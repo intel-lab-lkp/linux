@@ -416,6 +416,7 @@ int resctrl_arch_update_domains(struct rdt_resource *r, u32 closid);
 
 bool resctrl_enable_mon_event(enum resctrl_event_id eventid, bool any_cpu,
 			      unsigned int binary_bits, void *arch_priv);
+void resctrl_disable_mon_event(enum resctrl_event_id eventid);
 
 bool resctrl_is_mon_event_enabled(enum resctrl_event_id eventid);
 
