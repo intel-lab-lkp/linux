@@ -883,7 +883,7 @@ static int tdx_iommu_enable_all(void)
 	return ret;
 }
 
-static int __maybe_unused tdx_connect_init(struct device *dev)
+static int tdx_connect_init(struct device *dev)
 {
 	struct tsm_dev *link;
 	int ret;
@@ -914,8 +914,7 @@ static int __maybe_unused tdx_connect_init(struct device *dev)
 
 static int tdx_host_probe(struct faux_device *fdev)
 {
-	/* TODO: do tdx_connect_init() when it is fully implemented. */
-	return 0;
+	return tdx_connect_init(&fdev->dev);
 }
 
 static struct faux_device_ops tdx_host_ops = {
