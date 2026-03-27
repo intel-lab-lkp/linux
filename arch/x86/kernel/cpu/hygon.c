@@ -189,12 +189,6 @@ static void init_hygon(struct cpuinfo_x86 *c)
 
 	set_cpu_cap(c, X86_FEATURE_REP_GOOD);
 
-	/*
-	 * XXX someone from Hygon needs to confirm this DTRT
-	 *
-	init_spectral_chicken(c);
-	 */
-
 	set_cpu_cap(c, X86_FEATURE_ZEN);
 	set_cpu_cap(c, X86_FEATURE_CPB);
 
