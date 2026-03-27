@@ -1587,19 +1587,16 @@ static bool is_arch_lbr_xsave_available(void)
 
 void __init intel_pmu_arch_lbr_init(void)
 {
+	const struct leaf_0x1c_0 *l = cpuid_leaf(&boot_cpu_data, 0x1c);
 	struct pmu *pmu = x86_get_pmu(smp_processor_id());
-	union cpuid28_eax eax;
-	union cpuid28_ebx ebx;
-	union cpuid28_ecx ecx;
-	unsigned int unused_edx;
 	bool arch_lbr_xsave;
 	size_t size;
 	u64 lbr_nr;
 
-	/* Arch LBR Capabilities */
-	cpuid(28, &eax.full, &ebx.full, &ecx.full, &unused_edx);
+	if (!l)
+		goto clear_arch_lbr;
 
-	lbr_nr = fls(eax.split.lbr_depth_mask) * 8;
+	lbr_nr = fls(l->lbr_depth_mask) * 8;
 	if (!lbr_nr)
 		goto clear_arch_lbr;
 
@@ -1607,17 +1604,17 @@ void __init intel_pmu_arch_lbr_init(void)
 	if (wrmsrq_safe(MSR_ARCH_LBR_DEPTH, lbr_nr))
 		goto clear_arch_lbr;
 
-	x86_pmu.lbr_depth_mask = eax.split.lbr_depth_mask;
-	x86_pmu.lbr_deep_c_reset = eax.split.lbr_deep_c_reset;
-	x86_pmu.lbr_lip = eax.split.lbr_lip;
-	x86_pmu.lbr_cpl = ebx.split.lbr_cpl;
-	x86_pmu.lbr_filter = ebx.split.lbr_filter;
-	x86_pmu.lbr_call_stack = ebx.split.lbr_call_stack;
-	x86_pmu.lbr_mispred = ecx.split.lbr_mispred;
-	x86_pmu.lbr_timed_lbr = ecx.split.lbr_timed_lbr;
-	x86_pmu.lbr_br_type = ecx.split.lbr_br_type;
-	x86_pmu.lbr_counters = ecx.split.lbr_counters;
-	x86_pmu.lbr_nr = lbr_nr;
+	x86_pmu.lbr_depth_mask		= l->lbr_depth_mask;
+	x86_pmu.lbr_deep_c_reset	= l->lbr_deep_c_reset;
+	x86_pmu.lbr_lip			= l->lbr_ip_is_lip;
+	x86_pmu.lbr_cpl			= l->lbr_cpl;
+	x86_pmu.lbr_filter		= l->lbr_branch_filter;
+	x86_pmu.lbr_call_stack		= l->lbr_call_stack;
+	x86_pmu.lbr_mispred		= l->lbr_mispredict;
+	x86_pmu.lbr_timed_lbr		= l->lbr_timed_lbr;
+	x86_pmu.lbr_br_type		= l->lbr_branch_type;
+	x86_pmu.lbr_counters		= l->lbr_events_gpc_bmp;
+	x86_pmu.lbr_nr			= lbr_nr;
 
 	if (!!x86_pmu.lbr_counters)
 		x86_pmu.flags |= PMU_FL_BR_CNTR | PMU_FL_DYN_CONSTRAINT;
