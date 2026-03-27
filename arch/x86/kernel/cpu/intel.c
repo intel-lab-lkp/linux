@@ -183,20 +183,34 @@ static void detect_tme_early(struct cpuinfo_x86 *c)
 		     keyid_bits);
 }
 
+/*
+ * Intel CPUs have an MSR bit to limit CPUID enumeration to CPUID(0x2), which
+ * can be set by old BIOSes before booting Linux.  Clear that bit.
+ *
+ * Scan any newly-found CPUID leaves afterwards.
+ */
 void intel_unlock_cpuid_leafs(struct cpuinfo_x86 *c)
 {
+	const struct leaf_0x0_0 *l0;
+	unsigned int rescan_from;
+
 	if (boot_cpu_data.x86_vendor != X86_VENDOR_INTEL)
 		return;
 
 	if (c->x86_vfm < INTEL_PENTIUM_M_DOTHAN)
 		return;
 
-	/*
-	 * The BIOS can have limited CPUID to leaf 2, which breaks feature
-	 * enumeration. Unlock it and update the maximum leaf info.
-	 */
-	if (msr_clear_bit(MSR_IA32_MISC_ENABLE, MSR_IA32_MISC_ENABLE_LIMIT_CPUID_BIT) > 0)
-		c->cpuid_level = cpuid_eax(0);
+	if (msr_clear_bit(MSR_IA32_MISC_ENABLE, MSR_IA32_MISC_ENABLE_LIMIT_CPUID_BIT) <= 0)
+		return;
+
+	cpuid_refresh_leaf(c, 0x0);
+	l0 = cpuid_leaf(c, 0x0);
+	if (!l0)
+		return;
+
+	rescan_from = min_t(int, l0->max_std_leaf, c->cpuid_level) + 1;
+	cpuid_refresh_range(c, rescan_from, CPUID_BASE_END);
+	c->cpuid_level = l0->max_std_leaf;
 }
 
 static void early_init_intel(struct cpuinfo_x86 *c)
