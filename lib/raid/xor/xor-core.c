@@ -65,6 +65,8 @@ void xor_gen(void *dest, void **srcs, unsigned int src_cnt, unsigned int bytes)
 {
 	unsigned int src_off = 0;
 
+	WARN_ON_ONCE(in_interrupt());
+	WARN_ON_ONCE(bytes == 0);
 	WARN_ON_ONCE(bytes & 511);
 
 	while (src_cnt > 0) {
