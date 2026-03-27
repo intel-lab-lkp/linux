@@ -41,7 +41,7 @@ properties:
 
   clock-output-names:
     minItems: 3
-    maxItems: 17
+    maxItems: 19
 
   renesas,mode:
     description: Board-specific settings of the MD_CK* bits on R-Mobile A1
@@ -116,6 +116,8 @@ allOf:
             - const: zg
             - const: b
             - const: m1
+            - const: ztr
+            - const: zt
             - const: hp
             - const: hpp
             - const: usbp
@@ -239,7 +241,7 @@ examples:
             clocks = <&extal1_clk>, <&extal2_clk>, <&extalr_clk>;
             #clock-cells = <1>;
             clock-output-names = "system", "pllc0", "pllc1", "pllc2", "r",
-                                 "usb24s", "i", "zg", "b", "m1", "hp", "hpp",
-                                 "usbp", "s", "zb", "m3", "cp";
+                                 "usb24s", "i", "zg", "b", "m1", "ztr", "zt",
+                                 "hp", "hpp", "usbp", "s", "zb", "m3", "cp";
             renesas,mode = <0x05>;
     };
