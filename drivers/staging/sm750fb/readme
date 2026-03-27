@@ -7,7 +7,7 @@ Introduction:
 
 About the kernel module parameter of driver:
 
-	Use 1280,8bpp index color and 60 hz mode:
+	Use 1280,8 bits_per_pixel index color and 60 hz mode:
 	insmod ./sm750fb.ko g_option="1280x1024-8@60"
 
 	Disable MTRR,Disable 2d acceleration,Disable hardware cursor,
@@ -29,8 +29,8 @@ About the kernel module parameter of driver:
 		it equal to modular method with below command:
 		insmod ./sm750fb.ko g_option="noaccel:1280x1024@60:otherparm:etc..."
 
-	2) if you put 800x600 into the parameter without bpp and
-		refresh rate, kernel driver will defaulty use 16bpp and 60hz
+	2) if you put 800x600 into the parameter without bits_per_pixel and
+		refresh rate, kernel driver will defaulty use 16 bits_per_pixel and 60hz
 
 Important:
 	if you have vesafb enabled in your config then /dev/fb0 will be created by vesafb

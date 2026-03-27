@@ -14,8 +14,8 @@
 
 enum sm750_pnltype {
 	sm750_24TFT = 0,	/* 24bit tft */
-	sm750_dualTFT = 2,	/* dual 18 bit tft */
-	sm750_doubleTFT = 1,	/* 36 bit double pixel tft */
+	sm750_dual_tft = 2,	/* dual 18 bit tft */
+	sm750_double_tft = 1,	/* 36 bit double pixel tft */
 };
 
 /* vga channel is not concerned  */
@@ -39,13 +39,13 @@ enum sm750_path {
 };
 
 struct init_status {
-	ushort powerMode;
+	ushort power_mode;
 	/* below three clocks are in unit of MHZ*/
 	ushort chip_clk;
 	ushort mem_clk;
 	ushort master_clk;
-	ushort setAllEngOff;
-	ushort resetMemory;
+	ushort set_all_eng_off;
+	ushort reset_memory;
 };
 
 struct lynx_accel {
@@ -60,22 +60,22 @@ struct lynx_accel {
 	int (*de_wait)(void);/* see if hardware ready to work */
 
 	int (*de_fillrect)(struct lynx_accel *accel,
-			   u32 base, u32 pitch, u32 bpp,
+			   u32 base, u32 pitch, u32 bits_per_pixel,
 			   u32 x, u32 y, u32 width, u32 height,
 			   u32 color, u32 rop);
 
 	int (*de_copyarea)(struct lynx_accel *accel,
 			   u32 s_base, u32 s_pitch,
 			   u32 sx, u32 sy,
-			   u32 d_base, u32 d_pitch,
-			   u32 bpp, u32 dx, u32 dy,
+			   u32 dest_base, u32 dest_pitch,
+			   u32 bits_per_pixel, u32 dx, u32 dy,
 			   u32 width, u32 height,
 			   u32 rop2);
 
-	int (*de_imageblit)(struct lynx_accel *accel, const char *p_srcbuf,
-			    u32 src_delta, u32 start_bit, u32 d_base, u32 d_pitch,
+	int (*de_imageblit)(struct lynx_accel *accel, const char *src_buf,
+			    u32 src_pitch, u32 start_bit, u32 dest_base, u32 dest_pitch,
 			    u32 byte_per_pixel, u32 dx, u32 dy, u32 width,
-			    u32 height, u32 f_color, u32 b_color, u32 rop2);
+			    u32 height, u32 fg_color, u32 bg_color, u32 rop2);
 
 };
 
@@ -97,8 +97,8 @@ struct sm750_dev {
 	unsigned long vidreg_start;
 	__u32 vidmem_size;
 	__u32 vidreg_size;
-	void __iomem *pvReg;
-	unsigned char __iomem *pvMem;
+	void __iomem *reg_base;
+	unsigned char __iomem *fb_mem;
 	/* locks*/
 	spinlock_t slock;
 
