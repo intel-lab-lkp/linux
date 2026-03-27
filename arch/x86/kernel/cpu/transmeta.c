@@ -10,14 +10,6 @@
 
 #include "cpu.h"
 
-static void early_init_transmeta(struct cpuinfo_x86 *c)
-{
-	const struct leaf_0x80860000_0 *l = cpuid_leaf(c, 0x80860000);
-
-	if (l && l->max_tra_leaf >= 0x80860001)
-		c->x86_capability[CPUID_8086_0001_EDX] = cpuid_edx(0x80860001);
-}
-
 /*
  * If CPU revision is 0x02000000, then CPUID(0x80860002) should be used instead.
  */
@@ -85,7 +77,6 @@ static void init_transmeta(struct cpuinfo_x86 *c)
 	rdmsr(0x80860004, cap_mask, uk);
 	wrmsr(0x80860004, ~0, uk);
 	cpuid_refresh_leaf(c, 0x1);
-	c->x86_capability[CPUID_1_EDX] = cpuid_edx(0x00000001);
 	wrmsr(0x80860004, cap_mask, uk);
 
 	/* All Transmeta CPUs have a constant TSC */
@@ -103,7 +94,6 @@ static void init_transmeta(struct cpuinfo_x86 *c)
 static const struct cpu_dev transmeta_cpu_dev = {
 	.c_vendor	= "Transmeta",
 	.c_ident	= { "GenuineTMx86", "TransmetaCPU" },
-	.c_early_init	= early_init_transmeta,
 	.c_init		= init_transmeta,
 	.c_x86_vendor	= X86_VENDOR_TRANSMETA,
 };
