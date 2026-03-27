@@ -20,6 +20,13 @@ struct tun_msg_ctl {
 };
 
 #if defined(CONFIG_TUN) || defined(CONFIG_TUN_MODULE)
+extern struct rtnl_link_ops tun_link_ops;
+
+static inline bool netdev_is_tun(const struct net_device *dev)
+{
+	return dev->rtnl_link_ops == &tun_link_ops;
+}
+
 struct socket *tun_get_socket(struct file *);
 struct ptr_ring *tun_get_tx_ring(struct file *file);
 
@@ -44,6 +51,11 @@ void tun_ptr_free(void *ptr);
 #include <linux/errno.h>
 struct file;
 struct socket;
+
+static inline bool netdev_is_tun(const struct net_device *dev)
+{
+	return false;
+}
 
 static inline struct socket *tun_get_socket(struct file *f)
 {

@@ -89,6 +89,7 @@
 #include <linux/errno.h>
 #include <linux/interrupt.h>
 #include <linux/if_ether.h>
+#include <linux/if_tun.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/ethtool.h>
@@ -526,24 +527,27 @@ static const char *const netdev_lock_name[] = {
 static struct lock_class_key netdev_xmit_lock_key[ARRAY_SIZE(netdev_lock_type)];
 static struct lock_class_key netdev_addr_lock_key[ARRAY_SIZE(netdev_lock_type)];
 
-static inline unsigned short netdev_lock_pos(unsigned short dev_type)
+static inline unsigned short netdev_lock_pos(const struct net_device *dev)
 {
+	unsigned short dev_type = dev->type;
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(netdev_lock_type); i++)
 		if (netdev_lock_type[i] == dev_type)
 			return i;
+
 	/* the last key is used by default */
-	WARN_ONCE(1, "netdev_lock_pos() could not find dev_type=%u\n", dev_type);
+	WARN_ONCE(!netdev_is_tun(dev),
+		  "netdev_lock_pos() could not find dev_type=%u\n", dev_type);
 	return ARRAY_SIZE(netdev_lock_type) - 1;
 }
 
-static inline void netdev_set_xmit_lockdep_class(spinlock_t *lock,
-						 unsigned short dev_type)
+static inline void netdev_set_xmit_lockdep_class(const struct net_device *dev,
+						 spinlock_t *lock)
 {
 	int i;
 
-	i = netdev_lock_pos(dev_type);
+	i = netdev_lock_pos(dev);
 	lockdep_set_class_and_name(lock, &netdev_xmit_lock_key[i],
 				   netdev_lock_name[i]);
 }
@@ -552,14 +556,14 @@ static inline void netdev_set_addr_lockdep_class(struct net_device *dev)
 {
 	int i;
 
-	i = netdev_lock_pos(dev->type);
+	i = netdev_lock_pos(dev);
 	lockdep_set_class_and_name(&dev->addr_list_lock,
 				   &netdev_addr_lock_key[i],
 				   netdev_lock_name[i]);
 }
 #else
-static inline void netdev_set_xmit_lockdep_class(spinlock_t *lock,
-						 unsigned short dev_type)
+static inline void netdev_set_xmit_lockdep_class(const struct net_device *dev,
+						 spinlock_t *lock)
 {
 }
 
@@ -11222,7 +11226,7 @@ static void netdev_init_one_queue(struct net_device *dev,
 {
 	/* Initialize queue lock */
 	spin_lock_init(&queue->_xmit_lock);
-	netdev_set_xmit_lockdep_class(&queue->_xmit_lock, dev->type);
+	netdev_set_xmit_lockdep_class(dev, &queue->_xmit_lock);
 	queue->xmit_lock_owner = -1;
 	netdev_queue_numa_node_write(queue, NUMA_NO_NODE);
 	queue->dev = dev;
