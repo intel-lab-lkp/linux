@@ -1416,7 +1416,7 @@ ice_self_test(struct net_device *netdev, struct ethtool_test *eth_test,
 		/* If the device is online then take it offline */
 		if (if_running)
 			/* indicate we're in test mode */
-			ice_stop(netdev);
+			dev_change_flags(netdev, netdev->flags & ~IFF_UP, NULL);
 
 		data[ICE_ETH_TEST_LINK] = ice_link_test(netdev);
 		data[ICE_ETH_TEST_EEPROM] = ice_eeprom_test(netdev);
@@ -1434,10 +1434,12 @@ ice_self_test(struct net_device *netdev, struct ethtool_test *eth_test,
 		clear_bit(ICE_TESTING, pf->state);
 
 		if (if_running) {
-			int status = ice_open(netdev);
+			int status = dev_change_flags(netdev,
+						      netdev->flags | IFF_UP,
+						      NULL);
 
 			if (status) {
-				dev_err(dev, "Could not open device %s, err %d\n",
+				dev_err(dev, "Could not bring up device %s, err %d\n",
 					pf->int_name, status);
 			}
 		}
