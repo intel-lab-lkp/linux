@@ -20,7 +20,35 @@
 #include "vm_util.h"
 #include "kselftest.h"
 
-void run_dio_using_hugetlb(unsigned int start_off, unsigned int end_off)
+#ifndef STATX_DIOALIGN
+#define STATX_DIOALIGN		0x00002000U
+#endif
+
+unsigned int get_dio_alignment(void)
+{
+	int fd, ret;
+	struct statx stx;
+	unsigned int dio_align = 1;
+
+	fd = open("/tmp", O_TMPFILE | O_RDWR | O_DIRECT, 0664);
+	if (fd < 0)
+		ksft_exit_skip("Unable to allocate file: %s\n", strerror(errno));
+
+	ret = statx(fd, "", AT_EMPTY_PATH, STATX_DIOALIGN, &stx);
+	if (ret < 0) {
+		ksft_perror("statx() failed");
+	} else if ((stx.stx_mask & STATX_DIOALIGN) &&
+			stx.stx_dio_offset_align) {
+		dio_align = stx.stx_dio_offset_align;
+	}
+
+	close(fd);
+
+	return dio_align;
+}
+
+void run_dio_using_hugetlb(unsigned int start_off, unsigned int end_off,
+			unsigned int dio_align)
 {
 	int fd;
 	char *buffer =  NULL;
@@ -33,6 +61,11 @@ void run_dio_using_hugetlb(unsigned int start_off, unsigned int end_off)
 	const int mmap_prot  = PROT_READ | PROT_WRITE;
 
 	writesize = end_off - start_off;
+	if (writesize % dio_align != 0) {
+		ksft_test_result_skip("DIO alignment (%u) incompatible with offset %zu\n",
+				dio_align, writesize);
+		return;
+	}
 
 	/* Get the default huge page size */
 	h_pagesize = default_huge_page_size();
@@ -89,16 +122,10 @@ void run_dio_using_hugetlb(unsigned int start_off, unsigned int end_off)
 
 int main(void)
 {
-	size_t pagesize = 0;
-	int fd;
+	size_t pagesize = psize();
+	unsigned int dio_align = get_dio_alignment();
 
 	ksft_print_header();
-
-	/* Open the file to DIO */
-	fd = open("/tmp", O_TMPFILE | O_RDWR | O_DIRECT, 0664);
-	if (fd < 0)
-		ksft_exit_skip("Unable to allocate file: %s\n", strerror(errno));
-	close(fd);
 
 	/* Check if huge pages are free */
 	if (!get_free_hugepages())
@@ -106,20 +133,17 @@ int main(void)
 
 	ksft_set_plan(4);
 
-	/* Get base page size */
-	pagesize  = psize();
-
 	/* start and end is aligned to pagesize */
-	run_dio_using_hugetlb(0, (pagesize * 3));
+	run_dio_using_hugetlb(0, (pagesize * 3), dio_align);
 
 	/* start is aligned but end is not aligned */
-	run_dio_using_hugetlb(0, (pagesize * 3) - (pagesize / 2));
+	run_dio_using_hugetlb(0, (pagesize * 3) - (pagesize / 2), dio_align);
 
 	/* start is unaligned and end is aligned */
-	run_dio_using_hugetlb(pagesize / 2, (pagesize * 3));
+	run_dio_using_hugetlb(pagesize / 2, (pagesize * 3), dio_align);
 
 	/* both start and end are unaligned */
-	run_dio_using_hugetlb(pagesize / 2, (pagesize * 3) + (pagesize / 2));
+	run_dio_using_hugetlb(pagesize / 2, (pagesize * 3) + (pagesize / 2), dio_align);
 
 	ksft_finished();
 }
