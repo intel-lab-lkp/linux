@@ -15,6 +15,8 @@ static void ice_dcbnl_devreset(struct net_device *netdev)
 {
 	struct ice_pf *pf = ice_netdev_to_pf(netdev);
 
+	if (test_bit(ICE_SHUTTING_DOWN, pf->state))
+		return;
 	while (ice_is_reset_in_progress(pf->state))
 		usleep_range(1000, 2000);
 
@@ -35,6 +37,8 @@ static int ice_dcbnl_getets(struct net_device *netdev, struct ieee_ets *ets)
 	struct ice_pf *pf;
 
 	pf = ice_netdev_to_pf(netdev);
+	if (test_bit(ICE_SHUTTING_DOWN, pf->state))
+		return -EBUSY;
 	dcbxcfg = &pf->hw.port_info->qos_cfg.local_dcbx_cfg;
 
 	ets->willing = dcbxcfg->etscfg.willing;
@@ -66,6 +70,8 @@ static int ice_dcbnl_setets(struct net_device *netdev, struct ieee_ets *ets)
 	int bwcfg = 0, bwrec = 0;
 	int err, i;
 
+	if (test_bit(ICE_SHUTTING_DOWN, pf->state))
+		return -EBUSY;
 	if ((pf->dcbx_cap & DCB_CAP_DCBX_LLD_MANAGED) ||
 	    !(pf->dcbx_cap & DCB_CAP_DCBX_VER_IEEE))
 		return -EINVAL;
@@ -135,6 +141,8 @@ ice_dcbnl_getnumtcs(struct net_device *dev, int __always_unused tcid, u8 *num)
 
 	if (!test_bit(ICE_FLAG_DCB_CAPABLE, pf->flags))
 		return -EINVAL;
+	if (test_bit(ICE_SHUTTING_DOWN, pf->state))
+		return -EBUSY;
 
 	*num = pf->hw.func_caps.common_cap.maxtc;
 	return 0;
@@ -148,6 +156,8 @@ static u8 ice_dcbnl_getdcbx(struct net_device *netdev)
 {
 	struct ice_pf *pf = ice_netdev_to_pf(netdev);
 
+	if (test_bit(ICE_SHUTTING_DOWN, pf->state))
+		return 0;
 	return pf->dcbx_cap;
 }
 
@@ -161,6 +171,8 @@ static u8 ice_dcbnl_setdcbx(struct net_device *netdev, u8 mode)
 	struct ice_pf *pf = ice_netdev_to_pf(netdev);
 	struct ice_qos_cfg *qos_cfg;
 
+	if (test_bit(ICE_SHUTTING_DOWN, pf->state))
+		return 0;
 	/* if FW LLDP agent is running, DCBNL not allowed to change mode */
 	if (test_bit(ICE_FLAG_FW_LLDP_AGENT, pf->flags))
 		return ICE_DCB_NO_HW_CHG;
@@ -208,6 +220,8 @@ static void ice_dcbnl_get_perm_hw_addr(struct net_device *netdev, u8 *perm_addr)
 	struct ice_port_info *pi = pf->hw.port_info;
 	int i, j;
 
+	if (test_bit(ICE_SHUTTING_DOWN, pf->state))
+		return;
 	memset(perm_addr, 0xff, MAX_ADDR_LEN);
 
 	for (i = 0; i < netdev->addr_len; i++)
@@ -242,6 +256,8 @@ static int ice_dcbnl_getpfc(struct net_device *netdev, struct ieee_pfc *pfc)
 	struct ice_dcbx_cfg *dcbxcfg;
 	int i;
 
+	if (test_bit(ICE_SHUTTING_DOWN, pf->state))
+		return -EBUSY;
 	dcbxcfg = &pi->qos_cfg.local_dcbx_cfg;
 	pfc->pfc_cap = dcbxcfg->pfc.pfccap;
 	pfc->pfc_en = dcbxcfg->pfc.pfcena;
@@ -267,6 +283,8 @@ static int ice_dcbnl_setpfc(struct net_device *netdev, struct ieee_pfc *pfc)
 	struct ice_dcbx_cfg *new_cfg;
 	int err;
 
+	if (test_bit(ICE_SHUTTING_DOWN, pf->state))
+		return -EBUSY;
 	if ((pf->dcbx_cap & DCB_CAP_DCBX_LLD_MANAGED) ||
 	    !(pf->dcbx_cap & DCB_CAP_DCBX_VER_IEEE))
 		return -EINVAL;
@@ -308,6 +326,8 @@ ice_dcbnl_get_pfc_cfg(struct net_device *netdev, int prio, u8 *setting)
 	struct ice_pf *pf = ice_netdev_to_pf(netdev);
 	struct ice_port_info *pi = pf->hw.port_info;
 
+	if (test_bit(ICE_SHUTTING_DOWN, pf->state))
+		return;
 	if ((pf->dcbx_cap & DCB_CAP_DCBX_LLD_MANAGED) ||
 	    !(pf->dcbx_cap & DCB_CAP_DCBX_VER_CEE))
 		return;
@@ -331,6 +351,8 @@ static void ice_dcbnl_set_pfc_cfg(struct net_device *netdev, int prio, u8 set)
 	struct ice_pf *pf = ice_netdev_to_pf(netdev);
 	struct ice_dcbx_cfg *new_cfg;
 
+	if (test_bit(ICE_SHUTTING_DOWN, pf->state))
+		return;
 	if ((pf->dcbx_cap & DCB_CAP_DCBX_LLD_MANAGED) ||
 	    !(pf->dcbx_cap & DCB_CAP_DCBX_VER_CEE))
 		return;
@@ -364,6 +386,8 @@ static u8 ice_dcbnl_getpfcstate(struct net_device *netdev)
 	struct ice_pf *pf = ice_netdev_to_pf(netdev);
 	struct ice_port_info *pi = pf->hw.port_info;
 
+	if (test_bit(ICE_SHUTTING_DOWN, pf->state))
+		return 0;
 	/* Return enabled if any UP enabled for PFC */
 	if (pi->qos_cfg.local_dcbx_cfg.pfc.pfcena)
 		return 1;
@@ -395,6 +419,8 @@ static u8 ice_dcbnl_setstate(struct net_device *netdev, u8 state)
 {
 	struct ice_pf *pf = ice_netdev_to_pf(netdev);
 
+	if (test_bit(ICE_SHUTTING_DOWN, pf->state))
+		return ICE_DCB_NO_HW_CHG;
 	if ((pf->dcbx_cap & DCB_CAP_DCBX_LLD_MANAGED) ||
 	    !(pf->dcbx_cap & DCB_CAP_DCBX_VER_CEE))
 		return ICE_DCB_NO_HW_CHG;
@@ -469,6 +495,8 @@ ice_dcbnl_set_pg_tc_cfg_tx(struct net_device *netdev, int tc,
 	struct ice_dcbx_cfg *new_cfg;
 	int i;
 
+	if (test_bit(ICE_SHUTTING_DOWN, pf->state))
+		return;
 	if ((pf->dcbx_cap & DCB_CAP_DCBX_LLD_MANAGED) ||
 	    !(pf->dcbx_cap & DCB_CAP_DCBX_VER_CEE))
 		return;
@@ -504,6 +532,8 @@ ice_dcbnl_get_pg_bwg_cfg_tx(struct net_device *netdev, int pgid, u8 *bw_pct)
 	struct ice_pf *pf = ice_netdev_to_pf(netdev);
 	struct ice_port_info *pi = pf->hw.port_info;
 
+	if (test_bit(ICE_SHUTTING_DOWN, pf->state))
+		return;
 	if ((pf->dcbx_cap & DCB_CAP_DCBX_LLD_MANAGED) ||
 	    !(pf->dcbx_cap & DCB_CAP_DCBX_VER_CEE))
 		return;
@@ -528,6 +558,8 @@ ice_dcbnl_set_pg_bwg_cfg_tx(struct net_device *netdev, int pgid, u8 bw_pct)
 	struct ice_pf *pf = ice_netdev_to_pf(netdev);
 	struct ice_dcbx_cfg *new_cfg;
 
+	if (test_bit(ICE_SHUTTING_DOWN, pf->state))
+		return;
 	if ((pf->dcbx_cap & DCB_CAP_DCBX_LLD_MANAGED) ||
 	    !(pf->dcbx_cap & DCB_CAP_DCBX_VER_CEE))
 		return;
@@ -609,6 +641,8 @@ ice_dcbnl_get_pg_bwg_cfg_rx(struct net_device *netdev, int __always_unused pgid,
 {
 	struct ice_pf *pf = ice_netdev_to_pf(netdev);
 
+	if (test_bit(ICE_SHUTTING_DOWN, pf->state))
+		return;
 	if ((pf->dcbx_cap & DCB_CAP_DCBX_LLD_MANAGED) ||
 	    !(pf->dcbx_cap & DCB_CAP_DCBX_VER_CEE))
 		return;
@@ -643,6 +677,8 @@ static u8 ice_dcbnl_get_cap(struct net_device *netdev, int capid, u8 *cap)
 {
 	struct ice_pf *pf = ice_netdev_to_pf(netdev);
 
+	if (test_bit(ICE_SHUTTING_DOWN, pf->state))
+		return ICE_DCB_NO_HW_CHG;
 	if (!(test_bit(ICE_FLAG_DCB_CAPABLE, pf->flags)))
 		return ICE_DCB_NO_HW_CHG;
 
@@ -695,6 +731,8 @@ static int ice_dcbnl_getapp(struct net_device *netdev, u8 idtype, u16 id)
 				.protocol = id,
 			     };
 
+	if (test_bit(ICE_SHUTTING_DOWN, pf->state))
+		return -EBUSY;
 	if ((pf->dcbx_cap & DCB_CAP_DCBX_LLD_MANAGED) ||
 	    !(pf->dcbx_cap & DCB_CAP_DCBX_VER_CEE))
 		return -EINVAL;
@@ -738,6 +776,8 @@ static int ice_dcbnl_setapp(struct net_device *netdev, struct dcb_app *app)
 	u8 max_tc;
 	int ret;
 
+	if (test_bit(ICE_SHUTTING_DOWN, pf->state))
+		return -EBUSY;
 	/* ONLY DSCP APP TLVs have operational significance */
 	if (app->selector != IEEE_8021QAZ_APP_SEL_DSCP)
 		return -EINVAL;
@@ -871,6 +911,8 @@ static int ice_dcbnl_delapp(struct net_device *netdev, struct dcb_app *app)
 	unsigned int i, j;
 	int ret = 0;
 
+	if (test_bit(ICE_SHUTTING_DOWN, pf->state))
+		return -EBUSY;
 	if (pf->dcbx_cap & DCB_CAP_DCBX_LLD_MANAGED) {
 		netdev_err(netdev, "can't delete DSCP netlink app when FW DCB agent is active\n");
 		return -EINVAL;
@@ -978,6 +1020,8 @@ static u8 ice_dcbnl_cee_set_all(struct net_device *netdev)
 	struct ice_dcbx_cfg *new_cfg;
 	int err;
 
+	if (test_bit(ICE_SHUTTING_DOWN, pf->state))
+		return ICE_DCB_NO_HW_CHG;
 	if ((pf->dcbx_cap & DCB_CAP_DCBX_LLD_MANAGED) ||
 	    !(pf->dcbx_cap & DCB_CAP_DCBX_VER_CEE))
 		return ICE_DCB_NO_HW_CHG;
@@ -1048,6 +1092,8 @@ void ice_dcbnl_set_all(struct ice_vsi *vsi)
 		return;
 
 	pf = ice_netdev_to_pf(netdev);
+	if (test_bit(ICE_SHUTTING_DOWN, pf->state))
+		return;
 	pi = pf->hw.port_info;
 
 	/* SW DCB taken care of by SW Default Config */

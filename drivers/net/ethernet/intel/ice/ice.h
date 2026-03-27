@@ -283,6 +283,7 @@ enum ice_pf_state {
 	ICE_EMPR_RECV,		/* set by OICR handler */
 	ICE_SUSPENDED,		/* set on module remove path */
 	ICE_RESET_FAILED,		/* set by reset/rebuild */
+	ICE_SHUTTING_DOWN,		/* set on module remove path, before releasing resources */
 	/* When checking for the PF to be in a nominal operating state, the
 	 * bits that are grouped at the beginning of the list need to be
 	 * checked. Bits occurring before ICE_STATE_NOMINAL_CHECK_BITS will
