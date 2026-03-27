@@ -1899,8 +1899,11 @@ static enum scan_result collapse_file(struct mm_struct *mm, unsigned long addr,
 	int nr_none = 0;
 	bool is_shmem = shmem_file(file);
 
-	VM_BUG_ON(!IS_ENABLED(CONFIG_READ_ONLY_THP_FOR_FS) && !is_shmem);
-	VM_BUG_ON(start & (HPAGE_PMD_NR - 1));
+	/* "huge" shmem sets mapping folio order and passes the check below */
+	if (mapping_max_folio_order(mapping) < PMD_ORDER)
+		return SCAN_FAIL;
+	if (start & (HPAGE_PMD_NR - 1))
+		return SCAN_ADDRESS_RANGE;
 
 	result = alloc_charge_folio(&new_folio, mm, cc);
 	if (result != SCAN_SUCCEED)
