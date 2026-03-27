@@ -3,6 +3,8 @@
  * CPUID parser; for populating the system's CPUID tables.
  */
 
+#define pr_fmt(fmt) "x86/cpuid: " fmt
+
 #include <linux/kernel.h>
 
 #include <asm/cpuid/api.h>
@@ -54,8 +56,11 @@ cpuid_read_0x2(const struct cpuid_parse_entry *e, const struct cpuid_read_output
 	 * keep the leaf marked as invalid at the CPUID table.
 	 */
 	cpuid_read_subleaf(e->leaf, e->subleaf, l);
-	if (l->iteration_count != 0x01)
+	if (l->iteration_count != 0x01) {
+		pr_warn_once("Ignoring CPUID(0x2) due to invalid iteration count = %d",
+			     l->iteration_count);
 		return;
+	}
 
 	/*
 	 * The most significant bit (MSB) of each CPUID(0x2) register must be clear.
