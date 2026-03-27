@@ -50,10 +50,12 @@ static void init_zhaoxin_cap(struct cpuinfo_x86 *c)
 
 static void early_init_zhaoxin(struct cpuinfo_x86 *c)
 {
+	const struct leaf_0x80000007_0 *el7 = cpuid_leaf(c, 0x80000007);
+
 	if (c->x86 >= 0x6)
 		set_cpu_cap(c, X86_FEATURE_CONSTANT_TSC);
 
-	if (c->x86_power & (1 << 8)) {
+	if (el7 && el7->constant_tsc) {
 		set_cpu_cap(c, X86_FEATURE_CONSTANT_TSC);
 		set_cpu_cap(c, X86_FEATURE_NONSTOP_TSC);
 	}

@@ -215,6 +215,7 @@ void intel_unlock_cpuid_leafs(struct cpuinfo_x86 *c)
 
 static void early_init_intel(struct cpuinfo_x86 *c)
 {
+	const struct leaf_0x80000007_0 *el7 = cpuid_leaf(c, 0x80000007);
 	u64 misc_enable;
 
 	if (c->x86 >= 6 && !cpu_has(c, X86_FEATURE_IA64))
@@ -262,16 +263,16 @@ static void early_init_intel(struct cpuinfo_x86 *c)
 		c->x86_phys_bits = 36;
 
 	/*
-	 * c->x86_power is 8000_0007 edx. Bit 8 is TSC runs at constant rate
-	 * with P/T states and does not stop in deep C-states.
+	 * CPUID(0x80000007).constant_tsc implies that TSC runs at constant
+	 * rate with P/T states and does not stop in deep C-states
 	 *
-	 * It is also reliable across cores and sockets. (but not across
-	 * cabinets - we turn it off in that case explicitly.)
+	 * It is also reliable across cores and sockets, but not across
+	 * cabinets; disable it explicitly in that case.
 	 *
 	 * Use a model-specific check for some older CPUs that have invariant
-	 * TSC but may not report it architecturally via 8000_0007.
+	 * TSC but may not report it architecturally via CPUID(0x80000007).
 	 */
-	if (c->x86_power & (1 << 8)) {
+	if (el7 && el7->constant_tsc) {
 		set_cpu_cap(c, X86_FEATURE_CONSTANT_TSC);
 		set_cpu_cap(c, X86_FEATURE_NONSTOP_TSC);
 	} else if ((c->x86_vfm >= INTEL_P4_PRESCOTT && c->x86_vfm <= INTEL_P4_CEDARMILL) ||
