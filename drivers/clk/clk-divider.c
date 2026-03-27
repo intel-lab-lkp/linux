@@ -315,6 +315,21 @@ static int clk_divider_bestdiv(struct clk_hw *hw, struct clk_hw *parent,
 		return bestdiv;
 	}
 
+	if (parent && clk_has_v2_rate_negotiation(parent->core)) {
+		unsigned long lcm_rate;
+
+		lcm_rate = clk_hw_get_children_lcm(parent, hw, rate);
+		if (lcm_rate > 0) {
+			/* Validate and use what the parent can actually provide */
+			lcm_rate = clk_hw_round_rate(parent, lcm_rate);
+			*best_parent_rate = lcm_rate;
+			bestdiv = _div_round(table, lcm_rate, rate, flags);
+			bestdiv = bestdiv == 0 ? 1 : bestdiv;
+			bestdiv = bestdiv > maxdiv ? maxdiv : bestdiv;
+			return bestdiv;
+		}
+	}
+
 	/*
 	 * The maximum divider we can use without overflowing
 	 * unsigned long in rate * i below
