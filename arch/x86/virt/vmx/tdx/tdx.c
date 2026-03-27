@@ -289,7 +289,8 @@ static void tdx_free_pages_bulk(unsigned int nr_pages, struct page **pages)
 		__free_page(pages[i]);
 }
 
-static int tdx_alloc_pages_bulk(unsigned int nr_pages, struct page **pages)
+static int tdx_alloc_pages_bulk(unsigned int nr_pages, struct page **pages,
+				void *data)
 {
 	unsigned int filled, done = 0;
 
@@ -326,7 +327,10 @@ void tdx_page_array_free(struct tdx_page_array *array)
 EXPORT_SYMBOL_GPL(tdx_page_array_free);
 
 static struct tdx_page_array *
-tdx_page_array_alloc(unsigned int nr_pages)
+tdx_page_array_alloc(unsigned int nr_pages,
+		     int (*alloc_fn)(unsigned int nr_pages,
+				     struct page **pages, void *data),
+		     void *data)
 {
 	struct tdx_page_array *array = NULL;
 	struct page **pages = NULL;
@@ -348,7 +352,7 @@ tdx_page_array_alloc(unsigned int nr_pages)
 	if (!pages)
 		goto out_free;
 
-	ret = tdx_alloc_pages_bulk(nr_pages, pages);
+	ret = alloc_fn(nr_pages, pages, data);
 	if (ret)
 		goto out_free;
 
@@ -388,7 +392,7 @@ struct tdx_page_array *tdx_page_array_create(unsigned int nr_pages)
 	if (nr_pages > TDX_PAGE_ARRAY_MAX_NENTS)
 		return NULL;
 
-	array = tdx_page_array_alloc(nr_pages);
+	array = tdx_page_array_alloc(nr_pages, tdx_alloc_pages_bulk, NULL);
 	if (!array)
 		return NULL;
 
@@ -520,6 +524,36 @@ int tdx_page_array_ctrl_release(struct tdx_page_array *array,
 	return 0;
 }
 EXPORT_SYMBOL_GPL(tdx_page_array_ctrl_release);
+
+static int tdx_alloc_pages_contig(unsigned int nr_pages, struct page **pages,
+				  void *data)
+{
+	struct page *page;
+	int i;
+
+	page = alloc_contig_pages(nr_pages, GFP_KERNEL, numa_mem_id(),
+				  &node_online_map);
+	if (!page)
+		return -ENOMEM;
+
+	for (i = 0; i < nr_pages; i++)
+		pages[i] = page + i;
+
+	return 0;
+}
+
+/*
+ * For holding large number of contiguous pages, usually larger than
+ * TDX_PAGE_ARRAY_MAX_NENTS (512).
+ *
+ * Similar to tdx_page_array_alloc(), after allocating with this
+ * function, call tdx_page_array_populate() to populate the tdx_page_array.
+ */
+static __maybe_unused struct tdx_page_array *
+tdx_page_array_alloc_contig(unsigned int nr_pages)
+{
+	return tdx_page_array_alloc(nr_pages, tdx_alloc_pages_contig, NULL);
+}
 
 #define HPA_LIST_INFO_FIRST_ENTRY	GENMASK_U64(11, 3)
 #define HPA_LIST_INFO_PFN		GENMASK_U64(51, 12)
