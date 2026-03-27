@@ -229,35 +229,32 @@ static void init_hygon(struct cpuinfo_x86 *c)
 	clear_cpu_cap(c, X86_FEATURE_APIC_MSRS_FENCE);
 }
 
+/*
+ * For DTLB/ITLB 2M-4M detection, fall back to L1 if L2 is disabled
+ */
 static void cpu_detect_tlb_hygon(struct cpuinfo_x86 *c)
 {
-	u32 ebx, eax, ecx, edx;
-	u16 mask = 0xfff;
+	const struct leaf_0x80000005_0 *el5 = cpuid_leaf(c, 0x80000005);
+	const struct leaf_0x80000006_0 *el6 = cpuid_leaf(c, 0x80000006);
 
-	if (c->extended_cpuid_level < 0x80000006)
+	if (!el5 || !el6)
 		return;
 
-	cpuid(0x80000006, &eax, &ebx, &ecx, &edx);
+	tlb_lld_4k = el6->l2_dtlb_4k_nentries;
+	tlb_lli_4k = el6->l2_itlb_4k_nentries;
 
-	tlb_lld_4k = (ebx >> 16) & mask;
-	tlb_lli_4k = ebx & mask;
-
-	/* Handle DTLB 2M and 4M sizes, fall back to L1 if L2 is disabled */
-	if (!((eax >> 16) & mask))
-		tlb_lld_2m = (cpuid_eax(0x80000005) >> 16) & 0xff;
+	if (el6->l2_dtlb_2m_4m_nentries)
+		tlb_lld_2m = el6->l2_dtlb_2m_4m_nentries;
 	else
-		tlb_lld_2m = (eax >> 16) & mask;
+		tlb_lld_2m = el5->l1_dtlb_2m_4m_nentries;
 
-	/* a 4M entry uses two 2M entries */
+	if (el6->l2_itlb_2m_4m_nentries)
+		tlb_lli_2m = el6->l2_itlb_2m_4m_nentries;
+	else
+		tlb_lli_2m = el5->l1_itlb_2m_4m_nentries;
+
+	/* A 4M TLB entry uses two 2M entries */
 	tlb_lld_4m = tlb_lld_2m >> 1;
-
-	/* Handle ITLB 2M and 4M sizes, fall back to L1 if L2 is disabled */
-	if (!(eax & mask)) {
-		cpuid(0x80000005, &eax, &ebx, &ecx, &edx);
-		tlb_lli_2m = eax & 0xff;
-	} else
-		tlb_lli_2m = eax & mask;
-
 	tlb_lli_4m = tlb_lli_2m >> 1;
 }
 
