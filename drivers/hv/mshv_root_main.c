@@ -2252,6 +2252,7 @@ root_scheduler_deinit(void)
 static int mshv_reboot_notify(struct notifier_block *nb,
 			      unsigned long code, void *unused)
 {
+	mshv_debugfs_exit();
 	cpuhp_remove_state(mshv_cpuhp_online);
 	return 0;
 }
