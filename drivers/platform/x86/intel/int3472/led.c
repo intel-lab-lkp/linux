@@ -6,57 +6,57 @@
 #include <linux/leds.h>
 #include <linux/platform_data/x86/int3472.h>
 
-static int int3472_pled_set(struct led_classdev *led_cdev,
-			    enum led_brightness brightness)
+static int int3472_led_set(struct led_classdev *led_cdev,
+			   enum led_brightness brightness)
 {
-	struct int3472_pled *pled = container_of(led_cdev, struct int3472_pled, classdev);
+	struct int3472_led *led = container_of(led_cdev, struct int3472_led, classdev);
 
-	gpiod_set_value_cansleep(pled->gpio, brightness);
+	gpiod_set_value_cansleep(led->gpio, brightness);
 	return 0;
 }
 
-int skl_int3472_register_pled(struct int3472_discrete_device *int3472, struct gpio_desc *gpio)
+int skl_int3472_register_led(struct int3472_discrete_device *int3472, struct gpio_desc *gpio)
 {
-	struct int3472_pled *pled = &int3472->pled;
+	struct int3472_led *led = &int3472->led;
 	char *p;
 	int ret;
 
-	if (pled->classdev.dev)
+	if (led->classdev.dev)
 		return -EBUSY;
 
-	pled->gpio = gpio;
+	led->gpio = gpio;
 
 	/* Generate the name, replacing the ':' in the ACPI devname with '_' */
-	snprintf(pled->name, sizeof(pled->name),
+	snprintf(led->name, sizeof(led->name),
 		 "%s::privacy_led", acpi_dev_name(int3472->sensor));
-	p = strchr(pled->name, ':');
+	p = strchr(led->name, ':');
 	if (p)
 		*p = '_';
 
-	pled->classdev.name = pled->name;
-	pled->classdev.max_brightness = 1;
-	pled->classdev.brightness_set_blocking = int3472_pled_set;
+	led->classdev.name = led->name;
+	led->classdev.max_brightness = 1;
+	led->classdev.brightness_set_blocking = int3472_led_set;
 
-	ret = led_classdev_register(int3472->dev, &pled->classdev);
+	ret = led_classdev_register(int3472->dev, &led->classdev);
 	if (ret)
 		return ret;
 
-	pled->lookup.provider = pled->name;
-	pled->lookup.dev_id = int3472->sensor_name;
-	pled->lookup.con_id = "privacy";
-	led_add_lookup(&pled->lookup);
+	led->lookup.provider = led->name;
+	led->lookup.dev_id = int3472->sensor_name;
+	led->lookup.con_id = "privacy";
+	led_add_lookup(&led->lookup);
 
 	return 0;
 }
 
-void skl_int3472_unregister_pled(struct int3472_discrete_device *int3472)
+void skl_int3472_unregister_led(struct int3472_discrete_device *int3472)
 {
-	struct int3472_pled *pled = &int3472->pled;
+	struct int3472_led *led = &int3472->led;
 
-	if (IS_ERR_OR_NULL(pled->classdev.dev))
+	if (IS_ERR_OR_NULL(led->classdev.dev))
 		return;
 
-	led_remove_lookup(&pled->lookup);
-	led_classdev_unregister(&pled->classdev);
-	gpiod_put(pled->gpio);
+	led_remove_lookup(&led->lookup);
+	led_classdev_unregister(&led->classdev);
+	gpiod_put(led->gpio);
 }
