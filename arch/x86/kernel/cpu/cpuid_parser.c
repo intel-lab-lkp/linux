@@ -74,13 +74,12 @@ static const struct cpuid_parse_entry cpuid_common_entries[] = {
 	CPUID_COMMON_ENTRIES
 };
 
-static const struct {
-	const struct cpuid_parse_entry	*table;
-	int				nr_entries;
-} cpuid_phases[] = {
+const struct cpuid_phase cpuid_phases[] = {
 	{	cpuid_early_entries,	ARRAY_SIZE(cpuid_early_entries)		},
 	{	cpuid_common_entries,	ARRAY_SIZE(cpuid_common_entries)	},
 };
+
+const int cpuid_nphases = ARRAY_SIZE(cpuid_phases);
 
 /*
  * Leaf-independent parser code:
@@ -189,7 +188,7 @@ cpuid_fill_table(struct cpuid_table *t, const struct cpuid_parse_entry entries[]
 
 static void __cpuid_scan_cpu_full(struct cpuinfo_x86 *c, bool early_boot)
 {
-	int nphases = early_boot ? 1 : ARRAY_SIZE(cpuid_phases);
+	int nphases = early_boot ? 1 : cpuid_nphases;
 	struct cpuid_table *table = &c->cpuid;
 
 	for (int i = 0; i < nphases; i++)
