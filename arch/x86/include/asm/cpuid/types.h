@@ -168,9 +168,12 @@ struct leaf_parse_info {
  * Use an array of storage entries to accommodate CPUID leaves with multiple subleaves
  * having the same output format.  This is common for hierarchical enumeration; e.g.,
  * CPUID(0x4), CPUID(0x12), and CPUID(0x8000001d).
+ *
+ * Align all CPUID outputs to unsigned long.  They're passed to bitops for X86_FEATURE
+ * queries, which require the alignment.
  */
 #define __CPUID_LEAF(_name, _count)				\
-	struct _name		_name[_count];			\
+	struct _name		_name[_count] __aligned(sizeof(unsigned long));\
 	struct leaf_parse_info	_name##_info
 
 /**
@@ -267,9 +270,61 @@ struct cpuid_leaves {
  *
  * This is to be embedded inside 'struct cpuinfo_x86' to provide parsed and
  * sanitized CPUID data per CPU.
+ *
+ * Align the leaves to unsigned long since their elements are passed to bitops
+ * for X86_FEATURE querying.
  */
 struct cpuid_table {
-	struct cpuid_leaves	leaves;
+	struct cpuid_leaves	leaves __aligned(sizeof(unsigned long));
 };
+
+/*
+ * X86_FEATURE word mappings:
+ *
+ * Build a compile-time mapping table from an <asm/cpufeatures.h> X86_FEATURE
+ * word to its corresponding cached entry in a CPUID table.
+ */
+
+#define __BUG(n)	(NCAPINTS + (n))
+
+struct cpuid_cpufeature {
+	unsigned int	leaves_offset;	/* Offset from a struct cpuid_leaves instance */
+	unsigned int	cpuid_reg;	/* Output register: CPUID_EAX -> CPUID_EDX */
+};
+
+#define __cpu_feature_word(_word, _leaf, _subleaf, _reg)				\
+	[_word] = {									\
+		.leaves_offset	= offsetof(struct cpuid_leaves, leaf_##_leaf##_##_subleaf),\
+		.cpuid_reg	= _reg,							\
+	}
+
+#define CPUID_FEATURE_WORDS_MAP								\
+{											\
+	/*   X86_FEATURE word,		Leaf,		Subleaf,	Output reg */	\
+	__cpu_feature_word(0,		0x1,		0,		CPUID_EDX),	\
+	__cpu_feature_word(1,		0x80000001,	0,		CPUID_EDX),	\
+	__cpu_feature_word(2,		0x80860001,	0,		CPUID_EDX),	\
+	__cpu_feature_word(3,		0x4c780001,	0,		CPUID_EAX),	\
+	__cpu_feature_word(4,		0x1,		0,		CPUID_ECX),	\
+	__cpu_feature_word(5,		0xc0000001,	0,		CPUID_EDX),	\
+	__cpu_feature_word(6,		0x80000001,	0,		CPUID_ECX),	\
+	__cpu_feature_word(7,		0x4c780001,	0,		CPUID_EBX),	\
+	__cpu_feature_word(8,		0x4c780001,	0,		CPUID_ECX),	\
+	__cpu_feature_word(9,		0x7,		0,		CPUID_EBX),	\
+	__cpu_feature_word(10,		0xd,		1,		CPUID_EAX),	\
+	__cpu_feature_word(11,		0x4c780001,	0,		CPUID_EDX),	\
+	__cpu_feature_word(12,		0x7,		1,		CPUID_EAX),	\
+	__cpu_feature_word(13,		0x80000008,	0,		CPUID_EBX),	\
+	__cpu_feature_word(14,		0x6,		0,		CPUID_EAX),	\
+	__cpu_feature_word(15,		0x8000000a,	0,		CPUID_EDX),	\
+	__cpu_feature_word(16,		0x7,		0,		CPUID_ECX),	\
+	__cpu_feature_word(17,		0x4c780001,	1,		CPUID_EAX),	\
+	__cpu_feature_word(18,		0x7,		0,		CPUID_EDX),	\
+	__cpu_feature_word(19,		0x8000001f,	0,		CPUID_EAX),	\
+	__cpu_feature_word(20,		0x80000021,	0,		CPUID_EAX),	\
+	__cpu_feature_word(21,		0x4c780001,	1,		CPUID_EBX),	\
+	__cpu_feature_word(__BUG(0),	0x4c780002,	0,		CPUID_EAX),	\
+	__cpu_feature_word(__BUG(1),	0x4c780002,	0,		CPUID_EBX),	\
+}
 
 #endif /* _ASM_X86_CPUID_TYPES_H */
