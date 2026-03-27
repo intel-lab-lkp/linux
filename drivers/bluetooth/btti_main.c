@@ -326,7 +326,7 @@ int btti_hci_register_hdev(struct btti_private *private_data)
 	hdev->setup = btti_hci_if_setup;
 	SET_HCIDEV_DEV(hdev, &sdiodev->func->dev);
 
-	set_bit(HCI_QUIRK_NON_PERSISTENT_SETUP, &hdev->quirks);
+	hci_set_quirk(hdev, HCI_QUIRK_NON_PERSISTENT_SETUP);
 
 	ret = hci_register_dev(hdev);
 	if (ret < 0) {
