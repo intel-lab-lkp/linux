@@ -89,15 +89,17 @@
 #endif /* CONFIG_SMP */
 
 #if defined(CONFIG_USE_X86_SEG_SUPPORT) && defined(USE_TYPEOF_UNQUAL)
-# define __my_cpu_type(var)	typeof(var)
-# define __my_cpu_ptr(ptr)	(ptr)
-# define __my_cpu_var(var)	(var)
+# define __my_cpu_type(var)		typeof(var)
+# define __my_cpu_ptr(ptr)		(ptr)
+# define __my_cpu_ptr_off(ptr, off)	(typeof(ptr))((uintptr_t)(ptr) + (off))
+# define __my_cpu_var(var)		(var)
 
-# define __percpu_qual		__percpu_seg_override
+# define __percpu_qual			__percpu_seg_override
 #else
-# define __my_cpu_type(var)	typeof(var) __percpu_seg_override
-# define __my_cpu_ptr(ptr)	(__my_cpu_type(*(ptr))*)(__force uintptr_t)(ptr)
-# define __my_cpu_var(var)	(*__my_cpu_ptr(&(var)))
+# define __my_cpu_type(var)		typeof(var) __percpu_seg_override
+# define __my_cpu_ptr(ptr)		(__my_cpu_type(*(ptr))*)(__force uintptr_t)(ptr)
+# define __my_cpu_ptr_off(ptr, off)	(__my_cpu_type(*(ptr))*)((__force uintptr_t)(ptr) + (off))
+# define __my_cpu_var(var)		(*__my_cpu_ptr(&(var)))
 #endif
 
 #define __force_percpu_arg(x)	__force_percpu_prefix "%" #x
@@ -570,29 +572,33 @@ do {									\
  */
 #define this_cpu_read_stable(pcp)			__pcpu_size_call_return(this_cpu_read_stable_, pcp)
 
-#define x86_this_cpu_constant_test_bit(_nr, _var)			\
+#define x86_this_cpu_constant_test_bit(_nr, _var, _offset)		\
 ({									\
 	unsigned long __percpu *addr__ =				\
-		(unsigned long __percpu *)&(_var) + BIT_WORD(_nr);	\
+		(unsigned long __percpu *)((u8 __percpu *)&(_var) + (_offset)) +\
+		 BIT_WORD(_nr);						\
+									\
+	/* Ensure bitops safety */					\
+	BUILD_BUG_ON(!IS_ALIGNED((unsigned long)(_offset), sizeof(unsigned long)));\
 									\
 	!!(BIT_MASK(_nr) & raw_cpu_read(*addr__));			\
 })
 
-#define x86_this_cpu_variable_test_bit(_nr, _var)			\
+#define x86_this_cpu_variable_test_bit(_nr, _var, _offset)		\
 ({									\
 	bool oldbit;							\
 									\
 	asm volatile("btl %[nr], " __percpu_arg([var])			\
 		     : "=@ccc" (oldbit)					\
-		     : [var] "m" (__my_cpu_var(_var)),			\
+		     : [var] "m" (*__my_cpu_ptr_off(&(_var), _offset)),	\
 		       [nr] "rI" (_nr));				\
 	oldbit;								\
 })
 
-#define x86_this_cpu_test_bit(_nr, _var)				\
+#define x86_this_cpu_test_bit(_nr, _var, _offset)			\
 	(__builtin_constant_p(_nr)					\
-	 ? x86_this_cpu_constant_test_bit(_nr, _var)			\
-	 : x86_this_cpu_variable_test_bit(_nr, _var))
+	 ? x86_this_cpu_constant_test_bit(_nr, _var, _offset)		\
+	 : x86_this_cpu_variable_test_bit(_nr, _var, _offset))
 
 
 #include <asm-generic/percpu.h>
