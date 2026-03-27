@@ -502,7 +502,8 @@ xfs_buf_item_unpin(
 {
 	struct xfs_buf_log_item	*bip = BUF_ITEM(lip);
 	struct xfs_buf		*bp = bip->bli_buf;
-	int			stale = bip->bli_flags & XFS_BLI_STALE;
+	unsigned int		flags = READ_ONCE(bip->bli_flags);
+	int			stale = flags & XFS_BLI_STALE;
 	int			freed;
 
 	ASSERT(bp->b_log_item == bip);
@@ -679,13 +680,14 @@ xfs_buf_item_release(
 {
 	struct xfs_buf_log_item	*bip = BUF_ITEM(lip);
 	struct xfs_buf		*bp = bip->bli_buf;
-	bool			hold = bip->bli_flags & XFS_BLI_HOLD;
-	bool			stale = bip->bli_flags & XFS_BLI_STALE;
+	unsigned int		flags = bip->bli_flags;
+	bool			hold = flags & XFS_BLI_HOLD;
+	bool			stale = flags & XFS_BLI_STALE;
 	bool			aborted = test_bit(XFS_LI_ABORTED,
 						   &lip->li_flags);
-	bool			dirty = bip->bli_flags & XFS_BLI_DIRTY;
+	bool			dirty = flags & XFS_BLI_DIRTY;
 #if defined(DEBUG) || defined(XFS_WARN)
-	bool			ordered = bip->bli_flags & XFS_BLI_ORDERED;
+	bool			ordered = flags & XFS_BLI_ORDERED;
 #endif
 
 	trace_xfs_buf_item_release(bip);
@@ -705,7 +707,8 @@ xfs_buf_item_release(
 	 * per-transaction state from the bli, which has been copied above.
 	 */
 	bp->b_transp = NULL;
-	bip->bli_flags &= ~(XFS_BLI_LOGGED | XFS_BLI_HOLD | XFS_BLI_ORDERED);
+	WRITE_ONCE(bip->bli_flags,
+		   flags & ~(XFS_BLI_LOGGED | XFS_BLI_HOLD | XFS_BLI_ORDERED));
 
 	/* If there are other references, then we have nothing to do. */
 	if (!atomic_dec_and_test(&bip->bli_refcount))
@@ -792,10 +795,11 @@ xfs_buf_item_committed(
 	xfs_lsn_t		lsn)
 {
 	struct xfs_buf_log_item	*bip = BUF_ITEM(lip);
+	unsigned int		flags = READ_ONCE(bip->bli_flags);
 
 	trace_xfs_buf_item_committed(bip);
 
-	if ((bip->bli_flags & XFS_BLI_INODE_ALLOC_BUF) && lip->li_lsn != 0)
+	if ((flags & XFS_BLI_INODE_ALLOC_BUF) && lip->li_lsn != 0)
 		return lip->li_lsn;
 	return lsn;
 }

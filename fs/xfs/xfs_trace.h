@@ -896,7 +896,7 @@ DECLARE_EVENT_CLASS(xfs_buf_item_class,
 	),
 	TP_fast_assign(
 		__entry->dev = bip->bli_buf->b_target->bt_dev;
-		__entry->bli_flags = bip->bli_flags;
+		__entry->bli_flags = READ_ONCE(bip->bli_flags);
 		__entry->bli_recur = bip->bli_recur;
 		__entry->bli_refcount = atomic_read(&bip->bli_refcount);
 		__entry->buf_bno = xfs_buf_daddr(bip->bli_buf);
