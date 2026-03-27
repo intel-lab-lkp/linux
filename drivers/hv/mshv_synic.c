@@ -454,7 +454,6 @@ int mshv_synic_init(unsigned int cpu)
 #ifdef HYPERVISOR_CALLBACK_VECTOR
 	union hv_synic_sint sint;
 #endif
-	union hv_synic_scontrol sctrl;
 	struct hv_synic_pages *spages = this_cpu_ptr(mshv_root.synic_pages);
 	struct hv_message_page **msg_page = &spages->hyp_synic_message_page;
 	struct hv_synic_event_flags_page **event_flags_page =
@@ -462,28 +461,37 @@ int mshv_synic_init(unsigned int cpu)
 	struct hv_synic_event_ring_page **event_ring_page =
 			&spages->synic_event_ring_page;
 
-	/* Setup the Synic's message page */
+	/*
+	 * Map the SYNIC message page. On root partition the hypervisor
+	 * pre-provisions the SIMP GPA but may not set simp_enabled;
+	 * on L1VH, VMBus already fully set it up. Enable it on root.
+	 */
 	simp.as_uint64 = hv_get_non_nested_msr(HV_MSR_SIMP);
-	simp.simp_enabled = true;
+	if (hv_root_partition()) {
+		simp.simp_enabled = true;
+		hv_set_non_nested_msr(HV_MSR_SIMP, simp.as_uint64);
+	}
 	*msg_page = memremap(simp.base_simp_gpa << HV_HYP_PAGE_SHIFT,
 			     HV_HYP_PAGE_SIZE,
 			     MEMREMAP_WB);
 
 	if (!(*msg_page))
-		return -EFAULT;
+		goto cleanup_simp;
 
-	hv_set_non_nested_msr(HV_MSR_SIMP, simp.as_uint64);
-
-	/* Setup the Synic's event flags page */
+	/*
+	 * Map the event flags page. Same as SIMP: enable on root,
+	 * already enabled by VMBus on L1VH.
+	 */
 	siefp.as_uint64 = hv_get_non_nested_msr(HV_MSR_SIEFP);
-	siefp.siefp_enabled = true;
+	if (hv_root_partition()) {
+		siefp.siefp_enabled = true;
+		hv_set_non_nested_msr(HV_MSR_SIEFP, siefp.as_uint64);
+	}
 	*event_flags_page = memremap(siefp.base_siefp_gpa << PAGE_SHIFT,
 				     PAGE_SIZE, MEMREMAP_WB);
 
 	if (!(*event_flags_page))
-		goto cleanup;
-
-	hv_set_non_nested_msr(HV_MSR_SIEFP, siefp.as_uint64);
+		goto cleanup_siefp;
 
 	/* Setup the Synic's event ring page */
 	sirbp.as_uint64 = hv_get_non_nested_msr(HV_MSR_SIRBP);
@@ -492,7 +500,7 @@ int mshv_synic_init(unsigned int cpu)
 				    PAGE_SIZE, MEMREMAP_WB);
 
 	if (!(*event_ring_page))
-		goto cleanup;
+		goto cleanup_siefp;
 
 	hv_set_non_nested_msr(HV_MSR_SIRBP, sirbp.as_uint64);
 
@@ -515,28 +523,33 @@ int mshv_synic_init(unsigned int cpu)
 			      sint.as_uint64);
 #endif
 
-	/* Enable global synic bit */
-	sctrl.as_uint64 = hv_get_non_nested_msr(HV_MSR_SCONTROL);
-	sctrl.enable = 1;
-	hv_set_non_nested_msr(HV_MSR_SCONTROL, sctrl.as_uint64);
+	/*
+	 * On L1VH, VMBus owns SCONTROL and has already enabled it.
+	 * On root partition, VMBus doesn't run so we must enable it.
+	 */
+	if (hv_root_partition()) {
+		union hv_synic_scontrol sctrl;
+
+		sctrl.as_uint64 = hv_get_non_nested_msr(HV_MSR_SCONTROL);
+		sctrl.enable = 1;
+		hv_set_non_nested_msr(HV_MSR_SCONTROL, sctrl.as_uint64);
+	}
 
 	return 0;
 
-cleanup:
-	if (*event_ring_page) {
-		sirbp.sirbp_enabled = false;
-		hv_set_non_nested_msr(HV_MSR_SIRBP, sirbp.as_uint64);
-		memunmap(*event_ring_page);
-	}
-	if (*event_flags_page) {
+cleanup_siefp:
+	if (*event_flags_page)
+		memunmap(*event_flags_page);
+	if (hv_root_partition()) {
 		siefp.siefp_enabled = false;
 		hv_set_non_nested_msr(HV_MSR_SIEFP, siefp.as_uint64);
-		memunmap(*event_flags_page);
 	}
-	if (*msg_page) {
+cleanup_simp:
+	if (*msg_page)
+		memunmap(*msg_page);
+	if (hv_root_partition()) {
 		simp.simp_enabled = false;
 		hv_set_non_nested_msr(HV_MSR_SIMP, simp.as_uint64);
-		memunmap(*msg_page);
 	}
 
 	return -EFAULT;
@@ -545,10 +558,7 @@ cleanup:
 int mshv_synic_cleanup(unsigned int cpu)
 {
 	union hv_synic_sint sint;
-	union hv_synic_simp simp;
-	union hv_synic_siefp siefp;
 	union hv_synic_sirbp sirbp;
-	union hv_synic_scontrol sctrl;
 	struct hv_synic_pages *spages = this_cpu_ptr(mshv_root.synic_pages);
 	struct hv_message_page **msg_page = &spages->hyp_synic_message_page;
 	struct hv_synic_event_flags_page **event_flags_page =
@@ -568,28 +578,43 @@ int mshv_synic_cleanup(unsigned int cpu)
 	hv_set_non_nested_msr(HV_MSR_SINT0 + HV_SYNIC_DOORBELL_SINT_INDEX,
 			      sint.as_uint64);
 
-	/* Disable Synic's event ring page */
+	/* Disable SYNIC event ring page owned by MSHV */
 	sirbp.as_uint64 = hv_get_non_nested_msr(HV_MSR_SIRBP);
 	sirbp.sirbp_enabled = false;
 	hv_set_non_nested_msr(HV_MSR_SIRBP, sirbp.as_uint64);
 	memunmap(*event_ring_page);
 
-	/* Disable Synic's event flags page */
-	siefp.as_uint64 = hv_get_non_nested_msr(HV_MSR_SIEFP);
-	siefp.siefp_enabled = false;
-	hv_set_non_nested_msr(HV_MSR_SIEFP, siefp.as_uint64);
+	/*
+	 * Release our mappings of the message and event flags pages.
+	 * On root partition, we enabled SIMP/SIEFP — disable them.
+	 * On L1VH, VMBus owns the MSRs, leave them alone.
+	 */
 	memunmap(*event_flags_page);
+	if (hv_root_partition()) {
+		union hv_synic_simp simp;
+		union hv_synic_siefp siefp;
 
-	/* Disable Synic's message page */
-	simp.as_uint64 = hv_get_non_nested_msr(HV_MSR_SIMP);
-	simp.simp_enabled = false;
-	hv_set_non_nested_msr(HV_MSR_SIMP, simp.as_uint64);
+		siefp.as_uint64 = hv_get_non_nested_msr(HV_MSR_SIEFP);
+		siefp.siefp_enabled = false;
+		hv_set_non_nested_msr(HV_MSR_SIEFP, siefp.as_uint64);
+
+		simp.as_uint64 = hv_get_non_nested_msr(HV_MSR_SIMP);
+		simp.simp_enabled = false;
+		hv_set_non_nested_msr(HV_MSR_SIMP, simp.as_uint64);
+	}
 	memunmap(*msg_page);
 
-	/* Disable global synic bit */
-	sctrl.as_uint64 = hv_get_non_nested_msr(HV_MSR_SCONTROL);
-	sctrl.enable = 0;
-	hv_set_non_nested_msr(HV_MSR_SCONTROL, sctrl.as_uint64);
+	/*
+	 * On root partition, we enabled SCONTROL in init — disable it.
+	 * On L1VH, VMBus owns SCONTROL, leave it alone.
+	 */
+	if (hv_root_partition()) {
+		union hv_synic_scontrol sctrl;
+
+		sctrl.as_uint64 = hv_get_non_nested_msr(HV_MSR_SCONTROL);
+		sctrl.enable = 0;
+		hv_set_non_nested_msr(HV_MSR_SCONTROL, sctrl.as_uint64);
+	}
 
 	return 0;
 }
