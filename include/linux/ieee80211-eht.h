@@ -485,13 +485,13 @@ struct ieee80211_multi_link_elem {
 #define IEEE80211_MED_SYNC_DELAY_DEFAULT		0x10ac
 
 #define IEEE80211_EML_CAP_EMLSR_SUPP			0x0001
-#define IEEE80211_EML_CAP_EMLSR_PADDING_DELAY		0x000e
+#define IEEE80211_EML_CAP_EMLSR_EMLMR_PADDING_DELAY		0x000e
 #define  IEEE80211_EML_CAP_EMLSR_PADDING_DELAY_0US		0
 #define  IEEE80211_EML_CAP_EMLSR_PADDING_DELAY_32US		1
 #define  IEEE80211_EML_CAP_EMLSR_PADDING_DELAY_64US		2
 #define  IEEE80211_EML_CAP_EMLSR_PADDING_DELAY_128US		3
 #define  IEEE80211_EML_CAP_EMLSR_PADDING_DELAY_256US		4
-#define IEEE80211_EML_CAP_EMLSR_TRANSITION_DELAY	0x0070
+#define IEEE80211_EML_CAP_EMLSR_EMLMR_TRANSITION_DELAY	0x0070
 #define  IEEE80211_EML_CAP_EMLSR_TRANSITION_DELAY_0US		0
 #define  IEEE80211_EML_CAP_EMLSR_TRANSITION_DELAY_16US		1
 #define  IEEE80211_EML_CAP_EMLSR_TRANSITION_DELAY_32US		2
@@ -1114,11 +1114,17 @@ static inline bool ieee80211_tid_to_link_map_size_ok(const u8 *data, size_t len)
 
 static inline u32 ieee80211_emlsr_pad_delay_in_us(u16 eml_cap)
 {
+	u32 elmsr_supp =
+		u16_get_bits(eml_cap, IEEE80211_EML_CAP_EMLSR_SUPP);
+
+	if (!elmsr_supp)
+		return 0;
+
 	/* IEEE Std 802.11be-2024 Table 9-417i—Encoding of the EMLSR
 	 * Padding Delay subfield.
 	 */
 	u32 pad_delay = u16_get_bits(eml_cap,
-				     IEEE80211_EML_CAP_EMLSR_PADDING_DELAY);
+				     IEEE80211_EML_CAP_EMLSR_EMLMR_PADDING_DELAY);
 
 	if (!pad_delay ||
 	    pad_delay > IEEE80211_EML_CAP_EMLSR_PADDING_DELAY_256US)
@@ -1138,12 +1144,18 @@ static inline u32 ieee80211_emlsr_pad_delay_in_us(u16 eml_cap)
 
 static inline u32 ieee80211_emlsr_trans_delay_in_us(u16 eml_cap)
 {
+	u32 elmsr_supp =
+		u16_get_bits(eml_cap, IEEE80211_EML_CAP_EMLSR_SUPP);
+
+	if (!elmsr_supp)
+		return 0;
+
 	/* IEEE Std 802.11be-2024 Table 9-417j—Encoding of the EMLSR
 	 * Transition Delay subfield.
 	 */
 	u32 trans_delay =
 		u16_get_bits(eml_cap,
-			     IEEE80211_EML_CAP_EMLSR_TRANSITION_DELAY);
+			     IEEE80211_EML_CAP_EMLSR_EMLMR_TRANSITION_DELAY);
 
 	/* invalid values also just use 0 */
 	if (!trans_delay ||

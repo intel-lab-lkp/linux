@@ -217,11 +217,11 @@ void ieee80211_rx_eml_op_mode_notif(struct ieee80211_sub_if_data *sdata,
 			sta->sta.eml_cap =
 				u8_replace_bits(sta->sta.eml_cap,
 						pad_delay,
-						IEEE80211_EML_CAP_EMLSR_PADDING_DELAY);
+						IEEE80211_EML_CAP_EMLSR_EMLMR_PADDING_DELAY);
 			sta->sta.eml_cap =
 				u8_replace_bits(sta->sta.eml_cap,
 						trans_delay,
-						IEEE80211_EML_CAP_EMLSR_TRANSITION_DELAY);
+						IEEE80211_EML_CAP_EMLSR_EMLMR_TRANSITION_DELAY);
 		}
 	}
 
