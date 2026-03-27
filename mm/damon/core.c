@@ -1330,6 +1330,8 @@ int damon_commit_ctx(struct damon_ctx *dst, struct damon_ctx *src)
 	dst->maybe_corrupted = true;
 	if (!is_power_of_2(src->min_region_sz))
 		return -EINVAL;
+	if (!src->addr_unit || !is_power_of_2(src->addr_unit))
+		return -EINVAL;
 
 	err = damon_commit_schemes(dst, src);
 	if (err)
