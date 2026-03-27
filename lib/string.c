@@ -415,11 +415,13 @@ EXPORT_SYMBOL(strnchr);
 #ifndef __HAVE_ARCH_STRLEN
 size_t strlen(const char *s)
 {
-	const char *sc;
+	size_t len;
 
-	for (sc = s; *sc != '\0'; ++sc)
-		/* nothing */;
-	return sc - s;
+	for (len = 0; likely(s[len]); len += 2) {
+		if (!s[len + 1])
+			return len + 1;
+	}
+	return len;
 }
 EXPORT_SYMBOL(strlen);
 #endif
