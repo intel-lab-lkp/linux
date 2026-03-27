@@ -21,6 +21,10 @@ static void cpuid_clear(const struct cpuid_parse_entry *e, const struct cpuid_re
 	memset(output->info, 0, sizeof(*output->info));
 }
 
+static const struct cpuid_vendor_entry cpuid_vendor_entries[] = {
+	CPUID_VENDOR_ENTRIES
+};
+
 /*
  * Leaf read functions:
  */
@@ -57,16 +61,56 @@ cpuid_read_0x80000000(const struct cpuid_parse_entry *e, const struct cpuid_read
 }
 
 /*
- * CPUID parser table:
+ * CPUID parser tables:
+ *
+ * At early boot, only leaves at cpuid_early_entries[] should be parsed.
  */
 
-static const struct cpuid_parse_entry cpuid_parse_entries[] = {
-	CPUID_PARSE_ENTRIES
+static const struct cpuid_parse_entry cpuid_early_entries[] = {
+	CPUID_EARLY_ENTRIES
+};
+
+static const struct cpuid_parse_entry cpuid_common_entries[] = {
+	CPUID_COMMON_ENTRIES
+};
+
+static const struct {
+	const struct cpuid_parse_entry	*table;
+	int				nr_entries;
+} cpuid_phases[] = {
+	{	cpuid_early_entries,	ARRAY_SIZE(cpuid_early_entries)		},
+	{	cpuid_common_entries,	ARRAY_SIZE(cpuid_common_entries)	},
 };
 
 /*
  * Leaf-independent parser code:
  */
+
+static bool cpuid_leaf_matches_vendor(unsigned int leaf, u8 cpu_vendor)
+{
+	const struct cpuid_parse_entry *p = cpuid_early_entries;
+	const struct cpuid_vendor_entry *v = cpuid_vendor_entries;
+
+	/* Leaves in the early boot parser table are vendor agnostic */
+	for (int i = 0; i < ARRAY_SIZE(cpuid_early_entries); i++, p++)
+		if (p->leaf == leaf)
+			return true;
+
+	/* Leaves in the vendor table must pass a CPU vendor check */
+	for (int i = 0; i < ARRAY_SIZE(cpuid_vendor_entries); i++, v++) {
+		if (v->leaf != leaf)
+			continue;
+
+		for (unsigned int j = 0; j < v->nvendors; j++)
+			if (cpu_vendor == v->vendors[j])
+				return true;
+
+		return false;
+	}
+
+	/* Remaining leaves are vendor agnostic */
+	return true;
+}
 
 static unsigned int cpuid_range_max_leaf(const struct cpuid_table *t, unsigned int range)
 {
@@ -94,6 +138,9 @@ __cpuid_reset_table(struct cpuid_table *t, const struct cpuid_parse_entry entrie
 		};
 
 		if (entry->leaf < start || entry->leaf > end)
+			continue;
+
+		if (!cpuid_leaf_matches_vendor(entry->leaf, boot_cpu_data.x86_vendor))
 			continue;
 
 		cpuid_clear(entry, &output);
@@ -140,27 +187,50 @@ cpuid_fill_table(struct cpuid_table *t, const struct cpuid_parse_entry entries[]
 		__cpuid_fill_table(t, entries, nr_entries, ranges[i].start, ranges[i].end);
 }
 
-static void __cpuid_scan_cpu_full(struct cpuinfo_x86 *c)
+static void __cpuid_scan_cpu_full(struct cpuinfo_x86 *c, bool early_boot)
 {
-	unsigned int nr_entries = ARRAY_SIZE(cpuid_parse_entries);
+	int nphases = early_boot ? 1 : ARRAY_SIZE(cpuid_phases);
 	struct cpuid_table *table = &c->cpuid;
 
-	cpuid_fill_table(table, cpuid_parse_entries, nr_entries);
+	for (int i = 0; i < nphases; i++)
+		cpuid_fill_table(table, cpuid_phases[i].table, cpuid_phases[i].nr_entries);
 }
 
 static void
-__cpuid_scan_cpu_partial(struct cpuinfo_x86 *c, unsigned int start_leaf, unsigned int end_leaf)
+__cpuid_scan_cpu_partial(struct cpuinfo_x86 *c, bool early_boot, unsigned int start_leaf, unsigned int end_leaf)
 {
-	unsigned int nr_entries = ARRAY_SIZE(cpuid_parse_entries);
+	int nphases = early_boot ? 1 : ARRAY_SIZE(cpuid_phases);
 	struct cpuid_table *table = &c->cpuid;
 
-	__cpuid_zero_table(table, cpuid_parse_entries, nr_entries, start_leaf, end_leaf);
-	__cpuid_fill_table(table, cpuid_parse_entries, nr_entries, start_leaf, end_leaf);
+	for (int i = 0; i < nphases; i++) {
+		const struct cpuid_parse_entry *entries = cpuid_phases[i].table;
+		unsigned int nr_entries = cpuid_phases[i].nr_entries;
+
+		__cpuid_zero_table(table, entries, nr_entries, start_leaf, end_leaf);
+		__cpuid_fill_table(table, entries, nr_entries, start_leaf, end_leaf);
+	}
 }
 
 /*
  * Call-site APIs:
  */
+
+/**
+ * cpuid_scan_cpu_early() - Populate CPUID table on early boot
+ * @c:		CPU capability structure associated with the current CPU
+ *
+ * Populate the CPUID table embedded within @c with parsed CPUID data.
+ *
+ * This must be called at early boot, so that early boot code can identify the
+ * CPU's x86 vendor.  Only CPUID(0x0) and CPUID(0x1) are parsed.
+ *
+ * cpuid_scan_cpu() must be called later to complete the CPUID table.  That is,
+ * after saving the x86 vendor info to the CPU capability structure @c.
+ */
+void cpuid_scan_cpu_early(struct cpuinfo_x86 *c)
+{
+	__cpuid_scan_cpu_full(c, true);
+}
 
 /**
  * cpuid_scan_cpu() - Populate current CPU's CPUID table
@@ -169,10 +239,12 @@ __cpuid_scan_cpu_partial(struct cpuinfo_x86 *c, unsigned int start_leaf, unsigne
  * Populate the CPUID table embedded within @c with parsed CPUID data.  All CPUID
  * instructions are invoked locally, so this must be called on the CPU associated
  * with @c.
+ *
+ * cpuid_scan_cpu_early() must have been called earlier on @c.
  */
 void cpuid_scan_cpu(struct cpuinfo_x86 *c)
 {
-	__cpuid_scan_cpu_full(c);
+	__cpuid_scan_cpu_full(c, false);
 }
 
 /**
@@ -180,6 +252,8 @@ void cpuid_scan_cpu(struct cpuinfo_x86 *c)
  * @c:		CPU capability structure associated with the current CPU
  * @start:	Start of leaf range to be re-scanned
  * @end:	End of leaf range
+ *
+ * cpuid_scan_cpu_early() must have been called earlier on @c.
  */
 void cpuid_refresh_range(struct cpuinfo_x86 *c, u32 start, u32 end)
 {
@@ -189,13 +263,15 @@ void cpuid_refresh_range(struct cpuinfo_x86 *c, u32 start, u32 end)
 	if (WARN_ON_ONCE(CPUID_RANGE(start) != CPUID_RANGE(end)))
 		return;
 
-	__cpuid_scan_cpu_partial(c, start, end);
+	__cpuid_scan_cpu_partial(c, false, start, end);
 }
 
 /**
  * cpuid_refresh_leaf() - Rescan a CPUID table's leaf
  * @c:		CPU capability structure associated with the current CPU
  * @leaf:	Leaf to be re-scanned
+ *
+ * cpuid_scan_cpu_early() must have been called earlier on @c.
  */
 void cpuid_refresh_leaf(struct cpuinfo_x86 *c, u32 leaf)
 {
