@@ -718,6 +718,9 @@ static void cdns_dsi_bridge_atomic_pre_enable(struct drm_bridge *bridge,
 	u32 tmp, reg_wakeup, div, status;
 	int nlanes;
 
+	dev_dbg(dsi->base.dev, "bitclk %lu, byteclk %lu\n",
+		phy_cfg->hs_clk_rate, phy_cfg->hs_clk_rate / 8);
+
 	/*
 	 * The cdns-dsi controller needs to be enabled before it's DPI source
 	 * has begun streaming. If this is not followed, there is a brief window
