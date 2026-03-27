@@ -1528,8 +1528,10 @@ static int amdgpu_ras_query_error_status_with_event(struct amdgpu_device *adev,
 	if (ret)
 		return ret;
 
-	if (!amdgpu_ras_get_error_query_mode(adev, &error_query_mode))
-		return -EINVAL;
+	if (!amdgpu_ras_get_error_query_mode(adev, &error_query_mode)) {
+		ret = -EINVAL;
+		goto out_fini_err_data;
+	}
 
 	memset(&qctx, 0, sizeof(qctx));
 	qctx.evid.type = type;
