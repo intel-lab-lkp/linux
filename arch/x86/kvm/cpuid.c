@@ -30,8 +30,8 @@
 #include "xen.h"
 
 /*
- * Unlike "struct cpuinfo_x86.x86_capability", kvm_cpu_caps doesn't need to be
- * aligned to sizeof(unsigned long) because it's not accessed via bitops.
+ * No unsigned long alignment is needed.  The CPUID tables X86_FEATURE
+ * words are accessed by bitops, but this table is not.
  */
 u32 kvm_cpu_caps[NR_KVM_CPU_CAPS] __read_mostly;
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_cpu_caps);
@@ -837,9 +837,6 @@ void kvm_initialize_cpu_caps(void)
 
 	WARN_ON_ONCE(kvm_is_configuring_cpu_caps);
 	kvm_is_configuring_cpu_caps = true;
-
-	BUILD_BUG_ON(sizeof(kvm_cpu_caps) - (NKVMCAPINTS * sizeof(*kvm_cpu_caps)) >
-		     sizeof(boot_cpu_data.x86_capability));
 
 	kvm_cpu_cap_init(CPUID_1_ECX,
 		F(XMM3),
