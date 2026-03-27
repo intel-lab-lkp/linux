@@ -512,12 +512,9 @@ static int __must_check set_external_spte_present(struct kvm *kvm, tdp_ptep_t sp
 						 gfn_t gfn, u64 *old_spte,
 						 u64 new_spte, int level)
 {
-	bool was_present = is_shadow_present_pte(*old_spte);
 	bool is_present = is_shadow_present_pte(new_spte);
 	bool is_leaf = is_present && is_last_spte(new_spte, level);
 	int ret = 0;
-
-	KVM_BUG_ON(was_present, kvm);
 
 	lockdep_assert_held(&kvm->mmu_lock);
 	/*
@@ -661,13 +658,6 @@ static inline int __must_check __tdp_mmu_set_spte_atomic(struct kvm *kvm,
 
 	if (is_mirror_sptep(iter->sptep) && !is_frozen_spte(new_spte)) {
 		int ret;
-
-		/*
-		 * Users of atomic zapping don't operate on mirror roots,
-		 * so don't handle it and bug the VM if it's seen.
-		 */
-		if (KVM_BUG_ON(!is_shadow_present_pte(new_spte), kvm))
-			return -EBUSY;
 
 		ret = set_external_spte_present(kvm, iter->sptep, iter->gfn,
 						&iter->old_spte, new_spte, iter->level);
