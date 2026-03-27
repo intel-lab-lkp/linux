@@ -551,9 +551,9 @@
 			clock-output-names = "system", "pllc0", "pllc1",
 					     "pllc2", "r",
 					     "usb24s",
-					     "i", "zg", "b", "m1", "hp",
-					     "hpp", "usbp", "s", "zb", "m3",
-					     "cp";
+					     "i", "zg", "b", "m1", "ztr", "zt",
+					     "hp", "hpp", "usbp", "s", "zb",
+					     "m3", "cp";
 		};
 
 		/* Variable factor clocks (DIV6) */
