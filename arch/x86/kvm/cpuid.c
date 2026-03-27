@@ -1503,28 +1503,28 @@ static inline int __do_cpuid_func(struct kvm_cpuid_array *array, u32 function)
 		}
 		break;
 	case 0xa: { /* Architectural Performance Monitoring */
-		union cpuid10_eax eax = { };
-		union cpuid10_edx edx = { };
+		struct leaf_0xa_0 l = { };
+		struct cpuid_regs *regs = (struct cpuid_regs *)&l;
 
 		if (!enable_pmu || !static_cpu_has(X86_FEATURE_ARCH_PERFMON)) {
 			entry->eax = entry->ebx = entry->ecx = entry->edx = 0;
 			break;
 		}
 
-		eax.split.version_id = kvm_pmu_cap.version;
-		eax.split.num_counters = kvm_pmu_cap.num_counters_gp;
-		eax.split.bit_width = kvm_pmu_cap.bit_width_gp;
-		eax.split.mask_length = kvm_pmu_cap.events_mask_len;
-		edx.split.num_counters_fixed = kvm_pmu_cap.num_counters_fixed;
-		edx.split.bit_width_fixed = kvm_pmu_cap.bit_width_fixed;
+		l.pmu_version		= kvm_pmu_cap.version;
+		l.num_counters_gp	= kvm_pmu_cap.num_counters_gp;
+		l.bit_width_gp		= kvm_pmu_cap.bit_width_gp;
+		l.events_mask_len	= kvm_pmu_cap.events_mask_len;
+		l.num_counters_fixed	= kvm_pmu_cap.num_counters_fixed;
+		l.bitwidth_fixed	= kvm_pmu_cap.bit_width_fixed;
 
 		if (kvm_pmu_cap.version)
-			edx.split.anythread_deprecated = 1;
+			l.anythread_deprecation = 1;
 
-		entry->eax = eax.full;
+		entry->eax = regs->eax;
 		entry->ebx = kvm_pmu_cap.events_mask;
 		entry->ecx = 0;
-		entry->edx = edx.full;
+		entry->edx = regs->edx;
 		break;
 	}
 	case 0x1f:
