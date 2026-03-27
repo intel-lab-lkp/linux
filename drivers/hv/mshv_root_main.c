@@ -2256,19 +2256,9 @@ static int mshv_reboot_notify(struct notifier_block *nb,
 	return 0;
 }
 
-struct notifier_block mshv_reboot_nb = {
+static struct notifier_block mshv_reboot_nb = {
 	.notifier_call = mshv_reboot_notify,
 };
-
-static void mshv_root_partition_exit(void)
-{
-	unregister_reboot_notifier(&mshv_reboot_nb);
-}
-
-static int __init mshv_root_partition_init(struct device *dev)
-{
-	return register_reboot_notifier(&mshv_reboot_nb);
-}
 
 static int __init mshv_init_vmm_caps(struct device *dev)
 {
@@ -2339,8 +2329,7 @@ static int __init mshv_parent_partition_init(void)
 	if (ret)
 		goto remove_cpu_state;
 
-	if (hv_root_partition())
-		ret = mshv_root_partition_init(dev);
+	ret = register_reboot_notifier(&mshv_reboot_nb);
 	if (ret)
 		goto remove_cpu_state;
 
@@ -2368,8 +2357,7 @@ exit_debugfs:
 deinit_root_scheduler:
 	root_scheduler_deinit();
 exit_partition:
-	if (hv_root_partition())
-		mshv_root_partition_exit();
+	unregister_reboot_notifier(&mshv_reboot_nb);
 remove_cpu_state:
 	cpuhp_remove_state(mshv_cpuhp_online);
 free_synic_pages:
@@ -2387,8 +2375,7 @@ static void __exit mshv_parent_partition_exit(void)
 	misc_deregister(&mshv_dev);
 	mshv_irqfd_wq_cleanup();
 	root_scheduler_deinit();
-	if (hv_root_partition())
-		mshv_root_partition_exit();
+	unregister_reboot_notifier(&mshv_reboot_nb);
 	cpuhp_remove_state(mshv_cpuhp_online);
 	free_percpu(mshv_root.synic_pages);
 }

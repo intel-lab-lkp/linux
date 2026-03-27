@@ -495,13 +495,29 @@ int mshv_synic_init(unsigned int cpu)
 
 	/* Setup the Synic's event ring page */
 	sirbp.as_uint64 = hv_get_non_nested_msr(HV_MSR_SIRBP);
+
+	if (hv_root_partition()) {
+		*event_ring_page = memremap(sirbp.base_sirbp_gpa << PAGE_SHIFT,
+					    PAGE_SIZE, MEMREMAP_WB);
+
+		if (!(*event_ring_page))
+			goto cleanup_siefp;
+	} else {
+		/*
+		 * On L1VH the hypervisor does not provide a SIRBP page.
+		 * Allocate one and program its GPA into the MSR.
+		 */
+		*event_ring_page = (struct hv_synic_event_ring_page *)
+			get_zeroed_page(GFP_KERNEL);
+
+		if (!(*event_ring_page))
+			goto cleanup_siefp;
+
+		sirbp.base_sirbp_gpa = virt_to_phys(*event_ring_page)
+				>> PAGE_SHIFT;
+	}
+
 	sirbp.sirbp_enabled = true;
-	*event_ring_page = memremap(sirbp.base_sirbp_gpa << PAGE_SHIFT,
-				    PAGE_SIZE, MEMREMAP_WB);
-
-	if (!(*event_ring_page))
-		goto cleanup_siefp;
-
 	hv_set_non_nested_msr(HV_MSR_SIRBP, sirbp.as_uint64);
 
 #ifdef HYPERVISOR_CALLBACK_VECTOR
@@ -581,8 +597,15 @@ int mshv_synic_cleanup(unsigned int cpu)
 	/* Disable SYNIC event ring page owned by MSHV */
 	sirbp.as_uint64 = hv_get_non_nested_msr(HV_MSR_SIRBP);
 	sirbp.sirbp_enabled = false;
-	hv_set_non_nested_msr(HV_MSR_SIRBP, sirbp.as_uint64);
-	memunmap(*event_ring_page);
+
+	if (hv_root_partition()) {
+		hv_set_non_nested_msr(HV_MSR_SIRBP, sirbp.as_uint64);
+		memunmap(*event_ring_page);
+	} else {
+		sirbp.base_sirbp_gpa = 0;
+		hv_set_non_nested_msr(HV_MSR_SIRBP, sirbp.as_uint64);
+		free_page((unsigned long)*event_ring_page);
+	}
 
 	/*
 	 * Release our mappings of the message and event flags pages.
