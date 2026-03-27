@@ -34,6 +34,12 @@
 #define MODE_DP				3
 #define MODE_HDMI_20			4
 #define MODE_HDMI_FRL			5
+#define HDMI_FRL3G_RATE_ENCODING	0
+#define HDMI_FRL6G_RATE_ENCODING	1
+#define HDMI_FRL8G_RATE_ENCODING	2
+#define HDMI_FRL10G_RATE_ENCODING	3
+#define HDMI_FRL12G_RATE_ENCODING	4
+#define VDR_NUM_REGISTERS		13
 #define Q32_TO_INT(x)	((x) >> 32)
 #define Q32_TO_FRAC(x)	((x) & 0xFFFFFFFF)
 #define DCO_MIN_FREQ_MHZ	11850
@@ -1501,8 +1507,40 @@ static void compute_dco_fine(struct lt_phy_params *p, u32 dco_12g)
 		dco_fine0_tune_2_0;
 }
 
-int
-intel_lt_phy_calculate_hdmi_state(struct intel_lt_phy_pll_state *lt_state,
+static int intel_hdmi_vdr_rate_encoding(struct intel_display *display,
+					u8 mode, u32 clock_khz)
+{
+	switch (mode) {
+	case MODE_HDMI_20:
+		/* For TMDS/HDMI2.0 the rate encoding is not used (don't care). */
+		return 0;
+
+	case MODE_HDMI_FRL:
+		if (intel_dpll_clock_matches(clock_khz, 300000))
+			return HDMI_FRL3G_RATE_ENCODING;
+		if (intel_dpll_clock_matches(clock_khz, 600000))
+			return HDMI_FRL6G_RATE_ENCODING;
+		if (intel_dpll_clock_matches(clock_khz, 800000))
+			return HDMI_FRL8G_RATE_ENCODING;
+		if (intel_dpll_clock_matches(clock_khz, 1000000))
+			return HDMI_FRL10G_RATE_ENCODING;
+		if (intel_dpll_clock_matches(clock_khz, 1200000))
+			return HDMI_FRL12G_RATE_ENCODING;
+
+		drm_dbg_kms(display->drm,
+			    "Unsupported LT PHY HDMI FRL rate %u kHz\n",
+			    clock_khz);
+		return -EINVAL;
+
+	default:
+		/* Not an HDMI mode */
+		return -EINVAL;
+	}
+}
+
+static int
+intel_lt_phy_calculate_hdmi_state(struct intel_display *display,
+				  struct intel_lt_phy_pll_state *lt_state,
 				  u32 frequency_khz)
 {
 #define DATA_ASSIGN(i, pll_reg)	\
@@ -1520,6 +1558,8 @@ intel_lt_phy_calculate_hdmi_state(struct intel_lt_phy_pll_state *lt_state,
 
 	bool found = false;
 	struct lt_phy_params p;
+	u8 mode;
+	int rate;
 	u32 dco_fmin = DCO_MIN_FREQ_MHZ;
 	u64 refclk_khz = REF_CLK_KHZ;
 	u32 refclk_mhz_int = REF_CLK_KHZ / 1000;
@@ -1616,8 +1656,21 @@ intel_lt_phy_calculate_hdmi_state(struct intel_lt_phy_pll_state *lt_state,
 		    (frequency_khz == 2500) || (dco_12g == 1)) ? 0 : 1;
 	set_phy_vdr_addresses(&p, pll_type);
 
-	lt_state->config[0] = 0x84;
-	lt_state->config[1] = 0x2d;
+	mode = intel_hdmi_is_frl(frequency_khz) ? MODE_HDMI_FRL : MODE_HDMI_20;
+	rate = intel_hdmi_vdr_rate_encoding(display, mode, frequency_khz);
+
+	if (rate < 0)
+		return rate;
+
+	/* Only HDMI FRL 10G mode uses USB PLL */
+	if (mode == MODE_HDMI_FRL && rate == HDMI_FRL10G_RATE_ENCODING)
+		lt_state->config[0] = REG_FIELD_PREP(LT_PHY_VDR_RATE_ENCODING_MASK, rate) |
+				      REG_FIELD_PREP(LT_PHY_VDR_MODE_ENCODING_MASK, mode);
+	else
+		lt_state->config[0] = LT_PHY_VDR_DP_PLL_ENABLE |
+				      REG_FIELD_PREP(LT_PHY_VDR_RATE_ENCODING_MASK, rate) |
+				      REG_FIELD_PREP(LT_PHY_VDR_MODE_ENCODING_MASK, mode);
+	lt_state->config[1] = LT_PHY_VDR_PLL_RECIPE | LT_PHY_VDR_NUMBER_OF_REGISTERS(VDR_NUM_REGISTERS);
 	ADDR_ASSIGN(0, p.pll_reg4);
 	ADDR_ASSIGN(1, p.pll_reg3);
 	ADDR_ASSIGN(2, p.pll_reg5);
@@ -1778,7 +1831,7 @@ intel_lt_phy_pll_calc_state(struct intel_crtc_state *crtc_state,
 
 	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_HDMI)) {
 		hw_state->ltpll.lane_count = crtc_state->lane_count;
-		return intel_lt_phy_calculate_hdmi_state(&hw_state->ltpll,
+		return intel_lt_phy_calculate_hdmi_state(display, &hw_state->ltpll,
 							 crtc_state->port_clock);
 	}
 
@@ -1806,7 +1859,7 @@ intel_lt_phy_program_pll(struct intel_encoder *encoder,
 	intel_lt_phy_write(encoder, owned_lane_mask, LT_PHY_VDR_2_CONFIG,
 			   ltpll->config[2], MB_WRITE_COMMITTED);
 
-	for (i = 0; i <= 12; i++) {
+	for (i = 0; i < VDR_NUM_REGISTERS; i++) {
 		intel_lt_phy_write(encoder, INTEL_LT_PHY_LANE0, LT_PHY_VDR_X_ADDR_MSB(i),
 				   ltpll->addr_msb[i],
 				   MB_WRITE_COMMITTED);
@@ -2186,7 +2239,7 @@ void intel_lt_phy_dump_hw_state(struct drm_printer *p,
 			   i, hw_state->config[i]);
 	}
 
-	for (i = 0; i <= 12; i++)
+	for (i = 0; i < VDR_NUM_REGISTERS; i++)
 		for (j = 3; j >= 0; j--)
 			drm_printf(p, "vdr_data[%d][%d] = 0x%.4x,\n",
 				   i, j, hw_state->data[i][j]);
@@ -2257,7 +2310,7 @@ bool intel_lt_phy_pll_readout_hw_state(struct intel_encoder *encoder,
 	pll_state->config[1] = intel_lt_phy_read(encoder, INTEL_LT_PHY_LANE0, LT_PHY_VDR_1_CONFIG);
 	pll_state->config[2] = intel_lt_phy_read(encoder, lane, LT_PHY_VDR_2_CONFIG);
 
-	for (i = 0; i <= 12; i++) {
+	for (i = 0; i < VDR_NUM_REGISTERS; i++) {
 		for (j = 3, k = 0; j >= 0; j--, k++)
 			pll_state->data[i][k] =
 				intel_lt_phy_read(encoder, INTEL_LT_PHY_LANE0,
@@ -2284,7 +2337,6 @@ void intel_xe3plpd_pll_disable(struct intel_encoder *encoder)
 		intel_mtl_tbt_pll_disable_clock(encoder);
 	else
 		intel_lt_phy_pll_disable(encoder);
-
 }
 
 static void intel_lt_phy_pll_verify_clock(struct intel_display *display,
@@ -2328,7 +2380,7 @@ static void intel_lt_phy_pll_verify_params(struct intel_display *display,
 	if (!pll_params->is_hdmi)
 		return;
 
-	if (intel_lt_phy_calculate_hdmi_state(&pll_state, pll_params->clock_rate) != 0)
+	if (intel_lt_phy_calculate_hdmi_state(display, &pll_state, pll_params->clock_rate) != 0)
 		return;
 
 	intel_lt_phy_pll_verify_clock(display, pll_params->clock_rate, pll_params->name, &pll_state, false);
