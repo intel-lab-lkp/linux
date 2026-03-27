@@ -4,6 +4,8 @@
 #include <linux/module.h>
 #include <asm/cpufeature.h>
 
+#include "cpu.h"
+
 struct cpuid_dep {
 	unsigned int	feature;
 	unsigned int	depends;
@@ -156,24 +158,9 @@ void setup_clear_cpu_cap(unsigned int feature)
 	do_clear_cpu_cap(NULL, feature);
 }
 
-/*
- * Return the feature "name" if available, otherwise return
- * the X86_FEATURE_* numerals to make it easier to identify
- * the feature.
- */
-static const char *x86_feature_name(unsigned int feature, char *buf)
-{
-	if (x86_cap_flags[feature])
-		return x86_cap_flags[feature];
-
-	snprintf(buf, 16, "%d*32+%2d", feature / 32, feature % 32);
-
-	return buf;
-}
-
 void check_cpufeature_deps(struct cpuinfo_x86 *c)
 {
-	char feature_buf[16], depends_buf[16];
+	char feature_buf[X86_NAMELESS_FEAT_BUFLEN], depends_buf[X86_NAMELESS_FEAT_BUFLEN];
 	const struct cpuid_dep *d;
 
 	for (d = cpuid_deps; d->feature; d++) {

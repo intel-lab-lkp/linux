@@ -675,6 +675,7 @@ cpuid_dependent_features[] = {
 static void filter_cpuid_features(struct cpuinfo_x86 *c, bool warn)
 {
 	const struct cpuid_dependent_feature *df;
+	char feature_buf[X86_NAMELESS_FEAT_BUFLEN];
 
 	for (df = cpuid_dependent_features; df->feature; df++) {
 
@@ -697,7 +698,7 @@ static void filter_cpuid_features(struct cpuinfo_x86 *c, bool warn)
 			continue;
 
 		pr_warn("CPU: CPU feature %s disabled, no CPUID level 0x%x\n",
-			x86_cap_flags[df->feature], df->level);
+			x86_feature_name(df->feature, feature_buf), df->level);
 	}
 }
 
@@ -1631,6 +1632,7 @@ static inline bool parse_set_clear_cpuid(char *arg, bool set)
 
 	while (arg) {
 		bool found __maybe_unused = false;
+		char name_buf[X86_NAMELESS_FEAT_BUFLEN];
 		unsigned int bit;
 
 		opt = strsep(&arg, ",");
@@ -1651,10 +1653,7 @@ static inline bool parse_set_clear_cpuid(char *arg, bool set)
 					setup_clear_cpu_cap(bit);
 				}
 				/* empty-string, i.e., ""-defined feature flags */
-				if (!x86_cap_flags[bit])
-					pr_cont(" %d:%d\n", bit >> 5, bit & 31);
-				else
-					pr_cont(" %s\n", x86_cap_flags[bit]);
+				pr_cont(" %s\n", x86_feature_name(bit, name_buf));
 
 				taint++;
 			}
@@ -1970,6 +1969,27 @@ static void generic_identify(struct cpuinfo_x86 *c)
 #ifdef CONFIG_X86_32
 	set_cpu_bug(c, X86_BUG_ESPFIX);
 #endif
+}
+
+/*
+ * Return the feature "name" if available, otherwise return the
+ * X86_FEATURE_* numerals to make it easier to identify the feature.
+ * Callers of this function need to pass a char * buffer of size
+ * X86_NAMELESS_FEAT_BUFLEN.
+ */
+const char *x86_feature_name(unsigned int bit, char *buf)
+{
+	unsigned int word = bit >> 5;
+	const char *name = NULL;
+
+	if (word < NCAPINTS)
+		name = x86_cap_flags[bit];
+
+	if (name)
+		return name;
+
+	snprintf(buf, X86_NAMELESS_FEAT_BUFLEN, "%u:%u", word, bit & 31);
+	return buf;
 }
 
 /*

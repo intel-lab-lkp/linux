@@ -91,4 +91,8 @@ static inline bool spectre_v2_in_eibrs_mode(enum spectre_v2_mitigation mode)
 	       mode == SPECTRE_V2_EIBRS_LFENCE;
 }
 
+#define X86_NAMELESS_FEAT_BUFLEN	16
+
+const char *x86_feature_name(unsigned int bit, char *buf);
+
 #endif /* ARCH_X86_CPU_H */
