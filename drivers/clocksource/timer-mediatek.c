@@ -215,8 +215,7 @@ static irqreturn_t mtk_gpt_interrupt(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-static void
-__init mtk_gpt_setup(struct timer_of *to, u8 timer, u8 option)
+static void mtk_gpt_setup(struct timer_of *to, u8 timer, u8 option)
 {
 	writel(GPT_CTRL_CLEAR | GPT_CTRL_DISABLE,
 	       timer_of_base(to) + GPT_CTRL_REG(timer));
@@ -281,7 +280,7 @@ static struct timer_of to = {
 	},
 };
 
-static int __init mtk_syst_init(struct device_node *node)
+static int mtk_syst_init(struct device_node *node)
 {
 	int ret;
 
@@ -302,7 +301,7 @@ static int __init mtk_syst_init(struct device_node *node)
 	return 0;
 }
 
-static int __init mtk_gpt_init(struct device_node *node)
+static int mtk_gpt_init(struct device_node *node)
 {
 	int ret;
 
@@ -337,5 +336,23 @@ static int __init mtk_gpt_init(struct device_node *node)
 
 	return 0;
 }
-TIMER_OF_DECLARE(mtk_mt6577, "mediatek,mt6577-timer", mtk_gpt_init);
-TIMER_OF_DECLARE(mtk_mt6765, "mediatek,mt6765-timer", mtk_syst_init);
+
+static int mtk_timer_probe(struct platform_device *pdev)
+{
+	struct device_node *np = pdev->dev.of_node;
+	int (*probe_func)(struct device_node *node);
+
+	probe_func = of_device_get_match_data(&pdev->dev);
+
+	return probe_func(np);
+}
+
+static const struct of_device_id mtk_timer_match_table[] = {
+	{ .compatible =  "mediatek,mt6577-timer", .data = mtk_gpt_init },
+	{ .compatible =  "mediatek,mt6765-timer", .data = mtk_syst_init },
+	{ /* sentinel */ }
+};
+
+TIMER_PDEV_DECLARE(mtk_timer, mtk_timer_probe, NULL, mtk_timer_match_table);
+MODULE_DESCRIPTION("Mediatek timer driver");
+MODULE_LICENSE("GPL");
