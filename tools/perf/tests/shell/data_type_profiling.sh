@@ -35,6 +35,12 @@ test_basic_annotate() {
 
   echo "${mode} ${runtime} perf annotate test"
 
+  case "$(uname -m)" in
+    "s390x")
+      echo "Skip: 'perf mem record' not supported"
+      err=2
+      return ;;
+  esac
   case "x${runtime}" in
     "xRust")
     if ! perf check feature -q rust
