@@ -560,7 +560,7 @@ static int tdx_alloc_pages_contig(unsigned int nr_pages, struct page **pages,
  * Similar to tdx_page_array_alloc(), after allocating with this
  * function, call tdx_page_array_populate() to populate the tdx_page_array.
  */
-static __maybe_unused struct tdx_page_array *
+static struct tdx_page_array *
 tdx_page_array_alloc_contig(unsigned int nr_pages)
 {
 	return tdx_page_array_alloc(nr_pages, tdx_alloc_pages_contig, NULL);
@@ -643,7 +643,7 @@ EXPORT_SYMBOL_GPL(tdx_page_array_create_iommu_mt);
 #define HPA_LIST_INFO_PFN		GENMASK_U64(51, 12)
 #define HPA_LIST_INFO_LAST_ENTRY	GENMASK_U64(63, 55)
 
-static u64 __maybe_unused hpa_list_info_assign_raw(struct tdx_page_array *array)
+static u64 hpa_list_info_assign_raw(struct tdx_page_array *array)
 {
 	return FIELD_PREP(HPA_LIST_INFO_FIRST_ENTRY, 0) |
 	       FIELD_PREP(HPA_LIST_INFO_PFN,
@@ -1511,6 +1511,94 @@ static int init_tdmrs(struct tdmr_info_list *tdmr_list)
 static void tdx_clflush_page(struct page *page)
 {
 	clflush_cache_range(page_to_virt(page), PAGE_SIZE);
+}
+
+static void tdx_clflush_page_array(struct tdx_page_array *array)
+{
+	for (int i = 0; i < array->nents; i++)
+		tdx_clflush_page(array->pages[array->offset + i]);
+}
+
+static int tdx_ext_mem_add(struct tdx_page_array *ext_mem)
+{
+	struct tdx_module_args args = {
+		.rcx = hpa_list_info_assign_raw(ext_mem),
+	};
+	u64 r;
+
+	tdx_clflush_page_array(ext_mem);
+
+	do {
+		r = seamcall_ret(TDH_EXT_MEM_ADD, &args);
+		cond_resched();
+	} while (r == TDX_INTERRUPTED_RESUMABLE);
+
+	if (r != TDX_SUCCESS)
+		return -EFAULT;
+
+	return 0;
+}
+
+static int tdx_ext_mem_setup(struct tdx_page_array *ext_mem)
+{
+	unsigned int populated, offset = 0;
+	int ret;
+
+	/*
+	 * tdx_page_array's root page can hold 512 HPAs at most. We have ~50MB
+	 * memory to add, re-populate the array and add pages bulk by bulk.
+	 */
+	while (1) {
+		populated = tdx_page_array_populate(ext_mem, offset);
+		if (!populated)
+			break;
+
+		ret = tdx_ext_mem_add(ext_mem);
+		if (ret)
+			return ret;
+
+		offset += populated;
+	}
+
+	return 0;
+}
+
+static int __maybe_unused init_tdx_ext(void)
+{
+	struct tdx_page_array *ext_mem = NULL;
+	unsigned int nr_pages;
+	int ret;
+
+	if (!(tdx_sysinfo.features.tdx_features0 & TDX_FEATURES0_EXT))
+		return 0;
+
+	nr_pages = tdx_sysinfo.ext.memory_pool_required_pages;
+	/*
+	 * memory_pool_required_pages == 0 means no need to add more pages,
+	 * skip the memory setup.
+	 */
+	if (nr_pages) {
+		ext_mem = tdx_page_array_alloc_contig(nr_pages);
+		if (!ext_mem)
+			return -ENOMEM;
+
+		ret = tdx_ext_mem_setup(ext_mem);
+		if (ret)
+			goto out_ext_mem;
+	}
+
+	/* Extension memory is never reclaimed once assigned */
+	tdx_page_array_ctrl_leak(ext_mem);
+
+	pr_info("%lu KB allocated for TDX Module Extensions\n",
+		nr_pages * PAGE_SIZE / 1024);
+
+	return 0;
+
+out_ext_mem:
+	tdx_page_array_free(ext_mem);
+
+	return ret;
 }
 
 static int init_tdx_module(void)

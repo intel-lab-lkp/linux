@@ -60,6 +60,7 @@
 #define TDH_VP_WR			43
 #define TDH_SYS_CONFIG_V0		45
 #define TDH_SYS_CONFIG			SEAMCALL_LEAF_VER(TDH_SYS_CONFIG_V0, 1)
+#define TDH_EXT_MEM_ADD			61
 
 /* TDX page types */
 #define	PT_NDA		0x0
