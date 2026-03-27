@@ -139,8 +139,8 @@ static int subpage_walk_pmd_entry(pmd_t *pmd, unsigned long addr,
 				  unsigned long end, struct mm_walk *walk)
 {
 	struct vm_area_struct *vma = walk->vma;
-	split_huge_pmd(vma, pmd, addr);
-	return 0;
+
+	return split_huge_pmd(vma, pmd, addr);
 }
 
 static const struct mm_walk_ops subpage_walk_ops = {
@@ -148,11 +148,12 @@ static const struct mm_walk_ops subpage_walk_ops = {
 	.walk_lock	= PGWALK_WRLOCK_VERIFY,
 };
 
-static void subpage_mark_vma_nohuge(struct mm_struct *mm, unsigned long addr,
-				    unsigned long len)
+static int subpage_mark_vma_nohuge(struct mm_struct *mm, unsigned long addr,
+				   unsigned long len)
 {
 	struct vm_area_struct *vma;
 	VMA_ITERATOR(vmi, mm, addr);
+	int err;
 
 	/*
 	 * We don't try too hard, we just mark all the vma in that range
@@ -160,14 +161,17 @@ static void subpage_mark_vma_nohuge(struct mm_struct *mm, unsigned long addr,
 	 */
 	for_each_vma_range(vmi, vma, addr + len) {
 		vm_flags_set(vma, VM_NOHUGEPAGE);
-		walk_page_vma(vma, &subpage_walk_ops, NULL);
+		err = walk_page_vma(vma, &subpage_walk_ops, NULL);
+		if (err)
+			return err;
 	}
+	return 0;
 }
 #else
-static void subpage_mark_vma_nohuge(struct mm_struct *mm, unsigned long addr,
-				    unsigned long len)
+static int subpage_mark_vma_nohuge(struct mm_struct *mm, unsigned long addr,
+				   unsigned long len)
 {
-	return;
+	return 0;
 }
 #endif
 
@@ -229,7 +233,9 @@ SYSCALL_DEFINE3(subpage_prot, unsigned long, addr,
 		mm->context.hash_context->spt = spt;
 	}
 
-	subpage_mark_vma_nohuge(mm, addr, len);
+	err = subpage_mark_vma_nohuge(mm, addr, len);
+	if (err)
+		goto out;
 	for (limit = addr + len; addr < limit; addr = next) {
 		next = pmd_addr_end(addr, limit);
 		err = -ENOMEM;
