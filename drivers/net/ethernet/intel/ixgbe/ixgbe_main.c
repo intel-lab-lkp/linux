@@ -8054,6 +8054,12 @@ static void ixgbe_watchdog_update_link(struct ixgbe_adapter *adapter)
 		pfc_en |= !!(adapter->ixgbe_ieee_pfc->pfc_en);
 
 	if (link_up && !((adapter->flags & IXGBE_FLAG_DCB_ENABLED) && pfc_en)) {
+		if (hw->mac.ops.setup_fc) {
+			int err = hw->mac.ops.setup_fc(hw);
+
+			if (err)
+				e_warn(drv, "setup_fc failed: %d\n", err);
+		}
 		hw->mac.ops.fc_enable(hw);
 		ixgbe_set_rx_drop_en(adapter);
 	}
