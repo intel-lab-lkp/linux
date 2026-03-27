@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/sound/pcm3060.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: PCM3060 audio CODEC
+
+maintainers:
+  - Kirill Marinushkin <k.marinushkin@gmail.com>
+
+properties:
+  compatible:
+    const: ti,pcm3060
+
+  reg:
+    maxItems: 1
+
+  ti,out-single-ended:
+    type: boolean
+    description: |
+      If present, the output is single-ended.
+      If absent, the output is differential.
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      pcm3060: audio-codec@46 {
+        compatible = "ti,pcm3060";
+        reg = <0x46>;
+        ti,out-single-ended;
+      };
+    };
