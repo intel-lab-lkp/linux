@@ -37,6 +37,7 @@ patternProperties:
         items:
           enum:
             - i2s
+            - dsp_a
             - dsp_b
 
       dai-tdm-slot-num: true
