@@ -1179,50 +1179,40 @@ static unsigned int amd_size_cache(struct cpuinfo_x86 *c, unsigned int size)
 
 static void cpu_detect_tlb_amd(struct cpuinfo_x86 *c)
 {
-	u32 ebx, eax, ecx, edx;
-	u16 mask = 0xfff;
+	u32 l2_tlb_eax, l2_tlb_ebx, l1_tlb_eax;
+	u16 l2_mask = 0xfff, l1_mask = 0xff;
 
-	if (c->x86 < 0xf)
+	if (c->x86 < 0xf || c->extended_cpuid_level < 0x80000006)
 		return;
 
-	if (c->extended_cpuid_level < 0x80000006)
-		return;
+	l2_tlb_eax = cpuid_eax(0x80000006);
+	l2_tlb_ebx = cpuid_ebx(0x80000006);
+	l1_tlb_eax = cpuid_eax(0x80000005);
 
-	cpuid(0x80000006, &eax, &ebx, &ecx, &edx);
-
-	tlb_lld_4k = (ebx >> 16) & mask;
-	tlb_lli_4k = ebx & mask;
+	tlb_lld_4k = (l2_tlb_ebx >> 16) & l2_mask;
+	tlb_lli_4k = l2_tlb_ebx & l2_mask;
 
 	/*
-	 * K8 doesn't have 2M/4M entries in the L2 TLB so read out the L1 TLB
-	 * characteristics from the CPUID function 0x80000005 instead.
+	 * K8 does not report 2M/4M entries in the L2 TLB, so always use
+	 * the L1 TLB information there.  On later CPUs, fall back to L1
+	 * when the L2 entry count is zero.
 	 */
-	if (c->x86 == 0xf) {
-		cpuid(0x80000005, &eax, &ebx, &ecx, &edx);
-		mask = 0xff;
+
+	tlb_lld_2m = (l2_tlb_eax >> 16) & l2_mask;
+	if (c->x86 == 0xf || !tlb_lld_2m)
+		tlb_lld_2m = (l1_tlb_eax >> 16) & l1_mask;
+
+	tlb_lli_2m = l2_tlb_eax & l2_mask;
+	if (c->x86 == 0xf || !tlb_lli_2m) {
+		/* Erratum 658 */
+		if (c->x86 == 0x15 && c->x86_model <= 0x1f)
+			tlb_lli_2m = 1024;
+		else
+			tlb_lli_2m = l1_tlb_eax & l1_mask;
 	}
 
-	/* Handle DTLB 2M and 4M sizes, fall back to L1 if L2 is disabled */
-	if (!((eax >> 16) & mask))
-		tlb_lld_2m = (cpuid_eax(0x80000005) >> 16) & 0xff;
-	else
-		tlb_lld_2m = (eax >> 16) & mask;
-
-	/* a 4M entry uses two 2M entries */
+	/* A 4M entry uses two 2M entries */
 	tlb_lld_4m = tlb_lld_2m >> 1;
-
-	/* Handle ITLB 2M and 4M sizes, fall back to L1 if L2 is disabled */
-	if (!(eax & mask)) {
-		/* Erratum 658 */
-		if (c->x86 == 0x15 && c->x86_model <= 0x1f) {
-			tlb_lli_2m = 1024;
-		} else {
-			cpuid(0x80000005, &eax, &ebx, &ecx, &edx);
-			tlb_lli_2m = eax & 0xff;
-		}
-	} else
-		tlb_lli_2m = eax & mask;
-
 	tlb_lli_4m = tlb_lli_2m >> 1;
 
 	/* Max number of pages INVLPGB can invalidate in one shot */
