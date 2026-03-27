@@ -1659,12 +1659,6 @@ pud_t pudp_xchg_direct(struct mm_struct *, unsigned long, pud_t *, pud_t);
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 
-#define __HAVE_ARCH_PGTABLE_DEPOSIT
-void pgtable_trans_huge_deposit(struct mm_struct *mm, pmd_t *pmdp,
-				pgtable_t pgtable);
-
-#define __HAVE_ARCH_PGTABLE_WITHDRAW
-pgtable_t pgtable_trans_huge_withdraw(struct mm_struct *mm, pmd_t *pmdp);
 
 #define  __HAVE_ARCH_PMDP_SET_ACCESS_FLAGS
 static inline int pmdp_set_access_flags(struct vm_area_struct *vma,

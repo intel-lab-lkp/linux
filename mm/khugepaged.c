@@ -1240,7 +1240,7 @@ static enum scan_result collapse_huge_page(struct mm_struct *mm, unsigned long a
 	spin_lock(pmd_ptl);
 	BUG_ON(!pmd_none(*pmd));
 	if (arch_needs_pgtable_deposit()) {
-		pgtable_trans_huge_deposit(mm, pmd, pgtable);
+		arch_pgtable_trans_huge_deposit(mm, pmd, pgtable);
 	} else {
 		mm_dec_nr_ptes(mm);
 		pte_free(mm, pgtable);

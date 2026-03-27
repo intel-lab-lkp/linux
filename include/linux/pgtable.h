@@ -1207,13 +1207,19 @@ static inline pmd_t pmdp_collapse_flush(struct vm_area_struct *vma,
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE */
 #endif
 
-#ifndef __HAVE_ARCH_PGTABLE_DEPOSIT
-extern void pgtable_trans_huge_deposit(struct mm_struct *mm, pmd_t *pmdp,
-				       pgtable_t pgtable);
+#ifndef arch_pgtable_trans_huge_deposit
+static inline void arch_pgtable_trans_huge_deposit(struct mm_struct *mm,
+						   pmd_t *pmdp, pgtable_t pgtable)
+{
+}
 #endif
 
-#ifndef __HAVE_ARCH_PGTABLE_WITHDRAW
-extern pgtable_t pgtable_trans_huge_withdraw(struct mm_struct *mm, pmd_t *pmdp);
+#ifndef arch_pgtable_trans_huge_withdraw
+static inline pgtable_t arch_pgtable_trans_huge_withdraw(struct mm_struct *mm,
+							 pmd_t *pmdp)
+{
+	return NULL;
+}
 #endif
 
 #ifndef arch_needs_pgtable_deposit

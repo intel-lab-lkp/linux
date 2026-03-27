@@ -164,38 +164,6 @@ pud_t pudp_huge_clear_flush(struct vm_area_struct *vma, unsigned long address,
 #endif
 #endif
 
-#ifndef __HAVE_ARCH_PGTABLE_DEPOSIT
-void pgtable_trans_huge_deposit(struct mm_struct *mm, pmd_t *pmdp,
-				pgtable_t pgtable)
-{
-	assert_spin_locked(pmd_lockptr(mm, pmdp));
-
-	/* FIFO */
-	if (!pmd_huge_pte(mm, pmdp))
-		INIT_LIST_HEAD(&pgtable->lru);
-	else
-		list_add(&pgtable->lru, &pmd_huge_pte(mm, pmdp)->lru);
-	pmd_huge_pte(mm, pmdp) = pgtable;
-}
-#endif
-
-#ifndef __HAVE_ARCH_PGTABLE_WITHDRAW
-/* no "address" argument so destroys page coloring of some arch */
-pgtable_t pgtable_trans_huge_withdraw(struct mm_struct *mm, pmd_t *pmdp)
-{
-	pgtable_t pgtable;
-
-	assert_spin_locked(pmd_lockptr(mm, pmdp));
-
-	/* FIFO */
-	pgtable = pmd_huge_pte(mm, pmdp);
-	pmd_huge_pte(mm, pmdp) = list_first_entry_or_null(&pgtable->lru,
-							  struct page, lru);
-	if (pmd_huge_pte(mm, pmdp))
-		list_del(&pgtable->lru);
-	return pgtable;
-}
-#endif
 
 #ifndef __HAVE_ARCH_PMDP_INVALIDATE
 pmd_t pmdp_invalidate(struct vm_area_struct *vma, unsigned long address,

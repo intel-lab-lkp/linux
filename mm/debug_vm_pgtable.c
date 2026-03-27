@@ -240,7 +240,7 @@ static void __init pmd_advanced_tests(struct pgtable_debug_args *args)
 	/* Align the address wrt HPAGE_PMD_SIZE */
 	vaddr &= HPAGE_PMD_MASK;
 
-	pgtable_trans_huge_deposit(args->mm, args->pmdp, args->start_ptep);
+	arch_pgtable_trans_huge_deposit(args->mm, args->pmdp, args->start_ptep);
 
 	pmd = pfn_pmd(args->pmd_pfn, args->page_prot);
 	set_pmd_at(args->mm, vaddr, args->pmdp, pmd);
@@ -276,7 +276,7 @@ static void __init pmd_advanced_tests(struct pgtable_debug_args *args)
 
 	/*  Clear the pte entries  */
 	pmdp_huge_get_and_clear(args->mm, vaddr, args->pmdp);
-	pgtable_trans_huge_withdraw(args->mm, args->pmdp);
+	arch_pgtable_trans_huge_withdraw(args->mm, args->pmdp);
 }
 
 static void __init pmd_leaf_tests(struct pgtable_debug_args *args)

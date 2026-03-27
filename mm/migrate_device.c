@@ -888,7 +888,7 @@ static int migrate_vma_insert_huge_pmd_page(struct migrate_vma *migrate,
 		flush_cache_page(vma, addr, addr + HPAGE_PMD_SIZE);
 		pmdp_invalidate(vma, addr, pmdp);
 	} else if (pgtable) {
-		pgtable_trans_huge_deposit(vma->vm_mm, pmdp, pgtable);
+		arch_pgtable_trans_huge_deposit(vma->vm_mm, pmdp, pgtable);
 		mm_inc_nr_ptes(vma->vm_mm);
 	}
 	set_pmd_at(vma->vm_mm, addr, pmdp, entry);
