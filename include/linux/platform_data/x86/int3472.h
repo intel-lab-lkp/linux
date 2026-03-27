@@ -49,6 +49,7 @@
 #define GPIO_REGULATOR_OFF_ON_DELAY				(2 * USEC_PER_MSEC)
 
 #define INT3472_LED_MAX_NAME_LEN				32
+#define INT3472_MAX_LEDS					2
 
 #define CIO2_SENSOR_SSDB_MCLKSPEED_OFFSET			86
 
@@ -67,6 +68,10 @@
 
 #define to_int3472_device(clk)					\
 	container_of(clk, struct int3472_discrete_device, clock)
+
+enum int3472_led_type {
+	INT3472_LED_TYPE_PRIVACY,
+};
 
 struct acpi_device;
 struct dmi_system_id;
@@ -126,7 +131,9 @@ struct int3472_discrete_device {
 		struct led_lookup_data lookup;
 		char name[INT3472_LED_MAX_NAME_LEN];
 		struct gpio_desc *gpio;
-	} led;
+		bool has_lookup;
+	} leds[INT3472_MAX_LEDS];
+	unsigned int n_leds;
 
 	struct int3472_discrete_quirks quirks;
 
@@ -160,7 +167,9 @@ int skl_int3472_register_regulator(struct int3472_discrete_device *int3472,
 				   const char *second_sensor);
 void skl_int3472_unregister_regulator(struct int3472_discrete_device *int3472);
 
-int skl_int3472_register_led(struct int3472_discrete_device *int3472, struct gpio_desc *gpio);
-void skl_int3472_unregister_led(struct int3472_discrete_device *int3472);
+int skl_int3472_register_led(struct int3472_discrete_device *int3472,
+			     struct gpio_desc *gpio,
+			     enum int3472_led_type type);
+void skl_int3472_unregister_leds(struct int3472_discrete_device *int3472);
 
 #endif

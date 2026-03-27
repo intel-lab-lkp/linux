@@ -6,6 +6,14 @@
 #include <linux/leds.h>
 #include <linux/platform_data/x86/int3472.h>
 
+static const char * const int3472_led_names[] = {
+	[INT3472_LED_TYPE_PRIVACY] = "privacy",
+};
+
+static const char * const int3472_led_con_ids[] = {
+	[INT3472_LED_TYPE_PRIVACY] = "privacy",
+};
+
 static int int3472_led_set(struct led_classdev *led_cdev,
 			   enum led_brightness brightness)
 {
@@ -16,20 +24,25 @@ static int int3472_led_set(struct led_classdev *led_cdev,
 	return 0;
 }
 
-int skl_int3472_register_led(struct int3472_discrete_device *int3472, struct gpio_desc *gpio)
+int skl_int3472_register_led(struct int3472_discrete_device *int3472,
+			     struct gpio_desc *gpio,
+			     enum int3472_led_type type)
 {
-	struct int3472_led *led = &int3472->led;
+	const char *name_suffix = int3472_led_names[type];
+	const char *con_id = int3472_led_con_ids[type];
+	struct int3472_led *led;
 	char *p;
 	int ret;
 
-	if (led->classdev.dev)
-		return -EBUSY;
+	if (int3472->n_leds >= INT3472_MAX_LEDS)
+		return -ENOSPC;
 
+	led = &int3472->leds[int3472->n_leds];
 	led->gpio = gpio;
 
 	/* Generate the name, replacing the ':' in the ACPI devname with '_' */
 	snprintf(led->name, sizeof(led->name),
-		 "%s::privacy_led", acpi_dev_name(int3472->sensor));
+		 "%s::%s_led", acpi_dev_name(int3472->sensor), name_suffix);
 	p = strchr(led->name, ':');
 	if (p)
 		*p = '_';
@@ -42,22 +55,28 @@ int skl_int3472_register_led(struct int3472_discrete_device *int3472, struct gpi
 	if (ret)
 		return ret;
 
-	led->lookup.provider = led->name;
-	led->lookup.dev_id = int3472->sensor_name;
-	led->lookup.con_id = "privacy";
-	led_add_lookup(&led->lookup);
+	if (con_id) {
+		led->lookup.provider = led->name;
+		led->lookup.dev_id = int3472->sensor_name;
+		led->lookup.con_id = con_id;
+		led_add_lookup(&led->lookup);
+		led->has_lookup = true;
+	}
 
+	int3472->n_leds++;
 	return 0;
 }
 
-void skl_int3472_unregister_led(struct int3472_discrete_device *int3472)
+void skl_int3472_unregister_leds(struct int3472_discrete_device *int3472)
 {
-	struct int3472_led *led = &int3472->led;
+	unsigned int i;
 
-	if (IS_ERR_OR_NULL(led->classdev.dev))
-		return;
+	for (i = 0; i < int3472->n_leds; i++) {
+		struct int3472_led *led = &int3472->leds[i];
 
-	led_remove_lookup(&led->lookup);
-	led_classdev_unregister(&led->classdev);
-	gpiod_put(led->gpio);
+		if (led->has_lookup)
+			led_remove_lookup(&led->lookup);
+		led_classdev_unregister(&led->classdev);
+		gpiod_put(led->gpio);
+	}
 }
