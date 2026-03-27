@@ -262,6 +262,7 @@ struct bnge_stats_mem {
 
 enum bnge_net_state {
 	BNGE_STATE_NAPI_DISABLED,
+	BNGE_STATE_STATS_ENABLE,
 };
 
 #define BNGE_TIMER_INTERVAL	HZ
@@ -352,6 +353,8 @@ struct bnge_net {
 	struct bnge_ethtool_link_info	eth_link_info;
 
 	u64			flags;
+
+	struct rtnl_link_stats64	net_stats_prev;
 
 	struct bnge_stats_mem	port_stats;
 	struct bnge_stats_mem	rx_port_stats_ext;
