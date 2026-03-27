@@ -2012,6 +2012,7 @@ static int ice_ptp_adjtime(struct ptp_clock_info *info, s64 delta)
  * @lock_busy: Bit in the semaphore lock indicating the lock is busy
  * @ctl_reg: The hardware register to request cross timestamp
  * @ctl_active: Bit in the control register to request cross timestamp
+ * @ctl_timeout: Bits in the control register to indicate HW timeout
  * @art_time_l: Lower 32-bits of ART system time
  * @art_time_h: Upper 32-bits of ART system time
  * @dev_time_l: Lower 32-bits of device time (per timer index)
@@ -2025,6 +2026,7 @@ struct ice_crosststamp_cfg {
 	/* Capture control register */
 	u32 ctl_reg;
 	u32 ctl_active;
+	u32 ctl_timeout;
 
 	/* Time storage */
 	u32 art_time_l;
@@ -2038,6 +2040,7 @@ static const struct ice_crosststamp_cfg ice_crosststamp_cfg_e82x = {
 	.lock_busy = PFHH_SEM_BUSY_M,
 	.ctl_reg = GLHH_ART_CTL,
 	.ctl_active = GLHH_ART_CTL_ACTIVE_M,
+	.ctl_timeout = GLHH_ART_CTL_TIME_OUT1_M | GLHH_ART_CTL_TIME_OUT2_M,
 	.art_time_l = GLHH_ART_TIME_L,
 	.art_time_h = GLHH_ART_TIME_H,
 	.dev_time_l[0] = GLTSYN_HHTIME_L(0),
@@ -2052,6 +2055,7 @@ static const struct ice_crosststamp_cfg ice_crosststamp_cfg_e830 = {
 	.lock_busy = E830_PFPTM_SEM_BUSY_M,
 	.ctl_reg = E830_GLPTM_ART_CTL,
 	.ctl_active = E830_GLPTM_ART_CTL_ACTIVE_M,
+	.ctl_timeout = E830_GLPTM_ART_CTL_TIME_OUT_M,
 	.art_time_l = E830_GLPTM_ART_TIME_L,
 	.art_time_h = E830_GLPTM_ART_TIME_H,
 	.dev_time_l[0] = E830_GLTSYN_PTMTIME_L(0),
@@ -2126,9 +2130,13 @@ static int ice_capture_crosststamp(ktime_t *device,
 	ctl |= cfg->ctl_active;
 	wr32(hw, cfg->ctl_reg, ctl);
 
-	/* Poll until hardware completes the capture */
-	err = rd32_poll_timeout(hw, cfg->ctl_reg, ctl, !(ctl & cfg->ctl_active),
+	/* Poll until hardware completes the capture or timeout occurs */
+	err = rd32_poll_timeout(hw, cfg->ctl_reg, ctl,
+				!(ctl & cfg->ctl_active) ||
+				(ctl & cfg->ctl_timeout),
 				5, 20 * USEC_PER_MSEC);
+	if (ctl & cfg->ctl_timeout)
+		err = -ETIMEDOUT;
 	if (err)
 		goto err_timeout;
 
