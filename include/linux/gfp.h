@@ -391,6 +391,7 @@ extern void free_pages_nolock(struct page *page, unsigned int order);
 extern void free_pages(unsigned long addr, unsigned int order);
 
 #define __free_page(page) __free_pages((page), 0)
+DEFINE_FREE(__free_page, struct page *, if (_T) __free_page(_T))
 #define free_page(addr) free_pages((addr), 0)
 
 void page_alloc_init_cpuhp(void);
