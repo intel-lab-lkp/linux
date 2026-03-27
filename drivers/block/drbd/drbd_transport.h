@@ -57,6 +57,7 @@
 struct drbd_resource;
 struct drbd_listener;
 struct drbd_transport;
+struct bio;
 
 enum drbd_stream {
 	DATA_STREAM,
@@ -136,12 +137,6 @@ struct drbd_transport_stats {
 	int send_buffer_used;
 };
 
-/* argument to ->recv_pages() */
-struct drbd_page_chain_head {
-	struct page *head;
-	unsigned int nr_pages;
-};
-
 struct drbd_const_buffer {
 	const u8 *buffer;
 	unsigned int avail;
@@ -208,18 +203,19 @@ struct drbd_transport_ops {
 	int (*recv)(struct drbd_transport *, enum drbd_stream, void **buf, size_t size, int flags);
 
 /**
- * recv_pages() - Receive bulk data via the transport's DATA_STREAM
+ * recv_bio() - Receive bulk data via the transport's DATA_STREAM into bios
  * @peer_device: Identify the transport and the device
- * @page_chain:	Here recv_pages() will place the page chain head and length
+ * @bios:	the bio_list to add received data to
  * @size:	Number of bytes to receive
  *
- * recv_pages() will return the requested amount of data from DATA_STREAM,
- * and place it into pages allocated with drbd_alloc_pages().
+ * recv_bio() receives the requested amount of data from DATA_STREAM. It
+ * allocates pages by using drbd_alloc_pages() and adds them to bios in the
+ * bio_list.
  *
  * Upon success the function returns 0. Upon error the function returns a
  * negative value
  */
-	int (*recv_pages)(struct drbd_transport *, struct drbd_page_chain_head *, size_t size);
+	int (*recv_bio)(struct drbd_transport *, struct bio_list *bios, size_t size);
 
 	void (*stats)(struct drbd_transport *, struct drbd_transport_stats *stats);
 /**
@@ -240,7 +236,7 @@ struct drbd_transport_ops {
 	long (*get_rcvtimeo)(struct drbd_transport *, enum drbd_stream);
 	int (*send_page)(struct drbd_transport *, enum drbd_stream, struct page *,
 			 int offset, size_t size, unsigned msg_flags);
-	int (*send_zc_bio)(struct drbd_transport *, struct bio *bio);
+	int (*send_bio)(struct drbd_transport *, struct bio *bio, unsigned int msg_flags);
 	bool (*stream_ok)(struct drbd_transport *, enum drbd_stream);
 	bool (*hint)(struct drbd_transport *, enum drbd_stream, enum drbd_tr_hints hint);
 	void (*debugfs_show)(struct drbd_transport *, struct seq_file *m);
@@ -324,6 +320,8 @@ void drbd_path_event(struct drbd_transport *transport, struct drbd_path *path);
 void drbd_listener_destroy(struct kref *kref);
 struct drbd_path *__drbd_next_path_ref(struct drbd_path *drbd_path,
 				       struct drbd_transport *transport);
+int drbd_bio_add_page(struct drbd_transport *transport, struct bio_list *bios,
+		      struct page *page, unsigned int len, unsigned int offset);
 
 /* Might restart iteration, if current element is removed from list!! */
 #define for_each_path_ref(path, transport)			\
@@ -332,112 +330,11 @@ struct drbd_path *__drbd_next_path_ref(struct drbd_path *drbd_path,
 	     path = __drbd_next_path_ref(path, transport))
 
 /* drbd_receiver.c*/
-struct page *drbd_alloc_pages(struct drbd_transport *transport,
-			      unsigned int number, gfp_t gfp_mask);
-void drbd_free_pages(struct drbd_transport *transport, struct page *page);
+struct page *drbd_alloc_pages(struct drbd_transport *transport, gfp_t gfp_mask, unsigned int size);
+void drbd_free_page(struct drbd_transport *transport, struct page *page);
 void drbd_control_data_ready(struct drbd_transport *transport,
 			     struct drbd_const_buffer *pool);
 void drbd_control_event(struct drbd_transport *transport,
 			enum drbd_tr_event event);
-
-static inline void drbd_alloc_page_chain(struct drbd_transport *t,
-	struct drbd_page_chain_head *chain, unsigned int nr, gfp_t gfp_flags)
-{
-	chain->head = drbd_alloc_pages(t, nr, gfp_flags);
-	chain->nr_pages = chain->head ? nr : 0;
-}
-
-static inline void drbd_free_page_chain(struct drbd_transport *transport,
-					struct drbd_page_chain_head *chain)
-{
-	drbd_free_pages(transport, chain->head);
-	chain->head = NULL;
-	chain->nr_pages = 0;
-}
-
-/*
- * Some helper functions to deal with our page chains.
- */
-/* Our transports may sometimes need to only partially use a page.
- * We need to express that somehow.  Use this struct, and "graft" it into
- * struct page at page->lru.
- *
- * According to include/linux/mm.h:
- *  | A page may be used by anyone else who does a __get_free_page().
- *  | In this case, page_count still tracks the references, and should only
- *  | be used through the normal accessor functions. The top bits of page->flags
- *  | and page->virtual store page management information, but all other fields
- *  | are unused and could be used privately, carefully. The management of this
- *  | page is the responsibility of the one who allocated it, and those who have
- *  | subsequently been given references to it.
- * (we do alloc_page(), that is equivalent).
- *
- * Red Hat struct page is different from upstream (layout and members) :(
- * So I am not too sure about the "all other fields", and it is not as easy to
- * find a place where sizeof(struct drbd_page_chain) would fit on all archs and
- * distribution-changed layouts.
- *
- * But (upstream) struct page also says:
- *  | struct list_head lru;   * ...
- *  |       * Can be used as a generic list
- *  |       * by the page owner.
- *
- * On 32bit, use unsigned short for offset and size,
- * to still fit in sizeof(page->lru).
- */
-
-/* grafted over struct page.lru */
-struct drbd_page_chain {
-	struct page *next;	/* next page in chain, if any */
-#ifdef CONFIG_64BIT
-	unsigned int offset;	/* start offset of data within this page */
-	unsigned int size;	/* number of data bytes within this page */
-#else
-#if PAGE_SIZE > (1U<<16)
-#error "won't work."
-#endif
-	unsigned short offset;	/* start offset of data within this page */
-	unsigned short size;	/* number of data bytes within this page */
-#endif
-};
-
-static inline void dummy_for_buildbug(void)
-{
-	struct page *dummy;
-	BUILD_BUG_ON(sizeof(struct drbd_page_chain) > sizeof(dummy->lru));
-}
-
-#define page_chain_next(page) \
-	(((struct drbd_page_chain *)&(page)->lru)->next)
-#define page_chain_size(page) \
-	(((struct drbd_page_chain *)&(page)->lru)->size)
-#define page_chain_offset(page) \
-	(((struct drbd_page_chain *)&(page)->lru)->offset)
-#define set_page_chain_next(page, v) \
-	(((struct drbd_page_chain *)&(page)->lru)->next = (v))
-#define set_page_chain_size(page, v) \
-	(((struct drbd_page_chain *)&(page)->lru)->size = (v))
-#define set_page_chain_offset(page, v) \
-	(((struct drbd_page_chain *)&(page)->lru)->offset = (v))
-#define set_page_chain_next_offset_size(page, n, o, s)		\
-	(*((struct drbd_page_chain *)&(page)->lru) =		\
-	((struct drbd_page_chain) {				\
-		.next = (n),					\
-		.offset = (o),					\
-		.size = (s),					\
-	 }))
-
-#define page_chain_for_each(page) \
-	for (; page && ({ prefetch(page_chain_next(page)); 1; }); \
-			page = page_chain_next(page))
-#define page_chain_for_each_safe(page, n) \
-	for (; page && ({ n = page_chain_next(page); 1; }); page = n)
-
-#ifndef SK_CAN_REUSE
-/* This constant was introduced by Pavel Emelyanov <xemul@parallels.com> on
-   Thu Apr 19 03:39:36 2012 +0000. Before the release of linux-3.5
-   commit 4a17fd52 sock: Introduce named constants for sk_reuse */
-#define SK_CAN_REUSE   1
-#endif
 
 #endif
