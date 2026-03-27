@@ -10,6 +10,7 @@
 #include <linux/kallsyms.h>
 #include <linux/buildid.h>
 #include <linux/bsearch.h>
+#include <linux/sort.h>
 #include "internal.h"
 
 /* Lookup exported symbol in given range of kernel_symbols */
@@ -103,6 +104,95 @@ static bool is_core_symbol(const Elf_Sym *src, const Elf_Shdr *sechdrs,
 	return true;
 }
 
+static inline bool is_func_symbol(const Elf_Sym *sym)
+{
+	return sym->st_shndx != SHN_UNDEF && sym->st_size != 0 &&
+	       ELF_ST_TYPE(sym->st_info) == STT_FUNC;
+}
+
+static unsigned int bsearch_func_symbol(struct mod_kallsyms *kallsyms,
+					unsigned long addr,
+					unsigned long *bestval,
+					unsigned long *nextval)
+
+{
+	unsigned int mid, low = 1, high = kallsyms->num_func_syms + 1;
+	unsigned int best = 0;
+	unsigned long thisval;
+
+	while (low < high) {
+		mid = low + (high - low) / 2;
+		thisval = kallsyms_symbol_value(&kallsyms->symtab[mid]);
+
+		if (thisval <= addr) {
+			*bestval = thisval;
+			best = mid;
+			low = mid + 1;
+		} else {
+			*nextval = thisval;
+			high = mid;
+		}
+	}
+
+	return best;
+}
+
+static const char *kallsyms_symbol_name(struct mod_kallsyms *kallsyms,
+					unsigned int symnum)
+{
+	return kallsyms->strtab + kallsyms->symtab[symnum].st_name;
+}
+
+static unsigned int search_kallsyms_symbol(struct mod_kallsyms *kallsyms,
+					   unsigned long addr,
+					   unsigned long *bestval,
+					   unsigned long *nextval)
+{
+	unsigned int i, best = 0;
+
+	/*
+	 * Scan for closest preceding symbol and next symbol. (ELF starts
+	 * real symbols at 1). Skip the initial function symbols range
+	 * if num_func_syms is non-zero, those are handled separately for
+	 * the core TEXT segment lookup.
+	 */
+	for (i = 1 + kallsyms->num_func_syms; i < kallsyms->num_symtab; i++) {
+		const Elf_Sym *sym = &kallsyms->symtab[i];
+		unsigned long thisval = kallsyms_symbol_value(sym);
+
+		if (sym->st_shndx == SHN_UNDEF)
+			continue;
+
+		/*
+		 * We ignore unnamed symbols: they're uninformative
+		 * and inserted at a whim.
+		 */
+		if (*kallsyms_symbol_name(kallsyms, i) == '\0' ||
+		    is_mapping_symbol(kallsyms_symbol_name(kallsyms, i)))
+			continue;
+
+		if (thisval <= addr && thisval > *bestval) {
+			best = i;
+			*bestval = thisval;
+		}
+		if (thisval > addr && thisval < *nextval)
+			*nextval = thisval;
+	}
+
+	return best;
+}
+
+static int elf_sym_cmp(const void *a, const void *b)
+{
+	unsigned long val_a = kallsyms_symbol_value((const Elf_Sym *)a);
+	unsigned long val_b = kallsyms_symbol_value((const Elf_Sym *)b);
+
+	if (val_a < val_b)
+		return -1;
+
+	return val_a > val_b;
+}
+
 /*
  * We only allocate and copy the strings needed by the parts of symtab
  * we keep.  This is simple, but has the effect of making multiple
@@ -115,9 +205,10 @@ void layout_symtab(struct module *mod, struct load_info *info)
 	Elf_Shdr *symsect = info->sechdrs + info->index.sym;
 	Elf_Shdr *strsect = info->sechdrs + info->index.str;
 	const Elf_Sym *src;
-	unsigned int i, nsrc, ndst, strtab_size = 0;
+	unsigned int i, nsrc, ndst, nfunc, strtab_size = 0;
 	struct module_memory *mod_mem_data = &mod->mem[MOD_DATA];
 	struct module_memory *mod_mem_init_data = &mod->mem[MOD_INIT_DATA];
+	bool is_lp_mod = is_livepatch_module(mod);
 
 	/* Put symbol section at end of init part of module. */
 	symsect->sh_flags |= SHF_ALLOC;
@@ -129,12 +220,14 @@ void layout_symtab(struct module *mod, struct load_info *info)
 	nsrc = symsect->sh_size / sizeof(*src);
 
 	/* Compute total space required for the core symbols' strtab. */
-	for (ndst = i = 0; i < nsrc; i++) {
-		if (i == 0 || is_livepatch_module(mod) ||
+	for (ndst = nfunc = i = 0; i < nsrc; i++) {
+		if (i == 0 || is_lp_mod ||
 		    is_core_symbol(src + i, info->sechdrs, info->hdr->e_shnum,
 				   info->index.pcpu)) {
 			strtab_size += strlen(&info->strtab[src[i].st_name]) + 1;
 			ndst++;
+			if (!is_lp_mod && is_func_symbol(src + i))
+				nfunc++;
 		}
 	}
 
@@ -156,6 +249,7 @@ void layout_symtab(struct module *mod, struct load_info *info)
 	mod_mem_init_data->size = ALIGN(mod_mem_init_data->size,
 					__alignof__(struct mod_kallsyms));
 	info->mod_kallsyms_init_off = mod_mem_init_data->size;
+	info->num_func_syms = nfunc;
 
 	mod_mem_init_data->size += sizeof(struct mod_kallsyms);
 	info->init_typeoffs = mod_mem_init_data->size;
@@ -169,7 +263,7 @@ void layout_symtab(struct module *mod, struct load_info *info)
  */
 void add_kallsyms(struct module *mod, const struct load_info *info)
 {
-	unsigned int i, ndst;
+	unsigned int i, di, nfunc, ndst;
 	const Elf_Sym *src;
 	Elf_Sym *dst;
 	char *s;
@@ -178,6 +272,7 @@ void add_kallsyms(struct module *mod, const struct load_info *info)
 	void *data_base = mod->mem[MOD_DATA].base;
 	void *init_data_base = mod->mem[MOD_INIT_DATA].base;
 	struct mod_kallsyms *kallsyms;
+	bool is_lp_mod = is_livepatch_module(mod);
 
 	kallsyms = init_data_base + info->mod_kallsyms_init_off;
 
@@ -194,19 +289,28 @@ void add_kallsyms(struct module *mod, const struct load_info *info)
 	mod->core_kallsyms.symtab = dst = data_base + info->symoffs;
 	mod->core_kallsyms.strtab = s = data_base + info->stroffs;
 	mod->core_kallsyms.typetab = data_base + info->core_typeoffs;
+
 	strtab_size = info->core_typeoffs - info->stroffs;
 	src = kallsyms->symtab;
-	for (ndst = i = 0; i < kallsyms->num_symtab; i++) {
+	ndst = info->num_func_syms + 1;
+
+	for (nfunc = i = 0; i < kallsyms->num_symtab; i++) {
 		kallsyms->typetab[i] = elf_type(src + i, info);
-		if (i == 0 || is_livepatch_module(mod) ||
+		if (i == 0 || is_lp_mod ||
 		    is_core_symbol(src + i, info->sechdrs, info->hdr->e_shnum,
 				   info->index.pcpu)) {
 			ssize_t ret;
 
-			mod->core_kallsyms.typetab[ndst] =
-				kallsyms->typetab[i];
-			dst[ndst] = src[i];
-			dst[ndst++].st_name = s - mod->core_kallsyms.strtab;
+			if (i == 0)
+				di = 0;
+			else if (!is_lp_mod && is_func_symbol(src + i))
+				di = 1 + nfunc++;
+			else
+				di = ndst++;
+
+			mod->core_kallsyms.typetab[di] = kallsyms->typetab[i];
+			dst[di] = src[i];
+			dst[di].st_name = s - mod->core_kallsyms.strtab;
 			ret = strscpy(s, &kallsyms->strtab[src[i].st_name],
 				      strtab_size);
 			if (ret < 0)
@@ -216,9 +320,13 @@ void add_kallsyms(struct module *mod, const struct load_info *info)
 		}
 	}
 
+	WARN_ON_ONCE(nfunc != info->num_func_syms);
+	sort(dst + 1, nfunc, sizeof(Elf_Sym), elf_sym_cmp, NULL);
+
 	/* Set up to point into init section. */
 	rcu_assign_pointer(mod->kallsyms, kallsyms);
 	mod->core_kallsyms.num_symtab = ndst;
+	mod->core_kallsyms.num_func_syms = nfunc;
 }
 
 #if IS_ENABLED(CONFIG_STACKTRACE_BUILD_ID)
@@ -241,11 +349,6 @@ void init_build_id(struct module *mod, const struct load_info *info)
 }
 #endif
 
-static const char *kallsyms_symbol_name(struct mod_kallsyms *kallsyms, unsigned int symnum)
-{
-	return kallsyms->strtab + kallsyms->symtab[symnum].st_name;
-}
-
 /*
  * Given a module and address, find the corresponding symbol and return its name
  * while providing its size and offset if needed.
@@ -255,7 +358,10 @@ static const char *find_kallsyms_symbol(struct module *mod,
 					unsigned long *size,
 					unsigned long *offset)
 {
-	unsigned int i, best = 0;
+	unsigned int (*search)(struct mod_kallsyms *kallsyms,
+			       unsigned long addr, unsigned long *bestval,
+			       unsigned long *nextval);
+	unsigned int best;
 	unsigned long nextval, bestval;
 	struct mod_kallsyms *kallsyms = rcu_dereference(mod->kallsyms);
 	struct module_memory *mod_mem = NULL;
@@ -266,6 +372,11 @@ static const char *find_kallsyms_symbol(struct module *mod,
 			continue;
 #endif
 		if (within_module_mem_type(addr, mod, type)) {
+			if (type == MOD_TEXT && kallsyms->num_func_syms > 0)
+				search = bsearch_func_symbol;
+			else
+				search = search_kallsyms_symbol;
+
 			mod_mem = &mod->mem[type];
 			break;
 		}
@@ -278,33 +389,7 @@ static const char *find_kallsyms_symbol(struct module *mod,
 	nextval = (unsigned long)mod_mem->base + mod_mem->size;
 	bestval = (unsigned long)mod_mem->base - 1;
 
-	/*
-	 * Scan for closest preceding symbol, and next symbol. (ELF
-	 * starts real symbols at 1).
-	 */
-	for (i = 1; i < kallsyms->num_symtab; i++) {
-		const Elf_Sym *sym = &kallsyms->symtab[i];
-		unsigned long thisval = kallsyms_symbol_value(sym);
-
-		if (sym->st_shndx == SHN_UNDEF)
-			continue;
-
-		/*
-		 * We ignore unnamed symbols: they're uninformative
-		 * and inserted at a whim.
-		 */
-		if (*kallsyms_symbol_name(kallsyms, i) == '\0' ||
-		    is_mapping_symbol(kallsyms_symbol_name(kallsyms, i)))
-			continue;
-
-		if (thisval <= addr && thisval > bestval) {
-			best = i;
-			bestval = thisval;
-		}
-		if (thisval > addr && thisval < nextval)
-			nextval = thisval;
-	}
-
+	best = search(kallsyms, addr, &bestval, &nextval);
 	if (!best)
 		return NULL;
 
