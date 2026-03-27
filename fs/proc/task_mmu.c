@@ -2714,9 +2714,13 @@ static int pagemap_scan_thp_entry(pmd_t *pmd, unsigned long start,
 	 * needs to be performed on a portion of the huge page.
 	 */
 	if (end != start + HPAGE_SIZE) {
+		int err;
+
 		spin_unlock(ptl);
-		split_huge_pmd(vma, pmd, start);
+		err = split_huge_pmd(vma, pmd, start);
 		pagemap_scan_backout_range(p, start, end);
+		if (err)
+			return err;
 		/* Report as if there was no THP */
 		return -ENOENT;
 	}
