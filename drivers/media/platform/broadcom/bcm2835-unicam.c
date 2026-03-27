@@ -452,6 +452,33 @@ static const struct unicam_format_info unicam_image_formats[] = {
 		.csi_dt		= MIPI_CSI2_DT_RAW14,
 		.unpack		= UNICAM_PUM_UNPACK14,
 	}, {
+	/* Generic raw formats */
+		.fourcc		= V4L2_PIX_FMT_RAW_8,
+		.code		= MEDIA_BUS_FMT_RAW_8,
+		.depth		= 8,
+		.csi_dt		= MIPI_CSI2_DT_RAW8,
+	}, {
+		.fourcc		= V4L2_PIX_FMT_RAW_CSI2_10,
+		.unpacked_fourcc = V4L2_PIX_FMT_RAW_10,
+		.code		= MEDIA_BUS_FMT_RAW_10,
+		.depth		= 10,
+		.csi_dt		= MIPI_CSI2_DT_RAW10,
+		.unpack		= UNICAM_PUM_UNPACK10,
+	}, {
+		.fourcc		= V4L2_PIX_FMT_RAW_CSI2_12,
+		.unpacked_fourcc = V4L2_PIX_FMT_RAW_12,
+		.code		= MEDIA_BUS_FMT_RAW_12,
+		.depth		= 12,
+		.csi_dt		= MIPI_CSI2_DT_RAW12,
+		.unpack		= UNICAM_PUM_UNPACK12,
+	}, {
+		.fourcc		= V4L2_PIX_FMT_RAW_CSI2_14,
+		.unpacked_fourcc = V4L2_PIX_FMT_RAW_14,
+		.code		= MEDIA_BUS_FMT_RAW_14,
+		.depth		= 14,
+		.csi_dt		= MIPI_CSI2_DT_RAW14,
+		.unpack		= UNICAM_PUM_UNPACK14,
+	}, {
 	/* 16 bit Bayer formats could be supported. */
 
 	/* Greyscale formats */
