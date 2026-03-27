@@ -637,31 +637,6 @@ irqreturn_t rzg2l_cru_irq(int irq, void *data)
 	return IRQ_RETVAL(handled);
 }
 
-static int rzg3e_cru_get_current_slot(struct rzg2l_cru_dev *cru)
-{
-	u64 amnmadrs;
-	int slot;
-
-	/*
-	 * When AMnMADRSL is read, AMnMADRSH of the higher-order
-	 * address also latches the address.
-	 *
-	 * AMnMADRSH must be read after AMnMADRSL has been read.
-	 */
-	amnmadrs = rzg2l_cru_read(cru, AMnMADRSL);
-	amnmadrs |= (u64)rzg2l_cru_read(cru, AMnMADRSH) << 32;
-
-	/* Ensure amnmadrs is within this buffer range */
-	for (slot = 0; slot < cru->num_buf; slot++) {
-		if (amnmadrs >= cru->buf_addr[slot] &&
-		    amnmadrs < cru->buf_addr[slot] + cru->format.sizeimage)
-			return slot;
-	}
-
-	dev_err(cru->dev, "Invalid MB address 0x%llx (out of range)\n", amnmadrs);
-	return -EINVAL;
-}
-
 irqreturn_t rzg3e_cru_irq(int irq, void *data)
 {
 	struct rzg2l_cru_dev *cru = data;
@@ -693,9 +668,8 @@ irqreturn_t rzg3e_cru_irq(int irq, void *data)
 		return IRQ_HANDLED;
 	}
 
-	slot = rzg3e_cru_get_current_slot(cru);
-	if (slot < 0)
-		return IRQ_HANDLED;
+	slot = cru->active_slot;
+	cru->active_slot = (cru->active_slot + 1) % cru->num_buf;
 
 	dev_dbg(cru->dev, "Current written slot: %d\n", slot);
 	cru->buf_addr[slot] = 0;
@@ -762,6 +736,9 @@ static int rzg2l_cru_start_streaming_vq(struct vb2_queue *vq, unsigned int count
 		goto assert_aresetn;
 	}
 
+	cru->active_slot = 0;
+	cru->sequence = 0;
+
 	/* Allocate scratch buffer */
 	cru->scratch = dma_alloc_coherent(cru->dev, cru->format.sizeimage,
 					  &cru->scratch_phys, GFP_KERNEL);
@@ -771,8 +748,6 @@ static int rzg2l_cru_start_streaming_vq(struct vb2_queue *vq, unsigned int count
 		ret = -ENOMEM;
 		goto assert_presetn;
 	}
-
-	cru->sequence = 0;
 
 	ret = rzg2l_cru_set_stream(cru, 1);
 	if (ret) {
