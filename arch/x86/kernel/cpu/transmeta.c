@@ -27,19 +27,10 @@ static bool is_legacy_revision(const struct leaf_0x80860001_0 *l1)
 		 l1->cpu_rev_mask_major == 0 && l1->cpu_rev_mask_minor == 0);
 }
 
-static void init_transmeta(struct cpuinfo_x86 *c)
+static void print_cpu_revision(struct cpuinfo_x86 *c)
 {
 	const struct leaf_0x80860001_0 *l1 = cpuid_leaf(c, 0x80860001);
 	const struct leaf_0x80860002_0 *l2 = cpuid_leaf(c, 0x80860002);
-	const struct leaf_0x80860003_0 *l3 = cpuid_leaf(c, 0x80860003);
-	const struct leaf_0x80860004_0 *l4 = cpuid_leaf(c, 0x80860004);
-	const struct leaf_0x80860005_0 *l5 = cpuid_leaf(c, 0x80860005);
-	const struct leaf_0x80860006_0 *l6 = cpuid_leaf(c, 0x80860006);
-	unsigned int cap_mask, uk;
-
-	early_init_transmeta(c);
-
-	cpu_detect_cache_sizes(c);
 
 	if (l1 && is_legacy_revision(l1)) {
 		pr_info("CPU: Processor revision %u.%u.%u.%u, %u MHz\n",
@@ -59,6 +50,14 @@ static void init_transmeta(struct cpuinfo_x86 *c)
 			l2->cms_rev_mask_1, l2->cms_rev_mask_2,
 			l2->cms_rev_mask_3);
 	}
+}
+
+static void print_cpu_info_string(struct cpuinfo_x86 *c)
+{
+	const struct leaf_0x80860003_0 *l3 = cpuid_leaf(c, 0x80860003);
+	const struct leaf_0x80860004_0 *l4 = cpuid_leaf(c, 0x80860004);
+	const struct leaf_0x80860005_0 *l5 = cpuid_leaf(c, 0x80860005);
+	const struct leaf_0x80860006_0 *l6 = cpuid_leaf(c, 0x80860006);
 
 	if (l3 && l4 && l5 && l6) {
 		u32 info[] = {
@@ -70,6 +69,17 @@ static void init_transmeta(struct cpuinfo_x86 *c)
 		};
 		pr_info("CPU: %s\n", (char *)info);
 	}
+}
+
+static void init_transmeta(struct cpuinfo_x86 *c)
+{
+	unsigned int cap_mask, uk;
+
+	early_init_transmeta(c);
+	cpu_detect_cache_sizes(c);
+
+	print_cpu_revision(c);
+	print_cpu_info_string(c);
 
 	/* Unhide possibly hidden capability flags */
 	rdmsr(0x80860004, cap_mask, uk);
