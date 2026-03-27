@@ -269,6 +269,12 @@ static const struct dmi_system_id orientation_data[] = {
 			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Loki Zero"),
 		},
 		.driver_data = (void *)&lcd1080x1920_leftside_up,
+	}, {	/* BNCF NewBook 11 */
+		.matches = {
+		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "BNCF"),
+		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "NewBook11"),
+		},
+		.driver_data = (void *)&lcd1200x1920_rightside_up,
 	}, {	/* Chuwi HiBook (CWI514) */
 		.matches = {
 			DMI_MATCH(DMI_BOARD_VENDOR, "Hampoo"),
@@ -330,6 +336,18 @@ static const struct dmi_system_id orientation_data[] = {
 		  DMI_EXACT_MATCH(DMI_BOARD_NAME, "Default string"),
 		},
 		.driver_data = (void *)&gpd_pocket2,
+	}, {	/* GPD Pocket 3 */
+		.matches = {
+		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "GPD"),
+		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "G1621-02"),
+		},
+		.driver_data = (void *)&lcd1200x1920_rightside_up,
+	}, {	/* GPD Pocket 4 */
+		.matches = {
+		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "GPD"),
+		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "G1628-04"),
+		},
+		.driver_data = (void *)&lcd1600x2560_rightside_up,
 	}, {	/* GPD Win (same note on DMI match as GPD Pocket) */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_BOARD_VENDOR, "AMI Corporation"),
