@@ -1763,13 +1763,18 @@ static inline int __do_cpuid_func(struct kvm_cpuid_array *array, u32 function)
 		/* Drop reserved bits, pass host L2 cache and TLB info. */
 		entry->edx &= ~GENMASK(17, 16);
 		break;
-	case 0x80000007: /* Advanced power management */
+	case 0x80000007: { /* Advanced power management */
+		const struct cpuid_regs *el7 = cpuid_leaf_raw(&boot_cpu_data, 0x80000007);
+
 		cpuid_entry_override(entry, CPUID_8000_0007_EDX);
 
-		/* mask against host */
-		entry->edx &= boot_cpu_data.x86_power;
+		/* Mask against host */
+		if (el7)
+			entry->edx &= el7->edx;
+
 		entry->eax = entry->ebx = entry->ecx = 0;
 		break;
+	}
 	case 0x80000008: {
 		/*
 		 * GuestPhysAddrSize (EAX[23:16]) is intended for software
