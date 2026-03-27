@@ -1179,18 +1179,14 @@ static unsigned int amd_size_cache(struct cpuinfo_x86 *c, unsigned int size)
 
 static void cpu_detect_tlb_amd(struct cpuinfo_x86 *c)
 {
-	u32 l2_tlb_eax, l2_tlb_ebx, l1_tlb_eax;
-	u16 l2_mask = 0xfff, l1_mask = 0xff;
+	const struct leaf_0x80000005_0 *el5 = cpuid_leaf(c, 0x80000005);
+	const struct leaf_0x80000006_0 *el6 = cpuid_leaf(c, 0x80000006);
 
-	if (c->x86 < 0xf || c->extended_cpuid_level < 0x80000006)
+	if (c->x86 < 0xf || !el5 || !el6)
 		return;
 
-	l2_tlb_eax = cpuid_eax(0x80000006);
-	l2_tlb_ebx = cpuid_ebx(0x80000006);
-	l1_tlb_eax = cpuid_eax(0x80000005);
-
-	tlb_lld_4k = (l2_tlb_ebx >> 16) & l2_mask;
-	tlb_lli_4k = l2_tlb_ebx & l2_mask;
+	tlb_lld_4k = el6->l2_dtlb_4k_nentries;
+	tlb_lli_4k = el6->l2_itlb_4k_nentries;
 
 	/*
 	 * K8 does not report 2M/4M entries in the L2 TLB, so always use
@@ -1198,17 +1194,17 @@ static void cpu_detect_tlb_amd(struct cpuinfo_x86 *c)
 	 * when the L2 entry count is zero.
 	 */
 
-	tlb_lld_2m = (l2_tlb_eax >> 16) & l2_mask;
+	tlb_lld_2m = el6->l2_dtlb_2m_4m_nentries;
 	if (c->x86 == 0xf || !tlb_lld_2m)
-		tlb_lld_2m = (l1_tlb_eax >> 16) & l1_mask;
+		tlb_lld_2m = el5->l1_dtlb_2m_4m_nentries;
 
-	tlb_lli_2m = l2_tlb_eax & l2_mask;
+	tlb_lli_2m = el6->l2_itlb_2m_4m_nentries;
 	if (c->x86 == 0xf || !tlb_lli_2m) {
 		/* Erratum 658 */
 		if (c->x86 == 0x15 && c->x86_model <= 0x1f)
 			tlb_lli_2m = 1024;
 		else
-			tlb_lli_2m = l1_tlb_eax & l1_mask;
+			tlb_lli_2m = el5->l1_itlb_2m_4m_nentries;
 	}
 
 	/* A 4M entry uses two 2M entries */
