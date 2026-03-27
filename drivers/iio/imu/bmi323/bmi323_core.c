@@ -1712,6 +1712,8 @@ static int bmi323_write_raw(struct iio_dev *indio_dev,
 		iio_device_release_direct(indio_dev);
 		return ret;
 	case IIO_CHAN_INFO_SCALE:
+		if (chan->type == IIO_TEMP)
+			return -EINVAL;
 		if (!iio_device_claim_direct(indio_dev))
 			return -EBUSY;
 		ret = bmi323_set_scale(data, bmi323_iio_to_sensor(chan->type),
