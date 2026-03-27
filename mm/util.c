@@ -26,6 +26,7 @@
 #include <linux/compat.h>
 #include <linux/fsnotify.h>
 #include <linux/page_idle.h>
+#include <linux/module.h>
 
 #include <linux/uaccess.h>
 
@@ -42,7 +43,8 @@
  */
 void kfree_const(const void *x)
 {
-	if (!is_kernel_rodata((unsigned long)x))
+	if (!is_kernel_rodata((unsigned long)x) &&
+	    !is_module_rodata((unsigned long)x))
 		kfree(x);
 }
 EXPORT_SYMBOL(kfree_const);
@@ -98,7 +100,8 @@ EXPORT_SYMBOL(kstrdup);
  */
 const char *kstrdup_const(const char *s, gfp_t gfp)
 {
-	if (is_kernel_rodata((unsigned long)s))
+	if (is_kernel_rodata((unsigned long)s) ||
+	    is_module_rodata((unsigned long)s))
 		return s;
 
 	return kstrdup(s, gfp);

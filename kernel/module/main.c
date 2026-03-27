@@ -3861,6 +3861,15 @@ bool is_module_text_address(unsigned long addr)
 	return __module_text_address(addr) != NULL;
 }
 
+bool is_module_rodata(unsigned long addr)
+{
+	struct module *mod;
+
+	guard(rcu)();
+	mod = __module_address(addr);
+	return mod && within_module_mem_type(addr, mod, MOD_RODATA);
+}
+
 void module_for_each_mod(int(*func)(struct module *mod, void *data), void *data)
 {
 	struct module *mod;
