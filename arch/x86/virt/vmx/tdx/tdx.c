@@ -1519,6 +1519,23 @@ static void tdx_clflush_page_array(struct tdx_page_array *array)
 		tdx_clflush_page(array->pages[array->offset + i]);
 }
 
+/* Initialize the TDX Module Extensions then Extension-SEAMCALLs can be used */
+static int tdx_ext_init(void)
+{
+	struct tdx_module_args args = {};
+	u64 r;
+
+	do {
+		r = seamcall(TDH_EXT_INIT, &args);
+		cond_resched();
+	} while (r == TDX_INTERRUPTED_RESUMABLE);
+
+	if (r != TDX_SUCCESS)
+		return -EFAULT;
+
+	return 0;
+}
+
 static int tdx_ext_mem_add(struct tdx_page_array *ext_mem)
 {
 	struct tdx_module_args args = {
@@ -1572,6 +1589,17 @@ static int __maybe_unused init_tdx_ext(void)
 	if (!(tdx_sysinfo.features.tdx_features0 & TDX_FEATURES0_EXT))
 		return 0;
 
+	/*
+	 * With this errata, TDX should use movdir64b to clear private pages
+	 * when reclaiming them. See tdx_quirk_reset_paddr().
+	 *
+	 * Don't expect this errata on any TDX Extensions supported platform.
+	 * All features require TDX Extensions (including TDX Extensions
+	 * itself) will never call tdx_quirk_reset_paddr().
+	 */
+	if (boot_cpu_has_bug(X86_BUG_TDX_PW_MCE))
+		return -ENXIO;
+
 	nr_pages = tdx_sysinfo.ext.memory_pool_required_pages;
 	/*
 	 * memory_pool_required_pages == 0 means no need to add more pages,
@@ -1587,6 +1615,20 @@ static int __maybe_unused init_tdx_ext(void)
 			goto out_ext_mem;
 	}
 
+	/*
+	 * ext_required == 0 means no need to call TDH.EXT.INIT, the Extensions
+	 * are already working.
+	 */
+	if (tdx_sysinfo.ext.ext_required) {
+		ret = tdx_ext_init();
+		/*
+		 * Some pages may have been touched by the TDX module.
+		 * Flush cache before returning these pages to kernel.
+		 */
+		if (ret)
+			goto out_flush;
+	}
+
 	/* Extension memory is never reclaimed once assigned */
 	tdx_page_array_ctrl_leak(ext_mem);
 
@@ -1595,6 +1637,9 @@ static int __maybe_unused init_tdx_ext(void)
 
 	return 0;
 
+out_flush:
+	if (ext_mem)
+		wbinvd_on_all_cpus();
 out_ext_mem:
 	tdx_page_array_free(ext_mem);
 
