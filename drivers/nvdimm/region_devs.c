@@ -104,7 +104,7 @@ out:
 
 static int get_flush_data(struct nd_region *nd_region, size_t *size, int *num_flush)
 {
-	size_t flush_data_size = sizeof(void *);
+	size_t flush_data_size = 0;
 	int _num_flush = 0;
 	int i;
 
@@ -117,11 +117,10 @@ static int get_flush_data(struct nd_region *nd_region, size_t *size, int *num_fl
 			return -EBUSY;
 
 		/* at least one null hint slot per-dimm for the "no-hint" case */
-		flush_data_size += sizeof(void *);
 		_num_flush = min_not_zero(_num_flush, nvdimm->num_flush);
 		if (!nvdimm->num_flush)
 			continue;
-		flush_data_size += nvdimm->num_flush * sizeof(void *);
+		flush_data_size += nvdimm->num_flush;
 	}
 
 	*size = flush_data_size;
@@ -145,7 +144,7 @@ int nd_region_activate(struct nd_region *nd_region)
 	if (rc)
 		return rc;
 
-	ndrd = devm_kzalloc(dev, sizeof(*ndrd) + flush_data_size, GFP_KERNEL);
+	ndrd = devm_kzalloc(dev, struct_size(ndrd, flush_wpq, flush_data_size), GFP_KERNEL);
 	if (!ndrd)
 		return -ENOMEM;
 	dev_set_drvdata(dev, ndrd);
