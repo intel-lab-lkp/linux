@@ -1749,6 +1749,7 @@ static int npcm_video_probe(struct platform_device *pdev)
 
 	regs = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(regs)) {
+		kfree(video);
 		dev_err(&pdev->dev, "Failed to parse VCD reg in DTS\n");
 		return PTR_ERR(regs);
 	}
@@ -1756,33 +1757,44 @@ static int npcm_video_probe(struct platform_device *pdev)
 	video->vcd_regmap = devm_regmap_init_mmio(&pdev->dev, regs,
 						  &npcm_video_regmap_cfg);
 	if (IS_ERR(video->vcd_regmap)) {
+		kfree(video);
 		dev_err(&pdev->dev, "Failed to initialize VCD regmap\n");
 		return PTR_ERR(video->vcd_regmap);
 	}
 
 	video->reset = devm_reset_control_get(&pdev->dev, NULL);
 	if (IS_ERR(video->reset)) {
+		kfree(video);
 		dev_err(&pdev->dev, "Failed to get VCD reset control in DTS\n");
 		return PTR_ERR(video->reset);
 	}
 
 	video->gcr_regmap = syscon_regmap_lookup_by_phandle(pdev->dev.of_node,
 							    "nuvoton,sysgcr");
-	if (IS_ERR(video->gcr_regmap))
+	if (IS_ERR(video->gcr_regmap)) {
+		kfree(video);
 		return PTR_ERR(video->gcr_regmap);
+	}
 
 	video->gfx_regmap = syscon_regmap_lookup_by_phandle(pdev->dev.of_node,
 							    "nuvoton,sysgfxi");
-	if (IS_ERR(video->gfx_regmap))
+	if (IS_ERR(video->gfx_regmap)) {
+		kfree(video);
 		return PTR_ERR(video->gfx_regmap);
+	}
 
 	rc = npcm_video_init(video);
-	if (rc)
+	if (rc) {
+		kfree(video);
 		return rc;
+	}
 
 	rc = npcm_video_setup_video(video);
-	if (rc)
+	if (rc) {
+		of_reserved_mem_device_release(&pdev->dev);
+		kfree(video);
 		return rc;
+	}
 
 	dev_info(video->dev, "NPCM video driver probed\n");
 	return 0;
@@ -1800,6 +1812,7 @@ static void npcm_video_remove(struct platform_device *pdev)
 	v4l2_device_unregister(v4l2_dev);
 	if (video->ece.enable)
 		npcm_video_ece_stop(video);
+	kfree(video);
 	of_reserved_mem_device_release(dev);
 }
 
