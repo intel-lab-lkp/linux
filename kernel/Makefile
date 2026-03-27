@@ -37,6 +37,10 @@ KCOV_INSTRUMENT_extable.o := n
 KCOV_INSTRUMENT_stacktrace.o := n
 # Don't self-instrument.
 KCOV_INSTRUMENT_kcov.o := n
+# kexec_core.c contains __crash_kexec / machine_kexec paths that run with
+# degraded CPU state; KCOV instrumentation there causes per-CPU GS faults.
+KCOV_INSTRUMENT_kexec_core.o := n
+KCOV_INSTRUMENT_kexec.o := n
 # If sanitizers detect any issues in kcov, it may lead to recursion
 # via printk, etc.
 KASAN_SANITIZE_kcov.o := n

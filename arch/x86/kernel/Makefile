@@ -43,6 +43,11 @@ KCOV_INSTRUMENT_dumpstack_$(BITS).o			:= n
 KCOV_INSTRUMENT_unwind_orc.o				:= n
 KCOV_INSTRUMENT_unwind_frame.o				:= n
 KCOV_INSTRUMENT_unwind_guess.o				:= n
+# machine_kexec accesses per-CPU data via GS during kexec; KCOV instrumentation
+# there causes page faults → exception stack overflow → double fault, preventing
+# kdump crash kernel from booting.
+KCOV_INSTRUMENT_machine_kexec_64.o			:= n
+KCOV_INSTRUMENT_machine_kexec.o			:= n
 
 CFLAGS_head32.o := -fno-stack-protector
 CFLAGS_head64.o := -fno-stack-protector
