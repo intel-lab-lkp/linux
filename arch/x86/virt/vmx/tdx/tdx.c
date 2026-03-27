@@ -1580,7 +1580,7 @@ static int tdx_ext_mem_setup(struct tdx_page_array *ext_mem)
 	return 0;
 }
 
-static int __maybe_unused init_tdx_ext(void)
+static int init_tdx_ext(void)
 {
 	struct tdx_page_array *ext_mem = NULL;
 	unsigned int nr_pages;
@@ -1702,6 +1702,10 @@ static int init_tdx_module(void)
 
 	/* Initialize TDMRs to complete the TDX module initialization */
 	ret = init_tdmrs(&tdx_tdmr_list);
+	if (ret)
+		goto err_reset_pamts;
+
+	ret = init_tdx_ext();
 	if (ret)
 		goto err_reset_pamts;
 
