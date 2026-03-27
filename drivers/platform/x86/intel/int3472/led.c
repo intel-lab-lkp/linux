@@ -15,7 +15,8 @@ static int int3472_led_set(struct led_classdev *led_cdev,
 	return 0;
 }
 
-int skl_int3472_register_led(struct int3472_discrete_device *int3472, struct gpio_desc *gpio)
+int skl_int3472_register_led(struct int3472_discrete_device *int3472,
+			     struct gpio_desc *gpio, const char *name)
 {
 	struct int3472_led *led = &int3472->led;
 	char *p;
@@ -28,7 +29,7 @@ int skl_int3472_register_led(struct int3472_discrete_device *int3472, struct gpi
 
 	/* Generate the name, replacing the ':' in the ACPI devname with '_' */
 	snprintf(led->name, sizeof(led->name),
-		 "%s::privacy_led", acpi_dev_name(int3472->sensor));
+		 "%s::%s_led", acpi_dev_name(int3472->sensor), name);
 	p = strchr(led->name, ':');
 	if (p)
 		*p = '_';
