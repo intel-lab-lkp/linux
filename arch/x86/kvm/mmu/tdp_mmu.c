@@ -656,7 +656,13 @@ static inline int __must_check __tdp_mmu_set_spte_atomic(struct kvm *kvm,
 	 */
 	WARN_ON_ONCE(iter->yielded || is_frozen_spte(iter->old_spte));
 
-	if (is_mirror_sptep(iter->sptep) && !is_frozen_spte(new_spte)) {
+	/*
+	 * FROZEN_SPTE is a temporary state and should never be set via higher
+	 * level helpers.
+	 */
+	KVM_MMU_WARN_ON(is_frozen_spte(new_spte));
+
+	if (is_mirror_sptep(iter->sptep)) {
 		int ret;
 
 		ret = set_external_spte_present(kvm, iter->sptep, iter->gfn,
