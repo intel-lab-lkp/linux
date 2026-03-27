@@ -859,6 +859,7 @@ static void mali_c55_remove(struct platform_device *pdev)
 	struct mali_c55 *mali_c55 = platform_get_drvdata(pdev);
 
 	mali_c55_media_frameworks_deinit(mali_c55);
+	pm_runtime_disable(&pdev->dev);
 	kfree(mali_c55->context.registers);
 	of_reserved_mem_device_release(&pdev->dev);
 }
