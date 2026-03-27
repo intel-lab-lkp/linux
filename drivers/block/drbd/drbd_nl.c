@@ -73,7 +73,7 @@ int drbd_adm_dump_peer_devices(struct sk_buff *skb, struct netlink_callback *cb)
 int drbd_adm_dump_peer_devices_done(struct netlink_callback *cb);
 int drbd_adm_get_initial_state(struct sk_buff *skb, struct netlink_callback *cb);
 
-#include <linux/drbd_genl_api.h>
+#include "drbd_genl_api.h"
 #include "drbd_nla.h"
 #include <linux/genl_magic_func.h>
 

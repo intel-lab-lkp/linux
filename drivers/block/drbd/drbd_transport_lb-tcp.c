@@ -15,10 +15,10 @@
 #include <linux/tcp.h>
 #include <linux/highmem.h>
 #include <linux/bio.h>
-#include <linux/drbd_genl_api.h>
-#include <linux/drbd_config.h>
+#include "drbd_genl_api.h"
 #include <net/tcp.h>
 #include "drbd_protocol.h"
+#include "drbd_config.h"
 #include "drbd_transport.h"
 
 

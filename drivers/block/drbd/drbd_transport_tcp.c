@@ -19,14 +19,14 @@
 #include <linux/tcp.h>
 #include <linux/highmem.h>
 #include <linux/bio.h>
-#include <linux/drbd_genl_api.h>
-#include <linux/drbd_config.h>
+#include "drbd_genl_api.h"
 #include <linux/tls.h>
 #include <net/tcp.h>
 #include <net/handshake.h>
 #include <net/tls.h>
 #include <net/tls_prot.h>
 #include "drbd_protocol.h"
+#include "drbd_config.h"
 #include "drbd_transport.h"
 
 

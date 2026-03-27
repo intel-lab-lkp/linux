@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include <linux/kernel.h>
 #include <net/netlink.h>
-#include <linux/drbd_genl_api.h>
+#include "drbd_genl_api.h"
 #include "drbd_nla.h"
 
 static int drbd_nla_check_mandatory(int maxtype, struct nlattr *nla)
