@@ -1348,15 +1348,17 @@ static unsigned long move_vma(struct vma_remap_struct *vrm)
 	if (err)
 		return err;
 
+	/* We don't want racing faults. */
+	err = vma_start_write_killable(vrm->vma);
+	if (err)
+		return err;
+
 	/*
 	 * If accounted, determine the number of bytes the operation will
 	 * charge.
 	 */
 	if (!vrm_calc_charge(vrm))
 		return -ENOMEM;
-
-	/* We don't want racing faults. */
-	vma_start_write(vrm->vma);
 
 	/* Perform copy step. */
 	err = copy_vma_and_data(vrm, &new_vma);
