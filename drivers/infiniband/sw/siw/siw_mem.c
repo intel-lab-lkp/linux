@@ -50,7 +50,6 @@ void siw_umem_release(struct siw_umem *umem)
 		kfree(umem->page_chunk[i].plist);
 		num_pages -= PAGES_PER_CHUNK;
 	}
-	kfree(umem->page_chunk);
 	kfree(umem);
 }
 
@@ -347,16 +346,12 @@ struct siw_umem *siw_umem_get(struct ib_device *base_dev, u64 start,
 	num_pages = PAGE_ALIGN(start + len - first_page_va) >> PAGE_SHIFT;
 	num_chunks = (num_pages >> CHUNK_SHIFT) + 1;
 
-	umem = kzalloc_obj(*umem);
+	umem = kzalloc_flex(*umem, page_chunk, num_chunks);
 	if (!umem)
 		return ERR_PTR(-ENOMEM);
 
-	umem->page_chunk =
-		kzalloc_objs(struct siw_page_chunk, num_chunks);
-	if (!umem->page_chunk) {
-		rv = -ENOMEM;
-		goto err_out;
-	}
+	umem->num_pages = num_pages;
+
 	base_mem = ib_umem_get(base_dev, start, len, rights);
 	if (IS_ERR(base_mem)) {
 		rv = PTR_ERR(base_mem);
@@ -385,7 +380,6 @@ struct siw_umem *siw_umem_get(struct ib_device *base_dev, u64 start,
 		umem->page_chunk[i].plist = plist;
 		while (nents--) {
 			*plist = sg_page_iter_page(&sg_iter);
-			umem->num_pages++;
 			num_pages--;
 			plist++;
 			if (!__sg_page_iter_next(&sg_iter))
