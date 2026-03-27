@@ -505,6 +505,131 @@ static inline bool cpuid_amd_hygon_has_l3_cache(struct cpuinfo_x86 *c)
 }
 
 /*
+ * X86_FEATURE mapping:
+ *
+ * These macros are for the internal <asm/cpufeature.h> X86_FEATURE querying.
+ * Do everything at compile-time to preserve that header's query optimizations.
+ *
+ * @_feature: <asm/cpufeatures.h> X86_FEATURE symbol
+ */
+
+#define __feature_word(_feature)	((_feature) / 32)
+#define __feature_word_bit(_feature)	((_feature) % 32)
+
+/*
+ * Return cached CPUID output offset for @_feature; within 'struct cpuid_leaves'.
+ */
+#define __feature_byte_offset(_feature)						\
+({										\
+	struct cpuid_cpufeature ____map[] = CPUID_FEATURE_WORDS_MAP;		\
+	unsigned int ____word = __feature_word(_feature);			\
+										\
+	____map[____word].leaves_offset;					\
+})
+
+/*
+ * Return CPUID output register for @_feature; i.e., CPUID_EAX -> CPUID_EDX.
+ */
+#define __feature_register(_feature)						\
+({										\
+	struct cpuid_cpufeature ____map[] = CPUID_FEATURE_WORDS_MAP;		\
+	unsigned int ____word = __feature_word(_feature);			\
+										\
+	____map[____word].cpuid_reg;						\
+})
+
+/*
+ * Return bit offset for @_feature.  This is for bitops, where the offset is
+ * relative to ((u8 *)&cpuid_leaves + __feature_byte_offset(@_feature)).
+ */
+#define __feature_bit_offset(_feature)						\
+({										\
+	32 * __feature_register(_feature) + __feature_word_bit(_feature);	\
+})
+
+/**
+ * cpuid_feature_byte_offset() - Return X86_FEATURE byte offset
+ * @_feature:	X86_FEATURE symbol from <asm/cpufeatures.h>
+ *
+ * Return CPUID table 'struct cpuid_leaves' byte offset, for @_feature.
+ */
+#define cpuid_feature_byte_offset(_feature)	__feature_byte_offset(_feature)
+
+/**
+ * cpuid_feature_bitmap() - Return X86_FEATURE bitmap
+ * @_cpuinfo:	CPU capability structure ('struct cpuinfo_x86')
+ * @_feature:	X86_FEATURE symbol from <asm/cpufeatures.h>
+ *
+ * Return CPUID table bitmap, within @_cpuinfo, for @_feature.  The returned
+ * bitmap is unsigned long aligned, for bitops access.
+ */
+#define cpuid_feature_bitmap(_cpuinfo, _feature)				\
+	(unsigned long *)((u8 *)&(_cpuinfo)->cpuid.leaves + __feature_byte_offset(_feature))
+
+/**
+ * cpuid_feature_bit_offset()
+ * @_feature:	X86_FEATURE symbol from <asm/cpufeatures.h>
+ *
+ * Return CPUID table bit offset, for @_feature, within the bitmap returned by
+ * cpuid_feature_bitmap().
+ */
+#define cpuid_feature_bit_offset(_feature)	__feature_bit_offset(_feature)
+
+/*
+ * CPUID word mapping:
+ */
+
+static inline u32 *__cpuid_word_address(struct cpuinfo_x86 *c, u16 word)
+{
+	u16 feature = word * 32;
+
+	return (u32 *)cpuid_feature_bitmap(c, feature) + __feature_register(feature);
+}
+
+/**
+ * cpuid_word() - Return the CPUID word's raw u32 value
+ * @c:		CPU capability structure ('struct cpuinfo_x86')
+ * @word:	CPUID word number as defined at "enum cpuid_leafs"
+ */
+static inline u32 cpuid_word(struct cpuinfo_x86 *c, u16 word)
+{
+	return *__cpuid_word_address(c, word);
+}
+
+/**
+ * cpuid_word_set() - Set the CPUID word's raw u32 value
+ * @c:		CPU capability structure ('struct cpuinfo_x86')
+ * @word:	CPUID word number as defined at "enum cpuid_leafs"
+ * @val:	Raw u32 value to set the word to
+ */
+static inline void cpuid_word_set(struct cpuinfo_x86 *c, u16 word, u32 val)
+{
+	*__cpuid_word_address(c, word) = val;
+}
+
+/**
+ * cpuid_word_set_bits() - Set bits at CPUID word according to passed map
+ * @c:		CPU capability structure ('struct cpuinfo_x86')
+ * @word:	CPUID word number as defined at "enum cpuid_leafs"
+ * @map:	Map of bits to be set
+ */
+static inline void cpuid_word_set_bits(struct cpuinfo_x86 *c, u16 word, u32 map)
+{
+	*__cpuid_word_address(c, word) |= map;
+}
+
+/**
+ * cpuid_word_clear_bits() - Clear bits at CPUID word according to passed map
+ * @c:		CPU capability structure ('struct cpuinfo_x86')
+ * @word:	CPUID word number as defined at "enum cpuid_leafs"
+ * @map:	Map of bits to be cleared
+ */
+static inline void cpuid_word_clear_bits(struct cpuinfo_x86 *c, u16 word, u32 map)
+{
+	*__cpuid_word_address(c, word) &= ~map;
+}
+
+/*
  * CPUID parser exported APIs:
  */
 
