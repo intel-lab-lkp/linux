@@ -368,6 +368,19 @@ by the cpu which allocated them.
 
 Default: 128
 
+napi_consume_skb_defer
+----------------------
+When set to 1 (default), napi_consume_skb() defers freeing SKBs whose
+allocation CPU differs from the current CPU via skb_attempt_defer_free().
+This reduces cross-NUMA SLUB spinlock contention for multi-queue workloads.
+
+Setting this to 0 disables the defer path in napi_consume_skb() only,
+allowing SKBs to be returned to the local napi_skb_cache immediately.
+This can benefit single-flow or few-flow workloads (e.g. AF_XDP TX)
+where the defer detour hurts the fast recycle path.
+
+Default: 1
+
 optmem_max
 ----------
 

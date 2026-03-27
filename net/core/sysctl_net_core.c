@@ -676,6 +676,13 @@ static struct ctl_table net_core_table[] = {
 		.proc_handler	= proc_do_skb_defer_max,
 		.extra1		= SYSCTL_ZERO,
 	},
+	{
+		.procname	= "napi_consume_skb_defer",
+		.data		= &napi_consume_skb_defer_key.key,
+		.maxlen		= sizeof(napi_consume_skb_defer_key),
+		.mode		= 0644,
+		.proc_handler	= proc_do_static_key,
+	},
 };
 
 static struct ctl_table netns_core_table[] = {
