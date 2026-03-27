@@ -505,39 +505,36 @@ static __init void zhaoxin_arch_events_quirk(void)
 
 __init int zhaoxin_pmu_init(void)
 {
-	union cpuid10_edx edx;
-	union cpuid10_eax eax;
-	union cpuid10_ebx ebx;
+	const struct cpuid_regs *regs = cpuid_leaf_raw(&boot_cpu_data, 0xa);
+	const struct leaf_0xa_0 *leaf = cpuid_leaf(&boot_cpu_data, 0xa);
 	struct event_constraint *c;
-	unsigned int unused;
-	int version;
 
 	pr_info("Welcome to zhaoxin pmu!\n");
+
+	if (!leaf || !regs)
+		return -ENODEV;
 
 	/*
 	 * Check whether the Architectural PerfMon supports
 	 * hw_event or not.
 	 */
-	cpuid(10, &eax.full, &ebx.full, &unused, &edx.full);
-
-	if (eax.split.mask_length < ARCH_PERFMON_EVENTS_COUNT - 1)
+	if (leaf->events_mask_len < ARCH_PERFMON_EVENTS_COUNT - 1)
 		return -ENODEV;
 
-	version = eax.split.version_id;
-	if (version != 2)
+	if (leaf->pmu_version != 2)
 		return -ENODEV;
 
 	x86_pmu = zhaoxin_pmu;
 	pr_info("Version check pass!\n");
 
-	x86_pmu.version			= version;
-	x86_pmu.cntr_mask64		= GENMASK_ULL(eax.split.num_counters - 1, 0);
-	x86_pmu.cntval_bits		= eax.split.bit_width;
-	x86_pmu.cntval_mask		= (1ULL << eax.split.bit_width) - 1;
-	x86_pmu.events_maskl		= ebx.full;
-	x86_pmu.events_mask_len		= eax.split.mask_length;
+	x86_pmu.version			= leaf->pmu_version;
+	x86_pmu.cntr_mask64		= GENMASK_ULL(leaf->num_counters_gp - 1, 0);
+	x86_pmu.cntval_bits		= leaf->bit_width_gp;
+	x86_pmu.cntval_mask		= (1ULL << leaf->bit_width_gp) - 1;
+	x86_pmu.events_maskl		= regs->ebx;
+	x86_pmu.events_mask_len		= leaf->events_mask_len;
 
-	x86_pmu.fixed_cntr_mask64	= GENMASK_ULL(edx.split.num_counters_fixed - 1, 0);
+	x86_pmu.fixed_cntr_mask64	= GENMASK_ULL(leaf->num_counters_fixed - 1, 0);
 	x86_add_quirk(zhaoxin_arch_events_quirk);
 
 	switch (boot_cpu_data.x86) {
@@ -617,4 +614,3 @@ __init int zhaoxin_pmu_init(void)
 
 	return 0;
 }
-
