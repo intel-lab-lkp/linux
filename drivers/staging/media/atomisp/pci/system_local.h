@@ -53,11 +53,6 @@ extern const hrt_address FIFO_MONITOR_BASE[N_FIFO_MONITOR_ID];
 /* GP_DEVICE (single base for all separate GP_REG instances) */
 extern const hrt_address GP_DEVICE_BASE[N_GP_DEVICE_ID];
 
-/*GP TIMER , all timer registers are inter-twined,
- * so, having multiple base addresses for
- * different timers does not help*/
-extern const hrt_address GP_TIMER_BASE;
-
 /* GPIO */
 extern const hrt_address GPIO_BASE[N_GPIO_ID];
 

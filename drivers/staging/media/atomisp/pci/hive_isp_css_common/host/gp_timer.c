@@ -11,7 +11,12 @@
 #ifndef __INLINE_GP_TIMER__
 #include "gp_timer_private.h"  /*device_access.h*/
 #endif /* __INLINE_GP_TIMER__ */
-#include "system_local.h"
+
+/*GP TIMER , all timer registers are inter-twined,
+ * so, having multiple base addresses for
+ * different timers does not help
+ */
+static const hrt_address GP_TIMER_BASE = (hrt_address)0x0000000000000600ULL;
 
 /* FIXME: not sure if reg_load(), reg_store() should be API.
  */

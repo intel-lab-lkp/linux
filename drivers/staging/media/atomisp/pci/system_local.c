@@ -83,12 +83,6 @@ const hrt_address GP_DEVICE_BASE[N_GP_DEVICE_ID] = {
 	0x0000000000000000ULL
 };
 
-/*GP TIMER , all timer registers are inter-twined,
- * so, having multiple base addresses for
- * different timers does not help*/
-const hrt_address GP_TIMER_BASE =
-    (hrt_address)0x0000000000000600ULL;
-
 /* GPIO */
 const hrt_address GPIO_BASE[N_GPIO_ID] = {
 	0x0000000000000400ULL
