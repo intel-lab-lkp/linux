@@ -915,6 +915,7 @@ static int sdebug_host_max_queue;	/* per host */
 static int sdebug_lowest_aligned = DEF_LOWEST_ALIGNED;
 static int sdebug_max_luns = DEF_MAX_LUNS;
 static int sdebug_max_queue = SDEBUG_CANQUEUE;	/* per submit queue */
+static unsigned int sdebug_max_segment_size = UINT_MAX;
 static unsigned int sdebug_medium_error_start = OPT_MEDIUM_ERR_ADDR;
 static int sdebug_medium_error_count = OPT_MEDIUM_ERR_NUM;
 static int sdebug_ndelay = DEF_NDELAY;	/* if > 0 then unit is nanoseconds */
@@ -1040,6 +1041,26 @@ static const int condition_met_result = SAM_STAT_CONDITION_MET;
 
 static struct dentry *sdebug_debugfs_root;
 static ASYNC_DOMAIN_EXCLUSIVE(sdebug_async_domain);
+
+static int sdebug_set_max_segment_size(const char *val,
+				       const struct kernel_param *kp)
+{
+	int res;
+
+	res = kstrtouint(val, 0, &sdebug_max_segment_size);
+	if (res < 0)
+		return res;
+
+	if (sdebug_max_segment_size < BLK_MIN_SEGMENT_SIZE)
+		return -EINVAL;
+
+	return 0;
+}
+
+static const struct kernel_param_ops max_segment_size_ops = {
+	.set = sdebug_set_max_segment_size,
+	.get = param_get_uint,
+};
 
 static u32 sdebug_get_devsel(struct scsi_device *sdp)
 {
@@ -7366,6 +7387,8 @@ module_param_named(lowest_aligned, sdebug_lowest_aligned, int, S_IRUGO);
 module_param_named(lun_format, sdebug_lun_am_i, int, S_IRUGO | S_IWUSR);
 module_param_named(max_luns, sdebug_max_luns, int, S_IRUGO | S_IWUSR);
 module_param_named(max_queue, sdebug_max_queue, int, S_IRUGO | S_IWUSR);
+module_param_cb(max_segment_size, &max_segment_size_ops,
+		&sdebug_max_segment_size, S_IRUGO);
 module_param_named(medium_error_count, sdebug_medium_error_count, int,
 		   S_IRUGO | S_IWUSR);
 module_param_named(medium_error_start, sdebug_medium_error_start, int,
@@ -7449,6 +7472,7 @@ MODULE_PARM_DESC(lowest_aligned, "lowest aligned lba (def=0)");
 MODULE_PARM_DESC(lun_format, "LUN format: 0->peripheral (def); 1 --> flat address method");
 MODULE_PARM_DESC(max_luns, "number of LUNs per target to simulate(def=1)");
 MODULE_PARM_DESC(max_queue, "max number of queued commands (1 to max(def))");
+MODULE_PARM_DESC(max_segment_size, "max bytes in a single DMA segment");
 MODULE_PARM_DESC(medium_error_count, "count of sectors to return follow on MEDIUM error");
 MODULE_PARM_DESC(medium_error_start, "starting sector number to return MEDIUM error");
 MODULE_PARM_DESC(ndelay, "response delay in nanoseconds (def=0 -> ignore)");
@@ -9539,7 +9563,6 @@ static const struct scsi_host_template sdebug_driver_template = {
 	.sg_tablesize =		SG_MAX_SEGMENTS,
 	.cmd_per_lun =		DEF_CMD_PER_LUN,
 	.max_sectors =		-1U,
-	.max_segment_size =	-1U,
 	.module =		THIS_MODULE,
 	.skip_settle_delay =	1,
 	.track_queue_depth =	1,
@@ -9566,6 +9589,7 @@ static int sdebug_driver_probe(struct device *dev)
 	}
 	hpnt->can_queue = sdebug_max_queue;
 	hpnt->cmd_per_lun = sdebug_max_queue;
+	hpnt->max_segment_size = sdebug_max_segment_size;
 	if (!sdebug_clustering)
 		hpnt->dma_boundary = PAGE_SIZE - 1;
 
