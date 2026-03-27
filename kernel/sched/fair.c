@@ -5595,6 +5595,7 @@ dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 		if (sched_feat(DELAY_DEQUEUE) && delay &&
 		    !entity_eligible(cfs_rq, se)) {
 			update_load_avg(cfs_rq, se, 0);
+			update_entity_lag(cfs_rq, se);
 			set_delayed(se);
 			return false;
 		}
@@ -7089,12 +7090,16 @@ requeue_delayed_entity(struct sched_entity *se)
 	WARN_ON_ONCE(!se->on_rq);
 
 	if (sched_feat(DELAY_ZERO)) {
+		s64 vlag, prev_vlag = se->vlag;
 		update_entity_lag(cfs_rq, se);
-		if (se->vlag > 0) {
+		/* prev_vlag < 0 otherwise se would not be delayed */
+		vlag = clamp(se->vlag, prev_vlag, 0);
+
+		if (vlag != se->vlag) {
 			cfs_rq->nr_queued--;
 			if (se != cfs_rq->curr)
 				__dequeue_entity(cfs_rq, se);
-			se->vlag = 0;
+			se->vlag = vlag;
 			place_entity(cfs_rq, se, 0);
 			if (se != cfs_rq->curr)
 				__enqueue_entity(cfs_rq, se);
