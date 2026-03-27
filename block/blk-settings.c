@@ -470,8 +470,8 @@ int blk_validate_limits(struct queue_limits *lim)
 	} else {
 		/*
 		 * The maximum segment size has an odd historic 64k default that
-		 * drivers probably should override.  Just like the I/O size we
-		 * require drivers to at least handle a full page per segment.
+		 * drivers probably should override. The maximum DMA segment
+		 * size may be less than the virtual memory page size.
 		 */
 		if (!lim->max_segment_size)
 			lim->max_segment_size = BLK_MAX_SEGMENT_SIZE;
