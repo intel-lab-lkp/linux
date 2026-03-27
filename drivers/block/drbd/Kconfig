@@ -83,3 +83,13 @@ config BLK_DEV_DRBD_TCP
 	  for DRBD replication over TCP/IP networks.
 
 	  If unsure, say Y.
+
+config BLK_DEV_DRBD_RDMA
+	tristate "DRBD RDMA transport"
+	depends on BLK_DEV_DRBD && INFINIBAND && INFINIBAND_ADDR_TRANS
+	help
+
+	  RDMA transport support for DRBD. This enables DRBD replication
+	  over RDMA-capable networks for lower latency and higher throughput.
+
+	  If unsure, say N.
