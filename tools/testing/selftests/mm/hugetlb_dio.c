@@ -20,6 +20,31 @@
 #include "vm_util.h"
 #include "kselftest.h"
 
+#ifndef STATX_DIOALIGN
+#define STATX_DIOALIGN		0x00002000U
+#endif
+
+void check_dio_alignment(size_t pagesize)
+{
+	int fd;
+	struct statx stx;
+	unsigned int dio_align = 1;
+
+	fd = open("/tmp", O_TMPFILE | O_RDWR, 0664);
+	if (fd < 0)
+		ksft_exit_skip("Unable to allocate file: %s\n", strerror(errno));
+
+	if (statx(fd, "", AT_EMPTY_PATH, STATX_DIOALIGN, &stx) == 0 &&
+				(stx.stx_mask & STATX_DIOALIGN))
+		dio_align = stx.stx_dio_offset_align;
+
+	close(fd);
+
+	if ((pagesize / 2) % dio_align != 0)
+		ksft_exit_skip("DIO alignment (%u) incompatible with sub-page offset %lu\n",
+				dio_align, pagesize / 2);
+}
+
 void run_dio_using_hugetlb(unsigned int start_off, unsigned int end_off)
 {
 	int fd;
@@ -89,25 +114,17 @@ void run_dio_using_hugetlb(unsigned int start_off, unsigned int end_off)
 
 int main(void)
 {
-	size_t pagesize = 0;
-	int fd;
+	size_t pagesize = psize();
 
 	ksft_print_header();
 
-	/* Open the file to DIO */
-	fd = open("/tmp", O_TMPFILE | O_RDWR | O_DIRECT, 0664);
-	if (fd < 0)
-		ksft_exit_skip("Unable to allocate file: %s\n", strerror(errno));
-	close(fd);
+	check_dio_alignment(pagesize);
 
 	/* Check if huge pages are free */
 	if (!get_free_hugepages())
 		ksft_exit_skip("No free hugepage, exiting\n");
 
 	ksft_set_plan(4);
-
-	/* Get base page size */
-	pagesize  = psize();
 
 	/* start and end is aligned to pagesize */
 	run_dio_using_hugetlb(0, (pagesize * 3));
