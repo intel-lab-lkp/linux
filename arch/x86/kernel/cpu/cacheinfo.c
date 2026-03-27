@@ -341,11 +341,23 @@ void cacheinfo_hygon_init_llc_id(struct cpuinfo_x86 *c)
 	if (!cpuid_amd_hygon_has_l3_cache())
 		return;
 
-	/*
-	 * Hygons are similar to AMD Family 17h up to 1F models: LLC is
-	 * at the core complex level.  Core complex ID is ApicId[3].
-	 */
-	c->topo.llc_id = c->topo.apicid >> 3;
+	if (c->x86_model >= 0x4) {
+		/*
+		 * From model 4h: LLC ID is calculated from the number
+		 * of threads sharing the L3 cache.
+		 */
+		u32 llc_index = find_num_cache_leaves(c) - 1;
+		struct _cpuid4_info id4 = {};
+
+		if (!amd_fill_cpuid4_info(llc_index, &id4))
+			c->topo.llc_id = get_cache_id(c->topo.apicid, &id4);
+	} else {
+		/*
+		 * The others are similar to AMD Family 17h up to 1F models: LLC is
+		 * at the core complex level.  Core complex ID is ApicId[3].
+		 */
+		c->topo.llc_id = c->topo.apicid >> 3;
+	}
 }
 
 void init_amd_cacheinfo(struct cpuinfo_x86 *c)
