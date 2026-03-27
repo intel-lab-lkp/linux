@@ -952,6 +952,8 @@ static void apply_forced_caps(struct cpuinfo_x86 *c)
 {
 	int i;
 
+	clear_feature_disabled_deps(c);
+
 	for (i = 0; i < NCAPINTS + NBUGINTS; i++) {
 		c->x86_capability[i] &= ~cpu_caps_cleared[i];
 		c->x86_capability[i] |= cpu_caps_set[i];

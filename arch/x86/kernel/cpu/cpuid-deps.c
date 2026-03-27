@@ -158,6 +158,20 @@ void setup_clear_cpu_cap(unsigned int feature)
 	do_clear_cpu_cap(NULL, feature);
 }
 
+/*
+ * If the dependency was cleared through the disabled bitmasks while the
+ * feature wasn't it also needs to be cleared.
+ */
+void clear_feature_disabled_deps(struct cpuinfo_x86 *c)
+{
+	const struct cpuid_dep *d;
+
+	for (d = cpuid_deps; d->feature; d++) {
+		if (!DISABLED_MASK_BIT_SET(d->feature) && DISABLED_MASK_BIT_SET(d->depends))
+			set_bit(d->feature, (unsigned long *)cpu_caps_cleared);
+	}
+}
+
 void check_cpufeature_deps(struct cpuinfo_x86 *c)
 {
 	char feature_buf[X86_NAMELESS_FEAT_BUFLEN], depends_buf[X86_NAMELESS_FEAT_BUFLEN];
