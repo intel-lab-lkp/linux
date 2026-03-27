@@ -1239,7 +1239,12 @@ static enum scan_result collapse_huge_page(struct mm_struct *mm, unsigned long a
 
 	spin_lock(pmd_ptl);
 	BUG_ON(!pmd_none(*pmd));
-	pgtable_trans_huge_deposit(mm, pmd, pgtable);
+	if (arch_needs_pgtable_deposit()) {
+		pgtable_trans_huge_deposit(mm, pmd, pgtable);
+	} else {
+		mm_dec_nr_ptes(mm);
+		pte_free(mm, pgtable);
+	}
 	map_anon_folio_pmd_nopf(folio, pmd, vma, address);
 	spin_unlock(pmd_ptl);
 
