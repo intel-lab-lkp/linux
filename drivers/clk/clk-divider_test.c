@@ -59,6 +59,15 @@ static const struct clk_ops clk_dummy_div_ops = {
 	.set_rate = clk_dummy_div_set_rate,
 };
 
+/*
+ * clk-divider.c has support for v2 rate negotiation, and setting the parent
+ * based on the LCM, however we need to be able to test just setting the parent
+ * rate based on the LCM, and not set the v2 rate negotiation flag. This is to
+ * demonstrate existing behavior in the clk core when a parent rate that's
+ * suitable for all children is selected, a sibling will still have its rate
+ * negatively affected. Some boards may be unknowingly dependent on this
+ * behavior, and we want to ensure this behavior stays the same.
+ */
 static int clk_dummy_div_lcm_determine_rate(struct clk_hw *hw,
 					    struct clk_rate_request *req)
 {
@@ -184,6 +193,7 @@ static void clk_test_rate_change_divider_1(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, ctx->child1.div, 1);
 	KUNIT_ASSERT_EQ(test, clk_get_rate(ctx->child2_clk), 24 * HZ_PER_MHZ);
 	KUNIT_EXPECT_EQ(test, ctx->child2.div, 1);
+	/* This test is expected to work with both v1 and v2 rate negotiation. */
 
 	ret = clk_set_rate(ctx->child1_clk, 6 * HZ_PER_MHZ);
 	KUNIT_ASSERT_EQ(test, ret, 0);
@@ -216,6 +226,8 @@ static void clk_test_rate_change_divider_2_v1(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, ctx->child1.div, 1);
 	KUNIT_ASSERT_EQ(test, clk_get_rate(ctx->child2_clk), 24 * HZ_PER_MHZ);
 	KUNIT_EXPECT_EQ(test, ctx->child2.div, 1);
+	KUNIT_ASSERT_FALSE(test, __clk_has_v2_negotiation(ctx->child1_clk));
+	KUNIT_ASSERT_FALSE(test, __clk_has_v2_negotiation(ctx->child2_clk));
 
 	ret = clk_set_rate(ctx->child1_clk, 32 * HZ_PER_MHZ);
 	KUNIT_ASSERT_EQ(test, ret, 0);
@@ -252,6 +264,8 @@ static void clk_test_rate_change_divider_3_v1(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, ctx->child1.div, 1);
 	KUNIT_ASSERT_EQ(test, clk_get_rate(ctx->child2_clk), 24 * HZ_PER_MHZ);
 	KUNIT_EXPECT_EQ(test, ctx->child2.div, 1);
+	KUNIT_ASSERT_FALSE(test, __clk_has_v2_negotiation(ctx->child1_clk));
+	KUNIT_ASSERT_FALSE(test, __clk_has_v2_negotiation(ctx->child2_clk));
 
 	ret = clk_set_rate(ctx->child1_clk, 32 * HZ_PER_MHZ);
 	KUNIT_ASSERT_EQ(test, ret, 0);
