@@ -74,9 +74,14 @@ TC_INDIRECT_SCOPE int fw_classify(struct sk_buff *skb,
 			}
 		}
 	} else {
-		struct Qdisc *q = tcf_block_q(tp->chain->block);
+		struct tcf_block *block = tp->chain->block;
+		struct Qdisc *q;
+
+		if (tcf_block_shared(block))
+			return -1;
 
 		/* Old method: classify the packet using its skb mark. */
+		q = tcf_block_q(block);
 		if (id && (TC_H_MAJ(id) == 0 ||
 			   !(TC_H_MAJ(id ^ q->handle)))) {
 			res->classid = id;
