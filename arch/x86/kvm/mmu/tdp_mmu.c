@@ -498,8 +498,6 @@ static int __must_check set_external_spte_present(struct kvm *kvm,
 						  gfn_t gfn, u64 old_spte,
 						  u64 new_spte, int level)
 {
-	lockdep_assert_held(&kvm->mmu_lock);
-
 	return kvm_x86_call(set_external_spte)(kvm, gfn, level, new_spte);
 }
 

@@ -1722,9 +1722,10 @@ static int tdx_sept_map_leaf_spte(struct kvm *kvm, gfn_t gfn, enum pg_level leve
 static int tdx_sept_set_private_spte(struct kvm *kvm, gfn_t gfn,
 				     enum pg_level level, u64 mirror_spte)
 {
-
 	if (KVM_BUG_ON(!is_shadow_present_pte(mirror_spte), kvm))
 		return -EIO;
+
+	lockdep_assert_held(&kvm->mmu_lock);
 
 	if (!is_last_spte(mirror_spte, level))
 		return tdx_sept_link_private_spt(kvm, gfn, level, mirror_spte);
