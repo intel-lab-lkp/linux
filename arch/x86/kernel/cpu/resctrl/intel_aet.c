@@ -328,10 +328,6 @@ static bool get_events(void)
 	return ret;
 }
 
-void __exit intel_aet_exit(void)
-{
-}
-
 static bool get_pmt_references(void)
 {
 	get_feature = symbol_get(intel_pmt_get_regions_by_feature);
