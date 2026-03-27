@@ -275,8 +275,15 @@ static int tdx_page_array_populate(struct tdx_page_array *array,
 			    TDX_PAGE_ARRAY_MAX_NENTS);
 
 	entries = array->root;
-	for (i = 0; i < array->nents; i++)
-		entries[i] = page_to_phys(array->pages[offset + i]);
+	for (i = 0; i < array->nents; i++) {
+		struct page *page = array->pages[offset + i];
+
+		entries[i] = page_to_phys(page);
+
+		/* Now only for iommu_mt */
+		if (compound_nr(page) > 1)
+			entries[i] |= compound_nr(page);
+	}
 
 	return array->nents;
 }
@@ -286,7 +293,7 @@ static void tdx_free_pages_bulk(unsigned int nr_pages, struct page **pages)
 	int i;
 
 	for (i = 0; i < nr_pages; i++)
-		__free_page(pages[i]);
+		put_page(pages[i]);
 }
 
 static int tdx_alloc_pages_bulk(unsigned int nr_pages, struct page **pages,
@@ -463,6 +470,10 @@ static bool tdx_page_array_validate_release(struct tdx_page_array *array,
 			struct page *page = array->pages[offset + i];
 			u64 val = page_to_phys(page);
 
+			/* Now only for iommu_mt */
+			if (compound_nr(page) > 1)
+				val |= compound_nr(page);
+
 			if (val != entries[i]) {
 				pr_err("%s entry[%d] [0x%llx] doesn't match page hpa [0x%llx]\n",
 				       __func__, i, entries[i], val);
@@ -554,6 +565,79 @@ tdx_page_array_alloc_contig(unsigned int nr_pages)
 {
 	return tdx_page_array_alloc(nr_pages, tdx_alloc_pages_contig, NULL);
 }
+
+static int tdx_alloc_pages_iommu_mt(unsigned int nr_pages, struct page **pages,
+				    void *data)
+{
+	unsigned int iq_order = (unsigned int)(long)data;
+	struct folio *t_iq, *t_ctxiq;
+	int ret;
+
+	/* TODO: folio_alloc_node() is preferred, but need numa info */
+	t_iq = folio_alloc(GFP_KERNEL | __GFP_ZERO, iq_order);
+	if (!t_iq)
+		return -ENOMEM;
+
+	t_ctxiq = folio_alloc(GFP_KERNEL | __GFP_ZERO, iq_order);
+	if (!t_ctxiq) {
+		ret = -ENOMEM;
+		goto out_t_iq;
+	}
+
+	ret = tdx_alloc_pages_bulk(nr_pages - 2, pages + 2, NULL);
+	if (ret)
+		goto out_t_ctxiq;
+
+	pages[0] = folio_page(t_iq, 0);
+	pages[1] = folio_page(t_ctxiq, 0);
+
+	return 0;
+
+out_t_ctxiq:
+	folio_put(t_ctxiq);
+out_t_iq:
+	folio_put(t_iq);
+
+	return ret;
+}
+
+/**
+ * tdx_page_array_create_iommu_mt() - Create a page array for IOMMU Memory Tables
+ * @iq_order: The allocation order for the IOMMU Invalidation Queue.
+ * @nr_mt_pages: Number of additional order-0 pages for the MT.
+ *
+ * Allocate and populate a specialized tdx_page_array for IOMMU_MT structures.
+ * The resulting array consists of two multi-order folios (at index 0 and 1)
+ * followed by the requested number of order-0 pages.
+ *
+ * Return: Fully populated tdx_page_array or NULL on failure.
+ */
+struct tdx_page_array *
+tdx_page_array_create_iommu_mt(unsigned int iq_order, unsigned int nr_mt_pages)
+{
+	unsigned int nr_pages = nr_mt_pages + 2;
+	struct tdx_page_array *array;
+	int populated;
+
+	if (nr_pages > TDX_PAGE_ARRAY_MAX_NENTS)
+		return NULL;
+
+	array = tdx_page_array_alloc(nr_pages, tdx_alloc_pages_iommu_mt,
+				     (void *)(long)iq_order);
+	if (!array)
+		return NULL;
+
+	populated = tdx_page_array_populate(array, 0);
+	if (populated != nr_pages)
+		goto out_free;
+
+	return array;
+
+out_free:
+	tdx_page_array_free(array);
+	return NULL;
+}
+EXPORT_SYMBOL_GPL(tdx_page_array_create_iommu_mt);
 
 #define HPA_LIST_INFO_FIRST_ENTRY	GENMASK_U64(11, 3)
 #define HPA_LIST_INFO_PFN		GENMASK_U64(51, 12)
