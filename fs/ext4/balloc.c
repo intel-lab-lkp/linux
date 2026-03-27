@@ -737,10 +737,9 @@ ext4_fsblk_t ext4_new_meta_blocks(handle_t *handle, struct inode *inode,
 				  ext4_fsblk_t goal, unsigned int flags,
 				  unsigned long *count, int *errp)
 {
-	struct ext4_allocation_request ar;
+	struct ext4_allocation_request ar = {};
 	ext4_fsblk_t ret;
 
-	memset(&ar, 0, sizeof(ar));
 	/* Fill with neighbour allocated blocks */
 	ar.inode = inode;
 	ar.goal = goal;
