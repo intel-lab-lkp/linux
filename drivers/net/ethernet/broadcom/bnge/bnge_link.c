@@ -302,6 +302,8 @@ int bnge_update_phy_setting(struct bnge_net *bn)
 	struct bnge_dev *bd = bn->bd;
 	bool update_pause = false;
 	bool update_link = false;
+	bool hw_pause_autoneg;
+	bool pause_autoneg;
 	int rc;
 
 	link_info = &bd->link_info;
@@ -313,24 +315,41 @@ int bnge_update_phy_setting(struct bnge_net *bn)
 		return rc;
 	}
 
-	if ((elink_info->autoneg & BNGE_AUTONEG_FLOW_CTRL) &&
-	    (link_info->auto_pause_setting & BNGE_LINK_PAUSE_BOTH) !=
-	    elink_info->req_flow_ctrl)
+	pause_autoneg = !!(elink_info->autoneg & BNGE_AUTONEG_FLOW_CTRL);
+	hw_pause_autoneg = !!(link_info->auto_pause_setting &
+			      PORT_PHY_CFG_REQ_AUTO_PAUSE_AUTONEG_PAUSE);
+
+	/* Check if pause autonegotiation state has changed */
+	if (pause_autoneg != hw_pause_autoneg) {
 		update_pause = true;
-	if (!(elink_info->autoneg & BNGE_AUTONEG_FLOW_CTRL) &&
-	    link_info->force_pause_setting != elink_info->req_flow_ctrl)
+	} else if (pause_autoneg) {
+		/* If pause autoneg is enabled, check if the
+		 * requested RX/TX bits changed
+		 */
+		if ((link_info->auto_pause_setting & BNGE_LINK_PAUSE_BOTH) !=
+		    elink_info->req_flow_ctrl)
+			update_pause = true;
+	} else {
+		/* If pause autoneg is disabled, check if the
+		 * forced RX/TX bits changed
+		 */
+		if (link_info->force_pause_setting != elink_info->req_flow_ctrl)
+			update_pause = true;
+	}
+
+	/* Force update if link change is requested */
+	if (elink_info->force_link_chng)
 		update_pause = true;
+
+	/* Check if link speed or duplex settings have changed */
 	if (!(elink_info->autoneg & BNGE_AUTONEG_SPEED)) {
-		if (BNGE_AUTO_MODE(link_info->auto_mode))
-			update_link = true;
-		if (bnge_force_speed_updated(bn))
-			update_link = true;
-		if (elink_info->req_duplex != link_info->duplex_setting)
+		if (BNGE_AUTO_MODE(link_info->auto_mode) ||
+		    bnge_force_speed_updated(bn) ||
+		    elink_info->req_duplex != link_info->duplex_setting)
 			update_link = true;
 	} else {
-		if (link_info->auto_mode == BNGE_LINK_AUTO_NONE)
-			update_link = true;
-		if (bnge_auto_speed_updated(bn))
+		if (link_info->auto_mode == BNGE_LINK_AUTO_NONE ||
+		    bnge_auto_speed_updated(bn))
 			update_link = true;
 	}
 

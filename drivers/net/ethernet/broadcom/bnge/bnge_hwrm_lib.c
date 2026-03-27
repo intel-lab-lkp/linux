@@ -1054,7 +1054,11 @@ int bnge_hwrm_set_link_setting(struct bnge_net *bn, bool set_pause)
 
 	bnge_hwrm_set_link_common(bn, req);
 
-	return bnge_hwrm_req_send(bd, req);
+	rc = bnge_hwrm_req_send(bd, req);
+	if (!rc)
+		bn->eth_link_info.force_link_chng = false;
+
+	return rc;
 }
 
 int bnge_update_link(struct bnge_net *bn, bool chng_link_state)
