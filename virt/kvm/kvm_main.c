@@ -3176,6 +3176,7 @@ void kvm_vcpu_unmap(struct kvm_vcpu *vcpu, struct kvm_host_map *map)
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_vcpu_unmap);
 
+/* Compute bytes available in current page for the guest memory op */ 
 static int next_segment(unsigned long len, int offset)
 {
 	if (len > PAGE_SIZE - offset)
