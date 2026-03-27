@@ -692,7 +692,7 @@ static int amd_uncore_df_add(struct perf_event *event, int flags)
 static
 void amd_uncore_df_ctx_scan(struct amd_uncore *uncore, unsigned int cpu)
 {
-	union cpuid_0x80000022_ebx ebx;
+	const struct leaf_0x80000022_0 *leaf = cpuid_leaf(&cpu_data(cpu), 0x80000022);
 	union amd_uncore_info info;
 
 	if (!boot_cpu_has(X86_FEATURE_PERFCTR_NB))
@@ -703,10 +703,8 @@ void amd_uncore_df_ctx_scan(struct amd_uncore *uncore, unsigned int cpu)
 	info.split.gid = 0;
 	info.split.cid = topology_logical_package_id(cpu);
 
-	if (pmu_version >= 2) {
-		ebx.full = cpuid_ebx(EXT_PERFMON_DEBUG_FEATURES);
-		info.split.num_pmcs = ebx.split.num_df_pmc;
-	}
+	if (leaf && pmu_version >= 2)
+		info.split.num_pmcs = leaf->n_pmc_northbridge;
 
 	*per_cpu_ptr(uncore->info, cpu) = info;
 }
@@ -990,16 +988,14 @@ static void amd_uncore_umc_read(struct perf_event *event)
 static
 void amd_uncore_umc_ctx_scan(struct amd_uncore *uncore, unsigned int cpu)
 {
-	union cpuid_0x80000022_ebx ebx;
+	const struct leaf_0x80000022_0 *leaf = cpuid_leaf(&cpu_data(cpu), 0x80000022);
 	union amd_uncore_info info;
-	unsigned int eax, ecx, edx;
 
-	if (pmu_version < 2)
+	if (!leaf || pmu_version < 2)
 		return;
 
-	cpuid(EXT_PERFMON_DEBUG_FEATURES, &eax, &ebx.full, &ecx, &edx);
-	info.split.aux_data = ecx;	/* stash active mask */
-	info.split.num_pmcs = ebx.split.num_umc_pmc;
+	info.split.aux_data = leaf->active_umc_bitmask;
+	info.split.num_pmcs = leaf->n_pmc_umc;
 	info.split.gid = topology_logical_package_id(cpu);
 	info.split.cid = topology_logical_package_id(cpu);
 	*per_cpu_ptr(uncore->info, cpu) = info;
