@@ -179,7 +179,8 @@ static int amd_pmu_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 static void amd_pmu_refresh(struct kvm_vcpu *vcpu)
 {
 	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
-	union cpuid_0x80000022_ebx ebx;
+	struct leaf_0x80000022_0 leaf = { };
+	struct cpuid_regs *regs = (struct cpuid_regs *)&leaf;
 
 	pmu->version = 1;
 	if (guest_cpu_cap_has(vcpu, X86_FEATURE_PERFMON_V2)) {
@@ -190,8 +191,8 @@ static void amd_pmu_refresh(struct kvm_vcpu *vcpu)
 		 */
 		BUILD_BUG_ON(x86_feature_cpuid(X86_FEATURE_PERFMON_V2).function != 0x80000022 ||
 			     x86_feature_cpuid(X86_FEATURE_PERFMON_V2).index);
-		ebx.full = kvm_find_cpuid_entry_index(vcpu, 0x80000022, 0)->ebx;
-		pmu->nr_arch_gp_counters = ebx.split.num_core_pmc;
+		regs->ebx = kvm_find_cpuid_entry_index(vcpu, 0x80000022, 0)->ebx;
+		pmu->nr_arch_gp_counters = leaf.n_pmc_core;
 	} else if (guest_cpu_cap_has(vcpu, X86_FEATURE_PERFCTR_CORE)) {
 		pmu->nr_arch_gp_counters = AMD64_NUM_COUNTERS_CORE;
 	} else {
