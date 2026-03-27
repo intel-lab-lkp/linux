@@ -824,16 +824,18 @@ static const struct cpu_dev *cpu_devs[X86_VENDOR_NUM] = {};
 
 static void get_model_name(struct cpuinfo_x86 *c)
 {
-	unsigned int *v;
+	const struct leaf_0x80000002_0 *l2 = cpuid_leaf(c, 0x80000002);
+	const struct leaf_0x80000003_0 *l3 = cpuid_leaf(c, 0x80000003);
+	const struct leaf_0x80000004_0 *l4 = cpuid_leaf(c, 0x80000004);
 	char *p, *q, *s;
 
-	if (c->extended_cpuid_level < 0x80000004)
+	if (!l2 || !l3 || !l4)
 		return;
 
-	v = (unsigned int *)c->x86_model_id;
-	cpuid(0x80000002, &v[0], &v[1], &v[2], &v[3]);
-	cpuid(0x80000003, &v[4], &v[5], &v[6], &v[7]);
-	cpuid(0x80000004, &v[8], &v[9], &v[10], &v[11]);
+	*(struct leaf_0x80000002_0 *)&c->x86_model_id[0]  = *l2;
+	*(struct leaf_0x80000003_0 *)&c->x86_model_id[16] = *l3;
+	*(struct leaf_0x80000004_0 *)&c->x86_model_id[32] = *l4;
+
 	c->x86_model_id[48] = 0;
 
 	/* Trim whitespace */
