@@ -72,6 +72,10 @@ struct tdx_tsm_link {
 	struct tdx_page_array *spdm_mt;
 	unsigned int dev_info_size;
 	void *dev_info_data;
+
+	struct pci_ide *ide;
+	struct tdx_page_array *stream_mt;
+	unsigned int stream_id;
 };
 
 static struct tdx_tsm_link *to_tdx_tsm_link(struct pci_tsm *tsm)
@@ -351,6 +355,219 @@ static void tdx_spdm_session_teardown(struct tdx_tsm_link *tlink)
 DEFINE_FREE(tdx_spdm_session_teardown, struct tdx_tsm_link *,
 	    if (!IS_ERR_OR_NULL(_T)) tdx_spdm_session_teardown(_T))
 
+enum tdx_ide_stream_km_op {
+	TDX_IDE_STREAM_KM_SETUP = 0,
+	TDX_IDE_STREAM_KM_REFRESH = 1,
+	TDX_IDE_STREAM_KM_STOP = 2,
+};
+
+static int tdx_ide_stream_km(struct tdx_tsm_link *tlink,
+			     enum tdx_ide_stream_km_op op)
+{
+	u64 r, out_msg_sz;
+	int ret;
+
+	do {
+		r = tdh_ide_stream_km(tlink->spdm_id, tlink->stream_id, op,
+				      tlink->in_msg, tlink->out_msg,
+				      &out_msg_sz);
+		ret = tdx_tsm_link_event_handler(tlink, r, out_msg_sz);
+	} while (ret == -EAGAIN);
+
+	return ret;
+}
+
+static struct tdx_tsm_link *
+tdx_ide_stream_key_program(struct tdx_tsm_link *tlink)
+{
+	int ret;
+
+	ret = tdx_ide_stream_km(tlink, TDX_IDE_STREAM_KM_SETUP);
+	if (ret)
+		return ERR_PTR(ret);
+
+	return tlink;
+}
+
+static void tdx_ide_stream_key_stop(struct tdx_tsm_link *tlink)
+{
+	tdx_ide_stream_km(tlink, TDX_IDE_STREAM_KM_STOP);
+}
+
+DEFINE_FREE(tdx_ide_stream_key_stop, struct tdx_tsm_link *,
+	    if (!IS_ERR_OR_NULL(_T)) tdx_ide_stream_key_stop(_T))
+
+static void sel_stream_block_regs(struct pci_dev *pdev, struct pci_ide *ide,
+				  struct pci_ide_regs *regs)
+{
+	struct pci_dev *rp = pcie_find_root_port(pdev);
+	struct pci_ide_partner *setting = pci_ide_to_settings(rp, ide);
+
+	/* only support address association for prefetchable memory */
+	setting->mem_assoc = (struct pci_bus_region) { 0, -1 };
+	pci_ide_stream_to_regs(rp, ide, regs);
+}
+
+#define STREAM_INFO_RP_DEVFN		GENMASK_ULL(7, 0)
+#define STREAM_INFO_TYPE		BIT_ULL(8)
+#define  STREAM_INFO_TYPE_LINK		0
+#define  STREAM_INFO_TYPE_SEL		1
+
+static struct tdx_tsm_link *tdx_ide_stream_create(struct tdx_tsm_link *tlink,
+						  struct pci_ide *ide)
+{
+	u64 stream_info, stream_ctrl;
+	u64 stream_id, rp_ide_id;
+	unsigned int nr_pages = tdx_sysinfo->connect.ide_mt_page_count;
+	struct pci_dev *pdev = tlink->pci.base_tsm.pdev;
+	struct pci_dev *rp = pcie_find_root_port(pdev);
+	struct pci_ide_regs regs;
+	u64 r;
+
+	struct tdx_page_array *stream_mt __free(tdx_page_array_free) =
+		tdx_page_array_create(nr_pages);
+	if (!stream_mt)
+		return ERR_PTR(-ENOMEM);
+
+	stream_info = FIELD_PREP(STREAM_INFO_RP_DEVFN, rp->devfn);
+	stream_info |= FIELD_PREP(STREAM_INFO_TYPE, STREAM_INFO_TYPE_SEL);
+
+	/*
+	 * For Selective IDE stream, below values must be 0:
+	 *   NPR_AGG/PR_AGG/CPL_AGG/CONF_REQ/ALGO/DEFAULT/STREAM_ID
+	 *
+	 * below values are configurable but now hardcode to 0:
+	 *   PCRC/TC
+	 */
+	stream_ctrl = FIELD_PREP(PCI_IDE_SEL_CTL_EN, 0) |
+		      FIELD_PREP(PCI_IDE_SEL_CTL_TX_AGGR_NPR, 0) |
+		      FIELD_PREP(PCI_IDE_SEL_CTL_TX_AGGR_PR, 0) |
+		      FIELD_PREP(PCI_IDE_SEL_CTL_TX_AGGR_CPL, 0) |
+		      FIELD_PREP(PCI_IDE_SEL_CTL_PCRC_EN, 0) |
+		      FIELD_PREP(PCI_IDE_SEL_CTL_CFG_EN, 0) |
+		      FIELD_PREP(PCI_IDE_SEL_CTL_ALG, 0) |
+		      FIELD_PREP(PCI_IDE_SEL_CTL_TC, 0) |
+		      FIELD_PREP(PCI_IDE_SEL_CTL_ID, 0);
+
+	sel_stream_block_regs(pdev, ide, &regs);
+	if (regs.nr_addr != 1)
+		return ERR_PTR(-EFAULT);
+
+	r = tdh_ide_stream_create(stream_info, tlink->spdm_id,
+				  stream_mt, stream_ctrl,
+				  regs.rid1, regs.rid2, regs.addr[0].assoc1,
+				  regs.addr[0].assoc2, regs.addr[0].assoc3,
+				  &stream_id, &rp_ide_id);
+	if (r)
+		return ERR_PTR(-EFAULT);
+
+	tlink->stream_id = stream_id;
+	tlink->stream_mt = no_free_ptr(stream_mt);
+
+	pci_dbg(pdev, "%s stream id 0x%x rp ide_id 0x%llx\n", __func__,
+		tlink->stream_id, rp_ide_id);
+	return tlink;
+}
+
+static void tdx_ide_stream_delete(struct tdx_tsm_link *tlink)
+{
+	struct pci_dev *pdev = tlink->pci.base_tsm.pdev;
+	unsigned int nr_released;
+	u64 released_hpa, r;
+
+	r = tdh_ide_stream_block(tlink->spdm_id, tlink->stream_id);
+	if (r) {
+		pci_err(pdev, "ide stream block fail 0x%llx\n", r);
+		goto leak;
+	}
+
+	r = tdh_ide_stream_delete(tlink->spdm_id, tlink->stream_id,
+				  tlink->stream_mt, &nr_released,
+				  &released_hpa);
+	if (r) {
+		pci_err(pdev, "ide stream delete fail 0x%llx\n", r);
+		goto leak;
+	}
+
+	if (tdx_page_array_ctrl_release(tlink->stream_mt, nr_released,
+					released_hpa)) {
+		pci_err(pdev, "fail to release IDE stream_mt pages\n");
+		goto leak;
+	}
+
+	return;
+
+leak:
+	tdx_page_array_ctrl_leak(tlink->stream_mt);
+}
+
+DEFINE_FREE(tdx_ide_stream_delete, struct tdx_tsm_link *,
+	    if (!IS_ERR_OR_NULL(_T)) tdx_ide_stream_delete(_T))
+
+static struct tdx_tsm_link *tdx_ide_stream_setup(struct tdx_tsm_link *tlink)
+{
+	struct pci_dev *pdev = tlink->pci.base_tsm.pdev;
+	int ret;
+
+	struct pci_ide *ide __free(pci_ide_stream_release) =
+		pci_ide_stream_alloc(pdev);
+	if (!ide)
+		return ERR_PTR(-ENOMEM);
+
+	/* Configure IDE capability for RP & get stream_id */
+	struct tdx_tsm_link *tlink_create __free(tdx_ide_stream_delete) =
+		tdx_ide_stream_create(tlink, ide);
+	if (IS_ERR(tlink_create))
+		return tlink_create;
+
+	ide->stream_id = tlink->stream_id;
+	ret = pci_ide_stream_register(ide);
+	if (ret)
+		return ERR_PTR(ret);
+
+	/*
+	 * Configure IDE capability for target device
+	 *
+	 * Some test devices work only with DEFAULT_STREAM enabled. For
+	 * simplicity, enable DEFAULT_STREAM for all devices. A future decent
+	 * solution may be to have a quirk table to specify which devices need
+	 * DEFAULT_STREAM.
+	 */
+	ide->partner[PCI_IDE_EP].default_stream = 1;
+	pci_ide_stream_setup(pdev, ide);
+
+	/* Key Programming for RP & target device, enable IDE stream for RP */
+	struct tdx_tsm_link *tlink_program __free(tdx_ide_stream_key_stop) =
+		tdx_ide_stream_key_program(tlink);
+	if (IS_ERR(tlink_program))
+		return tlink_program;
+
+	ret = tsm_ide_stream_register(ide);
+	if (ret)
+		return ERR_PTR(ret);
+
+	/* Enable IDE stream for target device */
+	ret = pci_ide_stream_enable(pdev, ide);
+	if (ret)
+		return ERR_PTR(ret);
+
+	retain_and_null_ptr(tlink_create);
+	retain_and_null_ptr(tlink_program);
+	tlink->ide = no_free_ptr(ide);
+
+	return tlink;
+}
+
+static void tdx_ide_stream_teardown(struct tdx_tsm_link *tlink)
+{
+	tdx_ide_stream_key_stop(tlink);
+	tdx_ide_stream_delete(tlink);
+	pci_ide_stream_release(tlink->ide);
+}
+
+DEFINE_FREE(tdx_ide_stream_teardown, struct tdx_tsm_link *,
+	    if (!IS_ERR_OR_NULL(_T)) tdx_ide_stream_teardown(_T))
+
 static int tdx_tsm_link_connect(struct pci_dev *pdev)
 {
 	struct tdx_tsm_link *tlink = to_tdx_tsm_link(pdev->tsm);
@@ -362,7 +579,15 @@ static int tdx_tsm_link_connect(struct pci_dev *pdev)
 		return PTR_ERR(tlink_spdm);
 	}
 
+	struct tdx_tsm_link *tlink_ide __free(tdx_ide_stream_teardown) =
+		tdx_ide_stream_setup(tlink);
+	if (IS_ERR(tlink_ide)) {
+		pci_err(pdev, "fail to setup ide stream\n");
+		return PTR_ERR(tlink_ide);
+	}
+
 	retain_and_null_ptr(tlink_spdm);
+	retain_and_null_ptr(tlink_ide);
 
 	return 0;
 }
@@ -371,6 +596,7 @@ static void tdx_tsm_link_disconnect(struct pci_dev *pdev)
 {
 	struct tdx_tsm_link *tlink = to_tdx_tsm_link(pdev->tsm);
 
+	tdx_ide_stream_teardown(tlink);
 	tdx_spdm_session_teardown(tlink);
 }
 
