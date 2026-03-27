@@ -2,12 +2,19 @@
 #ifndef _CLK_KUNIT_H
 #define _CLK_KUNIT_H
 
-struct clk;
-struct clk_hw;
+#include <linux/clk-provider.h>
+
 struct device;
 struct device_node;
 struct of_phandle_args;
 struct kunit;
+
+struct clk_dummy_context {
+	struct clk_hw hw;
+	unsigned long rate;
+};
+
+extern const struct clk_ops clk_dummy_rate_ops;
 
 struct clk *
 clk_get_kunit(struct kunit *test, struct device *dev, const char *con_id);
