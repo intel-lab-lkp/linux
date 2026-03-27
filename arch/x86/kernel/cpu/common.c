@@ -1018,69 +1018,11 @@ static void init_speculation_control(struct cpuinfo_x86 *c)
 void get_cpu_cap(struct cpuinfo_x86 *c)
 {
 	const struct leaf_0x80000000_0 *el0;
-	u32 eax, ebx, ecx, edx;
 
 	cpuid_scan_cpu(c);
 
-	/* Intel-defined flags: level 0x00000001 */
-	if (c->cpuid_level >= 0x00000001) {
-		cpuid(0x00000001, &eax, &ebx, &ecx, &edx);
-
-		c->x86_capability[CPUID_1_ECX] = ecx;
-		c->x86_capability[CPUID_1_EDX] = edx;
-	}
-
-	/* Thermal and Power Management Leaf: level 0x00000006 (eax) */
-	if (c->cpuid_level >= 0x00000006)
-		c->x86_capability[CPUID_6_EAX] = cpuid_eax(0x00000006);
-
-	/* Additional Intel-defined flags: level 0x00000007 */
-	if (c->cpuid_level >= 0x00000007) {
-		cpuid_count(0x00000007, 0, &eax, &ebx, &ecx, &edx);
-		c->x86_capability[CPUID_7_0_EBX] = ebx;
-		c->x86_capability[CPUID_7_ECX] = ecx;
-		c->x86_capability[CPUID_7_EDX] = edx;
-
-		/* Check valid sub-leaf index before accessing it */
-		if (eax >= 1) {
-			cpuid_count(0x00000007, 1, &eax, &ebx, &ecx, &edx);
-			c->x86_capability[CPUID_7_1_EAX] = eax;
-		}
-	}
-
-	/* Extended state features: level 0x0000000d */
-	if (c->cpuid_level >= 0x0000000d) {
-		cpuid_count(0x0000000d, 1, &eax, &ebx, &ecx, &edx);
-
-		c->x86_capability[CPUID_D_1_EAX] = eax;
-	}
-
 	el0 = cpuid_leaf(c, 0x80000000);
 	c->extended_cpuid_level = el0 ? el0->max_ext_leaf : 0;
-
-	if (c->extended_cpuid_level >= 0x80000001) {
-		cpuid(0x80000001, &eax, &ebx, &ecx, &edx);
-
-		c->x86_capability[CPUID_8000_0001_ECX] = ecx;
-		c->x86_capability[CPUID_8000_0001_EDX] = edx;
-	}
-
-	if (c->extended_cpuid_level >= 0x80000007)
-		c->x86_power = cpuid_edx(0x80000007);
-
-	if (c->extended_cpuid_level >= 0x80000008) {
-		cpuid(0x80000008, &eax, &ebx, &ecx, &edx);
-		c->x86_capability[CPUID_8000_0008_EBX] = ebx;
-	}
-
-	if (c->extended_cpuid_level >= 0x8000000a)
-		c->x86_capability[CPUID_8000_000A_EDX] = cpuid_edx(0x8000000a);
-
-	if (c->extended_cpuid_level >= 0x8000001f)
-		c->x86_capability[CPUID_8000_001F_EAX] = cpuid_eax(0x8000001f);
-
-	if (c->extended_cpuid_level >= 0x80000021)
-		c->x86_capability[CPUID_8000_0021_EAX] = cpuid_eax(0x80000021);
 
 	init_scattered_cpuid_features(c);
 	init_speculation_control(c);
