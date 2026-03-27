@@ -169,6 +169,32 @@ static int g_max_sectors;
 module_param_named(max_sectors, g_max_sectors, int, 0444);
 MODULE_PARM_DESC(max_sectors, "Maximum size of a command (in 512B sectors)");
 
+static unsigned int g_max_segment_size = BLK_MAX_SEGMENT_SIZE;
+
+static int nullb_set_max_segment_size(const char *val,
+				      const struct kernel_param *kp)
+{
+	int res;
+
+	res = kstrtouint(val, 0, &g_max_segment_size);
+	if (res < 0)
+		return res;
+
+	if (g_max_segment_size < BLK_MIN_SEGMENT_SIZE)
+		return -EINVAL;
+
+	return 0;
+}
+
+static const struct kernel_param_ops max_segment_size_ops = {
+	.set = nullb_set_max_segment_size,
+	.get = param_get_uint,
+};
+
+module_param_cb(max_segment_size, &max_segment_size_ops, &g_max_segment_size,
+		0444);
+MODULE_PARM_DESC(max_segment_size, "Maximum size of a DMA segment in bytes");
+
 static unsigned int nr_devices = 1;
 module_param(nr_devices, uint, 0444);
 MODULE_PARM_DESC(nr_devices, "Number of devices to register");
@@ -442,6 +468,14 @@ static int nullb_apply_poll_queues(struct nullb_device *dev,
 	return ret;
 }
 
+static int nullb_apply_max_segment_size(struct nullb_device *dev,
+					unsigned int max_segment_size)
+{
+	if (max_segment_size < BLK_MIN_SEGMENT_SIZE)
+		return -EINVAL;
+	return 0;
+}
+
 NULLB_DEVICE_ATTR(size, ulong, NULL);
 NULLB_DEVICE_ATTR(completion_nsec, ulong, NULL);
 NULLB_DEVICE_ATTR(submit_queues, uint, nullb_apply_submit_queues);
@@ -450,6 +484,7 @@ NULLB_DEVICE_ATTR(home_node, uint, NULL);
 NULLB_DEVICE_ATTR(queue_mode, uint, NULL);
 NULLB_DEVICE_ATTR(blocksize, uint, NULL);
 NULLB_DEVICE_ATTR(max_sectors, uint, NULL);
+NULLB_DEVICE_ATTR(max_segment_size, uint, nullb_apply_max_segment_size);
 NULLB_DEVICE_ATTR(irqmode, uint, NULL);
 NULLB_DEVICE_ATTR(hw_queue_depth, uint, NULL);
 NULLB_DEVICE_ATTR(index, uint, NULL);
@@ -608,6 +643,7 @@ static struct configfs_attribute *nullb_device_attrs[] = {
 	&nullb_device_attr_index,
 	&nullb_device_attr_irqmode,
 	&nullb_device_attr_max_sectors,
+	&nullb_device_attr_max_segment_size,
 	&nullb_device_attr_mbps,
 	&nullb_device_attr_memory_backed,
 	&nullb_device_attr_no_sched,
@@ -805,6 +841,7 @@ static struct nullb_device *null_alloc_dev(void)
 	dev->queue_mode = g_queue_mode;
 	dev->blocksize = g_bs;
 	dev->max_sectors = g_max_sectors;
+	dev->max_segment_size = g_max_segment_size;
 	dev->irqmode = g_irqmode;
 	dev->hw_queue_depth = g_hw_queue_depth;
 	dev->blocking = g_blocking;
@@ -1248,6 +1285,9 @@ static blk_status_t null_transfer(struct nullb *nullb, struct page *page,
 	unsigned int valid_len = len;
 	void *p;
 
+	WARN_ONCE(len > dev->max_segment_size, "%u > %u\n", len,
+		  dev->max_segment_size);
+
 	p = kmap_local_page(page) + off;
 	if (!is_write) {
 		if (dev->zoned) {
@@ -1295,6 +1335,8 @@ static blk_status_t null_handle_data_transfer(struct nullb_cmd *cmd,
 	spin_lock_irq(&nullb->lock);
 	rq_for_each_segment(bvec, rq, iter) {
 		len = bvec.bv_len;
+		len = min(bvec.bv_len, nullb->dev->max_segment_size);
+		bvec.bv_len = len;
 		if (transferred_bytes + len > max_bytes)
 			len = max_bytes - transferred_bytes;
 		err = null_transfer(nullb, bvec.bv_page, len, bvec.bv_offset,
@@ -1958,6 +2000,7 @@ static int null_add_dev(struct nullb_device *dev)
 		.logical_block_size	= dev->blocksize,
 		.physical_block_size	= dev->blocksize,
 		.max_hw_sectors		= dev->max_sectors,
+		.max_segment_size	= dev->max_segment_size,
 		.dma_alignment		= 1,
 	};
 
