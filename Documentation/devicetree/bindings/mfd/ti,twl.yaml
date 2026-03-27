@@ -265,47 +265,23 @@ properties:
 
   audio:
     type: object
-    additionalProperties: true
-
-    properties:
-      compatible:
-        const: ti,twl4030-audio
-
-    required:
-      - compatible
+    $ref: /schemas/sound/ti,twl4030-audio.yaml
+    unevaluatedProperties: false
 
   keypad:
     type: object
-    additionalProperties: true
-
-    properties:
-      compatible:
-        const: ti,twl4030-keypad
-
-    required:
-      - compatible
+    $ref: /schemas/input/ti,twl4030-keypad.yaml
+    unevaluatedProperties: false
 
   twl4030-usb:
     type: object
-    additionalProperties: true
-
-    properties:
-      compatible:
-        const: ti,twl4030-usb
-
-    required:
-      - compatible
+    $ref: /schemas/usb/ti,twl4030-usb.yaml
+    unevaluatedProperties: false
 
   gpio:
     type: object
-    additionalProperties: true
-
-    properties:
-      compatible:
-        const: ti,twl4030-gpio
-
-    required:
-      - compatible
+    $ref: /schemas/gpio/ti,twl4030-gpio.yaml
+    unevaluatedProperties: false
 
   power:
     type: object
@@ -371,14 +347,8 @@ properties:
 
   usb-comparator:
     type: object
-    additionalProperties: true
-
-    properties:
-      compatible:
-        const: ti,twl6030-usb
-
-    required:
-      - compatible
+    $ref: /schemas/usb/ti,twl6030-usb.yaml
+    unevaluatedProperties: false
 
   pwm:
     type: object
