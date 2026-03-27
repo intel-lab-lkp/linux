@@ -536,6 +536,19 @@ static inline bool kmem_dump_obj(void *object) { return false; }
 #endif
 #endif
 
+/*
+ * Align memory allocations to cache lines if DMA API debugging is active
+ * to avoid false positive DMA overlapping error messages.
+ */
+#ifdef CONFIG_DMA_API_DEBUG
+#ifndef ARCH_KMALLOC_MINALIGN
+#define ARCH_KMALLOC_MINALIGN  L1_CACHE_BYTES
+#elif ARCH_KMALLOC_MINALIGN < L1_CACHE_BYTES
+#undef ARCH_KMALLOC_MINALIGN
+#define ARCH_KMALLOC_MINALIGN  L1_CACHE_BYTES
+#endif
+#endif
+
 #ifndef ARCH_KMALLOC_MINALIGN
 #define ARCH_KMALLOC_MINALIGN __alignof__(unsigned long long)
 #elif ARCH_KMALLOC_MINALIGN > 8
