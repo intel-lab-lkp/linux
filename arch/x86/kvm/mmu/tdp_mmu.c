@@ -494,13 +494,6 @@ static void handle_removed_pt(struct kvm *kvm, tdp_ptep_t pt, bool shared)
 	call_rcu(&sp->rcu_head, tdp_mmu_free_sp_rcu_callback);
 }
 
-static int __must_check set_external_spte_present(struct kvm *kvm,
-						  gfn_t gfn, u64 old_spte,
-						  u64 new_spte, int level)
-{
-	return kvm_x86_call(set_external_spte)(kvm, gfn, level, new_spte);
-}
-
 /**
  * __handle_changed_spte - handle bookkeeping associated with an SPTE change
  * @kvm: kvm instance
@@ -600,7 +593,7 @@ static int __handle_changed_spte(struct kvm *kvm, struct kvm_mmu_page *sp,
 	    (is_leaf || !is_present || WARN_ON_ONCE(pfn_changed))) {
 		handle_removed_pt(kvm, spte_to_child_pt(old_spte, level), shared);
 	} else if (is_mirror_sp(sp) && is_present) {
-		r = set_external_spte_present(kvm, gfn, old_spte, new_spte, level);
+		r = kvm_x86_call(set_external_spte)(kvm, gfn, level, new_spte);
 		if (r)
 			return r;
 	}
