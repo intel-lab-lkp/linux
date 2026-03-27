@@ -36,7 +36,10 @@ enum cpuid_regs_idx {
 #define CPUID_RANGE_MAX(idx)	(CPUID_RANGE(idx) + 0xffff)
 
 #define CPUID_BASE_START	0x00000000
+#define CPUID_EXT_START		0x80000000
+
 #define CPUID_BASE_END		CPUID_RANGE_MAX(CPUID_BASE_START)
+#define CPUID_EXT_END		CPUID_RANGE_MAX(CPUID_EXT_START)
 
 /*
  * Types for CPUID(0x2) parsing:
@@ -203,6 +206,7 @@ struct cpuid_leaves {
 	/*		Leaf		Subleaf number (or max number of subleaves) */
 	CPUID_LEAF   (	0x0,		0  );
 	CPUID_LEAF   (	0x1,		0  );
+	CPUID_LEAF   (  0x80000000,	0  );
 };
 
 /*

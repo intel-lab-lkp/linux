@@ -116,5 +116,6 @@ struct cpuid_parse_entry {
 	/*			Leaf		Subleaf		Reader function */		\
 	CPUID_PARSE_ENTRY   (	0x0,		0,		generic			),	\
 	CPUID_PARSE_ENTRY   (	0x1,		0,		generic			),	\
+	CPUID_PARSE_ENTRY   (	0x80000000,	0,		0x80000000		),	\
 
 #endif /* _ARCH_X86_CPUID_PARSER_H */
