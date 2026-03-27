@@ -99,6 +99,19 @@ cpuid_read_0x2(const struct cpuid_parse_entry *e, const struct cpuid_read_output
 	output->info->nr_entries = 1;
 }
 
+static void
+cpuid_read_0x7_1(const struct cpuid_parse_entry *e, const struct cpuid_read_output *output)
+{
+	struct leaf_0x7_0 l7;
+
+	cpuid_read_subleaf(0x7, 0, &l7);
+	if (l7.leaf7_n_subleaves == 0)
+		return;
+
+	cpuid_read_subleaf(e->leaf, e->subleaf, output->regs);
+	output->info->nr_entries = 1;
+}
+
 /*
  * Shared read function for Intel CPUID(0x4) and AMD CPUID(0x8000001d), as both have
  * the same subleaf enumeration logic and register output format.
