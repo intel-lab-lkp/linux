@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include <linux/export.h>
 #include <linux/bitops.h>
+#include <linux/sizes.h>
 #include <linux/elf.h>
 #include <linux/mm.h>
 #include <linux/kvm_types.h>
@@ -421,6 +422,8 @@ static void tsa_init(struct cpuinfo_x86 *c)
 
 static void bsp_init_amd(struct cpuinfo_x86 *c)
 {
+	const struct leaf_0x80000005_0 *el5 = cpuid_leaf(c, 0x80000005);
+
 	if (cpu_has(c, X86_FEATURE_CONSTANT_TSC)) {
 
 		if (c->x86 > 0x10 ||
@@ -433,13 +436,8 @@ static void bsp_init_amd(struct cpuinfo_x86 *c)
 		}
 	}
 
-	if (c->x86 == 0x15) {
-		unsigned long upperbit;
-		u32 cpuid, assoc;
-
-		cpuid	 = cpuid_edx(0x80000005);
-		assoc	 = cpuid >> 16 & 0xff;
-		upperbit = ((cpuid >> 24) << 10) / assoc;
+	if (c->x86 == 0x15 && el5) {
+		unsigned long upperbit = (el5->l1_icache_size_kb * SZ_1K) / el5->l1_icache_assoc;
 
 		va_align.mask	  = (upperbit - 1) & PAGE_MASK;
 		va_align.flags    = ALIGN_VA_32 | ALIGN_VA_64;
