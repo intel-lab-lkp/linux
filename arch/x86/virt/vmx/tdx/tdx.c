@@ -1510,7 +1510,7 @@ static int init_tdmrs(struct tdmr_info_list *tdmr_list)
  */
 static void tdx_clflush_page(struct page *page)
 {
-	clflush_cache_range(page_to_virt(page), PAGE_SIZE);
+	clflush_cache_range(page_to_virt(page), page_size(page));
 }
 
 static void tdx_clflush_page_array(struct tdx_page_array *array)
