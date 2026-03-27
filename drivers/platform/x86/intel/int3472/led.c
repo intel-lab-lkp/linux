@@ -7,54 +7,56 @@
 #include <linux/platform_data/x86/int3472.h>
 
 static int int3472_pled_set(struct led_classdev *led_cdev,
-				     enum led_brightness brightness)
+			    enum led_brightness brightness)
 {
-	struct int3472_discrete_device *int3472 =
-		container_of(led_cdev, struct int3472_discrete_device, pled.classdev);
+	struct int3472_pled *pled = container_of(led_cdev, struct int3472_pled, classdev);
 
-	gpiod_set_value_cansleep(int3472->pled.gpio, brightness);
+	gpiod_set_value_cansleep(pled->gpio, brightness);
 	return 0;
 }
 
 int skl_int3472_register_pled(struct int3472_discrete_device *int3472, struct gpio_desc *gpio)
 {
+	struct int3472_pled *pled = &int3472->pled;
 	char *p;
 	int ret;
 
-	if (int3472->pled.classdev.dev)
+	if (pled->classdev.dev)
 		return -EBUSY;
 
-	int3472->pled.gpio = gpio;
+	pled->gpio = gpio;
 
 	/* Generate the name, replacing the ':' in the ACPI devname with '_' */
-	snprintf(int3472->pled.name, sizeof(int3472->pled.name),
+	snprintf(pled->name, sizeof(pled->name),
 		 "%s::privacy_led", acpi_dev_name(int3472->sensor));
-	p = strchr(int3472->pled.name, ':');
+	p = strchr(pled->name, ':');
 	if (p)
 		*p = '_';
 
-	int3472->pled.classdev.name = int3472->pled.name;
-	int3472->pled.classdev.max_brightness = 1;
-	int3472->pled.classdev.brightness_set_blocking = int3472_pled_set;
+	pled->classdev.name = pled->name;
+	pled->classdev.max_brightness = 1;
+	pled->classdev.brightness_set_blocking = int3472_pled_set;
 
-	ret = led_classdev_register(int3472->dev, &int3472->pled.classdev);
+	ret = led_classdev_register(int3472->dev, &pled->classdev);
 	if (ret)
 		return ret;
 
-	int3472->pled.lookup.provider = int3472->pled.name;
-	int3472->pled.lookup.dev_id = int3472->sensor_name;
-	int3472->pled.lookup.con_id = "privacy";
-	led_add_lookup(&int3472->pled.lookup);
+	pled->lookup.provider = pled->name;
+	pled->lookup.dev_id = int3472->sensor_name;
+	pled->lookup.con_id = "privacy";
+	led_add_lookup(&pled->lookup);
 
 	return 0;
 }
 
 void skl_int3472_unregister_pled(struct int3472_discrete_device *int3472)
 {
-	if (IS_ERR_OR_NULL(int3472->pled.classdev.dev))
+	struct int3472_pled *pled = &int3472->pled;
+
+	if (IS_ERR_OR_NULL(pled->classdev.dev))
 		return;
 
-	led_remove_lookup(&int3472->pled.lookup);
-	led_classdev_unregister(&int3472->pled.classdev);
-	gpiod_put(int3472->pled.gpio);
+	led_remove_lookup(&pled->lookup);
+	led_classdev_unregister(&pled->classdev);
+	gpiod_put(pled->gpio);
 }
