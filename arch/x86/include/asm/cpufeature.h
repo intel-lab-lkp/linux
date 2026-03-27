@@ -90,29 +90,33 @@ void check_cpufeature_deps(struct cpuinfo_x86 *c);
 #define setup_force_cpu_bug(bit) setup_force_cpu_cap(bit)
 
 /*
- * Do not use an "m" constraint for [cap_byte] here: gcc doesn't know
- * that this is only used on a fallback path and will sometimes cause
- * it to manifest the address of boot_cpu_data in a register, fouling
- * the mainline (post-initialization) code.
+ * Helper macro for CPU feature detection with alternative instructions.
+ *
+ * Do not use an "m" constraint for [cap_byte]: GCC does not know that this is
+ * only used on a fallback path and will sometimes manifest the address of
+ * boot_cpu_data in a register, fouling the mainline post-initialization code.
  */
+#define __static_cpu_has(_feature_bit, _bitmap, _bitmap_bit)			\
+	asm goto(ALTERNATIVE_TERNARY("jmp 6f", %c[feature], "", "jmp %l[t_no]")	\
+		".pushsection .altinstr_aux,\"ax\"\n"				\
+		"6:\n"								\
+		ANNOTATE_DATA_SPECIAL "\n"					\
+		" testb %[bitnum], %a[cap_byte]\n"				\
+		" jnz %l[t_yes]\n"						\
+		" jmp %l[t_no]\n"						\
+		".popsection\n"							\
+		 : : [feature]	"i" (_feature_bit),				\
+		     [bitnum]	"i" (1 << ((_bitmap_bit) & 7)),			\
+		     [cap_byte] "i" (&((const char *)(_bitmap))[(_bitmap_bit) >> 3]) \
+		 : : t_yes, t_no);						\
+	t_yes:									\
+		return true;							\
+	t_no:									\
+		return false							\
+
 static __always_inline bool _static_cpu_has(u16 bit)
 {
-	asm goto(ALTERNATIVE_TERNARY("jmp 6f", %c[feature], "", "jmp %l[t_no]")
-		".pushsection .altinstr_aux,\"ax\"\n"
-		"6:\n"
-		ANNOTATE_DATA_SPECIAL "\n"
-		" testb %[bitnum], %a[cap_byte]\n"
-		" jnz %l[t_yes]\n"
-		" jmp %l[t_no]\n"
-		".popsection\n"
-		 : : [feature]  "i" (bit),
-		     [bitnum]   "i" (1 << (bit & 7)),
-		     [cap_byte] "i" (&((const char *)boot_cpu_data.x86_capability)[bit >> 3])
-		 : : t_yes, t_no);
-t_yes:
-	return true;
-t_no:
-	return false;
+	__static_cpu_has(bit, &boot_cpu_data.x86_capability, bit);
 }
 
 #define static_cpu_has(bit)					\
