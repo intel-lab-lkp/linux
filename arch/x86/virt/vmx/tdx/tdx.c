@@ -2084,8 +2084,8 @@ static inline u64 tdx_tdr_pa(struct tdx_td *td)
 	return page_to_phys(td->tdr_page);
 }
 
-static u64 __maybe_unused __seamcall_ir_resched(sc_func_t sc_func, u64 fn,
-						struct tdx_module_args *args)
+static u64 __seamcall_ir_resched(sc_func_t sc_func, u64 fn,
+				 struct tdx_module_args *args)
 {
 	struct tdx_module_args _args;
 	u64 r;
@@ -2478,3 +2478,31 @@ void tdx_cpu_flush_cache_for_kexec(void)
 }
 EXPORT_SYMBOL_FOR_KVM(tdx_cpu_flush_cache_for_kexec);
 #endif
+
+u64 tdh_iommu_setup(u64 vtbar, struct tdx_page_array *iommu_mt, u64 *iommu_id)
+{
+	struct tdx_module_args args = {
+		.rcx = vtbar,
+		.rdx = virt_to_phys(iommu_mt->root),
+	};
+	u64 r;
+
+	tdx_clflush_page_array(iommu_mt);
+
+	r = seamcall_ret_ir_resched(TDH_IOMMU_SETUP, &args);
+
+	*iommu_id = args.rcx;
+	return r;
+}
+EXPORT_SYMBOL_FOR_MODULES(tdh_iommu_setup, "tdx-host");
+
+u64 tdh_iommu_clear(u64 iommu_id, struct tdx_page_array *iommu_mt)
+{
+	struct tdx_module_args args = {
+		.rcx = iommu_id,
+		.rdx = virt_to_phys(iommu_mt->root),
+	};
+
+	return seamcall_ret_ir_resched(TDH_IOMMU_CLEAR, &args);
+}
+EXPORT_SYMBOL_FOR_MODULES(tdh_iommu_clear, "tdx-host");
