@@ -577,10 +577,7 @@ static int xive_find_target_in_mask(const struct cpumask *mask,
 		 */
 		if (cpu_online(cpu) && xive_try_pick_target(cpu))
 			return cpu;
-		cpu = cpumask_next(cpu, mask);
-		/* Wrap around */
-		if (cpu >= nr_cpu_ids)
-			cpu = cpumask_first(mask);
+		cpu = cpumask_next_wrap(cpu, mask);
 	} while (cpu != first);
 
 	return -1;
