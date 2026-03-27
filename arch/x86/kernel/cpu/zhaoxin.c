@@ -46,9 +46,10 @@ static void init_zhaoxin_cap(struct cpuinfo_x86 *c)
 		}
 
 		/*
-		 * Store Extended Feature Flags as word 5 of the CPU
-		 * capability bit array
+		 * Force-enabling CPU features affects the CPUID(0xc0000001)
+		 * EDX feature bits.  Refresh the leaf.
 		 */
+		cpuid_refresh_leaf(c, 0xc0000001);
 		c->x86_capability[CPUID_C000_0001_EDX] = cpuid_edx(0xC0000001);
 	}
 
