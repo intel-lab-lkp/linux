@@ -49,46 +49,6 @@ char *strncpy(char *dest, const char *src, size_t count)
 EXPORT_SYMBOL(strncpy);
 #endif
 
-#ifdef __HAVE_ARCH_STRCAT
-char *strcat(char *dest, const char *src)
-{
-	int d0, d1, d2, d3;
-	asm volatile("repne scasb\n\t"
-		"decl %1\n"
-		"1:\tlodsb\n\t"
-		"stosb\n\t"
-		"testb %%al,%%al\n\t"
-		"jne 1b"
-		: "=&S" (d0), "=&D" (d1), "=&a" (d2), "=&c" (d3)
-		: "0" (src), "1" (dest), "2" (0), "3" (0xffffffffu) : "memory");
-	return dest;
-}
-EXPORT_SYMBOL(strcat);
-#endif
-
-#ifdef __HAVE_ARCH_STRNCAT
-char *strncat(char *dest, const char *src, size_t count)
-{
-	int d0, d1, d2, d3;
-	asm volatile("repne scasb\n\t"
-		"decl %1\n\t"
-		"movl %8,%3\n"
-		"1:\tdecl %3\n\t"
-		"js 2f\n\t"
-		"lodsb\n\t"
-		"stosb\n\t"
-		"testb %%al,%%al\n\t"
-		"jne 1b\n"
-		"2:\txorl %2,%2\n\t"
-		"stosb"
-		: "=&S" (d0), "=&D" (d1), "=&a" (d2), "=&c" (d3)
-		: "0" (src), "1" (dest), "2" (0), "3" (0xffffffffu), "g" (count)
-		: "memory");
-	return dest;
-}
-EXPORT_SYMBOL(strncat);
-#endif
-
 #ifdef __HAVE_ARCH_STRCMP
 int strcmp(const char *cs, const char *ct)
 {
@@ -159,55 +119,6 @@ char *strchr(const char *s, int c)
 EXPORT_SYMBOL(strchr);
 #endif
 
-#ifdef __HAVE_ARCH_STRLEN
-size_t strlen(const char *s)
-{
-	int d0;
-	size_t res;
-	asm volatile("repne scasb"
-		: "=c" (res), "=&D" (d0)
-		: "1" (s), "a" (0), "0" (0xffffffffu)
-		: "memory");
-	return ~res - 1;
-}
-EXPORT_SYMBOL(strlen);
-#endif
-
-#ifdef __HAVE_ARCH_MEMCHR
-void *memchr(const void *cs, int c, size_t count)
-{
-	int d0;
-	void *res;
-	if (!count)
-		return NULL;
-	asm volatile("repne scasb\n\t"
-		"je 1f\n\t"
-		"movl $1,%0\n"
-		"1:\tdecl %0"
-		: "=D" (res), "=&c" (d0)
-		: "a" (c), "0" (cs), "1" (count)
-		: "memory");
-	return res;
-}
-EXPORT_SYMBOL(memchr);
-#endif
-
-#ifdef __HAVE_ARCH_MEMSCAN
-void *memscan(void *addr, int c, size_t size)
-{
-	if (!size)
-		return addr;
-	asm volatile("repnz scasb\n\t"
-	    "jnz 1f\n\t"
-	    "dec %%edi\n"
-	    "1:"
-	    : "=D" (addr), "=c" (size)
-	    : "0" (addr), "1" (size), "a" (c)
-	    : "memory");
-	return addr;
-}
-EXPORT_SYMBOL(memscan);
-#endif
 
 #ifdef __HAVE_ARCH_STRNLEN
 size_t strnlen(const char *s, size_t count)

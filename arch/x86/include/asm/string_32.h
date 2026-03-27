@@ -12,12 +12,6 @@ extern char *strcpy(char *dest, const char *src);
 #define __HAVE_ARCH_STRNCPY
 extern char *strncpy(char *dest, const char *src, size_t count);
 
-#define __HAVE_ARCH_STRCAT
-extern char *strcat(char *dest, const char *src);
-
-#define __HAVE_ARCH_STRNCAT
-extern char *strncat(char *dest, const char *src, size_t count);
-
 #define __HAVE_ARCH_STRCMP
 extern int strcmp(const char *cs, const char *ct);
 
@@ -26,9 +20,6 @@ extern int strncmp(const char *cs, const char *ct, size_t count);
 
 #define __HAVE_ARCH_STRCHR
 extern char *strchr(const char *s, int c);
-
-#define __HAVE_ARCH_STRLEN
-extern size_t strlen(const char *s);
 
 static __always_inline void *__memcpy(void *to, const void *from, size_t n)
 {
@@ -159,9 +150,6 @@ extern int memcmp(const void *, const void *, size_t);
 #define memcmp __builtin_memcmp
 #endif
 
-#define __HAVE_ARCH_MEMCHR
-extern void *memchr(const void *cs, int c, size_t count);
-
 static inline void *__memset_generic(void *s, char c, size_t count)
 {
 	int d0, d1;
@@ -215,12 +203,6 @@ static inline void *memset32(uint32_t *s, uint32_t v, size_t n)
 		     : "memory");
 	return s;
 }
-
-/*
- * find the first occurrence of byte 'c', or 1 past the area if none
- */
-#define __HAVE_ARCH_MEMSCAN
-extern void *memscan(void *addr, int c, size_t size);
 
 #endif /* __KERNEL__ */
 
