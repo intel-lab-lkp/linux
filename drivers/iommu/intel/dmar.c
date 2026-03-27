@@ -1033,6 +1033,56 @@ out:
 	return err;
 }
 
+static int keyp_config_unit_tvm_usable(union acpi_subtable_headers *header,
+				       void *arg, const unsigned long end)
+{
+	struct acpi_keyp_config_unit *acpi_cu =
+		(struct acpi_keyp_config_unit *)&header->keyp;
+	int *tvm_usable = arg;
+
+	if (acpi_cu->flags & ACPI_KEYP_F_TVM_USABLE)
+		*tvm_usable = 1;
+
+	return 0;
+}
+
+static bool platform_is_tdxc_enhanced(void)
+{
+	static int tvm_usable = -1;
+	int ret;
+
+	/* only need to parse once */
+	if (tvm_usable != -1)
+		return !!tvm_usable;
+
+	tvm_usable = 0;
+	ret = acpi_table_parse_keyp(ACPI_KEYP_TYPE_CONFIG_UNIT,
+				    keyp_config_unit_tvm_usable, &tvm_usable);
+	if (ret < 0)
+		tvm_usable = 0;
+
+	return !!tvm_usable;
+}
+
+static unsigned long iommu_max_domain_id(struct intel_iommu *iommu)
+{
+	unsigned long ndoms = cap_ndoms(iommu->cap);
+
+	/*
+	 * Intel TDX Connect Architecture Specification, Section 2.2 Trusted DMA
+	 *
+	 * When IOMMU is enabled to support TDX Connect, the IOMMU restricts
+	 * the VMM’s DID setting, reserving the MSB bit for the TDX module. The
+	 * TDX module always sets this reserved bit on the trusted DMA table.
+	 */
+	if (ecap_tdxc(iommu->ecap) && platform_is_tdxc_enhanced()) {
+		pr_info_once("Most Significant Bit of domain ID reserved.\n");
+		return ndoms >> 1;
+	}
+
+	return ndoms;
+}
+
 static int alloc_iommu(struct dmar_drhd_unit *drhd)
 {
 	struct intel_iommu *iommu;
@@ -1099,7 +1149,7 @@ static int alloc_iommu(struct dmar_drhd_unit *drhd)
 	spin_lock_init(&iommu->lock);
 	ida_init(&iommu->domain_ida);
 	mutex_init(&iommu->did_lock);
-	iommu->max_domain_id = cap_ndoms(iommu->cap);
+	iommu->max_domain_id = iommu_max_domain_id(iommu);
 
 	ver = readl(iommu->reg + DMAR_VER_REG);
 	pr_info("%s: reg_base_addr %llx ver %d:%d cap %llx ecap %llx\n",
