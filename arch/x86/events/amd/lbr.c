@@ -423,14 +423,13 @@ void amd_pmu_lbr_disable_all(void)
 
 __init int amd_pmu_lbr_init(void)
 {
-	union cpuid_0x80000022_ebx ebx;
+	const struct leaf_0x80000022_0 *l = cpuid_leaf(&boot_cpu_data, 0x80000022);
 
-	if (x86_pmu.version < 2 || !boot_cpu_has(X86_FEATURE_AMD_LBR_V2))
+	if (!l || x86_pmu.version < 2 || !boot_cpu_has(X86_FEATURE_AMD_LBR_V2))
 		return -EOPNOTSUPP;
 
 	/* Set number of entries */
-	ebx.full = cpuid_ebx(EXT_PERFMON_DEBUG_FEATURES);
-	x86_pmu.lbr_nr = ebx.split.lbr_v2_stack_sz;
+	x86_pmu.lbr_nr = l->lbr_v2_stack_size;
 
 	pr_cont("%d-deep LBR, ", x86_pmu.lbr_nr);
 
