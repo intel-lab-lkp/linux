@@ -450,14 +450,14 @@ int blk_validate_limits(struct queue_limits *lim)
 
 	/*
 	 * By default there is no limit on the segment boundary alignment,
-	 * but if there is one it can't be smaller than the page size as
-	 * that would break all the normal I/O patterns.
+	 * but if there is one, check that it allows at least 4 KiB of data to
+	 * be submitted at once. All known block device DMA controllers support
+	 * 4 KiB DMA segments that do not cross 4 KiB boundaries.
 	 */
 	if (!lim->seg_boundary_mask)
 		lim->seg_boundary_mask = BLK_SEG_BOUNDARY_MASK;
-	if (WARN_ON_ONCE(lim->seg_boundary_mask < BLK_MIN_SEGMENT_SIZE - 1))
+	if (WARN_ON_ONCE(lim->seg_boundary_mask < SZ_4K - 1))
 		return -EINVAL;
-
 	/*
 	 * Stacking device may have both virtual boundary and max segment
 	 * size limit, so allow this setting now, and long-term the two
