@@ -231,7 +231,19 @@ required:
   - interrupt-names
   - clocks
   - power-domains
-  - resets
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - renesas,r9a07g043-mtu3
+              - renesas,r9a07g044-mtu3
+              - renesas,r9a07g054-mtu3
+    then:
+      required:
+        - resets
 
 additionalProperties: false
 
