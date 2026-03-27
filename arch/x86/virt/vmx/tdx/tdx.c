@@ -30,6 +30,7 @@
 #include <linux/suspend.h>
 #include <linux/idr.h>
 #include <linux/kvm_types.h>
+#include <linux/bitfield.h>
 #include <asm/page.h>
 #include <asm/special_insns.h>
 #include <asm/msr-index.h>
@@ -256,6 +257,304 @@ static int build_tdx_memlist(struct list_head *tmb_list)
 err:
 	free_tdx_memlist(tmb_list);
 	return ret;
+}
+
+#define TDX_PAGE_ARRAY_MAX_NENTS	(PAGE_SIZE / sizeof(u64))
+
+static int tdx_page_array_populate(struct tdx_page_array *array,
+				   unsigned int offset)
+{
+	u64 *entries;
+	int i;
+
+	if (offset >= array->nr_pages)
+		return 0;
+
+	array->offset = offset;
+	array->nents = umin(array->nr_pages - offset,
+			    TDX_PAGE_ARRAY_MAX_NENTS);
+
+	entries = array->root;
+	for (i = 0; i < array->nents; i++)
+		entries[i] = page_to_phys(array->pages[offset + i]);
+
+	return array->nents;
+}
+
+static void tdx_free_pages_bulk(unsigned int nr_pages, struct page **pages)
+{
+	int i;
+
+	for (i = 0; i < nr_pages; i++)
+		__free_page(pages[i]);
+}
+
+static int tdx_alloc_pages_bulk(unsigned int nr_pages, struct page **pages)
+{
+	unsigned int filled, done = 0;
+
+	do {
+		filled = alloc_pages_bulk(GFP_KERNEL, nr_pages - done,
+					  pages + done);
+		if (!filled) {
+			tdx_free_pages_bulk(done, pages);
+			return -ENOMEM;
+		}
+
+		done += filled;
+	} while (done != nr_pages);
+
+	return 0;
+}
+
+/**
+ * tdx_page_array_free() - Free all memory for a tdx_page_array
+ * @array: The tdx_page_array to be freed.
+ *
+ * Free all associated pages and the container itself.
+ */
+void tdx_page_array_free(struct tdx_page_array *array)
+{
+	if (!array)
+		return;
+
+	tdx_free_pages_bulk(array->nr_pages, array->pages);
+	kfree(array->pages);
+	kfree(array->root);
+	kfree(array);
+}
+EXPORT_SYMBOL_GPL(tdx_page_array_free);
+
+static struct tdx_page_array *
+tdx_page_array_alloc(unsigned int nr_pages)
+{
+	struct tdx_page_array *array = NULL;
+	struct page **pages = NULL;
+	u64 *root = NULL;
+	int ret;
+
+	if (!nr_pages)
+		return NULL;
+
+	array = kzalloc_obj(*array);
+	if (!array)
+		goto out_free;
+
+	root = kzalloc(PAGE_SIZE, GFP_KERNEL);
+	if (!root)
+		goto out_free;
+
+	pages = kcalloc(nr_pages, sizeof(*pages), GFP_KERNEL);
+	if (!pages)
+		goto out_free;
+
+	ret = tdx_alloc_pages_bulk(nr_pages, pages);
+	if (ret)
+		goto out_free;
+
+	array->nr_pages = nr_pages;
+	array->pages = pages;
+	array->root = root;
+
+	return array;
+
+out_free:
+	kfree(pages);
+	kfree(root);
+	kfree(array);
+
+	return NULL;
+}
+
+/**
+ * tdx_page_array_create() - Create a small tdx_page_array (up to 512 pages)
+ * @nr_pages: Number of pages to allocate (must be <= 512).
+ *
+ * Allocate and populate a tdx_page_array in a single step. This is intended
+ * for small collections that fit within a single root page. The allocated
+ * pages are all order-0 pages. This is the most common use case for a list of
+ * TDX control pages.
+ *
+ * If more pages are required, use tdx_page_array_alloc() and
+ * tdx_page_array_populate() to build tdx_page_array chunk by chunk.
+ *
+ * Return: Fully populated tdx_page_array or NULL on failure.
+ */
+struct tdx_page_array *tdx_page_array_create(unsigned int nr_pages)
+{
+	struct tdx_page_array *array;
+	int populated;
+
+	if (nr_pages > TDX_PAGE_ARRAY_MAX_NENTS)
+		return NULL;
+
+	array = tdx_page_array_alloc(nr_pages);
+	if (!array)
+		return NULL;
+
+	populated = tdx_page_array_populate(array, 0);
+	if (populated != nr_pages)
+		goto out_free;
+
+	return array;
+
+out_free:
+	tdx_page_array_free(array);
+	return NULL;
+}
+EXPORT_SYMBOL_GPL(tdx_page_array_create);
+
+/**
+ * tdx_page_array_ctrl_leak() - Leak data pages and free the container
+ * @array: The tdx_page_array to be leaked.
+ *
+ * Call this function when failed to reclaim the control pages. Free the root
+ * page and the holding structures, but orphan the data pages, to prevent the
+ * host from re-allocating and accessing memory that the hardware may still
+ * consider private.
+ */
+void tdx_page_array_ctrl_leak(struct tdx_page_array *array)
+{
+	if (!array)
+		return;
+
+	kfree(array->pages);
+	kfree(array->root);
+	kfree(array);
+}
+EXPORT_SYMBOL_GPL(tdx_page_array_ctrl_leak);
+
+static bool tdx_page_array_validate_release(struct tdx_page_array *array,
+					    unsigned int offset,
+					    unsigned int nr_released,
+					    u64 released_hpa)
+{
+	unsigned int nents;
+
+	if (offset >= array->nr_pages)
+		return false;
+
+	nents = umin(array->nr_pages - offset, TDX_PAGE_ARRAY_MAX_NENTS);
+
+	if (nents != nr_released) {
+		pr_err("%s nr_released [%d] doesn't match page array nents [%d]\n",
+		       __func__, nr_released, nents);
+		return false;
+	}
+
+	/*
+	 * Unfortunately TDX has multiple page allocation protocols, check the
+	 * "singleton" case required for HPA_ARRAY_T.
+	 */
+	if (page_to_phys(array->pages[0]) == released_hpa &&
+	    array->nr_pages == 1)
+		return true;
+
+	/* Then check the "non-singleton" case */
+	if (virt_to_phys(array->root) == released_hpa) {
+		u64 *entries = array->root;
+		int i;
+
+		for (i = 0; i < nents; i++) {
+			struct page *page = array->pages[offset + i];
+			u64 val = page_to_phys(page);
+
+			if (val != entries[i]) {
+				pr_err("%s entry[%d] [0x%llx] doesn't match page hpa [0x%llx]\n",
+				       __func__, i, entries[i], val);
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	pr_err("%s failed to validate, released_hpa [0x%llx], root page hpa [0x%llx], page0 hpa [%#llx], number pages %u\n",
+	       __func__, released_hpa, virt_to_phys(array->root),
+	       page_to_phys(array->pages[0]), array->nr_pages);
+
+	return false;
+}
+
+/**
+ * tdx_page_array_ctrl_release() - Verify and release TDX control pages
+ * @array: The tdx_page_array used to originally create control pages.
+ * @nr_released: Number of HPAs the TDX Module reported as released.
+ * @released_hpa: The HPA list the TDX Module reported as released.
+ *
+ * TDX Module can at most release 512 control pages, so this function only
+ * accepts small tdx_page_array (up to 512 pages), usually created by
+ * tdx_page_array_create().
+ *
+ * Return: 0 on success, -errno on page release protocol error.
+ */
+int tdx_page_array_ctrl_release(struct tdx_page_array *array,
+				unsigned int nr_released,
+				u64 released_hpa)
+{
+	int i;
+
+	/*
+	 * The only case where ->nr_pages is allowed to be >
+	 * TDX_PAGE_ARRAY_MAX_NENTS is a case where those pages are never
+	 * expected to be released by this function.
+	 */
+	if (WARN_ON(array->nr_pages > TDX_PAGE_ARRAY_MAX_NENTS))
+		return -EINVAL;
+
+	if (WARN_ONCE(!tdx_page_array_validate_release(array, 0, nr_released,
+						       released_hpa),
+		      "page release protocol error, consider reboot and replace TDX Module.\n"))
+		return -EFAULT;
+
+	for (i = 0; i < array->nr_pages; i++) {
+		u64 r;
+
+		r = tdh_phymem_page_wbinvd_hkid(tdx_global_keyid,
+						array->pages[i]);
+		if (WARN_ON(r))
+			return -EFAULT;
+	}
+
+	tdx_page_array_free(array);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(tdx_page_array_ctrl_release);
+
+#define HPA_LIST_INFO_FIRST_ENTRY	GENMASK_U64(11, 3)
+#define HPA_LIST_INFO_PFN		GENMASK_U64(51, 12)
+#define HPA_LIST_INFO_LAST_ENTRY	GENMASK_U64(63, 55)
+
+static u64 __maybe_unused hpa_list_info_assign_raw(struct tdx_page_array *array)
+{
+	return FIELD_PREP(HPA_LIST_INFO_FIRST_ENTRY, 0) |
+	       FIELD_PREP(HPA_LIST_INFO_PFN,
+			  PFN_DOWN(virt_to_phys(array->root))) |
+	       FIELD_PREP(HPA_LIST_INFO_LAST_ENTRY, array->nents - 1);
+}
+
+#define HPA_ARRAY_T_PFN		GENMASK_U64(51, 12)
+#define HPA_ARRAY_T_SIZE	GENMASK_U64(63, 55)
+
+static u64 __maybe_unused hpa_array_t_assign_raw(struct tdx_page_array *array)
+{
+	unsigned long pfn;
+
+	if (array->nents == 1)
+		pfn = page_to_pfn(array->pages[array->offset]);
+	else
+		pfn = PFN_DOWN(virt_to_phys(array->root));
+
+	return FIELD_PREP(HPA_ARRAY_T_PFN, pfn) |
+	       FIELD_PREP(HPA_ARRAY_T_SIZE, array->nents - 1);
+}
+
+static u64 __maybe_unused hpa_array_t_release_raw(struct tdx_page_array *array)
+{
+	if (array->nents == 1)
+		return 0;
+
+	return virt_to_phys(array->root);
 }
 
 static int read_sys_metadata_field(u64 field_id, u64 *data)

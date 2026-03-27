@@ -139,6 +139,43 @@ void tdx_guest_keyid_free(unsigned int keyid);
 
 void tdx_quirk_reset_page(struct page *page);
 
+/**
+ * struct tdx_page_array - Represents a list of pages for TDX Module access
+ * @nr_pages: Total number of data pages in the collection
+ * @pages: Array of data page pointers containing all the data
+ *
+ * @offset: Internal: The starting index in @pages, positions the currently
+ *	    populated page window in @root.
+ * @nents: Internal: Number of valid HPAs for the page window in @root
+ * @root: Internal: A single 4KB page holding the 8-byte HPAs of the page
+ *	  window. The page window max size is constrained by the root page,
+ *	  which is 512 HPAs.
+ *
+ * This structure abstracts several TDX Module defined object types, e.g.,
+ * HPA_ARRAY_T and HPA_LIST_INFO. Typically they all use a "root page" as the
+ * medium to exchange a list of data pages between host and TDX Module. This
+ * structure serves as a unified parameter type for SEAMCALL wrappers, where
+ * these hardware object types are needed.
+ */
+struct tdx_page_array {
+	/* public: */
+	unsigned int nr_pages;
+	struct page **pages;
+
+	/* private: */
+	unsigned int offset;
+	unsigned int nents;
+	u64 *root;
+};
+
+void tdx_page_array_free(struct tdx_page_array *array);
+DEFINE_FREE(tdx_page_array_free, struct tdx_page_array *, if (_T) tdx_page_array_free(_T))
+struct tdx_page_array *tdx_page_array_create(unsigned int nr_pages);
+void tdx_page_array_ctrl_leak(struct tdx_page_array *array);
+int tdx_page_array_ctrl_release(struct tdx_page_array *array,
+				unsigned int nr_released,
+				u64 released_hpa);
+
 struct tdx_td {
 	/* TD root structure: */
 	struct page *tdr_page;
