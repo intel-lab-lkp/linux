@@ -2223,6 +2223,18 @@ megasas_make_prp_nvme(struct megasas_instance *instance, struct scsi_cmnd *scmd,
 		/* Put PRP pointer due to page boundary*/
 		page_mask_result = (uintptr_t)(ptr_sgl + 1) & page_mask;
 		if (unlikely(!page_mask_result)) {
+			/*
+			 * Bounds check: if the chain frame buffer cannot
+			 * fit the chain pointer plus at least one more
+			 * PRP entry, bail out to IEEE SGL fallback.
+			 * This prevents writing past the end of the
+			 * DMA-allocated chain frame buffer.
+			 */
+			if ((num_prp_in_chain + 2) * sizeof(u64) >
+			    instance->max_chain_frame_sz) {
+				build_prp = false;
+				break;
+			}
 			scmd_printk(KERN_NOTICE,
 				    scmd, "page boundary ptr_sgl: 0x%p\n",
 				    ptr_sgl);
@@ -2230,6 +2242,13 @@ megasas_make_prp_nvme(struct megasas_instance *instance, struct scsi_cmnd *scmd,
 			*ptr_sgl = cpu_to_le64(ptr_sgl_phys);
 			ptr_sgl++;
 			num_prp_in_chain++;
+		}
+
+		/* Bounds check: ensure space for this PRP entry */
+		if ((num_prp_in_chain + 1) * sizeof(u64) >
+		    instance->max_chain_frame_sz) {
+			build_prp = false;
+			break;
 		}
 
 		*ptr_sgl = cpu_to_le64(sge_addr);
