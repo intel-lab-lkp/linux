@@ -105,6 +105,43 @@ cpuid_read_0x2(const struct cpuid_parse_entry *e, const struct cpuid_read_output
  */
 define_cpuid_read_function(deterministic_cache, leaf_0x4_n, l, l->cache_type == 0);
 
+static bool cpuid_0x23_has_subleaf(u32 subleaf)
+{
+	struct leaf_0x23_0 l;
+
+	cpuid_read_subleaf(0x23, 0, &l);
+
+	if (subleaf == 1)
+		return l.counters_subleaf;
+	if (subleaf == 2)
+		return l.acr_subleaf;
+	if (subleaf == 3)
+		return l.events_subleaf;
+	if (subleaf == 4)
+		return l.pebs_caps_subleaf;
+	if (subleaf == 5)
+		return l.pebs_subleaf;
+
+	return false;
+}
+
+#define define_cpuid_0x23_subleaf_read_function(subl)						\
+static void											\
+cpuid_read_0x23_##subl(const struct cpuid_parse_entry *e, const struct cpuid_read_output *output) \
+{												\
+	if (!cpuid_0x23_has_subleaf(subl))							\
+		return;										\
+												\
+	cpuid_read_subleaf(e->leaf, e->subleaf, output->regs);					\
+	output->info->nr_entries = 1;								\
+}
+
+define_cpuid_0x23_subleaf_read_function(1);
+define_cpuid_0x23_subleaf_read_function(2);
+define_cpuid_0x23_subleaf_read_function(3);
+define_cpuid_0x23_subleaf_read_function(4);
+define_cpuid_0x23_subleaf_read_function(5);
+
 /*
  * Define an extended range CPUID read function
  *
