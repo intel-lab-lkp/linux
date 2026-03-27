@@ -1015,7 +1015,7 @@ struct vmbus_channel {
 	/* The max size of a packet on this channel */
 	u32 max_pkt_size;
 
-	/* function to mmap_prepare ring buffer memory to the channel's sysfs ring attribute */
+	/*  function to mmap ring buffer memory to the channel's sysfs ring attribute */
 	int (*mmap_prepare_ring_buffer)(struct vmbus_channel *channel, struct vm_area_desc *desc);
 
 	/* boolean to control visibility of sysfs for ring buffer */
