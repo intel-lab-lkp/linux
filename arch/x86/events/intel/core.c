@@ -6577,10 +6577,11 @@ static __init void intel_arch_events_quirk(void)
 
 static __init void intel_nehalem_quirk(void)
 {
-	union cpuid10_ebx ebx;
+	struct leaf_0xa_0 l = { };
+	struct cpuid_regs *regs = (struct cpuid_regs *)&l;
 
-	ebx.full = x86_pmu.events_maskl;
-	if (ebx.split.no_branch_misses_retired) {
+	regs->ebx = x86_pmu.events_maskl;
+	if (l.no_br_misses_retired) {
 		/*
 		 * Erratum AAJ80 detected, we work it around by using
 		 * the BR_MISP_EXEC.ANY event. This will over-count
@@ -6588,8 +6589,8 @@ static __init void intel_nehalem_quirk(void)
 		 * architectural event which is often completely bogus:
 		 */
 		intel_perfmon_event_map[PERF_COUNT_HW_BRANCH_MISSES] = 0x7f89;
-		ebx.split.no_branch_misses_retired = 0;
-		x86_pmu.events_maskl = ebx.full;
+		l.no_br_misses_retired = 0;
+		x86_pmu.events_maskl = regs->ebx;
 		pr_info("CPU erratum AAJ80 worked around\n");
 	}
 }
@@ -7522,15 +7523,13 @@ static __always_inline void intel_pmu_init_arw(struct pmu *pmu)
 
 __init int intel_pmu_init(void)
 {
+	const struct cpuid_regs *regs = cpuid_leaf_raw(&boot_cpu_data, 0xa);
+	const struct leaf_0xa_0 *leaf = cpuid_leaf(&boot_cpu_data, 0xa);
 	struct attribute **extra_skl_attr = &empty_attrs;
 	struct attribute **extra_attr = &empty_attrs;
 	struct attribute **td_attr    = &empty_attrs;
 	struct attribute **mem_attr   = &empty_attrs;
 	struct attribute **tsx_attr   = &empty_attrs;
-	union cpuid10_edx edx;
-	union cpuid10_eax eax;
-	union cpuid10_ebx ebx;
-	unsigned int fixed_mask;
 	bool pmem = false;
 	int version, i;
 	char *name;
@@ -7554,27 +7553,29 @@ __init int intel_pmu_init(void)
 		return -ENODEV;
 	}
 
+	if (!leaf || !regs)
+		return -ENODEV;
+
 	/*
 	 * Check whether the Architectural PerfMon supports
 	 * Branch Misses Retired hw_event or not.
 	 */
-	cpuid(10, &eax.full, &ebx.full, &fixed_mask, &edx.full);
-	if (eax.split.mask_length < ARCH_PERFMON_EVENTS_COUNT)
+	if (leaf->events_mask_len < ARCH_PERFMON_EVENTS_COUNT)
 		return -ENODEV;
 
-	version = eax.split.version_id;
+	version = leaf->pmu_version;
 	if (version < 2)
 		x86_pmu = core_pmu;
 	else
 		x86_pmu = intel_pmu;
 
 	x86_pmu.version			= version;
-	x86_pmu.cntr_mask64		= GENMASK_ULL(eax.split.num_counters - 1, 0);
-	x86_pmu.cntval_bits		= eax.split.bit_width;
-	x86_pmu.cntval_mask		= (1ULL << eax.split.bit_width) - 1;
+	x86_pmu.cntr_mask64		= GENMASK_ULL(leaf->num_counters_gp - 1, 0);
+	x86_pmu.cntval_bits		= leaf->bit_width_gp;
+	x86_pmu.cntval_mask		= (1ULL << leaf->bit_width_gp) - 1;
 
-	x86_pmu.events_maskl		= ebx.full;
-	x86_pmu.events_mask_len		= eax.split.mask_length;
+	x86_pmu.events_maskl		= regs->ebx;
+	x86_pmu.events_mask_len		= leaf->events_mask_len;
 
 	x86_pmu.pebs_events_mask	= intel_pmu_pebs_mask(x86_pmu.cntr_mask64);
 	x86_pmu.pebs_capable		= PEBS_COUNTER_MASK;
@@ -7588,9 +7589,9 @@ __init int intel_pmu_init(void)
 		int assume = 3 * !boot_cpu_has(X86_FEATURE_HYPERVISOR);
 
 		x86_pmu.fixed_cntr_mask64 =
-			GENMASK_ULL(max((int)edx.split.num_counters_fixed, assume) - 1, 0);
+			GENMASK_ULL(max((int)leaf->num_counters_fixed, assume) - 1, 0);
 	} else if (version >= 5)
-		x86_pmu.fixed_cntr_mask64 = fixed_mask;
+		x86_pmu.fixed_cntr_mask64 = leaf->pmu_fcounters_bitmap;
 
 	if (boot_cpu_has(X86_FEATURE_PDCM)) {
 		u64 capabilities;
@@ -7612,7 +7613,7 @@ __init int intel_pmu_init(void)
 	x86_add_quirk(intel_arch_events_quirk); /* Install first, so it runs last */
 
 	if (version >= 5) {
-		x86_pmu.intel_cap.anythread_deprecated = edx.split.anythread_deprecated;
+		x86_pmu.intel_cap.anythread_deprecated = leaf->anythread_deprecation;
 		if (x86_pmu.intel_cap.anythread_deprecated)
 			pr_cont(" AnyThread deprecated, ");
 	}
