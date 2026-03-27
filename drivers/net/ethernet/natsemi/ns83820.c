@@ -1051,6 +1051,12 @@ static netdev_tx_t ns83820_hard_start_xmit(struct sk_buff *skb,
 	int stopped = 0;
 	int do_intr = 0;
 	volatile __le32 *first_desc;
+	dma_addr_t frag_dma_addr[MAX_SKB_FRAGS];
+	unsigned int frag_dma_len[MAX_SKB_FRAGS];
+	int frag_mapped_count = 0;
+	dma_addr_t main_buf = 0;
+	unsigned int main_len = 0;
+	int i;
 
 	dprintk("ns83820_hard_start_xmit\n");
 
@@ -1121,6 +1127,13 @@ again:
 	buf = dma_map_single(&dev->pci_dev->dev, skb->data, len,
 			     DMA_TO_DEVICE);
 
+	if (dma_mapping_error(&dev->pci_dev->dev, buf)) {
+		dev_kfree_skb_any(skb);
+		return NETDEV_TX_OK;
+	}
+	main_buf = buf;
+	main_len = len;
+
 	first_desc = dev->tx_descs + (free_idx * DESC_SIZE);
 
 	for (;;) {
@@ -1144,6 +1157,15 @@ again:
 
 		buf = skb_frag_dma_map(&dev->pci_dev->dev, frag, 0,
 				       skb_frag_size(frag), DMA_TO_DEVICE);
+		if (dma_mapping_error(&dev->pci_dev->dev, buf))
+			goto dma_map_error;
+
+		if (frag_mapped_count < MAX_SKB_FRAGS) {
+			frag_dma_addr[frag_mapped_count] = buf;
+			frag_dma_len[frag_mapped_count] = skb_frag_size(frag);
+			frag_mapped_count++;
+		}
+
 		dprintk("frag: buf=%08Lx  page=%08lx offset=%08lx\n",
 			(long long)buf, (long) page_to_pfn(frag->page),
 			frag->page_offset);
@@ -1165,6 +1187,16 @@ again:
 	/* Check again: we may have raced with a tx done irq */
 	if (stopped && (dev->tx_done_idx != tx_done_idx) && start_tx_okay(dev))
 		netif_start_queue(ndev);
+
+	return NETDEV_TX_OK;
+dma_map_error:
+	dma_unmap_single(&dev->pci_dev->dev, main_buf, main_len, DMA_TO_DEVICE);
+	for (i = 0; i < frag_mapped_count; i++) {
+		dma_unmap_single(&dev->pci_dev->dev, frag_dma_addr[i], frag_dma_len[i],
+				 DMA_TO_DEVICE);
+	}
+
+	dev_kfree_skb_any(skb);
 
 	return NETDEV_TX_OK;
 }
