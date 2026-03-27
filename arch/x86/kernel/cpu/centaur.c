@@ -12,34 +12,27 @@
 
 #include "cpu.h"
 
-#define ACE_PRESENT	(1 << 6)
-#define ACE_ENABLED	(1 << 7)
 #define ACE_FCR		(1 << 28)	/* MSR_VIA_FCR */
-
-#define RNG_PRESENT	(1 << 2)
-#define RNG_ENABLED	(1 << 3)
 #define RNG_ENABLE	(1 << 6)	/* MSR_VIA_RNG */
 
 static void init_c3(struct cpuinfo_x86 *c)
 {
-	u32  lo, hi;
+	const struct leaf_0xc0000001_0 *l1 = cpuid_leaf(c, 0xc0000001);
+	u32 lo, hi;
 
-	/* Test for Centaur Extended Feature Flags presence */
-	if (cpuid_eax(0xC0000000) >= 0xC0000001) {
-		u32 tmp = cpuid_edx(0xC0000001);
-
-		/* enable ACE unit, if present and disabled */
-		if ((tmp & (ACE_PRESENT | ACE_ENABLED)) == ACE_PRESENT) {
+	if (l1) {
+		/* Enable ACE unit, if present and disabled */
+		if (l1->ace && !l1->ace_en) {
 			rdmsr(MSR_VIA_FCR, lo, hi);
-			lo |= ACE_FCR;		/* enable ACE unit */
+			lo |= ACE_FCR;
 			wrmsr(MSR_VIA_FCR, lo, hi);
 			pr_info("CPU: Enabled ACE h/w crypto\n");
 		}
 
-		/* enable RNG unit, if present and disabled */
-		if ((tmp & (RNG_PRESENT | RNG_ENABLED)) == RNG_PRESENT) {
+		/* Enable RNG unit, if present and disabled */
+		if (l1->rng && !l1->rng_en) {
 			rdmsr(MSR_VIA_RNG, lo, hi);
-			lo |= RNG_ENABLE;	/* enable RNG unit */
+			lo |= RNG_ENABLE;
 			wrmsr(MSR_VIA_RNG, lo, hi);
 			pr_info("CPU: Enabled h/w RNG\n");
 		}
