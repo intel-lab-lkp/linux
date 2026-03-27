@@ -635,9 +635,16 @@ static void cdns_dsi_hs_init(struct cdns_dsi *dsi)
 {
 	struct cdns_dsi_output *output = &dsi->output;
 	u32 status;
+	u32 val;
 
 	if (dsi->phy_initialized)
 		return;
+
+	/* Set force stop state on all lanes */
+	val = readl(dsi->regs + MCTL_MAIN_EN);
+	val |= DATA_FORCE_STOP | CLK_FORCE_STOP;
+	writel(val, dsi->regs + MCTL_MAIN_EN);
+
 	/*
 	 * Power all internal DPHY blocks down and maintain their reset line
 	 * asserted before changing the DPHY config.
@@ -661,6 +668,13 @@ static void cdns_dsi_hs_init(struct cdns_dsi *dsi)
 	writel(DPHY_CMN_PSO | DPHY_ALL_D_PDN | DPHY_C_PDN | DPHY_CMN_PDN |
 	       DPHY_D_RSTB(output->dev->lanes) | DPHY_C_RSTB,
 	       dsi->regs + MCTL_DPHY_CFG0);
+
+	/* Keep stop state for at least 100 us */
+	usleep_range(100, 200);
+
+	val &= ~(DATA_FORCE_STOP | CLK_FORCE_STOP);
+	writel(val, dsi->regs + MCTL_MAIN_EN);
+
 	dsi->phy_initialized = true;
 }
 
