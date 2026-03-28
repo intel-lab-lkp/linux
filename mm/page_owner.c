@@ -163,6 +163,9 @@ static noinline depot_stack_handle_t save_stack(gfp_t flags)
 
 	set_current_in_page_owner();
 	nr_entries = stack_trace_save(entries, ARRAY_SIZE(entries), 2);
+	if (nr_entries >= PAGE_OWNER_STACK_DEPTH)
+		pr_warn_ratelimited("page_owner: stack depth %u exceeds limit %u\n",
+			nr_entries, PAGE_OWNER_STACK_DEPTH);
 	handle = stack_depot_save(entries, nr_entries, flags);
 	if (!handle)
 		handle = failure_handle;
