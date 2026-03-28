@@ -64,8 +64,17 @@ static size_t s3fwrn82_uart_read(struct serdev_device *serdev,
 			continue;
 
 		if ((phy->recv_skb->len - S3FWRN82_NCI_HEADER)
-				< phy->recv_skb->data[S3FWRN82_NCI_IDX])
+				< phy->recv_skb->data[S3FWRN82_NCI_IDX]) {
+			if (phy->recv_skb->len < NCI_SKB_BUFF_LEN)
+				continue;
+
+			dev_dbg(&serdev->dev, "dropping oversized UART frame\n");
+			kfree_skb(phy->recv_skb);
+			phy->recv_skb = alloc_skb(NCI_SKB_BUFF_LEN, GFP_KERNEL);
+			if (!phy->recv_skb)
+				return 0;
 			continue;
+		}
 
 		s3fwrn5_recv_frame(phy->common.ndev, phy->recv_skb,
 				   phy->common.mode);
