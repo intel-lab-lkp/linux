@@ -222,7 +222,7 @@ static void intel_casf_write_coeff(struct intel_crtc_state *crtc_state)
 	}
 }
 
-static void convert_sharpness_coef_binary(struct scaler_filter_coeff *coeff,
+static void convert_sharpness_coeff_binary(struct scaler_filter_coeff *coeff,
 					  u16 coefficient)
 {
 	if (coefficient < 25) {
@@ -259,7 +259,7 @@ void intel_casf_scaler_compute_config(struct intel_crtc_state *crtc_state)
 
 	for (i = 0; i < SCALER_FILTER_NUM_TAPS; i++) {
 		filter_coeff[i] = (*(filtercoeff + i) * 100 / sumcoeff);
-		convert_sharpness_coef_binary(&crtc_state->hw.casf_params.coeff[i],
+		convert_sharpness_coeff_binary(&crtc_state->hw.casf_params.coeff[i],
 					      filter_coeff[i]);
 	}
 }
