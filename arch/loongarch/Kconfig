@@ -740,9 +740,11 @@ config MMU
 	default y
 
 config ARCH_MMAP_RND_BITS_MIN
+	default 18 if 64BIT
 	default 12
 
 config ARCH_MMAP_RND_BITS_MAX
+	default 32 if 64BIT
 	default 18
 
 config ARCH_SUPPORTS_UPROBES
