@@ -26,10 +26,10 @@ MODULE_ALIAS("ip6t_multiport");
 /* Returns 1 if the port is matched by the test, 0 otherwise. */
 static inline bool
 ports_match_v1(const struct xt_multiport_v1 *minfo,
-	       u_int16_t src, u_int16_t dst)
+	       u16 src, u16 dst)
 {
 	unsigned int i;
-	u_int16_t s, e;
+	u16 s, e;
 
 	for (i = 0; i < minfo->count; i++) {
 		s = minfo->ports[i];
@@ -106,20 +106,36 @@ multiport_mt(const struct sk_buff *skb, struct xt_action_param *par)
 }
 
 static inline bool
-check(u_int16_t proto,
-      u_int8_t ip_invflags,
-      u_int8_t match_flags,
-      u_int8_t count)
+multiport_valid_ranges(const struct xt_multiport_v1 *multiinfo)
+{
+	unsigned int i;
+
+	for (i = 0; i < multiinfo->count; i++) {
+		if (!multiinfo->pflags[i])
+			continue;
+
+		if (i == multiinfo->count - 1)
+			return false;
+
+		i++;
+	}
+
+	return true;
+}
+
+static inline bool
+check(u16 proto, u8 ip_invflags, const struct xt_multiport_v1 *multiinfo)
 {
 	/* Must specify supported protocol, no unknown flags or bad count */
-	return (proto == IPPROTO_TCP || proto == IPPROTO_UDP
-		|| proto == IPPROTO_UDPLITE
-		|| proto == IPPROTO_SCTP || proto == IPPROTO_DCCP)
-		&& !(ip_invflags & XT_INV_PROTO)
-		&& (match_flags == XT_MULTIPORT_SOURCE
-		    || match_flags == XT_MULTIPORT_DESTINATION
-		    || match_flags == XT_MULTIPORT_EITHER)
-		&& count <= XT_MULTI_PORTS;
+	return (proto == IPPROTO_TCP || proto == IPPROTO_UDP ||
+		proto == IPPROTO_UDPLITE ||
+		proto == IPPROTO_SCTP || proto == IPPROTO_DCCP) &&
+	       !(ip_invflags & XT_INV_PROTO) &&
+	       (multiinfo->flags == XT_MULTIPORT_SOURCE ||
+		multiinfo->flags == XT_MULTIPORT_DESTINATION ||
+		multiinfo->flags == XT_MULTIPORT_EITHER) &&
+	       multiinfo->count <= XT_MULTI_PORTS &&
+	       multiport_valid_ranges(multiinfo);
 }
 
 static int multiport_mt_check(const struct xt_mtchk_param *par)
@@ -127,8 +143,7 @@ static int multiport_mt_check(const struct xt_mtchk_param *par)
 	const struct ipt_ip *ip = par->entryinfo;
 	const struct xt_multiport_v1 *multiinfo = par->matchinfo;
 
-	return check(ip->proto, ip->invflags, multiinfo->flags,
-		     multiinfo->count) ? 0 : -EINVAL;
+	return check(ip->proto, ip->invflags, multiinfo) ? 0 : -EINVAL;
 }
 
 static int multiport_mt6_check(const struct xt_mtchk_param *par)
@@ -136,8 +151,7 @@ static int multiport_mt6_check(const struct xt_mtchk_param *par)
 	const struct ip6t_ip6 *ip = par->entryinfo;
 	const struct xt_multiport_v1 *multiinfo = par->matchinfo;
 
-	return check(ip->proto, ip->invflags, multiinfo->flags,
-		     multiinfo->count) ? 0 : -EINVAL;
+	return check(ip->proto, ip->invflags, multiinfo) ? 0 : -EINVAL;
 }
 
 static struct xt_match multiport_mt_reg[] __read_mostly = {
