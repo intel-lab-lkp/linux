@@ -32,7 +32,7 @@ static int otg_set_protocol(struct otg_fsm *fsm, int protocol)
 
 	if (fsm->protocol != protocol) {
 		VDBG("Changing role fsm->protocol= %d; new protocol= %d\n",
-			fsm->protocol, protocol);
+		     fsm->protocol, protocol);
 		/* stop old protocol */
 		if (fsm->protocol == PROTO_HOST)
 			ret = otg_start_host(fsm, 0);
@@ -139,14 +139,14 @@ static void otg_hnp_polling_work(struct work_struct *work)
 	*fsm->host_req_flag = 0;
 	/* Get host request flag from connected USB device */
 	retval = usb_control_msg(udev,
-				usb_rcvctrlpipe(udev, 0),
-				USB_REQ_GET_STATUS,
-				USB_DIR_IN | USB_RECIP_DEVICE,
-				0,
-				OTG_STS_SELECTOR,
-				fsm->host_req_flag,
-				1,
-				USB_CTRL_GET_TIMEOUT);
+				 usb_rcvctrlpipe(udev, 0),
+				 USB_REQ_GET_STATUS,
+				 USB_DIR_IN | USB_RECIP_DEVICE,
+				 0,
+				 OTG_STS_SELECTOR,
+				 fsm->host_req_flag,
+				 1,
+				 USB_CTRL_GET_TIMEOUT);
 	if (retval != 1) {
 		dev_err(&udev->dev, "Get one byte OTG status failed\n");
 		return;
@@ -156,7 +156,7 @@ static void otg_hnp_polling_work(struct work_struct *work)
 	if (flag == 0) {
 		/* Continue HNP polling */
 		schedule_delayed_work(&fsm->hnp_polling_work,
-					msecs_to_jiffies(T_HOST_REQ_POLL));
+				      msecs_to_jiffies(T_HOST_REQ_POLL));
 		return;
 	} else if (flag != HOST_REQUEST_FLAG) {
 		dev_err(&udev->dev, "host request flag %d is invalid\n", flag);
@@ -168,11 +168,11 @@ static void otg_hnp_polling_work(struct work_struct *work)
 		/* Set b_hnp_enable */
 		if (!fsm->otg->host->b_hnp_enable) {
 			retval = usb_control_msg(udev,
-					usb_sndctrlpipe(udev, 0),
-					USB_REQ_SET_FEATURE, 0,
-					USB_DEVICE_B_HNP_ENABLE,
-					0, NULL, 0,
-					USB_CTRL_SET_TIMEOUT);
+						 usb_sndctrlpipe(udev, 0),
+						 USB_REQ_SET_FEATURE, 0,
+						 USB_DEVICE_B_HNP_ENABLE,
+						 0, NULL, 0,
+						 USB_CTRL_SET_TIMEOUT);
 			if (retval >= 0)
 				fsm->otg->host->b_hnp_enable = 1;
 		}
@@ -199,7 +199,7 @@ static void otg_start_hnp_polling(struct otg_fsm *fsm)
 	}
 
 	schedule_delayed_work(&fsm->hnp_polling_work,
-					msecs_to_jiffies(T_HOST_REQ_POLL));
+			      msecs_to_jiffies(T_HOST_REQ_POLL));
 }
 
 /* Called when entering a state */
@@ -249,7 +249,7 @@ static int otg_set_state(struct otg_fsm *fsm, enum usb_otg_state new_state)
 		otg_loc_sof(fsm, 1);
 		otg_set_protocol(fsm, PROTO_HOST);
 		usb_bus_start_enum(fsm->otg->host,
-				fsm->otg->host->otg_port);
+				   fsm->otg->host->otg_port);
 		otg_start_hnp_polling(fsm);
 		break;
 	case OTG_STATE_A_IDLE:
@@ -349,7 +349,7 @@ int otg_statemachine(struct otg_fsm *fsm)
 		else if (fsm->b_sess_vld && fsm->otg->gadget)
 			otg_set_state(fsm, OTG_STATE_B_PERIPHERAL);
 		else if ((fsm->b_bus_req || fsm->adp_change || fsm->power_up) &&
-				fsm->b_ssend_srp && fsm->b_se0_srp)
+			 fsm->b_ssend_srp && fsm->b_se0_srp)
 			otg_set_state(fsm, OTG_STATE_B_SRP_INIT);
 		break;
 	case OTG_STATE_B_SRP_INIT:
@@ -383,14 +383,14 @@ int otg_statemachine(struct otg_fsm *fsm)
 		if (fsm->id)
 			otg_set_state(fsm, OTG_STATE_B_IDLE);
 		else if (!fsm->a_bus_drop && (fsm->a_bus_req ||
-			  fsm->a_srp_det || fsm->adp_change || fsm->power_up))
+					      fsm->a_srp_det || fsm->adp_change || fsm->power_up))
 			otg_set_state(fsm, OTG_STATE_A_WAIT_VRISE);
 		break;
 	case OTG_STATE_A_WAIT_VRISE:
 		if (fsm->a_vbus_vld)
 			otg_set_state(fsm, OTG_STATE_A_WAIT_BCON);
 		else if (fsm->id || fsm->a_bus_drop ||
-				fsm->a_wait_vrise_tmout)
+			 fsm->a_wait_vrise_tmout)
 			otg_set_state(fsm, OTG_STATE_A_WAIT_VFALL);
 		break;
 	case OTG_STATE_A_WAIT_BCON:
@@ -405,7 +405,7 @@ int otg_statemachine(struct otg_fsm *fsm)
 		if (fsm->id || fsm->a_bus_drop)
 			otg_set_state(fsm, OTG_STATE_A_WAIT_VFALL);
 		else if ((!fsm->a_bus_req || fsm->a_suspend_req_inf) &&
-				fsm->otg->host->b_hnp_enable)
+			 fsm->otg->host->b_hnp_enable)
 			otg_set_state(fsm, OTG_STATE_A_SUSPEND);
 		else if (!fsm->b_conn)
 			otg_set_state(fsm, OTG_STATE_A_WAIT_BCON);
