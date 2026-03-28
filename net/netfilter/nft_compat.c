@@ -786,6 +786,20 @@ static bool nft_match_reduce(struct nft_regs_track *track,
 	return strcmp(match->name, "comment") == 0;
 }
 
+static bool is_valid_compat_family(u32 family)
+{
+	switch (family) {
+	case NFPROTO_IPV4:
+	case NFPROTO_ARP:
+	case NFPROTO_BRIDGE:
+	case NFPROTO_IPV6:
+		return true;
+	}
+
+	/* others are nftables only */
+	return false;
+}
+
 static const struct nft_expr_ops *
 nft_match_select_ops(const struct nft_ctx *ctx,
 		     const struct nlattr * const tb[])
@@ -805,6 +819,9 @@ nft_match_select_ops(const struct nft_ctx *ctx,
 	mt_name = nla_data(tb[NFTA_MATCH_NAME]);
 	rev = ntohl(nla_get_be32(tb[NFTA_MATCH_REV]));
 	family = ctx->family;
+
+	if (!is_valid_compat_family(family))
+		return ERR_PTR(-EAFNOSUPPORT);
 
 	match = xt_request_find_match(family, mt_name, rev);
 	if (IS_ERR(match))
@@ -885,6 +902,9 @@ nft_target_select_ops(const struct nft_ctx *ctx,
 	tg_name = nla_data(tb[NFTA_TARGET_NAME]);
 	rev = ntohl(nla_get_be32(tb[NFTA_TARGET_REV]));
 	family = ctx->family;
+
+	if (!is_valid_compat_family(family))
+		return ERR_PTR(-EAFNOSUPPORT);
 
 	if (strcmp(tg_name, XT_ERROR_TARGET) == 0 ||
 	    strcmp(tg_name, XT_STANDARD_TARGET) == 0 ||
