@@ -1194,12 +1194,12 @@ void kvm_arch_flush_shadow_all(struct kvm *kvm)
 		struct kvm_s2_mmu *mmu = &kvm->arch.nested_mmus[i];
 
 		if (!WARN_ON(atomic_read(&mmu->refcnt)))
-			kvm_free_stage2(mmu);
+			kvm_uninit_stage2_mmu(kvm, mmu);
 	}
 	kvfree(kvm->arch.nested_mmus);
 	kvm->arch.nested_mmus = NULL;
 	kvm->arch.nested_mmus_size = 0;
-	kvm_uninit_stage2_mmu(kvm);
+	kvm_uninit_stage2_mmu(kvm, &kvm->arch.mmu);
 }
 
 /*

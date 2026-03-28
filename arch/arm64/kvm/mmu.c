@@ -1018,10 +1018,12 @@ out_free_pgtable:
 	return err;
 }
 
-void kvm_uninit_stage2_mmu(struct kvm *kvm)
+void kvm_uninit_stage2_mmu(struct kvm *kvm, struct kvm_s2_mmu *mmu)
 {
-	kvm_free_stage2(&kvm->arch.mmu);
-	kvm_mmu_free_memory_cache(&kvm->arch.mmu.split_page_cache);
+	kvm_free_stage2(mmu);
+
+	if (!kvm_is_nested_s2_mmu(kvm, mmu))
+		kvm_mmu_free_memory_cache(&mmu->split_page_cache);
 }
 
 static void stage2_unmap_memslot(struct kvm *kvm,
