@@ -30,12 +30,15 @@
 
 #define LMH_REG_DCVS_INTR_CLR		0x8
 
-#define LMH_ENABLE_ALGOS		1
-
 struct lmh_hw_data {
 	void __iomem *base;
 	struct irq_domain *domain;
 	int irq;
+};
+
+struct lmh_soc_data {
+	bool enable_algos;
+	u32 node_ids[8];
 };
 
 static irqreturn_t lmh_handle_irq(int hw_irq, void *data)
@@ -100,8 +103,8 @@ static int lmh_probe(struct platform_device *pdev)
 	struct device_node *np = dev->of_node;
 	struct device_node *cpu_node;
 	struct lmh_hw_data *lmh_data;
+	const struct lmh_soc_data *match_data;
 	int temp_low, temp_high, temp_arm, cpu_id, ret;
-	unsigned int enable_alg;
 	u32 node_id;
 
 	if (!qcom_scm_is_available())
@@ -144,10 +147,9 @@ static int lmh_probe(struct platform_device *pdev)
 	 * for other platforms, revisit this to check if the <cpu-id, node-id> should be part
 	 * of a dt match table.
 	 */
-	if (cpu_id == 0) {
-		node_id = LMH_CLUSTER0_NODE_ID;
-	} else if (cpu_id == 4) {
-		node_id = LMH_CLUSTER1_NODE_ID;
+	match_data = of_device_get_match_data(dev);
+	if (cpu_id >= 0 && cpu_id < 8) {
+		node_id = match_data->node_ids[cpu_id];
 	} else {
 		dev_err(dev, "Wrong CPU id associated with LMh node\n");
 		return -EINVAL;
@@ -156,9 +158,7 @@ static int lmh_probe(struct platform_device *pdev)
 	if (!qcom_scm_lmh_dcvsh_available())
 		return -EINVAL;
 
-	enable_alg = (uintptr_t)of_device_get_match_data(dev);
-
-	if (enable_alg) {
+	if (match_data->enable_algos) {
 		ret = qcom_scm_lmh_dcvsh(LMH_SUB_FN_CRNT, LMH_ALGO_MODE_ENABLE, 1,
 					 LMH_NODE_DCVS, node_id, 0);
 		if (ret)
@@ -231,10 +231,53 @@ static int lmh_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static const struct lmh_soc_data sdm670_lmh_data = {
+	.enable_algos = true,
+	.node_ids = {
+		LMH_CLUSTER0_NODE_ID,
+		LMH_CLUSTER0_NODE_ID,
+		LMH_CLUSTER0_NODE_ID,
+		LMH_CLUSTER0_NODE_ID,
+		LMH_CLUSTER0_NODE_ID,
+		LMH_CLUSTER0_NODE_ID,
+		LMH_CLUSTER1_NODE_ID,
+		LMH_CLUSTER1_NODE_ID,
+	},
+};
+
+static const struct lmh_soc_data sdm845_lmh_data = {
+	.enable_algos = true,
+	.node_ids = {
+		LMH_CLUSTER0_NODE_ID,
+		LMH_CLUSTER0_NODE_ID,
+		LMH_CLUSTER0_NODE_ID,
+		LMH_CLUSTER0_NODE_ID,
+		LMH_CLUSTER1_NODE_ID,
+		LMH_CLUSTER1_NODE_ID,
+		LMH_CLUSTER1_NODE_ID,
+		LMH_CLUSTER1_NODE_ID,
+	},
+};
+
+static const struct lmh_soc_data sm8150_lmh_data = {
+	.enable_algos = false,
+	.node_ids = {
+		LMH_CLUSTER0_NODE_ID,
+		LMH_CLUSTER0_NODE_ID,
+		LMH_CLUSTER0_NODE_ID,
+		LMH_CLUSTER0_NODE_ID,
+		LMH_CLUSTER1_NODE_ID,
+		LMH_CLUSTER1_NODE_ID,
+		LMH_CLUSTER1_NODE_ID,
+		LMH_CLUSTER1_NODE_ID,
+	},
+};
+
 static const struct of_device_id lmh_table[] = {
-	{ .compatible = "qcom,sc8180x-lmh", },
-	{ .compatible = "qcom,sdm845-lmh", .data = (void *)LMH_ENABLE_ALGOS},
-	{ .compatible = "qcom,sm8150-lmh", },
+	{ .compatible = "qcom,sc8180x-lmh", .data = &sm8150_lmh_data },
+	{ .compatible = "qcom,sdm670-lmh", .data = &sdm670_lmh_data },
+	{ .compatible = "qcom,sdm845-lmh", .data = &sdm845_lmh_data },
+	{ .compatible = "qcom,sm8150-lmh", .data = &sm8150_lmh_data },
 	{}
 };
 MODULE_DEVICE_TABLE(of, lmh_table);
