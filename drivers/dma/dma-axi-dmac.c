@@ -789,10 +789,10 @@ axi_dmac_prep_peripheral_dma_vec(struct dma_chan *c, const struct dma_vec *vecs,
 	return vchan_tx_prep(&chan->vchan, &desc->vdesc, flags);
 }
 
-static struct dma_async_tx_descriptor *axi_dmac_prep_slave_sg(
-	struct dma_chan *c, struct scatterlist *sgl,
-	unsigned int sg_len, enum dma_transfer_direction direction,
-	unsigned long flags, void *context)
+static struct dma_async_tx_descriptor *
+axi_dmac_prep_slave_sg(struct dma_chan *c, struct scatterlist *sgl,
+		       unsigned int sg_len, enum dma_transfer_direction direction,
+		       unsigned long flags, void *context)
 {
 	struct axi_dmac_chan *chan = to_axi_dmac_chan(c);
 	struct axi_dmac_desc *desc;
@@ -827,10 +827,10 @@ static struct dma_async_tx_descriptor *axi_dmac_prep_slave_sg(
 	return vchan_tx_prep(&chan->vchan, &desc->vdesc, flags);
 }
 
-static struct dma_async_tx_descriptor *axi_dmac_prep_dma_cyclic(
-	struct dma_chan *c, dma_addr_t buf_addr, size_t buf_len,
-	size_t period_len, enum dma_transfer_direction direction,
-	unsigned long flags)
+static struct dma_async_tx_descriptor *
+axi_dmac_prep_dma_cyclic(struct dma_chan *c, dma_addr_t buf_addr, size_t buf_len,
+			 size_t period_len, enum dma_transfer_direction direction,
+			 unsigned long flags)
 {
 	struct axi_dmac_chan *chan = to_axi_dmac_chan(c);
 	struct axi_dmac_desc *desc;
@@ -866,9 +866,9 @@ static struct dma_async_tx_descriptor *axi_dmac_prep_dma_cyclic(
 	return vchan_tx_prep(&chan->vchan, &desc->vdesc, flags);
 }
 
-static struct dma_async_tx_descriptor *axi_dmac_prep_interleaved(
-	struct dma_chan *c, struct dma_interleaved_template *xt,
-	unsigned long flags)
+static struct dma_async_tx_descriptor *
+axi_dmac_prep_interleaved(struct dma_chan *c, struct dma_interleaved_template *xt,
+			  unsigned long flags)
 {
 	struct axi_dmac_chan *chan = to_axi_dmac_chan(c);
 	struct axi_dmac_desc *desc;
