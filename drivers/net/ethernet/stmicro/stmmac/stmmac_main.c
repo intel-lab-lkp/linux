@@ -4385,6 +4385,9 @@ static void stmmac_set_gso_features(struct net_device *ndev)
 {
 	struct stmmac_priv *priv = netdev_priv(ndev);
 
+	if (priv->dma_cap.tsoen)
+		dev_info(priv->device, "TSO supported\n");
+
 	if (!(priv->plat->flags & STMMAC_FLAG_TSO_EN))
 		return;
 
@@ -7431,9 +7434,6 @@ static int stmmac_hw_init(struct stmmac_priv *priv)
 		device_set_wakeup_capable(priv->device, 1);
 		devm_pm_set_wake_irq(priv->device, priv->wol_irq);
 	}
-
-	if (priv->dma_cap.tsoen)
-		dev_info(priv->device, "TSO supported\n");
 
 	if (priv->dma_cap.number_rx_queues &&
 	    priv->plat->rx_queues_to_use > priv->dma_cap.number_rx_queues) {
