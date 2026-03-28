@@ -4940,6 +4940,14 @@ static netdev_features_t stmmac_features_check(struct sk_buff *skb,
 		queue = skb_get_queue_mapping(skb);
 		if (!stmmac_channel_tso_permitted(netdev_priv(dev), queue))
 			features &= ~NETIF_F_GSO_MASK;
+
+		/* STM32MP151 (dwmac v4.2) and STM32MP25xx (dwmac v5.3) states
+		 * for TDES2 normal (read format) descriptor that the maximum
+		 * header length supported for the TSO feature is 1023 bytes.
+		 * Fall back to software GSO for these skbs.
+		 */
+		if (skb_headlen(skb) > 1023)
+			features &= ~NETIF_F_GSO_MASK;
 	}
 
 	return features;
