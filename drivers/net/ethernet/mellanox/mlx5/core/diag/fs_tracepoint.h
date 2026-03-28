@@ -289,7 +289,7 @@ TRACE_EVENT(mlx5_fs_add_rule,
 			   memcpy(__entry->destination,
 				  &rule->dest_attr,
 				  sizeof(__entry->destination));
-			   if (rule->dest_attr.type &
+			   if (rule->dest_attr.type ==
 			       MLX5_FLOW_DESTINATION_TYPE_COUNTER)
 				__entry->counter_id =
 					mlx5_fc_id(rule->dest_attr.counter);
