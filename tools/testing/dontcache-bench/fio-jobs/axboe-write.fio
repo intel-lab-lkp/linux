@@ -1,0 +1,14 @@
+[global]
+ioengine=io_uring
+direct=0
+bs=64k
+numjobs=32
+time_based
+runtime=300
+rw=write
+group_reporting=0
+filename_format=$jobname.$jobnum
+log_avg_msec=1000
+write_bw_log=axboe-write
+
+[axboe-write]
