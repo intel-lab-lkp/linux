@@ -3063,11 +3063,11 @@ config MMU
 	default y
 
 config ARCH_MMAP_RND_BITS_MIN
-	default 12 if 64BIT
+	default 18 if 64BIT
 	default 8
 
 config ARCH_MMAP_RND_BITS_MAX
-	default 18 if 64BIT
+	default 20 if 64BIT
 	default 15
 
 config ARCH_MMAP_RND_COMPAT_BITS_MIN
