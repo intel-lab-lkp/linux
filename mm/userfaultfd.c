@@ -1872,7 +1872,7 @@ ssize_t move_pages(struct userfaultfd_ctx *ctx, unsigned long dst_start,
 	/* Re-check after taking map_changing_lock */
 	err = -EAGAIN;
 	down_read(&ctx->map_changing_lock);
-	if (likely(atomic_read(&ctx->mmap_changing)))
+	if (unlikely(atomic_read(&ctx->mmap_changing)))
 		goto out_unlock;
 	/*
 	 * Make sure the vma is not shared, that the src and dst remap
