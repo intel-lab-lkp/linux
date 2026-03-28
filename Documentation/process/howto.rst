@@ -34,7 +34,8 @@ experience, the following books are good for, if anything, reference:
  - "The C Programming Language" by Kernighan and Ritchie [Prentice Hall]
  - "Practical C Programming" by Steve Oualline [O'Reilly]
  - "C:  A Reference Manual" by Harbison and Steele [Prentice Hall]
-
+ - "Linux System Programming" by Robert Love [O'Reilly]
+ - "Linux Kernel Development" By Robert Love [Pearson]
 The kernel is written using GNU C and the GNU toolchain.  While it
 adheres to the ISO C11 standard, it uses a number of extensions that are
 not featured in the standard.  The kernel is a freestanding C
