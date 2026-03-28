@@ -14,7 +14,7 @@
  *
  * Data Structure
  * --------------
- * The printk_ringbuffer is made up of 3 internal ringbuffers:
+ * The printk_ringbuffer is made up of 2 internal ringbuffers:
  *
  *   desc_ring
  *     A ring of descriptors and their meta data (such as sequence number,
