@@ -831,6 +831,17 @@ static int get_dist_table(struct disttable **tbl, const struct nlattr *attr,
 	return 0;
 }
 
+static int validate_slot(const struct nlattr *attr, struct netlink_ext_ack *extack)
+{
+	const struct tc_netem_slot *c = nla_data(attr);
+
+	if (c->min_delay > c->max_delay) {
+		NL_SET_ERR_MSG(extack, "slot min delay greater than max delay");
+		return -EINVAL;
+	}
+	return 0;
+}
+
 static void get_slot(struct netem_sched_data *q, const struct nlattr *attr)
 {
 	const struct tc_netem_slot *c = nla_data(attr);
@@ -1041,6 +1052,12 @@ static int netem_change(struct Qdisc *sch, struct nlattr *opt, struct netlink_ex
 
 	if (tb[TCA_NETEM_SLOT_DIST]) {
 		ret = get_dist_table(&slot_dist, tb[TCA_NETEM_SLOT_DIST], extack);
+		if (ret)
+			goto table_free;
+	}
+
+	if (tb[TCA_NETEM_SLOT]) {
+		ret = validate_slot(tb[TCA_NETEM_SLOT], extack);
 		if (ret)
 			goto table_free;
 	}
