@@ -472,16 +472,64 @@ xfs_inodegc_queue_all(
 	return ret;
 }
 
+/*
+ * flush_workqueue() waits for all in-flight work items, including the current
+ * one.  If xfs_trans_alloc() hits ENOSPC while an inodegc worker is freeing an
+ * unlinked inode, xfs_blockgc_flush_all() recurses into xfs_inodegc_flush().
+ * Waiting for the current worker there deadlocks because the flush cannot
+ * complete until this work function returns.
+ */
+static struct xfs_inodegc *
+xfs_inodegc_current(struct xfs_mount *mp)
+{
+	struct work_struct	*work = current_work();
+	int			cpu;
+
+	if (!work)
+		return NULL;
+
+	for_each_possible_cpu(cpu) {
+		struct xfs_inodegc	*gc = per_cpu_ptr(mp->m_inodegc, cpu);
+
+		if (work == &gc->work.work)
+			return gc;
+	}
+
+	return NULL;
+}
+
 /* Wait for all queued work and collect errors */
 static int
 xfs_inodegc_wait_all(
 	struct xfs_mount	*mp)
 {
+	struct xfs_inodegc	*current_gc = xfs_inodegc_current(mp);
 	int			cpu;
 	int			error = 0;
 
+	if (current_gc) {
+		/*
+		 * current_gc is already in flight, so waiting for the whole
+		 * workqueue would recurse on ourselves.  Flush every other
+		 * per-cpu work item instead so that ENOSPC retries still wait
+		 * for the rest of the inodegc work to finish.
+		 */
+		for_each_possible_cpu(cpu) {
+			struct xfs_inodegc	*gc;
+
+			gc = per_cpu_ptr(mp->m_inodegc, cpu);
+			if (gc == current_gc)
+				continue;
+			flush_delayed_work(&gc->work);
+			if (gc->error && !error)
+				error = gc->error;
+			gc->error = 0;
+		}
+		return error;
+	}
+
 	flush_workqueue(mp->m_inodegc_wq);
-	for_each_cpu(cpu, &mp->m_inodegc_cpumask) {
+	for_each_possible_cpu(cpu) {
 		struct xfs_inodegc	*gc;
 
 		gc = per_cpu_ptr(mp->m_inodegc, cpu);
