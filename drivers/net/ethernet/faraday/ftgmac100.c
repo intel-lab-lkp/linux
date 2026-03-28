@@ -946,7 +946,9 @@ static void ftgmac100_free_rings(struct ftgmac100 *priv)
 {
 	/* Free skb arrays */
 	kfree(priv->rx_skbs);
+	priv->rx_skbs = NULL;
 	kfree(priv->tx_skbs);
+	priv->tx_skbs = NULL;
 
 	/* Free descriptors */
 	if (priv->rxdes)
@@ -965,31 +967,34 @@ static void ftgmac100_free_rings(struct ftgmac100 *priv)
 	if (priv->rx_scratch)
 		dma_free_coherent(priv->dev, RX_BUF_SIZE,
 				  priv->rx_scratch, priv->rx_scratch_dma);
+	priv->rx_scratch = NULL;
 }
 
 static int ftgmac100_alloc_rings(struct ftgmac100 *priv)
 {
+	int err = -ENOMEM;
+
 	/* Allocate skb arrays */
 	priv->rx_skbs = kcalloc(MAX_RX_QUEUE_ENTRIES, sizeof(void *),
 				GFP_KERNEL);
 	if (!priv->rx_skbs)
-		return -ENOMEM;
+		goto out;
 	priv->tx_skbs = kcalloc(MAX_TX_QUEUE_ENTRIES, sizeof(void *),
 				GFP_KERNEL);
 	if (!priv->tx_skbs)
-		return -ENOMEM;
+		goto out;
 
 	/* Allocate descriptors */
 	priv->rxdes = dma_alloc_coherent(priv->dev,
 					 MAX_RX_QUEUE_ENTRIES * sizeof(struct ftgmac100_rxdes),
 					 &priv->rxdes_dma, GFP_KERNEL);
 	if (!priv->rxdes)
-		return -ENOMEM;
+		goto out;
 	priv->txdes = dma_alloc_coherent(priv->dev,
 					 MAX_TX_QUEUE_ENTRIES * sizeof(struct ftgmac100_txdes),
 					 &priv->txdes_dma, GFP_KERNEL);
 	if (!priv->txdes)
-		return -ENOMEM;
+		goto out;
 
 	/* Allocate scratch packet buffer */
 	priv->rx_scratch = dma_alloc_coherent(priv->dev,
@@ -997,9 +1002,13 @@ static int ftgmac100_alloc_rings(struct ftgmac100 *priv)
 					      &priv->rx_scratch_dma,
 					      GFP_KERNEL);
 	if (!priv->rx_scratch)
-		return -ENOMEM;
+		goto out;
 
 	return 0;
+
+out:
+	ftgmac100_free_rings(priv);
+	return err;
 }
 
 static void ftgmac100_init_rings(struct ftgmac100 *priv)
