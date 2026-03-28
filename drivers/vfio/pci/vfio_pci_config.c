@@ -1829,8 +1829,17 @@ int vfio_config_init(struct vfio_pci_core_device *vdev)
 					cpu_to_le16(PCI_COMMAND_MEMORY);
 	}
 
+	/*
+	 * Sanitize bogus interrupt pin values.  Valid pins are 1 (INTA)
+	 * through 4 (INTD); anything else disables legacy interrupts.
+	 */
+	if (vconfig[PCI_INTERRUPT_PIN] > 4)
+		pci_info(pdev, "Bogus INTx pin %d, disabling INTx virtualization\n",
+			 vconfig[PCI_INTERRUPT_PIN]);
+
 	if (!IS_ENABLED(CONFIG_VFIO_PCI_INTX) || vdev->nointx ||
-	    !vdev->pdev->irq || vdev->pdev->irq == IRQ_NOTCONNECTED)
+	    !vdev->pdev->irq || vdev->pdev->irq == IRQ_NOTCONNECTED ||
+	    vconfig[PCI_INTERRUPT_PIN] > 4)
 		vconfig[PCI_INTERRUPT_PIN] = 0;
 
 	ret = vfio_cap_init(vdev);
