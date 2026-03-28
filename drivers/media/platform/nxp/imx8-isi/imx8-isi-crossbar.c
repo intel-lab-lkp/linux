@@ -306,6 +306,102 @@ static int mxc_isi_crossbar_set_fmt(struct v4l2_subdev *sd,
 	return 0;
 }
 
+static int mxc_isi_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
+				  struct v4l2_mbus_frame_desc *fd)
+{
+	struct mxc_isi_crossbar *xbar = to_isi_crossbar(sd);
+	struct device *dev = xbar->isi->dev;
+	struct v4l2_subdev_route *route;
+	struct v4l2_subdev_state *state;
+	int ret = 0;
+
+	if (pad < xbar->num_sinks)
+		return -EINVAL;
+
+	memset(fd, 0, sizeof(*fd));
+
+	state = v4l2_subdev_lock_and_get_active_state(sd);
+
+	/*
+	 * Iterate over all active routes. For each route going through the
+	 * requested source pad, get the frame descriptor from the connected
+	 * source subdev, find the corresponding stream entry, and add it to
+	 * the output frame descriptor with the routed stream ID.
+	 */
+	for_each_active_route(&state->routing, route) {
+		struct v4l2_mbus_frame_desc source_fd;
+		struct v4l2_subdev *remote_sd;
+		struct media_pad *remote_pad;
+		unsigned int i;
+
+		if (route->source_pad != pad)
+			continue;
+
+		/* Find the remote subdev connected to this sink pad */
+		remote_pad = media_pad_remote_pad_first(&xbar->pads[route->sink_pad]);
+		if (!remote_pad) {
+			dev_dbg(dev, "no remote pad connected to crossbar input %u\n",
+				route->sink_pad);
+			continue;
+		}
+
+		remote_sd = media_entity_to_v4l2_subdev(remote_pad->entity);
+		if (!remote_sd) {
+			dev_err(dev, "no subdev connected to crossbar input %u\n",
+				route->sink_pad);
+			ret = -EPIPE;
+			goto out_unlock;
+		}
+
+		/* Get frame descriptor from the remote subdev */
+		ret = v4l2_subdev_call(remote_sd, pad, get_frame_desc,
+				       remote_pad->index, &source_fd);
+		if (ret == -ENOIOCTLCMD) {
+			dev_dbg(dev, "%s:%u does not support frame descriptors\n",
+				remote_sd->entity.name, remote_pad->index);
+			continue;
+		}
+		if (ret < 0) {
+			dev_err(dev, "failed to get frame desc from %s:%u: %u\n",
+				remote_sd->entity.name, remote_pad->index, ret);
+			goto out_unlock;
+		}
+
+		if (fd->num_entries == 0)
+			fd->type = source_fd.type;
+
+		/* Find the source frame descriptor entry matching the sink stream */
+		for (i = 0; i < source_fd.num_entries; i++) {
+			if (source_fd.entry[i].stream == route->sink_stream)
+				break;
+		}
+
+		if (i == source_fd.num_entries) {
+			dev_err(dev, "stream %u not found in frame desc from %s:%u\n",
+				route->sink_stream, remote_sd->entity.name,
+				remote_pad->index);
+			ret = -EPIPE;
+			goto out_unlock;
+		}
+
+		if (fd->num_entries >= ARRAY_SIZE(fd->entry)) {
+			dev_err(dev, "frame descriptor is full\n");
+			ret = -ENOSPC;
+			goto out_unlock;
+		}
+
+		/* Copy the entry and update the stream ID */
+		fd->entry[fd->num_entries] = source_fd.entry[i];
+		fd->entry[fd->num_entries].stream = route->source_stream;
+		fd->num_entries++;
+	}
+
+out_unlock:
+	v4l2_subdev_unlock_state(state);
+
+	return ret;
+}
+
 static int mxc_isi_crossbar_set_routing(struct v4l2_subdev *sd,
 					struct v4l2_subdev_state *state,
 					enum v4l2_subdev_format_whence which,
@@ -404,6 +500,7 @@ static const struct v4l2_subdev_pad_ops mxc_isi_crossbar_subdev_pad_ops = {
 	.enum_mbus_code = mxc_isi_crossbar_enum_mbus_code,
 	.get_fmt = v4l2_subdev_get_fmt,
 	.set_fmt = mxc_isi_crossbar_set_fmt,
+	.get_frame_desc = mxc_isi_get_frame_desc,
 	.set_routing = mxc_isi_crossbar_set_routing,
 	.enable_streams = mxc_isi_crossbar_enable_streams,
 	.disable_streams = mxc_isi_crossbar_disable_streams,
