@@ -64,7 +64,7 @@
 
 #define WRITEEF4BYTE(_ptr, _val)			\
 	do {						\
-		(*((u32 *)(_ptr))) = EF2BYTE(_val);	\
+		(*((u32 *)(_ptr))) = EF4BYTE(_val);	\
 	} while (0)
 
 /*
