@@ -1591,6 +1591,7 @@ static enum drm_mode_status dpu_crtc_mode_valid(struct drm_crtc *crtc,
 {
 	struct dpu_kms *dpu_kms = _dpu_crtc_get_kms(crtc);
 	u64 adjusted_mode_clk;
+	u32 max_width;
 
 	/* if there is no 3d_mux block we cannot merge LMs so we cannot
 	 * split the large layer into 2 LMs, filter out such modes
@@ -1613,11 +1614,14 @@ static enum drm_mode_status dpu_crtc_mode_valid(struct drm_crtc *crtc,
 		return MODE_CLOCK_HIGH;
 
 	/*
-	 * max crtc width is equal to the max mixer width * 2 and max height is 4K
+	 * max crtc width is equal to the min of max mixer width * 2 and max sspp line width * 2
+	 * max height is 4K
 	 */
-	return drm_mode_validate_size(mode,
-				      2 * dpu_kms->catalog->caps->max_mixer_width,
-				      4096);
+	max_width = 2 * min_t(u32,
+			      dpu_kms->catalog->caps->max_mixer_width,
+			      dpu_kms->catalog->caps->max_linewidth);
+
+	return drm_mode_validate_size(mode, max_width, 4096);
 }
 
 /**
