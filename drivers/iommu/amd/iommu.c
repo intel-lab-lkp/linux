@@ -3070,7 +3070,12 @@ static void amd_iommu_get_resv_regions(struct device *dev,
 		if (devid < entry->devid_start || devid > entry->devid_end)
 			continue;
 
-		type   = IOMMU_RESV_DIRECT;
+		/*
+		 * When relax_unity is set, mark unity map entries as
+		 * relaxable so VFIO can claim devices for passthrough.
+		 */
+		type = amd_iommu_unity_relaxed ?
+			IOMMU_RESV_DIRECT_RELAXABLE : IOMMU_RESV_DIRECT;
 		length = entry->address_end - entry->address_start;
 		if (entry->prot & IOMMU_PROT_IR)
 			prot |= IOMMU_READ;

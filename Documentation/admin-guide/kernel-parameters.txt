@@ -441,6 +441,12 @@ Kernel parameters
 			force_enable    - Force enable the IOMMU on platforms known
 				          to be buggy with IOMMU enabled. Use this
 				          option with care.
+			relax_unity     - Mark IVRS unity map entries as relaxable,
+				          allowing VFIO to claim devices that have
+				          firmware-declared identity mappings. Required
+				          on some AMD motherboards where global unity
+				          maps prevent any device passthrough. Use this
+				          option with care.
 			pgtbl_v1        - Use v1 page table for DMA-API (Default).
 			pgtbl_v2        - Use v2 page table for DMA-API.
 			irtcachedis     - Disable Interrupt Remapping Table (IRT) caching.

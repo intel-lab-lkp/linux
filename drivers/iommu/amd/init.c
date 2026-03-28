@@ -173,6 +173,9 @@ u64 amd_iommu_efr2;
 /* Host (v1) page table is not supported*/
 bool amd_iommu_hatdis;
 
+/* Relax unity map entries for VFIO passthrough */
+bool amd_iommu_unity_relaxed __read_mostly;
+
 /* SNP is enabled on the system? */
 bool amd_iommu_snp_en;
 EXPORT_SYMBOL(amd_iommu_snp_en);
@@ -3676,6 +3679,9 @@ static int __init parse_amd_iommu_options(char *str)
 			amd_iommu_pgtable = PD_MODE_V2;
 		} else if (strncmp(str, "irtcachedis", 11) == 0) {
 			amd_iommu_irtcachedis = true;
+		} else if (strncmp(str, "relax_unity", 11) == 0) {
+			amd_iommu_unity_relaxed = true;
+			pr_warn("AMD IOMMU: unity map relaxation enabled\n");
 		} else if (strncmp(str, "nohugepages", 11) == 0) {
 			pr_info("Restricting V1 page-sizes to 4KiB");
 			amd_iommu_pgsize_bitmap = AMD_IOMMU_PGSIZES_4K;

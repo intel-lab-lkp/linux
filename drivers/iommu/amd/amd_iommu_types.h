@@ -907,6 +907,7 @@ struct unity_map_entry {
  */
 
 extern bool amd_iommu_force_isolation;
+extern bool amd_iommu_unity_relaxed;
 
 /* Max levels of glxval supported */
 extern int amd_iommu_max_glx_val;
