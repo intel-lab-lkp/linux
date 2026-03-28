@@ -452,6 +452,9 @@ pub fn to_result(err: crate::ffi::c_int) -> Result {
 /// for errors. This function performs the check and converts the "error pointer"
 /// to a normal pointer in an idiomatic fashion.
 ///
+/// Note that a `NULL` pointer is not considered an error pointer, and is returned
+/// as-is, wrapped in `Ok`.
+///
 /// # Examples
 ///
 /// ```ignore
@@ -464,6 +467,41 @@ pub fn to_result(err: crate::ffi::c_int) -> Result {
 ///     // SAFETY: `pdev` points to a valid platform device. There are no safety requirements
 ///     // on `index`.
 ///     from_err_ptr(unsafe { bindings::devm_platform_ioremap_resource(pdev.to_ptr(), index) })
+/// }
+/// ```
+///
+/// ```
+/// # use kernel::error::from_err_ptr;
+/// # mod bindings {
+/// #     use kernel::prelude::*;
+/// #     pub(super) unsafe fn einval_err_ptr() -> *mut kernel::ffi::c_void {
+/// #         let einval = -(kernel::bindings::EINVAL as isize);
+/// #         // SAFETY: `einval` is a valid error.
+/// #         unsafe { kernel::bindings::ERR_PTR(einval) }
+/// #     }
+/// #     pub(super) unsafe fn null_ptr() -> *mut kernel::ffi::c_void {
+/// #         core::ptr::null_mut()
+/// #     }
+/// #     pub(super) unsafe fn non_null_ptr() -> *mut kernel::ffi::c_void {
+/// #         0x1234 as *mut kernel::ffi::c_void
+/// #     }
+/// # }
+/// fn einval_err_ptr() {
+///     // SAFETY: ...
+///     let result = from_err_ptr(unsafe { bindings::einval_err_ptr() });
+///     assert_eq!(result, Err(EINVAL));
+/// }
+///
+/// fn null_ptr() {
+///     // SAFETY: ...
+///     let result = from_err_ptr(unsafe { bindings::null_ptr() });
+///     assert_eq!(result, Ok(core::ptr::null_mut()));
+/// }
+///
+/// fn non_null_ptr() {
+///     // SAFETY: ...
+///     let result = from_err_ptr(unsafe { bindings::non_null_ptr() });
+///     assert_eq!(result, Ok(0x1234 as *mut kernel::ffi::c_void));
 /// }
 /// ```
 pub fn from_err_ptr<T>(ptr: *mut T) -> Result<*mut T> {
