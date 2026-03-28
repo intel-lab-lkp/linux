@@ -3381,7 +3381,13 @@ again:
 	}
 
 	if (IS_ERR(inode)) {
-		BUG_ON(retries);
+		if (retries) {
+			btrfs_debug(fs_info,
+				    "free space inode not found after creation for block group %llu",
+				    block_group->start);
+			ret = -EIO;
+			goto out_free;
+		}
 		retries++;
 
 		if (block_group->ro)
