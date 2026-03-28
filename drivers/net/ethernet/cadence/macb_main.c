@@ -2088,11 +2088,14 @@ static irqreturn_t macb_interrupt(int irq, void *dev_id)
 	struct macb *bp = queue->bp;
 	struct net_device *dev = bp->dev;
 	u32 status, ctrl;
+	bool isr_clear;
 
 	status = queue_readl(queue, ISR);
 
 	if (unlikely(!status))
 		return IRQ_NONE;
+
+	isr_clear = bp->caps & MACB_CAPS_ISR_CLEAR_ON_WRITE;
 
 	spin_lock(&bp->lock);
 
@@ -2100,7 +2103,7 @@ static irqreturn_t macb_interrupt(int irq, void *dev_id)
 		/* close possible race with dev_close */
 		if (unlikely(!netif_running(dev))) {
 			queue_writel(queue, IDR, -1);
-			if (bp->caps & MACB_CAPS_ISR_CLEAR_ON_WRITE)
+			if (isr_clear)
 				queue_writel(queue, ISR, -1);
 			break;
 		}
@@ -2117,7 +2120,7 @@ static irqreturn_t macb_interrupt(int irq, void *dev_id)
 			 * now.
 			 */
 			queue_writel(queue, IDR, bp->rx_intr_mask);
-			if (bp->caps & MACB_CAPS_ISR_CLEAR_ON_WRITE)
+			if (isr_clear)
 				queue_writel(queue, ISR, MACB_BIT(RCOMP));
 
 			napi_schedule(&queue->napi_rx);
@@ -2126,7 +2129,7 @@ static irqreturn_t macb_interrupt(int irq, void *dev_id)
 		if (status & (MACB_BIT(TCOMP) |
 			      MACB_BIT(TXUBR))) {
 			queue_writel(queue, IDR, MACB_BIT(TCOMP));
-			if (bp->caps & MACB_CAPS_ISR_CLEAR_ON_WRITE)
+			if (isr_clear)
 				queue_writel(queue, ISR, MACB_BIT(TCOMP) |
 							 MACB_BIT(TXUBR));
 
@@ -2142,7 +2145,7 @@ static irqreturn_t macb_interrupt(int irq, void *dev_id)
 			queue_writel(queue, IDR, MACB_TX_INT_FLAGS);
 			schedule_work(&queue->tx_error_task);
 
-			if (bp->caps & MACB_CAPS_ISR_CLEAR_ON_WRITE)
+			if (isr_clear)
 				queue_writel(queue, ISR, MACB_TX_ERR_FLAGS);
 
 			break;
@@ -2165,7 +2168,7 @@ static irqreturn_t macb_interrupt(int irq, void *dev_id)
 			wmb();
 			macb_writel(bp, NCR, ctrl | MACB_BIT(RE));
 
-			if (bp->caps & MACB_CAPS_ISR_CLEAR_ON_WRITE)
+			if (isr_clear)
 				queue_writel(queue, ISR, MACB_BIT(RXUBR));
 		}
 
@@ -2178,7 +2181,7 @@ static irqreturn_t macb_interrupt(int irq, void *dev_id)
 				bp->hw_stats.macb.rx_overruns++;
 			spin_unlock(&bp->stats_lock);
 
-			if (bp->caps & MACB_CAPS_ISR_CLEAR_ON_WRITE)
+			if (isr_clear)
 				queue_writel(queue, ISR, MACB_BIT(ISR_ROVR));
 		}
 
@@ -2186,7 +2189,7 @@ static irqreturn_t macb_interrupt(int irq, void *dev_id)
 			queue_work(system_bh_wq, &bp->hresp_err_bh_work);
 			netdev_err(dev, "DMA bus error: HRESP not OK\n");
 
-			if (bp->caps & MACB_CAPS_ISR_CLEAR_ON_WRITE)
+			if (isr_clear)
 				queue_writel(queue, ISR, MACB_BIT(HRESP));
 		}
 		status = queue_readl(queue, ISR);
