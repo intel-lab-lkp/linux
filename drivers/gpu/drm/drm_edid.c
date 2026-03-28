@@ -6504,6 +6504,71 @@ void get_monitor_range(const struct detailed_timing *timing, void *c)
 	}
 }
 
+/**
+ * drm_get_monitor_range_displayid - populate monitor_range from a
+ * DisplayID v1r2 Dynamic Video Timing Range Limits block (tag 0x25).
+ *
+ * Some eDP panels report their VRR limits only in a DisplayID block,
+ * without setting DRM_EDID_FEATURE_CONTINUOUS_FREQ. drm_get_monitor_range()
+ * returns early for such panels, leaving monitor_range zeroed. This
+ * function is called separately from update_display_info() as a fallback.
+ *
+ * Block payload layout (block->num_bytes == 9):
+ *   data[6]       min_vfreq in Hz
+ *   data[7]       max_vfreq low 8 bits
+ *   data[8][1:0]  max_vfreq high bits (when block->rev & 7 is nonzero)
+ *
+ * Byte offsets verified against parse_edid_displayid_vrr() in amdgpu_dm.c.
+ */
+static void
+drm_get_monitor_range_displayid(struct drm_connector *connector,
+				const struct drm_edid *drm_edid)
+{
+	struct drm_display_info *info = &connector->display_info;
+	const struct displayid_block *block;
+	struct displayid_iter iter;
+
+	/* Only run when the classic EDID path left these zeroed */
+	if (info->monitor_range.min_vfreq && info->monitor_range.max_vfreq)
+		return;
+
+	displayid_iter_edid_begin(drm_edid, &iter);
+	displayid_iter_for_each(block, &iter) {
+		const u8 *data;
+		u16 min_vfreq, max_vfreq;
+
+		if (block->tag != DATA_BLOCK_2_DYNAMIC_VIDEO_TIMING)
+			continue;
+
+		/* rev bits [7:1] must be zero; payload must be exactly 9 bytes */
+		if ((block->rev & 0xFE) != 0 || block->num_bytes != 9)
+			continue;
+
+		data = (const u8 *)(block + 1);
+
+		min_vfreq = data[6];
+
+		/* rev bits [2:0] nonzero: max_vfreq is 10-bit */
+		if (block->rev & 7)
+			max_vfreq = data[7] | ((u16)(data[8] & 3) << 8);
+		else
+			max_vfreq = data[7];
+
+		if (!min_vfreq || !max_vfreq)
+			continue;
+
+		info->monitor_range.min_vfreq = min_vfreq;
+		info->monitor_range.max_vfreq = max_vfreq;
+
+		drm_dbg_kms(connector->dev,
+			    "[CONNECTOR:%d:%s] DisplayID dynamic video timing range: %u-%u Hz\n",
+			    connector->base.id, connector->name,
+			    min_vfreq, max_vfreq);
+		break;
+	}
+	displayid_iter_end(&iter);
+}
+
 static void drm_get_monitor_range(struct drm_connector *connector,
 				  const struct drm_edid *drm_edid)
 {
@@ -6691,10 +6756,9 @@ static void update_display_info(struct drm_connector *connector,
 	info->height_mm = edid->height_cm * 10;
 
 	drm_get_monitor_range(connector, drm_edid);
-
+	drm_get_monitor_range_displayid(connector, drm_edid);
 	if (edid->revision < 3)
 		goto out;
-
 	if (!drm_edid_is_digital(drm_edid))
 		goto out;
 
