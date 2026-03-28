@@ -434,7 +434,7 @@ static void net_shaper_rollback(struct net_shaper_binding *binding)
 	xa_for_each_marked(&hierarchy->shapers, index, cur,
 			   NET_SHAPER_NOT_VALID) {
 		__xa_erase(&hierarchy->shapers, index);
-		kfree(cur);
+		kfree_rcu(cur, rcu);
 	}
 	xa_unlock(&hierarchy->shapers);
 }
