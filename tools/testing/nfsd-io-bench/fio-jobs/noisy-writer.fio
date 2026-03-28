@@ -1,0 +1,14 @@
+[global]
+ioengine=nfs
+nfs_url=nfs://localhost/export
+direct=0
+bs=1M
+numjobs=16
+time_based=0
+group_reporting=1
+rw=write
+log_avg_msec=1000
+write_bw_log=noisywriter
+write_lat_log=noisywriter
+
+[bulk_writer]

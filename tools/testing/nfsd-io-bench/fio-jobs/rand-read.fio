@@ -1,0 +1,15 @@
+[global]
+ioengine=nfs
+nfs_url=nfs://localhost/export
+direct=0
+bs=4k
+numjobs=16
+runtime=300
+time_based=1
+group_reporting=1
+rw=randread
+log_avg_msec=1000
+write_bw_log=randread
+write_lat_log=randread
+
+[randread]
