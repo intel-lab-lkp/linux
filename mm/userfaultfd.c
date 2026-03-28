@@ -225,8 +225,9 @@ static int mfill_get_vma(struct mfill_state *state)
 	 */
 	down_read(&ctx->map_changing_lock);
 	state->vma = dst_vma;
+
 	err = -EAGAIN;
-	if (atomic_read(&ctx->mmap_changing))
+	if (dst_vma->vm_userfaultfd_ctx.ctx != ctx || atomic_read(&ctx->mmap_changing))
 		goto out_unlock;
 
 	err = -EINVAL;
@@ -498,6 +499,12 @@ static int __mfill_atomic_pte(struct mfill_state *state,
 			ret = mfill_copy_folio_retry(state, folio);
 			if (ret)
 				goto err_folio_put;
+			if (vma_uffd_ops(state->vma) != ops ||
+			    (ops != &anon_uffd_ops &&
+			    !(state->vma->vm_flags & VM_SHARED))) {
+				ret = -EAGAIN;
+				goto err_folio_put;
+			}
 		}
 	} else if (uffd_flags_mode_is(flags, MFILL_ATOMIC_ZEROPAGE)) {
 		clear_user_highpage(&folio->page, state->dst_addr);
