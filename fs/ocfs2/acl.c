@@ -364,7 +364,20 @@ int ocfs2_init_acl(handle_t *handle,
 
 	if (!S_ISLNK(inode->i_mode)) {
 		if (osb->s_mount_opt & OCFS2_MOUNT_POSIX_ACL) {
-			down_read(&OCFS2_I(dir)->ip_xattr_sem);
+			/*
+			 * This lookup reads the parent directory's default ACL while
+			 * the mknod path already holds a live jbd2 handle. Use a
+			 * distinct subclass to model the parent-child hierarchy for
+			 * lockdep: ocfs2_xattr_set() grabs subclass-0 ip_xattr_sem on
+			 * the file being updated before starting the transaction.
+			 *
+			 * This does not hide a real deadlock. When ocfs2_init_acl()
+			 * is called from ocfs2_mknod(), VFS already holds dir->i_rwsem
+			 * exclusively, so a concurrent ocfs2_xattr_set(dir) cannot run
+			 * in parallel on the same directory instance.
+			 */
+			down_read_nested(&OCFS2_I(dir)->ip_xattr_sem,
+					 OCFS2_XATTR_SEM_OWNER_PARENT);
 			acl = ocfs2_get_acl_nolock(dir, ACL_TYPE_DEFAULT,
 						   dir_bh);
 			up_read(&OCFS2_I(dir)->ip_xattr_sem);
