@@ -53,19 +53,14 @@
 
 /* Write data to memory */
 #define WRITEEF1BYTE(_ptr, _val)			\
-	do {						\
-		(*((u8 *)(_ptr))) = EF1BYTE(_val);	\
-	} while (0)
+	((*((u8 *)(_ptr))) = EF1BYTE(_val))
+
 /* Write le data to memory in host ordering */
 #define WRITEEF2BYTE(_ptr, _val)			\
-	do {						\
-		(*((u16 *)(_ptr))) = EF2BYTE(_val);	\
-	} while (0)
+	((*((u16 *)(_ptr))) = EF2BYTE(_val))
 
 #define WRITEEF4BYTE(_ptr, _val)			\
-	do {						\
-		(*((u32 *)(_ptr))) = EF4BYTE(_val);	\
-	} while (0)
+	((*((u32 *)(_ptr))) = EF4BYTE(_val))
 
 /*
  * Create a bit mask
