@@ -1174,11 +1174,20 @@ static int mshv_partition_create_region(struct mshv_partition *partition,
 {
 	struct mshv_mem_region *rg;
 	u64 nr_pages = HVPFN_DOWN(mem->size);
+	u64 new_region_end;
+
+	/* Reject regions whose end address would wrap around */
+	if (check_add_overflow(mem->guest_pfn, nr_pages, &new_region_end))
+		return -EOVERFLOW;
+
+	/* Reject regions beyond the maximum physical address */
+	if (new_region_end > HVPFN_DOWN(1ULL << MAX_PHYSMEM_BITS))
+		return -EINVAL;
 
 	/* Reject overlapping regions */
 	spin_lock(&partition->pt_mem_regions_lock);
 	hlist_for_each_entry(rg, &partition->pt_mem_regions, hnode) {
-		if (mem->guest_pfn + nr_pages <= rg->start_gfn ||
+		if (new_region_end <= rg->start_gfn ||
 		    rg->start_gfn + rg->nr_pages <= mem->guest_pfn)
 			continue;
 		spin_unlock(&partition->pt_mem_regions_lock);
