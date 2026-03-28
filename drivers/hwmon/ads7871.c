@@ -59,11 +59,13 @@
 #include <linux/hwmon-sysfs.h>
 #include <linux/err.h>
 #include <linux/delay.h>
+#include <linux/mutex.h>
 
 #define DEVICE_NAME	"ads7871"
 
 struct ads7871_data {
 	struct spi_device *spi;
+	struct mutex lock;
 };
 
 static int ads7871_read_reg8(struct spi_device *spi, int reg)
@@ -98,6 +100,8 @@ static ssize_t voltage_show(struct device *dev, struct device_attribute *da,
 	uint8_t channel, mux_cnv;
 
 	channel = attr->index;
+
+	mutex_lock(&pdata->lock);
 	/*
 	 * TODO: add support for conversions
 	 * other than single ended with a gain of 1
@@ -107,11 +111,11 @@ static ssize_t voltage_show(struct device *dev, struct device_attribute *da,
 	ret = ads7871_write_reg8(spi, REG_GAIN_MUX,
 				 (MUX_CNV_BM | MUX_M3_BM | channel));
 	if (ret < 0)
-		return ret;
+		goto out_unlock;
 
 	ret = ads7871_read_reg8(spi, REG_GAIN_MUX);
 	if (ret < 0)
-		return ret;
+		goto out_unlock;
 	mux_cnv = ((ret & MUX_CNV_BM) >> MUX_CNV_BV);
 	/*
 	 * on 400MHz arm9 platform the conversion
@@ -121,21 +125,27 @@ static ssize_t voltage_show(struct device *dev, struct device_attribute *da,
 		i++;
 		ret = ads7871_read_reg8(spi, REG_GAIN_MUX);
 		if (ret < 0)
-			return ret;
+			goto out_unlock;
 		mux_cnv = ((ret & MUX_CNV_BM) >> MUX_CNV_BV);
 		msleep_interruptible(1);
 	}
 
 	if (mux_cnv == 0) {
 		val = ads7871_read_reg16(spi, REG_LS_BYTE);
-		if (val < 0)
-			return val;
+		if (val < 0) {
+			ret = val;
+			goto out_unlock;
+		}
 		/*result in volts*10000 = (val/8192)*2.5*10000*/
 		val = ((val >> 2) * 25000) / 8192;
-		return sysfs_emit(buf, "%d\n", val);
+		ret = sysfs_emit(buf, "%d\n", val);
+		goto out_unlock;
 	}
 
-	return -ETIMEDOUT;
+	ret = -ETIMEDOUT;
+out_unlock:
+	mutex_unlock(&pdata->lock);
+	return ret;
 }
 
 static SENSOR_DEVICE_ATTR_RO(in0_input, voltage, 0);
@@ -194,7 +204,7 @@ static int ads7871_probe(struct spi_device *spi)
 		return -ENOMEM;
 
 	pdata->spi = spi;
-
+	mutex_init(&pdata->lock);
 	hwmon_dev = devm_hwmon_device_register_with_groups(dev, spi->modalias,
 							   pdata,
 							   ads7871_groups);
