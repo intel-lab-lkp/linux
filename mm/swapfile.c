@@ -3732,6 +3732,7 @@ SYSCALL_DEFINE2(swapon, const char __user *, specialfile, int, swap_flags)
 	si->list.prio = -si->prio;
 	si->avail_list.prio = -si->prio;
 	si->swap_file = swap_file;
+	setup_swap_ops(si);
 
 	/* Sets SWP_WRITEOK, resurrect the percpu ref, expose the swap device */
 	enable_swap_info(si);
