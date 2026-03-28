@@ -8,8 +8,9 @@
  *     ├── capabilities    # SMMU feature capabilities and configuration
  *     ├── registers	   # SMMU Key registers
  *     └── stream_table
- *	   └─── <sid>/                                # Stream ID 0
- *	       └── ste                                # Stream Table Entry
+ *	   └─── <sid>/                                # Stream ID
+ *	       ├─── ste                               # Stream Table Entry
+ *	       └── <dev_name>                         # Symlink to device sysfs directory
  *
  * The capabilities file provides detailed information about:
  * - translation stage support (Stage1/Stage2)
@@ -31,6 +32,7 @@
 
 #include <linux/cleanup.h>
 #include <linux/debugfs.h>
+#include <linux/kobject.h>
 #include <linux/slab.h>
 #include "arm-smmu-v3.h"
 
@@ -295,6 +297,7 @@ int arm_smmu_debugfs_create_stream_table(struct device *dev,
 	struct dentry *stream_dir, *dev_dir;
 	struct arm_smmu_master *master;
 	struct ste_context *ctx;
+	char *path, *full_path;
 	char name[64];
 	u32 sid;
 	int i;
@@ -333,6 +336,18 @@ int arm_smmu_debugfs_create_stream_table(struct device *dev,
 		debugfs_create_file("ste", 0444, dev_dir, ctx,
 				    &smmu_debugfs_ste_fops);
 
+		/* Create a symlink to the device's sysfs directory */
+		path = kobject_get_path(&dev->kobj, GFP_KERNEL);
+		if (!path)
+			continue;
+
+		full_path = kasprintf(GFP_KERNEL, "/sys%s", path);
+		if (full_path) {
+			debugfs_create_symlink(dev_name(dev), dev_dir, full_path);
+			kfree(full_path);
+		}
+
+		kfree(path);
 	}
 
 	return 0;
