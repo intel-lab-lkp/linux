@@ -193,7 +193,7 @@ static struct axi_dmac_desc *to_axi_dmac_desc(struct virt_dma_desc *vdesc)
 }
 
 static void axi_dmac_write(struct axi_dmac *axi_dmac, unsigned int reg,
-	unsigned int val)
+			   unsigned int val)
 {
 	writel(val, axi_dmac->base + reg);
 }
@@ -382,7 +382,7 @@ static void axi_dmac_start_transfer(struct axi_dmac_chan *chan)
 }
 
 static inline unsigned int axi_dmac_total_sg_bytes(struct axi_dmac_chan *chan,
-	struct axi_dmac_sg *sg)
+						   struct axi_dmac_sg *sg)
 {
 	if (chan->hw_2d)
 		return (sg->hw->x_len + 1) * (sg->hw->y_len + 1);
@@ -437,7 +437,7 @@ static void axi_dmac_dequeue_partial_xfers(struct axi_dmac_chan *chan)
 }
 
 static void axi_dmac_compute_residue(struct axi_dmac_chan *chan,
-	struct axi_dmac_desc *active)
+				     struct axi_dmac_desc *active)
 {
 	struct dmaengine_result *rslt = &active->vdesc.tx_result;
 	unsigned int start = active->num_completed - 1;
@@ -517,7 +517,7 @@ static bool axi_dmac_handle_cyclic_eot(struct axi_dmac_chan *chan,
 }
 
 static bool axi_dmac_transfer_done(struct axi_dmac_chan *chan,
-	unsigned int completed_transfers)
+				   unsigned int completed_transfers)
 {
 	struct axi_dmac_desc *active;
 	struct axi_dmac_sg *sg;
@@ -667,7 +667,7 @@ axi_dmac_alloc_desc(struct axi_dmac_chan *chan, unsigned int num_sgs)
 	desc->chan = chan;
 
 	hws = dma_alloc_coherent(dev, PAGE_ALIGN(num_sgs * sizeof(*hws)),
-				&hw_phys, GFP_ATOMIC);
+				 &hw_phys, GFP_ATOMIC);
 	if (!hws) {
 		kfree(desc);
 		return NULL;
@@ -703,9 +703,11 @@ static void axi_dmac_free_desc(struct axi_dmac_desc *desc)
 }
 
 static struct axi_dmac_sg *axi_dmac_fill_linear_sg(struct axi_dmac_chan *chan,
-	enum dma_transfer_direction direction, dma_addr_t addr,
-	unsigned int num_periods, unsigned int period_len,
-	struct axi_dmac_sg *sg)
+						   enum dma_transfer_direction direction,
+						   dma_addr_t addr,
+						   unsigned int num_periods,
+						   unsigned int period_len,
+						   struct axi_dmac_sg *sg)
 {
 	unsigned int num_segments, i;
 	unsigned int segment_size;
@@ -817,7 +819,7 @@ static struct dma_async_tx_descriptor *axi_dmac_prep_slave_sg(
 		}
 
 		dsg = axi_dmac_fill_linear_sg(chan, direction, sg_dma_address(sg), 1,
-			sg_dma_len(sg), dsg);
+					      sg_dma_len(sg), dsg);
 	}
 
 	desc->cyclic = false;
@@ -857,7 +859,7 @@ static struct dma_async_tx_descriptor *axi_dmac_prep_dma_cyclic(
 	desc->sg[num_sgs - 1].hw->flags &= ~AXI_DMAC_HW_FLAG_LAST;
 
 	axi_dmac_fill_linear_sg(chan, direction, buf_addr, num_periods,
-		period_len, desc->sg);
+				period_len, desc->sg);
 
 	desc->cyclic = true;
 
@@ -1006,7 +1008,7 @@ static void axi_dmac_adjust_chan_params(struct axi_dmac_chan *chan)
  * features are implemented and how it should behave.
  */
 static int axi_dmac_parse_chan_dt(struct device_node *of_chan,
-	struct axi_dmac_chan *chan)
+				  struct axi_dmac_chan *chan)
 {
 	u32 val;
 	int ret;
@@ -1295,7 +1297,7 @@ static int axi_dmac_probe(struct platform_device *pdev)
 		return ret;
 
 	ret = of_dma_controller_register(pdev->dev.of_node,
-		of_dma_xlate_by_chan_id, dma_dev);
+					 of_dma_xlate_by_chan_id, dma_dev);
 	if (ret)
 		return ret;
 
@@ -1310,7 +1312,7 @@ static int axi_dmac_probe(struct platform_device *pdev)
 		return ret;
 
 	regmap = devm_regmap_init_mmio(&pdev->dev, dmac->base,
-		 &axi_dmac_regmap_config);
+				       &axi_dmac_regmap_config);
 
 	return PTR_ERR_OR_ZERO(regmap);
 }
