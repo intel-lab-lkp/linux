@@ -75,15 +75,23 @@ void kvm_riscv_vcpu_host_vector_restore(struct kvm_cpu_context *cntx)
 
 int kvm_riscv_vcpu_alloc_vector_context(struct kvm_vcpu *vcpu)
 {
+	int rc = -ENOMEM;
+
 	vcpu->arch.guest_context.vector.datap = kzalloc(riscv_v_vsize, GFP_KERNEL);
 	if (!vcpu->arch.guest_context.vector.datap)
-		return -ENOMEM;
+		goto out;
 
 	vcpu->arch.host_context.vector.datap = kzalloc(riscv_v_vsize, GFP_KERNEL);
 	if (!vcpu->arch.host_context.vector.datap)
-		return -ENOMEM;
+		goto free_guest_vector_datap;
 
 	return 0;
+
+free_guest_vector_datap:
+	kfree(vcpu->arch.guest_context.vector.datap);
+	vcpu->arch.guest_context.vector.datap = NULL;
+out:
+	return rc;
 }
 
 void kvm_riscv_vcpu_free_vector_context(struct kvm_vcpu *vcpu)
