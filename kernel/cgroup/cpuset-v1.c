@@ -261,7 +261,7 @@ static void remove_tasks_in_empty_cpuset(struct cpuset *cs)
 	 * has online cpus, so can't be empty).
 	 */
 	parent = parent_cs(cs);
-	while (cpumask_empty(parent->cpus_allowed) ||
+	while (cpumask_empty(parent->effective_cpus) ||
 			nodes_empty(parent->mems_allowed))
 		parent = parent_cs(parent);
 
@@ -297,14 +297,16 @@ void cpuset1_hotplug_update_tasks(struct cpuset *cs,
 
 	/*
 	 * Don't call cpuset_update_tasks_cpumask() if the cpuset becomes empty,
-	 * as the tasks will be migrated to an ancestor.
+	 * as the tasks will be migrated to an ancestor. If cpuset_v2_mode mount
+	 * option is used, effective_cpus can differ from cpus_allowed. So
+	 * checking effective_cpus is more accurate for determining emptiness.
 	 */
-	if (cpus_updated && !cpumask_empty(cs->cpus_allowed))
+	if (cpus_updated && !cpumask_empty(cs->effective_cpus))
 		cpuset_update_tasks_cpumask(cs, new_cpus);
 	if (mems_updated && !nodes_empty(cs->mems_allowed))
 		cpuset_update_tasks_nodemask(cs);
 
-	is_empty = cpumask_empty(cs->cpus_allowed) ||
+	is_empty = cpumask_empty(cs->effective_cpus) ||
 		   nodes_empty(cs->mems_allowed);
 
 	/*
