@@ -376,6 +376,7 @@ highlight_language = "none"
 # Default theme
 html_theme = "alabaster"
 html_css_files = []
+html_js_files = ["copy-code.js"]
 
 if "DOCS_THEME" in os.environ:
     html_theme = os.environ["DOCS_THEME"]

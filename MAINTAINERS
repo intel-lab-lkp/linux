@@ -7656,6 +7656,12 @@ X:	Documentation/power/
 X:	Documentation/spi/
 X:	Documentation/userspace-api/media/
 
+DOCUMENTATION COPY CODE BUTTON
+R:	Rito Rhymes <rito@ritovision.com>
+L:	linux-doc@vger.kernel.org
+S:	Supported
+F:	Documentation/sphinx-static/copy-code.js
+
 DOCUMENTATION PROCESS
 M:	Jonathan Corbet <corbet@lwn.net>
 R:	Shuah Khan <skhan@linuxfoundation.org>
