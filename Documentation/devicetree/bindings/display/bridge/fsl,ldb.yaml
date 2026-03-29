@@ -28,6 +28,7 @@ properties:
     const: ldb
 
   reg:
+    minItems: 1
     maxItems: 2
 
   reg-names:
@@ -68,7 +69,6 @@ required:
   - compatible
   - clocks
   - ports
-  - reg
 
 allOf:
   - if:
@@ -83,12 +83,23 @@ allOf:
         ports:
           properties:
             port@2: false
+
   - if:
-      not:
-        properties:
-          compatible:
-            contains:
-              const: fsl,imx6sx-ldb
+      properties:
+        compatible:
+          contains:
+            enum:
+              - fsl,imx6sx-ldb
+              - fsl,imx8mp-ldb
+    then:
+      required:
+        - reg
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: fsl,imx8mp-ldb
     then:
       required:
         - reg-names
