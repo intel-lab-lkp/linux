@@ -3542,9 +3542,14 @@ ctnetlink_alloc_expect(const struct nlattr * const cda[], struct nf_conn *ct,
 	if (!help)
 		return ERR_PTR(-EOPNOTSUPP);
 
-	if (cda[CTA_EXPECT_CLASS] && helper) {
+	if (cda[CTA_EXPECT_CLASS]) {
+		struct nf_conntrack_helper *master_helper;
+
+		master_helper = rcu_dereference(help->helper);
+		if (!master_helper)
+			return ERR_PTR(-EOPNOTSUPP);
 		class = ntohl(nla_get_be32(cda[CTA_EXPECT_CLASS]));
-		if (class > helper->expect_class_max)
+		if (class > master_helper->expect_class_max)
 			return ERR_PTR(-EINVAL);
 	}
 	exp = nf_ct_expect_alloc(ct);
