@@ -198,8 +198,11 @@ int mconsole_notify(char *sock_name, int type, const void *data, int len)
 	if (err)
 		return err;
 
+	memset(&target, 0, sizeof(target));
 	target.sun_family = AF_UNIX;
-	strcpy(target.sun_path, sock_name);
+	if (snprintf(target.sun_path, sizeof(target.sun_path), "%s", sock_name) >=
+	    sizeof(target.sun_path))
+		return -EINVAL;
 
 	packet.magic = MCONSOLE_MAGIC;
 	packet.version = MCONSOLE_VERSION;
