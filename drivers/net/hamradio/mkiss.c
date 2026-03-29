@@ -249,9 +249,7 @@ static void ax_bump(struct mkiss *ax)
 				return;
 			}
 			if (ax->crcmode != CRC_MODE_SMACK && ax->crcauto) {
-				printk(KERN_INFO
-				       "mkiss: %s: Switching to crc-smack\n",
-				       ax->dev->name);
+				netdev_info(ax->dev, "Switching to crc-smack\n");
 				ax->crcmode = CRC_MODE_SMACK;
 			}
 			ax->rcount -= 2;
@@ -263,9 +261,7 @@ static void ax_bump(struct mkiss *ax)
 				return;
 			}
 			if (ax->crcmode != CRC_MODE_FLEX && ax->crcauto) {
-				printk(KERN_INFO
-				       "mkiss: %s: Switching to crc-flexnet\n",
-				       ax->dev->name);
+				netdev_info(ax->dev, "Switching to crc-flexnet\n");
 				ax->crcmode = CRC_MODE_FLEX;
 			}
 			ax->rcount -= 2;
@@ -284,8 +280,7 @@ static void ax_bump(struct mkiss *ax)
 
 	skb = dev_alloc_skb(count);
 	if (!skb) {
-		printk(KERN_ERR "mkiss: %s: memory squeeze, dropping packet.\n",
-		       ax->dev->name);
+		netdev_err(ax->dev, "memory squeeze, dropping packet.\n");
 		ax->dev->stats.rx_dropped++;
 		spin_unlock_bh(&ax->buflock);
 		return;
@@ -376,9 +371,7 @@ static void ax_changedmtu(struct mkiss *ax)
 	rbuff = kmalloc(len + 4, GFP_ATOMIC);
 
 	if (xbuff == NULL || rbuff == NULL)  {
-		printk(KERN_ERR "mkiss: %s: unable to grow ax25 buffers, "
-		       "MTU change cancelled.\n",
-		       ax->dev->name);
+		netdev_err(ax->dev, "unable to grow ax25 buffers, MTU change cancelled.\n");
 		dev->mtu = ax->mtu;
 		kfree(xbuff);
 		kfree(rbuff);
@@ -433,7 +426,7 @@ static void ax_encaps(struct net_device *dev, unsigned char *icp, int len)
 		ax_changedmtu(ax);
 
 	if (len > ax->mtu) {		/* Sigh, shouldn't occur BUT ... */
-		printk(KERN_ERR "mkiss: %s: truncating oversized transmit packet!\n", ax->dev->name);
+		netdev_err(ax->dev, "truncating oversized transmit packet!\n");
 		dev->stats.tx_dropped++;
 		netif_start_queue(dev);
 		return;
@@ -469,8 +462,7 @@ static void ax_encaps(struct net_device *dev, unsigned char *icp, int len)
 				  cmd = 0;
 				}
 				ax->crcauto = (cmd ? 0 : 1);
-				printk(KERN_INFO "mkiss: %s: crc mode set to %d\n",
-				       ax->dev->name, cmd);
+				netdev_info(ax->dev, "crc mode set to %d\n", cmd);
 			}
 			spin_unlock_bh(&ax->buflock);
 			netif_start_queue(dev);
@@ -484,7 +476,7 @@ static void ax_encaps(struct net_device *dev, unsigned char *icp, int len)
 		switch (ax->crcmode) {
 		case CRC_MODE_SMACK_TEST:
 			ax->crcmode  = CRC_MODE_FLEX_TEST;
-			printk(KERN_INFO "mkiss: %s: Trying crc-smack\n", ax->dev->name);
+			netdev_info(ax->dev, "Trying crc-smack\n");
 			fallthrough;
 		case CRC_MODE_SMACK:
 			*p |= 0x80;
@@ -493,7 +485,7 @@ static void ax_encaps(struct net_device *dev, unsigned char *icp, int len)
 			break;
 		case CRC_MODE_FLEX_TEST:
 			ax->crcmode = CRC_MODE_NONE;
-			printk(KERN_INFO "mkiss: %s: Trying crc-flexnet\n", ax->dev->name);
+			netdev_info(ax->dev, "Trying crc-flexnet\n");
 			fallthrough;
 		case CRC_MODE_FLEX:
 			*p |= 0x20;
@@ -526,7 +518,7 @@ static netdev_tx_t ax_xmit(struct sk_buff *skb, struct net_device *dev)
 		return ax25_ip_xmit(skb);
 
 	if (!netif_running(dev))  {
-		printk(KERN_ERR "mkiss: %s: xmit call when iface is down\n", dev->name);
+		netdev_err(ax->dev, "xmit call when iface is down\n");
 		return NETDEV_TX_BUSY;
 	}
 
@@ -540,8 +532,8 @@ static netdev_tx_t ax_xmit(struct sk_buff *skb, struct net_device *dev)
 			return NETDEV_TX_BUSY;
 		}
 
-		printk(KERN_ERR "mkiss: %s: transmit timed out, %s?\n", dev->name,
-		       (tty_chars_in_buffer(ax->tty) || ax->xleft) ?
+		netdev_err(ax->dev, "transmit timed out, %s?\n",
+			   (tty_chars_in_buffer(ax->tty) || ax->xleft) ?
 		       "bad line quality" : "driver error");
 
 		ax->xleft = 0;
@@ -735,24 +727,20 @@ static int mkiss_open(struct tty_struct *tty)
 	switch (crc_force) {
 	case 3:
 		ax->crcmode  = CRC_MODE_SMACK;
-		printk(KERN_INFO "mkiss: %s: crc mode smack forced.\n",
-		       ax->dev->name);
+		netdev_info(ax->dev, "crc mode smack forced.\n");
 		break;
 	case 2:
 		ax->crcmode  = CRC_MODE_FLEX;
-		printk(KERN_INFO "mkiss: %s: crc mode flexnet forced.\n",
-		       ax->dev->name);
+		netdev_info(ax->dev, "crc mode flexnet forced.\n");
 		break;
 	case 1:
 		ax->crcmode  = CRC_MODE_NONE;
-		printk(KERN_INFO "mkiss: %s: crc mode disabled.\n",
-		       ax->dev->name);
+		netdev_info(ax->dev, "crc mode disabled.\n");
 		break;
 	case 0:
 	default:
 		crc_force = 0;
-		printk(KERN_INFO "mkiss: %s: crc mode is auto.\n",
-		       ax->dev->name);
+		netdev_info(ax->dev, "crc mode is auto.\n");
 		ax->crcmode  = CRC_MODE_SMACK_TEST;
 	}
 	ax->crcauto = (crc_force ? 0 : 1);
@@ -949,20 +937,15 @@ static struct tty_ldisc_ops ax_ldisc = {
 	.write_wakeup	= mkiss_write_wakeup
 };
 
-static const char banner[] __initconst = KERN_INFO \
-	"mkiss: AX.25 Multikiss, Hans Albas PE1AYX\n";
-static const char msg_regfail[] __initconst = KERN_ERR \
-	"mkiss: can't register line discipline (err = %d)\n";
-
 static int __init mkiss_init_driver(void)
 {
 	int status;
 
-	printk(banner);
+	pr_info("mkiss: AX.25 Multikiss, Hans Albas PE1AYX\n");
 
 	status = tty_register_ldisc(&ax_ldisc);
 	if (status != 0)
-		printk(msg_regfail, status);
+		pr_err("mkiss: can't register line discipline (err = %d)\n", status);
 
 	return status;
 }
