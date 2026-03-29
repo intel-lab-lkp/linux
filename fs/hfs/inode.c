@@ -341,6 +341,31 @@ static int hfs_test_inode(struct inode *inode, void *data)
 }
 
 /*
+ * is_valid_catalog_record
+ *
+ * Validate the CNID of a catalog record
+ */
+static inline
+bool is_valid_catalog_record(u32 cnid, u8 type)
+{
+	if (likely(cnid >= HFS_FIRSTUSER_CNID))
+		return true;
+
+	switch (cnid) {
+	case HFS_ROOT_CNID:
+		return type == HFS_CDR_DIR;
+	case HFS_EXT_CNID:
+	case HFS_CAT_CNID:
+		return type == HFS_CDR_FIL;
+	default:
+		/* Invalid reserved CNID */
+		break;
+	}
+
+	return false;
+}
+
+/*
  * hfs_read_inode
  */
 static int hfs_read_inode(struct inode *inode, void *data)
@@ -348,6 +373,7 @@ static int hfs_read_inode(struct inode *inode, void *data)
 	struct hfs_iget_data *idata = data;
 	struct hfs_sb_info *hsb = HFS_SB(inode->i_sb);
 	hfs_cat_rec *rec;
+	u32 cnid;
 
 	HFS_I(inode)->flags = 0;
 	HFS_I(inode)->rsrc_inode = NULL;
@@ -369,6 +395,9 @@ static int hfs_read_inode(struct inode *inode, void *data)
 	rec = idata->rec;
 	switch (rec->type) {
 	case HFS_CDR_FIL:
+		cnid = be32_to_cpu(rec->file.FlNum);
+		if (!is_valid_catalog_record(cnid, rec->type))
+			goto make_bad_inode;
 		if (!HFS_IS_RSRC(inode)) {
 			hfs_inode_read_fork(inode, rec->file.ExtRec, rec->file.LgLen,
 					    rec->file.PyLen, be16_to_cpu(rec->file.ClpSize));
@@ -377,7 +406,7 @@ static int hfs_read_inode(struct inode *inode, void *data)
 					    rec->file.RPyLen, be16_to_cpu(rec->file.ClpSize));
 		}
 
-		inode->i_ino = be32_to_cpu(rec->file.FlNum);
+		inode->i_ino = cnid;
 		inode->i_mode = S_IRUGO | S_IXUGO;
 		if (!(rec->file.Flags & HFS_FIL_LOCK))
 			inode->i_mode |= S_IWUGO;
@@ -390,7 +419,10 @@ static int hfs_read_inode(struct inode *inode, void *data)
 		inode->i_mapping->a_ops = &hfs_aops;
 		break;
 	case HFS_CDR_DIR:
-		inode->i_ino = be32_to_cpu(rec->dir.DirID);
+		cnid = be32_to_cpu(rec->dir.DirID);
+		if (!is_valid_catalog_record(cnid, rec->type))
+			goto make_bad_inode;
+		inode->i_ino = cnid;
 		inode->i_size = be16_to_cpu(rec->dir.Val) + 2;
 		HFS_I(inode)->fs_blocks = 0;
 		inode->i_mode = S_IFDIR | (S_IRWXUGO & ~hsb->s_dir_umask);
@@ -399,8 +431,13 @@ static int hfs_read_inode(struct inode *inode, void *data)
 		inode->i_op = &hfs_dir_inode_operations;
 		inode->i_fop = &hfs_dir_operations;
 		break;
+make_bad_inode:
+		pr_warn("Invalid inode with cnid %lu\n", cnid);
+		pr_warn("Volume is probably corrupted, try performing fsck.\n");
+		fallthrough;
 	default:
 		make_bad_inode(inode);
+		break;
 	}
 	return 0;
 }
@@ -448,6 +485,11 @@ void hfs_inode_write_fork(struct inode *inode, struct hfs_extent *ext,
 					 HFS_SB(inode->i_sb)->alloc_blksz);
 }
 
+static inline u8 hfs_inode_type(struct inode *inode)
+{
+	return S_ISDIR(inode->i_mode) ? HFS_CDR_DIR : HFS_CDR_FIL;
+}
+
 int hfs_write_inode(struct inode *inode, struct writeback_control *wbc)
 {
 	struct inode *main_inode = inode;
@@ -460,20 +502,18 @@ int hfs_write_inode(struct inode *inode, struct writeback_control *wbc)
 	if (res)
 		return res;
 
-	if (inode->i_ino < HFS_FIRSTUSER_CNID) {
-		switch (inode->i_ino) {
-		case HFS_ROOT_CNID:
-			break;
-		case HFS_EXT_CNID:
-			hfs_btree_write(HFS_SB(inode->i_sb)->ext_tree);
-			return 0;
-		case HFS_CAT_CNID:
-			hfs_btree_write(HFS_SB(inode->i_sb)->cat_tree);
-			return 0;
-		default:
-			BUG();
-			return -EIO;
-		}
+	if (!is_valid_catalog_record(inode->i_ino, hfs_inode_type(inode)))
+		return -EIO;
+
+	switch (inode->i_ino) {
+	case HFS_EXT_CNID:
+		hfs_btree_write(HFS_SB(inode->i_sb)->ext_tree);
+		return 0;
+	case HFS_CAT_CNID:
+		hfs_btree_write(HFS_SB(inode->i_sb)->cat_tree);
+		return 0;
+	default:
+		break;
 	}
 
 	if (HFS_IS_RSRC(inode))

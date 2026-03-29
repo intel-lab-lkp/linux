@@ -371,6 +371,10 @@ static int hfs_fill_super(struct super_block *sb, struct fs_context *fc)
 	hfs_find_exit(&fd);
 	if (!root_inode)
 		goto bail_no_root;
+	if (is_bad_inode(root_inode)) {
+		iput(root_inode);
+		goto bail_no_root;
+	}
 
 	set_default_d_op(sb, &hfs_dentry_operations);
 	res = -ENOMEM;
