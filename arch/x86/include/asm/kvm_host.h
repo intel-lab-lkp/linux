@@ -757,6 +757,7 @@ struct kvm_vcpu_xen {
 	u64 timer_expires; /* In guest epoch */
 	atomic_t timer_pending;
 	struct hrtimer timer;
+	struct irq_work timer_inject_irqwork;
 	int poll_evtchn;
 	struct timer_list poll_timer;
 	struct kvm_hypervisor_cpuid cpuid;
