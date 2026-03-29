@@ -3709,6 +3709,18 @@ fail_tree_roots:
 	invalidate_inode_pages2(fs_info->btree_inode->i_mapping);
 
 fail_sb_buffer:
+	/*
+	 * Wait for in-flight readahead BIOs before stopping workers.
+	 * Readahead BIOs from btrfs_read_chunk_tree() (via
+	 * readahead_tree_node_children) may still be in flight on slow
+	 * devices (e.g. USB). Their completion callbacks
+	 * (btrfs_simple_end_io) access fs_info->dev_replace.bio_counter
+	 * which would be destroyed later, causing a use-after-free.
+	 * The bio_counter was already initialized in init_mount_fs_info()
+	 * so this wait is safe for all error paths reaching this label.
+	 */
+	wait_event(fs_info->dev_replace.replace_wait,
+		   percpu_counter_sum(&fs_info->dev_replace.bio_counter) == 0);
 	btrfs_stop_all_workers(fs_info);
 	btrfs_free_block_groups(fs_info);
 fail_alloc:
