@@ -1219,6 +1219,7 @@ static int qedi_data_avail(struct qedi_ctx *qedi, u16 vlanid)
 	struct qedi_uio_dev *udev;
 	struct qedi_uio_ctrl *uctrl;
 	struct sk_buff *skb;
+	size_t tx_slot_len;
 	u32 len;
 	int rc = 0;
 
@@ -1237,6 +1238,12 @@ static int qedi_data_avail(struct qedi_ctx *qedi, u16 vlanid)
 	len = uctrl->host_tx_pkt_len;
 	if (!len) {
 		QEDI_ERR(&qedi->dbg_ctx, "Invalid len %u\n", len);
+		return -EINVAL;
+	}
+
+	tx_slot_len = (char *)udev->rx_pkt - (char *)udev->tx_pkt;
+	if (len > tx_slot_len) {
+		QEDI_ERR(&qedi->dbg_ctx, "Invalid tx packet len %u\n", len);
 		return -EINVAL;
 	}
 
