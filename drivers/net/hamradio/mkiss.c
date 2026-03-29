@@ -686,7 +686,7 @@ static void mkiss_put(struct mkiss *ax)
 		complete(&ax->dead);
 }
 
-static int crc_force = 0;	/* Can be overridden with insmod */
+static int crc_force;	/* Can be overridden with insmod */
 
 static int mkiss_open(struct tty_struct *tty)
 {
