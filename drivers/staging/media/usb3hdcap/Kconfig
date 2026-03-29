@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: GPL-2.0
+config VIDEO_USB3HDCAP
+	tristate "USB3HDCAP video capture support"
+	depends on VIDEO_DEV && SND
+	select SND_PCM
+	select VIDEOBUF2_VMALLOC
+
+	help
+	  This is a video4linux2 driver for the StarTech USB3HDCAP video/audio
+	  capture device.
+
+	  To compile this driver as a module, choose M here; the
+	  module will be called usb3hdcap.
