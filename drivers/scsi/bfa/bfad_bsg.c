@@ -199,10 +199,18 @@ bfad_iocmd_ioc_set_name(struct bfad_s *bfad, void *cmd, unsigned int v_cmd)
 {
 	struct bfa_bsg_ioc_name_s *iocmd = (struct bfa_bsg_ioc_name_s *) cmd;
 
+	if (strnlen(iocmd->name, BFA_ADAPTER_SYM_NAME_LEN) >=
+	    BFA_ADAPTER_SYM_NAME_LEN) {
+		iocmd->status = BFA_STATUS_EINVAL;
+		return 0;
+	}
+
 	if (v_cmd == IOCMD_IOC_SET_ADAPTER_NAME)
-		strcpy(bfad->adapter_name, iocmd->name);
+		strscpy(bfad->adapter_name, iocmd->name,
+			sizeof(bfad->adapter_name));
 	else if (v_cmd == IOCMD_IOC_SET_PORT_NAME)
-		strcpy(bfad->port_name, iocmd->name);
+		strscpy(bfad->port_name, iocmd->name,
+			sizeof(bfad->port_name));
 
 	iocmd->status = BFA_STATUS_OK;
 	return 0;
