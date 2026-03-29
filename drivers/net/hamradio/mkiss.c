@@ -201,7 +201,7 @@ static int kiss_esc_crc(unsigned char *s, unsigned char *d, unsigned short crc,
 	int len)
 {
 	unsigned char *ptr = d;
-	unsigned char c=0;
+	unsigned char c = 0;
 
 	*ptr++ = END;
 	while (len > 0) {
