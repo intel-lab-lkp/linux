@@ -282,7 +282,8 @@ static void ax_bump(struct mkiss *ax)
 
 	count = ax->rcount;
 
-	if ((skb = dev_alloc_skb(count)) == NULL) {
+	skb = dev_alloc_skb(count);
+	if (!skb) {
 		printk(KERN_ERR "mkiss: %s: memory squeeze, dropping packet.\n",
 		       ax->dev->name);
 		ax->dev->stats.rx_dropped++;
@@ -591,10 +592,12 @@ static int ax_open(struct net_device *dev)
 	if (len < 576 * 2)
 		len = 576 * 2;
 
-	if ((ax->rbuff = kmalloc(len + 4, GFP_KERNEL)) == NULL)
+	ax->rbuff = kmalloc(len + 4, GFP_KERNEL);
+	if (!ax->rbuff)
 		goto norbuff;
 
-	if ((ax->xbuff = kmalloc(len + 4, GFP_KERNEL)) == NULL)
+	ax->xbuff = kmalloc(len + 4, GFP_KERNEL);
+	if (!ax->xbuff)
 		goto noxbuff;
 
 	ax->mtu	     = dev->mtu + 73;
