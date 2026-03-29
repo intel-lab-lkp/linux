@@ -18,8 +18,6 @@
 
 #include "power.h"
 
-static struct class *wakeup_class;
-
 #define wakeup_attr(_name)						\
 static ssize_t _name##_show(struct device *dev,				\
 			    struct device_attribute *attr, char *buf)	\
@@ -114,7 +112,7 @@ static ssize_t prevent_suspend_time_ms_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(prevent_suspend_time_ms);
 
-static struct attribute *wakeup_source_attrs[] = {
+static const struct attribute *const wakeup_source_attrs[] = {
 	&dev_attr_name.attr,
 	&dev_attr_active_count.attr,
 	&dev_attr_event_count.attr,
@@ -135,6 +133,12 @@ static void device_create_release(struct device *dev)
 	kfree(dev);
 }
 
+static const struct class wakeup_class = {
+	.name = "wakeup",
+	.dev_release = device_create_release,
+	.dev_groups = wakeup_source_groups,
+};
+
 static struct device *wakeup_source_device_create(struct device *parent,
 						  struct wakeup_source *ws)
 {
@@ -149,10 +153,8 @@ static struct device *wakeup_source_device_create(struct device *parent,
 
 	device_initialize(dev);
 	dev->devt = MKDEV(0, 0);
-	dev->class = wakeup_class;
+	dev->class = &wakeup_class;
 	dev->parent = parent;
-	dev->groups = wakeup_source_groups;
-	dev->release = device_create_release;
 	dev_set_drvdata(dev, ws);
 	device_set_pm_not_required(dev);
 
@@ -212,8 +214,6 @@ void wakeup_source_sysfs_remove(struct wakeup_source *ws)
 
 static int __init wakeup_sources_sysfs_init(void)
 {
-	wakeup_class = class_create("wakeup");
-
-	return PTR_ERR_OR_ZERO(wakeup_class);
+	return class_register(&wakeup_class);
 }
 postcore_initcall(wakeup_sources_sysfs_init);
