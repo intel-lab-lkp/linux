@@ -1750,10 +1750,10 @@ static int ufs_qcom_clk_scale_notify(struct ufs_hba *hba, bool scale_up,
 		}
 
 		ufs_qcom_icc_update_bw(host);
-		ufshcd_uic_hibern8_exit(hba);
+		err = ufshcd_uic_hibern8_exit(hba);
 	}
 
-	return 0;
+	return err;
 }
 
 static void ufs_qcom_enable_test_bus(struct ufs_qcom_host *host)
