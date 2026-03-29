@@ -41,6 +41,7 @@
 #endif
 
 int arch_update_cpu_topology(void);
+void srat_detect_node(struct cpuinfo_x86 *c);
 
 /* Conform to ACPI 2.0 SLIT distance definitions */
 #define LOCAL_DISTANCE		10
