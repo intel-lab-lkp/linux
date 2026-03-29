@@ -1148,6 +1148,18 @@ static int ip6_dst_lookup_tail(struct net *net, const struct sock *sk,
 			*dst = NULL;
 		}
 
+		/* If ECMP was involved the initial hash was calculted
+		 * with saddr=:: which can result in instability
+		 * when it is later re-calculated with the selected
+		 * saddr. Lookup the route again with the chosen
+		 * saddr to get a stable result.
+		 */
+		if (fl6->mp_hash) {
+			fl6->mp_hash = 0;
+			dst_release(*dst);
+			*dst = NULL;
+		}
+
 		if (fl6->flowi6_oif)
 			flags |= RT6_LOOKUP_F_IFACE;
 	}
