@@ -805,14 +805,26 @@ static inline struct arm_smmu_invs *arm_smmu_invs_alloc(size_t num_invs)
 
 struct arm_smmu_tlbi {
 	struct arm_smmu_domain *smmu_domain;
-	unsigned long iova;
-	size_t size;
-	unsigned int iopte_granule;
-	bool leaf_only;
+	unsigned long start;
+	unsigned long last;
+	/*
+	 * Level bitmaps use iommupt numbering: bit 0 is the leaf-only level
+	 * (ARM level 3), bit 1 is the next level up (ARM level 2), etc. These
+	 * match the iommu_iotlb_gather.pt fields. Each set bit indicates a
+	 * change at that level. The contiguous hint has no effect on
+	 * invalidation processing because HW can ignore the hint.
+	 *
+	 * If leaf_levels_bitmap is 0 then this is a walk cache only
+	 * invalidation. If table_levels_bitmap is 0 then this is a leaf only
+	 * invalidation.
+	 */
+	u8 leaf_levels_bitmap;
+	u8 table_levels_bitmap;
 
 	struct {
 		bool use_full_inv;
 		u16 num;
+		u8 stride_lg2;
 	} single;
 
 	struct {

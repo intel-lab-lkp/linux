@@ -2331,8 +2331,8 @@ static struct arm_smmu_cmd arm_smmu_atc_inv_to_cmd(u32 sid, int ssid,
 	 * This has the unpleasant side-effect of invalidating all PASID-tagged
 	 * ATC entries within the address range.
 	 */
-	page_start = tlbi->iova >> inval_grain_shift;
-	page_end = (tlbi->iova + tlbi->size - 1) >> inval_grain_shift;
+	page_start = tlbi->start >> inval_grain_shift;
+	page_end = tlbi->last >> inval_grain_shift;
 
 	/*
 	 * In an ATS Invalidate Request, the address must be aligned on the
@@ -2418,7 +2418,49 @@ static bool arm_smmu_ttl_addr_aligned(u64 address, unsigned int tg,
 }
 
 /*
- * Generate a single range TLBI command covering [iova, iova+size). Sets
+ * Compute the TTL hint from leaf/table level bitmaps. 0 ttlt means no hint
+ * invalidate all levels.
+ */
+static unsigned int arm_smmu_compute_ttl(u8 leaf_bitmap, u8 table_bitmap,
+					 unsigned int tg)
+{
+	int ttl;
+
+	if (leaf_bitmap) {
+		if (is_power_of_2(leaf_bitmap))
+			ttl = 3 - (int)__ffs(leaf_bitmap);
+		else
+			ttl = 0;
+
+		if (table_bitmap) {
+			int table_ttl = 3 - (int)__ffs(table_bitmap) + 1;
+
+			/*
+			 * A RIL invalidation with !leaf_only clears out all
+			 * table levels above the leaf level ttl only.
+			 */
+			if (table_ttl > ttl)
+				ttl = 0;
+		}
+	} else if (table_bitmap) {
+		ttl = 3 - (int)__ffs(table_bitmap) + 1;
+	} else {
+		/* Both bitmaps zero is not allowed */
+		return 0;
+	}
+
+	/* 16K granule, ARM TTL=1 is reserved (SMMUv3 F.b Section 4.4.1) */
+	if (tg == 14 && ttl == 1)
+		return 0;
+
+	/* ARM levels -1 and 0 cannot be hinted */
+	if (ttl <= 0 || ttl > 3)
+		return 0;
+	return ttl;
+}
+
+/*
+ * Generate a single range TLBI command covering [start, last]. Sets
  * use_full_inv if the range is too large for a single command.
  *
  * The algorithm finds the smallest SCALE where the range (in tg-sized pages)
@@ -2428,20 +2470,13 @@ static bool arm_smmu_ttl_addr_aligned(u64 address, unsigned int tg,
 static void arm_smmu_tlbi_calc_range(struct arm_smmu_tlbi *tlbi)
 {
 	unsigned int tg_lg2 = tlbi->smmu_domain->tgsz_lg2;
-	u64 cur_tg = tlbi->iova >> tg_lg2;
-	u64 last_tg = (tlbi->iova + tlbi->size - 1) >> tg_lg2;
+	unsigned int ttl = arm_smmu_compute_ttl(
+		tlbi->leaf_levels_bitmap, tlbi->table_levels_bitmap, tg_lg2);
+	u64 cur_tg = tlbi->start >> tg_lg2;
+	u64 last_tg = tlbi->last >> tg_lg2;
 	u64 num_tg = last_tg - cur_tg + 1;
 	u8 tg_enc = (tg_lg2 - 10) / 2;
 	unsigned int scale;
-	u8 ttl = 0;
-
-	/*
-	 * Determine what level the granule is at. For non-leaf, both
-	 * io-pgtable and SVA pass a nominal last-level granule because they
-	 * don't know what level(s) actually apply, so leave TTL=0.
-	 */
-	if (tlbi->leaf_only)
-		ttl = 4 - ((ilog2(tlbi->iopte_granule) - 3) / (tg_lg2 - 3));
 
 	/*
 	 * SMMUv3 F.b Section 4.4.1: TG!=0, NUM==0, SCALE==0, TTL==0 is
@@ -2449,14 +2484,18 @@ static void arm_smmu_tlbi_calc_range(struct arm_smmu_tlbi *tlbi)
 	 * a TTL hint to target only the exact leaf entry.
 	 */
 	if (num_tg == 1) {
-		if (!ttl)
+		/*
+		 * The two io-pgtable ops filling the tlbi won't generate ttl=0.
+		 * sva sets constants for single page that give ttl=3
+		 */
+		if (WARN_ON(!ttl))
 			ttl = 3;
 		tlbi->range.data0 = 0;
-		tlbi->range.data1 =
-			FIELD_PREP(CMDQ_TLBI_1_LEAF, tlbi->leaf_only) |
-			FIELD_PREP(CMDQ_TLBI_1_TTL, ttl) |
-			FIELD_PREP(CMDQ_TLBI_1_TG, tg_enc) |
-			(cur_tg << tg_lg2);
+		tlbi->range.data1 = FIELD_PREP(CMDQ_TLBI_1_LEAF,
+					       !tlbi->table_levels_bitmap) |
+				    FIELD_PREP(CMDQ_TLBI_1_TTL, ttl) |
+				    FIELD_PREP(CMDQ_TLBI_1_TG, tg_enc) |
+				    (cur_tg << tg_lg2);
 		return;
 	}
 
@@ -2480,10 +2519,6 @@ static void arm_smmu_tlbi_calc_range(struct arm_smmu_tlbi *tlbi)
 		return;
 	}
 
-	/* 16K granule TTL=1 is reserved (Section 4.4.1) */
-	if (tg_lg2 == 14 && ttl == 1)
-		ttl = 0;
-
 	/* Verify address alignment for the TTL hint */
 	if (ttl && !arm_smmu_ttl_addr_aligned(cur_tg << tg_lg2, tg_lg2, ttl))
 		ttl = 0;
@@ -2492,27 +2527,52 @@ static void arm_smmu_tlbi_calc_range(struct arm_smmu_tlbi *tlbi)
 		FIELD_PREP(CMDQ_TLBI_0_NUM,
 			   DIV_ROUND_UP_ULL(num_tg, 1ULL << scale) - 1) |
 		FIELD_PREP(CMDQ_TLBI_0_SCALE, scale);
-	tlbi->range.data1 = FIELD_PREP(CMDQ_TLBI_1_LEAF, tlbi->leaf_only) |
-			    FIELD_PREP(CMDQ_TLBI_1_TTL, ttl) |
-			    FIELD_PREP(CMDQ_TLBI_1_TG, tg_enc) |
-			    (cur_tg << tg_lg2);
+	tlbi->range.data1 =
+		FIELD_PREP(CMDQ_TLBI_1_LEAF, !tlbi->table_levels_bitmap) |
+		FIELD_PREP(CMDQ_TLBI_1_TTL, ttl) |
+		FIELD_PREP(CMDQ_TLBI_1_TG, tg_enc) |
+		(cur_tg << tg_lg2);
 }
 
 /*
- * One TLBI command per IOTLB entry, assuming the entries are all at least
- * iopte_granule sized. Sets use_full_inv if too many commands would be needed
- * which indicates too high a latency. The threshold is similar to MAX_DVM_OPS
- * in arch/arm64/include/asm/tlbflush.h for the 4k PAGE_SIZE.
+ * Compute the stride for non-RIL single-page invalidation. Returns the log2
+ * stride of the lowest affected level. Single invalidation removes all IOPTEs
+ * that contain the IOVA invalidated, and we can reliably assume that the
+ * architected page size and table sizes (not contiguous!) are reflected in the
+ * IOTLB. Thus if there is a 2M leaf entry we only need to issue a single IOTLB
+ * invalidation within that 2M IOVA.
+ */
+static u8 arm_smmu_tlbi_calc_stride(struct arm_smmu_tlbi *tlbi)
+{
+	unsigned int tg_lg2 = tlbi->smmu_domain->tgsz_lg2;
+	u8 combined = tlbi->table_levels_bitmap | tlbi->leaf_levels_bitmap;
+
+	if (!combined)
+		return U8_MAX;
+	return (tg_lg2 - 3) * __ffs(combined) + tg_lg2;
+}
+
+/*
+ * One TLBI command per stride-sized entry. Sets use_full_inv if too many
+ * commands would be needed. The threshold is similar to MAX_DVM_OPS in
+ * arch/arm64/include/asm/tlbflush.h.
  */
 static void arm_smmu_tlbi_calc_single(struct arm_smmu_tlbi *tlbi)
 {
-	unsigned long num_ops = tlbi->size / tlbi->iopte_granule;
+	u8 stride_lg2 = arm_smmu_tlbi_calc_stride(tlbi);
+	unsigned long num_ops;
 
+	if (stride_lg2 == U8_MAX) {
+		tlbi->single.use_full_inv = true;
+		return;
+	}
+	num_ops = (tlbi->last - tlbi->start + 1) >> stride_lg2;
 	if (!num_ops || num_ops > 512) {
 		tlbi->single.use_full_inv = true;
 		return;
 	}
 	tlbi->single.num = num_ops;
+	tlbi->single.stride_lg2 = stride_lg2;
 }
 
 static void arm_smmu_inv_all_cmd(struct arm_smmu_inv *inv,
@@ -2532,7 +2592,7 @@ static bool arm_smmu_inv_to_cmdq_batch(struct arm_smmu_inv *inv,
 				       struct arm_smmu_cmd *cmd,
 				       struct arm_smmu_tlbi *tlbi)
 {
-	u64 iova = tlbi->iova;
+	u64 iova = tlbi->start;
 	unsigned int i;
 
 	if (inv->smmu->features & ARM_SMMU_FEAT_RANGE_INV) {
@@ -2552,9 +2612,10 @@ static bool arm_smmu_inv_to_cmdq_batch(struct arm_smmu_inv *inv,
 	}
 
 	for (i = 0; i < tlbi->single.num; i++) {
-		cmd->data[1] = FIELD_PREP(CMDQ_TLBI_1_LEAF, tlbi->leaf_only) |
+		cmd->data[1] = FIELD_PREP(CMDQ_TLBI_1_LEAF,
+					  !tlbi->table_levels_bitmap) |
 			       (iova & ~GENMASK_U64(11, 0));
-		iova += tlbi->iopte_granule;
+		iova += BIT_U64(tlbi->single.stride_lg2);
 		arm_smmu_cmdq_batch_add_cmd_p(inv->smmu, cmds, cmd);
 	}
 	return false;
@@ -2733,15 +2794,21 @@ static void arm_smmu_tlb_inv_page_nosync(struct iommu_iotlb_gather *gather,
 	iommu_iotlb_gather_add_page(domain, gather, iova, granule);
 }
 
+/*
+ * Called by io-pgtable-arm.c for each single table level it wants to remove.
+ * size is the size of the table level and granule is the tg in bytes.
+ */
 static void arm_smmu_tlb_inv_walk(unsigned long iova, size_t size,
 				  size_t granule, void *cookie)
 {
 	struct arm_smmu_domain *smmu_domain = cookie;
+	unsigned int tg_lg2 = smmu_domain->tgsz_lg2;
 	struct arm_smmu_tlbi tlbi = {
 		.smmu_domain = smmu_domain,
-		.iova = iova,
-		.size = size,
-		.iopte_granule = granule,
+		.start = iova,
+		.last = iova + size - 1,
+		.table_levels_bitmap =
+			BIT((ilog2(size) - tg_lg2) / (tg_lg2 - 3)),
 	};
 
 	arm_smmu_domain_tlbi(&tlbi);
@@ -4008,15 +4075,23 @@ static void arm_smmu_flush_iotlb_all(struct iommu_domain *domain)
 		arm_smmu_tlb_inv_context(smmu_domain);
 }
 
+/*
+ * Called by io-pgtable-arm.c for each run of same pgsize leaf only
+ * invalidation. If it has to change to a different leaf level then it flushes
+ * the gather and starts a fresh one. Thus this always targets only a single
+ * leaf level.
+ */
 static void arm_smmu_iotlb_sync(struct iommu_domain *domain,
 				struct iommu_iotlb_gather *gather)
 {
+	struct arm_smmu_domain *smmu_domain = to_smmu_domain(domain);
+	unsigned int tg = smmu_domain->tgsz_lg2;
 	struct arm_smmu_tlbi tlbi = {
-		.smmu_domain = to_smmu_domain(domain),
-		.iova = gather->start,
-		.size = gather->end - gather->start + 1,
-		.iopte_granule = gather->pgsize,
-		.leaf_only = true,
+		.smmu_domain = smmu_domain,
+		.start = gather->start,
+		.last = gather->end,
+		.leaf_levels_bitmap =
+			BIT((ilog2(gather->pgsize) - tg) / (tg - 3)),
 	};
 
 	if (!gather->pgsize)
