@@ -182,17 +182,21 @@ EXPORT_SYMBOL_GPL(enclosure_unregister);
 #define ENCLOSURE_NAME_SIZE	64
 #define COMPONENT_NAME_SIZE	64
 
-static void enclosure_link_name(struct enclosure_component *cdev, char *name)
+static int enclosure_link_name(struct enclosure_component *cdev, char *name)
 {
-	strcpy(name, "enclosure_device:");
-	strcat(name, dev_name(&cdev->cdev));
+	if (snprintf(name, ENCLOSURE_NAME_SIZE, "enclosure_device:%s",
+		     dev_name(&cdev->cdev)) >= ENCLOSURE_NAME_SIZE)
+		return -EINVAL;
+
+	return 0;
 }
 
 static void enclosure_remove_links(struct enclosure_component *cdev)
 {
 	char name[ENCLOSURE_NAME_SIZE];
 
-	enclosure_link_name(cdev, name);
+	if (enclosure_link_name(cdev, name))
+		return;
 
 	/*
 	 * In odd circumstances, like multipath devices, something else may
@@ -214,7 +218,12 @@ static int enclosure_add_links(struct enclosure_component *cdev)
 	if (error)
 		return error;
 
-	enclosure_link_name(cdev, name);
+	error = enclosure_link_name(cdev, name);
+	if (error) {
+		sysfs_remove_link(&cdev->cdev.kobj, "device");
+		return error;
+	}
+
 	error = sysfs_create_link(&cdev->dev->kobj, &cdev->cdev.kobj, name);
 	if (error)
 		sysfs_remove_link(&cdev->cdev.kobj, "device");
