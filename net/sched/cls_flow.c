@@ -505,6 +505,10 @@ static int flow_change(struct net *net, struct sk_buff *in_skb,
 		if (TC_H_MAJ(baseclass) == 0) {
 			struct Qdisc *q = tcf_block_q(tp->chain->block);
 
+			if (!q) {
+				err = -EOPNOTSUPP;
+				goto err2;
+			}
 			baseclass = TC_H_MAKE(q->handle, baseclass);
 		}
 		if (TC_H_MIN(baseclass) == 0)
