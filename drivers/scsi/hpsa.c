@@ -8100,16 +8100,16 @@ static int hpsa_request_irqs(struct ctlr_info *h,
 	if (h->intr_mode == PERF_MODE_INT && h->msix_vectors > 0) {
 		/* If performant mode and MSI-X, use multiple reply queues */
 		for (i = 0; i < h->msix_vectors; i++) {
-			sprintf(h->intrname[i], "%s-msix%d", h->devname, i);
+			scnprintf(h->intrname[i], sizeof(h->intrname[i]),
+				  "%s-msix%d", h->devname, i);
 			rc = request_irq(pci_irq_vector(h->pdev, i), msixhandler,
-					0, h->intrname[i],
-					&h->q[i]);
+					 0, h->intrname[i], &h->q[i]);
 			if (rc) {
 				int j;
 
 				dev_err(&h->pdev->dev,
 					"failed to get irq %d for %s\n",
-				       pci_irq_vector(h->pdev, i), h->devname);
+					pci_irq_vector(h->pdev, i), h->devname);
 				for (j = 0; j < i; j++) {
 					free_irq(pci_irq_vector(h->pdev, j), &h->q[j]);
 					h->q[j] = 0;
@@ -8122,19 +8122,19 @@ static int hpsa_request_irqs(struct ctlr_info *h,
 	} else {
 		/* Use single reply pool */
 		if (h->msix_vectors > 0 || h->pdev->msi_enabled) {
-			sprintf(h->intrname[0], "%s-msi%s", h->devname,
-				h->msix_vectors ? "x" : "");
+			scnprintf(h->intrname[0], sizeof(h->intrname[0]),
+				  "%s-msi%s", h->devname,
+				  h->msix_vectors ? "x" : "");
 			rc = request_irq(pci_irq_vector(h->pdev, irq_vector),
-				msixhandler, 0,
-				h->intrname[0],
-				&h->q[h->intr_mode]);
+					 msixhandler, 0, h->intrname[0],
+					 &h->q[h->intr_mode]);
 		} else {
-			sprintf(h->intrname[h->intr_mode],
-				"%s-intx", h->devname);
+			scnprintf(h->intrname[h->intr_mode],
+				  sizeof(h->intrname[h->intr_mode]),
+				  "%s-intx", h->devname);
 			rc = request_irq(pci_irq_vector(h->pdev, irq_vector),
-				intxhandler, IRQF_SHARED,
-				h->intrname[0],
-				&h->q[h->intr_mode]);
+					 intxhandler, IRQF_SHARED,
+					 h->intrname[0], &h->q[h->intr_mode]);
 		}
 	}
 	if (rc) {
@@ -8715,7 +8715,8 @@ reinit_after_soft_reset:
 	if (rc)
 		goto clean2_5;	/* pci, lu, aer/h */
 
-	sprintf(h->devname, HPSA "%d", h->scsi_host->host_no);
+	scnprintf(h->devname, sizeof(h->devname), HPSA "%d",
+		  h->scsi_host->host_no);
 	h->ctlr = number_of_controllers;
 	number_of_controllers++;
 
