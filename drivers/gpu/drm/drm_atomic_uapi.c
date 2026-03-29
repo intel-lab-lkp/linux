@@ -1527,6 +1527,17 @@ static void complete_signaling(struct drm_device *dev,
 		if (event && (event->base.fence || event->base.file_priv)) {
 			drm_event_cancel_free(dev, &event->base);
 			crtc_state->event = NULL;
+		} else if (event && !event->base.completion) {
+			/*
+			 * The event was allocated by prepare_signaling()
+			 * but an error path was hit before the event got
+			 * fully set up (fence or file_priv assigned).
+			 * Events from drm_atomic_helper_setup_commit()
+			 * always have completion set, so checking for its
+			 * absence safely distinguishes our events.
+			 */
+			kfree(event);
+			crtc_state->event = NULL;
 		}
 	}
 
