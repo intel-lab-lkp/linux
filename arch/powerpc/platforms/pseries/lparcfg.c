@@ -418,6 +418,10 @@ static void parse_system_parameter_string(struct seq_file *m)
 		w_idx = 0;
 		idx = 0;
 		while ((*local_buffer) && (idx < splpar_strlen)) {
+			if (w_idx >= SPLPAR_MAXLENGTH - 1) {
+				pr_warn_once("lparcfg: shared processor attribute token is too long\n");
+				break;
+			}
 			workbuffer[w_idx++] = local_buffer[idx++];
 			if ((local_buffer[idx] == ',')
 			    || (local_buffer[idx] == '\0')) {
