@@ -24,6 +24,30 @@ div.document {
     width: auto;
 }
 
+/* Reduce excess mobile side spacing and rebalance the sidebar offset
+ * to match.
+ */
+@media screen and (max-width: 65em) {
+    body {
+        padding: 20px 15px;
+    }
+
+    div.body {
+        padding: 0;
+    }
+
+    div.sphinxsidebar {
+        margin: -20px -15px 20px -15px;
+    }
+
+    /* Keep the sidebar search control from stretching wider than intended
+     * and prevent the submit button from scaling unnecessarily.
+     */
+    div.sphinxsidebar #searchbox {
+        max-width: 300px;
+    }
+}
+
 /* Size the logo appropriately */
 img.logo {
     width: 104px;
