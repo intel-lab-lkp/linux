@@ -14,9 +14,17 @@
 #include <linux/regulator/driver.h>
 #include <linux/regulator/machine.h>
 #include <linux/rtnetlink.h>
+#include <linux/workqueue.h>
 #include <net/net_trackers.h>
 
 #define PSE_PW_D_LIMIT INT_MAX
+
+/*
+ * Default poll interval for controllers without IRQ support.
+ * 500ms provides a reasonable trade-off between responsiveness
+ * (event detection, PD detection) and I2C bus utilization.
+ */
+#define PSE_DEFAULT_POLL_INTERVAL_MS 500
 
 static DEFINE_MUTEX(pse_list_mutex);
 static LIST_HEAD(pse_controller_list);
@@ -1238,6 +1246,52 @@ static int pse_set_config_isr(struct pse_controller_dev *pcdev, int id,
 }
 
 /**
+ * pse_handle_events - Process PSE events for all PIs
+ * @pcdev: a pointer to the PSE controller device
+ * @notifs: per-PI notification array
+ * @notifs_mask: bitmask of PIs with events
+ *
+ * Common event handling shared between IRQ and poll paths.
+ * Caller must hold pcdev->lock.
+ */
+static void pse_handle_events(struct pse_controller_dev *pcdev,
+			      unsigned long *notifs,
+			      unsigned long notifs_mask)
+{
+	int i;
+
+	for_each_set_bit(i, &notifs_mask, pcdev->nr_lines) {
+		unsigned long pi_notifs, rnotifs;
+		struct pse_ntf ntf = {};
+		int ret;
+
+		/* Do nothing PI not described */
+		if (!pcdev->pi[i].rdev)
+			continue;
+
+		pi_notifs = notifs[i];
+		if (pse_pw_d_is_sw_pw_control(pcdev, pcdev->pi[i].pw_d)) {
+			ret = pse_set_config_isr(pcdev, i, pi_notifs);
+			if (ret)
+				pi_notifs |= ETHTOOL_PSE_EVENT_SW_PW_CONTROL_ERROR;
+		}
+
+		dev_dbg(pcdev->dev,
+			"Sending PSE notification EVT 0x%lx\n", pi_notifs);
+
+		ntf.notifs = pi_notifs;
+		ntf.id = i;
+		kfifo_in_spinlocked(&pcdev->ntf_fifo, &ntf, 1,
+				    &pcdev->ntf_fifo_lock);
+		schedule_work(&pcdev->ntf_work);
+
+		rnotifs = pse_to_regulator_notifs(pi_notifs);
+		regulator_notifier_call_chain(pcdev->pi[i].rdev, rnotifs,
+					      NULL);
+	}
+}
+
+/**
  * pse_isr - IRQ handler for PSE
  * @irq: irq number
  * @data: pointer to user interrupt structure
@@ -1248,54 +1302,45 @@ static irqreturn_t pse_isr(int irq, void *data)
 {
 	struct pse_controller_dev *pcdev;
 	unsigned long notifs_mask = 0;
-	struct pse_irq_desc *desc;
 	struct pse_irq *h = data;
-	int ret, i;
+	int ret;
 
-	desc = &h->desc;
 	pcdev = h->pcdev;
 
 	/* Clear notifs mask */
 	memset(h->notifs, 0, pcdev->nr_lines * sizeof(*h->notifs));
 	mutex_lock(&pcdev->lock);
-	ret = desc->map_event(irq, pcdev, h->notifs, &notifs_mask);
+	ret = h->desc.map_event(irq, pcdev, h->notifs, &notifs_mask);
 	if (ret || !notifs_mask) {
 		mutex_unlock(&pcdev->lock);
 		return IRQ_NONE;
 	}
 
-	for_each_set_bit(i, &notifs_mask, pcdev->nr_lines) {
-		unsigned long notifs, rnotifs;
-		struct pse_ntf ntf = {};
-
-		/* Do nothing PI not described */
-		if (!pcdev->pi[i].rdev)
-			continue;
-
-		notifs = h->notifs[i];
-		if (pse_pw_d_is_sw_pw_control(pcdev, pcdev->pi[i].pw_d)) {
-			ret = pse_set_config_isr(pcdev, i, notifs);
-			if (ret)
-				notifs |= ETHTOOL_PSE_EVENT_SW_PW_CONTROL_ERROR;
-		}
-
-		dev_dbg(h->pcdev->dev,
-			"Sending PSE notification EVT 0x%lx\n", notifs);
-
-		ntf.notifs = notifs;
-		ntf.id = i;
-		kfifo_in_spinlocked(&pcdev->ntf_fifo, &ntf, 1,
-				    &pcdev->ntf_fifo_lock);
-		schedule_work(&pcdev->ntf_work);
-
-		rnotifs = pse_to_regulator_notifs(notifs);
-		regulator_notifier_call_chain(pcdev->pi[i].rdev, rnotifs,
-					      NULL);
-	}
-
+	pse_handle_events(pcdev, h->notifs, notifs_mask);
 	mutex_unlock(&pcdev->lock);
 
 	return IRQ_HANDLED;
+}
+
+static void pse_poll_worker(struct work_struct *work)
+{
+	struct pse_controller_dev *pcdev =
+		container_of(work, struct pse_controller_dev,
+			     poll_work.work);
+	unsigned long notifs_mask = 0;
+	int ret;
+
+	memset(pcdev->poll_notifs, 0,
+	       pcdev->nr_lines * sizeof(*pcdev->poll_notifs));
+	mutex_lock(&pcdev->lock);
+	ret = pcdev->poll_desc.map_event(0, pcdev, pcdev->poll_notifs,
+					 &notifs_mask);
+	if (!ret && notifs_mask)
+		pse_handle_events(pcdev, pcdev->poll_notifs, notifs_mask);
+	mutex_unlock(&pcdev->lock);
+
+	queue_delayed_work(system_freezable_wq, &pcdev->poll_work,
+			   msecs_to_jiffies(pcdev->poll_interval_ms));
 }
 
 /**
@@ -1350,6 +1395,67 @@ int devm_pse_irq_helper(struct pse_controller_dev *pcdev, int irq,
 	return ret;
 }
 EXPORT_SYMBOL_GPL(devm_pse_irq_helper);
+
+static void pse_poll_cancel(void *data)
+{
+	struct pse_controller_dev *pcdev = data;
+
+	cancel_delayed_work_sync(&pcdev->poll_work);
+}
+
+/**
+ * devm_pse_poll_helper - Register poll-based PSE event notifier
+ * @pcdev: a pointer to the PSE controller device
+ * @d: PSE event description (uses same pse_irq_desc as IRQ path)
+ *
+ * For PSE controllers without IRQ support or with IRQ not wired. Sets
+ * up a delayed work that periodically calls the driver's map_event
+ * callback to detect state changes, feeding events into the standard
+ * notification pipeline.
+ *
+ * The poll worker uses system_freezable_wq to ensure it does not run
+ * during system suspend while the hardware may be inaccessible.
+ *
+ * Return: 0 on success and errno on failure
+ */
+int devm_pse_poll_helper(struct pse_controller_dev *pcdev,
+			 const struct pse_irq_desc *d)
+{
+	struct device *dev = pcdev->dev;
+	int ret;
+
+	if (!d || !d->map_event || !d->name)
+		return -EINVAL;
+
+	pcdev->poll_desc = *d;
+	pcdev->poll_notifs = devm_kcalloc(dev, pcdev->nr_lines,
+					  sizeof(*pcdev->poll_notifs),
+					  GFP_KERNEL);
+	if (!pcdev->poll_notifs)
+		return -ENOMEM;
+
+	of_property_read_u32(dev->of_node, "poll-interval-ms",
+			     &pcdev->poll_interval_ms);
+	if (!pcdev->poll_interval_ms)
+		pcdev->poll_interval_ms = PSE_DEFAULT_POLL_INTERVAL_MS;
+
+	INIT_DELAYED_WORK(&pcdev->poll_work, pse_poll_worker);
+	pcdev->polling = true;
+
+	/* Register devm action to cancel poll work before poll_notifs is
+	 * freed by devres. This ensures correct teardown ordering since
+	 * devm_pse_poll_helper() is called after devm_pse_controller_register().
+	 */
+	ret = devm_add_action_or_reset(dev, pse_poll_cancel, pcdev);
+	if (ret)
+		return ret;
+
+	queue_delayed_work(system_freezable_wq, &pcdev->poll_work,
+			   msecs_to_jiffies(pcdev->poll_interval_ms));
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(devm_pse_poll_helper);
 
 /* PSE control section */
 
