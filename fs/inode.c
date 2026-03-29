@@ -1029,6 +1029,7 @@ long prune_icache_sb(struct super_block *sb, struct shrink_control *sc)
 }
 
 static void __wait_on_freeing_inode(struct inode *inode, bool hash_locked, bool rcu_locked);
+static bool igrab_try_lockless(struct inode *inode);
 
 /*
  * Called with the inode lock held.
@@ -1053,6 +1054,11 @@ repeat:
 			continue;
 		if (!test(inode, data))
 			continue;
+		if (igrab_try_lockless(inode)) {
+			rcu_read_unlock();
+			*isnew = false;
+			return inode;
+		}
 		spin_lock(&inode->i_lock);
 		if (inode_state_read(inode) & (I_FREEING | I_WILL_FREE)) {
 			__wait_on_freeing_inode(inode, hash_locked, true);
@@ -1095,6 +1101,11 @@ repeat:
 			continue;
 		if (inode->i_sb != sb)
 			continue;
+		if (igrab_try_lockless(inode)) {
+			rcu_read_unlock();
+			*isnew = false;
+			return inode;
+		}
 		spin_lock(&inode->i_lock);
 		if (inode_state_read(inode) & (I_FREEING | I_WILL_FREE)) {
 			__wait_on_freeing_inode(inode, hash_locked, true);
@@ -1212,6 +1223,10 @@ void unlock_new_inode(struct inode *inode)
 	lockdep_annotate_inode_mutex_key(inode);
 	spin_lock(&inode->i_lock);
 	WARN_ON(!(inode_state_read(inode) & I_NEW));
+	/*
+	 * Paired with igrab_try_lockless()
+	 */
+	smp_wmb();
 	inode_state_clear(inode, I_NEW | I_CREATING);
 	inode_wake_up_bit(inode, __I_NEW);
 	spin_unlock(&inode->i_lock);
@@ -1223,6 +1238,10 @@ void discard_new_inode(struct inode *inode)
 	lockdep_annotate_inode_mutex_key(inode);
 	spin_lock(&inode->i_lock);
 	WARN_ON(!(inode_state_read(inode) & I_NEW));
+	/*
+	 * Paired with igrab_try_lockless()
+	 */
+	smp_wmb();
 	inode_state_clear(inode, I_NEW);
 	inode_wake_up_bit(inode, __I_NEW);
 	spin_unlock(&inode->i_lock);
@@ -1603,6 +1622,39 @@ struct inode *igrab(struct inode *inode)
 	return inode;
 }
 EXPORT_SYMBOL(igrab);
+
+/*
+ * Special routine for the inode hash. Don't use elsewhere.
+ *
+ * It provides lockless refcount acquire in the common case of no problematic
+ * flags being set.
+ *
+ * Any of I_NEW, I_CREATING, I_FREEING and I_WILL_FREE require dedicated treatment
+ * during lookup and bumping inodes with these is intentionally avoided. Additionally
+ * it is illegal to add refs if eiter I_FREEING or I_WILL_FREE is set in the first place.
+ *
+ * Correctness is achieved as follows:
+ * 1. both I_NEW and I_CREATING can only legally get set *before* the inode is visible
+ *    in the hash, meaning the upfront read takes care of them.
+ * 2. unsetting of I_NEW is preceded with a store fence, paired with full fence in
+ *    atomic_add_unless
+ * 3. both I_FREEING and I_WILL_FREE can only legally get set if ->i_count == 0, thus if
+ *    cmpxchg managed to replace any non-0 value, we have an invariant these flags are
+ *    not present
+ */
+static bool igrab_try_lockless(struct inode *inode)
+{
+	if (inode_state_read_once(inode) & (I_NEW | I_CREATING | I_FREEING | I_WILL_FREE))
+		return false;
+	/*
+	 * Paired with routines clearing I_NEW
+	 */
+	if (atomic_add_unless(&inode->i_count, 1, 0)) {
+		VFS_BUG_ON_INODE(inode_state_read_once(inode) & (I_FREEING | I_WILL_FREE), inode);
+		return true;
+	}
+	return false;
+}
 
 /**
  * ilookup5_nowait - search for an inode in the inode cache
