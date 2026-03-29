@@ -508,6 +508,16 @@ Description:
 		(RO) The size of extended linear cache, if there is an extended
 		linear cache. Otherwise the attribute will not be visible.
 
+
+What:		/sys/bus/cxl/devices/regionZ/locked
+Date:		Mar, 2026
+KernelVersion:	v7.1
+Contact:	linux-cxl@vger.kernel.org
+Description:
+		(RO) The lock status of the region, region destroy operations
+		are not permitted if the region is locked.
+
+
 What:		/sys/bus/cxl/devices/regionZ/mode
 Date:		January, 2023
 KernelVersion:	v6.3
