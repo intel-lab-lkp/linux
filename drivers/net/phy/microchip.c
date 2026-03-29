@@ -371,7 +371,7 @@ static void lan88xx_set_mdix(struct phy_device *phydev)
 
 static int lan88xx_config_init(struct phy_device *phydev)
 {
-	int val;
+	int val, err;
 
 	/*Zerodetect delay enable */
 	val = phy_read_mmd(phydev, MDIO_MMD_PCS,
@@ -383,6 +383,11 @@ static int lan88xx_config_init(struct phy_device *phydev)
 
 	/* Config DSP registers */
 	lan88xx_config_TR_regs(phydev);
+
+	/* Enable downshift after 2 failed attempts by default */
+	err = lan88xx_set_downshift(phydev, 2);
+	if (err < 0)
+		return err;
 
 	return 0;
 }
