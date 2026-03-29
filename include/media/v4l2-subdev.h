@@ -2051,4 +2051,24 @@ void v4l2_subdev_notify_event(struct v4l2_subdev *sd,
  */
 bool v4l2_subdev_is_streaming(struct v4l2_subdev *sd);
 
+/**
+ * v4l2_subdev_get_frame_desc() - Get a pad's frame descriptor
+ * @sd: The sub-device
+ * @pad: The number of the pad in @sd from which to obtain the frame descriptor
+ * @desc: A pointer to a frame descriptor, with its type field set
+ *
+ * Obtain a frame descriptor from a sub-device. If the sub-device supports the
+ * get_frame_desc pad operation, its result is returned, just like calling it
+ * directly using v4l2_subdev_call(). If the sub-device driver does not support
+ * it, then one containing a single entry is created using the information from
+ * the sub-device active state, which this function locks for the duration of
+ * the call to obtain it.
+ *
+ * The caller is required to set @desc->type to the expected bus type.
+ *
+ * Return: %0 on success or negative error code on failure.
+ */
+int v4l2_subdev_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
+			       struct v4l2_mbus_frame_desc *desc);
+
 #endif /* _V4L2_SUBDEV_H */
