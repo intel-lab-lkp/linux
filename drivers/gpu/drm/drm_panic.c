@@ -491,6 +491,8 @@ static void draw_panic_screen_user(struct drm_scanout_buffer *sb)
 
 	r_screen = DRM_RECT_INIT(0, 0, sb->width, sb->height);
 	drm_panic_logo_rect(&r_logo, font);
+	/* Center the panic logo */
+	drm_rect_translate(&r_logo, (sb->width - r_logo.x2) / 2, 0);
 
 	msg_width = min(get_max_line_len(panic_msg, panic_msg_lines) * font->width, sb->width);
 	msg_height = min(panic_msg_lines * font->height, sb->height);
