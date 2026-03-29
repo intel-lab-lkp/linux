@@ -234,9 +234,9 @@ static int get_modalias(const struct fw_unit *unit, char *buffer, size_t buffer_
 
 	get_modalias_ids(unit, id);
 
-	return snprintf(buffer, buffer_size,
-			"ieee1394:ven%08Xmo%08Xsp%08Xver%08X",
-			id[0], id[1], id[2], id[3]);
+	return scnprintf(buffer, buffer_size,
+			 "ieee1394:ven%08Xmo%08Xsp%08Xver%08X",
+			 id[0], id[1], id[2], id[3]);
 }
 
 static int fw_unit_uevent(const struct device *dev, struct kobj_uevent_env *env)
@@ -435,8 +435,9 @@ static ssize_t modalias_show(struct device *dev,
 	struct fw_unit *unit = fw_unit(dev);
 	int length;
 
-	length = get_modalias(unit, buf, PAGE_SIZE);
-	strcpy(buf + length, "\n");
+	length = get_modalias(unit, buf, PAGE_SIZE - 1);
+	buf[length] = '\n';
+	buf[length + 1] = '\0';
 
 	return length + 1;
 }
