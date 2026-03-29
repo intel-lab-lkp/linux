@@ -109,9 +109,13 @@ static int igc_fpe_xmit_smd_frame(struct igc_adapter *adapter,
 	__netif_tx_lock(nq, cpu);
 
 	err = igc_fpe_init_tx_descriptor(ring, skb, type);
-	igc_flush_tx_descriptors(ring);
+	if (!err)
+		igc_flush_tx_descriptors(ring);
 
 	__netif_tx_unlock(nq);
+
+	if (err)
+		dev_kfree_skb_any(skb);
 
 	return err;
 }
