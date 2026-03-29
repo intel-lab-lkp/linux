@@ -406,7 +406,7 @@ static int pn533_acr122_poweron_rdr(struct pn533_usb_phy *phy)
 	if (rc || (transferred != sizeof(cmd))) {
 		nfc_err(&phy->udev->dev,
 			"Reader power on cmd error %d\n", rc);
-		return rc;
+		return rc ?: -EINVAL;
 	}
 
 	rc =  usb_submit_urb(phy->in_urb, GFP_KERNEL);
@@ -500,7 +500,7 @@ static int pn533_usb_probe(struct usb_interface *interface,
 	if (!in_buf)
 		return -ENOMEM;
 
-	phy->udev = usb_get_dev(interface_to_usbdev(interface));
+	phy->udev = interface_to_usbdev(interface);
 	phy->interface = interface;
 
 	iface_desc = interface->cur_altsetting;
@@ -600,7 +600,6 @@ error:
 	usb_free_urb(phy->in_urb);
 	usb_free_urb(phy->out_urb);
 	usb_free_urb(phy->ack_urb);
-	usb_put_dev(phy->udev);
 	kfree(in_buf);
 	kfree(phy->ack_buffer);
 

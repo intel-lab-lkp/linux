@@ -116,7 +116,7 @@ static int nh_notifier_single_info_init(struct nh_notifier_info *info,
 	struct nh_info *nhi = rtnl_dereference(nh->nh_info);
 
 	info->type = NH_NOTIFIER_INFO_TYPE_SINGLE;
-	info->nh = kzalloc(sizeof(*info->nh), GFP_KERNEL);
+	info->nh = kzalloc_obj(*info->nh);
 	if (!info->nh)
 		return -ENOMEM;
 
@@ -137,8 +137,7 @@ static int nh_notifier_mpath_info_init(struct nh_notifier_info *info,
 	int i;
 
 	info->type = NH_NOTIFIER_INFO_TYPE_GRP;
-	info->nh_grp = kzalloc(struct_size(info->nh_grp, nh_entries, num_nh),
-			       GFP_KERNEL);
+	info->nh_grp = kzalloc_flex(*info->nh_grp, nh_entries, num_nh);
 	if (!info->nh_grp)
 		return -ENOMEM;
 
@@ -318,8 +317,7 @@ static int nh_notifier_res_bucket_info_init(struct nh_notifier_info *info,
 		return err;
 
 	info->type = NH_NOTIFIER_INFO_TYPE_RES_BUCKET;
-	info->nh_res_bucket = kzalloc(sizeof(*info->nh_res_bucket),
-				      GFP_KERNEL);
+	info->nh_res_bucket = kzalloc_obj(*info->nh_res_bucket);
 	if (!info->nh_res_bucket)
 		return -ENOMEM;
 
@@ -535,7 +533,7 @@ static struct nexthop *nexthop_alloc(void)
 {
 	struct nexthop *nh;
 
-	nh = kzalloc(sizeof(struct nexthop), GFP_KERNEL);
+	nh = kzalloc_obj(struct nexthop);
 	if (nh) {
 		INIT_LIST_HEAD(&nh->fi_list);
 		INIT_LIST_HEAD(&nh->f6i_list);
@@ -550,7 +548,7 @@ static struct nh_group *nexthop_grp_alloc(u16 num_nh)
 {
 	struct nh_group *nhg;
 
-	nhg = kzalloc(struct_size(nhg, nh_entries, num_nh), GFP_KERNEL);
+	nhg = kzalloc_flex(*nhg, nh_entries, num_nh);
 	if (nhg)
 		nhg->num_nh = num_nh;
 
@@ -715,9 +713,8 @@ static int nh_notifier_grp_hw_stats_init(struct nh_notifier_info *info,
 
 	info->id = nh->id;
 	info->type = NH_NOTIFIER_INFO_TYPE_GRP_HW_STATS;
-	info->nh_grp_hw_stats = kzalloc(struct_size(info->nh_grp_hw_stats,
-						    stats, nhg->num_nh),
-					GFP_KERNEL);
+	info->nh_grp_hw_stats = kzalloc_flex(*info->nh_grp_hw_stats, stats,
+					     nhg->num_nh);
 	if (!info->nh_grp_hw_stats)
 		return -ENOMEM;
 
@@ -2005,7 +2002,8 @@ static void nh_hthr_group_rebalance(struct nh_group *nhg)
 }
 
 static void remove_nh_grp_entry(struct net *net, struct nh_grp_entry *nhge,
-				struct nl_info *nlinfo)
+				struct nl_info *nlinfo,
+				struct list_head *deferred_free)
 {
 	struct nh_grp_entry *nhges, *new_nhges;
 	struct nexthop *nhp = nhge->nh_parent;
@@ -2065,8 +2063,8 @@ static void remove_nh_grp_entry(struct net *net, struct nh_grp_entry *nhge,
 	rcu_assign_pointer(nhp->nh_grp, newg);
 
 	list_del(&nhge->nh_list);
-	free_percpu(nhge->stats);
 	nexthop_put(nhge->nh);
+	list_add(&nhge->nh_list, deferred_free);
 
 	/* Removal of a NH from a resilient group is notified through
 	 * bucket notifications.
@@ -2086,12 +2084,25 @@ static void remove_nexthop_from_groups(struct net *net, struct nexthop *nh,
 				       struct nl_info *nlinfo)
 {
 	struct nh_grp_entry *nhge, *tmp;
+	LIST_HEAD(deferred_free);
+
+	/* If there is nothing to do, let's avoid the costly call to
+	 * synchronize_net()
+	 */
+	if (list_empty(&nh->grp_list))
+		return;
 
 	list_for_each_entry_safe(nhge, tmp, &nh->grp_list, nh_list)
-		remove_nh_grp_entry(net, nhge, nlinfo);
+		remove_nh_grp_entry(net, nhge, nlinfo, &deferred_free);
 
 	/* make sure all see the newly published array before releasing rtnl */
 	synchronize_net();
+
+	/* Now safe to free percpu stats — all RCU readers have finished */
+	list_for_each_entry_safe(nhge, tmp, &deferred_free, nh_list) {
+		list_del(&nhge->nh_list);
+		free_percpu(nhge->stats);
+	}
 }
 
 static void remove_nexthop_group(struct nexthop *nh, struct nl_info *nlinfo)
@@ -2396,6 +2407,13 @@ static int replace_nexthop_single(struct net *net, struct nexthop *old,
 
 	if (new->is_group) {
 		NL_SET_ERR_MSG(extack, "Can not replace a nexthop with a nexthop group.");
+		return -EINVAL;
+	}
+
+	if (!list_empty(&old->grp_list) &&
+	    rtnl_dereference(new->nh_info)->fdb_nh !=
+	    rtnl_dereference(old->nh_info)->fdb_nh) {
+		NL_SET_ERR_MSG(extack, "Cannot change nexthop FDB status while in a group");
 		return -EINVAL;
 	}
 
@@ -2884,7 +2902,7 @@ static struct nexthop *nexthop_create(struct net *net, struct nh_config *cfg,
 	if (!nh)
 		return ERR_PTR(-ENOMEM);
 
-	nhi = kzalloc(sizeof(*nhi), GFP_KERNEL);
+	nhi = kzalloc_obj(*nhi);
 	if (!nhi) {
 		kfree(nh);
 		return ERR_PTR(-ENOMEM);
@@ -3511,12 +3529,42 @@ static int rtm_dump_walk_nexthops(struct sk_buff *skb,
 	int err;
 
 	s_idx = ctx->idx;
-	for (node = rb_first(root); node; node = rb_next(node)) {
+
+	/* If this is not the first invocation, ctx->idx will contain the id of
+	 * the last nexthop we processed. Instead of starting from the very
+	 * first element of the red/black tree again and linearly skipping the
+	 * (potentially large) set of nodes with an id smaller than s_idx, walk
+	 * the tree and find the left-most node whose id is >= s_idx.  This
+	 * provides an efficient O(log n) starting point for the dump
+	 * continuation.
+	 */
+	if (s_idx != 0) {
+		struct rb_node *tmp = root->rb_node;
+
+		node = NULL;
+		while (tmp) {
+			struct nexthop *nh;
+
+			nh = rb_entry(tmp, struct nexthop, rb_node);
+			if (nh->id < s_idx) {
+				tmp = tmp->rb_right;
+			} else {
+				/* Track current candidate and keep looking on
+				 * the left side to find the left-most
+				 * (smallest id) that is still >= s_idx.
+				 */
+				node = tmp;
+				tmp = tmp->rb_left;
+			}
+		}
+	} else {
+		node = rb_first(root);
+	}
+
+	for (; node; node = rb_next(node)) {
 		struct nexthop *nh;
 
 		nh = rb_entry(node, struct nexthop, rb_node);
-		if (nh->id < s_idx)
-			continue;
 
 		ctx->idx = nh->id;
 		err = nh_cb(skb, cb, nh, data);
@@ -3884,7 +3932,7 @@ static int nh_netdev_event(struct notifier_block *this,
 		nexthop_flush_dev(dev, event);
 		break;
 	case NETDEV_CHANGE:
-		if (!(dev_get_flags(dev) & (IFF_RUNNING | IFF_LOWER_UP)))
+		if (!(netif_get_flags(dev) & (IFF_RUNNING | IFF_LOWER_UP)))
 			nexthop_flush_dev(dev, event);
 		break;
 	case NETDEV_CHANGEMTU:

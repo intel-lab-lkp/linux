@@ -55,28 +55,33 @@ void iwl_mld_cleanup_vif(void *data, u8 *mac, struct ieee80211_vif *vif)
 
 	ieee80211_iter_keys(mld->hw, vif, iwl_mld_cleanup_keys_iter, NULL);
 
-	wiphy_delayed_work_cancel(mld->wiphy, &mld_vif->mlo_scan_start_wk);
-
 	CLEANUP_STRUCT(mld_vif);
 }
 
 static int iwl_mld_send_mac_cmd(struct iwl_mld *mld,
 				struct iwl_mac_config_cmd *cmd)
 {
+	u16 cmd_id = WIDE_ID(MAC_CONF_GROUP, MAC_CONFIG_CMD);
+	int len = sizeof(*cmd);
 	int ret;
 
 	lockdep_assert_wiphy(mld->wiphy);
 
-	ret = iwl_mld_send_cmd_pdu(mld,
-				   WIDE_ID(MAC_CONF_GROUP, MAC_CONFIG_CMD),
-				   cmd);
+	if (iwl_fw_lookup_cmd_ver(mld->fw, cmd_id, 0) < 4) {
+		if (WARN_ON(cmd->mac_type == cpu_to_le32(FW_MAC_TYPE_NAN)))
+			return -EINVAL;
+
+		len = sizeof(struct iwl_mac_config_cmd_v3);
+	}
+
+	ret = iwl_mld_send_cmd_pdu(mld, cmd_id, cmd, len);
 	if (ret)
 		IWL_ERR(mld, "Failed to send MAC_CONFIG_CMD ret = %d\n", ret);
 
 	return ret;
 }
 
-int iwl_mld_mac80211_iftype_to_fw(const struct ieee80211_vif *vif)
+static int iwl_mld_mac80211_iftype_to_fw(const struct ieee80211_vif *vif)
 {
 	switch (vif->type) {
 	case NL80211_IFTYPE_STATION:
@@ -115,20 +120,12 @@ static bool iwl_mld_is_nic_ack_enabled(struct iwl_mld *mld,
 
 static void iwl_mld_set_he_support(struct iwl_mld *mld,
 				   struct ieee80211_vif *vif,
-				   struct iwl_mac_config_cmd *cmd,
-				   int cmd_ver)
+				   struct iwl_mac_config_cmd *cmd)
 {
-	if (vif->type == NL80211_IFTYPE_AP) {
-		if (cmd_ver == 2)
-			cmd->wifi_gen_v2.he_ap_support = cpu_to_le16(1);
-		else
-			cmd->wifi_gen.he_ap_support = 1;
-	} else {
-		if (cmd_ver == 2)
-			cmd->wifi_gen_v2.he_support = cpu_to_le16(1);
-		else
-			cmd->wifi_gen.he_support = 1;
-	}
+	if (vif->type == NL80211_IFTYPE_AP)
+		cmd->wifi_gen.he_ap_support = 1;
+	else
+		cmd->wifi_gen.he_support = 1;
 }
 
 /* fill the common part for all interface types */
@@ -140,9 +137,6 @@ static void iwl_mld_mac_cmd_fill_common(struct iwl_mld *mld,
 	struct iwl_mld_vif *mld_vif = iwl_mld_vif_from_mac80211(vif);
 	struct ieee80211_bss_conf *link_conf;
 	unsigned int link_id;
-	int cmd_ver = iwl_fw_lookup_cmd_ver(mld->fw,
-					    WIDE_ID(MAC_CONF_GROUP,
-						    MAC_CONFIG_CMD), 0);
 
 	lockdep_assert_wiphy(mld->wiphy);
 
@@ -169,11 +163,8 @@ static void iwl_mld_mac_cmd_fill_common(struct iwl_mld *mld,
 	 * and enable both when we have MLO.
 	 */
 	if (ieee80211_vif_is_mld(vif)) {
-		iwl_mld_set_he_support(mld, vif, cmd, cmd_ver);
-		if (cmd_ver == 2)
-			cmd->wifi_gen_v2.eht_support = cpu_to_le32(1);
-		else
-			cmd->wifi_gen.eht_support = 1;
+		iwl_mld_set_he_support(mld, vif, cmd);
+		cmd->wifi_gen.eht_support = 1;
 		return;
 	}
 
@@ -181,7 +172,7 @@ static void iwl_mld_mac_cmd_fill_common(struct iwl_mld *mld,
 		if (!link_conf->he_support)
 			continue;
 
-		iwl_mld_set_he_support(mld, vif, cmd, cmd_ver);
+		iwl_mld_set_he_support(mld, vif, cmd);
 
 		/* EHT, if supported, was already set above */
 		break;
@@ -353,6 +344,10 @@ int iwl_mld_mac_fw_action(struct iwl_mld *mld, struct ieee80211_vif *vif,
 
 	lockdep_assert_wiphy(mld->wiphy);
 
+	/* NAN interface type is not known to FW */
+	if (vif->type == NL80211_IFTYPE_NAN)
+		return 0;
+
 	if (action == FW_CTXT_ACTION_REMOVE)
 		return iwl_mld_rm_mac_from_fw(mld, vif);
 
@@ -398,23 +393,19 @@ static void iwl_mld_mlo_scan_start_wk(struct wiphy *wiphy,
 	iwl_mld_int_mlo_scan(mld, iwl_mld_vif_to_mac80211(mld_vif));
 }
 
-IWL_MLD_ALLOC_FN(vif, vif)
+static IWL_MLD_ALLOC_FN(vif, vif)
 
 /* Constructor function for struct iwl_mld_vif */
-static int
+static void
 iwl_mld_init_vif(struct iwl_mld *mld, struct ieee80211_vif *vif)
 {
 	struct iwl_mld_vif *mld_vif = iwl_mld_vif_from_mac80211(vif);
-	int ret;
 
 	lockdep_assert_wiphy(mld->wiphy);
 
 	mld_vif->mld = mld;
+	mld_vif->fw_id = IWL_MLD_INVALID_FW_ID;
 	mld_vif->roc_activity = ROC_NUM_ACTIVITIES;
-
-	ret = iwl_mld_allocate_vif_fw_id(mld, &mld_vif->fw_id, vif);
-	if (ret)
-		return ret;
 
 	if (!mld->fw_status.in_hw_restart) {
 		wiphy_work_init(&mld_vif->emlsr.unblock_tpt_wk,
@@ -429,8 +420,6 @@ iwl_mld_init_vif(struct iwl_mld *mld, struct ieee80211_vif *vif)
 					iwl_mld_mlo_scan_start_wk);
 	}
 	iwl_mld_init_internal_sta(&mld_vif->aux_sta);
-
-	return 0;
 }
 
 int iwl_mld_add_vif(struct iwl_mld *mld, struct ieee80211_vif *vif)
@@ -440,7 +429,13 @@ int iwl_mld_add_vif(struct iwl_mld *mld, struct ieee80211_vif *vif)
 
 	lockdep_assert_wiphy(mld->wiphy);
 
-	ret = iwl_mld_init_vif(mld, vif);
+	iwl_mld_init_vif(mld, vif);
+
+	/* NAN interface type is not known to FW */
+	if (vif->type == NL80211_IFTYPE_NAN)
+		return 0;
+
+	ret = iwl_mld_allocate_vif_fw_id(mld, &mld_vif->fw_id, vif);
 	if (ret)
 		return ret;
 
@@ -451,24 +446,25 @@ int iwl_mld_add_vif(struct iwl_mld *mld, struct ieee80211_vif *vif)
 	return ret;
 }
 
-int iwl_mld_rm_vif(struct iwl_mld *mld, struct ieee80211_vif *vif)
+void iwl_mld_rm_vif(struct iwl_mld *mld, struct ieee80211_vif *vif)
 {
 	struct iwl_mld_vif *mld_vif = iwl_mld_vif_from_mac80211(vif);
-	int ret;
 
 	lockdep_assert_wiphy(mld->wiphy);
 
-	ret = iwl_mld_mac_fw_action(mld, vif, FW_CTXT_ACTION_REMOVE);
+	/* NAN interface type is not known to FW */
+	if (vif->type == NL80211_IFTYPE_NAN)
+		return;
+
+	iwl_mld_mac_fw_action(mld, vif, FW_CTXT_ACTION_REMOVE);
 
 	if (WARN_ON(mld_vif->fw_id >= ARRAY_SIZE(mld->fw_id_to_vif)))
-		return -EINVAL;
+		return;
 
 	RCU_INIT_POINTER(mld->fw_id_to_vif[mld_vif->fw_id], NULL);
 
 	iwl_mld_cancel_notifications_of_object(mld, IWL_MLD_OBJECT_TYPE_VIF,
 					       mld_vif->fw_id);
-
-	return ret;
 }
 
 void iwl_mld_set_vif_associated(struct iwl_mld *mld,
@@ -545,7 +541,20 @@ void iwl_mld_handle_probe_resp_data_notif(struct iwl_mld *mld,
 
 	mld_link = &iwl_mld_vif_from_mac80211(vif)->deflink;
 
-	new_data = kzalloc(sizeof(*new_data), GFP_KERNEL);
+	/* len_low should be 2 + n*13 (where n is the number of descriptors.
+	 * 13 is the size of a NoA descriptor). We can have either one or two
+	 * descriptors.
+	 */
+	if (IWL_FW_CHECK(mld, notif->noa_active &&
+			 notif->noa_attr.len_low != 2 +
+			 sizeof(struct ieee80211_p2p_noa_desc) &&
+			 notif->noa_attr.len_low != 2 +
+			 sizeof(struct ieee80211_p2p_noa_desc) * 2,
+			 "Invalid noa_attr.len_low (%d)\n",
+			 notif->noa_attr.len_low))
+		return;
+
+	new_data = kzalloc_obj(*new_data);
 	if (!new_data)
 		return;
 

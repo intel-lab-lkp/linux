@@ -10,6 +10,7 @@
 #include <linux/etherdevice.h>
 #include <linux/mii.h>
 #include <linux/ethtool.h>
+#include <linux/hex.h>
 #include <linux/phy.h>
 #include <linux/usb.h>
 #include <linux/crc32.h>
@@ -30,13 +31,6 @@
 #include <linux/usb/r8152.h>
 #include <net/gso.h>
 
-/* Information for net-next */
-#define NETNEXT_VERSION		"12"
-
-/* Information for net */
-#define NET_VERSION		"13"
-
-#define DRIVER_VERSION		"v1." NETNEXT_VERSION "." NET_VERSION
 #define DRIVER_AUTHOR "Realtek linux nic maintainers <nic_swsd@realtek.com>"
 #define DRIVER_DESC "Realtek RTL8152/RTL8153 Based USB Ethernet Adapters"
 #define MODULENAME "r8152"
@@ -213,6 +207,7 @@
 #define OCP_EEE_LPABLE		0xa5d2
 #define OCP_10GBT_CTRL		0xa5d4
 #define OCP_10GBT_STAT		0xa5d6
+#define OCP_EEE_LPABLE2		0xa6d0
 #define OCP_EEE_ADV2		0xa6d4
 #define OCP_PHY_STATE		0xa708		/* nway state for 8153 */
 #define OCP_PHY_PATCH_STAT	0xb800
@@ -954,6 +949,7 @@ struct r8152 {
 	u16 ocp_base;
 	u16 speed;
 	u16 eee_adv;
+	u16 eee_adv2;
 	u8 *intr_buff;
 	u8 version;
 	u8 duplex;
@@ -2449,6 +2445,8 @@ static int r8152_tx_agg_fill(struct r8152 *tp, struct tx_agg *agg)
 	ret = usb_submit_urb(agg->urb, GFP_ATOMIC);
 	if (ret < 0)
 		usb_autopm_put_interface_async(tp->intf);
+	else
+		netif_trans_update(tp->netdev);
 
 out_tx_fill:
 	return ret;
@@ -5397,7 +5395,7 @@ static void r8156_eee_en(struct r8152 *tp, bool enable)
 
 	config = ocp_reg_read(tp, OCP_EEE_ADV2);
 
-	if (enable)
+	if (enable && (tp->eee_adv2 & MDIO_EEE_2_5GT))
 		config |= MDIO_EEE_2_5GT;
 	else
 		config &= ~MDIO_EEE_2_5GT;
@@ -8535,19 +8533,6 @@ static int rtl8152_system_resume(struct r8152 *tp)
 		usb_submit_urb(tp->intr_urb, GFP_NOIO);
 	}
 
-	/* If the device is RTL8152_INACCESSIBLE here then we should do a
-	 * reset. This is important because the usb_lock_device_for_reset()
-	 * that happens as a result of usb_queue_reset_device() will silently
-	 * fail if the device was suspended or if too much time passed.
-	 *
-	 * NOTE: The device is locked here so we can directly do the reset.
-	 * We don't need usb_lock_device_for_reset() because that's just a
-	 * wrapper over device_lock() and device_resume() (which calls us)
-	 * does that for us.
-	 */
-	if (test_bit(RTL8152_INACCESSIBLE, &tp->flags))
-		usb_reset_device(tp->udev);
-
 	return 0;
 }
 
@@ -8658,18 +8643,32 @@ static int rtl8152_suspend(struct usb_interface *intf, pm_message_t message)
 static int rtl8152_resume(struct usb_interface *intf)
 {
 	struct r8152 *tp = usb_get_intfdata(intf);
+	bool runtime_resume = test_bit(SELECTIVE_SUSPEND, &tp->flags);
 	int ret;
 
 	mutex_lock(&tp->control);
 
 	rtl_reset_ocp_base(tp);
 
-	if (test_bit(SELECTIVE_SUSPEND, &tp->flags))
+	if (runtime_resume)
 		ret = rtl8152_runtime_resume(tp);
 	else
 		ret = rtl8152_system_resume(tp);
 
 	mutex_unlock(&tp->control);
+
+	/* If the device is RTL8152_INACCESSIBLE here then we should do a
+	 * reset. This is important because the usb_lock_device_for_reset()
+	 * that happens as a result of usb_queue_reset_device() will silently
+	 * fail if the device was suspended or if too much time passed.
+	 *
+	 * NOTE: The device is locked here so we can directly do the reset.
+	 * We don't need usb_lock_device_for_reset() because that's just a
+	 * wrapper over device_lock() and device_resume() (which calls us)
+	 * does that for us.
+	 */
+	if (!runtime_resume && test_bit(RTL8152_INACCESSIBLE, &tp->flags))
+		usb_reset_device(tp->udev);
 
 	return ret;
 }
@@ -8754,7 +8753,6 @@ static void rtl8152_get_drvinfo(struct net_device *netdev,
 	struct r8152 *tp = netdev_priv(netdev);
 
 	strscpy(info->driver, MODULENAME, sizeof(info->driver));
-	strscpy(info->version, DRIVER_VERSION, sizeof(info->version));
 	usb_make_path(tp->udev, info->bus_info, sizeof(info->bus_info));
 	if (!IS_ERR_OR_NULL(tp->rtl_fw.fw))
 		strscpy(info->fw_version, tp->rtl_fw.version,
@@ -8926,7 +8924,8 @@ static void rtl8152_get_strings(struct net_device *dev, u32 stringset, u8 *data)
 
 static int r8152_get_eee(struct r8152 *tp, struct ethtool_keee *eee)
 {
-	__ETHTOOL_DECLARE_LINK_MODE_MASK(common);
+	__ETHTOOL_DECLARE_LINK_MODE_MASK(common) = {};
+	u16 speed = rtl8152_get_speed(tp);
 	u16 val;
 
 	val = r8152_mmd_read(tp, MDIO_MMD_PCS, MDIO_PCS_EEE_ABLE);
@@ -8940,8 +8939,14 @@ static int r8152_get_eee(struct r8152 *tp, struct ethtool_keee *eee)
 
 	eee->eee_enabled = tp->eee_en;
 
-	linkmode_and(common, eee->advertised, eee->lp_advertised);
-	eee->eee_active = phy_check_valid(tp->speed, tp->duplex, common);
+	if (speed & _1000bps)
+		linkmode_set_bit(ETHTOOL_LINK_MODE_1000baseT_Full_BIT, common);
+	if (speed & _100bps)
+		linkmode_set_bit(ETHTOOL_LINK_MODE_100baseT_Full_BIT, common);
+
+	linkmode_and(common, common, eee->advertised);
+	linkmode_and(common, common, eee->lp_advertised);
+	eee->eee_active = !linkmode_empty(common);
 
 	return 0;
 }
@@ -8952,7 +8957,10 @@ static int r8152_set_eee(struct r8152 *tp, struct ethtool_keee *eee)
 
 	tp->eee_en = eee->eee_enabled;
 	tp->eee_adv = val;
-
+	if (tp->support_2500full) {
+		val = linkmode_to_mii_eee_cap2_t(eee->advertised);
+		tp->eee_adv2 = val;
+	}
 	rtl_eee_enable(tp, tp->eee_en);
 
 	return 0;
@@ -8960,7 +8968,8 @@ static int r8152_set_eee(struct r8152 *tp, struct ethtool_keee *eee)
 
 static int r8153_get_eee(struct r8152 *tp, struct ethtool_keee *eee)
 {
-	__ETHTOOL_DECLARE_LINK_MODE_MASK(common);
+	__ETHTOOL_DECLARE_LINK_MODE_MASK(common) = {};
+	u16 speed = rtl8152_get_speed(tp);
 	u16 val;
 
 	val = ocp_reg_read(tp, OCP_EEE_ABLE);
@@ -8972,10 +8981,29 @@ static int r8153_get_eee(struct r8152 *tp, struct ethtool_keee *eee)
 	val = ocp_reg_read(tp, OCP_EEE_LPABLE);
 	mii_eee_cap1_mod_linkmode_t(eee->lp_advertised, val);
 
+	if (tp->support_2500full) {
+		linkmode_set_bit(ETHTOOL_LINK_MODE_2500baseT_Full_BIT, eee->supported);
+
+		val = ocp_reg_read(tp, OCP_EEE_ADV2);
+		mii_eee_cap2_mod_linkmode_adv_t(eee->advertised, val);
+
+		val = ocp_reg_read(tp, OCP_EEE_LPABLE2);
+		mii_eee_cap2_mod_linkmode_adv_t(eee->lp_advertised, val);
+
+		if (speed & _2500bps)
+			linkmode_set_bit(ETHTOOL_LINK_MODE_2500baseT_Full_BIT, common);
+	}
+
 	eee->eee_enabled = tp->eee_en;
 
-	linkmode_and(common, eee->advertised, eee->lp_advertised);
-	eee->eee_active = phy_check_valid(tp->speed, tp->duplex, common);
+	if (speed & _1000bps)
+		linkmode_set_bit(ETHTOOL_LINK_MODE_1000baseT_Full_BIT, common);
+	if (speed & _100bps)
+		linkmode_set_bit(ETHTOOL_LINK_MODE_100baseT_Full_BIT, common);
+
+	linkmode_and(common, common, eee->advertised);
+	linkmode_and(common, common, eee->lp_advertised);
+	eee->eee_active = !linkmode_empty(common);
 
 	return 0;
 }
@@ -9311,6 +9339,7 @@ static const struct ethtool_ops ops = {
 	.set_ringparam = rtl8152_set_ringparam,
 	.get_pauseparam = rtl8152_get_pauseparam,
 	.set_pauseparam = rtl8152_set_pauseparam,
+	.get_ts_info = ethtool_op_get_ts_info,
 };
 
 static int rtl8152_ioctl(struct net_device *netdev, struct ifreq *rq, int cmd)
@@ -9515,6 +9544,7 @@ static int rtl_ops_init(struct r8152 *tp)
 	case RTL_VER_11:
 		tp->eee_en		= true;
 		tp->eee_adv		= MDIO_EEE_1000T | MDIO_EEE_100TX;
+		tp->eee_adv2		= MDIO_EEE_2_5GT;
 		fallthrough;
 	case RTL_VER_10:
 		ops->init		= r8156_init;
@@ -9540,6 +9570,7 @@ static int rtl_ops_init(struct r8152 *tp)
 	case RTL_VER_15:
 		tp->eee_en		= true;
 		tp->eee_adv		= MDIO_EEE_1000T | MDIO_EEE_100TX;
+		tp->eee_adv2		= MDIO_EEE_2_5GT;
 		ops->init		= r8156b_init;
 		ops->enable		= rtl8156b_enable;
 		ops->disable		= rtl8153_disable;
@@ -9650,7 +9681,7 @@ static u8 __rtl_get_hw_ver(struct usb_device *udev)
 	int ret;
 	int i;
 
-	tmp = kmalloc(sizeof(*tmp), GFP_KERNEL);
+	tmp = kmalloc_obj(*tmp);
 	if (!tmp)
 		return 0;
 
@@ -9947,7 +9978,6 @@ static int rtl8152_probe_once(struct usb_interface *intf,
 		goto out2;
 
 	set_bit(PROBED_WITH_NO_ERRORS, &tp->flags);
-	netif_info(tp, probe, netdev, "%s\n", DRIVER_VERSION);
 
 	return 0;
 
@@ -10058,6 +10088,7 @@ static const struct usb_device_id rtl8152_table[] = {
 	{ USB_DEVICE(VENDOR_ID_DLINK,   0xb301) },
 	{ USB_DEVICE(VENDOR_ID_DELL,    0xb097) },
 	{ USB_DEVICE(VENDOR_ID_ASUS,    0x1976) },
+	{ USB_DEVICE(VENDOR_ID_TRENDNET, 0xe02b) },
 	{}
 };
 
@@ -10122,7 +10153,12 @@ static int __init rtl8152_driver_init(void)
 	ret = usb_register_device_driver(&rtl8152_cfgselector_driver, THIS_MODULE);
 	if (ret)
 		return ret;
-	return usb_register(&rtl8152_driver);
+
+	ret = usb_register(&rtl8152_driver);
+	if (ret)
+		usb_deregister_device_driver(&rtl8152_cfgselector_driver);
+
+	return ret;
 }
 
 static void __exit rtl8152_driver_exit(void)
@@ -10137,4 +10173,3 @@ module_exit(rtl8152_driver_exit);
 MODULE_AUTHOR(DRIVER_AUTHOR);
 MODULE_DESCRIPTION(DRIVER_DESC);
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRIVER_VERSION);

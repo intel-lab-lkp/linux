@@ -14,7 +14,6 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
-#include <linux/of_gpio.h>
 #include <linux/pinctrl/pinctrl.h>
 #include <linux/slab.h>
 #include <linux/string.h>
@@ -446,32 +445,6 @@ out:
 	return desc;
 }
 
-/**
- * of_get_named_gpio() - Get a GPIO number to use with GPIO API
- * @np:		device node to get GPIO from
- * @propname:	Name of property containing gpio specifier(s)
- * @index:	index of the GPIO
- *
- * **DEPRECATED** This function is deprecated and must not be used in new code.
- *
- * Returns:
- * GPIO number to use with Linux generic GPIO API, or one of the errno
- * value on the error condition.
- */
-int of_get_named_gpio(const struct device_node *np, const char *propname,
-		      int index)
-{
-	struct gpio_desc *desc;
-
-	desc = of_get_named_gpiod_flags(np, propname, index, NULL);
-
-	if (IS_ERR(desc))
-		return PTR_ERR(desc);
-	else
-		return desc_to_gpio(desc);
-}
-EXPORT_SYMBOL_GPL(of_get_named_gpio);
-
 /* Converts gpio_lookup_flags into bitmask of GPIO_* values */
 static unsigned long of_convert_gpio_flags(enum of_gpio_flags flags)
 {
@@ -541,6 +514,10 @@ static struct gpio_desc *of_find_gpio_rename(struct device_node *np,
 #if IS_ENABLED(CONFIG_NFC_MRVL_UART)
 		{ "reset",	"reset-n-io",	"marvell,nfc-uart" },
 		{ "reset",	"reset-n-io",	"mrvl,nfc-uart" },
+#endif
+#if IS_ENABLED(CONFIG_NFC_S3FWRN5_I2C)
+		{ "en",		"s3fwrn5,en-gpios",	"samsung,s3fwrn5-i2c" },
+		{ "wake",	"s3fwrn5,fw-gpios",	"samsung,s3fwrn5-i2c" },
 #endif
 #if IS_ENABLED(CONFIG_PCI_LANTIQ)
 		/* MIPS Lantiq PCI */
@@ -634,6 +611,7 @@ static struct gpio_desc *of_find_gpio_rename(struct device_node *np,
 	return ERR_PTR(-ENOENT);
 }
 
+#if IS_ENABLED(CONFIG_SND_SOC_MT2701_CS42448)
 static struct gpio_desc *of_find_mt2701_gpio(struct device_node *np,
 					     const char *con_id,
 					     unsigned int idx,
@@ -665,6 +643,7 @@ static struct gpio_desc *of_find_mt2701_gpio(struct device_node *np,
 
 	return desc;
 }
+#endif
 
 /*
  * Trigger sources are special, they allow us to use any GPIO as a LED trigger
@@ -699,7 +678,9 @@ typedef struct gpio_desc *(*of_find_gpio_quirk)(struct device_node *np,
 						enum of_gpio_flags *of_flags);
 static const of_find_gpio_quirk of_find_gpio_quirks[] = {
 	of_find_gpio_rename,
+#if IS_ENABLED(CONFIG_SND_SOC_MT2701_CS42448)
 	of_find_mt2701_gpio,
+#endif
 	of_find_trigger_gpio,
 	NULL
 };
@@ -708,7 +689,7 @@ struct gpio_desc *of_find_gpio(struct device_node *np, const char *con_id,
 			       unsigned int idx, unsigned long *flags)
 {
 	char propname[32]; /* 32 is max size of property name */
-	enum of_gpio_flags of_flags;
+	enum of_gpio_flags of_flags = 0;
 	const of_find_gpio_quirk *q;
 	struct gpio_desc *desc;
 
@@ -878,7 +859,7 @@ static void of_gpiochip_remove_hog(struct gpio_chip *chip,
 {
 	struct gpio_desc *desc;
 
-	for_each_gpio_desc_with_flag(chip, desc, FLAG_IS_HOGGED)
+	for_each_gpio_desc_with_flag(chip, desc, GPIOD_FLAG_IS_HOGGED)
 		if (READ_ONCE(desc->hog) == hog)
 			gpiochip_free_own_desc(desc);
 }
@@ -1030,85 +1011,6 @@ static int of_gpio_threecell_xlate(struct gpio_chip *gc,
 
 	return gpiospec->args[1];
 }
-
-#if IS_ENABLED(CONFIG_OF_GPIO_MM_GPIOCHIP)
-#include <linux/gpio/legacy-of-mm-gpiochip.h>
-/**
- * of_mm_gpiochip_add_data - Add memory mapped GPIO chip (bank)
- * @np:		device node of the GPIO chip
- * @mm_gc:	pointer to the of_mm_gpio_chip allocated structure
- * @data:	driver data to store in the struct gpio_chip
- *
- * To use this function you should allocate and fill mm_gc with:
- *
- * 1) In the gpio_chip structure:
- *    - all the callbacks
- *    - of_gpio_n_cells
- *    - of_xlate callback (optional)
- *
- * 3) In the of_mm_gpio_chip structure:
- *    - save_regs callback (optional)
- *
- * If succeeded, this function will map bank's memory and will
- * do all necessary work for you. Then you'll able to use .regs
- * to manage GPIOs from the callbacks.
- *
- * Returns:
- * 0 on success, or negative errno on failure.
- */
-int of_mm_gpiochip_add_data(struct device_node *np,
-			    struct of_mm_gpio_chip *mm_gc,
-			    void *data)
-{
-	int ret = -ENOMEM;
-	struct gpio_chip *gc = &mm_gc->gc;
-
-	gc->label = kasprintf(GFP_KERNEL, "%pOF", np);
-	if (!gc->label)
-		goto err0;
-
-	mm_gc->regs = of_iomap(np, 0);
-	if (!mm_gc->regs)
-		goto err1;
-
-	gc->base = -1;
-
-	if (mm_gc->save_regs)
-		mm_gc->save_regs(mm_gc);
-
-	fwnode_handle_put(mm_gc->gc.fwnode);
-	mm_gc->gc.fwnode = fwnode_handle_get(of_fwnode_handle(np));
-
-	ret = gpiochip_add_data(gc, data);
-	if (ret)
-		goto err2;
-
-	return 0;
-err2:
-	of_node_put(np);
-	iounmap(mm_gc->regs);
-err1:
-	kfree(gc->label);
-err0:
-	pr_err("%pOF: GPIO chip registration failed with status %d\n", np, ret);
-	return ret;
-}
-EXPORT_SYMBOL_GPL(of_mm_gpiochip_add_data);
-
-/**
- * of_mm_gpiochip_remove - Remove memory mapped GPIO chip (bank)
- * @mm_gc:	pointer to the of_mm_gpio_chip allocated structure
- */
-void of_mm_gpiochip_remove(struct of_mm_gpio_chip *mm_gc)
-{
-	struct gpio_chip *gc = &mm_gc->gc;
-
-	gpiochip_remove(gc);
-	iounmap(mm_gc->regs);
-	kfree(gc->label);
-}
-EXPORT_SYMBOL_GPL(of_mm_gpiochip_remove);
-#endif
 
 #ifdef CONFIG_PINCTRL
 static int of_gpiochip_add_pin_range(struct gpio_chip *chip)
