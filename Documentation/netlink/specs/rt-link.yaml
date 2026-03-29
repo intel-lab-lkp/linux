@@ -833,6 +833,13 @@ definitions:
     entries:
       - p2p
       - mp
+  -
+    name: br-stp-mode
+    type: enum
+    entries:
+      - auto
+      - user
+      - kernel
 
 attribute-sets:
   -
@@ -1543,6 +1550,10 @@ attribute-sets:
       -
         name: fdb-max-learned
         type: u32
+      -
+        name: stp-mode
+        type: u32
+        enum: br-stp-mode
   -
     name: linkinfo-brport-attrs
     name-prefix: ifla-brport-
