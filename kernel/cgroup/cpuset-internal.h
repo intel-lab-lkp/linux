@@ -46,6 +46,7 @@ typedef enum {
 	CS_SCHED_LOAD_BALANCE,
 	CS_SPREAD_PAGE,
 	CS_SPREAD_SLAB,
+	CS_TASKS_OUT,
 } cpuset_flagbits_t;
 
 /* The various types of files and directories in a cpuset file system */

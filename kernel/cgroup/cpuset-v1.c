@@ -322,6 +322,9 @@ void cpuset1_hotplug_update_tasks(struct cpuset *cs,
 			return;
 		}
 
+		/* Enable task removal without security check */
+		set_bit(CS_TASKS_OUT, &cs->flags);
+
 		s->cs = cs;
 		INIT_WORK(&s->work, cpuset_migrate_tasks_workfn);
 		schedule_work(&s->work);

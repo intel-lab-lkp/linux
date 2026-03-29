@@ -3011,6 +3011,20 @@ static int cpuset_can_attach(struct cgroup_taskset *tset)
 	setsched_check = !cpuset_v2() ||
 		!cpumask_equal(cs->effective_cpus, oldcs->effective_cpus) ||
 		!nodes_equal(cs->effective_mems, oldcs->effective_mems);
+	/*
+	 * Also check if task migration away from the old cpuset is allowed
+	 * without security check. This bit should only be set by the hotplug
+	 * handler when task migration from a child v1 cpuset to its ancestor
+	 * is needed because there is no CPU left for the tasks to run on after
+	 * a hot CPU removal. Clear the bit if set as it is one-off. Also
+	 * doube-check the CPU emptiness of oldcs to be sure before clearing
+	 * setsched_check.
+	 */
+	if (test_bit(CS_TASKS_OUT, &oldcs->flags)) {
+		if (cpumask_empty(oldcs->effective_cpus))
+			setsched_check = false;
+		clear_bit(CS_TASKS_OUT, &oldcs->flags);
+	}
 
 	cgroup_taskset_for_each(task, css, tset) {
 		ret = task_can_attach(task);
