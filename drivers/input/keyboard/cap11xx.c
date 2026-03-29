@@ -534,9 +534,6 @@ static int cap11xx_i2c_probe(struct i2c_client *i2c_client)
 	if (error < 0)
 		return error;
 
-	dev_info(dev, "CAP11XX detected, model %s, revision 0x%02x\n",
-			 id->name, rev);
-
 	priv->model = cap;
 
 	dev_info(dev, "CAP11XX device detected, model %s, revision 0x%02x\n",
