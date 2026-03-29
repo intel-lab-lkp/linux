@@ -130,6 +130,17 @@ def config_init(app, config):
                                     "The kernel development community",
                                     "manual"))
 
+    # Generate the root 404 page and per-translation copies for full-doc builds.
+    config.html_additional_pages = {"404": "404.html"}
+    if os.path.samefile(kern_doc_dir, app.srcdir):
+        translations_dir = os.path.join(kern_doc_dir, "translations")
+        for lang in sorted(os.listdir(translations_dir)):
+            full = os.path.join(translations_dir, lang)
+            if not os.path.isdir(full):
+                continue
+
+            config.html_additional_pages[f"translations/{lang}/404"] = "404.html"
+
 # helper
 # ------
 
@@ -436,6 +447,10 @@ sys.stderr.write("Using %s theme\n" % html_theme)
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ["sphinx-static"]
+
+# Generate a simple static 404 page. Serving it for missing paths is left to
+# the web server configuration.
+html_additional_pages = {}
 
 # If true, Docutils "smart quotes" will be used to convert quotes and dashes
 # to typographically correct entities.  However, conversion of "--" to "—"

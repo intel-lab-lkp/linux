@@ -195,3 +195,72 @@ a.manpage {
 	font-weight: bold;
 	font-family: "Courier New", Courier, monospace;
 }
+
+/* Center the 404 body copy without affecting normal pages.
+ * This minimum height ensures the footer remains positioned
+ * visibly at the bottom of the page despite most of the page
+ * being empty.
+ * 100% width allows for contained centering of inner contents */
+div.kernel-404-page {
+    align-items: center;
+    box-sizing: border-box;
+    display: flex;
+    justify-content: center;
+    min-height: 90vh;
+    padding: 2rem 1rem;
+    width: 100%;
+}
+
+/* Group the content as a vertical stack */
+div.kernel-404-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    max-width: 28rem;
+}
+
+a.kernel-404-logo-link {
+    align-self: stretch;
+    border-bottom: none;
+}
+
+a.kernel-404-logo-link:hover {
+    border-bottom: none;
+}
+
+img.kernel-404-logo {
+    display: block;
+    height: auto;
+    margin-inline: auto;
+}
+
+div.kernel-404-content h1,
+div.kernel-404-content p {
+    margin: 0;
+}
+
+/* Make the header larger and more prominent. */
+div.kernel-404-content h1 {
+    font-size: 300%;
+}
+
+p.kernel-404-home {
+    margin-top: 0.5rem;
+    text-align: center;
+}
+
+@media screen and (max-width: 65em) {
+    /* Less viewport height because the mobile sidebar is taking
+     * up large chunk of the screen already */
+    div.kernel-404-page {
+        min-height: 40vh;
+    }
+
+    img.kernel-404-logo {
+        width: 70%;
+    }
+
+    div.kernel-404-content h1 {
+        font-size: 240%;
+    }
+}
