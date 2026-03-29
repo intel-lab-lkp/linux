@@ -64,7 +64,7 @@ struct mkiss {
 #define AXF_OUTWAIT	4		/* is outpacket was flag	*/
 
 	int		mode;
-        int		crcmode;	/* MW: for FlexNet, SMACK etc.  */
+	int		crcmode;	/* MW: for FlexNet, SMACK etc.  */
 	int		crcauto;	/* CRC auto mode */
 
 #define CRC_MODE_NONE		0
@@ -439,27 +439,30 @@ static void ax_encaps(struct net_device *dev, unsigned char *icp, int len)
 		/* Configuration Command (kissparms(1).
 		 * Protocol spec says: never append CRC.
 		 * This fixes a very old bug in the linux
-		 * kiss driver. -- dl9sau */
+		 * kiss driver. -- dl9sau
+		 */
 		switch (*p & 0xff) {
 		case 0x85:
 			/* command from userspace especially for us,
-			 * not for delivery to the tnc */
+			 * not for delivery to the tnc
+			 */
 			if (len > 1) {
 				int cmd = (p[1] & 0xff);
-				switch(cmd) {
+
+				switch (cmd) {
 				case 3:
-				  ax->crcmode = CRC_MODE_SMACK;
-				  break;
+					ax->crcmode = CRC_MODE_SMACK;
+					break;
 				case 2:
-				  ax->crcmode = CRC_MODE_FLEX;
-				  break;
+					ax->crcmode = CRC_MODE_FLEX;
+					break;
 				case 1:
-				  ax->crcmode = CRC_MODE_NONE;
-				  break;
+					ax->crcmode = CRC_MODE_NONE;
+					break;
 				case 0:
 				default:
-				  ax->crcmode = CRC_MODE_SMACK_TEST;
-				  cmd = 0;
+					ax->crcmode = CRC_MODE_SMACK_TEST;
+					cmd = 0;
 				}
 				ax->crcauto = (cmd ? 0 : 1);
 				netdev_info(ax->dev, "crc mode set to %d\n", cmd);
@@ -473,6 +476,7 @@ static void ax_encaps(struct net_device *dev, unsigned char *icp, int len)
 		}
 	} else {
 		unsigned short crc;
+
 		switch (ax->crcmode) {
 		case CRC_MODE_SMACK_TEST:
 			ax->crcmode  = CRC_MODE_FLEX_TEST;
@@ -812,7 +816,7 @@ static int mkiss_ioctl(struct tty_struct *tty, unsigned int cmd,
 	switch (cmd) {
 	case SIOCGIFNAME:
 		err = copy_to_user((void __user *) arg, ax->dev->name,
-		                   strlen(ax->dev->name) + 1) ? -EFAULT : 0;
+				   strlen(ax->dev->name) + 1) ? -EFAULT : 0;
 		break;
 
 	case SIOCGIFENCAP:
@@ -828,7 +832,7 @@ static int mkiss_ioctl(struct tty_struct *tty, unsigned int cmd,
 		ax->mode = tmp;
 		dev->addr_len        = AX25_ADDR_LEN;
 		dev->hard_header_len = AX25_KISS_HEADER_LEN +
-		                       AX25_MAX_HEADER_LEN + 3;
+				       AX25_MAX_HEADER_LEN + 3;
 		dev->type            = ARPHRD_AX25;
 
 		err = 0;
@@ -838,7 +842,7 @@ static int mkiss_ioctl(struct tty_struct *tty, unsigned int cmd,
 		char addr[AX25_ADDR_LEN];
 
 		if (copy_from_user(&addr,
-		                   (void __user *) arg, AX25_ADDR_LEN)) {
+				   (void __user *)arg, AX25_ADDR_LEN)) {
 			err = -EFAULT;
 			break;
 		}
