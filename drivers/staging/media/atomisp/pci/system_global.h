@@ -218,7 +218,6 @@ typedef enum {
 #define	N_ACQUISITION_UNIT_ID		1
 #define	N_CTRL_UNIT_ID			1
 
-
 enum ia_css_isp_memories {
 	IA_CSS_ISP_PMEM0 = 0,
 	IA_CSS_ISP_DMEM0,
@@ -247,7 +246,6 @@ typedef enum {
 	ISYS_IRQ2_ID,	/* port c */
 	N_ISYS_IRQ_ID
 } isys_irq_ID_t;
-
 
 /*
  * Input-buffer Controller.
