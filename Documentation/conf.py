@@ -437,6 +437,12 @@ sys.stderr.write("Using %s theme\n" % html_theme)
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ["sphinx-static"]
 
+# Generate a simple static 404 page. Serving it for missing paths is left to
+# the front-end web server configuration.
+html_additional_pages = {
+    "404": "404.html",
+}
+
 # If true, Docutils "smart quotes" will be used to convert quotes and dashes
 # to typographically correct entities.  However, conversion of "--" to "—"
 # is not always what we want, so enable only quotes.

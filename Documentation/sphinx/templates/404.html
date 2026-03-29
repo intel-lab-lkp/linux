@@ -1,0 +1,16 @@
+{# SPDX-License-Identifier: GPL-2.0-only #}
+{% extends "layout.html" %}
+{% set title = "404 Not Found" %}
+
+{% block body %}
+  <div class="kernel-404-page">
+    <div class="kernel-404-content">
+      <a class="kernel-404-logo-link" href="{{ pathto(master_doc) }}" aria-label="Return home">
+        <img class="kernel-404-logo" src="{{ pathto('_static/logo.svg', 1) }}" alt="" />
+      </a>
+      <h1>404 Not Found</h1>
+      <p>The page you are searching for doesn't exist.</p>
+      <p class="kernel-404-home"><a href="{{ pathto(master_doc) }}">Return home</a></p>
+    </div>
+  </div>
+{% endblock %}
