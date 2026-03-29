@@ -72,7 +72,7 @@ out:
 
 /**
  * ecryptfs_derive_iv
- * @iv: destination for the derived iv vale
+ * @iv: destination for the derived iv value
  * @crypt_stat: Pointer to crypt_stat struct for the current inode
  * @offset: Offset of the extent whose IV we are to derive
  *
@@ -84,18 +84,15 @@ void ecryptfs_derive_iv(char *iv, struct ecryptfs_crypt_stat *crypt_stat,
 {
 	char dst[MD5_DIGEST_SIZE];
 	char src[ECRYPTFS_MAX_IV_BYTES + 16];
+	size_t len;
 
 	if (unlikely(ecryptfs_verbosity > 0)) {
 		ecryptfs_printk(KERN_DEBUG, "root iv:\n");
 		ecryptfs_dump_hex(crypt_stat->root_iv, crypt_stat->iv_bytes);
 	}
-	/* TODO: It is probably secure to just cast the least
-	 * significant bits of the root IV into an unsigned long and
-	 * add the offset to that rather than go through all this
-	 * hashing business. -Halcrow */
 	memcpy(src, crypt_stat->root_iv, crypt_stat->iv_bytes);
-	memset((src + crypt_stat->iv_bytes), 0, 16);
-	snprintf((src + crypt_stat->iv_bytes), 16, "%lld", offset);
+	len = scnprintf(src + crypt_stat->iv_bytes, 16, "%lld", offset) + 1;
+	memset(src + crypt_stat->iv_bytes + len, 0, 16 - len);
 	if (unlikely(ecryptfs_verbosity > 0)) {
 		ecryptfs_printk(KERN_DEBUG, "source:\n");
 		ecryptfs_dump_hex(src, (crypt_stat->iv_bytes + 16));
