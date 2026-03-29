@@ -367,9 +367,12 @@ int ecard_readchunk(struct in_chunk_dir *cd, ecard_t *ec, int id, int num)
 	if (c_id(&excd) & 0x80) {
 		switch (c_id(&excd) & 0x70) {
 		case 0x70:
+			if (c_len(&excd) >= sizeof(excd.d.string))
+				return 0;
 			ecard_readbytes((unsigned char *)excd.d.string, ec,
 					(int)c_start(&excd), c_len(&excd),
 					useld);
+			excd.d.string[c_len(&excd)] = '\0';
 			break;
 		case 0x00:
 			break;
