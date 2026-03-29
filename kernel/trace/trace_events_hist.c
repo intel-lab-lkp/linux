@@ -2964,12 +2964,9 @@ find_synthetic_field_var(struct hist_trigger_data *target_hist_data,
 	struct hist_field *event_var;
 	char *synthetic_name;
 
-	synthetic_name = kzalloc(MAX_FILTER_STR_VAL, GFP_KERNEL);
+	synthetic_name = kasprintf(GFP_KERNEL, "synthetic_%s", field_name);
 	if (!synthetic_name)
 		return ERR_PTR(-ENOMEM);
-
-	strcpy(synthetic_name, "synthetic_");
-	strcat(synthetic_name, field_name);
 
 	event_var = find_event_var(target_hist_data, system, event_name, synthetic_name);
 
@@ -3016,6 +3013,8 @@ create_field_var_hist(struct hist_trigger_data *target_hist_data,
 	struct hist_field *event_var;
 	char *saved_filter;
 	char *cmd;
+	size_t cmdlen;
+	size_t off;
 	int ret;
 
 	if (target_hist_data->n_field_var_hists >= SYNTH_FIELDS_MAX) {
@@ -3053,35 +3052,46 @@ create_field_var_hist(struct hist_trigger_data *target_hist_data,
 	if (!var_hist)
 		return ERR_PTR(-ENOMEM);
 
-	cmd = kzalloc(MAX_FILTER_STR_VAL, GFP_KERNEL);
+	saved_filter = find_trigger_filter(hist_data, file);
+
+	cmdlen = strlen("keys=") + strlen(":synthetic_") +
+		 strlen(field_name) + strlen("=") + strlen(field_name) + 1;
+	first = true;
+	for_each_hist_key_field(i, hist_data) {
+		key_field = hist_data->fields[i];
+		if (!first)
+			cmdlen++;
+		cmdlen += strlen(key_field->field->name);
+		first = false;
+	}
+
+	if (saved_filter)
+		cmdlen += strlen(" if ") + strlen(saved_filter);
+
+	cmd = kzalloc(cmdlen, GFP_KERNEL);
 	if (!cmd) {
 		kfree(var_hist);
 		return ERR_PTR(-ENOMEM);
 	}
 
 	/* Use the same keys as the compatible histogram */
-	strcat(cmd, "keys=");
+	off = scnprintf(cmd, cmdlen, "keys=");
+	first = true;
 
 	for_each_hist_key_field(i, hist_data) {
 		key_field = hist_data->fields[i];
-		if (!first)
-			strcat(cmd, ",");
-		strcat(cmd, key_field->field->name);
+		off += scnprintf(cmd + off, cmdlen - off, "%s%s",
+				 first ? "" : ",", key_field->field->name);
 		first = false;
 	}
 
 	/* Create the synthetic field variable specification */
-	strcat(cmd, ":synthetic_");
-	strcat(cmd, field_name);
-	strcat(cmd, "=");
-	strcat(cmd, field_name);
+	off += scnprintf(cmd + off, cmdlen - off, ":synthetic_%s=%s",
+			 field_name, field_name);
 
 	/* Use the same filter as the compatible histogram */
-	saved_filter = find_trigger_filter(hist_data, file);
-	if (saved_filter) {
-		strcat(cmd, " if ");
-		strcat(cmd, saved_filter);
-	}
+	if (saved_filter)
+		scnprintf(cmd + off, cmdlen - off, " if %s", saved_filter);
 
 	var_hist->cmd = kstrdup(cmd, GFP_KERNEL);
 	if (!var_hist->cmd) {
