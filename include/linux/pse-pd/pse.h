@@ -10,6 +10,7 @@
 #include <linux/kfifo.h>
 #include <uapi/linux/ethtool.h>
 #include <uapi/linux/ethtool_netlink_generated.h>
+#include <linux/leds.h>
 #include <linux/regulator/driver.h>
 
 /* Maximum current in uA according to IEEE 802.3-2022 Table 145-1 */
@@ -266,6 +267,23 @@ struct pse_pi {
 	int pw_allocated_mW;
 };
 
+#if IS_ENABLED(CONFIG_LEDS_TRIGGERS)
+/**
+ * struct pse_pi_led_triggers - LED trigger state for a PSE PI
+ *
+ * @delivering: LED trigger for power delivering state
+ * @enabled: LED trigger for admin enabled state
+ * @last_delivering: cached delivering state for change detection
+ * @last_enabled: cached enabled state for change detection
+ */
+struct pse_pi_led_triggers {
+	struct led_trigger delivering;
+	struct led_trigger enabled;
+	bool last_delivering;
+	bool last_enabled;
+};
+#endif
+
 /**
  * struct pse_ntf - PSE notification element
  *
@@ -303,6 +321,7 @@ struct pse_ntf {
  * @ntf_work: workqueue for PSE notification management
  * @ntf_fifo: PSE notifications FIFO
  * @ntf_fifo_lock: protect @ntf_fifo writer
+ * @pi_led_trigs: per-PI LED trigger state array
  */
 struct pse_controller_dev {
 	const struct pse_controller_ops *ops;
@@ -327,6 +346,9 @@ struct pse_controller_dev {
 	struct work_struct ntf_work;
 	DECLARE_KFIFO_PTR(ntf_fifo, struct pse_ntf);
 	spinlock_t ntf_fifo_lock; /* Protect @ntf_fifo writer */
+#if IS_ENABLED(CONFIG_LEDS_TRIGGERS)
+	struct pse_pi_led_triggers *pi_led_trigs;
+#endif
 };
 
 /**
