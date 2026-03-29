@@ -37,7 +37,7 @@ int rxe_ib_get_hw_stats(struct ib_device *ibdev,
 		return -EINVAL;
 
 	for (cnt = 0; cnt < ARRAY_SIZE(rxe_counter_descs); cnt++)
-		stats->value[cnt] = atomic64_read(&dev->stats_counters[cnt]);
+		stats->value[cnt] = rxe_counter_get(dev, cnt);
 
 	return ARRAY_SIZE(rxe_counter_descs);
 }
