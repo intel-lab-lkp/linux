@@ -2251,7 +2251,8 @@ static int __tc_ctl_tclass(struct sk_buff *skb, struct nlmsghdr *n,
 		case RTM_DELTCLASS:
 			err = tclass_del_notify(net, cops, skb, n, q, cl, extack);
 			/* Unbind the class with flilters with 0 */
-			tc_bind_tclass(q, portid, clid, 0);
+			if (!err)
+				tc_bind_tclass(q, portid, clid, 0);
 			goto out;
 		case RTM_GETTCLASS:
 			err = tclass_get_notify(net, skb, n, q, cl, extack);
