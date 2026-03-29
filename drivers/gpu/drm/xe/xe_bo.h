@@ -342,6 +342,21 @@ bool xe_bo_is_vm_bound(struct xe_bo *bo);
 bool xe_bo_has_single_placement(struct xe_bo *bo);
 uint64_t vram_region_gpu_offset(struct ttm_resource *res);
 
+/**
+ * xe_bo_vram_gpu_offset - Return cached GPU offset for BO's memory region
+ * @bo: The buffer object.
+ *
+ * Returns the GPU offset for the BO's current memory region. This value
+ * is cached on the BO and updated whenever the BO is moved, avoiding
+ * repeated pointer chasing through TTM resource manager structures.
+ *
+ * Return: The GPU-visible offset, or 0 for system/TT memory.
+ */
+static inline u64 xe_bo_vram_gpu_offset(struct xe_bo *bo)
+{
+	return bo->vram_gpu_offset;
+}
+
 bool xe_bo_can_migrate(struct xe_bo *bo, u32 mem_type);
 
 int xe_bo_migrate(struct xe_bo *bo, u32 mem_type, struct ttm_operation_ctx *ctc,

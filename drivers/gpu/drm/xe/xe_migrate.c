@@ -2499,7 +2499,7 @@ int xe_migrate_access_memory(struct xe_migrate *m, struct xe_bo *bo,
 
 	do {
 		struct dma_fence *__fence;
-		u64 vram_addr = vram_region_gpu_offset(bo->ttm.resource) +
+		u64 vram_addr = xe_bo_vram_gpu_offset(bo) +
 			cursor.start;
 		int current_bytes;
 		u32 pitch;

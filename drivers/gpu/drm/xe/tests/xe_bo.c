@@ -603,9 +603,126 @@ static void xe_bo_shrink_kunit(struct kunit *test)
 	shrink_test_run_device(xe);
 }
 
+/*
+ * Test that bo->vram_gpu_offset is kept in sync with the value computed
+ * by vram_region_gpu_offset() across BO creation, eviction to system
+ * memory, and restoration back to VRAM.
+ */
+static void vram_gpu_offset_test_run_tile(struct xe_device *xe,
+					  struct xe_tile *tile,
+					  struct kunit *test)
+{
+	struct xe_bo *bo;
+	unsigned int bo_flags = XE_BO_FLAG_VRAM_IF_DGFX(tile);
+	struct drm_exec *exec = XE_VALIDATION_OPT_OUT;
+	u64 expected;
+	long timeout;
+	int ret;
+
+	kunit_info(test, "Testing vram_gpu_offset cache on tile %u\n", tile->id);
+
+	bo = xe_bo_create_user(xe, NULL, SZ_1M, DRM_XE_GEM_CPU_CACHING_WC,
+			       bo_flags, exec);
+	if (IS_ERR(bo)) {
+		KUNIT_FAIL(test, "Failed to create bo: %pe\n", bo);
+		return;
+	}
+
+	xe_bo_lock(bo, false);
+
+	/* After creation the BO should be in VRAM on DGFX. */
+	ret = xe_bo_validate(bo, NULL, false, exec);
+	if (ret) {
+		KUNIT_FAIL(test, "Failed to validate bo: %d\n", ret);
+		goto out_unlock;
+	}
+
+	/* Wait for any async clears. */
+	timeout = dma_resv_wait_timeout(bo->ttm.base.resv,
+					DMA_RESV_USAGE_KERNEL, false, 5 * HZ);
+	if (timeout <= 0) {
+		KUNIT_FAIL(test, "Timeout waiting for bo after validate.\n");
+		goto out_unlock;
+	}
+
+	expected = vram_region_gpu_offset(bo->ttm.resource);
+	KUNIT_EXPECT_EQ(test, xe_bo_vram_gpu_offset(bo), expected);
+
+	if (xe_bo_is_vram(bo))
+		KUNIT_EXPECT_NE(test, xe_bo_vram_gpu_offset(bo), 0);
+
+	/* Evict to system memory — cache must become 0. */
+	ret = xe_bo_evict(bo, exec);
+	if (ret) {
+		KUNIT_FAIL(test, "Failed to evict bo: %d\n", ret);
+		goto out_unlock;
+	}
+
+	timeout = dma_resv_wait_timeout(bo->ttm.base.resv,
+					DMA_RESV_USAGE_KERNEL, false, 5 * HZ);
+	if (timeout <= 0) {
+		KUNIT_FAIL(test, "Timeout waiting for bo after evict.\n");
+		goto out_unlock;
+	}
+
+	expected = vram_region_gpu_offset(bo->ttm.resource);
+	KUNIT_EXPECT_EQ(test, xe_bo_vram_gpu_offset(bo), expected);
+	KUNIT_EXPECT_EQ(test, xe_bo_vram_gpu_offset(bo), (u64)0);
+
+	/* Restore back to VRAM — cache must be updated again. */
+	ret = xe_bo_validate(bo, NULL, false, exec);
+	if (ret) {
+		KUNIT_FAIL(test, "Failed to validate bo back to vram: %d\n", ret);
+		goto out_unlock;
+	}
+
+	timeout = dma_resv_wait_timeout(bo->ttm.base.resv,
+					DMA_RESV_USAGE_KERNEL, false, 5 * HZ);
+	if (timeout <= 0) {
+		KUNIT_FAIL(test, "Timeout waiting for bo after restore.\n");
+		goto out_unlock;
+	}
+
+	expected = vram_region_gpu_offset(bo->ttm.resource);
+	KUNIT_EXPECT_EQ(test, xe_bo_vram_gpu_offset(bo), expected);
+
+	if (xe_bo_is_vram(bo))
+		KUNIT_EXPECT_NE(test, xe_bo_vram_gpu_offset(bo), 0);
+
+out_unlock:
+	xe_bo_unlock(bo);
+	xe_bo_put(bo);
+}
+
+static int vram_gpu_offset_test_run_device(struct xe_device *xe)
+{
+	struct kunit *test = kunit_get_current_test();
+	struct xe_tile *tile;
+	int id;
+
+	if (!IS_DGFX(xe)) {
+		kunit_skip(test, "non-discrete device\n");
+		return 0;
+	}
+
+	guard(xe_pm_runtime)(xe);
+	for_each_tile(tile, xe, id)
+		vram_gpu_offset_test_run_tile(xe, tile, test);
+
+	return 0;
+}
+
+static void xe_bo_vram_gpu_offset_kunit(struct kunit *test)
+{
+	struct xe_device *xe = test->priv;
+
+	vram_gpu_offset_test_run_device(xe);
+}
+
 static struct kunit_case xe_bo_tests[] = {
 	KUNIT_CASE_PARAM(xe_ccs_migrate_kunit, xe_pci_live_device_gen_param),
 	KUNIT_CASE_PARAM(xe_bo_evict_kunit, xe_pci_live_device_gen_param),
+	KUNIT_CASE_PARAM(xe_bo_vram_gpu_offset_kunit, xe_pci_live_device_gen_param),
 	{}
 };
 

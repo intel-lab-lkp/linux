@@ -705,7 +705,7 @@ static void xe_ggtt_map_bo(struct xe_ggtt *ggtt, struct xe_ggtt_node *node,
 						   pte | xe_res_dma(&cur));
 	} else {
 		/* Prepend GPU offset */
-		pte |= vram_region_gpu_offset(bo->ttm.resource);
+		pte |= xe_bo_vram_gpu_offset(bo);
 
 		for (xe_res_first(bo->ttm.resource, 0, xe_bo_size(bo), &cur);
 		     cur.remaining; xe_res_next(&cur, XE_PAGE_SIZE))

@@ -110,6 +110,12 @@ struct xe_bo {
 	u64 min_align;
 
 	/**
+	 * @vram_gpu_offset: Cached GPU offset for BO's current memory
+	 * region, updated on move. Protected by the BO's dma-resv lock.
+	 */
+	u64 vram_gpu_offset;
+
+	/**
 	 * @madv_purgeable: user space advise on BO purgeability, protected
 	 * by BO's dma-resv lock.
 	 */

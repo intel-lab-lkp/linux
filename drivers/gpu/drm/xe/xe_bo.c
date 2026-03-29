@@ -1164,6 +1164,9 @@ static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
 		ret = xe_sriov_vf_ccs_attach_bo(bo);
 
 out:
+	bo->vram_gpu_offset = ttm_bo->resource ?
+		vram_region_gpu_offset(ttm_bo->resource) : 0;
+
 	if ((!ttm_bo->resource || ttm_bo->resource->mem_type == XE_PL_SYSTEM) &&
 	    ttm_bo->ttm) {
 		long timeout = dma_resv_wait_timeout(ttm_bo->base.resv,
@@ -2908,9 +2911,15 @@ int xe_managed_bo_reinit_in_vram(struct xe_device *xe, struct xe_tile *tile, str
 	return 0;
 }
 
-/*
- * XXX: This is in the VM bind data path, likely should calculate this once and
- * store, with a recalculation if the BO is moved.
+/**
+ * vram_region_gpu_offset - Compute GPU offset for a TTM resource's memory region
+ * @res: The TTM resource.
+ *
+ * Computes the GPU-visible offset for @res based on its current memory type.
+ * Callers that always operate on a BO's current resource should prefer
+ * xe_bo_vram_gpu_offset() which returns a cached value.
+ *
+ * Return: The GPU-visible offset, or 0 for system/TT memory.
  */
 uint64_t vram_region_gpu_offset(struct ttm_resource *res)
 {
@@ -3173,7 +3182,7 @@ dma_addr_t __xe_bo_addr(struct xe_bo *bo, u64 offset, size_t page_size)
 
 		xe_res_first(bo->ttm.resource, page << PAGE_SHIFT,
 			     page_size, &cur);
-		return cur.start + offset + vram_region_gpu_offset(bo->ttm.resource);
+		return cur.start + offset + xe_bo_vram_gpu_offset(bo);
 	}
 }
 
