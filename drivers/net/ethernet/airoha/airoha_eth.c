@@ -2957,6 +2957,8 @@ static int airoha_register_gdm_devices(struct airoha_eth *eth)
 			return err;
 	}
 
+	set_bit(DEV_STATE_REGISTERED, &eth->state);
+
 	return 0;
 }
 
