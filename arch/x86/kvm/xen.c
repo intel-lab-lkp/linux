@@ -122,6 +122,24 @@ void kvm_xen_inject_timer_irqs(struct kvm_vcpu *vcpu)
 	}
 }
 
+static void xen_timer_inject_irqwork(struct irq_work *work)
+{
+	struct kvm_vcpu_xen *xen = container_of(work, struct kvm_vcpu_xen,
+						timer_inject_irqwork);
+	struct kvm_vcpu *vcpu = container_of(xen, struct kvm_vcpu, arch.xen);
+	struct kvm_xen_evtchn e;
+	int rc;
+
+	e.vcpu_id = vcpu->vcpu_id;
+	e.vcpu_idx = vcpu->vcpu_idx;
+	e.port = vcpu->arch.xen.timer_virq;
+	e.priority = KVM_IRQ_ROUTING_XEN_EVTCHN_PRIO_2LEVEL;
+
+	rc = kvm_xen_set_evtchn_fast(&e, vcpu->kvm);
+	if (rc != -EWOULDBLOCK)
+		vcpu->arch.xen.timer_expires = 0;
+}
+
 static enum hrtimer_restart xen_timer_callback(struct hrtimer *timer)
 {
 	struct kvm_vcpu *vcpu = container_of(timer, struct kvm_vcpu,
@@ -131,6 +149,17 @@ static enum hrtimer_restart xen_timer_callback(struct hrtimer *timer)
 
 	if (atomic_read(&vcpu->arch.xen.timer_pending))
 		return HRTIMER_NORESTART;
+
+	/*
+	 * On PREEMPT_RT, this callback runs in hard IRQ context where
+	 * kvm_xen_set_evtchn_fast() cannot acquire sleeping locks
+	 * (specifically gpc->lock). Defer to irq_work which runs in
+	 * thread context on RT.
+	 */
+	if (in_hardirq()) {
+		irq_work_queue(&vcpu->arch.xen.timer_inject_irqwork);
+		return HRTIMER_NORESTART;
+	}
 
 	e.vcpu_id = vcpu->vcpu_id;
 	e.vcpu_idx = vcpu->vcpu_idx;
@@ -2302,6 +2331,8 @@ void kvm_xen_init_vcpu(struct kvm_vcpu *vcpu)
 	timer_setup(&vcpu->arch.xen.poll_timer, cancel_evtchn_poll, 0);
 	hrtimer_setup(&vcpu->arch.xen.timer, xen_timer_callback, CLOCK_MONOTONIC,
 		      HRTIMER_MODE_ABS_HARD);
+	init_irq_work(&vcpu->arch.xen.timer_inject_irqwork,
+		      xen_timer_inject_irqwork);
 
 	kvm_gpc_init(&vcpu->arch.xen.runstate_cache, vcpu->kvm);
 	kvm_gpc_init(&vcpu->arch.xen.runstate2_cache, vcpu->kvm);
