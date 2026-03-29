@@ -315,6 +315,7 @@ static int occ_putsram(struct occ *occ, const void *data, ssize_t len,
 		       u8 seq_no, u16 checksum)
 {
 	u32 data_len = ((len + 7) / 8) * 8;	/* must be multiples of 8 B */
+	size_t max_data_len;
 	size_t cmd_len, parsed_len, resp_data_len;
 	size_t resp_len = OCC_MAX_RESP_WORDS;
 	__be32 *buf = occ->buffer;
@@ -344,6 +345,11 @@ static int occ_putsram(struct occ *occ, const void *data, ssize_t len,
 		buf[4] = cpu_to_be32(OCC_P10_SRAM_CMD_ADDR);
 		break;
 	}
+
+	max_data_len = OCC_MAX_RESP_WORDS * sizeof(*buf);
+	max_data_len -= (5 + idx) * sizeof(*buf);
+	if (data_len > max_data_len)
+		return -EINVAL;
 
 	buf[4 + idx] = cpu_to_be32(data_len);
 	memcpy(&buf[5 + idx], data, len);
