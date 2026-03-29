@@ -42,6 +42,8 @@ static int pse_get_pse_attributes(struct phy_device *phydev,
 		return -EOPNOTSUPP;
 	}
 
+	pse_control_try_resolve(phydev);
+
 	if (!phydev->psec) {
 		NL_SET_ERR_MSG(extack, "No PSE is attached");
 		return -EOPNOTSUPP;
@@ -248,6 +250,8 @@ ethnl_set_pse_validate(struct phy_device *phydev, struct genl_info *info)
 		NL_SET_ERR_MSG(info->extack, "No PHY is attached");
 		return -EOPNOTSUPP;
 	}
+
+	pse_control_try_resolve(phydev);
 
 	if (!phydev->psec) {
 		NL_SET_ERR_MSG(info->extack, "No PSE is attached");
