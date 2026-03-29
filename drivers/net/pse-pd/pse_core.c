@@ -421,6 +421,18 @@ static int pse_pi_is_enabled(struct regulator_dev *rdev)
 
 	id = rdev_get_id(rdev);
 	mutex_lock(&pcdev->lock);
+
+	/*
+	 * Report the PI as disabled until a consumer has acquired it
+	 * and synced admin_state_enabled from hardware. This prevents
+	 * regulator_late_cleanup from disabling unclaimed PSE PIs
+	 * when the PSE controller driver loads as a module.
+	 */
+	if (!pcdev->pi[id].admin_state_synced) {
+		ret = 0;
+		goto out;
+	}
+
 	if (pse_pw_d_is_sw_pw_control(pcdev, pcdev->pi[id].pw_d)) {
 		ret = pcdev->pi[id].admin_state_enabled;
 		goto out;
@@ -1431,6 +1443,7 @@ pse_control_get_internal(struct pse_controller_dev *pcdev, unsigned int index,
 		goto free_psec;
 
 	pcdev->pi[index].admin_state_enabled = ret;
+	pcdev->pi[index].admin_state_synced = true;
 	psec->ps = devm_regulator_get_exclusive(pcdev->dev,
 						rdev_get_name(pcdev->pi[index].rdev));
 	if (IS_ERR(psec->ps)) {
