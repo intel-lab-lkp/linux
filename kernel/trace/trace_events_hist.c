@@ -1362,12 +1362,12 @@ static const char *hist_field_name(struct hist_field *field,
 		if (field->system) {
 			static char full_name[MAX_FILTER_STR_VAL];
 
-			strcat(full_name, field->system);
-			strcat(full_name, ".");
-			strcat(full_name, field->event_name);
-			strcat(full_name, ".");
-			strcat(full_name, field->name);
-			field_name = full_name;
+			if (snprintf(full_name, sizeof(full_name), "%s.%s.%s",
+				     field->system, field->event_name,
+				     field->name) < sizeof(full_name))
+				field_name = full_name;
+			else
+				field_name = field->name;
 		} else
 			field_name = field->name;
 	} else if (field->flags & HIST_FIELD_FL_TIMESTAMP)
