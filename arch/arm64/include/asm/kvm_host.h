@@ -220,6 +220,9 @@ struct kvm_s2_mmu {
 	/* canonical IPA to nested IPA range lookup, protected by kvm.mmu_lock */
 	struct maple_tree nested_revmap_mt;
 
+	/* nested IPA to canonical IPA range lookup, protected by kvm.mmu_lock */
+	struct maple_tree nested_direct_mt;
+
 #ifdef CONFIG_PTDUMP_STAGE2_DEBUGFS
 	struct dentry *shadow_pt_debugfs_dentry;
 #endif
