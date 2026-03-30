@@ -12,7 +12,11 @@
 #include <asm/ucontext.h>
 #include <asm/vdso.h>
 
-#define COMPAT_DEBUG_SIG 0
+#ifdef DEBUG_SIG
+#  define DEBUGP(fmt, args...) pr_info("%s: " fmt, __func__, ##args)
+#else
+#  define DEBUGP(fmt, args...)
+#endif
 
 struct compat_sigcontext {
 	struct compat_user_regs_struct sc_regs;
@@ -233,11 +237,9 @@ int compat_setup_rt_frame(struct ksignal *ksig, sigset_t *set,
 	regs->a1 = (unsigned long)(&frame->info); /* a1: siginfo pointer */
 	regs->a2 = (unsigned long)(&frame->uc);   /* a2: ucontext pointer */
 
-#if COMPAT_DEBUG_SIG
-	pr_info("SIG deliver (%s:%d): sig=%d pc=%p ra=%p sp=%p\n",
+	DEBUGP("SIG deliver (%s:%d): sig=%d pc=%p ra=%p sp=%p\n",
 		current->comm, task_pid_nr(current), ksig->sig,
 		(void *)regs->epc, (void *)regs->ra, frame);
-#endif
 
 	return 0;
 }
