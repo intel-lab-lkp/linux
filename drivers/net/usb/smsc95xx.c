@@ -1550,6 +1550,12 @@ static int smsc95xx_suspend(struct usb_interface *intf, pm_message_t message)
 
 	pdata->pm_task = current;
 
+	if (pdata->phydev) {
+		ret = phy_suspend(pdata->phydev);
+		if (ret)
+			return ret;
+	}
+
 	ret = usbnet_suspend(intf, message);
 	if (ret < 0) {
 		netdev_warn(dev->net, "usbnet_suspend error\n");
