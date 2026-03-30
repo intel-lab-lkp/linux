@@ -912,6 +912,35 @@ static int record_accel(struct kvm_s2_mmu *mmu, gpa_t gpa,
 	return mas_store_gfp(&mas, (void *)new_entry, GFP_KERNEL_ACCOUNT);
 }
 
+void kvm_remove_nested_revmap(struct kvm_s2_mmu *mmu, u64 addr, u64 size)
+{
+	/*
+	 * Iterate through the mt of this mmu, remove all unpolluted canonical
+	 * ipa ranges that maps to ranges that are strictly within
+	 * [addr, addr + size).
+	 */
+	struct maple_tree *mt = &mmu->nested_revmap_mt;
+	void *entry;
+	u64 nested_ipa, nested_ipa_end, addr_end = addr + size;
+	size_t revmap_size;
+
+	MA_STATE(mas, mt, 0, ULONG_MAX);
+
+	mas_for_each(&mas, entry, ULONG_MAX) {
+		if ((u64)entry & UNKNOWN_IPA)
+			continue;
+
+		revmap_size = mas.last - mas.index + 1;
+		nested_ipa = (u64)entry & NESTED_IPA_MASK;
+		nested_ipa_end = nested_ipa + revmap_size;
+
+		if (nested_ipa >= addr && nested_ipa_end <= addr_end) {
+			accel_clear_mmu_range(mmu, mas.index, revmap_size);
+			mas_erase(&mas);
+		}
+	}
+}
+
 int kvm_record_nested_revmap(gpa_t ipa, struct kvm_s2_mmu *mmu,
 			     gpa_t fault_ipa, size_t map_size)
 {
