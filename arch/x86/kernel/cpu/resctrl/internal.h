@@ -237,7 +237,6 @@ void resctrl_arch_mbm_cntr_assign_set_one(struct rdt_resource *r);
 bool intel_aet_pre_mount(void);
 void intel_aet_mount_result(int ret);
 void intel_aet_unmount(void);
-void __exit intel_aet_exit(void);
 int intel_aet_read_event(int domid, u32 rmid, void *arch_priv, u64 *val);
 void intel_aet_mon_domain_setup(int cpu, int id, struct rdt_resource *r,
 				struct list_head *add_pos);
@@ -246,7 +245,6 @@ bool intel_handle_aet_option(bool force_off, char *tok);
 static inline bool intel_aet_pre_mount(void) { return false; }
 static inline void intel_aet_mount_result(int ret) { }
 static inline void intel_aet_unmount(void) { }
-static inline void __exit intel_aet_exit(void) { }
 static inline int intel_aet_read_event(int domid, u32 rmid, void *arch_priv, u64 *val)
 {
 	return -EINVAL;
