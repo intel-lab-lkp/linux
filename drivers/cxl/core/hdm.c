@@ -686,6 +686,54 @@ int cxl_dpa_alloc(struct cxl_endpoint_decoder *cxled, u64 size)
 	return devm_add_action_or_reset(&port->dev, cxl_dpa_release, cxled);
 }
 
+static int find_committed_endpoint_decoder(struct device *dev, const void *data)
+{
+	struct cxl_endpoint_decoder *cxled;
+	struct cxl_decoder *cxld;
+
+	if (!is_endpoint_decoder(dev))
+		return 0;
+
+	cxled = to_cxl_endpoint_decoder(dev);
+	cxld = &cxled->cxld;
+
+	return (cxld->flags & CXL_DECODER_F_ENABLE);
+}
+
+/**
+ * cxl_get_region_from_committed_decoder - obtain a pointer to a region
+ * @cxlmd: CXL memdev from an endpoint device
+ *
+ * An accelerator decoder can be set up by the firmware/BIOS and the auto
+ * discovery region creation triggered by the memdev object initialization.
+ * Using this function the related driver can obtain such a region.
+ *
+ * Only one committed HDM is expected, returning the first one found.
+ *
+ * Return pointer to a region or NULL
+ */
+struct cxl_region *cxl_get_region_from_committed_decoder(struct cxl_memdev *cxlmd)
+{
+	struct cxl_port *endpoint = cxlmd->endpoint;
+	struct cxl_endpoint_decoder *cxled;
+
+	if (!endpoint)
+		return NULL;
+
+	guard(rwsem_read)(&cxl_rwsem.dpa);
+	struct device *cxled_dev __free(put_device) =
+		device_find_child(&endpoint->dev, NULL,
+				  find_committed_endpoint_decoder);
+
+	if (!cxled_dev)
+		return NULL;
+
+	cxled = to_cxl_endpoint_decoder(cxled_dev);
+
+	return cxled->cxld.region;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_get_region_from_committed_decoder, "CXL");
+
 static void cxld_set_interleave(struct cxl_decoder *cxld, u32 *ctrl)
 {
 	u16 eig;
