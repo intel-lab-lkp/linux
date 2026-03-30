@@ -296,18 +296,27 @@ static void lcdif_set_formats(struct lcdif_drm_private *lcdif,
 static void lcdif_set_mode(struct lcdif_drm_private *lcdif, u32 bus_flags)
 {
 	struct drm_display_mode *m = &lcdif->crtc.state->adjusted_mode;
-	u32 ctrl = 0;
+	u32 ctrl;
 
 	if (m->flags & DRM_MODE_FLAG_NHSYNC)
-		ctrl |= CTRL_INV_HS;
-	if (m->flags & DRM_MODE_FLAG_NVSYNC)
-		ctrl |= CTRL_INV_VS;
-	if (bus_flags & DRM_BUS_FLAG_DE_LOW)
-		ctrl |= CTRL_INV_DE;
-	if (bus_flags & DRM_BUS_FLAG_PIXDATA_DRIVE_NEGEDGE)
-		ctrl |= CTRL_INV_PXCK;
+		writel(CTRL_INV_HS, lcdif->base + LCDC_V8_CTRL + REG_SET);
+	else
+		writel(CTRL_INV_HS, lcdif->base + LCDC_V8_CTRL + REG_CLR);
 
-	writel(ctrl, lcdif->base + LCDC_V8_CTRL);
+	if (m->flags & DRM_MODE_FLAG_NVSYNC)
+		writel(CTRL_INV_VS, lcdif->base + LCDC_V8_CTRL + REG_SET);
+	else
+		writel(CTRL_INV_VS, lcdif->base + LCDC_V8_CTRL + REG_CLR);
+
+	if (bus_flags & DRM_BUS_FLAG_DE_LOW)
+		writel(CTRL_INV_DE, lcdif->base + LCDC_V8_CTRL + REG_SET);
+	else
+		writel(CTRL_INV_DE, lcdif->base + LCDC_V8_CTRL + REG_CLR);
+
+	if (bus_flags & DRM_BUS_FLAG_PIXDATA_DRIVE_NEGEDGE)
+		writel(CTRL_INV_PXCK, lcdif->base + LCDC_V8_CTRL + REG_SET);
+	else
+		writel(CTRL_INV_PXCK, lcdif->base + LCDC_V8_CTRL + REG_CLR);
 
 	writel(DISP_SIZE_DELTA_Y(m->vdisplay) |
 	       DISP_SIZE_DELTA_X(m->hdisplay),
