@@ -29,12 +29,14 @@ properties:
   reg:
     items:
       - description: Controller control and status registers.
+      - description: Internal Address Translation Unit (iATU) registers.
       - description: PCIe configuration registers.
       - description: Controller application registers.
 
   reg-names:
     items:
       - const: dbi
+      - const: atu
       - const: config
       - const: app
 
@@ -94,9 +96,10 @@ examples:
       #address-cells = <3>;
       #size-cells = <2>;
       reg = <0xd0e00000 0x1000>,
+            <0xd0ec0000 0x1000>,
             <0xd2000000 0x800000>,
             <0xd0a41000 0x1000>;
-      reg-names = "dbi", "config", "app";
+      reg-names = "dbi", "atu", config", "app";
       linux,pci-domain = <0>;
       max-link-speed = <4>;
       bus-range = <0x00 0x08>;
