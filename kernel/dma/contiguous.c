@@ -42,7 +42,6 @@
 #include <linux/memblock.h>
 #include <linux/err.h>
 #include <linux/sizes.h>
-#include <linux/dma-buf/heaps/cma.h>
 #include <linux/dma-map-ops.h>
 #include <linux/cma.h>
 #include <linux/nospec.h>
@@ -272,10 +271,6 @@ void __init dma_contiguous_reserve(phys_addr_t limit)
 						  fixed);
 		if (ret)
 			return;
-
-		ret = dma_heap_cma_register_heap(dma_contiguous_default_area);
-		if (ret)
-			pr_warn("Couldn't register default CMA heap.");
 	}
 }
 
