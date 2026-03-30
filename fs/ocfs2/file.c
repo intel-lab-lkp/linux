@@ -1254,25 +1254,30 @@ int ocfs2_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 				goto bail_unlock;
 			}
 		}
-		down_write(&OCFS2_I(inode)->ip_alloc_sem);
+		/*
+		 * Start the transaction before taking ip_alloc_sem so that
+		 * ocfs2_setattr() uses the same ordering as the xattr paths
+		 * and does not invert jbd2_handle against ip_alloc_sem.
+		 */
 		handle = ocfs2_start_trans(osb, OCFS2_INODE_UPDATE_CREDITS +
 					   2 * ocfs2_quota_trans_credits(sb));
 		if (IS_ERR(handle)) {
 			status = PTR_ERR(handle);
 			mlog_errno(status);
-			goto bail_unlock_alloc;
+			goto bail_unlock;
 		}
+		down_write(&OCFS2_I(inode)->ip_alloc_sem);
 		status = __dquot_transfer(inode, transfer_to);
 		if (status < 0)
 			goto bail_commit;
 	} else {
-		down_write(&OCFS2_I(inode)->ip_alloc_sem);
 		handle = ocfs2_start_trans(osb, OCFS2_INODE_UPDATE_CREDITS);
 		if (IS_ERR(handle)) {
 			status = PTR_ERR(handle);
 			mlog_errno(status);
-			goto bail_unlock_alloc;
+			goto bail_unlock;
 		}
+		down_write(&OCFS2_I(inode)->ip_alloc_sem);
 	}
 
 	setattr_copy(&nop_mnt_idmap, inode, attr);
@@ -1284,7 +1289,6 @@ int ocfs2_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 
 bail_commit:
 	ocfs2_commit_trans(osb, handle);
-bail_unlock_alloc:
 	up_write(&OCFS2_I(inode)->ip_alloc_sem);
 bail_unlock:
 	if (status && inode_locked) {
