@@ -161,6 +161,7 @@ static void kvaser_pci_del_chan(struct net_device *dev)
 {
 	struct sja1000_priv *priv;
 	struct kvaser_pci *board;
+	void __iomem *base_addr;
 	int i;
 
 	if (!dev)
@@ -186,7 +187,8 @@ static void kvaser_pci_del_chan(struct net_device *dev)
 	}
 	unregister_sja1000dev(dev);
 
-	pci_iounmap(board->pci_dev, priv->reg_base);
+	base_addr = priv->reg_base - board->channel * KVASER_PCI_PORT_BYTES;
+	pci_iounmap(board->pci_dev, base_addr);
 	pci_iounmap(board->pci_dev, board->conf_addr);
 	pci_iounmap(board->pci_dev, board->res_addr);
 
