@@ -102,11 +102,11 @@ static void fortify_test_known_sizes(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, __compiletime_strlen(unchanging_12), 12);
 
 	KUNIT_EXPECT_FALSE(test, __is_constexpr(__builtin_strlen(array_unknown)));
-	KUNIT_EXPECT_EQ(test, __compiletime_strlen(array_unknown), SIZE_MAX);
+	KUNIT_EXPECT_FALSE(test, __is_constexpr(__compiletime_strlen(array_unknown)));
 
 	/* Externally defined and dynamically sized string pointer: */
 	KUNIT_EXPECT_FALSE(test, __is_constexpr(__builtin_strlen(test->name)));
-	KUNIT_EXPECT_EQ(test, __compiletime_strlen(test->name), SIZE_MAX);
+	KUNIT_EXPECT_FALSE(test, __is_constexpr(__compiletime_strlen(test->name)));
 }
 
 /* This is volatile so the optimizer can't perform DCE below. */
@@ -128,12 +128,12 @@ static noinline size_t want_minus_one(int pick)
 		str = "1";
 		break;
 	}
-	return __compiletime_strlen(str);
+	return __builtin_constant_p(__compiletime_strlen(str));
 }
 
 static void fortify_test_control_flow_split(struct kunit *test)
 {
-	KUNIT_EXPECT_EQ(test, want_minus_one(pick), SIZE_MAX);
+	KUNIT_EXPECT_FALSE(test, want_minus_one(pick));
 }
 
 #define KUNIT_EXPECT_BOS(test, p, expected, name)			\

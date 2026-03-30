@@ -58,19 +58,22 @@ void __read_overflow2_field(size_t avail, size_t wanted) __compiletime_warning("
 void __write_overflow(void) __compiletime_error("detected write beyond size of object (1st parameter)");
 void __write_overflow_field(size_t avail, size_t wanted) __compiletime_warning("detected write beyond size of field (1st parameter); maybe use struct_group()?");
 
-#define __compiletime_strlen(p)					\
-({								\
-	char *__p = (char *)(p);				\
-	size_t __ret = SIZE_MAX;				\
-	const size_t __p_size = __member_size(p);		\
-	if (__p_size != SIZE_MAX &&				\
-	    __builtin_constant_p(*__p)) {			\
-		size_t __p_len = __p_size - 1;			\
-		if (__builtin_constant_p(__p[__p_len]) &&	\
-		    __p[__p_len] == '\0')			\
-			__ret = __builtin_strlen(__p);		\
-	}							\
-	__ret;							\
+/*
+ * __builtin_strlen() generates a compile-time error for 'const char foo[4] = "abcd";'.
+ * But that is a valid source for both strnlen() and strscpy() with a constant
+ * length less than or equal to 4.
+ * __compiletime_strlen() returns a non-constant for such items.
+ * Beware of strings with embedded '\0', __builtin_strlen() can be much smaller
+ * than __member_size();
+ * The return value must only be used when it is a constant.
+ */
+extern size_t __fortify_undefined;
+#define __compiletime_strlen(p)							\
+({										\
+	char *__p = (char *)(p);						\
+	const size_t __p_size = __member_size(p);				\
+	__p_size == SIZE_MAX || !statically_true(__p[__p_size - 1] == '\0') ?	\
+		__fortify_undefined : __builtin_strlen(__p);			\
 })
 
 #if defined(__SANITIZE_ADDRESS__)
@@ -215,16 +218,13 @@ __FORTIFY_INLINE __kernel_size_t strnlen(const char * const POS p, __kernel_size
 	const size_t p_len = __compiletime_strlen(p);
 	size_t ret;
 
-	/* We can take compile-time actions when maxlen is const. */
-	if (__builtin_constant_p(maxlen) && p_len != SIZE_MAX) {
-		/* If p is const, we can use its compile-time-known len. */
-		if (maxlen >= p_size)
-			return p_len;
-	}
+	/* If p is const, we can use its compile-time-known len. */
+	if (__builtin_constant_p(p_len))
+		return p_len < maxlen ? p_len : maxlen;
 
 	/* Do not check characters beyond the end of p. */
-	ret = __real_strnlen(p, maxlen < p_size ? maxlen : p_size);
-	if (p_size <= ret && maxlen != ret)
+	ret = __real_strnlen(p, p_size < maxlen ? p_size : maxlen);
+	if (ret == p_size && p_size < maxlen)
 		fortify_panic(FORTIFY_FUNC_strnlen, FORTIFY_READ, p_size, ret + 1, ret);
 	return ret;
 }
@@ -289,7 +289,7 @@ __FORTIFY_INLINE ssize_t sized_strscpy(char * const POS p, const char * const PO
 	if (statically_true(p_size < SIZE_MAX)) {
 		len = __compiletime_strlen(q);
 
-		if (len < SIZE_MAX && statically_true(len < size)) {
+		if (statically_true(len < size)) {
 			__underlying_memcpy(p, q, len + 1);
 			return len;
 		}
