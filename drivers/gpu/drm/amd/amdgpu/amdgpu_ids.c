@@ -62,16 +62,17 @@ struct amdgpu_pasid_cb {
  */
 int amdgpu_pasid_alloc(unsigned int bits)
 {
+	unsigned long flags;
 	int pasid;
 
 	if (bits == 0)
 		return -EINVAL;
 
 	idr_preload(GFP_KERNEL);
-	spin_lock(&amdgpu_pasid_idr_lock);
+	spin_lock_irqsave(&amdgpu_pasid_idr_lock, flags);
 	pasid = idr_alloc_cyclic(&amdgpu_pasid_idr, NULL, 1,
 				 1U << bits, GFP_NOWAIT);
-	spin_unlock(&amdgpu_pasid_idr_lock);
+	spin_unlock_irqrestore(&amdgpu_pasid_idr_lock, flags);
 	idr_preload_end();
 
 	if (pasid >= 0)
@@ -86,11 +87,12 @@ int amdgpu_pasid_alloc(unsigned int bits)
  */
 void amdgpu_pasid_free(u32 pasid)
 {
+	unsigned long flags;
 	trace_amdgpu_pasid_freed(pasid);
 
-	spin_lock(&amdgpu_pasid_idr_lock);
+	spin_lock_irqsave(&amdgpu_pasid_idr_lock, flags);
 	idr_remove(&amdgpu_pasid_idr, pasid);
-	spin_unlock(&amdgpu_pasid_idr_lock);
+	spin_unlock_irqrestore(&amdgpu_pasid_idr_lock, flags);
 }
 
 static void amdgpu_pasid_free_cb(struct dma_fence *fence,
@@ -633,7 +635,9 @@ void amdgpu_vmid_mgr_fini(struct amdgpu_device *adev)
  */
 void amdgpu_pasid_mgr_cleanup(void)
 {
-	spin_lock(&amdgpu_pasid_idr_lock);
+	unsigned long flags;
+
+	spin_lock_irqsave(&amdgpu_pasid_idr_lock, flags);
 	idr_destroy(&amdgpu_pasid_idr);
-	spin_unlock(&amdgpu_pasid_idr_lock);
+	spin_unlock_irqrestore(&amdgpu_pasid_idr_lock, flags);
 }
