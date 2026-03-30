@@ -3,7 +3,7 @@
 //! A wrapper for data protected by a lock that does not wrap it.
 
 use super::{lock::Backend, lock::Lock};
-use crate::build_assert;
+use crate::const_assert;
 use core::{cell::UnsafeCell, mem::size_of, ptr};
 
 /// Allows access to some data to be serialised by a lock that does not wrap it.
@@ -100,7 +100,7 @@ impl<T, U> LockedBy<T, U> {
     /// memory location*, the data becomes accessible again: none of this affects memory safety
     /// because in any case at most one thread (or CPU) can access the protected data at a time.
     pub fn new<B: Backend>(owner: &Lock<U, B>, data: T) -> Self {
-        build_assert!(
+        const_assert!(
             size_of::<Lock<U, B>>() > 0,
             "The lock type cannot be a ZST because it may be impossible to distinguish instances"
         );
@@ -126,7 +126,7 @@ impl<T: ?Sized, U> LockedBy<T, U> {
     where
         T: Sync,
     {
-        build_assert!(
+        const_assert!(
             size_of::<U>() > 0,
             "`U` cannot be a ZST because `owner` wouldn't be unique"
         );
@@ -155,7 +155,7 @@ impl<T: ?Sized, U> LockedBy<T, U> {
     /// Panics if `owner` is different from the data protected by the lock used in
     /// [`new`](LockedBy::new).
     pub fn access_mut<'a>(&'a self, owner: &'a mut U) -> &'a mut T {
-        build_assert!(
+        const_assert!(
             size_of::<U>() > 0,
             "`U` cannot be a ZST because `owner` wouldn't be unique"
         );
