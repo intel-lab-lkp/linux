@@ -154,11 +154,6 @@ extern char *__underlying_strncpy(char *p, const char *q, __kernel_size_t size) 
 #define POS0			__pass_object_size(0)
 #endif
 
-#define __compiletime_lessthan(bounds, length)	(	\
-	__builtin_constant_p((bounds) < (length)) &&	\
-	(bounds) < (length)				\
-)
-
 /**
  * strncpy - Copy a string to memory with non-guaranteed NUL padding
  *
@@ -196,7 +191,7 @@ char *strncpy(char * const POS p, const char *q, __kernel_size_t size)
 {
 	const size_t p_size = __member_size(p);
 
-	if (__compiletime_lessthan(p_size, size))
+	if (statically_true(p_size < size))
 		__write_overflow();
 	if (p_size < size)
 		fortify_panic(FORTIFY_FUNC_strncpy, FORTIFY_WRITE, p_size, size, p);
@@ -287,14 +282,14 @@ __FORTIFY_INLINE ssize_t sized_strscpy(char * const POS p, const char * const PO
 	 * If size can be known at compile time and is greater than
 	 * p_size, generate a compile time write overflow error.
 	 */
-	if (__compiletime_lessthan(p_size, size))
+	if (statically_true(p_size < size))
 		__write_overflow();
 
 	/* Short-circuit for compile-time known-safe lengths. */
-	if (__compiletime_lessthan(p_size, SIZE_MAX)) {
+	if (statically_true(p_size < SIZE_MAX)) {
 		len = __compiletime_strlen(q);
 
-		if (len < SIZE_MAX && __compiletime_lessthan(len, size)) {
+		if (len < SIZE_MAX && statically_true(len < size)) {
 			__underlying_memcpy(p, q, len + 1);
 			return len;
 		}
@@ -469,12 +464,12 @@ __FORTIFY_INLINE bool fortify_memset_chk(__kernel_size_t size,
 		 */
 
 		/* Error when size is larger than enclosing struct. */
-		if (__compiletime_lessthan(p_size_field, p_size) &&
-		    __compiletime_lessthan(p_size, size))
+		if (statically_true(p_size_field < p_size) &&
+		    statically_true(p_size < size))
 			__write_overflow();
 
 		/* Warn when write size is larger than dest field. */
-		if (__compiletime_lessthan(p_size_field, size))
+		if (statically_true(p_size_field < size))
 			__write_overflow_field(p_size_field, size);
 	}
 	/*
@@ -557,15 +552,15 @@ __FORTIFY_INLINE bool fortify_memcpy_chk(__kernel_size_t size,
 		 */
 
 		/* Error when size is larger than enclosing struct. */
-		if (__compiletime_lessthan(p_size_field, p_size) &&
-		    __compiletime_lessthan(p_size, size))
+		if (statically_true(p_size_field < p_size) &&
+		    statically_true(p_size < size))
 			__write_overflow();
-		if (__compiletime_lessthan(q_size_field, q_size) &&
-		    __compiletime_lessthan(q_size, size))
+		if (statically_true(q_size_field < q_size) &&
+		    statically_true(q_size < size))
 			__read_overflow2();
 
 		/* Warn when write size argument larger than dest field. */
-		if (__compiletime_lessthan(p_size_field, size))
+		if (statically_true(p_size_field < size))
 			__write_overflow_field(p_size_field, size);
 		/*
 		 * Warn for source field over-read when building with W=1
@@ -573,8 +568,8 @@ __FORTIFY_INLINE bool fortify_memcpy_chk(__kernel_size_t size,
 		 * the same time.
 		 */
 		if ((IS_ENABLED(KBUILD_EXTRA_WARN1) ||
-		     __compiletime_lessthan(p_size_field, size)) &&
-		    __compiletime_lessthan(q_size_field, size))
+		     statically_true(p_size_field < size)) &&
+		    statically_true(q_size_field < size))
 			__read_overflow2_field(q_size_field, size);
 	}
 	/*
@@ -699,7 +694,7 @@ __FORTIFY_INLINE void *memscan(void * const POS0 p, int c, __kernel_size_t size)
 {
 	const size_t p_size = __struct_size(p);
 
-	if (__compiletime_lessthan(p_size, size))
+	if (statically_true(p_size < size))
 		__read_overflow();
 	if (p_size < size)
 		fortify_panic(FORTIFY_FUNC_memscan, FORTIFY_READ, p_size, size, NULL);
@@ -713,9 +708,9 @@ int memcmp(const void * const POS0 p, const void * const POS0 q, __kernel_size_t
 	const size_t q_size = __struct_size(q);
 
 	if (__builtin_constant_p(size)) {
-		if (__compiletime_lessthan(p_size, size))
+		if (statically_true(p_size < size))
 			__read_overflow();
-		if (__compiletime_lessthan(q_size, size))
+		if (statically_true(q_size < size))
 			__read_overflow2();
 	}
 	if (p_size < size)
@@ -730,7 +725,7 @@ void *memchr(const void * const POS0 p, int c, __kernel_size_t size)
 {
 	const size_t p_size = __struct_size(p);
 
-	if (__compiletime_lessthan(p_size, size))
+	if (statically_true(p_size < size))
 		__read_overflow();
 	if (p_size < size)
 		fortify_panic(FORTIFY_FUNC_memchr, FORTIFY_READ, p_size, size, NULL);
@@ -742,7 +737,7 @@ __FORTIFY_INLINE void *memchr_inv(const void * const POS0 p, int c, size_t size)
 {
 	const size_t p_size = __struct_size(p);
 
-	if (__compiletime_lessthan(p_size, size))
+	if (statically_true(p_size < size))
 		__read_overflow();
 	if (p_size < size)
 		fortify_panic(FORTIFY_FUNC_memchr_inv, FORTIFY_READ, p_size, size, NULL);
@@ -755,7 +750,7 @@ __FORTIFY_INLINE void *kmemdup_noprof(const void * const POS0 p, size_t size, gf
 {
 	const size_t p_size = __struct_size(p);
 
-	if (__compiletime_lessthan(p_size, size))
+	if (statically_true(p_size < size))
 		__read_overflow();
 	if (p_size < size)
 		fortify_panic(FORTIFY_FUNC_kmemdup, FORTIFY_READ, p_size, size,
@@ -793,7 +788,7 @@ char *strcpy(char * const POS p, const char * const POS q)
 		return __underlying_strcpy(p, q);
 	size = strlen(q) + 1;
 	/* Compile-time check for const size overflow. */
-	if (__compiletime_lessthan(p_size, size))
+	if (statically_true(p_size < size))
 		__write_overflow();
 	/* Run-time check for dynamic size overflow. */
 	if (p_size < size)
