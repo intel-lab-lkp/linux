@@ -523,6 +523,7 @@ struct net_bridge {
 	unsigned char			topology_change;
 	unsigned char			topology_change_detected;
 	u16				root_port;
+	u32				stp_mode;
 	unsigned long			max_age;
 	unsigned long			hello_time;
 	unsigned long			forward_delay;
