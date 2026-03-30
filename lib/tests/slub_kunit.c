@@ -7,6 +7,7 @@
 #include <linux/kernel.h>
 #include <linux/rcupdate.h>
 #include <linux/delay.h>
+#include <linux/perf_event.h>
 #include "../mm/slab.h"
 
 static struct kunit_resource resource;
@@ -291,6 +292,92 @@ static void test_krealloc_redzone_zeroing(struct kunit *test)
 	kmem_cache_destroy(s);
 }
 
+#define REPEAT_TIMES 1000
+#define LOOP_SIZE 1000
+static void *objects[LOOP_SIZE];
+
+struct nmi_context {
+	struct kunit *test;
+	int callback_count;
+	int alloc_ok;
+	int alloc_fail;
+	struct perf_event *event;
+};
+
+static struct perf_event_attr nmi_hw_attr = {
+	.type = PERF_TYPE_HARDWARE,
+	.config = PERF_COUNT_HW_CPU_CYCLES,
+	.size = sizeof(struct perf_event_attr),
+	.pinned = 1,
+	.disabled = 1,
+	.freq = 1,
+	.sample_freq = 100000,
+};
+
+static void kmalloc_kfree_nolock_in_nmi(struct perf_event *event,
+					struct perf_sample_data *data,
+					struct pt_regs *regs)
+{
+	void *objp;
+	gfp_t gfp;
+	struct nmi_context *ctx = event->overflow_handler_context;
+
+	/* __GFP_ACCOUNT to test kmalloc_nolock() in alloc_slab_obj_exts() */
+	gfp = (ctx->callback_count % 2) ? 0 : __GFP_ACCOUNT;
+	objp = kmalloc_nolock(64, gfp, NUMA_NO_NODE);
+
+	if (objp)
+		ctx->alloc_ok++;
+	else
+		ctx->alloc_fail++;
+
+	kfree_nolock(objp);
+	ctx->callback_count++;
+}
+
+static void test_kmalloc_kfree_nolock(struct kunit *test)
+{
+	int i, j;
+	struct nmi_context ctx = { .test = test };
+	struct perf_event *event;
+	bool alloc_fail = false;
+
+	event = perf_event_create_kernel_counter(&nmi_hw_attr, -1, current,
+						 kmalloc_kfree_nolock_in_nmi,
+						 &ctx);
+	if (IS_ERR(event))
+		kunit_skip(test, "Failed to create perf event");
+	ctx.event = event;
+	perf_event_enable(ctx.event);
+	for (i = 0; i < REPEAT_TIMES; i++) {
+		for (j = 0; j < LOOP_SIZE; j++) {
+			gfp_t gfp = (i % 2) ? 0 : __GFP_ACCOUNT;
+
+			objects[j] = kmalloc(64, gfp);
+			if (!objects[j]) {
+				j--;
+				while (j >= 0)
+					kfree(objects[j--]);
+				alloc_fail = true;
+				goto cleanup;
+			}
+		}
+		for (j = 0; j < LOOP_SIZE; j++)
+			kfree(objects[j]);
+	}
+
+cleanup:
+	perf_event_disable(ctx.event);
+	perf_event_release_kernel(ctx.event);
+
+	kunit_info(test, "callback_count: %d, alloc_ok: %d, alloc_fail: %d\n",
+		   ctx.callback_count, ctx.alloc_ok, ctx.alloc_fail);
+
+	if (alloc_fail)
+		kunit_skip(test, "Allocation failed");
+	KUNIT_EXPECT_EQ(test, 0, slab_errors);
+}
+
 static int test_init(struct kunit *test)
 {
 	slab_errors = 0;
@@ -315,6 +402,7 @@ static struct kunit_case test_cases[] = {
 	KUNIT_CASE(test_kfree_rcu_wq_destroy),
 	KUNIT_CASE(test_leak_destroy),
 	KUNIT_CASE(test_krealloc_redzone_zeroing),
+	KUNIT_CASE_SLOW(test_kmalloc_kfree_nolock),
 	{}
 };
 
