@@ -5716,9 +5716,18 @@ static const struct macb_config pic64hpsc_config = {
 	.jumbo_max_len = 16383,
 };
 
+static const struct macb_config macb_macb_config = {
+	.caps = MACB_CAPS_GIGABIT_MODE_AVAILABLE |
+		MACB_CAPS_JUMBO |
+		MACB_CAPS_GEM_HAS_PTP,
+	.dma_burst_length = 16,
+	.usrio = &at91_default_usrio,
+	.jumbo_max_len = 10240,
+};
+
 static const struct of_device_id macb_dt_ids[] = {
 	{ .compatible = "cdns,at91sam9260-macb", .data = &at91sam9260_config },
-	{ .compatible = "cdns,macb" },
+	{ .compatible = "cdns,macb", .data = &macb_macb_config},
 	{ .compatible = "cdns,np4-macb", .data = &np4_config },
 	{ .compatible = "cdns,pc302-gem", .data = &pc302gem_config },
 	{ .compatible = "cdns,gem", .data = &pc302gem_config },
@@ -5747,15 +5756,6 @@ static const struct of_device_id macb_dt_ids[] = {
 MODULE_DEVICE_TABLE(of, macb_dt_ids);
 #endif /* CONFIG_OF */
 
-static const struct macb_config default_gem_config = {
-	.caps = MACB_CAPS_GIGABIT_MODE_AVAILABLE |
-		MACB_CAPS_JUMBO |
-		MACB_CAPS_GEM_HAS_PTP,
-	.dma_burst_length = 16,
-	.usrio = &at91_default_usrio,
-	.jumbo_max_len = 10240,
-};
-
 static int macb_probe(struct platform_device *pdev)
 {
 	struct clk *pclk, *hclk = NULL, *tx_clk = NULL, *rx_clk = NULL;
@@ -5778,7 +5778,7 @@ static int macb_probe(struct platform_device *pdev)
 
 	macb_config = of_device_get_match_data(&pdev->dev);
 	if (!macb_config)
-		macb_config = &default_gem_config;
+		return -EINVAL;
 
 	err = macb_clk_init(pdev, &pclk, &hclk, &tx_clk, &rx_clk, &tsu_clk,
 			    macb_config);
