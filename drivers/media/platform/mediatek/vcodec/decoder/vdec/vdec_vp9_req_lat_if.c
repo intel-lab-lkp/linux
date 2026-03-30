@@ -1168,7 +1168,7 @@ static int vdec_vp9_slice_setup_lat(struct vdec_vp9_slice_instance *instance,
 
 	ret = vdec_vp9_slice_setup_lat_buffer(instance, vsi, bs, lat_buf);
 	if (ret)
-		goto err;
+		goto alloc_err;
 
 	vdec_vp9_slice_setup_seg_buffer(instance, vsi, &instance->seg[0]);
 
@@ -1176,14 +1176,16 @@ static int vdec_vp9_slice_setup_lat(struct vdec_vp9_slice_instance *instance,
 
 	ret = vdec_vp9_slice_setup_prob_buffer(instance, vsi);
 	if (ret)
-		goto err;
+		goto alloc_err;
 
 	ret = vdec_vp9_slice_setup_tile_buffer(instance, vsi, bs);
 	if (ret)
-		goto err;
+		goto alloc_err;
 
 	return 0;
 
+alloc_err:
+	vdec_vp9_slice_free_working_buffer(instance);
 err:
 	return ret;
 }
