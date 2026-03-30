@@ -406,23 +406,19 @@ void rzg2l_cru_stop_image_processing(struct rzg2l_cru_dev *cru)
 
 static int rzg2l_cru_get_virtual_channel(struct rzg2l_cru_dev *cru)
 {
-	struct v4l2_mbus_frame_desc fd = { };
+	struct v4l2_mbus_frame_desc fd = {
+		.type = V4L2_MBUS_FRAME_DESC_TYPE_CSI2,
+	};
 	struct media_pad *remote_pad;
 	int ret;
 
 	remote_pad = media_pad_remote_pad_unique(&cru->ip.pads[RZG2L_CRU_IP_SINK]);
-	ret = v4l2_subdev_call(cru->ip.remote, pad, get_frame_desc, remote_pad->index, &fd);
-	if (ret < 0 && ret != -ENOIOCTLCMD) {
+
+	ret = v4l2_subdev_get_frame_desc(cru->ip.remote,
+					 remote_pad->index, &fd);
+	if (ret < 0) {
 		dev_err(cru->dev, "get_frame_desc failed on IP remote subdev\n");
 		return ret;
-	}
-	/* If remote subdev does not implement .get_frame_desc default to VC0. */
-	if (ret == -ENOIOCTLCMD)
-		return 0;
-
-	if (fd.type != V4L2_MBUS_FRAME_DESC_TYPE_CSI2) {
-		dev_err(cru->dev, "get_frame_desc returned invalid bus type %d\n", fd.type);
-		return -EINVAL;
 	}
 
 	if (!fd.num_entries) {

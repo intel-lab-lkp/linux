@@ -737,8 +737,9 @@ static int rzg2l_csi2_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
 			csi2->remote_source->name, remote_pad);
 		return PTR_ERR(remote_pad);
 	}
-	return v4l2_subdev_call(csi2->remote_source, pad, get_frame_desc,
-				remote_pad->index, fd);
+	fd->type = V4L2_MBUS_FRAME_DESC_TYPE_CSI2;
+	return v4l2_subdev_get_frame_desc(csi2->remote_source,
+					  remote_pad->index, fd);
 }
 
 static const struct v4l2_subdev_video_ops rzg2l_csi2_video_ops = {
