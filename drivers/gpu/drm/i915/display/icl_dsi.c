@@ -711,7 +711,7 @@ gen11_dsi_configure_transcoder(struct intel_encoder *encoder,
 		dsi_trans = dsi_port_to_transcoder(port);
 		tmp = intel_de_read(display, DSI_TRANS_FUNC_CONF(dsi_trans));
 
-		if (intel_dsi->eotp_pkt)
+		if (intel_dsi->eot_pkt)
 			tmp &= ~EOTP_DISABLED;
 		else
 			tmp |= EOTP_DISABLED;
@@ -728,6 +728,12 @@ gen11_dsi_configure_transcoder(struct intel_encoder *encoder,
 			tmp |= CLK_ENTER_LP_AFTER_DATA;
 		else
 			tmp |= CLK_HS_CONTINUOUS;
+
+		if (DISPLAY_VER(display) >= 12 &&
+		    intel_dsi->lp_clock_during_lpm)
+			tmp |= LP_CLK_DURING_LPM;
+		else
+			tmp &= ~LP_CLK_DURING_LPM;
 
 		/* configure buffer threshold limit to minimum */
 		tmp &= ~PIX_BUF_THRESHOLD_MASK;
@@ -765,10 +771,11 @@ gen11_dsi_configure_transcoder(struct intel_encoder *encoder,
 			}
 		}
 
-		if (DISPLAY_VER(display) >= 12) {
-			if (is_vid_mode(intel_dsi))
-				tmp |= BLANKING_PACKET_ENABLE;
-		}
+		if (DISPLAY_VER(display) >= 12 &&
+		    is_vid_mode(intel_dsi) && intel_dsi->blanking_pkt)
+			tmp |= BLANKING_PACKET_ENABLE;
+		else
+			tmp &= ~BLANKING_PACKET_ENABLE;
 
 		/* program DSI operation mode */
 		if (is_vid_mode(intel_dsi)) {
