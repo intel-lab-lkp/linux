@@ -2004,11 +2004,23 @@ static int trace__symbols_init(struct trace *trace, int argc, const char **argv,
 	if (err < 0)
 		goto out;
 
-	err = __machine__synthesize_threads(trace->host, &trace->tool, &trace->opts.target,
-					    evlist->core.threads, trace__tool_process,
-					    /*needs_mmap=*/callchain_param.enabled,
-					    /*mmap_data=*/false,
-					    /*nr_threads_synthesize=*/1);
+	if (trace->summary_only) {
+		if (trace->summary_mode == SUMMARY__BY_THREAD) {
+			err = __machine__synthesize_threads(trace->host, &trace->tool,
+							    &trace->opts.target,
+							    evlist->core.threads,
+							    trace__tool_process,
+							    /*needs_mmap=*/false,
+							    /*mmap_data=*/false,
+							    /*nr_threads_synthesize=*/1);
+		}
+	} else {
+		err = __machine__synthesize_threads(trace->host, &trace->tool, &trace->opts.target,
+						    evlist->core.threads, trace__tool_process,
+						    /*needs_mmap=*/callchain_param.enabled,
+						    /*mmap_data=*/false,
+						    /*nr_threads_synthesize=*/1);
+	}
 out:
 	if (err) {
 		perf_env__exit(&trace->host_env);
