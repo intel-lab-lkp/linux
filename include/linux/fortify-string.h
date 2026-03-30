@@ -230,9 +230,8 @@ __FORTIFY_INLINE __kernel_size_t strnlen(const char * const POS p, __kernel_size
 }
 
 /*
- * Defined after fortified strnlen to reuse it. However, it must still be
- * possible for strlen() to be used on compile-time strings for use in
- * static initializers (i.e. as a constant expression).
+ * strlen() of a compile-time string needs to be a constant expression
+ * so it can be used, for example, as a static initializer.
  */
 /**
  * strlen - Return count of characters in a NUL-terminated string
@@ -247,9 +246,9 @@ __FORTIFY_INLINE __kernel_size_t strnlen(const char * const POS p, __kernel_size
  * Returns number of characters in @p (NOT including the final NUL).
  *
  */
-#define strlen(p)							\
-	__builtin_choose_expr(__is_constexpr(__builtin_strlen(p)),	\
-		__builtin_strlen(p), __fortify_strlen(p))
+#define strlen(p)					\
+	(__builtin_constant_p(__builtin_strlen(p)) ?	\
+		__builtin_strlen(p) : __fortify_strlen(p))
 __FORTIFY_INLINE __diagnose_as(__builtin_strlen, 1)
 __kernel_size_t __fortify_strlen(const char * const POS p)
 {
@@ -259,7 +258,14 @@ __kernel_size_t __fortify_strlen(const char * const POS p)
 	/* Give up if we don't know how large p is. */
 	if (p_size == SIZE_MAX)
 		return __underlying_strlen(p);
-	ret = strnlen(p, p_size);
+	/*
+	 * 'ret' can be constant here even though the __builtin_constant_p(__builtin_strlen(p))
+	 * in the #define wrapper is false.
+	 */
+	ret = __builtin_strlen(p);
+	if (__builtin_constant_p(ret))
+		return ret;
+	ret = __real_strnlen(p, p_size);
 	if (p_size <= ret)
 		fortify_panic(FORTIFY_FUNC_strlen, FORTIFY_READ, p_size, ret + 1, ret);
 	return ret;
