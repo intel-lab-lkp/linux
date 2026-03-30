@@ -233,4 +233,6 @@ struct cxl_memdev *devm_cxl_add_memdev(struct cxl_dev_state *cxlds,
 				       const struct cxl_memdev_attach *attach);
 struct cxl_region;
 struct cxl_region *cxl_get_region_from_committed_decoder(struct cxl_memdev *cxlmd);
+struct range;
+int cxl_get_region_range(struct cxl_region *region, struct range *range);
 #endif /* __CXL_CXL_H__ */
