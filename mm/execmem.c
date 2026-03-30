@@ -59,7 +59,14 @@ static void *execmem_vmalloc(struct execmem_range *range, size_t size,
 		return NULL;
 	}
 
-	return p;
+	/*
+	 * Resetting the tag here is necessary to avoid the tagged address
+	 * ending up in the maple tree structure. There it's linear address
+	 * can be incorrectly compared with other addresses which can result in
+	 * a wrong address being picked down the line and for example a page
+	 * permission violation error panicking the kernel.
+	 */
+	return kasan_reset_tag(p);
 }
 
 struct vm_struct *execmem_vmap(size_t size)
