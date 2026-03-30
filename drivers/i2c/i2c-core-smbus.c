@@ -566,6 +566,15 @@ s32 __i2c_smbus_xfer(struct i2c_adapter *adapter, u16 addr,
 	if (res)
 		return res;
 
+	/* Reject invalid block lengths before they reach tracepoints
+	 * or native smbus_xfer implementations.
+	 */
+	if (data && (protocol == I2C_SMBUS_BLOCK_DATA ||
+		     protocol == I2C_SMBUS_BLOCK_PROC_CALL ||
+		     protocol == I2C_SMBUS_I2C_BLOCK_DATA) &&
+	    data->block[0] > I2C_SMBUS_BLOCK_MAX)
+		return -EINVAL;
+
 	/* If enabled, the following two tracepoints are conditional on
 	 * read_write and protocol.
 	 */
