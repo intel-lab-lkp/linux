@@ -270,48 +270,56 @@ static bool is_ohci_port(enum usbhs_omap_port_mode pmode)
 	}
 }
 
-static int usbhs_runtime_resume(struct device *dev)
+static int usbhs_clocks_enable(struct device *dev, bool enable)
 {
-	struct usbhs_hcd_omap		*omap = dev_get_drvdata(dev);
-	struct usbhs_omap_platform_data	*pdata = omap->pdata;
-	int i, r;
+	struct usbhs_hcd_omap *omap = dev_get_drvdata(dev);
+	struct usbhs_omap_platform_data *pdata = omap->pdata;
+	int r = 0, i;
 
-	dev_dbg(dev, "usbhs_runtime_resume\n");
-
-	omap_tll_enable(pdata);
-
-	if (!IS_ERR(omap->ehci_logic_fck))
-		clk_prepare_enable(omap->ehci_logic_fck);
+	if (!enable && !IS_ERR(omap->ehci_logic_fck))
+		clk_disable_unprepare(omap->ehci_logic_fck);
 
 	for (i = 0; i < omap->nports; i++) {
 		switch (pdata->port_mode[i]) {
 		case OMAP_EHCI_PORT_MODE_HSIC:
 			if (!IS_ERR(omap->hsic60m_clk[i])) {
-				r = clk_prepare_enable(omap->hsic60m_clk[i]);
-				if (r) {
-					dev_err(dev,
-					 "Can't enable port %d hsic60m clk:%d\n",
-					 i, r);
+				if (enable) {
+					r = clk_prepare_enable(omap->hsic60m_clk[i]);
+					if (r) {
+						dev_err(dev,
+							"Can't enable port %d hsic60m clk:%d\n",
+							i, r);
+					}
+				} else {
+					clk_disable_unprepare(omap->hsic60m_clk[i]);
 				}
 			}
 
 			if (!IS_ERR(omap->hsic480m_clk[i])) {
-				r = clk_prepare_enable(omap->hsic480m_clk[i]);
-				if (r) {
-					dev_err(dev,
-					 "Can't enable port %d hsic480m clk:%d\n",
-					 i, r);
+				if (enable) {
+					r = clk_prepare_enable(omap->hsic480m_clk[i]);
+					if (r) {
+						dev_err(dev,
+							"Can't enable port %d hsic480m clk:%d\n",
+							i, r);
+					}
+				} else {
+					clk_disable_unprepare(omap->hsic480m_clk[i]);
 				}
 			}
 			fallthrough;	/* as HSIC mode needs utmi_clk */
 
 		case OMAP_EHCI_PORT_MODE_TLL:
 			if (!IS_ERR(omap->utmi_clk[i])) {
-				r = clk_prepare_enable(omap->utmi_clk[i]);
-				if (r) {
-					dev_err(dev,
-					 "Can't enable port %d clk : %d\n",
-					 i, r);
+				if (enable) {
+					r = clk_prepare_enable(omap->utmi_clk[i]);
+					if (r) {
+						dev_err(dev,
+							"Can't enable port %d clk : %d\n",
+							i, r);
+					}
+				} else {
+					clk_disable_unprepare(omap->utmi_clk[i]);
 				}
 			}
 			break;
@@ -320,38 +328,28 @@ static int usbhs_runtime_resume(struct device *dev)
 		}
 	}
 
-	return 0;
+	if (enable && !IS_ERR(omap->ehci_logic_fck))
+		r = clk_prepare_enable(omap->ehci_logic_fck);
+
+	return r;
+}
+
+static int usbhs_runtime_resume(struct device *dev)
+{
+	struct usbhs_hcd_omap		*omap = dev_get_drvdata(dev);
+	struct usbhs_omap_platform_data	*pdata = omap->pdata;
+
+	omap_tll_enable(pdata);
+
+	return usbhs_clocks_enable(dev, true);
 }
 
 static int usbhs_runtime_suspend(struct device *dev)
 {
 	struct usbhs_hcd_omap		*omap = dev_get_drvdata(dev);
 	struct usbhs_omap_platform_data	*pdata = omap->pdata;
-	int i;
 
-	dev_dbg(dev, "usbhs_runtime_suspend\n");
-
-	for (i = 0; i < omap->nports; i++) {
-		switch (pdata->port_mode[i]) {
-		case OMAP_EHCI_PORT_MODE_HSIC:
-			if (!IS_ERR(omap->hsic60m_clk[i]))
-				clk_disable_unprepare(omap->hsic60m_clk[i]);
-
-			if (!IS_ERR(omap->hsic480m_clk[i]))
-				clk_disable_unprepare(omap->hsic480m_clk[i]);
-			fallthrough;	/* as utmi_clks were used in HSIC mode */
-
-		case OMAP_EHCI_PORT_MODE_TLL:
-			if (!IS_ERR(omap->utmi_clk[i]))
-				clk_disable_unprepare(omap->utmi_clk[i]);
-			break;
-		default:
-			break;
-		}
-	}
-
-	if (!IS_ERR(omap->ehci_logic_fck))
-		clk_disable_unprepare(omap->ehci_logic_fck);
+	usbhs_clocks_enable(dev, false);
 
 	omap_tll_disable(pdata);
 
