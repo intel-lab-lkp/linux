@@ -92,6 +92,8 @@ int inv_icm42607_buffer_update_watermark(struct inv_icm42607_state *st);
 int inv_icm42607_buffer_fifo_read(struct inv_icm42607_state *st,
 				  unsigned int max);
 
+int inv_icm42607_buffer_fifo_parse(struct inv_icm42607_state *st);
+
 int inv_icm42607_buffer_hwfifo_flush(struct inv_icm42607_state *st,
 				     unsigned int count);
 
