@@ -14,7 +14,7 @@
 #ifdef CONFIG_DEBUG_VIRTUAL
 unsigned long __phys_addr(unsigned long x)
 {
-	unsigned long y = x - __START_KERNEL_map;
+	unsigned long y = __phys_addr_kernel_start(x);
 
 	/* use the carry flag to determine if x was < __START_KERNEL_map */
 	if (unlikely(x > y)) {
@@ -35,7 +35,7 @@ EXPORT_SYMBOL(__phys_addr);
 
 bool __virt_addr_valid(unsigned long x)
 {
-	unsigned long y = x - __START_KERNEL_map;
+	unsigned long y = __phys_addr_kernel_start(x);
 
 	/* use the carry flag to determine if x was < __START_KERNEL_map */
 	if (unlikely(x > y)) {
