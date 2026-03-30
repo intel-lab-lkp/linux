@@ -38,6 +38,10 @@
 #define LINK_STATUS_CONFIGURATION	GENMASK(12, 11)
 #define LINK_STATUS_SEMAPHORE		BIT(0)
 
+/* Sleep Control 0 Register */
+#define LAN867X_REG_SLEEP_CTRL0		0x0080
+#define SLEEP_CTRL0_MDI_WAKEUP_EN	BIT(14)
+
 /* Link Status Configuration */
 #define LINK_STATUS_CONFIG_PLCA_STATUS	0x1
 #define LINK_STATUS_CONFIG_SEMAPHORE	0x2
@@ -472,9 +476,14 @@ static int lan867x_revd0_config_init(struct phy_device *phydev)
 {
 	int ret;
 
-	ret = lan867x_check_reset_complete(phydev);
-	if (ret)
-		return ret;
+	/* Reset status is only valid after an explicit PHY reset, it is not set
+	 * when the PHY resumes from suspend/sleep state.
+	 */
+	if (!phydev->suspended) {
+		ret = lan867x_check_reset_complete(phydev);
+		if (ret)
+			return ret;
+	}
 
 	for (int i = 0; i < ARRAY_SIZE(lan867x_revd0_fixup_regs); i++) {
 		ret = phy_write_mmd(phydev, MDIO_MMD_VEND2,
@@ -489,6 +498,53 @@ static int lan867x_revd0_config_init(struct phy_device *phydev)
 	 * autoneg.
 	 */
 	return lan867x_revd0_link_active_selection(phydev, false);
+}
+
+static int lan867x_revd0_suspend(struct phy_device *phydev)
+{
+	int ret;
+
+	/* Configure WUP as wake source for system suspend */
+	ret = phy_set_bits_mmd(phydev, MDIO_MMD_VEND2,
+			       LAN867X_REG_SLEEP_CTRL0,
+			       SLEEP_CTRL0_MDI_WAKEUP_EN);
+	if (ret)
+		return ret;
+
+	return genphy_c45_oatc10_suspend(phydev);
+}
+
+static int lan867x_revd0_set_wol(struct phy_device *phydev,
+				 struct ethtool_wolinfo *wol)
+{
+	/* Only support WAKE_PHY via WUP (Wake-up Pulse) */
+	if (wol->wolopts & ~WAKE_PHY)
+		return -EOPNOTSUPP;
+
+	if (wol->wolopts & WAKE_PHY) {
+		return phy_set_bits_mmd(phydev, MDIO_MMD_VEND2,
+					LAN867X_REG_SLEEP_CTRL0,
+					SLEEP_CTRL0_MDI_WAKEUP_EN);
+	} else {
+		/* Disable WUP wake source */
+		return phy_clear_bits_mmd(phydev, MDIO_MMD_VEND2,
+					  LAN867X_REG_SLEEP_CTRL0,
+					  SLEEP_CTRL0_MDI_WAKEUP_EN);
+	}
+}
+
+static void lan867x_revd0_get_wol(struct phy_device *phydev,
+				  struct ethtool_wolinfo *wol)
+{
+	int ret;
+
+	wol->supported = WAKE_PHY;
+	wol->wolopts = 0;
+
+	/* Check if WUP wake source is currently enabled */
+	ret = phy_read_mmd(phydev, MDIO_MMD_VEND2, LAN867X_REG_SLEEP_CTRL0);
+	if (ret >= 0 && (ret & SLEEP_CTRL0_MDI_WAKEUP_EN))
+		wol->wolopts = WAKE_PHY;
 }
 
 static int lan86xx_read_status(struct phy_device *phydev)
@@ -569,6 +625,7 @@ static struct phy_driver microchip_t1s_driver[] = {
 		PHY_ID_MATCH_EXACT(PHY_ID_LAN867X_REVD0),
 		.name               = "LAN867X Rev.D0",
 		.features           = PHY_BASIC_T1S_P2MP_FEATURES,
+		.flags              = PHY_ALWAYS_CALL_SUSPEND,
 		.config_init        = lan867x_revd0_config_init,
 		.get_plca_cfg	    = genphy_c45_plca_get_cfg,
 		.set_plca_cfg	    = lan86xx_plca_set_cfg,
@@ -577,6 +634,10 @@ static struct phy_driver microchip_t1s_driver[] = {
 		.cable_test_get_status = genphy_c45_oatc14_cable_test_get_status,
 		.get_sqi            = genphy_c45_oatc14_get_sqi,
 		.get_sqi_max        = genphy_c45_oatc14_get_sqi_max,
+		.suspend            = lan867x_revd0_suspend,
+		.resume             = genphy_c45_oatc10_resume,
+		.get_wol	    = lan867x_revd0_get_wol,
+		.set_wol	    = lan867x_revd0_set_wol,
 	},
 	{
 		PHY_ID_MATCH_EXACT(PHY_ID_LAN865X_REVB),
