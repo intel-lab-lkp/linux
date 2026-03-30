@@ -69,13 +69,19 @@ static inline uint32_t andes_cpu_llc_get_cctl_status(void)
 	return readl_relaxed(andes_priv.llc_base + ANDES_LLC_REG_CCTL_STATUS_OFFSET_C0);
 }
 
-static void andes_cpu_cache_operation(unsigned long start, unsigned long end,
-				       unsigned int l1_op, unsigned int llc_op)
+static void andes_cpu_cache_operation(phys_addr_t paddr, size_t size,
+				      unsigned int l1_op, unsigned int llc_op)
 {
 	unsigned long line_size = andes_priv.andes_cache_line_size;
 	void __iomem *base = andes_priv.llc_base;
+	unsigned long start = (unsigned long)phys_to_virt(paddr);
+	unsigned long end = start + size;
+	unsigned long flags;
 	unsigned long pa;
 	int mhartid = 0;
+
+	start = ALIGN_DOWN(start, line_size);
+	end = ALIGN(end, line_size);
 
 	if (IS_ENABLED(CONFIG_SMP))
 		mhartid = cpuid_to_hartid_map(get_cpu());
@@ -83,7 +89,9 @@ static void andes_cpu_cache_operation(unsigned long start, unsigned long end,
 		mhartid = cpuid_to_hartid_map(0);
 
 	mb(); /* complete earlier memory accesses before the cache flush */
-	while (end > start) {
+	for (; start < end; start += line_size) {
+		local_irq_save(flags);
+
 		csr_write(CSR_UCCTLBEGINADDR, start);
 		csr_write(CSR_UCCTLCOMMAND, l1_op);
 
@@ -95,7 +103,7 @@ static void andes_cpu_cache_operation(unsigned long start, unsigned long end,
 			ANDES_LLC_CCTL_STATUS_IDLE)
 			;
 
-		start += line_size;
+		local_irq_restore(flags);
 	}
 	mb(); /* issue later memory accesses after the cache flush */
 
@@ -103,60 +111,31 @@ static void andes_cpu_cache_operation(unsigned long start, unsigned long end,
 		put_cpu();
 }
 
-/* Write-back L1 and LLC entry */
-static inline void andes_cpu_dcache_wb_range(unsigned long start, unsigned long end)
-{
-	andes_cpu_cache_operation(start, end, ANDES_L1D_CCTL_VA_WB,
-				   ANDES_LLC_CCTL_PA_WB);
-}
-
-/* Invalidate the L1 and LLC entry */
-static inline void andes_cpu_dcache_inval_range(unsigned long start, unsigned long end)
-{
-	andes_cpu_cache_operation(start, end, ANDES_L1D_CCTL_VA_INVAL,
-				   ANDES_LLC_CCTL_PA_INVAL);
-}
-
 static void andes_dma_cache_inv(phys_addr_t paddr, size_t size)
 {
-	unsigned long start = (unsigned long)phys_to_virt(paddr);
-	unsigned long end = start + size;
-	unsigned long line_size = andes_priv.andes_cache_line_size;
-	unsigned long flags;
-
 	if (unlikely(!size))
 		return;
 
-	start = ALIGN_DOWN(start, line_size);
-	end = ALIGN(end, line_size);
-
-	local_irq_save(flags);
-	andes_cpu_dcache_inval_range(start, end);
-	local_irq_restore(flags);
+	andes_cpu_cache_operation(paddr, size, ANDES_L1D_CCTL_VA_INVAL,
+				  ANDES_LLC_CCTL_PA_INVAL);
 }
 
 static void andes_dma_cache_wback(phys_addr_t paddr, size_t size)
 {
-	unsigned long start = (unsigned long)phys_to_virt(paddr);
-	unsigned long end = start + size;
-	unsigned long line_size = andes_priv.andes_cache_line_size;
-	unsigned long flags;
-
 	if (unlikely(!size))
 		return;
 
-	start = ALIGN_DOWN(start, line_size);
-	end = ALIGN(end, line_size);
-
-	local_irq_save(flags);
-	andes_cpu_dcache_wb_range(start, end);
-	local_irq_restore(flags);
+	andes_cpu_cache_operation(paddr, size, ANDES_L1D_CCTL_VA_WB,
+				  ANDES_LLC_CCTL_PA_WB);
 }
 
 static void andes_dma_cache_wback_inv(phys_addr_t paddr, size_t size)
 {
-	andes_dma_cache_wback(paddr, size);
-	andes_dma_cache_inv(paddr, size);
+	if (unlikely(!size))
+		return;
+
+	andes_cpu_cache_operation(paddr, size, ANDES_L1D_CCTL_VA_WBINVAL,
+				  ANDES_LLC_CCTL_PA_WBINVAL);
 }
 
 static int andes_get_llc_line_size(struct device_node *np)
