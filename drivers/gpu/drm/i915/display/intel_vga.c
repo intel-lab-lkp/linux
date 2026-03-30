@@ -49,6 +49,7 @@ void intel_vga_disable(struct intel_display *display)
 	enum pipe pipe;
 	u32 tmp;
 	u8 sr1;
+	int err;
 
 	tmp = intel_de_read(display, vga_reg);
 	if (tmp & VGA_DISP_DISABLE)
@@ -65,13 +66,22 @@ void intel_vga_disable(struct intel_display *display)
 		    pipe_name(pipe));
 
 	/* WaEnableVGAAccessThroughIOPort:ctg,elk,ilk,snb,ivb,vlv,hsw */
-	vga_get_uninterruptible(pdev, VGA_RSRC_LEGACY_IO);
+	/*
+	 * if the VGA ports are inaccessible now, the chance that vgacon
+	 * will be able to access them later is low enough that we don't
+	 * have to care about the emulation state machines being in sync
+	 */
+	err = vga_get_uninterruptible(pdev, VGA_RSRC_LEGACY_IO);
+	if (err)
+		goto skip;
+
 	outb(0x01, VGA_SEQ_I);
 	sr1 = inb(VGA_SEQ_D);
 	outb(sr1 | VGA_SR01_SCREEN_OFF, VGA_SEQ_D);
 	vga_put(pdev, VGA_RSRC_LEGACY_IO);
 	udelay(300);
 
+skip:
 	intel_de_write(display, vga_reg, VGA_DISP_DISABLE);
 	intel_de_posting_read(display, vga_reg);
 }
@@ -79,6 +89,7 @@ void intel_vga_disable(struct intel_display *display)
 void intel_vga_reset_io_mem(struct intel_display *display)
 {
 	struct pci_dev *pdev = to_pci_dev(display->drm->dev);
+	int err;
 
 	/*
 	 * After we re-enable the power well, if we touch VGA register 0x3d5
@@ -89,8 +100,14 @@ void intel_vga_reset_io_mem(struct intel_display *display)
 	 * console_unlock(). So make here we touch the VGA MSR register, making
 	 * sure vgacon can keep working normally without triggering interrupts
 	 * and error messages.
+	 *
+	 * We ignore this issue if we can't access the VGA registers, because
+	 * neither can vgacon.
 	 */
-	vga_get_uninterruptible(pdev, VGA_RSRC_LEGACY_IO);
+	err = vga_get_uninterruptible(pdev, VGA_RSRC_LEGACY_IO);
+	if (err)
+		return;
+
 	outb(inb(VGA_MIS_R), VGA_MIS_W);
 	vga_put(pdev, VGA_RSRC_LEGACY_IO);
 }
