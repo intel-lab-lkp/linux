@@ -66,7 +66,7 @@ static struct andes_priv andes_priv;
 /* LLC operations */
 static inline uint32_t andes_cpu_llc_get_cctl_status(void)
 {
-	return readl(andes_priv.llc_base + ANDES_LLC_REG_CCTL_STATUS_OFFSET_C0);
+	return readl_relaxed(andes_priv.llc_base + ANDES_LLC_REG_CCTL_STATUS_OFFSET_C0);
 }
 
 static void andes_cpu_cache_operation(unsigned long start, unsigned long end,
@@ -74,16 +74,22 @@ static void andes_cpu_cache_operation(unsigned long start, unsigned long end,
 {
 	unsigned long line_size = andes_priv.andes_cache_line_size;
 	void __iomem *base = andes_priv.llc_base;
-	int mhartid = smp_processor_id();
 	unsigned long pa;
+	int mhartid = 0;
 
+	if (IS_ENABLED(CONFIG_SMP))
+		mhartid = cpuid_to_hartid_map(get_cpu());
+	else
+		mhartid = cpuid_to_hartid_map(0);
+
+	mb(); /* complete earlier memory accesses before the cache flush */
 	while (end > start) {
 		csr_write(CSR_UCCTLBEGINADDR, start);
 		csr_write(CSR_UCCTLCOMMAND, l1_op);
 
 		pa = virt_to_phys((void *)start);
-		writel(pa, base + ANDES_LLC_REG_CCTL_ACC_OFFSET_BY_CORE(mhartid));
-		writel(llc_op, base + ANDES_LLC_REG_CCTL_CMD_OFFSET_BY_CORE(mhartid));
+		writel_relaxed(pa, base + ANDES_LLC_REG_CCTL_ACC_OFFSET_BY_CORE(mhartid));
+		writel_relaxed(llc_op, base + ANDES_LLC_REG_CCTL_CMD_OFFSET_BY_CORE(mhartid));
 		while ((andes_cpu_llc_get_cctl_status() &
 			ANDES_LLC_CCTL_STATUS_MASK_BY_CORE(mhartid)) !=
 			ANDES_LLC_CCTL_STATUS_IDLE)
@@ -91,6 +97,10 @@ static void andes_cpu_cache_operation(unsigned long start, unsigned long end,
 
 		start += line_size;
 	}
+	mb(); /* issue later memory accesses after the cache flush */
+
+	if (IS_ENABLED(CONFIG_SMP))
+		put_cpu();
 }
 
 /* Write-back L1 and LLC entry */
