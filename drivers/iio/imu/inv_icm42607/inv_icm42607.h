@@ -11,6 +11,7 @@
 #include <linux/regmap.h>
 #include <linux/mutex.h>
 #include <linux/regulator/consumer.h>
+#include <linux/pm.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/common/inv_sensors_timestamp.h>
 
@@ -19,6 +20,16 @@ enum inv_icm42607_chip {
 	INV_CHIP_ICM42607P,
 	INV_CHIP_ICM42607,
 	INV_CHIP_NB,
+};
+
+/* serial bus slew rates */
+enum inv_icm42607_slew_rate {
+	INV_ICM42607_SLEW_RATE_20_60NS,
+	INV_ICM42607_SLEW_RATE_12_36NS,
+	INV_ICM42607_SLEW_RATE_6_18NS,
+	INV_ICM42607_SLEW_RATE_4_12NS,
+	INV_ICM42607_SLEW_RATE_2_6NS,
+	INV_ICM42607_SLEW_RATE_INF_2NS,
 };
 
 enum inv_icm42607_sensor_mode {
@@ -412,6 +423,9 @@ struct inv_icm42607_sensor_state {
 #define INV_ICM42607_SUSPEND_DELAY_MS			2000
 
 typedef int (*inv_icm42607_bus_setup)(struct inv_icm42607_state *);
+
+extern const struct regmap_config inv_icm42607_regmap_config;
+extern const struct dev_pm_ops inv_icm42607_pm_ops;
 
 u32 inv_icm42607_odr_to_period(enum inv_icm42607_odr odr);
 
