@@ -528,5 +528,18 @@ struct auxiliary_device *mlx5_sd_get_adev(struct mlx5_core_dev *dev,
 	if (dev == primary)
 		return adev;
 
+	device_lock(&primary->priv.adev[idx]->adev.dev);
+	/* In case primary finish removing its adev */
+	if (!mlx5_devcom_comp_is_ready(sd->devcom)) {
+		device_unlock(&primary->priv.adev[idx]->adev.dev);
+		return NULL;
+	}
 	return &primary->priv.adev[idx]->adev;
+}
+
+void mlx5_sd_put_adev(struct auxiliary_device *actual_adev,
+		      struct auxiliary_device *adev)
+{
+	if (actual_adev != adev)
+		device_unlock(&actual_adev->dev);
 }
