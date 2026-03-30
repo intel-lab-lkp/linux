@@ -860,10 +860,12 @@ void blkdev_put_no_open(struct block_device *bdev)
 	put_device(&bdev->bd_device);
 }
 
-static bool bdev_writes_blocked(struct block_device *bdev)
+bool bdev_writes_blocked(struct block_device *bdev)
 {
 	return bdev->bd_writers < 0;
 }
+EXPORT_SYMBOL_GPL(bdev_writes_blocked);
+
 
 static void bdev_block_writes(struct block_device *bdev)
 {

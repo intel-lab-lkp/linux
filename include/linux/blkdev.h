@@ -828,6 +828,7 @@ static inline bool bdev_read_only(struct block_device *bdev)
 	return bdev_test_flag(bdev, BD_READ_ONLY) || get_disk_ro(bdev->bd_disk);
 }
 
+bool bdev_writes_blocked(struct block_device *bdev);
 bool set_capacity_and_notify(struct gendisk *disk, sector_t size);
 void disk_force_media_change(struct gendisk *disk);
 void bdev_mark_dead(struct block_device *bdev, bool surprise);
