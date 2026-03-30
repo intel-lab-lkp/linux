@@ -165,12 +165,20 @@ int npc_get_nixlf_mcam_index(struct npc_mcam *mcam,
 
 		switch (type) {
 		case NIXLF_BCAST_ENTRY:
+			if (bcast == USHRT_MAX)
+				return -EINVAL;
 			return bcast;
 		case NIXLF_ALLMULTI_ENTRY:
+			if (mcast == USHRT_MAX)
+				return -EINVAL;
 			return mcast;
 		case NIXLF_PROMISC_ENTRY:
+			if (promisc == USHRT_MAX)
+				return -EINVAL;
 			return promisc;
 		case NIXLF_UCAST_ENTRY:
+			if (ucast == USHRT_MAX)
+				return -EINVAL;
 			return ucast;
 		default:
 			return -EINVAL;
@@ -237,12 +245,8 @@ void npc_enable_mcam_entry(struct rvu *rvu, struct npc_mcam *mcam,
 	int bank = npc_get_bank(mcam, index);
 	int actbank = bank;
 
-	if (is_cn20k(rvu->pdev)) {
-		if (index < 0 || index >= mcam->banksize * mcam->banks)
-			return;
-
+	if (is_cn20k(rvu->pdev))
 		return npc_cn20k_enable_mcam_entry(rvu, blkaddr, index, enable);
-	}
 
 	index &= (mcam->banksize - 1);
 	for (; bank < (actbank + mcam->banks_per_entry); bank++) {
@@ -1113,7 +1117,7 @@ void rvu_npc_update_flowkey_alg_idx(struct rvu *rvu, u16 pcifunc, int nixlf,
 		index = mcam_index;
 	}
 
-	if (index >= mcam->total_entries)
+	if (index < 0 || index >= mcam->total_entries)
 		return;
 
 	bank = npc_get_bank(mcam, index);
@@ -1158,16 +1162,18 @@ void rvu_npc_update_flowkey_alg_idx(struct rvu *rvu, u16 pcifunc, int nixlf,
 		/* If PF's promiscuous  entry is enabled,
 		 * Set RSS action for that entry as well
 		 */
-		npc_update_rx_action_with_alg_idx(rvu, action, pfvf, index,
-						  blkaddr, alg_idx);
+		if (index >= 0)
+			npc_update_rx_action_with_alg_idx(rvu, action, pfvf,
+							  index, blkaddr, alg_idx);
 
 		index = npc_get_nixlf_mcam_index(mcam, pcifunc,
 						 nixlf, NIXLF_ALLMULTI_ENTRY);
 		/* If PF's allmulti  entry is enabled,
 		 * Set RSS action for that entry as well
 		 */
-		npc_update_rx_action_with_alg_idx(rvu, action, pfvf, index,
-						  blkaddr, alg_idx);
+		if (index >= 0)
+			npc_update_rx_action_with_alg_idx(rvu, action, pfvf,
+							  index, blkaddr, alg_idx);
 	}
 }
 
@@ -1212,7 +1218,12 @@ static void npc_enadis_default_entries(struct rvu *rvu, u16 pcifunc,
 {
 	struct rvu_pfvf *pfvf = rvu_get_pfvf(rvu, pcifunc);
 	struct npc_mcam *mcam = &rvu->hw->mcam;
+	int type = NIXLF_UCAST_ENTRY;
 	int index, blkaddr;
+
+	/* only CGX or LBK interfaces have default entries */
+	if (is_cn20k(rvu->pdev) && !npc_is_cgx_or_lbk(rvu, pcifunc))
+		return;
 
 	blkaddr = rvu_get_blkaddr(rvu, BLKTYPE_NPC, 0);
 	if (blkaddr < 0)
@@ -1221,8 +1232,11 @@ static void npc_enadis_default_entries(struct rvu *rvu, u16 pcifunc,
 	/* Ucast MCAM match entry of this PF/VF */
 	if (npc_is_feature_supported(rvu, BIT_ULL(NPC_DMAC),
 				     pfvf->nix_rx_intf)) {
+		if (is_cn20k(rvu->pdev) && is_lbk_vf(rvu, pcifunc))
+			type = NIXLF_PROMISC_ENTRY;
+
 		index = npc_get_nixlf_mcam_index(mcam, pcifunc,
-						 nixlf, NIXLF_UCAST_ENTRY);
+						 nixlf, type);
 		npc_enable_mcam_entry(rvu, mcam, blkaddr, index, enable);
 	}
 
@@ -1232,9 +1246,13 @@ static void npc_enadis_default_entries(struct rvu *rvu, u16 pcifunc,
 	if ((pcifunc & RVU_PFVF_FUNC_MASK) && !rvu->hw->cap.nix_rx_multicast)
 		return;
 
+	type = NIXLF_BCAST_ENTRY;
+	if (is_cn20k(rvu->pdev) && is_lbk_vf(rvu, pcifunc))
+		type = NIXLF_PROMISC_ENTRY;
+
 	/* add/delete pf_func to broadcast MCE list */
 	npc_enadis_default_mce_entry(rvu, pcifunc, nixlf,
-				     NIXLF_BCAST_ENTRY, enable);
+				     type, enable);
 }
 
 void rvu_npc_disable_default_entries(struct rvu *rvu, u16 pcifunc, int nixlf)
@@ -1243,6 +1261,9 @@ void rvu_npc_disable_default_entries(struct rvu *rvu, u16 pcifunc, int nixlf)
 		return;
 
 	npc_enadis_default_entries(rvu, pcifunc, nixlf, false);
+
+	if (is_cn20k(rvu->pdev) && is_vf(pcifunc))
+		return;
 
 	/* Delete multicast and promisc MCAM entries */
 	npc_enadis_default_mce_entry(rvu, pcifunc, nixlf,
@@ -1299,6 +1320,10 @@ void rvu_npc_disable_mcam_entries(struct rvu *rvu, u16 pcifunc, int nixlf)
 
 	blkaddr = rvu_get_blkaddr(rvu, BLKTYPE_NPC, 0);
 	if (blkaddr < 0)
+		return;
+
+	/* only CGX or LBK interfaces have default entries */
+	if (is_cn20k(rvu->pdev) && !npc_is_cgx_or_lbk(rvu, pcifunc))
 		return;
 
 	mutex_lock(&mcam->lock);
@@ -2504,32 +2529,57 @@ void npc_mcam_clear_bit(struct npc_mcam *mcam, u16 index)
 static void npc_mcam_free_all_entries(struct rvu *rvu, struct npc_mcam *mcam,
 				      int blkaddr, u16 pcifunc)
 {
+	u16 dft_idxs[NPC_DFT_RULE_MAX_ID] = {[0 ... NPC_DFT_RULE_MAX_ID - 1] = USHRT_MAX};
 	u16 index, cntr;
+	bool dft_rl;
 	int rc;
+
+	npc_cn20k_dft_rules_idx_get(rvu, pcifunc,
+				    &dft_idxs[NPC_DFT_RULE_BCAST_ID],
+				    &dft_idxs[NPC_DFT_RULE_MCAST_ID],
+				    &dft_idxs[NPC_DFT_RULE_PROMISC_ID],
+				    &dft_idxs[NPC_DFT_RULE_UCAST_ID]);
 
 	/* Scan all MCAM entries and free the ones mapped to 'pcifunc' */
 	for (index = 0; index < mcam->bmap_entries; index++) {
-		if (mcam->entry2pfvf_map[index] == pcifunc) {
-			mcam->entry2pfvf_map[index] = NPC_MCAM_INVALID_MAP;
-			/* Free the entry in bitmap */
-			npc_mcam_clear_bit(mcam, index);
-			/* Disable the entry */
-			npc_enable_mcam_entry(rvu, mcam, blkaddr, index, false);
+		if (mcam->entry2pfvf_map[index] != pcifunc)
+			continue;
 
-			/* Update entry2counter mapping */
-			cntr = mcam->entry2cntr_map[index];
-			if (cntr != NPC_MCAM_INVALID_MAP)
-				npc_unmap_mcam_entry_and_cntr(rvu, mcam,
-							      blkaddr, index,
-							      cntr);
-			mcam->entry2target_pffunc[index] = 0x0;
-			if (is_cn20k(rvu->pdev)) {
-				rc = npc_cn20k_idx_free(rvu, &index, 1);
-				if (rc)
-					dev_err(rvu->dev,
-						"Failed to free mcam idx=%u pcifunc=%#x\n",
-						index, pcifunc);
+		mcam->entry2pfvf_map[index] = NPC_MCAM_INVALID_MAP;
+
+		dft_rl = false;
+		if (is_cn20k(rvu->pdev)) {
+			if (dft_idxs[NPC_DFT_RULE_BCAST_ID] == index ||
+			    dft_idxs[NPC_DFT_RULE_MCAST_ID] == index ||
+			    dft_idxs[NPC_DFT_RULE_PROMISC_ID] == index ||
+			    dft_idxs[NPC_DFT_RULE_UCAST_ID] == index) {
+				dft_rl = true;
 			}
+		}
+
+		/* Free the entry in bitmap.*/
+		if (!dft_rl)
+			npc_mcam_clear_bit(mcam, index);
+
+		/* Disable the entry */
+		npc_enable_mcam_entry(rvu, mcam, blkaddr, index, false);
+
+		/* Update entry2counter mapping */
+		cntr = mcam->entry2cntr_map[index];
+		if (cntr != NPC_MCAM_INVALID_MAP)
+			npc_unmap_mcam_entry_and_cntr(rvu, mcam,
+						      blkaddr, index,
+						      cntr);
+		mcam->entry2target_pffunc[index] = 0x0;
+		if (is_cn20k(rvu->pdev)) {
+			if (dft_rl)
+				continue;
+
+			rc = npc_cn20k_idx_free(rvu, &index, 1);
+			if (rc)
+				dev_err(rvu->dev,
+					"Failed to free mcam idx=%u pcifunc=%#x\n",
+					index, pcifunc);
 		}
 	}
 }
@@ -3917,13 +3967,22 @@ void rvu_npc_clear_ucast_entry(struct rvu *rvu, int pcifunc, int nixlf)
 	struct npc_mcam *mcam = &rvu->hw->mcam;
 	struct rvu_npc_mcam_rule *rule;
 	int ucast_idx, blkaddr;
+	u8 type;
 
 	blkaddr = rvu_get_blkaddr(rvu, BLKTYPE_NPC, 0);
 	if (blkaddr < 0)
 		return;
 
+	type = NIXLF_UCAST_ENTRY;
+	if (is_cn20k(rvu->pdev) && is_lbk_vf(rvu, pcifunc))
+		type = NIXLF_PROMISC_ENTRY;
+
 	ucast_idx = npc_get_nixlf_mcam_index(mcam, pcifunc,
-					     nixlf, NIXLF_UCAST_ENTRY);
+					     nixlf, type);
+
+	/* In cn20k, default rules are freed before detach rsrc */
+	if (ucast_idx < 0)
+		return;
 
 	npc_enable_mcam_entry(rvu, mcam, blkaddr, ucast_idx, false);
 
