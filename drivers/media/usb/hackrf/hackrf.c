@@ -1513,6 +1513,14 @@ static int hackrf_probe(struct usb_interface *intf,
 	return 0;
 err_video_unregister_device_rx:
 	video_unregister_device(&dev->rx_vdev);
+	/* v4l2_device refcount was incremented by video_register_device().
+	 * Use v4l2_device_put() to let hackrf_video_release() handle cleanup
+	 * when the last reference is dropped, avoiding a use-after-free if
+	 * userspace still holds an open file descriptor.
+	 */
+	v4l2_device_put(&dev->v4l2_dev);
+	dev_dbg(&intf->dev, "failed=%d\n", ret);
+	return ret;
 err_v4l2_device_unregister:
 	v4l2_device_unregister(&dev->v4l2_dev);
 err_v4l2_ctrl_handler_free_tx:
