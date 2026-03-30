@@ -22,8 +22,8 @@ architectures, but it has significant performance and memory overheads.
 
 Software Tag-Based KASAN or SW_TAGS KASAN, enabled with CONFIG_KASAN_SW_TAGS,
 can be used for both debugging and dogfood testing, similar to userspace HWASan.
-This mode is only supported for arm64, but its moderate memory overhead allows
-using it for testing on memory-restricted devices with real workloads.
+This mode is only supported for arm64 and x86, but its moderate memory overhead
+allows using it for testing on memory-restricted devices with real workloads.
 
 Hardware Tag-Based KASAN or HW_TAGS KASAN, enabled with CONFIG_KASAN_HW_TAGS,
 is the mode intended to be used as an in-field memory bug detector or as a
@@ -346,16 +346,21 @@ Software Tag-Based KASAN
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
 Software Tag-Based KASAN uses a software memory tagging approach to checking
-access validity. It is currently only implemented for the arm64 architecture.
+access validity. It is currently only implemented for the arm64 and x86
+architectures. To function, special hardware CPU features* are needed for
+repurposing space inside the kernel pointers to store pointer tags.
 
-Software Tag-Based KASAN uses the Top Byte Ignore (TBI) feature of arm64 CPUs
-to store a pointer tag in the top byte of kernel pointers. It uses shadow memory
-to store memory tags associated with each 16-byte memory cell (therefore, it
-dedicates 1/16th of the kernel memory for shadow memory).
+Software Tag-Based mode uses shadow memory to store memory tags associated with
+each 16-byte memory cell (therefore, it dedicates 1/16th of the kernel memory
+for shadow memory). On each memory allocation, Software Tag-Based KASAN
+generates a random tag, tags the allocated memory with this tag, and embeds the
+same tag into the returned pointer.
 
-On each memory allocation, Software Tag-Based KASAN generates a random tag, tags
-the allocated memory with this tag, and embeds the same tag into the returned
-pointer.
+Two special tag values can be distinguished. A match-all pointer tag (otherwise
+called the 'kernel tag' because it's supposed to be equal to the value normally
+present in the same bits of the linear address when KASAN is disabled) -
+accesses through such pointers are not checked. Another value is also reserved
+to tag freed memory regions.
 
 Software Tag-Based KASAN uses compile-time instrumentation to insert checks
 before each memory access. These checks make sure that the tag of the memory
@@ -367,12 +372,32 @@ Software Tag-Based KASAN also has two instrumentation modes (outline, which
 emits callbacks to check memory accesses; and inline, which performs the shadow
 memory checks inline). With outline instrumentation mode, a bug report is
 printed from the function that performs the access check. With inline
-instrumentation, a ``brk`` instruction is emitted by the compiler, and a
-dedicated ``brk`` handler is used to print bug reports.
+instrumentation, the compiler emits a specific arch-dependent instruction with a
+dedicated handler to print bug reports.
 
-Software Tag-Based KASAN uses 0xFF as a match-all pointer tag (accesses through
-pointers with the 0xFF pointer tag are not checked). The value 0xFE is currently
-reserved to tag freed memory regions.
+Architecture specific details:
+
+::
+
+  +-----------------------+--------+---------------------+
+  | detail \ architecture | arm64  | x86                 |
+  +=======================+========+=====================+
+  | Hardware feature      | TBI    | LAM                 |
+  +-----------------------+--------+---------------------+
+  | Kernel tag            | 0xFF   | 0x0F                |
+  +-----------------------+--------+---------------------+
+  | Freed memory tag      | 0xFE   | 0x0E                |
+  +-----------------------+--------+---------------------+
+  | Tag width             | 8 bits | 4 bits              |
+  +-----------------------+--------+---------------------+
+  | Inline instruction    | brk    | no compiler support |
+  +-----------------------+--------+---------------------+
+
+* Different architectures implement different hardware features to mask and
+  repurpose linear address bits. arm64 utilizes Top Byte Ignore (TBI) to mask
+  out and allow storing tags in the top byte of the pointer. x86 uses Linear
+  Address Masking (LAM) to store tags in the four bits of the kernel pointer's
+  top byte.
 
 Hardware Tag-Based KASAN
 ~~~~~~~~~~~~~~~~~~~~~~~~
