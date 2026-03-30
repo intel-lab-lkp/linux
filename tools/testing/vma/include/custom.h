@@ -15,12 +15,6 @@ extern unsigned long dac_mmap_min_addr;
 #define dac_mmap_min_addr	0UL
 #endif
 
-#define VM_WARN_ON(_expr) (WARN_ON(_expr))
-#define VM_WARN_ON_ONCE(_expr) (WARN_ON_ONCE(_expr))
-#define VM_WARN_ON_VMG(_expr, _vmg) (WARN_ON(_expr))
-#define VM_BUG_ON(_expr) (BUG_ON(_expr))
-#define VM_BUG_ON_VMA(_expr, _vma) (BUG_ON(_expr))
-
 #define TASK_SIZE ((1ul << 47)-PAGE_SIZE)
 
 /*
@@ -28,8 +22,6 @@ extern unsigned long dac_mmap_min_addr;
  * either way :)
  */
 #define pr_warn_once pr_err
-
-#define pgtable_supports_soft_dirty() 1
 
 struct anon_vma {
 	struct anon_vma *root;
@@ -97,23 +89,6 @@ static inline void vma_lock_init(struct vm_area_struct *vma, bool reset_refcnt)
 {
 	if (reset_refcnt)
 		refcount_set(&vma->vm_refcnt, 0);
-}
-
-static __always_inline vma_flags_t __mk_vma_flags(size_t count,
-		const vma_flag_t *bits)
-{
-	vma_flags_t flags;
-	int i;
-
-	/*
-	 * For testing purposes: allow invalid bit specification so we can
-	 * easily test.
-	 */
-	vma_flags_clear_all(&flags);
-	for (i = 0; i < count; i++)
-		if (bits[i] < NUM_VMA_FLAG_BITS)
-			vma_flags_set_flag(&flags, bits[i]);
-	return flags;
 }
 
 static inline unsigned long vma_kernel_pagesize(struct vm_area_struct *vma)
