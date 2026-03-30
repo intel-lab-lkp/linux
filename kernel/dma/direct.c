@@ -23,10 +23,27 @@
  */
 u64 zone_dma_limit __ro_after_init = DMA_BIT_MASK(24);
 
+/* Memory is decrypted and managed externally. */
+static inline bool dma_external_decryption(struct device *dev)
+{
+	return is_swiotlb_for_alloc(dev);
+}
+
+/* Memory needs to be decrypted by the dma-direct layer. */
+static inline bool dma_owns_decryption(struct device *dev)
+{
+	return force_dma_unencrypted(dev) && !dma_external_decryption(dev);
+}
+
+static inline bool is_dma_decrypted(struct device *dev)
+{
+	return force_dma_unencrypted(dev) || dma_external_decryption(dev);
+}
+
 static inline dma_addr_t phys_to_dma_direct(struct device *dev,
 		phys_addr_t phys)
 {
-	if (force_dma_unencrypted(dev) || is_swiotlb_for_alloc(dev))
+	if (is_dma_decrypted(dev))
 		return phys_to_dma_unencrypted(dev, phys);
 	return phys_to_dma(dev, phys);
 }
@@ -79,7 +96,7 @@ bool dma_coherent_ok(struct device *dev, phys_addr_t phys, size_t size)
 
 static int dma_set_decrypted(struct device *dev, void *vaddr, size_t size)
 {
-	if (!force_dma_unencrypted(dev) || is_swiotlb_for_alloc(dev))
+	if (!dma_owns_decryption(dev))
 		return 0;
 	return set_memory_decrypted((unsigned long)vaddr, PFN_UP(size));
 }
@@ -88,7 +105,7 @@ static int dma_set_encrypted(struct device *dev, void *vaddr, size_t size)
 {
 	int ret;
 
-	if (!force_dma_unencrypted(dev) || is_swiotlb_for_alloc(dev))
+	if (!dma_owns_decryption(dev))
 		return 0;
 	ret = set_memory_encrypted((unsigned long)vaddr, PFN_UP(size));
 	if (ret)
@@ -203,7 +220,7 @@ static void *dma_direct_alloc_no_mapping(struct device *dev, size_t size,
 void *dma_direct_alloc(struct device *dev, size_t size,
 		dma_addr_t *dma_handle, gfp_t gfp, unsigned long attrs)
 {
-	bool allow_highmem = !force_dma_unencrypted(dev);
+	bool allow_highmem = !dma_owns_decryption(dev);
 	bool remap = false, set_uncached = false;
 	struct page *page;
 	void *ret;
@@ -213,7 +230,7 @@ void *dma_direct_alloc(struct device *dev, size_t size,
 		gfp |= __GFP_NOWARN;
 
 	if ((attrs & DMA_ATTR_NO_KERNEL_MAPPING) &&
-	    !force_dma_unencrypted(dev) && !is_swiotlb_for_alloc(dev))
+	    !is_dma_decrypted(dev))
 		return dma_direct_alloc_no_mapping(dev, size, dma_handle, gfp);
 
 	if (!dev_is_dma_coherent(dev)) {
@@ -247,7 +264,7 @@ void *dma_direct_alloc(struct device *dev, size_t size,
 	 * Remapping or decrypting memory may block, allocate the memory from
 	 * the atomic pools instead if we aren't allowed block.
 	 */
-	if ((remap || force_dma_unencrypted(dev)) &&
+	if ((remap || dma_owns_decryption(dev)) &&
 	    dma_direct_use_pool(dev, gfp))
 		return dma_direct_alloc_from_pool(dev, size, dma_handle, gfp);
 
@@ -272,7 +289,7 @@ void *dma_direct_alloc(struct device *dev, size_t size,
 	if (remap) {
 		pgprot_t prot = dma_pgprot(dev, PAGE_KERNEL, attrs);
 
-		if (force_dma_unencrypted(dev))
+		if (is_dma_decrypted(dev))
 			prot = pgprot_decrypted(prot);
 
 		/* remove any dirty cache lines on the kernel alias */
@@ -314,7 +331,7 @@ void dma_direct_free(struct device *dev, size_t size,
 	unsigned int page_order = get_order(size);
 
 	if ((attrs & DMA_ATTR_NO_KERNEL_MAPPING) &&
-	    !force_dma_unencrypted(dev) && !is_swiotlb_for_alloc(dev)) {
+	    !is_dma_decrypted(dev)) {
 		/* cpu_addr is a struct page cookie, not a kernel address */
 		dma_free_contiguous(dev, cpu_addr, size);
 		return;
@@ -362,7 +379,7 @@ struct page *dma_direct_alloc_pages(struct device *dev, size_t size,
 	struct page *page;
 	void *ret;
 
-	if (force_dma_unencrypted(dev) && dma_direct_use_pool(dev, gfp))
+	if (dma_owns_decryption(dev) && dma_direct_use_pool(dev, gfp))
 		return dma_direct_alloc_from_pool(dev, size, dma_handle, gfp);
 
 	page = __dma_direct_alloc_pages(dev, size, gfp, false);
@@ -530,7 +547,7 @@ int dma_direct_mmap(struct device *dev, struct vm_area_struct *vma,
 	int ret = -ENXIO;
 
 	vma->vm_page_prot = dma_pgprot(dev, vma->vm_page_prot, attrs);
-	if (force_dma_unencrypted(dev))
+	if (is_dma_decrypted(dev))
 		vma->vm_page_prot = pgprot_decrypted(vma->vm_page_prot);
 
 	if (dma_mmap_from_dev_coherent(dev, vma, cpu_addr, size, &ret))
