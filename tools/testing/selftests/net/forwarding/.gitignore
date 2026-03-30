@@ -1,3 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0-only
 forwarding.config
 ipmr
+mc_encode
+mc_decode

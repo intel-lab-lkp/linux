@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: GPL-2.0
 
 ALL_TESTS="
+	v3query_mrc_test
+	v3query_qqic_test
 	v2reportleave_test
 	v3include_test
 	v3inc_allow_test
@@ -84,6 +86,7 @@ switch_destroy()
 {
 	ip link set dev $swp2 down
 	ip link set dev $swp1 down
+	ip link set dev br0 down
 
 	ip link del dev br0
 }
@@ -114,6 +117,112 @@ cleanup()
 	h1_destroy
 
 	vrf_cleanup
+}
+
+check_binary()
+{
+	local cmd=$1; shift
+	local args=$@
+
+	if [[ ! -x "$(command -v "$cmd")" ]]; then
+		log_test_skip "$args $cmd not found"
+		return $EXIT_STATUS
+	fi
+}
+
+tcpdump_show_with_filter()
+{
+	local if_name=$1; shift
+	local filter=$@
+
+	tcpdump -e -n -r ${capfile[$if_name]} "$filter" 2>&1
+}
+
+validate_query()
+{
+	local if_name=$1; shift
+	local test="$1"; shift
+	local value="$1"; shift
+	local pattern=""
+	local field_val=""
+	local pos=""
+	local msg="IGMPv3 query: verify $test"
+	check_command tshark || return 1
+	check_binary "./mc_encode" $msg || return 1
+
+	if [ "$test" = "MRC" ]; then
+		pos=1 # MRC field offset within IGMP header
+		field_val=$(tshark -r ${capfile[$if_name]} -Y "igmp.type==0x11" \
+			   -V 2>/dev/null | grep "Max Resp Time")
+	elif [ "$test" = "QQIC" ]; then
+		pos=9 # QQIC field offset within IGMP header
+		field_val=$(tshark -r ${capfile[$if_name]} -Y "igmp.type==0x11" \
+			   -V 2>/dev/null | grep "QQIC")
+	fi
+
+	local enc_val=$(./mc_encode $value)
+	pattern="ip proto 2 and igmp[0] == 0x11 and igmp[$pos] == $enc_val"
+	local opt_str=""
+	tcpdump_show_with_filter $if_name $pattern | grep -q "igmp query v3"
+	ret=$?
+	if [ "$field_val" != "" -a $ret -ne 0 ]; then
+		opt_str="Bad $test value in IGMP packet: $field_val"
+	fi
+	check_err $ret "$opt_str"
+
+	log_test "$msg" "configured=$value, expected=$enc_val"
+}
+
+v3query_mrc_test()
+{
+	RET=0
+	local qri_val=160
+	local br_qri=$((qri_val*10))
+
+	# Set MRT to validate
+	ip link set dev br0 type bridge mcast_query_interval 12500 \
+					mcast_query_response_interval $br_qri \
+					mcast_igmp_version 3
+	check_err $? "IGMPv3 QUERY bridge configuration failed"
+
+	ip link set dev br0 down
+	tcpdump_start $h2
+	ip link set dev br0 up
+	sleep 2
+	tcpdump_stop $h2
+
+	validate_query $h2 "MRC" $qri_val
+	tcpdump_cleanup $h2
+
+	ip link set dev br0 type bridge mcast_query_interval 12500 \
+					mcast_query_response_interval 1000 \
+					mcast_igmp_version 2
+}
+
+v3query_qqic_test()
+{
+	RET=0
+	local qqi_val=160
+	local br_qqi=$((qqi_val*100))
+
+	# Set QQIC to validate
+	ip link set dev br0 type bridge mcast_query_interval $br_qqi \
+					mcast_query_response_interval 1000 \
+					mcast_igmp_version 3
+	check_err $? "IGMPv3 QUERY bridge configuration failed"
+
+	ip link set dev br0 down
+	tcpdump_start $h2
+	ip link set dev br0 up
+	sleep 2
+	tcpdump_stop $h2
+
+	validate_query $h2 "QQIC" $qqi_val
+	tcpdump_cleanup $h2
+
+	ip link set dev br0 type bridge mcast_query_interval 12500 \
+					mcast_query_response_interval 1000 \
+					mcast_igmp_version 2
 }
 
 v2reportleave_test()
