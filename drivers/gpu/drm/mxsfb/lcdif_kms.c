@@ -393,6 +393,22 @@ static void lcdif_disable_controller(struct lcdif_drm_private *lcdif)
 	if (ret)
 		drm_err(lcdif->drm, "Failed to disable controller!\n");
 
+	/*
+	 * It is necessary to wait for the full frame to finish streaming
+	 * through the DMA engine before we can safely disable it by removing
+	 * the DISP_PARA_DISP_ON bit. Disabling it in-flight can leave the
+	 * hardware confused and unable to resume streaming for the next frame.
+	 */
+	reg = readl(lcdif->base + LCDC_V8_CTRLDESCL0_5);
+	reg |= CTRLDESCL0_5_SHADOW_LOAD_EN;
+	writel(reg, lcdif->base + LCDC_V8_CTRLDESCL0_5);
+
+	ret = readl_poll_timeout(lcdif->base + LCDC_V8_CTRLDESCL0_5,
+				 reg, !(reg & CTRLDESCL0_5_SHADOW_LOAD_EN),
+				 0, 36000);	/* Wait ~2 frame times max */
+	if (ret)
+		drm_err(lcdif->drm, "Failed to disable controller!\n");
+
 	reg = readl(lcdif->base + LCDC_V8_DISP_PARA);
 	reg &= ~DISP_PARA_DISP_ON;
 	writel(reg, lcdif->base + LCDC_V8_DISP_PARA);
