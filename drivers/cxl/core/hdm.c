@@ -415,7 +415,13 @@ static int __cxl_dpa_reserve(struct cxl_endpoint_decoder *cxled,
 
 	port->hdm_end++;
 	get_device(&cxled->cxld.dev);
-	return 0;
+
+	/*
+	 * Perform devres registration while holding cxl_rwsem.dpa so
+	 * cxl_dpa_free() cannot observe dpa_res without a matching devres
+	 * action.
+	 */
+	return devm_add_action_or_reset(&port->dev, cxl_dpa_release, cxled);
 }
 
 static int add_dpa_res(struct device *dev, struct resource *parent,
@@ -506,16 +512,8 @@ int devm_cxl_dpa_reserve(struct cxl_endpoint_decoder *cxled,
 				resource_size_t base, resource_size_t len,
 				resource_size_t skipped)
 {
-	struct cxl_port *port = cxled_to_port(cxled);
-	int rc;
-
-	scoped_guard(rwsem_write, &cxl_rwsem.dpa)
-		rc = __cxl_dpa_reserve(cxled, base, len, skipped);
-
-	if (rc)
-		return rc;
-
-	return devm_add_action_or_reset(&port->dev, cxl_dpa_release, cxled);
+	guard(rwsem_write)(&cxl_rwsem.dpa);
+	return __cxl_dpa_reserve(cxled, base, len, skipped);
 }
 EXPORT_SYMBOL_NS_GPL(devm_cxl_dpa_reserve, "CXL");
 
@@ -613,7 +611,8 @@ static int __cxl_dpa_alloc(struct cxl_endpoint_decoder *cxled, u64 size)
 	struct resource *p, *last;
 	int part;
 
-	guard(rwsem_write)(&cxl_rwsem.dpa);
+	lockdep_assert_held_write(&cxl_rwsem.dpa);
+
 	if (cxled->cxld.region) {
 		dev_dbg(dev, "decoder attached to %s\n",
 			dev_name(&cxled->cxld.region->dev));
@@ -676,14 +675,8 @@ static int __cxl_dpa_alloc(struct cxl_endpoint_decoder *cxled, u64 size)
 
 int cxl_dpa_alloc(struct cxl_endpoint_decoder *cxled, u64 size)
 {
-	struct cxl_port *port = cxled_to_port(cxled);
-	int rc;
-
-	rc = __cxl_dpa_alloc(cxled, size);
-	if (rc)
-		return rc;
-
-	return devm_add_action_or_reset(&port->dev, cxl_dpa_release, cxled);
+	guard(rwsem_write)(&cxl_rwsem.dpa);
+	return __cxl_dpa_alloc(cxled, size);
 }
 
 static void cxld_set_interleave(struct cxl_decoder *cxld, u32 *ctrl)
