@@ -614,8 +614,10 @@ static int usbio_probe(struct usb_interface *intf, const struct usb_device_id *i
 	usb_fill_bulk_urb(usbio->urb, udev, usbio->rx_pipe, usbio->rxbuf,
 			  usbio->rxbuf_len, usbio_bulk_recv, usbio);
 	ret = usb_submit_urb(usbio->urb, GFP_KERNEL);
-	if (ret)
+	if (ret) {
+		usb_free_urb(usbio->urb);
 		return dev_err_probe(dev, ret, "Submitting usb urb\n");
+	}
 
 	mutex_lock(&usbio->ctrl_mutex);
 
