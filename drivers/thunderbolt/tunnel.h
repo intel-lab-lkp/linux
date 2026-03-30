@@ -75,7 +75,6 @@ struct tb_tunnel {
 	struct tb *tb;
 	struct tb_port *src_port;
 	struct tb_port *dst_port;
-	struct tb_path **paths;
 	size_t npaths;
 	int (*pre_activate)(struct tb_tunnel *tunnel);
 	int (*activate)(struct tb_tunnel *tunnel, bool activate);
@@ -107,6 +106,8 @@ struct tb_tunnel {
 	struct delayed_work dprx_work;
 	void (*callback)(struct tb_tunnel *tunnel, void *data);
 	void *callback_data;
+
+	struct tb_path *paths[] __counted_by(npaths);
 };
 
 struct tb_tunnel *tb_tunnel_discover_pci(struct tb *tb, struct tb_port *down,
