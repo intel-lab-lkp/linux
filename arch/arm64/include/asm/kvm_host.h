@@ -321,6 +321,7 @@ struct kvm_arch {
 	struct kvm_s2_mmu *nested_mmus;
 	size_t nested_mmus_size;
 	int nested_mmus_next;
+	int mmus_per_bit_power;
 
 	/* Interrupt controller */
 	struct vgic_dist	vgic;

@@ -1009,6 +1009,8 @@ int kvm_init_stage2_mmu(struct kvm *kvm, struct kvm_s2_mmu *mmu, unsigned long t
 	if (kvm_is_nested_s2_mmu(kvm, mmu))
 		kvm_init_nested_s2_mmu(mmu);
 
+	mt_init(&mmu->nested_revmap_mt);
+
 	return 0;
 
 out_destroy_pgtable:
@@ -1107,8 +1109,9 @@ void kvm_free_stage2_pgd(struct kvm_s2_mmu *mmu)
 		free_percpu(mmu->last_vcpu_ran);
 	}
 
+	mtree_destroy(&mmu->nested_revmap_mt);
+
 	if (kvm_is_nested_s2_mmu(kvm, mmu)) {
-		mtree_destroy(&mmu->nested_revmap_mt);
 		kvm_init_nested_s2_mmu(mmu);
 	}
 
