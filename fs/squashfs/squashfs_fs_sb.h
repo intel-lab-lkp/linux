@@ -12,20 +12,6 @@
 
 #include "squashfs_fs.h"
 
-struct squashfs_cache {
-	char			*name;
-	int			entries;
-	int			curr_blk;
-	int			next_blk;
-	int			num_waiters;
-	int			unused;
-	int			block_size;
-	int			pages;
-	spinlock_t		lock;
-	wait_queue_head_t	wait_queue;
-	struct squashfs_cache_entry *entry;
-};
-
 struct squashfs_cache_entry {
 	u64			block;
 	int			length;
@@ -38,6 +24,20 @@ struct squashfs_cache_entry {
 	struct squashfs_cache	*cache;
 	void			**data;
 	struct squashfs_page_actor	*actor;
+};
+
+struct squashfs_cache {
+	char			*name;
+	int			entries;
+	int			curr_blk;
+	int			next_blk;
+	int			num_waiters;
+	int			unused;
+	int			block_size;
+	int			pages;
+	spinlock_t		lock;
+	wait_queue_head_t	wait_queue;
+	struct squashfs_cache_entry entry[] __counted_by(entries);
 };
 
 struct squashfs_sb_info {
