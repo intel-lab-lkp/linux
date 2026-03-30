@@ -260,6 +260,7 @@ struct pse_pi {
 	struct device_node *np;
 	struct regulator_dev *rdev;
 	bool admin_state_enabled;
+	bool admin_state_synced;
 	struct pse_power_domain *pw_d;
 	int prio;
 	bool isr_pd_detected;
