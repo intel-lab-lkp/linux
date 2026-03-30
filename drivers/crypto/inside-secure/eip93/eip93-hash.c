@@ -67,7 +67,7 @@ void eip93_hash_handle_result(struct crypto_async_request *async, int err)
 	int i;
 
 	dma_unmap_single(eip93->dev, rctx->sa_state_base,
-			 sizeof(*sa_state), DMA_FROM_DEVICE);
+			 sizeof(*sa_state), DMA_TO_DEVICE);
 
 	/*
 	 * With partial_hash assume SHA256_DIGEST_SIZE buffer is passed.

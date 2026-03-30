@@ -687,12 +687,12 @@ void eip93_handle_result(struct eip93_device *eip93, struct eip93_cipher_reqctx 
 	if (rctx->sa_state_ctr)
 		dma_unmap_single(eip93->dev, rctx->sa_state_ctr_base,
 				 sizeof(*rctx->sa_state_ctr),
-				 DMA_FROM_DEVICE);
+				 DMA_TO_DEVICE);
 
 	if (rctx->sa_state)
 		dma_unmap_single(eip93->dev, rctx->sa_state_base,
 				 sizeof(*rctx->sa_state),
-				 DMA_FROM_DEVICE);
+				 DMA_TO_DEVICE);
 
 	if (!IS_ECB(rctx->flags))
 		memcpy(reqiv, rctx->sa_state->state_iv, rctx->ivsize);
