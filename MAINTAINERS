@@ -1863,6 +1863,14 @@ S:	Supported
 F:	Documentation/devicetree/bindings/spi/andestech,ae350-spi.yaml
 F:	drivers/spi/spi-atcspi200.c
 
+ANDES CACHE DRIVER
+M:	Alex Chun-Ju Lin <alex749@andestech.com>
+M:	Leo Yu-Chi Liang <ycliang@andestech.com>
+M:	Mina Hui Min Chou <minachou@andestech.com>
+S:	Supported
+F:	Documentation/devicetree/bindings/cache/andestech,andes-llcache.yaml
+F:	drivers/cache/andes_llcache.c
+
 ANDROID DRIVERS
 M:	Greg Kroah-Hartman <gregkh@linuxfoundation.org>
 M:	Arve Hjønnevåg <arve@android.com>
