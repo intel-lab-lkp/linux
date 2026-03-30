@@ -10,11 +10,11 @@ menuconfig CACHEMAINT_FOR_DMA
 
 if CACHEMAINT_FOR_DMA
 
-config AX45MP_L2_CACHE
-	bool "Andes Technology AX45MP L2 Cache controller"
+config ANDES_CACHE
+	bool "Andes platform CPUs Cache controller"
 	select RISCV_NONSTANDARD_CACHE_OPS
 	help
-	  Support for the L2 cache controller on Andes Technology AX45MP platforms.
+	  Support for the L1 and LLC (last level cache) controller on Andes platform CPUs.
 
 config SIFIVE_CCACHE
 	bool "Sifive Composable Cache controller"
