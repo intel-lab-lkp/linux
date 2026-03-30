@@ -161,8 +161,12 @@ int fwnode_mdiobus_register_phy(struct mii_bus *bus,
 
 	psec = fwnode_find_pse_control(child, phy);
 	if (IS_ERR(psec)) {
-		rc = PTR_ERR(psec);
-		goto unregister_phy;
+		if (PTR_ERR(psec) == -EPROBE_DEFER) {
+			psec = NULL;
+		} else {
+			rc = PTR_ERR(psec);
+			goto unregister_phy;
+		}
 	}
 
 	phy->psec = psec;
