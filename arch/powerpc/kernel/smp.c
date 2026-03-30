@@ -594,6 +594,7 @@ void crash_send_ipi(void (*crash_ipi_callback)(struct pt_regs *))
 {
 	int cpu;
 
+	smp_ops->set_crash_nmi_ipi();
 	smp_send_nmi_ipi(NMI_IPI_ALL_OTHERS, crash_ipi_callback, 1000000);
 	if (kdump_in_progress() && crash_wake_offline) {
 		for_each_present_cpu(cpu) {

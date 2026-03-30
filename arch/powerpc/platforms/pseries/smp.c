@@ -51,6 +51,9 @@
  */
 static cpumask_var_t of_spin_mask;
 
+
+static int crash_nmi_ipi;
+
 /* Query where a cpu is now.  Return codes #defined in plpar_wrappers.h */
 int smp_query_cpu_stopped(unsigned int pcpu)
 {
@@ -171,12 +174,35 @@ static void dbell_or_ic_cause_ipi(int cpu)
 	ic_cause_ipi(cpu);
 }
 
+static void pseries_set_crash_nmi_ipi(void)
+{
+	crash_nmi_ipi = 1;
+}
+
 static int pseries_cause_nmi_ipi(int cpu)
 {
 	int hwcpu;
+	int k, curcpu;
 
+	curcpu = smp_processor_id();
 	if (cpu == NMI_IPI_ALL_OTHERS) {
-		hwcpu = H_SIGNAL_SYS_RESET_ALL_OTHERS;
+		if (crash_nmi_ipi) {
+			for_each_present_cpu(k) {
+				if (k != curcpu) {
+					hwcpu = get_hard_smp_processor_id(k);
+
+					/* it is possible that cpu is present,
+					 * but not started yet.
+					 */
+
+					if (paca_ptrs[hwcpu]->cpu_start == 1) {
+						plpar_signal_sys_reset(hwcpu);
+					}
+				}
+			}
+			return 1;
+		} else
+			hwcpu = H_SIGNAL_SYS_RESET_ALL_OTHERS;
 	} else {
 		if (cpu < 0) {
 			WARN_ONCE(true, "incorrect cpu parameter %d", cpu);
@@ -243,6 +269,7 @@ static struct smp_ops_t pseries_smp_ops = {
 	.message_pass	= NULL,	/* Use smp_muxed_ipi_message_pass */
 	.cause_ipi	= NULL,	/* Filled at runtime by pSeries_smp_probe() */
 	.cause_nmi_ipi	= pseries_cause_nmi_ipi,
+	.set_crash_nmi_ipi = pseries_set_crash_nmi_ipi,
 	.probe		= pSeries_smp_probe,
 	.prepare_cpu	= pseries_smp_prepare_cpu,
 	.kick_cpu	= smp_pSeries_kick_cpu,

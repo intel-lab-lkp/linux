@@ -47,6 +47,7 @@ struct smp_ops_t {
 	void  (*cause_ipi)(int cpu);
 #endif
 	int   (*cause_nmi_ipi)(int cpu);
+	void  (*set_crash_nmi_ipi)(void);
 	void  (*probe)(void);
 	int   (*kick_cpu)(int nr);
 	int   (*prepare_cpu)(int nr);
