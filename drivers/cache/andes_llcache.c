@@ -111,21 +111,17 @@ static void andes_dma_cache_inv(phys_addr_t paddr, size_t size)
 {
 	unsigned long start = (unsigned long)phys_to_virt(paddr);
 	unsigned long end = start + size;
-	unsigned long line_size;
+	unsigned long line_size = andes_priv.andes_cache_line_size;
 	unsigned long flags;
 
-	if (unlikely(start == end))
+	if (unlikely(!size))
 		return;
 
-	line_size = andes_priv.andes_cache_line_size;
-
-	start = start & (~(line_size - 1));
-	end = ((end + line_size - 1) & (~(line_size - 1)));
+	start = ALIGN_DOWN(start, line_size);
+	end = ALIGN(end, line_size);
 
 	local_irq_save(flags);
-
 	andes_cpu_dcache_inval_range(start, end);
-
 	local_irq_restore(flags);
 }
 
@@ -133,15 +129,15 @@ static void andes_dma_cache_wback(phys_addr_t paddr, size_t size)
 {
 	unsigned long start = (unsigned long)phys_to_virt(paddr);
 	unsigned long end = start + size;
-	unsigned long line_size;
+	unsigned long line_size = andes_priv.andes_cache_line_size;
 	unsigned long flags;
 
-	if (unlikely(start == end))
+	if (unlikely(!size))
 		return;
 
-	line_size = andes_priv.andes_cache_line_size;
-	start = start & (~(line_size - 1));
-	end = ((end + line_size - 1) & (~(line_size - 1)));
+	start = ALIGN_DOWN(start, line_size);
+	end = ALIGN(end, line_size);
+
 	local_irq_save(flags);
 	andes_cpu_dcache_wb_range(start, end);
 	local_irq_restore(flags);
@@ -159,14 +155,13 @@ static int andes_get_llc_line_size(struct device_node *np)
 
 	ret = of_property_read_u32(np, "cache-line-size", &andes_priv.andes_cache_line_size);
 	if (ret) {
-		pr_err("Failed to get cache-line-size, defaulting to 64 bytes\n");
+		pr_err("Cache: Failed to get cache-line-size\n");
 		return ret;
 	}
 
 	if (andes_priv.andes_cache_line_size != ANDES_CACHE_LINE_SIZE) {
-		pr_err("Expected cache-line-size to be 64 bytes (found:%u)\n",
-		       andes_priv.andes_cache_line_size);
-		return -EINVAL;
+		pr_warn("Cache: Expected cache-line-size to be 64 bytes (found:%u)\n",
+			andes_priv.andes_cache_line_size);
 	}
 
 	return 0;
@@ -186,16 +181,18 @@ static const struct of_device_id andes_cache_ids[] = {
 static int __init andes_cache_init(void)
 {
 	struct resource res;
-	int ret;
+	int ret = 0;
 
 	struct device_node *np __free(device_node) =
 		of_find_matching_node(NULL, andes_cache_ids);
-	if (!of_device_is_available(np))
-		return -ENODEV;
+	if (!of_device_is_available(np)) {
+		ret = -ENODEV;
+		goto err_ret;
+	}
 
 	ret = of_address_to_resource(np, 0, &res);
 	if (ret)
-		return ret;
+		goto err_ret;
 
 	/*
 	 * If IOCP is present on the Andes AX45MP core riscv_cbom_block_size
@@ -208,17 +205,22 @@ static int __init andes_cache_init(void)
 		return 0;
 
 	andes_priv.llc_base = ioremap(res.start, resource_size(&res));
-	if (!andes_priv.llc_base)
-		return -ENOMEM;
+	if (!andes_priv.llc_base) {
+		ret = -ENOMEM;
+		goto err_ret;
+	}
 
 	ret = andes_get_llc_line_size(np);
-	if (ret) {
-		iounmap(andes_priv.llc_base);
-		return ret;
-	}
+	if (ret)
+		goto err_unmap;
 
 	riscv_noncoherent_register_cache_ops(&andes_cmo_ops);
 
 	return 0;
+
+err_unmap:
+	iounmap(andes_priv.llc_base);
+err_ret:
+	return ret;
 }
 early_initcall(andes_cache_init);
