@@ -1,0 +1,19 @@
+What:		/sys/bus/platform/drivers/i2c-ast2600/.../xfer_mode
+Date:		March 2026
+KernelVersion:	7.x
+Contact:	Ryan Chen <ryan_chen@aspeedtech.com>
+Description:	Shows or sets the active transfer mode for an ASPEED AST2600
+		I2C controller instance.
+
+		Possible values:
+
+		=========  =================================================
+		byte       Programmed I/O, one byte at a time.
+		buffer     Programmed I/O using the hardware FIFO buffer.
+		           Only available if the controller has a buffer
+		           resource defined in the device tree.
+		dma        DMA transfer (if DMA is available for this
+		           controller).
+		=========  =================================================
+
+		Writing an unsupported or unavailable mode returns -EINVAL.
