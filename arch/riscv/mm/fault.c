@@ -271,6 +271,16 @@ static inline bool access_error(unsigned long cause, struct vm_area_struct *vma)
 	return false;
 }
 
+static __always_inline void
+trace_page_fault_entries(unsigned long address, struct pt_regs *regs,
+			 unsigned long cause_code)
+{
+	if (user_mode(regs))
+		trace_page_fault_user(address, regs, cause_code);
+	else
+		trace_page_fault_kernel(address, regs, cause_code);
+}
+
 /*
  * This routine handles page faults.  It determines the address and the
  * problem, and then passes it off to one of the appropriate routines.
@@ -294,10 +304,7 @@ void handle_page_fault(struct pt_regs *regs)
 	if (kprobe_page_fault(regs, cause))
 		return;
 
-	if (user_mode(regs))
-		trace_page_fault_user(addr, regs, cause);
-	else
-		trace_page_fault_kernel(addr, regs, cause);
+	trace_page_fault_entries(addr, regs, cause);
 
 	/*
 	 * Fault-in kernel-space virtual memory on-demand.
