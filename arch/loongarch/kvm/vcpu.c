@@ -238,7 +238,7 @@ static void kvm_late_check_requests(struct kvm_vcpu *vcpu)
 			vcpu->arch.flush_gpa = INVALID_GPA;
 		}
 
-	if (kvm_check_request(KVM_REQ_AUX_LOAD, vcpu)) {
+	if (kvm_check_request(KVM_REQ_FPU_LOAD, vcpu)) {
 		if (kvm_guest_has_lasx(&vcpu->arch))
 			kvm_own_lasx(vcpu);
 		else if (kvm_guest_has_lsx(&vcpu->arch))
