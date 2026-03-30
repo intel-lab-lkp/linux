@@ -14,6 +14,13 @@
 # uncompression can be done without blocking on allocation).
 #
 
+# Force atomic GCOV counter updates to prevent GCC from merging global
+# counters with loop induction variables — concurrent inflate_fast()
+# execution on multiple CPUs causes out-of-bounds writes otherwise.
+ifdef CONFIG_GCOV_KERNEL
+ccflags-y += -fprofile-update=atomic
+endif
+
 obj-$(CONFIG_ZLIB_INFLATE) += zlib_inflate.o
 
 zlib_inflate-objs := inffast.o inflate.o infutil.o \
