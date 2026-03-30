@@ -1,0 +1,34 @@
+drm drm-fixes 7aaa8047eafd0bd628065b15757d9b48c5f9c07d
+	Linux 7.0-rc6
+drm-misc drm-misc-fixes 2f42c1a6161646cbd29b443459fd635d29eda634
+	drm/ast: dp501: Fix initialization of SCU2C
+drm-rust drm-rust-fixes f338e77383789c0cae23ca3d48adcc5e9e137e3c
+	Linux 7.0-rc4
+drm-intel drm-intel-fixes 4dfce79e098915d8e5fc2b9e1d980bc3251dd32c
+	drm/i915/dsi: Don't do DSC horizontal timing adjustments in command mode
+drm-xe drm-xe-fixes 7aaa8047eafd0bd628065b15757d9b48c5f9c07d
+	Linux 7.0-rc6
+drm drm-next a51973c5dff8a0f01cc7d1b2007306ea0004fa16
+	Merge tag 'drm-xe-next-2026-03-26-1' of https://gitlab.freedesktop.org/drm/xe/kernel into drm-next
+drm-misc drm-misc-next-fixes 6fdfd24017756bbe27ccc786051e97f3bf0c3d62
+	Merge drm/drm-fixes into drm-misc-next-fixes
+drm-intel drm-intel-next-fixes 777a02812f739af9e349cd0f695400a1d84053f4
+	drm/i915/dp: Add missing slice count check during mode validation
+drm-xe drm-xe-next-fixes 6de23f81a5e08be8fbf5e8d7e9febc72a5b5f27f
+	Linux 7.0-rc1
+drm-misc drm-misc-next dac97a6bd6c4a24e60a147cb2cf750eddb7594a8
+	accel/qaic: Retain bootlogs that overflow
+drm-rust drm-rust-next 7c50d748b4a635bc39802ea3f6b120e66b1b9067
+	gpu: nova-core: firmware: factor out an elf_str() function
+drm-intel drm-intel-next 4ab789c1b3c81eca56a3b1f7686f3c805add1e49
+	Merge drm/drm-next into drm-intel-next
+drm-intel drm-intel-gt-next 06249b4e691a75694c014a61708c007fb5755f60
+	drm/i915: Fix potential overflow of shmem scatterlist length
+drm-xe drm-xe-next df03d7c2bbc91d1e83f8b42881ad791353df7d94
+	drm/xe: Document GT statistics
+drm-intel topic/core-for-CI 3d15d7e81d498d56ca6ba3af63f2fa1106da87ad
+	ACPI: PM: s2idle: Add module parameter for LPS0 constraints checking
+drm-xe topic/xe-for-CI bd9ef8d19f9e9ff47518ce48fb2002d58bfeeaaa
+	drm/xe/nvlp: Define GuC firmware for NVL-P
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
