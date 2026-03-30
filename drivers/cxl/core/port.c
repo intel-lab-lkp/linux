@@ -1829,11 +1829,30 @@ int devm_cxl_enumerate_ports(struct cxl_memdev *cxlmd)
 retry:
 	for (iter = dev; iter; iter = grandparent(iter)) {
 		struct device *dport_dev = grandparent(iter);
+		struct pci_dev *dport_pdev = to_pci_dev(dport_dev);
 		struct device *uport_dev;
 		struct cxl_dport *dport;
 
 		if (is_cxl_host_bridge(dport_dev))
 			return 0;
+
+		/*
+		 * Check the downstream port's PM init status, and if it has
+		 * failed retry PM init according to CXL Spec. 4.0 Sect. 8.1.5.1
+		 * - Implementation Note
+		 */
+		if (!cxl_port_pm_init_is_complete(dport_pdev)) {
+			dev_dbg(&cxlmd->dev,
+				"PM init failed for %s, retrying PM init\n",
+				dev_name(dport_dev));
+
+			cxl_port_retry_failed_pm_init(dport_pdev);
+
+			if (!cxl_port_pm_init_is_complete(dport_pdev))
+				dev_dbg(&cxlmd->dev,
+					"PM init failed retry for %s\n",
+					dev_name(dport_dev));
+		}
 
 		uport_dev = dport_dev->parent;
 		if (!uport_dev) {
