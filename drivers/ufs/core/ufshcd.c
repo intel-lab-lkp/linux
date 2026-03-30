@@ -5744,7 +5744,7 @@ static bool ufshcd_mcq_force_compl_one(struct request *rq, void *priv)
 	if (blk_mq_is_reserved_rq(rq) || !hwq)
 		return true;
 
-	ufshcd_mcq_compl_all_cqes_lock(hba, hwq);
+	ufshcd_mcq_poll_cqe_lock(hba, hwq);
 
 	/*
 	 * For those cmds of which the cqes are not present in the cq, complete
