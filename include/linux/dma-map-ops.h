@@ -147,9 +147,6 @@ static inline void dma_free_contiguous(struct device *dev, struct page *page,
 {
 	__free_pages(page, get_order(size));
 }
-static inline void dma_contiguous_early_fixup(phys_addr_t base, unsigned long size)
-{
-}
 #endif /* CONFIG_DMA_CMA*/
 
 #ifdef CONFIG_DMA_DECLARE_COHERENT
@@ -360,6 +357,12 @@ static inline void arch_sync_dma_for_cpu(phys_addr_t paddr, size_t size,
 {
 }
 #endif /* ARCH_HAS_SYNC_DMA_FOR_CPU */
+
+#ifndef CONFIG_ARCH_HAS_BATCHED_DMA_SYNC
+static inline void arch_sync_dma_flush(void)
+{
+}
+#endif
 
 #ifdef CONFIG_ARCH_HAS_SYNC_DMA_FOR_CPU_ALL
 void arch_sync_dma_for_cpu_all(void);
