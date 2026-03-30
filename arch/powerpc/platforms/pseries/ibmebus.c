@@ -276,6 +276,9 @@ static ssize_t probe_store(const struct bus_type *bus, const char *buf, size_t c
 	char *path;
 	ssize_t rc = 0;
 
+	if (!count)
+		return -EINVAL;
+
 	path = ibmebus_chomp(buf, count);
 	if (!path)
 		return -ENOMEM;
@@ -311,6 +314,9 @@ static ssize_t remove_store(const struct bus_type *bus, const char *buf, size_t 
 {
 	struct device *dev;
 	char *path;
+
+	if (!count)
+		return -EINVAL;
 
 	path = ibmebus_chomp(buf, count);
 	if (!path)
