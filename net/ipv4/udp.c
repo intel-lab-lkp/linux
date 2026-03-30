@@ -2149,7 +2149,7 @@ static int udp_connect(struct sock *sk, struct sockaddr_unsized *uaddr,
 	return res;
 }
 
-int __udp_disconnect(struct sock *sk, int flags)
+static int ___udp_disconnect(struct sock *sk, int flags, bool clear_dest)
 {
 	struct inet_sock *inet = inet_sk(sk);
 	/*
@@ -2157,8 +2157,10 @@ int __udp_disconnect(struct sock *sk, int flags)
 	 */
 
 	sk->sk_state = TCP_CLOSE;
-	inet->inet_daddr = 0;
-	inet->inet_dport = 0;
+	if (clear_dest) {
+		inet->inet_daddr = 0;
+		inet->inet_dport = 0;
+	}
 	sock_rps_reset_rxhash(sk);
 	sk->sk_bound_dev_if = 0;
 	if (!(sk->sk_userlocks & SOCK_BINDADDR_LOCK)) {
@@ -2175,14 +2177,19 @@ int __udp_disconnect(struct sock *sk, int flags)
 	sk_dst_reset(sk);
 	return 0;
 }
+
+int __udp_disconnect(struct sock *sk, int flags)
+{
+	return ___udp_disconnect(sk, flags, true);
+}
 EXPORT_SYMBOL(__udp_disconnect);
 
-static int udp_disconnect_unhash4(struct sock *sk, int flags)
+static int udp_disconnect_unhash4(struct sock *sk, int flags, bool clear_dest)
 {
 	struct udp_table *udptable = udp_get_table_prot(sk);
 
 	udp_unhash4(udptable, sk);
-	__udp_disconnect(sk, flags);
+	___udp_disconnect(sk, flags, clear_dest);
 
 	return 0;
 }
@@ -2190,7 +2197,7 @@ static int udp_disconnect_unhash4(struct sock *sk, int flags)
 int udp_disconnect(struct sock *sk, int flags)
 {
 	lock_sock(sk);
-	udp_disconnect_unhash4(sk, flags);
+	udp_disconnect_unhash4(sk, flags, true);
 	release_sock(sk);
 	return 0;
 }
@@ -3101,7 +3108,7 @@ int udp_abort(struct sock *sk, int err)
 
 	sk->sk_err = err;
 	sk_error_report(sk);
-	udp_disconnect_unhash4(sk, 0);
+	udp_disconnect_unhash4(sk, 0, false);
 
 out:
 	if (!has_current_bpf_ctx())
