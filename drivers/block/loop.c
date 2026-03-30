@@ -1085,8 +1085,24 @@ static int loop_configure(struct loop_device *lo, blk_mode_t mode,
 	if (part_shift)
 		lo->lo_flags |= LO_FLAGS_PARTSCAN;
 	partscan = lo->lo_flags & LO_FLAGS_PARTSCAN;
-	if (partscan)
+	if (partscan) {
 		clear_bit(GD_SUPPRESS_PART_SCAN, &lo->lo_disk->state);
+
+		/*
+		 * disk_force_media_change() above sets GD_NEED_PART_SCAN to
+		 * trigger a partition scan on the next device open. However,
+		 * when LO_FLAGS_PARTSCAN is set, loop_reread_partitions() below
+		 * will do the scan explicitly. If we leave GD_NEED_PART_SCAN
+		 * set, the uevent we're about to send causes udev to open the
+		 * device, which triggers blkdev_get_whole() to scan first, and
+		 * then loop_reread_partitions() scans again. The second scan
+		 * drops all partitions from the first scan before re-adding
+		 * them, causing partition devices to briefly disappear. Clear
+		 * the flag to prevent this since loop_reread_partitions() will
+		 * handle the scan.
+		 */
+		clear_bit(GD_NEED_PART_SCAN, &lo->lo_disk->state);
+	}
 
 	dev_set_uevent_suppress(disk_to_dev(lo->lo_disk), 0);
 	kobject_uevent(&disk_to_dev(lo->lo_disk)->kobj, KOBJ_CHANGE);
