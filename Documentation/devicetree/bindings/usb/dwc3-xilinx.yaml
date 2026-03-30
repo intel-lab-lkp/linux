@@ -15,6 +15,8 @@ properties:
       - enum:
           - xlnx,zynqmp-dwc3
           - xlnx,versal-dwc3
+          - xlnx,versal2-mmi-dwc3
+
   reg:
     maxItems: 1
 
@@ -37,8 +39,9 @@ properties:
       A list of phandle and clock-specifier pairs for the clocks
       listed in clock-names.
     items:
-      - description: Master/Core clock, has to be >= 125 MHz
-          for SS operation and >= 60MHz for HS operation.
+      - description: Master/Core clock, has to be >= 156.25 MHz in SSP
+          mode, >= 125 MHz for SS operation and >= 60 MHz for HS
+          operation.
       - description: Clock source to core during PHY power down.
 
   clock-names:
@@ -79,6 +82,20 @@ properties:
     description: GPIO used for the reset ulpi-phy
     maxItems: 1
 
+  xlnx,usb-syscon:
+    description:
+      Phandle to the MMI UDH system-level control register (SLCR) syscon
+      node, with four cells specifying the register offsets for USB2 PHY,
+      USB3 PHY, USB DRD, and USB power configuration respectively.
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    items:
+      - items:
+          - description: phandle to MMI UDH SLCR syscon node
+          - description: USB2 PHY register offset within SLCR
+          - description: USB3 PHY register offset within SLCR
+          - description: USB DRD register offset within SLCR
+          - description: USB power register offset within SLCR
+
 # Required child node:
 
 patternProperties:
@@ -87,7 +104,6 @@ patternProperties:
 
 required:
   - compatible
-  - reg
   - "#address-cells"
   - "#size-cells"
   - ranges
@@ -104,6 +120,7 @@ allOf:
           contains:
             enum:
               - xlnx,versal-dwc3
+              - xlnx,versal2-mmi-dwc3
     then:
       properties:
         resets:
@@ -116,6 +133,26 @@ allOf:
           minItems: 3
         reset-names:
           minItems: 3
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - xlnx,zynqmp-dwc3
+              - xlnx,versal-dwc3
+    then:
+      required:
+        - reg
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: xlnx,versal2-mmi-dwc3
+    then:
+      required:
+        - xlnx,usb-syscon
 
 additionalProperties: false
 
@@ -154,5 +191,32 @@ examples:
                 dr_mode = "host";
                 dma-coherent;
             };
+        };
+    };
+  - |
+    #include <dt-bindings/power/xlnx-zynqmp-power.h>
+    #include <dt-bindings/reset/xlnx-zynqmp-resets.h>
+    #include <dt-bindings/phy/phy.h>
+    usb {
+        #address-cells = <1>;
+        #size-cells = <1>;
+        compatible = "xlnx,versal2-mmi-dwc3";
+        clocks = <&zynqmp_clk 32>, <&zynqmp_clk 34>;
+        clock-names = "bus_clk", "ref_clk";
+        power-domains = <&zynqmp_firmware PD_USB_0>;
+        resets = <&zynqmp_reset ZYNQMP_RESET_USB1_CORERESET>;
+        reset-names = "usb_crst";
+        phys = <&psgtr 2 PHY_TYPE_USB3 0 2>;
+        phy-names = "usb3-phy";
+        xlnx,usb-syscon = <&udh_slcr 0x005c 0x0070 0x00c4 0x00f8>;
+        ranges;
+
+        usb@fe200000 {
+            compatible = "snps,dwc3";
+            reg = <0xfe200000 0x40000>;
+            interrupt-names = "host", "otg";
+            interrupts = <0 65 4>, <0 69 4>;
+            dr_mode = "host";
+            dma-coherent;
         };
     };
