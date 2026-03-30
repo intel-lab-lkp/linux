@@ -301,6 +301,7 @@
 				clock-names = "refclk_60m_int",
 					      "refclk_60m_ext_p1",
 					      "refclk_60m_ext_p2";
+				pbias-supply = <&pbias_sim_reg>;
 
 				usbhsohci: usb@800 {
 					compatible = "ti,ohci-omap3";
