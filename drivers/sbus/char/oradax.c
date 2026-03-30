@@ -189,7 +189,6 @@ struct dax_cca {
 
 /* per thread CCB context */
 struct dax_ctx {
-	struct dax_ccb		*ccb_buf;
 	u64			ccb_buf_ra;	/* cached RA of ccb_buf  */
 	struct dax_cca		*ca_buf;
 	u64			ca_buf_ra;	/* cached RA of ca_buf   */
@@ -200,6 +199,7 @@ struct dax_ctx {
 	union ccb_result	result;
 	u32			ccb_count;
 	u32			fail_count;
+	struct dax_ccb		ccb_buf[];
 };
 
 /* driver public entry points */
@@ -533,7 +533,6 @@ static int dax_close(struct inode *ino, struct file *f)
 		dax_unlock_pages(ctx, i, 1);
 	}
 
-	kfree(ctx->ccb_buf);
 	kfree(ctx->ca_buf);
 	dax_stat_dbg("CCBs: %d good, %d bad", ctx->ccb_count, ctx->fail_count);
 	kfree(ctx);
@@ -643,13 +642,9 @@ static int dax_open(struct inode *inode, struct file *f)
 	struct dax_ctx *ctx = NULL;
 	int i;
 
-	ctx = kzalloc_obj(*ctx);
+	ctx = kzalloc_flex(*ctx, ccb_buf, DAX_MAX_CCBS);
 	if (ctx == NULL)
-		goto done;
-
-	ctx->ccb_buf = kzalloc_objs(struct dax_ccb, DAX_MAX_CCBS);
-	if (ctx->ccb_buf == NULL)
-		goto done;
+		return -ENOMEM;
 
 	ctx->ccb_buf_ra = virt_to_phys(ctx->ccb_buf);
 	dax_dbg("ctx->ccb_buf=0x%p, ccb_buf_ra=0x%llx",
@@ -671,8 +666,6 @@ static int dax_open(struct inode *inode, struct file *f)
 	return 0;
 
 alloc_error:
-	kfree(ctx->ccb_buf);
-done:
 	kfree(ctx);
 	return -ENOMEM;
 }
