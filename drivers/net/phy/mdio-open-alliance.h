@@ -78,6 +78,19 @@
 /* SQI is supported using 3 bits means 8 levels (0-7) */
 #define OATC14_SQI_MAX_LEVEL		7
 
+/* Open Alliance 10BASE-T1S Sleep/Wake-up Registers
+ * Specification:
+ *   "10BASE-T1S Sleep/Wake-up Specification"
+ *   https://opensig.org/wp-content/uploads/2024/01/TC14_TC10_JWG_10BASE-T1S-Sleep-Wake-up-Specification_1.0_final.pdf
+ */
+/* Sleep/Wake-up Status Register */
+#define MDIO_OATC10_WS_STATUS		0xd000
+#define OATC10_WS_STATUS_LPCAP		BIT(15)	/* PM client capability */
+
+/* Sleep/Wake-up Control Register */
+#define MDIO_OATC10_WS_CONTROL		0xd001
+#define OATC10_WS_CONTROL_LPREQ		BIT(15)	/* Request low power */
+
 /* Bus Short/Open Status:
  * 0 0 - no fault; everything is ok. (Default)
  * 0 1 - detected as an open or missing termination(s)

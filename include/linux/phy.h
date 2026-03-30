@@ -556,6 +556,48 @@ struct phy_oatc14_sqi_capability {
 };
 
 /**
+ * struct phy_plca_cfg - Configuration of the PLCA (Physical Layer Collision
+ * Avoidance) Reconciliation Sublayer.
+ *
+ * @version: read-only PLCA register map version. -1 = not available. Ignored
+ *   when setting the configuration. Format is the same as reported by the PLCA
+ *   IDVER register (31.CA00). -1 = not available.
+ * @enabled: PLCA configured mode (enabled/disabled). -1 = not available / don't
+ *   set. 0 = disabled, anything else = enabled.
+ * @node_id: the PLCA local node identifier. -1 = not available / don't set.
+ *   Allowed values [0 .. 254]. 255 = node disabled.
+ * @node_cnt: the PLCA node count (maximum number of nodes having a TO). Only
+ *   meaningful for the coordinator (node_id = 0). -1 = not available / don't
+ *   set. Allowed values [1 .. 255].
+ * @to_tmr: The value of the PLCA to_timer in bit-times, which determines the
+ *   PLCA transmit opportunity window opening. See IEEE802.3 Clause 148 for
+ *   more details. The to_timer shall be set equal over all nodes.
+ *   -1 = not available / don't set. Allowed values [0 .. 255].
+ * @burst_cnt: controls how many additional frames a node is allowed to send in
+ *   single transmit opportunity (TO). The default value of 0 means that the
+ *   node is allowed exactly one frame per TO. A value of 1 allows two frames
+ *   per TO, and so on. -1 = not available / don't set.
+ *   Allowed values [0 .. 255].
+ * @burst_tmr: controls how many bit times to wait for the MAC to send a new
+ *   frame before interrupting the burst. This value should be set to a value
+ *   greater than the MAC inter-packet gap (which is typically 96 bits).
+ *   -1 = not available / don't set. Allowed values [0 .. 255].
+ *
+ * A structure containing configuration parameters for setting/getting the PLCA
+ * RS configuration. The driver does not need to implement all the parameters,
+ * but should report what is actually used.
+ */
+struct phy_plca_cfg {
+	int version;
+	int enabled;
+	int node_id;
+	int node_cnt;
+	int to_tmr;
+	int burst_cnt;
+	int burst_tmr;
+};
+
+/**
  * struct phy_device - An instance of a PHY
  *
  * @mdio: MDIO bus this PHY is on
@@ -655,6 +697,7 @@ struct phy_oatc14_sqi_capability {
  * @shared: Pointer to private data shared by phys in one package
  * @priv: Pointer to driver private data
  * @oatc14_sqi_capability: SQI capability information for OATC14 10Base-T1S PHY
+ * @plca_cfg: Cache PLCA configuration for OATC10 compliance 10Base-T1S PHY
  *
  * interrupts currently only supports enabled or disabled,
  * but could be changed in the future to support enabling
@@ -807,6 +850,7 @@ struct phy_device {
 #endif
 
 	struct phy_oatc14_sqi_capability oatc14_sqi_capability;
+	struct phy_plca_cfg plca_cfg;
 };
 
 /* Generic phy_device::dev_flags */
@@ -856,48 +900,6 @@ enum link_inband_signalling {
 	LINK_INBAND_DISABLE		= BIT(0),
 	LINK_INBAND_ENABLE		= BIT(1),
 	LINK_INBAND_BYPASS		= BIT(2),
-};
-
-/**
- * struct phy_plca_cfg - Configuration of the PLCA (Physical Layer Collision
- * Avoidance) Reconciliation Sublayer.
- *
- * @version: read-only PLCA register map version. -1 = not available. Ignored
- *   when setting the configuration. Format is the same as reported by the PLCA
- *   IDVER register (31.CA00). -1 = not available.
- * @enabled: PLCA configured mode (enabled/disabled). -1 = not available / don't
- *   set. 0 = disabled, anything else = enabled.
- * @node_id: the PLCA local node identifier. -1 = not available / don't set.
- *   Allowed values [0 .. 254]. 255 = node disabled.
- * @node_cnt: the PLCA node count (maximum number of nodes having a TO). Only
- *   meaningful for the coordinator (node_id = 0). -1 = not available / don't
- *   set. Allowed values [1 .. 255].
- * @to_tmr: The value of the PLCA to_timer in bit-times, which determines the
- *   PLCA transmit opportunity window opening. See IEEE802.3 Clause 148 for
- *   more details. The to_timer shall be set equal over all nodes.
- *   -1 = not available / don't set. Allowed values [0 .. 255].
- * @burst_cnt: controls how many additional frames a node is allowed to send in
- *   single transmit opportunity (TO). The default value of 0 means that the
- *   node is allowed exactly one frame per TO. A value of 1 allows two frames
- *   per TO, and so on. -1 = not available / don't set.
- *   Allowed values [0 .. 255].
- * @burst_tmr: controls how many bit times to wait for the MAC to send a new
- *   frame before interrupting the burst. This value should be set to a value
- *   greater than the MAC inter-packet gap (which is typically 96 bits).
- *   -1 = not available / don't set. Allowed values [0 .. 255].
- *
- * A structure containing configuration parameters for setting/getting the PLCA
- * RS configuration. The driver does not need to implement all the parameters,
- * but should report what is actually used.
- */
-struct phy_plca_cfg {
-	int version;
-	int enabled;
-	int node_id;
-	int node_cnt;
-	int to_tmr;
-	int burst_cnt;
-	int burst_tmr;
 };
 
 /**
@@ -2333,6 +2335,8 @@ int genphy_c45_oatc14_cable_test_get_status(struct phy_device *phydev,
 					    bool *finished);
 int genphy_c45_oatc14_get_sqi_max(struct phy_device *phydev);
 int genphy_c45_oatc14_get_sqi(struct phy_device *phydev);
+int genphy_c45_oatc10_suspend(struct phy_device *phydev);
+int genphy_c45_oatc10_resume(struct phy_device *phydev);
 
 /* The gen10g_* functions are the old Clause 45 stub */
 int gen10g_config_aneg(struct phy_device *phydev);

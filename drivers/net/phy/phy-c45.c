@@ -1832,3 +1832,85 @@ int genphy_c45_oatc14_get_sqi(struct phy_device *phydev)
 	return ret & OATC14_DCQ_SQI_VALUE;
 }
 EXPORT_SYMBOL(genphy_c45_oatc14_get_sqi);
+
+/**
+ * genphy_c45_oatc10_suspend - Suspend OATC10 PHY into low power state
+ * @phydev: PHY device to suspend
+ *
+ * Puts an OATC10 PHY into low power sleep state.
+ *
+ * The function performs the following steps:
+ * 1. Verify low power capability is supported
+ * 2. Cache current PLCA configuration for restoration on wake
+ * 3. Set the low power request bit to enter sleep state
+ *
+ * Return:
+ * * 0 on successful entry to low power state
+ * * -EOPNOTSUPP if PHY doesn't support low power capability
+ * * Negative error code on register read/write failures
+ */
+int genphy_c45_oatc10_suspend(struct phy_device *phydev)
+{
+	int ret;
+
+	/* Check for Low Power capability */
+	ret = phy_read_mmd(phydev, MDIO_MMD_VEND2, MDIO_OATC10_WS_STATUS);
+	if (ret < 0)
+		return ret;
+
+	if (!(ret & OATC10_WS_STATUS_LPCAP))
+		return -EOPNOTSUPP;
+
+	/* Cache PLCA settings for later use. These values must be restored when
+	 * the PHY wakes up from the low-power sleep state, as all configured
+	 * settings are lost.
+	 */
+	ret = genphy_c45_plca_get_cfg(phydev, &phydev->plca_cfg);
+	if (ret)
+		return ret;
+
+	phydev->plca_cfg.version = -1;
+
+	if (phydev->state == PHY_UP)
+		/* Put the PHY into low power sleep state */
+		return phy_set_bits_mmd(phydev, MDIO_MMD_VEND2,
+					MDIO_OATC10_WS_CONTROL,
+					OATC10_WS_CONTROL_LPREQ);
+
+	return 0;
+}
+EXPORT_SYMBOL(genphy_c45_oatc10_suspend);
+
+/**
+ * genphy_c45_oatc10_resume - Resume OATC10 PHY from low-power sleep state
+ * @phydev: PHY device to resume
+ *
+ * Resume a PHY from suspend state. When the PHY wakes up from the low-power
+ * sleep state, all configured settings are lost. This function reinitializes
+ * the PHY configuration settings.
+ *
+ * Return: 0 on success, negative errno on failure
+ */
+int genphy_c45_oatc10_resume(struct phy_device *phydev)
+{
+	int ret;
+
+	if (!phydev->suspended)
+		return 0;
+
+	/* When the PHY wakes up from the low-power sleep state, it needs to be
+	 * reinitialized as all configured settings are lost.
+	 */
+	if (phydev->drv->config_init) {
+		ret = phydev->drv->config_init(phydev);
+		if (ret)
+			return ret;
+	}
+
+	/* Reconfigure the PHY with cached PLCA settings */
+	if (phydev->drv->set_plca_cfg)
+		return phydev->drv->set_plca_cfg(phydev, &phydev->plca_cfg);
+
+	return 0;
+}
+EXPORT_SYMBOL(genphy_c45_oatc10_resume);
