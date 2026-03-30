@@ -356,7 +356,8 @@ static ssize_t ath11k_read_simulate_fw_crash(struct file *file,
 	const char buf[] =
 		"To simulate firmware crash write one of the keywords to this file:\n"
 		"`assert` - this will send WMI_FORCE_FW_HANG_CMDID to firmware to cause assert.\n"
-		"`hw-restart` - this will simply queue hw restart without fw/hw actually crashing.\n";
+		"`hw-restart` - this will simply queue hw restart without fw/hw actually crashing.\n"
+		"`lockup` - simulate a firmware lockup without the h/w actually hanging.\n";
 
 	return simple_read_from_buffer(user_buf, count, ppos, buf, strlen(buf));
 }
@@ -412,6 +413,10 @@ static ssize_t ath11k_write_simulate_fw_crash(struct file *file,
 	} else if (!strcmp(buf, "hw-restart")) {
 		ath11k_info(ab, "user requested hw restart\n");
 		queue_work(ab->workqueue_aux, &ab->reset_work);
+		ret = 0;
+	} else if (!strcmp(buf, "lockup")) {
+		ath11k_info(ab, "simulating lockup\n");
+		ab->simulate_lockup = true;
 		ret = 0;
 	} else {
 		ret = -EINVAL;
