@@ -73,6 +73,16 @@ config PWM_AIROHA
 	  To compile this driver as a module, choose M here: the module
 	  will be called pwm-airoha.
 
+config PWM_ANDES
+	tristate "Andes PWM support"
+	depends on ARCH_ANDES || COMPILE_TEST
+	help
+	  Generic PWM framework driver for Andes platform, such as QiLai SoC
+	  and AE350 platform.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called pwm-andes.
+
 config PWM_APPLE
 	tristate "Apple SoC PWM support"
 	depends on ARCH_APPLE || COMPILE_TEST
