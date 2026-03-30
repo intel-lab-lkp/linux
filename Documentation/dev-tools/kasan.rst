@@ -315,13 +315,19 @@ translate a memory address to its corresponding shadow address.
 Here is the function which translates an address to its corresponding shadow
 address::
 
-    static inline void *kasan_mem_to_shadow(const void *addr)
-    {
-	return (void *)((unsigned long)addr >> KASAN_SHADOW_SCALE_SHIFT)
-		+ KASAN_SHADOW_OFFSET;
-    }
+        static inline void *kasan_mem_to_shadow(const void *addr)
+        {
+                void *scaled;
 
-where ``KASAN_SHADOW_SCALE_SHIFT = 3``.
+                if (IS_ENABLED(CONFIG_KASAN_GENERIC))
+                        scaled = (void *)((unsigned long)addr >> KASAN_SHADOW_SCALE_SHIFT);
+                else
+                        scaled = (void *)((long)addr >> KASAN_SHADOW_SCALE_SHIFT);
+
+                return KASAN_SHADOW_OFFSET + scaled;
+        }
+
+where for Generic KASAN ``KASAN_SHADOW_SCALE_SHIFT = 3``.
 
 Compile-time instrumentation is used to insert memory access checks. Compiler
 inserts function calls (``__asan_load*(addr)``, ``__asan_store*(addr)``) before
