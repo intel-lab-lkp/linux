@@ -15,6 +15,40 @@ static const u64 fold_consts_val[2] = { 0xeadc41fd2ba3d420ULL,
 static const u64 bconsts_val[2] = { 0x27ecfa329aef9f77ULL,
 				    0x34d926535897936aULL };
 
+#if defined(CONFIG_ARM) && defined(CONFIG_CC_IS_CLANG)
+static inline uint64x2_t pmull64(uint64x2_t a, uint64x2_t b)
+{
+	uint64_t l = vgetq_lane_u64(a, 0);
+	uint64_t m = vgetq_lane_u64(b, 0);
+	uint64x2_t result;
+
+	asm("vmull.p64	%q0, %1, %2" : "=w"(result) : "w"(l), "w"(m));
+
+	return result;
+}
+
+static inline uint64x2_t pmull64_high(uint64x2_t a, uint64x2_t b)
+{
+	uint64_t l = vgetq_lane_u64(a, 1);
+	uint64_t m = vgetq_lane_u64(b, 1);
+	uint64x2_t result;
+
+	asm("vmull.p64	%q0, %1, %2" : "=w"(result) : "w"(l), "w"(m));
+
+	return result;
+}
+
+static inline uint64x2_t pmull64_hi_lo(uint64x2_t a, uint64x2_t b)
+{
+	uint64_t l = vgetq_lane_u64(a, 1);
+	uint64_t m = vgetq_lane_u64(b, 0);
+	uint64x2_t result;
+
+	asm("vmull.p64	%q0, %1, %2" : "=w"(result) : "w"(l), "w"(m));
+
+	return result;
+}
+#else
 static inline uint64x2_t pmull64(uint64x2_t a, uint64x2_t b)
 {
 	return vreinterpretq_u64_p128(vmull_p64(vgetq_lane_u64(a, 0),
@@ -34,6 +68,7 @@ static inline uint64x2_t pmull64_hi_lo(uint64x2_t a, uint64x2_t b)
 	return vreinterpretq_u64_p128(vmull_p64(vgetq_lane_u64(a, 1),
 						vgetq_lane_u64(b, 0)));
 }
+#endif
 
 u64 crc64_nvme_arm64_c(u64 crc, const u8 *p, size_t len)
 {
