@@ -2490,6 +2490,14 @@ static void unregister_region(void *_cxlr)
 	put_device(&cxlr->dev);
 }
 
+void cxl_unregister_region(struct cxl_region *cxlr)
+{
+	struct cxl_port *port = to_cxl_port(cxlr->cxlrd->cxlsd.cxld.dev.parent);
+
+	devm_release_action(port->uport_dev, unregister_region, cxlr);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_unregister_region, "CXL");
+
 static struct lock_class_key cxl_region_key;
 
 static struct cxl_region *cxl_region_alloc(struct cxl_root_decoder *cxlrd, int id)

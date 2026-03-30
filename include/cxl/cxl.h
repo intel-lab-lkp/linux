@@ -235,4 +235,5 @@ struct cxl_region;
 struct cxl_region *cxl_get_region_from_committed_decoder(struct cxl_memdev *cxlmd);
 struct range;
 int cxl_get_region_range(struct cxl_region *region, struct range *range);
+void cxl_unregister_region(struct cxl_region *cxlr);
 #endif /* __CXL_CXL_H__ */
