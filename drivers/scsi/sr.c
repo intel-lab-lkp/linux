@@ -684,6 +684,7 @@ static int sr_probe(struct scsi_device *sdev)
 	sr_vendor_init(cd);
 
 	set_capacity(disk, cd->capacity);
+	set_disk_ro(disk, !cd->writeable);
 	disk->private_data = cd;
 
 	if (register_cdrom(disk, &cd->cdi))
