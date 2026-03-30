@@ -23,8 +23,19 @@ SERVER_PORT=1234
 CLIENT_GW="198.51.200.2"
 SERVER_GW="198.51.100.2"
 
+assert_pass()
+{
+	local ret=$?
+	if [ $ret != 0 ]; then
+		echo "FAIL: ${@}"
+		exit $ksft_fail
+	else
+		echo "PASS: ${@}"
+	fi
+}
+
 # setup the topo
-setup() {
+topo_setup() {
 	setup_ns CLIENT_NS SERVER_NS ROUTER_NS
 	ip -n "$SERVER_NS" link add link0 type veth peer name link1 netns "$ROUTER_NS"
 	ip -n "$CLIENT_NS" link add link3 type veth peer name link2 netns "$ROUTER_NS"
@@ -42,21 +53,51 @@ setup() {
 	ip -n "$CLIENT_NS" link set link3 up
 	ip -n "$CLIENT_NS" addr add $CLIENT_IP/24 dev link3
 	ip -n "$CLIENT_NS" route add $SERVER_IP dev link3 via $CLIENT_GW
+}
 
-	# simulate the delay on OVS upcall by setting up a delay for INIT_ACK with
-	# tc on $SERVER_NS side
-	tc -n "$SERVER_NS" qdisc add dev link0 root handle 1: htb r2q 64
-	tc -n "$SERVER_NS" class add dev link0 parent 1: classid 1:1 htb rate 100mbit
-	tc -n "$SERVER_NS" filter add dev link0 parent 1: protocol ip u32 match ip protocol 132 \
-		0xff match u8 2 0xff at 32 flowid 1:1
-	if ! tc -n "$SERVER_NS" qdisc add dev link0 parent 1:1 handle 10: netem delay 1200ms; then
-		echo "SKIP: Cannot add netem qdisc"
-		exit $ksft_skip
-	fi
+conf_delay()
+{
+	# simulate the delay on OVS upcall by setting up a delay for INIT_ACK/INIT with
+	case $1 in
+	"INIT") chunk_type=1
+		# tc on $CLIENT_NS side
+		tc -n "$CLIENT_NS" qdisc add dev link3 root handle 1: htb r2q 64
+		tc -n "$CLIENT_NS" class add dev link3 parent 1: classid 1:1 htb rate 100mbit
+		tc -n "$CLIENT_NS" filter add dev link3 parent 1: protocol ip \
+			u32 match ip protocol 132 0xff match u8 $chunk_type 0xff at 32 flowid 1:1
+		if ! tc -n "$CLIENT_NS" qdisc add dev link3 parent 1:1 handle 10: \
+			netem delay 1200ms; then
+			echo "SKIP: Cannot add netem qdisc"
+			exit $ksft_skip
+		fi
+		;;
+	"INIT_ACK") chunk_type=2
+		# tc on $SERVER_NS side
+		tc -n "$SERVER_NS" qdisc add dev link0 root handle 1: htb r2q 64
+		tc -n "$SERVER_NS" class add dev link0 parent 1: classid 1:1 htb rate 100mbit
+		tc -n "$SERVER_NS" filter add dev link0 parent 1: protocol ip \
+			u32 match ip protocol 132 0xff match u8 $chunk_type 0xff at 32 flowid 1:1
+		if ! tc -n "$SERVER_NS" qdisc add dev link0 parent 1:1 handle 10: \
+			netem delay 1200ms; then
+			echo "SKIP: Cannot add netem qdisc"
+			exit $ksft_skip
+		fi
+		;;
+	esac
 
 	# simulate the ctstate check on OVS nf_conntrack
-	ip net exec "$ROUTER_NS" iptables -A FORWARD -m state --state INVALID,UNTRACKED -j DROP
-	ip net exec "$ROUTER_NS" iptables -A INPUT -p sctp -j DROP
+	ip net exec "$ROUTER_NS" nft -f - <<-EOF
+	table ip t {
+	        chain forward {
+	                type filter hook forward priority filter; policy accept;
+	                meta l4proto { icmp, icmpv6 } accept
+	                ct state new counter accept
+	                ct state established,related counter accept
+	                ct state invalid log flags all counter drop
+	                counter
+	        }
+	}
+	EOF
 
 	# use a smaller number for assoc's max_retrans to reproduce the issue
 	modprobe -q sctp
@@ -64,8 +105,6 @@ setup() {
 }
 
 cleanup() {
-	ip net exec "$CLIENT_NS" pkill sctp_collision >/dev/null 2>&1
-	ip net exec "$SERVER_NS" pkill sctp_collision >/dev/null 2>&1
 	cleanup_all_ns
 }
 
@@ -81,7 +120,14 @@ do_test() {
 
 # run the test case
 trap cleanup EXIT
-setup && \
-echo "Test for SCTP Collision in nf_conntrack:" && \
-do_test && echo "PASS!"
-exit $?
+
+echo "Test for SCTP INIT_ACK Collision in nf_conntrack:"
+topo_setup && conf_delay INIT_ACK
+do_test
+assert_pass "The delayed INIT_ACK chunk did not disrupt sctp ct tracking."
+
+echo "Test for SCTP INIT Collision in nf_conntrack:"
+
+topo_setup && conf_delay INIT
+do_test
+assert_pass "The delayed INIT chunk did not disrupt sctp ct tracking."
