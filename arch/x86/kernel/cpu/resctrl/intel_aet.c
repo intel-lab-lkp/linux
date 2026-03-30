@@ -23,6 +23,7 @@
 #include <linux/intel_vsec.h>
 #include <linux/io.h>
 #include <linux/minmax.h>
+#include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/rculist.h>
 #include <linux/rcupdate.h>
@@ -289,6 +290,9 @@ static enum pmt_feature_id lookup_pfid(const char *pfname)
 	return FEATURE_INVALID;
 }
 
+static struct pmt_feature_group *(*get_feature)(enum pmt_feature_id id);
+static void (*put_feature)(struct pmt_feature_group *p);
+
 /*
  * Request a copy of struct pmt_feature_group for each event group. If there is
  * one, the returned structure has an array of telemetry_region structures,
@@ -300,7 +304,7 @@ static enum pmt_feature_id lookup_pfid(const char *pfname)
  * struct pmt_feature_group to indicate that its events are successfully
  * enabled.
  */
-bool intel_aet_get_events(void)
+static bool aet_get_events(void)
 {
 	struct pmt_feature_group *p;
 	enum pmt_feature_id pfid;
@@ -309,14 +313,14 @@ bool intel_aet_get_events(void)
 
 	for_each_event_group(peg) {
 		pfid = lookup_pfid((*peg)->pfname);
-		p = intel_pmt_get_regions_by_feature(pfid);
+		p = get_feature(pfid);
 		if (IS_ERR_OR_NULL(p))
 			continue;
 		if (enable_events(*peg, p)) {
 			(*peg)->pfg = p;
 			ret = true;
 		} else {
-			intel_pmt_put_feature_group(p);
+			put_feature(p);
 		}
 	}
 
@@ -325,27 +329,96 @@ bool intel_aet_get_events(void)
 
 void __exit intel_aet_exit(void)
 {
-	struct event_group **peg;
+}
 
-	for_each_event_group(peg) {
-		if ((*peg)->pfg) {
-			intel_pmt_put_feature_group((*peg)->pfg);
-			(*peg)->pfg = NULL;
-		}
+static bool get_pmt_references(void)
+{
+	get_feature = symbol_request(intel_pmt_get_regions_by_feature);
+	if (!get_feature)
+		return false;
+	put_feature = symbol_request(intel_pmt_put_feature_group);
+	if (!put_feature) {
+		symbol_put(intel_pmt_get_regions_by_feature);
+		get_feature = NULL;
+		return false;
+	}
+
+	return true;
+}
+
+static void put_pmt_references(void)
+{
+	if (get_feature) {
+		symbol_put(intel_pmt_get_regions_by_feature);
+		get_feature = NULL;
+	}
+	if (put_feature) {
+		symbol_put(intel_pmt_put_feature_group);
+		put_feature = NULL;
 	}
 }
 
+static enum {
+	AET_UNINITIALIZED,
+	AET_PRESENT,
+	AET_NOT_PRESENT
+} aet_state;
+
 bool intel_aet_pre_mount(void)
 {
-	return false; // Temporary stub
+	bool ret;
+
+	if (aet_state == AET_PRESENT)
+		return true;
+
+	if (aet_state == AET_NOT_PRESENT || !get_pmt_references())
+		return false;
+
+	ret = aet_get_events();
+
+	if (ret) {
+		aet_state = AET_PRESENT;
+	} else {
+		aet_state = AET_NOT_PRESENT;
+		put_pmt_references();
+	}
+
+	return ret;
+}
+
+static void aet_cleanup(void)
+{
+	struct event_group **peg;
+
+	if (aet_state == AET_PRESENT) {
+		for_each_event_group(peg) {
+			if ((*peg)->pfg) {
+				struct event_group *e = *peg;
+
+				for (int j = 0; j < e->num_events; j++)
+					resctrl_disable_mon_event(e->evts[j].id);
+				put_feature((*peg)->pfg);
+				(*peg)->pfg = NULL;
+			}
+		}
+		put_pmt_references();
+		aet_state = AET_UNINITIALIZED;
+	}
 }
 
 void intel_aet_mount_result(int ret)
 {
+	struct rdt_resource *r = &rdt_resources_all[RDT_RESOURCE_PERF_PKG].r_resctrl;
+
+	if (ret) {
+		r->mon_capable = false;
+		aet_cleanup();
+	}
 }
 
 void intel_aet_unmount(void)
 {
+	aet_cleanup();
 }
 
 #define DATA_VALID	BIT_ULL(63)
