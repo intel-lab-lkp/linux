@@ -584,6 +584,9 @@ static vm_fault_t drm_gem_shmem_any_fault(struct vm_fault *vmf, unsigned int ord
 	struct folio *folio;
 	unsigned long pfn;
 
+	if (order && order != PMD_ORDER)
+		return VM_FAULT_FALLBACK;
+
 	dma_resv_lock(obj->resv, NULL);
 
 	if (page_offset >= num_pages || drm_WARN_ON_ONCE(dev, !shmem->pages) ||
