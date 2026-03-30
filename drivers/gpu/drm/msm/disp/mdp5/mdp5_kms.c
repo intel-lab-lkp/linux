@@ -19,6 +19,20 @@
 #include "msm_mmu.h"
 #include "mdp5_kms.h"
 
+static const struct of_device_id mdp5_dt_match[];
+int msm_count_mdp5(void)
+{
+	struct device_node *np;
+	int count = 0;
+
+	for_each_matching_node(np, mdp5_dt_match) {
+		if (of_device_is_available(np))
+			count++;
+	}
+
+	return count;
+}
+
 static int mdp5_hw_init(struct msm_kms *kms)
 {
 	struct mdp5_kms *mdp5_kms = to_mdp5_kms(to_mdp_kms(kms));

@@ -555,6 +555,12 @@ void msm_kms_shutdown(struct platform_device *pdev);
 
 bool msm_disp_drv_should_bind(struct device *dev, bool dpu_driver);
 
-bool msm_gpu_no_components(void);
+bool msm_separate_gpu_kms_components(void);
+
+int msm_count_mdss(void);
+
+int msm_count_mdp4(void);
+
+int msm_count_mdp5(void);
 
 #endif /* __MSM_DRV_H__ */
