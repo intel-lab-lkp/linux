@@ -402,6 +402,15 @@ int bio_integrity_map_user(struct bio *bio, struct iov_iter *iter)
 					extraction_flags, &offset);
 	if (unlikely(ret < 0))
 		goto free_bvec;
+	if (unlikely(ret != nr_vecs)) {
+		for (int i = 0; i < ret; i++)
+			unpin_user_page(pages[i]);
+
+		if (pages != stack_pages)
+			kvfree(pages);
+		ret = -EFAULT;
+		goto free_bvec;
+	}
 
 	nr_bvecs = bvec_from_pages(bvec, pages, nr_vecs, bytes, offset,
 				   &is_p2p);
