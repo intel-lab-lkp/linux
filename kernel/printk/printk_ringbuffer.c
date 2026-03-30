@@ -1302,22 +1302,25 @@ static const char *get_data(struct prb_data_ring *data_ring,
 		return NULL;
 	}
 
-	/* Sanity check. Data-less blocks were handled earlier. */
-	if (WARN_ON_ONCE(!data_check_size(data_ring, *data_size) || !*data_size))
-		return NULL;
-
 	/* A valid data block will always be aligned to the ID size. */
 	if (WARN_ON_ONCE(blk_lpos->begin != ALIGN(blk_lpos->begin, sizeof(db->id))) ||
 	    WARN_ON_ONCE(blk_lpos->next != ALIGN(blk_lpos->next, sizeof(db->id)))) {
 		return NULL;
 	}
 
-	/* A valid data block will always have at least an ID. */
-	if (WARN_ON_ONCE(*data_size < sizeof(db->id)))
+	/*
+	 * A regular data block will always have an ID and at least
+	 * 1 byte of data. Data-less blocks were handled earlier.
+	 */
+	if (WARN_ON_ONCE(*data_size <= sizeof(db->id)))
 		return NULL;
 
 	/* Subtract block ID space from size to reflect data size. */
 	*data_size -= sizeof(db->id);
+
+	/* Sanity check the max size of the regular data block. */
+	if (WARN_ON_ONCE(!data_check_size(data_ring, *data_size)))
+		return NULL;
 
 	return &db->data[0];
 }
