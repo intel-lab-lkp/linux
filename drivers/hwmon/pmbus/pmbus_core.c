@@ -106,7 +106,6 @@ struct pmbus_data {
 	int max_attributes;
 	int num_attributes;
 	struct attribute_group group;
-	const struct attribute_group **groups;
 
 	struct pmbus_sensor *sensors;
 
@@ -127,6 +126,8 @@ struct pmbus_data {
 	int vout_high[PMBUS_PAGES];	/* voltage high margin */
 
 	ktime_t next_access_backoff;	/* Wait until at least this time */
+
+	const struct attribute_group *groups[];
 };
 
 struct pmbus_debugfs_entry {
@@ -3726,17 +3727,12 @@ int pmbus_do_probe(struct i2c_client *client, struct pmbus_driver_info *info)
 				     | I2C_FUNC_SMBUS_WORD_DATA))
 		return -ENODEV;
 
-	data = devm_kzalloc(dev, sizeof(*data), GFP_KERNEL);
-	if (!data)
-		return -ENOMEM;
-
 	if (info->groups)
 		while (info->groups[groups_num])
 			groups_num++;
 
-	data->groups = devm_kcalloc(dev, groups_num + 2, sizeof(void *),
-				    GFP_KERNEL);
-	if (!data->groups)
+	data = devm_kzalloc(dev, struct_size(data, groups, groups_num + 2), GFP_KERNEL);
+	if (!data)
 		return -ENOMEM;
 
 	i2c_set_clientdata(client, data);
