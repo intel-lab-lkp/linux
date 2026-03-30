@@ -216,8 +216,13 @@ size_t copy_page_to_iter_nofault(struct page *page, unsigned offset,
 static __always_inline __must_check
 size_t copy_to_iter(const void *addr, size_t bytes, struct iov_iter *i)
 {
-	if (check_copy_size(addr, bytes, true))
-		return _copy_to_iter(addr, bytes, i);
+	if (user_backed_iter(i)) {
+		if (check_copy_size(addr, bytes, true))
+			return _copy_to_iter(addr, bytes, i);
+	} else {
+		if (__compiletime_check_copy_size(addr, bytes, true))
+			return _copy_to_iter(addr, bytes, i);
+	}
 	return 0;
 }
 

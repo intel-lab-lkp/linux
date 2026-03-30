@@ -41,8 +41,14 @@ static inline void copy_overflow(int size, unsigned long count)
 		__copy_overflow(size, count);
 }
 
+/*
+ * Copy size validation without usercopy hardening. Checks
+ * compile-time object size and runtime overflow, but skips
+ * check_object_size(). Use check_copy_size() when @addr
+ * may point to userspace-accessible memory.
+ */
 static __always_inline __must_check bool
-check_copy_size(const void *addr, size_t bytes, bool is_source)
+__compiletime_check_copy_size(const void *addr, size_t bytes, bool is_source)
 {
 	int sz = __builtin_object_size(addr, 0);
 	if (unlikely(sz >= 0 && sz < bytes)) {
@@ -55,6 +61,14 @@ check_copy_size(const void *addr, size_t bytes, bool is_source)
 		return false;
 	}
 	if (WARN_ON_ONCE(bytes > INT_MAX))
+		return false;
+	return true;
+}
+
+static __always_inline __must_check bool
+check_copy_size(const void *addr, size_t bytes, bool is_source)
+{
+	if (!__compiletime_check_copy_size(addr, bytes, is_source))
 		return false;
 	check_object_size(addr, bytes, is_source);
 	return true;

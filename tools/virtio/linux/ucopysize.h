@@ -13,6 +13,12 @@ static inline void copy_overflow(int size, unsigned long count)
 }
 
 static __always_inline __must_check bool
+__compiletime_check_copy_size(const void *addr, size_t bytes, bool is_source)
+{
+	return true;
+}
+
+static __always_inline __must_check bool
 check_copy_size(const void *addr, size_t bytes, bool is_source)
 {
 	return true;
