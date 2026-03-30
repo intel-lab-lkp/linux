@@ -350,6 +350,7 @@ int devm_pse_irq_helper(struct pse_controller_dev *pcdev, int irq,
 struct pse_control *of_pse_control_get(struct device_node *node,
 				       struct phy_device *phydev);
 void pse_control_put(struct pse_control *psec);
+void pse_control_try_resolve(struct phy_device *phydev);
 
 int pse_ethtool_get_status(struct pse_control *psec,
 			   struct netlink_ext_ack *extack,
@@ -376,6 +377,10 @@ static inline struct pse_control *of_pse_control_get(struct device_node *node,
 }
 
 static inline void pse_control_put(struct pse_control *psec)
+{
+}
+
+static inline void pse_control_try_resolve(struct phy_device *phydev)
 {
 }
 

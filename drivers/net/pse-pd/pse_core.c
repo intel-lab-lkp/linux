@@ -1570,6 +1570,42 @@ out:
 EXPORT_SYMBOL_GPL(of_pse_control_get);
 
 /**
+ * pse_control_try_resolve - attempt to resolve a deferred PSE control
+ * @phydev: the PHY device whose PSE control may need resolution
+ *
+ * When a PSE controller driver is built as a module, it may not have
+ * probed when PHYs were registered on the MDIO bus. This function
+ * retries PSE control acquisition and should be called before
+ * accessing phydev->psec in ethtool handlers.
+ *
+ * Context: Caller must hold RTNL.
+ */
+void pse_control_try_resolve(struct phy_device *phydev)
+{
+	struct device_node *np;
+	struct pse_control *psec;
+
+	ASSERT_RTNL();
+
+	if (phydev->psec)
+		return;
+
+	np = phydev->mdio.dev.of_node;
+	if (!np || !of_property_present(np, "pses"))
+		return;
+
+	psec = of_pse_control_get(np, phydev);
+	if (IS_ERR(psec)) {
+		phydev_dbg(phydev, "failed to resolve PSE control: %pe\n",
+			   psec);
+		return;
+	}
+
+	phydev->psec = psec;
+}
+EXPORT_SYMBOL_GPL(pse_control_try_resolve);
+
+/**
  * pse_get_sw_admin_state - Convert the software admin state to c33 or podl
  *			    admin state value used in the standard
  * @psec: PSE control pointer
