@@ -990,6 +990,8 @@ struct mon_evt mon_event_all[QOS_NUM_EVENTS] = {
 bool resctrl_enable_mon_event(enum resctrl_event_id eventid, bool any_cpu,
 			      unsigned int binary_bits, void *arch_priv)
 {
+	if (WARN_ON(resctrl_mounted))
+		return false;
 	if (WARN_ON_ONCE(eventid < QOS_FIRST_EVENT || eventid >= QOS_NUM_EVENTS ||
 			 binary_bits > MAX_BINARY_BITS))
 		return false;
@@ -1008,6 +1010,20 @@ bool resctrl_enable_mon_event(enum resctrl_event_id eventid, bool any_cpu,
 	mon_event_all[eventid].enabled = true;
 
 	return true;
+}
+
+void resctrl_disable_mon_event(enum resctrl_event_id eventid)
+{
+	if (WARN_ON(resctrl_mounted))
+		return;
+	if (WARN_ON_ONCE(eventid < QOS_FIRST_EVENT || eventid >= QOS_NUM_EVENTS))
+		return;
+	if (!mon_event_all[eventid].enabled) {
+		pr_warn("Repeat disable for event %d\n", eventid);
+		return;
+	}
+
+	mon_event_all[eventid].enabled = false;
 }
 
 bool resctrl_is_mon_event_enabled(enum resctrl_event_id eventid)
