@@ -411,11 +411,6 @@ static inline unsigned long virt_to_pfn(const void *kaddr)
  */
 
 #if defined(CONFIG_DEBUG_VIRTUAL)
-#define page_to_virt(x)	({						\
-	__typeof__(x) __page = x;					\
-	void *__addr = __va(page_to_phys(__page));			\
-	(void *)__tag_set((const void *)__addr, page_kasan_tag(__page));\
-})
 #define virt_to_page(x)		pfn_to_page(virt_to_pfn(x))
 #else
 #define page_to_virt(x)	({						\
