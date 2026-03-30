@@ -1459,7 +1459,7 @@ static void rswitch_phy_remove_link_mode(struct rswitch_device *rdev,
 
 static int rswitch_phy_device_init(struct rswitch_device *rdev)
 {
-	struct phy_device *phydev;
+	struct phy_device *phydev, *tmp_phydev;
 	struct device_node *phy;
 	int err = -ENOENT;
 
@@ -1473,14 +1473,18 @@ static int rswitch_phy_device_init(struct rswitch_device *rdev)
 	/* Set phydev->host_interfaces before calling of_phy_connect() to
 	 * configure the PHY with the information of host_interfaces.
 	 */
-	phydev = of_phy_find_device(phy);
-	if (!phydev)
+	tmp_phydev = of_phy_find_device(phy);
+	if (!tmp_phydev)
 		goto out;
-	__set_bit(rdev->etha->phy_interface, phydev->host_interfaces);
+	__set_bit(rdev->etha->phy_interface, tmp_phydev->host_interfaces);
 	phydev->mac_managed_pm = true;
 
 	phydev = of_phy_connect(rdev->ndev, phy, rswitch_adjust_link, 0,
 				rdev->etha->phy_interface);
+
+	/* Release the temporary reference obtained by of_phy_find_device() */
+	phy_device_free(tmp_phydev);
+
 	if (!phydev)
 		goto out;
 
