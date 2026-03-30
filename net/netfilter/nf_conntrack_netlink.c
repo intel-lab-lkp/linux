@@ -3573,7 +3573,7 @@ ctnetlink_alloc_expect(const struct nlattr * const cda[], struct nf_conn *ct,
 		const char *name = nla_data(cda[CTA_EXPECT_FN]);
 		struct nf_ct_helper_expectfn *expfn;
 
-		expfn = nf_ct_helper_expectfn_find_by_name(name);
+		expfn = nf_ct_helper_expectfn_find_by_name(helper->name, name);
 		if (expfn == NULL) {
 			err = -EINVAL;
 			goto err_out;

@@ -335,13 +335,14 @@ EXPORT_SYMBOL_GPL(nf_ct_helper_expectfn_unregister);
 
 /* Caller should hold the rcu lock */
 struct nf_ct_helper_expectfn *
-nf_ct_helper_expectfn_find_by_name(const char *name)
+nf_ct_helper_expectfn_find_by_name(const char *helper, const char *name)
 {
 	struct nf_ct_helper_expectfn *cur;
 	bool found = false;
 
 	list_for_each_entry_rcu(cur, &nf_ct_helper_expectfn_list, head) {
-		if (!strcmp(cur->name, name)) {
+		if ((cur->helper && !strcmp(cur->helper, helper)) ||
+		    !strcmp(cur->name, name)) {
 			found = true;
 			break;
 		}

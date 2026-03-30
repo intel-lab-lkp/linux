@@ -653,6 +653,7 @@ err1:
 }
 
 static struct nf_ct_helper_expectfn sip_nat = {
+	.helper		= "sip",
 	.name		= "sip",
 	.expectfn	= nf_nat_sip_expected,
 };

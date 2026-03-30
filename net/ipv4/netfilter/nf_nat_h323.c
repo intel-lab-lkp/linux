@@ -570,11 +570,13 @@ static int nat_callforwarding(struct sk_buff *skb, struct nf_conn *ct,
 }
 
 static struct nf_ct_helper_expectfn q931_nat = {
+	.helper		= "RAS",
 	.name		= "Q.931",
 	.expectfn	= ip_nat_q931_expect,
 };
 
 static struct nf_ct_helper_expectfn callforwarding_nat = {
+	.helper		= "Q.931",
 	.name		= "callforwarding",
 	.expectfn	= ip_nat_callforwarding_expect,
 };
