@@ -137,8 +137,8 @@
 		};
 
 		l2_cache: cache-controller@200000 {
-			compatible = "andestech,qilai-ax45mp-cache",
-				     "andestech,ax45mp-cache", "cache";
+			compatible = "andestech,qilai-llcache",
+				     "andestech,llcache", "cache";
 			reg = <0x0 0x00200000 0x0 0x100000>;
 			interrupts = <16 IRQ_TYPE_LEVEL_HIGH>;
 			cache-line-size = <64>;
