@@ -52,6 +52,7 @@ config SND_SOC_ALL_CODECS
 	imply SND_SOC_AK5558
 	imply SND_SOC_ALC5623
 	imply SND_SOC_ALC5632
+	imply SND_SOC_AUDIO_GPIO_AMP
 	imply SND_SOC_AUDIO_IIO_AUX
 	imply SND_SOC_AW8738
 	imply SND_SOC_AW87390
@@ -637,6 +638,17 @@ config SND_SOC_ALC5623
 config SND_SOC_ALC5632
 	tristate
 	depends on I2C
+
+config SND_SOC_AUDIO_GPIO_AMP
+	tristate "Audio GPIO Amplifier"
+	select GPIOLIB
+	help
+	  Enable support for GPIO amplifier.
+	  This allows to have an amplifier driven by GPIOs in the audio path and
+	  controlled using mixer controls.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called snd-soc-audio-gpio-amp.
 
 config SND_SOC_AUDIO_IIO_AUX
 	tristate "Audio IIO Auxiliary device"

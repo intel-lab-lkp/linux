@@ -424,6 +424,7 @@ snd-soc-wsa883x-y := wsa883x.o
 snd-soc-wsa884x-y := wsa884x.o
 snd-soc-zl38060-y := zl38060.o
 # Amp
+snd-soc-audio-gpio-amp-y := audio-gpio-amp.o
 snd-soc-max9877-y := max9877.o
 snd-soc-max98504-y := max98504.o
 snd-soc-simple-amplifier-y := simple-amplifier.o
@@ -871,6 +872,7 @@ obj-$(CONFIG_SND_SOC_WSA884X)	+= snd-soc-wsa884x.o
 obj-$(CONFIG_SND_SOC_ZL38060)	+= snd-soc-zl38060.o
 
 # Amp
+obj-$(CONFIG_SND_SOC_AUDIO_GPIO_AMP)	+= snd-soc-audio-gpio-amp.o
 obj-$(CONFIG_SND_SOC_MAX9877)	+= snd-soc-max9877.o
 obj-$(CONFIG_SND_SOC_MAX98504)	+= snd-soc-max98504.o
 obj-$(CONFIG_SND_SOC_SIMPLE_AMPLIFIER)	+= snd-soc-simple-amplifier.o
