@@ -153,6 +153,7 @@ static int hinic3_init_nic_dev(struct net_device *netdev,
 		return -ENOMEM;
 
 	nic_dev->nic_svc_cap = hwdev->cfg_mgmt->cap.nic_svc_cap;
+	u64_stats_init(&nic_dev->stats.syncp);
 
 	nic_dev->workq = create_singlethread_workqueue(HINIC3_NIC_DEV_WQ_NAME);
 	if (!nic_dev->workq) {
