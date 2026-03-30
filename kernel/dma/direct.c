@@ -203,6 +203,7 @@ static void *dma_direct_alloc_no_mapping(struct device *dev, size_t size,
 void *dma_direct_alloc(struct device *dev, size_t size,
 		dma_addr_t *dma_handle, gfp_t gfp, unsigned long attrs)
 {
+	bool allow_highmem = !force_dma_unencrypted(dev);
 	bool remap = false, set_uncached = false;
 	struct page *page;
 	void *ret;
@@ -251,7 +252,7 @@ void *dma_direct_alloc(struct device *dev, size_t size,
 		return dma_direct_alloc_from_pool(dev, size, dma_handle, gfp);
 
 	/* we always manually zero the memory once we are done */
-	page = __dma_direct_alloc_pages(dev, size, gfp & ~__GFP_ZERO, true);
+	page = __dma_direct_alloc_pages(dev, size, gfp & ~__GFP_ZERO, allow_highmem);
 	if (!page)
 		return NULL;
 
@@ -264,6 +265,9 @@ void *dma_direct_alloc(struct device *dev, size_t size,
 		remap = true;
 		set_uncached = false;
 	}
+
+	if (dma_set_decrypted(dev, page_address(page), size))
+		goto out_leak_pages;
 
 	if (remap) {
 		pgprot_t prot = dma_pgprot(dev, PAGE_KERNEL, attrs);
@@ -278,11 +282,9 @@ void *dma_direct_alloc(struct device *dev, size_t size,
 		ret = dma_common_contiguous_remap(page, size, prot,
 				__builtin_return_address(0));
 		if (!ret)
-			goto out_free_pages;
+			goto out_encrypt_pages;
 	} else {
 		ret = page_address(page);
-		if (dma_set_decrypted(dev, ret, size))
-			goto out_leak_pages;
 	}
 
 	memset(ret, 0, size);
@@ -300,7 +302,6 @@ void *dma_direct_alloc(struct device *dev, size_t size,
 out_encrypt_pages:
 	if (dma_set_encrypted(dev, page_address(page), size))
 		return NULL;
-out_free_pages:
 	__dma_direct_free_pages(dev, page, size);
 	return NULL;
 out_leak_pages:
@@ -339,7 +340,12 @@ void dma_direct_free(struct device *dev, size_t size,
 		return;
 
 	if (is_vmalloc_addr(cpu_addr)) {
+		void *vaddr = page_address(dma_direct_to_page(dev, dma_addr));
+
 		vunmap(cpu_addr);
+
+		if (dma_set_encrypted(dev, vaddr, size))
+			return;
 	} else {
 		if (IS_ENABLED(CONFIG_ARCH_HAS_DMA_CLEAR_UNCACHED))
 			arch_dma_clear_uncached(cpu_addr, size);
