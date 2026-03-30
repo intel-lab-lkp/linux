@@ -41,11 +41,13 @@
 #define PIPE_CLK_SELECT				0
 #define XLNX_USB_FPD_POWER_PRSNT		0x80
 #define FPD_POWER_PRSNT_OPTION			BIT(0)
+#define XLNX_MMI_USB_TX_DEEMPH_DEF		0x8c45
 
 struct dwc3_xlnx;
 
 struct dwc3_xlnx_config {
 	int				(*pltfm_init)(struct dwc3_xlnx *data);
+	u32				tx_deemph;
 	bool				map_resource;
 };
 
@@ -284,6 +286,7 @@ static const struct dwc3_xlnx_config versal_config = {
 
 static const struct dwc3_xlnx_config versal2_config = {
 	.pltfm_init = dwc3_xlnx_init_versal2,
+	.tx_deemph = XLNX_MMI_USB_TX_DEEMPH_DEF,
 };
 
 static const struct of_device_id dwc3_xlnx_of_match[] = {
@@ -303,10 +306,12 @@ static const struct of_device_id dwc3_xlnx_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, dwc3_xlnx_of_match);
 
-static int dwc3_set_swnode(struct device *dev)
+static int dwc3_set_swnode(struct dwc3_xlnx *priv_data)
 {
+	struct device *dev = priv_data->dev;
+	const struct dwc3_xlnx_config *config = priv_data->dwc3_config;
 	struct device_node *np = dev->of_node, *dwc3_np;
-	struct property_entry props[2];
+	struct property_entry props[3];
 	int prop_idx = 0, ret = 0;
 
 	dwc3_np = of_get_compatible_child(np, "snps,dwc3");
@@ -320,6 +325,10 @@ static int dwc3_set_swnode(struct device *dev)
 	if (of_dma_is_coherent(dwc3_np))
 		props[prop_idx++] = PROPERTY_ENTRY_U16("snps,gsbuscfg0-reqinfo",
 						       0xffff);
+	if (config->tx_deemph)
+		props[prop_idx++] = PROPERTY_ENTRY_U32("snps,lcsr-tx-deemph",
+						       config->tx_deemph);
+
 	of_node_put(dwc3_np);
 
 	if (prop_idx)
@@ -368,7 +377,7 @@ static int dwc3_xlnx_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_clk_put;
 
-	ret = dwc3_set_swnode(dev);
+	ret = dwc3_set_swnode(priv_data);
 	if (ret)
 		goto err_clk_put;
 
