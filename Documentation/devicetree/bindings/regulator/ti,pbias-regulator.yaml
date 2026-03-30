@@ -89,6 +89,7 @@ allOf:
               contains:
                 enum:
                   - pbias_mmc_omap4
+                  - pbias_sim_omap4
 
   - if:
       properties:
