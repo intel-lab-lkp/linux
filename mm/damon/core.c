@@ -1278,6 +1278,9 @@ int damon_commit_ctx(struct damon_ctx *dst, struct damon_ctx *src)
 	dst->addr_unit = src->addr_unit;
 	dst->min_region_sz = src->min_region_sz;
 
+	dst->thread_status.kdamond_pid = src->thread_status.kdamond_pid;
+	dst->thread_status.enabled = src->thread_status.enabled;
+
 	dst->maybe_corrupted = false;
 	return 0;
 }
@@ -2740,6 +2743,14 @@ static void kdamond_init_ctx(struct damon_ctx *ctx)
 	}
 }
 
+static void damon_update_thread_status(struct damon_ctx *ctx)
+{
+	if (ctx->thread_status.kdamond_pid)
+		*ctx->thread_status.kdamond_pid = -1;
+	if (ctx->thread_status.enabled)
+		*ctx->thread_status.enabled = false;
+}
+
 /*
  * The monitoring daemon that runs as a kernel thread
  */
@@ -2858,16 +2869,22 @@ done:
 	kdamond_call(ctx, true);
 	damos_walk_cancel(ctx);
 
-	pr_debug("kdamond (%d) finishes\n", current->pid);
 	mutex_lock(&ctx->kdamond_lock);
 	ctx->kdamond = NULL;
 	mutex_unlock(&ctx->kdamond_lock);
+
+	if (ctx->thread_status.enabled && *ctx->thread_status.enabled)
+		pr_debug("kdamond (%d) crashed\n", current->pid);
+	else
+		pr_debug("kdamond (%d) finishes\n", current->pid);
 
 	mutex_lock(&damon_lock);
 	nr_running_ctxs--;
 	if (!nr_running_ctxs && running_exclusive_ctxs)
 		running_exclusive_ctxs = false;
 	mutex_unlock(&damon_lock);
+
+	damon_update_thread_status(ctx);
 
 	return 0;
 }

@@ -750,6 +750,11 @@ struct damon_attrs {
 	unsigned long aggr_samples;
 };
 
+struct damon_thread_status {
+	int *kdamond_pid;
+	bool *enabled;
+};
+
 /**
  * struct damon_ctx - Represents a context for each monitoring.  This is the
  * main interface that allows users to set the attributes and get the results
@@ -828,6 +833,8 @@ struct damon_ctx {
 
 	struct list_head adaptive_targets;
 	struct list_head schemes;
+
+	struct damon_thread_status thread_status;
 };
 
 static inline struct damon_region *damon_next_region(struct damon_region *r)
