@@ -618,8 +618,8 @@ int iio_multiply_value(int *result, s64 multiplier,
 			denominator = NANO;
 			break;
 		}
-		*result = multiplier * abs(val);
-		*result += div_s64(multiplier * abs(val2), denominator);
+		*result = multiplier * abs((s64)val);
+		*result += div_s64(multiplier * abs((s64)val2), denominator);
 		if (val < 0 || val2 < 0)
 			*result *= -1;
 		return IIO_VAL_INT;
