@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # SPDX-License-Identifier: GPL-2.0
 
 SYSFS=
@@ -10,8 +10,8 @@ prerequisite()
 {
 	msg="skip all tests:"
 
-	if [ $UID != 0 ]; then
-		echo $msg must be run as root >&2
+	if [ $(id -u) -ne 0 ]; then
+		printf "%s must be run as root\n" "$msg" >&2
 		exit $ksft_skip
 	fi
 
@@ -20,37 +20,37 @@ prerequisite()
 	SYSFS=`mount -t sysfs | head -1 | awk '{ print $3 }'`
 
 	if [ ! -d "$SYSFS" ]; then
-		echo $msg sysfs is not mounted >&2
+		printf "%s sysfs is not mounted\n" "$msg" >&2
 		exit $ksft_skip
 	fi
 
 	if ! ls $SYSFS/devices/system/cpu/cpu* > /dev/null 2>&1; then
-		echo $msg cpu hotplug is not supported >&2
+		printf "%s cpu hotplug is not supported\n" "$msg" >&2
 		exit $ksft_skip
 	fi
 
-	echo "CPU online/offline summary:"
+	printf "CPU online/offline summary:\n"
 	online_cpus=`cat $SYSFS/devices/system/cpu/online`
 	online_max=${online_cpus##*-}
 
-	if [[ "$online_cpus" = "$online_max" ]]; then
-		echo "$msg: since there is only one cpu: $online_cpus"
+	if [ "$online_cpus" = "$online_max" ]; then
+		printf "%s since there is only one cpu: %s\n" "$msg" "$online_cpus"
 		exit $ksft_skip
 	fi
 
 	present_cpus=`cat $SYSFS/devices/system/cpu/present`
 	present_max=${present_cpus##*-}
-	echo "present_cpus = $present_cpus present_max = $present_max"
+	printf "present_cpus = %s,  present_max = %s\n" "$present_cpus" "$present_max"
 
-	echo -e "\t Cpus in online state: $online_cpus"
+	printf "\t Cpus in online state: %s\n" "$online_cpus"
 
 	offline_cpus=`cat $SYSFS/devices/system/cpu/offline`
-	if [[ "a$offline_cpus" = "a" ]]; then
+	if [ "a$offline_cpus" = "a" ]; then
 		offline_cpus=0
 	else
 		offline_max=${offline_cpus##*-}
 	fi
-	echo -e "\t Cpus in offline state: $offline_cpus"
+	printf "\t Cpus in offline state: %s\n" "$offline_cpus"
 }
 
 #
@@ -62,7 +62,7 @@ hotpluggable_cpus()
 
 	for cpu in $SYSFS/devices/system/cpu/cpu*; do
 		if [ -f $cpu/online ] && grep -q $state $cpu/online; then
-			echo ${cpu##/*/cpu}
+			printf "%s\n" "${cpu##/*/cpu}"
 		fi
 	done
 }
@@ -99,39 +99,44 @@ offline_cpu()
 
 online_cpu_expect_success()
 {
+	FUNC="online_cpu_expect_success()"
 	local cpu=$1
 
 	if ! online_cpu $cpu; then
-		echo $FUNCNAME $cpu: unexpected fail >&2
+		printf "%s %s: unexpected fail\n" "$FUNC" "$cpu" >&2
 		retval=1
 	elif ! cpu_is_online $cpu; then
-		echo $FUNCNAME $cpu: unexpected offline >&2
+		printf "%s %s: unexpected offline\n" "$FUNC" "$cpu" >&2
 		retval=1
 	fi
 }
 
 online_cpu_expect_fail()
 {
+
+	FUNC="online_cpu_expect_fail()"
 	local cpu=$1
 
 	if online_cpu $cpu 2> /dev/null; then
-		echo $FUNCNAME $cpu: unexpected success >&2
+		printf "%s %s: unexpected success\n" "$FUNC" "$cpu" >&2
 		retval=1
 	elif ! cpu_is_offline $cpu; then
-		echo $FUNCNAME $cpu: unexpected online >&2
+		printf "%s %s: unexpected online\n" "$FUNC" "$cpu" >&2
 		retval=1
 	fi
 }
 
 offline_cpu_expect_success()
 {
+
+	FUNC="offline_cpu_expect_success()"
 	local cpu=$1
 
 	if ! offline_cpu $cpu; then
-		echo $FUNCNAME $cpu: unexpected fail >&2
+		printf "%s %s: unexpected fail\n" "$FUNC" "$cpu" >&2
 		retval=1
 	elif ! cpu_is_offline $cpu; then
-		echo $FUNCNAME $cpu: unexpected offline >&2
+		printf "%s %s: unexpected offline\n" "$FUNC" "$cpu" >&2
 		retval=1
 	fi
 }
@@ -139,12 +144,13 @@ offline_cpu_expect_success()
 offline_cpu_expect_fail()
 {
 	local cpu=$1
+	FUNC="offline_cpu_expect_fail()"
 
 	if offline_cpu $cpu 2> /dev/null; then
-		echo $FUNCNAME $cpu: unexpected success >&2
+		printf "%s %s: unexpected success\n" "$FUNC" "$cpu" >&2
 		retval=1
 	elif ! cpu_is_online $cpu; then
-		echo $FUNCNAME $cpu: unexpected offline >&2
+		printf "%s %s: unexpected offline\n" "$FUNC" "$cpu" >&2
 		retval=1
 	fi
 }
@@ -182,9 +188,9 @@ while getopts ah opt; do
 		allcpus=1
 		;;
 	h)
-		echo "Usage $0 [ -a ]"
-		echo -e "\t default offline one cpu"
-		echo -e "\t run with -a option to offline all cpus"
+		printf "Usage %s [ -a ]\n" "$0"
+		printf "\t default offline one cpu\n"
+		printf "\t run with -a option to offline all cpus\n"
 		exit
 		;;
 	esac
@@ -195,25 +201,25 @@ prerequisite
 #
 # Safe test (default) - offline and online one cpu
 #
-if [ $allcpus -eq 0 ]; then
-	echo "Limited scope test: one hotplug cpu"
-	echo -e "\t (leaves cpu in the original state):"
-	echo -e "\t online to offline to online: cpu $online_max"
+if [ "$allcpus" -eq 0 ]; then
+	printf "Limited scope test: one hotplug cpu\n"
+	printf "\t (leaves cpu in the original state):\n"
+	printf "\t online to offline to online: cpu %s\n" "$online_max"
 	offline_cpu_expect_success $online_max
 	online_cpu_expect_success $online_max
 
-	if [[ $offline_cpus -gt 0 ]]; then
-		echo -e "\t online to offline to online: cpu $present_max"
+	if [ "$offline_cpus" -gt 0 ]; then
+		printf "\t online to offline to online: cpu %s\n" "$present_max"
 		online_cpu_expect_success $present_max
 		offline_cpu_expect_success $present_max
 		online_cpu $present_max
 	fi
 	exit $retval
 else
-	echo "Full scope test: all hotplug cpus"
-	echo -e "\t online all offline cpus"
-	echo -e "\t offline all online cpus"
-	echo -e "\t online all offline cpus"
+	printf "Full scope test: all hotplug cpus\n"
+	printf "\t online all offline cpus\n"
+	printf "\t offline all online cpus\n"
+	printf "\t online all offline cpus\n"
 fi
 
 online_all_hot_pluggable_cpus
