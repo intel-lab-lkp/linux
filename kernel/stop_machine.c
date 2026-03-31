@@ -584,18 +584,8 @@ static int __init cpu_stop_init(void)
 }
 early_initcall(cpu_stop_init);
 
-int stop_machine_cpuslocked(cpu_stop_fn_t fn, void *data,
-			    const struct cpumask *cpus)
+static int stop_multi_cpus(struct multi_stop_data *msdata)
 {
-	struct multi_stop_data msdata = {
-		.fn = fn,
-		.data = data,
-		.num_threads = num_online_cpus(),
-		.active_cpus = cpus,
-	};
-
-	lockdep_assert_cpus_held();
-
 	if (!stop_machine_initialized) {
 		/*
 		 * Handle the case where stop_machine() is called
@@ -605,19 +595,34 @@ int stop_machine_cpuslocked(cpu_stop_fn_t fn, void *data,
 		unsigned long flags;
 		int ret;
 
-		WARN_ON_ONCE(msdata.num_threads != 1);
+		WARN_ON_ONCE(msdata->num_threads != 1);
 
 		local_irq_save(flags);
 		hard_irq_disable();
-		ret = (*fn)(data);
+		ret = msdata->fn(msdata->data);
 		local_irq_restore(flags);
 
 		return ret;
 	}
 
 	/* Set the initial state and stop all online cpus. */
-	set_state(&msdata, MULTI_STOP_PREPARE);
-	return stop_cpus(cpu_online_mask, multi_cpu_stop, &msdata);
+	set_state(msdata, MULTI_STOP_PREPARE);
+	return stop_cpus(cpu_online_mask, multi_cpu_stop, msdata);
+}
+
+int stop_machine_cpuslocked(cpu_stop_fn_t fn, void *data,
+			    const struct cpumask *cpus)
+{
+	struct multi_stop_data msdata = {
+		.fn		= fn,
+		.data		= data,
+		.num_threads	= num_online_cpus(),
+		.active_cpus	= cpus,
+	};
+
+	lockdep_assert_cpus_held();
+
+	return stop_multi_cpus(&msdata);
 }
 
 int stop_machine(cpu_stop_fn_t fn, void *data, const struct cpumask *cpus)
