@@ -47,6 +47,10 @@
 #define _INTEL_BIOS_PRIVATE
 #include "intel_vbt_defs.h"
 
+#define VS_PE_MASK 0x000000ff
+
+#define LOW(x) ((x) & (VS_PE_MASK))
+
 /**
  * DOC: Video BIOS Table (VBT)
  *
@@ -2185,6 +2189,38 @@ parse_compression_parameters(struct intel_display *display)
 }
 
 static void
+parse_vswing_preemph_lt(union intel_ddi_buf_trans_entry **bufs_table,
+			const struct bdb_vswing_preemph *block)
+{
+	union intel_ddi_buf_trans_entry *entry;
+	const u32 *tables = block->tables;
+	u32 num_rows = 16;
+	size_t offset = 0;
+	size_t row_width;
+	const u32 *vals;
+
+	row_width = block->num_columns * sizeof(*tables);
+
+	for (int idx = 0; idx < block->num_tables; idx++) {
+		for (int row = 0; row < num_rows; row++) {
+			vals = &tables[offset];
+
+			entry = &bufs_table[idx][row];
+			entry->lt.main_cursor = LOW(vals[0]);
+			entry->lt.pre_cursor = LOW(vals[1]);
+			entry->lt.post_cursor = LOW(vals[2]);
+			/* FIXME confirm LT's tables' layout
+			 * should this ever trigger.
+			 * entry->lt.txswing = LOW(vals[3]);
+			 * entry->lt.txswing_level = LOW(vals[4]);
+			 */
+
+			offset += row_width;
+		}
+	}
+}
+
+static void
 parse_vswing_preemph_override(struct intel_display *display)
 {
 	union intel_ddi_buf_trans_entry **bufs_table;
@@ -2207,8 +2243,12 @@ parse_vswing_preemph_override(struct intel_display *display)
 	for (int idx = 0; idx < block->num_tables; idx++)
 		bufs_table[idx] = kzalloc(num_rows * sizeof(**bufs_table), GFP_KERNEL);
 
-	drm_dbg_kms(display->drm, "Vswing / Preemph Override not yet supported on the platform\n");
-	bufs_table = NULL;
+	if (HAS_LT_PHY(display)) {
+		parse_vswing_preemph_lt(bufs_table, block);
+	} else {
+		drm_dbg_kms(display->drm, "Vswing / Preemph Override not yet supported on the platform\n");
+		bufs_table = NULL;
+	}
 
 	display->vbt.vswing_preemph.bufs_table = bufs_table;
 	display->vbt.vswing_preemph.num_tables = block->num_tables;
