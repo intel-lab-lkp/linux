@@ -42,6 +42,9 @@ struct iommu_flush_ops {
 			       void *cookie);
 	void (*tlb_add_page)(struct iommu_iotlb_gather *gather,
 			     unsigned long iova, size_t granule, void *cookie);
+	void (*tlb_add_range)(struct iommu_iotlb_gather *gather,
+			      unsigned long iova, size_t size, size_t granule,
+			      void *cookie);
 };
 
 /**

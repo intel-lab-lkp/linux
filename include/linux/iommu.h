@@ -1034,30 +1034,31 @@ static inline void iommu_iotlb_gather_add_range(struct iommu_iotlb_gather *gathe
 }
 
 /**
- * iommu_iotlb_gather_add_page - Gather for page-based TLB invalidation
+ * iommu_iotlb_gather_add_range_pgsize - Include pgsize in the gather
  * @domain: IOMMU domain to be invalidated
  * @gather: TLB gather data
  * @iova: start of page to invalidate
  * @size: size of page to invalidate
+ * @pgsize: page granularity of the invalidation
  *
- * Helper for IOMMU drivers to build invalidation commands based on individual
- * pages, or with page size/table level hints which cannot be gathered if they
- * differ.
+ * Helper for IOMMU drivers to build invalidation commands when using the pgsize
+ * hint. Unlike iommu_iotlb_gather_add_range() this also flushes if the range is
+ * disjoint.
  */
-static inline void iommu_iotlb_gather_add_page(struct iommu_domain *domain,
-					       struct iommu_iotlb_gather *gather,
-					       unsigned long iova, size_t size)
+static inline void iommu_iotlb_gather_add_range_pgsize(
+	struct iommu_domain *domain, struct iommu_iotlb_gather *gather,
+	unsigned long iova, size_t size, size_t pgsize)
 {
 	/*
 	 * If the new page is disjoint from the current range or is mapped at
 	 * a different granularity, then sync the TLB so that the gather
 	 * structure can be rewritten.
 	 */
-	if ((gather->pgsize && gather->pgsize != size) ||
+	if ((gather->pgsize && gather->pgsize != pgsize) ||
 	    iommu_iotlb_gather_is_disjoint(gather, iova, size))
 		iommu_iotlb_sync(domain, gather);
 
-	gather->pgsize = size;
+	gather->pgsize = pgsize;
 	iommu_iotlb_gather_add_range(gather, iova, size);
 }
 

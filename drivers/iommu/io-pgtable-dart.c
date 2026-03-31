@@ -330,6 +330,9 @@ static size_t dart_unmap_pages(struct io_pgtable_ops *ops, unsigned long iova,
 		i++;
 	}
 
+	if (i && !iommu_iotlb_gather_queued(gather))
+		iommu_iotlb_gather_add_range(gather, iova, i * pgsize);
+
 	return i * pgsize;
 }
 

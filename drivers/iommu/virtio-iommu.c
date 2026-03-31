@@ -897,6 +897,8 @@ static size_t viommu_unmap_pages(struct iommu_domain *domain, unsigned long iova
 	if (unmapped < size)
 		return 0;
 
+	iommu_iotlb_gather_add_range(gather, iova, unmapped);
+
 	/* Device already removed all mappings after detach. */
 	if (!vdomain->nr_endpoints)
 		return unmapped;

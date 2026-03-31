@@ -340,6 +340,7 @@ static size_t sprd_iommu_unmap(struct iommu_domain *domain, unsigned long iova,
 	spin_lock_irqsave(&dom->pgtlock, flags);
 	memset(pgt_base_iova, 0, pgcount * sizeof(u32));
 	spin_unlock_irqrestore(&dom->pgtlock, flags);
+	iommu_iotlb_gather_add_range(iotlb_gather, iova, size);
 
 	return size;
 }

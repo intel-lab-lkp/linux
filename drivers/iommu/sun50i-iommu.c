@@ -655,6 +655,7 @@ static size_t sun50i_iommu_unmap(struct iommu_domain *domain, unsigned long iova
 
 	memset(pte_addr, 0, sizeof(*pte_addr));
 	sun50i_table_flush(sun50i_domain, pte_addr, 1);
+	iommu_iotlb_gather_add_range(gather, iova, SZ_4K);
 
 	return SZ_4K;
 }

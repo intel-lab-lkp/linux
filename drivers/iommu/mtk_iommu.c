@@ -828,7 +828,6 @@ static size_t mtk_iommu_unmap(struct iommu_domain *domain,
 {
 	struct mtk_iommu_domain *dom = to_mtk_domain(domain);
 
-	iommu_iotlb_gather_add_range(gather, iova, pgsize * pgcount);
 	return dom->iop->unmap_pages(dom->iop, iova, pgsize, pgcount, gather);
 }
 

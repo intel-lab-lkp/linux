@@ -596,6 +596,10 @@ static size_t __arm_v7s_unmap(struct arm_v7s_io_pgtable *data,
 
 		__arm_v7s_set_pte(ptep, 0, num_entries, &iop->cfg);
 
+		if (!iommu_iotlb_gather_queued(gather))
+			iommu_iotlb_gather_add_range(gather, iova,
+						     num_entries * blk_size);
+
 		for (i = 0; i < num_entries; i++) {
 			if (ARM_V7S_PTE_IS_TABLE(pte[i], lvl)) {
 				/* Also flush any partial walks */

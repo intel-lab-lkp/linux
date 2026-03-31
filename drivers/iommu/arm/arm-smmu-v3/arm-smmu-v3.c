@@ -2775,14 +2775,15 @@ void arm_smmu_domain_inv_range(struct arm_smmu_domain *smmu_domain,
 	rcu_read_unlock();
 }
 
-static void arm_smmu_tlb_inv_page_nosync(struct iommu_iotlb_gather *gather,
-					 unsigned long iova, size_t granule,
-					 void *cookie)
+static void arm_smmu_tlb_inv_range_nosync(struct iommu_iotlb_gather *gather,
+					  unsigned long iova, size_t size,
+					  size_t granule, void *cookie)
 {
 	struct arm_smmu_domain *smmu_domain = cookie;
 	struct iommu_domain *domain = &smmu_domain->domain;
 
-	iommu_iotlb_gather_add_page(domain, gather, iova, granule);
+	iommu_iotlb_gather_add_range_pgsize(domain, gather, iova, size,
+					    granule);
 }
 
 static void arm_smmu_tlb_inv_walk(unsigned long iova, size_t size,
@@ -2796,7 +2797,7 @@ static void arm_smmu_tlb_inv_walk(unsigned long iova, size_t size,
 static const struct iommu_flush_ops arm_smmu_flush_ops = {
 	.tlb_flush_all	= arm_smmu_tlb_inv_context,
 	.tlb_flush_walk = arm_smmu_tlb_inv_walk,
-	.tlb_add_page	= arm_smmu_tlb_inv_page_nosync,
+	.tlb_add_range	= arm_smmu_tlb_inv_range_nosync,
 };
 
 static bool arm_smmu_dbm_capable(struct arm_smmu_device *smmu)
