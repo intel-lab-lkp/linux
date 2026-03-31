@@ -112,8 +112,6 @@ int aead_init_geniv(struct crypto_aead *aead)
 	struct crypto_aead *child;
 	int err;
 
-	spin_lock_init(&ctx->lock);
-
 	err = crypto_get_default_rng();
 	if (err)
 		goto out;
