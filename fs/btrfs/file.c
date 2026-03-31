@@ -1227,8 +1227,11 @@ static int copy_one_range(struct btrfs_inode *inode, struct iov_iter *iter,
 		return ret;
 	reserved_len = ret;
 	/* Write range must be inside the reserved range. */
-	ASSERT(reserved_start <= start);
-	ASSERT(start + write_bytes <= reserved_start + reserved_len);
+	ASSERT(reserved_start <= start, "reserved_start=%llu start=%llu",
+	       reserved_start, start);
+	ASSERT(start + write_bytes <= reserved_start + reserved_len,
+	       "start=%llu write_bytes=%zu reserved_start=%llu reserved_len=%llu",
+	       start, write_bytes, reserved_start, reserved_len);
 
 again:
 	ret = balance_dirty_pages_ratelimited_flags(inode->vfs_inode.i_mapping,
@@ -2335,7 +2338,8 @@ static int btrfs_insert_replace_extent(struct btrfs_trans_handle *trans,
 			    btrfs_item_ptr_offset(leaf, slot),
 			    sizeof(struct btrfs_file_extent_item));
 	extent = btrfs_item_ptr(leaf, slot, struct btrfs_file_extent_item);
-	ASSERT(btrfs_file_extent_type(leaf, extent) != BTRFS_FILE_EXTENT_INLINE);
+	ASSERT(btrfs_file_extent_type(leaf, extent) != BTRFS_FILE_EXTENT_INLINE,
+	       "file_extent_type=%u", btrfs_file_extent_type(leaf, extent));
 	btrfs_set_file_extent_offset(leaf, extent, extent_info->data_offset);
 	btrfs_set_file_extent_num_bytes(leaf, extent, replace_len);
 	if (extent_info->is_new_extent)
