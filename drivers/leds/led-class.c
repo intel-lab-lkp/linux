@@ -425,7 +425,7 @@ void led_remove_lookup(struct led_lookup_data *led_lookup)
 		return;
 
 	mutex_lock(&leds_lookup_lock);
-	list_del(&led_lookup->list);
+	list_del_init(&led_lookup->list);
 	mutex_unlock(&leds_lookup_lock);
 }
 EXPORT_SYMBOL_GPL(led_remove_lookup);
