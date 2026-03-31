@@ -134,6 +134,18 @@ static void carl9170_cmd_callback(struct ar9170 *ar, u32 len, void *buffer)
 	 * So we only check if we provided enough space for the data.
 	 */
 	if (unlikely(ar->readlen != (len - 4))) {
+		if (ar->cmd_seq == -2) {
+			/*
+			 * Firmware retained a stale response from a previous
+			 * probe's echo test across USB reconnect (SH-2 retains
+			 * state if power is not fully cut).  The real echo test
+			 * has not been sent yet -- discard silently.
+			 */
+			dev_dbg(&ar->udev->dev,
+				"discarding stale init response (len %d)\n",
+				len - 4);
+			return;
+		}
 		dev_warn(&ar->udev->dev, "received invalid command response:"
 			 "got %d, instead of %d\n", len - 4, ar->readlen);
 		print_hex_dump_bytes("carl9170 cmd:", DUMP_PREFIX_OFFSET,
