@@ -263,12 +263,13 @@ static struct adapter *rtw_sdio_if1_init(struct dvobj_priv *dvobj, const struct 
 
 	/* 3 6. read efuse/eeprom data */
 	rtw_hal_read_chip_info(padapter);
+	
+	if (rtw_wdev_alloc(padapter, dvobj_to_dev(dvobj))) 
+		goto free_hal_data;
 
 	/* 3 7. init driver common data */
 	if (rtw_init_drv_sw(padapter))
-		goto free_hal_data;
-
-	rtw_wdev_alloc(padapter, dvobj_to_dev(dvobj));
+		goto free_wdev;
 
 	/* 3 8. get WLan MAC address */
 	/*  set mac addr */
@@ -278,11 +279,12 @@ static struct adapter *rtw_sdio_if1_init(struct dvobj_priv *dvobj, const struct 
 
 	return padapter;
 
-free_hal_data:
-	kfree(padapter->HalData);
-
+free_wdev:
 	rtw_wdev_unregister(padapter->rtw_wdev);
 	rtw_wdev_free(padapter->rtw_wdev);
+
+free_hal_data:
+	kfree(padapter->HalData);
 
 free_adapter:
 	if (pnetdev)
