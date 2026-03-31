@@ -257,7 +257,7 @@ static struct adapter *rtw_sdio_if1_init(struct dvobj_priv *dvobj, const struct 
 	padapter->intf_alloc_irq = &sdio_alloc_irq;
 	padapter->intf_free_irq = &sdio_free_irq;
 
-	if (rtw_init_io_priv(padapter, sdio_set_intf_ops) == _FAIL)
+	if (rtw_init_io_priv(padapter, sdio_set_intf_ops))
 		goto free_hal_data;
 
 	rtw_hal_read_chip_version(padapter);
@@ -270,7 +270,7 @@ static struct adapter *rtw_sdio_if1_init(struct dvobj_priv *dvobj, const struct 
 	rtw_hal_read_chip_info(padapter);
 
 	/* 3 7. init driver common data */
-	if (rtw_init_drv_sw(padapter) == _FAIL)
+	if (rtw_init_drv_sw(padapter))
 		goto free_hal_data;
 
 	rtw_wdev_alloc(padapter, dvobj_to_dev(dvobj));
