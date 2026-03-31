@@ -655,9 +655,11 @@ EXPORT_SYMBOL_GPL(stop_core_cpuslocked);
 
 /**
  * stop_machine_from_inactive_cpu - stop_machine() from inactive CPU
+ *
  * @fn: the function to run
  * @data: the data ptr for the @fn()
- * @cpus: the cpus to run the @fn() on (NULL = any online cpu)
+ * @cpus: the CPUs to run the @fn() on. If NULL, @fn() runs on a single
+ *        (arbitrary) CPU from cpu_online_mask.
  *
  * This is identical to stop_machine() but can be called from a CPU which
  * is not active.  The local CPU is in the process of hotplug (so no other
