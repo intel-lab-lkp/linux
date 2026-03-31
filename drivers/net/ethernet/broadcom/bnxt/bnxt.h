@@ -1398,6 +1398,8 @@ struct bnxt_vf_info {
 };
 #endif
 
+#define BNXT_MAX_VFS	128
+
 struct bnxt_pf_info {
 #define BNXT_FIRST_PF_FID	1
 #define BNXT_FIRST_VF_FID	128
