@@ -368,6 +368,8 @@ static int p50_gpio_probe(struct platform_device *pdev)
 	if (ret)
 		return dev_err_probe(&pdev->dev, ret, "failed to register software nodes");
 
+	set_secondary_fwnode(&pdev->dev, software_node_fwnode(&gpiochip_node));
+
 	led_info.fwnode = software_node_fwnode(&gpio_leds_node);
 	p50->leds_pdev = platform_device_register_full(&led_info);
 	if (IS_ERR(p50->leds_pdev)) {
