@@ -1786,6 +1786,12 @@ xe3plpd_get_lt_buf_trans(struct intel_encoder *encoder,
 		return intel_get_buf_trans(&xe3plpd_lt_trans_dp14, n_entries);
 }
 
+static enum icl_vswing_preemph_index
+_compute_index_icl(const struct intel_crtc_state *crtc_state)
+{
+        return (enum icl_vswing_preemph_index) 0;
+}
+
 static enum snps_vswing_preemph_index
 _compute_index_snps_c10(const struct intel_crtc_state *crtc_state)
 {
@@ -1849,6 +1855,8 @@ vswing_preemph_compute_index(struct intel_encoder *encoder,
 			index.snps = _compute_index_snps_c10(crtc_state);
 		else
 			index.snps = _compute_index_snps_c20(crtc_state);
+	} else if (display->platform.elkhartlake) {
+		index.icl = _compute_index_icl(crtc_state);
 	} else {
 		drm_dbg_kms(display->drm, "using default VS/PE Override index");
 		index = (union ddi_vswing_preemph_index) 0;
@@ -1865,6 +1873,8 @@ vswing_preemph_cast_index(struct intel_display *display,
 		return index.lt;
 	} else if (DISPLAY_VER(display) >= 14) {
 		return index.snps;
+	} else if (display->platform.elkhartlake) {
+		return index.icl;
 	}
 
 	return 0;
