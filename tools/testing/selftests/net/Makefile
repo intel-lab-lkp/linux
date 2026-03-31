@@ -42,6 +42,7 @@ TEST_PROGS := \
 	gre_ipv6_lladdr.sh \
 	icmp.sh \
 	icmp_redirect.sh \
+	ipv4_addr_lookup_test.sh \
 	io_uring_zerocopy_tx.sh \
 	ioam6.sh \
 	ip6_gre_headroom.sh \
@@ -127,6 +128,8 @@ TEST_PROGS := \
 # end of TEST_PROGS
 
 TEST_PROGS_EXTENDED := \
+	ipv4_addr_lookup_test_virtme.sh \
+	ipv4_addr_lookup_trace.bt \
 	xfrm_policy_add_speed.sh \
 # end of TEST_PROGS_EXTENDED
 
@@ -135,6 +138,7 @@ TEST_GEN_FILES := \
 	cmsg_sender \
 	fin_ack_lat \
 	hwtstamp_config \
+	ipv4_addr_lookup_udp_sender \
 	io_uring_zerocopy_tx \
 	ioam6_parser \
 	ip_defrag \

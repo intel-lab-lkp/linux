@@ -1,0 +1,178 @@
+#!/usr/bin/env bpftrace
+/*
+ * ipv4_addr_lookup_trace.bt - Trace inet_addr_lst rhltable code paths
+ * SPDX-License-Identifier: GPL-2.0
+ *
+ * Run alongside ipv4_addr_lookup_test.sh to verify that the correct
+ * kernel functions are exercised and to capture per-call overhead.
+ *
+ * Traces:
+ *  - inet_lookup_ifaddr_rcu  : hot lookup (latency histogram)
+ *  - __ip_dev_find           : full lookup incl. FIB fallback
+ *  - inet_hash_remove        : hash remove path
+ *  - rhashtable_insert_slow  : slow-path insert (fast path is inline)
+ *  - rht_deferred_worker     : resize worker (expand / shrink)
+ *  - bucket_table_alloc      : new table allocation (reveals new size)
+ *  - rhashtable_rehash_table : actual data migration between tables
+ *
+ * Usage:
+ *   bpftrace ipv4_addr_lookup_trace.bt          # in one terminal
+ *   ./ipv4_addr_lookup_test.sh --num-addrs 500  # in another
+ *   # Ctrl-C the bpftrace when test finishes
+ */
+
+BEGIN
+{
+	printf("Tracing inet_addr_lst rhltable paths... Ctrl-C to stop.\n\n");
+	@phase = "idle";
+}
+
+/* ------------------------------------------------------------------ */
+/* Hot lookup path: inet_lookup_ifaddr_rcu (called from __ip_dev_find) */
+/* ------------------------------------------------------------------ */
+
+kprobe:inet_lookup_ifaddr_rcu
+{
+	@lookup_entry[tid] = nsecs;
+}
+
+kretprobe:inet_lookup_ifaddr_rcu
+/@lookup_entry[tid]/
+{
+	$dt = nsecs - @lookup_entry[tid];
+	@lookup_ns = hist($dt);
+	@lookup_count++;
+	delete(@lookup_entry[tid]);
+}
+
+/* __ip_dev_find: full overhead including FIB fallback path */
+
+kprobe:__ip_dev_find
+{
+	@ipdev_entry[tid] = nsecs;
+}
+
+kretprobe:__ip_dev_find
+/@ipdev_entry[tid]/
+{
+	$dt = nsecs - @ipdev_entry[tid];
+	@ipdev_ns = hist($dt);
+	@ipdev_count++;
+	delete(@ipdev_entry[tid]);
+}
+
+/* ------------------------------------------------------------------ */
+/* Insert / Remove                                                     */
+/* ------------------------------------------------------------------ */
+
+/* rhashtable_insert_slow is the non-inline slow path called on insert */
+kprobe:rhashtable_insert_slow
+{
+	@insert_slow++;
+}
+
+/* inet_hash_remove is static but not inlined in this build */
+kprobe:inet_hash_remove
+{
+	@remove_count++;
+}
+
+/* ------------------------------------------------------------------ */
+/* Resize events                                                       */
+/* ------------------------------------------------------------------ */
+
+/* rht_deferred_worker: the workqueue callback that drives resize */
+kprobe:rht_deferred_worker
+{
+	@resize_wq_entry[tid] = nsecs;
+	@resize_events++;
+	printf(">>> RESIZE #%lld: deferred_worker started\n",
+	       @resize_events);
+}
+
+kretprobe:rht_deferred_worker
+/@resize_wq_entry[tid]/
+{
+	$dt = nsecs - @resize_wq_entry[tid];
+	@resize_wq_ns = hist($dt);
+	printf("    RESIZE: deferred_worker done in %lld us\n", $dt / 1000);
+	delete(@resize_wq_entry[tid]);
+}
+
+/* bucket_table_alloc: reveals the NEW table size being allocated.
+ * Signature: bucket_table_alloc(struct rhashtable *ht, size_t nbuckets, gfp_t)
+ * arg1 = nbuckets = new table size.
+ */
+kprobe:bucket_table_alloc*
+{
+	@new_tbl_size = arg1;
+	@bucket_allocs++;
+	printf("    RESIZE: bucket_table_alloc nbuckets=%lld\n", arg1);
+	print(kstack(6));
+}
+
+/* rhashtable_rehash_table: actual entry migration between old/new table */
+kprobe:rhashtable_rehash_table
+{
+	@rehash_entry[tid] = nsecs;
+}
+
+kretprobe:rhashtable_rehash_table
+/@rehash_entry[tid]/
+{
+	$dt = nsecs - @rehash_entry[tid];
+	@rehash_ns = hist($dt);
+	@rehash_count++;
+	printf("    RESIZE: rehash_table done in %lld us\n", $dt / 1000);
+	delete(@rehash_entry[tid]);
+}
+
+/* ------------------------------------------------------------------ */
+/* Summary on Ctrl-C                                                   */
+/* ------------------------------------------------------------------ */
+
+END
+{
+	printf("\n");
+	printf("========================================================\n");
+	printf("  inet_addr_lst rhltable trace summary\n");
+	printf("========================================================\n");
+
+	printf("\n--- Call counts ---\n");
+	printf("  inet_lookup_ifaddr_rcu : %8lld  (hot lookup)\n",
+	       @lookup_count);
+	printf("  __ip_dev_find          : %8lld  (full lookup)\n",
+	       @ipdev_count);
+	printf("  rhashtable_insert_slow : %8lld  (insert slow path)\n",
+	       @insert_slow);
+	printf("  inet_hash_remove       : %8lld  (remove)\n",
+	       @remove_count);
+
+	printf("\n--- Resize activity ---\n");
+	printf("  rht_deferred_worker    : %8lld  (resize worker runs)\n",
+	       @resize_events);
+	printf("  bucket_table_alloc     : %8lld  (table allocations)\n",
+	       @bucket_allocs);
+	printf("  rhashtable_rehash      : %8lld  (rehash completions)\n",
+	       @rehash_count);
+
+	printf("\n--- inet_lookup_ifaddr_rcu latency (ns) ---\n");
+	print(@lookup_ns);
+
+	printf("\n--- __ip_dev_find latency (ns) ---\n");
+	print(@ipdev_ns);
+
+	printf("\n--- rht_deferred_worker duration (ns) ---\n");
+	print(@resize_wq_ns);
+
+	printf("\n--- rhashtable_rehash_table duration (ns) ---\n");
+	print(@rehash_ns);
+
+	/* clean up maps */
+	clear(@lookup_entry);
+	clear(@ipdev_entry);
+	clear(@resize_wq_entry);
+	clear(@rehash_entry);
+	clear(@new_tbl_size);
+	clear(@phase);
+}
