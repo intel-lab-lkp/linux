@@ -1353,7 +1353,7 @@ static int mlx5_ib_query_device(struct ib_device *ibdev,
 			fill_esw_mgr_reg_c0(mdev, &resp);
 	}
 
-	if (uhw_outlen) {
+	if (uhw) {
 		err = ib_copy_to_udata(uhw, &resp, resp.response_length);
 
 		if (err)
