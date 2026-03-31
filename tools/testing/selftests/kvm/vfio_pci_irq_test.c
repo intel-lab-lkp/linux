@@ -186,7 +186,7 @@ static void send_msi(struct vfio_pci_device *device, bool use_device_msi, int ms
 
 static void help(const char *name)
 {
-	printf("Usage: %s [-a] [-b] [-d] [-e] [-h] [-i nr_irqs] [-n] [-p] segment:bus:device.function\n",
+	printf("Usage: %s [-a] [-b] [-d] [-e] [-h] [-i nr_irqs] [-n] [-p] [-v nr_vcpus] segment:bus:device.function\n",
 	       name);
 	printf("\n");
 	printf("  -a: Randomly affinitize the device IRQ to different CPUs\n"
@@ -200,6 +200,8 @@ static void help(const char *name)
 	printf("  -n: Route some of the device interrupts to be delivered as\n"
 	       "      an NMI into the guest.\n");
 	printf("  -p: Pin vCPU threads to random pCPUs throughout the test.\n");
+	printf("  -v: Set the number of vCPUs that the test should create.\n"
+	       "      Interrupts will be round-robined among vCPUs.\n");
 	printf("\n");
 	exit(KSFT_FAIL);
 }
@@ -242,7 +244,7 @@ int main(int argc, char **argv)
 
 	device_bdf = vfio_selftests_get_bdf(&argc, argv);
 
-	while ((c = getopt(argc, argv, "abdehi:np")) != -1) {
+	while ((c = getopt(argc, argv, "abdehi:npv:")) != -1) {
 		switch (c) {
 		case 'a':
 			irq_affinity = true;
@@ -264,6 +266,9 @@ int main(int argc, char **argv)
 			break;
 		case 'p':
 			pin_vcpus = true;
+			break;
+		case 'v':
+			nr_vcpus = atoi_positive("nr_vcpus", optarg);
 			break;
 		case 'h':
 		default:
