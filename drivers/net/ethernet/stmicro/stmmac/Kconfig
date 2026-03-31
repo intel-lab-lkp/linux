@@ -20,7 +20,6 @@ if STMMAC_ETH
 config STMMAC_SELFTESTS
 	bool "Support for STMMAC Selftests"
 	depends on INET
-	depends on STMMAC_ETH
 	default n
 	help
 	  This adds support for STMMAC Selftests using ethtool. Enable this
@@ -29,7 +28,6 @@ config STMMAC_SELFTESTS
 
 config STMMAC_PLATFORM
 	tristate "STMMAC Platform bus support"
-	depends on STMMAC_ETH
 	select MFD_SYSCON
 	default y
 	help
@@ -53,7 +51,6 @@ config DWMAC_DWC_QOS_ETH
 
 config DWMAC_GENERIC
 	tristate "Generic driver for DWMAC"
-	default STMMAC_PLATFORM
 	help
 	  Generic DWMAC driver for platforms that don't require any
 	  platform specific code to function or is using platform
@@ -312,7 +309,6 @@ config DWMAC_IMX8
 config DWMAC_INTEL_PLAT
 	tristate "Intel dwmac support"
 	depends on OF && COMMON_CLK
-	depends on STMMAC_ETH
 	help
 	  Support for ethernet controllers on Intel SoCs
 
@@ -347,7 +343,7 @@ config DWMAC_VISCONTI
 	help
 	  Support for ethernet controller on Visconti SoCs.
 
-endif
+endif # STMMAC_PLATFORM
 
 config STMMAC_LIBPCI
 	tristate
@@ -357,7 +353,7 @@ config STMMAC_LIBPCI
 config DWMAC_INTEL
 	tristate "Intel GMAC support"
 	default X86
-	depends on X86 && STMMAC_ETH && PCI
+	depends on X86 && PCI
 	depends on COMMON_CLK
 	depends on ACPI
 	help
@@ -396,4 +392,4 @@ config STMMAC_PCI
 	  If you have a controller with this interface, say Y or M here.
 
 	  If unsure, say N.
-endif
+endif # STMMAC_ETH
