@@ -22,6 +22,8 @@ static bool guest_ready_for_irqs[KVM_MAX_VCPUS];
 static bool guest_received_irq[KVM_MAX_VCPUS];
 static bool guest_received_nmi[KVM_MAX_VCPUS];
 
+static pid_t vcpu_tids[KVM_MAX_VCPUS];
+
 #define TIMEOUT_NS (2ULL * 1000 * 1000 * 1000)
 
 static u32 guest_get_vcpu_id(void)
@@ -64,10 +66,62 @@ static void *vcpu_thread_main(void *arg)
 	struct kvm_vcpu *vcpu = arg;
 	struct ucall uc;
 
+	WRITE_ONCE(vcpu_tids[vcpu->id], syscall(__NR_gettid));
+
 	vcpu_run(vcpu);
 	TEST_ASSERT_EQ(UCALL_DONE, get_ucall(vcpu, &uc));
 
 	return NULL;
+}
+
+static int get_cpu(struct kvm_vcpu *vcpu)
+{
+	pid_t tid = vcpu_tids[vcpu->id];
+	cpu_set_t cpus;
+	int cpu = -1;
+	int i;
+
+	kvm_sched_getaffinity(tid, sizeof(cpus), &cpus);
+
+	for (i = 0; i < get_nprocs(); i++) {
+		if (!CPU_ISSET(i, &cpus))
+			continue;
+
+		if (cpu != -1) {
+			cpu = i;
+		} else {
+			/* vCPU is pinned to multiple CPUs */
+			return -1;
+		}
+	}
+
+	return cpu;
+}
+
+static void pin_vcpu_threads(int nr_vcpus, int start_cpu, cpu_set_t *available_cpus)
+{
+	const size_t size = sizeof(cpu_set_t);
+	int nr_cpus, cpu, vcpu_index = 0;
+	cpu_set_t target_cpu;
+
+	nr_cpus = get_nprocs();
+	CPU_ZERO(&target_cpu);
+
+	for (cpu = start_cpu;; cpu = (cpu + 1) % nr_cpus) {
+		if (vcpu_index == nr_vcpus)
+			break;
+
+		if (!CPU_ISSET(cpu, available_cpus))
+			continue;
+
+		CPU_SET(cpu, &target_cpu);
+
+		kvm_sched_setaffinity(vcpu_tids[vcpu_index], size, &target_cpu);
+
+		CPU_CLR(cpu, &target_cpu);
+
+		vcpu_index++;
+	}
 }
 
 static void kvm_clear_gsi_routes(struct kvm_vm *vm)
@@ -132,7 +186,7 @@ static void send_msi(struct vfio_pci_device *device, bool use_device_msi, int ms
 
 static void help(const char *name)
 {
-	printf("Usage: %s [-a] [-b] [-d] [-e] [-h] [-i nr_irqs] [-n] segment:bus:device.function\n",
+	printf("Usage: %s [-a] [-b] [-d] [-e] [-h] [-i nr_irqs] [-n] [-p] segment:bus:device.function\n",
 	       name);
 	printf("\n");
 	printf("  -a: Randomly affinitize the device IRQ to different CPUs\n"
@@ -145,6 +199,7 @@ static void help(const char *name)
 	printf("  -i: The number of IRQs to generate during the test.\n");
 	printf("  -n: Route some of the device interrupts to be delivered as\n"
 	       "      an NMI into the guest.\n");
+	printf("  -p: Pin vCPU threads to random pCPUs throughout the test.\n");
 	printf("\n");
 	exit(KSFT_FAIL);
 }
@@ -167,7 +222,7 @@ int main(int argc, char **argv)
 	u8 vector = 32 + rand() % (UINT8_MAX - 32);
 
 	/* Test configuration (overridable by command line flags). */
-	bool use_device_msi = false, irq_affinity = false;
+	bool use_device_msi = false, irq_affinity = false, pin_vcpus = false;
 	bool empty = false, nmi = false;
 	int nr_irqs = 1000;
 	int nr_vcpus = 1;
@@ -177,6 +232,7 @@ int main(int argc, char **argv)
 	u64 irq_count, pin_count, piw_count;
 	struct vfio_pci_device *device;
 	struct iommu *iommu;
+	cpu_set_t available_cpus;
 	const char *device_bdf;
 	FILE *irq_affinity_fp;
 	int i, j, c, msi, irq;
@@ -186,7 +242,7 @@ int main(int argc, char **argv)
 
 	device_bdf = vfio_selftests_get_bdf(&argc, argv);
 
-	while ((c = getopt(argc, argv, "abdehi:n")) != -1) {
+	while ((c = getopt(argc, argv, "abdehi:np")) != -1) {
 		switch (c) {
 		case 'a':
 			irq_affinity = true;
@@ -205,6 +261,9 @@ int main(int argc, char **argv)
 			break;
 		case 'n':
 			nmi = true;
+			break;
+		case 'p':
+			pin_vcpus = true;
 			break;
 		case 'h':
 		default:
@@ -243,6 +302,15 @@ int main(int argc, char **argv)
 			continue;
 	}
 
+	if (pin_vcpus) {
+		kvm_sched_getaffinity(vcpu_tids[0], sizeof(available_cpus), &available_cpus);
+
+		if (nr_vcpus > CPU_COUNT(&available_cpus)) {
+			printf("There are more vCPUs than pCPUs; refusing to pin.\n");
+			pin_vcpus = false;
+		}
+	}
+
 	if (irq_affinity) {
 		char path[PATH_MAX];
 
@@ -272,6 +340,9 @@ int main(int argc, char **argv)
 			TEST_ASSERT(ret > 0, "Failed to affinitize IRQ-%d to CPU %d", irq, irq_cpu);
 		}
 
+		if (pin_vcpus && vcpu->id == 0)
+			pin_vcpu_threads(nr_vcpus, rand() % get_nprocs(), &available_cpus);
+
 		for (j = 0; j < nr_vcpus; j++) {
 			TEST_ASSERT(
 				!READ_FROM_GUEST(vm, guest_received_irq[vcpu->id]),
@@ -300,6 +371,8 @@ int main(int argc, char **argv)
 				printf("  do_empty: %d\n", do_empty);
 				if (irq_affinity)
 					printf("  irq_cpu: %d\n", irq_cpu);
+				if (pin_vcpus)
+					printf("  vcpu_cpu: %d\n", get_cpu(vcpu));
 
 				TEST_FAIL("vCPU never received IRQ!\n");
 			}
