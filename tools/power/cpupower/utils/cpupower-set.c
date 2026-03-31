@@ -31,6 +31,24 @@ static void print_wrong_arg_exit(void)
 	exit(EXIT_FAILURE);
 }
 
+/* Safe integer parsing with range validation. Returns 0 on success,
+ * -EINVAL on parse error, -ERANGE if value is outside [min, max].
+ */
+static int parse_int_range(const char *arg, int min, int max, int *out)
+{
+	char *end = NULL;
+	long val;
+
+	errno = 0;
+	val = strtol(arg, &end, 10);
+	if (errno || end == arg || *end != '\0')
+		return -EINVAL;
+	if (val < min || val > max)
+		return -ERANGE;
+	*out = (int)val;
+	return 0;
+}
+
 int cmd_set(int argc, char **argv)
 {
 	extern char *optarg;
@@ -69,10 +87,8 @@ int cmd_set(int argc, char **argv)
 		case 'b':
 			if (params.perf_bias)
 				print_wrong_arg_exit();
-			perf_bias = atoi(optarg);
-			if (perf_bias < 0 || perf_bias > 15) {
-				printf(_("--perf-bias param out "
-					 "of range [0-%d]\n"), 15);
+			if (parse_int_range(optarg, 0, 15, &perf_bias)) {
+				fprintf(stderr, _("--perf-bias param out of range [0-%d]\n"), 15);
 				print_wrong_arg_exit();
 			}
 			params.perf_bias = 1;
@@ -100,9 +116,8 @@ int cmd_set(int argc, char **argv)
 		case 't':
 			if (params.turbo_boost)
 				print_wrong_arg_exit();
-			turbo_boost = atoi(optarg);
-			if (turbo_boost < 0 || turbo_boost > 1) {
-				printf("--turbo-boost param out of range [0-1]\n");
+			if (parse_int_range(optarg, 0, 1, &turbo_boost)) {
+				fprintf(stderr, "--turbo-boost param out of range [0-1]\n");
 				print_wrong_arg_exit();
 			}
 			params.turbo_boost = 1;
