@@ -474,6 +474,12 @@ static int txgbe_open(struct net_device *netdev)
 	if (err)
 		goto err_free_irq;
 
+	if (wx->phydev) {
+		err = phylink_connect_phy(wx->phylink, wx->phydev);
+		if (err)
+			goto err_free_irq;
+	}
+
 	wx_ptp_init(wx);
 
 	txgbe_up_complete(wx);
@@ -527,6 +533,8 @@ static int txgbe_close(struct net_device *netdev)
 	wx_free_irq(wx);
 	txgbe_free_misc_irq(wx->priv);
 	wx_free_resources(wx);
+	if (wx->phydev)
+		phylink_disconnect_phy(wx->phylink);
 	txgbe_fdir_filter_exit(wx);
 	wx_control_hw(wx, false);
 

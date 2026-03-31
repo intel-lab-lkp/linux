@@ -294,16 +294,6 @@ static int txgbe_phylink_init(struct txgbe *txgbe)
 	if (IS_ERR(phylink))
 		return PTR_ERR(phylink);
 
-	if (wx->phydev) {
-		int ret;
-
-		ret = phylink_connect_phy(phylink, wx->phydev);
-		if (ret) {
-			phylink_destroy(phylink);
-			return ret;
-		}
-	}
-
 	wx->phylink = phylink;
 
 	return 0;
@@ -657,7 +647,6 @@ void txgbe_remove_phy(struct txgbe *txgbe)
 		return;
 	case wx_mac_sp:
 		if (txgbe->wx->media_type == wx_media_copper) {
-			phylink_disconnect_phy(txgbe->wx->phylink);
 			phylink_destroy(txgbe->wx->phylink);
 			return;
 		}
