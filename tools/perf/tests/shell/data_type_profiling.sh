@@ -14,18 +14,26 @@ testprogs=("perf test -w code_with_type" "perf test -w datasym")
 err=0
 perfdata=$(mktemp /tmp/__perf_test.perf.data.XXXXX)
 perfout=$(mktemp /tmp/__perf_test.perf.out.XXXXX)
+perferr=$(mktemp /tmp/__perf_test.perf.err.XXXXX)
 
 cleanup() {
-  rm -rf "${perfdata}" "${perfout}"
+  rm -rf "${perfdata}" "${perfout}" "${perferr}"
   rm -rf "${perfdata}".old
 
   trap - EXIT TERM INT
 }
 
 trap_cleanup() {
-  echo "Unexpected signal in ${FUNCNAME[1]}"
+  if cat "${perferr}" | grep -q 'failed: no PMU supports the memory events'
+  then
+    echo "${mode} annotate [Skip: perf mem record] not supported"
+    rc=2
+  else
+    echo "Unexpected signal in ${FUNCNAME[1]}"
+    rc=1
+  fi
   cleanup
-  exit 1
+  exit $rc
 }
 trap trap_cleanup EXIT TERM INT
 
@@ -50,12 +58,18 @@ test_basic_annotate() {
 
   if [ "x${mode}" == "xBasic" ]
   then
-    perf mem record -o "${perfdata}" ${testprogs[$index]} 2> /dev/null
+    perf mem record -o "${perfdata}" ${testprogs[$index]} 2> "${perferr}"
   else
-    perf mem record -o - ${testprogs[$index]} 2> /dev/null > "${perfdata}"
+    perf mem record -o - ${testprogs[$index]} 2> "${perferr}" > "${perfdata}"
   fi
   if [ "x$?" != "x0" ]
   then
+    if cat "${perferr}" | grep -q 'failed: no PMU supports the memory events'
+    then
+      echo "${mode} annotate [Skip: perf mem record] not supported"
+      err=2
+      return
+    fi
     echo "${mode} annotate [Failed: perf record]"
     err=1
     return
