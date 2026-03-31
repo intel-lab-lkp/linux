@@ -200,6 +200,7 @@ int xp_assign_dev(struct xsk_buff_pool *pool,
 		goto err_unreg_pool;
 	}
 
+	pool->umem->zc = true;
 	if (netdev->xdp_zc_max_segs == 1 && (flags & XDP_USE_SG)) {
 		err = -EOPNOTSUPP;
 		goto err_unreg_pool;
@@ -224,13 +225,14 @@ int xp_assign_dev(struct xsk_buff_pool *pool,
 		err = -EINVAL;
 		goto err_unreg_xsk;
 	}
-	pool->umem->zc = true;
 	pool->xdp_zc_max_segs = netdev->xdp_zc_max_segs;
 	return 0;
 
 err_unreg_xsk:
 	xp_disable_drv_zc(pool);
 err_unreg_pool:
+	if (refcount_read(&pool->umem->users) == 1)
+		pool->umem->zc = false;
 	if (!force_zc)
 		err = 0; /* fallback to copy mode */
 	if (err) {
