@@ -563,22 +563,9 @@ static noinstr int microcode_update_handler(void *unused)
  * path which must be NMI safe until the primary thread completed the
  * update.
  */
-bool noinstr microcode_nmi_handler(void)
+static noinstr int microcode_nmi_handler(void *data)
 {
-	if (!raw_cpu_read(ucode_ctrl.nmi_enabled))
-		return false;
-
-	raw_cpu_write(ucode_ctrl.nmi_enabled, false);
-	return microcode_update_handler(NULL) == 0;
-}
-
-static int stop_cpu_in_nmi(void *unused)
-{
-	/* Enable the NMI handler and raise NMI */
-	this_cpu_write(ucode_ctrl.nmi_enabled, true);
-	apic->send_IPI(smp_processor_id(), NMI_VECTOR);
-
-	return 0;
+	return microcode_update_handler(data);
 }
 
 static int load_late_stop_cpus(bool is_safe)
@@ -616,7 +603,7 @@ static int load_late_stop_cpus(bool is_safe)
 
 	if (microcode_ops->use_nmi) {
 		static_branch_enable_cpuslocked(&microcode_nmi_handler_enable);
-		stop_machine_cpuslocked(stop_cpu_in_nmi, NULL, cpu_online_mask);
+		stop_machine_nmi_cpuslocked(microcode_nmi_handler, NULL, cpu_online_mask);
 		static_branch_disable_cpuslocked(&microcode_nmi_handler_enable);
 	} else {
 		stop_machine_cpuslocked(microcode_update_handler, NULL, cpu_online_mask);
