@@ -1811,7 +1811,8 @@ perf_event_nmi_handler(unsigned int cmd, struct pt_regs *regs)
 	ret = static_call(x86_pmu_handle_irq)(regs);
 	finish_clock = sched_clock();
 
-	perf_sample_event_took(finish_clock - start_clock);
+	if (ret)
+		perf_sample_event_took(finish_clock - start_clock);
 
 	return ret;
 }
