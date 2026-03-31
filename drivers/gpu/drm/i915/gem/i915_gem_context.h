@@ -90,6 +90,24 @@ static inline void i915_gem_context_clear_persistence(struct i915_gem_context *c
 }
 
 static inline bool
+i915_gem_context_wa_22013059131_optout(const struct i915_gem_context *ctx)
+{
+	return test_bit(UCONTEXT_WA_22013059131, &ctx->user_flags);
+}
+
+static inline void
+i915_gem_context_set_wa_22013059131_optout(struct i915_gem_context *ctx)
+{
+	set_bit(UCONTEXT_WA_22013059131, &ctx->user_flags);
+}
+
+static inline void
+i915_gem_context_clear_wa_22013059131_optout(struct i915_gem_context *ctx)
+{
+	clear_bit(UCONTEXT_WA_22013059131, &ctx->user_flags);
+}
+
+static inline bool
 i915_gem_context_user_engines(const struct i915_gem_context *ctx)
 {
 	return test_bit(CONTEXT_USER_ENGINES, &ctx->flags);
