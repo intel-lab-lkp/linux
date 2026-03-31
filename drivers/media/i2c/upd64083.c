@@ -77,10 +77,21 @@ static u8 upd64083_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
 	u8 buf[7];
+	int ret;
 
 	if (reg >= sizeof(buf))
 		return 0xff;
-	i2c_master_recv(client, buf, sizeof(buf));
+
+	ret = i2c_master_recv(client, buf, sizeof(buf));
+	if (ret < 0) {
+		v4l2_err(sd, "i2c read failed: %d\n", ret);
+		return 0xff;
+	}
+	if (ret != sizeof(buf)) {
+		v4l2_err(sd, "i2c read incomplete: %d bytes\n", ret);
+		return 0xff;
+	}
+
 	return buf[reg];
 }
 #endif
@@ -123,8 +134,18 @@ static int upd64083_log_status(struct v4l2_subdev *sd)
 {
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
 	u8 buf[7];
+	int ret;
 
-	i2c_master_recv(client, buf, 7);
+	ret = i2c_master_recv(client, buf, 7);
+	if (ret < 0) {
+		v4l2_err(sd, "i2c read failed: %d\n", ret);
+		return ret;
+	}
+	if (ret != sizeof(buf)) {
+		v4l2_err(sd, "i2c read incomplete: %d bytes\n", ret);
+		return -EIO;
+	}
+
 	v4l2_info(sd, "Status: SA00=%02x SA01=%02x SA02=%02x SA03=%02x "
 		      "SA04=%02x SA05=%02x SA06=%02x\n",
 		buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6]);
