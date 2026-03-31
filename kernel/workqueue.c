@@ -1852,8 +1852,20 @@ static void unplug_oldest_pwq(struct workqueue_struct *wq)
 	raw_spin_lock_irq(&pwq->pool->lock);
 	if (pwq->plugged) {
 		pwq->plugged = false;
-		if (pwq_activate_first_inactive(pwq, true))
+		if (pwq_activate_first_inactive(pwq, true)) {
+			if (!list_empty(&pwq->inactive_works)) {
+				struct worker_pool *pool = pwq->pool;
+				struct wq_node_nr_active *nna =
+					wq_node_nr_active(wq, pool->node);
+
+				raw_spin_lock(&nna->lock);
+				if (list_empty(&pwq->pending_node))
+					list_add_tail(&pwq->pending_node,
+						      &nna->pending_pwqs);
+				raw_spin_unlock(&nna->lock);
+			}
 			kick_pool(pwq->pool);
+		}
 	}
 	raw_spin_unlock_irq(&pwq->pool->lock);
 }
