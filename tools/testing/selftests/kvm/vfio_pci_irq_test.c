@@ -88,9 +88,11 @@ static void send_msi(struct vfio_pci_device *device, int msi)
 
 static void help(const char *name)
 {
-	printf("Usage: %s [-h] segment:bus:device.function\n",
+	printf("Usage: %s [-a] [-h] segment:bus:device.function\n",
 	       name);
 	printf("\n");
+	printf("  -a: Randomly affinitize the device IRQ to different CPUs\n"
+	       "      throughout the test.\n");
 	printf("\n");
 	exit(KSFT_FAIL);
 }
@@ -113,6 +115,7 @@ int main(int argc, char **argv)
 	u8 vector = 32 + rand() % (UINT8_MAX - 32);
 
 	/* Test configuration (overridable by command line flags). */
+	bool irq_affinity = false;
 	int nr_irqs = 1000;
 	int nr_vcpus = 1;
 
@@ -122,13 +125,19 @@ int main(int argc, char **argv)
 	struct vfio_pci_device *device;
 	struct iommu *iommu;
 	const char *device_bdf;
+	FILE *irq_affinity_fp;
 	int i, j, c, msi, irq;
 	struct kvm_vm *vm;
+	int irq_cpu;
+	int ret;
 
 	device_bdf = vfio_selftests_get_bdf(&argc, argv);
 
-	while ((c = getopt(argc, argv, "h")) != -1) {
+	while ((c = getopt(argc, argv, "ah")) != -1) {
 		switch (c) {
+		case 'a':
+			irq_affinity = true;
+			break;
 		case 'h':
 		default:
 			help(argv[0]);
@@ -163,6 +172,14 @@ int main(int argc, char **argv)
 			continue;
 	}
 
+	if (irq_affinity) {
+		char path[PATH_MAX];
+
+		snprintf(path, sizeof(path), "/proc/irq/%d/smp_affinity_list", irq);
+		irq_affinity_fp = fopen(path, "w");
+		TEST_ASSERT(irq_affinity_fp, "fopen(%s) failed", path);
+	}
+
 	/* Set a consistent seed so that test are repeatable. */
 	srand(0);
 
@@ -171,6 +188,13 @@ int main(int argc, char **argv)
 		struct timespec start;
 
 		kvm_route_msi(vm, gsi, vcpu, vector);
+
+		if (irq_affinity && vcpu->id == 0) {
+			irq_cpu = rand() % get_nprocs();
+
+			ret = fprintf(irq_affinity_fp, "%d\n", irq_cpu);
+			TEST_ASSERT(ret > 0, "Failed to affinitize IRQ-%d to CPU %d", irq, irq_cpu);
+		}
 
 		for (j = 0; j < nr_vcpus; j++) {
 			TEST_ASSERT(
@@ -189,6 +213,8 @@ int main(int argc, char **argv)
 			if (timespec_to_ns(timespec_elapsed(start)) > TIMEOUT_NS) {
 				printf("Timeout waiting for interrupt!\n");
 				printf("  vCPU: %d\n", vcpu->id);
+				if (irq_affinity)
+					printf("  irq_cpu: %d\n", irq_cpu);
 
 				TEST_FAIL("vCPU never received IRQ!\n");
 			}
@@ -202,6 +228,9 @@ int main(int argc, char **argv)
 	for (i = 0; i < nr_vcpus; i++) {
 		pthread_join(vcpu_threads[i], NULL);
 	}
+
+	if (irq_affinity)
+		fclose(irq_affinity_fp);
 
 	printf("Host interrupts handled:\n");
 	printf("  IRQ-%d: %lu\n", irq, get_irq_count(irq) - irq_count);
