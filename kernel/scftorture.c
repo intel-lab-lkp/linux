@@ -364,8 +364,6 @@ static void scftorture_invoke_one(struct scf_statistics *scfp, struct torture_ra
 	}
 	if (use_cpus_read_lock)
 		cpus_read_lock();
-	else
-		preempt_disable();
 	switch (scfsp->scfs_prim) {
 	case SCF_PRIM_RESCHED:
 		if (IS_BUILTIN(CONFIG_SCF_TORTURE_TEST)) {
@@ -411,13 +409,10 @@ static void scftorture_invoke_one(struct scf_statistics *scfp, struct torture_ra
 		if (!ret) {
 			if (use_cpus_read_lock)
 				cpus_read_unlock();
-			else
-				preempt_enable();
+
 			wait_for_completion(&scfcp->scfc_completion);
 			if (use_cpus_read_lock)
 				cpus_read_lock();
-			else
-				preempt_disable();
 		} else {
 			scfp->n_single_rpc_ofl++;
 			scf_add_to_free_list(scfcp);
@@ -463,8 +458,6 @@ static void scftorture_invoke_one(struct scf_statistics *scfp, struct torture_ra
 	}
 	if (use_cpus_read_lock)
 		cpus_read_unlock();
-	else
-		preempt_enable();
 	if (allocfail)
 		schedule_timeout_idle((1 + longwait) * HZ);  // Let no-wait handlers complete.
 	else if (!(torture_random(trsp) & 0xfff))
