@@ -185,13 +185,18 @@ static inline u32 get_slot_comp_priority(struct zram *zram, u32 index)
 	return prio & ZRAM_COMP_PRIORITY_MASK;
 }
 
+static void update_slot_ac_time(struct zram *zram, u32 index)
+{
+#ifdef CONFIG_ZRAM_TRACK_ENTRY_ACTIME
+	zram->table[index].attr.ac_time = (u32)ktime_get_boottime_seconds();
+#endif
+}
+
 static void mark_slot_accessed(struct zram *zram, u32 index)
 {
 	clear_slot_flag(zram, index, ZRAM_IDLE);
 	clear_slot_flag(zram, index, ZRAM_PP_SLOT);
-#ifdef CONFIG_ZRAM_TRACK_ENTRY_ACTIME
-	zram->table[index].attr.ac_time = (u32)ktime_get_boottime_seconds();
-#endif
+	update_slot_ac_time(zram, index);
 }
 
 static inline void update_used_max(struct zram *zram, const unsigned long pages)
@@ -952,6 +957,7 @@ static int zram_writeback_complete(struct zram *zram, struct zram_wb_req *req)
 	zs_free(zram->mem_pool, get_slot_handle(zram, index));
 	set_slot_handle(zram, index, req->blk_idx);
 	set_slot_flag(zram, index, ZRAM_WB);
+	update_slot_ac_time(zram, index);
 
 out:
 	slot_unlock(zram, index);
