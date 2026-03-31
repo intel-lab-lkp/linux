@@ -86,6 +86,14 @@ __cacheline_aligned_in_smp DEFINE_SEQLOCK(rename_lock);
 
 EXPORT_SYMBOL(rename_lock);
 
+static long dsm_zero = 0;
+static long dsm_max = ULONG_MAX/2;
+
+/* Highwater mark for number of stale entries in a directory (loosely
+ * measured by parent dentry reference count).
+ */
+static unsigned long dir_stale_max __read_mostly = 500000;
+
 static struct kmem_cache *__dentry_cache __ro_after_init;
 #define dentry_cache runtime_const_ptr(__dentry_cache)
 
@@ -215,6 +223,15 @@ static const struct ctl_table fs_dcache_sysctls[] = {
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_ONE,
+	},
+	{
+		.procname	= "dir-stale-max",
+		.data		= &dir_stale_max,
+		.maxlen		= sizeof(dir_stale_max),
+		.mode		= 0644,
+		.proc_handler	= proc_doulongvec_minmax,
+		.extra1		= &dsm_zero,
+		.extra2		= &dsm_max,
 	},
 };
 
@@ -767,6 +784,17 @@ static inline bool retain_dentry(struct dentry *dentry, bool locked)
 	// Explicitly told not to bother
 	if (unlikely(d_flags & DCACHE_DONTCACHE))
 		return false;
+
+	if (dir_stale_max) {
+		unsigned long p_count;
+
+		// If the parent reference count is higher than some large value
+		// its dominated by the contribution of its children so there's
+		// no benefit caching the dentry over re-allocating it.
+		p_count = READ_ONCE(dentry->d_parent->d_lockref.count);
+		if (unlikely(p_count > dir_stale_max))
+			return false;
+	}
 
 	// At this point it looks like we ought to keep it.  We also might
 	// need to do something - put it on LRU if it wasn't there already

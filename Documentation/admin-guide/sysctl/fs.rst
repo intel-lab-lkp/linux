@@ -75,6 +75,13 @@ negative dentries which do not map to any files. Instead,
 they help speeding up rejection of non-existing files provided
 by the users.
 
+dir-stale-max
+-------------
+
+Used to limit the number of stale child dentries retained in a
+directory before the benifit of caching the dentry is negated by
+the cost of traversing hash buckets during lookups or enumerating
+the directory children. Initially set to 500000.
 
 file-max & file-nr
 ------------------
