@@ -15,6 +15,7 @@
 
 #include <libvfio.h>
 
+static bool x2apic = true;
 static bool done;
 static bool block;
 
@@ -28,14 +29,20 @@ static pid_t vcpu_tids[KVM_MAX_VCPUS];
 
 static u32 guest_get_vcpu_id(void)
 {
-	return x2apic_read_reg(APIC_ID);
+	if (x2apic)
+		return x2apic_read_reg(APIC_ID);
+	else
+		return xapic_read_reg(APIC_ID) >> 24;
 }
 
 static void guest_irq_handler(struct ex_regs *regs)
 {
 	WRITE_ONCE(guest_received_irq[guest_get_vcpu_id()], true);
 
-	x2apic_write_reg(APIC_EOI, 0);
+	if (x2apic)
+		x2apic_write_reg(APIC_EOI, 0);
+	else
+		xapic_write_reg(APIC_EOI, 0);
 }
 
 static void guest_nmi_handler(struct ex_regs *regs)
@@ -45,7 +52,10 @@ static void guest_nmi_handler(struct ex_regs *regs)
 
 static void guest_code(void)
 {
-	x2apic_enable();
+	if (x2apic)
+		x2apic_enable();
+	else
+		xapic_enable();
 
 	sti_nop();
 
@@ -186,7 +196,7 @@ static void send_msi(struct vfio_pci_device *device, bool use_device_msi, int ms
 
 static void help(const char *name)
 {
-	printf("Usage: %s [-a] [-b] [-d] [-e] [-h] [-i nr_irqs] [-n] [-p] [-v nr_vcpus] segment:bus:device.function\n",
+	printf("Usage: %s [-a] [-b] [-d] [-e] [-h] [-i nr_irqs] [-n] [-p] [-v nr_vcpus] [-x] segment:bus:device.function\n",
 	       name);
 	printf("\n");
 	printf("  -a: Randomly affinitize the device IRQ to different CPUs\n"
@@ -202,6 +212,7 @@ static void help(const char *name)
 	printf("  -p: Pin vCPU threads to random pCPUs throughout the test.\n");
 	printf("  -v: Set the number of vCPUs that the test should create.\n"
 	       "      Interrupts will be round-robined among vCPUs.\n");
+	printf("  -x: Use xAPIC mode instead of x2APIC mode in the guest.\n");
 	printf("\n");
 	exit(KSFT_FAIL);
 }
@@ -244,7 +255,7 @@ int main(int argc, char **argv)
 
 	device_bdf = vfio_selftests_get_bdf(&argc, argv);
 
-	while ((c = getopt(argc, argv, "abdehi:npv:")) != -1) {
+	while ((c = getopt(argc, argv, "abdehi:npv:x")) != -1) {
 		switch (c) {
 		case 'a':
 			irq_affinity = true;
@@ -270,6 +281,9 @@ int main(int argc, char **argv)
 		case 'v':
 			nr_vcpus = atoi_positive("nr_vcpus", optarg);
 			break;
+		case 'x':
+			x2apic = false;
+			break;
 		case 'h':
 		default:
 			help(argv[0]);
@@ -279,6 +293,9 @@ int main(int argc, char **argv)
 	vm = vm_create_with_vcpus(nr_vcpus, guest_code, vcpus);
 	vm_install_exception_handler(vm, vector, guest_irq_handler);
 	vm_install_exception_handler(vm, NMI_VECTOR, guest_nmi_handler);
+
+	if (!x2apic)
+		virt_pg_map(vm, APIC_DEFAULT_GPA, APIC_DEFAULT_GPA);
 
 	iommu = iommu_init(default_iommu_mode);
 	device = vfio_pci_device_init(device_bdf, iommu);
@@ -295,6 +312,7 @@ int main(int argc, char **argv)
 
 	kvm_assign_irqfd(vm, gsi, device->msi_eventfds[msi]);
 
+	sync_global_to_guest(vm, x2apic);
 	sync_global_to_guest(vm, block);
 
 	for (i = 0; i < nr_vcpus; i++)
