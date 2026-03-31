@@ -74,6 +74,41 @@ struct intel_ddi_buf_trans {
 	u8 hdmi_default_entry;
 };
 
+enum lt_vswing_preemph_index {
+        XE3P_VS_PE_UNSET = -1,
+	XE3P_VS_PE_DEFAULT = 0,
+        XE3P_VS_PE_EDP = 3,
+        XE3P_VS_PE_DP14 = 4,
+        XE3P_VS_PE_DP21 = 5
+};
+
+enum snps_vswing_preemph_index {
+        MTL_C10_VS_PE_UNSET = -1,
+        MTL_C10_VS_PE_DP14_RBR_HBR = 0,
+        MTL_C10_VS_PE_DP14_HBR2_HBR3 = 1,
+        MTL_C10_VS_PE_EDP_NON_HBR3 = 2,
+        MTL_C10_VS_PE_EDP_HBR3 = 3,
+
+        MTL_C20_VS_PE_DP14 = 4,
+        MTL_C20_VS_PE_DP20 = 5
+};
+
+enum icl_vswing_preemph_index {
+        ICL_VS_PE_UNSET = -1,
+        ICL_VS_PE_DEFAULT = 0
+};
+
+union ddi_vswing_preemph_index {
+        enum lt_vswing_preemph_index lt;
+        enum snps_vswing_preemph_index snps;
+        enum icl_vswing_preemph_index icl;
+};
+
+struct ddi_vswing_preemph {
+        struct intel_ddi_buf_trans *buf_trans;
+        union ddi_vswing_preemph_index index;
+};
+
 bool is_hobl_buf_trans(const struct intel_ddi_buf_trans *table);
 
 void intel_ddi_buf_trans_init(struct intel_encoder *encoder);
