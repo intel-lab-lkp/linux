@@ -2277,6 +2277,8 @@ static inline void __init trace_event_init(void) { }
 static inline void trace_event_update_all(struct trace_eval_map **map, int len) { }
 #endif
 
+int tracing_alloc_snapshot(void);
+
 #ifdef CONFIG_TRACER_SNAPSHOT
 extern const struct file_operations snapshot_fops;
 extern const struct file_operations snapshot_raw_fops;
@@ -2284,7 +2286,6 @@ extern const struct file_operations snapshot_raw_fops;
 /* Used when creating instances */
 int trace_allocate_snapshot(struct trace_array *tr, int size);
 
-int tracing_alloc_snapshot(void);
 void tracing_snapshot_cond(struct trace_array *tr, void *cond_data);
 int tracing_snapshot_cond_enable(struct trace_array *tr, void *cond_data, cond_update_fn_t update);
 int tracing_snapshot_cond_disable(struct trace_array *tr);
