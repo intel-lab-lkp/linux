@@ -179,6 +179,8 @@ static int hinic3_sw_init(struct net_device *netdev)
 	int err;
 
 	mutex_init(&nic_dev->port_state_mutex);
+	mutex_init(&nic_dev->channel_cfg_lock);
+	spin_lock_init(&nic_dev->channel_res_lock);
 
 	nic_dev->q_params.sq_depth = HINIC3_SQ_DEPTH;
 	nic_dev->q_params.rq_depth = HINIC3_RQ_DEPTH;
@@ -314,6 +316,15 @@ static void hinic3_link_status_change(struct net_device *netdev,
 				      bool link_status_up)
 {
 	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+	unsigned long flags;
+	bool valid;
+
+	spin_lock_irqsave(&nic_dev->channel_res_lock, flags);
+	valid = HINIC3_CHANNEL_RES_VALID(nic_dev);
+	spin_unlock_irqrestore(&nic_dev->channel_res_lock, flags);
+
+	if (!valid)
+		return;
 
 	if (link_status_up) {
 		if (netif_carrier_ok(netdev))

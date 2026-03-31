@@ -135,10 +135,16 @@ static int hinic3_set_interrupt_moder(struct net_device *netdev, u16 q_id,
 {
 	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
 	struct hinic3_interrupt_info info = {};
+	unsigned long flags;
 	int err;
 
-	if (q_id >= nic_dev->q_params.num_qps)
+	spin_lock_irqsave(&nic_dev->channel_res_lock, flags);
+
+	if (!HINIC3_CHANNEL_RES_VALID(nic_dev) ||
+	    q_id >= nic_dev->q_params.num_qps) {
+		spin_unlock_irqrestore(&nic_dev->channel_res_lock, flags);
 		return 0;
+	}
 
 	info.interrupt_coalesc_set = 1;
 	info.coalesc_timer_cfg = coalesc_timer_cfg;
@@ -146,6 +152,8 @@ static int hinic3_set_interrupt_moder(struct net_device *netdev, u16 q_id,
 	info.msix_index = nic_dev->q_params.irq_cfg[q_id].msix_entry_idx;
 	info.resend_timer_cfg =
 		nic_dev->intr_coalesce[q_id].resend_timer_cfg;
+
+	spin_unlock_irqrestore(&nic_dev->channel_res_lock, flags);
 
 	err = hinic3_set_interrupt_cfg(nic_dev->hwdev, info);
 	if (err) {
