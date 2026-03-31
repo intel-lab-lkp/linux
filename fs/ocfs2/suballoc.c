@@ -197,6 +197,22 @@ static int ocfs2_validate_gd_self(struct super_block *sb,
 			 8 * le16_to_cpu(gd->bg_size));
 	}
 
+	/*
+	 * For discontiguous block groups, validate that bg_list.l_next_free_rec
+	 * does not exceed the maximum number of extent records that can physically
+	 * fit in a single block.
+	 */
+	if (ocfs2_gd_is_discontig(gd)) {
+		u16 max_recs = ocfs2_extent_recs_per_gd(sb);
+
+		if (le16_to_cpu(gd->bg_list.l_next_free_rec) > max_recs) {
+			do_error("Group descriptor #%llu bad discontig l_next_free_rec %u max %u\n",
+				 (unsigned long long)bh->b_blocknr,
+				 le16_to_cpu(gd->bg_list.l_next_free_rec),
+				 max_recs);
+		}
+	}
+
 	return 0;
 }
 
