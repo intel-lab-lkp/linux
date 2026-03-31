@@ -693,6 +693,7 @@ static void serial_8250_overrun_backoff_work(struct work_struct *work)
 int serial8250_register_8250_port(const struct uart_8250_port *up)
 {
 	struct uart_8250_port *uart;
+	bool console_hwflow;
 	int ret;
 
 	if (up->port.uartclk == 0)
@@ -715,6 +716,9 @@ int serial8250_register_8250_port(const struct uart_8250_port *up)
 	/* Check if it is CIR already. We check this below again, see there why. */
 	if (uart->port.type == PORT_8250_CIR)
 		return -ENODEV;
+
+	/* Preserve specified console hardware flow control. */
+	console_hwflow = uart->port.flags & UPF_CONS_FLOW;
 
 	if (uart->port.dev)
 		uart_remove_one_port(&serial8250_reg, &uart->port);
@@ -756,6 +760,9 @@ int serial8250_register_8250_port(const struct uart_8250_port *up)
 		if (ret)
 			goto err;
 	}
+
+	if (console_hwflow)
+		uart->port.flags |= UPF_CONS_FLOW;
 
 	if (up->port.flags & UPF_FIXED_TYPE)
 		uart->port.type = up->port.type;
