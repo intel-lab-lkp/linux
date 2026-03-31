@@ -19,21 +19,30 @@ MODULE_AUTHOR("Andras Kis-Szabo <kisza@sch.bme.hu>");
 static bool
 eui64_mt6(const struct sk_buff *skb, struct xt_action_param *par)
 {
+	const unsigned char *mac;
+	const struct ethhdr *eth;
 	unsigned char eui64[8];
 
-	if (!(skb_mac_header(skb) >= skb->head &&
-	      skb_mac_header(skb) + ETH_HLEN <= skb->data) &&
-	    par->fragoff != 0) {
-		par->hotdrop = true;
+	if (!skb_mac_header_was_set(skb)) {
+		if (par->fragoff != 0)
+			par->hotdrop = true;
 		return false;
 	}
 
+	mac = skb_mac_header(skb);
+	if (mac < skb->head || mac + ETH_HLEN > skb->data) {
+		if (par->fragoff != 0)
+			par->hotdrop = true;
+		return false;
+	}
+	eth = (const struct ethhdr *)mac;
+
 	memset(eui64, 0, sizeof(eui64));
 
-	if (eth_hdr(skb)->h_proto == htons(ETH_P_IPV6)) {
+	if (eth->h_proto == htons(ETH_P_IPV6)) {
 		if (ipv6_hdr(skb)->version == 0x6) {
-			memcpy(eui64, eth_hdr(skb)->h_source, 3);
-			memcpy(eui64 + 5, eth_hdr(skb)->h_source + 3, 3);
+			memcpy(eui64, eth->h_source, 3);
+			memcpy(eui64 + 5, eth->h_source + 3, 3);
 			eui64[3] = 0xff;
 			eui64[4] = 0xfe;
 			eui64[0] ^= 0x02;
