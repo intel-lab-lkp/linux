@@ -1989,6 +1989,12 @@ static int rtl8365mb_setup(struct dsa_switch *ds)
 		if (dsa_is_unused_port(ds, i))
 			continue;
 
+		/* Set the initial STP state of all ports to DISABLED, otherwise
+		 * ports will still forward frames to the CPU despite being
+		 * administratively down by default.
+		 */
+		rtl8365mb_port_stp_state_set(ds, i, BR_STATE_DISABLED);
+
 		/* Forward only to the CPU */
 		ret = rtl8365mb_port_set_isolation(priv, i, cpu->mask);
 		if (ret)
@@ -1998,12 +2004,6 @@ static int rtl8365mb_setup(struct dsa_switch *ds)
 		ret = rtl8365mb_port_set_learning(priv, i, false);
 		if (ret)
 			goto out_teardown_irq;
-
-		/* Set the initial STP state of all ports to DISABLED, otherwise
-		 * ports will still forward frames to the CPU despite being
-		 * administratively down by default.
-		 */
-		rtl8365mb_port_stp_state_set(ds, i, BR_STATE_DISABLED);
 
 		/* Set up per-port private data */
 		p->priv = priv;
