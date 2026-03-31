@@ -1786,6 +1786,36 @@ xe3plpd_get_lt_buf_trans(struct intel_encoder *encoder,
 		return intel_get_buf_trans(&xe3plpd_lt_trans_dp14, n_entries);
 }
 
+static enum snps_vswing_preemph_index
+_compute_index_snps_c10(const struct intel_crtc_state *crtc_state)
+{
+        if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_DP)) {
+		if (crtc_state->port_clock > 270000)
+                        return MTL_C10_VS_PE_DP14_HBR2_HBR3;
+                else
+                        return MTL_C10_VS_PE_DP14_RBR_HBR;
+        } else if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP)){
+		if (crtc_state->port_clock > 540000)
+                        return MTL_C10_VS_PE_EDP_HBR3;
+                else
+                        return MTL_C10_VS_PE_EDP_NON_HBR3;
+        }
+
+        return (enum snps_vswing_preemph_index) 0;
+}
+
+static enum snps_vswing_preemph_index
+_compute_index_snps_c20(const struct intel_crtc_state *crtc_state)
+{
+        if (intel_crtc_has_dp_encoder(crtc_state) && intel_dp_is_uhbr(crtc_state)) {
+                return MTL_C20_VS_PE_DP20;
+        } else if (!intel_crtc_has_type(crtc_state, INTEL_OUTPUT_HDMI)) {
+                return MTL_C20_VS_PE_DP14;
+        }
+
+        return (enum snps_vswing_preemph_index) 0;
+}
+
 static enum lt_vswing_preemph_index
 _compute_index_lt(const struct intel_crtc_state *crtc_state)
 {
@@ -1814,6 +1844,11 @@ vswing_preemph_compute_index(struct intel_encoder *encoder,
 
 	if (HAS_LT_PHY(display)) {
 		index.lt = _compute_index_lt(crtc_state);
+	} else if (DISPLAY_VER(display) >= 14) {
+		if (intel_encoder_is_c10phy(encoder))
+			index.snps = _compute_index_snps_c10(crtc_state);
+		else
+			index.snps = _compute_index_snps_c20(crtc_state);
 	} else {
 		drm_dbg_kms(display->drm, "using default VS/PE Override index");
 		index = (union ddi_vswing_preemph_index) 0;
@@ -1828,6 +1863,8 @@ vswing_preemph_cast_index(struct intel_display *display,
 {
 	if (HAS_LT_PHY(display)) {
 		return index.lt;
+	} else if (DISPLAY_VER(display) >= 14) {
+		return index.snps;
 	}
 
 	return 0;
