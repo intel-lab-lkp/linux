@@ -84,6 +84,11 @@ struct block_device {
 #define bdev_whole(_bdev) \
 	((_bdev)->bd_disk->part0)
 
+static inline bool bdev_writes_blocked(struct block_device *bdev)
+{
+	return bdev->bd_writers < 0;
+}
+
 #define dev_to_bdev(device) \
 	container_of((device), struct block_device, bd_device)
 

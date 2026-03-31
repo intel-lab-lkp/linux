@@ -1239,6 +1239,22 @@ loop_set_status(struct loop_device *lo, const struct loop_info64 *info)
 		goto out_unlock;
 	}
 
+#ifndef CONFIG_BLK_DEV_WRITE_MOUNTED
+	/*
+	 * Changing lo_offset or shrinking lo_sizelimit on a mounted
+	 * device is equivalent to modifying the block device contents.
+	 * Block this if writes to the device are blocked.
+	 */
+	if ((lo->lo_offset != info->lo_offset ||
+	     (info->lo_sizelimit &&
+	      (lo->lo_sizelimit == 0 ||
+	       info->lo_sizelimit < lo->lo_sizelimit))) &&
+	    bdev_writes_blocked(lo->lo_device)) {
+		err = -EBUSY;
+		goto out_unlock;
+	}
+#endif
+
 	if (lo->lo_offset != info->lo_offset ||
 	    lo->lo_sizelimit != info->lo_sizelimit) {
 		size_changed = true;
