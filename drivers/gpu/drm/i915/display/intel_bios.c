@@ -2189,6 +2189,33 @@ parse_compression_parameters(struct intel_display *display)
 }
 
 static void
+parse_vswing_preemph_snps(union intel_ddi_buf_trans_entry **bufs_table,
+			  const struct bdb_vswing_preemph *block)
+{
+	union intel_ddi_buf_trans_entry *entry;
+	const u32 *tables = block->tables;
+	u32 num_rows = 16;
+	size_t offset = 0;
+	size_t row_width;
+	const u32 *vals;
+
+	row_width = block->num_columns * sizeof(*tables);
+
+	for (int idx = 0; idx < block->num_tables; idx++) {
+		for (int row = 0; row < num_rows; row++) {
+			vals = &tables[offset];
+
+			entry = &bufs_table[idx][row];
+			entry->snps.vswing = LOW(vals[0]);
+			entry->snps.pre_cursor = LOW(vals[1]);
+			entry->snps.post_cursor = LOW(vals[2]);
+
+			offset += row_width;
+		}
+	}
+}
+
+static void
 parse_vswing_preemph_lt(union intel_ddi_buf_trans_entry **bufs_table,
 			const struct bdb_vswing_preemph *block)
 {
@@ -2245,6 +2272,10 @@ parse_vswing_preemph_override(struct intel_display *display)
 
 	if (HAS_LT_PHY(display)) {
 		parse_vswing_preemph_lt(bufs_table, block);
+	} else if (DISPLAY_VER(display) >= 14) {
+		parse_vswing_preemph_snps(bufs_table, block);
+	} else if (display->platform.battlemage) {
+		parse_vswing_preemph_snps(bufs_table, block);
 	} else {
 		drm_dbg_kms(display->drm, "Vswing / Preemph Override not yet supported on the platform\n");
 		bufs_table = NULL;
