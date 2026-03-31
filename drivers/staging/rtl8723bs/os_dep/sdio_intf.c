@@ -219,14 +219,13 @@ static void sd_intf_stop(struct adapter *padapter)
 
 static struct adapter *rtw_sdio_if1_init(struct dvobj_priv *dvobj, const struct sdio_device_id  *pdid)
 {
-	int status = _FAIL;
 	struct net_device *pnetdev;
 	struct adapter *padapter = NULL;
 	struct sdio_data *psdio = &dvobj->intf_data;
 
 	padapter = vzalloc(sizeof(*padapter));
 	if (!padapter)
-		goto exit;
+		return NULL;
 
 	padapter->dvobj = dvobj;
 	dvobj->if1 = padapter;
@@ -284,27 +283,21 @@ static struct adapter *rtw_sdio_if1_init(struct dvobj_priv *dvobj, const struct 
 
 	rtw_hal_disable_interrupt(padapter);
 
-	status = _SUCCESS;
+	return padapter;
 
 free_hal_data:
-	if (status != _SUCCESS && padapter->HalData)
-		kfree(padapter->HalData);
+	kfree(padapter->HalData);
 
-	if (status != _SUCCESS) {
-		rtw_wdev_unregister(padapter->rtw_wdev);
-		rtw_wdev_free(padapter->rtw_wdev);
-	}
+	rtw_wdev_unregister(padapter->rtw_wdev);
+	rtw_wdev_free(padapter->rtw_wdev);
 
 free_adapter:
-	if (status != _SUCCESS) {
-		if (pnetdev)
-			rtw_free_netdev(pnetdev);
-		else
-			vfree((u8 *)padapter);
-		padapter = NULL;
-	}
-exit:
-	return padapter;
+	if (pnetdev)
+		rtw_free_netdev(pnetdev);
+	else
+		vfree((u8 *)padapter);
+
+	return NULL;
 }
 
 static void rtw_sdio_if1_deinit(struct adapter *if1)
