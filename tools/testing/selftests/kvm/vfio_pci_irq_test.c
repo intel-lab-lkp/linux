@@ -16,6 +16,7 @@
 #include <libvfio.h>
 
 static bool done;
+static bool block;
 
 static bool guest_ready_for_irqs[KVM_MAX_VCPUS];
 static bool guest_received_irq[KVM_MAX_VCPUS];
@@ -42,7 +43,10 @@ static void guest_code(void)
 	WRITE_ONCE(guest_ready_for_irqs[guest_get_vcpu_id()], true);
 
 	while (!READ_ONCE(done)) {
-		cpu_relax();
+		if (block)
+			hlt();
+		else
+			cpu_relax();
 	}
 
 	GUEST_DONE();
@@ -88,11 +92,12 @@ static void send_msi(struct vfio_pci_device *device, int msi)
 
 static void help(const char *name)
 {
-	printf("Usage: %s [-a] [-h] segment:bus:device.function\n",
+	printf("Usage: %s [-a] [-b] [-h] segment:bus:device.function\n",
 	       name);
 	printf("\n");
 	printf("  -a: Randomly affinitize the device IRQ to different CPUs\n"
 	       "      throughout the test.\n");
+	printf("  -b: Block vCPUs (e.g. HLT) instead of spinning in guest-mode\n");
 	printf("\n");
 	exit(KSFT_FAIL);
 }
@@ -133,10 +138,13 @@ int main(int argc, char **argv)
 
 	device_bdf = vfio_selftests_get_bdf(&argc, argv);
 
-	while ((c = getopt(argc, argv, "ah")) != -1) {
+	while ((c = getopt(argc, argv, "abh")) != -1) {
 		switch (c) {
 		case 'a':
 			irq_affinity = true;
+			break;
+		case 'b':
+			block = true;
 			break;
 		case 'h':
 		default:
@@ -161,6 +169,8 @@ int main(int argc, char **argv)
 	       device_bdf, msi, irq, nr_irqs);
 
 	kvm_assign_irqfd(vm, gsi, device->msi_eventfds[msi]);
+
+	sync_global_to_guest(vm, block);
 
 	for (i = 0; i < nr_vcpus; i++)
 		pthread_create(&vcpu_threads[i], NULL, vcpu_thread_main, vcpus[i]);
@@ -226,6 +236,11 @@ int main(int argc, char **argv)
 	WRITE_TO_GUEST(vm, done, true);
 
 	for (i = 0; i < nr_vcpus; i++) {
+		if (block) {
+			kvm_route_msi(vm, gsi, vcpus[i], vector);
+			send_msi(device, msi);
+		}
+
 		pthread_join(vcpu_threads[i], NULL);
 	}
 
