@@ -124,8 +124,10 @@ struct cls_fl_head {
 
 struct cls_fl_filter {
 	struct fl_flow_mask *mask;
+	struct flow_dissector mask_dissector;
 	struct rhash_head ht_node;
 	struct fl_flow_key mkey;
+	struct fl_flow_key mask_key;
 	struct tcf_exts exts;
 	struct tcf_result res;
 	struct fl_flow_key key;
@@ -445,6 +447,12 @@ static void fl_destroy_filter_work(struct work_struct *work)
 	__fl_destroy_filter(f);
 }
 
+static void fl_filter_copy_mask(struct cls_fl_filter *f)
+{
+	f->mask_key = f->mask->key;
+	f->mask_dissector = f->mask->dissector;
+}
+
 static void fl_hw_destroy_filter(struct tcf_proto *tp, struct cls_fl_filter *f,
 				 bool rtnl_held, struct netlink_ext_ack *extack)
 {
@@ -476,8 +484,8 @@ static int fl_hw_replace_filter(struct tcf_proto *tp,
 	tc_cls_common_offload_init(&cls_flower.common, tp, f->flags, extack);
 	cls_flower.command = FLOW_CLS_REPLACE;
 	cls_flower.cookie = (unsigned long) f;
-	cls_flower.rule->match.dissector = &f->mask->dissector;
-	cls_flower.rule->match.mask = &f->mask->key;
+	cls_flower.rule->match.dissector = &f->mask_dissector;
+	cls_flower.rule->match.mask = &f->mask_key;
 	cls_flower.rule->match.key = &f->mkey;
 	cls_flower.classid = f->res.classid;
 
@@ -2489,6 +2497,7 @@ static int fl_change(struct net *net, struct sk_buff *in_skb,
 	err = fl_check_assign_mask(head, fnew, fold, mask);
 	if (err)
 		goto unbind_filter;
+	fl_filter_copy_mask(fnew);
 
 	err = fl_ht_insert_unique(fnew, fold, &in_ht);
 	if (err)
@@ -2705,8 +2714,8 @@ static int fl_reoffload(struct tcf_proto *tp, bool add, flow_setup_cb_t *cb,
 		cls_flower.command = add ?
 			FLOW_CLS_REPLACE : FLOW_CLS_DESTROY;
 		cls_flower.cookie = (unsigned long)f;
-		cls_flower.rule->match.dissector = &f->mask->dissector;
-		cls_flower.rule->match.mask = &f->mask->key;
+		cls_flower.rule->match.dissector = &f->mask_dissector;
+		cls_flower.rule->match.mask = &f->mask_key;
 		cls_flower.rule->match.key = &f->mkey;
 
 		err = tc_setup_offload_action(&cls_flower.rule->action, &f->exts,
@@ -3709,7 +3718,7 @@ static int fl_dump(struct net *net, struct tcf_proto *tp, void *fh,
 		goto nla_put_failure_locked;
 
 	key = &f->key;
-	mask = &f->mask->key;
+	mask = &f->mask_key;
 	skip_hw = tc_skip_hw(f->flags);
 
 	if (fl_dump_key(skb, net, key, mask))
