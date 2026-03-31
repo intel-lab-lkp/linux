@@ -149,6 +149,13 @@ static int refresh_exported_devices(struct usbip_host_driver *hdriver)
 		}
 	}
 
+	if (hdriver->ndevs == 0) {
+		if (!strcmp(hdriver->udev_subsystem, "usb"))
+			info("Please check if %s driver is loaded or export devices.",USBIP_HOST_DRV_NAME);
+		else
+			info("Please check if %s driver is loaded or export devices.",USBIP_DEVICE_DRV_NAME);
+	}
+
 	return 0;
 }
 
