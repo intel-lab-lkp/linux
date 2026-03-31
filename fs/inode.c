@@ -3018,6 +3018,12 @@ EXPORT_SYMBOL(mode_strip_sgid);
  *
  * If inode is an invalid pointer, we don't want to crash accessing it,
  * so probe everything depending on it carefully with get_kernel_nofault().
+ *
+ * TODO:
+ * - add more fields
+ * - pretty print flags instead of merely showing numerical values
+ * - consider extending inode ops with a ->dump_inode func so that filesystems
+ *   can print additional information
  */
 void dump_inode(struct inode *inode, const char *reason)
 {
