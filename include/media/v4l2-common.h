@@ -98,7 +98,9 @@ int v4l2_ctrl_query_fill(struct v4l2_queryctrl *qctrl,
 /* ------------------------------------------------------------------------- */
 
 struct clk;
+struct v4l2_ctrl;
 struct v4l2_device;
+struct v4l2_mbus_framefmt;
 struct v4l2_subdev;
 struct v4l2_subdev_ops;
 
@@ -824,5 +826,31 @@ static inline bool v4l2_is_quant_valid(__u8 quantization)
 	return quantization == V4L2_QUANTIZATION_FULL_RANGE ||
 	       quantization == V4L2_QUANTIZATION_LIM_RANGE;
 }
+
+/**
+ * v4l2_sensor_fll_llp_set - Compatibility support for hblank and vblank
+ *			     controls
+ *
+ * @fll: Frame length in lines control
+ * @vblank: Vertical blanking control
+ * @llp: Line length in pixels control
+ * @hblank: Horizontal blanking control
+ * @exposure: Exposure control
+ * @format: Source pad format
+ * @src: The control being set -- one of the other four controls
+ * @setting_ctrl: Pointer to the sensor's setting_ctrl variable; false in
+ *		  initialisation
+ * @exposure_margin: The exposure margin of the sensor
+ *
+ * Compatiblity helper for handling frame time related controls for sensor
+ * drivers that support both the Common Raw Sensor Model and the legacy
+ * interface.
+ */
+int v4l2_sensor_fll_llp_set(struct v4l2_ctrl *fll, struct v4l2_ctrl *vblank,
+			    struct v4l2_ctrl *llp, struct v4l2_ctrl *hblank,
+			    struct v4l2_ctrl *exposure,
+			    const struct v4l2_mbus_framefmt *format,
+			    struct v4l2_ctrl *src, bool *setting_ctrl,
+			    int exposure_margin);
 
 #endif /* V4L2_COMMON_H_ */

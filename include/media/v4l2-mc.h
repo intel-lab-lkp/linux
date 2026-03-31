@@ -18,6 +18,7 @@
 /* We don't need to include pci.h or usb.h here */
 struct pci_dev;
 struct usb_device;
+struct v4l2_ctrl;
 
 #ifdef CONFIG_MEDIA_CONTROLLER
 /**

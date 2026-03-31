@@ -862,3 +862,69 @@ struct clk *__devm_v4l2_sensor_clk_get(struct device *dev, const char *id,
 	return clk_hw->clk;
 }
 EXPORT_SYMBOL_GPL(__devm_v4l2_sensor_clk_get);
+
+int v4l2_sensor_fll_llp_set(struct v4l2_ctrl *fll, struct v4l2_ctrl *vblank,
+			    struct v4l2_ctrl *llp, struct v4l2_ctrl *hblank,
+			    struct v4l2_ctrl *exposure,
+			    const struct v4l2_mbus_framefmt *format,
+			    struct v4l2_ctrl *src, bool *setting_ctrl,
+			    int exposure_margin)
+{
+	struct v4l2_ctrl *dest;
+	s32 val;
+	int ret;
+
+	/* Was setting the control user-initiated or were we called again? */
+	if (*setting_ctrl) {
+		*setting_ctrl = false;
+		return 0;
+	}
+
+	/* Are we being called for writing a value to a register? */
+	if (src->val == src->cur.val)
+		return 0;
+
+	switch (src->id) {
+	case V4L2_CID_FRAME_LENGTH_LINES:
+		dest = vblank;
+		val = src->val - format->height;
+		break;
+	case V4L2_CID_VBLANK:
+		dest = fll;
+		val = src->val + format->height;
+		break;
+	case V4L2_CID_LINE_LENGTH_PIXELS:
+		dest = hblank;
+		val = src->val - format->width;
+		break;
+	case V4L2_CID_HBLANK:
+		dest = llp;
+		val = src->val + format->width;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (val == dest->val)
+		return 0;
+
+	*setting_ctrl = true;
+
+	ret = __v4l2_ctrl_s_ctrl(dest, val);
+	if (ret)
+		return ret;
+
+	/*
+	 * Only modify exposure range when setting fll, directly or via vblank.
+	 */
+	if (src->id != V4L2_CID_FRAME_LENGTH_LINES &&
+	    dest->id != V4L2_CID_FRAME_LENGTH_LINES)
+		return 0;
+
+	int exposure_max = fll->val - exposure_margin;
+
+	return __v4l2_ctrl_modify_range(exposure, exposure->minimum,
+					exposure_max, exposure->step,
+					exposure_max);
+}
+EXPORT_SYMBOL_GPL(v4l2_sensor_fll_llp_set);
