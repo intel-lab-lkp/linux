@@ -25,6 +25,8 @@
 #define force_o_largefile() (!IS_ENABLED(CONFIG_ARCH_32BIT_OFF_T))
 #endif
 
+#define VALID_MKDIRAT_FD_FLAGS	(MKDIRAT_FD_NEED_FD)
+
 #if BITS_PER_LONG == 32
 #define IS_GETLK32(cmd)		((cmd) == F_GETLK)
 #define IS_SETLK32(cmd)		((cmd) == F_SETLK)

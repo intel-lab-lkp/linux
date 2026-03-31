@@ -95,6 +95,9 @@
 #define O_NDELAY	O_NONBLOCK
 #endif
 
+/* Flags for mkdirat_fd */
+#define MKDIRAT_FD_NEED_FD	0x01
+
 #define F_DUPFD		0	/* dup */
 #define F_GETFD		1	/* get close_on_exec */
 #define F_SETFD		2	/* set/clear close_on_exec */

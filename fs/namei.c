@@ -5277,13 +5277,18 @@ EXPORT_SYMBOL(vfs_mkdir);
 
 int filename_mkdirat(int dfd, struct filename *name, umode_t mode)
 {
+	return filename_mkdirat_fd(dfd, name, mode, 0);
+}
+
+int filename_mkdirat_fd(int dfd, struct filename *name, umode_t mode, unsigned int flags)
+{
 	struct dentry *dentry;
 	struct path path;
 	int error;
 	unsigned int lookup_flags = LOOKUP_DIRECTORY;
 	struct delegated_inode delegated_inode = { };
 
-retry:
+start:
 	dentry = filename_create(dfd, name, &path, lookup_flags);
 	if (IS_ERR(dentry))
 		return PTR_ERR(dentry);
@@ -5296,7 +5301,6 @@ retry:
 		if (IS_ERR(dentry))
 			error = PTR_ERR(dentry);
 	}
-	end_creating_path(&path, dentry);
 	if (is_delegated(&delegated_inode)) {
 		error = break_deleg_wait(&delegated_inode);
 		if (!error)
@@ -5306,7 +5310,25 @@ retry:
 		lookup_flags |= LOOKUP_REVAL;
 		goto retry;
 	}
+
+	if (!error && (flags & MKDIRAT_FD_NEED_FD)) {
+		struct path new_path = { .mnt = path.mnt, .dentry = dentry };
+		error = FD_ADD(0, dentry_open(&new_path, O_DIRECTORY, current_cred()));
+	}
+	end_creating_path(&path, dentry);
 	return error;
+retry:
+	end_creating_path(&path, dentry);
+	goto start;
+}
+
+SYSCALL_DEFINE4(mkdirat_fd, int, dfd, const char __user *, pathname, umode_t, mode,
+		unsigned int, flags)
+{
+	CLASS(filename, name)(pathname);
+	if (flags & ~VALID_MKDIRAT_FD_FLAGS)
+		return -EINVAL;
+	return filename_mkdirat_fd(dfd, name, mode, flags | MKDIRAT_FD_NEED_FD);
 }
 
 SYSCALL_DEFINE3(mkdirat, int, dfd, const char __user *, pathname, umode_t, mode)
