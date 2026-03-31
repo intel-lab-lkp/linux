@@ -60,7 +60,7 @@
 struct intel_fbdev {
 	struct intel_framebuffer *fb;
 	struct i915_vma *vma;
-	unsigned long vma_flags;
+	s8 fence_id;
 };
 
 static struct intel_fbdev *to_intel_fbdev(struct drm_fb_helper *fb_helper)
@@ -141,7 +141,7 @@ static void intel_fbdev_fb_destroy(struct fb_info *info)
 	 * the info->screen_base mmaping. Leaking the VMA is simpler than
 	 * trying to rectify all the possible error paths leading here.
 	 */
-	intel_fb_unpin_vma(ifbdev->vma, ifbdev->vma_flags);
+	intel_fb_unpin_vma(ifbdev->vma, ifbdev->fence_id);
 	drm_framebuffer_remove(fb_helper->fb);
 
 	drm_client_release(&fb_helper->client);
@@ -269,9 +269,9 @@ int intel_fbdev_driver_fbdev_probe(struct drm_fb_helper *helper,
 	struct fb_info *info = helper->info;
 	struct ref_tracker *wakeref;
 	struct i915_vma *vma;
-	unsigned long flags = 0;
 	bool prealloc = false;
 	struct drm_gem_object *obj;
+	int fence_id = -1;
 	int ret;
 
 	ifbdev->fb = NULL;
@@ -314,7 +314,7 @@ int intel_fbdev_driver_fbdev_probe(struct drm_fb_helper *helper,
 				   fb->min_alignment, 0,
 				   intel_fb_view_vtd_guard(&fb->base, &fb->normal_view,
 							   DRM_MODE_ROTATE_0),
-				   false, &flags);
+				   &fence_id);
 	if (IS_ERR(vma)) {
 		ret = PTR_ERR(vma);
 		goto out_unlock;
@@ -345,14 +345,14 @@ int intel_fbdev_driver_fbdev_probe(struct drm_fb_helper *helper,
 	drm_dbg_kms(display->drm, "allocated %dx%d fb\n", fb->base.width, fb->base.height);
 	ifbdev->fb = fb;
 	ifbdev->vma = vma;
-	ifbdev->vma_flags = flags;
+	ifbdev->fence_id = fence_id;
 
 	intel_display_rpm_put(display, wakeref);
 
 	return 0;
 
 out_unpin:
-	intel_fb_unpin_vma(vma, flags);
+	intel_fb_unpin_vma(vma, fence_id);
 out_unlock:
 	intel_display_rpm_put(display, wakeref);
 
@@ -538,6 +538,8 @@ void intel_fbdev_setup(struct intel_display *display)
 	ifbdev = drmm_kzalloc(display->drm, sizeof(*ifbdev), GFP_KERNEL);
 	if (!ifbdev)
 		return;
+
+	ifbdev->fence_id = -1;
 
 	display->fbdev.fbdev = ifbdev;
 	if (intel_fbdev_init_bios(display, ifbdev))
