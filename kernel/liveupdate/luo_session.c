@@ -366,11 +366,14 @@ static const struct file_operations luo_session_fops = {
 /* Create a "struct file" for session */
 static int luo_session_getfile(struct luo_session *session, struct file **filep)
 {
-	char name_buf[128];
+	char name_buf[NAME_MAX];
 	struct file *file;
 
 	lockdep_assert_held(&session->mutex);
-	snprintf(name_buf, sizeof(name_buf), "[luo_session] %s", session->name);
+	/* dynamic_dname() rejects names above NAME_MAX bytes, including NUL terminator
+	 * and a 'anon_inode:' prefix. Truncate to NAME_MAX - 12 - 1 to avoid
+	 * ENAMETOOLONG. */
+	snprintf(name_buf, NAME_MAX - 12 - 1, "[luo_session] %s", session->name);
 	file = anon_inode_getfile(name_buf, &luo_session_fops, session, O_RDWR);
 	if (IS_ERR(file))
 		return PTR_ERR(file);
