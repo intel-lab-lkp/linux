@@ -153,6 +153,10 @@ static void cros_usbpd_notify_remove_acpi(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct acpi_device *adev = ACPI_COMPANION(dev);
 
+	if (!adev) {
+		dev_warn(dev, "No ACPI companion found\n");
+		return;
+	}
 	acpi_remove_notify_handler(adev->handle, ACPI_ALL_NOTIFY,
 				   cros_usbpd_notify_acpi);
 }
