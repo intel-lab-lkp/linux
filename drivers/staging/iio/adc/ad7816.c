@@ -22,8 +22,9 @@
 /*
  * AD7816 config masks
  */
-#define AD7816_FULL			0x1
-#define AD7816_PD			0x2
+#define AD7816_FULL			0
+#define AD7816_PD			1
+
 #define AD7816_CS_MASK			0x7
 #define AD7816_CS_MAX			0x4
 
