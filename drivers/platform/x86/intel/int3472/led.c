@@ -4,6 +4,7 @@
 #include <linux/acpi.h>
 #include <linux/gpio/consumer.h>
 #include <linux/leds.h>
+#include <linux/list.h>
 #include <linux/platform_data/x86/int3472.h>
 
 static int int3472_led_set(struct led_classdev *led_cdev,
@@ -16,16 +17,19 @@ static int int3472_led_set(struct led_classdev *led_cdev,
 }
 
 int skl_int3472_register_led(struct int3472_discrete_device *int3472,
-			     struct gpio_desc *gpio, const char *con_id)
+			     struct gpio_desc *gpio, const char *con_id,
+			     bool add_lookup)
 {
-	struct int3472_led *led = &int3472->led;
+	struct int3472_led *led;
 	char *p;
 	int ret;
 
-	if (led->classdev.dev)
-		return -EBUSY;
+	if (int3472->n_leds >= INT3472_MAX_LEDS)
+		return -ENOSPC;
 
+	led = &int3472->leds[int3472->n_leds];
 	led->gpio = gpio;
+	INIT_LIST_HEAD(&led->lookup.list);
 
 	/* Generate the name, replacing the ':' in the ACPI devname with '_' */
 	snprintf(led->name, sizeof(led->name),
@@ -42,22 +46,25 @@ int skl_int3472_register_led(struct int3472_discrete_device *int3472,
 	if (ret)
 		return ret;
 
-	led->lookup.provider = led->name;
-	led->lookup.dev_id = int3472->sensor_name;
-	led->lookup.con_id = con_id;
-	led_add_lookup(&led->lookup);
+	if (add_lookup) {
+		led->lookup.provider = led->name;
+		led->lookup.dev_id = int3472->sensor_name;
+		led->lookup.con_id = con_id;
+		led_add_lookup(&led->lookup);
+	}
 
+	int3472->n_leds++;
 	return 0;
 }
 
-void skl_int3472_unregister_led(struct int3472_discrete_device *int3472)
+void skl_int3472_unregister_leds(struct int3472_discrete_device *int3472)
 {
-	struct int3472_led *led = &int3472->led;
+	for (unsigned int i = 0; i < int3472->n_leds; i++) {
+		struct int3472_led *led = &int3472->leds[i];
 
-	if (IS_ERR_OR_NULL(led->classdev.dev))
-		return;
-
-	led_remove_lookup(&led->lookup);
-	led_classdev_unregister(&led->classdev);
-	gpiod_put(led->gpio);
+		if (!list_empty(&led->lookup.list))
+			led_remove_lookup(&led->lookup);
+		led_classdev_unregister(&led->classdev);
+		gpiod_put(led->gpio);
+	}
 }
