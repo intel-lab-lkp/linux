@@ -175,11 +175,9 @@ int mlx5_ib_destroy_gsi(struct mlx5_ib_qp *mqp)
 	int ret;
 
 	ret = ib_destroy_qp(gsi->rx_qp);
-	if (ret) {
+	if (ret)
 		mlx5_ib_warn(dev, "unable to destroy hardware GSI QP. error %d\n",
 			     ret);
-		return ret;
-	}
 	dev->devr.ports[port_num - 1].gsi = NULL;
 	gsi->rx_qp = NULL;
 
