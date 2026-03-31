@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <asm-generic/unistd.h>
 #include <unistd.h>
 #include <sys/mman.h>
 #include <sys/prctl.h>
