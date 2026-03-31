@@ -5316,9 +5316,25 @@ static void map_anon_folio_pte_pf(struct folio *folio, pte_t *pte,
 }
 
 /*
- * We enter with non-exclusive mmap_lock (to exclude vma changes,
- * but allow concurrent faults), and pte mapped but not yet locked.
- * We return with mmap_lock still held, but pte unmapped and unlocked.
+ * We enter in one of two locking contexts:
+ *
+ * 1) VMA lock path (FAULT_FLAG_VMA_LOCK set):
+ *    Entered holding a read lock on the faulting VMA (vma_start_read),
+ *    but NOT holding mmap_lock. This is the fast path introduced with
+ *    per-VMA locking (CONFIG_PER_VMA_LOCK). If this function cannot
+ *    complete the fault (e.g. needs to wait on I/O or encounters a
+ *    condition requiring the mm lock), it must return VM_FAULT_RETRY
+ *    and the caller will fall back to the mmap_lock path below.
+ *
+ * 2) mmap_lock path (FAULT_FLAG_VMA_LOCK not set):
+ *    Entered holding a non-exclusive (read) lock on mmap_lock, which
+ *    excludes VMA tree modifications but allows concurrent faults on
+ *    other VMAs. No per-VMA lock is held.
+ *
+ * In both cases, on entry the pte is mapped but not yet locked.
+ * On return, the pte is unmapped and unlocked, and whichever of
+ * the above locks was held on entry is still held (mmap_lock is
+ * not dropped, VMA read lock is not dropped, rather, the caller releases it).
  */
 static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 {
