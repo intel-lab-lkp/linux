@@ -459,7 +459,7 @@ static int __stop_cpus(const struct cpumask *cpumask,
  * RETURNS:
  * -ENOENT if @fn(@arg) was not executed at all because all cpus in
  * @cpumask were offline; otherwise, 0 if all executions of @fn
- * returned 0, any non zero return value if any returned non zero.
+ * returned 0, the accumulated value of all non-zero @fn returns.
  */
 static int stop_cpus(const struct cpumask *cpumask, cpu_stop_fn_t fn, void *arg)
 {
@@ -512,7 +512,7 @@ repeat:
 		ret = fn(arg);
 		if (done) {
 			if (ret)
-				done->ret = ret;
+				done->ret |= ret;
 			cpu_stop_signal_done(done);
 		}
 		preempt_count_dec();
@@ -674,8 +674,8 @@ EXPORT_SYMBOL_GPL(stop_core_cpuslocked);
  * Local CPU is inactive.  Temporarily stops all active CPUs.
  *
  * RETURNS:
- * 0 if all executions of @fn returned 0, any non zero return value if any
- * returned non zero.
+ * 0 if all executions of @fn returned 0, otherwise the accumulated value
+ * of all non-zero @fn returns.
  */
 int stop_machine_from_inactive_cpu(cpu_stop_fn_t fn, void *data,
 				  const struct cpumask *cpus)
@@ -705,5 +705,5 @@ int stop_machine_from_inactive_cpu(cpu_stop_fn_t fn, void *data,
 		cpu_relax();
 
 	mutex_unlock(&stop_cpus_mutex);
-	return ret ?: done.ret;
+	return ret | done.ret;
 }

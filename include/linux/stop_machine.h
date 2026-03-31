@@ -124,9 +124,9 @@ static inline void print_stop_info(const char *log_lvl, struct task_struct *task
  * the possibility of blocking in cpus_read_lock() means that the caller
  * cannot usefully rely on this serialization.
  *
- * Return: 0 if all invocations of @fn return zero.  Otherwise, the
- * value returned by an arbitrarily chosen member of the set of calls to
- * @fn that returned non-zero.
+ * Return: 0 if all invocations of @fn return zero.  Otherwise, an
+ * accumulated return value from all invocation of @fn that returned
+ * non-zero.
  */
 int stop_machine(cpu_stop_fn_t fn, void *data, const struct cpumask *cpus);
 
@@ -154,9 +154,9 @@ int stop_machine_cpuslocked(cpu_stop_fn_t fn, void *data, const struct cpumask *
  *
  * Context: Must be called from within a cpus_read_lock() protected region.
  *
- * Return: 0 if all invocations of @fn return zero.  Otherwise, the
- * value returned by an arbitrarily chosen member of the set of calls to
- * @fn that returned non-zero.
+ * Return: 0 if all invocations of @fn return zero.  Otherwise, an
+ * accumulated return value from all invocation of @fn that returned
+ * non-zero.
  */
 int stop_core_cpuslocked(unsigned int cpu, cpu_stop_fn_t fn, void *data);
 
