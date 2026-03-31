@@ -21,7 +21,7 @@ typec_altmode_set_retimer(struct altmode *alt, unsigned long conf, void *data)
 	if (!alt->retimer)
 		return 0;
 
-	state.alt = &alt->adev;
+	state.alt = conf >= TYPEC_STATE_MODAL ? &alt->adev : NULL;
 	state.mode = conf;
 	state.data = data;
 
@@ -36,7 +36,7 @@ typec_altmode_set_mux(struct altmode *alt, unsigned long conf, void *data)
 	if (!alt->mux)
 		return 0;
 
-	state.alt = &alt->adev;
+	state.alt = conf >= TYPEC_STATE_MODAL ? &alt->adev : NULL;
 	state.mode = conf;
 	state.data = data;
 
