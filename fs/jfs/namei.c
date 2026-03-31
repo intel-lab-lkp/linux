@@ -97,7 +97,13 @@ static int jfs_create(struct mnt_idmap *idmap, struct inode *dip,
 	}
 
 	tid = txBegin(dip->i_sb, 0);
-
+	if (tid == 0) {
+		jfs_err("jfs_create: unable to create tblk due to read only filesystem");
+		free_ea_wmap(ip);
+		clear_nlink(ip);
+		discard_new_inode(ip);
+		return -EROFS;
+	}
 	mutex_lock_nested(&JFS_IP(dip)->commit_mutex, COMMIT_MUTEX_PARENT);
 	mutex_lock_nested(&JFS_IP(ip)->commit_mutex, COMMIT_MUTEX_CHILD);
 
