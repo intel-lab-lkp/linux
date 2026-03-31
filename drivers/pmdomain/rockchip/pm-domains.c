@@ -1077,6 +1077,11 @@ static int rockchip_pm_domain_probe(struct platform_device *pdev)
 	for_each_available_child_of_node_scoped(np, node) {
 		error = rockchip_pm_add_one_domain(pmu, node);
 		if (error) {
+			if (error == -EPROBE_DEFER) {
+				dev_dbg(dev, "skipped node %pOFn, dependencies not yet available\n",
+					node);
+				continue;
+			}
 			dev_err(dev, "failed to handle node %pOFn: %d\n",
 				node, error);
 			goto err_out;
