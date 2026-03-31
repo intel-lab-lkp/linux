@@ -32,6 +32,8 @@
 #include "../hw_hpd.h"
 #include "../hw_generic.h"
 
+#include "../hw_factory_dcn_ddc.h"
+
 #include "hw_factory_dcn32.h"
 
 #include "dcn/dcn_3_2_0_offset.h"
@@ -203,25 +205,12 @@ static void define_ddc_registers(
 		struct hw_gpio_pin *pin,
 		uint32_t en)
 {
-	struct hw_ddc *ddc = HW_DDC_FROM_BASE(pin);
-
-	switch (pin->id) {
-	case GPIO_ID_DDC_DATA:
-		ddc->regs = &ddc_data_regs_dcn[en];
-		ddc->base.regs = &ddc_data_regs_dcn[en].gpio;
-		break;
-	case GPIO_ID_DDC_CLOCK:
-		ddc->regs = &ddc_clk_regs_dcn[en];
-		ddc->base.regs = &ddc_clk_regs_dcn[en].gpio;
-		break;
-	default:
-		ASSERT_CRITICAL(false);
-		return;
-	}
-
-	ddc->shifts = &ddc_shift[en];
-	ddc->masks = &ddc_mask[en];
-
+	dcn_define_ddc_registers_common(
+		pin, en,
+		ddc_data_regs_dcn,
+		ddc_clk_regs_dcn,
+		ddc_shift,
+		ddc_mask);
 }
 
 static void define_hpd_registers(struct hw_gpio_pin *pin, uint32_t en)
