@@ -14,5 +14,3 @@ endif
 LOCAL_HDRS += helpers.h
 
 include ../lib.mk
-
-$(TEST_GEN_PROGS): helpers.c
