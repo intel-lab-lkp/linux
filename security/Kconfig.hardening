@@ -211,7 +211,55 @@ config ZERO_CALL_USED_REGS
 
 endmenu
 
-menu "Bounds checking"
+menu "Bounds safety"
+
+config CC_HAS_OVERFLOW_BEHAVIOR_TYPES
+	# Clang 23+
+	depends on CC_IS_CLANG
+	def_bool $(cc-option,-Xclang -fexperimental-overflow-behavior-types)
+
+config OVERFLOW_BEHAVIOR_TYPES
+	bool
+	help
+	  Selected if either OVERFLOW_BEHAVIOR_TYPES_TRAP or
+	  OVERFLOW_BEHAVIOR_TYPES_WARN is chosen.
+
+choice
+	prompt "Perform checking for integer arithmetic wrap-around"
+	default OVERFLOW_BEHAVIOR_TYPES_TRAP if CC_HAS_OVERFLOW_BEHAVIOR_TYPES
+	default OVERFLOW_BEHAVIOR_TYPES_WARN if COMPILE_TEST && CC_HAS_OVERFLOW_BEHAVIOR_TYPES
+	default OVERFLOW_BEHAVIOR_TYPES_NONE
+	help
+	  This option enables Overflow Behavior Types and all of the
+	  sanitizers involved in integer overflow (wrap-around) mitigation:
+	  signed-integer-overflow, unsigned-integer-overflow,
+	  implicit-signed-integer-truncation, implicit-unsigned-integer-truncation,
+	  and implicit-integer-sign-change. Only types (and variables)
+	  annotated with __ob_wrap or __ob_trap will be instrumented by the
+	  compiler.
+
+	config OVERFLOW_BEHAVIOR_TYPES_TRAP
+		bool "Trap when __ob_trap types overflow (mitigate)"
+		depends on CC_HAS_OVERFLOW_BEHAVIOR_TYPES
+		select OVERFLOW_BEHAVIOR_TYPES
+		help
+		  Enables Overflow Behavior Types and traps when __ob_trap
+		  annotated variables overflow or underflow.
+
+	config OVERFLOW_BEHAVIOR_TYPES_WARN
+		bool "Warn when __ob_trap types overflow (informational)"
+		depends on CC_HAS_OVERFLOW_BEHAVIOR_TYPES
+		select OVERFLOW_BEHAVIOR_TYPES
+		help
+		  Enables Overflow Behavior Types and warns when __ob_trap
+		  annotated variables overflow or underflow.
+
+	config OVERFLOW_BEHAVIOR_TYPES_NONE
+		bool "Disable any handling of __ob_trap types (disabled)"
+		help
+		  No special handling of __ob_trap annotated types.
+
+endchoice
 
 config FORTIFY_SOURCE
 	bool "Harden common str/mem functions against buffer overflows"

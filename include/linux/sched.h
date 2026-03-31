@@ -48,6 +48,7 @@
 #include <linux/uidgid_types.h>
 #include <linux/tracepoint-defs.h>
 #include <linux/unwind_deferred_types.h>
+#include <linux/ubsan.h>
 #include <asm/kmap_size.h>
 #include <linux/time64.h>
 #ifndef COMPILE_OFFSETS
@@ -1271,7 +1272,7 @@ struct task_struct {
 	struct held_lock		held_locks[MAX_LOCK_DEPTH];
 #endif
 
-#if defined(CONFIG_UBSAN) && !defined(CONFIG_UBSAN_TRAP)
+#ifdef NEED_SANITIZER_WARN_HANDLER
 	unsigned int			in_ubsan;
 #endif
 

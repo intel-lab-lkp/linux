@@ -18,4 +18,4 @@ always-$(CONFIG_RANDSTRUCT) += randstruct.seed
 # integer-wrap: if the .scl file changes, we need to do a full rebuild.
 $(obj)/../../include/generated/integer-wrap.h: $(srctree)/scripts/integer-wrap-ignore.scl FORCE
 	$(call if_changed,touch)
-always-$(CONFIG_UBSAN_INTEGER_WRAP) += ../../include/generated/integer-wrap.h
+always-$(CONFIG_OVERFLOW_BEHAVIOR_TYPES) += ../../include/generated/integer-wrap.h

@@ -49,6 +49,13 @@ KBUILD_CFLAGS += $(call cc-option, -Wno-format-truncation-non-kprintf)
 # because -Wuninitialized will still flag when an uninitialized const variable
 # is used.
 KBUILD_CFLAGS += $(call cc-option, -Wno-default-const-init-unsafe)
+
+# Clang with Overflow Behavior Types support but building a kernel without
+# CONFIG_OVERFLOW_BEHAVIOR_TYPES needs to explicitly ignore the attribute.
+ifndef CONFIG_OVERFLOW_BEHAVIOR_TYPES
+KBUILD_CFLAGS += $(call cc-option, -Wno-overflow-behavior-attribute-ignored)
+endif
+
 else
 
 # gcc inanely warns about local variables called 'main'

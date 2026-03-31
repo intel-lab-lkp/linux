@@ -76,9 +76,12 @@ ifeq ($(CONFIG_UBSAN),y)
 _c_flags += $(if $(patsubst n%,, \
 		$(UBSAN_SANITIZE_$(target-stem).o)$(UBSAN_SANITIZE)$(is-kernel-object)), \
 		$(CFLAGS_UBSAN))
+endif
+
+ifeq ($(CONFIG_OVERFLOW_BEHAVIOR_TYPES),y)
 _c_flags += $(if $(patsubst n%,, \
-		$(UBSAN_INTEGER_WRAP_$(target-stem).o)$(UBSAN_SANITIZE_$(target-stem).o)$(UBSAN_INTEGER_WRAP)$(UBSAN_SANITIZE)$(is-kernel-object)), \
-		$(CFLAGS_UBSAN_INTEGER_WRAP))
+		$(OVERFLOW_BEHAVIOR_TYPES_$(target-stem).o)$(OVERFLOW_BEHAVIOR_TYPES)$(is-kernel-object)), \
+		$(CFLAGS_OVERFLOW_BEHAVIOR_TYPES))
 endif
 
 ifeq ($(CONFIG_KCOV),y)

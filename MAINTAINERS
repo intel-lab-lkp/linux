@@ -19915,6 +19915,15 @@ F:	Documentation/devicetree/bindings/media/i2c/ovti,ov2659.txt
 F:	drivers/media/i2c/ov2659.c
 F:	include/media/i2c/ov2659.h
 
+OVERFLOW BEHAVIOR TYPES
+M:	Kees Cook <kees@kernel.org>
+M:	Justin Stitt <justinstitt@google.com>
+L:	linux-hardening@vger.kernel.org
+S:	Supported
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/kees/linux.git for-next/hardening
+F:	scripts/integer-wrap-ignore.scl
+F:	scripts/Makefile.obt
+
 OVERLAY FILESYSTEM
 M:	Miklos Szeredi <miklos@szeredi.hu>
 M:	Amir Goldstein <amir73il@gmail.com>

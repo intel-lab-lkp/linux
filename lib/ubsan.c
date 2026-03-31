@@ -19,7 +19,7 @@
 
 #include "ubsan.h"
 
-#if defined(CONFIG_UBSAN_TRAP) || defined(CONFIG_UBSAN_KVM_EL2)
+#ifdef NEED_SANITIZER_TRAP_HANDLER
 /*
  * Only include matches for UBSAN checks that are actually compiled in.
  * The mappings of struct SanitizerKind (the -fsanitize=xxx args) to
@@ -44,7 +44,7 @@ const char *report_ubsan_failure(u32 check_type)
 	case ubsan_shift_out_of_bounds:
 		return "UBSAN: shift out of bounds";
 #endif
-#if defined(CONFIG_UBSAN_DIV_ZERO) || defined(CONFIG_UBSAN_INTEGER_WRAP)
+#if defined(CONFIG_UBSAN_DIV_ZERO) || defined(CONFIG_OVERFLOW_BEHAVIOR_TYPES)
 	/*
 	 * SanitizerKind::IntegerDivideByZero and
 	 * SanitizerKind::SignedIntegerOverflow emit
@@ -79,7 +79,7 @@ const char *report_ubsan_failure(u32 check_type)
 	case ubsan_type_mismatch:
 		return "UBSAN: type mismatch";
 #endif
-#ifdef CONFIG_UBSAN_INTEGER_WRAP
+#ifdef CONFIG_OVERFLOW_BEHAVIOR_TYPES
 	/*
 	 * SanitizerKind::SignedIntegerOverflow emits
 	 * SanitizerHandler::AddOverflow, SanitizerHandler::SubOverflow,
@@ -91,15 +91,18 @@ const char *report_ubsan_failure(u32 check_type)
 		return "UBSAN: integer subtraction overflow";
 	case ubsan_mul_overflow:
 		return "UBSAN: integer multiplication overflow";
+	case ubsan_implicit_conversion:
+		return "UBSAN: integer truncation";
+	case ubsan_negate_overflow:
+		return "UBSAN: negation overflow";
 #endif
 	default:
 		return "UBSAN: unrecognized failure code";
 	}
 }
+#endif /* NEED_SANITIZER_TRAP_HANDLER */
 
-#endif
-
-#ifndef CONFIG_UBSAN_TRAP
+#ifdef NEED_SANITIZER_WARN_HANDLER
 static const char * const type_check_kinds[] = {
 	"load of",
 	"store to",
@@ -558,4 +561,4 @@ void __ubsan_handle_alignment_assumption(void *_data, unsigned long ptr,
 }
 EXPORT_SYMBOL(__ubsan_handle_alignment_assumption);
 
-#endif /* !CONFIG_UBSAN_TRAP */
+#endif /* NEED_SANITIZER_WARN_HANDLER */

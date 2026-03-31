@@ -39,6 +39,6 @@
  * may have changed, which may impact the expected behaviors that should
  * not differ between compilation units.
  */
-#ifdef INTEGER_WRAP
+#ifdef OVERFLOW_BEHAVIOR_TYPES
 #include <generated/integer-wrap.h>
 #endif

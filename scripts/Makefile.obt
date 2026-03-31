@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: GPL-2.0
+
+# Instead of specifying `all`, let's pick our patterns piecemeal so we aren't
+# blindsided by compiler upgrades.
+OVERFLOW_BEHAVIOR_TYPES_IGNORE_PATTERNS := negated-unsigned-const,$\
+					   unsigned-post-decr-while,$\
+					   add-signed-overflow-test,$\
+					   add-unsigned-overflow-test
+
+OVERFLOW_BEHAVIOR_TYPES_SANITIZERS := signed-integer-overflow,$\
+				      unsigned-integer-overflow,$\
+				      implicit-signed-integer-truncation,$\
+				      implicit-unsigned-integer-truncation,$\
+				      implicit-integer-sign-change
+
+overflow-behavior-types-cflags-$(CONFIG_OVERFLOW_BEHAVIOR_TYPES) +=	 \
+	-DOVERFLOW_BEHAVIOR_TYPES					 \
+	-Xclang -fexperimental-overflow-behavior-types			 \
+	-fsanitize=$(OVERFLOW_BEHAVIOR_TYPES_SANITIZERS)		 \
+	-fsanitize-undefined-ignore-overflow-pattern=$(OVERFLOW_BEHAVIOR_TYPES_IGNORE_PATTERNS) \
+	-fsanitize-ignorelist=$(srctree)/scripts/integer-wrap-ignore.scl \
+	-Wno-incompatible-pointer-types-discards-overflow-behavior
+overflow-behavior-types-cflags-$(CONFIG_OVERFLOW_BEHAVIOR_TYPES_WARN) += \
+	-fno-sanitize-trap=$(OVERFLOW_BEHAVIOR_TYPES_SANITIZERS)
+overflow-behavior-types-cflags-$(CONFIG_OVERFLOW_BEHAVIOR_TYPES_TRAP) += \
+	-fsanitize-trap=$(OVERFLOW_BEHAVIOR_TYPES_SANITIZERS)
+
+export CFLAGS_OVERFLOW_BEHAVIOR_TYPES := $(overflow-behavior-types-cflags-y)

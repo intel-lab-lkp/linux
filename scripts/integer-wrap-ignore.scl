@@ -1,3 +1,2 @@
-[{unsigned-integer-overflow,signed-integer-overflow,implicit-signed-integer-truncation,implicit-unsigned-integer-truncation}]
+[{unsigned-integer-overflow,signed-integer-overflow,implicit-signed-integer-truncation,implicit-unsigned-integer-truncation,implicit-integer-sign-change}]
 type:*
-type:size_t=sanitize
