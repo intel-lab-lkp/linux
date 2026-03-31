@@ -623,6 +623,7 @@ core_initcall(init_events_core_sysctls);
  */
 #define NR_ACCUMULATED_SAMPLES 128
 static DEFINE_PER_CPU(u64, running_sample_length);
+static DEFINE_PER_CPU(u64, last_throttle_clock);
 
 static u64 __report_avg;
 static u64 __report_allowed;
@@ -643,6 +644,8 @@ void perf_sample_event_took(u64 sample_len_ns)
 	u64 max_len = READ_ONCE(perf_sample_allowed_ns);
 	u64 running_len;
 	u64 avg_len;
+	u64 delta;
+	u64 now;
 	u32 max;
 
 	if (max_len == 0)
@@ -661,6 +664,17 @@ void perf_sample_event_took(u64 sample_len_ns)
 	 */
 	avg_len = running_len/NR_ACCUMULATED_SAMPLES;
 	if (avg_len <= max_len)
+		return;
+
+	/*
+	 * Very infrequent events like the perf counter hard watchdog
+	 * can trigger spurious throttling: skip throttling if the prior
+	 * NMI got here more than one second before this NMI began.
+	 */
+	now = local_clock();
+	delta = now - __this_cpu_read(last_throttle_clock);
+	__this_cpu_write(last_throttle_clock, now);
+	if (delta - sample_len_ns > NSEC_PER_SEC)
 		return;
 
 	__report_avg = avg_len;
