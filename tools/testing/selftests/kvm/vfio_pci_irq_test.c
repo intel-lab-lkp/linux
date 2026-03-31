@@ -125,7 +125,7 @@ static void send_msi(struct vfio_pci_device *device, bool use_device_msi, int ms
 
 static void help(const char *name)
 {
-	printf("Usage: %s [-a] [-b] [-d] [-e] [-h] segment:bus:device.function\n",
+	printf("Usage: %s [-a] [-b] [-d] [-e] [-h] [-i nr_irqs] segment:bus:device.function\n",
 	       name);
 	printf("\n");
 	printf("  -a: Randomly affinitize the device IRQ to different CPUs\n"
@@ -135,6 +135,7 @@ static void help(const char *name)
 	       "      it with an eventfd write.\n");
 	printf("  -e: Destroy and recreate KVM's GSI routing table in between\n"
 	       "      some interrupts.\n");
+	printf("  -i: The number of IRQs to generate during the test.\n");
 	printf("\n");
 	exit(KSFT_FAIL);
 }
@@ -176,7 +177,7 @@ int main(int argc, char **argv)
 
 	device_bdf = vfio_selftests_get_bdf(&argc, argv);
 
-	while ((c = getopt(argc, argv, "abdeh")) != -1) {
+	while ((c = getopt(argc, argv, "abdehi:")) != -1) {
 		switch (c) {
 		case 'a':
 			irq_affinity = true;
@@ -189,6 +190,9 @@ int main(int argc, char **argv)
 			break;
 		case 'e':
 			empty = true;
+			break;
+		case 'i':
+			nr_irqs = atoi_positive("Number of IRQs", optarg);
 			break;
 		case 'h':
 		default:
