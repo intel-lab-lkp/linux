@@ -22,6 +22,7 @@
 #include <linux/atomic.h>
 #include <linux/nmi.h>
 #include <linux/sched/wake_q.h>
+#include <linux/delay.h>
 
 /*
  * Structure to determine completion condition and record errors.  May
@@ -174,6 +175,15 @@ struct multi_stop_data {
 
 	enum multi_stop_state	state;
 	atomic_t		thread_ack;
+
+#ifdef CONFIG_STOP_MACHINE_NMI
+	/* Used in the NMI stop_machine variant */
+	bool			use_nmi;
+	/* A separate function type to highlight noinstr requirement */
+	cpu_stop_nmisafe_fn_t	nmisafe_fn;
+	/* cpumask of CPUs on which to raise an NMI */
+	cpumask_var_t		nmi_cpus;
+#endif
 };
 
 static void set_state(struct multi_stop_data *msdata,
@@ -196,6 +206,8 @@ notrace void __weak stop_machine_yield(const struct cpumask *cpumask)
 {
 	cpu_relax();
 }
+
+static int multi_stop_run(struct multi_stop_data *msdata);
 
 /* This is the cpu_stop function which stops the CPU. */
 static int multi_cpu_stop(void *data)
@@ -235,7 +247,7 @@ static int multi_cpu_stop(void *data)
 				break;
 			case MULTI_STOP_RUN:
 				if (is_active)
-					err = msdata->fn(msdata->data);
+					err = multi_stop_run(msdata);
 				break;
 			default:
 				break;
@@ -712,3 +724,85 @@ int stop_machine_from_inactive_cpu(cpu_stop_fn_t fn, void *data,
 	mutex_unlock(&stop_cpus_mutex);
 	return ret | done.ret;
 }
+
+#ifdef CONFIG_STOP_MACHINE_NMI
+
+struct nmi_stop {
+	struct multi_stop_data	*data;
+	int			ret;
+	bool			done;
+};
+
+static DEFINE_PER_CPU(struct nmi_stop, nmi_stop);
+
+/*
+ * Instrumentation may trigger nested exceptions such as #INT3, #DB,
+ * or #PF. IRET from those would re-enable NMIs, which opposes the goal
+ * of this NMI stop-machine facility.
+ */
+bool noinstr stop_machine_nmi_handler(void)
+{
+	struct multi_stop_data *msdata = raw_cpu_read(nmi_stop.data);
+	unsigned int cpu = smp_processor_id();
+	int ret;
+
+	if (!msdata || !cpumask_test_and_clear_cpu(cpu, msdata->nmi_cpus))
+		return false;
+
+	/*
+	 * The indirect call to @nmisafe_fn() is indistinguishable at
+	 * post-compilation. Temporarily enabling instrumentation avoids
+	 * objtool false positives.
+	 */
+	instrumentation_begin();
+	ret = msdata->nmisafe_fn(msdata->data);
+	instrumentation_end();
+
+	raw_cpu_write(nmi_stop.ret,  ret);
+	raw_cpu_write(nmi_stop.done, true);
+	raw_cpu_write(nmi_stop.data, NULL);
+
+	return true;
+}
+
+static bool wait_for_nmi_handler(void)
+{
+	/* Conservative timeout */
+	unsigned long timeout = USEC_PER_SEC;
+
+	while (!this_cpu_read(nmi_stop.done) && timeout--)
+		udelay(1);
+
+	return this_cpu_read(nmi_stop.done);
+}
+
+static int nmi_stop_run(struct multi_stop_data *msdata)
+{
+	/*
+	 * Save per-CPU state accessible from NMI context and raise a
+	 * self-NMI to execute the stop function from the NMI handler
+	 */
+	this_cpu_write(nmi_stop.data, msdata);
+	this_cpu_write(nmi_stop.done, false);
+	arch_send_self_nmi();
+
+	/* Ensure the handler went through before reading the result */
+	if (!wait_for_nmi_handler())
+		return -ETIMEDOUT;
+
+	return this_cpu_read(nmi_stop.ret);
+}
+
+static int multi_stop_run(struct multi_stop_data *msdata)
+{
+	return msdata->use_nmi ? nmi_stop_run(msdata) : msdata->fn(msdata->data);
+}
+
+#else
+
+static int multi_stop_run(struct multi_stop_data *msdata)
+{
+	return msdata->fn(msdata->data);
+}
+
+#endif /* CONFIG_STOP_MACHINE_NMI */

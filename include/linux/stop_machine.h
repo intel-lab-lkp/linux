@@ -19,6 +19,12 @@
  */
 typedef int (*cpu_stop_fn_t)(void *arg);
 
+/*
+ * Stop function variant runnable from NMI context. This makes the
+ * noinstr requirement explicit at the type level.
+ */
+typedef int (*cpu_stop_nmisafe_fn_t)(void *arg);
+
 #ifdef CONFIG_SMP
 
 struct cpu_stop_work {
@@ -189,4 +195,14 @@ stop_machine_from_inactive_cpu(cpu_stop_fn_t fn, void *data,
 }
 
 #endif	/* CONFIG_SMP || CONFIG_HOTPLUG_CPU */
+
+#ifdef CONFIG_STOP_MACHINE_NMI
+
+void arch_send_self_nmi(void);
+bool noinstr stop_machine_nmi_handler(void);
+
+#else
+static inline bool stop_machine_nmi_handler(void) { return false; }
+#endif /* CONFIG_STOP_MACHINE_NMI */
+
 #endif	/* _LINUX_STOP_MACHINE */
