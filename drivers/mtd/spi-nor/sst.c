@@ -267,8 +267,16 @@ out:
 
 static int sst_nor_late_init(struct spi_nor *nor)
 {
-	if (nor->info->mfr_flags & SST_WRITE)
+	if (nor->info->mfr_flags & SST_WRITE) {
 		nor->mtd._write = sst_nor_write;
+		/*
+		 * AAI mode requires dynamic opcode changes (BP vs AAI_WP).
+		 * Disable dirmap to ensure spi_nor_spimem_exec_op() uses
+		 * the runtime opcode instead of the dirmap template.
+		 */
+		if (nor->dirmap.wdesc)
+			nor->dirmap.wdesc->nodirmap = true;
+	}
 
 	return 0;
 }
