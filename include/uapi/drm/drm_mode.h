@@ -48,6 +48,7 @@ extern "C" {
 #define DRM_CONNECTOR_NAME_LEN	32
 #define DRM_DISPLAY_MODE_LEN	32
 #define DRM_PROP_NAME_LEN	32
+#define DRM_MODE_ATOMIC_FAILURE_STRING_LEN	128
 
 #define DRM_MODE_TYPE_BUILTIN	(1<<0) /* deprecated */
 #define DRM_MODE_TYPE_CLOCK_C	((1<<1) | DRM_MODE_TYPE_BUILTIN) /* deprecated */
@@ -1345,6 +1346,61 @@ struct drm_mode_destroy_dumb {
 		DRM_MODE_ATOMIC_TEST_ONLY |\
 		DRM_MODE_ATOMIC_NONBLOCK |\
 		DRM_MODE_ATOMIC_ALLOW_MODESET)
+
+/**
+ * enum drm_mode_atomic_failure_codes -  error codes for failures in atomic_ioctl
+ * @DRM_MODE_ATOMIC_UNSPECIFIED_ERROR: this is the default/unspecified error.
+ * @DRM_MODE_ATOMIC_INVALID_API_USAGE: invallid API usage(DRM_ATOMIC not
+ *				       enabled, invalid falg, page_flip event
+ *				       with test-only, etc)
+ * @DRM_MODE_ATOMIC_NEED_FULL_MODESET: Need full modeset on all connected crtc's
+ * @DRM_MODE_ATOMIC_ASYNC_PROP_CHANGED: Property changed in async flip
+ * @DRM_MODE_ATOMIC_SCANOUT_BW: For a given resolution, refresh rate and the
+ *                              color depth cannot be accomodated. Resolution
+ *                              is to lower the refresh rate or color depth.
+ * @DRM_MODE_ATOMIC_CONNECTOR_BW: Refers to the limitation on the link rate on
+ *                                a given connector.
+ * @DRM_MODE_ATOMIC_PIPE_BW: Limitation on the pipe, either pipe not available
+ *                           or the pipe scaling factor limitation.
+ * @DRM_MODE_ATOMIC_MEMORY_DOMAIN: Any other memory/bandwidth related limitation
+ *                                 other then the ones specified above.
+ * @DRM_MODE_ATOMIC_SPEC_VIOLOATION: Limitation of a particular feature on that
+ *                                   hardware. To get to know the feature, the
+ *                                   property/object causing this is being sent
+ *                                   back to user @failure_objs_ptr in the
+ *                                   struct drm_mode_atomic_err_code
+ */
+enum drm_mode_atomic_failure_codes {
+	DRM_MODE_ATOMIC_UNSPECIFIED_ERROR,
+	DRM_MODE_ATOMIC_INVALID_API_USAGE,
+	DRM_MODE_ATOMIC_NEED_FULL_MODESET,
+	DRM_MODE_ATOMIC_ASYNC_PROP_CHANGED,
+	DRM_MODE_ATOMIC_SCANOUT_BW,
+	DRM_MODE_ATTOMIC_CONNECTOR_BW,
+	DRM_MODE_ATTOMIC_PIPE_BW,
+	DRM_MODE_ATOMIC_MEMORY_DOMAIN,
+	DRM_MODE_ATOMIC_SPEC_VIOLOATION,
+};
+
+/**
+ * struct drm_mode_atomic_err_code - struct to store the error code
+ *
+ * pointer to this struct will be stored in reserved variable of
+ * struct drm_mode_atomic to report the failure cause to the user.
+ *
+ * @failure_code: error codes defined in enum drm_moide_atomic_failure_code
+ * @failure_objs_ptr: pointer to the drm_object that caused error
+ * @reserved: reserved for future use
+ * @count_objs: count of drm_objects if multiple drm_objects caused error
+ * @failure_string: user readable error message string
+ */
+struct drm_mode_atomic_err_code {
+	__u64 failure_code;
+	__u64 failure_objs_ptr;
+	__u64 reserved;
+	__u32 count_objs;
+	char failure_string[DRM_MODE_ATOMIC_FAILURE_STRING_LEN];
+};
 
 struct drm_mode_atomic {
 	__u32 flags;
