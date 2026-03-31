@@ -1582,7 +1582,7 @@ declare -A cappid
 declare -A capfile
 declare -A capout
 
-tcpdump_start()
+tcpdump_start_nosleep()
 {
 	local if_name=$1; shift
 	local ns=$1; shift
@@ -1606,16 +1606,25 @@ tcpdump_start()
 		-s 65535 -B 32768 $capuser -w ${capfile[$if_name]} \
 		> "${capout[$if_name]}" 2>&1 &
 	cappid[$if_name]=$!
+}
 
+tcpdump_start()
+{
+	tcpdump_start_nosleep $1 $2
 	sleep 1
 }
 
-tcpdump_stop()
+tcpdump_stop_nosleep()
 {
 	local if_name=$1
 	local pid=${cappid[$if_name]}
 
 	$ns_cmd kill "$pid" && wait "$pid"
+}
+
+tcpdump_stop()
+{
+	tcpdump_stop_nosleep $1
 	sleep 1
 }
 
