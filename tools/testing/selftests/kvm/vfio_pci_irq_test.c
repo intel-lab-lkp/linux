@@ -25,7 +25,7 @@ static bool guest_received_nmi[KVM_MAX_VCPUS];
 
 static pid_t vcpu_tids[KVM_MAX_VCPUS];
 
-#define TIMEOUT_NS (2ULL * 1000 * 1000 * 1000)
+static u64 timeout_ns = 2ULL * 1000 * 1000 * 1000;
 
 static u32 guest_get_vcpu_id(void)
 {
@@ -196,7 +196,7 @@ static void send_msi(struct vfio_pci_device *device, bool use_device_msi, int ms
 
 static void help(const char *name)
 {
-	printf("Usage: %s [-a] [-b] [-d] [-e] [-h] [-i nr_irqs] [-n] [-p] [-v nr_vcpus] [-x] segment:bus:device.function\n",
+	printf("Usage: %s [-a] [-b] [-d] [-e] [-h] [-i nr_irqs] [-n] [-p] [-t timeout] [-v nr_vcpus] [-x] segment:bus:device.function\n",
 	       name);
 	printf("\n");
 	printf("  -a: Randomly affinitize the device IRQ to different CPUs\n"
@@ -210,6 +210,7 @@ static void help(const char *name)
 	printf("  -n: Route some of the device interrupts to be delivered as\n"
 	       "      an NMI into the guest.\n");
 	printf("  -p: Pin vCPU threads to random pCPUs throughout the test.\n");
+	printf("  -t: The timeout in seconds to wait for an interrupt.\n");
 	printf("  -v: Set the number of vCPUs that the test should create.\n"
 	       "      Interrupts will be round-robined among vCPUs.\n");
 	printf("  -x: Use xAPIC mode instead of x2APIC mode in the guest.\n");
@@ -255,7 +256,7 @@ int main(int argc, char **argv)
 
 	device_bdf = vfio_selftests_get_bdf(&argc, argv);
 
-	while ((c = getopt(argc, argv, "abdehi:npv:x")) != -1) {
+	while ((c = getopt(argc, argv, "abdehi:npv:xt:")) != -1) {
 		switch (c) {
 		case 'a':
 			irq_affinity = true;
@@ -277,6 +278,9 @@ int main(int argc, char **argv)
 			break;
 		case 'p':
 			pin_vcpus = true;
+			break;
+		case 't':
+			timeout_ns = (u64)atoi_positive("Timeout (seconds)", optarg) * 1000ULL * 1000 * 1000;
 			break;
 		case 'v':
 			nr_vcpus = atoi_positive("nr_vcpus", optarg);
@@ -387,7 +391,7 @@ int main(int argc, char **argv)
 			if (!do_nmi && READ_FROM_GUEST(vm, guest_received_irq[vcpu->id]))
 				break;
 
-			if (timespec_to_ns(timespec_elapsed(start)) > TIMEOUT_NS) {
+			if (timespec_to_ns(timespec_elapsed(start)) > timeout_ns) {
 				printf("Timeout waiting for interrupt!\n");
 				printf("  vCPU: %d\n", vcpu->id);
 				printf("  do_nmi: %d\n", do_nmi);
