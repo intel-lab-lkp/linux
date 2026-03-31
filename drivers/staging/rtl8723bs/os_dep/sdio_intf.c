@@ -242,8 +242,6 @@ static struct adapter *rtw_sdio_if1_init(struct dvobj_priv *dvobj, const struct 
 
 	SET_NETDEV_DEV(pnetdev, dvobj_to_dev(dvobj));
 
-	padapter = rtw_netdev_priv(pnetdev);
-
 	/* 3 3. init driver special setting, interface, OS and hardware relative */
 
 	/* 4 3.1 set hardware operation functions */
