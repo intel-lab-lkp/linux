@@ -4,6 +4,7 @@
 #include <linux/delay.h>
 #include <linux/smp.h>
 #include <linux/string_choices.h>
+#include <linux/stop_machine.h>
 
 #include <asm/io_apic.h>
 
@@ -247,6 +248,15 @@ void default_send_IPI_self(int vector)
 {
 	__default_send_IPI_shortcut(APIC_DEST_SELF, vector);
 }
+
+#ifdef CONFIG_STOP_MACHINE_NMI
+
+void arch_send_self_nmi(void)
+{
+	apic->send_IPI(smp_processor_id(), NMI_VECTOR);
+}
+
+#endif
 
 #ifdef CONFIG_X86_32
 void default_send_IPI_mask_sequence_logical(const struct cpumask *mask, int vector)
