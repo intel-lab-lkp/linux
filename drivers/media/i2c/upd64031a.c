@@ -73,10 +73,19 @@ static u8 upd64031a_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
 	u8 buf[2];
+	int ret;
 
 	if (reg >= sizeof(buf))
 		return 0xff;
-	i2c_master_recv(client, buf, 2);
+
+	ret = i2c_master_recv(client, buf, 2);
+	if (ret != sizeof(buf)) {
+		int err = ret < 0 ? ret : -EIO;
+
+		v4l2_err(sd, "I2C read failed: %pe\n", ERR_PTR(err));
+		return 0xff;
+	}
+
 	return buf[reg];
 }
 
