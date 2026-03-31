@@ -161,7 +161,7 @@ config STATIC_KEYS_SELFTEST
 
 config STATIC_CALL_SELFTEST
 	bool "Static call selftest"
-	depends on HAVE_STATIC_CALL
+	depends on HAVE_STATIC_CALL_INLINE
 	help
 	  Boot time self-test of the call patching code.
 
