@@ -2349,6 +2349,8 @@ void __attribute((constructor)) kvm_selftest_init(void)
 	struct sigaction sig_sa = {
 		.sa_handler = report_unexpected_signal,
 	};
+	char *env_seed = getenv("KVM_RANDOM_SEED");
+	int random_seed;
 
 	/* Tell stdout not to buffer its content. */
 	setbuf(stdout, NULL);
@@ -2358,8 +2360,15 @@ void __attribute((constructor)) kvm_selftest_init(void)
 	sigaction(SIGILL, &sig_sa, NULL);
 	sigaction(SIGFPE, &sig_sa, NULL);
 
+	if (env_seed)
+		random_seed = strtol(env_seed, NULL, 0);
+	else
+		random_seed = time(NULL);
+
+	srand(random_seed);
 	guest_random_seed = last_guest_seed = random();
-	pr_info("Random seed: 0x%x\n", guest_random_seed);
+	pr_info("Guest random seed: 0x%x (srand: 0x%x)\n",
+		guest_random_seed, random_seed);
 
 	kvm_selftest_arch_init();
 }
