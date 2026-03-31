@@ -49,6 +49,7 @@
 #include "igmp_internal.h"
 #include <linux/slab.h>
 #include <linux/hash.h>
+#include <linux/rhashtable.h>
 #ifdef CONFIG_SYSCTL
 #include <linux/sysctl.h>
 #endif
@@ -108,28 +109,45 @@ static const struct nla_policy ifa_ipv4_policy[IFA_MAX+1] = {
 	[IFA_PROTO]		= { .type = NLA_U8 },
 };
 
-#define IN4_ADDR_HSIZE_SHIFT	order_base_2(CONFIG_INET_ADDR_HASH_BUCKETS)
-#define IN4_ADDR_HSIZE		(1U << IN4_ADDR_HSIZE_SHIFT)
-
-static u32 inet_addr_hash(const struct net *net, __be32 addr)
+static int inet_addr_cmpfn(struct rhashtable_compare_arg *arg, const void *obj)
 {
-	u32 val = __ipv4_addr_hash(addr, net_hash_mix(net));
+	const struct in_ifaddr *ifa = obj;
+	const __be32 *key = arg->key;
 
-	return hash_32(val, IN4_ADDR_HSIZE_SHIFT);
+	return *key != ifa->ifa_local;
 }
+
+static const struct rhashtable_params inet_addr_rht_params = {
+	.head_offset	= offsetof(struct in_ifaddr, addr_lst),
+	.key_offset	= offsetof(struct in_ifaddr, ifa_local),
+	.key_len	= sizeof(__be32),
+	.min_size	= 32,
+	.obj_cmpfn	= inet_addr_cmpfn,
+	.automatic_shrinking = true,
+};
 
 static void inet_hash_insert(struct net *net, struct in_ifaddr *ifa)
 {
-	u32 hash = inet_addr_hash(net, ifa->ifa_local);
+	int err;
 
 	ASSERT_RTNL();
-	hlist_add_head_rcu(&ifa->addr_lst, &net->ipv4.inet_addr_lst[hash]);
+	err = rhltable_insert(&net->ipv4.inet_addr_lst, &ifa->addr_lst,
+			      inet_addr_rht_params);
+	/* Non-fatal: lookups fall back to fib_table_lookup() */
+	if (unlikely(err))
+		pr_warn("%s() failed for %pI4: %d\n",
+			__func__, &ifa->ifa_local, err);
 }
 
-static void inet_hash_remove(struct in_ifaddr *ifa)
+static void inet_hash_remove(struct net *net, struct in_ifaddr *ifa)
 {
+	int err;
+
 	ASSERT_RTNL();
-	hlist_del_init_rcu(&ifa->addr_lst);
+	err = rhltable_remove(&net->ipv4.inet_addr_lst, &ifa->addr_lst,
+			      inet_addr_rht_params);
+	/* -ENOENT is fine: insert may have failed earlier (e.g. -ENOMEM) */
+	WARN_ON_ONCE(err && err != -ENOENT);
 }
 
 /**
@@ -173,12 +191,12 @@ EXPORT_SYMBOL(__ip_dev_find);
 /* called under RCU lock */
 struct in_ifaddr *inet_lookup_ifaddr_rcu(struct net *net, __be32 addr)
 {
-	u32 hash = inet_addr_hash(net, addr);
-	struct in_ifaddr *ifa;
+	struct rhlist_head *rhl;
 
-	hlist_for_each_entry_rcu(ifa, &net->ipv4.inet_addr_lst[hash], addr_lst)
-		if (ifa->ifa_local == addr)
-			return ifa;
+	rhl = rhltable_lookup(&net->ipv4.inet_addr_lst, &addr,
+			      inet_addr_rht_params);
+	if (rhl)
+		return container_of(rhl, struct in_ifaddr, addr_lst);
 
 	return NULL;
 }
@@ -216,7 +234,7 @@ static struct in_ifaddr *inet_alloc_ifa(struct in_device *in_dev)
 	in_dev_hold(in_dev);
 	ifa->ifa_dev = in_dev;
 
-	INIT_HLIST_NODE(&ifa->addr_lst);
+	memset(&ifa->addr_lst, 0, sizeof(ifa->addr_lst));
 
 	return ifa;
 }
@@ -405,7 +423,7 @@ static void __inet_del_ifa(struct in_device *in_dev,
 			}
 
 			if (!do_promote) {
-				inet_hash_remove(ifa);
+				inet_hash_remove(dev_net(in_dev->dev), ifa);
 				*ifap1 = ifa->ifa_next;
 
 				rtmsg_ifa(RTM_DELADDR, ifa, nlh, portid);
@@ -434,7 +452,7 @@ no_promotions:
 	/* 2. Unlink it */
 
 	*ifap = ifa1->ifa_next;
-	inet_hash_remove(ifa1);
+	inet_hash_remove(dev_net(in_dev->dev), ifa1);
 
 	/* 3. Announce address deletion */
 
@@ -709,21 +727,24 @@ out:
 static void check_lifetime(struct work_struct *work)
 {
 	unsigned long now, next, next_sec, next_sched;
+	bool change_needed = false;
+	struct in_device *in_dev;
+	struct net_device *dev;
 	struct in_ifaddr *ifa;
-	struct hlist_node *n;
 	struct net *net;
-	int i;
 
 	net = container_of(to_delayed_work(work), struct net, ipv4.addr_chk_work);
 	now = jiffies;
 	next = round_jiffies_up(now + ADDR_CHECK_FREQUENCY);
 
-	for (i = 0; i < IN4_ADDR_HSIZE; i++) {
-		struct hlist_head *head = &net->ipv4.inet_addr_lst[i];
-		bool change_needed = false;
+	rcu_read_lock();
+	for_each_netdev_rcu(net, dev) {
+		in_dev = __in_dev_get_rcu(dev);
+		if (!in_dev)
+			continue;
 
-		rcu_read_lock();
-		hlist_for_each_entry_rcu(ifa, head, addr_lst) {
+		for (ifa = rcu_dereference(in_dev->ifa_list); ifa;
+		     ifa = rcu_dereference(ifa->ifa_next)) {
 			unsigned long age, tstamp;
 			u32 preferred_lft;
 			u32 valid_lft;
@@ -757,43 +778,47 @@ static void check_lifetime(struct work_struct *work)
 				next = tstamp + preferred_lft * HZ;
 			}
 		}
-		rcu_read_unlock();
-		if (!change_needed)
-			continue;
+	}
+	rcu_read_unlock();
 
+	if (change_needed) {
 		rtnl_net_lock(net);
-		hlist_for_each_entry_safe(ifa, n, head, addr_lst) {
-			unsigned long age;
+		for_each_netdev(net, dev) {
+			struct in_ifaddr __rcu **ifap;
 
-			if (ifa->ifa_flags & IFA_F_PERMANENT)
+			in_dev = __in_dev_get_rtnl_net(dev);
+			if (!in_dev)
 				continue;
 
-			/* We try to batch several events at once. */
-			age = (now - ifa->ifa_tstamp +
-			       ADDRCONF_TIMER_FUZZ_MINUS) / HZ;
+			ifap = &in_dev->ifa_list;
+			ifa = rtnl_net_dereference(net, *ifap);
+			while (ifa) {
+				unsigned long age;
 
-			if (ifa->ifa_valid_lft != INFINITY_LIFE_TIME &&
-			    age >= ifa->ifa_valid_lft) {
-				struct in_ifaddr __rcu **ifap;
-				struct in_ifaddr *tmp;
-
-				ifap = &ifa->ifa_dev->ifa_list;
-				tmp = rtnl_net_dereference(net, *ifap);
-				while (tmp) {
-					if (tmp == ifa) {
-						inet_del_ifa(ifa->ifa_dev,
-							     ifap, 1);
-						break;
-					}
-					ifap = &tmp->ifa_next;
-					tmp = rtnl_net_dereference(net, *ifap);
+				if (ifa->ifa_flags & IFA_F_PERMANENT) {
+					ifap = &ifa->ifa_next;
+					ifa = rtnl_net_dereference(net, *ifap);
+					continue;
 				}
-			} else if (ifa->ifa_preferred_lft !=
-				   INFINITY_LIFE_TIME &&
-				   age >= ifa->ifa_preferred_lft &&
-				   !(ifa->ifa_flags & IFA_F_DEPRECATED)) {
-				ifa->ifa_flags |= IFA_F_DEPRECATED;
-				rtmsg_ifa(RTM_NEWADDR, ifa, NULL, 0);
+
+				/* We try to batch several events at once. */
+				age = (now - ifa->ifa_tstamp +
+				       ADDRCONF_TIMER_FUZZ_MINUS) / HZ;
+
+				if (ifa->ifa_valid_lft != INFINITY_LIFE_TIME &&
+				    age >= ifa->ifa_valid_lft) {
+					inet_del_ifa(in_dev, ifap, 1);
+					ifa = rtnl_net_dereference(net, *ifap);
+					continue;
+				} else if (ifa->ifa_preferred_lft !=
+					   INFINITY_LIFE_TIME &&
+					   age >= ifa->ifa_preferred_lft &&
+					   !(ifa->ifa_flags & IFA_F_DEPRECATED)) {
+					ifa->ifa_flags |= IFA_F_DEPRECATED;
+					rtmsg_ifa(RTM_NEWADDR, ifa, NULL, 0);
+				}
+				ifap = &ifa->ifa_next;
+				ifa = rtnl_net_dereference(net, *ifap);
 			}
 		}
 		rtnl_net_unlock(net);
@@ -2786,12 +2811,9 @@ static __net_init int devinet_init_net(struct net *net)
 #endif
 	struct ipv4_devconf *all, *dflt;
 	int err;
-	int i;
 
-	err = -ENOMEM;
-	net->ipv4.inet_addr_lst = kmalloc_objs(struct hlist_head,
-					       IN4_ADDR_HSIZE);
-	if (!net->ipv4.inet_addr_lst)
+	err = rhltable_init(&net->ipv4.inet_addr_lst, &inet_addr_rht_params);
+	if (err)
 		goto err_alloc_hash;
 
 	all = kmemdup(&ipv4_devconf, sizeof(ipv4_devconf), GFP_KERNEL);
@@ -2854,9 +2876,6 @@ static __net_init int devinet_init_net(struct net *net)
 	net->ipv4.forw_hdr = forw_hdr;
 #endif
 
-	for (i = 0; i < IN4_ADDR_HSIZE; i++)
-		INIT_HLIST_HEAD(&net->ipv4.inet_addr_lst[i]);
-
 	INIT_DEFERRABLE_WORK(&net->ipv4.addr_chk_work, check_lifetime);
 
 	net->ipv4.devconf_all = all;
@@ -2876,7 +2895,7 @@ err_alloc_ctl:
 err_alloc_dflt:
 	kfree(all);
 err_alloc_all:
-	kfree(net->ipv4.inet_addr_lst);
+	rhltable_destroy(&net->ipv4.inet_addr_lst);
 err_alloc_hash:
 	return err;
 }
@@ -2900,7 +2919,7 @@ static __net_exit void devinet_exit_net(struct net *net)
 #endif
 	kfree(net->ipv4.devconf_dflt);
 	kfree(net->ipv4.devconf_all);
-	kfree(net->ipv4.inet_addr_lst);
+	rhltable_destroy(&net->ipv4.inet_addr_lst);
 }
 
 static __net_initdata struct pernet_operations devinet_ops = {

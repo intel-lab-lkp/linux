@@ -401,22 +401,6 @@ config INET_IPCOMP
 
 	  If unsure, say Y.
 
-config INET_ADDR_HASH_BUCKETS
-	int "IPv4 address hash table size" if EXPERT
-	range 64 16384
-	default 256
-	help
-	  Number of hash buckets for looking up local IPv4 addresses,
-	  e.g. during route output to validate the source address via
-	  __ip_dev_find().  Rounded up to the nearest power of 2.
-
-	  Hosts with many IPv4 addresses benefit from a larger table to reduce
-	  hash chain lengths. This is particularly relevant when sending using
-	  unconnected UDP sockets.
-
-	  The default of 256 is fine for most systems.  A value of 1024
-	  suits hosts with ~500+ addresses.
-
 config INET_TABLE_PERTURB_ORDER
 	int "INET: Source port perturbation table size (as power of 2)" if EXPERT
 	default 16

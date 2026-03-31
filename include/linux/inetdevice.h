@@ -13,6 +13,7 @@
 #include <linux/sysctl.h>
 #include <linux/rtnetlink.h>
 #include <linux/refcount.h>
+#include <linux/rhashtable-types.h>
 
 struct ipv4_devconf {
 	void	*sysctl;
@@ -141,7 +142,7 @@ static inline void ipv4_devconf_setall(struct in_device *in_dev)
 							  ARP_EVICT_NOCARRIER)
 
 struct in_ifaddr {
-	struct hlist_node	addr_lst;
+	struct rhlist_head	addr_lst;
 	struct in_ifaddr	__rcu *ifa_next;
 	struct in_device	*ifa_dev;
 	struct rcu_head		rcu_head;
