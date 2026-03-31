@@ -4,6 +4,8 @@
 //!
 //! Support for defining bitfields in Rust structures. Also used by the [`register!`] macro.
 
+use kernel::prelude::*;
+
 /// Defines a struct with accessors to access bits within an inner unsigned integer.
 ///
 /// # Syntax
@@ -314,12 +316,11 @@ macro_rules! bitfield {
         /// Returns a value for the bitfield where all fields are set to their default value.
         impl ::core::default::Default for $name {
             fn default() -> Self {
-                #[allow(unused_mut)]
-                let mut value = Self(Default::default());
+                let value = Self(Default::default());
 
                 ::kernel::macros::paste!(
                 $(
-                value.[<set_ $field>](Default::default());
+                let value = value.[<set_ $field>](Default::default());
                 )*
                 );
 
@@ -327,4 +328,47 @@ macro_rules! bitfield {
             }
         }
     };
+}
+
+#[kunit_tests(nova_core_bitfield)]
+mod tests {
+    use super::*;
+
+    #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+    enum State {
+        Inactive = 0,
+        #[default]
+        Active = 1,
+    }
+
+    impl From<bool> for State {
+        fn from(value: bool) -> Self {
+            if value {
+                State::Active
+            } else {
+                State::Inactive
+            }
+        }
+    }
+
+    impl From<State> for bool {
+        fn from(state: State) -> bool {
+            match state {
+                State::Inactive => false,
+                State::Active => true,
+            }
+        }
+    }
+
+    bitfield! {
+        struct TestBitfield(u32) {
+            0:0 state as bool => State;
+        }
+    }
+
+    #[test]
+    fn default_impl() -> Result {
+        assert_eq!(TestBitfield::default().state(), State::Active);
+        Ok(())
+    }
 }
