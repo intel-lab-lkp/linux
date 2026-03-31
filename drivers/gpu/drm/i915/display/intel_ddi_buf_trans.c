@@ -1786,6 +1786,25 @@ xe3plpd_get_lt_buf_trans(struct intel_encoder *encoder,
 		return intel_get_buf_trans(&xe3plpd_lt_trans_dp14, n_entries);
 }
 
+static enum lt_vswing_preemph_index
+_compute_index_lt(const struct intel_crtc_state *crtc_state)
+{
+        if (intel_crtc_has_dp_encoder(crtc_state) && intel_dp_is_uhbr(crtc_state)) {
+                return XE3P_VS_PE_DP21;
+        } else if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP)) {
+                 /* FIXME need to check correct parsing & table index should
+                 * this ever trigger.
+                 */
+                drm_WARN(to_intel_display(crtc_state)->drm, 1,
+                         "Ask to override EDP's vswing/preemph tables\n");
+                return XE3P_VS_PE_EDP;
+        } else {
+                return XE3P_VS_PE_DP14;
+        }
+
+        return (enum lt_vswing_preemph_index) 0;
+}
+
 static union ddi_vswing_preemph_index
 vswing_preemph_compute_index(struct intel_encoder *encoder,
 			     const struct intel_crtc_state *crtc_state)
@@ -1793,8 +1812,12 @@ vswing_preemph_compute_index(struct intel_encoder *encoder,
 	struct intel_display *display = to_intel_display(encoder);
 	union ddi_vswing_preemph_index index;
 
-	drm_dbg_kms(display->drm, "using default VS/PE Override index");
-	index = (union ddi_vswing_preemph_index) 0;
+	if (HAS_LT_PHY(display)) {
+		index.lt = _compute_index_lt(crtc_state);
+	} else {
+		drm_dbg_kms(display->drm, "using default VS/PE Override index");
+		index = (union ddi_vswing_preemph_index) 0;
+	}
 
 	return index;
 }
@@ -1803,6 +1826,10 @@ static int
 vswing_preemph_cast_index(struct intel_display *display,
 			   union ddi_vswing_preemph_index index)
 {
+	if (HAS_LT_PHY(display)) {
+		return index.lt;
+	}
+
 	return 0;
 }
 
