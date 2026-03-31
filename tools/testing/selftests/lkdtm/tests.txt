@@ -87,3 +87,13 @@ FORTIFY_STR_MEMBER detected buffer overflow
 FORTIFY_MEM_OBJECT detected buffer overflow
 FORTIFY_MEM_MEMBER detected field-spanning write
 PPC_SLB_MULTIHIT Recovered
+OBT_ASSIGN_TRUNCATE_TO traps: UBSAN: integer truncation
+OBT_ASSIGN_TRUNCATE_FROM traps: UBSAN: integer truncation
+OBT_CAST_TRUNCATE traps: UBSAN: integer truncation
+OBT_CAST_SIGNED traps: UBSAN: integer truncation
+OBT_MUL traps: UBSAN: integer multiplication overflow
+OBT_MUL_SIGNED traps: UBSAN: integer multiplication overflow
+OBT_ADD traps: UBSAN: integer addition overflow
+OBT_ADD_SIGNED traps: UBSAN: integer addition overflow
+OBT_NEGATED_UNSIGNED traps: UBSAN: negation overflow
+OBT_POSTFIX_OPERATORS traps: UBSAN: integer truncation

@@ -817,6 +817,249 @@ static noinline void lkdtm_CORRUPT_PAC(void)
 #endif
 }
 
+static void lkdtm_OBT_ASSIGN_TRUNCATE_TO(void)
+{
+	volatile int big = INT_MAX;
+	volatile int wide_low_value = 5;
+	u8 __ob_trap narrow_low_value = 0;
+	s32 __ob_trap same = 0;
+	u8 __ob_trap small = 0;
+
+	pr_info("Performing same-width assignment to OBT\n");
+	same = big;
+
+	pr_info("Performing small-value assignment to OBT\n");
+	narrow_low_value = wide_low_value;
+
+	pr_info("Expecting trap on truncated assignment to OBT\n");
+	small = big;
+
+	pr_err("FAIL: survived overflowing truncated assignment to OBT: %d -> %u (ok: %d -> %u)\n",
+		same, small, wide_low_value, narrow_low_value);
+	pr_expected_config(CONFIG_OVERFLOW_BEHAVIOR_TYPES_TRAP);
+}
+
+static void lkdtm_OBT_ASSIGN_TRUNCATE_FROM(void)
+{
+	volatile s32 __ob_trap big = INT_MAX;
+	volatile s32 __ob_trap wide_low_value = 5;
+	u8 narrow_low_value = 0;
+	s32 same = 0;
+	u8 small = 0;
+
+	pr_info("Performing same-width assignment from OBT\n");
+	same = big;
+
+	pr_info("Performing small-value assignment from OBT\n");
+	narrow_low_value = wide_low_value;
+
+	pr_info("Expecting trap on truncated assignment from OBT\n");
+	small = big;
+
+	pr_err("FAIL: survived overflowing truncated assignment from OBT: %d -> %u (ok: %d -> %u)\n",
+		same, small, wide_low_value, narrow_low_value);
+	pr_expected_config(CONFIG_OVERFLOW_BEHAVIOR_TYPES_TRAP);
+}
+
+static void lkdtm_OBT_CAST_TRUNCATE(void)
+{
+	volatile u32 __ob_trap big = INT_MAX;
+	u32 trunc = 0;
+	u32 small = 0;
+
+	pr_info("Performing wrapping too-small cast\n");
+	trunc = (u16 __ob_wrap)big;
+
+	pr_info("Expecting trap on too-small cast\n");
+	small = (s16)big;
+
+	pr_err("FAIL: survived truncated casting: %u -> %u (ok: %u -> %u)\n",
+		big, small, big, trunc);
+	pr_expected_config(CONFIG_OVERFLOW_BEHAVIOR_TYPES_TRAP);
+}
+
+static void lkdtm_OBT_CAST_SIGNED(void)
+{
+	volatile u32 __ob_trap big = UINT_MAX;
+	s32 neg = 0;
+	s32 small = 0;
+
+	pr_info("Performing explicit sign-changing cast\n");
+	neg = (s32 __ob_wrap)big;
+
+	pr_info("Expecting trap on unexpected sign-changing cast\n");
+	small = (s32)big;
+
+	pr_err("FAIL: survived lossy sign conversion: %u -> %d (forced: %u -> %d)\n",
+		big, small, big, neg);
+	pr_expected_config(CONFIG_OVERFLOW_BEHAVIOR_TYPES_TRAP);
+}
+
+static void lkdtm_OBT_MUL(void)
+{
+	/* Promotion means no overflow checking can happen. */
+	volatile u8 __ob_trap a8 = 100;
+	volatile u8 __ob_trap b8 = 3;
+	unsigned int promoted;
+	/* 32-bit or larger, however, get checked. */
+	volatile u32 __ob_trap a = UINT_MAX - 1;
+	volatile u32 __ob_trap b = 2;
+	unsigned long long happy;
+	unsigned long long outcome;
+
+	/* Promotion means a * b happens as "int __ob_trap", so no trap. */
+	pr_info("Performing promoted overflowing unsigned multiplication\n");
+	promoted = a8 * b8;
+
+	pr_info("Performing non-overflowing unsigned multiplication\n");
+	happy = b * b;
+
+	pr_info("Expecting trap on overflowing unsigned multiplication\n");
+	outcome = a * b;
+
+	pr_err("FAIL: survived unsigned multiplication overflow: %u * %u -> %llu (ok: %u * %u -> %llu, %u)\n",
+		a, b, outcome, b, b, happy, promoted);
+	pr_expected_config(CONFIG_OVERFLOW_BEHAVIOR_TYPES_TRAP);
+}
+
+static void lkdtm_OBT_MUL_SIGNED(void)
+{
+	/* Promotion means no overflow checking can happen. */
+	volatile s8 __ob_trap a8 = 100;
+	volatile s8 __ob_trap b8 = 3;
+	int promoted;
+	/* 32-bit or larger, however, get checked. */
+	volatile s32 __ob_trap a = INT_MAX - 1;
+	volatile s32 __ob_trap b = 2;
+	signed long long happy;
+	signed long long outcome;
+
+	/* Promotion means a8 * b8 happens as "int __ob_trap", so no trap. */
+	pr_info("Performing promoted overflowing signed multiplication\n");
+	promoted = a8 * b8;
+
+	pr_info("Performing non-overflowing signed multiplication\n");
+	happy = b * b;
+
+	pr_info("Expecting trap on overflowing signed multiplication\n");
+	outcome = a * b;
+
+	pr_err("FAIL: survived signed multiplication overflow: %d * %d -> %lld (ok: %d * %d -> %lld, %d)\n",
+		a, b, outcome, b, b, happy, promoted);
+	pr_expected_config(CONFIG_OVERFLOW_BEHAVIOR_TYPES_TRAP);
+}
+
+static void lkdtm_OBT_ADD(void)
+{
+	/* Promotion means no overflow checking can happen. */
+	volatile u8 __ob_trap a8 = 250;
+	volatile u8 __ob_trap b8 = 30;
+	unsigned int promoted;
+	/* 32-bit or larger, however, get checked. */
+	volatile u32 __ob_trap a = UINT_MAX - 1;
+	volatile u32 __ob_trap b = 2;
+	unsigned long long happy;
+	unsigned long long outcome;
+
+	/* Promotion means a8 + b8 happens as "int __ob_trap", so no trap. */
+	pr_info("Performing promoted overflowing unsigned addition\n");
+	promoted = a8 + b8;
+
+	pr_info("Performing idiomatic unsigned overflow addition test\n");
+	if (a + b < a) {
+		/* Report status so test isn't elided by compiler. */
+		pr_info("ok: overflow contained by conditional\n");
+	}
+
+	pr_info("Performing non-overflowing unsigned addition\n");
+	happy = b + b;
+
+	pr_info("Expecting trap on overflowing unsigned addition\n");
+	outcome = a + b;
+
+	pr_err("FAIL: survived unsigned addition overflow: %u + %u -> %llu (ok: %u + %u -> %llu)\n",
+		a, b, outcome, b, b, happy);
+	pr_expected_config(CONFIG_OVERFLOW_BEHAVIOR_TYPES_TRAP);
+}
+
+static void lkdtm_OBT_ADD_SIGNED(void)
+{
+	/* Promotion means no overflow checking can happen. */
+	volatile s8 __ob_trap a8 = 120;
+	volatile s8 __ob_trap b8 = 30;
+	int promoted;
+	/* 32-bit or larger, however, get checked. */
+	volatile s32 __ob_trap a = INT_MAX - 1;
+	volatile s32 __ob_trap b = 2;
+	signed long long happy;
+	signed long long outcome;
+
+	/* Promotion means a8 + b8 happens as "int __ob_trap", so no trap. */
+	pr_info("Performing promoted overflowing signed addition\n");
+	promoted = a8 + b8;
+
+	pr_info("Performing idiomatic signed overflow addition test\n");
+	if (a + b < a) {
+		/* Report status so test isn't elided by compiler. */
+		pr_info("ok: overflow contained by conditional\n");
+	}
+
+	pr_info("Performing non-overflowing signed addition\n");
+	happy = b + b;
+
+	pr_info("Expecting trap on overflowing signed addition\n");
+	outcome = a + b;
+
+	pr_err("FAIL: survived signed addition overflow: %u + %u -> %llu (ok: %u + %u -> %llu)\n",
+		a, b, outcome, b, b, happy);
+	pr_expected_config(CONFIG_OVERFLOW_BEHAVIOR_TYPES_TRAP);
+}
+
+static void lkdtm_OBT_NEGATED_UNSIGNED(void)
+{
+	volatile unsigned long __ob_trap value = 256;
+	size_t outcome;
+
+	pr_info("Expecting trap on overflowing unsigned negation\n");
+	outcome = value & -value;
+
+	pr_err("FAIL: survived negated unsigned value: %lu -> %zu\n",
+		value, outcome);
+	pr_expected_config(CONFIG_OVERFLOW_BEHAVIOR_TYPES_TRAP);
+}
+
+static void lkdtm_OBT_POSTFIX_OPERATORS(void)
+{
+	volatile int target = 300;
+	volatile int flag = 0;
+	int i;
+	u8 __ob_wrap wrapper = 0; /* Explicitly wrapping. */
+	u8 __ob_trap counter = 0;
+
+	pr_info("Performing u8 __ob_wrap post-increment past 255\n");
+	for (i = 0; i < target; i++)
+		wrapper++;
+	if (wrapper != 44)
+		pr_err("FAIL: wrapped incorrecty: %u\n", wrapper);
+
+	pr_info("Performing idiomatic post-decrement zero test\n");
+	counter = target / 2;
+	while (counter--)
+		if (flag)
+			break;
+	if (counter != 255)
+		pr_err("FAIL: u8 __ob_trap post-decrement zero-test did not wrap: %u\n",
+			counter);
+
+	pr_info("Expecting trap on u8 __ob_trap post-increment past 255\n");
+	counter = 0;
+	for (i = 0; i < target; i++)
+		counter++;
+
+	pr_err("FAIL: survived overflowed post-increment: %u\n", counter);
+	pr_expected_config(CONFIG_OVERFLOW_BEHAVIOR_TYPES_TRAP);
+}
+
 static struct crashtype crashtypes[] = {
 	CRASHTYPE(PANIC),
 	CRASHTYPE(PANIC_STOP_IRQOFF),
@@ -850,6 +1093,16 @@ static struct crashtype crashtypes[] = {
 	CRASHTYPE(UNSET_SMEP),
 	CRASHTYPE(DOUBLE_FAULT),
 	CRASHTYPE(CORRUPT_PAC),
+	CRASHTYPE(OBT_ASSIGN_TRUNCATE_TO),
+	CRASHTYPE(OBT_ASSIGN_TRUNCATE_FROM),
+	CRASHTYPE(OBT_CAST_TRUNCATE),
+	CRASHTYPE(OBT_CAST_SIGNED),
+	CRASHTYPE(OBT_MUL),
+	CRASHTYPE(OBT_MUL_SIGNED),
+	CRASHTYPE(OBT_ADD),
+	CRASHTYPE(OBT_ADD_SIGNED),
+	CRASHTYPE(OBT_NEGATED_UNSIGNED),
+	CRASHTYPE(OBT_POSTFIX_OPERATORS),
 };
 
 struct crashtype_category bugs_crashtypes = {
