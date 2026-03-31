@@ -138,6 +138,19 @@ static inline bool drm_exec_is_contended(struct drm_exec *exec)
 	return !!exec->contended;
 }
 
+/**
+ * drm_exec_retry() - Unconditionally restart the loop to grab all locks.
+ * @exec: drm_exec object
+ *
+ * Unconditionally retry the loop to lock all objects. For consistency,
+ * the exec object needs to be newly initialized or contended.
+ */
+#define drm_exec_retry(_exec)				\
+	do {						\
+		WARN_ON(!drm_exec_is_contended(_exec)); \
+		goto *__drm_exec_retry_ptr;		\
+	} while (0)
+
 void drm_exec_init(struct drm_exec *exec, u32 flags, unsigned nr);
 void drm_exec_fini(struct drm_exec *exec);
 bool drm_exec_cleanup(struct drm_exec *exec);
