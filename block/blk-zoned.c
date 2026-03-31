@@ -1960,6 +1960,7 @@ static int disk_update_zone_resources(struct gendisk *disk,
 		queue_limits_cancel_update(q);
 		pr_warn("%s: Invalid number of conventional zones %u / %u\n",
 			disk->disk_name, args->nr_conv_zones, disk->nr_zones);
+		kfree(args->zones_cond);
 		ret = -ENODEV;
 		goto unfreeze;
 	}
@@ -2239,6 +2240,7 @@ int blk_revalidate_disk_zones(struct gendisk *disk)
 	ret = disk_revalidate_zone_resources(disk, &args);
 	if (ret) {
 		memalloc_noio_restore(noio_flag);
+		kfree(args.zones_cond);
 		return ret;
 	}
 
@@ -2264,6 +2266,7 @@ int blk_revalidate_disk_zones(struct gendisk *disk)
 
 	pr_warn("%s: failed to revalidate zones\n", disk->disk_name);
 
+	kfree(args.zones_cond);
 	memflags = blk_mq_freeze_queue(q);
 	disk_free_zone_resources(disk);
 	blk_mq_unfreeze_queue(q, memflags);
