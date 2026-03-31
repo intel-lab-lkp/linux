@@ -127,3 +127,19 @@ did_interface_receive()
 		false
 	fi
 }
+
+did_interface_receive_icmp()
+{
+	local interface="$1"
+	local ip_address="$2"
+
+	local packet_count=$(tcpdump_show "$interface" | grep \
+			"> ${ip_address}: ICMP" | wc -l)
+	echo "Packet count for ${interface} was ${packet_count}"
+
+	if [[ "$packet_count" -gt 0 ]]; then
+		true
+	else
+		false
+	fi
+}
