@@ -38,6 +38,14 @@ static vm_fault_t ocfs2_fault(struct vm_fault *vmf)
 	ret = filemap_fault(vmf);
 	ocfs2_unblock_signals(&oldset);
 
+	/*
+	 * filemap_fault() may drop the mmap_lock and return VM_FAULT_RETRY.
+	 * In that case the vma may have been freed by a concurrent munmap(),
+	 * so we must not dereference it.
+	 */
+	if (ret & VM_FAULT_RETRY)
+		return ret;
+
 	trace_ocfs2_fault(OCFS2_I(vma->vm_file->f_mapping->host)->ip_blkno,
 			  vma, vmf->page, vmf->pgoff);
 	return ret;
