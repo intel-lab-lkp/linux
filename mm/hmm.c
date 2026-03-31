@@ -59,6 +59,35 @@ static int hmm_pfns_fill(unsigned long addr, unsigned long end,
 	return 0;
 }
 
+static int hmm_handle_mm_fault(struct vm_area_struct *vma,
+			       unsigned long addr,
+			       unsigned int fault_flags)
+{
+	int ret;
+
+	if (userfaultfd_missing(vma)) {
+		struct mm_struct *mm = vma->vm_mm;
+
+		fault_flags |= FAULT_FLAG_ALLOW_RETRY |
+			       FAULT_FLAG_USER;
+
+		ret = handle_mm_fault(vma, addr, fault_flags, NULL);
+
+		if (ret & (VM_FAULT_COMPLETED | VM_FAULT_RETRY)) {
+			mmap_read_lock(mm);
+			return -EBUSY;
+		}
+
+		if (ret & VM_FAULT_ERROR)
+			return vm_fault_to_errno(ret, 0);
+	} else {
+		ret = handle_mm_fault(vma, addr, fault_flags, NULL);
+		if (ret & VM_FAULT_ERROR)
+			return vm_fault_to_errno(ret, 0);
+	}
+	return 0;
+}
+
 /*
  * hmm_vma_fault() - fault in a range lacking valid pmd or pte(s)
  * @addr: range virtual start address (inclusive)
@@ -86,10 +115,13 @@ static int hmm_vma_fault(unsigned long addr, unsigned long end,
 		fault_flags |= FAULT_FLAG_WRITE;
 	}
 
-	for (; addr < end; addr += PAGE_SIZE)
-		if (handle_mm_fault(vma, addr, fault_flags, NULL) &
-		    VM_FAULT_ERROR)
-			return -EFAULT;
+	for (; addr < end; addr += PAGE_SIZE) {
+		int ret;
+
+		ret = hmm_handle_mm_fault(vma, addr, fault_flags);
+		if (ret)
+			return ret;
+	}
 	return -EBUSY;
 }
 
