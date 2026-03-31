@@ -78,26 +78,54 @@ static void kvm_route_msi(struct kvm_vm *vm, u32 gsi, struct kvm_vcpu *vcpu,
 	vm_ioctl(vm, KVM_SET_GSI_ROUTING, routes);
 }
 
-static int setup_msi(struct vfio_pci_device *device)
+static int setup_msi(struct vfio_pci_device *device, bool use_device_msi)
 {
+	const int flags = MAP_SHARED | MAP_ANONYMOUS;
+	const int prot = PROT_READ | PROT_WRITE;
+	struct dma_region *region;
+
+	if (use_device_msi) {
+		/* A driver is required to generate an MSI. */
+		TEST_REQUIRE(device->driver.ops);
+
+		/* Set up a DMA-able region for the driver to use. */
+		region = &device->driver.region;
+		region->iova = 0;
+		region->size = SZ_2M;
+		region->vaddr = kvm_mmap(region->size, prot, flags, -1);
+		TEST_ASSERT(region->vaddr != MAP_FAILED, "mmap() failed\n");
+		iommu_map(device->iommu, region);
+
+		vfio_pci_driver_init(device);
+
+		return device->driver.msi;
+	}
+
 	TEST_REQUIRE(device->msix_info.count > 0);
 	vfio_pci_msix_enable(device, 0, 1);
 	return 0;
 }
 
-static void send_msi(struct vfio_pci_device *device, int msi)
+static void send_msi(struct vfio_pci_device *device, bool use_device_msi, int msi)
 {
-	vfio_pci_irq_trigger(device, VFIO_PCI_MSIX_IRQ_INDEX, msi);
+	if (use_device_msi) {
+		TEST_ASSERT_EQ(msi, device->driver.msi);
+		vfio_pci_driver_send_msi(device);
+	} else {
+		vfio_pci_irq_trigger(device, VFIO_PCI_MSIX_IRQ_INDEX, msi);
+	}
 }
 
 static void help(const char *name)
 {
-	printf("Usage: %s [-a] [-b] [-h] segment:bus:device.function\n",
+	printf("Usage: %s [-a] [-b] [-d] [-h] segment:bus:device.function\n",
 	       name);
 	printf("\n");
 	printf("  -a: Randomly affinitize the device IRQ to different CPUs\n"
 	       "      throughout the test.\n");
 	printf("  -b: Block vCPUs (e.g. HLT) instead of spinning in guest-mode\n");
+	printf("  -d: Use the device to trigger the IRQ instead of emulating\n"
+	       "      it with an eventfd write.\n");
 	printf("\n");
 	exit(KSFT_FAIL);
 }
@@ -120,7 +148,7 @@ int main(int argc, char **argv)
 	u8 vector = 32 + rand() % (UINT8_MAX - 32);
 
 	/* Test configuration (overridable by command line flags). */
-	bool irq_affinity = false;
+	bool use_device_msi = false, irq_affinity = false;
 	int nr_irqs = 1000;
 	int nr_vcpus = 1;
 
@@ -138,13 +166,16 @@ int main(int argc, char **argv)
 
 	device_bdf = vfio_selftests_get_bdf(&argc, argv);
 
-	while ((c = getopt(argc, argv, "abh")) != -1) {
+	while ((c = getopt(argc, argv, "abdh")) != -1) {
 		switch (c) {
 		case 'a':
 			irq_affinity = true;
 			break;
 		case 'b':
 			block = true;
+			break;
+		case 'd':
+			use_device_msi = true;
 			break;
 		case 'h':
 		default:
@@ -157,7 +188,7 @@ int main(int argc, char **argv)
 
 	iommu = iommu_init(default_iommu_mode);
 	device = vfio_pci_device_init(device_bdf, iommu);
-	msi = setup_msi(device);
+	msi = setup_msi(device, use_device_msi);
 	irq = get_irq_number(device_bdf, msi);
 
 	irq_count = get_irq_count(irq);
@@ -165,7 +196,7 @@ int main(int argc, char **argv)
 	piw_count = get_irq_count_by_name("PIW:");
 
 	printf("%s %s MSI-X[%d] (IRQ-%d) %d times\n",
-               "Notifying the eventfd for",
+	       use_device_msi ? "Triggering" : "Notifying the eventfd for",
 	       device_bdf, msi, irq, nr_irqs);
 
 	kvm_assign_irqfd(vm, gsi, device->msi_eventfds[msi]);
@@ -213,7 +244,7 @@ int main(int argc, char **argv)
 				vcpu->id);
 		}
 
-		send_msi(device, msi);
+		send_msi(device, use_device_msi, msi);
 
 		clock_gettime(CLOCK_MONOTONIC, &start);
 		for (;;) {
@@ -238,7 +269,7 @@ int main(int argc, char **argv)
 	for (i = 0; i < nr_vcpus; i++) {
 		if (block) {
 			kvm_route_msi(vm, gsi, vcpus[i], vector);
-			send_msi(device, msi);
+			send_msi(device, false, msi);
 		}
 
 		pthread_join(vcpu_threads[i], NULL);
