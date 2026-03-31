@@ -217,6 +217,9 @@ static int query_engines(struct xe_device *xe,
 
 	engines->num_engines = i;
 
+	if (xe_device_is_admin_only(xe))
+		memset(engines, 0, size);
+
 	if (copy_to_user(query_ptr, engines, size)) {
 		kfree(engines);
 		return -EFAULT;
@@ -296,6 +299,9 @@ static int query_mem_regions(struct xe_device *xe,
 			mem_regions->num_mem_regions++;
 		}
 	}
+
+	if (xe_device_is_admin_only(xe))
+		memset(mem_regions, 0, size);
 
 	if (!copy_to_user(query_ptr, mem_regions, size))
 		ret = 0;
