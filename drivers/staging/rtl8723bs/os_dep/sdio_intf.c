@@ -192,12 +192,6 @@ static void sdio_dvobj_deinit(struct sdio_func *func)
 	}
 }
 
-void rtw_set_hal_ops(struct adapter *padapter)
-{
-	/* alloc memory for HAL DATA */
-	rtw_hal_data_init(padapter);
-}
-
 static void sd_intf_start(struct adapter *padapter)
 {
 	if (!padapter)
@@ -245,8 +239,9 @@ static struct adapter *rtw_sdio_if1_init(struct dvobj_priv *dvobj, const struct 
 	/* 3 3. init driver special setting, interface, OS and hardware relative */
 
 	/* 4 3.1 set hardware operation functions */
-	rtw_set_hal_ops(padapter);
-
+	/* allocates padapter->HalData */
+	if (rtw_hal_data_init(padapter))
+		goto free_adapter;
 
 	/* 3 5. initialize Chip version */
 	padapter->intf_start = &sd_intf_start;
