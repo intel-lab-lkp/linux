@@ -152,34 +152,17 @@ ufs_set_de_type(struct super_block *sb, struct ufs_dir_entry *de, int mode)
 	if ((UFS_SB(sb)->s_flags & UFS_DE_MASK) != UFS_DE_44BSD)
 		return;
 
-	/*
-	 * TODO turn this into a table lookup
-	 */
-	switch (mode & S_IFMT) {
-	case S_IFSOCK:
-		de->d_u.d_44.d_type = DT_SOCK;
-		break;
-	case S_IFLNK:
-		de->d_u.d_44.d_type = DT_LNK;
-		break;
-	case S_IFREG:
-		de->d_u.d_44.d_type = DT_REG;
-		break;
-	case S_IFBLK:
-		de->d_u.d_44.d_type = DT_BLK;
-		break;
-	case S_IFDIR:
-		de->d_u.d_44.d_type = DT_DIR;
-		break;
-	case S_IFCHR:
-		de->d_u.d_44.d_type = DT_CHR;
-		break;
-	case S_IFIFO:
-		de->d_u.d_44.d_type = DT_FIFO;
-		break;
-	default:
-		de->d_u.d_44.d_type = DT_UNKNOWN;
-	}
+	static const unsigned char type_table[16] = {
+		[S_IFSOCK >> 12]	= DT_SOCK,
+		[S_IFLNK >> 12]		= DT_LNK,
+		[S_IFREG >> 12]		= DT_REG,
+		[S_IFBLK >> 12]		= DT_BLK,
+		[S_IFDIR >> 12]		= DT_DIR,
+		[S_IFCHR >> 12]		= DT_CHR,
+		[S_IFIFO >> 12]		= DT_FIFO,
+	};
+
+	de->d_u.d_44.d_type = type_table[(mode & S_IFMT) >> 12];
 }
 
 static inline u32
