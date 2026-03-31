@@ -63,6 +63,13 @@ static void *vcpu_thread_main(void *arg)
 	return NULL;
 }
 
+static void kvm_clear_gsi_routes(struct kvm_vm *vm)
+{
+	struct kvm_irq_routing routes = {};
+
+	vm_ioctl(vm, KVM_SET_GSI_ROUTING, &routes);
+}
+
 static void kvm_route_msi(struct kvm_vm *vm, u32 gsi, struct kvm_vcpu *vcpu,
 			  u8 vector)
 {
@@ -118,7 +125,7 @@ static void send_msi(struct vfio_pci_device *device, bool use_device_msi, int ms
 
 static void help(const char *name)
 {
-	printf("Usage: %s [-a] [-b] [-d] [-h] segment:bus:device.function\n",
+	printf("Usage: %s [-a] [-b] [-d] [-e] [-h] segment:bus:device.function\n",
 	       name);
 	printf("\n");
 	printf("  -a: Randomly affinitize the device IRQ to different CPUs\n"
@@ -126,6 +133,8 @@ static void help(const char *name)
 	printf("  -b: Block vCPUs (e.g. HLT) instead of spinning in guest-mode\n");
 	printf("  -d: Use the device to trigger the IRQ instead of emulating\n"
 	       "      it with an eventfd write.\n");
+	printf("  -e: Destroy and recreate KVM's GSI routing table in between\n"
+	       "      some interrupts.\n");
 	printf("\n");
 	exit(KSFT_FAIL);
 }
@@ -149,6 +158,7 @@ int main(int argc, char **argv)
 
 	/* Test configuration (overridable by command line flags). */
 	bool use_device_msi = false, irq_affinity = false;
+	bool empty = false;
 	int nr_irqs = 1000;
 	int nr_vcpus = 1;
 
@@ -166,7 +176,7 @@ int main(int argc, char **argv)
 
 	device_bdf = vfio_selftests_get_bdf(&argc, argv);
 
-	while ((c = getopt(argc, argv, "abdh")) != -1) {
+	while ((c = getopt(argc, argv, "abdeh")) != -1) {
 		switch (c) {
 		case 'a':
 			irq_affinity = true;
@@ -176,6 +186,9 @@ int main(int argc, char **argv)
 			break;
 		case 'd':
 			use_device_msi = true;
+			break;
+		case 'e':
+			empty = true;
 			break;
 		case 'h':
 		default:
@@ -226,7 +239,11 @@ int main(int argc, char **argv)
 
 	for (i = 0; i < nr_irqs; i++) {
 		struct kvm_vcpu *vcpu = vcpus[i % nr_vcpus];
+		const bool do_empty = empty && (i & BIT(3));
 		struct timespec start;
+
+		if (do_empty)
+			kvm_clear_gsi_routes(vm);
 
 		kvm_route_msi(vm, gsi, vcpu, vector);
 
@@ -254,6 +271,7 @@ int main(int argc, char **argv)
 			if (timespec_to_ns(timespec_elapsed(start)) > TIMEOUT_NS) {
 				printf("Timeout waiting for interrupt!\n");
 				printf("  vCPU: %d\n", vcpu->id);
+				printf("  do_empty: %d\n", do_empty);
 				if (irq_affinity)
 					printf("  irq_cpu: %d\n", irq_cpu);
 
