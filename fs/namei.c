@@ -721,15 +721,15 @@ EXPORT_SYMBOL(path_put);
 
 #define EMBEDDED_LEVELS 2
 struct nameidata {
-	struct path	path;
-	struct qstr	last;
-	struct path	root;
-	struct inode	*inode; /* path.dentry.d_inode */
-	unsigned int	flags, state;
-	unsigned	seq, next_seq, m_seq, r_seq;
-	int		last_type;
-	unsigned	depth;
-	int		total_link_count;
+	struct path		path;
+	struct qstr		last;
+	struct path		root;
+	struct inode		*inode; /* path.dentry.d_inode */
+	unsigned int		flags, state;
+	unsigned		seq, next_seq, m_seq, r_seq;
+	enum component_type	last_type;
+	unsigned		depth;
+	int			total_link_count;
 	struct saved {
 		struct path link;
 		struct delayed_call done;
@@ -2220,9 +2220,9 @@ in_root:
 	return dget(nd->path.dentry);
 }
 
-static const char *handle_dots(struct nameidata *nd, int type)
+static const char *handle_dots(struct nameidata *nd, enum component_type type)
 {
-	if (type == LAST_DOTDOT) {
+	if (type == DOTDOT) {
 		const char *error = NULL;
 		struct dentry *parent;
 
@@ -2266,7 +2266,7 @@ static __always_inline const char *walk_component(struct nameidata *nd, int flag
 	 * to be able to know about the current root directory and
 	 * parent relationships.
 	 */
-	if (unlikely(nd->last_type != LAST_NORM)) {
+	if (unlikely(nd->last_type != NORMAL)) {
 		if (unlikely(nd->depth) && !(flags & WALK_MORE))
 			put_link(nd);
 		return handle_dots(nd, nd->last_type);
@@ -2576,7 +2576,7 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 	int depth = 0; // depth <= nd->depth
 	int err;
 
-	nd->last_type = LAST_ROOT;
+	nd->last_type = ROOT;
 	nd->flags |= LOOKUP_PARENT;
 	if (IS_ERR(name))
 		return PTR_ERR(name);
@@ -2606,16 +2606,16 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 
 		switch(lastword) {
 		case LAST_WORD_IS_DOTDOT:
-			nd->last_type = LAST_DOTDOT;
+			nd->last_type = DOTDOT;
 			nd->state |= ND_JUMPED;
 			break;
 
 		case LAST_WORD_IS_DOT:
-			nd->last_type = LAST_DOT;
+			nd->last_type = DOT;
 			break;
 
 		default:
-			nd->last_type = LAST_NORM;
+			nd->last_type = NORMAL;
 			nd->state &= ~ND_JUMPED;
 
 			struct dentry *parent = nd->path.dentry;
@@ -2779,7 +2779,7 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 
 static inline const char *lookup_last(struct nameidata *nd)
 {
-	if (nd->last_type == LAST_NORM && nd->last.name[nd->last.len])
+	if (nd->last_type == NORMAL && nd->last.name[nd->last.len])
 		nd->flags |= LOOKUP_FOLLOW | LOOKUP_DIRECTORY;
 
 	return walk_component(nd, WALK_TRAILING);
@@ -2868,7 +2868,7 @@ static int path_parentat(struct nameidata *nd, unsigned flags,
 /* Note: this does not consume "name" */
 static int __filename_parentat(int dfd, struct filename *name,
 			       unsigned int flags, struct path *parent,
-			       struct qstr *last, int *type,
+			       struct qstr *last, enum component_type *type,
 			       const struct path *root)
 {
 	int retval;
@@ -2893,7 +2893,7 @@ static int __filename_parentat(int dfd, struct filename *name,
 
 static int filename_parentat(int dfd, struct filename *name,
 			     unsigned int flags, struct path *parent,
-			     struct qstr *last, int *type)
+			     struct qstr *last, enum component_type *type)
 {
 	return __filename_parentat(dfd, name, flags, parent, last, type, NULL);
 }
@@ -2961,12 +2961,13 @@ static struct dentry *__start_removing_path(int dfd, struct filename *name,
 	struct path parent_path __free(path_put) = {};
 	struct dentry *d;
 	struct qstr last;
-	int type, error;
+	enum component_type type;
+	int error;
 
 	error = filename_parentat(dfd, name, 0, &parent_path, &last, &type);
 	if (error)
 		return ERR_PTR(error);
-	if (unlikely(type != LAST_NORM))
+	if (unlikely(type != NORMAL))
 		return ERR_PTR(-EINVAL);
 	/* don't fail immediately if it's r/o, at least try to report other errors */
 	error = mnt_want_write(parent_path.mnt);
@@ -3007,12 +3008,13 @@ struct dentry *kern_path_parent(const char *name, struct path *path)
 	CLASS(filename_kernel, filename)(name);
 	struct dentry *d;
 	struct qstr last;
-	int type, error;
+        enum component_type type;
+	int error;
 
 	error = filename_parentat(AT_FDCWD, filename, 0, &parent_path, &last, &type);
 	if (error)
 		return ERR_PTR(error);
-	if (unlikely(type != LAST_NORM))
+	if (unlikely(type != NORMAL))
 		return ERR_PTR(-EINVAL);
 
 	d = lookup_noperm_unlocked(&last, parent_path.dentry);
@@ -3055,7 +3057,7 @@ EXPORT_SYMBOL(kern_path);
  * @root: pointer to struct path of the base directory
  */
 int vfs_path_parent_lookup(struct filename *filename, unsigned int flags,
-			   struct path *parent, struct qstr *last, int *type,
+			   struct path *parent, struct qstr *last, enum component_type *type,
 			   const struct path *root)
 {
 	return  __filename_parentat(AT_FDCWD, filename, flags, parent, last,
@@ -4572,7 +4574,7 @@ static const char *open_last_lookups(struct nameidata *nd,
 
 	nd->flags |= op->intent;
 
-	if (nd->last_type != LAST_NORM) {
+	if (nd->last_type != NORMAL) {
 		if (nd->depth)
 			put_link(nd);
 		return handle_dots(nd, nd->last_type);
@@ -4925,7 +4927,7 @@ static struct dentry *filename_create(int dfd, struct filename *name,
 	bool want_dir = lookup_flags & LOOKUP_DIRECTORY;
 	unsigned int reval_flag = lookup_flags & LOOKUP_REVAL;
 	unsigned int create_flags = LOOKUP_CREATE | LOOKUP_EXCL;
-	int type;
+	enum component_type type;
 	int error;
 
 	error = filename_parentat(dfd, name, reval_flag, path, &last, &type);
@@ -4936,7 +4938,7 @@ static struct dentry *filename_create(int dfd, struct filename *name,
 	 * Yucky last component or no last component at all?
 	 * (foo/., foo/.., /////)
 	 */
-	if (unlikely(type != LAST_NORM))
+	if (unlikely(type != NORMAL))
 		goto out;
 
 	/* don't fail immediately if it's r/o, at least try to report other errors */
@@ -5387,7 +5389,7 @@ int filename_rmdir(int dfd, struct filename *name)
 	struct dentry *dentry;
 	struct path path;
 	struct qstr last;
-	int type;
+	enum component_type type;
 	unsigned int lookup_flags = 0;
 	struct delegated_inode delegated_inode = { };
 retry:
@@ -5396,15 +5398,16 @@ retry:
 		return error;
 
 	switch (type) {
-	case LAST_DOTDOT:
+	case DOTDOT:
 		error = -ENOTEMPTY;
 		goto exit2;
-	case LAST_DOT:
+	case DOT:
 		error = -EINVAL;
 		goto exit2;
-	case LAST_ROOT:
+	case ROOT:
 		error = -EBUSY;
 		goto exit2;
+	case NORMAL: ; // OK
 	}
 
 	error = mnt_want_write(path.mnt);
@@ -5529,7 +5532,7 @@ int filename_unlinkat(int dfd, struct filename *name)
 	struct dentry *dentry;
 	struct path path;
 	struct qstr last;
-	int type;
+	enum component_type type;
 	struct inode *inode;
 	struct delegated_inode delegated_inode = { };
 	unsigned int lookup_flags = 0;
@@ -5539,7 +5542,7 @@ retry:
 		return error;
 
 	error = -EISDIR;
-	if (type != LAST_NORM)
+	if (type != NORMAL)
 		goto exit_path_put;
 
 	error = mnt_want_write(path.mnt);
@@ -6096,7 +6099,7 @@ int filename_renameat2(int olddfd, struct filename *from,
 	struct renamedata rd;
 	struct path old_path, new_path;
 	struct qstr old_last, new_last;
-	int old_type, new_type;
+	enum component_type old_type, new_type;
 	struct delegated_inode delegated_inode = { };
 	unsigned int lookup_flags = 0;
 	bool should_retry = false;
@@ -6125,12 +6128,12 @@ retry:
 		goto exit2;
 
 	error = -EBUSY;
-	if (old_type != LAST_NORM)
+	if (old_type != NORMAL)
 		goto exit2;
 
 	if (flags & RENAME_NOREPLACE)
 		error = -EEXIST;
-	if (new_type != LAST_NORM)
+	if (new_type != NORMAL)
 		goto exit2;
 
 	error = mnt_want_write(old_path.mnt);
