@@ -844,7 +844,7 @@ static void smp_call_function_many_cond(const struct cpumask *mask,
 					unsigned int scf_flags,
 					smp_cond_func_t cond_func)
 {
-	int cpu, last_cpu, this_cpu = smp_processor_id();
+	int cpu, last_cpu, this_cpu;
 	struct call_function_data *cfd;
 	bool wait = scf_flags & SCF_WAIT;
 	struct cpumask *cpumask, *task_mask;
@@ -852,10 +852,10 @@ static void smp_call_function_many_cond(const struct cpumask *mask,
 	int nr_cpus = 0;
 	bool run_remote = false;
 
-	lockdep_assert_preemption_disabled();
-
 	task_mask = smp_task_ipi_mask(current);
 	preemptible_wait = task_mask && preemptible();
+
+	this_cpu = get_cpu();
 	cfd = this_cpu_ptr(&cfd_data);
 	cpumask = preemptible_wait ? task_mask : cfd->cpumask;
 
@@ -937,6 +937,19 @@ static void smp_call_function_many_cond(const struct cpumask *mask,
 		local_irq_restore(flags);
 	}
 
+	/*
+	 * We may block in csd_lock_wait() for a significant amount of time,
+	 * especially when interrupts are disabled or with a large number of
+	 * remote CPUs. Try to enable preemption before csd_lock_wait().
+	 *
+	 * Use the cpumask_stack instead of cfd->cpumask to avoid concurrency
+	 * modification from tasks on the same cpu. If preemption occurs during
+	 * csd_lock_wait, other concurrent smp_call_function_many_cond() calls
+	 * will simply block until the previous csd->func() completes.
+	 */
+	if (preemptible_wait)
+		put_cpu();
+
 	if (run_remote && wait) {
 		for_each_cpu(cpu, cpumask) {
 			call_single_data_t *csd;
@@ -945,6 +958,9 @@ static void smp_call_function_many_cond(const struct cpumask *mask,
 			csd_lock_wait(csd);
 		}
 	}
+
+	if (!preemptible_wait)
+		put_cpu();
 }
 
 /**
