@@ -122,4 +122,14 @@ static inline bool vfio_pci_device_match(struct vfio_pci_device *device,
 
 const char *vfio_pci_get_cdev_path(const char *bdf);
 
+#define vfio_pci_cmd_set(_device, _bits) do {				\
+	u16 __cmd = vfio_pci_config_readw((_device), PCI_COMMAND);	\
+	vfio_pci_config_writew((_device), PCI_COMMAND, __cmd | (_bits));\
+} while (0)
+
+#define vfio_pci_cmd_clear(_device, _bits) do {				\
+	u16 __cmd = vfio_pci_config_readw((_device), PCI_COMMAND);	\
+	vfio_pci_config_writew((_device), PCI_COMMAND, __cmd & ~(_bits));\
+} while (0)
+
 #endif /* SELFTESTS_VFIO_LIB_INCLUDE_LIBVFIO_VFIO_PCI_DEVICE_H */
