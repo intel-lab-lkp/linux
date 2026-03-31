@@ -3,6 +3,8 @@
  * Copyright © 2020 Intel Corporation
  */
 
+#include <drm/drm_print.h>
+
 #include "intel_cx0_phy.h"
 #include "intel_ddi.h"
 #include "intel_ddi_buf_trans.h"
@@ -1784,6 +1786,56 @@ xe3plpd_get_lt_buf_trans(struct intel_encoder *encoder,
 		return intel_get_buf_trans(&xe3plpd_lt_trans_dp14, n_entries);
 }
 
+static union ddi_vswing_preemph_index
+vswing_preemph_compute_index(struct intel_encoder *encoder,
+			     const struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(encoder);
+	union ddi_vswing_preemph_index index;
+
+	drm_dbg_kms(display->drm, "using default VS/PE Override index");
+	index = (union ddi_vswing_preemph_index) 0;
+
+	return index;
+}
+
+static int
+vswing_preemph_cast_index(struct intel_display *display,
+			   union ddi_vswing_preemph_index index)
+{
+	return 0;
+}
+
+static const struct intel_ddi_buf_trans *
+override_buf_trans(struct intel_encoder *encoder,
+		   const struct intel_crtc_state *crtc_state,
+		   int *n_entries)
+{
+	struct intel_display *display = to_intel_display(encoder);
+
+	struct intel_ddi_buf_trans *buf_trans;
+	struct ddi_vswing_preemph *vswing_preemph;
+	union ddi_vswing_preemph_index index;
+	u32 idx;
+
+	index = encoder->vswing_preemph->index;
+	idx = vswing_preemph_cast_index(display, index);
+
+	if (idx < 0) {
+		index = vswing_preemph_compute_index(encoder, crtc_state);
+		vswing_preemph = (void *) encoder->vswing_preemph;
+		vswing_preemph->index = index;
+		idx = vswing_preemph_cast_index(display, index);
+	}
+
+	buf_trans = (void *) encoder->vswing_preemph->buf_trans;
+
+	buf_trans->entries = display->vbt.vswing_preemph.bufs_table[idx];
+	buf_trans->num_entries = display->vbt.vswing_preemph.num_rows;
+
+	return intel_get_buf_trans(buf_trans, n_entries);
+}
+
 void intel_ddi_buf_trans_init(struct intel_encoder *encoder)
 {
 	struct intel_display *display = to_intel_display(encoder);
@@ -1851,4 +1903,7 @@ void intel_ddi_buf_trans_init(struct intel_encoder *encoder)
 
 		MISSING_CASE(pdev->device);
 	}
+
+	if (encoder->vswing_preemph->buf_trans)
+		encoder->get_buf_trans = override_buf_trans;
 }
