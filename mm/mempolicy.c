@@ -3713,6 +3713,7 @@ static ssize_t weighted_interleave_auto_store(struct kobject *kobj,
 			goto update_wi_state;
 		if (input == old_wi_state->mode_auto) {
 			mutex_unlock(&wi_state_lock);
+			kfree(new_wi_state);
 			return count;
 		}
 
