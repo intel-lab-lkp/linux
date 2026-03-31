@@ -111,3 +111,4 @@ developers:
 
    kernel-docs
    deprecated
+   arithmetic-overflow

@@ -397,6 +397,18 @@
 #endif
 
 /*
+ * Optional: only supported by Clang with -Xclang -experimental-foverflow-behavior-types
+ * passed via CONFIG_OVERFLOW_BEHAVIOR_TYPES. When not available, define empty macros for
+ * the trap/wrap annotations.
+ *
+ * clang: https://clang.llvm.org/docs/OverflowBehaviorTypes.html
+ */
+#if !__has_attribute(overflow_behavior) || !defined(OVERFLOW_BEHAVIOR_TYPES)
+# define __ob_trap
+# define __ob_wrap
+#endif
+
+/*
  *   gcc: https://gcc.gnu.org/onlinedocs/gcc/Common-Function-Attributes.html#index-weak-function-attribute
  *   gcc: https://gcc.gnu.org/onlinedocs/gcc/Common-Variable-Attributes.html#index-weak-variable-attribute
  */

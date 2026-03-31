@@ -19921,6 +19921,7 @@ M:	Justin Stitt <justinstitt@google.com>
 L:	linux-hardening@vger.kernel.org
 S:	Supported
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/kees/linux.git for-next/hardening
+F:	Documentation/process/arithmetic-overflow.rst
 F:	scripts/integer-wrap-ignore.scl
 F:	scripts/Makefile.obt
 
