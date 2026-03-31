@@ -2681,6 +2681,7 @@ static const struct qcom_cc_desc cam_cc_sm8750_desc = {
 	.num_resets = ARRAY_SIZE(cam_cc_sm8750_resets),
 	.gdscs = cam_cc_sm8750_gdscs,
 	.num_gdscs = ARRAY_SIZE(cam_cc_sm8750_gdscs),
+	.cc_gdsc = &cam_cc_titan_top_gdsc,
 	.use_rpm = true,
 	.driver_data = &cam_cc_sm8750_driver_data,
 };
