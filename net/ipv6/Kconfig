@@ -234,6 +234,21 @@ config IPV6_FOU_TUNNEL
 	default NET_FOU_IP_TUNNELS && IPV6_FOU
 	select IPV6_TUNNEL
 
+config INET6_ADDR_HASH_BUCKETS
+	int "IPv6 address hash table size" if EXPERT
+	range 64 16384
+	default 256
+	help
+	  Number of hash buckets for looking up local IPv6 addresses,
+	  e.g. in ipv6_chk_addr() and related callers.  Rounded up to
+	  the nearest power of 2.
+
+	  Hosts with many IPv6 addresses benefit from a larger table to
+	  reduce hash chain lengths.
+
+	  The default of 256 is fine for most systems.  A value of 1024
+	  suits hosts with ~500+ addresses.
+
 config IPV6_MULTIPLE_TABLES
 	bool "IPv6: Multiple Routing Tables"
 	select FIB_RULES

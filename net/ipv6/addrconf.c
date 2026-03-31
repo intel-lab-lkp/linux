@@ -144,7 +144,7 @@ static int ipv6_generate_stable_address(struct in6_addr *addr,
 					u8 dad_count,
 					const struct inet6_dev *idev);
 
-#define IN6_ADDR_HSIZE_SHIFT	8
+#define IN6_ADDR_HSIZE_SHIFT	order_base_2(CONFIG_INET6_ADDR_HASH_BUCKETS)
 #define IN6_ADDR_HSIZE		(1 << IN6_ADDR_HSIZE_SHIFT)
 
 static void addrconf_verify(struct net *net);
