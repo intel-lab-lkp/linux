@@ -296,7 +296,6 @@ struct ublk_queue {
 
 /* Per-registered shared memory buffer */
 struct ublk_buf {
-	struct page **pages;
 	unsigned int nr_pages;
 };
 
@@ -5255,27 +5254,25 @@ static void ublk_unquiesce_and_resume(struct gendisk *disk)
  * coalescing consecutive PFNs into single range entries.
  * Returns 0 on success, negative error with partial insertions unwound.
  */
-/* Erase coalesced PFN ranges from the maple tree for pages [0, nr_pages) */
-static void ublk_buf_erase_ranges(struct ublk_device *ub,
-				  struct ublk_buf *ubuf,
-				  unsigned long nr_pages)
+/* Erase coalesced PFN ranges from the maple tree matching buf_index */
+static void ublk_buf_erase_ranges(struct ublk_device *ub, int buf_index)
 {
-	unsigned long i;
+	MA_STATE(mas, &ub->buf_tree, 0, ULONG_MAX);
+	struct ublk_buf_range *range;
 
-	for (i = 0; i < nr_pages; ) {
-		unsigned long pfn = page_to_pfn(ubuf->pages[i]);
-		unsigned long start = i;
-
-		while (i + 1 < nr_pages &&
-		       page_to_pfn(ubuf->pages[i + 1]) == pfn + (i - start) + 1)
-			i++;
-		i++;
-		kfree(mtree_erase(&ub->buf_tree, pfn));
+	mas_lock(&mas);
+	mas_for_each(&mas, range, ULONG_MAX) {
+		if (range->buf_index == buf_index) {
+			mas_erase(&mas);
+			kfree(range);
+		}
 	}
+	mas_unlock(&mas);
 }
 
 static int __ublk_ctrl_reg_buf(struct ublk_device *ub,
-			       struct ublk_buf *ubuf, int index,
+			       struct ublk_buf *ubuf,
+			       struct page **pages, int index,
 			       unsigned short flags)
 {
 	unsigned long nr_pages = ubuf->nr_pages;
@@ -5283,13 +5280,13 @@ static int __ublk_ctrl_reg_buf(struct ublk_device *ub,
 	int ret;
 
 	for (i = 0; i < nr_pages; ) {
-		unsigned long pfn = page_to_pfn(ubuf->pages[i]);
+		unsigned long pfn = page_to_pfn(pages[i]);
 		unsigned long start = i;
 		struct ublk_buf_range *range;
 
 		/* Find run of consecutive PFNs */
 		while (i + 1 < nr_pages &&
-		       page_to_pfn(ubuf->pages[i + 1]) == pfn + (i - start) + 1)
+		       page_to_pfn(pages[i + 1]) == pfn + (i - start) + 1)
 			i++;
 		i++;	/* past the last page in this run */
 
@@ -5314,7 +5311,7 @@ static int __ublk_ctrl_reg_buf(struct ublk_device *ub,
 	return 0;
 
 unwind:
-	ublk_buf_erase_ranges(ub, ubuf, i);
+	ublk_buf_erase_ranges(ub, index);
 	return ret;
 }
 
@@ -5329,6 +5326,7 @@ static int ublk_ctrl_reg_buf(struct ublk_device *ub,
 	void __user *argp = (void __user *)(unsigned long)header->addr;
 	struct ublk_shmem_buf_reg buf_reg;
 	unsigned long addr, size, nr_pages;
+	struct page **pages = NULL;
 	unsigned int gup_flags;
 	struct gendisk *disk;
 	struct ublk_buf *ubuf;
@@ -5365,9 +5363,8 @@ static int ublk_ctrl_reg_buf(struct ublk_device *ub,
 		goto put_disk;
 	}
 
-	ubuf->pages = kvmalloc_array(nr_pages, sizeof(*ubuf->pages),
-				     GFP_KERNEL);
-	if (!ubuf->pages) {
+	pages = kvmalloc_array(nr_pages, sizeof(*pages), GFP_KERNEL);
+	if (!pages) {
 		ret = -ENOMEM;
 		goto err_free;
 	}
@@ -5376,7 +5373,7 @@ static int ublk_ctrl_reg_buf(struct ublk_device *ub,
 	if (!(buf_reg.flags & UBLK_SHMEM_BUF_READ_ONLY))
 		gup_flags |= FOLL_WRITE;
 
-	pinned = pin_user_pages_fast(addr, nr_pages, gup_flags, ubuf->pages);
+	pinned = pin_user_pages_fast(addr, nr_pages, gup_flags, pages);
 	if (pinned < 0) {
 		ret = pinned;
 		goto err_free_pages;
@@ -5400,7 +5397,7 @@ static int ublk_ctrl_reg_buf(struct ublk_device *ub,
 	if (ret)
 		goto err_unlock;
 
-	ret = __ublk_ctrl_reg_buf(ub, ubuf, index, buf_reg.flags);
+	ret = __ublk_ctrl_reg_buf(ub, ubuf, pages, index, buf_reg.flags);
 	if (ret) {
 		xa_erase(&ub->bufs_xa, index);
 		goto err_unlock;
@@ -5408,6 +5405,7 @@ static int ublk_ctrl_reg_buf(struct ublk_device *ub,
 
 	mutex_unlock(&ub->mutex);
 
+	kvfree(pages);
 	ublk_unquiesce_and_resume(disk);
 	ublk_put_disk(disk);
 	return index;
@@ -5416,9 +5414,9 @@ err_unlock:
 	mutex_unlock(&ub->mutex);
 	ublk_unquiesce_and_resume(disk);
 err_unpin:
-	unpin_user_pages(ubuf->pages, pinned);
+	unpin_user_pages(pages, pinned);
 err_free_pages:
-	kvfree(ubuf->pages);
+	kvfree(pages);
 err_free:
 	kfree(ubuf);
 put_disk:
@@ -5427,11 +5425,36 @@ put_disk:
 }
 
 static void __ublk_ctrl_unreg_buf(struct ublk_device *ub,
-				  struct ublk_buf *ubuf)
+				  struct ublk_buf *ubuf, int buf_index)
 {
-	ublk_buf_erase_ranges(ub, ubuf, ubuf->nr_pages);
-	unpin_user_pages(ubuf->pages, ubuf->nr_pages);
-	kvfree(ubuf->pages);
+	MA_STATE(mas, &ub->buf_tree, 0, ULONG_MAX);
+	struct ublk_buf_range *range;
+	struct page *pages[32];
+
+	mas_lock(&mas);
+	mas_for_each(&mas, range, ULONG_MAX) {
+		unsigned long base, nr, off;
+
+		if (range->buf_index != buf_index)
+			continue;
+
+		base = range->base_pfn;
+		nr = mas.last - mas.index + 1;
+		mas_erase(&mas);
+
+		for (off = 0; off < nr; ) {
+			unsigned int batch = min_t(unsigned long,
+						   nr - off, 32);
+			unsigned int j;
+
+			for (j = 0; j < batch; j++)
+				pages[j] = pfn_to_page(base + off + j);
+			unpin_user_pages(pages, batch);
+			off += batch;
+		}
+		kfree(range);
+	}
+	mas_unlock(&mas);
 	kfree(ubuf);
 }
 
@@ -5462,7 +5485,7 @@ static int ublk_ctrl_unreg_buf(struct ublk_device *ub,
 		return -ENOENT;
 	}
 
-	__ublk_ctrl_unreg_buf(ub, ubuf);
+	__ublk_ctrl_unreg_buf(ub, ubuf, index);
 
 	mutex_unlock(&ub->mutex);
 
@@ -5477,7 +5500,7 @@ static void ublk_buf_cleanup(struct ublk_device *ub)
 	unsigned long index;
 
 	xa_for_each(&ub->bufs_xa, index, ubuf)
-		__ublk_ctrl_unreg_buf(ub, ubuf);
+		__ublk_ctrl_unreg_buf(ub, ubuf, index);
 	xa_destroy(&ub->bufs_xa);
 	mtree_destroy(&ub->buf_tree);
 }
