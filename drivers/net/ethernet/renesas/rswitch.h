@@ -1217,6 +1217,14 @@ struct rswitch_private {
 	enum hwtstamp_rx_filters tstamp_rx_ctrl;
 };
 
+struct rswitch_switchdev_event_work {
+	struct work_struct work;
+	struct switchdev_notifier_fdb_info fdb_info;
+	struct net_device *ndev;
+	struct rswitch_private *priv;
+	unsigned long event;
+};
+
 bool is_rdev(const struct net_device *ndev);
 void rswitch_modify(void __iomem *addr, enum rswitch_reg reg, u32 clear, u32 set);
 int rswitch_reg_wait(void __iomem *addr, u32 offs, u32 mask, u32 expected);
