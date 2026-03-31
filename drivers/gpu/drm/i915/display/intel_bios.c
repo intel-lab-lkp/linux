@@ -77,6 +77,7 @@
 struct intel_bios_encoder_data {
 	struct intel_display *display;
 
+	struct ddi_vswing_preemph vswing_preemph;
 	struct child_device_config child;
 	struct dsc_compression_parameters_entry *dsc;
 	struct list_head node;
@@ -2758,6 +2759,20 @@ static void sanitize_hdmi_level_shift(struct intel_bios_encoder_data *devdata,
 	}
 }
 
+static void override_vswing_preemph(struct intel_bios_encoder_data *devdata)
+{
+	struct intel_ddi_buf_trans *buf_trans;
+
+	devdata->vswing_preemph.buf_trans = NULL;
+	devdata->vswing_preemph.index = (union ddi_vswing_preemph_index) -1;
+
+	if (!intel_bios_encoder_overrides_vswing(devdata))
+		return;
+
+	buf_trans = kzalloc(sizeof(*buf_trans), GFP_KERNEL);
+	devdata->vswing_preemph.buf_trans = buf_trans;
+}
+
 static bool
 intel_bios_encoder_supports_crt(const struct intel_bios_encoder_data *devdata)
 {
@@ -2949,6 +2964,7 @@ static void parse_ddi_port(struct intel_bios_encoder_data *devdata)
 	sanitize_dedicated_external(devdata, port);
 	sanitize_device_type(devdata, port);
 	sanitize_hdmi_level_shift(devdata, port);
+	override_vswing_preemph(devdata);
 }
 
 static bool has_ddi_port_info(struct intel_display *display)
@@ -3157,6 +3173,9 @@ init_vbt_missing_defaults(struct intel_display *display)
 			break;
 
 		devdata->display = display;
+		devdata->vswing_preemph.buf_trans = NULL;
+		devdata->vswing_preemph.index =
+			(union ddi_vswing_preemph_index) -1;
 		child = &devdata->child;
 
 		if (port == PORT_F)
@@ -3490,6 +3509,10 @@ void intel_bios_driver_remove(struct intel_display *display)
 				 node) {
 		list_del(&devdata->node);
 		kfree(devdata->dsc);
+
+		if (devdata->vswing_preemph.buf_trans)
+			kfree(devdata->vswing_preemph.buf_trans);
+
 		kfree(devdata);
 	}
 
@@ -3935,6 +3958,12 @@ bool intel_bios_encoder_supports_typec_usb(const struct intel_bios_encoder_data 
 bool intel_bios_encoder_supports_tbt(const struct intel_bios_encoder_data *devdata)
 {
 	return devdata->display->vbt.version >= 209 && devdata->child.tbt;
+}
+
+bool intel_bios_encoder_overrides_vswing(const struct intel_bios_encoder_data *devdata)
+{
+	return devdata->display->vbt.version >= 218 &&
+		devdata->child.use_vbt_vswing;
 }
 
 bool intel_bios_encoder_is_dedicated_external(const struct intel_bios_encoder_data *devdata)
