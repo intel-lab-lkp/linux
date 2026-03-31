@@ -391,8 +391,6 @@ void latency_fsnotify(struct trace_array *tr)
 	 */
 	irq_work_queue(&tr->fsnotify_irqwork);
 }
-#else
-static inline void latency_fsnotify(struct trace_array *tr) { }
 #endif /* LATENCY_FS_NOTIFY */
 static const struct file_operations tracing_max_lat_fops;
 
