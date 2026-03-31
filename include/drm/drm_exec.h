@@ -89,6 +89,19 @@ drm_exec_obj(struct drm_exec *exec, unsigned long index)
 	for (unsigned long _index = (exec)->num_objects - 1;				\
 	     ((obj) = drm_exec_obj(exec, _index)); --_index)
 
+/*
+ * Helper to drm_exec_until_all_locked(). Don't use directly.
+ *
+ * Since labels can't be defined local to the loop's body we use a jump pointer
+ * to make sure that the retry is only used from within the loop's body.
+ */
+#define __drm_exec_until_all_locked(exec, _label)			\
+_label:									\
+	for (void * __maybe_unused __drm_exec_retry_ptr; ({		\
+		__drm_exec_retry_ptr = &&_label;			\
+		drm_exec_cleanup(exec);					\
+	});)
+
 /**
  * drm_exec_until_all_locked - loop until all GEM objects are locked
  * @exec: drm_exec object
@@ -96,17 +109,9 @@ drm_exec_obj(struct drm_exec *exec, unsigned long index)
  * Core functionality of the drm_exec object. Loops until all GEM objects are
  * locked and no more contention exists. At the beginning of the loop it is
  * guaranteed that no GEM object is locked.
- *
- * Since labels can't be defined local to the loops body we use a jump pointer
- * to make sure that the retry is only used from within the loops body.
  */
 #define drm_exec_until_all_locked(exec)					\
-__PASTE(__drm_exec_, __LINE__):						\
-	for (void *__drm_exec_retry_ptr; ({				\
-		__drm_exec_retry_ptr = &&__PASTE(__drm_exec_, __LINE__);\
-		(void)__drm_exec_retry_ptr;				\
-		drm_exec_cleanup(exec);					\
-	});)
+	__drm_exec_until_all_locked(exec, __UNIQUE_ID(drm_exec))
 
 /**
  * drm_exec_retry_on_contention - restart the loop to grap all locks
