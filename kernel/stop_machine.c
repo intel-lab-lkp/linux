@@ -798,6 +798,49 @@ static int multi_stop_run(struct multi_stop_data *msdata)
 	return msdata->use_nmi ? nmi_stop_run(msdata) : msdata->fn(msdata->data);
 }
 
+int stop_machine_nmi_cpuslocked(cpu_stop_nmisafe_fn_t nmisafe_fn, void *data,
+				const struct cpumask *cpus)
+{
+	struct multi_stop_data msdata = {
+		.nmisafe_fn	= nmisafe_fn,
+		.data		= data,
+		.num_threads	= num_online_cpus(),
+		.active_cpus	= cpus,
+		.use_nmi	= true,
+	};
+	int ret;
+
+	if (!zalloc_cpumask_var(&msdata.nmi_cpus, GFP_KERNEL))
+		return -ENOMEM;
+
+	/*
+	 * NMI CPUs should be exactly those 'active' CPUs executing the
+	 * stop function. Follow the selection logic in multi_cpu_stop()
+	 * if not provided.
+	 */
+	if (!msdata.active_cpus)
+		cpumask_set_cpu(cpumask_first(cpu_online_mask), msdata.nmi_cpus);
+	else
+		cpumask_copy(msdata.nmi_cpus, msdata.active_cpus);
+
+	lockdep_assert_cpus_held();
+
+	ret = stop_multi_cpus(&msdata);
+
+	/*
+	 * The NMI handler clears each CPU bit. If any of those NMIs were
+	 * ever missed out, return error clearly.
+	 */
+	if (!cpumask_empty(msdata.nmi_cpus)) {
+		pr_err("CPUs %*pbl didn't run the stop_machine NMI handler.\n",
+		       cpumask_pr_args(msdata.nmi_cpus));
+		ret = -EINVAL;
+	}
+
+	free_cpumask_var(msdata.nmi_cpus);
+	return ret;
+}
+
 #else
 
 static int multi_stop_run(struct multi_stop_data *msdata)
