@@ -108,7 +108,7 @@ static const struct nla_policy ifa_ipv4_policy[IFA_MAX+1] = {
 	[IFA_PROTO]		= { .type = NLA_U8 },
 };
 
-#define IN4_ADDR_HSIZE_SHIFT	8
+#define IN4_ADDR_HSIZE_SHIFT	order_base_2(CONFIG_INET_ADDR_HASH_BUCKETS)
 #define IN4_ADDR_HSIZE		(1U << IN4_ADDR_HSIZE_SHIFT)
 
 static u32 inet_addr_hash(const struct net *net, __be32 addr)
