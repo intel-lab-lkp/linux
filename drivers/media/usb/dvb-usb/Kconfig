@@ -15,18 +15,16 @@ config DVB_USB
 
 	  Say Y if you own a USB DVB device.
 
+if DVB_USB
+
 config DVB_USB_DEBUG
 	bool "Enable extended debug support for all DVB-USB devices"
-	depends on DVB_USB
 	help
 	  Say Y if you want to enable debugging. See modinfo dvb-usb (and the
 	  appropriate drivers) for debug levels.
 
-if DVB_USB
-
 config DVB_USB_A800
 	tristate "AVerMedia AverTV DVB-T USB 2.0 (A800)"
-	depends on DVB_USB
 	select DVB_USB_DIB3000MC
 	select DVB_PLL if MEDIA_SUBDRV_AUTOSELECT
 	select MEDIA_TUNER_MT2060 if MEDIA_SUBDRV_AUTOSELECT
@@ -35,7 +33,6 @@ config DVB_USB_A800
 
 config DVB_USB_AF9005
 	tristate "Afatech AF9005 DVB-T USB1.1 support"
-	depends on DVB_USB
 	select MEDIA_TUNER_MT2060 if MEDIA_SUBDRV_AUTOSELECT
 	select MEDIA_TUNER_QT1010 if MEDIA_SUBDRV_AUTOSELECT
 	help
@@ -51,7 +48,6 @@ config DVB_USB_AF9005_REMOTE
 
 config DVB_USB_AZ6027
 	tristate "Azurewave DVB-S/S2 USB2.0 AZ6027 support"
-	depends on DVB_USB
 	select DVB_STB0899 if MEDIA_SUBDRV_AUTOSELECT
 	select DVB_STB6100 if MEDIA_SUBDRV_AUTOSELECT
 	help
@@ -59,7 +55,6 @@ config DVB_USB_AZ6027
 
 config DVB_USB_CINERGY_T2
 	tristate "Terratec CinergyT2/qanu USB 2.0 DVB-T receiver"
-	depends on DVB_USB
 	help
 	  Support for "TerraTec CinergyT2" USB2.0 Highspeed DVB Receivers
 
@@ -67,7 +62,6 @@ config DVB_USB_CINERGY_T2
 
 config DVB_USB_CXUSB
 	tristate "Conexant USB2.0 hybrid reference design support"
-	depends on DVB_USB
 	select DVB_PLL if MEDIA_SUBDRV_AUTOSELECT
 	select DVB_CX22702 if MEDIA_SUBDRV_AUTOSELECT
 	select DVB_LGDT330X if MEDIA_SUBDRV_AUTOSELECT
@@ -106,7 +100,6 @@ config DVB_USB_CXUSB_ANALOG
 
 config DVB_USB_DIB0700
 	tristate "DiBcom DiB0700 USB DVB devices (see help for supported devices)"
-	depends on DVB_USB
 	select DVB_DIB7000P if MEDIA_SUBDRV_AUTOSELECT
 	select DVB_DIB7000M if MEDIA_SUBDRV_AUTOSELECT
 	select DVB_DIB8000 if MEDIA_SUBDRV_AUTOSELECT
@@ -137,7 +130,6 @@ config DVB_USB_DIB0700
 
 config DVB_USB_DIB3000MC
 	tristate
-	depends on DVB_USB
 	select DVB_DIB3000MC
 	help
 	  This is a module with helper functions for accessing the
@@ -147,7 +139,6 @@ config DVB_USB_DIB3000MC
 
 config DVB_USB_DIBUSB_MB
 	tristate "DiBcom USB DVB-T devices (based on the DiB3000M-B) (see help for device list)"
-	depends on DVB_USB
 	select DVB_PLL if MEDIA_SUBDRV_AUTOSELECT
 	select DVB_DIB3000MB
 	depends on DVB_DIB3000MC || !DVB_DIB3000MC
@@ -170,7 +161,6 @@ config DVB_USB_DIBUSB_MB_FAULTY
 
 config DVB_USB_DIBUSB_MC
 	tristate "DiBcom USB DVB-T devices (based on the DiB3000M-C/P) (see help for device list)"
-	depends on DVB_USB
 	select DVB_USB_DIB3000MC
 	select MEDIA_TUNER_MT2060 if MEDIA_SUBDRV_AUTOSELECT
 	help
@@ -185,7 +175,6 @@ config DVB_USB_DIBUSB_MC
 
 config DVB_USB_DIGITV
 	tristate "Nebula Electronics uDigiTV DVB-T USB2.0 support"
-	depends on DVB_USB
 	select DVB_PLL if MEDIA_SUBDRV_AUTOSELECT
 	select DVB_NXT6000 if MEDIA_SUBDRV_AUTOSELECT
 	select DVB_MT352 if MEDIA_SUBDRV_AUTOSELECT
@@ -194,7 +183,6 @@ config DVB_USB_DIGITV
 
 config DVB_USB_DTT200U
 	tristate "WideView WT-200U and WT-220U (pen) DVB-T USB2.0 support (Yakumo/Hama/Typhoon/Yuan)"
-	depends on DVB_USB
 	help
 	  Say Y here to support the WideView/Yakumo/Hama/Typhoon/Yuan DVB-T USB2.0 receiver.
 
@@ -204,7 +192,6 @@ config DVB_USB_DTT200U
 
 config DVB_USB_DTV5100
 	tristate "AME DTV-5100 USB2.0 DVB-T support"
-	depends on DVB_USB
 	select DVB_ZL10353 if MEDIA_SUBDRV_AUTOSELECT
 	select MEDIA_TUNER_QT1010 if MEDIA_SUBDRV_AUTOSELECT
 	help
@@ -212,7 +199,6 @@ config DVB_USB_DTV5100
 
 config DVB_USB_DW2102
 	tristate "DvbWorld & TeVii DVB-S/S2 USB2.0 support"
-	depends on DVB_USB
 	select DVB_PLL if MEDIA_SUBDRV_AUTOSELECT
 	select DVB_STV0299 if MEDIA_SUBDRV_AUTOSELECT
 	select DVB_STV0288 if MEDIA_SUBDRV_AUTOSELECT
@@ -235,7 +221,6 @@ config DVB_USB_DW2102
 
 config DVB_USB_GP8PSK
 	tristate "GENPIX 8PSK->USB module support"
-	depends on DVB_USB
 	help
 	  Say Y here to support the
 	    GENPIX 8psk module
@@ -244,7 +229,6 @@ config DVB_USB_GP8PSK
 
 config DVB_USB_M920X
 	tristate "Uli m920x DVB-T USB2.0 support"
-	depends on DVB_USB
 	select DVB_MT352 if MEDIA_SUBDRV_AUTOSELECT
 	select DVB_TDA1004X if MEDIA_SUBDRV_AUTOSELECT
 	select MEDIA_TUNER_QT1010 if MEDIA_SUBDRV_AUTOSELECT
@@ -258,7 +242,6 @@ config DVB_USB_M920X
 
 config DVB_USB_NOVA_T_USB2
 	tristate "Hauppauge WinTV-NOVA-T usb2 DVB-T USB2.0 support"
-	depends on DVB_USB
 	select DVB_USB_DIB3000MC
 	select DVB_PLL if MEDIA_SUBDRV_AUTOSELECT
 	select MEDIA_TUNER_MT2060 if MEDIA_SUBDRV_AUTOSELECT
@@ -267,7 +250,6 @@ config DVB_USB_NOVA_T_USB2
 
 config DVB_USB_OPERA1
 	tristate "Opera1 DVB-S USB2.0 receiver"
-	depends on DVB_USB
 	select DVB_STV0299 if MEDIA_SUBDRV_AUTOSELECT
 	select DVB_PLL if MEDIA_SUBDRV_AUTOSELECT
 	help
@@ -275,7 +257,6 @@ config DVB_USB_OPERA1
 
 config DVB_USB_PCTV452E
 	tristate "Pinnacle PCTV HDTV Pro USB device/TT Connect S2-3600"
-	depends on DVB_USB
 	select TTPCI_EEPROM
 	select DVB_ISL6423 if MEDIA_SUBDRV_AUTOSELECT
 	select DVB_LNBP22 if MEDIA_SUBDRV_AUTOSELECT
@@ -289,7 +270,6 @@ config DVB_USB_PCTV452E
 
 config DVB_USB_TECHNISAT_USB2
 	tristate "Technisat DVB-S/S2 USB2.0 support"
-	depends on DVB_USB
 	select DVB_STV090x if MEDIA_SUBDRV_AUTOSELECT
 	select DVB_STV6110x if MEDIA_SUBDRV_AUTOSELECT
 	help
@@ -297,7 +277,6 @@ config DVB_USB_TECHNISAT_USB2
 
 config DVB_USB_TTUSB2
 	tristate "Pinnacle 400e DVB-S USB2.0 support"
-	depends on DVB_USB
 	select DVB_TDA10086 if MEDIA_SUBDRV_AUTOSELECT
 	select DVB_LNBP21 if MEDIA_SUBDRV_AUTOSELECT
 	select DVB_TDA826X if MEDIA_SUBDRV_AUTOSELECT
@@ -312,7 +291,6 @@ config DVB_USB_TTUSB2
 
 config DVB_USB_UMT_010
 	tristate "HanfTek UMT-010 DVB-T USB2.0 support"
-	depends on DVB_USB
 	select DVB_PLL if MEDIA_SUBDRV_AUTOSELECT
 	select DVB_USB_DIB3000MC
 	select MEDIA_TUNER_MT2060 if MEDIA_SUBDRV_AUTOSELECT
@@ -322,7 +300,6 @@ config DVB_USB_UMT_010
 
 config DVB_USB_VP702X
 	tristate "TwinhanDTV StarBox and clones DVB-S USB2.0 support"
-	depends on DVB_USB
 	help
 	  Say Y here to support the
 
@@ -334,7 +311,6 @@ config DVB_USB_VP702X
 
 config DVB_USB_VP7045
 	tristate "TwinhanDTV Alpha/MagicBoxII, DNTV tinyUSB2, Beetle USB2.0 support"
-	depends on DVB_USB
 	help
 	  Say Y here to support the
 
@@ -346,4 +322,4 @@ config DVB_USB_VP7045
 
 	  DVB-T USB2.0 receivers.
 
-endif
+endif # DVB_USB
