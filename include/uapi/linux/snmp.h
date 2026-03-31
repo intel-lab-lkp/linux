@@ -369,6 +369,8 @@ enum
 	LINUX_MIB_TLSTXREKEYOK,			/* TlsTxRekeyOk */
 	LINUX_MIB_TLSTXREKEYERROR,		/* TlsTxRekeyError */
 	LINUX_MIB_TLSRXREKEYRECEIVED,		/* TlsRxRekeyReceived */
+	LINUX_MIB_TLSTXREKEYHWFAIL,             /* TlsTxRekeyHwFail */
+	LINUX_MIB_TLSRXREKEYHWFAIL,		/* TlsRxRekeyHwFail */
 	__LINUX_MIB_TLSMAX
 };
 
