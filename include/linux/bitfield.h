@@ -112,6 +112,19 @@
 	})
 
 /**
+ * FIELD_WIDTH() - return the width of a bitfield
+ * @_mask: shifted mask defining the field's length and position
+ *
+ * Returns the number of contiguous bits covered by @_mask.
+ * This corresponds to the bit width of FIELD_MAX(@_mask).
+ */
+#define FIELD_WIDTH(_mask)						\
+	({								\
+		__BF_FIELD_CHECK(_mask, 0ULL, 0ULL, "FIELD_WIDTH: ");	\
+		__bf_shf(~FIELD_MAX(_mask));				\
+	})
+
+/**
  * FIELD_FIT() - check if value fits in the field
  * @_mask: shifted mask defining the field's length and position
  * @_val:  value to test against the field
