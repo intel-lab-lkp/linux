@@ -34,6 +34,7 @@
 #include <drm/drm_fixed.h>
 #include <drm/drm_print.h>
 
+#include "intel_ddi_buf_trans.h"
 #include "intel_display.h"
 #include "intel_display_core.h"
 #include "intel_display_rpm.h"
@@ -2183,6 +2184,38 @@ parse_compression_parameters(struct intel_display *display)
 	}
 }
 
+static void
+parse_vswing_preemph_override(struct intel_display *display)
+{
+	union intel_ddi_buf_trans_entry **bufs_table;
+	const struct bdb_vswing_preemph *block;
+	u8 num_rows;
+
+	if (display->vbt.version < 218)
+		return;
+
+	block = bdb_find_section(display, BDB_VSWING_PREEMPH);
+
+	/* pre-ICL GOP don't have VBT #57 */
+	if (!block)
+		return;
+
+	num_rows = DISPLAY_VER(display) >= 14 ? 16 : 10;
+
+	bufs_table = kzalloc(block->num_tables * sizeof(*bufs_table), GFP_KERNEL);
+
+	for (int idx = 0; idx < block->num_tables; idx++)
+		bufs_table[idx] = kzalloc(num_rows * sizeof(**bufs_table), GFP_KERNEL);
+
+	drm_dbg_kms(display->drm, "Vswing / Preemph Override not yet supported on the platform\n");
+	bufs_table = NULL;
+
+	display->vbt.vswing_preemph.bufs_table = bufs_table;
+	display->vbt.vswing_preemph.num_tables = block->num_tables;
+	display->vbt.vswing_preemph.num_rows = num_rows;
+	display->vbt.vswing_preemph.num_cols = block->num_columns;
+}
+
 static u8 translate_iboost(struct intel_display *display, u8 val)
 {
 	static const u8 mapping[] = { 1, 3, 7 }; /* See VBT spec */
@@ -2978,6 +3011,9 @@ init_vbt_defaults(struct intel_display *display)
 							      !HAS_PCH_SPLIT(display));
 	drm_dbg_kms(display->drm, "Set default to SSC at %d kHz\n",
 		    display->vbt.lvds_ssc_freq);
+
+	/* Vswing / Preemphasis Override */
+	display->vbt.vswing_preemph.bufs_table = NULL;
 }
 
 /* Common defaults which may be overridden by VBT. */
@@ -3274,6 +3310,7 @@ void intel_bios_init(struct intel_display *display)
 
 	/* Depends on child device list */
 	parse_compression_parameters(display);
+	parse_vswing_preemph_override(display);
 
 out:
 	if (!vbt) {
@@ -3357,6 +3394,13 @@ void intel_bios_driver_remove(struct intel_display *display)
 	list_for_each_entry_safe(entry, ne, &display->vbt.bdb_blocks, node) {
 		list_del(&entry->node);
 		kfree(entry);
+	}
+
+	if (display->vbt.vswing_preemph.bufs_table) {
+		for (int idx = 0; idx < display->vbt.vswing_preemph.num_tables; idx++)
+			kfree(display->vbt.vswing_preemph.bufs_table[idx]);
+
+		kfree(display->vbt.vswing_preemph.bufs_table);
 	}
 }
 

@@ -233,6 +233,15 @@ struct intel_vbt_data {
 	struct list_head display_devices;
 	struct list_head bdb_blocks;
 
+	struct {
+		// union intel_ddi_buf_trans_entry **tables_block;
+		// union intel_ddi_buf_trans_entry **bufs_block;
+		union intel_ddi_buf_trans_entry **bufs_table;
+		int num_tables;
+		int num_cols;
+		int num_rows;
+	} vswing_preemph;
+
 	struct sdvo_device_mapping {
 		u8 initialized;
 		u8 dvo_port;
