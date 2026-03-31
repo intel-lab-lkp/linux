@@ -20,6 +20,8 @@ static bool block;
 
 static bool guest_ready_for_irqs[KVM_MAX_VCPUS];
 static bool guest_received_irq[KVM_MAX_VCPUS];
+static bool guest_received_nmi[KVM_MAX_VCPUS];
+
 #define TIMEOUT_NS (2ULL * 1000 * 1000 * 1000)
 
 static u32 guest_get_vcpu_id(void)
@@ -32,6 +34,11 @@ static void guest_irq_handler(struct ex_regs *regs)
 	WRITE_ONCE(guest_received_irq[guest_get_vcpu_id()], true);
 
 	x2apic_write_reg(APIC_EOI, 0);
+}
+
+static void guest_nmi_handler(struct ex_regs *regs)
+{
+	WRITE_ONCE(guest_received_nmi[guest_get_vcpu_id()], true);
 }
 
 static void guest_code(void)
@@ -71,7 +78,7 @@ static void kvm_clear_gsi_routes(struct kvm_vm *vm)
 }
 
 static void kvm_route_msi(struct kvm_vm *vm, u32 gsi, struct kvm_vcpu *vcpu,
-			  u8 vector)
+			  u8 vector, bool do_nmi)
 {
 	u8 buf[sizeof(struct kvm_irq_routing) + sizeof(struct kvm_irq_routing_entry)] = {};
 	struct kvm_irq_routing *routes = (void *)&buf;
@@ -80,7 +87,7 @@ static void kvm_route_msi(struct kvm_vm *vm, u32 gsi, struct kvm_vcpu *vcpu,
 	routes->entries[0].gsi = gsi;
 	routes->entries[0].type = KVM_IRQ_ROUTING_MSI;
 	routes->entries[0].u.msi.address_lo = 0xFEE00000 | (vcpu->id << 12);
-	routes->entries[0].u.msi.data = vector;
+	routes->entries[0].u.msi.data = do_nmi ? NMI_VECTOR | (4 << 8) : vector;
 
 	vm_ioctl(vm, KVM_SET_GSI_ROUTING, routes);
 }
@@ -125,7 +132,7 @@ static void send_msi(struct vfio_pci_device *device, bool use_device_msi, int ms
 
 static void help(const char *name)
 {
-	printf("Usage: %s [-a] [-b] [-d] [-e] [-h] [-i nr_irqs] segment:bus:device.function\n",
+	printf("Usage: %s [-a] [-b] [-d] [-e] [-h] [-i nr_irqs] [-n] segment:bus:device.function\n",
 	       name);
 	printf("\n");
 	printf("  -a: Randomly affinitize the device IRQ to different CPUs\n"
@@ -136,6 +143,8 @@ static void help(const char *name)
 	printf("  -e: Destroy and recreate KVM's GSI routing table in between\n"
 	       "      some interrupts.\n");
 	printf("  -i: The number of IRQs to generate during the test.\n");
+	printf("  -n: Route some of the device interrupts to be delivered as\n"
+	       "      an NMI into the guest.\n");
 	printf("\n");
 	exit(KSFT_FAIL);
 }
@@ -159,7 +168,7 @@ int main(int argc, char **argv)
 
 	/* Test configuration (overridable by command line flags). */
 	bool use_device_msi = false, irq_affinity = false;
-	bool empty = false;
+	bool empty = false, nmi = false;
 	int nr_irqs = 1000;
 	int nr_vcpus = 1;
 
@@ -177,7 +186,7 @@ int main(int argc, char **argv)
 
 	device_bdf = vfio_selftests_get_bdf(&argc, argv);
 
-	while ((c = getopt(argc, argv, "abdehi:")) != -1) {
+	while ((c = getopt(argc, argv, "abdehi:n")) != -1) {
 		switch (c) {
 		case 'a':
 			irq_affinity = true;
@@ -194,6 +203,9 @@ int main(int argc, char **argv)
 		case 'i':
 			nr_irqs = atoi_positive("Number of IRQs", optarg);
 			break;
+		case 'n':
+			nmi = true;
+			break;
 		case 'h':
 		default:
 			help(argv[0]);
@@ -202,6 +214,7 @@ int main(int argc, char **argv)
 
 	vm = vm_create_with_vcpus(nr_vcpus, guest_code, vcpus);
 	vm_install_exception_handler(vm, vector, guest_irq_handler);
+	vm_install_exception_handler(vm, NMI_VECTOR, guest_nmi_handler);
 
 	iommu = iommu_init(default_iommu_mode);
 	device = vfio_pci_device_init(device_bdf, iommu);
@@ -243,13 +256,14 @@ int main(int argc, char **argv)
 
 	for (i = 0; i < nr_irqs; i++) {
 		struct kvm_vcpu *vcpu = vcpus[i % nr_vcpus];
+		const bool do_nmi = nmi && (i & BIT(2));
 		const bool do_empty = empty && (i & BIT(3));
 		struct timespec start;
 
 		if (do_empty)
 			kvm_clear_gsi_routes(vm);
 
-		kvm_route_msi(vm, gsi, vcpu, vector);
+		kvm_route_msi(vm, gsi, vcpu, vector, do_nmi);
 
 		if (irq_affinity && vcpu->id == 0) {
 			irq_cpu = rand() % get_nprocs();
@@ -263,18 +277,26 @@ int main(int argc, char **argv)
 				!READ_FROM_GUEST(vm, guest_received_irq[vcpu->id]),
 				"IRQ flag for vCPU %d not clear prior to test",
 				vcpu->id);
+			TEST_ASSERT(
+				!READ_FROM_GUEST(vm, guest_received_nmi[vcpu->id]),
+				"NMI flag for vCPU %d not clear prior to test",
+				vcpu->id);
 		}
 
 		send_msi(device, use_device_msi, msi);
 
 		clock_gettime(CLOCK_MONOTONIC, &start);
 		for (;;) {
-			if (READ_FROM_GUEST(vm, guest_received_irq[vcpu->id]))
+			if (do_nmi && READ_FROM_GUEST(vm, guest_received_nmi[vcpu->id]))
+				break;
+
+			if (!do_nmi && READ_FROM_GUEST(vm, guest_received_irq[vcpu->id]))
 				break;
 
 			if (timespec_to_ns(timespec_elapsed(start)) > TIMEOUT_NS) {
 				printf("Timeout waiting for interrupt!\n");
 				printf("  vCPU: %d\n", vcpu->id);
+				printf("  do_nmi: %d\n", do_nmi);
 				printf("  do_empty: %d\n", do_empty);
 				if (irq_affinity)
 					printf("  irq_cpu: %d\n", irq_cpu);
@@ -283,14 +305,17 @@ int main(int argc, char **argv)
 			}
 		}
 
-		WRITE_TO_GUEST(vm, guest_received_irq[vcpu->id], false);
+		if (do_nmi)
+			WRITE_TO_GUEST(vm, guest_received_nmi[vcpu->id], false);
+		else
+			WRITE_TO_GUEST(vm, guest_received_irq[vcpu->id], false);
 	}
 
 	WRITE_TO_GUEST(vm, done, true);
 
 	for (i = 0; i < nr_vcpus; i++) {
 		if (block) {
-			kvm_route_msi(vm, gsi, vcpus[i], vector);
+			kvm_route_msi(vm, gsi, vcpus[i], vector, false);
 			send_msi(device, false, msi);
 		}
 
