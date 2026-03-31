@@ -16,6 +16,7 @@
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-fwnode.h>
+#include <media/v4l2-mc.h>
 
 #define OV2740_LINK_FREQ_360MHZ		360000000ULL
 #define OV2740_LINK_FREQ_180MHZ		180000000ULL
@@ -562,9 +563,12 @@ struct ov2740 {
 	/* V4L2 Controls */
 	struct v4l2_ctrl *link_freq;
 	struct v4l2_ctrl *pixel_rate;
+	struct v4l2_ctrl *fll;
 	struct v4l2_ctrl *vblank;
+	struct v4l2_ctrl *llp;
 	struct v4l2_ctrl *hblank;
 	struct v4l2_ctrl *exposure;
+	bool setting_ctrl;
 
 	/* GPIOs, clocks, regulators */
 	struct gpio_desc *reset_gpio;
@@ -738,18 +742,28 @@ static int ov2740_set_ctrl(struct v4l2_ctrl *ctrl)
 {
 	struct ov2740 *ov2740 = container_of(ctrl->handler,
 					     struct ov2740, ctrl_handler);
-	s64 exposure_max;
-	int ret;
+	int ret = 0;
 
 	/* Propagate change of current control to all related controls */
-	if (ctrl->id == V4L2_CID_VBLANK) {
-		/* Update max exposure while meeting expected vblanking */
-		exposure_max = ov2740->cur_mode->height + ctrl->val -
-			       OV2740_EXPOSURE_MAX_MARGIN;
-		__v4l2_ctrl_modify_range(ov2740->exposure,
-					 ov2740->exposure->minimum,
-					 exposure_max, ov2740->exposure->step,
-					 exposure_max);
+	switch (ctrl->id) {
+	case V4L2_CID_FRAME_LENGTH_LINES:
+	case V4L2_CID_VBLANK:
+	case V4L2_CID_LINE_LENGTH_PIXELS:
+	case V4L2_CID_HBLANK: {
+		struct v4l2_subdev_state *state =
+			v4l2_subdev_get_locked_active_state(&ov2740->sd);
+		const struct v4l2_mbus_framefmt *format =
+			v4l2_subdev_state_get_format(state, OV2740_PAD_SOURCE,
+						     OV2740_STREAM_PIXEL);
+
+		ret = v4l2_sensor_fll_llp_set(ov2740->fll, ov2740->vblank,
+					      ov2740->llp, ov2740->hblank,
+					      ov2740->exposure, format,
+					      ctrl, &ov2740->setting_ctrl,
+					      OV2740_EXPOSURE_MAX_MARGIN);
+		if (ret)
+			return ret;
+	}
 	}
 
 	/* V4L2 controls values will be applied only when power is already up */
@@ -773,8 +787,10 @@ static int ov2740_set_ctrl(struct v4l2_ctrl *ctrl)
 		break;
 
 	case V4L2_CID_VBLANK:
-		ret = ov2740_write_reg(ov2740, OV2740_REG_VTS, 2,
-				       ov2740->cur_mode->height + ctrl->val);
+		break;
+
+	case V4L2_CID_FRAME_LENGTH_LINES:
+		ret = ov2740_write_reg(ov2740, OV2740_REG_VTS, 2, ctrl->val);
 		break;
 
 	case V4L2_CID_TEST_PATTERN:
@@ -804,7 +820,7 @@ static int ov2740_init_controls(struct ov2740 *ov2740)
 	int ret;
 
 	ctrl_hdlr = &ov2740->ctrl_handler;
-	ret = v4l2_ctrl_handler_init(ctrl_hdlr, 13);
+	ret = v4l2_ctrl_handler_init(ctrl_hdlr, 15);
 	if (ret)
 		return ret;
 
@@ -825,10 +841,22 @@ static int ov2740_init_controls(struct ov2740 *ov2740)
 	vblank_min = ov2740->cur_mode->vts_min - ov2740->cur_mode->height;
 	vblank_max = ov2740->cur_mode->vts_max - ov2740->cur_mode->height;
 	vblank_default = ov2740->cur_mode->vts_def - ov2740->cur_mode->height;
+	ov2740->fll = v4l2_ctrl_new_std(ctrl_hdlr, &ov2740_ctrl_ops,
+					V4L2_CID_FRAME_LENGTH_LINES,
+					ov2740->cur_mode->vts_min,
+					ov2740->cur_mode->vts_max, 1,
+					ov2740->cur_mode->vts_def);
 	ov2740->vblank = v4l2_ctrl_new_std(ctrl_hdlr, &ov2740_ctrl_ops,
 					   V4L2_CID_VBLANK, vblank_min,
 					   vblank_max, 1, vblank_default);
 
+	ov2740->llp = v4l2_ctrl_new_std(ctrl_hdlr, &ov2740_ctrl_ops,
+					V4L2_CID_LINE_LENGTH_PIXELS,
+					ov2740->cur_mode->hts,
+					ov2740->cur_mode->hts, 1,
+					ov2740->cur_mode->hts);
+	if (ov2740->llp)
+		ov2740->llp->flags |= V4L2_CTRL_FLAG_READ_ONLY;
 	h_blank = ov2740->cur_mode->hts - ov2740->cur_mode->width;
 	ov2740->hblank = v4l2_ctrl_new_std(ctrl_hdlr, &ov2740_ctrl_ops,
 					   V4L2_CID_HBLANK, h_blank, h_blank, 1,
@@ -1215,7 +1243,6 @@ static int ov2740_init_state(struct v4l2_subdev *sd,
 		.routes = routes,
 		.num_routes = ARRAY_SIZE(routes),
 	};
-	struct ov2740 *ov2740 = to_ov2740(sd);
 	int ret;
 
 	ret = v4l2_subdev_set_routing(sd, sd_state, &routing);
