@@ -94,6 +94,30 @@ typedef unsigned int		uint;
 typedef unsigned long		ulong;
 typedef unsigned long long	ullong;
 
+/* Trapping types. */
+typedef u8 __ob_trap		u8t;
+typedef u16 __ob_trap		u16t;
+typedef u32 __ob_trap		u32t;
+typedef u64 __ob_trap		u64t;
+typedef unsigned long __ob_trap	ulongt;
+typedef s8 __ob_trap		s8t;
+typedef s16 __ob_trap		s16t;
+typedef s32 __ob_trap		s32t;
+typedef s64 __ob_trap		s64t;
+typedef signed long __ob_trap	slongt;
+
+/* Wrapping types. */
+typedef u8 __ob_wrap		u8w;
+typedef u16 __ob_wrap		u16w;
+typedef u32 __ob_wrap		u32w;
+typedef u64 __ob_wrap		u64w;
+typedef unsigned long __ob_wrap	ulongw;
+typedef s8 __ob_wrap		s8w;
+typedef s16 __ob_wrap		s16w;
+typedef s32 __ob_wrap		s32w;
+typedef s64 __ob_wrap		s64w;
+typedef signed long __ob_wrap	slongw;
+
 #ifndef __BIT_TYPES_DEFINED__
 #define __BIT_TYPES_DEFINED__
 
