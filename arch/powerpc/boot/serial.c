@@ -90,13 +90,14 @@ static void *serial_get_stdout_devp(void)
 	if (devp == NULL)
 		goto err_out;
 
-	if (getprop(devp, "linux,stdout-path", path, MAX_PATH_LEN) > 0 ||
-		getprop(devp, "stdout-path", path, MAX_PATH_LEN) > 0) {
+	if (getprop_str(devp, "linux,stdout-path", path, MAX_PATH_LEN) > 0 ||
+	    getprop_str(devp, "stdout-path", path, MAX_PATH_LEN) > 0) {
 		devp = finddevice(path);
 		if (devp == NULL)
 			goto err_out;
 
-		if ((getprop(devp, "device_type", devtype, sizeof(devtype)) > 0)
+		if ((getprop_str(devp, "device_type", devtype,
+				 sizeof(devtype)) > 0)
 				&& !strcmp(devtype, "serial"))
 			return devp;
 	}

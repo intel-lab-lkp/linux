@@ -106,6 +106,29 @@ static inline int getprop(void *devp, const char *name, void *buf, int buflen)
 	return (dt_ops.getprop) ? dt_ops.getprop(devp, name, buf, buflen) : -1;
 }
 
+static inline int getprop_str(void *devp, const char *name, char *buf,
+			      int buflen)
+{
+	int len;
+
+	if (buflen <= 0)
+		return -1;
+
+	len = getprop(devp, name, buf, buflen);
+	if (len <= 0) {
+		buf[0] = '\0';
+		return len;
+	}
+
+	if (len >= buflen) {
+		buf[buflen - 1] = '\0';
+		return -1;
+	}
+	buf[len] = '\0';
+
+	return len;
+}
+
 static inline int setprop(void *devp, const char *name,
                           const void *buf, int buflen)
 {
@@ -172,7 +195,7 @@ static inline void *find_node_by_alias(const char *alias)
 
 	if (devp) {
 		char path[MAX_PATH_LEN];
-		if (getprop(devp, alias, path, MAX_PATH_LEN) > 0)
+		if (getprop_str(devp, alias, path, MAX_PATH_LEN) > 0)
 			return finddevice(path);
 	}
 
