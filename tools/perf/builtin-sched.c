@@ -3807,6 +3807,7 @@ const char *output_name;
 static int perf_sched__schedstat_record(struct perf_sched *sched,
 					int argc, const char **argv)
 {
+	sigset_t sigchld_mask, oldmask;
 	struct perf_session *session;
 	struct target target = {};
 	struct evlist *evlist;
@@ -3821,6 +3822,15 @@ static int perf_sched__schedstat_record(struct perf_sched *sched,
 	signal(SIGINT, sighandler);
 	signal(SIGCHLD, sighandler);
 	signal(SIGTERM, sighandler);
+
+	/*
+	 * Block SIGCHLD early so that a short-lived workload cannot deliver
+	 * the signal before we are ready to wait for it. sigsuspend() below
+	 * will atomically unblock it.
+	 */
+	sigemptyset(&sigchld_mask);
+	sigaddset(&sigchld_mask, SIGCHLD);
+	sigprocmask(SIG_BLOCK, &sigchld_mask, &oldmask);
 
 	evlist = evlist__new();
 	if (!evlist)
@@ -3902,8 +3912,15 @@ static int perf_sched__schedstat_record(struct perf_sched *sched,
 	if (argc)
 		evlist__start_workload(evlist);
 
-	/* wait for signal */
-	pause();
+	/*
+	 * Use sigsuspend() instead of pause() to avoid a race where a
+	 * short-lived workload exits and delivers SIGCHLD before pause()
+	 * is entered, causing it to block indefinitely. sigsuspend()
+	 * atomically unblocks SIGCHLD (blocked above) and suspends,
+	 * ensuring no signal is lost.
+	 */
+	sigsuspend(&oldmask);
+	sigprocmask(SIG_SETMASK, &oldmask, NULL);
 
 	if (reset) {
 		err = disable_sched_schedstat();
