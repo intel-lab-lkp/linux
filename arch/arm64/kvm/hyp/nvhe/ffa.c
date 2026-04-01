@@ -862,7 +862,7 @@ out_unlock:
 	hyp_spin_unlock(&host_buffers.lock);
 }
 
-bool kvm_host_ffa_handler(struct kvm_cpu_context *host_ctxt, u32 func_id)
+bool kvm_host_ffa_handler(struct kvm_cpu_context *host_ctxt, u64 func_id)
 {
 	struct arm_smccc_1_2_regs res;
 

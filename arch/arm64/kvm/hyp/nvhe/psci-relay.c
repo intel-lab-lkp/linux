@@ -291,7 +291,7 @@ static unsigned long psci_1_0_handler(u64 func_id, struct kvm_cpu_context *host_
 	}
 }
 
-bool kvm_host_psci_handler(struct kvm_cpu_context *host_ctxt, u32 func_id)
+bool kvm_host_psci_handler(struct kvm_cpu_context *host_ctxt, u64 func_id)
 {
 	unsigned long ret;
 
