@@ -7379,7 +7379,7 @@ static int __init bfq_slab_setup(void)
 
 static ssize_t bfq_var_show(unsigned int var, char *page)
 {
-	return sprintf(page, "%u\n", var);
+	return sysfs_emit(page, "%u\n", var);
 }
 
 static int bfq_var_store(unsigned long *var, const char *page)
