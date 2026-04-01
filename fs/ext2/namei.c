@@ -334,6 +334,13 @@ static int ext2_rename (struct mnt_idmap * idmap,
 	bool old_is_dir = S_ISDIR(old_inode->i_mode);
 	int err;
 
+	if (new_inode && new_inode->i_nlink == 0) {
+		ext2_error(old_dir->i_sb, __func__,
+			   "target inode %lu has zero i_nlink, filesystem may be corrupt",
+			   new_inode->i_ino);
+		return -EFSCORRUPTED;
+	}
+
 	if (flags & ~RENAME_NOREPLACE)
 		return -EINVAL;
 
