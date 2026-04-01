@@ -5604,6 +5604,7 @@ static int stmmac_rx(struct stmmac_priv *priv, int limit, u32 queue)
 	unsigned int desc_size;
 	struct sk_buff *skb = NULL;
 	struct stmmac_xdp_buff ctx;
+	int budget = limit;
 	int xdp_status = 0;
 	int bufsz;
 
@@ -5869,6 +5870,14 @@ drain_data:
 
 	priv->xstats.rx_dropped += rx_dropped;
 	priv->xstats.rx_errors += rx_errors;
+
+	/* stmmac_rx_refill() may fail, leaving some dirty entries behind.
+	 * A few is OK, but if it gets out of hand, we risk dropping frames
+	 * in the next traffic burst; in the worst case (100% dirty) we won't
+	 * even receive any future "DMA completed" interrupts.
+	 */
+	if (unlikely(stmmac_rx_dirty(priv, queue) >= STMMAC_RX_FILL_BATCH))
+		return budget;
 
 	return count;
 }
