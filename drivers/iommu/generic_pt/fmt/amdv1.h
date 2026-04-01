@@ -156,6 +156,7 @@ static inline unsigned int amdv1pt_num_items_lg2(const struct pt_state *pts)
 static inline pt_vaddr_t amdv1pt_possible_sizes(const struct pt_state *pts)
 {
 	unsigned int isz_lg2 = pt_table_item_lg2sz(pts);
+	pt_vaddr_t raw;
 
 	if (!amdv1pt_can_have_leaf(pts))
 		return 0;
@@ -168,8 +169,9 @@ static inline pt_vaddr_t amdv1pt_possible_sizes(const struct pt_state *pts)
 	 * 512GB Pages are not supported due to a hardware bug.
 	 * Otherwise every power of two size is supported.
 	 */
-	return GENMASK_ULL(min(51, isz_lg2 + amdv1pt_num_items_lg2(pts) - 1),
+	raw = GENMASK_ULL(min(51, isz_lg2 + amdv1pt_num_items_lg2(pts) - 1),
 			   isz_lg2) & ~SZ_512G;
+	return fvalog2_mod(raw, pts->range->common->max_vasz_lg2);
 }
 #define pt_possible_sizes amdv1pt_possible_sizes
 
