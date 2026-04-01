@@ -717,6 +717,14 @@ xprt_rdma_disable_swap(struct rpc_xprt *xprt)
 {
 }
 
+static bool
+xprt_rdma_supports_p2pdma(struct rpc_xprt *xprt)
+{
+	struct rpcrdma_xprt *r_xprt = rpcx_to_rdmax(xprt);
+
+	return ib_dma_pci_p2p_dma_supported(r_xprt->rx_ep->re_id->device);
+}
+
 /*
  * Plumbing for rpc transport switch and kernel module
  */
@@ -742,6 +750,7 @@ static const struct rpc_xprt_ops xprt_rdma_procs = {
 	.enable_swap		= xprt_rdma_enable_swap,
 	.disable_swap		= xprt_rdma_disable_swap,
 	.inject_disconnect	= xprt_rdma_inject_disconnect,
+	.supports_p2pdma	= xprt_rdma_supports_p2pdma,
 #if defined(CONFIG_SUNRPC_BACKCHANNEL)
 	.bc_setup		= xprt_rdma_bc_setup,
 	.bc_maxpayload		= xprt_rdma_bc_maxpayload,

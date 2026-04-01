@@ -187,6 +187,7 @@ struct rpc_xprt_ops {
 	void		(*bc_free_rqst)(struct rpc_rqst *rqst);
 	void		(*bc_destroy)(struct rpc_xprt *xprt,
 				      unsigned int max_reqs);
+	bool		(*supports_p2pdma)(struct rpc_xprt *xprt);
 };
 
 /*
