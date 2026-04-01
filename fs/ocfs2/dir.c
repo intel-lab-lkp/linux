@@ -790,12 +790,22 @@ static int ocfs2_dx_dir_lookup_rec(struct inode *inode,
 	struct buffer_head *eb_bh = NULL;
 	struct ocfs2_extent_block *eb;
 	struct ocfs2_extent_rec *rec = NULL;
+	unsigned int max_recs;
 
-	if (le16_to_cpu(el->l_count) !=
-	    ocfs2_extent_recs_per_dx_root(inode->i_sb)) {
+	max_recs = ocfs2_extent_recs_per_dx_root(inode->i_sb);
+	if (le16_to_cpu(el->l_count) != max_recs) {
 		ret = ocfs2_error(inode->i_sb,
 				  "Inode %llu has invalid extent list length %u\n",
 				  inode->i_ino, le16_to_cpu(el->l_count));
+		goto out;
+	}
+
+	if (le16_to_cpu(el->l_next_free_rec) > max_recs) {
+		ret = ocfs2_error(inode->i_sb,
+				  "Inode %llu has invalid dx root next free %u, max %u\n",
+				  inode->i_ino,
+				  le16_to_cpu(el->l_next_free_rec),
+				  max_recs);
 		goto out;
 	}
 
@@ -815,6 +825,27 @@ static int ocfs2_dx_dir_lookup_rec(struct inode *inode,
 					  "Inode %llu has non zero tree depth in btree tree block %llu\n",
 					  inode->i_ino,
 					  (unsigned long long)eb_bh->b_blocknr);
+			goto out;
+		}
+
+		max_recs = ocfs2_extent_recs_per_eb(inode->i_sb);
+		if (le16_to_cpu(el->l_count) != max_recs) {
+			ret = ocfs2_error(inode->i_sb,
+					  "Inode %llu has invalid tree block %llu list count %u, max %u\n",
+					  inode->i_ino,
+					  (unsigned long long)eb_bh->b_blocknr,
+					  le16_to_cpu(el->l_count),
+					  max_recs);
+			goto out;
+		}
+
+		if (le16_to_cpu(el->l_next_free_rec) > max_recs) {
+			ret = ocfs2_error(inode->i_sb,
+					  "Inode %llu has invalid tree block %llu next free %u, max %u\n",
+					  inode->i_ino,
+					  (unsigned long long)eb_bh->b_blocknr,
+					  le16_to_cpu(el->l_next_free_rec),
+					  max_recs);
 			goto out;
 		}
 	}
