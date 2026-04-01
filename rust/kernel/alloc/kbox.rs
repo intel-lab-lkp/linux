@@ -170,15 +170,16 @@ where
     ///
     /// # Safety
     ///
-    /// For non-ZSTs, `raw` must point at an allocation allocated with `A` that is sufficiently
-    /// aligned for and holds a valid `T`. The caller passes ownership of the allocation to the
-    /// `Box`.
+    /// For non-ZSTs, `raw` must point at an allocation allocated with `A` with a layout
+    /// of `Layout::for_value::<T>()`. The caller passes ownership of the allocation
+    /// to the `Box`.
     ///
     /// For ZSTs, `raw` must be a dangling, well aligned pointer.
     #[inline]
     pub const unsafe fn from_raw(raw: *mut T) -> Self {
         // INVARIANT: Validity of `raw` is guaranteed by the safety preconditions of this function.
-        // SAFETY: By the safety preconditions of this function, `raw` is not a NULL pointer.
+        // SAFETY: By the safety preconditions of this function, `raw` is not a NULL pointer and
+        // was allocated via `A` for `Layout::for_value::<T>()`.
         Self(unsafe { NonNull::new_unchecked(raw) }, PhantomData)
     }
 
