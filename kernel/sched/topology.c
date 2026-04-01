@@ -840,7 +840,7 @@ int group_balance_cpu(struct sched_group *sg)
  *
  * We want to construct domains and groups to represent this. The way we go
  * about doing this is to build the domains on 'hops'. For each NUMA level we
- * construct the mask of all nodes reachable in @level hops.
+ * construct the mask of all nodes reachable at that number of hops.
  *
  * For the above NUMA topology that gives 3 levels:
  *
@@ -2236,13 +2236,13 @@ void sched_domains_numa_masks_clear(unsigned int cpu)
 	}
 }
 
-/*
+/**
  * sched_numa_find_closest() - given the NUMA topology, find the cpu
  *                             closest to @cpu from @cpumask.
- * cpumask: cpumask to find a cpu from
- * cpu: cpu to be close to
+ * @cpus: cpumask to find a cpu from
+ * @cpu: cpu to be close to
  *
- * returns: cpu, or nr_cpu_ids when nothing found.
+ * Return: @cpu, or nr_cpu_ids when nothing found.
  */
 int sched_numa_find_closest(const struct cpumask *cpus, int cpu)
 {
