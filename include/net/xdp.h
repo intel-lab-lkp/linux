@@ -477,6 +477,23 @@ out:
 	return len;
 }
 
+static inline int xdp_frame_pad(struct xdp_frame *xdpf)
+{
+	void *sinfo;
+
+	if (likely(xdpf->len >= ETH_ZLEN))
+		return 0;
+
+	sinfo = xdp_get_shared_info_from_frame(xdpf);
+	if (unlikely(xdpf->data + ETH_ZLEN > sinfo))
+		return -ENOMEM;
+
+	memset(xdpf->data + xdpf->len, 0, ETH_ZLEN - xdpf->len);
+	xdpf->len = ETH_ZLEN;
+
+	return 0;
+}
+
 int __xdp_rxq_info_reg(struct xdp_rxq_info *xdp_rxq,
 		       struct net_device *dev, u32 queue_index,
 		       unsigned int napi_id, u32 frag_size);
