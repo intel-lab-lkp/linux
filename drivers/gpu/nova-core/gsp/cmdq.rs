@@ -384,6 +384,7 @@ impl DmaGspMem {
     // # Invariants
     //
     // - The returned value is within `0..MSGQ_NUM_PAGES`.
+    #[inline(always)]
     fn gsp_write_ptr(&self) -> u32 {
         super::fw::gsp_mem::gsp_write_ptr(&self.0)
     }
@@ -393,6 +394,7 @@ impl DmaGspMem {
     // # Invariants
     //
     // - The returned value is within `0..MSGQ_NUM_PAGES`.
+    #[inline(always)]
     fn gsp_read_ptr(&self) -> u32 {
         super::fw::gsp_mem::gsp_read_ptr(&self.0)
     }
@@ -402,6 +404,7 @@ impl DmaGspMem {
     // # Invariants
     //
     // - The returned value is within `0..MSGQ_NUM_PAGES`.
+    #[inline(always)]
     fn cpu_read_ptr(&self) -> u32 {
         super::fw::gsp_mem::cpu_read_ptr(&self.0)
     }
@@ -416,6 +419,7 @@ impl DmaGspMem {
     // # Invariants
     //
     // - The returned value is within `0..MSGQ_NUM_PAGES`.
+    #[inline(always)]
     fn cpu_write_ptr(&self) -> u32 {
         super::fw::gsp_mem::cpu_write_ptr(&self.0)
     }

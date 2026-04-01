@@ -58,14 +58,17 @@ pub(super) mod gsp_mem {
         MSGQ_NUM_PAGES, //
     };
 
+    #[inline(always)]
     pub(in crate::gsp) fn gsp_write_ptr(qs: &Coherent<GspMem>) -> u32 {
         dma_read!(qs, .gspq.tx.0.writePtr) % MSGQ_NUM_PAGES
     }
 
+    #[inline(always)]
     pub(in crate::gsp) fn gsp_read_ptr(qs: &Coherent<GspMem>) -> u32 {
         dma_read!(qs, .gspq.rx.0.readPtr) % MSGQ_NUM_PAGES
     }
 
+    #[inline(always)]
     pub(in crate::gsp) fn cpu_read_ptr(qs: &Coherent<GspMem>) -> u32 {
         dma_read!(qs, .cpuq.rx.0.readPtr) % MSGQ_NUM_PAGES
     }
@@ -79,6 +82,7 @@ pub(super) mod gsp_mem {
         dma_write!(qs, .cpuq.rx.0.readPtr, rptr);
     }
 
+    #[inline(always)]
     pub(in crate::gsp) fn cpu_write_ptr(qs: &Coherent<GspMem>) -> u32 {
         dma_read!(qs, .cpuq.tx.0.writePtr) % MSGQ_NUM_PAGES
     }
