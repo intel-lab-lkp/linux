@@ -13,7 +13,7 @@ from enum import Enum
 
 from lib.py import ksft_run, ksft_exit, ksft_eq, ksft_ge, ksft_ne, ksft_pr
 from lib.py import KsftNamedVariant, ksft_variants
-from lib.py import KsftFailEx, NetDrvEpEnv
+from lib.py import KsftFailEx, KsftSkipEx, NetDrvEpEnv
 from lib.py import EthtoolFamily, NetdevFamily, NlError
 from lib.py import bkg, cmd, rand_port, wait_port_listen
 from lib.py import ip, defer
@@ -693,6 +693,55 @@ def test_xdp_native_qstats(cfg, act):
             ksft_ge(after['tx-packets'], before['tx-packets'])
 
 
+def _set_jumbo_mtu(cfg, mtu):
+    ip(f"link set dev {cfg.ifname} mtu {mtu}")
+    defer(ip, f"link set dev {cfg.ifname} mtu 1500")
+
+
+def _exec_cmd(cfg, obj, sec, ip_opts=""):
+    return cmd(f"ip {ip_opts} link set dev {cfg.ifname} xdpdrv obj {obj} sec {sec}", shell=True, fail=False)
+
+
+def test_xdp_native_attach_sb_to_mb(cfg):
+    obj = cfg.net_lib_dir / "xdp_dummy.bpf.o"
+    mtu = 9000
+
+    _set_jumbo_mtu(cfg, mtu)
+
+    probe = _exec_cmd(cfg, obj, "xdp.frags")
+    if probe.ret != 0:
+        output = probe.stderr.strip() or probe.stdout.strip()
+        raise KsftSkipEx(output or "device does not support multi-buffer XDP")
+
+    ip(f"link set dev {cfg.ifname} xdpdrv off")
+
+    probe = _exec_cmd(cfg, obj, "xdp")
+    if probe.ret == 0:
+        ip(f"link set dev {cfg.ifname} xdpdrv off")
+        raise KsftFailEx(f"driver unexpectedly allows non-multi-buffer XDP at MTU {mtu}")
+
+
+def test_xdp_native_update_mb_to_sb(cfg):
+    obj = cfg.net_lib_dir / "xdp_dummy.bpf.o"
+
+    _set_jumbo_mtu(cfg, 9000)
+
+    attach = _exec_cmd(cfg, obj, "xdp.frags")
+    if attach.ret != 0:
+        output = attach.stderr.strip() or attach.stdout.strip()
+        raise KsftSkipEx(output or "device does not support multi-buffer XDP")
+
+    defer(ip, f"link set dev {cfg.ifname} xdpdrv off")
+
+    update1 = _exec_cmd(cfg, obj, "xdp.frags", "-force")
+    if update1.ret != 0:
+        raise KsftFailEx("device fails to update multi-buffer XDP")
+
+    update2 = _exec_cmd(cfg, obj, "xdp", "-force")
+    if update2.ret == 0:
+        raise KsftFailEx("device unexpectedly updates non-multi-buffer XDP")
+
+
 def main():
     """
     Main function to execute the XDP tests.
@@ -718,6 +767,8 @@ def main():
                 test_xdp_native_adjst_head_grow_data,
                 test_xdp_native_adjst_head_shrnk_data,
                 test_xdp_native_qstats,
+                test_xdp_native_attach_sb_to_mb,
+                test_xdp_native_update_mb_to_sb,
             ],
             args=(cfg,))
     ksft_exit()
