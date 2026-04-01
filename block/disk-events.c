@@ -372,7 +372,7 @@ static ssize_t disk_events_poll_msecs_store(struct device *dev,
 	struct gendisk *disk = dev_to_disk(dev);
 	long intv;
 
-	if (!count || !sscanf(buf, "%ld", &intv))
+	if (kstrtol(buf, 10, &intv))
 		return -EINVAL;
 
 	if (intv < 0 && intv != -1)
