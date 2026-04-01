@@ -49,18 +49,16 @@ ssize_t part_timeout_store(struct device *dev, struct device_attribute *attr,
 			   const char *buf, size_t count)
 {
 	struct gendisk *disk = dev_to_disk(dev);
+	struct request_queue *q = disk->queue;
 	int val;
 
-	if (count) {
-		struct request_queue *q = disk->queue;
-		char *p = (char *) buf;
+	if (kstrtoint(buf, 10, &val))
+		return -EINVAL;
 
-		val = simple_strtoul(p, &p, 10);
-		if (val)
-			blk_queue_flag_set(QUEUE_FLAG_FAIL_IO, q);
-		else
-			blk_queue_flag_clear(QUEUE_FLAG_FAIL_IO, q);
-	}
+	if (val)
+		blk_queue_flag_set(QUEUE_FLAG_FAIL_IO, q);
+	else
+		blk_queue_flag_clear(QUEUE_FLAG_FAIL_IO, q);
 
 	return count;
 }
