@@ -309,7 +309,7 @@ static inline int check_net(const struct net *net)
 	return ns_ref_read(net) != 0;
 }
 
-void net_drop_ns(void *);
+void net_drop_ns(struct ns_common *);
 void net_passive_dec(struct net *net);
 
 #else
