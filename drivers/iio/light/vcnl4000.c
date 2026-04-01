@@ -2043,7 +2043,7 @@ static int vcnl4000_probe(struct i2c_client *client)
 	if (ret < 0)
 		goto fail_poweroff;
 
-	ret = iio_device_register(indio_dev);
+	ret = devm_iio_device_register(dev, indio_dev);
 	if (ret < 0)
 		goto fail_poweroff;
 
@@ -2099,7 +2099,6 @@ static void vcnl4000_remove(struct i2c_client *client)
 
 	pm_runtime_dont_use_autosuspend(&client->dev);
 	pm_runtime_disable(&client->dev);
-	iio_device_unregister(indio_dev);
 	pm_runtime_set_suspended(&client->dev);
 
 	ret = data->chip_spec->set_power_state(data, false);
