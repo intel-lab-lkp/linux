@@ -712,6 +712,8 @@ static void nfs4_server_set_init_caps(struct nfs_server *server)
 
 void nfs_server_set_init_caps(struct nfs_server *server)
 {
+	struct rpc_xprt *xprt;
+
 	switch (server->nfs_client->rpc_ops->version) {
 	case 2:
 		server->caps = NFS_CAP_HARDLINKS | NFS_CAP_SYMLINKS;
@@ -725,6 +727,12 @@ void nfs_server_set_init_caps(struct nfs_server *server)
 		nfs4_server_set_init_caps(server);
 		break;
 	}
+
+	rcu_read_lock();
+	xprt = rcu_dereference(server->client->cl_xprt);
+	if (xprt->ops->supports_p2pdma && xprt->ops->supports_p2pdma(xprt))
+		server->caps |= NFS_CAP_P2PDMA;
+	rcu_read_unlock();
 }
 EXPORT_SYMBOL_GPL(nfs_server_set_init_caps);
 

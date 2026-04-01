@@ -672,7 +672,7 @@ int nfs_show_stats(struct seq_file *m, struct dentry *root)
 	show_implementation_id(m, nfss);
 
 	seq_puts(m, "\n\tcaps:\t");
-	seq_printf(m, "caps=0x%x", nfss->caps);
+	seq_printf(m, "caps=0x%llx", nfss->caps);
 	seq_printf(m, ",wtmult=%u", nfss->wtmult);
 	seq_printf(m, ",dtsize=%u", nfss->dtsize);
 	seq_printf(m, ",bsize=%u", nfss->bsize);

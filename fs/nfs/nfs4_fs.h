@@ -60,7 +60,7 @@ enum nfs4_client_state {
 struct nfs_seqid_counter;
 struct nfs4_minor_version_ops {
 	u32	minor_version;
-	unsigned init_caps;
+	u64	init_caps;
 
 	int	(*init_client)(struct nfs_client *);
 	void	(*shutdown_client)(struct nfs_client *);
