@@ -329,12 +329,12 @@ static ssize_t __disk_events_show(unsigned int events, char *buf)
 
 	for (i = 0; i < ARRAY_SIZE(disk_events_strs); i++)
 		if (events & (1 << i)) {
-			pos += sprintf(buf + pos, "%s%s",
-				       delim, disk_events_strs[i]);
+			pos += sysfs_emit_at(buf, pos, "%s%s",
+					     delim, disk_events_strs[i]);
 			delim = " ";
 		}
 	if (pos)
-		pos += sprintf(buf + pos, "\n");
+		pos += sysfs_emit_at(buf, pos, "\n");
 	return pos;
 }
 
@@ -361,8 +361,8 @@ static ssize_t disk_events_poll_msecs_show(struct device *dev,
 	struct gendisk *disk = dev_to_disk(dev);
 
 	if (!disk->ev)
-		return sprintf(buf, "-1\n");
-	return sprintf(buf, "%ld\n", disk->ev->poll_msecs);
+		return sysfs_emit(buf, "-1\n");
+	return sysfs_emit(buf, "%ld\n", disk->ev->poll_msecs);
 }
 
 static ssize_t disk_events_poll_msecs_store(struct device *dev,
