@@ -11,7 +11,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define ARM_SPE_PKT_DESC_MAX		256
+#define ARM_SPE_PKT_DESC_MAX		512
 
 #define ARM_SPE_NEED_MORE_BYTES		-1
 #define ARM_SPE_BAD_PACKET		-2
@@ -186,5 +186,6 @@ const char *arm_spe_pkt_name(enum arm_spe_pkt_type);
 int arm_spe_get_packet(const unsigned char *buf, size_t len,
 		       struct arm_spe_pkt *packet);
 
-int arm_spe_pkt_desc(const struct arm_spe_pkt *packet, char *buf, size_t len);
+int arm_spe_pkt_desc(const struct arm_spe_pkt *packet, char *buf, size_t len,
+		     u64 midr);
 #endif
