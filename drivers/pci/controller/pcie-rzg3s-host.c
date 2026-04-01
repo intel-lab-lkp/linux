@@ -1653,9 +1653,10 @@ rzg3s_pcie_host_setup(struct rzg3s_pcie_host *host,
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to init IRQ domain\n");
 
-	ret = rzg3s_pcie_host_init(host);
-	if (ret) {
-		dev_err_probe(dev, ret, "Failed to initialize the HW!\n");
+	/* Failure to get a link might just be that no cards are inserted */
+	if (rzg3s_pcie_host_init(host)) {
+		dev_info(dev, "PCIe link down!\n");
+		ret = -ENODEV;
 		goto teardown_irqdomain;
 	}
 
