@@ -210,6 +210,7 @@ struct nvmet_port {
 	bool				enabled;
 	int				inline_data_size;
 	int				max_queue_size;
+	int				mdts;
 	const struct nvmet_fabrics_ops	*tr_ops;
 	bool				pi_enable;
 };
@@ -660,6 +661,7 @@ void nvmet_add_async_event(struct nvmet_ctrl *ctrl, u8 event_type,
 #define NVMET_MAX_QUEUE_SIZE	1024
 #define NVMET_NR_QUEUES		128
 #define NVMET_MAX_CMD(ctrl)	(NVME_CAP_MQES(ctrl->cap) + 1)
+#define NVMET_MAX_MDTS		255
 
 /*
  * Nice round number that makes a list of nsids fit into a page.
