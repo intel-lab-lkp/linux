@@ -4655,6 +4655,7 @@ static int perf_sched__schedstat_live(struct perf_sched *sched,
 				      int argc, const char **argv)
 {
 	struct cpu_domain_map **cd_map = NULL;
+	sigset_t sigchld_mask, oldmask;
 	struct target target = {};
 	u32 __maybe_unused md;
 	struct evlist *evlist;
@@ -4665,6 +4666,10 @@ static int perf_sched__schedstat_live(struct perf_sched *sched,
 	signal(SIGINT, sighandler);
 	signal(SIGCHLD, sighandler);
 	signal(SIGTERM, sighandler);
+
+	sigemptyset(&sigchld_mask);
+	sigaddset(&sigchld_mask, SIGCHLD);
+	sigprocmask(SIG_BLOCK, &sigchld_mask, &oldmask);
 
 	evlist = evlist__new();
 	if (!evlist)
@@ -4707,8 +4712,8 @@ static int perf_sched__schedstat_live(struct perf_sched *sched,
 	if (argc)
 		evlist__start_workload(evlist);
 
-	/* wait for signal */
-	pause();
+	sigsuspend(&oldmask);
+	sigprocmask(SIG_SETMASK, &oldmask, NULL);
 
 	if (reset) {
 		err = disable_sched_schedstat();
