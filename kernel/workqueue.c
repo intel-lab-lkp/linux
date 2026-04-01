@@ -1852,8 +1852,17 @@ static void unplug_oldest_pwq(struct workqueue_struct *wq)
 	raw_spin_lock_irq(&pwq->pool->lock);
 	if (pwq->plugged) {
 		pwq->plugged = false;
-		if (pwq_activate_first_inactive(pwq, true))
+		if (pwq_activate_first_inactive(pwq, true)) {
+			/*
+			 * pwq is unbound. Additional inactive work_items need
+			 * to reinsert the pwq into nna->pending_pwqs, which
+			 * was skipped while pwq->plugged was true. See
+			 * pwq_tryinc_nr_active() for additional details.
+			 */
+			pwq_activate_first_inactive(pwq, false);
+
 			kick_pool(pwq->pool);
+		}
 	}
 	raw_spin_unlock_irq(&pwq->pool->lock);
 }
