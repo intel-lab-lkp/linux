@@ -157,16 +157,6 @@ static inline void serdev_controller_put(struct serdev_controller *ctrl)
 		put_device(&ctrl->dev);
 }
 
-struct serdev_device *serdev_device_alloc(struct serdev_controller *);
-int serdev_device_add(struct serdev_device *);
-void serdev_device_remove(struct serdev_device *);
-
-struct serdev_controller *serdev_controller_alloc(struct device *host,
-						  struct device *parent,
-						  size_t size);
-int serdev_controller_add(struct serdev_controller *);
-void serdev_controller_remove(struct serdev_controller *);
-
 static inline void serdev_controller_write_wakeup(struct serdev_controller *ctrl)
 {
 	struct serdev_device *serdev = ctrl->serdev;
@@ -204,6 +194,16 @@ int serdev_device_break_ctl(struct serdev_device *serdev, int break_state);
 void serdev_device_write_wakeup(struct serdev_device *);
 ssize_t serdev_device_write(struct serdev_device *, const u8 *, size_t, long);
 void serdev_device_write_flush(struct serdev_device *);
+
+struct serdev_device *serdev_device_alloc(struct serdev_controller *);
+int serdev_device_add(struct serdev_device *);
+void serdev_device_remove(struct serdev_device *);
+
+struct serdev_controller *serdev_controller_alloc(struct device *host,
+						  struct device *parent,
+						  size_t size);
+int serdev_controller_add(struct serdev_controller *);
+void serdev_controller_remove(struct serdev_controller *);
 
 /*
  * serdev device driver functions
@@ -264,6 +264,28 @@ static inline ssize_t serdev_device_write(struct serdev_device *sdev,
 	return -ENODEV;
 }
 static inline void serdev_device_write_flush(struct serdev_device *sdev) {}
+
+static inline struct serdev_device *serdev_device_alloc(struct serdev_controller *)
+{
+	return NULL;
+}
+static inline int serdev_device_add(struct serdev_device *)
+{
+	return -ENODEV;
+}
+static inline void serdev_device_remove(struct serdev_device *) {}
+
+static inline struct serdev_controller *serdev_controller_alloc(struct device *host,
+						  struct device *parent,
+						  size_t size)
+{
+	return NULL;
+}
+static inline int serdev_controller_add(struct serdev_controller *)
+{
+	return -ENODEV;
+}
+static inline void serdev_controller_remove(struct serdev_controller *) {}
 
 #define serdev_device_driver_register(x)
 #define serdev_device_driver_unregister(x)
