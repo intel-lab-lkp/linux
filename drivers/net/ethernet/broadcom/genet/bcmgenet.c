@@ -2018,10 +2018,10 @@ static int bcmgenet_tx_poll(struct napi_struct *napi, int budget)
 
 	spin_lock(&ring->lock);
 	work_done = __bcmgenet_tx_reclaim(ring->priv->dev, ring);
-	if (ring->free_bds > (MAX_SKB_FRAGS + 1)) {
-		txq = netdev_get_tx_queue(ring->priv->dev, ring->index);
+	txq = netdev_get_tx_queue(ring->priv->dev, ring->index);
+	if (netif_tx_queue_stopped(txq))
 		netif_tx_wake_queue(txq);
-	}
+
 	spin_unlock(&ring->lock);
 
 	if (work_done == 0) {
@@ -2223,9 +2223,6 @@ static netdev_tx_t bcmgenet_xmit(struct sk_buff *skb, struct net_device *dev)
 	ring->prod_index &= DMA_P_INDEX_MASK;
 
 	netdev_tx_sent_queue(txq, GENET_CB(skb)->bytes_sent);
-
-	if (ring->free_bds <= (MAX_SKB_FRAGS + 1))
-		netif_tx_stop_queue(txq);
 
 	if (!netdev_xmit_more() || netif_xmit_stopped(txq))
 		/* Packets are ready, update producer index */
