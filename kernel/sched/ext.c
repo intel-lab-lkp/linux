@@ -1163,19 +1163,31 @@ static void dispatch_dequeue(struct rq *rq, struct task_struct *p)
 	if (!dsq) {
 		/*
 		 * If !dsq && on-list, @p is on @rq's ddsp_deferred_locals.
-		 * Unlinking is all that's needed to cancel.
+		 * Unlink and clear the deferred dispatch state.
 		 */
-		if (unlikely(!list_empty(&p->scx.dsq_list.node)))
+		if (unlikely(!list_empty(&p->scx.dsq_list.node))) {
 			list_del_init(&p->scx.dsq_list.node);
+
+			p->scx.ddsp_dsq_id = SCX_DSQ_INVALID;
+			p->scx.ddsp_enq_flags = 0;
+		}
 
 		/*
 		 * When dispatching directly from the BPF scheduler to a local
 		 * DSQ, the task isn't associated with any DSQ but
 		 * @p->scx.holding_cpu may be set under the protection of
-		 * %SCX_OPSS_DISPATCHING.
+		 * %SCX_OPSS_DISPATCHING. If we win the race and clear
+		 * holding_cpu before dispatch_to_local_dsq() completes, the
+		 * in-flight dispatch is cancelled and dispatch_enqueue() won't
+		 * be called. Clear the stale direct dispatch state here so the
+		 * next wakeup starts clean.
 		 */
-		if (p->scx.holding_cpu >= 0)
+		if (p->scx.holding_cpu >= 0) {
 			p->scx.holding_cpu = -1;
+
+			p->scx.ddsp_dsq_id = SCX_DSQ_INVALID;
+			p->scx.ddsp_enq_flags = 0;
+		}
 
 		return;
 	}
@@ -2944,6 +2956,9 @@ static void scx_enable_task(struct task_struct *p)
 		weight = sched_prio_to_weight[p->static_prio - MAX_RT_PRIO];
 
 	p->scx.weight = sched_weight_to_cgroup(weight);
+
+	p->scx.ddsp_dsq_id = SCX_DSQ_INVALID;
+	p->scx.ddsp_enq_flags = 0;
 
 	if (SCX_HAS_OP(sch, enable))
 		SCX_CALL_OP_TASK(sch, SCX_KF_REST, enable, rq, p);
