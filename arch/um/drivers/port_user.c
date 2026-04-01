@@ -19,7 +19,7 @@ struct port_chan {
 	int raw;
 	struct termios tt;
 	void *kernel_data;
-	char dev[sizeof("32768\0")];
+	char dev[sizeof("65535")];
 };
 
 static void *port_init(char *str, int device, const struct chan_opts *opts)
@@ -27,6 +27,7 @@ static void *port_init(char *str, int device, const struct chan_opts *opts)
 	struct port_chan *data;
 	void *kern_data;
 	char *end;
+	unsigned long parsed_port;
 	int port;
 
 	if (*str != ':') {
@@ -35,12 +36,13 @@ static void *port_init(char *str, int device, const struct chan_opts *opts)
 		return NULL;
 	}
 	str++;
-	port = strtoul(str, &end, 0);
-	if ((*end != '\0') || (end == str)) {
+	parsed_port = strtoul(str, &end, 0);
+	if ((*end != '\0') || end == str || parsed_port > 65535) {
 		printk(UM_KERN_ERR "port_init : couldn't parse port '%s'\n",
 		       str);
 		return NULL;
 	}
+	port = parsed_port;
 
 	kern_data = port_data(port);
 	if (kern_data == NULL)
