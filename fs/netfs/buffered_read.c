@@ -590,6 +590,7 @@ zero_out:
 
 /**
  * netfs_write_begin - Helper to prepare for writing [DEPRECATED]
+ * @iocb: The kiocb describing the write request
  * @ctx: The netfs context
  * @file: The file to read from
  * @mapping: The mapping to read from
@@ -621,7 +622,7 @@ zero_out:
  * Note that this should be considered deprecated and netfs_perform_write()
  * used instead.
  */
-int netfs_write_begin(struct netfs_inode *ctx,
+int netfs_write_begin(const struct kiocb *iocb, struct netfs_inode *ctx,
 		      struct file *file, struct address_space *mapping,
 		      loff_t pos, unsigned int len, struct folio **_folio,
 		      void **_fsdata)
@@ -632,8 +633,7 @@ int netfs_write_begin(struct netfs_inode *ctx,
 	int ret;
 
 retry:
-	folio = __filemap_get_folio(mapping, index, FGP_WRITEBEGIN,
-				    mapping_gfp_mask(mapping));
+	folio = write_begin_get_folio(iocb, mapping, index, len);
 	if (IS_ERR(folio))
 		return PTR_ERR(folio);
 

@@ -1881,7 +1881,8 @@ static int ceph_write_begin(const struct kiocb *iocb,
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int r;
 
-	r = netfs_write_begin(&ci->netfs, file, inode->i_mapping, pos, len, foliop, NULL);
+	r = netfs_write_begin(iocb, &ci->netfs, file, inode->i_mapping, pos,
+			      len, foliop, NULL);
 	if (r < 0)
 		return r;
 

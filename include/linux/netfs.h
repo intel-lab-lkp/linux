@@ -415,7 +415,8 @@ int netfs_writeback_single(struct address_space *mapping,
 struct readahead_control;
 void netfs_readahead(struct readahead_control *);
 int netfs_read_folio(struct file *, struct folio *);
-int netfs_write_begin(struct netfs_inode *, struct file *,
+int netfs_write_begin(const struct kiocb *iocb,
+		      struct netfs_inode *ctx, struct file *file,
 		      struct address_space *, loff_t pos, unsigned int len,
 		      struct folio **, void **fsdata);
 int netfs_writepages(struct address_space *mapping,
