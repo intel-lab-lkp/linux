@@ -663,6 +663,29 @@ static inline int __init prom_getprop(phandle node, const char *pname,
 			 (u32)(unsigned long) value, (u32) valuelen);
 }
 
+static int __init prom_getprop_string(phandle node, const char *pname,
+				      char *value, size_t valuelen)
+{
+	int rc;
+
+	if (!valuelen)
+		return PROM_ERROR;
+
+	rc = prom_getprop(node, pname, value, valuelen);
+	if (rc == PROM_ERROR || rc <= 0) {
+		value[0] = '\0';
+		return rc;
+	}
+
+	if (rc >= valuelen) {
+		value[valuelen - 1] = '\0';
+		return PROM_ERROR;
+	}
+	value[rc] = '\0';
+
+	return rc;
+}
+
 static inline int __init prom_getproplen(phandle node, const char *pname)
 {
 	return call_prom("getproplen", 2, 1, node, ADDR(pname));
@@ -791,7 +814,8 @@ static void __init early_cmdline_parse(void)
 	p = prom_cmd_line;
 
 	if (!IS_ENABLED(CONFIG_CMDLINE_FORCE) && (long)prom.chosen > 0)
-		l = prom_getprop(prom.chosen, "bootargs", p, COMMAND_LINE_SIZE-1);
+		l = prom_getprop_string(prom.chosen, "bootargs", p,
+					COMMAND_LINE_SIZE);
 
 	if (IS_ENABLED(CONFIG_CMDLINE_EXTEND) || l <= 0 || p[0] == '\0')
 		prom_strlcat(prom_cmd_line, " " CONFIG_CMDLINE,
@@ -1231,7 +1255,7 @@ static int __init prom_count_smt_threads(void)
 	/* Pick up th first CPU node we can find */
 	for (node = 0; prom_next_node(&node); ) {
 		type[0] = 0;
-		prom_getprop(node, "device_type", type, sizeof(type));
+		prom_getprop_string(node, "device_type", type, sizeof(type));
 
 		if (prom_strcmp(type, "cpu"))
 			continue;
@@ -1677,14 +1701,14 @@ static void __init prom_init_mem(void)
 
 	for (node = 0; prom_next_node(&node); ) {
 		type[0] = 0;
-		prom_getprop(node, "device_type", type, sizeof(type));
+		prom_getprop_string(node, "device_type", type, sizeof(type));
 
 		if (type[0] == 0) {
 			/*
 			 * CHRP Longtrail machines have no device_type
 			 * on the memory node, so check the name instead...
 			 */
-			prom_getprop(node, "name", type, sizeof(type));
+			prom_getprop_string(node, "name", type, sizeof(type));
 		}
 		if (prom_strcmp(type, "memory"))
 			continue;
@@ -2005,10 +2029,10 @@ static void __init prom_initialize_tce_table(void)
 		compatible[0] = 0;
 		type[0] = 0;
 		model[0] = 0;
-		prom_getprop(node, "compatible",
-			     compatible, sizeof(compatible));
-		prom_getprop(node, "device_type", type, sizeof(type));
-		prom_getprop(node, "model", model, sizeof(model));
+		prom_getprop_string(node, "compatible", compatible,
+				    sizeof(compatible));
+		prom_getprop_string(node, "device_type", type, sizeof(type));
+		prom_getprop_string(node, "model", model, sizeof(model));
 
 		if ((type[0] == 0) || (prom_strstr(type, "pci") == NULL))
 			continue;
@@ -2170,12 +2194,12 @@ static void __init prom_hold_cpus(void)
 		__be32 reg;
 
 		type[0] = 0;
-		prom_getprop(node, "device_type", type, sizeof(type));
+		prom_getprop_string(node, "device_type", type, sizeof(type));
 		if (prom_strcmp(type, "cpu") != 0)
 			continue;
 
 		/* Skip non-configured cpus. */
-		if (prom_getprop(node, "status", type, sizeof(type)) > 0)
+		if (prom_getprop_string(node, "status", type, sizeof(type)) > 0)
 			if (prom_strcmp(type, "okay") != 0)
 				continue;
 
@@ -2248,9 +2272,8 @@ static void __init prom_find_mmu(void)
 	oprom = call_prom("finddevice", 1, 1, ADDR("/openprom"));
 	if (!PHANDLE_VALID(oprom))
 		return;
-	if (prom_getprop(oprom, "model", version, sizeof(version)) <= 0)
+	if (prom_getprop_string(oprom, "model", version, sizeof(version)) <= 0)
 		return;
-	version[sizeof(version) - 1] = 0;
 	/* XXX might need to add other versions here */
 	if (prom_strcmp(version, "Open Firmware, 1.0.5") == 0)
 		of_workarounds = OF_WA_CLAIM;
@@ -2296,7 +2319,8 @@ static void __init prom_init_stdout(void)
 
 		/* If it's a display, note it */
 		memset(type, 0, sizeof(type));
-		prom_getprop(stdout_node, "device_type", type, sizeof(type));
+		prom_getprop_string(stdout_node, "device_type", type,
+				    sizeof(type));
 		if (prom_strcmp(type, "display") == 0)
 			prom_setprop(stdout_node, path, "linux,boot-display", NULL, 0);
 	}
@@ -2343,8 +2367,8 @@ static int __init prom_find_machine_type(void)
 	 *    non-IBM designs !
 	 *  - it has /rtas
 	 */
-	len = prom_getprop(prom.root, "device_type",
-			   compat, sizeof(compat)-1);
+	len = prom_getprop_string(prom.root, "device_type",
+				  compat, sizeof(compat));
 	if (len <= 0)
 		return PLATFORM_GENERIC;
 	if (prom_strcmp(compat, "chrp"))
@@ -2408,7 +2432,7 @@ static void __init prom_check_displays(void)
 	prom_debug("Looking for displays\n");
 	for (node = 0; prom_next_node(&node); ) {
 		memset(type, 0, sizeof(type));
-		prom_getprop(node, "device_type", type, sizeof(type));
+		prom_getprop_string(node, "device_type", type, sizeof(type));
 		if (prom_strcmp(type, "display") != 0)
 			continue;
 
@@ -2892,7 +2916,7 @@ static void __init fixup_device_tree_pmac(void)
 	// Some pmacs are missing #size-cells on escc or i2s nodes
 	for (node = 0; prom_next_node(&node); ) {
 		type[0] = '\0';
-		prom_getprop(node, "device_type", type, sizeof(type));
+		prom_getprop_string(node, "device_type", type, sizeof(type));
 		if (prom_strcmp(type, "escc") && prom_strcmp(type, "i2s") &&
 		    prom_strcmp(type, "media-bay"))
 			continue;
@@ -2988,7 +3012,7 @@ static void __init fixup_device_tree_efika(void)
 	if (!PHANDLE_VALID(node))
 		return;
 
-	rv = prom_getprop(node, "model", prop, sizeof(prop));
+	rv = prom_getprop_string(node, "model", prop, sizeof(prop));
 	if (rv == PROM_ERROR)
 		return;
 	if (prom_strcmp(prop, "EFIKA5K2"))
@@ -2998,13 +3022,14 @@ static void __init fixup_device_tree_efika(void)
 
 	/* Claiming to be 'chrp' is death */
 	node = call_prom("finddevice", 1, 1, ADDR("/"));
-	rv = prom_getprop(node, "device_type", prop, sizeof(prop));
+	rv = prom_getprop_string(node, "device_type", prop, sizeof(prop));
 	if (rv != PROM_ERROR && (prom_strcmp(prop, "chrp") == 0))
 		prom_setprop(node, "/", "device_type", "efika", sizeof("efika"));
 
 	/* CODEGEN,description is exposed in /proc/cpuinfo so
 	   fix that too */
-	rv = prom_getprop(node, "CODEGEN,description", prop, sizeof(prop));
+	rv = prom_getprop_string(node, "CODEGEN,description", prop,
+				 sizeof(prop));
 	if (rv != PROM_ERROR && (prom_strstr(prop, "CHRP")))
 		prom_setprop(node, "/", "CODEGEN,description",
 			     "Efika 5200B PowerPC System",
