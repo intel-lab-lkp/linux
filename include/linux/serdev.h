@@ -357,13 +357,13 @@ static inline bool serdev_acpi_get_uart_resource(struct acpi_resource *ares,
 }
 #endif /* CONFIG_ACPI */
 
-#ifdef CONFIG_OF
+#if IS_ENABLED(CONFIG_OF) && IS_ENABLED(CONFIG_SERIAL_DEV_BUS)
 struct serdev_controller *of_find_serdev_controller_by_node(struct device_node *node);
 #else
 static inline struct serdev_controller *of_find_serdev_controller_by_node(struct device_node *node)
 {
 	return NULL;
 }
-#endif /* CONFIG_OF */
+#endif /* CONFIG_OF && CONFIG_SERIAL_DEV_BUS */
 
 #endif /*_LINUX_SERDEV_H */
