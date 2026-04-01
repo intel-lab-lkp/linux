@@ -60,6 +60,7 @@ static void vhci_recv_ret_submit(struct vhci_device *vdev,
 	struct usbip_device *ud = &vdev->ud;
 	struct urb *urb;
 	unsigned long flags;
+	int orig_number_of_packets;
 
 	spin_lock_irqsave(&vdev->priv_lock, flags);
 	urb = pickup_urb_and_free_priv(vdev, pdu->base.seqnum);
@@ -73,8 +74,32 @@ static void vhci_recv_ret_submit(struct vhci_device *vdev,
 		return;
 	}
 
+	/*
+	 * Save the original number_of_packets before it gets overwritten
+	 * by the server's response. The iso_frame_desc[] array was allocated
+	 * based on this value, so the server must not increase it.
+	 */
+	orig_number_of_packets = urb->number_of_packets;
+
 	/* unpack the pdu to a urb */
 	usbip_pack_pdu(pdu, urb, USBIP_RET_SUBMIT, 0);
+
+	/*
+	 * Validate number_of_packets from the server response against the
+	 * original URB allocation. A malicious server could set this to a
+	 * larger value, causing usbip_recv_iso() to write beyond the
+	 * iso_frame_desc[] array bounds.
+	 */
+	if (urb->number_of_packets < 0 ||
+	    urb->number_of_packets > orig_number_of_packets) {
+		dev_err(&urb->dev->dev,
+			"invalid number_of_packets in ret_submit: %d (max %d)\n",
+			urb->number_of_packets, orig_number_of_packets);
+		urb->number_of_packets = orig_number_of_packets;
+		urb->status = -EPROTO;
+		usbip_event_add(ud, VDEV_EVENT_ERROR_TCP);
+		goto error;
+	}
 
 	/* recv transfer buffer */
 	if (usbip_recv_xbuff(ud, urb) < 0) {
