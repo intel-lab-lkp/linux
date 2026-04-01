@@ -6504,6 +6504,70 @@ void get_monitor_range(const struct detailed_timing *timing, void *c)
 	}
 }
 
+static bool
+displayid_is_dynamic_video_timing_block(const struct displayid_iter *iter,
+					const struct displayid_block *block)
+{
+	return displayid_version(iter) == DISPLAY_ID_STRUCTURE_VER_20 &&
+		block->tag == DATA_BLOCK_2_DYNAMIC_VIDEO_TIMING;
+}
+
+static void
+displayid_parse_dynamic_video_timing(struct drm_connector *connector,
+				     const struct displayid_block *block)
+{
+	const struct displayid_dynamic_video_timing_block *dvt =
+		(const struct displayid_dynamic_video_timing_block *)block;
+	struct drm_display_info *info = &connector->display_info;
+	u16 min_vfreq, max_vfreq;
+
+	/* Already populated from classic EDID descriptor */
+	if (info->monitor_range.min_vfreq && info->monitor_range.max_vfreq)
+		return;
+
+	/* Specification requires exactly 9 payload bytes */
+	if (block->num_bytes != 9)
+		return;
+
+	/* Specification requires rev bits [7:1] to be zero */
+	if (block->rev & 0xFE)
+		return;
+
+	min_vfreq = dvt->min_vfreq;
+
+	/* rev bits [2:0] nonzero: max_vfreq is a 10-bit value */
+	if (block->rev & 0x07)
+		max_vfreq = dvt->max_vfreq_lo | ((u16)(dvt->max_vfreq_hi_flags & 0x3) << 8);
+	else
+		max_vfreq = dvt->max_vfreq_lo;
+
+	if (!min_vfreq || !max_vfreq)
+		return;
+
+	info->monitor_range.min_vfreq = min_vfreq;
+	info->monitor_range.max_vfreq = max_vfreq;
+
+	drm_dbg_kms(connector->dev,
+		    "[CONNECTOR:%d:%s] DisplayID dynamic video timing range: %u-%u Hz\n",
+		    connector->base.id, connector->name,
+		    min_vfreq, max_vfreq);
+}
+
+static void
+drm_get_monitor_range_displayid(struct drm_connector *connector,
+				const struct drm_edid *drm_edid)
+{
+	const struct displayid_block *block;
+	struct displayid_iter iter;
+
+	displayid_iter_edid_begin(drm_edid, &iter);
+	displayid_iter_for_each(block, &iter) {
+		if (displayid_is_dynamic_video_timing_block(&iter, block))
+			displayid_parse_dynamic_video_timing(connector, block);
+	}
+	displayid_iter_end(&iter);
+}
+
 static void drm_get_monitor_range(struct drm_connector *connector,
 				  const struct drm_edid *drm_edid)
 {
@@ -6691,10 +6755,8 @@ static void update_display_info(struct drm_connector *connector,
 	info->height_mm = edid->height_cm * 10;
 
 	drm_get_monitor_range(connector, drm_edid);
-
 	if (edid->revision < 3)
 		goto out;
-
 	if (!drm_edid_is_digital(drm_edid))
 		goto out;
 
@@ -6757,6 +6819,7 @@ static void update_display_info(struct drm_connector *connector,
 		info->color_formats |= DRM_COLOR_FORMAT_YCBCR422;
 
 	drm_update_mso(connector, drm_edid);
+	drm_get_monitor_range_displayid(connector, drm_edid);
 
 out:
 	if (drm_edid_has_internal_quirk(connector, EDID_QUIRK_NON_DESKTOP)) {

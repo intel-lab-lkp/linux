@@ -145,6 +145,20 @@ struct displayid_formula_timing_block {
 #define DISPLAYID_VESA_MSO_OVERLAP	GENMASK(3, 0)
 #define DISPLAYID_VESA_MSO_MODE		GENMASK(6, 5)
 
+/*
+ * DisplayID v2r0 §4.9 - Dynamic Video Timing Range Limits Block
+ * num_bytes must be 9, rev bits [7:1] must be zero.
+ * When rev bits [2:0] are nonzero, max_vfreq is a 10-bit value
+ * formed by max_vfreq_lo and bits [1:0] of max_vfreq_hi_flags.
+ */
+struct displayid_dynamic_video_timing_block {
+	struct displayid_block base;
+	u8 reserved[6];
+	u8 min_vfreq;
+	u8 max_vfreq_lo;
+	u8 max_vfreq_hi_flags;
+} __packed;
+
 struct displayid_vesa_vendor_specific_block {
 	struct displayid_block base;
 	u8 oui[3];
