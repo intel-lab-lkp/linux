@@ -70,6 +70,10 @@ int fuse_copy_out_args(struct fuse_copy_state *cs, struct fuse_args *args,
 		       unsigned int nbytes);
 void fuse_dev_queue_forget(struct fuse_iqueue *fiq,
 			   struct fuse_forget_link *forget);
+#ifdef CONFIG_FUSE_IO_URING
+void fuse_io_uring_send_forget(struct fuse_iqueue *fiq,
+			       struct fuse_forget_link *forget);
+#endif
 void fuse_dev_queue_interrupt(struct fuse_iqueue *fiq, struct fuse_req *req);
 bool fuse_remove_pending_req(struct fuse_req *req, spinlock_t *lock);
 

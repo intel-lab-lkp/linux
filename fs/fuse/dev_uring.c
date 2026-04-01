@@ -1364,7 +1364,7 @@ bool fuse_uring_remove_pending_req(struct fuse_req *req)
 
 static const struct fuse_iqueue_ops fuse_io_uring_ops = {
 	/* should be send over io-uring as enhancement */
-	.send_forget = fuse_dev_queue_forget,
+	.send_forget = fuse_io_uring_send_forget,
 
 	/*
 	 * could be send over io-uring, but interrupts should be rare,
