@@ -1374,7 +1374,10 @@ static int __sev_snp_init_locked(int *error, unsigned int max_snp_asid)
 		return -EOPNOTSUPP;
 	}
 
-	snp_prepare();
+	if (snp_prepare() < 0) {
+		dev_dbg(sev->dev, "SNP preparation failed, are all CPUs online?\n");
+		return -EOPNOTSUPP;
+	}
 
 	/*
 	 * Starting in SNP firmware v1.52, the SNP_INIT_EX command takes a list
