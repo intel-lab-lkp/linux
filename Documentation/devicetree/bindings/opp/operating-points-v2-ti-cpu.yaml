@@ -34,6 +34,16 @@ properties:
       points to syscon node representing the control module
       register space of the SoC.
 
+  ti,soc-info:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: |
+      Optional phandle to the SoC info device (chipid). Used on K3 SoCs
+      to establish device link dependencies ensuring proper probe ordering
+      (ti-cpufreq after k3-socinfo) and preventing unbinding of k3-socinfo
+      while the OPP table is in use. This is needed because ti-cpufreq uses
+      soc_device_match() to detect SoC revision information provided by
+      k3-socinfo.
+
   opp-shared: true
 
 patternProperties:
@@ -82,6 +92,7 @@ examples:
     opp-table {
         compatible = "operating-points-v2-ti-cpu";
         syscon = <&scm_conf>;
+        ti,soc-info = <&chipid>;
 
         opp-300000000 {
             opp-hz = /bits/ 64 <300000000>;
