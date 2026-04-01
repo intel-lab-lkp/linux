@@ -361,6 +361,7 @@ static void
 __nfulnl_send(struct nfulnl_instance *inst)
 {
 	if (inst->qlen > 1) {
+		struct nfgenmsg *nfmsg;
 		struct nlmsghdr *nlh = nlmsg_put(inst->skb, 0, 0,
 						 NLMSG_DONE,
 						 sizeof(struct nfgenmsg),
@@ -370,6 +371,10 @@ __nfulnl_send(struct nfulnl_instance *inst)
 			kfree_skb(inst->skb);
 			goto out;
 		}
+		nfmsg = nlmsg_data(nlh);
+		nfmsg->nfgen_family = AF_UNSPEC;
+		nfmsg->version = NFNETLINK_V0;
+		nfmsg->res_id = htons(inst->group_num);
 	}
 	nfnetlink_unicast(inst->skb, inst->net, inst->peer_portid);
 out:
