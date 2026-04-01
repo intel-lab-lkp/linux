@@ -179,6 +179,8 @@ struct sii902x {
 	struct gpio_desc *reset_gpio;
 	struct i2c_mux_core *i2cmux;
 	u32 bus_width;
+	unsigned int ctx_tpi;
+	unsigned int ctx_interrupt;
 
 	/*
 	 * Mutex protects audio and video functions from interfering
@@ -189,6 +191,13 @@ struct sii902x {
 		struct platform_device *pdev;
 		struct clk *mclk;
 		u32 i2s_fifo_sequence[4];
+		bool active;
+		/* Audio register context for suspend/resume */
+		unsigned int ctx_i2s_input_config;
+		unsigned int ctx_audio_config_byte2;
+		unsigned int ctx_audio_config_byte3;
+		u8 ctx_i2s_stream_header[SII902X_TPI_I2S_STRM_HDR_SIZE];
+		u8 ctx_audio_infoframe[SII902X_TPI_MISC_INFOFRAME_SIZE];
 	} audio;
 };
 
@@ -755,6 +764,8 @@ static int sii902x_audio_hw_params(struct device *dev, void *data,
 	if (ret)
 		goto out;
 
+	sii902x->audio.active = true;
+
 	dev_dbg(dev, "%s: hdmi audio enabled\n", __func__);
 out:
 	mutex_unlock(&sii902x->mutex);
@@ -776,6 +787,8 @@ static void sii902x_audio_shutdown(struct device *dev, void *data)
 
 	regmap_write(sii902x->regmap, SII902X_TPI_AUDIO_CONFIG_BYTE2_REG,
 		     SII902X_TPI_AUDIO_INTERFACE_DISABLE);
+
+	sii902x->audio.active = false;
 
 	mutex_unlock(&sii902x->mutex);
 
@@ -1069,6 +1082,157 @@ static const struct drm_bridge_timings default_sii902x_timings = {
 		 | DRM_BUS_FLAG_DE_HIGH,
 };
 
+static int sii902x_resume(struct device *dev)
+{
+	struct sii902x *sii902x = dev_get_drvdata(dev);
+	unsigned int tpi_reg, status;
+	int ret, i;
+
+	ret = regmap_read(sii902x->regmap, SII902X_REG_TPI_RQB, &tpi_reg);
+	if (ret)
+		return ret;
+
+	if (tpi_reg != sii902x->ctx_tpi) {
+		/*
+		 * TPI register context has changed. SII902X power supply
+		 * device has been turned off and on.
+		 */
+		sii902x_reset(sii902x);
+
+		/* Configure the device to enter TPI mode. */
+		ret = regmap_write(sii902x->regmap, SII902X_REG_TPI_RQB, 0x0);
+		if (ret)
+			return ret;
+
+		/* Re-enable the interrupts */
+		regmap_write(sii902x->regmap, SII902X_INT_ENABLE,
+			     sii902x->ctx_interrupt);
+	}
+
+	/* Clear all pending interrupts */
+	regmap_read(sii902x->regmap, SII902X_INT_STATUS, &status);
+	regmap_write(sii902x->regmap, SII902X_INT_STATUS, status);
+
+	/*
+	 * Restore audio context if audio was active before suspend,
+	 * in the matching order of sii902x_audio_hw_params() initialization.
+	 */
+	if (sii902x->audio.active) {
+		ret = clk_prepare_enable(sii902x->audio.mclk);
+		if (ret) {
+			dev_err(dev, "Failed to re-enable mclk: %d\n", ret);
+			return ret;
+		}
+
+		ret = regmap_write(sii902x->regmap, SII902X_TPI_AUDIO_CONFIG_BYTE2_REG,
+				   sii902x->audio.ctx_audio_config_byte2);
+		if (ret)
+			goto err_audio_resume;
+
+		ret = regmap_write(sii902x->regmap, SII902X_TPI_I2S_INPUT_CONFIG_REG,
+				   sii902x->audio.ctx_i2s_input_config);
+		if (ret)
+			goto err_audio_resume;
+
+		for (i = 0; i < ARRAY_SIZE(sii902x->audio.i2s_fifo_sequence) &&
+		     sii902x->audio.i2s_fifo_sequence[i]; i++) {
+			ret = regmap_write(sii902x->regmap,
+					   SII902X_TPI_I2S_ENABLE_MAPPING_REG,
+					   sii902x->audio.i2s_fifo_sequence[i]);
+			if (ret)
+				goto err_audio_resume;
+		}
+
+		ret = regmap_write(sii902x->regmap, SII902X_TPI_AUDIO_CONFIG_BYTE3_REG,
+				   sii902x->audio.ctx_audio_config_byte3);
+		if (ret)
+			goto err_audio_resume;
+
+		ret = regmap_bulk_write(sii902x->regmap, SII902X_TPI_I2S_STRM_HDR_BASE,
+					sii902x->audio.ctx_i2s_stream_header,
+					SII902X_TPI_I2S_STRM_HDR_SIZE);
+		if (ret)
+			goto err_audio_resume;
+
+		ret = regmap_bulk_write(sii902x->regmap, SII902X_TPI_MISC_INFOFRAME_BASE,
+					sii902x->audio.ctx_audio_infoframe,
+					SII902X_TPI_MISC_INFOFRAME_SIZE);
+		if (ret)
+			goto err_audio_resume;
+	}
+
+	return 0;
+
+err_audio_resume:
+	clk_disable_unprepare(sii902x->audio.mclk);
+	dev_err(dev, "Failed to restore audio registers: %d\n", ret);
+	return ret;
+}
+
+static int sii902x_suspend(struct device *dev)
+{
+	struct sii902x *sii902x = dev_get_drvdata(dev);
+	int ret;
+
+	ret = regmap_read(sii902x->regmap, SII902X_REG_TPI_RQB,
+			  &sii902x->ctx_tpi);
+	if (ret)
+		return ret;
+
+	ret = regmap_read(sii902x->regmap, SII902X_INT_ENABLE,
+			  &sii902x->ctx_interrupt);
+	if (ret)
+		return ret;
+
+	/*
+	 * Save audio context if audio is active, in the matching order
+	 * of sii902x_audio_hw_params() initialization.
+	 */
+	if (sii902x->audio.active) {
+		ret = regmap_read(sii902x->regmap, SII902X_TPI_AUDIO_CONFIG_BYTE2_REG,
+				  &sii902x->audio.ctx_audio_config_byte2);
+		if (ret)
+			goto err_audio_suspend;
+
+		ret = regmap_read(sii902x->regmap, SII902X_TPI_I2S_INPUT_CONFIG_REG,
+				  &sii902x->audio.ctx_i2s_input_config);
+		if (ret)
+			goto err_audio_suspend;
+
+		ret = regmap_read(sii902x->regmap, SII902X_TPI_AUDIO_CONFIG_BYTE3_REG,
+				  &sii902x->audio.ctx_audio_config_byte3);
+		if (ret)
+			goto err_audio_suspend;
+
+		ret = regmap_bulk_read(sii902x->regmap, SII902X_TPI_I2S_STRM_HDR_BASE,
+				       sii902x->audio.ctx_i2s_stream_header,
+				       SII902X_TPI_I2S_STRM_HDR_SIZE);
+		if (ret)
+			goto err_audio_suspend;
+
+		ret = regmap_bulk_read(sii902x->regmap, SII902X_TPI_MISC_INFOFRAME_BASE,
+				       sii902x->audio.ctx_audio_infoframe,
+				       SII902X_TPI_MISC_INFOFRAME_SIZE);
+		if (ret)
+			goto err_audio_suspend;
+
+		/*
+		 * audio.active is kept true so that resume restores the audio
+		 * context. sii902x_audio_shutdown() clears it when the stream
+		 * is explicitly closed.
+		 */
+		clk_disable_unprepare(sii902x->audio.mclk);
+	}
+
+	return 0;
+
+err_audio_suspend:
+	dev_err(dev, "Failed to save audio context: %d\n", ret);
+	return ret;
+}
+
+static DEFINE_SIMPLE_DEV_PM_OPS(sii902x_pm_ops, sii902x_suspend, sii902x_resume);
+
 static int sii902x_init(struct sii902x *sii902x)
 {
 	struct device *dev = &sii902x->i2c->dev;
@@ -1247,6 +1411,7 @@ static struct i2c_driver sii902x_driver = {
 	.remove = sii902x_remove,
 	.driver = {
 		.name = "sii902x",
+		.pm = pm_sleep_ptr(&sii902x_pm_ops),
 		.of_match_table = sii902x_dt_ids,
 	},
 	.id_table = sii902x_i2c_ids,
