@@ -444,19 +444,6 @@ struct slabinfo {
 
 void get_slabinfo(struct kmem_cache *s, struct slabinfo *sinfo);
 
-#ifdef CONFIG_SLUB_DEBUG
-#ifdef CONFIG_SLUB_DEBUG_ON
-DECLARE_STATIC_KEY_TRUE(slub_debug_enabled);
-#else
-DECLARE_STATIC_KEY_FALSE(slub_debug_enabled);
-#endif
-extern void print_tracking(struct kmem_cache *s, void *object);
-long validate_slab_cache(struct kmem_cache *s);
-static inline bool __slub_debug_enabled(void)
-{
-	return static_branch_unlikely(&slub_debug_enabled);
-}
-#else
 static inline void print_tracking(struct kmem_cache *s, void *object)
 {
 }
@@ -464,7 +451,6 @@ static inline bool __slub_debug_enabled(void)
 {
 	return false;
 }
-#endif
 
 /*
  * Returns true if any of the specified slab_debug flags is enabled for the
@@ -473,18 +459,10 @@ static inline bool __slub_debug_enabled(void)
  */
 static inline bool kmem_cache_debug_flags(struct kmem_cache *s, slab_flags_t flags)
 {
-	if (IS_ENABLED(CONFIG_SLUB_DEBUG))
-		VM_WARN_ON_ONCE(!(flags & SLAB_DEBUG_FLAGS));
-	if (__slub_debug_enabled())
-		return s->flags & flags;
 	return false;
 }
 
-#if IS_ENABLED(CONFIG_SLUB_DEBUG) && IS_ENABLED(CONFIG_KUNIT)
-bool slab_in_kunit_test(void);
-#else
 static inline bool slab_in_kunit_test(void) { return false; }
-#endif
 
 /*
  * slub is about to manipulate internal object metadata.  This memory lies
@@ -649,13 +627,9 @@ static inline size_t large_kmalloc_size(const struct page *page)
 	return PAGE_SIZE << large_kmalloc_order(page);
 }
 
-#ifdef CONFIG_SLUB_DEBUG
-void dump_unreclaimable_slab(void);
-#else
 static inline void dump_unreclaimable_slab(void)
 {
 }
-#endif
 
 void ___cache_free(struct kmem_cache *cache, void *x, unsigned long addr);
 
@@ -694,11 +668,7 @@ static inline bool slab_want_init_on_free(struct kmem_cache *c)
 	return false;
 }
 
-#if defined(CONFIG_DEBUG_FS) && defined(CONFIG_SLUB_DEBUG)
-void debugfs_slab_release(struct kmem_cache *);
-#else
 static inline void debugfs_slab_release(struct kmem_cache *s) { }
-#endif
 
 #ifdef CONFIG_PRINTK
 #define KS_ADDRS_COUNT 16
@@ -725,9 +695,5 @@ static inline bool slub_debug_orig_size(struct kmem_cache *s)
 	return (kmem_cache_debug_flags(s, SLAB_STORE_USER) &&
 			(s->flags & SLAB_KMALLOC));
 }
-
-#ifdef CONFIG_SLUB_DEBUG
-void skip_orig_size_check(struct kmem_cache *s, const void *object);
-#endif
 
 #endif /* MM_SLAB_H */

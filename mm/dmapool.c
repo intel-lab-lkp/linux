@@ -36,10 +36,6 @@
 #include <linux/types.h>
 #include <linux/wait.h>
 
-#ifdef CONFIG_SLUB_DEBUG_ON
-#define DMAPOOL_DEBUG 1
-#endif
-
 struct dma_block {
 	struct dma_block *next_block;
 	dma_addr_t dma;

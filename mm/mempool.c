@@ -37,117 +37,12 @@ static int __init mempool_faul_inject_init(void)
 }
 late_initcall(mempool_faul_inject_init);
 
-#ifdef CONFIG_SLUB_DEBUG_ON
-static void poison_error(struct mempool *pool, void *element, size_t size,
-			 size_t byte)
-{
-	const int nr = pool->curr_nr;
-	const int start = max_t(int, byte - (BITS_PER_LONG / 8), 0);
-	const int end = min_t(int, byte + (BITS_PER_LONG / 8), size);
-	int i;
-
-	pr_err("BUG: mempool element poison mismatch\n");
-	pr_err("Mempool %p size %zu\n", pool, size);
-	pr_err(" nr=%d @ %p: %s0x", nr, element, start > 0 ? "... " : "");
-	for (i = start; i < end; i++)
-		pr_cont("%x ", *(u8 *)(element + i));
-	pr_cont("%s\n", end < size ? "..." : "");
-	dump_stack();
-}
-
-static void __check_element(struct mempool *pool, void *element, size_t size)
-{
-	u8 *obj = element;
-	size_t i;
-
-	for (i = 0; i < size; i++) {
-		u8 exp = (i < size - 1) ? POISON_FREE : POISON_END;
-
-		if (obj[i] != exp) {
-			poison_error(pool, element, size, i);
-			return;
-		}
-	}
-	memset(obj, POISON_INUSE, size);
-}
-
-static void check_element(struct mempool *pool, void *element)
-{
-	/* Skip checking: KASAN might save its metadata in the element. */
-	if (kasan_enabled())
-		return;
-
-	/* Mempools backed by slab allocator */
-	if (pool->free == mempool_kfree) {
-		__check_element(pool, element, (size_t)pool->pool_data);
-	} else if (pool->free == mempool_free_slab) {
-		__check_element(pool, element, kmem_cache_size(pool->pool_data));
-	} else if (pool->free == mempool_free_pages) {
-		/* Mempools backed by page allocator */
-		int order = (int)(long)pool->pool_data;
-
-#ifdef CONFIG_HIGHMEM
-		for (int i = 0; i < (1 << order); i++) {
-			struct page *page = (struct page *)element;
-			void *addr = kmap_local_page(page + i);
-
-			__check_element(pool, addr, PAGE_SIZE);
-			kunmap_local(addr);
-		}
-#else
-		void *addr = page_address((struct page *)element);
-
-		__check_element(pool, addr, PAGE_SIZE << order);
-#endif
-	}
-}
-
-static void __poison_element(void *element, size_t size)
-{
-	u8 *obj = element;
-
-	memset(obj, POISON_FREE, size - 1);
-	obj[size - 1] = POISON_END;
-}
-
-static void poison_element(struct mempool *pool, void *element)
-{
-	/* Skip poisoning: KASAN might save its metadata in the element. */
-	if (kasan_enabled())
-		return;
-
-	/* Mempools backed by slab allocator */
-	if (pool->alloc == mempool_kmalloc) {
-		__poison_element(element, (size_t)pool->pool_data);
-	} else if (pool->alloc == mempool_alloc_slab) {
-		__poison_element(element, kmem_cache_size(pool->pool_data));
-	} else if (pool->alloc == mempool_alloc_pages) {
-		/* Mempools backed by page allocator */
-		int order = (int)(long)pool->pool_data;
-
-#ifdef CONFIG_HIGHMEM
-		for (int i = 0; i < (1 << order); i++) {
-			struct page *page = (struct page *)element;
-			void *addr = kmap_local_page(page + i);
-
-			__poison_element(addr, PAGE_SIZE);
-			kunmap_local(addr);
-		}
-#else
-		void *addr = page_address((struct page *)element);
-
-		__poison_element(addr, PAGE_SIZE << order);
-#endif
-	}
-}
-#else /* CONFIG_SLUB_DEBUG_ON */
 static inline void check_element(struct mempool *pool, void *element)
 {
 }
 static inline void poison_element(struct mempool *pool, void *element)
 {
 }
-#endif /* CONFIG_SLUB_DEBUG_ON */
 
 static __always_inline bool kasan_poison_element(struct mempool *pool,
 		void *element)
