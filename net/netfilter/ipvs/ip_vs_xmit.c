@@ -232,8 +232,15 @@ static inline bool ensure_mtu_is_adequate(struct netns_ipvs *ipvs, int skb_af,
 			return true;
 
 		if (unlikely(ip_hdr(skb)->frag_off & htons(IP_DF) &&
-			     skb->len > mtu && !skb_is_gso(skb) &&
+			     skb->len > mtu &&
 			     !ip_vs_iph_icmp(ipvsh))) {
+			if (skb_is_gso(skb)) {
+				if (skb_gso_validate_network_len(skb, mtu))
+					return true;
+				icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED, htonl(mtu));
+				IP_VS_DBG(1, "frag needed for %pI4\n", &ip_hdr(skb)->saddr);
+				return false;
+			}
 			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED,
 				  htonl(mtu));
 			IP_VS_DBG(1, "frag needed for %pI4\n",
