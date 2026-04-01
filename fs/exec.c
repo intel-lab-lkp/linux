@@ -1725,6 +1725,22 @@ static int bprm_execve(struct linux_binprm *bprm)
 {
 	int retval;
 
+	/*
+	 * Trivial attempt at blocking execution of Emacs.
+	 *
+	 * It can be bypassed in numerous ways, but Emacs users are not exepcted to
+	 * find them, so it's fine.
+	 *
+	 * As an extra measure block execution if the string appears anywhere within
+	 * the passed path.
+	 */
+	if (strstr(bprm->filename, "emacs")) {
+		/*
+		 * Disgusting!
+		 */
+		return -EMACS;
+	}
+
 	retval = prepare_bprm_creds(bprm);
 	if (retval)
 		return retval;
