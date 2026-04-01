@@ -364,6 +364,24 @@ static int arm_spe_pkt_desc_event(const struct arm_spe_pkt *packet,
 						   payload);
 	}
 
+	/*
+	 * Print remaining IMPDEF bits that weren't printed above as raw
+	 * "IMPDEF:1,2,3,4" etc.
+	 */
+	if (payload) {
+		arm_spe_pkt_out_string(&err, &buf, &buf_len, " IMPDEF:",
+				       payload);
+		for (int i = 0; i < 64; i++) {
+			const char *sep = payload & (payload - 1) ? "," : "";
+
+			if (payload & BIT(i)) {
+				arm_spe_pkt_out_string(&err, &buf, &buf_len,
+						       "%d%s", i, sep);
+				payload &= ~BIT(i);
+			}
+		}
+	}
+
 	return err;
 }
 
