@@ -6,6 +6,7 @@
  * Copyright (c) 2023-2025 Hans de Goede <hansg@kernel.org>
  */
 
+#include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
 #include <linux/gpio/consumer.h>
@@ -84,6 +85,7 @@
 #define to_gc0310_sensor(x) container_of(x, struct gc0310_device, sd)
 
 struct gc0310_device {
+	struct clk *clk;
 	struct device *dev;
 	struct i2c_client *client;
 
@@ -634,7 +636,6 @@ static int gc0310_check_hwcfg(struct device *dev)
 	};
 	struct fwnode_handle *ep_fwnode;
 	unsigned long link_freq_bitmap;
-	u32 mclk;
 	int ret;
 
 	/*
@@ -645,21 +646,6 @@ static int gc0310_check_hwcfg(struct device *dev)
 	if (!ep_fwnode)
 		return dev_err_probe(dev, -EPROBE_DEFER,
 				     "waiting for fwnode graph endpoint\n");
-
-	ret = fwnode_property_read_u32(dev_fwnode(dev), "clock-frequency",
-				       &mclk);
-	if (ret) {
-		fwnode_handle_put(ep_fwnode);
-		return dev_err_probe(dev, ret,
-				     "reading clock-frequency property\n");
-	}
-
-	if (mclk != GC0310_MCLK_FREQ) {
-		fwnode_handle_put(ep_fwnode);
-		return dev_err_probe(dev, -EINVAL,
-				     "external clock %u is not supported\n",
-				     mclk);
-	}
 
 	ret = v4l2_fwnode_endpoint_alloc_parse(ep_fwnode, &bus_cfg);
 	fwnode_handle_put(ep_fwnode);
@@ -684,6 +670,7 @@ static int gc0310_check_hwcfg(struct device *dev)
 static int gc0310_probe(struct i2c_client *client)
 {
 	struct gc0310_device *sensor;
+	unsigned long freq;
 	int ret;
 
 	ret = gc0310_check_hwcfg(&client->dev);
@@ -696,6 +683,16 @@ static int gc0310_probe(struct i2c_client *client)
 
 	sensor->client = client;
 	sensor->dev = &client->dev;
+
+	sensor->clk = devm_v4l2_sensor_clk_get(sensor->dev, NULL);
+	if (IS_ERR(sensor->clk))
+		return dev_err_probe(sensor->dev, PTR_ERR(sensor->clk),
+				     "failed to get clock\n");
+
+	freq = clk_get_rate(sensor->clk);
+	if (freq != GC0310_MCLK_FREQ)
+		return dev_err_probe(sensor->dev, -EINVAL,
+				     "external clock %lu is not supported\n", freq);
 
 	sensor->reset = devm_gpiod_get(sensor->dev, "reset", GPIOD_OUT_HIGH);
 	if (IS_ERR(sensor->reset)) {
