@@ -263,7 +263,7 @@ static int __init msr_init(void)
 {
 	int err;
 
-	if (__register_chrdev(MSR_MAJOR, 0, NR_CPUS, "cpu/msr", &msr_fops)) {
+	if (__register_chrdev(MSR_MAJOR, 0, num_possible_cpus(), "cpu/msr", &msr_fops)) {
 		pr_err("unable to get major %d for msr\n", MSR_MAJOR);
 		return -EBUSY;
 	}
@@ -281,7 +281,7 @@ static int __init msr_init(void)
 out_class:
 	class_unregister(&msr_class);
 out_chrdev:
-	__unregister_chrdev(MSR_MAJOR, 0, NR_CPUS, "cpu/msr");
+	__unregister_chrdev(MSR_MAJOR, 0, num_possible_cpus(), "cpu/msr");
 	return err;
 }
 module_init(msr_init);
@@ -290,7 +290,7 @@ static void __exit msr_exit(void)
 {
 	cpuhp_remove_state(cpuhp_msr_state);
 	class_unregister(&msr_class);
-	__unregister_chrdev(MSR_MAJOR, 0, NR_CPUS, "cpu/msr");
+	__unregister_chrdev(MSR_MAJOR, 0, num_possible_cpus(), "cpu/msr");
 }
 module_exit(msr_exit)
 
