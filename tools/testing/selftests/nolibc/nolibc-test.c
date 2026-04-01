@@ -1554,6 +1554,30 @@ int test_time_types(void)
 	return 0;
 }
 
+int test_malloc(void)
+{
+	void *ptr1, *ptr2, *ptr3;
+
+	ptr1 = malloc(100);
+	if (!ptr1)
+		return 1;
+
+	ptr2 = realloc(ptr1, 200);
+	if (!ptr2) {
+		free(ptr1);
+		return 2;
+	}
+
+	ptr3 = realloc(ptr2, 2 * getpagesize());
+	if (!ptr3) {
+		free(ptr2);
+		return 3;
+	}
+
+	free(ptr3);
+	return 0;
+}
+
 int run_stdlib(int min, int max)
 {
 	int test;
@@ -1680,6 +1704,7 @@ int run_stdlib(int min, int max)
 		CASE_TEST(memchr_foobar6_o);        EXPECT_STREQ(1, memchr("foobar", 'o', 6), "oobar"); break;
 		CASE_TEST(memchr_foobar3_b);        EXPECT_STRZR(1, memchr("foobar", 'b', 3)); break;
 		CASE_TEST(time_types);              EXPECT_ZR(is_nolibc, test_time_types()); break;
+		CASE_TEST(malloc);                  EXPECT_ZR(1, test_malloc()); break;
 
 		case __LINE__:
 			return ret; /* must be last */
