@@ -31,6 +31,16 @@ BSS_STACK(4096);
 static char cmdline[BOOT_COMMAND_LINE_SIZE]
 	__attribute__((__section__("__builtin_cmdline")));
 
+static void print_cmdline(const char *prefix, const char *suffix)
+{
+	size_t len = strnlen(cmdline, BOOT_COMMAND_LINE_SIZE - 1);
+
+	printf("%s", prefix);
+	if (console_ops.write && len)
+		console_ops.write(cmdline, len);
+	printf("%s", suffix);
+}
+
 static void prep_cmdline(void *chosen)
 {
 	if (cmdline[0] == '\0')
@@ -38,7 +48,7 @@ static void prep_cmdline(void *chosen)
 	else
 		setprop_str(chosen, "bootargs", cmdline);
 
-	printf("cmdline: '%s'\n", cmdline);
+	print_cmdline("cmdline: '", "'\n");
 }
 
 static void ps3_console_write(const char *buf, int len)
