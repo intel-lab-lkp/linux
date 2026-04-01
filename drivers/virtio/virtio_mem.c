@@ -23,6 +23,8 @@
 #include <linux/log2.h>
 #include <linux/vmalloc.h>
 #include <linux/suspend.h>
+#include <linux/set_memory.h>
+#include <linux/cc_platform.h>
 
 #include <acpi/acpi_numa.h>
 
@@ -864,19 +866,90 @@ static bool virtio_mem_contains_range(struct virtio_mem *vm, uint64_t start,
 	return start >= vm->addr && start + size <= vm->addr + vm->region_size;
 }
 
+/*
+ * In CoCo (TDX, SEV-SNP) environments, hotplugged memory must be explicitly
+ * accepted before use (private/encrypted), and converted to shared/decrypted
+ * before returning to the hypervisor on unplug.
+ */
+static int virtio_mem_coco_set_encrypted(uint64_t addr, uint64_t size)
+{
+	return set_memory_encrypted((unsigned long)__va(addr), PFN_DOWN(size));
+}
+
+static int virtio_mem_coco_set_decrypted(uint64_t addr, uint64_t size)
+{
+	return set_memory_decrypted((unsigned long)__va(addr), PFN_DOWN(size));
+}
+
+/*
+ * Convert all plugged subblocks of a memory block back to shared/decrypted.
+ * Used to undo set_encrypted on failure or cancel.
+ */
+static void virtio_mem_sbm_coco_set_decrypted(struct virtio_mem *vm,
+					      unsigned long mb_id)
+{
+	int sb_id, count;
+
+	if (!cc_platform_has(CC_ATTR_GUEST_MEM_ENCRYPT))
+		return;
+
+	for (sb_id = 0; sb_id < vm->sbm.sbs_per_mb; sb_id += count) {
+		count = 1;
+		if (!virtio_mem_sbm_test_sb_plugged(vm, mb_id, sb_id, 1))
+			continue;
+		while (sb_id + count < vm->sbm.sbs_per_mb &&
+		       virtio_mem_sbm_test_sb_plugged(vm, mb_id,
+						      sb_id + count, 1))
+			count++;
+		virtio_mem_coco_set_decrypted(
+			virtio_mem_mb_id_to_phys(mb_id) +
+				sb_id * vm->sbm.sb_size,
+			(uint64_t)count * vm->sbm.sb_size);
+	}
+}
+
 static int virtio_mem_sbm_notify_going_online(struct virtio_mem *vm,
 					      unsigned long mb_id)
 {
+	int sb_id, count, rc;
+
 	switch (virtio_mem_sbm_get_mb_state(vm, mb_id)) {
 	case VIRTIO_MEM_SBM_MB_OFFLINE_PARTIAL:
 	case VIRTIO_MEM_SBM_MB_OFFLINE:
-		return NOTIFY_OK;
-	default:
 		break;
+	default:
+		dev_warn_ratelimited(&vm->vdev->dev,
+				     "memory block onlining denied\n");
+		return NOTIFY_BAD;
 	}
-	dev_warn_ratelimited(&vm->vdev->dev,
-			     "memory block onlining denied\n");
-	return NOTIFY_BAD;
+
+	if (!cc_platform_has(CC_ATTR_GUEST_MEM_ENCRYPT))
+		return NOTIFY_OK;
+
+	/*
+	 * In CoCo environments, explicitly accept plugged subblocks before
+	 * they get onlined and handed to the buddy. Only accept at subblock
+	 * granularity -- unplugged subblocks have no backing in the secure
+	 * page tables (SEPT) and accepting them would fail.
+	 */
+	for (sb_id = 0; sb_id < vm->sbm.sbs_per_mb; sb_id += count) {
+		count = 1;
+		if (!virtio_mem_sbm_test_sb_plugged(vm, mb_id, sb_id, 1))
+			continue;
+		/* Coalesce consecutive plugged subblocks */
+		while (sb_id + count < vm->sbm.sbs_per_mb &&
+		       virtio_mem_sbm_test_sb_plugged(vm, mb_id,
+						      sb_id + count, 1))
+			count++;
+		rc = virtio_mem_coco_set_encrypted(
+			virtio_mem_mb_id_to_phys(mb_id) +
+				sb_id * vm->sbm.sb_size,
+			(uint64_t)count * vm->sbm.sb_size);
+		if (rc)
+			return NOTIFY_BAD;
+	}
+
+	return NOTIFY_OK;
 }
 
 static void virtio_mem_sbm_notify_offline(struct virtio_mem *vm,
@@ -1055,8 +1128,16 @@ static int virtio_mem_memory_notifier_cb(struct notifier_block *nb,
 			break;
 		}
 		vm->hotplug_active = true;
-		if (vm->in_sbm)
+		if (vm->in_sbm) {
 			rc = virtio_mem_sbm_notify_going_online(vm, id);
+		} else {
+			/*
+			 * For BBM, accept the whole memory block range. Unlike
+			 * SBM, the entire big block is always plugged.
+			 */
+			if (virtio_mem_coco_set_encrypted(start, size))
+				rc = NOTIFY_BAD;
+		}
 		break;
 	case MEM_OFFLINE:
 		if (vm->in_sbm)
@@ -1106,6 +1187,14 @@ static int virtio_mem_memory_notifier_cb(struct notifier_block *nb,
 	case MEM_CANCEL_ONLINE:
 		if (!vm->hotplug_active)
 			break;
+		/*
+		 * Undo CoCo acceptance done in MEM_GOING_ONLINE. Pages were
+		 * made private but never onlined -- convert back to shared.
+		 */
+		if (vm->in_sbm)
+			virtio_mem_sbm_coco_set_decrypted(vm, id);
+		else
+			virtio_mem_coco_set_decrypted(start, size);
 		vm->hotplug_active = false;
 		mutex_unlock(&vm->hotplug_mutex);
 		break;
@@ -1583,12 +1672,17 @@ static int virtio_mem_bbm_plug_bb(struct virtio_mem *vm, unsigned long bb_id)
  * memory block. Will fail if any subblock cannot get unplugged (instead of
  * skipping it).
  *
+ * If @coco_shared is true, convert each subblock range to shared/decrypted
+ * before unplugging. This is required for offline blocks that have a direct
+ * map but must not be used for blocks in PLUGGED state (no direct map).
+ *
  * Will not modify the state of the memory block.
  *
  * Note: can fail after some subblocks were unplugged.
  */
 static int virtio_mem_sbm_unplug_any_sb_raw(struct virtio_mem *vm,
-					    unsigned long mb_id, uint64_t *nb_sb)
+					    unsigned long mb_id, uint64_t *nb_sb,
+					    bool coco_shared)
 {
 	int sb_id, count;
 	int rc;
@@ -1607,6 +1701,15 @@ static int virtio_mem_sbm_unplug_any_sb_raw(struct virtio_mem *vm,
 		       virtio_mem_sbm_test_sb_plugged(vm, mb_id, sb_id - 1, 1)) {
 			count++;
 			sb_id--;
+		}
+
+		if (coco_shared) {
+			rc = virtio_mem_coco_set_decrypted(
+				virtio_mem_mb_id_to_phys(mb_id) +
+					sb_id * vm->sbm.sb_size,
+				(uint64_t)count * vm->sbm.sb_size);
+			if (rc)
+				return rc;
 		}
 
 		rc = virtio_mem_sbm_unplug_sb(vm, mb_id, sb_id, count);
@@ -1630,7 +1733,11 @@ static int virtio_mem_sbm_unplug_mb(struct virtio_mem *vm, unsigned long mb_id)
 {
 	uint64_t nb_sb = vm->sbm.sbs_per_mb;
 
-	return virtio_mem_sbm_unplug_any_sb_raw(vm, mb_id, &nb_sb);
+	/*
+	 * Called for PLUGGED blocks (add_memory failed) -- no direct map
+	 * exists, so CoCo conversion is not possible.
+	 */
+	return virtio_mem_sbm_unplug_any_sb_raw(vm, mb_id, &nb_sb, false);
 }
 
 /*
@@ -1743,6 +1850,17 @@ static int virtio_mem_sbm_plug_any_sb(struct virtio_mem *vm,
 		*nb_sb -= count;
 		if (old_state == VIRTIO_MEM_SBM_MB_OFFLINE_PARTIAL)
 			continue;
+
+		/* Accept memory for CoCo before fake-onlining into buddy */
+		rc = virtio_mem_coco_set_encrypted(
+			virtio_mem_mb_id_to_phys(mb_id) +
+				sb_id * vm->sbm.sb_size,
+			(uint64_t)count * vm->sbm.sb_size);
+		if (rc) {
+			virtio_mem_sbm_unplug_sb(vm, mb_id, sb_id, count);
+			*nb_sb += count;
+			return rc;
+		}
 
 		/* fake-online the pages if the memory block is online */
 		pfn = PFN_DOWN(virtio_mem_mb_id_to_phys(mb_id) +
@@ -1941,7 +2059,8 @@ static int virtio_mem_sbm_unplug_any_sb_offline(struct virtio_mem *vm,
 {
 	int rc;
 
-	rc = virtio_mem_sbm_unplug_any_sb_raw(vm, mb_id, nb_sb);
+	/* Offline blocks have a direct map -- convert for CoCo before unplug */
+	rc = virtio_mem_sbm_unplug_any_sb_raw(vm, mb_id, nb_sb, true);
 
 	/* some subblocks might have been unplugged even on failure */
 	if (!virtio_mem_sbm_test_sb_plugged(vm, mb_id, 0, vm->sbm.sbs_per_mb))
@@ -1989,10 +2108,32 @@ static int virtio_mem_sbm_unplug_sb_online(struct virtio_mem *vm,
 	if (rc)
 		return rc;
 
+	/* Convert private→shared for CoCo before handing back to device */
+	rc = virtio_mem_coco_set_decrypted(
+		virtio_mem_mb_id_to_phys(mb_id) +
+			sb_id * vm->sbm.sb_size,
+		(uint64_t)count * vm->sbm.sb_size);
+	if (rc) {
+		virtio_mem_fake_online(start_pfn, nr_pages);
+		return rc;
+	}
+
 	/* Try to unplug the allocated memory */
 	rc = virtio_mem_sbm_unplug_sb(vm, mb_id, sb_id, count);
 	if (rc) {
-		/* Return the memory to the buddy. */
+		/*
+		 * Try to return the memory to the buddy. If set_encrypted
+		 * fails, we must not fake-online shared memory -- that would
+		 * be a CoCo confidentiality breach. Leak the memory instead.
+		 */
+		if (virtio_mem_coco_set_encrypted(
+			    virtio_mem_mb_id_to_phys(mb_id) +
+				    sb_id * vm->sbm.sb_size,
+			    (uint64_t)count * vm->sbm.sb_size)) {
+			dev_err(&vm->vdev->dev,
+				"CoCo set_encrypted failed, leaking memory\n");
+			return rc;
+		}
 		virtio_mem_fake_online(start_pfn, nr_pages);
 		return rc;
 	}
@@ -2191,8 +2332,30 @@ static int virtio_mem_bbm_offline_remove_and_unplug_bb(struct virtio_mem *vm,
 	}
 	mutex_unlock(&vm->hotplug_mutex);
 
+	/*
+	 * Convert private→shared for CoCo while direct map still exists.
+	 * Must happen before offline_and_remove tears down the mapping.
+	 */
+	rc = virtio_mem_coco_set_decrypted(
+		virtio_mem_bb_id_to_phys(vm, bb_id), vm->bbm.bb_size);
+	if (rc) {
+		mutex_lock(&vm->hotplug_mutex);
+		goto rollback;
+	}
+
 	rc = virtio_mem_bbm_offline_and_remove_bb(vm, bb_id);
 	if (rc) {
+		/*
+		 * Try to re-accept the memory for CoCo. If this fails, we
+		 * must not fake-online shared memory -- leak it instead.
+		 */
+		if (virtio_mem_coco_set_encrypted(
+			    virtio_mem_bb_id_to_phys(vm, bb_id),
+			    vm->bbm.bb_size)) {
+			dev_err(&vm->vdev->dev,
+				"CoCo set_encrypted failed, leaking memory\n");
+			return rc;
+		}
 		mutex_lock(&vm->hotplug_mutex);
 		goto rollback;
 	}
