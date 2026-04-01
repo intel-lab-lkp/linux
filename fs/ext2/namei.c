@@ -293,7 +293,12 @@ static int ext2_unlink(struct inode *dir, struct dentry *dentry)
 		goto out;
 
 	inode_set_ctime_to_ts(inode, inode_get_ctime(dir));
-	inode_dec_link_count(inode);
+	if (!inode->i_nlink)
+		ext2_error(inode->i_sb, __func__,
+			   "inode %lu has zero i_nlink on unlink, fs may be corrupt",
+			   inode->i_ino);
+	else
+		inode_dec_link_count(inode);
 	err = 0;
 out:
 	return err;
