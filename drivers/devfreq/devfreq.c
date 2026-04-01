@@ -1395,9 +1395,6 @@ static ssize_t governor_store(struct device *dev, struct device_attribute *attr,
 	char str_governor[DEVFREQ_NAME_LEN + 1];
 	const struct devfreq_governor *governor, *prev_governor;
 
-	if (!df->governor)
-		return -EINVAL;
-
 	ret = sscanf(buf, "%" __stringify(DEVFREQ_NAME_LEN) "s", str_governor);
 	if (ret != 1)
 		return -EINVAL;
@@ -1408,6 +1405,20 @@ static ssize_t governor_store(struct device *dev, struct device_attribute *attr,
 		ret = PTR_ERR(governor);
 		goto out;
 	}
+
+	if (!df->governor) {
+		df->governor = governor;
+		ret = df->governor->event_handler(df, DEVFREQ_GOV_START, NULL);
+		if (ret) {
+			dev_warn(dev, "%s: Governor %s not started(%d)\n",
+				__func__, df->governor->name, ret);
+			df->governor = NULL;
+		} else {
+			ret = sysfs_update_group(&df->dev.kobj, &gov_attr_group);
+		}
+		goto out;
+	}
+
 	if (df->governor == governor) {
 		ret = 0;
 		goto out;
