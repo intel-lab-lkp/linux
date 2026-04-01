@@ -263,8 +263,10 @@ sh_css_load_firmware(struct device *dev, const char *fw_data,
 	}
 
 	fw_minibuffer = kzalloc_objs(struct fw_param, sh_css_num_binaries);
-	if (!fw_minibuffer)
-		return -ENOMEM;
+	if (!fw_minibuffer) {
+		ret = -ENOMEM;
+		goto err_alloc;
+	}
 
 	for (i = 0; i < sh_css_num_binaries; i++) {
 		struct ia_css_fw_info *bi = &binaries[i];
@@ -278,18 +280,23 @@ sh_css_load_firmware(struct device *dev, const char *fw_data,
 
 		err = sh_css_load_blob_info(fw_data, bi, &bd, i);
 
-		if (err)
-			return -EINVAL;
+		if (err) {
+			ret = -EINVAL;
+			goto err_alloc;
+		}
 
-		if (bi->blob.offset + bi->blob.size > fw_size)
-			return -EINVAL;
+		if (bi->blob.offset + bi->blob.size > fw_size) {
+			ret = -EINVAL;
+			goto err_alloc;
+		}
 
 		switch (bd.header.type) {
 		case ia_css_isp_firmware:
 			if (bd.header.info.isp.type > IA_CSS_ACC_STANDALONE) {
 				dev_err(dev, "binary #%2d: invalid SP type\n",
 					i);
-				return -EINVAL;
+				ret = -EINVAL;
+				goto err_alloc;
 			}
 
 			dev_dbg(dev,
@@ -313,17 +320,22 @@ sh_css_load_firmware(struct device *dev, const char *fw_data,
 				dev_err(dev,
 					"binary #%2d: invalid firmware type\n",
 					i);
-				return -EINVAL;
+				ret = -EINVAL;
+				goto err_alloc;
 			}
 			break;
 		}
 
 		if (bi->type == ia_css_sp_firmware) {
-			if (i != SP_FIRMWARE)
-				return -EINVAL;
+			if (i != SP_FIRMWARE) {
+				ret = -EINVAL;
+				goto err_alloc;
+			}
 			err = setup_binary(bi, fw_data, &sh_css_sp_fw, i);
-			if (err)
-				return err;
+			if (err) {
+				ret = err;
+				goto err_alloc;
+			}
 
 		} else {
 			/*
@@ -331,18 +343,32 @@ sh_css_load_firmware(struct device *dev, const char *fw_data,
 			 * (including bootloaders) (i>NUM_OF_SPS)
 			 * are ISP firmware
 			 */
-			if (i < NUM_OF_SPS)
-				return -EINVAL;
+			if (i < NUM_OF_SPS) {
+				ret = -EINVAL;
+				goto err_alloc;
+			}
 
-			if (bi->type != ia_css_isp_firmware)
-				return -EINVAL;
-			if (!sh_css_blob_info) /* cannot happen but KW does not see this */
-				return -EINVAL;
+			if (bi->type != ia_css_isp_firmware) {
+				ret = -EINVAL;
+				goto err_alloc;
+			}
+			if (!sh_css_blob_info) {
+				/* cannot happen but KW does not see this */
+				ret = -EINVAL;
+				goto err_alloc;
+			}
 			sh_css_blob_info[i - NUM_OF_SPS] = bd;
 		}
 	}
 
 	return 0;
+
+err_alloc:
+	kfree(fw_minibuffer);
+	fw_minibuffer = NULL;
+	kfree(sh_css_blob_info);
+	sh_css_blob_info = NULL;
+	return ret;
 }
 
 void sh_css_unload_firmware(void)
