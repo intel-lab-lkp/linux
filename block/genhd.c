@@ -1186,14 +1186,16 @@ ssize_t part_fail_store(struct device *dev,
 			struct device_attribute *attr,
 			const char *buf, size_t count)
 {
-	int i;
+	int val;
 
-	if (count > 0 && sscanf(buf, "%d", &i) > 0) {
-		if (i)
-			bdev_set_flag(dev_to_bdev(dev), BD_MAKE_IT_FAIL);
-		else
-			bdev_clear_flag(dev_to_bdev(dev), BD_MAKE_IT_FAIL);
-	}
+	if (kstrtoint(buf, 10, &val))
+		return -EINVAL;
+
+	if (val)
+		bdev_set_flag(dev_to_bdev(dev), BD_MAKE_IT_FAIL);
+	else
+		bdev_clear_flag(dev_to_bdev(dev), BD_MAKE_IT_FAIL);
+
 	return count;
 }
 
