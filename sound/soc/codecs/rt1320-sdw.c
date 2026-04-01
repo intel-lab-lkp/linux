@@ -577,6 +577,7 @@ static bool rt1320_volatile_register(struct device *dev, unsigned int reg)
 	case 0xd530:
 	case 0xd540 ... 0xd541:
 	case 0xd543:
+	case 0xdb00 ... 0xdb03:
 	case 0xdb58 ... 0xdb5f:
 	case 0xdb60 ... 0xdb63:
 	case 0xdb68 ... 0xdb69:
@@ -2299,6 +2300,14 @@ static SOC_ENUM_SINGLE_DECL(rt1320_rx_data_ch_enum,
 	SDW_SDCA_CTL(FUNC_NUM_AMP, RT1320_SDCA_ENT_PPU21, RT1320_SDCA_CTL_POSTURE_NUMBER, 0), 0,
 	rt1320_rx_data_ch_select);
 
+static const char * const rt1320_brown_out_mode[] = {
+	"On",
+	"Off",
+};
+
+static SOC_ENUM_SINGLE_DECL(rt1320_brown_out_enum, 0, 0,
+	rt1320_brown_out_mode);
+
 static const DECLARE_TLV_DB_SCALE(out_vol_tlv, -6525, 75, 0);
 static const DECLARE_TLV_DB_SCALE(in_vol_tlv, -1725, 75, 0);
 
@@ -2486,6 +2495,42 @@ static int rt1320_rae_update_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int rt1320_brown_out_put(struct snd_kcontrol *kcontrol,
+				 struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct rt1320_sdw_priv *rt1320 = snd_soc_component_get_drvdata(component);
+	struct device *dev = &rt1320->sdw_slave->dev;
+	int ret, tmp;
+
+	ret = pm_runtime_resume(component->dev);
+	if (ret < 0 && ret != -EACCES)
+		return ret;
+
+	rt1320->brown_out = ucontrol->value.integer.value[0];
+	regcache_cache_bypass(rt1320->regmap, true);
+
+	if (rt1320->brown_out == 1)
+		regmap_write(rt1320->regmap, 0xdb03, 0x00);
+	else
+		regmap_write(rt1320->regmap, 0xdb03, 0xf0);
+
+	regcache_cache_bypass(rt1320->regmap, false);
+
+	return 0;
+}
+
+static int rt1320_brown_out_get(struct snd_kcontrol *kcontrol,
+				     struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct rt1320_sdw_priv *rt1320 = snd_soc_component_get_drvdata(component);
+
+	ucontrol->value.integer.value[0] = rt1320->brown_out;
+
+	return 0;
+}
+
 static int rt1320_r0_temperature_get(struct snd_kcontrol *kcontrol,
 				     struct snd_ctl_elem_value *ucontrol)
 {
@@ -2545,6 +2590,8 @@ static const struct snd_kcontrol_new rt1320_snd_controls[] = {
 		rt1320_r0_temperature_get, rt1320_r0_temperature_put),
 	SOC_SINGLE_EXT("RAE Update", SND_SOC_NOPM, 0, 1, 0,
 		rt1320_rae_update_get, rt1320_rae_update_put),
+	SOC_ENUM_EXT("Brown Out Switch", rt1320_brown_out_enum,
+		rt1320_brown_out_get, rt1320_brown_out_put),
 };
 
 static const struct snd_kcontrol_new rt1320_spk_l_dac =
