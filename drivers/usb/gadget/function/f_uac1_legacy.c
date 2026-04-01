@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/atomic.h>
+#include <asm/unaligned.h>
 
 #include "u_uac1_legacy.h"
 
@@ -370,9 +371,21 @@ static void f_audio_complete(struct usb_ep *ep, struct usb_request *req)
 		if (ep == out_ep)
 			f_audio_out_ep_complete(ep, req);
 		else if (audio->set_con) {
-			memcpy(&data, req->buf, req->length);
-			audio->set_con->set(audio->set_con, audio->set_cmd,
-					le16_to_cpu(data));
+			struct usb_audio_control *con = audio->set_con;
+
+			if ((con->type == UAC_FU_MUTE && req->actual != sizeof(u8)) ||
+				(con->type == UAC_FU_VOLUME && req->actual != sizeof(__le16)) ||
+				(con->type != UAC_FU_MUTE && con->type != UAC_FU_VOLUME)) {
+				usb_ep_set_halt(ep);
+				audio->set_con = NULL;
+				break;
+			}
+
+			if (con->type == UAC_FU_MUTE)
+				data = *(u8 *)req->buf;
+			else
+				data = get_unaligned_le16(req->buf);
+			con->set(con, audio->set_cmd, data);
 			audio->set_con = NULL;
 		}
 		break;
