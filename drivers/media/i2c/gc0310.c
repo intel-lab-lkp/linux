@@ -721,7 +721,7 @@ static int gc0310_probe(struct i2c_client *client)
 
 	ret = gc0310_detect(sensor);
 	if (ret)
-		goto err_power_down;
+		goto error_power_off;
 
 	sensor->sd.internal_ops = &gc0310_internal_ops;
 	sensor->sd.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
@@ -730,20 +730,27 @@ static int gc0310_probe(struct i2c_client *client)
 
 	ret = gc0310_init_controls(sensor);
 	if (ret)
-		goto err_power_down;
+		goto error_power_off;
 
 	ret = media_entity_pads_init(&sensor->sd.entity, 1, &sensor->pad);
-	if (ret)
-		goto err_power_down;
+	if (ret) {
+		dev_err_probe(&client->dev, ret, "failed to init entity pads\n");
+		goto error_handler_free;
+	}
 
 	sensor->sd.state_lock = sensor->ctrls.handler.lock;
 	ret = v4l2_subdev_init_finalize(&sensor->sd);
-	if (ret)
-		goto err_power_down;
+	if (ret) {
+		dev_err_probe(&client->dev, ret, "subdev init error\n");
+		goto error_media_entity;
+	}
 
 	ret = v4l2_async_register_subdev_sensor(&sensor->sd);
-	if (ret)
-		goto err_power_down;
+	if (ret) {
+		dev_err_probe(&client->dev, ret,
+			      "failed to register gc0310 sub-device\n");
+		goto error_subdev_cleanup;
+	}
 
 	pm_runtime_set_autosuspend_delay(&client->dev, 1000);
 	pm_runtime_use_autosuspend(&client->dev);
@@ -751,9 +758,21 @@ static int gc0310_probe(struct i2c_client *client)
 
 	return 0;
 
-err_power_down:
+error_subdev_cleanup:
+	v4l2_subdev_cleanup(&sensor->sd);
+	pm_runtime_disable(&client->dev);
+	pm_runtime_set_suspended(&client->dev);
+
+error_media_entity:
+	media_entity_cleanup(&sensor->sd.entity);
+
+error_handler_free:
+	v4l2_ctrl_handler_free(&sensor->ctrls.handler);
+
+error_power_off:
 	pm_runtime_put_noidle(&client->dev);
-	gc0310_remove(client);
+	gc0310_power_off(&client->dev);
+
 	return ret;
 }
 
