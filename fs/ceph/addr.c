@@ -576,6 +576,21 @@ static inline void ceph_fscache_write_to_cache(struct inode *inode, u64 off, u64
 }
 #endif /* CONFIG_CEPH_FSCACHE */
 
+static inline bool ceph_folio_is_cacheable(const struct folio *folio, bool caching)
+{
+	/* Dropbehind writeback should not populate the local fscache. */
+	return caching && !folio_test_dropbehind(folio);
+}
+
+static inline void ceph_flush_fscache_write(struct inode *inode, u64 off, u64 *len)
+{
+	if (!*len)
+		return;
+
+	ceph_fscache_write_to_cache(inode, off, *len, true);
+	*len = 0;
+}
+
 struct ceph_writeback_ctl
 {
 	loff_t i_size;
@@ -730,7 +745,7 @@ static int write_folio_nounlock(struct folio *folio,
 	struct ceph_writeback_ctl ceph_wbc;
 	struct ceph_osd_client *osdc = &fsc->client->osdc;
 	struct ceph_osd_request *req;
-	bool caching = ceph_is_cache_enabled(inode);
+	bool caching = ceph_folio_is_cacheable(folio, ceph_is_cache_enabled(inode));
 	struct page *bounce_page = NULL;
 
 	doutc(cl, "%llx.%llx folio %p idx %lu\n", ceph_vinop(inode), folio,
@@ -1412,11 +1427,14 @@ int ceph_submit_write(struct address_space *mapping,
 	bool caching = ceph_is_cache_enabled(inode);
 	u64 offset;
 	u64 len;
+	u64 cache_offset, cache_len;
 	unsigned i;
 
 new_request:
 	offset = ceph_fscrypt_page_offset(ceph_wbc->pages[0]);
 	len = ceph_wbc->wsize;
+	cache_offset = 0;
+	cache_len = 0;
 
 	req = ceph_osdc_new_request(&fsc->client->osdc,
 				    &ci->i_layout, vino,
@@ -1477,9 +1495,11 @@ new_request:
 	ceph_wbc->op_idx = 0;
 	for (i = 0; i < ceph_wbc->locked_pages; i++) {
 		u64 cur_offset;
+		bool cache_page;
 
 		page = ceph_fscrypt_pagecache_page(ceph_wbc->pages[i]);
 		cur_offset = page_offset(page);
+		cache_page = ceph_folio_is_cacheable(page_folio(page), caching);
 
 		/*
 		 * Discontinuity in page range? Ceph can handle that by just passing
@@ -1491,7 +1511,7 @@ new_request:
 				break;
 
 			/* Kick off an fscache write with what we have so far. */
-			ceph_fscache_write_to_cache(inode, offset, len, caching);
+			ceph_flush_fscache_write(inode, cache_offset, &cache_len);
 
 			/* Start a new extent */
 			osd_req_op_extent_dup_last(req, ceph_wbc->op_idx,
@@ -1514,13 +1534,19 @@ new_request:
 
 		set_page_writeback(page);
 
-		if (caching)
+		if (cache_page) {
+			if (!cache_len)
+				cache_offset = cur_offset;
 			ceph_set_page_fscache(page);
+			cache_len += thp_size(page);
+		} else {
+			ceph_flush_fscache_write(inode, cache_offset, &cache_len);
+		}
 
 		len += thp_size(page);
 	}
 
-	ceph_fscache_write_to_cache(inode, offset, len, caching);
+	ceph_flush_fscache_write(inode, cache_offset, &cache_len);
 
 	if (ceph_wbc->size_stable) {
 		len = min(len, ceph_wbc->i_size - offset);
