@@ -276,6 +276,9 @@ static const struct edid_quirk {
 	/* LQ116M1JW10 displays noise when 8 bpc, but display fine as 6 bpc */
 	EDID_QUIRK('S', 'H', 'P', 0x154c, BIT(EDID_QUIRK_FORCE_6BPC)),
 
+	/* YUK */
+	EDID_QUIRK('Y', 'U', 'K', 0xaa01, EDID_QUIRK_FORCE_8BPC),
+
 	/*
 	 * @drm_edid_internal_quirk entries end here, following with the
 	 * @drm_edid_quirk entries.
