@@ -69,36 +69,37 @@ static ssize_t blk_mq_hw_sysfs_show(struct kobject *kobj,
 static ssize_t blk_mq_hw_sysfs_nr_tags_show(struct blk_mq_hw_ctx *hctx,
 					    char *page)
 {
-	return sprintf(page, "%u\n", hctx->tags->nr_tags);
+	return sysfs_emit(page, "%u\n", hctx->tags->nr_tags);
 }
 
 static ssize_t blk_mq_hw_sysfs_nr_reserved_tags_show(struct blk_mq_hw_ctx *hctx,
 						     char *page)
 {
-	return sprintf(page, "%u\n", hctx->tags->nr_reserved_tags);
+	return sysfs_emit(page, "%u\n", hctx->tags->nr_reserved_tags);
 }
 
 static ssize_t blk_mq_hw_sysfs_cpus_show(struct blk_mq_hw_ctx *hctx, char *page)
 {
-	const size_t size = PAGE_SIZE - 1;
 	unsigned int i, first = 1;
-	int ret = 0, pos = 0;
+	int ret, pos = 0;
 
 	for_each_cpu(i, hctx->cpumask) {
 		if (first)
-			ret = snprintf(pos + page, size - pos, "%u", i);
+			ret = sysfs_emit_at(page, pos, "%u", i);
 		else
-			ret = snprintf(pos + page, size - pos, ", %u", i);
+			ret = sysfs_emit_at(page, pos, ", %u", i);
 
-		if (ret >= size - pos)
+		if (ret <= 0)
 			break;
 
 		first = 0;
 		pos += ret;
 	}
 
-	ret = snprintf(pos + page, size + 1 - pos, "\n");
-	return pos + ret;
+	ret = sysfs_emit_at(page, pos, "\n");
+	if (ret > 0)
+		pos += ret;
+	return pos;
 }
 
 static struct blk_mq_hw_ctx_sysfs_entry blk_mq_hw_sysfs_nr_tags = {
