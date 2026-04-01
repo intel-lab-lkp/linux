@@ -929,6 +929,15 @@ static int l2cap_sock_setsockopt(struct socket *sock, int level, int optname,
 
 		/* change security for LE channels */
 		if (chan->scid == L2CAP_CID_ATT) {
+			/* If security already pending, return error to avoid
+			 * changing the pending_sec_level while the pairing
+			 * procedure is still ongoing.
+			 */
+			if (test_bit(FLAG_PENDING_SECURITY, &chan->flags)) {
+				err = -EINPROGRESS;
+				break;
+			}
+
 			if (smp_conn_security(conn->hcon, sec.level)) {
 				err = -EINVAL;
 				break;
