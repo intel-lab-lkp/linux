@@ -14,6 +14,8 @@
 #include <linux/pci-epf.h>
 #include <linux/pci-ep-cfs.h>
 
+#include "../pci.h"
+
 static const struct class pci_epc_class = {
 	.name = "pci_epc",
 };
@@ -547,6 +549,75 @@ void pci_epc_mem_unmap(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 			      map->map_size);
 }
 EXPORT_SYMBOL_GPL(pci_epc_mem_unmap);
+
+/**
+ * pci_epc_doe_setup() - Setup and discover DOE mailboxes for all functions
+ * @epc: the EPC device on which DOE mailboxes has to be setup
+ *
+ * Discover DOE (Data Object Exchange) capabilities for all physical functions
+ * in the endpoint controller and register DOE mailboxes.
+ *
+ * This API should be called by the controller driver during initialization
+ * if DOE support is available (indicated by doe_capable in pci_epc_features).
+ *
+ * RETURNS: 0 on success, -errno on failure
+ */
+int pci_epc_doe_setup(struct pci_epc *epc)
+{
+	u16 cap_offset = 0;
+	u8 func_no;
+	int ret;
+
+	if (!epc || !epc->ops || !epc->ops->find_ext_capability)
+		return -EINVAL;
+
+	/* Initialize DOE framework for this controller */
+	ret = pci_ep_doe_init(epc);
+	if (ret)
+		return ret;
+
+	/* Discover DOE capabilities for all functions */
+	for (func_no = 0; func_no < epc->max_functions; func_no++) {
+		while ((cap_offset = epc->ops->find_ext_capability(epc, func_no, 0,
+								   cap_offset,
+								   PCI_EXT_CAP_ID_DOE))) {
+			/* Register this DOE mailbox */
+			ret = pci_ep_doe_add_mailbox(epc, func_no, cap_offset);
+			if (ret) {
+				dev_err(&epc->dev,
+					"[pf%d:offset %x] failed to add DOE mailbox\n",
+					func_no, cap_offset);
+			}
+		}
+	}
+
+	dev_dbg(&epc->dev, "DOE mailboxes setup complete\n");
+	return 0;
+}
+EXPORT_SYMBOL_GPL(pci_epc_doe_setup);
+
+/**
+ * pci_epc_doe_destroy() - Destroy and cleanup DOE mailboxes
+ * @epc: the EPC device on which DOE mailboxes has to be destroyed
+ *
+ * Destroy all DOE mailboxes registered on this endpoint controller and
+ * free associated resources.
+ *
+ * This API should be called by the controller driver during controller cleanup
+ * if DOE support is available (indicated by doe_capable in pci_epc_features).
+ *
+ * RETURNS: 0 on success, -errno on failure
+ */
+int pci_epc_doe_destroy(struct pci_epc *epc)
+{
+	if (!epc)
+		return -EINVAL;
+
+	pci_ep_doe_destroy(epc);
+	dev_dbg(&epc->dev, "DOE mailboxes destroyed\n");
+	return 0;
+}
+EXPORT_SYMBOL_GPL(pci_epc_doe_destroy);
 
 /**
  * pci_epc_clear_bar() - reset the BAR
