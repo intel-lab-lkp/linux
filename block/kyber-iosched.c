@@ -852,7 +852,7 @@ static ssize_t kyber_##name##_lat_show(struct elevator_queue *e,	\
 {									\
 	struct kyber_queue_data *kqd = e->elevator_data;		\
 									\
-	return sprintf(page, "%llu\n", kqd->latency_targets[domain]);	\
+	return sysfs_emit(page, "%llu\n", kqd->latency_targets[domain]); \
 }									\
 									\
 static ssize_t kyber_##name##_lat_store(struct elevator_queue *e,	\
