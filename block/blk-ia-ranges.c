@@ -15,14 +15,14 @@ static ssize_t
 blk_ia_range_sector_show(struct blk_independent_access_range *iar,
 			 char *buf)
 {
-	return sprintf(buf, "%llu\n", iar->sector);
+	return sysfs_emit(buf, "%llu\n", iar->sector);
 }
 
 static ssize_t
 blk_ia_range_nr_sectors_show(struct blk_independent_access_range *iar,
 			     char *buf)
 {
-	return sprintf(buf, "%llu\n", iar->nr_sectors);
+	return sysfs_emit(buf, "%llu\n", iar->nr_sectors);
 }
 
 struct blk_ia_range_sysfs_entry {
