@@ -277,7 +277,6 @@ static int create_space_info_sub_group(struct btrfs_space_info *parent, u64 flag
 
 	ret = btrfs_sysfs_add_space_info_type(sub_group);
 	if (ret) {
-		kfree(sub_group);
 		parent->sub_group[index] = NULL;
 	}
 	return ret;
