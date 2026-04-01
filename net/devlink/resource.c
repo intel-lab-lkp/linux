@@ -341,6 +341,22 @@ int devlink_nl_resource_dump_doit(struct sk_buff *skb, struct genl_info *info)
 	return devlink_resource_fill(info, DEVLINK_CMD_RESOURCE_DUMP, 0);
 }
 
+static u32 devlink_resource_scope_get(struct nlattr **attrs, int *flags)
+{
+	struct nla_bitfield32 scope;
+	u32 value;
+
+	if (!attrs || !attrs[DEVLINK_ATTR_RESOURCE_SCOPE_MASK])
+		return DEVLINK_RESOURCE_SCOPE_VALID_MASK;
+
+	scope = nla_get_bitfield32(attrs[DEVLINK_ATTR_RESOURCE_SCOPE_MASK]);
+	value = scope.value & scope.selector;
+	if (value != DEVLINK_RESOURCE_SCOPE_VALID_MASK)
+		*flags |= NLM_F_DUMP_FILTERED;
+
+	return value;
+}
+
 static int
 devlink_resource_dump_fill_one(struct sk_buff *skb, struct devlink *devlink,
 			       struct devlink_port *devlink_port,
@@ -400,16 +416,27 @@ devlink_nl_resource_dump_one(struct sk_buff *skb, struct devlink *devlink,
 	struct devlink_nl_dump_state *state = devlink_dump_state(cb);
 	struct devlink_port *devlink_port;
 	unsigned long port_idx;
+	u32 scope;
 	int err;
 
-	if (!state->port_number) {
+	scope = devlink_resource_scope_get(genl_info_dump(cb)->attrs, &flags);
+	if (!scope) {
+		NL_SET_ERR_MSG_ATTR(genl_info_dump(cb)->extack,
+				    genl_info_dump(cb)->attrs[DEVLINK_ATTR_RESOURCE_SCOPE_MASK],
+				    "empty resource scope selection");
+		return -EINVAL;
+	}
+	if (!state->port_number && (scope & DEVLINK_RESOURCE_SCOPE_DEV)) {
 		err = devlink_resource_dump_fill_one(skb, devlink, NULL,
-						     cb, flags, &state->idx);
+						     cb, flags,
+						     &state->idx);
 		if (err)
 			return err;
 		state->idx = 0;
 	}
 
+	if (!(scope & DEVLINK_RESOURCE_SCOPE_PORT))
+		goto out;
 	xa_for_each_start(&devlink->ports, port_idx, devlink_port,
 			  state->port_number ? state->port_number - 1 : 0) {
 		err = devlink_resource_dump_fill_one(skb, devlink, devlink_port,
@@ -420,6 +447,7 @@ devlink_nl_resource_dump_one(struct sk_buff *skb, struct devlink *devlink,
 		}
 		state->idx = 0;
 	}
+out:
 	state->port_number = 0;
 	return 0;
 }
