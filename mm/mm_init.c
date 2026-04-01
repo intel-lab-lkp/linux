@@ -853,7 +853,7 @@ overlap_memmap_init(unsigned long zone, unsigned long *pfn)
  *   zone/node above the hole except for the trailing pages in the last
  *   section that will be appended to the zone/node below.
  */
-static void __init init_unavailable_range(unsigned long spfn,
+static unsigned long __init init_unavailable_range(unsigned long spfn,
 					  unsigned long epfn,
 					  int zone, int node)
 {
@@ -869,6 +869,36 @@ static void __init init_unavailable_range(unsigned long spfn,
 	if (pgcnt)
 		pr_info("On node %d, zone %s: %lld pages in unavailable ranges\n",
 			node, zone_names[zone], pgcnt);
+	return pgcnt;
+}
+
+/*
+ * Initialize unavailable range [spfn, epfn) while accounting only the pages
+ * that fall within the zone span towards pages_with_online_memmap. Pages
+ * outside the zone span are still initialized but not accounted.
+ */
+static void __init init_unavailable_range_for_zone(struct zone *zone,
+						   unsigned long spfn,
+						   unsigned long epfn)
+{
+	int nid = zone_to_nid(zone);
+	int zid = zone_idx(zone);
+	unsigned long in_zone_start;
+	unsigned long in_zone_end;
+
+	in_zone_start = clamp(spfn, zone->zone_start_pfn, zone_end_pfn(zone));
+	in_zone_end = clamp(epfn, zone->zone_start_pfn, zone_end_pfn(zone));
+
+	if (spfn < in_zone_start)
+		init_unavailable_range(spfn, in_zone_start, zid, nid);
+
+	if (in_zone_start < in_zone_end)
+		zone->pages_with_online_memmap +=
+			init_unavailable_range(in_zone_start, in_zone_end,
+					       zid, nid);
+
+	if (in_zone_end < epfn)
+		init_unavailable_range(in_zone_end, epfn, zid, nid);
 }
 
 /*
@@ -967,9 +997,10 @@ static void __init memmap_init_zone_range(struct zone *zone,
 	memmap_init_range(end_pfn - start_pfn, nid, zone_id, start_pfn,
 			  zone_end_pfn, MEMINIT_EARLY, NULL, MIGRATE_MOVABLE,
 			  false);
+	zone->pages_with_online_memmap += end_pfn - start_pfn;
 
 	if (*hole_pfn < start_pfn)
-		init_unavailable_range(*hole_pfn, start_pfn, zone_id, nid);
+		init_unavailable_range_for_zone(zone, *hole_pfn, start_pfn);
 
 	*hole_pfn = end_pfn;
 }
@@ -1007,8 +1038,11 @@ static void __init memmap_init(void)
 #else
 	end_pfn = round_up(end_pfn, MAX_ORDER_NR_PAGES);
 #endif
-	if (hole_pfn < end_pfn)
-		init_unavailable_range(hole_pfn, end_pfn, zone_id, nid);
+	if (hole_pfn < end_pfn) {
+		struct zone *zone = &NODE_DATA(nid)->node_zones[zone_id];
+
+		init_unavailable_range_for_zone(zone, hole_pfn, end_pfn);
+	}
 }
 
 #ifdef CONFIG_ZONE_DEVICE
@@ -2271,28 +2305,6 @@ void __init init_cma_pageblock(struct page *page)
 	page_zone(page)->cma_pages += pageblock_nr_pages;
 }
 #endif
-
-void set_zone_contiguous(struct zone *zone)
-{
-	unsigned long block_start_pfn = zone->zone_start_pfn;
-	unsigned long block_end_pfn;
-
-	block_end_pfn = pageblock_end_pfn(block_start_pfn);
-	for (; block_start_pfn < zone_end_pfn(zone);
-			block_start_pfn = block_end_pfn,
-			 block_end_pfn += pageblock_nr_pages) {
-
-		block_end_pfn = min(block_end_pfn, zone_end_pfn(zone));
-
-		if (!__pageblock_pfn_to_page(block_start_pfn,
-					     block_end_pfn, zone))
-			return;
-		cond_resched();
-	}
-
-	/* We confirm that there is no hole */
-	zone->contiguous = true;
-}
 
 /*
  * Check if a PFN range intersects multiple zones on one or more
