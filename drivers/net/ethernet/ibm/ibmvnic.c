@@ -2444,7 +2444,8 @@ static netdev_tx_t ibmvnic_xmit(struct sk_buff *skb, struct net_device *netdev)
 	 * rcu to ensure reset waits for us to complete.
 	 */
 	rcu_read_lock();
-	if (!adapter->tx_queues_active) {
+	if (!adapter->tx_queues_active ||
+	    queue_num >= adapter->num_active_tx_scrqs) {
 		dev_kfree_skb_any(skb);
 
 		tx_send_failed++;
@@ -2664,14 +2665,13 @@ tx_err:
 		netif_carrier_off(netdev);
 	}
 out:
-	rcu_read_unlock();
 	adapter->tx_send_failed += tx_send_failed;
 	adapter->tx_map_failed += tx_map_failed;
 	adapter->tx_stats_buffers[queue_num].batched_packets += tx_bpackets;
 	adapter->tx_stats_buffers[queue_num].direct_packets += tx_dpackets;
 	adapter->tx_stats_buffers[queue_num].bytes += tx_bytes;
 	adapter->tx_stats_buffers[queue_num].dropped_packets += tx_dropped;
-
+	rcu_read_unlock();
 	return ret;
 }
 
