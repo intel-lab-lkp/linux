@@ -165,6 +165,19 @@ static void __init do_add_efi_memmap(void)
 	e820__update_table(e820_table);
 }
 
+void __init efi_init_reservations(void)
+{
+	efi_find_mirror();
+	efi_esrt_init();
+	efi_mokvar_table_init();
+
+	/*
+	 * The EFI specification says that boot service code won't be
+	 * called after ExitBootServices(). This is, in fact, a lie.
+	 */
+	efi_reserve_boot_services();
+}
+
 /*
  * Given add_efi_memmap defaults to 0 and there is no alternative
  * e820 mechanism for soft-reserved memory, import the full EFI memory

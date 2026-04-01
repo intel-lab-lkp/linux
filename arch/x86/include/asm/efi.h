@@ -387,10 +387,9 @@ static inline  bool efi_is_table_address(unsigned long phys_addr)
 {
 	return false;
 }
-static inline void efi_reserve_boot_services(void)
-{
-}
 #endif /* CONFIG_EFI */
+
+void efi_init_reservations(void);
 
 extern int __init efi_memmap_alloc(unsigned int num_entries,
 				   struct efi_memory_map_data *data);
