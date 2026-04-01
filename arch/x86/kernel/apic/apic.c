@@ -341,6 +341,8 @@ static void __setup_APIC_LVTT(unsigned int clocks, int oneshot, int irqen)
  */
 
 static atomic_t eilvt_offsets[APIC_EILVT_NR_MAX];
+unsigned int apic_eilvt_count __ro_after_init;
+EXPORT_SYMBOL_FOR_KVM(apic_eilvt_count);
 
 static inline int eilvt_entry_is_changeable(unsigned int old, unsigned int new)
 {
@@ -408,6 +410,15 @@ int setup_APIC_eilvt(u8 offset, u8 vector, u8 msg_type, u8 mask)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(setup_APIC_eilvt);
+
+static __init void init_eilvt(void)
+{
+	if (cpu_feature_enabled(X86_FEATURE_EXTAPIC))
+		apic_eilvt_count = APIC_EFEAT_XLC(apic_read(APIC_EFEAT));
+
+	if (!apic_eilvt_count)
+		apic_eilvt_count = APIC_EILVT_NR_AMD_10H;
+}
 
 /*
  * Program the next event, relative to now
@@ -1644,6 +1655,9 @@ static void setup_local_APIC(void)
 	if (!cpu)
 		cmci_recheck();
 #endif
+
+	if (!apic_eilvt_count)
+		init_eilvt();
 }
 
 static void end_local_APIC_setup(void)
