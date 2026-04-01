@@ -2209,6 +2209,15 @@ static int nvme_update_ns_info_generic(struct nvme_ns *ns,
 	nvme_set_ctrl_limits(ns->ctrl, &lim, false);
 
 	memflags = blk_mq_freeze_queue(ns->disk->queue);
+
+	/*
+	 * Explicitly check for P2PDMA support as BLK_FEAT_PCI_P2PDMA
+	 * is filtered out by queue_limits_stack_bdev().
+	 */
+	if (ns->ctrl->ops->supports_pci_p2pdma &&
+	   ns->ctrl->ops->supports_pci_p2pdma(ns->ctrl))
+		lim.features |= BLK_FEAT_PCI_P2PDMA;
+
 	ret = queue_limits_commit_update(ns->disk->queue, &lim);
 	set_disk_ro(ns->disk, nvme_ns_is_readonly(ns, info));
 	blk_mq_unfreeze_queue(ns->disk->queue, memflags);

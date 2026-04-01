@@ -2189,6 +2189,20 @@ out_fail:
 	nvme_rdma_reconnect_or_remove(ctrl, ret);
 }
 
+static bool nvme_rdma_supports_pci_p2pdma(struct nvme_ctrl *ctrl)
+{
+	struct nvme_rdma_ctrl *r_ctrl = to_rdma_ctrl(ctrl);
+	bool supported = false;
+
+	if (r_ctrl && r_ctrl->device)
+		supported = ib_dma_pci_p2p_dma_supported(r_ctrl->device->dev);
+
+	dev_dbg(ctrl->device, "PCI P2PDMA support result: %s\n",
+			supported ? "PASSED" : "FAILED (HW/Driver restriction)");
+
+	return supported;
+}
+
 static const struct nvme_ctrl_ops nvme_rdma_ctrl_ops = {
 	.name			= "rdma",
 	.module			= THIS_MODULE,
@@ -2203,6 +2217,7 @@ static const struct nvme_ctrl_ops nvme_rdma_ctrl_ops = {
 	.get_address		= nvmf_get_address,
 	.stop_ctrl		= nvme_rdma_stop_ctrl,
 	.get_virt_boundary	= nvme_get_virt_boundary,
+	.supports_pci_p2pdma	= nvme_rdma_supports_pci_p2pdma,
 };
 
 /*
