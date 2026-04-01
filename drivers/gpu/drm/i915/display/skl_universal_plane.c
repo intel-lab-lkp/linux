@@ -1567,7 +1567,8 @@ icl_plane_update_noarm(struct intel_dsb *dsb,
 	plane_color_ctl = plane_state->color_ctl |
 		glk_plane_color_ctl_crtc(crtc_state);
 
-	intel_color_plane_program_pipeline(dsb, plane_state);
+	if (!plane_state->is_y_plane)
+		intel_color_plane_program_pipeline(dsb, plane_state);
 
 	/* The scaler will handle the output position */
 	if (plane_state->scaler_id >= 0) {
