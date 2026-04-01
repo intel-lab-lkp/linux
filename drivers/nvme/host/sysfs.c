@@ -810,6 +810,23 @@ const struct attribute_group nvme_dev_attrs_group = {
 EXPORT_SYMBOL_GPL(nvme_dev_attrs_group);
 
 #ifdef CONFIG_NVME_TCP_TLS
+static ssize_t tls_mode_show(struct device *dev,
+			     struct device_attribute *attr, char *buf)
+{
+	struct nvme_ctrl *ctrl = dev_get_drvdata(dev);
+	const char *mode;
+
+	if (ctrl->opts->tls)
+		mode = "tls";
+	else if (ctrl->opts->concat)
+		mode = "concat";
+	else
+		mode = "none";
+
+	return sysfs_emit(buf, "%s\n", mode);
+}
+static DEVICE_ATTR_RO(tls_mode);
+
 static ssize_t tls_key_show(struct device *dev,
 			    struct device_attribute *attr, char *buf)
 {
@@ -845,6 +862,7 @@ static struct attribute *nvme_tls_attrs[] = {
 	&dev_attr_tls_key.attr,
 	&dev_attr_tls_configured_key.attr,
 	&dev_attr_tls_keyring.attr,
+	&dev_attr_tls_mode.attr,
 	NULL,
 };
 
