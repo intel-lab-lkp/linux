@@ -84,6 +84,9 @@
 #define to_gc0310_sensor(x) container_of(x, struct gc0310_device, sd)
 
 struct gc0310_device {
+	struct device *dev;
+	struct i2c_client *client;
+
 	struct v4l2_subdev sd;
 	struct media_pad pad;
 
@@ -409,28 +412,27 @@ static int gc0310_power_on(struct device *dev)
 
 static int gc0310_detect(struct gc0310_device *sensor)
 {
-	struct i2c_client *client = v4l2_get_subdevdata(&sensor->sd);
 	u64 val;
 	int ret;
 
-	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
+	if (!i2c_check_functionality(sensor->client->adapter, I2C_FUNC_I2C))
 		return -ENODEV;
 
 	ret = cci_read(sensor->regmap, GC0310_SC_CMMN_CHIP_ID_REG, &val, NULL);
 	if (ret < 0) {
-		dev_err(&client->dev, "read sensor_id failed: %d\n", ret);
+		dev_err(sensor->dev, "read sensor_id failed: %d\n", ret);
 		return -ENODEV;
 	}
 
-	dev_dbg(&client->dev, "sensor ID = 0x%llx\n", val);
+	dev_dbg(sensor->dev, "sensor ID = 0x%llx\n", val);
 
 	if (val != GC0310_ID) {
-		dev_err(&client->dev, "sensor ID error, read id = 0x%llx, target id = 0x%x\n",
+		dev_err(sensor->dev, "sensor ID error, read id = 0x%llx, target id = 0x%x\n",
 			val, GC0310_ID);
 		return -ENODEV;
 	}
 
-	dev_dbg(&client->dev, "detect gc0310 success\n");
+	dev_dbg(sensor->dev, "detect gc0310 success\n");
 
 	return 0;
 }
@@ -440,10 +442,9 @@ static int gc0310_enable_streams(struct v4l2_subdev *sd,
 				 u32 pad, u64 streams_mask)
 {
 	struct gc0310_device *sensor = to_gc0310_sensor(sd);
-	struct i2c_client *client = v4l2_get_subdevdata(sd);
 	int ret;
 
-	ret = pm_runtime_resume_and_get(&client->dev);
+	ret = pm_runtime_resume_and_get(sensor->dev);
 	if (ret)
 		return ret;
 
@@ -474,7 +475,7 @@ static int gc0310_enable_streams(struct v4l2_subdev *sd,
 
 error_power_down:
 	if (ret)
-		pm_runtime_put(&client->dev);
+		pm_runtime_put(sensor->dev);
 
 	return ret;
 }
@@ -484,7 +485,6 @@ static int gc0310_disable_streams(struct v4l2_subdev *sd,
 				  u32 pad, u64 streams_mask)
 {
 	struct gc0310_device *sensor = to_gc0310_sensor(sd);
-	struct i2c_client *client = v4l2_get_subdevdata(sd);
 	int ret = 0;
 
 	cci_write(sensor->regmap, GC0310_RESET_RELATED_REG,
@@ -494,7 +494,7 @@ static int gc0310_disable_streams(struct v4l2_subdev *sd,
 	cci_write(sensor->regmap, GC0310_RESET_RELATED_REG,
 		  GC0310_REGISTER_PAGE_0, &ret);
 
-	pm_runtime_put(&client->dev);
+	pm_runtime_put(sensor->dev);
 	return ret;
 }
 
@@ -559,7 +559,6 @@ static const struct v4l2_subdev_internal_ops gc0310_internal_ops = {
 
 static int gc0310_init_controls(struct gc0310_device *sensor)
 {
-	struct i2c_client *client = v4l2_get_subdevdata(&sensor->sd);
 	struct v4l2_ctrl_handler *hdl = &sensor->ctrls.handler;
 	struct v4l2_fwnode_device_properties props;
 	int exp_max, ret;
@@ -597,7 +596,7 @@ static int gc0310_init_controls(struct gc0310_device *sensor)
 				  GC0310_H_BLANK_DEFAULT, 1,
 				  GC0310_H_BLANK_DEFAULT);
 
-	ret = v4l2_fwnode_device_parse(&client->dev, &props);
+	ret = v4l2_fwnode_device_parse(sensor->dev, &props);
 	if (ret)
 		return ret;
 
@@ -621,10 +620,10 @@ static void gc0310_remove(struct i2c_client *client)
 	v4l2_subdev_cleanup(sd);
 	media_entity_cleanup(&sensor->sd.entity);
 	v4l2_ctrl_handler_free(&sensor->ctrls.handler);
-	pm_runtime_disable(&client->dev);
-	if (!pm_runtime_status_suspended(&client->dev)) {
-		gc0310_power_off(&client->dev);
-		pm_runtime_set_suspended(&client->dev);
+	pm_runtime_disable(sensor->dev);
+	if (!pm_runtime_status_suspended(sensor->dev)) {
+		gc0310_power_off(sensor->dev);
+		pm_runtime_set_suspended(sensor->dev);
 	}
 }
 
@@ -695,15 +694,18 @@ static int gc0310_probe(struct i2c_client *client)
 	if (!sensor)
 		return -ENOMEM;
 
-	sensor->reset = devm_gpiod_get(&client->dev, "reset", GPIOD_OUT_HIGH);
+	sensor->client = client;
+	sensor->dev = &client->dev;
+
+	sensor->reset = devm_gpiod_get(sensor->dev, "reset", GPIOD_OUT_HIGH);
 	if (IS_ERR(sensor->reset)) {
-		return dev_err_probe(&client->dev, PTR_ERR(sensor->reset),
+		return dev_err_probe(sensor->dev, PTR_ERR(sensor->reset),
 				     "getting reset GPIO\n");
 	}
 
-	sensor->powerdown = devm_gpiod_get(&client->dev, "powerdown", GPIOD_OUT_HIGH);
+	sensor->powerdown = devm_gpiod_get(sensor->dev, "powerdown", GPIOD_OUT_HIGH);
 	if (IS_ERR(sensor->powerdown)) {
-		return dev_err_probe(&client->dev, PTR_ERR(sensor->powerdown),
+		return dev_err_probe(sensor->dev, PTR_ERR(sensor->powerdown),
 				     "getting powerdown GPIO\n");
 	}
 
@@ -713,11 +715,11 @@ static int gc0310_probe(struct i2c_client *client)
 	if (IS_ERR(sensor->regmap))
 		return PTR_ERR(sensor->regmap);
 
-	gc0310_power_on(&client->dev);
+	gc0310_power_on(sensor->dev);
 
-	pm_runtime_set_active(&client->dev);
-	pm_runtime_get_noresume(&client->dev);
-	pm_runtime_enable(&client->dev);
+	pm_runtime_set_active(sensor->dev);
+	pm_runtime_get_noresume(sensor->dev);
+	pm_runtime_enable(sensor->dev);
 
 	ret = gc0310_detect(sensor);
 	if (ret)
@@ -734,34 +736,34 @@ static int gc0310_probe(struct i2c_client *client)
 
 	ret = media_entity_pads_init(&sensor->sd.entity, 1, &sensor->pad);
 	if (ret) {
-		dev_err_probe(&client->dev, ret, "failed to init entity pads\n");
+		dev_err_probe(sensor->dev, ret, "failed to init entity pads\n");
 		goto error_handler_free;
 	}
 
 	sensor->sd.state_lock = sensor->ctrls.handler.lock;
 	ret = v4l2_subdev_init_finalize(&sensor->sd);
 	if (ret) {
-		dev_err_probe(&client->dev, ret, "subdev init error\n");
+		dev_err_probe(sensor->dev, ret, "subdev init error\n");
 		goto error_media_entity;
 	}
 
 	ret = v4l2_async_register_subdev_sensor(&sensor->sd);
 	if (ret) {
-		dev_err_probe(&client->dev, ret,
+		dev_err_probe(sensor->dev, ret,
 			      "failed to register gc0310 sub-device\n");
 		goto error_subdev_cleanup;
 	}
 
-	pm_runtime_set_autosuspend_delay(&client->dev, 1000);
-	pm_runtime_use_autosuspend(&client->dev);
-	pm_runtime_put_autosuspend(&client->dev);
+	pm_runtime_set_autosuspend_delay(sensor->dev, 1000);
+	pm_runtime_use_autosuspend(sensor->dev);
+	pm_runtime_put_autosuspend(sensor->dev);
 
 	return 0;
 
 error_subdev_cleanup:
 	v4l2_subdev_cleanup(&sensor->sd);
-	pm_runtime_disable(&client->dev);
-	pm_runtime_set_suspended(&client->dev);
+	pm_runtime_disable(sensor->dev);
+	pm_runtime_set_suspended(sensor->dev);
 
 error_media_entity:
 	media_entity_cleanup(&sensor->sd.entity);
@@ -770,8 +772,8 @@ error_handler_free:
 	v4l2_ctrl_handler_free(&sensor->ctrls.handler);
 
 error_power_off:
-	pm_runtime_put_noidle(&client->dev);
-	gc0310_power_off(&client->dev);
+	pm_runtime_put_noidle(sensor->dev);
+	gc0310_power_off(sensor->dev);
 
 	return ret;
 }
