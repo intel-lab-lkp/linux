@@ -46,6 +46,7 @@ void __init memblock_init(void)
 		}
 	}
 
+	min_low_pfn = PFN_UP(memblock_start_of_DRAM());
 	max_pfn = PFN_DOWN(memblock_end_of_DRAM());
 	max_low_pfn = min(PFN_DOWN(HIGHMEM_START), max_pfn);
 	memblock_set_current_limit(PFN_PHYS(max_low_pfn));
