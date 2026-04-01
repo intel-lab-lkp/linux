@@ -488,6 +488,55 @@ TRACE_EVENT(mm_vmscan_lru_shrink_active,
 		show_reclaim_flags(__entry->reclaim_flags))
 );
 
+#ifdef CONFIG_LRU_GEN
+TRACE_EVENT(mm_vmscan_lru_inc_min_seq,
+
+	TP_PROTO(struct mem_cgroup *memcg, int type, int swappiness, unsigned long min_seq),
+
+	TP_ARGS(memcg, type, swappiness, min_seq),
+
+	TP_STRUCT__entry(
+		__field(int, id)
+		__field(int, type)
+		__field(int, swappiness)
+		__field(unsigned long, min_seq)
+	),
+
+	TP_fast_assign(
+		__entry->id = mem_cgroup_id(memcg);
+		__entry->type = type;
+		__entry->swappiness = swappiness;
+		__entry->min_seq = min_seq;
+	),
+
+	TP_printk("memcg_id=%d type=%d swappiness=%d min_seq=%ld",
+		__entry->id, __entry->type,
+		__entry->swappiness, __entry->min_seq)
+);
+
+TRACE_EVENT(mm_vmscan_lru_inc_max_seq,
+
+	TP_PROTO(struct mem_cgroup *memcg, int swappiness, unsigned long max_seq),
+
+	TP_ARGS(memcg, swappiness, max_seq),
+
+	TP_STRUCT__entry(
+		__field(int, id)
+		__field(int, swappiness)
+		__field(unsigned long, max_seq)
+	),
+
+	TP_fast_assign(
+		__entry->id = mem_cgroup_id(memcg);
+		__entry->swappiness = swappiness;
+		__entry->max_seq = max_seq;
+	),
+
+	TP_printk("memcg_id=%d swappiness=%d max_seq=%ld",
+		__entry->id, __entry->swappiness, __entry->max_seq)
+);
+#endif /* CONFIG_LRU_GEN */
+
 TRACE_EVENT(mm_vmscan_node_reclaim_begin,
 
 	TP_PROTO(int nid, int order, gfp_t gfp_flags),

@@ -3848,6 +3848,7 @@ static bool inc_min_seq(struct lruvec *lruvec, int type, int swappiness)
 	int zone;
 	int remaining = MAX_LRU_BATCH;
 	struct lru_gen_folio *lrugen = &lruvec->lrugen;
+	struct mem_cgroup *memcg = lruvec_memcg(lruvec);
 	int hist = lru_hist_from_seq(lrugen->min_seq[type]);
 	int new_gen, old_gen = lru_gen_from_seq(lrugen->min_seq[type]);
 
@@ -3892,6 +3893,7 @@ static bool inc_min_seq(struct lruvec *lruvec, int type, int swappiness)
 done:
 	reset_ctrl_pos(lruvec, type, true);
 	WRITE_ONCE(lrugen->min_seq[type], lrugen->min_seq[type] + 1);
+	trace_mm_vmscan_lru_inc_min_seq(memcg, type, swappiness, lrugen->min_seq[type]);
 
 	return true;
 }
@@ -3902,6 +3904,7 @@ static bool try_to_inc_min_seq(struct lruvec *lruvec, int swappiness)
 	bool success = false;
 	bool seq_inc_flag = false;
 	struct lru_gen_folio *lrugen = &lruvec->lrugen;
+	struct mem_cgroup *memcg = lruvec_memcg(lruvec);
 	DEFINE_MIN_SEQ(lruvec);
 
 	VM_WARN_ON_ONCE(!seq_is_valid(lruvec));
@@ -3947,6 +3950,7 @@ next:
 
 		reset_ctrl_pos(lruvec, type, true);
 		WRITE_ONCE(lrugen->min_seq[type], min_seq[type]);
+		trace_mm_vmscan_lru_inc_min_seq(memcg, type, swappiness, lrugen->min_seq[type]);
 		success = true;
 	}
 
@@ -3959,6 +3963,7 @@ static bool inc_max_seq(struct lruvec *lruvec, unsigned long seq, int swappiness
 	int prev, next;
 	int type, zone;
 	struct lru_gen_folio *lrugen = &lruvec->lrugen;
+	struct mem_cgroup *memcg = lruvec_memcg(lruvec);
 restart:
 	if (seq < READ_ONCE(lrugen->max_seq))
 		return false;
@@ -4012,6 +4017,7 @@ restart:
 	WRITE_ONCE(lrugen->timestamps[next], jiffies);
 	/* make sure preceding modifications appear */
 	smp_store_release(&lrugen->max_seq, lrugen->max_seq + 1);
+	trace_mm_vmscan_lru_inc_max_seq(memcg, swappiness, lrugen->max_seq);
 unlock:
 	spin_unlock_irq(&lruvec->lru_lock);
 
