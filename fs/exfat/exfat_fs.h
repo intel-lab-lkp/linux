@@ -552,6 +552,23 @@ int exfat_read_volume_label(struct super_block *sb,
 int exfat_write_volume_label(struct super_block *sb,
 			     struct exfat_uni_name *label);
 
+static inline int exfat_chain_advance(struct super_block *sb,
+		struct exfat_chain *chain, unsigned int step)
+{
+	if (chain->size >= step)
+		chain->size -= step;
+	else
+		return -EIO;
+
+	if (exfat_fat_walk(sb, &chain->dir, step, chain->flags))
+		return -EIO;
+
+	if (chain->size == 0 && chain->flags == ALLOC_NO_FAT_CHAIN)
+		chain->dir = EXFAT_EOF_CLUSTER;
+
+	return 0;
+}
+
 /* inode.c */
 extern const struct inode_operations exfat_file_inode_operations;
 void exfat_sync_inode(struct inode *inode);
