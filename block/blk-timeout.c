@@ -42,7 +42,7 @@ ssize_t part_timeout_show(struct device *dev, struct device_attribute *attr,
 	struct gendisk *disk = dev_to_disk(dev);
 	int set = test_bit(QUEUE_FLAG_FAIL_IO, &disk->queue->queue_flags);
 
-	return sprintf(buf, "%d\n", set != 0);
+	return sysfs_emit(buf, "%d\n", set != 0);
 }
 
 ssize_t part_timeout_store(struct device *dev, struct device_attribute *attr,
