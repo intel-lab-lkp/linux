@@ -780,7 +780,7 @@ static int init_one_mc(struct mc_priv *priv, struct platform_device *pdev, int i
 	struct device *dev;
 	enum dev_type dt;
 	char name[MC_NAME_LEN];
-	int rc;
+	int rc = -ENOMEM;
 
 	config = priv->adec[CONF + i * ADEC_NUM];
 	num_chans = FIELD_GET(MC5_NUM_CHANS_MASK, config);
@@ -812,10 +812,15 @@ static int init_one_mc(struct mc_priv *priv, struct platform_device *pdev, int i
 	layers[1].size = num_chans;
 	layers[1].is_virt_csrow = false;
 
-	rc = -ENOMEM;
 	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev)
 		return rc;
+
+	sprintf(name, "versal-net-ddrmc5-edac-%d", i);
+
+	dev->init_name = name;
+	dev->release = versal_edac_release;
+	device_initialize(dev);
 
 	mci = edac_mc_alloc(i, ARRAY_SIZE(layers), layers, sizeof(struct mc_priv));
 	if (!mci) {
@@ -823,12 +828,7 @@ static int init_one_mc(struct mc_priv *priv, struct platform_device *pdev, int i
 		goto err_dev_free;
 	}
 
-	sprintf(name, "versal-net-ddrmc5-edac-%d", i);
-
-	dev->init_name = name;
-	dev->release = versal_edac_release;
-
-	rc = device_register(dev);
+	rc = device_add(dev);
 	if (rc)
 		goto err_mc_free;
 
@@ -849,11 +849,11 @@ static int init_one_mc(struct mc_priv *priv, struct platform_device *pdev, int i
 	return 0;
 
 err_unreg:
-	device_unregister(mci->pdev);
+	device_del(dev);
 err_mc_free:
 	edac_mc_free(mci);
 err_dev_free:
-	kfree(dev);
+	put_device(dev);
 
 	return rc;
 }
