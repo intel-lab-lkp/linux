@@ -112,4 +112,15 @@ struct ionic_srq_resp {
 	__aligned_u64 rq_cmb_offset;
 };
 
+struct ionic_phc_state {
+	__u32 seq;
+	__u32 rsvd;
+	__aligned_u64 mask;
+	__aligned_u64 tick;
+	__aligned_u64 nsec;
+	__aligned_u64 frac;
+	__u32 mult;
+	__u32 shift;
+};
+
 #endif /* IONIC_ABI_H */
