@@ -385,8 +385,6 @@ static void read_lpar_name(struct seq_file *m)
 		read_dt_lpar_name(m);
 }
 
-#define SPLPAR_MAXLENGTH 1026*(sizeof(char))
-
 /*
  * parse_system_parameter_string()
  * Retrieve the potential_processors, max_entitled_capacity and friends
@@ -407,27 +405,32 @@ static void parse_system_parameter_string(struct seq_file *m)
 		const char *local_buffer;
 		int splpar_strlen;
 		int idx, w_idx;
-		char *workbuffer = kzalloc(SPLPAR_MAXLENGTH, GFP_KERNEL);
-
-		if (!workbuffer)
-			goto out_free;
+		size_t workbuf_size;
+		char *workbuffer;
 
 		splpar_strlen = be16_to_cpu(buf->len);
 		local_buffer = buf->val;
+		workbuf_size = splpar_strlen + 1;
+
+		workbuffer = kzalloc(workbuf_size, GFP_KERNEL);
+		if (!workbuffer)
+			goto out_free;
 
 		w_idx = 0;
 		idx = 0;
-		while ((*local_buffer) && (idx < splpar_strlen)) {
+		while ((idx < splpar_strlen) && local_buffer[idx]) {
 			workbuffer[w_idx++] = local_buffer[idx++];
-			if ((local_buffer[idx] == ',')
+			if (idx >= splpar_strlen ||
+			    (local_buffer[idx] == ',')
 			    || (local_buffer[idx] == '\0')) {
 				workbuffer[w_idx] = '\0';
 				if (w_idx) {
 					/* avoid the empty string */
 					seq_printf(m, "%s\n", workbuffer);
 				}
-				memset(workbuffer, 0, SPLPAR_MAXLENGTH);
-				idx++;	/* skip the comma */
+				memset(workbuffer, 0, workbuf_size);
+				if (idx < splpar_strlen)
+					idx++;	/* skip the comma */
 				w_idx = 0;
 			} else if (local_buffer[idx] == '=') {
 				/* code here to replace workbuffer contents
