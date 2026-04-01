@@ -1991,6 +1991,7 @@ static int check_lock_contention_options(const struct option *options,
 
 static int __cmd_contention(int argc, const char **argv)
 {
+	sigset_t sigchld_mask, oldmask;
 	int err = -EINVAL;
 	struct perf_tool eops;
 	struct perf_data data = {
@@ -2064,6 +2065,15 @@ static int __cmd_contention(int argc, const char **argv)
 		signal(SIGCHLD, sighandler);
 		signal(SIGTERM, sighandler);
 
+		/*
+		 * Block SIGCHLD early so that a short-lived workload
+		 * cannot deliver the signal before sigsuspend() is
+		 * entered below.
+		 */
+		sigemptyset(&sigchld_mask);
+		sigaddset(&sigchld_mask, SIGCHLD);
+		sigprocmask(SIG_BLOCK, &sigchld_mask, &oldmask);
+
 		con.evlist = evlist__new();
 		if (con.evlist == NULL) {
 			err = -ENOMEM;
@@ -2127,8 +2137,14 @@ static int __cmd_contention(int argc, const char **argv)
 		if (argc)
 			evlist__start_workload(con.evlist);
 
-		/* wait for signal */
-		pause();
+		/*
+		 * Use sigsuspend() instead of pause() to avoid a race
+		 * where a short-lived workload exits and delivers SIGCHLD
+		 * before pause() is entered. sigsuspend() atomically
+		 * unblocks SIGCHLD (blocked above) and suspends.
+		 */
+		sigsuspend(&oldmask);
+		sigprocmask(SIG_SETMASK, &oldmask, NULL);
 
 		lock_contention_stop();
 		lock_contention_read(&con);
