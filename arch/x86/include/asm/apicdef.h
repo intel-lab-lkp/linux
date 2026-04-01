@@ -140,7 +140,6 @@
 #define APIC_IER	0x480
 #define APIC_EILVTn(n)	(0x500 + 0x10 * n)
 #define		APIC_EILVT_NR_AMD_10H	4
-#define		APIC_EILVT_NR_MAX	APIC_EILVT_NR_AMD_10H
 
 #define APIC_BASE (fix_to_virt(FIX_APIC_BASE))
 #define APIC_BASE_MSR		0x800
