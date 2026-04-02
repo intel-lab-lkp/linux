@@ -57,6 +57,7 @@
 #include <linux/file.h>
 #include <linux/firmware.h>
 #include <linux/fs.h>
+#include <linux/if_arp.h>
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
 #include <linux/io-pgtable.h>
@@ -66,6 +67,8 @@
 #include <linux/mdio.h>
 #include <linux/mm.h>
 #include <linux/miscdevice.h>
+#include <linux/netdevice.h>
+#include <linux/netlink.h>
 #include <linux/of_device.h>
 #include <linux/pci.h>
 #include <linux/phy.h>
@@ -88,6 +91,7 @@
 #include <linux/wait.h>
 #include <linux/workqueue.h>
 #include <linux/xarray.h>
+#include <net/rtnetlink.h>
 #include <trace/events/rust_sample.h>
 
 /*
