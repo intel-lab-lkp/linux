@@ -488,6 +488,54 @@ static int elf_read(struct file *file, void *buf, size_t len, loff_t pos)
 	return 0;
 }
 
+/*
+ * Return the largest folio alignment for a PT_LOAD segment, so the
+ * hardware can coalesce PTEs (e.g. arm64 contpte) or use PMD mappings
+ * for large folios.
+ *
+ * Try PMD alignment so large folios can be PMD-mapped. Then try
+ * exec_folio_order() alignment for hardware TLB coalescing (e.g.
+ * arm64 contpte/HPA).
+ *
+ * Use the largest power-of-2 that fits within the segment size, capped
+ * by the target folio size.
+ * Only align when the segment's virtual address and file offset are
+ * already aligned to that size, as misalignment would prevent coalescing
+ * anyway.
+ *
+ * The segment size check avoids reducing ASLR entropy for small binaries
+ * that cannot benefit.
+ */
+static unsigned long folio_alignment(struct elf_phdr *cmd)
+{
+	unsigned long alignment = 0;
+	unsigned long seg_size;
+
+	if (!cmd->p_filesz)
+		return 0;
+
+	seg_size = rounddown_pow_of_two(cmd->p_filesz);
+
+	if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE)) {
+		unsigned long size = min(seg_size, HPAGE_PMD_SIZE);
+
+		if (size > PAGE_SIZE &&
+		    IS_ALIGNED(cmd->p_vaddr | cmd->p_offset, size))
+			alignment = size;
+	}
+
+	if (!alignment && exec_folio_order()) {
+		unsigned long size = min(seg_size,
+					PAGE_SIZE << exec_folio_order());
+
+		if (size > PAGE_SIZE &&
+		    IS_ALIGNED(cmd->p_vaddr | cmd->p_offset, size))
+			alignment = size;
+	}
+
+	return alignment;
+}
+
 static unsigned long maximum_alignment(struct elf_phdr *cmds, int nr)
 {
 	unsigned long alignment = 0;
@@ -501,6 +549,8 @@ static unsigned long maximum_alignment(struct elf_phdr *cmds, int nr)
 			if (!is_power_of_2(p_align))
 				continue;
 			alignment = max(alignment, p_align);
+			alignment = max(alignment,
+					folio_alignment(&cmds[i]));
 		}
 	}
 
