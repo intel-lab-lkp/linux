@@ -272,7 +272,9 @@ struct scsi_device {
 #define SCSI_DEFAULT_DEVICE_BLOCKED	3
 
 	atomic_t iorequest_cnt;
-	atomic_t iodone_cnt;
+	/* ensure iorequest_cnt and iodone_cnt are on different cache lines to avoid significant
+	   performance hits on cache line contention on some CPU architectures */
+	atomic_t iodone_cnt ____cacheline_aligned_in_smp;
 	atomic_t ioerr_cnt;
 	atomic_t iotmo_cnt;
 
