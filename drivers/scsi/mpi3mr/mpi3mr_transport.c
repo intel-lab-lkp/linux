@@ -1139,9 +1139,7 @@ void mpi3mr_sas_host_refresh(struct mpi3mr_ioc *mrioc)
 	    "updating handles for sas_host(0x%016llx)\n",
 	    (unsigned long long)mrioc->sas_hba.sas_address);
 
-	sz = offsetof(struct mpi3_sas_io_unit_page0, phy_data) +
-	    (mrioc->sas_hba.num_phys *
-	     sizeof(struct mpi3_sas_io_unit0_phy_data));
+	sz = struct_size(sas_io_unit_pg0, phy_data, mrioc->sas_hba.num_phys);
 	sas_io_unit_pg0 = kzalloc(sz, GFP_KERNEL);
 	if (!sas_io_unit_pg0)
 		return;
@@ -1203,8 +1201,7 @@ void mpi3mr_sas_host_add(struct mpi3mr_ioc *mrioc)
 	struct mpi3_enclosure_page0 encl_pg0;
 	struct mpi3_device0_sas_sata_format *sasinf;
 
-	sz = offsetof(struct mpi3_sas_io_unit_page0, phy_data) +
-	    (num_phys * sizeof(struct mpi3_sas_io_unit0_phy_data));
+	sz = struct_size(sas_io_unit_pg0, phy_data, num_phys);
 	sas_io_unit_pg0 = kzalloc(sz, GFP_KERNEL);
 	if (!sas_io_unit_pg0)
 		return;
@@ -1226,8 +1223,7 @@ void mpi3mr_sas_host_add(struct mpi3mr_ioc *mrioc)
 
 	mrioc->sas_hba.num_phys = num_phys;
 
-	sz = offsetof(struct mpi3_sas_io_unit_page0, phy_data) +
-	    (num_phys * sizeof(struct mpi3_sas_io_unit0_phy_data));
+	sz = struct_size(sas_io_unit_pg0, phy_data, num_phys);
 	sas_io_unit_pg0 = kzalloc(sz, GFP_KERNEL);
 	if (!sas_io_unit_pg0)
 		return;
@@ -1713,12 +1709,11 @@ mpi3mr_refresh_sas_ports(struct mpi3mr_ioc *mrioc)
 	struct mpi3_device0_sas_sata_format *sasinf;
 	struct mpi3mr_sas_port *mr_sas_port;
 
-	sz = offsetof(struct mpi3_sas_io_unit_page0, phy_data) +
-		(mrioc->sas_hba.num_phys *
-		 sizeof(struct mpi3_sas_io_unit0_phy_data));
+	sz = struct_size(sas_io_unit_pg0, phy_data, mrioc->sas_hba.num_phys);
 	sas_io_unit_pg0 = kzalloc(sz, GFP_KERNEL);
 	if (!sas_io_unit_pg0)
 		return;
+
 	h_port = kzalloc_objs(struct host_port, 64);
 	if (!h_port)
 		goto out;
@@ -3014,9 +3009,7 @@ mpi3mr_transport_phy_enable(struct sas_phy *phy, int enable)
 		    SMP_PHY_CONTROL_DISABLE);
 
 	/* handle hba phys */
-	sz = offsetof(struct mpi3_sas_io_unit_page0, phy_data) +
-		(mrioc->sas_hba.num_phys *
-		 sizeof(struct mpi3_sas_io_unit0_phy_data));
+	sz = struct_size(sas_io_unit_pg0, phy_data, mrioc->sas_hba.num_phys);
 	sas_io_unit_pg0 = kzalloc(sz, GFP_KERNEL);
 	if (!sas_io_unit_pg0) {
 		rc = -ENOMEM;
@@ -3056,9 +3049,7 @@ mpi3mr_transport_phy_enable(struct sas_phy *phy, int enable)
 	}
 
 	/* read sas_iounit page 1 */
-	sz = offsetof(struct mpi3_sas_io_unit_page1, phy_data) +
-		(mrioc->sas_hba.num_phys *
-		 sizeof(struct mpi3_sas_io_unit1_phy_data));
+	sz = struct_size(sas_io_unit_pg1, phy_data, mrioc->sas_hba.num_phys);
 	sas_io_unit_pg1 = kzalloc(sz, GFP_KERNEL);
 	if (!sas_io_unit_pg1) {
 		rc = -ENOMEM;
@@ -3134,9 +3125,7 @@ mpi3mr_transport_phy_speed(struct sas_phy *phy, struct sas_phy_linkrates *rates)
 	}
 
 	/* handle hba phys */
-	sz = offsetof(struct mpi3_sas_io_unit_page1, phy_data) +
-		(mrioc->sas_hba.num_phys *
-		 sizeof(struct mpi3_sas_io_unit1_phy_data));
+	sz = struct_size(sas_io_unit_pg1, phy_data, mrioc->sas_hba.num_phys);
 	sas_io_unit_pg1 = kzalloc(sz, GFP_KERNEL);
 	if (!sas_io_unit_pg1) {
 		rc = -ENOMEM;
