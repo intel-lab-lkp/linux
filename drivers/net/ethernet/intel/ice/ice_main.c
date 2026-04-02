@@ -5646,6 +5646,16 @@ static int ice_resume(struct device *dev)
 	/* Restart the service task */
 	mod_timer(&pf->serv_tmr, round_jiffies(jiffies + pf->serv_tmr_period));
 
+	/* Wait for the scheduled reset to finish so that the device is fully
+	 * operational before returning. Without this, userspace (e.g.
+	 * NetworkManager) may try to open the net device while the
+	 * asynchronous reset and rebuild is still in progress, resulting in
+	 * "can't open net device while reset is in progress" errors.
+	 */
+	ret = ice_wait_for_reset(pf, 10 * HZ);
+	if (ret)
+		dev_err(dev, "Wait for reset failed during resume: %d\n", ret);
+
 	return 0;
 }
 
