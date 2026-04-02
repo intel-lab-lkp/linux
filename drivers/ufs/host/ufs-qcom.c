@@ -2186,6 +2186,16 @@ struct ufs_qcom_irq {
 	struct ufs_hba		*hba;
 };
 
+static irqreturn_t ufs_qcom_mcq_threaded_esi_handler(int irq, void *data)
+{
+	struct ufs_qcom_irq *qi = data;
+	struct ufs_hba *hba = qi->hba;
+
+	ufshcd_mcq_poll_cqe_lock(hba, &hba->uhq[qi->idx]);
+
+	return IRQ_HANDLED;
+}
+
 static irqreturn_t ufs_qcom_mcq_esi_handler(int irq, void *data)
 {
 	struct ufs_qcom_irq *qi = data;
@@ -2193,9 +2203,22 @@ static irqreturn_t ufs_qcom_mcq_esi_handler(int irq, void *data)
 	struct ufs_hw_queue *hwq = &hba->uhq[qi->idx];
 
 	ufshcd_mcq_write_cqis(hba, 0x1, qi->idx);
-	ufshcd_mcq_poll_cqe_lock(hba, hwq);
 
-	return IRQ_HANDLED;
+	if (arch_scale_cpu_capacity(raw_smp_processor_id()) ==
+	    SCHED_CAPACITY_SCALE) {
+		ufshcd_mcq_poll_cqe_lock(hba, hwq);
+		return IRQ_HANDLED;
+	}
+
+	if (ufshcd_mcq_poll_n_cqe_lock(hba, hwq, 4) < 4)
+		return IRQ_HANDLED;
+
+	/*
+	 * Defer further completion processing to thread context because
+	 * processing a large number of completions in interrupt context on
+	 * slower CPU cores can result in unacceptably high interrupt latencies.
+	 */
+	return IRQ_WAKE_THREAD;
 }
 
 static int ufs_qcom_config_esi(struct ufs_hba *hba)
@@ -2231,8 +2254,10 @@ static int ufs_qcom_config_esi(struct ufs_hba *hba)
 		qi[idx].idx = idx;
 		qi[idx].hba = hba;
 
-		ret = devm_request_irq(hba->dev, qi[idx].irq, ufs_qcom_mcq_esi_handler,
-				       IRQF_SHARED, "qcom-mcq-esi", qi + idx);
+		ret = devm_request_threaded_irq(hba->dev, qi[idx].irq,
+			ufs_qcom_mcq_esi_handler,
+			ufs_qcom_mcq_threaded_esi_handler,
+			IRQF_SHARED | IRQF_ONESHOT, "qcom-mcq-esi", qi + idx);
 		if (ret) {
 			dev_err(hba->dev, "%s: Failed to request IRQ for %d, err = %d\n",
 				__func__, qi[idx].irq, ret);
