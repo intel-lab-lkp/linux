@@ -1,3 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0-only
 config RESET_RTK_COMMON
 	bool
+	select AUXILIARY_BUS
+	default COMMON_CLK_RTD1625
