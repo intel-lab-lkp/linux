@@ -323,7 +323,7 @@ static void bio_associate_blkg_from_page(struct bio *bio, struct folio *folio)
 struct swap_iocb {
 	struct kiocb		iocb;
 	struct bio_vec		bvec[SWAP_CLUSTER_MAX];
-	int			pages;
+	int			bvecs;
 	int			len;
 };
 static mempool_t *sio_pool;
@@ -358,14 +358,14 @@ static void sio_write_complete(struct kiocb *iocb, long ret)
 		 */
 		pr_err_ratelimited("Write error %ld on dio swapfile (%llu)\n",
 				   ret, swap_dev_pos(page_swap_entry(page)));
-		for (p = 0; p < sio->pages; p++) {
+		for (p = 0; p < sio->bvecs; p++) {
 			page = sio->bvec[p].bv_page;
 			set_page_dirty(page);
 			ClearPageReclaim(page);
 		}
 	}
 
-	for (p = 0; p < sio->pages; p++)
+	for (p = 0; p < sio->bvecs; p++)
 		end_page_writeback(sio->bvec[p].bv_page);
 
 	mempool_free(sio, sio_pool);
@@ -393,13 +393,13 @@ static void swap_writepage_fs(struct folio *folio, struct swap_iocb **swap_plug)
 		init_sync_kiocb(&sio->iocb, swap_file);
 		sio->iocb.ki_complete = sio_write_complete;
 		sio->iocb.ki_pos = pos;
-		sio->pages = 0;
+		sio->bvecs = 0;
 		sio->len = 0;
 	}
-	bvec_set_folio(&sio->bvec[sio->pages], folio, folio_size(folio), 0);
+	bvec_set_folio(&sio->bvec[sio->bvecs], folio, folio_size(folio), 0);
 	sio->len += folio_size(folio);
-	sio->pages += 1;
-	if (sio->pages == ARRAY_SIZE(sio->bvec) || !swap_plug) {
+	sio->bvecs += 1;
+	if (sio->bvecs == ARRAY_SIZE(sio->bvec) || !swap_plug) {
 		swap_write_unplug(sio);
 		sio = NULL;
 	}
@@ -473,7 +473,7 @@ void swap_write_unplug(struct swap_iocb *sio)
 	struct address_space *mapping = sio->iocb.ki_filp->f_mapping;
 	int ret;
 
-	iov_iter_bvec(&from, ITER_SOURCE, sio->bvec, sio->pages, sio->len);
+	iov_iter_bvec(&from, ITER_SOURCE, sio->bvec, sio->bvecs, sio->len);
 	ret = mapping->a_ops->swap_rw(&sio->iocb, &from);
 	if (ret != -EIOCBQUEUED)
 		sio_write_complete(&sio->iocb, ret);
@@ -485,7 +485,7 @@ static void sio_read_complete(struct kiocb *iocb, long ret)
 	int p;
 
 	if (ret == sio->len) {
-		for (p = 0; p < sio->pages; p++) {
+		for (p = 0; p < sio->bvecs; p++) {
 			struct folio *folio = page_folio(sio->bvec[p].bv_page);
 
 			count_mthp_stat(folio_order(folio), MTHP_STAT_SWPIN);
@@ -495,7 +495,7 @@ static void sio_read_complete(struct kiocb *iocb, long ret)
 		}
 		count_vm_events(PSWPIN, sio->len >> PAGE_SHIFT);
 	} else {
-		for (p = 0; p < sio->pages; p++) {
+		for (p = 0; p < sio->bvecs; p++) {
 			struct folio *folio = page_folio(sio->bvec[p].bv_page);
 
 			folio_unlock(folio);
@@ -555,13 +555,13 @@ static void swap_read_folio_fs(struct folio *folio, struct swap_iocb **plug)
 		init_sync_kiocb(&sio->iocb, sis->swap_file);
 		sio->iocb.ki_pos = pos;
 		sio->iocb.ki_complete = sio_read_complete;
-		sio->pages = 0;
+		sio->bvecs = 0;
 		sio->len = 0;
 	}
-	bvec_set_folio(&sio->bvec[sio->pages], folio, folio_size(folio), 0);
+	bvec_set_folio(&sio->bvec[sio->bvecs], folio, folio_size(folio), 0);
 	sio->len += folio_size(folio);
-	sio->pages += 1;
-	if (sio->pages == ARRAY_SIZE(sio->bvec) || !plug) {
+	sio->bvecs += 1;
+	if (sio->bvecs == ARRAY_SIZE(sio->bvec) || !plug) {
 		swap_read_unplug(sio);
 		sio = NULL;
 	}
@@ -662,7 +662,7 @@ void __swap_read_unplug(struct swap_iocb *sio)
 	struct address_space *mapping = sio->iocb.ki_filp->f_mapping;
 	int ret;
 
-	iov_iter_bvec(&from, ITER_DEST, sio->bvec, sio->pages, sio->len);
+	iov_iter_bvec(&from, ITER_DEST, sio->bvec, sio->bvecs, sio->len);
 	ret = mapping->a_ops->swap_rw(&sio->iocb, &from);
 	if (ret != -EIOCBQUEUED)
 		sio_read_complete(&sio->iocb, ret);
