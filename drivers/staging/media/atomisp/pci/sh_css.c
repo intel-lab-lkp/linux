@@ -65,7 +65,6 @@
 
 #define SH_CSS_VIDEO_BUFFER_ALIGNMENT 0
 
-
 #include "ia_css_spctrl.h"
 #include "ia_css_version_data.h"
 #include "sh_css_struct.h"
@@ -101,7 +100,7 @@ enum ia_sh_css_modes {
 	sh_css_mode_resume
 };
 
-/**
+/*
  * struct sh_css_stream_seed - a stream seed, to save and restore the
  * stream data.
  *
@@ -115,7 +114,7 @@ enum ia_sh_css_modes {
  *
  * the stream seed contains all the data required to "grow" the seed again
  * after it was closed.
-*/
+ */
 struct sh_css_stream_seed {
 	struct ia_css_stream		**orig_stream;
 	struct ia_css_stream		*stream;
@@ -208,11 +207,11 @@ need_capture_pp(const struct ia_css_pipe *pipe);
 static bool
 need_yuv_scaler_stage(const struct ia_css_pipe *pipe);
 
-static int ia_css_pipe_create_cas_scaler_desc_single_output(
-    struct ia_css_frame_info *cas_scaler_in_info,
-    struct ia_css_frame_info *cas_scaler_out_info,
-    struct ia_css_frame_info *cas_scaler_vf_info,
-    struct ia_css_cas_binary_descr *descr);
+static int
+ia_css_pipe_create_cas_scaler_desc_single_output(struct ia_css_frame_info *cas_scaler_in_info,
+						 struct ia_css_frame_info *cas_scaler_out_info,
+						 struct ia_css_frame_info *cas_scaler_vf_info,
+						 struct ia_css_cas_binary_descr *descr);
 
 static void ia_css_pipe_destroy_cas_scaler_desc(struct ia_css_cas_binary_descr
 	*descr);
@@ -226,11 +225,10 @@ static bool need_capt_ldc(const struct ia_css_pipe *pipe);
 static int
 sh_css_pipe_load_binaries(struct ia_css_pipe *pipe);
 
-static
-int sh_css_pipe_get_viewfinder_frame_info(
-    struct ia_css_pipe *pipe,
-    struct ia_css_frame_info *info,
-    unsigned int idx);
+static int
+sh_css_pipe_get_viewfinder_frame_info(struct ia_css_pipe *pipe,
+				      struct ia_css_frame_info *info,
+				      unsigned int idx);
 
 static int
 sh_css_pipe_get_output_frame_info(struct ia_css_pipe *pipe,
@@ -305,8 +303,8 @@ create_host_yuvpp_pipeline(struct ia_css_pipe *pipe);
 static unsigned int
 sh_css_get_sw_interrupt_value(unsigned int irq);
 
-static struct ia_css_binary *ia_css_pipe_get_shading_correction_binary(
-    const struct ia_css_pipe *pipe);
+static struct ia_css_binary *
+ia_css_pipe_get_shading_correction_binary(const struct ia_css_pipe *pipe);
 
 static struct ia_css_binary *
 ia_css_pipe_get_s3a_binary(const struct ia_css_pipe *pipe);
@@ -470,10 +468,9 @@ sh_css_config_input_network_2400(struct ia_css_stream *stream)
 	if (pipe->pipeline.stages)
 		binary = pipe->pipeline.stages->binary;
 
-	err = ia_css_isys_convert_stream_format_to_mipi_format(
-	    stream->config.input_config.format,
-	    stream->csi_rx_config.comp,
-	    &fmt_type);
+	err = ia_css_isys_convert_stream_format_to_mipi_format(stream->config.input_config.format,
+							       stream->csi_rx_config.comp,
+							       &fmt_type);
 	if (err)
 		return err;
 	sh_css_sp_program_input_circuit(fmt_type,
@@ -504,9 +501,9 @@ sh_css_config_input_network_2400(struct ia_css_stream *stream)
 	return 0;
 }
 
-static unsigned int csi2_protocol_calculate_max_subpixels_per_line(
-    enum atomisp_input_format	format,
-    unsigned int			pixels_per_line)
+static unsigned int
+csi2_protocol_calculate_max_subpixels_per_line(enum atomisp_input_format format,
+					       unsigned int pixels_per_line)
 {
 	unsigned int rval;
 
@@ -629,9 +626,9 @@ static unsigned int csi2_protocol_calculate_max_subpixels_per_line(
 	return rval;
 }
 
-static bool sh_css_translate_stream_cfg_to_input_system_input_port_id(
-    struct ia_css_stream_config *stream_cfg,
-    ia_css_isys_descr_t	*isys_stream_descr)
+static bool
+sh_css_translate_stream_cfg_to_input_system_input_port_id(struct ia_css_stream_config *stream_cfg,
+							  ia_css_isys_descr_t *isys_stream_descr)
 {
 	bool rc;
 
@@ -665,9 +662,9 @@ static bool sh_css_translate_stream_cfg_to_input_system_input_port_id(
 	return rc;
 }
 
-static bool sh_css_translate_stream_cfg_to_input_system_input_port_type(
-    struct ia_css_stream_config *stream_cfg,
-    ia_css_isys_descr_t	*isys_stream_descr)
+static bool
+sh_css_translate_stream_cfg_to_input_system_input_port_type(struct ia_css_stream_config *stream_cfg,
+							    ia_css_isys_descr_t *isys_stream_descr)
 {
 	bool rc;
 
@@ -692,10 +689,10 @@ static bool sh_css_translate_stream_cfg_to_input_system_input_port_type(
 	return rc;
 }
 
-static bool sh_css_translate_stream_cfg_to_input_system_input_port_attr(
-    struct ia_css_stream_config *stream_cfg,
-    ia_css_isys_descr_t	*isys_stream_descr,
-    int isys_stream_idx)
+static bool
+sh_css_translate_stream_cfg_to_input_system_input_port_attr(struct ia_css_stream_config *stream_cfg,
+							    ia_css_isys_descr_t	*isys_stream_descr,
+							    int isys_stream_idx)
 {
 	bool rc;
 
@@ -726,9 +723,9 @@ static bool sh_css_translate_stream_cfg_to_input_system_input_port_attr(
 		unsigned int fmt_type;
 
 		err = ia_css_isys_convert_stream_format_to_mipi_format(
-			  stream_cfg->isys_config[isys_stream_idx].format,
-			  MIPI_PREDICTOR_NONE,
-			  &fmt_type);
+				stream_cfg->isys_config[isys_stream_idx].format,
+				MIPI_PREDICTOR_NONE,
+				&fmt_type);
 		if (err)
 			rc = false;
 
@@ -740,9 +737,8 @@ static bool sh_css_translate_stream_cfg_to_input_system_input_port_attr(
 		if (IS_ISP2401)
 			isys_stream_descr->online = stream_cfg->online;
 
-		err |= ia_css_isys_convert_compressed_format(
-			   &stream_cfg->source.port.compression,
-			   isys_stream_descr);
+		err |= ia_css_isys_convert_compressed_format(&stream_cfg->source.port.compression,
+							     isys_stream_descr);
 		if (err)
 			rc = false;
 
@@ -750,9 +746,9 @@ static bool sh_css_translate_stream_cfg_to_input_system_input_port_attr(
 		isys_stream_descr->metadata.enable = false;
 		if (stream_cfg->metadata_config.resolution.height > 0) {
 			err = ia_css_isys_convert_stream_format_to_mipi_format(
-				  stream_cfg->metadata_config.data_type,
-				  MIPI_PREDICTOR_NONE,
-				  &fmt_type);
+					stream_cfg->metadata_config.data_type,
+					MIPI_PREDICTOR_NONE,
+					&fmt_type);
 			if (err)
 				rc = false;
 			isys_stream_descr->metadata.fmt_type = fmt_type;
@@ -787,10 +783,11 @@ static bool sh_css_translate_stream_cfg_to_input_system_input_port_attr(
 	return rc;
 }
 
-static bool sh_css_translate_stream_cfg_to_input_system_input_port_resolution(
-    struct ia_css_stream_config *stream_cfg,
-    ia_css_isys_descr_t	*isys_stream_descr,
-    int isys_stream_idx)
+static bool
+sh_css_translate_stream_cfg_to_input_system_input_port_resolution(
+		struct ia_css_stream_config *stream_cfg,
+		ia_css_isys_descr_t *isys_stream_descr,
+		int isys_stream_idx)
 {
 	unsigned int bits_per_subpixel;
 	unsigned int max_subpixels_per_line;
@@ -840,11 +837,11 @@ static bool sh_css_translate_stream_cfg_to_input_system_input_port_resolution(
 	return true;
 }
 
-static bool sh_css_translate_stream_cfg_to_isys_stream_descr(
-    struct ia_css_stream_config *stream_cfg,
-    bool early_polling,
-    ia_css_isys_descr_t	*isys_stream_descr,
-    int isys_stream_idx)
+static bool
+sh_css_translate_stream_cfg_to_isys_stream_descr(struct ia_css_stream_config *stream_cfg,
+						 bool early_polling,
+						 ia_css_isys_descr_t *isys_stream_descr,
+						 int isys_stream_idx)
 {
 	bool rc;
 
@@ -2256,8 +2253,7 @@ alloc_continuous_frames(struct ia_css_pipe *pipe, bool init_time)
 		ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE_PRIVATE,
 				    "alloc_continuous_frames() IA_CSS_FRAME_FORMAT_RAW_PACKED\n");
 		ref_info.format = IA_CSS_FRAME_FORMAT_RAW_PACKED;
-	} else
-	{
+	} else {
 		ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE_PRIVATE,
 				    "alloc_continuous_frames() IA_CSS_FRAME_FORMAT_RAW\n");
 		ref_info.format = IA_CSS_FRAME_FORMAT_RAW;
@@ -7856,8 +7852,7 @@ ia_css_stream_create(const struct ia_css_stream_config *stream_config,
 
 	/* check if mipi size specified */
 	if (stream_config->mode == IA_CSS_INPUT_MODE_BUFFERED_SENSOR)
-		if (!IS_ISP2401 || !stream_config->online)
-		{
+		if (!IS_ISP2401 || !stream_config->online) {
 			unsigned int port = (unsigned int)stream_config->source.port.port;
 
 			if (port >= N_MIPI_PORT_ID) {
