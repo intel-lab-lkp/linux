@@ -15,7 +15,9 @@ allOf:
 
 properties:
   compatible:
-    const: amd,versal2-mdb-host
+    enum:
+      - amd,versal2-mdb-host
+      - amd,versal2-cpm6-host
 
   reg:
     items:
