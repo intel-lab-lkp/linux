@@ -548,6 +548,12 @@ static int emc2305_of_parse_pwm_child(struct device *dev,
 		return ret;
 	}
 
+	if (ch >= data->pwm_num) {
+		dev_err(dev, "invalid reg %u for node %pOF (valid range 0-%u)\n", ch, child,
+			data->pwm_num - 1);
+		return -EINVAL;
+	}
+
 	ret = of_parse_phandle_with_args(child, "pwms", "#pwm-cells", 0, &args);
 
 	if (ret)
