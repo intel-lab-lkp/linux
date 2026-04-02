@@ -74,11 +74,13 @@ static void __gfs2_ail_flush(struct gfs2_glock *gl, bool fsync,
 			if (fsync)
 				continue;
 			gfs2_ail_error(gl, bh);
+			continue;
 		}
 		gfs2_trans_add_revoke(sdp, bd);
 		nr_revokes--;
 	}
-	GLOCK_BUG_ON(gl, !fsync && atomic_read(&gl->gl_ail_count));
+	GLOCK_BUG_ON(gl, !fsync && !gfs2_withdrawn(sdp) &&
+		     atomic_read(&gl->gl_ail_count));
 	spin_unlock(&sdp->sd_ail_lock);
 	gfs2_log_unlock(sdp);
 }
