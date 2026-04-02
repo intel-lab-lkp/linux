@@ -16,6 +16,8 @@
 
 #include <asm/amd/nb.h>
 #include <asm/cpuid/api.h>
+#include <asm/hygon/node.h>
+#include <asm/processor.h>
 
 static u32 *flush_words;
 
@@ -60,13 +62,20 @@ EXPORT_SYMBOL_GPL(node_to_amd_nb);
 
 static int amd_cache_northbridges(void)
 {
+	bool is_hygon = (boot_cpu_data.x86_vendor == X86_VENDOR_HYGON);
 	struct amd_northbridge *nb;
 	u16 i;
 
 	if (amd_northbridges.num)
 		return 0;
 
-	amd_northbridges.num = amd_num_nodes();
+	if (is_hygon) {
+		amd_northbridges.num = hygon_node_num();
+		if (!amd_northbridges.num)
+			return -ENODEV;
+	} else {
+		amd_northbridges.num = amd_num_nodes();
+	}
 
 	nb = kzalloc_objs(struct amd_northbridge, amd_northbridges.num);
 	if (!nb)
@@ -75,7 +84,8 @@ static int amd_cache_northbridges(void)
 	amd_northbridges.nb = nb;
 
 	for (i = 0; i < amd_northbridges.num; i++) {
-		node_to_amd_nb(i)->misc = amd_node_get_func(i, 3);
+		node_to_amd_nb(i)->misc = is_hygon ? hygon_node_get_func(i, 3)
+						   : amd_node_get_func(i, 3);
 
 		/*
 		 * Each Northbridge must have a 'misc' device.
@@ -87,7 +97,8 @@ static int amd_cache_northbridges(void)
 			return -ENODEV;
 		}
 
-		node_to_amd_nb(i)->link = amd_node_get_func(i, 4);
+		node_to_amd_nb(i)->link = is_hygon ? hygon_node_get_func(i, 4)
+						   : amd_node_get_func(i, 4);
 	}
 
 	if (amd_gart_present())
