@@ -561,7 +561,9 @@ struct request_queue {
 	struct timer_list	timeout;
 	struct work_struct	timeout_work;
 
-	atomic_t		nr_active_requests_shared_tags;
+	/* ensure nr_active_requests_shared_tags and nr_requests are on different cache lines
+	   to avoid significant performance hits on cache line contention on some CPU architectures */
+	atomic_t		nr_active_requests_shared_tags ____cacheline_aligned_in_smp;
 
 	struct blk_mq_tags	*sched_shared_tags;
 
