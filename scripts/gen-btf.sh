@@ -104,12 +104,14 @@ gen_btf_o()
 
 embed_btf_data()
 {
-	${OBJCOPY} --add-section .BTF=${ELF_FILE}.BTF ${ELF_FILE}
+	${OBJCOPY} --remove-section .BTF \
+		--add-section .BTF=${ELF_FILE}.BTF ${ELF_FILE}
 
 	# a module might not have a .BTF_ids or .BTF.base section
 	btf_base="${ELF_FILE}.BTF.base"
 	if [ -f "${btf_base}" ]; then
-		${OBJCOPY} --add-section .BTF.base=${btf_base} ${ELF_FILE}
+		${OBJCOPY} --remove-section .BTF.base \
+			--add-section .BTF.base=${btf_base} ${ELF_FILE}
 	fi
 	btf_ids="${ELF_FILE}.BTF_ids"
 	if [ -f "${btf_ids}" ]; then

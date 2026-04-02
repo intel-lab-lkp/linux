@@ -54,9 +54,19 @@ if_changed_except = $(if $(call newer_prereqs_except,$(2))$(cmd-check),      \
 	$(cmd);                                                              \
 	printf '%s\n' 'savedcmd_$@ := $(make-cmd)' > $(dot-target).cmd, @:)
 
-# Re-generate module BTFs if either module's .ko or vmlinux changed
+# Build final module objects.
+#
+# The *.ko files are usually independent of vmlinux. However, special handling
+# is required for module BTFs, which need to be regenerated if either the
+# module's .ko file or vmlinux has changed, as vmlinux is used as a base for
+# deduplication. Consequently, vmlinux is included in the rule prerequisites.
+#
+# The regular ld_ko_o call is conditional and is skipped if only vmlinux has
+# changed. The exclusion pattern used in the if_changed_except call contains
+# '$(objtree)/vmlinux' to match the exact prerequisite and plain 'vmlinux' to
+# cover the case when make normalizes './vmlinux' to 'vmlinux'.
 %.ko: %.o %.mod.o .module-common.o $(objtree)/scripts/module.lds $(and $(CONFIG_DEBUG_INFO_BTF_MODULES),$(KBUILD_BUILTIN),$(objtree)/vmlinux) FORCE
-	+$(call if_changed_except,ld_ko_o,$(objtree)/vmlinux)
+	+$(call if_changed_except,ld_ko_o,$(objtree)/vmlinux vmlinux)
 ifdef CONFIG_DEBUG_INFO_BTF_MODULES
 	+$(if $(newer-prereqs),$(call cmd,btf_ko))
 endif
