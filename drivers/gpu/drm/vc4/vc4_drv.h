@@ -898,6 +898,8 @@ struct vc4_exec_info {
 struct vc4_file {
 	struct vc4_dev *dev;
 
+	struct kref refcount;
+
 	struct xarray perfmons;
 
 	struct drm_sched_entity sched_entity[VC4_MAX_QUEUES];
@@ -1083,6 +1085,8 @@ static inline void vc4_debugfs_add_regset32(struct drm_device *drm,
 #endif
 
 /* vc4_drv.c */
+struct vc4_file *vc4_file_get(struct vc4_file *vc4file);
+void vc4_file_put(struct vc4_file *vc4file);
 void __iomem *vc4_ioremap_regs(struct platform_device *dev, int index);
 int vc4_dumb_fixup_args(struct drm_mode_create_dumb *args);
 
