@@ -1591,12 +1591,18 @@ static inline void update_mmu_cache_range(struct vm_fault *vmf,
 #define arch_wants_old_prefaulted_pte	cpu_has_hw_af
 
 /*
- * Request exec memory is read into pagecache in at least 64K folios. This size
- * can be contpte-mapped when 4K base pages are in use (16 pages into 1 iTLB
- * entry), and HPA can coalesce it (4 pages into 1 TLB entry) when 16K base
- * pages are in use.
+ * Request exec memory is read into pagecache in folios large enough for
+ * hardware TLB coalescing. On 4K and 16K page configs this is 64K, which
+ * enables contpte mapping (16 × 4K) and HPA coalescing (4 × 16K). On
+ * 64K page configs, contpte requires 2M (32 × 64K).
  */
-#define exec_folio_order() ilog2(SZ_64K >> PAGE_SHIFT)
+#define exec_folio_order exec_folio_order
+static inline unsigned int exec_folio_order(void)
+{
+	if (PAGE_SIZE == SZ_64K)
+		return ilog2(SZ_2M >> PAGE_SHIFT);
+	return ilog2(SZ_64K >> PAGE_SHIFT);
+}
 
 static inline bool pud_sect_supported(void)
 {

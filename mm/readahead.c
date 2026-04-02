@@ -465,7 +465,7 @@ static inline int ra_alloc_folio(struct readahead_control *ractl, pgoff_t index,
 }
 
 void page_cache_ra_order(struct readahead_control *ractl,
-		struct file_ra_state *ra)
+		struct file_ra_state *ra, gfp_t gfp)
 {
 	struct address_space *mapping = ractl->mapping;
 	pgoff_t start = readahead_index(ractl);
@@ -475,7 +475,6 @@ void page_cache_ra_order(struct readahead_control *ractl,
 	pgoff_t mark = index + ra->size - ra->async_size;
 	unsigned int nofs;
 	int err = 0;
-	gfp_t gfp = readahead_gfp_mask(mapping);
 	unsigned int new_order = ra->order;
 
 	trace_page_cache_ra_order(mapping->host, start, ra);
@@ -626,7 +625,7 @@ void page_cache_sync_ra(struct readahead_control *ractl,
 readit:
 	ra->order = 0;
 	ractl->_index = ra->start;
-	page_cache_ra_order(ractl, ra);
+	page_cache_ra_order(ractl, ra, readahead_gfp_mask(ractl->mapping));
 }
 EXPORT_SYMBOL_GPL(page_cache_sync_ra);
 
@@ -697,7 +696,7 @@ readit:
 		ra->size -= end - aligned_end;
 	ra->async_size = ra->size;
 	ractl->_index = ra->start;
-	page_cache_ra_order(ractl, ra);
+	page_cache_ra_order(ractl, ra, readahead_gfp_mask(ractl->mapping));
 }
 EXPORT_SYMBOL_GPL(page_cache_async_ra);
 

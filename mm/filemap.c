@@ -3310,6 +3310,7 @@ static struct file *do_sync_mmap_readahead(struct vm_fault *vmf)
 	DEFINE_READAHEAD(ractl, file, ra, mapping, vmf->pgoff);
 	struct file *fpin = NULL;
 	vm_flags_t vm_flags = vmf->vma->vm_flags;
+	gfp_t gfp = readahead_gfp_mask(mapping);
 	bool force_thp_readahead = false;
 	unsigned short mmap_miss;
 
@@ -3362,28 +3363,45 @@ static struct file *do_sync_mmap_readahead(struct vm_fault *vmf)
 			ra->size *= 2;
 		ra->async_size = HPAGE_PMD_NR;
 		ra->order = HPAGE_PMD_ORDER;
-		page_cache_ra_order(&ractl, ra);
+		page_cache_ra_order(&ractl, ra, gfp);
 		return fpin;
 	}
 
 	if (vm_flags & VM_EXEC) {
 		/*
-		 * Allow arch to request a preferred minimum folio order for
-		 * executable memory. This can often be beneficial to
-		 * performance if (e.g.) arm64 can contpte-map the folio.
-		 * Executable memory rarely benefits from readahead, due to its
-		 * random access nature, so set async_size to 0.
+		 * Request large folios for executable memory to enable
+		 * hardware PTE coalescing and PMD mappings:
 		 *
-		 * Limit to the boundaries of the VMA to avoid reading in any
-		 * pad that might exist between sections, which would be a waste
-		 * of memory.
+		 *  - If the VMA is large enough for a PMD, request
+		 *    HPAGE_PMD_ORDER so the folio can be PMD-mapped.
+		 *  - Otherwise, use exec_folio_order() which returns
+		 *    the minimum order for hardware TLB coalescing
+		 *    (e.g. arm64 contpte/HPA).
+		 *
+		 * Use ~__GFP_RECLAIM so large folio allocation is
+		 * opportunistic — if memory isn't readily available,
+		 * fall back to smaller folios rather than stalling on
+		 * reclaim or compaction.
+		 *
+		 * Executable memory rarely benefits from speculative
+		 * readahead due to its random access nature, so set
+		 * async_size to 0.
+		 *
+		 * Limit to the boundaries of the VMA to avoid reading
+		 * in any pad that might exist between sections, which
+		 * would be a waste of memory.
 		 */
+		gfp &= ~__GFP_RECLAIM;
 		struct vm_area_struct *vma = vmf->vma;
 		unsigned long start = vma->vm_pgoff;
 		unsigned long end = start + vma_pages(vma);
 		unsigned long ra_end;
 
-		ra->order = exec_folio_order();
+		if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) &&
+		    vma_pages(vma) >= HPAGE_PMD_NR)
+			ra->order = HPAGE_PMD_ORDER;
+		else
+			ra->order = exec_folio_order();
 		ra->start = round_down(vmf->pgoff, 1UL << ra->order);
 		ra->start = max(ra->start, start);
 		ra_end = round_up(ra->start + ra->ra_pages, 1UL << ra->order);
@@ -3402,7 +3420,7 @@ static struct file *do_sync_mmap_readahead(struct vm_fault *vmf)
 
 	fpin = maybe_unlock_mmap_for_io(vmf, fpin);
 	ractl._index = ra->start;
-	page_cache_ra_order(&ractl, ra);
+	page_cache_ra_order(&ractl, ra, gfp);
 	return fpin;
 }
 
