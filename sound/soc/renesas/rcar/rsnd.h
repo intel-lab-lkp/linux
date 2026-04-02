@@ -631,6 +631,7 @@ struct rsnd_priv {
 	struct reset_control *audmapp_rstc;
 
 	spinlock_t lock;
+	unsigned int ssiu_busif_count;
 	unsigned long flags;
 #define RSND_GEN_MASK	(0xF << 0)
 #define RSND_GEN1	(1 << 0)
@@ -642,6 +643,7 @@ struct rsnd_priv {
 #define RSND_RZ_MASK	(0xFF << 8)
 #define RSND_RZ3	(3 << 8)
 #define RSND_RZG3E	(1 << 12)
+#define RSND_SSIU_BUSIF_STATUS_COUNT_2	BIT(16) /* Only 2 BUSIF error-status register pairs */
 	/*
 	 * below value will be filled on rsnd_gen_probe()
 	 */
