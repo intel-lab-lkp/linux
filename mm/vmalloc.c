@@ -2065,6 +2065,7 @@ static struct vmap_area *alloc_vmap_area(unsigned long size,
 		 * to avoid false negatives.
 		 */
 		kmemleak_scan_area(&va->rb_node, SIZE_MAX, gfp_mask);
+		INIT_LIST_HEAD(&va->list);
 	}
 
 retry:
