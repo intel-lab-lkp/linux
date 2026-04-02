@@ -11,16 +11,17 @@ maintainers:
 
 description: |
   LLCC (Last Level Cache Controller) provides last level of cache memory in SoC,
-  that can be shared by multiple clients. Clients here are different cores in the
-  SoC, the idea is to minimize the local caches at the clients and migrate to
-  common pool of memory. Cache memory is divided into partitions called slices
-  which are assigned to clients. Clients can query the slice details, activate
-  and deactivate them.
+  that can be shared by multiple clients. Clients here are different cores in
+  the SoC. The idea is to minimize the local caches at the clients and migrate
+  to a common pool of memory. Cache memory is divided into partitions called
+  slices which are assigned to clients. Clients can query the slice details,
+  activate and deactivate them.
 
 properties:
   compatible:
     enum:
       - qcom,glymur-llcc
+      - qcom,hawi-llcc
       - qcom,ipq5424-llcc
       - qcom,kaanapali-llcc
       - qcom,qcs615-llcc
@@ -56,6 +57,11 @@ properties:
 
   interrupts:
     maxItems: 1
+
+  memory-region:
+    maxItems: 1
+    description: handle to a reserved-memory node used for firmware-populated
+      SLC/SCT shared memory.
 
   nvmem-cells:
     items:
@@ -318,6 +324,7 @@ allOf:
           contains:
             enum:
               - qcom,kaanapali-llcc
+              - qcom,hawi-llcc
               - qcom,sm8450-llcc
               - qcom,sm8550-llcc
               - qcom,sm8650-llcc
@@ -340,6 +347,18 @@ allOf:
             - const: llcc3_base
             - const: llcc_broadcast_base
             - const: llcc_broadcast_and_base
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - qcom,hawi-llcc
+    then:
+      required:
+        - memory-region
+    else:
+      properties:
+        memory-region: false
 
 additionalProperties: false
 
