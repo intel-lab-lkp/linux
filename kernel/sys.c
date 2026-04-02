@@ -2071,6 +2071,9 @@ static int prctl_set_mm_map(int opt, const void __user *addr, unsigned long data
 		return put_user((unsigned int)sizeof(prctl_map),
 				(unsigned int __user *)addr);
 
+	if (!checkpoint_restore_ns_capable(current_user_ns()))
+		return -EPERM;
+
 	if (data_size != sizeof(prctl_map))
 		return -EINVAL;
 
