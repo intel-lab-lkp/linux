@@ -12,6 +12,8 @@
 
 #include <sound/pcm_drm_eld.h>
 
+struct snd_kcontrol;
+
 /* We abuse kcontrol_new.subdev field to pass the NID corresponding to
  * the given new control.  If id.subdev has a bit flag HDA_SUBDEV_NID_FLAG,
  * snd_hda_ctl_add() takes the lower-bit subdev value as a valid NID.
@@ -203,6 +205,7 @@ enum { HDA_DIG_NONE, HDA_DIG_EXCLUSIVE, HDA_DIG_ANALOG_DUP }; /* dig_out_used */
 #define HDA_MAX_OUTS	5
 
 struct hda_multi_out {
+	struct snd_kcontrol *share_spdif_kctl; /* cached shared SPDIF switch */
 	int num_dacs;		/* # of DACs, must be more than 1 */
 	const hda_nid_t *dac_nids;	/* DAC list */
 	hda_nid_t hp_nid;	/* optional DAC for HP, 0 when not exists */
