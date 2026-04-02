@@ -880,22 +880,18 @@ static int rk3x_i2c_v1_calc_timings(unsigned long clk_rate,
 	return ret;
 }
 
-static void rk3x_i2c_adapt_div(struct rk3x_i2c *i2c, unsigned long clk_rate)
+static void __rk3x_i2c_adapt_div(struct rk3x_i2c *i2c, unsigned long clk_rate)
 {
 	struct i2c_timings *t = &i2c->t;
 	struct rk3x_i2c_calced_timings calc;
 	unsigned long period, time_hold = (WAIT_TIMEOUT / 2) * 1000000;
 	u64 t_low_ns, t_high_ns;
-	unsigned long flags;
 	u32 val;
 	int ret;
 
 	ret = i2c->soc_data->calc_timings(clk_rate, t, &calc);
 	WARN_ONCE(ret != 0, "Could not reach SCL freq %u", t->bus_freq_hz);
 
-	clk_enable(i2c->pclk);
-
-	spin_lock_irqsave(&i2c->lock, flags);
 	val = i2c_readl(i2c, REG_CON);
 	val &= ~REG_CON_TUNING_MASK;
 	val |= calc.tuning;
@@ -909,10 +905,6 @@ static void rk3x_i2c_adapt_div(struct rk3x_i2c *i2c, unsigned long clk_rate)
 		i2c_writel(i2c, val, REG_SCL_OE_DB);
 	}
 
-	spin_unlock_irqrestore(&i2c->lock, flags);
-
-	clk_disable(i2c->pclk);
-
 	t_low_ns = div_u64(8ULL * HZ_PER_GHZ * (calc.div_low + 1), clk_rate);
 	t_high_ns = div_u64(8ULL * HZ_PER_GHZ * (calc.div_high + 1), clk_rate);
 	dev_dbg(i2c->dev,
@@ -920,6 +912,19 @@ static void rk3x_i2c_adapt_div(struct rk3x_i2c *i2c, unsigned long clk_rate)
 		clk_rate / HZ_PER_KHZ,
 		HZ_PER_GHZ / t->bus_freq_hz,
 		t_low_ns, t_high_ns);
+}
+
+static void rk3x_i2c_adapt_div(struct rk3x_i2c *i2c, unsigned long clk_rate)
+{
+	unsigned long flags;
+
+	clk_enable(i2c->pclk);
+
+	spin_lock_irqsave(&i2c->lock, flags);
+	__rk3x_i2c_adapt_div(i2c, clk_rate);
+	spin_unlock_irqrestore(&i2c->lock, flags);
+
+	clk_disable(i2c->pclk);
 }
 
 /**
@@ -1152,7 +1157,7 @@ static int rk3x_i2c_xfer_common(struct i2c_adapter *adap,
 	if (ret == -ETIMEDOUT && i2c->soc_data->has_scl_oe_debounce) {
 		if (ipd & REG_INT_SLV_HDSCL) {
 			dev_err(i2c->dev, "SCL hold by slave detected, resetting timings.\n");
-			rk3x_i2c_adapt_div(i2c, clk_get_rate(i2c->clk));
+			__rk3x_i2c_adapt_div(i2c, clk_get_rate(i2c->clk));
 		}
 	}
 
