@@ -7,6 +7,7 @@
 #include "ice.h"
 
 #define ICE_DPLL_RCLK_NUM_MAX	4
+#define ICE_DPLL_TXCLK_NUM_MAX	2
 
 /**
  * enum ice_dpll_pin_sw - enumerate ice software pin indices:
@@ -63,6 +64,7 @@ struct ice_dpll_pin {
 	u8 ref_sync;
 	bool active;
 	bool hidden;
+	enum ice_e825c_ref_clk tx_ref_src;
 };
 
 /** ice_dpll - store info required for DPLL control
@@ -111,9 +113,11 @@ struct ice_dpll {
  * @lock: locks access to configuration of a dpll
  * @eec: pointer to EEC dpll dev
  * @pps: pointer to PPS dpll dev
+ * @txc: pointer to TXC dpll dev
  * @inputs: input pins pointer
  * @outputs: output pins pointer
  * @rclk: recovered pins pointer
+ * @txclks: TX clock reference pins pointer
  * @num_inputs: number of input pins available on dpll
  * @num_outputs: number of output pins available on dpll
  * @cgu_state_acq_err_num: number of errors returned during periodic work
@@ -131,11 +135,13 @@ struct ice_dplls {
 	struct completion dpll_init;
 	struct ice_dpll eec;
 	struct ice_dpll pps;
+	struct ice_dpll txc;
 	struct ice_dpll_pin *inputs;
 	struct ice_dpll_pin *outputs;
 	struct ice_dpll_pin sma[ICE_DPLL_PIN_SW_NUM];
 	struct ice_dpll_pin ufl[ICE_DPLL_PIN_SW_NUM];
 	struct ice_dpll_pin rclk;
+	struct ice_dpll_pin txclks[ICE_DPLL_TXCLK_NUM_MAX];
 	u8 num_inputs;
 	u8 num_outputs;
 	u8 sma_data;
