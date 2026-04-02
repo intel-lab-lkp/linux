@@ -132,6 +132,36 @@ static void set_isa(struct cpuinfo_loongarch *c, unsigned int isa)
 	}
 }
 
+/*
+ * Some LoongArch has broken sc.q which incorrectly handles the upper word
+ * when the lower word is zero. Newer firmware versions (such as the 202602
+ * release from Loongson) seem to contain a workaround for this issue.
+ *
+ * Disable sc.q if erratic to ensure reliability and compatibility.
+ */
+static bool sc_q_is_sane(void)
+{
+	struct {
+		long word[2];
+	} __aligned(16) mem;
+	register long tmp;
+
+	asm (
+		"1:ll.d\t$r0, %[mem]\n\t"
+		"move\t%[tmp], $r0\n\t"
+		"sc.q\t%[tmp], %[one], %[mem]\n\t"
+		"beqz\t%[tmp], 1b"
+		: [mem] "=ZB" (mem), [tmp] "=&r" (tmp)
+		: [one] "r" (1));
+
+	if (mem.word[1] != 1) {
+		pr_warn_once("Warning: sc.q is erratic on this platform, disabling for both kernel and HWCAP. Please try a firmware update.");
+		return false;
+	}
+
+	return true;
+}
+
 static void cpu_probe_common(struct cpuinfo_loongarch *c)
 {
 	unsigned int config;
@@ -177,7 +207,7 @@ static void cpu_probe_common(struct cpuinfo_loongarch *c)
 		c->options |= LOONGARCH_CPU_LAM;
 		elf_hwcap |= HWCAP_LOONGARCH_LAM;
 	}
-	if (config & CPUCFG2_SCQ) {
+	if ((config & CPUCFG2_SCQ) && sc_q_is_sane()) {
 		c->options |= LOONGARCH_CPU_SCQ;
 		elf_hwcap |= HWCAP_LOONGARCH_SCQ;
 	}
