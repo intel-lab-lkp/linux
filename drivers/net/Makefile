@@ -38,7 +38,11 @@ obj-$(CONFIG_VXLAN) += vxlan/
 obj-$(CONFIG_GENEVE) += geneve.o
 obj-$(CONFIG_BAREUDP) += bareudp.o
 obj-$(CONFIG_GTP) += gtp.o
-obj-$(CONFIG_NLMON) += nlmon.o
+ifdef CONFIG_NLMON_RUST
+  obj-$(CONFIG_NLMON) += nlmon_rust.o
+else
+  obj-$(CONFIG_NLMON) += nlmon.o
+endif
 obj-$(CONFIG_PFCP) += pfcp.o
 obj-$(CONFIG_NET_VRF) += vrf.o
 obj-$(CONFIG_VSOCKMON) += vsockmon.o
