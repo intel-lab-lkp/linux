@@ -91,6 +91,7 @@
 #include <linux/user_namespace.h>
 #include <linux/indirect_call_wrapper.h>
 #include <linux/textsearch.h>
+#include <linux/kfence.h>
 
 #include "dev.h"
 #include "devmem.h"
@@ -1083,7 +1084,8 @@ static int skb_pp_frag_ref(struct sk_buff *skb)
 
 static void skb_kfree_head(void *head, unsigned int end_offset)
 {
-	if (end_offset == SKB_SMALL_HEAD_HEADROOM)
+	if (end_offset == SKB_SMALL_HEAD_HEADROOM &&
+	    !is_kfence_address(head))
 		kmem_cache_free(net_hotdata.skb_small_head_cache, head);
 	else
 		kfree(head);
