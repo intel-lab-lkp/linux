@@ -549,7 +549,14 @@ static void mt_feature_mapping(struct hid_device *hdev,
 
 	switch (usage->hid) {
 	case HID_DG_CONTACTMAX:
-		mt_get_feature(hdev, field->report);
+		/*
+		 * Yoga Book 9: skip GET_REPORT during probe; the firmware
+		 * resets if it receives any control request before the init
+		 * Output report is sent (within ~1.18s of USB enumeration).
+		 * Logical maximum from the descriptor is used as the fallback.
+		 */
+		if (!(td->mtclass.quirks & MT_QUIRK_YOGABOOK9I))
+			mt_get_feature(hdev, field->report);
 
 		td->maxcontacts = field->value[0];
 		if (!td->maxcontacts &&
@@ -566,6 +573,10 @@ static void mt_feature_mapping(struct hid_device *hdev,
 			break;
 		}
 
+		/* Yoga Book 9 reports Clickpad but is a direct touchscreen */
+		if (td->mtclass.quirks & MT_QUIRK_YOGABOOK9I)
+			break;
+
 		mt_get_feature(hdev, field->report);
 		switch (field->value[usage->usage_index]) {
 		case MT_BUTTONTYPE_CLICKPAD:
@@ -579,7 +590,9 @@ static void mt_feature_mapping(struct hid_device *hdev,
 		break;
 	case 0xff0000c5:
 		/* Retrieve the Win8 blob once to enable some devices */
-		if (usage->usage_index == 0)
+		/* Yoga Book 9: skip; firmware resets before init if queried */
+		if (usage->usage_index == 0 &&
+		    !(td->mtclass.quirks & MT_QUIRK_YOGABOOK9I))
 			mt_get_feature(hdev, field->report);
 		break;
 	}
@@ -644,8 +657,11 @@ static struct mt_application *mt_allocate_application(struct mt_device *td,
 
 	/*
 	 * Model touchscreens providing buttons as touchpads.
+	 * Yoga Book 9 has an emulated touchpad but its touch surfaces
+	 * are direct screens, not indirect pointers.
 	 */
-	if (application == HID_DG_TOUCHPAD) {
+	if (application == HID_DG_TOUCHPAD &&
+	    !(td->mtclass.quirks & MT_QUIRK_YOGABOOK9I)) {
 		mt_application->mt_flags |= INPUT_MT_POINTER;
 		td->inputmode_value = MT_INPUTMODE_TOUCHPAD;
 	}
@@ -802,11 +818,15 @@ static int mt_touch_input_mapping(struct hid_device *hdev, struct hid_input *hi,
 
 	/*
 	 * Model touchscreens providing buttons as touchpads.
+	 * Skip for Yoga Book 9 which has stylus buttons inside
+	 * touchscreen collections, not physical touchpad buttons.
 	 */
 	if (field->application == HID_DG_TOUCHSCREEN &&
 	    (usage->hid & HID_USAGE_PAGE) == HID_UP_BUTTON) {
-		app->mt_flags |= INPUT_MT_POINTER;
-		td->inputmode_value = MT_INPUTMODE_TOUCHPAD;
+		if (!(app->quirks & MT_QUIRK_YOGABOOK9I)) {
+			app->mt_flags |= INPUT_MT_POINTER;
+			td->inputmode_value = MT_INPUTMODE_TOUCHPAD;
+		}
 	}
 
 	/* count the buttons on touchpads */
@@ -1420,7 +1440,6 @@ static int mt_touch_input_configured(struct hid_device *hdev,
 	 */
 	if (cls->quirks & MT_QUIRK_APPLE_TOUCHBAR)
 		app->mt_flags |= INPUT_MT_DIRECT;
-
 	if (cls->is_indirect)
 		app->mt_flags |= INPUT_MT_POINTER;
 
@@ -1432,7 +1451,8 @@ static int mt_touch_input_configured(struct hid_device *hdev,
 
 	/* check for clickpads */
 	if ((app->mt_flags & INPUT_MT_POINTER) &&
-	    (app->buttons_count == 1))
+	    (app->buttons_count == 1) &&
+	    !(app->quirks & MT_QUIRK_YOGABOOK9I))
 		td->is_buttonpad = true;
 
 	if (td->is_buttonpad)
