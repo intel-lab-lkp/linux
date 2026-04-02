@@ -523,9 +523,11 @@ static int blkdev_flushbuf(struct block_device *bdev, unsigned cmd,
 		return -EACCES;
 
 	mutex_lock(&bdev->bd_holder_lock);
-	if (bdev->bd_holder_ops && bdev->bd_holder_ops->sync)
+	if (bdev->bd_holder_ops && bdev->bd_holder_ops->sync) {
 		bdev->bd_holder_ops->sync(bdev);
-	else {
+		/* bdev->bd_holder_ops->sync() releases bd_holder_lock */
+		__release(&bdev->bd_holder_lock);
+	} else {
 		mutex_unlock(&bdev->bd_holder_lock);
 		sync_blockdev(bdev);
 	}
