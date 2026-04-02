@@ -6,6 +6,28 @@
 #include <linux/kvm_host.h>
 #include <trace/events/kvm.h>
 #include <asm/kvm_pch_pic.h>
+#include <asm/kvm_vcpu.h>
+
+static int dmsintc_deliver_msi_to_vcpu(struct kvm *kvm,
+				struct kvm_vcpu *vcpu,
+				u32 vector, int level)
+{
+	struct kvm_interrupt vcpu_irq;
+	struct dmsintc_state *ds;
+
+	if (!level)
+		return 0;
+	if (!vcpu || vector >= 256)
+		return -EINVAL;
+	ds = &vcpu->arch.dmsintc_state;
+	if (!ds)
+		return -ENODEV;
+	set_bit(vector, (unsigned long *)&ds->vector_map);
+	vcpu_irq.irq = INT_AVEC;
+	kvm_vcpu_ioctl_interrupt(vcpu, &vcpu_irq);
+	kvm_vcpu_kick(vcpu);
+	return 0;
+}
 
 static int kvm_set_pic_irq(struct kvm_kernel_irq_routing_entry *e,
 		struct kvm *kvm, int irq_source_id, int level, bool line_status)
@@ -14,6 +36,21 @@ static int kvm_set_pic_irq(struct kvm_kernel_irq_routing_entry *e,
 	pch_pic_set_irq(kvm->arch.pch_pic, e->irqchip.pin, level);
 
 	return 0;
+}
+
+int dmsintc_set_msi_irq(struct kvm *kvm, u64 addr, int data, int level)
+{
+	unsigned int virq, dest;
+	struct kvm_vcpu *vcpu;
+
+	virq = (addr >> AVEC_IRQ_SHIFT) & AVEC_IRQ_MASK;
+	dest = (addr >> AVEC_CPU_SHIFT) & kvm->arch.dmsintc->cpu_mask;
+	if (dest >= KVM_MAX_VCPUS)
+		return -EINVAL;
+	vcpu = kvm_get_vcpu_by_cpuid(kvm, dest);
+	if (!vcpu)
+		return -EINVAL;
+	return dmsintc_deliver_msi_to_vcpu(kvm, vcpu, virq, level);
 }
 
 /*
@@ -28,10 +65,7 @@ int kvm_set_msi(struct kvm_kernel_irq_routing_entry *e,
 {
 	if (!level)
 		return -1;
-
-	pch_msi_set_irq(kvm, e->msi.data, level);
-
-	return 0;
+	return pch_msi_set_irq(kvm, e, level);
 }
 
 /*
@@ -71,13 +105,15 @@ int kvm_set_routing_entry(struct kvm *kvm,
 int kvm_arch_set_irq_inatomic(struct kvm_kernel_irq_routing_entry *e,
 		struct kvm *kvm, int irq_source_id, int level, bool line_status)
 {
+	if (!level)
+		return -EWOULDBLOCK;
+
 	switch (e->type) {
 	case KVM_IRQ_ROUTING_IRQCHIP:
 		pch_pic_set_irq(kvm->arch.pch_pic, e->irqchip.pin, level);
 		return 0;
 	case KVM_IRQ_ROUTING_MSI:
-		pch_msi_set_irq(kvm, e->msi.data, level);
-		return 0;
+		return pch_msi_set_irq(kvm, e, level);
 	default:
 		return -EWOULDBLOCK;
 	}
