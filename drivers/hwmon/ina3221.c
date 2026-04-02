@@ -142,6 +142,12 @@ static const u8 limit_regs[] = {
 	SQ52210_ALERT_LIMIT3,
 };
 
+static const u8 alert_flag[] = {
+	F_AFF1,
+	F_AFF2,
+	F_AFF3,
+};
+
 /**
  * struct ina3221_input - channel input source specific information
  * @label: label of channel input source
@@ -446,6 +452,42 @@ static int ina3221_read_in(struct device *dev, u32 attr, int channel, long *val)
 	case hwmon_in_enable:
 		*val = ina3221_is_enabled(ina, channel);
 		return 0;
+	case hwmon_in_crit:
+	case hwmon_in_lcrit:
+		/* Only for Bus Voltage */
+		if (channel >= INA3221_NUM_CHANNELS)
+			return -EOPNOTSUPP;
+
+		if (!ina3221_is_enabled(ina, channel))
+			return -ENODATA;
+
+		reg = limit_regs[channel];
+		ret = ina3221_read_value(ina, reg, &regval);
+		if (ret)
+			return ret;
+		/*
+		 * Scale of bus voltage (mV): LSB is 8mV
+		 */
+		*val = regval * 8;
+		return 0;
+	case hwmon_in_crit_alarm:
+	case hwmon_in_lcrit_alarm:
+		/* Only for Bus Voltage */
+		if (channel >= INA3221_NUM_CHANNELS)
+			return -EOPNOTSUPP;
+		/* No actual register read if channel is disabled */
+		if (!ina3221_is_enabled(ina, channel)) {
+			/* Return 0 for alert flags */
+			*val = 0;
+			return 0;
+		}
+
+		reg = alert_flag[channel];
+		ret = regmap_field_read(ina->fields[reg], &regval);
+		if (ret)
+			return ret;
+		*val = regval;
+		return 0;
 	default:
 		return -EOPNOTSUPP;
 	}
@@ -457,8 +499,16 @@ static const u8 ina3221_curr_reg[][INA3221_NUM_CHANNELS + 1] = {
 	[hwmon_curr_max] = { INA3221_WARN1, INA3221_WARN2, INA3221_WARN3, 0 },
 	[hwmon_curr_crit] = { INA3221_CRIT1, INA3221_CRIT2,
 			      INA3221_CRIT3, INA3221_CRIT_SUM },
+	[hwmon_curr_lcrit] = { SQ52210_ALERT_LIMIT1, SQ52210_ALERT_LIMIT2,
+			      SQ52210_ALERT_LIMIT3, 0 },
 	[hwmon_curr_max_alarm] = { F_WF1, F_WF2, F_WF3, 0 },
 	[hwmon_curr_crit_alarm] = { F_CF1, F_CF2, F_CF3, F_SF },
+	[hwmon_curr_lcrit_alarm] = { F_AFF1, F_AFF2, F_AFF3, 0 },
+};
+static const u8 sq52210_curr_reg[INA3221_NUM_CHANNELS] = {
+	SQ52210_CURRENT1,
+	SQ52210_CURRENT2,
+	SQ52210_CURRENT3
 };
 
 static int ina3221_read_curr(struct device *dev, u32 attr,
@@ -467,6 +517,7 @@ static int ina3221_read_curr(struct device *dev, u32 attr,
 	struct ina3221_data *ina = dev_get_drvdata(dev);
 	struct ina3221_input *input = ina->inputs;
 	u8 reg = ina3221_curr_reg[attr][channel];
+	bool has_current_reg = ina->config->has_current_reg;
 	int resistance_uo, voltage_nv;
 	int regval, ret;
 
@@ -489,10 +540,20 @@ static int ina3221_read_curr(struct device *dev, u32 attr,
 			if (ret)
 				return ret;
 		}
+		if (has_current_reg) {
+			reg = sq52210_curr_reg[channel];
+			ret = ina3221_read_value(ina, reg, &regval);
+			if (ret)
+				return ret;
+			/* Return current in mA */
+			*val = DIV_U64_ROUND_CLOSEST((u64)regval * (u64)ina->current_lsb_uA, 1000);
+			return 0;
+		}
 
 		fallthrough;
 	case hwmon_curr_crit:
 	case hwmon_curr_max:
+	case hwmon_curr_lcrit:
 		if (!resistance_uo)
 			return -ENODATA;
 
@@ -507,6 +568,7 @@ static int ina3221_read_curr(struct device *dev, u32 attr,
 		return 0;
 	case hwmon_curr_crit_alarm:
 	case hwmon_curr_max_alarm:
+	case hwmon_curr_lcrit_alarm:
 		/* No actual register read if channel is disabled */
 		if (!ina3221_is_enabled(ina, channel)) {
 			/* Return 0 for alert flags */
@@ -617,7 +679,9 @@ static int sq52210_alert_limit_write(struct ina3221_data *ina,
 		 * For SUL configuration, directly convert it to current
 		 * settings implemented in the ina3221_write_curr function.
 		 */
-		return -EOPNOTSUPP;
+		alert_mask = BIT(15 - channel);
+		regval = val;
+		break;
 	case SQ52210_ALERT_BOL:
 		/* BOL: Bus Over Limit - BIT(12), BIT(11), BIT(10) */
 		alert_mask = BIT(12 - item);
@@ -711,12 +775,18 @@ static int ina3221_write_curr(struct device *dev, u32 attr,
 	struct ina3221_input *input = ina->inputs;
 	u8 reg = ina3221_curr_reg[attr][channel];
 	int resistance_uo, current_ma, voltage_uv;
-	int regval;
+	int regval, ret;
 
-	if (channel > INA3221_CHANNEL3)
-		resistance_uo = ina->summation_shunt_resistor;
-	else
+	if (attr == hwmon_curr_lcrit) {
+		if (channel > INA3221_CHANNEL3)
+			return -EOPNOTSUPP;
 		resistance_uo = input[channel].shunt_resistor;
+	} else {
+		if (channel > INA3221_CHANNEL3)
+			resistance_uo = ina->summation_shunt_resistor;
+		else
+			resistance_uo = input[channel].shunt_resistor;
+	}
 
 	if (!resistance_uo)
 		return -EOPNOTSUPP;
@@ -747,7 +817,12 @@ static int ina3221_write_curr(struct device *dev, u32 attr,
 	else
 		regval = DIV_ROUND_CLOSEST(voltage_uv, 5) & 0xfff8;
 
-	return regmap_write(ina->regmap, reg, regval);
+	if (attr == hwmon_curr_lcrit)
+		ret = sq52210_alert_limit_write(ina, SQ52210_ALERT_SUL, channel, regval);
+	else
+		ret = regmap_write(ina->regmap, reg, regval);
+
+	return ret;
 }
 
 static int ina3221_write_enable(struct device *dev, int channel, bool enable)
@@ -796,6 +871,26 @@ fail:
 	}
 
 	return ret;
+}
+
+static int ina3221_write_in(struct device *dev, u32 attr, int channel, long val)
+{
+	struct ina3221_data *ina = dev_get_drvdata(dev);
+
+	if (attr == hwmon_in_lcrit || attr == hwmon_in_crit)
+		if (channel >= INA3221_NUM_CHANNELS)
+			return -EOPNOTSUPP;
+
+	switch (attr) {
+	case hwmon_in_lcrit:
+		return sq52210_alert_limit_write(ina, SQ52210_ALERT_BUL, channel, val);
+	case hwmon_in_crit:
+		return sq52210_alert_limit_write(ina, SQ52210_ALERT_BOL, channel, val);
+	case hwmon_in_enable:
+		return ina3221_write_enable(dev, channel, val);
+	default:
+		return 0;
+	}
 }
 
 static int ina3221_write_power(struct device *dev, u32 attr, int channel, long val)
@@ -847,7 +942,7 @@ static int ina3221_write(struct device *dev, enum hwmon_sensor_types type,
 		break;
 	case hwmon_in:
 		/* 0-align channel ID */
-		ret = ina3221_write_enable(dev, channel - 1, val);
+		ret = ina3221_write_in(dev, attr, channel - 1, val);
 		break;
 	case hwmon_curr:
 		ret = ina3221_write_curr(dev, attr, channel, val);
