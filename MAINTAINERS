@@ -18335,6 +18335,25 @@ X:	Documentation/devicetree/bindings/net/wireless/
 X:	drivers/net/can/
 X:	drivers/net/wireless/
 
+NETWORKING LINK-TYPE ABSTRACTIONS [RUST]
+M:	Wenzhao Liao <wenzhaoliao@ruc.edu.cn>
+L:	netdev@vger.kernel.org
+L:	rust-for-linux@vger.kernel.org
+S:	Maintained
+F:	rust/kernel/net.rs
+F:	rust/kernel/net/netdevice.rs
+F:	rust/kernel/net/netlink_tap.rs
+F:	rust/kernel/net/rtnl.rs
+F:	rust/kernel/net/skbuff.rs
+F:	rust/kernel/net/stats.rs
+
+NLMON DRIVER [RUST]
+M:	Wenzhao Liao <wenzhaoliao@ruc.edu.cn>
+L:	netdev@vger.kernel.org
+L:	rust-for-linux@vger.kernel.org
+S:	Maintained
+F:	drivers/net/nlmon_rust.rs
+
 NETWORKING DRIVERS (WIRELESS)
 M:	Johannes Berg <johannes@sipsolutions.net>
 L:	linux-wireless@vger.kernel.org
