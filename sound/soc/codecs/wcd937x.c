@@ -100,6 +100,7 @@ struct wcd937x_priv {
 	int aux_pdm_wd_int;
 	bool comp1_enable;
 	bool comp2_enable;
+	bool has_always_on_supplies;
 
 	struct gpio_desc *us_euro_gpio;
 	struct gpio_desc *reset_gpio;
@@ -2907,10 +2908,14 @@ static int wcd937x_probe(struct platform_device *pdev)
 	cfg = &wcd937x->mbhc_cfg;
 	cfg->swap_gnd_mic = wcd937x_swap_gnd_mic;
 
-	ret = devm_regulator_bulk_get_enable(dev, ARRAY_SIZE(wcd937x_supplies),
-					     wcd937x_supplies);
-	if (ret)
-		return dev_err_probe(dev, ret, "Failed to get and enable supplies\n");
+	wcd937x->has_always_on_supplies = of_property_read_bool(dev->of_node,
+							"qcom,always-on-supply");
+	if (!wcd937x->has_always_on_supplies) {
+		ret = devm_regulator_bulk_get_enable(dev, ARRAY_SIZE(wcd937x_supplies),
+						wcd937x_supplies);
+		if (ret)
+			return dev_err_probe(dev, ret, "Failed to get and enable supplies\n");
+	}
 
 	ret = wcd_dt_parse_micbias_info(&wcd937x->common);
 	if (ret)
