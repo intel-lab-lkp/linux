@@ -9,7 +9,9 @@
  */
 
 #include <linux/debugfs.h>
+#include <asm/processor.h>
 #include <asm/amd/node.h>
+#include <asm/hygon/node.h>
 
 /*
  * AMD Nodes are a physical collection of I/O devices within an SoC. There can be one
@@ -35,6 +37,7 @@ struct pci_dev *amd_node_get_func(u16 node, u8 func)
 }
 
 static struct pci_dev **amd_roots;
+static u16 smn_num_nodes;
 
 /* Protect the PCI config register pairs used for SMN. */
 static DEFINE_MUTEX(smn_mutex);
@@ -88,7 +91,7 @@ static int __amd_smn_rw(u8 i_off, u8 d_off, u16 node, u32 address, u32 *value, b
 	struct pci_dev *root;
 	int err = -ENODEV;
 
-	if (node >= amd_num_nodes())
+	if (node >= smn_num_nodes)
 		return err;
 
 	root = amd_roots[node];
@@ -151,7 +154,7 @@ static ssize_t smn_node_write(struct file *file, const char __user *userbuf,
 	if (ret)
 		return ret;
 
-	if (node >= amd_num_nodes())
+	if (node >= smn_num_nodes)
 		return -ENODEV;
 
 	debug_node = node;
@@ -246,10 +249,14 @@ __setup("amd_smn_debugfs_enable", amd_smn_enable_dfs);
 
 static int __init amd_smn_init(void)
 {
-	u16 count, num_roots, roots_per_node, node, num_nodes;
+	struct pci_dev *socket_roots[HYGON_MAX_SOCKETS] = { };
+	u16 count, num_roots, roots_per_node, roots_per_socket, node, num_nodes;
+	u16 num_sockets, socket, socket_id;
 	struct pci_dev *root;
+	int ret;
 
-	if (!cpu_feature_enabled(X86_FEATURE_ZEN))
+	if (!cpu_feature_enabled(X86_FEATURE_ZEN) &&
+	    boot_cpu_data.x86_vendor != X86_VENDOR_HYGON)
 		return 0;
 
 	guard(mutex)(&smn_mutex);
@@ -268,7 +275,9 @@ static int __init amd_smn_init(void)
 		 * entire PCI config space for simplicity rather than covering
 		 * specific registers piecemeal.
 		 */
-		if (!pci_request_config_region_exclusive(root, 0, PCI_CFG_SPACE_SIZE, NULL)) {
+		if (!pci_request_config_region_exclusive(root, 0,
+							 PCI_CFG_SPACE_SIZE,
+							 NULL)) {
 			pci_err(root, "Failed to reserve config space\n");
 			return -EEXIST;
 		}
@@ -276,29 +285,96 @@ static int __init amd_smn_init(void)
 		num_roots++;
 	}
 
-	pr_debug("Found %d AMD root devices\n", num_roots);
+	pr_debug("Found %d SMN root devices\n", num_roots);
 
 	if (!num_roots)
 		return -ENODEV;
 
-	num_nodes = amd_num_nodes();
-	amd_roots = kzalloc_objs(*amd_roots, num_nodes);
-	if (!amd_roots)
-		return -ENOMEM;
+	if (boot_cpu_data.x86_vendor == X86_VENDOR_HYGON) {
+		/*
+		 * Hygon: roots are shared per-socket, not one-per-node.
+		 * Build amd_roots[] by expanding socket roots to per-node
+		 * using hygon_node_socket() for the assignment.
+		 *
+		 * hygon_node_num() triggers hygon_build_cache() which reads
+		 * hardware identity registers and validates socket topology.
+		 */
+		socket = 0;
 
-	roots_per_node = num_roots / num_nodes;
+		num_nodes = hygon_node_num();
+		if (!num_nodes)
+			return -ENODEV;
 
-	count = 0;
-	node = 0;
-	root = NULL;
-	while (node < num_nodes && (root = get_next_root(root))) {
-		/* Use one root for each node and skip the rest. */
-		if (count++ % roots_per_node)
-			continue;
+		num_sockets = hygon_socket_num();
+		if (!num_sockets)
+			return -ENODEV;
 
-		pci_dbg(root, "is root for AMD node %u\n", node);
-		amd_roots[node++] = root;
+		if (num_sockets > ARRAY_SIZE(socket_roots))
+			return -EINVAL;
+
+		if (num_roots % num_sockets) {
+			pr_err("Root count %u not divisible by socket count %u\n",
+			       num_roots, num_sockets);
+			return -ENODEV;
+		}
+
+		smn_num_nodes = num_nodes;
+		amd_roots = kzalloc_objs(*amd_roots, num_nodes);
+		if (!amd_roots)
+			return -ENOMEM;
+
+		roots_per_socket = num_roots / num_sockets;
+		count = 0;
+		root = NULL;
+		while (socket < num_sockets && (root = get_next_root(root))) {
+			if (count++ % roots_per_socket)
+				continue;
+
+			pci_dbg(root, "is root for Hygon socket %u\n", socket);
+			socket_roots[socket++] = root;
+		}
+
+		if (socket != num_sockets) {
+			ret = -ENODEV;
+			goto err_free;
+		}
+
+		for (node = 0; node < num_nodes; node++) {
+			socket_id = hygon_node_socket(node);
+
+			if (socket_id >= num_sockets) {
+				ret = -ENODEV;
+				goto err_free;
+			}
+
+			pci_dbg(socket_roots[socket_id],
+				"is root for Hygon node %u (socket %u)\n",
+				node, socket_id);
+			amd_roots[node] = socket_roots[socket_id];
+		}
+
+	} else {
+		num_nodes = amd_num_nodes();
+		smn_num_nodes = num_nodes;
+		amd_roots = kzalloc_objs(*amd_roots, num_nodes);
+		if (!amd_roots)
+			return -ENOMEM;
+
+		roots_per_node = num_roots / num_nodes;
+
+		count = 0;
+		node = 0;
+		root = NULL;
+		while (node < num_nodes && (root = get_next_root(root))) {
+			/* Use one root for each node and skip the rest. */
+			if (count++ % roots_per_node)
+				continue;
+
+			pci_dbg(root, "is root for AMD node %u\n", node);
+			amd_roots[node++] = root;
+		}
 	}
+
 
 	if (enable_dfs) {
 		debugfs_dir = debugfs_create_dir("amd_smn", arch_debugfs_dir);
@@ -311,6 +387,12 @@ static int __init amd_smn_init(void)
 	smn_exclusive = true;
 
 	return 0;
+
+err_free:
+	kfree(amd_roots);
+	amd_roots = NULL;
+	smn_num_nodes = 0;
+	return ret;
 }
 
 fs_initcall(amd_smn_init);
