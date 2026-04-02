@@ -231,10 +231,13 @@ static size_t calc_mem_regions_size(struct xe_device *xe)
 	u32 num_managers = 1;
 	int i;
 
+	if (xe_device_is_admin_only(xe))
+		goto out;
+
 	for (i = XE_PL_VRAM0; i <= XE_PL_VRAM1; ++i)
 		if (ttm_manager_type(&xe->ttm, i))
 			num_managers++;
-
+out:
 	return offsetof(struct drm_xe_query_mem_regions, mem_regions[num_managers]);
 }
 
@@ -273,6 +276,8 @@ static int query_mem_regions(struct xe_device *xe,
 	mem_regions->num_mem_regions = 1;
 
 	for (i = XE_PL_VRAM0; i <= XE_PL_VRAM1; ++i) {
+		if (xe_device_is_admin_only(xe))
+			break;
 		man = ttm_manager_type(&xe->ttm, i);
 		if (man) {
 			mem_regions->mem_regions[mem_regions->num_mem_regions].mem_class =
@@ -296,6 +301,9 @@ static int query_mem_regions(struct xe_device *xe,
 			mem_regions->num_mem_regions++;
 		}
 	}
+
+	if (xe_device_is_admin_only(xe))
+		memset(mem_regions, 0, size);
 
 	if (!copy_to_user(query_ptr, mem_regions, size))
 		ret = 0;
