@@ -4,3 +4,6 @@
 
 #[cfg(CONFIG_RUST_PHYLIB_ABSTRACTIONS)]
 pub mod phy;
+pub mod netdevice;
+pub mod skbuff;
+pub mod stats;
