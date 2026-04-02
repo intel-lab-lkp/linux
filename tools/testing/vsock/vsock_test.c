@@ -346,6 +346,65 @@ static void test_stream_msg_peek_server(const struct test_opts *opts)
 	return test_msg_peek_server(opts, false);
 }
 
+#define PEEK_AFTER_RECV_LEN 100
+
+static void test_stream_peek_after_recv_client(const struct test_opts *opts)
+{
+	unsigned char buf[PEEK_AFTER_RECV_LEN];
+	int fd;
+	int i;
+
+	fd = vsock_stream_connect(opts->peer_cid, opts->peer_port);
+	if (fd < 0) {
+		perror("connect");
+		exit(EXIT_FAILURE);
+	}
+
+	for (i = 0; i < sizeof(buf); i++)
+		buf[i] = (unsigned char)i;
+
+	control_expectln("SRVREADY");
+
+	send_buf(fd, buf, sizeof(buf), 0, sizeof(buf));
+
+	close(fd);
+}
+
+static void test_stream_peek_after_recv_server(const struct test_opts *opts)
+{
+	unsigned char buf[PEEK_AFTER_RECV_LEN];
+	int half = PEEK_AFTER_RECV_LEN / 2;
+	ssize_t ret;
+	int fd;
+
+	fd = vsock_stream_accept(VMADDR_CID_ANY, opts->peer_port, NULL);
+	if (fd < 0) {
+		perror("accept");
+		exit(EXIT_FAILURE);
+	}
+
+	control_writeln("SRVREADY");
+
+	/* Partial recv to advance offset within the skb */
+	recv_buf(fd, buf, half, 0, half);
+
+	/* Try to peek more than what remains: should return only 'half'
+	 * bytes. Note: we can't use recv_buf() because it loops until
+	 * all requested bytes are returned.
+	 */
+	ret = recv(fd, buf, sizeof(buf), MSG_PEEK);
+	if (ret < 0) {
+		perror("recv");
+		exit(EXIT_FAILURE);
+	} else if (ret != half) {
+		fprintf(stderr, "MSG_PEEK after partial recv returned %d (expected %d)\n",
+			ret, half);
+		exit(EXIT_FAILURE);
+	}
+
+	close(fd);
+}
+
 #define SOCK_BUF_SIZE (2 * 1024 * 1024)
 #define SOCK_BUF_SIZE_SMALL (64 * 1024)
 #define MAX_MSG_PAGES 4
@@ -2519,6 +2578,11 @@ static struct test_case test_cases[] = {
 		.name = "SOCK_STREAM TX credit bounds",
 		.run_client = test_stream_tx_credit_bounds_client,
 		.run_server = test_stream_tx_credit_bounds_server,
+	},
+	{
+		.name = "SOCK_STREAM MSG_PEEK after partial recv",
+		.run_client = test_stream_peek_after_recv_client,
+		.run_server = test_stream_peek_after_recv_server,
 	},
 	{},
 };
