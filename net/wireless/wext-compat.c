@@ -170,13 +170,15 @@ int cfg80211_wext_giwrange(struct net_device *dev,
 			break;
 
 		case WLAN_CIPHER_SUITE_WEP40:
-			range->encoding_size[range->num_encoding_sizes++] =
-				WLAN_KEY_LEN_WEP40;
+			if (range->num_encoding_sizes < IW_MAX_ENCODING_SIZES)
+				range->encoding_size[range->num_encoding_sizes++] =
+					WLAN_KEY_LEN_WEP40;
 			break;
 
 		case WLAN_CIPHER_SUITE_WEP104:
-			range->encoding_size[range->num_encoding_sizes++] =
-				WLAN_KEY_LEN_WEP104;
+			if (range->num_encoding_sizes < IW_MAX_ENCODING_SIZES)
+				range->encoding_size[range->num_encoding_sizes++] =
+					WLAN_KEY_LEN_WEP104;
 			break;
 		}
 	}
