@@ -1133,6 +1133,9 @@ static int dfh_get_param_size(void __iomem *dfh_base, resource_size_t max)
 
 		size += next * sizeof(u64);
 
+		if (size + DFHv1_PARAM_HDR > max)
+			return -EINVAL;
+
 		if (FIELD_GET(DFHv1_PARAM_HDR_NEXT_EOP, v))
 			return size;
 	}
