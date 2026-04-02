@@ -10,6 +10,7 @@
 #include <linux/rbtree.h>
 #include <stdio.h>
 #include <errno.h>
+#include <libgen.h>
 #include "addr_location.h"
 #include "path.h"
 #include "symbol_conf.h"
