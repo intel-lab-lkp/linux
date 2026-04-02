@@ -8,6 +8,10 @@
 #ifndef __MFD_NCT6694_H
 #define __MFD_NCT6694_H
 
+#include <linux/mutex.h>
+#include <linux/spinlock.h>
+#include <linux/types.h>
+
 #define NCT6694_VENDOR_ID	0x0416
 #define NCT6694_PRODUCT_ID	0x200B
 #define NCT6694_INT_IN_EP	0x81
@@ -82,10 +86,6 @@ union __packed nct6694_usb_msg {
 
 struct nct6694 {
 	struct device *dev;
-	struct ida gpio_ida;
-	struct ida i2c_ida;
-	struct ida canfd_ida;
-	struct ida wdt_ida;
 	struct irq_domain *domain;
 	struct mutex access_lock;
 	spinlock_t irq_lock;

@@ -7,7 +7,6 @@
 
 #include <linux/bits.h>
 #include <linux/gpio/driver.h>
-#include <linux/idr.h>
 #include <linux/interrupt.h>
 #include <linux/mfd/nct6694.h>
 #include <linux/module.h>
@@ -381,14 +380,6 @@ static void nct6694_irq_dispose_mapping(void *d)
 	irq_dispose_mapping(data->irq);
 }
 
-static void nct6694_gpio_ida_free(void *d)
-{
-	struct nct6694_gpio_data *data = d;
-	struct nct6694 *nct6694 = data->nct6694;
-
-	ida_free(&nct6694->gpio_ida, data->group);
-}
-
 static int nct6694_gpio_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -403,15 +394,7 @@ static int nct6694_gpio_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	data->nct6694 = nct6694;
-
-	ret = ida_alloc(&nct6694->gpio_ida, GFP_KERNEL);
-	if (ret < 0)
-		return ret;
-	data->group = ret;
-
-	ret = devm_add_action_or_reset(dev, nct6694_gpio_ida_free, data);
-	if (ret)
-		return ret;
+	data->group = pdev->id;
 
 	names = devm_kcalloc(dev, NCT6694_NR_GPIO, sizeof(char *),
 			     GFP_KERNEL);

@@ -11,7 +11,6 @@
 
 #include <linux/bits.h>
 #include <linux/interrupt.h>
-#include <linux/idr.h>
 #include <linux/irq.h>
 #include <linux/irqdomain.h>
 #include <linux/kernel.h>
@@ -23,35 +22,35 @@
 #include <linux/usb.h>
 
 static const struct mfd_cell nct6694_devs[] = {
-	MFD_CELL_NAME("nct6694-gpio"),
-	MFD_CELL_NAME("nct6694-gpio"),
-	MFD_CELL_NAME("nct6694-gpio"),
-	MFD_CELL_NAME("nct6694-gpio"),
-	MFD_CELL_NAME("nct6694-gpio"),
-	MFD_CELL_NAME("nct6694-gpio"),
-	MFD_CELL_NAME("nct6694-gpio"),
-	MFD_CELL_NAME("nct6694-gpio"),
-	MFD_CELL_NAME("nct6694-gpio"),
-	MFD_CELL_NAME("nct6694-gpio"),
-	MFD_CELL_NAME("nct6694-gpio"),
-	MFD_CELL_NAME("nct6694-gpio"),
-	MFD_CELL_NAME("nct6694-gpio"),
-	MFD_CELL_NAME("nct6694-gpio"),
-	MFD_CELL_NAME("nct6694-gpio"),
-	MFD_CELL_NAME("nct6694-gpio"),
+	MFD_CELL_BASIC("nct6694-gpio", NULL, NULL, 0, 0),
+	MFD_CELL_BASIC("nct6694-gpio", NULL, NULL, 0, 1),
+	MFD_CELL_BASIC("nct6694-gpio", NULL, NULL, 0, 2),
+	MFD_CELL_BASIC("nct6694-gpio", NULL, NULL, 0, 3),
+	MFD_CELL_BASIC("nct6694-gpio", NULL, NULL, 0, 4),
+	MFD_CELL_BASIC("nct6694-gpio", NULL, NULL, 0, 5),
+	MFD_CELL_BASIC("nct6694-gpio", NULL, NULL, 0, 6),
+	MFD_CELL_BASIC("nct6694-gpio", NULL, NULL, 0, 7),
+	MFD_CELL_BASIC("nct6694-gpio", NULL, NULL, 0, 8),
+	MFD_CELL_BASIC("nct6694-gpio", NULL, NULL, 0, 9),
+	MFD_CELL_BASIC("nct6694-gpio", NULL, NULL, 0, 10),
+	MFD_CELL_BASIC("nct6694-gpio", NULL, NULL, 0, 11),
+	MFD_CELL_BASIC("nct6694-gpio", NULL, NULL, 0, 12),
+	MFD_CELL_BASIC("nct6694-gpio", NULL, NULL, 0, 13),
+	MFD_CELL_BASIC("nct6694-gpio", NULL, NULL, 0, 14),
+	MFD_CELL_BASIC("nct6694-gpio", NULL, NULL, 0, 15),
 
-	MFD_CELL_NAME("nct6694-i2c"),
-	MFD_CELL_NAME("nct6694-i2c"),
-	MFD_CELL_NAME("nct6694-i2c"),
-	MFD_CELL_NAME("nct6694-i2c"),
-	MFD_CELL_NAME("nct6694-i2c"),
-	MFD_CELL_NAME("nct6694-i2c"),
+	MFD_CELL_BASIC("nct6694-i2c", NULL, NULL, 0, 0),
+	MFD_CELL_BASIC("nct6694-i2c", NULL, NULL, 0, 1),
+	MFD_CELL_BASIC("nct6694-i2c", NULL, NULL, 0, 2),
+	MFD_CELL_BASIC("nct6694-i2c", NULL, NULL, 0, 3),
+	MFD_CELL_BASIC("nct6694-i2c", NULL, NULL, 0, 4),
+	MFD_CELL_BASIC("nct6694-i2c", NULL, NULL, 0, 5),
 
-	MFD_CELL_NAME("nct6694-canfd"),
-	MFD_CELL_NAME("nct6694-canfd"),
+	MFD_CELL_BASIC("nct6694-canfd", NULL, NULL, 0, 0),
+	MFD_CELL_BASIC("nct6694-canfd", NULL, NULL, 0, 1),
 
-	MFD_CELL_NAME("nct6694-wdt"),
-	MFD_CELL_NAME("nct6694-wdt"),
+	MFD_CELL_BASIC("nct6694-wdt", NULL, NULL, 0, 0),
+	MFD_CELL_BASIC("nct6694-wdt", NULL, NULL, 0, 1),
 
 	MFD_CELL_NAME("nct6694-hwmon"),
 
@@ -307,23 +306,18 @@ static int nct6694_usb_probe(struct usb_interface *iface,
 	nct6694->dev = dev;
 	nct6694->udev = udev;
 
-	ida_init(&nct6694->gpio_ida);
-	ida_init(&nct6694->i2c_ida);
-	ida_init(&nct6694->canfd_ida);
-	ida_init(&nct6694->wdt_ida);
-
 	spin_lock_init(&nct6694->irq_lock);
 
 	ret = devm_mutex_init(dev, &nct6694->access_lock);
 	if (ret)
-		goto err_ida;
+		goto err_irq_domain;
 
 	interface = iface->cur_altsetting;
 
 	int_endpoint = &interface->endpoint[0].desc;
 	if (!usb_endpoint_is_int_in(int_endpoint)) {
 		ret = -ENODEV;
-		goto err_ida;
+		goto err_irq_domain;
 	}
 
 	usb_fill_int_urb(nct6694->int_in_urb, udev, usb_rcvintpipe(udev, NCT6694_INT_IN_EP),
@@ -332,11 +326,11 @@ static int nct6694_usb_probe(struct usb_interface *iface,
 
 	ret = usb_submit_urb(nct6694->int_in_urb, GFP_KERNEL);
 	if (ret)
-		goto err_ida;
+		goto err_irq_domain;
 
 	usb_set_intfdata(iface, nct6694);
 
-	ret = mfd_add_hotplug_devices(dev, nct6694_devs, ARRAY_SIZE(nct6694_devs));
+	ret = devm_mfd_add_devices(dev, 0, nct6694_devs, ARRAY_SIZE(nct6694_devs), NULL, 0, NULL);
 	if (ret)
 		goto err_mfd;
 
@@ -344,11 +338,7 @@ static int nct6694_usb_probe(struct usb_interface *iface,
 
 err_mfd:
 	usb_kill_urb(nct6694->int_in_urb);
-err_ida:
-	ida_destroy(&nct6694->wdt_ida);
-	ida_destroy(&nct6694->canfd_ida);
-	ida_destroy(&nct6694->i2c_ida);
-	ida_destroy(&nct6694->gpio_ida);
+err_irq_domain:
 	irq_domain_remove(nct6694->domain);
 err_urb:
 	usb_free_urb(nct6694->int_in_urb);
@@ -359,12 +349,7 @@ static void nct6694_usb_disconnect(struct usb_interface *iface)
 {
 	struct nct6694 *nct6694 = usb_get_intfdata(iface);
 
-	mfd_remove_devices(nct6694->dev);
 	usb_kill_urb(nct6694->int_in_urb);
-	ida_destroy(&nct6694->wdt_ida);
-	ida_destroy(&nct6694->canfd_ida);
-	ida_destroy(&nct6694->i2c_ida);
-	ida_destroy(&nct6694->gpio_ida);
 	irq_domain_remove(nct6694->domain);
 	usb_free_urb(nct6694->int_in_urb);
 }
