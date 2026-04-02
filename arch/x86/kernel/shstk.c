@@ -542,6 +542,15 @@ static int shstk_disable(void)
 	return 0;
 }
 
+static int __init shstk_configure(char *str)
+{
+	if (!strcmp(str, "off"))
+		setup_clear_cpu_cap(X86_FEATURE_SHSTK);
+
+	return 1;
+}
+__setup("shstk=", shstk_configure);
+
 SYSCALL_DEFINE3(map_shadow_stack, unsigned long, addr, unsigned long, size, unsigned int, flags)
 {
 	bool set_tok = flags & SHADOW_STACK_SET_TOKEN;
