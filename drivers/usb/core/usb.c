@@ -1126,6 +1126,8 @@ EXPORT_SYMBOL_GPL(usb_free_noncoherent);
 u32 usb_endpoint_max_periodic_payload(struct usb_device *udev,
 				      const struct usb_host_endpoint *ep)
 {
+	u32 max_payload;
+
 	if (!usb_endpoint_xfer_isoc(&ep->desc) &&
 	    !usb_endpoint_xfer_int(&ep->desc))
 		return 0;
@@ -1136,7 +1138,12 @@ u32 usb_endpoint_max_periodic_payload(struct usb_device *udev,
 			return le32_to_cpu(ep->ssp_isoc_ep_comp.dwBytesPerInterval);
 		fallthrough;
 	case USB_SPEED_SUPER:
-		return le16_to_cpu(ep->ss_ep_comp.wBytesPerInterval);
+		max_payload = usb_endpoint_maxp(&ep->desc) * (ep->ss_ep_comp.bMaxBurst + 1);
+		if (usb_endpoint_xfer_isoc(&ep->desc))
+			return max_t(u32, max_payload * USB_SS_MULT(ep->ss_ep_comp.bmAttributes),
+					ep->ss_ep_comp.wBytesPerInterval);
+		else
+			return max_t(u32, max_payload, ep->ss_ep_comp.wBytesPerInterval);
 	default:
 		if (usb_endpoint_is_hs_isoc_double(udev, ep))
 			return le32_to_cpu(ep->eusb2_isoc_ep_comp.dwBytesPerInterval);
