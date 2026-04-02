@@ -77,6 +77,7 @@ struct crashtype_category {
 
 /* Each category's crashtypes list. */
 extern struct crashtype_category bugs_crashtypes;
+extern struct crashtype_category deadlock_crashtypes;
 extern struct crashtype_category heap_crashtypes;
 extern struct crashtype_category perms_crashtypes;
 extern struct crashtype_category refcount_crashtypes;

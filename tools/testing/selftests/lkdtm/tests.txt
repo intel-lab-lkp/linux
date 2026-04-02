@@ -87,3 +87,7 @@ FORTIFY_STR_MEMBER detected buffer overflow
 FORTIFY_MEM_OBJECT detected buffer overflow
 FORTIFY_MEM_MEMBER detected field-spanning write
 PPC_SLB_MULTIHIT Recovered
+#FOLIO_LOCK_AA Hangs the system
+#FOLIO_LOCK_ABBA Hangs the system
+#FOLIO_MUTEX_LOCK_ABBA Hangs the system
+#FOLIO_DEFERRED_EVENT_ABBA Hangs the system

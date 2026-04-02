@@ -89,6 +89,7 @@ static struct crashpoint crashpoints[] = {
 /* List of possible types for crashes that can be triggered. */
 static const struct crashtype_category *crashtype_categories[] = {
 	&bugs_crashtypes,
+	&deadlock_crashtypes,
 	&heap_crashtypes,
 	&perms_crashtypes,
 	&refcount_crashtypes,
