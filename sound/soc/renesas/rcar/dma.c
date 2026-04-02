@@ -984,3 +984,15 @@ audmapp_end:
 	/* dummy mem mod for debug */
 	return rsnd_mod_init(NULL, &mem, &mem_ops, NULL, NULL, 0, 0);
 }
+
+void rsnd_dma_suspend(struct rsnd_priv *priv)
+{
+	clk_disable_unprepare(priv->audmapp_clk);
+	rsnd_suspend_clk_reset(NULL, priv->audmapp_rstc);
+}
+
+void rsnd_dma_resume(struct rsnd_priv *priv)
+{
+	rsnd_resume_clk_reset(NULL, priv->audmapp_rstc);
+	clk_prepare_enable(priv->audmapp_clk);
+}
