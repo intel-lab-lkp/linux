@@ -206,6 +206,12 @@ colors.*::
 		Default values are 'white', 'blue'.
 
 core.*::
+	addr2line-disable-warn::
+		When set to 1 disable all warnings from 'addr2line' output.
+		Default setting is 0 to show these warnings.
+	addr2line-timeout::
+		Sets a timeout (in milliseconds) for parsing 'addr2line'
+		output.  The default timeout is 500ms.
 	core.proc-map-timeout::
 		Sets a timeout (in milliseconds) for parsing /proc/<pid>/maps files.
 		Can be overridden by the --proc-map-timeout option on supported

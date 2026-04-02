@@ -18,9 +18,6 @@
 
 #define MAX_INLINE_NEST 1024
 
-/* If addr2line doesn't return data for 5 seconds then timeout. */
-int addr2line_timeout_ms = 5 * 1000;
-
 static int filename_split(char *filename, unsigned int *line_nr)
 {
 	char *sep;
@@ -86,6 +83,9 @@ static struct child_process *addr2line_subprocess_init(const char *addr2line_pat
 		addr2line_subprocess_cleanup(a2l);
 		return NULL;
 	}
+
+	if (!symbol_conf.addr2line_timeout_ms)
+		symbol_conf.addr2line_timeout_ms = 5 * 1000;
 
 	return a2l;
 }
@@ -335,7 +335,7 @@ int cmd__addr2line(const char *dso_name, u64 addr,
 		goto out;
 	}
 	io__init(&io, a2l->out, buf, sizeof(buf));
-	io.timeout_ms = addr2line_timeout_ms;
+	io.timeout_ms = symbol_conf.addr2line_timeout_ms;
 	switch (read_addr2line_record(&io, cmd_a2l_style, dso_name, addr, /*first=*/true,
 				      &record_function, &record_filename, &record_line_nr)) {
 	case -1:
