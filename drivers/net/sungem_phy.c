@@ -44,27 +44,27 @@ static const int phy_BCM5400_link_table[8][3] = {
 	{ 1, 0, 1 },	/* 1000BT */
 };
 
-static inline int __sungem_phy_read(struct mii_phy* phy, int id, int reg)
+static inline int __sungem_phy_read(struct mii_phy *phy, int id, int reg)
 {
 	return phy->mdio_read(phy->dev, id, reg);
 }
 
-static inline void __sungem_phy_write(struct mii_phy* phy, int id, int reg, int val)
+static inline void __sungem_phy_write(struct mii_phy *phy, int id, int reg, int val)
 {
 	phy->mdio_write(phy->dev, id, reg, val);
 }
 
-static inline int sungem_phy_read(struct mii_phy* phy, int reg)
+static inline int sungem_phy_read(struct mii_phy *phy, int reg)
 {
 	return phy->mdio_read(phy->dev, phy->mii_id, reg);
 }
 
-static inline void sungem_phy_write(struct mii_phy* phy, int reg, int val)
+static inline void sungem_phy_write(struct mii_phy *phy, int reg, int val)
 {
 	phy->mdio_write(phy->dev, phy->mii_id, reg, val);
 }
 
-static int reset_one_mii_phy(struct mii_phy* phy, int phy_id)
+static int reset_one_mii_phy(struct mii_phy *phy, int phy_id)
 {
 	u16 val;
 	int limit = 10000;
@@ -88,7 +88,7 @@ static int reset_one_mii_phy(struct mii_phy* phy, int phy_id)
 	return limit <= 0;
 }
 
-static int bcm5201_init(struct mii_phy* phy)
+static int bcm5201_init(struct mii_phy *phy)
 {
 	u16 data;
 
@@ -101,7 +101,7 @@ static int bcm5201_init(struct mii_phy* phy)
 	return 0;
 }
 
-static int bcm5201_suspend(struct mii_phy* phy)
+static int bcm5201_suspend(struct mii_phy *phy)
 {
 	sungem_phy_write(phy, MII_BCM5201_INTERRUPT, 0);
 	sungem_phy_write(phy, MII_BCM5201_MULTIPHY, MII_BCM5201_MULTIPHY_SUPERISOLATE);
@@ -109,7 +109,7 @@ static int bcm5201_suspend(struct mii_phy* phy)
 	return 0;
 }
 
-static int bcm5221_init(struct mii_phy* phy)
+static int bcm5221_init(struct mii_phy *phy)
 {
 	u16 data;
 
@@ -132,7 +132,7 @@ static int bcm5221_init(struct mii_phy* phy)
 	return 0;
 }
 
-static int bcm5221_suspend(struct mii_phy* phy)
+static int bcm5221_suspend(struct mii_phy *phy)
 {
 	u16 data;
 
@@ -147,7 +147,7 @@ static int bcm5221_suspend(struct mii_phy* phy)
 	return 0;
 }
 
-static int bcm5241_init(struct mii_phy* phy)
+static int bcm5241_init(struct mii_phy *phy)
 {
 	u16 data;
 
@@ -170,7 +170,7 @@ static int bcm5241_init(struct mii_phy* phy)
 	return 0;
 }
 
-static int bcm5241_suspend(struct mii_phy* phy)
+static int bcm5241_suspend(struct mii_phy *phy)
 {
 	u16 data;
 
@@ -185,7 +185,7 @@ static int bcm5241_suspend(struct mii_phy* phy)
 	return 0;
 }
 
-static int bcm5400_init(struct mii_phy* phy)
+static int bcm5400_init(struct mii_phy *phy)
 {
 	u16 data;
 
@@ -214,7 +214,7 @@ static int bcm5400_init(struct mii_phy* phy)
 	return 0;
 }
 
-static int bcm5400_suspend(struct mii_phy* phy)
+static int bcm5400_suspend(struct mii_phy *phy)
 {
 #if 0 /* Commented out in Darwin... someone has those dawn docs ? */
 	sungem_phy_write(phy, MII_BMCR, BMCR_PDOWN);
@@ -222,7 +222,7 @@ static int bcm5400_suspend(struct mii_phy* phy)
 	return 0;
 }
 
-static int bcm5401_init(struct mii_phy* phy)
+static int bcm5401_init(struct mii_phy *phy)
 {
 	u16 data;
 	int rev;
@@ -270,7 +270,7 @@ static int bcm5401_init(struct mii_phy* phy)
 	return 0;
 }
 
-static int bcm5401_suspend(struct mii_phy* phy)
+static int bcm5401_suspend(struct mii_phy *phy)
 {
 #if 0 /* Commented out in Darwin... someone has those dawn docs ? */
 	sungem_phy_write(phy, MII_BMCR, BMCR_PDOWN);
@@ -278,8 +278,9 @@ static int bcm5401_suspend(struct mii_phy* phy)
 	return 0;
 }
 
-static int bcm5411_init(struct mii_phy* phy)
+static int bcm5411_init(struct mii_phy *phy)
 {
+	int val;
 	u16 data;
 
 	/* Here's some more Apple black magic to setup
@@ -295,7 +296,12 @@ static int bcm5411_init(struct mii_phy* phy)
 	sungem_phy_write(phy, MII_BMCR, BMCR_RESET);
 	sungem_phy_write(phy, MII_BMCR, 0x1340);
 
-	data = sungem_phy_read(phy, MII_BCM5400_GB_CONTROL);
+	val = sungem_phy_read(phy, MII_BCM5400_GB_CONTROL);
+
+	if (val < 0 || val == 0xffff)
+		return -EIO;
+
+	data = (u16)val;
 	data |= MII_BCM5400_GB_CONTROL_FULLDUPLEXCAP;
 	sungem_phy_write(phy, MII_BCM5400_GB_CONTROL, data);
 
@@ -408,14 +414,14 @@ static int genmii_read_link(struct mii_phy *phy)
 	return 0;
 }
 
-static int generic_suspend(struct mii_phy* phy)
+static int generic_suspend(struct mii_phy *phy)
 {
 	sungem_phy_write(phy, MII_BMCR, BMCR_PDOWN);
 
 	return 0;
 }
 
-static int bcm5421_init(struct mii_phy* phy)
+static int bcm5421_init(struct mii_phy *phy)
 {
 	u16 data;
 	unsigned int id;
@@ -548,7 +554,7 @@ static int bcm54xx_read_link(struct mii_phy *phy)
 	u16 val;
 
 	if (phy->autoneg) {
-	    	val = sungem_phy_read(phy, MII_BCM5400_AUXSTATUS);
+		val = sungem_phy_read(phy, MII_BCM5400_AUXSTATUS);
 		link_mode = ((val & MII_BCM5400_AUXSTATUS_LINKMODE_MASK) >>
 			     MII_BCM5400_AUXSTATUS_LINKMODE_SHIFT);
 		phy->duplex = phy_BCM5400_link_table[link_mode][0] ?
@@ -568,7 +574,7 @@ static int bcm54xx_read_link(struct mii_phy *phy)
 	return 0;
 }
 
-static int marvell88e1111_init(struct mii_phy* phy)
+static int marvell88e1111_init(struct mii_phy *phy)
 {
 	u16 rev;
 
@@ -592,7 +598,7 @@ static int marvell88e1111_init(struct mii_phy* phy)
 
 #define BCM5421_MODE_MASK	(1 << 5)
 
-static int bcm5421_poll_link(struct mii_phy* phy)
+static int bcm5421_poll_link(struct mii_phy *phy)
 {
 	u32 phy_reg;
 	int mode;
@@ -616,7 +622,7 @@ static int bcm5421_poll_link(struct mii_phy* phy)
 		return 1;
 }
 
-static int bcm5421_read_link(struct mii_phy* phy)
+static int bcm5421_read_link(struct mii_phy *phy)
 {
 	u32 phy_reg;
 	int mode;
@@ -644,7 +650,7 @@ static int bcm5421_read_link(struct mii_phy* phy)
 	return 0;
 }
 
-static int bcm5421_enable_fiber(struct mii_phy* phy, int autoneg)
+static int bcm5421_enable_fiber(struct mii_phy *phy, int autoneg)
 {
 	/* enable fiber mode */
 	sungem_phy_write(phy, MII_NCONFIG, 0x9020);
@@ -665,7 +671,7 @@ static int bcm5421_enable_fiber(struct mii_phy* phy, int autoneg)
 #define BCM5461_FIBER_LINK	(1 << 2)
 #define BCM5461_MODE_MASK	(3 << 1)
 
-static int bcm5461_poll_link(struct mii_phy* phy)
+static int bcm5461_poll_link(struct mii_phy *phy)
 {
 	u32 phy_reg;
 	int mode;
@@ -691,7 +697,7 @@ static int bcm5461_poll_link(struct mii_phy* phy)
 
 #define BCM5461_FIBER_DUPLEX	(1 << 3)
 
-static int bcm5461_read_link(struct mii_phy* phy)
+static int bcm5461_read_link(struct mii_phy *phy)
 {
 	u32 phy_reg;
 	int mode;
@@ -720,7 +726,7 @@ static int bcm5461_read_link(struct mii_phy* phy)
 	return 0;
 }
 
-static int bcm5461_enable_fiber(struct mii_phy* phy, int autoneg)
+static int bcm5461_enable_fiber(struct mii_phy *phy, int autoneg)
 {
 	/* select fiber mode, enable 1000 base-X registers */
 	sungem_phy_write(phy, MII_NCONFIG, 0xfc0b);

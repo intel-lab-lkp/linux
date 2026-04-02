@@ -1707,8 +1707,12 @@ static void gem_init_phy(struct gem *gp)
 		sungem_phy_probe(&gp->phy_mii, gp->mii_phy_addr);
 
 		/* Init PHY */
-		if (gp->phy_mii.def && gp->phy_mii.def->ops->init)
-			gp->phy_mii.def->ops->init(&gp->phy_mii);
+		if (gp->phy_mii.def && gp->phy_mii.def->ops->init) {
+			int err = gp->phy_mii.def->ops->init(&gp->phy_mii);
+
+			if (err)
+				netdev_err(gp->dev, "PHY init failed: %d\n", err);
+		}
 	} else {
 		gem_pcs_reset(gp);
 		gem_pcs_reinit_adv(gp);
