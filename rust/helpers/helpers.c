@@ -67,6 +67,7 @@
 #include "maple_tree.c"
 #include "mm.c"
 #include "mutex.c"
+#include "net.c"
 #include "of.c"
 #include "page.c"
 #include "pci.c"
