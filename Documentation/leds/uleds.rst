@@ -17,16 +17,20 @@ structure to it (found in kernel public header file linux/uleds.h)::
 
     struct uleds_user_dev {
 	char name[LED_MAX_NAME_SIZE];
+	int max_brightness;
     };
 
-A new LED class device will be created with the name given. The name can be
-any valid sysfs device node name, but consider using the LED class naming
-convention of "devicename:color:function".
+A new LED class device will be created with the given name and maximum
+brightness. The name can be any valid sysfs device node name, but consider
+using the LED class naming convention of "devicename:color:function".
 
-The current brightness is found by reading a single byte from the character
-device. Values are unsigned: 0 to 255. Reading will block until the brightness
-changes. The device node can also be polled to notify when the brightness value
-changes.
+Although max_brightness is a signed int, only positive values are valid:
+1 to INT_MAX.
+
+The current brightness is found by reading a whole int from the character
+device. The possible values are 0 to max_brightness. Reading will block until
+the brightness changes. The device node can also be polled to notify when the
+brightness value changes.
 
 The LED class device will be removed when the open file handle to /dev/uleds
 is closed.
