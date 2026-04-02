@@ -511,6 +511,9 @@ static const struct of_device_id amd_mdb_pcie_of_match[] = {
 	{
 		.compatible = "amd,versal2-mdb-host",
 	},
+	{
+		.compatible = "amd,versal2-cpm6-host",
+	},
 	{},
 };
 
