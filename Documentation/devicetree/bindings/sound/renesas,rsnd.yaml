@@ -9,8 +9,11 @@ title: Renesas R-Car Sound Driver
 maintainers:
   - Kuninori Morimoto <kuninori.morimoto.gx@renesas.com>
 
-properties:
+description:
+  Binding for Renesas R-Car Gen1/Gen2/Gen3/Gen4 and RZ/G1/G2 sound
+  controllers using the standard RSND layout.
 
+properties:
   compatible:
     oneOf:
       # for Gen1 SoC
@@ -67,34 +70,6 @@ properties:
     minItems: 1
     maxItems: 5
 
-  "#sound-dai-cells":
-    description: |
-      it must be 0 if your system is using single DAI
-      it must be 1 if your system is using multi  DAIs
-      This is used on simple-audio-card
-    enum: [0, 1]
-
-  "#clock-cells":
-    description: |
-      it must be 0 if your system has audio_clkout
-      it must be 1 if your system has audio_clkout0/1/2/3
-    enum: [0, 1]
-
-  "#address-cells":
-    const: 1
-
-  "#size-cells":
-    const: 0
-
-  clock-frequency:
-    description: for audio_clkout0/1/2/3
-
-  clkout-lr-asynchronous:
-    description: audio_clkoutn is asynchronizes with lr-clock.
-    $ref: /schemas/types.yaml#/definitions/flag
-
-  power-domains: true
-
   resets:
     minItems: 1
     maxItems: 11
@@ -109,181 +84,45 @@ properties:
     maxItems: 31
 
   clock-names:
-    description: List of necessary clock names.
-    # details are defined below
+    description: List of clock names.
+    minItems: 1
+    maxItems: 31
 
-  # ports is below
-  port:
-    $ref: audio-graph-port.yaml#/definitions/port-base
-    unevaluatedProperties: false
-    patternProperties:
-      "^endpoint(@[0-9a-f]+)?":
-        $ref: audio-graph-port.yaml#/definitions/endpoint-base
-        properties:
-          playback:
-            $ref: /schemas/types.yaml#/definitions/phandle-array
-          capture:
-            $ref: /schemas/types.yaml#/definitions/phandle-array
-        unevaluatedProperties: false
+  "#sound-dai-cells": true
 
-  rcar_sound,dvc:
-    description: DVC subnode.
-    type: object
-    patternProperties:
-      "^dvc-[0-1]$":
-        type: object
-        additionalProperties: false
+  "#clock-cells": true
 
-        properties:
-          dmas:
-            maxItems: 1
-          dma-names:
-            const: tx
-        required:
-          - dmas
-          - dma-names
-    additionalProperties: false
+  "#address-cells": true
 
-  rcar_sound,mix:
-    description: MIX subnode.
-    type: object
-    patternProperties:
-      "^mix-[0-1]$":
-        type: object
-        additionalProperties: false
-    additionalProperties: false
+  "#size-cells": true
 
-  rcar_sound,ctu:
-    description: CTU subnode.
-    type: object
-    patternProperties:
-      "^ctu-[0-7]$":
-        type: object
-        additionalProperties: false
-    additionalProperties: false
+  clock-frequency: true
 
-  rcar_sound,src:
-    description: SRC subnode.
-    type: object
-    patternProperties:
-      "^src-[0-9]$":
-        type: object
-        additionalProperties: false
+  clkout-lr-asynchronous: true
 
-        properties:
-          interrupts:
-            maxItems: 1
-          dmas:
-            maxItems: 2
-          dma-names:
-            allOf:
-              - items:
-                  enum:
-                    - tx
-                    - rx
-    additionalProperties: false
+  power-domains: true
 
-  rcar_sound,ssiu:
-    description: SSIU subnode.
-    type: object
-    patternProperties:
-      "^ssiu-[0-9]+$":
-        type: object
-        additionalProperties: false
+  port: true
 
-        properties:
-          dmas:
-            maxItems: 2
-          dma-names:
-            allOf:
-              - items:
-                  enum:
-                    - tx
-                    - rx
-        required:
-          - dmas
-          - dma-names
-    additionalProperties: false
+  rcar_sound,dvc: true
 
-  rcar_sound,ssi:
-    description: SSI subnode.
-    type: object
-    patternProperties:
-      "^ssi-[0-9]$":
-        type: object
-        additionalProperties: false
+  rcar_sound,mix: true
 
-        properties:
-          interrupts:
-            maxItems: 1
-          dmas:
-            minItems: 2
-            maxItems: 4
-          dma-names:
-            allOf:
-              - items:
-                  enum:
-                    - tx
-                    - rx
-                    - txu # if no ssiu node
-                    - rxu # if no ssiu node
+  rcar_sound,ctu: true
 
-          shared-pin:
-            description: shared clock pin
-            $ref: /schemas/types.yaml#/definitions/flag
-          pio-transfer:
-            description: PIO transfer mode
-            $ref: /schemas/types.yaml#/definitions/flag
-          no-busif:
-            description: BUSIF is not used when [mem -> SSI] via DMA case
-            $ref: /schemas/types.yaml#/definitions/flag
-        required:
-          - interrupts
-    additionalProperties: false
+  rcar_sound,src: true
+
+  rcar_sound,ssiu: true
+
+  rcar_sound,ssi: true
 
 patternProperties:
-  # For DAI base
-  'rcar_sound,dai(@[0-9a-f]+)?$':
-    description: DAI subnode.
-    type: object
-    patternProperties:
-      "^dai([0-9]+)?$":
-        type: object
-        additionalProperties: false
-
-        properties:
-          playback:
-            $ref: /schemas/types.yaml#/definitions/phandle-array
-          capture:
-            $ref: /schemas/types.yaml#/definitions/phandle-array
-        anyOf:
-          - required:
-              - playback
-          - required:
-              - capture
-    additionalProperties: false
-
-  'ports(@[0-9a-f]+)?$':
-    $ref: audio-graph-port.yaml#/definitions/port-base
-    unevaluatedProperties: false
-    patternProperties:
-      '^port(@[0-9a-f]+)?$':
-        $ref: "#/properties/port"
-
-required:
-  - compatible
-  - reg
-  - reg-names
-  - clocks
-  - clock-names
+  'rcar_sound,dai(@[0-9a-f]+)?$': true
+  'ports(@[0-9a-f]+)?$': true
 
 allOf:
-  - $ref: dai-common.yaml#
+  - $ref: renesas,rsnd-common.yaml#
 
-  # --------------------
-  # reg/reg-names
-  # --------------------
-  # for Gen1
   - if:
       properties:
         compatible:
@@ -295,11 +134,10 @@ allOf:
           maxItems: 3
         reg-names:
           items:
-            enum:
-              - sru
-              - ssi
-              - adg
-  # for Gen2/Gen3
+            - const: sru
+            - const: ssi
+            - const: adg
+
   - if:
       properties:
         compatible:
@@ -310,16 +148,34 @@ allOf:
     then:
       properties:
         reg:
-          minItems: 5
+          maxItems: 5
         reg-names:
           items:
-            enum:
-              - scu
-              - adg
-              - ssiu
-              - ssi
-              - audmapp
-  # for Gen4
+            - const: scu
+            - const: adg
+            - const: ssiu
+            - const: ssi
+            - const: audmapp
+        resets:
+          maxItems: 11
+        reset-names:
+          items:
+            oneOf:
+              - const: ssi-all
+              - pattern: '^ssi\.[0-9]$'
+        clocks:
+          maxItems: 31
+        clock-names:
+          items:
+            oneOf:
+              - const: ssi-all
+              - pattern: '^ssi\.[0-9]$'
+              - pattern: '^src\.[0-9]$'
+              - pattern: '^mix\.[0-1]$'
+              - pattern: '^ctu\.[0-1]$'
+              - pattern: '^dvc\.[0-1]$'
+              - pattern: '^clk_(a|b|c|i)$'
+
   - if:
       properties:
         compatible:
@@ -336,38 +192,19 @@ allOf:
               - ssiu
               - ssi
               - sdmc
-
-  # --------------------
-  # clock-names
-  # --------------------
-  - if:
-      properties:
-        compatible:
-          contains:
-            const: renesas,rcar_sound-gen4
-    then:
-      properties:
-        clock-names:
+        resets:
+          maxItems: 2
+        reset-names:
+          items:
+            - const: ssiu.0
+            - const: ssi.0
+        clocks:
           maxItems: 3
-          items:
-            enum:
-              - ssi.0
-              - ssiu.0
-              - clkin
-    else:
-      properties:
         clock-names:
-          minItems: 1
-          maxItems: 31
           items:
-            oneOf:
-              - const: ssi-all
-              - pattern: '^ssi\.[0-9]$'
-              - pattern: '^src\.[0-9]$'
-              - pattern: '^mix\.[0-1]$'
-              - pattern: '^ctu\.[0-1]$'
-              - pattern: '^dvc\.[0-1]$'
-              - pattern: '^clk_(a|b|c|i)$'
+            - const: ssiu.0
+            - const: ssi.0
+            - const: clkin
 
 unevaluatedProperties: false
 
