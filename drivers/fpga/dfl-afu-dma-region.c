@@ -34,9 +34,12 @@ void afu_dma_region_init(struct dfl_feature_dev_data *fdata)
 static int afu_dma_pin_pages(struct dfl_feature_dev_data *fdata,
 			     struct dfl_afu_dma_region *region)
 {
-	int npages = region->length >> PAGE_SHIFT;
+	unsigned long npages = region->length >> PAGE_SHIFT;
 	struct device *dev = &fdata->dev->dev;
 	int ret, pinned;
+
+	if (npages > INT_MAX)
+		return -EINVAL;
 
 	ret = account_locked_vm(current->mm, npages, true);
 	if (ret)
