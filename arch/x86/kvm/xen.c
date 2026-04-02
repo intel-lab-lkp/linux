@@ -1816,7 +1816,17 @@ int kvm_xen_set_evtchn_fast(struct kvm_xen_evtchn *xe, struct kvm *kvm)
 
 	idx = srcu_read_lock(&kvm->srcu);
 
-	read_lock_irqsave(&gpc->lock, flags);
+	/*
+	 * Use trylock for the "fast" path. If the lock is contended,
+	 * return -EWOULDBLOCK to use the slow path which injects the
+	 * event from process context via timer_pending + KVM_REQ_UNBLOCK.
+	 */
+	local_irq_save(flags);
+	if (!read_trylock(&gpc->lock)) {
+		local_irq_restore(flags);
+		srcu_read_unlock(&kvm->srcu, idx);
+		return -EWOULDBLOCK;
+	}
 	if (!kvm_gpc_check(gpc, PAGE_SIZE))
 		goto out_rcu;
 
@@ -1847,10 +1857,22 @@ int kvm_xen_set_evtchn_fast(struct kvm_xen_evtchn *xe, struct kvm *kvm)
 	} else {
 		rc = 1; /* Delivered to the bitmap in shared_info. */
 		/* Now switch to the vCPU's vcpu_info to set the index and pending_sel */
-		read_unlock_irqrestore(&gpc->lock, flags);
+		read_unlock(&gpc->lock);
+		local_irq_restore(flags);
 		gpc = &vcpu->arch.xen.vcpu_info_cache;
 
-		read_lock_irqsave(&gpc->lock, flags);
+		local_irq_save(flags);
+		if (!read_trylock(&gpc->lock)) {
+			/*
+			 * Lock contended. Set the in-kernel pending flag
+			 * and kick the vCPU to inject via the slow path.
+			 */
+			local_irq_restore(flags);
+			if (!test_and_set_bit(port_word_bit,
+					&vcpu->arch.xen.evtchn_pending_sel))
+				kick_vcpu = true;
+			goto out_kick;
+		}
 		if (!kvm_gpc_check(gpc, sizeof(struct vcpu_info))) {
 			/*
 			 * Could not access the vcpu_info. Set the bit in-kernel
@@ -1884,7 +1906,10 @@ int kvm_xen_set_evtchn_fast(struct kvm_xen_evtchn *xe, struct kvm *kvm)
 	}
 
  out_rcu:
-	read_unlock_irqrestore(&gpc->lock, flags);
+	read_unlock(&gpc->lock);
+	local_irq_restore(flags);
+
+ out_kick:
 	srcu_read_unlock(&kvm->srcu, idx);
 
 	if (kick_vcpu) {
