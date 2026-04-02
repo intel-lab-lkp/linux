@@ -864,6 +864,20 @@ int rsnd_dma_probe(struct rsnd_priv *priv)
 	if (rsnd_is_gen4(priv))
 		goto audmapp_end;
 
+	/* for RZ/G3E */
+	priv->audmapp_rstc =
+		devm_reset_control_get_optional_exclusive_deasserted(dev, "audmapp");
+	if (IS_ERR(priv->audmapp_rstc)) {
+		return dev_err_probe(dev, PTR_ERR(priv->audmapp_rstc),
+				     "failed to get audmapp reset\n");
+	}
+
+	priv->audmapp_clk = devm_clk_get_optional_enabled(dev, "audmapp");
+	if (IS_ERR(priv->audmapp_clk)) {
+		return dev_err_probe(dev, PTR_ERR(priv->audmapp_clk),
+				     "failed to get audmapp clock\n");
+	}
+
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "audmapp");
 	if (!res) {
 		dev_err(dev, "lack of audmapp in DT\n");

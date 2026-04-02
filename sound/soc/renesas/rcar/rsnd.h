@@ -623,6 +623,13 @@ void rsnd_adg_clk_dbg_info(struct rsnd_priv *priv, struct seq_file *m);
 struct rsnd_priv {
 
 	struct platform_device *pdev;
+
+	/*
+	 * below value will be filled on rsnd_dma_probe()
+	 */
+	struct clk *audmapp_clk;
+	struct reset_control *audmapp_rstc;
+
 	spinlock_t lock;
 	unsigned long flags;
 #define RSND_GEN_MASK	(0xF << 0)
