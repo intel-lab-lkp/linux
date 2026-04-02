@@ -639,9 +639,9 @@ static ssize_t hibernation_show(const struct bus_type *bus, char *buf)
 	return sprintf(buf, "%d\n", !!hv_is_hibernation_supported());
 }
 
-static BUS_ATTR_RO(hibernation);
+static const BUS_ATTR_RO(hibernation);
 
-static struct attribute *vmbus_bus_attrs[] = {
+static const struct attribute *const vmbus_bus_attrs[] = {
 	&bus_attr_hibernation.attr,
 	NULL,
 };
