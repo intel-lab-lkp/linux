@@ -790,7 +790,13 @@ static void virtio_fs_request_complete(struct fuse_req *req,
 	struct folio *folio;
 
 	args = req->args;
-	copy_args_from_argbuf(args, req);
+	if (test_bit(FR_ISREPLY, &req->flags))
+		copy_args_from_argbuf(args, req);
+	else if (req->argbuf) {
+		/* Bounce buffer from virtio_fs_enqueue_req(); no reply payload to copy */
+		kfree(req->argbuf);
+		req->argbuf = NULL;
+	}
 
 	if (args->out_pages && args->page_zeroing) {
 		len = args->out_args[args->out_numargs - 1].size;
@@ -842,9 +848,11 @@ static void virtio_fs_requests_done_work(struct work_struct *work)
 		virtqueue_disable_cb(vq);
 
 		while ((req = virtqueue_get_buf(vq, &len)) != NULL) {
-			if (!virtio_fs_verify_response(req, len)) {
-				req->out.h.error = -EIO;
-				req->out.h.len = sizeof(struct fuse_out_header);
+			if (test_bit(FR_ISREPLY, &req->flags)) {
+				if (!virtio_fs_verify_response(req, len)) {
+					req->out.h.error = -EIO;
+					req->out.h.len = sizeof(struct fuse_out_header);
+				}
 			}
 			spin_lock(&fpq->lock);
 			list_move_tail(&req->list, &reqs);
