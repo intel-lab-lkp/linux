@@ -906,6 +906,8 @@ int vc4_bo_dumb_create(struct drm_file *file_priv,
 		       struct drm_mode_create_dumb *args);
 int vc4_create_bo_ioctl(struct drm_device *dev, void *data,
 			struct drm_file *file_priv);
+int vc4_wait_bo_ioctl(struct drm_device *dev, void *data,
+		      struct drm_file *file_priv);
 int vc4_create_shader_bo_ioctl(struct drm_device *dev, void *data,
 			       struct drm_file *file_priv);
 int vc4_mmap_bo_ioctl(struct drm_device *dev, void *data,
@@ -990,8 +992,6 @@ int vc4_submit_cl_ioctl(struct drm_device *dev, void *data,
 			struct drm_file *file_priv);
 int vc4_wait_seqno_ioctl(struct drm_device *dev, void *data,
 			 struct drm_file *file_priv);
-int vc4_wait_bo_ioctl(struct drm_device *dev, void *data,
-		      struct drm_file *file_priv);
 void vc4_submit_next_bin_job(struct drm_device *dev);
 void vc4_submit_next_render_job(struct drm_device *dev);
 void vc4_move_job_to_render(struct drm_device *dev, struct vc4_exec_info *exec);
