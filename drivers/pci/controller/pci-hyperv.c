@@ -3403,9 +3403,26 @@ static int hv_allocate_config_window(struct hv_pcibus_device *hbus)
 
 	/*
 	 * Set up a region of MMIO space to use for accessing configuration
-	 * space.
+	 * space. Use the high MMIO range to not conflict with the hyperv_drm
+	 * driver (which normally gets MMIO from the low MMIO range) in the
+	 * kdump kernel of a Gen2 VM, which may fail to reserve the framebuffer
+	 * MMIO range in vmbus_reserve_fb() due to screen_info.lfb_base being
+	 * zero in the kdump kernel:
+	 *
+	 * on ARM64, the two syscalls (KEXEC_LOAD, KEXEC_FILE_LOAD) don't
+	 * initialize the screen_info.lfb_base for the kdump kernel;
+	 *
+	 * on x86-64, the KEXEC_FILE_LOAD syscall initializes kdump kernel's
+	 * screen_info.lfb_base (see bzImage64_load() -> setup_boot_parameters())
+	 * but the KEXEC_LOAD syscall doesn't really do that when the hyperv_drm
+	 * driver loads, because the user-space program 'kexec' doesn't
+	 * recognize hyperv_drm: see the function setup_linux_vesafb() in the
+	 * kexec-tools.git repo. Note: old versions of kexec-tools, e.g.
+	 * v2.0.18, initialize screen_info.lfb_base if the hyperv_fb driver
+	 * loads, but hyperv_fb is deprecated and has been removed from the
+	 * mainline kernel.
 	 */
-	ret = vmbus_allocate_mmio(&hbus->mem_config, hbus->hdev, 0, -1,
+	ret = vmbus_allocate_mmio(&hbus->mem_config, hbus->hdev, SZ_4G, -1,
 				  PCI_CONFIG_MMIO_LENGTH, 0x1000, false);
 	if (ret)
 		return ret;
