@@ -1319,6 +1319,19 @@ unsigned long thp_get_unmapped_area_vmflags(struct file *filp, unsigned long add
 	if (ret)
 		return ret;
 
+	if (filp && exec_folio_order()) {
+		unsigned long exec_folio_size = PAGE_SIZE << exec_folio_order();
+		unsigned long size = rounddown_pow_of_two(len);
+
+		size = min(size, exec_folio_size);
+		if (size > PAGE_SIZE && size != PMD_SIZE) {
+			ret = __thp_get_unmapped_area(filp, addr, len, off,
+						      flags, size, vm_flags);
+			if (ret)
+				return ret;
+		}
+	}
+
 	return mm_get_unmapped_area_vmflags(filp, addr, len, pgoff, flags,
 					    vm_flags);
 }
