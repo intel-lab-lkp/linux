@@ -1986,7 +1986,11 @@ static const struct tipd_data tps6598x_data = {
 	.irq_handler = tps6598x_interrupt,
 	.irq_mask1 = TPS_REG_INT_POWER_STATUS_UPDATE |
 		     TPS_REG_INT_DATA_STATUS_UPDATE |
-		     TPS_REG_INT_PLUG_EVENT,
+		     TPS_REG_INT_PLUG_EVENT |
+		     TPS_REG_INT_PP_SWITCH_CHANGED |
+		     TPS_REG_INT_NEW_CONTRACT_AS_CONSUMER |
+		     TPS_REG_INT_HARD_RESET |
+		     TPS_REG_INT_STATUS_UPDATE,
 	.tps_struct_size = sizeof(struct tps6598x),
 	.register_port = tps6598x_register_port,
 	.unregister_port = tps6598x_unregister_port,
