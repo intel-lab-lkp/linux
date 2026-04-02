@@ -19,6 +19,12 @@ use kernel::{
     prelude::*,
     sync::{
         aref::ARef,
+        barrier::{
+            dma_mb,
+            Read,
+            Release,
+            Write, //
+        },
         Mutex, //
     },
     time::Delta,
@@ -258,6 +264,9 @@ impl DmaGspMem {
         let tx = self.cpu_write_ptr() as usize;
         let rx = self.gsp_read_ptr() as usize;
 
+        // ORDERING: control dependency provides necessary LOAD->STORE ordering.
+        // `dma_mb(Acquire)` may be used here if we don't want to rely on control dependency.
+
         // SAFETY:
         // - We will only access the driver-owned part of the shared memory.
         // - Per the safety statement of the function, no concurrent access will be performed.
@@ -310,6 +319,9 @@ impl DmaGspMem {
     fn driver_read_area(&self) -> (&[[u8; GSP_PAGE_SIZE]], &[[u8; GSP_PAGE_SIZE]]) {
         let tx = self.gsp_write_ptr() as usize;
         let rx = self.cpu_read_ptr() as usize;
+
+        // ORDERING: Ensure data load is ordered after load of GSP write pointer.
+        dma_mb(Read);
 
         // SAFETY:
         // - We will only access the driver-owned part of the shared memory.
@@ -408,6 +420,10 @@ impl DmaGspMem {
 
     // Informs the GSP that it can send `elem_count` new pages into the message queue.
     fn advance_cpu_read_ptr(&mut self, elem_count: u32) {
+        // ORDERING: Ensure read pointer is properly ordered.
+        //
+        dma_mb(Release);
+
         super::fw::gsp_mem::advance_cpu_read_ptr(&self.0, elem_count)
     }
 
@@ -422,6 +438,9 @@ impl DmaGspMem {
 
     // Informs the GSP that it can process `elem_count` new pages from the command queue.
     fn advance_cpu_write_ptr(&mut self, elem_count: u32) {
+        // ORDERING: Ensure all command data is visible before updateing ring buffer pointer.
+        dma_mb(Write);
+
         super::fw::gsp_mem::advance_cpu_write_ptr(&self.0, elem_count)
     }
 }
