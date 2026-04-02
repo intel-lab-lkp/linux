@@ -1270,7 +1270,8 @@ static enum skb_drop_reason icmp_echo(struct sk_buff *skb)
  *	Searches for net_device that matches PROBE interface identifier
  *		and builds PROBE reply message in icmphdr.
  *
- *	Returns false if PROBE responses are disabled via sysctl
+ *	Returns false if PROBE responses are disabled via sysctl or
+ *	the request should be silently discarded.
  */
 
 bool icmp_build_probe(struct sk_buff *skb, struct icmphdr *icmphdr)
@@ -1346,6 +1347,13 @@ bool icmp_build_probe(struct sk_buff *skb, struct icmphdr *icmphdr)
 			if (iio->ident.addr.ctype3_hdr.addrlen != sizeof(struct in6_addr))
 				goto send_mal_query;
 			dev = ipv6_stub->ipv6_dev_find(net, &iio->ident.addr.ip_addr.ipv6_addr, dev);
+			/*
+			 * If IPv6 identifier lookup is unavailable, silently
+			 * discard the request instead of misreporting NO_IF.
+			 */
+			if (IS_ERR(dev))
+				return false;
+
 			dev_hold(dev);
 			break;
 #endif
