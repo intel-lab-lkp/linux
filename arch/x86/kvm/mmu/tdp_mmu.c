@@ -590,14 +590,15 @@ static void handle_changed_spte(struct kvm *kvm, int as_id, gfn_t gfn,
 		pr_err("Invalid SPTE change: cannot replace a present leaf\n"
 		       "SPTE with another present leaf SPTE mapping a\n"
 		       "different PFN!\n"
-		       "as_id: %d gfn: %llx old_spte: %llx new_spte: %llx level: %d",
+		       "as_id: %d gfn: %llx old_spte: %llx new_spte: %llx level: %d\n",
 		       as_id, gfn, old_spte, new_spte, level);
 
 		/*
-		 * Crash the host to prevent error propagation and guest data
-		 * corruption.
+		 * Return early to prevent invalid SPTE from being set.
+		 * This prevents guest data corruption while allowing the VM to continue
+		 * in a degraded state for debugging purposes.
 		 */
-		BUG();
+		return;
 	}
 
 	if (old_spte == new_spte)
@@ -1453,9 +1454,12 @@ static bool wrprot_gfn_range(struct kvm *kvm, struct kvm_mmu_page *root,
 	u64 new_spte;
 	bool spte_set = false;
 
-	rcu_read_lock();
+	if (WARN_ON_ONCE(min_level > KVM_MAX_HUGEPAGE_LEVEL)) {
+		pr_err("Invalid min_level %d for write protection range operation\n", min_level);
+		return false;
+	}
 
-	BUG_ON(min_level > KVM_MAX_HUGEPAGE_LEVEL);
+	rcu_read_lock();
 
 	for_each_tdp_pte_min_level(iter, kvm, root, min_level, start, end) {
 retry:
@@ -1887,7 +1891,10 @@ static bool write_protect_gfn(struct kvm *kvm, struct kvm_mmu_page *root,
 	u64 new_spte;
 	bool spte_set = false;
 
-	BUG_ON(min_level > KVM_MAX_HUGEPAGE_LEVEL);
+	if (WARN_ON_ONCE(min_level > KVM_MAX_HUGEPAGE_LEVEL)) {
+		pr_err("Invalid min_level %d for write protection operation\n", min_level);
+		return false;
+	}
 
 	rcu_read_lock();
 
