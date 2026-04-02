@@ -613,6 +613,18 @@ static int ocfs2_read_locked_inode(struct inode *inode,
 			"Inode %llu: system file state is ambiguous\n",
 			(unsigned long long)args->fi_blkno);
 
+	/*
+	 * JBD2-managed buffers can skip ocfs2_validate_inode_block(). Keep
+	 * SUPER_BLOCK_FL away from ocfs2_populate_inode(), which still BUG()s
+	 * when that flag is present on a dinode.
+	 */
+	if (fe->i_flags & cpu_to_le32(OCFS2_SUPER_BLOCK_FL)) {
+		status = ocfs2_error(inode->i_sb,
+				     "Invalid dinode #%llu: superblock flag set\n",
+				     (unsigned long long)args->fi_blkno);
+		goto bail;
+	}
+
 	if (S_ISCHR(le16_to_cpu(fe->i_mode)) ||
 	    S_ISBLK(le16_to_cpu(fe->i_mode)))
 		inode->i_rdev = huge_decode_dev(le64_to_cpu(fe->id1.dev1.i_rdev));
@@ -1559,6 +1571,13 @@ int ocfs2_validate_inode_block(struct super_block *sb,
 		goto bail;
 	}
 
+	if (di->i_flags & cpu_to_le32(OCFS2_SUPER_BLOCK_FL)) {
+		rc = ocfs2_error(sb,
+				 "Invalid dinode #%llu: superblock flag set\n",
+				 (unsigned long long)bh->b_blocknr);
+		goto bail;
+	}
+
 	rc = 0;
 
 bail:
@@ -1626,6 +1645,14 @@ static int ocfs2_filecheck_validate_inode_block(struct super_block *sb,
 		rc = -OCFS2_FILECHECK_ERR_GENERATION;
 	}
 
+	if (di->i_flags & cpu_to_le32(OCFS2_SUPER_BLOCK_FL)) {
+		mlog(ML_ERROR,
+		     "Filecheck: invalid dinode #%llu: superblock flag set\n",
+		     (unsigned long long)bh->b_blocknr);
+		rc = -OCFS2_FILECHECK_ERR_INVALIDINO;
+		goto bail;
+	}
+
 bail:
 	return rc;
 }
@@ -1668,6 +1695,11 @@ static int ocfs2_filecheck_repair_inode_block(struct super_block *sb,
 		 * need more things to check here.
 		 */
 		return -OCFS2_FILECHECK_ERR_VALIDFLAG;
+	}
+
+	if (di->i_flags & cpu_to_le32(OCFS2_SUPER_BLOCK_FL)) {
+		/* Cannot fix a dinode with the superblock flag set. */
+		return -OCFS2_FILECHECK_ERR_INVALIDINO;
 	}
 
 	if (le64_to_cpu(di->i_blkno) != bh->b_blocknr) {
