@@ -632,6 +632,13 @@ struct rsnd_priv {
 	struct clk *audmapp_clk;
 	struct reset_control *audmapp_rstc;
 
+	/*
+	 * Below values will be filled in rsnd_src_probe()
+	 */
+	struct clk *clk_scu;
+	struct clk *clk_scu_x2;
+	struct clk *clk_scu_supply;
+
 	spinlock_t lock;
 	unsigned int ssiu_busif_count;
 	unsigned long flags;

@@ -516,6 +516,7 @@ static int rsnd_src_init(struct rsnd_mod *mod,
 			 struct rsnd_priv *priv)
 {
 	struct rsnd_src *src = rsnd_mod_to_src(mod);
+	struct device *dev = rsnd_priv_to_dev(priv);
 	int ret;
 
 	/* reset sync convert_rate */
@@ -525,6 +526,12 @@ static int rsnd_src_init(struct rsnd_mod *mod,
 	ret = rsnd_mod_power_on(mod);
 	if (ret < 0)
 		return ret;
+
+	ret = clk_prepare_enable(priv->clk_scu_supply);
+	if (ret) {
+		dev_err(dev, "Cannot enable scu_supply_clk\n");
+		return ret;
+	}
 
 	rsnd_src_activation(mod);
 
@@ -548,6 +555,8 @@ static int rsnd_src_quit(struct rsnd_mod *mod,
 	/* reset sync convert_rate */
 	src->sync.val		=
 	src->current_sync_rate	= 0;
+
+	clk_disable_unprepare(priv->clk_scu_supply);
 
 	return 0;
 }
@@ -711,8 +720,9 @@ struct rsnd_mod *rsnd_src_mod_get(struct rsnd_priv *priv, int id)
 
 int rsnd_src_probe(struct rsnd_priv *priv)
 {
-	struct device_node *node;
 	struct device *dev = rsnd_priv_to_dev(priv);
+	struct reset_control *rstc;
+	struct device_node *node;
 	struct rsnd_src *src;
 	struct clk *clk;
 	char name[RSND_SRC_NAME_SIZE];
@@ -737,6 +747,27 @@ int rsnd_src_probe(struct rsnd_priv *priv)
 	priv->src_nr	= nr;
 	priv->src	= src;
 
+	priv->clk_scu = devm_clk_get_optional_enabled(dev, "scu");
+	if (IS_ERR(priv->clk_scu)) {
+		ret = dev_err_probe(dev, PTR_ERR(priv->clk_scu),
+				    "failed to get scu clock\n");
+		goto rsnd_src_probe_done;
+	}
+
+	priv->clk_scu_x2 = devm_clk_get_optional_enabled(dev, "scu_x2");
+	if (IS_ERR(priv->clk_scu_x2)) {
+		ret = dev_err_probe(dev, PTR_ERR(priv->clk_scu_x2),
+				    "failed to get scu_x2 clock\n");
+		goto rsnd_src_probe_done;
+	}
+
+	priv->clk_scu_supply = devm_clk_get_optional(dev, "scu_supply");
+	if (IS_ERR(priv->clk_scu_supply)) {
+		ret = dev_err_probe(dev, PTR_ERR(priv->clk_scu_supply),
+				    "failed to get scu_supply clock\n");
+		goto rsnd_src_probe_done;
+	}
+
 	i = 0;
 	for_each_child_of_node_scoped(node, np) {
 		if (!of_device_is_available(np))
@@ -759,6 +790,16 @@ int rsnd_src_probe(struct rsnd_priv *priv)
 			goto rsnd_src_probe_done;
 		}
 
+		/*
+		 * RZ/G3E uses a shared SCU reset controller for all SRC modules.
+		 * R-Car platforms typically don't have SRC reset controls.
+		 */
+		rstc = devm_reset_control_get_optional_shared(dev, "scu");
+		if (IS_ERR(rstc)) {
+			ret = PTR_ERR(rstc);
+			goto rsnd_src_probe_done;
+		}
+
 		clk = devm_clk_get(dev, name);
 		if (IS_ERR(clk)) {
 			ret = PTR_ERR(clk);
@@ -766,7 +807,7 @@ int rsnd_src_probe(struct rsnd_priv *priv)
 		}
 
 		ret = rsnd_mod_init(priv, rsnd_mod_get(src),
-				    &rsnd_src_ops, clk, NULL, RSND_MOD_SRC, i);
+				    &rsnd_src_ops, clk, rstc, RSND_MOD_SRC, i);
 		if (ret)
 			goto rsnd_src_probe_done;
 
