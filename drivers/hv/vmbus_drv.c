@@ -645,10 +645,7 @@ static struct attribute *vmbus_bus_attrs[] = {
 	&bus_attr_hibernation.attr,
 	NULL,
 };
-static const struct attribute_group vmbus_bus_group = {
-	.attrs = vmbus_bus_attrs,
-};
-__ATTRIBUTE_GROUPS(vmbus_bus);
+ATTRIBUTE_GROUPS(vmbus_bus);
 
 /*
  * vmbus_uevent - add uevent for our device
