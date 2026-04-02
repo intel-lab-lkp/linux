@@ -11,9 +11,12 @@ set -e
 
 stat_output=$(mktemp /tmp/__perf_test.stat_output.std.XXXXX)
 
+# For event_name[i] expect to see event_metric[i]. 'stalled-cycles-backend' may
+# match both 'backend_cycles_idle' and 'stalled_cycles_per_instruction', hence
+# matching "_cycles_".
 event_name=(cpu-clock task-clock context-switches cpu-migrations page-faults stalled-cycles-frontend stalled-cycles-backend cycles instructions branches branch-misses)
-event_metric=("CPUs_utilized" "CPUs_utilized" "cs/sec" "migrations/sec" "faults/sec" "frontend_cycles_idle" "backend_cycles_idle" "GHz" "insn_per_cycle" "/sec" "branch_miss_rate")
-skip_metric=("tma_" "TopdownL1")
+event_metric=("CPUs_utilized" "CPUs_utilized" "cs/sec" "migrations/sec" "faults/sec" "frontend_cycles_idle" "_cycles_" "GHz" "insn_per_cycle" "/sec" "branch_miss_rate")
+skip_metric=("tma_" "TopdownL1" "percent of slots")
 
 cleanup() {
   rm -f "${stat_output}"
