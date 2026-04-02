@@ -19,6 +19,9 @@
 #define CLKOUT3	3
 #define CLKOUTMAX 4
 
+/* Maximum SSI count for per-SSI clocks */
+#define ADG_SSI_MAX	10
+
 #define BRGCKR_31	(1 << 31)
 #define BRRx_MASK(x) (0x3FF & x)
 
@@ -34,6 +37,9 @@ struct rsnd_adg {
 	struct clk *adg;
 	struct clk *clkin[CLKINMAX];
 	struct clk *clkout[CLKOUTMAX];
+	/* RZ/G3E: per-SSI ADG clocks (adg.ssi.0 through adg.ssi.9) */
+	struct clk *clk_adg_ssi[ADG_SSI_MAX];
+	struct clk *clk_ssif_supply;
 	struct clk *null_clk;
 	struct clk_onecell_data onecell;
 	struct rsnd_mod mod;
@@ -341,9 +347,57 @@ int rsnd_adg_clk_query(struct rsnd_priv *priv, unsigned int rate)
 	return -EIO;
 }
 
+/*
+ * RZ/G3E: Prepare SSI clocks - call from hw_params (can sleep)
+ */
+int rsnd_adg_ssi_clk_prepare(struct rsnd_mod *ssi_mod)
+{
+	struct rsnd_priv *priv = rsnd_mod_to_priv(ssi_mod);
+	struct rsnd_adg *adg = rsnd_priv_to_adg(priv);
+	struct device *dev = rsnd_priv_to_dev(priv);
+	int id = rsnd_mod_id(ssi_mod);
+	int ret;
+
+	ret = clk_prepare(adg->clk_adg_ssi[id]);
+	if (ret) {
+		dev_err(dev, "Cannot prepare adg.ssi.%d ADG clock\n", id);
+		return ret;
+	}
+
+	ret = clk_prepare(adg->clk_ssif_supply);
+	if (ret) {
+		dev_err(dev, "Cannot prepare SSIF supply clock\n");
+		clk_unprepare(adg->clk_adg_ssi[id]);
+		return ret;
+	}
+
+	return 0;
+}
+
+/*
+ * RZ/G3E: Unprepare SSI clocks - call from hw_free (can sleep)
+ */
+void rsnd_adg_ssi_clk_unprepare(struct rsnd_mod *ssi_mod)
+{
+	struct rsnd_priv *priv = rsnd_mod_to_priv(ssi_mod);
+	struct rsnd_adg *adg = rsnd_priv_to_adg(priv);
+	int id = rsnd_mod_id(ssi_mod);
+
+	clk_unprepare(adg->clk_adg_ssi[id]);
+	clk_unprepare(adg->clk_ssif_supply);
+}
+
 int rsnd_adg_ssi_clk_stop(struct rsnd_mod *ssi_mod)
 {
+	struct rsnd_priv *priv = rsnd_mod_to_priv(ssi_mod);
+	struct rsnd_adg *adg = rsnd_priv_to_adg(priv);
+	int id = rsnd_mod_id(ssi_mod);
+
 	rsnd_adg_set_ssi_clk(ssi_mod, 0);
+
+	/* RZ/G3E: only disable here, unprepare is done in hw_free */
+	clk_disable(adg->clk_adg_ssi[id]);
+	clk_disable(adg->clk_ssif_supply);
 
 	return 0;
 }
@@ -354,7 +408,8 @@ int rsnd_adg_ssi_clk_try_start(struct rsnd_mod *ssi_mod, unsigned int rate)
 	struct rsnd_adg *adg = rsnd_priv_to_adg(priv);
 	struct device *dev = rsnd_priv_to_dev(priv);
 	struct rsnd_mod *adg_mod = rsnd_mod_get(adg);
-	int data;
+	int id = rsnd_mod_id(ssi_mod);
+	int ret, data;
 	u32 ckr = 0;
 
 	data = rsnd_adg_clk_query(priv, rate);
@@ -375,6 +430,18 @@ int rsnd_adg_ssi_clk_try_start(struct rsnd_mod *ssi_mod, unsigned int rate)
 		(ckr) ? 'B' : 'A',
 		(ckr) ?	adg->brg_rate[ADG_HZ_48] :
 			adg->brg_rate[ADG_HZ_441]);
+
+	/*
+	 * RZ/G3E: enable per-SSI and supply clocks
+	 * Prepare was done in hw_params
+	 */
+	ret = clk_enable(adg->clk_adg_ssi[id]);
+	if (ret)
+		dev_warn(dev, "Cannot enable adg.ssi.%d ADG clock\n", id);
+
+	ret = clk_enable(adg->clk_ssif_supply);
+	if (ret)
+		dev_warn(dev, "Cannot enable SSIF supply clock\n");
 
 	return 0;
 }
@@ -769,6 +836,31 @@ void rsnd_adg_clk_dbg_info(struct rsnd_priv *priv, struct seq_file *m)
 #define rsnd_adg_clk_dbg_info(priv, m)
 #endif
 
+static int rsnd_adg_get_ssi_clks(struct rsnd_priv *priv)
+{
+	struct rsnd_adg *adg = rsnd_priv_to_adg(priv);
+	struct device *dev = rsnd_priv_to_dev(priv);
+	char name[16];
+	int i;
+
+	/* SSIF supply clock */
+	adg->clk_ssif_supply = devm_clk_get_optional(dev, "ssif_supply");
+	if (IS_ERR(adg->clk_ssif_supply))
+		return dev_err_probe(dev, PTR_ERR(adg->clk_ssif_supply),
+				     "failed to get ssif_supply clock\n");
+
+	/* Per-SSI ADG clocks */
+	for (i = 0; i < ADG_SSI_MAX; i++) {
+		snprintf(name, sizeof(name), "adg.ssi.%d", i);
+		adg->clk_adg_ssi[i] = devm_clk_get_optional(dev, name);
+		if (IS_ERR(adg->clk_adg_ssi[i]))
+			return dev_err_probe(dev, PTR_ERR(adg->clk_adg_ssi[i]),
+					     "failed to get %s clock\n", name);
+	}
+
+	return 0;
+}
+
 int rsnd_adg_probe(struct rsnd_priv *priv)
 {
 	struct reset_control *rstc;
@@ -797,6 +889,11 @@ int rsnd_adg_probe(struct rsnd_priv *priv)
 		return ret;
 
 	ret = rsnd_adg_get_clkout(priv);
+	if (ret)
+		return ret;
+
+	/* RZ/G3E-specific: per-SSI ADG and SSIF supply clocks */
+	ret = rsnd_adg_get_ssi_clks(priv);
 	if (ret)
 		return ret;
 

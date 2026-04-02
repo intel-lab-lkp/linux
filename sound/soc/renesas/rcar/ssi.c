@@ -537,6 +537,7 @@ static int rsnd_ssi_hw_params(struct rsnd_mod *mod,
 {
 	struct rsnd_dai *rdai = rsnd_io_to_rdai(io);
 	unsigned int fmt_width = snd_pcm_format_width(params_format(params));
+	int ret;
 
 	if (fmt_width > rdai->chan_width) {
 		struct rsnd_priv *priv = rsnd_io_to_priv(io);
@@ -545,6 +546,21 @@ static int rsnd_ssi_hw_params(struct rsnd_mod *mod,
 		dev_err(dev, "invalid combination of slot-width and format-data-width\n");
 		return -EINVAL;
 	}
+
+	/* RZ/G3E: prepare clocks here (can sleep) */
+	ret = rsnd_adg_ssi_clk_prepare(mod);
+	if (ret < 0)
+		return ret;
+
+	return 0;
+}
+
+static int rsnd_ssi_hw_free(struct rsnd_mod *mod,
+			    struct rsnd_dai_stream *io,
+			    struct snd_pcm_substream *substream)
+{
+	/* RZ/G3E: unprepare clocks here (can sleep) */
+	rsnd_adg_ssi_clk_unprepare(mod);
 
 	return 0;
 }
@@ -956,6 +972,7 @@ static struct rsnd_mod_ops rsnd_ssi_pio_ops = {
 	.pointer	= rsnd_ssi_pio_pointer,
 	.pcm_new	= rsnd_ssi_pcm_new,
 	.hw_params	= rsnd_ssi_hw_params,
+	.hw_free	= rsnd_ssi_hw_free,
 	.get_status	= rsnd_ssi_get_status,
 };
 
@@ -1070,6 +1087,7 @@ static struct rsnd_mod_ops rsnd_ssi_dma_ops = {
 	.pcm_new	= rsnd_ssi_pcm_new,
 	.fallback	= rsnd_ssi_fallback,
 	.hw_params	= rsnd_ssi_hw_params,
+	.hw_free	= rsnd_ssi_hw_free,
 	.get_status	= rsnd_ssi_get_status,
 	DEBUG_INFO
 };
