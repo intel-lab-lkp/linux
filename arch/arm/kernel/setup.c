@@ -24,6 +24,7 @@
 #include <linux/interrupt.h>
 #include <linux/smp.h>
 #include <linux/proc_fs.h>
+#include <linux/string.h>
 #include <linux/memblock.h>
 #include <linux/bug.h>
 #include <linux/compiler.h>
@@ -65,11 +66,11 @@
 
 
 #if defined(CONFIG_FPE_NWFPE) || defined(CONFIG_FPE_FASTFPE)
-char fpe_type[8];
+char fpe_type[9];
 
 static int __init fpe_setup(char *line)
 {
-	memcpy(fpe_type, line, 8);
+	strscpy(fpe_type, line, sizeof(fpe_type));
 	return 1;
 }
 
