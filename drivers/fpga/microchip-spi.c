@@ -115,7 +115,13 @@ static int mpf_ops_parse_header(struct fpga_manager *mgr,
 		return -EINVAL;
 	}
 
+	if (count < MPF_HEADER_SIZE_OFFSET + 1)
+		return -EINVAL;
+
 	header_size = *(buf + MPF_HEADER_SIZE_OFFSET);
+	if (!header_size)
+		return -EINVAL;
+
 	if (header_size > count) {
 		info->header_size = header_size;
 		return -EAGAIN;
@@ -139,6 +145,12 @@ static int mpf_ops_parse_header(struct fpga_manager *mgr,
 	bitstream_start = 0;
 
 	while (blocks_num--) {
+		if (block_id_offset >= count ||
+		    block_start_offset + sizeof(u32) > count) {
+			info->header_size = block_start_offset + sizeof(u32);
+			return -EAGAIN;
+		}
+
 		block_id = *(buf + block_id_offset);
 		block_start = get_unaligned_le32(buf + block_start_offset);
 
@@ -175,6 +187,9 @@ static int mpf_ops_parse_header(struct fpga_manager *mgr,
 	 * to each other. Image header should be extended by now up to where
 	 * actual bitstream starts, so no need for overflow check anymore.
 	 */
+	if (MPF_DATA_SIZE_OFFSET + sizeof(u16) > count)
+		return -EINVAL;
+
 	components_num = get_unaligned_le16(buf + MPF_DATA_SIZE_OFFSET);
 
 	for (i = 0; i < components_num; i++) {
@@ -182,6 +197,11 @@ static int mpf_ops_parse_header(struct fpga_manager *mgr,
 			(i * MPF_BITS_PER_COMPONENT_SIZE) / BITS_PER_BYTE;
 		component_size_byte_off =
 			(i * MPF_BITS_PER_COMPONENT_SIZE) % BITS_PER_BYTE;
+
+		if (components_size_start + component_size_byte_num < components_size_start ||
+		    components_size_start + component_size_byte_num +
+		    sizeof(u32) > count)
+			return -EINVAL;
 
 		component_size = get_unaligned_le32(buf +
 						    components_size_start +
