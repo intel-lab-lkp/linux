@@ -3315,6 +3315,8 @@ void xfrm_state_fini(struct net *net)
 	xfrm_state_flush(net, 0, false);
 	flush_work(&xfrm_state_gc_work);
 
+	synchronize_rcu();
+
 	WARN_ON(!list_empty(&net->xfrm.state_all));
 
 	for (i = 0; i <= net->xfrm.state_hmask; i++) {
