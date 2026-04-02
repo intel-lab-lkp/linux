@@ -174,11 +174,10 @@ static void vc4_v3d_init_hw(struct drm_device *dev)
 
 int vc4_v3d_get_bin_slot(struct vc4_dev *vc4)
 {
-	struct drm_device *dev = &vc4->base;
+	struct dma_fence *fence;
 	unsigned long irqflags;
 	int slot;
-	uint64_t seqno = 0;
-	struct vc4_exec_info *exec;
+	long ret;
 
 	if (WARN_ON_ONCE(vc4->gen > VC4_GEN_4))
 		return -ENODEV;
@@ -194,21 +193,20 @@ try_again:
 		return slot;
 	}
 
-	/* Couldn't find an open slot.  Wait for render to complete
+	/* Couldn't find an open slot. Wait for render to complete
 	 * and try again.
 	 */
-	exec = vc4_last_render_job(vc4);
-	if (exec)
-		seqno = exec->seqno;
+	fence = NULL;
+	if (vc4->render_job)
+		fence = dma_fence_get(vc4->render_job->base.done_fence);
 	spin_unlock_irqrestore(&vc4->job_lock, irqflags);
 
-	if (seqno) {
-		int ret = vc4_wait_for_seqno(dev, seqno, ~0ull, true);
-
-		if (ret == 0)
+	if (fence) {
+		ret = dma_fence_wait_timeout(fence, true, MAX_SCHEDULE_TIMEOUT);
+		dma_fence_put(fence);
+		if (ret > 0)
 			goto try_again;
-
-		return ret;
+		return ret < 0 ? ret : -ETIMEDOUT;
 	}
 
 	return -ENOMEM;
