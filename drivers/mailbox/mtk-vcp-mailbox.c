@@ -84,7 +84,7 @@ static int mtk_vcp_mbox_send_data(struct mbox_chan *chan, void *data)
 
 static bool mtk_vcp_mbox_last_tx_done(struct mbox_chan *chan)
 {
-	struct mtk_ipi_info *ipi_info = chan->active_req;
+	struct mtk_ipi_info *ipi_info = chan->msg_data[chan->active_req].data;
 	struct mtk_vcp_mbox *priv = chan->con_priv;
 
 	return !(readl(priv->base + priv->cfg->set_in) & BIT(ipi_info->index));
