@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0
 
+GCOV_PROFILE_iommu_amdv1.o := n
+
 iommu_pt_fmt-$(CONFIG_IOMMU_PT_AMDV1) += amdv1
 iommu_pt_fmt-$(CONFIG_IOMMUFD_TEST) += mock
 
