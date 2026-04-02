@@ -3509,9 +3509,6 @@ static void sd_read_block_provisioning(struct scsi_disk *sdkp)
 {
 	struct scsi_vpd *vpd;
 
-	if (sdkp->lbpme == 0)
-		return;
-
 	rcu_read_lock();
 	vpd = rcu_dereference(sdkp->device->vpd_pgb2);
 
@@ -3524,6 +3521,20 @@ static void sd_read_block_provisioning(struct scsi_disk *sdkp)
 	sdkp->lbpu	= (vpd->data[5] >> 7) & 1; /* UNMAP */
 	sdkp->lbpws	= (vpd->data[5] >> 6) & 1; /* WRITE SAME(16) w/ UNMAP */
 	sdkp->lbpws10	= (vpd->data[5] >> 5) & 1; /* WRITE SAME(10) w/ UNMAP */
+
+	/*
+	 * Some USB-NVMe bridge devices (e.g. Realtek RTL9210) report UNMAP
+	 * support via VPD B2 (LBPU=1) but fail to set the LBPME flag in the
+	 * READ CAPACITY 16 response. If VPD B2 indicates UNMAP support,
+	 * enable lbpme so discard can be configured properly.
+	 */
+	if (!sdkp->lbpme && sdkp->lbpu) {
+		if (sdkp->first_scan)
+			sd_printk(KERN_NOTICE, sdkp,
+				  "LBPME not set in READ CAPACITY 16 but LBPU set in VPD B2; enabling discard\n");
+		sdkp->lbpme = 1;
+	}
+
 	rcu_read_unlock();
 }
 
