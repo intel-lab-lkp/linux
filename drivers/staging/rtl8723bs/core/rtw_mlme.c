@@ -1862,7 +1862,7 @@ signed int rtw_set_auth(struct adapter *adapter, struct security_priv *psecurity
 
 	psetauthparm->mode = (unsigned char)psecuritypriv->dot11AuthAlgrthm;
 
-	pcmd->cmdcode = _SetAuth_CMD_;
+	pcmd->cmdcode = SET_AUTH;
 	pcmd->parmbuf = (unsigned char *)psetauthparm;
 	pcmd->cmdsz =  (sizeof(struct setauth_parm));
 	pcmd->rsp = NULL;
@@ -1933,7 +1933,7 @@ signed int rtw_set_key(struct adapter *adapter, struct security_priv *psecurityp
 			goto exit;
 		}
 
-		pcmd->cmdcode = _SetKey_CMD_;
+		pcmd->cmdcode = SET_KEY;
 		pcmd->parmbuf = (u8 *)psetkeyparm;
 		pcmd->cmdsz =  (sizeof(struct setkey_parm));
 		pcmd->rsp = NULL;

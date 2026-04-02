@@ -10,81 +10,6 @@
 #include <linux/align.h>
 #include <linux/delay.h>
 
-static struct _cmd_callback rtw_cmd_callback[] = {
-	{GEN_CMD_CODE(_Read_MACREG), NULL}, /*0*/
-	{GEN_CMD_CODE(_Write_MACREG), NULL},
-	{GEN_CMD_CODE(_Read_BBREG), &rtw_getbbrfreg_cmdrsp_callback},
-	{GEN_CMD_CODE(_Write_BBREG), NULL},
-	{GEN_CMD_CODE(_Read_RFREG), &rtw_getbbrfreg_cmdrsp_callback},
-	{GEN_CMD_CODE(_Write_RFREG), NULL}, /*5*/
-	{GEN_CMD_CODE(_Read_EEPROM), NULL},
-	{GEN_CMD_CODE(_Write_EEPROM), NULL},
-	{GEN_CMD_CODE(_Read_EFUSE), NULL},
-	{GEN_CMD_CODE(_Write_EFUSE), NULL},
-
-	{GEN_CMD_CODE(_Read_CAM),	NULL},	/*10*/
-	{GEN_CMD_CODE(_Write_CAM),	 NULL},
-	{GEN_CMD_CODE(_setBCNITV), NULL},
-	{GEN_CMD_CODE(_setMBIDCFG), NULL},
-	{GEN_CMD_CODE(_JoinBss), &rtw_joinbss_cmd_callback},  /*14*/
-	{GEN_CMD_CODE(_DisConnect), &rtw_disassoc_cmd_callback}, /*15*/
-	{GEN_CMD_CODE(_CreateBss), &rtw_createbss_cmd_callback},
-	{GEN_CMD_CODE(_SetOpMode), NULL},
-	{GEN_CMD_CODE(_SiteSurvey), &rtw_survey_cmd_callback}, /*18*/
-	{GEN_CMD_CODE(_SetAuth), NULL},
-
-	{GEN_CMD_CODE(_SetKey), NULL},	/*20*/
-	{GEN_CMD_CODE(_SetStaKey), &rtw_setstaKey_cmdrsp_callback},
-	{GEN_CMD_CODE(_SetAssocSta), &rtw_setassocsta_cmdrsp_callback},
-	{GEN_CMD_CODE(_DelAssocSta), NULL},
-	{GEN_CMD_CODE(_SetStaPwrState), NULL},
-	{GEN_CMD_CODE(_SetBasicRate), NULL}, /*25*/
-	{GEN_CMD_CODE(_GetBasicRate), NULL},
-	{GEN_CMD_CODE(_SetDataRate), NULL},
-	{GEN_CMD_CODE(_GetDataRate), NULL},
-	{GEN_CMD_CODE(_SetPhyInfo), NULL},
-
-	{GEN_CMD_CODE(_GetPhyInfo), NULL}, /*30*/
-	{GEN_CMD_CODE(_SetPhy), NULL},
-	{GEN_CMD_CODE(_GetPhy), NULL},
-	{GEN_CMD_CODE(_readRssi), NULL},
-	{GEN_CMD_CODE(_readGain), NULL},
-	{GEN_CMD_CODE(_SetAtim), NULL}, /*35*/
-	{GEN_CMD_CODE(_SetPwrMode), NULL},
-	{GEN_CMD_CODE(_JoinbssRpt), NULL},
-	{GEN_CMD_CODE(_SetRaTable), NULL},
-	{GEN_CMD_CODE(_GetRaTable), NULL},
-
-	{GEN_CMD_CODE(_GetCCXReport), NULL}, /*40*/
-	{GEN_CMD_CODE(_GetDTMReport),	NULL},
-	{GEN_CMD_CODE(_GetTXRateStatistics), NULL},
-	{GEN_CMD_CODE(_SetUsbSuspend), NULL},
-	{GEN_CMD_CODE(_SetH2cLbk), NULL},
-	{GEN_CMD_CODE(_AddBAReq), NULL}, /*45*/
-	{GEN_CMD_CODE(_SetChannel), NULL},		/*46*/
-	{GEN_CMD_CODE(_SetTxPower), NULL},
-	{GEN_CMD_CODE(_SwitchAntenna), NULL},
-	{GEN_CMD_CODE(_SetCrystalCap), NULL},
-	{GEN_CMD_CODE(_SetSingleCarrierTx), NULL},	/*50*/
-
-	{GEN_CMD_CODE(_SetSingleToneTx), NULL}, /*51*/
-	{GEN_CMD_CODE(_SetCarrierSuppressionTx), NULL},
-	{GEN_CMD_CODE(_SetContinuousTx), NULL},
-	{GEN_CMD_CODE(_SwitchBandwidth), NULL},		/*54*/
-	{GEN_CMD_CODE(_TX_Beacon), NULL},/*55*/
-
-	{GEN_CMD_CODE(_Set_MLME_EVT), NULL},/*56*/
-	{GEN_CMD_CODE(_Set_Drv_Extra), NULL},/*57*/
-	{GEN_CMD_CODE(_Set_H2C_MSG), NULL},/*58*/
-	{GEN_CMD_CODE(_SetChannelPlan), NULL},/*59*/
-
-	{GEN_CMD_CODE(_SetChannelSwitch), NULL},/*60*/
-	{GEN_CMD_CODE(_TDLS), NULL},/*61*/
-	{GEN_CMD_CODE(_ChkBMCSleepq), NULL}, /*62*/
-
-	{GEN_CMD_CODE(_RunInThreadCMD), NULL},/*63*/
-};
-
 static struct cmd_hdl wlancmds[] = {
 	GEN_DRV_CMD_HANDLER(0, NULL) /*0*/
 	GEN_DRV_CMD_HANDLER(0, NULL)
@@ -301,7 +226,7 @@ int rtw_cmd_filter(struct cmd_priv *pcmdpriv, struct cmd_obj *cmd_obj)
 {
 	u8 bAllow = false; /* set to true to allow enqueuing cmd when hw_init_completed is false */
 
-	if (cmd_obj->cmdcode == GEN_CMD_CODE(_SetChannelPlan))
+	if (cmd_obj->cmdcode == SET_CHANNEL_PLAN)
 		bAllow = true;
 
 	if ((!pcmdpriv->padapter->hw_init_completed && !bAllow) ||
@@ -343,8 +268,8 @@ struct	cmd_obj	*rtw_dequeue_cmd(struct cmd_priv *pcmdpriv)
 
 void rtw_free_cmd_obj(struct cmd_obj *pcmd)
 {
-	if ((pcmd->cmdcode != _JoinBss_CMD_) &&
-	    (pcmd->cmdcode != _CreateBss_CMD_)) {
+	if ((pcmd->cmdcode != JOIN_BSS) &&
+	    (pcmd->cmdcode != CREATE_BSS)) {
 		/* free parmbuf in cmd_obj */
 		kfree(pcmd->parmbuf);
 	}
@@ -377,7 +302,6 @@ int rtw_cmd_thread(void *context)
 	struct cmd_obj *pcmd;
 	u8 *pcmdbuf;
 	u8 (*cmd_hdl)(struct adapter *padapter, u8 *pbuf);
-	void (*pcmd_callback)(struct adapter *dev, struct cmd_obj *pcmd);
 	struct adapter *padapter = context;
 	struct cmd_priv *pcmdpriv = &padapter->cmdpriv;
 	struct drvextra_cmd_parm *extra_parm = NULL;
@@ -478,16 +402,33 @@ post_process:
 		}
 
 		/* call callback function for post-processed */
-		if (pcmd->cmdcode < ARRAY_SIZE(rtw_cmd_callback)) {
-			pcmd_callback = rtw_cmd_callback[pcmd->cmdcode].callback;
-			if (!pcmd_callback) {
-				rtw_free_cmd_obj(pcmd);
-			} else {
-				/* todo: !!! fill rsp_buf to pcmd->rsp if (pcmd->rsp!= NULL) */
-				pcmd_callback(pcmd->padapter, pcmd);/* need consider that free cmd_obj in rtw_cmd_callback */
-			}
-		} else {
+		/* todo: !!! fill rsp_buf to pcmd->rsp if (pcmd->rsp != NULL) */
+		switch (pcmd->cmdcode) {
+		case READ_BBREG:
+		case READ_RFREG:
+			rtw_getbbrfreg_cmdrsp_callback(padapter, pcmd);
+			break;
+		case JOIN_BSS:
+			rtw_joinbss_cmd_callback(padapter, pcmd);
+			break;
+		case DISCONNECT:
+			rtw_disassoc_cmd_callback(padapter, pcmd);
+			break;
+		case CREATE_BSS:
+			rtw_createbss_cmd_callback(padapter, pcmd);
+			break;
+		case SITE_SURVEY:
+			rtw_survey_cmd_callback(padapter, pcmd);
+			break;
+		case SET_STA_KEY:
+			rtw_setstaKey_cmdrsp_callback(padapter, pcmd);
+			break;
+		case SET_ASSOC_STA:
+			rtw_setassocsta_cmdrsp_callback(padapter, pcmd);
+			break;
+		default:
 			rtw_free_cmd_obj(pcmd);
+			break;
 		}
 		flush_signals_thread();
 		goto _next;
@@ -501,7 +442,7 @@ post_process:
 			break;
 		}
 
-		if (pcmd->cmdcode == GEN_CMD_CODE(_Set_Drv_Extra)) {
+		if (pcmd->cmdcode == SET_DRV_EXTRA) {
 			extra_parm = (struct drvextra_cmd_parm *)pcmd->parmbuf;
 			if (extra_parm->pbuf && extra_parm->size > 0)
 				kfree(extra_parm->pbuf);
@@ -546,7 +487,7 @@ u8 rtw_sitesurvey_cmd(struct adapter  *padapter, struct ndis_802_11_ssid *ssid, 
 
 	rtw_free_network_queue(padapter, false);
 
-	init_h2fwcmd_w_parm_no_rsp(ph2c, psurveyPara, GEN_CMD_CODE(_SiteSurvey));
+	init_h2fwcmd_w_parm_no_rsp(ph2c, psurveyPara, SITE_SURVEY);
 
 	/* psurveyPara->bsslimit = 48; */
 	psurveyPara->scan_mode = pmlmepriv->scan_mode;
@@ -609,7 +550,7 @@ u8 rtw_createbss_cmd(struct adapter  *padapter)
 	}
 
 	INIT_LIST_HEAD(&pcmd->list);
-	pcmd->cmdcode = _CreateBss_CMD_;
+	pcmd->cmdcode = CREATE_BSS;
 	pcmd->parmbuf = (unsigned char *)pdev_network;
 	pcmd->cmdsz = get_wlan_bssid_ex_sz((struct wlan_bssid_ex *)pdev_network);
 	pcmd->rsp = NULL;
@@ -642,7 +583,7 @@ int rtw_startbss_cmd(struct adapter  *padapter, int flags)
 		}
 
 		INIT_LIST_HEAD(&pcmd->list);
-		pcmd->cmdcode = GEN_CMD_CODE(_CreateBss);
+		pcmd->cmdcode = CREATE_BSS;
 		pcmd->parmbuf = NULL;
 		pcmd->cmdsz =  0;
 		pcmd->rsp = NULL;
@@ -777,7 +718,7 @@ u8 rtw_joinbss_cmd(struct adapter  *padapter, struct wlan_network *pnetwork)
 	pcmd->cmdsz = get_wlan_bssid_ex_sz(psecnetwork);/* get cmdsz before endian conversion */
 
 	INIT_LIST_HEAD(&pcmd->list);
-	pcmd->cmdcode = _JoinBss_CMD_;/* GEN_CMD_CODE(_JoinBss) */
+	pcmd->cmdcode = JOIN_BSS;
 	pcmd->parmbuf = (unsigned char *)psecnetwork;
 	pcmd->rsp = NULL;
 	pcmd->rspsz = 0;
@@ -811,7 +752,7 @@ u8 rtw_disassoc_cmd(struct adapter *padapter, u32 deauth_timeout_ms, bool enqueu
 			kfree(param);
 			goto exit;
 		}
-		init_h2fwcmd_w_parm_no_rsp(cmdobj, param, _DisConnect_CMD_);
+		init_h2fwcmd_w_parm_no_rsp(cmdobj, param, DISCONNECT);
 		res = rtw_enqueue_cmd(cmdpriv, cmdobj);
 	} else {
 		/* no need to enqueue, do the cmd hdl directly and free cmd parameter */
@@ -847,7 +788,7 @@ u8 rtw_setopmode_cmd(struct adapter  *padapter, enum ndis_802_11_network_infrast
 			goto exit;
 		}
 
-		init_h2fwcmd_w_parm_no_rsp(ph2c, psetop, _SetOpMode_CMD_);
+		init_h2fwcmd_w_parm_no_rsp(ph2c, psetop, SET_OP_MODE);
 		res = rtw_enqueue_cmd(pcmdpriv, ph2c);
 	} else {
 		setopmode_hdl(padapter, (u8 *)psetop);
@@ -904,7 +845,7 @@ u8 rtw_setstakey_cmd(struct adapter *padapter, struct sta_info *sta, u8 unicast_
 			goto exit;
 		}
 
-		init_h2fwcmd_w_parm_no_rsp(ph2c, psetstakey_para, _SetStaKey_CMD_);
+		init_h2fwcmd_w_parm_no_rsp(ph2c, psetstakey_para, SET_STA_KEY);
 		ph2c->rsp = (u8 *)psetstakey_rsp;
 		ph2c->rspsz = sizeof(struct set_stakey_rsp);
 		res = rtw_enqueue_cmd(pcmdpriv, ph2c);
@@ -955,7 +896,7 @@ u8 rtw_clearstakey_cmd(struct adapter *padapter, struct sta_info *sta, u8 enqueu
 			goto exit;
 		}
 
-		init_h2fwcmd_w_parm_no_rsp(ph2c, psetstakey_para, _SetStaKey_CMD_);
+		init_h2fwcmd_w_parm_no_rsp(ph2c, psetstakey_para, SET_STA_KEY);
 		ph2c->rsp = (u8 *)psetstakey_rsp;
 		ph2c->rspsz = sizeof(struct set_stakey_rsp);
 
@@ -993,7 +934,7 @@ u8 rtw_addbareq_cmd(struct adapter *padapter, u8 tid, u8 *addr)
 	paddbareq_parm->tid = tid;
 	memcpy(paddbareq_parm->addr, addr, ETH_ALEN);
 
-	init_h2fwcmd_w_parm_no_rsp(ph2c, paddbareq_parm, GEN_CMD_CODE(_AddBAReq));
+	init_h2fwcmd_w_parm_no_rsp(ph2c, paddbareq_parm, ADD_BA_REQ);
 
 	/* rtw_enqueue_cmd(pcmdpriv, ph2c); */
 	res = rtw_enqueue_cmd(pcmdpriv, ph2c);
@@ -1028,7 +969,7 @@ u8 rtw_reset_securitypriv_cmd(struct adapter *padapter)
 	pdrvextra_cmd_parm->size = 0;
 	pdrvextra_cmd_parm->pbuf = NULL;
 
-	init_h2fwcmd_w_parm_no_rsp(ph2c, pdrvextra_cmd_parm, GEN_CMD_CODE(_Set_Drv_Extra));
+	init_h2fwcmd_w_parm_no_rsp(ph2c, pdrvextra_cmd_parm, SET_DRV_EXTRA);
 
 	/* rtw_enqueue_cmd(pcmdpriv, ph2c); */
 	res = rtw_enqueue_cmd(pcmdpriv, ph2c);
@@ -1061,7 +1002,7 @@ u8 rtw_free_assoc_resources_cmd(struct adapter *padapter)
 	pdrvextra_cmd_parm->size = 0;
 	pdrvextra_cmd_parm->pbuf = NULL;
 
-	init_h2fwcmd_w_parm_no_rsp(ph2c, pdrvextra_cmd_parm, GEN_CMD_CODE(_Set_Drv_Extra));
+	init_h2fwcmd_w_parm_no_rsp(ph2c, pdrvextra_cmd_parm, SET_DRV_EXTRA);
 
 	/* rtw_enqueue_cmd(pcmdpriv, ph2c); */
 	res = rtw_enqueue_cmd(pcmdpriv, ph2c);
@@ -1094,7 +1035,7 @@ u8 rtw_dynamic_chk_wk_cmd(struct adapter *padapter)
 	pdrvextra_cmd_parm->type = 0;
 	pdrvextra_cmd_parm->size = 0;
 	pdrvextra_cmd_parm->pbuf = NULL;
-	init_h2fwcmd_w_parm_no_rsp(ph2c, pdrvextra_cmd_parm, GEN_CMD_CODE(_Set_Drv_Extra));
+	init_h2fwcmd_w_parm_no_rsp(ph2c, pdrvextra_cmd_parm, SET_DRV_EXTRA);
 
 	/* rtw_enqueue_cmd(pcmdpriv, ph2c); */
 	res = rtw_enqueue_cmd(pcmdpriv, ph2c);
@@ -1343,7 +1284,7 @@ u8 rtw_lps_ctrl_wk_cmd(struct adapter *padapter, u8 lps_ctrl_type, u8 enqueue)
 		pdrvextra_cmd_parm->size = 0;
 		pdrvextra_cmd_parm->pbuf = NULL;
 
-		init_h2fwcmd_w_parm_no_rsp(ph2c, pdrvextra_cmd_parm, GEN_CMD_CODE(_Set_Drv_Extra));
+		init_h2fwcmd_w_parm_no_rsp(ph2c, pdrvextra_cmd_parm, SET_DRV_EXTRA);
 
 		res = rtw_enqueue_cmd(pcmdpriv, ph2c);
 	} else {
@@ -1384,7 +1325,7 @@ u8 rtw_dm_in_lps_wk_cmd(struct adapter *padapter)
 	pdrvextra_cmd_parm->size = 0;
 	pdrvextra_cmd_parm->pbuf = NULL;
 
-	init_h2fwcmd_w_parm_no_rsp(ph2c, pdrvextra_cmd_parm, GEN_CMD_CODE(_Set_Drv_Extra));
+	init_h2fwcmd_w_parm_no_rsp(ph2c, pdrvextra_cmd_parm, SET_DRV_EXTRA);
 
 	res = rtw_enqueue_cmd(pcmdpriv, ph2c);
 
@@ -1446,7 +1387,7 @@ u8 rtw_dm_ra_mask_wk_cmd(struct adapter *padapter, u8 *psta)
 	pdrvextra_cmd_parm->size = 0;
 	pdrvextra_cmd_parm->pbuf = psta;
 
-	init_h2fwcmd_w_parm_no_rsp(ph2c, pdrvextra_cmd_parm, GEN_CMD_CODE(_Set_Drv_Extra));
+	init_h2fwcmd_w_parm_no_rsp(ph2c, pdrvextra_cmd_parm, SET_DRV_EXTRA);
 
 	res = rtw_enqueue_cmd(pcmdpriv, ph2c);
 
@@ -1479,7 +1420,7 @@ u8 rtw_ps_cmd(struct adapter *padapter)
 	pdrvextra_cmd_parm->type = 0;
 	pdrvextra_cmd_parm->size = 0;
 	pdrvextra_cmd_parm->pbuf = NULL;
-	init_h2fwcmd_w_parm_no_rsp(ppscmd, pdrvextra_cmd_parm, GEN_CMD_CODE(_Set_Drv_Extra));
+	init_h2fwcmd_w_parm_no_rsp(ppscmd, pdrvextra_cmd_parm, SET_DRV_EXTRA);
 
 	res = rtw_enqueue_cmd(pcmdpriv, ppscmd);
 
@@ -1550,7 +1491,7 @@ u8 rtw_chk_hi_queue_cmd(struct adapter *padapter)
 	pdrvextra_cmd_parm->size = 0;
 	pdrvextra_cmd_parm->pbuf = NULL;
 
-	init_h2fwcmd_w_parm_no_rsp(ph2c, pdrvextra_cmd_parm, GEN_CMD_CODE(_Set_Drv_Extra));
+	init_h2fwcmd_w_parm_no_rsp(ph2c, pdrvextra_cmd_parm, SET_DRV_EXTRA);
 
 	res = rtw_enqueue_cmd(pcmdpriv, ph2c);
 
@@ -1642,7 +1583,7 @@ u8 rtw_c2h_packet_wk_cmd(struct adapter *padapter, u8 *pbuf, u16 length)
 	pdrvextra_cmd_parm->size = length;
 	pdrvextra_cmd_parm->pbuf = pbuf;
 
-	init_h2fwcmd_w_parm_no_rsp(ph2c, pdrvextra_cmd_parm, GEN_CMD_CODE(_Set_Drv_Extra));
+	init_h2fwcmd_w_parm_no_rsp(ph2c, pdrvextra_cmd_parm, SET_DRV_EXTRA);
 
 	res = rtw_enqueue_cmd(pcmdpriv, ph2c);
 
@@ -1677,7 +1618,7 @@ u8 rtw_c2h_wk_cmd(struct adapter *padapter, u8 *c2h_evt)
 	pdrvextra_cmd_parm->size =  c2h_evt ? 16 : 0;
 	pdrvextra_cmd_parm->pbuf = c2h_evt;
 
-	init_h2fwcmd_w_parm_no_rsp(ph2c, pdrvextra_cmd_parm, GEN_CMD_CODE(_Set_Drv_Extra));
+	init_h2fwcmd_w_parm_no_rsp(ph2c, pdrvextra_cmd_parm, SET_DRV_EXTRA);
 
 	res = rtw_enqueue_cmd(pcmdpriv, ph2c);
 

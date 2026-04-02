@@ -679,18 +679,18 @@ void rtw_dummy_event_callback(struct adapter *adapter, u8 *pbuf);
 void rtw_fwdbg_event_callback(struct adapter *adapter, u8 *pbuf);
 
 enum {
-	GEN_EVT_CODE(_Read_MACREG) = 0, /*0*/
-	GEN_EVT_CODE(_Read_BBREG),
-	GEN_EVT_CODE(_Read_RFREG),
-	GEN_EVT_CODE(_Read_EEPROM),
-	GEN_EVT_CODE(_Read_EFUSE),
-	GEN_EVT_CODE(_Read_CAM),			/*5*/
+	GEN_EVT_CODE(READ_MACREG) = 0, /*0*/
+	GEN_EVT_CODE(READ_BBREG),
+	GEN_EVT_CODE(READ_RFREG),
+	GEN_EVT_CODE(READ_EEPROM),
+	GEN_EVT_CODE(READ_EFUSE),
+	GEN_EVT_CODE(READ_CAM),			/*5*/
 	GEN_EVT_CODE(_Get_BasicRate),
 	GEN_EVT_CODE(_Get_DataRate),
 	GEN_EVT_CODE(_Survey),	 /*8*/
 	GEN_EVT_CODE(_SurveyDone),	 /*9*/
 
-	GEN_EVT_CODE(_JoinBss), /*10*/
+	GEN_EVT_CODE(JOIN_BSS), /*10*/
 	GEN_EVT_CODE(_AddSTA),
 	GEN_EVT_CODE(_DelSTA),
 	GEN_EVT_CODE(_AtimDone),

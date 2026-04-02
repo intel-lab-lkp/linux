@@ -551,9 +551,6 @@ struct RunInThread_param {
 };
 
 
-#define GEN_CMD_CODE(cmd)	cmd ## _CMD_
-
-
 /*
 
 Result:
@@ -624,92 +621,87 @@ extern void rtw_setassocsta_cmdrsp_callback(struct adapter  *padapter,  struct c
 extern void rtw_getrttbl_cmdrsp_callback(struct adapter  *padapter,  struct cmd_obj *pcmd);
 
 
-struct _cmd_callback {
-	u32 cmd_code;
-	void (*callback)(struct adapter  *padapter, struct cmd_obj *cmd);
-};
-
 enum {
-	GEN_CMD_CODE(_Read_MACREG),	/*0*/
-	GEN_CMD_CODE(_Write_MACREG),
-	GEN_CMD_CODE(_Read_BBREG),
-	GEN_CMD_CODE(_Write_BBREG),
-	GEN_CMD_CODE(_Read_RFREG),
-	GEN_CMD_CODE(_Write_RFREG), /*5*/
-	GEN_CMD_CODE(_Read_EEPROM),
-	GEN_CMD_CODE(_Write_EEPROM),
-	GEN_CMD_CODE(_Read_EFUSE),
-	GEN_CMD_CODE(_Write_EFUSE),
+	READ_MACREG,
+	WRITE_MACREG,
+	READ_BBREG,
+	WRITE_BBREG,
+	READ_RFREG,
+	WRITE_RFREG,
+	READ_EEPROM,
+	WRITE_EEPROM,
+	READ_EFUSE,
+	WRITE_EFUSE,
 
-	GEN_CMD_CODE(_Read_CAM),	/*10*/
-	GEN_CMD_CODE(_Write_CAM),
-	GEN_CMD_CODE(_setBCNITV),
-	GEN_CMD_CODE(_setMBIDCFG),
-	GEN_CMD_CODE(_JoinBss),   /*14*/
-	GEN_CMD_CODE(_DisConnect), /*15*/
-	GEN_CMD_CODE(_CreateBss),
-	GEN_CMD_CODE(_SetOpMode),
-	GEN_CMD_CODE(_SiteSurvey),  /*18*/
-	GEN_CMD_CODE(_SetAuth),
+	READ_CAM,
+	WRITE_CAM,
+	SET_BCNITV,
+	SET_MBIDCFG,
+	JOIN_BSS,
+	DISCONNECT,
+	CREATE_BSS,
+	SET_OP_MODE,
+	SITE_SURVEY,
+	SET_AUTH,
 
-	GEN_CMD_CODE(_SetKey),	/*20*/
-	GEN_CMD_CODE(_SetStaKey),
-	GEN_CMD_CODE(_SetAssocSta),
-	GEN_CMD_CODE(_DelAssocSta),
-	GEN_CMD_CODE(_SetStaPwrState),
-	GEN_CMD_CODE(_SetBasicRate), /*25*/
-	GEN_CMD_CODE(_GetBasicRate),
-	GEN_CMD_CODE(_SetDataRate),
-	GEN_CMD_CODE(_GetDataRate),
-	GEN_CMD_CODE(_SetPhyInfo),
+	SET_KEY,
+	SET_STA_KEY,
+	SET_ASSOC_STA,
+	DEL_ASSOC_STA,
+	SET_STA_PWR_STATE,
+	SET_BASIC_RATE,
+	GET_BASIC_RATE,
+	SET_DATA_RATE,
+	GET_DATA_RATE,
+	SET_PHY_INFO,
 
-	GEN_CMD_CODE(_GetPhyInfo),	/*30*/
-	GEN_CMD_CODE(_SetPhy),
-	GEN_CMD_CODE(_GetPhy),
-	GEN_CMD_CODE(_readRssi),
-	GEN_CMD_CODE(_readGain),
-	GEN_CMD_CODE(_SetAtim), /*35*/
-	GEN_CMD_CODE(_SetPwrMode),
-	GEN_CMD_CODE(_JoinbssRpt),
-	GEN_CMD_CODE(_SetRaTable),
-	GEN_CMD_CODE(_GetRaTable),
+	GET_PHY_INFO,
+	SET_PHY,
+	GET_PHY,
+	READ_RSSI,
+	READ_GAIN,
+	SET_ATIM,
+	SET_PWR_MODE,
+	JOIN_BSS_RPT,
+	SET_RA_TABLE,
+	GET_RA_TABLE,
 
-	GEN_CMD_CODE(_GetCCXReport), /*40*/
-	GEN_CMD_CODE(_GetDTMReport),
-	GEN_CMD_CODE(_GetTXRateStatistics),
-	GEN_CMD_CODE(_SetUsbSuspend),
-	GEN_CMD_CODE(_SetH2cLbk),
-	GEN_CMD_CODE(_AddBAReq), /*45*/
-	GEN_CMD_CODE(_SetChannel), /*46*/
-	GEN_CMD_CODE(_SetTxPower),
-	GEN_CMD_CODE(_SwitchAntenna),
-	GEN_CMD_CODE(_SetCrystalCap),
-	GEN_CMD_CODE(_SetSingleCarrierTx), /*50*/
+	GET_CCX_REPORT,
+	GET_DTM_REPORT,
+	GET_TX_RATE_STATISTICS,
+	SET_USB_SUSPEND,
+	SET_H2C_LBK,
+	ADD_BA_REQ,
+	SET_CHANNEL,
+	SET_TX_POWER,
+	SWITCH_ANTENNA,
+	SET_CRYSTAL_CAP,
+	SET_SINGLE_CARRIER_TX,
 
-	GEN_CMD_CODE(_SetSingleToneTx),/*51*/
-	GEN_CMD_CODE(_SetCarrierSuppressionTx),
-	GEN_CMD_CODE(_SetContinuousTx),
-	GEN_CMD_CODE(_SwitchBandwidth), /*54*/
-	GEN_CMD_CODE(_TX_Beacon), /*55*/
+	SET_SINGLE_TONE_TX,
+	SET_CARRIER_SUPPRESSION_TX,
+	SET_CONTINUOUS_TX,
+	SWITCH_BANDWIDTH,
+	TX_BEACON,
 
-	GEN_CMD_CODE(_Set_MLME_EVT), /*56*/
-	GEN_CMD_CODE(_Set_Drv_Extra), /*57*/
-	GEN_CMD_CODE(_Set_H2C_MSG), /*58*/
+	SET_MLME_EVT,
+	SET_DRV_EXTRA,
+	SET_H2C_MSG,
 
-	GEN_CMD_CODE(_SetChannelPlan), /*59*/
+	SET_CHANNEL_PLAN,
 
-	GEN_CMD_CODE(_SetChannelSwitch), /*60*/
-	GEN_CMD_CODE(_TDLS), /*61*/
-	GEN_CMD_CODE(_ChkBMCSleepq), /*62*/
+	SET_CHANNEL_SWITCH,
+	TDLS,
+	CHK_BMC_SLEEPQ,
 
-	GEN_CMD_CODE(_RunInThreadCMD), /*63*/
+	RUN_IN_THREAD_CMD,
 
 	MAX_H2CCMD
 };
 
-#define _GetBBReg_CMD_		_Read_BBREG_CMD_
-#define _SetBBReg_CMD_		_Write_BBREG_CMD_
-#define _GetRFReg_CMD_		_Read_RFREG_CMD_
-#define _SetRFReg_CMD_		_Write_RFREG_CMD_
+#define GET_BB_REG READ_BBREG
+#define SET_BB_REG WRITE_BBREG
+#define GET_RF_REG READ_RFREG
+#define SET_RF_REG WRITE_RFREG
 
-#endif /*  _CMD_H_ */
+#endif /* _CMD_H_ */
