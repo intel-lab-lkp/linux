@@ -28,6 +28,12 @@ properties:
   vdd-px-supply:
     description: A reference to the 1.8V I/O supply
 
+  qcom,always-on-supply:
+    type: boolean
+    description: Indicates that the codec supply regulators are always enabled
+                 by the system and must not be requested or enabled by the codec
+                 driver.
+
 required:
   - compatible
   - vdd-px-supply
