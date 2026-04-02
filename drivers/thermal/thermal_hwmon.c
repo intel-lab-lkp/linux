@@ -242,6 +242,15 @@ void thermal_remove_hwmon_sysfs(struct thermal_zone_device *tz)
 	list_del(&temp->hwmon_node);
 	kfree(temp);
 	if (!list_empty(&hwmon->tz_list)) {
+		if (hwmon->device->parent == &tz->device) {
+			struct thermal_hwmon_temp *first;
+
+			first = list_first_entry(&hwmon->tz_list,
+						 struct thermal_hwmon_temp,
+						 hwmon_node);
+			device_move(hwmon->device, &first->tz->device,
+				    DPM_ORDER_DEV_AFTER_PARENT);
+		}
 		mutex_unlock(&thermal_hwmon_list_lock);
 		return;
 	}
