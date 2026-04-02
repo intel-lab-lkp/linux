@@ -72,11 +72,20 @@ static bool __init alix_present(unsigned long bios_phys,
 	for (p = bios_virt; p < scan_end; p++) {
 		const char *tail;
 		char *a;
+		size_t copy_len;
 
 		if (memcmp(p, alix_sig, alix_sig_len) != 0)
 			continue;
 
-		memcpy(name, p, sizeof(name));
+		/*
+		 * The scan window only proves that the signature and the
+		 * trailing board digit fit in the mapped BIOS region.
+		 */
+		copy_len = min_t(size_t, sizeof(name) - 1,
+				 bios_virt + bios_len - p);
+
+		memcpy(name, p, copy_len);
+		name[copy_len] = '\0';
 
 		/* remove the first \0 character from string */
 		a = strchr(name, '\0');
