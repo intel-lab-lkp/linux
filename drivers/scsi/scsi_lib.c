@@ -373,6 +373,7 @@ EXPORT_SYMBOL(scsi_execute_cmd);
 static void scsi_dec_host_busy(struct Scsi_Host *shost, struct scsi_cmnd *cmd)
 {
 	unsigned long flags;
+	unsigned int busy;
 
 	rcu_read_lock();
 	__clear_bit(SCMD_STATE_INFLIGHT, &cmd->state);
@@ -385,7 +386,7 @@ static void scsi_dec_host_busy(struct Scsi_Host *shost, struct scsi_cmnd *cmd)
 		 */
 		smp_mb();
 
-		unsigned int busy = scsi_host_busy(shost);
+		busy = scsi_host_busy(shost);
 
 		spin_lock_irqsave(shost->host_lock, flags);
 		if (shost->host_failed || shost->host_eh_scheduled)
