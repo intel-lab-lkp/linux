@@ -264,7 +264,7 @@ struct hsr_node *hsr_get_node(struct hsr_port *port, struct list_head *node_db,
 	bool san = false;
 
 	if (!skb_mac_header_was_set(skb))
-		return NULL;
+		return ERR_PTR(-EINVAL);
 
 	ethhdr = (struct ethhdr *)skb_mac_header(skb);
 
@@ -297,14 +297,24 @@ struct hsr_node *hsr_get_node(struct hsr_port *port, struct list_head *node_db,
 	    ethhdr->h_proto == htons(ETH_P_HSR)) {
 		/* Check if skb contains hsr_ethhdr */
 		if (skb->mac_len < sizeof(struct hsr_ethhdr))
-			return NULL;
+			return ERR_PTR(-EINVAL);
 	} else {
 		rct = skb_get_PRP_rct(skb);
 		if (!rct && rx_port != HSR_PT_MASTER)
 			san = true;
 	}
 
-	return hsr_add_node(hsr, node_db, ethhdr->h_source, san, rx_port);
+	/* PRP accepts ordinary SAN traffic on slave ports without learning a
+	 * persistent node entry.
+	 */
+	if (hsr->prot_version == PRP_V1 && san)
+		return ERR_PTR(-ENOENT);
+
+	node = hsr_add_node(hsr, node_db, ethhdr->h_source, san, rx_port);
+	if (!node)
+		return ERR_PTR(-ENOMEM);
+
+	return node;
 }
 
 static bool hsr_seq_block_is_old(struct hsr_seq_block *block)
