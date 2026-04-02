@@ -653,6 +653,12 @@ static int send_forget_request(struct virtio_fs_vq *fsvq,
 			kfree(forget);
 			if (in_flight)
 				dec_in_flight_req(fsvq);
+			/*
+			 * send_forget_request() returns 1 to mean "stop draining
+			 * queued_reqs for now".  A negative value is also non-zero
+			 * and would stall the worker after one dropped forget.
+			 */
+			ret = 0;
 		}
 		goto out;
 	}
