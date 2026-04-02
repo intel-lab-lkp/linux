@@ -1034,22 +1034,22 @@ static void update_dl_entity(struct sched_dl_entity *dl_se)
 			return;
 		}
 
-		/*
-		 * When [4] D->A is followed by [1] A->B, dl_defer_running
-		 * needs to be cleared, otherwise it will fail to properly
-		 * start the zero-laxity timer.
-		 */
-		dl_se->dl_defer_running = 0;
 		replenish_dl_new_period(dl_se, rq);
 	} else if (dl_server(dl_se) && dl_se->dl_defer) {
 		/*
-		 * The server can still use its previous deadline, so check if
-		 * it left the dl_defer_running state.
+		 * The server can still use its previous deadline. Clear
+		 * dl_defer_running unconditionally: a stale dl_defer_running=1
+		 * from a prior starvation episode (set in dl_server_timer() when
+		 * the zero-laxity timer fires) must not carry over to the next
+		 * activation. PROXY_WAKING return-migration (proxy_force_return)
+		 * re-activates the server via attach_one_task()->enqueue_task_fair()
+		 * without calling dl_server_stop() first, so the flag is not
+		 * cleared in the [4] D->A path for that case.
+		 * Always re-arm the zero-laxity timer on each re-activation.
 		 */
-		if (!dl_se->dl_defer_running) {
-			dl_se->dl_defer_armed = 1;
-			dl_se->dl_throttled = 1;
-		}
+		dl_se->dl_defer_running = 0;
+		dl_se->dl_defer_armed = 1;
+		dl_se->dl_throttled = 1;
 	}
 }
 
