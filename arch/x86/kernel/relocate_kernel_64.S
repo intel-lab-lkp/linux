@@ -136,6 +136,8 @@ SYM_CODE_START_LOCAL_NOALIGN(identity_mapped)
 	 * %r13 original CR4 when relocate_kernel() was invoked
 	 */
 
+	/* set return address to 0 if not preserving context */
+	pushq	$0
 	/* store the start address on the stack */
 	pushq   %rdx
 
