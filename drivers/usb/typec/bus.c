@@ -7,6 +7,8 @@
  */
 
 #include <linux/usb/pd_vdo.h>
+#include <linux/kernel.h>
+#include <linux/module.h>
 
 #include "bus.h"
 #include "class.h"
@@ -62,7 +64,7 @@ static int typec_altmode_set_state(struct typec_altmode *adev,
 	bool is_port = is_typec_port(adev->dev.parent);
 	struct altmode *port_altmode;
 
-	port_altmode = is_port ? to_altmode(adev) : to_altmode(adev)->partner;
+	port_altmode = is_port ? to_altmode(adev) : to_altmode(adev)->partners[0];
 
 	return typec_altmode_set_switches(port_altmode, conf, data);
 }
@@ -89,6 +91,7 @@ int typec_altmode_notify(struct typec_altmode *adev,
 	bool is_port;
 	struct altmode *altmode;
 	struct altmode *partner;
+	int partner_idx;
 	int ret;
 
 	if (!adev)
@@ -96,11 +99,17 @@ int typec_altmode_notify(struct typec_altmode *adev,
 
 	altmode = to_altmode(adev);
 
-	if (!altmode->partner)
+	partner_idx = typec_altmode_get_partner_idx_by_name(altmode, dev_name(&adev->dev));
+	if (partner_idx == -1) {
+		dev_info(&adev->dev, "%s adev is not in the partners array\n", __func__);
+		return -ENODEV;
+	}
+
+	if (!altmode->partners[partner_idx])
 		return -ENODEV;
 
 	is_port = is_typec_port(adev->dev.parent);
-	partner = altmode->partner;
+	partner = altmode->partners[partner_idx];
 
 	ret = typec_altmode_set_switches(is_port ? altmode : partner, conf, data);
 	if (ret)
@@ -125,12 +134,17 @@ EXPORT_SYMBOL_GPL(typec_altmode_notify);
  */
 int typec_altmode_enter(struct typec_altmode *adev, u32 *vdo)
 {
-	struct altmode *partner = to_altmode(adev)->partner;
-	struct typec_altmode *pdev = &partner->adev;
+	struct altmode *partner;
+	struct typec_altmode *pdev;
 	int ret;
+
+	partner = to_altmode(adev)->partners[0];
+	pdev = &partner->adev;
 
 	if (!adev || adev->active)
 		return 0;
+
+	typec_altmode_dump("typec_altmode_enter partner", partner);
 
 	if (!pdev->ops || !pdev->ops->enter)
 		return -EOPNOTSUPP;
@@ -156,12 +170,14 @@ EXPORT_SYMBOL_GPL(typec_altmode_enter);
  */
 int typec_altmode_exit(struct typec_altmode *adev)
 {
-	struct altmode *partner = to_altmode(adev)->partner;
+	struct altmode *partner = to_altmode(adev)->partners[0];
 	struct typec_altmode *pdev = &partner->adev;
 	int ret;
 
 	if (!adev || !adev->active)
 		return 0;
+
+	typec_altmode_dump("typec_altmode_exit partner", partner);
 
 	if (!pdev->ops || !pdev->ops->exit)
 		return -EOPNOTSUPP;
@@ -185,7 +201,7 @@ EXPORT_SYMBOL_GPL(typec_altmode_exit);
  */
 int typec_altmode_attention(struct typec_altmode *adev, u32 vdo)
 {
-	struct altmode *partner = to_altmode(adev)->partner;
+	struct altmode *partner = to_altmode(adev)->partners[0];
 	struct typec_altmode *pdev;
 
 	if (!partner)
@@ -220,12 +236,15 @@ int typec_altmode_vdm(struct typec_altmode *adev,
 	if (!adev)
 		return 0;
 
+
 	altmode = to_altmode(adev);
 
-	if (!altmode->partner)
+	typec_altmode_dump("typec_altmode_vdm altmode", altmode);
+
+	if (!altmode->partners[0])
 		return -ENODEV;
 
-	pdev = &altmode->partner->adev;
+	pdev = &altmode->partners[0]->adev;
 
 	if (!pdev->ops || !pdev->ops->vdm)
 		return -EOPNOTSUPP;
@@ -237,10 +256,10 @@ EXPORT_SYMBOL_GPL(typec_altmode_vdm);
 const struct typec_altmode *
 typec_altmode_get_partner(struct typec_altmode *adev)
 {
-	if (!adev || !to_altmode(adev)->partner)
+	if (!adev || !to_altmode(adev)->partners[0])
 		return NULL;
 
-	return &to_altmode(adev)->partner->adev;
+	return &to_altmode(adev)->partners[0]->adev;
 }
 EXPORT_SYMBOL_GPL(typec_altmode_get_partner);
 
@@ -258,7 +277,7 @@ EXPORT_SYMBOL_GPL(typec_altmode_get_partner);
  */
 int typec_cable_altmode_enter(struct typec_altmode *adev, enum typec_plug_index sop, u32 *vdo)
 {
-	struct altmode *partner = to_altmode(adev)->partner;
+	struct altmode *partner = to_altmode(adev)->partners[0];
 	struct typec_altmode *pdev;
 
 	if (!adev || adev->active)
@@ -288,7 +307,7 @@ EXPORT_SYMBOL_GPL(typec_cable_altmode_enter);
  */
 int typec_cable_altmode_exit(struct typec_altmode *adev, enum typec_plug_index sop)
 {
-	struct altmode *partner = to_altmode(adev)->partner;
+	struct altmode *partner = to_altmode(adev)->partners[0];
 	struct typec_altmode *pdev;
 
 	if (!adev || !adev->active)
@@ -330,9 +349,9 @@ int typec_cable_altmode_vdm(struct typec_altmode *adev, enum typec_plug_index so
 	altmode = to_altmode(adev);
 
 	if (is_typec_plug(adev->dev.parent)) {
-		if (!altmode->partner)
+		if (!altmode->partners[0])
 			return -ENODEV;
-		pdev = &altmode->partner->adev;
+		pdev = &altmode->partners[0]->adev;
 	} else {
 		if (!altmode->plug[sop])
 			return -ENODEV;
@@ -360,7 +379,7 @@ EXPORT_SYMBOL_GPL(typec_cable_altmode_vdm);
 struct typec_altmode *typec_altmode_get_plug(struct typec_altmode *adev,
 					     enum typec_plug_index index)
 {
-	struct altmode *port = to_altmode(adev)->partner;
+	struct altmode *port = to_altmode(adev)->partners[0];
 
 	if (port->plug[index]) {
 		get_device(&port->plug[index]->adev.dev);
@@ -494,17 +513,58 @@ static int typec_uevent(const struct device *dev, struct kobj_uevent_env *env)
 	return add_uevent_var(env, "MODALIAS=typec:id%04X", altmode->svid);
 }
 
+void typec_altmode_dump(char *name, struct altmode *alt)
+{
+	if (alt) {
+		for (int i = 0; i < TYPEC_ALTMODE_MAX_PARTNERS; i++) {
+			if (alt->partners[i]) {
+				dev_info(&alt->adev.dev, "%s[%p]->partners[%d] = %p / adev name = %s",
+					name,
+					alt,
+					i,
+					alt->partners[i],
+					dev_name(&alt->partners[i]->adev.dev)
+				);
+			}
+		}
+		for (int i = 0; i < 2; i++) {
+			if (alt->plug[i]) {
+				dev_info(&alt->adev.dev, "%s[%p]->plug[%d] = %p / adev name = %s",
+					name,
+					alt,
+					i,
+					alt->plug[i],
+					dev_name(&alt->plug[i]->adev.dev)
+				);
+			}
+		}
+	} else {
+		dev_info(&alt->adev.dev, "alt == NULL !");
+	}
+}
+
 static int typec_altmode_create_links(struct altmode *alt)
 {
-	struct device *port_dev = &alt->partner->adev.dev;
+	struct device *port_dev = &alt->partners[0]->adev.dev;
 	struct device *dev = &alt->adev.dev;
 	int err;
+
+	dev_info(&alt->adev.dev, "%s \"port\" -> %s\n",
+		__func__,
+		dev_name(port_dev)
+	);
 
 	err = sysfs_create_link(&dev->kobj, &port_dev->kobj, "port");
 	if (err)
 		return err;
 
-	err = sysfs_create_link(&port_dev->kobj, &dev->kobj, "partner");
+	dev_info(port_dev, "%s \"%s\" -> %s\n",
+		__func__,
+		dev_name(port_dev),
+		dev_name(dev)
+	);
+
+	err = sysfs_create_link(&port_dev->kobj, &dev->kobj, dev_name(dev));
 	if (err)
 		sysfs_remove_link(&dev->kobj, "port");
 
@@ -513,7 +573,17 @@ static int typec_altmode_create_links(struct altmode *alt)
 
 static void typec_altmode_remove_links(struct altmode *alt)
 {
-	sysfs_remove_link(&alt->partner->adev.dev.kobj, "partner");
+	struct altmode *partner = alt->partners[0];
+
+	dev_info(&partner->adev.dev, "%s \"%s\"\n",
+		__func__,
+		dev_name(&alt->adev.dev)
+	);
+
+	sysfs_remove_link(&partner->adev.dev.kobj, dev_name(&alt->adev.dev));
+
+	dev_info(&alt->adev.dev, "%s \"port\"\n", __func__);
+
 	sysfs_remove_link(&alt->adev.dev.kobj, "port");
 }
 
@@ -525,7 +595,7 @@ static int typec_probe(struct device *dev)
 	int ret;
 
 	/* Fail if the port does not support the alternate mode */
-	if (!altmode->partner)
+	if (!altmode->partners[0])
 		return -ENODEV;
 
 	ret = typec_altmode_create_links(altmode);
@@ -559,6 +629,29 @@ static void typec_remove(struct device *dev)
 
 	adev->desc = NULL;
 	adev->ops = NULL;
+}
+
+int typec_altmode_get_partner_idx_by_name(struct altmode *altmode, const char *name)
+{
+	if (!altmode)
+		return -1;
+
+	for (int i = 0; i < TYPEC_ALTMODE_MAX_PARTNERS; i++) {
+		if (!altmode->partners[i])
+			continue;
+		if (!strcmp(name, dev_name(&altmode->partners[i]->adev.dev)))
+			return i;
+	}
+	return -1;
+}
+
+bool typec_altmode_partners_is_empty(struct altmode *altmode)
+{
+	for (int i = 0; i < TYPEC_ALTMODE_MAX_PARTNERS; i++) {
+		if (altmode->partners[i])
+			return false;
+	}
+	return true;
 }
 
 const struct bus_type typec_bus = {

@@ -241,6 +241,15 @@ static int altmode_match(struct device *dev, const void *data)
 	return (adev->svid == id->svid);
 }
 
+static int typec_altmode_partners_get_free_slot(struct altmode *altmode)
+{
+	for (int i = 0; i < TYPEC_ALTMODE_MAX_PARTNERS; i++) {
+		if (altmode->partners[i] == NULL)
+			return i;
+	}
+	return -1;
+}
+
 static void typec_altmode_set_partner(struct altmode *altmode)
 {
 	struct typec_altmode *adev = &altmode->adev;
@@ -253,9 +262,18 @@ static void typec_altmode_set_partner(struct altmode *altmode)
 	if (!dev)
 		return;
 
+	dev_info(&altmode->adev.dev, "%s dev %s\n",
+		__func__,
+		dev_name(dev)
+	);
+
+	typec_altmode_dump("altmode before set_partner", altmode);
+
 	/* Bind the port alt mode to the partner/plug alt mode. */
 	partner = to_altmode(to_typec_altmode(dev));
-	altmode->partner = partner;
+	typec_altmode_dump("partner before set_partner", partner);
+
+	altmode->partners[0] = partner;
 
 	/* Bind the partner/plug alt mode to the port alt mode. */
 	if (is_typec_plug(adev->dev.parent)) {
@@ -263,18 +281,51 @@ static void typec_altmode_set_partner(struct altmode *altmode)
 
 		partner->plug[plug->index] = altmode;
 	} else {
-		partner->partner = altmode;
+		int free_spot = typec_altmode_partners_get_free_slot(partner);
+
+		if (free_spot == -1) {
+			dev_info(&altmode->adev.dev, "typec altmode, no free slot in partners table");
+			return;
+		}
+		partner->partners[free_spot] = altmode;
 	}
+
+	typec_altmode_dump("altmode after set_partner", altmode);
+	typec_altmode_dump("partner after set_partner", partner);
+
 }
 
 static void typec_altmode_put_partner(struct altmode *altmode)
 {
-	struct altmode *partner = altmode->partner;
+	struct altmode *partner = altmode->partners[0];
 	struct typec_altmode *adev;
 	struct typec_altmode *partner_adev;
 
-	if (!partner)
+	if (!partner) {
+		dev_info(&altmode->adev.dev, "%s partner is already NULL\n", __func__);
 		return;
+	}
+
+	typec_altmode_dump("altmode before put_partner", altmode);
+	typec_altmode_dump("partner before put_partner", partner);
+
+	int partner_idx = typec_altmode_get_partner_idx_by_name(
+		partner,
+		dev_name(&altmode->adev.dev)
+	);
+
+	dev_info(&altmode->adev.dev, "%s partner_idx = %d\n", __func__, partner_idx);
+
+	if (partner_idx == -1) {
+		dev_info(&altmode->adev.dev, "partner_idx altmod not found in partners list");
+		return;
+	}
+
+	dev_info(&altmode->adev.dev, "%s altmode->adev = %p partner->adev = %p\n",
+		__func__,
+		&altmode->adev,
+		&partner->adev
+	);
 
 	adev = &altmode->adev;
 	partner_adev = &partner->adev;
@@ -284,9 +335,22 @@ static void typec_altmode_put_partner(struct altmode *altmode)
 
 		partner->plug[plug->index] = NULL;
 	} else {
-		partner->partner = NULL;
+		partner->partners[partner_idx] = NULL;
 	}
-	put_device(&partner_adev->dev);
+
+	typec_altmode_dump("partner after set to NULL", partner);
+
+	if (typec_altmode_partners_is_empty(partner)) {
+		dev_info(&altmode->adev.dev, "%s partner->partners is empty -> put_device(...)\n",
+			__func__
+		);
+		put_device(&partner_adev->dev);
+	} else {
+		dev_info(&altmode->adev.dev, "%s partner->partners is not empty -> keeping it\n",
+			__func__
+		);
+	}
+
 }
 
 /**
@@ -370,8 +434,16 @@ static ssize_t active_store(struct device *dev, struct device_attribute *attr,
 {
 	struct typec_altmode *adev = to_typec_altmode(dev);
 	struct altmode *altmode = to_altmode(adev);
+	int partner_idx = typec_altmode_get_partner_idx_by_name(altmode, dev_name(dev));
 	bool enter;
 	int ret;
+
+	dev_info(dev, "%s buf %s altmode %s partner_idx %d\n",
+		__func__,
+		buf,
+		dev_name(&altmode->adev.dev),
+		partner_idx
+	);
 
 	ret = kstrtobool(buf, &enter);
 	if (ret)
@@ -380,14 +452,21 @@ static ssize_t active_store(struct device *dev, struct device_attribute *attr,
 	if (adev->active == enter)
 		return size;
 
+	if (partner_idx == -1) {
+		dev_warn(dev, "dev is not in the altmode partners array");
+		return 0;
+	}
+
 	if (is_typec_port(adev->dev.parent)) {
 		typec_altmode_update_active(adev, enter);
 
 		/* Make sure that the partner exits the mode before disabling */
-		if (altmode->partner && !enter && altmode->partner->adev.active)
-			typec_altmode_exit(&altmode->partner->adev);
-	} else if (altmode->partner) {
-		if (enter && !altmode->partner->adev.active) {
+		if (altmode->partners[partner_idx]
+				&& !enter
+				&& altmode->partners[partner_idx]->adev.active)
+			typec_altmode_exit(&altmode->partners[partner_idx]->adev);
+	} else if (altmode->partners[partner_idx]) {
+		if (enter && !altmode->partners[partner_idx]->adev.active) {
 			dev_warn(dev, "port has the mode disabled\n");
 			return -EPERM;
 		}
