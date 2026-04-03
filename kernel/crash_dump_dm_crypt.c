@@ -417,7 +417,7 @@ int crash_load_dm_crypt_keys(struct kimage *image)
 		return -ENOENT;
 	}
 
-	if (!is_dm_key_reused) {
+	if (!is_dm_key_reused || !keys_header) {
 		image->dm_crypt_keys_addr = 0;
 		r = build_keys_header();
 		if (r)
@@ -433,6 +433,7 @@ int crash_load_dm_crypt_keys(struct kimage *image)
 	r = kexec_add_buffer(&kbuf);
 	if (r) {
 		kvfree((void *)kbuf.buffer);
+		keys_header = NULL;
 		return r;
 	}
 	image->dm_crypt_keys_addr = kbuf.mem;
