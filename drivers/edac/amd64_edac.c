@@ -4,6 +4,7 @@
 #include "amd64_edac.h"
 #include <asm/amd/nb.h>
 #include <asm/amd/node.h>
+#include <asm/hygon/node.h>
 
 static struct edac_pci_ctl_info *pci_ctl;
 
@@ -96,6 +97,29 @@ int __amd64_write_pci_cfg_dword(struct pci_dev *pdev, int offset,
 			   func, PCI_FUNC(pdev->devfn), offset);
 
 	return pcibios_err_to_errno(err);
+}
+
+static u32 get_umc_base_addr(struct amd64_pvt *pvt, u8 channel)
+{
+	if (hygon_f18h_m4h()) {
+		struct pci_dev *dev = node_to_amd_nb(pvt->mc_node_id)->misc;
+		u8 df_id;
+
+		hygon_get_dfid(dev, &df_id);
+
+		return get_umc_base(channel) + (0x80000000 + (0x10000000 * (df_id - 4)));
+	}
+
+	return get_umc_base(channel);
+}
+
+static u16 get_num_nodes(void)
+{
+	if (boot_cpu_data.x86_vendor == X86_VENDOR_HYGON &&
+	    boot_cpu_data.x86 == 0x18)
+		return amd_num_nodes();
+
+	return amd_nb_num();
 }
 
 /*
@@ -1452,12 +1476,15 @@ static void umc_read_base_mask(struct amd64_pvt *pvt)
 	u32 mask_reg, mask_reg_sec;
 	u32 *base, *base_sec;
 	u32 *mask, *mask_sec;
+	u32 umc_base;
 	int cs, umc;
 	u32 tmp;
 
 	for_each_umc(umc) {
-		umc_base_reg = get_umc_base(umc) + UMCCH_BASE_ADDR;
-		umc_base_reg_sec = get_umc_base(umc) + UMCCH_BASE_ADDR_SEC;
+		umc_base = get_umc_base_addr(pvt, umc);
+
+		umc_base_reg = umc_base + UMCCH_BASE_ADDR;
+		umc_base_reg_sec = umc_base + UMCCH_BASE_ADDR_SEC;
 
 		for_each_chip_select(cs, umc, pvt) {
 			base = &pvt->csels[umc].csbases[cs];
@@ -1479,8 +1506,8 @@ static void umc_read_base_mask(struct amd64_pvt *pvt)
 			}
 		}
 
-		umc_mask_reg = get_umc_base(umc) + UMCCH_ADDR_MASK;
-		umc_mask_reg_sec = get_umc_base(umc) + get_umc_reg(pvt, UMCCH_ADDR_MASK_SEC);
+		umc_mask_reg = umc_base + UMCCH_ADDR_MASK;
+		umc_mask_reg_sec = umc_base + get_umc_reg(pvt, UMCCH_ADDR_MASK_SEC);
 
 		for_each_chip_select_mask(cs, umc, pvt) {
 			mask = &pvt->csels[umc].csmasks[cs];
@@ -1567,7 +1594,8 @@ static void umc_determine_memory_type(struct amd64_pvt *pvt)
 		 * Check if the system supports the "DDR Type" field in UMC Config
 		 * and has DDR5 DIMMs in use.
 		 */
-		if (pvt->flags.zn_regs_v2 && ((umc->umc_cfg & GENMASK(2, 0)) == 0x1)) {
+		if ((pvt->flags.zn_regs_v2 || hygon_f18h_m4h()) &&
+		    ((umc->umc_cfg & GENMASK(2, 0)) == 0x1)) {
 			if (umc->dimm_cfg & BIT(5))
 				umc->dram_type = MEM_LRDDR5;
 			else if (umc->dimm_cfg & BIT(4))
@@ -2801,7 +2829,11 @@ static inline void decode_bus_error(int node_id, struct mce *m)
  */
 static void umc_get_err_info(struct mce *m, struct err_info *err)
 {
-	err->channel = (m->ipid & GENMASK(31, 0)) >> 20;
+	if (boot_cpu_data.x86_vendor == X86_VENDOR_HYGON &&
+	    boot_cpu_data.x86 == 0x18)
+		err->channel = FIELD_GET(GENMASK(23, 20), m->ipid);
+	else
+		err->channel = FIELD_GET(GENMASK(31, 20), m->ipid);
 	err->csrow = m->synd & 0x7;
 }
 
@@ -2922,8 +2954,7 @@ static void umc_read_mc_regs(struct amd64_pvt *pvt)
 
 	/* Read registers from each UMC */
 	for_each_umc(i) {
-
-		umc_base = get_umc_base(i);
+		umc_base = get_umc_base_addr(pvt, i);
 		umc = &pvt->umc[i];
 
 		if (!amd_smn_read(nid, umc_base + get_umc_reg(pvt, UMCCH_DIMM_CFG), &tmp))
@@ -3841,6 +3872,16 @@ static int per_family_init(struct amd64_pvt *pvt)
 		break;
 
 	case 0x18:
+		switch (pvt->model) {
+		case 0x4:
+			pvt->max_mcs			= 3;
+			break;
+		case 0x5:
+			pvt->max_mcs			= 1;
+			break;
+		default:
+			break;
+		}
 		break;
 
 	case 0x19:
@@ -4131,6 +4172,7 @@ static int __init amd64_edac_init(void)
 {
 	const char *owner;
 	int err = -ENODEV;
+	u16 node_num;
 	int i;
 
 	if (ghes_get_devices())
@@ -4143,13 +4185,15 @@ static int __init amd64_edac_init(void)
 	if (!x86_match_cpu(amd64_cpuids))
 		return -ENODEV;
 
-	if (!amd_nb_num())
+	node_num = get_num_nodes();
+
+	if (!node_num)
 		return -ENODEV;
 
 	opstate_init();
 
 	err = -ENOMEM;
-	ecc_stngs = kzalloc_objs(ecc_stngs[0], amd_nb_num());
+	ecc_stngs = kzalloc_objs(ecc_stngs[0], node_num);
 	if (!ecc_stngs)
 		goto err_free;
 
@@ -4157,7 +4201,7 @@ static int __init amd64_edac_init(void)
 	if (!msrs)
 		goto err_free;
 
-	for (i = 0; i < amd_nb_num(); i++) {
+	for (i = 0; i < node_num; i++) {
 		err = probe_one_instance(i);
 		if (err) {
 			/* unwind properly */
@@ -4213,7 +4257,7 @@ static void __exit amd64_edac_exit(void)
 	else
 		amd_unregister_ecc_decoder(decode_bus_error);
 
-	for (i = 0; i < amd_nb_num(); i++)
+	for (i = 0; i < get_num_nodes(); i++)
 		remove_one_instance(i);
 
 	kfree(ecc_stngs);
