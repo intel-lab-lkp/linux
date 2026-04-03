@@ -4699,8 +4699,11 @@ static int ice_cfg_netdev(struct ice_vsi *vsi)
 	struct net_device *netdev;
 	u8 mac_addr[ETH_ALEN];
 
-	netdev = alloc_etherdev_mqs(sizeof(*np), vsi->alloc_txq,
-				    vsi->alloc_rxq);
+	netdev = alloc_etherdev_mqs(sizeof(*np),
+				    min_t(int, num_online_cpus(),
+					   vsi->back->hw.func_caps.common_cap.num_txq),
+				    min_t(int, num_online_cpus(),
+					   vsi->back->hw.func_caps.common_cap.num_rxq));
 	if (!netdev)
 		return -ENOMEM;
 
