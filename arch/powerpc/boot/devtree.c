@@ -343,11 +343,16 @@ int dt_is_compatible(void *node, const char *compat)
 	if (len < 0)
 		return 0;
 
-	for (pos = 0; pos < len; pos++) {
+	for (pos = 0; pos < len; ) {
+		int entry_len = strnlen(&buf[pos], len - pos);
+
+		if (entry_len == len - pos)
+			return 0;
+
 		if (!strcmp(buf + pos, compat))
 			return 1;
 
-		pos += strnlen(&buf[pos], len - pos);
+		pos += entry_len + 1;
 	}
 
 	return 0;
