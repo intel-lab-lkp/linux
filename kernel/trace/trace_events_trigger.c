@@ -246,7 +246,7 @@ event_triggers_post_call(struct trace_event_file *file,
 }
 EXPORT_SYMBOL_GPL(event_triggers_post_call);
 
-#define SHOW_AVAILABLE_TRIGGERS	(void *)(1UL)
+#define SHOW_AVAILABLE_TRIGGERS	((void *)(1UL))
 
 static void *trigger_next(struct seq_file *m, void *t, loff_t *pos)
 {
@@ -325,6 +325,7 @@ static const struct seq_operations event_triggers_seq_ops = {
 static int event_trigger_regex_open(struct inode *inode, struct file *file)
 {
 	int ret;
+	struct seq_file *m = NULL;
 
 	ret = security_locked_down(LOCKDOWN_TRACEFS);
 	if (ret)
@@ -351,7 +352,7 @@ static int event_trigger_regex_open(struct inode *inode, struct file *file)
 	if (file->f_mode & FMODE_READ) {
 		ret = seq_open(file, &event_triggers_seq_ops);
 		if (!ret) {
-			struct seq_file *m = file->private_data;
+			m = file->private_data;
 			m->private = file;
 		}
 	}
@@ -388,9 +389,9 @@ static ssize_t event_trigger_regex_write(struct file *file,
 					 const char __user *ubuf,
 					 size_t cnt, loff_t *ppos)
 {
+	char *buf __free(kfree) = NULL;
 	struct trace_event_file *event_file;
 	ssize_t ret;
-	char *buf __free(kfree) = NULL;
 
 	if (!cnt)
 		return 0;
@@ -633,6 +634,7 @@ clear_event_triggers(struct trace_array *tr)
 
 	list_for_each_entry(file, &tr->events, list) {
 		struct event_trigger_data *data, *n;
+
 		list_for_each_entry_safe(data, n, &file->triggers, list) {
 			trace_event_trigger_enable_disable(file, 0);
 			list_del_rcu(&data->list);
@@ -785,7 +787,7 @@ static void unregister_trigger(char *glob,
  *   cmd               - the trigger command name
  *   glob              - the trigger command name optionally prefaced with '!'
  *   param_and_filter  - text following cmd and ':'
- *   param             - text following cmd and ':' and stripped of filter
+ *   param             - text following cmd and ':' and filter removed
  *   filter            - the optional filter text following (and including) 'if'
  *
  * To illustrate the use of these components, here are some concrete
