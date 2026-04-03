@@ -106,7 +106,7 @@ uint32_t fdt_check_mem_start(uint32_t mem_start, const void *fdt)
 	/* Walk all memory nodes and regions */
 	for (offset = fdt_next_node(fdt, -1, NULL); offset >= 0;
 	     offset = fdt_next_node(fdt, offset, NULL)) {
-		type = fdt_getprop(fdt, offset, "device_type", NULL);
+		type = fdt_stringlist_get(fdt, offset, "device_type", 0, NULL);
 		if (!type || strcmp(type, "memory"))
 			continue;
 
