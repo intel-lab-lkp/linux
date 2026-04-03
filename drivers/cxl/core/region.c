@@ -426,7 +426,7 @@ static ssize_t commit_store(struct device *dev, struct device_attribute *attr,
 	}
 
 	if (test_bit(CXL_REGION_F_LOCK, &cxlr->flags))
-		return -EPERM;
+		return -EBUSY;
 
 	rc = queue_reset(cxlr);
 	if (rc)
