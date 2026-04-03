@@ -137,7 +137,7 @@ static void fuse_request_init(struct fuse_mount *fm, struct fuse_req *req)
 	req->create_time = jiffies;
 }
 
-static struct fuse_req *fuse_request_alloc(struct fuse_mount *fm, gfp_t flags)
+struct fuse_req *fuse_request_alloc(struct fuse_mount *fm, gfp_t flags)
 {
 	struct fuse_req *req = kmem_cache_zalloc(fuse_req_cachep, flags);
 	if (req)
@@ -175,7 +175,7 @@ static bool fuse_block_alloc(struct fuse_conn *fc, bool for_background)
 	       (fc->io_uring && fc->connected && !fuse_uring_ready(fc));
 }
 
-static void fuse_drop_waiting(struct fuse_conn *fc)
+void fuse_drop_waiting(struct fuse_conn *fc)
 {
 	/*
 	 * lockess check of fc->connected is okay, because atomic_dec_and_test()
@@ -335,8 +335,8 @@ __releases(fiq->lock)
 	spin_unlock(&fiq->lock);
 }
 
-void fuse_dev_queue_forget(struct fuse_iqueue *fiq,
-			   struct fuse_forget_link *forget)
+void fuse_dev_queue_forget_list(struct fuse_iqueue *fiq,
+				struct fuse_forget_link *forget)
 {
 	spin_lock(&fiq->lock);
 	if (fiq->connected) {
@@ -347,6 +347,20 @@ void fuse_dev_queue_forget(struct fuse_iqueue *fiq,
 		kfree(forget);
 		spin_unlock(&fiq->lock);
 	}
+}
+
+void fuse_dev_queue_forget(struct fuse_iqueue *fiq,
+			   struct fuse_forget_link *forget)
+{
+#ifdef CONFIG_FUSE_IO_URING
+	struct fuse_conn *fc = container_of(fiq, struct fuse_conn, iq);
+
+	if (fuse_uring_ready(fc)) {
+		fuse_io_uring_send_forget(fiq, forget);
+		return;
+	}
+#endif
+	fuse_dev_queue_forget_list(fiq, forget);
 }
 
 void fuse_dev_queue_interrupt(struct fuse_iqueue *fiq, struct fuse_req *req)
@@ -601,7 +615,7 @@ static void __fuse_request_send(struct fuse_req *req)
 	smp_rmb();
 }
 
-static void fuse_adjust_compat(struct fuse_conn *fc, struct fuse_args *args)
+void fuse_adjust_compat(struct fuse_conn *fc, struct fuse_args *args)
 {
 	if (fc->minor < 4 && args->opcode == FUSE_STATFS)
 		args->out_args[0].size = FUSE_COMPAT_STATFS_SIZE;
@@ -634,7 +648,7 @@ static void fuse_adjust_compat(struct fuse_conn *fc, struct fuse_args *args)
 	}
 }
 
-static void fuse_force_creds(struct fuse_req *req)
+void fuse_force_creds(struct fuse_req *req)
 {
 	struct fuse_conn *fc = req->fm->fc;
 
@@ -649,7 +663,7 @@ static void fuse_force_creds(struct fuse_req *req)
 	req->in.h.pid = pid_nr_ns(task_pid(current), fc->pid_ns);
 }
 
-static void fuse_args_to_req(struct fuse_req *req, struct fuse_args *args)
+void fuse_args_to_req(struct fuse_req *req, struct fuse_args *args)
 {
 	req->in.h.opcode = args->opcode;
 	req->in.h.nodeid = args->nodeid;

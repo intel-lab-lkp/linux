@@ -1362,6 +1362,89 @@ bool fuse_uring_remove_pending_req(struct fuse_req *req)
 	return fuse_remove_pending_req(req, &queue->lock);
 }
 
+struct fuse_forget_uring_data {
+	struct fuse_args args;
+	struct fuse_forget_in inarg;
+};
+
+static void fuse_forget_uring_free(struct fuse_mount *fm, struct fuse_args *args,
+				   int error)
+{
+	struct fuse_forget_uring_data *d =
+		container_of(args, struct fuse_forget_uring_data, args);
+
+	kfree(d);
+}
+
+/*
+ * Send FUSE_FORGET through the io-uring ring when active; same payload as
+ * fuse_read_single_forget(), with userspace committing like any other request.
+ * Called from fuse_dev_queue_forget() when fuse_uring_ready().
+ */
+void fuse_io_uring_send_forget(struct fuse_iqueue *fiq,
+				struct fuse_forget_link *forget)
+{
+	struct fuse_conn *fc = container_of(fiq, struct fuse_conn, iq);
+	struct fuse_mount *fm;
+	struct fuse_req *req;
+	struct fuse_forget_uring_data *d;
+
+	if (!fuse_uring_ready(fc)) {
+		fuse_dev_queue_forget_list(fiq, forget);
+		return;
+	}
+
+	down_read(&fc->killsb);
+	if (list_empty(&fc->mounts)) {
+		up_read(&fc->killsb);
+		fuse_dev_queue_forget_list(fiq, forget);
+		return;
+	}
+	fm = list_first_entry(&fc->mounts, struct fuse_mount, fc_entry);
+	up_read(&fc->killsb);
+
+	d = kmalloc(sizeof(*d), GFP_KERNEL);
+	if (!d)
+		goto fallback;
+
+	atomic_inc(&fc->num_waiting);
+	req = fuse_request_alloc(fm, GFP_KERNEL);
+	if (!req) {
+		kfree(d);
+		fuse_drop_waiting(fc);
+		goto fallback;
+	}
+
+	memset(&d->args, 0, sizeof(d->args));
+	d->inarg.nlookup = forget->forget_one.nlookup;
+	d->args.opcode = FUSE_FORGET;
+	d->args.nodeid = forget->forget_one.nodeid;
+	d->args.in_numargs = 1;
+	d->args.in_args[0].size = sizeof(d->inarg);
+	d->args.in_args[0].value = &d->inarg;
+	d->args.force = true;
+	d->args.noreply = true;
+	d->args.end = fuse_forget_uring_free;
+
+	kfree(forget);
+
+	fuse_force_creds(req);
+	__set_bit(FR_WAITING, &req->flags);
+	if (!d->args.abort_on_kill)
+		__set_bit(FR_FORCE, &req->flags);
+	fuse_adjust_compat(fc, &d->args);
+	fuse_args_to_req(req, &d->args);
+	req->in.h.len = sizeof(struct fuse_in_header) +
+		fuse_len_args(req->args->in_numargs,
+			      (struct fuse_arg *)req->args->in_args);
+
+	fuse_uring_queue_fuse_req(fiq, req);
+	return;
+
+fallback:
+	fuse_dev_queue_forget_list(fiq, forget);
+}
+
 static const struct fuse_iqueue_ops fuse_io_uring_ops = {
 	/* should be send over io-uring as enhancement */
 	.send_forget = fuse_dev_queue_forget,
