@@ -202,9 +202,10 @@ static int isp_subdev_validate_rect(struct v4l2_subdev *sd, uint32_t pad,
 }
 
 struct v4l2_rect *atomisp_subdev_get_rect(struct v4l2_subdev *sd,
-	struct v4l2_subdev_state *sd_state,
-	u32 which, uint32_t pad,
-	uint32_t target)
+					  struct v4l2_subdev_state *sd_state,
+					  u32 which,
+					  uint32_t pad,
+					  uint32_t target)
 {
 	struct atomisp_sub_device *isp_sd = v4l2_get_subdevdata(sd);
 
@@ -841,8 +842,8 @@ static int isp_subdev_init_entities(struct atomisp_sub_device *asd)
 	asd->vfpp = v4l2_ctrl_new_custom(&asd->ctrl_handler,
 					 &ctrl_vfpp, NULL);
 	asd->continuous_viewfinder = v4l2_ctrl_new_custom(&asd->ctrl_handler,
-				     &ctrl_continuous_viewfinder,
-				     NULL);
+							  &ctrl_continuous_viewfinder,
+							  NULL);
 	asd->continuous_raw_buffer_size =
 	    v4l2_ctrl_new_custom(&asd->ctrl_handler,
 				 &ctrl_continuous_raw_buffer_size,

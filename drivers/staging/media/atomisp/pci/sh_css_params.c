@@ -1058,8 +1058,8 @@ ia_css_params_store_ia_css_host_data(
 	IA_CSS_ENTER_PRIVATE("");
 
 	hmm_store(ddr_addr,
-		   (void *)(data->address),
-		   (size_t)data->size);
+		  (void *)(data->address),
+		  (size_t)data->size);
 
 	IA_CSS_LEAVE_PRIVATE("void");
 }
@@ -2629,7 +2629,7 @@ static void host_lut_store(const void *lut)
 }
 
 int ia_css_pipe_set_bci_scaler_lut(struct ia_css_pipe *pipe,
-	const void *lut)
+				   const void *lut)
 {
 	int err = 0;
 	bool stream_started = false;
@@ -2670,8 +2670,8 @@ int ia_css_pipe_set_bci_scaler_lut(struct ia_css_pipe *pipe,
 			gdc_lut_convert_to_isp_format((const int(*)[HRT_GDC_N])lut,
 						      interleaved_lut_temp);
 			hmm_store(pipe->scaler_pp_lut,
-				   (int *)interleaved_lut_temp,
-				   sizeof(zoom_table));
+				  (int *)interleaved_lut_temp,
+				  sizeof(zoom_table));
 		}
 	}
 
@@ -2710,7 +2710,7 @@ int sh_css_params_map_and_store_default_gdc_lut(void)
 	gdc_lut_convert_to_isp_format((const int(*)[HRT_GDC_N])zoom_table,
 				      interleaved_lut_temp);
 	hmm_store(default_gdc_lut, (int *)interleaved_lut_temp,
-		   sizeof(zoom_table));
+		  sizeof(zoom_table));
 
 	IA_CSS_LEAVE_PRIVATE("lut(%u) err=%d", default_gdc_lut, err);
 	return err;
@@ -3435,8 +3435,8 @@ sh_css_params_write_to_ddr_internal(
 			return err;
 		}
 		hmm_store(ddr_map->macc_tbl,
-			   converted_macc_table.data,
-			   sizeof(converted_macc_table.data));
+			  converted_macc_table.data,
+			  sizeof(converted_macc_table.data));
 	}
 
 	if (binary->info->sp.enable.dvs_6axis) {
@@ -3483,9 +3483,9 @@ sh_css_params_write_to_ddr_internal(
 				params->pipe_dvs_6axis_config_changed[pipe_id] = true;
 
 				store_dvs_6axis_config(params->pipe_dvs_6axis_config[pipe_id],
-						    binary,
-						    dvs_in_frame_info,
-						    ddr_map->dvs_6axis_params_y);
+						       binary,
+						       dvs_in_frame_info,
+						       ddr_map->dvs_6axis_params_y);
 				params->isp_params_changed = true;
 			}
 		}
@@ -3538,20 +3538,20 @@ sh_css_params_write_to_ddr_internal(
 		for (i = 0; i < IA_CSS_MORPH_TABLE_NUM_PLANES; i++) {
 			buff_realloced |=
 			    reallocate_buffer(virt_addr_tetra_x[i],
-					    virt_size_tetra_x[i],
-					    morph_plane_bytes(binary),
-					    params->morph_table_changed,
-					    &err);
+					      virt_size_tetra_x[i],
+					      morph_plane_bytes(binary),
+					      params->morph_table_changed,
+					      &err);
 			if (err) {
 				IA_CSS_LEAVE_ERR_PRIVATE(err);
 				return err;
 			}
 			buff_realloced |=
 			    reallocate_buffer(virt_addr_tetra_y[i],
-					    virt_size_tetra_y[i],
-					    morph_plane_bytes(binary),
-					    params->morph_table_changed,
-					    &err);
+					      virt_size_tetra_y[i],
+					      morph_plane_bytes(binary),
+					      params->morph_table_changed,
+					      &err);
 			if (err) {
 				IA_CSS_LEAVE_ERR_PRIVATE(err);
 				return err;
@@ -3578,15 +3578,15 @@ sh_css_params_write_to_ddr_internal(
 
 			for (i = 0; i < IA_CSS_MORPH_TABLE_NUM_PLANES; i++) {
 				store_morph_plane(table->coordinates_x[i],
-						table->width,
-						table->height,
-						*virt_addr_tetra_x[i],
-						binary->morph_tbl_aligned_width);
+						  table->width,
+						  table->height,
+						  *virt_addr_tetra_x[i],
+						  binary->morph_tbl_aligned_width);
 				store_morph_plane(table->coordinates_y[i],
-						table->width,
-						table->height,
-						*virt_addr_tetra_y[i],
-						binary->morph_tbl_aligned_width);
+						  table->width,
+						  table->height,
+						  *virt_addr_tetra_y[i],
+						  binary->morph_tbl_aligned_width);
 			}
 			if (id_table)
 				ia_css_morph_table_free(id_table);
@@ -3597,15 +3597,15 @@ sh_css_params_write_to_ddr_internal(
 	for (mem = 0; mem < N_IA_CSS_MEMORIES; mem++) {
 		const struct ia_css_isp_data *isp_data =
 		    ia_css_isp_param_get_isp_mem_init(&binary->info->sp.mem_initializers,
-						    IA_CSS_PARAM_CLASS_PARAM, mem);
+						      IA_CSS_PARAM_CLASS_PARAM, mem);
 		size_t size = isp_data->size;
 
 		if (!size) continue;
 		buff_realloced = reallocate_buffer(&ddr_map->isp_mem_param[stage_num][mem],
-						&ddr_map_size->isp_mem_param[stage_num][mem],
-						size,
-						params->isp_mem_params_changed[pipe_id][stage_num][mem],
-						&err);
+						   &ddr_map_size->isp_mem_param[stage_num][mem],
+						   size,
+						   params->isp_mem_params_changed[pipe_id][stage_num][mem],
+						   &err);
 		if (err) {
 			IA_CSS_LEAVE_ERR_PRIVATE(err);
 			return err;
@@ -3761,8 +3761,8 @@ ia_css_ptr sh_css_store_sp_stage_to_ddr(
 {
 	IA_CSS_ENTER_LEAVE_PRIVATE("void");
 	hmm_store(xmem_sp_stage_ptrs[pipe][stage],
-		   &sh_css_sp_stage,
-		   sizeof(struct sh_css_sp_stage));
+		  &sh_css_sp_stage,
+		  sizeof(struct sh_css_sp_stage));
 	return xmem_sp_stage_ptrs[pipe][stage];
 }
 
@@ -3772,8 +3772,8 @@ ia_css_ptr sh_css_store_isp_stage_to_ddr(
 {
 	IA_CSS_ENTER_LEAVE_PRIVATE("void");
 	hmm_store(xmem_isp_stage_ptrs[pipe][stage],
-		   &sh_css_isp_stage,
-		   sizeof(struct sh_css_isp_stage));
+		  &sh_css_isp_stage,
+		  sizeof(struct sh_css_isp_stage));
 	return xmem_isp_stage_ptrs[pipe][stage];
 }
 
@@ -3810,7 +3810,7 @@ static int ref_sh_css_ddr_address_map(
 			to_addrs.addrs[i] = mmgr_NULL;
 		else
 			to_addrs.addrs[i] = ia_css_refcount_increment(IA_CSS_REFCOUNT_PARAM_BUFFER,
-					    in_addrs.addrs[i]);
+								      in_addrs.addrs[i]);
 	}
 
 	IA_CSS_LEAVE_ERR_PRIVATE(err);
@@ -3834,7 +3834,8 @@ static int write_ia_css_isp_parameter_set_info_to_ddr(
 	succ = (*out != mmgr_NULL);
 	if (succ)
 		hmm_store(*out,
-			   me, sizeof(struct ia_css_isp_parameter_set_info));
+			  me,
+			  sizeof(struct ia_css_isp_parameter_set_info));
 	else
 		err = -ENOMEM;
 

@@ -584,7 +584,7 @@ static void __apply_additional_pipe_config(
 }
 
 static bool is_pipe_valid_to_current_run_mode(struct atomisp_sub_device *asd,
-	enum ia_css_pipe_id pipe_id)
+					      enum ia_css_pipe_id pipe_id)
 {
 	if (pipe_id == IA_CSS_PIPE_ID_YUVPP)
 		return true;
@@ -1025,7 +1025,7 @@ void atomisp_css_update_isp_params(struct atomisp_sub_device *asd)
 }
 
 void atomisp_css_update_isp_params_on_pipe(struct atomisp_sub_device *asd,
-	struct ia_css_pipe *pipe)
+					   struct ia_css_pipe *pipe)
 {
 	int ret;
 
@@ -1456,8 +1456,8 @@ int atomisp_css_input_set_resolution(struct atomisp_sub_device *asd,
 }
 
 void atomisp_css_input_set_binning_factor(struct atomisp_sub_device *asd,
-	enum atomisp_input_stream_id stream_id,
-	unsigned int bin_factor)
+					  enum atomisp_input_stream_id stream_id,
+					  unsigned int bin_factor)
 {
 	asd->stream_env[stream_id]
 	.stream_config.sensor_binning_factor = bin_factor;
@@ -1908,8 +1908,8 @@ static void __configure_output(struct atomisp_sub_device *asd,
  * downscaling input resolution.
  */
 static void __configure_capture_pp_input(struct atomisp_sub_device *asd,
-	unsigned int width, unsigned int height,
-	enum ia_css_pipe_id pipe_id)
+					 unsigned int width, unsigned int height,
+					 enum ia_css_pipe_id pipe_id)
 {
 	struct atomisp_device *isp = asd->isp;
 	struct atomisp_stream_env *stream_env =
@@ -1960,8 +1960,8 @@ static void __configure_capture_pp_input(struct atomisp_sub_device *asd,
  * yuv downscaling, which needs addtional configurations.
  */
 static void __configure_preview_pp_input(struct atomisp_sub_device *asd,
-	unsigned int width, unsigned int height,
-	enum ia_css_pipe_id pipe_id)
+					 unsigned int width, unsigned int height,
+					 enum ia_css_pipe_id pipe_id)
 {
 	struct atomisp_device *isp = asd->isp;
 	int out_width, out_height, yuv_ds_in_width, yuv_ds_in_height;
@@ -2317,9 +2317,9 @@ int atomisp_css_copy_configure_output(struct atomisp_sub_device *asd,
 }
 
 int atomisp_css_preview_configure_output(struct atomisp_sub_device *asd,
-	unsigned int width, unsigned int height,
-	unsigned int min_width,
-	enum ia_css_frame_format format)
+					 unsigned int width, unsigned int height,
+					 unsigned int min_width,
+					 enum ia_css_frame_format format)
 {
 	__configure_output(asd, ATOMISP_INPUT_STREAM_GENERAL, width, height,
 			   min_width, format, IA_CSS_PIPE_ID_PREVIEW);
@@ -2327,9 +2327,9 @@ int atomisp_css_preview_configure_output(struct atomisp_sub_device *asd,
 }
 
 int atomisp_css_capture_configure_output(struct atomisp_sub_device *asd,
-	unsigned int width, unsigned int height,
-	unsigned int min_width,
-	enum ia_css_frame_format format)
+					 unsigned int width, unsigned int height,
+					 unsigned int min_width,
+					 enum ia_css_frame_format format)
 {
 	__configure_output(asd, ATOMISP_INPUT_STREAM_GENERAL, width, height,
 			   min_width, format, IA_CSS_PIPE_ID_CAPTURE);
@@ -2456,7 +2456,9 @@ int atomisp_css_video_configure_pp_input(
 }
 
 int atomisp_css_offline_capture_configure(struct atomisp_sub_device *asd,
-	int num_captures, unsigned int skip, int offset)
+					  int num_captures,
+					  unsigned int skip,
+					  int offset)
 {
 	int ret;
 
@@ -3355,7 +3357,7 @@ void atomisp_css_set_isp_config_id(struct atomisp_sub_device *asd,
 }
 
 void atomisp_css_set_isp_config_applied_frame(struct atomisp_sub_device *asd,
-	struct ia_css_frame *output_frame)
+					      struct ia_css_frame *output_frame)
 {
 	asd->params.config.output_frame = output_frame;
 }
