@@ -154,6 +154,22 @@ struct cxl_memdev_attach {
 };
 
 /**
+ * struct cxl_attach_region - coordinate mapping a region at memdev registration
+ * @attach: common core attachment descriptor
+ * @region: physical address range of the region
+ *
+ * For the common simple case of a CXL device with private (non-general purpose
+ * / "accelerator") memory, enumerate firmware instantiated region, or
+ * instantiate a region for the device's capacity. Destroy the region on detach.
+ */
+struct cxl_attach_region {
+	struct cxl_memdev_attach attach;
+	struct range region;
+};
+
+int cxl_memdev_attach_region(struct cxl_memdev *cxlmd);
+
+/**
  * struct cxl_dev_state - The driver device state
  *
  * cxl_dev_state represents the CXL driver/device state.  It provides an
