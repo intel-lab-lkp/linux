@@ -14,12 +14,38 @@ struct arch_arm64 {
 	regex_t jump_insn;
 };
 
+static bool arm64__check_multi_regs(const char *op)
+{
+	char *comma = strchr(op, ',');
+
+	while (comma) {
+		char *next = comma + 1;
+
+		next = skip_spaces(next);
+
+		/*
+		 * Check the first valid character after the comma:
+		 * - If it is '#', it indicates an immediate offset (e.g., [x1, #16]).
+		 * - If it is an alphabetic character, it is highly likely a
+		 *   register name (e.g., x, w, s, d, q, v, p, z).
+		 * - Special cases: Alias and control registers like sp, xzr,
+		 *   and wzr all start with an alphabetic character.
+		 */
+		if (*next && *next != '#' && isalpha(*next))
+			return true;
+
+		comma = strchr(next, ',');
+	}
+
+	return false;
+}
+
 static int arm64_mov__parse(const struct arch *arch __maybe_unused,
 			    struct ins_operands *ops,
 			    struct map_symbol *ms __maybe_unused,
 			    struct disasm_line *dl __maybe_unused)
 {
-	char *s = strchr(ops->raw, ','), *target, *endptr;
+	char *s = strchr(ops->raw, ','), *target, *endptr, *comment, prev;
 
 	if (s == NULL)
 		return -1;
@@ -31,29 +57,48 @@ static int arm64_mov__parse(const struct arch *arch __maybe_unused,
 	if (ops->source.raw == NULL)
 		return -1;
 
-	target = ++s;
+	target = skip_spaces(++s);
+	comment = strchr(s, arch->objdump.comment_char);
+
+	if (comment != NULL)
+		s = comment - 1;
+	else
+		s = strchr(s, '\0') - 1;
+
+	while (s > target && isspace(s[0]))
+		--s;
+	s++;
+	prev = *s;
+	*s = '\0';
 	ops->target.raw = strdup(target);
+	*s = prev;
+
 	if (ops->target.raw == NULL)
 		goto out_free_source;
 
-	ops->target.addr = strtoull(target, &endptr, 16);
-	if (endptr == target)
-		goto out_free_target;
+	ops->target.multi_regs = arm64__check_multi_regs(ops->target.raw);
 
-	s = strchr(endptr, '<');
-	if (s == NULL)
-		goto out_free_target;
-	endptr = strchr(s + 1, '>');
-	if (endptr == NULL)
-		goto out_free_target;
+	/* Parse address followed by symbol name, e.g. "addr <symbol>" */
+	if (strchr(target, '<') != NULL) {
+		ops->target.addr = strtoull(target, &endptr, 16);
+		if (endptr == target)
+			goto out_free_target;
 
-	*endptr = '\0';
-	*s = ' ';
-	ops->target.name = strdup(s);
-	*s = '<';
-	*endptr = '>';
-	if (ops->target.name == NULL)
-		goto out_free_target;
+		s = strchr(endptr, '<');
+		if (s == NULL)
+			goto out_free_target;
+		endptr = strchr(s + 1, '>');
+		if (endptr == NULL)
+			goto out_free_target;
+
+		*endptr = '\0';
+		*s = ' ';
+		ops->target.name = strdup(s);
+		*s = '<';
+		*endptr = '>';
+		if (ops->target.name == NULL)
+			goto out_free_target;
+	}
 
 	return 0;
 
