@@ -21,6 +21,7 @@
 #include <asm/amd/node.h>
 
 #include "reg_fields.h"
+#include "hygon/reg_fields.h"
 
 #undef pr_fmt
 #define pr_fmt(fmt) "amd_atl: " fmt
@@ -42,6 +43,7 @@
 
 enum df_revisions {
 	UNKNOWN,
+	HYGON_DF1,
 	DF2,
 	DF3,
 	DF3p5,
@@ -283,6 +285,11 @@ unsigned long convert_umc_mca_addr_to_sys_addr(struct atl_err *err);
 
 u64 add_base_and_hole(struct addr_ctx *ctx, u64 addr);
 u64 remove_base_and_hole(struct addr_ctx *ctx, u64 addr);
+
+int get_dram_hole_base(void);
+void dump_df_cfg(void);
+
+int hygon_get_df_system_info(void);
 
 /* GUIDs for PRM handlers */
 extern const guid_t norm_to_sys_guid;
