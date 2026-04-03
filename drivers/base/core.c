@@ -1123,7 +1123,7 @@ static void __device_links_queue_sync_state(struct device *dev,
 
 	if (!dev_has_sync_state(dev))
 		return;
-	if (dev->state_synced)
+	if (test_bit(DEV_FLAG_STATE_SYNCED, &dev->flags))
 		return;
 
 	list_for_each_entry(link, &dev->links.consumers, s_node) {
@@ -1138,7 +1138,7 @@ static void __device_links_queue_sync_state(struct device *dev,
 	 * than once. This can happen if new consumers get added to the device
 	 * and probed before the list is flushed.
 	 */
-	dev->state_synced = true;
+	set_bit(DEV_FLAG_STATE_SYNCED, &dev->flags);
 
 	if (WARN_ON(!list_empty(&dev->links.defer_sync)))
 		return;
@@ -1779,7 +1779,8 @@ static int fw_devlink_dev_sync_state(struct device *dev, void *data)
 	struct device *sup = link->supplier;
 
 	if (!device_link_test(link, DL_FLAG_MANAGED) ||
-	    link->status == DL_STATE_ACTIVE || sup->state_synced ||
+	    link->status == DL_STATE_ACTIVE ||
+	    test_bit(DEV_FLAG_STATE_SYNCED, &sup->flags) ||
 	    !dev_has_sync_state(sup))
 		return 0;
 
@@ -1793,7 +1794,7 @@ static int fw_devlink_dev_sync_state(struct device *dev, void *data)
 		return 0;
 
 	dev_warn(sup, "Timed out. Forcing sync_state()\n");
-	sup->state_synced = true;
+	set_bit(DEV_FLAG_STATE_SYNCED, &sup->flags);
 	get_device(sup);
 	list_add_tail(&sup->links.defer_sync, data);
 

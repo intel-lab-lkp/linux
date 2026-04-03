@@ -581,12 +581,10 @@ static ssize_t state_synced_store(struct device *dev,
 		return -EINVAL;
 
 	device_lock(dev);
-	if (!dev->state_synced) {
-		dev->state_synced = true;
+	if (!test_and_set_bit(DEV_FLAG_STATE_SYNCED, &dev->flags))
 		dev_sync_state(dev);
-	} else {
+	else
 		ret = -EINVAL;
-	}
 	device_unlock(dev);
 
 	return ret ? ret : count;
@@ -598,7 +596,7 @@ static ssize_t state_synced_show(struct device *dev,
 	bool val;
 
 	device_lock(dev);
-	val = dev->state_synced;
+	val = test_bit(DEV_FLAG_STATE_SYNCED, &dev->flags);
 	device_unlock(dev);
 
 	return sysfs_emit(buf, "%u\n", val);
