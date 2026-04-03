@@ -284,7 +284,11 @@ static int __init sp804_of_init(struct device_node *np, struct sp804_timer *time
 	int irq, ret = -EINVAL;
 	u32 irq_num = 0;
 	struct clk *clk1, *clk2;
-	const char *name = of_get_property(np, "compatible", NULL);
+	const char *name;
+
+	ret = of_property_read_string(np, "compatible", &name);
+	if (ret)
+		return ret;
 
 	if (initialized) {
 		pr_debug("%pOF: skipping further SP804 timer device\n", np);
@@ -371,8 +375,12 @@ static int __init integrator_cp_of_init(struct device_node *np)
 	static int init_count = 0;
 	void __iomem *base;
 	int irq, ret = -EINVAL;
-	const char *name = of_get_property(np, "compatible", NULL);
+	const char *name;
 	struct clk *clk;
+
+	ret = of_property_read_string(np, "compatible", &name);
+	if (ret)
+		return ret;
 
 	base = of_iomap(np, 0);
 	if (!base) {
