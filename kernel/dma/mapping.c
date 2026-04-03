@@ -126,11 +126,9 @@ static bool dma_go_direct(struct device *dev, dma_addr_t mask,
 	if (likely(!ops))
 		return true;
 
-#ifdef CONFIG_DMA_OPS_BYPASS
-	if (dev->dma_ops_bypass)
+	if (IS_ENABLED(CONFIG_DMA_OPS_BYPASS) && test_bit(DEV_FLAG_DMA_OPS_BYPASS, &dev->flags))
 		return min_not_zero(mask, dev->bus_dma_limit) >=
 			    dma_direct_get_required_mask(dev);
-#endif
 	return false;
 }
 
@@ -889,8 +887,8 @@ bool dma_pci_p2pdma_supported(struct device *dev)
 	const struct dma_map_ops *ops = get_dma_ops(dev);
 
 	/*
-	 * Note: dma_ops_bypass is not checked here because P2PDMA should
-	 * not be used with dma mapping ops that do not have support even
+	 * Note: DEV_FLAG_DMA_OPS_BYPASS is not checked here because P2PDMA
+	 * should not be used with dma mapping ops that do not have support even
 	 * if the specific device is bypassing them.
 	 */
 
