@@ -10,6 +10,7 @@
 #include <linux/pci.h>
 #include <linux/net_tstamp.h>
 #include <linux/sort.h>
+#include <net/tso.h>
 
 #include "otx2_common.h"
 #include "cn10k.h"
@@ -487,6 +488,7 @@ static int rvu_rep_stop(struct net_device *dev)
 static const struct net_device_ops rvu_rep_netdev_ops = {
 	.ndo_open		= rvu_rep_open,
 	.ndo_stop		= rvu_rep_stop,
+	.ndo_features_check	= tso_features_check,
 	.ndo_start_xmit		= rvu_rep_xmit,
 	.ndo_get_stats64	= rvu_rep_get_stats64,
 	.ndo_change_mtu		= rvu_rep_change_mtu,

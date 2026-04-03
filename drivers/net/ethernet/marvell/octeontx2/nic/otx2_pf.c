@@ -17,6 +17,7 @@
 #include <linux/bpf_trace.h>
 #include <linux/bitfield.h>
 #include <net/page_pool/types.h>
+#include <net/tso.h>
 
 #include "otx2_reg.h"
 #include "otx2_common.h"
@@ -2924,6 +2925,7 @@ static int otx2_ndo_set_vf_trust(struct net_device *netdev, int vf,
 static const struct net_device_ops otx2_netdev_ops = {
 	.ndo_open		= otx2_open,
 	.ndo_stop		= otx2_stop,
+	.ndo_features_check	= tso_features_check,
 	.ndo_start_xmit		= otx2_xmit,
 	.ndo_select_queue	= otx2_select_queue,
 	.ndo_fix_features	= otx2_fix_features,

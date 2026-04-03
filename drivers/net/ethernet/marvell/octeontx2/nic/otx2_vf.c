@@ -9,6 +9,7 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/net_tstamp.h>
+#include <net/tso.h>
 
 #include "otx2_common.h"
 #include "otx2_reg.h"
@@ -526,6 +527,7 @@ static int otx2vf_set_features(struct net_device *netdev,
 static const struct net_device_ops otx2vf_netdev_ops = {
 	.ndo_open = otx2vf_open,
 	.ndo_stop = otx2vf_stop,
+	.ndo_features_check = tso_features_check,
 	.ndo_start_xmit = otx2vf_xmit,
 	.ndo_select_queue = otx2_select_queue,
 	.ndo_set_rx_mode = otx2vf_set_rx_mode,

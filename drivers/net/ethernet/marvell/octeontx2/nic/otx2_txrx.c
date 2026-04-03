@@ -936,6 +936,7 @@ static void otx2_sq_append_tso(struct otx2_nic *pfvf, struct otx2_snd_queue *sq,
 	struct tso_t tso;
 
 	hdr_len = tso_start(skb, &tso);
+	DEBUG_NET_WARN_ON_ONCE(hdr_len > TSO_HEADER_SIZE);
 
 	/* Map SKB's fragments to DMA.
 	 * It's done here to avoid mapping for every TSO segment's packet.
