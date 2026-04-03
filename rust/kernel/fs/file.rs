@@ -342,6 +342,36 @@ impl LocalFile {
         // FIXME(read_once): Replace with `read_once` when available on the Rust side.
         unsafe { core::ptr::addr_of!((*self.as_ptr()).f_flags).read_volatile() }
     }
+
+    /// Marks this file as a stream, disabling seek position validation.
+    ///
+    /// This should be called from the `open` handler of a character device that
+    /// produces data as a stream rather than supporting random access. It clears
+    /// the seek-related file mode flags and sets `FMODE_STREAM`, which tells the
+    /// VFS layer not to validate seek positions on `read_iter` and `write_iter`
+    /// calls.
+    ///
+    /// Must only be called during `open()`, before the file descriptor is
+    /// installed into the process fd table and becomes accessible to other
+    /// threads.
+    pub fn stream_open(&self) {
+        // SAFETY: The file pointer is valid for the duration of this call
+        // because `LocalFile` can only exist while the underlying `struct file`
+        // is alive. Since `LocalFile` is not `Send`, this method can only be
+        // called before the file is shared across threads, which means no other
+        // thread can be concurrently modifying `f_mode`. The pointer is
+        // guaranteed non-null by the type invariants of `LocalFile`.
+        unsafe {
+            let file = self.as_ptr();
+            (*file).f_mode &= !(
+                bindings::FMODE_LSEEK
+                    | bindings::FMODE_PREAD
+                    | bindings::FMODE_PWRITE
+                    | bindings::FMODE_ATOMIC_POS
+            );
+            (*file).f_mode |= bindings::FMODE_STREAM;
+        }
+    }
 }
 
 impl File {
