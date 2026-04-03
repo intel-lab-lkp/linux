@@ -2855,12 +2855,13 @@ static int _ocfs2_free_suballoc_bits(handle_t *handle,
 	struct ocfs2_chain_rec *rec;
 	__le16 old_bg_contig_free_bits = 0;
 
-	/* The alloc_bh comes from ocfs2_free_dinode() or
-	 * ocfs2_free_clusters().  The callers have all locked the
-	 * allocator and gotten alloc_bh from the lock call.  This
-	 * validates the dinode buffer.  Any corruption that has happened
-	 * is a code bug. */
-	BUG_ON(!OCFS2_IS_VALID_DINODE(fe));
+	/* JBD-managed buffers can bypass inode validation. */
+	if (!OCFS2_IS_VALID_DINODE(fe)) {
+		status = ocfs2_error(alloc_inode->i_sb,
+				     "Invalid dinode #%llu\n",
+				     (unsigned long long)OCFS2_I(alloc_inode)->ip_blkno);
+		goto bail;
+	}
 	BUG_ON((count + start_bit) > ocfs2_bits_per_group(cl));
 
 	trace_ocfs2_free_suballoc_bits(
