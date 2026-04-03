@@ -615,6 +615,18 @@ enum drm_panthor_vm_bind_op_flags {
 	DRM_PANTHOR_VM_BIND_OP_MAP_UNCACHED = 1 << 2,
 
 	/**
+	 * @DRM_PANTHOR_VM_BIND_OP_MAP_SPARSE: Repeat a BO range
+	 *
+	 * Only valid with DRM_PANTHOR_VM_BIND_OP_TYPE_MAP.
+	 *
+	 * When this flag is set, the whole vm_bind range is mapped over a dummy
+	 * object in a cyclic fashion, and all GPU reads from the addresses in the
+	 * range return 0. This flag being set means drm_panthor_vm_bind_op:offset
+	 * and drm_panthor_vm_bind_op::handle must both be set to 0.
+	 */
+	DRM_PANTHOR_VM_BIND_OP_MAP_SPARSE = 1 << 3,
+
+	/**
 	 * @DRM_PANTHOR_VM_BIND_OP_TYPE_MASK: Mask used to determine the type of operation.
 	 */
 	DRM_PANTHOR_VM_BIND_OP_TYPE_MASK = (int)(0xfu << 28),
@@ -677,7 +689,6 @@ struct drm_panthor_vm_bind_op {
 	 * This array shall not be empty for sync-only operations.
 	 */
 	struct drm_panthor_obj_array syncs;
-
 };
 
 /**
