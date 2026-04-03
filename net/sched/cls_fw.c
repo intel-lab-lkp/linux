@@ -78,7 +78,7 @@ TC_INDIRECT_SCOPE int fw_classify(struct sk_buff *skb,
 
 		/* Old method: classify the packet using its skb mark. */
 		if (id && (TC_H_MAJ(id) == 0 ||
-			   !(TC_H_MAJ(id ^ q->handle)))) {
+			   (q && !(TC_H_MAJ(id ^ q->handle))))) {
 			res->classid = id;
 			res->class = 0;
 			return 0;
