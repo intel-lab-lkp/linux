@@ -525,10 +525,18 @@ static int netem_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 			goto finish_segs;
 		}
 
-		if (skb_headlen(skb))
-			skb->data[get_random_u32_below(skb_headlen(skb))] ^=
-				1 << get_random_u32_below(8);
-		q->xstats.corrupted++;
+		if (skb->len > 0) {
+			unsigned int offset = get_random_u32_below(skb->len);
+			u8 *ptr, val;
+
+			/* handle multi-segment skb's */
+			ptr = skb_header_pointer(skb, offset, 1, &val);
+			if (ptr) {
+				val = *ptr ^ (1 << get_random_u32_below(8));
+				skb_store_bits(skb, offset, &val, 1);
+			}
+			q->xstats.corrupted++;
+		}
 	}
 
 	if (unlikely(q->t_len >= sch->limit)) {
