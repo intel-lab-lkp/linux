@@ -308,6 +308,34 @@ static void update_insn_state_arm64(struct type_state *state,
 	sreg = src->reg1;
 	dreg = dst->reg1;
 
+	/* Register to register transfers */
+	if (!strcmp(dl->ins.name, "mov")) {
+		if (!has_reg_type(state, sreg))
+			return;
+
+		tsr = &state->regs[sreg];
+		tsr->copied_from = -1;
+
+		if (!has_reg_type(state, dreg) ||
+		    !state->regs[dreg].ok) {
+			tsr->ok = false;
+			return;
+		}
+
+		tsr->type = state->regs[dreg].type;
+		tsr->kind = state->regs[dreg].kind;
+		tsr->offset = state->regs[dreg].offset;
+		tsr->ok = true;
+
+		if (tsr->kind == TSR_KIND_TYPE || tsr->kind == TSR_KIND_POINTER)
+			tsr->copied_from = dreg;
+
+		pr_debug_dtp("mov [%x] reg%d -> reg%d",
+			     insn_offset, dreg, sreg);
+		pr_debug_type_name(&tsr->type, tsr->kind);
+		return;
+	}
+
 	if (dloc->fb_cfa) {
 		u64 ip = dloc->ms->sym->start + dl->al.offset;
 		u64 pc = map__rip_2objdump(dloc->ms->map, ip);
