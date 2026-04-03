@@ -830,6 +830,8 @@ static int __init early_mem(char *p)
 	u64 start;
 	char *endp;
 
+	if (!p)
+		return 1;
 	/*
 	 * If the user specifies memory size, we
 	 * blow away any automatically generated
