@@ -186,6 +186,8 @@ static int __run_selftests(const char *name,
 			   unsigned int count,
 			   void *data)
 {
+	int u_pid_nr = i915_selftest.userspace_pid;
+	struct mm_struct *mm = NULL;
 	int err = 0;
 
 	while (!i915_selftest.random_seed)
@@ -201,6 +203,37 @@ static int __run_selftests(const char *name,
 	pr_info(DRIVER_NAME ": Performing %s selftests with st_random_seed=0x%x st_timeout=%u\n",
 		name, i915_selftest.random_seed, i915_selftest.timeout_ms);
 
+	/**
+	 * If the user passed a valid PID of a userspace task, then we may borrow
+	 * its address space to prepare a safe environment for the mmap selftests.
+	 */
+	if (u_pid_nr) {
+		struct pid *u_pid = find_get_pid(u_pid_nr);
+		struct task_struct *task;
+
+		if (!u_pid) {
+			pr_warn("Could not find PID: %d\n", u_pid_nr);
+			goto run_tests;
+		}
+
+		task = get_pid_task(u_pid, PIDTYPE_PID);
+		put_pid(u_pid);
+		if (!task) {
+			pr_warn("Could not find userspace task for PID: %d\n", u_pid_nr);
+			goto run_tests;
+		}
+
+		mm = get_task_mm(task);
+		put_task_struct(task);
+		if (!mm) {
+			pr_warn("Could not find address space of task with PID: %d\n", u_pid_nr);
+			goto run_tests;
+		}
+
+		kthread_use_mm(mm);
+	}
+
+run_tests:
 	/* Tests are listed in order in i915_*_selftests.h */
 	for (; count--; st++) {
 		if (!st->enabled)
@@ -225,6 +258,11 @@ static int __run_selftests(const char *name,
 		 "%s returned %d, conflicting with selftest's magic values!\n",
 		 st->name, err))
 		err = -1;
+
+	if (mm) {
+		mmput_async(mm);
+		kthread_unuse_mm(mm);
+	}
 
 	return err;
 }
