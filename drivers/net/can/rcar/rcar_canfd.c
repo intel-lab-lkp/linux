@@ -1186,6 +1186,10 @@ static void rcar_canfd_error(struct net_device *ndev, u32 cerfl,
 		can_bus_off(ndev);
 		cf->can_id |= CAN_ERR_BUSOFF;
 	}
+	if (cerfl & RCANFD_CERFL_BORF) {
+		netdev_dbg(ndev, "Bus-Off recovery interrupt\n");
+		priv->can.state = CAN_STATE_ERROR_ACTIVE;
+	}
 	if (cerfl & RCANFD_CERFL_OVLF) {
 		netdev_dbg(ndev,
 			   "Overload Frame Transmission error interrupt\n");
