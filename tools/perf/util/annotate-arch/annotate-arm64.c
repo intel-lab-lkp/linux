@@ -7,6 +7,7 @@
 #include <linux/zalloc.h>
 #include <linux/string.h>
 #include <regex.h>
+#include <inttypes.h>
 #include "../annotate.h"
 #include "../disasm.h"
 #include "../annotate-data.h"
@@ -307,6 +308,50 @@ static void update_insn_state_arm64(struct type_state *state,
 
 	sreg = src->reg1;
 	dreg = dst->reg1;
+
+	if (!strcmp(dl->ins.name, "add")) {
+		struct type_state_reg dst_tsr;
+
+		if (!has_reg_type(state, sreg) ||
+		    !has_reg_type(state, dreg) ||
+		    !state->regs[dreg].ok)
+			return;
+
+		tsr = &state->regs[sreg];
+		tsr->copied_from = -1;
+		dst_tsr = state->regs[dreg];
+
+		/* Handle calculation of a register holding a typed pointer */
+		if (dst_tsr.kind == TSR_KIND_POINTER ||
+		    (dst_tsr.kind == TSR_KIND_TYPE &&
+		    dwarf_tag(&dst_tsr.type) == DW_TAG_pointer_type)) {
+			s32 offset;
+
+			if (dst_tsr.kind == TSR_KIND_TYPE &&
+			    __die_get_real_type(&dst_tsr.type, &type_die) == NULL)
+				return;
+
+			if (dst_tsr.kind == TSR_KIND_POINTER)
+				type_die = dst_tsr.type;
+
+			/* Check if the target type has a member at the new offset */
+			offset = dst->offset + dst_tsr.offset;
+			if (die_get_member_type(&type_die, offset, &type_die) == NULL)
+				return;
+
+			tsr->type = dst_tsr.type;
+			tsr->kind = dst_tsr.kind;
+			tsr->offset = offset;
+			tsr->ok = true;
+
+			pr_debug_dtp("add [%x] address of %s%#x(reg%d) -> reg%d",
+				     insn_offset, dst->offset < 0 ? "-" : "",
+				     abs(dst->offset), dreg, sreg);
+
+			pr_debug_type_name(&tsr->type, tsr->kind);
+		}
+		return;
+	}
 
 	/* Register to register transfers */
 	if (!strcmp(dl->ins.name, "mov")) {
