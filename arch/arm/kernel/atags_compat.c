@@ -92,6 +92,7 @@ static struct tag * __init memtag(struct tag *tag, unsigned long start, unsigned
 static void __init build_tag_list(struct param_struct *params, void *taglist)
 {
 	struct tag *tag = taglist;
+	size_t cmdline_len;
 
 	if (params->u1.s.page_size != PAGE_SIZE) {
 		pr_warn("Warning: bad configuration page, trying to continue\n");
@@ -195,9 +196,11 @@ static void __init build_tag_list(struct param_struct *params, void *taglist)
 
 	tag = tag_next(tag);
 	tag->hdr.tag = ATAG_CMDLINE;
-	tag->hdr.size = (strlen(params->commandline) + 3 +
+	cmdline_len = strnlen(params->commandline, sizeof(params->commandline));
+	tag->hdr.size = (cmdline_len + 1 + 3 +
 			 sizeof(struct tag_header)) >> 2;
-	strcpy(tag->u.cmdline.cmdline, params->commandline);
+	memcpy(tag->u.cmdline.cmdline, params->commandline, cmdline_len);
+	tag->u.cmdline.cmdline[cmdline_len] = '\0';
 
 	tag = tag_next(tag);
 	tag->hdr.tag = ATAG_NONE;
