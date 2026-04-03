@@ -13,16 +13,17 @@ static char early_cmdline[COMMAND_LINE_SIZE];
 static char *get_early_cmdline(uintptr_t dtb_pa)
 {
 	const char *fdt_cmdline = NULL;
-	unsigned int fdt_cmdline_size = 0;
+	int fdt_cmdline_size = 0;
 	int chosen_node;
 
 	if (!IS_ENABLED(CONFIG_CMDLINE_FORCE)) {
 		chosen_node = fdt_path_offset((void *)dtb_pa, "/chosen");
 		if (chosen_node >= 0) {
-			fdt_cmdline = fdt_getprop((void *)dtb_pa, chosen_node,
-						  "bootargs", NULL);
-			if (fdt_cmdline) {
-				fdt_cmdline_size = strlen(fdt_cmdline);
+			fdt_cmdline = fdt_stringlist_get((void *)dtb_pa,
+							 chosen_node,
+							 "bootargs", 0,
+							 &fdt_cmdline_size);
+			if (fdt_cmdline && fdt_cmdline_size > 0) {
 				strscpy(early_cmdline, fdt_cmdline,
 					COMMAND_LINE_SIZE);
 			}
