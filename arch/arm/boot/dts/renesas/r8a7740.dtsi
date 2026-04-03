@@ -393,7 +393,8 @@
 		compatible = "renesas,fsi2-r8a7740", "renesas,sh_fsi2";
 		reg = <0xfe1f0000 0x400>;
 		interrupts = <GIC_SPI 9 0x4>;
-		clocks = <&mstp3_clks R8A7740_CLK_FSI>;
+		clocks = <&mstp3_clks R8A7740_CLK_FSI>, <&spu_clk>;
+		clock-names = "fsi", "spu";
 		power-domains = <&pd_a4mp>;
 		status = "disabled";
 	};
