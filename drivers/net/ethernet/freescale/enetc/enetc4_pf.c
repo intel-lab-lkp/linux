@@ -6,6 +6,7 @@
 #include <linux/of_net.h>
 #include <linux/of_platform.h>
 #include <linux/unaligned.h>
+#include <net/tso.h>
 
 #include "enetc_pf_common.h"
 #include "enetc4_debugfs.h"
@@ -564,6 +565,7 @@ static int enetc4_pf_set_features(struct net_device *ndev,
 static const struct net_device_ops enetc4_ndev_ops = {
 	.ndo_open		= enetc_open,
 	.ndo_stop		= enetc_close,
+	.ndo_features_check	= tso_features_check,
 	.ndo_start_xmit		= enetc_xmit,
 	.ndo_get_stats		= enetc_get_stats,
 	.ndo_set_mac_address	= enetc_pf_set_mac_addr,

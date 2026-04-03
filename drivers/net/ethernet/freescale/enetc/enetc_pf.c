@@ -7,6 +7,7 @@
 #include <linux/of_platform.h>
 #include <linux/of_net.h>
 #include <linux/pcs-lynx.h>
+#include <net/tso.h>
 #include "enetc_ierb.h"
 #include "enetc_pf_common.h"
 
@@ -617,6 +618,7 @@ static int enetc_pf_setup_tc(struct net_device *ndev, enum tc_setup_type type,
 static const struct net_device_ops enetc_ndev_ops = {
 	.ndo_open		= enetc_open,
 	.ndo_stop		= enetc_close,
+	.ndo_features_check	= tso_features_check,
 	.ndo_start_xmit		= enetc_xmit,
 	.ndo_get_stats		= enetc_get_stats,
 	.ndo_set_mac_address	= enetc_pf_set_mac_addr,

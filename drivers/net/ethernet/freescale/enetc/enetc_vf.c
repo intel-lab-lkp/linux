@@ -3,6 +3,7 @@
 
 #include <linux/module.h>
 #include "enetc.h"
+#include <net/tso.h>
 
 #define ENETC_DRV_NAME_STR "ENETC VF driver"
 
@@ -115,6 +116,7 @@ static int enetc_vf_setup_tc(struct net_device *ndev, enum tc_setup_type type,
 static const struct net_device_ops enetc_ndev_ops = {
 	.ndo_open		= enetc_open,
 	.ndo_stop		= enetc_close,
+	.ndo_features_check	= tso_features_check,
 	.ndo_start_xmit		= enetc_xmit,
 	.ndo_get_stats		= enetc_get_stats,
 	.ndo_set_mac_address	= enetc_vf_set_mac_addr,
