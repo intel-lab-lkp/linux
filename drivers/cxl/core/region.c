@@ -2768,17 +2768,20 @@ static ssize_t delete_region_store(struct device *dev,
 {
 	struct cxl_root_decoder *cxlrd = to_cxl_root_decoder(dev);
 	struct cxl_port *port = to_cxl_port(dev->parent);
-	struct cxl_region *cxlr;
 
-	cxlr = cxl_find_region_by_name(cxlrd, buf);
+	struct cxl_region *cxlr __free(put_cxl_region) =
+		cxl_find_region_by_name(cxlrd, buf);
 	if (IS_ERR(cxlr))
 		return PTR_ERR(cxlr);
 
+	if (test_bit(CXL_REGION_F_LOCK, &cxlr->flags))
+		return -EBUSY;
+
 	devm_release_action(port->uport_dev, unregister_region, cxlr);
-	put_device(&cxlr->dev);
 
 	return len;
 }
+
 DEVICE_ATTR_WO(delete_region);
 
 static void cxl_pmem_region_release(struct device *dev)
