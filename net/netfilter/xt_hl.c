@@ -6,6 +6,7 @@
  * Hop Limit matching module
  * (C) 2001-2002 Maciej Soltysiak <solt@dns.toxicfilms.tv>
  */
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/ip.h>
 #include <linux/ipv6.h>
@@ -25,7 +26,12 @@ MODULE_ALIAS("ip6t_hl");
 static bool ttl_mt(const struct sk_buff *skb, struct xt_action_param *par)
 {
 	const struct ipt_ttl_info *info = par->matchinfo;
-	const u8 ttl = ip_hdr(skb)->ttl;
+	const u8 ttl;
+
+	if (!skb)
+		return false;
+
+	ttl = ip_hdr(skb)->ttl;
 
 	switch (info->mode) {
 	case IPT_TTL_EQ:
@@ -36,15 +42,21 @@ static bool ttl_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		return ttl < info->ttl;
 	case IPT_TTL_GT:
 		return ttl > info->ttl;
+	default:
+		pr_warn("Unknown TTL match mode: %d\n", info->mode);
+		return false;
 	}
-
-	return false;
 }
 
 static bool hl_mt6(const struct sk_buff *skb, struct xt_action_param *par)
 {
 	const struct ip6t_hl_info *info = par->matchinfo;
-	const struct ipv6hdr *ip6h = ipv6_hdr(skb);
+	const struct ipv6hdr *ip6h;
+
+	if (!skb)
+		return false;
+
+	ip6h = ipv6_hdr(skb);
 
 	switch (info->mode) {
 	case IP6T_HL_EQ:
@@ -55,9 +67,10 @@ static bool hl_mt6(const struct sk_buff *skb, struct xt_action_param *par)
 		return ip6h->hop_limit < info->hop_limit;
 	case IP6T_HL_GT:
 		return ip6h->hop_limit > info->hop_limit;
+	default:
+		pr_warn("Unknown Hop Limit match mode: %d\n", info->mode);
+		return false;
 	}
-
-	return false;
 }
 
 static struct xt_match hl_mt_reg[] __read_mostly = {
