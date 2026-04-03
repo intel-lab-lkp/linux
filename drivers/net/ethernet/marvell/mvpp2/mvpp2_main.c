@@ -4318,6 +4318,7 @@ static int mvpp2_tx_tso(struct sk_buff *skb, struct net_device *dev,
 		return 0;
 
 	hdr_sz = tso_start(skb, &tso);
+	DEBUG_NET_WARN_ON_ONCE(hdr_sz > TSO_HEADER_SIZE);
 
 	len = skb->len - hdr_sz;
 	while (len > 0) {
@@ -5795,6 +5796,7 @@ static int mvpp2_ethtool_set_eee(struct net_device *dev,
 static const struct net_device_ops mvpp2_netdev_ops = {
 	.ndo_open		= mvpp2_open,
 	.ndo_stop		= mvpp2_stop,
+	.ndo_features_check	= tso_features_check,
 	.ndo_start_xmit		= mvpp2_tx,
 	.ndo_set_rx_mode	= mvpp2_set_rx_mode,
 	.ndo_set_mac_address	= mvpp2_set_mac_address,
