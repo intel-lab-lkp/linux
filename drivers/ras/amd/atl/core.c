@@ -17,7 +17,7 @@
 
 struct df_config df_cfg __read_mostly;
 
-static int addr_over_limit(struct addr_ctx *ctx)
+int addr_over_limit(struct addr_ctx *ctx)
 {
 	u64 dram_limit_addr;
 
@@ -39,7 +39,7 @@ static int addr_over_limit(struct addr_ctx *ctx)
 	return 0;
 }
 
-static bool legacy_hole_en(struct addr_ctx *ctx)
+bool legacy_hole_en(struct addr_ctx *ctx)
 {
 	u32 reg = ctx->map.base;
 

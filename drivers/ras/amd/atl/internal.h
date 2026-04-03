@@ -297,6 +297,8 @@ unsigned long convert_umc_mca_addr_to_sys_addr(struct atl_err *err);
 
 u64 add_base_and_hole(struct addr_ctx *ctx, u64 addr);
 u64 remove_base_and_hole(struct addr_ctx *ctx, u64 addr);
+bool legacy_hole_en(struct addr_ctx *ctx);
+int addr_over_limit(struct addr_ctx *ctx);
 
 int get_dram_hole_base(void);
 void dump_df_cfg(void);
@@ -312,6 +314,10 @@ int hygon_get_df_system_info(void);
 int hygon_get_address_map(struct addr_ctx *ctx);
 int hygon_denormalize_address(struct addr_ctx *ctx);
 int hygon_dehash_address(struct addr_ctx *ctx);
+
+unsigned long hygon_norm_to_sys_addr(u8 socket_id, u8 die_id, u8 coh_st_inst_id,
+				     u8 sub_channel, unsigned long addr);
+unsigned long hygon_convert_umc_mca_addr_to_sys_addr(struct atl_err *err);
 
 /* GUIDs for PRM handlers */
 extern const guid_t norm_to_sys_guid;
