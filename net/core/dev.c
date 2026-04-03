@@ -4875,8 +4875,8 @@ int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 			 * unfortunately
 			 */
 recursion_alert:
-			net_crit_ratelimited("Dead loop on virtual device %s, fix it urgently!\n",
-					     dev->name);
+			net_crit_ratelimited("Dead loop on virtual device %s (net %llu), fix it urgently!\n",
+					     dev->name, dev_net(dev)->net_cookie);
 			rc = -ENETDOWN;
 		}
 	}
