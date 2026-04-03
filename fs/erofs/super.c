@@ -177,6 +177,10 @@ static int erofs_init_device(struct erofs_buf *buf, struct super_block *sb,
 
 	dif->blocks = le32_to_cpu(dis->blocks_lo);
 	dif->uniaddr = le32_to_cpu(dis->uniaddr_lo);
+	if (erofs_sb_has_48bit(sbi)) {
+		dif->blocks |= (u64)le32_to_cpu(dis->blocks_hi) << 32;
+		dif->uniaddr |= (u64)le16_to_cpu(dis->uniaddr_hi) << 32;
+	}
 	sbi->total_blocks += dif->blocks;
 	*pos += EROFS_DEVT_SLOT_SIZE;
 	return 0;
