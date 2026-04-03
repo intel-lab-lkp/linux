@@ -715,6 +715,7 @@ EXPORT_SYMBOL_GPL(iomap_is_partially_uptodate);
 struct folio *iomap_get_folio(struct iomap_iter *iter, loff_t pos, size_t len)
 {
 	fgf_t fgp = FGP_WRITEBEGIN | FGP_NOFS;
+	gfp_t gfp;
 
 	if (iter->flags & IOMAP_NOWAIT)
 		fgp |= FGP_NOWAIT;
@@ -722,8 +723,20 @@ struct folio *iomap_get_folio(struct iomap_iter *iter, loff_t pos, size_t len)
 		fgp |= FGP_DONTCACHE;
 	fgp |= fgf_set_order(len);
 
+	gfp = mapping_gfp_mask(iter->inode->i_mapping);
+
+	/*
+	 * If the folio order hint exceeds PAGE_ALLOC_COSTLY_ORDER,
+	 * strip __GFP_DIRECT_RECLAIM to make the allocation purely
+	 * opportunistic.  This avoids compaction + drain_all_pages()
+	 * in __alloc_pages_slowpath() that devastate throughput
+	 * on large systems during buffered writes.
+	 */
+	if (FGF_GET_ORDER(fgp) > PAGE_ALLOC_COSTLY_ORDER)
+		gfp &= ~__GFP_DIRECT_RECLAIM;
+
 	return __filemap_get_folio(iter->inode->i_mapping, pos >> PAGE_SHIFT,
-			fgp, mapping_gfp_mask(iter->inode->i_mapping));
+			fgp, gfp);
 }
 EXPORT_SYMBOL_GPL(iomap_get_folio);
 
