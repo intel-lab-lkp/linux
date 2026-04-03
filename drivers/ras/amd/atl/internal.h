@@ -305,8 +305,12 @@ int df2_get_dram_addr_map(struct addr_ctx *ctx);
 bool valid_map(struct addr_ctx *ctx);
 void dump_address_map(struct dram_addr_map *map);
 
+u64 make_space_for_coh_st_id_at_intlv_bit(struct addr_ctx *ctx);
+u64 insert_coh_st_id_at_intlv_bit(struct addr_ctx *ctx, u64 denorm_addr, u16 coh_st_id);
+
 int hygon_get_df_system_info(void);
 int hygon_get_address_map(struct addr_ctx *ctx);
+int hygon_denormalize_address(struct addr_ctx *ctx);
 
 /* GUIDs for PRM handlers */
 extern const guid_t norm_to_sys_guid;
