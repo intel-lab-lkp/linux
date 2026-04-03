@@ -201,7 +201,19 @@ static int cxl_mem_probe(struct device *dev)
 struct cxl_memdev *devm_cxl_add_memdev(struct cxl_dev_state *cxlds,
 				       const struct cxl_memdev_attach *attach)
 {
-	return __devm_cxl_add_memdev(cxlds, attach);
+	struct cxl_memdev *cxlmd;
+	void *group;
+
+	group = devres_open_group(cxlds->dev, NULL, GFP_KERNEL);
+	if (!group)
+		return ERR_PTR(-ENOMEM);
+
+	cxlmd = __devm_cxl_add_memdev(cxlds, attach);
+	if (IS_ERR(cxlmd))
+		devres_release_group(cxlds->dev, group);
+	else
+		devres_remove_group(cxlds->dev, group);
+	return cxlmd;
 }
 EXPORT_SYMBOL_NS_GPL(devm_cxl_add_memdev, "CXL");
 
