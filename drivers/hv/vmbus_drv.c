@@ -1695,7 +1695,7 @@ static ssize_t out_mask_show(struct vmbus_channel *channel, char *buf)
 	mutex_unlock(&rbi->ring_buffer_mutex);
 	return ret;
 }
-static VMBUS_CHAN_ATTR_RO(out_mask);
+static const VMBUS_CHAN_ATTR_RO(out_mask);
 
 static ssize_t in_mask_show(struct vmbus_channel *channel, char *buf)
 {
@@ -1712,7 +1712,7 @@ static ssize_t in_mask_show(struct vmbus_channel *channel, char *buf)
 	mutex_unlock(&rbi->ring_buffer_mutex);
 	return ret;
 }
-static VMBUS_CHAN_ATTR_RO(in_mask);
+static const VMBUS_CHAN_ATTR_RO(in_mask);
 
 static ssize_t read_avail_show(struct vmbus_channel *channel, char *buf)
 {
@@ -1729,7 +1729,7 @@ static ssize_t read_avail_show(struct vmbus_channel *channel, char *buf)
 	mutex_unlock(&rbi->ring_buffer_mutex);
 	return ret;
 }
-static VMBUS_CHAN_ATTR_RO(read_avail);
+static const VMBUS_CHAN_ATTR_RO(read_avail);
 
 static ssize_t write_avail_show(struct vmbus_channel *channel, char *buf)
 {
@@ -1746,7 +1746,7 @@ static ssize_t write_avail_show(struct vmbus_channel *channel, char *buf)
 	mutex_unlock(&rbi->ring_buffer_mutex);
 	return ret;
 }
-static VMBUS_CHAN_ATTR_RO(write_avail);
+static const VMBUS_CHAN_ATTR_RO(write_avail);
 
 static ssize_t target_cpu_show(struct vmbus_channel *channel, char *buf)
 {
@@ -1864,7 +1864,7 @@ static ssize_t target_cpu_store(struct vmbus_channel *channel,
 
 	return ret ?: count;
 }
-static VMBUS_CHAN_ATTR(cpu, 0644, target_cpu_show, target_cpu_store);
+static const VMBUS_CHAN_ATTR(cpu, 0644, target_cpu_show, target_cpu_store);
 
 static ssize_t channel_pending_show(struct vmbus_channel *channel,
 				    char *buf)
@@ -1873,7 +1873,7 @@ static ssize_t channel_pending_show(struct vmbus_channel *channel,
 		       channel_pending(channel,
 				       vmbus_connection.monitor_pages[1]));
 }
-static VMBUS_CHAN_ATTR(pending, 0444, channel_pending_show, NULL);
+static const VMBUS_CHAN_ATTR(pending, 0444, channel_pending_show, NULL);
 
 static ssize_t channel_latency_show(struct vmbus_channel *channel,
 				    char *buf)
@@ -1882,19 +1882,19 @@ static ssize_t channel_latency_show(struct vmbus_channel *channel,
 		       channel_latency(channel,
 				       vmbus_connection.monitor_pages[1]));
 }
-static VMBUS_CHAN_ATTR(latency, 0444, channel_latency_show, NULL);
+static const VMBUS_CHAN_ATTR(latency, 0444, channel_latency_show, NULL);
 
 static ssize_t channel_interrupts_show(struct vmbus_channel *channel, char *buf)
 {
 	return sprintf(buf, "%llu\n", channel->interrupts);
 }
-static VMBUS_CHAN_ATTR(interrupts, 0444, channel_interrupts_show, NULL);
+static const VMBUS_CHAN_ATTR(interrupts, 0444, channel_interrupts_show, NULL);
 
 static ssize_t channel_events_show(struct vmbus_channel *channel, char *buf)
 {
 	return sprintf(buf, "%llu\n", channel->sig_events);
 }
-static VMBUS_CHAN_ATTR(events, 0444, channel_events_show, NULL);
+static const VMBUS_CHAN_ATTR(events, 0444, channel_events_show, NULL);
 
 static ssize_t channel_intr_in_full_show(struct vmbus_channel *channel,
 					 char *buf)
@@ -1902,7 +1902,7 @@ static ssize_t channel_intr_in_full_show(struct vmbus_channel *channel,
 	return sprintf(buf, "%llu\n",
 		       (unsigned long long)channel->intr_in_full);
 }
-static VMBUS_CHAN_ATTR(intr_in_full, 0444, channel_intr_in_full_show, NULL);
+static const VMBUS_CHAN_ATTR(intr_in_full, 0444, channel_intr_in_full_show, NULL);
 
 static ssize_t channel_intr_out_empty_show(struct vmbus_channel *channel,
 					   char *buf)
@@ -1910,7 +1910,7 @@ static ssize_t channel_intr_out_empty_show(struct vmbus_channel *channel,
 	return sprintf(buf, "%llu\n",
 		       (unsigned long long)channel->intr_out_empty);
 }
-static VMBUS_CHAN_ATTR(intr_out_empty, 0444, channel_intr_out_empty_show, NULL);
+static const VMBUS_CHAN_ATTR(intr_out_empty, 0444, channel_intr_out_empty_show, NULL);
 
 static ssize_t channel_out_full_first_show(struct vmbus_channel *channel,
 					   char *buf)
@@ -1918,7 +1918,7 @@ static ssize_t channel_out_full_first_show(struct vmbus_channel *channel,
 	return sprintf(buf, "%llu\n",
 		       (unsigned long long)channel->out_full_first);
 }
-static VMBUS_CHAN_ATTR(out_full_first, 0444, channel_out_full_first_show, NULL);
+static const VMBUS_CHAN_ATTR(out_full_first, 0444, channel_out_full_first_show, NULL);
 
 static ssize_t channel_out_full_total_show(struct vmbus_channel *channel,
 					   char *buf)
@@ -1926,14 +1926,14 @@ static ssize_t channel_out_full_total_show(struct vmbus_channel *channel,
 	return sprintf(buf, "%llu\n",
 		       (unsigned long long)channel->out_full_total);
 }
-static VMBUS_CHAN_ATTR(out_full_total, 0444, channel_out_full_total_show, NULL);
+static const VMBUS_CHAN_ATTR(out_full_total, 0444, channel_out_full_total_show, NULL);
 
 static ssize_t subchannel_monitor_id_show(struct vmbus_channel *channel,
 					  char *buf)
 {
 	return sprintf(buf, "%u\n", channel->offermsg.monitorid);
 }
-static VMBUS_CHAN_ATTR(monitor_id, 0444, subchannel_monitor_id_show, NULL);
+static const VMBUS_CHAN_ATTR(monitor_id, 0444, subchannel_monitor_id_show, NULL);
 
 static ssize_t subchannel_id_show(struct vmbus_channel *channel,
 				  char *buf)
@@ -1941,7 +1941,7 @@ static ssize_t subchannel_id_show(struct vmbus_channel *channel,
 	return sprintf(buf, "%u\n",
 		       channel->offermsg.offer.sub_channel_index);
 }
-static VMBUS_CHAN_ATTR_RO(subchannel_id);
+static const VMBUS_CHAN_ATTR_RO(subchannel_id);
 
 static int hv_mmap_ring_buffer_wrapper(struct file *filp, struct kobject *kobj,
 				       const struct bin_attribute *attr,
@@ -1963,7 +1963,7 @@ static const struct bin_attribute chan_attr_ring_buffer = {
 	},
 	.mmap = hv_mmap_ring_buffer_wrapper,
 };
-static struct attribute *vmbus_chan_attrs[] = {
+static const struct attribute *const vmbus_chan_attrs[] = {
 	&chan_attr_out_mask.attr,
 	&chan_attr_in_mask.attr,
 	&chan_attr_read_avail.attr,
@@ -1992,7 +1992,7 @@ static const struct bin_attribute *const vmbus_chan_bin_attrs[] = {
  * each attribute, and returns 0 if an attribute is not visible.
  */
 static umode_t vmbus_chan_attr_is_visible(struct kobject *kobj,
-					  struct attribute *attr, int idx)
+					  const struct attribute *attr, int idx)
 {
 	const struct vmbus_channel *channel =
 		container_of(kobj, struct vmbus_channel, kobj);
@@ -2030,9 +2030,9 @@ static size_t vmbus_chan_bin_size(struct kobject *kobj,
 }
 
 static const struct attribute_group vmbus_chan_group = {
-	.attrs = vmbus_chan_attrs,
+	.attrs_const = vmbus_chan_attrs,
 	.bin_attrs = vmbus_chan_bin_attrs,
-	.is_visible = vmbus_chan_attr_is_visible,
+	.is_visible_const = vmbus_chan_attr_is_visible,
 	.is_bin_visible = vmbus_chan_bin_attr_is_visible,
 	.bin_size = vmbus_chan_bin_size,
 };
