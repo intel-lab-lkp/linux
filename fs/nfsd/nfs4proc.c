@@ -1396,6 +1396,24 @@ out_put_src:
 	goto out;
 }
 
+static bool nfsd4_clear_nocmtime(struct file *f)
+{
+	if ((READ_ONCE(f->f_mode) & FMODE_NOCMTIME) != 0) {
+		spin_lock(&f->f_lock);
+		f->f_mode &= ~FMODE_NOCMTIME;
+		spin_unlock(&f->f_lock);
+		return true;
+	}
+	return false;
+}
+
+static void nfsd4_restore_nocmtime(struct file *f)
+{
+	spin_lock(&f->f_lock);
+	f->f_mode |= FMODE_NOCMTIME;
+	spin_unlock(&f->f_lock);
+}
+
 static __be32
 nfsd4_clone(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		union nfsd4_op_u *u)
@@ -1403,16 +1421,19 @@ nfsd4_clone(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	struct nfsd4_clone *clone = &u->clone;
 	struct nfsd_file *src, *dst;
 	__be32 status;
+	bool restore_nocmtime = false;
 
 	status = nfsd4_verify_copy(rqstp, cstate, &clone->cl_src_stateid, &src,
 				   &clone->cl_dst_stateid, &dst);
 	if (status)
 		goto out;
 
+	restore_nocmtime = nfsd4_clear_nocmtime(dst->nf_file);
 	status = nfsd4_clone_file_range(rqstp, src, clone->cl_src_pos,
 			dst, clone->cl_dst_pos, clone->cl_count,
 			EX_ISSYNC(cstate->current_fh.fh_export));
-
+	if (restore_nocmtime)
+		nfsd4_restore_nocmtime(dst->nf_file);
 	nfsd_file_put(dst);
 	nfsd_file_put(src);
 out:
@@ -2132,6 +2153,7 @@ nfsd4_copy(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	struct nfsd4_copy *copy = &u->copy;
 	struct nfsd42_write_res *result;
 	__be32 status;
+	bool restore_nocmtime = false;
 
 	result = &copy->cp_res;
 	nfsd_copy_write_verifier((__be32 *)&result->wr_verifier.data, nn);
@@ -2157,6 +2179,7 @@ nfsd4_copy(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		}
 	}
 
+	restore_nocmtime = nfsd4_clear_nocmtime(copy->nf_dst->nf_file);
 	memcpy(&copy->fh, &cstate->current_fh.fh_handle,
 		sizeof(struct knfsd_fh));
 	if (nfsd4_copy_is_async(copy)) {
@@ -2199,6 +2222,8 @@ nfsd4_copy(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 				       copy->nf_dst->nf_file, true);
 	}
 out:
+	if (restore_nocmtime)
+		nfsd4_restore_nocmtime(copy->nf_dst->nf_file);
 	trace_nfsd_copy_done(copy, status);
 	release_copy_files(copy);
 	return status;
