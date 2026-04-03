@@ -11,6 +11,7 @@
 
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/libfdt.h>
 #include <linux/of_address.h>
 #include <linux/of_fdt.h>
 #include <linux/io.h>
@@ -66,7 +67,8 @@ void __iomem *mvebu_get_scu_base(void)
 static int __init mvebu_scan_mem(unsigned long node, const char *uname,
 				 int depth, void *data)
 {
-	const char *type = of_get_flat_dt_prop(node, "device_type", NULL);
+	const char *type = fdt_stringlist_get(initial_boot_params, node,
+					      "device_type", 0, NULL);
 	const __be32 *reg, *endp;
 	int l;
 
