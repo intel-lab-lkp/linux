@@ -106,7 +106,7 @@ void bio_integrity_setup_default(struct bio *bio)
 	struct blk_integrity *bi = blk_get_integrity(bio->bi_bdev->bd_disk);
 	struct bio_integrity_payload *bip = bio_integrity(bio);
 
-	bip_set_seed(bip, bio->bi_iter.bi_sector);
+	bip_set_seed(bip, bio_integrity_intervals(bi, bio->bi_iter.bi_sector));
 
 	if (bi->csum_type) {
 		bip->bip_flags |= BIP_CHECK_GUARD;

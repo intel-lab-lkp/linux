@@ -317,7 +317,7 @@ static blk_status_t blk_integrity_iterate(struct bio *bio,
 		.data_iter = *data_iter,
 		.prot_iter = bip->bip_iter,
 		.interval_remaining = 1 << bi->interval_exp,
-		.seed = data_iter->bi_sector,
+		.seed = bio_integrity_intervals(bi, data_iter->bi_sector),
 		.csum = 0,
 	};
 	blk_status_t ret = BLK_STS_OK;
