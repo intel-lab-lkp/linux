@@ -255,10 +255,6 @@ static void print_capstone_detail(struct cs_insn *insn, char *buf, size_t len,
 	struct map *map = args->ms->map;
 	struct symbol *sym;
 
-	/* TODO: support more architectures */
-	if (!arch__is_x86(args->arch))
-		return;
-
 	if (insn->detail == NULL)
 		return;
 
@@ -302,6 +298,98 @@ static void print_capstone_detail(struct cs_insn *insn, char *buf, size_t len,
 				  orig_addr, sym->name, addr - sym->start);
 		}
 		break;
+	}
+}
+
+static void format_capstone_insn_x86(struct cs_insn *insn, char *buf,
+				     size_t len, struct annotate_args *args,
+				     u64 addr)
+{
+	int printed;
+
+	printed = scnprintf(buf, len, "       %-7s %s",
+			    insn->mnemonic, insn->op_str);
+	buf += printed;
+	len -= printed;
+
+	print_capstone_detail(insn, buf, len, args, addr);
+}
+
+static void format_capstone_insn_arm64(struct cs_insn *insn, char *buf,
+				       size_t len, struct annotate_args *args,
+				       u64 addr)
+{
+	struct map *map = args->ms->map;
+	struct symbol *sym;
+	char *last_imm, *endptr;
+	u64 orig_addr;
+
+	scnprintf(buf, len, "       %-7s %s",
+		  insn->mnemonic, insn->op_str);
+	/*
+	 * Adjust instructions to keep the existing behavior with objdump.
+	 *
+	 * Example conversion:
+	 * From: b #0xffff8000800114c8
+	 * To:   b ffff8000800114c8 <el0t_64_sync+0x108>
+	 */
+	switch (insn->id) {
+	case ARM64_INS_B:
+	case ARM64_INS_BL:
+	case ARM64_INS_CBNZ:
+	case ARM64_INS_CBZ:
+	case ARM64_INS_TBNZ:
+	case ARM64_INS_TBZ:
+	case ARM64_INS_ADRP:
+		/* Extract last immediate value as address */
+		last_imm = strrchr(buf, '#');
+		if (!last_imm)
+			return;
+
+		orig_addr = strtoull(last_imm + 1, &endptr, 16);
+		if (endptr == last_imm + 1)
+			return;
+
+		/* Relocate map that contains the address */
+		if (dso__kernel(map__dso(map))) {
+			map = maps__find(map__kmaps(map), orig_addr);
+			if (map == NULL)
+				return;
+		}
+
+		/* Convert it to map-relative address for search */
+		addr = map__map_ip(map, orig_addr);
+
+		sym = map__find_symbol(map, addr);
+		if (sym == NULL)
+			return;
+
+		/* Symbolize the resolved address */
+		len = len - (last_imm - buf);
+		if (addr == sym->start) {
+			scnprintf(last_imm, len, "%"PRIx64" <%s>",
+				  orig_addr, sym->name);
+		} else {
+			scnprintf(last_imm, len, "%"PRIx64" <%s+%#"PRIx64">",
+				  orig_addr, sym->name, addr - sym->start);
+		}
+		break;
+	default:
+		break;
+	}
+}
+
+static void format_capstone_insn(struct cs_insn *insn, char *buf, size_t len,
+				 struct annotate_args *args, u64 addr)
+{
+	/* TODO: support more architectures */
+	if (arch__is_x86(args->arch))
+		format_capstone_insn_x86(insn, buf, len, args, addr);
+	else if (arch__is_arm64(args->arch))
+		format_capstone_insn_arm64(insn, buf, len, args, addr);
+	else {
+		scnprintf(buf, len, "       %-7s %s",
+			  insn->mnemonic, insn->op_str);
 	}
 }
 
@@ -381,14 +469,9 @@ int symbol__disassemble_capstone(const char *filename __maybe_unused,
 
 	free_count = count = perf_cs_disasm(handle, buf, buf_len, start, buf_len, &insn);
 	for (i = 0, offset = 0; i < count; i++) {
-		int printed;
-
-		printed = scnprintf(disasm_buf, sizeof(disasm_buf),
-				    "       %-7s %s",
-				    insn[i].mnemonic, insn[i].op_str);
-		print_capstone_detail(&insn[i], disasm_buf + printed,
-				      sizeof(disasm_buf) - printed, args,
-				      start + offset);
+		format_capstone_insn(&insn[i], disasm_buf,
+				     sizeof(disasm_buf), args,
+				     start + offset);
 
 		args->offset = offset;
 		args->line = disasm_buf;
