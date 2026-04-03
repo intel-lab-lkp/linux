@@ -2232,10 +2232,9 @@ decay_va_pool_node(struct vmap_node *vn, bool full_decay)
 		/* Detach the pool, so no-one can access it. */
 		spin_lock(&vn->pool_lock);
 		list_replace_init(&vn->pool[i].head, &tmp_list);
-		spin_unlock(&vn->pool_lock);
-
 		pool_len = n_decay = vn->pool[i].len;
 		WRITE_ONCE(vn->pool[i].len, 0);
+		spin_unlock(&vn->pool_lock);
 
 		/* Decay a pool by ~25% out of left objects. */
 		if (!full_decay)
@@ -2258,8 +2257,14 @@ decay_va_pool_node(struct vmap_node *vn, bool full_decay)
 		 */
 		if (!list_empty(&tmp_list)) {
 			spin_lock(&vn->pool_lock);
-			list_replace_init(&tmp_list, &vn->pool[i].head);
-			WRITE_ONCE(vn->pool[i].len, pool_len);
+			/*
+			 * Merge leftover areas back into the pool rather than
+			 * replacing the whole list. A concurrent allocator can
+			 * repopulate vn->pool[i].head while we are decaying
+			 * tmp_list, and replacing would drop those nodes.
+			 */
+			list_splice_tail_init(&tmp_list, &vn->pool[i].head);
+			WRITE_ONCE(vn->pool[i].len, vn->pool[i].len + pool_len);
 			spin_unlock(&vn->pool_lock);
 		}
 	}
