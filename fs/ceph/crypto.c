@@ -208,6 +208,7 @@ int ceph_encode_encrypted_dname(struct inode *parent, char *buf, int elen)
 	struct ceph_client *cl = ceph_inode_to_client(parent);
 	struct inode *dir = parent;
 	char *p = buf;
+	char suffix[1 + 20 + 1];
 	u32 len;
 	int name_len = elen;
 	int ret;
@@ -271,8 +272,20 @@ int ceph_encode_encrypted_dname(struct inode *parent, char *buf, int elen)
 
 	/* To understand the 240 limit, see CEPH_NOHASH_NAME_MAX comments */
 	WARN_ON(elen > 240);
-	if (dir != parent) // leading _ is already there; append _<inum>
-		elen += 1 + sprintf(p + elen, "_%ld", dir->i_ino);
+	if (dir != parent) { // leading _ is already there; append _<inum>
+		ret = snprintf(suffix, sizeof(suffix), "_%lu", dir->i_ino);
+		if (ret < 0) {
+			elen = ret;
+			goto out;
+		}
+		if (ret >= NAME_MAX - elen) {
+			elen = -ENAMETOOLONG;
+			goto out;
+		}
+
+		memcpy(p + elen, suffix, ret);
+		elen += ret + 1;
+	}
 
 out:
 	kfree(cryptbuf);
