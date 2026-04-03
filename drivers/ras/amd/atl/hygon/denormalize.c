@@ -16,6 +16,8 @@ static u16 hygon_get_dst_fabric_id(struct addr_ctx *ctx)
 		return FIELD_GET(HYGON_DF1_DST_FABRIC_ID, ctx->map.limit);
 	case HYGON_DF2:
 		return FIELD_GET(HYGON_DF2_DST_FABRIC_ID, ctx->map.limit);
+	case HYGON_DF3:
+		return FIELD_GET(HYGON_DF3_DST_FABRIC_ID, ctx->map.limit);
 	default:
 		atl_debug_on_bad_df_rev();
 		return 0;

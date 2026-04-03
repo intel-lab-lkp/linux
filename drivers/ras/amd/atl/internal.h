@@ -45,6 +45,7 @@ enum df_revisions {
 	UNKNOWN,
 	HYGON_DF1,
 	HYGON_DF2,
+	HYGON_DF3,
 	DF2,
 	DF3,
 	DF3p5,
