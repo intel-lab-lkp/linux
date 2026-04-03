@@ -149,7 +149,8 @@ pub(crate) fn expand(
     let field_check = make_field_check(&fields, init_kind, &path);
     Ok(quote! {{
         // Get the data about fields from the supplied type.
-        // SAFETY: TODO
+        // SAFETY: The type implements `#has_data_trait`, guaranteeing that `#get_data` returns the
+        // correct `#data_trait` type for initializing the struct's fields.
         let #data = unsafe {
             use ::pin_init::__internal::#has_data_trait;
             // Can't use `<#path as #has_data_trait>::#get_data`, since the user is able to omit
@@ -171,7 +172,8 @@ pub(crate) fn expand(
         let init = move |slot| -> ::core::result::Result<(), #error> {
             init(slot).map(|__InitOk| ())
         };
-        // SAFETY: TODO
+        // SAFETY: the closure passed to `#init_from_closure` correctly initializes all fields of the
+        // struct and returns `Ok(())` on success; it handles errors/panics correctly.
         let init = unsafe { ::pin_init::#init_from_closure::<_, #error>(init) };
         init
     }})
@@ -250,12 +252,13 @@ fn init_fields(
                 let accessor = if pinned {
                     let project_ident = format_ident!("__project_{ident}");
                     quote! {
-                        // SAFETY: TODO
+                        // SAFETY: `slot` is a valid pointer to the struct being initialized, and `#data`
+                        // provides the correct projection function through the `#project_ident` method.
                         unsafe { #data.#project_ident(&mut (*#slot).#ident) }
                     }
                 } else {
                     quote! {
-                        // SAFETY: TODO
+                        // SAFETY: `slot` is a valid pointer to the struct being initialized.
                         unsafe { &mut (*#slot).#ident }
                     }
                 };
@@ -263,7 +266,8 @@ fn init_fields(
                     #(#attrs)*
                     {
                         #value_prep
-                        // SAFETY: TODO
+                        // SAFETY: `slot` is a valid pointer to the struct being initialized, and the
+                        // field is properly aligned (enforced by the field accessor).
                         unsafe { #write(::core::ptr::addr_of_mut!((*#slot).#ident), #value_ident) };
                     }
                     #(#cfgs)*
@@ -290,7 +294,8 @@ fn init_fields(
                             unsafe { #data.#ident(::core::ptr::addr_of_mut!((*#slot).#ident), #init)? };
                         },
                         quote! {
-                            // SAFETY: TODO
+                            // SAFETY: `slot` is a valid pointer to the struct being initialized, and `#data`
+                            // provides the correct projection function through the `#project_ident` method.
                             unsafe { #data.#project_ident(&mut (*#slot).#ident) }
                         },
                     )
@@ -307,7 +312,7 @@ fn init_fields(
                             };
                         },
                         quote! {
-                            // SAFETY: TODO
+                            // SAFETY: `slot` is a valid pointer to the struct being initialized.
                             unsafe { &mut (*#slot).#ident }
                         },
                     )
