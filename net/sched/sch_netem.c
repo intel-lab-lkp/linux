@@ -71,6 +71,18 @@ struct disttable {
 	s16 table[] __counted_by(size);
 };
 
+enum GE_state_model {
+	GOOD_STATE = 1,
+	BAD_STATE,
+};
+
+enum _4_state_model {
+	TX_IN_GAP_PERIOD = 1,
+	TX_IN_BURST_PERIOD,
+	LOST_IN_GAP_PERIOD,
+	LOST_IN_BURST_PERIOD,
+};
+
 struct netem_sched_data {
 	/* internal t(ime)fifo qdisc uses t_root and sch->limit */
 	struct rb_root t_root;
@@ -120,18 +132,6 @@ struct netem_sched_data {
 		CLG_4_STATES,
 		CLG_GILB_ELL,
 	} loss_model;
-
-	enum {
-		TX_IN_GAP_PERIOD = 1,
-		TX_IN_BURST_PERIOD,
-		LOST_IN_GAP_PERIOD,
-		LOST_IN_BURST_PERIOD,
-	} _4_state_model;
-
-	enum {
-		GOOD_STATE = 1,
-		BAD_STATE,
-	} GE_state_model;
 
 	/* Correlated Loss Generation models */
 	struct clgstate {
