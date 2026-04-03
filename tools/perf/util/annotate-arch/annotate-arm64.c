@@ -335,6 +335,16 @@ static void update_insn_state_arm64(struct type_state *state,
 		}
 		return;
 	}
+
+	/* Register to memory transfers */
+	if (!strncmp(dl->ins.name, "st", 2)) {
+		/*
+		 * Store instructions do not change the register type,
+		 * but the base register must be updated for pre/post-index
+		 * modes.
+		 */
+		adjust_reg_index_state(state, dreg, dst, "str", insn_offset);
+	}
 }
 #endif
 
