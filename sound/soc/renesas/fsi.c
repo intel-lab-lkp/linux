@@ -292,6 +292,7 @@ struct fsi_master {
 	void __iomem *base;
 	struct fsi_priv fsia;
 	struct fsi_priv fsib;
+	struct clk *clk_spu;
 	const struct fsi_core *core;
 	spinlock_t lock;
 };
@@ -1554,6 +1555,11 @@ static int fsi_dai_startup(struct snd_pcm_substream *substream,
 			   struct snd_soc_dai *dai)
 {
 	struct fsi_priv *fsi = fsi_get_priv(substream);
+	int ret;
+
+	ret = clk_prepare_enable(fsi->master->clk_spu);
+	if (ret)
+		return ret;
 
 	fsi_clk_invalid(fsi);
 
@@ -1566,6 +1572,7 @@ static void fsi_dai_shutdown(struct snd_pcm_substream *substream,
 	struct fsi_priv *fsi = fsi_get_priv(substream);
 
 	fsi_clk_invalid(fsi);
+	clk_disable_unprepare(fsi->master->clk_spu);
 }
 
 static int fsi_dai_trigger(struct snd_pcm_substream *substream, int cmd,
@@ -1962,6 +1969,13 @@ static int fsi_probe(struct platform_device *pdev)
 	/* master setting */
 	master->core		= core;
 	spin_lock_init(&master->lock);
+
+	/* SPU clock is required for FSI register access */
+	master->clk_spu = devm_clk_get(&pdev->dev, "spu");
+	if (IS_ERR(master->clk_spu)) {
+		dev_err(&pdev->dev, "Failed to get spu clock\n");
+		return PTR_ERR(master->clk_spu);
+	}
 
 	/* FSI A setting */
 	fsi		= &master->fsia;
