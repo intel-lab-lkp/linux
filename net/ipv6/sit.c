@@ -359,7 +359,6 @@ static int ipip6_tunnel_get_prl(struct net_device *dev, struct ip_tunnel_prl __u
 	rcu_read_unlock();
 
 	len = sizeof(*kp) * c;
-	ret = 0;
 	if ((len && copy_to_user(a + 1, kp, len)) || put_user(len, &a->datalen))
 		ret = -EFAULT;
 
