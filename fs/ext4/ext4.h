@@ -3872,6 +3872,7 @@ extern void ext4_stop_mmpd(struct ext4_sb_info *sbi);
 extern const struct fsverity_operations ext4_verityops;
 
 /* orphan.c */
+extern const struct proc_ops ext4_orphan_proc_ops;
 extern int ext4_orphan_add(handle_t *, struct inode *);
 extern int ext4_orphan_del(handle_t *, struct inode *);
 extern void ext4_orphan_cleanup(struct super_block *sb,

@@ -639,6 +639,8 @@ int ext4_register_sysfs(struct super_block *sb)
 				ext4_seq_mb_stats_show, sb);
 		proc_create_seq_data("mb_structs_summary", 0444, sbi->s_proc,
 				&ext4_mb_seq_structs_summary_ops, sb);
+		proc_create_data("orphan_list", 0444, sbi->s_proc,
+				 &ext4_orphan_proc_ops, sb);
 	}
 	return 0;
 }
