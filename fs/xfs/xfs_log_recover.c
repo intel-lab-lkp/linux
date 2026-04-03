@@ -1050,6 +1050,9 @@ xlog_verify_head(
 	if (error < 0)
 		return error;
 
+	if (!error)
+		return -EIO;
+
 	/*
 	 * Now run a CRC verification pass over the records starting at the
 	 * block found above to the current head. If a CRC failure occurs, the
