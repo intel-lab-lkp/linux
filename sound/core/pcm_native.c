@@ -246,7 +246,7 @@ int snd_pcm_info_user(struct snd_pcm_substream *substream,
 	struct snd_pcm_info *info __free(kfree) =
 		kmalloc_obj(*info);
 
-	if (! info)
+	if (!info)
 		return -ENOMEM;
 	err = snd_pcm_info(substream, info);
 	if (err >= 0) {
@@ -607,7 +607,7 @@ static int period_to_usecs(struct snd_pcm_runtime *runtime)
 {
 	int usecs;
 
-	if (! runtime->rate)
+	if (!runtime->rate)
 		return -1; /* invalid */
 
 	/* take 75% of period time as the deadline */
@@ -1716,7 +1716,7 @@ static int snd_pcm_do_suspend(struct snd_pcm_substream *substream,
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	if (runtime->trigger_master != substream)
 		return 0;
-	if (! snd_pcm_running(substream))
+	if (!snd_pcm_running(substream))
 		return 0;
 	substream->ops->trigger(substream, SNDRV_PCM_TRIGGER_SUSPEND);
 	runtime->stop_operating = true;
@@ -1770,7 +1770,7 @@ int snd_pcm_suspend_all(struct snd_pcm *pcm)
 	struct snd_pcm_substream *substream;
 	int stream, err = 0;
 
-	if (! pcm)
+	if (!pcm)
 		return 0;
 
 	for_each_pcm_substream(pcm, stream, substream) {
@@ -2047,7 +2047,7 @@ static int snd_pcm_do_drain_init(struct snd_pcm_substream *substream,
 		switch (runtime->state) {
 		case SNDRV_PCM_STATE_PREPARED:
 			/* start playback stream if possible */
-			if (! snd_pcm_playback_empty(substream)) {
+			if (!snd_pcm_playback_empty(substream)) {
 				snd_pcm_do_start(substream, SNDRV_PCM_STATE_DRAINING);
 				snd_pcm_post_start(substream, SNDRV_PCM_STATE_DRAINING);
 			} else {
@@ -3193,7 +3193,7 @@ static snd_pcm_uframes_t recalculate_boundary(struct snd_pcm_runtime *runtime)
 	snd_pcm_uframes_t border;
 	int order;
 
-	if (! runtime->buffer_size)
+	if (!runtime->buffer_size)
 		return 0;
 
 	border = 0x7fffffffUL - runtime->buffer_size;
@@ -3234,7 +3234,7 @@ static int snd_pcm_ioctl_sync_ptr_compat(struct snd_pcm_substream *substream,
 	status = runtime->status;
 	control = runtime->control;
 	boundary = recalculate_boundary(runtime);
-	if (! boundary)
+	if (!boundary)
 		boundary = 0x7fffffff;
 	scoped_guard(pcm_stream_lock_irq, substream) {
 		/* FIXME: we should consider the boundary for the sync from app */
