@@ -1709,6 +1709,19 @@ static int panthor_vm_lock_region(struct panthor_vm *vm, u64 start, u64 size)
 	    start + size <= vm->locked_region.start + vm->locked_region.size)
 		return 0;
 
+	/* sm_step_remap() may need a locked region that isn't a strict superset
+	 * of the original one because of having to extend unmap boundaries beyond
+	 * it to deal with partial unmaps of transparent huge pages. What we want
+	 * in those cases is to lock the union of both regions.
+	 */
+	if (vm->locked_region.size) {
+		u64 end = start + size;
+
+		start = min(start, vm->locked_region.start);
+		size = max(vm->locked_region.start +
+			   vm->locked_region.size, end) - start;
+	}
+
 	mutex_lock(&ptdev->mmu->as.slots_lock);
 	if (vm->as.id >= 0 && size) {
 		/* Lock the region that needs to be updated */
