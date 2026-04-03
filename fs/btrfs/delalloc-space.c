@@ -252,12 +252,19 @@ static void btrfs_inode_rsv_release(struct btrfs_inode *inode, bool qgroup_free)
 
 /*
  * Each delalloc extent could become an ordered_extent and end up inserting a
- * new extent into the extent and free space trees. So we must reserve
- * delayed ref space up front for that.
+ * new extent into the extent and free space trees. It also may end up writing
+ * csums, so we must reserve delayed ref space up front for all of that.
  */
 static u64 delalloc_calc_delayed_refs_rsv(const struct btrfs_fs_info *fs_info, u64 nr_extents)
 {
-	return btrfs_calc_delayed_ref_bytes(fs_info, nr_extents);
+	/*
+	 * btrfs_calc_delayed_ref_bytes() does not assume csums as it is
+	 * also called from metadata writing contexts. So the extra
+	 * metadata insertion reservation represents the possibility of
+	 * delayed refs during csum tree writes.
+	 */
+	return btrfs_calc_delayed_ref_bytes(fs_info, nr_extents) +
+		btrfs_calc_insert_metadata_size(fs_info, nr_extents);
 }
 
 static void btrfs_calculate_inode_block_rsv_size(struct btrfs_fs_info *fs_info,
