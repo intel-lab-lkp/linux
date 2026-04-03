@@ -4,6 +4,7 @@
 
 #include <uapi/asm/ptrace.h>
 
+#include <asm/thread_info.h>
 
 #define arch_has_single_step()		(1)
 #define user_mode(regs) (((regs)->ps & 8) != 0)
@@ -22,6 +23,17 @@
 static inline unsigned long regs_return_value(struct pt_regs *regs)
 {
 	return regs->r0;
+}
+
+/*
+ * The user stack pointer is not stored in pt_regs.  It lives in the
+ * PCB, which sits at the base of the kernel stack (i.e. in thread_info).
+ */
+static inline unsigned long user_stack_pointer(struct pt_regs *regs)
+{
+	struct thread_info *ti =
+		(struct thread_info *)((char *)(regs + 1) - 2 * PAGE_SIZE);
+	return ti->pcb.usp;
 }
 
 #endif

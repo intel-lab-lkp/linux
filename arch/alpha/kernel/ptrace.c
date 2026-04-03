@@ -12,10 +12,12 @@
 #include <linux/smp.h>
 #include <linux/errno.h>
 #include <linux/ptrace.h>
+#include <linux/regset.h>
 #include <linux/user.h>
 #include <linux/security.h>
 #include <linux/signal.h>
 #include <linux/audit.h>
+#include <linux/elf.h>
 
 #include <linux/uaccess.h>
 #include <asm/fpu.h>
@@ -272,6 +274,141 @@ void user_disable_single_step(struct task_struct *child)
 void ptrace_disable(struct task_struct *child)
 { 
 	user_disable_single_step(child);
+}
+
+/*
+ * Get the general registers from a task.
+ * Follows the elf_gregset_t layout: 32 GPRs + unique (replacing PS).
+ */
+static int genregs_get(struct task_struct *target,
+		       const struct user_regset *regset,
+		       struct membuf to)
+{
+	elf_gregset_t gregs;
+
+	dump_elf_thread(gregs, task_pt_regs(target),
+			task_thread_info(target));
+	return membuf_write(&to, &gregs, sizeof(gregs));
+}
+
+/*
+ * Set the general registers for a task.
+ */
+static int genregs_set(struct task_struct *target,
+		       const struct user_regset *regset,
+		       unsigned int pos, unsigned int count,
+		       const void *kbuf, const void __user *ubuf)
+{
+	elf_gregset_t gregs;
+	struct pt_regs *regs = task_pt_regs(target);
+	struct switch_stack *sw = ((struct switch_stack *)regs) - 1;
+	struct thread_info *ti = task_thread_info(target);
+	int ret;
+
+	/* Start with the current register values. */
+	dump_elf_thread(gregs, regs, ti);
+
+	ret = user_regset_copyin(&pos, &count, &kbuf, &ubuf,
+				 &gregs, 0, sizeof(gregs));
+	if (ret)
+		return ret;
+
+	/* Apply the register values back. */
+	regs->r0  = gregs[0];
+	regs->r1  = gregs[1];
+	regs->r2  = gregs[2];
+	regs->r3  = gregs[3];
+	regs->r4  = gregs[4];
+	regs->r5  = gregs[5];
+	regs->r6  = gregs[6];
+	regs->r7  = gregs[7];
+	regs->r8  = gregs[8];
+	sw->r9    = gregs[9];
+	sw->r10   = gregs[10];
+	sw->r11   = gregs[11];
+	sw->r12   = gregs[12];
+	sw->r13   = gregs[13];
+	sw->r14   = gregs[14];
+	sw->r15   = gregs[15];
+	regs->r16 = gregs[16];
+	regs->r17 = gregs[17];
+	regs->r18 = gregs[18];
+	regs->r19 = gregs[19];
+	regs->r20 = gregs[20];
+	regs->r21 = gregs[21];
+	regs->r22 = gregs[22];
+	regs->r23 = gregs[23];
+	regs->r24 = gregs[24];
+	regs->r25 = gregs[25];
+	regs->r26 = gregs[26];
+	regs->r27 = gregs[27];
+	regs->r28 = gregs[28];
+	regs->gp  = gregs[29];
+	ti->pcb.usp = gregs[30];
+	regs->pc  = gregs[31];
+	ti->pcb.unique = gregs[32];
+
+	return 0;
+}
+
+/*
+ * Get the floating-point registers from a task.
+ */
+static int fpregs_get(struct task_struct *target,
+		      const struct user_regset *regset,
+		      struct membuf to)
+{
+	return membuf_write(&to, task_thread_info(target)->fp,
+			    ELF_NFPREG * sizeof(elf_fpreg_t));
+}
+
+/*
+ * Set the floating-point registers for a task.
+ */
+static int fpregs_set(struct task_struct *target,
+		      const struct user_regset *regset,
+		      unsigned int pos, unsigned int count,
+		      const void *kbuf, const void __user *ubuf)
+{
+	return user_regset_copyin(&pos, &count, &kbuf, &ubuf,
+				  task_thread_info(target)->fp,
+				  0, ELF_NFPREG * sizeof(elf_fpreg_t));
+}
+
+enum alpha_regset {
+	REGSET_GENERAL,
+	REGSET_FPU,
+};
+
+static const struct user_regset alpha_regsets[] = {
+	[REGSET_GENERAL] = {
+		USER_REGSET_NOTE_TYPE(PRSTATUS),
+		.n = ELF_NGREG,
+		.size = sizeof(elf_greg_t),
+		.align = sizeof(elf_greg_t),
+		.regset_get = genregs_get,
+		.set = genregs_set,
+	},
+	[REGSET_FPU] = {
+		USER_REGSET_NOTE_TYPE(PRFPREG),
+		.n = ELF_NFPREG,
+		.size = sizeof(elf_fpreg_t),
+		.align = sizeof(elf_fpreg_t),
+		.regset_get = fpregs_get,
+		.set = fpregs_set,
+	},
+};
+
+static const struct user_regset_view user_alpha_view = {
+	.name = "alpha",
+	.e_machine = ELF_ARCH,
+	.regsets = alpha_regsets,
+	.n = ARRAY_SIZE(alpha_regsets),
+};
+
+const struct user_regset_view *task_user_regset_view(struct task_struct *task)
+{
+	return &user_alpha_view;
 }
 
 long arch_ptrace(struct task_struct *child, long request,
