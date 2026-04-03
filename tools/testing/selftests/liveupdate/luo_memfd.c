@@ -36,6 +36,9 @@
 #define MEMFD_DATA_BUFFER_SIZE SZ_1M
 #define MEMFD_DATA_FS_COPY "memfd_data_fs_copy.bin"
 
+#define ZERO_SESSION_NAME "zero_session"
+#define ZERO_MEMFD_TOKEN 1
+
 static int luo_fd = -1;
 static int stage;
 
@@ -101,6 +104,60 @@ TEST(memfd_data)
 		break;
 	case 2:
 		memfd_data_stage_2(_metadata);
+		break;
+	default:
+		TH_LOG("Unknown stage %d\n", stage);
+		ASSERT_FALSE(true);
+	}
+}
+
+static void zero_memfd_stage_1(struct __test_metadata *_metadata)
+{
+	int zero_fd, session;
+	struct liveupdate_session_preserve_fd preserve_arg = { .size = sizeof(preserve_arg) };
+
+	session = luo_create_session(luo_fd, ZERO_SESSION_NAME);
+	ASSERT_GE(session, 0);
+
+	zero_fd = memfd_create("zero_memfd", 0);
+	ASSERT_GE(zero_fd, 0);
+
+	preserve_arg.fd = zero_fd;
+	preserve_arg.token = ZERO_MEMFD_TOKEN;
+	ASSERT_GE(ioctl(session, LIVEUPDATE_SESSION_PRESERVE_FD, &preserve_arg), 0);
+
+	daemonize_and_wait();
+}
+
+static void zero_memfd_stage_2(struct __test_metadata *_metadata)
+{
+	int zero_fd, session;
+	struct liveupdate_session_retrieve_fd retrieve_arg = { .size = sizeof(retrieve_arg) };
+
+	session = luo_retrieve_session(luo_fd, ZERO_SESSION_NAME);
+	ASSERT_GE(session, 0);
+
+	retrieve_arg.token = ZERO_MEMFD_TOKEN;
+	ASSERT_GE(ioctl(session, LIVEUPDATE_SESSION_RETRIEVE_FD, &retrieve_arg), 0);
+	zero_fd = retrieve_arg.fd;
+	ASSERT_GE(zero_fd, 0);
+
+	ASSERT_EQ(lseek(zero_fd, 0, SEEK_END), 0);
+
+	ASSERT_EQ(luo_session_finish(session), 0);
+}
+
+/*
+ * Test that a zero-sized memfd is preserved across live update.
+ */
+TEST(zero_memfd)
+{
+	switch (stage) {
+	case 1:
+		zero_memfd_stage_1(_metadata);
+		break;
+	case 2:
+		zero_memfd_stage_2(_metadata);
 		break;
 	default:
 		TH_LOG("Unknown stage %d\n", stage);
