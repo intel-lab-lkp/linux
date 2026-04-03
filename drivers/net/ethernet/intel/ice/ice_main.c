@@ -971,7 +971,7 @@ static void ice_set_dflt_mib(struct ice_pf *pf)
 	tlv->ouisubtype = htonl(ouisubtype);
 
 	buf = tlv->tlvinfo;
-	buf[0] = 0;
+	buf[0] = ICE_IEEE_ETS_IS_WILLING;
 
 	/* ETS CFG all UPs map to TC 0. Next 4 (1 - 4) Octets = 0.
 	 * Octets 5 - 12 are BW values, set octet 5 to 100% BW.
