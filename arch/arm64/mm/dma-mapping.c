@@ -48,7 +48,7 @@ void arch_setup_dma_ops(struct device *dev, bool coherent)
 		   dev_driver_string(dev), dev_name(dev),
 		   ARCH_DMA_MINALIGN, cls);
 
-	dev->dma_coherent = coherent;
+	assign_bit(DEV_FLAG_DMA_COHERENT, &dev->flags, coherent);
 
 	xen_setup_dma_ops(dev);
 }

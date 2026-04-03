@@ -98,8 +98,8 @@ void arch_setup_dma_ops(struct device *dev, bool coherent)
 	 * DMA buffers.
 	 */
 	if (is_isa_arcv2() && ioc_enable && coherent)
-		dev->dma_coherent = true;
+		set_bit(DEV_FLAG_DMA_COHERENT, &dev->flags);
 
 	dev_info(dev, "use %scoherent DMA ops\n",
-		 dev->dma_coherent ? "" : "non");
+		 test_bit(DEV_FLAG_DMA_COHERENT, &dev->flags) ? "" : "non");
 }

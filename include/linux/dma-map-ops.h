@@ -230,7 +230,7 @@ int dma_direct_set_offset(struct device *dev, phys_addr_t cpu_start,
 extern bool dma_default_coherent;
 static inline bool dev_is_dma_coherent(struct device *dev)
 {
-	return dev->dma_coherent;
+	return test_bit(DEV_FLAG_DMA_COHERENT, &dev->flags);
 }
 #else
 #define dma_default_coherent true
