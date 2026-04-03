@@ -90,6 +90,31 @@ static const struct glob_test_case glob_test_cases[] = {
 	{ .pat = "*abcd*abcdef*", .str = "abcabcdabcdeabcdefg", .expected = true },
 	{ .pat = "*abcd*", .str = "abcabcabcabcefg", .expected = false },
 	{ .pat = "*ab*cd*", .str = "abcabcabcabcefg", .expected = false },
+	/* backslash escaping */
+	{ .pat = "\\a", .str = "a", .expected = true },
+	{ .pat = "\\a", .str = "\\a", .expected = false },
+	{ .pat = "\\*", .str = "*", .expected = true },
+	{ .pat = "\\*", .str = "a", .expected = false },
+	{ .pat = "\\?", .str = "?", .expected = true },
+	{ .pat = "\\?", .str = "a", .expected = false },
+	{ .pat = "\\[a]", .str = "[a]", .expected = true },
+	{ .pat = "\\\\", .str = "\\", .expected = true },
+	{ .pat = "a\\*b", .str = "a*b", .expected = true },
+	{ .pat = "a\\*b", .str = "aXb", .expected = false },
+	/* trailing backslash */
+	{ .pat = "a\\", .str = "a", .expected = true },
+	{ .pat = "\\", .str = "", .expected = true },
+	/* backwards ranges */
+	{ .pat = "[z-a]", .str = "m", .expected = false },
+	{ .pat = "[!z-a]", .str = "m", .expected = true },
+	/* high-bit characters */
+	{ .pat = "\xc0", .str = "\xc0", .expected = true },
+	{ .pat = "\xc0", .str = "\x80", .expected = false },
+	{ .pat = "[\x80-\xff]", .str = "\xc0", .expected = true },
+	{ .pat = "[\x80-\xff]", .str = "\x7f", .expected = false },
+	/* unclosed bracket as literal */
+	{ .pat = "[abc", .str = "[abc", .expected = true },
+	{ .pat = "[abc", .str = "a", .expected = false },
 };
 
 static void glob_case_to_desc(const struct glob_test_case *t, char *desc)
