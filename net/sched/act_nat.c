@@ -242,7 +242,9 @@ TC_INDIRECT_SCOPE int tcf_nat_act(struct sk_buff *skb,
 		new_addr &= mask;
 		new_addr |= addr & ~mask;
 
-		/* XXX Fix up the inner checksums. */
+		/* Update inner IP header checksum after address rewrite */
+		csum_replace4(&iph->check, addr, new_addr);
+
 		if (egress)
 			iph->daddr = new_addr;
 		else
