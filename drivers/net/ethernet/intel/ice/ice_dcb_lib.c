@@ -501,13 +501,17 @@ ice_dcb_need_recfg(struct ice_pf *pf, struct ice_dcbx_cfg *old_cfg,
 
 		if (memcmp(&new_cfg->etscfg.tcbwtable,
 			   &old_cfg->etscfg.tcbwtable,
-			   sizeof(new_cfg->etscfg.tcbwtable)))
+			   sizeof(new_cfg->etscfg.tcbwtable))) {
+			need_reconfig = true;
 			dev_dbg(dev, "ETS TC BW Table changed.\n");
+		}
 
 		if (memcmp(&new_cfg->etscfg.tsatable,
 			   &old_cfg->etscfg.tsatable,
-			   sizeof(new_cfg->etscfg.tsatable)))
+			   sizeof(new_cfg->etscfg.tsatable))) {
+			need_reconfig = true;
 			dev_dbg(dev, "ETS TSA Table changed.\n");
+		}
 	}
 
 	/* Check if PFC configuration has changed */
