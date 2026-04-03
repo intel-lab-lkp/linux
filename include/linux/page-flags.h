@@ -934,6 +934,7 @@ enum pagetype {
 	PGTY_zsmalloc		= 0xf6,
 	PGTY_unaccepted		= 0xf7,
 	PGTY_large_kmalloc	= 0xf8,
+	PGTY_pcp_buddy		= 0xf9,
 
 	PGTY_mapcount_underflow = 0xff
 };
@@ -1001,6 +1002,14 @@ static __always_inline void __ClearPage##uname(struct page *page)	\
  * (see mm/page_alloc.c).
  */
 PAGE_TYPE_OPS(Buddy, buddy, buddy)
+
+/*
+ * PagePCPBuddy() indicates that the page is free and in a per-cpu
+ * buddy allocator (see mm/page_alloc.c). Unlike PageBuddy() pages,
+ * these are not on zone free lists and must not be isolated by
+ * compaction or other zone-level code.
+ */
+PAGE_TYPE_OPS(PCPBuddy, pcp_buddy, pcp_buddy)
 
 /*
  * PageOffline() indicates that the page is logically offline although the
