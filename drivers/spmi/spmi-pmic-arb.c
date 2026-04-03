@@ -28,6 +28,7 @@
 #define PMIC_ARB_VERSION_V5_MIN		0x50000000
 #define PMIC_ARB_VERSION_V7_MIN		0x70000000
 #define PMIC_ARB_VERSION_V8_MIN		0x80000000
+#define PMIC_ARB_VERSION_V8P5_MIN	0x80050000
 #define PMIC_ARB_INT_EN			0x0004
 
 #define PMIC_ARB_FEATURES		0x0004
@@ -63,11 +64,34 @@
 #define SPMI_OWNERSHIP_PERIPH2OWNER(X)	((X) & 0x7)
 
 /* Channel Status fields */
-enum pmic_arb_chnl_status {
-	PMIC_ARB_STATUS_DONE	= BIT(0),
-	PMIC_ARB_STATUS_FAILURE	= BIT(1),
-	PMIC_ARB_STATUS_DENIED	= BIT(2),
-	PMIC_ARB_STATUS_DROPPED	= BIT(3),
+struct pmic_arb_chnl_status_mask {
+	u8	done;
+	u8	failure;
+	u8	crc;
+	u8	parity;
+	u8	nack;
+	u8	denied;
+	u8	dropped;
+};
+
+static const struct pmic_arb_chnl_status_mask chnl_status_mask = {
+	.done		= BIT(0),
+	.failure	= BIT(1),
+	.crc		= 0,
+	.parity		= 0,
+	.nack		= 0,
+	.denied		= BIT(2),
+	.dropped	= BIT(3),
+};
+
+static const struct pmic_arb_chnl_status_mask chnl_status_mask_v8p5 = {
+	.done		= BIT(0),
+	.failure	= BIT(1),
+	.crc		= BIT(2),
+	.parity		= BIT(3),
+	.nack		= BIT(4),
+	.denied		= BIT(5),
+	.dropped	= BIT(6),
 };
 
 /* Command register fields */
@@ -201,6 +225,7 @@ struct spmi_pmic_arb_bus {
  * @max_periphs:	Number of elements in apid_data[]
  * @buses:		per arbiter buses instances
  * @buses_available:	number of buses registered
+ * @chnl_status_mask:	Bit masks of channel status fields
  */
 struct spmi_pmic_arb {
 	void __iomem		*rd_base;
@@ -214,6 +239,7 @@ struct spmi_pmic_arb {
 	int			max_periphs;
 	struct spmi_pmic_arb_bus *buses[PMIC_ARB_MAX_BUSES];
 	int			buses_available;
+	const struct pmic_arb_chnl_status_mask *chnl_status_mask;
 };
 
 /**
@@ -312,6 +338,7 @@ static int pmic_arb_wait_for_done(struct spmi_controller *ctrl,
 {
 	struct spmi_pmic_arb_bus *bus = spmi_controller_get_drvdata(ctrl);
 	struct spmi_pmic_arb *pmic_arb = bus->pmic_arb;
+	const struct pmic_arb_chnl_status_mask *mask;
 	u32 status = 0;
 	u32 timeout = PMIC_ARB_TIMEOUT_US;
 	u32 offset;
@@ -323,26 +350,45 @@ static int pmic_arb_wait_for_done(struct spmi_controller *ctrl,
 
 	offset = rc;
 	offset += PMIC_ARB_STATUS;
+	mask = pmic_arb->chnl_status_mask;
 
 	while (timeout--) {
 		status = readl_relaxed(base + offset);
 
-		if (status & PMIC_ARB_STATUS_DONE) {
-			if (status & PMIC_ARB_STATUS_DENIED) {
+		if (status & mask->done) {
+			if (status & mask->denied) {
 				dev_err(&ctrl->dev, "%s: %#x %#x: transaction denied (%#x)\n",
 					__func__, sid, addr, status);
 				return -EPERM;
 			}
 
-			if (status & PMIC_ARB_STATUS_FAILURE) {
+			if (status & mask->failure) {
 				dev_err(&ctrl->dev, "%s: %#x %#x: transaction failed (%#x) reg: 0x%x\n",
 					__func__, sid, addr, status, offset);
 				WARN_ON(1);
 				return -EIO;
 			}
 
-			if (status & PMIC_ARB_STATUS_DROPPED) {
+			if (status & mask->dropped) {
 				dev_err(&ctrl->dev, "%s: %#x %#x: transaction dropped (%#x)\n",
+					__func__, sid, addr, status);
+				return -EIO;
+			}
+
+			if (status & mask->crc) {
+				dev_err(&ctrl->dev, "%s: %#x %#x: CRC error (%#x)\n",
+					__func__, sid, addr, status);
+				return -EIO;
+			}
+
+			if (status & mask->parity) {
+				dev_err(&ctrl->dev, "%s: %#x %#x: parity error (%#x)\n",
+					__func__, sid, addr, status);
+				return -EIO;
+			}
+
+			if (status & mask->nack) {
+				dev_err(&ctrl->dev, "%s: %#x %#x: NACK error (%#x)\n",
 					__func__, sid, addr, status);
 				return -EIO;
 			}
@@ -2032,6 +2078,11 @@ static int spmi_pmic_arb_probe(struct platform_device *pdev)
 		pmic_arb->ver_ops = &pmic_arb_v7;
 	else
 		pmic_arb->ver_ops = &pmic_arb_v8;
+
+	if (hw_ver < PMIC_ARB_VERSION_V8P5_MIN)
+		pmic_arb->chnl_status_mask = &chnl_status_mask;
+	else
+		pmic_arb->chnl_status_mask = &chnl_status_mask_v8p5;
 
 	err = pmic_arb->ver_ops->get_core_resources(pdev, core);
 	if (err)
