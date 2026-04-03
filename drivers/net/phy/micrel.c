@@ -6016,8 +6016,13 @@ static int lan8841_suspend(struct phy_device *phydev)
 
 static int ksz9131_resume(struct phy_device *phydev)
 {
-	if (phydev->suspended && phy_interface_is_rgmii(phydev))
-		ksz9131_config_rgmii_delay(phydev);
+	int ret;
+
+	if (phydev->suspended) {
+		ret = phy_init_hw(phydev);
+		if (ret)
+			return ret;
+	}
 
 	return kszphy_resume(phydev);
 }
