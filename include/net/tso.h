@@ -28,4 +28,15 @@ void tso_build_hdr(const struct sk_buff *skb, char *hdr, struct tso_t *tso,
 void tso_build_data(const struct sk_buff *skb, struct tso_t *tso, int size);
 int tso_start(struct sk_buff *skb, struct tso_t *tso);
 
+static inline int tso_compute_hdr_len(const struct sk_buff *skb)
+{
+	int tlen = skb_is_gso_tcp(skb) ? tcp_hdrlen(skb) : sizeof(struct udphdr);
+	int hdr_len = skb_transport_offset(skb) + tlen;
+
+	return hdr_len;
+}
+
+netdev_features_t tso_features_check(struct sk_buff *skb,
+				     struct net_device *dev,
+				     netdev_features_t features);
 #endif	/* _TSO_H */

@@ -87,3 +87,15 @@ int tso_start(struct sk_buff *skb, struct tso_t *tso)
 	return hdr_len;
 }
 EXPORT_SYMBOL(tso_start);
+
+netdev_features_t tso_features_check(struct sk_buff *skb,
+				     struct net_device *dev,
+				     netdev_features_t features)
+{
+	if (skb_is_gso(skb)) {
+		if (tso_compute_hdr_len(skb) > TSO_HEADER_SIZE)
+			features &= ~NETIF_F_GSO_MASK;
+	}
+	return features;
+}
+EXPORT_SYMBOL(tso_features_check);
