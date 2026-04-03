@@ -468,10 +468,13 @@ struct device_physical_location {
  * @DEV_FLAG_CAN_MATCH: The device has matched with a driver at least once or it
  *		is in a bus (like AMBA) which can't check for matching drivers
  *		until other devices probe successfully.
+ * @DEV_FLAG_DMA_IOMMU: Device is using default IOMMU implementation for DMA and
+ *		doesn't rely on dma_ops structure.
  */
 enum struct_device_flags {
 	DEV_FLAG_READY_TO_PROBE,
 	DEV_FLAG_CAN_MATCH,
+	DEV_FLAG_DMA_IOMMU,
 };
 
 /**
@@ -564,8 +567,6 @@ enum struct_device_flags {
  *		for dma allocations.  This flag is managed by the dma ops
  *		instance from ->dma_supported.
  * @dma_skip_sync: DMA sync operations can be skipped for coherent buffers.
- * @dma_iommu: Device is using default IOMMU implementation for DMA and
- *		doesn't rely on dma_ops structure.
  * @flags:	DEV_FLAG_XXX flags. Use atomic bitfield operations to modify.
  *
  * At the lowest level, every device in a Linux system is represented by an
@@ -684,9 +685,6 @@ struct device {
 #endif
 #ifdef CONFIG_DMA_NEED_SYNC
 	bool			dma_skip_sync:1;
-#endif
-#ifdef CONFIG_IOMMU_DMA
-	bool			dma_iommu:1;
 #endif
 
 	unsigned long		flags;

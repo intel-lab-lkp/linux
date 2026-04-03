@@ -7,12 +7,14 @@
 #ifndef _LINUX_IOMMU_DMA_H
 #define _LINUX_IOMMU_DMA_H
 
+#include <linux/bitops.h>
 #include <linux/dma-direction.h>
+#include <linux/device.h>
 
 #ifdef CONFIG_IOMMU_DMA
 static inline bool use_dma_iommu(struct device *dev)
 {
-	return dev->dma_iommu;
+	return test_bit(DEV_FLAG_DMA_IOMMU, &dev->flags);
 }
 #else
 static inline bool use_dma_iommu(struct device *dev)
