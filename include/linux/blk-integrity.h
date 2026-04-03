@@ -66,17 +66,17 @@ queue_max_integrity_segments(const struct request_queue *q)
 }
 
 /**
- * bio_integrity_intervals - Return number of integrity intervals for a bio
+ * bio_integrity_intervals - Convert sectors to integrity intervals
  * @bi:		blk_integrity profile for device
- * @sectors:	Size of the bio in 512-byte sectors
+ * @sectors:	Number of 512-byte sectors
  *
  * Description: The block layer calculates everything in 512 byte
  * sectors but integrity metadata is done in terms of the data integrity
  * interval size of the storage device.  Convert the block layer sectors
  * to the appropriate number of integrity intervals.
  */
-static inline unsigned int bio_integrity_intervals(struct blk_integrity *bi,
-						   unsigned int sectors)
+static inline u64 bio_integrity_intervals(struct blk_integrity *bi,
+					  sector_t sectors)
 {
 	return sectors >> (bi->interval_exp - 9);
 }
@@ -153,8 +153,8 @@ queue_max_integrity_segments(const struct request_queue *q)
 	return 0;
 }
 
-static inline unsigned int bio_integrity_intervals(struct blk_integrity *bi,
-						   unsigned int sectors)
+static inline u64 bio_integrity_intervals(struct blk_integrity *bi,
+					  sector_t sectors)
 {
 	return 0;
 }
