@@ -594,7 +594,9 @@ void fib6_update_sernum_stub(struct net *net, struct fib6_info *f6i);
 void fib6_metric_set(struct fib6_info *f6i, int metric, u32 val);
 static inline bool fib6_metric_locked(struct fib6_info *f6i, int metric)
 {
-	return !!(f6i->fib6_metrics->metrics[RTAX_LOCK - 1] & (1 << metric));
+	struct dst_metrics *m = READ_ONCE(f6i->fib6_metrics);
+
+	return !!(m->metrics[RTAX_LOCK - 1] & (1 << metric));
 }
 void fib6_info_hw_flags_set(struct net *net, struct fib6_info *f6i,
 			    bool offload, bool trap, bool offload_failed);

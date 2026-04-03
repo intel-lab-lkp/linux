@@ -1163,7 +1163,7 @@ static void rt6_set_from(struct rt6_info *rt, struct fib6_info *from)
 {
 	rt->rt6i_flags &= ~RTF_EXPIRES;
 	rcu_assign_pointer(rt->from, from);
-	ip_dst_init_metrics(&rt->dst, from->fib6_metrics);
+	ip_dst_init_metrics(&rt->dst, READ_ONCE(from->fib6_metrics));
 }
 
 /* Caller must already hold reference to f6i in result */
@@ -1635,11 +1635,12 @@ __rt6_find_exception_rcu(struct rt6_exception_bucket **bucket,
 static unsigned int fib6_mtu(const struct fib6_result *res)
 {
 	const struct fib6_nh *nh = res->nh;
+	struct dst_metrics *m;
 	unsigned int mtu;
 
-	if (res->f6i->fib6_pmtu) {
-		mtu = res->f6i->fib6_pmtu;
-	} else {
+	m = READ_ONCE(res->f6i->fib6_metrics);
+	mtu = READ_ONCE(m->metrics[RTAX_MTU - 1]);
+	if (!mtu) {
 		struct net_device *dev = nh->fib_nh_dev;
 		struct inet6_dev *idev;
 
@@ -3300,7 +3301,9 @@ u32 ip6_mtu_from_fib6(const struct fib6_result *res,
 	u32 mtu = 0;
 
 	if (unlikely(fib6_metric_locked(f6i, RTAX_MTU))) {
-		mtu = f6i->fib6_pmtu;
+		struct dst_metrics *m = READ_ONCE(f6i->fib6_metrics);
+
+		mtu = READ_ONCE(m->metrics[RTAX_MTU - 1]);
 		if (mtu)
 			goto out;
 	}
@@ -5037,7 +5040,8 @@ static int fib6_nh_mtu_change(struct fib6_nh *nh, void *_arg)
 	 */
 	if (nh->fib_nh_dev == arg->dev) {
 		struct inet6_dev *idev = __in6_dev_get(arg->dev);
-		u32 mtu = f6i->fib6_pmtu;
+		struct dst_metrics *m = READ_ONCE(f6i->fib6_metrics);
+		u32 mtu = READ_ONCE(m->metrics[RTAX_MTU - 1]);
 
 		if (mtu >= arg->mtu ||
 		    (mtu < arg->mtu && mtu == idev->cnf.mtu6))
@@ -5844,7 +5848,7 @@ static int rt6_fill_node(struct net *net, struct sk_buff *skb,
 			goto nla_put_failure;
 	}
 
-	pmetrics = dst ? dst_metrics_ptr(dst) : rt->fib6_metrics->metrics;
+	pmetrics = dst ? dst_metrics_ptr(dst) : READ_ONCE(rt->fib6_metrics)->metrics;
 	if (rtnetlink_put_metrics(skb, pmetrics) < 0)
 		goto nla_put_failure;
 

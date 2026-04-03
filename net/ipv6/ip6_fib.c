@@ -1144,9 +1144,11 @@ static int fib6_add_rt2node(struct fib6_node *fn, struct fib6_info *rt,
 					iter->fib6_flags &= ~RTF_PREFIX_RT;
 				}
 
-				if (rt->fib6_pmtu)
+				u32 pmtu = READ_ONCE(rt->fib6_pmtu);
+
+				if (pmtu)
 					fib6_metric_set(iter, RTAX_MTU,
-							rt->fib6_pmtu);
+							pmtu);
 				return -EEXIST;
 			}
 			/* If we have the same destination and the same metric,
