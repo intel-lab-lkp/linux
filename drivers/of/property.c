@@ -648,16 +648,36 @@ EXPORT_SYMBOL_GPL(of_prop_next_u32);
 
 const char *of_prop_next_string(const struct property *prop, const char *cur)
 {
-	const void *curv = cur;
+	const char *curv = cur;
+	const char *end;
+	size_t len;
 
-	if (!prop)
+	if (!prop || !prop->value || !prop->length)
 		return NULL;
 
-	if (!cur)
-		return prop->value;
+	end = prop->value + prop->length;
 
-	curv += strlen(cur) + 1;
-	if (curv >= prop->value + prop->length)
+	if (!cur) {
+		len = strnlen(prop->value, prop->length);
+		if (len >= prop->length)
+			return NULL;
+
+		return prop->value;
+	}
+
+	if (cur < (const char *)prop->value || cur >= end)
+		return NULL;
+
+	len = strnlen(cur, end - cur);
+	if (len >= end - cur)
+		return NULL;
+
+	curv += len + 1;
+	if (curv >= end)
+		return NULL;
+
+	len = strnlen(curv, end - curv);
+	if (len >= end - curv)
 		return NULL;
 
 	return curv;
