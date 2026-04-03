@@ -191,6 +191,69 @@ static const struct ins_ops *arm64__associate_instruction_ops(struct arch *arch,
 	return ops;
 }
 
+static int extract_op_location_arm64(const struct arch *arch,
+				     struct disasm_line *dl __maybe_unused,
+				     const char *op_str, int op_idx __maybe_unused,
+				     struct annotated_op_loc *op_loc)
+{
+	const char *s = op_str;
+	char *p = NULL;
+
+	if (op_str == NULL)
+		return 0;
+
+	/* Handle standalone immediate operands (e.g., #0x10) */
+	if (*s == arch->objdump.imm_char) {
+		op_loc->offset = strtol(s + 1, &p, 0);
+		if (p && p != s + 1)
+			op_loc->imm = true;
+		return 0;
+	}
+
+	/*
+	 * Handle memory references (e.g., [x0, #8]), identify
+	 * arm64 specific addressing modes
+	 */
+	if (*s == arch->objdump.memory_ref_char) {
+		op_loc->mem_ref = true;
+
+		p = strchr(s, ']');
+		if (p == NULL)
+			return -1;
+
+		/* Pre-index: [base, #imm]! */
+		if (p[1] == '!')
+			op_loc->addr_mode = INSN_ADDR_PRE_INDEX;
+		/* Post-index: [base], #imm */
+		else if (p[1] == ',' && strchr(p + 1, arch->objdump.imm_char))
+			op_loc->addr_mode = INSN_ADDR_POST_INDEX;
+		/* Signed offset: [base{, #imm}] */
+		else
+			op_loc->addr_mode = INSN_ADDR_SIGNED_OFFSET;
+
+		s++;
+	}
+
+	/* Extract the primary register */
+	op_loc->reg1 = arch__dwarf_regnum(arch, s);
+	if (op_loc->reg1 == -1)
+		return -1;
+
+	/* Move to the next symbol of the operand, if any */
+	s = strchr(s, ',');
+	if (s == NULL)
+		return 0;
+	s = skip_spaces(s + 1);
+
+	/* Parse secondary register or immediate offset */
+	if (op_loc->multi_regs)
+		op_loc->reg2 = arch__dwarf_regnum(arch, s);
+	else if (*s == arch->objdump.imm_char)
+		op_loc->offset = strtol(s + 1, &p, 0);
+
+	return 0;
+}
+
 const struct arch *arch__new_arm64(const struct e_machine_and_e_flags *id,
 				   const char *cpuid __maybe_unused)
 {
@@ -209,6 +272,7 @@ const struct arch *arch__new_arm64(const struct e_machine_and_e_flags *id,
 	arch->objdump.memory_ref_char	  = '[';
 	arch->objdump.imm_char		  = '#';
 	arch->associate_instruction_ops   = arm64__associate_instruction_ops;
+	arch->extract_op_location	  = extract_op_location_arm64;
 
 	/* bl, blr */
 	err = regcomp(&arm->call_insn, "^blr?$", REG_EXTENDED);
