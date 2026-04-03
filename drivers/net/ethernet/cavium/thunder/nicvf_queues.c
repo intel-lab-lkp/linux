@@ -1492,6 +1492,7 @@ static int nicvf_sq_append_tso(struct nicvf *nic, struct snd_queue *sq,
 	int hdr_len;
 
 	hdr_len = tso_start(skb, &tso);
+	DEBUG_NET_WARN_ON_ONCE(hdr_len > TSO_HEADER_SIZE);
 
 	total_len = skb->len - hdr_len;
 	while (total_len > 0) {

@@ -19,6 +19,7 @@
 #include <linux/filter.h>
 #include <linux/net_tstamp.h>
 #include <linux/workqueue.h>
+#include <net/tso.h>
 
 #include "nic_reg.h"
 #include "nic.h"
@@ -2077,6 +2078,7 @@ static void nicvf_set_rx_mode(struct net_device *netdev)
 static const struct net_device_ops nicvf_netdev_ops = {
 	.ndo_open		= nicvf_open,
 	.ndo_stop		= nicvf_stop,
+	.ndo_features_check	= tso_features_check,
 	.ndo_start_xmit		= nicvf_xmit,
 	.ndo_change_mtu		= nicvf_change_mtu,
 	.ndo_set_mac_address	= nicvf_set_mac_address,
