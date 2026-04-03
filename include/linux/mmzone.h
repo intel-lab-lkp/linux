@@ -916,7 +916,7 @@ struct zone {
 	 * Flags for a pageblock_nr_pages block. See pageblock-flags.h.
 	 * In SPARSEMEM, this map is stored in struct mem_section
 	 */
-	unsigned long		*pageblock_flags;
+	struct pageblock_data	*pageblock_data;
 #endif /* CONFIG_SPARSEMEM */
 
 	/* zone_start_pfn == zone_start_paddr >> PAGE_SHIFT */
@@ -1866,9 +1866,6 @@ static inline bool movable_only_nodes(nodemask_t *nodes)
 #define PAGES_PER_SECTION       (1UL << PFN_SECTION_SHIFT)
 #define PAGE_SECTION_MASK	(~(PAGES_PER_SECTION-1))
 
-#define SECTION_BLOCKFLAGS_BITS \
-	((1UL << (PFN_SECTION_SHIFT - pageblock_order)) * NR_PAGEBLOCK_BITS)
-
 #if (MAX_PAGE_ORDER + PAGE_SHIFT) > SECTION_SIZE_BITS
 #error Allocator MAX_PAGE_ORDER exceeds SECTION_SIZE
 #endif
@@ -1901,13 +1898,17 @@ static inline unsigned long section_nr_to_pfn(unsigned long sec)
 #define SUBSECTION_ALIGN_UP(pfn) ALIGN((pfn), PAGES_PER_SUBSECTION)
 #define SUBSECTION_ALIGN_DOWN(pfn) ((pfn) & PAGE_SUBSECTION_MASK)
 
+struct pageblock_data {
+	unsigned long flags;
+};
+
 struct mem_section_usage {
 	struct rcu_head rcu;
 #ifdef CONFIG_SPARSEMEM_VMEMMAP
 	DECLARE_BITMAP(subsection_map, SUBSECTIONS_PER_SECTION);
 #endif
 	/* See declaration of similar field in struct zone */
-	unsigned long pageblock_flags[0];
+	struct pageblock_data pageblock_data[];
 };
 
 void subsection_map_init(unsigned long pfn, unsigned long nr_pages);
@@ -1960,9 +1961,9 @@ extern struct mem_section **mem_section;
 extern struct mem_section mem_section[NR_SECTION_ROOTS][SECTIONS_PER_ROOT];
 #endif
 
-static inline unsigned long *section_to_usemap(struct mem_section *ms)
+static inline struct pageblock_data *section_to_usemap(struct mem_section *ms)
 {
-	return ms->usage->pageblock_flags;
+	return ms->usage->pageblock_data;
 }
 
 static inline struct mem_section *__nr_to_section(unsigned long nr)

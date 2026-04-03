@@ -787,6 +787,23 @@ static inline struct page *find_buddy_page_pfn(struct page *page,
 	return NULL;
 }
 
+static inline struct pageblock_data *pfn_to_pageblock(const struct page *page,
+						      unsigned long pfn)
+{
+#ifdef CONFIG_SPARSEMEM
+	struct mem_section *ms = __pfn_to_section(pfn);
+	unsigned long idx = (pfn & (PAGES_PER_SECTION - 1)) >> pageblock_order;
+
+	return &section_to_usemap(ms)[idx];
+#else
+	struct zone *zone = page_zone(page);
+	unsigned long idx;
+
+	idx = (pfn - pageblock_start_pfn(zone->zone_start_pfn)) >> pageblock_order;
+	return &zone->pageblock_data[idx];
+#endif
+}
+
 extern struct page *__pageblock_pfn_to_page(unsigned long start_pfn,
 				unsigned long end_pfn, struct zone *zone);
 
