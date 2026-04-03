@@ -642,6 +642,8 @@ static inline bool mem_cgroup_below_min(struct mem_cgroup *target,
 
 int __mem_cgroup_charge(struct folio *folio, struct mm_struct *mm, gfp_t gfp);
 
+int mem_cgroup_try_charge_pages(struct mem_cgroup *memcg, gfp_t gfp_mask,
+				unsigned int nr_pages);
 /**
  * mem_cgroup_charge - Charge a newly allocated folio to a cgroup.
  * @folio: Folio to charge.
@@ -691,6 +693,8 @@ static inline void mem_cgroup_uncharge_folios(struct folio_batch *folios)
 		return;
 	__mem_cgroup_uncharge_folios(folios);
 }
+
+void mem_cgroup_uncharge_pages(struct mem_cgroup *memcg, unsigned int nr_pages);
 
 void mem_cgroup_replace_folio(struct folio *old, struct folio *new);
 void mem_cgroup_migrate(struct folio *old, struct folio *new);

@@ -4765,6 +4765,24 @@ int __mem_cgroup_charge(struct folio *folio, struct mm_struct *mm, gfp_t gfp)
 }
 
 /**
+ * mem_cgroup_try_charge_pages - charge pages to a memory cgroup
+ * @memcg: memory cgroup to charge
+ * @gfp_mask: reclaim mode
+ * @nr_pages: number of pages to charge
+ *
+ * Try to charge @nr_pages to @memcg through try_charge_memcg.
+ *
+ * Returns 0 on success, an error code on failure.
+ */
+int mem_cgroup_try_charge_pages(struct mem_cgroup *memcg, gfp_t gfp_mask,
+				unsigned int nr_pages)
+{
+	return try_charge(memcg, gfp_mask, nr_pages);
+}
+EXPORT_SYMBOL_GPL(mem_cgroup_try_charge_pages);
+
+
+/**
  * mem_cgroup_charge_hugetlb - charge the memcg for a hugetlb folio
  * @folio: folio being charged
  * @gfp: reclaim mode
@@ -4947,6 +4965,12 @@ void __mem_cgroup_uncharge_folios(struct folio_batch *folios)
 	if (ug.memcg)
 		uncharge_batch(&ug);
 }
+
+void mem_cgroup_uncharge_pages(struct mem_cgroup *memcg, unsigned int nr_pages)
+{
+	memcg_uncharge(memcg, nr_pages);
+}
+EXPORT_SYMBOL_GPL(mem_cgroup_uncharge_pages);
 
 /**
  * mem_cgroup_replace_folio - Charge a folio's replacement.
