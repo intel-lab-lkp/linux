@@ -17,6 +17,7 @@
 #include <linux/refcount.h>
 #include <linux/rculist.h>
 #include <linux/slab.h>
+#include <linux/memcontrol.h>
 
 struct dmem_cgroup_region {
 	/**
@@ -76,6 +77,9 @@ struct dmem_cgroup_pool_state {
 
 	refcount_t ref;
 	bool inited;
+
+	bool memcg;
+	bool memcg_locked;
 };
 
 /*
@@ -162,6 +166,14 @@ set_resource_max(struct dmem_cgroup_pool_state *pool, u64 val)
 	page_counter_set_max(&pool->cnt, val);
 }
 
+static void
+set_resource_memcg(struct dmem_cgroup_pool_state *pool, u64 val)
+{
+	/* Cannot change once a charge happened. */
+	if (!pool->memcg_locked)
+		pool->memcg = !!val;
+}
+
 static u64 get_resource_low(struct dmem_cgroup_pool_state *pool)
 {
 	return pool ? READ_ONCE(pool->cnt.low) : 0;
@@ -182,11 +194,17 @@ static u64 get_resource_current(struct dmem_cgroup_pool_state *pool)
 	return pool ? page_counter_read(&pool->cnt) : 0;
 }
 
+static u64 get_resource_memcg(struct dmem_cgroup_pool_state *pool)
+{
+	return pool ? READ_ONCE(pool->memcg) : 0;
+}
+
 static void reset_all_resource_limits(struct dmem_cgroup_pool_state *rpool)
 {
 	set_resource_min(rpool, 0);
 	set_resource_low(rpool, 0);
 	set_resource_max(rpool, PAGE_COUNTER_MAX);
+	set_resource_memcg(rpool, 0);
 }
 
 static void dmemcs_offline(struct cgroup_subsys_state *css)
@@ -609,6 +627,20 @@ get_cg_pool_unlocked(struct dmemcg_state *cg, struct dmem_cgroup_region *region)
 	return pool;
 }
 
+static struct mem_cgroup *mem_cgroup_from_cgroup(struct cgroup *c)
+{
+	struct cgroup_subsys_state *css;
+
+	if (mem_cgroup_disabled())
+		return NULL;
+
+	rcu_read_lock();
+	css = cgroup_e_css(c, &memory_cgrp_subsys);
+	rcu_read_unlock();
+
+	return mem_cgroup_from_css(css);
+}
+
 /**
  * dmem_cgroup_uncharge() - Uncharge a pool.
  * @pool: Pool to uncharge.
@@ -624,6 +656,13 @@ void dmem_cgroup_uncharge(struct dmem_cgroup_pool_state *pool, u64 size)
 		return;
 
 	page_counter_uncharge(&pool->cnt, size);
+
+	struct mem_cgroup *memcg = mem_cgroup_from_cgroup(pool->cs->css.cgroup);
+
+	if (pool->memcg && memcg)
+		mem_cgroup_uncharge_pages(memcg,
+					  PAGE_ALIGN(size) >> PAGE_SHIFT);
+
 	css_put(&pool->cs->css);
 	dmemcg_pool_put(pool);
 }
@@ -655,6 +694,8 @@ int dmem_cgroup_try_charge(struct dmem_cgroup_region *region, u64 size,
 	struct dmemcg_state *cg;
 	struct dmem_cgroup_pool_state *pool;
 	struct page_counter *fail;
+	struct mem_cgroup *memcg;
+	unsigned long nr_pages = PAGE_ALIGN(size) >> PAGE_SHIFT;
 	int ret;
 
 	*ret_pool = NULL;
@@ -670,7 +711,22 @@ int dmem_cgroup_try_charge(struct dmem_cgroup_region *region, u64 size,
 	pool = get_cg_pool_unlocked(cg, region);
 	if (IS_ERR(pool)) {
 		ret = PTR_ERR(pool);
-		goto err;
+		goto err_css_put;
+	}
+
+	pool->memcg_locked = true;
+	memcg = get_mem_cgroup_from_current();
+	if (pool->memcg && memcg) {
+		ret = mem_cgroup_try_charge_pages(memcg, GFP_KERNEL, nr_pages);
+		if (ret) {
+			/*
+			 * No dmem_cgroup_state_evict_valuable() could help,
+			 * there's no ret_limit_pool to return.
+			 */
+			ret = -ENOMEM;
+			dmemcg_pool_put(pool);
+			goto err_memcg_put;
+		}
 	}
 
 	if (!page_counter_try_charge(&pool->cnt, size, &fail)) {
@@ -681,14 +737,21 @@ int dmem_cgroup_try_charge(struct dmem_cgroup_region *region, u64 size,
 		}
 		dmemcg_pool_put(pool);
 		ret = -EAGAIN;
-		goto err;
+		goto err_uncharge_memcg;
 	}
+
+	mem_cgroup_put(memcg);
 
 	/* On success, reference from get_current_dmemcs is transferred to *ret_pool */
 	*ret_pool = pool;
 	return 0;
 
-err:
+err_uncharge_memcg:
+	if (pool->memcg && memcg)
+		mem_cgroup_uncharge_pages(memcg, nr_pages);
+err_memcg_put:
+	mem_cgroup_put(memcg);
+err_css_put:
 	css_put(&cg->css);
 	return ret;
 }
@@ -846,6 +909,17 @@ static ssize_t dmem_cgroup_region_max_write(struct kernfs_open_file *of,
 	return dmemcg_limit_write(of, buf, nbytes, off, set_resource_max);
 }
 
+static int dmem_cgroup_memcg_show(struct seq_file *sf, void *v)
+{
+	return dmemcg_limit_show(sf, v, get_resource_memcg);
+}
+
+static ssize_t dmem_cgroup_memcg_write(struct kernfs_open_file *of, char *buf,
+				       size_t nbytes, loff_t off)
+{
+	return dmemcg_limit_write(of, buf, nbytes, off, set_resource_memcg);
+}
+
 static struct cftype files[] = {
 	{
 		.name = "capacity",
@@ -872,6 +946,12 @@ static struct cftype files[] = {
 		.name = "max",
 		.write = dmem_cgroup_region_max_write,
 		.seq_show = dmem_cgroup_region_max_show,
+		.flags = CFTYPE_NOT_ON_ROOT,
+	},
+	{
+		.name = "memcg",
+		.write = dmem_cgroup_memcg_write,
+		.seq_show = dmem_cgroup_memcg_show,
 		.flags = CFTYPE_NOT_ON_ROOT,
 	},
 	{ } /* Zero entry terminates. */
