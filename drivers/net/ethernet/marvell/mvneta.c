@@ -2823,6 +2823,7 @@ static int mvneta_tx_tso(struct sk_buff *skb, struct net_device *dev,
 
 	/* Initialize the TSO handler, and prepare the first payload */
 	hdr_len = tso_start(skb, &tso);
+	DEBUG_NET_WARN_ON_ONCE(hdr_len > TSO_HEADER_SIZE);
 
 	total_len = skb->len - hdr_len;
 	while (total_len > 0) {
@@ -5320,6 +5321,7 @@ static int mvneta_setup_tc(struct net_device *dev, enum tc_setup_type type,
 static const struct net_device_ops mvneta_netdev_ops = {
 	.ndo_open            = mvneta_open,
 	.ndo_stop            = mvneta_stop,
+	.ndo_features_check  = tso_features_check,
 	.ndo_start_xmit      = mvneta_tx,
 	.ndo_set_rx_mode     = mvneta_set_rx_mode,
 	.ndo_set_mac_address = mvneta_set_mac_addr,
