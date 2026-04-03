@@ -38,16 +38,13 @@ u64 get_kaslr_seed(uintptr_t dtb_pa)
 static bool fdt_device_is_available(const void *fdt, int node)
 {
 	const char *status;
-	int statlen;
 
-	status = fdt_getprop(fdt, node, "status", &statlen);
+	status = fdt_stringlist_get(fdt, node, "status", 0, NULL);
 	if (!status)
 		return true;
 
-	if (statlen > 0) {
-		if (!strcmp(status, "okay") || !strcmp(status, "ok"))
-			return true;
-	}
+	if (!strcmp(status, "okay") || !strcmp(status, "ok"))
+		return true;
 
 	return false;
 }
@@ -137,14 +134,14 @@ static bool isa_string_contains(const char *isa_str, const char *ext_name)
  */
 static bool early_cpu_isa_ext_available(const void *fdt, int node, const char *ext_name)
 {
-	const void *prop;
+	const char *prop;
 	int len;
 
 	prop = fdt_getprop(fdt, node, "riscv,isa-extensions", &len);
 	if (prop && fdt_stringlist_contains(prop, len, ext_name))
 		return true;
 
-	prop = fdt_getprop(fdt, node, "riscv,isa", &len);
+	prop = fdt_stringlist_get(fdt, node, "riscv,isa", 0, &len);
 	if (prop && isa_string_contains(prop, ext_name))
 		return true;
 
@@ -210,7 +207,7 @@ u64 set_satp_mode_from_fdt(uintptr_t dtb_pa)
 		if (!fdt_device_is_available(fdt, node))
 			continue;
 
-		mmu_type = fdt_getprop(fdt, node, "mmu-type", NULL);
+		mmu_type = fdt_stringlist_get(fdt, node, "mmu-type", 0, NULL);
 		if (!mmu_type)
 			break;
 
