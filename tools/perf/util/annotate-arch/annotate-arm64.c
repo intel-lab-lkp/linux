@@ -290,7 +290,7 @@ static void adjust_reg_index_state(struct type_state *state, int reg,
 }
 
 static void update_insn_state_arm64(struct type_state *state,
-				    struct data_loc_info *dloc, Dwarf_Die * cu_die __maybe_unused,
+				    struct data_loc_info *dloc, Dwarf_Die *cu_die,
 				    struct disasm_line *dl)
 {
 	struct annotated_insn_loc loc;
@@ -308,6 +308,23 @@ static void update_insn_state_arm64(struct type_state *state,
 
 	sreg = src->reg1;
 	dreg = dst->reg1;
+
+	if (!strcmp(dl->ins.name, "adrp")) {
+		if (!has_reg_type(state, sreg) || !dl->ops.target.addr)
+			return;
+
+		tsr = &state->regs[sreg];
+		tsr->copied_from = -1;
+		tsr->kind = TSR_KIND_GLOBAL_ADDR;
+		/* Partial page-relative address, finalized in next 'add/ldr' */
+		tsr->addr = dl->ops.target.addr;
+		tsr->offset = 0;
+		tsr->ok = true;
+
+		pr_debug_dtp("adrp [%x] global addr=%"PRIx64" -> reg%d\n",
+			     insn_offset, tsr->addr, sreg);
+		return;
+	}
 
 	if (!strcmp(dl->ins.name, "add")) {
 		struct type_state_reg dst_tsr;
@@ -342,6 +359,7 @@ static void update_insn_state_arm64(struct type_state *state,
 			tsr->type = dst_tsr.type;
 			tsr->kind = dst_tsr.kind;
 			tsr->offset = offset;
+			tsr->addr = 0;
 			tsr->ok = true;
 
 			pr_debug_dtp("add [%x] address of %s%#x(reg%d) -> reg%d",
@@ -350,6 +368,18 @@ static void update_insn_state_arm64(struct type_state *state,
 
 			pr_debug_type_name(&tsr->type, tsr->kind);
 		}
+
+		/* Handle PC-relative global address calculation (adrp/add pair) */
+		if (dst_tsr.kind == TSR_KIND_GLOBAL_ADDR) {
+			tsr->kind = dst_tsr.kind;
+			tsr->addr = dst_tsr.addr + dst->offset;
+			tsr->offset = 0;
+			tsr->ok = true;
+
+			pr_debug_dtp("add [%x] global addr=%"PRIx64" -> reg%d\n",
+				     insn_offset, tsr->addr, sreg);
+		}
+
 		return;
 	}
 
@@ -370,6 +400,7 @@ static void update_insn_state_arm64(struct type_state *state,
 		tsr->type = state->regs[dreg].type;
 		tsr->kind = state->regs[dreg].kind;
 		tsr->offset = state->regs[dreg].offset;
+		tsr->addr = state->regs[dreg].addr;
 		tsr->ok = true;
 
 		if (tsr->kind == TSR_KIND_TYPE || tsr->kind == TSR_KIND_POINTER)
@@ -444,6 +475,7 @@ static void update_insn_state_arm64(struct type_state *state,
 			tsr->type = type_die;
 			tsr->kind = TSR_KIND_TYPE;
 			tsr->offset = 0;
+			tsr->addr = 0;
 			tsr->ok = true;
 
 			pr_debug_dtp("ldr [%x] %#x(reg%d) -> reg%d",
@@ -451,6 +483,30 @@ static void update_insn_state_arm64(struct type_state *state,
 			pr_debug_type_name(&tsr->type, tsr->kind);
 
 			adjust_reg_index_state(state, dreg, dst, "ldr", insn_offset);
+			return;
+		}
+
+		/* Or check if it's a global variable */
+		if (dst_tsr.kind == TSR_KIND_GLOBAL_ADDR) {
+			u64 ip = dloc->ms->sym->start + dl->al.offset;
+			u64 addr = dst_tsr.addr + dst->offset;
+			int offset;
+
+			if (!get_global_var_type(cu_die, dloc, ip, addr, &offset,
+						 &type_die) ||
+			    !die_get_member_type(&type_die, offset, &type_die)) {
+				tsr->ok = false;
+				return;
+			}
+
+			tsr->type = type_die;
+			tsr->kind = TSR_KIND_TYPE;
+			tsr->offset = offset;
+			tsr->addr = addr;
+			tsr->ok = true;
+			pr_debug_dtp("ldr [%x] global (%"PRIx64") -> reg%d",
+				     insn_offset, addr, sreg);
+			pr_debug_type_name(&tsr->type, tsr->kind);
 		}
 		return;
 	}
@@ -472,10 +528,12 @@ static void update_insn_state_arm64(struct type_state *state,
 			if (stack) {
 				if (!stack->compound)
 					set_stack_state(stack, offset, tsr->kind,
-							&tsr->type, tsr->offset);
+							&tsr->type, tsr->offset,
+							tsr->addr);
 			} else {
 				findnew_stack_state(state, offset, tsr->kind,
-						    &tsr->type, tsr->offset);
+						    &tsr->type, tsr->offset,
+						    tsr->addr);
 			}
 
 			pr_debug_dtp("str [%x] reg%d -> -%#x(stack)",

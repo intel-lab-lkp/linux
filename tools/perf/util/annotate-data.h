@@ -37,6 +37,7 @@ enum type_state_kind {
 	TSR_KIND_PERCPU_POINTER,
 	TSR_KIND_POINTER,
 	TSR_KIND_CANARY,
+	TSR_KIND_GLOBAL_ADDR,
 };
 
 /**
@@ -187,6 +188,7 @@ struct type_state_reg {
 	u64 lifetime_end;
 	u8 kind;
 	u8 copied_from;
+	u64 addr;
 };
 
 /* Type information in a stack location, dynamically allocated */
@@ -199,6 +201,7 @@ struct type_state_stack {
 	int size;
 	bool compound;
 	u8 kind;
+	u64 addr;
 };
 
 /*
@@ -253,9 +256,9 @@ bool has_reg_type(struct type_state *state, int reg);
 struct type_state_stack *findnew_stack_state(struct type_state *state,
 						int offset, u8 kind,
 						Dwarf_Die *type_die,
-						int ptr_offset);
+						int ptr_offset, u64 addr);
 void set_stack_state(struct type_state_stack *stack, int offset, u8 kind,
-				Dwarf_Die *type_die, int ptr_offset);
+				Dwarf_Die *type_die, int ptr_offset, u64 addr);
 struct type_state_stack *find_stack_state(struct type_state *state,
 						int offset);
 bool get_global_var_type(Dwarf_Die *cu_die, struct data_loc_info *dloc,
