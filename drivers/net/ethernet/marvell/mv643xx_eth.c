@@ -835,6 +835,7 @@ static int txq_submit_tso(struct tx_queue *txq, struct sk_buff *skb,
 
 	/* Initialize the TSO handler, and prepare the first payload */
 	hdr_len = tso_start(skb, &tso);
+	DEBUG_NET_WARN_ON_ONCE(hdr_len > TSO_HEADER_SIZE);
 
 	total_len = skb->len - hdr_len;
 	while (total_len > 0) {
@@ -3066,6 +3067,7 @@ static void init_pscr(struct mv643xx_eth_private *mp, int speed, int duplex)
 static const struct net_device_ops mv643xx_eth_netdev_ops = {
 	.ndo_open		= mv643xx_eth_open,
 	.ndo_stop		= mv643xx_eth_stop,
+	.ndo_features_check	= tso_features_check,
 	.ndo_start_xmit		= mv643xx_eth_xmit,
 	.ndo_set_rx_mode	= mv643xx_eth_set_rx_mode,
 	.ndo_set_mac_address	= mv643xx_eth_set_mac_address,
