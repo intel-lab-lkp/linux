@@ -114,10 +114,7 @@
 /* RSCFDnCFDCmCTR / RSCFDnCmCTR */
 #define RCANFD_CCTR_CTME		BIT(24)
 #define RCANFD_CCTR_ERRD		BIT(23)
-#define RCANFD_CCTR_BOM_MASK		(0x3 << 21)
-#define RCANFD_CCTR_BOM_ISO		(0x0 << 21)
-#define RCANFD_CCTR_BOM_BENTRY		(0x1 << 21)
-#define RCANFD_CCTR_BOM_BEND		(0x2 << 21)
+#define RCANFD_CCTR_BOM			GENMASK(22, 21)
 #define RCANFD_CCTR_TDCVFIE		BIT(19)
 #define RCANFD_CCTR_SOCOIE		BIT(18)
 #define RCANFD_CCTR_EOCOIE		BIT(17)
@@ -135,6 +132,7 @@
 #define RCANFD_CCTR_CHDMC_COPM		(0x0)
 #define RCANFD_CCTR_CHDMC_CRESET	(0x1)
 #define RCANFD_CCTR_CHDMC_CHLT		(0x2)
+#define RCANFD_CCTR_BOM_BENTRY		(1)
 
 /* RSCFDnCFDCmSTS / RSCFDnCmSTS */
 #define RCANFD_CSTS_COMSTS		BIT(7)
@@ -470,6 +468,7 @@ struct rcar_canfd_global {
 	struct clk *can_clk;		/* fCAN clock */
 	struct clk *clk_ram;		/* Clock RAM */
 	unsigned long channels_mask;	/* Enabled channels mask */
+	u32 bom;			/* Bus-Off recovery mode */
 	bool extclk;			/* CANFD or Ext clock */
 	bool fdmode;			/* CAN FD or Classical CAN only mode */
 	bool fd_only_mode;		/* FD-Only mode for CAN-FD */
@@ -891,8 +890,7 @@ static void rcar_canfd_configure_controller(struct rcar_canfd_global *gpriv)
 		rcar_canfd_set_bit(gpriv->base, RCANFD_CCTR(ch),
 				   RCANFD_CCTR_ERRD);
 		rcar_canfd_update_bit(gpriv->base, RCANFD_CCTR(ch),
-				      RCANFD_CCTR_BOM_MASK,
-				      RCANFD_CCTR_BOM_BENTRY);
+				      RCANFD_CCTR_BOM, gpriv->bom);
 	}
 }
 
@@ -2110,6 +2108,7 @@ static int rcar_canfd_probe(struct platform_device *pdev)
 	bool fdmode = true;			/* CAN FD only mode - default */
 	char name[9] = "channelX";
 	u32 ch, fcan_freq;
+	u32 prop;
 	int i;
 
 	info = of_device_get_match_data(dev);
@@ -2168,6 +2167,11 @@ static int rcar_canfd_probe(struct platform_device *pdev)
 
 	if (of_property_read_bool(dev->of_node, "renesas,fd-only"))
 		gpriv->fd_only_mode = true; /* FD-Only mode for CAN-FD */
+
+	if (of_property_read_u32(dev->of_node, "renesas,bus-off-recovery-mode", &prop) < 0)
+		prop = RCANFD_CCTR_BOM_BENTRY; /* default */
+
+	gpriv->bom = FIELD_PREP(RCANFD_CCTR_BOM, prop);
 
 	gpriv->rstc1 = devm_reset_control_get_optional_exclusive(dev, "rstp_n");
 	if (IS_ERR(gpriv->rstc1))
