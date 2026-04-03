@@ -18,6 +18,12 @@ static void hygon_df_get_masks_shifts(u32 mask0)
 		df_cfg.die_id_shift = FIELD_GET(HYGON_DF1_DIE_ID_SHIFT, mask0);
 		df_cfg.die_id_mask = FIELD_GET(HYGON_DF1_DIE_ID_MASK, mask0);
 		break;
+	case HYGON_DF2:
+		df_cfg.socket_id_shift = FIELD_GET(HYGON_DF1_SOCKET_ID_SHIFT, mask0);
+		df_cfg.socket_id_mask = FIELD_GET(HYGON_DF2_SOCKET_ID_MASK, mask0);
+		df_cfg.die_id_shift = FIELD_GET(HYGON_DF1_DIE_ID_SHIFT, mask0);
+		df_cfg.die_id_mask = FIELD_GET(HYGON_DF2_DIE_ID_MASK, mask0);
+		break;
 	default:
 		atl_debug_on_bad_df_rev();
 		return;
@@ -30,6 +36,8 @@ static int hygon_determine_df_rev(void)
 
 	if (boot_cpu_data.x86_model == 0x4 || boot_cpu_data.x86_model == 0x5)
 		df_cfg.rev = HYGON_DF1;
+	else if (boot_cpu_data.x86_model == 0x6 || boot_cpu_data.x86_model == 0x8)
+		df_cfg.rev = HYGON_DF2;
 
 	/* Read D18F1x208 (SystemFabricIdMask). */
 	if (df_indirect_read_broadcast(0, 1, 0x208, &fabric_id_mask0))
@@ -44,6 +52,7 @@ static void hygon_get_num_maps(void)
 {
 	switch (df_cfg.rev) {
 	case HYGON_DF1:
+	case HYGON_DF2:
 		df_cfg.num_coh_st_maps	= 2;
 		break;
 	default:

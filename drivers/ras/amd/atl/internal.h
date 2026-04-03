@@ -44,6 +44,7 @@
 enum df_revisions {
 	UNKNOWN,
 	HYGON_DF1,
+	HYGON_DF2,
 	DF2,
 	DF3,
 	DF3p5,
@@ -61,6 +62,7 @@ enum intlv_modes {
 	DF3_6CHAN			= 0x06,
 	NOHASH_16CHAN			= 0x07,
 	NOHASH_32CHAN			= 0x08,
+	HYGON_DF2_4CHAN_HASH		= 0x09,
 	DF3_COD4_2CHAN_HASH		= 0x0C,
 	DF3_COD2_4CHAN_HASH		= 0x0D,
 	DF3_COD1_8CHAN_HASH		= 0x0E,

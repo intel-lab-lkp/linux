@@ -16,8 +16,12 @@ static int hygon_df_get_intlv_mode(struct addr_ctx *ctx)
 	if (df_cfg.rev == HYGON_DF1 && ctx->map.intlv_mode == 2)
 		ctx->map.intlv_mode = HYGON_DF1_3CHAN;
 
-	if (ctx->map.intlv_mode == 8)
-		ctx->map.intlv_mode = DF2_2CHAN_HASH;
+	if (ctx->map.intlv_mode == 8) {
+		if (df_cfg.rev == HYGON_DF2)
+			ctx->map.intlv_mode = HYGON_DF2_4CHAN_HASH;
+		else
+			ctx->map.intlv_mode = DF2_2CHAN_HASH;
+	}
 
 	if (ctx->map.intlv_mode != NONE &&
 	    ctx->map.intlv_mode != NOHASH_2CHAN &&
@@ -25,6 +29,7 @@ static int hygon_df_get_intlv_mode(struct addr_ctx *ctx)
 	    ctx->map.intlv_mode != NOHASH_4CHAN &&
 	    ctx->map.intlv_mode != NOHASH_8CHAN &&
 	    ctx->map.intlv_mode != NOHASH_16CHAN &&
+		ctx->map.intlv_mode != HYGON_DF2_4CHAN_HASH &&
 	    ctx->map.intlv_mode != DF2_2CHAN_HASH)
 		return -EINVAL;
 
@@ -38,6 +43,7 @@ static u64 hygon_get_hi_addr_offset(u32 reg_dram_offset)
 
 	switch (df_cfg.rev) {
 	case HYGON_DF1:
+	case HYGON_DF2:
 		hi_addr_offset = FIELD_GET(HYGON_DF1_HI_ADDR_OFFSET, reg_dram_offset);
 		break;
 	default:
@@ -120,10 +126,24 @@ static int hygon_df1_get_dram_addr_map(struct addr_ctx *ctx)
 	return 0;
 }
 
+static int hygon_df2_get_dram_addr_map(struct addr_ctx *ctx)
+{
+	if (df2_get_dram_addr_map(ctx))
+		return -EINVAL;
+
+	/* Read D18F0x60 */
+	if (df_indirect_read_instance(ctx->node_id, 0, 0x60,
+				      ctx->inst_id, &ctx->map.intlv))
+		return -EINVAL;
+
+	return 0;
+}
+
 static int hygon_get_dram_addr_map(struct addr_ctx *ctx)
 {
 	switch (df_cfg.rev) {
 	case HYGON_DF1:	return hygon_df1_get_dram_addr_map(ctx);
+	case HYGON_DF2:	return hygon_df2_get_dram_addr_map(ctx);
 	default:
 			atl_debug_on_bad_df_rev();
 			return -EINVAL;
@@ -141,6 +161,9 @@ static int hygon_get_coh_st_fabric_id(struct addr_ctx *ctx)
 	switch (df_cfg.rev) {
 	case HYGON_DF1:
 		ctx->coh_st_fabric_id = FIELD_GET(HYGON_DF1_COH_ST_FABRIC_ID, reg);
+		break;
+	case HYGON_DF2:
+		ctx->coh_st_fabric_id = FIELD_GET(HYGON_DF2_COH_ST_FABRIC_ID, reg);
 		break;
 	default:
 		atl_debug_on_bad_df_rev();
@@ -226,6 +249,7 @@ static u8 hygon_get_num_intlv_chan(struct addr_ctx *ctx)
 		return 2;
 	case HYGON_DF1_3CHAN:
 		return 3;
+	case HYGON_DF2_4CHAN_HASH:
 	case NOHASH_4CHAN:
 		return 4;
 	case NOHASH_8CHAN:
@@ -261,6 +285,7 @@ static u8 hygon_get_intlv_bit_pos(struct addr_ctx *ctx)
 
 	switch (df_cfg.rev) {
 	case HYGON_DF1:
+	case HYGON_DF2:
 		addr_sel = FIELD_GET(HYGON_DF1_INTLV_ADDR_SEL, ctx->map.base);
 		break;
 	default:
@@ -280,6 +305,9 @@ static u8 hygon_get_num_intlv_dies(struct addr_ctx *ctx)
 	case HYGON_DF1:
 		dies = FIELD_GET(HYGON_DF1_INTLV_NUM_DIES, ctx->map.limit);
 		break;
+	case HYGON_DF2:
+		dies = FIELD_GET(HYGON_DF2_INTLV_NUM_DIES, ctx->map.intlv);
+		break;
 	default:
 		atl_debug_on_bad_df_rev();
 		break;
@@ -295,6 +323,7 @@ static u8 hygon_get_num_intlv_sockets(struct addr_ctx *ctx)
 
 	switch (df_cfg.rev) {
 	case HYGON_DF1:
+	case HYGON_DF2:
 		sockets = FIELD_GET(HYGON_DF1_INTLV_NUM_SOCKETS, ctx->map.base);
 		break;
 	default:

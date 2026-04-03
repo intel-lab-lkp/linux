@@ -27,7 +27,13 @@ static u8 hygon_get_ipid_sub_channel(struct atl_err *err)
 #define HYGON_UMC_CHANNEL_NUM	GENMASK(23, 20)
 static u8 hygon_get_coh_st_inst_id(struct atl_err *err)
 {
-	return FIELD_GET(HYGON_UMC_CHANNEL_NUM, err->ipid);
+	u8 sub_channel = hygon_get_ipid_sub_channel(err);
+	u8 coh_st_inst_id = FIELD_GET(HYGON_UMC_CHANNEL_NUM, err->ipid);
+
+	if (df_cfg.rev == HYGON_DF2)
+		coh_st_inst_id = (coh_st_inst_id << 1) + sub_channel;
+
+	return coh_st_inst_id;
 }
 
 unsigned long hygon_convert_umc_mca_addr_to_sys_addr(struct atl_err *err)

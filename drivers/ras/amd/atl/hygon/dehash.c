@@ -48,6 +48,25 @@ static int hygon_df_2chan_dehash_addr(struct addr_ctx *ctx)
 	return 0;
 }
 
+static int hygon_df2_4chan_dehash_addr(struct addr_ctx *ctx)
+{
+	u8 hashed_bit;
+	u8 intlv_bit_pos = ctx->map.intlv_bit_pos;
+
+	hashed_bit =	(ctx->ret_addr >> 12) ^
+			(ctx->ret_addr >> 18) ^
+			(ctx->ret_addr >> 21) ^
+			(ctx->ret_addr >> 30) ^
+			ctx->coh_st_fabric_id;
+
+	hashed_bit &= 0x3;
+	if (hashed_bit != ((ctx->ret_addr >> intlv_bit_pos) & 0x3))
+		ctx->ret_addr = (ctx->ret_addr & ~((u64)3 << intlv_bit_pos)) |
+				(hashed_bit << intlv_bit_pos);
+
+	return 0;
+}
+
 int hygon_dehash_address(struct addr_ctx *ctx)
 {
 	switch (ctx->map.intlv_mode) {
@@ -63,6 +82,10 @@ int hygon_dehash_address(struct addr_ctx *ctx)
 
 	case DF2_2CHAN_HASH:
 		hygon_df_2chan_dehash_addr(ctx);
+		break;
+
+	case HYGON_DF2_4CHAN_HASH:
+		hygon_df2_4chan_dehash_addr(ctx);
 		break;
 
 	default:
