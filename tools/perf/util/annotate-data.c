@@ -1230,20 +1230,37 @@ again:
 	}
 
 	if (state->regs[reg].kind == TSR_KIND_PERCPU_BASE) {
-		u64 var_addr = dloc->op->offset;
+		u64 var_addr;
 		int var_offset;
 
 		pr_debug_dtp("percpu var");
 
-		if (dloc->op->multi_regs) {
-			int reg2 = dloc->op->reg2;
+		if (arch__is_arm64(dloc->arch)) {
+			int reg2;
 
-			if (dloc->op->reg2 == reg)
-				reg2 = dloc->op->reg1;
+			if (!dloc->op->multi_regs)
+				return PERF_TMR_BAIL_OUT;
 
-			if (has_reg_type(state, reg2) && state->regs[reg2].ok &&
-			    state->regs[reg2].kind == TSR_KIND_CONST)
-				var_addr += state->regs[reg2].imm_value;
+			reg2 = dloc->op->reg2;
+			if (!has_reg_type(state, reg2) ||
+			    state->regs[reg2].kind != TSR_KIND_GLOBAL_ADDR ||
+			    !state->regs[reg2].ok)
+				return PERF_TMR_BAIL_OUT;
+
+			var_addr = state->regs[reg2].addr;
+		} else {
+			var_addr = dloc->op->offset;
+
+			if (dloc->op->multi_regs) {
+				int reg2 = dloc->op->reg2;
+
+				if (dloc->op->reg2 == reg)
+					reg2 = dloc->op->reg1;
+
+				if (has_reg_type(state, reg2) && state->regs[reg2].ok &&
+				    state->regs[reg2].kind == TSR_KIND_CONST)
+					var_addr += state->regs[reg2].imm_value;
+			}
 		}
 
 		if (get_global_var_type(cu_die, dloc, dloc->ip, var_addr,

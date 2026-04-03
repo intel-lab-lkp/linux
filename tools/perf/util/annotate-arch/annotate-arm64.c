@@ -378,6 +378,26 @@ static void update_insn_state_arm64(struct type_state *state,
 
 			pr_debug_dtp("add [%x] global addr=%"PRIx64" -> reg%d\n",
 				     insn_offset, tsr->addr, sreg);
+			return;
+		}
+
+		/* Handle per-cpu base addresses */
+		if (dst_tsr.kind == TSR_KIND_PERCPU_BASE) {
+			if (!dst->multi_regs || !has_reg_type(state, dst->reg2) ||
+			    state->regs[dst->reg2].kind != TSR_KIND_GLOBAL_ADDR ||
+			    !state->regs[dst->reg2].ok)
+				return;
+
+			/* Inherit type from the global variable */
+			tsr->type = state->regs[dst->reg2].type;
+			tsr->kind = state->regs[dst->reg2].kind;
+			tsr->offset = state->regs[dst->reg2].offset;
+			tsr->addr = state->regs[dst->reg2].addr;
+			tsr->ok = true;
+
+			pr_debug_dtp("add [%x] percpu %#"PRIx64" -> reg%d",
+				     insn_offset, tsr->addr, sreg);
+			pr_debug_type_name(&tsr->type, tsr->kind);
 		}
 
 		return;
@@ -491,7 +511,51 @@ static void update_insn_state_arm64(struct type_state *state,
 			u64 ip = dloc->ms->sym->start + dl->al.offset;
 			u64 addr = dst_tsr.addr + dst->offset;
 			int offset;
+			u8 kind;
+			const char *var_name = NULL;
 
+			/* it might be per-cpu offset */
+			if (get_global_var_info(dloc, addr, &var_name, &offset) &&
+			    !strcmp(var_name, "__per_cpu_offset"))
+				kind = TSR_KIND_PERCPU_BASE;
+			else
+				kind = TSR_KIND_TYPE;
+
+			if (!get_global_var_type(cu_die, dloc, ip, addr, &offset,
+						 &type_die) ||
+			    !die_get_member_type(&type_die, offset, &type_die)) {
+				tsr->ok = false;
+				return;
+			}
+
+			tsr->type = type_die;
+			tsr->kind = kind;
+			tsr->offset = offset;
+			tsr->addr = 0;
+			tsr->ok = true;
+
+			pr_debug_dtp("ldr [%x] global (%"PRIx64") -> reg%d",
+				     insn_offset, addr, sreg);
+			pr_debug_type_name(&tsr->type, tsr->kind);
+			return;
+		}
+
+		/* Or check if it's a per-cpu base address */
+		if (dst_tsr.kind == TSR_KIND_PERCPU_BASE) {
+			u64 ip = dloc->ms->sym->start + dl->al.offset;
+			u64 addr;
+			int offset;
+			/*
+			 * If reg2 is a global variable, this means reg1 is
+			 * an index into the variable's per-cpu array, so
+			 * dereference type from reg2.
+			 */
+			if (!dst->multi_regs || !has_reg_type(state, dst->reg2) ||
+			    state->regs[dst->reg2].kind != TSR_KIND_GLOBAL_ADDR ||
+			    !state->regs[dst->reg2].ok)
+				return;
+
+			addr = state->regs[dst->reg2].addr;
 			if (!get_global_var_type(cu_die, dloc, ip, addr, &offset,
 						 &type_die) ||
 			    !die_get_member_type(&type_die, offset, &type_die)) {
@@ -502,10 +566,11 @@ static void update_insn_state_arm64(struct type_state *state,
 			tsr->type = type_die;
 			tsr->kind = TSR_KIND_TYPE;
 			tsr->offset = offset;
-			tsr->addr = addr;
+			tsr->addr = 0;
 			tsr->ok = true;
-			pr_debug_dtp("ldr [%x] global (%"PRIx64") -> reg%d",
-				     insn_offset, addr, sreg);
+
+			pr_debug_dtp("ldr [%x] percpu (reg%d, reg%d) -> reg%d",
+				     insn_offset, dreg, dst->reg2, sreg);
 			pr_debug_type_name(&tsr->type, tsr->kind);
 		}
 		return;
