@@ -1270,6 +1270,7 @@ static int dpaa2_eth_build_gso_fd(struct dpaa2_eth_priv *priv,
 
 	/* Initialize the TSO handler, and prepare the first payload */
 	hdr_len = tso_start(skb, &tso);
+	DEBUG_NET_WARN_ON_ONCE(hdr_len > TSO_HEADER_SIZE);
 	*total_fds_len = 0;
 
 	total_len = skb->len - hdr_len;
@@ -3029,6 +3030,7 @@ static int dpaa2_eth_setup_tc(struct net_device *net_dev,
 
 static const struct net_device_ops dpaa2_eth_ops = {
 	.ndo_open = dpaa2_eth_open,
+	.ndo_features_check = tso_features_check,
 	.ndo_start_xmit = dpaa2_eth_tx,
 	.ndo_stop = dpaa2_eth_stop,
 	.ndo_set_mac_address = dpaa2_eth_set_addr,
