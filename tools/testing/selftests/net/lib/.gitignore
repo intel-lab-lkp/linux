@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0-only
 csum
 gro
+so_txtime
 xdp_helper

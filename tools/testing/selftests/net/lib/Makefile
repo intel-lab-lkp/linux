@@ -15,6 +15,7 @@ TEST_GEN_FILES := \
 	$(patsubst %.c,%.o,$(wildcard *.bpf.c)) \
 	csum \
 	gro \
+	so_txtime \
 	xdp_helper \
 # end of TEST_GEN_FILES
 
