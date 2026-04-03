@@ -94,6 +94,7 @@ static void init_llvm(void)
 struct symbol_lookup_storage {
 	u64 branch_addr;
 	u64 pcrel_load_addr;
+	u64 pcrel_adrp_addr;
 };
 
 static const char *
@@ -108,6 +109,18 @@ symbol_lookup_callback(void *disinfo, uint64_t value,
 		storage->branch_addr = value;
 	else if (*ref_type == LLVMDisassembler_ReferenceType_In_PCrel_Load)
 		storage->pcrel_load_addr = value;
+	else if (*ref_type == LLVMDisassembler_ReferenceType_In_ARM64_ADRP) {
+		uint64_t adrp_imm;
+
+		/* immhi (bits 23:5) and immlo (bits 30:29) */
+		adrp_imm = ((value & 0x00ffffe0) >> 3) | ((value >> 29) & 0x3);
+		/* Sign-extend the 21-bit immediate to 64-bit */
+		if (adrp_imm & (1ULL << 20))
+			adrp_imm |= ~((1ULL << 21) - 1);
+
+		/* Calculate the target page address */
+		storage->pcrel_adrp_addr = (address & ~0xFFFLL) + (adrp_imm << 12);
+	}
 	*ref_type = LLVMDisassembler_ReferenceType_InOut_None;
 	return NULL;
 }
@@ -204,6 +217,7 @@ int symbol__disassemble_llvm(const char *filename, struct symbol *sym,
 
 		storage.branch_addr = 0;
 		storage.pcrel_load_addr = 0;
+		storage.pcrel_adrp_addr = 0;
 
 		/*
 		 * LLVM's API has the code be disassembled as non-const, cast
@@ -223,6 +237,42 @@ int symbol__disassemble_llvm(const char *filename, struct symbol *sym,
 				disasm_len += scnprintf(disasm_buf + disasm_len,
 							sizeof(disasm_buf) -
 								disasm_len,
+							" <%s>", name);
+				free(name);
+			}
+		}
+		if (storage.pcrel_adrp_addr != 0) {
+			/*
+			 * ADRP (Address Page) instructions encode a 21-bit signed
+			 * immediate offset relative to the current PC's page.
+			 *
+			 * To maintain consistency with standard objdump output,
+			 * we truncate the raw encoded immediate at the comma
+			 * and replace it with the resolved absolute page address.
+			 *
+			 * Example conversion:
+			 * From: adrp x18, 8014
+			 * To:   adrp x18, ffff800081f5f000 <this_cpu_vector>
+			 */
+			char *name;
+			char *s = strchr(disasm_buf, ',');
+
+			if (s == NULL)
+				goto err;
+
+			s++;
+			*s = '\0';
+			disasm_len = strlen(disasm_buf);
+			disasm_len += scnprintf(disasm_buf + disasm_len,
+						sizeof(disasm_buf) - disasm_len,
+						" %"PRIx64,
+						storage.pcrel_adrp_addr);
+			name = llvm_name_for_data(dso, filename,
+						  storage.pcrel_adrp_addr);
+			if (name) {
+				disasm_len += scnprintf(disasm_buf + disasm_len,
+							sizeof(disasm_buf) -
+							disasm_len,
 							" <%s>", name);
 				free(name);
 			}
