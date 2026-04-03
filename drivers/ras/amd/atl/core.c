@@ -195,22 +195,37 @@ MODULE_DEVICE_TABLE(x86cpu, amd_atl_cpuids);
 static int __init amd_atl_init(void)
 {
 	int ret;
+	u16 num_nodes;
+	bool is_hygon = boot_cpu_data.x86_vendor == X86_VENDOR_HYGON;
 
 	if (!x86_match_cpu(amd_atl_cpuids))
 		return -ENODEV;
 
-	if (!amd_nb_num())
+	if (is_hygon)
+		num_nodes = amd_num_nodes();
+	else
+		num_nodes = amd_nb_num();
+
+	if (!num_nodes)
 		return -ENODEV;
 
 	check_for_legacy_df_access();
 
-	ret = get_df_system_info();
+	if (is_hygon)
+		ret = hygon_get_df_system_info();
+	else
+		ret = get_df_system_info();
+
 	if (ret)
 		return ret;
 
 	/* Increment this module's recount so that it can't be easily unloaded. */
 	__module_get(THIS_MODULE);
-	amd_atl_register_decoder(convert_umc_mca_addr_to_sys_addr);
+
+	if (is_hygon)
+		amd_atl_register_decoder(hygon_convert_umc_mca_addr_to_sys_addr);
+	else
+		amd_atl_register_decoder(convert_umc_mca_addr_to_sys_addr);
 
 	pr_info("AMD Address Translation Library initialized\n");
 	return 0;

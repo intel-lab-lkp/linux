@@ -68,9 +68,16 @@ static int __df_indirect_read(u16 node, u8 func, u16 reg, u8 instance_id, u32 *l
 	struct pci_dev *F4;
 	int err = -ENODEV;
 	u32 ficaa = 0;
+	u16 num_nodes;
+	bool is_hygon = boot_cpu_data.x86_vendor == X86_VENDOR_HYGON;
 
 	node = get_accessible_node(node);
-	if (node >= amd_nb_num()) {
+	if (is_hygon)
+		num_nodes = amd_num_nodes();
+	else
+		num_nodes = amd_nb_num();
+
+	if (node >= num_nodes) {
 		pr_debug("Node %u is out of bounds\n", node);
 		goto out;
 	}
