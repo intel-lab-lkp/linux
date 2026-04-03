@@ -2662,6 +2662,14 @@ ice_set_link_ksettings(struct net_device *netdev,
 	/* Get link modes supported by hardware.*/
 	ice_phy_type_to_ethtool(netdev, &safe_ks);
 
+	/* Pull the value of autoneg from phy caps to ensure we allow
+	 * toggling it on all PHYs that support it.
+	 */
+	if (ice_is_phy_caps_an_enabled(phy_caps)) {
+		ethtool_link_ksettings_add_link_mode(&safe_ks, supported, Autoneg);
+		set_bit(ETHTOOL_LINK_MODE_FEC_NONE_BIT, safe_ks.link_modes.supported);
+	}
+
 	/* and check against modes requested by user.
 	 * Return an error if unsupported mode was set.
 	 */
