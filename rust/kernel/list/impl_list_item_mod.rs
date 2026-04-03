@@ -86,7 +86,11 @@ macro_rules! impl_has_list_links_self_ptr {
         // right type.
         unsafe impl$(<$($generics)*>)? $crate::list::HasSelfPtr<$item_type $(, $id)?> for $self {}
 
-        // SAFETY: TODO.
+        // SAFETY: The implementation of `raw_get_list_links` returns a pointer to the
+        // `ListLinks` field inside `ListLinksSelfPtr`. This cast is valid because
+        // `ListLinksSelfPtr` is a wrapper around `ListLinks` and shares the same memory
+        // layout. The macro only compiles if the field has type `ListLinksSelfPtr`, which
+        // the type system enforces statically.
         unsafe impl$(<$($generics)*>)? $crate::list::HasListLinks$(<$id>)? for $self {
             #[inline]
             unsafe fn raw_get_list_links(ptr: *mut Self) -> *mut $crate::list::ListLinks$(<$id>)? {
@@ -274,7 +278,10 @@ macro_rules! impl_list_item {
                 // SAFETY: The caller promises that `me` points at a valid value of type `Self`.
                 let links_field = unsafe { <Self as $crate::list::ListItem<$num>>::view_links(me) };
 
-                // SAFETY: TODO.
+                // SAFETY: `links_field` is valid because `view_links` returned it from a valid
+                // `me` pointer as promised by the caller. `links_field` points to the `inner`
+                // field of a `ListLinksSelfPtr` because `Self: HasSelfPtr` guarantees that the
+                // `ListLinks` field is always inside a `ListLinksSelfPtr`.
                 let container = unsafe {
                     $crate::container_of!(
                         links_field, $crate::list::ListLinksSelfPtr<Self, $num>, inner
@@ -326,7 +333,11 @@ macro_rules! impl_list_item {
             //   `ListArc` containing `Self` until the next call to `post_remove`. The value cannot
             //   be destroyed while a `ListArc` reference exists.
             unsafe fn view_value(links_field: *mut $crate::list::ListLinks<$num>) -> *const Self {
-                // SAFETY: TODO.
+                // SAFETY: `links_field` is valid and points to a live value because the caller
+                // of `prepare_to_insert` promised to retain ownership of the `ListArc`, and the
+                // value cannot be destroyed while a `ListArc` exists. `links_field` points to
+                // the `inner` field of a `ListLinksSelfPtr` because `Self: HasSelfPtr`
+                // guarantees this.
                 let container = unsafe {
                     $crate::container_of!(
                         links_field, $crate::list::ListLinksSelfPtr<Self, $num>, inner
