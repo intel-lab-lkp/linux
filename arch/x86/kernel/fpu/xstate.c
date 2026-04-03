@@ -855,6 +855,17 @@ void __init fpu__init_system_xstate(unsigned int legacy_size)
 		goto out_disable;
 	}
 
+	if (boot_cpu_has(X86_FEATURE_USER_SHSTK) &&
+	    !(fpu_kernel_cfg.max_features & XFEATURE_MASK_CET_USER)) {
+		/*
+		 * The kernel relies on XSAVES/XRSTORS to context switch shadow
+		 * stack state.  If this isn't present, disable user shadow
+		 * stacks.
+		 */
+		pr_err("x86/fpu: CET_USER not supported in xstate when CET is supported.  Disabling shadow stacks.\n");
+		setup_clear_cpu_cap(X86_FEATURE_USER_SHSTK);
+	}
+
 	fpu_kernel_cfg.independent_features = fpu_kernel_cfg.max_features &
 					      XFEATURE_MASK_INDEPENDENT;
 
