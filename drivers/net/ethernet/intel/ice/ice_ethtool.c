@@ -367,6 +367,7 @@ static const u32 ice_adv_lnk_speed_5000[] __initconst = {
 static const u32 ice_adv_lnk_speed_10000[] __initconst = {
 	ETHTOOL_LINK_MODE_10000baseT_Full_BIT,
 	ETHTOOL_LINK_MODE_10000baseKR_Full_BIT,
+	ETHTOOL_LINK_MODE_10000baseCR_Full_BIT,
 	ETHTOOL_LINK_MODE_10000baseSR_Full_BIT,
 	ETHTOOL_LINK_MODE_10000baseLR_Full_BIT,
 };
