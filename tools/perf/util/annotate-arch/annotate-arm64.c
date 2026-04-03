@@ -9,6 +9,8 @@
 #include <regex.h>
 #include "../annotate.h"
 #include "../disasm.h"
+#include "../annotate-data.h"
+#include "../debug.h"
 
 struct arch_arm64 {
 	struct arch arch;
@@ -254,6 +256,88 @@ static int extract_op_location_arm64(const struct arch *arch,
 	return 0;
 }
 
+#ifdef HAVE_LIBDW_SUPPORT
+static int get_mem_offset(struct annotated_op_loc *op_loc, int type_offset)
+{
+	if (op_loc->addr_mode == INSN_ADDR_POST_INDEX)
+		return type_offset;
+
+	return op_loc->offset + type_offset;
+}
+
+static void adjust_reg_index_state(struct type_state *state, int reg,
+				   struct annotated_op_loc *op_loc,
+				   const char *insn_name, u32 insn_offset)
+{
+	struct type_state_reg *tsr;
+
+	if (!has_reg_type(state, reg) ||
+	    (op_loc->addr_mode != INSN_ADDR_PRE_INDEX &&
+	    op_loc->addr_mode != INSN_ADDR_POST_INDEX))
+		return;
+
+	tsr = &state->regs[reg];
+	tsr->offset = op_loc->offset + tsr->offset;
+	tsr->ok = true;
+
+	pr_debug_dtp("%s [%x] %s-index %#x(reg%d) -> reg%d", insn_name,
+		     insn_offset, op_loc->addr_mode == INSN_ADDR_PRE_INDEX ?
+		     "pre" : "post", op_loc->offset, reg, reg);
+	pr_debug_type_name(&tsr->type, tsr->kind);
+}
+
+static void update_insn_state_arm64(struct type_state *state,
+				    struct data_loc_info *dloc, Dwarf_Die * cu_die __maybe_unused,
+				    struct disasm_line *dl)
+{
+	struct annotated_insn_loc loc;
+	struct annotated_op_loc *src = &loc.ops[INSN_OP_SOURCE];
+	struct annotated_op_loc *dst = &loc.ops[INSN_OP_TARGET];
+	struct type_state_reg *tsr;
+	Dwarf_Die type_die;
+	u32 insn_offset = dl->al.offset;
+	int sreg, dreg;
+
+	if (annotate_get_insn_location(dloc->arch, dl, &loc) < 0)
+		return;
+
+	sreg = src->reg1;
+	dreg = dst->reg1;
+
+	/* Memory to register transfers */
+	if (!strncmp(dl->ins.name, "ld", 2)) {
+		struct type_state_reg dst_tsr;
+
+		if (!has_reg_type(state, sreg) ||
+		    !has_reg_type(state, dreg) ||
+		    !state->regs[dreg].ok)
+			return;
+
+		tsr = &state->regs[sreg];
+		tsr->copied_from = -1;
+		dst_tsr = state->regs[dreg];
+
+		/* Dereference the pointer if it has one */
+		if (dst_tsr.kind == TSR_KIND_TYPE &&
+		    die_deref_ptr_type(&dst_tsr.type,
+				       get_mem_offset(dst, dst_tsr.offset),
+				       &type_die)) {
+			tsr->type = type_die;
+			tsr->kind = TSR_KIND_TYPE;
+			tsr->offset = 0;
+			tsr->ok = true;
+
+			pr_debug_dtp("ldr [%x] %#x(reg%d) -> reg%d",
+				     insn_offset, dst->offset, dreg, sreg);
+			pr_debug_type_name(&tsr->type, tsr->kind);
+
+			adjust_reg_index_state(state, dreg, dst, "ldr", insn_offset);
+		}
+		return;
+	}
+}
+#endif
+
 const struct arch *arch__new_arm64(const struct e_machine_and_e_flags *id,
 				   const char *cpuid __maybe_unused)
 {
@@ -273,6 +357,9 @@ const struct arch *arch__new_arm64(const struct e_machine_and_e_flags *id,
 	arch->objdump.imm_char		  = '#';
 	arch->associate_instruction_ops   = arm64__associate_instruction_ops;
 	arch->extract_op_location	  = extract_op_location_arm64;
+#ifdef HAVE_LIBDW_SUPPORT
+	arch->update_insn_state		  = update_insn_state_arm64;
+#endif
 
 	/* bl, blr */
 	err = regcomp(&arm->call_insn, "^blr?$", REG_EXTENDED);
