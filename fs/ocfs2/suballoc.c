@@ -870,9 +870,13 @@ static int ocfs2_reserve_suballoc_bits(struct ocfs2_super *osb,
 
 	fe = (struct ocfs2_dinode *) bh->b_data;
 
-	/* The bh was validated by the inode read inside
-	 * ocfs2_inode_lock().  Any corruption is a code bug. */
-	BUG_ON(!OCFS2_IS_VALID_DINODE(fe));
+	/* JBD-managed buffers can bypass inode validation. */
+	if (!OCFS2_IS_VALID_DINODE(fe)) {
+		status = ocfs2_error(alloc_inode->i_sb,
+				     "Invalid dinode #%llu\n",
+				     (unsigned long long)OCFS2_I(alloc_inode)->ip_blkno);
+		goto bail;
+	}
 
 	if (!(fe->i_flags & cpu_to_le32(OCFS2_CHAIN_FL))) {
 		status = ocfs2_error(alloc_inode->i_sb,
