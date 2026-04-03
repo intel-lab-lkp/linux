@@ -8,6 +8,7 @@
 
 #include <linux/genalloc.h>
 #include <linux/io.h>
+#include <linux/libfdt.h>
 #include <linux/of_address.h>
 #include <linux/of.h>
 #include <linux/of_fdt.h>
@@ -1044,7 +1045,8 @@ static int __init at91_pm_backup_scan_memcs(unsigned long node,
 	if (*located)
 		return 0;
 
-	type = of_get_flat_dt_prop(node, "device_type", NULL);
+	type = fdt_stringlist_get(initial_boot_params, node, "device_type",
+				  0, NULL);
 
 	/* We are scanning "memory" nodes only. */
 	if (!type || strcmp(type, "memory"))
