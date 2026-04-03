@@ -91,10 +91,19 @@ struct gpio_desc *swnode_find_gpio(struct fwnode_handle *fwnode,
 
 	for_each_gpio_property_name(propname, con_id) {
 		ret = swnode_gpio_get_reference(fwnode, propname, idx, &args);
-		if (ret == 0)
+		if (ret == 0 || ret == -ENOTCONN)
 			break;
 	}
 	if (ret) {
+		if (ret == -ENOTCONN)
+			/*
+			 * -ENOTCONN for a software node reference lookup means
+			 *  that a remote struct software_node exists but has
+			 *  not yet been registered as a firmware node. Defer
+			 *  until this happens.
+			 */
+			return ERR_PTR(-EPROBE_DEFER);
+
 		pr_debug("%s: can't parse '%s' property of node '%pfwP[%d]'\n",
 			__func__, propname, fwnode, idx);
 		return ERR_PTR(ret);
