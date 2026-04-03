@@ -216,4 +216,4 @@ static int __init wakeup_sources_sysfs_init(void)
 
 	return PTR_ERR_OR_ZERO(wakeup_class);
 }
-postcore_initcall(wakeup_sources_sysfs_init);
+pure_initcall(wakeup_sources_sysfs_init);
