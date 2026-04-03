@@ -5587,7 +5587,10 @@ ice_find_dummy_packet(struct ice_adv_lkup_elem *lkups, u16 lkups_cnt,
 	for (i = 0; i < lkups_cnt; i++) {
 		if (lkups[i].type == ICE_UDP_ILOS)
 			match |= ICE_PKT_INNER_UDP;
-		else if (lkups[i].type == ICE_TCP_IL)
+		else if (lkups[i].type == ICE_TCP_IL ||
+			 (lkups[i].type == ICE_IPV4_IL &&
+			  lkups[i].h_u.ipv4_hdr.protocol == IPPROTO_TCP &&
+			  lkups[i].m_u.ipv4_hdr.protocol == 0xFF))
 			match |= ICE_PKT_INNER_TCP;
 		else if (lkups[i].type == ICE_IPV6_OFOS)
 			match |= ICE_PKT_OUTER_IPV6;
