@@ -333,14 +333,17 @@ static void make_xfence_request(struct kvm *kvm,
 	unsigned long i;
 	struct kvm_vcpu *vcpu;
 	unsigned int actual_req = req;
+	unsigned int idx;
 	DECLARE_BITMAP(vcpu_mask, KVM_MAX_VCPUS);
 
 	bitmap_zero(vcpu_mask, KVM_MAX_VCPUS);
 	kvm_for_each_vcpu(i, vcpu, kvm) {
 		if (hbase != -1UL) {
-			if (vcpu->vcpu_id < hbase)
+			idx = vcpu->vcpu_id - hbase;
+
+			if (idx < 0 || idx >= BITS_PER_LONG)
 				continue;
-			if (!(hmask & (1UL << (vcpu->vcpu_id - hbase))))
+			if (!(hmask & (1UL << idx)))
 				continue;
 		}
 
