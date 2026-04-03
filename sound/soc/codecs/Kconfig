@@ -275,6 +275,7 @@ config SND_SOC_ALL_CODECS
 	imply SND_SOC_TAS571X
 	imply SND_SOC_TAS5720
 	imply SND_SOC_TAS6424
+	imply SND_SOC_TAS67524
 	imply SND_SOC_TDA7419
 	imply SND_SOC_TFA9879
 	imply SND_SOC_TFA989X
@@ -2236,6 +2237,16 @@ config SND_SOC_TAS6424
 	help
 	  Enable support for Texas Instruments TAS6424 high-efficiency
 	  digital input quad-channel Class-D audio power amplifiers.
+
+config SND_SOC_TAS67524
+	tristate "Texas Instruments TAS67524 Quad-Channel Audio Amplifier"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  Enable support for Texas Instruments TAS67524 quad-channel Class-D
+	  audio power amplifier. The device supports I2S and TDM interfaces
+	  with real-time voltage and current sense feedback via SDOUT, and
+	  provides DC/AC/real-time load diagnostics for speaker monitoring.
 
 config SND_SOC_TDA7419
 	tristate "ST TDA7419 audio processor"
