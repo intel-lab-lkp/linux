@@ -7770,6 +7770,7 @@ static int select_idle_cpu(struct task_struct *p, struct sched_domain *sd, bool 
 static int
 select_idle_capacity(struct task_struct *p, struct sched_domain *sd, int target)
 {
+	bool prefers_idle_core = sched_smt_active() && test_idle_cores(target);
 	unsigned long task_util, util_min, util_max, best_cap = 0;
 	int fits, best_fits = 0;
 	int cpu, best_cpu = -1;
@@ -7783,6 +7784,7 @@ select_idle_capacity(struct task_struct *p, struct sched_domain *sd, int target)
 	util_max = uclamp_eff_value(p, UCLAMP_MAX);
 
 	for_each_cpu_wrap(cpu, cpus, target) {
+		bool preferred_core = !prefers_idle_core || is_core_idle(cpu);
 		unsigned long cpu_cap = capacity_of(cpu);
 
 		if (!available_idle_cpu(cpu) && !sched_idle_cpu(cpu))
@@ -7791,7 +7793,7 @@ select_idle_capacity(struct task_struct *p, struct sched_domain *sd, int target)
 		fits = util_fits_cpu(task_util, util_min, util_max, cpu);
 
 		/* This CPU fits with all requirements */
-		if (fits > 0)
+		if (fits > 0 && preferred_core)
 			return cpu;
 		/*
 		 * Only the min performance hint (i.e. uclamp_min) doesn't fit.
@@ -7799,9 +7801,30 @@ select_idle_capacity(struct task_struct *p, struct sched_domain *sd, int target)
 		 */
 		else if (fits < 0)
 			cpu_cap = get_actual_cpu_capacity(cpu);
+		/*
+		 * fits > 0 implies we are not on a preferred core
+		 * but the util fits CPU capacity. Set fits to -2 so
+		 * the effective range becomes [-2, 0] where:
+		 *    0 - does not fit
+		 *   -1 - fits with the exception of UCLAMP_MIN
+		 *   -2 - fits with the exception of preferred_core
+		 */
+		else if (fits > 0)
+			fits = -2;
 
 		/*
-		 * First, select CPU which fits better (-1 being better than 0).
+		 * If we are on a preferred core, translate the range of fits
+		 * of [-1, 0] to [-4, -3]. This ensures that an idle core
+		 * is always given priority over (partially) busy core.
+		 *
+		 * A fully fitting idle core would have returned early and hence
+		 * fits > 0 for preferred_core need not be dealt with.
+		 */
+		if (preferred_core)
+			fits -= 3;
+
+		/*
+		 * First, select CPU which fits better (lower is more preferred).
 		 * Then, select the one with best capacity at same level.
 		 */
 		if ((fits < best_fits) ||
@@ -7820,12 +7843,17 @@ static inline bool asym_fits_cpu(unsigned long util,
 				 unsigned long util_max,
 				 int cpu)
 {
-	if (sched_asym_cpucap_active())
+	if (sched_asym_cpucap_active()) {
 		/*
 		 * Return true only if the cpu fully fits the task requirements
 		 * which include the utilization and the performance hints.
+		 *
+		 * When SMT is active, also require that the core has no busy
+		 * siblings.
 		 */
-		return (util_fits_cpu(util, util_min, util_max, cpu) > 0);
+		return (!sched_smt_active() || is_core_idle(cpu)) &&
+		       (util_fits_cpu(util, util_min, util_max, cpu) > 0);
+	}
 
 	return true;
 }
