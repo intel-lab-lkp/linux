@@ -209,7 +209,7 @@ static int df3_6ch_get_dram_addr_map(struct addr_ctx *ctx)
 	return 0;
 }
 
-static int df2_get_dram_addr_map(struct addr_ctx *ctx)
+int df2_get_dram_addr_map(struct addr_ctx *ctx)
 {
 	/* Read D18F0x110 (DramBaseAddress). */
 	if (df_indirect_read_instance(ctx->node_id, 0, 0x110 + (8 * ctx->map.num),
@@ -441,7 +441,7 @@ static int find_normalized_offset(struct addr_ctx *ctx, u64 *norm_offset)
 	return 0;
 }
 
-static bool valid_map(struct addr_ctx *ctx)
+bool valid_map(struct addr_ctx *ctx)
 {
 	if (df_cfg.rev >= DF4)
 		return FIELD_GET(DF_ADDR_RANGE_VAL, ctx->map.ctl);
@@ -735,7 +735,7 @@ err:
 	return -EINVAL;
 }
 
-static void dump_address_map(struct dram_addr_map *map)
+void dump_address_map(struct dram_addr_map *map)
 {
 	u8 i;
 

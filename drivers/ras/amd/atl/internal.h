@@ -55,6 +55,7 @@ enum df_revisions {
 enum intlv_modes {
 	NONE				= 0x00,
 	NOHASH_2CHAN			= 0x01,
+	HYGON_DF1_3CHAN			= 0x02,
 	NOHASH_4CHAN			= 0x03,
 	NOHASH_8CHAN			= 0x05,
 	DF3_6CHAN			= 0x06,
@@ -246,6 +247,14 @@ struct addr_ctx_inputs {
 	u8 coh_st_inst_id;
 };
 
+struct hygon_chan_intlv {
+	u8 sub_channel;
+	u8 chan_addr_sel;
+	u8 chan_hash_enable;
+	u8 ddr5_enable;
+	u8 start_bit;
+};
+
 struct addr_ctx {
 	u64 ret_addr;
 
@@ -266,6 +275,9 @@ struct addr_ctx {
 	 * System-wide ID that includes 'node' bits.
 	 */
 	u16 coh_st_fabric_id;
+
+	/* Hygon Channel Interleave */
+	struct hygon_chan_intlv chan_intlv_hygon;
 };
 
 int df_indirect_read_instance(u16 node, u8 func, u16 reg, u8 instance_id, u32 *lo);
@@ -289,7 +301,12 @@ u64 remove_base_and_hole(struct addr_ctx *ctx, u64 addr);
 int get_dram_hole_base(void);
 void dump_df_cfg(void);
 
+int df2_get_dram_addr_map(struct addr_ctx *ctx);
+bool valid_map(struct addr_ctx *ctx);
+void dump_address_map(struct dram_addr_map *map);
+
 int hygon_get_df_system_info(void);
+int hygon_get_address_map(struct addr_ctx *ctx);
 
 /* GUIDs for PRM handlers */
 extern const guid_t norm_to_sys_guid;

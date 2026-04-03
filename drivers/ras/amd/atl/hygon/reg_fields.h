@@ -8,6 +8,84 @@
  */
 
 /*
+ * Coherent Station Fabric ID
+ *
+ * Access type: Instance
+ *
+ * Register
+ *	Rev	Fieldname	Bits
+ *
+ *	D18F0x50 [Fabric Block Instance Information 3]
+ *	HYGON_DF1   BlockFabricId	[17:8]
+ */
+#define HYGON_DF1_COH_ST_FABRIC_ID	GENMASK(17, 8)
+
+/*
+ * Interleave Number of Sockets
+ *
+ * Access type: Instance
+ *
+ * Register
+ *	Rev	Fieldname	Bits
+ *
+ *	D18F0x110 [DRAM Base Address]
+ *	HYGON_DF1 IntLvNumSockets [3:2]
+ */
+#define HYGON_DF1_INTLV_NUM_SOCKETS	GENMASK(3, 2)
+
+/*
+ * Interleave Number of Channels
+ *
+ * Access type: Instance
+ *
+ * Register
+ *	Rev	Fieldname	Bits
+ *
+ *	D18F0x110 [DRAM Base Address]
+ *	HYGON_DF1	IntLvNumChan	[7:4]
+ */
+#define HYGON_DF1_INTLV_NUM_CHAN	GENMASK(7, 4)
+
+/*
+ * Interleave Address Select
+ *
+ * Access type: Instance
+ *
+ * Register
+ *	Rev	Fieldname	Bits
+ *
+ *	D18F0x110 [DRAM Base Address]
+ *	HYGON_DF1	IntLvAddrSel	[10:8]
+ */
+#define HYGON_DF1_INTLV_ADDR_SEL	GENMASK(10, 8)
+
+/*
+ * Interleave Number of Dies
+ *
+ * Access type: Instance
+ *
+ * Register
+ *	Rev	Fieldname	Bits
+ *
+ *	D18F0x114 [DRAM Limit Address]
+ *	HYGON_DF1	IntLvNumDies	[11:10]
+ */
+#define HYGON_DF1_INTLV_NUM_DIES	GENMASK(11, 10)
+
+/*
+ * High Address Offset
+ *
+ * Access type: Instance
+ *
+ * Register
+ *	Rev	Fieldname	Bits
+ *
+ *	D18F0x214 [DRAM Offset]
+ *	HYGON_DF1	HiAddrOffset	[31:19]
+ */
+#define HYGON_DF1_HI_ADDR_OFFSET	GENMASK(31, 19)
+
+/*
  * Die ID Mask
  *
  * Access type: Broadcast
