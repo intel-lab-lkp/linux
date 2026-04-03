@@ -25,26 +25,19 @@
 static int hibmc_connector_get_modes(struct drm_connector *connector)
 {
 	struct hibmc_vdac *vdac = to_hibmc_vdac(connector);
-	const struct drm_edid *drm_edid;
-	int count;
+	int count = 0;
 
-	drm_edid = drm_edid_read_ddc(connector, &vdac->adapter);
+	if (vdac->phys_state == connector_status_connected)
+		count = drm_connector_helper_get_modes(connector);
 
-	drm_edid_connector_update(connector, drm_edid);
+	if (count > 0)
+		return count;
 
-	if (drm_edid) {
-		count = drm_edid_connector_add_modes(connector);
-		if (count)
-			goto out;
-	}
-
+	drm_edid_connector_update(connector, NULL);
 	count = drm_add_modes_noedid(connector,
 				     connector->dev->mode_config.max_width,
 				     connector->dev->mode_config.max_height);
 	drm_set_preferred_mode(connector, 1024, 768);
-
-out:
-	drm_edid_free(drm_edid);
 
 	return count;
 }
@@ -57,10 +50,32 @@ static void hibmc_connector_destroy(struct drm_connector *connector)
 	drm_connector_cleanup(connector);
 }
 
+static int hibmc_vdac_detect(struct drm_connector *connector,
+			     struct drm_modeset_acquire_ctx *ctx,
+			     bool force)
+{
+	struct hibmc_drm_private *priv = to_hibmc_drm_private(connector->dev);
+	struct hibmc_vdac *vdac = to_hibmc_vdac(connector);
+
+	vdac->phys_state = drm_connector_helper_detect_from_ddc(connector,
+								ctx, force);
+
+	/* If the DP connectors are disconnected, the hibmc_vdac_detect function
+	 * must return a connected state to ensure KVM display functionality.
+	 * Additionally, for previous-generation products that may lack hardware
+	 * link support and thus cannot detect the monitor, hibmc_vdac_detect
+	 * should also return a connected state.
+	 */
+	if (priv->dp.phys_state != connector_status_connected)
+		return connector_status_connected;
+
+	return vdac->phys_state;
+}
+
 static const struct drm_connector_helper_funcs
 	hibmc_connector_helper_funcs = {
 	.get_modes = hibmc_connector_get_modes,
-	.detect_ctx = drm_connector_helper_detect_from_ddc,
+	.detect_ctx = hibmc_vdac_detect,
 };
 
 static const struct drm_connector_funcs hibmc_connector_funcs = {
@@ -129,6 +144,8 @@ int hibmc_vdac_init(struct hibmc_drm_private *priv)
 	drm_connector_attach_encoder(connector, encoder);
 
 	connector->polled = DRM_CONNECTOR_POLL_CONNECT | DRM_CONNECTOR_POLL_DISCONNECT;
+
+	vdac->phys_state = connector_status_connected;
 
 	return 0;
 
