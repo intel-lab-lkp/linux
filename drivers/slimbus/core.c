@@ -209,8 +209,8 @@ static void of_register_slim_devices(struct slim_controller *ctrl)
 		int reg[2], ret;
 		int manf_id, prod_code;
 
-		compat = of_get_property(node, "compatible", NULL);
-		if (!compat)
+		ret = of_property_read_string(node, "compatible", &compat);
+		if (ret)
 			continue;
 
 		ret = sscanf(compat, "slim%x,%x", &manf_id, &prod_code);
