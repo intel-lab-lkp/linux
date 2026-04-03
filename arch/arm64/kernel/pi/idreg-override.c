@@ -373,11 +373,11 @@ static __init const u8 *get_bootargs_cmdline(const void *fdt, int node)
 	if (node < 0)
 		return NULL;
 
-	prop = fdt_getprop(fdt, node, bootargs, NULL);
+	prop = fdt_stringlist_get(fdt, node, bootargs, 0, NULL);
 	if (!prop)
 		return NULL;
 
-	return strlen(prop) ? prop : NULL;
+	return *prop ? prop : NULL;
 }
 
 static __init void parse_cmdline(const void *fdt, int chosen)
