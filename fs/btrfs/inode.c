@@ -653,6 +653,7 @@ static noinline int __cow_file_range_inline(struct btrfs_inode *inode,
 		goto out;
 	}
 	trans->block_rsv = &inode->block_rsv;
+	btrfs_delalloc_migrate_delayed_refs_rsv(trans, inode);
 
 	drop_args.path = path;
 	drop_args.start = 0;
@@ -3297,6 +3298,7 @@ int btrfs_finish_one_ordered(struct btrfs_ordered_extent *ordered_extent)
 		}
 	} else {
 		BUG_ON(root == fs_info->tree_root);
+		btrfs_delalloc_migrate_delayed_refs_rsv(trans, inode);
 		ret = insert_ordered_extent_file_extent(trans, ordered_extent);
 		if (unlikely(ret < 0)) {
 			btrfs_abort_transaction(trans, ret);
@@ -8074,9 +8076,10 @@ struct inode *btrfs_alloc_inode(struct super_block *sb)
 
 	spin_lock_init(&ei->lock);
 	ei->outstanding_extents = 0;
-	if (sb->s_magic != BTRFS_TEST_MAGIC)
+	if (sb->s_magic != BTRFS_TEST_MAGIC) {
 		btrfs_init_metadata_block_rsv(fs_info, &ei->block_rsv,
 					      BTRFS_BLOCK_RSV_DELALLOC);
+	}
 	ei->runtime_flags = 0;
 	ei->prop_compress = BTRFS_COMPRESS_NONE;
 	ei->defrag_compress = BTRFS_COMPRESS_NONE;

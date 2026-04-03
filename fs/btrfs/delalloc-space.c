@@ -3,11 +3,13 @@
 #include "messages.h"
 #include "ctree.h"
 #include "delalloc-space.h"
+#include "delayed-ref.h"
 #include "block-rsv.h"
 #include "btrfs_inode.h"
 #include "space-info.h"
 #include "qgroup.h"
 #include "fs.h"
+#include "transaction.h"
 
 /*
  * HOW DOES THIS WORK
@@ -240,11 +242,22 @@ static void btrfs_inode_rsv_release(struct btrfs_inode *inode, bool qgroup_free)
 	if (released > 0)
 		trace_btrfs_space_reservation(fs_info, "delalloc",
 					      btrfs_ino(inode), released, 0);
+
 	if (qgroup_free)
 		btrfs_qgroup_free_meta_prealloc(inode->root, qgroup_to_release);
 	else
 		btrfs_qgroup_convert_reserved_meta(inode->root,
 						   qgroup_to_release);
+}
+
+/*
+ * Each delalloc extent could become an ordered_extent and end up inserting a
+ * new extent into the extent and free space trees. So we must reserve
+ * delayed ref space up front for that.
+ */
+static u64 delalloc_calc_delayed_refs_rsv(const struct btrfs_fs_info *fs_info, u64 nr_extents)
+{
+	return btrfs_calc_delayed_ref_bytes(fs_info, nr_extents);
 }
 
 static void btrfs_calculate_inode_block_rsv_size(struct btrfs_fs_info *fs_info,
@@ -266,6 +279,7 @@ static void btrfs_calculate_inode_block_rsv_size(struct btrfs_fs_info *fs_info,
 		reserve_size = btrfs_calc_insert_metadata_size(fs_info,
 						outstanding_extents);
 		reserve_size += btrfs_calc_metadata_size(fs_info, 1);
+		reserve_size += delalloc_calc_delayed_refs_rsv(fs_info, outstanding_extents);
 	}
 	if (!(inode->flags & BTRFS_INODE_NODATASUM)) {
 		u64 csum_leaves;
@@ -289,7 +303,8 @@ static void btrfs_calculate_inode_block_rsv_size(struct btrfs_fs_info *fs_info,
 
 static void calc_inode_reservations(struct btrfs_inode *inode,
 				    u64 num_bytes, u64 disk_num_bytes,
-				    u64 *meta_reserve, u64 *qgroup_reserve)
+				    u64 *meta_reserve,
+				    u64 *qgroup_reserve)
 {
 	struct btrfs_fs_info *fs_info = inode->root->fs_info;
 	u64 nr_extents = count_max_extents(fs_info, num_bytes);
@@ -309,7 +324,29 @@ static void calc_inode_reservations(struct btrfs_inode *inode,
 	 * for an inode update.
 	 */
 	*meta_reserve += inode_update;
+
+	*meta_reserve += delalloc_calc_delayed_refs_rsv(fs_info, nr_extents);
+
 	*qgroup_reserve = nr_extents * fs_info->nodesize;
+}
+
+u64 btrfs_delalloc_migrate_delayed_refs_rsv(struct btrfs_trans_handle *trans,
+                                           struct btrfs_inode *inode)
+{
+       struct btrfs_block_rsv *inode_rsv = &inode->block_rsv;
+       struct btrfs_block_rsv *trans_rsv = &trans->delayed_rsv;
+       u64 num_bytes = delalloc_calc_delayed_refs_rsv(trans->fs_info, 1);
+
+       spin_lock(&inode_rsv->lock);
+       num_bytes = min(num_bytes, inode_rsv->reserved);
+       inode_rsv->reserved -= num_bytes;
+       inode_rsv->full = (inode_rsv->reserved >= inode_rsv->size);
+       spin_unlock(&inode_rsv->lock);
+
+       btrfs_block_rsv_add_bytes(trans_rsv, num_bytes, true);
+       trans->delayed_refs_bytes_reserved += num_bytes;
+
+       return num_bytes;
 }
 
 int btrfs_delalloc_reserve_metadata(struct btrfs_inode *inode, u64 num_bytes,
@@ -358,8 +395,8 @@ int btrfs_delalloc_reserve_metadata(struct btrfs_inode *inode, u64 num_bytes,
 						 noflush);
 	if (ret)
 		return ret;
-	ret = btrfs_reserve_metadata_bytes(block_rsv->space_info, meta_reserve,
-					   flush);
+	ret = btrfs_reserve_metadata_bytes(block_rsv->space_info,
+					   meta_reserve, flush);
 	if (ret) {
 		btrfs_qgroup_free_meta_prealloc(root, qgroup_reserve);
 		return ret;
