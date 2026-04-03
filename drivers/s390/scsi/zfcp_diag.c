@@ -224,7 +224,7 @@ __zfcp_diag_test_buffer_age_isfresh(const struct zfcp_diag_adapter *const diag,
  *
  * This function will cause an update of the given @hdr by calling the also
  * given @buffer_update function. If called by multiple sources at the same
- * time, it will synchornize the update by only allowing one source to call
+ * time, it will synchronize the update by only allowing one source to call
  * @buffer_update and the others to wait for that source to complete instead
  * (the wait is interruptible).
  *
