@@ -662,25 +662,108 @@ int ext4_orphan_file_empty(struct super_block *sb)
 
 struct ext4_proc_orphan {
 	struct ext4_inode_info cursor;
+	bool print_title;
 };
+
+static inline bool ext4_is_cursor(struct ext4_inode_info *inode)
+{
+	return (inode->vfs_inode.i_ino == 0);
+}
+
+static struct inode *ext4_list_next(struct list_head *head, struct list_head *p)
+{
+	struct ext4_inode_info *inode;
+
+	list_for_each_continue(p, head) {
+		inode = list_entry(p, typeof(*inode), i_orphan);
+		if (!ext4_is_cursor(inode))
+			return &inode->vfs_inode;
+	}
+
+	return NULL;
+}
 
 static void *ext4_orphan_seq_start(struct seq_file *seq, loff_t *pos)
 {
-	return NULL;
+	struct ext4_proc_orphan *s = seq->private;
+	struct super_block *sb = pde_data(file_inode(seq->file));
+	struct ext4_sb_info *sbi = EXT4_SB(sb);
+	struct list_head *prev;
+
+	mutex_lock(&sbi->s_orphan_lock);
+
+	if (!*pos) {
+		prev = &sbi->s_orphan;
+	} else {
+		prev = &s->cursor.i_orphan;
+		if (list_empty(prev))
+			return NULL;
+	}
+
+	return ext4_list_next(&sbi->s_orphan, prev);
 }
 
 static void *ext4_orphan_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 {
-	return NULL;
+	struct super_block *sb = pde_data(file_inode(seq->file));
+	struct ext4_sb_info *sbi = EXT4_SB(sb);
+	struct inode *inode = v;
+
+	++*pos;
+
+	return ext4_list_next(&sbi->s_orphan, &EXT4_I(inode)->i_orphan);
+}
+
+static void ext4_show_filename(struct seq_file *seq, struct inode *inode)
+{
+	struct dentry *dentry;
+
+	dentry = d_find_alias(inode);
+	if (!dentry)
+		dentry = d_find_any_alias(inode);
+
+	if (dentry)
+		seq_dentry(seq, dentry, "\t\n\\");
+	else
+		seq_puts(seq, "unknown");
+
+	dput(dentry);
+	seq_putc(seq, '\n');
 }
 
 static int ext4_orphan_seq_show(struct seq_file *seq, void *v)
 {
+	struct inode *inode = v;
+	struct ext4_proc_orphan *s = seq->private;
+
+	if (s->print_title) {
+		seq_puts(seq, "INO\tNLINK\tSIZE\tBLOCKS\tPROJID\tPATH\n");
+		s->print_title = false;
+	}
+
+	seq_printf(seq, "%llu\t%u\t%llu\t%llu\t%u\t",
+		   inode->i_ino, inode->i_nlink,
+		   i_size_read(inode), inode->i_blocks,
+		   __kprojid_val(EXT4_I(inode)->i_projid));
+
+	ext4_show_filename(seq, inode);
+
 	return 0;
 }
 
 static void ext4_orphan_seq_stop(struct seq_file *seq, void *v)
 {
+	struct super_block *sb = pde_data(file_inode(seq->file));
+	struct ext4_sb_info *sbi = EXT4_SB(sb);
+	struct inode *inode = v;
+	struct ext4_proc_orphan *s = seq->private;
+
+	if (inode)
+		list_move_tail(&s->cursor.i_orphan, &EXT4_I(inode)->i_orphan);
+	else
+		list_del_init(&s->cursor.i_orphan);
+
+	mutex_unlock(&sbi->s_orphan_lock);
 }
 
 const struct seq_operations ext4_orphan_seq_ops = {
@@ -703,6 +786,7 @@ static int ext4_seq_orphan_open(struct inode *inode, struct file *file)
 		private = m->private;
 		INIT_LIST_HEAD(&private->cursor.i_orphan);
 		private->cursor.vfs_inode.i_ino = 0;
+		private->print_title = true;
 	}
 
 	return rc;
