@@ -832,7 +832,7 @@ impl<T: AsBytes + FromBytes> Coherent<T> {
             Err(EINVAL)?;
         }
 
-        let size = core::mem::size_of::<T>().checked_mul(len).ok_or(ENOMEM)?;
+        let size = core::mem::size_of::<T>().checked_mul(len).ok_or(EOVERFLOW)?;
         let mut dma_handle = 0;
         // SAFETY: Device pointer is guaranteed as valid by the type invariant on `Device`.
         let addr = unsafe {
