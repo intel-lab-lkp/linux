@@ -569,6 +569,15 @@ struct tc_netem_gemodel {
 #define NETEM_DIST_SCALE	8192
 #define NETEM_DIST_MAX		16384
 
+struct tc_netem_xstats {
+	__u32	delayed;	/* packets delayed */
+	__u32	dropped;	/* packets dropped by loss model      */
+	__u32	corrupted;	/* packets with bit errors injected   */
+	__u32	duplicated;	/* duplicate packets generated        */
+	__u32	reordered;	/* packets sent out of order          */
+	__u32	ecn_marked;	/* packets ECN CE-marked (not dropped)*/
+};
+
 /* DRR */
 
 enum {
