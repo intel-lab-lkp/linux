@@ -11,6 +11,8 @@
 #include "../disasm.h"
 #include "../annotate-data.h"
 #include "../debug.h"
+#include "../map.h"
+#include "../symbol.h"
 
 struct arch_arm64 {
 	struct arch arch;
@@ -297,6 +299,8 @@ static void update_insn_state_arm64(struct type_state *state,
 	Dwarf_Die type_die;
 	u32 insn_offset = dl->al.offset;
 	int sreg, dreg;
+	int fbreg = dloc->fbreg;
+	int fboff = 0;
 
 	if (annotate_get_insn_location(dloc->arch, dl, &loc) < 0)
 		return;
@@ -304,17 +308,59 @@ static void update_insn_state_arm64(struct type_state *state,
 	sreg = src->reg1;
 	dreg = dst->reg1;
 
+	if (dloc->fb_cfa) {
+		u64 ip = dloc->ms->sym->start + dl->al.offset;
+		u64 pc = map__rip_2objdump(dloc->ms->map, ip);
+
+		if (die_get_cfa(dloc->di->dbg, pc, &fbreg, &fboff) < 0)
+			fbreg = -1;
+	}
+
 	/* Memory to register transfers */
 	if (!strncmp(dl->ins.name, "ld", 2)) {
 		struct type_state_reg dst_tsr;
 
-		if (!has_reg_type(state, sreg) ||
-		    !has_reg_type(state, dreg) ||
-		    !state->regs[dreg].ok)
+		if (!has_reg_type(state, sreg))
 			return;
 
 		tsr = &state->regs[sreg];
 		tsr->copied_from = -1;
+
+		/* Check stack variables with offset */
+		if (sreg == fbreg || sreg == state->stack_reg) {
+			struct type_state_stack *stack;
+			int offset = src->offset - fboff;
+
+			stack = find_stack_state(state, offset);
+			if (stack == NULL) {
+				tsr->ok = false;
+				return;
+			} else if (!stack->compound) {
+				tsr->type = stack->type;
+				tsr->kind = stack->kind;
+				tsr->offset = stack->ptr_offset;
+				tsr->ok = true;
+			} else if (die_get_member_type(&stack->type,
+						       offset - stack->offset,
+						       &type_die)) {
+				tsr->type = type_die;
+				tsr->kind = TSR_KIND_TYPE;
+				tsr->offset = 0;
+				tsr->ok = true;
+			} else {
+				tsr->ok = false;
+				return;
+			}
+
+			pr_debug_dtp("ldr [%x] -%#x(stack) -> reg%d",
+				     insn_offset, -offset, sreg);
+			pr_debug_type_name(&tsr->type, tsr->kind);
+			return;
+		}
+
+		if (!has_reg_type(state, dreg) || !state->regs[dreg].ok)
+			return;
+
 		dst_tsr = state->regs[dreg];
 
 		/* Dereference the pointer if it has one */
@@ -338,6 +384,37 @@ static void update_insn_state_arm64(struct type_state *state,
 
 	/* Register to memory transfers */
 	if (!strncmp(dl->ins.name, "st", 2)) {
+		/* Check stack variables with offset */
+		if (dreg == fbreg || dreg == state->stack_reg) {
+			struct type_state_stack *stack;
+			int offset = dst->offset - fboff;
+
+			if (!has_reg_type(state, sreg) ||
+			    !state->regs[sreg].ok)
+				return;
+
+			tsr = &state->regs[sreg];
+
+			stack = find_stack_state(state, offset);
+			if (stack) {
+				if (!stack->compound)
+					set_stack_state(stack, offset, tsr->kind,
+							&tsr->type, tsr->offset);
+			} else {
+				findnew_stack_state(state, offset, tsr->kind,
+						    &tsr->type, tsr->offset);
+			}
+
+			pr_debug_dtp("str [%x] reg%d -> -%#x(stack)",
+				     insn_offset, sreg, -offset);
+			if (tsr->offset != 0) {
+				pr_debug_dtp(" reg%d offset %#x ->",
+					     sreg, tsr->offset);
+			}
+			pr_debug_type_name(&tsr->type, tsr->kind);
+			return;
+		}
+
 		/*
 		 * Store instructions do not change the register type,
 		 * but the base register must be updated for pre/post-index
