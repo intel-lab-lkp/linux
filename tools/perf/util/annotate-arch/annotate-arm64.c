@@ -3,7 +3,9 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <linux/zalloc.h>
+#include <linux/string.h>
 #include <regex.h>
 #include "../annotate.h"
 #include "../disasm.h"
@@ -12,6 +14,7 @@ struct arch_arm64 {
 	struct arch arch;
 	regex_t call_insn;
 	regex_t jump_insn;
+	regex_t ldst_insn; /* load and store instruction */
 };
 
 static bool arm64__check_multi_regs(const char *op)
@@ -114,6 +117,59 @@ static const struct ins_ops arm64_mov_ops = {
 	.scnprintf = mov__scnprintf,
 };
 
+static int arm64_ldst__parse(const struct arch *arch __maybe_unused,
+			     struct ins_operands *ops,
+			     struct map_symbol *ms __maybe_unused,
+			     struct disasm_line *dl __maybe_unused)
+{
+	char *s, *target;
+
+	/*
+	 * The part starting from the memory access annotation '[' is parsed
+	 * as 'target', while the part before it is parsed as 'source'.
+	 */
+	target = s = strchr(ops->raw, arch->objdump.memory_ref_char);
+	if (!s)
+		return -1;
+
+	while (s > ops->raw && *s != ',')
+		--s;
+
+	if (s == ops->raw)
+		return -1;
+
+	*s = '\0';
+	ops->source.raw = strdup(ops->raw);
+
+	*s = ',';
+	if (!ops->source.raw)
+		return -1;
+
+	ops->source.multi_regs = arm64__check_multi_regs(ops->source.raw);
+
+	ops->target.raw = strdup(target);
+	if (!ops->target.raw) {
+		zfree(&ops->source.raw);
+		return -1;
+	}
+	ops->target.mem_ref = true;
+	ops->target.multi_regs = arm64__check_multi_regs(ops->target.raw);
+
+	return 0;
+}
+
+static int arm64_ldst__scnprintf(const struct ins *ins, char *bf, size_t size,
+				 struct ins_operands *ops, int max_ins_name)
+{
+	return scnprintf(bf, size, "%-*s %s,%s", max_ins_name, ins->name,
+			 ops->source.raw, ops->target.raw);
+}
+
+static struct ins_ops arm64_ldst_ops = {
+	.parse	   = arm64_ldst__parse,
+	.scnprintf = arm64_ldst__scnprintf,
+};
+
 static const struct ins_ops *arm64__associate_instruction_ops(struct arch *arch, const char *name)
 {
 	struct arch_arm64 *arm = container_of(arch, struct arch_arm64, arch);
@@ -124,6 +180,8 @@ static const struct ins_ops *arm64__associate_instruction_ops(struct arch *arch,
 		ops = &jump_ops;
 	else if (!regexec(&arm->call_insn, name, 2, match, 0))
 		ops = &call_ops;
+	else if (!regexec(&arm->ldst_insn, name, 2, match, 0))
+		ops = &arm64_ldst_ops;
 	else if (!strcmp(name, "ret"))
 		ops = &ret_ops;
 	else
@@ -148,6 +206,8 @@ const struct arch *arch__new_arm64(const struct e_machine_and_e_flags *id,
 	arch->id = *id;
 	arch->objdump.comment_char	  = '/';
 	arch->objdump.skip_functions_char = '+';
+	arch->objdump.memory_ref_char	  = '[';
+	arch->objdump.imm_char		  = '#';
 	arch->associate_instruction_ops   = arm64__associate_instruction_ops;
 
 	/* bl, blr */
@@ -161,8 +221,20 @@ const struct arch *arch__new_arm64(const struct e_machine_and_e_flags *id,
 	if (err)
 		goto out_free_call;
 
+	/*
+	 * The ARM64 architecture has many variants of load/store instructions.
+	 * It is quite challenging to match all of them completely. Here, we
+	 * only match the prefixes of these instructions.
+	 */
+	err = regcomp(&arm->ldst_insn, "^(ld|st|cas|prf|swp)",
+		      REG_EXTENDED);
+	if (err)
+		goto out_free_jump;
+
 	return arch;
 
+out_free_jump:
+	regfree(&arm->jump_insn);
 out_free_call:
 	regfree(&arm->call_insn);
 out_free_arm:
