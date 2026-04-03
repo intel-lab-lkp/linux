@@ -66,10 +66,16 @@ int rnpgbe_send_notify(struct mucse_hw *hw,
 		       int mode)
 {
 	int err;
-	/* Keep switch struct to support more modes in the future */
+
 	switch (mode) {
 	case mucse_fw_powerup:
 		err = mucse_mbx_powerup(hw, enable);
+		break;
+	case mucse_fw_portup:
+		err = mucse_mbx_phyup(hw, enable);
+		break;
+	case mucse_fw_link_report_en:
+		err = mucse_mbx_link_report(hw, enable);
 		break;
 	default:
 		err = -EINVAL;
@@ -148,4 +154,27 @@ int rnpgbe_init_hw(struct mucse_hw *hw, int board_type)
 	mucse_init_mbx_params_pf(hw);
 
 	return 0;
+}
+
+/**
+ * rnpgbe_set_rx - Setup rx state
+ * @hw: hw information structure
+ * @enable: set rx on or off
+ *
+ * rnpgbe_set_rx setup rx enable
+ *
+ **/
+void rnpgbe_set_rx(struct mucse_hw *hw, bool enable)
+{
+	u32 value = mucse_hw_rd32(hw, GMAC_CONTROL);
+
+	if (enable)
+		value |= GMAC_CONTROL_RE;
+	else
+		value &= ~GMAC_CONTROL_RE;
+
+	mucse_hw_wr32(hw, GMAC_CONTROL, value);
+
+	value = mucse_hw_rd32(hw, GMAC_FRAME_FILTER);
+	mucse_hw_wr32(hw, GMAC_FRAME_FILTER, value | BIT(0));
 }
