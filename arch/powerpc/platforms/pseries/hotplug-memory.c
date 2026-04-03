@@ -213,9 +213,9 @@ static int dlpar_change_lmb_state(struct drmem_lmb *lmb, bool online)
 		return -EINVAL;
 	}
 
-	if (online && mem_block->dev.offline)
+	if (online && test_bit(DEV_FLAG_OFFLINE, &mem_block->dev.flags))
 		rc = device_online(&mem_block->dev);
-	else if (!online && !mem_block->dev.offline)
+	else if (!online && !test_bit(DEV_FLAG_OFFLINE, &mem_block->dev.flags))
 		rc = device_offline(&mem_block->dev);
 	else
 		rc = 0;

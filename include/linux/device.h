@@ -484,6 +484,8 @@ struct device_physical_location {
  *		architecture supports non-coherent devices.
  * @DEV_FLAG_OF_NODE_REUSED: Set if the device-tree node is shared with an
  *		ancestor device.
+ * @DEV_FLAG_OFFLINE_DISABLED: If set, the device is permanently online.
+ * @DEV_FLAG_OFFLINE: Set after successful invocation of bus type's .offline().
  */
 enum struct_device_flags {
 	DEV_FLAG_READY_TO_PROBE,
@@ -494,6 +496,8 @@ enum struct_device_flags {
 	DEV_FLAG_STATE_SYNCED,
 	DEV_FLAG_DMA_COHERENT,
 	DEV_FLAG_OF_NODE_REUSED,
+	DEV_FLAG_OFFLINE_DISABLED,
+	DEV_FLAG_OFFLINE,
 };
 
 /**
@@ -571,8 +575,6 @@ enum struct_device_flags {
  *              should be set by the subsystem / bus driver that discovered
  *              the device.
  *
- * @offline_disabled: If set, the device is permanently online.
- * @offline:	Set after successful invocation of bus type's .offline().
  * @flags:	DEV_FLAG_XXX flags. Use atomic bitfield operations to modify.
  *
  * At the lowest level, every device in a Linux system is represented by an
@@ -676,9 +678,6 @@ struct device {
 	struct device_physical_location *physical_location;
 
 	enum device_removable	removable;
-
-	bool			offline_disabled:1;
-	bool			offline:1;
 
 	unsigned long		flags;
 };
