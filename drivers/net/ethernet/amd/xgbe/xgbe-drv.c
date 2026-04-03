@@ -1312,14 +1312,17 @@ err_napi:
 
 static void xgbe_stop(struct xgbe_prv_data *pdata)
 {
-	struct xgbe_hw_if *hw_if = &pdata->hw_if;
 	struct xgbe_phy_if *phy_if = &pdata->phy_if;
-	struct xgbe_channel *channel;
 	struct net_device *netdev = pdata->netdev;
+	struct xgbe_hw_if *hw_if = &pdata->hw_if;
+	struct xgbe_channel *channel;
 	struct netdev_queue *txq;
 	unsigned int i;
 
 	DBGPR("-->xgbe_stop\n");
+
+	/* Wait for any active KR training to complete */
+	xgbe_wait_for_kr_training(pdata);
 
 	if (test_bit(XGBE_STOPPED, &pdata->dev_state))
 		return;

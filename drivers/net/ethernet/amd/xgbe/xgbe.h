@@ -203,6 +203,9 @@
 #define XGBE_LINK_TIMEOUT		5
 #define XGBE_KR_TRAINING_WAIT_ITER	50
 
+/* Extra slack time beyond AN timeout to cover KR training completion */
+#define XGBE_KRTR_TIME			100
+
 #define XGBE_SGMII_AN_LINK_DUPLEX	BIT(1)
 #define XGBE_SGMII_AN_LINK_SPEED	(BIT(2) | BIT(3))
 #define XGBE_SGMII_AN_LINK_SPEED_10	0x00
@@ -844,6 +847,7 @@ struct xgbe_phy_impl_if {
 	/* Pre/Post KR training enablement support */
 	void (*kr_training_pre)(struct xgbe_prv_data *);
 	void (*kr_training_post)(struct xgbe_prv_data *);
+	void (*kr_training_inprogress)(struct xgbe_prv_data *pdata);
 
 	/* SFP module related info */
 	int (*module_info)(struct xgbe_prv_data *pdata,
@@ -1014,6 +1018,9 @@ struct xgbe_prv_data {
 
 	/* RSS addressing mutex */
 	struct mutex rss_mutex;
+
+	/* Firmware mailbox mutex */
+	struct mutex mailbox_lock;
 
 	/* Flags representing xgbe_state */
 	unsigned long dev_state;
@@ -1252,6 +1259,12 @@ struct xgbe_prv_data {
 };
 
 /* Function prototypes*/
+static inline void xgbe_wait_for_kr_training(struct xgbe_prv_data *pdata)
+{
+	if (pdata->phy_if.phy_impl.kr_training_inprogress)
+		pdata->phy_if.phy_impl.kr_training_inprogress(pdata);
+}
+
 struct xgbe_prv_data *xgbe_alloc_pdata(struct device *);
 void xgbe_free_pdata(struct xgbe_prv_data *);
 void xgbe_set_counts(struct xgbe_prv_data *);

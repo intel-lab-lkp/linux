@@ -2095,14 +2095,88 @@ static void xgbe_phy_pll_ctrl(struct xgbe_prv_data *pdata, bool enable)
 	usleep_range(100, 200);
 }
 
+static bool xgbe_phy_port_is_inphi(struct xgbe_prv_data *pdata)
+{
+	struct xgbe_phy_data *phy_data = pdata->phy_data;
+
+	/* Re-driver models 4223 && 4227 are supported Inphi models */
+	return phy_data->redrv &&
+	       (phy_data->redrv_model == XGBE_PHY_REDRV_MODEL_4223 ||
+		phy_data->redrv_model == XGBE_PHY_REDRV_MODEL_4227);
+}
+
+static bool xgbe_kr_training_in_progress(struct xgbe_prv_data *pdata)
+{
+	struct xgbe_phy_data *phy_data = pdata->phy_data;
+	unsigned long kr_start, kr_end;
+
+	/* Only wait for KR training in specific conditions:
+	 *  - Inphi re-driver is present, OR
+	 *  - Currently in KR mode with autoneg enabled
+	 */
+	if (!xgbe_phy_port_is_inphi(pdata) &&
+	    !(phy_data->cur_mode == XGBE_MODE_KR &&
+	      pdata->phy.autoneg == AUTONEG_ENABLE))
+		return false;
+
+	/* If training hasn't completed, ensure it actually started */
+	kr_start = READ_ONCE(pdata->kr_start_time);
+	if (!kr_start)
+		return false;
+
+	/* Training is complete - no need to wait */
+	if (READ_ONCE(pdata->an_result) == XGBE_AN_COMPLETE)
+		return false;
+
+	kr_end = kr_start +
+		msecs_to_jiffies(XGBE_AN_MS_TIMEOUT + XGBE_KRTR_TIME);
+
+	/* If we're already past the training window, it's not "in progress" */
+	if (time_after(jiffies, kr_end))
+		return false;
+
+	return true;
+}
+
+static void xgbe_wait_for_kr_training_inprogress(struct xgbe_prv_data *pdata)
+{
+	unsigned long kr_end;
+
+	if (!xgbe_kr_training_in_progress(pdata))
+		return;
+
+	/* Don't block the auto-negotiation state machine work item */
+	if (current_work() == &pdata->an_work)
+		return;
+
+	kr_end = READ_ONCE(pdata->kr_start_time) +
+		msecs_to_jiffies(XGBE_AN_MS_TIMEOUT + XGBE_KRTR_TIME);
+
+	/* Poll until training completes or the training window expires */
+	while (time_before(jiffies, kr_end)) {
+		if (READ_ONCE(pdata->an_result) == XGBE_AN_COMPLETE)
+			break;
+
+		usleep_range(10000, 11000);
+	}
+}
+
 static void xgbe_phy_perform_ratechange(struct xgbe_prv_data *pdata,
-					enum xgbe_mb_cmd cmd, enum xgbe_mb_subcmd sub_cmd)
+					enum xgbe_mb_cmd cmd,
+					enum xgbe_mb_subcmd sub_cmd)
 {
 	unsigned int s0 = 0;
 	unsigned int wait;
 
 	/* Disable PLL re-initialization during FW command processing */
 	xgbe_phy_pll_ctrl(pdata, false);
+
+	/* Serialize firmware mailbox access.
+	 * Protects entire command sequence including busy check, PLL control,
+	 * and command execution. Uses explicit lock/unlock for compatibility
+	 * with goto-based cleanup (per cleanup.h guidelines).
+	 */
+	mutex_lock(&pdata->mailbox_lock);
 
 	/* Log if a previous command did not complete */
 	if (XP_IOREAD_BITS(pdata, XP_DRIVER_INT_RO, STATUS)) {
@@ -2115,7 +2189,7 @@ static void xgbe_phy_perform_ratechange(struct xgbe_prv_data *pdata,
 	XP_SET_BITS(s0, XP_DRIVER_SCRATCH_0, COMMAND, cmd);
 	XP_SET_BITS(s0, XP_DRIVER_SCRATCH_0, SUB_COMMAND, sub_cmd);
 
-	/* Issue the command */
+	/* Issue the firmware command */
 	XP_IOWRITE(pdata, XP_DRIVER_SCRATCH_0, s0);
 	XP_IOWRITE(pdata, XP_DRIVER_SCRATCH_1, 0);
 	XP_IOWRITE_BITS(pdata, XP_DRIVER_INT_REQ, REQUEST, 1);
@@ -2123,11 +2197,13 @@ static void xgbe_phy_perform_ratechange(struct xgbe_prv_data *pdata,
 	/* Wait for command to complete */
 	wait = XGBE_RATECHANGE_COUNT;
 	while (wait--) {
-		if (!XP_IOREAD_BITS(pdata, XP_DRIVER_INT_RO, STATUS))
+		if (!XP_IOREAD_BITS(pdata, XP_DRIVER_INT_RO, STATUS)) {
+			mutex_unlock(&pdata->mailbox_lock);
 			goto do_rx_adaptation;
-
+		}
 		usleep_range(1000, 2000);
 	}
+	mutex_unlock(&pdata->mailbox_lock);
 
 	netif_dbg(pdata, link, pdata->netdev,
 		  "firmware mailbox command did not complete\n");
@@ -3743,6 +3819,7 @@ void xgbe_init_function_ptrs_phy_v2(struct xgbe_phy_if *phy_if)
 
 	phy_impl->kr_training_pre	= xgbe_phy_kr_training_pre;
 	phy_impl->kr_training_post	= xgbe_phy_kr_training_post;
+	phy_impl->kr_training_inprogress = xgbe_wait_for_kr_training_inprogress;
 
 	phy_impl->module_info		= xgbe_phy_module_info;
 	phy_impl->module_eeprom		= xgbe_phy_module_eeprom;
