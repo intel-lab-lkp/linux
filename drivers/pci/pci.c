@@ -1875,6 +1875,16 @@ struct pci_saved_state *pci_store_saved_state(struct pci_dev *dev)
 	if (!dev->state_saved)
 		return NULL;
 
+	/*
+	 * The link state check here is racy since the link may transition at
+	 * any time. This is a best-effort attempt to avoid saving PCI state
+	 * when the link is already down.
+	 */
+	if (!pcie_link_is_active(dev)) {
+		dev->state_saved = false;
+		return NULL;
+	}
+
 	size = sizeof(*state) + sizeof(struct pci_cap_saved_data);
 
 	hlist_for_each_entry(tmp, &dev->saved_cap_space, next)
