@@ -16,6 +16,7 @@
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/memblock.h>
+#include <linux/of.h>
 
 #include <asm/prom.h>
 #include <asm/oplib.h>
@@ -23,6 +24,8 @@
 #include <asm/leon_amba.h>
 
 #include "prom.h"
+
+#define SPARC_PATH_COMPONENT_EXTRA 32
 
 void * __init prom_early_alloc(unsigned long size)
 {
@@ -52,9 +55,10 @@ void * __init prom_early_alloc(unsigned long size)
  * we walk up the tree until we discover a "device_type" property
  * we recognize and we go from there.
  */
-static void __init sparc32_path_component(struct device_node *dp, char *tmp_buf)
+static void __init sparc32_path_component(const char *name,
+					  struct device_node *dp,
+					  char *tmp_buf, size_t len)
 {
-	const char *name = of_get_property(dp, "name", NULL);
 	struct linux_prom_registers *regs;
 	struct property *rprop;
 
@@ -63,15 +67,14 @@ static void __init sparc32_path_component(struct device_node *dp, char *tmp_buf)
 		return;
 
 	regs = rprop->value;
-	sprintf(tmp_buf, "%s@%x,%x",
-		name,
-		regs->which_io, regs->phys_addr);
+	scnprintf(tmp_buf, len, "%s@%x,%x",
+		  name, regs->which_io, regs->phys_addr);
 }
 
 /* "name@slot,offset"  */
-static void __init sbus_path_component(struct device_node *dp, char *tmp_buf)
+static void __init sbus_path_component(const char *name, struct device_node *dp,
+				       char *tmp_buf, size_t len)
 {
-	const char *name = of_get_property(dp, "name", NULL);
 	struct linux_prom_registers *regs;
 	struct property *prop;
 
@@ -80,16 +83,14 @@ static void __init sbus_path_component(struct device_node *dp, char *tmp_buf)
 		return;
 
 	regs = prop->value;
-	sprintf(tmp_buf, "%s@%x,%x",
-		name,
-		regs->which_io,
-		regs->phys_addr);
+	scnprintf(tmp_buf, len, "%s@%x,%x",
+		  name, regs->which_io, regs->phys_addr);
 }
 
 /* "name@devnum[,func]" */
-static void __init pci_path_component(struct device_node *dp, char *tmp_buf)
+static void __init pci_path_component(const char *name, struct device_node *dp,
+				      char *tmp_buf, size_t len)
 {
-	const char *name = of_get_property(dp, "name", NULL);
 	struct linux_prom_pci_registers *regs;
 	struct property *prop;
 	unsigned int devfn;
@@ -101,21 +102,17 @@ static void __init pci_path_component(struct device_node *dp, char *tmp_buf)
 	regs = prop->value;
 	devfn = (regs->phys_hi >> 8) & 0xff;
 	if (devfn & 0x07) {
-		sprintf(tmp_buf, "%s@%x,%x",
-			name,
-			devfn >> 3,
-			devfn & 0x07);
+		scnprintf(tmp_buf, len, "%s@%x,%x",
+			  name, devfn >> 3, devfn & 0x07);
 	} else {
-		sprintf(tmp_buf, "%s@%x",
-			name,
-			devfn >> 3);
+		scnprintf(tmp_buf, len, "%s@%x", name, devfn >> 3);
 	}
 }
 
 /* "name@addrhi,addrlo" */
-static void __init ebus_path_component(struct device_node *dp, char *tmp_buf)
+static void __init ebus_path_component(const char *name, struct device_node *dp,
+				       char *tmp_buf, size_t len)
 {
-	const char *name = of_get_property(dp, "name", NULL);
 	struct linux_prom_registers *regs;
 	struct property *prop;
 
@@ -125,15 +122,15 @@ static void __init ebus_path_component(struct device_node *dp, char *tmp_buf)
 
 	regs = prop->value;
 
-	sprintf(tmp_buf, "%s@%x,%x",
-		name,
-		regs->which_io, regs->phys_addr);
+	scnprintf(tmp_buf, len, "%s@%x,%x",
+		  name, regs->which_io, regs->phys_addr);
 }
 
 /* "name@irq,addrlo" */
-static void __init ambapp_path_component(struct device_node *dp, char *tmp_buf)
+static void __init ambapp_path_component(const char *name,
+					 struct device_node *dp,
+					 char *tmp_buf, size_t len)
 {
-	const char *name = of_get_property(dp, "name", NULL);
 	struct amba_prom_registers *regs;
 	unsigned int *intr;
 	unsigned int reg0;
@@ -158,45 +155,46 @@ static void __init ambapp_path_component(struct device_node *dp, char *tmp_buf)
 	else
 		intr = prop->value;
 
-	sprintf(tmp_buf, "%s@%x,%x", name, *intr, reg0);
+	scnprintf(tmp_buf, len, "%s@%x,%x", name, *intr, reg0);
 }
 
-static void __init __build_path_component(struct device_node *dp, char *tmp_buf)
+static void __init __build_path_component(const char *name,
+					  struct device_node *dp,
+					  char *tmp_buf, size_t len)
 {
 	struct device_node *parent = dp->parent;
 
 	if (parent != NULL) {
 		if (of_node_is_type(parent, "pci") ||
 		    of_node_is_type(parent, "pciex"))
-			return pci_path_component(dp, tmp_buf);
+			return pci_path_component(name, dp, tmp_buf, len);
 		if (of_node_is_type(parent, "sbus"))
-			return sbus_path_component(dp, tmp_buf);
+			return sbus_path_component(name, dp, tmp_buf, len);
 		if (of_node_is_type(parent, "ebus"))
-			return ebus_path_component(dp, tmp_buf);
+			return ebus_path_component(name, dp, tmp_buf, len);
 		if (of_node_is_type(parent, "ambapp"))
-			return ambapp_path_component(dp, tmp_buf);
+			return ambapp_path_component(name, dp, tmp_buf, len);
 
 		/* "isa" is handled with platform naming */
 	}
 
 	/* Use platform naming convention.  */
-	return sparc32_path_component(dp, tmp_buf);
+	return sparc32_path_component(name, dp, tmp_buf, len);
 }
 
 char * __init build_path_component(struct device_node *dp)
 {
-	const char *name = of_get_property(dp, "name", NULL);
-	char tmp_buf[64], *n;
+	const char *name = "";
+	char *n;
 	size_t n_sz;
 
-	tmp_buf[0] = '\0';
-	__build_path_component(dp, tmp_buf);
-	if (tmp_buf[0] == '\0')
-		strscpy(tmp_buf, name);
-
-	n_sz = strlen(tmp_buf) + 1;
+	of_property_read_string(dp, "name", &name);
+	n_sz = strlen(name) + SPARC_PATH_COMPONENT_EXTRA;
 	n = prom_early_alloc(n_sz);
-	strscpy(n, tmp_buf, n_sz);
+	n[0] = '\0';
+	__build_path_component(name, dp, n, n_sz);
+	if (n[0] == '\0')
+		strscpy(n, name, n_sz);
 
 	return n;
 }
