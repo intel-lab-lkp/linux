@@ -270,6 +270,21 @@ static const struct config_entry config_table[] = {
 		.codec_hid =  &essx_83x6,
 	},
 	{
+		.flags = 0,
+		.device = PCI_DEVICE_ID_INTEL_HDA_CML_LP,
+		.dmi_table = (const struct dmi_system_id []) {
+			{
+				.ident = "Lenovo ThinkPad X1 Yoga Gen 5",
+				.matches = {
+					DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+					DMI_MATCH(DMI_PRODUCT_FAMILY,
+						  "ThinkPad X1 Yoga Gen 5"),
+				},
+			},
+			{}
+		}
+	},
+	{
 		.flags = FLAG_SOF | FLAG_SOF_ONLY_IF_DMIC_OR_SOUNDWIRE,
 		.device = PCI_DEVICE_ID_INTEL_HDA_CML_LP,
 	},
