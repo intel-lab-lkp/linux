@@ -9357,7 +9357,9 @@ static int cb_getattr_update_times(struct dentry *dentry, struct nfs4_delegation
 /**
  * nfsd4_deleg_getattr_conflict - Recall if GETATTR causes conflict
  * @rqstp: RPC transaction context
- * @dentry: dentry of inode to be checked for a conflict
+ * @path: used to get the inode and size of the file to be checked for a
+ * 	  conflict
+ * @stat: used to get the size of the file to be checked for a conflict
  * @pdp: returned WRITE delegation, if one was found
  *
  * This function is called when there is a conflict between a write
@@ -9372,17 +9374,18 @@ static int cb_getattr_update_times(struct dentry *dentry, struct nfs4_delegation
  * caller must put the reference.
  */
 __be32
-nfsd4_deleg_getattr_conflict(struct svc_rqst *rqstp, struct dentry *dentry,
-			     struct nfs4_delegation **pdp)
+nfsd4_deleg_getattr_conflict(struct svc_rqst *rqstp, struct path *path,
+			     struct kstat *stat, struct nfs4_delegation **pdp)
 {
 	struct nfsd_net *nn = net_generic(SVC_NET(rqstp), nfsd_net_id);
 	struct nfsd_thread_local_info *ntli = rqstp->rq_private;
+	struct inode *inode = d_inode(path->dentry);
 	struct file_lock_context *ctx;
 	struct nfs4_delegation *dp = NULL;
 	struct file_lease *fl;
 	struct nfs4_cb_fattr *ncf;
-	struct inode *inode = d_inode(dentry);
 	__be32 status;
+	int err;
 
 	ctx = locks_inode_context(inode);
 	if (!ctx)
@@ -9429,20 +9432,30 @@ nfsd4_deleg_getattr_conflict(struct svc_rqst *rqstp, struct dentry *dentry,
 		if (status != nfserr_jukebox ||
 		    !nfsd_wait_for_delegreturn(rqstp, inode))
 			goto out_status;
+		status = nfs_ok;
+		goto out_status;
 	}
-	if (!ncf->ncf_file_modified &&
-	    (ncf->ncf_initial_cinfo != ncf->ncf_cb_change ||
-	     ncf->ncf_cur_fsize != ncf->ncf_cb_fsize))
-		ncf->ncf_file_modified = true;
+	if (!ncf->ncf_file_modified) {
+		if (ncf->ncf_initial_cinfo != ncf->ncf_cb_change) {
+			ncf->ncf_file_modified = true;
+		} else {
+			err = vfs_getattr(path, stat, STATX_SIZE,
+					  AT_STATX_SYNC_AS_STAT);
+			if (err) {
+				status = nfserrno(err);
+				goto out_status;
+			}
+			if (stat->size != ncf->ncf_cb_fsize)
+				ncf->ncf_file_modified = true;
+		}
+	}
 	if (ncf->ncf_file_modified) {
-		int err;
-
 		/*
 		 * Per section 10.4.3 of RFC 8881, the server would
 		 * not update the file's metadata with the client's
 		 * modified size
 		 */
-		err = cb_getattr_update_times(dentry, dp);
+		err = cb_getattr_update_times(path->dentry, dp);
 		if (err) {
 			status = nfserrno(err);
 			goto out_status;
