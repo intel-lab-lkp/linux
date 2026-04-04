@@ -2883,10 +2883,30 @@ static inline void bpf_skops_init_skb(struct bpf_sock_ops_kern *skops,
 	skops->skb = skb;
 	skops->skb_data_end = skb->data + end_offset;
 }
+static inline void tcp_bpf_tx_timestamp(struct sock *sk)
+{
+	struct sk_buff *skb;
+
+	if (!cgroup_bpf_enabled(CGROUP_SOCK_OPS) ||
+	    !SK_BPF_CB_FLAG_TEST(sk, SK_BPF_CB_TX_TIMESTAMPING))
+		return;
+
+	skb = tcp_write_queue_tail(sk);
+	if (!skb)
+		return;
+
+	if (!(skb_shinfo(skb)->tx_flags & SKBTX_BPF))
+		bpf_skops_tx_timestamping(sk, skb, BPF_SOCK_OPS_TSTAMP_SENDMSG_CB);
+	else
+		skb_shinfo(skb)->tskey = TCP_SKB_CB(skb)->seq + skb->len - 1;
+}
 #else
 static inline void bpf_skops_init_skb(struct bpf_sock_ops_kern *skops,
 				      struct sk_buff *skb,
 				      unsigned int end_offset)
+{
+}
+static inline void tcp_bpf_tx_timestamp(struct sock *sk)
 {
 }
 #endif
