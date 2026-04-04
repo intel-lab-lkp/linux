@@ -148,10 +148,12 @@ static void __init pci_clock_check(void)
 		return;
 
 	if (pciclock != 33) {
+		char arg[24];
+
 		pr_warn("WARNING: PCI clock is %dMHz, setting pci_clock\n",
 			pciclock);
-		argptr += strlen(argptr);
-		sprintf(argptr, " pci_clock=%d", pciclock);
+		snprintf(arg, sizeof(arg), " pci_clock=%d", pciclock);
+		strlcat(argptr, arg, COMMAND_LINE_SIZE);
 		if (pciclock < 20 || pciclock > 66)
 			pr_warn("WARNING: IDE timing calculations will be "
 			        "incorrect\n");
