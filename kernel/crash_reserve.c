@@ -252,15 +252,47 @@ next:
 	return ck_cmdline;
 }
 
+/*
+ * This function parses command lines in the format
+ *
+ *   crashkernel=ramsize-range:size[,...][@offset],>boundary
+ */
+static void __init parse_crashkernel_boundary(char *ck_cmdline,
+					unsigned long long *boundary)
+{
+	char *cur = ck_cmdline, *next;
+	char *first_gt = false;
+
+	first_gt = strchr(cur, '>');
+	if (!first_gt)
+		return;
+
+	cur = first_gt + 1;
+	if (*cur == '\0' || *cur == ' ' || *cur == ',') {
+		pr_warn("crashkernel: '>' specified without boundary size, ignoring\n");
+		return;
+	}
+
+	*boundary = memparse(cur, &next);
+	if (cur == next) {
+		pr_warn("crashkernel: invalid boundary size after '>'\n");
+		return;
+	}
+}
+
 static int __init __parse_crashkernel(char *cmdline,
 			     unsigned long long system_ram,
 			     unsigned long long *crash_size,
 			     unsigned long long *crash_base,
-			     const char *suffix)
+			     const char *suffix,
+			     bool *high,
+			     unsigned long long *low_size)
 {
 	char *first_colon, *first_space;
 	char *ck_cmdline;
 	char *name = "crashkernel=";
+	unsigned long long boundary = 0;
+	int ret;
 
 	BUG_ON(!crash_size || !crash_base);
 	*crash_size = 0;
@@ -281,9 +313,19 @@ static int __init __parse_crashkernel(char *cmdline,
 	 */
 	first_colon = strchr(ck_cmdline, ':');
 	first_space = strchr(ck_cmdline, ' ');
-	if (first_colon && (!first_space || first_colon < first_space))
-		return parse_crashkernel_mem(ck_cmdline, system_ram,
+	if (first_colon && (!first_space || first_colon < first_space)) {
+		ret = parse_crashkernel_mem(ck_cmdline, system_ram,
 				crash_size, crash_base);
+
+		/* Handle optional ',>boundary' condition for range ':' syntax only. */
+		parse_crashkernel_boundary(ck_cmdline, &boundary);
+		if (!ret && *crash_size > boundary) {
+			*high = true;
+			*low_size = DEFAULT_CRASH_KERNEL_LOW_SIZE;
+		}
+
+		return ret;
+	}
 
 	return parse_crashkernel_simple(ck_cmdline, crash_size, crash_base);
 }
@@ -308,7 +350,7 @@ int __init parse_crashkernel(char *cmdline,
 
 	/* crashkernel=X[@offset] */
 	ret = __parse_crashkernel(cmdline, system_ram, crash_size,
-				crash_base, NULL);
+				crash_base, NULL, high, low_size);
 #ifdef CONFIG_ARCH_HAS_GENERIC_CRASHKERNEL_RESERVATION
 	/*
 	 * If non-NULL 'high' passed in and no normal crashkernel
@@ -316,7 +358,7 @@ int __init parse_crashkernel(char *cmdline,
 	 */
 	if (high && ret == -ENOENT) {
 		ret = __parse_crashkernel(cmdline, 0, crash_size,
-				crash_base, suffix_tbl[SUFFIX_HIGH]);
+				crash_base, suffix_tbl[SUFFIX_HIGH], high, low_size);
 		if (ret || !*crash_size)
 			return -EINVAL;
 
@@ -325,7 +367,7 @@ int __init parse_crashkernel(char *cmdline,
 		 * is not allowed.
 		 */
 		ret = __parse_crashkernel(cmdline, 0, low_size,
-				crash_base, suffix_tbl[SUFFIX_LOW]);
+				crash_base, suffix_tbl[SUFFIX_LOW], high, low_size);
 		if (ret == -ENOENT) {
 			*low_size = DEFAULT_CRASH_KERNEL_LOW_SIZE;
 			ret = 0;
@@ -342,7 +384,7 @@ int __init parse_crashkernel(char *cmdline,
 	 */
 	if (cma_size)
 		__parse_crashkernel(cmdline, 0, cma_size,
-			&cma_base, suffix_tbl[SUFFIX_CMA]);
+			&cma_base, suffix_tbl[SUFFIX_CMA], high, low_size);
 #endif
 	if (!*crash_size)
 		ret = -EINVAL;

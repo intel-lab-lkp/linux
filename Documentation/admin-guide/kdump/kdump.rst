@@ -293,7 +293,28 @@ crashkernel syntax
        2) if the RAM size is between 512M and 2G (exclusive), then reserve 64M
        3) if the RAM size is larger than 2G, then reserve 128M
 
-3) crashkernel=size,high and crashkernel=size,low
+3) range1:size1[,range2:size2,...][@offset],>boundary
+   Optionally, the range list can be followed by a conditional suffix
+   `,>boundary`. When the selected crashkernel size matches the
+   condition, the kernel will reserve memory using the same policy as
+   `crashkernel=size,high` (i.e. prefer high memory first and reserve the
+   default low memory area).
+
+   The syntax is::
+
+        crashkernel=<range1>:<size1>[,<range2>:<size2>,...][@offset],>boundary
+        range=start-[end]
+
+   For example::
+
+        crashkernel=2G-16G:512M,16G-:1G,>512M
+
+   This would mean:
+       1) if the RAM size is between 2G and 16G (exclusive), then reserve 512M.
+       2) if the RAM size is larger than 16G, allocation will behave like
+          `crashkernel=1G,high`.
+
+4) crashkernel=size,high and crashkernel=size,low
 
    If memory above 4G is preferred, crashkernel=size,high can be used to
    fulfill that. With it, physical memory is allowed to be allocated from top,
@@ -311,7 +332,7 @@ crashkernel syntax
 
             crashkernel=0,low
 
-4) crashkernel=size,cma
+5) crashkernel=size,cma
 
 	Reserve additional crash kernel memory from CMA. This reservation is
 	usable by the first system's userspace memory and kernel movable

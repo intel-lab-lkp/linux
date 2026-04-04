@@ -1087,7 +1087,7 @@ Kernel parameters
 			4G when '@offset' hasn't been specified.
 			See Documentation/admin-guide/kdump/kdump.rst for further details.
 
-	crashkernel=range1:size1[,range2:size2,...][@offset]
+	crashkernel=range1:size1[,range2:size2,...][@offset][,>boundary]
 			[KNL] Same as above, but depends on the memory
 			in the running system. The syntax of range is
 			start-[end] where start and end are both
