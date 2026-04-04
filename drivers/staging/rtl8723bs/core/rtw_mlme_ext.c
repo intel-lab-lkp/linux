@@ -4510,9 +4510,6 @@ void report_join_res(struct adapter *padapter, int res)
 
 
 	rtw_enqueue_cmd(pcmdpriv, pcmd_obj);
-
-	return;
-
 }
 
 void report_wmm_edca_update(struct adapter *padapter)
