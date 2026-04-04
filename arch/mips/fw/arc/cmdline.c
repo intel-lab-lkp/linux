@@ -51,18 +51,20 @@ static char __init *move_firmware_args(int argc, LONG *argv, char *cp)
 			len = strlen(used_arc[i][0]);
 
 			if (!strncmp(prom_argv(actr), used_arc[i][0], len)) {
-			/* Ok, we want it. First append the replacement... */
-				strcat(cp, used_arc[i][1]);
-				cp += strlen(used_arc[i][1]);
+				/* Ok, we want it. First append the replacement... */
+				strlcat(arcs_cmdline, used_arc[i][1],
+					COMMAND_LINE_SIZE);
+				cp = arcs_cmdline + strlen(arcs_cmdline);
 				/* ... and now the argument */
 				s = strchr(prom_argv(actr), '=');
 				if (s) {
 					s++;
-					len = strlen(s);
-					memcpy(cp, s, len + 1);
-					cp += len;
+					strlcat(arcs_cmdline, s,
+						COMMAND_LINE_SIZE);
+					cp = arcs_cmdline + strlen(arcs_cmdline);
 				}
-				*cp++ = ' ';
+				strlcat(arcs_cmdline, " ", COMMAND_LINE_SIZE);
+				cp = arcs_cmdline + strlen(arcs_cmdline);
 				break;
 			}
 		}
@@ -95,10 +97,9 @@ void __init prom_init_cmdline(int argc, LONG *argv)
 		}
 
 		/* Ok, we want it. */
-		len = strlen(prom_argv(actr));
-		memcpy(cp, prom_argv(actr), len + 1);
-		cp += len;
-		*cp++ = ' ';
+		strlcat(arcs_cmdline, prom_argv(actr), COMMAND_LINE_SIZE);
+		strlcat(arcs_cmdline, " ", COMMAND_LINE_SIZE);
+		cp = arcs_cmdline + strlen(arcs_cmdline);
 
 	pic_cont:
 		actr++;
