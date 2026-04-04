@@ -432,6 +432,7 @@ static bool mem_avoid_overlap(struct mem_vector *img,
 		}
 
 		if (ptr->type == SETUP_INDIRECT &&
+		    ptr->len >= sizeof(struct setup_indirect) &&
 		    ((struct setup_indirect *)ptr->data)->type != SETUP_INDIRECT) {
 			avoid.start = ((struct setup_indirect *)ptr->data)->addr;
 			avoid.size = ((struct setup_indirect *)ptr->data)->len;
