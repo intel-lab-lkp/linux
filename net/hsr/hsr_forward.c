@@ -403,7 +403,8 @@ static void hsr_deliver_master(struct sk_buff *skb, struct net_device *dev,
 	int res, recv_len;
 
 	was_multicast_frame = (skb->pkt_type == PACKET_MULTICAST);
-	hsr_addr_subst_source(node_src, skb);
+	if (node_src)
+		hsr_addr_subst_source(node_src, skb);
 	skb_pull(skb, ETH_HLEN);
 	recv_len = skb->len;
 	res = netif_rx(skb);
@@ -545,7 +546,7 @@ static void hsr_forward_do(struct hsr_frame_info *frame)
 		/* Don't send frame over port where it has been sent before.
 		 * Also for SAN, this shouldn't be done.
 		 */
-		if (!frame->is_from_san &&
+		if (frame->node_src && !frame->is_from_san &&
 		    hsr->proto_ops->register_frame_out &&
 		    hsr->proto_ops->register_frame_out(port, frame))
 			continue;
@@ -688,21 +689,25 @@ static int fill_frame_info(struct hsr_frame_info *frame,
 		return -EINVAL;
 
 	memset(frame, 0, sizeof(*frame));
+	frame->port_rcv = port;
 	frame->is_supervision = is_supervision_frame(port->hsr, skb);
 	if (frame->is_supervision && hsr->redbox)
 		frame->is_proxy_supervision =
 			is_proxy_supervision_frame(port->hsr, skb);
+
+	ethhdr = (struct ethhdr *)skb_mac_header(skb);
+	check_local_dest(port->hsr, skb, frame);
 
 	n_db = &hsr->node_db;
 	if (port->type == HSR_PT_INTERLINK)
 		n_db = &hsr->proxy_node_db;
 
 	frame->node_src = hsr_get_node(port, n_db, skb,
-				       frame->is_supervision, port->type);
-	if (!frame->node_src)
-		return -1; /* Unknown node and !is_supervision, or no mem */
+				       frame->is_supervision, port->type,
+				       !frame->is_local_exclusive);
+	if (!frame->node_src && !frame->is_local_exclusive)
+		return -1;
 
-	ethhdr = (struct ethhdr *)skb_mac_header(skb);
 	frame->is_vlan = false;
 	proto = ethhdr->h_proto;
 
@@ -720,12 +725,9 @@ static int fill_frame_info(struct hsr_frame_info *frame,
 	}
 
 	frame->is_from_san = false;
-	frame->port_rcv = port;
 	ret = hsr->proto_ops->fill_frame_info(proto, skb, frame);
 	if (ret)
 		return ret;
-
-	check_local_dest(port->hsr, skb, frame);
 
 	return 0;
 }
@@ -739,7 +741,8 @@ void hsr_forward_skb(struct sk_buff *skb, struct hsr_port *port)
 	if (fill_frame_info(&frame, skb, port) < 0)
 		goto out_drop;
 
-	hsr_register_frame_in(frame.node_src, port, frame.sequence_nr);
+	if (frame.node_src)
+		hsr_register_frame_in(frame.node_src, port, frame.sequence_nr);
 	hsr_forward_do(&frame);
 	rcu_read_unlock();
 	/* Gets called for ingress frames as well as egress from master port.

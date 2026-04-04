@@ -33,7 +33,7 @@ void hsr_del_self_node(struct hsr_priv *hsr);
 void hsr_del_nodes(struct list_head *node_db);
 struct hsr_node *hsr_get_node(struct hsr_port *port, struct list_head *node_db,
 			      struct sk_buff *skb, bool is_sup,
-			      enum hsr_port_type rx_port);
+			      enum hsr_port_type rx_port, bool learn);
 void hsr_handle_sup_frame(struct hsr_frame_info *frame);
 bool hsr_addr_is_self(struct hsr_priv *hsr, unsigned char *addr);
 bool hsr_addr_is_redbox(struct hsr_priv *hsr, unsigned char *addr);

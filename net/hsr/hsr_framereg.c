@@ -255,7 +255,7 @@ void prp_update_san_info(struct hsr_node *node, bool is_sup)
  */
 struct hsr_node *hsr_get_node(struct hsr_port *port, struct list_head *node_db,
 			      struct sk_buff *skb, bool is_sup,
-			      enum hsr_port_type rx_port)
+			      enum hsr_port_type rx_port, bool learn)
 {
 	struct hsr_priv *hsr = port->hsr;
 	struct hsr_node *node;
@@ -303,6 +303,9 @@ struct hsr_node *hsr_get_node(struct hsr_port *port, struct list_head *node_db,
 		if (!rct && rx_port != HSR_PT_MASTER)
 			san = true;
 	}
+
+	if (!learn)
+		return NULL;
 
 	return hsr_add_node(hsr, node_db, ethhdr->h_source, san, rx_port);
 }
