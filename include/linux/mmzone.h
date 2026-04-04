@@ -328,6 +328,7 @@ enum node_stat_item {
 #endif
 	NR_BALLOON_PAGES,
 	NR_KERNEL_FILE_PAGES,
+	NR_PERCPU_B,
 	NR_VM_NODE_STAT_ITEMS
 };
 
@@ -365,7 +366,8 @@ static __always_inline bool vmstat_item_in_bytes(int idx)
 	 * byte-precise.
 	 */
 	return (idx == NR_SLAB_RECLAIMABLE_B ||
-		idx == NR_SLAB_UNRECLAIMABLE_B);
+		idx == NR_SLAB_UNRECLAIMABLE_B ||
+		idx == NR_PERCPU_B);
 }
 
 /*

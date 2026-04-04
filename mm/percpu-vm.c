@@ -55,7 +55,8 @@ static void pcpu_free_pages(struct pcpu_chunk *chunk,
 			    struct page **pages, int page_start, int page_end)
 {
 	unsigned int cpu;
-	int i;
+	int nr_pages = page_end - page_start;
+	int i, nid;
 
 	for_each_possible_cpu(cpu) {
 		for (i = page_start; i < page_end; i++) {
@@ -65,6 +66,10 @@ static void pcpu_free_pages(struct pcpu_chunk *chunk,
 				__free_page(page);
 		}
 	}
+
+	for_each_node(nid)
+		mod_node_page_state(NODE_DATA(nid), NR_PERCPU_B,
+				-1L * nr_pages * nr_cpus_node(nid) * PAGE_SIZE);
 }
 
 /**
@@ -84,7 +89,8 @@ static int pcpu_alloc_pages(struct pcpu_chunk *chunk,
 			    gfp_t gfp)
 {
 	unsigned int cpu, tcpu;
-	int i;
+	int nr_pages = page_end - page_start;
+	int i, nid;
 
 	gfp |= __GFP_HIGHMEM;
 
@@ -97,6 +103,10 @@ static int pcpu_alloc_pages(struct pcpu_chunk *chunk,
 				goto err;
 		}
 	}
+
+	for_each_node(nid)
+		mod_node_page_state(NODE_DATA(nid), NR_PERCPU_B,
+				    nr_pages * nr_cpus_node(nid) * PAGE_SIZE);
 	return 0;
 
 err:

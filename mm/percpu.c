@@ -1632,6 +1632,45 @@ static bool pcpu_memcg_pre_alloc_hook(size_t size, gfp_t gfp,
 	return true;
 }
 
+/*
+ * pcpu_mod_memcg_lruvec - update per-node memcg percpu stats
+ * @objcg: object cgroup to charge
+ * @size: size of pcpu allocation
+ * @sign: 1 for charge, -1 for uncharge
+ *
+ * Charge percpu memory across NUMA nodes proportional to per-node CPU count.
+ * Includes the obj_cgroup pointer overhead (see pcpu_obj_full_size) from the
+ * chunk's obj_exts array, but spreads proportionally across all nodes to
+ * avoid attributing it to a single node.
+ *
+ * The "extra" size calculation is best-effort but deterministic.
+ * Charges will equal uncharges, although there may be small discrepancies
+ * due to rounding up/down.
+ */
+static void pcpu_mod_memcg_lruvec(struct obj_cgroup *objcg, size_t size,
+				  int sign)
+{
+	struct mem_cgroup *memcg;
+	size_t extra = size / PCPU_MIN_ALLOC_SIZE * sizeof(struct obj_cgroup *);
+	int nid;
+
+	memcg = obj_cgroup_memcg(objcg);
+	for_each_node(nid) {
+		struct lruvec *lruvec;
+		unsigned int nr_cpus = nr_cpus_node(nid);
+		long charge;
+
+		if (!nr_cpus)
+			continue;
+
+		charge = nr_cpus * size +
+			 mult_frac(extra, nr_cpus, num_possible_cpus());
+
+		lruvec = mem_cgroup_lruvec(memcg, NODE_DATA(nid));
+		mod_memcg_lruvec_state(lruvec, NR_PERCPU_B, sign * charge);
+	}
+}
+
 static void pcpu_memcg_post_alloc_hook(struct obj_cgroup *objcg,
 				       struct pcpu_chunk *chunk, int off,
 				       size_t size)
@@ -1644,8 +1683,7 @@ static void pcpu_memcg_post_alloc_hook(struct obj_cgroup *objcg,
 		chunk->obj_exts[off >> PCPU_MIN_ALLOC_SHIFT].cgroup = objcg;
 
 		rcu_read_lock();
-		mod_memcg_state(obj_cgroup_memcg(objcg), MEMCG_PERCPU_B,
-				pcpu_obj_full_size(size));
+		pcpu_mod_memcg_lruvec(objcg, size, 1);
 		rcu_read_unlock();
 	} else {
 		obj_cgroup_uncharge(objcg, pcpu_obj_full_size(size));
@@ -1667,8 +1705,7 @@ static void pcpu_memcg_free_hook(struct pcpu_chunk *chunk, int off, size_t size)
 	obj_cgroup_uncharge(objcg, pcpu_obj_full_size(size));
 
 	rcu_read_lock();
-	mod_memcg_state(obj_cgroup_memcg(objcg), MEMCG_PERCPU_B,
-			-pcpu_obj_full_size(size));
+	pcpu_mod_memcg_lruvec(objcg, size, -1);
 	rcu_read_unlock();
 
 	obj_cgroup_put(objcg);

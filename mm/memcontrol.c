@@ -377,6 +377,7 @@ static const unsigned int memcg_node_stat_items[] = {
 	NR_UNEVICTABLE,
 	NR_SLAB_RECLAIMABLE_B,
 	NR_SLAB_UNRECLAIMABLE_B,
+	NR_PERCPU_B,
 	WORKINGSET_REFAULT_ANON,
 	WORKINGSET_REFAULT_FILE,
 	WORKINGSET_ACTIVATE_ANON,
@@ -428,7 +429,6 @@ static const unsigned int memcg_node_stat_items[] = {
 static const unsigned int memcg_stat_items[] = {
 	MEMCG_SWAP,
 	MEMCG_SOCK,
-	MEMCG_PERCPU_B,
 	MEMCG_KMEM,
 	MEMCG_ZSWAP_B,
 	MEMCG_ZSWAPPED,
@@ -926,9 +926,8 @@ static void __mod_memcg_lruvec_state(struct mem_cgroup_per_node *pn,
 	put_cpu();
 }
 
-static void mod_memcg_lruvec_state(struct lruvec *lruvec,
-				     enum node_stat_item idx,
-				     int val)
+void mod_memcg_lruvec_state(struct lruvec *lruvec, enum node_stat_item idx,
+			    int val)
 {
 	struct pglist_data *pgdat = lruvec_pgdat(lruvec);
 	struct mem_cgroup_per_node *pn;
@@ -942,6 +941,7 @@ static void mod_memcg_lruvec_state(struct lruvec *lruvec,
 
 	get_non_dying_memcg_end();
 }
+EXPORT_SYMBOL(mod_memcg_lruvec_state);
 
 /**
  * mod_lruvec_state - update lruvec memory statistics
@@ -1541,7 +1541,7 @@ static const struct memory_stat memory_stats[] = {
 	{ "kernel_stack",		NR_KERNEL_STACK_KB		},
 	{ "pagetables",			NR_PAGETABLE			},
 	{ "sec_pagetables",		NR_SECONDARY_PAGETABLE		},
-	{ "percpu",			MEMCG_PERCPU_B			},
+	{ "percpu",			NR_PERCPU_B			},
 	{ "sock",			MEMCG_SOCK			},
 	{ "vmalloc",			NR_VMALLOC			},
 	{ "shmem",			NR_SHMEM			},
@@ -1603,7 +1603,7 @@ static const struct memory_stat memory_stats[] = {
 static int memcg_page_state_unit(int item)
 {
 	switch (item) {
-	case MEMCG_PERCPU_B:
+	case NR_PERCPU_B:
 	case MEMCG_ZSWAP_B:
 	case NR_SLAB_RECLAIMABLE_B:
 	case NR_SLAB_UNRECLAIMABLE_B:
