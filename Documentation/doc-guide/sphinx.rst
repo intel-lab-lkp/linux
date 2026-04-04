@@ -194,6 +194,77 @@ subdirectories you can specify.
 
 To remove the generated documentation, run ``make cleandocs``.
 
+Advanced Search Integration
+---------------------------
+
+The advanced search integration is a kernel-specific Sphinx
+customization that overrides the stock search page and sidebar
+quick-search template to provide a more capable search interface for
+kernel documentation while still building on the same underlying
+Sphinx search primitives.
+
+The advanced search integration is implemented by three files:
+
+* ``Documentation/sphinx/templates/search.html`` for the custom search page;
+* ``Documentation/sphinx/templates/searchbox.html`` for the sidebar link;
+* ``Documentation/sphinx-static/kernel-search.js`` for the client-side
+  search runtime.
+
+The page relies on a strict boot order. ``language_data.js`` must load
+before ``kernel-search.js``, and ``searchindex.js`` must load afterwards
+to populate the shared search index consumed by the runtime.
+
+The runtime works with all supported Sphinx versions, but the available
+result kinds differ by the metadata present in ``searchindex.js``:
+
+* Sphinx ``3.4.3`` through ``5.1.x`` provide ``Symbols`` and ``Pages``.
+  ``Sections`` and ``Index entries`` are unavailable because those
+  versions do not emit the ``alltitles`` and ``indexentries`` fields.
+* Sphinx ``5.2.0`` and newer provide the full result set: ``Symbols``,
+  ``Sections``, ``Index entries``, and ``Pages``.
+
+Runtime behavior is intentionally bounded, but still fully client-side:
+
+* ``searchindex.js`` is loaded into the browser before any query can run,
+  and broad full-site builds can still increase page-load and query latency.
+* The ``Pages`` group starts collapsed. Page-summary fetches begin only
+  after the user opens that group.
+* Page summaries are fetched on demand after the user opens the
+  ``Pages`` group. Browsers with ``IntersectionObserver`` keep that work
+  near the viewport, with at most four concurrent requests, an
+  eight-second timeout, and a limit of fifty summarized page results per
+  query.
+* Successful summary fetches are cached for the current page session.
+  Aborted or failed fetches are not cached, and the result remains usable
+  as a normal link even when its summary is unavailable.
+
+If full-site ``searchindex.js`` size becomes the bottleneck, that needs a
+larger follow-up design such as precomputed summary sidecars, sharded
+search data, or a server-backed search service. The client-side runtime
+described here does not solve that class of scaling limit.
+
+For a quick local regression check, run::
+
+	python3 tools/docs/test_advanced_search.py
+
+It builds a small documentation subset and verifies the generated search
+page, copied static assets, and the search index contract used by the
+client-side search runtime.
+
+To verify full-site support for a change, also run at least one full
+``make htmldocs`` build and manually exercise the generated ``search.html``
+page.
+
+To disable the feature and return to the theme's default Quick Search setup,
+remove the two template overrides:
+
+* ``Documentation/sphinx/templates/search.html``
+* ``Documentation/sphinx/templates/searchbox.html``
+
+That restores the native Sphinx search page and the default sidebar quick
+search box. ``kernel-search.js`` can then be removed as follow-up cleanup,
+but removing the two template overrides is enough to roll back behavior.
+
 .. [#ink] Having ``inkscape(1)`` from Inkscape (https://inkscape.org)
 	  as well would improve the quality of images embedded in PDF
 	  documents, especially for kernel releases 5.18 and later.

@@ -7656,6 +7656,16 @@ X:	Documentation/power/
 X:	Documentation/spi/
 X:	Documentation/userspace-api/media/
 
+DOCUMENTATION ADVANCED SEARCH
+R:	Rito <rito@ritovision.com>
+L:	linux-doc@vger.kernel.org
+S:	Maintained
+F:	Documentation/sphinx-static/kernel-search.js
+F:	Documentation/sphinx-static/custom.css
+F:	Documentation/sphinx/templates/search.html
+F:	Documentation/sphinx/templates/searchbox.html
+F:	tools/docs/test_advanced_search.py
+
 DOCUMENTATION PROCESS
 M:	Jonathan Corbet <corbet@lwn.net>
 R:	Shuah Khan <skhan@linuxfoundation.org>

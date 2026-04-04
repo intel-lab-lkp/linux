@@ -195,3 +195,291 @@ a.manpage {
 	font-weight: bold;
 	font-family: "Courier New", Courier, monospace;
 }
+
+/* Keep the quick search box as-is and add a secondary advanced search link. */
+div.sphinxsidebar p.search-advanced-link {
+    margin: 0.5em 0 0 0;
+    font-size: 0.95em;
+}
+
+/*
+ * The enhanced search page keeps the stock GET workflow but adds
+ * filter controls and grouped results.
+ */
+form.kernel-search-form {
+    margin-bottom: 2em;
+}
+
+/* Search bar layout: query input and submit action row. */
+div.kernel-search-query-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1em;
+    align-items: end;
+}
+
+div.kernel-search-query-field {
+    flex: 1 1 26em;
+}
+
+div.kernel-search-query-field label,
+div.kernel-search-field label,
+fieldset.kernel-search-kind-filters legend {
+    display: block;
+    font-weight: bold;
+    margin-bottom: 0.35em;
+}
+
+div.kernel-search-query-field input[type="text"],
+div.kernel-search-field select {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+div.kernel-search-query-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75em;
+}
+
+span.kernel-search-progress {
+    min-height: 1.2em;
+    color: #666;
+}
+
+/* Collapsible advanced-filter panel. */
+details.kernel-search-advanced {
+    margin-top: 1em;
+    padding: 0.75em 1em 1em 1em;
+    border: 1px solid #cccccc;
+    background: #f7f7f7;
+}
+
+details.kernel-search-advanced summary {
+    cursor: pointer;
+    font-weight: bold;
+}
+
+/* Responsive grid for advanced search filters. */
+div.kernel-search-advanced-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(16em, 1fr));
+    gap: 1em 1.25em;
+    margin-top: 1em;
+}
+
+fieldset.kernel-search-kind-filters {
+    margin: 0;
+    padding: 0;
+    border: none;
+}
+
+label.kernel-search-checkbox {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5em;
+    margin-bottom: 0.35em;
+}
+
+/* Tabbed result shell, cards, and lazy-loaded page summaries. */
+div.kernel-search-results {
+    margin-top: 1.5em;
+}
+
+p.kernel-search-status {
+    margin-bottom: 1.5em;
+}
+
+div.kernel-search-results-shell {
+    display: flex;
+    flex-direction: column;
+    max-height: min(78vh, 56rem);
+    border: 1px solid #d8d8d8;
+    border-radius: 0.75rem;
+    background: #fbfbfb;
+    overflow: hidden;
+}
+
+div.kernel-search-tab-strip {
+    position: relative;
+    flex: 0 0 auto;
+    border-bottom: 1px solid #dddddd;
+    background: #ffffff;
+}
+
+div.kernel-search-tab-strip::before,
+div.kernel-search-tab-strip::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1.25rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 120ms ease-in-out;
+    z-index: 2;
+}
+
+div.kernel-search-tab-strip::before {
+    left: 0;
+    background: linear-gradient(90deg, rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0));
+}
+
+div.kernel-search-tab-strip::after {
+    right: 0;
+    background: linear-gradient(270deg, rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0));
+}
+
+div.kernel-search-tab-strip.has-left-shadow::before,
+div.kernel-search-tab-strip.has-right-shadow::after {
+    opacity: 1;
+}
+
+div.kernel-search-tab-scroller {
+    display: flex;
+    gap: 0.45rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 0.85rem 1rem 0;
+    scrollbar-width: thin;
+}
+
+div.kernel-search-panel-tools {
+    flex: 0 0 auto;
+    padding: 0.8rem 1rem 0.6rem;
+    border-bottom: 1px solid #e6e6e6;
+    background: #fbfbfb;
+}
+
+label.kernel-search-summary-limit {
+    margin-bottom: 0;
+}
+
+button.kernel-search-tab {
+    appearance: none;
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: 0.6rem 0.6rem 0 0;
+    background: transparent;
+    color: #444444;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.45rem;
+    margin: 0;
+    padding: 0.7rem 0.95rem 0.65rem;
+    white-space: nowrap;
+}
+
+button.kernel-search-tab:hover {
+    background: #f3f3f3;
+}
+
+button.kernel-search-tab:focus-visible {
+    outline: 2px solid #1f6feb;
+    outline-offset: 2px;
+}
+
+button.kernel-search-tab.is-active {
+    background: #fbfbfb;
+    border-color: #d8d8d8;
+    color: #111111;
+    font-weight: bold;
+}
+
+span.kernel-search-tab-label {
+    line-height: 1.2;
+}
+
+span.kernel-search-tab-count {
+    color: #666666;
+    font-size: 0.95em;
+}
+
+div.kernel-search-panels {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+section.kernel-search-panel {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding: 0.35rem 1rem 1rem;
+}
+
+section.kernel-search-panel[hidden] {
+    display: none;
+}
+
+ol.kernel-search-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+li.kernel-search-result {
+    padding: 0.9em 0;
+    border-top: 1px solid #dddddd;
+}
+
+li.kernel-search-result:first-child {
+    border-top: none;
+}
+
+div.kernel-search-result-heading {
+    font-weight: bold;
+}
+
+div.kernel-search-result-heading,
+div.kernel-search-result-heading a,
+div.kernel-search-path,
+div.kernel-search-meta,
+p.kernel-search-summary {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+div.kernel-search-path,
+div.kernel-search-meta,
+p.kernel-search-summary {
+    margin-top: 0.3em;
+    color: #555555;
+}
+
+div.kernel-search-path,
+div.kernel-search-meta {
+    font-size: 0.95em;
+}
+
+p.kernel-search-summary {
+    margin-bottom: 0;
+}
+
+p.kernel-search-summary-status {
+    font-style: italic;
+}
+
+p.kernel-search-summary-status.is-error {
+    color: #8b0000;
+}
+
+/* Responsive layout adjustments for narrow and wide screens. */
+@media screen and (max-width: 65em) {
+    div.kernel-search-query-actions {
+        width: 100%;
+        justify-content: flex-start;
+    }
+}
+
+@media screen and (min-width: 65em) {
+    div.kernel-search-result-heading,
+    div.kernel-search-path,
+    div.kernel-search-meta,
+    p.kernel-search-summary {
+        margin-left: 2rem;
+    }
+}
