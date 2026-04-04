@@ -1667,7 +1667,10 @@ static int create_fake_symbols(struct elf *elf)
 		size = 0;
 		next_reloc = reloc;
 		for_each_reloc_continue(sec->rsec, next_reloc) {
-			if (annotype(elf, sec, next_reloc) != ANNOTYPE_DATA_SPECIAL ||
+			unsigned int next_type = annotype(elf, sec, next_reloc);
+
+			if ((next_type != ANNOTYPE_DATA_SPECIAL &&
+			     next_type != ANNOTYPE_DATA_SPECIAL_END) ||
 			    next_reloc->sym->sec != reloc->sym->sec)
 				continue;
 

@@ -68,5 +68,6 @@ struct unwind_hint {
 #define ANNOTYPE_NOCFI			9
 
 #define ANNOTYPE_DATA_SPECIAL		1
+#define ANNOTYPE_DATA_SPECIAL_END	2
 
 #endif /* _LINUX_OBJTOOL_TYPES_H */

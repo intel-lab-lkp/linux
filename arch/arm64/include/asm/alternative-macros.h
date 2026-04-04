@@ -3,10 +3,15 @@
 #define __ASM_ALTERNATIVE_MACROS_H
 
 #include <linux/const.h>
+#include <linux/annotate.h>
 #include <vdso/bits.h>
 
 #include <asm/cpucaps.h>
 #include <asm/insn-def.h>
+
+#ifndef COMPILE_OFFSETS
+#include <asm/asm-offsets.h>
+#endif
 
 /*
  * Binutils 2.27.0 can't handle a 'UL' suffix on constants, so for the assembly
@@ -58,15 +63,18 @@
 	"661:\n\t"							\
 	oldinstr "\n"							\
 	"662:\n"							\
-	".pushsection .altinstructions,\"a\"\n"				\
+	".pushsection .altinstructions,\"aM\", @progbits, "		\
+		      __stringify(ALT_INSTR_SIZE) "\n"			\
 	ALTINSTR_ENTRY(cpucap)						\
 	".popsection\n"							\
 	".subsection 1\n"						\
+	ANNOTATE_DATA_SPECIAL "\n"					\
 	"663:\n\t"							\
 	newinstr "\n"							\
 	"664:\n\t"							\
 	".org	. - (664b-663b) + (662b-661b)\n\t"			\
 	".org	. - (662b-661b) + (664b-663b)\n\t"			\
+	ANNOTATE_DATA_SPECIAL_END "\n\t"					\
 	".previous\n"							\
 	".endif\n"
 
@@ -75,7 +83,8 @@
 	"661:\n\t"							\
 	oldinstr "\n"							\
 	"662:\n"							\
-	".pushsection .altinstructions,\"a\"\n"				\
+	".pushsection .altinstructions,\"aM\", @progbits, "		\
+		      __stringify(ALT_INSTR_SIZE) "\n"			\
 	ALTINSTR_ENTRY_CB(cpucap, cb)					\
 	".popsection\n"							\
 	"663:\n\t"							\
@@ -102,13 +111,15 @@
 .macro alternative_insn insn1, insn2, cap, enable = 1
 	.if \enable
 661:	\insn1
-662:	.pushsection .altinstructions, "a"
+662:	.pushsection .altinstructions, "aM", @progbits, ALT_INSTR_SIZE
 	altinstruction_entry 661b, 663f, \cap, 662b-661b, 664f-663f
 	.popsection
 	.subsection 1
+	ANNOTATE_DATA_SPECIAL
 663:	\insn2
 664:	.org	. - (664b-663b) + (662b-661b)
 	.org	. - (662b-661b) + (664b-663b)
+	ANNOTATE_DATA_SPECIAL_END
 	.previous
 	.endif
 .endm
@@ -137,7 +148,7 @@
  */
 .macro alternative_if_not cap
 	.set .Lasm_alt_mode, 0
-	.pushsection .altinstructions, "a"
+	.pushsection .altinstructions, "aM", @progbits, ALT_INSTR_SIZE
 	altinstruction_entry 661f, 663f, \cap, 662f-661f, 664f-663f
 	.popsection
 661:
@@ -145,17 +156,18 @@
 
 .macro alternative_if cap
 	.set .Lasm_alt_mode, 1
-	.pushsection .altinstructions, "a"
+	.pushsection .altinstructions, "aM", @progbits, ALT_INSTR_SIZE
 	altinstruction_entry 663f, 661f, \cap, 664f-663f, 662f-661f
 	.popsection
 	.subsection 1
 	.align 2	/* So GAS knows label 661 is suitably aligned */
+	ANNOTATE_DATA_SPECIAL
 661:
 .endm
 
 .macro alternative_cb cap, cb
 	.set .Lasm_alt_mode, 0
-	.pushsection .altinstructions, "a"
+	.pushsection .altinstructions, "aM", @progbits, ALT_INSTR_SIZE
 	altinstruction_entry 661f, \cb, (1 << ARM64_CB_SHIFT) | \cap, 662f-661f, 0
 	.popsection
 661:
@@ -168,7 +180,9 @@
 662:
 	.if .Lasm_alt_mode==0
 	.subsection 1
+	ANNOTATE_DATA_SPECIAL
 	.else
+	ANNOTATE_DATA_SPECIAL_END
 	.previous
 	.endif
 663:
@@ -182,6 +196,7 @@
 	.org	. - (664b-663b) + (662b-661b)
 	.org	. - (662b-661b) + (664b-663b)
 	.if .Lasm_alt_mode==0
+	ANNOTATE_DATA_SPECIAL_END
 	.previous
 	.endif
 .endm

@@ -3,6 +3,7 @@
 #define _LINUX_ANNOTATE_H
 
 #include <linux/objtool_types.h>
+#include <linux/stringify.h>
 
 #ifdef CONFIG_OBJTOOL
 
@@ -10,6 +11,10 @@
 	.pushsection section, "M", @progbits, 8;			\
 	.long label - ., type;						\
 	.popsection
+
+#define __ASM_ANNOTATE_DATA(type)					\
+912:									\
+	__ASM_ANNOTATE(.discard.annotate_data, 912b, type)
 
 #ifndef __ASSEMBLY__
 
@@ -39,6 +44,9 @@
 #endif /* __ASSEMBLY__ */
 
 #else /* !CONFIG_OBJTOOL */
+
+#define __ASM_ANNOTATE_DATA(type)
+
 #ifndef __ASSEMBLY__
 #define ASM_ANNOTATE_LABEL(label, type) ""
 #define ASM_ANNOTATE(type)
@@ -106,10 +114,12 @@
 #define ANNOTATE_NOCFI_SYM(sym)		asm(ASM_ANNOTATE_LABEL(sym, ANNOTYPE_NOCFI))
 
 /*
- * Annotate a special section entry.  This emables livepatch module generation
+ * Annotate a special section entry.  This enables livepatch module generation
  * to find and extract individual special section entries as needed.
  */
 #define ANNOTATE_DATA_SPECIAL		ASM_ANNOTATE_DATA(ANNOTYPE_DATA_SPECIAL)
+#define __ANNOTATE_DATA_SPECIAL		__ASM_ANNOTATE_DATA(ANNOTYPE_DATA_SPECIAL)
+#define ANNOTATE_DATA_SPECIAL_END	ASM_ANNOTATE_DATA(ANNOTYPE_DATA_SPECIAL_END)
 
 #else /* __ASSEMBLY__ */
 #define ANNOTATE_NOENDBR		ANNOTATE type=ANNOTYPE_NOENDBR
@@ -122,6 +132,8 @@
 #define ANNOTATE_REACHABLE		ANNOTATE type=ANNOTYPE_REACHABLE
 #define ANNOTATE_NOCFI_SYM		ANNOTATE type=ANNOTYPE_NOCFI
 #define ANNOTATE_DATA_SPECIAL		ANNOTATE_DATA type=ANNOTYPE_DATA_SPECIAL
+#define __ANNOTATE_DATA_SPECIAL		__ASM_ANNOTATE_DATA(ANNOTYPE_DATA_SPECIAL)
+#define ANNOTATE_DATA_SPECIAL_END	ANNOTATE_DATA type=ANNOTYPE_DATA_SPECIAL_END
 #endif /* __ASSEMBLY__ */
 
 #endif /* _LINUX_ANNOTATE_H */

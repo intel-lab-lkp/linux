@@ -5,6 +5,7 @@
  */
 #define __ASM_ASM_BUG_H
 
+#include <linux/annotate.h>
 #include <asm/brk-imm.h>
 
 #ifdef CONFIG_DEBUG_BUGVERBOSE
@@ -24,6 +25,7 @@
 #define __BUG_ENTRY_START				\
 		.pushsection __bug_table,"aw";		\
 		.align 2;				\
+		__ANNOTATE_DATA_SPECIAL;		\
 	14470:	.long 14471f - .;			\
 
 #define __BUG_ENTRY_END					\

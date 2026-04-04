@@ -5,6 +5,10 @@
 #include <linux/bits.h>
 #include <asm/gpr-num.h>
 
+#ifndef COMPILE_OFFSETS
+#include <asm/asm-offsets.h>
+#endif
+
 #define EX_TYPE_NONE			0
 #define EX_TYPE_BPF			1
 #define EX_TYPE_UACCESS_ERR_ZERO	2
@@ -29,13 +33,13 @@
 
 #ifdef __ASSEMBLER__
 
-#define __ASM_EXTABLE_RAW(insn, fixup, type, data)	\
-	.pushsection	__ex_table, "a";		\
-	.align		2;				\
-	.long		((insn) - .);			\
-	.long		((fixup) - .);			\
-	.short		(type);				\
-	.short		(data);				\
+#define __ASM_EXTABLE_RAW(insn, fixup, type, data)			\
+	.pushsection	__ex_table, "aM", @progbits, EXTABLE_SIZE;	\
+	.align		2;						\
+	.long		((insn) - .);					\
+	.long		((fixup) - .);					\
+	.short		(type);						\
+	.short		(data);						\
 	.popsection;
 
 #define EX_DATA_REG(reg, gpr)	\
@@ -82,7 +86,8 @@
 #include <linux/stringify.h>
 
 #define __ASM_EXTABLE_RAW(insn, fixup, type, data)	\
-	".pushsection	__ex_table, \"a\"\n"		\
+	".pushsection	__ex_table, \"aM\", @progbits, "\
+			__stringify(EXTABLE_SIZE) "\n"	\
 	".align		2\n"				\
 	".long		((" insn ") - .)\n"		\
 	".long		((" fixup ") - .)\n"		\

@@ -11,6 +11,7 @@
 #ifndef __ASSEMBLER__
 
 #include <linux/types.h>
+#include <linux/annotate.h>
 #include <asm/insn.h>
 
 #define HAVE_JUMP_LABEL_BATCH
@@ -19,6 +20,7 @@
 #define JUMP_TABLE_ENTRY(key, label)			\
 	".pushsection	__jump_table, \"aw\"\n\t"	\
 	".align		3\n\t"				\
+	ANNOTATE_DATA_SPECIAL "\n\t"			\
 	".long		1b - ., " label " - .\n\t"	\
 	".quad		" key " - .\n\t"		\
 	".popsection\n\t"

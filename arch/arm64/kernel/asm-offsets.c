@@ -23,6 +23,8 @@
 #include <asm/suspend.h>
 #include <linux/kbuild.h>
 #include <linux/arm-smccc.h>
+#include <asm/alternative.h>
+#include <asm/extable.h>
 
 int main(void)
 {
@@ -185,5 +187,8 @@ int main(void)
 #endif
   DEFINE(PIE_E0_ASM, PIE_E0);
   DEFINE(PIE_E1_ASM, PIE_E1);
+  BLANK();
+  DEFINE(ALT_INSTR_SIZE,		sizeof(struct alt_instr));
+  DEFINE(EXTABLE_SIZE,			sizeof(struct exception_table_entry));
   return 0;
 }
