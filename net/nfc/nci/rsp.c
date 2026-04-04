@@ -66,7 +66,16 @@ static u8 nci_core_init_rsp_packet_v1(struct nci_dev *ndev,
 	       rsp_1->supported_rf_interfaces,
 	       ndev->num_supported_rf_interfaces);
 
-	rsp_2 = (void *) (skb->data + 6 + rsp_1->num_supported_rf_interfaces);
+	if (skb->len < sizeof(*rsp_1) + ndev->num_supported_rf_interfaces +
+		       sizeof(*rsp_2)) {
+		pr_err("CORE_INIT_RSP too short: len=%u need=%zu\n",
+		       skb->len,
+		       sizeof(*rsp_1) + ndev->num_supported_rf_interfaces +
+		       sizeof(*rsp_2));
+		return NCI_STATUS_SYNTAX_ERROR;
+	}
+	rsp_2 = (void *)(skb->data + sizeof(*rsp_1) +
+			 ndev->num_supported_rf_interfaces);
 
 	ndev->max_logical_connections = rsp_2->max_logical_connections;
 	ndev->max_routing_table_size =
