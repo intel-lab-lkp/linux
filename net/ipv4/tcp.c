@@ -484,13 +484,14 @@ void tcp_init_sock(struct sock *sk)
 
 static void tcp_tx_timestamp(struct sock *sk, struct sockcm_cookie *sockc)
 {
-	struct sk_buff *skb = tcp_write_queue_tail(sk);
 	u32 tsflags = sockc->tsflags;
+	struct sk_buff *skb;
 
-	if (unlikely(!skb))
-		skb = skb_rb_last(&sk->tcp_rtx_queue);
+	if (!tsflags)
+		return;
 
-	if (tsflags && skb) {
+	skb = tcp_write_queue_tail(sk) ? : skb_rb_last(&sk->tcp_rtx_queue);
+	if (skb) {
 		struct skb_shared_info *shinfo = skb_shinfo(skb);
 		struct tcp_skb_cb *tcb = TCP_SKB_CB(skb);
 
