@@ -81,10 +81,11 @@ static void __init console_config(void)
 	if ((strstr(fw_getcmdline(), "console=")) == NULL) {
 		sprintf(console_string, " console=ttyS0,%d%c%c%c", baud,
 			parity, bits, flow);
-		strcat(fw_getcmdline(), console_string);
+		strlcat(fw_getcmdline(), console_string,
+			COMMAND_LINE_SIZE);
 		pr_info("Config serial console:%s\n", console_string);
 	}
-}
+	}
 #endif
 
 static void __init mips_nmi_setup(void)
