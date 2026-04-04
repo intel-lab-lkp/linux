@@ -88,6 +88,19 @@ SR-IOV [1] is work in progress.
 | Complexity: Beginner
 | Link: https://lore.kernel.org/all/20251119-rust-pci-sriov-v1-0-883a94599a97@redhat.com/ [1]
 
+Device address type wrappers
+----------------------------
+
+The ``SizeConstants`` trait provides ``SZ_*`` constants as associated constants
+on ``u32``, ``u64``, and ``usize``. Device-centric APIs such as GPU VM
+management and buddy allocators could benefit from newtype wrappers around these
+integer types to represent device addresses and sizes. A separate marker trait
+could then serve as a generic bound for those wrappers.
+
+| Complexity: Intermediate
+| Link: https://lore.kernel.org/all/DHJJJNP5T5FZ.2HWBMOEEKH9ZR@kernel.org/
+| Contact: Danilo Krummrich
+
 GPU (general)
 =============
 
