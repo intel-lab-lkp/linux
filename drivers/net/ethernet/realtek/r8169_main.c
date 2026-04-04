@@ -2416,6 +2416,181 @@ static int rtl8169_set_link_ksettings(struct net_device *ndev,
 	return 0;
 }
 
+#define R8127_SDS_I2C_CON		0xe200
+#define R8127_SDS_I2C_TAR		0xe204
+#define R8127_SDS_I2C_DATA_CMD		0xe210
+#define R8127_SDS_I2C_FS_SCL_HCNT	0xe21c
+#define R8127_SDS_I2C_FS_SCL_LCNT	0xe220
+#define R8127_SDS_I2C_INTR_STAT		0xe22c
+#define R8127_SDS_I2C_EN		0xe26c
+#define R8127_SDS_I2C_STATUS		0xe270
+
+#define R8127_SDS_I2C_STATUS_ACTIVITY BIT(0)
+#define R8127_SDS_I2C_RX_FIFO_NOT_EMPTY BIT(3)
+#define R8127_SDS_I2C_STAT_TX_ABRT BIT(6)
+
+#define R8127_SDS_I2C_CMD_READ BIT(8)
+#define R8127_SDS_I2C_CMD_STOP BIT(9)
+#define R8127_SDS_I2C_CMD_RESTART BIT(10)
+
+#define SFF_8472_ID_ADDR 0x50
+#define SFF_8472_DIAGNOSTICS_ADDR 0x51
+
+#define SFF_8472_COMP_ADDR      0x5e
+#define SFF_8472_DOM_TYPE_ADDR  0x5c
+
+#define SFF_8472_ADDRESS_CHANGE_REQ_MASK 0x4
+
+static void r8127_sfp_sds_i2c_init(struct rtl8169_private *tp, u8 addr)
+{
+	r8168_mac_ocp_write(tp, R8127_SDS_I2C_EN, 0);
+	r8168_mac_ocp_write(tp, R8127_SDS_I2C_CON, 0x65);
+	r8168_mac_ocp_write(tp, R8127_SDS_I2C_TAR, addr);
+	r8168_mac_ocp_write(tp, R8127_SDS_I2C_FS_SCL_HCNT, 0x23a);
+	r8168_mac_ocp_write(tp, R8127_SDS_I2C_FS_SCL_LCNT, 0x23a);
+	r8168_mac_ocp_write(tp, R8127_SDS_I2C_EN, 1);
+}
+
+static void r8127_sfp_sds_i2c_disable(struct rtl8169_private *tp)
+{
+	r8168_mac_ocp_write(tp, R8127_SDS_I2C_EN, 0);
+}
+
+DECLARE_RTL_COND(r8127_sfp_sds_i2c_idle_cond)
+{
+	u16 val;
+
+	val = r8168_mac_ocp_read(tp, R8127_SDS_I2C_STATUS);
+
+	return val & R8127_SDS_I2C_STATUS_ACTIVITY;
+}
+
+DECLARE_RTL_COND(r8127_sfp_sds_i2c_rx_fifo_cond)
+{
+	u16 val;
+
+	val = r8168_mac_ocp_read(tp, R8127_SDS_I2C_STATUS);
+
+	return val & R8127_SDS_I2C_RX_FIFO_NOT_EMPTY;
+}
+
+static int r8127_sfp_sds_i2c_read(struct rtl8169_private *tp,
+				  u8 addr, u8 off, u8 *buf, u16 len)
+{
+	u16 intr_stat;
+	int ret = 0;
+
+	r8127_sfp_sds_i2c_init(tp, addr);
+
+	r8168_mac_ocp_write(tp, R8127_SDS_I2C_DATA_CMD, off);
+
+	if (!rtl_loop_wait_low(tp, &r8127_sfp_sds_i2c_idle_cond, 10, 100)) {
+		ret = -EIO;
+		goto out;
+	}
+
+	intr_stat = r8168_mac_ocp_read(tp, R8127_SDS_I2C_INTR_STAT);
+	if (intr_stat & R8127_SDS_I2C_STAT_TX_ABRT) {
+		/* NACK */
+		ret = -EIO;
+		goto out;
+	}
+
+	for (int i = 0; i < len; i++) {
+		u16 data = R8127_SDS_I2C_CMD_READ;
+
+		if (i == len - 1)
+			data |= R8127_SDS_I2C_CMD_STOP;
+		if (i == 0)
+			data |= R8127_SDS_I2C_CMD_RESTART;
+
+		r8168_mac_ocp_write(tp, R8127_SDS_I2C_DATA_CMD, data);
+
+		if (!rtl_loop_wait_high(tp, &r8127_sfp_sds_i2c_rx_fifo_cond,
+					10, 1000)) {
+			ret = -ETIMEDOUT;
+			goto out;
+		}
+
+		buf[i] = r8168_mac_ocp_read(tp, R8127_SDS_I2C_DATA_CMD);
+	}
+
+out:
+	r8127_sfp_sds_i2c_disable(tp);
+
+	return ret;
+}
+
+static int rtl8169_get_module_info(struct net_device *ndev,
+				   struct ethtool_modinfo *modinfo)
+{
+	struct rtl8169_private *tp = netdev_priv(ndev);
+	u8 compliance_val, dom_type;
+	int ret;
+
+	if (!tp->sfp_mode)
+		return -EOPNOTSUPP;
+
+	ret = r8127_sfp_sds_i2c_read(tp, SFF_8472_ID_ADDR,
+				     SFF_8472_COMP_ADDR, &compliance_val, 1);
+	if (ret)
+		return ret;
+
+	ret = r8127_sfp_sds_i2c_read(tp, SFF_8472_ID_ADDR,
+				     SFF_8472_DOM_TYPE_ADDR, &dom_type, 1);
+	if (ret)
+		return ret;
+
+	if (dom_type & SFF_8472_ADDRESS_CHANGE_REQ_MASK || compliance_val == 0x00) {
+		modinfo->type = ETH_MODULE_SFF_8079;
+		modinfo->eeprom_len = ETH_MODULE_SFF_8079_LEN;
+	} else {
+		modinfo->type = ETH_MODULE_SFF_8472;
+		modinfo->eeprom_len = ETH_MODULE_SFF_8472_LEN;
+	}
+
+	return 0;
+}
+
+static int rtl8169_get_module_eeprom(struct net_device *ndev,
+				     struct ethtool_eeprom *ee, unsigned char *data)
+{
+	struct rtl8169_private *tp = netdev_priv(ndev);
+	unsigned int first, last, len;
+	int ret;
+
+	if (!tp->sfp_mode)
+		return -EOPNOTSUPP;
+
+	first = ee->offset;
+	last = ee->offset + ee->len;
+
+	if (first < ETH_MODULE_SFF_8079_LEN) {
+		len = min(last, ETH_MODULE_SFF_8079_LEN);
+		len -= first;
+
+		ret = r8127_sfp_sds_i2c_read(tp, SFF_8472_ID_ADDR,
+					     first, data, len);
+		if (ret)
+			return ret;
+
+		first += len;
+		data += len;
+	}
+	if (first < ETH_MODULE_SFF_8472_LEN && last > ETH_MODULE_SFF_8079_LEN) {
+		len = min(last, ETH_MODULE_SFF_8472_LEN);
+		len -= first;
+		first -= ETH_MODULE_SFF_8079_LEN;
+
+		ret = r8127_sfp_sds_i2c_read(tp, SFF_8472_DIAGNOSTICS_ADDR,
+					     first, data, len);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
 static const struct ethtool_ops rtl8169_ethtool_ops = {
 	.supported_coalesce_params = ETHTOOL_COALESCE_USECS |
 				     ETHTOOL_COALESCE_MAX_FRAMES,
@@ -2442,6 +2617,8 @@ static const struct ethtool_ops rtl8169_ethtool_ops = {
 	.set_pauseparam		= rtl8169_set_pauseparam,
 	.get_eth_mac_stats	= rtl8169_get_eth_mac_stats,
 	.get_eth_ctrl_stats	= rtl8169_get_eth_ctrl_stats,
+	.get_module_info	= rtl8169_get_module_info,
+	.get_module_eeprom	= rtl8169_get_module_eeprom,
 };
 
 static const struct rtl_chip_info *rtl8169_get_chip_version(u32 xid, bool gmii)
