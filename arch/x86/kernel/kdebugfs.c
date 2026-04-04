@@ -94,7 +94,7 @@ static int __init create_setup_data_nodes(struct dentry *parent)
 	u64 pa_data, pa_next;
 	struct dentry *d;
 	int error;
-	u32 len;
+	size_t len;
 	int no = 0;
 
 	d = debugfs_create_dir("setup_data", parent);
@@ -116,8 +116,7 @@ static int __init create_setup_data_nodes(struct dentry *parent)
 		}
 		pa_next = data->next;
 
-		if (data->type == SETUP_INDIRECT) {
-			len = sizeof(*data) + data->len;
+		if (setup_data_indirect_valid(data, &len)) {
 			memunmap(data);
 			data = memremap(pa_data, len, MEMREMAP_WB);
 			if (!data) {

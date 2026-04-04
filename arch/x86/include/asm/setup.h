@@ -29,6 +29,7 @@
 
 #ifndef __ASSEMBLER__
 #include <linux/cache.h>
+#include <linux/overflow.h>
 
 #include <asm/bootparam.h>
 #include <asm/x86_init.h>
@@ -81,6 +82,22 @@ static inline void x86_ce4100_early_setup(void) { }
  */
 extern struct boot_params boot_params;
 extern char _text[];
+
+static inline bool setup_data_entry_size(u32 data_len, size_t *size)
+{
+	return !check_add_overflow(sizeof(struct setup_data), (size_t)data_len,
+				   size);
+}
+
+static inline bool setup_data_indirect_valid(const struct setup_data *data,
+					     size_t *size)
+{
+	if (data->type != SETUP_INDIRECT)
+		return false;
+	if (data->len < sizeof(struct setup_indirect))
+		return false;
+	return setup_data_entry_size(data->len, size);
+}
 
 static inline bool kaslr_enabled(void)
 {

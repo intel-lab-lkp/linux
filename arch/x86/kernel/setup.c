@@ -570,7 +570,7 @@ static void __init memblock_x86_reserve_range_setup_data(void)
 	struct setup_indirect *indirect;
 	struct setup_data *data;
 	u64 pa_data, pa_next;
-	u32 len;
+	size_t len, data_len;
 
 	pa_data = boot_params.hdr.setup_data;
 	while (pa_data) {
@@ -580,13 +580,19 @@ static void __init memblock_x86_reserve_range_setup_data(void)
 			return;
 		}
 
-		len = sizeof(*data);
 		pa_next = data->next;
+		if (!setup_data_entry_size(data->len, &data_len)) {
+			memblock_reserve_kern(pa_data, sizeof(*data));
+			pr_warn("setup: ignoring setup_data entry with oversized length\n");
+			early_memunmap(data, sizeof(*data));
+			pa_data = pa_next;
+			continue;
+		}
 
-		memblock_reserve_kern(pa_data, sizeof(*data) + data->len);
+		len = sizeof(*data);
+		memblock_reserve_kern(pa_data, data_len);
 
-		if (data->type == SETUP_INDIRECT) {
-			len += data->len;
+		if (setup_data_indirect_valid(data, &len)) {
 			early_memunmap(data, sizeof(*data));
 			data = early_memremap(pa_data, len);
 			if (!data) {

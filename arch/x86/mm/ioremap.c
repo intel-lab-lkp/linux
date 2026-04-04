@@ -647,7 +647,7 @@ static bool __ref __memremap_is_setup_data(resource_size_t phys_addr, bool early
 
 	paddr = boot_params.hdr.setup_data;
 	while (paddr) {
-		unsigned int len, size;
+		size_t len, size;
 
 		if (phys_addr == paddr)
 			return true;
@@ -675,8 +675,7 @@ static bool __ref __memremap_is_setup_data(resource_size_t phys_addr, bool early
 			return true;
 		}
 
-		if (data->type == SETUP_INDIRECT) {
-			size += len;
+		if (setup_data_indirect_valid(data, &size)) {
 			if (early) {
 				early_memunmap(data, setup_data_sz);
 				data = early_memremap_decrypted(paddr, size);
