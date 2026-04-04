@@ -146,6 +146,8 @@ static int _aead_recvmsg(struct socket *sock, struct msghdr *msg,
 	if (usedpages < outlen) {
 		size_t less = outlen - usedpages;
 
+		if (!ctx->enc)
+			less += as;
 		if (used < less) {
 			err = -EINVAL;
 			goto free;
