@@ -1398,9 +1398,11 @@ new_segment:
 wait_for_space:
 		set_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
 		tcp_remove_empty_skb(sk);
-		if (copied)
+		if (copied) {
+			tcp_bpf_tx_timestamp(sk);
 			tcp_push(sk, flags & ~MSG_MORE, mss_now,
 				 TCP_NAGLE_PUSH, size_goal);
+		}
 
 		err = sk_stream_wait_memory(sk, &timeo);
 		if (err != 0)
