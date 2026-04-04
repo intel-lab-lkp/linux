@@ -132,6 +132,12 @@ static int cap_get_ims_certificate(struct gb_cap *cap, u32 class, u32 id,
 
 	response = op->response->payload;
 	*result = response->result_code;
+
+	if (op->response->payload_size < sizeof(*response)) {
+		ret = -EINVAL;
+		goto done;
+	}
+
 	*size = op->response->payload_size - sizeof(*response);
 	memcpy(certificate, response->certificate, *size);
 
