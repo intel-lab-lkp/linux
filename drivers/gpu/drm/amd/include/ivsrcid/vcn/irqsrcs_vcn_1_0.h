@@ -29,6 +29,7 @@
 #define VCN_1_0__SRCID__UVD_ENC_GENERAL_PURPOSE                 119     /* 0x77 Encoder General Purpose  */
 #define VCN_1_0__SRCID__UVD_ENC_LOW_LATENCY                     120     /* 0x78 Encoder Low Latency  */
 #define VCN_1_0__SRCID__UVD_SYSTEM_MESSAGE_INTERRUPT	        124		/* 0x7c UVD system message interrupt  */
+#define VCN_1_0__SRCID__JPEG_DECODE                             126     /* 0x7e JRBC Decode interrupt */
 
 #endif /* __IRQSRCS_VCN_1_0_H__ */
 

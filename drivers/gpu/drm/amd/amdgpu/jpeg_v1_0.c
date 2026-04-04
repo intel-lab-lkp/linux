@@ -31,6 +31,7 @@
 
 #include "vcn/vcn_1_0_offset.h"
 #include "vcn/vcn_1_0_sh_mask.h"
+#include "ivsrcid/vcn/irqsrcs_vcn_1_0.h"
 
 static void jpeg_v1_0_set_dec_ring_funcs(struct amdgpu_device *adev);
 static void jpeg_v1_0_set_irq_funcs(struct amdgpu_device *adev);
@@ -443,7 +444,7 @@ static int jpeg_v1_0_process_interrupt(struct amdgpu_device *adev,
 	DRM_DEBUG("IH: JPEG decode TRAP\n");
 
 	switch (entry->src_id) {
-	case 126:
+	case VCN_1_0__SRCID__JPEG_DECODE:
 		amdgpu_fence_process(adev->jpeg.inst->ring_dec);
 		break;
 	default:
@@ -488,7 +489,8 @@ int jpeg_v1_0_sw_init(struct amdgpu_ip_block *ip_block)
 	int r;
 
 	/* JPEG TRAP */
-	r = amdgpu_irq_add_id(adev, SOC15_IH_CLIENTID_VCN, 126, &adev->jpeg.inst->irq);
+	r = amdgpu_irq_add_id(adev, SOC15_IH_CLIENTID_VCN,
+		VCN_1_0__SRCID__JPEG_DECODE, &adev->jpeg.inst->irq);
 	if (r)
 		return r;
 
