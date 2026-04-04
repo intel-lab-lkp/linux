@@ -7,6 +7,7 @@ CFLAGS += -I../../../../usr/include/ $(KHDR_INCLUDES)
 CFLAGS += -I../
 
 TEST_PROGS := \
+	act_nat_icmp_csum.sh \
 	altnames.sh \
 	amt.sh \
 	arp_ndisc_evict_nocarrier.sh \
