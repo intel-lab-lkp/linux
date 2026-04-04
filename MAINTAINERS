@@ -7665,6 +7665,7 @@ F:	Documentation/sphinx-static/custom.css
 F:	Documentation/sphinx/templates/search.html
 F:	Documentation/sphinx/templates/searchbox.html
 F:	tools/docs/test_advanced_search.py
+F:	tools/docs/bench_search_playwright.mjs
 
 DOCUMENTATION PROCESS
 M:	Jonathan Corbet <corbet@lwn.net>

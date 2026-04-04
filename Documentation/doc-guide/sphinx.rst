@@ -255,6 +255,35 @@ To verify full-site support for a change, also run at least one full
 ``make htmldocs`` build and manually exercise the generated ``search.html``
 page.
 
+Benchmark Harness
+~~~~~~~~~~~~~~~~~
+
+For larger behavior or performance changes, the Playwright benchmark
+harness can compare stock and advanced search against already-built
+documentation trees.
+
+The harness lives at ``tools/docs/bench_search_playwright.mjs``. It does
+not install Playwright itself; point it at an existing Playwright module
+with the ``PLAYWRIGHT_MODULE`` environment variable or the
+``--playwright-module`` command-line option.
+
+A typical workflow is:
+
+1. Build each documentation tree you want to compare.
+2. Serve each ``Documentation/output`` directory locally, for example with
+   ``python3 -m http.server``.
+3. Run ``node tools/docs/bench_search_playwright.mjs`` with a variant
+   label, a local URL, a query, and an output path or output directory.
+
+For comparative runs, build and serve one documentation tree per target
+you want to benchmark.
+
+For the full option set, including scenario selection, failure
+injection, network throttling, startup timing collection, and optional
+app timings, run::
+
+	node tools/docs/bench_search_playwright.mjs --help
+
 To disable the feature and return to the theme's default Quick Search setup,
 remove the two template overrides:
 

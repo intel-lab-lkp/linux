@@ -57,6 +57,23 @@
   let activeResultKind = RESULT_KIND_ORDER[0];
   let pageSummaryLimitEnabled = true;
   let tabStripCleanup = null;
+  // Expose lightweight search-phase timings for external benchmarking and
+  // diagnostics. The search UI does not depend on these values being present.
+  const perfNow = () =>
+    window.performance && typeof window.performance.now === "function"
+      ? window.performance.now()
+      : Date.now();
+  let domContentLoadedMs = null;
+  let searchIndexReadyMs = null;
+
+  const writeSearchPerf = (update) => {
+    const current = window.__kernelSearchPerf || {};
+    window.__kernelSearchPerf = {
+      ...current,
+      ...update,
+      version: 1,
+    };
+  };
 
   // Hook into Sphinx's asynchronous searchindex.js loading.
   window.Search = window.Search || {};
@@ -1127,13 +1144,48 @@ const setSummaryPlaceholder = (payload, text, modifierClass) => {
     });
   };
 
+  const storeRunSearchPerf = (state, resultsByKind, phaseTimingsMs, runSearchStartedMs, runSearchCompletedMs) => {
+    const resultCounts = RESULT_KIND_ORDER.reduce((counts, kind) => {
+      counts[kind] = resultsByKind[kind].length;
+      return counts;
+    }, {});
+    resultCounts.total = RESULT_KIND_ORDER.reduce((sum, kind) => sum + resultCounts[kind], 0);
+
+    const timingsMs = {
+      ...phaseTimingsMs,
+      runSearch: runSearchCompletedMs - runSearchStartedMs,
+    };
+    if (domContentLoadedMs !== null && searchIndexReadyMs !== null) {
+      timingsMs.searchIndexWait = searchIndexReadyMs - domContentLoadedMs;
+    }
+
+    writeSearchPerf({
+      exact: state.exact,
+      kinds: [...state.kinds],
+      query: state.query,
+      resultCounts,
+      timingsMs,
+    });
+  };
+
   const runSearch = () => {
     const baseState = parseState();
     bindFormState(baseState);
     populateAreaOptions(document.getElementById("kernel-search-area"), baseState);
     populateObjectTypeOptions(document.getElementById("kernel-search-objtype"), baseState);
 
-    const queryState = buildQueryState(baseState.query, baseState.exact);
+    const phaseTimingsMs = {};
+    const timePhase = (name, callback) => {
+      const startedMs = perfNow();
+      const value = callback();
+      phaseTimingsMs[name] = perfNow() - startedMs;
+      return value;
+    };
+    const runSearchStartedMs = perfNow();
+    const queryState = timePhase(
+      "buildQueryState",
+      () => buildQueryState(baseState.query, baseState.exact),
+    );
     const renderState = {
       ...baseState,
       highlightTerms: queryState.highlightTerms,
@@ -1147,27 +1199,55 @@ const setSummaryPlaceholder = (payload, text, modifierClass) => {
     };
 
     if (!baseState.queryLower) {
-      renderResults(renderState, resultsByKind);
+      timePhase("renderResults", () => renderResults(renderState, resultsByKind));
+      storeRunSearchPerf(
+        baseState,
+        resultsByKind,
+        phaseTimingsMs,
+        runSearchStartedMs,
+        perfNow(),
+      );
       return;
     }
 
     if (baseState.kinds.has("object")) {
-      resultsByKind.object = collectObjectResults(window.Search._index, queryState, filters);
+      resultsByKind.object = timePhase(
+        "collectObjectResults",
+        () => collectObjectResults(window.Search._index, queryState, filters),
+      );
     }
     if (baseState.kinds.has("title")) {
-      resultsByKind.title = collectSectionResults(window.Search._index, queryState, filters);
+      resultsByKind.title = timePhase(
+        "collectSectionResults",
+        () => collectSectionResults(window.Search._index, queryState, filters),
+      );
     }
     if (baseState.kinds.has("index")) {
-      resultsByKind.index = collectIndexResults(window.Search._index, queryState, filters);
+      resultsByKind.index = timePhase(
+        "collectIndexResults",
+        () => collectIndexResults(window.Search._index, queryState, filters),
+      );
     }
     if (baseState.kinds.has("text")) {
-      resultsByKind.text = collectTextResults(window.Search._index, queryState, filters);
+      resultsByKind.text = timePhase(
+        "collectTextResults",
+        () => collectTextResults(window.Search._index, queryState, filters),
+      );
     }
 
-    renderResults(renderState, resultsByKind);
+    timePhase("renderResults", () => renderResults(renderState, resultsByKind));
+    storeRunSearchPerf(
+      baseState,
+      resultsByKind,
+      phaseTimingsMs,
+      runSearchStartedMs,
+      perfNow(),
+    );
   };
 
   document.addEventListener("DOMContentLoaded", () => {
+    domContentLoadedMs = perfNow();
+    writeSearchPerf({ domContentLoadedMs });
     const container = document.getElementById("kernel-search-results");
     if (!container) return;
 
@@ -1175,6 +1255,8 @@ const setSummaryPlaceholder = (payload, text, modifierClass) => {
     if (progress) progress.textContent = "Preparing search...";
 
     window.Search.whenReady(() => {
+      searchIndexReadyMs = perfNow();
+      writeSearchPerf({ searchIndexReadyMs });
       if (progress) progress.textContent = "";
       runSearch();
     });
