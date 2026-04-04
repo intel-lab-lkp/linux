@@ -128,13 +128,13 @@ static void __init prom_init_cmdline(void)
 	for (i = 1; i < argc; i++) {
 		char *str = (char *)(long)argv32[i];
 		if (i != 1)
-			strcat(arcs_cmdline, " ");
+			strlcat(arcs_cmdline, " ", COMMAND_LINE_SIZE);
 		if (strchr(str, ' ')) {
-			strcat(arcs_cmdline, "\"");
-			strcat(arcs_cmdline, str);
-			strcat(arcs_cmdline, "\"");
+			strlcat(arcs_cmdline, "\"", COMMAND_LINE_SIZE);
+			strlcat(arcs_cmdline, str, COMMAND_LINE_SIZE);
+			strlcat(arcs_cmdline, "\"", COMMAND_LINE_SIZE);
 		} else
-			strcat(arcs_cmdline, str);
+			strlcat(arcs_cmdline, str, COMMAND_LINE_SIZE);
 	}
 }
 
@@ -227,8 +227,8 @@ static void __init preprocess_cmdline(void)
 			continue;
 		}
 		if (arcs_cmdline[0])
-			strcat(arcs_cmdline, " ");
-		strcat(arcs_cmdline, str);
+			strlcat(arcs_cmdline, " ", COMMAND_LINE_SIZE);
+		strlcat(arcs_cmdline, str, COMMAND_LINE_SIZE);
 	}
 
 	txx9_cache_fixup();
