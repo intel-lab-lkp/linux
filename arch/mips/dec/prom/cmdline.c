@@ -29,9 +29,13 @@ void __init prom_init_cmdline(s32 argc, s32 *argv, u32 magic)
 		start_arg = 2;
 	for (i = start_arg; i < argc; i++) {
 		arg = (void *)(long)(argv[i]);
-		strcat(arcs_cmdline, arg);
-		if (i < (argc - 1))
-			strcat(arcs_cmdline, " ");
+		if (strlcat(arcs_cmdline, arg, COMMAND_LINE_SIZE) >=
+		    COMMAND_LINE_SIZE)
+			break;
+		if (i < (argc - 1) &&
+		    strlcat(arcs_cmdline, " ", COMMAND_LINE_SIZE) >=
+		    COMMAND_LINE_SIZE)
+			break;
 	}
 
 #ifdef PROM_DEBUG
