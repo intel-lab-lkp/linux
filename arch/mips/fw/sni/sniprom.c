@@ -142,8 +142,12 @@ void __init prom_init(void)
 
 	/* copy prom cmdline parameters to kernel cmdline */
 	for (i = 1; i < argc; i++) {
-		strcat(arcs_cmdline, (char *)CKSEG0ADDR(argv[i]));
-		if (i < (argc - 1))
-			strcat(arcs_cmdline, " ");
+		if (strlcat(arcs_cmdline, (char *)CKSEG0ADDR(argv[i]),
+			    COMMAND_LINE_SIZE) >= COMMAND_LINE_SIZE)
+			break;
+		if (i < (argc - 1) &&
+		    strlcat(arcs_cmdline, " ", COMMAND_LINE_SIZE) >=
+		    COMMAND_LINE_SIZE)
+			break;
 	}
 }
