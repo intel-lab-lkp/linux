@@ -34,8 +34,10 @@ void __init mach_prom_init_machtype(void)
 		else
 			mips_machtype = MACH_LEMOTE_NAS;
 
-		strcat(arcs_cmdline, " machtype=");
-		strcat(arcs_cmdline, get_system_type());
-		strcat(arcs_cmdline, " ");
+		strlcat(arcs_cmdline, " machtype=",
+			COMMAND_LINE_SIZE);
+		strlcat(arcs_cmdline, get_system_type(),
+			COMMAND_LINE_SIZE);
+		strlcat(arcs_cmdline, " ", COMMAND_LINE_SIZE);
 	}
 }
