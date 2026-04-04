@@ -1,0 +1,116 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright 2023-2026 Marek Vasut
+ */
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+
+&{/} {
+	reg_backlight_en_level: regulator-backlight-en-level {
+		compatible = "regulator-gpio";
+		regulator-name = "Backlight_SEL_EN";
+		regulator-type = "voltage";
+		gpios = <&gpiolvds 5 GPIO_ACTIVE_HIGH>; /* SEL_EN */
+		states = <3300000 0x0>,
+			 <5000000 0x1>;
+
+		/* Default setting: lowest supported voltage. */
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+	};
+
+	reg_backlight_pwm_level: regulator-backlight-pwm-level {
+		compatible = "regulator-gpio";
+		regulator-name = "Backlight_SEL_PWM";
+		regulator-type = "voltage";
+		gpios = <&gpiolvds 4 GPIO_ACTIVE_HIGH>; /* SEL_PWM */
+		states = <3300000 0x0>,
+			 <5000000 0x1>;
+
+		/* Default setting: lowest supported voltage. */
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+	};
+
+	reg_panel_bl_supply: regulator-panel-bl-supply {
+		compatible = "regulator-gpio";
+		regulator-type = "voltage";
+		regulator-name = "PANEL_BL_SUPPLY";
+		enable-gpios = <&gpiolvds 0 0>;
+		enable-active-high;
+		status = "okay";
+
+		/*
+		 * MP2328 voltage divider settings:
+		 *   R1=51k1
+		 *   R2=5k62 with optional series Rs=2k21 (12V)
+		 *
+		 * 1 / Rx = (1 / R2) [ + (1 / Rs)][ + (1 / Rt)]
+		 * Vout = 0.5 + ((R1 / Rx) * 0.5)
+		 */
+		gpios = <&gpiolvds 1 GPIO_ACTIVE_HIGH>;	/* 12V */
+		states = <5000000 0x0>,
+			 <12000000 0x1>;
+
+		/* Default setting: lowest supported voltage. */
+		gpios-states = <1>;	/* Default GPIO state is HIGH, so 12V0 out */
+		regulator-min-microvolt = <12000000>;
+		regulator-max-microvolt = <12000000>;
+	};
+
+	reg_panel_bl: regulator-panel-bl {
+		compatible = "regulator-fixed";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_panel_backlight>;
+		regulator-name = "PANEL_BL";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		gpio = <&gpiowifi 0 0>;
+		enable-active-high;
+		vin-supply = <&reg_panel_bl_supply>;
+		/* Used by panels which enable PWM signal before BL ON/OFF */
+		status = "disabled";
+	};
+};
+
+&lcdif2 {
+	status = "okay";
+};
+
+&lvds_bridge {
+	status = "okay";
+};
+
+&pwm1 {
+	status = "okay";
+};
+
+&reg_panel_vcc {
+	compatible = "regulator-gpio";
+	regulator-type = "voltage";
+	enable-gpios = <&gpiowifi 4 0>;
+	enable-active-high;
+	status = "okay";
+
+	/*
+	 * MP2328 voltage divider settings:
+	 *   R1=51k1
+	 *   R2=9k09 with optional series Rs=5k62 (5V) or Rt=2k21 (12V)
+	 *
+	 * 1 / Rx = (1 / R2) [ + (1 / Rs)][ + (1 / Rt)]
+	 * Vout = 0.5 + ((R1 / Rx) * 0.5)
+	 */
+	gpios = <&gpiolvds 2 GPIO_ACTIVE_HIGH>,	/* 5V */
+		<&gpiolvds 3 GPIO_ACTIVE_HIGH>;	/* 12V */
+	states = <3300000 0x0>,
+		 <5000000 0x1>,
+		 <12000000 0x2>,
+		 <14000000 0x3>;
+
+	/* Default setting: lowest supported voltage. */
+	gpios-states = <0 0>;	/* Default GPIO state is LOW/LOW, so 3V3 out */
+	regulator-min-microvolt = <3300000>;
+	regulator-max-microvolt = <3300000>;
+};

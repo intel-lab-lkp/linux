@@ -30,11 +30,8 @@
 
 	backlight: backlight {
 		compatible = "pwm-backlight";
-		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_panel_backlight>;
 		brightness-levels = <0 1 10 20 30 40 50 60 70 75 80 90 100>;
 		default-brightness-level = <7>;
-		enable-gpios = <&gpio3 0 GPIO_ACTIVE_HIGH>;
 		pwms = <&pwm1 0 5000000 0>;
 		/* Disabled by default, unless display board plugged in. */
 		status = "disabled";
@@ -66,7 +63,6 @@
 		regulator-name = "PANEL_VCC";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio3 6 0>;
 		enable-active-high;
 		/* Disabled by default, unless display board plugged in. */
 		status = "disabled";

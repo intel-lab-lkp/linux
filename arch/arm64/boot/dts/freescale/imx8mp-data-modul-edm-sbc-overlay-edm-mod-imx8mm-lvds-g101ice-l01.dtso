@@ -1,0 +1,28 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright 2023-2026 Marek Vasut
+ */
+
+#include "imx8mp-data-modul-edm-sbc-overlay-edm-mod-imx8mm-lvds.dtsi"
+#include "imx8mp-data-modul-edm-sbc-overlay-lvds-g101ice-l01.dtsi"
+
+&lt9211_codec {
+	ports {
+		port@2 {
+			reg = <2>;
+
+			lt9211_out_a: endpoint {
+				remote-endpoint = <&panel_lvds>;
+			};
+		};
+	};
+};
+
+&mipi_dsi {
+	samsung,burst-clock-frequency = <515000000>;
+	samsung,esc-clock-frequency = <10000000>;
+};
+
+&panel_lvds {
+	remote-endpoint = <&lt9211_out_a>;
+};

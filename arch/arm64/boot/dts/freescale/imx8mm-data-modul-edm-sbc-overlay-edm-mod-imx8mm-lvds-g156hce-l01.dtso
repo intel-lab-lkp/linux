@@ -1,0 +1,95 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright 2023-2026 Marek Vasut
+ */
+
+#include "imx8mm-data-modul-edm-sbc-overlay-edm-mod-imx8mm-lvds.dtsi"
+
+&backlight {
+	power-supply = <&reg_panel_bl>;
+	/* 4.6 POWER ON/OFF SEQUENCE, T9 >= 10 ms */
+	pwm-off-delay-ms = <10>;
+	/* 4.3.2 BACKLIGHT UNIT fPWM=200 Hz (Typ.), value below in ns */
+	pwms = <&pwm1 0 5000000 0>;
+	status = "okay";
+};
+
+&lt9211_codec {
+	ports {
+		port@2 {
+			reg = <2>;
+
+			lt9211_out_a: endpoint {
+				remote-endpoint = <&panel_lvds_a>;
+			};
+		};
+
+		port@3 {
+			reg = <3>;
+
+			lt9211_out_b: endpoint {
+				remote-endpoint = <&panel_lvds_b>;
+			};
+		};
+	};
+};
+
+&mipi_dsi {
+	samsung,burst-clock-frequency = <864000000>;	/* RX ByteClock ~27 MHz */
+	samsung,esc-clock-frequency = <10000000>;
+};
+
+&panel {
+	compatible = "innolux,g156hce-l01";
+	status = "okay";
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+			dual-lvds-odd-pixels;
+
+			panel_lvds_b: endpoint {
+				remote-endpoint = <&lt9211_out_b>;
+			};
+		};
+
+		port@1 {
+			reg = <1>;
+			dual-lvds-even-pixels;
+
+			panel_lvds_a: endpoint {
+				remote-endpoint = <&lt9211_out_a>;
+			};
+		};
+	};
+};
+
+&reg_backlight_pwm_level {	/* G156HCE-L01 can do both 3V3 and 5V IO */
+	/* Always only output 3.3V on this G156HCE-L01 panel unit. */
+	regulator-min-microvolt = <3300000>;
+	regulator-max-microvolt = <3300000>;
+};
+
+&reg_backlight_en_level {	/* G156HCE-L01 can do both 3V3 and 5V IO */
+	/* Always only output 3.3V on this G156HCE-L01 panel unit. */
+	regulator-min-microvolt = <3300000>;
+	regulator-max-microvolt = <3300000>;
+};
+
+&reg_panel_bl {
+	startup-delay-us = <10000>; /* T8 */
+	off-on-delay-us = <1170000>; /* T9 + T6 + T3 + T7 + T4 + T1 + T2 + T5 */
+	status = "okay";
+};
+
+&reg_panel_vcc {
+	/* 4.6 POWER ON/OFF SEQUENCE */
+	startup-delay-us = <1000>; /* 0.5ms <= T1 + T2 <= 60 ms */
+
+	/* Always only output 3.3V on this G156HCE-L01 panel unit. */
+	regulator-min-microvolt = <3300000>;
+	regulator-max-microvolt = <3300000>;
+};
