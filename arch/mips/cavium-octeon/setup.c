@@ -898,9 +898,11 @@ void __init prom_init(void)
 
 	if (strstr(arcs_cmdline, "console=") == NULL) {
 		if (octeon_uart == 1)
-			strcat(arcs_cmdline, " console=ttyS1,115200");
+			strlcat(arcs_cmdline, " console=ttyS1,115200",
+				COMMAND_LINE_SIZE);
 		else
-			strcat(arcs_cmdline, " console=ttyS0,115200");
+			strlcat(arcs_cmdline, " console=ttyS0,115200",
+				COMMAND_LINE_SIZE);
 	}
 
 	mips_hpt_frequency = octeon_get_clock_rate();
