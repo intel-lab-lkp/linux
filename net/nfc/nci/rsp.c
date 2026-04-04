@@ -87,9 +87,16 @@ static u8 nci_core_init_rsp_packet_v2(struct nci_dev *ndev,
 				      const struct sk_buff *skb)
 {
 	const struct nci_core_init_rsp_nci_ver2 *rsp = (void *)skb->data;
-	const u8 *supported_rf_interface = rsp->supported_rf_interfaces;
+	const u8 *supported_rf_interface;
+	const u8 *end = skb->data + skb->len;
 	u8 rf_interface_idx = 0;
 	u8 rf_extension_cnt = 0;
+
+	if (skb->len < sizeof(*rsp)) {
+		pr_err("CORE_INIT_RSP v2 too short: len=%u need=%zu\n",
+		       skb->len, sizeof(*rsp));
+		return NCI_STATUS_SYNTAX_ERROR;
+	}
 
 	pr_debug("status %x\n", rsp->status);
 
@@ -103,11 +110,22 @@ static u8 nci_core_init_rsp_packet_v2(struct nci_dev *ndev,
 		min((int)ndev->num_supported_rf_interfaces,
 		    NCI_MAX_SUPPORTED_RF_INTERFACES);
 
+	supported_rf_interface = rsp->supported_rf_interfaces;
 	while (rf_interface_idx < ndev->num_supported_rf_interfaces) {
+		if (supported_rf_interface + 2 > end) {
+			pr_err("CORE_INIT_RSP v2 truncated at rf_interface %d\n",
+			       rf_interface_idx);
+			return NCI_STATUS_SYNTAX_ERROR;
+		}
 		ndev->supported_rf_interfaces[rf_interface_idx++] = *supported_rf_interface++;
 
 		/* skip rf extension parameters */
 		rf_extension_cnt = *supported_rf_interface++;
+		if (supported_rf_interface + rf_extension_cnt > end) {
+			pr_err("CORE_INIT_RSP v2 rf_extension overflow at idx %d\n",
+			       rf_interface_idx - 1);
+			return NCI_STATUS_SYNTAX_ERROR;
+		}
 		supported_rf_interface += rf_extension_cnt;
 	}
 
