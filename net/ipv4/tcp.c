@@ -1390,9 +1390,12 @@ new_segment:
 
 		if (forced_push(tp)) {
 			tcp_mark_push(tp, skb);
+			tcp_bpf_tx_timestamp(sk);
 			__tcp_push_pending_frames(sk, mss_now, TCP_NAGLE_PUSH);
-		} else if (skb == tcp_send_head(sk))
+		} else if (skb == tcp_send_head(sk)) {
+			tcp_bpf_tx_timestamp(sk);
 			tcp_push_one(sk, mss_now);
+		}
 		continue;
 
 wait_for_space:
