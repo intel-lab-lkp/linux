@@ -113,6 +113,12 @@ properties:
       - port@0
       - port@1
 
+  resets:
+    maxItems: 1
+
+  reset-names:
+    const: hdmi
+
   rockchip,grf:
     $ref: /schemas/types.yaml#/definitions/phandle
     description:
