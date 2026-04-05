@@ -5,7 +5,7 @@
 
 config IPW2100
 	tristate "Intel PRO/Wireless 2100 Network Connection"
-	depends on PCI && CFG80211
+	depends on PCI && MAC80211
 	select WIRELESS_EXT
 	select WEXT_PRIV
 	select FW_LOADER
@@ -64,7 +64,7 @@ config IPW2100_DEBUG
 
 config IPW2200
 	tristate "Intel PRO/Wireless 2200BG and 2915ABG Network Connection"
-	depends on PCI && CFG80211
+	depends on PCI && MAC80211
 	select WIRELESS_EXT
 	select WEXT_PRIV
 	select FW_LOADER
@@ -151,7 +151,7 @@ config IPW2200_DEBUG
 
 config LIBIPW
 	tristate
-	depends on PCI && CFG80211
+	depends on PCI && MAC80211
 	select WIRELESS_EXT
 	select CRYPTO
 	select CRYPTO_MICHAEL_MIC
