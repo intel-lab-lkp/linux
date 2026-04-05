@@ -486,9 +486,9 @@ reviewed it as thoroughly as if a Reviewed-by: was provided.  Similarly, a key
 user may not have carried out a technical review of the patch, yet they may be
 satisfied with the general approach, the feature or the user-facing interface.
 
-Acked-by: does not necessarily indicate acknowledgement of the entire patch.
+Acked-by: does not necessarily indicate acknowledgment of the entire patch.
 For example, if a patch affects multiple subsystems and has an Acked-by: from
-one subsystem maintainer then this usually indicates acknowledgement of just
+one subsystem maintainer then this usually indicates acknowledgment of just
 the part which affects that maintainer's code.  Judgement should be used here.
 When in doubt people should refer to the original discussion in the mailing
 list archives.  A "# Suffix" may also be used in this case to clarify.
