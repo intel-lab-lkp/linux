@@ -749,7 +749,23 @@ static void fourcc_pointer(struct kunit *kunittest)
 	fourcc_pointer_test(kunittest, try_cb, ARRAY_SIZE(try_cb), "%p4cb");
 }
 
-static void
+/*
+ * GCC < 12.1 can miscompile this test when branch profiling is enabled.
+ *
+ * BUILD_BUG_ON(IS_ERR(PTR)) is a constant false expression, but old GCC can
+ * still trip over it after CONFIG_TRACE_BRANCH_PROFILING and
+ * CONFIG_PROFILE_ALL_BRANCHES rewrite the IS_ERR() unlikely() path into
+ * side-effectful branch counter updates. IPA splitting then outlines the cold
+ * assert arm into errptr.part.* and leaves that clone with an unconditional
+ * __compiletime_assert_*() call, so the build fails even though PTR is not an
+ * ERR_PTR.
+ *
+ * Keep this test out of that buggy IPA path so the BUILD_BUG_ON() can stay in
+ * place without open-coding IS_ERR(). This can be removed once the minimum GCC
+ * includes commit 76fe49423047 ("Fix tree-optimization/101941: IPA splitting
+ * out function with error attribute"), which first shipped in GCC 12.1.
+ */
+static noinline void
 errptr(struct kunit *kunittest)
 {
 	test("-1234", "%pe", ERR_PTR(-1234));
