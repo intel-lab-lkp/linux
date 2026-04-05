@@ -160,6 +160,8 @@ static inline void rose_neigh_hold(struct rose_neigh *rose_neigh)
 static inline void rose_neigh_put(struct rose_neigh *rose_neigh)
 {
 	if (refcount_dec_and_test(&rose_neigh->use)) {
+		timer_delete_sync(&rose_neigh->t0timer);
+		timer_delete_sync(&rose_neigh->ftimer);
 		if (rose_neigh->ax25)
 			ax25_cb_put(rose_neigh->ax25);
 		kfree(rose_neigh->digipeat);
