@@ -2009,23 +2009,29 @@ int mlx5_ib_enable_lb(struct mlx5_ib_dev *dev, bool td, bool qp)
 {
 	int err = 0;
 
-	if (dev->lb.force_enable)
-		return 0;
-
 	mutex_lock(&dev->lb.mutex);
+
 	if (td)
 		dev->lb.user_td++;
 	if (qp)
 		dev->lb.qps++;
 
-	if (dev->lb.user_td == 2 ||
-	    dev->lb.qps == 1) {
-		if (!dev->lb.enabled) {
-			err = mlx5_nic_vport_update_local_lb(dev->mdev, true);
+	if (dev->lb.force_enable)
+		goto unlock;
+
+	if (!dev->lb.enabled && (dev->lb.user_td >= 1 || dev->lb.qps >= 1)) {
+		err = mlx5_nic_vport_update_local_lb(dev->mdev, true);
+		if (err) {
+			if (td)
+				dev->lb.user_td--;
+			if (qp)
+				dev->lb.qps--;
+		} else {
 			dev->lb.enabled = true;
 		}
 	}
 
+unlock:
 	mutex_unlock(&dev->lb.mutex);
 
 	return err;
@@ -2033,23 +2039,22 @@ int mlx5_ib_enable_lb(struct mlx5_ib_dev *dev, bool td, bool qp)
 
 void mlx5_ib_disable_lb(struct mlx5_ib_dev *dev, bool td, bool qp)
 {
-	if (dev->lb.force_enable)
-		return;
-
 	mutex_lock(&dev->lb.mutex);
+
 	if (td)
 		dev->lb.user_td--;
 	if (qp)
 		dev->lb.qps--;
 
-	if (dev->lb.user_td == 1 &&
-	    dev->lb.qps == 0) {
-		if (dev->lb.enabled) {
-			mlx5_nic_vport_update_local_lb(dev->mdev, false);
-			dev->lb.enabled = false;
-		}
+	if (dev->lb.force_enable)
+		goto unlock;
+
+	if (dev->lb.enabled && (dev->lb.user_td == 0 && dev->lb.qps == 0)) {
+		mlx5_nic_vport_update_local_lb(dev->mdev, false);
+		dev->lb.enabled = false;
 	}
 
+unlock:
 	mutex_unlock(&dev->lb.mutex);
 }
 
