@@ -119,7 +119,7 @@ config JFFS2_ZLIB
 	help
 	  Zlib is designed to be a free, general-purpose, legally unencumbered,
 	  lossless data-compression library for use on virtually any computer
-	  hardware and operating system. See <http://www.gzip.org/zlib/> for
+	  hardware and operating system. See <https://www.zlib.net/> for
 	  further information.
 
 	  Say 'Y' if unsure.
