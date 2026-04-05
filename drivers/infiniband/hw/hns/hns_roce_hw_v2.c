@@ -7288,6 +7288,12 @@ static void hns_roce_hw_v2_get_cfg(struct hns_roce_dev *hr_dev,
 	addrconf_addr_eui48((u8 *)&hr_dev->ib_dev.node_guid,
 			    hr_dev->iboe.netdevs[0]->dev_addr);
 
+	if (handle->rinfo.num_vectors > HNS_ROCE_MAX_IRQ_NUM) {
+		dev_warn(hr_dev->dev, "num_vectors %d exceeds max %d, clamping\n",
+			 handle->rinfo.num_vectors, HNS_ROCE_MAX_IRQ_NUM);
+		handle->rinfo.num_vectors = HNS_ROCE_MAX_IRQ_NUM;
+	}
+
 	for (i = 0; i < handle->rinfo.num_vectors; i++)
 		hr_dev->irq[i] = pci_irq_vector(handle->pdev,
 						i + handle->rinfo.base_vector);
