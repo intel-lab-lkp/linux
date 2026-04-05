@@ -639,14 +639,32 @@ static ssize_t do_listns_userns(struct klistns *kls)
 	return ret;
 }
 
+static inline struct ns_common *next_ns_common(struct ns_common *ns,
+					       struct ns_tree_root *ns_tree)
+{
+	if (ns_tree)
+		return list_entry_rcu(ns->ns_tree_node.ns_list_entry.next, struct ns_common, ns_tree_node.ns_list_entry);
+	return list_entry_rcu(ns->ns_unified_node.ns_list_entry.next, struct ns_common, ns_unified_node.ns_list_entry);
+}
+
+static inline bool ns_common_is_head(struct ns_common *ns,
+				     const struct list_head *head,
+				     struct ns_tree_root *ns_tree)
+{
+	if (ns_tree)
+		return &ns->ns_tree_node.ns_list_entry == head;
+	return &ns->ns_unified_node.ns_list_entry == head;
+}
+
 /*
  * Lookup a namespace with id >= ns_id in either the unified tree or a type-specific tree.
  * Returns the namespace with the smallest id that is >= ns_id.
  */
 static struct ns_common *lookup_ns_id_at(u64 ns_id, int ns_type)
 {
-	struct ns_common *ret = NULL;
+	struct ns_common *min = NULL, *ret = NULL;
 	struct ns_tree_root *ns_tree = NULL;
+	struct list_head *head;
 	struct rb_node *node;
 
 	if (ns_type) {
@@ -672,9 +690,9 @@ static struct ns_common *lookup_ns_id_at(u64 ns_id, int ns_type)
 
 		if (ns_id <= ns->ns_id) {
 			if (ns_type)
-				ret = node_to_ns(node);
+				min = node_to_ns(node);
 			else
-				ret = node_to_ns_unified(node);
+				min = node_to_ns_unified(node);
 			if (ns_id == ns->ns_id)
 				break;
 			node = node->rb_left;
@@ -683,8 +701,31 @@ static struct ns_common *lookup_ns_id_at(u64 ns_id, int ns_type)
 		}
 	}
 
-	if (ret)
-		ret = ns_get_unless_inactive(ret);
+	if (!min)
+		return NULL;
+	/*
+	 * Now min->ns_id is the minimum id where min->ns_id >= ns_id holds,
+	 * but min could be inactive or destroyed here, therefore
+	 * ns_get_unless_inactive(min) could return NULL.
+	 *
+	 * To handle this case, try acquiring the next ns until it reaches the
+	 * first valid ns.
+	 */
+	if (ns_tree)
+		head = &ns_tree->ns_list_head;
+	else
+		head = &ns_unified_root.ns_list_head;
+
+	while (!ns_common_is_head(min, head, ns_tree)) {
+		ret = ns_get_unless_inactive(min);
+		if (ret)
+			break;
+
+		rcu_read_lock();
+		min = next_ns_common(min, ns_tree);
+		rcu_read_unlock();
+	}
+
 	return ret;
 }
 
@@ -694,23 +735,6 @@ static inline struct ns_common *first_ns_common(const struct list_head *head,
 	if (ns_tree)
 		return list_entry_rcu(head->next, struct ns_common, ns_tree_node.ns_list_entry);
 	return list_entry_rcu(head->next, struct ns_common, ns_unified_node.ns_list_entry);
-}
-
-static inline struct ns_common *next_ns_common(struct ns_common *ns,
-					       struct ns_tree_root *ns_tree)
-{
-	if (ns_tree)
-		return list_entry_rcu(ns->ns_tree_node.ns_list_entry.next, struct ns_common, ns_tree_node.ns_list_entry);
-	return list_entry_rcu(ns->ns_unified_node.ns_list_entry.next, struct ns_common, ns_unified_node.ns_list_entry);
-}
-
-static inline bool ns_common_is_head(struct ns_common *ns,
-				     const struct list_head *head,
-				     struct ns_tree_root *ns_tree)
-{
-	if (ns_tree)
-		return &ns->ns_tree_node.ns_list_entry == head;
-	return &ns->ns_unified_node.ns_list_entry == head;
 }
 
 static ssize_t do_listns(struct klistns *kls)
