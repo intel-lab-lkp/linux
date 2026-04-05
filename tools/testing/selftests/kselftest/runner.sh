@@ -164,18 +164,24 @@ in_netns()
 
 run_in_netns()
 {
-	local netns=$(mktemp -u ${BASENAME_TEST}-XXXXXX)
-	local tmplog="/tmp/$(mktemp -u ${BASENAME_TEST}-XXXXXX)"
-	ip netns add $netns
-	if [ $? -ne 0 ]; then
+	local netns_tmp netns tmplog
+
+	netns_tmp=$(mktemp -d "/tmp/${BASENAME_TEST}-netns-XXXXXX")
+	netns=${netns_tmp##*/}
+	rmdir "$netns_tmp"
+	tmplog=$(mktemp "/tmp/${BASENAME_TEST}-log-XXXXXX")
+
+	if ! ip netns add "$netns"; then
 		echo "# Warning: Create namespace failed for $BASENAME_TEST"
 		echo "not ok $test_num selftests: $DIR: $BASENAME_TEST # Create NS failed"
+		rm -f "$tmplog"
+		return
 	fi
-	ip -n $netns link set lo up
-	in_netns $netns &> $tmplog
-	ip netns del $netns &> /dev/null
-	cat $tmplog
-	rm -f $tmplog
+	ip -n "$netns" link set lo up
+	in_netns "$netns" >"$tmplog" 2>&1
+	ip netns del "$netns" >/dev/null 2>&1
+	cat "$tmplog"
+	rm -f "$tmplog"
 }
 
 run_many()
