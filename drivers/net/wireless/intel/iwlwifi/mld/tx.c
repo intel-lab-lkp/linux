@@ -44,8 +44,8 @@ void iwl_mld_toggle_tx_ant(struct iwl_mld *mld, u8 *ant)
 	*ant = iwl_mld_next_ant(iwl_mld_get_valid_tx_ant(mld), *ant);
 }
 
-static int
-iwl_mld_get_queue_size(struct iwl_mld *mld, struct ieee80211_txq *txq)
+static int iwl_mld_get_queue_size(struct iwl_mld *mld,
+				  struct ieee80211_txq *txq)
 {
 	struct ieee80211_sta *sta = txq->sta;
 	struct ieee80211_link_sta *link_sta;
@@ -74,9 +74,10 @@ static int iwl_mld_allocate_txq(struct iwl_mld *mld, struct ieee80211_txq *txq)
 	/* We can't know when the station is asleep or awake, so we
 	 * must disable the queue hang detection.
 	 */
-	unsigned int watchdog_timeout = txq->vif->type == NL80211_IFTYPE_AP ?
-				IWL_WATCHDOG_DISABLED :
-				mld->trans->mac_cfg->base->wd_timeout;
+	unsigned int watchdog_timeout =
+		txq->vif->type == NL80211_IFTYPE_AP ?
+			IWL_WATCHDOG_DISABLED :
+			mld->trans->mac_cfg->base->wd_timeout;
 	int queue, size;
 
 	lockdep_assert_wiphy(mld->wiphy);
@@ -91,9 +92,9 @@ static int iwl_mld_allocate_txq(struct iwl_mld *mld, struct ieee80211_txq *txq)
 				    watchdog_timeout);
 
 	if (queue >= 0)
-		IWL_DEBUG_TX_QUEUES(mld,
-				    "Enabling TXQ #%d for sta mask 0x%x tid %d\n",
-				    queue, fw_sta_mask, tid);
+		IWL_DEBUG_TX_QUEUES(
+			mld, "Enabling TXQ #%d for sta mask 0x%x tid %d\n",
+			queue, fw_sta_mask, tid);
 	return queue;
 }
 
@@ -123,9 +124,8 @@ void iwl_mld_add_txq_list(struct iwl_mld *mld)
 
 	while (!list_empty(&mld->txqs_to_add)) {
 		struct ieee80211_txq *txq;
-		struct iwl_mld_txq *mld_txq =
-			list_first_entry(&mld->txqs_to_add, struct iwl_mld_txq,
-					 list);
+		struct iwl_mld_txq *mld_txq = list_first_entry(
+			&mld->txqs_to_add, struct iwl_mld_txq, list);
 		int failed;
 
 		txq = container_of((void *)mld_txq, struct ieee80211_txq,
@@ -149,8 +149,7 @@ void iwl_mld_add_txq_list(struct iwl_mld *mld)
 
 void iwl_mld_add_txqs_wk(struct wiphy *wiphy, struct wiphy_work *wk)
 {
-	struct iwl_mld *mld = container_of(wk, struct iwl_mld,
-					   add_txqs_wk);
+	struct iwl_mld *mld = container_of(wk, struct iwl_mld, add_txqs_wk);
 
 	/* will reschedule to run after restart */
 	if (mld->fw_status.in_hw_restart)
@@ -159,8 +158,8 @@ void iwl_mld_add_txqs_wk(struct wiphy *wiphy, struct wiphy_work *wk)
 	iwl_mld_add_txq_list(mld);
 }
 
-void
-iwl_mld_free_txq(struct iwl_mld *mld, u32 fw_sta_mask, u32 tid, u32 queue_id)
+void iwl_mld_free_txq(struct iwl_mld *mld, u32 fw_sta_mask, u32 tid,
+		      u32 queue_id)
 {
 	struct iwl_scd_queue_cfg_cmd remove_cmd = {
 		.operation = cpu_to_le32(IWL_SCD_QUEUE_REMOVE),
@@ -193,8 +192,7 @@ void iwl_mld_remove_txq(struct iwl_mld *mld, struct ieee80211_txq *txq)
 
 	sta_msk = iwl_mld_fw_sta_id_mask(mld, txq->sta);
 
-	tid = txq->tid == IEEE80211_NUM_TIDS ? IWL_MGMT_TID :
-					       txq->tid;
+	tid = txq->tid == IEEE80211_NUM_TIDS ? IWL_MGMT_TID : txq->tid;
 
 	iwl_mld_free_txq(mld, sta_msk, tid, mld_txq->fw_id);
 
@@ -202,11 +200,9 @@ void iwl_mld_remove_txq(struct iwl_mld *mld, struct ieee80211_txq *txq)
 	mld_txq->status.allocated = false;
 }
 
-#define OPT_HDR(type, skb, off) \
-	(type *)(skb_network_header(skb) + (off))
+#define OPT_HDR(type, skb, off) (type *)(skb_network_header(skb) + (off))
 
-static __le32
-iwl_mld_get_offload_assist(struct sk_buff *skb, bool amsdu)
+static __le32 iwl_mld_get_offload_assist(struct sk_buff *skb, bool amsdu)
 {
 	struct ieee80211_hdr *hdr = (void *)skb->data;
 	u16 mh_len = ieee80211_hdrlen(hdr->frame_control);
@@ -225,7 +221,7 @@ iwl_mld_get_offload_assist(struct sk_buff *skb, bool amsdu)
 	 * the devices we support has this flags?
 	 */
 	if (WARN_ONCE(skb->protocol != htons(ETH_P_IP) &&
-		      skb->protocol != htons(ETH_P_IPV6),
+			      skb->protocol != htons(ETH_P_IPV6),
 		      "No support for requested checksum\n")) {
 		skb_checksum_help(skb);
 		goto out;
@@ -306,8 +302,8 @@ static void iwl_mld_get_basic_rates_and_band(struct iwl_mld *mld,
 					     unsigned long *basic_rates,
 					     u8 *band)
 {
-	u32 link_id = u32_get_bits(info->control.flags,
-				   IEEE80211_TX_CTRL_MLO_LINK);
+	u32 link_id =
+		u32_get_bits(info->control.flags, IEEE80211_TX_CTRL_MLO_LINK);
 
 	*basic_rates = vif->bss_conf.basic_rates;
 	*band = info->band;
@@ -333,8 +329,7 @@ static void iwl_mld_get_basic_rates_and_band(struct iwl_mld *mld,
 	}
 }
 
-u8 iwl_mld_get_lowest_rate(struct iwl_mld *mld,
-			   struct ieee80211_tx_info *info,
+u8 iwl_mld_get_lowest_rate(struct iwl_mld *mld, struct ieee80211_tx_info *info,
 			   struct ieee80211_vif *vif)
 {
 	struct ieee80211_supported_band *sband;
@@ -389,8 +384,8 @@ static u32 iwl_mld_mac80211_rate_idx_to_fw(struct iwl_mld *mld,
 
 	/* if the rate isn't a well known legacy rate, take the lowest one */
 	if (rate_idx < 0 || rate_idx >= IWL_RATE_COUNT_LEGACY)
-		rate_idx = iwl_mld_get_lowest_rate(mld, info,
-						   info->control.vif);
+		rate_idx =
+			iwl_mld_get_lowest_rate(mld, info, info->control.vif);
 
 	WARN_ON_ONCE(rate_idx < 0);
 
@@ -404,7 +399,8 @@ static u32 iwl_mld_mac80211_rate_idx_to_fw(struct iwl_mld *mld,
 	 * 0 - 3 for CCK and 0 - 7 for OFDM
 	 */
 	rate_plcp = (rate_idx >= IWL_FIRST_OFDM_RATE ?
-		     rate_idx - IWL_FIRST_OFDM_RATE : rate_idx);
+			     rate_idx - IWL_FIRST_OFDM_RATE :
+			     rate_idx);
 
 	return (u32)rate_plcp | rate_flags;
 }
@@ -424,8 +420,7 @@ static u32 iwl_mld_get_tx_ant(struct iwl_mld *mld,
 
 static u32 iwl_mld_get_inject_tx_rate(struct iwl_mld *mld,
 				      struct ieee80211_tx_info *info,
-				      struct ieee80211_sta *sta,
-				      __le16 fc)
+				      struct ieee80211_sta *sta, __le16 fc)
 {
 	struct ieee80211_tx_rate *rate = &info->control.rates[0];
 	u32 result;
@@ -492,9 +487,8 @@ static __le32 iwl_mld_get_tx_rate_n_flags(struct iwl_mld *mld,
 	return iwl_v3_rate_to_v2_v3(rate, mld->fw_rates_ver_3);
 }
 
-static void
-iwl_mld_fill_tx_cmd_hdr(struct iwl_tx_cmd *tx_cmd,
-			struct sk_buff *skb, bool amsdu)
+static void iwl_mld_fill_tx_cmd_hdr(struct iwl_tx_cmd *tx_cmd,
+				    struct sk_buff *skb, bool amsdu)
 {
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
 	struct ieee80211_hdr *hdr = (void *)skb->data;
@@ -530,10 +524,9 @@ iwl_mld_fill_tx_cmd_hdr(struct iwl_tx_cmd *tx_cmd,
 	}
 }
 
-static void
-iwl_mld_fill_tx_cmd(struct iwl_mld *mld, struct sk_buff *skb,
-		    struct iwl_device_tx_cmd *dev_tx_cmd,
-		    struct ieee80211_sta *sta)
+static void iwl_mld_fill_tx_cmd(struct iwl_mld *mld, struct sk_buff *skb,
+				struct iwl_device_tx_cmd *dev_tx_cmd,
+				struct ieee80211_sta *sta)
 {
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
 	struct ieee80211_hdr *hdr = (void *)skb->data;
@@ -561,8 +554,7 @@ iwl_mld_fill_tx_cmd(struct iwl_mld *mld, struct sk_buff *skb,
 		rate_n_flags = iwl_mld_get_tx_rate_n_flags(mld, info, sta,
 							   hdr->frame_control);
 	} else if (!ieee80211_is_data(hdr->frame_control) ||
-		   (mld_sta &&
-		    mld_sta->sta_state < IEEE80211_STA_AUTHORIZED)) {
+		   (mld_sta && mld_sta->sta_state < IEEE80211_STA_AUTHORIZED)) {
 		/* These are important frames */
 		flags |= IWL_TX_FLAGS_HIGH_PRI;
 	}
@@ -587,8 +579,8 @@ iwl_mld_get_link_from_tx_info(struct ieee80211_tx_info *info)
 {
 	struct iwl_mld_vif *mld_vif =
 		iwl_mld_vif_from_mac80211(info->control.vif);
-	u32 link_id = u32_get_bits(info->control.flags,
-				   IEEE80211_TX_CTRL_MLO_LINK);
+	u32 link_id =
+		u32_get_bits(info->control.flags, IEEE80211_TX_CTRL_MLO_LINK);
 
 	if (link_id == IEEE80211_LINK_UNSPECIFIED) {
 		if (info->control.vif->active_links)
@@ -600,9 +592,9 @@ iwl_mld_get_link_from_tx_info(struct ieee80211_tx_info *info)
 	return rcu_dereference(mld_vif->link[link_id]);
 }
 
-static int
-iwl_mld_get_tx_queue_id(struct iwl_mld *mld, struct ieee80211_txq *txq,
-			struct sk_buff *skb)
+static int iwl_mld_get_tx_queue_id(struct iwl_mld *mld,
+				   struct ieee80211_txq *txq,
+				   struct sk_buff *skb)
 {
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
 	struct ieee80211_hdr *hdr = (void *)skb->data;
@@ -686,8 +678,7 @@ iwl_mld_get_tx_queue_id(struct iwl_mld *mld, struct ieee80211_txq *txq,
 	return IWL_MLD_INVALID_QUEUE;
 }
 
-static void iwl_mld_probe_resp_set_noa(struct iwl_mld *mld,
-				       struct sk_buff *skb)
+static void iwl_mld_probe_resp_set_noa(struct iwl_mld *mld, struct sk_buff *skb)
 {
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
 	struct iwl_mld_link *mld_link =
@@ -709,8 +700,7 @@ static void iwl_mld_probe_resp_set_noa(struct iwl_mld *mld,
 
 	if (skb_tailroom(skb) < resp_data->noa_len) {
 		if (pskb_expand_head(skb, 0, resp_data->noa_len, GFP_ATOMIC)) {
-			IWL_ERR(mld,
-				"Failed to reallocate probe resp\n");
+			IWL_ERR(mld, "Failed to reallocate probe resp\n");
 			goto out;
 		}
 	}
@@ -770,8 +760,7 @@ static int iwl_mld_tx_mpdu(struct iwl_mld *mld, struct sk_buff *skb,
 			tid = IWL_TID_NON_QOS;
 	}
 
-	IWL_DEBUG_TX(mld, "TX TID:%d from Q:%d len %d\n",
-		     tid, queue, skb->len);
+	IWL_DEBUG_TX(mld, "TX TID:%d from Q:%d len %d\n", tid, queue, skb->len);
 
 	/* From now on, we cannot access info->control */
 	memset(&info->status, 0, sizeof(info->status));
@@ -824,7 +813,7 @@ static int iwl_mld_tx_tso_segment(struct iwl_mld *mld, struct sk_buff *skb,
 	 */
 	if (skb->protocol == htons(ETH_P_IPV6) &&
 	    ((struct ipv6hdr *)skb_network_header(skb))->nexthdr !=
-	    IPPROTO_TCP) {
+		    IPPROTO_TCP) {
 		netdev_flags &= ~NETIF_F_CSUM_MASK;
 		return iwl_tx_tso_segment(skb, 1, netdev_flags, mpdus_skbs);
 	}
@@ -851,7 +840,7 @@ static int iwl_mld_tx_tso_segment(struct iwl_mld *mld, struct sk_buff *skb,
 		num_subframes = sta->max_amsdu_subframes;
 
 	tcp_payload_len = skb_tail_pointer(skb) - skb_transport_header(skb) -
-		tcp_hdrlen(skb) + skb->data_len;
+			  tcp_hdrlen(skb) + skb->data_len;
 
 	/* Make sure we have enough TBs for the A-MSDU:
 	 *	2 for each subframe
@@ -893,7 +882,7 @@ static int iwl_mld_tx_tso(struct iwl_mld *mld, struct sk_buff *skb,
 		return -1;
 
 	payload_len = skb_tail_pointer(skb) - skb_transport_header(skb) -
-		tcp_hdrlen(skb) + skb->data_len;
+		      tcp_hdrlen(skb) + skb->data_len;
 
 	if (payload_len <= skb_shinfo(skb)->gso_size)
 		return iwl_mld_tx_mpdu(mld, skb, txq);
@@ -1011,8 +1000,8 @@ static void iwl_mld_hwrate_to_tx_rate(struct iwl_mld *mld,
 {
 	enum nl80211_band band = info->band;
 	struct ieee80211_tx_rate *tx_rate = &info->status.rates[0];
-	u32 rate_n_flags = iwl_v3_rate_from_v2_v3(rate_n_flags_fw,
-						  mld->fw_rates_ver_3);
+	u32 rate_n_flags =
+		iwl_v3_rate_from_v2_v3(rate_n_flags_fw, mld->fw_rates_ver_3);
 	u32 sgi = rate_n_flags & RATE_MCS_SGI_MSK;
 	u32 chan_width = rate_n_flags & RATE_MCS_CHAN_WIDTH_MSK;
 	u32 format = rate_n_flags & RATE_MCS_MOD_TYPE_MSK;
@@ -1042,10 +1031,9 @@ static void iwl_mld_hwrate_to_tx_rate(struct iwl_mld *mld,
 		tx_rate->idx = RATE_HT_MCS_INDEX(rate_n_flags);
 		break;
 	case RATE_MCS_MOD_TYPE_VHT:
-		ieee80211_rate_set_vht(tx_rate,
-				       rate_n_flags & RATE_MCS_CODE_MSK,
-				       u32_get_bits(rate_n_flags,
-						    RATE_MCS_NSS_MSK) + 1);
+		ieee80211_rate_set_vht(
+			tx_rate, rate_n_flags & RATE_MCS_CODE_MSK,
+			u32_get_bits(rate_n_flags, RATE_MCS_NSS_MSK) + 1);
 		tx_rate->flags |= IEEE80211_TX_RC_VHT_MCS;
 		break;
 	case RATE_MCS_MOD_TYPE_HE:
@@ -1056,9 +1044,8 @@ static void iwl_mld_hwrate_to_tx_rate(struct iwl_mld *mld,
 		tx_rate->idx = 0;
 		break;
 	default:
-		tx_rate->idx =
-			iwl_mld_legacy_hw_idx_to_mac80211_idx(rate_n_flags,
-							      band);
+		tx_rate->idx = iwl_mld_legacy_hw_idx_to_mac80211_idx(
+			rate_n_flags, band);
 		break;
 	}
 }
@@ -1082,6 +1069,19 @@ void iwl_mld_handle_tx_resp_notif(struct iwl_mld *mld,
 	bool mgmt = false;
 	bool tx_failure = (status & TX_STATUS_MSK) != TX_STATUS_SUCCESS;
 
+	/* Firmware is dead — the TX response may contain corrupt SSN values
+	 * from a dying firmware DMA. Processing it could cause
+	 * iwl_trans_reclaim() to free the wrong TX queue entries, leading to
+	 * skb use-after-free or double-free.
+	 */
+	if (unlikely(test_bit(STATUS_FW_ERROR, &mld->trans->status))) {
+		WARN_ONCE(
+			1,
+			"iwlwifi: TX resp notif (sta=%d txq=%d) after FW error\n",
+			sta_id, txq_id);
+		return;
+	}
+
 	if (IWL_FW_CHECK(mld, tx_resp->frame_count != 1,
 			 "Invalid tx_resp notif frame_count (%d)\n",
 			 tx_resp->frame_count))
@@ -1093,8 +1093,8 @@ void iwl_mld_handle_tx_resp_notif(struct iwl_mld *mld,
 			 notif_size, pkt_len))
 		return;
 
-	ssn = le32_to_cpup((__le32 *)agg_status +
-			   tx_resp->frame_count) & 0xFFFF;
+	ssn = le32_to_cpup((__le32 *)agg_status + tx_resp->frame_count) &
+	      0xFFFF;
 
 	__skb_queue_head_init(&skbs);
 
@@ -1112,7 +1112,8 @@ void iwl_mld_handle_tx_resp_notif(struct iwl_mld *mld,
 
 		memset(&info->status, 0, sizeof(info->status));
 
-		info->flags &= ~(IEEE80211_TX_STAT_ACK | IEEE80211_TX_STAT_TX_FILTERED);
+		info->flags &= ~(IEEE80211_TX_STAT_ACK |
+				 IEEE80211_TX_STAT_TX_FILTERED);
 
 		/* inform mac80211 about what happened with the frame */
 		switch (status & TX_STATUS_MSK) {
@@ -1149,10 +1150,11 @@ void iwl_mld_handle_tx_resp_notif(struct iwl_mld *mld,
 			ieee80211_tx_status_skb(mld->hw, skb);
 	}
 
-	IWL_DEBUG_TX_REPLY(mld,
-			   "TXQ %d status 0x%08x ssn=%d initial_rate 0x%x retries %d\n",
-			   txq_id, status, ssn, le32_to_cpu(tx_resp->initial_rate),
-			   tx_resp->failure_frame);
+	IWL_DEBUG_TX_REPLY(
+		mld,
+		"TXQ %d status 0x%08x ssn=%d initial_rate 0x%x retries %d\n",
+		txq_id, status, ssn, le32_to_cpu(tx_resp->initial_rate),
+		tx_resp->failure_frame);
 
 	if (tx_failure && mgmt)
 		iwl_mld_toggle_tx_ant(mld, &mld->mgmt_tx_ant);
@@ -1168,9 +1170,8 @@ void iwl_mld_handle_tx_resp_notif(struct iwl_mld *mld,
 		/* This can happen if the TX cmd was sent before pre_rcu_remove
 		 * but the TX response was received after
 		 */
-		IWL_DEBUG_TX_REPLY(mld,
-				   "Got valid sta_id (%d) but sta is NULL\n",
-				   sta_id);
+		IWL_DEBUG_TX_REPLY(
+			mld, "Got valid sta_id (%d) but sta is NULL\n", sta_id);
 		goto out;
 	}
 
@@ -1246,8 +1247,7 @@ int iwl_mld_flush_link_sta_txqs(struct iwl_mld *mld, u32 fw_sta_id)
 
 	resp_len = iwl_rx_packet_payload_len(cmd.resp_pkt);
 	if (IWL_FW_CHECK(mld, resp_len != sizeof(*rsp),
-			 "Invalid TXPATH_FLUSH response len: %d\n",
-			 resp_len)) {
+			 "Invalid TXPATH_FLUSH response len: %d\n", resp_len)) {
 		ret = -EIO;
 		goto free_rsp;
 	}
@@ -1273,16 +1273,14 @@ int iwl_mld_flush_link_sta_txqs(struct iwl_mld *mld, u32 fw_sta_id)
 		int read_after = le16_to_cpu(queue_info->read_after_flush);
 		int txq_id = le16_to_cpu(queue_info->queue_num);
 
-		if (IWL_FW_CHECK(mld,
-				 txq_id >= ARRAY_SIZE(mld->fw_id_to_txq),
+		if (IWL_FW_CHECK(mld, txq_id >= ARRAY_SIZE(mld->fw_id_to_txq),
 				 "Invalid txq id %d\n", txq_id))
 			continue;
 
-		IWL_DEBUG_TX_QUEUES(mld,
-				    "tid %d txq_id %d read-before %d read-after %d\n",
-				    le16_to_cpu(queue_info->tid), txq_id,
-				    le16_to_cpu(queue_info->read_before_flush),
-				    read_after);
+		IWL_DEBUG_TX_QUEUES(
+			mld, "tid %d txq_id %d read-before %d read-after %d\n",
+			le16_to_cpu(queue_info->tid), txq_id,
+			le16_to_cpu(queue_info->read_before_flush), read_after);
 
 		iwl_mld_tx_reclaim_txq(mld, txq_id, read_after, true);
 	}
@@ -1312,8 +1310,7 @@ int iwl_mld_ensure_queue(struct iwl_mld *mld, struct ieee80211_txq *txq)
 	return ret;
 }
 
-int iwl_mld_update_sta_txqs(struct iwl_mld *mld,
-			    struct ieee80211_sta *sta,
+int iwl_mld_update_sta_txqs(struct iwl_mld *mld, struct ieee80211_sta *sta,
 			    u32 old_sta_mask, u32 new_sta_mask)
 {
 	struct iwl_scd_queue_cfg_cmd cmd = {
@@ -1326,10 +1323,9 @@ int iwl_mld_update_sta_txqs(struct iwl_mld *mld,
 
 	for (int tid = 0; tid <= IWL_MAX_TID_COUNT; tid++) {
 		struct ieee80211_txq *txq =
-			sta->txq[tid != IWL_MAX_TID_COUNT ?
-					tid : IEEE80211_NUM_TIDS];
-		struct iwl_mld_txq *mld_txq =
-			iwl_mld_txq_from_mac80211(txq);
+			sta->txq[tid != IWL_MAX_TID_COUNT ? tid :
+							    IEEE80211_NUM_TIDS];
+		struct iwl_mld_txq *mld_txq = iwl_mld_txq_from_mac80211(txq);
 		int ret;
 
 		if (!mld_txq->status.allocated)
@@ -1340,10 +1336,9 @@ int iwl_mld_update_sta_txqs(struct iwl_mld *mld,
 		else
 			cmd.u.modify.tid = cpu_to_le32(tid);
 
-		ret = iwl_mld_send_cmd_pdu(mld,
-					   WIDE_ID(DATA_PATH_GROUP,
-						   SCD_QUEUE_CONFIG_CMD),
-					   &cmd);
+		ret = iwl_mld_send_cmd_pdu(
+			mld, WIDE_ID(DATA_PATH_GROUP, SCD_QUEUE_CONFIG_CMD),
+			&cmd);
 		if (ret)
 			return ret;
 	}
@@ -1360,27 +1355,32 @@ void iwl_mld_handle_compressed_ba_notif(struct iwl_mld *mld,
 	u8 sta_id = ba_res->sta_id;
 	struct ieee80211_link_sta *link_sta;
 
+	if (unlikely(test_bit(STATUS_FW_ERROR, &mld->trans->status))) {
+		WARN_ONCE(1, "iwlwifi: BA notif (sta=%d) after FW error\n",
+			  sta_id);
+		return;
+	}
+
 	if (!tfd_cnt)
 		return;
 
 	if (IWL_FW_CHECK(mld, struct_size(ba_res, tfd, tfd_cnt) > pkt_len,
-			 "Short BA notif (tfd_cnt=%d, size:0x%x)\n",
-			 tfd_cnt, pkt_len))
+			 "Short BA notif (tfd_cnt=%d, size:0x%x)\n", tfd_cnt,
+			 pkt_len))
 		return;
 
-	IWL_DEBUG_TX_REPLY(mld,
-			   "BA notif received from sta_id=%d, flags=0x%x, sent:%d, acked:%d\n",
-			   sta_id, le32_to_cpu(ba_res->flags),
-			   le16_to_cpu(ba_res->txed),
-			   le16_to_cpu(ba_res->done));
+	IWL_DEBUG_TX_REPLY(
+		mld,
+		"BA notif received from sta_id=%d, flags=0x%x, sent:%d, acked:%d\n",
+		sta_id, le32_to_cpu(ba_res->flags), le16_to_cpu(ba_res->txed),
+		le16_to_cpu(ba_res->done));
 
 	for (int i = 0; i < tfd_cnt; i++) {
 		struct iwl_compressed_ba_tfd *ba_tfd = &ba_res->tfd[i];
 		int txq_id = le16_to_cpu(ba_tfd->q_num);
 		int index = le16_to_cpu(ba_tfd->tfd_index);
 
-		if (IWL_FW_CHECK(mld,
-				 txq_id >= ARRAY_SIZE(mld->fw_id_to_txq),
+		if (IWL_FW_CHECK(mld, txq_id >= ARRAY_SIZE(mld->fw_id_to_txq),
 				 "Invalid txq id %d\n", txq_id))
 			continue;
 
