@@ -1397,10 +1397,10 @@ exit($exit);
 sub top_of_kernel_tree {
 	my ($root) = @_;
 
+	# Allow sparse checkouts that still contain the files these scripts need.
 	my @tree_check = (
 		"COPYING", "CREDITS", "Kbuild", "MAINTAINERS", "Makefile",
-		"README", "Documentation", "arch", "include", "drivers",
-		"fs", "init", "ipc", "kernel", "lib", "scripts",
+		"README", "Documentation", "scripts",
 	);
 
 	foreach my $check (@tree_check) {
