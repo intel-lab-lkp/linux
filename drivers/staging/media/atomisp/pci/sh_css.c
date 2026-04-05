@@ -4385,7 +4385,7 @@ sh_css_pipe_get_grid_info(struct ia_css_pipe *pipe,
 	} else {
 		memset(&info->dvs_grid, 0, sizeof(info->dvs_grid));
 		memset(&info->dvs_grid.dvs_stat_grid_info, 0,
-			   sizeof(info->dvs_grid.dvs_stat_grid_info));
+		       sizeof(info->dvs_grid.dvs_stat_grid_info));
 	}
 
 	if (binary) {
@@ -4797,7 +4797,7 @@ static int video_start(struct ia_css_pipe *pipe)
 
 	if (pipe->stream->cont_capt) {
 		ia_css_pipeline_get_sp_thread_id(ia_css_pipe_get_pipe_num(capture_pipe),
-						    &thread_id);
+						 &thread_id);
 		copy_ovrd |= 1 << thread_id;
 	}
 

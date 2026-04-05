@@ -846,7 +846,7 @@ static int atomisp_register_entities(struct atomisp_device *isp)
 	/* Register internal entities */
 	for (i = 0; i < ATOMISP_CAMERA_NR_PORTS; i++) {
 		ret = atomisp_mipi_csi2_register_entities(&isp->csi2_port[i],
-			&isp->v4l2_dev);
+							  &isp->v4l2_dev);
 		if (ret == 0)
 			continue;
 

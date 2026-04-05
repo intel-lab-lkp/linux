@@ -1464,7 +1464,7 @@ sh_css_update_host2sp_num_mipi_frames(unsigned int num_frames)
 
 void
 sh_css_update_host2sp_cont_num_raw_frames(unsigned int num_frames,
-	bool set_avail)
+					  bool set_avail)
 {
 	const struct ia_css_fw_info *fw;
 	unsigned int HIVE_ADDR_host_sp_com;
