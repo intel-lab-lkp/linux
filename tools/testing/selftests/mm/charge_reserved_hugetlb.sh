@@ -193,9 +193,9 @@ function write_hugetlbfs_and_get_usage() {
     [[ "$private" == "-r" ]] && [[ "$expect_failure" != 1 ]]; then
 
     bash write_hugetlb_memory.sh "$size" "$populate" "$write" \
-      "$cgroup" "$path" "$method" "$private" "-l" "$reserve" 2>&1 | tee $output &
+      "$cgroup" "$path" "$method" "$private" "-l" "$reserve" \
+      >"$output" 2>&1 &
 
-    local write_result=$?
     local write_pid=$!
 
     until grep -q -i "DONE" $output; do
@@ -223,6 +223,8 @@ function write_hugetlbfs_and_get_usage() {
       sleep 0.5
     fi
 
+    wait "$write_pid"
+    local write_result=$?
     echo write_result is $write_result
   else
     bash write_hugetlb_memory.sh "$size" "$populate" "$write" \
