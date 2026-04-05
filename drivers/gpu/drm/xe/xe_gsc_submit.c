@@ -49,7 +49,7 @@ u64 xe_gsc_create_host_session_id(void)
 {
 	u64 host_session_id;
 
-	get_random_bytes(&host_session_id, sizeof(u64));
+	host_session_id = get_random_u64();
 	host_session_id &= ~HOST_SESSION_CLIENT_MASK;
 	return host_session_id;
 }
