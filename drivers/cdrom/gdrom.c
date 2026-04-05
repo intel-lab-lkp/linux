@@ -484,6 +484,25 @@ static const struct cdrom_device_ops gdrom_ops = {
 				  CDC_RESET | CDC_DRIVE_STATUS | CDC_CD_R,
 };
 
+static int gdrom_update_capacity(void)
+{
+	sector_t cap;
+	int ret;
+
+	if (gdrom_drivestatus(gd.cd_info, CDSL_CURRENT) != CDS_DISC_OK) {
+		set_capacity(gd.disk, 0);
+		return -ENOMEDIUM;
+	}
+	ret = gdrom_readtoc_cmd(gd.toc, 0);
+	if (ret) {
+		set_capacity(gd.disk, 0);
+		return ret;
+	}
+	cap = (sector_t)get_entry_lba(gd.toc->leadout) * GD_TO_BLK;
+	set_capacity(gd.disk, cap);
+	return 0;
+}
+
 static int gdrom_bdops_open(struct gendisk *disk, blk_mode_t mode)
 {
 	int ret;
@@ -492,6 +511,8 @@ static int gdrom_bdops_open(struct gendisk *disk, blk_mode_t mode)
 
 	mutex_lock(&gdrom_mutex);
 	ret = cdrom_open(gd.cd_info, mode);
+	if (!ret)
+		ret = gdrom_update_capacity();
 	mutex_unlock(&gdrom_mutex);
 	return ret;
 }
