@@ -66,11 +66,13 @@ void __iomem *mvebu_get_scu_base(void)
 static int __init mvebu_scan_mem(unsigned long node, const char *uname,
 				 int depth, void *data)
 {
-	const char *type = of_get_flat_dt_prop(node, "device_type", NULL);
+	const char *type;
 	const __be32 *reg, *endp;
-	int l;
+	int len, l;
 
-	if (type == NULL || strcmp(type, "memory"))
+	type = of_get_flat_dt_prop(node, "device_type", &len);
+
+	if (!type || strnlen(type, len) >= len || strcmp(type, "memory"))
 		return 0;
 
 	reg = of_get_flat_dt_prop(node, "linux,usable-memory", &l);
