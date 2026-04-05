@@ -19,5 +19,5 @@ echo $$ > ${cgroup_path:-/dev/cgroup/memory}/"$cgroup"/cgroup.procs
 echo "Method is $method"
 
 set +e
-./write_to_hugetlbfs -p "$path" -s "$size" "$write" "$populate" -m "$method" \
+exec ./write_to_hugetlbfs -p "$path" -s "$size" "$write" "$populate" -m "$method" \
       "$private" "$want_sleep" "$reserve"

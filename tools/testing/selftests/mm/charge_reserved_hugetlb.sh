@@ -44,6 +44,8 @@ else
 fi
 export cgroup_path
 
+write_pids=()
+
 function cleanup() {
   if [[ $cgroup2 ]]; then
     echo $$ >$cgroup_path/cgroup.procs
@@ -193,10 +195,12 @@ function write_hugetlbfs_and_get_usage() {
     [[ "$private" == "-r" ]] && [[ "$expect_failure" != 1 ]]; then
 
     bash write_hugetlb_memory.sh "$size" "$populate" "$write" \
-      "$cgroup" "$path" "$method" "$private" "-l" "$reserve" 2>&1 | tee $output &
+      "$cgroup" "$path" "$method" "$private" "-l" "$reserve" \
+      >"$output" 2>&1 &
 
     local write_result=$?
     local write_pid=$!
+    write_pids+=("$write_pid")
 
     until grep -q -i "DONE" $output; do
       echo waiting for DONE signal.
@@ -261,10 +265,21 @@ function write_hugetlbfs_and_get_usage() {
 function cleanup_hugetlb_memory() {
   set +e
   local cgroup="$1"
-  if [[ "$(pgrep -f write_to_hugetlbfs)" != "" ]]; then
-    echo killing write_to_hugetlbfs
-    killall -2 --wait write_to_hugetlbfs
-    wait_for_hugetlb_memory_to_get_depleted $cgroup
+  local write_pid
+
+  if (( ${#write_pids[@]} )); then
+    for write_pid in "${write_pids[@]}"; do
+      if kill -0 "$write_pid" 2>/dev/null; then
+        echo killing write_to_hugetlbfs pid "$write_pid"
+        kill -2 "$write_pid"
+        wait "$write_pid"
+      fi
+    done
+    write_pids=()
+
+    if [[ -n "$cgroup" ]]; then
+      wait_for_hugetlb_memory_to_get_depleted "$cgroup"
+    fi
   fi
   set -e
 
