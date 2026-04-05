@@ -28,6 +28,7 @@ struct cpuacct {
 	/* cpuusage holds pointer to a u64-type object on every CPU */
 	u64 __percpu	*cpuusage;
 	struct kernel_cpustat __percpu	*cpustat;
+	struct rcu_head	rcu;
 };
 
 static inline struct cpuacct *css_ca(struct cgroup_subsys_state *css)
@@ -84,13 +85,20 @@ out:
 }
 
 /* Destroy an existing CPU accounting group */
-static void cpuacct_css_free(struct cgroup_subsys_state *css)
+static void cpuacct_free_rcu(struct rcu_head *rcu)
 {
-	struct cpuacct *ca = css_ca(css);
+	struct cpuacct *ca = container_of(rcu, struct cpuacct, rcu);
 
 	free_percpu(ca->cpustat);
 	free_percpu(ca->cpuusage);
 	kfree(ca);
+}
+
+static void cpuacct_css_free(struct cgroup_subsys_state *css)
+{
+	struct cpuacct *ca = css_ca(css);
+
+	call_rcu(&ca->rcu, cpuacct_free_rcu);
 }
 
 static u64 cpuacct_cpuusage_read(struct cpuacct *ca, int cpu,
