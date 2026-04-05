@@ -1157,6 +1157,7 @@ sub top_of_kernel_tree {
     if ($lk_path ne "" && substr($lk_path,length($lk_path)-1,1) ne "/") {
 	$lk_path .= "/";
     }
+    # Allow sparse checkouts that still contain the files these scripts need.
     if (   (-f "${lk_path}COPYING")
 	&& (-f "${lk_path}CREDITS")
 	&& (-f "${lk_path}Kbuild")
@@ -1164,14 +1165,6 @@ sub top_of_kernel_tree {
 	&& (-f "${lk_path}Makefile")
 	&& (-f "${lk_path}README")
 	&& (-d "${lk_path}Documentation")
-	&& (-d "${lk_path}arch")
-	&& (-d "${lk_path}include")
-	&& (-d "${lk_path}drivers")
-	&& (-d "${lk_path}fs")
-	&& (-d "${lk_path}init")
-	&& (-d "${lk_path}ipc")
-	&& (-d "${lk_path}kernel")
-	&& (-d "${lk_path}lib")
 	&& (-d "${lk_path}scripts")) {
 	return 1;
     }
