@@ -1415,12 +1415,20 @@ u16 tipc_get_gap_ack_blks(struct tipc_gap_ack_blks **ga, struct tipc_link *l,
 			  struct tipc_msg *hdr, bool uc)
 {
 	struct tipc_gap_ack_blks *p;
-	u16 sz = 0;
+	u16 sz = 0, dlen = msg_data_sz(hdr);
 
 	/* Does peer support the Gap ACK blocks feature? */
 	if (l->peer_caps & TIPC_GAP_ACK_BLOCK) {
+		if (dlen < sizeof(*p))
+			goto ignore;
+
 		p = (struct tipc_gap_ack_blks *)msg_data(hdr);
 		sz = ntohs(p->len);
+		if (sz < sizeof(*p) || sz > dlen) {
+			sz = 0;
+			goto ignore;
+		}
+
 		/* Sanity check */
 		if (sz == struct_size(p, gacks, size_add(p->ugack_cnt, p->bgack_cnt))) {
 			/* Good, check if the desired type exists */
@@ -1434,6 +1442,8 @@ u16 tipc_get_gap_ack_blks(struct tipc_gap_ack_blks **ga, struct tipc_link *l,
 			}
 		}
 	}
+
+ignore:
 	/* Other cases: ignore! */
 	p = NULL;
 
