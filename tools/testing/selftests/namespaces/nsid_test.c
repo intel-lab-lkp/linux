@@ -25,10 +25,12 @@
 /* Fixture for tests that create child processes */
 FIXTURE(nsid) {
 	pid_t child_pid;
+	pid_t grandchild_pid;
 };
 
 FIXTURE_SETUP(nsid) {
 	self->child_pid = 0;
+	self->grandchild_pid = 0;
 }
 
 FIXTURE_TEARDOWN(nsid) {
@@ -36,6 +38,10 @@ FIXTURE_TEARDOWN(nsid) {
 	if (self->child_pid > 0) {
 		kill(self->child_pid, SIGKILL);
 		waitpid(self->child_pid, NULL, 0);
+	}
+	if (self->grandchild_pid > 0) {
+		kill(self->grandchild_pid, SIGKILL);
+		waitpid(self->grandchild_pid, NULL, 0);
 	}
 }
 
@@ -677,6 +683,7 @@ TEST_F(nsid, timens_separate)
 	pid_t grandchild_pid;
 	ASSERT_EQ(read(pipefd[0], &grandchild_pid, sizeof(grandchild_pid)), sizeof(grandchild_pid));
 	close(pipefd[0]);
+	self->grandchild_pid = grandchild_pid;
 
 	/* Open grandchild's time namespace */
 	char path[256];
@@ -798,6 +805,7 @@ TEST_F(nsid, pidns_separate)
 	pid_t grandchild_pid;
 	ASSERT_EQ(read(pipefd[0], &grandchild_pid, sizeof(grandchild_pid)), sizeof(grandchild_pid));
 	close(pipefd[0]);
+	self->grandchild_pid = grandchild_pid;
 
 	/* Open grandchild's PID namespace */
 	char path[256];
