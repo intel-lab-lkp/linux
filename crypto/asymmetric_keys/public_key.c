@@ -147,11 +147,6 @@ software_key_determine_akcipher(const struct public_key *pkey,
 		   strcmp(pkey->pkey_algo, "mldsa87") == 0) {
 		if (strcmp(encoding, "raw") != 0)
 			return -EINVAL;
-		if (!hash_algo)
-			return -EINVAL;
-		if (strcmp(hash_algo, "none") != 0 &&
-		    strcmp(hash_algo, "sha512") != 0)
-			return -EINVAL;
 	} else {
 		/* Unknown public key algorithm */
 		return -ENOPKG;
