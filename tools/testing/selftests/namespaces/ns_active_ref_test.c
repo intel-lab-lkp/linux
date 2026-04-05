@@ -1193,6 +1193,10 @@ TEST(ns_multiple_children_same_parent)
 		write(pipefd[1], &c1_id, sizeof(c1_id));
 		write(pipefd[1], &c2_id, sizeof(c2_id));
 		close(pipefd[1]);
+
+		/* give parent a time to run open_by_handle_at() */
+		usleep(10000);
+
 		exit(0);
 	}
 
