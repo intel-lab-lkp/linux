@@ -20,12 +20,15 @@ TEST_PROGS := \
 	queues.py \
 	ring_reconfig.py \
 	shaper.py \
+	so_txtime.py \
 	stats.py \
 	xdp.py \
 # end of TEST_PROGS
 
 # YNL files, must be before "include ..lib.mk"
-YNL_GEN_FILES := psp_responder
+YNL_GEN_FILES := \
+	psp_responder \
+	so_txtime
 TEST_GEN_FILES += $(YNL_GEN_FILES)
 
 include ../../lib.mk
