@@ -538,6 +538,22 @@ static void virtio_mem_sbm_set_sb_unplugged(struct virtio_mem *vm,
 	__bitmap_clear(vm->sbm.sb_states, bit, count);
 }
 
+static inline bool bitmap_test_range_all_set(const unsigned long *map,
+					     unsigned int start, unsigned int nbits)
+{
+	unsigned int next_zero_bit = find_next_zero_bit(map, start + nbits, start);
+
+	return next_zero_bit >= start + nbits;
+}
+
+static inline bool bitmap_test_range_all_zero(const unsigned long *map,
+					      unsigned int start, unsigned int nbits)
+{
+	unsigned int next_set_bit = find_next_bit(map, start + nbits, start);
+
+	return next_set_bit >= start + nbits;
+}
+
 /*
  * Test if all selected subblocks are plugged.
  */
@@ -550,9 +566,7 @@ static bool virtio_mem_sbm_test_sb_plugged(struct virtio_mem *vm,
 	if (count == 1)
 		return test_bit(bit, vm->sbm.sb_states);
 
-	/* TODO: Helper similar to bitmap_set() */
-	return find_next_zero_bit(vm->sbm.sb_states, bit + count, bit) >=
-	       bit + count;
+	return bitmap_test_range_all_set(vm->sbm.sb_states, bit, count);
 }
 
 /*
@@ -564,9 +578,7 @@ static bool virtio_mem_sbm_test_sb_unplugged(struct virtio_mem *vm,
 {
 	const int bit = virtio_mem_sbm_sb_state_bit_nr(vm, mb_id, sb_id);
 
-	/* TODO: Helper similar to bitmap_set() */
-	return find_next_bit(vm->sbm.sb_states, bit + count, bit) >=
-	       bit + count;
+	return bitmap_test_range_all_zero(vm->sbm.sb_states, bit, count);
 }
 
 /*
