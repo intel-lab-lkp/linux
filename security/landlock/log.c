@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Landlock - Audit helpers
+ * Landlock - Log helpers
  *
  * Copyright © 2023-2025 Microsoft Corporation
  */
@@ -13,12 +13,13 @@
 #include <uapi/linux/landlock.h>
 
 #include "access.h"
-#include "audit.h"
 #include "common.h"
 #include "cred.h"
 #include "domain.h"
 #include "limits.h"
+#include "log.h"
 #include "ruleset.h"
+#ifdef CONFIG_AUDIT
 
 static const char *const fs_access_strings[] = {
 	[BIT_INDEX(LANDLOCK_ACCESS_FS_EXECUTE)] = "fs.execute",
@@ -133,6 +134,45 @@ static void log_domain(struct landlock_hierarchy *const hierarchy)
 	 */
 	WRITE_ONCE(hierarchy->log_status, LANDLOCK_LOG_RECORDED);
 }
+
+static void audit_denial(const struct landlock_cred_security *const subject,
+			 const struct landlock_request *const request,
+			 struct landlock_hierarchy *const youngest_denied,
+			 const size_t youngest_layer,
+			 const access_mask_t missing)
+{
+	struct audit_buffer *ab;
+
+	if (!audit_enabled)
+		return;
+
+	/* Checks if the current exec was restricting itself. */
+	if (subject->domain_exec & BIT(youngest_layer)) {
+		/* Ignores denials for the same execution. */
+		if (!youngest_denied->log_same_exec)
+			return;
+	} else {
+		/* Ignores denials after a new execution. */
+		if (!youngest_denied->log_new_exec)
+			return;
+	}
+
+	/* Uses consistent allocation flags wrt common_lsm_audit(). */
+	ab = audit_log_start(audit_context(), GFP_ATOMIC | __GFP_NOWARN,
+			     AUDIT_LANDLOCK_ACCESS);
+	if (!ab)
+		return;
+
+	audit_log_format(ab, "domain=%llx blockers=", youngest_denied->id);
+	log_blockers(ab, request->type, missing);
+	audit_log_lsm_data(ab, &request->audit);
+	audit_log_end(ab);
+
+	/* Logs this domain the first time it shows in log. */
+	log_domain(youngest_denied);
+}
+
+#endif /* CONFIG_AUDIT */
 
 static struct landlock_hierarchy *
 get_hierarchy(const struct landlock_domain *const domain, const size_t layer)
@@ -352,7 +392,7 @@ static bool is_valid_request(const struct landlock_request *const request)
 }
 
 /**
- * landlock_log_denial - Create audit records related to a denial
+ * landlock_log_denial - Log a denied access
  *
  * @subject: The Landlock subject's credential denying an action.
  * @request: Detail of the user space request.
@@ -360,7 +400,6 @@ static bool is_valid_request(const struct landlock_request *const request)
 void landlock_log_denial(const struct landlock_cred_security *const subject,
 			 const struct landlock_request *const request)
 {
-	struct audit_buffer *ab;
 	struct landlock_hierarchy *youngest_denied;
 	size_t youngest_layer;
 	access_mask_t missing;
@@ -403,37 +442,16 @@ void landlock_log_denial(const struct landlock_cred_security *const subject,
 	 */
 	atomic64_inc(&youngest_denied->num_denials);
 
-	if (!audit_enabled)
-		return;
-
-	/* Checks if the current exec was restricting itself. */
-	if (subject->domain_exec & BIT(youngest_layer)) {
-		/* Ignores denials for the same execution. */
-		if (!youngest_denied->log_same_exec)
-			return;
-	} else {
-		/* Ignores denials after a new execution. */
-		if (!youngest_denied->log_new_exec)
-			return;
-	}
-
-	/* Uses consistent allocation flags wrt common_lsm_audit(). */
-	ab = audit_log_start(audit_context(), GFP_ATOMIC | __GFP_NOWARN,
-			     AUDIT_LANDLOCK_ACCESS);
-	if (!ab)
-		return;
-
-	audit_log_format(ab, "domain=%llx blockers=", youngest_denied->id);
-	log_blockers(ab, request->type, missing);
-	audit_log_lsm_data(ab, &request->audit);
-	audit_log_end(ab);
-
-	/* Logs this domain the first time it shows in log. */
-	log_domain(youngest_denied);
+#ifdef CONFIG_AUDIT
+	audit_denial(subject, request, youngest_denied, youngest_layer,
+		     missing);
+#endif /* CONFIG_AUDIT */
 }
 
+#ifdef CONFIG_AUDIT
+
 /**
- * landlock_log_drop_domain - Create an audit record on domain deallocation
+ * landlock_log_free_domain - Create an audit record on domain deallocation
  *
  * @hierarchy: The domain's hierarchy being deallocated.
  *
@@ -443,7 +461,7 @@ void landlock_log_denial(const struct landlock_cred_security *const subject,
  * Called in a work queue scheduled by landlock_put_domain_deferred() called by
  * hook_cred_free().
  */
-void landlock_log_drop_domain(const struct landlock_hierarchy *const hierarchy)
+void landlock_log_free_domain(const struct landlock_hierarchy *const hierarchy)
 {
 	struct audit_buffer *ab;
 
@@ -471,6 +489,8 @@ void landlock_log_drop_domain(const struct landlock_hierarchy *const hierarchy)
 	audit_log_end(ab);
 }
 
+#endif /* CONFIG_AUDIT */
+
 #ifdef CONFIG_SECURITY_LANDLOCK_KUNIT_TEST
 
 static struct kunit_case test_cases[] = {
@@ -483,7 +503,7 @@ static struct kunit_case test_cases[] = {
 };
 
 static struct kunit_suite test_suite = {
-	.name = "landlock_audit",
+	.name = "landlock_log",
 	.test_cases = test_cases,
 };
 

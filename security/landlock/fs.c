@@ -42,12 +42,12 @@
 #include <uapi/linux/landlock.h>
 
 #include "access.h"
-#include "audit.h"
 #include "common.h"
 #include "cred.h"
 #include "domain.h"
 #include "fs.h"
 #include "limits.h"
+#include "log.h"
 #include "object.h"
 #include "ruleset.h"
 #include "setup.h"
@@ -918,10 +918,11 @@ jump_up:
 	path_put(&walker_path);
 
 	/*
-	 * Check CONFIG_AUDIT to enable elision of log_request_parent* and
-	 * associated caller's stack variables thanks to dead code elimination.
+	 * Check CONFIG_SECURITY_LANDLOCK_LOG to enable elision of
+	 * log_request_parent* and associated caller's stack variables thanks to
+	 * dead code elimination.
 	 */
-#ifdef CONFIG_AUDIT
+#ifdef CONFIG_SECURITY_LANDLOCK_LOG
 	if (!allowed_parent1 && log_request_parent1) {
 		log_request_parent1->type = LANDLOCK_REQUEST_FS_ACCESS;
 		log_request_parent1->audit.type = LSM_AUDIT_DATA_PATH;
@@ -937,7 +938,7 @@ jump_up:
 		log_request_parent2->access = access_masked_parent2;
 		log_request_parent2->layer_masks = layer_masks_parent2;
 	}
-#endif /* CONFIG_AUDIT */
+#endif /* CONFIG_SECURITY_LANDLOCK_LOG */
 
 	return allowed_parent1 && allowed_parent2;
 }

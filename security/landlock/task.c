@@ -20,11 +20,11 @@
 #include <net/af_unix.h>
 #include <net/sock.h>
 
-#include "audit.h"
 #include "common.h"
 #include "cred.h"
 #include "domain.h"
 #include "fs.h"
+#include "log.h"
 #include "ruleset.h"
 #include "setup.h"
 #include "task.h"

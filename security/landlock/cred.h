@@ -36,13 +36,15 @@ struct landlock_cred_security {
 	 */
 	struct landlock_domain *domain;
 
-#ifdef CONFIG_AUDIT
+#ifdef CONFIG_SECURITY_LANDLOCK_LOG
 	/**
 	 * @domain_exec: Bitmask identifying the domain layers that were enforced by
 	 * the current task's executed file (i.e. no new execve(2) since
 	 * landlock_restrict_self(2)).
 	 */
 	u16 domain_exec;
+#endif /* CONFIG_SECURITY_LANDLOCK_LOG */
+#ifdef CONFIG_AUDIT
 	/**
 	 * @log_subdomains_off: Set if the domain descendants's log_status should be
 	 * set to %LANDLOCK_LOG_DISABLED.  This is not a landlock_hierarchy
@@ -53,14 +55,14 @@ struct landlock_cred_security {
 #endif /* CONFIG_AUDIT */
 } __packed;
 
-#ifdef CONFIG_AUDIT
+#ifdef CONFIG_SECURITY_LANDLOCK_LOG
 
 /* Makes sure all layer executions can be stored. */
 static_assert(BITS_PER_TYPE(typeof_member(struct landlock_cred_security,
 					  domain_exec)) >=
 	      LANDLOCK_MAX_NUM_LAYERS);
 
-#endif /* CONFIG_AUDIT */
+#endif /* CONFIG_SECURITY_LANDLOCK_LOG */
 
 static inline struct landlock_cred_security *
 landlock_cred(const struct cred *cred)

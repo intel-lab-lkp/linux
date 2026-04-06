@@ -451,7 +451,7 @@ landlock_merge_ruleset(struct landlock_domain *const parent,
 	return no_free_ptr(new_dom);
 }
 
-#ifdef CONFIG_AUDIT
+#ifdef CONFIG_SECURITY_LANDLOCK_LOG
 
 /**
  * get_current_exe - Get the current's executable path, if any
@@ -560,6 +560,10 @@ int landlock_init_hierarchy_log(struct landlock_hierarchy *const hierarchy)
 	atomic64_set(&hierarchy->num_denials, 0);
 	return 0;
 }
+
+#endif /* CONFIG_SECURITY_LANDLOCK_LOG */
+
+#ifdef CONFIG_AUDIT
 
 static deny_masks_t
 get_layer_deny_mask(const access_mask_t all_existing_optional_access,

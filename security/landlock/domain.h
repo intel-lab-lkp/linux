@@ -21,7 +21,7 @@
 #include <linux/workqueue.h>
 
 #include "access.h"
-#include "audit.h"
+#include "log.h"
 #include "ruleset.h"
 
 enum landlock_log_status {
@@ -87,7 +87,7 @@ struct landlock_hierarchy {
 	 */
 	refcount_t usage;
 
-#ifdef CONFIG_AUDIT
+#ifdef CONFIG_SECURITY_LANDLOCK_LOG
 	/**
 	 * @log_status: Whether this domain should be logged or not.  Because
 	 * concurrent log entries may be created at the same time, it is still
@@ -117,7 +117,7 @@ struct landlock_hierarchy {
 		 * %LANDLOCK_RESTRICT_SELF_LOG_NEW_EXEC_ON.  Set to false by default.
 		 */
 		log_new_exec : 1;
-#endif /* CONFIG_AUDIT */
+#endif /* CONFIG_SECURITY_LANDLOCK_LOG */
 };
 
 #ifdef CONFIG_AUDIT
@@ -126,6 +126,10 @@ deny_masks_t
 landlock_get_deny_masks(const access_mask_t all_existing_optional_access,
 			const access_mask_t optional_access,
 			const struct layer_access_masks *const masks);
+
+#endif /* CONFIG_AUDIT */
+
+#ifdef CONFIG_SECURITY_LANDLOCK_LOG
 
 int landlock_init_hierarchy_log(struct landlock_hierarchy *const hierarchy);
 
@@ -139,7 +143,7 @@ landlock_free_hierarchy_details(struct landlock_hierarchy *const hierarchy)
 	kfree(hierarchy->details);
 }
 
-#else /* CONFIG_AUDIT */
+#else /* CONFIG_SECURITY_LANDLOCK_LOG */
 
 static inline int
 landlock_init_hierarchy_log(struct landlock_hierarchy *const hierarchy)
@@ -152,7 +156,7 @@ landlock_free_hierarchy_details(struct landlock_hierarchy *const hierarchy)
 {
 }
 
-#endif /* CONFIG_AUDIT */
+#endif /* CONFIG_SECURITY_LANDLOCK_LOG */
 
 static inline void
 landlock_get_hierarchy(struct landlock_hierarchy *const hierarchy)
@@ -166,7 +170,7 @@ static inline void landlock_put_hierarchy(struct landlock_hierarchy *hierarchy)
 	while (hierarchy && refcount_dec_and_test(&hierarchy->usage)) {
 		const struct landlock_hierarchy *const freeme = hierarchy;
 
-		landlock_log_drop_domain(hierarchy);
+		landlock_log_free_domain(hierarchy);
 		landlock_free_hierarchy_details(hierarchy);
 		hierarchy = hierarchy->parent;
 		kfree(freeme);

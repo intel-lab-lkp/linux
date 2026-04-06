@@ -1,12 +1,12 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Landlock - Audit helpers
+ * Landlock - Log helpers
  *
  * Copyright © 2023-2025 Microsoft Corporation
  */
 
-#ifndef _SECURITY_LANDLOCK_AUDIT_H
-#define _SECURITY_LANDLOCK_AUDIT_H
+#ifndef _SECURITY_LANDLOCK_LOG_H
+#define _SECURITY_LANDLOCK_LOG_H
 
 #include <linux/audit.h>
 #include <linux/lsm_audit.h>
@@ -54,7 +54,7 @@ struct landlock_request {
 
 #ifdef CONFIG_AUDIT
 
-void landlock_log_drop_domain(const struct landlock_hierarchy *const hierarchy);
+void landlock_log_free_domain(const struct landlock_hierarchy *const hierarchy);
 
 void landlock_log_denial(const struct landlock_cred_security *const subject,
 			 const struct landlock_request *const request);
@@ -62,7 +62,7 @@ void landlock_log_denial(const struct landlock_cred_security *const subject,
 #else /* CONFIG_AUDIT */
 
 static inline void
-landlock_log_drop_domain(const struct landlock_hierarchy *const hierarchy)
+landlock_log_free_domain(const struct landlock_hierarchy *const hierarchy)
 {
 }
 
@@ -74,4 +74,4 @@ landlock_log_denial(const struct landlock_cred_security *const subject,
 
 #endif /* CONFIG_AUDIT */
 
-#endif /* _SECURITY_LANDLOCK_AUDIT_H */
+#endif /* _SECURITY_LANDLOCK_LOG_H */

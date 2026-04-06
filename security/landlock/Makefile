@@ -13,6 +13,6 @@ landlock-y := \
 
 landlock-$(CONFIG_INET) += net.o
 
-landlock-$(CONFIG_AUDIT) += \
-	id.o \
-	audit.o
+landlock-$(CONFIG_SECURITY_LANDLOCK_LOG) += \
+	log.o \
+	id.o
