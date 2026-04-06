@@ -1890,7 +1890,9 @@ L:	linux-kernel@vger.kernel.org
 L:	linux-pci@vger.kernel.org
 L:	rust-for-linux@vger.kernel.org
 S:	Maintained
+F:	drivers/platform/goldfish/goldfish_address_space.rs
 F:	include/uapi/linux/goldfish_address_space.h
+K:	\bGOLDFISH_ADDRESS_SPACE\b
 
 ANDROID GOLDFISH RTC DRIVER
 M:	Jiaxun Yang <jiaxun.yang@flygoat.com>

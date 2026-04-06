@@ -17,4 +17,15 @@ config GOLDFISH_PIPE
 	  This is a virtual device to drive the QEMU pipe interface used by
 	  the Goldfish Android Virtual Device.
 
+config GOLDFISH_ADDRESS_SPACE
+	tristate "Goldfish address space driver in Rust"
+	depends on PCI && RUST && MMU
+	help
+	  Adds a Rust implementation of the Goldfish address space driver
+	  used by the Android Goldfish emulator.
+
+	  This implementation uses typed Rust abstractions for PCI resource
+	  setup, miscdevice registration, page-backed ping state, and the
+	  userspace ioctl interface.
+
 endif # GOLDFISH
