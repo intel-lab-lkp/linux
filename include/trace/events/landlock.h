@@ -12,6 +12,8 @@
 
 #include <linux/tracepoint.h>
 
+struct landlock_domain;
+struct landlock_hierarchy;
 struct landlock_ruleset;
 struct path;
 
@@ -165,6 +167,73 @@ TRACE_EVENT(landlock_add_rule_net,
 	    TP_printk("ruleset=%llx.%u access_rights=0x%x port=%llu",
 		      __entry->ruleset_id, __entry->ruleset_version,
 		      __entry->access_rights, __entry->port));
+
+/**
+ * landlock_restrict_self - new domain created from landlock_restrict_self()
+ * @ruleset: Source ruleset frozen into the domain (never NULL); caller
+ *           holds ruleset->lock for BTF consistency.  eBPF programs can
+ *           read the full ruleset state via BTF (rules, version, access
+ *           masks).
+ * @domain: Newly created domain (never NULL, immutable after creation).
+ *          eBPF programs can navigate domain->hierarchy->parent for the
+ *          parent domain chain.
+ *
+ * Emitted after the domain is successfully installed (including TSYNC
+ * if requested).  The flags-only restrict_self path (ruleset_fd == -1)
+ * does not create a domain and does not emit this event.  Restrict_self
+ * flags that affect logging (log_same_exec, log_new_exec) are accessible
+ * via BTF on domain->hierarchy.
+ */
+TRACE_EVENT(landlock_restrict_self,
+
+	    TP_PROTO(const struct landlock_ruleset *ruleset,
+		     const struct landlock_domain *domain),
+
+	    TP_ARGS(ruleset, domain),
+
+	    TP_STRUCT__entry(__field(__u64, ruleset_id)
+				     __field(__u32, ruleset_version)
+					     __field(__u64, domain_id)
+						     __field(__u64, parent_id)),
+
+	    TP_fast_assign(
+		    lockdep_assert_held(&ruleset->lock);
+		    __entry->ruleset_id = ruleset->id;
+		    __entry->ruleset_version = ruleset->version;
+		    __entry->domain_id = domain->hierarchy->id;
+		    __entry->parent_id = domain->hierarchy->parent ?
+						 domain->hierarchy->parent->id :
+						 0;),
+
+	    TP_printk("ruleset=%llx.%u domain=%llx parent=%llx",
+		      __entry->ruleset_id, __entry->ruleset_version,
+		      __entry->domain_id, __entry->parent_id));
+
+/**
+ * landlock_free_domain - domain freed
+ * @hierarchy: Hierarchy node being freed (never NULL); eBPF can read
+ *             hierarchy->details (creator identity), hierarchy->parent
+ *             (domain chain), and hierarchy->log_status via BTF
+ *
+ * Emitted when the domain's last reference is dropped, either
+ * asynchronously from a kworker (via landlock_put_domain_deferred) or
+ * synchronously from the calling task (via landlock_put_domain).
+ */
+TRACE_EVENT(landlock_free_domain,
+
+	    TP_PROTO(const struct landlock_hierarchy *hierarchy),
+
+	    TP_ARGS(hierarchy),
+
+	    TP_STRUCT__entry(__field(__u64, domain_id) __field(__u64, denials)),
+
+	    TP_fast_assign(
+		    __entry->domain_id = hierarchy->id;
+		    __entry->denials = atomic64_read(&hierarchy->num_denials);),
+
+	    TP_printk("domain=%llx denials=%llu", __entry->domain_id,
+		      __entry->denials));
+
 #endif /* _TRACE_LANDLOCK_H */
 
 /* This part must be outside protection */

@@ -491,6 +491,7 @@ SYSCALL_DEFINE2(landlock_restrict_self, const int, ruleset_fd, const __u32,
 		flags)
 {
 	struct landlock_ruleset *ruleset __free(landlock_put_ruleset) = NULL;
+	struct landlock_domain *new_dom = NULL;
 	struct cred *new_cred;
 	struct landlock_cred_security *new_llcred;
 	bool __maybe_unused log_same_exec, log_new_exec, log_subdomains,
@@ -558,10 +559,15 @@ SYSCALL_DEFINE2(landlock_restrict_self, const int, ruleset_fd, const __u32,
 		 * There is no possible race condition while copying and
 		 * manipulating the current credentials because they are
 		 * dedicated per thread.
+		 *
+		 * Holds @ruleset->lock across the merge and tracepoint
+		 * emission so that the tracepoint reads the exact
+		 * ruleset version frozen into the new domain.
 		 */
-		struct landlock_domain *const new_dom =
-			landlock_merge_ruleset(new_llcred->domain, ruleset);
+		mutex_lock(&ruleset->lock);
+		new_dom = landlock_merge_ruleset(new_llcred->domain, ruleset);
 		if (IS_ERR(new_dom)) {
+			mutex_unlock(&ruleset->lock);
 			abort_creds(new_cred);
 			return PTR_ERR(new_dom);
 		}
@@ -586,10 +592,23 @@ SYSCALL_DEFINE2(landlock_restrict_self, const int, ruleset_fd, const __u32,
 		const int err = landlock_restrict_sibling_threads(
 			current_cred(), new_cred);
 		if (err) {
+			if (ruleset)
+				mutex_unlock(&ruleset->lock);
 			abort_creds(new_cred);
 			return err;
 		}
 	}
 
+	/*
+	 * Emit after all fallible operations (including TSYNC) have
+	 * succeeded, so every event corresponds to an installed domain.
+	 * The ruleset lock is still held for BTF consistency (enforced
+	 * by lockdep_assert_held in TP_fast_assign).
+	 */
+	if (new_dom)
+		trace_landlock_restrict_self(ruleset, new_dom);
+
+	if (ruleset)
+		mutex_unlock(&ruleset->lock);
 	return commit_creds(new_cred);
 }

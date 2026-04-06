@@ -174,9 +174,12 @@ static void audit_denial(const struct landlock_cred_security *const subject,
 
 #endif /* CONFIG_AUDIT */
 
+#include <trace/events/landlock.h>
+
 #ifdef CONFIG_TRACEPOINTS
 #define CREATE_TRACE_POINTS
 #include <trace/events/landlock.h>
+#undef CREATE_TRACE_POINTS
 #endif /* CONFIG_TRACEPOINTS */
 
 static struct landlock_hierarchy *
@@ -472,6 +475,8 @@ void landlock_log_free_domain(const struct landlock_hierarchy *const hierarchy)
 
 	if (WARN_ON_ONCE(!hierarchy))
 		return;
+
+	trace_landlock_free_domain(hierarchy);
 
 	if (!audit_enabled)
 		return;
