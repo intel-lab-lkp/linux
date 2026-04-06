@@ -4,6 +4,7 @@
  *
  * Copyright © 2016-2020 Mickaël Salaün <mic@digikod.net>
  * Copyright © 2018-2020 ANSSI
+ * Copyright © 2026 Cloudflare
  */
 
 #include <linux/bits.h>
@@ -159,8 +160,16 @@ static void build_check_ruleset(void)
 	const struct landlock_rules rules = {
 		.num_rules = ~0,
 	};
+#ifdef CONFIG_SECURITY_LANDLOCK_LOG
+	const struct landlock_ruleset ruleset = {
+		.version = ~0,
+	};
+#endif /* CONFIG_SECURITY_LANDLOCK_LOG */
 
 	BUILD_BUG_ON(rules.num_rules < LANDLOCK_MAX_NUM_RULES);
+#ifdef CONFIG_SECURITY_LANDLOCK_LOG
+	BUILD_BUG_ON(ruleset.version < LANDLOCK_MAX_NUM_RULES);
+#endif /* CONFIG_SECURITY_LANDLOCK_LOG */
 }
 
 /**
@@ -293,11 +302,19 @@ int landlock_insert_rule(struct landlock_ruleset *const ruleset,
 		/* When @level is zero, landlock_rule_insert() extends @ruleset. */
 		.level = 0,
 	} };
+	int err;
 
 	build_check_layer();
 	lockdep_assert_held(&ruleset->lock);
-	return landlock_rule_insert(&ruleset->rules, id, &layers,
-				    ARRAY_SIZE(layers));
+	err = landlock_rule_insert(&ruleset->rules, id, &layers,
+				   ARRAY_SIZE(layers));
+
+#ifdef CONFIG_SECURITY_LANDLOCK_LOG
+	if (!err)
+		ruleset->version++;
+#endif /* CONFIG_SECURITY_LANDLOCK_LOG */
+
+	return err;
 }
 
 void landlock_free_rules(struct landlock_rules *const rules)

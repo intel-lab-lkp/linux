@@ -11,6 +11,7 @@
 #define _SECURITY_LANDLOCK_FS_H
 
 #include <linux/build_bug.h>
+#include <linux/cleanup.h>
 #include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/rcupdate.h>
@@ -127,5 +128,34 @@ __init void landlock_add_fs_hooks(void);
 int landlock_append_fs_rule(struct landlock_ruleset *const ruleset,
 			    const struct path *const path,
 			    access_mask_t access_hierarchy);
+
+/**
+ * resolve_path_for_trace - Resolve a path for tracepoint display
+ *
+ * @path: The path to resolve.
+ * @buf: A buffer of at least PATH_MAX bytes for the resolved path.
+ *
+ * Uses d_absolute_path() to produce a namespace-independent absolute path,
+ * unlike d_path() which resolves relative to the process's chroot.  This
+ * ensures trace output is deterministic regardless of the tracer's mount
+ * namespace.
+ *
+ * Return: A pointer into @buf with the resolved path, or an error string
+ * ("<too_long>", "<unreachable>").
+ */
+static inline const char *resolve_path_for_trace(const struct path *path,
+						  char *buf)
+{
+	const char *p;
+
+	p = d_absolute_path(path, buf, PATH_MAX);
+	if (!IS_ERR_OR_NULL(p))
+		return p;
+
+	if (PTR_ERR(p) == -ENAMETOOLONG)
+		return "<too_long>";
+
+	return "<unreachable>";
+}
 
 #endif /* _SECURITY_LANDLOCK_FS_H */

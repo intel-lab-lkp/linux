@@ -2562,6 +2562,7 @@ extern void __init vfs_caches_init(void);
 
 #define __getname()		kmalloc(PATH_MAX, GFP_KERNEL)
 #define __putname(name)		kfree(name)
+DEFINE_FREE(__putname, char *, if (_T) __putname(_T))
 
 void emergency_thaw_all(void);
 extern int sync_filesystem(struct super_block *);

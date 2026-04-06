@@ -157,6 +157,12 @@ struct landlock_ruleset {
 
 #ifdef CONFIG_SECURITY_LANDLOCK_LOG
 	/**
+	 * @version: Monotonic counter incremented on each rule insertion.  Used
+	 * by tracepoints to correlate a domain with the exact ruleset state it
+	 * was created from.  Protected by @lock.
+	 */
+	u32 version;
+	/**
 	 * @id: Unique identifier for this ruleset, used for tracing.
 	 */
 	u64 id;
