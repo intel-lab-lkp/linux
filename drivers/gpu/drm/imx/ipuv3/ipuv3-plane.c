@@ -34,7 +34,14 @@ to_ipu_plane_state(struct drm_plane_state *p)
 
 static unsigned int ipu_src_rect_width(const struct drm_plane_state *state)
 {
-	return ALIGN(drm_rect_width(&state->src) >> 16, 8);
+	/*
+	 * Do not align width to 8 pixels here. The IDMAC read width
+	 * must match the DC/DI hactive exactly, otherwise the DMFC
+	 * FIFO overflows or underflows causing IDMAC timeouts or
+	 * display corruption. The DMA burst size is adapted to the
+	 * actual width by ipu_calculate_bursts().
+	 */
+	return drm_rect_width(&state->src) >> 16;
 }
 
 static inline struct ipu_plane *to_ipu_plane(struct drm_plane *p)
