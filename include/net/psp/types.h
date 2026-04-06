@@ -25,6 +25,9 @@ struct psphdr {
 #define PSP_SPI_KEY_ID		GENMASK(30, 0)
 #define PSP_SPI_KEY_PHASE	BIT(31)
 
+/* Default SPI threshold: ~90% of max SPI (0x7FFFFFFF) to allow rotation before exhaustion */
+#define PSP_SPI_THRESHOLD_DEFAULT	0x73333333
+
 #define PSPHDR_CRYPT_OFFSET	GENMASK(5, 0)
 
 #define PSPHDR_VERFL_SAMPLE	BIT(7)
@@ -38,9 +41,13 @@ struct psphdr {
 /**
  * struct psp_dev_config - PSP device configuration
  * @versions: PSP versions enabled on the device
+ * @crypt_offset: crypto offset configured on the device
+ * @spi_threshold: SPI threshold value on the device
  */
 struct psp_dev_config {
 	u32 versions;
+	u8 crypt_offset;
+	u32 spi_threshold;
 };
 
 /**

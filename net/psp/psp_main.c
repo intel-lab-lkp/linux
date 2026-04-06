@@ -79,6 +79,9 @@ psp_dev_create(struct net_device *netdev,
 	INIT_LIST_HEAD(&psd->stale_assocs);
 	refcount_set(&psd->refcnt, 1);
 
+	/* ~90% of 0x7FFFFFFF; allows SPI rotation well before space is exhausted */
+	psd->config.spi_threshold = PSP_SPI_THRESHOLD_DEFAULT;
+
 	mutex_lock(&psp_devs_lock);
 	err = xa_alloc_cyclic(&psp_devs, &psd->id, psd, xa_limit_16b,
 			      &last_id, GFP_KERNEL);

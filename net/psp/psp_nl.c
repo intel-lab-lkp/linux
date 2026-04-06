@@ -101,7 +101,9 @@ psp_nl_dev_fill(struct psp_dev *psd, struct sk_buff *rsp,
 	if (nla_put_u32(rsp, PSP_A_DEV_ID, psd->id) ||
 	    nla_put_u32(rsp, PSP_A_DEV_IFINDEX, psd->main_netdev->ifindex) ||
 	    nla_put_u32(rsp, PSP_A_DEV_PSP_VERSIONS_CAP, psd->caps->versions) ||
-	    nla_put_u32(rsp, PSP_A_DEV_PSP_VERSIONS_ENA, psd->config.versions))
+	    nla_put_u32(rsp, PSP_A_DEV_PSP_VERSIONS_ENA, psd->config.versions) ||
+	    nla_put_u8(rsp, PSP_A_DEV_CRYPT_OFFSET, psd->config.crypt_offset) ||
+	    nla_put_u32(rsp, PSP_A_DEV_SPI_THRESHOLD, psd->config.spi_threshold))
 		goto err_cancel_msg;
 
 	genlmsg_end(rsp, hdr);
@@ -193,6 +195,13 @@ int psp_nl_dev_set_doit(struct sk_buff *skb, struct genl_info *info)
 
 	memcpy(&new_config, &psd->config, sizeof(new_config));
 
+	if (!info->attrs[PSP_A_DEV_PSP_VERSIONS_ENA] &&
+	    !info->attrs[PSP_A_DEV_CRYPT_OFFSET] &&
+	    !info->attrs[PSP_A_DEV_SPI_THRESHOLD]) {
+		NL_SET_ERR_MSG(info->extack, "No settings present");
+		return -EINVAL;
+	}
+
 	if (info->attrs[PSP_A_DEV_PSP_VERSIONS_ENA]) {
 		new_config.versions =
 			nla_get_u32(info->attrs[PSP_A_DEV_PSP_VERSIONS_ENA]);
@@ -200,9 +209,19 @@ int psp_nl_dev_set_doit(struct sk_buff *skb, struct genl_info *info)
 			NL_SET_ERR_MSG(info->extack, "Requested PSP versions not supported by the device");
 			return -EINVAL;
 		}
-	} else {
-		NL_SET_ERR_MSG(info->extack, "No settings present");
-		return -EINVAL;
+	}
+
+	if (info->attrs[PSP_A_DEV_CRYPT_OFFSET])
+		new_config.crypt_offset =
+			nla_get_u8(info->attrs[PSP_A_DEV_CRYPT_OFFSET]);
+
+	if (info->attrs[PSP_A_DEV_SPI_THRESHOLD]) {
+		new_config.spi_threshold =
+			nla_get_u32(info->attrs[PSP_A_DEV_SPI_THRESHOLD]);
+		if (new_config.spi_threshold & PSP_SPI_KEY_PHASE) {
+			NL_SET_ERR_MSG(info->extack, "SPI threshold must not have bit 31 set");
+			return -EINVAL;
+		}
 	}
 
 	rsp = psp_nl_reply_new(info);

@@ -23,9 +23,11 @@ static const struct nla_policy psp_dev_get_nl_policy[PSP_A_DEV_ID + 1] = {
 };
 
 /* PSP_CMD_DEV_SET - do */
-static const struct nla_policy psp_dev_set_nl_policy[PSP_A_DEV_PSP_VERSIONS_ENA + 1] = {
+static const struct nla_policy psp_dev_set_nl_policy[PSP_A_DEV_SPI_THRESHOLD + 1] = {
 	[PSP_A_DEV_ID] = NLA_POLICY_MIN(NLA_U32, 1),
 	[PSP_A_DEV_PSP_VERSIONS_ENA] = NLA_POLICY_MASK(NLA_U32, 0xf),
+	[PSP_A_DEV_CRYPT_OFFSET] = { .type = NLA_U8, },
+	[PSP_A_DEV_SPI_THRESHOLD] = { .type = NLA_U32, },
 };
 
 /* PSP_CMD_KEY_ROTATE - do */
@@ -75,7 +77,7 @@ static const struct genl_split_ops psp_nl_ops[] = {
 		.doit		= psp_nl_dev_set_doit,
 		.post_doit	= psp_device_unlock,
 		.policy		= psp_dev_set_nl_policy,
-		.maxattr	= PSP_A_DEV_PSP_VERSIONS_ENA,
+		.maxattr	= PSP_A_DEV_SPI_THRESHOLD,
 		.flags		= GENL_CMD_CAP_DO,
 	},
 	{

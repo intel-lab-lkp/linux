@@ -38,6 +38,15 @@ attribute-sets:
         type: u32
         enum: version
         enum-as-flags: true
+      -
+        name: crypt-offset
+        doc: The offset from the end of the PSP header to the start of the encrypted payload.
+        type: u8
+      -
+        name: spi-threshold
+        doc: Threshold for the SPI to trigger notification to the user for appropriate rotate action.
+        type: u32
+
   -
     name: assoc
     attributes:
@@ -170,6 +179,8 @@ operations:
             - ifindex
             - psp-versions-cap
             - psp-versions-ena
+            - crypt-offset
+            - spi-threshold
         pre: psp-device-get-locked
         post: psp-device-unlock
       dump:
@@ -193,6 +204,8 @@ operations:
           attributes:
             - id
             - psp-versions-ena
+            - crypt-offset
+            - spi-threshold
         reply:
           attributes: []
         pre: psp-device-get-locked
