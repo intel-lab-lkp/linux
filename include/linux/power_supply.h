@@ -231,6 +231,7 @@ union power_supply_propval {
 
 struct device_node;
 struct power_supply;
+struct power_supply_battery_info;
 
 /* Run-time specific power supply configuration */
 struct power_supply_config {
@@ -238,6 +239,12 @@ struct power_supply_config {
 
 	/* Driver private data */
 	void *drv_data;
+
+	/*
+	 * Optional pre-parsed battery info for battery supplies.
+	 * The pointed-to data must remain valid for the power supply lifetime.
+	 */
+	struct power_supply_battery_info *battery_info;
 
 	/* Device specific sysfs attributes */
 	const struct attribute_group **attr_grp;
@@ -813,6 +820,9 @@ extern struct power_supply *power_supply_get_by_reference(struct fwnode_handle *
 							  const char *property);
 extern struct power_supply *devm_power_supply_get_by_reference(
 				    struct device *dev, const char *property);
+
+extern int devm_power_supply_get_battery_info(struct device *dev,
+					      struct power_supply_battery_info **info_out);
 
 extern const enum power_supply_property power_supply_battery_info_properties[];
 extern const size_t power_supply_battery_info_properties_size;

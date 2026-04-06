@@ -1025,6 +1025,57 @@ static int max17042_init_defaults(struct max17042_chip *chip)
 	return 0;
 }
 
+static int max17042_apply_battery_properties(struct max17042_chip *chip,
+					     struct power_supply_battery_info *info)
+{
+	struct device *dev = chip->dev;
+	bool needs_config;
+	u64 data64;
+
+	if (!info)
+		return 0;
+
+	needs_config = (chip->enable_current_sense &&
+			(info->charge_full_design_uah != -EINVAL ||
+			 info->charge_term_current_ua != -EINVAL)) ||
+		       (chip->chip_type == MAXIM_DEVICE_TYPE_MAX17055 &&
+			info->voltage_max_design_uv > 4250000);
+	if (!needs_config)
+		return 0;
+
+	if (!chip->config_data) {
+		chip->config_data = devm_kzalloc(dev,
+						 sizeof(*chip->config_data),
+						 GFP_KERNEL);
+		if (!chip->config_data)
+			return -ENOMEM;
+	}
+
+	if (chip->enable_current_sense &&
+	    info->charge_full_design_uah != -EINVAL) {
+		data64 = (u64)info->charge_full_design_uah * chip->r_sns;
+		do_div(data64, MAX17042_CAPACITY_LSB);
+		chip->config_data->design_cap = (u16)data64;
+		chip->enable_por_init = true;
+	}
+
+	if (chip->enable_current_sense &&
+	    info->charge_term_current_ua != -EINVAL) {
+		data64 = (u64)info->charge_term_current_ua * chip->r_sns;
+		do_div(data64, MAX17042_CURRENT_LSB);
+		chip->config_data->ichgt_term = (u16)data64;
+		chip->enable_por_init = true;
+	}
+
+	if (chip->chip_type == MAXIM_DEVICE_TYPE_MAX17055 &&
+	    info->voltage_max_design_uv > 4250000) {
+		chip->config_data->model_cfg = MAX17055_MODELCFG_VCHG_BIT;
+		chip->enable_por_init = true;
+	}
+
+	return 0;
+}
+
 static const struct regmap_config max17042_regmap_config = {
 	.name = "max17042",
 	.reg_bits = 8,
@@ -1060,6 +1111,7 @@ static int max17042_probe(struct i2c_client *client, struct device *dev, int irq
 	const struct power_supply_desc *max17042_desc = &max17042_psy_desc;
 	struct power_supply_config psy_cfg = {};
 	struct max17042_chip *chip;
+	struct power_supply_battery_info *battery_info = NULL;
 	int ret;
 	u32 val;
 	bool use_default_config = false;
@@ -1106,11 +1158,21 @@ static int max17042_probe(struct i2c_client *client, struct device *dev, int irq
 	if (chip->r_sns == 0)
 		chip->r_sns = MAX17042_DEFAULT_SNS_RESISTOR;
 
+	ret = devm_power_supply_get_battery_info(dev, &battery_info);
+	if (ret && ret != -ENODEV && ret != -ENOENT)
+		return ret;
+
+	ret = max17042_apply_battery_properties(chip, battery_info);
+	if (ret)
+		return ret;
+
 	if (!chip->enable_current_sense) {
 		regmap_write(chip->regmap, MAX17042_CGAIN, 0x0000);
 		regmap_write(chip->regmap, MAX17042_MiscCFG, 0x0003);
 		regmap_write(chip->regmap, MAX17042_LearnCFG, 0x0007);
 	}
+
+	psy_cfg.battery_info = battery_info;
 
 	chip->battery = devm_power_supply_register(dev, max17042_desc,
 						   &psy_cfg);
