@@ -394,6 +394,14 @@ addr(struct kunit *kunittest)
 static void
 escaped_str(struct kunit *kunittest)
 {
+	const u8 buf[] = { 0x1b, 0x62, 0x20, 0x5c, 0x43,
+			   0x07, 0x22, 0x90, 0x0d, 0x5d };
+
+	test("\\eb \\C\\a\"\\220\\r]", "%*pE", 10, buf);
+	test("\\x1bb \\C\\x07\"\\x90\\x0d]", "%*pEhp", 10, buf);
+	test("\\e\\142\\040\\\\\\103\\a\\\"\\220\\r\\135",
+	     "%*pEa", 10, buf);
+	test("\\e", "%pE", buf);
 }
 
 static void
