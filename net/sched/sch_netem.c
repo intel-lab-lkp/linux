@@ -734,8 +734,10 @@ static void netem_slot_account(struct netem_sched_data *q,
 }
 
 /*
- * Transfer time-ready packets from the tfifo into the child qdisc,
- * then dequeue from the child.
+ * Transfer all time-ready packets from the tfifo into the child qdisc,
+ * then dequeue from the child.  Batching the transfers avoids calling
+ * qdisc_enqueue() inside the parent's dequeue path, which confuses
+ * parents that track active/inactive state on qlen transitions (HFSC).
  */
 static struct sk_buff *netem_dequeue_child(struct Qdisc *sch)
 {
@@ -743,31 +745,28 @@ static struct sk_buff *netem_dequeue_child(struct Qdisc *sch)
 	u64 now = ktime_get_ns();
 	struct sk_buff *skb;
 
-	skb = netem_peek(q);
-	if (skb) {
-		u64 time_to_send = netem_skb_cb(skb)->time_to_send;
+	while ((skb = netem_peek(q)) != NULL) {
+		struct sk_buff *to_free = NULL;
+		unsigned int pkt_len;
+		int err;
 
-		if (q->slot.slot_next && q->slot.slot_next < time_to_send)
-			get_slot_next(q, now);
+		if (netem_skb_cb(skb)->time_to_send > now)
+			break;
+		if (q->slot.slot_next && q->slot.slot_next > now)
+			break;
 
-		if (time_to_send <= now && q->slot.slot_next <= now) {
-			struct sk_buff *to_free = NULL;
-			unsigned int pkt_len;
-			int err;
+		skb = netem_pull_tfifo(q, sch);
+		netem_slot_account(q, skb, now);
 
-			skb = netem_pull_tfifo(q, sch);
-			netem_slot_account(q, skb, now);
-
-			pkt_len = qdisc_pkt_len(skb);
-			err = qdisc_enqueue(skb, q->qdisc, &to_free);
-			kfree_skb_list(to_free);
-			if (err != NET_XMIT_SUCCESS) {
-				if (net_xmit_drop_count(err))
-					qdisc_qstats_drop(sch);
-				sch->qstats.backlog -= pkt_len;
-				sch->q.qlen--;
-				qdisc_tree_reduce_backlog(sch, 1, pkt_len);
-			}
+		pkt_len = qdisc_pkt_len(skb);
+		err = qdisc_enqueue(skb, q->qdisc, &to_free);
+		kfree_skb_list(to_free);
+		if (unlikely(err != NET_XMIT_SUCCESS)) {
+			if (net_xmit_drop_count(err))
+				qdisc_qstats_drop(sch);
+			sch->qstats.backlog -= pkt_len;
+			sch->q.qlen--;
+			qdisc_tree_reduce_backlog(sch, 1, pkt_len);
 		}
 	}
 
