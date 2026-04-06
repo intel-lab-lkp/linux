@@ -378,6 +378,36 @@ static int walk_nested_s2_pgd(struct kvm_vcpu *vcpu, phys_addr_t ipa,
 	return 0;
 }
 
+#define _has_tgran_2(__r, __sz)						\
+	({								\
+		u64 _s1, _s2, _mmfr0 = __r;				\
+									\
+		_s2 = SYS_FIELD_GET(ID_AA64MMFR0_EL1,			\
+				    TGRAN##__sz##_2, _mmfr0);		\
+									\
+		_s1 = SYS_FIELD_GET(ID_AA64MMFR0_EL1,			\
+				    TGRAN##__sz, _mmfr0);		\
+									\
+		((_s2 != ID_AA64MMFR0_EL1_TGRAN##__sz##_2_NI &&		\
+		  _s2 != ID_AA64MMFR0_EL1_TGRAN##__sz##_2_TGRAN##__sz) || \
+		 (_s2 == ID_AA64MMFR0_EL1_TGRAN##__sz##_2_TGRAN##__sz && \
+		  _s1 != ID_AA64MMFR0_EL1_TGRAN##__sz##_NI));		\
+	})
+
+static bool has_tgran_2(u64 mmfr0, unsigned int shift)
+{
+	switch (shift) {
+	case 12:
+		return _has_tgran_2(mmfr0, 4);
+	case 14:
+		return _has_tgran_2(mmfr0, 16);
+	case 16:
+		return _has_tgran_2(mmfr0, 64);
+	default:
+		BUG();
+	}
+}
+
 static unsigned int tg0_to_shift(u64 tg0)
 {
 	switch (tg0) {
@@ -391,10 +421,34 @@ static unsigned int tg0_to_shift(u64 tg0)
 	}
 }
 
+static unsigned int fallback_tgran2_shift(u64 mmfr0)
+{
+	if (has_tgran_2(mmfr0, PAGE_SHIFT))
+		return PAGE_SHIFT;
+	else if (has_tgran_2(mmfr0, 12))
+		return 12;
+	else if (has_tgran_2(mmfr0, 14))
+		return 14;
+	else if (has_tgran_2(mmfr0, 16))
+		return 16;
+	else
+		return PAGE_SHIFT;
+}
+
 static u64 vtcr_tg0_shift(struct kvm *kvm, u64 vtcr)
 {
+	u64 mmfr0 = kvm_read_vm_id_reg(kvm, SYS_ID_AA64MMFR0_EL1);
 	u64 tg0 = FIELD_GET(VTCR_EL2_TG0_MASK, vtcr);
 	unsigned int shift = tg0_to_shift(tg0);
+
+	/*
+	 * If TGx is programmed to an unimplemented value (not advertised in
+	 * ID_AA64MMFR0_EL1), we should treat it as if an implemented value is
+	 * written, as per the architecture. Choose an available one while
+	 * prioritizing PAGE_SIZE.
+	 */
+	if (!has_tgran_2(mmfr0, shift))
+		return fallback_tgran2_shift(mmfr0);
 
 	return shift;
 }
@@ -1516,21 +1570,6 @@ static void kvm_map_l1_vncr(struct kvm_vcpu *vcpu)
 	}
 }
 
-#define has_tgran_2(__r, __sz)						\
-	({								\
-		u64 _s1, _s2, _mmfr0 = __r;				\
-									\
-		_s2 = SYS_FIELD_GET(ID_AA64MMFR0_EL1,			\
-				    TGRAN##__sz##_2, _mmfr0);		\
-									\
-		_s1 = SYS_FIELD_GET(ID_AA64MMFR0_EL1,			\
-				    TGRAN##__sz, _mmfr0);		\
-									\
-		((_s2 != ID_AA64MMFR0_EL1_TGRAN##__sz##_2_NI &&		\
-		  _s2 != ID_AA64MMFR0_EL1_TGRAN##__sz##_2_TGRAN##__sz) || \
-		 (_s2 == ID_AA64MMFR0_EL1_TGRAN##__sz##_2_TGRAN##__sz && \
-		  _s1 != ID_AA64MMFR0_EL1_TGRAN##__sz##_NI));		\
-	})
 /*
  * Our emulated CPU doesn't support all the possible features. For the
  * sake of simplicity (and probably mental sanity), wipe out a number
@@ -1617,15 +1656,15 @@ u64 limit_nv_id_reg(struct kvm *kvm, u32 reg, u64 val)
 		 */
 		switch (PAGE_SIZE) {
 		case SZ_4K:
-			if (has_tgran_2(orig_val, 4))
+			if (_has_tgran_2(orig_val, 4))
 				val |= SYS_FIELD_PREP_ENUM(ID_AA64MMFR0_EL1, TGRAN4_2, IMP);
 			fallthrough;
 		case SZ_16K:
-			if (has_tgran_2(orig_val, 16))
+			if (_has_tgran_2(orig_val, 16))
 				val |= SYS_FIELD_PREP_ENUM(ID_AA64MMFR0_EL1, TGRAN16_2, IMP);
 			fallthrough;
 		case SZ_64K:
-			if (has_tgran_2(orig_val, 64))
+			if (_has_tgran_2(orig_val, 64))
 				val |= SYS_FIELD_PREP_ENUM(ID_AA64MMFR0_EL1, TGRAN64_2, IMP);
 			break;
 		}
