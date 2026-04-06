@@ -883,8 +883,11 @@ static int cfg80211_rtw_add_key(struct wiphy *wiphy, struct net_device *ndev,
 
 	param->u.crypt.idx = key_index;
 
-	if (params->seq_len && params->seq)
-		memcpy(param->u.crypt.seq, (u8 *)params->seq, params->seq_len);
+	if (params->seq_len && params->seq) {
+		size_t seq_copy = min_t(size_t, params->seq_len,
+				       sizeof(param->u.crypt.seq));
+		memcpy(param->u.crypt.seq, (u8 *)params->seq, seq_copy);
+	}
 
 	if (params->key_len && params->key) {
 		param->u.crypt.key_len = params->key_len;
