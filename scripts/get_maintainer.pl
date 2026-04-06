@@ -68,6 +68,7 @@ my $pattern_depth = 0;
 my $self_test = undef;
 my $version = 0;
 my $help = 0;
+my $json = 0;
 my $find_maintainer_files = 0;
 my $maintainer_path;
 my $vcs_used = 0;
@@ -285,6 +286,7 @@ if (!GetOptions(
 		'find-maintainer-files' => \$find_maintainer_files,
 		'mpath|maintainer-path=s' => \$maintainer_path,
 		'self-test:s' => \$self_test,
+		'json!' => \$json,
 		'v|version' => \$version,
 		'h|help|usage' => \$help,
 		)) {
@@ -650,39 +652,74 @@ my %deduplicate_name_hash = ();
 my %deduplicate_address_hash = ();
 
 my @maintainers = get_maintainers();
-if (@maintainers) {
-    @maintainers = merge_email(@maintainers);
-    output(@maintainers);
-}
 
-if ($scm) {
-    @scm = uniq(@scm);
-    output(@scm);
-}
+if ($json) {
+    my @json_maintainers;
+    if (@maintainers) {
+	my %saw;
+	for (@maintainers) {
+	    my ($address, $role) = @$_;
+	    if (!$saw{$address}) {
+		my ($name, $email_addr) = parse_email($address);
+		my $entry = '{"name":"' . json_escape_str($name) .
+			    '","email":"' . json_escape_str($email_addr) . '"';
+		$entry .= ',"role":"' . json_escape_str($role) . '"' if ($output_roles && $role ne '');
+		$entry .= '}';
+		push(@json_maintainers, $entry);
+		$saw{$address} = 1;
+	    }
+	}
+    }
 
-if ($output_substatus) {
-    @substatus = uniq(@substatus);
-    output(@substatus);
-}
+    @scm = uniq(@scm) if ($scm);
+    @status = uniq(@status) if ($status);
+    @subsystem = uniq(@subsystem) if ($subsystem);
+    @web = uniq(@web) if ($web);
+    @bug = uniq(@bug) if ($bug);
 
-if ($status) {
-    @status = uniq(@status);
-    output(@status);
-}
+    my @fields;
+    push(@fields, '"maintainers":[' . join(',', @json_maintainers) . ']');
+    push(@fields, '"scm":' . json_str_array(@scm)) if ($scm);
+    push(@fields, '"status":' . json_str_array(@status)) if ($status);
+    push(@fields, '"subsystem":' . json_str_array(@subsystem)) if ($subsystem);
+    push(@fields, '"web":' . json_str_array(@web)) if ($web);
+    push(@fields, '"bug":' . json_str_array(@bug)) if ($bug);
+    print('{' . join(',', @fields) . '}' . "\n");
+} else {
+    if (@maintainers) {
+	@maintainers = merge_email(@maintainers);
+	output(@maintainers);
+    }
 
-if ($subsystem) {
-    @subsystem = uniq(@subsystem);
-    output(@subsystem);
-}
+    if ($scm) {
+	@scm = uniq(@scm);
+	output(@scm);
+    }
 
-if ($web) {
-    @web = uniq(@web);
-    output(@web);
-}
+    if ($output_substatus) {
+	@substatus = uniq(@substatus);
+	output(@substatus);
+    }
 
-if ($bug) {
-    @bug = uniq(@bug);
-    output(@bug);
+    if ($status) {
+	@status = uniq(@status);
+	output(@status);
+    }
+
+    if ($subsystem) {
+	@subsystem = uniq(@subsystem);
+	output(@subsystem);
+    }
+
+    if ($web) {
+	@web = uniq(@web);
+	output(@web);
+    }
+
+    if ($bug) {
+	@bug = uniq(@bug);
+	output(@bug);
+    }
 }
 
 exit($exit);
@@ -1104,6 +1141,7 @@ Output type options:
   --separator [, ] => separator for multiple entries on 1 line
     using --separator also sets --nomultiline if --separator is not [, ]
   --multiline => print 1 entry per line
+  --json => output results as JSON
 
 Other options:
   --pattern-depth => Number of pattern directory traversals (default: 0 (all))
@@ -2552,6 +2590,28 @@ sub merge_email {
     }
 
     return @lines;
+}
+
+sub json_escape_str {
+    my ($str) = @_;
+    $str =~ s/\\/\\\\/g;
+    $str =~ s/"/\\"/g;
+    $str =~ s/\n/\\n/g;
+    $str =~ s/\r/\\r/g;
+    $str =~ s/\t/\\t/g;
+    $str =~ s/\x08/\\b/g;
+    $str =~ s/\x0c/\\f/g;
+    $str =~ s/([\x00-\x07\x0b\x0e-\x1f])/sprintf("\\u%04x", ord($1))/ge;
+    return $str;
+}
+
+sub json_str_array {
+    my (@arr) = @_;
+    my @quoted;
+    foreach my $s (@arr) {
+	push(@quoted, '"' . json_escape_str($s) . '"');
+    }
+    return '[' . join(',', @quoted) . ']';
 }
 
 sub output {
