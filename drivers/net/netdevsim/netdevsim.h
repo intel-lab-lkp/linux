@@ -117,6 +117,8 @@ struct netdevsim {
 		struct psp_dev *dev;
 		u32 spi;
 		u32 assoc_cnt;
+		u8  crypt_offset;
+		u32 spi_threshold;
 	} psp;
 
 	struct nsim_bus_dev *nsim_bus_dev;

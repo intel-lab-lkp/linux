@@ -122,6 +122,11 @@ static int
 nsim_psp_set_config(struct psp_dev *psd, struct psp_dev_config *conf,
 		    struct netlink_ext_ack *extack)
 {
+	struct netdevsim *ns = psd->drv_priv;
+
+	ns->psp.crypt_offset = conf->crypt_offset;
+	ns->psp.spi_threshold = conf->spi_threshold;
+
 	return 0;
 }
 
@@ -249,6 +254,7 @@ int nsim_psp_init(struct netdevsim *ns)
 	if (err)
 		return err;
 
+	ns->psp.spi_threshold = PSP_SPI_THRESHOLD_DEFAULT;
 	debugfs_create_file("psp_rereg", 0200, ddir, ns, &nsim_psp_rereg_fops);
 	return 0;
 }
