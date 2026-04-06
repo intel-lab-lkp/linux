@@ -33,6 +33,7 @@ my $chk_patch = 1;
 my $tst_only;
 my $emacs = 0;
 my $terse = 0;
+my $json = 0;
 my $showfile = 0;
 my $file = 0;
 my $git = 0;
@@ -93,6 +94,7 @@ Options:
   --patch                    treat FILE as patchfile (default)
   --emacs                    emacs compile window format
   --terse                    one line per report
+  --json                     output results as JSON
   --showfile                 emit diffed file position, not input file position
   -g, --git                  treat FILE as a single commit or git revision range
                              single git commit with:
@@ -320,6 +322,7 @@ GetOptions(
 	'patch!'	=> \$chk_patch,
 	'emacs!'	=> \$emacs,
 	'terse!'	=> \$terse,
+	'json!'		=> \$json,
 	'showfile!'	=> \$showfile,
 	'f|file!'	=> \$file,
 	'g|git!'	=> \$git,
@@ -379,6 +382,7 @@ help($help - 1) if ($help);
 
 die "$P: --git cannot be used with --file or --fix\n" if ($git && ($file || $fix));
 die "$P: --verbose cannot be used with --terse\n" if ($verbose && $terse);
+die "$P: --json cannot be used with --terse or --emacs\n" if ($json && ($terse || $emacs));
 
 if ($color =~ /^[01]$/) {
 	$color = !$color;
@@ -1351,7 +1355,7 @@ for my $filename (@ARGV) {
 	}
 	close($FILE);
 
-	if ($#ARGV > 0 && $quiet == 0) {
+	if (!$json && $#ARGV > 0 && $quiet == 0) {
 		print '-' x length($vname) . "\n";
 		print "$vname\n";
 		print '-' x length($vname) . "\n";
@@ -1372,7 +1376,7 @@ for my $filename (@ARGV) {
 	$file = $oldfile if ($is_git_file);
 }
 
-if (!$quiet) {
+if (!$quiet && !$json) {
 	hash_show_words(\%use_type, "Used");
 	hash_show_words(\%ignore_type, "Ignored");
 
@@ -2395,11 +2399,51 @@ sub report {
 
 	push(our @report, $output);
 
+	if ($json) {
+		our ($realfile, $realline);
+		my %issue = (
+			level => $level,
+			type => $type,
+			message => $msg,
+		);
+		$issue{file} = $realfile if (defined $realfile && $realfile ne '');
+		$issue{line} = $realline + 0 if (defined $realline && $realline);
+		push(our @json_issues, \%issue);
+	}
+
 	return 1;
 }
 
 sub report_dump {
 	our @report;
+}
+
+sub json_escape {
+	my ($str) = @_;
+	$str =~ s/\\/\\\\/g;
+	$str =~ s/"/\\"/g;
+	$str =~ s/\n/\\n/g;
+	$str =~ s/\r/\\r/g;
+	$str =~ s/\t/\\t/g;
+	$str =~ s/\x08/\\b/g;
+	$str =~ s/\x0c/\\f/g;
+	$str =~ s/([\x00-\x07\x0b\x0e-\x1f])/sprintf("\\u%04x", ord($1))/ge;
+	return $str;
+}
+
+sub json_encode_issue {
+	my ($issue) = @_;
+	my @fields;
+	push(@fields, '"level":"' . json_escape($issue->{level}) . '"');
+	push(@fields, '"type":"' . json_escape($issue->{type}) . '"');
+	push(@fields, '"message":"' . json_escape($issue->{message}) . '"');
+	if (defined $issue->{file}) {
+		push(@fields, '"file":"' . json_escape($issue->{file}) . '"');
+	}
+	if (defined $issue->{line}) {
+		push(@fields, '"line":' . ($issue->{line} + 0));
+	}
+	return '{' . join(',', @fields) . '}';
 }
 
 sub fixup_current_range {
@@ -2690,14 +2734,15 @@ sub process {
 	my $last_coalesced_string_linenr = -1;
 
 	our @report = ();
+	our @json_issues = ();
 	our $cnt_lines = 0;
 	our $cnt_error = 0;
 	our $cnt_warn = 0;
 	our $cnt_chk = 0;
 
 	# Trace the real file/line as we go.
-	my $realfile = '';
-	my $realline = 0;
+	our $realfile = '';
+	our $realline = 0;
 	my $realcnt = 0;
 	my $here = '';
 	my $context_function;		#undef'd unless there's a known function
@@ -7791,18 +7836,33 @@ sub process {
 	# If we have no input at all, then there is nothing to report on
 	# so just keep quiet.
 	if ($#rawlines == -1) {
+		if ($json) {
+			print '{"filename":"' . json_escape($filename) .
+			      '","total_errors":0,"total_warnings":0,' .
+			      '"total_checks":0,"total_lines":0,"issues":[]}' . "\n";
+		}
 		exit(0);
 	}
 
 	# In mailback mode only produce a report in the negative, for
 	# things that appear to be patches.
 	if ($mailback && ($clean == 1 || !$is_patch)) {
+		if ($json) {
+			print '{"filename":"' . json_escape($filename) .
+			      '","total_errors":0,"total_warnings":0,' .
+			      '"total_checks":0,"total_lines":0,"issues":[]}' . "\n";
+		}
 		exit(0);
 	}
 
 	# This is not a patch, and we are in 'no-patch' mode so
 	# just keep quiet.
 	if (!$chk_patch && !$is_patch) {
+		if ($json) {
+			print '{"filename":"' . json_escape($filename) .
+			      '","total_errors":0,"total_warnings":0,' .
+			      '"total_checks":0,"total_lines":0,"issues":[]}' . "\n";
+		}
 		exit(0);
 	}
 
@@ -7850,6 +7910,19 @@ sub process {
 		}
 	}
 
+	if ($json) {
+		my @issue_strings;
+		foreach my $issue (@json_issues) {
+			push(@issue_strings, json_encode_issue($issue));
+		}
+		print '{"filename":"' . json_escape($filename) . '",' .
+		      '"total_errors":' . ($cnt_error + 0) . ',' .
+		      '"total_warnings":' . ($cnt_warn + 0) . ',' .
+		      '"total_checks":' . ($cnt_chk + 0) . ',' .
+		      '"total_lines":' . ($cnt_lines + 0) . ',' .
+		      '"issues":[' . join(',', @issue_strings) . ']' .
+		      '}' . "\n";
+	} else {
 	print report_dump();
 	if ($summary && !($clean == 1 && $quiet == 1)) {
 		print "$filename " if ($summary_file);
@@ -7878,8 +7951,9 @@ NOTE: Whitespace errors detected.
 EOM
 		}
 	}
+	} # end !$json
 
-	if ($clean == 0 && $fix &&
+	if (!$json && $clean == 0 && $fix &&
 	    ("@rawlines" ne "@fixed" ||
 	     $#fixed_inserted >= 0 || $#fixed_deleted >= 0)) {
 		my $newfile = $filename;
@@ -7918,7 +7992,7 @@ EOM
 		}
 	}
 
-	if ($quiet == 0) {
+	if (!$json && $quiet == 0) {
 		print "\n";
 		if ($clean == 1) {
 			print "$vname has no obvious style problems and is ready for submission.\n";

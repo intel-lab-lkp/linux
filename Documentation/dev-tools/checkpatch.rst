@@ -64,6 +64,13 @@ Available options:
 
    Output only one line per report.
 
+ - --json
+
+   Output results as a JSON object.  The object includes total error, warning,
+   and check counts, plus an array of individual issues with structured fields
+   for level, type, message, file, and line number.  Cannot be used with
+   --terse or --emacs.
+
  - --showfile
 
    Show the diffed file position instead of the input file position.
