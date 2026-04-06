@@ -1823,7 +1823,8 @@ int enetc_xdp_xmit(struct net_device *ndev, int num_frames,
 		xdp_tx_frm_cnt++;
 	}
 
-	if (unlikely((flags & XDP_XMIT_FLUSH) || k != xdp_tx_frm_cnt))
+	if (unlikely(xdp_tx_frm_cnt && ((flags & XDP_XMIT_FLUSH) ||
+					xdp_tx_frm_cnt < num_frames)))
 		enetc_update_tx_ring_tail(tx_ring);
 
 	tx_ring->stats.xdp_tx += xdp_tx_frm_cnt;
