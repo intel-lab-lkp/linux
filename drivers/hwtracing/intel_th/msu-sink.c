@@ -65,19 +65,28 @@ static int msu_sink_alloc_window(void *data, struct sg_table **sgt, size_t size)
 	if (ret)
 		return -ENOMEM;
 
-	priv->sgts[priv->nr_sgts++] = *sgt;
-
 	for_each_sg((*sgt)->sgl, sg_ptr, nents, i) {
 		block = dma_alloc_coherent(priv->dev->parent->parent,
 					   PAGE_SIZE, &sg_dma_address(sg_ptr),
 					   GFP_KERNEL);
 		if (!block)
-			return -ENOMEM;
+			goto err_free_pages;
 
 		sg_set_buf(sg_ptr, block, PAGE_SIZE);
 	}
 
+	priv->sgts[priv->nr_sgts++] = *sgt;
+
 	return nents;
+
+err_free_pages:
+	for_each_sg((*sgt)->sgl, sg_ptr, i, ret)
+		dma_free_coherent(priv->dev->parent->parent, PAGE_SIZE,
+				  sg_virt(sg_ptr), sg_dma_address(sg_ptr));
+
+	sg_free_table(*sgt);
+
+	return -ENOMEM;
 }
 
 /* See also: msc.c: __msc_buffer_win_free() */
