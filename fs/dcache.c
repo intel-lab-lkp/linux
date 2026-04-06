@@ -343,6 +343,7 @@ static void __d_free(struct rcu_head *head)
 {
 	struct dentry *dentry = container_of(head, struct dentry, d_u.d_rcu);
 
+	spin_unlock(&dentry->d_lock);
 	kmem_cache_free(dentry_cache, dentry); 
 }
 
@@ -350,6 +351,7 @@ static void __d_free_external(struct rcu_head *head)
 {
 	struct dentry *dentry = container_of(head, struct dentry, d_u.d_rcu);
 	kfree(external_name(dentry));
+	spin_unlock(&dentry->d_lock);
 	kmem_cache_free(dentry_cache, dentry);
 }
 
@@ -684,9 +686,10 @@ static struct dentry *__dentry_kill(struct dentry *dentry)
 	dentry_unlist(dentry);
 	if (dentry->d_flags & DCACHE_SHRINK_LIST)
 		can_free = false;
-	spin_unlock(&dentry->d_lock);
 	if (likely(can_free))
 		dentry_free(dentry);
+	else
+		spin_unlock(&dentry->d_lock);
 	if (parent && --parent->d_lockref.count) {
 		spin_unlock(&parent->d_lock);
 		return NULL;
@@ -1165,9 +1168,10 @@ void shrink_dentry_list(struct list_head *list)
 			rcu_read_unlock();
 			d_shrink_del(dentry);
 			can_free = dentry->d_flags & DCACHE_DENTRY_KILLED;
-			spin_unlock(&dentry->d_lock);
 			if (can_free)
 				dentry_free(dentry);
+			else
+				spin_unlock(&dentry->d_lock);
 			continue;
 		}
 		d_shrink_del(dentry);
