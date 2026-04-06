@@ -32,7 +32,7 @@ int rdma_restrack_init(struct ib_device *dev)
 	rt = dev->res;
 
 	for (i = 0; i < RDMA_RESTRACK_MAX; i++)
-		xa_init_flags(&rt[i].xa, XA_FLAGS_ALLOC);
+		xa_init_flags(&rt[i].xa, XA_FLAGS_ALLOC1);
 
 	return 0;
 }
@@ -71,6 +71,8 @@ int rdma_restrack_count(struct ib_device *dev, enum rdma_restrack_type type,
 
 	xa_lock(&rt->xa);
 	xas_for_each(&xas, e, U32_MAX) {
+		if (xa_is_zero(e))
+			continue;
 		if (xa_get_mark(&rt->xa, e->id, RESTRACK_DD) && !show_details)
 			continue;
 		cnt++;
@@ -216,14 +218,24 @@ void rdma_restrack_add(struct rdma_restrack_entry *res)
 		ret = xa_insert(&rt->xa, counter->id, res, GFP_KERNEL);
 		res->id = ret ? 0 : counter->id;
 	} else {
-		ret = xa_alloc_cyclic(&rt->xa, &res->id, res, xa_limit_32b,
-				      &rt->next_id, GFP_KERNEL);
-		ret = (ret < 0) ? ret : 0;
+		/* If res->id is valid, try to reinsert at res->id index in
+		 * order to maintain the same id in case of a reinsertion.
+		 */
+		if (res->id) {
+			ret = xa_insert(&rt->xa, res->id, res, GFP_KERNEL);
+		} else {
+			ret = xa_alloc_cyclic(&rt->xa, &res->id, res,
+					      xa_limit_32b, &rt->next_id,
+					      GFP_KERNEL);
+			ret = (ret < 0) ? ret : 0;
+		}
 	}
 
 out:
 	if (!ret)
 		res->valid = true;
+	else
+		WARN_ONCE(true, "Failed to insert restrack entry at res->id %u", res->id);
 }
 EXPORT_SYMBOL(rdma_restrack_add);
 
