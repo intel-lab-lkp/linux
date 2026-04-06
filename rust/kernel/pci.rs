@@ -47,6 +47,7 @@ pub use self::io::{
     ConfigSpaceSize,
     Extended,
     Normal, //
+    SharedMemoryBar,
 };
 pub use self::irq::{
     IrqType,
@@ -457,6 +458,13 @@ impl Device<device::Core> {
     pub fn set_master(&self) {
         // SAFETY: `self.as_raw` is guaranteed to be a pointer to a valid `struct pci_dev`.
         unsafe { bindings::pci_set_master(self.as_raw()) };
+    }
+
+    /// Disable this PCI device.
+    #[inline]
+    pub fn disable_device(&self) {
+        // SAFETY: `self.as_raw` is guaranteed to be a pointer to a valid `struct pci_dev`.
+        unsafe { bindings::pci_disable_device(self.as_raw()) };
     }
 }
 

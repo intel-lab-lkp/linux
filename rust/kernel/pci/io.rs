@@ -7,6 +7,7 @@ use crate::{
     bindings,
     device,
     devres::Devres,
+    ffi::{c_ulong, c_void},
     io::{
         io_define_read,
         io_define_write,
@@ -17,11 +18,13 @@ use crate::{
         MmioRaw, //
     },
     prelude::*,
-    sync::aref::ARef, //
+    sync::aref::ARef,
+    types::ScopeGuard,
 };
 use core::{
     marker::PhantomData,
     ops::Deref, //
+    ptr::NonNull,
 };
 
 /// Represents the size of a PCI configuration space.
@@ -285,6 +288,104 @@ impl<const SIZE: usize> Deref for Bar<SIZE> {
     }
 }
 
+/// A cacheable shared-memory mapping of a PCI BAR created via `memremap()`.
+///
+/// This is intended for BARs that back shared memory rather than device register MMIO. The
+/// mapping owns both the underlying PCI region reservation and the `memremap()` lifetime, so
+/// driver code does not need to keep raw pointers or manually pair teardown calls.
+pub struct SharedMemoryBar {
+    pdev: ARef<Device>,
+    addr: NonNull<c_void>,
+    phys_start: bindings::resource_size_t,
+    len: usize,
+    num: i32,
+}
+
+// SAFETY: `SharedMemoryBar` owns a stable BAR reservation plus its `memremap()` mapping. Moving
+// the owner to another thread does not change the validity of the underlying PCI resource.
+unsafe impl Send for SharedMemoryBar {}
+
+// SAFETY: Shared references only expose immutable metadata queries; the mapped pointer itself is
+// not exposed for dereferencing.
+unsafe impl Sync for SharedMemoryBar {}
+
+impl SharedMemoryBar {
+    fn new(pdev: &Device, num: u32, name: &CStr) -> Result<Self> {
+        if !Bar::index_is_valid(num) {
+            return Err(EINVAL);
+        }
+
+        let len = pdev.resource_len(num)?;
+        if len == 0 {
+            return Err(ENXIO);
+        }
+
+        let len = usize::try_from(len)?;
+        let phys_start = pdev.resource_start(num)?;
+        let num = i32::try_from(num)?;
+
+        // SAFETY:
+        // - `pdev` is valid by the invariants of `Device`.
+        // - `num` is checked above.
+        // - `name` is a valid NUL-terminated string.
+        let ret = unsafe { bindings::pci_request_region(pdev.as_raw(), num, name.as_char_ptr()) };
+        if ret != 0 {
+            return Err(EBUSY);
+        }
+
+        let release_region = ScopeGuard::new(|| {
+            // SAFETY:
+            // - `pdev` is still valid for the duration of this constructor.
+            // - `num` has just been successfully reserved.
+            unsafe { bindings::pci_release_region(pdev.as_raw(), num) };
+        });
+
+        // SAFETY:
+        // - `phys_start`/`len` describe the BAR range we just reserved.
+        // - `MEMREMAP_WB` matches the external goldfish driver behaviour.
+        let addr = unsafe { bindings::memremap(phys_start, len, bindings::MEMREMAP_WB as c_ulong) };
+        let addr = NonNull::new(addr.cast()).ok_or(ENOMEM)?;
+
+        release_region.dismiss();
+
+        Ok(Self {
+            pdev: pdev.into(),
+            addr,
+            phys_start,
+            len,
+            num,
+        })
+    }
+
+    /// Returns the physical start address of the BAR.
+    #[inline]
+    pub fn phys_start(&self) -> bindings::resource_size_t {
+        self.phys_start
+    }
+
+    /// Returns the BAR size in bytes.
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    fn release(&self) {
+        // SAFETY:
+        // - `self.addr` is a valid `memremap()` result owned by `self`.
+        // - `self.num` is the BAR region successfully reserved by `Self::new`.
+        unsafe {
+            bindings::memunmap(self.addr.as_ptr().cast());
+            bindings::pci_release_region(self.pdev.as_raw(), self.num);
+        }
+    }
+}
+
+impl Drop for SharedMemoryBar {
+    fn drop(&mut self) {
+        self.release();
+    }
+}
+
 impl Device<device::Bound> {
     /// Maps an entire PCI BAR after performing a region-request on it. I/O operation bound checks
     /// can be performed on compile time for offsets (plus the requested type size) < SIZE.
@@ -303,6 +404,15 @@ impl Device<device::Bound> {
         name: &'a CStr,
     ) -> impl PinInit<Devres<Bar>, Error> + 'a {
         self.iomap_region_sized::<0>(bar, name)
+    }
+
+    /// Reserve and `memremap()` an entire PCI BAR as cacheable shared memory.
+    pub fn memremap_bar<'a>(
+        &'a self,
+        bar: u32,
+        name: &'a CStr,
+    ) -> impl PinInit<Devres<SharedMemoryBar>, Error> + 'a {
+        Devres::new(self.as_ref(), SharedMemoryBar::new(self, bar, name))
     }
 
     /// Returns the size of configuration space.
