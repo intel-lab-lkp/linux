@@ -108,9 +108,11 @@ static int setup_e820_entries(struct boot_params *params)
 
 	nr_e820_entries = e820_table_kexec->nr_entries;
 
-	/* TODO: Pass entries more than E820_MAX_ENTRIES_ZEROPAGE in bootparams setup data */
-	if (nr_e820_entries > E820_MAX_ENTRIES_ZEROPAGE)
+	if (nr_e820_entries > E820_MAX_ENTRIES_ZEROPAGE) {
+		pr_warn("E820 table has %u entries, truncating to %u supported by boot_params\n",
+			nr_e820_entries, E820_MAX_ENTRIES_ZEROPAGE);
 		nr_e820_entries = E820_MAX_ENTRIES_ZEROPAGE;
+	}
 
 	params->e820_entries = nr_e820_entries;
 	memcpy(&params->e820_table, &e820_table_kexec->entries, nr_e820_entries*sizeof(struct e820_entry));
