@@ -9,6 +9,7 @@
 #define _ROSE_H 
 
 #include <linux/refcount.h>
+#include <linux/workqueue.h>
 #include <linux/rose.h>
 #include <net/ax25.h>
 #include <net/sock.h>
@@ -105,6 +106,7 @@ struct rose_neigh {
 	struct sk_buff_head	queue;
 	struct timer_list	t0timer;
 	struct timer_list	ftimer;
+	struct work_struct	free_work;
 };
 
 struct rose_node {
@@ -159,12 +161,8 @@ static inline void rose_neigh_hold(struct rose_neigh *rose_neigh)
 
 static inline void rose_neigh_put(struct rose_neigh *rose_neigh)
 {
-	if (refcount_dec_and_test(&rose_neigh->use)) {
-		if (rose_neigh->ax25)
-			ax25_cb_put(rose_neigh->ax25);
-		kfree(rose_neigh->digipeat);
-		kfree(rose_neigh);
-	}
+	if (refcount_dec_and_test(&rose_neigh->use))
+		schedule_work(&rose_neigh->free_work);
 }
 
 /* af_rose.c */

@@ -28,6 +28,7 @@
 #include <linux/mm.h>
 #include <linux/interrupt.h>
 #include <linux/notifier.h>
+#include <linux/workqueue.h>
 #include <linux/init.h>
 #include <net/rose.h>
 #include <linux/seq_file.h>
@@ -43,6 +44,19 @@ static struct rose_route *rose_route_list;
 static DEFINE_SPINLOCK(rose_route_list_lock);
 
 struct rose_neigh *rose_loopback_neigh;
+
+static void rose_neigh_free_work(struct work_struct *work)
+{
+	struct rose_neigh *rose_neigh =
+		container_of(work, struct rose_neigh, free_work);
+
+	timer_shutdown_sync(&rose_neigh->t0timer);
+	timer_shutdown_sync(&rose_neigh->ftimer);
+	if (rose_neigh->ax25)
+		ax25_cb_put(rose_neigh->ax25);
+	kfree(rose_neigh->digipeat);
+	kfree(rose_neigh);
+}
 
 /*
  *	Add a new route to a node, and in the process add the node and the
@@ -103,6 +117,7 @@ static int __must_check rose_add_node(struct rose_route_struct *rose_route,
 
 		timer_setup(&rose_neigh->ftimer, NULL, 0);
 		timer_setup(&rose_neigh->t0timer, NULL, 0);
+		INIT_WORK(&rose_neigh->free_work, rose_neigh_free_work);
 
 		if (rose_route->ndigis != 0) {
 			rose_neigh->digipeat =
@@ -388,6 +403,7 @@ void rose_add_loopback_neigh(void)
 
 	timer_setup(&sn->ftimer, NULL, 0);
 	timer_setup(&sn->t0timer, NULL, 0);
+	INIT_WORK(&sn->free_work, rose_neigh_free_work);
 
 	spin_lock_bh(&rose_neigh_list_lock);
 	sn->next = rose_neigh_list;
