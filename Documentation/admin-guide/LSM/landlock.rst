@@ -1,12 +1,13 @@
 .. SPDX-License-Identifier: GPL-2.0
 .. Copyright © 2025 Microsoft Corporation
+.. Copyright © 2026 Cloudflare
 
 ================================
 Landlock: system-wide management
 ================================
 
 :Author: Mickaël Salaün
-:Date: January 2026
+:Date: April 2026
 
 Landlock can leverage the audit framework to log events.
 
@@ -176,11 +177,218 @@ filters to limit noise with two complementary ways:
   programs,
 - or with audit rules (see :manpage:`auditctl(8)`).
 
+Tracepoints
+===========
+
+Landlock also provides tracepoints as an alternative to audit for
+debugging and observability.  Tracepoints fire unconditionally,
+independent of audit configuration, ``audit_enabled``, and domain log
+flags.  This makes them suitable for always-on monitoring with eBPF or
+for ad-hoc debugging with ``trace-pipe``.  See
+:doc:`/trace/events-landlock` for the complete event reference.
+
+Enabling tracepoints
+--------------------
+
+Enable individual Landlock tracepoints via tracefs::
+
+  # Enable filesystem denial tracing:
+  echo 1 > /sys/kernel/tracing/events/landlock/landlock_deny_access_fs/enable
+
+  # Enable all Landlock events:
+  echo 1 > /sys/kernel/tracing/events/landlock/enable
+
+  # Read the trace output:
+  cat /sys/kernel/tracing/trace_pipe
+
+Available events
+----------------
+
+**Policy setup events:**
+
+- ``landlock_create_ruleset`` -- emitted when a ruleset is created.
+  Fields: ``ruleset`` (ID and version), ``handled_fs``, ``handled_net``,
+  ``scoped``.
+
+- ``landlock_add_rule_fs``, ``landlock_add_rule_net`` -- emitted when a
+  rule is added.  Fields: ``ruleset`` (ID and version),
+  ``access_rights`` (access mask),
+  target identifier (``dev:ino`` and ``path`` for FS, ``port`` for net).
+
+- ``landlock_restrict_self`` -- emitted when a task restricts itself.
+  Fields: ``ruleset`` (ID and version), ``domain`` (new domain ID),
+  ``parent`` (parent domain ID or 0).
+
+**Access check events (hot path):**
+
+- ``landlock_check_rule_fs``, ``landlock_check_rule_net`` -- emitted
+  when a rule matches during an access check.  Fires for every matching
+  rule in the pathwalk, regardless of the final outcome (allowed or
+  denied).
+
+**Denial events:**
+
+- ``landlock_deny_access_fs``, ``landlock_deny_access_net`` -- emitted
+  when a filesystem or network access is denied.
+- ``landlock_deny_ptrace``, ``landlock_deny_scope_signal``,
+  ``landlock_deny_scope_abstract_unix_socket`` -- emitted when a scope
+  check denies access.
+
+  Common fields include:
+
+  - ``domain`` -- the denying domain's ID
+  - ``blockers`` -- the denied access rights (bitmask,
+    ``deny_access_fs`` and ``deny_access_net`` only)
+  - ``same_exec`` -- whether the task is the same executable that
+    called ``landlock_restrict_self()`` for the denying domain
+  - ``log_same_exec``, ``log_new_exec`` -- the domain's configured log
+    flags (useful for filtering expected denials)
+  - Type-specific fields: ``path`` (FS), ``sport``/``dport`` (net),
+    ``tracee_pid``/``comm`` (ptrace), ``target_pid``/``comm`` (signal),
+    ``peer_pid``/``sun_path`` (abstract unix socket)
+
+**Lifecycle events:**
+
+- ``landlock_free_domain`` -- emitted when a domain is deallocated.
+  Fields: ``domain`` (ID), ``denials`` (total denial count).
+- ``landlock_free_ruleset`` -- emitted when a ruleset is freed.
+  Fields: ``ruleset`` (ID and version).
+
+Event samples
+-------------
+
+A sandboxed program tries to read ``/etc/passwd`` with only ``/tmp``
+writable::
+
+  $ echo 1 > /sys/kernel/tracing/events/landlock/enable
+  $ LL_FS_RO=/ LL_FS_RW=/tmp ./sandboxer cat /etc/passwd &
+  $ cat /sys/kernel/tracing/trace_pipe
+  sandboxer-286  landlock_create_ruleset: ruleset=10b556c58.0 handled_fs=0xdfff handled_net=0x0 scoped=0x0
+  sandboxer-286  landlock_restrict_self: ruleset=10b556c58.3 domain=10b556c61 parent=0
+  cat-287        landlock_deny_access_fs: domain=10b556c61 same_exec=0 log_same_exec=1 log_new_exec=0 blockers=0x4 dev=254:2 ino=143821 path=/etc/passwd
+  kworker/0:1-12 landlock_free_domain: domain=10b556c61 denials=1
+
+Unlike audit, tracepoints fire for all denials regardless of the
+domain's log flags.  This means ``deny_access_*`` events appear even
+when ``LANDLOCK_RESTRICT_SELF_LOG_SAME_EXEC_OFF`` would suppress the
+corresponding audit record.
+
+Filtering with ftrace
+---------------------
+
+Use ftrace filter expressions to select specific events::
+
+  # Only show denials that audit would also log:
+  echo 'same_exec == 1 && log_same_exec == 1 || same_exec == 0 && log_new_exec == 1' > \
+    /sys/kernel/tracing/events/landlock/landlock_deny_access_fs/filter
+
+Using eBPF
+----------
+
+eBPF programs can attach to Landlock tracepoints to build custom
+monitoring.  A stateful eBPF program observes the full event stream and
+maintains per-domain state in BPF maps:
+
+1. On ``landlock_restrict_self``: record the domain ID, parent, flags.
+2. On ``landlock_deny_access_*``: look up the domain, decide whether
+   to count, alert, or ignore the denial based on custom policy.
+3. On ``landlock_free_domain``: clean up the per-domain state, log
+   final statistics.
+
+This approach requires no kernel modification and no Landlock-specific
+BPF helpers.  The Landlock IDs serve as correlation keys across events.
+
+.. _landlock_observability:
+
+When to use tracing vs audit
+-----------------------------
+
+Audit and tracing both help diagnose Landlock policy issues:
+
+**Audit** records denied accesses with the blockers, domain, and object
+identification (path, port).  Audit is the standard Linux mechanism for
+security events, with a stable record format that is well established
+and already supported by log management systems, SIEM platforms, and EDR
+solutions.  Audit is always active (when ``CONFIG_AUDIT`` is set),
+filtered by log flags to reduce noise in production, and designed for
+long-term security monitoring and compliance.
+
+**Tracing** provides deeper introspection for policy debugging.  In
+addition to denied accesses, trace events cover the complete lifecycle
+of Landlock objects (rulesets, domains) and intermediate rule matching
+during access checks.  Trace events are disabled by default (zero
+overhead) and fire unconditionally, regardless of log flags.  eBPF
+programs attached to trace events can access the full kernel context
+(ruleset rules, domain hierarchy, process credentials) via BTF, enabling
+richer analysis than the flat fields in audit records.  For example, an
+eBPF-based live monitoring tool can correlate creation, rule-addition,
+and denial events to build a real-time view of all active Landlock
+domains and their policies.  However, BTF-based access depends on
+internal kernel struct layouts which have no stability guarantee.  CO-RE
+(Compile Once, Run Everywhere) provides best-effort field relocation.
+The ftrace printk format is also not a stable ABI, but is
+self-describing via the per-event ``format`` file, allowing tools to
+adapt dynamically.
+
+Observability guarantees and limitations
+-----------------------------------------
+
+Both audit records and trace events are emitted for every denied access,
+with these exceptions:
+
+- **Log flags** (audit only): ``LANDLOCK_RESTRICT_SELF_LOG_SAME_EXEC_OFF``,
+  ``LANDLOCK_RESTRICT_SELF_LOG_NEW_EXEC_ON``, and
+  ``LANDLOCK_RESTRICT_SELF_LOG_SUBDOMAINS_OFF`` control which denials
+  generate audit records.  Trace events fire regardless of these flags.
+
+- **NOAUDIT hooks**: Some LSM hooks suppress logging for speculative
+  permission probes (e.g., reading ``/proc/<pid>/status`` uses
+  ``PTRACE_MODE_NOAUDIT``).  When NOAUDIT is set, neither audit records
+  nor trace events are emitted, and the denial is not counted in
+  ``denials``.  The denial is still enforced.  This avoids performance
+  overhead and noise from speculative probes that test permissions
+  without performing an actual access.
+
+- **Audit rate limiting**: The audit subsystem may silently drop records
+  when the audit queue is full.  Trace events are not rate-limited.
+
+- **Tracepoint disabled**: When a trace event is disabled (the default
+  state), the tracepoint is a no-op with zero overhead.
+
+When both audit and tracing are active, every logged denial produces both
+an audit record (subject to log flags) and a trace event.  The
+``denials`` count in ``free_domain`` events reflects the total number of
+logged denials, which may be lower than the actual number of enforced
+denials due to NOAUDIT hooks.
+
+.. _landlock_observability_security:
+
+Observability security considerations
+---------------------------------------
+
+Both audit records and trace events expose information about all
+Landlock-sandboxed processes on the system, including filesystem paths
+being accessed, network ports, and process identities.  System
+administrators must ensure that access to audit logs (controlled by the
+audit subsystem configuration) and to trace events (requiring
+``CAP_SYS_ADMIN`` or ``CAP_BPF`` + ``CAP_PERFMON``) is restricted to
+trusted users.
+
+eBPF programs attached to Landlock trace events have access to the full
+kernel context of each event (ruleset rules, domain hierarchy, process
+credentials) via BTF.  This level of access is comparable to
+``CAP_SYS_ADMIN`` and must be treated accordingly.
+
+Audit logs and kernel trace events require elevated privileges and are
+system-wide; they are not designed for per-sandbox unprivileged
+monitoring.
+
 Additional documentation
 ========================
 
 * `Linux Audit Documentation`_
 * Documentation/userspace-api/landlock.rst
+* Documentation/trace/events-landlock.rst
 * Documentation/security/landlock.rst
 * https://landlock.io
 

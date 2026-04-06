@@ -1,13 +1,14 @@
 .. SPDX-License-Identifier: GPL-2.0
 .. Copyright © 2017-2020 Mickaël Salaün <mic@digikod.net>
 .. Copyright © 2019-2020 ANSSI
+.. Copyright © 2026 Cloudflare
 
 ==================================
 Landlock LSM: kernel documentation
 ==================================
 
 :Author: Mickaël Salaün
-:Date: March 2026
+:Date: April 2026
 
 Landlock's goal is to create scoped access-control (i.e. sandboxing).  To
 harden a whole system, this feature should be available to any process,
@@ -177,11 +178,43 @@ makes the reasoning much easier and helps avoid pitfalls.
 .. kernel-doc:: security/landlock/domain.h
     :identifiers:
 
+Denial logging
+==============
+
+Access denials are logged through two independent channels: audit
+records and tracepoints.  Both are managed by the common denial
+framework in ``log.c``, compiled under ``CONFIG_SECURITY_LANDLOCK_LOG``
+(automatically selected by ``CONFIG_AUDIT`` or ``CONFIG_TRACEPOINTS``).
+
+Audit records respect audit configuration, domain log flags, and
+``LANDLOCK_LOG_DISABLED``.  Tracepoints fire unconditionally,
+independent of audit configuration and domain log flags.  The denial
+counter (``num_denials``) is always incremented regardless of logging
+configuration.
+
+See Documentation/admin-guide/LSM/landlock.rst for audit record format,
+tracepoint usage, and filtering examples.
+
+.. kernel-doc:: security/landlock/log.h
+    :identifiers:
+
+Trace events
+------------
+
+See :doc:`/trace/events-landlock` for trace event usage and format details.
+
+.. kernel-doc:: include/trace/events/landlock.h
+    :doc: Landlock trace events
+
+.. kernel-doc:: include/trace/events/landlock.h
+    :internal:
+
 Additional documentation
 ========================
 
 * Documentation/userspace-api/landlock.rst
 * Documentation/admin-guide/LSM/landlock.rst
+* Documentation/trace/events-landlock.rst
 * https://landlock.io
 
 .. Links

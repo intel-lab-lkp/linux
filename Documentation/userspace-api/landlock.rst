@@ -8,7 +8,7 @@ Landlock: unprivileged access control
 =====================================
 
 :Author: Mickaël Salaün
-:Date: March 2026
+:Date: April 2026
 
 The goal of Landlock is to enable restriction of ambient rights (e.g. global
 filesystem or network access) for a set of processes.  Because Landlock
@@ -698,8 +698,12 @@ Starting with the Landlock ABI version 7, it is possible to control logging of
 Landlock audit events with the ``LANDLOCK_RESTRICT_SELF_LOG_SAME_EXEC_OFF``,
 ``LANDLOCK_RESTRICT_SELF_LOG_NEW_EXEC_ON``, and
 ``LANDLOCK_RESTRICT_SELF_LOG_SUBDOMAINS_OFF`` flags passed to
-sys_landlock_restrict_self().  See Documentation/admin-guide/LSM/landlock.rst
-for more details on audit.
+sys_landlock_restrict_self().  These flags control audit record generation.
+Landlock tracepoints are not affected by these flags and always fire when
+enabled, providing an alternative observability channel for debugging and
+monitoring.  See :doc:`/admin-guide/LSM/landlock` for more details
+on audit and tracepoints, and :doc:`/trace/events-landlock` for the
+complete trace event reference.
 
 Thread synchronization (ABI < 8)
 --------------------------------
@@ -814,6 +818,7 @@ Additional documentation
 ========================
 
 * Documentation/admin-guide/LSM/landlock.rst
+* Documentation/trace/events-landlock.rst
 * Documentation/security/landlock.rst
 * https://landlock.io
 

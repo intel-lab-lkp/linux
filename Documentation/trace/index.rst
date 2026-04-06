@@ -54,6 +54,7 @@ applications.
    events-power
    events-nmi
    events-msr
+   events-landlock
    events-pci
    boottime-trace
    histogram
