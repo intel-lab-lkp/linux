@@ -90,16 +90,17 @@ static int filter_write(u32 reg)
 	static DEFINE_RATELIMIT_STATE(fw_rs, 30 * HZ, 1);
 
 	switch (allow_writes) {
-	case MSR_WRITES_ON:  return 0;
+	case MSR_WRITES_ON: return 0;
 	case MSR_WRITES_OFF: return -EPERM;
-	default: break;
+	default:
+			     break;
 	}
 
 	if (!__ratelimit(&fw_rs))
 		return 0;
 
 	pr_warn("Write to unrecognized MSR 0x%x by %s (pid: %d), tainting CPU_OUT_OF_SPEC.\n",
-	        reg, current->comm, current->pid);
+			reg, current->comm, current->pid);
 	pr_warn("See https://git.kernel.org/pub/scm/linux/kernel/git/tip/tip.git/about for details.\n");
 
 	return 0;
@@ -314,9 +315,15 @@ static int get_allow_writes(char *buf, const struct kernel_param *kp)
 	const char *res;
 
 	switch (allow_writes) {
-	case MSR_WRITES_ON:  res = "on"; break;
-	case MSR_WRITES_OFF: res = "off"; break;
-	default: res = "default"; break;
+	case MSR_WRITES_ON:
+		res = "on";
+		break;
+	case MSR_WRITES_OFF:
+		res = "off";
+		break;
+	default:
+		res = "default";
+		break;
 	}
 
 	return sprintf(buf, "%s\n", res);
