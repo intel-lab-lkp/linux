@@ -6,6 +6,7 @@
  */
 
 #include <linux/clk-provider.h>
+#include <linux/clk.h>
 #include <linux/err.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -15,21 +16,36 @@
 
 #define I2S_CSR		0x00
 #define I2S_CR2		0x08
+#define I2S_MCR		0x100
 #define CSR_BCE_BIT	28
+#define CSR_TE_BIT	31
 #define CR2_BCD		BIT(24)
 #define CR2_DIV_SHIFT	0
 #define CR2_DIV_WIDTH	8
+#define MCR_MOE		BIT(30)
 
 struct fsl_sai_clk {
 	struct clk_divider bclk_div;
+	struct clk_divider mclk_div;
 	struct clk_gate bclk_gate;
+	struct clk_gate mclk_gate;
 	struct clk_hw *bclk_hw;
+	struct clk_hw *mclk_hw;
 	spinlock_t lock;
 };
 
 struct fsl_sai_data {
 	unsigned int	offset;	/* Register offset */
+	bool		have_mclk; /* Have MCLK control */
 };
+
+static struct clk_hw *
+fsl_sai_of_clk_get(struct of_phandle_args *clkspec, void *data)
+{
+	struct fsl_sai_clk *sai_clk = data;
+
+	return clkspec->args[0] ? sai_clk->mclk_hw : sai_clk->bclk_hw;
+}
 
 static int fsl_sai_clk_register(struct device *dev, void __iomem *base,
 				spinlock_t *lock, struct clk_divider *div,
@@ -104,15 +120,28 @@ static int fsl_sai_clk_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	return devm_of_clk_add_hw_provider(dev, of_clk_hw_simple_get, hw);
+	if (data->have_mclk) {
+		ret = fsl_sai_clk_register(dev, base, &sai_clk->lock,
+					   &sai_clk->mclk_div,
+					   &sai_clk->mclk_gate,
+					   &sai_clk->mclk_hw,
+					   CSR_TE_BIT, MCR_MOE, I2S_MCR,
+					   "MCLK");
+		if (ret)
+			return ret;
+	}
+
+	return devm_of_clk_add_hw_provider(dev, fsl_sai_of_clk_get, sai_clk);
 }
 
 static const struct fsl_sai_data fsl_sai_vf610_data = {
 	.offset	= 0,
+	.have_mclk = false,
 };
 
 static const struct fsl_sai_data fsl_sai_imx8mq_data = {
 	.offset	= 8,
+	.have_mclk = true,
 };
 
 static const struct of_device_id of_fsl_sai_clk_ids[] = {
