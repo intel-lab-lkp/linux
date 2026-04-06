@@ -1801,8 +1801,10 @@ int enetc_xdp_xmit(struct net_device *ndev, int num_frames,
 		xdp_tx_bd_cnt = enetc_xdp_frame_to_xdp_tx_swbd(tx_ring,
 							       xdp_redirect_arr,
 							       frames[k]);
-		if (unlikely(xdp_tx_bd_cnt < 0))
+		if (unlikely(xdp_tx_bd_cnt < 0)) {
+			tx_ring->stats.xdp_tx_drops++;
 			break;
+		}
 
 		if (unlikely(!enetc_xdp_tx(tx_ring, xdp_redirect_arr,
 					   xdp_tx_bd_cnt))) {
