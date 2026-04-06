@@ -10,11 +10,12 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <linux/landlock.h>
 #include <linux/in.h>
+#include <linux/landlock.h>
 #include <sched.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/mount.h>
 #include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/syscall.h>
@@ -22,6 +23,9 @@
 
 #include "audit.h"
 #include "common.h"
+#include "trace.h"
+
+#define TRACE_TASK "net_test"
 
 const short sock_port_start = (1 << 10);
 
@@ -2025,5 +2029,546 @@ TEST_F(audit, connect)
 
 	EXPECT_EQ(0, close(sock_fd));
 }
+
+/* Trace tests */
+
+/* clang-format off */
+FIXTURE(trace_net) {
+	/* clang-format on */
+	int tracefs_ok;
+};
+
+FIXTURE_SETUP(trace_net)
+{
+	int ret;
+
+	set_cap(_metadata, CAP_SYS_ADMIN);
+	ASSERT_EQ(0, unshare(CLONE_NEWNS));
+	ASSERT_EQ(0, mount(NULL, "/", NULL, MS_REC | MS_PRIVATE, NULL));
+
+	ret = tracefs_fixture_setup();
+	if (ret) {
+		clear_cap(_metadata, CAP_SYS_ADMIN);
+		self->tracefs_ok = 0;
+		SKIP(return, "tracefs not available");
+	}
+	self->tracefs_ok = 1;
+
+	ASSERT_EQ(0,
+		  tracefs_enable_event(TRACEFS_DENY_ACCESS_NET_ENABLE, true));
+	ASSERT_EQ(0, tracefs_clear());
+	clear_cap(_metadata, CAP_SYS_ADMIN);
+}
+
+FIXTURE_TEARDOWN(trace_net)
+{
+	if (!self->tracefs_ok)
+		return;
+
+	set_cap(_metadata, CAP_SYS_ADMIN);
+	tracefs_enable_event(TRACEFS_DENY_ACCESS_NET_ENABLE, false);
+	tracefs_fixture_teardown();
+	clear_cap(_metadata, CAP_SYS_ADMIN);
+}
+
+/*
+ * Baseline: verifies that without Landlock, the bind succeeds and no
+ * deny_access_net trace event fires.
+ */
+/* clang-format off */
+FIXTURE_VARIANT(trace_net)
+{
+	/* clang-format on */
+	bool sandbox;
+	int bind_port_offset; /* 0 = allowed port, 1 = denied port */
+	int expect_denied;
+};
+
+/* Unsandboxed: no Landlock, bind should succeed with no events. */
+/* clang-format off */
+FIXTURE_VARIANT_ADD(trace_net, unsandboxed) {
+	/* clang-format on */
+	.sandbox = false,
+	.bind_port_offset = 0,
+	.expect_denied = 0,
+};
+
+/* Denied: sandboxed, bind to port not in ruleset. */
+/* clang-format off */
+FIXTURE_VARIANT_ADD(trace_net, bind_denied) {
+	/* clang-format on */
+	.sandbox = true,
+	.bind_port_offset = 1,
+	.expect_denied = 1,
+};
+
+/* Allowed: sandboxed, bind to port in ruleset. */
+/* clang-format off */
+FIXTURE_VARIANT_ADD(trace_net, bind_allowed) {
+	/* clang-format on */
+	.sandbox = true,
+	.bind_port_offset = 0,
+	.expect_denied = 0,
+};
+
+TEST_F(trace_net, deny_access_net_bind)
+{
+	char *buf;
+	int count, status;
+	pid_t child;
+
+	if (!self->tracefs_ok)
+		SKIP(return, "tracefs not available");
+
+	ASSERT_EQ(0, tracefs_clear_buf());
+
+	child = fork();
+	ASSERT_LE(0, child);
+
+	if (child == 0) {
+		struct sockaddr_in addr = {
+			.sin_family = AF_INET,
+			.sin_addr.s_addr = htonl(INADDR_LOOPBACK),
+		};
+		int sock_fd;
+
+		if (variant->sandbox) {
+			struct landlock_ruleset_attr ruleset_attr = {
+				.handled_access_net =
+					LANDLOCK_ACCESS_NET_BIND_TCP,
+			};
+			struct landlock_net_port_attr port_attr = {
+				.allowed_access = LANDLOCK_ACCESS_NET_BIND_TCP,
+				.port = sock_port_start,
+			};
+			int ruleset_fd;
+
+			ruleset_fd = landlock_create_ruleset(
+				&ruleset_attr, sizeof(ruleset_attr), 0);
+			if (ruleset_fd < 0)
+				_exit(1);
+
+			if (landlock_add_rule(ruleset_fd,
+					      LANDLOCK_RULE_NET_PORT,
+					      &port_attr, 0)) {
+				close(ruleset_fd);
+				_exit(1);
+			}
+
+			prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
+			if (landlock_restrict_self(ruleset_fd, 0)) {
+				close(ruleset_fd);
+				_exit(1);
+			}
+			close(ruleset_fd);
+		}
+
+		sock_fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+		if (sock_fd < 0)
+			_exit(1);
+
+		addr.sin_port =
+			htons(sock_port_start + variant->bind_port_offset);
+		if (variant->expect_denied) {
+			/* Bind should be denied. */
+			if (bind(sock_fd, (struct sockaddr *)&addr,
+				 sizeof(addr)) == 0) {
+				close(sock_fd);
+				_exit(2);
+			}
+			if (errno != EACCES) {
+				close(sock_fd);
+				_exit(3);
+			}
+		} else {
+			/* Bind should succeed. */
+			if (bind(sock_fd, (struct sockaddr *)&addr,
+				 sizeof(addr))) {
+				close(sock_fd);
+				_exit(2);
+			}
+		}
+		close(sock_fd);
+		_exit(0);
+	}
+
+	ASSERT_EQ(child, waitpid(child, &status, 0));
+	ASSERT_TRUE(WIFEXITED(status));
+	EXPECT_EQ(0, WEXITSTATUS(status));
+
+	buf = tracefs_read_buf();
+	ASSERT_NE(NULL, buf);
+
+	count = tracefs_count_matches(buf, REGEX_DENY_ACCESS_NET(TRACE_TASK));
+	if (variant->expect_denied) {
+		EXPECT_LE(variant->expect_denied, count)
+		{
+			TH_LOG("Expected deny_access_net event, got %d\n%s",
+			       count, buf);
+		}
+	} else {
+		EXPECT_EQ(0, count)
+		{
+			TH_LOG("Expected 0 deny_access_net events, "
+			       "got %d\n%s",
+			       count, buf);
+		}
+	}
+
+	free(buf);
+}
+
+/* Connect and field-check tests use a separate fixture without variants. */
+
+/* clang-format off */
+FIXTURE(trace_net_connect) {
+	/* clang-format on */
+	int tracefs_ok;
+};
+
+FIXTURE_SETUP(trace_net_connect)
+{
+	int ret;
+
+	set_cap(_metadata, CAP_SYS_ADMIN);
+	ASSERT_EQ(0, unshare(CLONE_NEWNS));
+	ASSERT_EQ(0, mount(NULL, "/", NULL, MS_REC | MS_PRIVATE, NULL));
+
+	ret = tracefs_fixture_setup();
+	if (ret) {
+		clear_cap(_metadata, CAP_SYS_ADMIN);
+		self->tracefs_ok = 0;
+		SKIP(return, "tracefs not available");
+	}
+	self->tracefs_ok = 1;
+
+	ASSERT_EQ(0,
+		  tracefs_enable_event(TRACEFS_DENY_ACCESS_NET_ENABLE, true));
+	ASSERT_EQ(0, tracefs_clear());
+	clear_cap(_metadata, CAP_SYS_ADMIN);
+}
+
+FIXTURE_TEARDOWN(trace_net_connect)
+{
+	if (!self->tracefs_ok)
+		return;
+
+	set_cap(_metadata, CAP_SYS_ADMIN);
+	tracefs_enable_event(TRACEFS_DENY_ACCESS_NET_ENABLE, false);
+	tracefs_fixture_teardown();
+	clear_cap(_metadata, CAP_SYS_ADMIN);
+}
+
+/*
+ * Verifies that a denied connect emits a deny_access_net trace event with
+ * sport=0 and dport=<denied_port>.
+ */
+TEST_F(trace_net_connect, deny_access_net_connect_denied)
+{
+	pid_t child;
+	int status;
+	char *buf;
+	char field[64], expected[16];
+
+	if (!self->tracefs_ok)
+		SKIP(return, "tracefs not available");
+
+	child = fork();
+	ASSERT_LE(0, child);
+
+	if (child == 0) {
+		struct landlock_ruleset_attr ruleset_attr = {
+			.handled_access_net = LANDLOCK_ACCESS_NET_CONNECT_TCP,
+		};
+		struct landlock_net_port_attr port_attr = {
+			.allowed_access = LANDLOCK_ACCESS_NET_CONNECT_TCP,
+			.port = sock_port_start,
+		};
+		struct sockaddr_in addr = {
+			.sin_family = AF_INET,
+			.sin_addr.s_addr = htonl(INADDR_LOOPBACK),
+		};
+		int ruleset_fd, sock_fd;
+
+		ruleset_fd = landlock_create_ruleset(&ruleset_attr,
+						     sizeof(ruleset_attr), 0);
+		if (ruleset_fd < 0)
+			_exit(1);
+
+		if (landlock_add_rule(ruleset_fd, LANDLOCK_RULE_NET_PORT,
+				      &port_attr, 0)) {
+			close(ruleset_fd);
+			_exit(1);
+		}
+
+		prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
+		if (landlock_restrict_self(ruleset_fd, 0)) {
+			close(ruleset_fd);
+			_exit(1);
+		}
+		close(ruleset_fd);
+
+		/* Connect to denied port. */
+		sock_fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+		if (sock_fd < 0)
+			_exit(1);
+
+		addr.sin_port = htons(sock_port_start + 1);
+		if (connect(sock_fd, (struct sockaddr *)&addr, sizeof(addr)) ==
+		    0) {
+			close(sock_fd);
+			_exit(2);
+		}
+		if (errno != EACCES) {
+			close(sock_fd);
+			_exit(3);
+		}
+		close(sock_fd);
+		_exit(0);
+	}
+
+	ASSERT_EQ(child, waitpid(child, &status, 0));
+	ASSERT_TRUE(WIFEXITED(status));
+	EXPECT_EQ(0, WEXITSTATUS(status));
+
+	buf = tracefs_read_buf();
+	ASSERT_NE(NULL, buf);
+
+	EXPECT_LE(1, tracefs_count_matches(buf,
+					   REGEX_DENY_ACCESS_NET(TRACE_TASK)));
+
+	/*
+	 * Verify dport is the denied port and sport is 0.  The port
+	 * value must be in host endianness, matching the UAPI convention
+	 * (landlock_net_port_attr.port).  On little-endian,
+	 * htons(sock_port_start + 1) would produce a different decimal
+	 * value, so this comparison also catches byte-order bugs.
+	 */
+	ASSERT_EQ(0,
+		  tracefs_extract_field(buf, REGEX_DENY_ACCESS_NET(TRACE_TASK),
+					"sport", field, sizeof(field)));
+	EXPECT_STREQ("0", field);
+
+	ASSERT_EQ(0,
+		  tracefs_extract_field(buf, REGEX_DENY_ACCESS_NET(TRACE_TASK),
+					"dport", field, sizeof(field)));
+	snprintf(expected, sizeof(expected), "%llu",
+		 (unsigned long long)(sock_port_start + 1));
+	EXPECT_STREQ(expected, field);
+
+	free(buf);
+}
+
+/* Verifies that a denied bind emits sport=<port> dport=0. */
+TEST_F(trace_net_connect, deny_access_net_bind_fields)
+{
+	pid_t child;
+	int status;
+	char *buf;
+	char field[64], expected[16];
+
+	if (!self->tracefs_ok)
+		SKIP(return, "tracefs not available");
+
+	child = fork();
+	ASSERT_LE(0, child);
+
+	if (child == 0) {
+		struct landlock_ruleset_attr ruleset_attr = {
+			.handled_access_net = LANDLOCK_ACCESS_NET_BIND_TCP,
+		};
+		struct landlock_net_port_attr port_attr = {
+			.allowed_access = LANDLOCK_ACCESS_NET_BIND_TCP,
+			.port = sock_port_start,
+		};
+		struct sockaddr_in addr = {
+			.sin_family = AF_INET,
+			.sin_addr.s_addr = htonl(INADDR_LOOPBACK),
+		};
+		int ruleset_fd, sock_fd;
+
+		ruleset_fd = landlock_create_ruleset(&ruleset_attr,
+						     sizeof(ruleset_attr), 0);
+		if (ruleset_fd < 0)
+			_exit(1);
+
+		if (landlock_add_rule(ruleset_fd, LANDLOCK_RULE_NET_PORT,
+				      &port_attr, 0)) {
+			close(ruleset_fd);
+			_exit(1);
+		}
+
+		prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
+		if (landlock_restrict_self(ruleset_fd, 0)) {
+			close(ruleset_fd);
+			_exit(1);
+		}
+		close(ruleset_fd);
+
+		/* Bind to denied port. */
+		sock_fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+		if (sock_fd < 0)
+			_exit(1);
+
+		addr.sin_port = htons(sock_port_start + 1);
+		if (bind(sock_fd, (struct sockaddr *)&addr, sizeof(addr)) ==
+		    0) {
+			close(sock_fd);
+			_exit(2);
+		}
+		if (errno != EACCES) {
+			close(sock_fd);
+			_exit(3);
+		}
+		close(sock_fd);
+		_exit(0);
+	}
+
+	ASSERT_EQ(child, waitpid(child, &status, 0));
+	ASSERT_TRUE(WIFEXITED(status));
+	EXPECT_EQ(0, WEXITSTATUS(status));
+
+	buf = tracefs_read_buf();
+	ASSERT_NE(NULL, buf);
+
+	EXPECT_LE(1, tracefs_count_matches(buf,
+					   REGEX_DENY_ACCESS_NET(TRACE_TASK)));
+
+	/* Verify sport is the denied port and dport is 0. */
+	ASSERT_EQ(0,
+		  tracefs_extract_field(buf, REGEX_DENY_ACCESS_NET(TRACE_TASK),
+					"dport", field, sizeof(field)));
+	EXPECT_STREQ("0", field);
+
+	ASSERT_EQ(0,
+		  tracefs_extract_field(buf, REGEX_DENY_ACCESS_NET(TRACE_TASK),
+					"sport", field, sizeof(field)));
+	snprintf(expected, sizeof(expected), "%llu",
+		 (unsigned long long)(sock_port_start + 1));
+	EXPECT_STREQ(expected, field);
+
+	free(buf);
+}
+
+/*
+ * Verifies that a denied connect after a successful bind shows sport=0 and
+ * dport=<denied_port>.  The bind succeeds (allowed port), then the connect is
+ * denied.  sport=0 because the denied operation is connect, not bind.
+ */
+TEST_F(trace_net_connect, deny_access_net_connect_after_bind)
+{
+	pid_t child;
+	int status;
+	char *buf;
+	char field[64], expected[16];
+
+	if (!self->tracefs_ok)
+		SKIP(return, "tracefs not available");
+
+	child = fork();
+	ASSERT_LE(0, child);
+
+	if (child == 0) {
+		struct landlock_ruleset_attr ruleset_attr = {
+			.handled_access_net = LANDLOCK_ACCESS_NET_BIND_TCP |
+					      LANDLOCK_ACCESS_NET_CONNECT_TCP,
+		};
+		struct landlock_net_port_attr port_attr;
+		struct sockaddr_in bind_addr = {
+			.sin_family = AF_INET,
+			.sin_port = htons(sock_port_start),
+			.sin_addr.s_addr = htonl(INADDR_LOOPBACK),
+		};
+		struct sockaddr_in conn_addr = {
+			.sin_family = AF_INET,
+			.sin_port = htons(sock_port_start + 1),
+			.sin_addr.s_addr = htonl(INADDR_LOOPBACK),
+		};
+		int ruleset_fd, sock_fd, optval = 1;
+
+		ruleset_fd = landlock_create_ruleset(&ruleset_attr,
+						     sizeof(ruleset_attr), 0);
+		if (ruleset_fd < 0)
+			_exit(1);
+
+		/* Allow bind and connect on sock_port_start only. */
+		port_attr.allowed_access = LANDLOCK_ACCESS_NET_BIND_TCP |
+					   LANDLOCK_ACCESS_NET_CONNECT_TCP;
+		port_attr.port = sock_port_start;
+		if (landlock_add_rule(ruleset_fd, LANDLOCK_RULE_NET_PORT,
+				      &port_attr, 0)) {
+			close(ruleset_fd);
+			_exit(1);
+		}
+
+		prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
+		if (landlock_restrict_self(ruleset_fd, 0)) {
+			close(ruleset_fd);
+			_exit(1);
+		}
+		close(ruleset_fd);
+
+		sock_fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+		if (sock_fd < 0)
+			_exit(1);
+		setsockopt(sock_fd, SOL_SOCKET, SO_REUSEADDR, &optval,
+			   sizeof(optval));
+
+		/* Bind to allowed port (succeeds, no trace event). */
+		if (bind(sock_fd, (struct sockaddr *)&bind_addr,
+			 sizeof(bind_addr))) {
+			close(sock_fd);
+			_exit(1);
+		}
+
+		/* Connect to denied port (fails, emits trace event). */
+		if (connect(sock_fd, (struct sockaddr *)&conn_addr,
+			    sizeof(conn_addr)) == 0) {
+			close(sock_fd);
+			_exit(2);
+		}
+		if (errno != EACCES) {
+			close(sock_fd);
+			_exit(3);
+		}
+		close(sock_fd);
+		_exit(0);
+	}
+
+	ASSERT_EQ(child, waitpid(child, &status, 0));
+	ASSERT_TRUE(WIFEXITED(status));
+	EXPECT_EQ(0, WEXITSTATUS(status));
+
+	buf = tracefs_read_buf();
+	ASSERT_NE(NULL, buf);
+
+	EXPECT_LE(1, tracefs_count_matches(buf,
+					   REGEX_DENY_ACCESS_NET(TRACE_TASK)));
+
+	/*
+	 * The denied operation is connect, so sport=0 and dport=<denied_port>,
+	 * regardless of the prior bind.
+	 */
+	ASSERT_EQ(0,
+		  tracefs_extract_field(buf, REGEX_DENY_ACCESS_NET(TRACE_TASK),
+					"sport", field, sizeof(field)));
+	EXPECT_STREQ("0", field);
+
+	ASSERT_EQ(0,
+		  tracefs_extract_field(buf, REGEX_DENY_ACCESS_NET(TRACE_TASK),
+					"dport", field, sizeof(field)));
+	snprintf(expected, sizeof(expected), "%llu",
+		 (unsigned long long)(sock_port_start + 1));
+	EXPECT_STREQ(expected, field);
+
+	free(buf);
+}
+
+/*
+ * IPv6 network trace tests are intentionally elided.  IPv6 hook dispatch uses
+ * the same current_check_access_socket() code path as IPv4, validated by the
+ * audit tests in this file.  The trace events use the same blockers/sport/dport
+ * fields regardless of address family.
+ */
 
 TEST_HARNESS_MAIN
