@@ -16,8 +16,8 @@ void hns_roce_srq_event(struct hns_roce_dev *hr_dev, u32 srqn, int event_type)
 
 	xa_lock(&srq_table->xa);
 	srq = xa_load(&srq_table->xa, srqn & (hr_dev->caps.num_srqs - 1));
-	if (srq)
-		refcount_inc(&srq->refcount);
+	if (srq && !refcount_inc_not_zero(&srq->refcount))
+		srq = NULL;
 	xa_unlock(&srq_table->xa);
 
 	if (!srq) {
@@ -481,8 +481,8 @@ int hns_roce_create_srq(struct ib_srq *ib_srq,
 	}
 
 	srq->event = hns_roce_ib_srq_event;
-	refcount_set(&srq->refcount, 1);
 	init_completion(&srq->free);
+	refcount_set(&srq->refcount, 1);
 
 	return 0;
 
