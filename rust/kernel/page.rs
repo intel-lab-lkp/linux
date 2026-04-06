@@ -7,7 +7,7 @@ use crate::{
     bindings,
     error::code::*,
     error::Result,
-    uaccess::UserSliceReader,
+    io::PhysAddr,
 };
 use core::{
     marker::PhantomData,
@@ -198,6 +198,13 @@ impl Page {
         unsafe { bindings::page_to_nid(self.as_ptr()) }
     }
 
+    /// Returns the physical address of the start of this page.
+    #[inline]
+    pub fn phys_addr(&self) -> PhysAddr {
+        // SAFETY: `self.as_ptr()` is a live `struct page` owned by this `Page`.
+        unsafe { bindings::page_to_phys(self.as_ptr()) }
+    }
+
     /// Runs a piece of code with this page mapped to an address.
     ///
     /// The page is unmapped when this call returns.
@@ -337,30 +344,25 @@ impl Page {
         })
     }
 
-    /// Copies data from userspace into this page.
-    ///
-    /// This method will perform bounds checks on the page offset. If `offset .. offset+len` goes
-    /// outside of the page, then this call returns [`EINVAL`].
-    ///
-    /// Like the other `UserSliceReader` methods, data races are allowed on the userspace address.
-    /// However, they are not allowed on the page you are copying into.
-    ///
-    /// # Safety
-    ///
-    /// Callers must ensure that this call does not race with a read or write to the same page that
-    /// overlaps with this write.
-    pub unsafe fn copy_from_user_slice_raw(
-        &self,
-        reader: &mut UserSliceReader,
-        offset: usize,
-        len: usize,
-    ) -> Result {
-        self.with_pointer_into_page(offset, len, move |dst| {
-            // SAFETY: If `with_pointer_into_page` calls into this closure, then it has performed a
-            // bounds check and guarantees that `dst` is valid for `len` bytes. Furthermore, we have
-            // exclusive access to the slice since the caller guarantees that there are no races.
-            reader.read_raw(unsafe { core::slice::from_raw_parts_mut(dst.cast(), len) })
-        })
+    /// Maps the page and reads from it into the given buffer.
+    pub fn read_slice(&self, dst: &mut [u8], offset: usize) -> Result {
+        // SAFETY: `dst` is a valid mutable slice for `dst.len()` bytes. Safe Rust also prevents
+        // callers from obtaining a mutable reference to this `Page` while this shared borrow
+        // exists, so concurrent writes through the safe API cannot overlap with this read.
+        unsafe { self.read_raw(dst.as_mut_ptr(), offset, dst.len()) }
+    }
+
+    /// Maps the page and writes the given buffer into it.
+    pub fn write_slice(&mut self, src: &[u8], offset: usize) -> Result {
+        // SAFETY: `src` is a valid immutable slice for `src.len()` bytes, and `&mut self`
+        // guarantees unique access to the page through the safe API.
+        unsafe { self.write_raw(src.as_ptr(), offset, src.len()) }
+    }
+
+    /// Zeroes a range within the page.
+    pub fn fill_zero(&mut self, offset: usize, len: usize) -> Result {
+        // SAFETY: `&mut self` guarantees unique access to the page through the safe API.
+        unsafe { self.fill_zero_raw(offset, len) }
     }
 }
 
