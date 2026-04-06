@@ -11,7 +11,9 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/landlock.h>
+#include <sched.h>
 #include <signal.h>
+#include <sys/mount.h>
 #include <sys/prctl.h>
 #include <sys/ptrace.h>
 #include <sys/types.h>
@@ -20,6 +22,7 @@
 
 #include "audit.h"
 #include "common.h"
+#include "trace.h"
 
 /* Copied from security/yama/yama_lsm.c */
 #define YAMA_SCOPE_DISABLED 0
@@ -427,6 +430,167 @@ TEST_F(audit, trace)
 	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(0, records.domain);
+}
+
+/* Trace tests */
+
+/* clang-format off */
+FIXTURE(trace_ptrace) {
+	/* clang-format on */
+	int tracefs_ok;
+};
+
+FIXTURE_SETUP(trace_ptrace)
+{
+	int ret;
+
+	set_cap(_metadata, CAP_SYS_ADMIN);
+	ASSERT_EQ(0, unshare(CLONE_NEWNS));
+	ASSERT_EQ(0, mount(NULL, "/", NULL, MS_REC | MS_PRIVATE, NULL));
+
+	ret = tracefs_fixture_setup();
+	if (ret) {
+		clear_cap(_metadata, CAP_SYS_ADMIN);
+		self->tracefs_ok = 0;
+		SKIP(return, "tracefs not available");
+	}
+	self->tracefs_ok = 1;
+
+	ASSERT_EQ(0, tracefs_enable_event(TRACEFS_DENY_PTRACE_ENABLE, true));
+	ASSERT_EQ(0, tracefs_clear());
+	clear_cap(_metadata, CAP_SYS_ADMIN);
+}
+
+FIXTURE_TEARDOWN(trace_ptrace)
+{
+	if (!self->tracefs_ok)
+		return;
+
+	set_cap(_metadata, CAP_SYS_ADMIN);
+	tracefs_enable_event(TRACEFS_DENY_PTRACE_ENABLE, false);
+	tracefs_fixture_teardown();
+	clear_cap(_metadata, CAP_SYS_ADMIN);
+}
+
+/* clang-format off */
+FIXTURE_VARIANT(trace_ptrace)
+{
+	/* clang-format on */
+	bool sandbox;
+	int expect_denied;
+};
+
+/* Denied: sandboxed child ptraces unsandboxed parent. */
+/* clang-format off */
+FIXTURE_VARIANT_ADD(trace_ptrace, denied) {
+	/* clang-format on */
+	.sandbox = true,
+	.expect_denied = 1,
+};
+
+/* Allowed: unsandboxed child uses PTRACE_TRACEME. */
+/* clang-format off */
+FIXTURE_VARIANT_ADD(trace_ptrace, allowed) {
+	/* clang-format on */
+	.sandbox = false,
+	.expect_denied = 0,
+};
+
+TEST_F(trace_ptrace, deny_ptrace)
+{
+	char *buf, field[64], expected_pid[16];
+	int count, status;
+	pid_t child, parent;
+
+	if (!self->tracefs_ok)
+		SKIP(return, "tracefs not available");
+
+	parent = getpid();
+
+	/*
+	 * Set a known comm so the denied variant can verify both the trace
+	 * line task name and the comm= field.
+	 */
+	prctl(PR_SET_NAME, "ll_trace_test");
+
+	child = fork();
+	ASSERT_LE(0, child);
+
+	if (child == 0) {
+		if (variant->sandbox) {
+			struct landlock_ruleset_attr ruleset_attr = {
+				.scoped = LANDLOCK_SCOPE_SIGNAL,
+			};
+			int ruleset_fd;
+
+			/*
+			 * Any scope creates a domain.  Ptrace denial
+			 * checks domain ancestry, not specific flags.
+			 */
+			ruleset_fd = landlock_create_ruleset(
+				&ruleset_attr, sizeof(ruleset_attr), 0);
+			if (ruleset_fd < 0)
+				_exit(1);
+
+			prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
+			if (landlock_restrict_self(ruleset_fd, 0)) {
+				close(ruleset_fd);
+				_exit(1);
+			}
+			close(ruleset_fd);
+
+			/* PTRACE_ATTACH on unsandboxed parent: denied. */
+			if (ptrace(PTRACE_ATTACH, parent, NULL, NULL) == 0) {
+				ptrace(PTRACE_DETACH, parent, NULL, NULL);
+				_exit(2);
+			}
+			if (errno != EPERM)
+				_exit(3);
+		} else {
+			/* No sandbox: ptrace should succeed. */
+			if (ptrace(PTRACE_TRACEME) != 0)
+				_exit(1);
+		}
+
+		_exit(0);
+	}
+
+	ASSERT_EQ(child, waitpid(child, &status, 0));
+	ASSERT_TRUE(WIFEXITED(status));
+	EXPECT_EQ(0, WEXITSTATUS(status));
+
+	buf = tracefs_read_buf();
+	ASSERT_NE(NULL, buf);
+
+	count = tracefs_count_matches(buf, REGEX_DENY_PTRACE("ll_trace_test"));
+	if (variant->expect_denied) {
+		EXPECT_LE(variant->expect_denied, count)
+		{
+			TH_LOG("Expected deny_ptrace event, got %d\n%s", count,
+			       buf);
+		}
+
+		/* Verify tracee_pid is the parent's TGID. */
+		snprintf(expected_pid, sizeof(expected_pid), "%d", parent);
+		ASSERT_EQ(0, tracefs_extract_field(
+				     buf, REGEX_DENY_PTRACE("ll_trace_test"),
+				     "tracee_pid", field, sizeof(field)));
+		EXPECT_STREQ(expected_pid, field);
+
+		/* Verify comm matches prctl(PR_SET_NAME). */
+		ASSERT_EQ(0, tracefs_extract_field(
+				     buf, REGEX_DENY_PTRACE("ll_trace_test"),
+				     "comm", field, sizeof(field)));
+		EXPECT_STREQ("ll_trace_test", field);
+	} else {
+		EXPECT_EQ(0, count)
+		{
+			TH_LOG("Expected 0 deny_ptrace events, got %d\n%s",
+			       count, buf);
+		}
+	}
+
+	free(buf);
 }
 
 TEST_HARNESS_MAIN
