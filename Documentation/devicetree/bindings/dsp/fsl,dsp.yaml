@@ -44,17 +44,10 @@ properties:
     minItems: 3
 
   power-domains:
-    description:
-      List of phandle and PM domain specifier as documented in
-      Documentation/devicetree/bindings/power/power_domain.txt
     minItems: 1
     maxItems: 4
 
   mboxes:
-    description:
-      List of <&phandle type channel> - 2 channels for TXDB, 2 channels for RXDB
-      or - 1 channel for TX, 1 channel for RX, 1 channel for RXDB
-      (see mailbox/fsl,mu.txt)
     maxItems: 3
 
   mbox-names:
@@ -64,9 +57,6 @@ properties:
       - const: rxdb
 
   memory-region:
-    description:
-      phandle to a node describing reserved memory (System RAM memory)
-      used by DSP (see bindings/reserved-memory/reserved-memory.txt)
     maxItems: 4
 
   firmware-name:
