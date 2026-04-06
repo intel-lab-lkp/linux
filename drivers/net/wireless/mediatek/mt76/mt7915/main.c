@@ -414,7 +414,11 @@ static int mt7915_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 	} else {
 		if (idx == *wcid_keyidx)
 			*wcid_keyidx = -1;
-		goto out;
+
+		if (!sta && mvif->mt76.cipher) {
+			mvif->mt76.cipher = 0;
+			mt7915_mcu_add_bss_info(phy, vif, true);
+		}
 	}
 
 	mt76_wcid_key_setup(&dev->mt76, wcid, key);
@@ -486,10 +490,6 @@ static int mt7915_config(struct ieee80211_hw *hw, int radio_idx,
 		if (!enabled) {
 			rxfilter |= MT_WF_RFCR_DROP_OTHER_UC;
 			dev->monitor_mask &= ~BIT(band);
-		} else {
-			rxfilter &= ~MT_WF_RFCR_DROP_OTHER_UC;
-			dev->monitor_mask |= BIT(band);
-		}
 
 		mt76_rmw_field(dev, MT_DMA_DCR0(band), MT_DMA_DCR0_RXD_G5_EN,
 			       enabled);
@@ -1166,10 +1166,6 @@ static void mt7915_sta_statistics(struct ieee80211_hw *hw,
 	if (txrate->legacy || txrate->flags) {
 		if (txrate->legacy) {
 			sinfo->txrate.legacy = txrate->legacy;
-		} else {
-			sinfo->txrate.mcs = txrate->mcs;
-			sinfo->txrate.nss = txrate->nss;
-			sinfo->txrate.bw = txrate->bw;
 			sinfo->txrate.he_gi = txrate->he_gi;
 			sinfo->txrate.he_dcm = txrate->he_dcm;
 			sinfo->txrate.he_ru_alloc = txrate->he_ru_alloc;
