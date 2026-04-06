@@ -171,6 +171,38 @@ def dev_get_device_bad(cfg):
     ksft_true(raised)
 
 
+def dev_set_crypt_offset(cfg):
+    """ Set and get the crypt-offset """
+    _init_psp_dev(cfg)
+
+    dev = cfg.pspnl.dev_get({'id': cfg.psp_dev_id})
+    orig = dev['crypt-offset']
+    cfg.pspnl.dev_set({"id": cfg.psp_dev_id,
+                       "crypt-offset": 5})
+    dev = cfg.pspnl.dev_get({'id': cfg.psp_dev_id})
+    ksft_eq(dev['crypt-offset'], 5)
+    cfg.pspnl.dev_set({"id": cfg.psp_dev_id,
+                       "crypt-offset": orig})
+    dev = cfg.pspnl.dev_get({'id': cfg.psp_dev_id})
+    ksft_eq(dev['crypt-offset'], orig)
+
+
+def dev_set_spi_threshold(cfg):
+    """ Set and get the spi-threshold """
+    _init_psp_dev(cfg)
+
+    dev = cfg.pspnl.dev_get({'id': cfg.psp_dev_id})
+    orig = dev['spi-threshold']
+    cfg.pspnl.dev_set({"id": cfg.psp_dev_id,
+                       "spi-threshold": 10})
+    dev = cfg.pspnl.dev_get({'id': cfg.psp_dev_id})
+    ksft_eq(dev['spi-threshold'], 10)
+    cfg.pspnl.dev_set({"id": cfg.psp_dev_id,
+                       "spi-threshold": orig})
+    dev = cfg.pspnl.dev_get({'id': cfg.psp_dev_id})
+    ksft_eq(dev['spi-threshold'], orig)
+
+
 def dev_rotate(cfg):
     """ Test key rotation """
     _init_psp_dev(cfg)
