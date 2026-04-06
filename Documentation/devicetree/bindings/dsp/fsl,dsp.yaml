@@ -17,10 +17,6 @@ description: |
 properties:
   compatible:
     enum:
-      - fsl,imx8qxp-dsp
-      - fsl,imx8qm-dsp
-      - fsl,imx8mp-dsp
-      - fsl,imx8ulp-dsp
       - fsl,imx8qxp-hifi4
       - fsl,imx8qm-hifi4
       - fsl,imx8mp-hifi4
@@ -59,18 +55,18 @@ properties:
       List of <&phandle type channel> - 2 channels for TXDB, 2 channels for RXDB
       or - 1 channel for TX, 1 channel for RX, 1 channel for RXDB
       (see mailbox/fsl,mu.txt)
-    minItems: 3
-    maxItems: 4
+    maxItems: 3
 
   mbox-names:
-    minItems: 3
-    maxItems: 4
+    items:
+      - const: tx
+      - const: rx
+      - const: rxdb
 
   memory-region:
     description:
       phandle to a node describing reserved memory (System RAM memory)
       used by DSP (see bindings/reserved-memory/reserved-memory.txt)
-    minItems: 1
     maxItems: 4
 
   firmware-name:
@@ -110,7 +106,6 @@ allOf:
         compatible:
           contains:
             enum:
-              - fsl,imx8qxp-dsp
               - fsl,imx8qxp-hifi4
     then:
       properties:
@@ -123,7 +118,6 @@ allOf:
         compatible:
           contains:
             enum:
-              - fsl,imx8qm-dsp
               - fsl,imx8qm-hifi4
     then:
       properties:
@@ -135,9 +129,7 @@ allOf:
         compatible:
           contains:
             enum:
-              - fsl,imx8mp-dsp
               - fsl,imx8mp-hifi4
-              - fsl,imx8ulp-dsp
               - fsl,imx8ulp-hifi4
     then:
       properties:
@@ -149,39 +141,6 @@ allOf:
         compatible:
           contains:
             enum:
-              - fsl,imx8qxp-hifi4
-              - fsl,imx8qm-hifi4
-              - fsl,imx8mp-hifi4
-              - fsl,imx8ulp-hifi4
-    then:
-      properties:
-        memory-region:
-          minItems: 4
-        mboxes:
-          maxItems: 3
-        mbox-names:
-          items:
-            - const: tx
-            - const: rx
-            - const: rxdb
-    else:
-      properties:
-        memory-region:
-          maxItems: 1
-        mboxes:
-          minItems: 4
-        mbox-names:
-          items:
-            - const: txdb0
-            - const: txdb1
-            - const: rxdb0
-            - const: rxdb1
-  - if:
-      properties:
-        compatible:
-          contains:
-            enum:
-              - fsl,imx8mp-dsp
               - fsl,imx8mp-hifi4
     then:
       required:
@@ -191,22 +150,6 @@ allOf:
 additionalProperties: false
 
 examples:
-  - |
-    #include <dt-bindings/firmware/imx/rsrc.h>
-    #include <dt-bindings/clock/imx8-clock.h>
-    dsp@596e8000 {
-        compatible = "fsl,imx8qxp-dsp";
-        reg = <0x596e8000 0x88000>;
-        clocks = <&adma_lpcg IMX_ADMA_LPCG_DSP_IPG_CLK>,
-                 <&adma_lpcg IMX_ADMA_LPCG_OCRAM_IPG_CLK>,
-                 <&adma_lpcg IMX_ADMA_LPCG_DSP_CORE_CLK>;
-        clock-names = "ipg", "ocram", "core";
-        power-domains = <&pd IMX_SC_R_MU_13B>,
-                        <&pd IMX_SC_R_MU_2A>;
-        mbox-names = "txdb0", "txdb1", "rxdb0", "rxdb1";
-        mboxes = <&lsio_mu13 2 0>, <&lsio_mu13 2 1>, <&lsio_mu13 3 0>, <&lsio_mu13 3 1>;
-        memory-region = <&dsp_reserved>;
-    };
   - |
     #include <dt-bindings/clock/imx8mp-clock.h>
     #include <dt-bindings/reset/imx8mp-reset-audiomix.h>

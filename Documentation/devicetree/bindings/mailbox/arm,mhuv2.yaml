@@ -192,16 +192,16 @@ examples:
         };
 
         mhu_client: dsp@596e8000 {
-            compatible = "fsl,imx8qxp-dsp";
+            compatible = "fsl,imx8qxp-hifi4";
             reg = <0 0x596e8000 0 0x88000>;
             clocks = <&adma_lpcg 0>, <&adma_lpcg 1>, <&adma_lpcg 2>;
             clock-names = "ipg", "ocram", "core";
             power-domains = <&pd 0>, <&pd 1>;
-            mbox-names = "txdb0", "txdb1", "rxdb0", "rxdb1";
+            mbox-names = "tx", "rx", "rxdb";
             mboxes = <&mhu_tx 2 0>, //data-transfer protocol with 5 windows, mhu-tx
-                     <&mhu_tx 3 0>, //data-transfer protocol with 7 windows, mhu-tx
                      <&mhu_rx 2 27>, //doorbell protocol channel 2, doorbell 27, mhu-rx
                      <&mhu_rx 0 0>;  //data-transfer protocol with 1 window, mhu-rx
-            memory-region = <&dsp_reserved>;
+            memory-region = <&dsp_vdev0buffer>, <&dsp_vdev0vring0>,
+                            <&dsp_vdev0vring1>, <&dsp_reserved>;
         };
     };
