@@ -15,14 +15,49 @@
 #include <linux/mm.h>
 #include <linux/path.h>
 #include <linux/pid.h>
+#include <linux/refcount.h>
 #include <linux/sched.h>
 #include <linux/signal.h>
+#include <linux/slab.h>
 #include <linux/uidgid.h>
+#include <linux/workqueue.h>
 
 #include "access.h"
 #include "common.h"
 #include "domain.h"
 #include "id.h"
+#include "ruleset.h"
+
+static void free_domain(struct landlock_domain *const domain)
+{
+	might_sleep();
+	landlock_free_rules(&domain->rules);
+	landlock_put_hierarchy(domain->hierarchy);
+	kfree(domain);
+}
+
+void landlock_put_domain(struct landlock_domain *const domain)
+{
+	might_sleep();
+	if (domain && refcount_dec_and_test(&domain->usage))
+		free_domain(domain);
+}
+
+static void free_domain_work(struct work_struct *const work)
+{
+	struct landlock_domain *domain;
+
+	domain = container_of(work, struct landlock_domain, work_free);
+	free_domain(domain);
+}
+
+void landlock_put_domain_deferred(struct landlock_domain *const domain)
+{
+	if (domain && refcount_dec_and_test(&domain->usage)) {
+		INIT_WORK(&domain->work_free, free_domain_work);
+		schedule_work(&domain->work_free);
+	}
+}
 
 #ifdef CONFIG_AUDIT
 
