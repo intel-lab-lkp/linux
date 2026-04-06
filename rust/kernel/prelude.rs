@@ -97,6 +97,11 @@ pub use super::{
     pr_notice,
     pr_warn,
     static_assert,
+    std_vendor::{
+        cold_path,
+        likely,
+        unlikely, //
+    },
     str::CStrExt as _,
     try_init,
     try_pin_init,
