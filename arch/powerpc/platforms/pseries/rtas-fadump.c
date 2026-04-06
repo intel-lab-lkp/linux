@@ -181,7 +181,7 @@ static u64 rtas_fadump_get_bootmem_min(void)
 
 static int rtas_fadump_register(struct fw_dump *fadump_conf)
 {
-	unsigned int wait_time, fdm_size;
+	unsigned int wait_time, total_wait, fdm_size;
 	int rc, err = -EIO;
 
 	/*
@@ -192,15 +192,20 @@ static int rtas_fadump_register(struct fw_dump *fadump_conf)
 	fdm_size = sizeof(struct rtas_fadump_section_header);
 	fdm_size += be16_to_cpu(fdm.header.dump_num_sections) * sizeof(struct rtas_fadump_section);
 
-	/* TODO: Add upper time limit for the delay */
+	total_wait = 0;
 	do {
 		rc =  rtas_call(fadump_conf->ibm_configure_kernel_dump, 3, 1,
 				NULL, FADUMP_REGISTER, &fdm, fdm_size);
 
 		wait_time = rtas_busy_delay_time(rc);
-		if (wait_time)
+		if (wait_time) {
+			if (total_wait >= RTAS_FADUMP_MAX_WAIT_MS) {
+				pr_err("Timed out waiting for firmware to register fadump\n");
+				return -ETIMEDOUT;
+			}
+			total_wait += wait_time;
 			mdelay(wait_time);
-
+		}
 	} while (wait_time);
 
 	switch (rc) {
@@ -234,18 +239,24 @@ static int rtas_fadump_register(struct fw_dump *fadump_conf)
 
 static int rtas_fadump_unregister(struct fw_dump *fadump_conf)
 {
-	unsigned int wait_time;
+	unsigned int wait_time, total_wait;
 	int rc;
 
-	/* TODO: Add upper time limit for the delay */
+	total_wait = 0;
 	do {
 		rc =  rtas_call(fadump_conf->ibm_configure_kernel_dump, 3, 1,
 				NULL, FADUMP_UNREGISTER, &fdm,
 				sizeof(struct rtas_fadump_mem_struct));
 
 		wait_time = rtas_busy_delay_time(rc);
-		if (wait_time)
+		if (wait_time) {
+			if (total_wait >= RTAS_FADUMP_MAX_WAIT_MS) {
+				pr_err("Timed out waiting for firmware to unregister fadump\n");
+				return -ETIMEDOUT;
+			}
+			total_wait += wait_time;
 			mdelay(wait_time);
+		}
 	} while (wait_time);
 
 	if (rc) {
@@ -259,18 +270,24 @@ static int rtas_fadump_unregister(struct fw_dump *fadump_conf)
 
 static int rtas_fadump_invalidate(struct fw_dump *fadump_conf)
 {
-	unsigned int wait_time;
+	unsigned int wait_time, total_wait;
 	int rc;
 
-	/* TODO: Add upper time limit for the delay */
+	total_wait = 0;
 	do {
 		rc =  rtas_call(fadump_conf->ibm_configure_kernel_dump, 3, 1,
 				NULL, FADUMP_INVALIDATE, fdm_active,
 				sizeof(struct rtas_fadump_mem_struct));
 
 		wait_time = rtas_busy_delay_time(rc);
-		if (wait_time)
+		if (wait_time) {
+			if (total_wait >= RTAS_FADUMP_MAX_WAIT_MS) {
+				pr_err("Timed out waiting for firmware to invalidate fadump\n");
+				return -ETIMEDOUT;
+			}
+			total_wait += wait_time;
 			mdelay(wait_time);
+		}
 	} while (wait_time);
 
 	if (rc) {
