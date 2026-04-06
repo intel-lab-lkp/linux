@@ -3,6 +3,7 @@
  * Landlock - Log helpers
  *
  * Copyright © 2023-2025 Microsoft Corporation
+ * Copyright © 2026 Cloudflare
  */
 
 #include <kunit/test.h>
@@ -143,6 +144,9 @@ static void audit_denial(const struct landlock_cred_security *const subject,
 {
 	struct audit_buffer *ab;
 
+	if (READ_ONCE(youngest_denied->log_status) == LANDLOCK_LOG_DISABLED)
+		return;
+
 	if (!audit_enabled)
 		return;
 
@@ -172,6 +176,16 @@ static void audit_denial(const struct landlock_cred_security *const subject,
 	log_domain(youngest_denied);
 }
 
+#else /* CONFIG_AUDIT */
+
+static inline void
+audit_denial(const struct landlock_cred_security *const subject,
+	     const struct landlock_request *const request,
+	     struct landlock_hierarchy *const youngest_denied,
+	     const size_t youngest_layer, const access_mask_t missing)
+{
+}
+
 #endif /* CONFIG_AUDIT */
 
 #include <trace/events/landlock.h>
@@ -180,6 +194,86 @@ static void audit_denial(const struct landlock_cred_security *const subject,
 #define CREATE_TRACE_POINTS
 #include <trace/events/landlock.h>
 #undef CREATE_TRACE_POINTS
+
+#include "fs.h"
+
+static void trace_denial(const struct landlock_cred_security *const subject,
+			 const struct landlock_request *const request,
+			 const struct landlock_hierarchy *const youngest_denied,
+			 const size_t youngest_layer,
+			 const access_mask_t missing)
+{
+	const bool same_exec = !!(subject->domain_exec & BIT(youngest_layer));
+
+	switch (request->type) {
+	case LANDLOCK_REQUEST_FS_ACCESS:
+	case LANDLOCK_REQUEST_FS_CHANGE_TOPOLOGY:
+		if (trace_landlock_deny_access_fs_enabled()) {
+			char *buf __free(__putname) = __getname();
+			const char *pathname;
+			const struct path *path;
+
+			/*
+			 * FS_CHANGE_TOPOLOGY uses either LSM_AUDIT_DATA_PATH or
+			 * LSM_AUDIT_DATA_DENTRY depending on the hook.  For the
+			 * dentry case, build a path on the stack with the real
+			 * dentry so TP_fast_assign can extract dev and ino.
+			 * The mnt field is unused by TP_fast_assign.
+			 */
+			if (request->audit.type == LSM_AUDIT_DATA_DENTRY) {
+				struct path dentry_path = {
+					.dentry = request->audit.u.dentry,
+				};
+
+				path = &dentry_path;
+				pathname =
+					buf ? dentry_path_raw(
+						      request->audit.u.dentry,
+						      buf, PATH_MAX) :
+					      "<no_mem>";
+				if (IS_ERR(pathname))
+					pathname = "<unreachable>";
+
+				trace_landlock_deny_access_fs(youngest_denied,
+							      same_exec,
+							      missing, path,
+							      pathname);
+			} else {
+				path = &request->audit.u.path;
+				pathname = buf ? resolve_path_for_trace(path,
+									buf) :
+						 "<no_mem>";
+
+				trace_landlock_deny_access_fs(youngest_denied,
+							      same_exec,
+							      missing, path,
+							      pathname);
+			}
+		}
+		break;
+	case LANDLOCK_REQUEST_NET_ACCESS:
+		if (trace_landlock_deny_access_net_enabled())
+			trace_landlock_deny_access_net(
+				youngest_denied, same_exec, missing,
+				request->audit.u.net->sk,
+				ntohs(request->audit.u.net->sport),
+				ntohs(request->audit.u.net->dport));
+		break;
+	default:
+		break;
+	}
+}
+
+#else /* CONFIG_TRACEPOINTS */
+
+static inline void
+trace_denial(const struct landlock_cred_security *const subject,
+	     const struct landlock_request *const request,
+	     const struct landlock_hierarchy *const youngest_denied,
+	     const size_t youngest_layer, const access_mask_t missing)
+{
+}
+
 #endif /* CONFIG_TRACEPOINTS */
 
 static struct landlock_hierarchy *
@@ -439,9 +533,6 @@ void landlock_log_denial(const struct landlock_cred_security *const subject,
 			get_hierarchy(subject->domain, youngest_layer);
 	}
 
-	if (READ_ONCE(youngest_denied->log_status) == LANDLOCK_LOG_DISABLED)
-		return;
-
 	/*
 	 * Consistently keeps track of the number of denied access requests
 	 * even if audit is currently disabled, or if audit rules currently
@@ -450,45 +541,25 @@ void landlock_log_denial(const struct landlock_cred_security *const subject,
 	 */
 	atomic64_inc(&youngest_denied->num_denials);
 
-#ifdef CONFIG_AUDIT
+	trace_denial(subject, request, youngest_denied, youngest_layer,
+		     missing);
 	audit_denial(subject, request, youngest_denied, youngest_layer,
 		     missing);
-#endif /* CONFIG_AUDIT */
 }
 
 #ifdef CONFIG_AUDIT
 
-/**
- * landlock_log_free_domain - Create an audit record on domain deallocation
- *
- * @hierarchy: The domain's hierarchy being deallocated.
- *
- * Only domains which previously appeared in the audit logs are logged again.
- * This is useful to know when a domain will never show again in the audit log.
- *
- * Called in a work queue scheduled by landlock_put_domain_deferred() called by
- * hook_cred_free().
- */
-void landlock_log_free_domain(const struct landlock_hierarchy *const hierarchy)
+static void audit_drop_domain(const struct landlock_hierarchy *const hierarchy)
 {
 	struct audit_buffer *ab;
-
-	if (WARN_ON_ONCE(!hierarchy))
-		return;
-
-	trace_landlock_free_domain(hierarchy);
 
 	if (!audit_enabled)
 		return;
 
-	/* Ignores domains that were not logged.  */
+	/* Ignores domains that were not logged. */
 	if (READ_ONCE(hierarchy->log_status) != LANDLOCK_LOG_RECORDED)
 		return;
 
-	/*
-	 * If logging of domain allocation succeeded, warns about failure to log
-	 * domain deallocation to highlight unbalanced domain lifetime logs.
-	 */
 	ab = audit_log_start(audit_context(), GFP_KERNEL,
 			     AUDIT_LANDLOCK_DOMAIN);
 	if (!ab)
@@ -499,7 +570,31 @@ void landlock_log_free_domain(const struct landlock_hierarchy *const hierarchy)
 	audit_log_end(ab);
 }
 
+#else /* CONFIG_AUDIT */
+
+static inline void
+audit_drop_domain(const struct landlock_hierarchy *const hierarchy)
+{
+}
+
 #endif /* CONFIG_AUDIT */
+
+/**
+ * landlock_log_free_domain - Log domain deallocation
+ *
+ * @hierarchy: The domain's hierarchy being deallocated.
+ *
+ * Called from landlock_put_domain_deferred() (via a work queue scheduled by
+ * hook_cred_free()) or directly from landlock_put_domain().
+ */
+void landlock_log_free_domain(const struct landlock_hierarchy *const hierarchy)
+{
+	if (WARN_ON_ONCE(!hierarchy))
+		return;
+
+	trace_landlock_free_domain(hierarchy);
+	audit_drop_domain(hierarchy);
+}
 
 #ifdef CONFIG_SECURITY_LANDLOCK_KUNIT_TEST
 

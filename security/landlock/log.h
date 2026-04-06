@@ -3,6 +3,7 @@
  * Landlock - Log helpers
  *
  * Copyright © 2023-2025 Microsoft Corporation
+ * Copyright © 2026 Cloudflare
  */
 
 #ifndef _SECURITY_LANDLOCK_LOG_H
@@ -28,7 +29,7 @@ enum landlock_request_type {
 /*
  * We should be careful to only use a variable of this type for
  * landlock_log_denial().  This way, the compiler can remove it entirely if
- * CONFIG_AUDIT is not set.
+ * CONFIG_SECURITY_LANDLOCK_LOG is not set.
  */
 struct landlock_request {
 	/* Mandatory fields. */
@@ -52,14 +53,14 @@ struct landlock_request {
 	deny_masks_t deny_masks;
 };
 
-#ifdef CONFIG_AUDIT
+#ifdef CONFIG_SECURITY_LANDLOCK_LOG
 
 void landlock_log_free_domain(const struct landlock_hierarchy *const hierarchy);
 
 void landlock_log_denial(const struct landlock_cred_security *const subject,
 			 const struct landlock_request *const request);
 
-#else /* CONFIG_AUDIT */
+#else /* CONFIG_SECURITY_LANDLOCK_LOG */
 
 static inline void
 landlock_log_free_domain(const struct landlock_hierarchy *const hierarchy)
@@ -72,6 +73,6 @@ landlock_log_denial(const struct landlock_cred_security *const subject,
 {
 }
 
-#endif /* CONFIG_AUDIT */
+#endif /* CONFIG_SECURITY_LANDLOCK_LOG */
 
 #endif /* _SECURITY_LANDLOCK_LOG_H */

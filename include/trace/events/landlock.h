@@ -18,6 +18,7 @@ struct landlock_hierarchy;
 struct landlock_rule;
 struct landlock_ruleset;
 struct path;
+struct sock;
 
 /**
  * DOC: Landlock trace events
@@ -50,6 +51,15 @@ struct path;
  * Network port fields use __u64 in host endianness, matching the
  * landlock_net_port_attr.port UAPI convention.  Callers convert from
  * network byte order before emitting the event.
+ *
+ * Field ordering convention for denial events: domain ID, same_exec,
+ * log_same_exec, log_new_exec, then blockers (deny_access events only),
+ * then type-specific object identification fields, then variable-length
+ * fields.
+ *
+ * The deny_access denial events include same_exec and log_same_exec /
+ * log_new_exec fields so that both stateless (ftrace filter) and stateful
+ * (eBPF) consumers can replicate the audit subsystem's filtering logic.
  */
 
 /**
@@ -332,6 +342,96 @@ TRACE_EVENT(landlock_check_rule_net,
 		      __entry->domain_id, __entry->access_request,
 		      __entry->port,
 		      __print_dynamic_array(layers, sizeof(access_mask_t))));
+
+/**
+ * landlock_deny_access_fs - filesystem access denied
+ * @hierarchy: Hierarchy node that blocked the access (never NULL).
+ *             Identifies the specific domain in the hierarchy whose
+ *             rules caused the denial.  eBPF can read hierarchy->id,
+ *             hierarchy->log_same_exec, hierarchy->log_new_exec, and
+ *             walk hierarchy->parent for the domain chain.
+ * @same_exec: Whether the current task is the same executable that
+ *             called landlock_restrict_self() for the denying hierarchy
+ *             node.  Computed from the credential bitmask, not derivable
+ *             from the hierarchy alone.
+ * @blockers: Access mask that was blocked
+ * @path: Filesystem path that was denied (never NULL)
+ * @pathname: Resolved absolute path string (never NULL)
+ */
+TRACE_EVENT(
+	landlock_deny_access_fs,
+
+	TP_PROTO(const struct landlock_hierarchy *hierarchy, bool same_exec,
+		 access_mask_t blockers, const struct path *path,
+		 const char *pathname),
+
+	TP_ARGS(hierarchy, same_exec, blockers, path, pathname),
+
+	TP_STRUCT__entry(
+		__field(__u64, domain_id) __field(bool, same_exec)
+			__field(u32, log_same_exec) __field(u32, log_new_exec)
+				__field(access_mask_t, blockers)
+					__field(dev_t, dev) __field(ino_t, ino)
+						__string(pathname, pathname)),
+
+	TP_fast_assign(__entry->domain_id = hierarchy->id;
+		       __entry->same_exec = same_exec;
+		       __entry->log_same_exec = hierarchy->log_same_exec;
+		       __entry->log_new_exec = hierarchy->log_new_exec;
+		       __entry->blockers = blockers;
+		       __entry->dev = path->dentry->d_sb->s_dev;
+		       __entry->ino = d_backing_inode(path->dentry)->i_ino;
+		       __assign_str(pathname);),
+
+	TP_printk(
+		"domain=%llx same_exec=%d log_same_exec=%u log_new_exec=%u blockers=0x%x dev=%u:%u ino=%lu path=%s",
+		__entry->domain_id, __entry->same_exec, __entry->log_same_exec,
+		__entry->log_new_exec, __entry->blockers, MAJOR(__entry->dev),
+		MINOR(__entry->dev), __entry->ino,
+		__print_untrusted_str(pathname)));
+
+/**
+ * landlock_deny_access_net - network access denied
+ * @hierarchy: Hierarchy node that blocked the access (never NULL)
+ * @same_exec: Whether the current task is the same executable that
+ *             called landlock_restrict_self() for the denying hierarchy
+ *             node
+ * @blockers: Access mask that was blocked
+ * @sk: Socket object (never NULL); eBPF can read socket family, state,
+ *      local/remote addresses, and options via BTF
+ * @sport: Source port in host endianness (non-zero for bind denials,
+ *         zero for connect denials)
+ * @dport: Destination port in host endianness (non-zero for connect
+ *         denials, zero for bind denials)
+ */
+TRACE_EVENT(
+	landlock_deny_access_net,
+
+	TP_PROTO(const struct landlock_hierarchy *hierarchy, bool same_exec,
+		 access_mask_t blockers, const struct sock *sk, __u64 sport,
+		 __u64 dport),
+
+	TP_ARGS(hierarchy, same_exec, blockers, sk, sport, dport),
+
+	TP_STRUCT__entry(
+		__field(__u64, domain_id) __field(bool, same_exec)
+			__field(u32, log_same_exec) __field(u32, log_new_exec)
+				__field(access_mask_t, blockers)
+					__field(__u64, sport)
+						__field(__u64, dport)),
+
+	TP_fast_assign(__entry->domain_id = hierarchy->id;
+		       __entry->same_exec = same_exec;
+		       __entry->log_same_exec = hierarchy->log_same_exec;
+		       __entry->log_new_exec = hierarchy->log_new_exec;
+		       __entry->blockers = blockers; __entry->sport = sport;
+		       __entry->dport = dport;),
+
+	TP_printk(
+		"domain=%llx same_exec=%d log_same_exec=%u log_new_exec=%u blockers=0x%x sport=%llu dport=%llu",
+		__entry->domain_id, __entry->same_exec, __entry->log_same_exec,
+		__entry->log_new_exec, __entry->blockers, __entry->sport,
+		__entry->dport));
 
 #endif /* _TRACE_LANDLOCK_H */
 
