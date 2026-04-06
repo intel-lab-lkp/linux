@@ -812,8 +812,13 @@ static inline void max17042_override_por_values(struct max17042_chip *chip)
 		max17042_override_por(map, MAX17047_V_empty, config->vempty);
 	}
 
-	if (chip->chip_type == MAXIM_DEVICE_TYPE_MAX17055)
+	if (chip->chip_type == MAXIM_DEVICE_TYPE_MAX17055) {
 		max17042_override_por(map, MAX17055_ModelCfg, config->model_cfg);
+		/* VChg is 1 by default, so allow it to be set to 0 */
+		regmap_update_bits(map, MAX17055_ModelCfg,
+				   MAX17055_MODELCFG_VCHG_BIT,
+				   config->model_cfg);
+	}
 }
 
 static int max17042_init_chip(struct max17042_chip *chip)
@@ -1039,7 +1044,7 @@ static int max17042_apply_battery_properties(struct max17042_chip *chip,
 			(info->charge_full_design_uah != -EINVAL ||
 			 info->charge_term_current_ua != -EINVAL)) ||
 		       (chip->chip_type == MAXIM_DEVICE_TYPE_MAX17055 &&
-			info->voltage_max_design_uv > 4250000);
+			info->voltage_max_design_uv != -EINVAL);
 	if (!needs_config)
 		return 0;
 
@@ -1068,8 +1073,9 @@ static int max17042_apply_battery_properties(struct max17042_chip *chip,
 	}
 
 	if (chip->chip_type == MAXIM_DEVICE_TYPE_MAX17055 &&
-	    info->voltage_max_design_uv > 4250000) {
-		chip->config_data->model_cfg = MAX17055_MODELCFG_VCHG_BIT;
+	    info->voltage_max_design_uv != -EINVAL) {
+		if (info->voltage_max_design_uv > 4250000)
+			chip->config_data->model_cfg = MAX17055_MODELCFG_VCHG_BIT;
 		chip->enable_por_init = true;
 	}
 
