@@ -211,6 +211,7 @@ static int __must_check nr_add_node(ax25_address *nr, const char *mnemonic,
 		nr_neigh_put(nr_neigh);
 		return 0;
 	}
+	spin_lock_bh(&nr_neigh_list_lock);
 	nr_node_lock(nr_node);
 
 	if (quality != 0)
@@ -246,7 +247,7 @@ static int __must_check nr_add_node(ax25_address *nr, const char *mnemonic,
 				nr_neigh_put(nr_node->routes[2].neighbour);
 
 				if (nr_node->routes[2].neighbour->count == 0 && !nr_node->routes[2].neighbour->locked)
-					nr_remove_neigh(nr_node->routes[2].neighbour);
+					nr_remove_neigh_locked(nr_node->routes[2].neighbour);
 
 				nr_node->routes[2].quality   = quality;
 				nr_node->routes[2].obs_count = obs_count;
@@ -281,6 +282,7 @@ static int __must_check nr_add_node(ax25_address *nr, const char *mnemonic,
 
 	nr_neigh_put(nr_neigh);
 	nr_node_unlock(nr_node);
+	spin_unlock_bh(&nr_neigh_list_lock);
 	nr_node_put(nr_node);
 	return 0;
 }
@@ -331,6 +333,7 @@ static int nr_del_node(ax25_address *callsign, ax25_address *neighbour, struct n
 		return -EINVAL;
 	}
 
+	spin_lock_bh(&nr_neigh_list_lock);
 	spin_lock_bh(&nr_node_list_lock);
 	nr_node_lock(nr_node);
 	for (i = 0; i < nr_node->count; i++) {
@@ -339,7 +342,7 @@ static int nr_del_node(ax25_address *callsign, ax25_address *neighbour, struct n
 			nr_neigh_put(nr_neigh);
 
 			if (nr_neigh->count == 0 && !nr_neigh->locked)
-				nr_remove_neigh(nr_neigh);
+				nr_remove_neigh_locked(nr_neigh);
 			nr_neigh_put(nr_neigh);
 
 			nr_node->count--;
@@ -361,6 +364,7 @@ static int nr_del_node(ax25_address *callsign, ax25_address *neighbour, struct n
 			}
 			nr_node_unlock(nr_node);
 			spin_unlock_bh(&nr_node_list_lock);
+			spin_unlock_bh(&nr_neigh_list_lock);
 
 			return 0;
 		}
@@ -368,6 +372,7 @@ static int nr_del_node(ax25_address *callsign, ax25_address *neighbour, struct n
 	nr_neigh_put(nr_neigh);
 	nr_node_unlock(nr_node);
 	spin_unlock_bh(&nr_node_list_lock);
+	spin_unlock_bh(&nr_neigh_list_lock);
 	nr_node_put(nr_node);
 
 	return -EINVAL;
@@ -454,6 +459,7 @@ static int nr_dec_obs(void)
 	struct hlist_node *nodet;
 	int i;
 
+	spin_lock_bh(&nr_neigh_list_lock);
 	spin_lock_bh(&nr_node_list_lock);
 	nr_node_for_each_safe(s, nodet, &nr_node_list) {
 		nr_node_lock(s);
@@ -469,7 +475,7 @@ static int nr_dec_obs(void)
 				nr_neigh_put(nr_neigh);
 
 				if (nr_neigh->count == 0 && !nr_neigh->locked)
-					nr_remove_neigh(nr_neigh);
+					nr_remove_neigh_locked(nr_neigh);
 
 				s->count--;
 
@@ -497,6 +503,7 @@ static int nr_dec_obs(void)
 		nr_node_unlock(s);
 	}
 	spin_unlock_bh(&nr_node_list_lock);
+	spin_unlock_bh(&nr_neigh_list_lock);
 
 	return 0;
 }
