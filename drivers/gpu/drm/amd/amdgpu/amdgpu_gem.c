@@ -1240,6 +1240,15 @@ static int amdgpu_gem_align_pitch(struct amdgpu_device *adev,
 
 	aligned += pitch_mask;
 	aligned &= ~pitch_mask;
+
+	/* Sanity check to avoid integer overflow in aligned * cpp.
+	 * The caller (drm_mode_create_dumb) validates width * cpp fits
+	 * in u32 before alignment, but rounding up can push aligned
+	 * past INT_MAX / cpp, causing signed overflow to 0 or negative.
+	 */
+	if (aligned > INT_MAX / (cpp ? cpp : 1) || aligned <= 0)
+		return 0;
+
 	return aligned * cpp;
 }
 
@@ -1267,8 +1276,12 @@ int amdgpu_mode_dumb_create(struct drm_file *file_priv,
 
 	args->pitch = amdgpu_gem_align_pitch(adev, args->width,
 					     DIV_ROUND_UP(args->bpp, 8), 0);
+	if (!args->pitch)
+		return -EINVAL;
 	args->size = (u64)args->pitch * args->height;
 	args->size = ALIGN(args->size, PAGE_SIZE);
+	if (!args->size)
+		return -EINVAL;
 	domain = amdgpu_bo_get_preferred_domain(adev,
 				amdgpu_display_supported_domains(adev, flags));
 	r = amdgpu_gem_object_create(adev, args->size, 0, domain, flags,
