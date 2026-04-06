@@ -175,6 +175,8 @@ struct ssp_sensorhub_info {
  * @sensor_devs:	registered IIO devices table
  * @enable_refcount:	enable reference count for wdt (watchdog timer)
  * @header_buffer:	cache aligned buffer for packet header
+ * @rx_buf:		buffer to receive SPI data
+ * @rx_buf_size:	allocated size of rx_buf
  */
 struct ssp_data {
 	struct spi_device *spi;
@@ -222,6 +224,9 @@ struct ssp_data {
 	atomic_t enable_refcount;
 
 	__le16 header_buffer[SSP_HEADER_BUFFER_SIZE / sizeof(__le16)] __aligned(IIO_DMA_MINALIGN);
+
+	u8 *rx_buf;
+	size_t rx_buf_size;
 };
 
 void ssp_clean_pending_list(struct ssp_data *data);

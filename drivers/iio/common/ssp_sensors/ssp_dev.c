@@ -516,6 +516,18 @@ static int ssp_probe(struct spi_device *spi)
 		goto err_setup_spi;
 	}
 
+	data->rx_buf_size = SSP_DATA_PACKET_SIZE;
+	data->rx_buf = devm_kzalloc(&spi->dev,
+				    data->rx_buf_size,
+				    GFP_KERNEL | GFP_DMA);
+
+	if (!data->rx_buf) {
+		dev_err(&spi->dev,
+			"Failed to allocate memory for rx_buf\n");
+		ret = -ENOMEM;
+		goto err_setup_spi;
+	}
+
 	for (i = 0; i < SSP_SENSOR_MAX; ++i) {
 		data->delay_buf[i] = SSP_DEFAULT_POLLING_DELAY;
 		data->batch_latency_buf[i] = 0;
