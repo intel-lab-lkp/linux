@@ -275,19 +275,11 @@ int set_direct_map_default_noflush(struct page *page)
 				 PAGE_SIZE, set_mask, clear_mask);
 }
 
-static int __set_memory_enc_dec(unsigned long addr,
-				int numpages,
-				bool encrypt)
+static int __set_lm_addr_enc_dec(unsigned long addr, int numpages, bool encrypt)
 {
 	unsigned long set_prot = 0, clear_prot = 0;
 	phys_addr_t start, end;
 	int ret;
-
-	if (!is_realm_world())
-		return 0;
-
-	if (!__is_lm_address(addr))
-		return -EINVAL;
 
 	start = __virt_to_phys(addr);
 	end = start + numpages * PAGE_SIZE;
@@ -319,6 +311,70 @@ static int __set_memory_enc_dec(unsigned long addr,
 	return __change_memory_common(addr, PAGE_SIZE * numpages,
 				      __pgprot(PTE_PRESENT_VALID_KERNEL),
 				      __pgprot(PTE_PRESENT_INVALID));
+}
+
+static int __set_va_addr_enc_dec(unsigned long addr, int numpages, bool encrypt)
+{
+	unsigned long set_prot = 0, clear_prot = 0, start_idx;
+	struct vm_struct *area;
+	int i, ret;
+
+	if (encrypt)
+		clear_prot = PROT_NS_SHARED;
+	else
+		set_prot = PROT_NS_SHARED;
+
+	area = find_vm_area((void *)addr);
+	if (!area)
+		return -EINVAL;
+
+	start_idx = ((unsigned long)kasan_reset_tag((void *)addr) -
+		     (unsigned long)kasan_reset_tag(area->addr)) >>
+		    PAGE_SHIFT;
+
+	if (start_idx + numpages > area->nr_pages)
+		return -EINVAL;
+
+	/*
+	 * Break the mapping before we make any changes to avoid stale TLB
+	 * entries or Synchronous External Aborts caused by RIPAS_EMPTY
+	 */
+	ret = change_memory_common(addr, numpages,
+		__pgprot(set_prot | PTE_PRESENT_INVALID),
+		__pgprot(clear_prot | PTE_PRESENT_VALID_KERNEL));
+
+	if (ret)
+		return ret;
+
+	for (i = 0; i < numpages; i++) {
+		struct page *page = area->pages[start_idx + i];
+		phys_addr_t phys = page_to_phys(page);
+
+		if (encrypt) {
+			ret = rsi_set_memory_range_protected(phys,
+							     phys + PAGE_SIZE);
+		} else {
+			ret = rsi_set_memory_range_shared(phys,
+							  phys + PAGE_SIZE);
+		}
+		if (ret)
+			return ret;
+	}
+
+	return change_memory_common(addr, numpages,
+				    __pgprot(PTE_PRESENT_VALID_KERNEL),
+				    __pgprot(PTE_PRESENT_INVALID));
+}
+
+static int __set_memory_enc_dec(unsigned long addr, int numpages, bool encrypt)
+{
+	if (!is_realm_world())
+		return 0;
+
+	if (!__is_lm_address(addr))
+		return __set_va_addr_enc_dec(addr, numpages, encrypt);
+
+	return __set_lm_addr_enc_dec(addr, numpages, encrypt);
 }
 
 static int realm_set_memory_encrypted(unsigned long addr, int numpages)
