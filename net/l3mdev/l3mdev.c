@@ -177,7 +177,7 @@ u32 l3mdev_fib_table_rcu(const struct net_device *dev)
 		const struct net_device *master;
 
 		master = netdev_master_upper_dev_get_rcu(_dev);
-		if (master &&
+		if (master && netif_is_l3_master(master) &&
 		    master->l3mdev_ops->l3mdev_fib_table)
 			tb_id = master->l3mdev_ops->l3mdev_fib_table(master);
 	}
