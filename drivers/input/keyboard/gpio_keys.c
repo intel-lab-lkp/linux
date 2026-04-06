@@ -27,6 +27,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/of.h>
 #include <linux/of_irq.h>
+#include <linux/pinctrl/consumer.h>
 #include <linux/spinlock.h>
 #include <dt-bindings/input/gpio-keys.h>
 
@@ -1088,7 +1089,64 @@ static int gpio_keys_resume(struct device *dev)
 	return 0;
 }
 
-static DEFINE_SIMPLE_DEV_PM_OPS(gpio_keys_pm_ops, gpio_keys_suspend, gpio_keys_resume);
+static int gpio_keys_freeze(struct device *dev)
+{
+	struct gpio_keys_drvdata *ddata = dev_get_drvdata(dev);
+	struct gpio_button_data *bdata;
+	int i;
+
+	for (i = 0; i < ddata->pdata->nbuttons; i++) {
+		bdata = &ddata->data[i];
+		bdata->suspended = true;
+	}
+
+	return 0;
+}
+
+static int gpio_keys_restore(struct device *dev)
+{
+	struct gpio_keys_drvdata *ddata = dev_get_drvdata(dev);
+	struct gpio_button_data *bdata;
+	int error;
+	int i;
+
+	error = pinctrl_pm_select_default_state(dev);
+	if (error)
+		dev_warn(dev, "failed to restore pinctrl default state: %d\n",
+			 error);
+
+	for (i = 0; i < ddata->pdata->nbuttons; i++) {
+		bdata = &ddata->data[i];
+		bdata->suspended = false;
+
+		/*
+		 * After hibernation the interrupt controller is
+		 * re-initialized and loses its configuration.
+		 * Restore dual-edge triggering for GPIO-backed
+		 * buttons so both press and release are detected.
+		 */
+		if (bdata->gpiod) {
+			error = irq_set_irq_type(bdata->irq,
+						 IRQ_TYPE_EDGE_BOTH);
+			if (error)
+				dev_warn(dev,
+					 "failed to restore IRQ %d trigger: %d\n",
+					 bdata->irq, error);
+		}
+	}
+
+	gpio_keys_report_state(ddata);
+	return 0;
+}
+
+static const struct dev_pm_ops gpio_keys_pm_ops = {
+	.suspend	= gpio_keys_suspend,
+	.resume		= gpio_keys_resume,
+	.freeze		= gpio_keys_freeze,
+	.restore	= gpio_keys_restore,
+	.thaw		= gpio_keys_resume,
+	.poweroff	= gpio_keys_suspend,
+};
 
 static void gpio_keys_shutdown(struct platform_device *pdev)
 {
