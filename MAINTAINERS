@@ -1884,6 +1884,14 @@ S:	Supported
 F:	Documentation/devicetree/bindings/interrupt-controller/google,goldfish-pic.yaml
 F:	drivers/irqchip/irq-goldfish-pic.c
 
+ANDROID GOLDFISH ADDRESS SPACE DRIVER
+M:	Wenzhao Liao <wenzhaoliao@ruc.edu.cn>
+L:	linux-kernel@vger.kernel.org
+L:	linux-pci@vger.kernel.org
+L:	rust-for-linux@vger.kernel.org
+S:	Maintained
+F:	include/uapi/linux/goldfish_address_space.h
+
 ANDROID GOLDFISH RTC DRIVER
 M:	Jiaxun Yang <jiaxun.yang@flygoat.com>
 S:	Supported
