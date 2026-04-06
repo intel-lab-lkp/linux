@@ -44,6 +44,9 @@
 
 #include "audit.h"
 #include "common.h"
+#include "trace.h"
+
+#define TRACE_TASK "fs_test"
 
 #ifndef renameat2
 int renameat2(int olddirfd, const char *oldpath, int newdirfd,
@@ -7762,6 +7765,221 @@ TEST_F(audit_layout1, mount)
 	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(1, records.domain);
+}
+
+/* clang-format off */
+FIXTURE(trace_layout1) {
+	/* clang-format on */
+	int tracefs_ok;
+};
+
+FIXTURE_SETUP(trace_layout1)
+{
+	struct stat st;
+
+	/*
+	 * Check tracefs availability before creating the layout, following the
+	 * layout3_fs pattern: skip before any layout creation to avoid leaving
+	 * stale TMP_DIR on skip.
+	 */
+	if (stat(TRACEFS_LANDLOCK_DIR, &st)) {
+		self->tracefs_ok = 0;
+		SKIP(return, "tracefs not available");
+	}
+	self->tracefs_ok = 1;
+
+	/* Isolate tracefs state (PID filter, event enables). */
+	set_cap(_metadata, CAP_SYS_ADMIN);
+	ASSERT_EQ(0, unshare(CLONE_NEWNS));
+	ASSERT_EQ(0, mount(NULL, "/", NULL, MS_REC | MS_PRIVATE, NULL));
+	clear_cap(_metadata, CAP_SYS_ADMIN);
+
+	prepare_layout(_metadata);
+	create_layout1(_metadata);
+
+	set_cap(_metadata, CAP_DAC_OVERRIDE);
+	ASSERT_EQ(0, tracefs_fixture_setup());
+	ASSERT_EQ(0, tracefs_enable_event(TRACEFS_CHECK_RULE_FS_ENABLE, true));
+	ASSERT_EQ(0, tracefs_clear());
+	ASSERT_EQ(0, tracefs_set_pid_filter(getpid()));
+	clear_cap(_metadata, CAP_DAC_OVERRIDE);
+}
+
+FIXTURE_TEARDOWN_PARENT(trace_layout1)
+{
+	if (!self->tracefs_ok)
+		return;
+
+	set_cap(_metadata, CAP_DAC_OVERRIDE);
+	tracefs_enable_event(TRACEFS_CHECK_RULE_FS_ENABLE, false);
+	tracefs_clear_pid_filter();
+	tracefs_fixture_teardown();
+	clear_cap(_metadata, CAP_DAC_OVERRIDE);
+
+	remove_layout1(_metadata);
+	cleanup_layout(_metadata);
+}
+
+/*
+ * Verifies that check_rule_fs events include correct field values: domain, dev,
+ * ino, request, and allowed.  All values are verified against stat() of the
+ * rule path on a deterministic tmpfs layout.
+ */
+TEST_F(trace_layout1, check_rule_fs_fields)
+{
+	struct stat dir_stat;
+	char expected_dev[32];
+	char expected_ino[32];
+	char expected_req[32];
+	char *buf;
+	char field[64];
+
+	if (!self->tracefs_ok)
+		SKIP(return, "tracefs not available");
+
+	ASSERT_EQ(0, stat(dir_s1d1, &dir_stat));
+	snprintf(expected_dev, sizeof(expected_dev), "%u:%u",
+		 major(dir_stat.st_dev), minor(dir_stat.st_dev));
+	snprintf(expected_ino, sizeof(expected_ino), "%lu", dir_stat.st_ino);
+	snprintf(expected_req, sizeof(expected_req), "0x%x",
+		 (unsigned int)LANDLOCK_ACCESS_FS_READ_DIR);
+
+	set_cap(_metadata, CAP_DAC_OVERRIDE);
+	ASSERT_EQ(0, tracefs_clear());
+	clear_cap(_metadata, CAP_DAC_OVERRIDE);
+
+	sandbox_child_fs_access(_metadata, dir_s1d1,
+				LANDLOCK_ACCESS_FS_READ_DIR,
+				LANDLOCK_ACCESS_FS_READ_DIR, dir_s1d1);
+
+	set_cap(_metadata, CAP_DAC_OVERRIDE);
+	buf = tracefs_read_trace();
+	clear_cap(_metadata, CAP_DAC_OVERRIDE);
+	ASSERT_NE(NULL, buf);
+
+	EXPECT_EQ(1,
+		  tracefs_count_matches(buf, REGEX_CHECK_RULE_FS(TRACE_TASK)))
+	{
+		TH_LOG("Expected 1 check_rule_fs event\n%s", buf);
+	}
+
+	ASSERT_EQ(0, tracefs_extract_field(buf, REGEX_CHECK_RULE_FS(TRACE_TASK),
+					   "dev", field, sizeof(field)));
+	EXPECT_STREQ(expected_dev, field)
+	{
+		TH_LOG("Expected dev=%s, got %s", expected_dev, field);
+	}
+
+	ASSERT_EQ(0, tracefs_extract_field(buf, REGEX_CHECK_RULE_FS(TRACE_TASK),
+					   "ino", field, sizeof(field)));
+	EXPECT_STREQ(expected_ino, field)
+	{
+		TH_LOG("Expected ino=%s, got %s", expected_ino, field);
+	}
+
+	ASSERT_EQ(0, tracefs_extract_field(buf, REGEX_CHECK_RULE_FS(TRACE_TASK),
+					   "request", field, sizeof(field)));
+	EXPECT_STREQ(expected_req, field)
+	{
+		TH_LOG("Expected request=%s, got %s", expected_req, field);
+	}
+
+	ASSERT_EQ(0, tracefs_extract_field(buf, REGEX_CHECK_RULE_FS(TRACE_TASK),
+					   "allowed", field, sizeof(field)));
+	EXPECT_EQ('{', field[0])
+	{
+		TH_LOG("Expected allowed={...}, got %s", field);
+	}
+
+	free(buf);
+}
+
+/*
+ * Verifies check_rule_fs behavior with multiple rules.  With rules at s1d1 and
+ * s1d2 (a child of s1d1), accessing s1d2 produces only 1 event because the
+ * pathwalk short-circuits after the first rule fully unmasks the single layer.
+ */
+TEST_F(trace_layout1, check_rule_fs_multiple_rules)
+{
+	pid_t pid;
+	int status;
+	char *buf;
+	int count;
+
+	if (!self->tracefs_ok)
+		SKIP(return, "tracefs not available");
+
+	set_cap(_metadata, CAP_DAC_OVERRIDE);
+	ASSERT_EQ(0, tracefs_clear());
+	clear_cap(_metadata, CAP_DAC_OVERRIDE);
+
+	pid = fork();
+	ASSERT_LE(0, pid);
+
+	if (pid == 0) {
+		struct landlock_ruleset_attr attr = {
+			.handled_access_fs = LANDLOCK_ACCESS_FS_READ_DIR,
+		};
+		struct landlock_path_beneath_attr path_beneath = {
+			.allowed_access = LANDLOCK_ACCESS_FS_READ_DIR,
+		};
+		int ruleset_fd, fd;
+
+		ruleset_fd = landlock_create_ruleset(&attr, sizeof(attr), 0);
+		if (ruleset_fd < 0)
+			_exit(1);
+
+		path_beneath.parent_fd =
+			open(dir_s1d1, O_PATH | O_DIRECTORY | O_CLOEXEC);
+		if (path_beneath.parent_fd < 0)
+			_exit(1);
+		if (landlock_add_rule(ruleset_fd, LANDLOCK_RULE_PATH_BENEATH,
+				      &path_beneath, 0))
+			_exit(1);
+		close(path_beneath.parent_fd);
+
+		path_beneath.parent_fd =
+			open(dir_s1d2, O_PATH | O_DIRECTORY | O_CLOEXEC);
+		if (path_beneath.parent_fd < 0)
+			_exit(1);
+		if (landlock_add_rule(ruleset_fd, LANDLOCK_RULE_PATH_BENEATH,
+				      &path_beneath, 0))
+			_exit(1);
+		close(path_beneath.parent_fd);
+
+		prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
+		if (landlock_restrict_self(ruleset_fd, 0))
+			_exit(1);
+		close(ruleset_fd);
+
+		fd = open(dir_s1d2, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+		if (fd >= 0)
+			close(fd);
+		_exit(0);
+	}
+
+	ASSERT_EQ(pid, waitpid(pid, &status, 0));
+	ASSERT_TRUE(WIFEXITED(status));
+	EXPECT_EQ(0, WEXITSTATUS(status));
+
+	set_cap(_metadata, CAP_DAC_OVERRIDE);
+	buf = tracefs_read_trace();
+	clear_cap(_metadata, CAP_DAC_OVERRIDE);
+	ASSERT_NE(NULL, buf);
+
+	/*
+	 * Only 1 check_rule_fs event: the rule on dir_s1d2 fully unmasked the
+	 * single layer, so the pathwalk short-circuits before reaching the
+	 * dir_s1d1 rule.
+	 */
+	count = tracefs_count_matches(buf, REGEX_CHECK_RULE_FS(TRACE_TASK));
+	EXPECT_EQ(1, count)
+	{
+		TH_LOG("Expected 1 check_rule_fs event, got %d\n%s", count,
+		       buf);
+	}
+
+	free(buf);
 }
 
 TEST_HARNESS_MAIN
