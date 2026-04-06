@@ -174,6 +174,22 @@ static int ssp_check_lines(struct ssp_data *data, bool state)
 	return 0;
 }
 
+static inline void ssp_pending_add(struct ssp_data *data,
+				   struct ssp_msg *msg)
+{
+	mutex_lock(&data->pending_lock);
+	list_add_tail(&msg->list, &data->pending_list);
+	mutex_unlock(&data->pending_lock);
+}
+
+static inline void ssp_pending_del(struct ssp_data *data,
+				   struct ssp_msg *msg)
+{
+	mutex_lock(&data->pending_lock);
+	list_del(&msg->list);
+	mutex_unlock(&data->pending_lock);
+}
+
 static int ssp_do_transfer(struct ssp_data *data, struct ssp_msg *msg,
 			   struct completion *done, int timeout)
 {
@@ -202,19 +218,13 @@ static int ssp_do_transfer(struct ssp_data *data, struct ssp_msg *msg,
 		goto _error_locked;
 	}
 
-	if (!use_no_irq) {
-		mutex_lock(&data->pending_lock);
-		list_add_tail(&msg->list, &data->pending_list);
-		mutex_unlock(&data->pending_lock);
-	}
+	if (!use_no_irq)
+		ssp_pending_add(data, msg);
 
 	status = ssp_check_lines(data, true);
 	if (status < 0) {
-		if (!use_no_irq) {
-			mutex_lock(&data->pending_lock);
-			list_del(&msg->list);
-			mutex_unlock(&data->pending_lock);
-		}
+		if (!use_no_irq)
+			ssp_pending_del(data, msg);
 		goto _error_locked;
 	}
 
@@ -224,9 +234,7 @@ static int ssp_do_transfer(struct ssp_data *data, struct ssp_msg *msg,
 		if (wait_for_completion_timeout(done,
 						msecs_to_jiffies(timeout)) ==
 		    0) {
-			mutex_lock(&data->pending_lock);
-			list_del(&msg->list);
-			mutex_unlock(&data->pending_lock);
+			ssp_pending_del(data, msg);
 
 			data->timeout_cnt++;
 			return -ETIMEDOUT;
