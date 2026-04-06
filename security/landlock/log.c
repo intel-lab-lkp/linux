@@ -174,6 +174,11 @@ static void audit_denial(const struct landlock_cred_security *const subject,
 
 #endif /* CONFIG_AUDIT */
 
+#ifdef CONFIG_TRACEPOINTS
+#define CREATE_TRACE_POINTS
+#include <trace/events/landlock.h>
+#endif /* CONFIG_TRACEPOINTS */
+
 static struct landlock_hierarchy *
 get_hierarchy(const struct landlock_domain *const domain, const size_t layer)
 {

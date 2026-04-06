@@ -4,6 +4,7 @@
  *
  * Copyright © 2016-2020 Mickaël Salaün <mic@digikod.net>
  * Copyright © 2018-2020 ANSSI
+ * Copyright © 2026 Cloudflare
  */
 
 #ifndef _SECURITY_LANDLOCK_RULESET_H
@@ -153,6 +154,14 @@ struct landlock_ruleset {
 	 * @usage: Number of file descriptors referencing this ruleset.
 	 */
 	refcount_t usage;
+
+#ifdef CONFIG_SECURITY_LANDLOCK_LOG
+	/**
+	 * @id: Unique identifier for this ruleset, used for tracing.
+	 */
+	u64 id;
+#endif /* CONFIG_SECURITY_LANDLOCK_LOG */
+
 	/**
 	 * @layer: Contains the subset of filesystem and network actions that
 	 * are handled by this ruleset.

@@ -38,6 +38,8 @@
 #include "setup.h"
 #include "tsync.h"
 
+#include <trace/events/landlock.h>
+
 static bool is_initialized(void)
 {
 	if (likely(landlock_initialized))
@@ -255,6 +257,9 @@ SYSCALL_DEFINE3(landlock_create_ruleset,
 					  ruleset_attr.scoped);
 	if (IS_ERR(ruleset))
 		return PTR_ERR(ruleset);
+
+	/* Ruleset is not yet shared (FD not installed), no lock needed. */
+	trace_landlock_create_ruleset(ruleset);
 
 	/* Creates anonymous FD referring to the ruleset. */
 	ruleset_fd = anon_inode_getfd("[landlock-ruleset]", &ruleset_fops,
