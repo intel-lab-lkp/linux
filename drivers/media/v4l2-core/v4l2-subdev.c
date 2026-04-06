@@ -1843,8 +1843,6 @@ __v4l2_subdev_state_get_interval(struct v4l2_subdev_state *state,
 	if (WARN_ON(!state))
 		return NULL;
 
-	lockdep_assert_held(state->lock);
-
 	if (state->pads) {
 		if (stream)
 			return NULL;
