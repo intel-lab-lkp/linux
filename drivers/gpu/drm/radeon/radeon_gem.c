@@ -828,6 +828,11 @@ int radeon_align_pitch(struct radeon_device *rdev, int width, int cpp, bool tile
 
 	aligned += pitch_mask;
 	aligned &= ~pitch_mask;
+
+	/* Guard against integer overflow in aligned * cpp. */
+	if (aligned > INT_MAX / (cpp ? cpp : 1) || aligned <= 0)
+		return 0;
+
 	return aligned * cpp;
 }
 
@@ -842,8 +847,12 @@ int radeon_mode_dumb_create(struct drm_file *file_priv,
 
 	args->pitch = radeon_align_pitch(rdev, args->width,
 					 DIV_ROUND_UP(args->bpp, 8), 0);
+	if (!args->pitch)
+		return -EINVAL;
 	args->size = (u64)args->pitch * args->height;
 	args->size = ALIGN(args->size, PAGE_SIZE);
+	if (!args->size)
+		return -EINVAL;
 
 	r = radeon_gem_object_create(rdev, args->size, 0,
 				     RADEON_GEM_DOMAIN_VRAM, 0,
