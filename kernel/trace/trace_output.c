@@ -16,6 +16,7 @@
 #include <linux/btf.h>
 #include <linux/bpf.h>
 #include <linux/hashtable.h>
+#include <linux/string_helpers.h>
 
 #include "trace_output.h"
 #include "trace_btf.h"
@@ -320,6 +321,46 @@ trace_print_hex_dump_seq(struct trace_seq *p, const char *prefix_str,
 	return ret;
 }
 EXPORT_SYMBOL(trace_print_hex_dump_seq);
+
+/**
+ * trace_print_untrusted_str_seq - print a string after escaping characters
+ * @s: trace seq struct to write to
+ * @src: The string to print
+ *
+ * Prints a string to a trace seq after escaping all special characters,
+ * including common separators (space, equal sign), quotes, and backslashes.
+ * This transforms a string from an untrusted source (e.g. user space) to make
+ * it:
+ * - safe to parse,
+ * - easy to read (for simple strings),
+ * - easy to get back the original.
+ */
+const char *trace_print_untrusted_str_seq(struct trace_seq *s,
+					   const char *src)
+{
+	int escaped_size;
+	char *buf;
+	size_t buf_size = seq_buf_get_buf(&s->seq, &buf);
+	const char *ret = trace_seq_buffer_ptr(s);
+
+	/* Buffer exhaustion is normal when the trace buffer is full. */
+	if (!src || buf_size == 0)
+		return NULL;
+
+	escaped_size = string_escape_mem(src, strlen(src), buf, buf_size,
+		ESCAPE_SPACE | ESCAPE_SPECIAL | ESCAPE_NAP | ESCAPE_APPEND |
+		ESCAPE_OCTAL, " ='\"\\");
+	if (unlikely(escaped_size >= buf_size)) {
+		/* We need some room for the final '\0'. */
+		seq_buf_set_overflow(&s->seq);
+		s->full = 1;
+		return NULL;
+	}
+	seq_buf_commit(&s->seq, escaped_size);
+	trace_seq_putc(s, 0);
+	return ret;
+}
+EXPORT_SYMBOL(trace_print_untrusted_str_seq);
 
 int trace_raw_output_prep(struct trace_iterator *iter,
 			  struct trace_event *trace_event)

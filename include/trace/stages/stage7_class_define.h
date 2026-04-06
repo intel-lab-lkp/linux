@@ -24,6 +24,7 @@
 #undef __print_array
 #undef __print_dynamic_array
 #undef __print_hex_dump
+#undef __print_untrusted_str
 #undef __get_buf
 
 /*

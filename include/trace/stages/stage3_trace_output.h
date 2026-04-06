@@ -133,6 +133,10 @@
 	trace_print_hex_dump_seq(p, prefix_str, prefix_type,		\
 				 rowsize, groupsize, buf, len, ascii)
 
+#undef __print_untrusted_str
+#define __print_untrusted_str(str)							\
+		trace_print_untrusted_str_seq(p, __get_str(str))
+
 #undef __print_ns_to_secs
 #define __print_ns_to_secs(value)			\
 	({						\
