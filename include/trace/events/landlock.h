@@ -11,6 +11,7 @@
 #define _TRACE_LANDLOCK_H
 
 #include <linux/tracepoint.h>
+#include <net/af_unix.h>
 
 struct dentry;
 struct landlock_domain;
@@ -19,6 +20,7 @@ struct landlock_rule;
 struct landlock_ruleset;
 struct path;
 struct sock;
+struct task_struct;
 
 /**
  * DOC: Landlock trace events
@@ -432,6 +434,139 @@ TRACE_EVENT(
 		__entry->domain_id, __entry->same_exec, __entry->log_same_exec,
 		__entry->log_new_exec, __entry->blockers, __entry->sport,
 		__entry->dport));
+
+/**
+ * landlock_deny_ptrace - ptrace access denied
+ * @hierarchy: Hierarchy node that blocked the access (never NULL)
+ * @same_exec: Whether the current task is the same executable that called
+ *             landlock_restrict_self() for the denying hierarchy node
+ * @tracee: Target task (never NULL); eBPF can read pid, comm, cred,
+ *          namespaces, and cgroup via BTF
+ */
+TRACE_EVENT(
+	landlock_deny_ptrace,
+
+	TP_PROTO(const struct landlock_hierarchy *hierarchy, bool same_exec,
+		 const struct task_struct *tracee),
+
+	TP_ARGS(hierarchy, same_exec, tracee),
+
+	TP_STRUCT__entry(
+		__field(__u64, domain_id) __field(bool, same_exec)
+			__field(u32, log_same_exec) __field(u32, log_new_exec)
+				__field(pid_t, tracee_pid)
+					__string(tracee_comm, tracee->comm)),
+
+	TP_fast_assign(__entry->domain_id = hierarchy->id;
+		       __entry->same_exec = same_exec;
+		       __entry->log_same_exec = hierarchy->log_same_exec;
+		       __entry->log_new_exec = hierarchy->log_new_exec;
+		       __entry->tracee_pid =
+			       task_tgid_nr((struct task_struct *)tracee);
+		       __assign_str(tracee_comm);),
+
+	TP_printk(
+		"domain=%llx same_exec=%d log_same_exec=%u log_new_exec=%u tracee_pid=%d comm=%s",
+		__entry->domain_id, __entry->same_exec, __entry->log_same_exec,
+		__entry->log_new_exec, __entry->tracee_pid,
+		__print_untrusted_str(tracee_comm)));
+
+/**
+ * landlock_deny_scope_signal - signal delivery denied by
+ *                               LANDLOCK_SCOPE_SIGNAL
+ * @hierarchy: Hierarchy node that blocked the access (never NULL)
+ * @same_exec: Whether the current task is the same executable that called
+ *             landlock_restrict_self() for the denying hierarchy node
+ * @target: Signal target task (never NULL); eBPF can read pid, comm, cred,
+ *          namespaces, and cgroup via BTF
+ */
+TRACE_EVENT(
+	landlock_deny_scope_signal,
+
+	TP_PROTO(const struct landlock_hierarchy *hierarchy, bool same_exec,
+		 const struct task_struct *target),
+
+	TP_ARGS(hierarchy, same_exec, target),
+
+	TP_STRUCT__entry(
+		__field(__u64, domain_id) __field(bool, same_exec)
+			__field(u32, log_same_exec) __field(u32, log_new_exec)
+				__field(pid_t, target_pid)
+					__string(target_comm, target->comm)),
+
+	TP_fast_assign(__entry->domain_id = hierarchy->id;
+		       __entry->same_exec = same_exec;
+		       __entry->log_same_exec = hierarchy->log_same_exec;
+		       __entry->log_new_exec = hierarchy->log_new_exec;
+		       __entry->target_pid =
+			       task_tgid_nr((struct task_struct *)target);
+		       __assign_str(target_comm);),
+
+	TP_printk(
+		"domain=%llx same_exec=%d log_same_exec=%u log_new_exec=%u target_pid=%d comm=%s",
+		__entry->domain_id, __entry->same_exec, __entry->log_same_exec,
+		__entry->log_new_exec, __entry->target_pid,
+		__print_untrusted_str(target_comm)));
+
+/**
+ * landlock_deny_scope_abstract_unix_socket - abstract unix socket access
+ *     denied by LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET
+ * @hierarchy: Hierarchy node that blocked the access (never NULL)
+ * @same_exec: Whether the current task is the same executable that called
+ *             landlock_restrict_self() for the denying hierarchy node
+ * @peer: Peer socket (never NULL); eBPF can read sk_peer_pid,
+ *        sk_peer_cred, socket type, and protocol via BTF
+ */
+TRACE_EVENT(
+	landlock_deny_scope_abstract_unix_socket,
+
+	TP_PROTO(const struct landlock_hierarchy *hierarchy, bool same_exec,
+		 const struct sock *peer),
+
+	TP_ARGS(hierarchy, same_exec, peer),
+
+	TP_STRUCT__entry(
+		__field(__u64, domain_id) __field(bool, same_exec)
+			__field(u32, log_same_exec) __field(u32, log_new_exec)
+				__field(pid_t, peer_pid)
+		/*
+		 * Abstract socket names are untrusted binary data from
+		 * user space.  Use __string_len because abstract names
+		 * are not NUL-terminated; their length is determined by
+		 * addr->len.
+		 */
+		__string_len(sun_path,
+			     unix_sk(peer)->addr ?
+				     unix_sk(peer)->addr->name->sun_path + 1 :
+				     "",
+			     unix_sk(peer)->addr ?
+				     unix_sk(peer)->addr->len -
+					     offsetof(struct sockaddr_un,
+						      sun_path) -
+					     1 :
+				     0)),
+
+	TP_fast_assign(struct pid *peer_pid;
+
+		       __entry->domain_id = hierarchy->id;
+		       __entry->same_exec = same_exec;
+		       __entry->log_same_exec = hierarchy->log_same_exec;
+		       __entry->log_new_exec = hierarchy->log_new_exec;
+		       /*
+			* READ_ONCE prevents compiler double-read.  The value
+			* is stable because unix_state_lock(peer) is held by
+			* the caller (hook_unix_stream_connect or
+			* hook_unix_may_send).
+			*/
+		       peer_pid = READ_ONCE(peer->sk_peer_pid);
+		       __entry->peer_pid = peer_pid ? pid_nr(peer_pid) : 0;
+		       __assign_str(sun_path);),
+
+	TP_printk(
+		"domain=%llx same_exec=%d log_same_exec=%u log_new_exec=%u peer_pid=%d sun_path=%s",
+		__entry->domain_id, __entry->same_exec, __entry->log_same_exec,
+		__entry->log_new_exec, __entry->peer_pid,
+		__print_untrusted_str(sun_path)));
 
 #endif /* _TRACE_LANDLOCK_H */
 

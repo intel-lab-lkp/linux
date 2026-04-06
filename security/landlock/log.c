@@ -11,6 +11,9 @@
 #include <linux/bitops.h>
 #include <linux/lsm_audit.h>
 #include <linux/pid.h>
+#include <linux/sched.h>
+#include <linux/slab.h>
+#include <net/sock.h>
 #include <uapi/linux/landlock.h>
 
 #include "access.h"
@@ -258,6 +261,23 @@ static void trace_denial(const struct landlock_cred_security *const subject,
 				request->audit.u.net->sk,
 				ntohs(request->audit.u.net->sport),
 				ntohs(request->audit.u.net->dport));
+		break;
+	case LANDLOCK_REQUEST_PTRACE:
+		if (trace_landlock_deny_ptrace_enabled())
+			trace_landlock_deny_ptrace(youngest_denied, same_exec,
+						   request->audit.u.tsk);
+		break;
+	case LANDLOCK_REQUEST_SCOPE_SIGNAL:
+		if (trace_landlock_deny_scope_signal_enabled())
+			trace_landlock_deny_scope_signal(youngest_denied,
+							 same_exec,
+							 request->audit.u.tsk);
+		break;
+	case LANDLOCK_REQUEST_SCOPE_ABSTRACT_UNIX_SOCKET:
+		if (trace_landlock_deny_scope_abstract_unix_socket_enabled())
+			trace_landlock_deny_scope_abstract_unix_socket(
+				youngest_denied, same_exec,
+				request->audit.u.net->sk);
 		break;
 	default:
 		break;
