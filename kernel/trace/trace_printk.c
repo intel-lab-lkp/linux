@@ -22,8 +22,9 @@
 #ifdef CONFIG_MODULES
 
 /*
- * modules trace_printk()'s formats are autosaved in struct trace_bprintk_fmt
- * which are queued on trace_bprintk_fmt_list.
+ * modules trace_printk() formats and tracepoint_string() strings are
+ * autosaved in struct trace_bprintk_fmt, which are queued on
+ * trace_bprintk_fmt_list.
  */
 static LIST_HEAD(trace_bprintk_fmt_list);
 
@@ -33,7 +34,11 @@ static DEFINE_MUTEX(btrace_mutex);
 struct trace_bprintk_fmt {
 	struct list_head list;
 	const char *fmt;
+	unsigned int type;
 };
+
+#define TRACE_BPRINTK_TYPE		BIT(0)
+#define TRACE_TRACEPOINT_TYPE		BIT(1)
 
 static inline struct trace_bprintk_fmt *lookup_format(const char *fmt)
 {
@@ -49,22 +54,24 @@ static inline struct trace_bprintk_fmt *lookup_format(const char *fmt)
 	return NULL;
 }
 
-static
-void hold_module_trace_bprintk_format(const char **start, const char **end)
+static void hold_module_trace_format(const char **start, const char **end,
+				     unsigned int type)
 {
 	const char **iter;
 	char *fmt;
 
 	/* allocate the trace_printk per cpu buffers */
-	if (start != end)
+	if ((type & TRACE_BPRINTK_TYPE) && start != end)
 		trace_printk_init_buffers();
 
 	mutex_lock(&btrace_mutex);
 	for (iter = start; iter < end; iter++) {
 		struct trace_bprintk_fmt *tb_fmt = lookup_format(*iter);
 		if (tb_fmt) {
-			if (!IS_ERR(tb_fmt))
+			if (!IS_ERR(tb_fmt)) {
+				tb_fmt->type |= type;
 				*iter = tb_fmt->fmt;
+			}
 			continue;
 		}
 
@@ -76,6 +83,7 @@ void hold_module_trace_bprintk_format(const char **start, const char **end)
 				list_add_tail(&tb_fmt->list, &trace_bprintk_fmt_list);
 				strcpy(fmt, *iter);
 				tb_fmt->fmt = fmt;
+				tb_fmt->type = type;
 			} else
 				kfree(tb_fmt);
 		}
@@ -85,17 +93,28 @@ void hold_module_trace_bprintk_format(const char **start, const char **end)
 	mutex_unlock(&btrace_mutex);
 }
 
-static int module_trace_bprintk_format_notify(struct notifier_block *self,
-		unsigned long val, void *data)
+static int module_trace_format_notify(struct notifier_block *self,
+				      unsigned long val, void *data)
 {
 	struct module *mod = data;
+
+	if (val != MODULE_STATE_COMING)
+		return NOTIFY_OK;
+
 	if (mod->num_trace_bprintk_fmt) {
 		const char **start = mod->trace_bprintk_fmt_start;
 		const char **end = start + mod->num_trace_bprintk_fmt;
 
-		if (val == MODULE_STATE_COMING)
-			hold_module_trace_bprintk_format(start, end);
+		hold_module_trace_format(start, end, TRACE_BPRINTK_TYPE);
 	}
+
+	if (mod->num_tracepoint_strings) {
+		const char **start = mod->tracepoint_strings_start;
+		const char **end = start + mod->num_tracepoint_strings;
+
+		hold_module_trace_format(start, end, TRACE_TRACEPOINT_TYPE);
+	}
+
 	return NOTIFY_OK;
 }
 
@@ -171,8 +190,8 @@ static void format_mod_stop(void)
 
 #else /* !CONFIG_MODULES */
 __init static int
-module_trace_bprintk_format_notify(struct notifier_block *self,
-		unsigned long val, void *data)
+module_trace_format_notify(struct notifier_block *self,
+			   unsigned long val, void *data)
 {
 	return NOTIFY_OK;
 }
@@ -193,8 +212,8 @@ void trace_printk_control(bool enabled)
 }
 
 __initdata_or_module static
-struct notifier_block module_trace_bprintk_format_nb = {
-	.notifier_call = module_trace_bprintk_format_notify,
+struct notifier_block module_trace_format_nb = {
+	.notifier_call = module_trace_format_notify,
 };
 
 int __trace_bprintk(unsigned long ip, const char *fmt, ...)
@@ -254,11 +273,25 @@ EXPORT_SYMBOL_GPL(__ftrace_vprintk);
 bool trace_is_tracepoint_string(const char *str)
 {
 	const char **ptr = __start___tracepoint_str;
+#ifdef CONFIG_MODULES
+	struct trace_bprintk_fmt *tb_fmt;
+#endif
 
 	for (ptr = __start___tracepoint_str; ptr < __stop___tracepoint_str; ptr++) {
 		if (str == *ptr)
 			return true;
 	}
+
+#ifdef CONFIG_MODULES
+	mutex_lock(&btrace_mutex);
+	list_for_each_entry(tb_fmt, &trace_bprintk_fmt_list, list) {
+		if ((tb_fmt->type & TRACE_TRACEPOINT_TYPE) && str == tb_fmt->fmt) {
+			mutex_unlock(&btrace_mutex);
+			return true;
+		}
+	}
+	mutex_unlock(&btrace_mutex);
+#endif
 	return false;
 }
 
@@ -824,7 +857,7 @@ fs_initcall(init_trace_printk_function_export);
 
 static __init int init_trace_printk(void)
 {
-	return register_module_notifier(&module_trace_bprintk_format_nb);
+	return register_module_notifier(&module_trace_format_nb);
 }
 
 early_initcall(init_trace_printk);

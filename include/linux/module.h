@@ -515,6 +515,8 @@ struct module {
 #ifdef CONFIG_TRACING
 	unsigned int num_trace_bprintk_fmt;
 	const char **trace_bprintk_fmt_start;
+	unsigned int num_tracepoint_strings;
+	const char **tracepoint_strings_start;
 #endif
 #ifdef CONFIG_EVENT_TRACING
 	struct trace_event_call **trace_events;
