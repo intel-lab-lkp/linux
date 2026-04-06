@@ -100,7 +100,7 @@ use kernel::{
     fs::{File, Kiocb},
     ioctl::{_IO, _IOC_SIZE, _IOR, _IOW},
     iov::{IovIterDest, IovIterSource},
-    miscdevice::{MiscDevice, MiscDeviceOptions, MiscDeviceRegistration},
+    miscdevice::{MiscDevice, MiscDeviceOpenContext, MiscDeviceOptions, MiscDeviceRegistration},
     new_mutex,
     prelude::*,
     sync::{aref::ARef, Mutex},
@@ -154,9 +154,10 @@ struct RustMiscDevice {
 #[vtable]
 impl MiscDevice for RustMiscDevice {
     type Ptr = Pin<KBox<Self>>;
+    type RegistrationData = ();
 
-    fn open(_file: &File, misc: &MiscDeviceRegistration<Self>) -> Result<Pin<KBox<Self>>> {
-        let dev = ARef::from(misc.device());
+    fn open(_file: &File, ctx: &MiscDeviceOpenContext<'_, Self>) -> Result<Pin<KBox<Self>>> {
+        let dev = ctx.device();
 
         dev_info!(dev, "Opening Rust Misc Device Sample\n");
 
@@ -221,6 +222,8 @@ impl MiscDevice for RustMiscDevice {
         Ok(0)
     }
 }
+
+kernel::declare_misc_device_fops!(RustMiscDevice);
 
 #[pinned_drop]
 impl PinnedDrop for RustMiscDevice {
