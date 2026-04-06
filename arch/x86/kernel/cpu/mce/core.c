@@ -90,7 +90,6 @@ struct mca_config mca_cfg __read_mostly = {
 };
 
 static DEFINE_PER_CPU(struct mce_hw_err, hw_errs_seen);
-static unsigned long mce_need_notify;
 
 /*
  * MCA banks polled by the period polling timer for corrected events.
@@ -595,7 +594,7 @@ static bool mce_notify_irq(void)
 	/* Not more than two messages every minute */
 	static DEFINE_RATELIMIT_STATE(ratelimit, 60*HZ, 2);
 
-	if (test_and_clear_bit(0, &mce_need_notify)) {
+	if (!mce_gen_pool_empty()) {
 		mce_work_trigger();
 
 		if (__ratelimit(&ratelimit))
@@ -617,10 +616,6 @@ static int mce_early_notifier(struct notifier_block *nb, unsigned long val,
 
 	/* Emit the trace record: */
 	trace_mce_record(err);
-
-	set_bit(0, &mce_need_notify);
-
-	mce_notify_irq();
 
 	return NOTIFY_DONE;
 }
