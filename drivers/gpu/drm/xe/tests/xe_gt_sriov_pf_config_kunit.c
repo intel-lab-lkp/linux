@@ -7,16 +7,23 @@
 #include <kunit/test.h>
 #include <kunit/test-bug.h>
 
+#include "xe_device.h"
 #include "xe_kunit_helpers.h"
 #include "xe_pci_test.h"
 
 #define TEST_MAX_VFS	63
 #define TEST_VRAM	0x7a800000ull	/* random size that works on 32-bit */
 
+static bool sriov_pf_admin_only;
+
+static bool xe_device_is_admin_only_stub(const struct xe_device *xe)
+{
+	return sriov_pf_admin_only;
+}
+
 static void pf_set_admin_mode(struct xe_device *xe, bool enable)
 {
-	/* should match logic of xe_sriov_pf_admin_only() */
-	xe->sriov.pf.admin_only = enable;
+	sriov_pf_admin_only = enable;
 	KUNIT_EXPECT_EQ(kunit_get_current_test(), enable, xe_sriov_pf_admin_only(xe));
 }
 
@@ -81,6 +88,10 @@ static int pf_gt_config_test_init(struct kunit *test)
 	xe->sriov.pf.device_total_vfs = TEST_MAX_VFS;
 	xe->sriov.pf.driver_max_vfs = TEST_MAX_VFS;
 	KUNIT_ASSERT_EQ(test, xe_sriov_pf_get_totalvfs(xe), 63);
+
+	sriov_pf_admin_only = false;
+	kunit_activate_static_stub(test, xe_device_is_admin_only,
+				   xe_device_is_admin_only_stub);
 
 	pf_set_admin_mode(xe, false);
 	KUNIT_ASSERT_EQ(test, xe_sriov_init(xe), 0);
