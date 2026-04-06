@@ -19,8 +19,8 @@
 
 /*
  * All access rights that are denied by default whether they are handled or not
- * by a ruleset/layer.  This must be ORed with all ruleset->access_masks[]
- * entries when we need to get the absolute handled access masks, see
+ * by a ruleset/layer.  This must be ORed with all domain->layers[] entries when
+ * we need to get the absolute handled access masks, see
  * landlock_upgrade_handled_access_masks().
  */
 /* clang-format off */
