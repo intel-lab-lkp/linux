@@ -510,7 +510,11 @@ static int ssp_probe(struct spi_device *spi)
 	data->spi = spi;
 	spi_set_drvdata(spi, data);
 
-	mutex_init(&data->comm_lock);
+	ret = devm_mutex_init(&spi->dev, &data->comm_lock);
+	if (ret < 0) {
+		dev_err(&spi->dev, "Failed to init comm_lock mutex\n");
+		goto err_setup_spi;
+	}
 
 	for (i = 0; i < SSP_SENSOR_MAX; ++i) {
 		data->delay_buf[i] = SSP_DEFAULT_POLLING_DELAY;
@@ -523,7 +527,11 @@ static int ssp_probe(struct spi_device *spi)
 
 	data->time_syncing = true;
 
-	mutex_init(&data->pending_lock);
+	ret = devm_mutex_init(&spi->dev, &data->pending_lock);
+	if (ret < 0) {
+		dev_err(&spi->dev, "Failed to init pending_lock mutex\n");
+		goto err_setup_spi;
+	}
 	INIT_LIST_HEAD(&data->pending_list);
 
 	atomic_set(&data->enable_refcount, 0);
@@ -533,13 +541,13 @@ static int ssp_probe(struct spi_device *spi)
 
 	timer_setup(&data->wdt_timer, ssp_wdt_timer_func, 0);
 
-	ret = request_threaded_irq(data->spi->irq, NULL,
-				   ssp_irq_thread_fn,
-				   IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
-				   "SSP_Int", data);
+	ret = devm_request_threaded_irq(&spi->dev, data->spi->irq, NULL,
+					ssp_irq_thread_fn,
+					IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+					"SSP_Int", data);
 	if (ret < 0) {
 		dev_err(&spi->dev, "Irq request fail\n");
-		goto err_setup_irq;
+		goto err_setup_spi;
 	}
 
 	/* Let's start with enabled one so irq balance could be ok */
@@ -553,21 +561,16 @@ static int ssp_probe(struct spi_device *spi)
 		ret = ssp_initialize_mcu(data);
 		if (ret < 0) {
 			dev_err(&spi->dev, "Initialize_mcu failed\n");
-			goto err_read_reg;
+			goto err_setup_spi;
 		}
 	} else {
 		dev_err(&spi->dev, "Firmware version not supported\n");
 		ret = -EPERM;
-		goto err_read_reg;
+		goto err_setup_spi;
 	}
 
 	return 0;
 
-err_read_reg:
-	free_irq(data->spi->irq, data);
-err_setup_irq:
-	mutex_destroy(&data->pending_lock);
-	mutex_destroy(&data->comm_lock);
 err_setup_spi:
 	mfd_remove_devices(&spi->dev);
 
@@ -589,13 +592,8 @@ static void ssp_remove(struct spi_device *spi)
 
 	ssp_clean_pending_list(data);
 
-	free_irq(data->spi->irq, data);
-
 	timer_delete_sync(&data->wdt_timer);
 	cancel_work_sync(&data->work_wdt);
-
-	mutex_destroy(&data->comm_lock);
-	mutex_destroy(&data->pending_lock);
 
 	mfd_remove_devices(&spi->dev);
 }
