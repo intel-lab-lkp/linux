@@ -493,16 +493,12 @@ static int virtio_device_of_init(struct virtio_device *dev)
 	 * Simply don't init of_node in this case.
 	 */
 	if (!of_device_is_compatible(np, compat)) {
-		ret = 0;
-		goto out;
+		of_node_put(np);
+		return 0;
 	}
 
 	dev->dev.of_node = np;
 	return 0;
-
-out:
-	of_node_put(np);
-	return ret;
 }
 
 /**
