@@ -235,6 +235,21 @@ mt7996_set_hw_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 		} else {
 			if (idx == *wcid_keyidx)
 				*wcid_keyidx = -1;
+
+			if (!sta && link->mt76.cipher) {
+				struct ieee80211_bss_conf *lc;
+
+				lc = link_conf_dereference_protected(vif,
+								     link_id);
+				if (!lc)
+					lc = &vif->bss_conf;
+
+				link->mt76.cipher = 0;
+				mt7996_mcu_add_bss_info(link->phy, vif, lc,
+							&link->mt76,
+							msta_link, true);
+			}
+
 			continue;
 		}
 
