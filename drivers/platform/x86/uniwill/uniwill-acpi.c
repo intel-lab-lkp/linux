@@ -1404,7 +1404,12 @@ static int uniwill_get_property(struct power_supply *psy, const struct power_sup
 		if (ret < 0)
 			return ret;
 
-		val->intval = clamp_val(FIELD_GET(CHARGE_CTRL_MASK, regval), 0, 100);
+		regval = FIELD_GET(CHARGE_CTRL_MASK, regval);
+		if (!regval)
+			val->intval = 100;
+		else
+			val->intval = min(regval, 100);
+
 		return 0;
 	default:
 		return -EINVAL;
@@ -1499,10 +1504,31 @@ static int uniwill_remove_battery(struct power_supply *battery, struct acpi_batt
 
 static int uniwill_battery_init(struct uniwill_data *data)
 {
+	unsigned int value, threshold;
 	int ret;
 
 	if (!uniwill_device_supports(data, UNIWILL_FEATURE_BATTERY))
 		return 0;
+
+	ret = regmap_read(data->regmap, EC_ADDR_CHARGE_CTRL, &value);
+	if (ret < 0)
+		return ret;
+
+	/*
+	 * The charge control threshold might be initialized with 0 by
+	 * the EC to signal that said threshold is uninitialized. We thus
+	 * need to replace this value with 100 to signal that we want to
+	 * take control of battery charging. For the sake of completeness
+	 * we also set the charging threshold to 100 if the EC-provided
+	 * value is invalid.
+	 */
+	threshold = FIELD_GET(CHARGE_CTRL_MASK, value);
+	if (threshold == 0 || threshold > 100) {
+		FIELD_MODIFY(CHARGE_CTRL_MASK, &value, 100);
+		ret = regmap_write(data->regmap, EC_ADDR_CHARGE_CTRL, value);
+		if (ret < 0)
+			return ret;
+	}
 
 	ret = devm_mutex_init(data->dev, &data->battery_lock);
 	if (ret < 0)
