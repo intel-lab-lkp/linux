@@ -50,10 +50,7 @@ static inline int ORANGEFS_khandle_cmp(const struct orangefs_khandle *kh1,
 static inline void ORANGEFS_khandle_to(const struct orangefs_khandle *kh,
 				   void *p, int size)
 {
-
-	memcpy(p, kh->u, 16);
-	memset(p + 16, 0, size - 16);
-
+	memcpy_and_pad(p, size, kh->u, 16, 0);
 }
 
 static inline void ORANGEFS_khandle_from(struct orangefs_khandle *kh,
