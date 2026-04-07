@@ -108,6 +108,9 @@ static int powerz_read_data(struct usb_device *udev, struct powerz_priv *priv)
 {
 	int ret;
 
+	if (!priv->urb)
+		return -ENODEV;
+
 	priv->status = -ETIMEDOUT;
 	reinit_completion(&priv->completion);
 
@@ -124,10 +127,11 @@ static int powerz_read_data(struct usb_device *udev, struct powerz_priv *priv)
 	if (ret)
 		return ret;
 
-	if (!wait_for_completion_interruptible_timeout
-	    (&priv->completion, msecs_to_jiffies(5))) {
+	ret = wait_for_completion_interruptible_timeout(&priv->completion,
+							msecs_to_jiffies(5));
+	if (ret <= 0) {
 		usb_kill_urb(priv->urb);
-		return -EIO;
+		return ret ? ret : -EIO;
 	}
 
 	if (priv->urb->actual_length < sizeof(struct powerz_sensor_data))
@@ -224,15 +228,16 @@ static int powerz_probe(struct usb_interface *intf,
 	mutex_init(&priv->mutex);
 	init_completion(&priv->completion);
 
+	usb_set_intfdata(intf, priv);
+
 	hwmon_dev =
 	    devm_hwmon_device_register_with_info(parent, DRIVER_NAME, priv,
 						 &powerz_chip_info, NULL);
 	if (IS_ERR(hwmon_dev)) {
+		usb_set_intfdata(intf, NULL);
 		usb_free_urb(priv->urb);
 		return PTR_ERR(hwmon_dev);
 	}
-
-	usb_set_intfdata(intf, priv);
 
 	return 0;
 }
@@ -241,9 +246,12 @@ static void powerz_disconnect(struct usb_interface *intf)
 {
 	struct powerz_priv *priv = usb_get_intfdata(intf);
 
+	usb_set_intfdata(intf, NULL);
+
 	mutex_lock(&priv->mutex);
 	usb_kill_urb(priv->urb);
 	usb_free_urb(priv->urb);
+	priv->urb = NULL;
 	mutex_unlock(&priv->mutex);
 }
 
