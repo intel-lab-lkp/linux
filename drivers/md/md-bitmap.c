@@ -2618,7 +2618,7 @@ location_store(struct mddev *mddev, const char *buf, size_t len)
 			goto out;
 		}
 
-		bitmap_destroy(mddev);
+		md_bitmap_destroy(mddev);
 		mddev->bitmap_info.offset = 0;
 		if (mddev->bitmap_info.file) {
 			struct file *f = mddev->bitmap_info.file;
@@ -2653,15 +2653,20 @@ location_store(struct mddev *mddev, const char *buf, size_t len)
 				goto out;
 			}
 
+			/*
+			 * lockless bitmap shoudle have set bitmap_id
+			 * using bitmap_type, so always ID_BITMAP.
+			 */
+			mddev->bitmap_id = ID_BITMAP;
 			mddev->bitmap_info.offset = offset;
-			rv = bitmap_create(mddev);
+			rv = md_bitmap_create(mddev);
 			if (rv)
 				goto out;
 
 			rv = bitmap_load(mddev);
 			if (rv) {
 				mddev->bitmap_info.offset = 0;
-				bitmap_destroy(mddev);
+				md_bitmap_destroy(mddev);
 				goto out;
 			}
 		}
