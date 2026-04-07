@@ -145,7 +145,7 @@ static ssize_t evm_read_xattrs(struct file *filp, char __user *buf,
 		size += strlen(xattr->name) + 1;
 	}
 
-	temp = kmalloc(size + 1, GFP_KERNEL);
+	temp = kzalloc(size + 1, GFP_KERNEL);
 	if (!temp) {
 		mutex_unlock(&xattr_list_mutex);
 		return -ENOMEM;
