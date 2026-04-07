@@ -2555,10 +2555,12 @@ static ssize_t recompress_store(struct device *dev,
 		if (!strcmp(param, "type")) {
 			if (!strcmp(val, "idle"))
 				mode = RECOMPRESS_IDLE;
-			if (!strcmp(val, "huge"))
+			else if (!strcmp(val, "huge"))
 				mode = RECOMPRESS_HUGE;
-			if (!strcmp(val, "huge_idle"))
+			else if (!strcmp(val, "huge_idle"))
 				mode = RECOMPRESS_IDLE | RECOMPRESS_HUGE;
+			else
+				return -EINVAL;
 			continue;
 		}
 
