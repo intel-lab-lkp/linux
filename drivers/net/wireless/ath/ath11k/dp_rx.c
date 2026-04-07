@@ -4512,10 +4512,11 @@ config_refill_ring:
 	return 0;
 }
 
-static void ath11k_dp_mon_set_frag_len(u32 *total_len, u32 *frag_len)
+static void ath11k_dp_mon_set_frag_len(u32 *total_len, u32 *frag_len,
+				       u32 hal_desc_sz)
 {
-	if (*total_len >= (DP_RX_BUFFER_SIZE - sizeof(struct hal_rx_desc))) {
-		*frag_len = DP_RX_BUFFER_SIZE - sizeof(struct hal_rx_desc);
+	if (*total_len >= (DP_RX_BUFFER_SIZE - hal_desc_sz)) {
+		*frag_len = DP_RX_BUFFER_SIZE - hal_desc_sz;
 		*total_len -= *frag_len;
 	} else {
 		*frag_len = *total_len;
@@ -4659,19 +4660,19 @@ static u32 ath11k_dp_rx_mon_comp_ppduid(u32 msdu_ppdu_id, u32 *ppdu_id,
 
 static void ath11k_dp_mon_get_buf_len(struct hal_rx_msdu_desc_info *info,
 				      bool *is_frag, u32 *total_len,
-				      u32 *frag_len, u32 *msdu_cnt)
+				      u32 *frag_len, u32 *msdu_cnt,
+				      u32 hal_desc_sz)
 {
 	if (info->msdu_flags & RX_MSDU_DESC_INFO0_MSDU_CONTINUATION) {
 		if (!*is_frag) {
 			*total_len = info->msdu_len;
 			*is_frag = true;
 		}
-		ath11k_dp_mon_set_frag_len(total_len,
-					   frag_len);
+		ath11k_dp_mon_set_frag_len(total_len, frag_len, hal_desc_sz);
 	} else {
 		if (*is_frag) {
-			ath11k_dp_mon_set_frag_len(total_len,
-						   frag_len);
+			ath11k_dp_mon_set_frag_len(total_len, frag_len,
+						   hal_desc_sz);
 		} else {
 			*frag_len = info->msdu_len;
 		}
@@ -4793,7 +4794,7 @@ u32 ath11k_dp_rx_mon_mpdu_pop(struct ath11k *ar, int mac_id,
 
 			rx_desc = (struct hal_rx_desc *)msdu->data;
 
-			rx_pkt_offset = sizeof(struct hal_rx_desc);
+			rx_pkt_offset = ar->ab->hw_params.hal_desc_sz;
 			l2_hdr_offset = ath11k_dp_rx_h_msdu_end_l3pad(ar->ab, rx_desc);
 
 			if (is_first_msdu) {
@@ -4824,7 +4825,8 @@ u32 ath11k_dp_rx_mon_mpdu_pop(struct ath11k *ar, int mac_id,
 			}
 			ath11k_dp_mon_get_buf_len(&msdu_list.msdu_info[i],
 						  &is_frag, &total_len,
-						  &frag_len, &msdu_cnt);
+						  &frag_len, &msdu_cnt,
+						  rx_pkt_offset);
 			rx_buf_size = rx_pkt_offset + l2_hdr_offset + frag_len;
 
 			ath11k_dp_pkt_set_pktlen(msdu, rx_buf_size);
@@ -5425,7 +5427,7 @@ ath11k_dp_rx_full_mon_mpdu_pop(struct ath11k *ar,
 
 			rx_desc = (struct hal_rx_desc *)msdu->data;
 
-			rx_pkt_offset = sizeof(struct hal_rx_desc);
+			rx_pkt_offset = ar->ab->hw_params.hal_desc_sz;
 			l2_hdr_offset = ath11k_dp_rx_h_msdu_end_l3pad(ar->ab, rx_desc);
 
 			if (is_first_msdu) {
@@ -5440,7 +5442,8 @@ ath11k_dp_rx_full_mon_mpdu_pop(struct ath11k *ar,
 
 			ath11k_dp_mon_get_buf_len(&msdu_list.msdu_info[i],
 						  &is_frag, &total_len,
-						  &frag_len, &msdu_cnt);
+						  &frag_len, &msdu_cnt,
+						  rx_pkt_offset);
 
 			rx_buf_size = rx_pkt_offset + l2_hdr_offset + frag_len;
 
