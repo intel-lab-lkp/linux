@@ -8,6 +8,8 @@
 #ifndef __TEGRA210_ADX_H__
 #define __TEGRA210_ADX_H__
 
+#include <linux/types.h>
+
 /* Register offsets from TEGRA210_ADX*_BASE */
 #define TEGRA210_ADX_RX_STATUS		0x0c
 #define TEGRA210_ADX_RX_INT_STATUS	0x10
@@ -88,8 +90,7 @@ struct tegra210_adx_soc_data {
 
 struct tegra210_adx {
 	struct regmap *regmap;
-	unsigned int *map;
-	unsigned int *byte_mask;
+	u16 *map;
 	const struct tegra210_adx_soc_data *soc_data;
 };
 
