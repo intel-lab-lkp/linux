@@ -353,7 +353,11 @@ static int __mbox_bind_client(struct mbox_chan *chan, struct mbox_client *cl)
 
 		if (ret) {
 			dev_err(dev, "Unable to startup the chan (%d)\n", ret);
-			mbox_free_channel(chan);
+			scoped_guard(spinlock_irqsave, &chan->lock) {
+				chan->cl = NULL;
+				if (chan->txdone_method == TXDONE_BY_ACK)
+					chan->txdone_method = TXDONE_BY_POLL;
+			}
 			return ret;
 		}
 	}
