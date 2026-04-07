@@ -129,3 +129,6 @@ SCHED_FEAT(LATENCY_WARN, false)
  */
 SCHED_FEAT(NI_RANDOM, true)
 SCHED_FEAT(NI_RATE, true)
+
+/* Generic steal time monitor to act on cpu_preferred_mask */
+SCHED_FEAT(STEAL_MONITOR, false)
