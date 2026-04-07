@@ -4167,6 +4167,7 @@ static inline bool task_can_run_on_preferred_cpu(struct task_struct *p)
 void sched_push_current_non_preferred_cpu(struct rq *rq);
 void sched_init_steal_monitor(void);
 void sched_steal_detection_work(struct work_struct *work);
+void sched_trigger_steal_computation(int cpu);
 #else
 static inline bool task_can_run_on_preferred_cpu(struct task_struct *p)
 {
@@ -4175,6 +4176,7 @@ static inline bool task_can_run_on_preferred_cpu(struct task_struct *p)
 
 static inline void sched_push_current_non_preferred_cpu(struct rq *rq) { }
 static inline void sched_init_steal_monitor(void) { }
+static inline void sched_trigger_steal_computation(int cpu) { }
 #endif
 
 #endif /* _KERNEL_SCHED_SCHED_H */

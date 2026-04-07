@@ -5635,6 +5635,10 @@ void sched_tick(void)
 		rq->idle_balance = idle_cpu(cpu);
 		sched_balance_trigger(rq);
 	}
+
+	/* This feature works currently on SMT system */
+	if (sched_feat(STEAL_MONITOR) && IS_ENABLED(CONFIG_SCHED_SMT))
+		sched_trigger_steal_computation(cpu);
 }
 
 #ifdef CONFIG_NO_HZ_FULL
@@ -11295,5 +11299,28 @@ void sched_steal_detection_work(struct work_struct *work)
 	/* Update the prev_time for next iteration*/
 	now = ktime_get();
 	sm->prev_time = now;
+}
+
+void sched_trigger_steal_computation(int cpu)
+{
+	int first_hk_cpu = cpumask_first_and(housekeeping_cpumask(HK_TYPE_KERNEL_NOISE),
+					     cpu_online_mask);
+	ktime_t now;
+
+	/* Done by first online housekeeping CPU only */
+	if (likely(cpu != first_hk_cpu))
+		return;
+
+	/*
+	 * Since everything is updated by first housekeeping CPU,
+	 * There is no need for complex syncronization.
+	 */
+	now = ktime_get();
+
+	/* Default is once per second */
+	if (likely((now - steal_mon.prev_time) < steal_mon.sampling_period_ms * NSEC_PER_MSEC))
+		return;
+
+	schedule_work_on(first_hk_cpu, &steal_mon.work);
 }
 #endif
