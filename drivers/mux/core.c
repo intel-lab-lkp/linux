@@ -564,9 +564,10 @@ static struct mux_control *mux_get(struct device *dev, const char *mux_name,
 	}
 
 	mux_chip = of_find_mux_chip_by_node(args.np);
-	of_node_put(args.np);
-	if (!mux_chip)
-		return ERR_PTR(-EPROBE_DEFER);
+	if (!mux_chip) {
+		ret = -EPROBE_DEFER;
+		goto put_and_ret_err;
+	}
 
 	controller = 0;
 	if (state) {
@@ -575,7 +576,8 @@ static struct mux_control *mux_get(struct device *dev, const char *mux_name,
 			dev_err(dev, "%pOF: wrong #mux-state-cells for %pOF\n",
 				np, args.np);
 			put_device(&mux_chip->dev);
-			return ERR_PTR(-EINVAL);
+			ret = -EINVAL;
+			goto put_and_ret_err;
 		}
 
 		if (args.args_count == 2) {
@@ -591,7 +593,8 @@ static struct mux_control *mux_get(struct device *dev, const char *mux_name,
 			dev_err(dev, "%pOF: wrong #mux-control-cells for %pOF\n",
 				np, args.np);
 			put_device(&mux_chip->dev);
-			return ERR_PTR(-EINVAL);
+			ret = -EINVAL;
+			goto put_and_ret_err;
 		}
 
 		if (args.args_count)
@@ -602,10 +605,16 @@ static struct mux_control *mux_get(struct device *dev, const char *mux_name,
 		dev_err(dev, "%pOF: bad mux controller %u specified in %pOF\n",
 			np, controller, args.np);
 		put_device(&mux_chip->dev);
-		return ERR_PTR(-EINVAL);
+		ret = -EINVAL;
+		goto put_and_ret_err;
 	}
 
+	of_node_put(args.np);
 	return &mux_chip->mux[controller];
+
+put_and_ret_err:
+	of_node_put(args.np);
+	return ERR_PTR(ret);
 }
 
 /**
