@@ -4140,4 +4140,16 @@ DEFINE_CLASS_IS_UNCONDITIONAL(sched_change)
 
 #include "ext.h"
 
+#ifdef CONFIG_PARAVIRT
+static inline bool task_can_run_on_preferred_cpu(struct task_struct *p)
+{
+	return cpumask_intersects(p->cpus_ptr, cpu_preferred_mask);
+}
+#else
+static inline bool task_can_run_on_preferred_cpu(struct task_struct *p)
+{
+	return true;
+}
+#endif
+
 #endif /* _KERNEL_SCHED_SCHED_H */

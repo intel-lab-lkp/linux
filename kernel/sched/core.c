@@ -2405,9 +2405,16 @@ static inline bool is_cpu_allowed(struct task_struct *p, int cpu)
 	if (is_migration_disabled(p))
 		return cpu_online(cpu);
 
-	/* Non kernel threads are not allowed during either online or offline. */
-	if (!(p->flags & PF_KTHREAD))
-		return cpu_active(cpu);
+	/*
+	 * Non kernel threads are not allowed during either online or offline.
+	 * Ensure it is a preferred CPU to avoid further contention
+	 */
+	if (!(p->flags & PF_KTHREAD)) {
+		if (!cpu_active(cpu))
+			return false;
+		if (!cpu_preferred(cpu) && task_can_run_on_preferred_cpu(p))
+			return false;
+	}
 
 	/* KTHREAD_IS_PER_CPU is always allowed. */
 	if (kthread_is_per_cpu(p))
@@ -2415,6 +2422,10 @@ static inline bool is_cpu_allowed(struct task_struct *p, int cpu)
 
 	/* Regular kernel threads don't get to stay during offline. */
 	if (cpu_dying(cpu))
+		return false;
+
+	/* Try on preferred CPU first */
+	if (!cpu_preferred(cpu) && task_can_run_on_preferred_cpu(p))
 		return false;
 
 	/* But are allowed during online. */
