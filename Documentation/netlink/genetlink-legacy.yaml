@@ -270,6 +270,23 @@ properties:
                       For string attributes, do not check whether attribute
                       contains the terminating null character.
                     type: boolean
+              default:
+                description: |
+                  Default value expression (C macro or literal) for this attribute.
+                  Used to generate set_defaults() initialization functions.
+                type: [ string, integer ]
+              required:
+                description: |
+                  If true, from_attrs() returns an error when this attribute is
+                  missing from the request message.
+                type: boolean
+              nla-policy-type:
+                description: |
+                  Override the NLA type used in kernel policy arrays. Use this when
+                  the semantic type differs from the wire type for backward compat
+                  (e.g., s32 fields that must use NLA_U32 on the wire because
+                  userspace predates NLA_S32 support).
+                enum: [ u8, u16, u32, u64, s8, s16, s32, s64 ]
               sub-type: *attr-type
               display-hint: *display-hint
               # Start genetlink-c
@@ -471,3 +488,9 @@ properties:
           to store the socket state. The type / structure is internal
           to the kernel, and is not defined in the spec.
         type: string
+      emit-structs:
+        description: |
+          Generate C struct declarations and serialization helpers
+          (from_attrs, to_skb, set_defaults) in the kernel header
+          and source.
+        type: boolean
