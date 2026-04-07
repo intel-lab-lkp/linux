@@ -24,6 +24,7 @@ struct device;
 #define GPIO_GENERIC_NO_SET_ON_INPUT		BIT(6)
 #define GPIO_GENERIC_PINCTRL_BACKEND		BIT(7) /* Call pinctrl direction setters */
 #define GPIO_GENERIC_NO_INPUT			BIT(8) /* only output */
+#define GPIO_GENERIC_PORT_MAPPED		BIT(9) /* port-mapped */
 
 /**
  * struct gpio_generic_chip_config - Generic GPIO chip configuration data
@@ -60,6 +61,19 @@ struct gpio_generic_chip_config {
 	void __iomem *dirout;
 	void __iomem *dirin;
 	unsigned long flags;
+};
+
+/**
+ * struct gpio_chip_reg - Generic GPIO chip register descriptor for MMIO or port-mapped I/O
+ * @mmio: MMIO register address.
+ * @port: I/O Port register address.
+ *
+ * Describes a GPIO chip register located either in MMIO space or in
+ * port-mapped I/O space.
+ */
+struct gpio_chip_reg {
+	void __iomem *mmio;
+	unsigned long port;
 };
 
 /**
