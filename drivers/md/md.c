@@ -4269,6 +4269,8 @@ bitmap_type_show(struct mddev *mddev, char *page)
 	xa_for_each(&md_submodule, i, head) {
 		if (head->type != MD_BITMAP)
 			continue;
+		if (head->id == ID_BITMAP_NONE)
+			continue;
 
 		if (mddev->bitmap_id == head->id)
 			len += sprintf(page + len, "[%s] ", head->name);
