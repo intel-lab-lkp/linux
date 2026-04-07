@@ -150,6 +150,7 @@ struct vfio_ap_queue {
 	struct list_head reset_qnode;
 	struct ap_queue_status reset_status;
 	struct work_struct reset_work;
+	struct ap_tapq_hwinfo hwinfo;
 };
 
 int vfio_ap_mdev_register(void);
