@@ -18,6 +18,7 @@
 #include <linux/hugetlb.h>
 #include <linux/export.h>
 #include <linux/sort.h>
+#include <linux/rcutree.h>
 
 #include <asm/cpu.h>
 #include <asm/cpu-type.h>
@@ -742,12 +743,18 @@ static void __ref r4k_tlb_uniquify_write(struct tlbent *tlb_vpns, int tlbsize)
  */
 static void __ref r4k_tlb_uniquify(void)
 {
+	unsigned int cpu = raw_smp_processor_id();
 	int tlbsize = current_cpu_data.tlbsize;
 	bool use_slab = slab_is_available();
+	static bool secondary = false;
 	phys_addr_t tlb_vpn_size;
 	struct tlbent *tlb_vpns;
 
 	tlb_vpn_size = tlbsize * sizeof(*tlb_vpns);
+	if (secondary)
+		rcu_cpu_starting(cpu);
+	else
+		secondary = true;
 	tlb_vpns = (use_slab ?
 		    kmalloc(tlb_vpn_size, GFP_ATOMIC) :
 		    memblock_alloc_raw(tlb_vpn_size, sizeof(*tlb_vpns)));
