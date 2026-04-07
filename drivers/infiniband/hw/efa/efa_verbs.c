@@ -169,6 +169,11 @@ static inline struct efa_ah *to_eah(struct ib_ah *ibah)
 	return container_of(ibah, struct efa_ah, ibah);
 }
 
+static inline struct efa_comp_cntr *to_ecc(struct ib_comp_cntr *ibcc)
+{
+	return container_of(ibcc, struct efa_comp_cntr, ibcc);
+}
+
 static inline struct efa_user_mmap_entry *
 to_emmap(struct rdma_user_mmap_entry *rdma_entry)
 {
@@ -245,6 +250,7 @@ int efa_query_device(struct ib_device *ibdev,
 	props->max_recv_sge = dev_attr->max_rq_sge;
 	props->max_sge_rd = dev_attr->max_wr_rdma_sge;
 	props->max_pkeys = 1;
+	props->max_comp_cntr = dev_attr->max_event_counters / 2;
 
 	if (udata && udata->outlen) {
 		resp.max_sq_sge = dev_attr->max_sq_sge;
@@ -269,6 +275,9 @@ int efa_query_device(struct ib_device *ibdev,
 
 		if (EFA_DEV_CAP(dev, UNSOLICITED_WRITE_RECV))
 			resp.device_caps |= EFA_QUERY_DEVICE_CAPS_UNSOLICITED_WRITE_RECV;
+
+		if (EFA_DEV_CAP(dev, EVENT_COUNTERS))
+			resp.device_caps |= EFA_QUERY_DEVICE_CAPS_COMP_CNTR;
 
 		if (dev->neqs)
 			resp.device_caps |= EFA_QUERY_DEVICE_CAPS_CQ_NOTIFICATIONS;
@@ -2266,6 +2275,174 @@ enum rdma_link_layer efa_port_link_layer(struct ib_device *ibdev,
 					 u32 port_num)
 {
 	return IB_LINK_LAYER_UNSPECIFIED;
+}
+
+static int efa_create_event_counter(struct efa_dev *dev, struct ib_umem *umem,
+				    u16 uarn, u32 *handle)
+{
+	struct efa_com_create_counter_params params = {};
+	struct efa_com_create_counter_result result;
+	int err;
+
+	params.uarn = uarn;
+	params.dma_addr = ib_umem_start_dma_addr(umem);
+
+	err = efa_com_create_counter(&dev->edev, &params, &result);
+	if (err)
+		return err;
+
+	*handle = result.cntr_handle;
+	return 0;
+}
+
+static int efa_destroy_event_counter(struct efa_dev *dev, u32 handle)
+{
+	struct efa_com_destroy_counter_params params = {
+		.cntr_handle = handle,
+	};
+
+	return efa_com_destroy_counter(&dev->edev, &params);
+}
+
+int efa_create_comp_cntr(struct ib_comp_cntr *ibcc, struct uverbs_attr_bundle *attrs)
+{
+	struct efa_dev *dev = to_edev(ibcc->device);
+	struct efa_comp_cntr *cc = to_ecc(ibcc);
+	struct efa_ucontext *ucontext;
+	int err;
+
+	if (!ibcc->comp_umem || !ibcc->err_umem) {
+		ibdev_dbg(&dev->ibdev, "Completion Counter without umem isn't supported\n");
+		return -EOPNOTSUPP;
+	}
+
+	ucontext = rdma_udata_to_drv_context(&attrs->driver_udata, struct efa_ucontext,
+					     ibucontext);
+
+	err = efa_create_event_counter(dev, ibcc->comp_umem, ucontext->uarn, &cc->comp_handle);
+	if (err) {
+		ibdev_dbg(&dev->ibdev, "Failed to create comp event counter [%d]\n", err);
+		return err;
+	}
+
+	err = efa_create_event_counter(dev, ibcc->err_umem, ucontext->uarn, &cc->err_handle);
+	if (err) {
+		ibdev_dbg(&dev->ibdev, "Failed to create err event counter [%d]\n", err);
+		efa_destroy_event_counter(dev, cc->comp_handle);
+		return err;
+	}
+
+	ibcc->comp_count_max_value = dev->dev_attr.event_counter_max_val;
+	ibcc->err_count_max_value = dev->dev_attr.event_counter_max_val;
+
+	return 0;
+}
+
+int efa_destroy_comp_cntr(struct ib_comp_cntr *ibcc)
+{
+	struct efa_dev *dev = to_edev(ibcc->device);
+	struct efa_comp_cntr *cc = to_ecc(ibcc);
+	int err;
+
+	err = efa_destroy_event_counter(dev, cc->comp_handle);
+	if (err)
+		return err;
+
+	return efa_destroy_event_counter(dev, cc->err_handle);
+}
+
+static int efa_modify_event_counter(struct efa_dev *dev, u32 handle, u8 operation, u64 value)
+{
+	struct efa_com_modify_counter_params params = {
+		.cntr_handle = handle,
+		.operation = operation,
+		.value = value,
+	};
+
+	return efa_com_modify_counter(&dev->edev, &params);
+}
+
+int efa_set_comp_cntr(struct ib_comp_cntr *ibcc, u64 value)
+{
+	return efa_modify_event_counter(to_edev(ibcc->device), to_ecc(ibcc)->comp_handle,
+					EFA_ADMIN_COUNTER_MODIFY_SET, value);
+}
+
+int efa_set_err_comp_cntr(struct ib_comp_cntr *ibcc, u64 value)
+{
+	return efa_modify_event_counter(to_edev(ibcc->device), to_ecc(ibcc)->err_handle,
+					EFA_ADMIN_COUNTER_MODIFY_SET, value);
+}
+
+int efa_inc_comp_cntr(struct ib_comp_cntr *ibcc, u64 amount)
+{
+	return efa_modify_event_counter(to_edev(ibcc->device), to_ecc(ibcc)->comp_handle,
+					EFA_ADMIN_COUNTER_MODIFY_ADD, amount);
+}
+
+int efa_inc_err_comp_cntr(struct ib_comp_cntr *ibcc, u64 amount)
+{
+	return efa_modify_event_counter(to_edev(ibcc->device), to_ecc(ibcc)->err_handle,
+					EFA_ADMIN_COUNTER_MODIFY_ADD, amount);
+}
+
+static u32 efa_comp_cntr_op_to_comp_events(u32 op_mask)
+{
+	u32 events = 0;
+
+	if (op_mask & IB_UVERBS_COMP_CNTR_ATTACH_OP_SEND)
+		EFA_SET(&events, EFA_ADMIN_COUNTER_ATTACH_QP_EVENTS_SEND_COMP, 1);
+	if (op_mask & IB_UVERBS_COMP_CNTR_ATTACH_OP_RECV)
+		EFA_SET(&events, EFA_ADMIN_COUNTER_ATTACH_QP_EVENTS_RECV_COMP, 1);
+	if (op_mask & IB_UVERBS_COMP_CNTR_ATTACH_OP_RDMA_READ)
+		EFA_SET(&events, EFA_ADMIN_COUNTER_ATTACH_QP_EVENTS_READ_COMP, 1);
+	if (op_mask & IB_UVERBS_COMP_CNTR_ATTACH_OP_REMOTE_RDMA_READ)
+		EFA_SET(&events, EFA_ADMIN_COUNTER_ATTACH_QP_EVENTS_REMOTE_READ_COMP, 1);
+	if (op_mask & IB_UVERBS_COMP_CNTR_ATTACH_OP_RDMA_WRITE)
+		EFA_SET(&events, EFA_ADMIN_COUNTER_ATTACH_QP_EVENTS_WRITE_COMP, 1);
+	if (op_mask & IB_UVERBS_COMP_CNTR_ATTACH_OP_REMOTE_RDMA_WRITE)
+		EFA_SET(&events, EFA_ADMIN_COUNTER_ATTACH_QP_EVENTS_REMOTE_WRITE_COMP, 1);
+
+	return events;
+}
+
+static u32 efa_comp_cntr_op_to_err_events(u32 op_mask)
+{
+	u32 events = 0;
+
+	if (op_mask & IB_UVERBS_COMP_CNTR_ATTACH_OP_SEND)
+		EFA_SET(&events, EFA_ADMIN_COUNTER_ATTACH_QP_EVENTS_SEND_COMP_ERR, 1);
+	if (op_mask & IB_UVERBS_COMP_CNTR_ATTACH_OP_RECV)
+		EFA_SET(&events, EFA_ADMIN_COUNTER_ATTACH_QP_EVENTS_RECV_COMP_ERR, 1);
+	if (op_mask & IB_UVERBS_COMP_CNTR_ATTACH_OP_RDMA_READ)
+		EFA_SET(&events, EFA_ADMIN_COUNTER_ATTACH_QP_EVENTS_READ_COMP_ERR, 1);
+	if (op_mask & IB_UVERBS_COMP_CNTR_ATTACH_OP_RDMA_WRITE)
+		EFA_SET(&events, EFA_ADMIN_COUNTER_ATTACH_QP_EVENTS_WRITE_COMP_ERR, 1);
+
+	return events;
+}
+
+int efa_qp_attach_comp_cntr(struct ib_qp *ibqp, struct ib_comp_cntr *ibcc,
+			    struct ib_comp_cntr_attach_attr *attr)
+{
+	struct efa_com_attach_counter_params params;
+	struct efa_dev *dev = to_edev(ibqp->device);
+	struct efa_comp_cntr *cc = to_ecc(ibcc);
+	struct efa_qp *qp = to_eqp(ibqp);
+	int err;
+
+	params.cntr_handle = cc->comp_handle;
+	params.qp_handle = qp->qp_handle;
+	params.events = efa_comp_cntr_op_to_comp_events(attr->op_mask);
+
+	err = efa_com_attach_counter(&dev->edev, &params);
+	if (err)
+		return err;
+
+	params.cntr_handle = cc->err_handle;
+	params.events = efa_comp_cntr_op_to_err_events(attr->op_mask);
+
+	return efa_com_attach_counter(&dev->edev, &params);
 }
 
 DECLARE_UVERBS_NAMED_METHOD(EFA_IB_METHOD_MR_QUERY,
