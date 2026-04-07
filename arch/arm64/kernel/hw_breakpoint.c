@@ -187,9 +187,9 @@ static int is_compat_bp(struct perf_event *bp)
  *	-ENOSPC if no slot is available/matches
  *	-EINVAL on wrong operations parameter
  */
-static int hw_breakpoint_slot_setup(struct perf_event **slots, int max_slots,
-				    struct perf_event *bp,
-				    enum hw_breakpoint_ops ops)
+static nokprobe_inline int
+hw_breakpoint_slot_setup(struct perf_event **slots, int max_slots,
+			 struct perf_event *bp, enum hw_breakpoint_ops ops)
 {
 	int i;
 	struct perf_event **slot;
@@ -283,6 +283,7 @@ static int hw_breakpoint_control(struct perf_event *bp,
 
 	return 0;
 }
+NOKPROBE_SYMBOL(hw_breakpoint_control);
 
 /*
  * Install a perf counter breakpoint.
@@ -718,8 +719,8 @@ NOKPROBE_SYMBOL(do_breakpoint);
  * The function returns the distance of the address from the bytes watched by
  * the watchpoint. In case of an exact match, it returns 0.
  */
-static u64 get_distance_from_watchpoint(unsigned long addr, u64 val,
-					struct arch_hw_breakpoint_ctrl *ctrl)
+static nokprobe_inline u64 get_distance_from_watchpoint(unsigned long addr, u64 val,
+							struct arch_hw_breakpoint_ctrl *ctrl)
 {
 	u64 wp_low, wp_high;
 	u32 lens, lene;
@@ -739,8 +740,8 @@ static u64 get_distance_from_watchpoint(unsigned long addr, u64 val,
 		return 0;
 }
 
-static int watchpoint_report(struct perf_event *wp, unsigned long addr,
-			     struct pt_regs *regs)
+static nokprobe_inline int watchpoint_report(struct perf_event *wp, unsigned long addr,
+					     struct pt_regs *regs)
 {
 	int step = is_default_overflow_handler(wp);
 	struct arch_hw_breakpoint *info = counter_arch_bp(wp);
