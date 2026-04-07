@@ -3843,21 +3843,13 @@ static void clear_mm_walk(void)
 		kfree(walk);
 }
 
-static bool inc_min_seq(struct lruvec *lruvec, int type, int swappiness)
+static bool inc_min_seq(struct lruvec *lruvec, int type)
 {
 	int zone;
 	int remaining = MAX_LRU_BATCH;
 	struct lru_gen_folio *lrugen = &lruvec->lrugen;
 	int hist = lru_hist_from_seq(lrugen->min_seq[type]);
 	int new_gen, old_gen = lru_gen_from_seq(lrugen->min_seq[type]);
-
-	/* For file type, skip the check if swappiness is anon only */
-	if (type && (swappiness == SWAPPINESS_ANON_ONLY))
-		goto done;
-
-	/* For anon type, skip the check if swappiness is zero (file only) */
-	if (!type && !swappiness)
-		goto done;
 
 	/* prevent cold/hot inversion if the type is evictable */
 	for (zone = 0; zone < MAX_NR_ZONES; zone++) {
@@ -3889,7 +3881,7 @@ static bool inc_min_seq(struct lruvec *lruvec, int type, int swappiness)
 				return false;
 		}
 	}
-done:
+
 	reset_ctrl_pos(lruvec, type, true);
 	WRITE_ONCE(lrugen->min_seq[type], lrugen->min_seq[type] + 1);
 
@@ -3975,7 +3967,7 @@ restart:
 		if (get_nr_gens(lruvec, type) != MAX_NR_GENS)
 			continue;
 
-		if (inc_min_seq(lruvec, type, swappiness))
+		if (inc_min_seq(lruvec, type))
 			continue;
 
 		spin_unlock_irq(&lruvec->lru_lock);
