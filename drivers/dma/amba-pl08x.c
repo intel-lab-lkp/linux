@@ -268,12 +268,12 @@ struct pl08x_dma_chan {
  * @adev: the corresponding AMBA (PrimeCell) bus entry
  * @vd: vendor data for this PL08x variant
  * @pd: platform data passed in from the platform/machine
- * @phy_chans: array of data for the physical channels
  * @pool: a pool for the LLI descriptors
  * @lli_buses: bitmask to or in to LLI pointer selecting AHB port for LLI
  * fetches
  * @mem_buses: set to indicate memory transfers on AHB2.
  * @lli_words: how many words are used in each LLI item for this variant
+ * @phy_chans: array of data for the physical channels
  */
 struct pl08x_driver_data {
 	struct dma_device slave;
@@ -283,11 +283,11 @@ struct pl08x_driver_data {
 	struct amba_device *adev;
 	const struct vendor_data *vd;
 	struct pl08x_platform_data *pd;
-	struct pl08x_phy_chan *phy_chans;
 	struct dma_pool *pool;
 	u8 lli_buses;
 	u8 mem_buses;
 	u8 lli_words;
+	struct pl08x_phy_chan phy_chans[];
 };
 
 /*
@@ -2709,7 +2709,7 @@ static int pl08x_probe(struct amba_device *adev, const struct amba_id *id)
 		goto out_no_pl08x;
 
 	/* Create the driver state holder */
-	pl08x = kzalloc_obj(*pl08x);
+	pl08x = kzalloc_flex(*pl08x, phy_chans, vd->channels);
 	if (!pl08x) {
 		ret = -ENOMEM;
 		goto out_no_pl08x;
@@ -2854,13 +2854,6 @@ static int pl08x_probe(struct amba_device *adev, const struct amba_id *id)
 		goto out_no_irq;
 	}
 
-	/* Initialize physical channels */
-	pl08x->phy_chans = kzalloc_objs(*pl08x->phy_chans, vd->channels);
-	if (!pl08x->phy_chans) {
-		ret = -ENOMEM;
-		goto out_no_phychans;
-	}
-
 	for (i = 0; i < vd->channels; i++) {
 		struct pl08x_phy_chan *ch = &pl08x->phy_chans[i];
 
@@ -2962,8 +2955,6 @@ out_no_memcpy_reg:
 out_no_slave:
 	pl08x_free_virtual_channels(&pl08x->memcpy);
 out_no_memcpy:
-	kfree(pl08x->phy_chans);
-out_no_phychans:
 	free_irq(adev->irq[0], pl08x);
 out_no_irq:
 	dma_pool_destroy(pl08x->pool);
