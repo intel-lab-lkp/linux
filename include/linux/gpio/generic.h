@@ -49,6 +49,11 @@ struct device;
  *         assumed that setting a line to 1 in this register will turn that
  *         line into an input line. Conversely, setting the line to 0 will
  *         turn that line into an output.
+ * @dat_port: Port-mapped counterpart of @dat.
+ * @set_port: Port-mapped counterpart of @set.
+ * @clr_port: Port-mapped counterpart of @clr.
+ * @dirout_port: Port-mapped counterpart of @dirout.
+ * @dirin_port: Port-mapped counterpart of @dirin.
  * @flags: Different flags that will affect the behaviour of the device, such
  *         as endianness etc.
  */
@@ -60,6 +65,11 @@ struct gpio_generic_chip_config {
 	void __iomem *clr;
 	void __iomem *dirout;
 	void __iomem *dirin;
+	unsigned long dat_port;
+	unsigned long set_port;
+	unsigned long clr_port;
+	unsigned long dirout_port;
+	unsigned long dirin_port;
 	unsigned long flags;
 };
 
