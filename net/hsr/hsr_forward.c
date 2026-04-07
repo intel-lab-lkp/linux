@@ -82,35 +82,33 @@ static bool is_supervision_frame(struct hsr_priv *hsr, struct sk_buff *skb)
 	    hsr_sup_tag->tlv.HSR_TLV_length != sizeof(struct hsr_sup_payload))
 		return false;
 
-	/* Get next tlv */
+	/* Get next TLV */
 	total_length += hsr_sup_tag->tlv.HSR_TLV_length;
-	if (!pskb_may_pull(skb, total_length))
+	if (!pskb_may_pull(skb, total_length + sizeof(struct hsr_sup_tlv)))
 		return false;
 	skb_pull(skb, total_length);
 	hsr_sup_tlv = (struct hsr_sup_tlv *)skb->data;
 	skb_push(skb, total_length);
 
-	/* if this is a redbox supervision frame we need to verify
-	 * that more data is available
-	 */
+	/* If this is a RedBox supervision frame, verify additional data */
 	if (hsr_sup_tlv->HSR_TLV_type == PRP_TLV_REDBOX_MAC) {
-		/* tlv length must be a length of a mac address */
+		/* TLV length must be the size of a MAC address */
 		if (hsr_sup_tlv->HSR_TLV_length != sizeof(struct hsr_sup_payload))
 			return false;
 
-		/* make sure another tlv follows */
+		/* Make sure another TLV follows */
 		total_length += sizeof(struct hsr_sup_tlv) + hsr_sup_tlv->HSR_TLV_length;
-		if (!pskb_may_pull(skb, total_length))
+		if (!pskb_may_pull(skb, total_length + sizeof(struct hsr_sup_tlv)))
 			return false;
 
-		/* get next tlv */
+		/* Get next TLV */
 		skb_pull(skb, total_length);
 		hsr_sup_tlv = (struct hsr_sup_tlv *)skb->data;
 		skb_push(skb, total_length);
 	}
 
-	/* end of tlvs must follow at the end */
-	if (hsr_sup_tlv->HSR_TLV_type == HSR_TLV_EOT &&
+	/* Supervision frame must end with EOT TLV */
+	if (hsr_sup_tlv->HSR_TLV_type != HSR_TLV_EOT ||
 	    hsr_sup_tlv->HSR_TLV_length != 0)
 		return false;
 
