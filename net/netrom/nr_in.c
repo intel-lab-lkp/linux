@@ -36,12 +36,22 @@ static int nr_queue_rx_frame(struct sock *sk, struct sk_buff *skb, int more)
 	nr_start_idletimer(sk);
 
 	if (more) {
+		if ((unsigned int)nr->fraglen + skb->len > USHRT_MAX) {
+			skb_queue_purge(&nr->frag_queue);
+			nr->fraglen = 0;
+			return 1;
+		}
 		nr->fraglen += skb->len;
 		skb_queue_tail(&nr->frag_queue, skb);
 		return 0;
 	}
 
 	if (!more && nr->fraglen > 0) {	/* End of fragment */
+		if ((unsigned int)nr->fraglen + skb->len > USHRT_MAX) {
+			skb_queue_purge(&nr->frag_queue);
+			nr->fraglen = 0;
+			return 1;
+		}
 		nr->fraglen += skb->len;
 		skb_queue_tail(&nr->frag_queue, skb);
 
