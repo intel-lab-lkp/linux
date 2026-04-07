@@ -125,9 +125,6 @@ struct dvb_ca_private {
 	/* number of slots supported by this CA interface */
 	unsigned int slot_count;
 
-	/* information on each slot */
-	struct dvb_ca_slot *slot_info;
-
 	/* wait queues for read() and write() operations */
 	wait_queue_head_t wait_queue;
 
@@ -157,6 +154,9 @@ struct dvb_ca_private {
 
 	/* Whether the device is disconnected */
 	int exit;
+
+	/* information on each slot */
+	struct dvb_ca_slot slot_info[] __counted_by(slot_count);
 };
 
 static void dvb_ca_private_free(struct dvb_ca_private *ca)
@@ -167,7 +167,6 @@ static void dvb_ca_private_free(struct dvb_ca_private *ca)
 	for (i = 0; i < ca->slot_count; i++)
 		vfree(ca->slot_info[i].rx_buffer.data);
 
-	kfree(ca->slot_info);
 	kfree(ca);
 }
 
@@ -1880,20 +1879,15 @@ int dvb_ca_en50221_init(struct dvb_adapter *dvb_adapter,
 		return -EINVAL;
 
 	/* initialise the system data */
-	ca = kzalloc_obj(*ca);
+	ca = kzalloc_flex(*ca, slot_info, slot_count);
 	if (!ca) {
 		ret = -ENOMEM;
 		goto exit;
 	}
+	ca->slot_count = slot_count;
 	kref_init(&ca->refcount);
 	ca->pub = pubca;
 	ca->flags = flags;
-	ca->slot_count = slot_count;
-	ca->slot_info = kzalloc_objs(struct dvb_ca_slot, slot_count);
-	if (!ca->slot_info) {
-		ret = -ENOMEM;
-		goto free_ca;
-	}
 	init_waitqueue_head(&ca->wait_queue);
 	ca->open = 0;
 	ca->wakeup = 0;
@@ -1904,7 +1898,7 @@ int dvb_ca_en50221_init(struct dvb_adapter *dvb_adapter,
 	ret = dvb_register_device(dvb_adapter, &ca->dvbdev, &dvbdev_ca, ca,
 				  DVB_DEVICE_CA, 0);
 	if (ret)
-		goto free_slot_info;
+		goto free_ca;
 
 	/* now initialise each slot */
 	for (i = 0; i < slot_count; i++) {
@@ -1939,8 +1933,6 @@ int dvb_ca_en50221_init(struct dvb_adapter *dvb_adapter,
 
 unregister_device:
 	dvb_unregister_device(ca->dvbdev);
-free_slot_info:
-	kfree(ca->slot_info);
 free_ca:
 	kfree(ca);
 exit:
