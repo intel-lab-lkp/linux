@@ -98,16 +98,82 @@ static void vfio_ap_release_mig_files(struct ap_matrix_mdev *matrix_mdev)
 	}
 }
 
-static ssize_t vfio_ap_save_read(struct file *, char __user *, size_t, loff_t *)
+static ssize_t validate_save_read_parms(struct vfio_ap_migration_file *migf,
+					loff_t *pos, size_t len)
 {
-	/* TODO */
-	return -EOPNOTSUPP;
+	lockdep_assert_held(&matrix_dev->mdevs_lock);
+
+	if (migf->disabled) {
+		dev_err(migf->matrix_mdev->vdev.dev,
+			"%s (%d): migration file is disabled\n",
+			__func__, __LINE__);
+		return -ENODEV;
+	}
+
+	if (*pos > migf->config_sz) {
+		dev_err(migf->matrix_mdev->vdev.dev,
+			"%s (%d): file pos (%llu) exceeds migf->config size (%zu)\n",
+			__func__, __LINE__, *pos, migf->config_sz);
+		return -EINVAL;
+	}
+
+	return 0;
 }
 
-static int vfio_ap_release_migf(struct inode *, struct file *)
+static ssize_t vfio_ap_save_read(struct file *filp, char __user *buf,
+				 size_t len, loff_t *pos)
 {
-	/* TODO */
-	return -EOPNOTSUPP;
+	struct vfio_ap_migration_file *migf;
+	ssize_t ret = 0;
+
+	if (pos)
+		return -ESPIPE;
+
+	mutex_lock(&matrix_dev->mdevs_lock);
+
+	pos = &filp->f_pos;
+	migf = filp->private_data;
+
+	ret = validate_save_read_parms(migf, pos, len);
+	if (ret)
+		goto out_unlock;
+
+	len = min_t(size_t, migf->config_sz - *pos, len);
+	if (len) {
+		if (copy_to_user(buf, (void *)migf->ap_config + *pos, len)) {
+			ret = -EFAULT;
+			dev_err(migf->matrix_mdev->vdev.dev,
+				"%s (%d): failed to copy config data to user\n",
+				__func__, __LINE__);
+			goto out_unlock;
+		}
+
+		*pos += len;
+		ret = len;
+	}
+
+	dev_dbg(migf->matrix_mdev->vdev.dev,
+		"%s (%d): copied %zu bytes of AP config data to user\n",
+		__func__, __LINE__, len);
+
+out_unlock:
+	mutex_unlock(&matrix_dev->mdevs_lock);
+
+	return ret;
+}
+
+static void vfio_ap_deallocate_migf(struct vfio_ap_migration_file *migf);
+
+static int vfio_ap_release_migf(struct inode *inode, struct file *filp)
+{
+	struct vfio_ap_migration_file *migf;
+
+	mutex_lock(&matrix_dev->mdevs_lock);
+	migf = filp->private_data;
+	vfio_ap_deallocate_migf(migf);
+	mutex_unlock(&matrix_dev->mdevs_lock);
+
+	return 0;
 }
 
 static const struct file_operations vfio_ap_save_fops = {
