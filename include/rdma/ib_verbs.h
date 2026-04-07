@@ -453,6 +453,7 @@ struct ib_device_attr {
 	u64			max_dm_size;
 	/* Max entries for sgl for optimized performance per READ */
 	u32			max_sgl_rd;
+	u32			max_comp_cntr;
 };
 
 enum ib_mtu {
@@ -1746,6 +1747,19 @@ struct ib_cq {
 	struct rdma_restrack_entry res;
 };
 
+struct ib_comp_cntr {
+	struct ib_device	*device;
+	struct ib_uobject	*uobject;
+	struct ib_umem		*comp_umem;
+	struct ib_umem		*err_umem;
+	u64			comp_count_max_value;
+	u64			err_count_max_value;
+};
+
+struct ib_comp_cntr_attach_attr {
+	u32 op_mask;
+};
+
 struct ib_srq {
 	struct ib_device       *device;
 	struct ib_pd	       *pd;
@@ -2624,6 +2638,8 @@ struct ib_device_ops {
 			 struct ib_udata *udata);
 	int (*modify_qp)(struct ib_qp *qp, struct ib_qp_attr *qp_attr,
 			 int qp_attr_mask, struct ib_udata *udata);
+	int (*qp_attach_comp_cntr)(struct ib_qp *qp, struct ib_comp_cntr *cc,
+				   struct ib_comp_cntr_attach_attr *attr);
 	int (*query_qp)(struct ib_qp *qp, struct ib_qp_attr *qp_attr,
 			int qp_attr_mask, struct ib_qp_init_attr *qp_init_attr);
 	int (*destroy_qp)(struct ib_qp *qp, struct ib_udata *udata);
@@ -2645,6 +2661,15 @@ struct ib_device_ops {
 	 * post_destroy_cq - Free all kernel resources
 	 */
 	void (*post_destroy_cq)(struct ib_cq *cq);
+	int (*create_comp_cntr)(struct ib_comp_cntr *cc,
+				struct uverbs_attr_bundle *attrs);
+	int (*destroy_comp_cntr)(struct ib_comp_cntr *cc);
+	int (*set_comp_cntr)(struct ib_comp_cntr *cc, u64 value);
+	int (*set_err_comp_cntr)(struct ib_comp_cntr *cc, u64 value);
+	int (*inc_comp_cntr)(struct ib_comp_cntr *cc, u64 amount);
+	int (*inc_err_comp_cntr)(struct ib_comp_cntr *cc, u64 amount);
+	int (*read_comp_cntr)(struct ib_comp_cntr *cc, u64 *value);
+	int (*read_err_comp_cntr)(struct ib_comp_cntr *cc, u64 *value);
 	struct ib_mr *(*get_dma_mr)(struct ib_pd *pd, int mr_access_flags);
 	struct ib_mr *(*reg_user_mr)(struct ib_pd *pd, u64 start, u64 length,
 				     u64 virt_addr, int mr_access_flags,
@@ -2878,6 +2903,7 @@ struct ib_device_ops {
 	DECLARE_RDMA_OBJ_SIZE(ib_ah);
 	DECLARE_RDMA_OBJ_SIZE(ib_counters);
 	DECLARE_RDMA_OBJ_SIZE(ib_cq);
+	DECLARE_RDMA_OBJ_SIZE(ib_comp_cntr);
 	DECLARE_RDMA_OBJ_SIZE(ib_dmah);
 	DECLARE_RDMA_OBJ_SIZE(ib_mw);
 	DECLARE_RDMA_OBJ_SIZE(ib_pd);
