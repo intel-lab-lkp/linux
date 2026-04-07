@@ -1,11 +1,11 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-2.0
 # description: Basic tests on writing to trace_marker_raw
-# requires: trace_marker_raw
+# requires: trace_marker_raw od:program
 # flags: instance
 
 is_little_endian() {
-	if lscpu | grep -q 'Little Endian'; then
+	if [ "$(printf '\001\000\000\000' | od -An -tu4 | tr -d '[:space:]')" = "1" ]; then
 		echo 1;
 	else
 		echo 0;
@@ -34,7 +34,7 @@ make_str() {
 
 	data=`printf -- 'X%.0s' $(seq $cnt)`
 
-	printf "${val}${data}"
+	printf "%b%s" "${val}" "${data}"
 }
 
 write_buffer() {
@@ -47,36 +47,68 @@ write_buffer() {
 
 
 test_multiple_writes() {
+	out_file=$TMPDIR/trace_marker_raw.out
+	match_file=$TMPDIR/trace_marker_raw.lines
+	wait_iter=0
+	pause_on_trace=
 
-	# Write a bunch of data where the id is the count of
-	# data to write
-	for i in `seq 1 10` `seq 101 110` `seq 1001 1010`; do
-		write_buffer $i $i
+	if [ -f options/pause-on-trace ]; then
+		pause_on_trace=`cat options/pause-on-trace`
+		echo 0 > options/pause-on-trace
+	fi
+
+	: > trace
+	cat trace_pipe > $out_file &
+	reader_pid=$!
+	sleep 1
+
+	# Write sizes that cover both the short and long raw-data encodings
+	# without overflowing the trace buffer before we can verify them.
+	for i in `seq 1 12`; do
+		write_buffer 0x12345678 $i
+	done
+
+	while [ "`grep -c ' buf:' $out_file 2> /dev/null || true`" -lt 12 ]; do
+		wait_iter=$((wait_iter + 1))
+		if [ $wait_iter -ge 10 ]; then
+			kill $reader_pid 2> /dev/null || true
+			wait $reader_pid 2> /dev/null || true
+			if [ -n "$pause_on_trace" ]; then
+				echo $pause_on_trace > options/pause-on-trace
+			fi
+			return 1
+		fi
+		sleep 1
 	done
 
 	# add a little buffer
 	echo stop > trace_marker
+	sleep 1
+	kill $reader_pid 2> /dev/null || true
+	wait $reader_pid 2> /dev/null || true
+	if [ -n "$pause_on_trace" ]; then
+		echo $pause_on_trace > options/pause-on-trace
+	fi
 
-	# Check to make sure the number of entries is the id (rounded up by 4)
-	awk '/.*: # [0-9a-f]* / {
-			print;
-			cnt = -1;
-			for (i = 0; i < NF; i++) {
-				# The counter is after the "#" marker
-				if ( $i == "#" ) {
-					i++;
-					cnt = strtonum("0x" $i);
-					num = NF - (i + 1);
-					# The number of items is always rounded up by 4
-					cnt2 = int((cnt + 3) / 4) * 4;
-					if (cnt2 != num) {
-						exit 1;
-					}
-					break;
-				}
-			}
-		}
-	// { if (NR > 30) { exit 0; } } ' trace_pipe;
+	grep ' buf:' $out_file > $match_file || return 1
+	if [ "`wc -l < $match_file`" -ne 12 ]; then
+		cat $match_file
+		return 1
+	fi
+
+	# Check to make sure the number of byte values matches the id exactly.
+	for expected in `seq 1 12`; do
+		line=`sed -n "${expected}p" $match_file`
+		if [ -z "$line" ]; then
+			return 1
+		fi
+		rest=${line#* buf: }
+		set -- $rest
+		if [ "$#" -ne "$expected" ]; then
+			echo "$line"
+			return 1
+		fi
+	done
 }
 
 
@@ -106,13 +138,6 @@ test_buffer() {
 }
 
 ORIG=`cat buffer_size_kb`
-
-# test_multiple_writes test needs at least 12KB buffer
-NEW_SIZE=12
-
-if [ ${ORIG} -lt ${NEW_SIZE} ]; then
-	echo ${NEW_SIZE} > buffer_size_kb
-fi
 
 test_buffer
 if ! test_multiple_writes; then
