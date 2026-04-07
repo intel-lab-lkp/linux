@@ -133,6 +133,20 @@ struct mv_xor_v2_descriptor {
 };
 
 /**
+ * struct mv_xor_v2_sw_desc - implements a xor SW descriptor
+ * @idx: descriptor index
+ * @async_tx: support for the async_tx api
+ * @hw_desc: associated HW descriptor
+ * @free_list: node of the free SW descriprots list
+*/
+struct mv_xor_v2_sw_desc {
+	int idx;
+	struct dma_async_tx_descriptor async_tx;
+	struct mv_xor_v2_descriptor hw_desc;
+	struct list_head free_list;
+};
+
+/**
  * struct mv_xor_v2_device - implements a xor device
  * @lock: lock for the engine
  * @clk: reference to the 'core' clock
@@ -164,25 +178,11 @@ struct mv_xor_v2_device {
 	struct dma_chan	dmachan;
 	dma_addr_t hw_desq;
 	struct mv_xor_v2_descriptor *hw_desq_virt;
-	struct mv_xor_v2_sw_desc *sw_desq;
 	int desc_size;
 	unsigned int npendings;
 	unsigned int hw_queue_idx;
 	unsigned int irq;
-};
-
-/**
- * struct mv_xor_v2_sw_desc - implements a xor SW descriptor
- * @idx: descriptor index
- * @async_tx: support for the async_tx api
- * @hw_desc: associated HW descriptor
- * @free_list: node of the free SW descriprots list
-*/
-struct mv_xor_v2_sw_desc {
-	int idx;
-	struct dma_async_tx_descriptor async_tx;
-	struct mv_xor_v2_descriptor hw_desc;
-	struct list_head free_list;
+	struct mv_xor_v2_sw_desc sw_desq[];
 };
 
 /*
@@ -716,12 +716,12 @@ static int mv_xor_v2_probe(struct platform_device *pdev)
 	struct mv_xor_v2_device *xor_dev;
 	int i, ret = 0;
 	struct dma_device *dma_dev;
-	struct mv_xor_v2_sw_desc *sw_desc;
 
 	BUILD_BUG_ON(sizeof(struct mv_xor_v2_descriptor) !=
 		     MV_XOR_V2_EXT_DESC_SIZE);
 
-	xor_dev = devm_kzalloc(&pdev->dev, sizeof(*xor_dev), GFP_KERNEL);
+	xor_dev = devm_kzalloc(&pdev->dev, struct_size(xor_dev, sw_desq,
+				MV_XOR_V2_DESC_NUM), GFP_KERNEL);
 	if (!xor_dev)
 		return -ENOMEM;
 
@@ -778,15 +778,6 @@ static int mv_xor_v2_probe(struct platform_device *pdev)
 	if (!xor_dev->hw_desq_virt) {
 		ret = -ENOMEM;
 		goto free_msi_irqs;
-	}
-
-	/* alloc memory for the SW descriptors */
-	xor_dev->sw_desq = devm_kcalloc(&pdev->dev,
-					MV_XOR_V2_DESC_NUM, sizeof(*sw_desc),
-					GFP_KERNEL);
-	if (!xor_dev->sw_desq) {
-		ret = -ENOMEM;
-		goto free_hw_desq;
 	}
 
 	spin_lock_init(&xor_dev->lock);
