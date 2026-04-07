@@ -29,8 +29,9 @@ static bool x86__is_snc_supported(void)
 
 	if (!checked_if_snc_supported) {
 
-		/* Graniterapids supports SNC configuration. */
+		/* Emeraldrapids Graniterapids support SNC configuration. */
 		static const char *const supported_cpuids[] = {
+			"GenuineIntel-6-CF", /* Emeraldrapids */
 			"GenuineIntel-6-A[DE]", /* Graniterapids */
 		};
 		char *cpuid = get_cpuid_str((struct perf_cpu){0});
@@ -140,23 +141,42 @@ static int uncore_imc_snc(struct perf_pmu *pmu)
 	// Compute the IMC SNC using lookup tables.
 	unsigned int imc_num;
 	int snc_nodes = snc_nodes_per_l3_cache();
-	const u8 snc2_map[] = {1, 1, 0, 0};
-	const u8 snc3_map[] = {1, 1, 0, 0, 2, 2};
-	const u8 *snc_map;
-	size_t snc_map_len;
+	char *cpuid;
+	static const u8 emr_snc2_map[] = { 0, 0, 1, 1 };
+	static const u8 gnr_snc2_map[] = { 1, 1, 0, 0 };
+	static const u8 snc3_map[] = { 1, 1, 0, 0, 2, 2 };
+	static const u8 *snc_map;
+	static size_t snc_map_len;
 
-	switch (snc_nodes) {
-	case 2:
-		snc_map = snc2_map;
-		snc_map_len = ARRAY_SIZE(snc2_map);
-		break;
-	case 3:
-		snc_map = snc3_map;
-		snc_map_len = ARRAY_SIZE(snc3_map);
-		break;
-	default:
-		/* Error or no lookup support for SNC with >3 nodes. */
-		return 0;
+	/* snc_map is not inited yet. We only look up once to avoid expensive operations. */
+	if (!snc_map) {
+		switch (snc_nodes) {
+		case 2:
+			cpuid = get_cpuid_str((struct perf_cpu){ 0 });
+			if (cpuid) {
+				if (strcmp_cpuid_str("GenuineIntel-6-CF", cpuid) == 0) {
+					snc_map = emr_snc2_map;
+					snc_map_len = ARRAY_SIZE(emr_snc2_map);
+				} else if (strcmp_cpuid_str("GenuineIntel-6-A[DE]", cpuid) == 0) {
+					snc_map = gnr_snc2_map;
+					snc_map_len = ARRAY_SIZE(gnr_snc2_map);
+				}
+				free(cpuid);
+			}
+			break;
+		case 3:
+			snc_map = snc3_map;
+			snc_map_len = ARRAY_SIZE(snc3_map);
+			break;
+		default:
+			/* Error or no lookup support for SNC with >3 nodes. */
+			return 0;
+		}
+
+		if (!snc_map) {
+			pr_warning("Unexpected: can not find snc map config");
+			return 0;
+		}
 	}
 
 	/* Compute SNC for PMU. */
