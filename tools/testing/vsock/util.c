@@ -399,6 +399,14 @@ void recv_buf(int fd, void *buf, size_t len, int flags, ssize_t expected_ret)
 		if (ret == 0 || (ret < 0 && errno != EINTR))
 			break;
 
+		if (flags & MSG_PEEK) {
+			if (ret == expected_ret) {
+				nread = ret;
+				break;
+			}
+			continue;
+		}
+
 		nread += ret;
 	} while (nread < len);
 	timeout_end();
