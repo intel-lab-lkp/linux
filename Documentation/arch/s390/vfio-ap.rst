@@ -1016,7 +1016,7 @@ guest_matrix dyn ap_config
 
 the following features are advertised:
 
----------------+---------------------------------------------------------------+
++--------------+---------------------------------------------------------------+
 | Flag         | Description                                                   |
 +==============+===============================================================+
 | guest_matrix | guest_matrix attribute exists. It reports the matrix of       |
@@ -1025,105 +1025,242 @@ the following features are advertised:
 +--------------+---------------------------------------------------------------+
 | dyn          | Indicates hot plug/unplug of AP adapters, domains and control |
 |              | domains for a guest to which the mdev is attached.            |
-+------------+-----------------------------------------------------------------+
++--------------+---------------------------------------------------------------+
 | ap_config    | ap_config interface for one-shot modifications to mdev config |
 +--------------+---------------------------------------------------------------+
+| migratable   | Indicates that live guest migration is supported for guests   |
+|              | to which crypto devices are passed through                    |
++--------------+---------------------------------------------------------------+
 
-Limitations
-===========
-Live guest migration is not supported for guests using AP devices without
-intervention by a system administrator. Before a KVM guest can be migrated,
-the vfio_ap mediated device must be removed. Unfortunately, it can not be
-removed manually (i.e., echo 1 > /sys/devices/vfio_ap/matrix/$UUID/remove) while
-the mdev is in use by a KVM guest. If the guest is being emulated by QEMU,
-its mdev can be hot unplugged from the guest in one of two ways:
+Live Guest Migration
+====================
+The VFIO AP mediated device is not used to provide userspace with direct access
+to a device as is the case with other devices that use the VFIO framework to
+pass them through to a guest. Instead, it manages AP configuration metadata
+identifying the AP adapters, domains, and control domains to which a guest will
+be granted access. These AP resources are configured by assigning them to a
+vfio-ap mediated device via its sysfs assignment interfaces. When the guest is
+started, the vfio_ap device driver sets the guest's AP configuration
+from the metadata stored with the mediated device. The AP devices
+are not accessed directly through the vfio_ap driver, so the driver has no
+internal device state to migrate. It's sole purpose during migration is to
+ensure that the AP configurations of the source and destination guests are
+compatible.
 
-1. If the KVM guest was started with libvirt, you can hot unplug the mdev via
-   the following commands:
+To be considered compatible, the AP configuration for both the source and
+destination guests must meet these requirements:
 
-      virsh detach-device <guestname> <path-to-device-xml>
+  * Must have the same number of APQNs
 
-      For example, to hot unplug mdev 62177883-f1bb-47f0-914d-32a22e3a8804 from
-      the guest named 'my-guest':
+  * Each APQN assigned to the source guest must also be assigned to the
+    destination guest
 
-         virsh detach-device my-guest ~/config/my-guest-hostdev.xml
+  * Each APQN assigned to the source guest and destination guest must reference
+    a queue with compatible hardware capabilities:
 
-            The contents of my-guest-hostdev.xml:
++--------------+---------------------------------------------------------------+
+| Hardware     | Description                                                   |
+| Capabilities |                                                               |
++==============+===============================================================+
+| facilities   | * AP special command facility (APSC)                          |
+|              | * AP 4096-bit ME PKU commands facility (AP4KM)                |
+|              | * AP 4096-bit CRT PKU commands (AP4KC)                        |
++--------------+---------------------------------------------------------------+
+| mode         | * CCA-mode                                                    |
+|              | * Accelerator-mode                                            |
+|              | * XCP-mode (EP11)                                             |
++--------------+---------------------------------------------------------------+
+| AP extended  | APXA installed                                                |
+| addressing   |                                                               |
++--------------+---------------------------------------------------------------+
+| command      | Command filtering available                                   |
+| filtering    |                                                               |
++--------------+---------------------------------------------------------------+
+| functional   | * Full native card function                                   |
+| capabilities | * Only stateless functions                                    |
++--------------+---------------------------------------------------------------+
+| secure       | The guest running on the source host can not have any queues  |
+| execution    | bound or associated with it                                   |
++--------------+---------------------------------------------------------------+
+| AP type      | * No AP type                                                  |
+|              | * PCICC (Leeds-2)                                             |
+|              | * PCICA (Leeds-2 Lite)                                        |
+|              | * PCIXCC                                                      |
+|              | * CEX2A                                                       |
+|              | * CEX2C                                                       |
+|              | * CEX3A                                                       |
+|              | * CEX3C                                                       |
+|              | * CEX4S                                                       |
+|              | * CEX5S                                                       |
+|              | * CEX6S                                                       |
+|              | * CEX7S                                                       |
+|              | * CEX8S                                                       |
+|              |                                                               |
+|              | Note: The AP type on the source and destination guests can    |
+|              |       differ if the queue passed through to the target guest  |
+|              |       is a newer model (backwards compatible)                 |
++--------------+---------------------------------------------------------------+
 
-.. code-block:: xml
+Live guest migration failures due to AP configuration errors
+------------------------------------------------------------
+The destination host is missing the mediated device with the same name as the
+mdev attached to the source guest
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-            <hostdev mode='subsystem' type='mdev' managed='no' model='vfio-ap'>
-              <source>
-                <address uuid='62177883-f1bb-47f0-914d-32a22e3a8804'/>
-              </source>
-            </hostdev>
+**Source host**
 
++--------------+--------------------------------------------------------------------+
+| Log          | Message                                                            |
++==============+====================================================================+
+| Console log: | *error: device not found: mediated device '$UUID' not found*       |
++--------------+--------------------------------------------------------------------+
 
-      virsh qemu-monitor-command <guest-name> --hmp "device-del <device-id>"
+The source guest is not enabled for migration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+**Source host**
 
-      For example, to hot unplug the vfio_ap mediated device identified on the
-      qemu command line with 'id=hostdev0' from the guest named 'my-guest':
-
-.. code-block:: sh
-
-         virsh qemu-monitor-command my-guest --hmp "device_del hostdev0"
-
-2. A vfio_ap mediated device can be hot unplugged by attaching the qemu monitor
-   to the guest and using the following qemu monitor command:
-
-      (QEMU) device-del id=<device-id>
-
-      For example, to hot unplug the vfio_ap mediated device that was specified
-      on the qemu command line with 'id=hostdev0' when the guest was started:
-
-         (QEMU) device-del id=hostdev0
-
-After live migration of the KVM guest completes, an AP configuration can be
-restored to the KVM guest by hot plugging a vfio_ap mediated device on the target
-system into the guest in one of two ways:
-
-1. If the KVM guest was started with libvirt, you can hot plug a matrix mediated
-   device into the guest via the following virsh commands:
-
-   virsh attach-device <guestname> <path-to-device-xml>
-
-      For example, to hot plug mdev 62177883-f1bb-47f0-914d-32a22e3a8804 into
-      the guest named 'my-guest':
-
-         virsh attach-device my-guest ~/config/my-guest-hostdev.xml
-
-            The contents of my-guest-hostdev.xml:
-
-.. code-block:: xml
-
-            <hostdev mode='subsystem' type='mdev' managed='no' model='vfio-ap'>
-              <source>
-                <address uuid='62177883-f1bb-47f0-914d-32a22e3a8804'/>
-              </source>
-            </hostdev>
++--------------+--------------------------------------------------------------------+
+| Log          | Message                                                            |
++==============+====================================================================+
+| Console log: | *error: Requested operation is not valid:                          |
+|              | cannot migrate domain: $UUID: Migration is disabled for VFIO       |
+|              | device*                                                            |
++--------------+--------------------------------------------------------------------+
 
 
-   virsh qemu-monitor-command <guest-name> --hmp \
-   "device_add vfio-ap,sysfsdev=<path-to-mdev>,id=<device-id>"
+The AP configuration of the source and destination guests are not compatible
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+**Source host**
 
-      For example, to hot plug the vfio_ap mediated device
-      62177883-f1bb-47f0-914d-32a22e3a8804 into the guest named 'my-guest' with
-      device-id hostdev0:
++--------------+--------------------------------------------------------------------+
+| Log          | Message                                                            |
++==============+====================================================================+
+| Console log: | *error: operation failed: job 'migration in' failed: load of       |
+|              | migration failed: Bad address*                                     |
++--------------+--------------------------------------------------------------------+
+| Kernel log:  | N/A                                                                |
++--------------+--------------------------------------------------------------------+
+| QEMU log:    | *initiating migration*                                             |
+|              |                                                                    |
+|              | *qemu-system-s390x: Sibling indicated error 1*                     |
++--------------+--------------------------------------------------------------------+
 
-      virsh qemu-monitor-command my-guest --hmp \
-      "device_add vfio-ap,\
-      sysfsdev=/sys/devices/vfio_ap/matrix/62177883-f1bb-47f0-914d-32a22e3a8804,\
-      id=hostdev0"
+**Destination host**
 
-2. A vfio_ap mediated device can be hot plugged by attaching the qemu monitor
-   to the guest and using the following qemu monitor command:
++--------------+--------------------------------------------------------------------+
+| Log          | Message                                                            |
++==============+====================================================================+
+| Console log: | N/A                                                                |
++--------------+--------------------------------------------------------------------+
+| Kernel log:  | *vfio_ap_mdev $UUID: Migration failed: Source and target queues    |
+|              | ($APQN) are not compatible*                                        |
+|              |                                                                    |
+|              | The message above will be followed by one or more messages         |
+|              | enumerating the incompatible features; for example:                |
+|              |                                                                    |
+|              | *vfio_ap_mdev $UUID: APSC facility installed in source queue $APQN*|
+|              |                                                                    |
+|              | *vfio_ap_mdev $UUID: APSC facility not installed in target queue   |
+|              | $APQN*                                                             |
+|              |                                                                    |
+|              | *AP type of source ($APTYPE) not compatible with target ($APTYPE)* |
++--------------+--------------------------------------------------------------------+
+| QEMU log:    | *initiating migration*                                             |
+|              |                                                                    |
+|              | *qemu-system-s390x: error while loading state section id ...*      |
+|              |                                                                    |
+|              | *shutting down, reason=failed*                                     |
+|              |                                                                    |
+|              | *terminating on signal 15 from pid 1196 (/usr/sbin/virtqemud)*     |
++--------------+--------------------------------------------------------------------+
 
-      (qemu) device_add "vfio-ap,sysfsdev=<path-to-mdev>,id=<device-id>"
+The AP configuration of the source guest has more APQNS than the destination guest
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+**Source host**
 
-      For example, to plug the vfio_ap mediated device
-      62177883-f1bb-47f0-914d-32a22e3a8804 into the guest with the device-id
-      hostdev0:
++--------------+--------------------------------------------------------------------+
+| Log          | Message                                                            |
++==============+====================================================================+
+| Console log: | *error: operation f1e166ee77e6failed: job 'migration in' failed: load of       |
+|              | migration failed: Input/output error*                              |
++--------------+--------------------------------------------------------------------+
+| Kernel log:  | N/A                                                                |
++--------------+--------------------------------------------------------------------+
+| QEMU log:    | *initiating migration*                                             |
+|              |                                                                    |
+|              | *qemu-system-s390x: Sibling indicated error 1*                     |
++--------------+--------------------------------------------------------------------+
 
-         (QEMU) device-add "vfio-ap,\
-         sysfsdev=/sys/devices/vfio_ap/matrix/62177883-f1bb-47f0-914d-32a22e3a8804,\
-         id=hostdev0"
+**Destination host**
+
++--------------+--------------------------------------------------------------------+
+| Log          | Message                                                            |
++==============+====================================================================+
+| Console log: | N/A                                                                |
++--------------+--------------------------------------------------------------------+
+| Kernel log:  | *vfio_ap_mdev $UUID:                                               |
+|              | migration failed: source guest's AP config size (xx) larger than   |
+|              | target's (yy)*                                                     |
++--------------+--------------------------------------------------------------------+
+| QEMU log:    | *initiating migration*                                             |
+|              |                                                                    |
+|              | *qemu-system-s390x: error while loading state section id ...*      |
+|              |                                                                    |
+|              | *shutting down, reason=failed*                                     |
+|              |                                                                    |
+|              | *terminating on signal 15 from pid 1196 (/usr/sbin/virtqemud)*     |
++--------------+--------------------------------------------------------------------+
+
+The AP configuration of the source guest has fewer APQNS than the destination guest
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+**Source host**
+
++--------------+--------------------------------------------------------------------+
+| Log          | Message                                                            |
++==============+====================================================================+
+| Console log: | *error: operation failed: job 'migration in' failed: load of       |
+|              | migration failed: No such device*                                  |
++--------------+--------------------------------------------------------------------+
+| Kernel log:  | N/A                                                                |
++--------------+--------------------------------------------------------------------+
+| QEMU log:    | *initiating migration*                                             |
+|              |                                                                    |
+|              | *qemu-system-s390x: Sibling indicated error 1*                     |
++--------------+--------------------------------------------------------------------+
+
+**Destination host**
+
++--------------+--------------------------------------------------------------------+
+| Log          | Message                                                            |
++==============+====================================================================+
+| Console log: | N/A                                                                |
++--------------+--------------------------------------------------------------------+
+| Kernel log:  | *vfio_ap_mdev $UUID:                                               |
+|              | migration failed: number of queues on source (x) and target (y)    |
+|              | guests differ*                                                     |
++--------------+--------------------------------------------------------------------+
+| QEMU log:    | *initiating migration*                                             |
+|              |                                                                    |
+|              | *qemu-system-s390x: error while loading state section id ...*      |
+|              |                                                                    |
+|              | *shutting down, reason=failed*                                     |
+|              |                                                                    |
+|              | *terminating on signal 15 from pid 1196 (/usr/sbin/virtqemud)*     |
++--------------+--------------------------------------------------------------------+
+
+AP Configuration Management
+---------------------------
+The AP configurations of the source and destination guests must be synchronized or
+live guest migration will likely fail due to incompatibility. In particular, it is
+imperative that such changes are not made during migration. Configuration stability
+is an orchestration-layer or system administrator responsibility, consistent with
+other VFIO device types. The vfio_ap driver's role is to validate configurations
+and provide clear diagnostics when incompatibilities are detected, enabling
+orchestration tools to implement appropriate policies.
+
+Note that s390 Common Cryptographic Architecture (CCA) master key administration
+must to be performed on both the source and destination AP devices to synchronize
+the key values prior to allowing live guest migration. If the master keys do not
+match, then crypto applications that rely on secure keys wrapped by a CCA master
+key will fail when the guest on which they are running is migrated to the
+destination host.
