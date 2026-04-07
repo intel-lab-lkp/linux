@@ -1035,6 +1035,9 @@ static int hci_sock_bound_ioctl(struct sock *sk, unsigned int cmd,
 		if (!capable(CAP_NET_ADMIN))
 			return -EPERM;
 		return hci_sock_reject_list_del(hdev, (void __user *)arg);
+
+	case HCISETACLPRIO:
+		return hci_set_acl_prio(hdev, (void __user *)arg);
 	}
 
 	return -ENOIOCTLCMD;
@@ -1072,6 +1075,7 @@ static int hci_sock_ioctl(struct socket *sock, unsigned int cmd,
 	case HCIGETAUTHINFO:
 	case HCIBLOCKADDR:
 	case HCIUNBLOCKADDR:
+	case HCISETACLPRIO:
 		break;
 	default:
 		return -ENOIOCTLCMD;

@@ -91,6 +91,8 @@ struct hci_ufilter {
 
 #define HCIINQUIRY	_IOR('H', 240, int)
 
+#define HCISETACLPRIO	_IOW('H', 250, int)
+
 /* Ioctl requests structures */
 struct hci_dev_stats {
 	__u32 err_rx;
@@ -170,6 +172,11 @@ struct hci_inquiry_req {
 	__u8  lap[3];
 	__u8  length;
 	__u8  num_rsp;
+};
+
+struct hci_acl_prio_req {
+	__u16 handle;
+	__u8  high_prio;
 };
 #define IREQ_CACHE_FLUSH 0x0001
 

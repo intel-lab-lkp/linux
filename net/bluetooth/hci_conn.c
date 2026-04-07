@@ -35,6 +35,7 @@
 #include <net/bluetooth/iso.h>
 #include <net/bluetooth/mgmt.h>
 
+#include "brcm.h"
 #include "smp.h"
 #include "eir.h"
 
@@ -2773,6 +2774,16 @@ int hci_get_auth_info(struct hci_dev *hdev, void __user *arg)
 		return -ENOENT;
 
 	return copy_to_user(arg, &req, sizeof(req)) ? -EFAULT : 0;
+}
+
+int hci_set_acl_prio(struct hci_dev *hdev, void __user *arg)
+{
+	struct hci_acl_prio_req req;
+
+	if (copy_from_user(&req, arg, sizeof(req)))
+		return -EFAULT;
+
+	return brcm_set_high_priority(hdev, req.handle, req.high_prio);
 }
 
 struct hci_chan *hci_chan_create(struct hci_conn *conn)
