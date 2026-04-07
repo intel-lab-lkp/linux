@@ -8,6 +8,8 @@ import socket
 import subprocess
 import time
 
+from .consts import KSRC, KSFT_DIR
+
 
 class CmdInitFailure(Exception):
     """ Command failed to start. Only raised by bkg(). """
@@ -217,12 +219,12 @@ class defer:
         self.exec_only()
 
 
-def tool(name, args, json=None, ns=None, host=None):
+def tool(name, args, json=None, ns=None, host=None, shell=None):
     cmd_str = name + ' '
     if json:
         cmd_str += '--json '
     cmd_str += args
-    cmd_obj = cmd(cmd_str, ns=ns, host=host)
+    cmd_obj = cmd(cmd_str, ns=ns, host=host, shell=shell)
     if json:
         return _json.loads(cmd_obj.stdout)
     return cmd_obj
@@ -240,6 +242,19 @@ def ip(args, json=None, ns=None, host=None):
 
 def ethtool(args, json=None, ns=None, host=None):
     return tool('ethtool', args, json=json, ns=ns, host=host)
+
+
+def ynlcli(family, args, json=None, ns=None, host=None):
+    if (KSFT_DIR / "kselftest-list.txt").exists():
+        cli = KSFT_DIR / "net/lib/ynl/pyynl/cli.py"
+        spec = KSFT_DIR / f"net/lib/specs/{family}.yaml"
+    else:
+        cli = KSRC / "tools/net/ynl/pyynl/cli.py"
+        spec = KSRC / f"Documentation/netlink/specs/{family}.yaml"
+    if not cli.exists():
+        raise FileNotFoundError(f"cli not found at {cli}")
+    args = f"--spec {spec} --no-schema {args}"
+    return tool(cli.as_posix(), args, json=json, ns=ns, host=host, shell=True)
 
 
 def bpftrace(expr, json=None, ns=None, host=None, timeout=None):
