@@ -2618,7 +2618,7 @@ location_store(struct mddev *mddev, const char *buf, size_t len)
 			goto out;
 		}
 
-		md_bitmap_destroy(mddev);
+		md_bitmap_destroy(mddev, true);
 		mddev->bitmap_info.offset = 0;
 		if (mddev->bitmap_info.file) {
 			struct file *f = mddev->bitmap_info.file;
@@ -2659,14 +2659,14 @@ location_store(struct mddev *mddev, const char *buf, size_t len)
 			 */
 			mddev->bitmap_id = ID_BITMAP;
 			mddev->bitmap_info.offset = offset;
-			rv = md_bitmap_create(mddev);
+			rv = md_bitmap_create(mddev, true);
 			if (rv)
 				goto out;
 
 			rv = bitmap_load(mddev);
 			if (rv) {
 				mddev->bitmap_info.offset = 0;
-				md_bitmap_destroy(mddev);
+				md_bitmap_destroy(mddev, true);
 				goto out;
 			}
 		}

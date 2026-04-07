@@ -895,8 +895,8 @@ static inline void safe_put_page(struct page *p)
 
 int register_md_submodule(struct md_submodule_head *msh);
 void unregister_md_submodule(struct md_submodule_head *msh);
-int md_bitmap_create(struct mddev *mddev);
-void md_bitmap_destroy(struct mddev *mddev);
+int md_bitmap_create(struct mddev *mddev, bool create_sysfs);
+void md_bitmap_destroy(struct mddev *mddev, bool remove_sysfs);
 
 extern struct md_thread *md_register_thread(
 	void (*run)(struct md_thread *thread),

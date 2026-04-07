@@ -678,7 +678,7 @@ static void active_io_release(struct percpu_ref *ref)
 
 static void no_op(struct percpu_ref *r) {}
 
-static bool mddev_set_bitmap_ops(struct mddev *mddev)
+static bool mddev_set_bitmap_ops(struct mddev *mddev, bool create_sysfs)
 {
 	struct bitmap_operations *old = mddev->bitmap_ops;
 	struct md_submodule_head *head;
@@ -703,7 +703,7 @@ static bool mddev_set_bitmap_ops(struct mddev *mddev)
 	mddev->bitmap_ops = (void *)head;
 	xa_unlock(&md_submodule);
 
-	if (!mddev_is_dm(mddev) && mddev->bitmap_ops->group) {
+	if (create_sysfs && !mddev_is_dm(mddev) && mddev->bitmap_ops->group) {
 		if (sysfs_create_group(&mddev->kobj, mddev->bitmap_ops->group))
 			pr_warn("md: cannot register extra bitmap attributes for %s\n",
 				mdname(mddev));
@@ -721,9 +721,9 @@ err:
 	return false;
 }
 
-static void mddev_clear_bitmap_ops(struct mddev *mddev)
+static void mddev_clear_bitmap_ops(struct mddev *mddev, bool remove_sysfs)
 {
-	if (!mddev_is_dm(mddev) && mddev->bitmap_ops &&
+	if (remove_sysfs && !mddev_is_dm(mddev) && mddev->bitmap_ops &&
 	    mddev->bitmap_ops->group)
 		sysfs_remove_group(&mddev->kobj, mddev->bitmap_ops->group);
 
@@ -6447,24 +6447,24 @@ static void md_safemode_timeout(struct timer_list *t)
 
 static int start_dirty_degraded;
 
-int md_bitmap_create(struct mddev *mddev)
+int md_bitmap_create(struct mddev *mddev, bool create_sysfs)
 {
 	if (mddev->bitmap_id == ID_BITMAP_NONE)
 		return -EINVAL;
 
-	if (!mddev_set_bitmap_ops(mddev))
+	if (!mddev_set_bitmap_ops(mddev, create_sysfs))
 		return -ENOENT;
 
 	return mddev->bitmap_ops->create(mddev);
 }
 
-void md_bitmap_destroy(struct mddev *mddev)
+void md_bitmap_destroy(struct mddev *mddev, bool remove_sysfs)
 {
 	if (!md_bitmap_registered(mddev))
 		return;
 
 	mddev->bitmap_ops->destroy(mddev);
-	mddev_clear_bitmap_ops(mddev);
+	mddev_clear_bitmap_ops(mddev, remove_sysfs);
 }
 
 int md_run(struct mddev *mddev)
@@ -6612,7 +6612,7 @@ int md_run(struct mddev *mddev)
 	}
 	if (err == 0 && pers->sync_request &&
 	    (mddev->bitmap_info.file || mddev->bitmap_info.offset)) {
-		err = md_bitmap_create(mddev);
+		err = md_bitmap_create(mddev, true);
 		if (err)
 			pr_warn("%s: failed to create bitmap (%d)\n",
 				mdname(mddev), err);
@@ -6685,7 +6685,7 @@ bitmap_abort:
 		pers->free(mddev, mddev->private);
 	mddev->private = NULL;
 	put_pers(pers);
-	md_bitmap_destroy(mddev);
+	md_bitmap_destroy(mddev, true);
 	return err;
 }
 EXPORT_SYMBOL_GPL(md_run);
@@ -6702,7 +6702,7 @@ int do_md_run(struct mddev *mddev)
 	if (md_bitmap_registered(mddev)) {
 		err = mddev->bitmap_ops->load(mddev);
 		if (err) {
-			md_bitmap_destroy(mddev);
+			md_bitmap_destroy(mddev, true);
 			goto out;
 		}
 	}
@@ -6903,7 +6903,7 @@ static void __md_stop(struct mddev *mddev)
 {
 	struct md_personality *pers = mddev->pers;
 
-	md_bitmap_destroy(mddev);
+	md_bitmap_destroy(mddev, true);
 	mddev_detach(mddev);
 	spin_lock(&mddev->lock);
 	mddev->pers = NULL;
@@ -7680,16 +7680,16 @@ static int set_bitmap_file(struct mddev *mddev, int fd)
 	err = 0;
 	if (mddev->pers) {
 		if (fd >= 0) {
-			err = md_bitmap_create(mddev);
+			err = md_bitmap_create(mddev, true);
 			if (!err)
 				err = mddev->bitmap_ops->load(mddev);
 
 			if (err) {
-				md_bitmap_destroy(mddev);
+				md_bitmap_destroy(mddev, true);
 				fd = -1;
 			}
 		} else if (fd < 0) {
-			md_bitmap_destroy(mddev);
+			md_bitmap_destroy(mddev, true);
 		}
 	}
 
@@ -7996,12 +7996,12 @@ static int update_array_info(struct mddev *mddev, mdu_array_info_t *info)
 				mddev->bitmap_info.default_offset;
 			mddev->bitmap_info.space =
 				mddev->bitmap_info.default_space;
-			rv = md_bitmap_create(mddev);
+			rv = md_bitmap_create(mddev, true);
 			if (!rv)
 				rv = mddev->bitmap_ops->load(mddev);
 
 			if (rv)
-				md_bitmap_destroy(mddev);
+				md_bitmap_destroy(mddev, true);
 		} else {
 			struct md_bitmap_stats stats;
 
@@ -8027,7 +8027,7 @@ static int update_array_info(struct mddev *mddev, mdu_array_info_t *info)
 				put_cluster_ops(mddev);
 				mddev->safemode_delay = DEFAULT_SAFEMODE_DELAY;
 			}
-			md_bitmap_destroy(mddev);
+			md_bitmap_destroy(mddev, true);
 			mddev->bitmap_info.offset = 0;
 		}
 	}
