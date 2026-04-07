@@ -203,11 +203,11 @@ static inline void get_update_locks_for_queue(struct vfio_ap_queue *q)
  * Return: the pointer to the vfio_ap_queue struct representing the queue or
  *	   NULL if the queue is not assigned to @matrix_mdev
  */
-static struct vfio_ap_queue *vfio_ap_mdev_get_queue(
-					struct ap_matrix_mdev *matrix_mdev,
-					int apqn)
+struct vfio_ap_queue *vfio_ap_mdev_get_queue(struct ap_matrix_mdev *matrix_mdev, int apqn)
 {
 	struct vfio_ap_queue *q;
+
+	lockdep_assert_held(&matrix_dev->mdevs_lock);
 
 	hash_for_each_possible(matrix_mdev->qtable.queues, q, mdev_qnode,
 			       apqn) {
@@ -2096,6 +2096,20 @@ static void vfio_ap_mdev_request(struct vfio_device *vdev, unsigned int count)
 	}
 
 	release_update_locks_for_mdev(matrix_mdev);
+}
+
+int vfio_ap_mdev_get_num_queues(struct ap_matrix *ap_matrix)
+{
+	unsigned long apid, apqi;
+	int num_queues = 0;
+
+	lockdep_assert_held(&matrix_dev->mdevs_lock);
+
+	for_each_set_bit_inv(apid, ap_matrix->apm, AP_DEVICES)
+		for_each_set_bit_inv(apqi, ap_matrix->aqm, AP_DOMAINS)
+			num_queues++;
+
+	return num_queues;
 }
 
 static int vfio_ap_mdev_get_device_info(unsigned long arg)

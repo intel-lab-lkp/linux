@@ -153,6 +153,10 @@ struct vfio_ap_queue {
 	struct ap_tapq_hwinfo hwinfo;
 };
 
+struct vfio_ap_queue *vfio_ap_mdev_get_queue(struct ap_matrix_mdev *matrix_mdev, int apqn);
+
+int vfio_ap_mdev_get_num_queues(struct ap_matrix *ap_matrix);
+
 int vfio_ap_mdev_register(void);
 void vfio_ap_mdev_unregister(void);
 
