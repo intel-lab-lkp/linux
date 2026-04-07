@@ -111,20 +111,20 @@ int __mt76_worker_fn(void *ptr)
 	struct mt76_worker *w = ptr;
 
 	while (!kthread_should_stop()) {
-		set_current_state(TASK_INTERRUPTIBLE);
-
 		if (kthread_should_park()) {
 			kthread_parkme();
 			continue;
 		}
 
 		if (!test_and_clear_bit(MT76_WORKER_SCHEDULED, &w->state)) {
-			schedule();
+			wait_event_interruptible(w->wq,
+				test_bit(MT76_WORKER_SCHEDULED, &w->state) ||
+				kthread_should_stop() ||
+				kthread_should_park());
 			continue;
 		}
 
 		set_bit(MT76_WORKER_RUNNING, &w->state);
-		set_current_state(TASK_RUNNING);
 		w->fn(w);
 		cond_resched();
 		clear_bit(MT76_WORKER_RUNNING, &w->state);

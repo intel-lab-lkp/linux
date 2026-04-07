@@ -9,12 +9,14 @@
 #include <linux/skbuff.h>
 #include <linux/bitops.h>
 #include <linux/bitfield.h>
+#include <linux/wait.h>
 #include <net/mac80211.h>
 
 struct mt76_worker
 {
 	struct task_struct *task;
 	void (*fn)(struct mt76_worker *);
+	wait_queue_head_t wq;
 	unsigned long state;
 };
 
@@ -63,6 +65,7 @@ mt76_worker_setup(struct ieee80211_hw *hw, struct mt76_worker *w,
 
 	if (fn)
 		w->fn = fn;
+	init_waitqueue_head(&w->wq);
 	w->task = kthread_run(__mt76_worker_fn, w,
 			      "mt76-%s %s", name, dev_name);
 
@@ -82,7 +85,7 @@ static inline void mt76_worker_schedule(struct mt76_worker *w)
 
 	if (!test_and_set_bit(MT76_WORKER_SCHEDULED, &w->state) &&
 	    !test_bit(MT76_WORKER_RUNNING, &w->state))
-		wake_up_process(w->task);
+		wake_up(&w->wq);
 }
 
 static inline void mt76_worker_disable(struct mt76_worker *w)
