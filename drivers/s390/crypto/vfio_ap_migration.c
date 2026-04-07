@@ -931,10 +931,18 @@ vfio_ap_transition_to_state(struct ap_matrix_mdev *matrix_mdev,
 		return NULL;
 	}
 
+	/*
+	 * Stop the operation of the vfio-ap device. Since the vfio-ap device
+	 * does not virtualize a DMA device, there is no physical device to
+	 * stop; so, the only thing left to do is release the migration files
+	 * used to process the vfio device migration. Note that this state
+	 * transition is for the vfio-ap device on the source host.
+	 */
 	if (cur_state == VFIO_DEVICE_STATE_STOP_COPY &&
 	    new_state == VFIO_DEVICE_STATE_STOP) {
-		/* TODO */
-		return ERR_PTR(-EOPNOTSUPP);
+		vfio_ap_release_mig_files(matrix_mdev);
+
+		return NULL;
 	}
 
 	if ((cur_state == VFIO_DEVICE_STATE_STOP &&
