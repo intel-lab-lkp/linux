@@ -11315,7 +11315,7 @@ void sched_steal_detection_work(struct work_struct *work)
 	steal_ratio = (delta_steal * 100 * 100) / (delta_ns * num_online_cpus());
 
 	/* If the steal time values are high, reduce one core from preferred CPUs */
-	if (steal_ratio > sm->high_threshold) {
+	if (sm->previous_decision == 1 && steal_ratio > sm->high_threshold) {
 		int last_cpu;
 
 		cpumask_and(sm->tmp_mask, cpu_online_mask, cpu_preferred_mask);
@@ -11337,7 +11337,7 @@ void sched_steal_detection_work(struct work_struct *work)
 	}
 
 	/* If the steal time values are low, increase one core as preferred CPUs */
-	if (steal_ratio < sm->low_threshold) {
+	if (sm->previous_decision == -1 && steal_ratio < sm->low_threshold) {
 		int first_cpu;
 
 		first_cpu = cpumask_first_andnot(cpu_online_mask, cpu_preferred_mask);
@@ -11348,6 +11348,14 @@ void sched_steal_detection_work(struct work_struct *work)
 		for_each_cpu(tmp_cpu, cpu_smt_mask(first_cpu))
 			set_cpu_preferred(tmp_cpu, true);
 	}
+
+	/* mark the direction. This helps to avoid ping-pongs */
+	if (steal_ratio > sm->high_threshold)
+		sm->previous_decision = 1;
+	else if (steal_ratio < sm->low_threshold)
+		sm->previous_decision = -1;
+	else
+		sm->previous_decision = 0;
 #endif
 }
 
