@@ -1690,6 +1690,7 @@ EXPORT_SYMBOL_GPL(mt76_sta_pre_rcu_remove);
 void mt76_wcid_init(struct mt76_wcid *wcid, u8 band_idx)
 {
 	wcid->hw_key_idx = -1;
+	wcid->hw_key_idx2 = -1;
 	wcid->phy_idx = band_idx;
 
 	INIT_LIST_HEAD(&wcid->tx_list);
