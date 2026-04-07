@@ -311,6 +311,46 @@ vfio_ap_save_mdev_state(struct ap_matrix_mdev *matrix_mdev)
 	return mig_data->saving_migf;
 }
 
+static ssize_t vfio_ap_resume_write(struct file *filp, const char __user *buf,
+				    size_t len, loff_t *pos)
+{
+	/* TODO */
+	return -EOPNOTSUPP;
+}
+
+static const struct file_operations vfio_ap_resume_fops = {
+	.owner = THIS_MODULE,
+	.write = vfio_ap_resume_write,
+	.release = vfio_ap_release_migf,
+};
+
+static struct vfio_ap_migration_file *
+vfio_ap_resume_mdev_state(struct ap_matrix_mdev *matrix_mdev)
+{
+	struct vfio_ap_migration_data *mig_data;
+	struct vfio_ap_migration_file *migf;
+	struct file *filp;
+
+	lockdep_assert_held(&matrix_dev->mdevs_lock);
+	mig_data = matrix_mdev->mig_data;
+
+	migf = vfio_ap_allocate_migf(matrix_mdev);
+	if (IS_ERR(migf))
+		return ERR_CAST(migf);
+
+	filp = vfio_ap_open_file_stream(migf, &vfio_ap_resume_fops, O_WRONLY);
+	if (IS_ERR(filp)) {
+		vfio_ap_deallocate_migf(migf);
+		return ERR_CAST(filp);
+	}
+
+	migf->matrix_mdev = matrix_mdev;
+	migf->filp = filp;
+	mig_data->resuming_migf = migf;
+
+	return migf;
+}
+
 static struct file *
 vfio_ap_transition_to_state(struct ap_matrix_mdev *matrix_mdev,
 			    enum vfio_device_mig_state new_state)
@@ -344,10 +384,21 @@ vfio_ap_transition_to_state(struct ap_matrix_mdev *matrix_mdev,
 		return NULL;
 	}
 
+	/*
+	 * Starts the process of restoring the state of the vfio-ap device
+	 * on the target host by creating a filestream to be used to transfer
+	 * the internal state of the vfio-ap device on the source host that
+	 * was saved during the STOP_COPY phase of the migration.
+	 */
 	if (cur_state == VFIO_DEVICE_STATE_STOP &&
 	    new_state == VFIO_DEVICE_STATE_RESUMING) {
-		/* TODO */
-		return ERR_PTR(-EOPNOTSUPP);
+		migf = vfio_ap_resume_mdev_state(matrix_mdev);
+		if (IS_ERR(migf))
+			return ERR_CAST(migf);
+
+		get_file(migf->filp);
+
+		return migf->filp;
 	}
 
 	if (cur_state == VFIO_DEVICE_STATE_RESUMING &&
