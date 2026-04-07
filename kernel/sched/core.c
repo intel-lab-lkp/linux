@@ -11262,6 +11262,7 @@ void sched_push_current_non_preferred_cpu(struct rq *rq)
 	local_irq_save(flags);
 
 	get_task_struct(push_task);
+	schedstat_inc(push_task->stats.nr_migrations_cpu_non_preferred);
 
 	rq_lock(rq, &rf);
 	rq->push_task_work_done = 1;
