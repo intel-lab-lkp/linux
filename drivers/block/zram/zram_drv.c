@@ -1437,12 +1437,17 @@ static void read_from_bdev_async(struct zram *zram, struct page *page,
 	struct bio *bio;
 
 	req = kmalloc_obj(*req, GFP_NOIO);
-	if (!req)
+	if (!req) {
+		parent->bi_status = BLK_STS_IOERR;
+		bio_endio(parent);
 		return;
+	}
 
 	bio = bio_alloc(zram->bdev, 1, parent->bi_opf, GFP_NOIO);
 	if (!bio) {
 		kfree(req);
+		parent->bi_status = BLK_STS_IOERR;
+		bio_endio(parent);
 		return;
 	}
 
