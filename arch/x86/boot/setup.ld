@@ -61,6 +61,7 @@ SECTIONS
 
 	/DISCARD/	: {
 		*(.note*)
+		*(.interp)
 	}
 
 	/*
