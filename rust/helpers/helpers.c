@@ -9,6 +9,7 @@
 
 #define __rust_helper
 
+#include "acpi.c"
 #include "atomic.c"
 #include "atomic_ext.c"
 #include "auxiliary.c"

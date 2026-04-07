@@ -96,6 +96,11 @@
  */
 #include <../../drivers/base/base.h>
 
+/*
+ * The driver-core Rust code needs to call `acpi_of_match_device`.
+ */
+#include <acpi/acpi_bus.h>
+
 #if defined(CONFIG_DRM_PANIC_SCREEN_QR_CODE)
 // Used by `#[export]` in `drivers/gpu/drm/drm_panic_qr.rs`.
 #include <drm/drm_panic.h>
