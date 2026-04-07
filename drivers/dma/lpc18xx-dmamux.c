@@ -32,11 +32,11 @@ struct lpc18xx_dmamux {
 
 struct lpc18xx_dmamux_data {
 	struct dma_router dmarouter;
-	struct lpc18xx_dmamux *muxes;
 	u32 dma_master_requests;
 	u32 dma_mux_requests;
 	struct regmap *reg;
 	spinlock_t lock;
+	struct lpc18xx_dmamux muxes[] __counted_by(dma_master_requests);
 };
 
 static void lpc18xx_dmamux_free(struct device *dev, void *route_data)
@@ -122,11 +122,29 @@ static int lpc18xx_dmamux_probe(struct platform_device *pdev)
 {
 	struct device_node *dma_np, *np = pdev->dev.of_node;
 	struct lpc18xx_dmamux_data *dmamux;
+	u32 dma_master_requests;
 	int ret;
 
-	dmamux = devm_kzalloc(&pdev->dev, sizeof(*dmamux), GFP_KERNEL);
+	dma_np = of_parse_phandle(np, "dma-masters", 0);
+	if (!dma_np) {
+		dev_err(&pdev->dev, "can't get dma master\n");
+		return -ENODEV;
+	}
+
+	ret = of_property_read_u32(dma_np, "dma-requests",
+				   &dma_master_requests);
+	of_node_put(dma_np);
+	if (ret) {
+		dev_err(&pdev->dev, "missing master dma-requests property\n");
+		return ret;
+	}
+
+	dmamux = devm_kzalloc(&pdev->dev, struct_size(dmamux, muxes, dma_master_requests),
+			GFP_KERNEL);
 	if (!dmamux)
 		return -ENOMEM;
+
+	dmamux->dma_master_requests = dma_master_requests;
 
 	dmamux->reg = syscon_regmap_lookup_by_compatible("nxp,lpc1850-creg");
 	if (IS_ERR(dmamux->reg)) {
@@ -140,26 +158,6 @@ static int lpc18xx_dmamux_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "missing dma-requests property\n");
 		return ret;
 	}
-
-	dma_np = of_parse_phandle(np, "dma-masters", 0);
-	if (!dma_np) {
-		dev_err(&pdev->dev, "can't get dma master\n");
-		return -ENODEV;
-	}
-
-	ret = of_property_read_u32(dma_np, "dma-requests",
-				   &dmamux->dma_master_requests);
-	of_node_put(dma_np);
-	if (ret) {
-		dev_err(&pdev->dev, "missing master dma-requests property\n");
-		return ret;
-	}
-
-	dmamux->muxes = devm_kcalloc(&pdev->dev, dmamux->dma_master_requests,
-				     sizeof(struct lpc18xx_dmamux),
-				     GFP_KERNEL);
-	if (!dmamux->muxes)
-		return -ENOMEM;
 
 	spin_lock_init(&dmamux->lock);
 	platform_set_drvdata(pdev, dmamux);
