@@ -184,6 +184,7 @@ err:
 #define FLAGS_MODE1	0x004E200000080E01UL
 #define FLAGS_MODE2	0x004E200000080401UL
 #define FLAGS_ACTIVATE  0x100
+#define BEST_ENERGY_LIST_MAX_ENTRIES	(PAGE_SIZE / (sizeof(u32) * 2))
 
 static ssize_t get_best_energy_list(char *page, int activate)
 {
@@ -205,6 +206,11 @@ static ssize_t get_best_energy_list(char *page, int activate)
 				0, 0, 0, 0, 0, 0);
 	if (rc != H_SUCCESS) {
 		free_page((unsigned long) buf_page);
+		return -EINVAL;
+	}
+
+	if (retbuf[0] > BEST_ENERGY_LIST_MAX_ENTRIES) {
+		free_page((unsigned long)buf_page);
 		return -EINVAL;
 	}
 
