@@ -244,10 +244,27 @@ mt7996_set_hw_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 					&link->mt76, msta_link, true);
 	}
 
-	if (cmd == SET_KEY)
+	if (cmd == SET_KEY) {
 		*wcid_keyidx = idx;
-	else if (idx == *wcid_keyidx)
-		*wcid_keyidx = -1;
+	} else {
+		if (idx == *wcid_keyidx)
+			*wcid_keyidx = -1;
+
+		/* Clear BSS cipher only when the last group key is removed;
+		 * during GTK rotation the new key is installed before the old
+		 * one is removed, so hw_key_idx still points at the new key
+		 * and this condition stays false.
+		 */
+		if (!sta && link->mt76.cipher &&
+		    msta_link->wcid.hw_key_idx == (u8)-1 &&
+		    msta_link->wcid.hw_key_idx2 == (u8)-1) {
+			link->mt76.cipher = 0;
+			if (link->phy)
+				mt7996_mcu_add_bss_info(link->phy, vif,
+							link_conf, &link->mt76,
+							msta_link, true);
+		}
+	}
 
 	/* only do remove key for BIGTK */
 	if (cmd != SET_KEY && !is_bigtk)
