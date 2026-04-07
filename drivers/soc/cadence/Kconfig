@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: GPL-2.0
+
+config CDNS_MHDP_HELPER
+	tristate
+	help
+	  Enable Cadence MHDP helpers for mailbox, HDMI and DP.
+	  This driver provides a foundational layer of mailbox communication for
+	  various Cadence MHDP IP implementations, such as HDMI and DisplayPort.
+
