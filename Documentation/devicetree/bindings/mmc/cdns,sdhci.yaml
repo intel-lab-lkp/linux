@@ -24,6 +24,10 @@ properties:
     minItems: 1
     maxItems: 2
 
+  reg-names:
+    minItems: 1
+    maxItems: 2
+
   interrupts:
     maxItems: 1
 
@@ -139,7 +143,19 @@ allOf:
     else:
       properties:
         reg:
-          maxItems: 1
+          oneOf:
+            - items:
+                - description: Host controller registers
+            - items:
+                - description: Host controller registers
+                - description: CQE (Command Queue Engine) registers
+        reg-names:
+          oneOf:
+            - items:
+                - const: sdhci
+            - items:
+                - const: sdhci
+                - const: cqhci
 
 unevaluatedProperties: false
 
@@ -149,6 +165,20 @@ examples:
         compatible = "socionext,uniphier-sd4hc", "cdns,sd4hc";
         reg = <0x5a000000 0x400>;
         interrupts = <0 78 4>;
+        clocks = <&clk 4>;
+        bus-width = <8>;
+        mmc-ddr-1_8v;
+        mmc-hs200-1_8v;
+        mmc-hs400-1_8v;
+        cdns,phy-dll-delay-sdclk = <0>;
+    };
+
+  - |
+    emmc_cqe: mmc@5b000000 {
+        compatible = "socionext,uniphier-sd4hc", "cdns,sd4hc";
+        reg = <0x5b000000 0x400>, <0x5b000400 0x060>;
+        reg-names = "sdhci", "cqhci";
+        interrupts = <0 79 4>;
         clocks = <&clk 4>;
         bus-width = <8>;
         mmc-ddr-1_8v;
