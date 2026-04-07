@@ -125,6 +125,9 @@ struct bitmap_operations {
 	void (*set_pages)(void *data, unsigned long pages);
 	void (*free)(void *data);
 
+	int (*register_groups)(struct mddev *mddev);
+	void (*unregister_groups)(struct mddev *mddev);
+
 	struct attribute_group *group;
 };
 

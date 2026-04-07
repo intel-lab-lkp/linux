@@ -240,6 +240,11 @@ static bool bitmap_enabled(void *data, bool flush)
 	       bitmap->storage.filemap != NULL;
 }
 
+static bool dummy_bitmap_enabled(void *data, bool flush)
+{
+	return false;
+}
+
 /*
  * check a page and, if necessary, allocate it (or hijack it if the alloc fails)
  *
@@ -2201,6 +2206,11 @@ static int bitmap_create(struct mddev *mddev)
 	return 0;
 }
 
+static int dummy_bitmap_create(struct mddev *mddev)
+{
+	return 0;
+}
+
 static int bitmap_load(struct mddev *mddev)
 {
 	int err = 0;
@@ -2594,6 +2604,9 @@ location_show(struct mddev *mddev, char *page)
 	return len;
 }
 
+static int create_internal_group(struct mddev *mddev);
+static void remove_internal_group(struct mddev *mddev);
+
 static ssize_t
 location_store(struct mddev *mddev, const char *buf, size_t len)
 {
@@ -2618,7 +2631,8 @@ location_store(struct mddev *mddev, const char *buf, size_t len)
 			goto out;
 		}
 
-		md_bitmap_destroy(mddev, true);
+		md_bitmap_destroy(mddev, false);
+		remove_internal_group(mddev);
 		mddev->bitmap_info.offset = 0;
 		if (mddev->bitmap_info.file) {
 			struct file *f = mddev->bitmap_info.file;
@@ -2659,14 +2673,22 @@ location_store(struct mddev *mddev, const char *buf, size_t len)
 			 */
 			mddev->bitmap_id = ID_BITMAP;
 			mddev->bitmap_info.offset = offset;
-			rv = md_bitmap_create(mddev, true);
+			rv = md_bitmap_create(mddev, false);
 			if (rv)
 				goto out;
 
-			rv = bitmap_load(mddev);
+			rv = create_internal_group(mddev);
 			if (rv) {
 				mddev->bitmap_info.offset = 0;
-				md_bitmap_destroy(mddev, true);
+				bitmap_destroy(mddev);
+				goto out;
+			}
+
+			rv = bitmap_load(mddev);
+			if (rv) {
+				remove_internal_group(mddev);
+				mddev->bitmap_info.offset = 0;
+				md_bitmap_destroy(mddev, false);
 				goto out;
 			}
 		}
@@ -2960,8 +2982,7 @@ static struct md_sysfs_entry max_backlog_used =
 __ATTR(max_backlog_used, S_IRUGO | S_IWUSR,
        behind_writes_used_show, behind_writes_used_reset);
 
-static struct attribute *md_bitmap_attrs[] = {
-	&bitmap_location.attr,
+static struct attribute *internal_bitmap_attrs[] = {
 	&bitmap_space.attr,
 	&bitmap_timeout.attr,
 	&bitmap_backlog.attr,
@@ -2972,10 +2993,56 @@ static struct attribute *md_bitmap_attrs[] = {
 	NULL
 };
 
-static struct attribute_group md_bitmap_group = {
+static struct attribute_group internal_bitmap_group = {
 	.name = "bitmap",
-	.attrs = md_bitmap_attrs,
+	.attrs = internal_bitmap_attrs,
 };
+
+/* Only necessary attrs for compatibility */
+static struct attribute *common_bitmap_attrs[] = {
+	&bitmap_location.attr,
+	NULL
+};
+
+static const struct attribute_group common_bitmap_group = {
+	.name = "bitmap",
+	.attrs = common_bitmap_attrs,
+};
+
+static int create_internal_group(struct mddev *mddev)
+{
+	/*
+	 * md_bitmap_group and md_bitmap_common_group are using same name
+	 * 'bitmap'.
+	 */
+	return sysfs_merge_group(&mddev->kobj, &internal_bitmap_group);
+}
+
+static void remove_internal_group(struct mddev *mddev)
+{
+	sysfs_unmerge_group(&mddev->kobj, &internal_bitmap_group);
+}
+
+static int bitmap_register_groups(struct mddev *mddev)
+{
+	int ret;
+
+	ret = sysfs_create_group(&mddev->kobj, &common_bitmap_group);
+
+	if (ret)
+		return ret;
+
+	ret = sysfs_merge_group(&mddev->kobj, &internal_bitmap_group);
+	if (ret)
+		sysfs_remove_group(&mddev->kobj, &common_bitmap_group);
+
+	return ret;
+}
+
+static void bitmap_unregister_groups(struct mddev *mddev)
+{
+	sysfs_unmerge_group(&mddev->kobj, &internal_bitmap_group);
+}
 
 static struct bitmap_operations bitmap_ops = {
 	.head = {
@@ -3018,21 +3085,52 @@ static struct bitmap_operations bitmap_ops = {
 	.set_pages		= bitmap_set_pages,
 	.free			= md_bitmap_free,
 
-	.group			= &md_bitmap_group,
+	.register_groups	= bitmap_register_groups,
+	.unregister_groups	= bitmap_unregister_groups,
+};
+
+static int none_bitmap_register_groups(struct mddev *mddev)
+{
+	return sysfs_create_group(&mddev->kobj, &common_bitmap_group);
+}
+
+static struct bitmap_operations none_bitmap_ops = {
+	.head = {
+		.type	= MD_BITMAP,
+		.id	= ID_BITMAP_NONE,
+		.name	= "none",
+	},
+
+	.enabled		= dummy_bitmap_enabled,
+	.create			= dummy_bitmap_create,
+	.destroy		= bitmap_destroy,
+	.load			= bitmap_load,
+	.get_stats		= bitmap_get_stats,
+	.free			= md_bitmap_free,
+
+	.register_groups	= none_bitmap_register_groups,
+	.unregister_groups	= NULL,
 };
 
 int md_bitmap_init(void)
 {
+	int ret;
+
 	md_bitmap_wq = alloc_workqueue("md_bitmap", WQ_MEM_RECLAIM | WQ_UNBOUND,
 				       0);
 	if (!md_bitmap_wq)
 		return -ENOMEM;
 
-	return register_md_submodule(&bitmap_ops.head);
+	ret = register_md_submodule(&bitmap_ops.head);
+	if (ret)
+		return ret;
+
+	return register_md_submodule(&none_bitmap_ops.head);
 }
 
 void md_bitmap_exit(void)
 {
 	destroy_workqueue(md_bitmap_wq);
 	unregister_md_submodule(&bitmap_ops.head);
+	unregister_md_submodule(&none_bitmap_ops.head);
 }

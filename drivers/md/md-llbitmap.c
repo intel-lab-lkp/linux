@@ -1561,6 +1561,16 @@ static struct attribute_group md_llbitmap_group = {
 	.attrs = md_llbitmap_attrs,
 };
 
+static int llbitmap_register_groups(struct mddev *mddev)
+{
+	return sysfs_create_group(&mddev->kobj, &md_llbitmap_group);
+}
+
+static void llbitmap_unregister_groups(struct mddev *mddev)
+{
+	sysfs_remove_group(&mddev->kobj, &md_llbitmap_group);
+}
+
 static struct bitmap_operations llbitmap_ops = {
 	.head = {
 		.type	= MD_BITMAP,
@@ -1597,6 +1607,8 @@ static struct bitmap_operations llbitmap_ops = {
 	.dirty_bits		= llbitmap_dirty_bits,
 	.write_all		= llbitmap_write_all,
 
+	.register_groups	= llbitmap_register_groups,
+	.unregister_groups	= llbitmap_unregister_groups,
 	.group			= &md_llbitmap_group,
 };
 

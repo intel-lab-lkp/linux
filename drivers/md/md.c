@@ -683,8 +683,7 @@ static bool mddev_set_bitmap_ops(struct mddev *mddev, bool create_sysfs)
 	struct bitmap_operations *old = mddev->bitmap_ops;
 	struct md_submodule_head *head;
 
-	if (mddev->bitmap_id == ID_BITMAP_NONE ||
-	    (old && old->head.id == mddev->bitmap_id))
+	if (old && old->head.id == mddev->bitmap_id)
 		return true;
 
 	xa_lock(&md_submodule);
@@ -703,8 +702,8 @@ static bool mddev_set_bitmap_ops(struct mddev *mddev, bool create_sysfs)
 	mddev->bitmap_ops = (void *)head;
 	xa_unlock(&md_submodule);
 
-	if (create_sysfs && !mddev_is_dm(mddev) && mddev->bitmap_ops->group) {
-		if (sysfs_create_group(&mddev->kobj, mddev->bitmap_ops->group))
+	if (create_sysfs && !mddev_is_dm(mddev) && mddev->bitmap_ops->register_groups) {
+		if (mddev->bitmap_ops->register_groups(mddev))
 			pr_warn("md: cannot register extra bitmap attributes for %s\n",
 				mdname(mddev));
 		else
@@ -724,8 +723,8 @@ err:
 static void mddev_clear_bitmap_ops(struct mddev *mddev, bool remove_sysfs)
 {
 	if (remove_sysfs && !mddev_is_dm(mddev) && mddev->bitmap_ops &&
-	    mddev->bitmap_ops->group)
-		sysfs_remove_group(&mddev->kobj, mddev->bitmap_ops->group);
+	    mddev->bitmap_ops->unregister_groups)
+		mddev->bitmap_ops->unregister_groups(mddev);
 
 	mddev->bitmap_ops = NULL;
 }
@@ -6610,8 +6609,9 @@ int md_run(struct mddev *mddev)
 			(unsigned long long)pers->size(mddev, 0, 0) / 2);
 		err = -EINVAL;
 	}
-	if (err == 0 && pers->sync_request &&
-	    (mddev->bitmap_info.file || mddev->bitmap_info.offset)) {
+	if (err == 0 && pers->sync_request) {
+		if (mddev->bitmap_info.offset == 0)
+			mddev->bitmap_id = ID_BITMAP_NONE;
 		err = md_bitmap_create(mddev, true);
 		if (err)
 			pr_warn("%s: failed to create bitmap (%d)\n",
