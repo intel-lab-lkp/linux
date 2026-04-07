@@ -137,8 +137,8 @@ void *swap_cache_get_shadow(swp_entry_t entry)
 	return NULL;
 }
 
-void __swap_cache_add_folio(struct swap_cluster_info *ci,
-			    struct folio *folio, swp_entry_t entry)
+static void __swap_cache_do_add_folio(struct swap_cluster_info *ci,
+				      struct folio *folio, swp_entry_t entry)
 {
 	unsigned int ci_off = swp_cluster_offset(entry), ci_end;
 	unsigned long nr_pages = folio_nr_pages(folio);
@@ -159,7 +159,14 @@ void __swap_cache_add_folio(struct swap_cluster_info *ci,
 	folio_ref_add(folio, nr_pages);
 	folio_set_swapcache(folio);
 	folio->swap = entry;
+}
 
+void __swap_cache_add_folio(struct swap_cluster_info *ci,
+			    struct folio *folio, swp_entry_t entry)
+{
+	unsigned long nr_pages = folio_nr_pages(folio);
+
+	__swap_cache_do_add_folio(ci, folio, entry);
 	node_stat_mod_folio(folio, NR_FILE_PAGES, nr_pages);
 	lruvec_stat_mod_folio(folio, NR_SWAPCACHE, nr_pages);
 }
@@ -207,7 +214,7 @@ static int swap_cache_add_folio(struct folio *folio, swp_entry_t entry,
 		if (swp_tb_is_shadow(old_tb))
 			shadow = swp_tb_to_shadow(old_tb);
 	} while (++ci_off < ci_end);
-	__swap_cache_add_folio(ci, folio, entry);
+	__swap_cache_do_add_folio(ci, folio, entry);
 	swap_cluster_unlock(ci);
 	if (shadowp)
 		*shadowp = shadow;
@@ -219,7 +226,7 @@ failed:
 }
 
 /**
- * __swap_cache_del_folio - Removes a folio from the swap cache.
+ * __swap_cache_do_del_folio - Removes a folio from the swap cache.
  * @ci: The locked swap cluster.
  * @folio: The folio.
  * @entry: The first swap entry that the folio corresponds to.
@@ -231,8 +238,9 @@ failed:
  * Context: Caller must ensure the folio is locked and in the swap cache
  * using the index of @entry, and lock the cluster that holds the entries.
  */
-void __swap_cache_del_folio(struct swap_cluster_info *ci, struct folio *folio,
-			    swp_entry_t entry, void *shadow)
+static void __swap_cache_do_del_folio(struct swap_cluster_info *ci,
+				      struct folio *folio,
+				      swp_entry_t entry, void *shadow)
 {
 	int count;
 	unsigned long old_tb;
@@ -265,8 +273,6 @@ void __swap_cache_del_folio(struct swap_cluster_info *ci, struct folio *folio,
 
 	folio->swap.val = 0;
 	folio_clear_swapcache(folio);
-	node_stat_mod_folio(folio, NR_FILE_PAGES, -nr_pages);
-	lruvec_stat_mod_folio(folio, NR_SWAPCACHE, -nr_pages);
 
 	if (!folio_swapped) {
 		__swap_cluster_free_entries(si, ci, ci_start, nr_pages);
@@ -277,6 +283,16 @@ void __swap_cache_del_folio(struct swap_cluster_info *ci, struct folio *folio,
 				__swap_cluster_free_entries(si, ci, ci_off, 1);
 		} while (++ci_off < ci_end);
 	}
+}
+
+void __swap_cache_del_folio(struct swap_cluster_info *ci, struct folio *folio,
+			    swp_entry_t entry, void *shadow)
+{
+	unsigned long nr_pages = folio_nr_pages(folio);
+
+	__swap_cache_do_del_folio(ci, folio, entry, shadow);
+	node_stat_mod_folio(folio, NR_FILE_PAGES, -nr_pages);
+	lruvec_stat_mod_folio(folio, NR_SWAPCACHE, -nr_pages);
 }
 
 /**
@@ -452,7 +468,7 @@ void swap_update_readahead(struct folio *folio, struct vm_area_struct *vma,
  * __swap_cache_prepare_and_add - Prepare the folio and add it to swap cache.
  * @entry: swap entry to be bound to the folio.
  * @folio: folio to be added.
- * @gfp: memory allocation flags for charge, can be 0 if @charged if true.
+ * @gfp: memory allocation flags for charge, can be 0 if @charged is true.
  * @charged: if the folio is already charged.
  *
  * Update the swap_map and add folio as swap cache, typically before swapin.
@@ -466,15 +482,14 @@ static struct folio *__swap_cache_prepare_and_add(swp_entry_t entry,
 						  struct folio *folio,
 						  gfp_t gfp, bool charged)
 {
+	unsigned long nr_pages = folio_nr_pages(folio);
 	struct folio *swapcache = NULL;
+	struct swap_cluster_info *ci;
 	void *shadow;
 	int ret;
 
 	__folio_set_locked(folio);
 	__folio_set_swapbacked(folio);
-
-	if (!charged && mem_cgroup_swapin_charge_folio(folio, NULL, gfp, entry))
-		goto failed;
 
 	for (;;) {
 		ret = swap_cache_add_folio(folio, entry, &shadow);
@@ -495,6 +510,20 @@ static struct folio *__swap_cache_prepare_and_add(swp_entry_t entry,
 		if (swapcache)
 			goto failed;
 	}
+
+	if (!charged && mem_cgroup_swapin_charge_folio(folio, NULL, gfp, entry)) {
+		/* We might lose the shadow here, but that's fine */
+		ci = swap_cluster_get_and_lock(folio);
+		__swap_cache_do_del_folio(ci, folio, entry, NULL);
+		swap_cluster_unlock(ci);
+
+		/* __swap_cache_do_del_folio doesn't put the refs */
+		folio_ref_sub(folio, nr_pages);
+		goto failed;
+	}
+
+	node_stat_mod_folio(folio, NR_FILE_PAGES, nr_pages);
+	lruvec_stat_mod_folio(folio, NR_SWAPCACHE, nr_pages);
 
 	memcg1_swapin(entry, folio_nr_pages(folio));
 	if (shadow)
