@@ -773,13 +773,18 @@ static void digital_in_recv_sensf_res(struct nfc_digital_dev *ddev, void *arg,
 	}
 
 	skb_pull(resp, 1);
+	if (resp->len > sizeof(struct digital_sensf_res)) {
+		rc = -EIO;
+		goto exit;
+	}
 
 	memset(&target, 0, sizeof(struct nfc_target));
 
 	sensf_res = (struct digital_sensf_res *)resp->data;
 
-	memcpy(target.sensf_res, sensf_res, resp->len);
-	target.sensf_res_len = resp->len;
+	target.sensf_res_len = min_t(unsigned int, resp->len,
+				     sizeof(target.sensf_res));
+	memcpy(target.sensf_res, sensf_res, target.sensf_res_len);
 
 	memcpy(target.nfcid2, sensf_res->nfcid2, NFC_NFCID2_MAXSIZE);
 	target.nfcid2_len = NFC_NFCID2_MAXSIZE;
