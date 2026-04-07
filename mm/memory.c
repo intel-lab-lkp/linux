@@ -4595,22 +4595,8 @@ static vm_fault_t handle_pte_marker(struct vm_fault *vmf)
 
 static struct folio *__alloc_swap_folio(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
-	struct folio *folio;
-	softleaf_t entry;
-
-	folio = vma_alloc_folio(GFP_HIGHUSER_MOVABLE, 0, vma, vmf->address);
-	if (!folio)
-		return NULL;
-
-	entry = softleaf_from_pte(vmf->orig_pte);
-	if (mem_cgroup_swapin_charge_folio(folio, vma->vm_mm,
-					   GFP_KERNEL, entry)) {
-		folio_put(folio);
-		return NULL;
-	}
-
-	return folio;
+	return vma_alloc_folio(GFP_HIGHUSER_MOVABLE, 0,
+			       vmf->vma, vmf->address);
 }
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
@@ -4736,13 +4722,8 @@ static struct folio *alloc_swap_folio(struct vm_fault *vmf)
 	while (orders) {
 		addr = ALIGN_DOWN(vmf->address, PAGE_SIZE << order);
 		folio = vma_alloc_folio(gfp, order, vma, addr);
-		if (folio) {
-			if (!mem_cgroup_swapin_charge_folio(folio, vma->vm_mm,
-							    gfp, entry))
-				return folio;
-			count_mthp_stat(order, MTHP_STAT_SWPIN_FALLBACK_CHARGE);
-			folio_put(folio);
-		}
+		if (folio)
+			return folio;
 		count_mthp_stat(order, MTHP_STAT_SWPIN_FALLBACK);
 		order = next_order(&orders, order);
 	}
@@ -4858,18 +4839,30 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 	folio = swap_cache_get_folio(entry);
 	if (folio)
 		swap_update_readahead(folio, vma, vmf->address);
+
 	if (!folio) {
 		if (data_race(si->flags & SWP_SYNCHRONOUS_IO)) {
+			gfp_t gfp = GFP_HIGHUSER_MOVABLE;
+
 			folio = alloc_swap_folio(vmf);
 			if (folio) {
-				/*
-				 * folio is charged, so swapin can only fail due
-				 * to raced swapin and return NULL.
-				 */
-				swapcache = swapin_folio(entry, folio);
-				if (swapcache != folio)
+				if (folio_test_large(folio))
+					gfp = vma_thp_gfp_mask(vma);
+				swapcache = swapin_folio(entry, folio, gfp);
+				if (swapcache) {
+					/* We might hit with another cached swapin */
+					if (swapcache != folio)
+						folio_put(folio);
+					folio = swapcache;
+				} else if (folio_test_large(folio)) {
+					/* THP swapin failed, try order 0 */
 					folio_put(folio);
-				folio = swapcache;
+					folio = swapin_readahead(entry, GFP_HIGHUSER_MOVABLE, vmf);
+				} else {
+					/* order 0 swapin failure, abort */
+					folio_put(folio);
+					folio = NULL;
+				}
 			}
 		} else {
 			folio = swapin_readahead(entry, GFP_HIGHUSER_MOVABLE, vmf);

@@ -2071,22 +2071,15 @@ retry:
 		goto fallback;
 	}
 
-	if (mem_cgroup_swapin_charge_folio(new, vma ? vma->vm_mm : NULL,
-					   alloc_gfp, entry)) {
-		folio_put(new);
-		new = ERR_PTR(-ENOMEM);
-		goto fallback;
-	}
-
-	swapcache = swapin_folio(entry, new);
+	swapcache = swapin_folio(entry, new, alloc_gfp);
 	if (swapcache != new) {
 		folio_put(new);
 		if (!swapcache) {
 			/*
-			 * The new folio is charged already, swapin can
-			 * only fail due to another raced swapin.
+			 * Fail with -ENOMEM by default, caller will
+			 * correct it to -EEXIST if mapping changed.
 			 */
-			new = ERR_PTR(-EEXIST);
+			new = ERR_PTR(-ENOMEM);
 			goto fallback;
 		}
 	}

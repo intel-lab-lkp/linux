@@ -468,8 +468,7 @@ void swap_update_readahead(struct folio *folio, struct vm_area_struct *vma,
  * __swap_cache_prepare_and_add - Prepare the folio and add it to swap cache.
  * @entry: swap entry to be bound to the folio.
  * @folio: folio to be added.
- * @gfp: memory allocation flags for charge, can be 0 if @charged is true.
- * @charged: if the folio is already charged.
+ * @gfp: memory allocation flags for charge.
  *
  * Update the swap_map and add folio as swap cache, typically before swapin.
  * All swap slots covered by the folio must have a non-zero swap count.
@@ -480,7 +479,7 @@ void swap_update_readahead(struct folio *folio, struct vm_area_struct *vma,
  */
 static struct folio *__swap_cache_prepare_and_add(swp_entry_t entry,
 						  struct folio *folio,
-						  gfp_t gfp, bool charged)
+						  gfp_t gfp)
 {
 	unsigned long nr_pages = folio_nr_pages(folio);
 	struct folio *swapcache = NULL;
@@ -511,11 +510,13 @@ static struct folio *__swap_cache_prepare_and_add(swp_entry_t entry,
 			goto failed;
 	}
 
-	if (!charged && mem_cgroup_swapin_charge_folio(folio, NULL, gfp, entry)) {
+	if (mem_cgroup_swapin_charge_folio(folio, NULL, gfp, entry)) {
 		/* We might lose the shadow here, but that's fine */
 		ci = swap_cluster_get_and_lock(folio);
 		__swap_cache_do_del_folio(ci, folio, entry, NULL);
 		swap_cluster_unlock(ci);
+
+		count_mthp_stat(folio_order(folio), MTHP_STAT_SWPIN_FALLBACK_CHARGE);
 
 		/* __swap_cache_do_del_folio doesn't put the refs */
 		folio_ref_sub(folio, nr_pages);
@@ -578,7 +579,7 @@ struct folio *swap_cache_alloc_folio(swp_entry_t entry, gfp_t gfp_mask,
 	if (!folio)
 		return NULL;
 	/* Try add the new folio, returns existing folio or NULL on failure. */
-	result = __swap_cache_prepare_and_add(entry, folio, gfp_mask, false);
+	result = __swap_cache_prepare_and_add(entry, folio, gfp_mask);
 	if (result == folio)
 		*new_page_allocated = true;
 	else
@@ -589,7 +590,7 @@ struct folio *swap_cache_alloc_folio(swp_entry_t entry, gfp_t gfp_mask,
 /**
  * swapin_folio - swap-in one or multiple entries skipping readahead.
  * @entry: starting swap entry to swap in
- * @folio: a new allocated and charged folio
+ * @folio: a new allocated folio
  *
  * Reads @entry into @folio, @folio will be added to the swap cache.
  * If @folio is a large folio, the @entry will be rounded down to align
@@ -600,14 +601,14 @@ struct folio *swap_cache_alloc_folio(swp_entry_t entry, gfp_t gfp_mask,
  * to order 0. Else, if another folio was already added to the swap cache,
  * return that swap cache folio instead.
  */
-struct folio *swapin_folio(swp_entry_t entry, struct folio *folio)
+struct folio *swapin_folio(swp_entry_t entry, struct folio *folio, gfp_t gfp)
 {
 	struct folio *swapcache;
 	pgoff_t offset = swp_offset(entry);
 	unsigned long nr_pages = folio_nr_pages(folio);
 
 	entry = swp_entry(swp_type(entry), round_down(offset, nr_pages));
-	swapcache = __swap_cache_prepare_and_add(entry, folio, 0, true);
+	swapcache = __swap_cache_prepare_and_add(entry, folio, gfp);
 	if (swapcache == folio)
 		swap_read_folio(folio, NULL);
 	return swapcache;

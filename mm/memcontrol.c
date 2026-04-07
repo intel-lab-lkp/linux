@@ -5067,8 +5067,7 @@ out:
  * @gfp: reclaim mode
  * @entry: swap entry for which the folio is allocated
  *
- * This function charges a folio allocated for swapin. Please call this before
- * adding the folio to the swapcache.
+ * This function charges a folio allocated for swapin.
  *
  * Returns 0 on success. Otherwise, an error code is returned.
  */
