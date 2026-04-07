@@ -1645,13 +1645,15 @@ static int __ref kernel_init(void *unused)
 	      "See Linux Documentation/admin-guide/init.rst for guidance.");
 }
 
-/* Open /dev/console, for stdin/stdout/stderr, this should never fail */
+/* Open /dev/console, for stdin/stdout/stderr */
 void __init console_on_rootfs(void)
 {
 	struct file *file = filp_open("/dev/console", O_RDWR, 0);
 
 	if (IS_ERR(file)) {
-		pr_err("Warning: unable to open an initial console.\n");
+		pr_err("Warning: unable to open an initial console. "
+		       "You likely supplied your own internal initramfs, "
+		       "make sure /dev/console is there.\n");
 		return;
 	}
 	init_dup(file);
