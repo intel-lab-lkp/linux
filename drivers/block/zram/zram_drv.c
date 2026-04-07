@@ -1772,6 +1772,12 @@ static ssize_t algorithm_params_store(struct device *dev,
 	if (prio < ZRAM_PRIMARY_COMP || prio >= ZRAM_MAX_COMPS)
 		return -EINVAL;
 
+	guard(rwsem_write)(&zram->dev_lock);
+	if (init_done(zram)) {
+		pr_info("Can't change algorithm params for initialized device\n");
+		return -EBUSY;
+	}
+
 	ret = comp_params_store(zram, prio, level, dict_path, &deflate_params);
 	return ret ? ret : len;
 }
