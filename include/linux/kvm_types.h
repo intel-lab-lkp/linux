@@ -144,6 +144,7 @@ struct kvm_vcpu_stat_generic {
 
 struct kvm_refcount {
 	refcount_t users_count;
+	void (*destroy)(struct kvm *kvm);
 };
 
 static inline void kvm_get_kvm(struct kvm *kvm)
@@ -160,6 +161,13 @@ static inline bool kvm_get_kvm_safe(struct kvm *kvm)
 {
 	struct kvm_refcount *rc = (struct kvm_refcount *)kvm;
 	return refcount_inc_not_zero(&rc->users_count);
+}
+
+static inline void kvm_put_kvm(struct kvm *kvm)
+{
+	struct kvm_refcount *rc = (struct kvm_refcount *)kvm;
+	if (refcount_dec_and_test(&rc->users_count))
+		rc->destroy(kvm);
 }
 
 #endif /* !__ASSEMBLER__ */
