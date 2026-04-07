@@ -123,6 +123,16 @@
 
 #define IPMI_WDOG_TIMER_NOT_INIT_RESP	0x80
 
+/* Timeout for waiting for a heartbeat response (in jiffies). */
+#define IPMI_HEARTBEAT_WAIT_TIMEOUT	(HZ * 5)
+
+/*
+ * Set when the BMC becomes unreachable while the watchdog is active.
+ * Once set, all BMC communication is skipped and an orderly reboot
+ * is in progress.
+ */
+static bool bmc_reset_shutdown;
+
 static DEFINE_MUTEX(ipmi_watchdog_mutex);
 static bool nowayout = WATCHDOG_NOWAYOUT;
 
@@ -339,12 +349,14 @@ static int __ipmi_heartbeat(void);
  * and freed when both the send and receive messages are free.
  */
 static atomic_t msg_tofree = ATOMIC_INIT(0);
+static atomic_t msg_in_flight = ATOMIC_INIT(0);
 static DECLARE_COMPLETION(msg_wait);
 static void msg_free_smi(struct ipmi_smi_msg *msg)
 {
 	if (atomic_dec_and_test(&msg_tofree)) {
 		if (!oops_in_progress)
 			complete(&msg_wait);
+		atomic_set(&msg_in_flight, 0);
 	}
 }
 static void msg_free_recv(struct ipmi_recv_msg *msg)
@@ -352,6 +364,7 @@ static void msg_free_recv(struct ipmi_recv_msg *msg)
 	if (atomic_dec_and_test(&msg_tofree)) {
 		if (!oops_in_progress)
 			complete(&msg_wait);
+		atomic_set(&msg_in_flight, 0);
 	}
 }
 static struct ipmi_smi_msg smi_msg = INIT_IPMI_SMI_MSG(msg_free_smi);
@@ -429,19 +442,34 @@ static int _ipmi_set_timeout(int do_heartbeat)
 {
 	int send_heartbeat_now;
 	int rv;
+	unsigned long ret;
 
 	if (!watchdog_user)
 		return -ENODEV;
 
+	if (bmc_reset_shutdown)
+		return -ENODEV;
+
+	if (atomic_read(&msg_in_flight))
+		return -EBUSY;
+
+	reinit_completion(&msg_wait);
+	atomic_set(&msg_in_flight, 1);
 	atomic_set(&msg_tofree, 2);
 
 	rv = __ipmi_set_timeout(&smi_msg, &recv_msg, &send_heartbeat_now);
 	if (rv) {
 		atomic_set(&msg_tofree, 0);
+		atomic_set(&msg_in_flight, 0);
 		return rv;
 	}
 
-	wait_for_completion(&msg_wait);
+	ret = wait_for_completion_timeout(&msg_wait,
+					  IPMI_HEARTBEAT_WAIT_TIMEOUT);
+	if (ret == 0) {
+		atomic_set(&msg_tofree, 0);
+		return -ETIMEDOUT;
+	}
 
 	if ((do_heartbeat == IPMI_SET_TIMEOUT_FORCE_HB)
 		|| ((send_heartbeat_now)
@@ -510,10 +538,17 @@ static int __ipmi_heartbeat(void)
 {
 	struct kernel_ipmi_msg msg;
 	int rv;
+	unsigned long ret;
 	struct ipmi_system_interface_addr addr;
 	int timeout_retries = 0;
 
 restart:
+	if (bmc_reset_shutdown)
+		return -ENODEV;
+
+	if (atomic_read(&msg_in_flight))
+		return -EBUSY;
+
 	/*
 	 * Don't reset the timer if we have the timer turned off, that
 	 * re-enables the watchdog.
@@ -521,6 +556,8 @@ restart:
 	if (ipmi_watchdog_state == WDOG_TIMEOUT_NONE)
 		return 0;
 
+	reinit_completion(&msg_wait);
+	atomic_set(&msg_in_flight, 1);
 	atomic_set(&msg_tofree, 2);
 
 	addr.addr_type = IPMI_SYSTEM_INTERFACE_ADDR_TYPE;
@@ -541,14 +578,17 @@ restart:
 				      1);
 	if (rv) {
 		atomic_set(&msg_tofree, 0);
-		pr_warn("heartbeat send failure: %d\n", rv);
+		atomic_set(&msg_in_flight, 0);
 		return rv;
 	}
 
-	/* Wait for the heartbeat to be sent. */
-	wait_for_completion(&msg_wait);
+	ret = wait_for_completion_timeout(&msg_wait, IPMI_HEARTBEAT_WAIT_TIMEOUT);
+	if (ret == 0) {
+		atomic_set(&msg_tofree, 0);
+		return -ETIMEDOUT;
+	}
 
-	if (recv_msg.msg.data[0] == IPMI_WDOG_TIMER_NOT_INIT_RESP)  {
+	if (recv_msg.msg.data[0] >= 0x80) {
 		timeout_retries++;
 		if (timeout_retries > 3) {
 			pr_err("Unable to restore the IPMI watchdog's settings, giving up\n");
@@ -557,12 +597,11 @@ restart:
 		}
 
 		/*
-		 * The timer was not initialized, that means the BMC was
-		 * probably reset and lost the watchdog information.  Attempt
-		 * to restore the timer's info.  Note that we still hold
-		 * the heartbeat lock, to keep a heartbeat from happening
-		 * in this process, so must say no heartbeat to avoid a
-		 * deadlock on this mutex
+		 * The BMC was probably reset and lost the watchdog
+		 * information.  Attempt to restore the timer's info.
+		 * Note that we still hold the heartbeat lock, to keep
+		 * a heartbeat from happening in this process, so must
+		 * say no heartbeat to avoid a deadlock on this mutex.
 		 */
 		rv = _ipmi_set_timeout(IPMI_SET_TIMEOUT_NO_HB);
 		if (rv) {
@@ -876,15 +915,38 @@ static struct miscdevice ipmi_wdog_miscdev = {
 static void ipmi_wdog_msg_handler(struct ipmi_recv_msg *msg,
 				  void                 *handler_data)
 {
-	if (msg->msg.cmd == IPMI_WDOG_RESET_TIMER &&
-			msg->msg.data[0] == IPMI_WDOG_TIMER_NOT_INIT_RESP)
-		pr_info("response: The IPMI controller appears to have been reset, will attempt to reinitialize the watchdog timer\n");
-	else if (msg->msg.data[0] != 0)
-		pr_err("response: Error %x on cmd %x\n",
-		       msg->msg.data[0],
-		       msg->msg.cmd);
+	if (msg->msg.data[0] != 0) {
+		if (msg->msg.data[0] == IPMI_WDOG_TIMER_NOT_INIT_RESP)
+			pr_crit("BMC error: watchdog timer not initialized "
+				"(0x%02x on cmd 0x%02x)\n",
+				msg->msg.data[0], msg->msg.cmd);
+		else if (msg->msg.data[0] > 0x80 &&
+			 msg->msg.data[0] <= 0xBE)
+			pr_crit("BMC error: vendor-specific completion code "
+				"0x%02x on cmd 0x%02x\n",
+				msg->msg.data[0], msg->msg.cmd);
+		else
+			pr_crit("BMC error: completion code 0x%02x "
+				"on cmd 0x%02x\n",
+				msg->msg.data[0], msg->msg.cmd);
+
+		if (ipmi_watchdog_state != WDOG_TIMEOUT_NONE &&
+		    !bmc_reset_shutdown) {
+			bmc_reset_shutdown = true;
+			pr_crit("BMC communication lost with watchdog active, "
+				"initiating system reboot\n");
+			orderly_reboot();
+		}
+	}
 
 	ipmi_free_recv_msg(msg);
+	/*
+	 * Ensure the in-flight flag is cleared after the message is freed.
+	 * In the normal path this is redundant (already cleared by the
+	 * recv_msg destructor). For late responses arriving after a
+	 * completion timeout, this is the only path that clears the flag.
+	 */
+	atomic_set(&msg_in_flight, 0);
 }
 
 static void ipmi_wdog_pretimeout_handler(void *handler_data)
@@ -1105,6 +1167,9 @@ static int wdog_reboot_handler(struct notifier_block *this,
 	if ((watchdog_user) && (!reboot_event_handled)) {
 		/* Make sure we only do this once. */
 		reboot_event_handled = 1;
+
+		if (bmc_reset_shutdown)
+			return NOTIFY_OK;
 
 		if (code == SYS_POWER_OFF || code == SYS_HALT) {
 			/* Disable the WDT if we are shutting down. */
