@@ -59,6 +59,7 @@
 #include <linux/nstree.h>
 #include <linux/irq_work.h>
 #include <net/sock.h>
+#include <linux/cn_proc.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/cgroup.h>
@@ -2980,8 +2981,10 @@ int cgroup_attach_task(struct cgroup *dst_cgrp, struct task_struct *leader,
 
 	cgroup_migrate_finish(&mgctx);
 
-	if (!ret)
+	if (!ret) {
+		proc_cgroup_migrate_connector(leader, dst_cgrp);
 		TRACE_CGROUP_PATH(attach_task, dst_cgrp, leader, threadgroup);
+	}
 
 	return ret;
 }

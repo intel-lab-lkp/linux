@@ -16,6 +16,8 @@
 #include <linux/pid_namespace.h>
 #include <linux/cgroupstats.h>
 #include <linux/fs_parser.h>
+#include <linux/cn_proc.h>
+
 
 #include <trace/events/cgroup.h>
 
@@ -147,8 +149,11 @@ int cgroup_transfer_tasks(struct cgroup *to, struct cgroup *from)
 
 		if (task) {
 			ret = cgroup_migrate(task, false, &mgctx);
-			if (!ret)
+			if (!ret) {
+				proc_cgroup_migrate_connector(task, to);
 				TRACE_CGROUP_PATH(transfer_tasks, to, task, false);
+			}
+
 			put_task_struct(task);
 		}
 	} while (task && !ret);

@@ -33,7 +33,8 @@ enum proc_cn_mcast_op {
 #define PROC_EVENT_ALL (PROC_EVENT_FORK | PROC_EVENT_EXEC | PROC_EVENT_UID |  \
 			PROC_EVENT_GID | PROC_EVENT_SID | PROC_EVENT_PTRACE | \
 			PROC_EVENT_COMM | PROC_EVENT_NONZERO_EXIT |           \
-			PROC_EVENT_COREDUMP | PROC_EVENT_EXIT)
+			PROC_EVENT_COREDUMP | PROC_EVENT_EXIT | \
+			PROC_EVENT_CGRP_MIGRATE)
 
 /*
  * If you add an entry in proc_cn_event, make sure you add it in
@@ -51,7 +52,8 @@ enum proc_cn_event {
 	PROC_EVENT_SID  = 0x00000080,
 	PROC_EVENT_PTRACE = 0x00000100,
 	PROC_EVENT_COMM = 0x00000200,
-	/* "next" should be 0x00000400 */
+	PROC_EVENT_CGRP_MIGRATE = 0x00000400,
+	/* "next" should be 0x00000800 */
 	/* "last" is the last process event: exit,
 	 * while "next to last" is coredumping event
 	 * before that is report only if process dies
@@ -152,6 +154,14 @@ struct proc_event {
 			__kernel_pid_t parent_pid;
 			__kernel_pid_t parent_tgid;
 		} exit;
+
+		struct cgrp_proc_event {
+			__kernel_pid_t process_pid;
+			__kernel_pid_t process_tgid;
+			__kernel_pid_t initiator_pid;
+			__kernel_pid_t initiator_tgid;
+			__u64          cgroup_id;
+		} cgrp;
 
 	} event_data;
 };
