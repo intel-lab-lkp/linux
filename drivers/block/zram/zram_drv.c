@@ -2701,8 +2701,10 @@ static void zram_bio_discard(struct zram *zram, struct bio *bio)
 	 * skipping this logical block is appropriate here.
 	 */
 	if (offset) {
-		if (n <= (PAGE_SIZE - offset))
+		if (n <= (PAGE_SIZE - offset)) {
+			bio_endio(bio);
 			return;
+		}
 
 		n -= (PAGE_SIZE - offset);
 		index++;
