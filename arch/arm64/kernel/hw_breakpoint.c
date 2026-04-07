@@ -418,6 +418,16 @@ static int arch_build_bp_info(struct perf_event *bp,
 	/* Type */
 	switch (attr->bp_type) {
 	case HW_BREAKPOINT_X:
+		/*
+		 * We don't allow kernel breakpoints in places that are not
+		 * acceptable for kprobes.  On non-kprobes kernels, we don't
+		 * allow kernel breakpoints at all.
+		 */
+		if (attr->bp_addr >= TASK_SIZE_MAX) {
+			if (within_kprobe_blacklist(attr->bp_addr))
+				return -EINVAL;
+		}
+
 		hw->ctrl.type = ARM_BREAKPOINT_EXECUTE;
 		break;
 	case HW_BREAKPOINT_R:
