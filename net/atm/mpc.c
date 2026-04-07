@@ -886,7 +886,6 @@ static void mpoad_close(struct atm_vcc *vcc)
 		struct lec_priv *priv = netdev_priv(mpc->dev);
 		priv->lane2_ops->associate_indicator = NULL;
 		stop_mpc(mpc);
-		dev_put(mpc->dev);
 	}
 
 	mpc->in_ops->destroy_cache(mpc);
@@ -1508,6 +1507,8 @@ static void __exit atm_mpoa_cleanup(void)
 			priv = netdev_priv(mpc->dev);
 			if (priv->lane2_ops != NULL)
 				priv->lane2_ops->associate_indicator = NULL;
+			dev_put(mpc->dev);
+			mpc->dev = NULL;
 		}
 		ddprintk("about to clear caches\n");
 		mpc->in_ops->destroy_cache(mpc);
