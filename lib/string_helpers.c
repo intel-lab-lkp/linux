@@ -121,6 +121,13 @@ int string_get_size(u64 size, u64 blk_size, const enum string_size_units units,
 		size += 1;
 	}
 
+	if (size >= divisor[units_base]) {
+		size = 1;
+		remainder = 0;
+		i++;
+		j = 2;
+	}
+
 	if (j) {
 		snprintf(tmp, sizeof(tmp), ".%03u", remainder);
 		tmp[j+1] = '\0';

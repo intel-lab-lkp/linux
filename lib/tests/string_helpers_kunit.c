@@ -558,6 +558,10 @@ static void test_get_size(struct kunit *test)
 	/* weird block sizes */
 	test_string_get_size_one(3000, 1900, "5.70 MB", "5.44 MiB");
 
+	/* rounding carry into the next unit */
+	test_string_get_size_one(999500, 1, "1.00 MB", "976 KiB");
+	test_string_get_size_one(1048064, 1, "1.05 MB", "1.00 MiB");
+
 	/* huge values */
 	test_string_get_size_one(U64_MAX, 4096, "75.6 ZB", "64.0 ZiB");
 	test_string_get_size_one(4096, U64_MAX, "75.6 ZB", "64.0 ZiB");
