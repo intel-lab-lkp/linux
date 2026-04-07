@@ -850,8 +850,6 @@ mt7915_mac_tx_free_done(struct mt7915_dev *dev,
 {
 	struct sk_buff *skb, *tmp;
 
-	mt7915_mac_sta_poll(dev);
-
 	if (wake)
 		mt76_set_tx_blocked(&dev->mt76, false);
 
@@ -1998,6 +1996,7 @@ void mt7915_mac_work(struct work_struct *work)
 	if (++mphy->mac_work_count == 5) {
 		mphy->mac_work_count = 0;
 
+		mt7915_mac_sta_poll(phy->dev);
 		mt7915_mac_update_stats(phy);
 		mt7915_mac_severe_check(phy);
 
