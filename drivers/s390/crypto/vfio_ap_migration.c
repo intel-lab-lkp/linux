@@ -4,6 +4,7 @@
  *
  * Copyright IBM Corp. 2025
  */
+#include <linux/anon_inodes.h>
 #include <linux/file.h>
 #include "uapi/linux/vfio_ap.h"
 
@@ -97,12 +98,160 @@ static void vfio_ap_release_mig_files(struct ap_matrix_mdev *matrix_mdev)
 	}
 }
 
+static ssize_t vfio_ap_save_read(struct file *, char __user *, size_t, loff_t *)
+{
+	/* TODO */
+	return -EOPNOTSUPP;
+}
+
+static int vfio_ap_release_migf(struct inode *, struct file *)
+{
+	/* TODO */
+	return -EOPNOTSUPP;
+}
+
+static const struct file_operations vfio_ap_save_fops = {
+	.owner = THIS_MODULE,
+	.read = vfio_ap_save_read,
+	.compat_ioctl = compat_ptr_ioctl,
+	.release = vfio_ap_release_migf,
+};
+
+static struct vfio_ap_config
+*vfio_ap_allocate_config(struct ap_matrix_mdev *matrix_mdev, size_t *config_sz)
+{
+	struct vfio_ap_config *ap_config;
+	size_t qinfo_size;
+	int num_queues;
+
+	lockdep_assert_held(&matrix_dev->mdevs_lock);
+	num_queues = vfio_ap_mdev_get_num_queues(&matrix_mdev->shadow_apcb);
+	qinfo_size = num_queues * sizeof(struct vfio_ap_queue_info);
+	*config_sz = qinfo_size + sizeof(struct vfio_ap_config);
+	ap_config = kzalloc(*config_sz, GFP_KERNEL_ACCOUNT);
+
+	if (!ap_config)
+		return ERR_PTR(-ENOMEM);
+
+	ap_config->num_queues = num_queues;
+
+	return ap_config;
+}
+
+static void vfio_ap_store_queue_info(struct vfio_ap_migration_file *migf)
+{
+	unsigned long *apm, *aqm, num_queues, apid, apqi, apqn, data;
+	struct ap_matrix_mdev *matrix_mdev;
+	struct vfio_ap_queue *q;
+
+	lockdep_assert_held(&matrix_dev->mdevs_lock);
+	matrix_mdev = migf->matrix_mdev;
+	apm = matrix_mdev->shadow_apcb.apm;
+	aqm = matrix_mdev->shadow_apcb.aqm;
+	num_queues = 0;
+
+	for_each_set_bit_inv(apid, apm, AP_DEVICES) {
+		for_each_set_bit_inv(apqi, aqm, AP_DOMAINS) {
+			apqn = AP_MKQID(apid, apqi);
+			q = vfio_ap_mdev_get_queue(matrix_mdev, apqn);
+
+			if (!q)
+				continue;
+
+			migf->ap_config->qinfo[num_queues].apqn = apqn;
+			data = q->hwinfo.value;
+			migf->ap_config->qinfo[num_queues].data = data;
+			num_queues += 1;
+			dev_dbg(matrix_mdev->vdev.dev,
+				"%s (%d): qinfo: apqn=%04lx data=%016lx\n",
+				__func__, __LINE__, apqn, data);
+		}
+	}
+}
+
+static struct vfio_ap_migration_file
+*vfio_ap_allocate_migf(struct ap_matrix_mdev *matrix_mdev)
+{
+	struct vfio_ap_migration_file *migf;
+	struct vfio_ap_config *ap_config;
+	size_t config_size;
+
+	lockdep_assert_held(&matrix_dev->mdevs_lock);
+
+	migf = kzalloc_obj(struct vfio_ap_migration_file, GFP_KERNEL_ACCOUNT);
+	if (!migf)
+		return ERR_PTR(-ENOMEM);
+
+	ap_config = vfio_ap_allocate_config(matrix_mdev, &config_size);
+	if (IS_ERR(ap_config)) {
+		kfree(migf);
+		return ERR_CAST(ap_config);
+	}
+
+	migf->ap_config = ap_config;
+	migf->config_sz = config_size;
+	migf->matrix_mdev = matrix_mdev;
+
+	return migf;
+}
+
+static void vfio_ap_deallocate_migf(struct vfio_ap_migration_file *migf)
+{
+	kfree(migf->ap_config);
+	kfree(migf);
+}
+
+static struct file *vfio_ap_open_file_stream(struct vfio_ap_migration_file *migf,
+					     const struct file_operations *fops,
+					     int flags)
+{
+	struct file *filp;
+
+	lockdep_assert_held(&matrix_dev->mdevs_lock);
+
+	filp = anon_inode_getfile("vfio_ap_migf", fops, migf, flags);
+	if (IS_ERR(filp))
+		return ERR_CAST(filp);
+
+	stream_open(filp->f_inode, filp);
+
+	return filp;
+}
+
+static struct vfio_ap_migration_file *
+vfio_ap_save_mdev_state(struct ap_matrix_mdev *matrix_mdev)
+{
+	struct vfio_ap_migration_data *mig_data;
+	struct vfio_ap_migration_file *migf;
+	struct file *filp;
+
+	lockdep_assert_held(&matrix_dev->mdevs_lock);
+	mig_data = matrix_mdev->mig_data;
+
+	migf = vfio_ap_allocate_migf(matrix_mdev);
+	if (IS_ERR(migf))
+		return ERR_CAST(migf);
+
+	filp = vfio_ap_open_file_stream(migf, &vfio_ap_save_fops, O_RDONLY);
+	if (IS_ERR(filp)) {
+		vfio_ap_deallocate_migf(migf);
+		return ERR_CAST(filp);
+	}
+
+	migf->filp = filp;
+	mig_data->saving_migf = migf;
+	vfio_ap_store_queue_info(mig_data->saving_migf);
+
+	return mig_data->saving_migf;
+}
+
 static struct file *
 vfio_ap_transition_to_state(struct ap_matrix_mdev *matrix_mdev,
 			    enum vfio_device_mig_state new_state)
 {
 	struct vfio_ap_migration_data *mig_data;
 	enum vfio_device_mig_state cur_state;
+	struct vfio_ap_migration_file *migf;
 
 	lockdep_assert_held(&matrix_dev->mdevs_lock);
 	mig_data = matrix_mdev->mig_data;
@@ -110,10 +259,23 @@ vfio_ap_transition_to_state(struct ap_matrix_mdev *matrix_mdev,
 	dev_dbg(matrix_mdev->vdev.dev, "%s: %d -> %d\n", __func__, cur_state,
 		new_state);
 
+	/*
+	 * Begins the process of saving the vfio device state by creating and
+	 * returning a streaming data_fd to be used to read out the internal
+	 * state of the vfio-ap device on the source host.
+	 */
 	if (cur_state == VFIO_DEVICE_STATE_STOP &&
 	    new_state == VFIO_DEVICE_STATE_STOP_COPY) {
-		/* TODO */
-		return ERR_PTR(-EOPNOTSUPP);
+		migf = vfio_ap_save_mdev_state(matrix_mdev);
+		if (IS_ERR(migf))
+			return ERR_CAST(migf);
+
+		if (migf) {
+			get_file(migf->filp);
+			return migf->filp;
+		}
+
+		return NULL;
 	}
 
 	if (cur_state == VFIO_DEVICE_STATE_STOP &&
