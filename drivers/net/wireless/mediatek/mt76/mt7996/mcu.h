@@ -220,6 +220,31 @@ struct mt7996_mcu_all_sta_info_event {
 			__le32 tx_msdu_cnt;
 			__le32 rx_msdu_cnt;
 		} __packed, msdu_cnt);
+
+		DECLARE_FLEX_ARRAY(struct {
+			__le16 wlan_idx;
+			u8 rsv[2];
+			__le32 tx[IEEE80211_NUM_ACS];
+			__le32 rx[IEEE80211_NUM_ACS];
+		} __packed, airtime);
+	} __packed;
+} __packed;
+
+struct mt7996_mcu_per_sta_info_event {
+	u8 rsv[4];
+	__le16 tag;
+	__le16 len;
+	u8 more;
+	u8 rsv2;
+	__le16 sta_num;
+	u8 rsv3[4];
+
+	union {
+		DECLARE_FLEX_ARRAY(struct {
+			__le16 wlan_idx;
+			u8 rsv[2];
+			u8 rcpi[4];
+		} __packed, rssi);
 	} __packed;
 } __packed;
 
