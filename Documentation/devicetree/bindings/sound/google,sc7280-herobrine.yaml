@@ -17,8 +17,13 @@ allOf:
 
 properties:
   compatible:
-    enum:
-      - google,sc7280-herobrine
+    oneOf:
+      - enum:
+          - google,sc7280-herobrine
+      - items:
+          - enum:
+              - radxa,dragon-q6a-sndcard
+          - const: google,sc7280-herobrine
 
   "#address-cells":
     const: 1
