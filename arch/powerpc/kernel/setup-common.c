@@ -68,6 +68,7 @@
 #include <asm/kasan.h>
 #include <asm/mce.h>
 #include <asm/systemcfg.h>
+#include <linux/kmsg_dump.h>
 
 #include "setup.h"
 
@@ -748,6 +749,8 @@ static int ppc_panic_fadump_handler(struct notifier_block *this,
 	 * If firmware-assisted dump has been registered then trigger
 	 * its callback and let the firmware handles everything else.
 	 */
+	kmsg_dump_desc(KMSG_DUMP_PANIC, (char *)ptr);
+
 	crash_fadump(NULL, ptr);
 
 	return NOTIFY_DONE;
