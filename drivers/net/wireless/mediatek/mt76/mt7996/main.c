@@ -249,6 +249,13 @@ mt7996_set_hw_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 	else if (idx == *wcid_keyidx)
 		*wcid_keyidx = -1;
 
+	if (cmd != SET_KEY && !sta && link->mt76.cipher) {
+		link->mt76.cipher = 0;
+		if (link->phy)
+			mt7996_mcu_add_bss_info(link->phy, vif, link_conf,
+						&link->mt76, msta_link, true);
+	}
+
 	/* only do remove key for BIGTK */
 	if (cmd != SET_KEY && !is_bigtk)
 		return 0;
