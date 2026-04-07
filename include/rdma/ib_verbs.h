@@ -1754,6 +1754,7 @@ struct ib_comp_cntr {
 	struct ib_umem		*err_umem;
 	u64			comp_count_max_value;
 	u64			err_count_max_value;
+	struct rdma_restrack_entry res;
 };
 
 struct ib_comp_cntr_attach_attr {

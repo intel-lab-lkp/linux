@@ -8,6 +8,7 @@
 #include <rdma/ib_umem_dmabuf.h>
 #include "rdma_core.h"
 #include "uverbs.h"
+#include "restrack.h"
 
 static int uverbs_free_comp_cntr(struct ib_uobject *uobject,
 				 enum rdma_remove_reason why,
@@ -20,6 +21,7 @@ static int uverbs_free_comp_cntr(struct ib_uobject *uobject,
 	if (ret)
 		return ret;
 
+	rdma_restrack_del(&cc->res);
 	ib_umem_release(cc->comp_umem);
 	ib_umem_release(cc->err_umem);
 	kfree(cc);
@@ -120,7 +122,11 @@ static int UVERBS_HANDLER(UVERBS_METHOD_COMP_CNTR_CREATE)(
 	if (ret)
 		goto err_err_umem;
 
+	rdma_restrack_new(&cc->res, RDMA_RESTRACK_COMP_CNTR);
+	rdma_restrack_set_name(&cc->res, NULL);
+
 	uobj->object = cc;
+	rdma_restrack_add(&cc->res);
 	uverbs_finalize_uobj_create(attrs, UVERBS_ATTR_CREATE_COMP_CNTR_HANDLE);
 
 	ret = uverbs_copy_to(attrs,
