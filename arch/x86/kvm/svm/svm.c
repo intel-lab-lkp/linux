@@ -1251,6 +1251,30 @@ void svm_switch_vmcb(struct vcpu_svm *svm, struct kvm_vmcb_info *target_vmcb)
 	svm->vmcb = target_vmcb->ptr;
 }
 
+static void svm_load_vmcb01(struct kvm_vcpu *vcpu)
+{
+	struct vcpu_svm *svm = to_svm(vcpu);
+
+	if (!is_guest_mode(vcpu)) {
+		WARN_ON_ONCE(svm->vmcb != svm->vmcb01.ptr);
+		return;
+	}
+
+	WARN_ON_ONCE(svm->vmcb != svm->nested.vmcb02.ptr);
+	svm_switch_vmcb(svm, &svm->vmcb01);
+}
+
+static void svm_put_vmcb01(struct kvm_vcpu *vcpu)
+{
+	if (!is_guest_mode(vcpu))
+		return;
+
+	svm_switch_vmcb(to_svm(vcpu), &to_svm(vcpu)->nested.vmcb02);
+}
+
+DEFINE_GUARD(svm_vmcb01, struct kvm_vcpu *,
+	     svm_load_vmcb01(_T), svm_put_vmcb01(_T))
+
 static int svm_vcpu_precreate(struct kvm *kvm)
 {
 	return avic_alloc_physical_id_table(kvm);
