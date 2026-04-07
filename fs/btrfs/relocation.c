@@ -5089,6 +5089,7 @@ fail:
 	btrfs_free_reserved_extent(fs_info, new_addr, length, 0);
 
 	mutex_unlock(&fs_info->remap_mutex);
+	btrfs_abort_transaction(trans, ret);
 	btrfs_end_transaction(trans);
 
 	return ret;
