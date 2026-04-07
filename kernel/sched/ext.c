@@ -6214,9 +6214,9 @@ __bpf_kfunc bool scx_bpf_dsq_move_to_local(u64 dsq_id)
 		 */
 		dspc->nr_tasks++;
 		return true;
-	} else {
-		return false;
 	}
+
+	return false;
 }
 
 /**
