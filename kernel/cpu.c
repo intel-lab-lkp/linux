@@ -3137,6 +3137,12 @@ void set_cpu_online(unsigned int cpu, bool online)
 		if (cpumask_test_and_clear_cpu(cpu, &__cpu_online_mask))
 			atomic_dec(&__num_online_cpus);
 	}
+
+	/*
+	 * An online CPU is by default assumed to be preferred
+	 * Unitl STEAL_MONITOR changes it
+	 */
+	set_cpu_preferred(cpu, online);
 }
 
 /*
