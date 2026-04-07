@@ -3,6 +3,7 @@
 
 """Run the tools/testing/selftests/net/csum testsuite."""
 
+import errno
 import fcntl
 import socket
 import struct
@@ -47,10 +48,20 @@ def run_one_stream(cfg, ipver, remote_v4, remote_v6, should_lso):
 
         if ipver == "4":
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.connect((remote_v4, port))
+            sockaddr = (remote_v4, port)
         else:
             sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-            sock.connect((remote_v6, port))
+            sockaddr = (remote_v6, port)
+
+        for attempt in range(5):
+            try:
+                sock.connect(sockaddr)
+                break
+            except OSError as e:
+                if e.errno == errno.EHOSTUNREACH and attempt < 4:
+                    time.sleep(0.5)
+                else:
+                    raise
 
         # Small send to make sure the connection is working.
         sock.send("ping".encode())
