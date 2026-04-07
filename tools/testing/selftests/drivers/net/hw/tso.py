@@ -374,6 +374,12 @@ def main() -> None:
                 (),
             ),
             (
+                "vxlan2", "4", "tx-udp_tnl-csum-segmentation",
+                ("vxlan", "id 100 dstport 4789 udpcsum",
+                 "tx-gso-partial tx-udp_tnl-segmentation tx-udp_tnl-csum-segmentation", (),),
+                ("vxlan", "id 200 dstport 5789 udpcsum", "", ("4", "6")),
+            ),
+            (
                 "gre", "4", "tx-gre-segmentation",
                 ("gre", "", "", ("4", "6")),
                 (),
@@ -389,6 +395,24 @@ def main() -> None:
                  "tx-gso-partial tx-udp_tnl-segmentation tx-udp_tnl-csum-segmentation", (),),
                 ("geneve", "id 200 dstport 6082 noudpcsum udp6zerocsumtx udp6zerocsumrx",
                  "", ("4", "6"),),
+            ),
+            (
+                "geneve2_csum", "", "tx-udp_tnl-csum-segmentation",
+                ("geneve", "id 100 dstport 6081 udpcsum",
+                 "tx-gso-partial tx-udp_tnl-segmentation tx-udp_tnl-csum-segmentation", (),),
+                ("geneve", "id 200 dstport 6082 noudpcsum", "", ("4", "6")),
+            ),
+            (
+                "geneve2_grohint", "", "tx-udp_tnl-csum-segmentation",
+                ("geneve", "id 100 dstport 6081 udpcsum gro-hint",
+                 "tx-gso-partial tx-udp_tnl-segmentation tx-udp_tnl-csum-segmentation", (),),
+                ("geneve", "id 200 dstport 6082 udpcsum", "", ("4", "6")),
+            ),
+            (
+                "geneve2_inherit", "4", "tx-udp_tnl-csum-segmentation",
+                ("geneve", "id 100 dstport 6081 udpcsum gro-hint",
+                 "tx-gso-partial tx-udp_tnl-segmentation tx-udp_tnl-csum-segmentation", (),),
+                ("geneve", "id 200 dstport 6082 udpcsum inner-proto-inherit", "", ("4", "6")),
             ),
         )
 
