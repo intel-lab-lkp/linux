@@ -1285,3 +1285,133 @@ pub fn system_bh_highpri() -> &'static Queue {
 ///
 /// This is intended for use in KUnit tests and sample modules ONLY.
 #[cfg(CONFIG_KUNIT)]
+
+#[macros::kunit_tests(rust_kernel_workqueue)]
+mod tests {
+    use super::*;
+    use crate::sync::Arc;
+
+    #[pin_data]
+    struct TestWorkItem {
+        #[pin]
+        work: Work<TestWorkItem>,
+        value: i32,
+    }
+
+    impl_has_work! {
+        impl HasWork<Self> for TestWorkItem { self.work }
+    }
+
+    impl WorkItem for TestWorkItem {
+        type Pointer = Arc<Self>;
+        fn run(_this: Arc<Self>) {}
+    }
+
+    #[pin_data]
+    struct TestDelayedWorkItem {
+        #[pin]
+        delayed_work: DelayedWork<TestDelayedWorkItem>,
+        value: i32,
+    }
+
+    impl_has_delayed_work! {
+        impl HasDelayedWork<Self> for TestDelayedWorkItem { self.delayed_work }
+    }
+
+    impl WorkItem for TestDelayedWorkItem {
+        type Pointer = Arc<Self>;
+        fn run(_this: Arc<Self>) {}
+    }
+
+    #[test]
+    fn test_work_cancel_reclaim() {
+        let item = Arc::pin_init(
+            pin_init!(TestWorkItem {
+                work <- new_work!("TestWorkItem::work"),
+                value: 42,
+            }),
+            GFP_KERNEL,
+        )
+        .expect("Failed to allocate TestWorkItem");
+
+        let initial_count = arc_count(&item);
+
+        // Enqueue
+        let _ = system().enqueue(item.clone());
+
+        // Cancel and Reclaim (if it was pending)
+        if let Some(reclaimed) = item.work.cancel() {
+            assert!(arc_count(&item) == initial_count + 1);
+            drop(reclaimed);
+            assert!(arc_count(&item) == initial_count);
+        }
+    }
+
+    #[test]
+    fn test_work_cancel_sync_reclaim() {
+        let item = Arc::pin_init(
+            pin_init!(TestWorkItem {
+                work <- new_work!("TestWorkItem::work"),
+                value: 42,
+            }),
+            GFP_KERNEL,
+        )
+        .expect("Failed to allocate TestWorkItem");
+
+        let initial_count = arc_count(&item);
+
+        // Enqueue
+        let _ = system().enqueue(item.clone());
+
+        // Cancel Sync and Reclaim
+        if let Some(reclaimed) = item.work.cancel_sync() {
+            assert!(arc_count(&item) == initial_count + 1);
+            drop(reclaimed);
+            assert!(arc_count(&item) == initial_count);
+        }
+    }
+
+    #[test]
+    fn test_work_stress_enqueue_cancel() {
+        let item = Arc::pin_init(
+            pin_init!(TestWorkItem {
+                work <- new_work!("TestWorkItem::work"),
+                value: 42,
+            }),
+            GFP_KERNEL,
+        )
+        .expect("Failed to allocate TestWorkItem");
+
+        for _ in 0..100 {
+            if let Ok(_) = system().enqueue(item.clone()) {
+                let _ = item.work.cancel_sync();
+            }
+        }
+
+        assert_eq!(arc_count(&item), 1);
+    }
+
+    #[test]
+    fn test_delayed_work_cancel_reclaim() {
+        let item = Arc::pin_init(
+            pin_init!(TestDelayedWorkItem {
+                delayed_work <- new_delayed_work!("TestDelayedWorkItem::delayed_work"),
+                value: 42,
+            }),
+            GFP_KERNEL,
+        )
+        .expect("Failed to allocate TestDelayedWorkItem");
+
+        let initial_count = arc_count(&item);
+
+        // Enqueue delayed (use a longer delay to ensure it stays pending)
+        let _ = system().enqueue_delayed(item.clone(), 1000);
+
+        // Cancel and Reclaim
+        if let Some(reclaimed) = item.delayed_work.cancel() {
+            assert!(arc_count(&item) == initial_count + 1);
+            drop(reclaimed);
+            assert!(arc_count(&item) == initial_count);
+        }
+    }
+}
