@@ -734,6 +734,67 @@ device to close it, or the timer will not stop.  This is a new semantic
 for the driver, but makes it consistent with the rest of the watchdog
 drivers in Linux.
 
+BMC Reset Behavior
+------------------
+
+When the BMC (Baseboard Management Controller) resets while the IPMI
+watchdog is active, the hardware watchdog timer state on the BMC is
+lost.  The driver detects this condition and initiates a clean system
+reboot rather than leaving the system running without watchdog
+protection.
+
+The driver handles BMC resets as follows:
+
+1. **Panic prevention:** The static message structures (``smi_msg`` and
+   ``recv_msg``) are guarded by an ``msg_in_flight`` atomic flag.  If a
+   previous message is still queued in the IPMI layer, new operations
+   return ``-EBUSY`` instead of reusing the structures (which would cause
+   a ``list_add`` corruption BUG).
+
+2. **Hang prevention:** ``wait_for_completion_timeout()`` with a 5-second
+   timeout replaces the indefinite ``wait_for_completion()`` in both
+   ``__ipmi_heartbeat()`` and ``_ipmi_set_timeout()``.  This prevents
+   tasks from blocking in D state when the BMC is unresponsive.
+
+3. **BMC failure detection:** When ``ipmi_wdog_msg_handler()`` receives
+   a non-zero completion code while the watchdog is active, it sets the
+   ``bmc_reset_shutdown`` flag and calls ``orderly_reboot()``.  Error
+   classification distinguishes three categories:
+
+   - ``TIMER_NOT_INIT`` (0x80): the BMC lost the watchdog timer state.
+   - Vendor-specific codes (0x81-0xBE): BMC-specific error responses.
+   - Standard IPMI completion codes (0xC0+): general BMC errors.
+
+   All produce a critical-level log message::
+
+     IPMI Watchdog: BMC error: watchdog timer not initialized (0x80 on cmd 0x22)
+     IPMI Watchdog: BMC communication lost with watchdog active, initiating system reboot
+
+4. **Clean shutdown:** Once ``bmc_reset_shutdown`` is set, all BMC
+   communication paths (``_ipmi_set_timeout()``, ``__ipmi_heartbeat()``,
+   ``wdog_reboot_handler()``) return immediately without attempting
+   further IPMI operations.  This prevents panics, stack traces, and
+   hangs during the reboot sequence.
+
+5. **Late response handling:** The ``msg_in_flight`` flag is cleared in
+   ``ipmi_wdog_msg_handler()`` after the message is freed.  This handles
+   late responses arriving after a completion timeout, ensuring the flag
+   does not remain set permanently.
+
+The system reboot after a BMC reset is the expected and correct
+behavior.  The hardware watchdog timer lives on the BMC, and when
+that timer state is lost, the system must be restarted to restore
+watchdog protection.
+
+Administrators performing supervised BMC maintenance (firmware updates,
+manual resets) should disarm the watchdog before the operation::
+
+  systemctl stop watchdog
+
+And restart it after the BMC has fully recovered::
+
+  systemctl start watchdog
+
 
 Panic Timeouts
 --------------
