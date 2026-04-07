@@ -915,6 +915,9 @@ static void __init early_init_dt_check_kho(void)
 	if (!IS_ENABLED(CONFIG_KEXEC_HANDOVER) || (long)node < 0)
 		return;
 
+	if (is_kdump_kernel())
+		return;
+
 	if (!of_flat_dt_get_addr_size(node, "linux,kho-fdt",
 				      &fdt_start, &fdt_size))
 		return;

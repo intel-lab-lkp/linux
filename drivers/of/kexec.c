@@ -271,7 +271,8 @@ static int kho_add_chosen(const struct kimage *image, void *fdt, int chosen_node
 	if (ret && ret != -FDT_ERR_NOTFOUND)
 		return ret;
 
-	if (!image->kho.fdt || !image->kho.scratch)
+	if (!image->kho.fdt || !image->kho.scratch ||
+	    image->type == KEXEC_TYPE_CRASH)
 		return 0;
 
 	fdt_mem = image->kho.fdt;
