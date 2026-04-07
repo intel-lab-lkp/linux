@@ -487,7 +487,6 @@ static int papr_hvpipe_dev_create_handle(u32 srcID)
 		return -ENOMEM;
 
 	src_info->srcID = srcID;
-	src_info->tsk = current;
 	init_waitqueue_head(&src_info->recv_wqh);
 
 	/*
@@ -497,8 +496,8 @@ static int papr_hvpipe_dev_create_handle(u32 srcID)
 	spin_lock(&hvpipe_src_list_lock);
 	if(hvpipe_find_source(srcID)) {
 		spin_unlock(&hvpipe_src_list_lock);
-		pr_err("pid(%d) could not get the source(%d)\n",
-				src_info->tsk->pid, srcID);
+		pr_err("pid(%s:%d) could not get the source(%d)\n",
+				current->comm, task_pid_nr(current), srcID);
 		kfree(src_info);
 		return -EALREADY;
 	}
