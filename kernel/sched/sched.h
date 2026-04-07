@@ -4159,6 +4159,8 @@ struct steal_monitor_t {
 	unsigned int sampling_period_ms;
 };
 
+extern struct steal_monitor_t steal_mon;
+
 static inline bool task_can_run_on_preferred_cpu(struct task_struct *p)
 {
 	return cpumask_intersects(p->cpus_ptr, cpu_preferred_mask);

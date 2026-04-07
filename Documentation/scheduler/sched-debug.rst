@@ -52,3 +52,30 @@ rate for each task.
 
 ``scan_size_mb`` is how many megabytes worth of pages are scanned for
 a given scan.
+
+==================================
+Tunables for generic steal monitor
+==================================
+
+Generic Steal time monitor can be enabled by selecting STEAL_MONITOR in
+sched features. It is disabled by default.
+
+steal_mon_period - sampling frequency in milliseconds.
+How often sampling for steal values happen. This controls how fast scheduler
+acts on detecting the changes to steal time values.
+Default value is 1000 milliseconds.
+
+steal_mon_low - lower threshold value in percentage * 100
+This determines what values should be considered as nil/no steal values.
+When scheduler see steal times below this value, it will try to increase
+the preferred CPUs by 1 core. Having value as zero causes too much oscillations.
+Default value is 200, i.e 2% steal is considered as low threshold.
+
+steal_mon_high - higher threshold value in percentage * 100
+This determines what values should be considered as high steal values.
+When scheduler see steal times higher than this value, it will reduce
+the preferred CPUs by 1 core.
+Default value is 500, i.e 5% steal is considered as high threshold.
+
+Note: When the steal values in between high and low threshold no action is taken
+by scheduler. This is to avoid too much oscillations.

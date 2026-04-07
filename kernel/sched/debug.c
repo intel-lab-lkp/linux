@@ -612,6 +612,12 @@ static __init int sched_init_debug(void)
 	debugfs_create_u32("migration_cost_ns", 0644, debugfs_sched, &sysctl_sched_migration_cost);
 	debugfs_create_u32("nr_migrate", 0644, debugfs_sched, &sysctl_sched_nr_migrate);
 
+#ifdef CONFIG_PARAVIRT
+	debugfs_create_u32("steal_mon_low", 0644, debugfs_sched, &steal_mon.low_threshold);
+	debugfs_create_u32("steal_mon_high", 0644, debugfs_sched, &steal_mon.high_threshold);
+	debugfs_create_u32("steal_mon_period", 0644, debugfs_sched, &steal_mon.sampling_period_ms);
+#endif
+
 	sched_domains_mutex_lock();
 	update_sched_domain_debugfs();
 	sched_domains_mutex_unlock();
