@@ -215,12 +215,14 @@ int tegra_dc_rgb_probe(struct tegra_dc *dc)
 	if (!np)
 		return -ENODEV;
 
+	if (!of_device_is_available(np)) {
+		of_node_put(np);
+		return -ENODEV;
+	}
+
 	err = devm_add_action_or_reset(dc->dev, tegra_dc_of_node_put, np);
 	if (err < 0)
 		return err;
-
-	if (!of_device_is_available(np))
-		return -ENODEV;
 
 	rgb = devm_kzalloc(dc->dev, sizeof(*rgb), GFP_KERNEL);
 	if (!rgb)
