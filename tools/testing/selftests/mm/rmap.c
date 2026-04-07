@@ -430,4 +430,73 @@ TEST_F(migrate, ksm)
 	propagate_children(_metadata, data);
 }
 
+/* To test if ksm page can be migrated when it's mremapped */
+int merge_mremap_and_migrate(struct global_data *data)
+{
+	int ret = 0;
+	/* Allocate range and set the same data */
+	data->mapsize = 3*getpagesize();
+	data->region = mmap(NULL, data->mapsize, PROT_READ|PROT_WRITE,
+			   MAP_PRIVATE|MAP_ANON, -1, 0);
+	if (data->region == MAP_FAILED)
+		ksft_exit_fail_perror("mmap failed");
+
+	memset(data->region, 0x77, data->mapsize);
+
+	if (ksm_start() < 0)
+		return FAIL_ON_CHECK;
+
+	/* 1  2 expected */
+	ksft_print_msg("Shared: %ld (1 expected) Sharing: %ld (2 expected)\n",
+		ksm_get_pages_shared(), ksm_get_pages_sharing());
+
+	/*
+	 * Mremap the second pagesize address range into the third pagesize
+	 * address.
+	 */
+	data->region = mremap(data->region + getpagesize(), getpagesize(), getpagesize(),
+			 MREMAP_MAYMOVE|MREMAP_FIXED, data->region + 2*getpagesize());
+
+	if (data->region == MAP_FAILED)
+		return FAIL_ON_CHECK;
+
+	/* Check if we can migrate this region successfully */
+	ret = try_to_move_page(data->region);
+	if (ret != 0)
+		return ret;
+
+	/* Wait ksm scan two turns at least */
+	if (ksm_start() < 0)
+		return FAIL_ON_CHECK;
+
+	/* 1  1 expected */
+	ksft_print_msg("Shared: %ld (1 expected) Sharing: %ld (1 expected)\n",
+		ksm_get_pages_shared(), ksm_get_pages_sharing());
+
+	return 0;
+}
+
+TEST_F(migrate, ksm_and_mremap)
+{
+	int ret;
+	struct global_data *data = &self->data;
+
+	/* prepare KSM interface setting */
+	if (ksm_stop() < 0)
+		SKIP(return, "accessing \"/sys/kernel/mm/ksm/run\") failed");
+	if (ksm_get_full_scans() < 0)
+		SKIP(return, "accessing \"/sys/kernel/mm/ksm/full_scan\") failed");
+
+	ret = prctl(PR_SET_MEMORY_MERGE, 1, 0, 0, 0);
+	if (ret < 0 && errno == EINVAL)
+		SKIP(return, "PR_SET_MEMORY_MERGE not supported");
+	else if (ret)
+		ksft_exit_fail_perror("PR_SET_MEMORY_MERGE=1 failed");
+
+	/* Start to merge same pages and mremap one of the three page area,
+	 * and test if ksm page can be migrated when it's mremapped */
+	ASSERT_EQ(merge_mremap_and_migrate(data), 0);
+}
+
+
 TEST_HARNESS_MAIN
