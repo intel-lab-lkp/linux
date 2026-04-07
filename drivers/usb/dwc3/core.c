@@ -2190,24 +2190,72 @@ static void dwc3_vbus_draw_work(struct work_struct *work)
 	if (ret < 0)
 		dev_dbg(dwc->dev, "Error (%d) setting vbus draw (%d mA)\n",
 			ret, dwc->current_limit);
+
+	/* Unregister the psy notifier now that we have the power_supply reference */
+	if (dwc->psy_nb.notifier_call) {
+		power_supply_unreg_notifier(&dwc->psy_nb);
+		dwc->psy_nb.notifier_call = NULL;
+	}
 }
 
-static struct power_supply *dwc3_get_usb_power_supply(struct dwc3 *dwc)
+static int dwc3_psy_notifier(struct notifier_block *nb,
+			     unsigned long event, void *data)
 {
-	struct power_supply *usb_psy;
-	const char *usb_psy_name;
+	struct dwc3 *dwc = container_of(nb, struct dwc3, psy_nb);
+	struct power_supply *psy = data;
+	unsigned long flags;
+
+	if (strcmp(psy->desc->name, dwc->usb_psy_name) != 0)
+		return NOTIFY_DONE;
+
+	/* Explicitly get the reference for this psy */
+	psy = power_supply_get_by_name(dwc->usb_psy_name);
+	if (!psy)
+		return NOTIFY_DONE;
+
+	spin_lock_irqsave(&dwc->lock, flags);
+	/*
+	 * The USB power_supply may already be set. This can happen if notifier
+	 * callbacks for the USB power_supply race, or if a previous notifier
+	 * callback has already successfully fetched and associated the instance.
+	 * In such cases, release the newly acquired reference and ignore
+	 * subsequent notifications until the notifier is unregistered.
+	 */
+	if (dwc->usb_psy) {
+		spin_unlock_irqrestore(&dwc->lock, flags);
+		power_supply_put(psy);
+		return NOTIFY_DONE;
+	}
+
+	dwc->usb_psy = psy;
+	if (dwc->current_limit != UINT_MAX)
+		schedule_work(&dwc->vbus_draw_work);
+	spin_unlock_irqrestore(&dwc->lock, flags);
+
+	return NOTIFY_OK;
+}
+
+static void dwc3_get_usb_power_supply(struct dwc3 *dwc)
+{
 	int ret;
 
-	ret = device_property_read_string(dwc->dev, "usb-psy-name", &usb_psy_name);
+	ret = device_property_read_string(dwc->dev, "usb-psy-name", &dwc->usb_psy_name);
 	if (ret < 0)
-		return NULL;
-
-	usb_psy = power_supply_get_by_name(usb_psy_name);
-	if (!usb_psy)
-		return ERR_PTR(-EPROBE_DEFER);
+		return;
 
 	INIT_WORK(&dwc->vbus_draw_work, dwc3_vbus_draw_work);
-	return usb_psy;
+
+	dwc->usb_psy = power_supply_get_by_name(dwc->usb_psy_name);
+	if (!dwc->usb_psy) {
+		dwc->current_limit = UINT_MAX;
+		dwc->psy_nb.notifier_call = dwc3_psy_notifier;
+		ret = power_supply_reg_notifier(&dwc->psy_nb);
+		if (ret) {
+			dev_err(dwc->dev, "Failed to register power supply notifier: %d\n", ret);
+			dwc->psy_nb.notifier_call = NULL;
+			return;
+		}
+	}
 }
 
 int dwc3_core_probe(const struct dwc3_probe_data *data)
@@ -2255,9 +2303,9 @@ int dwc3_core_probe(const struct dwc3_probe_data *data)
 
 	dwc3_get_software_properties(dwc, &data->properties);
 
-	dwc->usb_psy = dwc3_get_usb_power_supply(dwc);
-	if (IS_ERR(dwc->usb_psy))
-		return dev_err_probe(dev, PTR_ERR(dwc->usb_psy), "couldn't get usb power supply\n");
+	spin_lock_init(&dwc->lock);
+
+	dwc3_get_usb_power_supply(dwc);
 
 	if (!data->ignore_clocks_and_resets) {
 		dwc->reset = devm_reset_control_array_get_optional_shared(dev);
@@ -2309,7 +2357,6 @@ int dwc3_core_probe(const struct dwc3_probe_data *data)
 		dwc->num_usb3_ports = 1;
 	}
 
-	spin_lock_init(&dwc->lock);
 	mutex_init(&dwc->mutex);
 
 	pm_runtime_get_noresume(dev);
@@ -2377,6 +2424,8 @@ err_disable_clks:
 err_assert_reset:
 	reset_control_assert(dwc->reset);
 err_put_psy:
+	if (dwc->psy_nb.notifier_call)
+		power_supply_unreg_notifier(&dwc->psy_nb);
 	if (dwc->usb_psy)
 		power_supply_put(dwc->usb_psy);
 
@@ -2432,6 +2481,11 @@ void dwc3_core_remove(struct dwc3 *dwc)
 	pm_runtime_set_suspended(dwc->dev);
 
 	dwc3_free_event_buffers(dwc);
+
+	if (dwc->psy_nb.notifier_call) {
+		power_supply_unreg_notifier(&dwc->psy_nb);
+		dwc->psy_nb.notifier_call = NULL;
+	}
 
 	if (dwc->usb_psy) {
 		cancel_work_sync(&dwc->vbus_draw_work);
