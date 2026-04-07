@@ -11290,15 +11290,65 @@ void sched_init_steal_monitor(void)
 	steal_mon.sampling_period_ms  = 1000;		/* once per second */
 }
 
-/* This is only a skeleton. Subsequent patches introduce more of it */
 void sched_steal_detection_work(struct work_struct *work)
 {
 	struct steal_monitor_t *sm = container_of(work, struct steal_monitor_t, work);
+	int this_cpu = raw_smp_processor_id();
+	u64 delta_steal, delta_ns, steal = 0;
+	u64 steal_ratio;
 	ktime_t now;
+	int tmp_cpu;
+
+	for_each_cpu(tmp_cpu, cpu_online_mask)
+		steal += kcpustat_cpu(tmp_cpu).cpustat[CPUTIME_STEAL];
 
 	/* Update the prev_time for next iteration*/
 	now = ktime_get();
+	delta_steal = steal > sm->prev_steal ? steal - sm->prev_steal : 0;
+	delta_ns = max_t(u64, ktime_to_ns(ktime_sub(now, sm->prev_time)), 1);
+
 	sm->prev_time = now;
+	sm->prev_steal = steal;
+
+#ifdef CONFIG_SCHED_SMT
+	/* Multiply by 100 to consider the fractional values of steal time */
+	steal_ratio = (delta_steal * 100 * 100) / (delta_ns * num_online_cpus());
+
+	/* If the steal time values are high, reduce one core from preferred CPUs */
+	if (steal_ratio > sm->high_threshold) {
+		int last_cpu;
+
+		cpumask_and(sm->tmp_mask, cpu_online_mask, cpu_preferred_mask);
+		last_cpu = cpumask_last(sm->tmp_mask);
+
+		/*
+		 * If the core belongs to the housekeeping CPUs, no action is
+		 * taken. This leaves at least one core preferred always.
+		 * This ensures at least some CPUs are available to run
+		 */
+		if (cpumask_equal(cpu_smt_mask(last_cpu), cpu_smt_mask(this_cpu)))
+			return;
+
+		for_each_cpu(tmp_cpu, cpu_smt_mask(last_cpu)) {
+			set_cpu_preferred(tmp_cpu, false);
+			if (tick_nohz_full_cpu(tmp_cpu))
+				tick_nohz_dep_set_cpu(tmp_cpu, TICK_DEP_BIT_SCHED);
+		}
+	}
+
+	/* If the steal time values are low, increase one core as preferred CPUs */
+	if (steal_ratio < sm->low_threshold) {
+		int first_cpu;
+
+		first_cpu = cpumask_first_andnot(cpu_online_mask, cpu_preferred_mask);
+		/* All CPUs are preferred. Nothing to increase further */
+		if (first_cpu >= nr_cpu_ids)
+			return;
+
+		for_each_cpu(tmp_cpu, cpu_smt_mask(first_cpu))
+			set_cpu_preferred(tmp_cpu, true);
+	}
+#endif
 }
 
 void sched_trigger_steal_computation(int cpu)
