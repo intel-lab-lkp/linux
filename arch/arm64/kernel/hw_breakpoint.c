@@ -40,6 +40,7 @@ static DEFINE_PER_CPU(int, stepping_kernel_bp);
 /* Number of BRP/WRP registers on this CPU. */
 static int core_num_brps;
 static int core_num_wrps;
+static bool has_debug_v8p9;
 
 int hw_breakpoint_slots(int type)
 {
@@ -104,7 +105,7 @@ int hw_breakpoint_slots(int type)
 	WRITE_WB_REG_CASE(OFF, 14, REG, VAL);	\
 	WRITE_WB_REG_CASE(OFF, 15, REG, VAL)
 
-static u64 read_wb_reg(int reg, int n)
+static nokprobe_inline u64 __read_wb_reg(int reg, int n)
 {
 	u64 val = 0;
 
@@ -119,9 +120,27 @@ static u64 read_wb_reg(int reg, int n)
 
 	return val;
 }
+
+static u64 read_wb_reg(int reg, int n)
+{
+	u64 val;
+
+	/*
+	 * Bank selection in MDSELR_EL1, followed by an indexed read from
+	 * breakpoint (or watchpoint) registers cannot be interrupted, as
+	 * that might cause misread from the wrong targets instead. Hence
+	 * this requires mutual exclusion.
+	 */
+	if (has_debug_v8p9) {
+		write_sysreg_s(SYS_FIELD_PREP(MDSELR_EL1, BANK, n / MAX_PER_BANK), SYS_MDSELR_EL1);
+		isb();
+	}
+	val = __read_wb_reg(reg, n % MAX_PER_BANK);
+	return val;
+}
 NOKPROBE_SYMBOL(read_wb_reg);
 
-static void write_wb_reg(int reg, int n, u64 val)
+static nokprobe_inline void __write_wb_reg(int reg, int n, u64 val)
 {
 	switch (reg + n) {
 	GEN_WRITE_WB_REG_CASES(AARCH64_DBG_REG_BVR, AARCH64_DBG_REG_NAME_BVR, val);
@@ -132,6 +151,21 @@ static void write_wb_reg(int reg, int n, u64 val)
 		pr_warn("attempt to write to unknown breakpoint register %d\n", n);
 	}
 	isb();
+}
+
+static void write_wb_reg(int reg, int n, u64 val)
+{
+	/*
+	 * Bank selection in MDSELR_EL1, followed by an indexed read from
+	 * breakpoint (or watchpoint) registers cannot be interrupted, as
+	 * that might cause misread from the wrong targets instead. Hence
+	 * this requires mutual exclusion.
+	 */
+	if (has_debug_v8p9) {
+		write_sysreg_s(SYS_FIELD_PREP(MDSELR_EL1, BANK, n / MAX_PER_BANK), SYS_MDSELR_EL1);
+		isb();
+	}
+	__write_wb_reg(reg, n % MAX_PER_BANK, val);
 }
 NOKPROBE_SYMBOL(write_wb_reg);
 
@@ -990,6 +1024,7 @@ static int __init arch_hw_breakpoint_init(void)
 
 	core_num_brps = get_num_brps();
 	core_num_wrps = get_num_wrps();
+	has_debug_v8p9 = (core_num_brps > 16) || (core_num_wrps > 16);
 
 	pr_info("found %d breakpoint and %d watchpoint registers.\n",
 		core_num_brps, core_num_wrps);
@@ -1006,6 +1041,8 @@ static int __init arch_hw_breakpoint_init(void)
 
 	/* Register cpu_suspend hw breakpoint restore hook */
 	cpu_suspend_set_dbg_restorer(hw_breakpoint_reset);
+	BUILD_BUG_ON((ARM_MAX_BRP % MAX_PER_BANK) != 0);
+	BUILD_BUG_ON((ARM_MAX_WRP % MAX_PER_BANK) != 0);
 
 	return ret;
 }

@@ -22,6 +22,7 @@
 #include <asm/daifflags.h>
 #include <asm/debug-monitors.h>
 #include <asm/exception.h>
+#include <asm/hw_breakpoint.h>
 #include <asm/kgdb.h>
 #include <asm/kprobes.h>
 #include <asm/system_misc.h>
@@ -123,11 +124,16 @@ void disable_debug_monitors(enum dbg_active_el el)
 }
 NOKPROBE_SYMBOL(disable_debug_monitors);
 
-/*
- * OS lock clearing.
- */
-static int clear_os_lock(unsigned int cpu)
+static int debug_monitors_reset(unsigned int cpu)
 {
+	if (is_debug_v8p9_enabled()) {
+		u64 mdscr = mdscr_read();
+
+		mdscr |= MDSCR_EL1_EMBWE;
+		mdscr_write(mdscr);
+	}
+
+	/* Clear OS lock */
 	write_sysreg(0, osdlr_el1);
 	write_sysreg(0, oslar_el1);
 	isb();
@@ -138,7 +144,7 @@ static int __init debug_monitors_init(void)
 {
 	return cpuhp_setup_state(CPUHP_AP_ARM64_DEBUG_MONITORS_STARTING,
 				 "arm64/debug_monitors:starting",
-				 clear_os_lock, NULL);
+				 debug_monitors_reset, NULL);
 }
 postcore_initcall(debug_monitors_init);
 
