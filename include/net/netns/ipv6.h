@@ -112,13 +112,13 @@ struct netns_ipv6 {
 	struct list_head	mr6_tables;
 	struct fib_rules_ops	*mr6_rules_ops;
 #endif
+	struct fib_notifier_ops	*ip6mr_notifier_ops;
+	atomic_t		ipmr_seq;
 #endif
 	atomic_t		dev_addr_genid;
 	atomic_t		fib6_sernum;
 	struct seg6_pernet_data *seg6_data;
 	struct fib_notifier_ops	*notifier_ops;
-	struct fib_notifier_ops	*ip6mr_notifier_ops;
-	atomic_t		ipmr_seq;
 	struct {
 		struct hlist_head head;
 		spinlock_t	lock;
