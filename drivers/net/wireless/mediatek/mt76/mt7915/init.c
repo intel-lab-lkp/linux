@@ -470,8 +470,8 @@ mt7915_init_wiphy(struct mt7915_phy *phy)
 	mt7915_set_stream_he_caps(phy);
 	mt7915_init_txpower(phy);
 
-	wiphy->available_antennas_rx = phy->mt76->antenna_mask;
-	wiphy->available_antennas_tx = phy->mt76->antenna_mask;
+	wiphy->available_antennas_rx = phy->mt76->chainmask;
+	wiphy->available_antennas_tx = phy->mt76->chainmask;
 
 	/* init led callbacks */
 	if (IS_ENABLED(CONFIG_MT76_LEDS)) {

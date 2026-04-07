@@ -260,6 +260,7 @@ void mt7915_eeprom_parse_hw_cap(struct mt7915_dev *dev,
 	if (band)
 		mphy->chainmask <<= dev->chainshift;
 	mphy->antenna_mask = BIT(nss) - 1;
+	phy->orig_antenna_mask = mphy->antenna_mask;
 	dev->chainmask |= mphy->chainmask;
 	dev->chainshift = hweight8(dev->mphy.chainmask);
 }

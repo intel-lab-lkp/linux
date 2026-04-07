@@ -210,6 +210,8 @@ struct mt7915_phy {
 	u8 throttle_state;
 	u32 throttle_temp[2]; /* 0: critical high, 1: maximum */
 
+	u8 orig_antenna_mask;
+
 	u32 rxfilter;
 	u64 omac_mask;
 
