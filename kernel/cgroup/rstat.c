@@ -743,6 +743,42 @@ void cgroup_base_stat_cputime_show(struct seq_file *seq)
 	cgroup_force_idle_show(seq, &bstat);
 }
 
+
+void cgroup_base_stat_cputime_show_percpu(struct seq_file *seq)
+{
+	struct cgroup *cgrp = seq_css(seq)->cgroup;
+	int cpu;
+
+	css_rstat_flush(&cgrp->self);
+
+	for_each_possible_cpu(cpu) {
+		struct cgroup_rstat_base_cpu *rstatbc;
+		struct cgroup_base_stat bstat;
+		unsigned int seq_cnt;
+
+		/* Reacquire for each CPU to avoid disabling IRQs too long */
+		__css_rstat_lock(&cgrp->self, cpu);
+		rstatbc = cgroup_rstat_base_cpu(cgrp, cpu);
+		do {
+			seq_cnt = __u64_stats_fetch_begin(&rstatbc->bsync);
+			bstat = rstatbc->subtree_bstat;
+		} while (__u64_stats_fetch_retry(&rstatbc->bsync, seq_cnt));
+		__css_rstat_unlock(&cgrp->self, cpu);
+
+		do_div(bstat.cputime.sum_exec_runtime, NSEC_PER_USEC);
+		do_div(bstat.cputime.utime, NSEC_PER_USEC);
+		do_div(bstat.cputime.stime, NSEC_PER_USEC);
+		do_div(bstat.ntime, NSEC_PER_USEC);
+
+		seq_printf(seq, "cpu%d usage_usec=%llu user_usec=%llu system_usec=%llu nice_usec=%llu\n",
+			   cpu,
+			   bstat.cputime.sum_exec_runtime,
+			   bstat.cputime.utime,
+			   bstat.cputime.stime,
+			   bstat.ntime);
+	}
+}
+
 /* Add bpf kfuncs for css_rstat_updated() and css_rstat_flush() */
 BTF_KFUNCS_START(bpf_rstat_kfunc_ids)
 BTF_ID_FLAGS(func, css_rstat_updated)
