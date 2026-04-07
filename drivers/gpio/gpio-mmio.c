@@ -643,6 +643,7 @@ int gpio_generic_chip_init(struct gpio_generic_chip *chip,
 	gc->base = -1;
 	gc->request = gpio_mmio_request;
 	chip->be_bits = !!(flags & GPIO_GENERIC_BIG_ENDIAN);
+	chip->io_port = !!(flags & GPIO_GENERIC_PORT_MAPPED);
 
 	ret = gpiochip_get_ngpios(gc, dev);
 	if (ret)

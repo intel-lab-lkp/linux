@@ -117,6 +117,7 @@ struct gpio_generic_chip {
 	unsigned long (*read_reg)(void __iomem *reg);
 	void (*write_reg)(void __iomem *reg, unsigned long data);
 	bool be_bits;
+	bool io_port;
 	void __iomem *reg_dat;
 	void __iomem *reg_set;
 	void __iomem *reg_clr;
