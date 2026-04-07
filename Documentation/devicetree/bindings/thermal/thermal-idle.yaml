@@ -51,11 +51,6 @@ examples:
     /{
         #include <dt-bindings/thermal/thermal.h>
 
-        compatible = "foo";
-        model = "foo";
-        #address-cells = <1>;
-        #size-cells = <1>;
-
         // Example: Combining idle cooling device on big CPUs with cpufreq cooling device
         cpus {
             #address-cells = <2>;
@@ -101,33 +96,34 @@ examples:
 
         /* ... */
 
-        thermal_zones {
-            cpu_thermal: cpu {
+        thermal-zones {
+            cpu_thermal: cpu-thermal {
                 polling-delay-passive = <100>;
                 polling-delay = <1000>;
+                thermal-sensors = <&tsens0 1>;
 
                 /* ... */
 
                 trips {
-                    cpu_alert0: cpu_alert0 {
+                    cpu_alert0: cpu-alert0 {
                         temperature = <65000>;
                         hysteresis = <2000>;
                         type = "passive";
                     };
 
-                    cpu_alert1: cpu_alert1 {
+                    cpu_alert1: cpu-alert1 {
                         temperature = <70000>;
                         hysteresis = <2000>;
                         type = "passive";
                     };
 
-                    cpu_alert2: cpu_alert2 {
+                    cpu_alert2: cpu-alert2 {
                         temperature = <75000>;
                         hysteresis = <2000>;
                         type = "passive";
                     };
 
-                    cpu_crit: cpu_crit {
+                    cpu_crit: cpu-crit {
                         temperature = <95000>;
                         hysteresis = <2000>;
                         type = "critical";
