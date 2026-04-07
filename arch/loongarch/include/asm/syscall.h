@@ -78,7 +78,11 @@ static inline void syscall_set_arguments(struct task_struct *task,
 
 static inline int syscall_get_arch(struct task_struct *task)
 {
+#ifdef CONFIG_64BIT
 	return AUDIT_ARCH_LOONGARCH64;
+#else
+	return AUDIT_ARCH_LOONGARCH32;
+#endif
 }
 
 static inline bool arch_syscall_is_vdso_sigreturn(struct pt_regs *regs)
