@@ -1236,6 +1236,10 @@ struct rq {
 	unsigned char		nohz_idle_balance;
 	unsigned char		idle_balance;
 
+#ifdef CONFIG_PARAVIRT
+	bool			push_task_work_done;
+#endif
+
 	unsigned long		misfit_task_load;
 
 	/* For active balancing */
@@ -4148,11 +4152,15 @@ static inline bool task_can_run_on_preferred_cpu(struct task_struct *p)
 {
 	return cpumask_intersects(p->cpus_ptr, cpu_preferred_mask);
 }
+
+void sched_push_current_non_preferred_cpu(struct rq *rq);
 #else
 static inline bool task_can_run_on_preferred_cpu(struct task_struct *p)
 {
 	return true;
 }
+
+static inline void sched_push_current_non_preferred_cpu(struct rq *rq) { }
 #endif
 
 #endif /* _KERNEL_SCHED_SCHED_H */

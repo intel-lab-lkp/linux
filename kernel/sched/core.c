@@ -5593,6 +5593,10 @@ void sched_tick(void)
 	unsigned long hw_pressure;
 	u64 resched_latency;
 
+	/* push the current CFS/RT task out if its on non-preferred CPU */
+	if (!cpu_preferred(cpu))
+		sched_push_current_non_preferred_cpu(rq);
+
 	if (housekeeping_cpu(cpu, HK_TYPE_KERNEL_NOISE))
 		arch_scale_freq_tick();
 
@@ -11188,4 +11192,84 @@ void sched_change_end(struct sched_change_ctx *ctx)
 #ifdef CONFIG_PARAVIRT
 struct cpumask __cpu_preferred_mask __read_mostly;
 EXPORT_SYMBOL(__cpu_preferred_mask);
+
+/* npc - non preferred CPU */
+static DEFINE_PER_CPU(struct cpu_stop_work, npc_push_task_work);
+
+static int sched_non_preferred_cpu_push_stop(void *arg)
+{
+	struct task_struct *p = arg;
+	struct rq *rq = this_rq();
+	struct rq_flags rf;
+	int cpu;
+
+	raw_spin_lock_irq(&p->pi_lock);
+	rq_lock(rq, &rf);
+	rq->push_task_work_done = 0;
+
+	update_rq_clock(rq);
+
+	if (task_rq(p) == rq && task_on_rq_queued(p)) {
+		cpu = select_fallback_rq(rq->cpu, p);
+		rq = __migrate_task(rq, &rf, p, cpu);
+	}
+
+	rq_unlock(rq, &rf);
+	raw_spin_unlock_irq(&p->pi_lock);
+	put_task_struct(p);
+
+	return 0;
+}
+
+/* Using this CPU will lead to more hypervisor preemptions.
+ * It is better not to use this CPU.
+ *
+ * In case any task is scheduled on such CPU, move it out. In
+ * select_fallback_rq a preferred CPU will be chosen and henceforth
+ * task shouldn't come back to this CPU
+ */
+void sched_push_current_non_preferred_cpu(struct rq *rq)
+{
+	struct task_struct *push_task = rq->curr;
+	unsigned long flags;
+	struct rq_flags rf;
+
+	/* sanity check */
+	if (cpu_preferred(rq->cpu))
+		return;
+
+	/* Idle task can't be pused out */
+	if (rq->curr == rq->idle)
+		return;
+
+	/* Do for only SCHED_NORMAL AND RT for now */
+	if (push_task->sched_class != &fair_sched_class &&
+	    push_task->sched_class != &rt_sched_class)
+		return;
+
+	if (kthread_is_per_cpu(push_task) ||
+	    is_migration_disabled(push_task))
+		return;
+
+	/* Is there any preferred CPU in the affinity list */
+	if (!task_can_run_on_preferred_cpu(push_task))
+		return;
+
+	/* There is already a stopper thread for this. Dont race with it */
+	if (rq->push_task_work_done == 1)
+		return;
+
+	local_irq_save(flags);
+
+	get_task_struct(push_task);
+
+	rq_lock(rq, &rf);
+	rq->push_task_work_done = 1;
+	rq_unlock(rq, &rf);
+
+	stop_one_cpu_nowait(rq->cpu, sched_non_preferred_cpu_push_stop,
+			    push_task, this_cpu_ptr(&npc_push_task_work));
+	local_irq_restore(flags);
+}
+
 #endif
