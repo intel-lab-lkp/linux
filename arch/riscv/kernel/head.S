@@ -385,7 +385,14 @@ SYM_CODE_START(_start_kernel)
 	 * get far enough along the boot process that it should continue.
 	 */
 .Lwait_for_cpu_up:
-	/* FIXME: We should WFI to save some energy here. */
+	/*
+	 * Wait for the boot hart to populate the stack and task pointers.
+	 * Use WFI to avoid burning power in a busy-wait loop. Per the
+	 * RISC-V privileged spec, WFI wakes on a pending interrupt even
+	 * with global interrupts disabled (e.g. SIE=0), and implementations
+	 * are permitted to treat it as a NOP, so this is always safe.
+	 */
+	wfi
 	REG_L sp, (a1)
 	REG_L tp, (a2)
 	beqz sp, .Lwait_for_cpu_up
