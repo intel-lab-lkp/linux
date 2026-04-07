@@ -49,6 +49,9 @@ obj-$(CONFIG_UML_PCI_OVER_VFIO) += vfio_uml.o
 # pcap_user.o must be added explicitly.
 USER_OBJS := fd.o null.o pty.o tty.o xterm.o vector_user.o
 CFLAGS_null.o = -DDEV_NULL=$(DEV_NULL_PATH)
+# cow_user.o is a host-side helper that uses libc strrchr(); undo the global
+# UML remap to kernel_strrchr for this translation unit.
+CFLAGS_cow_user.o += -Ustrrchr
 
 CFLAGS_xterm.o += '-DCONFIG_XTERM_CHAN_DEFAULT_EMULATOR="$(CONFIG_XTERM_CHAN_DEFAULT_EMULATOR)"'
 
