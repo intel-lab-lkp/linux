@@ -231,6 +231,8 @@ static int hw_breakpoint_control(struct perf_event *bp,
 	enum dbg_active_el dbg_el = debug_exception_level(info->ctrl.privilege);
 	u32 ctrl;
 
+	lockdep_assert_irqs_disabled();
+
 	if (info->ctrl.type == ARM_BREAKPOINT_EXECUTE) {
 		/* Breakpoint */
 		ctrl_reg = AARCH64_DBG_REG_BCR;
