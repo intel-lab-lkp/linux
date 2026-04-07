@@ -5935,8 +5935,8 @@ static ssize_t write_marker_to_buffer(struct trace_array *tr, const char *buf,
 	size = cnt + meta_size;
 
 	buffer = tr->array_buffer.buffer;
-	event = __trace_buffer_lock_reserve(buffer, TRACE_PRINT, size,
-					    tracing_gen_ctx());
+	event = __trace_buffer_lock_reserve_long(buffer, TRACE_PRINT, size,
+						 tracing_gen_ctx());
 	if (unlikely(!event)) {
 		/*
 		 * If the size was greater than what was allowed, then
@@ -6349,8 +6349,8 @@ static ssize_t write_raw_marker_to_buffer(struct trace_array *tr,
 	if (size > ring_buffer_max_event_size(buffer))
 		return -EINVAL;
 
-	event = __trace_buffer_lock_reserve(buffer, TRACE_RAW_DATA, size,
-					    tracing_gen_ctx());
+	event = __trace_buffer_lock_reserve_long(buffer, TRACE_RAW_DATA, size,
+						 tracing_gen_ctx());
 	if (!event)
 		/* Ring buffer disabled, return as if not open for write */
 		return -EBADF;

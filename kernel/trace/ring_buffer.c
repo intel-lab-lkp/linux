@@ -190,10 +190,14 @@ rb_event_data_length(struct ring_buffer_event *event)
 	unsigned length;
 
 	if (event->type_len)
-		length = event->type_len * RB_ALIGNMENT;
-	else
-		length = event->array[0];
-	return length + RB_EVNT_HDR_SIZE;
+		return event->type_len * RB_ALIGNMENT + RB_EVNT_HDR_SIZE;
+
+	/*
+	 * Long records store the true payload size in array[0], but still
+	 * consume an aligned amount of space in the buffer.
+	 */
+	length = event->array[0] + RB_EVNT_HDR_SIZE + sizeof(event->array[0]);
+	return ALIGN(length, RB_ARCH_ALIGNMENT);
 }
 
 /*
@@ -260,12 +264,13 @@ unsigned ring_buffer_event_length(struct ring_buffer_event *event)
 	if (extended_time(event))
 		event = skip_time_extend(event);
 
+	if (!event->type_len)
+		return event->array[0];
+
 	length = rb_event_length(event);
 	if (event->type_len > RINGBUF_TYPE_DATA_TYPE_LEN_MAX)
 		return length;
 	length -= RB_EVNT_HDR_SIZE;
-	if (length > RB_MAX_SMALL_DATA + sizeof(event->array[0]))
-                length -= sizeof(event->array[0]);
 	return length;
 }
 EXPORT_SYMBOL_GPL(ring_buffer_event_length);
@@ -429,9 +434,11 @@ struct rb_event_info {
 	u64			delta;
 	u64			before;
 	u64			after;
+	unsigned long		data_length;
 	unsigned long		length;
 	struct buffer_page	*tail_page;
 	int			add_timestamp;
+	bool			force_long;
 };
 
 /*
@@ -3867,14 +3874,15 @@ rb_update_event(struct ring_buffer_per_cpu *cpu_buffer,
 
 	event->time_delta = delta;
 	length -= RB_EVNT_HDR_SIZE;
-	if (length > RB_MAX_SMALL_DATA || RB_FORCE_8BYTE_ALIGNMENT) {
+	if (length > RB_MAX_SMALL_DATA || RB_FORCE_8BYTE_ALIGNMENT ||
+	    info->force_long) {
 		event->type_len = 0;
-		event->array[0] = length;
+		event->array[0] = info->data_length;
 	} else
 		event->type_len = DIV_ROUND_UP(length, RB_ALIGNMENT);
 }
 
-static unsigned rb_calculate_event_length(unsigned length)
+static unsigned int rb_calculate_event_length(unsigned int length, bool force_long)
 {
 	struct ring_buffer_event event; /* Used only for sizeof array */
 
@@ -3882,7 +3890,7 @@ static unsigned rb_calculate_event_length(unsigned length)
 	if (!length)
 		length++;
 
-	if (length > RB_MAX_SMALL_DATA || RB_FORCE_8BYTE_ALIGNMENT)
+	if (length > RB_MAX_SMALL_DATA || RB_FORCE_8BYTE_ALIGNMENT || force_long)
 		length += sizeof(event.array[0]);
 
 	length += RB_EVNT_HDR_SIZE;
@@ -4678,7 +4686,7 @@ __rb_reserve_next(struct ring_buffer_per_cpu *cpu_buffer,
 static __always_inline struct ring_buffer_event *
 rb_reserve_next_event(struct trace_buffer *buffer,
 		      struct ring_buffer_per_cpu *cpu_buffer,
-		      unsigned long length)
+		      unsigned long length, bool force_long)
 {
 	struct ring_buffer_event *event;
 	struct rb_event_info info;
@@ -4714,7 +4722,9 @@ rb_reserve_next_event(struct trace_buffer *buffer,
 	}
 #endif
 
-	info.length = rb_calculate_event_length(length);
+	info.length = rb_calculate_event_length(length, force_long);
+	info.data_length = length ? : 1;
+	info.force_long = force_long;
 
 	if (ring_buffer_time_stamp_abs(cpu_buffer->buffer)) {
 		add_ts_default = RB_ADD_STAMP_ABSOLUTE;
@@ -4771,8 +4781,9 @@ rb_reserve_next_event(struct trace_buffer *buffer,
  * Must be paired with ring_buffer_unlock_commit, unless NULL is returned.
  * If NULL is returned, then nothing has been allocated or locked.
  */
-struct ring_buffer_event *
-ring_buffer_lock_reserve(struct trace_buffer *buffer, unsigned long length)
+static struct ring_buffer_event *
+__ring_buffer_lock_reserve(struct trace_buffer *buffer, unsigned long length,
+			   bool force_long)
 {
 	struct ring_buffer_per_cpu *cpu_buffer;
 	struct ring_buffer_event *event;
@@ -4800,7 +4811,7 @@ ring_buffer_lock_reserve(struct trace_buffer *buffer, unsigned long length)
 	if (unlikely(trace_recursive_lock(cpu_buffer)))
 		goto out;
 
-	event = rb_reserve_next_event(buffer, cpu_buffer, length);
+	event = rb_reserve_next_event(buffer, cpu_buffer, length, force_long);
 	if (!event)
 		goto out_unlock;
 
@@ -4812,7 +4823,20 @@ ring_buffer_lock_reserve(struct trace_buffer *buffer, unsigned long length)
 	preempt_enable_notrace();
 	return NULL;
 }
+
+struct ring_buffer_event *
+ring_buffer_lock_reserve(struct trace_buffer *buffer, unsigned long length)
+{
+	return __ring_buffer_lock_reserve(buffer, length, false);
+}
 EXPORT_SYMBOL_GPL(ring_buffer_lock_reserve);
+
+struct ring_buffer_event *
+ring_buffer_lock_reserve_long(struct trace_buffer *buffer, unsigned long length)
+{
+	return __ring_buffer_lock_reserve(buffer, length, true);
+}
+EXPORT_SYMBOL_GPL(ring_buffer_lock_reserve_long);
 
 /*
  * Decrement the entries to the page that an event is on.
@@ -4947,7 +4971,7 @@ int ring_buffer_write(struct trace_buffer *buffer,
 	if (unlikely(trace_recursive_lock(cpu_buffer)))
 		return -EBUSY;
 
-	event = rb_reserve_next_event(buffer, cpu_buffer, length);
+	event = rb_reserve_next_event(buffer, cpu_buffer, length, false);
 	if (!event)
 		goto out_unlock;
 

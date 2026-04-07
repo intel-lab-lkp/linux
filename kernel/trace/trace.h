@@ -1680,6 +1680,21 @@ __trace_buffer_lock_reserve(struct trace_buffer *buffer,
 	return event;
 }
 
+static __always_inline struct ring_buffer_event *
+__trace_buffer_lock_reserve_long(struct trace_buffer *buffer,
+				 int type,
+				 unsigned long len,
+				 unsigned int trace_ctx)
+{
+	struct ring_buffer_event *event;
+
+	event = ring_buffer_lock_reserve_long(buffer, len);
+	if (event != NULL)
+		trace_event_setup(event, type, trace_ctx);
+
+	return event;
+}
+
 static __always_inline void
 __buffer_unlock_commit(struct trace_buffer *buffer, struct ring_buffer_event *event)
 {

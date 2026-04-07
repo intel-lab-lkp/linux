@@ -412,8 +412,8 @@ int __trace_array_puts(struct trace_array *tr, unsigned long ip,
 	trace_ctx = tracing_gen_ctx();
 	buffer = tr->array_buffer.buffer;
 	guard(ring_buffer_nest)(buffer);
-	event = __trace_buffer_lock_reserve(buffer, TRACE_PRINT, alloc,
-					    trace_ctx);
+	event = __trace_buffer_lock_reserve_long(buffer, TRACE_PRINT, alloc,
+						 trace_ctx);
 	if (!event)
 		return 0;
 
@@ -693,8 +693,8 @@ int __trace_array_vprintk(struct trace_buffer *buffer,
 
 	size = sizeof(*entry) + len + 1;
 	scoped_guard(ring_buffer_nest, buffer) {
-		event = __trace_buffer_lock_reserve(buffer, TRACE_PRINT, size,
-						    trace_ctx);
+		event = __trace_buffer_lock_reserve_long(buffer, TRACE_PRINT, size,
+							 trace_ctx);
 		if (!event)
 			goto out;
 		entry = ring_buffer_event_data(event);
