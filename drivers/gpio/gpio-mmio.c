@@ -122,6 +122,60 @@ static unsigned long gpio_mmio_read32be(struct gpio_chip_reg *reg)
 	return ioread32be(reg->mmio);
 }
 
+#ifdef CONFIG_HAS_IOPORT
+
+static void gpio_port_write8(struct gpio_chip_reg *reg, unsigned long data)
+{
+	outb(data, reg->port);
+}
+
+static unsigned long gpio_port_read8(struct gpio_chip_reg *reg)
+{
+	return inb(reg->port);
+}
+
+static void gpio_port_write16(struct gpio_chip_reg *reg, unsigned long data)
+{
+	outw(data, reg->port);
+}
+
+static unsigned long gpio_port_read16(struct gpio_chip_reg *reg)
+{
+	return inw(reg->port);
+}
+
+static void gpio_port_write32(struct gpio_chip_reg *reg, unsigned long data)
+{
+	outl(data, reg->port);
+}
+
+static unsigned long gpio_port_read32(struct gpio_chip_reg *reg)
+{
+	return inl(reg->port);
+}
+
+static void gpio_port_write16be(struct gpio_chip_reg *reg, unsigned long data)
+{
+	outw(swab16(data), reg->port);
+}
+
+static unsigned long gpio_port_read16be(struct gpio_chip_reg *reg)
+{
+	return swab16(inw(reg->port));
+}
+
+static void gpio_port_write32be(struct gpio_chip_reg *reg, unsigned long data)
+{
+	outl(swab32(data), reg->port);
+}
+
+static unsigned long gpio_port_read32be(struct gpio_chip_reg *reg)
+{
+	return swab32(inl(reg->port));
+}
+
+#endif /* CONFIG_HAS_IOPORT */
+
 static inline void gpio_chip_reg_init(struct gpio_chip_reg *reg, bool io_port,
 				 void __iomem *addr, unsigned long port)
 {
@@ -472,6 +526,46 @@ static int gpio_mmio_dir_out_val_first(struct gpio_chip *gc, unsigned int gpio,
 	return gpio_mmio_dir_return(gc, gpio, true);
 }
 
+static int gpio_port_setup_accessors(struct device *dev,
+				     struct gpio_generic_chip *chip,
+				     bool byte_be)
+{
+#ifdef CONFIG_HAS_IOPORT
+	switch (chip->bits) {
+	case 8:
+		chip->read_reg	= gpio_port_read8;
+		chip->write_reg	= gpio_port_write8;
+		break;
+	case 16:
+		if (byte_be) {
+			chip->read_reg	= gpio_port_read16be;
+			chip->write_reg	= gpio_port_write16be;
+		} else {
+			chip->read_reg	= gpio_port_read16;
+			chip->write_reg	= gpio_port_write16;
+		}
+		break;
+	case 32:
+		if (byte_be) {
+			chip->read_reg	= gpio_port_read32be;
+			chip->write_reg	= gpio_port_write32be;
+		} else {
+			chip->read_reg	= gpio_port_read32;
+			chip->write_reg	= gpio_port_write32;
+		}
+		break;
+	default:
+		dev_err(dev, "unsupported data width %u bits\n", chip->bits);
+		return -EINVAL;
+	}
+
+	return 0;
+#else
+	dev_err(dev, "not supported because of missing I/O resource\n");
+	return -ENXIO;
+#endif /* CONFIG_HAS_IOPORT */
+}
+
 static int gpio_mmio_setup_accessors(struct device *dev,
 				     struct gpio_generic_chip *chip,
 				     bool byte_be)
@@ -682,8 +776,12 @@ int gpio_generic_chip_init(struct gpio_generic_chip *chip,
 	if (ret)
 		return ret;
 
-	ret = gpio_mmio_setup_accessors(dev, chip,
-				    flags & GPIO_GENERIC_BIG_ENDIAN_BYTE_ORDER);
+	if (chip->io_port)
+		ret = gpio_port_setup_accessors(dev, chip,
+					flags & GPIO_GENERIC_BIG_ENDIAN_BYTE_ORDER);
+	else
+		ret = gpio_mmio_setup_accessors(dev, chip,
+					flags & GPIO_GENERIC_BIG_ENDIAN_BYTE_ORDER);
 	if (ret)
 		return ret;
 
