@@ -1361,7 +1361,7 @@ proto_again:
 			struct pppoe_hdr hdr;
 			__be16 proto;
 		} *hdr, _hdr;
-		u16 ppp_proto;
+		__be16 ppp_proto;
 
 		hdr = __skb_header_pointer(skb, nhoff, sizeof(_hdr), data, hlen, &_hdr);
 		if (!hdr) {
@@ -1374,27 +1374,19 @@ proto_again:
 			break;
 		}
 
-		/* least significant bit of the most significant octet
-		 * indicates if protocol field was compressed
-		 */
-		ppp_proto = ntohs(hdr->proto);
-		if (ppp_proto & 0x0100) {
-			ppp_proto = ppp_proto >> 8;
-			nhoff += PPPOE_SES_HLEN - 1;
-		} else {
-			nhoff += PPPOE_SES_HLEN;
-		}
+		ppp_proto = hdr->proto;
+		nhoff += PPPOE_SES_HLEN;
 
-		if (ppp_proto == PPP_IP) {
+		if (ppp_proto == htons(PPP_IP)) {
 			proto = htons(ETH_P_IP);
 			fdret = FLOW_DISSECT_RET_PROTO_AGAIN;
-		} else if (ppp_proto == PPP_IPV6) {
+		} else if (ppp_proto == htons(PPP_IPV6)) {
 			proto = htons(ETH_P_IPV6);
 			fdret = FLOW_DISSECT_RET_PROTO_AGAIN;
-		} else if (ppp_proto == PPP_MPLS_UC) {
+		} else if (ppp_proto == htons(PPP_MPLS_UC)) {
 			proto = htons(ETH_P_MPLS_UC);
 			fdret = FLOW_DISSECT_RET_PROTO_AGAIN;
-		} else if (ppp_proto == PPP_MPLS_MC) {
+		} else if (ppp_proto == htons(PPP_MPLS_MC)) {
 			proto = htons(ETH_P_MPLS_MC);
 			fdret = FLOW_DISSECT_RET_PROTO_AGAIN;
 		} else if (ppp_proto_is_valid(ppp_proto)) {
@@ -1412,7 +1404,7 @@ proto_again:
 							      FLOW_DISSECTOR_KEY_PPPOE,
 							      target_container);
 			key_pppoe->session_id = hdr->hdr.sid;
-			key_pppoe->ppp_proto = htons(ppp_proto);
+			key_pppoe->ppp_proto = ppp_proto;
 			key_pppoe->type = htons(ETH_P_PPP_SES);
 		}
 		break;
