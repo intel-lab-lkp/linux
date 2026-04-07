@@ -9,6 +9,7 @@
 #include <linux/err.h>
 #include <linux/hwmon.h>
 #include <linux/i2c.h>
+#include <linux/math64.h>
 #include <linux/module.h>
 #include <linux/regmap.h>
 
@@ -178,6 +179,7 @@ static int isl28022_read_power(struct device *dev, u32 attr, long *val)
 	struct isl28022_data *data = dev_get_drvdata(dev);
 	unsigned int regval;
 	int err;
+	u64 tmp;
 
 	switch (attr) {
 	case hwmon_power_input:
@@ -185,8 +187,9 @@ static int isl28022_read_power(struct device *dev, u32 attr, long *val)
 				  ISL28022_REG_POWER, &regval);
 		if (err < 0)
 			return err;
-		*val = ((51200000L * ((long)data->gain)) /
-			(long)data->shunt) * (long)regval;
+		tmp = (u64)51200000 * data->gain * regval;
+		tmp = div_u64(tmp, data->shunt);
+		*val = clamp_val(tmp, 0, LONG_MAX);
 		break;
 	default:
 		return -EOPNOTSUPP;
