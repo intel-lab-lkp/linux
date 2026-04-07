@@ -104,6 +104,10 @@ static inline int __cpupri_find(struct cpupri *cp, struct task_struct *p,
 		cpumask_and(lowest_mask, &p->cpus_mask, vec->mask);
 		cpumask_and(lowest_mask, lowest_mask, cpu_active_mask);
 
+#ifdef CONFIG_PARAVIRT
+		cpumask_and(lowest_mask, lowest_mask, cpu_preferred_mask);
+#endif
+
 		/*
 		 * We have to ensure that we have at least one bit
 		 * still set in the array, since the map could have
