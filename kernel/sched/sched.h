@@ -4148,12 +4148,25 @@ DEFINE_CLASS_IS_UNCONDITIONAL(sched_change)
 #include "ext.h"
 
 #ifdef CONFIG_PARAVIRT
+struct steal_monitor_t {
+	struct work_struct  work;
+	cpumask_var_t tmp_mask;
+	ktime_t prev_time;
+	u64 prev_steal;
+	int previous_decision;
+	unsigned int low_threshold;
+	unsigned int high_threshold;
+	unsigned int sampling_period_ms;
+};
+
 static inline bool task_can_run_on_preferred_cpu(struct task_struct *p)
 {
 	return cpumask_intersects(p->cpus_ptr, cpu_preferred_mask);
 }
 
 void sched_push_current_non_preferred_cpu(struct rq *rq);
+void sched_init_steal_monitor(void);
+void sched_steal_detection_work(struct work_struct *work);
 #else
 static inline bool task_can_run_on_preferred_cpu(struct task_struct *p)
 {
@@ -4161,6 +4174,7 @@ static inline bool task_can_run_on_preferred_cpu(struct task_struct *p)
 }
 
 static inline void sched_push_current_non_preferred_cpu(struct rq *rq) { }
+static inline void sched_init_steal_monitor(void) { }
 #endif
 
 #endif /* _KERNEL_SCHED_SCHED_H */
