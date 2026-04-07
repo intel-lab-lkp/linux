@@ -114,15 +114,15 @@ struct gpio_chip_reg {
  */
 struct gpio_generic_chip {
 	struct gpio_chip gc;
-	unsigned long (*read_reg)(void __iomem *reg);
-	void (*write_reg)(void __iomem *reg, unsigned long data);
+	unsigned long (*read_reg)(struct gpio_chip_reg *reg);
+	void (*write_reg)(struct gpio_chip_reg *reg, unsigned long data);
 	bool be_bits;
 	bool io_port;
-	void __iomem *reg_dat;
-	void __iomem *reg_set;
-	void __iomem *reg_clr;
-	void __iomem *reg_dir_out;
-	void __iomem *reg_dir_in;
+	struct gpio_chip_reg reg_dat;
+	struct gpio_chip_reg reg_set;
+	struct gpio_chip_reg reg_clr;
+	struct gpio_chip_reg reg_dir_out;
+	struct gpio_chip_reg reg_dir_in;
 	bool dir_unreadable;
 	bool pinctrl;
 	int bits;
@@ -174,10 +174,13 @@ gpio_generic_chip_set(struct gpio_generic_chip *chip, unsigned int offset,
 static inline unsigned long
 gpio_generic_read_reg(struct gpio_generic_chip *chip, void __iomem *reg)
 {
+	struct gpio_chip_reg rg;
+
 	if (WARN_ON(!chip->read_reg))
 		return 0;
 
-	return chip->read_reg(reg);
+	rg.mmio = reg;
+	return chip->read_reg(&rg);
 }
 
 /**
@@ -189,10 +192,13 @@ gpio_generic_read_reg(struct gpio_generic_chip *chip, void __iomem *reg)
 static inline void gpio_generic_write_reg(struct gpio_generic_chip *chip,
 					  void __iomem *reg, unsigned long val)
 {
+	struct gpio_chip_reg rg;
+
 	if (WARN_ON(!chip->write_reg))
 		return;
 
-	chip->write_reg(reg, val);
+	rg.mmio = reg;
+	chip->write_reg(&rg, val);
 }
 
 #define gpio_generic_chip_lock(gen_gc) \
