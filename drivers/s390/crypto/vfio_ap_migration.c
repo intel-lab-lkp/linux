@@ -11,6 +11,36 @@
 #include "ap_bus.h"
 #include "vfio_ap_private.h"
 
+/*
+ * Masks the fields of the queue information returned from the PQAP(TAPQ)
+ * command. In order to migrate a guest, it's AP configuration must be
+ * compatible with AP configuration assigned to the target guest's mdev.
+ * This mask is used to verify that the queue information for each source and
+ * target queue is compatible (i.e., the masked fields are equivalent).
+ *
+ * The relevant fields covered by this mask are:
+ * S bit 0: APSC  facility installed
+ * M bit 1: APQKM facility installed
+ * C bit 2: AP4KC facility installed
+ * Mode bits 3-5:
+ *     D bit 3: CCA-mode facility
+ *     A bit 4: accelerator-mode facility
+ *     X bit 5: XCP-mode facility
+ * N  bit 6: APXA facility installed
+ * SL bit 7: SLCF facility installed
+ * Classification (functional capabilities) bits 8-16
+ *     bit 8: Native card function
+ *     bit 9: Only stateless functions
+ * AP Type bits 32-40:
+ */
+#define QINFO_DATA_MASK		0xffffc000ff000000
+
+/*
+ * Masks the bit that indicates whether full native card function is available
+ * from the 8 bits specifying the functional capabilities of a queue
+ */
+#define CLASSIFICATION_NATIVE_FCN_MASK		0x80
+
 /**
  * vfio_ap_migration_data - the data needed to migrate a guest with pass-through
  *			    access to AP devices
@@ -235,6 +265,53 @@ static void vfio_ap_store_queue_info(struct vfio_ap_migration_file *migf)
 	}
 }
 
+static int validate_resume_write_parms(struct vfio_ap_migration_file *migf,
+				       size_t len, loff_t *pos)
+{
+	loff_t total_len;
+	int ret = -EIO;
+
+	lockdep_assert_held(&matrix_dev->mdevs_lock);
+
+	if (!migf->matrix_mdev) {
+		pr_err("migration failed: matrix_mdev object not linked to migration file");
+		goto done;
+	}
+
+	if (*pos < 0) {
+		dev_err(migf->matrix_mdev->vdev.dev,
+			"migration failed: invalid migration file position  (%lli) for write\n",
+			*pos);
+		goto done;
+	}
+
+	if (check_add_overflow((loff_t)len, *pos, &total_len)) {
+		dev_err(migf->matrix_mdev->vdev.dev,
+			"migration failed: pos (%llu) plus len (%zu) operation overflowed loff_t precision\n",
+			*pos, len);
+		goto done;
+	}
+
+	if (total_len > migf->config_sz) {
+		dev_err(migf->matrix_mdev->vdev.dev,
+			"migration failed: source guest's AP config size (%llu) larger than target's (%lu)",
+			total_len, migf->config_sz);
+		goto done;
+	}
+
+	if (migf->disabled) {
+		dev_err(migf->matrix_mdev->vdev.dev,
+			"migration failed: migration file is disabled");
+		goto done;
+	}
+
+	dev_dbg(migf->matrix_mdev->vdev.dev, "resume write parameters validated\n");
+	ret = 0;
+
+done:
+	return ret;
+}
+
 static struct vfio_ap_migration_file
 *vfio_ap_allocate_migf(struct ap_matrix_mdev *matrix_mdev)
 {
@@ -311,11 +388,448 @@ vfio_ap_save_mdev_state(struct ap_matrix_mdev *matrix_mdev)
 	return mig_data->saving_migf;
 }
 
+static void report_facilities_compatibility(struct ap_matrix_mdev *matrix_mdev,
+					    unsigned long apqn,
+					    struct ap_tapq_hwinfo *src_hwinfo,
+					    struct ap_tapq_hwinfo *target_hwinfo)
+{
+	if (src_hwinfo->apsc != target_hwinfo->apsc) {
+		if (src_hwinfo->apsc) {
+			dev_err(matrix_mdev->vdev.dev,
+				"APSC facility installed in source queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+
+			dev_err(matrix_mdev->vdev.dev,
+				"APSC facility not installed in target queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+		} else {
+			dev_err(matrix_mdev->vdev.dev,
+				"APSC facility not installed in source queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+
+			dev_err(matrix_mdev->vdev.dev,
+				"APSC facility installed in target queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+		}
+	}
+
+	if (src_hwinfo->mex4k != target_hwinfo->mex4k) {
+		if (src_hwinfo->mex4k) {
+			dev_err(matrix_mdev->vdev.dev,
+				"mex4k facility installed in source queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+
+			dev_err(matrix_mdev->vdev.dev,
+				"mex4k facility not installed in target queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+		} else {
+			dev_err(matrix_mdev->vdev.dev,
+				"mex4k facility not installed in source queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+
+			dev_err(matrix_mdev->vdev.dev,
+				"mex4k facility installed in target queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+		}
+	}
+
+	if (src_hwinfo->crt4k != target_hwinfo->crt4k) {
+		if (src_hwinfo->crt4k) {
+			dev_err(matrix_mdev->vdev.dev,
+				"crt4k facility installed in source queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+
+			dev_err(matrix_mdev->vdev.dev,
+				"crt4k facility not installed in target queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+		} else {
+			dev_err(matrix_mdev->vdev.dev,
+				"crt4k facility not installed in source queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+
+			dev_err(matrix_mdev->vdev.dev,
+				"crt4k facility installed in target queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+		}
+	}
+}
+
+static void report_mode_compatibility(struct ap_matrix_mdev *matrix_mdev,
+				      unsigned long apqn,
+				      struct ap_tapq_hwinfo *src_hwinfo,
+				      struct ap_tapq_hwinfo *target_hwinfo)
+{
+	if (src_hwinfo->cca != target_hwinfo->cca) {
+		if (src_hwinfo->cca) {
+			dev_err(matrix_mdev->vdev.dev,
+				"Coprocessor-mode facility installed in source queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+
+			dev_err(matrix_mdev->vdev.dev,
+				"Coprocessor-mode  facility not installed target queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+		} else {
+			dev_err(matrix_mdev->vdev.dev,
+				"Coprocessor-mode facility not installed in source queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+
+			dev_err(matrix_mdev->vdev.dev,
+				"Coprocessor-mode  facility installed target queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+		}
+	}
+
+	if (src_hwinfo->accel != target_hwinfo->accel) {
+		if (src_hwinfo->accel) {
+			dev_err(matrix_mdev->vdev.dev,
+				"Accelerator-mode facility installed source queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+
+			dev_err(matrix_mdev->vdev.dev,
+				"Accelerator-mode facility not installed target queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+		} else {
+			dev_err(matrix_mdev->vdev.dev,
+				"Accelerator-mode facility not installed source queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+
+			dev_err(matrix_mdev->vdev.dev,
+				"Accelerator-mode facility installed target queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+		}
+	}
+
+	if (src_hwinfo->ep11 != target_hwinfo->ep11) {
+		if (src_hwinfo->ep11) {
+			dev_err(matrix_mdev->vdev.dev,
+				"XCP-mode facility installed source queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+
+			dev_err(matrix_mdev->vdev.dev,
+				"XCP-mode facility not installed target queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+		} else {
+			dev_err(matrix_mdev->vdev.dev,
+				"XCP-mode facility not installed source queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+
+			dev_err(matrix_mdev->vdev.dev,
+				"XCP-mode facility installed target queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+		}
+	}
+}
+
+static void report_apxa_compatibility(struct ap_matrix_mdev *matrix_mdev,
+				      unsigned long apqn,
+				      struct ap_tapq_hwinfo *src_hwinfo,
+				      struct ap_tapq_hwinfo *target_hwinfo)
+{
+	if (src_hwinfo->apxa != target_hwinfo->apxa) {
+		if (src_hwinfo->apxa) {
+			dev_err(matrix_mdev->vdev.dev,
+				"AP-extended-addressing (APXA) facility installed in source queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+
+			dev_err(matrix_mdev->vdev.dev,
+				"AP-extended-addressing (APXA) facility not installed in target queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+		} else {
+			dev_err(matrix_mdev->vdev.dev,
+				"AP-extended-addressing (APXA) facility not installed in source queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+
+			dev_err(matrix_mdev->vdev.dev,
+				"AP-extended-addressing (APXA) facility installed in target queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+		}
+	}
+}
+
+static void report_slcf_compatibility(struct ap_matrix_mdev *matrix_mdev,
+				      unsigned long apqn,
+				      struct ap_tapq_hwinfo *src_hwinfo,
+				      struct ap_tapq_hwinfo *target_hwinfo)
+{
+	if (src_hwinfo->slcf != target_hwinfo->slcf) {
+		if (src_hwinfo->slcf) {
+			dev_err(matrix_mdev->vdev.dev,
+				"Stateless-command-filtering (SLCF) available in source queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+
+			dev_err(matrix_mdev->vdev.dev,
+				"Stateless-command-filtering (SLCF) not available in target queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+		} else {
+			dev_err(matrix_mdev->vdev.dev,
+				"Stateless-command-filtering (SLCF) not available in source queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+
+			dev_err(matrix_mdev->vdev.dev,
+				"Stateless-command-filtering (SLCF) available in target queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+		}
+	}
+}
+
+static void report_class_compatibility(struct ap_matrix_mdev *matrix_mdev,
+				       unsigned long apqn,
+				       struct ap_tapq_hwinfo *src_hwinfo,
+				       struct ap_tapq_hwinfo *target_hwinfo)
+{
+	unsigned long src_native, target_native;
+
+	src_native = src_hwinfo->class & CLASSIFICATION_NATIVE_FCN_MASK;
+	target_native = target_hwinfo->class & CLASSIFICATION_NATIVE_FCN_MASK;
+
+	if (src_native != target_native) {
+		/*
+		 * If the source queue has full native card function and the
+		 * target queue has only stateless functions available, then
+		 * there may be instructions that will not execute on the
+		 * target queue.
+		 *
+		 * If the source queue has only stateless card functions and the
+		 * target queue has full native card function available, then
+		 * we are okay because the target queue can run all card
+		 * functions.
+		 */
+		if (src_native) {
+			dev_err(matrix_mdev->vdev.dev,
+				"Full native card function available on source queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+
+			dev_err(matrix_mdev->vdev.dev,
+				"Only stateless functions available on target queue %02lx.%04lx\n",
+				AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+		}
+	}
+}
+
+static void report_bs_compatibility(struct ap_matrix_mdev *matrix_mdev,
+				    unsigned long apqn,
+				    struct ap_tapq_hwinfo *src_hwinfo,
+				    struct ap_tapq_hwinfo *target_hwinfo)
+{
+	if (src_hwinfo->bs || target_hwinfo->bs) {
+		dev_err(matrix_mdev->vdev.dev,
+			"Bind/associate state for source (%01x) and target (%01x) queue %02lx.%04lx are not compatible\n",
+			src_hwinfo->bs, target_hwinfo->bs,
+			AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+	}
+}
+
+static void report_aptype_compatibility(struct ap_matrix_mdev *matrix_mdev,
+					unsigned long apqn,
+					struct ap_tapq_hwinfo *src_hwinfo,
+					struct ap_tapq_hwinfo *target_hwinfo)
+{
+	dev_err(matrix_mdev->vdev.dev,
+		"AP type of source (%02x) not compatible with target (%02x)\n",
+		src_hwinfo->at, target_hwinfo->at);
+}
+
+/*
+ * Log a device error reporting that migration failed due to queue
+ * incompatibilities followed by a device error for each incompatible feature.
+ */
+static void report_qinfo_incompatibilities(struct ap_matrix_mdev *matrix_mdev,
+					   unsigned long apqn,
+					   struct ap_tapq_hwinfo *src_hwinfo,
+					   struct ap_tapq_hwinfo *target_hwinfo)
+{
+	dev_err(matrix_mdev->vdev.dev,
+		"Migration failed: Source and target queue (%02lx.%04lx) not compatible\n",
+		AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+
+	report_facilities_compatibility(matrix_mdev, apqn, src_hwinfo, target_hwinfo);
+	report_mode_compatibility(matrix_mdev, apqn, src_hwinfo, target_hwinfo);
+	report_apxa_compatibility(matrix_mdev, apqn, src_hwinfo, target_hwinfo);
+	report_slcf_compatibility(matrix_mdev, apqn, src_hwinfo, target_hwinfo);
+	report_class_compatibility(matrix_mdev, apqn, src_hwinfo, target_hwinfo);
+	report_aptype_compatibility(matrix_mdev, apqn, src_hwinfo, target_hwinfo);
+	report_bs_compatibility(matrix_mdev, apqn, src_hwinfo, target_hwinfo);
+}
+
+static bool qinfo_compatible(struct ap_matrix_mdev *matrix_mdev,
+			     unsigned long apqn,
+			     struct ap_tapq_hwinfo *src_hwinfo,
+			     struct ap_tapq_hwinfo *target_hwinfo)
+{
+	unsigned long src_bits, target_bits;
+
+	src_bits = src_hwinfo->value & QINFO_DATA_MASK;
+	target_bits = target_hwinfo->value & QINFO_DATA_MASK;
+
+	/*
+	 * If all relevant bits are the same, or only the AP type of the source
+	 * and target queue differ but the source type is older than the target
+	 * type, then no incompatibilities will be reported. The AP types are
+	 * considered compatible even if they differ as long as the source type
+	 * is older than the target type since AP devices are backwards
+	 * compatible.
+	 */
+	if (src_bits == target_bits ||
+	    (src_hwinfo->fac == target_hwinfo->fac &&
+	     src_hwinfo->at <= target_hwinfo->at)) {
+		return true;
+	}
+
+	report_qinfo_incompatibilities(matrix_mdev, apqn, src_hwinfo,
+				       target_hwinfo);
+
+	return false;
+}
+
+static int matrixes_compatible(struct vfio_ap_migration_file *migf)
+{
+	struct ap_matrix_mdev *matrix_mdev;
+	struct ap_tapq_hwinfo src_hwinfo;
+	struct vfio_ap_queue *q;
+	unsigned long apqn;
+
+	lockdep_assert_held(&matrix_dev->mdevs_lock);
+
+	matrix_mdev = migf->matrix_mdev;
+
+	for (int i = 0; i < migf->ap_config->num_queues; i++) {
+		apqn = migf->ap_config->qinfo[i].apqn;
+		q = vfio_ap_mdev_get_queue(matrix_mdev, apqn);
+		memcpy(&src_hwinfo, &migf->ap_config->qinfo[i].data,
+		       sizeof(src_hwinfo));
+
+		if (!qinfo_compatible(matrix_mdev, apqn, &src_hwinfo, &q->hwinfo))
+			return -EFAULT;
+	}
+
+	return 0;
+}
+
+static bool apqns_match(struct vfio_ap_migration_file *migf)
+{
+	struct ap_matrix_mdev *matrix_mdev;
+	unsigned long apid, apqi, apqn;
+	bool ret = true;
+
+	lockdep_assert_held(&matrix_dev->mdevs_lock);
+
+	matrix_mdev = migf->matrix_mdev;
+
+	for (int i = 0; i < migf->ap_config->num_queues; i++) {
+		apqn = migf->ap_config->qinfo[i].apqn;
+		apid = AP_QID_CARD(apqn);
+		apqi = AP_QID_QUEUE(apqn);
+
+		if (!test_bit_inv(apid, matrix_mdev->shadow_apcb.apm) ||
+		    !test_bit_inv(apqi, matrix_mdev->shadow_apcb.aqm)) {
+			dev_err(matrix_mdev->vdev.dev,
+				"migration failed: queue %02lx.%04lx not assigned to guest matrix\n",
+				apid, apqi);
+			ret = false;
+		}
+	}
+
+	return ret;
+}
+
+static int vfio_ap_validate_num_queues(struct vfio_ap_migration_file *migf)
+{
+	int num_migf_queues, num_mdev_queues;
+	struct ap_matrix_mdev *matrix_mdev;
+
+	lockdep_assert_held(&matrix_dev->mdevs_lock);
+	matrix_mdev = migf->matrix_mdev;
+	num_mdev_queues = vfio_ap_mdev_get_num_queues(&matrix_mdev->shadow_apcb);
+	num_migf_queues = migf->ap_config->num_queues;
+
+	if (num_mdev_queues != num_migf_queues) {
+		dev_err(matrix_mdev->vdev.dev,
+			"migration failed: number of queues on source (%d) and target (%d) guests differ\n",
+			num_migf_queues, num_mdev_queues);
+		return (num_mdev_queues > num_migf_queues) ? -ENODEV : -E2BIG;
+	}
+
+	return 0;
+}
+
+static int do_post_copy_validation(struct vfio_ap_migration_file *migf, loff_t pos)
+{
+	unsigned long nqueues_offset;
+	int ret;
+
+	nqueues_offset = offsetofend(struct vfio_ap_config, num_queues);
+	if (pos >= nqueues_offset) {
+		ret = vfio_ap_validate_num_queues(migf);
+		if (ret)
+			return ret;
+
+		if (pos == migf->config_sz) {
+			if (!apqns_match(migf))
+				return -ENODEV;
+			ret = matrixes_compatible(migf);
+			if (ret)
+				return ret;
+		}
+	}
+
+	return 0;
+}
+
+/**
+ * vfio_ap_resume_write - store the AP configuration information sent from the
+ *			  source guest into the migration file.
+ * @filp: the file used to send the AP configuration information from the source
+ *	  guest.
+ * @buf:  buffer containing the AP configuration information sent from the
+ *	  source guest
+ * @len:  the length of the AP configuration information contained in @buf
+ * *pos:  a pointer to store the file position after retrieving the AP config
+ *	  information from @buf
+ */
 static ssize_t vfio_ap_resume_write(struct file *filp, const char __user *buf,
 				    size_t len, loff_t *pos)
 {
-	/* TODO */
-	return -EOPNOTSUPP;
+	struct vfio_ap_migration_data *mig_data;
+	struct vfio_ap_migration_file *migf;
+	ssize_t ret = 0;
+
+	if (pos)
+		return -ESPIPE;
+
+	mutex_lock(&matrix_dev->mdevs_lock);
+
+	pos = &filp->f_pos;
+	migf = filp->private_data;
+	mig_data = migf->matrix_mdev->mig_data;
+
+	ret = validate_resume_write_parms(migf, len, pos);
+	if (ret)
+		goto out_unlock;
+
+	if (copy_from_user((void *)migf->ap_config + *pos, buf, len)) {
+		dev_err(migf->matrix_mdev->vdev.dev,
+			"%s (%d): failed to copy queue information from userspace",
+			__func__, __LINE__);
+		ret = -EFAULT;
+		goto out_unlock;
+	}
+
+	*pos += len;
+
+	ret = do_post_copy_validation(migf, *pos);
+	if (ret)
+		goto out_unlock;
+
+	ret = len;
+
+	dev_dbg(migf->matrix_mdev->vdev.dev,
+		"%s (%d): %zu bytes of queue information stored in the migration file",
+		__func__, __LINE__, len);
+
+out_unlock:
+	mutex_unlock(&matrix_dev->mdevs_lock);
+
+	return ret;
 }
 
 static const struct file_operations vfio_ap_resume_fops = {
