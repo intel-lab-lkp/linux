@@ -616,6 +616,35 @@ mt7996_mcu_rx_all_sta_info_event(struct mt7996_dev *dev, struct sk_buff *skb)
 			wcid->stats.rx_packets +=
 				le32_to_cpu(res->msdu_cnt[i].rx_msdu_cnt);
 			break;
+		case UNI_ALL_STA_TXRX_AIR_TIME: {
+			static const u8 ac_to_tid[] = {
+				[IEEE80211_AC_BE] = 0,
+				[IEEE80211_AC_BK] = 1,
+				[IEEE80211_AC_VI] = 4,
+				[IEEE80211_AC_VO] = 6
+			};
+			struct ieee80211_sta *sta;
+
+			wlan_idx = le16_to_cpu(res->airtime[i].wlan_idx);
+			wcid = mt76_wcid_ptr(dev, wlan_idx);
+			sta = wcid_to_sta(wcid);
+			if (!sta)
+				break;
+
+			for (ac = 0; ac < IEEE80211_NUM_ACS; ac++) {
+				u8 lmac_ac = mt76_connac_lmac_mapping(ac);
+				u32 tx_cur = le32_to_cpu(res->airtime[i].tx[lmac_ac]);
+				u32 rx_cur = le32_to_cpu(res->airtime[i].rx[lmac_ac]);
+
+				if (!tx_cur && !rx_cur)
+					continue;
+
+				ieee80211_sta_register_airtime(sta,
+							      ac_to_tid[ac],
+							      tx_cur, rx_cur);
+			}
+			break;
+		}
 		default:
 			break;
 		}
@@ -4753,6 +4782,112 @@ int mt7996_mcu_get_all_sta_info(struct mt7996_phy *phy, u16 tag)
 
 	return mt76_mcu_send_msg(&dev->mt76, MCU_WM_UNI_CMD(ALL_STA_INFO),
 				 &req, sizeof(req), false);
+}
+
+int mt7996_mcu_get_per_sta_info(struct mt7996_phy *phy, u16 tag)
+{
+	struct mt7996_dev *dev = phy->dev;
+	struct mt7996_mcu_per_sta_info_event *res;
+	struct mt76_wcid *wcid;
+	struct sk_buff *skb;
+	int i, ret, sta_num, resp_sta_num;
+	int wcid_idx = 0;
+	struct {
+		u8 _rsv1;
+		u8 unsolicit;
+		u8 _rsv2[2];
+
+		__le16 tag;
+		__le16 len;
+		__le16 sta_num;
+		u8 _rsv3[2];
+		__le16 wlan_idx[PER_STA_INFO_MAX_NUM];
+	} __packed req = {
+		.tag = cpu_to_le16(tag),
+		.len = cpu_to_le16(sizeof(req) - 4),
+	};
+
+	while (wcid_idx < mt7996_wtbl_size(dev)) {
+		sta_num = 0;
+
+		rcu_read_lock();
+		for (i = wcid_idx;
+		     i < mt7996_wtbl_size(dev) && sta_num < PER_STA_INFO_MAX_NUM;
+		     i++) {
+			wcid = rcu_dereference(dev->mt76.wcid[i]);
+			if (!wcid || !wcid->sta)
+				continue;
+			req.wlan_idx[sta_num++] = cpu_to_le16(i);
+		}
+		rcu_read_unlock();
+		wcid_idx = i;
+
+		if (!sta_num)
+			continue;
+
+		req.sta_num = cpu_to_le16(sta_num);
+
+		ret = mt76_mcu_send_and_get_msg(&dev->mt76,
+						MCU_WM_UNI_CMD(PER_STA_INFO),
+						&req, sizeof(req), true, &skb);
+		if (ret)
+			return ret;
+
+		res = (struct mt7996_mcu_per_sta_info_event *)skb->data;
+
+		resp_sta_num = le16_to_cpu(res->sta_num);
+		if (resp_sta_num > sta_num ||
+		    skb->len < struct_size(res, rssi, resp_sta_num)) {
+			dev_kfree_skb(skb);
+			return -EINVAL;
+		}
+
+		rcu_read_lock();
+		for (i = 0; i < resp_sta_num; i++) {
+			struct mt7996_sta_link *msta_link;
+			struct mt76_vif_link *mvif;
+			struct mt76_vif_link *mlink;
+			struct mt76_phy *mphy;
+			u16 wlan_idx;
+			s8 rssi[4];
+
+			switch (tag) {
+			case UNI_PER_STA_RSSI:
+				wlan_idx = le16_to_cpu(res->rssi[i].wlan_idx);
+				wcid = mt76_wcid_ptr(dev, wlan_idx);
+				if (!wcid || !wcid->sta)
+					break;
+
+				msta_link = container_of(wcid,
+							 struct mt7996_sta_link,
+							 wcid);
+
+				rssi[0] = (res->rssi[i].rcpi[0] - 220) / 2;
+				rssi[1] = (res->rssi[i].rcpi[1] - 220) / 2;
+				rssi[2] = (res->rssi[i].rcpi[2] - 220) / 2;
+				rssi[3] = (res->rssi[i].rcpi[3] - 220) / 2;
+
+				mvif = &msta_link->sta->vif->mt76;
+				mlink = rcu_dereference(mvif->link[wcid->link_id]);
+				if (mlink) {
+					mphy = mt76_vif_link_phy(mlink);
+					if (mphy)
+						msta_link->ack_signal =
+							mt76_rx_signal(mphy->antenna_mask,
+								       rssi);
+				}
+
+				ewma_avg_signal_add(&msta_link->avg_ack_signal,
+						    -msta_link->ack_signal);
+				break;
+			}
+		}
+		rcu_read_unlock();
+
+		dev_kfree_skb(skb);
+	}
+
+	return 0;
 }
 
 int mt7996_mcu_wed_rro_reset_sessions(struct mt7996_dev *dev, u16 id)
