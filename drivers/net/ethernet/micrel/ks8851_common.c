@@ -316,6 +316,7 @@ static irqreturn_t ks8851_irq(int irq, void *_ks)
 	unsigned int status;
 	struct sk_buff *skb;
 
+	local_bh_disable();
 	ks8851_lock(ks, &flags);
 
 	status = ks8851_rdreg16(ks, KS_ISR);
@@ -381,6 +382,7 @@ static irqreturn_t ks8851_irq(int irq, void *_ks)
 	if (status & IRQ_RXI)
 		while ((skb = __skb_dequeue(&rxq)))
 			netif_rx(skb);
+	local_bh_enable();
 
 	return IRQ_HANDLED;
 }
