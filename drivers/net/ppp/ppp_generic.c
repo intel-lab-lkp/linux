@@ -1057,6 +1057,12 @@ static int ppp_unattached_ioctl(struct net *net, struct ppp_file *pf,
 	struct ppp_net *pn;
 	int __user *p = (int __user *)arg;
 
+	if ((cmd == PPPIOCNEWUNIT ||
+	     cmd == PPPIOCATTACH ||
+	     cmd == PPPIOCATTCHAN) &&
+	    !ns_capable(net->user_ns, CAP_NET_ADMIN))
+		return -EPERM;
+
 	switch (cmd) {
 	case PPPIOCNEWUNIT:
 		/* Create a new ppp unit */
