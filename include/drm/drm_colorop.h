@@ -135,6 +135,71 @@ enum drm_colorop_curve_1d_type {
 };
 
 /**
+ * enum drm_colorop_fixed_matrix_type - type of Fixed Matrix
+ *
+ * Describes a Fixed Matrix operation to be applied by the DRM_COLOROP_FIXED_MATRIX
+ */
+enum drm_colorop_fixed_matrix_type {
+	/**
+	 * @DRM_COLOROP_FM_YCBCR601_FULL_RGB:
+	 *
+	 * enum string "YCbCr 601 Full to RGB"
+	 *
+	 * This selects the matrix that converts full range YCbCr into RGB
+	 * according to the BT.601 coefficients.
+	 */
+	DRM_COLOROP_FM_YCBCR601_FULL_RGB,
+
+	/**
+	 * @DRM_COLOROP_FM_YCBCR709_FULL_RGB:
+	 *
+	 * enum string "YCbCr 709 Full to RGB"
+	 *
+	 * This selects the matrix that converts full range YCbCr into RGB
+	 * according to the BT.709 coefficients.
+	 */
+	DRM_COLOROP_FM_YCBCR709_FULL_RGB,
+
+	/**
+	 * @DRM_COLOROP_FM_YCBCR2020_NC_FULL_RGB:
+	 *
+	 * enum string "YCbCr 2020 Full to RGB NC"
+	 *
+	 * This selects the matrix that converts full range YCbCr into RGB
+	 * according to the BT.2020 non-constant luminance coefficients.
+	 */
+	DRM_COLOROP_FM_YCBCR2020_FULL_RGB_NC,
+
+	/**
+	 * @DRM_COLOROP_FM_YCBCR_LIMITED_FULL:
+	 *
+	 * enum string "YCbCr limited to full"
+	 *
+	 * This selects the matrix that converts limited range YCbCr into
+	 * full range YCbCr. Though not strictly a matrix operation but
+	 * can be represented as one.
+	 */
+	DRM_COLOROP_FM_YCBCR_LIMITED_FULL,
+
+	/**
+	 * @DRM_COLOROP_FM_RGB709_RGB2020:
+	 *
+	 * enum string "RGB709 to RGB2020"
+	 *
+	 * Selects the fixed-function CSC preset that converts RGB
+	 * (BT.709) colorimetry to RGB (BT.2020).
+	 */
+	DRM_COLOROP_FM_RGB709_RGB2020,
+
+	/**
+	 * @DRM_COLOROP_FM_COUNT:
+	 *
+	 * enum value denoting the size of the enum
+	 */
+	DRM_COLOROP_FM_COUNT
+};
+
+/**
  * struct drm_colorop_state - mutable colorop state
  */
 struct drm_colorop_state {
@@ -182,6 +247,13 @@ struct drm_colorop_state {
 	 * out.
 	 */
 	struct drm_property_blob *data;
+
+	/**
+	 * @fixed_matrix_type:
+	 *
+	 * Type of Fixed Matrix operation.
+	 */
+	enum drm_colorop_fixed_matrix_type fixed_matrix_type;
 
 	/** @state: backpointer to global drm_atomic_state */
 	struct drm_atomic_state *state;
@@ -369,6 +441,13 @@ struct drm_colorop {
 	struct drm_property *data_property;
 
 	/**
+	 * @fixed_matrix_type_property:
+	 *
+	 * Sub-type for DRM_COLOROP_FIXED_MATRIX type.
+	 */
+	struct drm_property *fixed_matrix_type_property;
+
+	/**
 	 * @next_property:
 	 *
 	 * Read-only property to next colorop in the pipeline
@@ -424,6 +503,10 @@ int drm_plane_colorop_3dlut_init(struct drm_device *dev, struct drm_colorop *col
 				 uint32_t lut_size,
 				 enum drm_colorop_lut3d_interpolation_type interpolation,
 				 uint32_t flags);
+int drm_plane_colorop_fixed_matrix_init(struct drm_device *dev, struct drm_colorop *colorop,
+					struct drm_plane *plane,
+					const struct drm_colorop_funcs *funcs,
+					u64 supported_fm, uint32_t flags);
 
 struct drm_colorop_state *
 drm_atomic_helper_colorop_duplicate_state(struct drm_colorop *colorop);
@@ -480,6 +563,7 @@ drm_get_colorop_lut1d_interpolation_name(enum drm_colorop_lut1d_interpolation_ty
 
 const char *
 drm_get_colorop_lut3d_interpolation_name(enum drm_colorop_lut3d_interpolation_type type);
+const char *drm_get_colorop_fixed_matrix_type_name(enum drm_colorop_fixed_matrix_type type);
 
 void drm_colorop_set_next_property(struct drm_colorop *colorop, struct drm_colorop *next);
 
