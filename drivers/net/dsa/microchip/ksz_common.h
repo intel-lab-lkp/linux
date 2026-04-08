@@ -219,6 +219,9 @@ struct ksz_device {
 	 * the switch’s internal PHYs, bypassing the main SPI interface.
 	 */
 	struct mii_bus *parent_mdio_bus;
+
+	/* Equalizer low-loss workaround tunable */
+	u8 low_loss_wa_mode; /* bits [1:0]: 00 = disabled, 01 = workaround 1, 10 = workaround 2 */
 };
 
 /* List of supported models */
