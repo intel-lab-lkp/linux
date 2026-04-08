@@ -2805,7 +2805,8 @@ done:
 
 	sci_reset(port);
 
-	uart_update_timeout(port, termios->c_cflag, baud);
+	if (baud)
+		uart_update_timeout(port, termios->c_cflag, baud);
 
 	/* byte size and parity */
 	bits = tty_get_frame_size(termios->c_cflag);

@@ -286,7 +286,8 @@ done:
 	sci_port_enable(s);
 	uart_port_lock_irqsave(port, &flags);
 
-	uart_update_timeout(port, termios->c_cflag, baud);
+	if (baud)
+		uart_update_timeout(port, termios->c_cflag, baud);
 
 	rsci_serial_out(port, CCR0, ccr0_val);
 
