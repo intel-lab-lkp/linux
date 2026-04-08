@@ -1477,6 +1477,10 @@ static ssize_t target_wwn_vendor_id_store(struct config_item *item,
 			"\n");
 		return -EOVERFLOW;
 	}
+	if (len == 0) {
+		pr_err("Emulated T10 Vendor Identification equals zero.\n");
+		return -EINVAL;
+	}
 
 	ret = target_check_inquiry_data(stripped);
 
@@ -1533,6 +1537,10 @@ static ssize_t target_wwn_product_id_store(struct config_item *item,
 			"\n");
 		return -EOVERFLOW;
 	}
+	if (len == 0) {
+		pr_err("Emulated T10 Vendor equals zero.\n");
+		return -EINVAL;
+	}
 
 	ret = target_check_inquiry_data(stripped);
 
@@ -1588,6 +1596,10 @@ static ssize_t target_wwn_revision_store(struct config_item *item,
 			 __stringify(INQUIRY_REVISION_LEN)
 			"\n");
 		return -EOVERFLOW;
+	}
+	if (len == 0) {
+		pr_err("Emulated T10 Revision equals zero.\n");
+		return -EINVAL;
 	}
 
 	ret = target_check_inquiry_data(stripped);
