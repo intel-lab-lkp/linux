@@ -2847,8 +2847,11 @@ EXPORT_SYMBOL(__folio_cancel_dirty);
  *
  * This incoherency between the folio's dirty flag and xarray tag is
  * unfortunate, but it only exists while the folio is locked.
+ *
+ * For some cases we might not want to do mkclean, eg, if we've already taken
+ * care of it, hence pass the should_mkclean flag to indicate if its needed.
  */
-bool folio_clear_dirty_for_io(struct folio *folio)
+static bool __folio_clear_dirty_for_io(struct folio *folio, bool should_mkclean)
 {
 	struct address_space *mapping = folio_mapping(folio);
 	bool ret = false;
@@ -2885,7 +2888,7 @@ bool folio_clear_dirty_for_io(struct folio *folio)
 		 * as a serialization point for all the different
 		 * threads doing their things.
 		 */
-		if (folio_mkclean(folio))
+		if (should_mkclean && folio_mkclean(folio))
 			folio_mark_dirty(folio);
 		/*
 		 * We carefully synchronise fault handlers against
@@ -2907,6 +2910,11 @@ bool folio_clear_dirty_for_io(struct folio *folio)
 		return ret;
 	}
 	return folio_test_clear_dirty(folio);
+}
+
+bool folio_clear_dirty_for_io(struct folio *folio)
+{
+	return __folio_clear_dirty_for_io(folio, true);
 }
 EXPORT_SYMBOL(folio_clear_dirty_for_io);
 
