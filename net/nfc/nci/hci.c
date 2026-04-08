@@ -412,6 +412,10 @@ static void nci_hci_msg_rx_work(struct work_struct *work)
 
 	for (; (skb = skb_dequeue(&hdev->msg_rx_queue)); kcov_remote_stop()) {
 		kcov_remote_start_common(skb_get_kcov_handle(skb));
+		if (skb->len < NCI_HCI_HCP_HEADER_LEN) {
+			kfree_skb(skb);
+			continue;
+		}
 		pipe = NCI_HCP_MSG_GET_PIPE(skb->data[0]);
 		skb_pull(skb, NCI_HCI_HCP_PACKET_HEADER_LEN);
 		message = (struct nci_hcp_message *)skb->data;
@@ -482,6 +486,11 @@ void nci_hci_data_received_cb(void *context,
 	 * unblock waiting cmd context. Otherwise, enqueue to dispatch
 	 * in separate context where handler can also execute command.
 	 */
+	if (hcp_skb->len < NCI_HCI_HCP_HEADER_LEN) {
+		kfree_skb(hcp_skb);
+		return;
+	}
+
 	packet = (struct nci_hcp_packet *)hcp_skb->data;
 	type = NCI_HCP_MSG_GET_TYPE(packet->message.header);
 	if (type == NCI_HCI_HCP_RESPONSE) {

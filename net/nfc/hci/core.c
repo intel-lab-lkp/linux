@@ -134,6 +134,10 @@ static void nfc_hci_msg_rx_work(struct work_struct *work)
 	u8 instruction;
 
 	while ((skb = skb_dequeue(&hdev->msg_rx_queue)) != NULL) {
+		if (skb->len < NFC_HCI_HCP_HEADER_LEN) {
+			kfree_skb(skb);
+			continue;
+		}
 		pipe = skb->data[0];
 		skb_pull(skb, NFC_HCI_HCP_PACKET_HEADER_LEN);
 		message = (struct hcp_message *)skb->data;
@@ -904,6 +908,11 @@ static void nfc_hci_recv_from_llc(struct nfc_hci_dev *hdev, struct sk_buff *skb)
 	 * unblock waiting cmd context. Otherwise, enqueue to dispatch
 	 * in separate context where handler can also execute command.
 	 */
+	if (hcp_skb->len < NFC_HCI_HCP_HEADER_LEN) {
+		kfree_skb(hcp_skb);
+		return;
+	}
+
 	packet = (struct hcp_packet *)hcp_skb->data;
 	type = HCP_MSG_GET_TYPE(packet->message.header);
 	if (type == NFC_HCI_HCP_RESPONSE) {
