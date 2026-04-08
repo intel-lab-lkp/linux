@@ -254,6 +254,14 @@ void intel_crtc_state_dump(const struct intel_crtc_state *pipe_config,
 			   str_enabled_disabled(pipe_config->enable_psr2_su_region_et),
 			   str_enabled_disabled(pipe_config->req_psr2_sdp_prior_scanline),
 			   pipe_config->entry_setup_frames);
+		drm_printf(&p, "alpm: lobf = %s, io wake lines = %d, fast wake lines = %d, check entry lines = %d, aux less wake lines = %d, silence period symbol clocks = %d, lfps half cycle number of symbols = %d\n",
+			   str_enabled_disabled(pipe_config->has_lobf),
+			   pipe_config->alpm_state.io_wake_lines,
+			   pipe_config->alpm_state.fast_wake_lines,
+			   pipe_config->alpm_state.check_entry_lines,
+			   pipe_config->alpm_state.aux_less_wake_lines,
+			   pipe_config->alpm_state.silence_period_sym_clocks,
+			   pipe_config->alpm_state.lfps_half_cycle_num_of_syms);
 		drm_printf(&p, "minimum hblank: %d\n", pipe_config->min_hblank);
 	}
 
