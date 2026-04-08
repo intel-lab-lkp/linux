@@ -118,7 +118,7 @@ static inline struct sk_buff *__skb_dequeue_bad_txq(struct Qdisc *q)
 				qdisc_qstats_cpu_qlen_dec(q);
 			} else {
 				qdisc_qstats_backlog_dec(q, skb);
-				q->q.qlen--;
+				qdisc_qlen_dec(q);
 			}
 		} else {
 			skb = SKB_XOFF_MAGIC;
@@ -159,7 +159,7 @@ static inline void qdisc_enqueue_skb_bad_txq(struct Qdisc *q,
 		qdisc_qstats_cpu_qlen_inc(q);
 	} else {
 		qdisc_qstats_backlog_inc(q, skb);
-		q->q.qlen++;
+		qdisc_qlen_inc(q);
 	}
 
 	if (lock)
@@ -188,7 +188,7 @@ static inline void dev_requeue_skb(struct sk_buff *skb, struct Qdisc *q)
 		} else {
 			q->qstats.requeues++;
 			qdisc_qstats_backlog_inc(q, skb);
-			q->q.qlen++;
+			qdisc_qlen_inc(q);
 		}
 
 		skb = next;
@@ -294,7 +294,7 @@ static struct sk_buff *dequeue_skb(struct Qdisc *q, bool *validate,
 				qdisc_qstats_cpu_qlen_dec(q);
 			} else {
 				qdisc_qstats_backlog_dec(q, skb);
-				q->q.qlen--;
+				qdisc_qlen_dec(q);
 			}
 		} else {
 			skb = NULL;

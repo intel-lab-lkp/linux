@@ -415,7 +415,7 @@ static int dualpi2_enqueue_skb(struct sk_buff *skb, struct Qdisc *sch,
 		dualpi2_skb_cb(skb)->apply_step = skb_apply_step(skb, q);
 
 		/* Keep the overall qdisc stats consistent */
-		++sch->q.qlen;
+		qdisc_qlen_inc(sch);
 		qdisc_qstats_backlog_inc(sch, skb);
 		++q->packets_in_l;
 		if (!q->l_head_ts)
@@ -530,7 +530,7 @@ static struct sk_buff *dequeue_packet(struct Qdisc *sch,
 		qdisc_qstats_backlog_dec(q->l_queue, skb);
 
 		/* Keep the global queue size consistent */
-		--sch->q.qlen;
+		qdisc_qlen_dec(sch);
 		q->memory_used -= skb->truesize;
 	} else if (c_len) {
 		skb = __qdisc_dequeue_head(&sch->q);
