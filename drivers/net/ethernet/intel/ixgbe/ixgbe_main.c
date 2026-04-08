@@ -2897,6 +2897,16 @@ adjust_for_speed:
 		break;
 	}
 
+	/* In the case of a latency specific workload only allow us to
+	 * reduce the ITR by at most 2us. By doing this we should dial
+	 * in so that our number of interrupts is no more than 2x the number
+	 * of packets for the least busy workload. So for example in the case
+	 * of a TCP workload the ACK packets being received would set the
+	 * interrupt rate as they are a latency specific workload.
+	 */
+	if ((itr & IXGBE_ITR_ADAPTIVE_LATENCY) && itr < ring_container->itr)
+		itr = ring_container->itr - IXGBE_ITR_ADAPTIVE_MIN_INC;
+
 clear_counts:
 	/* Separate mode bit (IXGBE_ITR_ADAPTIVE_LATENCY) from usec delay;
 	 * clamp delay to [MIN_USECS, MAX_USECS] before storing to prevent
