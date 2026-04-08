@@ -517,6 +517,15 @@ static int intel_atomic_setup_scaler(struct intel_crtc_state *crtc_state,
 
 			return -EINVAL;
 		}
+
+		/*
+		 * For the purposes of prefill 4:2:0 chroma
+		 * subsampling is considered a 2x2 downscale.
+		 */
+		if (crtc_state->output_format == INTEL_OUTPUT_FORMAT_YCBCR420) {
+			hscale <<= 1;
+			vscale <<= 1;
+		}
 	}
 
 	scaler_state->scalers[*scaler_id].hscale = hscale;
