@@ -26,6 +26,7 @@ struct starfive_dwmac_data {
 struct starfive_dwmac {
 	struct device *dev;
 	const struct starfive_dwmac_data *data;
+	struct clk *sgmii_rx;
 };
 
 static int starfive_dwmac_set_mode(struct plat_stmmacenet_data *plat_dat)
@@ -35,6 +36,9 @@ static int starfive_dwmac_set_mode(struct plat_stmmacenet_data *plat_dat)
 	unsigned int args[2];
 	int phy_intf_sel;
 	int err;
+
+	if (plat_dat->phy_interface == PHY_INTERFACE_MODE_SGMII)
+		return 0;
 
 	phy_intf_sel = stmmac_get_phy_intf_sel(plat_dat->phy_interface);
 	if (phy_intf_sel != PHY_INTF_SEL_RGMII &&
@@ -66,6 +70,24 @@ static int starfive_dwmac_set_mode(struct plat_stmmacenet_data *plat_dat)
 	}
 
 	return 0;
+}
+
+static int stmmac_starfive_sgmii_set_clk_rate(void *bsp_priv, struct clk *clk_tx_i,
+					      phy_interface_t interface, int speed)
+{
+	struct starfive_dwmac *dwmac = (void *)bsp_priv;
+	long rate = rgmii_clock(speed);
+	int ret;
+
+	/* MAC clock rate the same as RGMII */
+	if (rate < 0)
+		return 0;
+
+	ret = clk_set_rate(clk_tx_i, rate);
+	if (ret)
+		return ret;
+
+	return clk_set_rate(dwmac->sgmii_rx, rate);
 }
 
 static int starfive_dwmac_probe(struct platform_device *pdev)
@@ -102,14 +124,23 @@ static int starfive_dwmac_probe(struct platform_device *pdev)
 		return dev_err_probe(&pdev->dev, PTR_ERR(clk_gtx),
 				     "error getting gtx clock\n");
 
+	dwmac->sgmii_rx = devm_clk_get_optional(&pdev->dev, "rx");
+	if (IS_ERR(dwmac->sgmii_rx))
+		return dev_err_probe(&pdev->dev, PTR_ERR(dwmac->sgmii_rx),
+				     "error getting sgmii rx clock\n");
+
 	/* Generally, the rgmii_tx clock is provided by the internal clock,
 	 * which needs to match the corresponding clock frequency according
 	 * to different speeds. If the rgmii_tx clock is provided by the
 	 * external rgmii_rxin, there is no need to configure the clock
 	 * internally, because rgmii_rxin will be adaptively adjusted.
 	 */
-	if (!device_property_read_bool(&pdev->dev, "starfive,tx-use-rgmii-clk"))
-		plat_dat->set_clk_tx_rate = stmmac_set_clk_tx_rate;
+	if (!device_property_read_bool(&pdev->dev, "starfive,tx-use-rgmii-clk")) {
+		if (plat_dat->phy_interface == PHY_INTERFACE_MODE_SGMII)
+			plat_dat->set_clk_tx_rate = stmmac_starfive_sgmii_set_clk_rate;
+		else
+			plat_dat->set_clk_tx_rate = stmmac_set_clk_tx_rate;
+	}
 
 	dwmac->dev = &pdev->dev;
 	plat_dat->flags |= STMMAC_FLAG_EN_TX_LPI_CLK_PHY_CAP;
@@ -130,6 +161,7 @@ static const struct starfive_dwmac_data jh7100_data = {
 static const struct of_device_id starfive_dwmac_match[] = {
 	{ .compatible = "starfive,jh7100-dwmac", .data = &jh7100_data },
 	{ .compatible = "starfive,jh7110-dwmac" },
+	{ .compatible = "starfive,jhb100-dwmac" },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, starfive_dwmac_match);
