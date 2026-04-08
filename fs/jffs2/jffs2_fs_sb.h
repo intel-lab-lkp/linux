@@ -55,6 +55,7 @@ struct jffs2_sb_info {
 	unsigned int flags;
 
 	struct task_struct *gc_task;	/* GC task struct */
+	bool gc_thread_started;         /* GC thread was successfully started */
 	struct completion gc_thread_start; /* GC thread start completion */
 	struct completion gc_thread_exit; /* GC thread exit completion port */
 

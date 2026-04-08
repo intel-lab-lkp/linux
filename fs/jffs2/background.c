@@ -52,6 +52,7 @@ int jffs2_start_garbage_collect_thread(struct jffs2_sb_info *c)
 		/* Wait for it... */
 		jffs2_dbg(1, "Garbage collect thread is pid %d\n", tsk->pid);
 		wait_for_completion(&c->gc_thread_start);
+		c->gc_thread_started = true;
 		ret = tsk->pid;
 	}
 
@@ -60,16 +61,16 @@ int jffs2_start_garbage_collect_thread(struct jffs2_sb_info *c)
 
 void jffs2_stop_garbage_collect_thread(struct jffs2_sb_info *c)
 {
-	int wait = 0;
 	spin_lock(&c->erase_completion_lock);
 	if (c->gc_task) {
 		jffs2_dbg(1, "Killing GC task %d\n", c->gc_task->pid);
 		send_sig(SIGKILL, c->gc_task, 1);
-		wait = 1;
 	}
 	spin_unlock(&c->erase_completion_lock);
-	if (wait)
+	if (c->gc_thread_started) {
 		wait_for_completion(&c->gc_thread_exit);
+		c->gc_thread_started = false;
+	}
 }
 
 static int jffs2_garbage_collect_thread(void *_c)
