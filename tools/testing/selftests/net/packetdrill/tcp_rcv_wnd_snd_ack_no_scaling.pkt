@@ -1,0 +1,37 @@
+// SPDX-License-Identifier: GPL-2.0
+//
+// Every packet must be ACKed immediately if the right edge of receive window
+// advances substantially. This test verifies that behavior when the connection
+// does not use window scaling.
+--mss=1000
+
+`./defaults.sh`
+
+// Initialize connection
+    0 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+   +0 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+   +0 setsockopt(3, SOL_SOCKET, SO_RCVBUF, [256000], 4) = 0
+   +0 bind(3, ..., ...) = 0
+   +0 listen(3, 1) = 0
+
+   +0 < S 0:0(0) win 32792
+   +0 > S. 0:0(0) ack 1 win 65535 <mss 1460>
+   +0 < . 1:1(0) ack 1 win 32792
+
+   +0 accept(3, ..., ...) = 4
+
+   +0 < P. 1:65001(65000) ack 1 win 32792
+   +0 > . 1:1(0) ack 65001 win 65535
+   +0 < P. 65001:130001(65000) ack 1 win 32792
+   +0 > . 1:1(0) ack 130001 win 65535
+   +0 < P. 130001:195001(65000) ack 1 win 32792
+   +0 > . 1:1(0) ack 195001 win 65535
+   +0 < P. 195001:260001(65000) ack 1 win 32792
+   +0 > . 1:1(0) ack 260001 win 65535
+   +0 < P. 260001:325001(65000) ack 1 win 32792
+   +0 > . 1:1(0) ack 325001 win 65535
+
+// reading all data does not open the window further -> no ACK
+   +0 read(4, ..., 325000) = 325000
+ +0.2 < P. 325001:390001(65000) ack 1 win 32792
+   +0 > . 1:1(0) ack 390001 win 65535
