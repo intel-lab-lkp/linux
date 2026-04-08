@@ -377,7 +377,7 @@ static int gred_offload_dump_stats(struct Qdisc *sch)
 	/* Even if driver returns failure adjust the stats - in case offload
 	 * ended but driver still wants to adjust the values.
 	 */
-	sch_tree_lock(sch);
+	sch_tree_lock_rcu(sch);
 	for (i = 0; i < MAX_DPs; i++) {
 		if (!table->tab[i])
 			continue;
@@ -394,7 +394,7 @@ static int gred_offload_dump_stats(struct Qdisc *sch)
 		sch->qstats.overlimits += hw_stats->stats.qstats[i].overlimits;
 	}
 	_bstats_update(&sch->bstats, bytes, packets);
-	sch_tree_unlock(sch);
+	sch_tree_unlock_rcu(sch);
 
 	kfree(hw_stats);
 	return ret;

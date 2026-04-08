@@ -909,7 +909,6 @@ static int tc_fill_qdisc(struct sk_buff *skb, struct Qdisc *q, u32 clid,
 	u32 block_index;
 	__u32 qlen;
 
-	cond_resched();
 	nlh = nlmsg_put(skb, portid, seq, event, sizeof(*tcm), flags);
 	if (!nlh)
 		goto out_nlmsg_trim;
@@ -941,7 +940,7 @@ static int tc_fill_qdisc(struct sk_buff *skb, struct Qdisc *q, u32 clid,
 		goto nla_put_failure;
 	qlen = qdisc_qlen_sum(q);
 
-	stab = rtnl_dereference(q->stab);
+	stab = rcu_dereference(q->stab);
 	if (stab && qdisc_dump_stab(skb, stab) < 0)
 		goto nla_put_failure;
 
@@ -1888,14 +1887,14 @@ static int tc_dump_qdisc(struct sk_buff *skb, struct netlink_callback *cb)
 	s_q_idx = q_idx = cb->args[1];
 
 	idx = 0;
-	ASSERT_RTNL();
 
 	err = nlmsg_parse_deprecated(nlh, sizeof(struct tcmsg), tca, TCA_MAX,
 				     rtm_tca_policy, cb->extack);
 	if (err < 0)
 		return err;
 
-	for_each_netdev(net, dev) {
+	rcu_read_lock();
+	for_each_netdev_rcu(net, dev) {
 		struct netdev_queue *dev_queue;
 
 		if (idx < s_idx)
@@ -1904,29 +1903,26 @@ static int tc_dump_qdisc(struct sk_buff *skb, struct netlink_callback *cb)
 			s_q_idx = 0;
 		q_idx = 0;
 
-		netdev_lock_ops(dev);
-		if (tc_dump_qdisc_root(rtnl_dereference(dev->qdisc),
+		if (tc_dump_qdisc_root(rcu_dereference(dev->qdisc),
 				       skb, cb, &q_idx, s_q_idx,
 				       true, tca[TCA_DUMP_INVISIBLE]) < 0) {
-			netdev_unlock_ops(dev);
 			goto done;
 		}
 
-		dev_queue = dev_ingress_queue(dev);
+		dev_queue = dev_ingress_queue_rcu(dev);
 		if (dev_queue &&
-		    tc_dump_qdisc_root(rtnl_dereference(dev_queue->qdisc_sleeping),
+		    tc_dump_qdisc_root(rcu_dereference(dev_queue->qdisc_sleeping),
 				       skb, cb, &q_idx, s_q_idx, false,
 				       tca[TCA_DUMP_INVISIBLE]) < 0) {
-			netdev_unlock_ops(dev);
 			goto done;
 		}
-		netdev_unlock_ops(dev);
 
 cont:
 		idx++;
 	}
 
 done:
+	rcu_read_unlock();
 	cb->args[0] = idx;
 	cb->args[1] = q_idx;
 
@@ -2487,7 +2483,8 @@ static const struct rtnl_msg_handler psched_rtnl_msg_handlers[] __initconst = {
 	{.msgtype = RTM_NEWQDISC, .doit = tc_modify_qdisc},
 	{.msgtype = RTM_DELQDISC, .doit = tc_get_qdisc},
 	{.msgtype = RTM_GETQDISC, .doit = tc_get_qdisc,
-	 .dumpit = tc_dump_qdisc},
+	 .dumpit = tc_dump_qdisc,
+	 .flags = RTNL_FLAG_DUMP_UNLOCKED},
 	{.msgtype = RTM_NEWTCLASS, .doit = tc_ctl_tclass},
 	{.msgtype = RTM_DELTCLASS, .doit = tc_ctl_tclass},
 	{.msgtype = RTM_GETTCLASS, .doit = tc_ctl_tclass,

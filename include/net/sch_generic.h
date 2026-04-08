@@ -628,6 +628,20 @@ static inline void sch_tree_unlock(struct Qdisc *q)
 		spin_unlock_bh(qdisc_root_sleeping_lock(q));
 }
 
+static inline void sch_tree_lock_rcu(struct Qdisc *q)
+{
+	if (!(q->flags & TCQ_F_MQROOT))
+		q = qdisc_root_sleeping(q);
+	spin_lock_bh(qdisc_lock(q));
+}
+
+static inline void sch_tree_unlock_rcu(struct Qdisc *q)
+{
+	if (!(q->flags & TCQ_F_MQROOT))
+		q = qdisc_root_sleeping(q);
+	spin_unlock_bh(qdisc_lock(q));
+}
+
 extern struct Qdisc noop_qdisc;
 extern struct Qdisc_ops noop_qdisc_ops;
 extern struct Qdisc_ops pfifo_fast_ops;

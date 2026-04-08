@@ -586,7 +586,7 @@ static int fq_codel_dump_stats(struct Qdisc *sch, struct gnet_dump *d)
 	};
 	struct list_head *pos;
 
-	sch_tree_lock(sch);
+	sch_tree_lock_rcu(sch);
 
 	st.qdisc_stats.maxpacket = q->cstats.maxpacket;
 	st.qdisc_stats.drop_overlimit = q->drop_overlimit;
@@ -601,7 +601,7 @@ static int fq_codel_dump_stats(struct Qdisc *sch, struct gnet_dump *d)
 
 	list_for_each(pos, &q->old_flows)
 		st.qdisc_stats.old_flows_len++;
-	sch_tree_unlock(sch);
+	sch_tree_unlock_rcu(sch);
 
 	return gnet_stats_copy_app(d, &st, sizeof(st));
 }

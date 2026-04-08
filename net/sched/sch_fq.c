@@ -1286,7 +1286,7 @@ static int fq_dump_stats(struct Qdisc *sch, struct gnet_dump *d)
 
 	st.pad = 0;
 
-	sch_tree_lock(sch);
+	sch_tree_lock_rcu(sch);
 
 	st.gc_flows		  = q->stat_gc_flows;
 	st.highprio_packets	  = 0;
@@ -1310,7 +1310,7 @@ static int fq_dump_stats(struct Qdisc *sch, struct gnet_dump *d)
 		st.band_drops[i]  = q->stat_band_drops[i];
 		st.band_pkt_count[i] = q->band_pkt_count[i];
 	}
-	sch_tree_unlock(sch);
+	sch_tree_unlock_rcu(sch);
 
 	return gnet_stats_copy_app(d, &st, sizeof(st));
 }

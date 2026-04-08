@@ -512,7 +512,7 @@ static int fq_pie_dump_stats(struct Qdisc *sch, struct gnet_dump *d)
 	struct tc_fq_pie_xstats st = { 0 };
 	struct list_head *pos;
 
-	sch_tree_lock(sch);
+	sch_tree_lock_rcu(sch);
 
 	st.packets_in	= q->stats.packets_in;
 	st.overlimit	= q->stats.overlimit;
@@ -527,7 +527,7 @@ static int fq_pie_dump_stats(struct Qdisc *sch, struct gnet_dump *d)
 
 	list_for_each(pos, &q->old_flows)
 		st.old_flows_len++;
-	sch_tree_unlock(sch);
+	sch_tree_unlock_rcu(sch);
 
 	return gnet_stats_copy_app(d, &st, sizeof(st));
 }
