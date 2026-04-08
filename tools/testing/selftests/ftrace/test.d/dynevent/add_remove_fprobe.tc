@@ -27,22 +27,29 @@ grep -q myevent3 dynamic_events
 test -d events/fprobes/myevent1
 test -d events/fprobes/myevent2
 
-echo 1 > events/fprobes/myevent1/enable
-# Make sure the event is attached.
 grep -q $PLACE enabled_functions
+grep -q $PLACE2 enabled_functions
 cnt=`cat enabled_functions | wc -l`
-if [ $cnt -eq $ocnt ]; then
+if [ $cnt -le $ocnt ]; then
+	exit_fail
+fi
+
+echo 1 > events/fprobes/myevent1/enable
+cnt1=`cat enabled_functions | wc -l`
+if [ $cnt1 -ne $cnt ]; then
 	exit_fail
 fi
 
 echo 1 > events/fprobes/myevent2/enable
 cnt2=`cat enabled_functions | wc -l`
+if [ $cnt2 -ne $cnt1 ]; then
+	exit_fail
+fi
 
 echo 1 > events/fprobes/myevent3/enable
-# If the function is different, the attached function should be increased
 grep -q $PLACE2 enabled_functions
 cnt=`cat enabled_functions | wc -l`
-if [ $cnt -eq $cnt2 ]; then
+if [ $cnt -ne $cnt2 ]; then
 	exit_fail
 fi
 
