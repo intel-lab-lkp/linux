@@ -3207,6 +3207,15 @@
 			};
 		};
 
+		hte_lic: hardware-timestamp@8380000 {
+			compatible = "nvidia,tegra264-gte-lic";
+			reg = <0x0 0x08380000 0x0 0x10000>;
+			interrupts = <GIC_SPI 0x00000268 IRQ_TYPE_LEVEL_HIGH>;
+			nvidia,int-threshold = <1>;
+			#timestamp-cells = <1>;
+			status = "disabled";
+		};
+
 		gpcdma: dma-controller@8400000 {
 			compatible = "nvidia,tegra264-gpcdma", "nvidia,tegra186-gpcdma";
 			reg = <0x0 0x08400000 0x0 0x210000>;
@@ -3265,6 +3274,16 @@
 					  "shared3", "shared4", "shared5", "shared6",
 					  "shared7";
 			#mbox-cells = <2>;
+		};
+
+		hte_aon: hardware-timestamp@c2b0000 {
+			compatible = "nvidia,tegra264-gte-aon";
+			reg = <0x0 0x0c2b0000 0x0 0x10000>;
+			interrupts = <GIC_SPI 0x00000226 IRQ_TYPE_LEVEL_HIGH>;
+			nvidia,int-threshold = <1>;
+			#timestamp-cells = <1>;
+			nvidia,gpio-controller = <&gpio_aon>;
+			status = "disabled";
 		};
 
 		rtc: rtc@c2c0000 {
