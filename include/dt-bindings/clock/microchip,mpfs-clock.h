@@ -73,4 +73,6 @@
 #define CLK_CCC_DLL1_OUT0	14
 #define CLK_CCC_DLL1_OUT1	15
 
+#define CLK_CCC_NUM		16
+
 #endif	/* _DT_BINDINGS_CLK_MICROCHIP_MPFS_H_ */
