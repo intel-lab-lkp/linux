@@ -1945,6 +1945,8 @@ unsigned long uprobe_get_trap_addr(struct pt_regs *regs)
 
 static void ri_pool_push(struct uprobe_task *utask, struct return_instance *ri)
 {
+	kfree(ri->extra_consumers);
+	ri->extra_consumers = NULL;
 	ri->cons_cnt = 0;
 	ri->next = utask->ri_pool;
 	utask->ri_pool = ri;
