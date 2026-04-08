@@ -4827,6 +4827,8 @@ intel_edp_init_dpcd(struct intel_dp *intel_dp, struct intel_connector *connector
 	if (ret < 0)
 		return false;
 
+	drm_dbg_kms(display->drm, "ALPM DPCD: %02x\n", intel_dp->alpm_dpcd);
+
 	/*
 	 * This has to be called after intel_dp->edp_dpcd is filled, PSR checks
 	 * for SET_POWER_CAPABLE bit in intel_dp->edp_dpcd[1]
