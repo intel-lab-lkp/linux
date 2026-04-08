@@ -47,8 +47,7 @@ static void stmmac_get_version(struct stmmac_priv *priv,
 		 FIELD_GET(DWMAC_SNPSVER, version));
 
 	ver->snpsver = FIELD_GET(DWMAC_SNPSVER, version);
-	if (core_type == DWMAC_CORE_XGMAC)
-		ver->userver = FIELD_GET(DWMAC_USERVER, version);
+	ver->userver = FIELD_GET(DWMAC_USERVER, version);
 }
 
 static void stmmac_dwmac_mode_quirk(struct stmmac_priv *priv)
