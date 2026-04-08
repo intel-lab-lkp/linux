@@ -1059,6 +1059,9 @@ static int ppp_unattached_ioctl(struct net *net, struct ppp_file *pf,
 
 	switch (cmd) {
 	case PPPIOCNEWUNIT:
+		if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
+			return -EPERM;
+
 		/* Create a new ppp unit */
 		if (get_user(unit, p))
 			break;
@@ -1073,6 +1076,9 @@ static int ppp_unattached_ioctl(struct net *net, struct ppp_file *pf,
 		break;
 
 	case PPPIOCATTACH:
+		if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
+			return -EPERM;
+
 		/* Attach to an existing ppp unit */
 		if (get_user(unit, p))
 			break;
@@ -1089,6 +1095,9 @@ static int ppp_unattached_ioctl(struct net *net, struct ppp_file *pf,
 		break;
 
 	case PPPIOCATTCHAN:
+		if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
+			return -EPERM;
+
 		if (get_user(unit, p))
 			break;
 		err = -ENXIO;
