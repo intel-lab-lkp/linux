@@ -847,7 +847,7 @@ static void smmu_pmu_get_iidr(struct smmu_pmu *smmu_pmu)
 static int smmu_pmu_probe(struct platform_device *pdev)
 {
 	struct smmu_pmu *smmu_pmu;
-	struct resource *res_0;
+	struct resource *res_0, *res_1;
 	u32 cfgr, reg_size;
 	u64 ceid_64[2];
 	int irq, err;
@@ -877,7 +877,16 @@ static int smmu_pmu_probe(struct platform_device *pdev)
 		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE,
 	};
 
-	smmu_pmu->reg_base = devm_platform_get_and_ioremap_resource(pdev, 0, &res_0);
+	res_0 = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!res_0)
+		return dev_err_probe(dev, -ENOENT, "missing PMCG page 0 MMIO resource\n");
+
+	/*
+	 * PMCG registers might be a sub-region of the parent SMMU MMIO window,
+	 * which is already requested by the SMMU driver. Do not call
+	 * devm_ioremap_resource() here to avoid double-requesting the region.
+	 */
+	smmu_pmu->reg_base = devm_ioremap(dev, res_0->start, resource_size(res_0));
 	if (IS_ERR(smmu_pmu->reg_base))
 		return PTR_ERR(smmu_pmu->reg_base);
 
@@ -885,7 +894,11 @@ static int smmu_pmu_probe(struct platform_device *pdev)
 
 	/* Determine if page 1 is present */
 	if (cfgr & SMMU_PMCG_CFGR_RELOC_CTRS) {
-		smmu_pmu->reloc_base = devm_platform_ioremap_resource(pdev, 1);
+		res_1 = platform_get_resource(pdev, IORESOURCE_MEM, 1);
+		if (!res_1)
+			return dev_err_probe(dev, -ENOENT, "missing PMCG page 1 MMIO resource\n");
+
+		smmu_pmu->reloc_base = devm_ioremap(dev, res_1->start, resource_size(res_1));
 		if (IS_ERR(smmu_pmu->reloc_base))
 			return PTR_ERR(smmu_pmu->reloc_base);
 	} else {
