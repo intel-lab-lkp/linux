@@ -1496,7 +1496,7 @@ DECLARE_EVENT_CLASS(nfs_page_class,
 			__field(dev_t, dev)
 			__field(u32, fhandle)
 			__field(u64, fileid)
-			__field(const struct nfs_page *__private, req)
+			__field(unsigned long, req)
 			__field(loff_t, offset)
 			__field(unsigned int, count)
 			__field(unsigned long, flags)
@@ -1509,14 +1509,14 @@ DECLARE_EVENT_CLASS(nfs_page_class,
 			__entry->dev = inode->i_sb->s_dev;
 			__entry->fileid = nfsi->fileid;
 			__entry->fhandle = nfs_fhandle_hash(&nfsi->fh);
-			__entry->req = req;
+			__entry->req = (unsigned long)req;
 			__entry->offset = req_offset(req);
 			__entry->count = req->wb_bytes;
 			__entry->flags = req->wb_flags;
 		),
 
 		TP_printk(
-			"fileid=%02x:%02x:%llu fhandle=0x%08x req=%p offset=%lld count=%u flags=%s",
+			"fileid=%02x:%02x:%llu fhandle=0x%08x req=0x%lx offset=%lld count=%u flags=%s",
 			MAJOR(__entry->dev), MINOR(__entry->dev),
 			(unsigned long long)__entry->fileid, __entry->fhandle,
 			__entry->req, __entry->offset, __entry->count,
