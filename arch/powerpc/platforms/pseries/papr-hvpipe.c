@@ -693,19 +693,18 @@ static int __init enable_hvpipe_IRQ(void)
 	struct device_node *np;
 
 	hvpipe_check_exception_token = rtas_function_token(RTAS_FN_CHECK_EXCEPTION);
-	if (hvpipe_check_exception_token  == RTAS_UNKNOWN_SERVICE)
+	if (hvpipe_check_exception_token == RTAS_UNKNOWN_SERVICE)
 		return -ENODEV;
 
 	/* hvpipe events */
 	np = of_find_node_by_path("/event-sources/ibm,hvpipe-msg-events");
-	if (np != NULL) {
-		request_event_sources_irqs(np, hvpipe_event_interrupt,
-					"HPIPE_EVENT");
-		of_node_put(np);
-	} else {
-		pr_err("Can not enable hvpipe event IRQ\n");
+	if (!np) {
+		pr_err("No device node found, could not enable hvpipe event IRQ\n");
 		return -ENODEV;
 	}
+
+	request_event_sources_irqs(np, hvpipe_event_interrupt, "HPIPE_EVENT");
+	of_node_put(np);
 
 	return 0;
 }
