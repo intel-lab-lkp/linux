@@ -471,7 +471,8 @@ static irqreturn_t zinitix_ts_irq_handler(int irq, void *bt541_handler)
 	}
 
 	finger_mask = touch_event.finger_mask;
-	for_each_set_bit(i, &finger_mask, MAX_SUPPORTED_FINGER_NUM) {
+	for (i = 0; i < min_t(unsigned long, finger_mask,
+			MAX_SUPPORTED_FINGER_NUM); i++) {
 		const struct point_coord *p = &touch_event.point_coord[i];
 
 		/* Only process contacts that are actually reported */
