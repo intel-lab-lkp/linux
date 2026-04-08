@@ -7895,9 +7895,10 @@ static int __stmmac_dvr_probe(struct device *device,
 	if (ret)
 		goto error_hw_init;
 
-	/* Only DWMAC core version 5.20 onwards supports HW descriptor prefetch.
+	/* Only DWMAC4 core version 5.20 onwards support HW descriptor prefetch.
 	 */
-	if (priv->snpsver < DWMAC_CORE_5_20)
+	if (priv->plat->core_type != DWMAC_CORE_GMAC4 ||
+	    priv->snpsver < DWMAC_CORE_5_20)
 		priv->plat->dma_cfg->dche = false;
 
 	stmmac_check_ether_addr(priv);
