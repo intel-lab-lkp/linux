@@ -619,7 +619,7 @@ static void iwl_mld_send_tlc_cmd(struct iwl_mld *mld,
 int iwl_mld_send_tlc_dhc(struct iwl_mld *mld, u8 sta_id, u32 type, u32 data)
 {
 	struct {
-		struct iwl_dhc_cmd dhc;
+		struct iwl_dhc_cmd_hdr dhc;
 		struct iwl_dhc_tlc_cmd tlc;
 	} __packed cmd = {
 		.tlc.sta_id = sta_id,

@@ -51,7 +51,7 @@ enum iwl_dhc_umac_integration_table {
 #define DHC_TARGET_UMAC BIT(27)
 
 /**
- * struct iwl_dhc_cmd - debug host command
+ * struct iwl_dhc_cmd_hdr - debug host command header
  * @length: length in DWs of the data structure that is concatenated to the end
  *	of this struct
  * @index_and_mask: bit 31 is 1 for data set operation else it's 0
@@ -62,14 +62,29 @@ enum iwl_dhc_umac_integration_table {
  *	bit 26 is 0 if the cmd targeted to LMAC0 and 1 if targeted to LMAC1,
  *	relevant only if bit 27 set to 0
  *	bits 0-25 is a specific entry index in the table specified in bits 28-30
- *
- * @data: the concatenated data.
  */
-struct iwl_dhc_cmd {
+struct iwl_dhc_cmd_hdr {
 	__le32 length;
 	__le32 index_and_mask;
+} __packed;
+
+/**
+ * struct iwl_dhc_cmd - debug host command
+ *
+ * (NOTE: New members MUST NOT be added directly to this struct. Add them to
+ * struct iwl_dhc_cmd_hdr instead.)
+ *
+ * @iwl_dhc_cmd_hdr: anonymous embedded header - members are directly
+ *		     accessible
+ * @data: the concatenated data.
+ *
+ */
+struct iwl_dhc_cmd {
+	struct iwl_dhc_cmd_hdr;
 	__le32 data[];
 } __packed; /* DHC_CMD_API_S */
+static_assert(offsetof(struct iwl_dhc_cmd, data) == sizeof(struct iwl_dhc_cmd_hdr),
+	      "New members must be added to struct iwl_dhc_cmd_hdr instead.");
 
 /**
  * struct iwl_dhc_payload_hdr - DHC payload header
