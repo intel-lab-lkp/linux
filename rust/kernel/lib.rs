@@ -76,6 +76,7 @@ pub mod id_pool;
 pub mod impl_flags;
 pub mod init;
 pub mod io;
+pub mod io_uring;
 pub mod ioctl;
 pub mod iommu;
 pub mod iov;
