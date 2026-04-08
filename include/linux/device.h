@@ -104,10 +104,18 @@ struct device_type {
  */
 struct device_attribute {
 	struct attribute	attr;
-	ssize_t (*show)(struct device *dev, struct device_attribute *attr,
-			char *buf);
-	ssize_t (*store)(struct device *dev, struct device_attribute *attr,
-			 const char *buf, size_t count);
+	__SYSFS_FUNCTION_ALTERNATIVE(
+		ssize_t (*show)(struct device *dev, struct device_attribute *attr,
+				char *buf);
+		ssize_t (*show_const)(struct device *dev, const struct device_attribute *attr,
+				      char *buf);
+	);
+	__SYSFS_FUNCTION_ALTERNATIVE(
+		ssize_t (*store)(struct device *dev, struct device_attribute *attr,
+				 const char *buf, size_t count);
+		ssize_t (*store_const)(struct device *dev, const struct device_attribute *attr,
+				       const char *buf, size_t count);
+	);
 };
 
 /**
@@ -135,11 +143,50 @@ ssize_t device_store_bool(struct device *dev, struct device_attribute *attr,
 ssize_t device_show_string(struct device *dev, struct device_attribute *attr,
 			   char *buf);
 
+typedef ssize_t __device_show_handler_const(struct device *dev, const struct device_attribute *attr,
+					    char *buf);
+typedef ssize_t __device_store_handler_const(struct device *dev, const struct device_attribute *attr,
+					     const char *buf, size_t count);
+
+#ifdef CONFIG_CFI
+
+#define __DEVICE_ATTR_SHOW_STORE(_show, _store)						\
+	.show		= _Generic(_show,						\
+			  __device_show_handler_const * : NULL,				\
+			  default : _show						\
+	),										\
+	.show_const	= _Generic(_show,						\
+			  __device_show_handler_const * : _show,			\
+			  default : NULL						\
+	),										\
+	.store		= _Generic(_store,						\
+			  __device_store_handler_const * : NULL,			\
+			  default : _store						\
+	),										\
+	.store_const	= _Generic(_store,						\
+			  __device_store_handler_const * : _store,			\
+			  default : NULL \
+	),
+
+#else
+
+#define __DEVICE_ATTR_SHOW_STORE(_show, _store)						\
+	.show		= _Generic(_show,						\
+			  __device_show_handler_const * : (void *)_show,		\
+			  default : _show						\
+	),										\
+	.store		= _Generic(_store,						\
+			  __device_store_handler_const * : (void *)_store,		\
+			  default : _store						\
+	),										\
+
+#endif
+
+
 #define __DEVICE_ATTR(_name, _mode, _show, _store) {			\
 	.attr = {.name = __stringify(_name),				\
 		 .mode = VERIFY_OCTAL_PERMISSIONS(_mode) },		\
-	.show	= _show,						\
-	.store	= _store,						\
+	__DEVICE_ATTR_SHOW_STORE(_show, _store)				\
 }
 
 #define __DEVICE_ATTR_RO_MODE(_name, _mode) \
@@ -161,8 +208,7 @@ ssize_t device_show_string(struct device *dev, struct device_attribute *attr,
 #define __DEVICE_ATTR_IGNORE_LOCKDEP(_name, _mode, _show, _store) {	\
 	.attr = {.name = __stringify(_name), .mode = _mode,		\
 			.ignore_lockdep = true },			\
-	.show		= _show,					\
-	.store		= _store,					\
+	__DEVICE_ATTR_SHOW_STORE(_show, _store)				\
 }
 #else
 #define __DEVICE_ATTR_IGNORE_LOCKDEP	__DEVICE_ATTR
