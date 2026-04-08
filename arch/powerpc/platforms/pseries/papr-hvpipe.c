@@ -460,6 +460,7 @@ static int papr_hvpipe_handle_release(struct inode *inode,
 	src_info = file->private_data;
 	list_del(&src_info->list);
 	file->private_data = NULL;
+	spin_unlock_irqrestore(&hvpipe_src_list_lock, flags);
 	/*
 	 * If the pipe for this specific source has any pending
 	 * payload, issue recv HVPIPE RTAS so that pipe will not
@@ -467,10 +468,8 @@ static int papr_hvpipe_handle_release(struct inode *inode,
 	 */
 	if (src_info->hvpipe_status & HVPIPE_MSG_AVAILABLE) {
 		src_info->hvpipe_status = 0;
-		spin_unlock_irqrestore(&hvpipe_src_list_lock, flags);
 		hvpipe_rtas_recv_msg(NULL, 0);
-	} else
-		spin_unlock_irqrestore(&hvpipe_src_list_lock, flags);
+	}
 
 	kfree(src_info);
 	return 0;
