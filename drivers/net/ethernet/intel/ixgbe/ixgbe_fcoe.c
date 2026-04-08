@@ -139,6 +139,7 @@ static int ixgbe_fcoe_ddp_setup(struct net_device *netdev, u16 xid,
 	struct ixgbe_fcoe *fcoe;
 	struct ixgbe_fcoe_ddp *ddp;
 	struct ixgbe_fcoe_ddp_pool *ddp_pool;
+	struct dma_pool *pool;
 	struct scatterlist *sg;
 	unsigned int i, j, dmacount;
 	unsigned int len;
@@ -179,28 +180,42 @@ static int ixgbe_fcoe_ddp_setup(struct net_device *netdev, u16 xid,
 		return 0;
 	}
 
+	/* Pin to current CPU only to read the per-CPU pool pointer; drop
+	 * the pin before any allocations that may sleep under direct reclaim.
+	 */
 	ddp_pool = per_cpu_ptr(fcoe->ddp_pool, get_cpu());
 	if (!ddp_pool->pool) {
 		e_warn(drv, "xid=0x%x no ddp pool for fcoe\n", xid);
-		goto out_noddp;
+		put_cpu();
+		return 0;
 	}
+	pool = ddp_pool->pool;
+	put_cpu();
 
 	/* setup dma from scsi command sgl */
 	dmacount = dma_map_sg(&adapter->pdev->dev, sgl, sgc, DMA_FROM_DEVICE);
 	if (dmacount == 0) {
 		e_err(drv, "xid 0x%x DMA map error\n", xid);
-		goto out_noddp;
+		return 0;
 	}
 
-	/* alloc the udl from per cpu ddp pool */
-	ddp->udl = dma_pool_alloc(ddp_pool->pool, GFP_ATOMIC, &ddp->udp);
+	/* Allocate from per-CPU pool; GFP_KERNEL is safe: preemption is
+	 * re-enabled after the put_cpu() above.  Per-CPU DMA pools are only
+	 * destroyed under RTNL during interface teardown, so the saved pool
+	 * pointer remains valid.
+	 */
+	ddp->udl = dma_pool_alloc(pool, GFP_KERNEL, &ddp->udp);
 	if (!ddp->udl) {
 		e_err(drv, "failed allocated ddp context\n");
-		goto out_noddp_unmap;
+		dma_unmap_sg(&adapter->pdev->dev, sgl, sgc, DMA_FROM_DEVICE);
+		return 0;
 	}
-	ddp->pool = ddp_pool->pool;
+	ddp->pool = pool;
 	ddp->sgl = sgl;
 	ddp->sgc = sgc;
+
+	/* Re-pin CPU for per-CPU statistics updates inside the SG loop. */
+	ddp_pool = per_cpu_ptr(fcoe->ddp_pool, get_cpu());
 
 	j = 0;
 	for_each_sg(sgl, sg, dmacount, i) {
@@ -210,7 +225,8 @@ static int ixgbe_fcoe_ddp_setup(struct net_device *netdev, u16 xid,
 			/* max number of buffers allowed in one DDP context */
 			if (j >= IXGBE_BUFFCNT_MAX) {
 				ddp_pool->noddp++;
-				goto out_noddp_free;
+				put_cpu();
+				goto out_noddp_free_unmap;
 			}
 
 			/* get the offset of length of current buffer */
@@ -220,16 +236,20 @@ static int ixgbe_fcoe_ddp_setup(struct net_device *netdev, u16 xid,
 			 * all but the 1st buffer (j == 0)
 			 * must be aligned on bufflen
 			 */
-			if ((j != 0) && (thisoff))
-				goto out_noddp_free;
+			if (j != 0 && thisoff) {
+				put_cpu();
+				goto out_noddp_free_unmap;
+			}
 			/*
 			 * all but the last buffer
 			 * ((i == (dmacount - 1)) && (thislen == len))
 			 * must end at bufflen
 			 */
-			if (((i != (dmacount - 1)) || (thislen != len))
-			    && ((thislen + thisoff) != bufflen))
-				goto out_noddp_free;
+			if ((i != (dmacount - 1) || thislen != len) &&
+			    (thislen + thisoff) != bufflen) {
+				put_cpu();
+				goto out_noddp_free_unmap;
+			}
 
 			ddp->udl[j] = (u64)(addr - thisoff);
 			/* only the first buffer may have none-zero offset */
@@ -250,7 +270,8 @@ static int ixgbe_fcoe_ddp_setup(struct net_device *netdev, u16 xid,
 	if (lastsize == bufflen) {
 		if (j >= IXGBE_BUFFCNT_MAX) {
 			ddp_pool->noddp_ext_buff++;
-			goto out_noddp_free;
+			put_cpu();
+			goto out_noddp_free_unmap;
 		}
 
 		ddp->udl[j] = (u64)(fcoe->extra_ddp_buffer_dma);
@@ -316,14 +337,10 @@ static int ixgbe_fcoe_ddp_setup(struct net_device *netdev, u16 xid,
 
 	return 1;
 
-out_noddp_free:
+out_noddp_free_unmap:
 	dma_pool_free(ddp->pool, ddp->udl, ddp->udp);
 	ixgbe_fcoe_clear_ddp(ddp);
-
-out_noddp_unmap:
 	dma_unmap_sg(&adapter->pdev->dev, sgl, sgc, DMA_FROM_DEVICE);
-out_noddp:
-	put_cpu();
 	return 0;
 }
 
