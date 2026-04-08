@@ -5814,6 +5814,18 @@ static void intel_crtc_check_fastset(const struct intel_crtc_state *old_crtc_sta
 		new_crtc_state->update_pipe = true;
 }
 
+static int intel_atomic_check_crtcs(struct intel_atomic_state *state)
+{
+	struct intel_crtc_state *new_crtc_state;
+	struct intel_crtc *crtc;
+	int i;
+
+	for_each_new_intel_crtc_in_state(state, crtc, new_crtc_state, i)
+		new_crtc_state->min_cdclk = intel_crtc_min_cdclk(new_crtc_state);
+
+	return 0;
+}
+
 static int intel_atomic_check_crtcs_late(struct intel_atomic_state *state)
 {
 	struct intel_display *display = to_intel_display(state);
@@ -6521,8 +6533,9 @@ int intel_atomic_check(struct drm_device *dev,
 	if (ret)
 		goto fail;
 
-	for_each_new_intel_crtc_in_state(state, crtc, new_crtc_state, i)
-		new_crtc_state->min_cdclk = intel_crtc_min_cdclk(new_crtc_state);
+	ret = intel_atomic_check_crtcs(state);
+	if (ret)
+		goto fail;
 
 	ret = intel_compute_global_watermarks(state);
 	if (ret)
