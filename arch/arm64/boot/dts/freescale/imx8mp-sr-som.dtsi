@@ -10,7 +10,6 @@
 	compatible = "solidrun,imx8mp-sr-som", "fsl,imx8mp";
 
 	chosen {
-		bootargs = "earlycon=ec_imx6q,0x30890000,115200";
 		stdout-path = &uart2;
 	};
 
