@@ -27,6 +27,7 @@
  *  	- parse available sample rates again when clock sources changed
  */
 
+#include <linux/array_size.h>
 #include <linux/bitops.h>
 #include <linux/init.h>
 #include <linux/list.h>
@@ -1287,16 +1288,48 @@ static int get_min_max_with_quirks(struct usb_mixer_elem_info *cval,
 		if (cval->res == 0)
 			cval->res = 1;
 
-		/* Additional checks for the proper resolution
+		/* Additional checks
+		 *
+		 * Some devices expose sticky mixers that accept SET_CUR
+		 * but do absolutely nothing.
 		 *
 		 * Some devices report smaller resolutions than actually
 		 * reacting.  They don't return errors but simply clip
 		 * to the lower aligned value.
 		 */
-		if (cval->min + cval->res < cval->max) {
+		if (cval->min < cval->max) {
+			int sticky_test_values[] = { cval->min, cval->max };
 			int last_valid_res = cval->res;
 			int saved, test, check;
+			bool effective = false;
+
 			if (get_cur_mix_raw(cval, minchn, &saved) < 0)
+				goto no_res_check;
+
+			for (i = 0; i < ARRAY_SIZE(sticky_test_values); i++) {
+				test = sticky_test_values[i];
+				if (test == saved)
+					continue;
+				/* Assume non-sticky on failure. */
+				if (snd_usb_set_cur_mix_value(cval, minchn, 0, test) ||
+				    get_cur_mix_raw(cval, minchn, &check) ||
+				    check != saved) { /* SET_CUR effective, non-sticky. */
+					effective = true;
+					break;
+				}
+			}
+			if (!effective) {
+				usb_audio_warn(cval->head.mixer->chip,
+					"%d:%d: sticky mixer values (%d/%d/%d => %d), disabling\n",
+					cval->head.id, mixer_ctrl_intf(cval->head.mixer),
+					cval->min, cval->max, cval->res, saved);
+
+				cval->initialized = 1;
+				cval->min = cval->max = cval->res = 0;
+				return -ENODEV;
+			}
+
+			if (cval->min + cval->res >= cval->max)
 				goto no_res_check;
 			for (;;) {
 				test = saved;
