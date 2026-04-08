@@ -752,6 +752,7 @@ struct nfsd4_copy {
 
 	struct nfsd_file        *nf_src;
 	struct nfsd_file        *nf_dst;
+	struct dentry		*d_dst;
 
 	copy_stateid_t		cp_stateid;
 
