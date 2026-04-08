@@ -7,6 +7,7 @@
 #include <linux/module.h>
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
+#include <linux/cleanup.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
 #include <linux/acpi.h>
@@ -597,20 +598,17 @@ static int bmc150_accel_set_scale(struct bmc150_accel_data *data, int val)
 static int bmc150_accel_get_temp(struct bmc150_accel_data *data, int *val)
 {
 	struct device *dev = regmap_get_device(data->regmap);
-	int ret;
 	unsigned int value;
+	int ret;
 
-	mutex_lock(&data->mutex);
+	guard(mutex)(&data->mutex);
 
 	ret = regmap_read(data->regmap, BMC150_ACCEL_REG_TEMP, &value);
 	if (ret < 0) {
 		dev_err(dev, "Error reading reg_temp\n");
-		mutex_unlock(&data->mutex);
 		return ret;
 	}
 	*val = sign_extend32(value, 7);
-
-	mutex_unlock(&data->mutex);
 
 	return IIO_VAL_INT;
 }
@@ -810,17 +808,14 @@ static int bmc150_accel_write_event_config(struct iio_dev *indio_dev,
 	if (state == data->ev_enable_state)
 		return 0;
 
-	mutex_lock(&data->mutex);
+	guard(mutex)(&data->mutex);
 
 	ret = bmc150_accel_set_interrupt(data, BMC150_ACCEL_INT_ANY_MOTION,
 					 state);
-	if (ret < 0) {
-		mutex_unlock(&data->mutex);
+	if (ret < 0)
 		return ret;
-	}
 
 	data->ev_enable_state = state;
-	mutex_unlock(&data->mutex);
 
 	return 0;
 }
@@ -847,9 +842,8 @@ static ssize_t bmc150_accel_get_fifo_watermark(struct device *dev,
 	struct bmc150_accel_data *data = iio_priv(indio_dev);
 	int wm;
 
-	mutex_lock(&data->mutex);
+	guard(mutex)(&data->mutex);
 	wm = data->watermark;
-	mutex_unlock(&data->mutex);
 
 	return sprintf(buf, "%d\n", wm);
 }
@@ -862,9 +856,8 @@ static ssize_t bmc150_accel_get_fifo_state(struct device *dev,
 	struct bmc150_accel_data *data = iio_priv(indio_dev);
 	bool state;
 
-	mutex_lock(&data->mutex);
+	guard(mutex)(&data->mutex);
 	state = data->fifo_mode;
-	mutex_unlock(&data->mutex);
 
 	return sprintf(buf, "%d\n", state);
 }
@@ -906,9 +899,8 @@ static int bmc150_accel_set_watermark(struct iio_dev *indio_dev, unsigned val)
 	if (val > BMC150_ACCEL_FIFO_LENGTH)
 		val = BMC150_ACCEL_FIFO_LENGTH;
 
-	mutex_lock(&data->mutex);
+	guard(mutex)(&data->mutex);
 	data->watermark = val;
-	mutex_unlock(&data->mutex);
 
 	return 0;
 }
@@ -1021,13 +1013,10 @@ static int __bmc150_accel_fifo_flush(struct iio_dev *indio_dev,
 static int bmc150_accel_fifo_flush(struct iio_dev *indio_dev, unsigned samples)
 {
 	struct bmc150_accel_data *data = iio_priv(indio_dev);
-	int ret;
 
-	mutex_lock(&data->mutex);
-	ret = __bmc150_accel_fifo_flush(indio_dev, samples, false);
-	mutex_unlock(&data->mutex);
+	guard(mutex)(&data->mutex);
 
-	return ret;
+	return __bmc150_accel_fifo_flush(indio_dev, samples, false);
 }
 
 static IIO_CONST_ATTR_SAMP_FREQ_AVAIL(
@@ -1230,32 +1219,24 @@ static int bmc150_accel_trigger_set_state(struct iio_trigger *trig,
 	struct bmc150_accel_data *data = t->data;
 	int ret;
 
-	mutex_lock(&data->mutex);
+	guard(mutex)(&data->mutex);
 
-	if (t->enabled == state) {
-		mutex_unlock(&data->mutex);
+	if (t->enabled == state)
 		return 0;
-	}
 
 	if (t->setup) {
 		ret = t->setup(t, state);
-		if (ret < 0) {
-			mutex_unlock(&data->mutex);
+		if (ret < 0)
 			return ret;
-		}
 	}
 
 	ret = bmc150_accel_set_interrupt(data, t->intr, state);
-	if (ret < 0) {
-		mutex_unlock(&data->mutex);
+	if (ret < 0)
 		return ret;
-	}
 
 	t->enabled = state;
 
-	mutex_unlock(&data->mutex);
-
-	return ret;
+	return 0;
 }
 
 static const struct iio_trigger_ops bmc150_accel_trigger_ops = {
