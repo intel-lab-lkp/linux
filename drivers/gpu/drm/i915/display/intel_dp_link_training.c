@@ -1267,7 +1267,7 @@ void intel_dp_stop_link_train(struct intel_dp *intel_dp,
 			lt_dbg(intel_dp, DP_PHY_DPRX, "128b/132b intra-hop not clearing\n");
 	}
 
-	intel_hpd_unblock(encoder);
+	intel_hpd_clear_and_unblock(encoder);
 
 	if (!display->hotplug.ignore_long_hpd &&
 	    intel_dp->link.seq_train_failures < MAX_SEQ_TRAIN_FAILURES) {
