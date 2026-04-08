@@ -120,7 +120,8 @@ static int imx_icc_node_init_qos(struct icc_provider *provider,
 	struct imx_icc_node *node_data = node->data;
 	const struct imx_icc_node_adj_desc *adj = node_data->desc->adj;
 	struct device *dev = provider->dev;
-	struct device_node *dn = NULL;
+	struct device_node *__free(device_nod) dn = of_parse_phandle(dev->of_node,
+			adj->phandle_name, 0);
 	struct platform_device *pdev;
 
 	if (adj->main_noc) {
@@ -128,7 +129,6 @@ static int imx_icc_node_init_qos(struct icc_provider *provider,
 		dev_dbg(dev, "icc node %s[%d] is main noc itself\n",
 			node->name, node->id);
 	} else {
-		dn = of_parse_phandle(dev->of_node, adj->phandle_name, 0);
 		if (!dn) {
 			dev_warn(dev, "Failed to parse %s\n",
 				 adj->phandle_name);
@@ -138,12 +138,10 @@ static int imx_icc_node_init_qos(struct icc_provider *provider,
 		if (!of_device_is_available(dn)) {
 			dev_warn(dev, "Missing property %s, skip scaling %s\n",
 				 adj->phandle_name, node->name);
-			of_node_put(dn);
 			return 0;
 		}
 
 		pdev = of_find_device_by_node(dn);
-		of_node_put(dn);
 		if (!pdev) {
 			dev_warn(dev, "node %s[%d] missing device for %pOF\n",
 				 node->name, node->id, dn);
