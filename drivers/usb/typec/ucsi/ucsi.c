@@ -632,6 +632,10 @@ static int ucsi_register_altmodes(struct ucsi_connector *con, u8 recipient)
 			if (ret)
 				return ret;
 		}
+
+		if (recipient == UCSI_RECIPIENT_SOP &&
+		    con->ucsi->quirks & UCSI_REPEATING_SOP_ALTMODES)
+			return 0;
 	}
 
 	return 0;
