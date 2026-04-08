@@ -2368,7 +2368,7 @@ static int skl_build_pipe_wm(struct intel_atomic_state *state,
 
 	crtc_state->wm.skl.optimal = crtc_state->wm.skl.raw;
 
-	return skl_wm_check_vblank(crtc_state);
+	return 0;
 }
 
 static bool skl_wm_level_equals(const struct skl_wm_level *l1,
@@ -2928,6 +2928,10 @@ skl_compute_wm(struct intel_atomic_state *state)
 	 */
 	for_each_new_intel_crtc_in_state(state, crtc, new_crtc_state, i) {
 		struct skl_pipe_wm *pipe_wm = &new_crtc_state->wm.skl.optimal;
+
+		ret = skl_wm_check_vblank(new_crtc_state);
+		if (ret)
+			return ret;
 
 		/*
 		 * We store use_sagv_wm in the crtc state rather than relying on
