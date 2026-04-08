@@ -97,8 +97,11 @@ static int dma_set_encrypted(struct device *dev, void *vaddr, size_t size)
 }
 
 static void __dma_direct_free_pages(struct device *dev, struct page *page,
-				    size_t size)
+				    size_t size, bool encrypt)
 {
+	if (encrypt && dma_set_encrypted(dev, page_address(page), size))
+		return;
+
 	if (swiotlb_free(dev, page, size))
 		return;
 	dma_free_contiguous(dev, page, size);
@@ -203,7 +206,7 @@ static void *dma_direct_alloc_no_mapping(struct device *dev, size_t size,
 void *dma_direct_alloc(struct device *dev, size_t size,
 		dma_addr_t *dma_handle, gfp_t gfp, unsigned long attrs)
 {
-	bool remap = false, set_uncached = false;
+	bool remap = false, set_uncached = false, encrypt = false;
 	struct page *page;
 	void *ret;
 
@@ -298,10 +301,9 @@ void *dma_direct_alloc(struct device *dev, size_t size,
 	return ret;
 
 out_encrypt_pages:
-	if (dma_set_encrypted(dev, page_address(page), size))
-		return NULL;
+	encrypt = true;
 out_free_pages:
-	__dma_direct_free_pages(dev, page, size);
+	__dma_direct_free_pages(dev, page, size, encrypt);
 	return NULL;
 out_leak_pages:
 	return NULL;
@@ -311,6 +313,7 @@ void dma_direct_free(struct device *dev, size_t size,
 		void *cpu_addr, dma_addr_t dma_addr, unsigned long attrs)
 {
 	unsigned int page_order = get_order(size);
+	bool encrypt = false;
 
 	if ((attrs & DMA_ATTR_NO_KERNEL_MAPPING) &&
 	    !force_dma_unencrypted(dev) && !is_swiotlb_for_alloc(dev)) {
@@ -343,11 +346,10 @@ void dma_direct_free(struct device *dev, size_t size,
 	} else {
 		if (IS_ENABLED(CONFIG_ARCH_HAS_DMA_CLEAR_UNCACHED))
 			arch_dma_clear_uncached(cpu_addr, size);
-		if (dma_set_encrypted(dev, cpu_addr, size))
-			return;
+		encrypt = true;
 	}
 
-	__dma_direct_free_pages(dev, dma_direct_to_page(dev, dma_addr), size);
+	__dma_direct_free_pages(dev, dma_direct_to_page(dev, dma_addr), size, encrypt);
 }
 
 struct page *dma_direct_alloc_pages(struct device *dev, size_t size,
@@ -384,9 +386,7 @@ void dma_direct_free_pages(struct device *dev, size_t size,
 	    dma_free_from_pool(dev, vaddr, size))
 		return;
 
-	if (dma_set_encrypted(dev, vaddr, size))
-		return;
-	__dma_direct_free_pages(dev, page, size);
+	__dma_direct_free_pages(dev, page, size, true);
 }
 
 #if defined(CONFIG_ARCH_HAS_SYNC_DMA_FOR_DEVICE) || \
