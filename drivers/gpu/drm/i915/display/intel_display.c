@@ -4293,12 +4293,6 @@ static int intel_crtc_atomic_check_late(struct intel_atomic_state *state,
 		return ret;
 	}
 
-	if (DISPLAY_VER(display) >= 9) {
-		ret = intel_atomic_setup_scalers(state, crtc);
-		if (ret)
-			return ret;
-	}
-
 	if (HAS_IPS(display)) {
 		ret = hsw_ips_compute_config(state, crtc);
 		if (ret)
@@ -5816,12 +5810,22 @@ static void intel_crtc_check_fastset(const struct intel_crtc_state *old_crtc_sta
 
 static int intel_atomic_check_crtcs(struct intel_atomic_state *state)
 {
+	struct intel_display *display = to_intel_display(state);
 	struct intel_crtc_state *new_crtc_state;
 	struct intel_crtc *crtc;
 	int i;
 
-	for_each_new_intel_crtc_in_state(state, crtc, new_crtc_state, i)
+	for_each_new_intel_crtc_in_state(state, crtc, new_crtc_state, i) {
+		int ret;
+
 		new_crtc_state->min_cdclk = intel_crtc_min_cdclk(new_crtc_state);
+
+		if (DISPLAY_VER(display) >= 9) {
+			ret = intel_atomic_setup_scalers(state, crtc);
+			if (ret)
+				return ret;
+		}
+	}
 
 	return 0;
 }
