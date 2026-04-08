@@ -39,20 +39,26 @@ properties:
     maxItems: 1
 
   clocks:
+    minItems: 5
     items:
       - description: GMAC main clock
       - description: GMAC AHB clock
       - description: PTP clock
       - description: TX clock
       - description: GTX clock
+      - description: SGMII RX clock
 
   clock-names:
-    items:
-      - const: stmmaceth
-      - const: pclk
-      - const: ptp_ref
-      - const: tx
-      - const: gtx
+    minItems: 5
+    maxItems: 6
+    contains:
+      enum:
+       - stmmaceth
+       - pclk
+       - ptp_ref
+       - tx
+       - gtx
+       - rx
 
   starfive,tx-use-rgmii-clk:
     description:
@@ -99,6 +105,14 @@ allOf:
           minItems: 2
           maxItems: 2
 
+        clocks:
+          minItems: 5
+          maxItems: 5
+
+        clock-names:
+          minItems: 5
+          maxItems: 5
+
         resets:
           maxItems: 1
 
@@ -120,6 +134,14 @@ allOf:
           minItems: 3
           maxItems: 3
 
+        clocks:
+          minItems: 5
+          maxItems: 5
+
+        clock-names:
+          minItems: 5
+          maxItems: 5
+
         resets:
           minItems: 2
 
@@ -138,6 +160,14 @@ allOf:
 
         interrupt-names:
           const: macirq
+
+        clocks:
+          minItems: 5
+          maxItems: 6
+
+        clock-names:
+          minItems: 5
+          maxItems: 6
 
         resets:
           maxItems: 1
