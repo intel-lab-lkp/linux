@@ -22,6 +22,12 @@ def set_flow_rule(cfg):
     return int(values)
 
 
+def set_flow_rule_port(cfg, port, queue):
+    output = ethtool(f"-N {cfg.ifname} flow-type tcp6 dst-port {port} action {queue}").stdout
+    values = re.search(r'ID (\d+)', output).group(1)
+    return int(values)
+
+
 def set_flow_rule_rss(cfg, rss_ctx_id):
     output = ethtool(f"-N {cfg.ifname} flow-type tcp6 dst-port {cfg.port} context {rss_ctx_id}").stdout
     values = re.search(r'ID (\d+)', output).group(1)
@@ -85,18 +91,51 @@ def rss(cfg):
     defer(ethtool, f"-N {cfg.ifname} delete {flow_rule_id}")
 
 
+def rss_multiqueue(cfg):
+    channels = cfg.ethnl.channels_get({'header': {'dev-index': cfg.ifindex}})
+    channels = channels['combined-count']
+    if channels < 3:
+        raise KsftSkipEx('Test requires NETIF with at least 3 combined channels')
+
+    rings = cfg.ethnl.rings_get({'header': {'dev-index': cfg.ifindex}})
+    rx_rings = rings['rx']
+    hds_thresh = rings.get('hds-thresh', 0)
+
+    cfg.ethnl.rings_set({'header': {'dev-index': cfg.ifindex},
+                         'tcp-data-split': 'enabled',
+                         'hds-thresh': 0,
+                         'rx': 64})
+    defer(cfg.ethnl.rings_set, {'header': {'dev-index': cfg.ifindex},
+                                'tcp-data-split': 'unknown',
+                                'hds-thresh': hds_thresh,
+                                'rx': rx_rings})
+    defer(mp_clear_wait, cfg)
+
+    cfg.num_threads = 2
+    cfg.target = channels - cfg.num_threads
+    ethtool(f"-X {cfg.ifname} equal {cfg.target}")
+    defer(ethtool, f"-X {cfg.ifname} default")
+
+    for i in range(cfg.num_threads):
+        flow_rule_id = set_flow_rule_port(cfg, cfg.port + i, cfg.target + i)
+        defer(ethtool, f"-N {cfg.ifname} delete {flow_rule_id}")
+
+
 @ksft_variants([
     KsftNamedVariant("single", single),
     KsftNamedVariant("rss", rss),
+    KsftNamedVariant("rss_multiqueue", rss_multiqueue),
 ])
 def test_zcrx(cfg, setup) -> None:
     cfg.require_ipver('6')
 
+    cfg.num_threads = getattr(cfg, 'num_threads', 1)
     setup(cfg)
-    rx_cmd = f"{cfg.bin_local} -s -p {cfg.port} -i {cfg.ifname} -q {cfg.target}"
-    tx_cmd = f"{cfg.bin_remote} -c -h {cfg.addr_v['6']} -p {cfg.port} -l 12840"
+    rx_cmd = f"{cfg.bin_local} -s -p {cfg.port} -i {cfg.ifname} -q {cfg.target} -t {cfg.num_threads}"
+    tx_cmd = f"{cfg.bin_remote} -c -h {cfg.addr_v['6']} -p {cfg.port} -l 12840 -t {cfg.num_threads}"
     with bkg(rx_cmd, exit_wait=True):
-        wait_port_listen(cfg.port, proto="tcp")
+        for i in range(cfg.num_threads):
+            wait_port_listen(cfg.port + i, proto="tcp")
         cmd(tx_cmd, host=cfg.remote)
 
 

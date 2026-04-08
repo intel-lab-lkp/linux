@@ -102,6 +102,7 @@ struct thread_ctx {
 	bool			stop;
 	size_t			received;
 	int			queue_id;
+	int			port;
 	int			thread_id;
 };
 
@@ -353,35 +354,47 @@ static void *server_worker(void *arg)
 
 static void run_server(void)
 {
+	struct epoll_event ev, events[64];
 	struct thread_ctx *ctxs;
+	struct sockaddr_in6 addr;
 	pthread_t *threads;
-	int fd, ret, i, enable;
+	int *fds;
+	int epfd, nfds, accepted;
+	int ret, i, enable;
 
 	ctxs = calloc(cfg_num_threads, sizeof(*ctxs));
 	threads = calloc(cfg_num_threads, sizeof(*threads));
-	if (!ctxs || !threads)
+	fds = calloc(cfg_num_threads, sizeof(*fds));
+	if (!ctxs || !threads || !fds)
 		error(1, 0, "calloc()");
 
-	fd = socket(AF_INET6, SOCK_STREAM, 0);
-	if (fd == -1)
-		error(1, 0, "socket()");
+	for (i = 0; i < cfg_num_threads; i++) {
+		fds[i] = socket(AF_INET6, SOCK_STREAM, 0);
+		if (fds[i] == -1)
+			error(1, 0, "socket()");
 
-	enable = 1;
-	ret = setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int));
-	if (ret < 0)
-		error(1, 0, "setsockopt(SO_REUSEADDR)");
+		enable = 1;
+		ret = setsockopt(fds[i], SOL_SOCKET, SO_REUSEADDR,
+				 &enable, sizeof(int));
+		if (ret < 0)
+			error(1, 0, "setsockopt(SO_REUSEADDR)");
 
-	ret = bind(fd, (struct sockaddr *)&cfg_addr, sizeof(cfg_addr));
-	if (ret < 0)
-		error(1, 0, "bind()");
+		addr = cfg_addr;
+		addr.sin6_port = htons(cfg_port + i);
 
-	if (listen(fd, 1024) < 0)
-		error(1, 0, "listen()");
+		ret = bind(fds[i], (struct sockaddr *)&addr, sizeof(addr));
+		if (ret < 0)
+			error(1, 0, "bind()");
+
+		if (listen(fds[i], 1024) < 0)
+			error(1, 0, "listen()");
+	}
 
 	pthread_barrier_init(&barrier, NULL, cfg_num_threads + 1);
 
 	for (i = 0; i < cfg_num_threads; i++) {
 		ctxs[i].queue_id = cfg_queue_id + i;
+		ctxs[i].port = cfg_port + i;
 		ctxs[i].thread_id = i;
 	}
 
@@ -397,12 +410,36 @@ static void run_server(void)
 	if (cfg_dry_run)
 		goto join;
 
+	epfd = epoll_create1(0);
+	if (epfd < 0)
+		error(1, 0, "epoll_create1()");
+
 	for (i = 0; i < cfg_num_threads; i++) {
-		ctxs[i].connfd = accept(fd, NULL, NULL);
-		if (ctxs[i].connfd < 0)
-			error(1, 0, "accept()");
+		ev.events = EPOLLIN;
+		ev.data.u32 = i;
+		if (epoll_ctl(epfd, EPOLL_CTL_ADD, fds[i], &ev) < 0)
+			error(1, 0, "epoll_ctl()");
 	}
 
+	accepted = 0;
+	while (accepted < cfg_num_threads) {
+		nfds = epoll_wait(epfd, events, 64, 5000);
+		if (nfds < 0)
+			error(1, 0, "epoll_wait()");
+		if (nfds == 0)
+			error(1, 0, "epoll_wait() timeout");
+
+		for (i = 0; i < nfds; i++) {
+			int idx = events[i].data.u32;
+
+			ctxs[idx].connfd = accept(fds[idx], NULL, NULL);
+			if (ctxs[idx].connfd < 0)
+				error(1, 0, "accept()");
+			accepted++;
+		}
+	}
+
+	close(epfd);
 	pthread_barrier_wait(&barrier);
 
 join:
@@ -410,23 +447,29 @@ join:
 		pthread_join(threads[i], NULL);
 
 	pthread_barrier_destroy(&barrier);
-	close(fd);
+	for (i = 0; i < cfg_num_threads; i++)
+		close(fds[i]);
+	free(fds);
 	free(threads);
 	free(ctxs);
 }
 
 static void *client_worker(void *arg)
 {
+	struct thread_ctx *ctx = arg;
+	struct sockaddr_in6 addr = cfg_addr;
 	ssize_t to_send = cfg_send_size;
 	ssize_t sent = 0;
 	ssize_t chunk, res;
 	int fd;
 
+	addr.sin6_port = htons(cfg_port + ctx->thread_id);
+
 	fd = socket(AF_INET6, SOCK_STREAM, 0);
 	if (fd == -1)
 		error(1, 0, "socket()");
 
-	if (connect(fd, (struct sockaddr *)&cfg_addr, sizeof(cfg_addr)))
+	if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)))
 		error(1, 0, "connect()");
 
 	while (to_send) {
