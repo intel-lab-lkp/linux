@@ -750,6 +750,15 @@ struct sock *tcp_check_req(struct sock *sk, struct sk_buff *skb,
 		 * Reset timer after retransmitting SYNACK, similar to
 		 * the idea of fast retransmit in recovery.
 		 */
+
+#if IS_ENABLED(CONFIG_IPV6)
+		if (sk->sk_family == AF_INET6)
+			inet_rsk(req)->ir_iif = tcp_v6_iif(skb);
+		else
+#endif
+			inet_rsk(req)->ir_iif =
+				inet_request_bound_dev_if(sk, skb);
+
 		if (!tcp_oow_rate_limited(sock_net(sk), skb,
 					  LINUX_MIB_TCPACKSKIPPEDSYNRECV,
 					  &tcp_rsk(req)->last_oow_ack_time)) {
