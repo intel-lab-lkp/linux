@@ -244,12 +244,16 @@ void intel_crtc_state_dump(const struct intel_crtc_state *pipe_config,
 		drm_printf(&p, "sdp split: %s\n",
 			   str_enabled_disabled(pipe_config->sdp_split_enable));
 
-		drm_printf(&p, "psr: %s, selective update: %s, panel replay: %s, selective fetch: %s\n",
+		drm_printf(&p, "psr: %s, selective update: %s, panel replay: %s, selective fetch: %s (y granularity = %d), early transport: %s, sdp prior scanline = %s, entry setup frames = %d\n",
 			   str_enabled_disabled(pipe_config->has_psr &&
 						!pipe_config->has_panel_replay),
 			   str_enabled_disabled(pipe_config->has_sel_update),
 			   str_enabled_disabled(pipe_config->has_panel_replay),
-			   str_enabled_disabled(pipe_config->enable_psr2_sel_fetch));
+			   str_enabled_disabled(pipe_config->enable_psr2_sel_fetch),
+			   pipe_config->su_y_granularity,
+			   str_enabled_disabled(pipe_config->enable_psr2_su_region_et),
+			   str_enabled_disabled(pipe_config->req_psr2_sdp_prior_scanline),
+			   pipe_config->entry_setup_frames);
 		drm_printf(&p, "minimum hblank: %d\n", pipe_config->min_hblank);
 	}
 
