@@ -4467,7 +4467,7 @@ sch_handle_ingress(struct sk_buff *skb, struct packet_type **pt_prev, int *ret,
 		   struct net_device *orig_dev, bool *another)
 {
 	struct bpf_mprog_entry *entry = rcu_dereference_bh(skb->dev->tcx_ingress);
-	enum skb_drop_reason drop_reason = SKB_DROP_REASON_TC_INGRESS;
+	enum skb_drop_reason drop_reason;
 	struct bpf_net_context __bpf_net_ctx, *bpf_net_ctx;
 	int sch_ret;
 
@@ -4480,7 +4480,15 @@ sch_handle_ingress(struct sk_buff *skb, struct packet_type **pt_prev, int *ret,
 		*pt_prev = NULL;
 	}
 
-	qdisc_pkt_len_segs_init(skb);
+	drop_reason = qdisc_pkt_len_segs_init(skb);
+	if (unlikely(drop_reason)) {
+		kfree_skb_reason(skb, drop_reason);
+		*ret = NET_RX_DROP;
+		bpf_net_ctx_clear(bpf_net_ctx);
+		return NULL;
+	}
+
+	drop_reason = SKB_DROP_REASON_TC_INGRESS;
 	tcx_set_ingress(skb, true);
 
 	if (static_branch_unlikely(&tcx_needed_key)) {
