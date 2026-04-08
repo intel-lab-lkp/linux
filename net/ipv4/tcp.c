@@ -3802,6 +3802,10 @@ int tcp_set_window_clamp(struct sock *sk, int val)
 	old_window_clamp = tp->window_clamp;
 	new_window_clamp = max_t(int, SOCK_MIN_RCVBUF / 2, val);
 
+	if ((1 << sk->sk_state) & (TCPF_ESTABLISHED | TCPF_CLOSE_WAIT |
+			TCPF_FIN_WAIT1 | TCPF_FIN_WAIT2))
+		new_window_clamp = min_t(u32, U16_MAX << tp->rx_opt.rcv_wscale, new_window_clamp);
+
 	if (new_window_clamp == old_window_clamp)
 		return 0;
 

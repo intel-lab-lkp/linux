@@ -914,6 +914,7 @@ void tcp_rcvbuf_grow(struct sock *sk, u32 newval)
 	struct tcp_sock *tp = tcp_sk(sk);
 	u32 rcvwin, rcvbuf, cap, oldval;
 	u32 rtt_threshold, rtt_us;
+	u32 window_clamp;
 	u64 grow;
 
 	oldval = tp->rcvq_space.space;
@@ -949,8 +950,9 @@ void tcp_rcvbuf_grow(struct sock *sk, u32 newval)
 	if (rcvbuf > sk->sk_rcvbuf) {
 		WRITE_ONCE(sk->sk_rcvbuf, rcvbuf);
 		/* Make the window clamp follow along.  */
-		WRITE_ONCE(tp->window_clamp,
-			   tcp_win_from_space(sk, rcvbuf));
+		window_clamp = tcp_win_from_space(sk, rcvbuf);
+		window_clamp = min_t(u32, U16_MAX << tp->rx_opt.rcv_wscale, window_clamp);
+		WRITE_ONCE(tp->window_clamp, window_clamp);
 	}
 }
 /*
