@@ -6624,11 +6624,15 @@ static int stmmac_dma_cap_show(struct seq_file *seq, void *v)
 	seq_printf(seq, "\tAV features: %s\n", (priv->dma_cap.av) ? "Y" : "N");
 	seq_printf(seq, "\tChecksum Offload in TX: %s\n",
 		   (priv->dma_cap.tx_coe) ? "Y" : "N");
-	if (priv->snpsver >= DWMAC_CORE_4_00 ||
-	    priv->plat->core_type == DWMAC_CORE_XGMAC) {
+	if (dwmac_is_xmac(priv->plat->core_type)) {
+		/* gmac4, xgmac, and motorcomm populate this. */
 		seq_printf(seq, "\tIP Checksum Offload in RX: %s\n",
 			   (priv->dma_cap.rx_coe) ? "Y" : "N");
 	} else {
+		/* only dwmac1000 has these three. sun8i sets rx_coe, but
+		 * sets snpsver to zero and leaves core_Type as MAC100, so
+		 * uses this path.
+		 */
 		seq_printf(seq, "\tIP Checksum Offload (type1) in RX: %s\n",
 			   (priv->dma_cap.rx_coe_type1) ? "Y" : "N");
 		seq_printf(seq, "\tIP Checksum Offload (type2) in RX: %s\n",
@@ -7441,6 +7445,9 @@ static int stmmac_hw_init(struct stmmac_priv *priv)
 		/* In case of GMAC4 rx_coe is from HW cap register. */
 		priv->plat->rx_coe = priv->dma_cap.rx_coe;
 
+		/* GMAC (dwmac1000) has separate bits for the Rx COE type.
+		 * Translate to the GMAC4/XGMAC rx_coe feature code.
+		 */
 		if (priv->dma_cap.rx_coe_type2)
 			priv->plat->rx_coe = STMMAC_RX_COE_TYPE2;
 		else if (priv->dma_cap.rx_coe_type1)

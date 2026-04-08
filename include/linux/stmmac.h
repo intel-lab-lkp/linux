@@ -256,6 +256,13 @@ struct plat_stmmacenet_data {
 	bool force_sf_dma_mode;
 	bool force_thresh_dma_mode;
 	bool riwt_off;
+	/* rx_coe:
+	 * for dwmac100, rx_coe does not appear to be defined.
+	 * for dwmac1000, rx_coe takes one of the STMMAC_RX_COE_* constants,
+	 *  which will be derived from the RXTYP[12]COE hardware feature bits.
+	 * for dwmac4 and xgmac, rx_coe is a boolean from the RXCOESEL hardware
+	 *  feature bit.
+	 */
 	int rx_coe;
 	int max_speed;
 	int maxmtu;
