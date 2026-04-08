@@ -836,16 +836,23 @@ struct i40e_vsi {
 	struct i40e_eth_stats eth_stats;
 	struct i40e_eth_stats eth_stats_offsets;
 	u64 tx_restart;
+	u64 tx_restart_base;
 	u64 tx_busy;
+	u64 tx_busy_base;
 	u64 tx_linearize;
 	u64 tx_force_wb;
 	u64 tx_stopped;
+	u64 tx_stopped_base;
+	u64 tx_bytes;
+	u64 tx_packets;
 	u64 rx_buf_failed;
 	u64 rx_page_failed;
 	u64 rx_page_reuse;
 	u64 rx_page_alloc;
 	u64 rx_page_waive;
 	u64 rx_page_busy;
+	u64 rx_bytes;
+	u64 rx_packets;
 
 	/* These are containers of ring pointers, allocated at run-time */
 	struct i40e_ring **rx_rings;

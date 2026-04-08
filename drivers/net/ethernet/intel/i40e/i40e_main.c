@@ -7,6 +7,7 @@
 #include <linux/if_bridge.h>
 #include <linux/if_macvlan.h>
 #include <linux/module.h>
+#include <net/netdev_queues.h>
 #include <net/pkt_cls.h>
 #include <net/xdp_sock_drv.h>
 
@@ -11690,6 +11691,26 @@ free_vsi:
 	return 0;
 }
 
+static void i40e_vsi_aggregate_tx_counters(struct i40e_vsi *vsi,
+					   struct i40e_ring *tx_ring)
+{
+	if (!tx_ring)
+		return;
+
+	vsi->tx_bytes += tx_ring->stats.bytes;
+	vsi->tx_packets += tx_ring->stats.packets;
+}
+
+static void i40e_vsi_aggregate_rx_counters(struct i40e_vsi *vsi,
+					   struct i40e_ring *rx_ring)
+{
+	if (!rx_ring)
+		return;
+
+	vsi->rx_bytes += rx_ring->stats.bytes;
+	vsi->rx_packets += rx_ring->stats.packets;
+}
+
 /**
  * i40e_vsi_clear_rings - Deallocates the Rx and Tx rings for the provided VSI
  * @vsi: the VSI being cleaned
@@ -11700,6 +11721,13 @@ static void i40e_vsi_clear_rings(struct i40e_vsi *vsi)
 
 	if (vsi->tx_rings && vsi->tx_rings[0]) {
 		for (i = 0; i < vsi->alloc_queue_pairs; i++) {
+			struct i40e_ring *xdp_ring = vsi->xdp_rings ?
+						     vsi->xdp_rings[i] : NULL;
+
+			i40e_vsi_aggregate_tx_counters(vsi, vsi->tx_rings[i]);
+			i40e_vsi_aggregate_tx_counters(vsi, xdp_ring);
+			i40e_vsi_aggregate_rx_counters(vsi, vsi->rx_rings[i]);
+
 			kfree_rcu(vsi->tx_rings[i], rcu);
 			WRITE_ONCE(vsi->tx_rings[i], NULL);
 			WRITE_ONCE(vsi->rx_rings[i], NULL);
@@ -13629,6 +13657,110 @@ static const struct net_device_ops i40e_netdev_ops = {
 	.ndo_hwtstamp_set	= i40e_ptp_hwtstamp_set,
 };
 
+static void i40e_get_queue_stats_rx(struct net_device *dev, int idx,
+				    struct netdev_queue_stats_rx *rx)
+{
+	struct i40e_netdev_priv *np = netdev_priv(dev);
+	struct i40e_vsi *vsi = np->vsi;
+	struct i40e_ring *rx_ring;
+	unsigned int start;
+	u64 bytes, packets;
+
+	rcu_read_lock();
+	rx_ring = READ_ONCE(vsi->rx_rings[idx]);
+	if (!rx_ring)
+		goto unlock;
+
+	do {
+		start = u64_stats_fetch_begin(&rx_ring->syncp);
+		bytes = rx_ring->stats.bytes;
+		packets = rx_ring->stats.packets;
+	} while (u64_stats_fetch_retry(&rx_ring->syncp, start));
+
+	rx->bytes = bytes;
+	rx->packets = packets;
+
+unlock:
+	rcu_read_unlock();
+}
+
+static void i40e_zero_tx_ring_stats(struct netdev_queue_stats_tx *tx)
+{
+	tx->bytes = 0;
+	tx->packets = 0;
+	tx->stop = 0;
+	tx->wake = 0;
+	tx->hw_drops = 0;
+}
+
+static void i40e_add_tx_ring_stats(struct i40e_ring *tx_ring,
+				   struct netdev_queue_stats_tx *tx)
+{
+	u64 bytes, packets;
+	unsigned int start;
+
+	do {
+		start = u64_stats_fetch_begin(&tx_ring->syncp);
+		bytes = tx_ring->stats.bytes;
+		packets = tx_ring->stats.packets;
+	} while (u64_stats_fetch_retry(&tx_ring->syncp, start));
+
+	tx->bytes += bytes;
+	tx->packets += packets;
+
+	tx->stop += tx_ring->tx_stats.tx_stopped;
+	tx->wake += tx_ring->tx_stats.restart_queue;
+	tx->hw_drops += tx_ring->tx_stats.tx_busy;
+}
+
+static void i40e_get_queue_stats_tx(struct net_device *dev, int idx,
+				    struct netdev_queue_stats_tx *tx)
+{
+	struct i40e_netdev_priv *np = netdev_priv(dev);
+	struct i40e_vsi *vsi = np->vsi;
+	struct i40e_ring *tx_ring;
+
+	rcu_read_lock();
+	tx_ring = READ_ONCE(vsi->tx_rings[idx]);
+	if (!tx_ring)
+		goto out;
+
+	i40e_zero_tx_ring_stats(tx);
+	i40e_add_tx_ring_stats(tx_ring, tx);
+
+	if (i40e_enabled_xdp_vsi(vsi)) {
+		tx_ring = READ_ONCE(vsi->xdp_rings[idx]);
+		if (tx_ring)
+			i40e_add_tx_ring_stats(tx_ring, tx);
+	}
+
+out:
+	rcu_read_unlock();
+}
+
+static void i40e_get_base_stats(struct net_device *dev,
+				struct netdev_queue_stats_rx *rx,
+				struct netdev_queue_stats_tx *tx)
+{
+	struct i40e_netdev_priv *np = netdev_priv(dev);
+	struct i40e_vsi *vsi = np->vsi;
+
+	tx->bytes = vsi->tx_bytes;
+	tx->packets = vsi->tx_packets;
+	tx->wake = vsi->tx_restart_base;
+	tx->stop = vsi->tx_stopped_base;
+	tx->hw_drops = vsi->tx_busy_base;
+
+	rx->bytes = vsi->rx_bytes;
+	rx->packets = vsi->rx_packets;
+}
+
+static const struct netdev_stat_ops i40e_stat_ops = {
+	.get_queue_stats_rx	= i40e_get_queue_stats_rx,
+	.get_queue_stats_tx	= i40e_get_queue_stats_tx,
+	.get_base_stats		= i40e_get_base_stats,
+};
+
 /**
  * i40e_config_netdev - Setup the netdev flags
  * @vsi: the VSI being configured
@@ -13790,6 +13922,7 @@ static int i40e_config_netdev(struct i40e_vsi *vsi)
 	/* Setup netdev TC information */
 	i40e_vsi_config_netdev_tc(vsi, vsi->tc_config.enabled_tc);
 
+	netdev->stat_ops = &i40e_stat_ops;
 	netdev->netdev_ops = &i40e_netdev_ops;
 	netdev->watchdog_timeo = 5 * HZ;
 	i40e_set_ethtool_ops(netdev);
