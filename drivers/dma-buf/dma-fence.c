@@ -884,9 +884,8 @@ dma_fence_test_signaled_any(struct dma_fence **fences, uint32_t count,
  * @idx: used to store the first signaled fence index, meaningful only on
  *	positive return
  *
- * Returns -EINVAL on custom fence wait implementation, -ERESTARTSYS if
- * interrupted, 0 if the wait timed out, or the remaining timeout in jiffies
- * on success.
+ * Returns -ERESTARTSYS if interrupted, 0 if the wait timed out,
+ * or the remaining timeout in jiffies on success.
  *
  * Synchronous waits for the first fence in the array to be signaled. The
  * caller needs to hold a reference to all fences in the array, otherwise a
