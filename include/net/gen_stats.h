@@ -21,6 +21,11 @@ struct gnet_stats_basic_sync {
 	struct u64_stats_sync syncp;
 } __aligned(2 * sizeof(u64));
 
+struct gnet_stats {
+	u64	bytes;
+	u64	packets;
+};
+
 struct net_rate_estimator;
 
 struct gnet_dump {
@@ -49,9 +54,9 @@ int gnet_stats_start_copy_compat(struct sk_buff *skb, int type,
 int gnet_stats_copy_basic(struct gnet_dump *d,
 			  struct gnet_stats_basic_sync __percpu *cpu,
 			  struct gnet_stats_basic_sync *b, bool running);
-void gnet_stats_add_basic(struct gnet_stats_basic_sync *bstats,
+void gnet_stats_add_basic(struct gnet_stats *bstats,
 			  struct gnet_stats_basic_sync __percpu *cpu,
-			  struct gnet_stats_basic_sync *b, bool running);
+			  const struct gnet_stats_basic_sync *b, bool running);
 int gnet_stats_copy_basic_hw(struct gnet_dump *d,
 			     struct gnet_stats_basic_sync __percpu *cpu,
 			     struct gnet_stats_basic_sync *b, bool running);
