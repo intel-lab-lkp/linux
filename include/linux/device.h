@@ -135,6 +135,27 @@ ssize_t device_store_bool(struct device *dev, struct device_attribute *attr,
 ssize_t device_show_string(struct device *dev, struct device_attribute *attr,
 			   char *buf);
 
+#define __DEVICE_ATTR(_name, _mode, _show, _store) \
+	__ATTR(_name, _mode, _show, _store)
+
+#define __DEVICE_ATTR_RO_MODE(_name, _mode) \
+	__ATTR_RO_MODE(_name, _mode)
+
+#define __DEVICE_ATTR_RO(_name) \
+	__ATTR_RO(_name)
+
+#define __DEVICE_ATTR_WO(_name) \
+	__ATTR_WO(_name)
+
+#define __DEVICE_ATTR_RW_MODE(_name, _mode) \
+	__ATTR_RW_MODE(_name, _mode)
+
+#define __DEVICE_ATTR_RW(_name) \
+	__ATTR_RW(_name)
+
+#define __DEVICE_ATTR_IGNORE_LOCKDEP(_name, _mode, _show, _store) \
+	__ATTR_IGNORE_LOCKDEP(_name, _mode, _show, _store)
+
 /**
  * DEVICE_ATTR - Define a device attribute.
  * @_name: Attribute name.
@@ -155,7 +176,7 @@ ssize_t device_show_string(struct device *dev, struct device_attribute *attr,
  *	};
  */
 #define DEVICE_ATTR(_name, _mode, _show, _store) \
-	struct device_attribute dev_attr_##_name = __ATTR(_name, _mode, _show, _store)
+	struct device_attribute dev_attr_##_name = __DEVICE_ATTR(_name, _mode, _show, _store)
 
 /**
  * DEVICE_ATTR_RW - Define a read-write device attribute.
@@ -165,7 +186,7 @@ ssize_t device_show_string(struct device *dev, struct device_attribute *attr,
  * and @_store is <_name>_store.
  */
 #define DEVICE_ATTR_RW(_name) \
-	struct device_attribute dev_attr_##_name = __ATTR_RW(_name)
+	struct device_attribute dev_attr_##_name = __DEVICE_ATTR_RW(_name)
 
 /**
  * DEVICE_ATTR_ADMIN_RW - Define an admin-only read-write device attribute.
@@ -174,7 +195,7 @@ ssize_t device_show_string(struct device *dev, struct device_attribute *attr,
  * Like DEVICE_ATTR_RW(), but @_mode is 0600.
  */
 #define DEVICE_ATTR_ADMIN_RW(_name) \
-	struct device_attribute dev_attr_##_name = __ATTR_RW_MODE(_name, 0600)
+	struct device_attribute dev_attr_##_name = __DEVICE_ATTR_RW_MODE(_name, 0600)
 
 /**
  * DEVICE_ATTR_RO - Define a readable device attribute.
@@ -183,7 +204,7 @@ ssize_t device_show_string(struct device *dev, struct device_attribute *attr,
  * Like DEVICE_ATTR(), but @_mode is 0444 and @_show is <_name>_show.
  */
 #define DEVICE_ATTR_RO(_name) \
-	struct device_attribute dev_attr_##_name = __ATTR_RO(_name)
+	struct device_attribute dev_attr_##_name = __DEVICE_ATTR_RO(_name)
 
 /**
  * DEVICE_ATTR_ADMIN_RO - Define an admin-only readable device attribute.
@@ -192,7 +213,7 @@ ssize_t device_show_string(struct device *dev, struct device_attribute *attr,
  * Like DEVICE_ATTR_RO(), but @_mode is 0400.
  */
 #define DEVICE_ATTR_ADMIN_RO(_name) \
-	struct device_attribute dev_attr_##_name = __ATTR_RO_MODE(_name, 0400)
+	struct device_attribute dev_attr_##_name = __DEVICE_ATTR_RO_MODE(_name, 0400)
 
 /**
  * DEVICE_ATTR_WO - Define an admin-only writable device attribute.
@@ -201,7 +222,7 @@ ssize_t device_show_string(struct device *dev, struct device_attribute *attr,
  * Like DEVICE_ATTR(), but @_mode is 0200 and @_store is <_name>_store.
  */
 #define DEVICE_ATTR_WO(_name) \
-	struct device_attribute dev_attr_##_name = __ATTR_WO(_name)
+	struct device_attribute dev_attr_##_name = __DEVICE_ATTR_WO(_name)
 
 /**
  * DEVICE_ULONG_ATTR - Define a device attribute backed by an unsigned long.
@@ -214,7 +235,7 @@ ssize_t device_show_string(struct device *dev, struct device_attribute *attr,
  */
 #define DEVICE_ULONG_ATTR(_name, _mode, _var) \
 	struct dev_ext_attribute dev_attr_##_name = \
-		{ __ATTR(_name, _mode, device_show_ulong, device_store_ulong), &(_var) }
+		{ __DEVICE_ATTR(_name, _mode, device_show_ulong, device_store_ulong), &(_var) }
 
 /**
  * DEVICE_INT_ATTR - Define a device attribute backed by an int.
@@ -226,7 +247,7 @@ ssize_t device_show_string(struct device *dev, struct device_attribute *attr,
  */
 #define DEVICE_INT_ATTR(_name, _mode, _var) \
 	struct dev_ext_attribute dev_attr_##_name = \
-		{ __ATTR(_name, _mode, device_show_int, device_store_int), &(_var) }
+		{ __DEVICE_ATTR(_name, _mode, device_show_int, device_store_int), &(_var) }
 
 /**
  * DEVICE_BOOL_ATTR - Define a device attribute backed by a bool.
@@ -238,7 +259,7 @@ ssize_t device_show_string(struct device *dev, struct device_attribute *attr,
  */
 #define DEVICE_BOOL_ATTR(_name, _mode, _var) \
 	struct dev_ext_attribute dev_attr_##_name = \
-		{ __ATTR(_name, _mode, device_show_bool, device_store_bool), &(_var) }
+		{ __DEVICE_ATTR(_name, _mode, device_show_bool, device_store_bool), &(_var) }
 
 /**
  * DEVICE_STRING_ATTR_RO - Define a device attribute backed by a r/o string.
@@ -251,11 +272,11 @@ ssize_t device_show_string(struct device *dev, struct device_attribute *attr,
  */
 #define DEVICE_STRING_ATTR_RO(_name, _mode, _var) \
 	struct dev_ext_attribute dev_attr_##_name = \
-		{ __ATTR(_name, (_mode) & ~0222, device_show_string, NULL), (_var) }
+		{ __DEVICE_ATTR(_name, (_mode) & ~0222, device_show_string, NULL), (_var) }
 
 #define DEVICE_ATTR_IGNORE_LOCKDEP(_name, _mode, _show, _store) \
 	struct device_attribute dev_attr_##_name =		\
-		__ATTR_IGNORE_LOCKDEP(_name, _mode, _show, _store)
+		__DEVICE_ATTR_IGNORE_LOCKDEP(_name, _mode, _show, _store)
 
 int device_create_file(struct device *device,
 		       const struct device_attribute *entry);
