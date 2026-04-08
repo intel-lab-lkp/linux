@@ -1224,8 +1224,23 @@ static void kernel_init_pages(struct page *page, int numpages)
 
 	/* s390's use of memset() could override KASAN redzones. */
 	kasan_disable_current();
-	for (i = 0; i < numpages; i++)
-		clear_highpage_kasan_tagged(page + i);
+
+	if (!IS_ENABLED(CONFIG_HIGHMEM)) {
+		void *addr = kasan_reset_tag(page_address(page));
+		unsigned int unit = preempt_model_preemptible() ?
+					numpages : PROCESS_PAGES_NON_PREEMPT_BATCH;
+		int count;
+
+		for (i = 0; i < numpages; i += count) {
+			cond_resched();
+			count = min_t(int, unit, numpages - i);
+			clear_pages(addr + (i << PAGE_SHIFT), count);
+		}
+	} else {
+		for (i = 0; i < numpages; i++)
+			clear_highpage_kasan_tagged(page + i);
+	}
+
 	kasan_enable_current();
 }
 
