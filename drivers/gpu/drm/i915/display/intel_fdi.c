@@ -438,7 +438,7 @@ void intel_fdi_normal_train(struct intel_crtc *crtc)
 {
 	struct intel_display *display = to_intel_display(crtc);
 	enum pipe pipe = crtc->pipe;
-	i915_reg_t reg;
+	intel_reg_t reg;
 	u32 temp;
 
 	/* enable normal train */
@@ -479,7 +479,7 @@ static void ilk_fdi_link_train(struct intel_crtc *crtc,
 {
 	struct intel_display *display = to_intel_display(crtc);
 	enum pipe pipe = crtc->pipe;
-	i915_reg_t reg;
+	intel_reg_t reg;
 	u32 temp, tries;
 
 	/*
@@ -580,7 +580,7 @@ static void gen6_fdi_link_train(struct intel_crtc *crtc,
 {
 	struct intel_display *display = to_intel_display(crtc);
 	enum pipe pipe = crtc->pipe;
-	i915_reg_t reg;
+	intel_reg_t reg;
 	u32 temp, i, retry;
 
 	/*
@@ -715,7 +715,7 @@ static void ivb_manual_fdi_link_train(struct intel_crtc *crtc,
 {
 	struct intel_display *display = to_intel_display(crtc);
 	enum pipe pipe = crtc->pipe;
-	i915_reg_t reg;
+	intel_reg_t reg;
 	u32 temp, i, j;
 
 	ivb_update_fdi_bc_bifurcation(crtc_state);
@@ -996,7 +996,7 @@ void ilk_fdi_pll_enable(const struct intel_crtc_state *crtc_state)
 	struct intel_display *display = to_intel_display(crtc_state);
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 	enum pipe pipe = crtc->pipe;
-	i915_reg_t reg;
+	intel_reg_t reg;
 	u32 temp;
 
 	/* enable PCH FDI RX PLL, wait warmup plus DMI latency */
@@ -1049,7 +1049,7 @@ void ilk_fdi_disable(struct intel_crtc *crtc)
 {
 	struct intel_display *display = to_intel_display(crtc);
 	enum pipe pipe = crtc->pipe;
-	i915_reg_t reg;
+	intel_reg_t reg;
 	u32 temp;
 
 	/* disable CPU FDI tx and PCH FDI rx */
