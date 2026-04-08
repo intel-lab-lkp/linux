@@ -2377,7 +2377,7 @@ void amdgpu_ttm_enable_buffer_funcs(struct amdgpu_device *adev)
 		r = amdgpu_ttm_buffer_entity_init(
 			&adev->mman.gtt_mgr,
 			&adev->mman.clear_entities[i],
-			DRM_SCHED_PRIORITY_NORMAL,
+			DRM_SCHED_PRIORITY_KERNEL,
 			adev->mman.buffer_funcs_scheds,
 			adev->mman.num_buffer_funcs_scheds, 1);
 
@@ -2397,7 +2397,7 @@ void amdgpu_ttm_enable_buffer_funcs(struct amdgpu_device *adev)
 		r = amdgpu_ttm_buffer_entity_init(
 			&adev->mman.gtt_mgr,
 			&adev->mman.move_entities[i],
-			DRM_SCHED_PRIORITY_NORMAL,
+			DRM_SCHED_PRIORITY_KERNEL,
 			adev->mman.buffer_funcs_scheds,
 			adev->mman.num_buffer_funcs_scheds, 2);
 
