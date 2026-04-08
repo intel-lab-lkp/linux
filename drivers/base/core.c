@@ -422,7 +422,7 @@ void device_pm_move_to_tail(struct device *dev)
 #define to_devlink(dev)	container_of((dev), struct device_link, link_dev)
 
 static ssize_t status_show(struct device *dev,
-			   struct device_attribute *attr, char *buf)
+			   const struct device_attribute *attr, char *buf)
 {
 	const char *output;
 
@@ -452,10 +452,10 @@ static ssize_t status_show(struct device *dev,
 
 	return sysfs_emit(buf, "%s\n", output);
 }
-static DEVICE_ATTR_RO(status);
+static const DEVICE_ATTR_RO(status);
 
 static ssize_t auto_remove_on_show(struct device *dev,
-				   struct device_attribute *attr, char *buf)
+				   const struct device_attribute *attr, char *buf)
 {
 	struct device_link *link = to_devlink(dev);
 	const char *output;
@@ -469,27 +469,27 @@ static ssize_t auto_remove_on_show(struct device *dev,
 
 	return sysfs_emit(buf, "%s\n", output);
 }
-static DEVICE_ATTR_RO(auto_remove_on);
+static const DEVICE_ATTR_RO(auto_remove_on);
 
 static ssize_t runtime_pm_show(struct device *dev,
-			       struct device_attribute *attr, char *buf)
+			       const struct device_attribute *attr, char *buf)
 {
 	struct device_link *link = to_devlink(dev);
 
 	return sysfs_emit(buf, "%d\n", device_link_test(link, DL_FLAG_PM_RUNTIME));
 }
-static DEVICE_ATTR_RO(runtime_pm);
+static const DEVICE_ATTR_RO(runtime_pm);
 
 static ssize_t sync_state_only_show(struct device *dev,
-				    struct device_attribute *attr, char *buf)
+				    const struct device_attribute *attr, char *buf)
 {
 	struct device_link *link = to_devlink(dev);
 
 	return sysfs_emit(buf, "%d\n", device_link_test(link, DL_FLAG_SYNC_STATE_ONLY));
 }
-static DEVICE_ATTR_RO(sync_state_only);
+static const DEVICE_ATTR_RO(sync_state_only);
 
-static struct attribute *devlink_attrs[] = {
+static const struct attribute *const devlink_attrs[] = {
 	&dev_attr_status.attr,
 	&dev_attr_auto_remove_on.attr,
 	&dev_attr_runtime_pm.attr,
@@ -1233,7 +1233,7 @@ static void device_link_drop_managed(struct device_link *link)
 }
 
 static ssize_t waiting_for_supplier_show(struct device *dev,
-					 struct device_attribute *attr,
+					 const struct device_attribute *attr,
 					 char *buf)
 {
 	bool val;
@@ -1244,7 +1244,7 @@ static ssize_t waiting_for_supplier_show(struct device *dev,
 	device_unlock(dev);
 	return sysfs_emit(buf, "%u\n", val);
 }
-static DEVICE_ATTR_RO(waiting_for_supplier);
+static const DEVICE_ATTR_RO(waiting_for_supplier);
 
 /**
  * device_links_force_bind - Prepares device to be force bound
@@ -2727,7 +2727,7 @@ static const struct kset_uevent_ops device_uevent_ops = {
 	.uevent =	dev_uevent,
 };
 
-static ssize_t uevent_show(struct device *dev, struct device_attribute *attr,
+static ssize_t uevent_show(struct device *dev, const struct device_attribute *attr,
 			   char *buf)
 {
 	struct kobject *top_kobj;
@@ -2770,7 +2770,7 @@ out:
 	return len;
 }
 
-static ssize_t uevent_store(struct device *dev, struct device_attribute *attr,
+static ssize_t uevent_store(struct device *dev, const struct device_attribute *attr,
 			    const char *buf, size_t count)
 {
 	int rc;
@@ -2784,9 +2784,9 @@ static ssize_t uevent_store(struct device *dev, struct device_attribute *attr,
 
 	return count;
 }
-static DEVICE_ATTR_RW(uevent);
+static const DEVICE_ATTR_RW(uevent);
 
-static ssize_t online_show(struct device *dev, struct device_attribute *attr,
+static ssize_t online_show(struct device *dev, const struct device_attribute *attr,
 			   char *buf)
 {
 	bool val;
@@ -2797,7 +2797,7 @@ static ssize_t online_show(struct device *dev, struct device_attribute *attr,
 	return sysfs_emit(buf, "%u\n", val);
 }
 
-static ssize_t online_store(struct device *dev, struct device_attribute *attr,
+static ssize_t online_store(struct device *dev, const struct device_attribute *attr,
 			    const char *buf, size_t count)
 {
 	bool val;
@@ -2815,9 +2815,9 @@ static ssize_t online_store(struct device *dev, struct device_attribute *attr,
 	unlock_device_hotplug();
 	return ret < 0 ? ret : count;
 }
-static DEVICE_ATTR_RW(online);
+static const DEVICE_ATTR_RW(online);
 
-static ssize_t removable_show(struct device *dev, struct device_attribute *attr,
+static ssize_t removable_show(struct device *dev, const struct device_attribute *attr,
 			      char *buf)
 {
 	const char *loc;
@@ -2834,7 +2834,7 @@ static ssize_t removable_show(struct device *dev, struct device_attribute *attr,
 	}
 	return sysfs_emit(buf, "%s\n", loc);
 }
-static DEVICE_ATTR_RO(removable);
+static const DEVICE_ATTR_RO(removable);
 
 int device_add_groups(struct device *dev,
 		      const struct attribute_group *const *groups)
