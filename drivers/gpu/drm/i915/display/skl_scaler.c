@@ -482,7 +482,7 @@ static int intel_atomic_setup_scaler(struct intel_crtc_state *crtc_state,
 		}
 	}
 
-	if (crtc_state->pch_pfit.enabled) {
+	if (!plane_state && crtc_state->pch_pfit.enabled) {
 		struct drm_rect src;
 		int max_hscale, max_vscale;
 
