@@ -1853,7 +1853,7 @@ int tcp_set_rcvlowat(struct sock *sk, int val)
 		WRITE_ONCE(sk->sk_rcvbuf, space);
 
 		if (tp->window_clamp && tp->window_clamp < val)
-			WRITE_ONCE(tp->window_clamp, val);
+			tcp_set_window_clamp(sk, val);
 	}
 	return 0;
 }
