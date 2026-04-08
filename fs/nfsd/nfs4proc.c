@@ -1396,6 +1396,17 @@ out_put_src:
 	goto out;
 }
 
+static void nfsd_update_cmtime_attr(struct dentry *dentry)
+{
+	struct iattr attr = {
+		.ia_valid = ATTR_CTIME | ATTR_MTIME | ATTR_DELEG,
+	};
+
+	inode_lock(d_inode(dentry));
+	notify_change(&nop_mnt_idmap, dentry, &attr, NULL);
+	inode_unlock(d_inode(dentry));
+}
+
 static __be32
 nfsd4_clone(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		union nfsd4_op_u *u)
@@ -1412,6 +1423,9 @@ nfsd4_clone(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	status = nfsd4_clone_file_range(rqstp, src, clone->cl_src_pos,
 			dst, clone->cl_dst_pos, clone->cl_count,
 			EX_ISSYNC(cstate->current_fh.fh_export));
+
+	if ((READ_ONCE(dst->nf_file->f_mode) & FMODE_NOCMTIME) != 0 && !status)
+		nfsd_update_cmtime_attr(cstate->current_fh.fh_dentry);
 
 	nfsd_file_put(dst);
 	nfsd_file_put(src);
