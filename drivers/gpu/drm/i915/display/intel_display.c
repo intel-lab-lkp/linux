@@ -2467,6 +2467,7 @@ static int intel_crtc_compute_set_context_latency(struct intel_atomic_state *sta
 static int intel_crtc_compute_config(struct intel_atomic_state *state,
 				     struct intel_crtc *crtc)
 {
+	struct intel_display *display = to_intel_display(state);
 	struct intel_crtc_state *crtc_state =
 		intel_atomic_get_new_crtc_state(state, crtc);
 	int ret;
@@ -2493,6 +2494,12 @@ static int intel_crtc_compute_config(struct intel_atomic_state *state,
 		return ilk_fdi_compute_config(crtc, crtc_state);
 
 	intel_vrr_compute_guardband(crtc_state);
+
+	if (DISPLAY_VER(display) >= 9) {
+		ret = skl_update_scaler_crtc(crtc_state);
+		if (ret)
+			return ret;
+	}
 
 	return 0;
 }
@@ -4287,13 +4294,6 @@ static int intel_crtc_atomic_check_late(struct intel_atomic_state *state,
 	}
 
 	if (DISPLAY_VER(display) >= 9) {
-		if (intel_crtc_needs_modeset(crtc_state) ||
-		    intel_crtc_needs_fastset(crtc_state)) {
-			ret = skl_update_scaler_crtc(crtc_state);
-			if (ret)
-				return ret;
-		}
-
 		ret = intel_atomic_setup_scalers(state, crtc);
 		if (ret)
 			return ret;
