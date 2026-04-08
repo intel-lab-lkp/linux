@@ -539,21 +539,9 @@ static int stmfts_read_system_info(struct stmfts_data *sdata)
 	return 0;
 }
 
-static int stmfts_power_on(struct stmfts_data *sdata)
+static int stmfts_configure(struct stmfts_data *sdata)
 {
 	int err;
-
-	err = regulator_bulk_enable(ARRAY_SIZE(stmfts_supplies),
-				    sdata->supplies);
-	if (err)
-		return err;
-
-	/*
-	 * The datasheet does not specify the power on time, but considering
-	 * that the reset time is < 10ms, I sleep 20ms to be sure
-	 */
-	msleep(20);
-
 
 	err = stmfts_read_system_info(sdata);
 	if (err)
@@ -594,6 +582,29 @@ static int stmfts_power_on(struct stmfts_data *sdata)
 	(void) i2c_smbus_write_byte(sdata->client, STMFTS_SLEEP_IN);
 
 	return 0;
+}
+
+static int stmfts_power_on(struct stmfts_data *sdata)
+{
+	int err;
+
+	err = regulator_bulk_enable(ARRAY_SIZE(stmfts_supplies),
+				    sdata->supplies);
+	if (err)
+		return err;
+
+	/*
+	 * The datasheet does not specify the power on time, but considering
+	 * that the reset time is < 10ms, I sleep 20ms to be sure
+	 */
+	msleep(20);
+
+	err = stmfts_configure(sdata);
+	if (err)
+		regulator_bulk_disable(ARRAY_SIZE(stmfts_supplies),
+				       sdata->supplies);
+
+	return err;
 }
 
 static void stmfts_power_off(void *data)
