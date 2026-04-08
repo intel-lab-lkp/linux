@@ -486,9 +486,15 @@ struct iomap_writethrough_ctx {
 	atomic_t		ref;
 	unsigned int		flags;
 	int			error;
+	bool			is_aio;
 
-	/* used during submission and for non-aio completion */
-	struct task_struct	*waiter;
+	union {
+		/* used during submission and for non-aio completion */
+		struct task_struct	*waiter;
+
+		/* used during aio completion */
+		struct work_struct	aio_work;
+	};
 
 	loff_t			bio_pos;
 	unsigned int		nr_bvecs;
