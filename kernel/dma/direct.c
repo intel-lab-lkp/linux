@@ -43,6 +43,11 @@ static inline struct page *dma_page_to_page(struct dma_page dma_page)
 	return (struct page *)(dma_page.val & ~DMA_PAGE_DECRYPTED_FLAG);
 }
 
+static inline bool is_dma_page_decrypted(struct dma_page dma_page)
+{
+	return dma_page.val & DMA_PAGE_DECRYPTED_FLAG;
+}
+
 /*
  * Most architectures use ZONE_DMA for the first 16 Megabytes, but some use
  * it for entirely different regions. In that case the arch code needs to
@@ -51,9 +56,9 @@ static inline struct page *dma_page_to_page(struct dma_page dma_page)
 u64 zone_dma_limit __ro_after_init = DMA_BIT_MASK(24);
 
 static inline dma_addr_t phys_to_dma_direct(struct device *dev,
-		phys_addr_t phys)
+					    phys_addr_t phys, bool already_decrypted)
 {
-	if (force_dma_unencrypted(dev))
+	if (already_decrypted || force_dma_unencrypted(dev))
 		return phys_to_dma_unencrypted(dev, phys);
 	return phys_to_dma(dev, phys);
 }
@@ -67,7 +72,7 @@ static inline struct page *dma_direct_to_page(struct device *dev,
 u64 dma_direct_get_required_mask(struct device *dev)
 {
 	phys_addr_t phys = (phys_addr_t)(max_pfn - 1) << PAGE_SHIFT;
-	u64 max_dma = phys_to_dma_direct(dev, phys);
+	u64 max_dma = phys_to_dma_direct(dev, phys, false);
 
 	return (1ULL << (fls64(max_dma) - 1)) * 2 - 1;
 }
@@ -96,7 +101,7 @@ static gfp_t dma_direct_optimal_gfp_mask(struct device *dev, u64 *phys_limit)
 
 bool dma_coherent_ok(struct device *dev, phys_addr_t phys, size_t size)
 {
-	dma_addr_t dma_addr = phys_to_dma_direct(dev, phys);
+	dma_addr_t dma_addr = phys_to_dma_direct(dev, phys, false);
 
 	if (dma_addr == DMA_MAPPING_ERROR)
 		return false;
@@ -122,11 +127,14 @@ static int dma_set_encrypted(struct device *dev, void *vaddr, size_t size)
 static void __dma_direct_free_pages(struct device *dev, struct page *page,
 				    size_t size, bool encrypt)
 {
-	if (encrypt && dma_set_encrypted(dev, page_address(page), size))
+	bool keep_encrypted = swiotlb_is_decrypted(dev, page, size);
+
+	if (!keep_encrypted && encrypt && dma_set_encrypted(dev, page_address(page), size))
 		return;
 
 	if (swiotlb_free(dev, page, size))
 		return;
+
 	dma_free_contiguous(dev, page, size);
 }
 
@@ -205,7 +213,7 @@ static void *dma_direct_alloc_from_pool(struct device *dev, size_t size,
 	page = dma_alloc_from_pool(dev, size, &ret, gfp, dma_coherent_ok);
 	if (!page)
 		return NULL;
-	*dma_handle = phys_to_dma_direct(dev, page_to_phys(page));
+	*dma_handle = phys_to_dma_direct(dev, page_to_phys(page), false);
 	return ret;
 }
 
@@ -225,7 +233,8 @@ static void *dma_direct_alloc_no_mapping(struct device *dev, size_t size,
 		arch_dma_prep_coherent(page, size);
 
 	/* return the page pointer as the opaque cookie */
-	*dma_handle = phys_to_dma_direct(dev, page_to_phys(page));
+	*dma_handle = phys_to_dma_direct(dev, page_to_phys(page),
+					 is_dma_page_decrypted(dma_page));
 	return page;
 }
 
@@ -234,6 +243,7 @@ void *dma_direct_alloc(struct device *dev, size_t size,
 {
 	bool remap = false, set_uncached = false, decrypt = force_dma_unencrypted(dev);
 	struct dma_page dma_page;
+	bool already_decrypted;
 	struct page *page;
 	void *ret;
 
@@ -289,6 +299,7 @@ void *dma_direct_alloc(struct device *dev, size_t size,
 	if (!page)
 		return NULL;
 
+	already_decrypted = is_dma_page_decrypted(dma_page);
 	/*
 	 * dma_alloc_contiguous can return highmem pages depending on a
 	 * combination the cma= arguments and per-arch setup.  These need to be
@@ -299,12 +310,13 @@ void *dma_direct_alloc(struct device *dev, size_t size,
 		set_uncached = false;
 	}
 
-	if (decrypt && dma_set_decrypted(dev, page_address(page), size))
+	if (!already_decrypted && decrypt &&
+	    dma_set_decrypted(dev, page_address(page), size))
 		goto out_leak_pages;
 	if (remap) {
 		pgprot_t prot = dma_pgprot(dev, PAGE_KERNEL, attrs);
 
-		if (decrypt)
+		if (decrypt || already_decrypted)
 			prot = pgprot_decrypted(prot);
 
 		/* remove any dirty cache lines on the kernel alias */
@@ -328,11 +340,11 @@ void *dma_direct_alloc(struct device *dev, size_t size,
 			goto out_encrypt_pages;
 	}
 
-	*dma_handle = phys_to_dma_direct(dev, page_to_phys(page));
+	*dma_handle = phys_to_dma_direct(dev, page_to_phys(page), already_decrypted);
 	return ret;
 
 out_encrypt_pages:
-	__dma_direct_free_pages(dev, page, size, decrypt);
+	__dma_direct_free_pages(dev, page, size, decrypt && !already_decrypted);
 	return NULL;
 out_leak_pages:
 	return NULL;
@@ -385,6 +397,7 @@ struct page *dma_direct_alloc_pages(struct device *dev, size_t size,
 		dma_addr_t *dma_handle, enum dma_data_direction dir, gfp_t gfp)
 {
 	struct dma_page dma_page;
+	bool already_decrypted;
 	struct page *page;
 	void *ret;
 
@@ -396,11 +409,13 @@ struct page *dma_direct_alloc_pages(struct device *dev, size_t size,
 	if (!page)
 		return NULL;
 
+	already_decrypted = is_dma_page_decrypted(dma_page);
 	ret = page_address(page);
-	if (force_dma_unencrypted(dev) && dma_set_decrypted(dev, ret, size))
+	if (!already_decrypted && force_dma_unencrypted(dev) &&
+	    dma_set_decrypted(dev, ret, size))
 		goto out_leak_pages;
 	memset(ret, 0, size);
-	*dma_handle = phys_to_dma_direct(dev, page_to_phys(page));
+	*dma_handle = phys_to_dma_direct(dev, page_to_phys(page), already_decrypted);
 	return page;
 out_leak_pages:
 	return NULL;
