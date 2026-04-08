@@ -61,6 +61,7 @@ my $def_configuration_dirs = ".:$ENV{HOME}:.scripts";
 my $env_config_dir = 'CHECKPATCH_CONFIG_DIR';
 my $max_line_length = 100;
 my $ignore_perl_version = 0;
+my $ignore_old_toolchain = 0;
 my $minimum_perl_version = 5.10.0;
 my $min_conf_desc_length = 4;
 my $spelling_file = "$D/spelling.txt";
@@ -137,6 +138,9 @@ Options:
                              file.  It's your fault if there's no backup or git
   --ignore-perl-version      override checking of perl version.  expect
                              runtime errors.
+  --ignore-old-toolchain     don't force C++ comments (/* */) for SPDX license
+                             (required by old toolchains). NOTE: it should *not*
+                             be used for Linux mainline.
   --codespell                Use the codespell dictionary for spelling/typos
                              (default:$codespellfile)
   --codespellfile            Use this codespell dictionary
@@ -346,6 +350,7 @@ GetOptions(
 	'fix!'		=> \$fix,
 	'fix-inplace!'	=> \$fix_inplace,
 	'ignore-perl-version!' => \$ignore_perl_version,
+	'ignore-old-toolchain!' => \$ignore_old_toolchain,
 	'debug=s'	=> \%debug,
 	'test-only=s'	=> \$tst_only,
 	'codespell!'	=> \$codespell,
@@ -3802,7 +3807,7 @@ sub process {
 			} elsif ($rawline =~ /^\+/) {
 				my $comment = "";
 				if ($realfile =~ /\.(h|s|S)$/) {
-					$comment = '/*';
+					$comment = $ignore_old_toolchain ? '//' : '/*';
 				} elsif ($realfile =~ /\.(c|rs|dts|dtsi)$/) {
 					$comment = '//';
 				} elsif (($checklicenseline == 2) || $realfile =~ /\.(sh|pl|py|awk|tc|yaml)$/) {
