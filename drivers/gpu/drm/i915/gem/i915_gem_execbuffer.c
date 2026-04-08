@@ -896,10 +896,8 @@ static struct i915_vma *eb_lookup_vma(struct i915_execbuffer *eb, u32 handle)
 
 		rcu_read_lock();
 		vma = radix_tree_lookup(&eb->gem_context->handles_vma, handle);
-		if (likely(vma && vma->vm == vm))
+		if (likely(vma))
 			vma = i915_vma_tryget(vma);
-		else
-			vma = NULL;
 		rcu_read_unlock();
 		if (likely(vma))
 			return vma;
@@ -1529,7 +1527,7 @@ static int eb_relocate_vma(struct i915_execbuffer *eb, struct eb_vma *ev)
 	 */
 	if (unlikely(!access_ok(urelocs, remain * sizeof(*urelocs))))
 		return -EFAULT;
-
+	i915_gem_object_get(ev->vma->obj);
 	do {
 		struct drm_i915_gem_relocation_entry *r = stack;
 		unsigned int count =
@@ -1590,6 +1588,7 @@ static int eb_relocate_vma(struct i915_execbuffer *eb, struct eb_vma *ev)
 		urelocs += ARRAY_SIZE(stack);
 	} while (remain);
 out:
+	i915_gem_object_put(ev->vma->obj);
 	reloc_cache_reset(&eb->reloc_cache, eb);
 	return remain;
 }
