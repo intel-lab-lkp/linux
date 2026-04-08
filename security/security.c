@@ -4989,12 +4989,18 @@ int security_xfrm_decode_session(struct sk_buff *skb, u32 *secid)
 	return call_int_hook(xfrm_decode_session, skb, secid, 1);
 }
 
-void security_skb_classify_flow(struct sk_buff *skb, struct flowi_common *flic)
+/**
+ * security_skb_classify_flow() - Set the flow's secid from the security label
+ * @skb: packet
+ * @flic: flow common structure to set
+ *
+ * Decode the packet in @skb and set the flow's secid in @flic.
+ *
+ * Return: Return 0 if successful.
+ */
+int security_skb_classify_flow(struct sk_buff *skb, struct flowi_common *flic)
 {
-	int rc = call_int_hook(xfrm_decode_session, skb, &flic->flowic_secid,
-			       0);
-
-	BUG_ON(rc);
+	return call_int_hook(xfrm_decode_session, skb, &flic->flowic_secid, 0);
 }
 EXPORT_SYMBOL(security_skb_classify_flow);
 #endif	/* CONFIG_SECURITY_NETWORK_XFRM */

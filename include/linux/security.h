@@ -1974,7 +1974,7 @@ int security_xfrm_state_pol_flow_match(struct xfrm_state *x,
 				       struct xfrm_policy *xp,
 				       const struct flowi_common *flic);
 int security_xfrm_decode_session(struct sk_buff *skb, u32 *secid);
-void security_skb_classify_flow(struct sk_buff *skb, struct flowi_common *flic);
+int security_skb_classify_flow(struct sk_buff *skb, struct flowi_common *flic);
 
 #else	/* CONFIG_SECURITY_NETWORK_XFRM */
 
@@ -2037,9 +2037,10 @@ static inline int security_xfrm_decode_session(struct sk_buff *skb, u32 *secid)
 	return 0;
 }
 
-static inline void security_skb_classify_flow(struct sk_buff *skb,
-					      struct flowi_common *flic)
+static inline int security_skb_classify_flow(struct sk_buff *skb,
+					     struct flowi_common *flic)
 {
+	return 0;
 }
 
 #endif	/* CONFIG_SECURITY_NETWORK_XFRM */
