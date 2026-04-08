@@ -424,6 +424,7 @@ static int ks8851_probe_spi(struct spi_device *spi)
 	ks->wrfifo = ks8851_wrfifo_spi;
 	ks->start_xmit = ks8851_start_xmit_spi;
 	ks->flush_tx_work = ks8851_flush_tx_work_spi;
+	ks->no_bh_in_irq_handler = false;
 
 #define STD_IRQ (IRQ_LCI |	/* Link Change */	\
 		 IRQ_TXI |	/* TX done */		\

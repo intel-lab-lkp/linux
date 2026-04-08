@@ -394,6 +394,8 @@ struct ks8851_net {
 	u16			rc_rxqcr;
 	u16			rc_ccr;
 
+	bool			no_bh_in_irq_handler;
+
 	struct mii_if_info	mii;
 	struct ks8851_rxctrl	rxctrl;
 

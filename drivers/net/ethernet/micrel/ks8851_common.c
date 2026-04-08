@@ -386,6 +386,24 @@ static irqreturn_t ks8851_irq(int irq, void *_ks)
 }
 
 /**
+ * ks8851_irq_nobh - IRQ handler with BH disabled
+ * @irq: IRQ number
+ * @_ks: cookie
+ *
+ * Wrapper which calls ks8851_irq() with BH disabled.
+ */
+static irqreturn_t ks8851_irq_nobh(int irq, void *_ks)
+{
+	irqreturn_t ret;
+
+	local_bh_disable();
+	ret = ks8851_irq(irq, _ks);
+	local_bh_enable();
+
+	return ret;
+}
+
+/**
  * ks8851_flush_tx_work - flush outstanding TX work
  * @ks: The device state
  */
@@ -408,7 +426,9 @@ static int ks8851_net_open(struct net_device *dev)
 	unsigned long flags;
 	int ret;
 
-	ret = request_threaded_irq(dev->irq, NULL, ks8851_irq,
+	ret = request_threaded_irq(dev->irq, NULL,
+				   ks->no_bh_in_irq_handler ?
+				   ks8851_irq_nobh : ks8851_irq,
 				   IRQF_TRIGGER_LOW | IRQF_ONESHOT,
 				   dev->name, ks);
 	if (ret < 0) {
