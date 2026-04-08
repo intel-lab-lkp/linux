@@ -1166,43 +1166,55 @@ static int nfs_set_super(struct super_block *s, struct fs_context *fc)
 static int nfs_compare_super_address(struct nfs_server *server1,
 				     struct nfs_server *server2)
 {
+	struct rpc_xprt *xprt1, *xprt2;
 	struct sockaddr *sap1, *sap2;
-	struct rpc_xprt *xprt1 = server1->client->cl_xprt;
-	struct rpc_xprt *xprt2 = server2->client->cl_xprt;
+	int ret = 0;
+
+	rcu_read_lock();
+
+	xprt1 = rcu_dereference(server1->client->cl_xprt);
+	xprt2 = rcu_dereference(server2->client->cl_xprt);
+
+	if (!xprt1 || !xprt2)
+		goto out;
 
 	if (!net_eq(xprt1->xprt_net, xprt2->xprt_net))
-		return 0;
+		goto out;
 
 	sap1 = (struct sockaddr *)&server1->nfs_client->cl_addr;
 	sap2 = (struct sockaddr *)&server2->nfs_client->cl_addr;
 
 	if (sap1->sa_family != sap2->sa_family)
-		return 0;
+		goto out;
 
 	switch (sap1->sa_family) {
 	case AF_INET: {
 		struct sockaddr_in *sin1 = (struct sockaddr_in *)sap1;
 		struct sockaddr_in *sin2 = (struct sockaddr_in *)sap2;
 		if (sin1->sin_addr.s_addr != sin2->sin_addr.s_addr)
-			return 0;
+			goto out;
 		if (sin1->sin_port != sin2->sin_port)
-			return 0;
+			goto out;
 		break;
 	}
 	case AF_INET6: {
 		struct sockaddr_in6 *sin1 = (struct sockaddr_in6 *)sap1;
 		struct sockaddr_in6 *sin2 = (struct sockaddr_in6 *)sap2;
 		if (!ipv6_addr_equal(&sin1->sin6_addr, &sin2->sin6_addr))
-			return 0;
+			goto out;
 		if (sin1->sin6_port != sin2->sin6_port)
-			return 0;
+			goto out;
 		break;
 	}
 	default:
-		return 0;
+		goto out;
 	}
 
-	return 1;
+	ret = 1;
+
+out:
+	rcu_read_unlock();
+	return ret;
 }
 
 static int nfs_compare_userns(const struct nfs_server *old,
