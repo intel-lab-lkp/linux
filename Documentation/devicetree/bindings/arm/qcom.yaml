@@ -1101,6 +1101,15 @@ properties:
 
       - items:
           - enum:
+              - ayntec,odin2
+              - ayntec,odin2mini
+              - ayntec,odin2portal
+              - ayntec,thor
+          - const: qcom,qcs8550
+          - const: qcom,sm8550
+
+      - items:
+          - enum:
               - ayaneo,pocket-s2
               - qcom,sm8650-hdk
               - qcom,sm8650-mtp
