@@ -531,7 +531,10 @@ static void stmmac_get_ethtool_stats(struct net_device *dev,
 		}
 	}
 
-	/* Update the DMA HW counters for dwmac10/100 */
+	/* Update the DMA HW counters for dwmac10/100 (DWMAC_CORE_MAC100),
+	 * where this will return zero. Other core types will have a non-zero
+	 * return value.
+	 */
 	ret = stmmac_dma_diagnostic_fr(priv, &priv->xstats, priv->ioaddr);
 	if (ret) {
 		/* If supported, for new GMAC chips expose the MMC counters */
@@ -553,7 +556,13 @@ static void stmmac_get_ethtool_stats(struct net_device *dev,
 				priv->xstats.phy_eee_wakeup_error_n = val;
 		}
 
-		if (priv->snpsver >= DWMAC_CORE_3_50)
+		/* Only dwmac1000 and dwmac4 implements the MAC .debug() method.
+		 * As there are different version spaces depending on core_type,
+		 * make this conditional on the appropriate core type.
+		 */
+		if ((priv->plat->core_type == DWMAC_CORE_GMAC ||
+		     priv->plat->core_type == DWMAC_CORE_GMAC4) &&
+		    priv->snpsver >= DWMAC_CORE_3_50)
 			stmmac_mac_debug(priv, priv->ioaddr,
 					(void *)&priv->xstats,
 					rx_queues_count, tx_queues_count);
