@@ -1,0 +1,28 @@
+// SPDX-License-Identifier: GPL-2.0
+//
+// Verify that TCP_WINDOW_CLAMP can be set to a high value on a LISTEN socket, but,
+// in an established connection, the value is clamped to the maximum representable
+// advertised window.
+--mss=1000
+
+`./defaults.sh`
+
+// Initialize connection
+    0 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+   +0 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+   +0 setsockopt(3, SOL_SOCKET, SO_RCVBUF, [256000], 4) = 0
+   +0 setsockopt(3, IPPROTO_TCP, 10, [255999], 4) = 0  // TCP_WINDOW_CLAMP == 10
+   +0 getsockopt(3, IPPROTO_TCP, 10, [255999], [4]) = 0
+   +0 bind(3, ..., ...) = 0
+   +0 listen(3, 1) = 0
+
+   +0 < S 0:0(0) win 32792
+   +0 > S. 0:0(0) ack 1 win 65535 <mss 1460>
+   +0 < . 1:1(0) ack 1 win 32792
+
+   +0 accept(3, ..., ...) = 4
+
+   +0 getsockopt(4, IPPROTO_TCP, 10, [65535], [4]) = 0
+   +0 setsockopt(4, IPPROTO_TCP, 10, [255999], 4) = 0
+   +0 getsockopt(4, IPPROTO_TCP, 10, [65535], [4]) = 0
+   +0 getsockopt(3, IPPROTO_TCP, 10, [255999], [4]) = 0
