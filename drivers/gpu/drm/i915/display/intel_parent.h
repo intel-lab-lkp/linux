@@ -113,9 +113,10 @@ void intel_parent_stolen_node_free(struct intel_display *display, const struct i
 int intel_parent_vma_fence_id(struct intel_display *display, const struct i915_vma *vma);
 
 /* generic */
+void intel_parent_fence_priority_display(struct intel_display *display, struct dma_fence *fence);
+unsigned long intel_parent_fence_timeout(struct intel_display *display);
 bool intel_parent_has_auxccs(struct intel_display *display);
 bool intel_parent_has_fenced_regions(struct intel_display *display);
 bool intel_parent_vgpu_active(struct intel_display *display);
-void intel_parent_fence_priority_display(struct intel_display *display, struct dma_fence *fence);
 
 #endif /* __INTEL_PARENT_H__ */

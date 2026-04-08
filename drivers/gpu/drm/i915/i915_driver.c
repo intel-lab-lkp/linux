@@ -91,6 +91,7 @@
 #include "pxp/intel_pxp_pm.h"
 
 #include "i915_bo.h"
+#include "i915_config.h"
 #include "i915_debugfs.h"
 #include "i915_display_pc8.h"
 #include "i915_dpt.h"
@@ -783,6 +784,7 @@ static const struct intel_display_parent_interface parent = {
 	.vma = &i915_display_vma_interface,
 
 	.fence_priority_display = fence_priority_display,
+	.fence_timeout = i915_fence_timeout,
 	.has_auxccs = has_auxccs,
 	.has_fenced_regions = has_fenced_regions,
 	.vgpu_active = vgpu_active,

@@ -243,6 +243,9 @@ struct intel_display_parent_interface {
 		/** @fence_priority_display: Set display priority. Optional. */
 		void (*fence_priority_display)(struct dma_fence *fence);
 
+		/** @fence_timeout: Fence timeout. Optional. */
+		unsigned long (*fence_timeout)(void);
+
 		/** @has_auxccs: Are AuxCCS formats supported by the parent. Optional. */
 		bool (*has_auxccs)(struct drm_device *drm);
 

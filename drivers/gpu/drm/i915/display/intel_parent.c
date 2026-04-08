@@ -354,6 +354,12 @@ void intel_parent_fence_priority_display(struct intel_display *display, struct d
 		display->parent->fence_priority_display(fence);
 }
 
+unsigned long intel_parent_fence_timeout(struct intel_display *display)
+{
+	return display->parent->fence_timeout ? display->parent->fence_timeout() :
+		MAX_SCHEDULE_TIMEOUT;
+}
+
 bool intel_parent_has_auxccs(struct intel_display *display)
 {
 	return display->parent->has_auxccs && display->parent->has_auxccs(display->drm);
