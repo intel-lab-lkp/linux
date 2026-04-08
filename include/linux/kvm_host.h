@@ -1382,29 +1382,6 @@ void mark_page_dirty_in_slot(struct kvm *kvm, const struct kvm_memory_slot *mems
 void mark_page_dirty(struct kvm *kvm, gfn_t gfn);
 void kvm_vcpu_mark_page_dirty(struct kvm_vcpu *vcpu, gfn_t gfn);
 
-int __kvm_vcpu_map(struct kvm_vcpu *vcpu, gfn_t gfn, struct kvm_host_map *map,
-		   bool writable);
-void kvm_vcpu_unmap(struct kvm_vcpu *vcpu, struct kvm_host_map *map);
-
-static inline int kvm_vcpu_map(struct kvm_vcpu *vcpu, gfn_t gfn,
-			       struct kvm_host_map *map)
-{
-	return __kvm_vcpu_map(vcpu, gfn, map, true);
-}
-
-static inline int kvm_vcpu_map_readonly(struct kvm_vcpu *vcpu, gfn_t gfn,
-					struct kvm_host_map *map)
-{
-	return __kvm_vcpu_map(vcpu, gfn, map, false);
-}
-
-static inline void kvm_vcpu_map_mark_dirty(struct kvm_vcpu *vcpu,
-					   struct kvm_host_map *map)
-{
-	if (kvm_vcpu_mapped(map))
-		kvm_vcpu_mark_page_dirty(vcpu, map->gfn);
-}
-
 unsigned long kvm_vcpu_gfn_to_hva(struct kvm_vcpu *vcpu, gfn_t gfn);
 unsigned long kvm_vcpu_gfn_to_hva_prot(struct kvm_vcpu *vcpu, gfn_t gfn, bool *writable);
 int kvm_vcpu_read_guest_page(struct kvm_vcpu *vcpu, gfn_t gfn, void *data, int offset,
@@ -1914,6 +1891,29 @@ static inline gfn_t gpa_to_gfn(gpa_t gpa)
 static inline hpa_t pfn_to_hpa(kvm_pfn_t pfn)
 {
 	return (hpa_t)pfn << PAGE_SHIFT;
+}
+
+int __kvm_vcpu_map(struct kvm_vcpu *vcpu, gfn_t gfn, struct kvm_host_map *map,
+		   bool writable);
+void kvm_vcpu_unmap(struct kvm_vcpu *vcpu, struct kvm_host_map *map);
+
+static inline int kvm_vcpu_map(struct kvm_vcpu *vcpu, gfn_t gfn,
+			       struct kvm_host_map *map)
+{
+	return __kvm_vcpu_map(vcpu, gfn, map, true);
+}
+
+static inline int kvm_vcpu_map_readonly(struct kvm_vcpu *vcpu, gfn_t gfn,
+					struct kvm_host_map *map)
+{
+	return __kvm_vcpu_map(vcpu, gfn, map, false);
+}
+
+static inline void kvm_vcpu_map_mark_dirty(struct kvm_vcpu *vcpu,
+					   struct kvm_host_map *map)
+{
+	if (kvm_vcpu_mapped(map))
+		kvm_vcpu_mark_page_dirty(vcpu, map->gfn);
 }
 
 static inline bool kvm_is_gpa_in_memslot(struct kvm *kvm, gpa_t gpa)
