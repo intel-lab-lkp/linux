@@ -785,18 +785,20 @@ static int __init papr_hvpipe_init(void)
 	if (ret)
 		goto out_wq;
 
-	ret = set_hvpipe_sys_param(1);
-	if (ret)
-		goto out_wq;
-
 	ret = misc_register(&papr_hvpipe_dev);
 	if (ret)
 		goto out_wq;
+
+	ret = set_hvpipe_sys_param(1);
+	if (ret)
+		goto out_misc;
 
 	pr_info("hvpipe feature is enabled\n");
 	hvpipe_feature = true;
 	return 0;
 
+out_misc:
+	misc_deregister(&papr_hvpipe_dev);
 out_wq:
 	destroy_workqueue(papr_hvpipe_wq);
 out:
