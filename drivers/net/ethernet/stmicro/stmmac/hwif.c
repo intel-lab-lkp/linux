@@ -42,12 +42,11 @@ static void stmmac_get_version(struct stmmac_priv *priv,
 		return;
 	}
 
-	dev_info(priv->device, "User ID: 0x%x, Synopsys ID: 0x%x\n",
-		 FIELD_GET(DWMAC_USERVER, version),
-		 FIELD_GET(DWMAC_SNPSVER, version));
-
 	ver->snpsver = FIELD_GET(DWMAC_SNPSVER, version);
 	ver->userver = FIELD_GET(DWMAC_USERVER, version);
+
+	dev_info(priv->device, "User ID: 0x%x, Synopsys ID: 0x%x\n",
+		 ver->userver, ver->snpsver);
 }
 
 static void stmmac_dwmac_mode_quirk(struct stmmac_priv *priv)
