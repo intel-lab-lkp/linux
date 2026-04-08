@@ -7465,9 +7465,14 @@ static int __init scx_init(void)
 		return ret;
 	}
 
-	if (!alloc_cpumask_var(&scx_bypass_lb_donee_cpumask, GFP_KERNEL) ||
-	    !alloc_cpumask_var(&scx_bypass_lb_resched_cpumask, GFP_KERNEL)) {
-		pr_err("sched_ext: Failed to allocate cpumasks\n");
+	if (!alloc_cpumask_var(&scx_bypass_lb_donee_cpumask, GFP_KERNEL)) {
+		pr_err("sched_ext: Failed to allocate donee cpumask\n");
+		return -ENOMEM;
+	}
+
+	if (!alloc_cpumask_var(&scx_bypass_lb_resched_cpumask, GFP_KERNEL)) {
+		pr_err("sched_ext: Failed to allocate resched cpumask\n");
+		free_cpumask_var(scx_bypass_lb_donee_cpumask);
 		return -ENOMEM;
 	}
 
