@@ -327,6 +327,30 @@ static void test_attach_api_fails(void)
 	if (!ASSERT_EQ(saved_error, -E2BIG, "fail_6_error"))
 		goto cleanup;
 
+	/* fail_7 - non-existent wildcard pattern (slow path) */
+	LIBBPF_OPTS_RESET(opts);
+
+	link = bpf_program__attach_kprobe_multi_opts(skel->progs.test_kprobe_manual,
+						     "__nonexistent_func_xyz_*",
+						     &opts);
+	saved_error = -errno;
+	if (!ASSERT_ERR_PTR(link, "fail_7"))
+		goto cleanup;
+
+	if (!ASSERT_EQ(saved_error, -ENOENT, "fail_7_error"))
+		goto cleanup;
+
+	/* fail_8 - non-existent exact name (fast path), same error as wildcard */
+	link = bpf_program__attach_kprobe_multi_opts(skel->progs.test_kprobe_manual,
+						     "__nonexistent_func_xyz_123",
+						     &opts);
+	saved_error = -errno;
+	if (!ASSERT_ERR_PTR(link, "fail_8"))
+		goto cleanup;
+
+	if (!ASSERT_EQ(saved_error, -ENOENT, "fail_8_error"))
+		goto cleanup;
+
 cleanup:
 	bpf_link__destroy(link);
 	kprobe_multi__destroy(skel);
@@ -355,8 +379,13 @@ static void test_session_skel_api(void)
 	ASSERT_OK(err, "test_run");
 	ASSERT_EQ(topts.retval, 0, "test_run");
 
-	/* bpf_fentry_test1-4 trigger return probe, result is 2 */
-	for (i = 0; i < 4; i++)
+	/*
+	 * bpf_fentry_test1 is hit by both the wildcard probe and the exact
+	 * name probe (test_kprobe_syms), so entry + return fires twice: 4.
+	 * bpf_fentry_test2-4 are hit only by the wildcard probe: 2.
+	 */
+	ASSERT_EQ(skel->bss->kprobe_session_result[0], 4, "kprobe_session_result");
+	for (i = 1; i < 4; i++)
 		ASSERT_EQ(skel->bss->kprobe_session_result[i], 2, "kprobe_session_result");
 
 	/* bpf_fentry_test5-8 trigger only entry probe, result is 1 */
@@ -604,6 +633,44 @@ static void test_attach_write_ctx(void)
 }
 #endif
 
+/*
+ * Test kprobe_multi handles shadow symbols (vmlinux + module duplicate).
+ * bpf_fentry_shadow_test exists in both vmlinux and bpf_testmod.
+ * kprobe_multi resolves via ftrace_lookup_symbols() which finds the
+ * vmlinux symbol first and stops, so this should always succeed.
+ */
+static void test_attach_probe_dup_sym(void)
+{
+	LIBBPF_OPTS(bpf_kprobe_multi_opts, opts);
+	const char *syms[1] = { "bpf_fentry_shadow_test" };
+	struct kprobe_multi *skel = NULL;
+	struct bpf_link *link1 = NULL, *link2 = NULL;
+
+	skel = kprobe_multi__open_and_load();
+	if (!ASSERT_OK_PTR(skel, "kprobe_multi__open_and_load"))
+		goto cleanup;
+
+	skel->bss->pid = getpid();
+	opts.syms = syms;
+	opts.cnt = ARRAY_SIZE(syms);
+
+	link1 = bpf_program__attach_kprobe_multi_opts(skel->progs.test_kprobe_manual,
+						      NULL, &opts);
+	if (!ASSERT_OK_PTR(link1, "attach_kprobe_multi_dup_sym"))
+		goto cleanup;
+
+	opts.retprobe = true;
+	link2 = bpf_program__attach_kprobe_multi_opts(skel->progs.test_kretprobe_manual,
+						      NULL, &opts);
+	if (!ASSERT_OK_PTR(link2, "attach_kretprobe_multi_dup_sym"))
+		goto cleanup;
+
+cleanup:
+	bpf_link__destroy(link2);
+	bpf_link__destroy(link1);
+	kprobe_multi__destroy(skel);
+}
+
 void serial_test_kprobe_multi_bench_attach(void)
 {
 	if (test__start_subtest("kernel"))
@@ -647,5 +714,7 @@ void test_kprobe_multi_test(void)
 		test_unique_match();
 	if (test__start_subtest("attach_write_ctx"))
 		test_attach_write_ctx();
+	if (test__start_subtest("dup_sym"))
+		test_attach_probe_dup_sym();
 	RUN_TESTS(kprobe_multi_verifier);
 }
