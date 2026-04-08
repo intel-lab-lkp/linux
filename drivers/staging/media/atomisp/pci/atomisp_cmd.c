@@ -15,6 +15,7 @@
 #include <linux/kfifo.h>
 #include <linux/pm_runtime.h>
 #include <linux/timer.h>
+#include <linux/uio.h>
 
 #include <asm/iosf_mbi.h>
 
@@ -1676,7 +1677,8 @@ int atomisp_3a_stat(struct atomisp_sub_device *asd, int flag,
 {
 	struct atomisp_device *isp = asd->isp;
 	struct atomisp_s3a_buf *s3a_buf;
-	unsigned long ret;
+	struct iov_iter iter;
+	int ret;
 
 	if (flag != 0)
 		return -EINVAL;
@@ -1709,13 +1711,12 @@ int atomisp_3a_stat(struct atomisp_sub_device *asd, int flag,
 	config->exp_id = s3a_buf->s3a_data->exp_id;
 	config->isp_config_id = s3a_buf->s3a_data->isp_config_id;
 
-	ret = copy_to_user(config->data, asd->params.s3a_user_stat->data,
-			   asd->params.s3a_output_bytes);
-	if (ret) {
-		dev_err(isp->dev, "copy to user failed: copied %lu bytes\n",
-			ret);
+	ret = import_ubuf(ITER_DEST, (void __user *)config->data, asd->params.s3a_output_bytes, &iter);
+	if (ret)
+		return ret;
+
+	if (copy_to_iter(asd->params.s3a_user_stat->data, asd->params.s3a_output_bytes, &iter) != asd->params.s3a_output_bytes)
 		return -EFAULT;
-	}
 
 	/* Move to free buffer list */
 	list_del_init(&s3a_buf->list);
