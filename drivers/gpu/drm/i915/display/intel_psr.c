@@ -608,6 +608,10 @@ static void _panel_replay_init_dpcd(struct intel_dp *intel_dp, struct intel_conn
 	if (ret < 0)
 		return;
 
+	drm_dbg_kms(display->drm, "Panel Replay DPCD: %*ph\n",
+		    DP_PANEL_REPLAY_CAP_SIZE,
+		    connector->dp.panel_replay_caps.dpcd);
+
 	if (!(connector->dp.panel_replay_caps.dpcd[INTEL_PR_DPCD_INDEX(DP_PANEL_REPLAY_CAP_SUPPORT)] &
 	      DP_PANEL_REPLAY_SUPPORT))
 		return;
@@ -655,6 +659,9 @@ static void _psr_init_dpcd(struct intel_dp *intel_dp, struct intel_connector *co
 				    sizeof(connector->dp.psr_caps.dpcd));
 	if (ret < 0)
 		return;
+
+	drm_dbg_kms(display->drm, "PSR DPCD: %*ph\n", EDP_PSR_RECEIVER_CAP_SIZE,
+		    connector->dp.psr_caps.dpcd);
 
 	if (!connector->dp.psr_caps.dpcd[INTEL_PSR_DPCD_INDEX(DP_PSR_SUPPORT)])
 		return;
