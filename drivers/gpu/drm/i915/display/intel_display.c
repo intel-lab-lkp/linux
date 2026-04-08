@@ -7169,7 +7169,7 @@ static void intel_atomic_commit_fence_wait(struct intel_atomic_state *intel_stat
 			continue;
 
 		ret = dma_fence_wait_any_timeout(fences, reset_fence ? 2 : 1, false,
-						 i915_fence_timeout(), NULL);
+						 MAX_SCHEDULE_TIMEOUT, NULL);
 		if (ret <= 0)
 			break;
 
