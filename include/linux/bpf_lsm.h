@@ -48,6 +48,8 @@ void bpf_lsm_find_cgroup_shim(const struct bpf_prog *prog, bpf_func_t *bpf_func)
 
 int bpf_lsm_get_retval_range(const struct bpf_prog *prog,
 			     struct bpf_retval_range *range);
+void bpf_security_get_retval_range(const struct bpf_prog *prog,
+				   struct bpf_retval_range *range);
 int bpf_set_dentry_xattr_locked(struct dentry *dentry, const char *name__str,
 				const struct bpf_dynptr *value_p, int flags);
 int bpf_remove_dentry_xattr_locked(struct dentry *dentry, const char *name__str);
@@ -91,6 +93,12 @@ static inline int bpf_lsm_get_retval_range(const struct bpf_prog *prog,
 {
 	return -EOPNOTSUPP;
 }
+
+static inline void bpf_security_get_retval_range(const struct bpf_prog *prog,
+						 struct bpf_retval_range *range)
+{
+}
+
 static inline int bpf_set_dentry_xattr_locked(struct dentry *dentry, const char *name__str,
 					      const struct bpf_dynptr *value_p, int flags)
 {

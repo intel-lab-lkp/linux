@@ -16776,8 +16776,10 @@ static bool return_retval_range(struct bpf_verifier_env *env, struct bpf_retval_
 			*range = retval_range(0, 0);
 			break;
 		case BPF_TRACE_RAW_TP:
-		case BPF_MODIFY_RETURN:
 			return false;
+		case BPF_MODIFY_RETURN:
+			bpf_security_get_retval_range(env->prog, range);
+			break;
 		case BPF_TRACE_ITER:
 		default:
 			break;

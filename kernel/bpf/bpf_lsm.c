@@ -448,3 +448,29 @@ int bpf_lsm_get_retval_range(const struct bpf_prog *prog,
 	}
 	return 0;
 }
+
+/* hooks return 0 or 1 */
+BTF_SET_START(bool_security_hooks)
+#ifdef CONFIG_SECURITY_NETWORK_XFRM
+BTF_ID(func, security_xfrm_state_pol_flow_match)
+#endif
+#ifdef CONFIG_AUDIT
+BTF_ID(func, security_audit_rule_known)
+#endif
+BTF_ID(func, security_inode_xattr_skipcap)
+BTF_SET_END(bool_security_hooks)
+
+/* Similar to bpf_lsm_get_retval_range,
+ * ensure that the return values of fmod_ret are valid.
+ */
+void bpf_security_get_retval_range(const struct bpf_prog *prog,
+				   struct bpf_retval_range *retval_range)
+{
+	if (btf_id_set_contains(&bool_security_hooks, prog->aux->attach_btf_id)) {
+		retval_range->minval = 0;
+		retval_range->maxval = 1;
+	} else {
+		retval_range->minval = -MAX_ERRNO;
+		retval_range->maxval = 0;
+	}
+}
