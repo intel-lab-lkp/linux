@@ -496,47 +496,31 @@ static u8 intel_dp_get_sink_sync_latency(struct intel_dp *intel_dp)
 	return val;
 }
 
-static void _psr_compute_su_granularity(struct intel_dp *intel_dp,
-					struct intel_connector *connector)
+static void _psr_compute_su_granularity(struct intel_connector *connector)
 {
-	struct intel_display *display = to_intel_display(intel_dp);
-	ssize_t r;
-	__le16 w;
+	u16 w;
 	u8 y;
 
 	/*
 	 * If sink don't have specific granularity requirements set legacy
 	 * ones.
 	 */
-	if (!(connector->dp.psr_caps.dpcd[1] & DP_PSR2_SU_GRANULARITY_REQUIRED)) {
+	if (!(connector->dp.psr_caps.dpcd[INTEL_PSR_DPCD_INDEX(DP_PSR_CAPS)] & DP_PSR2_SU_GRANULARITY_REQUIRED)) {
 		/* As PSR2 HW sends full lines, we do not care about x granularity */
-		w = cpu_to_le16(4);
+		w = 4;
 		y = 4;
 		goto exit;
 	}
 
-	r = drm_dp_dpcd_read(&intel_dp->aux, DP_PSR2_SU_X_GRANULARITY, &w, sizeof(w));
-	if (r != sizeof(w))
-		drm_dbg_kms(display->drm,
-			    "Unable to read selective update x granularity\n");
 	/*
 	 * Spec says that if the value read is 0 the default granularity should
 	 * be used instead.
 	 */
-	if (r != sizeof(w) || w == 0)
-		w = cpu_to_le16(4);
-
-	r = drm_dp_dpcd_read(&intel_dp->aux, DP_PSR2_SU_Y_GRANULARITY, &y, 1);
-	if (r != 1) {
-		drm_dbg_kms(display->drm,
-			    "Unable to read selective update y granularity\n");
-		y = 4;
-	}
-	if (y == 0)
-		y = 1;
+	w = le16_to_cpu(*(__le16 *)&connector->dp.psr_caps.dpcd[INTEL_PSR_DPCD_INDEX(DP_PSR2_SU_X_GRANULARITY)]) ? : 4;
+	y = connector->dp.psr_caps.dpcd[INTEL_PSR_DPCD_INDEX(DP_PSR2_SU_Y_GRANULARITY)] ? : 1;
 
 exit:
-	connector->dp.psr_caps.su_w_granularity = le16_to_cpu(w);
+	connector->dp.psr_caps.su_w_granularity = w;
 	connector->dp.psr_caps.su_y_granularity = y;
 }
 
@@ -672,11 +656,11 @@ static void _psr_init_dpcd(struct intel_dp *intel_dp, struct intel_connector *co
 	if (ret < 0)
 		return;
 
-	if (!connector->dp.psr_caps.dpcd[0])
+	if (!connector->dp.psr_caps.dpcd[INTEL_PSR_DPCD_INDEX(DP_PSR_SUPPORT)])
 		return;
 
 	drm_dbg_kms(display->drm, "eDP panel supports PSR version %x\n",
-		    connector->dp.psr_caps.dpcd[0]);
+		    connector->dp.psr_caps.dpcd[INTEL_PSR_DPCD_INDEX(DP_PSR_SUPPORT)]);
 
 	if (drm_dp_has_quirk(&intel_dp->desc, DP_DPCD_QUIRK_NO_PSR)) {
 		drm_dbg_kms(display->drm,
@@ -696,8 +680,8 @@ static void _psr_init_dpcd(struct intel_dp *intel_dp, struct intel_connector *co
 	connector->dp.psr_caps.sync_latency = intel_dp_get_sink_sync_latency(intel_dp);
 
 	if (DISPLAY_VER(display) >= 9 &&
-	    connector->dp.psr_caps.dpcd[0] >= DP_PSR2_WITH_Y_COORD_IS_SUPPORTED) {
-		bool y_req = connector->dp.psr_caps.dpcd[1] &
+	    connector->dp.psr_caps.dpcd[INTEL_PSR_DPCD_INDEX(DP_PSR_SUPPORT)] >= DP_PSR2_WITH_Y_COORD_IS_SUPPORTED) {
+		bool y_req = connector->dp.psr_caps.dpcd[INTEL_PSR_DPCD_INDEX(DP_PSR_CAPS)] &
 			     DP_PSR2_SU_Y_COORDINATE_REQUIRED;
 
 		/*
@@ -718,7 +702,7 @@ static void _psr_init_dpcd(struct intel_dp *intel_dp, struct intel_connector *co
 	}
 
 	if (connector->dp.psr_caps.su_support)
-		_psr_compute_su_granularity(intel_dp, connector);
+		_psr_compute_su_granularity(connector);
 }
 
 void intel_psr_init_dpcd(struct intel_dp *intel_dp, struct intel_connector *connector)
@@ -777,7 +761,7 @@ static bool psr2_su_region_et_valid(struct intel_connector *connector, bool pane
 	return panel_replay ?
 		connector->dp.panel_replay_caps.dpcd[INTEL_PR_DPCD_INDEX(DP_PANEL_REPLAY_CAP_SUPPORT)] &
 		DP_PANEL_REPLAY_EARLY_TRANSPORT_SUPPORT :
-		connector->dp.psr_caps.dpcd[0] == DP_PSR2_WITH_Y_COORD_ET_SUPPORTED;
+		connector->dp.psr_caps.dpcd[INTEL_PSR_DPCD_INDEX(DP_PSR_SUPPORT)] == DP_PSR2_WITH_Y_COORD_ET_SUPPORTED;
 }
 
 static void _panel_replay_enable_sink(struct intel_dp *intel_dp,
@@ -1415,7 +1399,7 @@ static int intel_psr_entry_setup_frames(struct intel_dp *intel_dp,
 	if (psr_setup_time < 0) {
 		drm_dbg_kms(display->drm,
 			    "PSR condition failed: Invalid PSR setup time (0x%02x)\n",
-			    connector->dp.psr_caps.dpcd[1]);
+			    connector->dp.psr_caps.dpcd[INTEL_PSR_DPCD_INDEX(DP_PSR_CAPS)]);
 		return -ETIME;
 	}
 
@@ -4222,8 +4206,8 @@ static void intel_psr_sink_capability(struct intel_connector *connector,
 		   str_yes_no(connector->dp.psr_caps.support));
 
 	if (connector->dp.psr_caps.support)
-		seq_printf(m, " [0x%02x]", connector->dp.psr_caps.dpcd[0]);
-	if (connector->dp.psr_caps.dpcd[0] == DP_PSR2_WITH_Y_COORD_ET_SUPPORTED)
+		seq_printf(m, " [0x%02x]", connector->dp.psr_caps.dpcd[INTEL_PSR_DPCD_INDEX(DP_PSR_SUPPORT)]);
+	if (connector->dp.psr_caps.dpcd[INTEL_PSR_DPCD_INDEX(DP_PSR_SUPPORT)] == DP_PSR2_WITH_Y_COORD_ET_SUPPORTED)
 		seq_printf(m, " (Early Transport)");
 	seq_printf(m, ", Panel Replay = %s", str_yes_no(connector->dp.panel_replay_caps.support));
 	seq_printf(m, ", Panel Replay Selective Update = %s",
