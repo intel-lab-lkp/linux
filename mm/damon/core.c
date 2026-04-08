@@ -16,6 +16,7 @@
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/string_choices.h>
+#include <linux/freezer.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/damon.h>
@@ -2753,6 +2754,7 @@ static int kdamond_fn(void *data)
 
 	complete(&ctx->kdamond_started);
 	kdamond_init_ctx(ctx);
+	set_freezable();
 
 	if (ctx->ops.init)
 		ctx->ops.init(ctx);
@@ -2773,6 +2775,8 @@ static int kdamond_fn(void *data)
 		unsigned long next_aggregation_sis = ctx->next_aggregation_sis;
 		unsigned long next_ops_update_sis = ctx->next_ops_update_sis;
 		unsigned long sample_interval = ctx->attrs.sample_interval;
+
+		try_to_freeze();
 
 		if (kdamond_wait_activation(ctx))
 			break;
