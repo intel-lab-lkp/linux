@@ -39,6 +39,7 @@ struct eventfd_ctx {
 	 * also, adds to the "count" counter and issue a wakeup.
 	 */
 	__u64 count;
+	__u64 maximum;
 	unsigned int flags;
 	int id;
 };
@@ -49,9 +50,9 @@ struct eventfd_ctx {
  * @mask: [in] poll mask
  *
  * This function is supposed to be called by the kernel in paths that do not
- * allow sleeping. In this function we allow the counter to reach the ULLONG_MAX
- * value, and we signal this as overflow condition by returning a EPOLLERR
- * to poll(2).
+ * allow sleeping. In this function we allow the counter to reach the maximum
+ * value (ctx->maximum), and we signal this as overflow condition by returning
+ * a EPOLLERR to poll(2).
  */
 void eventfd_signal_mask(struct eventfd_ctx *ctx, __poll_t mask)
 {
@@ -70,7 +71,7 @@ void eventfd_signal_mask(struct eventfd_ctx *ctx, __poll_t mask)
 
 	spin_lock_irqsave(&ctx->wqh.lock, flags);
 	current->in_eventfd = 1;
-	if (ctx->count < ULLONG_MAX)
+	if (ctx->count < ctx->maximum)
 		ctx->count++;
 	if (waitqueue_active(&ctx->wqh))
 		wake_up_locked_poll(&ctx->wqh, EPOLLIN | mask);
@@ -119,7 +120,7 @@ static __poll_t eventfd_poll(struct file *file, poll_table *wait)
 {
 	struct eventfd_ctx *ctx = file->private_data;
 	__poll_t events = 0;
-	u64 count;
+	u64 count, max;
 
 	poll_wait(file, &ctx->wqh, wait);
 
@@ -162,12 +163,13 @@ static __poll_t eventfd_poll(struct file *file, poll_table *wait)
 	 *     eventfd_poll returns 0
 	 */
 	count = READ_ONCE(ctx->count);
+	max = READ_ONCE(ctx->maximum);
 
 	if (count > 0)
 		events |= EPOLLIN;
-	if (count == ULLONG_MAX)
+	if (count == max)
 		events |= EPOLLERR;
-	if (ULLONG_MAX - 1 > count)
+	if (max - 1 > count)
 		events |= EPOLLOUT;
 
 	return events;
@@ -244,6 +246,11 @@ static ssize_t eventfd_read(struct kiocb *iocb, struct iov_iter *to)
 	return sizeof(ucnt);
 }
 
+static inline bool eventfd_is_writable(struct eventfd_ctx *ctx, __u64 cnt)
+{
+	return ctx->maximum > ctx->count && ctx->maximum - ctx->count > cnt;
+}
+
 static ssize_t eventfd_write(struct file *file, const char __user *buf, size_t count,
 			     loff_t *ppos)
 {
@@ -259,11 +266,11 @@ static ssize_t eventfd_write(struct file *file, const char __user *buf, size_t c
 		return -EINVAL;
 	spin_lock_irq(&ctx->wqh.lock);
 	res = -EAGAIN;
-	if (ULLONG_MAX - ctx->count > ucnt)
+	if (eventfd_is_writable(ctx, ucnt))
 		res = sizeof(ucnt);
 	else if (!(file->f_flags & O_NONBLOCK)) {
 		res = wait_event_interruptible_locked_irq(ctx->wqh,
-				ULLONG_MAX - ctx->count > ucnt);
+				eventfd_is_writable(ctx, ucnt));
 		if (!res)
 			res = sizeof(ucnt);
 	}
@@ -283,21 +290,61 @@ static ssize_t eventfd_write(struct file *file, const char __user *buf, size_t c
 static void eventfd_show_fdinfo(struct seq_file *m, struct file *f)
 {
 	struct eventfd_ctx *ctx = f->private_data;
-	__u64 cnt;
+	__u64 cnt, max;
 
 	spin_lock_irq(&ctx->wqh.lock);
 	cnt = ctx->count;
+	max = ctx->maximum;
 	spin_unlock_irq(&ctx->wqh.lock);
 
 	seq_printf(m,
 		   "eventfd-count: %16llx\n"
 		   "eventfd-id: %d\n"
-		   "eventfd-semaphore: %d\n",
+		   "eventfd-semaphore: %d\n"
+		   "eventfd-maximum: %16llx\n",
 		   cnt,
 		   ctx->id,
-		   !!(ctx->flags & EFD_SEMAPHORE));
+		   !!(ctx->flags & EFD_SEMAPHORE),
+		   max);
 }
 #endif
+
+static long eventfd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+	struct eventfd_ctx *ctx = file->private_data;
+	void __user *argp = (void __user *)arg;
+	__u64 max;
+	int ret;
+
+	switch (cmd) {
+	case EFD_IOC_SET_MAXIMUM:
+		if (copy_from_user(&max, argp, sizeof(max)))
+			return -EFAULT;
+
+		spin_lock_irq(&ctx->wqh.lock);
+		if (ctx->count >= max) {
+			ret = -EINVAL;
+		} else {
+			ctx->maximum = max;
+			ret = 0;
+			/* wake blocked writers that may now fit within the new maximum */
+			if (waitqueue_active(&ctx->wqh))
+				wake_up_locked_poll(&ctx->wqh, EPOLLOUT);
+		}
+		spin_unlock_irq(&ctx->wqh.lock);
+		return ret;
+
+	case EFD_IOC_GET_MAXIMUM:
+		spin_lock_irq(&ctx->wqh.lock);
+		max = ctx->maximum;
+		spin_unlock_irq(&ctx->wqh.lock);
+
+		return copy_to_user(argp, &max, sizeof(max)) ? -EFAULT : 0;
+
+	default:
+		return -ENOTTY;
+	}
+}
 
 static const struct file_operations eventfd_fops = {
 #ifdef CONFIG_PROC_FS
@@ -307,6 +354,8 @@ static const struct file_operations eventfd_fops = {
 	.poll		= eventfd_poll,
 	.read_iter	= eventfd_read,
 	.write		= eventfd_write,
+	.unlocked_ioctl	= eventfd_ioctl,
+	.compat_ioctl	= compat_ptr_ioctl,
 	.llseek		= noop_llseek,
 };
 
@@ -395,6 +444,7 @@ static int do_eventfd(unsigned int count, int flags)
 	kref_init(&ctx->kref);
 	init_waitqueue_head(&ctx->wqh);
 	ctx->count = count;
+	ctx->maximum = ULLONG_MAX;
 	ctx->flags = flags;
 
 	flags &= EFD_SHARED_FCNTL_FLAGS;
