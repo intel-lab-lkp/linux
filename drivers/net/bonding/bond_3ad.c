@@ -700,7 +700,8 @@ static void __update_ntt(struct lacpdu *lacpdu, struct port *port)
 }
 
 /**
- * __agg_ports_are_ready - check if all ports in an aggregator are ready
+ * __agg_ports_are_ready - check if all ports in an aggregator that are in
+ * the WAITING state are ready
  * @aggregator: the aggregator we're looking at
  *
  */
@@ -716,6 +717,8 @@ static int __agg_ports_are_ready(struct aggregator *aggregator)
 		for (port = aggregator->lag_ports;
 		     port;
 		     port = port->next_port_in_aggregator) {
+			if (port->sm_mux_state != AD_MUX_WAITING)
+				continue;
 			if (!(port->sm_vars & AD_PORT_READY_N)) {
 				retval = 0;
 				break;
