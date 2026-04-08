@@ -1297,9 +1297,12 @@ static u32 glk_plane_color_ctl(const struct intel_plane_state *plane_state)
 			plane_color_ctl |= PLANE_COLOR_YUV_RANGE_CORRECTION_DISABLE;
 	}
 
-	if (!icl_is_hdr_plane(display, plane->id))
+	if (!icl_is_hdr_plane(display, plane->id)) {
 		plane_color_ctl |= intel_csc_ff_type_to_csc_mode(plane_state->hw.csc_ff_type,
 								 plane_state->hw.csc_ff_enable);
+		plane_color_ctl |= plane_state->hw.yuv_range_correct ? 0 :
+					PLANE_COLOR_YUV_RANGE_CORRECTION_DISABLE;
+	}
 
 	if (plane_state->force_black)
 		plane_color_ctl |= PLANE_COLOR_PLANE_CSC_ENABLE;
