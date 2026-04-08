@@ -17,6 +17,33 @@
 #include "direct.h"
 
 /*
+ * Represent DMA allocation and 1 bit flag for it's state
+ */
+struct dma_page {
+	unsigned long val;
+};
+
+#define DMA_PAGE_DECRYPTED_FLAG		BIT(0)
+
+#define DMA_PAGE_NULL ((struct dma_page){ .val = 0 })
+
+static inline struct dma_page page_to_dma_page(struct page *page, bool decrypted)
+{
+	struct dma_page dma_page;
+
+	dma_page.val = (unsigned long)page;
+	if (decrypted)
+		dma_page.val |= DMA_PAGE_DECRYPTED_FLAG;
+
+	return dma_page;
+}
+
+static inline struct page *dma_page_to_page(struct dma_page dma_page)
+{
+	return (struct page *)(dma_page.val & ~DMA_PAGE_DECRYPTED_FLAG);
+}
+
+/*
  * Most architectures use ZONE_DMA for the first 16 Megabytes, but some use
  * it for entirely different regions. In that case the arch code needs to
  * override the variable below for dma-direct to work properly.
@@ -103,20 +130,21 @@ static void __dma_direct_free_pages(struct device *dev, struct page *page,
 	dma_free_contiguous(dev, page, size);
 }
 
-static struct page *dma_direct_alloc_swiotlb(struct device *dev, size_t size)
+static struct dma_page dma_direct_alloc_swiotlb(struct device *dev, size_t size)
 {
-	struct page *page = swiotlb_alloc(dev, size, NULL);
+	enum swiotlb_page_state state;
+	struct page *page = swiotlb_alloc(dev, size, &state);
 
 	if (page && !dma_coherent_ok(dev, page_to_phys(page), size)) {
 		swiotlb_free(dev, page, size);
-		return NULL;
+		return DMA_PAGE_NULL;
 	}
 
-	return page;
+	return page_to_dma_page(page, state == SWIOTLB_PAGE_DECRYPTED);
 }
 
-static struct page *__dma_direct_alloc_pages(struct device *dev, size_t size,
-		gfp_t gfp, bool allow_highmem)
+static struct dma_page __dma_direct_alloc_pages(struct device *dev, size_t size,
+						gfp_t gfp, bool allow_highmem)
 {
 	int node = dev_to_node(dev);
 	struct page *page;
@@ -132,7 +160,7 @@ static struct page *__dma_direct_alloc_pages(struct device *dev, size_t size,
 	if (page) {
 		if (dma_coherent_ok(dev, page_to_phys(page), size) &&
 		    (allow_highmem || !PageHighMem(page)))
-			return page;
+			return page_to_dma_page(page, false);
 
 		dma_free_contiguous(dev, page, size);
 	}
@@ -148,10 +176,10 @@ static struct page *__dma_direct_alloc_pages(struct device *dev, size_t size,
 		else if (IS_ENABLED(CONFIG_ZONE_DMA) && !(gfp & GFP_DMA))
 			gfp = (gfp & ~GFP_DMA32) | GFP_DMA;
 		else
-			return NULL;
+			return DMA_PAGE_NULL;
 	}
 
-	return page;
+	return page_to_dma_page(page, false);
 }
 
 /*
@@ -184,9 +212,11 @@ static void *dma_direct_alloc_from_pool(struct device *dev, size_t size,
 static void *dma_direct_alloc_no_mapping(struct device *dev, size_t size,
 		dma_addr_t *dma_handle, gfp_t gfp)
 {
+	struct dma_page dma_page;
 	struct page *page;
 
-	page = __dma_direct_alloc_pages(dev, size, gfp & ~__GFP_ZERO, true);
+	dma_page = __dma_direct_alloc_pages(dev, size, gfp & ~__GFP_ZERO, true);
+	page = dma_page_to_page(dma_page);
 	if (!page)
 		return NULL;
 
@@ -203,6 +233,7 @@ void *dma_direct_alloc(struct device *dev, size_t size,
 		dma_addr_t *dma_handle, gfp_t gfp, unsigned long attrs)
 {
 	bool remap = false, set_uncached = false, decrypt = force_dma_unencrypted(dev);
+	struct dma_page dma_page;
 	struct page *page;
 	void *ret;
 
@@ -253,7 +284,8 @@ void *dma_direct_alloc(struct device *dev, size_t size,
 	 * we always manually zero the memory once we are done, and only allow
 	 * high mem if pages doesn't need decryption.
 	 */
-	page = __dma_direct_alloc_pages(dev, size, gfp & ~__GFP_ZERO, !decrypt);
+	dma_page = __dma_direct_alloc_pages(dev, size, gfp & ~__GFP_ZERO, !decrypt);
+	page = dma_page_to_page(dma_page);
 	if (!page)
 		return NULL;
 
@@ -352,13 +384,15 @@ void dma_direct_free(struct device *dev, size_t size,
 struct page *dma_direct_alloc_pages(struct device *dev, size_t size,
 		dma_addr_t *dma_handle, enum dma_data_direction dir, gfp_t gfp)
 {
+	struct dma_page dma_page;
 	struct page *page;
 	void *ret;
 
 	if (force_dma_unencrypted(dev) && dma_direct_use_pool(dev, gfp))
 		return dma_direct_alloc_from_pool(dev, size, dma_handle, gfp);
 
-	page = __dma_direct_alloc_pages(dev, size, gfp, false);
+	dma_page = __dma_direct_alloc_pages(dev, size, gfp, false);
+	page = dma_page_to_page(dma_page);
 	if (!page)
 		return NULL;
 
