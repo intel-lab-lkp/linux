@@ -269,8 +269,9 @@ void tcp_select_initial_window(const struct sock *sk, int __space, __u32 mss,
 				      0, TCP_MAX_WSCALE);
 	}
 	/* Set the clamp no higher than max representable value */
-	WRITE_ONCE(*__window_clamp,
-		   min_t(__u32, U16_MAX << (*rcv_wscale), window_clamp));
+	window_clamp = min_t(u32, U16_MAX << (*rcv_wscale), window_clamp);
+	WRITE_ONCE(*__window_clamp, window_clamp);
+	*rcv_wnd = min(*rcv_wnd, window_clamp);
 }
 
 /* Chose a new window to advertise, update state in tcp_sock for the

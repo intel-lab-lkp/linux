@@ -600,9 +600,7 @@ struct sock *tcp_create_openreq_child(const struct sock *sk,
 	newtp->rx_opt.tstamp_ok = ireq->tstamp_ok;
 	newtp->rx_opt.sack_ok = ireq->sack_ok;
 	newtp->window_clamp = req->rsk_window_clamp;
-	newtp->rcv_ssthresh = req->rsk_rcv_wnd;
 	newtp->rcv_wnd = req->rsk_rcv_wnd;
-	newtp->rcv_mwnd_seq = newtp->rcv_wup + req->rsk_rcv_wnd;
 	newtp->rx_opt.wscale_ok = ireq->wscale_ok;
 	if (newtp->rx_opt.wscale_ok) {
 		newtp->rx_opt.snd_wscale = ireq->snd_wscale;
@@ -610,7 +608,13 @@ struct sock *tcp_create_openreq_child(const struct sock *sk,
 	} else {
 		newtp->rx_opt.snd_wscale = newtp->rx_opt.rcv_wscale = 0;
 		newtp->window_clamp = min(newtp->window_clamp, 65535U);
+		/* As the window in the SYN/ACK was not scaled,
+		 * we did not advertise more than 65535.
+		 */
+		newtp->rcv_wnd = min(newtp->rcv_wnd, 65535U);
 	}
+	newtp->rcv_ssthresh = newtp->rcv_wnd;
+	newtp->rcv_mwnd_seq = newtp->rcv_wup + newtp->rcv_wnd;
 	newtp->snd_wnd = ntohs(tcp_hdr(skb)->window) << newtp->rx_opt.snd_wscale;
 	newtp->max_window = newtp->snd_wnd;
 

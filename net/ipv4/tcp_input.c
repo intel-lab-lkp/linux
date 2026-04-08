@@ -6898,7 +6898,6 @@ consume:
 		 */
 		WRITE_ONCE(tp->rcv_nxt, TCP_SKB_CB(skb)->seq + 1);
 		tp->rcv_wup = TCP_SKB_CB(skb)->seq + 1;
-		tp->rcv_mwnd_seq = tp->rcv_wup + tp->rcv_wnd;
 
 		/* RFC1323: The window in SYN & SYN/ACK segments is
 		 * never scaled.
@@ -6909,7 +6908,13 @@ consume:
 			tp->rx_opt.snd_wscale = tp->rx_opt.rcv_wscale = 0;
 			WRITE_ONCE(tp->window_clamp,
 				   min(tp->window_clamp, 65535U));
+			tp->rcv_ssthresh = min(tp->rcv_ssthresh, 65535U);
+			/* As the window in the SYN was not scaled,
+			 * we did not advertise more than 65535.
+			 */
+			tp->rcv_wnd = min(tp->rcv_wnd, 65535U);
 		}
+		tp->rcv_mwnd_seq = tp->rcv_wup + tp->rcv_wnd;
 
 		if (tp->rx_opt.saw_tstamp) {
 			tp->rx_opt.tstamp_ok	   = 1;
