@@ -584,6 +584,7 @@ struct intel_connector {
 
 		struct {
 			u8 dpcd[EDP_PSR_RECEIVER_CAP_SIZE];
+#define INTEL_PSR_DPCD_INDEX(psr_dpcd_register)	((psr_dpcd_register) - DP_PSR_SUPPORT)
 
 			bool support;
 			bool su_support;
