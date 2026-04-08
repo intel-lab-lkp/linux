@@ -918,19 +918,34 @@ struct iwl_rss_config_cmd {
 #define IWL_MULTI_QUEUE_SYNC_SENDER_MSK 0xf
 
 /**
- * struct iwl_rxq_sync_cmd - RXQ notification trigger
+ * struct iwl_rxq_sync_cmd_hdr - RXQ notification trigger header
  *
  * @flags: flags of the notification. bit 0:3 are the sender queue
  * @rxq_mask: rx queues to send the notification on
  * @count: number of bytes in payload, should be DWORD aligned
- * @payload: data to send to rx queues
  */
-struct iwl_rxq_sync_cmd {
+struct iwl_rxq_sync_cmd_hdr {
 	__le32 flags;
 	__le32 rxq_mask;
 	__le32 count;
+} __packed;
+
+/**
+ * struct iwl_rxq_sync_cmd - RXQ notification trigger
+ *
+ * (NOTE: New members MUST NOT be added directly to this struct. Add them to
+ * struct iwl_rxq_sync_cmd_hdr instead.)
+ *
+ * @iwl_rxq_sync_cmd_hdr: anonymous embedded header - members are directly
+ *			  accessible
+ * @payload: data to send to rx queues
+ */
+struct iwl_rxq_sync_cmd {
+	struct iwl_rxq_sync_cmd_hdr;
 	u8 payload[];
 } __packed; /* MULTI_QUEUE_DRV_SYNC_HDR_CMD_API_S_VER_1 */
+static_assert(offsetof(struct iwl_rxq_sync_cmd, payload) == sizeof(struct iwl_rxq_sync_cmd_hdr),
+	      "New members must be added to struct iwl_rxq_sync_cmd_hdr instead.");
 
 /**
  * struct iwl_rxq_sync_notification - Notification triggered by RXQ

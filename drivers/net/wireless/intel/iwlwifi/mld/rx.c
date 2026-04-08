@@ -2172,7 +2172,7 @@ void iwl_mld_sync_rx_queues(struct iwl_mld *mld,
 {
 	u8 num_rx_queues = mld->trans->info.num_rxqs;
 	struct {
-		struct iwl_rxq_sync_cmd sync_cmd;
+		struct iwl_rxq_sync_cmd_hdr sync_cmd;
 		struct iwl_mld_internal_rxq_notif notif;
 	} __packed cmd = {
 		.sync_cmd.rxq_mask = cpu_to_le32(BIT(num_rx_queues) - 1),
