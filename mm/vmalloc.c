@@ -3537,6 +3537,8 @@ static int vmap_contig_pages_range(unsigned long addr, unsigned long end,
 		pgprot_t prot, struct page **pages)
 {
 	unsigned int count = (end - addr) >> PAGE_SHIFT;
+	unsigned int prev_shift = 0, idx = 0;
+	unsigned long map_addr = addr;
 	int err;
 
 	err = kmsan_vmap_pages_range_noflush(addr, end, prot, pages,
@@ -3548,14 +3550,28 @@ static int vmap_contig_pages_range(unsigned long addr, unsigned long end,
 		unsigned int shift = PAGE_SHIFT +
 			get_vmap_batch_order(pages, count - i, i);
 
-		err = vmap_range_noflush(addr, addr + (1UL << shift),
-				page_to_phys(pages[i]), prot, shift);
-		if (err)
-			goto out;
+		if (!i)
+			prev_shift = shift;
+
+		if (shift != prev_shift) {
+			err = vmap_small_pages_range_noflush(map_addr, addr,
+					prot, pages + idx,
+					min(prev_shift, PMD_SHIFT));
+			if (err)
+				goto out;
+			prev_shift = shift;
+			map_addr = addr;
+			idx = i;
+		}
 
 		addr += 1UL << shift;
 		i += 1U << (shift - PAGE_SHIFT);
 	}
+
+	/* Remaining */
+	if (map_addr < end)
+		err = vmap_small_pages_range_noflush(map_addr, end,
+				prot, pages + idx, min(prev_shift, PMD_SHIFT));
 
 out:
 	flush_cache_vmap(addr, end);
