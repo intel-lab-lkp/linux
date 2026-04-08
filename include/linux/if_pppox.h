@@ -38,7 +38,6 @@ struct pptp_opt {
 #include <net/sock.h>
 
 struct pppox_sock {
-	/* struct sock must be the first member of pppox_sock */
 	struct sock sk;
 	struct ppp_channel chan;
 	struct pppox_sock __rcu	*next;	  /* for hash table */
@@ -54,7 +53,7 @@ struct pppox_sock {
 
 static inline struct pppox_sock *pppox_sk(struct sock *sk)
 {
-	return (struct pppox_sock *)sk;
+	return container_of(sk, struct pppox_sock, sk);
 }
 
 struct module;
