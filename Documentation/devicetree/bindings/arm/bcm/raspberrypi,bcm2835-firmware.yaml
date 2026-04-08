@@ -137,6 +137,20 @@ required:
   - compatible
   - mboxes
 
+patternProperties:
+  "^otp-(customer|private)$":
+    type: object
+    additionalProperties: false
+
+    properties:
+      compatible:
+        enum:
+          - raspberrypi,firmware-otp-customer
+          - raspberrypi,firmware-otp-private
+
+    required:
+      - compatible
+
 additionalProperties: false
 
 examples:
@@ -154,6 +168,10 @@ examples:
             compatible = "raspberrypi,firmware-gpio";
             gpio-controller;
             #gpio-cells = <2>;
+        };
+
+        otp: otp-private {
+            compatible = "raspberrypi,firmware-otp-private";
         };
 
         reset: reset {
