@@ -1,10 +1,8 @@
 config DRM_ZYNQMP_DPSUB
 	tristate "ZynqMP DisplayPort Controller Driver"
-	depends on ARCH_ZYNQMP || COMPILE_TEST
+	depends on (ARCH_ZYNQMP && PHY_XILINX_ZYNQMP && XILINX_ZYNQMP_DPDMA) || COMPILE_TEST
 	depends on COMMON_CLK && DRM && OF
 	depends on DMADEVICES
-	depends on PHY_XILINX_ZYNQMP
-	depends on XILINX_ZYNQMP_DPDMA
 	select DMA_ENGINE
 	select DRM_CLIENT_SELECTION
 	select DRM_DISPLAY_DP_HELPER
