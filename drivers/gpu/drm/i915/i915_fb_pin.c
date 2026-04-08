@@ -29,7 +29,6 @@ intel_fb_pin_to_dpt(const struct drm_framebuffer *fb,
 		    unsigned long *out_flags,
 		    struct intel_dpt *dpt)
 {
-	struct intel_display *display = to_intel_display(fb->dev);
 	struct drm_i915_private *i915 = to_i915(fb->dev);
 	struct drm_gem_object *_obj = intel_fb_bo(fb);
 	struct drm_i915_gem_object *obj = to_intel_bo(_obj);
@@ -48,7 +47,7 @@ intel_fb_pin_to_dpt(const struct drm_framebuffer *fb,
 	if (WARN_ON(!i915_gem_object_is_framebuffer(obj)))
 		return ERR_PTR(-EINVAL);
 
-	atomic_inc(&display->restore.pending_fb_pin);
+	atomic_inc(&i915->pending_fb_pin);
 
 	for_i915_gem_ww(&ww, ret, true) {
 		ret = i915_gem_object_lock(obj, &ww);
@@ -103,7 +102,7 @@ intel_fb_pin_to_dpt(const struct drm_framebuffer *fb,
 
 	i915_vma_get(vma);
 err:
-	atomic_dec(&display->restore.pending_fb_pin);
+	atomic_dec(&i915->pending_fb_pin);
 
 	return vma;
 }
@@ -142,7 +141,7 @@ intel_fb_pin_to_ggtt(const struct drm_framebuffer *fb,
 	 */
 	wakeref = intel_runtime_pm_get(&i915->runtime_pm);
 
-	atomic_inc(&display->restore.pending_fb_pin);
+	atomic_inc(&i915->pending_fb_pin);
 
 	/*
 	 * Valleyview is definitely limited to scanning out the first
@@ -218,7 +217,7 @@ err:
 	if (ret)
 		vma = ERR_PTR(ret);
 
-	atomic_dec(&display->restore.pending_fb_pin);
+	atomic_dec(&i915->pending_fb_pin);
 	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
 	return vma;
 }
