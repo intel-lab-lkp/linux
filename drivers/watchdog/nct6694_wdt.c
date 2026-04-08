@@ -5,7 +5,6 @@
  * Copyright (C) 2025 Nuvoton Technology Corp.
  */
 
-#include <linux/idr.h>
 #include <linux/kernel.h>
 #include <linux/mfd/nct6694.h>
 #include <linux/module.h>
@@ -233,21 +232,12 @@ static const struct watchdog_ops nct6694_wdt_ops = {
 	.ping = nct6694_wdt_ping,
 };
 
-static void nct6694_wdt_ida_free(void *d)
-{
-	struct nct6694_wdt_data *data = d;
-	struct nct6694 *nct6694 = data->nct6694;
-
-	ida_free(&nct6694->wdt_ida, data->wdev_idx);
-}
-
 static int nct6694_wdt_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct nct6694 *nct6694 = dev_get_drvdata(dev->parent);
 	struct nct6694_wdt_data *data;
 	struct watchdog_device *wdev;
-	int ret;
 
 	data = devm_kzalloc(dev, sizeof(*data), GFP_KERNEL);
 	if (!data)
@@ -260,15 +250,7 @@ static int nct6694_wdt_probe(struct platform_device *pdev)
 
 	data->dev = dev;
 	data->nct6694 = nct6694;
-
-	ret = ida_alloc(&nct6694->wdt_ida, GFP_KERNEL);
-	if (ret < 0)
-		return ret;
-	data->wdev_idx = ret;
-
-	ret = devm_add_action_or_reset(dev, nct6694_wdt_ida_free, data);
-	if (ret)
-		return ret;
+	data->wdev_idx = pdev->id;
 
 	wdev = &data->wdev;
 	wdev->info = &nct6694_wdt_info;

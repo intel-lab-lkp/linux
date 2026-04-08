@@ -6,7 +6,6 @@
  */
 
 #include <linux/i2c.h>
-#include <linux/idr.h>
 #include <linux/kernel.h>
 #include <linux/mfd/nct6694.h>
 #include <linux/module.h>
@@ -134,14 +133,6 @@ static int nct6694_i2c_set_baudrate(struct nct6694_i2c_data *data)
 	return 0;
 }
 
-static void nct6694_i2c_ida_free(void *d)
-{
-	struct nct6694_i2c_data *data = d;
-	struct nct6694 *nct6694 = data->nct6694;
-
-	ida_free(&nct6694->i2c_ida, data->port);
-}
-
 static int nct6694_i2c_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -155,15 +146,7 @@ static int nct6694_i2c_probe(struct platform_device *pdev)
 
 	data->dev = dev;
 	data->nct6694 = nct6694;
-
-	ret = ida_alloc(&nct6694->i2c_ida, GFP_KERNEL);
-	if (ret < 0)
-		return ret;
-	data->port = ret;
-
-	ret = devm_add_action_or_reset(dev, nct6694_i2c_ida_free, data);
-	if (ret)
-		return ret;
+	data->port = pdev->id;
 
 	ret = nct6694_i2c_set_baudrate(data);
 	if (ret)

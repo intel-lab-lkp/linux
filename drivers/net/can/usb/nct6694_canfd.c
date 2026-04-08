@@ -8,7 +8,6 @@
 #include <linux/can/dev.h>
 #include <linux/can/rx-offload.h>
 #include <linux/ethtool.h>
-#include <linux/idr.h>
 #include <linux/irqdomain.h>
 #include <linux/kernel.h>
 #include <linux/mfd/nct6694.h>
@@ -725,15 +724,13 @@ static int nct6694_canfd_probe(struct platform_device *pdev)
 	struct net_device *ndev;
 	int port, irq, ret, can_clk;
 
-	port = ida_alloc(&nct6694->canfd_ida, GFP_KERNEL);
-	if (port < 0)
-		return port;
+	port = pdev->id;
 
 	irq = irq_create_mapping(nct6694->domain,
 				 NCT6694_IRQ_CAN0 + port);
 	if (!irq) {
 		ret = -EINVAL;
-		goto free_ida;
+		return ret;
 	}
 
 	ndev = alloc_candev(sizeof(struct nct6694_canfd_priv), 1);
@@ -796,24 +793,19 @@ free_candev:
 	free_candev(ndev);
 dispose_irq:
 	irq_dispose_mapping(irq);
-free_ida:
-	ida_free(&nct6694->canfd_ida, port);
 	return ret;
 }
 
 static void nct6694_canfd_remove(struct platform_device *pdev)
 {
 	struct nct6694_canfd_priv *priv = platform_get_drvdata(pdev);
-	struct nct6694 *nct6694 = priv->nct6694;
 	struct net_device *ndev = priv->ndev;
-	int port = ndev->dev_port;
 	int irq = ndev->irq;
 
 	unregister_candev(ndev);
 	can_rx_offload_del(&priv->offload);
 	free_candev(ndev);
 	irq_dispose_mapping(irq);
-	ida_free(&nct6694->canfd_ida, port);
 }
 
 static struct platform_driver nct6694_canfd_driver = {
