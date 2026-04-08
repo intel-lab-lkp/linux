@@ -106,7 +106,7 @@ static void __dma_direct_free_pages(struct device *dev, struct page *page,
 
 static struct page *dma_direct_alloc_swiotlb(struct device *dev, size_t size)
 {
-	struct page *page = swiotlb_alloc(dev, size);
+	struct page *page = swiotlb_alloc(dev, size, NULL);
 
 	if (page && !dma_coherent_ok(dev, page_to_phys(page), size)) {
 		swiotlb_free(dev, page, size);

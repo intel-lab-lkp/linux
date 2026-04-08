@@ -63,6 +63,7 @@ extern void __init swiotlb_update_mem_attributes(void);
  * @area_nslabs: Number of slots in each area.
  * @areas:	Array of memory area descriptors.
  * @slots:	Array of slot descriptors.
+ * @decrypted:	Whether the pool was decrypted or left in default state.
  * @node:	Member of the IO TLB memory pool list.
  * @rcu:	RCU head for swiotlb_dyn_free().
  * @transient:  %true if transient memory pool.
@@ -77,6 +78,7 @@ struct io_tlb_pool {
 	unsigned int area_nslabs;
 	struct io_tlb_area *areas;
 	struct io_tlb_slot *slots;
+	bool decrypted;
 #ifdef CONFIG_SWIOTLB_DYNAMIC
 	struct list_head node;
 	struct rcu_head rcu;
@@ -281,21 +283,40 @@ static inline void swiotlb_sync_single_for_cpu(struct device *dev,
 
 extern void swiotlb_print_info(void);
 
+/*
+ * This contains the state of pages returned by swiotlb_alloc()
+ * A page can either be:
+ * SWIOTLB_PAGE_DEFAULT: The page was not decrypted by the pool.
+ * SWIOTLB_PAGE_DECRYPTED: The page was decrypted by the pool.
+ */
+enum swiotlb_page_state {
+	SWIOTLB_PAGE_DEFAULT,
+	SWIOTLB_PAGE_DECRYPTED,
+};
+
 #ifdef CONFIG_DMA_RESTRICTED_POOL
-struct page *swiotlb_alloc(struct device *dev, size_t size);
+struct page *swiotlb_alloc(struct device *dev, size_t size,
+			   enum swiotlb_page_state *state);
 bool swiotlb_free(struct device *dev, struct page *page, size_t size);
+
+bool swiotlb_is_decrypted(struct device *dev, struct page *page, size_t size);
 
 static inline bool is_swiotlb_for_alloc(struct device *dev)
 {
 	return dev->dma_io_tlb_mem->for_alloc;
 }
 #else
-static inline struct page *swiotlb_alloc(struct device *dev, size_t size)
+static inline struct page *swiotlb_alloc(struct device *dev, size_t size,
+					 enum swiotlb_page_state *state)
 {
 	return NULL;
 }
 static inline bool swiotlb_free(struct device *dev, struct page *page,
 				size_t size)
+{
+	return false;
+}
+static inline bool swiotlb_is_decrypted(struct device *dev, struct page *page, size_t size)
 {
 	return false;
 }

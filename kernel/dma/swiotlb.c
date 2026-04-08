@@ -1746,7 +1746,8 @@ static inline void swiotlb_create_debugfs_files(struct io_tlb_mem *mem,
 
 #ifdef CONFIG_DMA_RESTRICTED_POOL
 
-struct page *swiotlb_alloc(struct device *dev, size_t size)
+struct page *swiotlb_alloc(struct device *dev, size_t size,
+			   enum swiotlb_page_state *state)
 {
 	struct io_tlb_mem *mem = dev->dma_io_tlb_mem;
 	struct io_tlb_pool *pool;
@@ -1770,6 +1771,8 @@ struct page *swiotlb_alloc(struct device *dev, size_t size)
 		return NULL;
 	}
 
+	if (state)
+		*state = pool->decrypted ? SWIOTLB_PAGE_DECRYPTED : SWIOTLB_PAGE_DEFAULT;
 	return pfn_to_page(PFN_DOWN(tlb_addr));
 }
 
@@ -1785,6 +1788,18 @@ bool swiotlb_free(struct device *dev, struct page *page, size_t size)
 	swiotlb_release_slots(dev, tlb_addr, pool);
 
 	return true;
+}
+
+bool swiotlb_is_decrypted(struct device *dev, struct page *page, size_t size)
+{
+	phys_addr_t tlb_addr = page_to_phys(page);
+	struct io_tlb_pool *pool;
+
+	pool = swiotlb_find_pool(dev, tlb_addr);
+	if (!pool)
+		return false;
+
+	return pool->decrypted;
 }
 
 static int rmem_swiotlb_device_init(struct reserved_mem *rmem,
@@ -1827,6 +1842,12 @@ static int rmem_swiotlb_device_init(struct reserved_mem *rmem,
 			return -ENOMEM;
 		}
 
+		/*
+		 * At the moment all restricted dma pools are always decrypted,
+		 * although that should change soon with CCA solutions introducing
+		 * device passthrough.
+		 */
+		pool->decrypted = true;
 		set_memory_decrypted((unsigned long)phys_to_virt(rmem->base),
 				     rmem->size >> PAGE_SHIFT);
 		swiotlb_init_io_tlb_pool(pool, rmem->base, nslabs,
