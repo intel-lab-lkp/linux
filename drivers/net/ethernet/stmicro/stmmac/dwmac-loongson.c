@@ -326,7 +326,7 @@ static int loongson_dwmac_setup(void *apriv, struct mac_device_info *mac)
 	 * original value so the correct HW-interface would be selected.
 	 */
 	if (ld->multichan) {
-		priv->synopsys_id = DWMAC_CORE_3_70;
+		priv->snpsver = DWMAC_CORE_3_70;
 		*dma = dwmac1000_dma_ops;
 		dma->init_chan = loongson_dwmac_dma_init_channel;
 		dma->dma_interrupt = loongson_dwmac_dma_interrupt;

@@ -304,7 +304,7 @@ struct stmmac_priv {
 	struct dma_features dma_cap;
 	struct stmmac_counters mmc;
 	int hw_cap_support;
-	int synopsys_id;
+	u8 snpsver;
 	u32 msg_enable;
 	/* Our MAC Wake-on-Lan options */
 	int wolopts;

@@ -1069,7 +1069,7 @@ static int sun8i_dwmac_setup(void *ppriv, struct mac_device_info *mac)
 	mac->unicast_filter_entries = 8;
 
 	/* Synopsys Id is not available */
-	priv->synopsys_id = 0;
+	priv->snpsver = 0;
 
 	return 0;
 }

@@ -72,7 +72,7 @@ static int stmmac_dwmac1_quirks(struct stmmac_priv *priv)
 		dev_info(priv->device, "Enhanced/Alternate descriptors\n");
 
 		/* GMAC older than 3.50 has no extended descriptors */
-		if (priv->synopsys_id >= DWMAC_CORE_3_50) {
+		if (priv->snpsver >= DWMAC_CORE_3_50) {
 			dev_info(priv->device, "Enabled extended descriptors\n");
 			priv->extend_desc = true;
 		} else {
@@ -299,7 +299,7 @@ stmmac_hwif_find(enum dwmac_core_type core_type, u8 snpsver, u8 userver)
 
 		if (core_type != entry->core_type)
 			continue;
-		/* Use synopsys_id var because some setups can override this */
+		/* Use snpsver var because some setups can override this */
 		if (snpsver < entry->min_snpsver)
 			continue;
 		if (core_type == DWMAC_CORE_XGMAC &&
@@ -324,7 +324,7 @@ int stmmac_hwif_init(struct stmmac_priv *priv)
 	stmmac_get_version(priv, &version);
 
 	/* Save ID for later use */
-	priv->synopsys_id = version.snpsver;
+	priv->snpsver = version.snpsver;
 
 	/* Lets assume some safe values first */
 	if (core_type == DWMAC_CORE_GMAC4) {
@@ -355,8 +355,8 @@ int stmmac_hwif_init(struct stmmac_priv *priv)
 
 	/* Fallback to generic HW */
 
-	/* Use synopsys_id var because some setups can override this */
-	entry = stmmac_hwif_find(core_type, priv->synopsys_id, version.userver);
+	/* Use snpsver var because some setups can override this */
+	entry = stmmac_hwif_find(core_type, priv->snpsver, version.userver);
 	if (!entry) {
 		dev_err(priv->device,
 			"Failed to find HW IF (id=0x%x, gmac=%d/%d)\n",
