@@ -5363,6 +5363,9 @@ static int arm_smmu_device_dt_probe(struct platform_device *pdev,
 	if (of_device_is_compatible(dev->of_node, "nvidia,tegra264-smmu"))
 		tegra_cmdqv_dt_probe(dev->of_node, smmu);
 
+	if (!ret)
+		return devm_of_platform_populate(dev);
+
 	return ret;
 }
 
