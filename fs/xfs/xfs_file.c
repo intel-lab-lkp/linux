@@ -988,6 +988,39 @@ out:
 	return ret;
 }
 
+static int
+xfs_writethrough_submit(
+	struct inode		*inode,
+	struct iomap		*iomap,
+	loff_t			offset,
+	u64			count)
+{
+	int error = 0;
+	unsigned int		nofs_flag;
+
+	/*
+	 * Convert CoW extents to regular.
+	 *
+	 * We are under writethrough context with folio lock possibly held. To
+	 * avoid memory allocation deadlocks, set the task-wide nofs context.
+	 */
+	if (iomap->flags & IOMAP_F_SHARED) {
+		nofs_flag = memalloc_nofs_save();
+		error = xfs_reflink_convert_cow(XFS_I(inode), offset, count);
+		memalloc_nofs_restore(nofs_flag);
+	}
+
+	return error;
+}
+
+const struct iomap_writethrough_ops xfs_writethrough_ops = {
+	.ops			= &xfs_direct_write_iomap_ops,
+	.write_ops		= &xfs_iomap_write_ops,
+	.dops			= &xfs_dio_write_ops,
+	.writethrough_submit	= &xfs_writethrough_submit
+};
+
+
 STATIC ssize_t
 xfs_file_buffered_write(
 	struct kiocb		*iocb,
@@ -1010,9 +1043,13 @@ write_retry:
 		goto out;
 
 	trace_xfs_file_buffered_write(iocb, from);
-	ret = iomap_file_buffered_write(iocb, from,
-			&xfs_buffered_write_iomap_ops, &xfs_iomap_write_ops,
-			NULL);
+	if (iocb->ki_flags & IOCB_WRITETHROUGH) {
+		ret = iomap_file_writethrough_write(iocb, from,
+						    &xfs_writethrough_ops, NULL);
+	} else
+		ret = iomap_file_buffered_write(iocb, from,
+						&xfs_buffered_write_iomap_ops,
+						&xfs_iomap_write_ops, NULL);
 
 	/*
 	 * If we hit a space limit, try to free up some lingering preallocated
@@ -1047,8 +1084,12 @@ out:
 
 	if (ret > 0) {
 		XFS_STATS_ADD(ip->i_mount, xs_write_bytes, ret);
-		/* Handle various SYNC-type writes */
-		ret = generic_write_sync(iocb, ret);
+		/*
+		 * Handle various SYNC-type writes.
+		 * For writethrough, we handle sync during completion.
+		 */
+		if (!(iocb->ki_flags & IOCB_WRITETHROUGH))
+			ret = generic_write_sync(iocb, ret);
 	}
 	return ret;
 }
@@ -2042,7 +2083,7 @@ const struct file_operations xfs_file_operations = {
 	.remap_file_range = xfs_file_remap_range,
 	.fop_flags	= FOP_MMAP_SYNC | FOP_BUFFER_RASYNC |
 			  FOP_BUFFER_WASYNC | FOP_DIO_PARALLEL_WRITE |
-			  FOP_DONTCACHE,
+			  FOP_DONTCACHE | FOP_WRITETHROUGH,
 	.setlease	= generic_setlease,
 };
 
