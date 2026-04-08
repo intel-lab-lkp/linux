@@ -54,6 +54,13 @@
 #include "fuse_i.h"
 #include "fuse_dev_i.h"
 
+#ifdef CONFIG_FAULT_INJECTION
+static bool cuse_inject_cdev_failure;
+module_param(cuse_inject_cdev_failure, bool, 0644);
+MODULE_PARM_DESC(cuse_inject_cdev_failure,
+	"Force cdev_alloc() failure in CUSE init (test only)");
+#endif
+
 #define CUSE_CONNTBL_LEN	64
 
 struct cuse_conn {
@@ -390,6 +397,12 @@ static void cuse_process_init_reply(struct fuse_mount *fm,
 	/* register cdev */
 	rc = -ENOMEM;
 	cdev = cdev_alloc();
+#ifdef CONFIG_FAULT_INJECTION
+	if (cuse_inject_cdev_failure && cdev) {
+		kobject_put(&cdev->kobj);
+		cdev = NULL;
+	}
+#endif
 	if (!cdev)
 		goto err_dev;
 
