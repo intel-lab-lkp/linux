@@ -745,13 +745,13 @@ xfs_dir3_data_init(
 	 */
 	hdr = bp->b_addr;
 	if (xfs_has_crc(mp)) {
-		struct xfs_dir3_blk_hdr *hdr3 = bp->b_addr;
+		struct xfs_dir3_data_hdr *hdr3 = bp->b_addr;
 
 		memset(hdr3, 0, sizeof(*hdr3));
-		hdr3->magic = cpu_to_be32(XFS_DIR3_DATA_MAGIC);
-		hdr3->blkno = cpu_to_be64(xfs_buf_daddr(bp));
-		hdr3->owner = cpu_to_be64(args->owner);
-		uuid_copy(&hdr3->uuid, &mp->m_sb.sb_meta_uuid);
+		hdr3->hdr.magic = cpu_to_be32(XFS_DIR3_DATA_MAGIC);
+		hdr3->hdr.blkno = cpu_to_be64(xfs_buf_daddr(bp));
+		hdr3->hdr.owner = cpu_to_be64(args->owner);
+		uuid_copy(&hdr3->hdr.uuid, &mp->m_sb.sb_meta_uuid);
 
 	} else
 		hdr->magic = cpu_to_be32(XFS_DIR2_DATA_MAGIC);
