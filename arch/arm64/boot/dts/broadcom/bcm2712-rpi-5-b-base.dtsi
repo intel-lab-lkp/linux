@@ -60,6 +60,14 @@
 				#reset-cells = <1>;
 			};
 
+			otp_customer: otp-customer {
+				compatible = "raspberrypi,firmware-otp-customer";
+			};
+
+			otp_private: otp-private {
+				compatible = "raspberrypi,firmware-otp-private";
+			};
+
 			power: power {
 				compatible = "raspberrypi,bcm2835-power";
 				firmware = <&firmware>;
