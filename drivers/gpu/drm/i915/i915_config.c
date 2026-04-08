@@ -15,3 +15,8 @@ unsigned long i915_fence_context_timeout(u64 context)
 
 	return 0;
 }
+
+unsigned long i915_fence_timeout(void)
+{
+	return i915_fence_context_timeout(U64_MAX);
+}
