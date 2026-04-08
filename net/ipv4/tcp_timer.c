@@ -299,6 +299,7 @@ static int tcp_write_timeout(struct sock *sk)
 	if (sk_rethink_txhash(sk)) {
 		tp->timeout_rehash++;
 		__NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPTIMEOUTREHASH);
+		sk_dst_reset(sk);
 	}
 
 	return 0;
