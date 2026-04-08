@@ -821,21 +821,26 @@ EXPORT_SYMBOL(__serio_register_driver);
 
 void serio_unregister_driver(struct serio_driver *drv)
 {
-	struct serio *serio;
+	struct serio *serio, *next;
+	LIST_HEAD(disconnect_list);
+
 
 	guard(mutex)(&serio_mutex);
 
 	drv->manual_bind = true;	/* so serio_find_driver ignores it */
 	serio_remove_pending_events(drv);
 
-start_over:
-	list_for_each_entry(serio, &serio_list, node) {
-		if (serio->drv == drv) {
-			serio_disconnect_port(serio);
-			serio_find_driver(serio);
-			/* we could've deleted some ports, restart */
-			goto start_over;
+	/*Collect all ports bound to this driver first*/
+	list_for_each_entry_safe(serio, next, &serio_list, node) {
+		if (serio->drv == drv && !(serio->parent && serio->parent->drv == drv)) {
+			list_move_tail(&serio->node, &disconnect_list);
 		}
+	}
+	
+	list_for_each_entry_safe(serio, next, &disconnect_list, node) {
+		list_move_tail(&serio->node, &serio_list);
+		serio_disconnect_port(serio);
+		serio_find_driver(serio);
 	}
 
 	driver_unregister(&drv->driver);
