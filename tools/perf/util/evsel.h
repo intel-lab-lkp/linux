@@ -376,7 +376,7 @@ u64 perf_sample__intval(struct perf_sample *sample, const char *name);
 u64 perf_sample__intval_common(struct perf_sample *sample, const char *name);
 char perf_sample__taskstate(struct perf_sample *sample, const char *name);
 
-static inline char *perf_sample__strval(struct perf_sample *sample, const char *name)
+static inline const char *perf_sample__strval(struct perf_sample *sample, const char *name)
 {
 	return perf_sample__rawptr(sample, name);
 }
