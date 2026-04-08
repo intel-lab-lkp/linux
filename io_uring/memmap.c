@@ -141,8 +141,11 @@ static int io_region_pin_pages(struct io_mapped_region *mr,
 	pages = io_pin_pages(reg->user_addr, size, &nr_pages);
 	if (IS_ERR(pages))
 		return PTR_ERR(pages);
-	if (WARN_ON_ONCE(nr_pages != mr->nr_pages))
+	if (WARN_ON_ONCE(nr_pages != mr->nr_pages)) {
+		unpin_user_pages(pages, nr_pages);
+		kvfree(pages);
 		return -EFAULT;
+	}
 
 	mr->pages = pages;
 	mr->flags |= IO_REGION_F_USER_PROVIDED;
