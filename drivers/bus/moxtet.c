@@ -212,6 +212,7 @@ of_register_moxtet_device(struct moxtet *moxtet, struct device_node *nc)
 	if (!dev) {
 		dev_err(moxtet->dev,
 			"Moxtet device alloc error for %pOF\n", nc);
+		of_node_clear_flag(nc, OF_POPULATED);
 		return ERR_PTR(-ENOMEM);
 	}
 
@@ -219,7 +220,7 @@ of_register_moxtet_device(struct moxtet *moxtet, struct device_node *nc)
 	if (ret) {
 		dev_err(moxtet->dev, "%pOF has no valid 'reg' property (%d)\n",
 			nc, ret);
-		goto err_put;
+		goto err_clean;
 	}
 
 	dev->idx = val;
@@ -228,7 +229,7 @@ of_register_moxtet_device(struct moxtet *moxtet, struct device_node *nc)
 		dev_err(moxtet->dev, "%pOF Moxtet address 0x%x out of range\n",
 			nc, dev->idx);
 		ret = -EINVAL;
-		goto err_put;
+		goto err_clean;
 	}
 
 	dev->id = moxtet->modules[dev->idx];
@@ -237,7 +238,7 @@ of_register_moxtet_device(struct moxtet *moxtet, struct device_node *nc)
 		dev_err(moxtet->dev, "%pOF Moxtet address 0x%x is empty\n", nc,
 			dev->idx);
 		ret = -ENODEV;
-		goto err_put;
+		goto err_clean;
 	}
 
 	of_node_get(nc);
@@ -247,12 +248,15 @@ of_register_moxtet_device(struct moxtet *moxtet, struct device_node *nc)
 	if (ret) {
 		dev_err(moxtet->dev,
 			"Moxtet device register error for %pOF\n", nc);
+		of_node_clear_flag(nc, OF_POPULATED);
 		of_node_put(nc);
 		goto err_put;
 	}
 
 	return dev;
 
+err_clean:
+	of_node_clear_flag(nc, OF_POPULATED);
 err_put:
 	put_device(&dev->dev);
 	return ERR_PTR(ret);
@@ -260,7 +264,6 @@ err_put:
 
 static void of_register_moxtet_devices(struct moxtet *moxtet)
 {
-	struct moxtet_device *dev;
 	struct device_node *nc;
 
 	if (!moxtet->dev->of_node)
@@ -269,13 +272,7 @@ static void of_register_moxtet_devices(struct moxtet *moxtet)
 	for_each_available_child_of_node(moxtet->dev->of_node, nc) {
 		if (of_node_test_and_set_flag(nc, OF_POPULATED))
 			continue;
-		dev = of_register_moxtet_device(moxtet, nc);
-		if (IS_ERR(dev)) {
-			dev_warn(moxtet->dev,
-				 "Failed to create Moxtet device for %pOF\n",
-				 nc);
-			of_node_clear_flag(nc, OF_POPULATED);
-		}
+		of_register_moxtet_device(moxtet, nc);
 	}
 }
 
