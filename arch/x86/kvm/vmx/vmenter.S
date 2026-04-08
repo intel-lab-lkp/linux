@@ -105,9 +105,9 @@ SYM_FUNC_START(__vmx_vcpu_run)
 	 * Unlike AMD there's no V_SPEC_CTRL here, so do not leave the body
 	 * out of line.  Clobbers RAX, RCX, RDX, RSI.
 	 */
-	ALTERNATIVE "jmp .Lspec_ctrl_done", "", X86_FEATURE_MSR_SPEC_CTRL
-	RESTORE_GUEST_SPEC_CTRL_BODY VMX_spec_ctrl(%_ASM_DI), .Lspec_ctrl_done
-.Lspec_ctrl_done:
+	ALTERNATIVE "jmp .Lspec_ctrl_guest_done", "", X86_FEATURE_MSR_SPEC_CTRL
+	RESTORE_GUEST_SPEC_CTRL_BODY VMX_spec_ctrl(%_ASM_DI), .Lspec_ctrl_guest_done
+.Lspec_ctrl_guest_done:
 
 	/*
 	 * Since vmentry is serializing on affected CPUs, there's no need for
@@ -252,15 +252,20 @@ SYM_INNER_LABEL_ALIGN(vmx_vmexit, SYM_L_GLOBAL)
 	FILL_RETURN_BUFFER %_ASM_CX, RSB_CLEAR_LOOPS, X86_FEATURE_RSB_VMEXIT,\
 			   X86_FEATURE_RSB_VMEXIT_LITE
 
-	pop %_ASM_ARG2	/* @flags */
-	pop %_ASM_ARG1	/* @vmx */
-
-	call vmx_spec_ctrl_restore_host
-
-	CLEAR_BRANCH_HISTORY_VMEXIT
-
 	/* Put return value in AX */
 	mov %_ASM_BX, %_ASM_AX
+
+	pop %_ASM_BX	/* @flags */
+	pop %_ASM_DI	/* @vmx */
+
+        /* Clobbers RAX, RCX, RDX, RSI.  */
+	ALTERNATIVE "jmp .Lspec_ctrl_host_done", "", X86_FEATURE_MSR_SPEC_CTRL
+	push %_ASM_AX
+	RESTORE_HOST_SPEC_CTRL_BODY VMX_spec_ctrl(%_ASM_DI), %ebx, .Lspec_ctrl_host_done
+	pop %_ASM_AX
+.Lspec_ctrl_host_done:
+
+	CLEAR_BRANCH_HISTORY_VMEXIT
 
 	pop %_ASM_BX
 #ifdef CONFIG_X86_64
