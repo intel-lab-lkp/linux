@@ -1119,6 +1119,14 @@ static ssize_t iomap_writethrough_complete(struct iomap_writethrough_ctx *wt_ctx
 	if (!ret) {
 		ret = wt_ctx->written;
 		iocb->ki_pos = wt_ctx->pos + ret;
+
+		/*
+		 * If this is a DSYNC write and we couldn't optimize it, make
+		 * sure we push it to stable storage now that we've written
+		 * data.
+		 */
+		if (iocb_is_dsync(wt_ctx->iocb) && !wt_ctx->use_fua)
+			ret = generic_write_sync(iocb, ret);
 	}
 
 	kfree(wt_ctx);
@@ -1173,6 +1181,7 @@ iomap_writethrough_submit_bio(struct iomap_writethrough_ctx *wt_ctx,
 	struct bio *bio;
 	unsigned int i;
 	u64 len = 0;
+	blk_opf_t opf = REQ_OP_WRITE;
 
 	if (!wt_ctx->nr_bvecs)
 		return;
@@ -1184,7 +1193,10 @@ iomap_writethrough_submit_bio(struct iomap_writethrough_ctx *wt_ctx,
 		wt_ops->writethrough_submit(wt_ctx->inode, iomap, wt_ctx->bio_pos,
 					    len);
 
-	bio = bio_alloc(iomap->bdev, wt_ctx->nr_bvecs, REQ_OP_WRITE, GFP_NOFS);
+	if (wt_ctx->use_fua)
+		opf |= REQ_FUA;
+
+	bio = bio_alloc(iomap->bdev, wt_ctx->nr_bvecs, opf, GFP_NOFS);
 	bio->bi_iter.bi_sector	= iomap_sector(iomap, wt_ctx->bio_pos);
 	bio->bi_end_io		= iomap_writethrough_bio_end_io;
 	bio->bi_private		= wt_ctx;
@@ -1272,6 +1284,19 @@ static int iomap_writethrough_iter(struct iomap_writethrough_ctx *wt_ctx,
 
 	if (!(iter->flags & IOMAP_WRITETHROUGH))
 		return -EINVAL;
+
+	/*
+	 * If we realise that cache flush is neccessary (eg FUA is not present
+	 * or we need metadata updates) then we turn off the optimization.
+	 */
+	if (wt_ctx->use_fua) {
+		if (iter->iomap.type != IOMAP_MAPPED ||
+		    (iter->iomap.flags &
+		     (IOMAP_F_NEW | IOMAP_F_SHARED | IOMAP_F_DIRTY)) ||
+		    (bdev_write_cache(iter->iomap.bdev) &&
+		     !bdev_fua(iter->iomap.bdev)))
+			wt_ctx->use_fua = false;
+	}
 
 	do {
 		struct folio *folio;
@@ -1545,9 +1570,6 @@ ssize_t iomap_file_writethrough_write(struct kiocb *iocb, struct iov_iter *i,
 		return -EINVAL;
 	if (iocb->ki_flags & (IOCB_NOWAIT | IOCB_DONTCACHE))
 		return -EINVAL;
-	if (iocb_is_dsync(iocb))
-		/* D_SYNC support not implemented yet */
-		return -EOPNOTSUPP;
 
 	/*
 	 * +1 to max bvecs to account for unaligned write spanning multiple
@@ -1574,6 +1596,13 @@ ssize_t iomap_file_writethrough_write(struct kiocb *iocb, struct iov_iter *i,
 	wt_ctx->max_bvecs = max_bvecs;
 	wt_ctx->is_aio = !is_sync_kiocb(iocb);
 	atomic_set(&wt_ctx->ref, 1);
+
+	/*
+	 * Similar to dio, we optimistically set use_fua=true to avoid explicit
+	 * sync. In case we later realise cache flush is needed we set it back
+	 * to false.
+	 */
+	wt_ctx->use_fua = iocb_is_dsync(iocb) && !(iocb->ki_flags & IOCB_SYNC);
 
 	if (!wt_ctx->is_aio)
 		wt_ctx->waiter = current;
