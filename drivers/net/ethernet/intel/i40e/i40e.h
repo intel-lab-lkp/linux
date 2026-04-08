@@ -845,6 +845,8 @@ struct i40e_vsi {
 	u64 tx_stopped_base;
 	u64 tx_bytes;
 	u64 tx_packets;
+	u64 tx_gso_packets;
+	u64 tx_gso_wire_packets;
 	u64 rx_buf_failed;
 	u64 rx_page_failed;
 	u64 rx_page_reuse;

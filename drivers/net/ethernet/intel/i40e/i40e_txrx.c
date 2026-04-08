@@ -928,6 +928,7 @@ static bool i40e_clean_tx_irq(struct i40e_vsi *vsi,
 			      struct i40e_ring *tx_ring, int napi_budget,
 			      unsigned int *tx_cleaned)
 {
+	unsigned int total_gso_packets = 0, total_gso_wire_packets = 0;
 	int i = tx_ring->next_to_clean;
 	struct i40e_tx_buffer *tx_buf;
 	struct i40e_tx_desc *tx_head;
@@ -959,6 +960,10 @@ static bool i40e_clean_tx_irq(struct i40e_vsi *vsi,
 		/* update the statistics for this packet */
 		total_bytes += tx_buf->bytecount;
 		total_packets += tx_buf->gso_segs;
+		if (tx_buf->gso_segs > 1) {
+			total_gso_packets++;
+			total_gso_wire_packets += tx_buf->gso_segs;
+		}
 
 		/* free the skb/XDP data */
 		if (ring_is_xdp(tx_ring))
@@ -1018,7 +1023,8 @@ static bool i40e_clean_tx_irq(struct i40e_vsi *vsi,
 
 	i += tx_ring->count;
 	tx_ring->next_to_clean = i;
-	i40e_update_tx_stats(tx_ring, total_packets, total_bytes);
+	i40e_update_tx_stats(tx_ring, total_packets, total_bytes,
+			     total_gso_packets, total_gso_wire_packets);
 	i40e_arm_wb(tx_ring, vsi, budget);
 
 	if (ring_is_xdp(tx_ring))

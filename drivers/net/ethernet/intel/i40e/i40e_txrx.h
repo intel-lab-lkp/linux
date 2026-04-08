@@ -295,6 +295,8 @@ struct i40e_tx_queue_stats {
 	u64 tx_linearize;
 	u64 tx_force_wb;
 	u64 tx_stopped;
+	u64 tx_gso_packets;
+	u64 tx_gso_wire_packets;
 	int prev_pkt_ctr;
 };
 

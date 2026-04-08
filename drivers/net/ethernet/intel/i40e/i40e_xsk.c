@@ -599,7 +599,7 @@ static bool i40e_xmit_zc(struct i40e_ring *xdp_ring, unsigned int budget)
 	i40e_set_rs_bit(xdp_ring);
 	i40e_xdp_ring_update_tail(xdp_ring);
 
-	i40e_update_tx_stats(xdp_ring, nb_pkts, total_bytes);
+	i40e_update_tx_stats(xdp_ring, nb_pkts, total_bytes, 0, 0);
 
 	return nb_pkts < budget;
 }

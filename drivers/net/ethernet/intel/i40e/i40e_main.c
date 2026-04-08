@@ -11699,6 +11699,8 @@ static void i40e_vsi_aggregate_tx_counters(struct i40e_vsi *vsi,
 
 	vsi->tx_bytes += tx_ring->stats.bytes;
 	vsi->tx_packets += tx_ring->stats.packets;
+	vsi->tx_gso_packets += tx_ring->tx_stats.tx_gso_packets;
+	vsi->tx_gso_wire_packets += tx_ring->tx_stats.tx_gso_wire_packets;
 }
 
 static void i40e_vsi_aggregate_rx_counters(struct i40e_vsi *vsi,
@@ -13688,6 +13690,8 @@ static void i40e_zero_tx_ring_stats(struct netdev_queue_stats_tx *tx)
 {
 	tx->bytes = 0;
 	tx->packets = 0;
+	tx->hw_gso_packets = 0;
+	tx->hw_gso_wire_packets = 0;
 	tx->stop = 0;
 	tx->wake = 0;
 	tx->hw_drops = 0;
@@ -13696,17 +13700,21 @@ static void i40e_zero_tx_ring_stats(struct netdev_queue_stats_tx *tx)
 static void i40e_add_tx_ring_stats(struct i40e_ring *tx_ring,
 				   struct netdev_queue_stats_tx *tx)
 {
-	u64 bytes, packets;
+	u64 bytes, packets, gso_packets, gso_wire_packets;
 	unsigned int start;
 
 	do {
 		start = u64_stats_fetch_begin(&tx_ring->syncp);
 		bytes = tx_ring->stats.bytes;
 		packets = tx_ring->stats.packets;
+		gso_packets = tx_ring->tx_stats.tx_gso_packets;
+		gso_wire_packets = tx_ring->tx_stats.tx_gso_wire_packets;
 	} while (u64_stats_fetch_retry(&tx_ring->syncp, start));
 
 	tx->bytes += bytes;
 	tx->packets += packets;
+	tx->hw_gso_packets += gso_packets;
+	tx->hw_gso_wire_packets += gso_wire_packets;
 
 	tx->stop += tx_ring->tx_stats.tx_stopped;
 	tx->wake += tx_ring->tx_stats.restart_queue;
@@ -13747,6 +13755,9 @@ static void i40e_get_base_stats(struct net_device *dev,
 
 	tx->bytes = vsi->tx_bytes;
 	tx->packets = vsi->tx_packets;
+	tx->hw_gso_packets = vsi->tx_gso_packets;
+	tx->hw_gso_wire_packets = vsi->tx_gso_wire_packets;
+
 	tx->wake = vsi->tx_restart_base;
 	tx->stop = vsi->tx_stopped_base;
 	tx->hw_drops = vsi->tx_busy_base;

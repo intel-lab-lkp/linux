@@ -45,11 +45,15 @@ static inline __le64 build_ctob(u32 td_cmd, u32 td_offset, unsigned int size,
  **/
 static inline void i40e_update_tx_stats(struct i40e_ring *tx_ring,
 					unsigned int total_packets,
-					unsigned int total_bytes)
+					unsigned int total_bytes,
+					unsigned int total_gso,
+					unsigned int total_gso_wire)
 {
 	u64_stats_update_begin(&tx_ring->syncp);
 	tx_ring->stats.bytes += total_bytes;
 	tx_ring->stats.packets += total_packets;
+	tx_ring->tx_stats.tx_gso_packets += total_gso;
+	tx_ring->tx_stats.tx_gso_wire_packets += total_gso_wire;
 	u64_stats_update_end(&tx_ring->syncp);
 	tx_ring->q_vector->tx.total_bytes += total_bytes;
 	tx_ring->q_vector->tx.total_packets += total_packets;
