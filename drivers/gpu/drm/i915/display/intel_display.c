@@ -4255,8 +4255,8 @@ static int hsw_compute_linetime_wm(struct intel_atomic_state *state,
 	return 0;
 }
 
-static int intel_crtc_atomic_check(struct intel_atomic_state *state,
-				   struct intel_crtc *crtc)
+static int intel_crtc_atomic_check_late(struct intel_atomic_state *state,
+					struct intel_crtc *crtc)
 {
 	struct intel_display *display = to_intel_display(crtc);
 	struct intel_crtc_state *crtc_state =
@@ -5814,7 +5814,7 @@ static void intel_crtc_check_fastset(const struct intel_crtc_state *old_crtc_sta
 		new_crtc_state->update_pipe = true;
 }
 
-static int intel_atomic_check_crtcs(struct intel_atomic_state *state)
+static int intel_atomic_check_crtcs_late(struct intel_atomic_state *state)
 {
 	struct intel_display *display = to_intel_display(state);
 	struct intel_crtc_state __maybe_unused *crtc_state;
@@ -5824,7 +5824,7 @@ static int intel_atomic_check_crtcs(struct intel_atomic_state *state)
 	for_each_new_intel_crtc_in_state(state, crtc, crtc_state, i) {
 		int ret;
 
-		ret = intel_crtc_atomic_check(state, crtc);
+		ret = intel_crtc_atomic_check_late(state, crtc);
 		if (ret) {
 			drm_dbg_atomic(display->drm,
 				       "[CRTC:%d:%s] atomic driver check failed\n",
@@ -6546,7 +6546,7 @@ int intel_atomic_check(struct drm_device *dev,
 	if (ret)
 		goto fail;
 
-	ret = intel_atomic_check_crtcs(state);
+	ret = intel_atomic_check_crtcs_late(state);
 	if (ret)
 		goto fail;
 
