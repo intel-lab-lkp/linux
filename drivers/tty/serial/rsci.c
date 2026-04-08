@@ -217,16 +217,13 @@ static void rsci_set_termios(struct uart_port *port, struct ktermios *termios,
 			     const struct ktermios *old)
 {
 	unsigned int ccr2_val = CCR2_INIT, ccr3_val = CCR3_INIT;
-	unsigned int ccr0_val = 0, ccr1_val = 0, ccr4_val = 0;
-	unsigned int brr1 = 255, cks1 = 0, srr1 = 15;
 	struct sci_port *s = to_sci_port(port);
 	unsigned int brr = 255, cks = 0;
-	int min_err = INT_MAX, err;
-	unsigned long max_freq = 0;
+	unsigned int ccr1_val = 0;
+	unsigned long max_freq;
 	unsigned int baud, i;
 	unsigned long flags;
 	unsigned int ctrl;
-	int best_clk = -1;
 
 	if ((termios->c_cflag & CSIZE) == CS7) {
 		ccr3_val |= CCR3_CHR0;
@@ -265,23 +262,15 @@ static void rsci_set_termios(struct uart_port *port, struct ktermios *termios,
 	}
 
 	baud = uart_get_baud_rate(port, termios, old, 0, max_freq);
-	if (!baud)
-		goto done;
+	if (baud) {
+		unsigned int srr;
+		int err;
 
-	/* Divided Functional Clock using standard Bit Rate Register */
-	err = sci_scbrr_calc(s, baud, &brr1, &srr1, &cks1);
-	if (abs(err) < abs(min_err)) {
-		best_clk = SCI_FCK;
-		ccr0_val = 0;
-		min_err = err;
-		brr = brr1;
-		cks = cks1;
-	}
-
-done:
-	if (best_clk >= 0)
+		/* Divided Functional Clock using standard Bit Rate Register */
+		err = sci_scbrr_calc(s, baud, &brr, &srr, &cks);
 		dev_dbg(port->dev, "Using clk %pC for %u%+d bps\n",
-			s->clks[best_clk], baud, min_err);
+			s->clks[SCI_FCK], baud, err);
+	}
 
 	sci_port_enable(s);
 	uart_port_lock_irqsave(port, &flags);
@@ -289,7 +278,7 @@ done:
 	if (baud)
 		uart_update_timeout(port, termios->c_cflag, baud);
 
-	rsci_serial_out(port, CCR0, ccr0_val);
+	rsci_serial_out(port, CCR0, 0);
 
 	ccr3_val |= CCR3_FM;
 	rsci_serial_out(port, CCR3, ccr3_val);
@@ -298,7 +287,7 @@ done:
 	rsci_serial_out(port, CCR2, ccr2_val);
 
 	rsci_serial_out(port, CCR1, ccr1_val);
-	rsci_serial_out(port, CCR4, ccr4_val);
+	rsci_serial_out(port, CCR4, 0);
 
 	ctrl = rsci_serial_in(port, FCR);
 	ctrl |= (FCR_RFRST | FCR_TFRST);
