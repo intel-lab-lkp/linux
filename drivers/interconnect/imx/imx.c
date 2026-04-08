@@ -143,15 +143,16 @@ static int imx_icc_node_init_qos(struct icc_provider *provider,
 		}
 
 		pdev = of_find_device_by_node(dn);
-		of_node_put(dn);
 		if (!pdev) {
 			dev_warn(dev, "node %s[%d] missing device for %pOF\n",
 				 node->name, node->id, dn);
+			of_node_put(dn);
 			return -EPROBE_DEFER;
 		}
 		node_data->qos_dev = &pdev->dev;
 		dev_dbg(dev, "node %s[%d] has device node %pOF\n",
 			node->name, node->id, dn);
+		of_node_put(dn);
 	}
 
 	return dev_pm_qos_add_request(node_data->qos_dev,
