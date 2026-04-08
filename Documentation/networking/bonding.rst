@@ -619,6 +619,39 @@ min_links
 	aggregator cannot be active without at least one available link,
 	setting this option to 0 or to 1 has the exact same effect.
 
+lacp_fallback
+
+	Specifies the fallback behavior of a bonding when LACP negotiation fails on
+	all slave links, i.e. when no slave is in the Collecting/Distributing state
+	(or only in Collecting state when coupled_control is disabled), while at
+	least `min_links` link still reports carrier up.
+
+	This option is only applicable to 802.3ad mode (mode 4).
+
+	Valid values are:
+
+	legacy or 0
+		In this situation, the bonding master remains carrier up and
+		randomly selects a single slave to transmit and receive traffic.
+		Traffic received on other slaves is dropped.
+
+		This mode is deprecated, as it may lead to traffic blackholing
+		when the absence of LACP negotiation means the partner is not
+		ready to collect and distribute traffic.
+
+		This is the legacy default behavior.
+
+	strict or 1
+		In this situation, the bonding master reports carrier down, allowing
+		upper-layer processes to detect that the interface is not usable for
+		collecting and distributing traffic.
+
+		The master transitions to carrier up only when at least
+		`min_links` slaves reach the Collecting(/Distributing) state,
+		allowing traffic to flow.
+
+	The default value is 0 (legacy).
+
 mode
 
 	Specifies one of the bonding policies. The default is
