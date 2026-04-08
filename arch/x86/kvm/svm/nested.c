@@ -1019,7 +1019,7 @@ int nested_svm_vmrun(struct kvm_vcpu *vcpu)
 	}
 
 	vmcb12_gpa = svm->vmcb->save.rax;
-	ret = kvm_vcpu_map(vcpu, gpa_to_gfn(vmcb12_gpa), &map);
+	ret = kvm_vcpu_map(vcpu, vmcb12_gpa, &map);
 	if (ret == -EINVAL) {
 		kvm_inject_gp(vcpu, 0);
 		return 1;
@@ -1134,7 +1134,7 @@ int nested_svm_vmexit(struct vcpu_svm *svm)
 	struct kvm_host_map map;
 	int rc;
 
-	rc = kvm_vcpu_map(vcpu, gpa_to_gfn(svm->nested.vmcb12_gpa), &map);
+	rc = kvm_vcpu_map(vcpu, svm->nested.vmcb12_gpa, &map);
 	if (rc) {
 		if (rc == -EINVAL)
 			kvm_inject_gp(vcpu, 0);

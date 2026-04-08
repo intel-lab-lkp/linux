@@ -1897,16 +1897,16 @@ int __kvm_vcpu_map(struct kvm_vcpu *vcpu, gfn_t gfn, struct kvm_host_map *map,
 		   bool writable);
 void kvm_vcpu_unmap(struct kvm_vcpu *vcpu, struct kvm_host_map *map);
 
-static inline int kvm_vcpu_map(struct kvm_vcpu *vcpu, gfn_t gfn,
+static inline int kvm_vcpu_map(struct kvm_vcpu *vcpu, gpa_t gpa,
 			       struct kvm_host_map *map)
 {
-	return __kvm_vcpu_map(vcpu, gfn, map, true);
+	return __kvm_vcpu_map(vcpu, gpa_to_gfn(gpa), map, true);
 }
 
-static inline int kvm_vcpu_map_readonly(struct kvm_vcpu *vcpu, gfn_t gfn,
+static inline int kvm_vcpu_map_readonly(struct kvm_vcpu *vcpu, gpa_t gpa,
 					struct kvm_host_map *map)
 {
-	return __kvm_vcpu_map(vcpu, gfn, map, false);
+	return __kvm_vcpu_map(vcpu, gpa_to_gfn(gpa), map, false);
 }
 
 static inline void kvm_vcpu_map_mark_dirty(struct kvm_vcpu *vcpu,

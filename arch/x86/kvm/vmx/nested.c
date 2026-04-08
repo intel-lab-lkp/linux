@@ -696,7 +696,7 @@ static inline bool nested_vmx_prepare_msr_bitmap(struct kvm_vcpu *vcpu,
 			return true;
 	}
 
-	if (kvm_vcpu_map_readonly(vcpu, gpa_to_gfn(vmcs12->msr_bitmap), &map))
+	if (kvm_vcpu_map_readonly(vcpu, vmcs12->msr_bitmap, &map))
 		return false;
 
 	msr_bitmap_l1 = (unsigned long *)map.hva;
@@ -2138,8 +2138,7 @@ static enum nested_evmptrld_status nested_vmx_handle_enlightened_vmptrld(
 
 		nested_release_evmcs(vcpu);
 
-		if (kvm_vcpu_map(vcpu, gpa_to_gfn(evmcs_gpa),
-				 &vmx->nested.hv_evmcs_map))
+		if (kvm_vcpu_map(vcpu, evmcs_gpa, &vmx->nested.hv_evmcs_map))
 			return EVMPTRLD_ERROR;
 
 		vmx->nested.hv_evmcs = vmx->nested.hv_evmcs_map.hva;
@@ -3437,7 +3436,7 @@ static bool nested_get_vmcs12_pages(struct kvm_vcpu *vcpu)
 	if (nested_cpu_has2(vmcs12, SECONDARY_EXEC_VIRTUALIZE_APIC_ACCESSES)) {
 		map = &vmx->nested.apic_access_page_map;
 
-		if (!kvm_vcpu_map(vcpu, gpa_to_gfn(vmcs12->apic_access_addr), map)) {
+		if (!kvm_vcpu_map(vcpu, vmcs12->apic_access_addr, map)) {
 			vmcs_write64(APIC_ACCESS_ADDR, pfn_to_hpa(map->pfn));
 		} else {
 			pr_debug_ratelimited("%s: no backing for APIC-access address in vmcs12\n",
@@ -3453,7 +3452,7 @@ static bool nested_get_vmcs12_pages(struct kvm_vcpu *vcpu)
 	if (nested_cpu_has(vmcs12, CPU_BASED_TPR_SHADOW)) {
 		map = &vmx->nested.virtual_apic_map;
 
-		if (!kvm_vcpu_map(vcpu, gpa_to_gfn(vmcs12->virtual_apic_page_addr), map)) {
+		if (!kvm_vcpu_map(vcpu, vmcs12->virtual_apic_page_addr, map)) {
 			vmcs_write64(VIRTUAL_APIC_PAGE_ADDR, pfn_to_hpa(map->pfn));
 		} else if (nested_cpu_has(vmcs12, CPU_BASED_CR8_LOAD_EXITING) &&
 		           nested_cpu_has(vmcs12, CPU_BASED_CR8_STORE_EXITING) &&
@@ -3479,7 +3478,7 @@ static bool nested_get_vmcs12_pages(struct kvm_vcpu *vcpu)
 	if (nested_cpu_has_posted_intr(vmcs12)) {
 		map = &vmx->nested.pi_desc_map;
 
-		if (!kvm_vcpu_map(vcpu, gpa_to_gfn(vmcs12->posted_intr_desc_addr), map)) {
+		if (!kvm_vcpu_map(vcpu, vmcs12->posted_intr_desc_addr, map)) {
 			vmx->nested.pi_desc =
 				(struct pi_desc *)(((void *)map->hva) +
 				offset_in_page(vmcs12->posted_intr_desc_addr));

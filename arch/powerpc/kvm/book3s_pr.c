@@ -644,7 +644,7 @@ static void kvmppc_patch_dcbz(struct kvm_vcpu *vcpu, struct kvmppc_pte *pte)
 	u32 *page;
 	int i, r;
 
-	r = kvm_vcpu_map(vcpu, pte->raddr >> PAGE_SHIFT, &map);
+	r = kvm_vcpu_map(vcpu, pte->raddr, &map);
 	if (r)
 		return;
 

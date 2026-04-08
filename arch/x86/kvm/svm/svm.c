@@ -2159,7 +2159,7 @@ static int vmload_vmsave_interception(struct kvm_vcpu *vcpu, bool vmload)
 	if (nested_svm_check_permissions(vcpu))
 		return 1;
 
-	ret = kvm_vcpu_map(vcpu, gpa_to_gfn(svm->vmcb->save.rax), &map);
+	ret = kvm_vcpu_map(vcpu, svm->vmcb->save.rax, &map);
 	if (ret) {
 		if (ret == -EINVAL)
 			kvm_inject_gp(vcpu, 0);
@@ -4820,7 +4820,7 @@ static int svm_enter_smm(struct kvm_vcpu *vcpu, union kvm_smram *smram)
 	 * that, see svm_prepare_switch_to_guest()) which must be
 	 * preserved.
 	 */
-	if (kvm_vcpu_map(vcpu, gpa_to_gfn(svm->nested.hsave_msr), &map_save))
+	if (kvm_vcpu_map(vcpu, svm->nested.hsave_msr, &map_save))
 		return 1;
 
 	BUILD_BUG_ON(offsetof(struct vmcb, save) != 0x400);
@@ -4854,11 +4854,11 @@ static int svm_leave_smm(struct kvm_vcpu *vcpu, const union kvm_smram *smram)
 	if (!(smram64->efer & EFER_SVME))
 		return 1;
 
-	if (kvm_vcpu_map(vcpu, gpa_to_gfn(smram64->svm_guest_vmcb_gpa), &map))
+	if (kvm_vcpu_map(vcpu, smram64->svm_guest_vmcb_gpa, &map))
 		return 1;
 
 	ret = 1;
-	if (kvm_vcpu_map(vcpu, gpa_to_gfn(svm->nested.hsave_msr), &map_save))
+	if (kvm_vcpu_map(vcpu, svm->nested.hsave_msr, &map_save))
 		goto unmap_map;
 
 	if (svm_allocate_nested(svm))
