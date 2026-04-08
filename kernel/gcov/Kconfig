@@ -42,6 +42,9 @@ config GCOV_PROFILE_ALL
 	depends on !COMPILE_TEST
 	depends on GCOV_KERNEL
 	depends on ARCH_HAS_GCOV_PROFILE_ALL
+	# Clang 20 & 21 miscompute __builtin_object_size() under -fprofile-arcs
+	# on 32-bit UML, causing spurious compile-time errors in check_copy_size().
+	depends on !(UML && !64BIT && CC_IS_CLANG && CLANG_VERSION >= 200000 && CLANG_VERSION < 220100)
 	default n
 	help
 	This options activates profiling for the entire kernel.
