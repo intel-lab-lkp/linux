@@ -15,7 +15,7 @@
 
 struct stmmac_version {
 	u8 snpsver;
-	u8 dev_id;
+	u8 userver;
 };
 
 static void stmmac_get_version(struct stmmac_priv *priv,
@@ -26,7 +26,7 @@ static void stmmac_get_version(struct stmmac_priv *priv,
 	u32 version;
 
 	ver->snpsver = 0;
-	ver->dev_id = 0;
+	ver->userver = 0;
 
 	if (core_type == DWMAC_CORE_MAC100)
 		return;
@@ -48,7 +48,7 @@ static void stmmac_get_version(struct stmmac_priv *priv,
 
 	ver->snpsver = FIELD_GET(DWMAC_SNPSVER, version);
 	if (core_type == DWMAC_CORE_XGMAC)
-		ver->dev_id = FIELD_GET(DWMAC_USERVER, version);
+		ver->userver = FIELD_GET(DWMAC_USERVER, version);
 }
 
 static void stmmac_dwmac_mode_quirk(struct stmmac_priv *priv)
@@ -111,7 +111,7 @@ int stmmac_reset(struct stmmac_priv *priv)
 static const struct stmmac_hwif_entry {
 	enum dwmac_core_type core_type;
 	u32 min_snpsver;
-	u32 dev_id;
+	u32 userver;
 	const struct stmmac_regs_off regs;
 	const void *desc;
 	const void *dma;
@@ -247,7 +247,7 @@ static const struct stmmac_hwif_entry {
 	}, {
 		.core_type = DWMAC_CORE_XGMAC,
 		.min_snpsver = DWXGMAC_CORE_2_10,
-		.dev_id = DWXGMAC_ID,
+		.userver = DWXGMAC_ID,
 		.regs = {
 			.ptp_off = PTP_XGMAC_OFFSET,
 			.mmc_off = MMC_XGMAC_OFFSET,
@@ -269,7 +269,7 @@ static const struct stmmac_hwif_entry {
 	}, {
 		.core_type = DWMAC_CORE_XGMAC,
 		.min_snpsver = DWXLGMAC_CORE_2_00,
-		.dev_id = DWXLGMAC_ID,
+		.userver = DWXLGMAC_ID,
 		.regs = {
 			.ptp_off = PTP_XGMAC_OFFSET,
 			.mmc_off = MMC_XGMAC_OFFSET,
@@ -291,7 +291,7 @@ static const struct stmmac_hwif_entry {
 };
 
 static const struct stmmac_hwif_entry *
-stmmac_hwif_find(enum dwmac_core_type core_type, u8 snpsver, u8 dev_id)
+stmmac_hwif_find(enum dwmac_core_type core_type, u8 snpsver, u8 userver)
 {
 	const struct stmmac_hwif_entry *entry;
 	int i;
@@ -305,7 +305,7 @@ stmmac_hwif_find(enum dwmac_core_type core_type, u8 snpsver, u8 dev_id)
 		if (snpsver < entry->min_snpsver)
 			continue;
 		if (core_type == DWMAC_CORE_XGMAC &&
-		    dev_id != entry->dev_id)
+		    userver != entry->userver)
 			continue;
 
 		return entry;
@@ -358,7 +358,7 @@ int stmmac_hwif_init(struct stmmac_priv *priv)
 	/* Fallback to generic HW */
 
 	/* Use synopsys_id var because some setups can override this */
-	entry = stmmac_hwif_find(core_type, priv->synopsys_id, version.dev_id);
+	entry = stmmac_hwif_find(core_type, priv->synopsys_id, version.userver);
 	if (!entry) {
 		dev_err(priv->device,
 			"Failed to find HW IF (id=0x%x, gmac=%d/%d)\n",
