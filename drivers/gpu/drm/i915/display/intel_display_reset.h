@@ -10,6 +10,10 @@
 
 struct intel_display;
 
+struct dma_fence *intel_display_reset_fence_get(struct intel_display *display);
+void intel_display_reset_fence_discard(struct intel_display *display);
+void intel_display_reset_fence_init(struct intel_display *display);
+
 bool intel_display_reset_supported(struct intel_display *display);
 bool intel_display_reset_test(struct intel_display *display);
 void intel_display_reset_prepare(struct intel_display *display);

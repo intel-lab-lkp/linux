@@ -34,6 +34,7 @@
 #include "intel_display_driver.h"
 #include "intel_display_irq.h"
 #include "intel_display_power.h"
+#include "intel_display_reset.h"
 #include "intel_display_types.h"
 #include "intel_display_utils.h"
 #include "intel_display_wa.h"
@@ -256,6 +257,8 @@ int intel_display_driver_probe_noirq(struct intel_display *display)
 	intel_dmc_init(display);
 
 	intel_mode_config_init(display);
+
+	intel_display_reset_fence_init(display);
 
 	ret = intel_cdclk_init(display);
 	if (ret)
@@ -583,6 +586,8 @@ void intel_display_driver_remove(struct intel_display *display)
 {
 	if (!HAS_DISPLAY(display))
 		return;
+
+	intel_display_reset_fence_discard(display);
 
 	flush_workqueue(display->wq.flip);
 	flush_workqueue(display->wq.modeset);

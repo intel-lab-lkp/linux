@@ -72,6 +72,7 @@
 #include "intel_display_driver.h"
 #include "intel_display_power.h"
 #include "intel_display_regs.h"
+#include "intel_display_reset.h"
 #include "intel_display_rpm.h"
 #include "intel_display_types.h"
 #include "intel_display_utils.h"
@@ -7149,22 +7150,35 @@ static void skl_commit_modeset_enables(struct intel_atomic_state *state)
 
 static void intel_atomic_commit_fence_wait(struct intel_atomic_state *intel_state)
 {
-	struct drm_plane *plane;
+	struct intel_display *display = to_intel_display(intel_state);
 	struct drm_plane_state *new_plane_state;
-	long ret;
+	struct dma_fence *reset_fence;
+	struct drm_plane *plane;
 	int i;
 
-	for_each_new_plane_in_state(&intel_state->base, plane, new_plane_state, i) {
-		if (new_plane_state->fence) {
-			ret = dma_fence_wait_timeout(new_plane_state->fence, false,
-						     i915_fence_timeout());
-			if (ret <= 0)
-				break;
+	reset_fence = intel_display_reset_fence_get(display);
 
-			dma_fence_put(new_plane_state->fence);
-			new_plane_state->fence = NULL;
-		}
+	for_each_new_plane_in_state(&intel_state->base, plane, new_plane_state, i) {
+		struct dma_fence *fences[2] = {
+			[0] = new_plane_state->fence,
+			[1] = reset_fence,
+		};
+		long ret;
+
+		if (!new_plane_state->fence)
+			continue;
+
+		ret = dma_fence_wait_any_timeout(fences, reset_fence ? 2 : 1, false,
+						 i915_fence_timeout(), NULL);
+		if (ret <= 0)
+			break;
+
+		dma_fence_put(new_plane_state->fence);
+		new_plane_state->fence = NULL;
 	}
+
+	if (reset_fence)
+		dma_fence_put(reset_fence);
 }
 
 static void intel_atomic_dsb_wait_commit(struct intel_crtc_state *crtc_state)
