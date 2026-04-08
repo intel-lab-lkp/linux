@@ -1,0 +1,30 @@
+// SPDX-License-Identifier: GPL-2.0
+//
+// If we do not support window scaling in a passive open, we must
+// restrict rcv_wnd to 65535.
+
+`./defaults.sh
+sysctl -q net.ipv4.tcp_window_scaling=0`
+
+    0 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+   +0 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+   +0 setsockopt(3, SOL_SOCKET, SO_RCVBUF, [256000], 4) = 0
+   +0 bind(3, ..., ...) = 0
+   +0 listen(3, 1) = 0
+
+   +0 < S 0:0(0) win 32792 <mss 1000,nop,wscale 7>
+   +0 > S. 0:0(0) ack 1 win 65535 <mss 1460>
+   +0 < . 1:1(0) ack 1 win 32792
+
+   +0 accept(3, ..., ...) = 4
+   +0 send(4, ..., 1000, 0) = 1000
+   +0 > P. 1:1001(1000) ack 1
+// Beyond window ACK is dropped, causing an immediate ACK
+   +0 < . 65537:65537(0) ack 1001 win 32792
+   +0 > . 1001:1001(0) ack 1
+
+  +.1 %{ assert tcpi_bytes_acked == 0, tcpi_bytes_acked; }%
+
+// In window ACK is accepted
+   +0 < . 65536:65536(0) ack 1001 win 32792
+  +.1 %{ assert tcpi_bytes_acked == 1000, tcpi_bytes_acked; }%
