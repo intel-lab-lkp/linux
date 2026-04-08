@@ -188,6 +188,8 @@ static unsigned long io_count_account_pages(struct page **pages, unsigned nr_pag
 	return res;
 }
 
+static void io_release_area_mem(struct io_zcrx_mem *mem);
+
 static int io_import_umem(struct io_zcrx_ifq *ifq,
 			  struct io_zcrx_mem *mem,
 			  struct io_uring_zcrx_area_reg *area_reg)
@@ -213,16 +215,20 @@ static int io_import_umem(struct io_zcrx_ifq *ifq,
 		return ret;
 	}
 
-	mem->account_pages = io_count_account_pages(pages, nr_pages);
-	ret = io_account_mem(ifq->user, ifq->mm_account, mem->account_pages);
-	if (ret < 0)
-		mem->account_pages = 0;
-
 	mem->sgt = &mem->page_sg_table;
 	mem->pages = pages;
 	mem->nr_folios = nr_pages;
 	mem->size = area_reg->len;
-	return ret;
+
+	mem->account_pages = io_count_account_pages(pages, nr_pages);
+	ret = io_account_mem(ifq->user, ifq->mm_account, mem->account_pages);
+	if (ret < 0) {
+		mem->account_pages = 0;
+		io_release_area_mem(mem);
+		return ret;
+	}
+
+	return 0;
 }
 
 static void io_release_area_mem(struct io_zcrx_mem *mem)
@@ -236,6 +242,7 @@ static void io_release_area_mem(struct io_zcrx_mem *mem)
 		sg_free_table(mem->sgt);
 		mem->sgt = NULL;
 		kvfree(mem->pages);
+		mem->pages = NULL;
 	}
 }
 
