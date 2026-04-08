@@ -187,6 +187,10 @@ struct acpi_driver {
  * -----------
  */
 
+bool acpi_of_match_device(const struct acpi_device *adev,
+			  const struct of_device_id *of_match_table,
+			  const struct of_device_id **of_id);
+
 /* Status (_STA) */
 
 struct acpi_device_status {
