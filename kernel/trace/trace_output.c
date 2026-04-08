@@ -1827,13 +1827,13 @@ static enum print_line_t trace_raw_data(struct trace_iterator *iter, int flags,
 					 struct trace_event *event)
 {
 	struct raw_data_entry *field;
-	int i;
+	unsigned int i;
 
 	trace_assign_type(field, iter->ent);
 
 	trace_seq_printf(&iter->seq, "# %x buf:", field->id);
 
-	for (i = 0; i < iter->ent_size - offsetof(struct raw_data_entry, buf); i++)
+	for (i = 0; i < field->len; i++)
 		trace_seq_printf(&iter->seq, " %02x",
 				 (unsigned char)field->buf[i]);
 

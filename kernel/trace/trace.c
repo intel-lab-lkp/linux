@@ -6338,11 +6338,13 @@ static ssize_t write_raw_marker_to_buffer(struct trace_array *tr,
 	struct ring_buffer_event *event;
 	struct trace_buffer *buffer;
 	struct raw_data_entry *entry;
+	size_t payload_len;
 	ssize_t written;
 	size_t size;
 
 	/* cnt includes both the entry->id and the data behind it. */
-	size = struct_offset(entry, id) + cnt;
+	payload_len = cnt - sizeof(entry->id);
+	size = struct_offset(entry, buf) + payload_len;
 
 	buffer = tr->array_buffer.buffer;
 
@@ -6356,10 +6358,9 @@ static ssize_t write_raw_marker_to_buffer(struct trace_array *tr,
 		return -EBADF;
 
 	entry = ring_buffer_event_data(event);
-	unsafe_memcpy(&entry->id, buf, cnt,
-		      "id and content already reserved on ring buffer"
-		      "'buf' includes the 'id' and the data."
-		      "'entry' was allocated with cnt from 'id'.");
+	memcpy(&entry->id, buf, sizeof(entry->id));
+	entry->len = payload_len;
+	memcpy(entry->buf, buf + sizeof(entry->id), payload_len);
 	written = cnt;
 
 	__buffer_unlock_commit(buffer, event);

@@ -288,6 +288,7 @@ FTRACE_ENTRY(raw_data, raw_data_entry,
 
 	F_STRUCT(
 		__field(	unsigned int,	id	)
+		__field(unsigned int, len)
 		__dynamic_array(	char,	buf	)
 	),
 
