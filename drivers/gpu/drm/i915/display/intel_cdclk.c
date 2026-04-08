@@ -4225,8 +4225,21 @@ static unsigned int _intel_cdclk_prefill_adj(const struct intel_crtc_state *crtc
 
 unsigned int intel_cdclk_prefill_adjustment(const struct intel_crtc_state *crtc_state)
 {
-	/* FIXME use the actual min_cdclk for the pipe here */
-	return intel_cdclk_prefill_adjustment_worst(crtc_state);
+	int clock = crtc_state->hw.pipe_mode.crtc_clock;
+	int min_cdclk;
+
+	/*
+	 * Only consider the current pipe's minimum cdclk here as a safe
+	 * lower bound. This must *not* be based on the actual/logical cdclk
+	 * frequency here as that may get reduced later due to eg. a modeset
+	 * on a different pipe, and that would completely invalidate the
+	 * guardband length checks we did on this pipe previously. That
+	 * could lead to prefill exceeding the guardband which would result
+	 * in underruns.
+	 */
+	min_cdclk = crtc_state->min_cdclk;
+
+	return _intel_cdclk_prefill_adj(crtc_state, clock, min_cdclk);
 }
 
 unsigned int intel_cdclk_prefill_adjustment_worst(const struct intel_crtc_state *crtc_state)

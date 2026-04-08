@@ -5819,6 +5819,12 @@ static int intel_atomic_check_crtcs(struct intel_atomic_state *state)
 		int ret;
 
 		new_crtc_state->min_cdclk = intel_crtc_min_cdclk(new_crtc_state);
+		if (new_crtc_state->min_cdclk > display->cdclk.max_cdclk_freq) {
+			drm_dbg_kms(display->drm, "[CRTC:%d:%s] required cdclk (%d kHz) exceeds max (%d kHz)\n",
+				    crtc->base.base.id, crtc->base.name, new_crtc_state->min_cdclk,
+				    display->cdclk.max_cdclk_freq);
+			return -EINVAL;
+		}
 
 		if (DISPLAY_VER(display) >= 9) {
 			ret = intel_atomic_setup_scalers(state, crtc);
