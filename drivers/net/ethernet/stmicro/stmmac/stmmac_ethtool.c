@@ -519,9 +519,9 @@ static void stmmac_get_ethtool_stats(struct net_device *dev,
 	u32 rx_queues_count = priv->plat->rx_queues_to_use;
 	u32 tx_queues_count = priv->plat->tx_queues_to_use;
 	u64 napi_poll = 0, normal_irq_n = 0;
-	int i, j = 0, pos, ret;
 	unsigned long count;
 	unsigned int start;
+	int i, j = 0, pos;
 
 	if (priv->dma_cap.asp) {
 		for (i = 0; i < STMMAC_SAFETY_FEAT_SIZE; i++) {
@@ -531,42 +531,38 @@ static void stmmac_get_ethtool_stats(struct net_device *dev,
 		}
 	}
 
-	/* Update the DMA HW counters for dwmac10/100 (DWMAC_CORE_MAC100),
-	 * where this will return zero. Other core types will have a non-zero
-	 * return value.
-	 */
-	ret = stmmac_dma_diagnostic_fr(priv, &priv->xstats, priv->ioaddr);
-	if (ret) {
-		/* If supported, for new GMAC chips expose the MMC counters */
-		if (priv->dma_cap.rmon) {
-			stmmac_mmc_read(priv, priv->mmcaddr, &priv->mmc);
+	/* Update the DMA HW counters for dwmac10/100 (DWMAC_CORE_MAC100). */
+	stmmac_dma_diagnostic_fr(priv, &priv->xstats, priv->ioaddr);
 
-			for (i = 0; i < STMMAC_MMC_STATS_LEN; i++) {
-				char *p;
-				p = (char *)priv + stmmac_mmc[i].stat_offset;
+	/* If supported, for new GMAC chips expose the MMC counters */
+	if (priv->dma_cap.rmon) {
+		stmmac_mmc_read(priv, priv->mmcaddr, &priv->mmc);
 
-				data[j++] = (stmmac_mmc[i].sizeof_stat ==
-					     sizeof(u64)) ? (*(u64 *)p) :
-					     (*(u32 *)p);
-			}
+		for (i = 0; i < STMMAC_MMC_STATS_LEN; i++) {
+			char *p = (char *)priv + stmmac_mmc[i].stat_offset;
+
+			data[j++] = stmmac_mmc[i].sizeof_stat == sizeof(u64) ?
+				    *(u64 *)p : *(u32 *)p;
 		}
-		if (priv->dma_cap.eee) {
-			int val = phylink_get_eee_err(priv->phylink);
-			if (val)
-				priv->xstats.phy_eee_wakeup_error_n = val;
-		}
-
-		/* Only dwmac1000 and dwmac4 implements the MAC .debug() method.
-		 * As there are different version spaces depending on core_type,
-		 * make this conditional on the appropriate core type.
-		 */
-		if ((priv->plat->core_type == DWMAC_CORE_GMAC ||
-		     priv->plat->core_type == DWMAC_CORE_GMAC4) &&
-		    priv->snpsver >= DWMAC_CORE_3_50)
-			stmmac_mac_debug(priv, priv->ioaddr,
-					(void *)&priv->xstats,
-					rx_queues_count, tx_queues_count);
 	}
+
+	if (priv->dma_cap.eee) {
+		int val = phylink_get_eee_err(priv->phylink);
+		if (val)
+			priv->xstats.phy_eee_wakeup_error_n = val;
+	}
+
+	/* Only dwmac1000 and dwmac4 implements the MAC .debug() method.
+	 * As there are different version spaces depending on core_type,
+	 * make this conditional on the appropriate core type.
+	 */
+	if ((priv->plat->core_type == DWMAC_CORE_GMAC ||
+	     priv->plat->core_type == DWMAC_CORE_GMAC4) &&
+	    priv->snpsver >= DWMAC_CORE_3_50)
+		stmmac_mac_debug(priv, priv->ioaddr,
+				(void *)&priv->xstats,
+				rx_queues_count, tx_queues_count);
+
 	for (i = 0; i < STMMAC_STATS_LEN; i++) {
 		char *p = (char *)priv + stmmac_gstrings_stats[i].stat_offset;
 		data[j++] = (stmmac_gstrings_stats[i].sizeof_stat ==
