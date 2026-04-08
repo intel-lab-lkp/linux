@@ -190,34 +190,34 @@ static int hvpipe_rtas_recv_msg(char __user *buf, int size)
 		return -ENOMEM;
 	}
 
-	ret = rtas_ibm_receive_hvpipe_msg(work_area, &srcID,
-					&bytes_written);
-	if (!ret) {
-		/*
-		 * Recv HVPIPE RTAS is successful.
-		 * When releasing FD or no one is waiting on the
-		 * specific source, issue recv HVPIPE RTAS call
-		 * so that pipe is not blocked - this func is called
-		 * with NULL buf.
-		 */
-		if (buf) {
-			if (size < bytes_written) {
-				pr_err("Received the payload size = %d, but the buffer size = %d\n",
-					bytes_written, size);
-				bytes_written = size;
-			}
-			if (copy_to_user(buf,
-					rtas_work_area_raw_buf(work_area),
-					bytes_written))
-				ret = -EFAULT;
-			else
-				ret = bytes_written;
-		}
-	} else {
-		pr_err("ibm,receive-hvpipe-msg failed with %d\n",
-				ret);
+	/*
+	 * Recv HVPIPE RTAS is successful.
+	 * When releasing FD or no one is waiting on the
+	 * specific source, issue recv HVPIPE RTAS call
+	 * so that pipe is not blocked - this func is called
+	 * with NULL buf.
+	 */
+	ret = rtas_ibm_receive_hvpipe_msg(work_area, &srcID, &bytes_written);
+	if (ret) {
+		pr_err("ibm,receive-hvpipe-msg failed with %d\n", ret);
+		goto out;
 	}
 
+	if (!buf)
+		goto out;
+
+	if (size < bytes_written) {
+		pr_err("Received the payload size = %d, but the buffer size = %d\n",
+				bytes_written, size);
+		bytes_written = size;
+	}
+
+	if (copy_to_user(buf, rtas_work_area_raw_buf(work_area), bytes_written))
+		ret = -EFAULT;
+	else
+		ret = bytes_written;
+
+out:
 	rtas_work_area_free(work_area);
 	return ret;
 }
