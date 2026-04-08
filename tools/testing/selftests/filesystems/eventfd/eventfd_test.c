@@ -5,12 +5,22 @@
 #include <fcntl.h>
 #include <asm/unistd.h>
 #include <linux/time_types.h>
+#include <stdarg.h>
+#include <stdint.h>
+#include <string.h>
 #include <unistd.h>
 #include <assert.h>
 #include <signal.h>
 #include <pthread.h>
 #include <sys/epoll.h>
-#include <sys/eventfd.h>
+#include <sys/ioctl.h>
+/*
+ * Prevent <asm-generic/fcntl.h> (pulled in via <linux/eventfd.h> ->
+ * <linux/fcntl.h> -> <asm/fcntl.h>) from redefining struct flock and
+ * friends that are already provided by the system <fcntl.h> above.
+ */
+#define _ASM_GENERIC_FCNTL_H
+#include <linux/eventfd.h>
 #include "kselftest_harness.h"
 
 #define EVENTFD_TEST_ITERATIONS 100000UL
@@ -304,6 +314,232 @@ TEST(eventfd_check_read_with_semaphore)
 	size = read(fd, &value, sizeof(value));
 	EXPECT_EQ(size, -1);
 	EXPECT_EQ(errno, EAGAIN);
+
+	close(fd);
+}
+
+/*
+ * The default maximum is ULLONG_MAX, matching the original behaviour.
+ */
+TEST(eventfd_check_ioctl_get_maximum_default)
+{
+	uint64_t max;
+	int fd, ret;
+
+	fd = sys_eventfd2(0, EFD_NONBLOCK);
+	ASSERT_GE(fd, 0);
+
+	ret = ioctl(fd, EFD_IOC_GET_MAXIMUM, &max);
+	EXPECT_EQ(ret, 0);
+	EXPECT_EQ(max, UINT64_MAX);
+
+	close(fd);
+}
+
+/*
+ * EFD_IOC_SET_MAXIMUM and EFD_IOC_GET_MAXIMUM round-trip.
+ */
+TEST(eventfd_check_ioctl_set_get_maximum)
+{
+	uint64_t max;
+	int fd, ret;
+
+	fd = sys_eventfd2(0, EFD_NONBLOCK);
+	ASSERT_GE(fd, 0);
+
+	max = 1000;
+	ret = ioctl(fd, EFD_IOC_SET_MAXIMUM, &max);
+	EXPECT_EQ(ret, 0);
+
+	max = 0;
+	ret = ioctl(fd, EFD_IOC_GET_MAXIMUM, &max);
+	EXPECT_EQ(ret, 0);
+	EXPECT_EQ(max, 1000);
+
+	close(fd);
+}
+
+/*
+ * Setting a maximum that is less than or equal to the current counter
+ * must fail with EINVAL.
+ */
+TEST(eventfd_check_ioctl_set_maximum_invalid)
+{
+	uint64_t value = 5, max;
+	ssize_t size;
+	int fd, ret;
+
+	fd = sys_eventfd2(0, EFD_NONBLOCK);
+	ASSERT_GE(fd, 0);
+
+	/* write 5 into the counter */
+	size = write(fd, &value, sizeof(value));
+	EXPECT_EQ(size, (ssize_t)sizeof(value));
+
+	/* setting maximum == count (5) must fail */
+	max = 5;
+	ret = ioctl(fd, EFD_IOC_SET_MAXIMUM, &max);
+	EXPECT_EQ(ret, -1);
+	EXPECT_EQ(errno, EINVAL);
+
+	/* setting maximum < count (3 < 5) must also fail */
+	max = 3;
+	ret = ioctl(fd, EFD_IOC_SET_MAXIMUM, &max);
+	EXPECT_EQ(ret, -1);
+	EXPECT_EQ(errno, EINVAL);
+
+	/* setting maximum > count (10 > 5) must succeed */
+	max = 10;
+	ret = ioctl(fd, EFD_IOC_SET_MAXIMUM, &max);
+	EXPECT_EQ(ret, 0);
+
+	close(fd);
+}
+
+/*
+ * Writes that would push the counter to or beyond maximum must return
+ * EAGAIN on a non-blocking fd.  After a read drains the counter the
+ * write should succeed again.
+ */
+TEST(eventfd_check_ioctl_write_blocked_at_maximum)
+{
+	uint64_t value, max_val = 5;
+	ssize_t size;
+	int fd, ret;
+
+	fd = sys_eventfd2(0, EFD_NONBLOCK);
+	ASSERT_GE(fd, 0);
+
+	ret = ioctl(fd, EFD_IOC_SET_MAXIMUM, &max_val);
+	ASSERT_EQ(ret, 0);
+
+	/* write 4 — counter becomes 4, one slot before maximum */
+	value = 4;
+	size = write(fd, &value, sizeof(value));
+	EXPECT_EQ(size, (ssize_t)sizeof(value));
+
+	/*
+	 * Writing 1 more would reach maximum (4+1 == 5 == maximum), which
+	 * is the overflow level.  The write must block, i.e. return EAGAIN
+	 * in non-blocking mode.
+	 */
+	value = 1;
+	size = write(fd, &value, sizeof(value));
+	EXPECT_EQ(size, -1);
+	EXPECT_EQ(errno, EAGAIN);
+
+	/* drain the counter */
+	size = read(fd, &value, sizeof(value));
+	EXPECT_EQ(size, (ssize_t)sizeof(value));
+	EXPECT_EQ(value, 4);
+
+	/* now the write must succeed (counter was reset to 0) */
+	value = 1;
+	size = write(fd, &value, sizeof(value));
+	EXPECT_EQ(size, (ssize_t)sizeof(value));
+
+	close(fd);
+}
+
+/*
+ * Verify that EPOLLOUT is correctly gated by the configured maximum:
+ * it should be clear when count >= maximum - 1, and set again after a read.
+ */
+TEST(eventfd_check_ioctl_poll_epollout)
+{
+	struct epoll_event ev, events[2];
+	uint64_t value, max_val = 5;
+	ssize_t sz;
+	int fd, epfd, nfds, ret;
+
+	fd = sys_eventfd2(0, EFD_NONBLOCK);
+	ASSERT_GE(fd, 0);
+
+	epfd = epoll_create1(0);
+	ASSERT_GE(epfd, 0);
+
+	ev.events = EPOLLIN | EPOLLOUT | EPOLLERR;
+	ev.data.fd = fd;
+	ret = epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &ev);
+	ASSERT_EQ(ret, 0);
+
+	ret = ioctl(fd, EFD_IOC_SET_MAXIMUM, &max_val);
+	ASSERT_EQ(ret, 0);
+
+	/* fresh fd: EPOLLOUT must be set (count=0 < maximum-1=4) */
+	nfds = epoll_wait(epfd, events, 2, 0);
+	EXPECT_EQ(nfds, 1);
+	EXPECT_TRUE(!!(events[0].events & EPOLLOUT));
+
+	/* write 4 — count reaches maximum-1=4, EPOLLOUT must clear */
+	value = 4;
+	sz = write(fd, &value, sizeof(value));
+	EXPECT_EQ(sz, (ssize_t)sizeof(value));
+
+	nfds = epoll_wait(epfd, events, 2, 0);
+	EXPECT_EQ(nfds, 1);
+	EXPECT_FALSE(!!(events[0].events & EPOLLOUT));
+	EXPECT_TRUE(!!(events[0].events & EPOLLIN));
+
+	/* drain counter — EPOLLOUT must reappear */
+	sz = read(fd, &value, sizeof(value));
+	EXPECT_EQ(sz, (ssize_t)sizeof(value));
+
+	nfds = epoll_wait(epfd, events, 2, 0);
+	EXPECT_EQ(nfds, 1);
+	EXPECT_TRUE(!!(events[0].events & EPOLLOUT));
+
+	close(epfd);
+	close(fd);
+}
+
+/*
+ * /proc/self/fdinfo must expose the configured maximum.
+ */
+TEST(eventfd_check_fdinfo_maximum)
+{
+	struct error err = {0};
+	uint64_t max_val = 12345;
+	int fd, ret;
+
+	fd = sys_eventfd2(0, 0);
+	ASSERT_GE(fd, 0);
+
+	/* before setting: default should be ULLONG_MAX */
+	ret = verify_fdinfo(fd, &err, "eventfd-maximum: ", 17,
+			    "%16llx\n", (unsigned long long)UINT64_MAX);
+	if (ret != 0)
+		ksft_print_msg("eventfd-maximum default check failed: %s\n",
+			       err.msg);
+	EXPECT_EQ(ret, 0);
+
+	ret = ioctl(fd, EFD_IOC_SET_MAXIMUM, &max_val);
+	ASSERT_EQ(ret, 0);
+
+	memset(&err, 0, sizeof(err));
+	ret = verify_fdinfo(fd, &err, "eventfd-maximum: ", 17,
+			    "%16llx\n", (unsigned long long)max_val);
+	if (ret != 0)
+		ksft_print_msg("eventfd-maximum after set check failed: %s\n",
+			       err.msg);
+	EXPECT_EQ(ret, 0);
+
+	close(fd);
+}
+
+/*
+ * An unrecognised ioctl must return ENOTTY (not EINVAL or ENOENT).
+ */
+TEST(eventfd_check_ioctl_unknown)
+{
+	int fd, ret;
+
+	fd = sys_eventfd2(0, 0);
+	ASSERT_GE(fd, 0);
+
+	ret = ioctl(fd, _IO('J', 0xff));
+	EXPECT_EQ(ret, -1);
+	EXPECT_EQ(errno, ENOTTY);
 
 	close(fd);
 }
