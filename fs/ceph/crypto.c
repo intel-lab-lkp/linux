@@ -15,6 +15,12 @@
 #include "mds_client.h"
 #include "crypto.h"
 
+/*
+ * Reserve room for '_' + decimal 64-bit inode number + trailing NUL.
+ * ceph_encode_encrypted_dname() copies only the visible suffix bytes.
+ */
+#define CEPH_ENCRYPTED_SNAP_INO_SUFFIX_MAX	sizeof("_18446744073709551615")
+
 static int ceph_crypt_get_context(struct inode *inode, void *ctx, size_t len)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
@@ -209,6 +215,7 @@ int ceph_encode_encrypted_dname(struct inode *parent, char *buf, int elen)
 	struct inode *dir = parent;
 	char *p = buf;
 	u32 len;
+	int prefix_len = 0;
 	int name_len = elen;
 	int ret;
 	u8 *cryptbuf = NULL;
@@ -219,6 +226,7 @@ int ceph_encode_encrypted_dname(struct inode *parent, char *buf, int elen)
 		if (IS_ERR(dir))
 			return PTR_ERR(dir);
 		p++; /* skip initial '_' */
+		prefix_len = 1;
 	}
 
 	if (!fscrypt_has_encryption_key(dir))
@@ -271,8 +279,20 @@ int ceph_encode_encrypted_dname(struct inode *parent, char *buf, int elen)
 
 	/* To understand the 240 limit, see CEPH_NOHASH_NAME_MAX comments */
 	WARN_ON(elen > 240);
-	if (dir != parent) // leading _ is already there; append _<inum>
-		elen += 1 + sprintf(p + elen, "_%ld", dir->i_ino);
+	if (dir != parent) {
+		/* leading '_' is already there; append _<inum> */
+		char suffix[CEPH_ENCRYPTED_SNAP_INO_SUFFIX_MAX];
+
+		ret = snprintf(suffix, sizeof(suffix), "_%lu", dir->i_ino);
+		if (ret > NAME_MAX - prefix_len - elen) {
+			elen = -ENAMETOOLONG;
+			goto out;
+		}
+
+		memcpy(p + elen, suffix, ret);
+		/* Include the leading '_' skipped by p. */
+		elen += ret + prefix_len;
+	}
 
 out:
 	kfree(cryptbuf);
