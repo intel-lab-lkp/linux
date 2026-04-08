@@ -428,6 +428,84 @@ static void hinic3_vport_down(struct net_device *netdev)
 	}
 }
 
+int
+hinic3_change_channel_settings(struct net_device *netdev,
+			       struct hinic3_dyna_txrxq_params *trxq_params)
+{
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+	struct hinic3_dyna_txrxq_params old_qp_params = {};
+	struct hinic3_dyna_qp_params new_qp_params = {};
+	struct hinic3_dyna_qp_params cur_qp_params = {};
+	bool need_teardown = false;
+	unsigned long flags;
+	int err;
+
+	mutex_lock(&nic_dev->channel_cfg_lock);
+
+	hinic3_config_num_qps(netdev, trxq_params);
+
+	err = hinic3_alloc_channel_resources(netdev, &new_qp_params,
+					     trxq_params);
+	if (err) {
+		netdev_err(netdev, "Failed to alloc channel resources\n");
+		mutex_unlock(&nic_dev->channel_cfg_lock);
+		return err;
+	}
+
+	spin_lock_irqsave(&nic_dev->channel_res_lock, flags);
+	if (!test_and_set_bit(HINIC3_CHANGE_RES_INVALID, &nic_dev->flags))
+		need_teardown = true;
+	spin_unlock_irqrestore(&nic_dev->channel_res_lock, flags);
+
+	if (need_teardown) {
+		hinic3_vport_down(netdev);
+		hinic3_close_channel(netdev);
+		hinic3_uninit_qps(nic_dev, &cur_qp_params);
+		hinic3_free_channel_resources(netdev, &cur_qp_params,
+					      &nic_dev->q_params);
+	}
+
+	if (nic_dev->num_qp_irq > trxq_params->num_qps)
+		hinic3_qp_irq_change(netdev, trxq_params->num_qps);
+
+	spin_lock_irqsave(&nic_dev->channel_res_lock, flags);
+	old_qp_params = nic_dev->q_params;
+	nic_dev->q_params = *trxq_params;
+	spin_unlock_irqrestore(&nic_dev->channel_res_lock, flags);
+
+	hinic3_init_qps(nic_dev, &new_qp_params);
+
+	err = hinic3_open_channel(netdev);
+	if (err)
+		goto err_uninit_qps;
+
+	err = hinic3_vport_up(netdev);
+	if (err)
+		goto err_close_channel;
+
+	spin_lock_irqsave(&nic_dev->channel_res_lock, flags);
+	clear_bit(HINIC3_CHANGE_RES_INVALID, &nic_dev->flags);
+	spin_unlock_irqrestore(&nic_dev->channel_res_lock, flags);
+
+	mutex_unlock(&nic_dev->channel_cfg_lock);
+
+	return 0;
+
+err_close_channel:
+	hinic3_close_channel(netdev);
+err_uninit_qps:
+	spin_lock_irqsave(&nic_dev->channel_res_lock, flags);
+	nic_dev->q_params = old_qp_params;
+	spin_unlock_irqrestore(&nic_dev->channel_res_lock, flags);
+
+	hinic3_uninit_qps(nic_dev, &new_qp_params);
+	hinic3_free_channel_resources(netdev, &new_qp_params, trxq_params);
+
+	mutex_unlock(&nic_dev->channel_cfg_lock);
+
+	return err;
+}
+
 static int hinic3_open(struct net_device *netdev)
 {
 	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
@@ -487,16 +565,33 @@ static int hinic3_close(struct net_device *netdev)
 {
 	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
 	struct hinic3_dyna_qp_params qp_params;
+	bool need_teardown = false;
+	unsigned long flags;
 
 	if (!test_and_clear_bit(HINIC3_INTF_UP, &nic_dev->flags)) {
 		netdev_dbg(netdev, "Netdev already close, do nothing\n");
 		return 0;
 	}
 
-	hinic3_vport_down(netdev);
-	hinic3_close_channel(netdev);
-	hinic3_uninit_qps(nic_dev, &qp_params);
-	hinic3_free_channel_resources(netdev, &qp_params, &nic_dev->q_params);
+	mutex_lock(&nic_dev->channel_cfg_lock);
+
+	spin_lock_irqsave(&nic_dev->channel_res_lock, flags);
+	if (!test_and_set_bit(HINIC3_CHANGE_RES_INVALID, &nic_dev->flags))
+		need_teardown = true;
+	spin_unlock_irqrestore(&nic_dev->channel_res_lock, flags);
+
+	if (need_teardown) {
+		hinic3_vport_down(netdev);
+		hinic3_close_channel(netdev);
+		hinic3_uninit_qps(nic_dev, &qp_params);
+		hinic3_free_channel_resources(netdev, &qp_params,
+					      &nic_dev->q_params);
+	}
+
+	hinic3_free_nicio_res(nic_dev);
+	hinic3_destroy_num_qps(netdev);
+
+	mutex_unlock(&nic_dev->channel_cfg_lock);
 
 	return 0;
 }
