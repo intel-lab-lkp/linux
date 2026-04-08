@@ -1285,6 +1285,7 @@ struct hv_device {
 
 	/* place holder to keep track of the dir for hv device in debugfs */
 	struct dentry *debug_dir;
+	bool co_external_memory;
 
 };
 
