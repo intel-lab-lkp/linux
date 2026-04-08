@@ -1240,6 +1240,32 @@ static u32 glk_plane_color_ctl_crtc(const struct intel_crtc_state *crtc_state)
 	return plane_color_ctl;
 }
 
+static u32 intel_csc_ff_type_to_csc_mode(enum drm_colorop_fixed_matrix_type csc_ff_type,
+					 bool enable)
+{
+	u32 csc_mode = PLANE_COLOR_CSC_MODE_BYPASS;
+
+	if (enable) {
+		switch (csc_ff_type) {
+		case DRM_COLOROP_FM_YCBCR601_FULL_RGB:
+			csc_mode = PLANE_COLOR_CSC_MODE_YUV601_TO_RGB601;
+			break;
+		case DRM_COLOROP_FM_YCBCR709_FULL_RGB:
+			csc_mode = PLANE_COLOR_CSC_MODE_YUV709_TO_RGB709;
+			break;
+		case DRM_COLOROP_FM_YCBCR2020_FULL_RGB_NC:
+			csc_mode = PLANE_COLOR_CSC_MODE_YUV2020_TO_RGB2020;
+			break;
+		case DRM_COLOROP_FM_RGB709_RGB2020:
+			csc_mode = PLANE_COLOR_CSC_MODE_RGB709_TO_RGB2020;
+			break;
+		default:
+			csc_mode = PLANE_COLOR_CSC_MODE_BYPASS;
+		}
+	}
+	return csc_mode;
+}
+
 static u32 glk_plane_color_ctl(const struct intel_plane_state *plane_state)
 {
 	struct intel_display *display = to_intel_display(plane_state);
@@ -1270,6 +1296,10 @@ static u32 glk_plane_color_ctl(const struct intel_plane_state *plane_state)
 		if (plane_state->hw.color_range == DRM_COLOR_YCBCR_FULL_RANGE)
 			plane_color_ctl |= PLANE_COLOR_YUV_RANGE_CORRECTION_DISABLE;
 	}
+
+	if (!icl_is_hdr_plane(display, plane->id))
+		plane_color_ctl |= intel_csc_ff_type_to_csc_mode(plane_state->hw.csc_ff_type,
+								 plane_state->hw.csc_ff_enable);
 
 	if (plane_state->force_black)
 		plane_color_ctl |= PLANE_COLOR_PLANE_CSC_ENABLE;
