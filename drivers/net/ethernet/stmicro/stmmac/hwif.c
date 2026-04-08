@@ -110,7 +110,7 @@ int stmmac_reset(struct stmmac_priv *priv)
 
 static const struct stmmac_hwif_entry {
 	enum dwmac_core_type core_type;
-	u32 min_id;
+	u32 min_snpsver;
 	u32 dev_id;
 	const struct stmmac_regs_off regs;
 	const void *desc;
@@ -129,7 +129,7 @@ static const struct stmmac_hwif_entry {
 	/* NOTE: New HW versions shall go to the end of this table */
 	{
 		.core_type = DWMAC_CORE_MAC100,
-		.min_id = 0,
+		.min_snpsver = 0,
 		.regs = {
 			.ptp_off = PTP_GMAC3_X_OFFSET,
 			.mmc_off = MMC_GMAC3_X_OFFSET,
@@ -146,7 +146,7 @@ static const struct stmmac_hwif_entry {
 		.quirks = stmmac_dwmac1_quirks,
 	}, {
 		.core_type = DWMAC_CORE_GMAC,
-		.min_id = 0,
+		.min_snpsver = 0,
 		.regs = {
 			.ptp_off = PTP_GMAC3_X_OFFSET,
 			.mmc_off = MMC_GMAC3_X_OFFSET,
@@ -163,7 +163,7 @@ static const struct stmmac_hwif_entry {
 		.quirks = stmmac_dwmac1_quirks,
 	}, {
 		.core_type = DWMAC_CORE_GMAC4,
-		.min_id = 0,
+		.min_snpsver = 0,
 		.regs = {
 			.ptp_off = PTP_GMAC4_OFFSET,
 			.mmc_off = MMC_GMAC4_OFFSET,
@@ -183,7 +183,7 @@ static const struct stmmac_hwif_entry {
 		.quirks = stmmac_dwmac4_quirks,
 	}, {
 		.core_type = DWMAC_CORE_GMAC4,
-		.min_id = DWMAC_CORE_4_00,
+		.min_snpsver = DWMAC_CORE_4_00,
 		.regs = {
 			.ptp_off = PTP_GMAC4_OFFSET,
 			.mmc_off = MMC_GMAC4_OFFSET,
@@ -204,7 +204,7 @@ static const struct stmmac_hwif_entry {
 		.quirks = NULL,
 	}, {
 		.core_type = DWMAC_CORE_GMAC4,
-		.min_id = DWMAC_CORE_4_10,
+		.min_snpsver = DWMAC_CORE_4_10,
 		.regs = {
 			.ptp_off = PTP_GMAC4_OFFSET,
 			.mmc_off = MMC_GMAC4_OFFSET,
@@ -225,7 +225,7 @@ static const struct stmmac_hwif_entry {
 		.quirks = NULL,
 	}, {
 		.core_type = DWMAC_CORE_GMAC4,
-		.min_id = DWMAC_CORE_5_10,
+		.min_snpsver = DWMAC_CORE_5_10,
 		.regs = {
 			.ptp_off = PTP_GMAC4_OFFSET,
 			.mmc_off = MMC_GMAC4_OFFSET,
@@ -246,7 +246,7 @@ static const struct stmmac_hwif_entry {
 		.quirks = NULL,
 	}, {
 		.core_type = DWMAC_CORE_XGMAC,
-		.min_id = DWXGMAC_CORE_2_10,
+		.min_snpsver = DWXGMAC_CORE_2_10,
 		.dev_id = DWXGMAC_ID,
 		.regs = {
 			.ptp_off = PTP_XGMAC_OFFSET,
@@ -268,7 +268,7 @@ static const struct stmmac_hwif_entry {
 		.quirks = NULL,
 	}, {
 		.core_type = DWMAC_CORE_XGMAC,
-		.min_id = DWXLGMAC_CORE_2_00,
+		.min_snpsver = DWXLGMAC_CORE_2_00,
 		.dev_id = DWXLGMAC_ID,
 		.regs = {
 			.ptp_off = PTP_XGMAC_OFFSET,
@@ -302,7 +302,7 @@ stmmac_hwif_find(enum dwmac_core_type core_type, u8 snpsver, u8 dev_id)
 		if (core_type != entry->core_type)
 			continue;
 		/* Use synopsys_id var because some setups can override this */
-		if (snpsver < entry->min_id)
+		if (snpsver < entry->min_snpsver)
 			continue;
 		if (core_type == DWMAC_CORE_XGMAC &&
 		    dev_id != entry->dev_id)
