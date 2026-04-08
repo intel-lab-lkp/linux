@@ -13833,7 +13833,7 @@ SYSCALL_DEFINE5(perf_event_open,
 	if (err)
 		return err;
 
-	if (!attr.exclude_kernel) {
+	if (!attr.exclude_kernel && !(attr.type == PERF_TYPE_TRACEPOINT && pid != -1)) {
 		err = perf_allow_kernel();
 		if (err)
 			return err;
