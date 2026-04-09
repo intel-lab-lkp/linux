@@ -5421,6 +5421,11 @@ static int raid5_read_one_chunk(struct mddev *mddev, struct bio *raid_bio)
 	sector_t sector, end_sector;
 	int dd_idx;
 	bool did_inc;
+	int seq;
+
+	seq = read_seqcount_begin(&conf->gen_lock);
+	if (unlikely(conf->reshape_progress != MaxSector))
+		return 0;
 
 	if (!in_chunk_boundary(mddev, raid_bio)) {
 		pr_debug("%s: non aligned\n", __func__);
@@ -5430,6 +5435,9 @@ static int raid5_read_one_chunk(struct mddev *mddev, struct bio *raid_bio)
 	sector = raid5_compute_sector(conf, raid_bio->bi_iter.bi_sector, 0,
 				      &dd_idx, NULL);
 	end_sector = sector + bio_sectors(raid_bio);
+
+	if (read_seqcount_retry(&conf->gen_lock, seq))
+		return 0;
 
 	if (r5c_big_stripe_cached(conf, sector))
 		return 0;
