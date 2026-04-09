@@ -141,13 +141,20 @@ static void nft_fwd_neigh_eval(const struct nft_expr *expr,
 		goto out;
 	}
 
+	if (nf_dup_netdev_has_recursed()) {
+		verdict = NF_DROP;
+		goto out;
+	}
+
 	dev = dev_get_by_index_rcu(nft_net(pkt), oif);
 	if (dev == NULL)
 		return;
 
 	skb->dev = dev;
 	skb_clear_tstamp(skb);
+	nf_dup_netdev_recursion_inc();
 	neigh_xmit(neigh_table, dev, addr, skb);
+	nf_dup_netdev_recursion_dec();
 out:
 	regs->verdict.code = verdict;
 }

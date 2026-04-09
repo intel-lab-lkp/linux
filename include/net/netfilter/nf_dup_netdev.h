@@ -7,6 +7,10 @@
 void nf_dup_netdev_egress(const struct nft_pktinfo *pkt, int oif);
 void nf_fwd_netdev_egress(const struct nft_pktinfo *pkt, int oif);
 
+bool nf_dup_netdev_has_recursed(void);
+void nf_dup_netdev_recursion_inc(void);
+void nf_dup_netdev_recursion_dec(void);
+
 struct nft_offload_ctx;
 struct nft_flow_rule;
 

@@ -29,6 +29,24 @@ static u8 *nf_get_nf_dup_skb_recursion(void)
 
 #endif
 
+bool nf_dup_netdev_has_recursed(void)
+{
+	return *nf_get_nf_dup_skb_recursion() > NF_RECURSION_LIMIT;
+}
+EXPORT_SYMBOL_GPL(nf_dup_netdev_has_recursed);
+
+void nf_dup_netdev_recursion_inc(void)
+{
+	(*nf_get_nf_dup_skb_recursion())++;
+}
+EXPORT_SYMBOL_GPL(nf_dup_netdev_recursion_inc);
+
+void nf_dup_netdev_recursion_dec(void)
+{
+	(*nf_get_nf_dup_skb_recursion())--;
+}
+EXPORT_SYMBOL_GPL(nf_dup_netdev_recursion_dec);
+
 static void nf_do_netdev_egress(struct sk_buff *skb, struct net_device *dev,
 				enum nf_dev_hooks hook)
 {
