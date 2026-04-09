@@ -1660,7 +1660,7 @@ static void __meminit remove_pte_mapping(pte_t *pte_base, unsigned long addr, un
 
 		ptep = pte_base + pte_index(addr);
 		pte = ptep_get(ptep);
-		if (!pte_present(*ptep))
+		if (!pte_present(pte))
 			continue;
 
 		pte_clear(&init_mm, addr, ptep);
