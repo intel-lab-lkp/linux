@@ -337,7 +337,14 @@ int BPF_STRUCT_OPS_SLEEPABLE(central_init)
 
 void BPF_STRUCT_OPS(central_exit, struct scx_exit_info *ei)
 {
+	u32 key = 0;
+	struct bpf_timer *timer;
+
 	UEI_RECORD(uei, ei);
+
+	timer = bpf_map_lookup_elem(&central_timer, &key);
+	if (timer)
+		bpf_timer_cancel(timer);
 }
 
 SCX_OPS_DEFINE(central_ops,
