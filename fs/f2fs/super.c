@@ -1844,6 +1844,13 @@ static int f2fs_drop_inode(struct inode *inode)
 			return 1;
 		}
 	}
+	/*
+	 * In order to get large folio as soon as possible, let's drop
+	 * inode cache asap. See also f2fs_release_file.
+	 */
+	if (f2fs_exist_written_data(F2FS_I_SB(inode),
+				    inode->i_ino, LARGE_FOLIO_INO))
+		return 1;
 
 	/*
 	 * This is to avoid a deadlock condition like below.
