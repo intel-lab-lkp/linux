@@ -261,9 +261,6 @@ static ssize_t ignore_nice_load_store(struct gov_attr_set *attr_set,
 	}
 	dbs_data->ignore_nice_load = input;
 
-	/* we need to re-evaluate prev_cpu_idle */
-	gov_update_cpu_data(dbs_data);
-
 	return count;
 }
 

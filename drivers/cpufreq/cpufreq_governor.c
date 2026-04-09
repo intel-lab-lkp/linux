@@ -92,6 +92,12 @@ EXPORT_SYMBOL_GPL(sampling_rate_store);
  *
  * Call under the @dbs_data->attr_set.update_lock. The per-policy
  * update_mutex is acquired and released internally for each policy.
+ *
+ * Note: prev_cpu_nice is intentionally not reset here. dbs_update() tracks
+ * prev_cpu_nice unconditionally on every sample, so it is always current.
+ * Resetting it here is therefore unnecessary and would only introduce a
+ * one-sample spike if a concurrent dbs_update() ran between the reset and
+ * the next sample.
  */
 void gov_update_cpu_data(struct dbs_data *dbs_data)
 {
@@ -106,8 +112,6 @@ void gov_update_cpu_data(struct dbs_data *dbs_data)
 
 			j_cdbs->prev_cpu_idle = get_cpu_idle_time(j, &j_cdbs->prev_update_time,
 								  dbs_data->io_is_busy);
-			if (dbs_data->ignore_nice_load)
-				j_cdbs->prev_cpu_nice = kcpustat_field(&kcpustat_cpu(j), CPUTIME_NICE, j);
 		}
 		mutex_unlock(&policy_dbs->update_mutex);
 	}
@@ -167,12 +171,18 @@ unsigned int dbs_update(struct cpufreq_policy *policy)
 
 		j_cdbs->prev_cpu_idle = cur_idle_time;
 
-		if (ignore_nice) {
-			u64 cur_nice = kcpustat_field(&kcpustat_cpu(j), CPUTIME_NICE, j);
+		/*
+		 * Always sample cur_nice and advance prev_cpu_nice, regardless
+		 * of ignore_nice.  This keeps prev_cpu_nice current so that
+		 * enabling ignore_nice_load via sysfs never produces a
+		 * stale-baseline spike (the delta will be at most one sampling
+		 * interval of accumulated nice time, not since boot).
+		 */
+		u64 cur_nice = kcpustat_field(&kcpustat_cpu(j), CPUTIME_NICE, j);
 
+		if (ignore_nice)
 			idle_time += div_u64(cur_nice - j_cdbs->prev_cpu_nice, NSEC_PER_USEC);
-			j_cdbs->prev_cpu_nice = cur_nice;
-		}
+		j_cdbs->prev_cpu_nice = cur_nice;
 
 		if (unlikely(!time_elapsed)) {
 			/*
@@ -519,7 +529,7 @@ int cpufreq_dbs_governor_start(struct cpufreq_policy *policy)
 	struct dbs_governor *gov = dbs_governor_of(policy);
 	struct policy_dbs_info *policy_dbs = policy->governor_data;
 	struct dbs_data *dbs_data = policy_dbs->dbs_data;
-	unsigned int sampling_rate, ignore_nice, j;
+	unsigned int sampling_rate, j;
 	unsigned int io_busy;
 
 	if (!policy->cur)
@@ -529,7 +539,6 @@ int cpufreq_dbs_governor_start(struct cpufreq_policy *policy)
 	policy_dbs->rate_mult = 1;
 
 	sampling_rate = dbs_data->sampling_rate;
-	ignore_nice = dbs_data->ignore_nice_load;
 	io_busy = dbs_data->io_is_busy;
 
 	mutex_lock(&policy_dbs->update_mutex);
@@ -542,8 +551,7 @@ int cpufreq_dbs_governor_start(struct cpufreq_policy *policy)
 		 */
 		j_cdbs->prev_load = 0;
 
-		if (ignore_nice)
-			j_cdbs->prev_cpu_nice = kcpustat_field(&kcpustat_cpu(j), CPUTIME_NICE, j);
+		j_cdbs->prev_cpu_nice = kcpustat_field(&kcpustat_cpu(j), CPUTIME_NICE, j);
 	}
 	mutex_unlock(&policy_dbs->update_mutex);
 
