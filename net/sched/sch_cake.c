@@ -1605,7 +1605,7 @@ static unsigned int cake_drop(struct Qdisc *sch, struct sk_buff **to_free)
 		cake_advance_shaper(q, b, skb, now, true);
 
 	qdisc_drop_reason(skb, sch, to_free, QDISC_DROP_OVERLIMIT);
-	sch->q.qlen--;
+	qdisc_qlen_dec(sch);
 
 	cake_heapify(q, 0);
 
@@ -1815,7 +1815,7 @@ static s32 cake_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 									  segs);
 			flow_queue_add(flow, segs);
 
-			sch->q.qlen++;
+			qdisc_qlen_inc(sch);
 			numsegs++;
 			slen += segs->len;
 			q->buffer_used += segs->truesize;
@@ -1854,7 +1854,7 @@ static s32 cake_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 			qdisc_tree_reduce_backlog(sch, 1, ack_pkt_len);
 			consume_skb(ack);
 		} else {
-			sch->q.qlen++;
+			qdisc_qlen_inc(sch);
 			q->buffer_used      += skb->truesize;
 		}
 
@@ -1980,7 +1980,7 @@ static struct sk_buff *cake_dequeue_one(struct Qdisc *sch)
 		b->tin_backlog		 -= len;
 		sch->qstats.backlog      -= len;
 		q->buffer_used		 -= skb->truesize;
-		sch->q.qlen--;
+		qdisc_qlen_dec(sch);
 
 		if (q->overflow_timeout)
 			cake_heapify(q, b->overflow_idx[q->cur_flow]);
