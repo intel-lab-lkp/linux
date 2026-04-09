@@ -1280,8 +1280,7 @@ static const struct option options[] = {
 	OPT_STRING_NOEMPTY('t', "field-separator", &symbol_conf.field_sep, "separator",
 		   "separator for columns, no spaces will be added between "
 		   "columns '.' is reserved."),
-	OPT_CALLBACK(0, "symfs", NULL, "directory",
-		     "Look for files with symbols relative to this directory",
+	OPT_CALLBACK(0, "symfs", NULL, "directory[,layout]", SYMFS_HELP,
 		     symbol__config_symfs),
 	OPT_UINTEGER('o', "order", &sort_compute, "Specify compute sorting."),
 	OPT_CALLBACK(0, "percentage", NULL, "relative|absolute",
@@ -1353,7 +1352,7 @@ static int cycles_printf(struct hist_entry *he, struct hist_entry *pair,
 	/*
 	 * Avoid printing the warning "addr2line_init failed for ..."
 	 */
-	symbol_conf.disable_add2line_warn = true;
+	symbol_conf.addr2line_disable_warn = true;
 
 	bi = block_he->block_info;
 
@@ -1987,7 +1986,7 @@ int cmd_diff(int argc, const char **argv)
 
 	if (compute == COMPUTE_STREAM) {
 		symbol_conf.show_branchflag_count = true;
-		symbol_conf.disable_add2line_warn = true;
+		symbol_conf.addr2line_disable_warn = true;
 		callchain_param.mode = CHAIN_FLAT;
 		callchain_param.key = CCKEY_SRCLINE;
 		callchain_param.branch_callstack = 1;
