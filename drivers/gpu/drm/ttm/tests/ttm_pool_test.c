@@ -2,6 +2,7 @@
 /*
  * Copyright © 2023 Intel Corporation
  */
+#include "linux/kconfig.h"
 #include <linux/mm.h>
 
 #include <drm/ttm/ttm_tt.h>
@@ -372,6 +373,11 @@ static void ttm_pool_free_no_dma_alloc(struct kunit *test)
 	enum ttm_caching caching = ttm_uncached;
 	unsigned int order = 2;
 	size_t size = (1 << order) * PAGE_SIZE;
+
+	if (!IS_ENABLED(CONFIG_X86)) {
+		kunit_skip(test, "Needs to be run on x86. Skipping.\n");
+		return;
+	}
 
 	tt = ttm_tt_kunit_init(test, 0, caching, size);
 	KUNIT_ASSERT_NOT_NULL(test, tt);
