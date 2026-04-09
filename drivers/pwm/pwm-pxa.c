@@ -53,6 +53,7 @@ struct pxa_pwm_chip {
 	struct device	*dev;
 
 	struct clk	*clk;
+	struct clk	*bus_clk;
 	void __iomem	*mmio_base;
 };
 
@@ -177,7 +178,12 @@ static int pwm_probe(struct platform_device *pdev)
 		return PTR_ERR(chip);
 	pc = to_pxa_pwm_chip(chip);
 
-	pc->clk = devm_clk_get(dev, NULL);
+	pc->bus_clk = devm_clk_get_optional_enabled(dev, "bus");
+	if (IS_ERR(pc->bus_clk))
+		return dev_err_probe(dev, PTR_ERR(pc->bus_clk), "Failed to get bus clock\n");
+
+	/* Get named func clk if bus clock is valid */
+	pc->clk = devm_clk_get(dev, pc->bus_clk ? "func" : NULL);
 	if (IS_ERR(pc->clk))
 		return dev_err_probe(dev, PTR_ERR(pc->clk), "Failed to get clock\n");
 
