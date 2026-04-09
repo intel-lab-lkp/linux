@@ -25,6 +25,7 @@
 #include <scsi/scsi_eh.h>
 #include <scsi/scsi_device.h>
 #include <scsi/scsi_tcq.h>
+#include <scsi/scsi_devinfo.h>
 #include <scsi/scsi_transport.h>
 #include <linux/libata.h>
 #include <linux/hdreg.h>
@@ -1131,7 +1132,14 @@ int ata_scsi_dev_config(struct scsi_device *sdev, struct queue_limits *lim,
 	if (dev->flags & ATA_DFLAG_TRUSTED)
 		sdev->security_supported = 1;
 
-	dev->sdev = sdev;
+	/*
+	 * Only LUN 0 is treated as the canonical scsi_device for the ATA
+	 * device.  Multi-LUN ATAPI devices share a single ata_device, so
+	 * dev->sdev must continue to track LUN 0 even when additional LUNs
+	 * are added or removed.
+	 */
+	if (sdev->lun == 0)
+		dev->sdev = sdev;
 	return 0;
 }
 
@@ -1220,7 +1228,12 @@ void ata_scsi_sdev_destroy(struct scsi_device *sdev)
 
 	spin_lock_irqsave(ap->lock, flags);
 	dev = __ata_scsi_find_dev(ap, sdev);
-	if (dev && dev->sdev) {
+	/*
+	 * Only detach when the canonical (LUN 0) scsi_device is going away.
+	 * Removing a non-LUN-0 sdev (e.g. a spurious multi-LUN scan result)
+	 * must not tear down the underlying ATA device.
+	 */
+	if (dev && dev->sdev == sdev) {
 		/* SCSI device already in CANCEL state, no need to offline it */
 		dev->sdev = NULL;
 		dev->flags |= ATA_DFLAG_DETACH;
@@ -2949,6 +2962,15 @@ static unsigned int atapi_xlat(struct ata_queued_cmd *qc)
 	memset(qc->cdb, 0, dev->cdb_len);
 	memcpy(qc->cdb, scmd->cmnd, scmd->cmd_len);
 
+	/*
+	 * Encode LUN in CDB byte 1 bits 7:5 for multi-LUN ATAPI devices
+	 * that use the SCSI-2 CDB LUN convention (e.g. Panasonic PD/CD
+	 * combo drives).
+	 */
+	if (scmd->device->lun)
+		qc->cdb[1] = (qc->cdb[1] & 0x1f) |
+			      ((scmd->device->lun & 0x7) << 5);
+
 	qc->complete_fn = atapi_qc_complete;
 
 	qc->tf.flags |= ATA_TFLAG_ISADDR | ATA_TFLAG_DEVICE;
@@ -3061,9 +3083,17 @@ static struct ata_device *__ata_scsi_find_dev(struct ata_port *ap,
 
 	/* skip commands not addressed to targets we simulate */
 	if (!sata_pmp_attached(ap)) {
-		if (unlikely(scsidev->channel || scsidev->lun))
+		if (unlikely(scsidev->channel))
 			return NULL;
 		devno = scsidev->id;
+		/* Allow non-zero LUNs for ATAPI devices (e.g. PD/CD combos) */
+		if (unlikely(scsidev->lun)) {
+			struct ata_device *dev = ata_find_dev(ap, devno);
+
+			if (!dev || dev->class != ATA_DEV_ATAPI)
+				return NULL;
+			return dev;
+		}
 	} else {
 		if (unlikely(scsidev->id || scsidev->lun))
 			return NULL;
@@ -4619,7 +4649,7 @@ int ata_scsi_add_hosts(struct ata_host *host, const struct scsi_host_template *s
 		shost->transportt = ata_scsi_transport_template;
 		shost->unique_id = ap->print_id;
 		shost->max_id = 16;
-		shost->max_lun = 1;
+		shost->max_lun = 8;
 		shost->max_channel = 1;
 		shost->max_cmd_len = 32;
 
