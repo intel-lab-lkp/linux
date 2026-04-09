@@ -2669,8 +2669,10 @@ void phylink_prepare_resume(struct phylink *pl)
 	 * then resume the PHY. Note that 802.3 allows PHYs 500ms before
 	 * the clock meets requirements. We do not implement this delay.
 	 */
-	if (pl->config->mac_requires_rxc && phydev && phydev->suspended)
+	if (pl->config->mac_requires_rxc && phydev && phydev->suspended) {
+		phy_init_hw(phydev);
 		phy_resume(phydev);
+	}
 }
 EXPORT_SYMBOL_GPL(phylink_prepare_resume);
 
@@ -2683,6 +2685,8 @@ EXPORT_SYMBOL_GPL(phylink_prepare_resume);
  */
 void phylink_resume(struct phylink *pl)
 {
+	struct phy_device *phydev = pl->phydev;
+
 	ASSERT_RTNL();
 
 	if (phylink_phy_pm_speed_ctrl(pl))
@@ -2712,6 +2716,9 @@ void phylink_resume(struct phylink *pl)
 		/* Re-enable and re-resolve the link parameters */
 		phylink_enable_and_run_resolve(pl, PHYLINK_DISABLE_MAC_WOL);
 	} else {
+		if (phydev && phydev->suspended)
+			phy_init_hw(phydev);
+
 		phylink_start(pl);
 	}
 }
