@@ -89,7 +89,6 @@ static int dwc3_generic_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "missing memory resource\n");
 		return -ENODEV;
 	}
-
 	dwc3g->resets = devm_reset_control_array_get_optional_exclusive(dev);
 	if (IS_ERR(dwc3g->resets))
 		return dev_err_probe(dev, PTR_ERR(dwc3g->resets), "failed to get resets\n");
@@ -214,6 +213,7 @@ static const struct of_device_id dwc3_generic_of_match[] = {
 	{ .compatible = "spacemit,k1-dwc3", },
 	{ .compatible = "fsl,ls1028a-dwc3", &fsl_ls1028_dwc3},
 	{ .compatible = "eswin,eic7700-dwc3", &eic7700_dwc3},
+	{ .compatible = "starfive,jhb100-dwc3", },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, dwc3_generic_of_match);
