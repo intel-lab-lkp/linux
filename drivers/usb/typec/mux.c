@@ -199,6 +199,8 @@ typec_switch_register(struct device *parent,
 		return ERR_PTR(ret);
 	}
 
+	device_set_pm_not_required(&sw_dev->dev);
+
 	ret = device_add(&sw_dev->dev);
 	if (ret) {
 		dev_err(parent, "failed to register switch (%d)\n", ret);
@@ -453,6 +455,8 @@ typec_mux_register(struct device *parent, const struct typec_mux_desc *desc)
 		put_device(&mux_dev->dev);
 		return ERR_PTR(ret);
 	}
+
+	device_set_pm_not_required(&mux_dev->dev);
 
 	ret = device_add(&mux_dev->dev);
 	if (ret) {
