@@ -3,18 +3,54 @@ set -e
 
 source $(dirname -- "${BASH_SOURCE[0]}")/lib.sh
 
+# List of devices which have a VFIO selftest driver
+DEVICES=(
+	"8086:0b25" # Intel Data Streaming Accelerator
+	"8086:0cf8" # Intel CBDMA
+)
+
+function print_supported_devices() {
+	local vendor_device_id
+	local id
+
+	for vendor_device_id in "${DEVICES[@]}"; do
+		read -r id <<< "${vendor_device_id}"
+		lspci -D -d "${id}" | awk '{ print $1 }'
+	done
+}
+
+function usage() {
+	echo "usage: $0 [-l] [-d <segment:bus:device.function>]" >&2
+	echo "" >&2
+	echo "  -l  List segment:bus:device.function numbers of supported devices." >&2
+	echo "  -d  segment:bus:device.function to set up." >&2
+}
+
 function main() {
 	local device_bdf
 	local device_dir
 	local numvfs
 	local driver
+	local bdf_list=()
 
-	if [ $# = 0 ]; then
-		echo "usage: $0 segment:bus:device.function ..." >&2
+	while getopts "ld:" opt; do
+		case ${opt} in
+			l)
+			 	echo "Supported devices: "
+				print_supported_devices
+				exit 0
+				;;
+			d) bdf_list+=("${OPTARG}") ;;
+			*) usage; exit 1 ;;
+		esac
+	done
+
+	if [ ${#bdf_list[@]} -eq 0 ]; then
+		usage
 		exit 1
 	fi
 
-	for device_bdf in "$@"; do
+	for device_bdf in "${bdf_list[@]}"; do
 		test -d /sys/bus/pci/devices/${device_bdf}
 
 		device_dir=${DEVICES_DIR}/${device_bdf}
@@ -42,6 +78,7 @@ function main() {
 
 		bind ${device_bdf} vfio-pci
 		touch ${device_dir}/vfio-pci
+		echo "Successfully set up ${device_bdf}"
 	done
 }
 
