@@ -541,12 +541,19 @@ static inline bool flow_rule_match_has_control_flags(const struct flow_rule *rul
 	return flow_rule_has_control_flags(match.mask->flags, extack);
 }
 
+enum flow_stats_byte_type {
+	FLOW_STATS_BYTES_L3 = 0,	/* L3 (inner IP) bytes */
+	FLOW_STATS_BYTES_INGRESS_L2,	/* full ingress L2 frame bytes */
+	FLOW_STATS_BYTES_EGRESS_L2,	/* full egress L2 frame bytes */
+};
+
 struct flow_stats {
 	u64	pkts;
 	u64	bytes;
 	u64	drops;
 	u64	lastused;
 	enum flow_action_hw_stats used_hw_stats;
+	enum flow_stats_byte_type byte_type;
 	bool used_hw_stats_valid;
 };
 
