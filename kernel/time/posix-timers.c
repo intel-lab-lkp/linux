@@ -9,6 +9,7 @@
  *
  * These are all the functions necessary to implement POSIX clocks & timers
  */
+#include <linux/capability.h>
 #include <linux/compat.h>
 #include <linux/compiler.h>
 #include <linux/init.h>
@@ -380,6 +381,8 @@ long posixtimer_create_prctl(unsigned long ctrl)
 		current->signal->timer_create_restore_ids = 0;
 		return 0;
 	case PR_TIMER_CREATE_RESTORE_IDS_ON:
+		if (!checkpoint_restore_ns_capable(current_user_ns()))
+			return -EPERM;
 		current->signal->timer_create_restore_ids = 1;
 		return 0;
 	case PR_TIMER_CREATE_RESTORE_IDS_GET:
