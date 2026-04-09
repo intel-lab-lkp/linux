@@ -176,7 +176,7 @@ static inline pte_t *pmd_page_vaddr(pmd_t pmd)
 #define pte_exec(pte)		(pte_isclear((pte), L_PTE_XN))
 
 #define pte_valid_user(pte)	\
-	(pte_valid(pte) && pte_isset((pte), L_PTE_USER) && pte_young(pte))
+	(pte_valid(pte) && pte_isset((pte), L_PTE_USER))
 
 static inline bool pte_access_permitted(pte_t pte, bool write)
 {
