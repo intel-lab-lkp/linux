@@ -7,6 +7,7 @@ use core::ops::{
 
 use kernel::{
     device,
+    devres::Devres,
     dma::CoherentHandle,
     fmt,
     io::Io,
@@ -16,7 +17,10 @@ use kernel::{
         Alignment, //
     },
     sizes::*,
-    sync::aref::ARef, //
+    sync::{
+        aref::ARef,
+        Arc, //
+    },
 };
 
 use crate::{
@@ -46,12 +50,14 @@ mod hal;
 /// Because of this, the sysmem flush memory page must be registered as early as possible during
 /// driver initialization, and before any falcon is reset.
 ///
-/// Users are responsible for manually calling [`Self::unregister`] before dropping this object,
-/// otherwise the GPU might still use it even after it has been freed.
+/// Users should call [`Self::unregister`] before unloading to ensure unregistering is infallible.
+/// [`Drop`] performs a best-effort fallback using revocable BAR access.
 pub(crate) struct SysmemFlush {
     /// Chipset we are operating on.
     chipset: Chipset,
     device: ARef<device::Device>,
+    /// MMIO mapping of PCI BAR 0.
+    bar: Arc<Devres<Bar0>>,
     /// Keep the page alive as long as we need it.
     page: CoherentHandle,
 }
@@ -60,6 +66,7 @@ impl SysmemFlush {
     /// Allocate a memory page and register it as the sysmem flush page.
     pub(crate) fn register(
         dev: &device::Device<device::Bound>,
+        devres_bar: Arc<Devres<Bar0>>,
         bar: &Bar0,
         chipset: Chipset,
     ) -> Result<Self> {
@@ -70,18 +77,17 @@ impl SysmemFlush {
         Ok(Self {
             chipset,
             device: dev.into(),
+            bar: devres_bar,
             page,
         })
     }
 
     /// Unregister the managed sysmem flush page.
-    ///
-    /// In order to gracefully tear down the GPU, users must make sure to call this method before
-    /// dropping the object.
     pub(crate) fn unregister(&self, bar: &Bar0) {
         let hal = hal::fb_hal(self.chipset);
+        let registered_dma_handle = hal.read_sysmem_flush_page(bar);
 
-        if hal.read_sysmem_flush_page(bar) == self.page.dma_handle() {
+        if registered_dma_handle == self.page.dma_handle() {
             let _ = hal.write_sysmem_flush_page(bar, 0).inspect_err(|e| {
                 dev_warn!(
                     &self.device,
@@ -89,13 +95,18 @@ impl SysmemFlush {
                     e
                 )
             });
-        } else {
-            // Another page has been registered after us for some reason - warn as this is a bug.
+        } else if registered_dma_handle != 0 {
             dev_warn!(
                 &self.device,
                 "attempt to unregister a sysmem flush page that is not active\n"
             );
         }
+    }
+}
+
+impl Drop for SysmemFlush {
+    fn drop(&mut self) {
+        let _ = self.bar.try_access_with(|bar| self.unregister(bar));
     }
 }
 

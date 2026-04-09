@@ -257,7 +257,12 @@ impl Gpu {
                     .inspect_err(|_| dev_err!(pdev, "GFW boot did not complete\n"))?;
             },
 
-            sysmem_flush: SysmemFlush::register(pdev.as_ref(), bar, spec.chipset)?,
+            sysmem_flush: SysmemFlush::register(
+                pdev.as_ref(),
+                devres_bar.clone(),
+                bar,
+                spec.chipset,
+            )?,
 
             gsp_falcon: Falcon::new(
                 pdev.as_ref(),
