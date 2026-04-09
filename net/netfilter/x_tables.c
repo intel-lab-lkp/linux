@@ -817,17 +817,6 @@ int xt_compat_match_to_user(const struct xt_entry_match *m,
 }
 EXPORT_SYMBOL_GPL(xt_compat_match_to_user);
 
-/* non-compat version may have padding after verdict */
-struct compat_xt_standard_target {
-	struct compat_xt_entry_target t;
-	compat_uint_t verdict;
-};
-
-struct compat_xt_error_target {
-	struct compat_xt_entry_target t;
-	char errorname[XT_FUNCTION_MAXNAMELEN];
-};
-
 int xt_compat_check_entry_offsets(const void *base, const char *elems,
 				  unsigned int target_offset,
 				  unsigned int next_offset)
@@ -850,18 +839,26 @@ int xt_compat_check_entry_offsets(const void *base, const char *elems,
 		return -EINVAL;
 
 	if (strcmp(t->u.user.name, XT_STANDARD_TARGET) == 0) {
-		const struct compat_xt_standard_target *st = (const void *)t;
+		DEFINE_RAW_FLEX(const struct compat_xt_entry_target, st, data,
+				sizeof(compat_uint_t));
+		compat_uint_t *verdict;
 
-		if (COMPAT_XT_ALIGN(target_offset + sizeof(*st)) != next_offset)
+		st = (const void *)t;
+		verdict = (compat_uint_t *)st->data;
+
+		if (COMPAT_XT_ALIGN(target_offset + __struct_size(st)) !=
+				next_offset)
 			return -EINVAL;
 
-		if (!verdict_ok(st->verdict))
+		if (!verdict_ok(*verdict))
 			return -EINVAL;
 	} else if (strcmp(t->u.user.name, XT_ERROR_TARGET) == 0) {
-		const struct compat_xt_error_target *et = (const void *)t;
+		DEFINE_RAW_FLEX(const struct compat_xt_entry_target, et, data,
+				XT_FUNCTION_MAXNAMELEN);
+		et = (const void *)t;
 
-		if (!error_tg_ok(t->u.target_size, sizeof(*et),
-				 et->errorname, sizeof(et->errorname)))
+		if (!error_tg_ok(t->u.target_size, __struct_size(et),
+				 et->data, __member_size(et->data)))
 			return -EINVAL;
 	}
 
