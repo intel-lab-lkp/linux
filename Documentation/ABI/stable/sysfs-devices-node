@@ -236,3 +236,13 @@ Description:
 		This interface is equivalent to the memcg variant.
 
 		See Documentation/admin-guide/cgroup-v2.rst
+
+What:		/sys/devices/system/node/nodeX/drop_caches
+Date:		Mar 2026
+Contact:	Linux Memory Management list <linux-mm@kvack.org>
+Description:
+		Drop clean page cache and/or reclaimable slab objects (dentries
+		and inodes) on a specific NUMA node. This is the per-node
+		equivalent of /proc/sys/vm/drop_caches
+
+		See Documentation/admin-guide/sysctl/vm.rst:drop_caches

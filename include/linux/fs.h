@@ -74,6 +74,7 @@ struct fs_parameter_spec;
 struct file_kattr;
 struct iomap_ops;
 struct delegated_inode;
+struct node;
 
 extern void __init inode_init(void);
 extern void __init inode_init_early(void);
@@ -3652,5 +3653,13 @@ static inline bool extensible_ioctl_valid(unsigned int cmd_a,
 		return false;
 	return true;
 }
+
+#if defined(CONFIG_SYSFS) && defined(CONFIG_NUMA)
+int drop_caches_register_node(struct node *node);
+void drop_caches_unregister_node(struct node *node);
+#else
+static inline int drop_caches_register_node(struct node *node) { return 0; }
+static inline void drop_caches_unregister_node(struct node *node) {}
+#endif /* CONFIG_SYSFS && CONFIG_NUMA */
 
 #endif /* _LINUX_FS_H */

@@ -522,17 +522,19 @@ void truncate_inode_pages_final(struct address_space *mapping)
 EXPORT_SYMBOL(truncate_inode_pages_final);
 
 /**
- * mapping_try_invalidate - Invalidate all the evictable folios of one inode
+ * mapping_try_invalidate - Invalidate all the evictable folios from a
+ *                          specific NUMA node of one inode
  * @mapping: the address_space which holds the folios to invalidate
  * @start: the offset 'from' which to invalidate
  * @end: the offset 'to' which to invalidate (inclusive)
+ * @nid: the NUMA node id to invalidate from, or NUMA_NO_NODE for all nodes
  * @nr_failed: How many folio invalidations failed
  *
  * This function is similar to invalidate_mapping_pages(), except that it
  * returns the number of folios which could not be evicted in @nr_failed.
  */
 unsigned long mapping_try_invalidate(struct address_space *mapping,
-		pgoff_t start, pgoff_t end, unsigned long *nr_failed)
+		pgoff_t start, pgoff_t end, int nid, unsigned long *nr_failed)
 {
 	pgoff_t indices[FOLIO_BATCH_SIZE];
 	struct folio_batch fbatch;
@@ -542,7 +544,7 @@ unsigned long mapping_try_invalidate(struct address_space *mapping,
 	int i;
 
 	folio_batch_init(&fbatch);
-	while (find_lock_entries(mapping, &index, end, &fbatch, indices)) {
+	while (__find_lock_entries(mapping, &index, end, nid, &fbatch, indices)) {
 		bool xa_has_values = false;
 		int nr = folio_batch_count(&fbatch);
 
@@ -599,9 +601,16 @@ unsigned long mapping_try_invalidate(struct address_space *mapping,
 unsigned long invalidate_mapping_pages(struct address_space *mapping,
 		pgoff_t start, pgoff_t end)
 {
-	return mapping_try_invalidate(mapping, start, end, NULL);
+	return mapping_try_invalidate(mapping, start, end, NUMA_NO_NODE, NULL);
 }
 EXPORT_SYMBOL(invalidate_mapping_pages);
+
+unsigned long invalidate_node_mapping_pages(struct address_space *mapping,
+		pgoff_t start, pgoff_t end, int nid)
+{
+	return mapping_try_invalidate(mapping, start, end, nid, NULL);
+}
+EXPORT_SYMBOL(invalidate_node_mapping_pages);
 
 static int folio_launder(struct address_space *mapping, struct folio *folio)
 {

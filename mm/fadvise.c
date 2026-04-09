@@ -155,7 +155,7 @@ int generic_fadvise(struct file *file, loff_t offset, loff_t len, int advice)
 			lru_add_drain();
 
 			mapping_try_invalidate(mapping, start_index, end_index,
-					&nr_failed);
+					       NUMA_NO_NODE, &nr_failed);
 
 			/*
 			 * The failures may be due to the folio being

@@ -2142,10 +2142,11 @@ unsigned find_get_entries(struct address_space *mapping, pgoff_t *start,
 }
 
 /**
- * find_lock_entries - Find a batch of pagecache entries.
+ * __find_lock_entries - Find a batch of pagecache entries from a specific node
  * @mapping:	The address_space to search.
  * @start:	The starting page cache index.
  * @end:	The final page index (inclusive).
+ * @nid		NUMA node ID to filter entries.
  * @fbatch:	Where the resulting entries are placed.
  * @indices:	The cache indices of the entries in @fbatch.
  *
@@ -2153,7 +2154,8 @@ unsigned find_get_entries(struct address_space *mapping, pgoff_t *start,
  * Swap, shadow and DAX entries are included.  Folios are returned
  * locked and with an incremented refcount.  Folios which are locked
  * by somebody else or under writeback are skipped.  Folios which are
- * partially outside the range are not returned.
+ * partially outside the range are not returned. Only entries belonging
+ * to nid will be returned, pass NUMA_NO_NODE to search all nodes.
  *
  * The entries have ascending indexes.  The indices may not be consecutive
  * due to not-present entries, large folios, folios which could not be
@@ -2161,8 +2163,8 @@ unsigned find_get_entries(struct address_space *mapping, pgoff_t *start,
  *
  * Return: The number of entries which were found.
  */
-unsigned find_lock_entries(struct address_space *mapping, pgoff_t *start,
-		pgoff_t end, struct folio_batch *fbatch, pgoff_t *indices)
+unsigned int __find_lock_entries(struct address_space *mapping, pgoff_t *start,
+		pgoff_t end, int nid, struct folio_batch *fbatch, pgoff_t *indices)
 {
 	XA_STATE(xas, &mapping->i_pages, *start);
 	struct folio *folio;
@@ -2180,6 +2182,8 @@ unsigned find_lock_entries(struct address_space *mapping, pgoff_t *start,
 				goto put;
 			/* Omit large folio which extends beyond the end */
 			if (base + nr - 1 > end)
+				goto put;
+			if (nid >= 0 && folio_nid(folio) != nid)
 				goto put;
 			if (!folio_trylock(folio))
 				goto put;

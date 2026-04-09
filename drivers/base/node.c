@@ -896,6 +896,7 @@ int register_node(int nid)
 	hugetlb_register_node(node);
 	compaction_register_node(node);
 	reclaim_register_node(node);
+	drop_caches_register_node(node);
 
 	/* link cpu under this node */
 	for_each_present_cpu(cpu) {
@@ -924,6 +925,7 @@ void unregister_node(int nid)
 	hugetlb_unregister_node(node);
 	compaction_unregister_node(node);
 	reclaim_unregister_node(node);
+	drop_caches_unregister_node(node);
 	node_remove_accesses(node);
 	node_remove_caches(node);
 	device_unregister(&node->dev);

@@ -4841,7 +4841,7 @@ static inline int in_gate_area(struct mm_struct *mm, unsigned long addr)
 
 bool process_shares_mm(const struct task_struct *p, const struct mm_struct *mm);
 
-void drop_slab(void);
+void drop_slab(int nid);
 
 #ifndef CONFIG_MMU
 #define randomize_va_space 0

@@ -418,19 +418,20 @@ static unsigned long drop_slab_node(int nid)
 	return freed;
 }
 
-void drop_slab(void)
+void drop_slab(int nid)
 {
-	int nid;
-	int shift = 0;
+	int i, shift = 0;
 	unsigned long freed;
+	nodemask_t n_mask;
 
+	n_mask = nid >= 0 ? nodemask_of_node(nid) : node_online_map;
 	do {
 		freed = 0;
-		for_each_online_node(nid) {
+		for_each_node_mask(i, n_mask) {
 			if (fatal_signal_pending(current))
 				return;
 
-			freed += drop_slab_node(nid);
+			freed += drop_slab_node(i);
 		}
 	} while ((freed >> shift++) > 1);
 }

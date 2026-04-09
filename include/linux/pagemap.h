@@ -20,6 +20,8 @@ struct folio_batch;
 
 unsigned long invalidate_mapping_pages(struct address_space *mapping,
 					pgoff_t start, pgoff_t end);
+unsigned long invalidate_node_mapping_pages(struct address_space *mapping,
+					pgoff_t start, pgoff_t end, int nid);
 
 static inline void invalidate_remote_inode(struct inode *inode)
 {

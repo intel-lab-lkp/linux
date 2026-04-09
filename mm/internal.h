@@ -553,8 +553,18 @@ static inline void force_page_cache_readahead(struct address_space *mapping,
 	force_page_cache_ra(&ractl, nr_to_read);
 }
 
-unsigned find_lock_entries(struct address_space *mapping, pgoff_t *start,
-		pgoff_t end, struct folio_batch *fbatch, pgoff_t *indices);
+unsigned int __find_lock_entries(struct address_space *mapping, pgoff_t *start,
+		pgoff_t end, int nid, struct folio_batch *fbatch,
+		pgoff_t *indices);
+
+static inline unsigned int find_lock_entries(struct address_space *mapping,
+		pgoff_t *start, pgoff_t end, struct folio_batch *fbatch,
+		pgoff_t *indices)
+{
+	return __find_lock_entries(mapping, start, end, NUMA_NO_NODE, fbatch,
+				   indices);
+}
+
 unsigned find_get_entries(struct address_space *mapping, pgoff_t *start,
 		pgoff_t end, struct folio_batch *fbatch, pgoff_t *indices);
 void filemap_free_folio(struct address_space *mapping, struct folio *folio);
@@ -563,7 +573,7 @@ bool truncate_inode_partial_folio(struct folio *folio, loff_t start,
 		loff_t end);
 long mapping_evict_folio(struct address_space *mapping, struct folio *folio);
 unsigned long mapping_try_invalidate(struct address_space *mapping,
-		pgoff_t start, pgoff_t end, unsigned long *nr_failed);
+		pgoff_t start, pgoff_t end, int nid, unsigned long *nr_failed);
 
 /**
  * folio_evictable - Test whether a folio is evictable.
