@@ -280,6 +280,10 @@ int ice_acl_add_rule_ethtool(struct ice_vsi *vsi, struct ethtool_rxnfc *cmd)
 		hw_prof->entry_h[hw_prof->cnt++][0] = entry_h;
 	}
 
+	input->acl_fltr = true;
+	/* input struct is added to the HW filter list */
+	ice_ntuple_update_list_entry(pf, input, fsp->location);
+
 	return 0;
 
 free_input:
