@@ -157,10 +157,8 @@ static int hugetlbfs_file_mmap_prepare(struct vm_area_desc *desc)
 	if (inode->i_flags & S_PRIVATE)
 		vma_flags_set(&vma_flags, VMA_NORESERVE_BIT);
 
-	if (hugetlb_reserve_pages(inode,
-			desc->pgoff >> huge_page_order(h),
-			len >> huge_page_shift(h), desc,
-			vma_flags) < 0)
+	if (hugetlb_reserve_pages(inode, desc->pgoff, len >> PAGE_SHIFT, desc,
+				  vma_flags) < 0)
 		goto out;
 
 	ret = 0;
@@ -408,8 +406,8 @@ static void hugetlb_unmap_file_folio(struct hstate *h,
 	unsigned long v_end;
 	pgoff_t start, end;
 
-	start = index * pages_per_huge_page(h);
-	end = (index + 1) * pages_per_huge_page(h);
+	start = index;
+	end = start + pages_per_huge_page(h);
 
 	i_mmap_lock_write(mapping);
 retry:
@@ -518,6 +516,8 @@ static void remove_inode_single_folio(struct hstate *h, struct inode *inode,
 		struct address_space *mapping, struct folio *folio,
 		pgoff_t index, bool truncate_op)
 {
+	pgoff_t next_index;
+
 	/*
 	 * If folio is mapped, it was faulted in after being
 	 * unmapped in caller or hugetlb_vmdelete_list() skips
@@ -540,8 +540,9 @@ static void remove_inode_single_folio(struct hstate *h, struct inode *inode,
 	VM_BUG_ON_FOLIO(folio_test_hugetlb_restore_reserve(folio), folio);
 	hugetlb_delete_from_page_cache(folio);
 	if (!truncate_op) {
+		next_index = index + pages_per_huge_page(h);
 		if (unlikely(hugetlb_unreserve_pages(inode, index,
-							index + 1, 1)))
+						     next_index, 1)))
 			hugetlb_fix_reserve_counts(inode);
 	}
 
@@ -575,7 +576,7 @@ static void remove_inode_hugepages(struct inode *inode, loff_t lstart,
 	struct address_space *mapping = &inode->i_data;
 	const pgoff_t end = lend >> PAGE_SHIFT;
 	struct folio_batch fbatch;
-	pgoff_t next, idx;
+	pgoff_t next;
 	int i, freed = 0;
 	bool truncate_op = (lend == LLONG_MAX);
 
@@ -592,9 +593,8 @@ static void remove_inode_hugepages(struct inode *inode, loff_t lstart,
 			/*
 			 * Remove folio that was part of folio_batch.
 			 */
-			idx = folio->index >> huge_page_order(h);
 			remove_inode_single_folio(h, inode, mapping, folio,
-						  idx, truncate_op);
+						  folio->index, truncate_op);
 			freed++;
 
 			mutex_unlock(&hugetlb_fault_mutex_table[hash]);
@@ -604,9 +604,8 @@ static void remove_inode_hugepages(struct inode *inode, loff_t lstart,
 	}
 
 	if (truncate_op)
-		(void)hugetlb_unreserve_pages(inode,
-				lstart >> huge_page_shift(h),
-				LONG_MAX, freed);
+		(void)hugetlb_unreserve_pages(inode, lstart >> PAGE_SHIFT,
+					      LONG_MAX, freed);
 }
 
 static void hugetlbfs_evict_inode(struct inode *inode)
@@ -1561,9 +1560,7 @@ struct file *hugetlb_file_setup(const char *name, size_t size,
 	inode->i_size = size;
 	clear_nlink(inode);
 
-	if (hugetlb_reserve_pages(inode, 0,
-			size >> huge_page_shift(hstate_inode(inode)), NULL,
-			acctflag) < 0)
+	if (hugetlb_reserve_pages(inode, 0, size >> PAGE_SHIFT, NULL, acctflag) < 0)
 		file = ERR_PTR(-ENOMEM);
 	else
 		file = alloc_file_pseudo(inode, mnt, name, O_RDWR,

@@ -6551,10 +6551,11 @@ next:
 }
 
 /*
- * Update the reservation map for the range [from, to].
+ * Update the reservation map for the range [from, to) where 'from' and 'to'
+ * are base-page indices that are expected to be huge page aligned.
  *
- * Returns the number of entries that would be added to the reservation map
- * associated with the range [from, to].  This number is greater or equal to
+ * Returns the number of huge pages that would be added to the reservation map
+ * associated with the range [from, to).  This number is greater or equal to
  * zero. -EINVAL or -ENOMEM is returned in case of any errors.
  */
 
@@ -6569,6 +6570,7 @@ long hugetlb_reserve_pages(struct inode *inode,
 	struct resv_map *resv_map;
 	struct hugetlb_cgroup *h_cg = NULL;
 	long gbl_reserve, regions_needed = 0;
+	long from_idx, to_idx;
 	int err;
 
 	/* This should never happen */
@@ -6576,6 +6578,12 @@ long hugetlb_reserve_pages(struct inode *inode,
 		VM_WARN(1, "%s called with a negative range\n", __func__);
 		return -EINVAL;
 	}
+
+	VM_WARN_ON(!IS_ALIGNED(from, 1UL << huge_page_order(h)));
+	VM_WARN_ON(!IS_ALIGNED(to,   1UL << huge_page_order(h)));
+
+	from_idx = from >> huge_page_order(h);
+	to_idx = to >> huge_page_order(h);
 
 	/*
 	 * Only apply hugepage reservation if asked. At fault time, an
@@ -6599,7 +6607,7 @@ long hugetlb_reserve_pages(struct inode *inode,
 		 */
 		resv_map = inode_resv_map(inode);
 
-		chg = region_chg(resv_map, from, to, &regions_needed);
+		chg = region_chg(resv_map, from_idx, to_idx, &regions_needed);
 	} else {
 		/* Private mapping. */
 		resv_map = resv_map_alloc();
@@ -6608,7 +6616,7 @@ long hugetlb_reserve_pages(struct inode *inode,
 			goto out_err;
 		}
 
-		chg = to - from;
+		chg = to_idx - from_idx;
 
 		set_vma_desc_resv_map(desc, resv_map);
 		set_vma_desc_resv_flags(desc, HPAGE_RESV_OWNER);
@@ -6663,7 +6671,7 @@ long hugetlb_reserve_pages(struct inode *inode,
 	 * else has to be done for private mappings here
 	 */
 	if (!desc || vma_desc_test(desc, VMA_MAYSHARE_BIT)) {
-		add = region_add(resv_map, from, to, regions_needed, h, h_cg);
+		add = region_add(resv_map, from_idx, to_idx, regions_needed, h, h_cg);
 
 		if (unlikely(add < 0)) {
 			hugetlb_acct_memory(h, -gbl_reserve);
@@ -6731,7 +6739,7 @@ out_err:
 		 * region_add failed or didn't run.
 		 */
 		if (chg >= 0 && add < 0)
-			region_abort(resv_map, from, to, regions_needed);
+			region_abort(resv_map, from_idx, to_idx, regions_needed);
 	if (desc && is_vma_desc_resv_set(desc, HPAGE_RESV_OWNER)) {
 		kref_put(&resv_map->refs, resv_map_release);
 		set_vma_desc_resv_map(desc, NULL);
@@ -6747,13 +6755,15 @@ long hugetlb_unreserve_pages(struct inode *inode, long start, long end,
 	long chg = 0;
 	struct hugepage_subpool *spool = subpool_inode(inode);
 	long gbl_reserve;
+	long start_idx = start >> huge_page_order(h);
+	long end_idx = end >> huge_page_order(h);
 
 	/*
 	 * Since this routine can be called in the evict inode path for all
 	 * hugetlbfs inodes, resv_map could be NULL.
 	 */
 	if (resv_map) {
-		chg = region_del(resv_map, start, end);
+		chg = region_del(resv_map, start_idx, end_idx);
 		/*
 		 * region_del() can fail in the rare case where a region
 		 * must be split and another region descriptor can not be

@@ -80,14 +80,15 @@ struct folio *memfd_alloc_folio(struct file *memfd, pgoff_t index)
 		struct inode *inode = file_inode(memfd);
 		struct hstate *h = hstate_file(memfd);
 		long nr_resv;
-		pgoff_t idx;
+		pgoff_t next_index;
 		int err = -ENOMEM;
 
 		gfp_mask = htlb_alloc_mask(h);
 		gfp_mask &= ~(__GFP_HIGHMEM | __GFP_MOVABLE);
-		idx = index >> huge_page_order(h);
+		next_index = index + pages_per_huge_page(h); 
 
-		nr_resv = hugetlb_reserve_pages(inode, idx, idx + 1, NULL, EMPTY_VMA_FLAGS);
+		nr_resv = hugetlb_reserve_pages(inode, index, next_index, NULL,
+						EMPTY_VMA_FLAGS);
 		if (nr_resv < 0)
 			return ERR_PTR(nr_resv);
 
@@ -137,7 +138,7 @@ struct folio *memfd_alloc_folio(struct file *memfd, pgoff_t index)
 		}
 err_unresv:
 		if (nr_resv > 0)
-			hugetlb_unreserve_pages(inode, idx, idx + 1, 0);
+			hugetlb_unreserve_pages(inode, index, next_index, 0);
 		return ERR_PTR(err);
 	}
 #endif
