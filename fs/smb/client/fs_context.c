@@ -1226,6 +1226,9 @@ static void smb3_sync_ctx_from_negotiated(struct cifs_sb_info *cifs_sb)
 	 */
 	ctx->ops = server->ops;
 	ctx->vals = server->vals;
+	/* /proc/mounts shows domain= from ses->domainName */
+	if (tcon->ses->domainName && !ctx->domainname)
+		ctx->domainname = kstrdup(tcon->ses->domainName, GFP_KERNEL);
 }
 
 /*
