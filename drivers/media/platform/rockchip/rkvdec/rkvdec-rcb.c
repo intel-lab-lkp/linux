@@ -57,7 +57,7 @@ bool rkvdec_rcb_buf_validate_size(struct rkvdec_ctx *ctx)
 	return ret;
 }
 
-void rkvdec_free_rcb(struct rkvdec_core *core)
+void rkvdec_free_rcb(struct rkvdec_dev *rkvdec, struct rkvdec_core *core)
 {
 	struct rkvdec_rcb_config *cfg = core->rcb_config;
 	unsigned long virt_addr;
@@ -76,12 +76,12 @@ void rkvdec_free_rcb(struct rkvdec_core *core)
 		case RKVDEC_ALLOC_SRAM:
 			virt_addr = (unsigned long)cfg->rcb_bufs[i].cpu;
 
-			if (core->iommu_domain)
-				iommu_unmap(core->iommu_domain, virt_addr, rcb_size);
+			if (rkvdec->iommu_global_domain)
+				iommu_unmap(rkvdec->iommu_global_domain, virt_addr, rcb_size);
 			gen_pool_free(core->sram_pool, virt_addr, rcb_size);
 			break;
 		case RKVDEC_ALLOC_DMA:
-			dma_free_coherent(core->dev,
+			dma_free_coherent(rkvdec->main_core->dev,
 					  rcb_size,
 					  cfg->rcb_bufs[i].cpu,
 					  cfg->rcb_bufs[i].dma);
@@ -97,7 +97,8 @@ void rkvdec_free_rcb(struct rkvdec_core *core)
 	core->rcb_config = NULL;
 }
 
-int rkvdec_allocate_rcb(struct rkvdec_core *core, u32 width, u32 height,
+int rkvdec_allocate_rcb(struct rkvdec_dev *rkvdec, struct rkvdec_core *core,
+			u32 width, u32 height,
 			const struct rcb_size_info *size_info,
 			size_t rcb_count)
 {
@@ -132,7 +133,7 @@ int rkvdec_allocate_rcb(struct rkvdec_core *core, u32 width, u32 height,
 
 		/* Try allocating an SRAM buffer */
 		if (core->sram_pool) {
-			if (core->iommu_domain)
+			if (rkvdec->iommu_global_domain)
 				rcb_size = ALIGN(rcb_size, SZ_4K);
 
 			cpu = gen_pool_dma_zalloc_align(core->sram_pool,
@@ -142,11 +143,11 @@ int rkvdec_allocate_rcb(struct rkvdec_core *core, u32 width, u32 height,
 		}
 
 		/* If an IOMMU is used, map the SRAM address through it */
-		if (cpu && core->iommu_domain) {
+		if (cpu && rkvdec->iommu_global_domain) {
 			unsigned long virt_addr = (unsigned long)cpu;
 			phys_addr_t phys_addr = dma;
 
-			ret = iommu_map(core->iommu_domain, virt_addr, phys_addr,
+			ret = iommu_map(rkvdec->iommu_global_domain, virt_addr, phys_addr,
 					rcb_size, IOMMU_READ | IOMMU_WRITE, 0);
 			if (ret) {
 				gen_pool_free(core->sram_pool,
@@ -166,7 +167,7 @@ int rkvdec_allocate_rcb(struct rkvdec_core *core, u32 width, u32 height,
 ram_fallback:
 		/* Fallback to RAM */
 		if (!cpu) {
-			cpu = dma_alloc_coherent(core->dev,
+			cpu = dma_alloc_coherent(rkvdec->main_core->dev,
 						 rcb_size,
 						 &dma,
 						 GFP_KERNEL);
@@ -189,7 +190,7 @@ ram_fallback:
 	return 0;
 
 err_alloc:
-	rkvdec_free_rcb(core);
+	rkvdec_free_rcb(rkvdec, core);
 
 	return ret;
 }

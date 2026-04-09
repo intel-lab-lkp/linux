@@ -135,7 +135,6 @@ struct rkvdec_core {
 	void __iomem *link;
 	struct delayed_work watchdog_work;
 	struct gen_pool *sram_pool;
-	struct iommu_domain *iommu_domain;
 	struct iommu_domain *empty_domain;
 	struct rkvdec_rcb_config *rcb_config;
 	struct rkvdec_ctx *curr_ctx;
@@ -155,6 +154,7 @@ struct rkvdec_dev {
 	unsigned int available_core_count;
 	spinlock_t cores_lock; /* serializes core list access */
 	struct rkvdec_core *main_core;
+	struct iommu_domain *iommu_global_domain;
 };
 
 struct rkvdec_ctx {

@@ -1204,9 +1204,9 @@ static void rkvdec_device_run(void *priv)
 	}
 
 	if (!rkvdec_rcb_buf_validate_size(ctx)) {
-		rkvdec_free_rcb(ctx->core);
+		rkvdec_free_rcb(ctx->dev, ctx->core);
 
-		ret = rkvdec_allocate_rcb(ctx->core,
+		ret = rkvdec_allocate_rcb(ctx->dev, ctx->core,
 					  ctx->decoded_fmt.fmt.pix_mp.width,
 					  ctx->decoded_fmt.fmt.pix_mp.height,
 					  ctx->dev->variant->rcb_sizes,
@@ -1486,6 +1486,7 @@ static void rkvdec_v4l2_cleanup(struct rkvdec_dev *rkvdec)
 
 static void rkvdec_iommu_restore(struct rkvdec_core *core)
 {
+	int ret;
 	if (core->empty_domain) {
 		/*
 		 * To rewrite mapping into the attached IOMMU core, attach a new empty domain that
@@ -1494,8 +1495,14 @@ static void rkvdec_iommu_restore(struct rkvdec_core *core)
 		 * This is safely done in this interrupt handler to make sure no memory get mapped
 		 * through the IOMMU while the empty domain is attached.
 		 */
-		iommu_attach_device(core->empty_domain, core->dev);
+		iommu_detach_device(core->curr_ctx->dev->iommu_global_domain, core->dev);
+		ret = iommu_attach_device(core->empty_domain, core->dev);
+		if (ret)
+			dev_warn(core->dev, "Cannot attach empty domain: %d\n", ret);
 		iommu_detach_device(core->empty_domain, core->dev);
+		ret = iommu_attach_device(core->curr_ctx->dev->iommu_global_domain, core->dev);
+		if (ret)
+			dev_warn(core->dev, "Cannot attach global domain: %d\n", ret);
 	}
 }
 
@@ -1858,6 +1865,8 @@ static int rkvdec_probe(struct platform_device *pdev)
 
 	core = &rkvdec->cores[rkvdec->core_count++];
 
+	core->id = rkvdec->core_count - 1;
+
 	platform_set_drvdata(pdev, rkvdec);
 	core->dev = &pdev->dev;
 	INIT_DELAYED_WORK(&core->watchdog_work, rkvdec_watchdog_func);
@@ -1883,12 +1892,24 @@ static int rkvdec_probe(struct platform_device *pdev)
 			return PTR_ERR(core->link);
 	}
 
-	core->iommu_domain = iommu_get_domain_for_dev(&pdev->dev);
-	if (core->iommu_domain) {
+	if (iommu_get_domain_for_dev(&pdev->dev)) {
 		core->empty_domain = iommu_paging_domain_alloc(core->dev);
 
-		if (!core->empty_domain)
+		if (IS_ERR(core->empty_domain))
 			dev_warn(core->dev, "cannot alloc new empty domain\n");
+
+		if (!rkvdec->iommu_global_domain) {
+			rkvdec->iommu_global_domain = iommu_get_domain_for_dev(core->dev);
+
+			if (IS_ERR(rkvdec->iommu_global_domain)) {
+				rkvdec->iommu_global_domain = NULL;
+				dev_warn_once(core->dev, "cannot alloc new global domain\n");
+			}
+		}
+
+		ret = iommu_attach_device(rkvdec->iommu_global_domain, core->dev);
+		if (ret)
+			dev_warn(core->dev, "cannot attach global domain to core %d\n", core->id);
 	}
 
 	ret = dma_set_coherent_mask(&pdev->dev, DMA_BIT_MASK(32));
@@ -1961,7 +1982,7 @@ static void rkvdec_remove(struct platform_device *pdev)
 		if (rkvdec->cores[i].empty_domain)
 			iommu_domain_free(rkvdec->cores[i].empty_domain);
 
-		rkvdec_free_rcb(&rkvdec->cores[i]);
+		rkvdec_free_rcb(rkvdec, &rkvdec->cores[i]);
 	}
 }
 
