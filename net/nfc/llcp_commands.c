@@ -201,25 +201,39 @@ int nfc_llcp_parse_gb_tlv(struct nfc_llcp_local *local,
 		return -ENODEV;
 
 	while (offset < tlv_array_len) {
+		if (tlv_array_len - offset < 2)
+			break;
 		type = tlv[0];
 		length = tlv[1];
+		if (tlv_array_len - offset - 2 < length)
+			break;
 
 		pr_debug("type 0x%x length %d\n", type, length);
 
 		switch (type) {
 		case LLCP_TLV_VERSION:
+			if (length < 1)
+				break;
 			local->remote_version = llcp_tlv_version(tlv);
 			break;
 		case LLCP_TLV_MIUX:
+			if (length < 2)
+				break;
 			local->remote_miu = llcp_tlv_miux(tlv) + 128;
 			break;
 		case LLCP_TLV_WKS:
+			if (length < 2)
+				break;
 			local->remote_wks = llcp_tlv_wks(tlv);
 			break;
 		case LLCP_TLV_LTO:
+			if (length < 1)
+				break;
 			local->remote_lto = llcp_tlv_lto(tlv) * 10;
 			break;
 		case LLCP_TLV_OPT:
+			if (length < 1)
+				break;
 			local->remote_opt = llcp_tlv_opt(tlv);
 			break;
 		default:
@@ -251,16 +265,24 @@ int nfc_llcp_parse_connection_tlv(struct nfc_llcp_sock *sock,
 		return -ENOTCONN;
 
 	while (offset < tlv_array_len) {
+		if (tlv_array_len - offset < 2)
+			break;
 		type = tlv[0];
 		length = tlv[1];
+		if (tlv_array_len - offset - 2 < length)
+			break;
 
 		pr_debug("type 0x%x length %d\n", type, length);
 
 		switch (type) {
 		case LLCP_TLV_MIUX:
+			if (length < 2)
+				break;
 			sock->remote_miu = llcp_tlv_miux(tlv) + 128;
 			break;
 		case LLCP_TLV_RW:
+			if (length < 1)
+				break;
 			sock->remote_rw = llcp_tlv_rw(tlv);
 			break;
 		case LLCP_TLV_SN:
