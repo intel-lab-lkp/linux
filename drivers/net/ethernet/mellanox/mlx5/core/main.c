@@ -86,7 +86,7 @@ MODULE_PARM_DESC(debug_mask, "debug mask: 1 = dump cmd data, 2 = dump cmd exec t
 
 static unsigned int prof_sel = MLX5_DEFAULT_PROF;
 module_param_named(prof_sel, prof_sel, uint, 0444);
-MODULE_PARM_DESC(prof_sel, "profile selector. Valid range 0 - 2");
+MODULE_PARM_DESC(prof_sel, "profile selector. Valid range 0 - 4");
 
 static u32 sw_owner_id[4];
 #define MAX_SW_VHCA_ID (BIT(__mlx5_bit_sz(cmd_hca_cap_2, sw_vhca_id)) - 1)
@@ -184,6 +184,11 @@ static struct mlx5_profile profile[] = {
 		.mask		= MLX5_PROF_MASK_QP_SIZE,
 		.log_max_qp	= LOG_MAX_SUPPORTED_QPS,
 		.num_cmd_caches = 0,
+	},
+	[4] = {
+		.mask = MLX5_PROF_MASK_DEF_SWITCHDEV | MLX5_PROF_MASK_QP_SIZE,
+		.log_max_qp = LOG_MAX_SUPPORTED_QPS,
+		.num_cmd_caches = MLX5_NUM_COMMAND_CACHES,
 	},
 };
 
@@ -1451,6 +1456,17 @@ static void mlx5_unload(struct mlx5_core_dev *dev)
 	mlx5_free_bfreg(dev, &dev->priv.bfreg);
 }
 
+static void mlx5_set_default_switchdev(struct mlx5_core_dev *dev)
+{
+	int err;
+
+	err = mlx5_devlink_eswitch_mode_set(priv_to_devlink(dev),
+					    DEVLINK_ESWITCH_MODE_SWITCHDEV,
+					    NULL);
+	if (err && err != -EOPNOTSUPP)
+		mlx5_core_warn(dev, "failed setting switchdev as default\n");
+}
+
 int mlx5_init_one_devl_locked(struct mlx5_core_dev *dev)
 {
 	bool light_probe = mlx5_dev_is_lightweight(dev);
@@ -1497,6 +1513,10 @@ int mlx5_init_one_devl_locked(struct mlx5_core_dev *dev)
 		mlx5_core_err(dev, "mlx5_hwmon_dev_register failed with error code %d\n", err);
 
 	mutex_unlock(&dev->intf_state_mutex);
+
+	if (dev->profile.mask & MLX5_PROF_MASK_DEF_SWITCHDEV)
+		mlx5_set_default_switchdev(dev);
+
 	return 0;
 
 err_register:
@@ -1598,6 +1618,10 @@ int mlx5_load_one_devl_locked(struct mlx5_core_dev *dev, bool recovery)
 		goto err_attach;
 
 	mutex_unlock(&dev->intf_state_mutex);
+
+	if (dev->profile.mask & MLX5_PROF_MASK_DEF_SWITCHDEV)
+		mlx5_set_default_switchdev(dev);
+
 	return 0;
 
 err_attach:
