@@ -3591,14 +3591,19 @@ static inline bool dev_xmit_recursion(void)
 			XMIT_RECURSION_LIMIT);
 }
 
+/* Non PREEMPT_RT version: inc and dec must run on the same CPU,
+ * migrate_disable is sufficient.
+ */
 static inline void dev_xmit_recursion_inc(void)
 {
+	migrate_disable();
 	__this_cpu_inc(softnet_data.xmit.recursion);
 }
 
 static inline void dev_xmit_recursion_dec(void)
 {
 	__this_cpu_dec(softnet_data.xmit.recursion);
+	migrate_enable();
 }
 #else
 static inline int dev_recursion_level(void)
