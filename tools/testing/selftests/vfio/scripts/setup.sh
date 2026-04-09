@@ -19,11 +19,30 @@ function print_supported_devices() {
 	done
 }
 
+function pick_device() {
+	local bdf
+
+	while read -r bdf; do
+		if [ -n "${bdf}" ]; then
+			if [ -d "${DEVICES_DIR}/${bdf}" ]; then
+				echo "${bdf} has already been set up, exiting." >&2
+				exit 0
+			fi
+			echo "${bdf}"
+			return 0
+		fi
+	done <<< "$(print_supported_devices)"
+
+	echo "No available supported devices found on the system." >&2
+	exit 1
+}
+
 function usage() {
 	echo "usage: $0 [-l] [-d <segment:bus:device.function>]" >&2
 	echo "" >&2
 	echo "  -l  List segment:bus:device.function numbers of supported devices." >&2
 	echo "  -d  segment:bus:device.function to set up." >&2
+	echo "      If -d is not specified, a device will be automatically picked." >&2
 }
 
 function main() {
@@ -46,8 +65,7 @@ function main() {
 	done
 
 	if [ ${#bdf_list[@]} -eq 0 ]; then
-		usage
-		exit 1
+		bdf_list=($(pick_device))
 	fi
 
 	for device_bdf in "${bdf_list[@]}"; do
