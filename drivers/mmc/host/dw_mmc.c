@@ -50,8 +50,6 @@
 				 SDMMC_IDMAC_INT_FBE | SDMMC_IDMAC_INT_RI | \
 				 SDMMC_IDMAC_INT_TI)
 
-#define DESC_RING_BUF_SZ	PAGE_SIZE
-
 struct idmac_desc_64addr {
 	u32		des0;	/* Control Descriptor */
 #define IDMAC_OWN_CLR64(x) \
@@ -493,7 +491,7 @@ static int dw_mci_idmac_init(struct dw_mci *host)
 		struct idmac_desc_64addr *p;
 
 		host->desc_num =
-			DESC_RING_BUF_SZ / sizeof(struct idmac_desc_64addr);
+			host->ring_size / sizeof(struct idmac_desc_64addr);
 
 		/* Forward link the descriptor list */
 		for (i = 0, p = host->sg_cpu; i < host->desc_num - 1;
@@ -521,7 +519,7 @@ static int dw_mci_idmac_init(struct dw_mci *host)
 		struct idmac_desc *p;
 
 		host->desc_num =
-			DESC_RING_BUF_SZ / sizeof(struct idmac_desc);
+			host->ring_size / sizeof(struct idmac_desc);
 
 		/* Forward link the descriptor list */
 		for (i = 0, p = host->sg_cpu;
@@ -653,7 +651,7 @@ static inline int dw_mci_prepare_desc(struct dw_mci *host, struct mmc_data *data
 err_own_bit:
 	/* restore the descriptor chain as it's polluted */
 	dev_dbg(host->dev, "descriptor is still owned by IDMAC.\n");
-	memset(host->sg_cpu, 0, DESC_RING_BUF_SZ);
+	memset(host->sg_cpu, 0, host->ring_size);
 	dw_mci_idmac_init(host);
 	return -EINVAL;
 }
@@ -2954,7 +2952,7 @@ static void dw_mci_init_dma(struct dw_mci *host)
 
 		/* Alloc memory for sg translation */
 		host->sg_cpu = dmam_alloc_coherent(host->dev,
-						   DESC_RING_BUF_SZ,
+						   host->ring_size,
 						   &host->sg_dma, GFP_KERNEL);
 		if (!host->sg_cpu) {
 			dev_err(host->dev,
@@ -3185,6 +3183,7 @@ struct dw_mci *dw_mci_alloc_host(struct device *dev)
 	host = mmc_priv(mmc);
 	host->mmc = mmc;
 	host->dev = dev;
+	host->ring_size = PAGE_SIZE;
 
 	return host;
 }
