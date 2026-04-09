@@ -3496,6 +3496,15 @@ static int push_leaf_left(struct btrfs_trans_handle *trans, struct btrfs_root
 		return PTR_ERR(left);
 
 	btrfs_tree_lock_nested(left, BTRFS_NESTING_LEFT);
+	/* An empty non-root leaf means the tree is corrupted. */
+	if (unlikely(btrfs_header_nritems(left) == 0)) {
+		btrfs_crit(left->fs_info,
+			   "empty left leaf at bytenr %llu while pushing from right leaf %llu",
+			   left->start, right->start);
+		ret = -EUCLEAN;
+		btrfs_abort_transaction(trans, ret);
+		goto out;
+	}
 
 	free_space = btrfs_leaf_free_space(left);
 	if (free_space < data_size) {
