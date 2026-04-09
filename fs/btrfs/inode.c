@@ -4506,6 +4506,8 @@ int btrfs_unlink_inode(struct btrfs_trans_handle *trans,
 {
 	int ret;
 
+	btrfs_record_unlink_dir(trans, dir, inode, false);
+
 	ret = __btrfs_unlink_inode(trans, dir, inode, name, NULL);
 	if (!ret) {
 		drop_nlink(&inode->vfs_inode);
@@ -4548,9 +4550,6 @@ static int btrfs_unlink(struct inode *dir, struct dentry *dentry)
 		ret = PTR_ERR(trans);
 		goto fscrypt_free;
 	}
-
-	btrfs_record_unlink_dir(trans, BTRFS_I(dir), BTRFS_I(d_inode(dentry)),
-				false);
 
 	ret = btrfs_unlink_inode(trans, BTRFS_I(dir), BTRFS_I(d_inode(dentry)),
 				 &fname.disk_name);
