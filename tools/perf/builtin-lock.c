@@ -1991,6 +1991,7 @@ static int check_lock_contention_options(const struct option *options,
 
 static int __cmd_contention(int argc, const char **argv)
 {
+	sigset_t sig_mask, oldmask;
 	int err = -EINVAL;
 	struct perf_tool eops;
 	struct perf_data data = {
@@ -2123,12 +2124,25 @@ static int __cmd_contention(int argc, const char **argv)
 	}
 
 	if (use_bpf) {
+		/*
+		 * Block all handled signals after evlist__prepare_workload()
+		 * so the forked child does not inherit a modified signal
+		 * mask, then use sigsuspend() to atomically unblock and
+		 * wait. This prevents a race where a short-lived workload
+		 * exits and delivers SIGCHLD before we are ready to wait.
+		 */
+		sigemptyset(&sig_mask);
+		sigaddset(&sig_mask, SIGCHLD);
+		sigaddset(&sig_mask, SIGINT);
+		sigaddset(&sig_mask, SIGTERM);
+		sigprocmask(SIG_BLOCK, &sig_mask, &oldmask);
+
 		lock_contention_start();
 		if (argc)
 			evlist__start_workload(con.evlist);
 
-		/* wait for signal */
-		pause();
+		sigsuspend(&oldmask);
+		sigprocmask(SIG_SETMASK, &oldmask, NULL);
 
 		lock_contention_stop();
 		lock_contention_read(&con);
