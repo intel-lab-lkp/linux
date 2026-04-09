@@ -143,4 +143,11 @@
 	offset = (0xb000000ull | (a) << 4 | (b) << 20);		\
 	offset; })
 
+/* NPA Registers */
+#define NPA_AF_DPCX_CFG(a)		(0x800 | (a) << 6)
+#define NPA_AF_DPC_PERMITX(a)		(0x1000 | (a) << 3)
+
+#define NPA_DPC_MAX			32
+#define NPA_DPC_LFS_PER_REG		64
+
 #endif /* RVU_MBOX_REG_H */
