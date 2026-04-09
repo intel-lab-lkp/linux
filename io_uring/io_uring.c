@@ -2934,6 +2934,7 @@ static __poll_t io_uring_poll(struct file *file, poll_table *wait)
 	 */
 	poll_wait(file, &ctx->poll_wq, wait);
 
+	spin_lock(&ctx->completion_lock);
 	if (!io_sqring_full(ctx))
 		mask |= EPOLLOUT | EPOLLWRNORM;
 
@@ -2953,6 +2954,7 @@ static __poll_t io_uring_poll(struct file *file, poll_table *wait)
 
 	if (__io_cqring_events_user(ctx) || io_has_work(ctx))
 		mask |= EPOLLIN | EPOLLRDNORM;
+	spin_unlock(&ctx->completion_lock);
 
 	return mask;
 }
