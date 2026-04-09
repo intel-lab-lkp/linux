@@ -14,10 +14,17 @@
 #include <linux/netdevice.h>
 #include <net/net_namespace.h>
 #include <net/sock.h>
+#include <asm/byteorder.h>
 
 /* MCTP packet definitions */
 struct mctp_hdr {
-	u8	ver;
+#if defined(__LITTLE_ENDIAN_BITFIELD)
+	u8	ver:4, rsvd: 4;
+#elif defined(__BIG_ENDIAN_BITFIELD)
+	u8	rsvd:4, ver: 4;
+#else
+#error	"Please fix <asm/byteorder.h>"
+#endif
 	u8	dest;
 	u8	src;
 	u8	flags_seq_tag;
