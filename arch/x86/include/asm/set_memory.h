@@ -4,7 +4,6 @@
 
 #include <asm/page.h>
 #include <asm-generic/set_memory.h>
-#include <asm/pgtable.h>
 
 #define set_memory_rox set_memory_rox
 int set_memory_rox(unsigned long addr, int numpages);

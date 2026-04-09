@@ -14,6 +14,7 @@
 #include <asm/insn.h>
 #include <asm/sev-common.h>
 #include <asm/coco.h>
+#include <asm/pgtable.h>
 #include <asm/set_memory.h>
 #include <asm/svm.h>
 
