@@ -1332,9 +1332,9 @@ static void smb3_sync_tcon_opts(struct cifs_sb_info *cifs_sb,
 
 /*
  * Synchronize server-level options that are stored on TCP_Server_Info
- * at mount time.  These fields are consulted at runtime (retry logic)
- * so remount needs to update the live server struct in addition to
- * cifs_sb->ctx.
+ * at mount time.  These fields are consulted at runtime (echo work,
+ * retry logic) so remount needs to update the live server struct in
+ * addition to cifs_sb->ctx.
  */
 static void smb3_sync_server_opts(struct cifs_sb_info *cifs_sb)
 {
@@ -1343,6 +1343,11 @@ static void smb3_sync_server_opts(struct cifs_sb_info *cifs_sb)
 
 	if (ctx->retrans)
 		server->retrans = ctx->retrans;
+	if (ctx->echo_interval) {
+		server->echo_interval = ctx->echo_interval * HZ;
+		mod_delayed_work(cifsiod_wq, &server->echo,
+				 server->echo_interval);
+	}
 }
 
 static int smb3_reconfigure(struct fs_context *fc)
