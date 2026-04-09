@@ -5533,7 +5533,7 @@ retry_avoidcopy:
 		 */
 		if (cow_from_owner) {
 			struct address_space *mapping = vma->vm_file->f_mapping;
-			pgoff_t idx;
+			pgoff_t index;
 			u32 hash;
 
 			folio_put(old_folio);
@@ -5546,8 +5546,9 @@ retry_avoidcopy:
 			 *
 			 * Reacquire both after unmap operation.
 			 */
-			idx = vma_hugecache_offset(h, vma, vmf->address);
-			hash = hugetlb_fault_mutex_hash(mapping, idx);
+			index = linear_page_index(vma, vmf->address);
+			hash = hugetlb_fault_mutex_hash(mapping, index);
+
 			hugetlb_vma_unlock_read(vma);
 			mutex_unlock(&hugetlb_fault_mutex_table[hash]);
 
@@ -5682,6 +5683,10 @@ static inline vm_fault_t hugetlb_handle_userfault(struct vm_fault *vmf,
 						  unsigned long reason)
 {
 	u32 hash;
+	pgoff_t index;
+
+	index = linear_page_index((const struct vm_area_struct *)vmf, vmf->address);
+	hash = hugetlb_fault_mutex_hash(mapping, index);
 
 	/*
 	 * vma_lock and hugetlb_fault_mutex must be dropped before handling
@@ -5689,7 +5694,6 @@ static inline vm_fault_t hugetlb_handle_userfault(struct vm_fault *vmf,
 	 * userfault, any vma operation should be careful from here.
 	 */
 	hugetlb_vma_unlock_read(vmf->vma);
-	hash = hugetlb_fault_mutex_hash(mapping, vmf->pgoff);
 	mutex_unlock(&hugetlb_fault_mutex_table[hash]);
 	return handle_userfault(vmf, reason);
 }
@@ -5714,7 +5718,8 @@ static bool hugetlb_pte_stable(struct hstate *h, struct mm_struct *mm, unsigned 
 static vm_fault_t hugetlb_no_page(struct address_space *mapping,
 			struct vm_fault *vmf)
 {
-	u32 hash = hugetlb_fault_mutex_hash(mapping, vmf->pgoff);
+	u32 hash;
+	pgoff_t index;
 	bool new_folio, new_anon_folio = false;
 	struct vm_area_struct *vma = vmf->vma;
 	struct mm_struct *mm = vma->vm_mm;
@@ -5725,6 +5730,8 @@ static vm_fault_t hugetlb_no_page(struct address_space *mapping,
 	unsigned long size;
 	pte_t new_pte;
 
+	index = vmf->pgoff << huge_page_order(h);
+	hash = hugetlb_fault_mutex_hash(mapping, index);
 	/*
 	 * Currently, we are forced to kill the process in the event the
 	 * original mapper has unmapped pages from the child due to a failed
@@ -5938,13 +5945,14 @@ backout_unlocked:
 }
 
 #ifdef CONFIG_SMP
-u32 hugetlb_fault_mutex_hash(struct address_space *mapping, pgoff_t idx)
+/* 'index' is expected to be in PAGE_SIZE granularity */
+u32 hugetlb_fault_mutex_hash(struct address_space *mapping, pgoff_t index)
 {
 	unsigned long key[2];
 	u32 hash;
 
 	key[0] = (unsigned long) mapping;
-	key[1] = idx;
+	key[1] = index >> huge_page_order(hstate_inode(mapping->host)); 
 
 	hash = jhash2((u32 *)&key, sizeof(key)/(sizeof(u32)), 0);
 
@@ -5955,7 +5963,7 @@ u32 hugetlb_fault_mutex_hash(struct address_space *mapping, pgoff_t idx)
  * For uniprocessor systems we always use a single mutex, so just
  * return 0 and avoid the hashing overhead.
  */
-u32 hugetlb_fault_mutex_hash(struct address_space *mapping, pgoff_t idx)
+u32 hugetlb_fault_mutex_hash(struct address_space *mapping, pgoff_t index)
 {
 	return 0;
 }
@@ -5970,6 +5978,7 @@ vm_fault_t hugetlb_fault(struct mm_struct *mm, struct vm_area_struct *vma,
 	struct hstate *h = hstate_vma(vma);
 	struct address_space *mapping;
 	bool need_wait_lock = false;
+	pgoff_t index;
 	struct vm_fault vmf = {
 		.vma = vma,
 		.address = address & huge_page_mask(h),
@@ -5990,8 +5999,9 @@ vm_fault_t hugetlb_fault(struct mm_struct *mm, struct vm_area_struct *vma,
 	 * get spurious allocation failures if two CPUs race to instantiate
 	 * the same page in the page cache.
 	 */
+	index = linear_page_index(vma, vmf.address);
 	mapping = vma->vm_file->f_mapping;
-	hash = hugetlb_fault_mutex_hash(mapping, vmf.pgoff);
+	hash = hugetlb_fault_mutex_hash(mapping, index);
 	mutex_lock(&hugetlb_fault_mutex_table[hash]);
 
 	/*

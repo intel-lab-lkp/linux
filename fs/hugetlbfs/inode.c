@@ -575,7 +575,7 @@ static void remove_inode_hugepages(struct inode *inode, loff_t lstart,
 	struct address_space *mapping = &inode->i_data;
 	const pgoff_t end = lend >> PAGE_SHIFT;
 	struct folio_batch fbatch;
-	pgoff_t next, index;
+	pgoff_t next, idx;
 	int i, freed = 0;
 	bool truncate_op = (lend == LLONG_MAX);
 
@@ -586,15 +586,15 @@ static void remove_inode_hugepages(struct inode *inode, loff_t lstart,
 			struct folio *folio = fbatch.folios[i];
 			u32 hash = 0;
 
-			index = folio->index >> huge_page_order(h);
-			hash = hugetlb_fault_mutex_hash(mapping, index);
+			hash = hugetlb_fault_mutex_hash(mapping, folio->index);
 			mutex_lock(&hugetlb_fault_mutex_table[hash]);
 
 			/*
 			 * Remove folio that was part of folio_batch.
 			 */
+			idx = folio->index >> huge_page_order(h);
 			remove_inode_single_folio(h, inode, mapping, folio,
-						  index, truncate_op);
+						  idx, truncate_op);
 			freed++;
 
 			mutex_unlock(&hugetlb_fault_mutex_table[hash]);
@@ -734,7 +734,7 @@ static long hugetlbfs_fallocate(struct file *file, int mode, loff_t offset,
 	struct mm_struct *mm = current->mm;
 	loff_t hpage_size = huge_page_size(h);
 	unsigned long hpage_shift = huge_page_shift(h);
-	pgoff_t start, index, end;
+	pgoff_t start, end, idx, index;
 	int error;
 	u32 hash;
 
@@ -774,7 +774,7 @@ static long hugetlbfs_fallocate(struct file *file, int mode, loff_t offset,
 	vm_flags_init(&pseudo_vma, VM_HUGETLB | VM_MAYSHARE | VM_SHARED);
 	pseudo_vma.vm_file = file;
 
-	for (index = start; index < end; index++) {
+	for (idx = start; idx < end; idx++) {
 		/*
 		 * This is supposed to be the vaddr where the page is being
 		 * faulted in, but we have no vaddr here.
@@ -794,14 +794,15 @@ static long hugetlbfs_fallocate(struct file *file, int mode, loff_t offset,
 		}
 
 		/* addr is the offset within the file (zero based) */
-		addr = index * hpage_size;
+		addr = idx * hpage_size;
 
 		/* mutex taken here, fault path and hole punch */
+		index = idx << huge_page_order(h);
 		hash = hugetlb_fault_mutex_hash(mapping, index);
 		mutex_lock(&hugetlb_fault_mutex_table[hash]);
 
 		/* See if already present in mapping to avoid alloc/free */
-		folio = filemap_get_folio(mapping, index << huge_page_order(h));
+		folio = filemap_get_folio(mapping, index);
 		if (!IS_ERR(folio)) {
 			folio_put(folio);
 			mutex_unlock(&hugetlb_fault_mutex_table[hash]);
@@ -824,7 +825,7 @@ static long hugetlbfs_fallocate(struct file *file, int mode, loff_t offset,
 		}
 		folio_zero_user(folio, addr);
 		__folio_mark_uptodate(folio);
-		error = hugetlb_add_to_page_cache(folio, mapping, index);
+		error = hugetlb_add_to_page_cache(folio, mapping, idx);
 		if (unlikely(error)) {
 			restore_reserve_on_error(h, &pseudo_vma, addr, folio);
 			folio_put(folio);
