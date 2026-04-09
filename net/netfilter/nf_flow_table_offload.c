@@ -5,6 +5,8 @@
 #include <linux/netfilter.h>
 #include <linux/rhashtable.h>
 #include <linux/netdevice.h>
+#include <linux/if_vlan.h>
+#include <linux/if_pppox.h>
 #include <linux/tc_act/tc_csum.h>
 #include <net/flow_offload.h>
 #include <net/ip_tunnels.h>
@@ -1008,10 +1010,135 @@ static void flow_offload_tuple_stats(struct flow_offload_work *offload,
 			      &offload->flowtable->flow_block.cb_list);
 }
 
+static int flow_offload_encap_hlen(const struct flow_offload_tuple *tuple,
+				   int idx)
+{
+	switch (tuple->encap[idx].proto) {
+	case htons(ETH_P_8021Q):
+	case htons(ETH_P_8021AD):
+		return VLAN_HLEN;
+	case htons(ETH_P_PPP_SES):
+		return PPPOE_SES_HLEN;
+	}
+	return 0;
+}
+
+static void flow_offload_encap_netstats(struct net_device *dev,
+					__be16 encap_proto,
+					bool rx, u64 pkts, u64 bytes)
+{
+	struct pcpu_sw_netstats *tstats;
+	struct vlan_pcpu_stats *vstats;
+
+	if (encap_proto == htons(ETH_P_8021Q) ||
+	    encap_proto == htons(ETH_P_8021AD)) {
+		vstats = this_cpu_ptr(vlan_dev_priv(dev)->vlan_pcpu_stats);
+		u64_stats_update_begin(&vstats->syncp);
+		if (rx) {
+			u64_stats_add(&vstats->rx_packets, pkts);
+			u64_stats_add(&vstats->rx_bytes, bytes);
+		} else {
+			u64_stats_add(&vstats->tx_packets, pkts);
+			u64_stats_add(&vstats->tx_bytes, bytes);
+		}
+		u64_stats_update_end(&vstats->syncp);
+	} else if (dev->tstats) {
+		tstats = this_cpu_ptr(dev->tstats);
+		u64_stats_update_begin(&tstats->syncp);
+		if (rx) {
+			u64_stats_add(&tstats->rx_packets, pkts);
+			u64_stats_add(&tstats->rx_bytes, bytes);
+		} else {
+			u64_stats_add(&tstats->tx_packets, pkts);
+			u64_stats_add(&tstats->tx_bytes, bytes);
+		}
+		u64_stats_update_end(&tstats->syncp);
+	}
+}
+
+/* Update sub-interface (VLAN, PPPoE) stats for hw-offloaded flows.
+ *
+ * The driver reports L3 (IP) bytes. Each sub-interface in the
+ * software path sees the frame with the headers of all layers
+ * BELOW it still present, so we add back inner-layer overhead.
+ *
+ * encap[] is ordered outermost to innermost, so walk from the
+ * innermost layer outward, accumulating overhead as we go.
+ */
+static void flow_offload_update_encap_stats(struct flow_offload *flow,
+					    struct flow_offload_tuple *tuple,
+					    bool rx, u64 pkts, u64 bytes)
+{
+	struct net_device *dev;
+	int inner_hlen = 0;
+	int i;
+
+	for (i = tuple->encap_num - 1; i >= 0; i--) {
+		if (tuple->in_vlan_ingress & BIT(i))
+			continue;
+
+		dev = dev_get_by_index_rcu(dev_net(flow->ct->ct_net),
+					   tuple->encap_ifidx[i]);
+		if (dev)
+			flow_offload_encap_netstats(dev,
+						    tuple->encap[i].proto, rx,
+						    pkts,
+						    bytes + inner_hlen * pkts);
+
+		inner_hlen += flow_offload_encap_hlen(tuple, i);
+	}
+
+	/* Bridge device sits outside all encap layers -- it sees
+	 * L3 bytes plus the full encap overhead.
+	 */
+	if (tuple->bridge_ifidx) {
+		dev = dev_get_by_index_rcu(dev_net(flow->ct->ct_net),
+					   tuple->bridge_ifidx);
+		if (dev && dev->tstats)
+			flow_offload_encap_netstats(dev, 0, rx, pkts,
+						    bytes + inner_hlen * pkts);
+	}
+}
+
+/* Compute per-direction input overhead from the encap and tunnel
+ * chains. Hardware flow counters report L2 frame bytes but
+ * conntrack expects L3 (inner IP) bytes -- matching what the
+ * software path sees after stripping all encap and tunnel headers.
+ */
+static int flow_offload_input_l2_overhead(struct flow_offload_tuple *tuple)
+{
+	int overhead = ETH_HLEN;
+	int i;
+
+	for (i = 0; i < tuple->encap_num; i++) {
+		if (tuple->in_vlan_ingress & BIT(i))
+			continue;
+
+		overhead += flow_offload_encap_hlen(tuple, i);
+	}
+
+	if (tuple->tun_num) {
+		switch (tuple->tun.l3_proto) {
+		case IPPROTO_IPIP:
+			overhead += sizeof(struct iphdr);
+			break;
+		case IPPROTO_IPV6:
+			overhead += sizeof(struct ipv6hdr);
+			break;
+		}
+	}
+
+	return overhead;
+}
+
 static void flow_offload_work_stats(struct flow_offload_work *offload)
 {
+	struct flow_offload_tuple *tuple;
 	struct flow_stats stats[FLOW_OFFLOAD_DIR_MAX] = {};
+	u64 l3_bytes[FLOW_OFFLOAD_DIR_MAX];
+	int l2_overhead;
 	u64 lastused;
+	int i;
 
 	flow_offload_tuple_stats(offload, FLOW_OFFLOAD_DIR_ORIGINAL, &stats[0]);
 	if (test_bit(NF_FLOW_HW_BIDIRECTIONAL, &offload->flow->flags))
@@ -1022,16 +1149,59 @@ static void flow_offload_work_stats(struct flow_offload_work *offload)
 	offload->flow->timeout = max_t(u64, offload->flow->timeout,
 				       lastused + flow_offload_get_timeout(offload->flow));
 
+	/* Convert hardware byte counts to L3 based on what the driver
+	 * reports.  Drivers that already report L3 (or do not set
+	 * byte_type) need no conversion.
+	 */
+	for (i = 0; i < FLOW_OFFLOAD_DIR_MAX; i++) {
+		l2_overhead = 0;
+
+		switch (stats[i].byte_type) {
+		case FLOW_STATS_BYTES_INGRESS_L2:
+			tuple = &offload->flow->tuplehash[i].tuple;
+			l2_overhead = flow_offload_input_l2_overhead(tuple);
+			break;
+		case FLOW_STATS_BYTES_EGRESS_L2:
+			tuple = &offload->flow->tuplehash[!i].tuple;
+			l2_overhead = flow_offload_input_l2_overhead(tuple);
+			break;
+		default:
+			break;
+		}
+		l3_bytes[i] = stats[i].bytes - stats[i].pkts * l2_overhead;
+	}
+
 	if (offload->flowtable->flags & NF_FLOWTABLE_COUNTER) {
 		if (stats[0].pkts)
 			nf_ct_acct_add(offload->flow->ct,
 				       FLOW_OFFLOAD_DIR_ORIGINAL,
-				       stats[0].pkts, stats[0].bytes);
+				       stats[0].pkts, l3_bytes[0]);
 		if (stats[1].pkts)
 			nf_ct_acct_add(offload->flow->ct,
 				       FLOW_OFFLOAD_DIR_REPLY,
-				       stats[1].pkts, stats[1].bytes);
+				       stats[1].pkts, l3_bytes[1]);
 	}
+
+	rcu_read_lock();
+	for (i = 0; i < FLOW_OFFLOAD_DIR_MAX; i++) {
+		tuple = &offload->flow->tuplehash[i].tuple;
+		if (!tuple->encap_num)
+			continue;
+
+		/* Input-side encap devices get RX stats */
+		if (stats[i].pkts)
+			flow_offload_update_encap_stats(offload->flow,
+							tuple, true,
+							stats[i].pkts,
+							l3_bytes[i]);
+		/* Same devices get TX stats from the other direction */
+		if (stats[!i].pkts)
+			flow_offload_update_encap_stats(offload->flow,
+							tuple, false,
+							stats[!i].pkts,
+							l3_bytes[!i]);
+	}
+	rcu_read_unlock();
 }
 
 static void flow_offload_work_handler(struct work_struct *work)
