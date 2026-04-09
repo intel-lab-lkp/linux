@@ -2,7 +2,7 @@
 #ifndef __VDSO_DATAPAGE_H
 #define __VDSO_DATAPAGE_H
 
-#ifndef __ASSEMBLY__
+#ifndef __ASSEMBLER__
 
 #include <linux/compiler.h>
 #include <uapi/linux/bits.h>
@@ -195,7 +195,7 @@ enum vdso_pages {
  */
 #include <asm/vdso/gettimeofday.h>
 
-#else /* !__ASSEMBLY__ */
+#else /* !__ASSEMBLER__ */
 
 #ifdef CONFIG_VDSO_GETRANDOM
 #define __vdso_u_rng_data	PROVIDE(vdso_u_rng_data = vdso_u_data + 2 * PAGE_SIZE);
@@ -216,6 +216,6 @@ enum vdso_pages {
 	__vdso_u_arch_data					\
 
 
-#endif /* !__ASSEMBLY__ */
+#endif /* !__ASSEMBLER__ */
 
 #endif /* __VDSO_DATAPAGE_H */
