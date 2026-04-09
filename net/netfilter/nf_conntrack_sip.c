@@ -194,7 +194,7 @@ static int epaddr_len(const struct nf_conn *ct, const char *dptr,
 	}
 
 	/* Port number */
-	if (*dptr == ':') {
+	if (dptr < limit && *dptr == ':') {
 		dptr++;
 		dptr += digits_len(ct, dptr, limit, shift);
 	}
@@ -520,7 +520,7 @@ int ct_sip_parse_header_uri(const struct nf_conn *ct, const char *dptr,
 
 	if (!sip_parse_addr(ct, dptr + *matchoff, &c, addr, limit, true))
 		return -1;
-	if (*c == ':') {
+	if (c < limit && *c == ':') {
 		c++;
 		p = simple_strtoul(c, (char **)&c, 10);
 		if (p < 1024 || p > 65535)
