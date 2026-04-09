@@ -24,6 +24,10 @@ properties:
 
   reset-source: true
 
+  nuvoton,ctrl-reg-val:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Initial value for the control register (0x0A).
+
 required:
   - compatible
   - reg
@@ -39,6 +43,7 @@ examples:
         rtc@6f {
             compatible = "nuvoton,nct3018y";
             reg = <0x6f>;
+            nuvoton,ctrl-reg-val = <0x21>;
         };
     };
 
