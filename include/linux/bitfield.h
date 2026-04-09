@@ -46,6 +46,30 @@
 
 #define __bf_shf(x) (__builtin_ffsll(x) - 1)
 
+#if defined(GCC_VERSION) && (GCC_VERSION < 140000)
+/*
+ * This workaround is required for gcc<14. The issue is an interaction between
+ * FIELD_PREP_CONST() and __GENMASK_ULL() that can be boiled down this MCVE,
+ * which fails to compile as GCC doesn't recognize the expression as constant:
+ *
+ *   int main() {
+ *       sizeof(struct {
+ *           int t : !(__builtin_ffsll(~0ULL) + 1 < 0);
+ *       });
+ *   }
+ *
+ * The underlying issue was inadvertently "fixed" (or perhaps sidestepped) in
+ * commit 0d00385eaf7 ("wide-int: Allow up to 16320 bits wide_int and change
+ * widest_int precision to 32640 bits [PR102989]"), which first appeared in
+ * GCC 14.1.
+ *
+ * See: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=124699
+ */
+#define __const_bf_shf(x) __bf_shf((long long)(x))
+#else
+#define __const_bf_shf(x) __bf_shf(x)
+#endif
+
 #define __scalar_type_to_unsigned_cases(type)				\
 		unsigned type:	(unsigned type)0,			\
 		signed type:	(unsigned type)0
@@ -157,11 +181,11 @@
 		/* mask must be non-zero */				\
 		BUILD_BUG_ON_ZERO((_mask) == 0) +			\
 		/* check if value fits */				\
-		BUILD_BUG_ON_ZERO(~((_mask) >> __bf_shf(_mask)) & (_val)) + \
+		BUILD_BUG_ON_ZERO(~((_mask) >> __const_bf_shf(_mask)) & (_val)) + \
 		/* check if mask is contiguous */			\
-		__BF_CHECK_POW2((_mask) + (1ULL << __bf_shf(_mask))) +	\
+		__BF_CHECK_POW2((_mask) + (1ULL << __const_bf_shf(_mask))) + \
 		/* and create the value */				\
-		(((typeof(_mask))(_val) << __bf_shf(_mask)) & (_mask))	\
+		(((typeof(_mask))(_val) << __const_bf_shf(_mask)) & (_mask)) \
 	)
 
 /**
