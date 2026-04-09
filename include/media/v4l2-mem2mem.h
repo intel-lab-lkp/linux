@@ -227,6 +227,26 @@ void v4l2_m2m_buf_done_and_job_finish(struct v4l2_m2m_dev *m2m_dev,
 				      struct v4l2_m2m_ctx *m2m_ctx,
 				      enum vb2_buffer_state state);
 
+/**
+ * v4l2_m2m_buf_done_manual() - manually mark the job as done, but do not
+ * finish it.
+ *
+ * @m2m_dev: opaque pointer to the internal data to handle M2M context
+ * @m2m_ctx: m2m context assigned to the instance given by struct &v4l2_m2m_ctx
+ * @state: vb2 buffer state passed to v4l2_m2m_buf_done().
+ *
+ * The function works the same way as v4l2_m2m_buf_done_and_job_finish()
+ * but does not inform the framework that the job has been finished,
+ * leaving the user the responsability to call v4l2_m2m_job_finish()
+ * when a buffer can be released to userspace.
+ *
+ * It allows driver to process new buffers, before the previous one is
+ * done.
+ */
+void v4l2_m2m_buf_done_manual(struct v4l2_m2m_dev *m2m_dev,
+			      struct v4l2_m2m_ctx *m2m_ctx,
+			      enum vb2_buffer_state state);
+
 static inline void
 v4l2_m2m_buf_done(struct vb2_v4l2_buffer *buf, enum vb2_buffer_state state)
 {
