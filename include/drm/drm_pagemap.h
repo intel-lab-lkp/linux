@@ -367,11 +367,14 @@ int drm_pagemap_reinit(struct drm_pagemap *dpagemap);
  * drm_pagemap_page_zone_device_data() - Page to zone_device_data
  * @page: Pointer to the page
  *
- * Return: Page's zone_device_data
+ * Return: Page's zone_device_data if owned by DRM pagemap, NULL otherwise
  */
 static inline struct drm_pagemap_zdd *drm_pagemap_page_zone_device_data(struct page *page)
 {
 	struct folio *folio = page_folio(page);
+
+	if (WARN_ON_ONCE(page_pgmap(page)->ops != drm_pagemap_pagemap_ops_get()))
+		return NULL;
 
 	return folio_zone_device_data(folio);
 }

@@ -1501,6 +1501,11 @@ map_pages:
 			struct drm_pagemap_zdd *__zdd =
 				drm_pagemap_page_zone_device_data(page);
 
+			if (!__zdd) {
+				err = -EINVAL;
+				goto err_unmap;
+			}
+
 			if (!ctx->allow_mixed &&
 			    zdd != __zdd && i > 0) {
 				err = -EOPNOTSUPP;

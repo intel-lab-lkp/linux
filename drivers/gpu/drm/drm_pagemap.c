@@ -753,10 +753,16 @@ int drm_pagemap_migrate_to_devmem(struct drm_pagemap_devmem *devmem_allocation,
 				own_pages++;
 				goto next;
 			}
-			cur.dpagemap = src_zdd->dpagemap;
-			cur.ops = src_zdd->devmem_allocation->ops;
-			cur.device = cur.dpagemap->drm->dev;
-			pages[i] = src_page;
+			if (src_zdd) {
+				cur.dpagemap = src_zdd->dpagemap;
+				cur.ops = src_zdd->devmem_allocation->ops;
+				cur.device = cur.dpagemap->drm->dev;
+				pages[i] = src_page;
+			} else {
+				npages = i;
+				err = -EINVAL;
+				goto err_finalize;
+			}
 		}
 		if (!pages[i]) {
 			cur.dpagemap = NULL;
