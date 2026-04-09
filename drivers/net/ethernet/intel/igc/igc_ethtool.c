@@ -1962,7 +1962,12 @@ static int igc_ethtool_get_link_ksettings(struct net_device *netdev,
 
 	/* set autoneg settings */
 	ethtool_link_ksettings_add_link_mode(cmd, supported, Autoneg);
-	ethtool_link_ksettings_add_link_mode(cmd, advertising, Autoneg);
+	if (hw->mac.autoneg_enabled) {
+		ethtool_link_ksettings_add_link_mode(cmd, advertising, Autoneg);
+		cmd->base.autoneg = AUTONEG_ENABLE;
+	} else {
+		cmd->base.autoneg = AUTONEG_DISABLE;
+	}
 
 	/* Set pause flow control settings */
 	ethtool_link_ksettings_add_link_mode(cmd, supported, Pause);
@@ -2015,7 +2020,6 @@ static int igc_ethtool_get_link_ksettings(struct net_device *netdev,
 		cmd->base.duplex = DUPLEX_UNKNOWN;
 	}
 	cmd->base.speed = speed;
-	cmd->base.autoneg = AUTONEG_ENABLE;
 
 	/* MDI-X => 2; MDI =>1; Invalid =>0 */
 	if (hw->phy.media_type == igc_media_type_copper)
@@ -2032,37 +2036,54 @@ static int igc_ethtool_get_link_ksettings(struct net_device *netdev,
 	return 0;
 }
 
-static int
-igc_ethtool_set_link_ksettings(struct net_device *netdev,
-			       const struct ethtool_link_ksettings *cmd)
+/**
+ * igc_handle_autoneg_disabled - Configure forced speed/duplex settings
+ * @netdev: network interface device structure
+ * @speed: requested speed
+ * @duplex: requested duplex
+ *
+ * Validates and records forced speed/duplex when autoneg is disabled.
+ * Only 10/100 Mb/s speeds are supported.
+ *
+ * Return: 0 on success, negative errno on failure.
+ */
+static int igc_handle_autoneg_disabled(struct net_device *netdev, u32 speed,
+				       u8 duplex)
 {
 	struct igc_adapter *adapter = netdev_priv(netdev);
-	struct net_device *dev = adapter->netdev;
-	struct igc_hw *hw = &adapter->hw;
-	u16 advertised = 0;
+	struct igc_mac_info *mac = &adapter->hw.mac;
+	enum igc_forced_speed_duplex forced_speed_duplex;
 
-	/* When adapter in resetting mode, autoneg/speed/duplex
-	 * cannot be changed
-	 */
-	if (igc_check_reset_block(hw)) {
-		netdev_err(dev, "Cannot change link characteristics when reset is active\n");
+	switch (speed) {
+	case SPEED_10:
+		forced_speed_duplex = (duplex == DUPLEX_FULL) ? IGC_FORCED_10F : IGC_FORCED_10H;
+		break;
+	case SPEED_100:
+		forced_speed_duplex = (duplex == DUPLEX_FULL) ? IGC_FORCED_100F : IGC_FORCED_100H;
+		break;
+	default:
+		netdev_info(netdev, "Unsupported speed for forced link\n");
 		return -EINVAL;
 	}
 
-	/* MDI setting is only allowed when autoneg enabled because
-	 * some hardware doesn't allow MDI setting when speed or
-	 * duplex is forced.
-	 */
-	if (cmd->base.eth_tp_mdix_ctrl) {
-		if (cmd->base.eth_tp_mdix_ctrl != ETH_TP_MDI_AUTO &&
-		    cmd->base.autoneg != AUTONEG_ENABLE) {
-			netdev_err(dev, "Forcing MDI/MDI-X state is not supported when link speed and/or duplex are forced\n");
-			return -EINVAL;
-		}
-	}
+	mac->autoneg_enabled = false;
+	mac->forced_speed_duplex = forced_speed_duplex;
+	return 0;
+}
 
-	while (test_and_set_bit(__IGC_RESETTING, &adapter->state))
-		usleep_range(1000, 2000);
+/**
+ * igc_handle_autoneg_enabled - Configure autonegotiation advertisement
+ * @adapter: private driver structure
+ * @cmd: ethtool link ksettings from user
+ *
+ * Records advertised speeds and flow control settings when autoneg
+ * is enabled.
+ */
+static void igc_handle_autoneg_enabled(struct igc_adapter *adapter,
+				       const struct ethtool_link_ksettings *cmd)
+{
+	struct igc_hw *hw = &adapter->hw;
+	u16 advertised = 0;
 
 	if (ethtool_link_ksettings_test_link_mode(cmd, advertising,
 						  2500baseT_Full))
@@ -2088,12 +2109,51 @@ igc_ethtool_set_link_ksettings(struct net_device *netdev,
 						  10baseT_Half))
 		advertised |= ADVERTISE_10_HALF;
 
-	if (cmd->base.autoneg == AUTONEG_ENABLE) {
-		hw->phy.autoneg_advertised = advertised;
-		if (adapter->fc_autoneg)
-			hw->fc.requested_mode = igc_fc_default;
+	hw->mac.autoneg_enabled = true;
+	hw->phy.autoneg_advertised = advertised;
+	if (adapter->fc_autoneg)
+		hw->fc.requested_mode = igc_fc_default;
+}
+
+static int
+igc_ethtool_set_link_ksettings(struct net_device *netdev,
+			       const struct ethtool_link_ksettings *cmd)
+{
+	struct igc_adapter *adapter = netdev_priv(netdev);
+	struct net_device *dev = adapter->netdev;
+	struct igc_hw *hw = &adapter->hw;
+
+	/* When adapter in resetting mode, autoneg/speed/duplex
+	 * cannot be changed
+	 */
+	if (igc_check_reset_block(hw)) {
+		netdev_err(dev, "Cannot change link characteristics when reset is active\n");
+		return -EINVAL;
+	}
+
+	/* MDI setting is only allowed when autoneg enabled because
+	 * some hardware doesn't allow MDI setting when speed or
+	 * duplex is forced.
+	 */
+	if (cmd->base.eth_tp_mdix_ctrl) {
+		if (cmd->base.eth_tp_mdix_ctrl != ETH_TP_MDI_AUTO &&
+		    cmd->base.autoneg != AUTONEG_ENABLE) {
+			netdev_err(dev, "Forcing MDI/MDI-X state is not supported when link speed and/or duplex are forced\n");
+			return -EINVAL;
+		}
+	}
+
+	while (test_and_set_bit(__IGC_RESETTING, &adapter->state))
+		usleep_range(1000, 2000);
+
+	if (cmd->base.autoneg == AUTONEG_DISABLE) {
+		if (igc_handle_autoneg_disabled(netdev, cmd->base.speed,
+						cmd->base.duplex)) {
+			clear_bit(__IGC_RESETTING, &adapter->state);
+			return -EINVAL;
+		}
 	} else {
-		netdev_info(dev, "Force mode currently not supported\n");
+		igc_handle_autoneg_enabled(adapter, cmd);
 	}
 
 	/* MDI-X => 2; MDI => 1; Auto => 3 */

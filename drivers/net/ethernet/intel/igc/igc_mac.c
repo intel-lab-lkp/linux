@@ -452,7 +452,7 @@ s32 igc_config_fc_after_link_up(struct igc_hw *hw)
 	 * so we had to force link.  In this case, we need to force the
 	 * configuration of the MAC to match the "fc" parameter.
 	 */
-	if (mac->autoneg_failed)
+	if (mac->autoneg_failed || !mac->autoneg_enabled)
 		ret_val = igc_force_mac_fc(hw);
 
 	if (ret_val) {
