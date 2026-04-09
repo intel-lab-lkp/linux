@@ -631,25 +631,31 @@ static int nci_store_general_bytes_nfc_dep(struct nci_dev *ndev,
 	switch (ntf->activation_rf_tech_and_mode) {
 	case NCI_NFC_A_PASSIVE_POLL_MODE:
 	case NCI_NFC_F_PASSIVE_POLL_MODE:
+		if (ntf->activation_params.poll_nfc_dep.atr_res_len <
+		    NFC_ATR_RES_GT_OFFSET)
+			break;
 		ndev->remote_gb_len = min_t(__u8,
-			(ntf->activation_params.poll_nfc_dep.atr_res_len
-						- NFC_ATR_RES_GT_OFFSET),
+			ntf->activation_params.poll_nfc_dep.atr_res_len
+						- NFC_ATR_RES_GT_OFFSET,
 			NFC_ATR_RES_GB_MAXSIZE);
 		memcpy(ndev->remote_gb,
-		       (ntf->activation_params.poll_nfc_dep.atr_res
-						+ NFC_ATR_RES_GT_OFFSET),
+		       ntf->activation_params.poll_nfc_dep.atr_res
+						+ NFC_ATR_RES_GT_OFFSET,
 		       ndev->remote_gb_len);
 		break;
 
 	case NCI_NFC_A_PASSIVE_LISTEN_MODE:
 	case NCI_NFC_F_PASSIVE_LISTEN_MODE:
+		if (ntf->activation_params.listen_nfc_dep.atr_req_len <
+		    NFC_ATR_REQ_GT_OFFSET)
+			break;
 		ndev->remote_gb_len = min_t(__u8,
-			(ntf->activation_params.listen_nfc_dep.atr_req_len
-						- NFC_ATR_REQ_GT_OFFSET),
+			ntf->activation_params.listen_nfc_dep.atr_req_len
+						- NFC_ATR_REQ_GT_OFFSET,
 			NFC_ATR_REQ_GB_MAXSIZE);
 		memcpy(ndev->remote_gb,
-		       (ntf->activation_params.listen_nfc_dep.atr_req
-						+ NFC_ATR_REQ_GT_OFFSET),
+		       ntf->activation_params.listen_nfc_dep.atr_req
+						+ NFC_ATR_REQ_GT_OFFSET,
 		       ndev->remote_gb_len);
 		break;
 
