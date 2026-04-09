@@ -289,6 +289,10 @@ static int __set_memory(unsigned long addr, int numpages, pgprot_t set_mask,
 		int i, page_start;
 
 		area = find_vm_area((void *)start);
+		if (!area) {
+			ret = -EINVAL;
+			goto unlock;
+		}
 		page_start = (start - (unsigned long)area->addr) >> PAGE_SHIFT;
 
 		for (i = page_start; i < page_start + numpages; ++i) {
