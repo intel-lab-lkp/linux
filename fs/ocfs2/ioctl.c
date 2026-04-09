@@ -441,7 +441,7 @@ static int ocfs2_info_freefrag_scan_chain(struct ocfs2_super *osb,
 	struct buffer_head *bh = NULL;
 	struct ocfs2_group_desc *bg = NULL;
 
-	unsigned int max_bits, num_clusters;
+	unsigned int max_bits, max_bitmap_bits, num_clusters;
 	unsigned int offset = 0, cluster, chunk;
 	unsigned int chunk_free, last_chunksize = 0;
 
@@ -474,11 +474,28 @@ static int ocfs2_info_freefrag_scan_chain(struct ocfs2_super *osb,
 		}
 
 		bg = (struct ocfs2_group_desc *)bh->b_data;
+		max_bits = le16_to_cpu(bg->bg_bits);
+		max_bitmap_bits = 8U *
+			ocfs2_group_bitmap_size(osb->sb, 1,
+						osb->s_feature_incompat);
+
+		/*
+		 * Non-coherent scans read raw blocks and do not get the
+		 * bg_bits validation from
+		 * ocfs2_read_group_descriptor().
+		 */
+		if (max_bits > max_bitmap_bits) {
+			mlog(ML_ERROR,
+			     "Group desc #%llu has %u bits, max bitmap bits %u\n",
+			     (unsigned long long)blkno,
+			     max_bits,
+			     max_bitmap_bits);
+			max_bits = max_bitmap_bits;
+		}
 
 		if (!le16_to_cpu(bg->bg_free_bits_count))
 			continue;
 
-		max_bits = le16_to_cpu(bg->bg_bits);
 		offset = 0;
 
 		for (chunk = 0; chunk < chunks_in_group; chunk++) {
