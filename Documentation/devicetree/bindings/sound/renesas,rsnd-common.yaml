@@ -1,0 +1,196 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/sound/renesas,rsnd-common.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Renesas R-Car/RZ Sound Common Properties
+
+maintainers:
+  - Kuninori Morimoto <kuninori.morimoto.gx@renesas.com>
+
+description:
+  Common property and subnode definitions shared by Renesas R-Car and RZ
+  sound controller bindings.
+
+select: false
+
+properties:
+  compatible: true
+
+  reg: true
+
+  reg-names: true
+
+  "#sound-dai-cells":
+    description:
+      Must be 0 for a single-DAI system and 1 for a multi-DAI system.
+    enum: [0, 1]
+
+  "#clock-cells":
+    description:
+      Must be 0 when the system has audio_clkout and 1 when it has
+      audio_clkout0/1/2/3.
+    enum: [0, 1]
+
+  "#address-cells":
+    const: 1
+
+  "#size-cells":
+    const: 0
+
+  clock-frequency:
+    description: Audio clock output frequency for audio_clkout0/1/2/3.
+
+  clkout-lr-asynchronous:
+    description: audio_clkoutn is asynchronous with lr-clock.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  power-domains: true
+
+  resets: true
+
+  reset-names: true
+
+  clocks: true
+
+  clock-names: true
+
+  port:
+    $ref: audio-graph-port.yaml#/definitions/port-base
+    unevaluatedProperties: false
+    patternProperties:
+      "^endpoint(@[0-9a-f]+)?$":
+        $ref: audio-graph-port.yaml#/definitions/endpoint-base
+        properties:
+          playback:
+            $ref: /schemas/types.yaml#/definitions/phandle-array
+          capture:
+            $ref: /schemas/types.yaml#/definitions/phandle-array
+        unevaluatedProperties: false
+
+  rcar_sound,dvc:
+    description: DVC subnode.
+    type: object
+    patternProperties:
+      "^dvc-[0-1]$":
+        type: object
+        additionalProperties: false
+        properties:
+          dmas: true
+          dma-names: true
+        required:
+          - dmas
+          - dma-names
+    additionalProperties: false
+
+  rcar_sound,mix:
+    description: MIX subnode.
+    type: object
+    patternProperties:
+      "^mix-[0-1]$":
+        type: object
+        additionalProperties: false
+    additionalProperties: false
+
+  rcar_sound,ctu:
+    description: CTU subnode.
+    type: object
+    patternProperties:
+      "^ctu-[0-7]$":
+        type: object
+        additionalProperties: false
+    additionalProperties: false
+
+  rcar_sound,src:
+    description: SRC subnode.
+    type: object
+    patternProperties:
+      "^src-[0-9]$":
+        type: object
+        additionalProperties: false
+        properties:
+          interrupts:
+            maxItems: 1
+          dmas: true
+          dma-names: true
+    additionalProperties: false
+
+  rcar_sound,ssiu:
+    description: SSIU subnode.
+    type: object
+    patternProperties:
+      "^ssiu-[0-9]+$":
+        type: object
+        additionalProperties: false
+        properties:
+          dmas: true
+          dma-names: true
+        required:
+          - dmas
+          - dma-names
+    additionalProperties: false
+
+  rcar_sound,ssi:
+    description: SSI subnode.
+    type: object
+    patternProperties:
+      "^ssi-[0-9]$":
+        type: object
+        additionalProperties: false
+        properties:
+          interrupts:
+            maxItems: 1
+          dmas: true
+          dma-names: true
+          shared-pin:
+            description: Shared clock pin.
+            $ref: /schemas/types.yaml#/definitions/flag
+          pio-transfer:
+            description: PIO transfer mode.
+            $ref: /schemas/types.yaml#/definitions/flag
+          no-busif:
+            description: BUSIF is not used for the mem-to-SSI via DMA case.
+            $ref: /schemas/types.yaml#/definitions/flag
+        required:
+          - interrupts
+    additionalProperties: false
+
+patternProperties:
+  'rcar_sound,dai(@[0-9a-f]+)?$':
+    description: DAI subnode.
+    type: object
+    patternProperties:
+      "^dai([0-9]+)?$":
+        type: object
+        additionalProperties: false
+        properties:
+          playback:
+            $ref: /schemas/types.yaml#/definitions/phandle-array
+          capture:
+            $ref: /schemas/types.yaml#/definitions/phandle-array
+        anyOf:
+          - required:
+              - playback
+          - required:
+              - capture
+    additionalProperties: false
+
+  'ports(@[0-9a-f]+)?$':
+    $ref: audio-graph-port.yaml#/definitions/port-base
+    unevaluatedProperties: false
+    patternProperties:
+      '^port(@[0-9a-f]+)?$':
+        $ref: "#/properties/port"
+
+required:
+  - compatible
+  - reg
+  - reg-names
+  - clocks
+  - clock-names
+
+allOf:
+  - $ref: dai-common.yaml#
+
+additionalProperties: true
