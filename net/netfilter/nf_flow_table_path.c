@@ -79,8 +79,10 @@ struct nft_forward_info {
 	struct id {
 		__u16	id;
 		__be16	proto;
+		int	ifindex;
 	} encap[NF_FLOW_TABLE_ENCAP_MAX];
 	u8 num_encaps;
+	int bridge_ifindex;
 	struct flow_offload_tunnel tun;
 	u8 num_tuns;
 	u8 ingress_vlans;
@@ -136,12 +138,15 @@ static void nft_dev_path_info(const struct net_device_path_stack *stack,
 					path->encap.id;
 				info->encap[info->num_encaps].proto =
 					path->encap.proto;
+				info->encap[info->num_encaps].ifindex =
+					path->dev->ifindex;
 				info->num_encaps++;
 			}
 			if (path->type == DEV_PATH_PPPOE)
 				memcpy(info->h_dest, path->encap.h_dest, ETH_ALEN);
 			break;
 		case DEV_PATH_BRIDGE:
+			info->bridge_ifindex = path->dev->ifindex;
 			if (is_zero_ether_addr(info->h_source))
 				memcpy(info->h_source, path->dev->dev_addr, ETH_ALEN);
 
@@ -156,6 +161,7 @@ static void nft_dev_path_info(const struct net_device_path_stack *stack,
 				}
 				info->encap[info->num_encaps].id = path->bridge.vlan_id;
 				info->encap[info->num_encaps].proto = path->bridge.vlan_proto;
+				info->encap[info->num_encaps].ifindex = path->dev->ifindex;
 				info->num_encaps++;
 				break;
 			case DEV_PATH_BR_VLAN_UNTAG:
@@ -261,6 +267,7 @@ static void nft_dev_forward_path(const struct nft_pktinfo *pkt,
 	for (i = 0; i < info.num_encaps; i++) {
 		route->tuple[!dir].in.encap[i].id = info.encap[i].id;
 		route->tuple[!dir].in.encap[i].proto = info.encap[i].proto;
+		route->tuple[!dir].in.encap[i].ifindex = info.encap[i].ifindex;
 	}
 
 	if (info.num_tuns &&
@@ -273,6 +280,7 @@ static void nft_dev_forward_path(const struct nft_pktinfo *pkt,
 
 	route->tuple[!dir].in.num_encaps = info.num_encaps;
 	route->tuple[!dir].in.ingress_vlans = info.ingress_vlans;
+	route->tuple[!dir].in.bridge_ifindex = info.bridge_ifindex;
 
 	if (info.xmit_type == FLOW_OFFLOAD_XMIT_DIRECT) {
 		memcpy(route->tuple[dir].out.h_source, info.h_source, ETH_ALEN);

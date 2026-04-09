@@ -148,6 +148,9 @@ struct flow_offload_tuple {
 	/* All members above are keys for lookups, see flow_offload_hash(). */
 	struct { }			__hash;
 
+	int				encap_ifidx[NF_FLOW_TABLE_ENCAP_MAX];
+	int				bridge_ifidx;
+
 	u8				dir:2,
 					xmit_type:3,
 					encap_num:2,
@@ -221,11 +224,13 @@ struct nf_flow_route {
 			struct {
 				u16		id;
 				__be16		proto;
+				int		ifindex;
 			} encap[NF_FLOW_TABLE_ENCAP_MAX];
 			struct flow_offload_tunnel tun;
 			u8			num_encaps:2,
 						num_tuns:2,
 						ingress_vlans:2;
+			int			bridge_ifindex;
 		} in;
 		struct {
 			u32			ifindex;

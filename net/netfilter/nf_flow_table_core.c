@@ -115,6 +115,7 @@ static int flow_offload_fill_route(struct flow_offload *flow,
 	for (i = route->tuple[dir].in.num_encaps - 1; i >= 0; i--) {
 		flow_tuple->encap[j].id = route->tuple[dir].in.encap[i].id;
 		flow_tuple->encap[j].proto = route->tuple[dir].in.encap[i].proto;
+		flow_tuple->encap_ifidx[j] = route->tuple[dir].in.encap[i].ifindex;
 		if (route->tuple[dir].in.ingress_vlans & BIT(i))
 			flow_tuple->in_vlan_ingress |= BIT(j);
 		j++;
@@ -123,6 +124,7 @@ static int flow_offload_fill_route(struct flow_offload *flow,
 	flow_tuple->tun = route->tuple[dir].in.tun;
 	flow_tuple->encap_num = route->tuple[dir].in.num_encaps;
 	flow_tuple->tun_num = route->tuple[dir].in.num_tuns;
+	flow_tuple->bridge_ifidx = route->tuple[dir].in.bridge_ifindex;
 
 	switch (route->tuple[dir].xmit_type) {
 	case FLOW_OFFLOAD_XMIT_DIRECT:
