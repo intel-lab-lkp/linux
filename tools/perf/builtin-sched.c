@@ -3807,6 +3807,7 @@ const char *output_name;
 static int perf_sched__schedstat_record(struct perf_sched *sched,
 					int argc, const char **argv)
 {
+	sigset_t sig_mask, oldmask;
 	struct perf_session *session;
 	struct target target = {};
 	struct evlist *evlist;
@@ -3899,11 +3900,25 @@ static int perf_sched__schedstat_record(struct perf_sched *sched,
 	if (err < 0)
 		goto out;
 
+	/*
+	 * Block all handled signals so that a short-lived workload exiting
+	 * (SIGCHLD) or an early Ctrl+C (SIGINT/SIGTERM) during the remaining
+	 * setup cannot be delivered before we are ready to wait. sigsuspend()
+	 * below will atomically unblock them. This is done after
+	 * evlist__prepare_workload() so the forked child does not inherit a
+	 * modified signal mask.
+	 */
+	sigemptyset(&sig_mask);
+	sigaddset(&sig_mask, SIGCHLD);
+	sigaddset(&sig_mask, SIGINT);
+	sigaddset(&sig_mask, SIGTERM);
+	sigprocmask(SIG_BLOCK, &sig_mask, &oldmask);
+
 	if (argc)
 		evlist__start_workload(evlist);
 
-	/* wait for signal */
-	pause();
+	sigsuspend(&oldmask);
+	sigprocmask(SIG_SETMASK, &oldmask, NULL);
 
 	if (reset) {
 		err = disable_sched_schedstat();
