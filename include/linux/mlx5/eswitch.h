@@ -29,6 +29,11 @@ enum {
 	REP_LOADED,
 };
 
+enum mlx5_esw_offloads_rep_type_state {
+	MLX5_ESW_OFFLOADS_REP_TYPE_UNBLOCKED,
+	MLX5_ESW_OFFLOADS_REP_TYPE_BLOCKED,
+};
+
 enum mlx5_switchdev_event {
 	MLX5_SWITCHDEV_EVENT_PAIR,
 	MLX5_SWITCHDEV_EVENT_UNPAIR,

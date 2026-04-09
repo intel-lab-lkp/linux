@@ -2410,23 +2410,56 @@ out_free:
 	return err;
 }
 
+static void mlx5_esw_assert_reps_blocked(struct mlx5_eswitch *esw)
+{
+	if (atomic_read(&esw->offloads.reps_conf_state) ==
+	    MLX5_ESW_OFFLOADS_REP_TYPE_BLOCKED)
+		return;
+
+	esw_warn(esw->dev, "reps state machine violated: expected BLOCKED\n");
+}
+
+static void mlx5_esw_mark_reps(struct mlx5_eswitch *esw,
+			       enum mlx5_esw_offloads_rep_type_state old,
+			       enum mlx5_esw_offloads_rep_type_state new)
+{
+	atomic_t *reps_conf_state = &esw->offloads.reps_conf_state;
+
+	do {
+		atomic_cond_read_relaxed(reps_conf_state, VAL == old);
+	} while (atomic_cmpxchg(reps_conf_state, old, new) != old);
+}
+
+void mlx5_esw_reps_block(struct mlx5_eswitch *esw)
+{
+	mlx5_esw_mark_reps(esw, MLX5_ESW_OFFLOADS_REP_TYPE_UNBLOCKED,
+			   MLX5_ESW_OFFLOADS_REP_TYPE_BLOCKED);
+}
+
+void mlx5_esw_reps_unblock(struct mlx5_eswitch *esw)
+{
+	mlx5_esw_mark_reps(esw, MLX5_ESW_OFFLOADS_REP_TYPE_BLOCKED,
+			   MLX5_ESW_OFFLOADS_REP_TYPE_UNBLOCKED);
+}
+
 static void esw_mode_change(struct mlx5_eswitch *esw, u16 mode)
 {
+	mlx5_esw_reps_unblock(esw);
 	mlx5_devcom_comp_lock(esw->dev->priv.hca_devcom_comp);
 	if (esw->dev->priv.flags & MLX5_PRIV_FLAGS_DISABLE_IB_ADEV ||
 	    mlx5_core_mp_enabled(esw->dev)) {
 		esw->mode = mode;
-		mlx5_rescan_drivers_locked(esw->dev);
-		mlx5_devcom_comp_unlock(esw->dev->priv.hca_devcom_comp);
-		return;
+		goto out;
 	}
 
 	esw->dev->priv.flags |= MLX5_PRIV_FLAGS_DISABLE_IB_ADEV;
 	mlx5_rescan_drivers_locked(esw->dev);
 	esw->mode = mode;
 	esw->dev->priv.flags &= ~MLX5_PRIV_FLAGS_DISABLE_IB_ADEV;
+out:
 	mlx5_rescan_drivers_locked(esw->dev);
 	mlx5_devcom_comp_unlock(esw->dev->priv.hca_devcom_comp);
+	mlx5_esw_reps_block(esw);
 }
 
 static void mlx5_esw_fdb_drop_destroy(struct mlx5_eswitch *esw)
@@ -2761,6 +2794,8 @@ void esw_offloads_cleanup(struct mlx5_eswitch *esw)
 static int __esw_offloads_load_rep(struct mlx5_eswitch *esw,
 				   struct mlx5_eswitch_rep *rep, u8 rep_type)
 {
+	mlx5_esw_assert_reps_blocked(esw);
+
 	if (atomic_cmpxchg(&rep->rep_data[rep_type].state,
 			   REP_REGISTERED, REP_LOADED) == REP_REGISTERED)
 		return esw->offloads.rep_ops[rep_type]->load(esw->dev, rep);
@@ -2771,6 +2806,8 @@ static int __esw_offloads_load_rep(struct mlx5_eswitch *esw,
 static void __esw_offloads_unload_rep(struct mlx5_eswitch *esw,
 				      struct mlx5_eswitch_rep *rep, u8 rep_type)
 {
+	mlx5_esw_assert_reps_blocked(esw);
+
 	if (atomic_cmpxchg(&rep->rep_data[rep_type].state,
 			   REP_LOADED, REP_REGISTERED) == REP_LOADED) {
 		if (rep_type == REP_ETH)
@@ -3673,6 +3710,7 @@ static void esw_vfs_changed_event_handler(struct mlx5_eswitch *esw)
 	if (new_num_vfs == esw->esw_funcs.num_vfs || host_pf_disabled)
 		goto free;
 
+	mlx5_esw_reps_block(esw);
 	/* Number of VFs can only change from "0 to x" or "x to 0". */
 	if (esw->esw_funcs.num_vfs > 0) {
 		mlx5_eswitch_unload_vf_vports(esw, esw->esw_funcs.num_vfs);
@@ -3682,9 +3720,11 @@ static void esw_vfs_changed_event_handler(struct mlx5_eswitch *esw)
 		err = mlx5_eswitch_load_vf_vports(esw, new_num_vfs,
 						  MLX5_VPORT_UC_ADDR_CHANGE);
 		if (err)
-			goto free;
+			goto unblock;
 	}
 	esw->esw_funcs.num_vfs = new_num_vfs;
+unblock:
+	mlx5_esw_reps_unblock(esw);
 free:
 	kvfree(out);
 }
@@ -4164,6 +4204,7 @@ int mlx5_devlink_eswitch_mode_set(struct devlink *devlink, u16 mode,
 		goto unlock;
 	}
 
+	mlx5_esw_reps_block(esw);
 	esw->eswitch_operation_in_progress = true;
 	up_write(&esw->mode_lock);
 
@@ -4203,6 +4244,7 @@ skip:
 		mlx5_devlink_netdev_netns_immutable_set(devlink, false);
 	down_write(&esw->mode_lock);
 	esw->eswitch_operation_in_progress = false;
+	mlx5_esw_reps_unblock(esw);
 unlock:
 	mlx5_esw_unlock(esw);
 enable_lag:
@@ -4474,9 +4516,10 @@ mlx5_eswitch_vport_has_rep(const struct mlx5_eswitch *esw, u16 vport_num)
 	return true;
 }
 
-void mlx5_eswitch_register_vport_reps(struct mlx5_eswitch *esw,
-				      const struct mlx5_eswitch_rep_ops *ops,
-				      u8 rep_type)
+static void
+mlx5_eswitch_register_vport_reps_blocked(struct mlx5_eswitch *esw,
+					 const struct mlx5_eswitch_rep_ops *ops,
+					 u8 rep_type)
 {
 	struct mlx5_eswitch_rep_data *rep_data;
 	struct mlx5_eswitch_rep *rep;
@@ -4491,9 +4534,20 @@ void mlx5_eswitch_register_vport_reps(struct mlx5_eswitch *esw,
 		}
 	}
 }
+
+void mlx5_eswitch_register_vport_reps(struct mlx5_eswitch *esw,
+				      const struct mlx5_eswitch_rep_ops *ops,
+				      u8 rep_type)
+{
+	mlx5_esw_reps_block(esw);
+	mlx5_eswitch_register_vport_reps_blocked(esw, ops, rep_type);
+	mlx5_esw_reps_unblock(esw);
+}
 EXPORT_SYMBOL(mlx5_eswitch_register_vport_reps);
 
-void mlx5_eswitch_unregister_vport_reps(struct mlx5_eswitch *esw, u8 rep_type)
+static void
+mlx5_eswitch_unregister_vport_reps_blocked(struct mlx5_eswitch *esw,
+					   u8 rep_type)
 {
 	struct mlx5_eswitch_rep *rep;
 	unsigned long i;
@@ -4503,6 +4557,13 @@ void mlx5_eswitch_unregister_vport_reps(struct mlx5_eswitch *esw, u8 rep_type)
 
 	mlx5_esw_for_each_rep(esw, i, rep)
 		atomic_set(&rep->rep_data[rep_type].state, REP_UNREGISTERED);
+}
+
+void mlx5_eswitch_unregister_vport_reps(struct mlx5_eswitch *esw, u8 rep_type)
+{
+	mlx5_esw_reps_block(esw);
+	mlx5_eswitch_unregister_vport_reps_blocked(esw, rep_type);
+	mlx5_esw_reps_unblock(esw);
 }
 EXPORT_SYMBOL(mlx5_eswitch_unregister_vport_reps);
 

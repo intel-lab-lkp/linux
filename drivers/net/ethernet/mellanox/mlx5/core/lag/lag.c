@@ -1105,7 +1105,9 @@ int mlx5_lag_reload_ib_reps(struct mlx5_lag *ldev, u32 flags)
 			struct mlx5_eswitch *esw;
 
 			esw = pf->dev->priv.eswitch;
+			mlx5_esw_reps_block(esw);
 			ret = mlx5_eswitch_reload_ib_reps(esw);
+			mlx5_esw_reps_unblock(esw);
 			if (ret)
 				return ret;
 		}
