@@ -534,6 +534,15 @@ static int nct3018y_probe(struct i2c_client *client)
 		}
 	}
 
+	if (!of_property_read_u32(client->dev.of_node, "nuvoton,ctrl-reg-val", &flags)) {
+
+		err = i2c_smbus_write_byte_data(client, NCT3018Y_REG_CTRL, (u8)flags);
+		if (err < 0) {
+			dev_dbg(&client->dev, "Unable to write NCT3018Y_REG_CTRL.\n");
+			return err;
+		}
+	}
+
 	flags = 0;
 	err = i2c_smbus_write_byte_data(client, NCT3018Y_REG_ST, flags);
 	if (err < 0) {
