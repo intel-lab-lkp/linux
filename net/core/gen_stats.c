@@ -123,10 +123,9 @@ void gnet_stats_basic_sync_init(struct gnet_stats_basic_sync *b)
 }
 EXPORT_SYMBOL(gnet_stats_basic_sync_init);
 
-static void gnet_stats_add_basic_cpu(struct gnet_stats_basic_sync *bstats,
+static void gnet_stats_add_basic_cpu(struct gnet_stats *bstats,
 				     struct gnet_stats_basic_sync __percpu *cpu)
 {
-	u64 t_bytes = 0, t_packets = 0;
 	int i;
 
 	for_each_possible_cpu(i) {
@@ -140,19 +139,18 @@ static void gnet_stats_add_basic_cpu(struct gnet_stats_basic_sync *bstats,
 			packets = u64_stats_read(&bcpu->packets);
 		} while (u64_stats_fetch_retry(&bcpu->syncp, start));
 
-		t_bytes += bytes;
-		t_packets += packets;
+		bstats->bytes += bytes;
+		bstats->packets += packets;
 	}
-	_bstats_update(bstats, t_bytes, t_packets);
 }
 
-void gnet_stats_add_basic(struct gnet_stats_basic_sync *bstats,
+void gnet_stats_add_basic(struct gnet_stats *bstats,
 			  struct gnet_stats_basic_sync __percpu *cpu,
-			  struct gnet_stats_basic_sync *b, bool running)
+			  const struct gnet_stats_basic_sync *b, bool running)
 {
 	unsigned int start;
-	u64 bytes = 0;
 	u64 packets = 0;
+	u64 bytes = 0;
 
 	WARN_ON_ONCE((cpu || running) && in_hardirq());
 
@@ -167,7 +165,8 @@ void gnet_stats_add_basic(struct gnet_stats_basic_sync *bstats,
 		packets = u64_stats_read(&b->packets);
 	} while (running && u64_stats_fetch_retry(&b->syncp, start));
 
-	_bstats_update(bstats, bytes, packets);
+	bstats->bytes += bytes;
+	bstats->packets += packets;
 }
 EXPORT_SYMBOL(gnet_stats_add_basic);
 

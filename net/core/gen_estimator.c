@@ -60,9 +60,10 @@ struct net_rate_estimator {
 };
 
 static void est_fetch_counters(struct net_rate_estimator *e,
-			       struct gnet_stats_basic_sync *b)
+			       struct gnet_stats *b)
 {
-	gnet_stats_basic_sync_init(b);
+	b->packets = 0;
+	b->bytes = 0;
 	if (e->stats_lock)
 		spin_lock(e->stats_lock);
 
@@ -76,18 +77,15 @@ static void est_fetch_counters(struct net_rate_estimator *e,
 static void est_timer(struct timer_list *t)
 {
 	struct net_rate_estimator *est = timer_container_of(est, t, timer);
-	struct gnet_stats_basic_sync b;
-	u64 b_bytes, b_packets;
+	struct gnet_stats b;
 	u64 rate, brate;
 
 	est_fetch_counters(est, &b);
-	b_bytes = u64_stats_read(&b.bytes);
-	b_packets = u64_stats_read(&b.packets);
 
-	brate = (b_bytes - est->last_bytes) << (10 - est->intvl_log);
+	brate = (b.bytes - est->last_bytes) << (10 - est->intvl_log);
 	brate = (brate >> est->ewma_log) - (est->avbps >> est->ewma_log);
 
-	rate = (b_packets - est->last_packets) << (10 - est->intvl_log);
+	rate = (b.packets - est->last_packets) << (10 - est->intvl_log);
 	rate = (rate >> est->ewma_log) - (est->avpps >> est->ewma_log);
 
 	preempt_disable_nested();
@@ -97,8 +95,8 @@ static void est_timer(struct timer_list *t)
 	write_seqcount_end(&est->seq);
 	preempt_enable_nested();
 
-	est->last_bytes = b_bytes;
-	est->last_packets = b_packets;
+	est->last_bytes = b.bytes;
+	est->last_packets = b.packets;
 
 	est->next_jiffies += ((HZ/4) << est->intvl_log);
 
@@ -138,7 +136,7 @@ int gen_new_estimator(struct gnet_stats_basic_sync *bstats,
 {
 	struct gnet_estimator *parm = nla_data(opt);
 	struct net_rate_estimator *old, *est;
-	struct gnet_stats_basic_sync b;
+	struct gnet_stats b;
 	int intvl_log;
 
 	if (nla_len(opt) < sizeof(*parm))
@@ -172,8 +170,8 @@ int gen_new_estimator(struct gnet_stats_basic_sync *bstats,
 	est_fetch_counters(est, &b);
 	if (lock)
 		local_bh_enable();
-	est->last_bytes = u64_stats_read(&b.bytes);
-	est->last_packets = u64_stats_read(&b.packets);
+	est->last_bytes = b.bytes;
+	est->last_packets = b.packets;
 
 	if (lock)
 		spin_lock_bh(lock);
