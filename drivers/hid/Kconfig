@@ -938,7 +938,7 @@ config HID_PICOLCD
 
 config HID_PICOLCD_FB
 	bool "Framebuffer support" if EXPERT
-	default !EXPERT
+	default y
 	depends on HID_PICOLCD
 	depends on HID_PICOLCD=FB || FB=y
 	select FB_SYSMEM_HELPERS_DEFERRED
@@ -948,7 +948,7 @@ config HID_PICOLCD_FB
 
 config HID_PICOLCD_BACKLIGHT
 	bool "Backlight control" if EXPERT
-	default !EXPERT
+	default y
 	depends on HID_PICOLCD
 	depends on HID_PICOLCD=BACKLIGHT_CLASS_DEVICE || BACKLIGHT_CLASS_DEVICE=y
 	help
@@ -957,7 +957,7 @@ config HID_PICOLCD_BACKLIGHT
 
 config HID_PICOLCD_LCD
 	bool "Contrast control" if EXPERT
-	default !EXPERT
+	default y
 	depends on HID_PICOLCD
 	depends on HID_PICOLCD=LCD_CLASS_DEVICE || LCD_CLASS_DEVICE=y
 	help
@@ -965,7 +965,7 @@ config HID_PICOLCD_LCD
 
 config HID_PICOLCD_LEDS
 	bool "GPO via leds class" if EXPERT
-	default !EXPERT
+	default y
 	depends on HID_PICOLCD
 	depends on HID_PICOLCD=LEDS_CLASS || LEDS_CLASS=y
 	help
@@ -973,7 +973,7 @@ config HID_PICOLCD_LEDS
 
 config HID_PICOLCD_CIR
 	bool "CIR via RC class" if EXPERT
-	default !EXPERT
+	default y
 	depends on HID_PICOLCD
 	depends on HID_PICOLCD=RC_CORE || RC_CORE=y
 	help
