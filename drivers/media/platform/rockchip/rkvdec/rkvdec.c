@@ -1027,6 +1027,8 @@ static void rkvdec_stop_streaming(struct vb2_queue *q)
 
 		if (desc->ops->stop)
 			desc->ops->stop(ctx);
+
+		vb2_wait_for_all_buffers(q);
 	}
 
 	rkvdec_queue_cleanup(q, VB2_BUF_STATE_ERROR);
