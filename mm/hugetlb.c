@@ -1007,17 +1007,6 @@ static long region_count(struct resv_map *resv, long f, long t)
 }
 
 /*
- * Convert the address within this vma to the page offset within
- * the mapping, huge page units here.
- */
-static pgoff_t vma_hugecache_offset(struct hstate *h,
-			struct vm_area_struct *vma, unsigned long address)
-{
-	return ((address - vma->vm_start) >> huge_page_shift(h)) +
-			(vma->vm_pgoff >> huge_page_order(h));
-}
-
-/*
  * Flags for MAP_PRIVATE reservations.  These are stored in the bottom
  * bits of the reservation map pointer, which are always clear due to
  * alignment.
@@ -2465,7 +2454,9 @@ static long __vma_reservation_common(struct hstate *h,
 	if (!resv)
 		return 1;
 
-	idx = vma_hugecache_offset(h, vma, addr);
+	idx = linear_page_index(vma, addr);
+	idx >>= huge_page_order(h);
+
 	switch (mode) {
 	case VMA_NEEDS_RESV:
 		ret = region_chg(resv, idx, idx + 1, &dummy_out_regions_needed);
@@ -4721,8 +4712,10 @@ static void hugetlb_vm_op_close(struct vm_area_struct *vma)
 	if (!resv || !is_vma_resv_set(vma, HPAGE_RESV_OWNER))
 		return;
 
-	start = vma_hugecache_offset(h, vma, vma->vm_start);
-	end = vma_hugecache_offset(h, vma, vma->vm_end);
+	start = linear_page_index(vma, vma->vm_start); 
+	start >>= huge_page_order(h);
+	end = linear_page_index(vma, vma->vm_end); 
+	end >>= huge_page_order(h);
 
 	reserve = (end - start) - region_count(resv, start, end);
 	hugetlb_cgroup_uncharge_counter(resv, start, end);
@@ -5978,14 +5971,13 @@ vm_fault_t hugetlb_fault(struct mm_struct *mm, struct vm_area_struct *vma,
 	struct hstate *h = hstate_vma(vma);
 	struct address_space *mapping;
 	bool need_wait_lock = false;
-	pgoff_t index;
+	pgoff_t index = linear_page_index(vma, address & huge_page_mask(h));
 	struct vm_fault vmf = {
 		.vma = vma,
 		.address = address & huge_page_mask(h),
 		.real_address = address,
 		.flags = flags,
-		.pgoff = vma_hugecache_offset(h, vma,
-				address & huge_page_mask(h)),
+		.pgoff = index >> huge_page_order(h),
 		/* TODO: Track hugetlb faults using vm_fault */
 
 		/*
@@ -5999,7 +5991,6 @@ vm_fault_t hugetlb_fault(struct mm_struct *mm, struct vm_area_struct *vma,
 	 * get spurious allocation failures if two CPUs race to instantiate
 	 * the same page in the page cache.
 	 */
-	index = linear_page_index(vma, vmf.address);
 	mapping = vma->vm_file->f_mapping;
 	hash = hugetlb_fault_mutex_hash(mapping, index);
 	mutex_lock(&hugetlb_fault_mutex_table[hash]);
@@ -6200,20 +6191,22 @@ int hugetlb_mfill_atomic_pte(pte_t *dst_pte,
 			     uffd_flags_t flags,
 			     struct folio **foliop)
 {
-	struct mm_struct *dst_mm = dst_vma->vm_mm;
-	bool is_continue = uffd_flags_mode_is(flags, MFILL_ATOMIC_CONTINUE);
-	bool wp_enabled = (flags & MFILL_ATOMIC_WP);
-	struct hstate *h = hstate_vma(dst_vma);
-	struct address_space *mapping = dst_vma->vm_file->f_mapping;
-	pgoff_t idx = vma_hugecache_offset(h, dst_vma, dst_addr);
-	unsigned long size = huge_page_size(h);
-	int vm_shared = dst_vma->vm_flags & VM_SHARED;
-	pte_t _dst_pte;
+	pgoff_t idx;
 	spinlock_t *ptl;
-	int ret = -ENOMEM;
 	struct folio *folio;
+	pte_t _dst_pte, dst_ptep;
 	bool folio_in_pagecache = false;
-	pte_t dst_ptep;
+	struct hstate *h = hstate_vma(dst_vma);
+	unsigned long size = huge_page_size(h);
+	struct mm_struct *dst_mm = dst_vma->vm_mm;
+	bool wp_enabled = (flags & MFILL_ATOMIC_WP);
+	int vm_shared = dst_vma->vm_flags & VM_SHARED;
+	struct address_space *mapping = dst_vma->vm_file->f_mapping;
+	bool is_continue = uffd_flags_mode_is(flags, MFILL_ATOMIC_CONTINUE);
+	int ret = -ENOMEM;
+
+	idx = linear_page_index(dst_vma, dst_addr);
+	idx >>= huge_page_order(h);
 
 	if (uffd_flags_mode_is(flags, MFILL_ATOMIC_POISON)) {
 		ptl = huge_pte_lock(h, dst_mm, dst_pte);
