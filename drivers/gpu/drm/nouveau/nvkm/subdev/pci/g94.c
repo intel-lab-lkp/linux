@@ -28,7 +28,7 @@ g94_pci_func = {
 	.cfg = { .addr = 0x088000, .size = 0x1000 },
 
 	.init = g84_pci_init,
-	.msi_rearm = nv40_pci_msi_rearm,
+	.msi_rearm = nv46_pci_msi_rearm,
 
 	.pcie.init = g84_pcie_init,
 	.pcie.set_link = g84_pcie_set_link,
