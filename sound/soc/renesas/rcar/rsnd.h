@@ -623,6 +623,7 @@ void rsnd_adg_clk_dbg_info(struct rsnd_priv *priv, struct seq_file *m);
 struct rsnd_priv {
 
 	struct platform_device *pdev;
+
 	spinlock_t lock;
 	unsigned long flags;
 
