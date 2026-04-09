@@ -449,14 +449,17 @@ static bool cobalt_queue_full(struct cobalt_vars *vars,
 	bool up = false;
 
 	if (ktime_to_ns(ktime_sub(now, vars->blue_timer)) > p->target) {
-		up = !vars->p_drop;
-		vars->p_drop += p->p_inc;
-		if (vars->p_drop < p->p_inc)
-			vars->p_drop = ~0;
-		vars->blue_timer = now;
+		u32 p_drop = vars->p_drop;
+
+		up = !p_drop;
+		p_drop += p->p_inc;
+		if (p_drop < p->p_inc)
+			p_drop = ~0;
+		WRITE_ONCE(vars->p_drop, p_drop);
+		WRITE_ONCE(vars->blue_timer, now);
 	}
-	vars->dropping = true;
-	vars->drop_next = now;
+	WRITE_ONCE(vars->dropping, true);
+	WRITE_ONCE(vars->drop_next, now);
 	if (!vars->count)
 		vars->count = 1;
 
@@ -474,21 +477,25 @@ static bool cobalt_queue_empty(struct cobalt_vars *vars,
 
 	if (vars->p_drop &&
 	    ktime_to_ns(ktime_sub(now, vars->blue_timer)) > p->target) {
-		if (vars->p_drop < p->p_dec)
-			vars->p_drop = 0;
+		u32 p_drop = vars->p_drop;
+
+		if (p_drop < p->p_dec)
+			p_drop = 0;
 		else
-			vars->p_drop -= p->p_dec;
-		vars->blue_timer = now;
-		down = !vars->p_drop;
+			p_drop -= p->p_dec;
+		WRITE_ONCE(vars->p_drop, p_drop);
+		WRITE_ONCE(vars->blue_timer, now);
+		down = !p_drop;
 	}
-	vars->dropping = false;
+	WRITE_ONCE(vars->dropping, false);
 
 	if (vars->count && ktime_to_ns(ktime_sub(now, vars->drop_next)) >= 0) {
 		vars->count--;
 		cobalt_invsqrt(vars);
-		vars->drop_next = cobalt_control(vars->drop_next,
-						 p->interval,
-						 vars->rec_inv_sqrt);
+		WRITE_ONCE(vars->drop_next,
+			   cobalt_control(vars->drop_next,
+					  p->interval,
+					  vars->rec_inv_sqrt));
 	}
 
 	return down;
@@ -534,37 +541,41 @@ static enum qdisc_drop_reason cobalt_should_drop(struct cobalt_vars *vars,
 
 	if (over_target) {
 		if (!vars->dropping) {
-			vars->dropping = true;
-			vars->drop_next = cobalt_control(now,
-							 p->interval,
-							 vars->rec_inv_sqrt);
+			WRITE_ONCE(vars->dropping, true);
+			WRITE_ONCE(vars->drop_next,
+				   cobalt_control(now,
+						  p->interval,
+						  vars->rec_inv_sqrt));
 		}
 		if (!vars->count)
 			vars->count = 1;
 	} else if (vars->dropping) {
-		vars->dropping = false;
+		WRITE_ONCE(vars->dropping, false);
 	}
 
 	if (next_due && vars->dropping) {
 		/* Use ECN mark if possible, otherwise drop */
-		if (!(vars->ecn_marked = INET_ECN_set_ce(skb)))
+		vars->ecn_marked = INET_ECN_set_ce(skb);
+		if (!vars->ecn_marked)
 			reason = QDISC_DROP_CONGESTED;
 
 		vars->count++;
 		if (!vars->count)
 			vars->count--;
 		cobalt_invsqrt(vars);
-		vars->drop_next = cobalt_control(vars->drop_next,
-						 p->interval,
-						 vars->rec_inv_sqrt);
+		WRITE_ONCE(vars->drop_next,
+			   cobalt_control(vars->drop_next,
+					  p->interval,
+					  vars->rec_inv_sqrt));
 		schedule = ktime_sub(now, vars->drop_next);
 	} else {
 		while (next_due) {
 			vars->count--;
 			cobalt_invsqrt(vars);
-			vars->drop_next = cobalt_control(vars->drop_next,
-							 p->interval,
-							 vars->rec_inv_sqrt);
+			WRITE_ONCE(vars->drop_next,
+				   cobalt_control(vars->drop_next,
+						  p->interval,
+						  vars->rec_inv_sqrt));
 			schedule = ktime_sub(now, vars->drop_next);
 			next_due = vars->count && ktime_to_ns(schedule) >= 0;
 		}
@@ -577,9 +588,9 @@ static enum qdisc_drop_reason cobalt_should_drop(struct cobalt_vars *vars,
 
 	/* Overload the drop_next field as an activity timeout */
 	if (!vars->count)
-		vars->drop_next = ktime_add_ns(now, p->interval);
+		WRITE_ONCE(vars->drop_next, ktime_add_ns(now, p->interval));
 	else if (ktime_to_ns(schedule) > 0 && reason == QDISC_DROP_UNSPEC)
-		vars->drop_next = now;
+		WRITE_ONCE(vars->drop_next, now);
 
 	return reason;
 }
@@ -813,7 +824,7 @@ skip_hash:
 		     i++, k = (k + 1) % CAKE_SET_WAYS) {
 			if (q->tags[outer_hash + k] == flow_hash) {
 				if (i)
-					q->way_hits++;
+					WRITE_ONCE(q->way_hits, q->way_hits + 1);
 
 				if (!q->flows[outer_hash + k].set) {
 					/* need to increment host refcnts */
@@ -831,7 +842,7 @@ skip_hash:
 		for (i = 0; i < CAKE_SET_WAYS;
 			 i++, k = (k + 1) % CAKE_SET_WAYS) {
 			if (!q->flows[outer_hash + k].set) {
-				q->way_misses++;
+				WRITE_ONCE(q->way_misses, q->way_misses + 1);
 				allocate_src = cake_dsrc(flow_mode);
 				allocate_dst = cake_ddst(flow_mode);
 				goto found;
@@ -841,7 +852,7 @@ skip_hash:
 		/* With no empty queues, default to the original
 		 * queue, accept the collision, update the host tags.
 		 */
-		q->way_collisions++;
+		WRITE_ONCE(q->way_collisions, q->way_collisions + 1);
 		allocate_src = cake_dsrc(flow_mode);
 		allocate_dst = cake_ddst(flow_mode);
 
@@ -875,7 +886,8 @@ found_src:
 			q->flows[reduced_hash].srchost = srchost_idx;
 
 			if (q->flows[reduced_hash].set == CAKE_SET_BULK)
-				cake_inc_srchost_bulk_flow_count(q, &q->flows[reduced_hash], flow_mode);
+				cake_inc_srchost_bulk_flow_count(q, &q->flows[reduced_hash],
+								 flow_mode);
 		}
 
 		if (allocate_dst) {
@@ -899,7 +911,8 @@ found_dst:
 			q->flows[reduced_hash].dsthost = dsthost_idx;
 
 			if (q->flows[reduced_hash].set == CAKE_SET_BULK)
-				cake_inc_dsthost_bulk_flow_count(q, &q->flows[reduced_hash], flow_mode);
+				cake_inc_dsthost_bulk_flow_count(q, &q->flows[reduced_hash],
+								 flow_mode);
 		}
 	}
 
@@ -1379,9 +1392,9 @@ static u32 cake_calc_overhead(struct cake_sched_data *qd, u32 len, u32 off)
 		len -= off;
 
 	if (qd->max_netlen < len)
-		qd->max_netlen = len;
+		WRITE_ONCE(qd->max_netlen, len);
 	if (qd->min_netlen > len)
-		qd->min_netlen = len;
+		WRITE_ONCE(qd->min_netlen, len);
 
 	len += q->rate_overhead;
 
@@ -1401,9 +1414,9 @@ static u32 cake_calc_overhead(struct cake_sched_data *qd, u32 len, u32 off)
 	}
 
 	if (qd->max_adjlen < len)
-		qd->max_adjlen = len;
+		WRITE_ONCE(qd->max_adjlen, len);
 	if (qd->min_adjlen > len)
-		qd->min_adjlen = len;
+		WRITE_ONCE(qd->min_adjlen, len);
 
 	return len;
 }
@@ -1416,7 +1429,7 @@ static u32 cake_overhead(struct cake_sched_data *q, const struct sk_buff *skb)
 	u16 segs = qdisc_pkt_segs(skb);
 	u32 len = qdisc_pkt_len(skb);
 
-	q->avg_netoff = cake_ewma(q->avg_netoff, off << 16, 8);
+	WRITE_ONCE(q->avg_netoff, cake_ewma(q->avg_netoff, off << 16, 8));
 
 	if (segs == 1)
 		return cake_calc_overhead(q, len, off);
@@ -1590,16 +1603,17 @@ static unsigned int cake_drop(struct Qdisc *sch, struct sk_buff **to_free)
 	}
 
 	if (cobalt_queue_full(&flow->cvars, &b->cparams, now))
-		b->unresponsive_flow_count++;
+		WRITE_ONCE(b->unresponsive_flow_count,
+			   b->unresponsive_flow_count + 1);
 
 	len = qdisc_pkt_len(skb);
 	q->buffer_used      -= skb->truesize;
-	b->backlogs[idx]    -= len;
-	b->tin_backlog      -= len;
+	WRITE_ONCE(b->backlogs[idx], b->backlogs[idx] - len);
+	WRITE_ONCE(b->tin_backlog, b->tin_backlog - len);
 	qstats_backlog_sub(sch, len);
 
-	flow->dropped++;
-	b->tin_dropped++;
+	WRITE_ONCE(flow->dropped, flow->dropped + 1);
+	WRITE_ONCE(b->tin_dropped, b->tin_dropped + 1);
 
 	if (q->config->rate_flags & CAKE_FLAG_INGRESS)
 		cake_advance_shaper(q, b, skb, now, true);
@@ -1795,7 +1809,7 @@ static s32 cake_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 	}
 
 	if (unlikely(len > b->max_skblen))
-		b->max_skblen = len;
+		WRITE_ONCE(b->max_skblen, len);
 
 	if (qdisc_pkt_segs(skb) > 1 && q->config->rate_flags & CAKE_FLAG_SPLIT_GSO) {
 		struct sk_buff *segs, *nskb;
@@ -1819,13 +1833,13 @@ static s32 cake_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 			numsegs++;
 			slen += segs->len;
 			q->buffer_used += segs->truesize;
-			b->packets++;
 		}
 
 		/* stats */
-		b->bytes	    += slen;
-		b->backlogs[idx]    += slen;
-		b->tin_backlog      += slen;
+		WRITE_ONCE(b->bytes, b->bytes + slen);
+		WRITE_ONCE(b->packets, b->packets + numsegs);
+		WRITE_ONCE(b->backlogs[idx], b->backlogs[idx] + slen);
+		WRITE_ONCE(b->tin_backlog, b->tin_backlog + slen);
 		qstats_backlog_add(sch, slen);
 		q->avg_window_bytes += slen;
 
@@ -1843,7 +1857,7 @@ static s32 cake_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 			ack = cake_ack_filter(q, flow);
 
 		if (ack) {
-			b->ack_drops++;
+			WRITE_ONCE(b->ack_drops, b->ack_drops + 1);
 			sch->qstats.drops++;
 			ack_pkt_len = qdisc_pkt_len(ack);
 			b->bytes += ack_pkt_len;
@@ -1859,10 +1873,10 @@ static s32 cake_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 		}
 
 		/* stats */
-		b->packets++;
-		b->bytes	    += len - ack_pkt_len;
-		b->backlogs[idx]    += len - ack_pkt_len;
-		b->tin_backlog      += len - ack_pkt_len;
+		WRITE_ONCE(b->packets, b->packets + 1);
+		WRITE_ONCE(b->bytes, b->bytes + len - ack_pkt_len);
+		WRITE_ONCE(b->backlogs[idx], b->backlogs[idx] + len - ack_pkt_len);
+		WRITE_ONCE(b->tin_backlog, b->tin_backlog + len - ack_pkt_len);
 		qstats_backlog_add(sch, len - ack_pkt_len);
 		q->avg_window_bytes += len - ack_pkt_len;
 	}
@@ -1917,27 +1931,30 @@ static s32 cake_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 		if (!flow->set) {
 			list_add_tail(&flow->flowchain, &b->new_flows);
 		} else {
-			b->decaying_flow_count--;
+			WRITE_ONCE(b->decaying_flow_count,
+				   b->decaying_flow_count - 1);
 			list_move_tail(&flow->flowchain, &b->new_flows);
 		}
 		flow->set = CAKE_SET_SPARSE;
-		b->sparse_flow_count++;
+		WRITE_ONCE(b->sparse_flow_count,
+			   b->sparse_flow_count + 1);
 
-		flow->deficit = cake_get_flow_quantum(b, flow, q->config->flow_mode);
+		WRITE_ONCE(flow->deficit,
+			   cake_get_flow_quantum(b, flow, q->config->flow_mode));
 	} else if (flow->set == CAKE_SET_SPARSE_WAIT) {
 		/* this flow was empty, accounted as a sparse flow, but actually
 		 * in the bulk rotation.
 		 */
 		flow->set = CAKE_SET_BULK;
-		b->sparse_flow_count--;
-		b->bulk_flow_count++;
+		WRITE_ONCE(b->sparse_flow_count, b->sparse_flow_count - 1);
+		WRITE_ONCE(b->bulk_flow_count, b->bulk_flow_count + 1);
 
 		cake_inc_srchost_bulk_flow_count(b, flow, q->config->flow_mode);
 		cake_inc_dsthost_bulk_flow_count(b, flow, q->config->flow_mode);
 	}
 
 	if (q->buffer_used > q->buffer_max_used)
-		q->buffer_max_used = q->buffer_used;
+		WRITE_ONCE(q->buffer_max_used, q->buffer_used);
 
 	if (q->buffer_used <= q->buffer_limit)
 		return NET_XMIT_SUCCESS;
@@ -1976,8 +1993,8 @@ static struct sk_buff *cake_dequeue_one(struct Qdisc *sch)
 	if (flow->head) {
 		skb = dequeue_head(flow);
 		len = qdisc_pkt_len(skb);
-		b->backlogs[q->cur_flow] -= len;
-		b->tin_backlog		 -= len;
+		WRITE_ONCE(b->backlogs[q->cur_flow], b->backlogs[q->cur_flow] - len);
+		WRITE_ONCE(b->tin_backlog, b->tin_backlog - len);
 		qstats_backlog_sub(sch, len);
 		q->buffer_used		 -= skb->truesize;
 		qdisc_qlen_dec(sch);
@@ -2042,7 +2059,7 @@ static struct sk_buff *cake_dequeue(struct Qdisc *sch)
 
 		cake_configure_rates(sch, new_rate, true);
 		q->last_checked_active = now;
-		q->active_queues = num_active_qs;
+		WRITE_ONCE(q->active_queues, num_active_qs);
 	}
 
 begin:
@@ -2149,8 +2166,10 @@ retry:
 		 */
 		if (flow->set == CAKE_SET_SPARSE) {
 			if (flow->head) {
-				b->sparse_flow_count--;
-				b->bulk_flow_count++;
+				WRITE_ONCE(b->sparse_flow_count,
+					   b->sparse_flow_count - 1);
+				WRITE_ONCE(b->bulk_flow_count,
+					   b->bulk_flow_count + 1);
 
 				cake_inc_srchost_bulk_flow_count(b, flow, q->config->flow_mode);
 				cake_inc_dsthost_bulk_flow_count(b, flow, q->config->flow_mode);
@@ -2165,7 +2184,8 @@ retry:
 			}
 		}
 
-		flow->deficit += cake_get_flow_quantum(b, flow, q->config->flow_mode);
+		WRITE_ONCE(flow->deficit,
+			   flow->deficit + cake_get_flow_quantum(b, flow, q->config->flow_mode));
 		list_move_tail(&flow->flowchain, &b->old_flows);
 
 		goto retry;
@@ -2187,16 +2207,22 @@ retry:
 				list_move_tail(&flow->flowchain,
 					       &b->decaying_flows);
 				if (flow->set == CAKE_SET_BULK) {
-					b->bulk_flow_count--;
+					WRITE_ONCE(b->bulk_flow_count,
+						   b->bulk_flow_count - 1);
 
-					cake_dec_srchost_bulk_flow_count(b, flow, q->config->flow_mode);
-					cake_dec_dsthost_bulk_flow_count(b, flow, q->config->flow_mode);
+					cake_dec_srchost_bulk_flow_count(b, flow,
+									 q->config->flow_mode);
+					cake_dec_dsthost_bulk_flow_count(b, flow,
+									 q->config->flow_mode);
 
-					b->decaying_flow_count++;
+					WRITE_ONCE(b->decaying_flow_count,
+						   b->decaying_flow_count + 1);
 				} else if (flow->set == CAKE_SET_SPARSE ||
 					   flow->set == CAKE_SET_SPARSE_WAIT) {
-					b->sparse_flow_count--;
-					b->decaying_flow_count++;
+					WRITE_ONCE(b->sparse_flow_count,
+						   b->sparse_flow_count - 1);
+					WRITE_ONCE(b->decaying_flow_count,
+						   b->decaying_flow_count + 1);
 				}
 				flow->set = CAKE_SET_DECAYING;
 			} else {
@@ -2204,14 +2230,20 @@ retry:
 				list_del_init(&flow->flowchain);
 				if (flow->set == CAKE_SET_SPARSE ||
 				    flow->set == CAKE_SET_SPARSE_WAIT)
-					b->sparse_flow_count--;
+					WRITE_ONCE(b->sparse_flow_count,
+						   b->sparse_flow_count - 1);
 				else if (flow->set == CAKE_SET_BULK) {
-					b->bulk_flow_count--;
+					WRITE_ONCE(b->bulk_flow_count,
+						   b->bulk_flow_count - 1);
 
-					cake_dec_srchost_bulk_flow_count(b, flow, q->config->flow_mode);
-					cake_dec_dsthost_bulk_flow_count(b, flow, q->config->flow_mode);
-				} else
-					b->decaying_flow_count--;
+					cake_dec_srchost_bulk_flow_count(b, flow,
+									 q->config->flow_mode);
+					cake_dec_dsthost_bulk_flow_count(b, flow,
+									 q->config->flow_mode);
+				} else {
+					WRITE_ONCE(b->decaying_flow_count,
+						   b->decaying_flow_count - 1);
+				}
 
 				flow->set = CAKE_SET_NONE;
 			}
@@ -2230,11 +2262,11 @@ retry:
 		if (q->config->rate_flags & CAKE_FLAG_INGRESS) {
 			len = cake_advance_shaper(q, b, skb,
 						  now, true);
-			flow->deficit -= len;
+			WRITE_ONCE(flow->deficit, flow->deficit - len);
 			b->tin_deficit -= len;
 		}
-		flow->dropped++;
-		b->tin_dropped++;
+		WRITE_ONCE(flow->dropped, flow->dropped + 1);
+		WRITE_ONCE(b->tin_dropped, b->tin_dropped + 1);
 		qdisc_tree_reduce_backlog(sch, 1, qdisc_pkt_len(skb));
 		qdisc_qstats_drop(sch);
 		qdisc_dequeue_drop(sch, skb, reason);
@@ -2242,20 +2274,22 @@ retry:
 			goto retry;
 	}
 
-	b->tin_ecn_mark += !!flow->cvars.ecn_marked;
+	WRITE_ONCE(b->tin_ecn_mark, b->tin_ecn_mark + !!flow->cvars.ecn_marked);
 	qdisc_bstats_update(sch, skb);
 	WRITE_ONCE(q->last_active, now);
 
 	/* collect delay stats */
 	delay = ktime_to_ns(ktime_sub(now, cobalt_get_enqueue_time(skb)));
-	b->avge_delay = cake_ewma(b->avge_delay, delay, 8);
-	b->peak_delay = cake_ewma(b->peak_delay, delay,
-				  delay > b->peak_delay ? 2 : 8);
-	b->base_delay = cake_ewma(b->base_delay, delay,
-				  delay < b->base_delay ? 2 : 8);
+	WRITE_ONCE(b->avge_delay, cake_ewma(b->avge_delay, delay, 8));
+	WRITE_ONCE(b->peak_delay,
+		   cake_ewma(b->peak_delay, delay,
+			     delay > b->peak_delay ? 2 : 8));
+	WRITE_ONCE(b->base_delay,
+		   cake_ewma(b->base_delay, delay,
+			     delay < b->base_delay ? 2 : 8));
 
 	len = cake_advance_shaper(q, b, skb, now, false);
-	flow->deficit -= len;
+	WRITE_ONCE(flow->deficit, flow->deficit - len);
 	b->tin_deficit -= len;
 
 	if (ktime_after(q->time_next_packet, now) && sch->q.qlen) {
@@ -2329,9 +2363,8 @@ static void cake_set_rate(struct cake_tin_data *b, u64 rate, u32 mtu,
 	u8  rate_shft = 0;
 	u64 rate_ns = 0;
 
-	b->flow_quantum = 1514;
 	if (rate) {
-		b->flow_quantum = max(min(rate >> 12, 1514ULL), 300ULL);
+		WRITE_ONCE(b->flow_quantum, max(min(rate >> 12, 1514ULL), 300ULL));
 		rate_shft = 34;
 		rate_ns = ((u64)NSEC_PER_SEC) << rate_shft;
 		rate_ns = div64_u64(rate_ns, max(MIN_RATE, rate));
@@ -2339,8 +2372,10 @@ static void cake_set_rate(struct cake_tin_data *b, u64 rate, u32 mtu,
 			rate_ns >>= 1;
 			rate_shft--;
 		}
-	} /* else unlimited, ie. zero delay */
-
+	} else {
+		/* else unlimited, ie. zero delay */
+		WRITE_ONCE(b->flow_quantum, 1514);
+	}
 	b->tin_rate_bps  = rate;
 	b->tin_rate_ns   = rate_ns;
 	b->tin_rate_shft = rate_shft;
@@ -2611,25 +2646,27 @@ static void cake_reconfigure(struct Qdisc *sch)
 {
 	struct cake_sched_data *qd = qdisc_priv(sch);
 	struct cake_sched_config *q = qd->config;
+	u32 buffer_limit;
 
 	cake_configure_rates(sch, qd->config->rate_bps, false);
 
 	if (q->buffer_config_limit) {
-		qd->buffer_limit = q->buffer_config_limit;
+		buffer_limit = q->buffer_config_limit;
 	} else if (q->rate_bps) {
 		u64 t = q->rate_bps * q->interval;
 
 		do_div(t, USEC_PER_SEC / 4);
-		qd->buffer_limit = max_t(u32, t, 4U << 20);
+		buffer_limit = max_t(u32, t, 4U << 20);
 	} else {
-		qd->buffer_limit = ~0;
+		buffer_limit = ~0;
 	}
 
 	sch->flags &= ~TCQ_F_CAN_BYPASS;
 
-	qd->buffer_limit = min(qd->buffer_limit,
-			       max(sch->limit * psched_mtu(qdisc_dev(sch)),
-				   q->buffer_config_limit));
+	WRITE_ONCE(qd->buffer_limit,
+		   min(buffer_limit,
+		       max(sch->limit * psched_mtu(qdisc_dev(sch)),
+			   q->buffer_config_limit)));
 }
 
 static int cake_config_change(struct cake_sched_config *q, struct nlattr *opt,
@@ -2774,10 +2811,10 @@ static int cake_change(struct Qdisc *sch, struct nlattr *opt,
 		return ret;
 
 	if (overhead_changed) {
-		qd->max_netlen = 0;
-		qd->max_adjlen = 0;
-		qd->min_netlen = ~0;
-		qd->min_adjlen = ~0;
+		WRITE_ONCE(qd->max_netlen, 0);
+		WRITE_ONCE(qd->max_adjlen, 0);
+		WRITE_ONCE(qd->min_netlen, ~0);
+		WRITE_ONCE(qd->min_adjlen, ~0);
 	}
 
 	if (qd->tins) {
@@ -2995,15 +3032,15 @@ static int cake_dump_stats(struct Qdisc *sch, struct gnet_dump *d)
 			goto nla_put_failure;			       \
 	} while (0)
 
-	PUT_STAT_U64(CAPACITY_ESTIMATE64, q->avg_peak_bandwidth);
-	PUT_STAT_U32(MEMORY_LIMIT, q->buffer_limit);
-	PUT_STAT_U32(MEMORY_USED, q->buffer_max_used);
-	PUT_STAT_U32(AVG_NETOFF, ((q->avg_netoff + 0x8000) >> 16));
-	PUT_STAT_U32(MAX_NETLEN, q->max_netlen);
-	PUT_STAT_U32(MAX_ADJLEN, q->max_adjlen);
-	PUT_STAT_U32(MIN_NETLEN, q->min_netlen);
-	PUT_STAT_U32(MIN_ADJLEN, q->min_adjlen);
-	PUT_STAT_U32(ACTIVE_QUEUES, q->active_queues);
+	PUT_STAT_U64(CAPACITY_ESTIMATE64, READ_ONCE(q->avg_peak_bandwidth));
+	PUT_STAT_U32(MEMORY_LIMIT, READ_ONCE(q->buffer_limit));
+	PUT_STAT_U32(MEMORY_USED, READ_ONCE(q->buffer_max_used));
+	PUT_STAT_U32(AVG_NETOFF, ((READ_ONCE(q->avg_netoff) + 0x8000) >> 16));
+	PUT_STAT_U32(MAX_NETLEN, READ_ONCE(q->max_netlen));
+	PUT_STAT_U32(MAX_ADJLEN, READ_ONCE(q->max_adjlen));
+	PUT_STAT_U32(MIN_NETLEN, READ_ONCE(q->min_netlen));
+	PUT_STAT_U32(MIN_ADJLEN, READ_ONCE(q->min_adjlen));
+	PUT_STAT_U32(ACTIVE_QUEUES, READ_ONCE(q->active_queues));
 
 #undef PUT_STAT_U32
 #undef PUT_STAT_U64
@@ -3029,38 +3066,38 @@ static int cake_dump_stats(struct Qdisc *sch, struct gnet_dump *d)
 		if (!ts)
 			goto nla_put_failure;
 
-		PUT_TSTAT_U64(THRESHOLD_RATE64, b->tin_rate_bps);
-		PUT_TSTAT_U64(SENT_BYTES64, b->bytes);
-		PUT_TSTAT_U32(BACKLOG_BYTES, b->tin_backlog);
+		PUT_TSTAT_U64(THRESHOLD_RATE64, READ_ONCE(b->tin_rate_bps));
+		PUT_TSTAT_U64(SENT_BYTES64, READ_ONCE(b->bytes));
+		PUT_TSTAT_U32(BACKLOG_BYTES, READ_ONCE(b->tin_backlog));
 
 		PUT_TSTAT_U32(TARGET_US,
-			      ktime_to_us(ns_to_ktime(b->cparams.target)));
+			ktime_to_us(ns_to_ktime(READ_ONCE(b->cparams.target))));
 		PUT_TSTAT_U32(INTERVAL_US,
-			      ktime_to_us(ns_to_ktime(b->cparams.interval)));
+			ktime_to_us(ns_to_ktime(READ_ONCE(b->cparams.interval))));
 
-		PUT_TSTAT_U32(SENT_PACKETS, b->packets);
-		PUT_TSTAT_U32(DROPPED_PACKETS, b->tin_dropped);
-		PUT_TSTAT_U32(ECN_MARKED_PACKETS, b->tin_ecn_mark);
-		PUT_TSTAT_U32(ACKS_DROPPED_PACKETS, b->ack_drops);
+		PUT_TSTAT_U32(SENT_PACKETS, READ_ONCE(b->packets));
+		PUT_TSTAT_U32(DROPPED_PACKETS, READ_ONCE(b->tin_dropped));
+		PUT_TSTAT_U32(ECN_MARKED_PACKETS, READ_ONCE(b->tin_ecn_mark));
+		PUT_TSTAT_U32(ACKS_DROPPED_PACKETS, READ_ONCE(b->ack_drops));
 
 		PUT_TSTAT_U32(PEAK_DELAY_US,
-			      ktime_to_us(ns_to_ktime(b->peak_delay)));
+			      ktime_to_us(ns_to_ktime(READ_ONCE(b->peak_delay))));
 		PUT_TSTAT_U32(AVG_DELAY_US,
-			      ktime_to_us(ns_to_ktime(b->avge_delay)));
+			      ktime_to_us(ns_to_ktime(READ_ONCE(b->avge_delay))));
 		PUT_TSTAT_U32(BASE_DELAY_US,
-			      ktime_to_us(ns_to_ktime(b->base_delay)));
+			      ktime_to_us(ns_to_ktime(READ_ONCE(b->base_delay))));
 
-		PUT_TSTAT_U32(WAY_INDIRECT_HITS, b->way_hits);
-		PUT_TSTAT_U32(WAY_MISSES, b->way_misses);
-		PUT_TSTAT_U32(WAY_COLLISIONS, b->way_collisions);
+		PUT_TSTAT_U32(WAY_INDIRECT_HITS, READ_ONCE(b->way_hits));
+		PUT_TSTAT_U32(WAY_MISSES, READ_ONCE(b->way_misses));
+		PUT_TSTAT_U32(WAY_COLLISIONS, READ_ONCE(b->way_collisions));
 
-		PUT_TSTAT_U32(SPARSE_FLOWS, b->sparse_flow_count +
-					    b->decaying_flow_count);
-		PUT_TSTAT_U32(BULK_FLOWS, b->bulk_flow_count);
-		PUT_TSTAT_U32(UNRESPONSIVE_FLOWS, b->unresponsive_flow_count);
-		PUT_TSTAT_U32(MAX_SKBLEN, b->max_skblen);
+		PUT_TSTAT_U32(SPARSE_FLOWS, READ_ONCE(b->sparse_flow_count) +
+					    READ_ONCE(b->decaying_flow_count));
+		PUT_TSTAT_U32(BULK_FLOWS, READ_ONCE(b->bulk_flow_count));
+		PUT_TSTAT_U32(UNRESPONSIVE_FLOWS, READ_ONCE(b->unresponsive_flow_count));
+		PUT_TSTAT_U32(MAX_SKBLEN, READ_ONCE(b->max_skblen));
 
-		PUT_TSTAT_U32(FLOW_QUANTUM, b->flow_quantum);
+		PUT_TSTAT_U32(FLOW_QUANTUM, READ_ONCE(b->flow_quantum));
 		nla_nest_end(d->skb, ts);
 	}
 
@@ -3137,13 +3174,15 @@ static int cake_dump_class_stats(struct Qdisc *sch, unsigned long cl,
 			}
 			sch_tree_unlock(sch);
 		}
-		qs.backlog = b->backlogs[idx % CAKE_QUEUES];
-		qs.drops = flow->dropped;
+		qs.backlog = READ_ONCE(b->backlogs[idx % CAKE_QUEUES]);
+		qs.drops = READ_ONCE(flow->dropped);
 	}
 	if (gnet_stats_copy_queue(d, NULL, &qs, qs.qlen) < 0)
 		return -1;
 	if (flow) {
 		ktime_t now = ktime_get();
+		bool dropping;
+		u32 p_drop;
 
 		stats = nla_nest_start_noflag(d->skb, TCA_STATS_APP);
 		if (!stats)
@@ -3158,21 +3197,23 @@ static int cake_dump_class_stats(struct Qdisc *sch, unsigned long cl,
 			goto nla_put_failure;			       \
 	} while (0)
 
-		PUT_STAT_S32(DEFICIT, flow->deficit);
-		PUT_STAT_U32(DROPPING, flow->cvars.dropping);
-		PUT_STAT_U32(COBALT_COUNT, flow->cvars.count);
-		PUT_STAT_U32(P_DROP, flow->cvars.p_drop);
-		if (flow->cvars.p_drop) {
+		PUT_STAT_S32(DEFICIT, READ_ONCE(flow->deficit));
+		dropping = READ_ONCE(flow->cvars.dropping);
+		PUT_STAT_U32(DROPPING, dropping);
+		PUT_STAT_U32(COBALT_COUNT, READ_ONCE(flow->cvars.count));
+		p_drop = READ_ONCE(flow->cvars.p_drop);
+		PUT_STAT_U32(P_DROP, p_drop);
+		if (p_drop) {
 			PUT_STAT_S32(BLUE_TIMER_US,
 				     ktime_to_us(
 					     ktime_sub(now,
-						       flow->cvars.blue_timer)));
+						       READ_ONCE(flow->cvars.blue_timer))));
 		}
-		if (flow->cvars.dropping) {
+		if (dropping) {
 			PUT_STAT_S32(DROP_NEXT_US,
 				     ktime_to_us(
 					     ktime_sub(now,
-						       flow->cvars.drop_next)));
+						       READ_ONCE(flow->cvars.drop_next))));
 		}
 
 		if (nla_nest_end(d->skb, stats) < 0)
@@ -3298,10 +3339,10 @@ static int cake_mq_change(struct Qdisc *sch, struct nlattr *opt,
 		struct cake_sched_data *qd = qdisc_priv(chld);
 
 		if (overhead_changed) {
-			qd->max_netlen = 0;
-			qd->max_adjlen = 0;
-			qd->min_netlen = ~0;
-			qd->min_adjlen = ~0;
+			WRITE_ONCE(qd->max_netlen, 0);
+			WRITE_ONCE(qd->max_adjlen, 0);
+			WRITE_ONCE(qd->min_netlen, ~0);
+			WRITE_ONCE(qd->min_adjlen, ~0);
 		}
 
 		if (qd->tins) {
