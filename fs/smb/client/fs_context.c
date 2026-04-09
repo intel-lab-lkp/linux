@@ -1301,6 +1301,35 @@ static void smb3_sync_ses_chan_max(struct cifs_ses *ses, unsigned int max_channe
 	spin_unlock(&ses->chan_lock);
 }
 
+/*
+ * Synchronize tcon options that are derived from ctx across all tcons
+ * associated with this superblock.  These fields are consulted at runtime
+ * (reconnect, I/O, unlink/rmdir) so remount needs to update the live
+ * tcons in addition to cifs_sb->ctx.
+ */
+static void smb3_sync_tcon_opts(struct cifs_sb_info *cifs_sb,
+				struct smb3_fs_context *ctx)
+{
+	struct rb_node *node;
+
+	spin_lock(&cifs_sb->tlink_tree_lock);
+	for (node = rb_first(&cifs_sb->tlink_tree); node; node = rb_next(node)) {
+		struct tcon_link *tlink;
+		struct cifs_tcon *tcon;
+
+		tlink = rb_entry(node, struct tcon_link, tl_rbnode);
+		tcon = tlink_tcon(tlink);
+		if (IS_ERR_OR_NULL(tcon))
+			continue;
+
+		spin_lock(&tcon->tc_lock);
+		tcon->retry = ctx->retry;
+		tcon->max_cached_dirs = ctx->max_cached_dirs;
+		spin_unlock(&tcon->tc_lock);
+	}
+	spin_unlock(&cifs_sb->tlink_tree_lock);
+}
+
 static int smb3_reconfigure(struct fs_context *fc)
 {
 	struct smb3_fs_context *ctx = smb3_fc2context(fc);
@@ -1438,6 +1467,8 @@ static int smb3_reconfigure(struct fs_context *fc)
 	if (!rc)
 		rc = dfs_cache_remount_fs(cifs_sb);
 #endif
+	if (!rc)
+		smb3_sync_tcon_opts(cifs_sb, cifs_sb->ctx);
 
 	return rc;
 }
