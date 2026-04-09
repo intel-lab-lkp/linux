@@ -304,7 +304,9 @@ ice_sf_eth_activate(struct ice_dynamic_port *dyn_port,
 	return 0;
 
 aux_dev_uninit:
+	/* ice_sf_dev_release() frees sf_dev and erases the xa entry */
 	auxiliary_device_uninit(&sf_dev->adev);
+	return err;
 sf_dev_free:
 	kfree(sf_dev);
 xa_erase:
