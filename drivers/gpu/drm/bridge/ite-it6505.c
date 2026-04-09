@@ -3361,13 +3361,13 @@ static void it6505_parse_dt(struct it6505 *it6505)
 	}
 
 	ep = of_graph_get_endpoint_by_regs(np, 0, 0);
-	of_node_put(ep);
 
 	if (ep) {
 		len = of_property_read_variable_u64_array(ep,
 							  "link-frequencies",
 							  &link_frequencies, 0,
 							  1);
+		of_node_put(ep);
 		if (len >= 0) {
 			do_div(link_frequencies, 1000);
 			if (link_frequencies > 297000) {
@@ -3382,6 +3382,7 @@ static void it6505_parse_dt(struct it6505 *it6505)
 			*max_dpi_pixel_clock = DPI_PIXEL_CLK_MAX;
 		}
 	} else {
+		of_node_put(ep);
 		dev_err(dev, "error endpoint, use default");
 		*max_dpi_pixel_clock = DPI_PIXEL_CLK_MAX;
 	}
