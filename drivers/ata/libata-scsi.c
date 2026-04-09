@@ -4731,6 +4731,35 @@ void ata_scsi_scan_host(struct ata_port *ap, int sync)
 			if (!IS_ERR(sdev)) {
 				dev->sdev = sdev;
 				ata_scsi_assign_ofnode(dev, ap);
+				/*
+				 * Multi-LUN ATAPI devices (e.g. PD/CD combo
+				 * drives) are flagged BLIST_FORCELUN in
+				 * scsi_devinfo.  Probe additional LUNs when
+				 * the flag is set.
+				 */
+				if (dev->class == ATA_DEV_ATAPI &&
+				    (sdev->sdev_bflags & BLIST_FORCELUN)) {
+					u64 lun;
+
+					for (lun = 1; lun < ap->scsi_host->max_lun;
+					     lun++) {
+						struct scsi_device *extra;
+
+						extra = __scsi_add_device(
+							ap->scsi_host,
+							channel, id, lun,
+							NULL);
+						if (IS_ERR(extra))
+							break;
+						/* PDT 0x1f: no device type */
+						if (extra->type == 0x1f) {
+							scsi_remove_device(extra);
+							scsi_device_put(extra);
+							break;
+						}
+						scsi_device_put(extra);
+					}
+				}
 				scsi_device_put(sdev);
 			} else {
 				dev->sdev = NULL;
