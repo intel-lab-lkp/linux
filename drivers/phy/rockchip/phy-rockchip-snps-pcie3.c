@@ -7,6 +7,7 @@
 
 #include <linux/clk.h>
 #include <linux/delay.h>
+#include <linux/hw_bitfield.h>
 #include <linux/io.h>
 #include <linux/iopoll.h>
 #include <linux/kernel.h>
@@ -35,10 +36,14 @@
 #define RK3588_PCIE3PHY_GRF_CMN_CON0		0x0
 #define RK3588_PCIE3PHY_GRF_PHY0_STATUS1	0x904
 #define RK3588_PCIE3PHY_GRF_PHY1_STATUS1	0xa04
+#define RK3588_PCIE3PHY_GRF_PHY0_LN0_CON0	0x1000
 #define RK3588_PCIE3PHY_GRF_PHY0_LN0_CON1	0x1004
 #define RK3588_PCIE3PHY_GRF_PHY0_LN1_CON1	0x1104
+#define RK3588_PCIE3PHY_GRF_PHY0_LN1_CON0	0x1100
+#define RK3588_PCIE3PHY_GRF_PHY1_LN0_CON0	0x2000
 #define RK3588_PCIE3PHY_GRF_PHY1_LN0_CON1	0x2004
 #define RK3588_PCIE3PHY_GRF_PHY1_LN1_CON1	0x2104
+#define RK3588_PCIE3PHY_GRF_PHY1_LN1_CON0	0x2100
 #define RK3588_SRAM_INIT_DONE(reg)		(reg & BIT(0))
 
 #define RK3588_BIFURCATION_LANE_0_1		BIT(0)
@@ -48,6 +53,13 @@
 #define RK3588_RX_CMN_REFCLK_MODE_DIS		(BIT(7) << 16)
 #define RK3588_PCIE1LN_SEL_EN			(GENMASK(1, 0) << 16)
 #define RK3588_PCIE30_PHY_MODE_EN		(GENMASK(2, 0) << 16)
+
+static const u32 rk3588_lane_con0[] = {
+	RK3588_PCIE3PHY_GRF_PHY0_LN0_CON0,
+	RK3588_PCIE3PHY_GRF_PHY0_LN1_CON0,
+	RK3588_PCIE3PHY_GRF_PHY1_LN0_CON0,
+	RK3588_PCIE3PHY_GRF_PHY1_LN1_CON0,
+};
 
 struct rockchip_p3phy_ops;
 
@@ -142,7 +154,7 @@ static int rockchip_p3phy_rk3588_init(struct rockchip_p3phy_priv *priv)
 {
 	u32 reg = 0;
 	u8 mode = RK3588_LANE_AGGREGATION; /* default */
-	int ret;
+	int ret, i;
 
 	regmap_write(priv->phy_grf, RK3588_PCIE3PHY_GRF_PHY0_LN0_CON1,
 		     priv->rx_cmn_refclk_mode[0] ? RK3588_RX_CMN_REFCLK_MODE_EN :
@@ -161,7 +173,7 @@ static int rockchip_p3phy_rk3588_init(struct rockchip_p3phy_priv *priv)
 	regmap_write(priv->phy_grf, RK3588_PCIE3PHY_GRF_CMN_CON0, BIT(8) | BIT(24));
 
 	/* Set bifurcation if needed */
-	for (int i = 0; i < priv->num_lanes; i++) {
+	for (i = 0; i < priv->num_lanes; i++) {
 		if (priv->lanes[i] > 1)
 			mode &= ~RK3588_LANE_AGGREGATION;
 		if (priv->lanes[i] == 3)
@@ -173,6 +185,18 @@ static int rockchip_p3phy_rk3588_init(struct rockchip_p3phy_priv *priv)
 	reg = mode;
 	regmap_write(priv->phy_grf, RK3588_PCIE3PHY_GRF_CMN_CON0,
 		     RK3588_PCIE30_PHY_MODE_EN | reg);
+
+	for (i = 0; i < priv->num_lanes && i < ARRAY_SIZE(rk3588_lane_con0); i++) {
+		u32 base = rk3588_lane_con0[i];
+
+		/* clkreq_n = 0 (asserted low for PIPE 4.3) */
+		regmap_write(priv->phy_grf, base,
+			     FIELD_PREP_WM16(BIT(6), 0));
+
+		/* PowerDown = P0 (0x0, fully active) */
+		regmap_write(priv->phy_grf, base,
+			     FIELD_PREP_WM16(GENMASK(11, 8), 0x0));
+	}
 
 	/* Set pcie1ln_sel in PHP_GRF_PCIESEL_CON */
 	if (!IS_ERR(priv->pipe_grf)) {
