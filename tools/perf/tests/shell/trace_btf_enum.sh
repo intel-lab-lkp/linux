@@ -1,5 +1,5 @@
 #!/bin/bash
-# perf trace enum augmentation tests
+# perf trace enum augmentation tests (exclusive)
 # SPDX-License-Identifier: GPL-2.0
 
 err=0
