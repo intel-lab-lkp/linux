@@ -1029,3 +1029,23 @@ audmapp_end:
 	/* dummy mem mod for debug */
 	return rsnd_mod_init(NULL, &mem, &mem_ops, NULL, NULL, 0, 0);
 }
+
+void rsnd_dma_suspend(struct rsnd_priv *priv)
+{
+	struct rsnd_dma_ctrl *dmac = rsnd_priv_to_dmac(priv);
+
+	if (dmac) {
+		clk_disable_unprepare(dmac->audmapp_clk);
+		rsnd_suspend_clk_reset(NULL, dmac->audmapp_rstc);
+	}
+}
+
+void rsnd_dma_resume(struct rsnd_priv *priv)
+{
+	struct rsnd_dma_ctrl *dmac = rsnd_priv_to_dmac(priv);
+
+	if (dmac) {
+		rsnd_resume_clk_reset(NULL, dmac->audmapp_rstc);
+		clk_prepare_enable(dmac->audmapp_clk);
+	}
+}
