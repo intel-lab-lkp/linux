@@ -69,9 +69,10 @@ static int get_vmas(struct xe_vm *vm, struct xe_vmas_in_madvise_range *madvise_r
 
 		if (madvise_range->num_vmas == max_vmas) {
 			max_vmas <<= 1;
-			__vmas = krealloc(madvise_range->vmas,
-					  max_vmas * sizeof(*madvise_range->vmas),
-					  GFP_KERNEL);
+			__vmas = krealloc_array(madvise_range->vmas,
+						max_vmas,
+						sizeof(*madvise_range->vmas),
+						GFP_KERNEL);
 			if (!__vmas) {
 				kfree(madvise_range->vmas);
 				return -ENOMEM;
