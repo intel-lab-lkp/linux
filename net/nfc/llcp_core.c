@@ -1282,6 +1282,11 @@ static void nfc_llcp_recv_snl(struct nfc_llcp_local *local,
 	size_t sdres_tlvs_len;
 	HLIST_HEAD(nl_sdres_list);
 
+	if (skb->len < LLCP_HEADER_SIZE) {
+		pr_err("Malformed SNL PDU\n");
+		return;
+	}
+
 	dsap = nfc_llcp_dsap(skb);
 	ssap = nfc_llcp_ssap(skb);
 
@@ -1298,11 +1303,17 @@ static void nfc_llcp_recv_snl(struct nfc_llcp_local *local,
 	sdres_tlvs_len = 0;
 
 	while (offset < tlv_len) {
+		if (tlv_len - offset < 2)
+			break;
 		type = tlv[0];
 		length = tlv[1];
+		if (tlv_len - offset - 2 < length)
+			break;
 
 		switch (type) {
 		case LLCP_TLV_SDREQ:
+			if (length < 1)
+				break;
 			tid = tlv[2];
 			service_name = (char *) &tlv[3];
 			service_name_len = length - 1;
@@ -1367,6 +1378,8 @@ add_snl:
 			break;
 
 		case LLCP_TLV_SDRES:
+			if (length < 2)
+				break;
 			mutex_lock(&local->sdreq_lock);
 
 			pr_debug("LLCP_TLV_SDRES: searching tid %d\n", tlv[2]);
