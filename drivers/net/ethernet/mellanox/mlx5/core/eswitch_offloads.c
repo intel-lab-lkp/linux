@@ -3699,7 +3699,20 @@ static void esw_wq_handler(struct work_struct *work)
 	esw = host_work->esw;
 	devlink = priv_to_devlink(esw->dev);
 
-	devl_lock(devlink);
+	/* Check for stale work BEFORE acquiring devlink lock.
+	 * mlx5_eswitch_cleanup() increments the generation counter
+	 * before destroy_workqueue() while holding devlink lock,
+	 * so acquiring devlink lock here would deadlock.
+	 */
+	for (;;) {
+		if (host_work->work_gen != atomic_read(&esw->generation))
+			goto free;
+
+		if (devl_trylock(devlink))
+			break;
+
+		cond_resched();
+	}
 
 	/* Stale work from one or more mode changes ago. Bail out. */
 	if (host_work->work_gen != atomic_read(&esw->generation))
@@ -3709,6 +3722,7 @@ static void esw_wq_handler(struct work_struct *work)
 
 unlock:
 	devl_unlock(devlink);
+free:
 	kfree(host_work);
 }
 
@@ -4160,6 +4174,8 @@ int mlx5_devlink_eswitch_mode_set(struct devlink *devlink, u16 mode,
 		err = -EINVAL;
 		goto skip;
 	}
+
+	atomic_inc(&esw->generation);
 
 	if (mlx5_mode == MLX5_ESWITCH_LEGACY)
 		esw->dev->priv.flags |= MLX5_PRIV_FLAGS_SWITCH_LEGACY;
