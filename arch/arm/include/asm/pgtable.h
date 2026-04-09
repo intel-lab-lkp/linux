@@ -10,7 +10,7 @@
 #include <linux/const.h>
 #include <asm/proc-fns.h>
 
-#ifndef __ASSEMBLY__
+#ifndef __ASSEMBLER__
 /*
  * ZERO_PAGE is a global shared page that is always zero: used
  * for zero-mapped memory areas etc..
@@ -52,7 +52,7 @@ extern unsigned long empty_zero_page[PAGE_SIZE / sizeof(unsigned long)];
 
 #define LIBRARY_TEXT_START	0x0c000000
 
-#ifndef __ASSEMBLY__
+#ifndef __ASSEMBLER__
 extern void __pte_error(const char *file, int line, pte_t);
 extern void __pmd_error(const char *file, int line, pmd_t);
 extern void __pgd_error(const char *file, int line, pgd_t);
@@ -135,7 +135,7 @@ extern pgprot_t phys_mem_access_prot(struct file *file, unsigned long pfn,
 	__pgprot_modify(prot, L_PTE_MT_MASK, L_PTE_MT_UNCACHED | L_PTE_XN)
 #endif
 
-#endif /* __ASSEMBLY__ */
+#endif /* __ASSEMBLER__ */
 
 /*
  * The table below defines the page protection levels that we insert into our
@@ -146,7 +146,7 @@ extern pgprot_t phys_mem_access_prot(struct file *file, unsigned long pfn,
  *  3) write implies read permissions
  */
 
-#ifndef __ASSEMBLY__
+#ifndef __ASSEMBLER__
 
 extern pgd_t swapper_pg_dir[PTRS_PER_PGD];
 
@@ -329,7 +329,7 @@ static inline pte_t pte_swp_clear_exclusive(pte_t pte)
 #define HAVE_ARCH_UNMAPPED_AREA
 #define HAVE_ARCH_UNMAPPED_AREA_TOPDOWN
 
-#endif /* !__ASSEMBLY__ */
+#endif /* !__ASSEMBLER__ */
 
 #endif /* CONFIG_MMU */
 

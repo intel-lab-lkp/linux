@@ -41,7 +41,7 @@
 #define UDELAY_MULT	UL(2147 * HZ + 483648 * HZ / 1000000)
 #define UDELAY_SHIFT	31
 
-#ifndef __ASSEMBLY__
+#ifndef __ASSEMBLER__
 
 struct delay_timer {
 	unsigned long (*read_current_timer)(void);
@@ -94,7 +94,7 @@ extern void __loop_const_udelay(unsigned long);
 #define ARCH_HAS_READ_CURRENT_TIMER
 extern void register_current_timer_delay(const struct delay_timer *timer);
 
-#endif /* __ASSEMBLY__ */
+#endif /* __ASSEMBLER__ */
 
 #endif /* defined(_ARM_DELAY_H) */
 

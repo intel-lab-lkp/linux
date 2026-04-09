@@ -7,7 +7,7 @@
 #ifndef __ASM_PROC_DOMAIN_H
 #define __ASM_PROC_DOMAIN_H
 
-#ifndef __ASSEMBLY__
+#ifndef __ASSEMBLER__
 #include <linux/thread_info.h>
 #include <asm/barrier.h>
 #endif
@@ -79,7 +79,7 @@
 #define DACR_UACCESS_ENABLE	\
 	(__DACR_DEFAULT | domain_val(DOMAIN_USER, DOMAIN_CLIENT))
 
-#ifndef __ASSEMBLY__
+#ifndef __ASSEMBLER__
 
 #ifdef CONFIG_CPU_CP15_MMU
 static __always_inline unsigned int get_domain(void)
@@ -124,7 +124,7 @@ static __always_inline void set_domain(unsigned int val)
 #define TUSERCOND(instr, cond)	#instr #cond
 #endif
 
-#else /* __ASSEMBLY__ */
+#else /* __ASSEMBLER__ */
 
 /*
  * Generate the T (user) versions of the LDR/STR and related
@@ -136,6 +136,6 @@ static __always_inline void set_domain(unsigned int val)
 #define TUSER(instr)	instr
 #endif
 
-#endif /* __ASSEMBLY__ */
+#endif /* __ASSEMBLER__ */
 
 #endif /* !__ASM_PROC_DOMAIN_H */
