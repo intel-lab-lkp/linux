@@ -1051,9 +1051,8 @@ static void setup_sensor_data(struct ec_sensors_data *ec)
 				break;
 			}
 		}
-		if (!bank_found) {
+		if (!bank_found)
 			ec->banks[ec->nr_banks++] = bank;
-		}
 		s++;
 	}
 	sort(ec->banks, ec->nr_banks, 1, bank_compare, NULL);
@@ -1110,9 +1109,8 @@ static int asus_ec_bank_switch(u8 bank, u8 *old)
 {
 	int status = 0;
 
-	if (old) {
+	if (old)
 		status = ec_read(ASUS_EC_BANK_REGISTER, old);
-	}
 	if (status || (old && (*old == bank)))
 		return status;
 	return ec_write(ASUS_EC_BANK_REGISTER, bank);
@@ -1149,9 +1147,8 @@ static int asus_ec_block_read(const struct device *dev,
 		}
 		for (ireg = 0; ireg < ec->nr_registers; ireg++) {
 			reg_bank = register_bank(ec->registers[ireg]);
-			if (reg_bank < bank) {
+			if (reg_bank < bank)
 				continue;
-			}
 			ec_read(register_index(ec->registers[ireg]),
 				ec->read_buffer + ireg);
 		}
@@ -1213,9 +1210,8 @@ static int update_ec_sensors(const struct device *dev,
 
 	status = asus_ec_block_read(dev, ec);
 
-	if (!status) {
+	if (!status)
 		update_sensor_values(ec, ec->read_buffer);
-	}
 
 	if (!ec->lock_data.unlock(&ec->lock_data))
 		dev_err(dev, "Failed to release mutex");
@@ -1264,9 +1260,8 @@ static int asus_ec_hwmon_read(struct device *dev, enum hwmon_sensor_types type,
 	struct ec_sensors_data *state = dev_get_drvdata(dev);
 	int sidx = find_ec_sensor_index(state, type, channel);
 
-	if (sidx < 0) {
+	if (sidx < 0)
 		return sidx;
-	}
 
 	ret = get_cached_value_or_update(dev, sidx, state, &value);
 	if (!ret) {
