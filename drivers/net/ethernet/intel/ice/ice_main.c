@@ -4335,18 +4335,24 @@ static int ice_send_version(struct ice_pf *pf)
 }
 
 /**
- * ice_init_acl - Initializes the ACL block
+ * ice_init_acl - initialize the ACL block and allocate necessary structs
  * @pf: ptr to PF device
  *
  * Return: 0 on success, negative on error
  */
 static int ice_init_acl(struct ice_pf *pf)
 {
+	struct device *dev = ice_pf_to_dev(pf);
 	struct ice_acl_tbl_params params = {};
 	struct ice_hw *hw = &pf->hw;
 	int divider;
 	u16 scen_id;
 	int err;
+
+	hw->acl_prof = devm_kcalloc(dev, ICE_FLTR_PTYPE_MAX,
+				    sizeof(*hw->acl_prof), GFP_KERNEL);
+	if (!hw->acl_prof)
+		return -ENOMEM;
 
 	/* Creates a single ACL table that consist of src_ip(4 byte),
 	 * dest_ip(4 byte), src_port(2 byte) and dst_port(2 byte) for a total
@@ -4367,7 +4373,7 @@ static int ice_init_acl(struct ice_pf *pf)
 
 	err = ice_acl_create_tbl(hw, &params);
 	if (err)
-		return err;
+		goto free_prof;
 
 	err = ice_acl_create_scen(hw, params.width, params.depth, &scen_id);
 	if (err)
@@ -4377,17 +4383,36 @@ static int ice_init_acl(struct ice_pf *pf)
 
 destroy_table:
 	ice_acl_destroy_tbl(hw);
+free_prof:
+	devm_kfree(dev, hw->acl_prof);
+	hw->acl_prof = NULL;
 
 	return err;
 }
 
 /**
- * ice_deinit_acl - Unroll the initialization of the ACL block
+ * ice_deinit_acl - unroll the initialization of the ACL block
  * @pf: ptr to PF device
  */
 static void ice_deinit_acl(struct ice_pf *pf)
 {
-	ice_acl_destroy_tbl(&pf->hw);
+	struct device *dev = ice_pf_to_dev(pf);
+	struct ice_hw *hw = &pf->hw;
+
+	ice_acl_destroy_tbl(hw);
+
+	for (int i = 0; i < ICE_FLTR_PTYPE_MAX; i++) {
+		struct ice_fd_hw_prof *hw_prof = hw->acl_prof[i];
+
+		if (!hw_prof)
+			continue;
+
+		kfree(hw_prof->fdir_seg[0]);
+		kfree(hw_prof);
+	}
+
+	devm_kfree(dev, hw->acl_prof);
+	hw->acl_prof = NULL;
 }
 
 /**
