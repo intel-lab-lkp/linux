@@ -1596,7 +1596,7 @@ static unsigned int cake_drop(struct Qdisc *sch, struct sk_buff **to_free)
 	q->buffer_used      -= skb->truesize;
 	b->backlogs[idx]    -= len;
 	b->tin_backlog      -= len;
-	sch->qstats.backlog -= len;
+	qstats_backlog_sub(sch, len);
 
 	flow->dropped++;
 	b->tin_dropped++;
@@ -1826,7 +1826,7 @@ static s32 cake_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 		b->bytes	    += slen;
 		b->backlogs[idx]    += slen;
 		b->tin_backlog      += slen;
-		sch->qstats.backlog += slen;
+		qstats_backlog_add(sch, slen);
 		q->avg_window_bytes += slen;
 
 		qdisc_tree_reduce_backlog(sch, 1-numsegs, len-slen);
@@ -1863,7 +1863,7 @@ static s32 cake_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 		b->bytes	    += len - ack_pkt_len;
 		b->backlogs[idx]    += len - ack_pkt_len;
 		b->tin_backlog      += len - ack_pkt_len;
-		sch->qstats.backlog += len - ack_pkt_len;
+		qstats_backlog_add(sch, len - ack_pkt_len);
 		q->avg_window_bytes += len - ack_pkt_len;
 	}
 
@@ -1978,7 +1978,7 @@ static struct sk_buff *cake_dequeue_one(struct Qdisc *sch)
 		len = qdisc_pkt_len(skb);
 		b->backlogs[q->cur_flow] -= len;
 		b->tin_backlog		 -= len;
-		sch->qstats.backlog      -= len;
+		qstats_backlog_sub(sch, len);
 		q->buffer_used		 -= skb->truesize;
 		qdisc_qlen_dec(sch);
 
