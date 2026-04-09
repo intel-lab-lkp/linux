@@ -1403,6 +1403,9 @@ nfsd4_clone(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	struct nfsd4_clone *clone = &u->clone;
 	struct nfsd_file *src, *dst;
 	__be32 status;
+	struct iattr attr = {
+		.ia_valid = ATTR_CTIME | ATTR_MTIME | ATTR_DELEG,
+	};
 
 	status = nfsd4_verify_copy(rqstp, cstate, &clone->cl_src_stateid, &src,
 				   &clone->cl_dst_stateid, &dst);
@@ -1412,6 +1415,9 @@ nfsd4_clone(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	status = nfsd4_clone_file_range(rqstp, src, clone->cl_src_pos,
 			dst, clone->cl_dst_pos, clone->cl_count,
 			EX_ISSYNC(cstate->current_fh.fh_export));
+
+	if ((READ_ONCE(dst->nf_file->f_mode) & FMODE_NOCMTIME) != 0 && !status)
+		nfsd_update_cmtime_attr(dst->nf_file, &attr);
 
 	nfsd_file_put(dst);
 	nfsd_file_put(src);
