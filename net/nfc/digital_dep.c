@@ -866,6 +866,12 @@ static void digital_in_recv_dep_res(struct nfc_digital_dev *ddev, void *arg,
 			goto error;
 		}
 
+		if (!resp->len) {
+			PROTOCOL_ERR("14.8.4.1");
+			rc = -EIO;
+			goto error;
+		}
+
 		rtox = DIGITAL_NFC_DEP_RTOX_VALUE(resp->data[0]);
 		if (!rtox || rtox > DIGITAL_NFC_DEP_RTOX_MAX) {
 			PROTOCOL_ERR("14.8.4.1");
