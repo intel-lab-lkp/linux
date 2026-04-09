@@ -6512,6 +6512,9 @@ static void scx_kick_cpu(struct scx_sched *sch, s32 cpu, u64 flags)
 	if (!ops_cpu_valid(sch, cpu, NULL))
 		return;
 
+	if (unlikely(READ_ONCE(sch->aborting)))
+		return;
+
 	local_irq_save(irq_flags);
 
 	this_rq = this_rq();
