@@ -268,7 +268,17 @@ int rose_process_rx_frame(struct sock *sk, struct sk_buff *skb)
 	if (rose->state == ROSE_STATE_0)
 		return 0;
 
+	if (!pskb_may_pull(skb, 3)) {
+		kfree_skb(skb);
+		return 0;
+	}
+
 	frametype = rose_decode(skb, &ns, &nr, &q, &d, &m);
+
+	if (frametype == ROSE_CLEAR_REQUEST && !pskb_may_pull(skb, 5)) {
+		kfree_skb(skb);
+		return 0;
+	}
 
 	switch (rose->state) {
 	case ROSE_STATE_1:
