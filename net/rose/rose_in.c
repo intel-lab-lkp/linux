@@ -270,6 +270,11 @@ int rose_process_rx_frame(struct sock *sk, struct sk_buff *skb)
 
 	frametype = rose_decode(skb, &ns, &nr, &q, &d, &m);
 
+	if (frametype == ROSE_CLEAR_REQUEST && skb->len < 5) {
+		kfree_skb(skb);
+		return 0;
+	}
+
 	switch (rose->state) {
 	case ROSE_STATE_1:
 		queued = rose_state1_machine(sk, skb, frametype);
