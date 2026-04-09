@@ -17,6 +17,7 @@
 
 	chosen {
 		stdout-path = "serial0";
+		bootph-all;
 	};
 };
 
@@ -41,6 +42,7 @@
 		function = "qup_se1";
 		drive-strength = <6>;
 		bias-pull-down;
+		bootph-all;
 	};
 
 	sdhc_default_state: sdhc-default-state {
@@ -49,6 +51,7 @@
 			function = "sdc_clk";
 			drive-strength = <8>;
 			bias-disable;
+			bootph-all;
 		};
 
 		cmd-pins {
@@ -56,6 +59,7 @@
 			function = "sdc_cmd";
 			drive-strength = <8>;
 			bias-pull-up;
+			bootph-all;
 		};
 
 		data-pins {
@@ -63,6 +67,7 @@
 			function = "sdc_data";
 			drive-strength = <8>;
 			bias-pull-up;
+			bootph-all;
 		};
 	};
 };

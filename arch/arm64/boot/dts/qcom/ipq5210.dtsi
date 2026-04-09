@@ -14,11 +14,13 @@
 
 	clocks {
 		sleep_clk: sleep-clk {
+			bootph-all;
 			compatible = "fixed-clock";
 			#clock-cells = <0>;
 		};
 
 		xo_board: xo-board-clk {
+			bootph-all;
 			compatible = "fixed-clock";
 			#clock-cells = <0>;
 		};
@@ -98,6 +100,7 @@
 		#address-cells = <2>;
 		#size-cells = <2>;
 		ranges;
+		bootph-all;
 
 		bootloader@87800000 {
 			reg = <0x0 0x87800000 0x0 0x400000>;
@@ -108,6 +111,7 @@
 			compatible = "qcom,smem";
 			reg = <0x0 0x87c00000 0x0 0x40000>;
 			no-map;
+			bootph-all;
 
 			hwlocks = <&tcsr_mutex 3>;
 		};
@@ -129,6 +133,7 @@
 		#size-cells = <2>;
 		dma-ranges = <0 0 0 0 0x10 0>;
 		ranges = <0 0 0 0 0x10 0>;
+		bootph-all;
 
 		tlmm: pinctrl@1000000 {
 			compatible = "qcom,ipq5210-tlmm";
@@ -139,6 +144,7 @@
 			gpio-ranges = <&tlmm 0 0 54>;
 			interrupt-controller;
 			#interrupt-cells = <2>;
+			bootph-all;
 		};
 
 		gcc: clock-controller@1800000 {
@@ -152,6 +158,7 @@
 				 <0>;
 			#clock-cells = <1>;
 			#reset-cells = <1>;
+			bootph-all;
 		};
 
 		tcsr_mutex: hwlock@1905000 {
@@ -169,6 +176,7 @@
 			ranges;
 			#address-cells = <2>;
 			#size-cells = <2>;
+			bootph-all;
 
 			uart1: serial@1a84000 {
 				compatible = "qcom,geni-debug-uart";
@@ -176,6 +184,7 @@
 				clocks = <&gcc GCC_QUPV3_WRAP_SE1_CLK>;
 				clock-names = "se";
 				interrupts = <GIC_SPI 139 IRQ_TYPE_LEVEL_HIGH>;
+				bootph-all;
 
 				status = "disabled";
 			};
@@ -200,6 +209,7 @@
 				      "core",
 				      "xo";
 			non-removable;
+			bootph-all;
 
 			status = "disabled";
 		};
