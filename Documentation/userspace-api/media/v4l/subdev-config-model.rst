@@ -260,6 +260,14 @@ Also refer to :ref:`Selection targets <v4l2-selection-targets-table>`.
       - \-
       - Embedded data source format.
 
+Frame rate
+^^^^^^^^^^
+
+Drivers supporting the Common raw camera sensor model support
+:ref:`V4L2_CID_LINE_LENGTH_PIXELS and V4L2_CID_FRAME_LENGTH_LINES
+<image_source_control_frame_length>` controls for :ref:`frame rate configuration
+<media_camera_sensor_frame_rate_raw>`.
+
 Embedded data
 ^^^^^^^^^^^^^
 

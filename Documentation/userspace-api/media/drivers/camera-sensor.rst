@@ -61,6 +61,8 @@ There are two different methods for obtaining possibilities for different frame
 intervals as well as configuring the frame interval. Which one to implement
 depends on the type of the device.
 
+.. _media_camera_sensor_frame_rate_raw:
+
 Raw camera sensors
 ~~~~~~~~~~~~~~~~~~
 
@@ -77,6 +79,12 @@ The frame interval is calculated using the following equation::
 The formula is bus independent and is applicable for raw timing parameters on
 large variety of devices beyond camera sensors. Devices that have no analogue
 crop, use the full source image size, i.e. pixel array size.
+
+The combined *analogue crop width + horizontal blanking* and *analogue crop
+height + vertical blanking* can be controlled directly using the
+:ref:`V4L2_CID_LINE_LENGTH_PIXELS and V4L2_CID_FRAME_LENGTH_LINES
+<image_source_control_frame_length>` controls, respectively, should the driver
+support them.
 
 Horizontal and vertical blanking are specified by ``V4L2_CID_HBLANK`` and
 ``V4L2_CID_VBLANK``, respectively. The unit of the ``V4L2_CID_HBLANK`` control
