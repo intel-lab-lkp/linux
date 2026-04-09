@@ -422,6 +422,15 @@ int btrfs_validate_extent_buffer(struct extent_buffer *eb,
 		const struct btrfs_key *expect_key = &check->first_key;
 		struct btrfs_key found_key;
 
+		/* We have @first_key, so this @eb must have at least one item. */
+		if (unlikely(btrfs_header_nritems(eb) == 0)) {
+			btrfs_err(fs_info,
+				  "invalid tree nritems, bytenr=%llu nritems=0 expect >0",
+				  eb->start);
+			ret = -EUCLEAN;
+			goto out;
+		}
+
 		if (found_level)
 			btrfs_node_key_to_cpu(eb, &found_key, 0);
 		else
