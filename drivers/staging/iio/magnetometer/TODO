@@ -1,0 +1,5 @@
+TODO
+====
+- Implement triggered buffer support (iio_triggered_buffer_setup)
+- Add interrupt (DRDY) support
+- Implement self-test (selftest regmap field is unused)
