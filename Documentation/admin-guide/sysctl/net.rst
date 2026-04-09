@@ -210,7 +210,9 @@ Default: 0 (off)
 mem_pcpu_rsv
 ------------
 
-Per-cpu reserved forward alloc cache size in page units. Default 1MB per CPU.
+Per-cpu reserved forward alloc cache size in page units.
+
+Default: 1MB per CPU, expressed in page units
 
 bypass_prot_mem
 ---------------
@@ -237,6 +239,37 @@ rps_default_mask
 
 The default RPS CPU mask used on newly created network devices. An empty
 mask means RPS disabled by default.
+
+rps_sock_flow_entries
+---------------------
+
+The total number of entries in the RPS flow table. This is used by
+RFS (Receive Flow Steering) to track which CPU is currently processing
+a flow in userspace. Non-zero values are rounded up to the nearest
+power of two.
+Available only when ``CONFIG_RPS`` is enabled.
+
+Default: 0
+
+flow_limit_cpu_bitmap
+---------------------
+
+Bitmap of CPUs for which RPS flow limiting is enabled. Flow limiting
+prioritizes small flows during CPU contention by dropping packets
+from large flows slightly ahead of those from small flows.
+Available only when ``CONFIG_NET_FLOW_LIMIT`` is enabled.
+
+Default: 0 (disabled)
+
+flow_limit_table_len
+--------------------
+
+The number of buckets in the flow limit hashtable. This value is
+only consulted when a new table is allocated. Modifying it does
+not update active tables. This value should be a power of two.
+Available only when ``CONFIG_NET_FLOW_LIMIT`` is enabled.
+
+Default: 4096
 
 tstamp_allow_data
 -----------------
@@ -290,6 +323,8 @@ probed in a round-robin manner. Also, a polling cycle may not exceed
 netdev_budget_usecs microseconds, even if netdev_budget has not been
 exhausted.
 
+Default: 300
+
 netdev_budget_usecs
 ---------------------
 
@@ -297,11 +332,15 @@ Maximum number of microseconds in one NAPI polling cycle. Polling
 will exit when either netdev_budget_usecs have elapsed during the
 poll cycle or the number of packets processed reaches netdev_budget.
 
+Default: ``2 * USEC_PER_SEC / HZ`` (2000 when ``HZ`` is 1000)
+
 netdev_max_backlog
 ------------------
 
 Maximum number of packets, queued on the INPUT side, when the interface
 receives packets faster than kernel can process them.
+
+Default: 1000
 
 qdisc_max_burst
 ------------------
@@ -368,6 +407,15 @@ by the cpu which allocated them.
 
 Default: 128
 
+max_skb_frags
+-------------
+
+The maximum number of fragments allowed per skb (socket buffer).
+This is mostly used for performance tuning of GSO (Generic
+Segmentation Offload).
+
+Default: ``CONFIG_MAX_SKB_FRAGS`` (17 if not overridden)
+
 optmem_max
 ----------
 
@@ -376,6 +424,16 @@ of struct cmsghdr structures with appended data. TCP tx zerocopy also uses
 optmem_max as a limit for its internal structures.
 
 Default : 128 KB
+
+somaxconn
+---------
+
+Limit of the socket listen() backlog, known in userspace as SOMAXCONN.
+The maximum number of established sockets waiting to be accepted by
+accept(). If the backlog is greater than this value, it will be
+silently truncated to this value.
+
+Default: 4096
 
 fb_tunnels_only_for_init_net
 ----------------------------
@@ -449,6 +507,8 @@ GRO has decided not to coalesce, it is placed on a per-NAPI list. This
 list is then passed to the stack when the number of segments reaches the
 gro_normal_batch limit.
 
+Default: 8
+
 high_order_alloc_disable
 ------------------------
 
@@ -465,8 +525,10 @@ Default: 0
 ----------------------------------------------------------
 
 There is only one file in this directory.
-unix_dgram_qlen limits the max number of datagrams queued in Unix domain
+max_dgram_qlen limits the max number of datagrams queued in Unix domain
 socket's buffer. It will not take effect unless PF_UNIX flag is specified.
+
+Default: 10
 
 
 3. /proc/sys/net/ipv4 - IPV4 settings
