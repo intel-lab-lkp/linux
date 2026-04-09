@@ -2124,8 +2124,22 @@ do_callback:
 
 	set_bit(NFSD4_COPY_F_COMPLETED, &copy->cp_flags);
 	trace_nfsd_copy_async_done(copy);
-	nfsd4_send_cb_offload(copy);
 	atomic_dec(&copy->cp_nn->pending_async_copies);
+	/*
+	 * choosing to check for existence of set dentry pointer to indicate
+	 * that we need to update the attributes and do a dput because the
+	 * file flag could be cleared by a DELEGRETURN and then we'd lose
+	 * that copy was started with file opened with NOCMTIME and we got
+	 * a reference on the dentry.
+	 */
+	if (copy->cp_res.wr_bytes_written > 0) {
+		struct iattr ia = {
+			.ia_valid = ATTR_CTIME | ATTR_MTIME | ATTR_DELEG,
+		};
+
+		nfsd_update_cmtime_attr(copy->nf_dst->nf_file, &ia);
+	}
+	nfsd4_send_cb_offload(copy);
 	return 0;
 }
 
@@ -2201,8 +2215,16 @@ nfsd4_copy(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		wake_up_process(async_copy->copy_task);
 		status = nfs_ok;
 	} else {
+		struct iattr ia = {
+			.ia_valid = ATTR_CTIME | ATTR_MTIME | ATTR_DELEG,
+		};
+
 		status = nfsd4_do_copy(copy, copy->nf_src->nf_file,
 				       copy->nf_dst->nf_file, true);
+		if ((READ_ONCE(copy->nf_dst->nf_file->f_mode) &
+			       FMODE_NOCMTIME) != 0 &&
+				copy->cp_res.wr_bytes_written > 0)
+			nfsd_update_cmtime_attr(copy->nf_dst->nf_file, &ia);
 	}
 out:
 	trace_nfsd_copy_done(copy, status);
