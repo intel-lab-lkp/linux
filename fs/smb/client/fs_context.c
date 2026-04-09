@@ -1330,6 +1330,21 @@ static void smb3_sync_tcon_opts(struct cifs_sb_info *cifs_sb,
 	spin_unlock(&cifs_sb->tlink_tree_lock);
 }
 
+/*
+ * Synchronize server-level options that are stored on TCP_Server_Info
+ * at mount time.  These fields are consulted at runtime (retry logic)
+ * so remount needs to update the live server struct in addition to
+ * cifs_sb->ctx.
+ */
+static void smb3_sync_server_opts(struct cifs_sb_info *cifs_sb)
+{
+	struct TCP_Server_Info *server = cifs_sb_master_tcon(cifs_sb)->ses->server;
+	struct smb3_fs_context *ctx = cifs_sb->ctx;
+
+	if (ctx->retrans)
+		server->retrans = ctx->retrans;
+}
+
 static int smb3_reconfigure(struct fs_context *fc)
 {
 	struct smb3_fs_context *ctx = smb3_fc2context(fc);
@@ -1469,6 +1484,8 @@ static int smb3_reconfigure(struct fs_context *fc)
 #endif
 	if (!rc)
 		smb3_sync_tcon_opts(cifs_sb, cifs_sb->ctx);
+	if (!rc)
+		smb3_sync_server_opts(cifs_sb);
 
 	return rc;
 }
