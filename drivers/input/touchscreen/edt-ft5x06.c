@@ -1285,7 +1285,9 @@ static int edt_ft5x06_ts_probe(struct i2c_client *client)
 		"Model \"%s\", Rev. \"%s\", %dx%d sensors\n",
 		tsdata->name, tsdata->fw_version, tsdata->num_x, tsdata->num_y);
 
-	input->name = tsdata->name;
+	if (device_property_read_string(&client->dev, "label", &input->name))
+		input->name = tsdata->name;
+
 	input->id.bustype = BUS_I2C;
 	input->dev.parent = &client->dev;
 
