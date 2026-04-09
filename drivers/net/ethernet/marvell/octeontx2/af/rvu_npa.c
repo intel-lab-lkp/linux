@@ -12,6 +12,11 @@
 #include "rvu_reg.h"
 #include "rvu.h"
 
+static bool npa_ctype_invalid(struct rvu *rvu, int ctype)
+{
+	return !is_cn20k(rvu->pdev) && ctype == NPA_AQ_CTYPE_HALO;
+}
+
 static int npa_aq_enqueue_wait(struct rvu *rvu, struct rvu_block *block,
 			       struct npa_aq_inst_s *inst)
 {
@@ -72,12 +77,18 @@ int rvu_npa_aq_enq_inst(struct rvu *rvu, struct npa_aq_enq_req *req,
 	bool ena;
 
 	pfvf = rvu_get_pfvf(rvu, pcifunc);
-	if (!pfvf->aura_ctx || req->aura_id >= pfvf->aura_ctx->qsize)
+	if (!pfvf->aura_ctx || req->aura_id >= pfvf->aura_ctx->qsize ||
+	    npa_ctype_invalid(rvu, req->ctype))
 		return NPA_AF_ERR_AQ_ENQUEUE;
 
 	blkaddr = rvu_get_blkaddr(rvu, BLKTYPE_NPA, pcifunc);
 	if (!pfvf->npalf || blkaddr < 0)
 		return NPA_AF_ERR_AF_LF_INVALID;
+
+	/* Ensure halo bitmap is exclusive to halo ctype */
+	if (is_cn20k(rvu->pdev) && req->ctype != NPA_AQ_CTYPE_HALO &&
+	    test_bit(req->aura_id, pfvf->halo_bmap))
+		return NPA_AF_ERR_AQ_ENQUEUE;
 
 	block = &hw->block[blkaddr];
 	aq = block->aq;
@@ -119,7 +130,7 @@ int rvu_npa_aq_enq_inst(struct rvu *rvu, struct npa_aq_enq_req *req,
 			memcpy(mask, &req->aura_mask,
 			       sizeof(struct npa_aura_s));
 			memcpy(ctx, &req->aura, sizeof(struct npa_aura_s));
-		} else {
+		} else { /* Applies to pool and halo since size is same */
 			memcpy(mask, &req->pool_mask,
 			       sizeof(struct npa_pool_s));
 			memcpy(ctx, &req->pool, sizeof(struct npa_pool_s));
@@ -135,7 +146,7 @@ int rvu_npa_aq_enq_inst(struct rvu *rvu, struct npa_aq_enq_req *req,
 			req->aura.pool_addr = pfvf->pool_ctx->iova +
 			(req->aura.pool_addr * pfvf->pool_ctx->entry_sz);
 			memcpy(ctx, &req->aura, sizeof(struct npa_aura_s));
-		} else { /* POOL's context */
+		} else { /* Applies to pool and halo since size is same */
 			memcpy(ctx, &req->pool, sizeof(struct npa_pool_s));
 		}
 		break;
@@ -176,6 +187,20 @@ int rvu_npa_aq_enq_inst(struct rvu *rvu, struct npa_aq_enq_req *req,
 		}
 	}
 
+	if (req->ctype == NPA_AQ_CTYPE_HALO) {
+		if (req->op == NPA_AQ_INSTOP_INIT && req->aura.ena)
+			__set_bit(req->aura_id, pfvf->halo_bmap);
+		if (req->op == NPA_AQ_INSTOP_WRITE) {
+			ena = (req->aura.ena & req->aura_mask.ena) |
+				(test_bit(req->aura_id, pfvf->halo_bmap) &
+				~req->aura_mask.ena);
+			if (ena)
+				__set_bit(req->aura_id, pfvf->halo_bmap);
+			else
+				__clear_bit(req->aura_id, pfvf->halo_bmap);
+		}
+	}
+
 	/* Set pool bitmap if pool hw context is enabled */
 	if (req->ctype == NPA_AQ_CTYPE_POOL) {
 		if (req->op == NPA_AQ_INSTOP_INIT && req->pool.ena)
@@ -198,7 +223,7 @@ int rvu_npa_aq_enq_inst(struct rvu *rvu, struct npa_aq_enq_req *req,
 			if (req->ctype == NPA_AQ_CTYPE_AURA)
 				memcpy(&rsp->aura, ctx,
 				       sizeof(struct npa_aura_s));
-			else
+			else /* Applies to pool and halo since size is same */
 				memcpy(&rsp->pool, ctx,
 				       sizeof(struct npa_pool_s));
 		}
@@ -210,12 +235,14 @@ int rvu_npa_aq_enq_inst(struct rvu *rvu, struct npa_aq_enq_req *req,
 static int npa_lf_hwctx_disable(struct rvu *rvu, struct hwctx_disable_req *req)
 {
 	struct rvu_pfvf *pfvf = rvu_get_pfvf(rvu, req->hdr.pcifunc);
+	const char *context = "Unknown";
 	struct npa_aq_enq_req aq_req;
 	unsigned long *bmap;
 	int id, cnt = 0;
 	int err = 0, rc;
 
-	if (!pfvf->pool_ctx || !pfvf->aura_ctx)
+	if (!pfvf->pool_ctx || !pfvf->aura_ctx ||
+	    npa_ctype_invalid(rvu, req->ctype))
 		return NPA_AF_ERR_AQ_ENQUEUE;
 
 	memset(&aq_req, 0, sizeof(struct npa_aq_enq_req));
@@ -226,6 +253,7 @@ static int npa_lf_hwctx_disable(struct rvu *rvu, struct hwctx_disable_req *req)
 		aq_req.pool_mask.ena = 1;
 		cnt = pfvf->pool_ctx->qsize;
 		bmap = pfvf->pool_bmap;
+		context = "Pool";
 	} else if (req->ctype == NPA_AQ_CTYPE_AURA) {
 		aq_req.aura.ena = 0;
 		aq_req.aura_mask.ena = 1;
@@ -233,6 +261,14 @@ static int npa_lf_hwctx_disable(struct rvu *rvu, struct hwctx_disable_req *req)
 		aq_req.aura_mask.bp_ena = 1;
 		cnt = pfvf->aura_ctx->qsize;
 		bmap = pfvf->aura_bmap;
+		context = "Aura";
+	} else if (req->ctype == NPA_AQ_CTYPE_HALO) {
+		aq_req.aura.ena = 0;
+		aq_req.aura_mask.ena = 1;
+		rvu_npa_halo_hwctx_disable(&aq_req);
+		cnt = pfvf->aura_ctx->qsize;
+		bmap = pfvf->halo_bmap;
+		context = "Halo";
 	}
 
 	aq_req.ctype = req->ctype;
@@ -246,8 +282,7 @@ static int npa_lf_hwctx_disable(struct rvu *rvu, struct hwctx_disable_req *req)
 		if (rc) {
 			err = rc;
 			dev_err(rvu->dev, "Failed to disable %s:%d context\n",
-				(req->ctype == NPA_AQ_CTYPE_AURA) ?
-				"Aura" : "Pool", id);
+				context, id);
 		}
 	}
 
@@ -311,6 +346,9 @@ static void npa_ctx_free(struct rvu *rvu, struct rvu_pfvf *pfvf)
 	kfree(pfvf->aura_bmap);
 	pfvf->aura_bmap = NULL;
 
+	kfree(pfvf->halo_bmap);
+	pfvf->halo_bmap = NULL;
+
 	qmem_free(rvu->dev, pfvf->aura_ctx);
 	pfvf->aura_ctx = NULL;
 
@@ -373,6 +411,13 @@ int rvu_mbox_handler_npa_lf_alloc(struct rvu *rvu,
 				  GFP_KERNEL);
 	if (!pfvf->aura_bmap)
 		goto free_mem;
+
+	if (is_cn20k(rvu->pdev)) {
+		pfvf->halo_bmap = kcalloc(NPA_AURA_COUNT(req->aura_sz),
+					  sizeof(long), GFP_KERNEL);
+		if (!pfvf->halo_bmap)
+			goto free_mem;
+	}
 
 	/* Alloc memory for pool HW contexts */
 	hwctx_size = 1UL << ((ctx_cfg >> 4) & 0xF);
@@ -560,6 +605,10 @@ void rvu_npa_lf_teardown(struct rvu *rvu, u16 pcifunc, int npalf)
 
 	/* Disable all auras */
 	ctx_req.ctype = NPA_AQ_CTYPE_AURA;
+	npa_lf_hwctx_disable(rvu, &ctx_req);
+
+	/* Disable all Halos */
+	ctx_req.ctype = NPA_AQ_CTYPE_HALO;
 	npa_lf_hwctx_disable(rvu, &ctx_req);
 
 	npa_ctx_free(rvu, pfvf);
