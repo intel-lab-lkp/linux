@@ -5651,10 +5651,8 @@ static void kick_cpus_irq_workfn(struct irq_work *irq_work)
 	unsigned long *ksyncs;
 	s32 cpu;
 
-	if (unlikely(!ksyncs_pcpu)) {
-		pr_warn_once("kick_cpus_irq_workfn() called with NULL scx_kick_syncs");
+	if (WARN_ON_ONCE(!ksyncs_pcpu))
 		return;
-	}
 
 	ksyncs = rcu_dereference_bh(ksyncs_pcpu)->syncs;
 
