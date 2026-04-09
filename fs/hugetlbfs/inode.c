@@ -242,9 +242,9 @@ static ssize_t hugetlbfs_read_iter(struct kiocb *iocb, struct iov_iter *to)
 	struct hstate *h = hstate_file(file);
 	struct address_space *mapping = file->f_mapping;
 	struct inode *inode = mapping->host;
-	unsigned long index = iocb->ki_pos >> huge_page_shift(h);
+	unsigned long idx = iocb->ki_pos >> huge_page_shift(h);
 	unsigned long offset = iocb->ki_pos & ~huge_page_mask(h);
-	unsigned long end_index;
+	unsigned long end_idx;
 	loff_t isize;
 	ssize_t retval = 0;
 
@@ -257,10 +257,10 @@ static ssize_t hugetlbfs_read_iter(struct kiocb *iocb, struct iov_iter *to)
 		isize = i_size_read(inode);
 		if (!isize)
 			break;
-		end_index = (isize - 1) >> huge_page_shift(h);
-		if (index > end_index)
+		end_idx = (isize - 1) >> huge_page_shift(h);
+		if (idx > end_idx)
 			break;
-		if (index == end_index) {
+		if (idx == end_idx) {
 			nr = ((isize - 1) & ~huge_page_mask(h)) + 1;
 			if (nr <= offset)
 				break;
@@ -268,7 +268,7 @@ static ssize_t hugetlbfs_read_iter(struct kiocb *iocb, struct iov_iter *to)
 		nr = nr - offset;
 
 		/* Find the folio */
-		folio = filemap_lock_hugetlb_folio(h, mapping, index);
+		folio = filemap_lock_folio(mapping, idx << huge_page_order(h));
 		if (IS_ERR(folio)) {
 			/*
 			 * We have a HOLE, zero out the user-buffer for the
@@ -307,10 +307,10 @@ static ssize_t hugetlbfs_read_iter(struct kiocb *iocb, struct iov_iter *to)
 				retval = -EFAULT;
 			break;
 		}
-		index += offset >> huge_page_shift(h);
+		idx += offset >> huge_page_shift(h);
 		offset &= ~huge_page_mask(h);
 	}
-	iocb->ki_pos = ((loff_t)index << huge_page_shift(h)) + offset;
+	iocb->ki_pos = ((loff_t)idx << huge_page_shift(h)) + offset;
 	return retval;
 }
 
@@ -652,10 +652,10 @@ static void hugetlbfs_zero_partial_page(struct hstate *h,
 					loff_t start,
 					loff_t end)
 {
-	pgoff_t idx = start >> huge_page_shift(h);
+	pgoff_t index = start >> PAGE_SHIFT; 
 	struct folio *folio;
 
-	folio = filemap_lock_hugetlb_folio(h, mapping, idx);
+	folio = filemap_lock_folio(mapping, index);
 	if (IS_ERR(folio))
 		return;
 
