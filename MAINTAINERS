@@ -21554,6 +21554,13 @@ F:	Documentation/networking/device_drivers/ethernet/freescale/dpaa2/overview.rst
 F:	drivers/bus/fsl-mc/
 F:	include/uapi/linux/fsl_mc.h
 
+QST QMC5883P MAGNETOMETER DRIVER
+M:	Hardik Phalet <hardik.phalet@pm.me>
+L:	linux-iio@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/iio/magnetometer/qst,qmc5883p.yaml
+F:	drivers/staging/iio/magnetometer/
+
 QT1010 MEDIA DRIVER
 L:	linux-media@vger.kernel.org
 S:	Orphan
