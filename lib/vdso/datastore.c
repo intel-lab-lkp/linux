@@ -42,7 +42,7 @@ void __init vdso_setup_data_pages(void)
 	 * Do not use folios. In time namespaces the pages are mapped in a different order
 	 * to userspace, which is not handled by the folio optimizations in finish_fault().
 	 */
-	pages = alloc_pages(GFP_KERNEL, order);
+	pages = alloc_pages(GFP_KERNEL | __GFP_ZERO, order);
 	if (!pages)
 		panic("Unable to allocate VDSO storage pages");
 
