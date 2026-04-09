@@ -52,7 +52,7 @@ static int wf_ad7417_temp_get(struct wf_sensor *sr, s32 *value)
 	if (rc < 0)
 		goto error;
 
-	/* Read a a 16-bit signed value */
+	/* Read a 16-bit signed value */
 	raw = be16_to_cpup((__le16 *)buf);
 
 	/* Convert 8.8-bit to 16.16 fixed point */
@@ -63,7 +63,7 @@ static int wf_ad7417_temp_get(struct wf_sensor *sr, s32 *value)
 
 error:
 	mutex_unlock(&pv->lock);
-	return -1;
+	return -EIO;
 }
 
 /*
@@ -79,7 +79,7 @@ error:
 static void wf_ad7417_adc_convert(struct wf_ad7417_priv *pv,
 				  int chan, s32 raw, s32 *value)
 {
-	switch(chan) {
+	switch (chan) {
 	case 1: /* Diode */
 		*value = (raw * (s32)pv->mpu->mdiode +
 			((s32)pv->mpu->bdiode << 12)) >> 2;
@@ -128,7 +128,7 @@ static int wf_ad7417_adc_get(struct wf_sensor *sr, s32 *value)
 		if (rc < 0)
 			goto error;
 
-		/* Read a a 16-bit signed value */
+		/* Read a 16-bit signed value */
 		raw = be16_to_cpup((__le16 *)buf) >> 6;
 		wf_ad7417_adc_convert(pv, chan, raw, value);
 
@@ -141,12 +141,12 @@ static int wf_ad7417_adc_get(struct wf_sensor *sr, s32 *value)
 
 	error:
 		dev_dbg(&pv->i2c->dev,
-			  "Error reading ADC, try %d...\n", i);
+			"Error reading ADC, try %d...\n", i);
 		if (i < 9)
 			msleep(10);
 	}
 	mutex_unlock(&pv->lock);
-	return -1;
+	return -EIO;
 }
 
 static void wf_ad7417_release(struct kref *ref)
@@ -261,7 +261,7 @@ static int wf_ad7417_probe(struct i2c_client *client)
 	}
 
 	pv = kzalloc_obj(struct wf_ad7417_priv);
-	if (pv == NULL)
+	if (!pv)
 		return -ENODEV;
 
 	kref_init(&pv->ref);
