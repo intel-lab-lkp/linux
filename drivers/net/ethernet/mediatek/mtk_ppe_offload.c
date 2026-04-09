@@ -557,6 +557,7 @@ mtk_flow_offload_stats(struct mtk_eth *eth, struct flow_cls_offload *f)
 				  &diff)) {
 		f->stats.pkts += diff.packets;
 		f->stats.bytes += diff.bytes;
+		f->stats.byte_type = FLOW_STATS_BYTES_INGRESS_L2;
 	}
 
 	return 0;
