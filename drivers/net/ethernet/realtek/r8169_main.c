@@ -29,6 +29,15 @@
 #include <linux/prefetch.h>
 #include <linux/ipv6.h>
 #include <linux/unaligned.h>
+#include <linux/regmap.h>
+#include <linux/platform_device.h>
+#include <linux/i2c.h>
+#include <linux/property.h>
+#include <linux/clkdev.h>
+#include <linux/clk-provider.h>
+#include <linux/gpio/machine.h>
+#include <linux/gpio/driver.h>
+#include <linux/gpio/property.h>
 #include <net/ip6_checksum.h>
 #include <net/netdev_queues.h>
 #include <net/phy/realtek_phy.h>
@@ -728,6 +737,37 @@ enum rtl_dash_type {
 	RTL_DASH_25_BP,
 };
 
+#define NODE_PROP(_NAME, _PROP)                 \
+	(const struct software_node) {          \
+		.name = (_NAME),                \
+		.properties = (_PROP),          \
+	}
+
+enum rtl8169_swnodes {
+	SWNODE_GPIO = 0,
+	SWNODE_I2C,
+	SWNODE_SFP,
+	SWNODE_PHYLINK,
+	SWNODE_MAX
+};
+
+struct rtl8169_nodes {
+	char gpio_name[32];
+	char i2c_name[32];
+	char sfp_name[32];
+	char phylink_name[32];
+	struct property_entry gpio_props[2];
+	struct property_entry i2c_props[4];
+	struct property_entry sfp_props[5];
+	struct property_entry phylink_props[3];
+	struct software_node_ref_args i2c_ref[1];
+	struct software_node_ref_args gpio0_ref[1];
+	struct software_node_ref_args gpio1_ref[1];
+	struct software_node_ref_args sfp_ref[1];
+	struct software_node swnodes[SWNODE_MAX];
+	const struct software_node *group[SWNODE_MAX + 1];
+};
+
 struct rtl8169_private {
 	void __iomem *mmio_addr;	/* memory map physical address */
 	struct pci_dev *pci_dev;
@@ -774,6 +814,13 @@ struct rtl8169_private {
 	struct r8169_led_classdev *leds;
 
 	u32 ocp_base;
+
+	struct platform_device *sfp_dev;
+	struct platform_device *i2c_dev;
+	struct clk_lookup *i2c_clock;
+	struct clk *i2c_clk;
+	struct gpio_chip *gpio;
+	struct rtl8169_nodes nodes;
 };
 
 typedef void (*rtl_generic_fct)(struct rtl8169_private *tp);
@@ -2414,6 +2461,246 @@ static int rtl8169_set_link_ksettings(struct net_device *ndev,
 	mutex_unlock(&phydev->lock);
 
 	return 0;
+}
+
+static int r8169_swnodes_register(struct rtl8169_private *tp)
+{
+	struct rtl8169_nodes *nodes = &tp->nodes;
+	struct pci_dev *pdev = tp->pci_dev;
+	struct software_node *swnodes;
+	u32 id;
+
+	id = pci_dev_id(pdev);
+
+	snprintf(nodes->gpio_name, sizeof(nodes->gpio_name), "r8169_gpio-%x", id);
+	snprintf(nodes->i2c_name, sizeof(nodes->i2c_name), "r8169_i2c-%x", id);
+	snprintf(nodes->sfp_name, sizeof(nodes->sfp_name), "r8169_sfp-%x", id);
+	snprintf(nodes->phylink_name, sizeof(nodes->phylink_name), "r8169_phylink-%x", id);
+
+	swnodes = nodes->swnodes;
+
+	/* GPIO 8: module presence
+	 * GPIO 11: rx signal lost
+	 */
+	nodes->gpio_props[0] = PROPERTY_ENTRY_STRING("pinctrl-names", "default");
+	swnodes[SWNODE_GPIO] = NODE_PROP(nodes->gpio_name, nodes->gpio_props);
+	nodes->gpio0_ref[0] = SOFTWARE_NODE_REFERENCE(&swnodes[SWNODE_GPIO], 8, GPIO_ACTIVE_LOW);
+	nodes->gpio1_ref[0] = SOFTWARE_NODE_REFERENCE(&swnodes[SWNODE_GPIO], 11, GPIO_ACTIVE_LOW);
+
+	nodes->i2c_props[0] = PROPERTY_ENTRY_STRING("compatible", "snps,designware-i2c");
+	nodes->i2c_props[1] = PROPERTY_ENTRY_BOOL("wx,i2c-snps-model");
+	nodes->i2c_props[2] = PROPERTY_ENTRY_U32("clock-frequency", I2C_MAX_STANDARD_MODE_FREQ);
+	swnodes[SWNODE_I2C] = NODE_PROP(nodes->i2c_name, nodes->i2c_props);
+	nodes->i2c_ref[0] = SOFTWARE_NODE_REFERENCE(&swnodes[SWNODE_I2C]);
+
+	nodes->sfp_props[0] = PROPERTY_ENTRY_STRING("compatible", "sff,sfp");
+	nodes->sfp_props[1] = PROPERTY_ENTRY_REF_ARRAY("i2c-bus", nodes->i2c_ref);
+	nodes->sfp_props[2] = PROPERTY_ENTRY_REF_ARRAY("mod-def0-gpios", nodes->gpio0_ref);
+	nodes->sfp_props[3] = PROPERTY_ENTRY_REF_ARRAY("los-gpios", nodes->gpio1_ref);
+	swnodes[SWNODE_SFP] = NODE_PROP(nodes->sfp_name, nodes->sfp_props);
+	nodes->sfp_ref[0] = SOFTWARE_NODE_REFERENCE(&swnodes[SWNODE_SFP]);
+
+	nodes->phylink_props[0] = PROPERTY_ENTRY_STRING("managed", "in-band-status");
+	nodes->phylink_props[1] = PROPERTY_ENTRY_REF_ARRAY("sfp", nodes->sfp_ref);
+	swnodes[SWNODE_PHYLINK] = NODE_PROP(nodes->phylink_name, nodes->phylink_props);
+
+	nodes->group[SWNODE_GPIO] = &swnodes[SWNODE_GPIO];
+	nodes->group[SWNODE_I2C] = &swnodes[SWNODE_I2C];
+	nodes->group[SWNODE_SFP] = &swnodes[SWNODE_SFP];
+	nodes->group[SWNODE_PHYLINK] = &swnodes[SWNODE_PHYLINK];
+
+	return software_node_register_node_group(nodes->group);
+}
+
+static int r8169_gpio_get(struct gpio_chip *chip, unsigned int offset)
+{
+	struct rtl8169_private *tp = gpiochip_get_data(chip);
+	int val;
+
+	val = r8168_mac_ocp_read(tp, 0xdc30);
+
+	return !!(val & BIT(offset));
+}
+
+static int r8169_gpio_init(struct rtl8169_private *tp)
+{
+	struct gpio_chip *gc;
+	struct pci_dev *pdev = tp->pci_dev;
+	struct device *dev;
+	int ret;
+
+	dev = &pdev->dev;
+
+	gc = devm_kzalloc(dev, sizeof(*gc), GFP_KERNEL);
+	if (!gc)
+		return -ENOMEM;
+
+	gc->label = devm_kasprintf(dev, GFP_KERNEL, "r8169_gpio-%x",
+				   pci_dev_id(pdev));
+	if (!gc->label)
+		return -ENOMEM;
+
+	gc->base = -1;
+	gc->ngpio = 16;
+	gc->owner = THIS_MODULE;
+	gc->parent = dev;
+	gc->fwnode = software_node_fwnode(tp->nodes.group[SWNODE_GPIO]);
+	gc->get = r8169_gpio_get;
+
+	ret = devm_gpiochip_add_data(dev, gc, tp);
+	if (ret)
+		return ret;
+
+	tp->gpio = gc;
+
+	return 0;
+}
+
+static int r8169_clock_register(struct rtl8169_private *tp)
+{
+	struct pci_dev *pdev = tp->pci_dev;
+	struct clk_lookup *clock;
+	char clk_name[32];
+	struct clk *clk;
+
+	snprintf(clk_name, sizeof(clk_name), "i2c_designware.%d",
+		 pci_dev_id(pdev));
+
+	/* 115MHz seems to result in an i2c clock of 100kHz */
+	clk = clk_register_fixed_rate(NULL, clk_name, NULL, 0, 115000000);
+	if (IS_ERR(clk))
+		return PTR_ERR(clk);
+
+	clock = clkdev_create(clk, NULL, "%s", clk_name);
+	if (!clock) {
+		clk_unregister(clk);
+		return -ENOMEM;
+	}
+
+	tp->i2c_clk = clk;
+	tp->i2c_clock = clock;
+
+	return 0;
+}
+
+#define R8127_SDS_I2C_BASE 0xe200
+
+static int r8169_i2c_read(void *context, unsigned int reg, unsigned int *val)
+{
+	struct rtl8169_private *tp = context;
+
+	*val = r8168_mac_ocp_read(tp, R8127_SDS_I2C_BASE + reg);
+
+	return 0;
+}
+
+static int r8169_i2c_write(void *context, unsigned int reg, unsigned int val)
+{
+	struct rtl8169_private *tp = context;
+
+	r8168_mac_ocp_write(tp, R8127_SDS_I2C_BASE + reg, val);
+
+	return 0;
+}
+
+static const struct regmap_config i2c_regmap_config = {
+	.reg_bits = 32,
+	.val_bits = 32,
+	.reg_read = r8169_i2c_read,
+	.reg_write = r8169_i2c_write,
+	.fast_io = true,
+};
+
+static int r8169_i2c_register(struct rtl8169_private *tp)
+{
+	struct platform_device_info info = {};
+	struct platform_device *i2c_dev;
+	struct regmap *i2c_regmap;
+	struct pci_dev *pdev = tp->pci_dev;
+
+	i2c_regmap = devm_regmap_init(&pdev->dev, NULL, tp, &i2c_regmap_config);
+	if (IS_ERR(i2c_regmap)) {
+		dev_err(&pdev->dev, "failed to init I2C regmap\n");
+		return PTR_ERR(i2c_regmap);
+	}
+
+	info.parent = &pdev->dev;
+	info.fwnode = software_node_fwnode(tp->nodes.group[SWNODE_I2C]);
+	info.name = "i2c_designware";
+	info.id = pci_dev_id(pdev);
+
+	i2c_dev = platform_device_register_full(&info);
+	if (IS_ERR(i2c_dev))
+		return PTR_ERR(i2c_dev);
+
+	tp->i2c_dev = i2c_dev;
+
+	return 0;
+}
+
+static int r8169_sfp_register(struct rtl8169_private *tp)
+{
+	struct pci_dev *pdev = tp->pci_dev;
+	struct platform_device_info info = {};
+	struct platform_device *sfp_dev;
+
+	info.parent = &pdev->dev;
+	info.fwnode = software_node_fwnode(tp->nodes.group[SWNODE_SFP]);
+	info.name = "sfp";
+	info.id = pci_dev_id(pdev);
+	sfp_dev = platform_device_register_full(&info);
+	if (IS_ERR(sfp_dev))
+		return PTR_ERR(sfp_dev);
+
+	tp->sfp_dev = sfp_dev;
+
+	return 0;
+}
+
+static int r8169_sfp_nodes_init(struct rtl8169_private *tp)
+{
+	struct pci_dev *pdev = tp->pci_dev;
+	int ret;
+
+	ret = r8169_swnodes_register(tp);
+	if (ret < 0)
+		return dev_err_probe(&pdev->dev, ret, "r8169_swnodes_register\n");
+
+	ret = r8169_gpio_init(tp);
+	if (ret < 0) {
+		ret = dev_err_probe(&pdev->dev, ret, "r8169_gpio_init\n");
+		goto err_unregister_swnode;
+	}
+
+	ret = r8169_clock_register(tp);
+	if (ret < 0) {
+		ret = dev_err_probe(&pdev->dev, ret, "r8169_clock_register\n");
+		goto err_unregister_swnode;
+	}
+
+	ret = r8169_i2c_register(tp);
+	if (ret < 0) {
+		ret = dev_err_probe(&pdev->dev, ret, "r8169_i2c_register\n");
+		goto err_unregister_clk;
+	}
+
+	ret = r8169_sfp_register(tp);
+	if (ret < 0) {
+		ret = dev_err_probe(&pdev->dev, ret, "r8169_sfp_register\n");
+		goto err_unregister_i2c;
+	}
+
+	return 0;
+
+err_unregister_i2c:
+	platform_device_unregister(tp->i2c_dev);
+err_unregister_clk:
+	clkdev_drop(tp->i2c_clock);
+	clk_unregister(tp->i2c_clk);
+err_unregister_swnode:
+	software_node_unregister_node_group(tp->nodes.group);
+
+	return ret;
 }
 
 static const struct ethtool_ops rtl8169_ethtool_ops = {
@@ -5296,6 +5583,14 @@ static void rtl_remove_one(struct pci_dev *pdev)
 
 	/* restore original MAC address */
 	rtl_rar_set(tp, tp->dev->perm_addr);
+
+	if (tp->sfp_mode) {
+		platform_device_unregister(tp->sfp_dev);
+		platform_device_unregister(tp->i2c_dev);
+		clkdev_drop(tp->i2c_clock);
+		clk_unregister(tp->i2c_clk);
+		software_node_unregister_node_group(tp->nodes.group);
+	}
 }
 
 static const struct net_device_ops rtl_netdev_ops = {
@@ -5682,8 +5977,13 @@ static int rtl_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (rtl_is_8125(tp)) {
 		u16 data = r8168_mac_ocp_read(tp, 0xd006);
 
-		if ((data & 0xff) == 0x07)
+		if ((data & 0xff) == 0x07) {
 			tp->sfp_mode = true;
+
+			rc = r8169_sfp_nodes_init(tp);
+			if (rc < 0)
+				return rc;
+		}
 	}
 
 	tp->dash_type = rtl_get_dash_type(tp);
