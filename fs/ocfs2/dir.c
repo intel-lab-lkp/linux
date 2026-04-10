@@ -1782,6 +1782,7 @@ static int ocfs2_dir_foreach_blk_id(struct inode *inode,
 				    struct dir_context *ctx)
 {
 	int ret, i;
+	int error = 0;
 	unsigned long offset = ctx->pos;
 	struct buffer_head *di_bh = NULL;
 	struct ocfs2_dinode *di;
@@ -1797,6 +1798,12 @@ static int ocfs2_dir_foreach_blk_id(struct inode *inode,
 
 	di = (struct ocfs2_dinode *)di_bh->b_data;
 	data = &di->id2.i_data;
+
+	if (unlikely(i_size_read(inode) > le16_to_cpu(data->id_count))) {
+		error = -EFSCORRUPTED;
+		mlog_errno(error);
+		goto out;
+	}
 
 	while (ctx->pos < i_size_read(inode)) {
 		/* If the dir block has changed since the last call to
@@ -1840,7 +1847,7 @@ static int ocfs2_dir_foreach_blk_id(struct inode *inode,
 	}
 out:
 	brelse(di_bh);
-	return 0;
+	return error;
 }
 
 /*
