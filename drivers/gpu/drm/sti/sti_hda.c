@@ -741,6 +741,7 @@ static int sti_hda_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct sti_hda *hda;
 	struct resource *res;
+	int ret;
 
 	DRM_INFO("%s\n", __func__);
 
@@ -783,7 +784,10 @@ static int sti_hda_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, hda);
 
-	return component_add(&pdev->dev, &sti_hda_ops);
+	ret = component_add(&pdev->dev, &sti_hda_ops);
+	if (ret)
+		drm_bridge_remove(&hda->bridge);
+	return ret;
 }
 
 static void sti_hda_remove(struct platform_device *pdev)
