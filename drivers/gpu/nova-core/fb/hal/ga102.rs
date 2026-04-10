@@ -2,12 +2,14 @@
 
 use kernel::{
     io::Io,
-    prelude::*, //
+    prelude::*,
+    sizes::*, //
 };
 
 use crate::{
     driver::Bar0,
     fb::hal::FbHal,
+    num::*,
     regs, //
 };
 
@@ -34,6 +36,10 @@ impl FbHal for Ga102 {
 
     fn vidmem_size(&self, bar: &Bar0) -> u64 {
         vidmem_size_ga102(bar)
+    }
+
+    fn frts_size(&self) -> u64 {
+        usize_as_u64(SZ_1M)
     }
 }
 
