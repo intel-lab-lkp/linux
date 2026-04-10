@@ -9,6 +9,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <linux/bitops.h>
+#include <string.h>
 #include "build-id.h"
 #include "debuginfo.h"
 #include "mutex.h"
@@ -20,6 +21,7 @@ struct perf_env;
 
 #define DSO__NAME_KALLSYMS	"[kernel.kallsyms]"
 #define DSO__NAME_KCORE		"[kernel.kcore]"
+#define DSO__NAME_GUEST_KALLSYMS	"[guest.kernel.kallsyms"
 
 /**
  * enum dso_binary_type - The kind of DSO generally associated with a memory
@@ -914,6 +916,14 @@ static inline bool dso__is_kcore(const struct dso *dso)
 static inline bool dso__is_kallsyms(const struct dso *dso)
 {
 	enum dso_binary_type bt = dso__binary_type(dso);
+
+	if (bt == DSO_BINARY_TYPE__NOT_FOUND) {
+		return RC_CHK_ACCESS(dso)->kernel &&
+			((strncmp(RC_CHK_ACCESS(dso)->long_name, DSO__NAME_KALLSYMS,
+				strlen(DSO__NAME_KALLSYMS)) == 0) ||
+			(strncmp(RC_CHK_ACCESS(dso)->long_name, DSO__NAME_GUEST_KALLSYMS,
+				strlen(DSO__NAME_GUEST_KALLSYMS)) == 0));
+	}
 
 	return bt == DSO_BINARY_TYPE__KALLSYMS || bt == DSO_BINARY_TYPE__GUEST_KALLSYMS;
 }
