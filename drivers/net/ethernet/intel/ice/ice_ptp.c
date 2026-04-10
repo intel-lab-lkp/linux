@@ -1120,9 +1120,9 @@ static int ice_ptp_check_tx_fifo(struct ice_ptp_port *port)
 		port->tx_fifo_busy_cnt, port->port_num);
 
 	if (port->tx_fifo_busy_cnt == ICE_PTP_FIFO_NUM_CHECKS) {
-		dev_dbg(ice_pf_to_dev(pf),
-			"Port %d Tx FIFO still not empty; resetting quad %d\n",
-			port->port_num, quad);
+		dev_warn(ice_pf_to_dev(pf),
+			 "Port %d Tx FIFO still not empty; resetting quad %d\n",
+			 port->port_num, quad);
 		ice_ptp_reset_ts_memory_quad_e82x(hw, quad);
 		port->tx_fifo_busy_cnt = FIFO_OK;
 		return 0;
