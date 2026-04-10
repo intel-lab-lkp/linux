@@ -58,4 +58,6 @@ struct sdxi_cxt {
 
 int sdxi_admin_cxt_init(struct sdxi_dev *sdxi);
 
+void sdxi_cxt_push_doorbell(struct sdxi_cxt *cxt, u64 index);
+
 #endif /* DMA_SDXI_CONTEXT_H */

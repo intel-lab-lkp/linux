@@ -16,6 +16,7 @@
 #include <linux/dmapool.h>
 #include <linux/errno.h>
 #include <linux/iommu.h>
+#include <linux/io-64-nonatomic-lo-hi.h>
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <asm/barrier.h>
@@ -256,6 +257,13 @@ static int sdxi_publish_cxt(const struct sdxi_cxt *cxt)
 
 	return configure_L1_entry(ent, &L1_cfg);
 	/* todo: need to send DSC_CXT_UPD to admin */
+}
+
+void sdxi_cxt_push_doorbell(struct sdxi_cxt *cxt, u64 index)
+{
+	/* Ensure preceding write index increment is visible. */
+	dma_wmb();
+	iowrite64(index, cxt->db);
 }
 
 static void free_admin_cxt(void *ptr)
