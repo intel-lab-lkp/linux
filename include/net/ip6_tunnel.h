@@ -156,6 +156,8 @@ static inline void ip6tunnel_xmit(struct sock *sk, struct sk_buff *skb,
 {
 	int pkt_len, err;
 
+	guard(migrate)();
+
 	if (unlikely(dev_recursion_level() > IP_TUNNEL_RECURSION_LIMIT)) {
 		if (dev) {
 			net_crit_ratelimited("Dead loop on virtual device %s, fix it urgently!\n",
