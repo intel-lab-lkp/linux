@@ -11,7 +11,7 @@ use kernel::{
         mq::{
             self,
             gen_disk::{self, GenDisk},
-            Operations, TagSet,
+            Operations, TagSet, TagSetFlags,
         },
     },
     prelude::*,
@@ -51,8 +51,15 @@ impl NullBlkDevice {
         rotational: bool,
         capacity_mib: u64,
         irq_mode: IRQMode,
+        blocking: bool,
     ) -> Result<GenDisk<Self>> {
-        let tagset = Arc::pin_init(TagSet::new(1, 256, 1), GFP_KERNEL)?;
+        let flags = if blocking {
+            TagSetFlags::BLOCKING
+        } else {
+            TagSetFlags::empty()
+        };
+
+        let tagset = Arc::pin_init(TagSet::new_with_flags(1, 256, 1, flags), GFP_KERNEL)?;
 
         let queue_data = Box::new(QueueData { irq_mode }, GFP_KERNEL)?;
 

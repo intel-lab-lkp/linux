@@ -35,7 +35,7 @@ impl AttributeOperations<0> for Config {
 
     fn show(_this: &Config, page: &mut [u8; PAGE_SIZE]) -> Result<usize> {
         let mut writer = kernel::str::Formatter::new(page);
-        writer.write_str("blocksize,size,rotational,irqmode\n")?;
+        writer.write_str("blocksize,size,rotational,irqmode,blocking\n")?;
         Ok(writer.bytes_written())
     }
 }
@@ -58,6 +58,7 @@ impl configfs::GroupOperations for Config {
                 rotational: 2,
                 size: 3,
                 irqmode: 4,
+                blocking: 5,
             ],
         };
 
@@ -73,6 +74,7 @@ impl configfs::GroupOperations for Config {
                     disk: None,
                     capacity_mib: 4096,
                     irq_mode: IRQMode::None,
+                    blocking: false,
                     name: name.try_into()?,
                 }),
             }),
@@ -122,6 +124,7 @@ struct DeviceConfigInner {
     rotational: bool,
     capacity_mib: u64,
     irq_mode: IRQMode,
+    blocking: bool,
     disk: Option<GenDisk<NullBlkDevice>>,
 }
 
@@ -152,6 +155,7 @@ impl configfs::AttributeOperations<0> for DeviceConfig {
                 guard.rotational,
                 guard.capacity_mib,
                 guard.irq_mode,
+                guard.blocking,
             )?);
             guard.powered = true;
         } else if guard.powered && !power_op {
@@ -256,6 +260,32 @@ impl configfs::AttributeOperations<4> for DeviceConfig {
         let value = text.parse::<u8>().map_err(|_| EINVAL)?;
 
         this.data.lock().irq_mode = IRQMode::try_from(value)?;
+        Ok(())
+    }
+}
+
+#[vtable]
+impl configfs::AttributeOperations<5> for DeviceConfig {
+    type Data = DeviceConfig;
+
+    fn show(this: &DeviceConfig, page: &mut [u8; PAGE_SIZE]) -> Result<usize> {
+        let mut writer = kernel::str::Formatter::new(page);
+
+        if this.data.lock().blocking {
+            writer.write_str("1\n")?;
+        } else {
+            writer.write_str("0\n")?;
+        }
+
+        Ok(writer.bytes_written())
+    }
+
+    fn store(this: &DeviceConfig, page: &[u8]) -> Result {
+        if this.data.lock().powered {
+            return Err(EBUSY);
+        }
+
+        this.data.lock().blocking = kstrtobool_bytes(page)?;
         Ok(())
     }
 }
