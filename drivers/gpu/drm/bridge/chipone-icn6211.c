@@ -760,7 +760,10 @@ static int chipone_i2c_probe(struct i2c_client *client)
 
 	drm_bridge_add(&icn->bridge);
 
-	return chipone_dsi_host_attach(icn);
+	ret = chipone_dsi_host_attach(icn);
+	if (ret)
+		drm_bridge_remove(&icn->bridge);
+	return ret;
 }
 
 static void chipone_dsi_remove(struct mipi_dsi_device *dsi)
