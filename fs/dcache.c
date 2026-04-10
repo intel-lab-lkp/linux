@@ -703,6 +703,8 @@ static struct dentry *__dentry_kill(struct dentry *dentry)
  *
  * Return false if dentry is busy.  Otherwise, return true and have
  * that dentry's inode locked.
+ *
+ * On failure the caller must drop ->d_lock *before* rcu_read_unlock()
  */
 
 static bool lock_for_kill(struct dentry *dentry)
@@ -885,8 +887,8 @@ static void finish_dput(struct dentry *dentry)
 		}
 		rcu_read_lock();
 	}
-	rcu_read_unlock();
 	spin_unlock(&dentry->d_lock);
+	rcu_read_unlock();
 }
 
 /* 
@@ -1145,11 +1147,12 @@ static inline void shrink_kill(struct dentry *victim)
 	do {
 		rcu_read_unlock();
 		victim = __dentry_kill(victim);
+		if (!victim)
+			return;
 		rcu_read_lock();
-	} while (victim && lock_for_kill(victim));
+	} while (lock_for_kill(victim));
+	spin_unlock(&victim->d_lock);
 	rcu_read_unlock();
-	if (victim)
-		spin_unlock(&victim->d_lock);
 }
 
 void shrink_dentry_list(struct list_head *list)
@@ -1162,10 +1165,10 @@ void shrink_dentry_list(struct list_head *list)
 		rcu_read_lock();
 		if (!lock_for_kill(dentry)) {
 			bool can_free;
-			rcu_read_unlock();
 			d_shrink_del(dentry);
 			can_free = dentry->d_flags & DCACHE_DENTRY_KILLED;
 			spin_unlock(&dentry->d_lock);
+			rcu_read_unlock();
 			if (can_free)
 				dentry_free(dentry);
 			continue;
