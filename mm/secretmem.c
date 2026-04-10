@@ -53,7 +53,6 @@ static vm_fault_t secretmem_fault(struct vm_fault *vmf)
 	struct inode *inode = file_inode(vmf->vma->vm_file);
 	pgoff_t offset = vmf->pgoff;
 	gfp_t gfp = vmf->gfp_mask;
-	unsigned long addr;
 	struct folio *folio;
 	vm_fault_t ret;
 	int err;
@@ -72,7 +71,7 @@ retry:
 			goto out;
 		}
 
-		err = set_direct_map_invalid_noflush(folio_address(folio));
+		err = folio_zap_direct_map(folio);
 		if (err) {
 			folio_put(folio);
 			ret = vmf_error(err);
@@ -87,7 +86,7 @@ retry:
 			 * already happened when we marked the page invalid
 			 * which guarantees that this call won't fail
 			 */
-			set_direct_map_default_noflush(folio_address(folio));
+			folio_restore_direct_map(folio);
 			folio_put(folio);
 			if (err == -EEXIST)
 				goto retry;
@@ -95,9 +94,6 @@ retry:
 			ret = vmf_error(err);
 			goto out;
 		}
-
-		addr = (unsigned long)folio_address(folio);
-		flush_tlb_kernel_range(addr, addr + PAGE_SIZE);
 	}
 
 	vmf->page = folio_file_page(folio, vmf->pgoff);
