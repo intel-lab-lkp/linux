@@ -14,7 +14,10 @@ use crate::{
 #[cfg(CONFIG_CPUMASK_OFFSTACK)]
 use core::ptr::{self, NonNull};
 
-use core::ops::{Deref, DerefMut};
+use core::{
+    iter::FusedIterator,
+    ops::{Deref, DerefMut},
+};
 
 /// A CPU Mask.
 ///
@@ -158,6 +161,52 @@ impl Cpumask {
     pub fn copy(&self, dstp: &mut Self) {
         // SAFETY: By the type invariant, `Self::as_raw` is a valid argument to `cpumask_copy`.
         unsafe { bindings::cpumask_copy(dstp.as_raw(), self.as_raw()) };
+    }
+}
+
+/// Iterator for a `Cpumask`.
+pub struct CpumaskIter<'a> {
+    mask: &'a Cpumask,
+    /// [`None`] if no bits have been returned yet, or the index of the last bit returned by the
+    /// iterator. Equal to [`kernel::cpu::nr_cpu_ids()`] when the iterator has been exhausted.
+    last: Option<u32>,
+}
+
+impl<'a> CpumaskIter<'a> {
+    /// Creates a new `CpumaskIter` for the given `Cpumask`.
+    fn new(mask: &'a Cpumask) -> CpumaskIter<'a> {
+        Self { mask, last: None }
+    }
+}
+
+impl<'a> Iterator for CpumaskIter<'a> {
+    type Item = CpuId;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // cpumask_next WARNs if the first argument is >= nr_cpu_ids when CONFIG_DEBUG_PER_CPU_MAPS
+        // is set. So, early out in that case
+        if let Some(last) = self.last {
+            if last >= kernel::cpu::nr_cpu_ids() {
+                return None;
+            }
+        }
+
+        // SAFETY: By the type invariant, `self.mask.as_raw` is a `struct cpumask *`.
+        let next = unsafe {
+            bindings::cpumask_next(self.last.map_or(-1, |l| l as i32), self.mask.as_raw())
+        };
+
+        self.last = Some(next);
+        CpuId::from_u32(next)
+    }
+}
+
+impl<'a> FusedIterator for CpumaskIter<'a> {}
+
+impl Cpumask {
+    /// Returns an iterator over the set bits in the cpumask.
+    pub fn iter(&self) -> CpumaskIter<'_> {
+        CpumaskIter::new(self)
     }
 }
 
