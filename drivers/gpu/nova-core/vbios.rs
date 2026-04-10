@@ -132,17 +132,14 @@ impl<'a> VbiosIterator<'a> {
 
     /// Read bytes at a specific offset, filling any gap.
     fn read_more_at_offset(&mut self, offset: usize, len: usize) -> Result {
-        if offset > BIOS_MAX_SCAN_LEN {
+        let end = offset.checked_add(len).ok_or(EINVAL)?;
+
+        if end > BIOS_MAX_SCAN_LEN {
             dev_err!(self.dev, "Error: exceeded BIOS scan limit.\n");
             return Err(EINVAL);
         }
 
-        // If `offset` is beyond current data size, fill the gap first.
-        let current_len = self.data.len();
-        let gap_bytes = offset.saturating_sub(current_len);
-
-        // Now read the requested bytes at the offset.
-        self.read_more(gap_bytes + len)
+        self.read_more(end.saturating_sub(self.data.len()))
     }
 
     /// Read a BIOS image at a specific offset and create a [`BiosImage`] from it.
@@ -155,8 +152,9 @@ impl<'a> VbiosIterator<'a> {
         len: usize,
         context: &str,
     ) -> Result<BiosImage> {
+        let end = offset.checked_add(len).ok_or(EINVAL)?;
         let data_len = self.data.len();
-        if offset + len > data_len {
+        if end > data_len {
             self.read_more_at_offset(offset, len).inspect_err(|e| {
                 dev_err!(
                     self.dev,
@@ -167,7 +165,7 @@ impl<'a> VbiosIterator<'a> {
             })?;
         }
 
-        BiosImage::new(self.dev, &self.data[offset..offset + len]).inspect_err(|err| {
+        BiosImage::new(self.dev, &self.data[offset..end]).inspect_err(|err| {
             dev_err!(
                 self.dev,
                 "Failed to {} at offset {:#x}: {:?}\n",
@@ -189,7 +187,7 @@ impl<'a> Iterator for VbiosIterator<'a> {
             return None;
         }
 
-        if self.current_offset > BIOS_MAX_SCAN_LEN {
+        if self.current_offset >= BIOS_MAX_SCAN_LEN {
             dev_err!(self.dev, "Error: exceeded BIOS scan limit, stopping scan\n");
             return None;
         }
