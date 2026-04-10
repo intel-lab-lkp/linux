@@ -20,7 +20,7 @@ const struct nla_policy net_shaper_handle_nl_policy[NET_SHAPER_A_HANDLE_ID + 1] 
 const struct nla_policy net_shaper_leaf_info_nl_policy[NET_SHAPER_A_WEIGHT + 1] = {
 	[NET_SHAPER_A_HANDLE] = NLA_POLICY_NESTED(net_shaper_handle_nl_policy),
 	[NET_SHAPER_A_PRIORITY] = { .type = NLA_U32, },
-	[NET_SHAPER_A_WEIGHT] = { .type = NLA_U32, },
+	[NET_SHAPER_A_WEIGHT] = NLA_POLICY_MIN(NLA_U32, 1),
 };
 
 /* NET_SHAPER_CMD_GET - do */
@@ -43,7 +43,7 @@ static const struct nla_policy net_shaper_set_nl_policy[NET_SHAPER_A_IFINDEX + 1
 	[NET_SHAPER_A_BW_MAX] = { .type = NLA_UINT, },
 	[NET_SHAPER_A_BURST] = { .type = NLA_UINT, },
 	[NET_SHAPER_A_PRIORITY] = { .type = NLA_U32, },
-	[NET_SHAPER_A_WEIGHT] = { .type = NLA_U32, },
+	[NET_SHAPER_A_WEIGHT] = NLA_POLICY_MIN(NLA_U32, 1),
 };
 
 /* NET_SHAPER_CMD_DELETE - do */
@@ -62,7 +62,7 @@ static const struct nla_policy net_shaper_group_nl_policy[NET_SHAPER_A_LEAVES + 
 	[NET_SHAPER_A_BW_MAX] = { .type = NLA_UINT, },
 	[NET_SHAPER_A_BURST] = { .type = NLA_UINT, },
 	[NET_SHAPER_A_PRIORITY] = { .type = NLA_U32, },
-	[NET_SHAPER_A_WEIGHT] = { .type = NLA_U32, },
+	[NET_SHAPER_A_WEIGHT] = NLA_POLICY_MIN(NLA_U32, 1),
 	[NET_SHAPER_A_LEAVES] = NLA_POLICY_NESTED(net_shaper_leaf_info_nl_policy),
 };
 

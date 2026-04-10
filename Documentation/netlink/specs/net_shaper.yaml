@@ -106,6 +106,8 @@ attribute-sets:
       -
         name: weight
         type: u32
+        checks:
+          min: 1
         doc: |
           Relative weight for round robin scheduling of the
           given shaper.
