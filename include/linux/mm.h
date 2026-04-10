@@ -38,6 +38,8 @@
 #include <linux/bitmap.h>
 #include <linux/bitops.h>
 #include <linux/iommu-debug-pagealloc.h>
+#include <linux/jump_label.h>
+#include <linux/wait_bit.h>
 
 struct mempolicy;
 struct anon_vma;
@@ -1798,6 +1800,8 @@ static inline __must_check bool try_get_page(struct page *page)
 	return true;
 }
 
+DECLARE_STATIC_KEY_FALSE(folio_put_wakeup_key);
+
 /**
  * folio_put - Decrement the reference count on a folio.
  * @folio: The folio.
@@ -1815,6 +1819,8 @@ static inline void folio_put(struct folio *folio)
 {
 	if (folio_put_testzero(folio))
 		__folio_put(folio);
+	else if (static_branch_unlikely(&folio_put_wakeup_key))
+		wake_up_var(&folio->_refcount);
 }
 
 /**
@@ -1835,6 +1841,8 @@ static inline void folio_put_refs(struct folio *folio, int refs)
 {
 	if (folio_ref_sub_and_test(folio, refs))
 		__folio_put(folio);
+	else if (static_branch_unlikely(&folio_put_wakeup_key))
+		wake_up_var(&folio->_refcount);
 }
 
 void folios_put_refs(struct folio_batch *folios, unsigned int *refs);

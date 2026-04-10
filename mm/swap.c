@@ -43,6 +43,9 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/pagemap.h>
 
+DEFINE_STATIC_KEY_FALSE(folio_put_wakeup_key);
+EXPORT_SYMBOL(folio_put_wakeup_key);
+
 /* How many pages do we try to swap or page in/out together? As a power of 2 */
 int page_cluster;
 static const int page_cluster_max = 31;
@@ -968,11 +971,16 @@ void folios_put_refs(struct folio_batch *folios, unsigned int *refs)
 			}
 			if (folio_ref_sub_and_test(folio, nr_refs))
 				free_zone_device_folio(folio);
+			else if (static_branch_unlikely(&folio_put_wakeup_key))
+				wake_up_var(&folio->_refcount);
 			continue;
 		}
 
-		if (!folio_ref_sub_and_test(folio, nr_refs))
+		if (!folio_ref_sub_and_test(folio, nr_refs)) {
+			if (static_branch_unlikely(&folio_put_wakeup_key))
+				wake_up_var(&folio->_refcount);
 			continue;
+		}
 
 		/* hugetlb has its own memcg */
 		if (folio_test_hugetlb(folio)) {
