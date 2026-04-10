@@ -3,6 +3,7 @@ obj-$(CONFIG_SDXI) += sdxi.o
 
 sdxi-objs += \
 	context.o     \
-	device.o
+	device.o      \
+	ring.o
 
 sdxi-$(CONFIG_PCI_MSI) += pci.o
