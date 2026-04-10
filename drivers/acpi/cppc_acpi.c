@@ -989,6 +989,23 @@ int __weak cpc_read_ffh(int cpunum, struct cpc_reg *reg, u64 *val)
 }
 
 /**
+ * cpc_read_ffh_fb_ctrs() - Read FFH feedback counters together
+ * @cpunum:	CPU number to read
+ * @reg1:	first CPPC register information
+ * @val1:	place holder for first return value
+ * @reg2:	second CPPC register information
+ * @val2:	place holder for second return value
+ *
+ * Return: 0 for success and error code
+ */
+int __weak cpc_read_ffh_fb_ctrs(int cpunum, struct cpc_reg *reg1,
+				u64 *val1, struct cpc_reg *reg2, u64 *val2)
+{
+	return -EOPNOTSUPP;
+}
+
+
+/**
  * cpc_write_ffh() - Write FFH register
  * @cpunum:	CPU number to write
  * @reg:	cppc register information
@@ -1504,6 +1521,40 @@ bool cppc_perf_ctrs_in_pcc(void)
 }
 EXPORT_SYMBOL_GPL(cppc_perf_ctrs_in_pcc);
 
+static int cppc_read_perf_fb_ctrs(int cpunum,
+				  struct cpc_register_resource *delivered_reg,
+				  struct cpc_register_resource *reference_reg,
+				  u64 *delivered, u64 *reference)
+{
+	int ret;
+
+	/*
+	 * For FFH feedback counters, try a paired read first to reduce
+	 * sampling skew between delivered and reference counters. Fall
+	 * back to the existing per-register reads if unsupported.
+	 */
+	if (CPC_IN_FFH(delivered_reg) && CPC_IN_FFH(reference_reg)) {
+		ret = cpc_read_ffh_fb_ctrs(cpunum,
+					&delivered_reg->cpc_entry.reg, delivered,
+					&reference_reg->cpc_entry.reg, reference);
+		if (!ret)
+			return 0;
+
+		if (ret != -EOPNOTSUPP)
+			return ret;
+	}
+
+	ret = cpc_read(cpunum, delivered_reg, delivered);
+	if (ret)
+		return ret;
+
+	ret = cpc_read(cpunum, reference_reg, reference);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
 /**
  * cppc_get_perf_ctrs - Read a CPU's performance feedback counters.
  * @cpunum: CPU from which to read counters.
@@ -1547,11 +1598,8 @@ int cppc_get_perf_ctrs(int cpunum, struct cppc_perf_fb_ctrs *perf_fb_ctrs)
 		}
 	}
 
-	ret = cpc_read(cpunum, delivered_reg, &delivered);
-	if (ret)
-		goto out_err;
-
-	ret = cpc_read(cpunum, reference_reg, &reference);
+	ret = cppc_read_perf_fb_ctrs(cpunum, delivered_reg, reference_reg,
+				     &delivered, &reference);
 	if (ret)
 		goto out_err;
 
