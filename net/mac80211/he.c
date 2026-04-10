@@ -173,38 +173,40 @@ _ieee80211_he_cap_ie_to_sta_he_cap(struct ieee80211_sub_if_data *sdata,
 				      &own_he_cap.he_mcs_nss_supp.tx_mcs_80,
 				      &he_cap->he_mcs_nss_supp.tx_mcs_80);
 
-	own_160 = own_he_cap.he_cap_elem.phy_cap_info[0] &
-		  IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_160MHZ_IN_5G;
-	peer_160 = he_cap->he_cap_elem.phy_cap_info[0] &
-		   IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_160MHZ_IN_5G;
+	if (band != NL80211_BAND_2GHZ) {
+		own_160 = own_he_cap.he_cap_elem.phy_cap_info[0] &
+			  IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_160MHZ_IN_5G;
+		peer_160 = he_cap->he_cap_elem.phy_cap_info[0] &
+			   IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_160MHZ_IN_5G;
 
-	if (peer_160 && own_160) {
-		ieee80211_he_mcs_intersection(&own_he_cap.he_mcs_nss_supp.rx_mcs_160,
-					      &he_cap->he_mcs_nss_supp.rx_mcs_160,
-					      &own_he_cap.he_mcs_nss_supp.tx_mcs_160,
-					      &he_cap->he_mcs_nss_supp.tx_mcs_160);
-	} else if (peer_160 && !own_160) {
-		ieee80211_he_mcs_disable(&he_cap->he_mcs_nss_supp.rx_mcs_160);
-		ieee80211_he_mcs_disable(&he_cap->he_mcs_nss_supp.tx_mcs_160);
-		he_cap->he_cap_elem.phy_cap_info[0] &=
-			~IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_160MHZ_IN_5G;
-	}
+		if (peer_160 && own_160) {
+			ieee80211_he_mcs_intersection(&own_he_cap.he_mcs_nss_supp.rx_mcs_160,
+						      &he_cap->he_mcs_nss_supp.rx_mcs_160,
+						      &own_he_cap.he_mcs_nss_supp.tx_mcs_160,
+						      &he_cap->he_mcs_nss_supp.tx_mcs_160);
+		} else if (peer_160 && !own_160) {
+			ieee80211_he_mcs_disable(&he_cap->he_mcs_nss_supp.rx_mcs_160);
+			ieee80211_he_mcs_disable(&he_cap->he_mcs_nss_supp.tx_mcs_160);
+			he_cap->he_cap_elem.phy_cap_info[0] &=
+				~IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_160MHZ_IN_5G;
+		}
 
-	own_80p80 = own_he_cap.he_cap_elem.phy_cap_info[0] &
-		    IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_80PLUS80_MHZ_IN_5G;
-	peer_80p80 = he_cap->he_cap_elem.phy_cap_info[0] &
-		     IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_80PLUS80_MHZ_IN_5G;
+		own_80p80 = own_he_cap.he_cap_elem.phy_cap_info[0] &
+			    IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_80PLUS80_MHZ_IN_5G;
+		peer_80p80 = he_cap->he_cap_elem.phy_cap_info[0] &
+			     IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_80PLUS80_MHZ_IN_5G;
 
-	if (peer_80p80 && own_80p80) {
-		ieee80211_he_mcs_intersection(&own_he_cap.he_mcs_nss_supp.rx_mcs_80p80,
-					      &he_cap->he_mcs_nss_supp.rx_mcs_80p80,
-					      &own_he_cap.he_mcs_nss_supp.tx_mcs_80p80,
-					      &he_cap->he_mcs_nss_supp.tx_mcs_80p80);
-	} else if (peer_80p80 && !own_80p80) {
-		ieee80211_he_mcs_disable(&he_cap->he_mcs_nss_supp.rx_mcs_80p80);
-		ieee80211_he_mcs_disable(&he_cap->he_mcs_nss_supp.tx_mcs_80p80);
-		he_cap->he_cap_elem.phy_cap_info[0] &=
-			~IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_80PLUS80_MHZ_IN_5G;
+		if (peer_80p80 && own_80p80) {
+			ieee80211_he_mcs_intersection(&own_he_cap.he_mcs_nss_supp.rx_mcs_80p80,
+						      &he_cap->he_mcs_nss_supp.rx_mcs_80p80,
+						      &own_he_cap.he_mcs_nss_supp.tx_mcs_80p80,
+						      &he_cap->he_mcs_nss_supp.tx_mcs_80p80);
+		} else if (peer_80p80 && !own_80p80) {
+			ieee80211_he_mcs_disable(&he_cap->he_mcs_nss_supp.rx_mcs_80p80);
+			ieee80211_he_mcs_disable(&he_cap->he_mcs_nss_supp.tx_mcs_80p80);
+			he_cap->he_cap_elem.phy_cap_info[0] &=
+				~IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_80PLUS80_MHZ_IN_5G;
+		}
 	}
 }
 

@@ -716,13 +716,14 @@ ieee80211_get_eht_cap_mcs_nss(const struct ieee80211_sta_he_cap *sta_he_cap,
 	case 0:
 		return sta_eht_cap->eht_mcs_nss_supp.bw._80.rx_tx_max_nss[idx];
 	case 1:
-		if (!(he_phy_cap0 &
+		if (band == NL80211_BAND_2GHZ || !(he_phy_cap0 &
 		      (IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_160MHZ_IN_5G |
 		       IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_80PLUS80_MHZ_IN_5G)))
 			return 0xff; /* pass check */
 		return sta_eht_cap->eht_mcs_nss_supp.bw._160.rx_tx_max_nss[idx];
 	case 2:
-		if (!(eht_phy_cap0 & IEEE80211_EHT_PHY_CAP0_320MHZ_IN_6GHZ))
+		if (band != NL80211_BAND_6GHZ ||
+		    !(eht_phy_cap0 & IEEE80211_EHT_PHY_CAP0_320MHZ_IN_6GHZ))
 			return 0xff; /* pass check */
 		return sta_eht_cap->eht_mcs_nss_supp.bw._320.rx_tx_max_nss[idx];
 	}

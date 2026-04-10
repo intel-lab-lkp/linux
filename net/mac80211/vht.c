@@ -609,7 +609,7 @@ void ieee80211_sta_init_nss(struct link_sta_info *link_sta)
 			}
 		}
 
-		support_160 = he_cap->he_cap_elem.phy_cap_info[0] &
+		support_160 = band != NL80211_BAND_2GHZ && he_cap->he_cap_elem.phy_cap_info[0] &
 			      IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_160MHZ_IN_5G;
 
 		if (support_160)
