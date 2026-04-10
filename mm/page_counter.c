@@ -12,6 +12,8 @@
 #include <linux/string.h>
 #include <linux/sched.h>
 #include <linux/bug.h>
+#include <linux/cpu.h>
+#include <linux/workqueue.h>
 #include <asm/page.h>
 
 static bool track_protection(struct page_counter *c)
@@ -402,6 +404,55 @@ void page_counter_free_stock(struct page_counter *counter)
 	counter->stock = NULL;
 }
 
+static long page_counter_drain_stock_cpu(void *arg)
+{
+	struct page_counter *counter = arg;
+	struct page_counter_stock *stock;
+	unsigned long nr_pages;
+
+	local_lock(&counter->stock->lock);
+	stock = this_cpu_ptr(counter->stock);
+	nr_pages = stock->nr_pages;
+	stock->nr_pages = 0;
+	local_unlock(&counter->stock->lock);
+
+	if (nr_pages)
+		page_counter_cancel_hierarchy(counter, nr_pages);
+
+	return 0;
+}
+/*
+ * Drain per-cpu stock across all online CPUs. Caller (drain_all_stock) is
+ * already protected by a mutex, all future callers must serialize as well.
+ */
+void page_counter_drain_stock(struct page_counter *counter)
+{
+	int cpu;
+
+	if (!counter->stock)
+		return;
+
+	cpus_read_lock();
+	for_each_online_cpu(cpu)
+		work_on_cpu(cpu, page_counter_drain_stock_cpu, counter);
+	cpus_read_unlock();
+}
+
+void page_counter_drain_cpu(struct page_counter *counter, unsigned int cpu)
+{
+	struct page_counter_stock *stock;
+	unsigned long nr_pages;
+
+	if (!counter->stock)
+		return;
+
+	stock = per_cpu_ptr(counter->stock, cpu);
+	nr_pages = stock->nr_pages;
+	if (nr_pages) {
+		stock->nr_pages = 0;
+		page_counter_cancel_hierarchy(counter, nr_pages);
+	}
+}
 
 #if IS_ENABLED(CONFIG_MEMCG) || IS_ENABLED(CONFIG_CGROUP_DMEM)
 /*
