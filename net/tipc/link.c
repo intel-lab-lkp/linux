@@ -1415,12 +1415,22 @@ u16 tipc_get_gap_ack_blks(struct tipc_gap_ack_blks **ga, struct tipc_link *l,
 			  struct tipc_msg *hdr, bool uc)
 {
 	struct tipc_gap_ack_blks *p;
-	u16 sz = 0;
+	u16 sz = 0, dlen = msg_data_sz(hdr);
 
 	/* Does peer support the Gap ACK blocks feature? */
 	if (l->peer_caps & TIPC_GAP_ACK_BLOCK) {
+		u16 min_sz = struct_size(p, gacks, 0);
+
+		if (dlen < min_sz)
+			goto ignore;
+
 		p = (struct tipc_gap_ack_blks *)msg_data(hdr);
 		sz = ntohs(p->len);
+		if (sz < min_sz || sz > dlen) {
+			sz = 0;
+			goto ignore;
+		}
+
 		/* Sanity check */
 		if (sz == struct_size(p, gacks, size_add(p->ugack_cnt, p->bgack_cnt))) {
 			/* Good, check if the desired type exists */
@@ -1434,6 +1444,8 @@ u16 tipc_get_gap_ack_blks(struct tipc_gap_ack_blks **ga, struct tipc_link *l,
 			}
 		}
 	}
+
+ignore:
 	/* Other cases: ignore! */
 	p = NULL;
 
@@ -2270,7 +2282,7 @@ static int tipc_link_proto_rcv(struct tipc_link *l, struct sk_buff *skb,
 	case STATE_MSG:
 		/* Validate Gap ACK blocks, drop if invalid */
 		glen = tipc_get_gap_ack_blks(&ga, l, hdr, true);
-		if (glen > dlen)
+		if (glen > dlen || ((l->peer_caps & TIPC_GAP_ACK_BLOCK) && !glen))
 			break;
 
 		l->rcv_nxt_state = msg_seqno(hdr) + 1;
