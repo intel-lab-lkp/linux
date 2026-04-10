@@ -4,6 +4,8 @@
 #ifndef __PANTHOR_GPU_REGS_H__
 #define __PANTHOR_GPU_REGS_H__
 
+#define GPU_CONTROL_BASE				0x0
+
 #define GPU_L2_FEATURES					0x4
 #define  GPU_L2_FEATURES_LINE_SIZE(x)			(1 << ((x) & GENMASK(7, 0)))
 
@@ -20,10 +22,6 @@
 #define GPU_CSF_ID					0x1C
 
 #define GPU_INT_BASE					0x20
-#define GPU_INT_RAWSTAT					0x20
-#define GPU_INT_CLEAR					0x24
-#define GPU_INT_MASK					0x28
-#define GPU_INT_STAT					0x2c
 #define   GPU_IRQ_FAULT					BIT(0)
 #define   GPU_IRQ_PROTM_FAULT				BIT(1)
 #define   GPU_IRQ_RESET_COMPLETED			BIT(8)
