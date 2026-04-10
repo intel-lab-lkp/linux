@@ -2285,17 +2285,11 @@ static bool ppp_channel_bridge_input(struct channel *pch, struct sk_buff *skb)
 		goto out_rcu;
 
 	spin_lock_bh(&pchb->downl);
-	if (!pchb->chan) {
-		/* channel got unregistered */
-		kfree_skb(skb);
-		goto outl;
-	}
 
 	skb_scrub_packet(skb, !net_eq(pch->chan_net, pchb->chan_net));
 	if (!pchb->chan->ops->start_xmit(pchb->chan, skb))
 		kfree_skb(skb);
 
-outl:
 	spin_unlock_bh(&pchb->downl);
 out_rcu:
 	rcu_read_unlock();
@@ -2997,6 +2991,8 @@ ppp_unregister_channel(struct ppp_channel *chan)
 	 * the channel's start_xmit or ioctl routine before we proceed.
 	 */
 	ppp_disconnect_channel(pch);
+	ppp_unbridge_channels(pch);
+
 	down_write(&pch->chan_sem);
 	spin_lock_bh(&pch->downl);
 	pch->chan = NULL;
@@ -3007,8 +3003,6 @@ ppp_unregister_channel(struct ppp_channel *chan)
 	spin_lock_bh(&pn->all_channels_lock);
 	list_del(&pch->list);
 	spin_unlock_bh(&pn->all_channels_lock);
-
-	ppp_unbridge_channels(pch);
 
 	pch->file.dead = 1;
 	wake_up_interruptible(&pch->file.rwait);
