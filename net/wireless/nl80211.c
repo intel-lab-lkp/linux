@@ -8624,12 +8624,6 @@ static int nl80211_set_station_tdls(struct genl_info *info,
 				nla_data(info->attrs[NL80211_ATTR_EHT_CAPABILITY]);
 			params->link_sta_params.eht_capa_len =
 				nla_len(info->attrs[NL80211_ATTR_EHT_CAPABILITY]);
-
-			if (!ieee80211_eht_capa_size_ok((const u8 *)params->link_sta_params.he_capa,
-							(const u8 *)params->link_sta_params.eht_capa,
-							params->link_sta_params.eht_capa_len,
-							false))
-				return -EINVAL;
 		}
 	}
 
@@ -8984,12 +8978,6 @@ static int nl80211_new_station(struct sk_buff *skb, struct genl_info *info)
 				nla_data(info->attrs[NL80211_ATTR_EHT_CAPABILITY]);
 			params.link_sta_params.eht_capa_len =
 				nla_len(info->attrs[NL80211_ATTR_EHT_CAPABILITY]);
-
-			if (!ieee80211_eht_capa_size_ok((const u8 *)params.link_sta_params.he_capa,
-							(const u8 *)params.link_sta_params.eht_capa,
-							params.link_sta_params.eht_capa_len,
-							false))
-				return -EINVAL;
 		}
 	}
 
@@ -18550,12 +18538,6 @@ nl80211_add_mod_link_station(struct sk_buff *skb, struct genl_info *info,
 				nla_data(info->attrs[NL80211_ATTR_EHT_CAPABILITY]);
 			params.eht_capa_len =
 				nla_len(info->attrs[NL80211_ATTR_EHT_CAPABILITY]);
-
-			if (!ieee80211_eht_capa_size_ok((const u8 *)params.he_capa,
-							(const u8 *)params.eht_capa,
-							params.eht_capa_len,
-							false))
-				return -EINVAL;
 		}
 	}
 
