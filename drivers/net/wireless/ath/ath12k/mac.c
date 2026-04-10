@@ -4,6 +4,7 @@
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
+#include <linux/nl80211.h>
 #include <net/mac80211.h>
 #include <net/cfg80211.h>
 #include <linux/etherdevice.h>
@@ -8703,28 +8704,32 @@ static void
 ath12k_mac_copy_eht_mcs_nss(struct ath12k_band_cap *band_cap,
 			    struct ieee80211_eht_mcs_nss_supp *mcs_nss,
 			    const struct ieee80211_he_cap_elem *he_cap,
-			    const struct ieee80211_eht_cap_elem_fixed *eht_cap)
+			    const struct ieee80211_eht_cap_elem_fixed *eht_cap,
+			    enum nl80211_band band)
 {
-	if ((he_cap->phy_cap_info[0] &
-	     (IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_IN_2G |
-	      IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_80MHZ_IN_5G |
+	if ((band == NL80211_BAND_2GHZ && (he_cap->phy_cap_info[0] &
+	     IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_IN_2G) == 0) ||
+	    (band != NL80211_BAND_2GHZ && (he_cap->phy_cap_info[0] &
+	     (IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_80MHZ_IN_5G |
 	      IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_160MHZ_IN_5G |
-	      IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_80PLUS80_MHZ_IN_5G)) == 0)
+	      IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_80PLUS80_MHZ_IN_5G)) == 0))
 		memcpy(&mcs_nss->only_20mhz, &band_cap->eht_mcs_20_only,
 		       sizeof(struct ieee80211_eht_mcs_nss_supp_20mhz_only));
 
-	if (he_cap->phy_cap_info[0] &
-	    (IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_IN_2G |
-	     IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_80MHZ_IN_5G))
+	if ((band == NL80211_BAND_2GHZ && (he_cap->phy_cap_info[0] &
+	     IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_IN_2G)) ||
+	    (band != NL80211_BAND_2GHZ && (he_cap->phy_cap_info[0] &
+	     IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_80MHZ_IN_5G)))
 		memcpy(&mcs_nss->bw._80, &band_cap->eht_mcs_80,
 		       sizeof(struct ieee80211_eht_mcs_nss_supp_bw));
 
-	if (he_cap->phy_cap_info[0] &
+	if (band != NL80211_BAND_2GHZ && he_cap->phy_cap_info[0] &
 	    IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_160MHZ_IN_5G)
 		memcpy(&mcs_nss->bw._160, &band_cap->eht_mcs_160,
 		       sizeof(struct ieee80211_eht_mcs_nss_supp_bw));
 
-	if (eht_cap->phy_cap_info[0] & IEEE80211_EHT_PHY_CAP0_320MHZ_IN_6GHZ)
+	if (band == NL80211_BAND_6GHZ &&
+	    eht_cap->phy_cap_info[0] & IEEE80211_EHT_PHY_CAP0_320MHZ_IN_6GHZ)
 		memcpy(&mcs_nss->bw._320, &band_cap->eht_mcs_320,
 		       sizeof(struct ieee80211_eht_mcs_nss_supp_bw));
 }
@@ -8809,7 +8814,8 @@ static void ath12k_mac_copy_eht_cap(struct ath12k *ar,
 				    struct ath12k_band_cap *band_cap,
 				    struct ieee80211_he_cap_elem *he_cap_elem,
 				    int iftype,
-				    struct ieee80211_sta_eht_cap *eht_cap)
+				    struct ieee80211_sta_eht_cap *eht_cap,
+				    enum nl80211_band band)
 {
 	struct ieee80211_eht_cap_elem_fixed *eht_cap_elem = &eht_cap->eht_cap_elem;
 
@@ -8852,7 +8858,7 @@ static void ath12k_mac_copy_eht_cap(struct ath12k *ar,
 	}
 
 	ath12k_mac_copy_eht_mcs_nss(band_cap, &eht_cap->eht_mcs_nss_supp,
-				    he_cap_elem, eht_cap_elem);
+				    he_cap_elem, eht_cap_elem, band);
 
 	if (eht_cap_elem->phy_cap_info[5] &
 	    IEEE80211_EHT_PHY_CAP5_PPE_THRESHOLD_PRESENT)
@@ -8888,7 +8894,7 @@ static int ath12k_mac_copy_sband_iftype_data(struct ath12k *ar,
 				ath12k_mac_setup_he_6ghz_cap(cap, band_cap);
 		}
 		ath12k_mac_copy_eht_cap(ar, band_cap, &he_cap->he_cap_elem, i,
-					&data[idx].eht_cap);
+					&data[idx].eht_cap, band);
 		idx++;
 	}
 
