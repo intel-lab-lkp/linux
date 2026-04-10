@@ -1544,7 +1544,8 @@ mt7996_mcu_sta_he_6g_tlv(struct sk_buff *skb,
 
 static void
 mt7996_mcu_sta_eht_tlv(struct sk_buff *skb,
-		       struct ieee80211_link_sta *link_sta)
+		       struct ieee80211_link_sta *link_sta,
+		       enum nl80211_band band)
 {
 	struct mt7996_sta *msta = (struct mt7996_sta *)link_sta->sta->drv_priv;
 	struct ieee80211_vif *vif = container_of((void *)msta->vif,
@@ -1569,11 +1570,12 @@ mt7996_mcu_sta_eht_tlv(struct sk_buff *skb,
 	eht->phy_cap_ext = cpu_to_le64(elem->phy_cap_info[8]);
 
 	if (vif->type != NL80211_IFTYPE_STATION &&
-	    (link_sta->he_cap.he_cap_elem.phy_cap_info[0] &
-	     (IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_IN_2G |
-	      IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_80MHZ_IN_5G |
-	      IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_160MHZ_IN_5G |
-	      IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_80PLUS80_MHZ_IN_5G)) == 0) {
+		((band == NL80211_BAND_2GHZ && (link_sta->he_cap.he_cap_elem.phy_cap_info[0] &
+		     IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_IN_2G) == 0) ||
+		    (band != NL80211_BAND_2GHZ && (link_sta->he_cap.he_cap_elem.phy_cap_info[0] &
+		     (IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_80MHZ_IN_5G |
+		      IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_160MHZ_IN_5G |
+		      IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_80PLUS80_MHZ_IN_5G)) == 0))) {
 		memcpy(eht->mcs_map_bw20, &mcs_map->only_20mhz,
 		       sizeof(eht->mcs_map_bw20));
 		return;
@@ -2773,7 +2775,7 @@ int mt7996_mcu_add_sta(struct mt7996_dev *dev,
 		/* starec he 6g*/
 		mt7996_mcu_sta_he_6g_tlv(skb, link_sta);
 		/* starec eht */
-		mt7996_mcu_sta_eht_tlv(skb, link_sta);
+		mt7996_mcu_sta_eht_tlv(skb, link_sta, link_conf->chanreq.oper.chan->band);
 		/* starec muru */
 		mt7996_mcu_sta_muru_tlv(dev, skb, link_conf, link_sta);
 
