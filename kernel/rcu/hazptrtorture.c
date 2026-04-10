@@ -631,7 +631,7 @@ static int __init hazptr_torture_init(void)
 	if (nreaders >= 0) {
 		nrealreaders = nreaders;
 	} else {
-		nrealreaders = num_online_cpus() - 2 - nreaders;
+		nrealreaders = num_online_cpus() * -nreaders;
 		if (nrealreaders <= 0)
 			nrealreaders = 1;
 	}
