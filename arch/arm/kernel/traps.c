@@ -28,6 +28,8 @@
 #include <linux/irq.h>
 #include <linux/vmalloc.h>
 
+void migrate_exec_log_dump(unsigned long fault_addr);
+
 #include <linux/atomic.h>
 #include <asm/cacheflush.h>
 #include <asm/exception.h>
@@ -490,6 +492,9 @@ die_sig:
 		dump_instr(KERN_INFO, regs);
 	}
 #endif
+	if (user_mode(regs))
+		migrate_exec_log_dump((unsigned long)pc);
+
 	arm_notify_die("Oops - undefined instruction", regs,
 		       SIGILL, ILL_ILLOPC, pc, 0, 6);
 }

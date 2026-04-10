@@ -48,6 +48,54 @@
 
 #include <trace/events/migrate.h>
 
+
+/* Debug: track recent exec page migrations */
+#define MIGRATE_EXEC_LOG_SIZE 8
+struct migrate_exec_entry {
+	unsigned long addr;
+	unsigned long old_pfn;
+	unsigned long new_pfn;
+	unsigned int pid;
+	bool flushed;
+};
+static DEFINE_PER_CPU(struct migrate_exec_entry[MIGRATE_EXEC_LOG_SIZE], migrate_exec_log);
+static DEFINE_PER_CPU(unsigned int, migrate_exec_idx);
+
+void migrate_exec_log_add(unsigned long addr, unsigned long old_pfn,
+			  unsigned long new_pfn, bool flushed)
+{
+	unsigned int idx = __this_cpu_read(migrate_exec_idx);
+	struct migrate_exec_entry *log = this_cpu_ptr(migrate_exec_log);
+	struct migrate_exec_entry *e = &log[idx];
+
+	e->addr = addr;
+	e->old_pfn = old_pfn;
+	e->new_pfn = new_pfn;
+	e->pid = current->pid;
+	e->flushed = flushed;
+	__this_cpu_write(migrate_exec_idx, (idx + 1) % MIGRATE_EXEC_LOG_SIZE);
+}
+
+void migrate_exec_log_dump(unsigned long fault_addr)
+{
+	int cpu;
+
+	pr_err("SIGILL at %lx pid %d, recent exec migrations:\n",
+	       fault_addr, current->pid);
+	for_each_online_cpu(cpu) {
+		struct migrate_exec_entry *log = per_cpu(migrate_exec_log, cpu);
+		int i;
+		for (i = 0; i < MIGRATE_EXEC_LOG_SIZE; i++) {
+			if (log[i].addr == 0)
+				continue;
+			pr_err("  cpu%d: addr=%lx old_pfn=%lx new_pfn=%lx pid=%d flushed=%d%s\n",
+			       cpu, log[i].addr, log[i].old_pfn, log[i].new_pfn,
+			       log[i].pid, log[i].flushed,
+			       (PAGE_ALIGN(fault_addr) == PAGE_ALIGN(log[i].addr)) ?
+			       " *** MATCH ***" : "");
+		}
+	}
+}
 #include "internal.h"
 #include "swap.h"
 
@@ -434,6 +482,11 @@ static bool remove_migration_pte(struct folio *folio,
 			else
 				folio_add_file_rmap_pte(folio, new, vma);
 			set_pte_at(vma->vm_mm, pvmw.address, pvmw.pte, pte);
+
+			if (vma->vm_flags & VM_EXEC)
+				migrate_exec_log_add(pvmw.address,
+					swp_offset(entry), page_to_pfn(new),
+					pte_young(pte));
 		}
 		if (READ_ONCE(vma->vm_flags) & VM_LOCKED)
 			mlock_drain_local();
