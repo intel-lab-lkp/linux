@@ -715,6 +715,8 @@ static int ice_dcb_noncontig_cfg(struct ice_pf *pf)
 	struct device *dev = ice_pf_to_dev(pf);
 	int ret;
 
+	dev_info(dev, "Non-contiguous ETS TC config not supported, falling back to default single TC\n");
+
 	/* Configure SW DCB default with ETS non-willing */
 	ret = ice_dcb_sw_dflt_cfg(pf, false, true);
 	if (ret) {
