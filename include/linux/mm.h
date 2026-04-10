@@ -243,6 +243,17 @@ static inline unsigned long folio_page_idx(const struct folio *folio,
 	return page - &folio->page;
 }
 
+static __always_inline void folio_clear_pages_anon_exclusive(struct page *page,
+		unsigned long nr_pages)
+{
+	for (;;) {
+		ClearPageAnonExclusive(page);
+		if (--nr_pages == 0)
+			break;
+		++page;
+	}
+}
+
 static inline struct folio *lru_to_folio(struct list_head *head)
 {
 	return list_entry((head)->prev, struct folio, lru);
