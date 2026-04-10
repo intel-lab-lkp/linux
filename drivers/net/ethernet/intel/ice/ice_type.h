@@ -153,6 +153,8 @@ enum ice_media_type {
 	ICE_MEDIA_BASET,
 	ICE_MEDIA_BACKPLANE,
 	ICE_MEDIA_DA,
+	ICE_MEDIA_AUI,
+	ICE_MEDIA_NONE,
 };
 
 enum ice_vsi_type {
