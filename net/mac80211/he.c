@@ -8,6 +8,7 @@
 
 #include "ieee80211_i.h"
 #include "rate.h"
+#include <linux/nl80211.h>
 
 static void
 ieee80211_update_from_he_6ghz_capa(const struct ieee80211_he_6ghz_capa *he_6ghz_capa,
@@ -112,7 +113,8 @@ _ieee80211_he_cap_ie_to_sta_he_cap(struct ieee80211_sub_if_data *sdata,
 				   const struct ieee80211_sta_he_cap *own_he_cap_ptr,
 				   const u8 *he_cap_ie, u8 he_cap_len,
 				   const struct ieee80211_he_6ghz_capa *he_6ghz_capa,
-				   struct link_sta_info *link_sta)
+				   struct link_sta_info *link_sta,
+				   enum nl80211_band band)
 {
 	struct ieee80211_sta_he_cap *he_cap = &link_sta->pub->he_cap;
 	struct ieee80211_sta_he_cap own_he_cap;
@@ -134,7 +136,7 @@ _ieee80211_he_cap_ie_to_sta_he_cap(struct ieee80211_sub_if_data *sdata,
 	own_he_cap = *own_he_cap_ptr;
 
 	/* Make sure size is OK */
-	mcs_nss_size = ieee80211_he_mcs_nss_size(he_cap_ie_elem);
+	mcs_nss_size = ieee80211_he_mcs_nss_size(he_cap_ie_elem, band);
 	he_ppe_size =
 		ieee80211_he_ppe_size(he_cap_ie[sizeof(he_cap->he_cap_elem) +
 						mcs_nss_size],
@@ -220,7 +222,8 @@ ieee80211_he_cap_ie_to_sta_he_cap(struct ieee80211_sub_if_data *sdata,
 					   he_cap_len,
 					   (sband->band == NL80211_BAND_6GHZ) ?
 						he_6ghz_capa : NULL,
-					   link_sta);
+					   link_sta,
+					   sband->band);
 }
 
 void

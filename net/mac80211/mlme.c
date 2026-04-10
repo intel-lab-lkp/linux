@@ -5933,7 +5933,7 @@ static u8 ieee80211_max_rx_chains(struct ieee80211_link_data *link,
 
 	/* skip one byte ext_tag_id */
 	he_cap = (void *)(he_cap_elem->data + 1);
-	mcs_nss_size = ieee80211_he_mcs_nss_size(he_cap);
+	mcs_nss_size = ieee80211_he_mcs_nss_size(he_cap, cbss->channel->band);
 
 	/* invalid HE IE */
 	if (he_cap_elem->datalen < 1 + mcs_nss_size + sizeof(*he_cap))

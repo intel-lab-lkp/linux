@@ -17,6 +17,7 @@
 
 #include <linux/types.h>
 #include <linux/if_ether.h>
+#include <linux/nl80211.h>
 
 #define IEEE80211_TWT_CONTROL_NDP			BIT(0)
 #define IEEE80211_TWT_CONTROL_RESP_MODE			BIT(1)
@@ -452,17 +453,19 @@ enum ieee80211_he_highest_mcs_supported_subfield_enc {
 
 /* Calculate 802.11ax HE capabilities IE Tx/Rx HE MCS NSS Support Field size */
 static inline u8
-ieee80211_he_mcs_nss_size(const struct ieee80211_he_cap_elem *he_cap)
+ieee80211_he_mcs_nss_size(const struct ieee80211_he_cap_elem *he_cap, enum nl80211_band band)
 {
 	u8 count = 4;
 
-	if (he_cap->phy_cap_info[0] &
-	    IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_160MHZ_IN_5G)
-		count += 4;
+	if (band == NL80211_BAND_5GHZ || band == NL80211_BAND_6GHZ) {
+		if (he_cap->phy_cap_info[0] &
+		    IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_160MHZ_IN_5G)
+			count += 4;
 
-	if (he_cap->phy_cap_info[0] &
-	    IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_80PLUS80_MHZ_IN_5G)
-		count += 4;
+		if (he_cap->phy_cap_info[0] &
+		    IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_80PLUS80_MHZ_IN_5G)
+			count += 4;
+	}
 
 	return count;
 }
@@ -506,7 +509,7 @@ ieee80211_he_ppe_size(u8 ppe_thres_hdr, const u8 *phy_cap_info)
 	return n;
 }
 
-static inline bool ieee80211_he_capa_size_ok(const u8 *data, u8 len)
+static inline bool ieee80211_he_capa_size_ok(const u8 *data, u8 len, enum nl80211_band band)
 {
 	const struct ieee80211_he_cap_elem *he_cap_ie_elem = (const void *)data;
 	u8 needed = sizeof(*he_cap_ie_elem);
@@ -514,7 +517,7 @@ static inline bool ieee80211_he_capa_size_ok(const u8 *data, u8 len)
 	if (len < needed)
 		return false;
 
-	needed += ieee80211_he_mcs_nss_size(he_cap_ie_elem);
+	needed += ieee80211_he_mcs_nss_size(he_cap_ie_elem, band);
 	if (len < needed)
 		return false;
 

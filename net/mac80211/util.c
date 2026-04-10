@@ -2579,7 +2579,7 @@ u8 ieee80211_ie_len_he_cap(struct ieee80211_sub_if_data *sdata)
 	if (!he_cap)
 		return 0;
 
-	n = ieee80211_he_mcs_nss_size(&he_cap->he_cap_elem);
+	n = ieee80211_he_mcs_nss_size(&he_cap->he_cap_elem, sband->band);
 	return 2 + 1 +
 	       sizeof(he_cap->he_cap_elem) + n +
 	       ieee80211_he_ppe_size(he_cap->ppe_thres[0],
@@ -2656,7 +2656,7 @@ int ieee80211_put_he_cap(struct sk_buff *skb,
 	/* modify on stack first to calculate 'n' and 'ie_len' correctly */
 	ieee80211_get_adjusted_he_cap(conn, he_cap, &elem);
 
-	n = ieee80211_he_mcs_nss_size(&elem);
+	n = ieee80211_he_mcs_nss_size(&elem, sband->band);
 	ie_len = 2 + 1 +
 		 sizeof(he_cap->he_cap_elem) + n +
 		 ieee80211_he_ppe_size(he_cap->ppe_thres[0],
