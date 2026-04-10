@@ -518,6 +518,10 @@ static void fn_hold(struct vc_data *vc)
 	 * Note: SCROLLOCK will be set (cleared) by stop_tty (start_tty);
 	 * these routines are also activated by ^S/^Q.
 	 * (And SCROLLOCK can also be set by the ioctl KDSKBLED.)
+	 *
+	 * kbd_keycode(), only from kbd_keycode via k_handler[], already holds a
+	 * reference to the tty via tty_port_tty_get(), so we can safely
+	 * access port->tty here without an extra kref.
 	 */
 	if (tty->flow.stopped)
 		start_tty(tty);
@@ -1431,7 +1435,7 @@ static void kbd_keycode(unsigned int keycode, int down, bool hw_raw)
 	struct keyboard_notifier_param param = { .vc = vc, .value = keycode, .down = down };
 	int rc;
 
-	tty = vc->port.tty;
+	tty = tty_port_tty_get(&vc->port);
 
 	if (tty && (!tty->driver_data)) {
 		/* No driver data? Strange. Okay we fix it then. */
@@ -1491,7 +1495,7 @@ static void kbd_keycode(unsigned int keycode, int down, bool hw_raw)
 		 * characters get aren't echoed locally. This makes key repeat
 		 * usable with slow applications and under heavy loads.
 		 */
-		return;
+		goto out;
 	}
 
 	param.shift = shift_final = (shift_state | kbd->slockstate) ^ kbd->lockstate;
@@ -1520,7 +1524,7 @@ static void kbd_keycode(unsigned int keycode, int down, bool hw_raw)
 					   KBD_UNBOUND_KEYCODE, &param);
 		do_compute_shiftstate();
 		kbd->slockstate = 0;
-		return;
+		goto out;
 	}
 
 	if (keycode < NR_KEYS)
@@ -1528,7 +1532,7 @@ static void kbd_keycode(unsigned int keycode, int down, bool hw_raw)
 	else if (keycode >= KEY_BRL_DOT1 && keycode <= KEY_BRL_DOT8)
 		keysym = U(K(KT_BRL, keycode - KEY_BRL_DOT1 + 1));
 	else
-		return;
+		goto out;
 
 	type = KTYP(keysym);
 
@@ -1539,7 +1543,7 @@ static void kbd_keycode(unsigned int keycode, int down, bool hw_raw)
 		if (rc != NOTIFY_STOP)
 			if (down && !(raw_mode || kbd->kbdmode == VC_OFF))
 				k_unicode(vc, keysym, !down);
-		return;
+		goto out;
 	}
 
 	type -= 0xf0;
@@ -1557,10 +1561,10 @@ static void kbd_keycode(unsigned int keycode, int down, bool hw_raw)
 	rc = atomic_notifier_call_chain(&keyboard_notifier_list,
 					KBD_KEYSYM, &param);
 	if (rc == NOTIFY_STOP)
-		return;
+		goto out;
 
 	if ((raw_mode || kbd->kbdmode == VC_OFF) && type != KT_SPEC && type != KT_SHIFT)
-		return;
+		goto out;
 
 	(*k_handler[type])(vc, KVAL(keysym), !down);
 
@@ -1569,6 +1573,8 @@ static void kbd_keycode(unsigned int keycode, int down, bool hw_raw)
 
 	if (type != KT_SLOCK)
 		kbd->slockstate = 0;
+out:
+	tty_kref_put(tty);
 }
 
 static void kbd_event(struct input_handle *handle, unsigned int event_type,

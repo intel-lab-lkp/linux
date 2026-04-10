@@ -3703,7 +3703,7 @@ static int con_install(struct tty_driver *driver, struct tty_struct *tty)
 		return ret;
 
 	tty->driver_data = vc;
-	vc->port.tty = tty;
+	tty_port_tty_set(&vc->port, tty);
 	tty_port_get(&vc->port);
 
 	if (!tty->winsize.ws_row && !tty->winsize.ws_col) {
@@ -3735,8 +3735,7 @@ static void con_shutdown(struct tty_struct *tty)
 	struct vc_data *vc = tty->driver_data;
 	BUG_ON(vc == NULL);
 
-	guard(console_lock)();
-	vc->port.tty = NULL;
+	tty_port_tty_set(&vc->port, NULL);
 }
 
 static void con_cleanup(struct tty_struct *tty)
