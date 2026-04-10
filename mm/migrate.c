@@ -47,6 +47,8 @@
 #include <asm/tlbflush.h>
 
 #include <trace/events/migrate.h>
+#include <linux/jump_label.h>
+#include <linux/wait_bit.h>
 
 #include "internal.h"
 #include "swap.h"
@@ -1732,6 +1734,17 @@ static void migrate_folios_move(struct list_head *src_folios,
 			*retry += 1;
 			*thp_retry += is_thp;
 			*nr_retry_pages += nr_pages;
+			/*
+			 * For longterm pinning, wait for references
+			 * to be released before retrying.
+			 */
+			if (reason == MR_LONGTERM_PIN) {
+				int expected = folio_expected_ref_count(folio) + 1;
+
+				wait_var_event_timeout(&folio->_refcount,
+					folio_ref_count(folio) <= expected,
+					HZ);
+			}
 			break;
 		case 0:
 			stats->nr_succeeded += nr_pages;
@@ -1941,6 +1954,17 @@ static int migrate_pages_batch(struct list_head *from,
 				retry++;
 				thp_retry += is_thp;
 				nr_retry_pages += nr_pages;
+				/*
+				 * For longterm pinning, wait for references
+				 * to be released.
+				 */
+				if (reason == MR_LONGTERM_PIN) {
+					int expected = folio_expected_ref_count(folio) + 1;
+
+					wait_var_event_timeout(&folio->_refcount,
+							folio_ref_count(folio) <= expected,
+							HZ);
+				}
 				break;
 			case 0:
 				list_move_tail(&folio->lru, &unmap_folios);
@@ -2085,6 +2109,9 @@ int migrate_pages(struct list_head *from, new_folio_t get_new_folio,
 
 	memset(&stats, 0, sizeof(stats));
 
+	if (reason == MR_LONGTERM_PIN)
+		static_branch_inc(&folio_put_wakeup_key);
+
 	rc_gather = migrate_hugetlbs(from, get_new_folio, put_new_folio, private,
 				     mode, reason, &stats, &ret_folios);
 	if (rc_gather < 0)
@@ -2137,6 +2164,9 @@ again:
 	if (!list_empty(from))
 		goto again;
 out:
+	if (reason == MR_LONGTERM_PIN)
+		static_branch_dec(&folio_put_wakeup_key);
+
 	/*
 	 * Put the permanent failure folio back to migration list, they
 	 * will be put back to the right list by the caller.
