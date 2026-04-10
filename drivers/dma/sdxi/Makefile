@@ -11,4 +11,5 @@ sdxi-objs += \
 sdxi-$(CONFIG_PCI_MSI) += pci.o
 
 obj-$(CONFIG_SDXI_KUNIT_TEST) += \
+	descriptor_kunit.o    \
 	ring_kunit.o
