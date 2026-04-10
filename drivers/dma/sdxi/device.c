@@ -9,6 +9,7 @@
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
+#include <linux/dmapool.h>
 #include <linux/log2.h>
 #include <linux/slab.h>
 
@@ -188,6 +189,37 @@ static int sdxi_fn_activate(struct sdxi_dev *sdxi)
 	return 0;
 }
 
+static int sdxi_create_dma_pool(struct sdxi_dev *sdxi, struct dma_pool **pool,
+				const char *name, size_t size)
+{
+	*pool = dmam_pool_create(name, sdxi_to_dev(sdxi), size, size, 0);
+	return *pool ? 0 : -ENOMEM;
+}
+
+static int sdxi_device_init(struct sdxi_dev *sdxi)
+{
+	int err;
+
+	if (sdxi_create_dma_pool(sdxi, &sdxi->write_index_pool,
+				 "Write_Index", sizeof(__le64)))
+		return -ENOMEM;
+	if (sdxi_create_dma_pool(sdxi, &sdxi->cxt_sts_pool,
+				 "CXT_STS", sizeof(struct sdxi_cxt_sts)))
+		return -ENOMEM;
+	if (sdxi_create_dma_pool(sdxi, &sdxi->cxt_ctl_pool,
+				 "CXT_CTL", sizeof(struct sdxi_cxt_ctl)))
+		return -ENOMEM;
+	if (sdxi_create_dma_pool(sdxi, &sdxi->cst_blk_pool,
+				 "CST_BLK", sizeof(struct sdxi_cst_blk)))
+		return -ENOMEM;
+
+	err = sdxi_fn_activate(sdxi);
+	if (err)
+		return err;
+
+	return 0;
+}
+
 int sdxi_register(struct device *dev, const struct sdxi_bus_ops *ops)
 {
 	struct sdxi_dev *sdxi;
@@ -205,5 +237,5 @@ int sdxi_register(struct device *dev, const struct sdxi_bus_ops *ops)
 	if (err)
 		return err;
 
-	return sdxi_fn_activate(sdxi);
+	return sdxi_device_init(sdxi);
 }
