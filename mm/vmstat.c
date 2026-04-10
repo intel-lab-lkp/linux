@@ -1965,12 +1965,33 @@ static const struct seq_operations vmstat_op = {
 #ifdef CONFIG_SMP
 static DEFINE_PER_CPU(struct delayed_work, vmstat_work);
 static int sysctl_stat_interval __read_mostly = HZ;
+static const int sysctl_stat_interval_max = INT_MAX / HZ;
 static int vmstat_late_init_done;
 
 #ifdef CONFIG_PROC_FS
 static void refresh_vm_stats(struct work_struct *work)
 {
 	refresh_cpu_vm_stats(true);
+}
+
+static int vmstat_stat_interval_handler(const struct ctl_table *table, int write,
+					void *buffer, size_t *lenp, loff_t *ppos)
+{
+	int interval = sysctl_stat_interval / HZ;
+	const struct ctl_table tmp = {
+		.data	= &interval,
+		.maxlen	= sizeof(interval),
+		.mode	= table->mode,
+		.extra1	= SYSCTL_ONE,
+		.extra2	= (void *)&sysctl_stat_interval_max,
+	};
+	int ret;
+
+	ret = proc_dointvec_minmax(&tmp, write, buffer, lenp, ppos);
+	if (!ret && write)
+		sysctl_stat_interval = interval * HZ;
+
+	return ret;
 }
 
 static int vmstat_refresh(const struct ctl_table *table, int write,
@@ -2260,7 +2281,7 @@ static const struct ctl_table vmstat_table[] = {
 		.data		= &sysctl_stat_interval,
 		.maxlen		= sizeof(sysctl_stat_interval),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec_jiffies,
+		.proc_handler	= vmstat_stat_interval_handler,
 	},
 	{
 		.procname	= "stat_refresh",
