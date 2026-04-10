@@ -819,11 +819,17 @@ v3d_get_extensions(struct drm_file *file_priv,
 	struct v3d_file_priv *v3d_priv = file_priv->driver_priv;
 	struct v3d_dev *v3d = v3d_priv->v3d;
 	struct drm_v3d_extension __user *user_ext;
+	unsigned int ext_count = 0;
 	int ret;
 
 	user_ext = u64_to_user_ptr(ext_handles);
 	while (user_ext) {
 		struct drm_v3d_extension ext;
+
+		if (ext_count++ >= 16) {
+			drm_dbg(&v3d->drm, "Too many V3D ioctl extensions\n");
+			return -E2BIG;
+		}
 
 		if (copy_from_user(&ext, user_ext, sizeof(ext))) {
 			drm_dbg(&v3d->drm, "Failed to copy submit extension\n");
