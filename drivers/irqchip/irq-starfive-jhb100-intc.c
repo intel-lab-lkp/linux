@@ -18,10 +18,11 @@
 #include <linux/reset.h>
 #include <linux/spinlock.h>
 
-#define STARFIVE_INTC_SRC0_CLEAR	0x10
-#define STARFIVE_INTC_SRC0_MASK		0x14
-#define STARFIVE_INTC_SRC0_INT		0x1c
+#define STARFIVE_INTC_SRC_CLEAR(n)	(0x10 + ((n) * 0x20))
+#define STARFIVE_INTC_SRC_MASK(n)	(0x14 + ((n) * 0x20))
+#define STARFIVE_INTC_SRC_INT(n)	(0x1c + ((n) * 0x20))
 
+#define STARFIVE_INTC_NUM		2
 #define STARFIVE_INTC_SRC_IRQ_NUM	32
 
 struct starfive_irq_chip {
@@ -53,18 +54,26 @@ static void starfive_intc_bit_clear(struct starfive_irq_chip *irqc,
 static void starfive_intc_unmask(struct irq_data *d)
 {
 	struct starfive_irq_chip *irqc = irq_data_get_irq_chip_data(d);
+	int i, bitpos;
+
+	i = d->hwirq / STARFIVE_INTC_SRC_IRQ_NUM;
+	bitpos = d->hwirq % STARFIVE_INTC_SRC_IRQ_NUM;
 
 	raw_spin_lock(&irqc->lock);
-	starfive_intc_bit_clear(irqc, STARFIVE_INTC_SRC0_MASK, BIT(d->hwirq));
+	starfive_intc_bit_clear(irqc, STARFIVE_INTC_SRC_MASK(i), BIT(bitpos));
 	raw_spin_unlock(&irqc->lock);
 }
 
 static void starfive_intc_mask(struct irq_data *d)
 {
 	struct starfive_irq_chip *irqc = irq_data_get_irq_chip_data(d);
+	int i, bitpos;
+
+	i = d->hwirq / STARFIVE_INTC_SRC_IRQ_NUM;
+	bitpos = d->hwirq % STARFIVE_INTC_SRC_IRQ_NUM;
 
 	raw_spin_lock(&irqc->lock);
-	starfive_intc_bit_set(irqc, STARFIVE_INTC_SRC0_MASK, BIT(d->hwirq));
+	starfive_intc_bit_set(irqc, STARFIVE_INTC_SRC_MASK(i), BIT(bitpos));
 	raw_spin_unlock(&irqc->lock);
 }
 
@@ -93,20 +102,23 @@ static void starfive_intc_irq_handler(struct irq_desc *desc)
 	struct starfive_irq_chip *irqc = irq_data_get_irq_handler_data(&desc->irq_data);
 	struct irq_chip *chip = irq_desc_get_chip(desc);
 	unsigned long value;
-	int hwirq;
+	int hwirq, i;
 
 	chained_irq_enter(chip, desc);
 
-	value = ioread32(irqc->base + STARFIVE_INTC_SRC0_INT);
-	while (value) {
-		hwirq = ffs(value) - 1;
+	for (i = 0; i < STARFIVE_INTC_NUM; i++) {
+		value = ioread32(irqc->base + STARFIVE_INTC_SRC_INT(i));
+		while (value) {
+			hwirq = ffs(value) - 1;
 
-		generic_handle_domain_irq(irqc->domain, hwirq);
+			generic_handle_domain_irq(irqc->domain,
+						  hwirq + i * STARFIVE_INTC_SRC_IRQ_NUM);
 
-		starfive_intc_bit_set(irqc, STARFIVE_INTC_SRC0_CLEAR, BIT(hwirq));
-		starfive_intc_bit_clear(irqc, STARFIVE_INTC_SRC0_CLEAR, BIT(hwirq));
+			starfive_intc_bit_set(irqc, STARFIVE_INTC_SRC_CLEAR(i), BIT(hwirq));
+			starfive_intc_bit_clear(irqc, STARFIVE_INTC_SRC_CLEAR(i), BIT(hwirq));
 
-		__clear_bit(hwirq, &value);
+			__clear_bit(hwirq, &value);
+		}
 	}
 
 	chained_irq_exit(chip, desc);
@@ -152,7 +164,8 @@ static int starfive_intc_probe(struct platform_device *pdev, struct device_node 
 
 	raw_spin_lock_init(&irqc->lock);
 
-	irqc->domain = irq_domain_create_linear(of_fwnode_handle(intc), STARFIVE_INTC_SRC_IRQ_NUM,
+	irqc->domain = irq_domain_create_linear(of_fwnode_handle(intc),
+						STARFIVE_INTC_SRC_IRQ_NUM * STARFIVE_INTC_NUM,
 						&starfive_intc_domain_ops, irqc);
 	if (!irqc->domain) {
 		dev_err(&pdev->dev, "Unable to create IRQ domain\n");
@@ -171,7 +184,7 @@ static int starfive_intc_probe(struct platform_device *pdev, struct device_node 
 					 irqc);
 
 	dev_info(&pdev->dev, "Interrupt controller register, nr_irqs %d\n",
-		 STARFIVE_INTC_SRC_IRQ_NUM);
+		 STARFIVE_INTC_SRC_IRQ_NUM * STARFIVE_INTC_NUM);
 
 	return 0;
 
