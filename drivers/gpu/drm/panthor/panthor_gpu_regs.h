@@ -19,6 +19,7 @@
 #define GPU_AS_PRESENT					0x18
 #define GPU_CSF_ID					0x1C
 
+#define GPU_INT_BASE					0x20
 #define GPU_INT_RAWSTAT					0x20
 #define GPU_INT_CLEAR					0x24
 #define GPU_INT_MASK					0x28
