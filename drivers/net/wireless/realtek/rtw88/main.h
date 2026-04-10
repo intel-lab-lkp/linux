@@ -471,7 +471,7 @@ struct rtw_2g_txpwr_idx {
 	struct rtw_2g_ns_pwr_idx_diff ht_2s_diff;
 	struct rtw_2g_ns_pwr_idx_diff ht_3s_diff;
 	struct rtw_2g_ns_pwr_idx_diff ht_4s_diff;
-};
+} __packed;
 
 struct rtw_5g_ht_1s_pwr_idx_diff {
 #ifdef __LITTLE_ENDIAN

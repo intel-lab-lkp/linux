@@ -51,7 +51,7 @@ struct rtw8814a_efuse {
 	union {
 		struct rtw8814au_efuse u;
 		struct rtw8814ae_efuse e;
-	};
+	} __packed;
 	u8 res5[0x122];			/* 0xde */
 } __packed;
 
