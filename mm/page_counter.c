@@ -8,6 +8,7 @@
 #include <linux/page_counter.h>
 #include <linux/atomic.h>
 #include <linux/kernel.h>
+#include <linux/percpu.h>
 #include <linux/string.h>
 #include <linux/sched.h>
 #include <linux/bug.h>
@@ -287,6 +288,65 @@ int page_counter_memparse(const char *buf, const char *max,
 	*nr_pages = min(bytes / PAGE_SIZE, (u64)PAGE_COUNTER_MAX);
 
 	return 0;
+}
+
+int page_counter_enable_stock(struct page_counter *counter, unsigned int batch)
+{
+	struct page_counter_stock __percpu *stock;
+	int cpu;
+
+	stock = alloc_percpu(struct page_counter_stock);
+	if (!stock)
+		return -ENOMEM;
+
+	for_each_possible_cpu(cpu) {
+		struct page_counter_stock *s = per_cpu_ptr(stock, cpu);
+
+		local_trylock_init(&s->lock);
+	}
+	counter->stock = stock;
+	counter->batch = batch;
+
+	return 0;
+}
+
+void page_counter_disable_stock(struct page_counter *counter)
+{
+	unsigned int stock_to_drain = 0;
+	int cpu;
+
+	if (!counter->stock)
+		return;
+
+	for_each_possible_cpu(cpu) {
+		struct page_counter_stock *stock;
+
+		/*
+		 * No need for local lock; this is called during css_offline,
+		 * after the cgroup has already been removed.
+		 */
+		stock = per_cpu_ptr(counter->stock, cpu);
+		stock_to_drain += stock->nr_pages;
+	}
+
+	if (stock_to_drain) {
+		struct page_counter *c;
+
+		for (c = counter; c; c = c->parent)
+			page_counter_cancel(c, stock_to_drain);
+	}
+
+	/* This prevents future charges from trying to deposit pages */
+	counter->batch = 0;
+}
+
+void page_counter_free_stock(struct page_counter *counter)
+{
+	if (!counter->stock)
+		return;
+
+	free_percpu(counter->stock);
+	counter->stock = NULL;
 }
 
 
