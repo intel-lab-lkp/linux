@@ -465,6 +465,10 @@ nouveau_display_hpd_work(struct work_struct *work)
 		if (bits & NVIF_CONN_EVENT_V0_IRQ) {
 			if (nouveau_dp_link_check(nv_connector))
 				continue;
+			/* Retry once after 100ms for transient DP glitches (NV50/G94) */
+			msleep(100);
+			if (nouveau_dp_link_check(nv_connector))
+				continue;
 		}
 
 		connector->status = drm_helper_probe_detect(connector, NULL, false);
