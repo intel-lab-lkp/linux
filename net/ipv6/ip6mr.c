@@ -259,6 +259,11 @@ err1:
 	return err;
 }
 
+static void __net_exit ip6mr_rules_exit(struct net *net)
+{
+	fib_rules_unregister(net->ipv6.mr6_rules_ops);
+}
+
 static void __net_exit ip6mr_rules_exit_rtnl(struct net *net,
 					     struct list_head *dev_kill_list)
 {
@@ -268,8 +273,6 @@ static void __net_exit ip6mr_rules_exit_rtnl(struct net *net,
 		list_del_rcu(&mrt->list);
 		ip6mr_free_table(mrt, dev_kill_list);
 	}
-
-	fib_rules_unregister(net->ipv6.mr6_rules_ops);
 }
 
 static int ip6mr_rules_dump(struct net *net, struct notifier_block *nb,
@@ -327,6 +330,10 @@ static int __net_init ip6mr_rules_init(struct net *net)
 
 	rcu_assign_pointer(net->ipv6.mrt6, mrt);
 	return 0;
+}
+
+static void __net_exit ip6mr_rules_exit(struct net *net)
+{
 }
 
 static void __net_exit ip6mr_rules_exit_rtnl(struct net *net,
@@ -1367,6 +1374,7 @@ proc_cache_fail:
 	remove_proc_entry("ip6_mr_vif", net->proc_net);
 proc_vif_fail:
 	ip6mr_rules_exit_rtnl(net, &dev_kill_list);
+	ip6mr_rules_exit(net);
 #endif
 ip6mr_rules_fail:
 	ip6mr_notifier_exit(net);
@@ -1379,6 +1387,7 @@ static void __net_exit ip6mr_net_exit(struct net *net)
 	remove_proc_entry("ip6_mr_cache", net->proc_net);
 	remove_proc_entry("ip6_mr_vif", net->proc_net);
 #endif
+	ip6mr_rules_exit(net);
 	ip6mr_notifier_exit(net);
 }
 
