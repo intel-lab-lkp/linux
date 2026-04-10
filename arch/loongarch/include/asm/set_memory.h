@@ -15,8 +15,9 @@ int set_memory_ro(unsigned long addr, int numpages);
 int set_memory_rw(unsigned long addr, int numpages);
 
 bool kernel_page_present(struct page *page);
-int set_direct_map_default_noflush(struct page *page);
-int set_direct_map_invalid_noflush(struct page *page);
-int set_direct_map_valid_noflush(struct page *page, unsigned nr, bool valid);
+int set_direct_map_invalid_noflush(const void *addr);
+int set_direct_map_default_noflush(const void *addr);
+int set_direct_map_valid_noflush(const void *addr, unsigned long numpages,
+				 bool valid);
 
 #endif /* _ASM_LOONGARCH_SET_MEMORY_H */

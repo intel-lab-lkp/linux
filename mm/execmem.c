@@ -119,7 +119,8 @@ static int execmem_set_direct_map_valid(struct vm_struct *vm, bool valid)
 	int err = 0;
 
 	for (int i = 0; i < vm->nr_pages; i += nr) {
-		err = set_direct_map_valid_noflush(vm->pages[i], nr, valid);
+		err = set_direct_map_valid_noflush(page_address(vm->pages[i]),
+						   nr, valid);
 		if (err)
 			goto err_restore;
 		updated += nr;
@@ -129,7 +130,8 @@ static int execmem_set_direct_map_valid(struct vm_struct *vm, bool valid)
 
 err_restore:
 	for (int i = 0; i < updated; i += nr)
-		set_direct_map_valid_noflush(vm->pages[i], nr, !valid);
+		set_direct_map_valid_noflush(page_address(vm->pages[i]), nr,
+					     !valid);
 
 	return err;
 }

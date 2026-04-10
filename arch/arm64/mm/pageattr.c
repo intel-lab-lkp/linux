@@ -245,7 +245,7 @@ int set_memory_valid(unsigned long addr, int numpages, int enable)
 					__pgprot(PTE_VALID));
 }
 
-int set_direct_map_invalid_noflush(struct page *page)
+int set_direct_map_invalid_noflush(const void *addr)
 {
 	pgprot_t clear_mask = __pgprot(PTE_VALID);
 	pgprot_t set_mask = __pgprot(0);
@@ -253,11 +253,11 @@ int set_direct_map_invalid_noflush(struct page *page)
 	if (!can_set_direct_map())
 		return 0;
 
-	return update_range_prot((unsigned long)page_address(page),
-				 PAGE_SIZE, set_mask, clear_mask);
+	return update_range_prot((unsigned long)addr, PAGE_SIZE, set_mask,
+				 clear_mask);
 }
 
-int set_direct_map_default_noflush(struct page *page)
+int set_direct_map_default_noflush(const void *addr)
 {
 	pgprot_t set_mask = __pgprot(PTE_VALID | PTE_WRITE);
 	pgprot_t clear_mask = __pgprot(PTE_RDONLY);
@@ -265,8 +265,8 @@ int set_direct_map_default_noflush(struct page *page)
 	if (!can_set_direct_map())
 		return 0;
 
-	return update_range_prot((unsigned long)page_address(page),
-				 PAGE_SIZE, set_mask, clear_mask);
+	return update_range_prot((unsigned long)addr, PAGE_SIZE, set_mask,
+				 clear_mask);
 }
 
 static int __set_memory_enc_dec(unsigned long addr,
@@ -349,14 +349,13 @@ int realm_register_memory_enc_ops(void)
 	return arm64_mem_crypt_ops_register(&realm_crypt_ops);
 }
 
-int set_direct_map_valid_noflush(struct page *page, unsigned nr, bool valid)
+int set_direct_map_valid_noflush(const void *addr, unsigned long numpages,
+				 bool valid)
 {
-	unsigned long addr = (unsigned long)page_address(page);
-
 	if (!can_set_direct_map())
 		return 0;
 
-	return set_memory_valid(addr, nr, valid);
+	return set_memory_valid((unsigned long)addr, numpages, valid);
 }
 
 #ifdef CONFIG_DEBUG_PAGEALLOC
