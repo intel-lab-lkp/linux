@@ -12,6 +12,7 @@
 #include <linux/dmapool.h>
 #include <linux/log2.h>
 #include <linux/slab.h>
+#include <linux/xarray.h>
 
 #include "context.h"
 #include "hw.h"
@@ -302,6 +303,7 @@ int sdxi_register(struct device *dev, const struct sdxi_bus_ops *ops)
 
 	sdxi->dev = dev;
 	sdxi->bus_ops = ops;
+	xa_init_flags(&sdxi->client_cxts, XA_FLAGS_ALLOC1);
 	dev_set_drvdata(dev, sdxi);
 
 	err = sdxi->bus_ops->init(sdxi);
@@ -314,6 +316,12 @@ int sdxi_register(struct device *dev, const struct sdxi_bus_ops *ops)
 void sdxi_unregister(struct device *dev)
 {
 	struct sdxi_dev *sdxi = dev_get_drvdata(dev);
+	struct sdxi_cxt *cxt;
+	unsigned long index;
+
+	xa_for_each(&sdxi->client_cxts, index, cxt)
+		sdxi_cxt_exit(cxt);
+	xa_destroy(&sdxi->client_cxts);
 
 	sdxi_dev_stop(sdxi);
 }

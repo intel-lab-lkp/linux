@@ -155,6 +155,16 @@ static int configure_cxt_ctl(struct sdxi_cxt_ctl *ctl, const struct sdxi_cxt_ctl
 	return 0;
 }
 
+static void invalidate_cxtl_ctl(struct sdxi_cxt_ctl *ctl)
+{
+	u64 ds_ring_ptr = le64_to_cpu(ctl->ds_ring_ptr);
+
+	FIELD_MODIFY(SDXI_CXT_CTL_VL, &ds_ring_ptr, 0);
+	WRITE_ONCE(ctl->ds_ring_ptr, cpu_to_le64(ds_ring_ptr));
+	dma_wmb();
+	*ctl = (typeof(*ctl)) { 0 };
+}
+
 /*
  * Logical representation of CXT_L1_ENT subfields.
  */
@@ -209,6 +219,16 @@ static int configure_L1_entry(struct sdxi_cxt_L1_ent *ent,
 	return 0;
 }
 
+static void invalidate_L1_entry(struct sdxi_cxt_L1_ent *ent)
+{
+	u64 cxt_ctl_ptr = le64_to_cpu(ent->cxt_ctl_ptr);
+
+	FIELD_MODIFY(SDXI_CXT_L1_ENT_VL, &cxt_ctl_ptr, 0);
+	WRITE_ONCE(ent->cxt_ctl_ptr, cpu_to_le64(cxt_ctl_ptr));
+	dma_wmb();
+	*ent = (typeof(*ent)) { 0 };
+}
+
 /*
  * Make the context control structure hierarchy valid from the POV of
  * the SDXI implementation. This may eventually involve allocation of
@@ -259,11 +279,77 @@ static int sdxi_publish_cxt(const struct sdxi_cxt *cxt)
 	/* todo: need to send DSC_CXT_UPD to admin */
 }
 
+/* Invalidate a context. */
+static void sdxi_rescind_cxt(struct sdxi_cxt *cxt)
+{
+	u8 l1_idx = ID_TO_L1_INDEX(cxt->id);
+	struct sdxi_cxt_L1_ent *ent = &cxt->sdxi->L1_table->entry[l1_idx];
+
+	invalidate_L1_entry(ent);
+	invalidate_cxtl_ctl(cxt->cxt_ctl);
+	/* todo: need to send DSC_CXT_UPD to admin */
+}
+
 void sdxi_cxt_push_doorbell(struct sdxi_cxt *cxt, u64 index)
 {
 	/* Ensure preceding write index increment is visible. */
 	dma_wmb();
 	iowrite64(index, cxt->db);
+}
+
+/* Enable automatic cleanup of an allocated context ID */
+struct __class_sdxi_cxt_id {
+	struct sdxi_dev *sdxi;
+	s32 id;
+};
+
+#define sdxi_cxt_id_null ((struct __class_sdxi_cxt_id){ NULL, -1 })
+#define take_sdxi_cxt_id(x) __get_and_null(x, sdxi_cxt_id_null)
+
+DEFINE_CLASS(sdxi_alloc_cxt_id, struct __class_sdxi_cxt_id,
+	if (_T.id >= 0)
+		xa_erase(&_T.sdxi->client_cxts, _T.id),
+	((struct __class_sdxi_cxt_id){
+		.sdxi = sdxi,
+		.id = ({
+			struct xa_limit limit = XA_LIMIT(1, sdxi->max_cxtid);
+			u32 id;
+			int err = xa_alloc(&sdxi->client_cxts, &id, cxt,
+					   limit, GFP_KERNEL);
+			err ? err : id;
+		}),
+	}),
+	struct sdxi_dev *sdxi, struct sdxi_cxt *cxt)
+
+/*
+ * Allocate the context ID; link the context back to the device;
+ * perform some final initialization of the context based on the ID
+ * allocated; update the context tables.
+ */
+static int register_cxt(struct sdxi_dev *sdxi, struct sdxi_cxt *cxt)
+{
+	int err;
+
+	CLASS(sdxi_alloc_cxt_id, slot)(sdxi, cxt);
+	if (slot.id < 0)
+		return slot.id;
+
+	cxt->sdxi = sdxi;
+	cxt->id = slot.id;
+	cxt->db = sdxi->dbs + slot.id * sdxi->db_stride;
+
+	err = sdxi_publish_cxt(cxt);
+	if (err)
+		return err;
+
+	take_sdxi_cxt_id(slot);
+	return 0;
+}
+
+static void unregister_cxt(struct sdxi_cxt *cxt)
+{
+	sdxi_rescind_cxt(cxt);
+	xa_erase(&cxt->sdxi->client_cxts, cxt->id);
 }
 
 static void free_admin_cxt(void *ptr)
@@ -295,4 +381,29 @@ int sdxi_admin_cxt_init(struct sdxi_dev *sdxi)
 	sdxi->admin_cxt = no_free_ptr(cxt);
 
 	return devm_add_action_or_reset(sdxi_to_dev(sdxi), free_admin_cxt, sdxi);
+}
+
+/*
+ * Allocate a context for in-kernel use. Starting the context is the
+ * caller's responsibility.
+ */
+struct sdxi_cxt *sdxi_cxt_new(struct sdxi_dev *sdxi)
+{
+	struct sdxi_cxt *cxt __free(sdxi_cxt) = sdxi_alloc_cxt(sdxi);
+	if (!cxt)
+		return NULL;
+
+	if (register_cxt(sdxi, cxt))
+		return NULL;
+
+	return_ptr(cxt);
+}
+
+void sdxi_cxt_exit(struct sdxi_cxt *cxt)
+{
+	if (WARN_ON(sdxi_cxt_is_admin(cxt)))
+		return;
+
+	unregister_cxt(cxt);
+	sdxi_free_cxt(cxt);
 }
