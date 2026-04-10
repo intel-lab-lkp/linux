@@ -9,23 +9,10 @@
 #include "ice_flow.h"
 #include "ice_acl_main.h"
 
-static struct in6_addr full_ipv6_addr_mask = {
-	.in6_u = {
-		.u6_addr8 = {
-			0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-			0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-		}
-	}
-};
-
-static struct in6_addr zero_ipv6_addr_mask = {
-	.in6_u = {
-		.u6_addr8 = {
-			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-		}
-	}
-};
+static bool ice_ipv6_mask_full(const __be32 *a)
+{
+	return (a[0] & a[1] & a[2] & a[3]) == cpu_to_be32(0xffffffff);
+}
 
 #define ICE_FULL_IPV4_ADDR_MASK	0xFFFFFFFF
 #define ICE_FULL_PORT_MASK	0xFFFF
@@ -1140,10 +1127,8 @@ static int ice_set_fdir_ip4_usr_seg(struct ice_flow_seg_info *seg,
 static int ice_ntuple_check_ip6_seg(struct ethtool_tcpip6_spec *tcp_ip6_spec)
 {
 	/* make sure we don't have any empty rule */
-	if (!memcmp(tcp_ip6_spec->ip6src, &zero_ipv6_addr_mask,
-		    sizeof(struct in6_addr)) &&
-	    !memcmp(tcp_ip6_spec->ip6dst, &zero_ipv6_addr_mask,
-		    sizeof(struct in6_addr)) &&
+	if (ipv6_addr_any((struct in6_addr *)tcp_ip6_spec->ip6src) &&
+	    ipv6_addr_any((struct in6_addr *)tcp_ip6_spec->ip6dst) &&
 	    !tcp_ip6_spec->psrc && !tcp_ip6_spec->pdst)
 		return -EINVAL;
 
@@ -1186,24 +1171,20 @@ static int ice_set_fdir_ip6_seg(struct ice_flow_seg_info *seg,
 	*perfect_fltr = true;
 	ICE_FLOW_SET_HDRS(seg, ICE_FLOW_SEG_HDR_IPV6 | l4_proto);
 
-	if (!memcmp(tcp_ip6_spec->ip6src, &full_ipv6_addr_mask,
-		    sizeof(struct in6_addr)))
+	if (ice_ipv6_mask_full(tcp_ip6_spec->ip6src))
 		ice_flow_set_fld(seg, ICE_FLOW_FIELD_IDX_IPV6_SA,
 				 ICE_FLOW_FLD_OFF_INVAL, ICE_FLOW_FLD_OFF_INVAL,
 				 ICE_FLOW_FLD_OFF_INVAL, false);
-	else if (!memcmp(tcp_ip6_spec->ip6src, &zero_ipv6_addr_mask,
-			 sizeof(struct in6_addr)))
+	else if (ipv6_addr_any((struct in6_addr *)tcp_ip6_spec->ip6src))
 		*perfect_fltr = false;
 	else
 		return -EOPNOTSUPP;
 
-	if (!memcmp(tcp_ip6_spec->ip6dst, &full_ipv6_addr_mask,
-		    sizeof(struct in6_addr)))
+	if (ice_ipv6_mask_full(tcp_ip6_spec->ip6dst))
 		ice_flow_set_fld(seg, ICE_FLOW_FIELD_IDX_IPV6_DA,
 				 ICE_FLOW_FLD_OFF_INVAL, ICE_FLOW_FLD_OFF_INVAL,
 				 ICE_FLOW_FLD_OFF_INVAL, false);
-	else if (!memcmp(tcp_ip6_spec->ip6dst, &zero_ipv6_addr_mask,
-			 sizeof(struct in6_addr)))
+	else if (ipv6_addr_any((struct in6_addr *)tcp_ip6_spec->ip6dst))
 		*perfect_fltr = false;
 	else
 		return -EOPNOTSUPP;
@@ -1250,10 +1231,8 @@ ice_ntuple_check_ip6_usr_seg(struct ethtool_usrip6_spec *usr_ip6_spec)
 	if (usr_ip6_spec->l4_proto)
 		return -EOPNOTSUPP;
 	/* empty rules are not valid */
-	if (!memcmp(usr_ip6_spec->ip6src, &zero_ipv6_addr_mask,
-		    sizeof(struct in6_addr)) &&
-	    !memcmp(usr_ip6_spec->ip6dst, &zero_ipv6_addr_mask,
-		    sizeof(struct in6_addr)))
+	if (ipv6_addr_any((struct in6_addr *)usr_ip6_spec->ip6src) &&
+	    ipv6_addr_any((struct in6_addr *)usr_ip6_spec->ip6dst))
 		return -EINVAL;
 
 	return 0;
@@ -1284,24 +1263,20 @@ static int ice_set_fdir_ip6_usr_seg(struct ice_flow_seg_info *seg,
 	*perfect_fltr = true;
 	ICE_FLOW_SET_HDRS(seg, ICE_FLOW_SEG_HDR_IPV6);
 
-	if (!memcmp(usr_ip6_spec->ip6src, &full_ipv6_addr_mask,
-		    sizeof(struct in6_addr)))
+	if (ice_ipv6_mask_full(usr_ip6_spec->ip6src))
 		ice_flow_set_fld(seg, ICE_FLOW_FIELD_IDX_IPV6_SA,
 				 ICE_FLOW_FLD_OFF_INVAL, ICE_FLOW_FLD_OFF_INVAL,
 				 ICE_FLOW_FLD_OFF_INVAL, false);
-	else if (!memcmp(usr_ip6_spec->ip6src, &zero_ipv6_addr_mask,
-			 sizeof(struct in6_addr)))
+	else if (ipv6_addr_any((struct in6_addr *)usr_ip6_spec->ip6src))
 		*perfect_fltr = false;
 	else
 		return -EOPNOTSUPP;
 
-	if (!memcmp(usr_ip6_spec->ip6dst, &full_ipv6_addr_mask,
-		    sizeof(struct in6_addr)))
+	if (ice_ipv6_mask_full(usr_ip6_spec->ip6dst))
 		ice_flow_set_fld(seg, ICE_FLOW_FIELD_IDX_IPV6_DA,
 				 ICE_FLOW_FLD_OFF_INVAL, ICE_FLOW_FLD_OFF_INVAL,
 				 ICE_FLOW_FLD_OFF_INVAL, false);
-	else if (!memcmp(usr_ip6_spec->ip6dst, &zero_ipv6_addr_mask,
-			 sizeof(struct in6_addr)))
+	else if (ipv6_addr_any((struct in6_addr *)usr_ip6_spec->ip6dst))
 		*perfect_fltr = false;
 	else
 		return -EOPNOTSUPP;
