@@ -100,4 +100,4 @@ mod tag_set;
 
 pub use operations::Operations;
 pub use request::Request;
-pub use tag_set::TagSet;
+pub use tag_set::{TagSet, TagSetFlags};
