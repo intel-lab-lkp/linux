@@ -150,7 +150,7 @@ static bool nf_osf_match_one(const struct sk_buff *skb,
 				fmatch = FMATCH_OK;
 			break;
 		case OSF_WSS_MODULO:
-			if ((ctx->window % f->wss.val) == 0)
+			if (f->wss.val == 0 || (ctx->window % f->wss.val) == 0)
 				fmatch = FMATCH_OK;
 			break;
 		}
