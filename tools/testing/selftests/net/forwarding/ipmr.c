@@ -2,7 +2,9 @@
 /* Copyright 2026 Google LLC */
 
 #include <linux/if.h>
+#include <linux/in6.h>
 #include <linux/mroute.h>
+#include <linux/mroute6.h>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 #include <linux/socket.h>
@@ -17,6 +19,14 @@ FIXTURE(ipmr)
 	int netlink_sk;
 	int raw_sk;
 	int veth_ifindex;
+	union {
+		struct vifctl vif;
+		struct mif6ctl vif6;
+	};
+	union {
+		struct mfcctl mfc;
+		struct mf6cctl mfc6;
+	};
 };
 
 FIXTURE_VARIANT(ipmr)
@@ -25,6 +35,11 @@ FIXTURE_VARIANT(ipmr)
 	int protocol;
 	int level;
 	int opts[MRT_MAX - MRT_BASE + 1];
+	int vif_size;
+	char vif_check_cmd_pimreg[64];
+	char vif_check_cmd_veth[64];
+	int mfc_size;
+	char mfc_check_cmd[1024];
 };
 
 FIXTURE_VARIANT_ADD(ipmr, ipv4)
@@ -47,6 +62,39 @@ FIXTURE_VARIANT_ADD(ipmr, ipv4)
 		MRT_DEL_MFC_PROXY,
 		MRT_FLUSH,
 	},
+	.vif_size = sizeof(struct vifctl),
+	.vif_check_cmd_pimreg = "cat /proc/net/ip_mr_vif | grep -q pimreg",
+	.vif_check_cmd_veth = "cat /proc/net/ip_mr_vif | grep -q veth",
+	.mfc_size = sizeof(struct mfcctl),
+	.mfc_check_cmd = "cat /proc/net/ip_mr_cache | grep -q '00000000 00000000'",
+};
+
+FIXTURE_VARIANT_ADD(ipmr, ipv6)
+{
+	.family = AF_INET6,
+	.protocol = IPPROTO_ICMPV6,
+	.level = IPPROTO_IPV6,
+	.opts = {
+		MRT6_INIT,
+		MRT6_DONE,
+		MRT6_ADD_MIF,
+		MRT6_DEL_MIF,
+		MRT6_ADD_MFC,
+		MRT6_DEL_MFC,
+		MRT6_VERSION,
+		MRT6_ASSERT,
+		MRT6_PIM,
+		MRT6_TABLE,
+		MRT6_ADD_MFC_PROXY,
+		MRT6_DEL_MFC_PROXY,
+		MRT_FLUSH,
+	},
+	.vif_size = sizeof(struct mif6ctl),
+	.vif_check_cmd_pimreg = "cat /proc/net/ip6_mr_vif | grep -q pim6reg",
+	.vif_check_cmd_veth = "cat /proc/net/ip6_mr_vif | grep -q veth",
+	.mfc_size = sizeof(struct mf6cctl),
+	.mfc_check_cmd = "cat /proc/net/ip6_mr_cache | "
+		"grep -q '0000:0000:0000:0000:0000:0000:0000:0000 0000:0000:0000:0000:0000:0000:0000:0000'",
 };
 
 struct mfc_attr {
@@ -144,6 +192,18 @@ FIXTURE_SETUP(ipmr)
 	ASSERT_EQ(0, err);
 
 	self->veth_ifindex = ifr.ifr_ifindex;
+
+	if (variant->family == AF_INET) {
+		self->vif = (struct vifctl){
+			.vifc_flags = VIFF_USE_IFINDEX,
+			.vifc_lcl_ifindex = self->veth_ifindex,
+		};
+	} else {
+		self->vif6 = (struct mif6ctl){
+			.mif6c_flags = 0,
+			.mif6c_pifi = self->veth_ifindex,
+		};
+	}
 }
 
 FIXTURE_TEARDOWN(ipmr)
@@ -169,41 +229,39 @@ TEST_F(ipmr, mrt_init)
 
 TEST_F(ipmr, mrt_add_vif_register)
 {
-	struct vifctl vif = {
-		.vifc_vifi = 0,
-		.vifc_flags = VIFF_REGISTER,
-	};
 	int err;
+
+	memset(&self->vif, 0, variant->vif_size);
+
+	if (variant->family == AF_INET)
+		self->vif.vifc_flags = VIFF_REGISTER;
+	else
+		self->vif6.mif6c_flags = MIFF_REGISTER;
 
 	err = setsockopt(self->raw_sk,
 			 variant->level, variant->opts[MRT_ADD_VIF - MRT_BASE],
-			 &vif,  sizeof(vif));
+			 &self->vif,  variant->vif_size);
 	ASSERT_EQ(0, err);
 
-	err = system("cat /proc/net/ip_mr_vif | grep -q pimreg");
+	err = system(variant->vif_check_cmd_pimreg);
 	ASSERT_EQ(0, err);
 
 	err = setsockopt(self->raw_sk,
 			 variant->level, variant->opts[MRT_DEL_VIF - MRT_BASE],
-			 &vif,  sizeof(vif));
+			 &self->vif,  variant->vif_size);
 	ASSERT_EQ(0, err);
 }
 
 TEST_F(ipmr, mrt_del_vif_unreg)
 {
-	struct vifctl vif = {
-		.vifc_vifi = 0,
-		.vifc_flags = VIFF_USE_IFINDEX,
-		.vifc_lcl_ifindex = self->veth_ifindex,
-	};
 	int err;
 
 	err = setsockopt(self->raw_sk,
 			 variant->level, variant->opts[MRT_ADD_VIF - MRT_BASE],
-			 &vif,  sizeof(vif));
+			 &self->vif,  variant->vif_size);
 	ASSERT_EQ(0, err);
 
-	err = system("cat /proc/net/ip_mr_vif | grep -q veth0");
+	err = system(variant->vif_check_cmd_veth);
 	ASSERT_EQ(0, err);
 
 	/* VIF is removed along with its device. */
@@ -213,23 +271,18 @@ TEST_F(ipmr, mrt_del_vif_unreg)
 	/* mrt->vif_table[veth_ifindex]->dev is NULL. */
 	err = setsockopt(self->raw_sk,
 			 variant->level, variant->opts[MRT_DEL_VIF - MRT_BASE],
-			 &vif,  sizeof(vif));
+			 &self->vif,  variant->vif_size);
 	ASSERT_EQ(-1, err);
 	ASSERT_EQ(EADDRNOTAVAIL, errno);
 }
 
 TEST_F(ipmr, mrt_del_vif_netns_dismantle)
 {
-	struct vifctl vif = {
-		.vifc_vifi = 0,
-		.vifc_flags = VIFF_USE_IFINDEX,
-		.vifc_lcl_ifindex = self->veth_ifindex,
-	};
 	int err;
 
 	err = setsockopt(self->raw_sk,
 			 variant->level, variant->opts[MRT_ADD_VIF - MRT_BASE],
-			 &vif,  sizeof(vif));
+			 &self->vif,  variant->vif_size);
 	ASSERT_EQ(0, err);
 
 	/* Let cleanup_net() remove veth0 and VIF. */
@@ -237,49 +290,49 @@ TEST_F(ipmr, mrt_del_vif_netns_dismantle)
 
 TEST_F(ipmr, mrt_add_mfc)
 {
-	struct mfcctl mfc = {};
 	int err;
 
 	/* MRT_ADD_MFC / MRT_ADD_MFC_PROXY does not need vif to exist (unlike netlink). */
 	err = setsockopt(self->raw_sk,
 			 variant->level, variant->opts[MRT_ADD_MFC - MRT_BASE],
-			 &mfc,  sizeof(mfc));
+			 &self->mfc, variant->mfc_size);
 	ASSERT_EQ(0, err);
 
 	/* (0.0.0.0 -> 0.0.0.0) */
-	err = system("cat /proc/net/ip_mr_cache | grep -q '00000000 00000000' ");
+	err = system(variant->mfc_check_cmd);
 	ASSERT_EQ(0, err);
 
 	err = setsockopt(self->raw_sk,
 			 variant->level, variant->opts[MRT_DEL_MFC - MRT_BASE],
-			 &mfc,  sizeof(mfc));
+			 &self->mfc, variant->mfc_size);
 }
 
 TEST_F(ipmr, mrt_add_mfc_proxy)
 {
-	struct mfcctl mfc = {};
 	int err;
 
 	err = setsockopt(self->raw_sk,
 			 variant->level, variant->opts[MRT_ADD_MFC_PROXY - MRT_BASE],
-			 &mfc,  sizeof(mfc));
+			 &self->mfc, variant->mfc_size);
 	ASSERT_EQ(0, err);
 
-	err = system("cat /proc/net/ip_mr_cache | grep -q '00000000 00000000' ");
+	err = system(variant->mfc_check_cmd);
 	ASSERT_EQ(0, err);
 
 	err = setsockopt(self->raw_sk,
 			 variant->level, variant->opts[MRT_DEL_MFC_PROXY - MRT_BASE],
-			 &mfc,  sizeof(mfc));
+			 &self->mfc, variant->mfc_size);
 }
+
+#define SKIP_IPV6()						\
+	do {							\
+		if (variant->family == AF_INET6)		\
+			SKIP(return,				\
+			     "no netlink MFC interface");	\
+	} while (0)
 
 TEST_F(ipmr, mrt_add_mfc_netlink)
 {
-	struct vifctl vif = {
-		.vifc_vifi = 0,
-		.vifc_flags = VIFF_USE_IFINDEX,
-		.vifc_lcl_ifindex = self->veth_ifindex,
-	};
 	struct mfc_attr mfc_attr = {
 		.table = RT_TABLE_DEFAULT,
 		.origin = 0,
@@ -289,15 +342,17 @@ TEST_F(ipmr, mrt_add_mfc_netlink)
 	};
 	int err;
 
+	SKIP_IPV6();
+
 	err = setsockopt(self->raw_sk,
 			 variant->level, variant->opts[MRT_ADD_VIF - MRT_BASE],
-			 &vif,  sizeof(vif));
+			 &self->vif, variant->vif_size);
 	ASSERT_EQ(0, err);
 
 	err = nl_sendmsg_mfc(_metadata, self, RTM_NEWROUTE, &mfc_attr);
 	ASSERT_EQ(0, err);
 
-	err = system("cat /proc/net/ip_mr_cache | grep -q '00000000 00000000' ");
+	err = system(variant->mfc_check_cmd);
 	ASSERT_EQ(0, err);
 
 	err = nl_sendmsg_mfc(_metadata, self, RTM_DELROUTE, &mfc_attr);
@@ -306,11 +361,6 @@ TEST_F(ipmr, mrt_add_mfc_netlink)
 
 TEST_F(ipmr, mrt_add_mfc_netlink_proxy)
 {
-	struct vifctl vif = {
-		.vifc_vifi = 0,
-		.vifc_flags = VIFF_USE_IFINDEX,
-		.vifc_lcl_ifindex = self->veth_ifindex,
-	};
 	struct mfc_attr mfc_attr = {
 		.table = RT_TABLE_DEFAULT,
 		.origin = 0,
@@ -320,15 +370,17 @@ TEST_F(ipmr, mrt_add_mfc_netlink_proxy)
 	};
 	int err;
 
+	SKIP_IPV6();
+
 	err = setsockopt(self->raw_sk,
 			 variant->level, variant->opts[MRT_ADD_VIF - MRT_BASE],
-			 &vif,  sizeof(vif));
+			 &self->vif, variant->vif_size);
 	ASSERT_EQ(0, err);
 
 	err = nl_sendmsg_mfc(_metadata, self, RTM_NEWROUTE, &mfc_attr);
 	ASSERT_EQ(0, err);
 
-	err = system("cat /proc/net/ip_mr_cache | grep -q '00000000 00000000' ");
+	err = system(variant->mfc_check_cmd);
 	ASSERT_EQ(0, err);
 
 	err = nl_sendmsg_mfc(_metadata, self, RTM_DELROUTE, &mfc_attr);
@@ -344,6 +396,8 @@ TEST_F(ipmr, mrt_add_mfc_netlink_no_vif)
 		.proxy = false,
 	};
 	int err;
+
+	SKIP_IPV6();
 
 	/* netlink always requires RTA_IIF of an existing vif. */
 	mfc_attr.ifindex = 0;
@@ -378,6 +432,8 @@ TEST_F(ipmr, mrt_del_mfc_netlink_netns_dismantle)
 	};
 	int i, err;
 
+	SKIP_IPV6();
+
 	for (i = 0; i < 2; i++) {
 		/* Create 2 VIFs just to avoid -ENFILE later. */
 		err = setsockopt(self->raw_sk,
@@ -390,7 +446,7 @@ TEST_F(ipmr, mrt_del_mfc_netlink_netns_dismantle)
 	err = nl_sendmsg_mfc(_metadata, self, RTM_NEWROUTE, &mfc_attr);
 	ASSERT_EQ(0, err);
 
-	err = system("cat /proc/net/ip_mr_cache | grep -q '00000000 00000000' ");
+	err = system(variant->mfc_check_cmd);
 	ASSERT_EQ(0, err);
 
 	/* Remove mrt->vif_table[0]. */
@@ -398,7 +454,7 @@ TEST_F(ipmr, mrt_del_mfc_netlink_netns_dismantle)
 	ASSERT_EQ(0, err);
 
 	/* MFC entry is NOT removed even if the tied VIF is removed... */
-	err = system("cat /proc/net/ip_mr_cache | grep -q '00000000 00000000' ");
+	err = system(variant->mfc_check_cmd);
 	ASSERT_EQ(0, err);
 
 	/* ... and netlink is not capable of removing such an entry
@@ -412,11 +468,6 @@ TEST_F(ipmr, mrt_del_mfc_netlink_netns_dismantle)
 
 TEST_F(ipmr, mrt_table_flush)
 {
-	struct vifctl vif = {
-		.vifc_vifi = 0,
-		.vifc_flags = VIFF_USE_IFINDEX,
-		.vifc_lcl_ifindex = self->veth_ifindex,
-	};
 	struct mfc_attr mfc_attr = {
 		.origin = 0,
 		.group = 0,
@@ -436,11 +487,17 @@ TEST_F(ipmr, mrt_table_flush)
 
 	err = setsockopt(self->raw_sk,
 			 variant->level, variant->opts[MRT_ADD_VIF - MRT_BASE],
-			 &vif,  sizeof(vif));
+			 &self->vif,  variant->vif_size);
 	ASSERT_EQ(0, err);
 
-	mfc_attr.table = table_id;
-	err = nl_sendmsg_mfc(_metadata, self, RTM_NEWROUTE, &mfc_attr);
+	if (variant->family == AF_INET) {
+		mfc_attr.table = table_id;
+		err = nl_sendmsg_mfc(_metadata, self, RTM_NEWROUTE, &mfc_attr);
+	} else {
+		err = setsockopt(self->raw_sk,
+				 variant->level, variant->opts[MRT_ADD_MFC - MRT_BASE],
+				 &self->mfc, variant->mfc_size);
+	}
 	ASSERT_EQ(0, err);
 
 	/* Flush mrt->vif_table[] and all caches. */
