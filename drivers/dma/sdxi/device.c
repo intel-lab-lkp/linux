@@ -16,6 +16,7 @@
 #include <linux/xarray.h>
 
 #include "context.h"
+#include "dma.h"
 #include "hw.h"
 #include "mmio.h"
 #include "sdxi.h"
@@ -290,6 +291,7 @@ static int sdxi_device_init(struct sdxi_dev *sdxi)
 	if (err)
 		return err;
 
+	sdxi_dma_register(sdxi);
 	return 0;
 }
 
