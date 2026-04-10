@@ -1,0 +1,303 @@
+/* SPDX-License-Identifier: BSD-2-Clause or GPL-2.0+ */
+
+/* This file contains definitions related to managing peers (homa_peer
+ * and homa_peertab).
+ */
+
+#ifndef _HOMA_PEER_H
+#define _HOMA_PEER_H
+
+#include "homa_wire.h"
+#include "homa_sock.h"
+
+#include <linux/rhashtable.h>
+
+struct homa_rpc;
+
+/**
+ * struct homa_peertab - Stores homa_peer objects, indexed by IPv6
+ * address. There is one of these per struct homa.
+ */
+struct homa_peertab {
+	/**
+	 * @lock: Used to synchronize updates to @ht as well as other
+	 * operations on this object.
+	 */
+	spinlock_t lock;
+
+	/** @ht: Hash table that stores all struct peers. */
+	struct rhashtable ht;
+
+	/** @ht_iter: Used to scan ht to find peers to garbage collect. */
+	struct rhashtable_iter ht_iter;
+
+	/** @num_peers: Total number of peers currently in @ht. */
+	int num_peers;
+
+	/**
+	 * @ht_valid: True means ht and ht_iter have been initialized and must
+	 * eventually be destroyed.
+	 */
+	bool ht_valid;
+
+	/** @rcu_head: Holds state of a pending call_rcu invocation. */
+	struct rcu_head rcu_head;
+
+	/**
+	 * @gc_stop_count: Nonzero means that peer garbage collection
+	 * should not be performed (conflicting state changes are underway).
+	 */
+	int gc_stop_count;
+
+	/**
+	 * @gc_threshold: If @num_peers is less than this, don't bother
+	 * doing any peer garbage collection. Set externally via sysctl.
+	 */
+	int gc_threshold;
+
+	/**
+	 * @net_max: If the number of peers for a homa_net exceeds this number,
+	 * work aggressively to reclaim peers for that homa_net. Set
+	 * externally via sysctl.
+	 */
+	int net_max;
+
+	/**
+	 * @idle_secs_min: A peer will not be considered for garbage collection
+	 * under any circumstances if it has been idle less than this many
+	 * seconds. Set externally via sysctl.
+	 */
+	int idle_secs_min;
+
+	/**
+	 * @idle_jiffies_min: Same as idle_secs_min except in units
+	 * of jiffies.
+	 */
+	unsigned long idle_jiffies_min;
+
+	/**
+	 * @idle_secs_max: A peer that has been idle for less than
+	 * this many seconds will not be considered for garbage collection
+	 * unless its homa_net has more than @net_threshold peers. Set
+	 * externally via sysctl.
+	 */
+	int idle_secs_max;
+
+	/**
+	 * @idle_jiffies_max: Same as idle_secs_max except in units
+	 * of jiffies.
+	 */
+	unsigned long idle_jiffies_max;
+
+};
+
+/**
+ * struct homa_peer_key - Used to look up homa_peer structs in an rhashtable.
+ */
+struct homa_peer_key {
+	/**
+	 * @addr: Address of the desired host. IPv4 addresses are represented
+	 * with IPv4-mapped IPv6 addresses. Must be the first variable in
+	 * the struct, because of union in homa_peer.
+	 */
+	struct in6_addr addr;
+
+	/** @hnet: The network namespace in which this peer is valid. */
+	struct homa_net *hnet;
+};
+
+/**
+ * struct homa_peer - One of these objects exists for each machine that we
+ * have communicated with (either as client or server).
+ */
+struct homa_peer {
+	union {
+		/**
+		 * @addr: IPv6 address for the machine (IPv4 addresses are
+		 * stored as IPv4-mapped IPv6 addresses).
+		 */
+		struct in6_addr addr;
+
+		/** @ht_key: The hash table key for this peer in peertab->ht. */
+		struct homa_peer_key ht_key;
+	};
+
+	/**
+	 * @refs: Number of outstanding references to this peer. Includes
+	 * one reference for the entry in peertab->ht, plus one for each
+	 * call to homa_peer_get that has not been canceled by a call to
+	 * homa_peer_release; the peer gets freed when this value becomes
+	 * zero.
+	 */
+	refcount_t refs;
+
+	/**
+	 * @access_jiffies: Time in jiffies of most recent access to this
+	 * peer.
+	 */
+	unsigned long access_jiffies;
+
+	/**
+	 * @ht_linkage: Used by rashtable implement to link this peer into
+	 * peertab->ht.
+	 */
+	struct rhash_head ht_linkage;
+
+	/**
+	 * @lock: used to synchronize access to fields in this struct, such
+	 * as @num_acks, @acks, @dst, and @dst_cookie.
+	 */
+	spinlock_t lock ____cacheline_aligned_in_smp;
+
+	/**
+	 * @num_acks: the number of (initial) entries in @acks that
+	 * currently hold valid information.
+	 */
+	int num_acks;
+
+	/**
+	 * @acks: info about client RPCs whose results have been completely
+	 * received.
+	 */
+	struct homa_ack acks[HOMA_MAX_ACKS_PER_PKT];
+
+	/**
+	 * @dst: Used to route packets to this peer; this object owns a
+	 * reference that must eventually be released.
+	 */
+	struct dst_entry __rcu *dst;
+
+	/**
+	 * @dst_cookie: Used to check whether dst is still valid. This is
+	 * accessed without synchronization, which is racy, but the worst
+	 * that can happen is using an obsolete dst.
+	 */
+	u32 dst_cookie;
+
+	/**
+	 * @flow: Addressing info used to create @dst and also required
+	 * when transmitting packets.
+	 */
+	struct flowi flow;
+
+	/**
+	 * @outstanding_resends: the number of resend requests we have
+	 * sent to this server (spaced @homa.resend_interval apart) since
+	 * we received a packet from this peer.
+	 */
+	int outstanding_resends;
+
+	/**
+	 * @most_recent_resend: @homa->timer_ticks when the most recent
+	 * resend was sent to this peer.
+	 */
+	int most_recent_resend;
+
+	/**
+	 * @least_recent_rpc: of all the RPCs for this peer scanned at
+	 * @current_ticks, this is the RPC whose @resend_timer_ticks
+	 * is farthest in the past.
+	 */
+	struct homa_rpc *least_recent_rpc;
+
+	/**
+	 * @least_recent_ticks: the @resend_timer_ticks value for
+	 * @least_recent_rpc.
+	 */
+	u32 least_recent_ticks;
+
+	/**
+	 * @current_ticks: the value of @homa->timer_ticks the last time
+	 * that @least_recent_rpc and @least_recent_ticks were computed.
+	 * Used to detect the start of a new homa_timer pass.
+	 */
+	u32 current_ticks;
+
+	/**
+	 * @resend_rpc: the value of @least_recent_rpc computed in the
+	 * previous homa_timer pass. This RPC will be issued a RESEND
+	 * in the current pass, if it still needs one.
+	 */
+	struct homa_rpc *resend_rpc;
+
+	/** @rcu_head: Holds state of a pending call_rcu invocation. */
+	struct rcu_head rcu_head;
+};
+
+void     homa_dst_refresh(struct homa_peertab *peertab,
+			  struct homa_peer *peer, struct homa_sock *hsk);
+struct dst_entry
+	*homa_get_dst(struct homa_peer *peer, struct homa_sock *hsk);
+void     homa_peer_add_ack(struct homa_rpc *rpc);
+struct homa_peer
+	*homa_peer_alloc(struct homa_sock *hsk, const struct in6_addr *addr);
+struct homa_peertab
+	*homa_peer_alloc_peertab(void);
+int      homa_peer_dointvec(const struct ctl_table *table, int write,
+			    void *buffer, size_t *lenp, loff_t *ppos);
+void     homa_peer_free(struct rcu_head *head);
+void     homa_peer_free_net(struct homa_net *hnet);
+void     homa_peer_free_peertab(struct homa_peertab *peertab);
+void     homa_peer_gc(struct homa_peertab *peertab);
+struct homa_peer
+	*homa_peer_get(struct homa_sock *hsk, const struct in6_addr *addr);
+int      homa_peer_get_acks(struct homa_peer *peer, int count,
+			    struct homa_ack *dst);
+int      homa_peer_pick_victims(struct homa_peertab *peertab,
+				struct homa_peer *victims[], int max_victims);
+int      homa_peer_prefer_evict(struct homa_peertab *peertab,
+				struct homa_peer *peer1,
+				struct homa_peer *peer2);
+void     homa_peer_release_fn(void *object, void *dummy);
+int      homa_peer_reset_dst(struct homa_peer *peer, struct homa_sock *hsk);
+void     homa_peer_update_sysctl_deps(struct homa_peertab *peertab);
+
+/**
+ * homa_peer_lock() - Acquire the lock for a peer.
+ * @peer:    Peer to lock.
+ */
+static inline void homa_peer_lock(struct homa_peer *peer)
+	__acquires(peer->lock)
+{
+	spin_lock_bh(&peer->lock);
+}
+
+/**
+ * homa_peer_unlock() - Release the lock for a peer.
+ * @peer:   Peer to lock.
+ */
+static inline void homa_peer_unlock(struct homa_peer *peer)
+	__releases(peer->lock)
+{
+	spin_unlock_bh(&peer->lock);
+}
+
+/**
+ * homa_peer_release() - Release a reference on a peer (cancels the effect of
+ * a previous call to homa_peer_hold). If the reference count becomes zero
+ * then the peer may be deleted at any time.
+ * @peer:      Object to release.
+ */
+static inline void homa_peer_release(struct homa_peer *peer)
+{
+	if (refcount_dec_and_test(&peer->refs))
+		call_rcu(&peer->rcu_head, homa_peer_free);
+}
+
+/**
+ * homa_peer_compare() - Comparison function for entries in @peertab->ht.
+ * @arg:   Contains one of the keys to compare.
+ * @obj:   homa_peer object containing the other key to compare.
+ * Return: 0 means the keys match, 1 means mismatch.
+ */
+static inline int homa_peer_compare(struct rhashtable_compare_arg *arg,
+				    const void *obj)
+{
+	const struct homa_peer_key *key = arg->key;
+	const struct homa_peer *peer = obj;
+
+	return !(ipv6_addr_equal(&key->addr, &peer->ht_key.addr) &&
+		 peer->ht_key.hnet == key->hnet);
+}
+
+#endif /* _HOMA_PEER_H */
