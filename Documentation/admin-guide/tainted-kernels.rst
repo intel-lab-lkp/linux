@@ -63,7 +63,7 @@ this on the machine that had the statements in the logs that were quoted earlier
 	 * Externally-built ('out-of-tree') module was loaded  (#12)
 	See Documentation/admin-guide/tainted-kernels.rst in the Linux kernel or
 	 https://www.kernel.org/doc/html/latest/admin-guide/tainted-kernels.html for
-	 a more details explanation of the various taint flags.
+	 a more detailed explanation of the various taint flags.
 	Raw taint value as int/string: 4609/'P        W  O     '
 
 You can try to decode the number yourself. That's easy if there was only one
