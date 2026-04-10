@@ -408,7 +408,7 @@ static struct ntfs_inode *__ntfs_create(struct mnt_idmap *idmap, struct inode *d
 	struct super_block *sb = dir_ni->vol->sb;
 	__le64 parent_mft_ref;
 	u64 child_mft_ref;
-	__le16 ea_size;
+	__le16 ea_size = 0;
 
 	vi = new_inode(vol->sb);
 	if (!vi)
