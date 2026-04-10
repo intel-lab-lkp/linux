@@ -209,7 +209,9 @@ int folio_alloc_swap(struct folio *folio);
 int folio_dup_swap(struct folio *folio);
 int folio_dup_swap_pages(struct folio *folio, struct page *page,
 			 unsigned long nr_pages);
-void folio_put_swap(struct folio *folio, struct page *subpage);
+void folio_put_swap(struct folio *folio);
+void folio_put_swap_pages(struct folio *folio, struct page *page,
+			  unsigned long nr_pages);
 
 /* For internal use */
 extern void __swap_cluster_free_entries(struct swap_info_struct *si,
@@ -403,7 +405,12 @@ static inline int folio_dup_swap_pages(struct folio *folio, struct page *page,
 	return -EINVAL;
 }
 
-static inline void folio_put_swap(struct folio *folio, struct page *page)
+static inline void folio_put_swap(struct folio *folio)
+{
+}
+
+static inline void folio_put_swap_pages(struct folio *folio, struct page *page,
+				  unsigned long nr_pages)
 {
 }
 
