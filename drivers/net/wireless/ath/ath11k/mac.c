@@ -2383,7 +2383,7 @@ static void ath11k_peer_assoc_h_he(struct ath11k *ar,
 		return;
 
 	arg->he_flag = true;
-	support_160 = !!(he_cap->he_cap_elem.phy_cap_info[0] &
+	support_160 = band != NL80211_BAND_2GHZ && !!(he_cap->he_cap_elem.phy_cap_info[0] &
 		  IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_160MHZ_IN_5G);
 
 	/* Supported HE-MCS and NSS Set of peer he_cap is intersection with self he_cp */
@@ -8683,13 +8683,14 @@ ath11k_mac_has_single_legacy_rate(struct ath11k *ar,
 }
 
 static __le16
-ath11k_mac_get_tx_mcs_map(const struct ieee80211_sta_he_cap *he_cap)
+ath11k_mac_get_tx_mcs_map(const struct ieee80211_sta_he_cap *he_cap,
+			  enum nl80211_band band)
 {
-	if (he_cap->he_cap_elem.phy_cap_info[0] &
+	if (band != NL80211_BAND_2GHZ && he_cap->he_cap_elem.phy_cap_info[0] &
 	    IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_80PLUS80_MHZ_IN_5G)
 		return he_cap->he_mcs_nss_supp.tx_mcs_80p80;
 
-	if (he_cap->he_cap_elem.phy_cap_info[0] &
+	if (band != NL80211_BAND_2GHZ && he_cap->he_cap_elem.phy_cap_info[0] &
 	    IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_160MHZ_IN_5G)
 		return he_cap->he_mcs_nss_supp.tx_mcs_160;
 
@@ -8740,7 +8741,7 @@ ath11k_mac_bitrate_mask_get_single_nss(struct ath11k *ar,
 	if (!he_cap)
 		return false;
 
-	he_mcs_map = le16_to_cpu(ath11k_mac_get_tx_mcs_map(he_cap));
+	he_mcs_map = le16_to_cpu(ath11k_mac_get_tx_mcs_map(he_cap, sband->band));
 
 	for (i = 0; i < ARRAY_SIZE(mask->control[band].he_mcs); i++) {
 		if (mask->control[band].he_mcs[i] == 0)
