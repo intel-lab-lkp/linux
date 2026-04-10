@@ -207,6 +207,15 @@ failed:
 	return false;
 }
 
+static void page_counter_cancel_hierarchy(struct page_counter *counter,
+					  unsigned long nr_pages)
+{
+	struct page_counter *c;
+
+	for (c = counter; c; c = c->parent)
+		page_counter_cancel(c, nr_pages);
+}
+
 /**
  * page_counter_uncharge - hierarchically uncharge pages
  * @counter: counter
@@ -214,10 +223,23 @@ failed:
  */
 void page_counter_uncharge(struct page_counter *counter, unsigned long nr_pages)
 {
-	struct page_counter *c;
+	unsigned long charge = nr_pages;
 
-	for (c = counter; c; c = c->parent)
-		page_counter_cancel(c, nr_pages);
+	if (counter->stock && local_trylock(&counter->stock->lock)) {
+		struct page_counter_stock *stock = this_cpu_ptr(counter->stock);
+
+		stock->nr_pages += nr_pages;
+		if (stock->nr_pages > counter->batch) {
+			charge = stock->nr_pages - counter->batch;
+			stock->nr_pages = counter->batch;
+			local_unlock(&counter->stock->lock);
+		} else {
+			local_unlock(&counter->stock->lock);
+			return;
+		}
+	}
+
+	page_counter_cancel_hierarchy(counter, charge);
 }
 
 /**
@@ -364,12 +386,8 @@ void page_counter_disable_stock(struct page_counter *counter)
 		stock_to_drain += stock->nr_pages;
 	}
 
-	if (stock_to_drain) {
-		struct page_counter *c;
-
-		for (c = counter; c; c = c->parent)
-			page_counter_cancel(c, stock_to_drain);
-	}
+	if (stock_to_drain)
+		page_counter_cancel_hierarchy(counter, stock_to_drain);
 
 	/* This prevents future charges from trying to deposit pages */
 	counter->batch = 0;
