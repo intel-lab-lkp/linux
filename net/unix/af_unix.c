@@ -3305,6 +3305,8 @@ static int unix_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			int answ = 0;
 
 			mutex_lock(&u->iolock);
+			/* The receive queue lock keeps skb and next_skb alive. */
+			spin_lock(&sk->sk_receive_queue.lock);
 
 			skb = skb_peek(&sk->sk_receive_queue);
 			if (skb) {
@@ -3319,6 +3321,7 @@ static int unix_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 					answ = 1;
 			}
 
+			spin_unlock(&sk->sk_receive_queue.lock);
 			mutex_unlock(&u->iolock);
 
 			err = put_user(answ, (int __user *)arg);
