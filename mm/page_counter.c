@@ -421,10 +421,7 @@ static long page_counter_drain_stock_cpu(void *arg)
 
 	return 0;
 }
-/*
- * Drain per-cpu stock across all online CPUs. Caller (drain_all_stock) is
- * already protected by a mutex, all future callers must serialize as well.
- */
+
 void page_counter_drain_stock(struct page_counter *counter)
 {
 	int cpu;
