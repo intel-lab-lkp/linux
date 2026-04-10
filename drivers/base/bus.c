@@ -728,7 +728,7 @@ int bus_add_driver(struct device_driver *drv)
 	struct driver_private *priv;
 	int error = 0;
 
-	if (!sp)
+	if (!sp || !sp->drivers_kset)
 		return -EINVAL;
 
 	/*
@@ -923,15 +923,7 @@ static ssize_t bus_uevent_store(const struct bus_type *bus,
 static struct bus_attribute bus_attr_uevent = __ATTR(uevent, 0200, NULL,
 						     bus_uevent_store);
 
-/**
- * bus_register - register a driver-core subsystem
- * @bus: bus to register
- *
- * Once we have that, we register the bus with the kobject
- * infrastructure, then register the children subsystems it has:
- * the devices and drivers that belong to the subsystem.
- */
-int bus_register(const struct bus_type *bus)
+static int bus_register_internal(const struct bus_type *bus, bool has_drivers)
 {
 	int retval;
 	struct subsys_private *priv;
@@ -953,7 +945,7 @@ int bus_register(const struct bus_type *bus)
 
 	bus_kobj->kset = bus_kset;
 	bus_kobj->ktype = &bus_ktype;
-	priv->drivers_autoprobe = 1;
+	priv->drivers_autoprobe = has_drivers;
 
 	retval = kset_register(&priv->subsys);
 	if (retval)
@@ -969,10 +961,12 @@ int bus_register(const struct bus_type *bus)
 		goto bus_devices_fail;
 	}
 
-	priv->drivers_kset = kset_create_and_add("drivers", NULL, bus_kobj);
-	if (!priv->drivers_kset) {
-		retval = -ENOMEM;
-		goto bus_drivers_fail;
+	if (has_drivers) {
+		priv->drivers_kset = kset_create_and_add("drivers", NULL, bus_kobj);
+		if (!priv->drivers_kset) {
+			retval = -ENOMEM;
+			goto bus_drivers_fail;
+		}
 	}
 
 	INIT_LIST_HEAD(&priv->interfaces);
@@ -982,9 +976,11 @@ int bus_register(const struct bus_type *bus)
 	klist_init(&priv->klist_devices, klist_devices_get, klist_devices_put);
 	klist_init(&priv->klist_drivers, NULL, NULL);
 
-	retval = add_probe_files(bus);
-	if (retval)
-		goto bus_probe_files_fail;
+	if (has_drivers) {
+		retval = add_probe_files(bus);
+		if (retval)
+			goto bus_probe_files_fail;
+	}
 
 	retval = sysfs_create_groups(bus_kobj, bus->bus_groups);
 	if (retval)
@@ -1008,6 +1004,28 @@ bus_uevent_fail:
 out:
 	kfree(priv);
 	return retval;
+}
+
+/**
+ * bus_register_fake - register a "fake" bus type without drivers
+ * @bus: bus to register
+ */
+int bus_register_fake(const struct bus_type *bus)
+{
+	return bus_register_internal(bus, false);
+}
+
+/**
+ * bus_register - register a driver-core subsystem
+ * @bus: bus to register
+ *
+ * Once we have that, we register the bus with the kobject
+ * infrastructure, then register the children subsystems it has:
+ * the devices and drivers that belong to the subsystem.
+ */
+int bus_register(const struct bus_type *bus)
+{
+	return bus_register_internal(bus, true);
 }
 EXPORT_SYMBOL_GPL(bus_register);
 
@@ -1405,7 +1423,7 @@ struct device_driver *driver_find(const char *name, const struct bus_type *bus)
 	struct kobject *k;
 	struct driver_private *priv;
 
-	if (!sp)
+	if (!sp || !sp->drivers_kset)
 		return NULL;
 
 	k = kset_find_obj(sp->drivers_kset, name);
