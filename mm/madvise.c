@@ -1008,8 +1008,6 @@ static long madvise_remove(struct madvise_behavior *madv_behavior)
 	unsigned long start = madv_behavior->range.start;
 	unsigned long end = madv_behavior->range.end;
 
-	mark_mmap_lock_dropped(madv_behavior);
-
 	if (vma->vm_flags & VM_LOCKED)
 		return -EINVAL;
 
@@ -1024,6 +1022,20 @@ static long madvise_remove(struct madvise_behavior *madv_behavior)
 
 	offset = (loff_t)(start - vma->vm_start)
 			+ ((loff_t)vma->vm_pgoff << PAGE_SHIFT);
+
+	/* Avoid calling into the filesystem while holding a VMA lock. */
+	if (madv_behavior->lock_mode == MADVISE_VMA_READ_LOCK) {
+		get_file(f);
+		vma_end_read(vma);
+		madv_behavior->vma = NULL;
+		error = vfs_fallocate(f,
+				FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE,
+				offset, end - start);
+		fput(f);
+		return error;
+	}
+
+	mark_mmap_lock_dropped(madv_behavior);
 
 	/*
 	 * Filesystem's fallocate may need to take i_rwsem.  We need to
@@ -1677,7 +1689,8 @@ int madvise_walk_vmas(struct madvise_behavior *madv_behavior)
 	if (madv_behavior->lock_mode == MADVISE_VMA_READ_LOCK &&
 	    try_vma_read_lock(madv_behavior)) {
 		error = madvise_vma_behavior(madv_behavior);
-		vma_end_read(madv_behavior->vma);
+		if (madv_behavior->vma)
+			vma_end_read(madv_behavior->vma);
 		return error;
 	}
 
@@ -1746,7 +1759,6 @@ static enum madvise_lock_mode get_lock_mode(struct madvise_behavior *madv_behavi
 		return MADVISE_NO_LOCK;
 
 	switch (madv_behavior->behavior) {
-	case MADV_REMOVE:
 	case MADV_WILLNEED:
 	case MADV_COLD:
 	case MADV_PAGEOUT:
@@ -1754,6 +1766,7 @@ static enum madvise_lock_mode get_lock_mode(struct madvise_behavior *madv_behavi
 	case MADV_POPULATE_WRITE:
 	case MADV_COLLAPSE:
 		return MADVISE_MMAP_READ_LOCK;
+	case MADV_REMOVE:
 	case MADV_GUARD_INSTALL:
 	case MADV_GUARD_REMOVE:
 	case MADV_DONTNEED:
