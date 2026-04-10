@@ -2137,7 +2137,8 @@ nl80211_send_iftype_data(struct sk_buff *msg,
 		mcs_nss_size =
 			ieee80211_eht_mcs_nss_size(&he_cap->he_cap_elem,
 						   &eht_cap->eht_cap_elem,
-						   is_ap);
+						   is_ap,
+						   sband->band);
 
 		ppe_thres_hdr = get_unaligned_le16(&eht_cap->eht_ppe_thres[0]);
 		ppe_thresh_size =
@@ -5919,7 +5920,8 @@ static bool eht_set_mcs_mask(struct genl_info *info, struct wireless_dev *wdev,
 	mcs_nss_len = ieee80211_eht_mcs_nss_size(&he_cap->he_cap_elem,
 						 &eht_cap->eht_cap_elem,
 						 wdev->iftype ==
-							NL80211_IFTYPE_STATION);
+							NL80211_IFTYPE_STATION,
+						 sband->band);
 
 	if (mcs_nss_len == 3) {
 		/* Supported iftypes for setting non-20 MHZ only EHT MCS */
@@ -6007,7 +6009,8 @@ static int nl80211_parse_tx_bitrate_mask(struct genl_info *info,
 		mcs_nss_len = ieee80211_eht_mcs_nss_size(&he_cap->he_cap_elem,
 							 &eht_cap->eht_cap_elem,
 							 wdev->iftype ==
-							 NL80211_IFTYPE_STATION);
+								NL80211_IFTYPE_STATION,
+							 sband->band);
 
 		eht_build_mcs_mask(info, eht_cap, mcs_nss_len,
 				   mask->control[i].eht_mcs);
@@ -6686,7 +6689,9 @@ static int nl80211_calculate_ap_params(struct cfg80211_ap_settings *params)
 		params->eht_cap = (void *)(cap->data + 1);
 		if (!ieee80211_eht_capa_size_ok((const u8 *)params->he_cap,
 						(const u8 *)params->eht_cap,
-						cap->datalen - 1, true))
+						cap->datalen - 1,
+						true,
+						params->chandef.chan->band))
 			return -EINVAL;
 	}
 	cap = cfg80211_find_ext_elem(WLAN_EID_EXT_EHT_OPERATION, ies, ies_len);

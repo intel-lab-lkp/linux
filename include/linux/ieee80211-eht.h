@@ -17,6 +17,7 @@
 
 #include <linux/types.h>
 #include <linux/if_ether.h>
+#include <linux/nl80211.h>
 /* need HE definitions for the inlines here */
 #include <linux/ieee80211-he.h>
 
@@ -283,31 +284,41 @@ struct ieee80211_eht_operation_info {
 static inline u8
 ieee80211_eht_mcs_nss_size(const struct ieee80211_he_cap_elem *he_cap,
 			   const struct ieee80211_eht_cap_elem_fixed *eht_cap,
-			   bool from_ap)
+			   bool from_ap,
+			   enum nl80211_band band)
 {
 	u8 count = 0;
 
-	/* on 2.4 GHz, if it supports 40 MHz, the result is 3 */
-	if (he_cap->phy_cap_info[0] &
-	    IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_IN_2G)
-		return 3;
+	switch (band) {
+	case NL80211_BAND_2GHZ:
+		if (from_ap || he_cap->phy_cap_info[0] &
+		    IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_IN_2G)
+			count += 3;
+		else
+			count = 4;
+	break;
+	case NL80211_BAND_6GHZ:
+		if (eht_cap->phy_cap_info[0] & IEEE80211_EHT_PHY_CAP0_320MHZ_IN_6GHZ)
+			count += 3;
+	fallthrough;
+	case NL80211_BAND_5GHZ:
+		if (he_cap->phy_cap_info[0] &
+		    IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_160MHZ_IN_5G)
+			count += 3;
+		if (he_cap->phy_cap_info[0] &
+		    IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_80MHZ_IN_5G)
+			count += 3;
+		if (!from_ap && (he_cap->phy_cap_info[0] &
+		    (IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_80MHZ_IN_5G |
+		    IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_160MHZ_IN_5G |
+		    IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_80PLUS80_MHZ_IN_5G)) == 0)
+			count = 4;
+	break;
+	default:
+	break;
+	}
 
-	/* on 2.4 GHz, these three bits are reserved, so should be 0 */
-	if (he_cap->phy_cap_info[0] &
-	    IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_80MHZ_IN_5G)
-		count += 3;
-
-	if (he_cap->phy_cap_info[0] &
-	    IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_160MHZ_IN_5G)
-		count += 3;
-
-	if (eht_cap->phy_cap_info[0] & IEEE80211_EHT_PHY_CAP0_320MHZ_IN_6GHZ)
-		count += 3;
-
-	if (count)
-		return count;
-
-	return from_ap ? 3 : 4;
+	return count;
 }
 
 /* 802.11be EHT PPE Thresholds */
@@ -344,7 +355,7 @@ ieee80211_eht_ppe_size(u16 ppe_thres_hdr, const u8 *phy_cap_info)
 
 static inline bool
 ieee80211_eht_capa_size_ok(const u8 *he_capa, const u8 *data, u8 len,
-			   bool from_ap)
+			   bool from_ap, enum nl80211_band band)
 {
 	const struct ieee80211_eht_cap_elem_fixed *elem = (const void *)data;
 	u8 needed = sizeof(struct ieee80211_eht_cap_elem_fixed);
@@ -354,7 +365,8 @@ ieee80211_eht_capa_size_ok(const u8 *he_capa, const u8 *data, u8 len,
 
 	needed += ieee80211_eht_mcs_nss_size((const void *)he_capa,
 					     (const void *)data,
-					     from_ap);
+					     from_ap,
+					     band);
 	if (len < needed)
 		return false;
 

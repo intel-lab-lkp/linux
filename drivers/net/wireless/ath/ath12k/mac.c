@@ -12537,7 +12537,8 @@ ath12k_mac_bitrate_mask_get_single_nss(struct ath12k *ar,
 
 	mcs_nss_len = ieee80211_eht_mcs_nss_size(&data->he_cap.he_cap_elem,
 						 &data->eht_cap.eht_cap_elem,
-						 false);
+						 false,
+						 sband->band);
 	if (mcs_nss_len == 4) {
 		/* 20 MHz only STA case */
 		const struct ieee80211_eht_mcs_nss_supp_20mhz_only *eht_mcs_nss =
