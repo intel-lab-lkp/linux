@@ -2641,6 +2641,7 @@ ice_set_link_ksettings(struct net_device *netdev,
 	u8 autoneg_changed = 0;
 	u64 phy_type_high = 0;
 	u64 phy_type_low = 0;
+	bool lenient_mode;
 	bool linkup;
 	int err;
 
@@ -2649,10 +2650,14 @@ ice_set_link_ksettings(struct net_device *netdev,
 	if (!pi)
 		return -EIO;
 
-	if (pi->phy.media_type != ICE_MEDIA_BASET &&
-	    pi->phy.media_type != ICE_MEDIA_FIBER &&
-	    pi->phy.media_type != ICE_MEDIA_BACKPLANE &&
-	    pi->phy.media_type != ICE_MEDIA_DA &&
+	lenient_mode = test_bit(ICE_FLAG_LINK_LENIENT_MODE_ENA, pf->flags);
+
+	/* Setting the speed and duplex advertised by autonegotiation is
+	 * supported for all media types, so only return unsupported for media
+	 * type none or unknown in strict mode.
+	 */
+	if ((pi->phy.media_type == ICE_MEDIA_NONE ||
+	     (pi->phy.media_type == ICE_MEDIA_UNKNOWN && !lenient_mode)) &&
 	    pi->phy.link_info.link_info & ICE_AQ_LINK_UP)
 		return -EOPNOTSUPP;
 
@@ -2682,7 +2687,7 @@ ice_set_link_ksettings(struct net_device *netdev,
 	if (!bitmap_subset(copy_ks.link_modes.advertising,
 			   safe_ks.link_modes.supported,
 			   __ETHTOOL_LINK_MODE_MASK_NBITS)) {
-		if (!test_bit(ICE_FLAG_LINK_LENIENT_MODE_ENA, pf->flags))
+		if (!lenient_mode)
 			netdev_info(netdev, "The selected speed is not supported by the current media. Please select a link speed that is supported by the current media.\n");
 		err = -EOPNOTSUPP;
 		goto done;
@@ -2783,7 +2788,7 @@ ice_set_link_ksettings(struct net_device *netdev,
 		 * intersect the requested advertised speed with NVM media type
 		 * PHY types.
 		 */
-		if (test_bit(ICE_FLAG_LINK_LENIENT_MODE_ENA, pf->flags)) {
+		if (lenient_mode) {
 			config.phy_type_high = cpu_to_le64(phy_type_high) &
 					       pf->nvm_phy_type_hi;
 			config.phy_type_low = cpu_to_le64(phy_type_low) &
