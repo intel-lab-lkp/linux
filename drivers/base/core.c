@@ -1106,7 +1106,9 @@ int device_links_check_suppliers(struct device *dev)
  * Queues a device for a sync_state() callback when the device links write lock
  * isn't held. This allows the sync_state() execution flow to use device links
  * APIs.  The caller must ensure this function is called with
- * device_links_write_lock() held.
+ * device_links_write_lock() held.  Note, if the optional queue_sync_state()
+ * callback has been assigned too, it gets called for every update to allowing a
+ * more fine grained support to be implemented on per supplier basis.
  *
  * This function does a get_device() to make sure the device is not freed while
  * on this list.
@@ -1125,6 +1127,9 @@ static void __device_links_queue_sync_state(struct device *dev,
 		return;
 	if (dev->state_synced)
 		return;
+
+	if (dev->driver && dev->driver->queue_sync_state)
+		dev->driver->queue_sync_state(dev);
 
 	list_for_each_entry(link, &dev->links.consumers, s_node) {
 		if (!device_link_test(link, DL_FLAG_MANAGED))
