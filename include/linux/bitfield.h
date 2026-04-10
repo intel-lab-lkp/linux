@@ -45,6 +45,7 @@
  */
 
 #define __bf_shf(x) (__builtin_ffsll(x) - 1)
+#define __bf_low_bit(mask) ((mask) & (~(mask) + 1))
 
 #define __scalar_type_to_unsigned_cases(type)				\
 		unsigned type:	(unsigned type)0,			\
@@ -138,8 +139,6 @@
 		__FIELD_PREP(_mask, _val, "FIELD_PREP: ");		\
 	})
 
-#define __BF_CHECK_POW2(n)	BUILD_BUG_ON_ZERO(((n) & ((n) - 1)) != 0)
-
 /**
  * FIELD_PREP_CONST() - prepare a constant bitfield element
  * @_mask: shifted mask defining the field's length and position
@@ -157,11 +156,11 @@
 		/* mask must be non-zero */				\
 		BUILD_BUG_ON_ZERO((_mask) == 0) +			\
 		/* check if value fits */				\
-		BUILD_BUG_ON_ZERO(~((_mask) >> __bf_shf(_mask)) & (_val)) + \
+		BUILD_BUG_ON_ZERO(~((_mask) / __bf_low_bit(_mask)) & (_val)) + \
 		/* check if mask is contiguous */			\
-		__BF_CHECK_POW2((_mask) + (1ULL << __bf_shf(_mask))) +	\
+		BUILD_BUG_ON_ZERO((_mask) & ((_mask) + __bf_low_bit(_mask))) + \
 		/* and create the value */				\
-		(((typeof(_mask))(_val) << __bf_shf(_mask)) & (_mask))	\
+		(((_val) * __bf_low_bit(_mask)) & (_mask))		\
 	)
 
 /**
