@@ -1958,11 +1958,11 @@ static inline unsigned int folio_unmap_pte_batch(struct folio *folio,
 	end_addr = pmd_addr_end(addr, vma->vm_end);
 	max_nr = (end_addr - addr) >> PAGE_SHIFT;
 
-	/* We only support lazyfree or file folios batching for now ... */
-	if (folio_test_anon(folio) && folio_test_swapbacked(folio))
+	if (pte_unused(pte))
 		return 1;
 
-	if (pte_unused(pte))
+	if (__is_defined(__HAVE_ARCH_UNMAP_ONE) && folio_test_anon(folio) &&
+	    folio_test_swapbacked(folio))
 		return 1;
 
 	/*
@@ -1973,6 +1973,122 @@ static inline unsigned int folio_unmap_pte_batch(struct folio *folio,
 	 */
 	return folio_pte_batch_flags(folio, vma, pvmw->pte, &pte, max_nr,
 				     FPB_RESPECT_WRITE | FPB_RESPECT_SOFT_DIRTY);
+}
+
+static inline void set_swp_ptes(struct mm_struct *mm, unsigned long address,
+		pte_t *ptep, swp_entry_t entry, pte_t pteval, bool anon_exclusive,
+		unsigned long nr_pages)
+{
+	pte_t swp_pte = swp_entry_to_pte(entry);
+
+	if (anon_exclusive)
+		swp_pte = pte_swp_mkexclusive(swp_pte);
+
+	if (likely(pte_present(pteval))) {
+		if (pte_soft_dirty(pteval))
+			swp_pte = pte_swp_mksoft_dirty(swp_pte);
+		if (pte_uffd_wp(pteval))
+			swp_pte = pte_swp_mkuffd_wp(swp_pte);
+	} else {
+		/* Device-exclusive entry */
+		VM_WARN_ON(nr_pages != 1);
+		if (pte_swp_soft_dirty(pteval))
+			swp_pte = pte_swp_mksoft_dirty(swp_pte);
+		if (pte_swp_uffd_wp(pteval))
+			swp_pte = pte_swp_mkuffd_wp(swp_pte);
+	}
+
+	for (int i = 0; i < nr_pages; ++i, ++ptep, address += PAGE_SIZE) {
+		set_pte_at(mm, address, ptep, swp_pte);
+		swp_pte = pte_next_swp_offset(swp_pte);
+	}
+}
+
+static inline void finish_folio_unmap(struct vm_area_struct *vma,
+		struct folio *folio, struct page *subpage, unsigned long nr_pages)
+{
+	if (unlikely(folio_test_hugetlb(folio)))
+		hugetlb_remove_rmap(folio);
+	else
+		folio_remove_rmap_ptes(folio, subpage, nr_pages, vma);
+	if (vma->vm_flags & VM_LOCKED)
+		mlock_drain_local();
+	folio_put_refs(folio, nr_pages);
+}
+
+static inline bool __unmap_anon_folio_range(struct vm_area_struct *vma, struct folio *folio,
+		struct page *subpage, unsigned long address, pte_t *ptep,
+		pte_t pteval, unsigned long nr_pages, bool anon_exclusive)
+{
+	swp_entry_t entry = page_swap_entry(subpage);
+	struct mm_struct *mm = vma->vm_mm;
+
+	if (folio_dup_swap_pages(folio, subpage, nr_pages) < 0) {
+		set_ptes(mm, address, ptep, pteval, nr_pages);
+		return false;
+	}
+
+	/*
+	 * arch_unmap_one() is expected to be a NOP on
+	 * architectures where we could have PFN swap PTEs,
+	 * so we'll not check/care.
+	 */
+	if (arch_unmap_one(mm, vma, address, pteval) < 0) {
+		VM_WARN_ON(nr_pages != 1);
+		folio_put_swap_pages(folio, subpage, nr_pages);
+		set_pte_at(mm, address, ptep, pteval);
+		return false;
+	}
+
+	/* See folio_try_share_anon_rmap(): clear PTE first. */
+	if (anon_exclusive && folio_try_share_anon_rmap_ptes(folio, subpage, nr_pages)) {
+		folio_put_swap_pages(folio, subpage, nr_pages);
+		set_ptes(mm, address, ptep, pteval, nr_pages);
+		return false;
+	}
+
+	if (list_empty(&mm->mmlist)) {
+		spin_lock(&mmlist_lock);
+		if (list_empty(&mm->mmlist))
+			list_add(&mm->mmlist, &init_mm.mmlist);
+		spin_unlock(&mmlist_lock);
+	}
+
+	add_mm_counter(mm, MM_ANONPAGES, -nr_pages);
+	add_mm_counter(mm, MM_SWAPENTS, nr_pages);
+	set_swp_ptes(mm, address, ptep, entry, pteval, anon_exclusive, nr_pages);
+	finish_folio_unmap(vma, folio, subpage, nr_pages);
+	return true;
+}
+
+static inline bool unmap_anon_folio_range(struct vm_area_struct *vma, struct folio *folio,
+		struct page *first_page, unsigned long address, pte_t *ptep,
+		pte_t pteval, unsigned long nr_pages)
+{
+	bool expected_anon_exclusive;
+	int sub_batch_idx = 0;
+	int len, ret;
+
+	for (;;) {
+		expected_anon_exclusive = PageAnonExclusive(first_page + sub_batch_idx);
+		len = page_anon_exclusive_sub_batch(sub_batch_idx, nr_pages,
+						    first_page, expected_anon_exclusive);
+		ret = __unmap_anon_folio_range(vma, folio, first_page + sub_batch_idx,
+					       address, ptep, pteval, len, expected_anon_exclusive);
+		if (!ret)
+			return ret;
+
+		nr_pages -= len;
+		if (!nr_pages)
+			break;
+
+		pteval = pte_advance_pfn(pteval, len);
+		address += len * PAGE_SIZE;
+		sub_batch_idx += len;
+		ptep += len;
+	}
+
+	return true;
 }
 
 static inline bool can_unmap_lazyfree_folio_range(struct vm_area_struct *vma,
@@ -2094,7 +2210,7 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 {
 	struct mm_struct *mm = vma->vm_mm;
 	DEFINE_FOLIO_VMA_WALK(pvmw, folio, vma, address, 0);
-	bool anon_exclusive, ret = true;
+	bool ret = true;
 	pte_t pteval;
 	struct page *subpage;
 	struct mmu_notifier_range range;
@@ -2219,8 +2335,6 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 
 		subpage = folio_page(folio, pfn - folio_pfn(folio));
 		address = pvmw.address;
-		anon_exclusive = folio_test_anon(folio) &&
-				 PageAnonExclusive(subpage);
 
 		if (folio_test_hugetlb(folio)) {
 			bool walk_done;
@@ -2252,6 +2366,7 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 			if (pte_dirty(pteval))
 				folio_mark_dirty(folio);
 		} else {
+			/* Device-exclusive entry */
 			pte_clear(mm, address, pvmw.pte);
 		}
 
@@ -2289,8 +2404,6 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 			 */
 			dec_mm_counter(mm, mm_counter(folio));
 		} else if (folio_test_anon(folio)) {
-			swp_entry_t entry = page_swap_entry(subpage);
-			pte_t swp_pte;
 			/*
 			 * Store the swap location in the pte.
 			 * See handle_pte_fault() ...
@@ -2306,57 +2419,17 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 				if (!can_unmap_lazyfree_folio_range(vma, folio, address,
 				    pvmw.pte, pteval, nr_pages))
 					goto walk_abort;
-
 				add_mm_counter(mm, MM_ANONPAGES, -nr_pages);
 				goto finish_unmap;
 			}
 
-			if (folio_dup_swap_pages(folio, subpage, 1) < 0) {
-				set_pte_at(mm, address, pvmw.pte, pteval);
+			if (!unmap_anon_folio_range(vma, folio, subpage, address,
+						    pvmw.pte, pteval, nr_pages))
 				goto walk_abort;
-			}
 
-			/*
-			 * arch_unmap_one() is expected to be a NOP on
-			 * architectures where we could have PFN swap PTEs,
-			 * so we'll not check/care.
-			 */
-			if (arch_unmap_one(mm, vma, address, pteval) < 0) {
-				folio_put_swap_pages(folio, subpage, 1);
-				set_pte_at(mm, address, pvmw.pte, pteval);
-				goto walk_abort;
-			}
-
-			/* See folio_try_share_anon_rmap(): clear PTE first. */
-			if (anon_exclusive &&
-			    folio_try_share_anon_rmap_pte(folio, subpage)) {
-				folio_put_swap_pages(folio, subpage, 1);
-				set_pte_at(mm, address, pvmw.pte, pteval);
-				goto walk_abort;
-			}
-			if (list_empty(&mm->mmlist)) {
-				spin_lock(&mmlist_lock);
-				if (list_empty(&mm->mmlist))
-					list_add(&mm->mmlist, &init_mm.mmlist);
-				spin_unlock(&mmlist_lock);
-			}
-			dec_mm_counter(mm, MM_ANONPAGES);
-			inc_mm_counter(mm, MM_SWAPENTS);
-			swp_pte = swp_entry_to_pte(entry);
-			if (anon_exclusive)
-				swp_pte = pte_swp_mkexclusive(swp_pte);
-			if (likely(pte_present(pteval))) {
-				if (pte_soft_dirty(pteval))
-					swp_pte = pte_swp_mksoft_dirty(swp_pte);
-				if (pte_uffd_wp(pteval))
-					swp_pte = pte_swp_mkuffd_wp(swp_pte);
-			} else {
-				if (pte_swp_soft_dirty(pteval))
-					swp_pte = pte_swp_mksoft_dirty(swp_pte);
-				if (pte_swp_uffd_wp(pteval))
-					swp_pte = pte_swp_mkuffd_wp(swp_pte);
-			}
-			set_pte_at(mm, address, pvmw.pte, swp_pte);
+			if (nr_pages == folio_nr_pages(folio))
+				goto walk_done;
+			continue;
 		} else {
 			/*
 			 * This is a locked file-backed folio,
@@ -2372,14 +2445,7 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 			add_mm_counter(mm, mm_counter_file(folio), -nr_pages);
 		}
 finish_unmap:
-		if (unlikely(folio_test_hugetlb(folio))) {
-			hugetlb_remove_rmap(folio);
-		} else {
-			folio_remove_rmap_ptes(folio, subpage, nr_pages, vma);
-		}
-		if (vma->vm_flags & VM_LOCKED)
-			mlock_drain_local();
-		folio_put_refs(folio, nr_pages);
+		finish_folio_unmap(vma, folio, subpage, nr_pages);
 
 		/*
 		 * If we are sure that we batched the entire folio and cleared
