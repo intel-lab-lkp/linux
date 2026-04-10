@@ -391,6 +391,22 @@ static void nft_netdev_unregister_hooks(struct net *net,
 	}
 }
 
+/* Splice hooks from a private list into a live (RCU-protected) hook list.
+ * Each entry is published individually via list_add_tail_rcu() so that
+ * concurrent RCU readers walking the destination list never observe torn
+ * list pointers.
+ */
+static void nft_hook_list_splice_rcu(struct list_head *from,
+				     struct list_head *to)
+{
+	struct nft_hook *hook, *next;
+
+	list_for_each_entry_safe(hook, next, from, list) {
+		list_del(&hook->list);
+		list_add_tail_rcu(&hook->list, to);
+	}
+}
+
 static int nf_tables_register_hook(struct net *net,
 				   const struct nft_table *table,
 				   struct nft_chain *chain)
@@ -3162,9 +3178,11 @@ static int nft_delchain_hook(struct nft_ctx *ctx,
 	const struct nlattr * const *nla = ctx->nla;
 	struct nft_chain_hook chain_hook = {};
 	struct nft_hook *this, *hook;
+	struct nft_hook **del_hooks;
 	LIST_HEAD(chain_del_list);
 	struct nft_trans *trans;
-	int err;
+	int err, n = 0, i;
+	int max_hooks = 0;
 
 	if (ctx->table->flags & __NFT_TABLE_F_UPDATE)
 		return -EOPNOTSUPP;
@@ -3174,19 +3192,38 @@ static int nft_delchain_hook(struct nft_ctx *ctx,
 	if (err < 0)
 		return err;
 
+	list_for_each_entry(this, &chain_hook.list, list)
+		max_hooks++;
+
+	del_hooks = kcalloc(max_hooks, sizeof(*del_hooks), GFP_KERNEL);
+	if (!del_hooks) {
+		nft_chain_release_hook(&chain_hook);
+		return -ENOMEM;
+	}
+
 	list_for_each_entry(this, &chain_hook.list, list) {
 		hook = nft_hook_list_find(&basechain->hook_list, this);
 		if (!hook) {
 			err = -ENOENT;
 			goto err_chain_del_hook;
 		}
-		list_move(&hook->list, &chain_del_list);
+		list_del_rcu(&hook->list);
+		del_hooks[n++] = hook;
 	}
+
+	/* Wait for any concurrent RCU readers (e.g. GETCHAIN dumps walking
+	 * basechain->hook_list) to finish before modifying the removed hooks'
+	 * list pointers to link them into the transaction's private list.
+	 */
+	synchronize_rcu();
+
+	for (i = 0; i < n; i++)
+		list_add_tail(&del_hooks[i]->list, &chain_del_list);
 
 	trans = nft_trans_alloc_chain(ctx, NFT_MSG_DELCHAIN);
 	if (!trans) {
 		err = -ENOMEM;
-		goto err_chain_del_hook;
+		goto err_chain_add_back;
 	}
 
 	nft_trans_basechain(trans) = basechain;
@@ -3194,13 +3231,24 @@ static int nft_delchain_hook(struct nft_ctx *ctx,
 	INIT_LIST_HEAD(&nft_trans_chain_hooks(trans));
 	list_splice(&chain_del_list, &nft_trans_chain_hooks(trans));
 	nft_chain_release_hook(&chain_hook);
+	kfree(del_hooks);
 
 	nft_trans_commit_list_add_tail(ctx->net, trans);
 
 	return 0;
 
+err_chain_add_back:
+	for (i = 0; i < n; i++)
+		list_add_tail_rcu(&del_hooks[i]->list, &basechain->hook_list);
+	kfree(del_hooks);
+	nft_chain_release_hook(&chain_hook);
+
+	return err;
+
 err_chain_del_hook:
-	list_splice(&chain_del_list, &basechain->hook_list);
+	for (i = 0; i < n; i++)
+		list_add_tail_rcu(&del_hooks[i]->list, &basechain->hook_list);
+	kfree(del_hooks);
 	nft_chain_release_hook(&chain_hook);
 
 	return err;
@@ -10912,8 +10960,8 @@ static int nf_tables_commit(struct net *net, struct sk_buff *skb)
 				nft_chain_commit_update(nft_trans_container_chain(trans));
 				nf_tables_chain_notify(&ctx, NFT_MSG_NEWCHAIN,
 						       &nft_trans_chain_hooks(trans));
-				list_splice(&nft_trans_chain_hooks(trans),
-					    &nft_trans_basechain(trans)->hook_list);
+				nft_hook_list_splice_rcu(&nft_trans_chain_hooks(trans),
+							&nft_trans_basechain(trans)->hook_list);
 				/* trans destroyed after rcu grace period */
 			} else {
 				nft_chain_commit_drop_policy(nft_trans_container_chain(trans));
@@ -11231,8 +11279,8 @@ static int __nf_tables_abort(struct net *net, enum nfnl_abort_action action)
 		case NFT_MSG_DELCHAIN:
 		case NFT_MSG_DESTROYCHAIN:
 			if (nft_trans_chain_update(trans)) {
-				list_splice(&nft_trans_chain_hooks(trans),
-					    &nft_trans_basechain(trans)->hook_list);
+				nft_hook_list_splice_rcu(&nft_trans_chain_hooks(trans),
+							&nft_trans_basechain(trans)->hook_list);
 			} else {
 				nft_use_inc_restore(&table->use);
 				nft_clear(trans->net, nft_trans_chain(trans));
