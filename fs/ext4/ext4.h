@@ -1630,6 +1630,7 @@ struct ext4_sb_info {
 	unsigned int s_mb_best_avail_max_trim_order;
 	unsigned int s_sb_update_sec;
 	unsigned int s_sb_update_kb;
+	unsigned int s_mb_max_prealloc_kb;
 
 	/* where last allocation was done - for stream allocation */
 	ext4_group_t *s_mb_last_groups;

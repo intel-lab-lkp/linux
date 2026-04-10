@@ -48,6 +48,14 @@ Description:
 		will have its blocks allocated out of its own unique
 		preallocation pool.
 
+What:		/sys/fs/ext4/<disk>/mb_max_prealloc_kb
+Date:		April 2026
+Contact:	"Linux Ext4 Development List" <linux-ext4@vger.kernel.org>
+Description:
+		Maximum size (in kilobytes) used by the multiblock allocator's
+		normalized request preallocation heuristic. Values are rounded
+		up to a power of two and clamped to a minimum of 8192 (8MiB).
+
 What:		/sys/fs/ext4/<disk>/inode_readahead_blks
 Date:		March 2008
 Contact:	"Theodore Ts'o" <tytso@mit.edu>

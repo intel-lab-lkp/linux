@@ -4583,7 +4583,7 @@ ext4_mb_normalize_request(struct ext4_allocation_context *ac,
 					(8<<20)>>bsbits, max, 8 * 1024)) {
 		start_off = ((loff_t)ac->ac_o_ex.fe_logical >>
 							(23 - bsbits)) << 23;
-		size = 8 * 1024 * 1024;
+		size = (loff_t)sbi->s_mb_max_prealloc_kb << 10;
 	} else {
 		start_off = (loff_t) ac->ac_o_ex.fe_logical << bsbits;
 		size	  = (loff_t) EXT4_C2B(sbi,

@@ -10,6 +10,8 @@
 
 #include <linux/time.h>
 #include <linux/fs.h>
+#include <linux/log2.h>
+#include <linux/limits.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/proc_fs.h>
@@ -41,6 +43,7 @@ typedef enum {
 	attr_pointer_atomic,
 	attr_journal_task,
 	attr_err_report_sec,
+	attr_mb_max_prealloc_kb,
 } attr_id_t;
 
 typedef enum {
@@ -112,6 +115,25 @@ static ssize_t reserved_clusters_store(struct ext4_sb_info *sbi,
 		return -EINVAL;
 
 	atomic64_set(&sbi->s_resv_clusters, val);
+	return count;
+}
+
+static ssize_t mb_max_prealloc_kb_store(struct ext4_sb_info *sbi,
+					const char *buf, size_t count)
+{
+	unsigned int v;
+	int ret;
+	unsigned long rounded;
+
+	ret = kstrtouint(skip_spaces(buf), 0, &v);
+	if (ret)
+		return ret;
+	if (v < 8192)
+		v = 8192;
+	rounded = roundup_pow_of_two((unsigned long)v);
+	if (rounded > UINT_MAX)
+		return -EINVAL;
+	sbi->s_mb_max_prealloc_kb = (unsigned int)rounded;
 	return count;
 }
 
@@ -288,6 +310,7 @@ EXT4_RW_ATTR_SBI_UI(mb_prefetch_limit, s_mb_prefetch_limit);
 EXT4_RW_ATTR_SBI_UL(last_trim_minblks, s_last_trim_minblks);
 EXT4_RW_ATTR_SBI_UI(sb_update_sec, s_sb_update_sec);
 EXT4_RW_ATTR_SBI_UI(sb_update_kb, s_sb_update_kb);
+EXT4_ATTR_OFFSET(mb_max_prealloc_kb, 0644, mb_max_prealloc_kb, ext4_sb_info, s_mb_max_prealloc_kb);
 
 static unsigned int old_bump_val = 128;
 EXT4_ATTR_PTR(max_writeback_mb_bump, 0444, pointer_ui, &old_bump_val);
@@ -341,6 +364,7 @@ static struct attribute *ext4_attrs[] = {
 	ATTR_LIST(last_trim_minblks),
 	ATTR_LIST(sb_update_sec),
 	ATTR_LIST(sb_update_kb),
+	ATTR_LIST(mb_max_prealloc_kb),
 	ATTR_LIST(err_report_sec),
 	NULL,
 };
@@ -431,6 +455,7 @@ static ssize_t ext4_generic_attr_show(struct ext4_attr *a,
 	case attr_mb_order:
 	case attr_pointer_pi:
 	case attr_pointer_ui:
+	case attr_mb_max_prealloc_kb:
 		if (a->attr_ptr == ptr_ext4_super_block_offset)
 			return sysfs_emit(buf, "%u\n", le32_to_cpup(ptr));
 		return sysfs_emit(buf, "%u\n", *((unsigned int *) ptr));
@@ -557,6 +582,8 @@ static ssize_t ext4_attr_store(struct kobject *kobj,
 		return reserved_clusters_store(sbi, buf, len);
 	case attr_inode_readahead:
 		return inode_readahead_blks_store(sbi, buf, len);
+	case attr_mb_max_prealloc_kb:
+		return mb_max_prealloc_kb_store(sbi, buf, len);
 	case attr_trigger_test_error:
 		return trigger_test_error(sbi, buf, len);
 	case attr_err_report_sec:
@@ -695,4 +722,3 @@ void ext4_exit_sysfs(void)
 	remove_proc_entry(proc_dirname, NULL);
 	ext4_proc_root = NULL;
 }
-

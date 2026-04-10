@@ -5453,6 +5453,7 @@ static int __ext4_fill_super(struct fs_context *fc, struct super_block *sb)
 		sbi->s_stripe = 0;
 	}
 	sbi->s_extent_max_zeroout_kb = 32;
+	sbi->s_mb_max_prealloc_kb = 8 * 1024;
 
 	/*
 	 * set up enough so that it can read an inode
