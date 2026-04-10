@@ -629,7 +629,27 @@ static inline bool pcpu_region_overlap(int a, int b, int x, int y)
  */
 static void pcpu_block_update(struct pcpu_block_md *block, int start, int end)
 {
-	int contig = end - start;
+	int contig;
+	int scan_hint_cand_1 = 0;
+	int scan_hint_cand_1_start = 0;
+	int scan_hint_cand_2 = 0;
+	int scan_hint_cand_2_start = 0;
+	bool overlap_with_contig_hint = pcpu_region_overlap(start, end,
+		block->contig_hint_start,
+		block->contig_hint_start + block->contig_hint);
+	bool overlap_with_scan_hint = pcpu_region_overlap(start, end,
+		block->scan_hint_start,
+		block->scan_hint_start + block->scan_hint);
+
+	if (block->contig_hint && overlap_with_contig_hint) {
+		start = min(start, block->contig_hint_start);
+		end = max(end, block->contig_hint_start + block->contig_hint);
+	}
+	if (block->scan_hint && overlap_with_scan_hint) {
+		start = min(start, block->scan_hint_start);
+		end = max(end, block->scan_hint_start + block->scan_hint);
+	}
+	contig = end - start;
 
 	block->first_free = min(block->first_free, start);
 	if (start == 0)
@@ -646,56 +666,86 @@ static void pcpu_block_update(struct pcpu_block_md *block, int start, int end)
 	}
 
 	if (contig > block->contig_hint) {
-		/* promote the old contig_hint to be the new scan_hint */
-		if (start > block->contig_hint_start) {
-			if (block->contig_hint > block->scan_hint) {
-				block->scan_hint_start =
-					block->contig_hint_start;
-				block->scan_hint = block->contig_hint;
-			} else if (start < block->scan_hint_start) {
-				/*
-				 * The old contig_hint == scan_hint.  But, the
-				 * new contig is larger so hold the invariant
-				 * scan_hint_start < contig_hint_start.
-				 */
-				block->scan_hint = 0;
-			}
-		} else {
-			block->scan_hint = 0;
+		if (!overlap_with_contig_hint) {
+			scan_hint_cand_1 = block->contig_hint;
+			scan_hint_cand_1_start = block->contig_hint_start;
 		}
-		block->contig_hint_start = start;
+
 		block->contig_hint = contig;
+		block->contig_hint_start = start;
 	} else if (contig == block->contig_hint) {
 		if (block->contig_hint_start &&
 		    (!start ||
 		     __ffs(start) > __ffs(block->contig_hint_start))) {
-			/* start has a better alignment so use it */
+			scan_hint_cand_1 = block->contig_hint;
+			scan_hint_cand_1_start = block->contig_hint_start;
+
+			/* Start has a better alignment so use it. */
 			block->contig_hint_start = start;
-			if (start < block->scan_hint_start &&
-			    block->contig_hint > block->scan_hint)
-				block->scan_hint = 0;
-		} else if (start > block->scan_hint_start ||
-			   block->contig_hint > block->scan_hint) {
-			/*
-			 * Knowing contig == contig_hint, update the scan_hint
-			 * if it is farther than or larger than the current
-			 * scan_hint.
-			 */
-			block->scan_hint_start = start;
-			block->scan_hint = contig;
+		} else {
+			if (!overlap_with_contig_hint) {
+				scan_hint_cand_1 = contig;
+				scan_hint_cand_1_start = start;
+			}
 		}
 	} else {
 		/*
-		 * The region is smaller than the contig_hint.  So only update
-		 * the scan_hint if it is larger than or equal and farther than
-		 * the current scan_hint.
+		 * Consider only when the new contig is larger than or equal to
+		 * the old scan hint.
 		 */
-		if ((start < block->contig_hint_start &&
-		     (contig > block->scan_hint ||
-		      (contig == block->scan_hint &&
-		       start > block->scan_hint_start)))) {
-			block->scan_hint_start = start;
-			block->scan_hint = contig;
+		if (contig >= block->scan_hint) {
+			scan_hint_cand_1 = contig;
+			scan_hint_cand_1_start = start;
+		}
+	}
+
+	if (block->scan_hint &&
+	    !pcpu_region_overlap(start, end, block->scan_hint_start,
+				 block->scan_hint_start + block->scan_hint)) {
+		scan_hint_cand_2 = block->scan_hint;
+		scan_hint_cand_2_start = block->scan_hint_start;
+	}
+
+	/* Make scan_hint_cand_1 be the best candidate for the new scan hint. */
+	if ((scan_hint_cand_2 > scan_hint_cand_1) ||
+	    (scan_hint_cand_2 == scan_hint_cand_1 &&
+	     scan_hint_cand_2_start > scan_hint_cand_1_start)) {
+		int tmp_hint = scan_hint_cand_1;
+		int tmp_hint_start = scan_hint_cand_1_start;
+
+		scan_hint_cand_1 = scan_hint_cand_2;
+		scan_hint_cand_1_start = scan_hint_cand_2_start;
+		scan_hint_cand_2 = tmp_hint;
+		scan_hint_cand_2_start = tmp_hint_start;
+	}
+
+	/*
+	 * At this point, it is guaranteed that none of the scan hint
+	 * candidates overlaps with the new contig hint while they may overlap
+	 * with the old scan hint, and that the first candidate is larger in
+	 * size or, it equal, farther than the second one.
+	 */
+
+	if (block->contig_hint > scan_hint_cand_1) {
+		if (scan_hint_cand_1_start < block->contig_hint_start) {
+			block->scan_hint = scan_hint_cand_1;
+			block->scan_hint_start = scan_hint_cand_1_start;
+		} else if (scan_hint_cand_2_start < block->contig_hint_start) {
+			block->scan_hint = scan_hint_cand_2;
+			block->scan_hint_start = scan_hint_cand_2_start;
+		} else {
+			block->scan_hint = 0;
+		}
+	} else if (block->contig_hint == scan_hint_cand_1) {
+		if (scan_hint_cand_1_start > block->contig_hint_start) {
+			block->scan_hint = scan_hint_cand_1;
+			block->scan_hint_start = scan_hint_cand_1_start;
+		} else if (scan_hint_cand_2 < block->contig_hint &&
+			   scan_hint_cand_2_start < scan_hint_cand_1_start) {
+			block->scan_hint = scan_hint_cand_2;
+			block->scan_hint_start = scan_hint_cand_2_start;
+		} else {
+			block->scan_hint = 0;
 		}
 	}
 }
