@@ -89,13 +89,50 @@ struct VbiosIterator<'a> {
     last_found: bool,
 }
 
+/// IFR signature: ASCII "NVGI" as a little-endian u32.
+const IFR_SIGNATURE: u32 = 0x4947564E;
+/// ROM directory signature: ASCII "RFRD" as a little-endian u32.
+const ROM_DIRECTORY_SIGNATURE: u32 = 0x44524652;
+
 impl<'a> VbiosIterator<'a> {
     fn new(dev: &'a device::Device, bar0: &'a Bar0) -> Result<Self> {
+        let sig = bar0.try_read32(ROM_OFFSET)?;
+
+        let current_offset = if sig == IFR_SIGNATURE {
+            let fixed1 = bar0.try_read32(ROM_OFFSET + 4)?;
+            let version = ((fixed1 >> 8) & 0xff) as u8;
+
+            match version {
+                // Note: We do not actually expect to see v1 or v2 on these GPUs
+                1 | 2 => {
+                    let fixed_data_size = ((fixed1 >> 16) & 0x7fff) as usize;
+                    bar0.try_read32(ROM_OFFSET + fixed_data_size + 4)? as usize
+                }
+                3 => {
+                    let fixed2 = bar0.try_read32(ROM_OFFSET + 8)?;
+                    let total_data_size = (fixed2 & 0x000f_ffff) as usize;
+                    let dir_offset = bar0.try_read32(ROM_OFFSET + total_data_size)? as usize + 4096;
+                    let dir_sig = bar0.try_read32(ROM_OFFSET + dir_offset)?;
+                    if dir_sig != ROM_DIRECTORY_SIGNATURE {
+                        dev_err!(dev, "could not find IFR ROM directory\n");
+                        return Err(EINVAL);
+                    }
+                    bar0.try_read32(ROM_OFFSET + dir_offset + 8)? as usize
+                }
+                _ => {
+                    dev_err!(dev, "unsupported IFR header version {}\n", version);
+                    return Err(EINVAL);
+                }
+            }
+        } else {
+            0
+        };
+
         Ok(Self {
             dev,
             bar0,
             data: KVec::new(),
-            current_offset: 0,
+            current_offset,
             last_found: false,
         })
     }
