@@ -1388,7 +1388,8 @@ static struct pernet_operations ip6mr_net_ops = {
 static const struct rtnl_msg_handler ip6mr_rtnl_msg_handlers[] __initconst_or_module = {
 	{.owner = THIS_MODULE, .protocol = RTNL_FAMILY_IP6MR,
 	 .msgtype = RTM_GETROUTE,
-	 .doit = ip6mr_rtm_getroute, .dumpit = ip6mr_rtm_dumproute},
+	 .doit = ip6mr_rtm_getroute, .dumpit = ip6mr_rtm_dumproute,
+	 .flags = RTNL_FLAG_DOIT_UNLOCKED},
 };
 
 int __init ip6_mr_init(void)
@@ -2712,6 +2713,8 @@ static int ip6mr_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr *nlh,
 		grp = nla_get_in6_addr(tb[RTA_DST]);
 	tableid = nla_get_u32_default(tb[RTA_TABLE], 0);
 
+	rcu_read_lock();
+
 	mrt = __ip6mr_get_table(net, tableid ?: RT_TABLE_DEFAULT);
 	if (!mrt) {
 		NL_SET_ERR_MSG_MOD(extack, "MR table does not exist");
@@ -2719,10 +2722,7 @@ static int ip6mr_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr *nlh,
 		goto err;
 	}
 
-	/* entries are added/deleted only under RTNL */
-	rcu_read_lock();
 	cache = ip6mr_cache_find(mrt, &src, &grp);
-	rcu_read_unlock();
 	if (!cache) {
 		NL_SET_ERR_MSG_MOD(extack, "MR cache entry not found");
 		err = -ENOENT;
@@ -2734,9 +2734,12 @@ static int ip6mr_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr *nlh,
 	if (err < 0)
 		goto err;
 
+	rcu_read_unlock();
+
 	return rtnl_unicast(skb, net, NETLINK_CB(in_skb).portid);
 
 err:
+	rcu_read_unlock();
 	kfree_skb(skb);
 	return err;
 }
