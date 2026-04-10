@@ -98,6 +98,6 @@ mod operations;
 mod request;
 mod tag_set;
 
-pub use operations::Operations;
+pub use operations::{Operations, TimeoutReturn};
 pub use request::Request;
 pub use tag_set::TagSet;

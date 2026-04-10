@@ -16,6 +16,16 @@ use core::marker::PhantomData;
 
 type ForeignBorrowed<'a, T> = <T as ForeignOwnable>::Borrowed<'a>;
 
+/// Return value for blk-mq timeout handlers.
+#[repr(u32)]
+pub enum TimeoutReturn {
+    /// The driver completed the request or will complete it later.
+    Done = bindings::blk_eh_timer_return_BLK_EH_DONE,
+
+    /// Reset the request timer and keep waiting for completion.
+    ResetTimer = bindings::blk_eh_timer_return_BLK_EH_RESET_TIMER,
+}
+
 /// Implement this trait to interface blk-mq as block devices.
 ///
 /// To implement a block device driver, implement this trait as described in the
@@ -45,6 +55,11 @@ pub trait Operations: Sized {
 
     /// Called by the kernel when the request is completed.
     fn complete(rq: ARef<Request<Self>>);
+
+    /// Called by the kernel when a request times out.
+    fn timeout(_rq: &Request<Self>) -> TimeoutReturn {
+        build_error!(crate::error::VTABLE_DEFAULT_ERROR)
+    }
 
     /// Called by the kernel to poll the device for completed requests. Only
     /// used for poll queues.
@@ -168,6 +183,25 @@ impl<T: Operations> OperationsVTable<T> {
     ///
     /// # Safety
     ///
+    /// This function may only be called by blk-mq C infrastructure. `rq` must
+    /// point to a valid request that is still live for the duration of this
+    /// callback.
+    unsafe extern "C" fn timeout_callback(
+        rq: *mut bindings::request,
+    ) -> bindings::blk_eh_timer_return {
+        // SAFETY: `rq` is valid as required by the safety requirements for
+        // this function, and the private data is initialized while the request
+        // is live.
+        let rq = unsafe { &*rq.cast::<Request<T>>() };
+
+        T::timeout(rq) as bindings::blk_eh_timer_return
+    }
+
+    /// This function is called by the C kernel. A pointer to this function is
+    /// installed in the `blk_mq_ops` vtable for the driver.
+    ///
+    /// # Safety
+    ///
     /// This function may only be called by blk-mq C infrastructure.
     unsafe extern "C" fn poll_callback(
         _hctx: *mut bindings::blk_mq_hw_ctx,
@@ -262,7 +296,11 @@ impl<T: Operations> OperationsVTable<T> {
         put_budget: None,
         set_rq_budget_token: None,
         get_rq_budget_token: None,
-        timeout: None,
+        timeout: if T::HAS_TIMEOUT {
+            Some(Self::timeout_callback)
+        } else {
+            None
+        },
         poll: if T::HAS_POLL {
             Some(Self::poll_callback)
         } else {
