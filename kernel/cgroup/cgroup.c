@@ -3944,11 +3944,11 @@ static ssize_t pressure_write(struct kernfs_open_file *of, char *buf,
 		return -ENODEV;
 
 	cgroup_get(cgrp);
-	cgroup_kn_unlock(of->kn);
 
 	/* Allow only one trigger per file descriptor */
 	if (ctx->psi.trigger) {
 		cgroup_put(cgrp);
+		cgroup_kn_unlock(of->kn);
 		return -EBUSY;
 	}
 
@@ -3956,12 +3956,14 @@ static ssize_t pressure_write(struct kernfs_open_file *of, char *buf,
 	new = psi_trigger_create(psi, buf, res, of->file, of);
 	if (IS_ERR(new)) {
 		cgroup_put(cgrp);
+		cgroup_kn_unlock(of->kn);
 		return PTR_ERR(new);
 	}
 
 	smp_store_release(&ctx->psi.trigger, new);
 	cgroup_put(cgrp);
 
+	cgroup_kn_unlock(of->kn);
 	return nbytes;
 }
 
