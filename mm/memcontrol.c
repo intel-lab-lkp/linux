@@ -4130,6 +4130,17 @@ static int mem_cgroup_css_online(struct cgroup_subsys_state *css)
 	 */
 	xa_store(&mem_cgroup_private_ids, memcg->id.id, memcg, GFP_KERNEL);
 
+	/*
+	 * On v2, non-leaf memcgs cannot directly be charged. This child's
+	 * parent is no longer a leaf, so drain the parent's stock.
+	 */
+	if (cgroup_subsys_on_dfl(memory_cgrp_subsys)) {
+		struct mem_cgroup *parent = parent_mem_cgroup(memcg);
+
+		if (parent)
+			page_counter_drain_stock(&parent->memory);
+	}
+
 	return 0;
 free_objcg:
 	for_each_node(nid) {
