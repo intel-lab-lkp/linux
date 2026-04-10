@@ -97,4 +97,8 @@ impl Operations for NullBlkDevice {
             // point, and so `end_ok` cannot fail.
             .expect("Fatal error - expected to be able to end request");
     }
+
+    fn timeout(_rq: &mq::Request<Self>) -> mq::TimeoutReturn {
+        mq::TimeoutReturn::ResetTimer
+    }
 }
