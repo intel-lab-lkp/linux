@@ -262,18 +262,17 @@ err1:
 	return err;
 }
 
-static void __net_exit ip6mr_rules_exit(struct net *net)
+static void __net_exit ip6mr_rules_exit_rtnl(struct net *net,
+					     struct list_head *dev_kill_list)
 {
 	struct mr_table *mrt, *next;
-	LIST_HEAD(dev_kill_list);
 
 	ASSERT_RTNL();
 	list_for_each_entry_safe(mrt, next, &net->ipv6.mr6_tables, list) {
 		list_del_rcu(&mrt->list);
-		ip6mr_free_table(mrt, &dev_kill_list);
+		ip6mr_free_table(mrt, dev_kill_list);
 	}
 
-	unregister_netdevice_many(&dev_kill_list);
 	fib_rules_unregister(net->ipv6.mr6_rules_ops);
 }
 
@@ -334,16 +333,15 @@ static int __net_init ip6mr_rules_init(struct net *net)
 	return 0;
 }
 
-static void __net_exit ip6mr_rules_exit(struct net *net)
+static void __net_exit ip6mr_rules_exit_rtnl(struct net *net,
+					     struct list_head *dev_kill_list)
 {
 	struct mr_table *mrt = rcu_dereference_protected(net->ipv6.mrt6, 1);
-	LIST_HEAD(dev_kill_list);
 
 	ASSERT_RTNL();
 
 	RCU_INIT_POINTER(net->ipv6.mrt6, NULL);
-	ip6mr_free_table(mrt, &dev_kill_list);
-	unregister_netdevice_many(&dev_kill_list);
+	ip6mr_free_table(mrt, dev_kill_list);
 }
 
 static int ip6mr_rules_dump(struct net *net, struct notifier_block *nb,
@@ -1343,6 +1341,7 @@ static void __net_exit ip6mr_notifier_exit(struct net *net)
 /* Setup for IP multicast routing */
 static int __net_init ip6mr_net_init(struct net *net)
 {
+	LIST_HEAD(dev_kill_list);
 	int err;
 
 	err = ip6mr_notifier_init(net);
@@ -1370,7 +1369,8 @@ proc_cache_fail:
 	remove_proc_entry("ip6_mr_vif", net->proc_net);
 proc_vif_fail:
 	rtnl_lock();
-	ip6mr_rules_exit(net);
+	ip6mr_rules_exit_rtnl(net, &dev_kill_list);
+	unregister_netdevice_many(&dev_kill_list);
 	rtnl_unlock();
 #endif
 ip6mr_rules_fail:
@@ -1387,20 +1387,16 @@ static void __net_exit ip6mr_net_exit(struct net *net)
 	ip6mr_notifier_exit(net);
 }
 
-static void __net_exit ip6mr_net_exit_batch(struct list_head *net_list)
+static void __net_exit ip6mr_net_exit_rtnl(struct net *net,
+					   struct list_head *dev_kill_list)
 {
-	struct net *net;
-
-	rtnl_lock();
-	list_for_each_entry(net, net_list, exit_list)
-		ip6mr_rules_exit(net);
-	rtnl_unlock();
+	ip6mr_rules_exit_rtnl(net, dev_kill_list);
 }
 
 static struct pernet_operations ip6mr_net_ops = {
 	.init = ip6mr_net_init,
 	.exit = ip6mr_net_exit,
-	.exit_batch = ip6mr_net_exit_batch,
+	.exit_rtnl = ip6mr_net_exit_rtnl,
 };
 
 static const struct rtnl_msg_handler ip6mr_rtnl_msg_handlers[] __initconst_or_module = {
