@@ -164,8 +164,6 @@ int housekeeping_update(struct cpumask *isol_mask)
 
 void __init housekeeping_init(void)
 {
-	enum hk_type type;
-
 	if (!housekeeping.flags)
 		return;
 
@@ -173,15 +171,25 @@ void __init housekeeping_init(void)
 
 	if (housekeeping.flags & HK_FLAG_KERNEL_NOISE)
 		sched_tick_offload_init();
+}
+
+static int __init housekeeping_late_init(void)
+{
+	enum hk_type type;
+
+	if (!housekeeping.flags)
+		return 0;
+
 	/*
 	 * Realloc with a proper allocator so that any cpumask update
-	 * can indifferently free the old version with kfree().
+	 * can indifferently free the old version with kfree(). This
+	 * should be done after the completion of deferred_init_memmap().
 	 */
 	for_each_set_bit(type, &housekeeping.flags, HK_TYPE_MAX) {
 		struct cpumask *omask, *nmask = kmalloc(cpumask_size(), GFP_KERNEL);
 
 		if (WARN_ON_ONCE(!nmask))
-			return;
+			return 0;
 
 		omask = rcu_dereference(housekeeping.cpumasks[type]);
 
@@ -191,7 +199,9 @@ void __init housekeeping_init(void)
 		RCU_INIT_POINTER(housekeeping.cpumasks[type], nmask);
 		memblock_free(omask, cpumask_size());
 	}
+	return 0;
 }
+pure_initcall(housekeeping_late_init);
 
 static void __init housekeeping_setup_type(enum hk_type type,
 					   cpumask_var_t housekeeping_staging)
