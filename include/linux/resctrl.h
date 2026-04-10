@@ -551,12 +551,15 @@ void resctrl_online_cpu(unsigned int cpu);
 void resctrl_offline_cpu(unsigned int cpu);
 
 /*
- * Architecture hook called at beginning of first file system mount attempt.
- * No locks are held.
+ * Architecture hook called before attempting to mount the file system.
+ * Called with just resctrl_mount_lock held.
  */
 void resctrl_arch_pre_mount(void);
 
-/* Called to report unmount. */
+/*
+ * Architecture hook called when mount fails, or on unmount.
+ * Called with just resctrl_mount_lock held.
+ */
 void resctrl_arch_unmount(void);
 
 /**
