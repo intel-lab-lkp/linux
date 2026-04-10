@@ -105,9 +105,9 @@ static char *cfg_mac_src;
 static int cfg_proto = IPPROTO_UDP;
 static int cfg_payload_char = 'a';
 static int cfg_payload_len = 100;
-static uint16_t cfg_port_dst = 34000;
-static uint16_t cfg_port_src = 33000;
-static uint16_t cfg_port_src_encap = 33001;
+static uint16_t cfg_port_dst = 13000;
+static uint16_t cfg_port_src = 13001;
+static uint16_t cfg_port_src_encap = 13002;
 static unsigned int cfg_random_seed;
 static int cfg_rcvbuf = 1 << 22;	/* be able to queue large cfg_num_pkt */
 static bool cfg_send_pfpacket;
