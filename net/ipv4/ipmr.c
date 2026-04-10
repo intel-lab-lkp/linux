@@ -151,16 +151,6 @@ static struct mr_table *__ipmr_get_table(struct net *net, u32 id)
 	return NULL;
 }
 
-static struct mr_table *ipmr_get_table(struct net *net, u32 id)
-{
-	struct mr_table *mrt;
-
-	rcu_read_lock();
-	mrt = __ipmr_get_table(net, id);
-	rcu_read_unlock();
-	return mrt;
-}
-
 static int ipmr_fib_lookup(struct net *net, struct flowi4 *flp4,
 			   struct mr_table **mrt)
 {
@@ -293,7 +283,7 @@ static void __net_exit ipmr_rules_exit_rtnl(struct net *net,
 	struct mr_table *mrt, *next;
 
 	list_for_each_entry_safe(mrt, next, &net->ipv4.mr_tables, list) {
-		list_del(&mrt->list);
+		list_del_rcu(&mrt->list);
 		ipmr_free_table(mrt, dev_kill_list);
 	}
 }
@@ -315,28 +305,30 @@ bool ipmr_rule_default(const struct fib_rule *rule)
 }
 EXPORT_SYMBOL(ipmr_rule_default);
 #else
-#define ipmr_for_each_table(mrt, net) \
-	for (mrt = net->ipv4.mrt; mrt; mrt = NULL)
-
 static struct mr_table *ipmr_mr_table_iter(struct net *net,
 					   struct mr_table *mrt)
 {
 	if (!mrt)
-		return net->ipv4.mrt;
+		return rcu_dereference(net->ipv4.mrt);
 	return NULL;
 }
 
-static struct mr_table *ipmr_get_table(struct net *net, u32 id)
+static struct mr_table *__ipmr_get_table(struct net *net, u32 id)
 {
-	return net->ipv4.mrt;
+	return rcu_dereference_check(net->ipv4.mrt,
+				     lockdep_rtnl_is_held() ||
+				     !rcu_access_pointer(net->ipv4.mrt));
 }
 
-#define __ipmr_get_table ipmr_get_table
+#define ipmr_for_each_table(mrt, net)				\
+	for (mrt = __ipmr_get_table(net, 0); mrt; mrt = NULL)
 
 static int ipmr_fib_lookup(struct net *net, struct flowi4 *flp4,
 			   struct mr_table **mrt)
 {
-	*mrt = net->ipv4.mrt;
+	*mrt = rcu_dereference(net->ipv4.mrt);
+	if (!*mrt)
+		return -EAGAIN;
 	return 0;
 }
 
@@ -347,7 +339,8 @@ static int __net_init ipmr_rules_init(struct net *net)
 	mrt = ipmr_new_table(net, RT_TABLE_DEFAULT);
 	if (IS_ERR(mrt))
 		return PTR_ERR(mrt);
-	net->ipv4.mrt = mrt;
+
+	rcu_assign_pointer(net->ipv4.mrt, mrt);
 	return 0;
 }
 
@@ -358,9 +351,10 @@ static void __net_exit ipmr_rules_exit(struct net *net)
 static void __net_exit ipmr_rules_exit_rtnl(struct net *net,
 					    struct list_head *dev_kill_list)
 {
-	ipmr_free_table(net->ipv4.mrt, dev_kill_list);
+	struct mr_table *mrt = rcu_dereference_protected(net->ipv4.mrt, 1);
 
-	net->ipv4.mrt = NULL;
+	RCU_INIT_POINTER(net->ipv4.mrt, NULL);
+	ipmr_free_table(mrt, dev_kill_list);
 }
 
 static int ipmr_rules_dump(struct net *net, struct notifier_block *nb,
@@ -380,6 +374,17 @@ bool ipmr_rule_default(const struct fib_rule *rule)
 }
 EXPORT_SYMBOL(ipmr_rule_default);
 #endif
+
+static struct mr_table *ipmr_get_table(struct net *net, u32 id)
+{
+	struct mr_table *mrt;
+
+	rcu_read_lock();
+	mrt = __ipmr_get_table(net, id);
+	rcu_read_unlock();
+
+	return mrt;
+}
 
 static inline int ipmr_hash_cmp(struct rhashtable_compare_arg *arg,
 				const void *ptr)
@@ -446,7 +451,7 @@ static void ipmr_free_table(struct mr_table *mrt, struct list_head *dev_kill_lis
 			    MRT_FLUSH_MFC | MRT_FLUSH_MFC_STATIC,
 			    &ipmr_dev_kill_list);
 	rhltable_destroy(&mrt->mfc_hash);
-	kfree(mrt);
+	kfree_rcu(mrt, rcu);
 
 	WARN_ON_ONCE(!net_initialized(net) && !list_empty(&ipmr_dev_kill_list));
 	list_splice(&ipmr_dev_kill_list, dev_kill_list);
