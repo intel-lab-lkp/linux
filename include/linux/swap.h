@@ -368,9 +368,18 @@ void folio_mark_lazyfree(struct folio *folio);
 extern void swap_setup(void);
 
 /* linux/mm/vmscan.c */
+struct reclaim_progress {
+	unsigned long nr_reclaimed;
+	unsigned long nr_anon;
+	unsigned long nr_file;
+};
+
 extern unsigned long zone_reclaimable_pages(struct zone *zone);
-extern unsigned long try_to_free_pages(struct zonelist *zonelist, int order,
-					gfp_t gfp_mask, nodemask_t *mask);
+extern unsigned long zone_reclaimable_file_pages(struct zone *zone);
+extern unsigned long zone_reclaimable_anon_pages(struct zone *zone);
+extern void try_to_free_pages(struct zonelist *zonelist, int order,
+			      gfp_t gfp_mask, nodemask_t *mask,
+			      struct reclaim_progress *progress);
 
 #define MEMCG_RECLAIM_MAY_SWAP (1 << 1)
 #define MEMCG_RECLAIM_PROACTIVE (1 << 2)

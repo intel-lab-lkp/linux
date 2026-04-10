@@ -4407,12 +4407,11 @@ static unsigned int check_retry_zonelist(unsigned int seq)
 }
 
 /* Perform direct synchronous page reclaim */
-static unsigned long
-__perform_reclaim(gfp_t gfp_mask, unsigned int order,
-					const struct alloc_context *ac)
+static void __perform_reclaim(gfp_t gfp_mask, unsigned int order,
+			      const struct alloc_context *ac,
+			      struct reclaim_progress *progress)
 {
 	unsigned int noreclaim_flag;
-	unsigned long progress;
 
 	cond_resched();
 
@@ -4421,30 +4420,27 @@ __perform_reclaim(gfp_t gfp_mask, unsigned int order,
 	fs_reclaim_acquire(gfp_mask);
 	noreclaim_flag = memalloc_noreclaim_save();
 
-	progress = try_to_free_pages(ac->zonelist, order, gfp_mask,
-								ac->nodemask);
+	try_to_free_pages(ac->zonelist, order, gfp_mask, ac->nodemask, progress);
 
 	memalloc_noreclaim_restore(noreclaim_flag);
 	fs_reclaim_release(gfp_mask);
 
 	cond_resched();
-
-	return progress;
 }
 
 /* The really slow allocator path where we enter direct reclaim */
 static inline struct page *
 __alloc_pages_direct_reclaim(gfp_t gfp_mask, unsigned int order,
 		unsigned int alloc_flags, const struct alloc_context *ac,
-		unsigned long *did_some_progress)
+		struct reclaim_progress *progress)
 {
 	struct page *page = NULL;
 	unsigned long pflags;
 	bool drained = false;
 
 	psi_memstall_enter(&pflags);
-	*did_some_progress = __perform_reclaim(gfp_mask, order, ac);
-	if (unlikely(!(*did_some_progress)))
+	__perform_reclaim(gfp_mask, order, ac, progress);
+	if (unlikely(!progress->nr_reclaimed))
 		goto out;
 
 retry:
@@ -4587,6 +4583,41 @@ bool gfp_pfmemalloc_allowed(gfp_t gfp_mask)
 }
 
 /*
+ * Minimum percentage of LRU reclaimable pages that must have been
+ * reclaimed in the last cycle for that type to be counted towards the
+ * "can we satisfy this allocation?" watermark check in
+ * should_reclaim_retry().
+ *
+ * This prevents systems with only RAM-backed swap (zram) from
+ * endlessly retrying reclaim for anon pages when minimal progress is
+ * made despite seemingly having lots of reclaimable pages.
+ *
+ * Setting this to 0 disables the per-LRU progress check: all
+ * reclaimable pages are always counted towards watermark.
+ */
+static int reclaim_progress_pct __read_mostly = 1;
+
+/*
+ * Return true if reclaim for this LRU type made at least
+ * reclaim_progress_pct% progress in the last cycle or the LRU progress
+ * check is disabled.
+ */
+static inline bool reclaim_progress_sufficient(unsigned long reclaimed,
+					       unsigned long reclaimable)
+{
+	unsigned long threshold;
+
+	if (!reclaim_progress_pct)
+		return true;
+
+	if (!reclaimable)
+		return false;
+
+	threshold = DIV_ROUND_UP(reclaimable * reclaim_progress_pct, 100);
+	return reclaimed >= threshold;
+}
+
+/*
  * Checks whether it makes sense to retry the reclaim to make a forward progress
  * for the given allocation request.
  *
@@ -4599,11 +4630,13 @@ bool gfp_pfmemalloc_allowed(gfp_t gfp_mask)
 static inline bool
 should_reclaim_retry(gfp_t gfp_mask, unsigned order,
 		     struct alloc_context *ac, int alloc_flags,
-		     bool did_some_progress, int *no_progress_loops)
+		     struct reclaim_progress *progress,
+		     int *no_progress_loops)
 {
 	struct zone *zone;
 	struct zoneref *z;
 	bool ret = false;
+	bool did_some_progress = progress->nr_reclaimed > 0;
 
 	/*
 	 * Costly allocations might have made a progress but this doesn't mean
@@ -4629,6 +4662,8 @@ should_reclaim_retry(gfp_t gfp_mask, unsigned order,
 				ac->highest_zoneidx, ac->nodemask) {
 		unsigned long available;
 		unsigned long reclaimable;
+		unsigned long reclaimable_anon;
+		unsigned long reclaimable_file;
 		unsigned long min_wmark = min_wmark_pages(zone);
 		bool wmark;
 
@@ -4637,7 +4672,24 @@ should_reclaim_retry(gfp_t gfp_mask, unsigned order,
 			!__cpuset_zone_allowed(zone, gfp_mask))
 				continue;
 
-		available = reclaimable = zone_reclaimable_pages(zone);
+		/*
+		 * Only count reclaimable pages from an LRU type if reclaim
+		 * actually made headway on that type in the last cycle.
+		 * This prevents the allocator from looping endlessly on
+		 * account of a large pool of pages that reclaim cannot make
+		 * progress on, e.g. anonymous pages when the only swap is
+		 * RAM-backed (zram).
+		 */
+		reclaimable = 0;
+		reclaimable_file = zone_reclaimable_file_pages(zone);
+		reclaimable_anon = zone_reclaimable_anon_pages(zone);
+
+		if (reclaim_progress_sufficient(progress->nr_file, reclaimable_file))
+			reclaimable += reclaimable_file;
+		if (reclaim_progress_sufficient(progress->nr_anon, reclaimable_anon))
+			reclaimable += reclaimable_anon;
+
+		available = reclaimable;
 		available += zone_page_state_snapshot(zone, NR_FREE_PAGES);
 
 		/*
@@ -4716,7 +4768,8 @@ __alloc_pages_slowpath(gfp_t gfp_mask, unsigned int order,
 	const bool costly_order = order > PAGE_ALLOC_COSTLY_ORDER;
 	struct page *page = NULL;
 	unsigned int alloc_flags;
-	unsigned long did_some_progress;
+	struct reclaim_progress reclaim_progress = {};
+	unsigned long oom_progress;
 	enum compact_priority compact_priority;
 	enum compact_result compact_result;
 	int compaction_retries;
@@ -4726,6 +4779,7 @@ __alloc_pages_slowpath(gfp_t gfp_mask, unsigned int order,
 	int reserve_flags;
 	bool compact_first = false;
 	bool can_retry_reserves = true;
+
 
 	if (unlikely(nofail)) {
 		/*
@@ -4844,7 +4898,7 @@ retry:
 	/* Try direct reclaim and then allocating */
 	if (!compact_first) {
 		page = __alloc_pages_direct_reclaim(gfp_mask, order, alloc_flags,
-							ac, &did_some_progress);
+						ac, &reclaim_progress);
 		if (page)
 			goto got_pg;
 	}
@@ -4904,7 +4958,7 @@ retry:
 		goto restart;
 
 	if (should_reclaim_retry(gfp_mask, order, ac, alloc_flags,
-				 did_some_progress > 0, &no_progress_loops))
+				 &reclaim_progress, &no_progress_loops))
 		goto retry;
 
 	/*
@@ -4913,7 +4967,7 @@ retry:
 	 * implementation of the compaction depends on the sufficient amount
 	 * of free memory (see __compaction_suitable)
 	 */
-	if (did_some_progress > 0 && can_compact &&
+	if (reclaim_progress.nr_reclaimed > 0 && can_compact &&
 			should_compact_retry(ac, order, alloc_flags,
 				compact_result, &compact_priority,
 				&compaction_retries))
@@ -4934,7 +4988,7 @@ retry:
 		goto restart;
 
 	/* Reclaim has failed us, start killing things */
-	page = __alloc_pages_may_oom(gfp_mask, order, ac, &did_some_progress);
+	page = __alloc_pages_may_oom(gfp_mask, order, ac, &oom_progress);
 	if (page)
 		goto got_pg;
 
@@ -4945,7 +4999,7 @@ retry:
 		goto nopage;
 
 	/* Retry as long as the OOM killer is making progress */
-	if (did_some_progress) {
+	if (oom_progress) {
 		no_progress_loops = 0;
 		goto retry;
 	}
@@ -6774,6 +6828,15 @@ static const struct ctl_table page_alloc_sysctl_table[] = {
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_ONE,
+	},
+	{
+		.procname	= "reclaim_progress_pct",
+		.data		= &reclaim_progress_pct,
+		.maxlen		= sizeof(reclaim_progress_pct),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE_HUNDRED,
 	},
 	{
 		.procname	= "percpu_pagelist_high_fraction",

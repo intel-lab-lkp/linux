@@ -167,6 +167,10 @@ struct scan_control {
 	/* Number of pages freed so far during a call to shrink_zones() */
 	unsigned long nr_reclaimed;
 
+	/* Anon/file LRU contributions to nr_reclaimed */
+	unsigned long nr_reclaimed_anon;
+	unsigned long nr_reclaimed_file;
+
 	struct {
 		unsigned int dirty;
 		unsigned int unqueued_dirty;
@@ -385,6 +389,21 @@ static inline bool can_reclaim_anon_pages(struct mem_cgroup *memcg,
 	return can_demote(nid, sc, memcg);
 }
 
+unsigned long zone_reclaimable_file_pages(struct zone *zone)
+{
+	return zone_page_state_snapshot(zone, NR_ZONE_INACTIVE_FILE) +
+		zone_page_state_snapshot(zone, NR_ZONE_ACTIVE_FILE);
+}
+
+unsigned long zone_reclaimable_anon_pages(struct zone *zone)
+{
+	if (!can_reclaim_anon_pages(NULL, zone_to_nid(zone), NULL))
+		return 0;
+
+	return zone_page_state_snapshot(zone, NR_ZONE_INACTIVE_ANON) +
+		zone_page_state_snapshot(zone, NR_ZONE_ACTIVE_ANON);
+}
+
 /*
  * This misses isolated folios which are not accounted for to save counters.
  * As the data only determines if reclaim or compaction continues, it is
@@ -392,15 +411,8 @@ static inline bool can_reclaim_anon_pages(struct mem_cgroup *memcg,
  */
 unsigned long zone_reclaimable_pages(struct zone *zone)
 {
-	unsigned long nr;
-
-	nr = zone_page_state_snapshot(zone, NR_ZONE_INACTIVE_FILE) +
-		zone_page_state_snapshot(zone, NR_ZONE_ACTIVE_FILE);
-	if (can_reclaim_anon_pages(NULL, zone_to_nid(zone), NULL))
-		nr += zone_page_state_snapshot(zone, NR_ZONE_INACTIVE_ANON) +
-			zone_page_state_snapshot(zone, NR_ZONE_ACTIVE_ANON);
-
-	return nr;
+	return zone_reclaimable_file_pages(zone) +
+		zone_reclaimable_anon_pages(zone);
 }
 
 /**
@@ -4718,6 +4730,10 @@ retry:
 	reclaimed = shrink_folio_list(&list, pgdat, sc, &stat, false, memcg);
 	sc->nr.unqueued_dirty += stat.nr_unqueued_dirty;
 	sc->nr_reclaimed += reclaimed;
+	if (type)
+		sc->nr_reclaimed_file += reclaimed;
+	else
+		sc->nr_reclaimed_anon += reclaimed;
 	trace_mm_vmscan_lru_shrink_inactive(pgdat->node_id,
 			scanned, reclaimed, &stat, sc->priority,
 			type ? LRU_INACTIVE_FILE : LRU_INACTIVE_ANON);
@@ -5776,6 +5792,8 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 	unsigned long nr_to_scan;
 	enum lru_list lru;
 	unsigned long nr_reclaimed = 0;
+	unsigned long nr_reclaimed_anon = 0;
+	unsigned long nr_reclaimed_file = 0;
 	unsigned long nr_to_reclaim = sc->nr_to_reclaim;
 	bool proportional_reclaim;
 	struct blk_plug plug;
@@ -5812,11 +5830,18 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 
 		for_each_evictable_lru(lru) {
 			if (nr[lru]) {
+				unsigned long reclaimed;
+
 				nr_to_scan = min(nr[lru], SWAP_CLUSTER_MAX);
 				nr[lru] -= nr_to_scan;
 
-				nr_reclaimed += shrink_list(lru, nr_to_scan,
-							    lruvec, sc);
+				reclaimed = shrink_list(lru, nr_to_scan,
+							lruvec, sc);
+				nr_reclaimed += reclaimed;
+				if (is_file_lru(lru))
+					nr_reclaimed_file += reclaimed;
+				else
+					nr_reclaimed_anon += reclaimed;
 			}
 		}
 
@@ -5876,6 +5901,8 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 	}
 	blk_finish_plug(&plug);
 	sc->nr_reclaimed += nr_reclaimed;
+	sc->nr_reclaimed_anon += nr_reclaimed_anon;
+	sc->nr_reclaimed_file += nr_reclaimed_file;
 
 	/*
 	 * Even if we did not try to evict anon pages at all, we want to
@@ -6563,8 +6590,9 @@ out:
 	return false;
 }
 
-unsigned long try_to_free_pages(struct zonelist *zonelist, int order,
-				gfp_t gfp_mask, nodemask_t *nodemask)
+void try_to_free_pages(struct zonelist *zonelist, int order,
+		       gfp_t gfp_mask, nodemask_t *nodemask,
+		       struct reclaim_progress *progress)
 {
 	unsigned long nr_reclaimed;
 	struct scan_control sc = {
@@ -6588,12 +6616,14 @@ unsigned long try_to_free_pages(struct zonelist *zonelist, int order,
 	BUILD_BUG_ON(MAX_NR_ZONES > S8_MAX);
 
 	/*
-	 * Do not enter reclaim if fatal signal was delivered while throttled.
-	 * 1 is returned so that the page allocator does not OOM kill at this
-	 * point.
+	 * Do not enter reclaim if fatal signal was delivered while
+	 * throttled. nr_reclaimed is set to 1 so that the page
+	 * allocator does not OOM kill at this point.
 	 */
-	if (throttle_direct_reclaim(sc.gfp_mask, zonelist, nodemask))
-		return 1;
+	if (throttle_direct_reclaim(sc.gfp_mask, zonelist, nodemask)) {
+		nr_reclaimed = 1;
+		goto out;
+	}
 
 	set_task_reclaim_state(current, &sc.reclaim_state);
 	trace_mm_vmscan_direct_reclaim_begin(order, sc.gfp_mask);
@@ -6603,7 +6633,11 @@ unsigned long try_to_free_pages(struct zonelist *zonelist, int order,
 	trace_mm_vmscan_direct_reclaim_end(nr_reclaimed);
 	set_task_reclaim_state(current, NULL);
 
-	return nr_reclaimed;
+	progress->nr_anon = sc.nr_reclaimed_anon;
+	progress->nr_file = sc.nr_reclaimed_file;
+
+out:
+	progress->nr_reclaimed = nr_reclaimed;
 }
 
 #ifdef CONFIG_MEMCG
