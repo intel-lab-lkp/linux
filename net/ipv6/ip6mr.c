@@ -136,16 +136,6 @@ static struct mr_table *__ip6mr_get_table(struct net *net, u32 id)
 	return NULL;
 }
 
-static struct mr_table *ip6mr_get_table(struct net *net, u32 id)
-{
-	struct mr_table *mrt;
-
-	rcu_read_lock();
-	mrt = __ip6mr_get_table(net, id);
-	rcu_read_unlock();
-	return mrt;
-}
-
 static int ip6mr_fib_lookup(struct net *net, struct flowi6 *flp6,
 			    struct mr_table **mrt)
 {
@@ -274,7 +264,7 @@ static void __net_exit ip6mr_rules_exit(struct net *net)
 
 	ASSERT_RTNL();
 	list_for_each_entry_safe(mrt, next, &net->ipv6.mr6_tables, list) {
-		list_del(&mrt->list);
+		list_del_rcu(&mrt->list);
 		ip6mr_free_table(mrt);
 	}
 	fib_rules_unregister(net->ipv6.mr6_rules_ops);
@@ -298,28 +288,30 @@ bool ip6mr_rule_default(const struct fib_rule *rule)
 }
 EXPORT_SYMBOL(ip6mr_rule_default);
 #else
-#define ip6mr_for_each_table(mrt, net) \
-	for (mrt = net->ipv6.mrt6; mrt; mrt = NULL)
-
 static struct mr_table *ip6mr_mr_table_iter(struct net *net,
 					    struct mr_table *mrt)
 {
 	if (!mrt)
-		return net->ipv6.mrt6;
+		return rcu_dereference(net->ipv6.mrt6);
 	return NULL;
 }
 
-static struct mr_table *ip6mr_get_table(struct net *net, u32 id)
+static struct mr_table *__ip6mr_get_table(struct net *net, u32 id)
 {
-	return net->ipv6.mrt6;
+	return rcu_dereference_check(net->ipv6.mrt6,
+				     lockdep_rtnl_is_held() ||
+				     !rcu_access_pointer(net->ipv6.mrt6));
 }
 
-#define __ip6mr_get_table ip6mr_get_table
+#define ip6mr_for_each_table(mrt, net)				\
+	for (mrt = __ip6mr_get_table(net, 0); mrt; mrt = NULL)
 
 static int ip6mr_fib_lookup(struct net *net, struct flowi6 *flp6,
 			    struct mr_table **mrt)
 {
-	*mrt = net->ipv6.mrt6;
+	*mrt = rcu_dereference(net->ipv6.mrt6);
+	if (!*mrt)
+		return -EAGAIN;
 	return 0;
 }
 
@@ -330,15 +322,19 @@ static int __net_init ip6mr_rules_init(struct net *net)
 	mrt = ip6mr_new_table(net, RT6_TABLE_DFLT);
 	if (IS_ERR(mrt))
 		return PTR_ERR(mrt);
-	net->ipv6.mrt6 = mrt;
+
+	rcu_assign_pointer(net->ipv6.mrt6, mrt);
 	return 0;
 }
 
 static void __net_exit ip6mr_rules_exit(struct net *net)
 {
+	struct mr_table *mrt = rcu_dereference_protected(net->ipv6.mrt6, 1);
+
 	ASSERT_RTNL();
-	ip6mr_free_table(net->ipv6.mrt6);
-	net->ipv6.mrt6 = NULL;
+
+	RCU_INIT_POINTER(net->ipv6.mrt6, NULL);
+	ip6mr_free_table(mrt);
 }
 
 static int ip6mr_rules_dump(struct net *net, struct notifier_block *nb,
@@ -352,6 +348,17 @@ static unsigned int ip6mr_rules_seq_read(const struct net *net)
 	return 0;
 }
 #endif
+
+static struct mr_table *ip6mr_get_table(struct net *net, u32 id)
+{
+	struct mr_table *mrt;
+
+	rcu_read_lock();
+	mrt = __ip6mr_get_table(net, id);
+	rcu_read_unlock();
+
+	return mrt;
+}
 
 static int ip6mr_hash_cmp(struct rhashtable_compare_arg *arg,
 			  const void *ptr)
@@ -412,7 +419,7 @@ static void ip6mr_free_table(struct mr_table *mrt)
 	mroute_clean_tables(mrt, MRT6_FLUSH_MIFS | MRT6_FLUSH_MIFS_STATIC |
 				 MRT6_FLUSH_MFC | MRT6_FLUSH_MFC_STATIC);
 	rhltable_destroy(&mrt->mfc_hash);
-	kfree(mrt);
+	kfree_rcu(mrt, rcu);
 }
 
 #ifdef CONFIG_PROC_FS
