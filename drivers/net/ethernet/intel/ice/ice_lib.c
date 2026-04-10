@@ -1329,14 +1329,18 @@ static int ice_vsi_init(struct ice_vsi *vsi, u32 vsi_flags)
 	if (vsi_flags & ICE_VSI_FLAG_INIT) {
 		ret = ice_add_vsi(hw, vsi->idx, ctxt, NULL);
 		if (ret) {
-			dev_err(dev, "Add VSI failed, err %d\n", ret);
+			dev_err(dev, "Add VSI %d failed, err %d aq_err %s\n",
+				vsi->idx, ret,
+				libie_aq_str(hw->adminq.sq_last_status));
 			ret = -EIO;
 			goto out;
 		}
 	} else {
 		ret = ice_update_vsi(hw, vsi->idx, ctxt, NULL);
 		if (ret) {
-			dev_err(dev, "Update VSI failed, err %d\n", ret);
+			dev_err(dev, "Update VSI %d failed, err %d aq_err %s\n",
+				vsi->idx, ret,
+				libie_aq_str(hw->adminq.sq_last_status));
 			ret = -EIO;
 			goto out;
 		}
