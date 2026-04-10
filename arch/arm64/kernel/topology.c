@@ -50,6 +50,16 @@ struct amu_cntr_sample {
 	unsigned long	last_scale_update;
 };
 
+struct amu_ffh_ctrs {
+	u64 corecnt;
+	u64 constcnt;
+};
+
+enum cpc_ffh_ctr_id {
+	CPC_FFH_CTR_CORE  = 0x0,
+	CPC_FFH_CTR_CONST = 0x1,
+};
+
 static DEFINE_PER_CPU_SHARED_ALIGNED(struct amu_cntr_sample, cpu_amu_samples);
 
 void update_freq_counters_refs(void)
@@ -397,7 +407,7 @@ static void cpu_read_constcnt(void *val)
 }
 
 static inline
-int counters_read_on_cpu(int cpu, smp_call_func_t func, u64 *val)
+int counters_read_on_cpu(int cpu, smp_call_func_t func, void *val)
 {
 	/*
 	 * Abort call on counterless CPU.
@@ -447,24 +457,73 @@ bool cpc_ffh_supported(void)
 	return true;
 }
 
+static void amu_read_core_const_ctrs(void *val)
+{
+	struct amu_ffh_ctrs *ctrs = val;
+
+	cpu_read_constcnt(&ctrs->constcnt);
+	cpu_read_corecnt(&ctrs->corecnt);
+}
+
+static u64 cpc_ffh_extract_bits(const struct cpc_reg *reg, u64 val)
+{
+	val &= GENMASK_ULL(reg->bit_offset + reg->bit_width - 1,
+			   reg->bit_offset);
+	val >>= reg->bit_offset;
+
+	return val;
+}
+
+static bool cpc_ffh_ctr_value(const struct cpc_reg *reg,
+			      const struct amu_ffh_ctrs *ctrs, u64 *val)
+{
+	switch ((u64)reg->address) {
+	case CPC_FFH_CTR_CORE:
+		*val = ctrs->corecnt;
+		break;
+	case CPC_FFH_CTR_CONST:
+		*val = ctrs->constcnt;
+		break;
+	default:
+		return false;
+	}
+
+	*val = cpc_ffh_extract_bits(reg, *val);
+	return true;
+}
+
+int cpc_read_ffh_fb_ctrs(int cpu, struct cpc_reg *reg1, u64 *val1,
+			 struct cpc_reg *reg2, u64 *val2)
+{
+	struct amu_ffh_ctrs ctrs;
+	int ret;
+
+	ret = counters_read_on_cpu(cpu, amu_read_core_const_ctrs, &ctrs);
+	if (ret)
+		return ret;
+
+	if (!cpc_ffh_ctr_value(reg1, &ctrs, val1) ||
+	    !cpc_ffh_ctr_value(reg2, &ctrs, val2))
+		return -EOPNOTSUPP;
+
+	return 0;
+}
+
 int cpc_read_ffh(int cpu, struct cpc_reg *reg, u64 *val)
 {
 	int ret = -EOPNOTSUPP;
 
 	switch ((u64)reg->address) {
-	case 0x0:
+	case CPC_FFH_CTR_CORE:
 		ret = counters_read_on_cpu(cpu, cpu_read_corecnt, val);
 		break;
-	case 0x1:
+	case CPC_FFH_CTR_CONST:
 		ret = counters_read_on_cpu(cpu, cpu_read_constcnt, val);
 		break;
 	}
 
-	if (!ret) {
-		*val &= GENMASK_ULL(reg->bit_offset + reg->bit_width - 1,
-				    reg->bit_offset);
-		*val >>= reg->bit_offset;
-	}
+	if (!ret)
+		*val = cpc_ffh_extract_bits(reg, *val);
 
 	return ret;
 }
