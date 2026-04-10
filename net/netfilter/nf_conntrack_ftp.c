@@ -126,6 +126,10 @@ static int try_number(const char *data, size_t dlen, u_int32_t array[],
 	for (i = 0, len = 0; len < dlen && i < array_size; len++, data++) {
 		if (*data >= '0' && *data <= '9') {
 			array[i] = array[i]*10 + *data - '0';
+			if (array[i] > 255) {
+				pr_debug("try_number: %u > 255\n", array[i]);
+				return 0;
+			}
 		}
 		else if (*data == sep)
 			i++;
