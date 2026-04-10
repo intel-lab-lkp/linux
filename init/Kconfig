@@ -792,6 +792,36 @@ config IKHEADERS
 	  or similar programs.  If you build the headers as a module, a module called
 	  kheaders.ko is built which can be loaded on-demand to get access to headers.
 
+config EARLY_CYCLES_KHZ
+	int "Frequency of the early times cycle counter, in KHz"
+	default 0
+	depends on PRINTK
+	depends on ARM64 || X86_64 || RISCV_TIMER
+	help
+	  Specifies the frequency value (in KHz) of the cycle counter
+	  used for early times information.
+
+	  Set this to provide timing information for printks in early boot
+	  (before the start of kernel timekeeping), that would otherwise
+	  show as 0.
+
+	  To calculate the value for your system, boot your system, and
+	  use the value expressed on the tsc or cntvct_el0 calibration line
+	  in your kernel message log:
+	  ex x86_64: tsc: Refined TSC clocksource calibration: 2095.057 MHz
+          In that case, use the value 2095057.
+	  ex arm64: arch_timer: cp15 timer running at 54.00MHz (phys).
+	  In that case, use the value of 54000.
+
+	  Note that this causes the kernel to show, for some early printks,
+	  times that are relative to processor power on, instead of
+	  relative to the start of kernel timekeeping.  When kernel
+	  timekeeping starts, the timestamps values reset, causing
+	  a discontinuity in the timestamp values.  If you see
+	  non-monotonic printk timestamps, please don't freak out.
+
+	  Set to 0 to disable this feature.
+
 config LOG_BUF_SHIFT
 	int "Kernel log buffer size (16 => 64KB, 17 => 128KB)"
 	range 12 25
