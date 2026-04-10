@@ -211,6 +211,7 @@ enum mapping_flags {
 	AS_KERNEL_FILE = 10,	/* mapping for a fake kernel file that shouldn't
 				   account usage to user cgroups */
 	AS_NO_DATA_INTEGRITY = 11, /* no data integrity guarantees */
+	AS_NO_DIRECT_MAP = 12,	/* Folios in the mapping are not in the direct map */
 	/* Bits 16-25 are used for FOLIO_ORDER */
 	AS_FOLIO_ORDER_BITS = 5,
 	AS_FOLIO_ORDER_MIN = 16,
@@ -354,6 +355,21 @@ static inline void mapping_set_no_data_integrity(struct address_space *mapping)
 static inline bool mapping_no_data_integrity(const struct address_space *mapping)
 {
 	return test_bit(AS_NO_DATA_INTEGRITY, &mapping->flags);
+}
+
+static inline void mapping_set_no_direct_map(struct address_space *mapping)
+{
+	set_bit(AS_NO_DIRECT_MAP, &mapping->flags);
+}
+
+static inline bool mapping_no_direct_map(const struct address_space *mapping)
+{
+	return test_bit(AS_NO_DIRECT_MAP, &mapping->flags);
+}
+
+static inline bool vma_has_no_direct_map(const struct vm_area_struct *vma)
+{
+	return vma->vm_file && mapping_no_direct_map(vma->vm_file->f_mapping);
 }
 
 static inline gfp_t mapping_gfp_mask(const struct address_space *mapping)
