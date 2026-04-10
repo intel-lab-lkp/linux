@@ -195,7 +195,7 @@ static int try_rfc1123(const char *data, size_t dlen,
 static int get_port(const char *data, int start, size_t dlen, char delim,
 		    __be16 *port)
 {
-	u_int16_t tmp_port = 0;
+	u_int32_t tmp_port = 0;
 	int i;
 
 	for (i = start; i < dlen; i++) {
@@ -207,8 +207,14 @@ static int get_port(const char *data, int start, size_t dlen, char delim,
 			pr_debug("get_port: return %d\n", tmp_port);
 			return i + 1;
 		}
-		else if (data[i] >= '0' && data[i] <= '9')
+		else if (data[i] >= '0' && data[i] <= '9'){
 			tmp_port = tmp_port*10 + data[i] - '0';
+			if (tmp_port > 65535) {
+				pr_debug("get_port: port %u out of range.\n",
+					 tmp_port);
+				break;
+			}
+		}
 		else { /* Some other crap */
 			pr_debug("get_port: invalid char.\n");
 			break;
