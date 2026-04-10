@@ -353,6 +353,7 @@ enum stat_item {
 	SHEAF_REFILL,		/* Objects refilled to a sheaf */
 	SHEAF_ALLOC,		/* Allocation of an empty sheaf */
 	SHEAF_FREE,		/* Freeing of an empty sheaf */
+	SHEAF_SPILL,
 	BARN_GET,		/* Got full sheaf from barn */
 	BARN_GET_FAIL,		/* Failed to get full sheaf from barn */
 	BARN_PUT,		/* Put full sheaf to barn */
@@ -4279,7 +4280,9 @@ static inline bool pfmemalloc_match(struct slab *slab, gfp_t gfpflags)
  * Assumes this is performed only for caches without debugging so we
  * don't need to worry about adding the slab to the full list.
  */
-static inline void *get_freelist_nofreeze(struct kmem_cache *s, struct slab *slab)
+static inline void *__get_freelist_nofreeze(struct kmem_cache *s,
+					    struct slab *slab, int *freecount,
+					    const char *n)
 {
 	struct freelist_counters old, new;
 
@@ -4293,9 +4296,24 @@ static inline void *get_freelist_nofreeze(struct kmem_cache *s, struct slab *sla
 
 		new.inuse = old.objects;
 
-	} while (!slab_update_freelist(s, slab, &old, &new, "get_freelist_nofreeze"));
+	} while (!slab_update_freelist(s, slab, &old, &new, n));
+
+	if (freecount)
+		*freecount = old.objects - old.inuse;
 
 	return old.freelist;
+}
+
+static inline void *get_freelist_nofreeze(struct kmem_cache *s, struct slab *slab)
+{
+	return __get_freelist_nofreeze(s, slab, NULL, "get_freelist_nofreeze");
+}
+
+static inline void *get_freelist_and_freecount_nofreeze(struct kmem_cache *s,
+							struct slab *slab,
+							int *freecount)
+{
+	return __get_freelist_nofreeze(s, slab, freecount, "get_freelist_and_freecount_nofreeze");
 }
 
 /*
@@ -7028,10 +7046,15 @@ __refill_objects_node(struct kmem_cache *s, void **p, gfp_t gfp, unsigned int mi
 		return 0;
 
 	list_for_each_entry_safe(slab, slab2, &pc.slabs, slab_list) {
+		void *head;
+		void *tail;
+		struct slub_percpu_sheaves *pcs;
+		int freecount, local_node, i, cnt = 0;
+		struct slab_sheaf *spill;
 
 		list_del(&slab->slab_list);
 
-		object = get_freelist_nofreeze(s, slab);
+		object = get_freelist_and_freecount_nofreeze(s, slab, &freecount);
 
 		while (object && refilled < max) {
 			p[refilled] = object;
@@ -7039,28 +7062,72 @@ __refill_objects_node(struct kmem_cache *s, void **p, gfp_t gfp, unsigned int mi
 			maybe_wipe_obj_freeptr(s, p[refilled]);
 
 			refilled++;
+			freecount--;
 		}
 
+		if (!freecount) {
+			if (refilled >= max)
+				break;
+			continue;
+		}
 		/*
-		 * Freelist had more objects than we can accommodate, we need to
-		 * free them back. We can treat it like a detached freelist, just
-		 * need to find the tail object.
+		 * Freelist had more objects than we can accommodate, we first
+		 * try to spill them into percpu sheaf.
 		 */
-		if (unlikely(object)) {
-			void *head = object;
-			void *tail;
-			int cnt = 0;
+		if (freecount > s->sheaf_capacity)
+			goto skip_spill;
+		if (slab_test_pfmemalloc(slab))
+			goto skip_spill;
 
-			do {
-				tail = object;
-				cnt++;
-				object = get_freepointer(s, object);
-			} while (object);
-			__slab_free(s, slab, head, tail, cnt, _RET_IP_);
+		if (!local_trylock(&s->cpu_sheaves->lock))
+			goto skip_spill;
+
+		local_node = numa_mem_id();
+		if (slab_nid(slab) != local_node) {
+			local_unlock(&s->cpu_sheaves->lock);
+			goto skip_spill;
 		}
 
-		if (refilled >= max)
-			break;
+		pcs = this_cpu_ptr(s->cpu_sheaves);
+		if (pcs->spare &&
+		    (freecount <= (s->sheaf_capacity - pcs->spare->size)))
+			spill = pcs->spare;
+		else if (freecount <= (s->sheaf_capacity - pcs->main->size))
+			spill = pcs->main;
+		else {
+			local_unlock(&s->cpu_sheaves->lock);
+			goto skip_spill;
+		}
+
+		if (freecount > (s->sheaf_capacity - spill->size)) {
+			local_unlock(&s->cpu_sheaves->lock);
+			goto skip_spill;
+		}
+
+		for (i = 0; i < freecount; i++) {
+			spill->objects[spill->size] = object;
+			object = get_freepointer(s, object);
+			maybe_wipe_obj_freeptr(s, spill->objects[spill->size]);
+			spill->size++;
+		}
+
+		local_unlock(&s->cpu_sheaves->lock);
+		stat(s, SHEAF_SPILL);
+		break;
+skip_spill:
+		/*
+		 * Freelist had more objects than we can accommodate or spill,
+		 * we need to free them back. We can treat it like a detached freelist,
+		 * just need to find the tail object.
+		 */
+		head = object;
+		do {
+			tail = object;
+			cnt++;
+			object = get_freepointer(s, object);
+		} while (object);
+		__slab_free(s, slab, head, tail, cnt, _RET_IP_);
+		break;
 	}
 
 	if (unlikely(!list_empty(&pc.slabs))) {
@@ -9247,6 +9314,7 @@ STAT_ATTR(SHEAF_FLUSH, sheaf_flush);
 STAT_ATTR(SHEAF_REFILL, sheaf_refill);
 STAT_ATTR(SHEAF_ALLOC, sheaf_alloc);
 STAT_ATTR(SHEAF_FREE, sheaf_free);
+STAT_ATTR(SHEAF_SPILL, sheaf_spill);
 STAT_ATTR(BARN_GET, barn_get);
 STAT_ATTR(BARN_GET_FAIL, barn_get_fail);
 STAT_ATTR(BARN_PUT, barn_put);
@@ -9335,6 +9403,7 @@ static struct attribute *slab_attrs[] = {
 	&sheaf_refill_attr.attr,
 	&sheaf_alloc_attr.attr,
 	&sheaf_free_attr.attr,
+	&sheaf_spill_attr.attr,
 	&barn_get_attr.attr,
 	&barn_get_fail_attr.attr,
 	&barn_put_attr.attr,
