@@ -2016,6 +2016,10 @@ int __phy_resume(struct phy_device *phydev)
 	if (!phydrv || !phydrv->resume)
 		return 0;
 
+	ret = phy_init_hw(phydev);
+	if (ret)
+		return ret;
+
 	ret = phydrv->resume(phydev);
 	if (!ret)
 		phydev->suspended = false;
