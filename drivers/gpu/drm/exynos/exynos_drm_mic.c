@@ -437,6 +437,7 @@ static int exynos_mic_probe(struct platform_device *pdev)
 
 err_pm:
 	pm_runtime_disable(dev);
+	drm_bridge_remove(&mic->bridge);
 err:
 	return ret;
 }
