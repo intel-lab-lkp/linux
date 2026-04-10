@@ -101,6 +101,9 @@ pub struct DynamicPerCpu<T> {
     // INVARIANT: The memory location in each CPU's per-CPU area pointed at by the alloc is
     // initialized.
     alloc: Option<Arc<PerCpuAllocation<T>>>,
+    // INVARIANT: `ptr` is the per-CPU pointer managed by `alloc`, which does not change for the
+    // lifetime of `self`.
+    pub(super) ptr: PerCpuPtr<T>,
 }
 
 impl<T: Zeroable> DynamicPerCpu<T> {
@@ -112,9 +115,13 @@ impl<T: Zeroable> DynamicPerCpu<T> {
     pub fn new_zero(flags: Flags) -> Option<Self> {
         let alloc: PerCpuAllocation<T> = PerCpuAllocation::new_zero()?;
 
+        let ptr = alloc.0;
         let arc = Arc::new(alloc, flags).ok()?;
 
-        Some(Self { alloc: Some(arc) })
+        Some(Self {
+            alloc: Some(arc),
+            ptr,
+        })
     }
 }
 
@@ -158,15 +165,10 @@ impl<T> DynamicPerCpu<T> {
             }
         }
 
-        Some(Self { alloc: Some(arc) })
-    }
-}
-
-impl<T> DynamicPerCpu<T> {
-    /// Gets the allocation backing this per-CPU variable.
-    pub(crate) fn alloc(&self) -> &Arc<PerCpuAllocation<T>> {
-        // SAFETY: This type's invariant ensures that `self.alloc` is `Some`.
-        unsafe { self.alloc.as_ref().unwrap_unchecked() }
+        Some(Self {
+            alloc: Some(arc),
+            ptr,
+        })
     }
 }
 
@@ -178,11 +180,11 @@ impl<T> PerCpu<T> for DynamicPerCpu<T> {
         //    exists on the current CPU.
         // 3. The invariants of `DynamicPerCpu` ensure that the contents of the allocation are
         //    initialized on each CPU.
-        // 4. The existence of a reference to the `PerCpuAllocation` ensures that the allocation is
-        //    live.
+        // 4. `&mut self` holds a reference to the `PerCpuAllocation`, so the allocation it manages
+        //    is live.
         // 5. The invariants of `DynamicPerCpu` ensure that the allocation is sized and aligned for
         //    a `T`.
-        unsafe { PerCpuToken::new(guard, &self.alloc.as_ref().unwrap_unchecked().0) }
+        unsafe { PerCpuToken::new(guard, &self.ptr) }
     }
 }
 
@@ -192,11 +194,11 @@ impl<T: InteriorMutable> CheckedPerCpu<T> for DynamicPerCpu<T> {
         // 1. Invariants of this type assure that `alloc` is `Some`.
         // 2. The invariants of `DynamicPerCpu` ensure that the contents of the allocation are
         //    initialized on each CPU.
-        // 3. The existence of a reference to the `PerCpuAllocation` ensures that the allocation is
-        //    live.
+        // 3. `&mut self` holds a reference to the `PerCpuAllocation`, so the allocation it manages
+        //    is live.
         // 4. The invariants of `DynamicPerCpu` ensure that the allocation is sized and aligned for
         //    a `T`.
-        unsafe { CheckedPerCpuToken::new(guard, &self.alloc.as_ref().unwrap_unchecked().0) }
+        unsafe { CheckedPerCpuToken::new(guard, &self.ptr) }
     }
 }
 
