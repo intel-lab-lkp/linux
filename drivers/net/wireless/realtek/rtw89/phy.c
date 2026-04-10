@@ -3972,9 +3972,21 @@ int rtw89_phy_rfk_report_wait(struct rtw89_dev *rtwdev, const char *rfk_name,
 	time_left = wait_for_completion_timeout(&wait->completion,
 						msecs_to_jiffies(ms));
 	if (time_left == 0) {
+		if (rtwdev->hci.type == RTW89_HCI_TYPE_USB) {
+			rtw89_debug(rtwdev, RTW89_DBG_RFK,
+				    "RF %s timeout (non-fatal on USB)\n",
+				    rfk_name);
+			goto out;
+		}
 		rtw89_warn(rtwdev, "failed to wait RF %s\n", rfk_name);
 		return -ETIMEDOUT;
 	} else if (wait->state != RTW89_RFK_STATE_OK) {
+		if (rtwdev->hci.type == RTW89_HCI_TYPE_USB) {
+			rtw89_debug(rtwdev, RTW89_DBG_RFK,
+				    "RF %s state %d (non-fatal on USB)\n",
+				    rfk_name, wait->state);
+			goto out;
+		}
 		rtw89_warn(rtwdev, "failed to do RF %s result from state %d\n",
 			   rfk_name, wait->state);
 		return -EFAULT;
