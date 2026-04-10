@@ -50,19 +50,6 @@ enum eth56g_res_type {
 	NUM_ETH56G_PHY_RES
 };
 
-enum ice_eth56g_link_spd {
-	ICE_ETH56G_LNK_SPD_1G,
-	ICE_ETH56G_LNK_SPD_2_5G,
-	ICE_ETH56G_LNK_SPD_10G,
-	ICE_ETH56G_LNK_SPD_25G,
-	ICE_ETH56G_LNK_SPD_40G,
-	ICE_ETH56G_LNK_SPD_50G,
-	ICE_ETH56G_LNK_SPD_50G2,
-	ICE_ETH56G_LNK_SPD_100G,
-	ICE_ETH56G_LNK_SPD_100G2,
-	NUM_ICE_ETH56G_LNK_SPD /* Must be last */
-};
-
 /**
  * struct ice_phy_reg_info_eth56g - ETH56G PHY register parameters
  * @base_addr: base address for each PHY block

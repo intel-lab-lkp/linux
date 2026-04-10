@@ -3538,6 +3538,51 @@ u16 ice_get_link_speed_based_on_phy_type(u64 phy_type_low, u64 phy_type_high)
 }
 
 /**
+ * ice_phy_get_speed_eth56g - Get link speed based on PHY link type
+ * @li: pointer to link information struct
+ *
+ * Return: simplified ETH56G PHY speed
+ */
+enum ice_eth56g_link_spd ice_phy_get_speed_eth56g(struct ice_link_status *li)
+{
+	u16 speed = ice_get_link_speed_based_on_phy_type(li->phy_type_low,
+							 li->phy_type_high);
+
+	switch (speed) {
+	case ICE_AQ_LINK_SPEED_1000MB:
+		return ICE_ETH56G_LNK_SPD_1G;
+	case ICE_AQ_LINK_SPEED_2500MB:
+		return ICE_ETH56G_LNK_SPD_2_5G;
+	case ICE_AQ_LINK_SPEED_10GB:
+		return ICE_ETH56G_LNK_SPD_10G;
+	case ICE_AQ_LINK_SPEED_25GB:
+		return ICE_ETH56G_LNK_SPD_25G;
+	case ICE_AQ_LINK_SPEED_40GB:
+		return ICE_ETH56G_LNK_SPD_40G;
+	case ICE_AQ_LINK_SPEED_50GB:
+		switch (li->phy_type_low) {
+		case ICE_PHY_TYPE_LOW_50GBASE_SR:
+		case ICE_PHY_TYPE_LOW_50GBASE_FR:
+		case ICE_PHY_TYPE_LOW_50GBASE_LR:
+		case ICE_PHY_TYPE_LOW_50GBASE_KR_PAM4:
+		case ICE_PHY_TYPE_LOW_50G_AUI1_AOC_ACC:
+		case ICE_PHY_TYPE_LOW_50G_AUI1:
+			return ICE_ETH56G_LNK_SPD_50G;
+		default:
+			return ICE_ETH56G_LNK_SPD_50G2;
+		}
+	case ICE_AQ_LINK_SPEED_100GB:
+		if (li->phy_type_high ||
+		    li->phy_type_low == ICE_PHY_TYPE_LOW_100GBASE_SR2)
+			return ICE_ETH56G_LNK_SPD_100G2;
+		else
+			return ICE_ETH56G_LNK_SPD_100G;
+	default:
+		return ICE_ETH56G_LNK_SPD_1G;
+	}
+}
+
+/**
  * ice_update_phy_type
  * @phy_type_low: pointer to the lower part of phy_type
  * @phy_type_high: pointer to the higher part of phy_type
