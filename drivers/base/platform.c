@@ -600,6 +600,7 @@ static void platform_device_release(struct device *dev)
 						  pdev.dev);
 
 	of_node_put(pa->pdev.dev.of_node);
+	device_remove_software_node(dev);
 	kfree(pa->pdev.dev.platform_data);
 	kfree(pa->pdev.mfd_cell);
 	kfree(pa->pdev.resource);
