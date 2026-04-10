@@ -2363,6 +2363,11 @@ static int ocfs2_inode_lock_update(struct inode *inode,
 			goto bail_refresh;
 		}
 
+		/* JBD2-managed buffers can bypass ocfs2_validate_inode_block(). */
+		status = ocfs2_validate_inline_dir(inode->i_sb, oi->ip_blkno, fe);
+		if (status)
+			goto bail_refresh;
+
 		/* This is a good chance to make sure we're not
 		 * locking an invalid object.  ocfs2_read_inode_block()
 		 * already checked that the inode block is sane.

@@ -138,6 +138,8 @@ int ocfs2_mark_inode_dirty(handle_t *handle,
 
 void ocfs2_set_inode_flags(struct inode *inode);
 void ocfs2_get_inode_flags(struct ocfs2_inode_info *oi);
+int ocfs2_validate_inline_dir(struct super_block *sb, u64 blkno,
+			      struct ocfs2_dinode *di);
 
 static inline blkcnt_t ocfs2_inode_sector_count(struct inode *inode)
 {

@@ -66,6 +66,26 @@ static int ocfs2_filecheck_validate_inode_block(struct super_block *sb,
 static int ocfs2_filecheck_repair_inode_block(struct super_block *sb,
 					      struct buffer_head *bh);
 
+/* Inline directories must never advertise more data than id_count can hold. */
+int ocfs2_validate_inline_dir(struct super_block *sb, u64 blkno,
+			      struct ocfs2_dinode *di)
+{
+	struct ocfs2_inline_data *data = &di->id2.i_data;
+
+	if (!S_ISDIR(le16_to_cpu(di->i_mode)) ||
+	    !(le16_to_cpu(di->i_dyn_features) & OCFS2_INLINE_DATA_FL))
+		return 0;
+
+	if (le64_to_cpu(di->i_size) > le16_to_cpu(data->id_count))
+		return ocfs2_error(sb,
+				   "Invalid dinode #%llu: inline dir i_size %llu exceeds id_count %u\n",
+				   (unsigned long long)blkno,
+				   (unsigned long long)le64_to_cpu(di->i_size),
+				   le16_to_cpu(data->id_count));
+
+	return 0;
+}
+
 void ocfs2_set_inode_flags(struct inode *inode)
 {
 	unsigned int flags = OCFS2_I(inode)->ip_attr;
@@ -612,6 +632,11 @@ static int ocfs2_read_locked_inode(struct inode *inode,
 			!!(args->fi_flags & OCFS2_FI_FLAG_SYSFILE),
 			"Inode %llu: system file state is ambiguous\n",
 			(unsigned long long)args->fi_blkno);
+
+	/* JBD2-managed buffers can bypass ocfs2_validate_inode_block(). */
+	status = ocfs2_validate_inline_dir(inode->i_sb, args->fi_blkno, fe);
+	if (status)
+		goto bail;
 
 	if (S_ISCHR(le16_to_cpu(fe->i_mode)) ||
 	    S_ISBLK(le16_to_cpu(fe->i_mode)))
@@ -1558,6 +1583,10 @@ int ocfs2_validate_inode_block(struct super_block *sb,
 				(unsigned long long)bh->b_blocknr);
 		goto bail;
 	}
+
+	rc = ocfs2_validate_inline_dir(sb, bh->b_blocknr, di);
+	if (rc)
+		goto bail;
 
 	rc = 0;
 
