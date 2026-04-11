@@ -100,6 +100,8 @@ static struct dentry *dfs_sched_core_prio;
  */
 int sched_set_itmt_support(void)
 {
+	int ret;
+
 	guard(mutex)(&itmt_update_mutex);
 
 	if (sched_itmt_capable)
@@ -110,16 +112,29 @@ int sched_set_itmt_support(void)
 						    arch_debugfs_dir,
 						    &sysctl_sched_itmt_enabled,
 						    &dfs_sched_itmt_fops);
-	if (IS_ERR_OR_NULL(dfs_sched_itmt)) {
+	if (IS_ERR(dfs_sched_itmt)) {
+		ret = PTR_ERR(dfs_sched_itmt);
 		dfs_sched_itmt = NULL;
+		if (ret != -ENODEV)
+			return ret;
+	} else if (!dfs_sched_itmt) {
 		return -ENOMEM;
 	}
 
 	dfs_sched_core_prio = debugfs_create_file("sched_core_priority", 0644,
 						  arch_debugfs_dir, NULL,
 						  &sched_core_priority_fops);
-	if (IS_ERR_OR_NULL(dfs_sched_core_prio)) {
+	if (IS_ERR(dfs_sched_core_prio)) {
+		ret = PTR_ERR(dfs_sched_core_prio);
 		dfs_sched_core_prio = NULL;
+		if (ret != -ENODEV) {
+			debugfs_remove(dfs_sched_itmt);
+			dfs_sched_itmt = NULL;
+			return ret;
+		}
+	} else if (!dfs_sched_core_prio) {
+		debugfs_remove(dfs_sched_itmt);
+		dfs_sched_itmt = NULL;
 		return -ENOMEM;
 	}
 
