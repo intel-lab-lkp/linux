@@ -87,10 +87,29 @@ static int imx_rpmsg_late_probe(struct snd_soc_card *card)
 	int ret;
 
 	if (data->lpa) {
-		struct snd_soc_component *codec_comp;
+		struct snd_soc_dapm_widget *w;
 		struct device_node *codec_np;
 		struct device_driver *codec_drv;
 		struct device *codec_dev = NULL;
+		int i, num_widgets;
+		const char *widgets;
+
+		num_widgets = of_property_count_strings(data->card.dev->of_node,
+							"ignore-suspend-widgets");
+		for_each_card_widgets(card, w) {
+			for (i = 0; i < num_widgets; i++) {
+				of_property_read_string_index(data->card.dev->of_node,
+							      "ignore-suspend-widgets",
+							      i, &widgets);
+				if (!strcmp(w->name, widgets)) {
+					ret = snd_soc_dapm_ignore_suspend(w->dapm, widgets);
+					if (ret) {
+						dev_err(dev, "failed to find ignore suspend widgets\n");
+						return ret;
+					}
+				}
+			}
+		}
 
 		codec_np = data->dai.codecs->of_node;
 		if (codec_np) {
@@ -107,22 +126,6 @@ static int imx_rpmsg_late_probe(struct snd_soc_card *card)
 			}
 		}
 		if (codec_dev) {
-			codec_comp = snd_soc_lookup_component_nolocked(codec_dev, NULL);
-			if (codec_comp) {
-				int i, num_widgets;
-				const char *widgets;
-				struct snd_soc_dapm_context *dapm;
-
-				num_widgets = of_property_count_strings(data->card.dev->of_node,
-									"ignore-suspend-widgets");
-				for (i = 0; i < num_widgets; i++) {
-					of_property_read_string_index(data->card.dev->of_node,
-								      "ignore-suspend-widgets",
-								      i, &widgets);
-					dapm = snd_soc_component_to_dapm(codec_comp);
-					snd_soc_dapm_ignore_suspend(dapm, widgets);
-				}
-			}
 			codec_drv = codec_dev->driver;
 			if (codec_drv->pm) {
 				memcpy(&lpa_pm, codec_drv->pm, sizeof(lpa_pm));
