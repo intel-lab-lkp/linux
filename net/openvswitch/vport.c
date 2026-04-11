@@ -424,6 +424,18 @@ int ovs_vport_set_upcall_portids(struct vport *vport, const struct nlattr *ids)
 	return 0;
 }
 
+int ovs_vport_get_upcall_portids_size(const struct vport *vport)
+{
+	struct vport_portids *ids;
+
+	ids = rcu_dereference_ovsl(vport->upcall_portids);
+
+	if (vport->dp->user_features & OVS_DP_F_VPORT_PIDS)
+		return nla_total_size(ids->n_ids * sizeof(u32));
+	else
+		return nla_total_size(sizeof(u32));
+}
+
 /**
  *	ovs_vport_get_upcall_portids - get the upcall_portids of @vport.
  *

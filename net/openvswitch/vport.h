@@ -38,6 +38,7 @@ int ovs_vport_set_options(struct vport *, struct nlattr *options);
 int ovs_vport_get_options(const struct vport *, struct sk_buff *);
 
 int ovs_vport_set_upcall_portids(struct vport *, const struct nlattr *pids);
+int ovs_vport_get_upcall_portids_size(const struct vport *vport);
 int ovs_vport_get_upcall_portids(const struct vport *, struct sk_buff *);
 u32 ovs_vport_find_upcall_portid(const struct vport *, struct sk_buff *);
 
