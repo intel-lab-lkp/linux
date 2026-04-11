@@ -1257,7 +1257,7 @@ ia_css_debug_pipe_graph_dump_stage(
 					p--;
 				/* Last comma found, copy till that comma */
 				strscpy(enable_info1, ei,
-                                        p > sizeof(enable_info1) ? sizeof(enable_info1) : p);
+					p > sizeof(enable_info1) ? sizeof(enable_info1) : p);
 
 				ei += p + 1;
 				l = strlen(ei);
