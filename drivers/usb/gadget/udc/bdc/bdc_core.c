@@ -487,13 +487,19 @@ static int bdc_probe(struct platform_device *pdev)
 	int irq;
 	u32 temp;
 	struct device *dev = &pdev->dev;
+	int num_phys;
 	int phy_num;
 
 	dev_dbg(dev, "%s()\n", __func__);
 
-	bdc = devm_kzalloc(dev, sizeof(*bdc), GFP_KERNEL);
+	num_phys = of_count_phandle_with_args(dev->of_node,
+						"phys", "#phy-cells");
+	bdc = devm_kzalloc(dev, struct_size(bdc, phys, num_phys), GFP_KERNEL);
 	if (!bdc)
 		return -ENOMEM;
+
+	bdc->num_phys = num_phys;
+	dev_info(dev, "Using %d phy(s)\n", bdc->num_phys);
 
 	bdc->regs = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(bdc->regs))
@@ -507,18 +513,6 @@ static int bdc_probe(struct platform_device *pdev)
 	bdc->irq = irq;
 	bdc->dev = dev;
 	dev_dbg(dev, "bdc->regs: %p irq=%d\n", bdc->regs, bdc->irq);
-
-	bdc->num_phys = of_count_phandle_with_args(dev->of_node,
-						"phys", "#phy-cells");
-	if (bdc->num_phys > 0) {
-		bdc->phys = devm_kcalloc(dev, bdc->num_phys,
-					sizeof(struct phy *), GFP_KERNEL);
-		if (!bdc->phys)
-			return -ENOMEM;
-	} else {
-		bdc->num_phys = 0;
-	}
-	dev_info(dev, "Using %d phy(s)\n", bdc->num_phys);
 
 	for (phy_num = 0; phy_num < bdc->num_phys; phy_num++) {
 		bdc->phys[phy_num] = devm_of_phy_get_by_index(

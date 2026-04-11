@@ -409,7 +409,6 @@ struct bdc {
 	spinlock_t	lock;
 
 	/* generic phy */
-	struct phy      **phys;
 	int num_phys;
 	/* num of endpoints for a particular instantiation of IP */
 	unsigned int num_eps;
@@ -453,6 +452,7 @@ struct bdc {
 	 */
 	struct delayed_work	func_wake_notify;
 	struct clk		*clk;
+	struct phy		*phys[] __counted_by(num_phys);
 };
 
 static inline u32 bdc_readl(void __iomem *base, u32 offset)
