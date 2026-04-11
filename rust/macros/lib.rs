@@ -55,6 +55,7 @@ use syn::parse_macro_input;
 /// - [`u64`]
 /// - [`isize`]
 /// - [`usize`]
+/// - [`bool`]
 ///
 /// C header: [`include/linux/moduleparam.h`](srctree/include/linux/moduleparam.h)
 ///
