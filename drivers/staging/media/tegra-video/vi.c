@@ -77,13 +77,13 @@ static int tegra_get_format_idx_by_code(struct tegra_vi *vi,
 	return -1;
 }
 
-static u32 tegra_get_format_fourcc_by_idx(struct tegra_vi *vi,
+static int tegra_get_format_fourcc_by_idx(struct tegra_vi *vi,
 					  unsigned int index)
 {
 	if (index >= vi->soc->nformats)
 		return -EINVAL;
 
-	return vi->soc->video_formats[index].fourcc;
+	return (int)vi->soc->video_formats[index].fourcc;
 }
 
 static const struct tegra_video_format *
@@ -395,6 +395,7 @@ static int tegra_channel_enum_format(struct file *file, void *fh,
 	struct tegra_vi_channel *chan = video_drvdata(file);
 	unsigned int index = 0, i;
 	unsigned long *fmts_bitmap = chan->tpg_fmts_bitmap;
+	int ret;
 
 	if (!IS_ENABLED(CONFIG_VIDEO_TEGRA_TPG))
 		fmts_bitmap = chan->fmts_bitmap;
@@ -405,7 +406,11 @@ static int tegra_channel_enum_format(struct file *file, void *fh,
 	for (i = 0; i < f->index + 1; i++, index++)
 		index = find_next_bit(fmts_bitmap, MAX_FORMAT_NUM, index);
 
-	f->pixelformat = tegra_get_format_fourcc_by_idx(chan->vi, index - 1);
+	ret = tegra_get_format_fourcc_by_idx(chan->vi, index - 1);
+	if (ret < 0)
+		return ret;
+
+	f->pixelformat = ret;
 
 	return 0;
 }
