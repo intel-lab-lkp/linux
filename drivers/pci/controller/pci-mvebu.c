@@ -78,18 +78,6 @@
 #define PCIE_DEBUG_CTRL         0x1a60
 #define  PCIE_DEBUG_SOFT_RESET		BIT(20)
 
-struct mvebu_pcie_port;
-
-/* Structure representing all PCIe interfaces */
-struct mvebu_pcie {
-	struct platform_device *pdev;
-	struct mvebu_pcie_port *ports;
-	struct resource io;
-	struct resource realio;
-	struct resource mem;
-	int nports;
-};
-
 struct mvebu_pcie_window {
 	phys_addr_t base;
 	phys_addr_t remap;
@@ -123,6 +111,16 @@ struct mvebu_pcie_port {
 	struct irq_domain *intx_irq_domain;
 	raw_spinlock_t irq_lock;
 	int intx_irq;
+};
+
+/* Structure representing all PCIe interfaces */
+struct mvebu_pcie {
+	struct platform_device *pdev;
+	struct resource io;
+	struct resource realio;
+	struct resource mem;
+	int nports;
+	struct mvebu_pcie_port ports[] __counted_by(nports);
 };
 
 static inline void mvebu_writel(struct mvebu_pcie_port *port, u32 val, u32 reg)
@@ -1455,23 +1453,19 @@ static int mvebu_pcie_probe(struct platform_device *pdev)
 	struct device_node *child;
 	int num, i, ret;
 
-	bridge = devm_pci_alloc_host_bridge(dev, sizeof(struct mvebu_pcie));
+	num = of_get_available_child_count(np);
+	bridge = devm_pci_alloc_host_bridge(dev, struct_size(pcie, ports, num));
 	if (!bridge)
 		return -ENOMEM;
 
 	pcie = pci_host_bridge_priv(bridge);
+	pcie->nports = num;
 	pcie->pdev = pdev;
 	platform_set_drvdata(pdev, pcie);
 
 	ret = mvebu_pcie_parse_request_resources(pcie);
 	if (ret)
 		return ret;
-
-	num = of_get_available_child_count(np);
-
-	pcie->ports = devm_kcalloc(dev, num, sizeof(*pcie->ports), GFP_KERNEL);
-	if (!pcie->ports)
-		return -ENOMEM;
 
 	i = 0;
 	for_each_available_child_of_node(np, child) {
@@ -1488,7 +1482,6 @@ static int mvebu_pcie_probe(struct platform_device *pdev)
 		port->dn = child;
 		i++;
 	}
-	pcie->nports = i;
 
 	for (i = 0; i < pcie->nports; i++) {
 		struct mvebu_pcie_port *port = &pcie->ports[i];
