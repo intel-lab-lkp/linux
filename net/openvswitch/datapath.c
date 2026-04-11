@@ -2184,9 +2184,17 @@ error:
 	return err;
 }
 
-static struct sk_buff *ovs_vport_cmd_alloc_info(void)
+/* Must be called with ovs_mutex or rcu_read_lock. */
+static size_t ovs_vport_cmd_msg_size(const struct vport *vport)
 {
-	return nlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
+	const struct vport_portids *ids;
+	size_t msgsize = NLMSG_DEFAULT_SIZE;
+
+	ids = rcu_dereference_ovsl(vport->upcall_portids);
+	if (ids && (vport->dp->user_features & OVS_DP_F_VPORT_PIDS))
+		msgsize += ids->n_ids * sizeof(u32);
+
+	return msgsize;
 }
 
 /* Called with ovs_mutex, only via ovs_dp_notify_wq(). */
@@ -2196,13 +2204,16 @@ struct sk_buff *ovs_vport_cmd_build_info(struct vport *vport, struct net *net,
 	struct sk_buff *skb;
 	int retval;
 
-	skb = nlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
+	skb = nlmsg_new(ovs_vport_cmd_msg_size(vport), GFP_KERNEL);
 	if (!skb)
 		return ERR_PTR(-ENOMEM);
 
 	retval = ovs_vport_cmd_fill_info(vport, skb, net, portid, seq, 0, cmd,
 					 GFP_KERNEL);
-	BUG_ON(retval < 0);
+	if (WARN_ON_ONCE(retval < 0)) {
+		kfree_skb(skb);
+		return ERR_PTR(retval);
+	}
 
 	return skb;
 }
@@ -2303,7 +2314,8 @@ static int ovs_vport_cmd_new(struct sk_buff *skb, struct genl_info *info)
 	if (port_no >= DP_MAX_PORTS)
 		return -EFBIG;
 
-	reply = ovs_vport_cmd_alloc_info();
+	reply = genlmsg_new(NLMSG_DEFAULT_SIZE +
+			    nla_len(a[OVS_VPORT_ATTR_UPCALL_PID]), GFP_KERNEL);
 	if (!reply)
 		return -ENOMEM;
 
@@ -2358,7 +2370,9 @@ restart:
 	else
 		netdev_set_rx_headroom(vport->dev, dp->max_headroom);
 
-	BUG_ON(err < 0);
+	if (WARN_ON_ONCE(err < 0))
+		goto exit_unlock_free;
+
 	ovs_unlock();
 
 	ovs_notify(&dp_vport_genl_family, reply, info);
@@ -2377,49 +2391,52 @@ static int ovs_vport_cmd_set(struct sk_buff *skb, struct genl_info *info)
 	struct vport *vport;
 	int err;
 
-	reply = ovs_vport_cmd_alloc_info();
-	if (!reply)
-		return -ENOMEM;
-
 	ovs_lock();
 	vport = lookup_vport(sock_net(skb->sk), genl_info_userhdr(info), a);
 	err = PTR_ERR(vport);
 	if (IS_ERR(vport))
-		goto exit_unlock_free;
+		goto exit_unlock;
 
 	if (a[OVS_VPORT_ATTR_TYPE] &&
 	    nla_get_u32(a[OVS_VPORT_ATTR_TYPE]) != vport->ops->type) {
 		err = -EINVAL;
-		goto exit_unlock_free;
+		goto exit_unlock;
 	}
 
 	if (a[OVS_VPORT_ATTR_OPTIONS]) {
 		err = ovs_vport_set_options(vport, a[OVS_VPORT_ATTR_OPTIONS]);
 		if (err)
-			goto exit_unlock_free;
+			goto exit_unlock;
 	}
-
 
 	if (a[OVS_VPORT_ATTR_UPCALL_PID]) {
 		struct nlattr *ids = a[OVS_VPORT_ATTR_UPCALL_PID];
 
 		err = ovs_vport_set_upcall_portids(vport, ids);
 		if (err)
-			goto exit_unlock_free;
+			goto exit_unlock;
+	}
+
+	reply = genlmsg_new(ovs_vport_cmd_msg_size(vport), GFP_KERNEL);
+	if (!reply) {
+		err = -ENOMEM;
+		goto exit_unlock;
 	}
 
 	err = ovs_vport_cmd_fill_info(vport, reply, genl_info_net(info),
 				      info->snd_portid, info->snd_seq, 0,
 				      OVS_VPORT_CMD_SET, GFP_KERNEL);
-	BUG_ON(err < 0);
+	if (WARN_ON_ONCE(err < 0)) {
+		kfree_skb(reply);
+		goto exit_unlock;
+	}
 
 	ovs_unlock();
 	ovs_notify(&dp_vport_genl_family, reply, info);
 	return 0;
 
-exit_unlock_free:
+exit_unlock:
 	ovs_unlock();
-	kfree_skb(reply);
 	return err;
 }
 
@@ -2433,25 +2450,30 @@ static int ovs_vport_cmd_del(struct sk_buff *skb, struct genl_info *info)
 	unsigned int new_headroom;
 	int err;
 
-	reply = ovs_vport_cmd_alloc_info();
-	if (!reply)
-		return -ENOMEM;
-
 	ovs_lock();
 	vport = lookup_vport(sock_net(skb->sk), genl_info_userhdr(info), a);
 	err = PTR_ERR(vport);
 	if (IS_ERR(vport))
-		goto exit_unlock_free;
+		goto exit_unlock;
 
 	if (vport->port_no == OVSP_LOCAL) {
 		err = -EINVAL;
-		goto exit_unlock_free;
+		goto exit_unlock;
+	}
+
+	reply = genlmsg_new(ovs_vport_cmd_msg_size(vport), GFP_KERNEL);
+	if (!reply) {
+		err = -ENOMEM;
+		goto exit_unlock;
 	}
 
 	err = ovs_vport_cmd_fill_info(vport, reply, genl_info_net(info),
 				      info->snd_portid, info->snd_seq, 0,
 				      OVS_VPORT_CMD_DEL, GFP_KERNEL);
-	BUG_ON(err < 0);
+	if (WARN_ON_ONCE(err < 0)) {
+		kfree_skb(reply);
+		goto exit_unlock;
+	}
 
 	/* the vport deletion may trigger dp headroom update */
 	dp = vport->dp;
@@ -2472,9 +2494,8 @@ static int ovs_vport_cmd_del(struct sk_buff *skb, struct genl_info *info)
 	ovs_notify(&dp_vport_genl_family, reply, info);
 	return 0;
 
-exit_unlock_free:
+exit_unlock:
 	ovs_unlock();
-	kfree_skb(reply);
 	return err;
 }
 
@@ -2484,9 +2505,20 @@ static int ovs_vport_cmd_get(struct sk_buff *skb, struct genl_info *info)
 	struct ovs_header *ovs_header = genl_info_userhdr(info);
 	struct sk_buff *reply;
 	struct vport *vport;
+	size_t msg_size;
 	int err;
 
-	reply = ovs_vport_cmd_alloc_info();
+	rcu_read_lock();
+	vport = lookup_vport(sock_net(skb->sk), ovs_header, a);
+	err = PTR_ERR(vport);
+	if (IS_ERR(vport)) {
+		rcu_read_unlock();
+		return err;
+	}
+	msg_size = ovs_vport_cmd_msg_size(vport);
+	rcu_read_unlock();
+
+	reply = genlmsg_new(msg_size, GFP_KERNEL);
 	if (!reply)
 		return -ENOMEM;
 
@@ -2495,11 +2527,16 @@ static int ovs_vport_cmd_get(struct sk_buff *skb, struct genl_info *info)
 	err = PTR_ERR(vport);
 	if (IS_ERR(vport))
 		goto exit_unlock_free;
+
 	err = ovs_vport_cmd_fill_info(vport, reply, genl_info_net(info),
 				      info->snd_portid, info->snd_seq, 0,
 				      OVS_VPORT_CMD_GET, GFP_ATOMIC);
-	BUG_ON(err < 0);
 	rcu_read_unlock();
+
+	if (err < 0) {
+		kfree_skb(reply);
+		return err;
+	}
 
 	return genlmsg_reply(reply, info);
 
