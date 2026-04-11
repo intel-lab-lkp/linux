@@ -22,6 +22,7 @@
 #define DLH             1       /*  Divisor latch High        */
 
 #define DEFAULT_BAUD 9600
+#define BASE_BAUD (1843200/16)
 
 static void early_serial_init(int port, int baud)
 {
@@ -89,16 +90,20 @@ static void parse_earlyprintk(void)
 		if (arg[pos] == ',')
 			pos++;
 
-		baud = simple_strtoull(arg + pos, &e, 0);
-		if (baud == 0 || arg + pos == e)
-			baud = DEFAULT_BAUD;
+		/* Parse the baud rate only if a usable port is selected. */
+		if (port) {
+			unsigned long long parsed_baud;
+
+			parsed_baud = simple_strtoull(arg + pos, NULL, 0);
+			if (parsed_baud >= 2 && parsed_baud <= BASE_BAUD)
+				baud = (int)parsed_baud;
+		}
 	}
 
 	if (port)
 		early_serial_init(port, baud);
 }
 
-#define BASE_BAUD (1843200/16)
 static unsigned int probe_baud(int port)
 {
 	unsigned char lcr, dll, dlh;
