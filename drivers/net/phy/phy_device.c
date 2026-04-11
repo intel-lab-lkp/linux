@@ -396,10 +396,6 @@ static __maybe_unused int mdio_bus_phy_resume(struct device *dev)
 	WARN_ON(phydev->state != PHY_HALTED && phydev->state != PHY_READY &&
 		phydev->state != PHY_UP);
 
-	ret = phy_init_hw(phydev);
-	if (ret < 0)
-		return ret;
-
 	ret = phy_resume(phydev);
 	if (ret < 0)
 		return ret;
@@ -1865,15 +1861,13 @@ int phy_attach_direct(struct net_device *dev, struct phy_device *phydev,
 	if (dev)
 		netif_carrier_off(phydev->attached_dev);
 
-	/* Do initial configuration here, now that
+	/* Do initial configuration inside phy_init_hw(), now that
 	 * we have certain key parameters
 	 * (dev_flags and interface)
 	 */
-	err = phy_init_hw(phydev);
+	err = phy_resume(phydev);
 	if (err)
 		goto error;
-
-	phy_resume(phydev);
 
 	/**
 	 * If the external phy used by current mac interface is managed by
@@ -2027,6 +2021,10 @@ EXPORT_SYMBOL(__phy_resume);
 int phy_resume(struct phy_device *phydev)
 {
 	int ret;
+
+	ret = phy_init_hw(phydev);
+	if (ret)
+		return ret;
 
 	mutex_lock(&phydev->lock);
 	ret = __phy_resume(phydev);
