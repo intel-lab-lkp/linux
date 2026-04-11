@@ -74,7 +74,6 @@ struct dwc3_qcom {
 	struct device		*dev;
 	void __iomem		*qscratch_base;
 	struct platform_device	*dwc3;
-	struct clk		**clks;
 	int			num_clocks;
 	struct reset_control	*resets;
 	struct dwc3_qcom_port	ports[DWC3_QCOM_MAX_PORTS];
@@ -90,6 +89,7 @@ struct dwc3_qcom {
 	bool			pm_suspended;
 	struct icc_path		*icc_path_ddr;
 	struct icc_path		*icc_path_apps;
+	struct clk		*clks[] __counted_by(num_clocks);
 };
 
 static inline void dwc3_qcom_setbits(void __iomem *base, u32 offset, u32 val)
@@ -653,10 +653,11 @@ static int dwc3_qcom_setup_irq(struct platform_device *pdev)
 	return 0;
 }
 
-static int dwc3_qcom_clk_init(struct dwc3_qcom *qcom, int count)
+static int dwc3_qcom_clk_init(struct dwc3_qcom *qcom)
 {
 	struct device		*dev = qcom->dev;
 	struct device_node	*np = dev->of_node;
+	int			count = qcom->num_clocks;
 	int			i;
 
 	if (!np || !count)
@@ -664,13 +665,6 @@ static int dwc3_qcom_clk_init(struct dwc3_qcom *qcom, int count)
 
 	if (count < 0)
 		return count;
-
-	qcom->num_clocks = count;
-
-	qcom->clks = devm_kcalloc(dev, qcom->num_clocks,
-				  sizeof(struct clk *), GFP_KERNEL);
-	if (!qcom->clks)
-		return -ENOMEM;
 
 	for (i = 0; i < qcom->num_clocks; i++) {
 		struct clk	*clk;
@@ -736,12 +730,17 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 	struct device		*dev = &pdev->dev;
 	struct dwc3_qcom	*qcom;
 	int			ret, i;
+	int			num_clocks;
 	bool			ignore_pipe_clk;
 	bool			wakeup_source;
 
-	qcom = devm_kzalloc(&pdev->dev, sizeof(*qcom), GFP_KERNEL);
+	num_clocks = of_clk_get_parent_count(np);
+	qcom = devm_kzalloc(&pdev->dev, struct_size(qcom, clks, num_clocks),
+			GFP_KERNEL);
 	if (!qcom)
 		return -ENOMEM;
+
+	qcom->num_clocks = num_clocks;
 
 	platform_set_drvdata(pdev, qcom);
 	qcom->dev = &pdev->dev;
@@ -766,7 +765,7 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 		goto reset_assert;
 	}
 
-	ret = dwc3_qcom_clk_init(qcom, of_clk_get_parent_count(np));
+	ret = dwc3_qcom_clk_init(qcom);
 	if (ret) {
 		dev_err_probe(dev, ret, "failed to get clocks\n");
 		goto reset_assert;
