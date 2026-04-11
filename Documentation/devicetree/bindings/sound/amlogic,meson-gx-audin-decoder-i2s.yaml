@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/sound/amlogic,meson-gx-audin-decoder-i2s.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Amlogic GX AUDIN I2S Input Decoder
+
+maintainers:
+  - Valerio Setti <vsetti@baylibre.com>
+
+allOf:
+  - $ref: dai-common.yaml#
+
+properties:
+  $nodename:
+    pattern: "^audio-controller@.*"
+
+  "#sound-dai-cells":
+    const: 0
+
+  compatible:
+    items:
+      - enum:
+          - amlogic,meson-gxbb-audin-decoder-i2s
+      - const: amlogic,meson-gx-audin-decoder-i2s
+
+  reg:
+    maxItems: 1
+
+  sound-name-prefix: true
+
+required:
+  - "#sound-dai-cells"
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    audio-controller@a040 {
+      compatible = "amlogic,meson-gxbb-audin-decoder-i2s",
+                   "amlogic,meson-gx-audin-decoder-i2s";
+      #sound-dai-cells = <0>;
+      sound-name-prefix = "AUDIN I2S Decoder";
+      reg = <0xa040 0x4>;
+      status = "disabled";
+    };
