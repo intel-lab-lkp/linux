@@ -2139,10 +2139,16 @@ static int skl_check_nv12_aux_surface(struct intel_plane_state *plane_state)
 	int min_height = intel_plane_min_height(plane, fb, uv_plane, rotation);
 	int max_width = intel_plane_max_width(plane, fb, uv_plane, rotation);
 	int max_height = intel_plane_max_height(plane, fb, uv_plane, rotation);
-	int x = plane_state->uapi.src.x1 >> 17;
-	int y = plane_state->uapi.src.y1 >> 17;
-	int w = drm_rect_width(&plane_state->uapi.src) >> 17;
-	int h = drm_rect_height(&plane_state->uapi.src) >> 17;
+
+	/*
+	 * LNL+ UV surface start/size =
+	 * ceiling(half of Y plane start/size). Use ceiling division
+	 * unconditionally; it is a no-op for even values.
+	 */
+	int x = (plane_state->uapi.src.x1 + (1 << 17) - 1) >> 17;
+	int y = (plane_state->uapi.src.y1 + (1 << 17) - 1) >> 17;
+	int w = (drm_rect_width(&plane_state->uapi.src) + (1 << 17) - 1) >> 17;
+	int h = (drm_rect_height(&plane_state->uapi.src) + (1 << 17) - 1) >> 17;
 	u32 offset;
 
 	/* FIXME not quite sure how/if these apply to the chroma plane */
