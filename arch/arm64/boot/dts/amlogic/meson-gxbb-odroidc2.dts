@@ -188,6 +188,12 @@
 				       <270950400>,
 				       <393216000>;
 
+		audio-aux-devs = <&audin_decoder_i2s>;
+		audio-routing = "AUDIN I2S Decoder IN", "AIU I2S Encoder Capture",
+				"AUDIN FIFO0 I2S IN", "AUDIN I2S Decoder OUT",
+				"AUDIN FIFO1 I2S IN", "AUDIN I2S Decoder OUT",
+				"AUDIN FIFO2 I2S IN", "AUDIN I2S Decoder OUT";
+
 		dai-link-0 {
 			sound-dai = <&aiu AIU_CPU CPU_I2S_FIFO>;
 		};
@@ -209,10 +215,38 @@
 				sound-dai = <&hdmi_tx>;
 			};
 		};
+
+		dai-link-3 {
+			sound-dai = <&audin_fifo0>;
+		};
+
+		dai-link-4 {
+			sound-dai = <&audin_fifo1>;
+		};
+
+		dai-link-5 {
+			sound-dai = <&audin_fifo2>;
+		};
 	};
 };
 
 &aiu {
+	status = "okay";
+};
+
+&audin_decoder_i2s {
+	status = "okay";
+};
+
+&audin_fifo0 {
+	status = "okay";
+};
+
+&audin_fifo1 {
+	status = "okay";
+};
+
+&audin_fifo2 {
 	status = "okay";
 };
 
