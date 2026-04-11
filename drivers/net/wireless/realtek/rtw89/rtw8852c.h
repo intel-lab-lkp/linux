@@ -13,11 +13,11 @@
 struct rtw8852c_u_efuse {
 	u8 rsvd[0x88];
 	u8 mac_addr[ETH_ALEN];
-};
+} __packed;
 
 struct rtw8852c_e_efuse {
 	u8 mac_addr[ETH_ALEN];
-};
+} __packed;
 
 struct rtw8852c_tssi_offset {
 	u8 cck_tssi[TSSI_CCK_CH_GROUP_NUM];
@@ -95,8 +95,10 @@ struct rtw8852c_efuse {
 	union {
 		struct rtw8852c_u_efuse u;
 		struct rtw8852c_e_efuse e;
-	};
+	} __packed;
 } __packed;
+
+static_assert(sizeof(struct rtw8852c_efuse) == 0x48e);
 
 extern const struct rtw89_chip_info rtw8852c_chip_info;
 

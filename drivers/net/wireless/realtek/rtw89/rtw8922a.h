@@ -68,6 +68,8 @@ struct rtw8922a_efuse {
 	struct rtw8922a_rx_gain_6g rx_gain_6g_b;
 } __packed;
 
+static_assert(sizeof(struct rtw8922a_efuse) == 0x1b8);
+
 extern const struct rtw89_chip_info rtw8922a_chip_info;
 extern const struct rtw89_chip_variant rtw8922ae_vs_variant;
 

@@ -20,11 +20,11 @@ enum rtw8852bx_pmac_mode {
 struct rtw8852bx_u_efuse {
 	u8 rsvd[0x88];
 	u8 mac_addr[ETH_ALEN];
-};
+} __packed;
 
 struct rtw8852bx_e_efuse {
 	u8 mac_addr[ETH_ALEN];
-};
+} __packed;
 
 struct rtw8852bx_tssi_offset {
 	u8 cck_tssi[TSSI_CCK_CH_GROUP_NUM];
@@ -89,8 +89,10 @@ struct rtw8852bx_efuse {
 	union {
 		struct rtw8852bx_u_efuse u;
 		struct rtw8852bx_e_efuse e;
-	};
+	} __packed;
 } __packed;
+
+static_assert(sizeof(struct rtw8852bx_efuse) == 0x48e);
 
 struct rtw8852bx_bb_pmac_info {
 	u8 en_pmac_tx:1;
