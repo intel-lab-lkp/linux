@@ -871,6 +871,7 @@ amdgpu_userq_create(struct drm_file *filp, union drm_amdgpu_userq *args)
 		     XA_LIMIT(1, AMDGPU_MAX_USERQ_COUNT), GFP_KERNEL);
 	if (r) {
 		drm_file_err(uq_mgr->file, "Failed to allocate a queue id\n");
+		xa_erase_irq(&adev->userq_doorbell_xa, index);
 		amdgpu_userq_fence_driver_free(queue);
 		uq_funcs->mqd_destroy(queue);
 		kfree(queue);
@@ -891,6 +892,7 @@ amdgpu_userq_create(struct drm_file *filp, union drm_amdgpu_userq *args)
 		r = amdgpu_userq_map_helper(queue);
 		if (r) {
 			drm_file_err(uq_mgr->file, "Failed to map Queue\n");
+			xa_erase_irq(&adev->userq_doorbell_xa, index);
 			xa_erase(&uq_mgr->userq_xa, qid);
 			amdgpu_userq_fence_driver_free(queue);
 			uq_funcs->mqd_destroy(queue);
