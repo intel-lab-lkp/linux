@@ -14,6 +14,12 @@
 #define _COMPONENT          ACPI_EXECUTER
 ACPI_MODULE_NAME("exregion")
 
+#ifdef CONFIG_ARCH_HAS_CC_PLATFORM
+bool acpi_cvm_guard_deny_access(unsigned long virt_addr);
+#else
+static inline bool acpi_cvm_guard_deny_access(unsigned long v) { return false; }
+#endif
+
 /*******************************************************************************
  *
  * FUNCTION:    acpi_ex_system_memory_space_handler
@@ -175,6 +181,12 @@ access:
 	 */
 	logical_addr_ptr = mm->logical_address +
 		((u64) address - (u64) mm->physical_address);
+
+#ifdef CONFIG_ARCH_HAS_CC_PLATFORM
+	if (acpi_cvm_guard_deny_access((unsigned long)logical_addr_ptr)) {
+		return_ACPI_STATUS(AE_AML_ILLEGAL_ADDRESS);
+	}
+#endif
 
 	ACPI_DEBUG_PRINT((ACPI_DB_INFO,
 			  "System-Memory (width %u) R/W %u Address=%8.8X%8.8X\n",

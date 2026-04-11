@@ -45,6 +45,7 @@ acpi-y				+= resource.o
 acpi-y				+= acpi_processor.o
 acpi-y				+= processor_core.o
 acpi-$(CONFIG_ARCH_MIGHT_HAVE_ACPI_PDC) += processor_pdc.o
+acpi-$(CONFIG_ARCH_HAS_CC_PLATFORM)	+= cvm_guard.o
 acpi-$(CONFIG_ACPI_EC)		+= ec.o
 acpi-$(CONFIG_ACPI_DOCK)	+= dock.o
 acpi-$(CONFIG_PCI)		+= pci_root.o pci_link.o pci_irq.o
