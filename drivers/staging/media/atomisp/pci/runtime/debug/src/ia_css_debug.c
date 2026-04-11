@@ -1256,8 +1256,7 @@ ia_css_debug_pipe_graph_dump_stage(
 				while (ei[p] != ',')
 					p--;
 				/* Last comma found, copy till that comma */
-				strscpy(enable_info1, ei,
-                                        p > sizeof(enable_info1) ? sizeof(enable_info1) : p);
+				strscpy(enable_info1, ei, umin(p, sizeof(enable_info1)));
 
 				ei += p + 1;
 				l = strlen(ei);
@@ -1268,8 +1267,7 @@ ia_css_debug_pipe_graph_dump_stage(
 					 * it is not guaranteed dword aligned
 					 */
 
-					strscpy(enable_info2, ei,
-						l > sizeof(enable_info2) ? sizeof(enable_info2) : l);
+					strscpy(enable_info2, ei, umin(l, sizeof(enable_info2)));
 
 					snprintf(enable_info, sizeof(enable_info), "%s\\n%s",
 						 enable_info1, enable_info2);
@@ -1280,8 +1278,7 @@ ia_css_debug_pipe_graph_dump_stage(
 					while (ei[p] != ',')
 						p--;
 
-					strscpy(enable_info2, ei,
-						p > sizeof(enable_info2) ? sizeof(enable_info2) : p);
+					strscpy(enable_info2, ei, umin(p, sizeof(enable_info2)));
 
 					ei += p + 1;
 					l = strlen(ei);
@@ -1303,7 +1300,7 @@ ia_css_debug_pipe_graph_dump_stage(
 						while (ei[p] != ',')
 							p--;
 						strscpy(enable_info3, ei,
-							p > sizeof(enable_info3) ? sizeof(enable_info3) : p);
+							umin(p, sizeof(enable_info3)));
 						ei += p + 1;
 						strscpy(enable_info3, ei,
 							sizeof(enable_info3));
