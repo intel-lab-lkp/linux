@@ -123,10 +123,10 @@ struct counter_device *counter_alloc(size_t sizeof_priv)
 	return counter;
 
 err_dev_set_name:
+	put_device(dev);
+	return NULL;
 
-	counter_chrdev_remove(counter);
 err_chrdev_add:
-
 	ida_free(&counter_ida, dev->id);
 err_ida_alloc:
 
