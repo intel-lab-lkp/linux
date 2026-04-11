@@ -7,6 +7,7 @@
 #include <linux/bitfield.h>
 #include <linux/kvm.h>
 #include <linux/kvm_host.h>
+#include <linux/maple_tree.h>
 
 #include <asm/fixmap.h>
 #include <asm/kvm_arm.h>
@@ -42,6 +43,19 @@ struct vncr_tlb {
  * will invalidate them more often).
  */
 #define S2_MMU_PER_VCPU		2
+
+/*
+ * Per shadow S2 reverse map (IPA -> nested IPA range) maple tree payload
+ * layout:
+ *
+ * bit 63: valid, 1 for non-polluted entries, prevents the case where the
+ *         nested IPA is 0 and turns the whole value to 0
+ * bits 55-12: nested IPA bits 55-12
+ * bit 0: polluted, 1 for polluted, 0 for not
+ */
+#define VALID_ENTRY		BIT(63)
+#define NESTED_IPA_MASK		GENMASK_ULL(55, 12)
+#define UNKNOWN_IPA		BIT(0)
 
 void kvm_init_nested(struct kvm *kvm)
 {
@@ -769,12 +783,57 @@ out:
 	return s2_mmu;
 }
 
+void kvm_record_nested_revmap(gpa_t ipa, struct kvm_s2_mmu *mmu,
+			      gpa_t fault_ipa, size_t map_size)
+{
+	struct maple_tree *mt = &mmu->nested_revmap_mt;
+	gpa_t start = ipa;
+	gpa_t end = ipa + map_size - 1;
+	u64 entry, new_entry = 0;
+	MA_STATE(mas, mt, start, end);
+
+	if (mmu->nested_revmap_broken)
+		return;
+
+	mtree_lock(mt);
+	entry = (u64)mas_find_range(&mas, end);
+
+	if (entry) {
+		/* maybe just a perm update... */
+		if (!(entry & UNKNOWN_IPA) && mas.index == start &&
+		    mas.last == end &&
+		    fault_ipa == (entry & NESTED_IPA_MASK))
+			goto unlock;
+		/*
+		 * Create a "polluted" range that spans all the overlapping
+		 * ranges and store it.
+		 */
+		while (entry && mas.index <= end) {
+			start = min(mas.index, start);
+			end = max(mas.last, end);
+			entry = (u64)mas_find_range(&mas, end);
+		}
+		new_entry |= UNKNOWN_IPA;
+	} else {
+		new_entry |= fault_ipa;
+		new_entry |= VALID_ENTRY;
+	}
+
+	mas_set_range(&mas, start, end);
+	if (mas_store_gfp(&mas, (void *)new_entry, GFP_NOWAIT | __GFP_ACCOUNT))
+		mmu->nested_revmap_broken = true;
+unlock:
+	mtree_unlock(mt);
+}
+
 void kvm_init_nested_s2_mmu(struct kvm_s2_mmu *mmu)
 {
 	/* CnP being set denotes an invalid entry */
 	mmu->tlb_vttbr = VTTBR_CNP_BIT;
 	mmu->nested_stage2_enabled = false;
 	atomic_set(&mmu->refcnt, 0);
+	mt_init(&mmu->nested_revmap_mt);
+	mmu->nested_revmap_broken = false;
 }
 
 void kvm_vcpu_load_hw_mmu(struct kvm_vcpu *vcpu)
@@ -1150,6 +1209,90 @@ void kvm_nested_s2_wp(struct kvm *kvm)
 	kvm_invalidate_vncr_ipa(kvm, 0, BIT(kvm->arch.mmu.pgt->ia_bits));
 }
 
+static void reset_revmap_and_unmap(struct kvm_s2_mmu *mmu, bool may_block)
+{
+	mtree_destroy(&mmu->nested_revmap_mt);
+	kvm_stage2_unmap_range(mmu, 0, kvm_phys_size(mmu), may_block);
+	mmu->nested_revmap_broken = false;
+}
+
+static void unmap_mmu_ipa_range(struct kvm_s2_mmu *mmu, gpa_t gpa,
+				  size_t unmap_size, bool may_block)
+{
+	struct maple_tree *mt = &mmu->nested_revmap_mt;
+	gpa_t start = gpa;
+	gpa_t end = gpa + unmap_size - 1;
+	u64 entry;
+	size_t entry_size;
+	bool unlock, fallback;
+	MA_STATE(mas, mt, gpa, end);
+
+	if (mmu->nested_revmap_broken) {
+		unlock = false;
+		fallback = true;
+		goto fin;
+	}
+
+	mtree_lock(mt);
+	entry = (u64)mas_find_range(&mas, end);
+
+	while (entry && mas.index <= end) {
+		start = mas.last + 1;
+		entry_size = mas.last - mas.index + 1;
+		/*
+		 * Give up and invalidate this s2 mmu if the unmap range
+		 * touches any polluted range.
+		 */
+		if (entry & UNKNOWN_IPA) {
+			unlock = true;
+			fallback = true;
+			goto fin;
+		}
+
+		/*
+		 * Ignore result, it is okay if a reverse mapping erase
+		 * fails.
+		 */
+		mas_store_gfp(&mas, NULL, GFP_NOWAIT | __GFP_ACCOUNT);
+
+		mtree_unlock(mt);
+		kvm_stage2_unmap_range(mmu, entry & NESTED_IPA_MASK, entry_size,
+				       may_block);
+		mtree_lock(mt);
+		/*
+		 * Other maple tree operations during preemption could render
+		 * this ma_state invalid, so reset it.
+		 */
+		mas_set_range(&mas, start, end);
+		entry = (u64)mas_find_range(&mas, end);
+	}
+	unlock = true;
+	fallback = false;
+
+fin:
+	if (unlock)
+		mtree_unlock(mt);
+	if (fallback)
+		reset_revmap_and_unmap(mmu, may_block);
+}
+
+void kvm_unmap_gfn_range_nested(struct kvm *kvm, gpa_t gpa, size_t size,
+				bool may_block)
+{
+	int i;
+
+	if (!kvm->arch.nested_mmus_size)
+		return;
+
+	/* TODO: accelerate this using mt of canonical s2 mmu */
+	for (i = 0; i < kvm->arch.nested_mmus_size; i++) {
+		struct kvm_s2_mmu *mmu = &kvm->arch.nested_mmus[i];
+
+		if (kvm_s2_mmu_valid(mmu))
+			unmap_mmu_ipa_range(mmu, gpa, size, may_block);
+	}
+}
+
 void kvm_nested_s2_unmap(struct kvm *kvm, bool may_block)
 {
 	int i;
@@ -1163,7 +1306,7 @@ void kvm_nested_s2_unmap(struct kvm *kvm, bool may_block)
 		struct kvm_s2_mmu *mmu = &kvm->arch.nested_mmus[i];
 
 		if (kvm_s2_mmu_valid(mmu))
-			kvm_stage2_unmap_range(mmu, 0, kvm_phys_size(mmu), may_block);
+			reset_revmap_and_unmap(mmu, may_block);
 	}
 
 	kvm_invalidate_vncr_ipa(kvm, 0, BIT(kvm->arch.mmu.pgt->ia_bits));
@@ -1848,7 +1991,7 @@ void check_nested_vcpu_requests(struct kvm_vcpu *vcpu)
 
 		write_lock(&vcpu->kvm->mmu_lock);
 		if (mmu->pending_unmap) {
-			kvm_stage2_unmap_range(mmu, 0, kvm_phys_size(mmu), true);
+			reset_revmap_and_unmap(mmu, true);
 			mmu->pending_unmap = false;
 		}
 		write_unlock(&vcpu->kvm->mmu_lock);
