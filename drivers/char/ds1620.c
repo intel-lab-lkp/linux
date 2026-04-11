@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * linux/drivers/char/ds1620.c: Dallas Semiconductors DS1620
+ *   Dallas Semiconductors DS1620
  *   thermometer driver (as used in the Rebel.com NetWinder)
  */
 #include <linux/module.h>
@@ -16,6 +16,7 @@
 #include <asm/mach-types.h>
 #include <linux/uaccess.h>
 #include <asm/therm.h>
+#include <asm/system_info.h>
 
 #ifdef CONFIG_PROC_FS
 /* define for /proc interface */
@@ -37,7 +38,7 @@
 #define CFG_1SHOT		1
 
 static DEFINE_MUTEX(ds1620_mutex);
-static const char *fan_state[] = { "off", "on", "on (hardwired)" };
+static const char *const fan_state[] = { "off", "on", "on (hardwired)" };
 
 /*
  * Start of NetWinder specifics
@@ -46,7 +47,6 @@ static const char *fan_state[] = { "off", "on", "on (hardwired)" };
  *  chance that the WaveArtist driver could touch these bits to
  *  enable or disable the speaker.
  */
-extern unsigned int system_rev;
 
 static inline void netwinder_ds1620_set_clk(int clk)
 {
@@ -245,7 +245,7 @@ ds1620_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 	uarg.i = (int __user *)arg;
 
-	switch(cmd) {
+	switch (cmd) {
 	case CMD_SET_THERMOSTATE:
 	case CMD_SET_THERMOSTATE2:
 		if (!capable(CAP_SYS_ADMIN))
@@ -310,7 +310,7 @@ ds1620_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 		netwinder_set_fan(i);
 		break;
-		
+
 	default:
 		return -ENOIOCTLCMD;
 	}
@@ -393,14 +393,14 @@ static int __init ds1620_init(void)
 
 #ifdef THERM_USE_PROC
 	if (!proc_create_single("therm", 0, NULL, ds1620_proc_therm_show))
-		printk(KERN_ERR "therm: unable to register /proc/therm\n");
+		pr_err("therm: unable to register /proc/therm\n");
 #endif
 
 	ds1620_read_state(&th);
 	ret = cvt_9_to_int(ds1620_in(THERM_READ_TEMP, 9));
 
-	printk(KERN_INFO "Thermostat: high %i.%i, low %i.%i, "
-	       "current %i.%i C, fan %s.\n",
+	pr_info("Thermostat: high %i.%i, low %i.%i,
+		current %i.%i C, fan %s.\n",
 	       th.hi >> 1, th.hi & 1 ? 5 : 0,
 	       th.lo >> 1, th.lo & 1 ? 5 : 0,
 	       ret   >> 1, ret   & 1 ? 5 : 0,
