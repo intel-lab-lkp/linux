@@ -58,6 +58,8 @@ enum {
 	RISCVPT_G = BIT(5),
 	RISCVPT_A = BIT(6),
 	RISCVPT_D = BIT(7),
+	RISCVPT_NC = BIT(61),
+	RISCVPT_IO = BIT(62),
 	RISCVPT_RSW = GENMASK(9, 8),
 	RISCVPT_PPN32 = GENMASK(31, 10),
 
@@ -237,6 +239,13 @@ static inline int riscvpt_iommu_set_prot(struct pt_common *common,
 		pte |= RISCVPT_R;
 	if (!(iommu_prot & IOMMU_NOEXEC))
 		pte |= RISCVPT_X;
+	if (common->features & BIT(PT_FEAT_RISCV_SVPBMT)) {
+		pte &= ~RISCVPT_PBMT;
+		if (iommu_prot & IOMMU_MMIO)
+			pte |= RISCVPT_IO;
+		else if (!(iommu_prot & IOMMU_CACHE))
+			pte |= RISCVPT_NC;
+	}
 
 	/* Caller must specify a supported combination of flags */
 	if (unlikely((pte & (RISCVPT_X | RISCVPT_W | RISCVPT_R)) == 0))
