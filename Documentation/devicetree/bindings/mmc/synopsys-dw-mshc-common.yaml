@@ -57,6 +57,14 @@ properties:
       force fifo watermark setting accordingly.
     $ref: /schemas/types.yaml#/definitions/flag
 
+  dma-threshold-bytes:
+    description:
+      DMA transfer takes place only if the transfer size is equal to or greater
+      than the number of bytes defined by the threshold value. Some controllers are
+      unable to perform the DMA transfer properly with small amounts of data.
+      This option allows to configure the threshold up to a comfortable value.
+    $ref: /schemas/types.yaml#/definitions/uint32
+
   dmas:
     maxItems: 1
 
