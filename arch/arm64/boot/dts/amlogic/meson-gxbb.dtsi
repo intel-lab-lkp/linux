@@ -84,6 +84,32 @@
 	resets = <&reset RESET_AIU>;
 };
 
+&audin_decoder_i2s {
+	compatible = "amlogic,meson-gxbb-audin-decoder-i2s",
+		     "amlogic,meson-gx-audin-decoder-i2s";
+};
+
+&audin_fifo0 {
+	compatible = "amlogic,meson-gxbb-audin-fifo",
+		     "amlogic,meson-gx-audin-fifo";
+	clocks = <&clkc CLKID_I2S_SPDIF>;
+	clock-names = "i2s_input_clk";
+};
+
+&audin_fifo1 {
+	compatible = "amlogic,meson-gxbb-audin-fifo",
+		     "amlogic,meson-gx-audin-fifo";
+	clocks = <&clkc CLKID_I2S_SPDIF>;
+	clock-names = "i2s_input_clk";
+};
+
+&audin_fifo2 {
+	compatible = "amlogic,meson-gxbb-audin-fifo",
+		     "amlogic,meson-gx-audin-fifo";
+	clocks = <&clkc CLKID_I2S_SPDIF>;
+	clock-names = "i2s_input_clk";
+};
+
 &aobus {
 	pinctrl_aobus: pinctrl@14 {
 		compatible = "amlogic,meson-gxbb-aobus-pinctrl";
