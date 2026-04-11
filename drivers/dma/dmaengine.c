@@ -1113,8 +1113,12 @@ static int __dma_async_device_channel_register(struct dma_device *device,
 
  err_out_ida:
 	ida_free(&device->chan_ida, chan->chan_id);
+	put_device(&chan->dev->device);
+	chan->dev = NULL;
+	goto err_free_local;
  err_free_dev:
 	kfree(chan->dev);
+	chan->dev = NULL;
  err_free_local:
 	free_percpu(chan->local);
 	chan->local = NULL;
