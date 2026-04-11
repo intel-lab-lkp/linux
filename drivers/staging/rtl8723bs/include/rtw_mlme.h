@@ -44,12 +44,12 @@
 
 
 enum {
- dot11AuthAlgrthm_Open = 0,
- dot11AuthAlgrthm_Shared,
- dot11AuthAlgrthm_8021X,
- dot11AuthAlgrthm_Auto,
- dot11AuthAlgrthm_WAPI,
- dot11AuthAlgrthm_MaxNum
+ dot11_auth_algrthm_Open = 0,
+ dot11_auth_algrthm_Shared,
+ dot11_auth_algrthm_8021X,
+ dot11_auth_algrthm_Auto,
+ dot11_auth_algrthm_WAPI,
+ dot11_auth_algrthm_MaxNum
 };
 
 /*  Scan type including active and passive scan. */
