@@ -70,6 +70,8 @@ struct phy_status_8703b {
 #endif
 } __packed;
 
+static_assert(sizeof(struct phy_status_8703b) == 28);
+
 /* Baseband registers */
 #define REG_BB_PWR_SAV5_11N 0x0818
 /* BIT(11) should be 1 for 8703B *and* 8723D, which means LNA uses 4

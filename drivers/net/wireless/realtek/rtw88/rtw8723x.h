@@ -95,8 +95,10 @@ struct rtw8723x_efuse {
 		struct rtw8723xe_efuse e;
 		struct rtw8723xu_efuse u;
 		struct rtw8723xs_efuse s;
-	};
+	} __packed;
 } __packed;
+
+static_assert(sizeof(struct rtw8723x_efuse) == 0x120);
 
 #define RTW8723X_IQK_ADDA_REG_NUM	16
 #define RTW8723X_IQK_MAC8_REG_NUM	3

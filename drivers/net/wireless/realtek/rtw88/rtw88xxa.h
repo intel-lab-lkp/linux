@@ -58,7 +58,7 @@ struct rtw88xxa_efuse {
 	union {
 		struct rtw8821au_efuse rtw8821au;
 		struct rtw8812au_efuse rtw8812au;
-	};
+	} __packed;
 } __packed;
 
 static_assert(sizeof(struct rtw88xxa_efuse) == 512);

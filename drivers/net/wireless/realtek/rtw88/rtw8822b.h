@@ -103,8 +103,10 @@ struct rtw8822b_efuse {
 		struct rtw8822be_efuse e;
 		struct rtw8822bu_efuse u;
 		struct rtw8822bs_efuse s;
-	};
+	} __packed;
 } __packed;
+
+static_assert(sizeof(struct rtw8822b_efuse) == 0x200);
 
 static inline void
 _rtw_write32s_mask(struct rtw_dev *rtwdev, u32 addr, u32 mask, u32 data)
