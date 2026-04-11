@@ -1,0 +1,14 @@
+config VMUFAT_FS
+	tristate "Dreamcast VMU FAT filesystem"
+	depends on BLOCK
+	help
+	  This implements the simple FAT type filesystem found on SEGA
+	  Dreamcast visual memory units.
+
+	  Dreamcast users who want to mount their VMUs to view the native
+	  filesystem will say 'Y' here. The filesystem is hardware independent
+	  but is not recommended for use in other circumstances, so just about
+	  everyone else should say 'N'.
+
+	  To compile this as a module say 'M' here. The module will be called
+	  vmufat.

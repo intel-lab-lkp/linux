@@ -54,6 +54,7 @@
 #define QNX4_SUPER_MAGIC	0x002f		/* qnx4 fs detection */
 #define QNX6_SUPER_MAGIC	0x68191122	/* qnx6 fs detection */
 #define AFS_FS_MAGIC		0x6B414653
+#define VMUFAT_SUPER_MAGIC	0x55555555  /* opening bytes of root */
 
 
 #define REISERFS_SUPER_MAGIC	0x52654973	/* used by gcc */

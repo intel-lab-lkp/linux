@@ -120,5 +120,6 @@ Documentation for filesystem implementations.
    udf
    virtiofs
    vfat
+   vmufat
    xfs/index
    zonefs
