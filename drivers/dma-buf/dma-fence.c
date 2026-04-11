@@ -1103,8 +1103,10 @@ __dma_fence_init(struct dma_fence *fence, const struct dma_fence_ops *ops,
  * to check which fence is later by simply using dma_fence_later().
  *
  * It is strongly discouraged to provide an external lock because this couples
- * lock and fence life time. This is only allowed for legacy use cases when
- * multiple fences need to be prevented from signaling out of order.
+ * lock and fence lifetime. This is only allowed for legacy use cases that need
+ * a shared lock to serialize signaling and observation of fences within a
+ * context, so that observers never see a later fence signaled while an earlier
+ * one isn't.
  */
 void
 dma_fence_init(struct dma_fence *fence, const struct dma_fence_ops *ops,
@@ -1130,8 +1132,10 @@ EXPORT_SYMBOL(dma_fence_init);
  * to check which fence is later by simply using dma_fence_later().
  *
  * It is strongly discouraged to provide an external lock because this couples
- * lock and fence life time. This is only allowed for legacy use cases when
- * multiple fences need to be prevented from signaling out of order.
+ * lock and fence lifetime. This is only allowed for legacy use cases that need
+ * a shared lock to serialize signaling and observation of fences within a
+ * context, so that observers never see a later fence signaled while an earlier
+ * one isn't.
  */
 void
 dma_fence_init64(struct dma_fence *fence, const struct dma_fence_ops *ops,
