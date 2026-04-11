@@ -276,6 +276,14 @@ void BPF_STRUCT_OPS(qmap_enqueue, struct task_struct *p, u64 enq_flags)
 		__sync_fetch_and_add(&nr_highpri_queued, 1);
 	}
 	__sync_fetch_and_add(&nr_enqueued, 1);
+
+	/*
+	 * Kick idle target CPU for pinned tasks. Without this, the CPU can
+	 * idle while ksoftirqd is pending in the BPF queue, triggering NOHZ
+	 * tick-stop warnings.
+	 */
+	if (p->nr_cpus_allowed == 1)
+		scx_bpf_kick_cpu(scx_bpf_task_cpu(p), SCX_KICK_IDLE);
 }
 
 /*
