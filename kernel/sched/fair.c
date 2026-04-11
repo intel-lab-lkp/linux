@@ -12040,7 +12040,7 @@ static void update_lb_imbalance_stat(struct lb_env *env, struct sched_domain *sd
  * - Note that load-balancing passes triggered while another one
  *   is executing are skipped and not re-tried.
  *
- * - Also note that this does not serialize rebalance_domains()
+ * - Also note that this does not serialize sched_balance_domains()
  *   execution, as non-SD_SERIALIZE domains will still be
  *   load-balanced in parallel.
  */
