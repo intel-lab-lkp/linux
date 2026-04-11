@@ -57,6 +57,13 @@ properties:
       - const: i2s
       - const: spdif
 
+  hpd-gpios:
+    maxItems: 1
+    description:
+      GPIO used for hot plug detection when the controller's native HPD
+      input is not connected. If not specified, the controller uses its
+      internal HPD detection mechanism.
+
   phys:
     maxItems: 1
 

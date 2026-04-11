@@ -8,6 +8,7 @@
  */
 #include <linux/bitfield.h>
 #include <linux/clk.h>
+#include <linux/gpio/consumer.h>
 #include <linux/iopoll.h>
 #include <linux/irq.h>
 #include <linux/media-bus-format.h>
@@ -330,6 +331,8 @@ struct dw_dp {
 	u8 pixel_mode;
 
 	DECLARE_BITMAP(sdp_reg_bank, SDP_REG_BANK_SIZE);
+
+	struct gpio_desc *hpd_gpiod;
 };
 
 enum {
@@ -480,6 +483,9 @@ static bool dw_dp_bandwidth_ok(struct dw_dp *dp,
 static bool dw_dp_hpd_detect(struct dw_dp *dp)
 {
 	u32 value;
+
+	if (dp->hpd_gpiod)
+		return gpiod_get_value_cansleep(dp->hpd_gpiod);
 
 	regmap_read(dp->regmap, DW_DP_HPD_STATUS, &value);
 
@@ -2000,6 +2006,12 @@ struct dw_dp *dw_dp_bind(struct device *dev, struct drm_encoder *encoder,
 	if (IS_ERR(dp->regmap)) {
 		dev_err_probe(dev, PTR_ERR(dp->regmap), "failed to create regmap\n");
 		return ERR_CAST(dp->regmap);
+	}
+
+	dp->hpd_gpiod = devm_gpiod_get_optional(dev, "hpd", GPIOD_IN);
+	if (IS_ERR(dp->hpd_gpiod)) {
+		dev_err_probe(dev, PTR_ERR(dp->hpd_gpiod), "failed to get hpd GPIO\n");
+		return ERR_CAST(dp->hpd_gpiod);
 	}
 
 	dp->phy = devm_of_phy_get(dev, dev->of_node, NULL);
