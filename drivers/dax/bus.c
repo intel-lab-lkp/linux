@@ -1453,6 +1453,7 @@ static struct dev_dax *__devm_create_dev_dax(struct dev_dax_data *data)
 	}
 
 	dev = &dev_dax->dev;
+	dev->type = &dev_dax_type;
 	device_initialize(dev);
 	dev_set_name(dev, "dax%d.%d", dax_region->id, dev_dax->id);
 
@@ -1499,7 +1500,6 @@ static struct dev_dax *__devm_create_dev_dax(struct dev_dax_data *data)
 	dev->devt = inode->i_rdev;
 	dev->bus = &dax_bus_type;
 	dev->parent = parent;
-	dev->type = &dev_dax_type;
 
 	rc = device_add(dev);
 	if (rc) {
@@ -1523,14 +1523,21 @@ static struct dev_dax *__devm_create_dev_dax(struct dev_dax_data *data)
 
 err_alloc_dax:
 	kfree(dev_dax->pgmap);
+	dev_dax->pgmap = NULL;
+
 err_pgmap:
 	free_dev_dax_ranges(dev_dax);
+	put_device(dev);
+	return ERR_PTR(rc);
+
 err_range:
-	free_dev_dax_id(dev_dax);
+	put_device(dev);
+	return ERR_PTR(rc);
+
 err_id:
 	kfree(dev_dax);
-
 	return ERR_PTR(rc);
+
 }
 
 struct dev_dax *devm_create_dev_dax(struct dev_dax_data *data)
