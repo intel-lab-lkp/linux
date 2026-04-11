@@ -163,6 +163,7 @@ struct dw_mci {
 	void __iomem		*regs;
 	void __iomem		*fifo_reg;
 	u32			data_addr_override;
+	u32			dma_threshold;
 	bool			wm_aligned;
 
 	struct scatterlist	*sg;
