@@ -181,7 +181,7 @@ static ssize_t ad9832_write(struct device *dev, struct device_attribute *attr,
 	if (ret)
 		goto error_ret;
 
-	mutex_lock(&st->lock);
+	guard(mutex)(&st->lock);
 	switch ((u32)this_attr->address) {
 	case AD9832_FREQ0HM:
 	case AD9832_FREQ1HM:
@@ -239,7 +239,6 @@ static ssize_t ad9832_write(struct device *dev, struct device_attribute *attr,
 	default:
 		ret = -ENODEV;
 	}
-	mutex_unlock(&st->lock);
 
 error_ret:
 	return ret ? ret : len;
