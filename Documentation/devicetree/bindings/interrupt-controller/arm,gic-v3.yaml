@@ -45,17 +45,24 @@ properties:
 
       The 1st cell is the interrupt type; 0 for SPI interrupts, 1 for PPI
       interrupts, 2 for interrupts in the Extended SPI range, 3 for the
-      Extended PPI range. Other values are reserved for future use.
+      Extended PPI range, and 4 for SGI interrupts. Other values are
+      reserved for future use.
 
       The 2nd cell contains the interrupt number for the interrupt type.
       SPI interrupts are in the range [0-987]. PPI interrupts are in the
       range [0-15]. Extended SPI interrupts are in the range [0-1023].
       Extended PPI interrupts are in the range [0-127].
 
+      SGI interrupts are in the range [8-15] which overlaps with the SGIs
+      assigned to/reserved for the secure world but donated to the non
+      secure world to use. Refer "arm,secure-donated-ns-sgi-ranges" for
+      more details.
+
       The 3rd cell is the flags, encoded as follows:
       bits[3:0] trigger type and level flags.
         1 = edge triggered
         4 = level triggered
+      SGIs are edge triggered and must be described as such.
 
       The 4th cell is a phandle to a node describing a set of CPUs this
       interrupt is affine to. The interrupt must be a PPI, and the node
@@ -135,6 +142,24 @@ properties:
     oneOf:
       - $ref: /schemas/types.yaml#/definitions/uint32
       - $ref: /schemas/types.yaml#/definitions/uint64
+
+  arm,secure-donated-ns-sgi-ranges:
+    description:
+      A list of pairs <sgi span>, where "sgi" is the first SGI INTID of a
+      range donated by the secure side to non-secure software, and "span" is
+      the size of that range. Multiple ranges can be provided.
+
+      SGIs described by interrupt specifiers with type 4 (SGI) must fall
+      within one of these ranges. SGIs(0-7) reserved by non-secure world
+      for internal IPIs must not be listed here. "sgi" must be in the
+      range [8-15], "span" must be in the range [1-8], and the range must
+      not extend past SGI 15.
+    $ref: /schemas/types.yaml#/definitions/uint32-matrix
+    items:
+      - minimum: 8
+        maximum: 15
+      - minimum: 1
+        maximum: 8
 
   ppi-partitions:
     type: object
