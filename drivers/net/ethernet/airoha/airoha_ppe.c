@@ -1332,11 +1332,19 @@ static int airoha_ppe_offload_setup(struct airoha_eth *eth)
 	struct airoha_npu *npu = airoha_ppe_npu_get(eth);
 	struct airoha_ppe *ppe = eth->ppe;
 	int err, ppe_num_stats_entries;
+	u32 val;
 
 	if (IS_ERR(npu))
 		return PTR_ERR(npu);
 
 	err = npu->ops.ppe_init(npu);
+	if (err)
+		goto error_npu_put;
+
+	/* Wait for NPU PPE configuration to complete */
+	err = read_poll_timeout(airoha_fe_rr, val, val, USEC_PER_MSEC,
+				100 * USEC_PER_MSEC, false, eth,
+				REG_PPE_PPE_FLOW_CFG(0));
 	if (err)
 		goto error_npu_put;
 
