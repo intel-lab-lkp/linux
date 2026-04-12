@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/firmware/arm,ffa.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Arm Firmware Framework for A-profile
+
+maintainers:
+  - Sudeep Holla <sudeep.holla@kernel.org>
+
+description: |
+  Arm Firmware Framework for A-profile (FF-A) firmware device node
+  describing the   notification interrupt exposed to the normal world.
+
+properties:
+  $nodename:
+    const: ffa
+
+  compatible:
+    const: arm,ffa
+
+  interrupts:
+    description:
+      Per-CPU notification interrupt used by the normal world FF-A partition.
+    maxItems: 1
+
+required:
+  - compatible
+  - interrupts
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    ffa {
+        compatible = "arm,ffa";
+        interrupts = <GIC_SGI 8 IRQ_TYPE_EDGE_RISING>;
+    };
