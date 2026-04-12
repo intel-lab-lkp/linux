@@ -5275,18 +5275,36 @@ err:
 }
 EXPORT_SYMBOL(vfs_mkdir);
 
-int filename_mkdirat(int dfd, struct filename *name, umode_t mode)
+static int mkdirat_lookup_flags(unsigned int flags)
+{
+	int lookup_flags = LOOKUP_DIRECTORY;
+
+	if (!(flags & AT_SYMLINK_NOFOLLOW))
+		lookup_flags |= LOOKUP_FOLLOW;
+	if (!(flags & AT_NO_AUTOMOUNT))
+		lookup_flags |= LOOKUP_AUTOMOUNT;
+
+	return lookup_flags;
+}
+
+int filename_mkdirat(int dfd, struct filename *name, umode_t mode) {
+	return PTR_ERR_OR_ZERO(do_file_mkdirat(dfd, name, mode, 0, false));
+}
+
+struct file *do_file_mkdirat(int dfd, struct filename *name, umode_t mode,
+		unsigned int flags, bool open)
 {
 	struct dentry *dentry;
 	struct path path;
 	int error;
-	unsigned int lookup_flags = LOOKUP_DIRECTORY;
+	struct file *filp = NULL;
+	unsigned int lookup_flags = mkdirat_lookup_flags(flags);
 	struct delegated_inode delegated_inode = { };
 
 retry:
 	dentry = filename_create(dfd, name, &path, lookup_flags);
 	if (IS_ERR(dentry))
-		return PTR_ERR(dentry);
+		return ERR_CAST(dentry);
 
 	error = security_path_mkdir(&path, dentry,
 			mode_strip_umask(path.dentry->d_inode, mode));
@@ -5295,6 +5313,10 @@ retry:
 				   dentry, mode, &delegated_inode);
 		if (IS_ERR(dentry))
 			error = PTR_ERR(dentry);
+	}
+	if (open && !error && !is_delegated(&delegated_inode)) {
+		const struct path new_path = { .mnt = path.mnt, .dentry = dentry };
+		filp = dentry_open(&new_path, O_DIRECTORY, current_cred());
 	}
 	end_creating_path(&path, dentry);
 	if (is_delegated(&delegated_inode)) {
@@ -5306,7 +5328,21 @@ retry:
 		lookup_flags |= LOOKUP_REVAL;
 		goto retry;
 	}
-	return error;
+	if (error)
+		return ERR_PTR(error);
+	return filp;
+}
+
+#define VALID_MKDIRAT2_FLAGS (AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT)
+
+SYSCALL_DEFINE4(mkdirat2, int, dfd, const char __user *, pathname, umode_t, mode,
+		unsigned int, flags)
+{
+	CLASS(filename, name)(pathname);
+	if (flags & ~VALID_MKDIRAT2_FLAGS)
+		return -EINVAL;
+
+	return FD_ADD(O_CLOEXEC, do_file_mkdirat(dfd, name, mode, flags, true));
 }
 
 SYSCALL_DEFINE3(mkdirat, int, dfd, const char __user *, pathname, umode_t, mode)
