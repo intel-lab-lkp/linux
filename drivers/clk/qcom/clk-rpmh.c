@@ -52,6 +52,7 @@ struct clk_rpmh {
 	struct clk_hw hw;
 	const char *res_name;
 	u8 div;
+	bool optional;
 	u32 res_addr;
 	u32 res_on_val;
 	u32 state;
@@ -71,13 +72,14 @@ struct clk_rpmh_desc {
 static DEFINE_MUTEX(rpmh_clk_lock);
 
 #define __DEFINE_CLK_RPMH(_name, _clk_name, _res_name,			\
-			  _res_en_offset, _res_on, _div)		\
+			  _res_en_offset, _res_on, _div, _optional)	\
 	static struct clk_rpmh clk_rpmh_##_clk_name##_ao;		\
 	static struct clk_rpmh clk_rpmh_##_clk_name = {			\
 		.res_name = _res_name,					\
 		.res_addr = _res_en_offset,				\
 		.res_on_val = _res_on,					\
 		.div = _div,						\
+		.optional = _optional,					\
 		.peer = &clk_rpmh_##_clk_name##_ao,			\
 		.valid_state_mask = (BIT(RPMH_WAKE_ONLY_STATE) |	\
 				      BIT(RPMH_ACTIVE_ONLY_STATE) |	\
@@ -97,6 +99,7 @@ static DEFINE_MUTEX(rpmh_clk_lock);
 		.res_addr = _res_en_offset,				\
 		.res_on_val = _res_on,					\
 		.div = _div,						\
+		.optional = _optional,					\
 		.peer = &clk_rpmh_##_clk_name,				\
 		.valid_state_mask = (BIT(RPMH_WAKE_ONLY_STATE) |	\
 					BIT(RPMH_ACTIVE_ONLY_STATE)),	\
@@ -113,11 +116,11 @@ static DEFINE_MUTEX(rpmh_clk_lock);
 
 #define DEFINE_CLK_RPMH_ARC(_name, _res_name, _res_on, _div)		\
 	__DEFINE_CLK_RPMH(_name, _name##_##div##_div, _res_name,	\
-			  CLK_RPMH_ARC_EN_OFFSET, _res_on, _div)
+			  CLK_RPMH_ARC_EN_OFFSET, _res_on, _div, false)
 
 #define DEFINE_CLK_RPMH_VRM(_name, _suffix, _res_name, _div)		\
 	__DEFINE_CLK_RPMH(_name, _name##_suffix, _res_name,		\
-			  CLK_RPMH_VRM_EN_OFFSET, 1, _div)
+			  CLK_RPMH_VRM_EN_OFFSET, 1, _div, true)
 
 #define DEFINE_CLK_RPMH_BCM(_name, _res_name)				\
 	static struct clk_rpmh clk_rpmh_##_name = {			\
@@ -946,6 +949,9 @@ static struct clk_hw *of_clk_rpmh_hw_get(struct of_phandle_args *clkspec,
 		return ERR_PTR(-EINVAL);
 	}
 
+	if (!rpmh->clks[idx])
+		return ERR_PTR(-ENOENT);
+
 	return rpmh->clks[idx];
 }
 
@@ -976,6 +982,11 @@ static int clk_rpmh_probe(struct platform_device *pdev)
 		rpmh_clk = to_clk_rpmh(hw_clks[i]);
 		res_addr = cmd_db_read_addr(rpmh_clk->res_name);
 		if (!res_addr) {
+			hw_clks[i] = NULL;
+
+			if (rpmh_clk->optional)
+				continue;
+
 			dev_err(&pdev->dev, "missing RPMh resource address for %s\n",
 				rpmh_clk->res_name);
 			return -ENODEV;
