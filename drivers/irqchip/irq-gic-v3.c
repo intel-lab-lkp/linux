@@ -35,6 +35,8 @@
 #include <asm/smp_plat.h>
 #include <asm/virt.h>
 
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+
 #include "irq-gic-common.h"
 
 static u8 dist_prio_irq __ro_after_init = GICV3_PRIO_IRQ;
@@ -65,6 +67,7 @@ struct gic_chip_data {
 	u64			flags;
 	bool			has_rss;
 	unsigned int		ppi_nr;
+	u16			donated_sgi_mask;
 	struct partition_affinity *parts;
 	unsigned int		nr_parts;
 };
@@ -95,6 +98,7 @@ static bool nmi_support_forbidden;
  * with hwirq IDs, is simplified by accounting for all 16.
  */
 #define SGI_NR		16
+#define GIC_SGI_IPI_NR	8
 
 /*
  * The behaviours of RPR and PMR registers differ depending on the value of
@@ -118,6 +122,74 @@ static bool nmi_support_forbidden;
  *   interrupt.
  */
 static DEFINE_STATIC_KEY_FALSE(supports_pseudo_nmis);
+
+static bool gic_sgi_is_donated_to_ns(unsigned int sgi)
+{
+	return sgi < SGI_NR && (gic_data.donated_sgi_mask & BIT(sgi));
+}
+
+static int __init gic_of_init_donated_sgi_ranges(struct device_node *node)
+{
+	const char *propname = "arm,secure-donated-ns-sgi-ranges";
+	int count, i;
+	u32 *ranges;
+	u16 mask = 0;
+
+	count = of_property_count_u32_elems(node, propname);
+	if (count < 0) {
+		if (count == -EINVAL)
+			return 0;
+
+		pr_err("%pOF: unable to read %s\n", node, propname);
+		return count;
+	}
+
+	if (!count)
+		return 0;
+
+	if (count % 2) {
+		pr_err("%pOF: %s must contain <sgi span> pairs\n",
+		       node, propname);
+		return -EINVAL;
+	}
+
+	ranges = kcalloc(count, sizeof(*ranges), GFP_KERNEL);
+	if (!ranges)
+		return -ENOMEM;
+
+	if (of_property_read_u32_array(node, propname, ranges, count)) {
+		pr_err("%pOF: unable to read %s\n", node, propname);
+		kfree(ranges);
+		return -EINVAL;
+	}
+
+	for (i = 0; i < count; i += 2) {
+		u32 sgi = ranges[i];
+		u32 span = ranges[i + 1];
+		u32 end;
+
+		if (sgi < GIC_SGI_IPI_NR || sgi >= SGI_NR || !span || span > 8) {
+			pr_err("%pOF: invalid SGI range <%u %u> in %s\n",
+			       node, sgi, span, propname);
+			kfree(ranges);
+			return -EINVAL;
+		}
+
+		end = sgi + span;
+		if (end > SGI_NR) {
+			pr_err("%pOF: SGI range <%u %u> exceeds SGI space in %s\n",
+			       node, sgi, span, propname);
+			kfree(ranges);
+			return -EINVAL;
+		}
+
+		mask |= GENMASK(end - 1, sgi);
+	}
+
+	kfree(ranges);
+	gic_data.donated_sgi_mask = mask;
+	return 0;
+}
 
 static u32 gic_get_pribits(void)
 {
@@ -1614,6 +1686,12 @@ static int gic_irq_domain_translate(struct irq_domain *d,
 		case 3:			/* EPPI */
 			*hwirq = fwspec->param[1] + EPPI_BASE_INTID;
 			break;
+		case GIC_SGI:		/* SGI */
+			if (!gic_sgi_is_donated_to_ns(fwspec->param[1]))
+				return -EINVAL;
+
+			*hwirq = fwspec->param[1];
+			break;
 		case GIC_IRQ_TYPE_LPI:	/* LPI */
 			*hwirq = fwspec->param[1];
 			break;
@@ -1622,6 +1700,10 @@ static int gic_irq_domain_translate(struct irq_domain *d,
 		}
 
 		*type = fwspec->param[2] & IRQ_TYPE_SENSE_MASK;
+
+		if (fwspec->param[0] == GIC_SGI &&
+		    *type != IRQ_TYPE_EDGE_RISING)
+			return -EINVAL;
 
 		/*
 		 * Make it clear that broken DTs are... broken.
@@ -2238,6 +2320,10 @@ static int __init gic_of_init(struct device_node *node, struct device_node *pare
 		redist_stride = 0;
 
 	gic_enable_of_quirks(node, gic_quirks, &gic_data);
+
+	err = gic_of_init_donated_sgi_ranges(node);
+	if (err)
+		goto out_unmap_rdist;
 
 	err = gic_init_bases(dist_phys_base, dist_base, rdist_regs,
 			     nr_redist_regions, redist_stride, &node->fwnode);
