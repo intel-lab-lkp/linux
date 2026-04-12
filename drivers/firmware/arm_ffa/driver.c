@@ -1821,6 +1821,45 @@ static void ffa_sched_recv_irq_work_fn(struct work_struct *work)
 	ffa_notification_info_get();
 }
 
+static int ffa_dt_map_irq(int intid)
+{
+	struct device_node *ffa __free(device_node) = NULL;
+	const struct cpumask *affinity;
+	struct irq_data *irqd;
+	int count, irq;
+
+	ffa = of_find_compatible_node(NULL, NULL, "arm,ffa");
+	if (!ffa)
+		return -ENXIO;
+
+	count = of_irq_count(ffa);
+	if (count <= 0)
+		return count ? count : -ENXIO;
+
+	if (count != 1) {
+		pr_err("FF-A currently supports exactly one interrupt\n");
+		return -EINVAL;
+	}
+
+	affinity = of_irq_get_affinity(ffa, 0);
+	if (!affinity || !cpumask_equal(affinity, cpu_possible_mask)) {
+		pr_err("FF-A currently supports only SGIs/PPIs\n");
+		return -EINVAL;
+	}
+
+	irq = of_irq_get(ffa, 0);
+	if (irq <= 0)
+		return irq ? irq : -ENXIO;
+
+	irqd = irq_get_irq_data(irq);
+	if (!irqd || irqd_to_hwirq(irqd) != intid) {
+		irq_dispose_mapping(irq);
+		return -EINVAL;
+	}
+
+	return irq;
+}
+
 static int ffa_irq_map(u32 id)
 {
 	char *err_str;
@@ -1842,19 +1881,7 @@ static int ffa_irq_map(u32 id)
 	}
 
 	if (acpi_disabled) {
-		struct of_phandle_args oirq = {};
-		struct device_node *gic;
-
-		/* Only GICv3 supported currently with the device tree */
-		gic = of_find_compatible_node(NULL, NULL, "arm,gic-v3");
-		if (!gic)
-			return -ENXIO;
-
-		oirq.np = gic;
-		oirq.args_count = 1;
-		oirq.args[0] = intid;
-		irq = irq_create_of_mapping(&oirq);
-		of_node_put(gic);
+		irq = ffa_dt_map_irq(intid);
 #ifdef CONFIG_ACPI
 	} else {
 		irq = acpi_register_gsi(NULL, intid, ACPI_EDGE_SENSITIVE,
