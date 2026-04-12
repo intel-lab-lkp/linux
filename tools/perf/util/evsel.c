@@ -3709,6 +3709,11 @@ void *perf_sample__rawptr(struct perf_sample *sample, const char *name)
 		return NULL;
 
 	offset = field->offset;
+	if ((u32)(offset + field->size) > sample->raw_size) {
+		pr_warning("Invalid trace point field offset %d for field of length %d in sample raw data of size %u\n",
+			   offset, field->size, sample->raw_size);
+		return NULL;
+	}
 
 	if (field->flags & TEP_FIELD_IS_DYNAMIC) {
 		offset = *(int *)(sample->raw_data + field->offset);
@@ -3725,6 +3730,12 @@ u64 format_field__intval(struct tep_format_field *field, struct perf_sample *sam
 {
 	u64 value;
 	void *ptr = sample->raw_data + field->offset;
+
+	if ((u32)(field->offset + field->size) > sample->raw_size) {
+		pr_warning("Invalid trace point field offset %d for field of length %d in sample raw data of size %u\n",
+			   field->offset, field->size, sample->raw_size);
+		return 0;
+	}
 
 	switch (field->size) {
 	case 1:
