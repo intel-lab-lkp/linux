@@ -784,6 +784,7 @@ VISIBLE_IF_KUNIT int tlob_parse_uprobe_line(char *buf, u64 *thr_out,
 	*path_out  = buf + n;
 	return 0;
 }
+EXPORT_SYMBOL_IF_KUNIT(tlob_parse_uprobe_line);
 
 static ssize_t tlob_monitor_write(struct file *file,
 				  const char __user *ubuf,

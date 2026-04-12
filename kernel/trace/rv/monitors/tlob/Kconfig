@@ -49,3 +49,15 @@ config RV_MON_TLOB
 	  For further information, see:
 	    Documentation/trace/rv/monitor_tlob.rst
 
+config TLOB_KUNIT_TEST
+	tristate "KUnit tests for tlob monitor" if !KUNIT_ALL_TESTS
+	depends on RV_MON_TLOB && KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  Enable KUnit in-kernel unit tests for the tlob RV monitor.
+
+	  Tests cover automaton state transitions, the hash table helpers,
+	  the start/stop task interface, and the event ring buffer including
+	  overflow handling and wakeup behaviour.
+
+	  Say Y or M here to run the tlob KUnit test suite; otherwise say N.
