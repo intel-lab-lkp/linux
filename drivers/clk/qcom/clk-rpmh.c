@@ -66,8 +66,6 @@ struct clk_rpmh {
 struct clk_rpmh_desc {
 	struct clk_hw **clks;
 	size_t num_clks;
-	/* RPMh clock clkaN are optional for this platform */
-	bool clka_optional;
 };
 
 static DEFINE_MUTEX(rpmh_clk_lock);
@@ -691,7 +689,6 @@ static struct clk_hw *sm8550_rpmh_clocks[] = {
 static const struct clk_rpmh_desc clk_rpmh_sm8550 = {
 	.clks = sm8550_rpmh_clocks,
 	.num_clks = ARRAY_SIZE(sm8550_rpmh_clocks),
-	.clka_optional = true,
 };
 
 static struct clk_hw *sm8650_rpmh_clocks[] = {
@@ -723,7 +720,6 @@ static struct clk_hw *sm8650_rpmh_clocks[] = {
 static const struct clk_rpmh_desc clk_rpmh_sm8650 = {
 	.clks = sm8650_rpmh_clocks,
 	.num_clks = ARRAY_SIZE(sm8650_rpmh_clocks),
-	.clka_optional = true,
 };
 
 static struct clk_hw *sc7280_rpmh_clocks[] = {
@@ -893,7 +889,6 @@ static struct clk_hw *sm8750_rpmh_clocks[] = {
 static const struct clk_rpmh_desc clk_rpmh_sm8750 = {
 	.clks = sm8750_rpmh_clocks,
 	.num_clks = ARRAY_SIZE(sm8750_rpmh_clocks),
-	.clka_optional = true,
 };
 
 static struct clk_hw *glymur_rpmh_clocks[] = {
@@ -981,12 +976,6 @@ static int clk_rpmh_probe(struct platform_device *pdev)
 		rpmh_clk = to_clk_rpmh(hw_clks[i]);
 		res_addr = cmd_db_read_addr(rpmh_clk->res_name);
 		if (!res_addr) {
-			hw_clks[i] = NULL;
-
-			if (desc->clka_optional &&
-			    !strncmp(rpmh_clk->res_name, "clka", sizeof("clka") - 1))
-				continue;
-
 			dev_err(&pdev->dev, "missing RPMh resource address for %s\n",
 				rpmh_clk->res_name);
 			return -ENODEV;
