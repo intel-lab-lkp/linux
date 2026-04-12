@@ -8,7 +8,7 @@
 #define _IA_CSS_EVENT_H
 
 #include <type_support.h>
-#include "sw_event_global.h"    /*event macros.TODO : Change File Name..???*/
+#include "sw_event_global.h"    /*event macros.*/
 
 bool ia_css_event_encode(
     u8	*in,
