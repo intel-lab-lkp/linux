@@ -1333,7 +1333,7 @@ EXPORT_SYMBOL_GPL(thp_get_unmapped_area);
 static struct folio *vma_alloc_anon_folio_pmd(struct vm_area_struct *vma,
 		unsigned long addr)
 {
-	gfp_t gfp = vma_thp_gfp_mask(vma);
+	gfp_t gfp = vma_thp_gfp_mask(vma) | __GFP_PREZEROED;
 	const int order = HPAGE_PMD_ORDER;
 	struct folio *folio;
 
@@ -1362,7 +1362,7 @@ static struct folio *vma_alloc_anon_folio_pmd(struct vm_area_struct *vma,
 	* make sure that the page corresponding to the faulting address will be
 	* hot in the cache after zeroing.
 	*/
-	if (user_alloc_needs_zeroing())
+	if (user_alloc_needs_zeroing() && !folio_test_clear_prezeroed(folio))
 		folio_zero_user(folio, addr);
 	/*
 	 * The memory barrier inside __folio_mark_uptodate makes sure that
