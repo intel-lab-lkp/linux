@@ -346,8 +346,10 @@ static int eqc_auxdev_create(struct device *dev, void __iomem *base,
 	adev->id = id;
 
 	ret = auxiliary_device_init(adev);
-	if (ret)
+	if (ret) {
+		kfree(adev);
 		return ret;
+	}
 
 	ret = auxiliary_device_add(adev);
 	if (ret)
