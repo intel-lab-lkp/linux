@@ -950,7 +950,7 @@ static inline bool hugepage_movable_supported(struct hstate *h)
 /* Movability of hugepages depends on migration support. */
 static inline gfp_t htlb_alloc_mask(struct hstate *h)
 {
-	gfp_t gfp = __GFP_COMP | __GFP_NOWARN;
+	gfp_t gfp = __GFP_COMP | __GFP_NOWARN | __GFP_PREZEROED;
 
 	gfp |= hugepage_movable_supported(h) ? GFP_HIGHUSER_MOVABLE : GFP_HIGHUSER;
 
