@@ -502,6 +502,10 @@ slhc_uncompress(struct slcompress *comp, unsigned char *icp, int isize)
 
 	/* We've got a compressed packet; read the change byte */
 	comp->sls_i_compressed++;
+	if (!comp->rstate) {
+		comp->sls_i_error++;
+		return 0;
+	}
 	if(isize < 3){
 		comp->sls_i_error++;
 		return 0;
@@ -651,8 +655,9 @@ slhc_remember(struct slcompress *comp, unsigned char *icp, int isize)
 
 	/* The packet is shorter than a legal IP header.
 	 * Also make sure isize is positive.
+	 * Reject if no receive slots are configured (rstate is NULL).
 	 */
-	if (isize < (int)sizeof(struct iphdr)) {
+	if (!comp->rstate || isize < (int)sizeof(struct iphdr)) {
 runt:
 		comp->sls_i_runt++;
 		return slhc_toss(comp);
