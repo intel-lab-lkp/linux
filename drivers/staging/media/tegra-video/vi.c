@@ -81,7 +81,7 @@ static u32 tegra_get_format_fourcc_by_idx(struct tegra_vi *vi,
 					  unsigned int index)
 {
 	if (index >= vi->soc->nformats)
-		return -EINVAL;
+		return 0;
 
 	return vi->soc->video_formats[index].fourcc;
 }
