@@ -1846,7 +1846,13 @@ inline void post_alloc_hook(struct page *page, unsigned int order,
 	bool zero_tags = init && (gfp_flags & __GFP_ZEROTAGS);
 	int i;
 
-	set_page_private(page, 0);
+	/*
+	 * If the page is pre-zeroed and the caller opted in via
+	 * __GFP_PREZEROED, preserve the marker so the caller can
+	 * skip its own zeroing.  Otherwise always clear private.
+	 */
+	if (!(prezeroed && (gfp_flags & __GFP_PREZEROED)))
+		set_page_private(page, 0);
 
 	/*
 	 * If the page is pre-zeroed, skip memory initialization.

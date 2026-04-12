@@ -5175,6 +5175,22 @@ static inline bool user_alloc_needs_zeroing(void)
  */
 #define MAGIC_PAGE_ZEROED	0x5A45524FU	/* ZERO */
 
+/**
+ * folio_test_clear_prezeroed - test and clear the pre-zeroed marker.
+ * @folio: the folio to test.
+ *
+ * Returns true if the folio was pre-zeroed by the host, and clears
+ * the marker.  Callers can skip their own zeroing.
+ */
+static inline bool folio_test_clear_prezeroed(struct folio *folio)
+{
+	if (page_private(&folio->page) == MAGIC_PAGE_ZEROED) {
+		set_page_private(&folio->page, 0);
+		return true;
+	}
+	return false;
+}
+
 int arch_get_shadow_stack_status(struct task_struct *t, unsigned long __user *status);
 int arch_set_shadow_stack_status(struct task_struct *t, unsigned long status);
 int arch_lock_shadow_stack_status(struct task_struct *t, unsigned long status);
