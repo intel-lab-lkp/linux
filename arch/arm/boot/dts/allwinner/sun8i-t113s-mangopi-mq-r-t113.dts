@@ -33,3 +33,7 @@
 		interrupt-names = "host-wake";
 	};
 };
+
+&wdt {
+	status = "okay";
+};
