@@ -162,14 +162,27 @@ vlmc_query_cnt_setup()
 {
 	local type=$1
 	local dev=$2
+	local match=$3
 
 	if [[ $type == "igmp" ]]; then
-		tc filter add dev $dev egress pref 10 prot 802.1Q \
+		# This matches: IP Protocol 2 (IGMP)
+		tc filter add dev "$dev" egress pref 10 prot 802.1Q \
 			flower vlan_id 10 vlan_ethtype ipv4 dst_ip 224.0.0.1 ip_proto 2 \
+			action continue
+		# AND Type 0x11 (Query) at offset 24 after IP
+		# IP (20 byte IP + 4 bytes Option)
+		match=(match u8 0x11 0xff at 24 $match)
+		tc filter add dev "$dev" egress pref 20 prot 802.1Q u32 "${match[@]}" \
 			action pass
 	else
-		tc filter add dev $dev egress pref 10 prot 802.1Q \
+		# This matches: ICMPv6
+		tc filter add dev "$dev" egress pref 10 prot 802.1Q \
 			flower vlan_id 10 vlan_ethtype ipv6 dst_ip ff02::1 ip_proto icmpv6 \
+			action continue
+		# AND Type 0x82 (Query) at offset 48 after IPv6
+		# IPv6 (40 bytes IPv6 + 2 bytes next HDR + 4 bytes Option + 2 byte pad)
+		match=(match u8 0x82 0xff at 48 $match)
+		tc filter add dev "$dev" egress pref 20 prot 802.1Q u32 "${match[@]}" \
 			action pass
 	fi
 
@@ -181,7 +194,53 @@ vlmc_query_cnt_cleanup()
 	local dev=$1
 
 	ip link set dev br0 type bridge mcast_stats_enabled 0
-	tc filter del dev $dev egress pref 10
+	tc filter del dev "$dev" egress pref 20
+	tc filter del dev "$dev" egress pref 10
+}
+
+vlmc_query_get_intvl_match()
+{
+	local type=$1
+	local version=$2
+	local test=$3
+	local interval=$4
+
+	if [ "$test" = "qqic" ]; then
+		# QQIC is 8-bit floating point encoding for IGMPv3 and MLDv2
+		if [ "${type}v${version}" = "igmpv3" ]; then
+			# IP 20 bytes + 4 bytes Option + IGMPv3[9]
+			if [[ $interval -lt 128 ]]; then
+				echo "match u8 0x3c 0xff at 33"
+			else
+				echo "match u8 0x84 0xff at 33"
+			fi
+		elif [ "${type}v${version}" = "mldv2" ]; then
+			# IPv6 40 + 2 next HDR + 4 Option + 2 pad + MLDv2[25]
+			if [[ $interval -lt 128 ]]; then
+				echo "match u8 0x3c 0xff at 73"
+			else
+				echo "match u8 0x84 0xff at 73"
+			fi
+		fi
+	elif [ "$test" = "mrc" ]; then
+		if [ "${type}v${version}" = "igmpv3" ]; then
+			# MRC is 8-bit floating point encoding for IGMPv3
+			# IP 20 bytes + 4 bytes Option + IGMPv3[1]
+			if [[ $interval -lt 128 ]]; then
+				echo "match u8 0x3c 0xff at 25"
+			else
+				echo "match u8 0x84 0xff at 25"
+			fi
+		elif [ "${type}v${version}" = "mldv2" ]; then
+			# MRC is 16-bit floating point encoding for MLDv2
+			# IPv6 40 + 2 next HDR + 4 Option + 2 pad + MLDv2[4]
+			if [[ $interval -lt 32768 ]]; then
+				echo "match u16 0x7530 0xffff at 52"
+			else
+				echo "match u16 0x8d4c 0xffff at 52"
+			fi
+		fi
+	fi
 }
 
 vlmc_check_query()
@@ -191,9 +250,13 @@ vlmc_check_query()
 	local dev=$3
 	local expect=$4
 	local time=$5
+	local test=$6
+	local interval=$7
+	local intvl_match=""
 	local ret=0
 
-	vlmc_query_cnt_setup $type $dev
+	intvl_match="$(vlmc_query_get_intvl_match "$type" "$version" "$test" "$interval")"
+	vlmc_query_cnt_setup "$type" "$dev" "$intvl_match"
 
 	local pre_tx_xstats=$(vlmc_query_cnt_xstats $type $version $dev)
 	bridge vlan global set vid 10 dev br0 mcast_snooping 1 mcast_querier 1
@@ -201,7 +264,7 @@ vlmc_check_query()
 	if [[ $ret -eq 0 ]]; then
 		sleep $time
 
-		local tcstats=$(tc_rule_stats_get $dev 10 egress)
+		local tcstats=$(tc_rule_stats_get "$dev" 20 egress)
 		local post_tx_xstats=$(vlmc_query_cnt_xstats $type $version $dev)
 
 		if [[ $tcstats != $expect || \
@@ -441,6 +504,7 @@ vlmc_query_intvl_test()
 	check_err $? "Wrong default mcast_query_interval global vlan option value"
 	log_test "Vlan mcast_query_interval global option default value"
 
+	log_info "Vlan 10 mcast_query_interval (QQIC) test cases:"
 	RET=0
 	bridge vlan global set vid 10 dev br0 mcast_snooping 1 mcast_startup_query_count 0
 	bridge vlan global set vid 10 dev br0 mcast_snooping 1 mcast_query_interval 200
@@ -448,8 +512,42 @@ vlmc_query_intvl_test()
 	# 1 is sent immediately, then 2 more in the next 5 seconds
 	vlmc_check_query igmp 2 $swp1 3 5
 	check_err $? "Wrong number of tagged IGMPv2 general queries sent"
-	log_test "Vlan 10 mcast_query_interval option changed to 200"
+	log_test "Number of tagged IGMPv2 general query"
 
+	RET=0
+	bridge vlan global set vid 10 dev br0 mcast_snooping 1 mcast_igmp_version 3
+	check_err $? "Could not set mcast_igmp_version in vlan 10"
+	bridge vlan global set vid 10 dev br0 mcast_snooping 1 mcast_mld_version 2
+	check_err $? "Could not set mcast_mld_version in vlan 10"
+	bridge vlan global set vid 10 dev br0 mcast_snooping 1 mcast_query_interval 6000
+	check_err $? "Could not set mcast_query_interval in vlan 10"
+	# 1 is sent immediately, IGMPv3 QQIC should match with linear value 60s
+	vlmc_check_query igmp 3 $swp1 1 1 qqic 60
+	check_err $? "Wrong QQIC in generated IGMPv3 general queries"
+	log_test "IGMPv3 QQIC linear value 60"
+
+	RET=0
+	# 1 is sent immediately, MLDv2 QQIC should match with linear value 60s
+	vlmc_check_query mld 2 $swp1 1 1 qqic 60
+	check_err $? "Wrong QQIC in generated MLDv2 general queries"
+	log_test "MLDv2 QQIC linear value 60"
+
+	RET=0
+	bridge vlan global set vid 10 dev br0 mcast_snooping 1 mcast_query_interval 16000
+	check_err $? "Could not set mcast_query_interval in vlan 10"
+	# 1 is sent immediately, IGMPv3 QQIC should match with non linear value 160s
+	vlmc_check_query igmp 3 $swp1 1 1 qqic 160
+	check_err $? "Wrong QQIC in generated IGMPv3 general queries"
+	log_test "IGMPv3 QQIC non linear value 160"
+
+	RET=0
+	# 1 is sent immediately, MLDv2 QQIC should match with non linear value 160s
+	vlmc_check_query mld 2 $swp1 1 1 qqic 160
+	check_err $? "Wrong QQIC in generated MLDv2 general queries"
+	log_test "MLDv2 QQIC non linear value 160"
+
+	bridge vlan global set vid 10 dev br0 mcast_snooping 1 mcast_igmp_version 2
+	bridge vlan global set vid 10 dev br0 mcast_snooping 1 mcast_mld_version 1
 	bridge vlan global set vid 10 dev br0 mcast_snooping 1 mcast_startup_query_count 2
 	bridge vlan global set vid 10 dev br0 mcast_snooping 1 mcast_query_interval 12500
 }
@@ -468,11 +566,47 @@ vlmc_query_response_intvl_test()
 	check_err $? "Wrong default mcast_query_response_interval global vlan option value"
 	log_test "Vlan mcast_query_response_interval global option default value"
 
+	log_info "Vlan 10 mcast_query_response_interval (MRC) test cases:"
 	RET=0
-	bridge vlan global set vid 10 dev br0 mcast_snooping 1 mcast_query_response_interval 200
+	bridge vlan global set vid 10 dev br0 mcast_snooping 1 mcast_startup_query_count 0
+	bridge vlan global set vid 10 dev br0 mcast_snooping 1 mcast_igmp_version 3
+	check_err $? "Could not set mcast_igmp_version in vlan 10"
+	bridge vlan global set vid 10 dev br0 mcast_snooping 1 mcast_query_response_interval 600
 	check_err $? "Could not set mcast_query_response_interval in vlan 10"
-	log_test "Vlan 10 mcast_query_response_interval option changed to 200"
+	# 1 is sent immediately, IGMPv3 MRC should match with linear value 60 units of 1/10s
+	vlmc_check_query igmp 3 $swp1 1 1 mrc 60
+	check_err $? "Wrong MRC in generated IGMPv3 general queries"
+	log_test "IGMPv3 MRC linear value 60"
 
+	RET=0
+	bridge vlan global set vid 10 dev br0 mcast_snooping 1 mcast_query_response_interval 1600
+	check_err $? "Could not set mcast_query_response_interval in vlan 10"
+	# 1 is sent immediately, IGMPv3 MRC should match with non linear value 160 unit of 1/10s
+	vlmc_check_query igmp 3 $swp1 1 1 mrc 160
+	check_err $? "Wrong MRC in generated IGMPv3 general queries"
+	log_test "IGMPv3 MRC non linear value 160"
+
+	RET=0
+	bridge vlan global set vid 10 dev br0 mcast_snooping 1 mcast_mld_version 2
+	check_err $? "Could not set mcast_mld_version in vlan 10"
+	bridge vlan global set vid 10 dev br0 mcast_snooping 1 mcast_query_response_interval 3000
+	check_err $? "Could not set mcast_query_response_interval in vlan 10"
+	# 1 is sent immediately, MLDv2 MRC should match with linear value 30000(ms)
+	vlmc_check_query mld 2 $swp1 1 1 mrc 30000
+	check_err $? "Wrong MRC in generated MLDv2 general queries"
+	log_test "MLDv2 MRC linear value 30000"
+
+	RET=0
+	bridge vlan global set vid 10 dev br0 mcast_snooping 1 mcast_query_response_interval 6000
+	check_err $? "Could not set mcast_query_response_interval in vlan 10"
+	# 1 is sent immediately, MLDv2 MRC should match with non linear value 60000(ms)
+	vlmc_check_query mld 2 $swp1 1 1 mrc 60000
+	check_err $? "Wrong MRC in generated MLDv2 general queries"
+	log_test "MLDv2 MRC non linear value 60000"
+
+	bridge vlan global set vid 10 dev br0 mcast_snooping 1 mcast_igmp_version 2
+	bridge vlan global set vid 10 dev br0 mcast_snooping 1 mcast_mld_version 1
+	bridge vlan global set vid 10 dev br0 mcast_snooping 1 mcast_startup_query_count 2
 	bridge vlan global set vid 10 dev br0 mcast_snooping 1 mcast_query_response_interval 1000
 }
 
