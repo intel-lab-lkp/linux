@@ -1999,6 +1999,10 @@ int __phy_resume(struct phy_device *phydev)
 
 	lockdep_assert_held(&phydev->lock);
 
+	ret = phy_init_hw(phydev);
+	if (ret)
+		return ret;
+
 	if (!phydrv || !phydrv->resume)
 		return 0;
 
@@ -2013,10 +2017,6 @@ EXPORT_SYMBOL(__phy_resume);
 int phy_resume(struct phy_device *phydev)
 {
 	int ret;
-
-	ret = phy_init_hw(phydev);
-	if (ret)
-		return ret;
 
 	mutex_lock(&phydev->lock);
 	ret = __phy_resume(phydev);
