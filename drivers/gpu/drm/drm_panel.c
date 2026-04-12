@@ -113,6 +113,13 @@ EXPORT_SYMBOL(drm_panel_remove);
  */
 void drm_panel_prepare(struct drm_panel *panel)
 {
+	drm_panel_prepare_for_mode(panel, NULL);
+}
+EXPORT_SYMBOL(drm_panel_prepare);
+
+void drm_panel_prepare_for_mode(struct drm_panel *panel,
+                                struct drm_display_mode *mode)
+{
 	struct drm_panel_follower *follower;
 	int ret;
 
@@ -126,7 +133,11 @@ void drm_panel_prepare(struct drm_panel *panel)
 
 	mutex_lock(&panel->follower_lock);
 
-	if (panel->funcs && panel->funcs->prepare) {
+	if (panel->funcs && panel->funcs->prepare_for_mode && mode) {
+		ret = panel->funcs->prepare_for_mode(panel, mode);
+		if (ret < 0)
+			goto exit;
+	} else if (panel->funcs && panel->funcs->prepare) {
 		ret = panel->funcs->prepare(panel);
 		if (ret < 0)
 			goto exit;
@@ -146,7 +157,7 @@ void drm_panel_prepare(struct drm_panel *panel)
 exit:
 	mutex_unlock(&panel->follower_lock);
 }
-EXPORT_SYMBOL(drm_panel_prepare);
+EXPORT_SYMBOL(drm_panel_prepare_for_mode);
 
 /**
  * drm_panel_unprepare - power off a panel

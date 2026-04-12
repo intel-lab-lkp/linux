@@ -81,6 +81,16 @@ struct drm_panel_funcs {
 	int (*prepare)(struct drm_panel *panel);
 
 	/**
+	 * @prepare_for_mode:
+	 *
+	 * Turn on panel and perform set up, with awareness of the mode being set.
+	 *
+	 * This function is optional.
+	 */
+	int (*prepare_for_mode)(struct drm_panel *panel,
+	                        struct drm_display_mode *mode);
+
+	/**
 	 * @enable:
 	 *
 	 * Enable panel (turn on back light, etc.).
@@ -331,6 +341,8 @@ void drm_panel_add(struct drm_panel *panel);
 void drm_panel_remove(struct drm_panel *panel);
 
 void drm_panel_prepare(struct drm_panel *panel);
+void drm_panel_prepare_for_mode(struct drm_panel *panel,
+                                struct drm_display_mode *mode);
 void drm_panel_unprepare(struct drm_panel *panel);
 
 void drm_panel_enable(struct drm_panel *panel);
