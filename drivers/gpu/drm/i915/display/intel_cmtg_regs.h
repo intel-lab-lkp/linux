@@ -51,4 +51,24 @@
 							    _TRANS_SET_CTX_LATENCY_CMTG_A, \
 							    _TRANS_SET_CTX_LATENCY_CMTG_B)
 
+#define _TRANS_VRR_CTL_CMTG_A		0x6F420
+#define _TRANS_VRR_CTL_CMTG_B		0x6F520
+#define TRANS_VRR_CTL_CMTG(trans)	_MMIO_TRANS((trans), \
+						     _TRANS_VRR_CTL_CMTG_A, _TRANS_VRR_CTL_CMTG_B)
+#define _TRANS_VRR_VMAX_CMTG_A		0x6F424
+#define _TRANS_VRR_VMAX_CMTG_B		0x6F524
+#define TRANS_VRR_VMAX_CMTG(trans)	_MMIO_TRANS((trans), \
+						     _TRANS_VRR_VMAX_CMTG_A, \
+						     _TRANS_VRR_VMAX_CMTG_B)
+#define _TRANS_VRR_VMIN_CMTG_A		0x6F434
+#define _TRANS_VRR_VMIN_CMTG_B		0x6F534
+#define TRANS_VRR_VMIN_CMTG(trans)	_MMIO_TRANS((trans), \
+						     _TRANS_VRR_VMIN_CMTG_A, \
+						     _TRANS_VRR_VMIN_CMTG_B)
+#define _TRANS_VRR_FLIPLINE_CMTG_A	0x6F438
+#define _TRANS_VRR_FLIPLINE_CMTG_B	0x6F538
+#define TRANS_VRR_FLIPLINE_CMTG(trans)	_MMIO_TRANS((trans), \
+						     _TRANS_VRR_FLIPLINE_CMTG_A, \
+						     _TRANS_VRR_FLIPLINE_CMTG_B)
+
 #endif /* __INTEL_CMTG_REGS_H__ */
