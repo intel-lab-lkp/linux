@@ -1629,9 +1629,9 @@ static void airoha_update_hw_stats(struct airoha_gdm_port *port)
 
 static int airoha_dev_open(struct net_device *dev)
 {
-	int err, len = ETH_HLEN + dev->mtu + ETH_FCS_LEN;
 	struct airoha_gdm_port *port = netdev_priv(dev);
 	struct airoha_qdma *qdma = port->qdma;
+	int err, len = ETH_HLEN + dev->mtu;
 
 	netif_tx_start_all_queues(dev);
 	err = airoha_set_vip_for_gdm_port(port, true);
@@ -1833,7 +1833,7 @@ static int airoha_dev_change_mtu(struct net_device *dev, int mtu)
 {
 	struct airoha_gdm_port *port = netdev_priv(dev);
 	struct airoha_eth *eth = port->qdma->eth;
-	u32 len = ETH_HLEN + mtu + ETH_FCS_LEN;
+	u32 len = ETH_HLEN + mtu;
 
 	airoha_fe_rmw(eth, REG_GDM_LEN_CFG(port->id),
 		      GDM_LONG_LEN_MASK,
