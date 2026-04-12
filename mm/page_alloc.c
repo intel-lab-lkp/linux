@@ -1753,8 +1753,20 @@ static __always_inline void page_del_and_expand(struct zone *zone,
 	bool was_reported = page_reported(page);
 
 	__del_page_from_free_list(page, zone, high, migratetype);
+
+	was_reported = was_reported &&
+		       static_branch_unlikely(&page_reporting_host_zeroes);
+
 	nr_pages -= expand(zone, page, low, high, migratetype, was_reported);
 	account_freepages(zone, -nr_pages, migratetype);
+
+	/*
+	 * If the page was reported and the host is known to zero reported
+	 * pages, mark it zeroed via page->private so that
+	 * post_alloc_hook() can skip redundant zeroing.
+	 */
+	if (was_reported)
+		set_page_private(page, MAGIC_PAGE_ZEROED);
 }
 
 static void check_new_page_bad(struct page *page)
@@ -1830,10 +1842,19 @@ inline void post_alloc_hook(struct page *page, unsigned int order,
 {
 	bool init = !want_init_on_free() && want_init_on_alloc(gfp_flags) &&
 			!should_skip_init(gfp_flags);
+	bool prezeroed = page_private(page) == MAGIC_PAGE_ZEROED;
 	bool zero_tags = init && (gfp_flags & __GFP_ZEROTAGS);
 	int i;
 
 	set_page_private(page, 0);
+
+	/*
+	 * If the page is pre-zeroed, skip memory initialization.
+	 * We still need to handle tag zeroing separately since the host
+	 * does not know about memory tags.
+	 */
+	if (prezeroed && init && !zero_tags)
+		init = false;
 
 	arch_alloc_page(page, order);
 	debug_pagealloc_map_pages(page, 1 << order);

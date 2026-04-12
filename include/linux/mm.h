@@ -5169,6 +5169,12 @@ static inline bool user_alloc_needs_zeroing(void)
 				   &init_on_alloc);
 }
 
+/*
+ * Sentinel stored in page->private to indicate the page was pre-zeroed
+ * by the hypervisor (via free page reporting).
+ */
+#define MAGIC_PAGE_ZEROED	0x5A45524FU	/* ZERO */
+
 int arch_get_shadow_stack_status(struct task_struct *t, unsigned long __user *status);
 int arch_set_shadow_stack_status(struct task_struct *t, unsigned long status);
 int arch_lock_shadow_stack_status(struct task_struct *t, unsigned long status);
