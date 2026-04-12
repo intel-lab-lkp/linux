@@ -7396,6 +7396,7 @@ int intel_dp_compute_config_late(struct intel_encoder *encoder,
 				 struct intel_crtc_state *crtc_state,
 				 struct drm_connector_state *conn_state)
 {
+	struct intel_display *display = to_intel_display(crtc_state);
 	struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
 	int ret;
 
@@ -7406,6 +7407,13 @@ int intel_dp_compute_config_late(struct intel_encoder *encoder,
 		return ret;
 
 	intel_alpm_lobf_compute_config_late(intel_dp, crtc_state);
+
+	if (DISPLAY_VER(display) >= 35 && intel_dp_is_edp(intel_dp) &&
+	    (crtc_state->has_lobf || crtc_state->has_sel_update ||
+	     crtc_state->has_panel_replay))
+		intel_display_power_set_target_dc_state(display, DC_STATE_EN_DC3CO);
+	else
+		intel_display_power_set_target_dc_state(display, DC_STATE_EN_UPTO_DC6);
 
 	return 0;
 }
