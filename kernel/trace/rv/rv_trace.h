@@ -126,6 +126,7 @@ DECLARE_EVENT_CLASS(error_da_monitor_id,
 #include <monitors/snroc/snroc_trace.h>
 #include <monitors/nrp/nrp_trace.h>
 #include <monitors/sssw/sssw_trace.h>
+#include <monitors/tlob/tlob_trace.h>
 // Add new monitors based on CONFIG_DA_MON_EVENTS_ID here
 
 #endif /* CONFIG_DA_MON_EVENTS_ID */
@@ -202,6 +203,55 @@ TRACE_EVENT(rv_retries_error,
 		__get_str(event), __get_str(name))
 );
 #endif /* CONFIG_RV_MON_MAINTENANCE_EVENTS */
+
+#ifdef CONFIG_RV_MON_TLOB
+/*
+ * tlob_budget_exceeded - emitted when a monitored task exceeds its latency
+ * budget.  Carries the on-CPU / off-CPU time breakdown so that the cause
+ * of the overrun (CPU-bound vs. scheduling/I/O latency) is immediately
+ * visible in the ftrace ring buffer without post-processing.
+ */
+TRACE_EVENT(tlob_budget_exceeded,
+
+	TP_PROTO(struct task_struct *task, u64 threshold_us,
+		 u64 on_cpu_us, u64 off_cpu_us, u32 switches,
+		 bool state_is_on_cpu, u64 tag),
+
+	TP_ARGS(task, threshold_us, on_cpu_us, off_cpu_us, switches,
+		state_is_on_cpu, tag),
+
+	TP_STRUCT__entry(
+		__string(comm,		task->comm)
+		__field(pid_t,		pid)
+		__field(u64,		threshold_us)
+		__field(u64,		on_cpu_us)
+		__field(u64,		off_cpu_us)
+		__field(u32,		switches)
+		__field(bool,		state_is_on_cpu)
+		__field(u64,		tag)
+	),
+
+	TP_fast_assign(
+		__assign_str(comm);
+		__entry->pid		= task->pid;
+		__entry->threshold_us	= threshold_us;
+		__entry->on_cpu_us	= on_cpu_us;
+		__entry->off_cpu_us	= off_cpu_us;
+		__entry->switches	= switches;
+		__entry->state_is_on_cpu = state_is_on_cpu;
+		__entry->tag		= tag;
+	),
+
+	TP_printk("%s[%d]: budget exceeded threshold=%llu on_cpu=%llu off_cpu=%llu switches=%u state=%s tag=0x%016llx",
+		__get_str(comm), __entry->pid,
+		__entry->threshold_us,
+		__entry->on_cpu_us, __entry->off_cpu_us,
+		__entry->switches,
+		__entry->state_is_on_cpu ? "on_cpu" : "off_cpu",
+		__entry->tag)
+);
+#endif /* CONFIG_RV_MON_TLOB */
+
 #endif /* _TRACE_RV_H */
 
 /* This part must be outside protection */

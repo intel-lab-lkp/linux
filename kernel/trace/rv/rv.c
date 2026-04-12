@@ -148,6 +148,10 @@
 #include <rv_trace.h>
 #endif
 
+#ifdef CONFIG_RV_MON_TLOB
+EXPORT_TRACEPOINT_SYMBOL_GPL(tlob_budget_exceeded);
+#endif
+
 #include "rv.h"
 
 DEFINE_MUTEX(rv_interface_lock);

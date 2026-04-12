@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+config RV_MON_TLOB
+	depends on RV
+	depends on UPROBES
+	select DA_MON_EVENTS_ID
+	bool "tlob monitor"
+	help
+	  Enable the tlob (task latency over budget) monitor. This monitor
+	  tracks the elapsed time (CLOCK_MONOTONIC) of a marked code path within a
+	  task (including both on-CPU and off-CPU time) and reports a
+	  violation when the elapsed time exceeds a configurable budget
+	  threshold.
+
+	  The monitor implements a three-state deterministic automaton.
+	  States: unmonitored, on_cpu, off_cpu.
+	  Key transitions:
+	    unmonitored    --(trace_start)-->    on_cpu
+	    on_cpu   --(switch_out)-->     off_cpu
+	    off_cpu  --(switch_in)-->      on_cpu
+	    on_cpu   --(trace_stop)-->    unmonitored
+	    off_cpu  --(trace_stop)-->    unmonitored
+	    on_cpu   --(budget_expired)--> unmonitored
+	    off_cpu  --(budget_expired)--> unmonitored
+
+	  External configuration is done via the tracefs "monitor" file:
+	    echo pid:threshold_us:binary:offset_start:offset_stop > .../rv/monitors/tlob/monitor
+	    echo -pid             > .../rv/monitors/tlob/monitor  (remove task)
+	    cat                     .../rv/monitors/tlob/monitor  (list tasks)
+
+	  The uprobe binding places two plain entry uprobes at offset_start and
+	  offset_stop in the binary; these trigger tlob_start_task() and
+	  tlob_stop_task() respectively.  Using two entry uprobes (rather than a
+	  uretprobe) means that a mistyped offset can never corrupt the call
+	  stack; the worst outcome is a missed stop, which causes the hrtimer to
+	  fire and report a budget violation.
+
+	  Violation events are delivered via a lock-free mmap ring buffer on
+	  /dev/rv (enabled by CONFIG_RV_CHARDEV).  The consumer mmap()s the
+	  device, reads records from the data array using the head/tail indices
+	  in the control page, and advances data_tail when done.
+
+	  For self-instrumentation, use TLOB_IOCTL_TRACE_START /
+	  TLOB_IOCTL_TRACE_STOP via the /dev/rv misc device (enabled by
+	  CONFIG_RV_CHARDEV).
+
+	  Up to TLOB_MAX_MONITORED tasks may be monitored simultaneously.
+
+	  For further information, see:
+	    Documentation/trace/rv/monitor_tlob.rst
+

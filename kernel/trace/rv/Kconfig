@@ -65,6 +65,7 @@ source "kernel/trace/rv/monitors/pagefault/Kconfig"
 source "kernel/trace/rv/monitors/sleep/Kconfig"
 # Add new rtapp monitors here
 
+source "kernel/trace/rv/monitors/tlob/Kconfig"
 # Add new monitors here
 
 config RV_REACTORS
@@ -93,3 +94,19 @@ config RV_REACT_PANIC
 	help
 	  Enables the panic reactor. The panic reactor emits a printk()
 	  message if an exception is found and panic()s the system.
+
+config RV_CHARDEV
+	bool "RV ioctl interface via /dev/rv"
+	depends on RV
+	default n
+	help
+	  Register a /dev/rv misc device that exposes an ioctl interface
+	  for RV monitor self-instrumentation.  All RV monitors share the
+	  single device node; ioctl numbers encode the monitor identity.
+
+	  When enabled, user-space programs can open /dev/rv and use
+	  monitor-specific ioctl commands to bracket code regions they
+	  want the kernel RV subsystem to observe.
+
+	  Say Y here if you want to use the tlob self-instrumentation
+	  ioctl interface; otherwise say N.
