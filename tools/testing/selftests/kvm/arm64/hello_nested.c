@@ -11,6 +11,10 @@
 #define XLATE2GPA	(0xABCD)
 #define L2STACKSZ	(0x100)
 
+#define L2SUCCESS	(0x0)
+#define L2FAILED	(0x1)
+#define L2ADD		(0x2)
+
 /*
  * TPIDR_EL2 is used to store vcpu id, so save and restore it.
  */
@@ -31,7 +35,14 @@ static vm_paddr_t ucall_translate_to_gpa(void *gva)
 
 static void l2_guest_code(void)
 {
-	do_hvc();
+	int ans = 0;
+
+	ans = do_hvc(L2ADD, 2, 3);
+
+	if (ans == 5)
+		do_hvc(L2SUCCESS, 0, 0);
+	else
+		do_hvc(L2FAILED, 0, 0);
 }
 
 static void guest_code(void)
@@ -42,6 +53,7 @@ static void guest_code(void)
 	vm_paddr_t l2_pc, l2_stack_top;
 	/* force 16-byte alignment for the stack pointer */
 	u8 l2_stack[L2STACKSZ] __attribute__((aligned(16)));
+	u64 arg1, arg2;
 
 	GUEST_ASSERT_EQ(get_current_el(), 2);
 	GUEST_PRINTF("vEL2 entry\n");
@@ -54,6 +66,23 @@ static void guest_code(void)
 
 	ret = run_l2(&vcpu, &hyp_data);
 	GUEST_ASSERT_EQ(ret, ARM_EXCEPTION_TRAP);
+
+	if (vcpu.context.regs.regs[0] == L2ADD) {
+		arg1 = vcpu.context.regs.regs[1];
+		arg2 = vcpu.context.regs.regs[2];
+		GUEST_PRINTF("L2 add request, arg1: %lx, arg2: %lx\n", arg1, arg2);
+		vcpu.context.regs.regs[0] = arg1 + arg2;
+	} else {
+		GUEST_FAIL("Unexpected hvc action\n");
+	}
+
+	ret = run_l2(&vcpu, &hyp_data);
+	GUEST_ASSERT_EQ(ret, ARM_EXCEPTION_TRAP);
+
+	if (vcpu.context.regs.regs[0] != L2SUCCESS)
+		GUEST_FAIL("L2 failed\n");
+
+	GUEST_PRINTF("L2 success!\n");
 	GUEST_DONE();
 }
 

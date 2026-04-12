@@ -50,7 +50,7 @@ void prepare_hyp(void);
 void init_vcpu(struct vcpu *vcpu, vm_paddr_t l2_pc, vm_paddr_t l2_stack_top);
 int run_l2(struct vcpu *vcpu, struct hyp_data *hyp_data);
 
-void do_hvc(void);
+u64 do_hvc(u64 action, u64 arg1, u64 arg2);
 u64 __guest_enter(struct vcpu *vcpu, struct cpu_context *hyp_context);
 void __hyp_exception(u64 type);
 
