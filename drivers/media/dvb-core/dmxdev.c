@@ -901,8 +901,15 @@ static int dvb_dmxdev_add_pid(struct dmxdev *dmxdev,
 	feed->pid = pid;
 	list_add(&feed->next, &filter->feed.ts);
 
-	if (filter->state >= DMXDEV_STATE_GO)
-		return dvb_dmxdev_start_feed(dmxdev, filter, feed);
+	if (filter->state >= DMXDEV_STATE_GO) {
+		int ret = dvb_dmxdev_start_feed(dmxdev, filter, feed);
+
+		if (ret < 0) {
+			list_del(&feed->next);
+			kfree(feed);
+		}
+		return ret;
+	}
 
 	return 0;
 }
