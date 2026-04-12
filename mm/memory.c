@@ -5250,7 +5250,7 @@ static struct folio *alloc_anon_folio(struct vm_fault *vmf)
 		goto fallback;
 
 	/* Try allocating the highest of the remaining orders. */
-	gfp = vma_thp_gfp_mask(vma);
+	gfp = vma_thp_gfp_mask(vma) | __GFP_PREZEROED;
 	while (orders) {
 		addr = ALIGN_DOWN(vmf->address, PAGE_SIZE << order);
 		folio = vma_alloc_folio(gfp, order, vma, addr);
@@ -5268,7 +5268,8 @@ static struct folio *alloc_anon_folio(struct vm_fault *vmf)
 			 * that the page corresponding to the faulting address
 			 * will be hot in the cache after zeroing.
 			 */
-			if (user_alloc_needs_zeroing())
+			if (user_alloc_needs_zeroing() &&
+			    !folio_test_clear_prezeroed(folio))
 				folio_zero_user(folio, vmf->address);
 			return folio;
 		}
