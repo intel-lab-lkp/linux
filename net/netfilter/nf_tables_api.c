@@ -5837,9 +5837,9 @@ static void nf_tables_unbind_set(const struct nft_ctx *ctx, struct nft_set *set,
 	}
 }
 
-static void nft_setelem_data_activate(const struct net *net,
-				      const struct nft_set *set,
-				      struct nft_elem_priv *elem_priv);
+void nft_setelem_data_activate(const struct net *net,
+			       const struct nft_set *set,
+			       struct nft_elem_priv *elem_priv);
 
 static int nft_mapelem_activate(const struct nft_ctx *ctx,
 				struct nft_set *set,
@@ -7656,9 +7656,9 @@ static int nft_setelem_active_next(const struct net *net,
 	return nft_set_elem_active(ext, genmask);
 }
 
-static void nft_setelem_data_activate(const struct net *net,
-				      const struct nft_set *set,
-				      struct nft_elem_priv *elem_priv)
+void nft_setelem_data_activate(const struct net *net,
+			       const struct nft_set *set,
+			       struct nft_elem_priv *elem_priv)
 {
 	const struct nft_set_ext *ext = nft_set_elem_ext(set, elem_priv);
 

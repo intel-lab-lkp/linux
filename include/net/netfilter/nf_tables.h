@@ -1910,6 +1910,9 @@ struct nft_trans_gc *nft_trans_gc_catchall_async(struct nft_trans_gc *gc,
 						 unsigned int gc_seq);
 struct nft_trans_gc *nft_trans_gc_catchall_sync(struct nft_trans_gc *gc);
 
+void nft_setelem_data_activate(const struct net *net,
+				 const struct nft_set *set,
+				 struct nft_elem_priv *elem_priv);
 void nft_setelem_data_deactivate(const struct net *net,
 				 const struct nft_set *set,
 				 struct nft_elem_priv *elem_priv);
