@@ -648,6 +648,23 @@ static inline pud_t pud_mkwrite(pud_t pud)
 	return pud_clear_saveddirty(pud);
 }
 
+#ifdef CONFIG_HAVE_ARCH_USERFAULTFD_WP
+static inline int pud_uffd_wp(pud_t pud)
+{
+	return pud_flags(pud) & _PAGE_UFFD_WP;
+}
+
+static inline pud_t pud_mkuffd_wp(pud_t pud)
+{
+	return pud_wrprotect(pud_set_flags(pud, _PAGE_UFFD_WP));
+}
+
+static inline pud_t pud_clear_uffd_wp(pud_t pud)
+{
+	return pud_clear_flags(pud, _PAGE_UFFD_WP);
+}
+#endif
+
 #ifdef CONFIG_HAVE_ARCH_SOFT_DIRTY
 static inline int pte_soft_dirty(pte_t pte)
 {
@@ -1549,6 +1566,22 @@ static inline pmd_t pmd_swp_clear_soft_dirty(pmd_t pmd)
 	return pmd_clear_flags(pmd, _PAGE_SWP_SOFT_DIRTY);
 }
 #endif
+#ifdef CONFIG_HUGETLB_PAGE
+static inline pud_t pud_swp_mksoft_dirty(pud_t pud)
+{
+	return pud_set_flags(pud, _PAGE_SWP_SOFT_DIRTY);
+}
+
+static inline int pud_swp_soft_dirty(pud_t pud)
+{
+	return pud_flags(pud) & _PAGE_SWP_SOFT_DIRTY;
+}
+
+static inline pud_t pud_swp_clear_soft_dirty(pud_t pud)
+{
+	return pud_clear_flags(pud, _PAGE_SWP_SOFT_DIRTY);
+}
+#endif
 #endif
 
 #ifdef CONFIG_HAVE_ARCH_USERFAULTFD_WP
@@ -1580,6 +1613,21 @@ static inline int pmd_swp_uffd_wp(pmd_t pmd)
 static inline pmd_t pmd_swp_clear_uffd_wp(pmd_t pmd)
 {
 	return pmd_clear_flags(pmd, _PAGE_SWP_UFFD_WP);
+}
+
+static inline pud_t pud_swp_mkuffd_wp(pud_t pud)
+{
+	return pud_set_flags(pud, _PAGE_SWP_UFFD_WP);
+}
+
+static inline int pud_swp_uffd_wp(pud_t pud)
+{
+	return pud_flags(pud) & _PAGE_SWP_UFFD_WP;
+}
+
+static inline pud_t pud_swp_clear_uffd_wp(pud_t pud)
+{
+	return pud_clear_flags(pud, _PAGE_SWP_UFFD_WP);
 }
 #endif /* CONFIG_HAVE_ARCH_USERFAULTFD_WP */
 
