@@ -343,7 +343,8 @@ static void snd_hwdep_free(struct snd_hwdep *hwdep)
 		return;
 	if (hwdep->private_free)
 		hwdep->private_free(hwdep);
-	put_device(hwdep->dev);
+	if (hwdep->dev)
+		put_device(hwdep->dev);
 	kfree(hwdep);
 }
 
