@@ -1,0 +1,25 @@
+digraph state_automaton {
+	center = true;
+	size = "7,11";
+	{node [shape = plaintext, style=invis, label=""] "__init_unmonitored"};
+	{node [shape = ellipse] "unmonitored"};
+	{node [shape = plaintext] "unmonitored"};
+	{node [shape = plaintext] "on_cpu"};
+	{node [shape = plaintext] "off_cpu"};
+	"__init_unmonitored" -> "unmonitored";
+	"unmonitored" [label = "unmonitored", color = green3];
+	"unmonitored" -> "on_cpu" [ label = "trace_start" ];
+	"unmonitored" -> "unmonitored" [ label = "switch_in\nswitch_out\nsched_wakeup" ];
+	"on_cpu" [label = "on_cpu"];
+	"on_cpu" -> "off_cpu" [ label = "switch_out" ];
+	"on_cpu" -> "unmonitored" [ label = "trace_stop\nbudget_expired" ];
+	"on_cpu" -> "on_cpu" [ label = "sched_wakeup" ];
+	"off_cpu" [label = "off_cpu"];
+	"off_cpu" -> "on_cpu" [ label = "switch_in" ];
+	"off_cpu" -> "unmonitored" [ label = "trace_stop\nbudget_expired" ];
+	"off_cpu" -> "off_cpu" [ label = "switch_out\nsched_wakeup" ];
+	{ rank = min ;
+		"__init_unmonitored";
+		"unmonitored";
+	}
+}
