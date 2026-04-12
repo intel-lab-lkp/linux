@@ -1148,8 +1148,11 @@ static int usb_serial_probe(struct usb_interface *interface,
 		device_enable_async_suspend(&port->dev);
 
 		retval = device_add(&port->dev);
-		if (retval)
+		if (retval) {
 			dev_err(ddev, "Error registering port device, continuing\n");
+			put_device(&port->dev);
+			serial->port[i] = NULL;
+		}
 	}
 
 	if (num_ports > 0)
