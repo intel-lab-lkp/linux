@@ -40,6 +40,11 @@
 		method = "smc";
 	};
 
+	ffa {
+		compatible = "arm,ffa";
+		interrupts = <GIC_SGI 8 IRQ_TYPE_EDGE_RISING>;
+	};
+
 	cpus {
 		#address-cells = <2>;
 		#size-cells = <0>;
@@ -224,6 +229,7 @@
 		#interrupt-cells = <3>;
 		#address-cells = <2>;
 		#size-cells = <2>;
+		arm,secure-donated-ns-sgi-ranges = <8 1>;
 		ranges;
 		interrupt-controller;
 		reg = <0x0 0x2f000000 0 0x10000>,	// GICD
