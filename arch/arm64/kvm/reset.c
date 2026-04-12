@@ -25,6 +25,7 @@
 #include <asm/ptrace.h>
 #include <asm/kvm_arm.h>
 #include <asm/kvm_asm.h>
+#include "vgic/vgic.h"
 #include <asm/kvm_emulate.h>
 #include <asm/kvm_mmu.h>
 #include <asm/kvm_nested.h>
@@ -198,6 +199,14 @@ void kvm_reset_vcpu(struct kvm_vcpu *vcpu)
 	vcpu->arch.reset_state.reset = false;
 	spin_unlock(&vcpu->arch.mp_state_lock);
 
+
+	/*
+	 * Initialize vGIC before entering preempt-disabled section.
+	 * vgic_lazy_init() may sleep via mutex_lock, which is illegal
+	 * inside preempt_disable(). Second call inside kvm_vgic_inject_irq
+	 * will find vGIC already initialized and return immediately.
+	 */
+	vgic_lazy_init(vcpu->kvm);
 	preempt_disable();
 	loaded = (vcpu->cpu != -1);
 	if (loaded)
