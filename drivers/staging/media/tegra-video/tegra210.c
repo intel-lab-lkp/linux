@@ -1095,11 +1095,9 @@ tegra210_csi_port_stop_streaming(struct tegra_csi_channel *csi_chan, u8 portno)
 		 (0xf << CSI_PP_START_MARKER_FRAME_MAX_OFFSET) |
 		 CSI_PP_DISABLE);
 
-	if (csi_chan->pg_mode) {
+	if (csi_chan->pg_mode)
 		tpg_write(csi, portno, TEGRA_CSI_PATTERN_GENERATOR_CTRL,
 			  PG_DISABLE);
-		return;
-	}
 
 	if (csi_chan->numlanes == 4) {
 		csi_write(csi, portno, TEGRA_CSI_PHY_CIL_COMMAND,
