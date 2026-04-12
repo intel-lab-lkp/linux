@@ -6278,9 +6278,14 @@ nfsd4_encode_operation(struct nfsd4_compoundres *resp, struct nfsd4_op *op)
 		warn_on_nonidempotent_op(op);
 		xdr_truncate_encode(xdr, op_status_offset + XDR_UNIT);
 	} else if (so) {
-		int len = xdr->buf->len - (op_status_offset + XDR_UNIT);
+		unsigned int len;
 
 		so->so_replay.rp_status = op->status;
+		if (xdr->buf->len >= op_status_offset + XDR_UNIT) {
+			len = xdr->buf->len - (op_status_offset + XDR_UNIT);
+		} else {
+			len = NFSD4_REPLAY_ISIZE + 1;
+		}
 		if (len <= NFSD4_REPLAY_ISIZE) {
 			so->so_replay.rp_buflen = len;
 			read_bytes_from_xdr_buf(xdr->buf,
