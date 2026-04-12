@@ -337,9 +337,9 @@ static int lan937x_dsp_workaround(struct phy_device *phydev, u16 ereg, u8 bank)
 	int rc = 0;
 	u16 val;
 
-	mutex_lock(&phydev->lock);
+	mutex_lock(&phydev->mdio.bus->mdio_lock);
 	/* Read previous selected bank */
-	rc = phy_read(phydev, LAN87XX_EXT_REG_CTL);
+	rc = __phy_read(phydev, LAN87XX_EXT_REG_CTL);
 	if (rc < 0)
 		goto out_unlock;
 
@@ -353,11 +353,11 @@ static int lan937x_dsp_workaround(struct phy_device *phydev, u16 ereg, u8 bank)
 		val |= LAN87XX_EXT_REG_CTL_RD_CTL;
 
 		/* access twice for DSP bank change,dummy access */
-		rc = phy_write(phydev, LAN87XX_EXT_REG_CTL, val);
+		rc = __phy_write(phydev, LAN87XX_EXT_REG_CTL, val);
 	}
 
 out_unlock:
-	mutex_unlock(&phydev->lock);
+	mutex_unlock(&phydev->mdio.bus->mdio_lock);
 
 	return rc;
 }
