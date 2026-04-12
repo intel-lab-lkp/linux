@@ -21,8 +21,17 @@
 
 extern char hyp_vectors[];
 
+enum vcpu_sysreg {
+	__INVALID_SYSREG__,   /* 0 is reserved as an invalid value */
+
+	SP_EL1,
+
+	NR_SYS_REGS
+};
+
 struct cpu_context {
 	struct user_pt_regs regs;	/* sp = sp_el0 */
+	u64 sys_regs[NR_SYS_REGS];
 };
 
 struct vcpu {
@@ -37,8 +46,16 @@ struct hyp_data {
 	struct cpu_context hyp_context;
 };
 
+void prepare_hyp(void);
+void init_vcpu(struct vcpu *vcpu, vm_paddr_t l2_pc, vm_paddr_t l2_stack_top);
+int run_l2(struct vcpu *vcpu, struct hyp_data *hyp_data);
+
+void do_hvc(void);
 u64 __guest_enter(struct vcpu *vcpu, struct cpu_context *hyp_context);
 void __hyp_exception(u64 type);
+
+void __sysreg_save_el1_state(struct cpu_context *ctxt);
+void __sysreg_restore_el1_state(struct cpu_context *ctxt);
 
 #endif /* !__ASSEMBLER__ */
 
