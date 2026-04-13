@@ -109,8 +109,10 @@ static int i2cr_scom_probe(struct fsi_device *fsi_dev)
 	dev_set_name(&scom->dev, "scom%d", didx);
 	cdev_init(&scom->cdev, &i2cr_scom_fops);
 	ret = cdev_device_add(&scom->cdev, &scom->dev);
-	if (ret)
+	if (ret) {
 		fsi_free_minor(scom->dev.devt);
+		put_device(&scom->dev);
+	}
 
 	return ret;
 }
