@@ -71,6 +71,7 @@ static void vm_area_init_from(const struct vm_area_struct *src,
 #endif
 #ifdef CONFIG_NUMA
 	dest->vm_policy = src->vm_policy;
+	dest->tree_idx = src->tree_idx;
 #endif
 #ifdef __HAVE_PFNMAP_TRACKING
 	dest->pfnmap_track_ctx = NULL;

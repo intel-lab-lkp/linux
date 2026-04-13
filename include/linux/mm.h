@@ -957,6 +957,9 @@ static inline void vma_init(struct vm_area_struct *vma, struct mm_struct *mm)
 	vma->vm_ops = &vma_dummy_vm_ops;
 	INIT_LIST_HEAD(&vma->anon_vma_chain);
 	vma_lock_init(vma, false);
+#ifdef CONFIG_NUMA
+	vma->tree_idx = numa_node_id();
+#endif
 }
 
 /* Use when VMA is not part of the VMA tree and needs no locking */
@@ -4030,6 +4033,8 @@ extern atomic_long_t mmap_pages_allocated;
 extern int nommu_shrink_inode_mappings(struct inode *, size_t, size_t);
 
 /* interval_tree.c */
+struct rb_root_cached *get_rb_root(struct vm_area_struct *vma,
+					struct address_space *mapping);
 void vma_interval_tree_insert(struct vm_area_struct *node,
 			      struct rb_root_cached *root);
 void vma_interval_tree_insert_after(struct vm_area_struct *node,
@@ -4045,9 +4050,36 @@ struct vm_area_struct *vma_interval_tree_iter_next(struct vm_area_struct *node,
 				unsigned long start, unsigned long last);
 
 /* Please use get_i_mmap_root() to get the @root */
+#ifdef CONFIG_NUMA
+/* Find the first valid VMA in the sibling trees */
+static inline struct vm_area_struct *first_vma(struct rb_root_cached ***__r,
+				unsigned long start, unsigned long last)
+{
+	struct vm_area_struct *vma = NULL;
+	struct rb_root_cached **tree = *__r;
+
+	while (*tree) {
+		vma = vma_interval_tree_iter_first(*tree++, start, last);
+		if (vma)
+			break;
+	}
+
+	/* Save for the next loop */
+	*__r = tree;
+	return vma;
+}
+
+/* @_tmp is referenced to avoid unused variable warning. */
+#define vma_interval_tree_foreach(vma, root, start, last)		\
+	for (struct rb_root_cached **_r = (void *)(root),		\
+		**_tmp = (vma = first_vma(&_r, start, last)) ? _r : NULL;\
+	     ((_tmp && vma) || (vma = first_vma(&_r, start, last)));	\
+		vma = vma_interval_tree_iter_next(vma, start, last))
+#else
 #define vma_interval_tree_foreach(vma, root, start, last)		\
 	for (vma = vma_interval_tree_iter_first(root, start, last);	\
 	     vma; vma = vma_interval_tree_iter_next(vma, start, last))
+#endif
 
 void anon_vma_interval_tree_insert(struct anon_vma_chain *node,
 				   struct rb_root_cached *root);

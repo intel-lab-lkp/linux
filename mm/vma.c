@@ -227,6 +227,16 @@ static bool can_vma_merge_after(struct vma_merge_struct *vmg)
 	return false;
 }
 
+struct rb_root_cached *get_rb_root(struct vm_area_struct *vma,
+					struct address_space *mapping)
+{
+#ifdef CONFIG_NUMA
+	return mapping->i_mmap[vma->tree_idx];
+#else
+	return &mapping->i_mmap;
+#endif
+}
+
 static void __vma_link_file(struct vm_area_struct *vma,
 			    struct address_space *mapping)
 {
@@ -234,8 +244,9 @@ static void __vma_link_file(struct vm_area_struct *vma,
 		mapping_allow_writable(mapping);
 
 	flush_dcache_mmap_lock(mapping);
-	vma_interval_tree_insert(vma, get_i_mmap_root(mapping));
+	vma_interval_tree_insert(vma, get_rb_root(vma, mapping));
 	flush_dcache_mmap_unlock(mapping);
+	inc_mapping_vma(mapping);
 }
 
 /*
@@ -248,8 +259,9 @@ static void __remove_shared_vm_struct(struct vm_area_struct *vma,
 		mapping_unmap_writable(mapping);
 
 	flush_dcache_mmap_lock(mapping);
-	vma_interval_tree_remove(vma, get_i_mmap_root(mapping));
+	vma_interval_tree_remove(vma, get_rb_root(vma, mapping));
 	flush_dcache_mmap_unlock(mapping);
+	dec_mapping_vma(mapping);
 }
 
 /*
@@ -320,10 +332,13 @@ static void vma_prepare(struct vma_prepare *vp)
 	if (vp->file) {
 		flush_dcache_mmap_lock(vp->mapping);
 		vma_interval_tree_remove(vp->vma,
-					get_i_mmap_root(vp->mapping));
-		if (vp->adj_next)
+					get_rb_root(vp->vma, vp->mapping));
+		dec_mapping_vma(vp->mapping);
+		if (vp->adj_next) {
 			vma_interval_tree_remove(vp->adj_next,
-					get_i_mmap_root(vp->mapping));
+					get_rb_root(vp->adj_next, vp->mapping));
+			dec_mapping_vma(vp->mapping);
+		}
 	}
 
 }
@@ -340,11 +355,14 @@ static void vma_complete(struct vma_prepare *vp, struct vma_iterator *vmi,
 			 struct mm_struct *mm)
 {
 	if (vp->file) {
-		if (vp->adj_next)
+		if (vp->adj_next) {
 			vma_interval_tree_insert(vp->adj_next,
-					get_i_mmap_root(vp->mapping));
+					get_rb_root(vp->adj_next, vp->mapping));
+			inc_mapping_vma(vp->mapping);
+		}
 		vma_interval_tree_insert(vp->vma,
-					get_i_mmap_root(vp->mapping));
+					get_rb_root(vp->vma, vp->mapping));
+		inc_mapping_vma(vp->mapping);
 		flush_dcache_mmap_unlock(vp->mapping);
 	}
 

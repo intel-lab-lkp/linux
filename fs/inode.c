@@ -215,6 +215,56 @@ static int no_open(struct inode *inode, struct file *file)
 	return -ENXIO;
 }
 
+#ifdef CONFIG_NUMA
+static void free_mapping_i_mmap(struct address_space *mapping)
+{
+	int i;
+
+	if (!mapping->i_mmap)
+		return;
+
+	for (i = 0; i < nr_node_ids; i++)
+		kfree(mapping->i_mmap[i]);
+
+	kfree(mapping->i_mmap);
+	mapping->i_mmap = NULL;
+}
+
+static int init_mapping_i_mmap(struct address_space *mapping)
+{
+	struct rb_root_cached *root;
+	int i;
+
+	/* The extra one is used as terminator in vma_interval_tree_foreach() */
+	mapping->i_mmap = kzalloc(sizeof(root) * (nr_node_ids + 1), GFP_KERNEL);
+	if (!mapping->i_mmap)
+		return -ENOMEM;
+
+	for (i = 0; i < nr_node_ids; i++) {
+		root = kzalloc_node(sizeof(*root), GFP_KERNEL, i);
+		if (!root)
+			goto no_mem;
+
+		*root = RB_ROOT_CACHED;
+		mapping->i_mmap[i] = root;
+	}
+	return 0;
+
+no_mem:
+	free_mapping_i_mmap(mapping);
+	return -ENOMEM;
+}
+#else
+static int init_mapping_i_mmap(struct address_space *mapping)
+{
+	mapping->i_mmap = RB_ROOT_CACHED;
+	return 0;
+}
+static void free_mapping_i_mmap(struct address_space *mapping)
+{
+}
+#endif
+
 /**
  * inode_init_always_gfp - perform inode structure initialisation
  * @sb: superblock inode belongs to
@@ -307,6 +357,9 @@ int inode_init_always_gfp(struct super_block *sb, struct inode *inode, gfp_t gfp
 	if (unlikely(security_inode_alloc(inode, gfp)))
 		return -ENOMEM;
 
+	if (init_mapping_i_mmap(mapping))
+		return -ENOMEM;
+
 	this_cpu_inc(nr_inodes);
 
 	return 0;
@@ -383,6 +436,7 @@ void __destroy_inode(struct inode *inode)
 	if (inode->i_default_acl && !is_uncached_acl(inode->i_default_acl))
 		posix_acl_release(inode->i_default_acl);
 #endif
+	free_mapping_i_mmap(&inode->i_data);
 	this_cpu_dec(nr_inodes);
 }
 EXPORT_SYMBOL(__destroy_inode);
@@ -486,7 +540,6 @@ static void __address_space_init_once(struct address_space *mapping)
 	init_rwsem(&mapping->i_mmap_rwsem);
 	INIT_LIST_HEAD(&mapping->i_private_list);
 	spin_lock_init(&mapping->i_private_lock);
-	mapping->i_mmap = RB_ROOT_CACHED;
 }
 
 void address_space_init_once(struct address_space *mapping)

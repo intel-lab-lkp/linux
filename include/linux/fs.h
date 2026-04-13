@@ -477,7 +477,12 @@ struct address_space {
 	/* number of thp, only for non-shmem files */
 	atomic_t		nr_thps;
 #endif
+#ifdef CONFIG_NUMA
+	struct rb_root_cached	**i_mmap;
+	unsigned long		vma_count;
+#else
 	struct rb_root_cached	i_mmap;
+#endif
 	unsigned long		nrpages;
 	pgoff_t			writeback_index;
 	const struct address_space_operations *a_ops;
@@ -547,6 +552,27 @@ static inline void i_mmap_assert_write_locked(struct address_space *mapping)
 	lockdep_assert_held_write(&mapping->i_mmap_rwsem);
 }
 
+#ifdef CONFIG_NUMA
+static inline int mapping_mapped(const struct address_space *mapping)
+{
+	return	READ_ONCE(mapping->vma_count);
+}
+
+static inline void inc_mapping_vma(struct address_space *mapping)
+{
+	mapping->vma_count++;
+}
+
+static inline void dec_mapping_vma(struct address_space *mapping)
+{
+	mapping->vma_count--;
+}
+
+static inline struct rb_root_cached *get_i_mmap_root(struct address_space *mapping)
+{
+	return (struct rb_root_cached *)mapping->i_mmap;
+}
+#else
 /*
  * Might pages of this file be mapped into userspace?
  */
@@ -555,10 +581,19 @@ static inline int mapping_mapped(const struct address_space *mapping)
 	return	!RB_EMPTY_ROOT(&mapping->i_mmap.rb_root);
 }
 
+static inline void inc_mapping_vma(struct address_space *mapping)
+{
+}
+
+static inline void dec_mapping_vma(struct address_space *mapping)
+{
+}
+
 static inline struct rb_root_cached *get_i_mmap_root(struct address_space *mapping)
 {
 	return &mapping->i_mmap;
 }
+#endif
 
 /*
  * Might pages of this file have been modified in userspace?

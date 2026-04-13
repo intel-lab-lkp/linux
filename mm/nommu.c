@@ -569,8 +569,9 @@ static void setup_vma_to_mm(struct vm_area_struct *vma, struct mm_struct *mm)
 
 		i_mmap_lock_write(mapping);
 		flush_dcache_mmap_lock(mapping);
-		vma_interval_tree_insert(vma, get_i_mmap_root(mapping));
+		vma_interval_tree_insert(vma, get_rb_root(vma, mapping));
 		flush_dcache_mmap_unlock(mapping);
+		inc_mapping_vma(mapping);
 		i_mmap_unlock_write(mapping);
 	}
 }
@@ -585,8 +586,9 @@ static void cleanup_vma_from_mm(struct vm_area_struct *vma)
 
 		i_mmap_lock_write(mapping);
 		flush_dcache_mmap_lock(mapping);
-		vma_interval_tree_remove(vma, get_i_mmap_root(mapping));
+		vma_interval_tree_remove(vma, get_rb_root(vma, mapping));
 		flush_dcache_mmap_unlock(mapping);
+		dec_mapping_vma(mapping);
 		i_mmap_unlock_write(mapping);
 	}
 }

@@ -1831,8 +1831,9 @@ __latent_entropy int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
 			flush_dcache_mmap_lock(mapping);
 			/* insert tmp into the share list, just after mpnt */
 			vma_interval_tree_insert_after(tmp, mpnt,
-					get_i_mmap_root(mapping));
+					get_rb_root(mpnt, mapping));
 			flush_dcache_mmap_unlock(mapping);
+			inc_mapping_vma(mapping);
 			i_mmap_unlock_write(mapping);
 		}
 
