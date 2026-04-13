@@ -21,6 +21,7 @@ Video4Linux (V4L) driver-specific documentation
 	ivtv
 	mali-c55
 	mgb4
+	nxp-neoisp
 	omap3isp
 	philips
 	qcom_camss
