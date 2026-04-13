@@ -1,3 +1,14 @@
+	if (skb->len < sizeof(*rsp)) {
+		pr_err("short NCI_CORE_INIT_RSP v2 packet\n");
+		return NCI_STATUS_SYNTAX_ERROR;
+	}
+	if (skb->len < 6 + rsp_1->num_supported_rf_interfaces +
+			sizeof(*rsp_2)) {
+		pr_err("short NCI_CORE_INIT_RSP v1 packet\n");
+		return NCI_STATUS_SYNTAX_ERROR;
+	}
+	if (skb->len < sizeof(*rsp_1))
+		return NCI_STATUS_SYNTAX_ERROR;
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  *  The NFC Controller Interface is the communication protocol between an
