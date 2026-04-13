@@ -417,6 +417,7 @@ static int memfd_luo_retrieve_folios(struct file *file,
 		const struct memfd_luo_folio_ser *pfolio = &folios_ser[i];
 		phys_addr_t phys;
 		u64 index;
+		long pages;
 		int flags;
 
 		if (!pfolio->pfn)
@@ -456,14 +457,16 @@ static int memfd_luo_retrieve_folios(struct file *file,
 		if (flags & MEMFD_LUO_FOLIO_DIRTY)
 			folio_mark_dirty(folio);
 
-		err = shmem_inode_acct_blocks(inode, 1);
+		pages = folio_nr_pages(folio);
+
+		err = shmem_inode_acct_blocks(inode, pages);
 		if (err) {
 			pr_err("shmem: failed to account folio index %ld: %d\n",
 			       i, err);
 			goto unlock_folio;
 		}
 
-		shmem_recalc_inode(inode, 1, 0);
+		shmem_recalc_inode(inode, pages, 0);
 		folio_add_lru(folio);
 		folio_unlock(folio);
 		folio_put(folio);
