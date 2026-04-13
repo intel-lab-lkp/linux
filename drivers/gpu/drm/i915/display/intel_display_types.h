@@ -1299,6 +1299,14 @@ struct intel_crtc_state {
 		struct drm_dp_as_sdp as_sdp;
 	} infoframes;
 
+	struct {
+		/*
+		 * SDP Transmission line, relative to the Vtotal.
+		 * The programmed transmit line is (Vtotal - value)
+		 */
+		u16 as;
+	} dp_sdp_tl;
+
 	u8 eld[MAX_ELD_BYTES];
 
 	/* HDMI scrambling status */

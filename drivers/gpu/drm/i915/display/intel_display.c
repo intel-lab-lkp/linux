@@ -5409,6 +5409,8 @@ intel_pipe_config_compare(const struct intel_crtc_state *current_config,
 	}
 	PIPE_CONF_CHECK_DP_VSC_SDP(vsc);
 
+	PIPE_CONF_CHECK_I(dp_sdp_tl.as);
+
 	PIPE_CONF_CHECK_X(sync_mode_slaves_mask);
 	PIPE_CONF_CHECK_I(master_transcoder);
 	PIPE_CONF_CHECK_X(joiner_pipes);
