@@ -101,7 +101,7 @@ teql_dequeue(struct Qdisc *sch)
 	if (skb == NULL) {
 		struct net_device *m = qdisc_dev(q);
 		if (m) {
-			dat->m->slaves = sch;
+			WRITE_ONCE(dat->m->slaves, sch);
 			netif_wake_queue(m);
 		}
 	} else {
@@ -136,19 +136,23 @@ teql_destroy(struct Qdisc *sch)
 	if (!master)
 		return;
 
-	prev = master->slaves;
+	prev = READ_ONCE(master->slaves);
 	if (prev) {
+		struct Qdisc *head = prev;
+
 		do {
 			q = NEXT_SLAVE(prev);
 			if (q == sch) {
 				NEXT_SLAVE(prev) = NEXT_SLAVE(q);
-				if (q == master->slaves) {
-					master->slaves = NEXT_SLAVE(q);
-					if (q == master->slaves) {
+				if (q == head) {
+					WRITE_ONCE(master->slaves,
+						   NEXT_SLAVE(q));
+					if (q == NEXT_SLAVE(q)) {
 						struct netdev_queue *txq;
 
 						txq = netdev_get_tx_queue(master->dev, 0);
-						master->slaves = NULL;
+						WRITE_ONCE(master->slaves,
+							   NULL);
 
 						dev_reset_queue(master->dev,
 								txq, NULL);
@@ -158,7 +162,7 @@ teql_destroy(struct Qdisc *sch)
 				break;
 			}
 
-		} while ((prev = q) != master->slaves);
+		} while ((prev = q) != head);
 	}
 }
 
@@ -285,7 +289,7 @@ static netdev_tx_t teql_master_xmit(struct sk_buff *skb, struct net_device *dev)
 	int subq = skb_get_queue_mapping(skb);
 	struct sk_buff *skb_res = NULL;
 
-	start = master->slaves;
+	start = READ_ONCE(master->slaves);
 
 restart:
 	nores = 0;
@@ -317,7 +321,7 @@ restart:
 				    netdev_start_xmit(skb, slave, slave_txq, false) ==
 				    NETDEV_TX_OK) {
 					__netif_tx_unlock(slave_txq);
-					master->slaves = NEXT_SLAVE(q);
+					WRITE_ONCE(master->slaves, NEXT_SLAVE(q));
 					netif_wake_queue(dev);
 					master->tx_packets++;
 					master->tx_bytes += length;
@@ -329,7 +333,7 @@ restart:
 				busy = 1;
 			break;
 		case 1:
-			master->slaves = NEXT_SLAVE(q);
+			WRITE_ONCE(master->slaves, NEXT_SLAVE(q));
 			return NETDEV_TX_OK;
 		default:
 			nores = 1;
