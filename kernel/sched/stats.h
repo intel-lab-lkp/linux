@@ -226,8 +226,8 @@ static inline void psi_sched_switch(struct task_struct *prev,
 }
 
 #else /* !CONFIG_PSI: */
-static inline void psi_enqueue(struct task_struct *p, bool migrate) {}
-static inline void psi_dequeue(struct task_struct *p, bool migrate) {}
+static inline void psi_enqueue(struct task_struct *p, int flags) {}
+static inline void psi_dequeue(struct task_struct *p, int flags) {}
 static inline void psi_ttwu_dequeue(struct task_struct *p) {}
 static inline void psi_sched_switch(struct task_struct *prev,
 				    struct task_struct *next,
