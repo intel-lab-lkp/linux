@@ -5189,6 +5189,10 @@ retry_this_zone:
 
 		prep_new_page(page, 0, gfp, 0);
 		set_page_refcounted(page);
+
+		trace_mm_page_alloc(page, 0, gfp, ac.migratetype);
+		kmsan_alloc_page(page, 0, gfp);
+
 		page_array[nr_populated++] = page;
 	}
 
@@ -6911,6 +6915,12 @@ static void split_free_frozen_pages(struct list_head *list, gfp_t gfp_mask)
 			int i;
 
 			post_alloc_hook(page, order, gfp_mask);
+			/*
+			 * Initialize KMSAN state right after post_alloc_hook().
+			 * This prepares the pages for subsequent outer callers
+			 * that might free sub-pages after the split.
+			 */
+			kmsan_alloc_page(page, order, gfp_mask);
 			if (!order)
 				continue;
 
@@ -7117,6 +7127,8 @@ int alloc_contig_frozen_range_noprof(unsigned long start, unsigned long end,
 
 		check_new_pages(head, order);
 		prep_new_page(head, order, gfp_mask, 0);
+
+		kmsan_alloc_page(head, order, gfp_mask);
 	} else {
 		ret = -EINVAL;
 		WARN(true, "PFN range: requested [%lu, %lu), allocated [%lu, %lu)\n",
