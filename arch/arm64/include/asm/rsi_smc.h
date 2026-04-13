@@ -145,6 +145,13 @@ struct realm_config {
 #endif /* __ASSEMBLER__ */
 
 /*
+ * The RSI definition of the Hash Algorithm (as specified by the Secure
+ * Hash Standard) returned in the realm_config data structure.
+ */
+#define RSI_HASH_SHA_256	0
+#define RSI_HASH_SHA_512	1
+
+/*
  * Read configuration for the current Realm.
  *
  * arg1 == struct realm_config addr
