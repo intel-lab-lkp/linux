@@ -4042,7 +4042,7 @@ static int iavf_handle_tclass(struct iavf_adapter *adapter, u32 tc,
 {
 	if (tc == 0)
 		return 0;
-	if (tc < adapter->num_tc) {
+	if (tc > adapter->num_tc) {
 		if (!filter->f.data.tcp_spec.dst_port) {
 			dev_err(&adapter->pdev->dev,
 				"Specify destination port to redirect to traffic class other than TC0\n");
