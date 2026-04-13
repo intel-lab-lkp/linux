@@ -703,6 +703,15 @@ void __jbd2_journal_drop_transaction(journal_t *journal, transaction_t *transact
 {
 	assert_spin_locked(&journal->j_list_lock);
 
+	J_ASSERT(transaction->t_state == T_FINISHED);
+	J_ASSERT(transaction->t_buffers == NULL);
+	J_ASSERT(transaction->t_forget == NULL);
+	J_ASSERT(transaction->t_shadow_list == NULL);
+	J_ASSERT(transaction->t_checkpoint_list == NULL);
+	J_ASSERT(atomic_read(&transaction->t_updates) == 0);
+	J_ASSERT(journal->j_committing_transaction != transaction);
+	J_ASSERT(journal->j_running_transaction != transaction);
+
 	journal->j_shrink_transaction = NULL;
 	if (transaction->t_cpnext) {
 		transaction->t_cpnext->t_cpprev = transaction->t_cpprev;
@@ -713,15 +722,6 @@ void __jbd2_journal_drop_transaction(journal_t *journal, transaction_t *transact
 		if (journal->j_checkpoint_transactions == transaction)
 			journal->j_checkpoint_transactions = NULL;
 	}
-
-	J_ASSERT(transaction->t_state == T_FINISHED);
-	J_ASSERT(transaction->t_buffers == NULL);
-	J_ASSERT(transaction->t_forget == NULL);
-	J_ASSERT(transaction->t_shadow_list == NULL);
-	J_ASSERT(transaction->t_checkpoint_list == NULL);
-	J_ASSERT(atomic_read(&transaction->t_updates) == 0);
-	J_ASSERT(journal->j_committing_transaction != transaction);
-	J_ASSERT(journal->j_running_transaction != transaction);
 
 	trace_jbd2_drop_transaction(journal, transaction);
 
