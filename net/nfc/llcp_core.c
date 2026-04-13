@@ -852,7 +852,7 @@ static const u8 *nfc_llcp_connect_sn(const struct sk_buff *skb, size_t *sn_len)
 	const u8 *tlv = &skb->data[2];
 	size_t tlv_array_len = skb->len - LLCP_HEADER_SIZE, offset = 0;
 
-	while (offset < tlv_array_len) {
+	while (offset + 1 < tlv_array_len) {
 		type = tlv[0];
 		length = tlv[1];
 
@@ -1299,7 +1299,7 @@ static void nfc_llcp_recv_snl(struct nfc_llcp_local *local,
 	offset = 0;
 	sdres_tlvs_len = 0;
 
-	while (offset < tlv_len) {
+	while (offset + 1 < tlv_len) {
 		type = tlv[0];
 		length = tlv[1];
 
