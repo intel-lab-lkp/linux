@@ -1258,8 +1258,13 @@ static int acpi_processor_get_power_info(struct acpi_processor *pr)
 
 	if (pr->flags.has_lpi) {
 		ret = acpi_processor_ffh_lpi_probe(pr->id);
-		if (ret)
+		if (ret == -ENODEV) {
+			pr_debug("CPU%u: FFH LPI probe failed, err = %d, power.count = %d\n",
+				 pr->id, ret, pr->power.count);
+			ret = 0;
+		} else if (ret) {
 			pr_err("CPU%u: Invalid FFH LPI data\n", pr->id);
+		}
 	}
 
 	return ret;
