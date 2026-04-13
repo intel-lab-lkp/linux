@@ -5,6 +5,7 @@
 
 #include "xe_assert.h"
 #include "xe_device_types.h"
+#include "xe_device.h"
 #include "xe_printk.h"
 #include "xe_ras.h"
 #include "xe_ras_types.h"
@@ -93,6 +94,22 @@ static enum xe_ras_recovery_action handle_compute_errors(struct xe_device *xe,
 	return XE_RAS_RECOVERY_ACTION_RECOVERED;
 }
 
+/**
+ * xe_punit_error_handler - Handler for Punit errors requiring cold reset
+ * @xe: device instance
+ *
+ * Handles Punit errors that affect the device and cannot be recovered
+ * through driver reload, PCIe reset, etc.
+ *
+ * Marks the device as wedged with DRM_WEDGE_RECOVERY_COLD_RESET method
+ * and notifies userspace that a device cold reset is required.
+ */
+static void xe_punit_error_handler(struct xe_device *xe)
+{
+	xe_device_set_wedged_method(xe, DRM_WEDGE_RECOVERY_COLD_RESET);
+	xe_device_declare_wedged(xe);
+}
+
 static enum xe_ras_recovery_action handle_soc_internal_errors(struct xe_device *xe,
 							      struct xe_ras_error_array *arr)
 {
@@ -132,7 +149,7 @@ static enum xe_ras_recovery_action handle_soc_internal_errors(struct xe_device *
 			xe_err(xe, "[RAS]: PUNIT %s error detected: 0x%x\n",
 			       severity_to_str(xe, common.severity),
 			       ieh_error->global_error_status);
-			/** TODO: Add PUNIT error handling */
+			xe_punit_error_handler(xe);
 			return XE_RAS_RECOVERY_ACTION_DISCONNECT;
 		}
 	}
