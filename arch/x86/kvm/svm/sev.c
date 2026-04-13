@@ -2942,6 +2942,8 @@ void sev_vm_destroy(struct kvm *kvm)
 	if (sev_snp_guest(kvm)) {
 		snp_guest_req_cleanup(kvm);
 
+		snp_rmpopt_all_physmem();
+
 		/*
 		 * Decomission handles unbinding of the ASID. If it fails for
 		 * some unexpected reason, just leak the ASID.
