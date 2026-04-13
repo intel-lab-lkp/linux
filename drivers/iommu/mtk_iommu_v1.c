@@ -413,12 +413,10 @@ static const struct iommu_ops mtk_iommu_v1_ops;
  * MTK generation one iommu HW only support one iommu domain, and all the client
  * sharing the same iova address space.
  */
-static int mtk_iommu_v1_create_mapping(struct device *dev,
-				       const struct of_phandle_args *args)
+static int mtk_iommu_v1_of_xlate(struct device *dev,
+				 const struct of_phandle_args *args)
 {
-	struct mtk_iommu_v1_data *data;
 	struct platform_device *m4updev;
-	struct dma_iommu_mapping *mtk_mapping;
 	int ret;
 
 	if (args->args_count != 1) {
@@ -442,46 +440,16 @@ static int mtk_iommu_v1_create_mapping(struct device *dev,
 		put_device(&m4updev->dev);
 	}
 
-	ret = iommu_fwspec_add_ids(dev, args->args, 1);
-	if (ret)
-		return ret;
-
-	data = dev_iommu_priv_get(dev);
-	mtk_mapping = data->mapping;
-	if (!mtk_mapping) {
-		/* MTK iommu support 4GB iova address space. */
-		mtk_mapping = arm_iommu_create_mapping(dev, 0, 1ULL << 32);
-		if (IS_ERR(mtk_mapping))
-			return PTR_ERR(mtk_mapping);
-
-		data->mapping = mtk_mapping;
-	}
-
-	return 0;
+	return iommu_fwspec_add_ids(dev, args->args, 1);
 }
 
 static struct iommu_device *mtk_iommu_v1_probe_device(struct device *dev)
 {
-	struct iommu_fwspec *fwspec = NULL;
-	struct of_phandle_args iommu_spec;
+	struct iommu_fwspec *fwspec = dev_iommu_fwspec_get(dev);
 	struct mtk_iommu_v1_data *data;
-	int err, idx = 0, larbid, larbidx;
+	int idx, larbid, larbidx;
 	struct device_link *link;
 	struct device *larbdev;
-
-	while (!of_parse_phandle_with_args(dev->of_node, "iommus",
-					   "#iommu-cells",
-					   idx, &iommu_spec)) {
-
-		err = mtk_iommu_v1_create_mapping(dev, &iommu_spec);
-		of_node_put(iommu_spec.np);
-		if (err)
-			return ERR_PTR(err);
-
-		/* dev->iommu_fwspec might have changed */
-		fwspec = dev_iommu_fwspec_get(dev);
-		idx++;
-	}
 
 	if (!fwspec)
 		return ERR_PTR(-ENODEV);
@@ -516,8 +484,21 @@ static struct iommu_device *mtk_iommu_v1_probe_device(struct device *dev)
 
 static void mtk_iommu_v1_probe_finalize(struct device *dev)
 {
-	__maybe_unused struct mtk_iommu_v1_data *data = dev_iommu_priv_get(dev);
+	struct mtk_iommu_v1_data *data = dev_iommu_priv_get(dev);
+	struct dma_iommu_mapping *mtk_mapping;
 	int err;
+
+	mtk_mapping = data->mapping;
+	if (!mtk_mapping) {
+		/* MTK iommu supports 4GB iova address space. */
+		mtk_mapping = arm_iommu_create_mapping(dev, 0, 1ULL << 32);
+		if (IS_ERR(mtk_mapping)) {
+			dev_err(dev, "Failed to create IOMMU mapping: %ld\n",
+				PTR_ERR(mtk_mapping));
+			return;
+		}
+		data->mapping = mtk_mapping;
+	}
 
 	err = arm_iommu_attach_device(dev, data->mapping);
 	if (err)
@@ -585,6 +566,7 @@ static const struct iommu_ops mtk_iommu_v1_ops = {
 	.probe_finalize = mtk_iommu_v1_probe_finalize,
 	.release_device	= mtk_iommu_v1_release_device,
 	.device_group	= generic_device_group,
+	.of_xlate	= mtk_iommu_v1_of_xlate,
 	.owner          = THIS_MODULE,
 	.default_domain_ops = &(const struct iommu_domain_ops) {
 		.attach_dev	= mtk_iommu_v1_attach_device,
