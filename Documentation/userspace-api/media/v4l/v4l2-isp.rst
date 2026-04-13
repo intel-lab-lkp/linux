@@ -24,7 +24,7 @@ correctly populate the buffer header with the generic parameters format version
 and with the size (in bytes) of the binary data buffer where it will store the
 ISP blocks configuration.
 
-Each *ISP configuration block* is preceded by an header implemented by the
+Each *ISP configuration block* is preceded by a header implemented by the
 :c:type:`v4l2_isp_params_block_header` structure, followed by the configuration
 parameters for that specific block, defined by the ISP driver specific data
 types.
@@ -32,8 +32,8 @@ types.
 Userspace applications are responsible for correctly populating each block's
 header fields (type, flags and size) and the block-specific parameters.
 
-ISP block enabling, disabling and configuration
------------------------------------------------
+ISP parameters block enabling, disabling and configuration
+----------------------------------------------------------
 
 When userspace wants to configure and enable an ISP block it shall fully
 populate the block configuration and set the V4L2_ISP_PARAMS_FL_BLOCK_ENABLE
@@ -59,7 +59,38 @@ definition without invalidating the existing ones.
 ISP statistics
 ==============
 
-Support for generic statistics format is not yet implemented in Video4Linux2.
+The generic ISP statistics format is similar to the generic ISP configuration
+parameters format. It is realized by defining a C structure that contains a
+header, followed by binary buffer where the ISP driver copies a variable number
+of ISP statistics block.
+
+The :c:type:`v4l2_isp_stats_buffer` structure defines the buffer header which
+is followed by a binary buffer of ISP statistics data. ISP drivers shall
+correctly populate the buffer header with the generic statistics format version
+and with the size (in bytes) of the binary data buffer where it will store the
+ISP statistics data.
+
+Each *ISP statistics block* is preceded by a header implemented by the
+:c:type:`v4l2_isp_stats_block_header` structure, followed by the statistics
+data for that specific block, defined by the ISP driver specific data types.
+
+Drivers are responsible for correctly populating each block's header fields
+(type and size) and the block-specific statistics data. The flags field can be
+left empty, it is not relevant for statistics data.
+
+ISP statistics block configuration
+----------------------------------
+
+When an ISP driver wants to share statistics from an ISP block, it shall fully
+populate the block statistics.
+
+When ISP driver wants userspace to ignore statistics from an ISP block, it can
+either simply omit the full block, or omit the additional data after header.
+In second case, block header's `size` shall be filled with header structure's
+size only.
+
+Extension to the statistics format can be implemented by adding new blocks
+definition without invalidating the existing ones.
 
 V4L2 ISP uAPI data types
 ========================
