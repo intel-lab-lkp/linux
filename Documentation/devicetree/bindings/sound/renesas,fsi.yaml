@@ -9,9 +9,6 @@ title: Renesas FIFO-buffered Serial Interface (FSI)
 maintainers:
   - Kuninori Morimoto <kuninori.morimoto.gx@renesas.com>
 
-allOf:
-  - $ref: dai-common.yaml#
-
 properties:
   $nodename:
     pattern: "^sound@.*"
@@ -38,7 +35,36 @@ properties:
     maxItems: 1
 
   clocks:
-    maxItems: 1
+    description: |
+      Clock driving the FSI Controller. The first clock must be
+      the module clock ("own").
+    minItems: 1
+    maxItems: 8
+
+  clock-names:
+    description: |
+      Names of clocks corresponding to entries in "clocks":
+      - "own": Main FSI module clock (must be first and always present)
+      - "spu": SPU bus/bridge clock. On R8A7740, this clock must be
+        enabled to allow register access as the FSI block is connected
+        behind the SPU bus.
+      - "icka" / "ickb": CPG DIV6 functional clocks for FSI port A/B
+      - "diva"/"divb": Internal FSI dividers for port A/B used for
+        audio clock generation
+      - "xcka"/"xckb": External clock inputs for FSI port A/B
+        provided by the board
+    minItems: 1
+    items:
+      - const: own
+      - &fsi_all_clks
+        enum: [spu, icka, ickb, diva, divb, xcka, xckb]
+      - &fsi_no_spu_clks
+        enum: [icka, ickb, diva, divb, xcka, xckb]
+      - *fsi_no_spu_clks
+      - *fsi_no_spu_clks
+      - *fsi_no_spu_clks
+      - *fsi_no_spu_clks
+      - *fsi_no_spu_clks
 
   power-domains:
     maxItems: 1
@@ -69,6 +95,27 @@ required:
 
 unevaluatedProperties: false
 
+allOf:
+  - $ref: dai-common.yaml#
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: renesas,fsi2-r8a7740
+    then:
+      properties:
+        clock-names:
+          minItems: 2
+          items:
+            - const: own
+            - const: spu
+            - *fsi_no_spu_clks
+            - *fsi_no_spu_clks
+            - *fsi_no_spu_clks
+            - *fsi_no_spu_clks
+            - *fsi_no_spu_clks
+            - *fsi_no_spu_clks
+
 examples:
   - |
     #include <dt-bindings/clock/r8a7740-clock.h>
@@ -77,7 +124,11 @@ examples:
             compatible = "renesas,fsi2-r8a7740", "renesas,sh_fsi2";
             reg = <0xfe1f0000 0x400>;
             interrupts = <GIC_SPI 9 0x4>;
-            clocks = <&mstp3_clks R8A7740_CLK_FSI>;
+            clocks = <&mstp3_clks R8A7740_CLK_FSI>, <&spu_clk>,
+                     <&fsia_clk>, <&fsib_clk>, <&fsidiva_clk>,
+                     <&fsidivb_clk>,<&fsiack_clk>,<&fsibck_clk>;
+            clock-names = "own", "spu", "icka", "ickb",
+                          "diva", "divb", "xcka", "xckb";
             power-domains = <&pd_a4mp>;
 
             #sound-dai-cells = <1>;
