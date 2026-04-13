@@ -280,7 +280,7 @@ exit:
 }
 
 u8 rtw_set_802_11_infrastructure_mode(struct adapter *padapter,
-	enum ndis_802_11_network_infrastructure networktype)
+				      enum ndis_802_11_network_infrastructure networktype)
 {
 	struct	mlme_priv *pmlmepriv = &padapter->mlmepriv;
 	struct	wlan_network	*cur_network = &pmlmepriv->cur_network;
@@ -300,7 +300,7 @@ u8 rtw_set_802_11_infrastructure_mode(struct adapter *padapter,
 			rtw_disassoc_cmd(padapter, 0, true);
 
 		if ((check_fwstate(pmlmepriv, _FW_LINKED) == true) ||
-			(check_fwstate(pmlmepriv, WIFI_ADHOC_MASTER_STATE) == true))
+		    (check_fwstate(pmlmepriv, WIFI_ADHOC_MASTER_STATE) == true))
 			rtw_free_assoc_resources(padapter, 1);
 
 		if ((*pold_state == Ndis802_11Infrastructure) || (*pold_state == Ndis802_11IBSS)) {

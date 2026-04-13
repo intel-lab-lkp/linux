@@ -337,7 +337,7 @@ static void rtw_handle_tkip_mic_err(struct adapter *padapter, u8 bgroup)
 		key_type |= NL80211_KEYTYPE_PAIRWISE;
 
 	cfg80211_michael_mic_failure(padapter->pnetdev, (u8 *)&pmlmepriv->assoc_bssid[0], key_type, -1,
-		NULL, GFP_ATOMIC);
+				     NULL, GFP_ATOMIC);
 
 	memset(&ev, 0x00, sizeof(ev));
 	if (bgroup)
@@ -701,7 +701,7 @@ static void count_rx_stats(struct adapter *padapter, union recv_frame *prframe, 
 }
 
 static signed int sta2sta_data_frame(struct adapter *adapter, union recv_frame *precv_frame,
-			struct sta_info **psta)
+				     struct sta_info **psta)
 {
 	u8 *ptr = precv_frame->u.hdr.rx_data;
 	signed int ret = _SUCCESS;
@@ -714,7 +714,7 @@ static signed int sta2sta_data_frame(struct adapter *adapter, union recv_frame *
 	signed int bmcast = is_multicast_ether_addr(pattrib->dst);
 
 	if ((check_fwstate(pmlmepriv, WIFI_ADHOC_STATE) == true) ||
-		(check_fwstate(pmlmepriv, WIFI_ADHOC_MASTER_STATE) == true)) {
+	    (check_fwstate(pmlmepriv, WIFI_ADHOC_MASTER_STATE) == true)) {
 
 		/*  filter packets that SA is myself or multicast or broadcast */
 		if (!memcmp(myhwaddr, pattrib->src, ETH_ALEN)) {
@@ -789,7 +789,7 @@ exit:
 }
 
 static signed int ap2sta_data_frame(struct adapter *adapter, union recv_frame *precv_frame,
-		       struct sta_info **psta)
+				    struct sta_info **psta)
 {
 	u8 *ptr = precv_frame->u.hdr.rx_data;
 	struct rx_pkt_attrib *pattrib = &precv_frame->u.hdr.attrib;
@@ -894,7 +894,7 @@ exit:
 }
 
 static signed int sta2ap_data_frame(struct adapter *adapter, union recv_frame *precv_frame,
-		       struct sta_info **psta)
+				    struct sta_info **psta)
 {
 	u8 *ptr = precv_frame->u.hdr.rx_data;
 	struct rx_pkt_attrib *pattrib = &precv_frame->u.hdr.attrib;
@@ -1416,7 +1416,7 @@ static signed int validate_80211w_mgmt(struct adapter *adapter, union recv_frame
 	    adapter->securitypriv.binstallBIPkey == true) {
 		/* unicast management frame decrypt */
 		if (pattrib->privacy && !(is_multicast_ether_addr(GetAddr1Ptr(ptr))) &&
-			(subtype == WIFI_DEAUTH || subtype == WIFI_DISASSOC || subtype == WIFI_ACTION)) {
+		    (subtype == WIFI_DEAUTH || subtype == WIFI_DISASSOC || subtype == WIFI_ACTION)) {
 			u8 *mgmt_DATA;
 			u32 data_len = 0;
 
@@ -1457,10 +1457,10 @@ static signed int validate_80211w_mgmt(struct adapter *adapter, union recv_frame
 		} else { /* 802.11w protect */
 			if (subtype == WIFI_ACTION) {
 				/* according 802.11-2012 standard, these five types are not robust types */
-				if (ptr[WLAN_HDR_A3_LEN] != RTW_WLAN_CATEGORY_PUBLIC          &&
-					ptr[WLAN_HDR_A3_LEN] != RTW_WLAN_CATEGORY_HT              &&
+				if (ptr[WLAN_HDR_A3_LEN] != RTW_WLAN_CATEGORY_PUBLIC &&
+				    ptr[WLAN_HDR_A3_LEN] != RTW_WLAN_CATEGORY_HT &&
 					ptr[WLAN_HDR_A3_LEN] != RTW_WLAN_CATEGORY_UNPROTECTED_WNM &&
-					ptr[WLAN_HDR_A3_LEN] != RTW_WLAN_CATEGORY_SELF_PROTECTED  &&
+					ptr[WLAN_HDR_A3_LEN] != RTW_WLAN_CATEGORY_SELF_PROTECTED &&
 					ptr[WLAN_HDR_A3_LEN] != RTW_WLAN_CATEGORY_P2P) {
 					goto validate_80211w_fail;
 				}
@@ -1580,7 +1580,7 @@ static signed int wlanhdr_to_ethhdr(union recv_frame *precvframe)
 	/* convert hdr + possible LLC headers into Ethernet header */
 	/* eth_type = (psnap_type[0] << 8) | psnap_type[1]; */
 	if ((!memcmp(psnap, rfc1042_header, SNAP_SIZE) &&
-		(memcmp(psnap_type, SNAP_ETH_TYPE_IPX, 2)) &&
+	     (memcmp(psnap_type, SNAP_ETH_TYPE_IPX, 2)) &&
 		(memcmp(psnap_type, SNAP_ETH_TYPE_APPLETALK_AARP, 2))) ||
 		/* eth_type != ETH_P_AARP && eth_type != ETH_P_IPX) || */
 		 !memcmp(psnap, bridge_tunnel_header, SNAP_SIZE)) {
@@ -1644,7 +1644,7 @@ static struct sk_buff *rtw_alloc_msdu_pkt(union recv_frame *prframe, u16 nSubfra
 	eth_type = get_unaligned_be16(&sub_skb->data[6]);
 
 	if (sub_skb->len >= 8 &&
-		((!memcmp(sub_skb->data, rfc1042_header, SNAP_SIZE) &&
+	    ((!memcmp(sub_skb->data, rfc1042_header, SNAP_SIZE) &&
 		eth_type != ETH_P_AARP && eth_type != ETH_P_IPX) ||
 		!memcmp(sub_skb->data, bridge_tunnel_header, SNAP_SIZE))) {
 		/*
@@ -2198,7 +2198,7 @@ static int recv_func(struct adapter *padapter, union recv_frame *rframe)
 
 		/* check if need to enqueue into uc_swdec_pending_queue*/
 		if (check_fwstate(mlmepriv, WIFI_STATION_STATE) &&
-			!is_multicast_ether_addr(prxattrib->ra) && prxattrib->encrypt > 0 &&
+		    !is_multicast_ether_addr(prxattrib->ra) && prxattrib->encrypt > 0 &&
 			(prxattrib->bdecrypted == 0 || psecuritypriv->sw_decrypt == true) &&
 			psecuritypriv->ndisauthtype == Ndis802_11AuthModeWPAPSK &&
 			!psecuritypriv->busetkipkey) {

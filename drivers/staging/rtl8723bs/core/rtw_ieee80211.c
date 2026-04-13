@@ -107,7 +107,7 @@ int rtw_check_network_type(unsigned char *rate, int channel)
 }
 
 u8 *rtw_set_fixed_ie(unsigned char *pbuf, unsigned int len, unsigned char *source,
-				unsigned int *frlen)
+		     unsigned int *frlen)
 {
 	memcpy(pbuf, source, len);
 	*frlen = *frlen + len;
@@ -700,7 +700,7 @@ u8 *rtw_get_wps_attr(u8 *wps_ie, uint wps_ielen, u16 target_attr_id, u8 *buf_att
 		*len_attr = 0;
 
 	if ((wps_ie[0] != WLAN_EID_VENDOR_SPECIFIC) ||
-		(memcmp(wps_ie + 2, wps_oui, 4))) {
+	    (memcmp(wps_ie + 2, wps_oui, 4))) {
 		return attr_ptr;
 	}
 
@@ -764,7 +764,7 @@ u8 *rtw_get_wps_attr_content(u8 *wps_ie, uint wps_ielen, u16 target_attr_id, u8 
 }
 
 static int rtw_ieee802_11_parse_vendor_specific(u8 *pos, uint elen,
-					    struct rtw_ieee802_11_elems *elems,
+						struct rtw_ieee802_11_elems *elems,
 					    int show_errors)
 {
 	unsigned int oui;
@@ -910,7 +910,7 @@ enum parse_result rtw_ieee802_11_parse_elems(u8 *start, uint len,
 			break;
 		case WLAN_EID_VENDOR_SPECIFIC:
 			if (rtw_ieee802_11_parse_vendor_specific(pos, elen,
-							     elems,
+								 elems,
 							     show_errors))
 				unknown++;
 			break;
