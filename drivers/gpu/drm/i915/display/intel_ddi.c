@@ -3875,7 +3875,8 @@ static void intel_ddi_set_idle_link_train(struct intel_dp *intel_dp,
 static bool intel_ddi_is_audio_enabled(struct intel_display *display,
 				       enum transcoder cpu_transcoder)
 {
-	if (cpu_transcoder == TRANSCODER_EDP)
+	if (cpu_transcoder == TRANSCODER_EDP ||
+	    cpu_transcoder == INVALID_TRANSCODER)
 		return false;
 
 	if (!intel_display_power_is_enabled(display, POWER_DOMAIN_AUDIO_MMIO))
@@ -4636,6 +4637,10 @@ static int intel_ddi_compute_config_late(struct intel_encoder *encoder,
 		crtc_state->master_transcoder = ffs(port_sync_transcoders) - 1;
 
 	if (crtc_state->master_transcoder == crtc_state->cpu_transcoder) {
+		if (crtc_state->master_transcoder == INVALID_TRANSCODER) {
+			crtc_state->sync_mode_slaves_mask = 0;
+			return 0;
+		}
 		crtc_state->master_transcoder = INVALID_TRANSCODER;
 		crtc_state->sync_mode_slaves_mask =
 			port_sync_transcoders & ~BIT(crtc_state->cpu_transcoder);
