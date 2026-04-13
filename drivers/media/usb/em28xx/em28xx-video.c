@@ -2495,6 +2495,8 @@ exit:
 	return 0;
 }
 
+static void em28xx_vdev_release(struct video_device *vfd);
+
 static const struct v4l2_file_operations em28xx_v4l_fops = {
 	.owner         = THIS_MODULE,
 	.open          = em28xx_v4l2_open,
@@ -2552,7 +2554,7 @@ static const struct v4l2_ioctl_ops video_ioctl_ops = {
 static const struct video_device em28xx_video_template = {
 	.fops		= &em28xx_v4l_fops,
 	.ioctl_ops	= &video_ioctl_ops,
-	.release	= video_device_release_empty,
+	.release	= em28xx_vdev_release,
 	.tvnorms	= V4L2_STD_ALL,
 };
 
@@ -2581,7 +2583,7 @@ static const struct v4l2_ioctl_ops radio_ioctl_ops = {
 static struct video_device em28xx_radio_template = {
 	.fops		= &radio_fops,
 	.ioctl_ops	= &radio_ioctl_ops,
-	.release	= video_device_release_empty,
+	.release	= em28xx_vdev_release,
 };
 
 /* I2C possible address to saa7115, tvp5150, msp3400, tvaudio */
@@ -2619,6 +2621,44 @@ static void em28xx_vdev_init(struct em28xx *dev,
 		 dev_name(&dev->intf->dev), type_name);
 
 	video_set_drvdata(vfd, dev);
+
+#ifdef CONFIG_MEDIA_CONTROLLER
+	/*
+	 * The struct video_device is referenced by struct media_device.entities
+	 * list (with video_device.entity.graph_obj.list) after the registration
+	 * until the last reference to struct video_device.dev is released, when
+	 * it is removed from the list.
+	 *
+	 * Keep a reference on struct em28xx_v4l2 (contains struct video_device)
+	 * so to account for this memory reference and not free it while in use,
+	 * and release this reference in struct video_device.release() callback.
+	 * (Note: if registration fails, this reference must be released.)
+	 *
+	 * See video_register_device(vdev)
+	 *       device_register(&vdev->dev) // .release = v4l2_device_release()
+	 *       video_register_media_controller(vdev)
+	 *         media_device_register_entity(..., &vdev->entity)
+	 * and v4l2_device_release(vdev)
+	 *       media_device_unregister_entity(&vdev->entity)
+	 *       vdev->release(vdev)
+	 */
+	kref_get(&dev->v4l2->ref);
+#endif
+}
+
+static void em28xx_vdev_release(struct video_device *vfd)
+{
+#ifdef CONFIG_MEDIA_CONTROLLER
+	struct em28xx_v4l2 *v4l2;
+
+	/*
+	 * Find struct em28xx_v4l2 with its embedded struct v4l2_device,
+	 * as video_get_drvdata() returns dev and dev->v4l2 may be NULL
+	 * (e.g., after em28xx_v4l2_init()'s error path).
+	 */
+	v4l2 = container_of(vfd->v4l2_dev, struct em28xx_v4l2, v4l2_dev);
+	kref_put(&v4l2->ref, em28xx_free_v4l2);
+#endif
 }
 
 static void em28xx_tuner_setup(struct em28xx *dev, unsigned short tuner_addr)
@@ -2961,6 +3001,7 @@ static int em28xx_v4l2_init(struct em28xx *dev)
 	if (ret) {
 		dev_err(&dev->intf->dev,
 			"unable to register video device (error=%i).\n", ret);
+		kref_put(&dev->v4l2->ref, em28xx_free_v4l2);
 		goto unregister_dev;
 	}
 
@@ -2995,6 +3036,7 @@ static int em28xx_v4l2_init(struct em28xx *dev)
 		if (ret < 0) {
 			dev_err(&dev->intf->dev,
 				"unable to register vbi device\n");
+			kref_put(&dev->v4l2->ref, em28xx_free_v4l2);
 			goto unregister_dev;
 		}
 	}
@@ -3008,6 +3050,7 @@ static int em28xx_v4l2_init(struct em28xx *dev)
 		if (ret < 0) {
 			dev_err(&dev->intf->dev,
 				"can't register radio device\n");
+			kref_put(&dev->v4l2->ref, em28xx_free_v4l2);
 			goto unregister_dev;
 		}
 		dev_info(&dev->intf->dev,
