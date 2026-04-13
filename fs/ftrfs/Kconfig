@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# FTRFS filesystem configuration
+#
+
+config FTRFS_FS
+	tristate "FTRFS fault-tolerant radiation-robust filesystem"
+	depends on BLOCK
+	select CRC32
+	select REED_SOLOMON
+	select REED_SOLOMON_ENC8
+	select REED_SOLOMON_DEC8
+	help
+	  FTRFS is a POSIX-compatible filesystem designed for dependable
+	  storage in radiation-intensive environments. It provides:
+
+	    - CRC32 checksumming per block and per inode
+	    - Reed-Solomon forward error correction (FEC)
+	    - EDAC-compatible error tracking
+
+	  Originally described in:
+	  Fuchs, Langer, Trinitis - ARCS 2015, TU Munich.
+	  Targeting embedded Linux on MRAM/NOR flash for space applications.
+
+	  To compile this filesystem support as a module, choose M here.
+	  The module will be called ftrfs.
+
+	  If unsure, say N.
+
+config FTRFS_FS_XATTR
+	bool "FTRFS extended attributes"
+	depends on FTRFS_FS
+	help
+	  Extended attributes are name:value pairs associated with inodes.
+	  They are required for SELinux, POSIX ACLs, and other security
+	  frameworks that store per-file metadata outside the inode.
+	  FTRFS xattrs follow the same namespace model as ext2/ext4.
+
+	  If you are not using SELinux or POSIX ACLs, say N.
+config FTRFS_FS_SECURITY
+	bool "FTRFS Security Labels"
+	depends on FTRFS_FS_XATTR
+	help
+	  Extended attributes are name:value pairs associated with inodes.
+	  They are required for SELinux, POSIX ACLs, and other security
+	  frameworks that store per-file metadata outside the inode.
+	  FTRFS xattrs follow the same namespace model as ext2/ext4.
+
+	  If you are not using SELinux or POSIX ACLs, say N.
