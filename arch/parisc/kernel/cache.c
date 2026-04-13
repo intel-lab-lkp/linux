@@ -473,6 +473,7 @@ static inline unsigned long get_upa(struct mm_struct *mm, unsigned long addr)
 void flush_dcache_folio(struct folio *folio)
 {
 	struct address_space *mapping = folio_flush_mapping(folio);
+	struct rb_root_cached *root;
 	struct vm_area_struct *vma;
 	unsigned long addr, old_addr = 0;
 	void *kaddr;
@@ -494,6 +495,7 @@ void flush_dcache_folio(struct folio *folio)
 		return;
 
 	pgoff = folio->index;
+	root = get_i_mmap_root(mapping);
 
 	/*
 	 * We have carefully arranged in arch_get_unmapped_area() that
@@ -503,7 +505,7 @@ void flush_dcache_folio(struct folio *folio)
 	 * on machines that support equivalent aliasing
 	 */
 	flush_dcache_mmap_lock_irqsave(mapping, flags);
-	vma_interval_tree_foreach(vma, &mapping->i_mmap, pgoff, pgoff + nr - 1) {
+	vma_interval_tree_foreach(vma, root, pgoff, pgoff + nr - 1) {
 		unsigned long offset = pgoff - vma->vm_pgoff;
 		unsigned long pfn = folio_pfn(folio);
 
