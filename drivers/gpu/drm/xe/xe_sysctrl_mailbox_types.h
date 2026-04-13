@@ -11,6 +11,19 @@
 #include "abi/xe_sysctrl_abi.h"
 
 /**
+ * enum xe_sysctrl_mailbox_command_id - RAS Command ID's for GFSP group
+ *
+ * @XE_SYSCTRL_CMD_GET_SOC_ERROR: Get basic error information
+ */
+enum xe_sysctrl_mailbox_command_id {
+	XE_SYSCTRL_CMD_GET_SOC_ERROR = 1
+};
+
+enum xe_sysctrl_group {
+	XE_SYSCTRL_GROUP_GFSP = 1
+};
+
+/**
  * struct xe_sysctrl_mailbox_command - System Controller mailbox command
  */
 struct xe_sysctrl_mailbox_command {
