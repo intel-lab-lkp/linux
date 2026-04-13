@@ -1451,7 +1451,7 @@ static int usb3_dma_update_status(struct renesas_usb3_ep *usb3_ep,
 		req->actual += len - remain;
 
 		if (cur_prd->word1 & USB3_PRD1_E ||
-		    (i + 1) < USB3_DMA_NUM_PRD_ENTRIES)
+		    (i + 1) >= USB3_DMA_NUM_PRD_ENTRIES)
 			break;
 
 		cur_prd++;
