@@ -800,11 +800,15 @@ static struct platform_device omap_mpuio_device = {
 static inline void omap_mpuio_init(struct gpio_bank *bank)
 {
 	static bool registered;
+	int ret;
 
 	platform_set_drvdata(&omap_mpuio_device, bank);
 	if (!registered) {
-		(void)platform_device_register(&omap_mpuio_device);
-		registered = true;
+		ret = platform_device_register(&omap_mpuio_device);
+		if (ret)
+			platform_device_put(&omap_mpuio_device);
+		else
+			registered = true;
 	}
 }
 
