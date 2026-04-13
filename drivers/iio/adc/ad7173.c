@@ -137,7 +137,7 @@
 #define AD7173_SETUP_REF_SEL_EXT_REF2	0x1
 #define AD7173_SETUP_REF_SEL_EXT_REF	0x0
 #define AD7173_VOLTAGE_INT_REF_uV	2500000
-#define AD7173_TEMP_SENSIIVITY_uV_per_C	477
+#define AD7173_TEMP_SENSITIVITY_UV_PER_C	477
 #define AD7177_ODR_START_VALUE		0x07
 #define AD4111_SHUNT_RESISTOR_OHM	50
 #define AD4111_DIVIDER_RATIO		10
@@ -1275,7 +1275,7 @@ static int ad7173_read_raw(struct iio_dev *indio_dev,
 		switch (chan->type) {
 		case IIO_TEMP:
 			temp = AD7173_VOLTAGE_INT_REF_uV * MILLI;
-			temp /= AD7173_TEMP_SENSIIVITY_uV_per_C;
+			temp /= AD7173_TEMP_SENSITIVITY_UV_PER_C;
 			*val = temp;
 			*val2 = chan->scan_type.realbits;
 			return IIO_VAL_FRACTIONAL_LOG2;
@@ -1300,7 +1300,7 @@ static int ad7173_read_raw(struct iio_dev *indio_dev,
 		case IIO_TEMP:
 			/* 0 Kelvin -> raw sample */
 			temp   = -ABSOLUTE_ZERO_MILLICELSIUS;
-			temp  *= AD7173_TEMP_SENSIIVITY_uV_per_C;
+			temp  *= AD7173_TEMP_SENSITIVITY_UV_PER_C;
 			temp <<= chan->scan_type.realbits;
 			temp   = DIV_U64_ROUND_CLOSEST(temp,
 						       AD7173_VOLTAGE_INT_REF_uV *
