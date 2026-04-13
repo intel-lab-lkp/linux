@@ -1053,7 +1053,7 @@ struct buffer_head *ext4_bread(handle_t *handle, struct inode *inode,
 	if (!bh || ext4_buffer_uptodate(bh))
 		return bh;
 
-	ret = ext4_read_bh_lock(bh, REQ_META | REQ_PRIO, true);
+	ret = ext4_read_bh_lock(inode->i_sb, bh, REQ_META | REQ_PRIO, true);
 	if (ret) {
 		put_bh(bh);
 		return ERR_PTR(ret);
@@ -1079,7 +1079,7 @@ int ext4_bread_batch(struct inode *inode, ext4_lblk_t block, int bh_count,
 	for (i = 0; i < bh_count; i++)
 		/* Note that NULL bhs[i] is valid because of holes. */
 		if (bhs[i] && !ext4_buffer_uptodate(bhs[i]))
-			ext4_read_bh_lock(bhs[i], REQ_META | REQ_PRIO, false);
+			ext4_read_bh_lock(inode->i_sb, bhs[i], REQ_META | REQ_PRIO, false);
 
 	if (!wait)
 		return 0;
@@ -1239,7 +1239,7 @@ int ext4_block_write_begin(handle_t *handle, struct folio *folio,
 		if (!buffer_uptodate(bh) && !buffer_delay(bh) &&
 		    !buffer_unwritten(bh) &&
 		    (block_start < from || block_end > to)) {
-			ext4_read_bh_lock(bh, 0, false);
+			ext4_read_bh_lock(inode->i_sb, bh, 0, false);
 			wait[nr_wait++] = bh;
 		}
 	}
@@ -4075,7 +4075,7 @@ static struct buffer_head *ext4_load_tail_bh(struct inode *inode, loff_t from)
 		set_buffer_uptodate(bh);
 
 	if (!buffer_uptodate(bh)) {
-		err = ext4_read_bh_lock(bh, 0, true);
+		err = ext4_read_bh_lock(inode->i_sb, bh, 0, true);
 		if (err)
 			goto unlock;
 		if (fscrypt_inode_uses_fs_layer_crypto(inode)) {
@@ -4977,7 +4977,7 @@ make_io:
 	 * Read the block from disk.
 	 */
 	trace_ext4_load_inode(sb, ino);
-	ext4_read_bh_nowait(bh, REQ_META | REQ_PRIO, NULL,
+	ext4_read_bh_nowait(sb, bh, REQ_META | REQ_PRIO, NULL,
 			    ext4_simulate_fail(sb, EXT4_SIM_INODE_EIO));
 	blk_finish_plug(&plug);
 	wait_on_buffer(bh);

@@ -548,7 +548,7 @@ ext4_read_block_bitmap_nowait(struct super_block *sb, ext4_group_t block_group,
 	 */
 	set_buffer_new(bh);
 	trace_ext4_read_block_bitmap_load(sb, block_group, ignore_locked);
-	ext4_read_bh_nowait(bh, REQ_META | REQ_PRIO |
+	ext4_read_bh_nowait(sb, bh, REQ_META | REQ_PRIO |
 			    (ignore_locked ? REQ_RAHEAD : 0),
 			    ext4_end_bitmap_read,
 			    ext4_simulate_fail(sb, EXT4_SIM_BBITMAP_EIO));

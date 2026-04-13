@@ -72,6 +72,7 @@ void ext4_end_bitmap_read(struct buffer_head *bh, int uptodate)
 		set_buffer_uptodate(bh);
 		set_bitmap_uptodate(bh);
 	}
+	bh_update_read_io_error(bh, uptodate, jiffies);
 	unlock_buffer(bh);
 	put_bh(bh);
 }
@@ -193,7 +194,7 @@ ext4_read_inode_bitmap(struct super_block *sb, ext4_group_t block_group)
 	 * submit the buffer_head for reading
 	 */
 	trace_ext4_load_inode_bitmap(sb, block_group);
-	ext4_read_bh(bh, REQ_META | REQ_PRIO,
+	ext4_read_bh(sb, bh, REQ_META | REQ_PRIO,
 		     ext4_end_bitmap_read,
 		     ext4_simulate_fail(sb, EXT4_SIM_IBITMAP_EIO));
 	if (!buffer_uptodate(bh)) {

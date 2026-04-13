@@ -1678,6 +1678,8 @@ struct ext4_sb_info {
 	struct timer_list s_err_report;
 	/* timeout in seconds for s_err_report; 0 disables the timer. */
 	unsigned long s_err_report_sec;
+	/* timeout in seconds for read error retry window; 0 disables. */
+	unsigned long s_err_retry_sec;
 
 	/* Lazy inode table initialization info */
 	struct ext4_li_request *s_li_request;
@@ -3183,11 +3185,12 @@ extern struct buffer_head *ext4_sb_bread_unmovable(struct super_block *sb,
 						   sector_t block);
 extern struct buffer_head *ext4_sb_bread_nofail(struct super_block *sb,
 						sector_t block);
-extern void ext4_read_bh_nowait(struct buffer_head *bh, blk_opf_t op_flags,
-				bh_end_io_t *end_io, bool simu_fail);
-extern int ext4_read_bh(struct buffer_head *bh, blk_opf_t op_flags,
-			bh_end_io_t *end_io, bool simu_fail);
-extern int ext4_read_bh_lock(struct buffer_head *bh, blk_opf_t op_flags, bool wait);
+extern void ext4_read_bh_nowait(struct super_block *sb, struct buffer_head *bh,
+				blk_opf_t op_flags, bh_end_io_t *end_io, bool simu_fail);
+extern int ext4_read_bh(struct super_block *sb, struct buffer_head *bh,
+			blk_opf_t op_flags, bh_end_io_t *end_io, bool simu_fail);
+extern int ext4_read_bh_lock(struct super_block *sb, struct buffer_head *bh,
+			blk_opf_t op_flags, bool wait);
 extern void ext4_sb_breadahead_unmovable(struct super_block *sb, sector_t block);
 extern int ext4_seq_options_show(struct seq_file *seq, void *offset);
 extern int ext4_calculate_overhead(struct super_block *sb);

@@ -159,6 +159,7 @@ static void __end_buffer_read_notouch(struct buffer_head *bh, int uptodate)
 void end_buffer_read_sync(struct buffer_head *bh, int uptodate)
 {
 	put_bh(bh);
+	bh_update_read_io_error(bh, uptodate, jiffies);
 	__end_buffer_read_notouch(bh, uptodate);
 }
 EXPORT_SYMBOL(end_buffer_read_sync);
@@ -167,6 +168,7 @@ void end_buffer_write_sync(struct buffer_head *bh, int uptodate)
 {
 	if (uptodate) {
 		set_buffer_uptodate(bh);
+		bh_update_read_io_error(bh, 1, jiffies);
 	} else {
 		buffer_io_error(bh, ", lost sync page write");
 		mark_buffer_write_io_error(bh);

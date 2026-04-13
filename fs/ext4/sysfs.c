@@ -249,6 +249,7 @@ EXT4_ATTR_OFFSET(mb_group_prealloc, 0644, clusters_in_group,
 EXT4_ATTR_OFFSET(mb_best_avail_max_trim_order, 0644, mb_order,
 		 ext4_sb_info, s_mb_best_avail_max_trim_order);
 EXT4_ATTR_OFFSET(err_report_sec, 0644, err_report_sec, ext4_sb_info, s_err_report_sec);
+EXT4_RW_ATTR_SBI_UL(err_retry_sec, s_err_retry_sec);
 EXT4_RW_ATTR_SBI_UI(inode_goal, s_inode_goal);
 EXT4_RW_ATTR_SBI_UI(mb_stats, s_mb_stats);
 EXT4_RW_ATTR_SBI_UI(mb_max_to_scan, s_mb_max_to_scan);
@@ -342,6 +343,7 @@ static struct attribute *ext4_attrs[] = {
 	ATTR_LIST(sb_update_sec),
 	ATTR_LIST(sb_update_kb),
 	ATTR_LIST(err_report_sec),
+	ATTR_LIST(err_retry_sec),
 	NULL,
 };
 ATTRIBUTE_GROUPS(ext4);

@@ -160,10 +160,34 @@ MODULE_ALIAS("ext3");
 #define IS_EXT3_SB(sb) ((sb)->s_type == &ext3_fs_type)
 
 
-static inline void __ext4_read_bh(struct buffer_head *bh, blk_opf_t op_flags,
-				  bh_end_io_t *end_io, bool simu_fail)
+static bool ext4_bh_throttle_read(struct super_block *sb, struct buffer_head *bh)
+{
+	unsigned long retry_sec = EXT4_SB(sb)->s_err_retry_sec;
+
+	if (!retry_sec || !buffer_read_io_error(bh))
+		return false;
+
+	if (bh->b_err_timestamp &&
+	    time_before(jiffies, bh->b_err_timestamp +
+			secs_to_jiffies(retry_sec)))
+		return true;
+
+	clear_buffer_read_io_error(bh);
+	bh->b_err_timestamp = 0;
+	return false;
+}
+
+static inline void __ext4_read_bh(struct super_block *sb, struct buffer_head *bh,
+				  blk_opf_t op_flags, bh_end_io_t *end_io,
+				  bool simu_fail)
 {
 	if (simu_fail) {
+		clear_buffer_uptodate(bh);
+		unlock_buffer(bh);
+		return;
+	}
+
+	if (ext4_bh_throttle_read(sb, bh)) {
 		clear_buffer_uptodate(bh);
 		unlock_buffer(bh);
 		return;
@@ -181,8 +205,8 @@ static inline void __ext4_read_bh(struct buffer_head *bh, blk_opf_t op_flags,
 	submit_bh(REQ_OP_READ | op_flags, bh);
 }
 
-void ext4_read_bh_nowait(struct buffer_head *bh, blk_opf_t op_flags,
-			 bh_end_io_t *end_io, bool simu_fail)
+void ext4_read_bh_nowait(struct super_block *sb, struct buffer_head *bh,
+			 blk_opf_t op_flags, bh_end_io_t *end_io, bool simu_fail)
 {
 	BUG_ON(!buffer_locked(bh));
 
@@ -190,11 +214,11 @@ void ext4_read_bh_nowait(struct buffer_head *bh, blk_opf_t op_flags,
 		unlock_buffer(bh);
 		return;
 	}
-	__ext4_read_bh(bh, op_flags, end_io, simu_fail);
+	__ext4_read_bh(sb, bh, op_flags, end_io, simu_fail);
 }
 
-int ext4_read_bh(struct buffer_head *bh, blk_opf_t op_flags,
-		 bh_end_io_t *end_io, bool simu_fail)
+int ext4_read_bh(struct super_block *sb, struct buffer_head *bh,
+		 blk_opf_t op_flags, bh_end_io_t *end_io, bool simu_fail)
 {
 	BUG_ON(!buffer_locked(bh));
 
@@ -203,7 +227,7 @@ int ext4_read_bh(struct buffer_head *bh, blk_opf_t op_flags,
 		return 0;
 	}
 
-	__ext4_read_bh(bh, op_flags, end_io, simu_fail);
+	__ext4_read_bh(sb, bh, op_flags, end_io, simu_fail);
 
 	wait_on_buffer(bh);
 	if (buffer_uptodate(bh))
@@ -211,14 +235,15 @@ int ext4_read_bh(struct buffer_head *bh, blk_opf_t op_flags,
 	return -EIO;
 }
 
-int ext4_read_bh_lock(struct buffer_head *bh, blk_opf_t op_flags, bool wait)
+int ext4_read_bh_lock(struct super_block *sb, struct buffer_head *bh,
+		      blk_opf_t op_flags, bool wait)
 {
 	lock_buffer(bh);
 	if (!wait) {
-		ext4_read_bh_nowait(bh, op_flags, NULL, false);
+		ext4_read_bh_nowait(sb, bh, op_flags, NULL, false);
 		return 0;
 	}
-	return ext4_read_bh(bh, op_flags, NULL, false);
+	return ext4_read_bh(sb, bh, op_flags, NULL, false);
 }
 
 /*
@@ -240,7 +265,7 @@ static struct buffer_head *__ext4_sb_bread_gfp(struct super_block *sb,
 	if (ext4_buffer_uptodate(bh))
 		return bh;
 
-	ret = ext4_read_bh_lock(bh, REQ_META | op_flags, true);
+	ret = ext4_read_bh_lock(sb, bh, REQ_META | op_flags, true);
 	if (ret) {
 		put_bh(bh);
 		return ERR_PTR(ret);
@@ -282,7 +307,7 @@ void ext4_sb_breadahead_unmovable(struct super_block *sb, sector_t block)
 
 	if (likely(bh)) {
 		if (trylock_buffer(bh))
-			ext4_read_bh_nowait(bh, REQ_RAHEAD, NULL, false);
+			ext4_read_bh_nowait(sb, bh, REQ_RAHEAD, NULL, false);
 		brelse(bh);
 	}
 }
