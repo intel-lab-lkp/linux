@@ -1388,7 +1388,7 @@ static void usb3_dma_fill_prd(struct renesas_usb3_ep *usb3_ep,
 		cur_prd->bap = dma;
 		remain -= len;
 		dma += len;
-		if (!remain || (i + 1) < USB3_DMA_NUM_PRD_ENTRIES)
+		if (!remain || (i + 1) >= USB3_DMA_NUM_PRD_ENTRIES)
 			break;
 
 		cur_prd++;
