@@ -1870,7 +1870,7 @@ static void halbtc8723b1ant_ActionWifiConnected(struct btc_coexist *pBtCoexist)
 			(pCoexDm->btStatus == BT_8723B_1ANT_BT_STATUS_ACL_SCO_BUSY)
 		) {
 			halbtc8723b1ant_ActionBtScoHidOnlyBusy(pBtCoexist,
-				BT_8723B_1ANT_WIFI_STATUS_CONNECTED_IDLE);
+							       BT_8723B_1ANT_WIFI_STATUS_CONNECTED_IDLE);
 		} else {
 			halbtc8723b1ant_PsTdma(pBtCoexist, NORMAL_EXEC, false, 8);
 

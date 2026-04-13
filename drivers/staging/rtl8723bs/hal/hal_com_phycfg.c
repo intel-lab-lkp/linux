@@ -426,7 +426,7 @@ void PHY_SetTxPowerIndexByRateSection(
 		u8 cckRates[]   = {MGN_1M, MGN_2M, MGN_5_5M, MGN_11M};
 
 		PHY_SetTxPowerIndexByRateArray(padapter, RFPath,
-					     pHalData->CurrentChannelBW,
+					       pHalData->CurrentChannelBW,
 					     Channel, cckRates,
 					     ARRAY_SIZE(cckRates));
 

@@ -566,7 +566,7 @@ static void halbtc8723b2ant_DacSwing(
 
 	if (!bForceExec) {
 		if ((pCoexDm->bPreDacSwingOn == pCoexDm->bCurDacSwingOn) &&
-			(pCoexDm->preDacSwingLvl == pCoexDm->curDacSwingLvl))
+		    (pCoexDm->preDacSwingLvl == pCoexDm->curDacSwingLvl))
 			return;
 	}
 	mdelay(30);
