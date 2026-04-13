@@ -995,6 +995,8 @@ void iwl_mld_tx_from_txq(struct iwl_mld *mld, struct ieee80211_txq *txq)
 	rcu_read_lock();
 	do {
 		while (likely(!mld_txq->status.stop_full) &&
+		       !test_bit(STATUS_FW_ERROR,
+				 &mld->trans->status) &&
 		       (skb = ieee80211_tx_dequeue(mld->hw, txq)))
 			iwl_mld_tx_skb(mld, skb, txq);
 	} while (atomic_dec_return(&mld_txq->tx_request));
