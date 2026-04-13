@@ -91,6 +91,16 @@ struct slab {
 #endif
 };
 
+struct slab_obj_iter {
+	unsigned long pos;
+	void *start;
+#ifdef CONFIG_SLAB_FREELIST_RANDOM
+	unsigned long freelist_count;
+	unsigned long page_limit;
+	bool random;
+#endif
+};
+
 #define SLAB_MATCH(pg, sl)						\
 	static_assert(offsetof(struct page, pg) == offsetof(struct slab, sl))
 SLAB_MATCH(flags, flags);
