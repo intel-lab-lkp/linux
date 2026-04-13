@@ -44,7 +44,7 @@ void __init kasan_init_generic(void)
 {
 	kasan_enable();
 
-	pr_info("KernelAddressSanitizer initialized (generic)\n");
+	pr_info("KernelAddressSanitizer (KASAN) initialized (generic)\n");
 }
 
 /*
