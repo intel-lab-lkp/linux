@@ -63,6 +63,19 @@ struct gpio_generic_chip_config {
 };
 
 /**
+ * union gpio_chip_reg - Generic GPIO chip register descriptor for MMIO or port-mapped I/O
+ * @mmio: MMIO register address.
+ * @port: I/O Port register address.
+ *
+ * Describes a GPIO chip register located either in MMIO space or in
+ * port-mapped I/O space.
+ */
+union gpio_chip_reg {
+	void __iomem *mmio;
+	unsigned long port;
+};
+
+/**
  * struct gpio_generic_chip - Generic GPIO chip implementation.
  * @gc: The underlying struct gpio_chip object, implementing low-level GPIO
  *      chip routines.
@@ -90,14 +103,14 @@ struct gpio_generic_chip_config {
  */
 struct gpio_generic_chip {
 	struct gpio_chip gc;
-	unsigned long (*read_reg)(void __iomem *reg);
-	void (*write_reg)(void __iomem *reg, unsigned long data);
+	unsigned long (*read_reg)(union gpio_chip_reg *reg);
+	void (*write_reg)(union gpio_chip_reg *reg, unsigned long data);
 	bool be_bits;
-	void __iomem *reg_dat;
-	void __iomem *reg_set;
-	void __iomem *reg_clr;
-	void __iomem *reg_dir_out;
-	void __iomem *reg_dir_in;
+	union gpio_chip_reg reg_dat;
+	union gpio_chip_reg reg_set;
+	union gpio_chip_reg reg_clr;
+	union gpio_chip_reg reg_dir_out;
+	union gpio_chip_reg reg_dir_in;
 	bool dir_unreadable;
 	bool pinctrl;
 	int bits;
@@ -149,10 +162,13 @@ gpio_generic_chip_set(struct gpio_generic_chip *chip, unsigned int offset,
 static inline unsigned long
 gpio_generic_read_reg(struct gpio_generic_chip *chip, void __iomem *reg)
 {
+	union gpio_chip_reg rg;
+
 	if (WARN_ON(!chip->read_reg))
 		return 0;
 
-	return chip->read_reg(reg);
+	rg.mmio = reg;
+	return chip->read_reg(&rg);
 }
 
 /**
@@ -164,10 +180,13 @@ gpio_generic_read_reg(struct gpio_generic_chip *chip, void __iomem *reg)
 static inline void gpio_generic_write_reg(struct gpio_generic_chip *chip,
 					  void __iomem *reg, unsigned long val)
 {
+	union gpio_chip_reg rg;
+
 	if (WARN_ON(!chip->write_reg))
 		return;
 
-	chip->write_reg(reg, val);
+	rg.mmio = reg;
+	chip->write_reg(&rg, val);
 }
 
 #define gpio_generic_chip_lock(gen_gc) \
