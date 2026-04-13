@@ -187,6 +187,8 @@ static const char *const pmic_models[] = {
 	[80] = "PM7550",
 	[82] = "PMC8380",
 	[83] = "SMB2360",
+	[89] = "PMIV0104",
+	[90] = "PMIV0102",
 	[91] = "PMIV0108",
 };
 
