@@ -1,3 +1,4 @@
+	sk_acceptq_added(sk);
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * common code for virtio vsock
@@ -1530,8 +1531,9 @@ virtio_transport_recv_listen(struct sock *sk, struct sk_buff *skb,
 		return -ENOMEM;
 	}
 
-	sk_acceptq_added(sk);
 
+
+	sk_acceptq_added(sk);
 	lock_sock_nested(child, SINGLE_DEPTH_NESTING);
 
 	child->sk_state = TCP_ESTABLISHED;
