@@ -400,11 +400,22 @@ void free_folio_and_swap_cache(struct folio *folio)
 		folio_put(folio);
 }
 
+static inline void free_file_cache(struct folio *folio)
+{
+	if (folio_trylock(folio)) {
+		mapping_evict_folio(folio_mapping(folio), folio);
+		folio_unlock(folio);
+	}
+}
+
 /*
  * Passed an array of pages, drop them all from swapcache and then release
  * them.  They are removed from the LRU and freed if this is their last use.
+ *
+ * If @free_unmapped_file is true, this function will proactively evict clean
+ * file-backed folios if they are no longer mapped.
  */
-void free_pages_and_swap_cache(struct encoded_page **pages, int nr)
+void free_pages_and_caches(struct encoded_page **pages, int nr, bool free_unmapped_file)
 {
 	struct folio_batch folios;
 	unsigned int refs[PAGEVEC_SIZE];
@@ -413,7 +424,11 @@ void free_pages_and_swap_cache(struct encoded_page **pages, int nr)
 	for (int i = 0; i < nr; i++) {
 		struct folio *folio = page_folio(encoded_page_ptr(pages[i]));
 
-		free_swap_cache(folio);
+		if (folio_test_anon(folio))
+			free_swap_cache(folio);
+		else if (unlikely(free_unmapped_file))
+			free_file_cache(folio);
+
 		refs[folios.nr] = 1;
 		if (unlikely(encoded_page_flags(pages[i]) &
 			     ENCODED_PAGE_BIT_NR_PAGES_NEXT))

@@ -433,7 +433,7 @@ static inline unsigned long total_swapcache_pages(void)
 
 void free_swap_cache(struct folio *folio);
 void free_folio_and_swap_cache(struct folio *folio);
-void free_pages_and_swap_cache(struct encoded_page **, int);
+void free_pages_and_caches(struct encoded_page **pages, int nr, bool free_unmapped_file);
 /* linux/mm/swapfile.c */
 extern atomic_long_t nr_swap_pages;
 extern long total_swap_pages;
@@ -510,8 +510,11 @@ static inline void put_swap_device(struct swap_info_struct *si)
 	do { (val)->freeswap = (val)->totalswap = 0; } while (0)
 #define free_folio_and_swap_cache(folio) \
 	folio_put(folio)
-#define free_pages_and_swap_cache(pages, nr) \
-	release_pages((pages), (nr));
+static inline void free_pages_and_caches(struct encoded_page **pages,
+		int nr, bool free_unmapped_file)
+{
+	release_pages(pages, nr);
+}
 
 static inline void free_swap_cache(struct folio *folio)
 {
