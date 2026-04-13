@@ -1402,9 +1402,8 @@ static int rtw_cfg80211_set_key_mgt(struct security_priv *psecuritypriv, u32 key
 	if (key_mgt == WLAN_AKM_SUITE_8021X)
 		/* auth_type = UMAC_AUTH_TYPE_8021X; */
 		psecuritypriv->dot11AuthAlgrthm = dot11AuthAlgrthm_8021X;
-	else if (key_mgt == WLAN_AKM_SUITE_PSK) {
+	else if (key_mgt == WLAN_AKM_SUITE_PSK)
 		psecuritypriv->dot11AuthAlgrthm = dot11AuthAlgrthm_8021X;
-	}
 
 	return 0;
 }
