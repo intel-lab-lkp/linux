@@ -50,8 +50,11 @@ static int __init virtual_eisa_root_init (void)
 {
 	int r;
 
-	if ((r = platform_device_register (&eisa_root_dev)))
+	r = platform_device_register(&eisa_root_dev);
+	if (r) {
+		platform_device_put(&eisa_root_dev);
 		return r;
+	}
 
 	eisa_bus_root.force_probe = force_probe;
 
