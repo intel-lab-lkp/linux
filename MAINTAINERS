@@ -9609,6 +9609,12 @@ S:	Maintained
 F:	drivers/leds/leds-expresswire.c
 F:	include/linux/leds-expresswire.h
 
+FTRFS FILE SYSTEM
+M:	Aurélien DESBRIERES <aurelien@hackers.camp>
+L:	linux-fsdevel@vger.kernel.org
+S:	Maintained
+F:	fs/ftrfs/
+
 EXT2 FILE SYSTEM
 M:	Jan Kara <jack@suse.com>
 L:	linux-ext4@vger.kernel.org
