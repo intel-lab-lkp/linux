@@ -2121,6 +2121,24 @@ xa_unlocked:
 	 */
 	try_to_unmap_flush();
 
+	/*
+	 * At this point, all folios are locked, unmapped, and all cached
+	 * mappings in TLBs are flushed. No one else is able to write to these
+	 * folios, since
+	 * 1. writes via FS ops require folio locks (see write_begin_get_folio());
+	 * 2. writes via mmap require taking a fault and locking folio locks.
+	 *
+	 * khugepaged only works for read-only fd, make sure all folios are
+	 * clean, since writes via mmap can happen between try_to_unmap() and
+	 * try_to_unmap_flush() via cached TLB entries.
+	 */
+	list_for_each_entry(folio, &pagelist, lru) {
+		if (!is_shmem && (folio_test_dirty(folio))) {
+			result = SCAN_PAGE_DIRTY_OR_WRITEBACK;
+			goto rollback;
+		}
+	}
+
 	if (result == SCAN_SUCCEED && nr_none &&
 	    !shmem_charge(mapping->host, nr_none))
 		result = SCAN_FAIL;
