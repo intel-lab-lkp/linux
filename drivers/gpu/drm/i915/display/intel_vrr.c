@@ -656,7 +656,7 @@ void intel_vrr_set_transcoder_timings(const struct intel_crtc_state *crtc_state)
 	 * Since currently we support VRR only for DP/eDP, so this is programmed
 	 * to for Adaptive Sync SDP to Vsync start.
 	 */
-	if (DISPLAY_VERx100(display) == 1401 || DISPLAY_VER(display) >= 20)
+	if (HAS_EMP_AS_SDP_TL(display))
 		intel_de_write(display,
 			       EMP_AS_SDP_TL(display, cpu_transcoder),
 			       EMP_AS_SDP_DB_TL(crtc_state->vrr.vsync_start));
