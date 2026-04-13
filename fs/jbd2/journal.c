@@ -1565,6 +1565,7 @@ static journal_t *journal_init_common(struct block_device *bdev,
 	/* The journal is marked for error until we succeed with recovery! */
 	journal->j_flags = JBD2_ABORT;
 
+	BUILD_BUG_ON(!is_power_of_2(JOURNAL_REVOKE_DEFAULT_HASH));
 	/* Set up a default-sized revoke table for the new mount. */
 	err = jbd2_journal_init_revoke(journal, JOURNAL_REVOKE_DEFAULT_HASH);
 	if (err)
