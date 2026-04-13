@@ -48,6 +48,8 @@ extern void __init housekeeping_init(void);
 
 extern int housekeeping_register_notifier(struct notifier_block *nb);
 extern int housekeeping_unregister_notifier(struct notifier_block *nb);
+extern int housekeeping_update_notify(enum hk_type type, const struct cpumask *new_mask);
+extern int housekeeping_update_all_types(const struct cpumask *new_mask);
 
 #else
 
@@ -83,6 +85,16 @@ static inline int housekeeping_register_notifier(struct notifier_block *nb)
 }
 
 static inline int housekeeping_unregister_notifier(struct notifier_block *nb)
+{
+	return 0;
+}
+
+static inline int housekeeping_update_notify(enum hk_type type, const struct cpumask *new_mask)
+{
+	return 0;
+}
+
+static inline int housekeeping_update_all_types(const struct cpumask *new_mask)
 {
 	return 0;
 }

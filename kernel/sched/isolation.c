@@ -27,6 +27,7 @@ enum hk_flags {
 #define HK_FLAG_KERNEL_NOISE (HK_FLAG_TICK | HK_FLAG_TIMER | HK_FLAG_RCU | \
 			      HK_FLAG_MISC | HK_FLAG_WQ | HK_FLAG_KTHREAD)
 
+static DEFINE_MUTEX(housekeeping_mutex);
 static BLOCKING_NOTIFIER_HEAD(housekeeping_notifier_list);
 
 DEFINE_STATIC_KEY_FALSE(housekeeping_overridden);
@@ -195,6 +196,43 @@ int housekeeping_update_notify(enum hk_type type, const struct cpumask *new_mask
 	return blocking_notifier_call_chain(&housekeeping_notifier_list, HK_UPDATE_MASK, &update);
 }
 EXPORT_SYMBOL_GPL(housekeeping_update_notify);
+
+int housekeeping_update_all_types(const struct cpumask *new_mask)
+{
+	enum hk_type type;
+	struct cpumask *old_masks[HK_TYPE_MAX] = { NULL };
+
+	if (cpumask_empty(new_mask) || !cpumask_intersects(new_mask, cpu_online_mask))
+		return -EINVAL;
+
+	if (!housekeeping.flags)
+		static_branch_enable(&housekeeping_overridden);
+
+	mutex_lock(&housekeeping_mutex);
+	for_each_set_bit(type, &housekeeping.flags, HK_TYPE_MAX) {
+		struct cpumask *nmask = kmalloc(cpumask_size(), GFP_KERNEL);
+
+		if (!nmask) {
+			mutex_unlock(&housekeeping_mutex);
+			return -ENOMEM;
+		}
+
+		cpumask_copy(nmask, new_mask);
+		old_masks[type] = housekeeping_cpumask_dereference(type);
+		rcu_assign_pointer(housekeeping.cpumasks[type], nmask);
+	}
+	mutex_unlock(&housekeeping_mutex);
+
+	synchronize_rcu();
+
+	for_each_set_bit(type, &housekeeping.flags, HK_TYPE_MAX) {
+		housekeeping_update_notify(type, new_mask);
+		kfree(old_masks[type]);
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(housekeeping_update_all_types);
 
 void __init housekeeping_init(void)
 {

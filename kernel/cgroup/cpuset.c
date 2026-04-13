@@ -3202,6 +3202,30 @@ out:
 }
 
 /*
+ * DHM interface: root cpuset allows updating global housekeeping cpumask.
+ */
+static ssize_t cpuset_write_housekeeping_cpus(struct kernfs_open_file *of,
+					      char *buf, size_t nbytes, loff_t off)
+{
+	cpumask_var_t new_mask;
+	int retval;
+
+	if (!alloc_cpumask_var(&new_mask, GFP_KERNEL))
+		return -ENOMEM;
+
+	buf = strstrip(buf);
+	retval = cpulist_parse(buf, new_mask);
+	if (retval)
+		goto out_free;
+
+	retval = housekeeping_update_all_types(new_mask);
+
+out_free:
+	free_cpumask_var(new_mask);
+	return retval ?: nbytes;
+}
+
+/*
  * Common handling for a write to a "cpus" or "mems" file.
  */
 ssize_t cpuset_write_resmask(struct kernfs_open_file *of,
@@ -3289,6 +3313,9 @@ int cpuset_common_seq_show(struct seq_file *sf, void *v)
 		break;
 	case FILE_ISOLATED_CPULIST:
 		seq_printf(sf, "%*pbl\n", cpumask_pr_args(isolated_cpus));
+		break;
+	case FILE_HOUSEKEEPING_CPULIST:
+		seq_printf(sf, "%*pbl\n", cpumask_pr_args(housekeeping_cpumask(HK_TYPE_DOMAIN)));
 		break;
 	default:
 		ret = -EINVAL;
@@ -3425,6 +3452,15 @@ static struct cftype dfl_files[] = {
 		.name = "cpus.isolated",
 		.seq_show = cpuset_common_seq_show,
 		.private = FILE_ISOLATED_CPULIST,
+		.flags = CFTYPE_ONLY_ON_ROOT,
+	},
+
+	{
+		.name = "housekeeping.cpus",
+		.seq_show = cpuset_common_seq_show,
+		.write = cpuset_write_housekeeping_cpus,
+		.max_write_len = (100U + 6 * NR_CPUS),
+		.private = FILE_HOUSEKEEPING_CPULIST,
 		.flags = CFTYPE_ONLY_ON_ROOT,
 	},
 
