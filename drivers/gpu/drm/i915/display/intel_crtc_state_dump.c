@@ -251,6 +251,14 @@ void intel_crtc_state_dump(const struct intel_crtc_state *pipe_config,
 			   str_enabled_disabled(pipe_config->has_panel_replay),
 			   str_enabled_disabled(pipe_config->enable_psr2_sel_fetch));
 		drm_printf(&p, "minimum hblank: %d\n", pipe_config->min_hblank);
+
+		drm_printf(&p, "DP SDP TL: AS: %u, CMN: %u, GMP: %u, PPS: %u, VSC: %u, VSC_EXT: %u\n",
+			   pipe_config->dp_sdp_tl.as,
+			   pipe_config->dp_sdp_tl.cmn,
+			   pipe_config->dp_sdp_tl.gmp,
+			   pipe_config->dp_sdp_tl.pps,
+			   pipe_config->dp_sdp_tl.vsc,
+			   pipe_config->dp_sdp_tl.vsc_ext);
 	}
 
 	drm_printf(&p, "audio: %i, infoframes: %i, infoframes enabled: 0x%x\n",
