@@ -58,12 +58,24 @@ while true; do
 			per_test_logging=1
 			shift ;;
 		-t | --test)
+			if [ $# -lt 2 ]; then
+				echo "Error: option '$1' requires an argument" >&2
+				usage 1
+			fi
 			TESTS="$TESTS $2"
 			shift 2 ;;
 		-S | --skip)
+			if [ $# -lt 2 ]; then
+				echo "Error: option '$1' requires an argument" >&2
+				usage 1
+			fi
 			SKIP="$SKIP $2"
 			shift 2 ;;
 		-c | --collection)
+			if [ $# -lt 2 ]; then
+				echo "Error: option '$1' requires an argument" >&2
+				usage 1
+			fi
 			COLLECTIONS="$COLLECTIONS $2"
 			shift 2 ;;
 		-l | --list)
@@ -79,6 +91,10 @@ while true; do
 			RUN_IN_NETNS=1
 			shift ;;
 		-o | --override-timeout)
+			if [ $# -lt 2 ]; then
+				echo "Error: option '$1' requires an argument" >&2
+				usage 1
+			fi
 			kselftest_override_timeout="$2"
 			shift 2 ;;
 		-h | --help)
