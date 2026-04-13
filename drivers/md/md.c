@@ -3869,6 +3869,9 @@ static struct md_rdev *md_import_device(dev_t newdev, int super_format, int supe
 
 out_blkdev_put:
 	fput(rdev->bdev_file);
+	md_rdev_clear(rdev);
+	kobject_put(&rdev->kobj);
+	return ERR_PTR(err);
 out_clear_rdev:
 	md_rdev_clear(rdev);
 out_free_rdev:
