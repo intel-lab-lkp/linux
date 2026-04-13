@@ -37,6 +37,7 @@
 #include <linux/wait.h>
 #include <linux/workqueue.h>
 #include <linux/task_work.h>
+#include <linux/topology.h>
 
 DEFINE_STATIC_KEY_FALSE(cpusets_pre_enable_key);
 DEFINE_STATIC_KEY_FALSE(cpusets_enabled_key);
@@ -155,6 +156,9 @@ static bool		update_housekeeping;	/* RWCS */
  * Copy of isolated_cpus to be passed to housekeeping_update()
  */
 static cpumask_var_t	isolated_hk_cpus;	/* T */
+
+/* DHM: Enable SMT-aware boundary checks */
+static bool cpuset_housekeeping_smt_aware = false;
 
 /*
  * A flag to force sched domain rebuild at the end of an operation.
@@ -3218,11 +3222,33 @@ static ssize_t cpuset_write_housekeeping_cpus(struct kernfs_open_file *of,
 	if (retval)
 		goto out_free;
 
+	if (cpuset_housekeeping_smt_aware) {
+		int cpu;
+		for_each_cpu(cpu, new_mask) {
+			if (!cpumask_subset(topology_sibling_cpumask(cpu), new_mask)) {
+				retval = -EINVAL;
+				goto out_free;
+			}
+		}
+	}
+
 	retval = housekeeping_update_all_types(new_mask);
 
 out_free:
 	free_cpumask_var(new_mask);
 	return retval ?: nbytes;
+}
+
+static ssize_t cpuset_write_housekeeping_smt_aware(struct kernfs_open_file *of,
+						   char *buf, size_t nbytes, loff_t off)
+{
+	bool val;
+
+	if (kstrtobool(buf, &val))
+		return -EINVAL;
+
+	cpuset_housekeeping_smt_aware = val;
+	return nbytes;
 }
 
 /*
@@ -3316,6 +3342,9 @@ int cpuset_common_seq_show(struct seq_file *sf, void *v)
 		break;
 	case FILE_HOUSEKEEPING_CPULIST:
 		seq_printf(sf, "%*pbl\n", cpumask_pr_args(housekeeping_cpumask(HK_TYPE_DOMAIN)));
+		break;
+	case FILE_HOUSEKEEPING_SMT_AWARE:
+		seq_printf(sf, "%d\n", cpuset_housekeeping_smt_aware);
 		break;
 	default:
 		ret = -EINVAL;
@@ -3461,6 +3490,14 @@ static struct cftype dfl_files[] = {
 		.write = cpuset_write_housekeeping_cpus,
 		.max_write_len = (100U + 6 * NR_CPUS),
 		.private = FILE_HOUSEKEEPING_CPULIST,
+		.flags = CFTYPE_ONLY_ON_ROOT,
+	},
+
+	{
+		.name = "housekeeping.smt_aware",
+		.seq_show = cpuset_common_seq_show,
+		.write = cpuset_write_housekeeping_smt_aware,
+		.private = FILE_HOUSEKEEPING_SMT_AWARE,
 		.flags = CFTYPE_ONLY_ON_ROOT,
 	},
 
