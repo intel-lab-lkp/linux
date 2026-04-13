@@ -881,6 +881,11 @@ static bool refresh_cpu_vm_stats(bool do_pagesets)
 	return changed;
 }
 
+static void refresh_vm_stats(struct work_struct *work)
+{
+	refresh_cpu_vm_stats(true);
+}
+
 /*
  * Fold the data for an offline cpu into the global array.
  * There cannot be any access by the offline cpu and therefore
@@ -1023,6 +1028,11 @@ unsigned long node_page_state(struct pglist_data *pgdat,
 	VM_WARN_ON_ONCE(vmstat_item_in_bytes(item));
 
 	return node_page_state_pages(pgdat, item);
+}
+
+int refresh_node_page_state(void)
+{
+	return schedule_on_each_cpu(refresh_vm_stats);
 }
 #endif
 
@@ -1968,11 +1978,6 @@ static int sysctl_stat_interval __read_mostly = HZ;
 static int vmstat_late_init_done;
 
 #ifdef CONFIG_PROC_FS
-static void refresh_vm_stats(struct work_struct *work)
-{
-	refresh_cpu_vm_stats(true);
-}
-
 static int vmstat_refresh(const struct ctl_table *table, int write,
 		   void *buffer, size_t *lenp, loff_t *ppos)
 {

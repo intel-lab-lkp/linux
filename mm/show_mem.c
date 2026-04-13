@@ -106,6 +106,16 @@ void si_meminfo_node(struct sysinfo *val, int nid)
 	val->totalram = managed_pages;
 	val->sharedram = node_page_state(pgdat, NR_SHMEM);
 	val->freeram = sum_zone_node_page_state(nid, NR_FREE_PAGES);
+	if (val->freeram > val->totalram) {
+		int err = refresh_node_page_state();
+		if (err)
+			val->freeram = val->totalram;
+		else
+			val->freeram = sum_zone_node_page_state(nid, NR_FREE_PAGES);
+
+		if (val->freeram > val->totalram)
+			val->freeram = val->totalram;
+	}
 	val->totalhigh = managed_highpages;
 	val->freehigh = free_highpages;
 	val->mem_unit = PAGE_SIZE;
