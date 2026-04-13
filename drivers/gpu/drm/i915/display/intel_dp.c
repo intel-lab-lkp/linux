@@ -7377,6 +7377,34 @@ void intel_dp_mst_resume(struct intel_display *display)
 }
 
 static
+int intel_dp_sdp_compute_as_tl(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+
+	if (!HAS_EMP_AS_SDP_TL(display))
+		return 0;
+
+	if (!(crtc_state->infoframes.enable &
+	      intel_hdmi_infoframe_enable(DP_SDP_ADAPTIVE_SYNC)))
+		return 0;
+
+	/*
+	 * EMP_AS_SDP_TL defines the T1 position as the default AS SDP
+	 * Transmission Line, which corresponds to the start of the
+	 * VSYNC pulse.
+	 *
+	 * Use the T1 position for now.
+	 */
+	return crtc_state->vrr.vsync_start;
+}
+
+static
+void intel_dp_sdp_tl_compute_config_late(struct intel_crtc_state *crtc_state)
+{
+	crtc_state->dp_sdp_tl.as = intel_dp_sdp_compute_as_tl(crtc_state);
+}
+
+static
 int intel_dp_sdp_compute_config_late(struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
@@ -7388,6 +7416,8 @@ int intel_dp_sdp_compute_config_late(struct intel_crtc_state *crtc_state)
 			    guardband, min_sdp_guardband);
 		return -EINVAL;
 	}
+
+	intel_dp_sdp_tl_compute_config_late(crtc_state);
 
 	return 0;
 }
@@ -7477,12 +7507,10 @@ bool intel_dp_joiner_candidate_valid(struct intel_connector *connector,
 
 int intel_dp_sdp_as_tl(const struct intel_crtc_state *crtc_state)
 {
-	/*
-	 * EMP_AS_SDP_TL defines the T1 position as the default AS SDP
-	 * Transmission Line, which corresponds to the start of the
-	 * VSYNC pulse.
-	 *
-	 * Use the T1 position for now.
-	 */
-	return crtc_state->vrr.vsync_start;
+	return crtc_state->dp_sdp_tl.as;
+}
+
+void intel_dp_sdp_transmission_line_get_config(struct intel_crtc_state *crtc_state)
+{
+	crtc_state->dp_sdp_tl.as = intel_vrr_read_emp_as_sdp_tl(crtc_state);
 }
