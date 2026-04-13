@@ -335,6 +335,7 @@ struct usb4_port {
  * @no_nvm_upgrade: Prevent NVM upgrade of this retimer
  * @auth_status: Status of last NVM authentication
  * @margining: Pointer to margining structure if enabled
+ * @spec_version: The implemented USB4 Retimer Specification version
  */
 struct tb_retimer {
 	struct device dev;
@@ -346,6 +347,7 @@ struct tb_retimer {
 	struct tb_nvm *nvm;
 	bool no_nvm_upgrade;
 	u32 auth_status;
+	u8 spec_version;
 #ifdef CONFIG_USB4_DEBUGFS_MARGINING
 	struct tb_margining *margining;
 #endif

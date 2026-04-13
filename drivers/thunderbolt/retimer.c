@@ -389,8 +389,8 @@ const struct device_type tb_retimer_type = {
 static int tb_retimer_add(struct tb_port *port, u8 index, u32 auth_status,
 			  bool on_board)
 {
+	u32 vendor, device, version;
 	struct tb_retimer *rt;
-	u32 vendor, device;
 	int ret;
 
 	ret = usb4_port_sb_read(port, USB4_SB_TARGET_RETIMER, index,
@@ -409,6 +409,14 @@ static int tb_retimer_add(struct tb_port *port, u8 index, u32 auth_status,
 		return ret;
 	}
 
+	ret = usb4_port_sb_read(port, USB4_SB_TARGET_RETIMER, index,
+				USB4_SB_FW_VERSION, &version, sizeof(version));
+	if (ret) {
+		if (ret != -ENODEV)
+			tb_port_warn(port, "failed read retimer Version: %d\n", ret);
+		return ret;
+	}
+
 
 	rt = kzalloc_obj(*rt);
 	if (!rt)
@@ -417,6 +425,7 @@ static int tb_retimer_add(struct tb_port *port, u8 index, u32 auth_status,
 	rt->index = index;
 	rt->vendor = vendor;
 	rt->device = device;
+	rt->spec_version = FIELD_GET(USB4_SB_FW_VERSION_VERSION, version);
 	rt->auth_status = auth_status;
 	rt->port = port;
 	rt->tb = port->sw->tb;

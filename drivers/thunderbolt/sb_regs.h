@@ -12,10 +12,11 @@
 
 #define USB4_SB_VENDOR_ID			0x00
 #define USB4_SB_PRODUCT_ID			0x01
-#define USB4_SB_FW_VERSION			0x02
-#define USB4_SB_DEBUG_CONF			0x05
-#define USB4_SB_DEBUG				0x06
-#define USB4_SB_LRD_TUNING			0x07
+#define USB4_SB_FW_VERSION			0x02 /* Retimer-only */
+#define USB4_SB_FW_VERSION_VERSION		GENMASK(7, 0)
+#define USB4_SB_DEBUG_CONF			0x05 /* Port-only, USB4 v2.0 */
+#define USB4_SB_DEBUG				0x06 /* Port-only, USB4 v2.0 */
+#define USB4_SB_LRD_TUNING			0x07 /* USB4 v2.0 */
 #define USB4_SB_OPCODE				0x08
 
 enum usb4_sb_opcode {
@@ -42,7 +43,7 @@ enum usb4_sb_opcode {
 #define USB4_SB_METADATA_NVM_AUTH_WRITE_MASK	GENMASK(5, 0)
 #define USB4_SB_LINK_CONF			0x0c
 #define USB4_SB_GEN23_TXFFE			0x0d
-#define USB4_SB_GEN4_TXFFE			0x0e
+#define USB4_SB_GEN4_TXFFE			0x0e /* USB4 v2.0 */
 #define USB4_SB_VERSION				0x0f
 #define USB4_SB_DATA				0x12
 

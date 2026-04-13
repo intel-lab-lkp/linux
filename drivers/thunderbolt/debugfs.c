@@ -67,6 +67,7 @@ enum usb4_margin_cap_time_indp {
 struct sb_reg {
 	unsigned int reg;
 	unsigned int size;
+	u8 min_spec_ver;
 };
 
 #define SB_MAX_SIZE		64
@@ -75,9 +76,9 @@ struct sb_reg {
 static const struct sb_reg port_sb_regs[] = {
 	{ USB4_SB_VENDOR_ID, 4 },
 	{ USB4_SB_PRODUCT_ID, 4 },
-	{ USB4_SB_DEBUG_CONF, 4 },
-	{ USB4_SB_DEBUG, 54 },
-	{ USB4_SB_LRD_TUNING, 4 },
+	{ USB4_SB_DEBUG_CONF, 4, .min_spec_ver = 2 },
+	{ USB4_SB_DEBUG, 54, .min_spec_ver = 2 },
+	{ USB4_SB_LRD_TUNING, 4, .min_spec_ver = 2 },
 	{ USB4_SB_OPCODE, 4 },
 	{ USB4_SB_METADATA, 4 },
 	{ USB4_SB_LINK_CONF, 3 },
@@ -92,11 +93,11 @@ static const struct sb_reg retimer_sb_regs[] = {
 	{ USB4_SB_VENDOR_ID, 4 },
 	{ USB4_SB_PRODUCT_ID, 4 },
 	{ USB4_SB_FW_VERSION, 4 },
-	{ USB4_SB_LRD_TUNING, 4 },
+	{ USB4_SB_LRD_TUNING, 4, .min_spec_ver = 2 },
 	{ USB4_SB_OPCODE, 4 },
 	{ USB4_SB_METADATA, 4 },
 	{ USB4_SB_GEN23_TXFFE, 4 },
-	{ USB4_SB_GEN4_TXFFE, 4 },
+	{ USB4_SB_GEN4_TXFFE, 4, .min_spec_ver = 2 },
 	{ USB4_SB_VERSION, 4 },
 	{ USB4_SB_DATA, 64 },
 };
@@ -2347,7 +2348,7 @@ DEBUGFS_ATTR_RW(counters);
 
 static int sb_regs_show(struct tb_port *port, const struct sb_reg *sb_regs,
 			size_t size, enum usb4_sb_target target, u8 index,
-			struct seq_file *s)
+			u8 spec_version, struct seq_file *s)
 {
 	int ret, i;
 
@@ -2357,6 +2358,9 @@ static int sb_regs_show(struct tb_port *port, const struct sb_reg *sb_regs,
 		const struct sb_reg *regs = &sb_regs[i];
 		u8 data[64];
 		int j;
+
+		if (regs->min_spec_ver > spec_version)
+			continue;
 
 		memset(data, 0, sizeof(data));
 		ret = usb4_port_sb_read(port, target, index, regs->reg, data,
@@ -2388,7 +2392,7 @@ static int port_sb_regs_show(struct seq_file *s, void *not_used)
 	}
 
 	ret = sb_regs_show(port, port_sb_regs, ARRAY_SIZE(port_sb_regs),
-			   USB4_SB_TARGET_ROUTER, 0, s);
+			   USB4_SB_TARGET_ROUTER, 0, port->config.thunderbolt_version, s);
 
 	mutex_unlock(&tb->lock);
 out_rpm_put:
@@ -2503,7 +2507,7 @@ static int retimer_sb_regs_show(struct seq_file *s, void *not_used)
 	}
 
 	ret = sb_regs_show(rt->port, retimer_sb_regs, ARRAY_SIZE(retimer_sb_regs),
-			   USB4_SB_TARGET_RETIMER, rt->index, s);
+			   USB4_SB_TARGET_RETIMER, rt->index, rt->spec_version, s);
 
 	mutex_unlock(&tb->lock);
 out_rpm_put:
