@@ -344,6 +344,10 @@ static int damon_lru_sort_apply_parameters(void)
 	if (err)
 		goto out;
 	err = damon_commit_ctx(ctx, param_ctx);
+	if (err) {
+		enabled = false;
+		kdamond_pid = -1;
+	}
 out:
 	damon_destroy_ctx(param_ctx);
 	return err;
@@ -388,8 +392,13 @@ static int damon_lru_sort_turn(bool on)
 
 	if (!on) {
 		err = damon_stop(&ctx, 1);
-		if (!err)
-			kdamond_pid = -1;
+		if (err) {
+			if (!damon_is_running(ctx))
+				err = 0;
+			else
+				return err;
+		}
+		kdamond_pid = -1;
 		return err;
 	}
 
