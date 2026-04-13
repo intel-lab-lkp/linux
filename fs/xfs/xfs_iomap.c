@@ -36,7 +36,7 @@
 #define XFS_ALLOC_ALIGN(mp, off) \
 	(((off) >> mp->m_allocsize_log) << mp->m_allocsize_log)
 
-static int
+int
 xfs_alert_fsblock_zero(
 	xfs_inode_t	*ip,
 	xfs_bmbt_irec_t	*imap)
@@ -616,115 +616,8 @@ xfs_iomap_write_unwritten(
 	xfs_off_t	count,
 	bool		update_isize)
 {
-	xfs_mount_t	*mp = ip->i_mount;
-	xfs_fileoff_t	offset_fsb;
-	xfs_filblks_t	count_fsb;
-	xfs_filblks_t	numblks_fsb;
-	int		nimaps;
-	xfs_trans_t	*tp;
-	xfs_bmbt_irec_t imap;
-	struct inode	*inode = VFS_I(ip);
-	xfs_fsize_t	i_size;
-	uint		resblks;
-	int		error;
-
-	trace_xfs_unwritten_convert(ip, offset, count);
-
-	offset_fsb = XFS_B_TO_FSBT(mp, offset);
-	count_fsb = XFS_B_TO_FSB(mp, (xfs_ufsize_t)offset + count);
-	count_fsb = (xfs_filblks_t)(count_fsb - offset_fsb);
-
-	/*
-	 * Reserve enough blocks in this transaction for two complete extent
-	 * btree splits.  We may be converting the middle part of an unwritten
-	 * extent and in this case we will insert two new extents in the btree
-	 * each of which could cause a full split.
-	 *
-	 * This reservation amount will be used in the first call to
-	 * xfs_bmbt_split() to select an AG with enough space to satisfy the
-	 * rest of the operation.
-	 */
-	resblks = XFS_DIOSTRAT_SPACE_RES(mp, 0) << 1;
-
-	/* Attach dquots so that bmbt splits are accounted correctly. */
-	error = xfs_qm_dqattach(ip);
-	if (error)
-		return error;
-
-	do {
-		/*
-		 * Set up a transaction to convert the range of extents
-		 * from unwritten to real. Do allocations in a loop until
-		 * we have covered the range passed in.
-		 *
-		 * Note that we can't risk to recursing back into the filesystem
-		 * here as we might be asked to write out the same inode that we
-		 * complete here and might deadlock on the iolock.
-		 */
-		error = xfs_trans_alloc_inode(ip, &M_RES(mp)->tr_write, resblks,
-				0, true, &tp);
-		if (error)
-			return error;
-
-		error = xfs_iext_count_extend(tp, ip, XFS_DATA_FORK,
-				XFS_IEXT_WRITE_UNWRITTEN_CNT);
-		if (error)
-			goto error_on_bmapi_transaction;
-
-		/*
-		 * Modify the unwritten extent state of the buffer.
-		 */
-		nimaps = 1;
-		error = xfs_bmapi_write(tp, ip, offset_fsb, count_fsb,
-					XFS_BMAPI_CONVERT, resblks, &imap,
-					&nimaps);
-		if (error)
-			goto error_on_bmapi_transaction;
-
-		/*
-		 * Log the updated inode size as we go.  We have to be careful
-		 * to only log it up to the actual write offset if it is
-		 * halfway into a block.
-		 */
-		i_size = XFS_FSB_TO_B(mp, offset_fsb + count_fsb);
-		if (i_size > offset + count)
-			i_size = offset + count;
-		if (update_isize && i_size > i_size_read(inode))
-			i_size_write(inode, i_size);
-		i_size = xfs_new_eof(ip, i_size);
-		if (i_size) {
-			ip->i_disk_size = i_size;
-			xfs_trans_log_inode(tp, ip, XFS_ILOG_CORE);
-		}
-
-		error = xfs_trans_commit(tp);
-		xfs_iunlock(ip, XFS_ILOCK_EXCL);
-		if (error)
-			return error;
-
-		if (unlikely(!xfs_valid_startblock(ip, imap.br_startblock))) {
-			xfs_bmap_mark_sick(ip, XFS_DATA_FORK);
-			return xfs_alert_fsblock_zero(ip, &imap);
-		}
-
-		if ((numblks_fsb = imap.br_blockcount) == 0) {
-			/*
-			 * The numblks_fsb value should always get
-			 * smaller, otherwise the loop is stuck.
-			 */
-			ASSERT(imap.br_blockcount);
-			break;
-		}
-		offset_fsb += numblks_fsb;
-		count_fsb -= numblks_fsb;
-	} while (count_fsb > 0);
-
-	return 0;
-
-error_on_bmapi_transaction:
-	xfs_trans_cancel(tp);
-	xfs_iunlock(ip, XFS_ILOCK_EXCL);
-	return error;
+	return xfs_bmap_alloc_or_convert_range(ip, offset, count,
+					XFS_BMAPI_CONVERT, update_isize);
 }
 
 static inline bool
