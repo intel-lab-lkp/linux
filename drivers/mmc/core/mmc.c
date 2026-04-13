@@ -1958,7 +1958,8 @@ err:
 
 static bool mmc_card_can_sleep(struct mmc_card *card)
 {
-	return card->ext_csd.rev >= 3;
+	return card->ext_csd.rev >= 3 &&
+	       !(card->quirks & MMC_QUIRK_BROKEN_SLEEP);
 }
 
 static int mmc_sleep_busy_cb(void *cb_data, bool *busy)

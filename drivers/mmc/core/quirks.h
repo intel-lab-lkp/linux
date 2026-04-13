@@ -153,6 +153,13 @@ static const struct mmc_fixup __maybe_unused mmc_blk_fixups[] = {
 	MMC_FIXUP("M62704", CID_MANFID_KINGSTON, 0x0100, add_quirk_mmc,
 		  MMC_QUIRK_TRIM_BROKEN),
 
+	/*
+	 * Some Kioxia eMMC devices will not go into boot mode on CMD0 arg
+	 * after going into SLEEP state.
+	 */
+	MMC_FIXUP("016G01", CID_MANFID_TOSHIBA, 0x0100, add_quirk_mmc,
+		  MMC_QUIRK_BROKEN_SLEEP),
+
 	END_FIXUP
 };
 
