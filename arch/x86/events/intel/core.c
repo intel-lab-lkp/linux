@@ -5939,8 +5939,12 @@ static void update_pmu_cap(struct pmu *pmu)
 	}
 
 	if (!intel_pmu_broken_perf_cap()) {
+		bool anythread = hybrid(pmu, intel_cap).anythread_deprecated;
+
 		/* Perf Metric (Bit 15) and PEBS via PT (Bit 16) are hybrid enumeration */
 		rdmsrq(MSR_IA32_PERF_CAPABILITIES, hybrid(pmu, intel_cap).capabilities);
+		/* It seems anythread_deprecated is deleted unintentionally */
+		hybrid(pmu, intel_cap).anythread_deprecated = anythread;
 	}
 }
 
