@@ -92,8 +92,11 @@ static int rtw_ops_config(struct ieee80211_hw *hw, int radio_idx, u32 changed)
 		}
 	}
 
-	if (changed & IEEE80211_CONF_CHANGE_CHANNEL)
-		rtw_set_channel(rtwdev);
+	if (changed & IEEE80211_CONF_CHANGE_CHANNEL) {
+		ret = rtw_set_channel(rtwdev);
+		if (ret)
+			goto out;
+	}
 
 	if ((changed & IEEE80211_CONF_CHANGE_IDLE) &&
 	    (hw->conf.flags & IEEE80211_CONF_IDLE) &&

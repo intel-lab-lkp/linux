@@ -868,22 +868,29 @@ void rtw_get_channel_params(struct cfg80211_chan_def *chandef,
 	chan_params->primary_chan = channel->hw_value;
 }
 
-void rtw_set_channel(struct rtw_dev *rtwdev)
+int rtw_set_channel(struct rtw_dev *rtwdev)
 {
 	const struct rtw_chip_info *chip = rtwdev->chip;
 	struct ieee80211_hw *hw = rtwdev->hw;
 	struct rtw_hal *hal = &rtwdev->hal;
 	struct rtw_channel_params ch_param;
 	u8 center_chan, primary_chan, bandwidth, band;
+	int ch_idx;
 
 	rtw_get_channel_params(&hw->conf.chandef, &ch_param);
 	if (WARN(ch_param.center_chan == 0, "Invalid channel\n"))
-		return;
+		return -EINVAL;
 
 	center_chan = ch_param.center_chan;
 	primary_chan = ch_param.primary_chan;
 	bandwidth = ch_param.bandwidth;
 	band = ch_param.center_chan > 14 ? RTW_BAND_5G : RTW_BAND_2G;
+
+	ch_idx = rtw_band_channel_to_idx(band, center_chan);
+	if (ch_idx < 0) {
+		rtw_warn(rtwdev, "not support band %d ch %d\n", band, center_chan);
+		return -EOPNOTSUPP;
+	}
 
 	rtw_update_channel(rtwdev, center_chan, primary_chan, band, bandwidth);
 
@@ -910,6 +917,8 @@ void rtw_set_channel(struct rtw_dev *rtwdev)
 	 */
 	if (!test_bit(RTW_FLAG_SCANNING, rtwdev->flags))
 		rtwdev->need_rfk = true;
+
+	return 0;
 }
 
 void rtw_chip_prepare_tx(struct rtw_dev *rtwdev)

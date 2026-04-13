@@ -201,4 +201,6 @@ enum rtw_phy_cck_pd_lv {
 #define RRSR_RATE_ORDER_MAX	0xfffff
 #define RRSR_RATE_ORDER_CCK_LEN	4
 
+int rtw_band_channel_to_idx(enum rtw_supported_band band, u8 channel);
+
 #endif

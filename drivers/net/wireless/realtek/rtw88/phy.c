@@ -1630,6 +1630,24 @@ static int rtw_channel_to_idx(u8 band, u8 channel)
 	return ch_idx;
 }
 
+int rtw_band_channel_to_idx(enum rtw_supported_band band, u8 channel)
+{
+	u8 phy_band;
+
+	switch (band) {
+	case RTW_BAND_2G:
+		phy_band = PHY_BAND_2G;
+		break;
+	case RTW_BAND_5G:
+		phy_band = PHY_BAND_5G;
+		break;
+	default:
+		return -1;
+	}
+
+	return rtw_channel_to_idx(phy_band, channel);
+}
+
 static void rtw_phy_set_tx_power_limit(struct rtw_dev *rtwdev, u8 regd, u8 band,
 				       u8 bw, u8 rs, u8 ch, s8 pwr_limit)
 {
