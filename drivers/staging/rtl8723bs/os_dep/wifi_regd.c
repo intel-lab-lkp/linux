@@ -93,7 +93,7 @@ static int _rtw_reg_notifier_apply(struct wiphy *wiphy,
 
 static const struct ieee80211_regdomain *_rtw_regdomain_select(struct
 							       rtw_regulatory
-							       *reg)
+ * reg)
 {
 	return &rtw_regdom_rd;
 }
