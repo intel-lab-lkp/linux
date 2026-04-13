@@ -13,6 +13,10 @@
 #include <linux/fs_context.h>
 #include <linux/types.h>
 
+/* inode_state_read_once returns inode_state_flags in kernel 7.0 */
+#define ftrfs_inode_is_new(inode) \
+	(inode_state_read_once(inode) & I_NEW)
+
 /* Magic number: 'FTRF' */
 #define FTRFS_MAGIC         0x46545246
 
@@ -49,29 +53,38 @@ struct ftrfs_super_block {
 	__le32  s_crc32;            /* CRC32 of this superblock */
 	__u8    s_uuid[16];         /* UUID */
 	__u8    s_label[32];        /* Volume label */
-	__u8    s_pad[3948];        /* Padding to 4096 bytes */
+	__u8    s_pad[3980];        /* Padding to 4096 bytes */
 } __packed;
 
 /*
  * On-disk inode
- * Size: 128 bytes
+ * Size: 256 bytes
+ *
+ * Addressing capacity:
+ *   direct  (12)  =              48 KiB
+ *   indirect (1)  =               2 MiB
+ *   dindirect (1) =               1 GiB
+ *   tindirect (1) =             512 GiB
+ *
+ * uid/gid: __le32 to support uid > 65535 (standard kernel convention)
+ * timestamps: __le64 nanoseconds (required for space mission precision)
  */
 struct ftrfs_inode {
 	__le16  i_mode;             /* File mode */
-	__le16  i_uid;              /* Owner UID */
-	__le16  i_gid;              /* Owner GID */
 	__le16  i_nlink;            /* Hard link count */
-	__le64  i_size;             /* File size in bytes */
+	__le32  i_uid;              /* Owner UID */
+	__le32  i_gid;              /* Owner GID */
+	__le64  i_size;             /* File size in bytes (64-bit, future-proof) */
 	__le64  i_atime;            /* Access time (ns) */
 	__le64  i_mtime;            /* Modification time (ns) */
 	__le64  i_ctime;            /* Change time (ns) */
-	__le32  i_blocks;           /* Block count */
 	__le32  i_flags;            /* Inode flags */
+	__le32  i_crc32;            /* CRC32 of inode (excluding this field) */
 	__le64  i_direct[FTRFS_DIRECT_BLOCKS];    /* Direct block pointers */
-	__le64  i_indirect;         /* Single indirect */
-	__le64  i_dindirect;        /* Double indirect */
-	__le32  i_crc32;            /* CRC32 of inode */
-	__u8    i_pad[2];           /* Padding to 128 bytes */
+	__le64  i_indirect;         /* Single indirect (~2 MiB) */
+	__le64  i_dindirect;        /* Double indirect (~1 GiB) */
+	__le64  i_tindirect;        /* Triple indirect (~512 GiB) */
+	__u8    i_reserved[84];     /* Padding to 256 bytes */
 } __packed;
 
 /* Inode flags */
@@ -111,6 +124,7 @@ struct ftrfs_inode_info {
 	__le64          i_direct[FTRFS_DIRECT_BLOCKS];
 	__le64          i_indirect;
 	__le64          i_dindirect;
+	__le64          i_tindirect;
 	__u32           i_flags;
 	struct inode    vfs_inode;  /* Must be last */
 };
@@ -140,6 +154,7 @@ extern const struct inode_operations ftrfs_dir_inode_operations;
 /* file.c */
 extern const struct file_operations ftrfs_file_operations;
 extern const struct inode_operations ftrfs_file_inode_operations;
+extern const struct address_space_operations ftrfs_aops;
 
 /* edac.c */
 __u32 ftrfs_crc32(const void *buf, size_t len);

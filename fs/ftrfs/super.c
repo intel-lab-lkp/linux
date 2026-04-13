@@ -252,6 +252,8 @@ static int __init ftrfs_init(void)
 		return ret;
 	}
 
+	BUILD_BUG_ON(sizeof(struct ftrfs_super_block) != FTRFS_BLOCK_SIZE);
+	BUILD_BUG_ON(sizeof(struct ftrfs_inode) != 256);
 	pr_info("ftrfs: module loaded (FTRFS Fault-Tolerant Radiation-Robust FS)\n");
 	return 0;
 }
