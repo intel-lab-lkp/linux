@@ -330,7 +330,7 @@ static void analog_calibrate_timer(struct analog_port *port)
 			tx = t;
 	}
 
-        port->loop = tx / 50;
+	port->loop = tx / 50;
 }
 
 /*
@@ -490,7 +490,7 @@ static int analog_init_masks(struct analog_port *port)
 			| ((~analog[0].mask & ANALOG_HAT_FCS) << 4);
 
 	analog[0].mask &= ~(ANALOG_THROTTLE | ANALOG_RUDDER)
-			| (((~analog[0].mask & ANALOG_BTNS_TLR ) >> 10)
+			| (((~analog[0].mask & ANALOG_BTNS_TLR) >> 10)
 			&  ((~analog[0].mask & ANALOG_BTNS_TLR2) >> 12));
 
 	analog[1].mask = ((i >> 20) & 0xff) | ((i >> 12) & 0xf0000);
