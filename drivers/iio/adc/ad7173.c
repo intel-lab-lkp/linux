@@ -666,12 +666,12 @@ static bool ad7173_is_setup_equal(const struct ad7173_channel_config *cfg1,
 	 */
 	static_assert(sizeof_field(struct ad7173_channel_config, config_props) ==
 		      sizeof(struct {
-				     bool bipolar;
-				     bool input_buf;
-				     u16 sinc3_odr_div;
-				     u8 sinc5_odr_index;
-				     u8 ref_sel;
-				     enum ad7173_filter_type filter_type;
+				bool bipolar;
+				bool input_buf;
+				u16 sinc3_odr_div;
+				u8 sinc5_odr_index;
+				u8 ref_sel;
+				enum ad7173_filter_type filter_type;
 			     }));
 
 	return cfg1->bipolar == cfg2->bipolar &&
