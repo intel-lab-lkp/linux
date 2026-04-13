@@ -127,6 +127,7 @@ relocate_enable_mmu:
 #endif /* CONFIG_MMU */
 #ifdef CONFIG_SMP
 	.global secondary_start_sbi
+	.align 2
 secondary_start_sbi:
 	/* Mask all interrupts */
 	csrw CSR_IE, zero
