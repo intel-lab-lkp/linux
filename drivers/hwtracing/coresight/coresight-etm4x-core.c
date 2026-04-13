@@ -959,8 +959,20 @@ static int etm4_enable_sysfs(struct coresight_device *csdev, struct coresight_pa
 	arg.config = drvdata->config;
 	raw_spin_unlock(&drvdata->spinlock);
 
+	/*
+	 * Take the hotplug lock to prevent redundant calls to etm4_enable_hw().
+	 *
+	 * The cpu_online_mask is set at the CPUHP_BRINGUP_CPU step.
+	 * In other words, if etm4_enable_sysfs() is called between
+	 * CPUHP_BRINGUP_CPU and CPUHP_AP_ARM_CORESIGHT_STARTING,
+	 * etm4_enable_hw() may be invoked in etm4_enable_sysfs_smp_call()
+	 * and then executed again in etm4_starting_cpu().
+	 */
+	cpus_read_lock();
 	ret = smp_call_function_single(drvdata->cpu,
 				       etm4_enable_sysfs_smp_call, &arg, 1);
+	cpus_read_unlock();
+
 	if (!ret)
 		ret = arg.rc;
 	if (!ret)
