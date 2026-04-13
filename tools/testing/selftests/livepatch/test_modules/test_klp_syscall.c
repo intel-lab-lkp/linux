@@ -12,15 +12,26 @@
 #include <linux/slab.h>
 #include <linux/livepatch.h>
 
-#if defined(__x86_64__)
+/*
+ * Before CONFIG_ARCH_HAS_SYSCALL_WRAPPER was introduced there were no
+ * prefixes for system calls.
+ * Both ppc and loongarch does not set prefixes for their system calls either.
+ */
+#if !defined(CONFIG_ARCH_HAS_SYSCALL_WRAPPER) ||  defined(__powerpc__) || \
+	defined(__loongarch__)
+#define FN_PREFIX
+#elif defined(__x86_64__)
 #define FN_PREFIX __x64_
 #elif defined(__s390x__)
 #define FN_PREFIX __s390x_
 #elif defined(__aarch64__)
 #define FN_PREFIX __arm64_
-#else
-/* powerpc does not select ARCH_HAS_SYSCALL_WRAPPER */
+#elif defined(__powerpc__)
 #define FN_PREFIX
+#elif defined(__loongarch__)
+#define FN_PREFIX
+#else
+#error "Missing syscall wrapper for the given architecture."
 #endif
 
 /* Protects klp_pids */
