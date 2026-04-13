@@ -409,15 +409,12 @@ static inline int collapse_test_exit_or_disable(struct mm_struct *mm)
 static bool hugepage_pmd_enabled(void)
 {
 	/*
-	 * We cover the anon, shmem and the file-backed case here; file-backed
-	 * hugepages, when configured in, are determined by the global control.
+	 * We cover the anon and shmem cases here.
 	 * Anon pmd-sized hugepages are determined by the pmd-size control.
 	 * Shmem pmd-sized hugepages are also determined by its pmd-size control,
 	 * except when the global shmem_huge is set to SHMEM_HUGE_DENY.
+	 * The file-backed case is determined by the anon and shmem cases.
 	 */
-	if (IS_ENABLED(CONFIG_READ_ONLY_THP_FOR_FS) &&
-	    hugepage_global_enabled())
-		return true;
 	if (test_bit(PMD_ORDER, &huge_anon_orders_always))
 		return true;
 	if (test_bit(PMD_ORDER, &huge_anon_orders_madvise))
