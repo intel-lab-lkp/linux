@@ -688,8 +688,14 @@ int __jfs_setxattr(tid_t tid, struct inode *inode, const char *name,
 	new_size = sizeof (struct jfs_ea_list);
 
 	if (xattr_size) {
-		for (ea = FIRST_EA(ealist); ea < END_EALIST(ealist);
+		struct jfs_ea *ealist_end = END_EALIST(ealist);
+		for (ea = FIRST_EA(ealist); ea < ealist_end;
 		     ea = NEXT_EA(ea)) {
+			if (unlikely(ea + 1 > ealist_end) ||
+			    unlikely(NEXT_EA(ea) > ealist_end)) {
+				rc = -EUCLEAN;
+				goto release;
+			}
 			if ((namelen == ea->namelen) &&
 			    (memcmp(name, ea->name, namelen) == 0)) {
 				found = 1;
