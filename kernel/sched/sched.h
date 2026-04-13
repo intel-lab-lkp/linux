@@ -514,6 +514,7 @@ struct task_group {
 #endif
 
 	struct cfs_bandwidth	cfs_bandwidth;
+	u64					slice_ns;
 
 #ifdef CONFIG_UCLAMP_TASK_GROUP
 	/* The two decimal precision [%] value requested from user-space */
@@ -613,9 +614,12 @@ extern int sched_group_set_idle(struct task_group *tg, long idle);
 
 extern void set_task_rq_fair(struct sched_entity *se,
 			     struct cfs_rq *prev, struct cfs_rq *next);
+
+extern int sched_group_set_slice(struct cgroup_subsys_state *css, u64 slice);
 #else /* !CONFIG_FAIR_GROUP_SCHED: */
 static inline int sched_group_set_shares(struct task_group *tg, unsigned long shares) { return 0; }
 static inline int sched_group_set_idle(struct task_group *tg, long idle) { return 0; }
+static inline int sched_group_set_slice(struct cgroup_subsys_state *css, u64 slice) { return 0; }
 #endif /* !CONFIG_FAIR_GROUP_SCHED */
 
 #else /* !CONFIG_CGROUP_SCHED: */

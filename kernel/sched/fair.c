@@ -14073,6 +14073,40 @@ int sched_group_set_shares(struct task_group *tg, unsigned long shares)
 	return ret;
 }
 
+int sched_group_set_slice(struct cgroup_subsys_state *css, u64 slice)
+{
+	struct css_task_iter it;
+	struct task_struct *task;
+	struct task_group *tg = css_tg(css);
+
+	if (tg == &root_task_group)
+		return -EINVAL;
+
+	if (slice < NSEC_PER_MSEC / 10 ||
+			slice > NSEC_PER_MSEC * 100)
+		return -EINVAL;
+
+	mutex_lock(&shares_mutex);
+
+	if (tg->slice_ns == slice) {
+		mutex_unlock(&shares_mutex);
+		return 0;
+	}
+
+	tg->slice_ns = slice;
+
+	css_task_iter_start(css, 0, &it);
+	while ((task = css_task_iter_next(&it))) {
+		task->se.custom_slice = 1;
+		task->se.slice = slice;
+	}
+	css_task_iter_end(&it);
+
+	mutex_unlock(&shares_mutex);
+
+	return 0;
+}
+
 int sched_group_set_idle(struct task_group *tg, long idle)
 {
 	int i;

@@ -9361,6 +9361,13 @@ static void sched_change_group(struct task_struct *tsk)
 	tg = autogroup_task_group(tsk, tg);
 	tsk->sched_task_group = tg;
 
+	if (tg->slice_ns) {
+		tsk->se.custom_slice = 1;
+		tsk->se.slice = tg->slice_ns;
+	} else {
+		tsk->se.custom_slice = 0;
+	}
+
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	if (tsk->sched_class->task_change_group)
 		tsk->sched_class->task_change_group(tsk);
@@ -10129,6 +10136,18 @@ static int cpu_idle_write_s64(struct cgroup_subsys_state *css,
 }
 #endif /* CONFIG_GROUP_SCHED_WEIGHT */
 
+static u64 slice_ns_read_u64(struct cgroup_subsys_state *css,
+		struct cftype *cft)
+{
+	return css_tg(css)->slice_ns;
+}
+
+static int slice_ns_write_u64(struct cgroup_subsys_state *css,
+		struct cftype *cft, u64 slice)
+{
+	return sched_group_set_slice(css, slice);
+}
+
 static struct cftype cpu_legacy_files[] = {
 #ifdef CONFIG_GROUP_SCHED_WEIGHT
 	{
@@ -10183,6 +10202,11 @@ static struct cftype cpu_legacy_files[] = {
 		.write = cpu_uclamp_max_write,
 	},
 #endif
+	{
+		.name = "slice_ns",
+		.read_u64 = slice_ns_read_u64,
+		.write_u64 = slice_ns_write_u64,
+	},
 	{ }	/* Terminate */
 };
 
