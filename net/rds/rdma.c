@@ -560,6 +560,7 @@ int rds_rdma_extra_size(struct rds_rdma_args *args,
 	struct rds_iovec *vec;
 	struct rds_iovec __user *local_vec;
 	int tot_pages = 0;
+	int ret = 0;
 	unsigned int nr_pages;
 	unsigned int i;
 
@@ -578,16 +579,20 @@ int rds_rdma_extra_size(struct rds_rdma_args *args,
 	vec = &iov->iov[0];
 
 	if (copy_from_user(vec, local_vec, args->nr_local *
-			   sizeof(struct rds_iovec)))
-		return -EFAULT;
+			   sizeof(struct rds_iovec))) {
+		ret = -EFAULT;
+		goto out;
+	}
 	iov->len = args->nr_local;
 
 	/* figure out the number of pages in the vector */
 	for (i = 0; i < args->nr_local; i++, vec++) {
 
 		nr_pages = rds_pages_in_vec(vec);
-		if (nr_pages == 0)
-			return -EINVAL;
+		if (nr_pages == 0) {
+			ret = -EINVAL;
+			goto out;
+		}
 
 		tot_pages += nr_pages;
 
@@ -595,11 +600,20 @@ int rds_rdma_extra_size(struct rds_rdma_args *args,
 		 * nr_pages for one entry is limited to (UINT_MAX>>PAGE_SHIFT)+1,
 		 * so tot_pages cannot overflow without first going negative.
 		 */
-		if (tot_pages < 0)
-			return -EINVAL;
+		if (tot_pages < 0) {
+			ret = -EINVAL;
+			goto out;
+		}
 	}
 
-	return tot_pages * sizeof(struct scatterlist);
+	ret = tot_pages * sizeof(struct scatterlist);
+
+out:
+	if (ret < 0) {
+		kfree(iov->iov);
+		iov->iov = NULL;
+	}
+	return ret;
 }
 
 /*
