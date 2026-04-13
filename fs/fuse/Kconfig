@@ -22,6 +22,7 @@ config FUSE_FS
 config CUSE
 	tristate "Character device in Userspace support"
 	depends on FUSE_FS
+	depends on !DEBUG_AID_FOR_SYZBOT
 	help
 	  This FUSE extension allows character devices to be
 	  implemented in userspace.
