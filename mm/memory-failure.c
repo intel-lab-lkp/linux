@@ -74,7 +74,8 @@ static int sysctl_memory_failure_recovery __read_mostly = 1;
 
 static int sysctl_enable_soft_offline __read_mostly = 1;
 
-static int sysctl_panic_on_unrecoverable_mf __read_mostly;
+static int sysctl_panic_on_unrecoverable_mf __read_mostly =
+			IS_ENABLED(CONFIG_BOOTPARAM_MEMORY_FAILURE_PANIC);
 
 atomic_long_t num_poisoned_pages __read_mostly = ATOMIC_LONG_INIT(0);
 

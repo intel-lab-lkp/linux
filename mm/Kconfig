@@ -733,6 +733,15 @@ config MEMORY_FAILURE
 	  even when some of its memory has uncorrected errors. This requires
 	  special hardware support and typically ECC memory.
 
+config BOOTPARAM_MEMORY_FAILURE_PANIC
+	bool "Panic on unrecoverable memory failure"
+	depends on MEMORY_FAILURE
+	help
+	  Say Y here to panic when an unrecoverable memory failure is
+	  detected. This covers kernel pages, high-order kernel pages,
+	  and unknown page types that cannot be recovered. Can be disabled
+	  at runtime via the panic_on_unrecoverable_memory_failure sysctl.
+
 config HWPOISON_INJECT
 	tristate "HWPoison pages injector"
 	depends on MEMORY_FAILURE && DEBUG_KERNEL && PROC_FS
