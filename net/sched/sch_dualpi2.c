@@ -870,6 +870,9 @@ static int dualpi2_change(struct Qdisc *sch, struct nlattr *opt,
 	       q->memory_used > q->memory_limit) {
 		struct sk_buff *skb = qdisc_dequeue_internal(sch, true);
 
+		if (!skb)
+			break;
+
 		q->memory_used -= skb->truesize;
 		qdisc_qstats_backlog_dec(sch, skb);
 		rtnl_qdisc_drop(skb, sch);
