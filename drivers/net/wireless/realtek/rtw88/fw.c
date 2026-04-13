@@ -284,6 +284,9 @@ static void rtw_fw_adaptivity_result(struct rtw_dev *rtwdev, u8 *payload,
 		result->density, result->igi, result->l2h_th_init, result->l2h,
 		result->h2l, result->option);
 
+	if (!edcca_th)
+		return;
+
 	rtw_dbg(rtwdev, RTW_DBG_ADAPTIVITY, "Reg Setting: L2H %x H2L %x\n",
 		rtw_read32_mask(rtwdev, edcca_th[EDCCA_TH_L2H_IDX].hw_reg.addr,
 				edcca_th[EDCCA_TH_L2H_IDX].hw_reg.mask),
