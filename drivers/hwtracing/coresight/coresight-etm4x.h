@@ -213,6 +213,7 @@
 #define TRCACATRn_EXLEVEL_MASK			GENMASK(14, 8)
 
 #define TRCSSCSRn_STATUS			BIT(31)
+#define TRCSSCSRn_PENDING			BIT(30)
 #define TRCSSCCRn_SAC_ARC_RST_MASK		GENMASK(24, 0)
 
 #define TRCSSPCICRn_PC_MASK			GENMASK(7, 0)
@@ -861,6 +862,7 @@ enum etm_impdef_type {
  * @lpoverride:	If the implementation can support low-power state over.
  * @skip_power_up: Indicates if an implementation can skip powering up
  *		   the trace unit.
+ * @ss_status:	The status of the corresponding single-shot comparator.
  */
 struct etmv4_caps {
 	u8	nr_pe;
@@ -899,6 +901,7 @@ struct etmv4_caps {
 	bool	atbtrig : 1;
 	bool	lpoverride : 1;
 	bool	skip_power_up : 1;
+	u32	ss_status[ETM_MAX_SS_CMP];
 };
 
 /**
@@ -977,7 +980,6 @@ struct etmv4_config {
 	u32				res_ctrl[ETM_MAX_RES_SEL]; /* TRCRSCTLRn */
 	u8				ss_idx;
 	u32				ss_ctrl[ETM_MAX_SS_CMP];
-	u32				ss_status[ETM_MAX_SS_CMP];
 	u32				ss_pe_cmp[ETM_MAX_SS_CMP];
 	u8				addr_idx;
 	u64				addr_val[ETM_MAX_SINGLE_ADDR_CMP];
