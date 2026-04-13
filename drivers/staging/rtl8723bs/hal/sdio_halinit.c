@@ -323,7 +323,6 @@ static void _InitQueuePriority(struct adapter *Adapter)
 	default:
 		break;
 	}
-
 }
 
 static void _InitPageBoundary(struct adapter *padapter)
