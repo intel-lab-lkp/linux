@@ -20,6 +20,8 @@
 
 #include <linux/oom.h>
 #include <linux/mm.h>
+#include <uapi/linux/mman.h>
+#include <linux/capability.h>
 #include <linux/err.h>
 #include <linux/gfp.h>
 #include <linux/sched.h>
@@ -1218,12 +1220,28 @@ SYSCALL_DEFINE2(process_mrelease, int, pidfd, unsigned int, flags)
 	bool reap = false;
 	long ret = 0;
 
-	if (flags)
+	if (flags & ~PROCESS_MRELEASE_VALID_FLAGS)
 		return -EINVAL;
 
 	task = pidfd_get_task(pidfd, &f_flags);
 	if (IS_ERR(task))
 		return PTR_ERR(task);
+
+	if (flags & PROCESS_MRELEASE_REAP_KILL) {
+		struct kernel_siginfo info;
+
+		if (!capable(CAP_KILL)) {
+			ret = -EPERM;
+			goto put_task;
+		}
+		clear_siginfo(&info);
+		info.si_signo = SIGKILL;
+		info.si_code = KILL_MRELEASE;
+		info.si_pid = task_tgid_vnr(current);
+		info.si_uid = from_kuid_munged(current_user_ns(), current_uid());
+
+		do_send_sig_info(SIGKILL, &info, task, PIDTYPE_TGID);
+	}
 
 	/*
 	 * Make sure to choose a thread which still has a reference to mm

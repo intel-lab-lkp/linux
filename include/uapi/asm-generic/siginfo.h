@@ -253,6 +253,12 @@ typedef struct siginfo {
 #define NSIGBUS		5
 
 /*
+ * SIGKILL si_codes
+ */
+#define KILL_MRELEASE	1	/* sent by process_mrelease */
+#define NSIGKILL	1
+
+/*
  * SIGTRAP si_codes
  */
 #define TRAP_BRKPT	1	/* process breakpoint */

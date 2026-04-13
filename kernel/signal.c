@@ -1134,6 +1134,10 @@ static int __send_signal_locked(int sig, struct kernel_siginfo *info,
 
 out_set:
 	signalfd_notify(t, sig);
+
+	if (sig == SIGKILL && !is_si_special(info) &&
+	    info->si_code == KILL_MRELEASE && t->mm)
+		mm_flags_set(MMF_UNSTABLE, t->mm);
 	sigaddset(&pending->signal, sig);
 
 	/* Let multiprocess signals appear after on-going forks */
