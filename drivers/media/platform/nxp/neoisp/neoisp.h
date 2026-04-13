@@ -9,6 +9,7 @@
 #define __NXP_NEOISP_H
 
 #include <linux/bits.h>
+#include <linux/debugfs.h>
 #include <linux/media/nxp/nxp_neoisp.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
@@ -225,7 +226,22 @@ struct neoisp_dev_s {
 	dma_addr_t dummy_dma;
 	u32 dummy_size;
 	struct neoisp_context_s *context;
+	struct dentry *debugfs_entry;
+	struct debugfs_regset32 *regset;
 };
+
+#if IS_ENABLED(CONFIG_DEBUG_FS)
+void neoisp_debugfs_init(struct neoisp_dev_s *neoispd);
+void neoisp_debugfs_exit(struct neoisp_dev_s *neoispd);
+#else
+static inline void neoisp_debugfs_init(struct neoisp_dev_s *neoispd)
+{
+}
+
+static inline void neoisp_debugfs_exit(struct neoisp_dev_s *neoispd)
+{
+}
+#endif
 
 static inline int neoisp_node_link_is_enabled(struct neoisp_node_s *node)
 {
