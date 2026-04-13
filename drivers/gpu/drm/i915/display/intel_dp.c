@@ -7510,7 +7510,56 @@ int intel_dp_sdp_as_tl(const struct intel_crtc_state *crtc_state)
 	return crtc_state->dp_sdp_tl.as;
 }
 
+static int intel_dp_sdp_tl_to_stagger(const struct intel_crtc_state *crtc_state,
+				      u16 sdp_tl)
+{
+	return sdp_tl - crtc_state->dp_sdp_tl.cmn;
+}
+
 void intel_dp_sdp_transmission_line_get_config(struct intel_crtc_state *crtc_state)
 {
 	crtc_state->dp_sdp_tl.as = intel_vrr_read_emp_as_sdp_tl(crtc_state);
+}
+
+void intel_dp_cmn_sdp_transmission_line_enable(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
+	int gmp_stagger;
+	int pps_stagger;
+	int vsc_ext_stagger;
+
+	if (!crtc_state->dp_sdp_tl.cmn)
+		return;
+
+	gmp_stagger = intel_dp_sdp_tl_to_stagger(crtc_state, crtc_state->dp_sdp_tl.gmp);
+	pps_stagger = intel_dp_sdp_tl_to_stagger(crtc_state, crtc_state->dp_sdp_tl.pps);
+	vsc_ext_stagger = intel_dp_sdp_tl_to_stagger(crtc_state, crtc_state->dp_sdp_tl.vsc_ext);
+
+	if (drm_WARN_ON(display->drm, gmp_stagger < 0))
+		return;
+	if (drm_WARN_ON(display->drm, pps_stagger < 0))
+		return;
+	if (drm_WARN_ON(display->drm, vsc_ext_stagger < 0))
+		return;
+
+	intel_de_write(display, CMN_SDP_TL_STGR_CTL(display, cpu_transcoder),
+		       GMP_STAGGER(gmp_stagger) |
+		       PPS_STAGGER(pps_stagger) |
+		       VSC_EXT_STAGGER(vsc_ext_stagger));
+
+	intel_de_write(display, CMN_SDP_TL(display, cpu_transcoder),
+		       TRANSMISSION_LINE_ENABLE |
+		       BASE_TRANSMISSION_LINE(crtc_state->dp_sdp_tl.cmn));
+}
+
+void intel_dp_cmn_sdp_transmission_line_disable(const struct intel_crtc_state *old_crtc_state)
+{
+	struct intel_display *display = to_intel_display(old_crtc_state);
+	enum transcoder cpu_transcoder = old_crtc_state->cpu_transcoder;
+
+	if (!old_crtc_state->dp_sdp_tl.cmn)
+		return;
+
+	intel_de_write(display, CMN_SDP_TL(display, cpu_transcoder), 0);
 }

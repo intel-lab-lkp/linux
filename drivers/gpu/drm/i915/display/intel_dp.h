@@ -240,5 +240,7 @@ bool intel_dp_joiner_candidate_valid(struct intel_connector *connector,
 
 int intel_dp_sdp_as_tl(const struct intel_crtc_state *crtc_state);
 void intel_dp_sdp_transmission_line_get_config(struct intel_crtc_state *crtc_state);
+void intel_dp_cmn_sdp_transmission_line_enable(const struct intel_crtc_state *crtc_state);
+void intel_dp_cmn_sdp_transmission_line_disable(const struct intel_crtc_state *old_crtc_state);
 
 #endif /* __INTEL_DP_H__ */
