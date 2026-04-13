@@ -1196,6 +1196,8 @@ static int fuse_uring_register(struct io_uring_cmd *cmd,
 
 	fuse_uring_do_register(ent, cmd, issue_flags);
 
+	fuse_uring_next_fuse_req(ent, queue, issue_flags);
+
 	return 0;
 }
 
