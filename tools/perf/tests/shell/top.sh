@@ -4,6 +4,9 @@
 
 set -e
 
+# shellcheck source=lib/timeout.sh
+. "$(dirname $0)"/lib/timeout.sh
+
 err=0
 log_file=$(mktemp /tmp/perf.top.log.XXXXX)
 
@@ -35,7 +38,9 @@ test_basic_perf_top() {
 	# Use -d 1 to avoid flooding output
 	# Use -e cpu-clock to ensure we get samples
 	# Use sleep to keep stdin open but silent, preventing EOF loop or interactive spam
-	if ! sleep 10 | timeout 5s perf top --stdio -d 1 -e cpu-clock -p $PID > "${log_file}" 2>&1; then
+	if ! sleep 10 | \
+	     bash_timeout 5s perf top --stdio -d 1 -e cpu-clock -p $PID > "${log_file}" 2>&1
+	then
 		retval=$?
 		if [ $retval -ne 124 ] && [ $retval -ne 0 ]; then
 			echo "Basic perf top test [Failed: perf top failed to start or run (ret=$retval)]"

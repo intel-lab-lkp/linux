@@ -4,6 +4,9 @@
 
 set -e
 
+# shellcheck source=lib/timeout.sh
+. "$(dirname $0)"/lib/timeout.sh
+
 err=0
 perfdata=$(mktemp /tmp/__perf_kvm_test.perf.data.XXXXX)
 qemu_pid_file=$(mktemp /tmp/__perf_kvm_test.qemu.pid.XXXXX)
@@ -102,7 +105,8 @@ test_kvm_stat_live() {
 
         # Run perf kvm live for 5 seconds, monitoring that PID
 	# Use sleep to keep stdin open but silent, preventing EOF loop or interactive spam
-	if ! sleep 10 | timeout 5s perf kvm stat live -p "${qemu_pid}" > "${log_file}" 2>&1; then
+	if ! sleep 10 | bash_timeout 5s perf kvm stat live -p "${qemu_pid}" > "${log_file}" 2>&1
+	then
 		retval=$?
 		if [ $retval -ne 124 ] && [ $retval -ne 0 ]; then
 			echo "perf kvm stat live [Failed: perf kvm stat live failed to start or run (ret=$retval)]"
