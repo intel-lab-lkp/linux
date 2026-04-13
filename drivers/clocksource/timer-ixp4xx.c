@@ -239,11 +239,16 @@ static struct platform_device ixp4xx_watchdog_device = {
 static int ixp4xx_timer_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
+	int ret;
 
 	/* Pass the base address as platform data and nothing else */
 	ixp4xx_watchdog_device.dev.platform_data = local_ixp4xx_timer->base;
 	ixp4xx_watchdog_device.dev.parent = dev;
-	return platform_device_register(&ixp4xx_watchdog_device);
+	ret = platform_device_register(&ixp4xx_watchdog_device);
+	if (ret)
+		platform_device_put(&ixp4xx_watchdog_device);
+
+	return ret;
 }
 
 static const struct of_device_id ixp4xx_timer_dt_id[] = {
