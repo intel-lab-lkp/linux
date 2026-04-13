@@ -1054,7 +1054,6 @@ xfs_mountfs(
 		xfs_clear_using_logged_xattrs(mp);
 
 	/* Enable background inode inactivation workers. */
-	xfs_inodegc_start(mp);
 	xfs_blockgc_start(mp);
 
 	if (xfs_has_metadir(mp)) {
@@ -1139,6 +1138,8 @@ xfs_mountfs(
 				goto out_rtunmount;
 		}
 	}
+
+	xfs_inodegc_start(mp);
 
 	/*
 	 * Finish recovering the file system.  This part needed to be delayed
