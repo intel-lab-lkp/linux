@@ -1305,6 +1305,12 @@ struct intel_crtc_state {
 		 * The programmed transmit line is (Vtotal - value)
 		 */
 		u16 as;
+		u16 gmp;
+		u16 pps;
+		u16 vsc;
+		u16 vsc_ext;
+		/* CMN SDP Base transmission line (Xe3p_lpd+) */
+		u16 cmn;
 	} dp_sdp_tl;
 
 	u8 eld[MAX_ELD_BYTES];
