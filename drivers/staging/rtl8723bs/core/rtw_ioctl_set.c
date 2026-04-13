@@ -151,7 +151,7 @@ u8 rtw_set_802_11_ssid(struct adapter *padapter, struct ndis_802_11_ssid *ssid)
 	else if (check_fwstate(pmlmepriv, _FW_UNDER_LINKING) == true)
 		goto release_mlme_lock;
 
-	if (check_fwstate(pmlmepriv, _FW_LINKED|WIFI_ADHOC_MASTER_STATE) == true) {
+	if (check_fwstate(pmlmepriv, _FW_LINKED | WIFI_ADHOC_MASTER_STATE) == true) {
 		if ((pmlmepriv->assoc_ssid.ssid_length == ssid->ssid_length) &&
 		    (!memcmp(&pmlmepriv->assoc_ssid.ssid, ssid->ssid, ssid->ssid_length))) {
 			if (check_fwstate(pmlmepriv, WIFI_STATION_STATE) == false) {
@@ -487,13 +487,13 @@ u16 rtw_get_cur_max_rate(struct adapter *adapter)
 					psta->htpriv.ht_cap.mcs.rx_mask);
 	} else {
 		while ((pcur_bss->supported_rates[i] != 0) && (pcur_bss->supported_rates[i] != 0xFF)) {
-			rate = pcur_bss->supported_rates[i]&0x7F;
+			rate = pcur_bss->supported_rates[i] & 0x7F;
 			if (rate > max_rate)
 				max_rate = rate;
 			i++;
 		}
 
-		max_rate = max_rate*10/2;
+		max_rate = max_rate * 10 / 2;
 	}
 
 	return max_rate;

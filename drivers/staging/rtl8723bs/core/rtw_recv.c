@@ -58,7 +58,7 @@ signed int _rtw_init_recv_priv(struct recv_priv *precvpriv, struct adapter *pada
 	/* precvpriv->precv_frame_buf = precvpriv->pallocated_frame_buf + RXFRAME_ALIGN_SZ - */
 	/* ((SIZE_PTR) (precvpriv->pallocated_frame_buf) &(RXFRAME_ALIGN_SZ-1)); */
 
-	precvframe = (union recv_frame *) precvpriv->precv_frame_buf;
+	precvframe = (union recv_frame *)precvpriv->precv_frame_buf;
 
 
 	for (i = 0; i < NR_RECVFRAME; i++) {
@@ -1492,7 +1492,7 @@ static signed int validate_recv_frame(struct adapter *adapter, union recv_frame 
 	struct rx_pkt_attrib *pattrib = &precv_frame->u.hdr.attrib;
 
 	u8 *ptr = precv_frame->u.hdr.rx_data;
-	u8  ver = (unsigned char) (*ptr) & 0x3;
+	u8  ver = (unsigned char)(*ptr) & 0x3;
 
 	/* add version chk */
 	if (ver != 0) {
@@ -1545,7 +1545,7 @@ static signed int validate_recv_frame(struct adapter *adapter, union recv_frame 
 			rtw_hal_get_def_var(adapter, HAL_DEF_DBG_DUMP_RXPKT, &(bDumpRxPkt));
 			/*  get ether_type */
 			memcpy(&eth_type, ptr + pattrib->hdrlen + pattrib->iv_len + LLC_HEADER_LENGTH, 2);
-			eth_type = ntohs((unsigned short) eth_type);
+			eth_type = ntohs((unsigned short)eth_type);
 #endif
 		}
 		break;
