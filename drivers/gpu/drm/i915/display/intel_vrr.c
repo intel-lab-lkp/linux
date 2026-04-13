@@ -607,11 +607,11 @@ void intel_vrr_write_emp_as_sdp_tl(const struct intel_crtc_state *crtc_state)
 
 	/*
 	 * Since currently we support VRR only for DP/eDP, so this is programmed
-	 * only for Adaptive Sync SDP to Vsync start.
+	 * only for Adaptive Sync SDP.
 	 */
 	intel_de_write(display,
 		       EMP_AS_SDP_TL(display, cpu_transcoder),
-		       EMP_AS_SDP_DB_TL(crtc_state->vrr.vsync_start));
+		       EMP_AS_SDP_DB_TL(intel_dp_sdp_as_tl(crtc_state)));
 }
 
 void intel_vrr_set_transcoder_timings(const struct intel_crtc_state *crtc_state)
