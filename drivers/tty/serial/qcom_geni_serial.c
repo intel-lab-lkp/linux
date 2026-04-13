@@ -2039,6 +2039,7 @@ static const struct dev_pm_ops qcom_geni_serial_pm_ops = {
 };
 
 static const struct of_device_id qcom_geni_serial_match_table[] = {
+#if IS_ENABLED(CONFIG_SERIAL_QCOM_GENI_CONSOLE)
 	{
 		.compatible = "qcom,geni-debug-uart",
 		.data = &qcom_geni_console_data,
@@ -2047,6 +2048,7 @@ static const struct of_device_id qcom_geni_serial_match_table[] = {
 		.compatible = "qcom,sa8255p-geni-debug-uart",
 		.data = &sa8255p_qcom_geni_console_data,
 	},
+#endif
 	{
 		.compatible = "qcom,geni-uart",
 		.data = &qcom_geni_uart_data,
