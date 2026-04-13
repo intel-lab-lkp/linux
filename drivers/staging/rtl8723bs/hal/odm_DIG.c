@@ -12,14 +12,14 @@ void odm_NHMCounterStatisticsInit(void *pDM_VOID)
 	struct dm_odm_t	*pDM_Odm = (struct dm_odm_t *)pDM_VOID;
 
 	/* PHY parameters initialize for n series */
-	rtw_write16(pDM_Odm->Adapter, ODM_REG_NHM_TIMER_11N+2, 0x2710);	/* 0x894[31:16]= 0x2710	Time duration for NHM unit: 4us, 0x2710 =40ms */
+	rtw_write16(pDM_Odm->Adapter, ODM_REG_NHM_TIMER_11N + 2, 0x2710);	/* 0x894[31:16]= 0x2710	Time duration for NHM unit: 4us, 0x2710 =40ms */
 	/* rtw_write16(pDM_Odm->Adapter, ODM_REG_NHM_TIMER_11N+2, 0x4e20);	0x894[31:16]= 0x4e20	Time duration for NHM unit: 4us, 0x4e20 =80ms */
-	rtw_write16(pDM_Odm->Adapter, ODM_REG_NHM_TH9_TH10_11N+2, 0xffff);	/* 0x890[31:16]= 0xffff	th_9, th_10 */
+	rtw_write16(pDM_Odm->Adapter, ODM_REG_NHM_TH9_TH10_11N + 2, 0xffff);	/* 0x890[31:16]= 0xffff	th_9, th_10 */
 	/* rtw_write32(pDM_Odm->Adapter, ODM_REG_NHM_TH3_TO_TH0_11N, 0xffffff5c);	0x898 = 0xffffff5c		th_3, th_2, th_1, th_0 */
 	rtw_write32(pDM_Odm->Adapter, ODM_REG_NHM_TH3_TO_TH0_11N, 0xffffff52);	/* 0x898 = 0xffffff52		th_3, th_2, th_1, th_0 */
 	rtw_write32(pDM_Odm->Adapter, ODM_REG_NHM_TH7_TO_TH4_11N, 0xffffffff);	/* 0x89c = 0xffffffff		th_7, th_6, th_5, th_4 */
 	PHY_SetBBReg(pDM_Odm->Adapter, ODM_REG_FPGA0_IQK_11N, bMaskByte0, 0xff);		/* 0xe28[7:0]= 0xff		th_8 */
-	PHY_SetBBReg(pDM_Odm->Adapter, ODM_REG_NHM_TH9_TH10_11N, BIT10|BIT9|BIT8, 0x7);	/* 0x890[9:8]=3			enable CCX */
+	PHY_SetBBReg(pDM_Odm->Adapter, ODM_REG_NHM_TH9_TH10_11N, BIT10 | BIT9 | BIT8, 0x7);	/* 0x890[9:8]=3			enable CCX */
 	PHY_SetBBReg(pDM_Odm->Adapter, ODM_REG_OFDM_FA_RSTC_11N, BIT7, 0x1);		/* 0xc0c[7]= 1			max power among all RX ants */
 }
 
@@ -72,16 +72,16 @@ void odm_NHMBB(void *pDM_VOID)
 	/* struct false_ALARM_STATISTICS *pFalseAlmCnt = &pDM_Odm->FalseAlmCnt; */
 
 	pDM_Odm->NHMCurTxOkcnt =
-		*(pDM_Odm->pNumTxBytesUnicast)-pDM_Odm->NHMLastTxOkcnt;
+		*(pDM_Odm->pNumTxBytesUnicast) - pDM_Odm->NHMLastTxOkcnt;
 	pDM_Odm->NHMCurRxOkcnt =
-		*(pDM_Odm->pNumRxBytesUnicast)-pDM_Odm->NHMLastRxOkcnt;
+		*(pDM_Odm->pNumRxBytesUnicast) - pDM_Odm->NHMLastRxOkcnt;
 	pDM_Odm->NHMLastTxOkcnt =
 		*(pDM_Odm->pNumTxBytesUnicast);
 	pDM_Odm->NHMLastRxOkcnt =
 		*(pDM_Odm->pNumRxBytesUnicast);
 
 
-	if ((pDM_Odm->NHMCurTxOkcnt) + 1 > (u64)(pDM_Odm->NHMCurRxOkcnt<<2) + 1) { /* Tx > 4*Rx possible for adaptivity test */
+	if ((pDM_Odm->NHMCurTxOkcnt) + 1 > (u64)(pDM_Odm->NHMCurRxOkcnt << 2) + 1) { /* Tx > 4*Rx possible for adaptivity test */
 		if (pDM_Odm->NHM_cnt_0 >= 190 || pDM_Odm->adaptivity_flag == true) {
 			/* Enable EDCCA since it is possible running Adaptivity testing */
 			/* test_status = 1; */
@@ -129,7 +129,7 @@ void odm_SearchPwdBLowerBound(void *pDM_VOID, u8 IGI_target)
 	ODM_Write_DIG(pDM_Odm, IGI);
 
 
-	Diff = IGI_target-(s8)IGI;
+	Diff = IGI_target - (s8)IGI;
 	TH_L2H_dmc = pDM_Odm->TH_L2H_ini + Diff;
 	if (TH_L2H_dmc > 10)
 		TH_L2H_dmc = 10;
@@ -152,7 +152,7 @@ void odm_SearchPwdBLowerBound(void *pDM_VOID, u8 IGI_target)
 		}
 
 		if (pDM_Odm->txEdcca1 > 5) {
-			IGI = IGI-1;
+			IGI = IGI - 1;
 			TH_L2H_dmc = TH_L2H_dmc + 1;
 			if (TH_L2H_dmc > 10)
 				TH_L2H_dmc = 10;
@@ -229,7 +229,7 @@ void odm_Adaptivity(void *pDM_VOID, u8 IGI)
 		IGI_target = pDM_Odm->IGI_Base + 2;
 	else
 		IGI_target = pDM_Odm->IGI_Base;
-	pDM_Odm->IGI_target = (u8) IGI_target;
+	pDM_Odm->IGI_target = (u8)IGI_target;
 
 	/* Search pwdB lower bound */
 	if (pDM_Odm->TxHangFlg == true) {
@@ -260,7 +260,7 @@ void odm_Adaptivity(void *pDM_VOID, u8 IGI)
 		odm_NHMBB(pDM_Odm);
 
 	if (EDCCA_State) {
-		Diff = IGI_target-(s8)IGI;
+		Diff = IGI_target - (s8)IGI;
 		TH_L2H_dmc = pDM_Odm->TH_L2H_ini + Diff;
 		if (TH_L2H_dmc > 10)
 			TH_L2H_dmc = 10;
@@ -336,7 +336,7 @@ void odm_DIGInit(void *pDM_VOID)
 
 	pDM_DigTable->bStopDIG = false;
 	pDM_DigTable->bPSDInProgress = false;
-	pDM_DigTable->CurIGValue = (u8) PHY_QueryBBReg(pDM_Odm->Adapter, ODM_REG(IGI_A), ODM_BIT(IGI));
+	pDM_DigTable->CurIGValue = (u8)PHY_QueryBBReg(pDM_Odm->Adapter, ODM_REG(IGI_A), ODM_BIT(IGI));
 	pDM_DigTable->RssiLowThresh	= DM_DIG_THRESH_LOW;
 	pDM_DigTable->RssiHighThresh	= DM_DIG_THRESH_HIGH;
 	pDM_DigTable->FALowThresh	= DMfalseALARM_THRESH_LOW;
@@ -444,7 +444,7 @@ void odm_DIG(void *pDM_VOID)
 				if (pDM_DigTable->AntDiv_RSSI_max > DIG_MaxOfMin)
 					DIG_Dynamic_MIN = DIG_MaxOfMin;
 				else
-					DIG_Dynamic_MIN = (u8) pDM_DigTable->AntDiv_RSSI_max;
+					DIG_Dynamic_MIN = (u8)pDM_DigTable->AntDiv_RSSI_max;
 			}
 		}
 	}
@@ -574,16 +574,16 @@ void odm_DIGbyRSSI_LPS(void *pDM_VOID)
 	u8 RSSI_Lower = DM_DIG_MIN_NIC;   /* 0x1E or 0x1C */
 	u8 CurrentIGI = pDM_Odm->RSSI_Min;
 
-	CurrentIGI = CurrentIGI+RSSI_OFFSET_DIG;
+	CurrentIGI = CurrentIGI + RSSI_OFFSET_DIG;
 
 	/*  Using FW PS mode to make IGI */
 	/* Adjust by  FA in LPS MODE */
 	if (pFalseAlmCnt->Cnt_all > DM_DIG_FA_TH2_LPS)
-		CurrentIGI = CurrentIGI+4;
+		CurrentIGI = CurrentIGI + 4;
 	else if (pFalseAlmCnt->Cnt_all > DM_DIG_FA_TH1_LPS)
-		CurrentIGI = CurrentIGI+2;
+		CurrentIGI = CurrentIGI + 2;
 	else if (pFalseAlmCnt->Cnt_all < DM_DIG_FA_TH0_LPS)
-		CurrentIGI = CurrentIGI-2;
+		CurrentIGI = CurrentIGI - 2;
 
 
 	/* Lower bound checking */
@@ -623,25 +623,25 @@ void odm_FalseAlarmCounterStatistics(void *pDM_VOID)
 	ret_value = PHY_QueryBBReg(
 		pDM_Odm->Adapter, ODM_REG_OFDM_FA_TYPE1_11N, bMaskDWord
 	);
-	FalseAlmCnt->Cnt_Fast_Fsync = (ret_value&0xffff);
-	FalseAlmCnt->Cnt_SB_Search_fail = ((ret_value&0xffff0000)>>16);
+	FalseAlmCnt->Cnt_Fast_Fsync = (ret_value & 0xffff);
+	FalseAlmCnt->Cnt_SB_Search_fail = ((ret_value & 0xffff0000) >> 16);
 
 	ret_value = PHY_QueryBBReg(
 		pDM_Odm->Adapter, ODM_REG_OFDM_FA_TYPE2_11N, bMaskDWord
 	);
-	FalseAlmCnt->Cnt_OFDM_CCA = (ret_value&0xffff);
-	FalseAlmCnt->Cnt_Parity_Fail = ((ret_value&0xffff0000)>>16);
+	FalseAlmCnt->Cnt_OFDM_CCA = (ret_value & 0xffff);
+	FalseAlmCnt->Cnt_Parity_Fail = ((ret_value & 0xffff0000) >> 16);
 
 	ret_value = PHY_QueryBBReg(
 		pDM_Odm->Adapter, ODM_REG_OFDM_FA_TYPE3_11N, bMaskDWord
 	);
-	FalseAlmCnt->Cnt_Rate_Illegal = (ret_value&0xffff);
-	FalseAlmCnt->Cnt_Crc8_fail = ((ret_value&0xffff0000)>>16);
+	FalseAlmCnt->Cnt_Rate_Illegal = (ret_value & 0xffff);
+	FalseAlmCnt->Cnt_Crc8_fail = ((ret_value & 0xffff0000) >> 16);
 
 	ret_value = PHY_QueryBBReg(
 		pDM_Odm->Adapter, ODM_REG_OFDM_FA_TYPE4_11N, bMaskDWord
 	);
-	FalseAlmCnt->Cnt_Mcs_fail = (ret_value&0xffff);
+	FalseAlmCnt->Cnt_Mcs_fail = (ret_value & 0xffff);
 
 	FalseAlmCnt->Cnt_Ofdm_fail =
 		FalseAlmCnt->Cnt_Parity_Fail +
@@ -664,13 +664,13 @@ void odm_FalseAlarmCounterStatistics(void *pDM_VOID)
 		ret_value = PHY_QueryBBReg(
 			pDM_Odm->Adapter, ODM_REG_CCK_FA_MSB_11N, bMaskByte3
 		);
-		FalseAlmCnt->Cnt_Cck_fail += (ret_value&0xff)<<8;
+		FalseAlmCnt->Cnt_Cck_fail += (ret_value & 0xff) << 8;
 
 		ret_value = PHY_QueryBBReg(
 			pDM_Odm->Adapter, ODM_REG_CCK_CCA_CNT_11N, bMaskDWord
 		);
 		FalseAlmCnt->Cnt_CCK_CCA =
-			((ret_value&0xFF)<<8) | ((ret_value&0xFF00)>>8);
+			((ret_value & 0xFF) << 8) | ((ret_value & 0xFF00) >> 8);
 	}
 
 	FalseAlmCnt->Cnt_all = (

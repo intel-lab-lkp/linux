@@ -131,8 +131,8 @@ u8 CCKSwingTable_Ch14_New[CCK_TABLE_SIZE][8] = {
 
 static void odm_CommonInfoSelfInit(struct dm_odm_t *pDM_Odm)
 {
-	pDM_Odm->bCckHighPower = (bool) PHY_QueryBBReg(pDM_Odm->Adapter, ODM_REG(CCK_RPT_FORMAT), ODM_BIT(CCK_RPT_FORMAT));
-	pDM_Odm->RFPathRxEnable = (u8) PHY_QueryBBReg(pDM_Odm->Adapter, ODM_REG(BB_RX_PATH), ODM_BIT(BB_RX_PATH));
+	pDM_Odm->bCckHighPower = (bool)PHY_QueryBBReg(pDM_Odm->Adapter, ODM_REG(CCK_RPT_FORMAT), ODM_BIT(CCK_RPT_FORMAT));
+	pDM_Odm->RFPathRxEnable = (u8)PHY_QueryBBReg(pDM_Odm->Adapter, ODM_REG(BB_RX_PATH), ODM_BIT(BB_RX_PATH));
 
 	pDM_Odm->TxRate = 0xFF;
 }
@@ -145,9 +145,9 @@ static void odm_CommonInfoSelfUpdate(struct dm_odm_t *pDM_Odm)
 
 	if (*(pDM_Odm->pBandWidth) == ODM_BW40M) {
 		if (*(pDM_Odm->pSecChOffset) == 1)
-			pDM_Odm->ControlChannel = *(pDM_Odm->pChannel)-2;
+			pDM_Odm->ControlChannel = *(pDM_Odm->pChannel) - 2;
 		else if (*(pDM_Odm->pSecChOffset) == 2)
-			pDM_Odm->ControlChannel = *(pDM_Odm->pChannel)+2;
+			pDM_Odm->ControlChannel = *(pDM_Odm->pChannel) + 2;
 	} else
 		pDM_Odm->ControlChannel = *(pDM_Odm->pChannel);
 
@@ -219,7 +219,7 @@ u32 ODM_Get_Rate_Bitmap(
 			rate_bitmap = 0x00000ff0;
 		break;
 
-	case (ODM_WM_B|ODM_WM_G):
+	case (ODM_WM_B | ODM_WM_G):
 		if (rssi_level == DM_RATR_STA_HIGH)
 			rate_bitmap = 0x00000f00;
 		else if (rssi_level == DM_RATR_STA_MIDDLE)
@@ -228,9 +228,9 @@ u32 ODM_Get_Rate_Bitmap(
 			rate_bitmap = 0x00000ff5;
 		break;
 
-	case (ODM_WM_B|ODM_WM_G|ODM_WM_N24G):
-	case (ODM_WM_B|ODM_WM_N24G):
-	case (ODM_WM_G|ODM_WM_N24G):
+	case (ODM_WM_B | ODM_WM_G | ODM_WM_N24G):
+	case (ODM_WM_B | ODM_WM_N24G):
+	case (ODM_WM_G | ODM_WM_N24G):
 		if (rssi_level == DM_RATR_STA_HIGH)
 			rate_bitmap = 0x000f0000;
 		else if (rssi_level == DM_RATR_STA_MIDDLE)
@@ -425,7 +425,7 @@ static void odm_RSSIMonitorCheckCE(struct dm_odm_t *pDM_Odm)
 					tmpEntryMaxPWDB = psta->rssi_stat.UndecoratedSmoothedPWDB;
 
 				if (psta->rssi_stat.UndecoratedSmoothedPWDB != (-1))
-					PWDB_rssi[sta_cnt++] = (psta->mac_id | (psta->rssi_stat.UndecoratedSmoothedPWDB<<16));
+					PWDB_rssi[sta_cnt++] = (psta->mac_id | (psta->rssi_stat.UndecoratedSmoothedPWDB << 16));
 			}
 		}
 

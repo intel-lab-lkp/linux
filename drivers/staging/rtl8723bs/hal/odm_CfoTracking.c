@@ -122,8 +122,8 @@ void ODM_CfoTracking(void *pDM_VOID)
 		/* 4 1.3 Avoid abnormal large CFO */
 		CFO_ave_diff =
 			(pCfoTrack->CFO_ave_pre >= CFO_ave) ?
-			(pCfoTrack->CFO_ave_pre-CFO_ave) :
-			(CFO_ave-pCfoTrack->CFO_ave_pre);
+			(pCfoTrack->CFO_ave_pre - CFO_ave) :
+			(CFO_ave - pCfoTrack->CFO_ave_pre);
 
 		if (
 			CFO_ave_diff > 20 &&

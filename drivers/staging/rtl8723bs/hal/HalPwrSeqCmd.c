@@ -88,7 +88,7 @@ u8 HalPwrSeqCmdParsing(
 					value &= (~(GET_PWR_CFG_MASK(PwrCfgCmd)));
 					value |= (
 						GET_PWR_CFG_VALUE(PwrCfgCmd)
-						&GET_PWR_CFG_MASK(PwrCfgCmd)
+ & GET_PWR_CFG_MASK(PwrCfgCmd)
 					);
 
 					/*  Write the value back to system register */
@@ -106,7 +106,7 @@ u8 HalPwrSeqCmdParsing(
 					else
 						value = rtw_read8(padapter, offset);
 
-					value = value&GET_PWR_CFG_MASK(PwrCfgCmd);
+					value = value & GET_PWR_CFG_MASK(PwrCfgCmd);
 					if (
 						value == (GET_PWR_CFG_VALUE(PwrCfgCmd) &
 						GET_PWR_CFG_MASK(PwrCfgCmd))
@@ -126,7 +126,7 @@ u8 HalPwrSeqCmdParsing(
 				if (GET_PWR_CFG_VALUE(PwrCfgCmd) == PWRSEQ_DELAY_US)
 					udelay(GET_PWR_CFG_OFFSET(PwrCfgCmd));
 				else
-					udelay(GET_PWR_CFG_OFFSET(PwrCfgCmd)*1000);
+					udelay(GET_PWR_CFG_OFFSET(PwrCfgCmd) * 1000);
 				break;
 
 			case PWR_CMD_END:

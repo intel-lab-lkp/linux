@@ -45,7 +45,7 @@ static void Init_ODM_ComInfo_8723b(struct adapter *Adapter)
 	/* 	ODM_CMNINFO_BINHCT_TEST only for MP Team */
 	ODM_CmnInfoInit(pDM_Odm, ODM_CMNINFO_BWIFI_TEST, Adapter->registrypriv.wifi_spec);
 
-	pdmpriv->InitODMFlag = ODM_RF_CALIBRATION|ODM_RF_TX_PWR_TRACK;
+	pdmpriv->InitODMFlag = ODM_RF_CALIBRATION | ODM_RF_TX_PWR_TRACK;
 
 	ODM_CmnInfoUpdate(pDM_Odm, ODM_CMNINFO_ABILITY, pdmpriv->InitODMFlag);
 }
@@ -189,7 +189,7 @@ void rtl8723b_hal_dm_in_lps(struct adapter *padapter)
 	/* set rssi to fw */
 	psta = rtw_get_stainfo(pstapriv, get_bssid(pmlmepriv));
 	if (psta && (psta->rssi_stat.UndecoratedSmoothedPWDB > 0)) {
-		PWDB_rssi = (psta->mac_id | (psta->rssi_stat.UndecoratedSmoothedPWDB<<16));
+		PWDB_rssi = (psta->mac_id | (psta->rssi_stat.UndecoratedSmoothedPWDB << 16));
 
 		rtl8723b_set_rssi_cmd(padapter, (u8 *)&PWDB_rssi);
 	}

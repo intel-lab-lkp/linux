@@ -152,7 +152,7 @@ PHY_GetRateValuesOfTxPowerByRate(
 		RateIndex[2] = PHY_GetRateIndexOfTxPowerByRate(MGN_12M);
 		RateIndex[3] = PHY_GetRateIndexOfTxPowerByRate(MGN_18M);
 		for (i = 0; i < 4; ++i) {
-			PwrByRateVal[i] = (s8) ((((Value >> (i * 8 + 4)) & 0xF)) * 10 +
+			PwrByRateVal[i] = (s8)((((Value >> (i * 8 + 4)) & 0xF)) * 10 +
 											((Value >> (i * 8)) & 0xF));
 		}
 		*RateNum = 4;
@@ -165,7 +165,7 @@ PHY_GetRateValuesOfTxPowerByRate(
 		RateIndex[2] = PHY_GetRateIndexOfTxPowerByRate(MGN_48M);
 		RateIndex[3] = PHY_GetRateIndexOfTxPowerByRate(MGN_54M);
 		for (i = 0; i < 4; ++i) {
-			PwrByRateVal[i] = (s8) ((((Value >> (i * 8 + 4)) & 0xF)) * 10 +
+			PwrByRateVal[i] = (s8)((((Value >> (i * 8 + 4)) & 0xF)) * 10 +
 											((Value >> (i * 8)) & 0xF));
 		}
 		*RateNum = 4;
@@ -173,7 +173,7 @@ PHY_GetRateValuesOfTxPowerByRate(
 
 	case rTxAGC_A_CCK1_Mcs32:
 		RateIndex[0] = PHY_GetRateIndexOfTxPowerByRate(MGN_1M);
-		PwrByRateVal[0] = (s8) ((((Value >> (8 + 4)) & 0xF)) * 10 +
+		PwrByRateVal[0] = (s8)((((Value >> (8 + 4)) & 0xF)) * 10 +
 										((Value >> 8) & 0xF));
 		*RateNum = 1;
 		break;
@@ -184,13 +184,13 @@ PHY_GetRateValuesOfTxPowerByRate(
 			RateIndex[1] = PHY_GetRateIndexOfTxPowerByRate(MGN_5_5M);
 			RateIndex[2] = PHY_GetRateIndexOfTxPowerByRate(MGN_11M);
 			for (i = 1; i < 4; ++i) {
-				PwrByRateVal[i - 1] = (s8) ((((Value >> (i * 8 + 4)) & 0xF)) * 10 +
+				PwrByRateVal[i - 1] = (s8)((((Value >> (i * 8 + 4)) & 0xF)) * 10 +
 												((Value >> (i * 8)) & 0xF));
 			}
 			*RateNum = 3;
 		} else if (BitMask == 0x000000ff) {
 			RateIndex[0] = PHY_GetRateIndexOfTxPowerByRate(MGN_11M);
-			PwrByRateVal[0] = (s8) ((((Value >> 4) & 0xF)) * 10 + (Value & 0xF));
+			PwrByRateVal[0] = (s8)((((Value >> 4) & 0xF)) * 10 + (Value & 0xF));
 			*RateNum = 1;
 		}
 		break;
@@ -202,7 +202,7 @@ PHY_GetRateValuesOfTxPowerByRate(
 		RateIndex[2] = PHY_GetRateIndexOfTxPowerByRate(MGN_MCS2);
 		RateIndex[3] = PHY_GetRateIndexOfTxPowerByRate(MGN_MCS3);
 		for (i = 0; i < 4; ++i) {
-			PwrByRateVal[i] = (s8) ((((Value >> (i * 8 + 4)) & 0xF)) * 10 +
+			PwrByRateVal[i] = (s8)((((Value >> (i * 8 + 4)) & 0xF)) * 10 +
 											((Value >> (i * 8)) & 0xF));
 		}
 		*RateNum = 4;
@@ -215,7 +215,7 @@ PHY_GetRateValuesOfTxPowerByRate(
 		RateIndex[2] = PHY_GetRateIndexOfTxPowerByRate(MGN_MCS6);
 		RateIndex[3] = PHY_GetRateIndexOfTxPowerByRate(MGN_MCS7);
 		for (i = 0; i < 4; ++i) {
-			PwrByRateVal[i] = (s8) ((((Value >> (i * 8 + 4)) & 0xF)) * 10 +
+			PwrByRateVal[i] = (s8)((((Value >> (i * 8 + 4)) & 0xF)) * 10 +
 											((Value >> (i * 8)) & 0xF));
 		}
 		*RateNum = 4;
@@ -226,7 +226,7 @@ PHY_GetRateValuesOfTxPowerByRate(
 		RateIndex[1] = PHY_GetRateIndexOfTxPowerByRate(MGN_2M);
 		RateIndex[2] = PHY_GetRateIndexOfTxPowerByRate(MGN_5_5M);
 		for (i = 1; i < 4; ++i) {
-			PwrByRateVal[i - 1] = (s8) ((((Value >> (i * 8 + 4)) & 0xF)) * 10 +
+			PwrByRateVal[i - 1] = (s8)((((Value >> (i * 8 + 4)) & 0xF)) * 10 +
 											((Value >> (i * 8)) & 0xF));
 		}
 		*RateNum = 3;
@@ -241,7 +241,7 @@ PHY_GetRateValuesOfTxPowerByRate(
 		RateIndex[2] = PHY_GetRateIndexOfTxPowerByRate(MGN_5_5M);
 		RateIndex[3] = PHY_GetRateIndexOfTxPowerByRate(MGN_11M);
 		for (i = 0; i < 4; ++i) {
-			PwrByRateVal[i] = (s8) ((((Value >> (i * 8 + 4)) & 0xF)) * 10 +
+			PwrByRateVal[i] = (s8)((((Value >> (i * 8 + 4)) & 0xF)) * 10 +
 											((Value >> (i * 8)) & 0xF));
 		}
 		*RateNum = 4;
@@ -256,7 +256,7 @@ PHY_GetRateValuesOfTxPowerByRate(
 		RateIndex[2] = PHY_GetRateIndexOfTxPowerByRate(MGN_12M);
 		RateIndex[3] = PHY_GetRateIndexOfTxPowerByRate(MGN_18M);
 		for (i = 0; i < 4; ++i) {
-			PwrByRateVal[i] = (s8) ((((Value >> (i * 8 + 4)) & 0xF)) * 10 +
+			PwrByRateVal[i] = (s8)((((Value >> (i * 8 + 4)) & 0xF)) * 10 +
 											((Value >> (i * 8)) & 0xF));
 		}
 		*RateNum = 4;
@@ -271,7 +271,7 @@ PHY_GetRateValuesOfTxPowerByRate(
 		RateIndex[2] = PHY_GetRateIndexOfTxPowerByRate(MGN_48M);
 		RateIndex[3] = PHY_GetRateIndexOfTxPowerByRate(MGN_54M);
 		for (i = 0; i < 4; ++i) {
-			PwrByRateVal[i] = (s8) ((((Value >> (i * 8 + 4)) & 0xF)) * 10 +
+			PwrByRateVal[i] = (s8)((((Value >> (i * 8 + 4)) & 0xF)) * 10 +
 											((Value >> (i * 8)) & 0xF));
 		}
 		*RateNum = 4;
@@ -286,7 +286,7 @@ PHY_GetRateValuesOfTxPowerByRate(
 		RateIndex[2] = PHY_GetRateIndexOfTxPowerByRate(MGN_MCS2);
 		RateIndex[3] = PHY_GetRateIndexOfTxPowerByRate(MGN_MCS3);
 		for (i = 0; i < 4; ++i) {
-			PwrByRateVal[i] = (s8) ((((Value >> (i * 8 + 4)) & 0xF)) * 10 +
+			PwrByRateVal[i] = (s8)((((Value >> (i * 8 + 4)) & 0xF)) * 10 +
 											((Value >> (i * 8)) & 0xF));
 		}
 		*RateNum = 4;
@@ -301,7 +301,7 @@ PHY_GetRateValuesOfTxPowerByRate(
 		RateIndex[2] = PHY_GetRateIndexOfTxPowerByRate(MGN_MCS6);
 		RateIndex[3] = PHY_GetRateIndexOfTxPowerByRate(MGN_MCS7);
 		for (i = 0; i < 4; ++i) {
-			PwrByRateVal[i] = (s8) ((((Value >> (i * 8 + 4)) & 0xF)) * 10 +
+			PwrByRateVal[i] = (s8)((((Value >> (i * 8 + 4)) & 0xF)) * 10 +
 											((Value >> (i * 8)) & 0xF));
 		}
 		*RateNum = 4;
@@ -459,7 +459,7 @@ u8 PHY_GetTxPowerIndexBase(
 {
 	struct hal_com_data *pHalData = GET_HAL_DATA(padapter);
 	u8 txPower = 0;
-	u8 chnlIdx = (Channel-1);
+	u8 chnlIdx = (Channel - 1);
 
 	if (HAL_IsLegalChannel(padapter, Channel) == false)
 		chnlIdx = 0;

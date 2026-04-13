@@ -33,7 +33,7 @@ void odm_ConfigRFReg_8723B(
 
 			udelay(1);
 
-			while ((getvalue>>8) != (Data>>8)) {
+			while ((getvalue >> 8) != (Data >> 8)) {
 				count++;
 				PHY_SetRFReg(pDM_Odm->Adapter, RF_PATH, RegAddr, bRFRegOffsetMask, Data);
 				udelay(1);
@@ -87,14 +87,14 @@ void odm_ConfigRFReg_8723B(
 void odm_ConfigRF_RadioA_8723B(struct dm_odm_t *pDM_Odm, u32 Addr, u32 Data)
 {
 	u32  content = 0x1000; /*  RF_Content: radioa_txt */
-	u32 maskforPhySet = (u32)(content&0xE000);
+	u32 maskforPhySet = (u32)(content & 0xE000);
 
 	odm_ConfigRFReg_8723B(
 		pDM_Odm,
 		Addr,
 		Data,
 		RF_PATH_A,
-		Addr|maskforPhySet
+		Addr | maskforPhySet
 	);
 }
 

@@ -335,8 +335,8 @@ static void rtl8723bs_recv_tasklet(struct tasklet_struct *t)
 
 					C2hEvent.CmdID = pbuf_c2h[0];
 					C2hEvent.CmdSeq = pbuf_c2h[1];
-					C2hEvent.CmdLen = (len_c2h-2);
-					pdata_c2h = pbuf_c2h+2;
+					C2hEvent.CmdLen = (len_c2h - 2);
+					pdata_c2h = pbuf_c2h + 2;
 
 					if (C2hEvent.CmdID == C2H_CCX_TX_RPT)
 						CCX_FwC2HTxRpt_8723b(padapter, pdata_c2h, C2hEvent.CmdLen);
@@ -403,7 +403,7 @@ s32 rtl8723bs_init_recv_priv(struct adapter *padapter)
 				precvbuf->pskb->dev = padapter->pnetdev;
 
 				tmpaddr = (SIZE_PTR)precvbuf->pskb->data;
-				alignment = tmpaddr & (RECVBUFF_ALIGN_SZ-1);
+				alignment = tmpaddr & (RECVBUFF_ALIGN_SZ - 1);
 				skb_reserve(precvbuf->pskb, (RECVBUFF_ALIGN_SZ - alignment));
 			}
 		}

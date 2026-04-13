@@ -29,7 +29,7 @@ s32 odm_signal_scale_mapping(struct dm_odm_t *dm_odm, s32 curr_sig)
 		if (curr_sig >= 51 && curr_sig <= 100)
 			ret_sig = 100;
 		else if (curr_sig >= 41 && curr_sig <= 50)
-			ret_sig = 80 + ((curr_sig - 40)*2);
+			ret_sig = 80 + ((curr_sig - 40) * 2);
 		else if (curr_sig >= 31 && curr_sig <= 40)
 			ret_sig = 66 + (curr_sig - 30);
 		else if (curr_sig >= 21 && curr_sig <= 30)
@@ -134,7 +134,7 @@ static void odm_rx_phy_status_parsing(struct dm_odm_t *dm_odm,
 		 * 2011.11.28 LukeLee: 88E use different LNA & VGA gain table
 		 * The RSSI formula should be modified according to the gain table
 		 */
-		lna_idx = ((cck_agc_rpt & 0xE0)>>5);
+		lna_idx = ((cck_agc_rpt & 0xE0) >> 5);
 		vga_idx = (cck_agc_rpt & 0x1F);
 		rx_pwr_all = odm_cck_rssi(lna_idx, vga_idx);
 		pwdb_all = odm_query_rx_pwr_percentage(rx_pwr_all);
@@ -161,7 +161,7 @@ static void odm_rx_phy_status_parsing(struct dm_odm_t *dm_odm,
 				else if (sq_rpt < 20)
 					sq = 100;
 				else
-					sq = ((64-sq_rpt) * 100) / 44;
+					sq = ((64 - sq_rpt) * 100) / 44;
 
 			}
 
@@ -194,7 +194,7 @@ static void odm_rx_phy_status_parsing(struct dm_odm_t *dm_odm,
 			phy_info->rx_mimo_signal_strength[i] = (u8)rssi;
 
 			/* Get Rx snr value in DB */
-			phy_info->rx_snr[i] = dm_odm->PhyDbgInfo.RxSNRdB[i] = (s32)(phy_sta_rpt->path_rxsnr[i]/2);
+			phy_info->rx_snr[i] = dm_odm->PhyDbgInfo.RxSNRdB[i] = (s32)(phy_sta_rpt->path_rxsnr[i] / 2);
 		}
 
 		/*
@@ -309,11 +309,11 @@ static void odm_Process_RSSIForDM(
 					RSSI_min = pPhyInfo->rx_mimo_signal_strength[RF_PATH_A];
 				}
 
-				if ((RSSI_max-RSSI_min) < 3)
+				if ((RSSI_max - RSSI_min) < 3)
 					RSSI_Ave = RSSI_max;
-				else if ((RSSI_max-RSSI_min) < 6)
+				else if ((RSSI_max - RSSI_min) < 6)
 					RSSI_Ave = RSSI_max - 1;
-				else if ((RSSI_max-RSSI_min) < 10)
+				else if ((RSSI_max - RSSI_min) < 10)
 					RSSI_Ave = RSSI_max - 2;
 				else
 					RSSI_Ave = RSSI_max - 3;
@@ -325,21 +325,21 @@ static void odm_Process_RSSIForDM(
 			else {
 				if (pPhyInfo->rx_pwd_ba11 > (u32)UndecoratedSmoothedOFDM) {
 					UndecoratedSmoothedOFDM =
-							((UndecoratedSmoothedOFDM*(Rx_Smooth_Factor-1)) +
-							RSSI_Ave)/Rx_Smooth_Factor;
+							((UndecoratedSmoothedOFDM * (Rx_Smooth_Factor - 1)) +
+							RSSI_Ave) / Rx_Smooth_Factor;
 					UndecoratedSmoothedOFDM = UndecoratedSmoothedOFDM + 1;
 				} else {
 					UndecoratedSmoothedOFDM =
-							((UndecoratedSmoothedOFDM*(Rx_Smooth_Factor-1)) +
-							RSSI_Ave)/Rx_Smooth_Factor;
+							((UndecoratedSmoothedOFDM * (Rx_Smooth_Factor - 1)) +
+							RSSI_Ave) / Rx_Smooth_Factor;
 				}
 			}
 
-			pEntry->rssi_stat.PacketMap = (pEntry->rssi_stat.PacketMap<<1) | BIT0;
+			pEntry->rssi_stat.PacketMap = (pEntry->rssi_stat.PacketMap << 1) | BIT0;
 
 		} else {
 			RSSI_Ave = pPhyInfo->rx_pwd_ba11;
-			pDM_Odm->RSSI_A = (u8) pPhyInfo->rx_pwd_ba11;
+			pDM_Odm->RSSI_A = (u8)pPhyInfo->rx_pwd_ba11;
 			pDM_Odm->RSSI_B = 0;
 
 			/* 1 Process CCK RSSI */
@@ -348,16 +348,16 @@ static void odm_Process_RSSIForDM(
 			else {
 				if (pPhyInfo->rx_pwd_ba11 > (u32)UndecoratedSmoothedCCK) {
 					UndecoratedSmoothedCCK =
-							((UndecoratedSmoothedCCK*(Rx_Smooth_Factor-1)) +
-							pPhyInfo->rx_pwd_ba11)/Rx_Smooth_Factor;
+							((UndecoratedSmoothedCCK * (Rx_Smooth_Factor - 1)) +
+							pPhyInfo->rx_pwd_ba11) / Rx_Smooth_Factor;
 					UndecoratedSmoothedCCK = UndecoratedSmoothedCCK + 1;
 				} else {
 					UndecoratedSmoothedCCK =
-							((UndecoratedSmoothedCCK*(Rx_Smooth_Factor-1)) +
-							pPhyInfo->rx_pwd_ba11)/Rx_Smooth_Factor;
+							((UndecoratedSmoothedCCK * (Rx_Smooth_Factor - 1)) +
+							pPhyInfo->rx_pwd_ba11) / Rx_Smooth_Factor;
 				}
 			}
-			pEntry->rssi_stat.PacketMap = pEntry->rssi_stat.PacketMap<<1;
+			pEntry->rssi_stat.PacketMap = pEntry->rssi_stat.PacketMap << 1;
 		}
 
 		/* if (pEntry) */
@@ -369,14 +369,14 @@ static void odm_Process_RSSIForDM(
 				pEntry->rssi_stat.ValidBit++;
 
 			for (i = 0; i < pEntry->rssi_stat.ValidBit; i++)
-				OFDM_pkt += (u8)(pEntry->rssi_stat.PacketMap>>i)&BIT0;
+				OFDM_pkt += (u8)(pEntry->rssi_stat.PacketMap >> i) & BIT0;
 
 			if (pEntry->rssi_stat.ValidBit == 64) {
-				Weighting = ((OFDM_pkt<<4) > 64)?64:(OFDM_pkt<<4);
-				UndecoratedSmoothedPWDB = (Weighting*UndecoratedSmoothedOFDM+(64-Weighting)*UndecoratedSmoothedCCK)>>6;
+				Weighting = ((OFDM_pkt << 4) > 64) ? 64 : (OFDM_pkt << 4);
+				UndecoratedSmoothedPWDB = (Weighting * UndecoratedSmoothedOFDM + (64 - Weighting) * UndecoratedSmoothedCCK) >> 6;
 			} else {
 				if (pEntry->rssi_stat.ValidBit != 0)
-					UndecoratedSmoothedPWDB = (OFDM_pkt*UndecoratedSmoothedOFDM+(pEntry->rssi_stat.ValidBit-OFDM_pkt)*UndecoratedSmoothedCCK)/pEntry->rssi_stat.ValidBit;
+					UndecoratedSmoothedPWDB = (OFDM_pkt * UndecoratedSmoothedOFDM + (pEntry->rssi_stat.ValidBit - OFDM_pkt) * UndecoratedSmoothedCCK) / pEntry->rssi_stat.ValidBit;
 				else
 					UndecoratedSmoothedPWDB = 0;
 			}

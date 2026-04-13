@@ -552,7 +552,7 @@ void rtw_hal_update_sta_rate_mask(struct adapter *padapter, struct sta_info *pst
 	/* b/g mode ra_bitmap */
 	for (i = 0; i < sizeof(psta->bssrateset); i++) {
 		if (psta->bssrateset[i])
-			tx_ra_bitmap |= rtw_get_bit_value_from_ieee_value(psta->bssrateset[i]&0x7f);
+			tx_ra_bitmap |= rtw_get_bit_value_from_ieee_value(psta->bssrateset[i] & 0x7f);
 	}
 
 	/* n mode ra_bitmap */
@@ -560,13 +560,13 @@ void rtw_hal_update_sta_rate_mask(struct adapter *padapter, struct sta_info *pst
 		limit = 8; /*   1R */
 
 		for (i = 0; i < limit; i++) {
-			if (psta->htpriv.ht_cap.mcs.rx_mask[i/8] & BIT(i%8))
-				tx_ra_bitmap |= BIT(i+12);
+			if (psta->htpriv.ht_cap.mcs.rx_mask[i / 8] & BIT(i % 8))
+				tx_ra_bitmap |= BIT(i + 12);
 		}
 	}
 
 	psta->ra_mask = tx_ra_bitmap;
-	psta->init_rate = get_highest_rate_idx(tx_ra_bitmap)&0x3f;
+	psta->init_rate = get_highest_rate_idx(tx_ra_bitmap) & 0x3f;
 }
 
 void SetHwReg(struct adapter *adapter, u8 variable, u8 *val)
@@ -583,7 +583,7 @@ void SetHwReg(struct adapter *adapter, u8 variable, u8 *val)
 		u16 reg_scr;
 
 		reg_scr = rtw_read16(adapter, REG_SECCFG);
-		rtw_write16(adapter, REG_SECCFG, reg_scr|SCR_CHK_KEYID|SCR_RxDecEnable|SCR_TxEncEnable);
+		rtw_write16(adapter, REG_SECCFG, reg_scr | SCR_CHK_KEYID | SCR_RxDecEnable | SCR_TxEncEnable);
 	}
 		break;
 	case HW_VAR_SEC_DK_CFG:
@@ -594,9 +594,9 @@ void SetHwReg(struct adapter *adapter, u8 variable, u8 *val)
 		if (val) { /* Enable default key related setting */
 			reg_scr |= SCR_TXBCUSEDK;
 			if (sec->dot11AuthAlgrthm != dot11AuthAlgrthm_8021X)
-				reg_scr |= (SCR_RxUseDK|SCR_TxUseDK);
+				reg_scr |= (SCR_RxUseDK | SCR_TxUseDK);
 		} else /* Disable default key related setting */
-			reg_scr &= ~(SCR_RXBCUSEDK|SCR_TXBCUSEDK|SCR_RxUseDK|SCR_TxUseDK);
+			reg_scr &= ~(SCR_RXBCUSEDK | SCR_TXBCUSEDK | SCR_RxUseDK | SCR_TxUseDK);
 
 		rtw_write8(adapter, REG_SECCFG, reg_scr);
 	}
@@ -773,7 +773,7 @@ bool GetU1ByteIntegerFromStringInDecimal(char *Str, u8 *pInt)
 void rtw_hal_check_rxfifo_full(struct adapter *adapter)
 {
 	/* switch counter to RX fifo */
-	rtw_write8(adapter, REG_RXERR_RPT+3, rtw_read8(adapter, REG_RXERR_RPT+3)|0xf0);
+	rtw_write8(adapter, REG_RXERR_RPT + 3, rtw_read8(adapter, REG_RXERR_RPT + 3) | 0xf0);
 }
 
 static u32 Array_kfreemap[] = {
@@ -805,13 +805,13 @@ void rtw_bb_rf_gain_offset(struct adapter *padapter)
 
 			for (i = 0; i < ARRAY_SIZE(Array_kfreemap); i += 2) {
 				v1 = Array[i];
-				v2 = Array[i+1];
+				v2 = Array[i + 1];
 				if (v1 == padapter->eeprompriv.EEPROMRFGainVal) {
 					target = v2;
 					break;
 				}
 			}
-			PHY_SetRFReg(padapter, RF_PATH_A, REG_RF_BB_GAIN_OFFSET, BIT18|BIT17|BIT16|BIT15, target);
+			PHY_SetRFReg(padapter, RF_PATH_A, REG_RF_BB_GAIN_OFFSET, BIT18 | BIT17 | BIT16 | BIT15, target);
 
 			rtw_hal_read_rfreg(padapter, RF_PATH_A, 0x7f, 0xffffffff);
 		}
