@@ -738,8 +738,12 @@ static int gpio_generic_chip_init_common(struct gpio_generic_chip *chip,
 	if (ret)
 		return ret;
 
-	ret = gpio_mmio_setup_accessors(dev, chip,
-				flags & GPIO_GENERIC_BIG_ENDIAN_BYTE_ORDER);
+	if (chip->io_port)
+		ret = gpio_port_setup_accessors(dev, chip,
+					flags & GPIO_GENERIC_BIG_ENDIAN_BYTE_ORDER);
+	else
+		ret = gpio_mmio_setup_accessors(dev, chip,
+					flags & GPIO_GENERIC_BIG_ENDIAN_BYTE_ORDER);
 	if (ret)
 		return ret;
 
@@ -799,10 +803,32 @@ int gpio_generic_chip_init(struct gpio_generic_chip *chip,
 	chip->reg_clr.mmio = cfg->clr;
 	chip->reg_dir_in.mmio = cfg->dirin;
 	chip->reg_dir_out.mmio = cfg->dirout;
+	chip->io_port = true;
 
 	return gpio_generic_chip_init_common(chip, cfg->sz, cfg->flags, cfg->dev);
 }
 EXPORT_SYMBOL_GPL(gpio_generic_chip_init);
+
+/**
+ * gpio_generic_chip_port_init() - Initialize a generic GPIO chip for I/O port devices
+ * @chip: Generic GPIO chip to set up.
+ * @cfg: Generic GPIO chip configuration.
+ *
+ * Returns 0 on success, negative error number on failure.
+ */
+int gpio_generic_chip_port_init(struct gpio_generic_chip *chip,
+			   const struct gpio_generic_chip_port_config *cfg)
+{
+	chip->reg_dat.port = cfg->dat;
+	chip->reg_set.port = cfg->set;
+	chip->reg_clr.port = cfg->clr;
+	chip->reg_dir_in.port = cfg->dirin;
+	chip->reg_dir_out.port = cfg->dirout;
+	chip->io_port = true;
+
+	return gpio_generic_chip_init_common(chip, cfg->sz, cfg->flags, cfg->dev);
+}
+EXPORT_SYMBOL_GPL(gpio_generic_chip_port_init);
 
 #if IS_ENABLED(CONFIG_GPIO_GENERIC_PLATFORM)
 

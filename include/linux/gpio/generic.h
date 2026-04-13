@@ -63,6 +63,43 @@ struct gpio_generic_chip_config {
 };
 
 /**
+ * struct gpio_generic_chip_port_config - Generic GPIO chip configuration data for I/O port devices
+ * @dev: Parent device of the new GPIO chip (compulsory).
+ * @sz: Size (width) of the PMIO registers in bytes, typically 1, 2 or 4.
+ * @dat: PMIO address for the register to READ the value of the GPIO lines, it
+ *       is expected that a 1 in the corresponding bit in this register means
+ *       the line is asserted.
+ * @set: PMIO address for the register to SET the value of the GPIO lines, it
+ *       is expected that we write the line with 1 in this register to drive
+ *       the GPIO line high.
+ * @clr: PMIO address for the register to CLEAR the value of the GPIO lines,
+ *       it is expected that we write the line with 1 in this register to
+ *       drive the GPIO line low. It is allowed to leave this address as NULL,
+ *       in that case the SET register will be assumed to also clear the GPIO
+ *       lines, by actively writing the line with 0.
+ * @dirout: PMIO address for the register to set the line as OUTPUT. It is
+ *          assumed that setting a line to 1 in this register will turn that
+ *          line into an output line. Conversely, setting the line to 0 will
+ *          turn that line into an input.
+ * @dirin: PMIO address for the register to set this line as INPUT. It is
+ *         assumed that setting a line to 1 in this register will turn that
+ *         line into an input line. Conversely, setting the line to 0 will
+ *         turn that line into an output.
+ * @flags: Different flags that will affect the behaviour of the device, such
+ *         as endianness etc.
+ */
+struct gpio_generic_chip_port_config {
+	struct device *dev;
+	unsigned long sz;
+	unsigned long dat;
+	unsigned long set;
+	unsigned long clr;
+	unsigned long dirout;
+	unsigned long dirin;
+	unsigned long flags;
+};
+
+/**
  * union gpio_chip_reg - Generic GPIO chip register descriptor for MMIO or port-mapped I/O
  * @mmio: MMIO register address.
  * @port: I/O Port register address.
@@ -85,6 +122,7 @@ union gpio_chip_reg {
  *           representing line 0, bit 30 is line 1 ... bit 0 is line 31) this
  *           is set to true by the generic GPIO core. It is for internal
  *           housekeeping only.
+ * @io_port: indicates that the device is I/O port-mapped
  * @reg_dat: data (in) register for generic GPIO
  * @reg_set: output set register (out=high) for generic GPIO
  * @reg_clr: output clear register (out=low) for generic GPIO
@@ -106,6 +144,7 @@ struct gpio_generic_chip {
 	unsigned long (*read_reg)(union gpio_chip_reg *reg);
 	void (*write_reg)(union gpio_chip_reg *reg, unsigned long data);
 	bool be_bits;
+	bool io_port;
 	union gpio_chip_reg reg_dat;
 	union gpio_chip_reg reg_set;
 	union gpio_chip_reg reg_clr;
@@ -128,6 +167,8 @@ to_gpio_generic_chip(struct gpio_chip *gc)
 int gpio_generic_chip_init(struct gpio_generic_chip *chip,
 			   const struct gpio_generic_chip_config *cfg);
 
+int gpio_generic_chip_port_init(struct gpio_generic_chip *chip,
+				const struct gpio_generic_chip_port_config *cfg);
 /**
  * gpio_generic_chip_set() - Set the GPIO line value of the generic GPIO chip.
  * @chip: Generic GPIO chip to use.
