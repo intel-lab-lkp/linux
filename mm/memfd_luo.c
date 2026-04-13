@@ -482,7 +482,7 @@ put_folios:
 	for (long j = i + 1; j < nr_folios; j++) {
 		const struct memfd_luo_folio_ser *pfolio = &folios_ser[j];
 
-		folio = kho_restore_folio(pfolio->pfn);
+		folio = kho_restore_folio(PFN_PHYS(pfolio->pfn));
 		if (folio)
 			folio_put(folio);
 	}
