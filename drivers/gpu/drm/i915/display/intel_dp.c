@@ -7376,6 +7376,57 @@ void intel_dp_mst_resume(struct intel_display *display)
 	}
 }
 
+static int intel_dp_sdp_stagger_to_tl(struct intel_crtc_state *crtc_state,
+				      int stagger)
+{
+	return crtc_state->dp_sdp_tl.cmn + stagger;
+}
+
+static
+void intel_dp_cmn_sdp_tl_compute_config_late(struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	bool as_sdp;
+
+	if (!HAS_CMN_SDP_TL(display))
+		return;
+
+	as_sdp = crtc_state->infoframes.enable &
+		 intel_hdmi_infoframe_enable(DP_SDP_ADAPTIVE_SYNC);
+	/*
+	 * When AS SDP is enabled :
+	 *  - The common SDP Transmission Line matches the EMP SDP Transmission Line.
+	 *
+	 * When AS SDP is disabled:
+	 *  - Bspec mentions the positions as lines of delayed vblank.
+	 *  - Guardband = 1st line of delayed vblank
+	 *  - Common SDP Transmission line is set to 2nd line of delayed vblank.
+	 */
+
+	if (as_sdp)
+		crtc_state->dp_sdp_tl.cmn = crtc_state->dp_sdp_tl.as;
+	else
+		crtc_state->dp_sdp_tl.cmn = crtc_state->vrr.guardband - 1;
+
+	/*
+	 * Currently we are programming the default stagger values, but these
+	 * can be optimized if required, based on number of SDPs enabled.
+	 *
+	 * Default values of the Transmission lines for SDPs other than AS SDP:
+	 * VSC : CMN SDP Transmission line
+	 * GMP : CMN SDP Transmission line
+	 * PPS : CMN SDP Transmission line + 1
+	 * VSC_EXT: CMN SDP Transmission line + 2
+	 */
+	crtc_state->dp_sdp_tl.vsc = crtc_state->dp_sdp_tl.cmn;
+	crtc_state->dp_sdp_tl.gmp =
+		intel_dp_sdp_stagger_to_tl(crtc_state, GMP_STAGGER_DEFAULT);
+	crtc_state->dp_sdp_tl.pps =
+		intel_dp_sdp_stagger_to_tl(crtc_state, PPS_STAGGER_DEFAULT);
+	crtc_state->dp_sdp_tl.vsc_ext =
+		intel_dp_sdp_stagger_to_tl(crtc_state, VSC_EXT_STAGGER_DEFAULT);
+}
+
 static
 int intel_dp_sdp_compute_as_tl(const struct intel_crtc_state *crtc_state)
 {
@@ -7402,6 +7453,7 @@ static
 void intel_dp_sdp_tl_compute_config_late(struct intel_crtc_state *crtc_state)
 {
 	crtc_state->dp_sdp_tl.as = intel_dp_sdp_compute_as_tl(crtc_state);
+	intel_dp_cmn_sdp_tl_compute_config_late(crtc_state);
 }
 
 static
@@ -7516,9 +7568,45 @@ static int intel_dp_sdp_tl_to_stagger(const struct intel_crtc_state *crtc_state,
 	return sdp_tl - crtc_state->dp_sdp_tl.cmn;
 }
 
+static
+void intel_dp_cmn_sdp_transmission_line_get_config(struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
+	u16 vsc_ext_stagger, pps_stagger, gmp_stagger;
+	u32 val;
+
+	if (!HAS_CMN_SDP_TL(display))
+		return;
+
+	val = intel_de_read(display, CMN_SDP_TL(display, cpu_transcoder));
+
+	if (!(val & TRANSMISSION_LINE_ENABLE))
+		return;
+
+	crtc_state->dp_sdp_tl.cmn = REG_FIELD_GET(BASE_TRANSMISSION_LINE_MASK, val);
+
+	/* SDP VSC uses same transmission line as CMN base transmission line */
+	crtc_state->dp_sdp_tl.vsc = crtc_state->dp_sdp_tl.cmn;
+
+	val = intel_de_read(display, CMN_SDP_TL_STGR_CTL(display, cpu_transcoder));
+
+	vsc_ext_stagger = REG_FIELD_GET(VSC_EXT_STAGGER_MASK, val);
+	pps_stagger = REG_FIELD_GET(PPS_STAGGER_MASK, val);
+	gmp_stagger = REG_FIELD_GET(GMP_STAGGER_MASK, val);
+
+	crtc_state->dp_sdp_tl.vsc_ext =
+		intel_dp_sdp_stagger_to_tl(crtc_state, vsc_ext_stagger);
+	crtc_state->dp_sdp_tl.pps =
+		intel_dp_sdp_stagger_to_tl(crtc_state, pps_stagger);
+	crtc_state->dp_sdp_tl.gmp =
+		intel_dp_sdp_stagger_to_tl(crtc_state, gmp_stagger);
+}
+
 void intel_dp_sdp_transmission_line_get_config(struct intel_crtc_state *crtc_state)
 {
 	crtc_state->dp_sdp_tl.as = intel_vrr_read_emp_as_sdp_tl(crtc_state);
+	intel_dp_cmn_sdp_transmission_line_get_config(crtc_state);
 }
 
 void intel_dp_cmn_sdp_transmission_line_enable(const struct intel_crtc_state *crtc_state)
