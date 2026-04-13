@@ -217,12 +217,10 @@ int resctrl_arch_set_cdp_enabled(enum resctrl_res_level rid, bool enable)
 		l3->mon.num_rmid = resctrl_arch_system_num_rmid_idx();
 
 	/* The mbw_max feature can't hide cdp as it's a per-partid maximum. */
-	if (cdp_enabled && !mpam_resctrl_controls[RDT_RESOURCE_MBA].cdp_enabled)
-		mpam_resctrl_controls[RDT_RESOURCE_MBA].resctrl_res.alloc_capable = false;
-
-	if (mpam_resctrl_controls[RDT_RESOURCE_MBA].cdp_enabled &&
-	    mpam_resctrl_controls[RDT_RESOURCE_MBA].class)
+	if (!cdp_enabled && mpam_resctrl_controls[RDT_RESOURCE_MBA].class)
 		mpam_resctrl_controls[RDT_RESOURCE_MBA].resctrl_res.alloc_capable = true;
+	else
+		mpam_resctrl_controls[RDT_RESOURCE_MBA].resctrl_res.alloc_capable = false;
 
 	if (enable) {
 		if (mpam_partid_max < 1)
