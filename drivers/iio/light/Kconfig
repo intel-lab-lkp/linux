@@ -520,6 +520,13 @@ config PA12203001
 	  This driver can also be built as a module.  If so, the module
 	  will be called pa12203001.
 
+config PAJ7620
+	tristate "PixArt PAJ7620 Gesture Sensor"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  Say Y here to build support for the PixArt PAJ7620 gesture sensor.
+
 config SI1133
 	tristate "SI1133 UV Index Sensor and Ambient Light Sensor"
 	depends on I2C
