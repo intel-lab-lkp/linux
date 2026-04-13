@@ -231,11 +231,13 @@ static int analog_button_read(struct analog_port *port, char saitek, char chf)
 
 	while ((~u & 0xf0) && (i < 16) && t) {
 		port->buttons |= 1 << analog_chf[(~u >> 4) & 0xf];
-		if (!saitek) return 0;
+		if (!saitek)
+			return 0;
 		udelay(ANALOG_SAITEK_DELAY);
 		t = strobe;
 		gameport_trigger(port->gameport);
-		while (((u = gameport_read(port->gameport)) & port->mask) && t) t--;
+		while (((u = gameport_read(port->gameport)) & port->mask) && t)
+			t--;
 		i++;
 	}
 
@@ -324,7 +326,8 @@ static void analog_calibrate_timer(struct analog_port *port)
 		local_irq_restore(flags);
 		udelay(i);
 		t = ktime_sub(t2, t1) - ktime_sub(t3, t2);
-		if (t < tx) tx = t;
+		if (t < tx)
+			tx = t;
 	}
 
         port->loop = tx / 50;
@@ -405,7 +408,8 @@ static int analog_init_device(struct analog_port *port, struct analog *analog, i
 				x = y;
 
 			if (analog->mask & ANALOG_SAITEK) {
-				if (i == 2) x = port->axes[i];
+				if (i == 2)
+					x = port->axes[i];
 				v = x - (x >> 2);
 				w = (x >> 4);
 			}
@@ -496,13 +500,25 @@ static int analog_init_masks(struct analog_port *port)
 
 	if (port->cooked) {
 
-		for (i = 0; i < 4; i++) max[i] = port->axes[i] << 1;
+		for (i = 0; i < 4; i++)
+			max[i] = port->axes[i] << 1;
 
-		if ((analog[0].mask & 0x7) == 0x7) max[2] = (max[0] + max[1]) >> 1;
-		if ((analog[0].mask & 0xb) == 0xb) max[3] = (max[0] + max[1]) >> 1;
-		if ((analog[0].mask & ANALOG_BTN_TL) && !(analog[0].mask & ANALOG_BTN_TL2)) max[2] >>= 1;
-		if ((analog[0].mask & ANALOG_BTN_TR) && !(analog[0].mask & ANALOG_BTN_TR2)) max[3] >>= 1;
-		if ((analog[0].mask & ANALOG_HAT_FCS)) max[3] >>= 1;
+		if ((analog[0].mask & 0x7) == 0x7)
+			max[2] = (max[0] + max[1]) >> 1;
+
+		if ((analog[0].mask & 0xb) == 0xb)
+			max[3] = (max[0] + max[1]) >> 1;
+
+		if ((analog[0].mask & ANALOG_BTN_TL) &&
+		    !(analog[0].mask & ANALOG_BTN_TL2))
+			max[2] >>= 1;
+
+		if ((analog[0].mask & ANALOG_BTN_TR) &&
+		    !(analog[0].mask & ANALOG_BTN_TR2))
+			max[3] >>= 1;
+
+		if ((analog[0].mask & ANALOG_HAT_FCS))
+			max[3] >>= 1;
 
 		gameport_calibrate(port->gameport, port->axes, max);
 	}
@@ -662,13 +678,16 @@ static void analog_parse_options(void)
 				analog_options[i] = analog_types[j].value;
 				break;
 			}
-		if (analog_types[j].name) continue;
+		if (analog_types[j].name)
+			continue;
 
 		analog_options[i] = simple_strtoul(js[i], &end, 0);
-		if (end != js[i]) continue;
+		if (end != js[i])
+			continue;
 
 		analog_options[i] = 0xff;
-		if (!strlen(js[i])) continue;
+		if (!strlen(js[i]))
+			continue;
 
 		printk(KERN_WARNING "analog.c: Bad config for port %d - \"%s\"\n", i, js[i]);
 	}
