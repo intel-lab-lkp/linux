@@ -1492,6 +1492,18 @@ static int fsi_hw_startup(struct fsi_priv *fsi,
 			  struct device *dev)
 {
 	u32 data = 0;
+	int ret = 0;
+	/* enable spu clock */
+	mutex_lock(&fsi->master->clk_lock);
+	if (fsi->master->clk_spu && fsi->master->spu_count++ == 0) {
+		ret = clk_prepare_enable(fsi->master->clk_spu);
+		if (ret < 0) {
+			fsi->master->spu_count--;
+			mutex_unlock(&fsi->master->clk_lock);
+			return ret;
+		}
+	}
+	mutex_unlock(&fsi->master->clk_lock);
 
 	/* clock setting */
 	if (fsi_is_clk_master(fsi))
@@ -1549,6 +1561,11 @@ static int fsi_hw_shutdown(struct fsi_priv *fsi,
 	/* stop master clock */
 	if (fsi_is_clk_master(fsi))
 		return fsi_clk_disable(dev, fsi);
+	/* stop spu clock */
+	mutex_lock(&fsi->master->clk_lock);
+	if (fsi->master->clk_spu && --fsi->master->spu_count == 0)
+		clk_disable_unprepare(fsi->master->clk_spu);
+	mutex_unlock(&fsi->master->clk_lock);
 
 	return 0;
 }
