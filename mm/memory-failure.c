@@ -74,6 +74,8 @@ static int sysctl_memory_failure_recovery __read_mostly = 1;
 
 static int sysctl_enable_soft_offline __read_mostly = 1;
 
+static int sysctl_panic_on_unrecoverable_mf __read_mostly;
+
 atomic_long_t num_poisoned_pages __read_mostly = ATOMIC_LONG_INIT(0);
 
 static bool hw_memory_failure __read_mostly = false;
@@ -151,6 +153,15 @@ static const struct ctl_table memory_failure_table[] = {
 		.procname	= "enable_soft_offline",
 		.data		= &sysctl_enable_soft_offline,
 		.maxlen		= sizeof(sysctl_enable_soft_offline),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
+	{
+		.procname	= "panic_on_unrecoverable_memory_failure",
+		.data		= &sysctl_panic_on_unrecoverable_mf,
+		.maxlen		= sizeof(sysctl_panic_on_unrecoverable_mf),
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= SYSCTL_ZERO,
@@ -1282,6 +1293,35 @@ static void update_per_node_mf_stats(unsigned long pfn,
 }
 
 /*
+ * Determine whether to panic on an unrecoverable memory failure.
+ *
+ * Design rationale: This design opts for immediate panic on kernel memory
+ * failures, capturing clean crashes other than random crashes on MF_IGNORED pages
+ *
+ * This panics on three categories of failures:
+ * - MF_MSG_KERNEL: Reserved pages that cannot be recovered
+ * - MF_MSG_KERNEL_HIGH_ORDER: High-order kernel pages that cannot be recovered
+ * - MF_MSG_UNKNOWN: Pages with unknown state that cannot be classified as recoverable
+ * - and the page is not being recovered (result = MF_IGNORED)
+ *
+ * Note: Transient races are mitigated by memory_failure()'s retry mechanism.
+ * When a buddy allocator race is detected (take_page_off_buddy() fails), the
+ * code clears PageHWPoison and retries the entire memory_failure() flow,
+ * allowing pages to be properly reclassified with updated flags. This ensures
+ * that false posiotives are not misclassified as unrecoverable.
+ *
+ */
+static bool panic_on_unrecoverable_mf(enum mf_action_page_type type,
+				       enum mf_result result)
+{
+	return sysctl_panic_on_unrecoverable_mf &&
+	       result == MF_IGNORED &&
+	       (type == MF_MSG_KERNEL ||
+		type == MF_MSG_KERNEL_HIGH_ORDER ||
+		type == MF_MSG_UNKNOWN);
+}
+
+/*
  * "Dirty/Clean" indication is not 100% accurate due to the possibility of
  * setting PG_dirty outside page lock. See also comment above set_page_dirty().
  */
@@ -1297,6 +1337,9 @@ static int action_result(unsigned long pfn, enum mf_action_page_type type,
 
 	pr_err("%#lx: recovery action for %s: %s\n",
 		pfn, action_page_types[type], action_name[result]);
+
+	if (panic_on_unrecoverable_mf(type, result))
+		panic("Memory failure: %#lx: unrecoverable page", pfn);
 
 	return (result == MF_RECOVERED || result == MF_DELAYED) ? 0 : -EBUSY;
 }
@@ -2432,7 +2475,11 @@ try_again:
 		}
 		goto unlock_mutex;
 	} else if (res < 0) {
-		res = action_result(pfn, MF_MSG_GET_HWPOISON, MF_IGNORED);
+		if (PageReserved(p))
+			res = action_result(pfn, MF_MSG_KERNEL, MF_IGNORED);
+		else
+			res = action_result(pfn, MF_MSG_GET_HWPOISON,
+					    MF_IGNORED);
 		goto unlock_mutex;
 	}
 
