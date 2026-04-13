@@ -147,7 +147,7 @@
 
 		pcie@1,0 {
 			device_type = "pci";
-			reg = <0x800 0 0 0 0>;
+			reg = <0x10800 0 0 0 0>;
 
 			#address-cells = <3>;
 			#size-cells = <2>;
@@ -162,7 +162,7 @@
 
 		pcie@2,0 {
 			device_type = "pci";
-			reg = <0x1000 0 0 0 0>;
+			reg = <0x11000 0 0 0 0>;
 
 			#address-cells = <3>;
 			#size-cells = <2>;
