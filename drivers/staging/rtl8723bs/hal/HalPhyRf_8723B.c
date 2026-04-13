@@ -172,7 +172,6 @@ void ODM_TxPwrTrackSetPwr_8723B(
 				TxRate = HwRateToMRate(pDM_Odm->TxRate);
 		} else /* force rate */
 			TxRate = (u8)rate;
-
 	}
 
 	if (TxRate != 0xFF) {
@@ -978,7 +977,6 @@ static void _PHY_PathAFillIQKMatrix8723B(
 		PHY_SetBBReg(pDM_Odm->Adapter, rOFDM0_RxIQExtAnta, 0xF0000000, reg);
 		pRFCalibrateInfo->RxIQC_8723B[PATH_S1][IDX_0xCA0][KEY] = rOFDM0_RxIQExtAnta;
 		pRFCalibrateInfo->RxIQC_8723B[PATH_S1][IDX_0xCA0][VAL] = PHY_QueryBBReg(pDM_Odm->Adapter, rOFDM0_RxIQExtAnta, bMaskDWord);
-
 	}
 }
 
@@ -1064,7 +1062,6 @@ static void _PHY_PathBFillIQKMatrix8723B(
 
 void ODM_SetIQCbyRFpath(struct dm_odm_t *pDM_Odm, u32 RFpath)
 {
-
 	struct odm_rf_cal_t *pRFCalibrateInfo = &pDM_Odm->RFCalibrateInfo;
 	u8 path;
 
@@ -1126,7 +1123,6 @@ static void _PHY_SaveMACRegisters8723B(
 		MACBackup[i] = rtw_read8(pDM_Odm->Adapter, MACReg[i]);
 	}
 	MACBackup[i] = rtw_read32(pDM_Odm->Adapter, MACReg[i]);
-
 }
 
 
@@ -1181,7 +1177,6 @@ static void _PHY_PathADDAOn8723B(
 	for (i = 1 ; i < IQK_ADDA_REG_NUM ; i++) {
 		PHY_SetBBReg(pDM_Odm->Adapter, ADDAReg[i], bMaskDWord, pathOn);
 	}
-
 }
 
 static void _PHY_MACSettingCalibration8723B(
@@ -1198,7 +1193,6 @@ static void _PHY_MACSettingCalibration8723B(
 		rtw_write8(pDM_Odm->Adapter, MACReg[i], (u8)(MACBackup[i] & (~BIT3)));
 	}
 	rtw_write8(pDM_Odm->Adapter, MACReg[i], (u8)(MACBackup[i] & (~BIT5)));
-
 }
 
 static bool phy_SimularityCompare_8723B(
@@ -1217,7 +1211,6 @@ static bool phy_SimularityCompare_8723B(
 	SimularityBitMap = 0;
 
 	for (i = 0; i < bound; i++) {
-
 		if ((i == 1) || (i == 3) || (i == 5) || (i == 7)) {
 			if ((result[c1][i] & 0x00000200) != 0)
 				tmp1 = result[c1][i] | 0xFFFFFC00;
@@ -1258,7 +1251,6 @@ static bool phy_SimularityCompare_8723B(
 		}
 		return bResult;
 	} else {
-
 		if (!(SimularityBitMap & 0x03)) { /* path A TX OK */
 			for (i = 0; i < 2; i++)
 				result[3][i] = result[c1][i];
@@ -1344,7 +1336,6 @@ static void phy_IQCalibrate_8723B(
 	/* u32 bbvalue; */
 
 	if (t == 0) {
-
 		/*  Save ADDA parameters, turn Path A ADDA on */
 		_PHY_SaveADDARegisters8723B(padapter, ADDA_REG, pDM_Odm->RFCalibrateInfo.ADDA_backup, IQK_ADDA_REG_NUM);
 		_PHY_SaveMACRegisters8723B(padapter, IQK_MAC_REG, pDM_Odm->RFCalibrateInfo.IQK_MAC_backup);
@@ -1420,7 +1411,6 @@ static void phy_IQCalibrate_8723B(
 
 /* path B IQK */
 	if (is2T) {
-
 		/* path B TX IQK */
 		for (i = 0 ; i < retryCount ; i++) {
 			PathBOK = phy_PathB_IQK_8723B(padapter);
@@ -1478,9 +1468,7 @@ static void phy_IQCalibrate_8723B(
 		/* load 0xe30 IQC default value */
 		PHY_SetBBReg(pDM_Odm->Adapter, rTx_IQK_Tone_A, bMaskDWord, 0x01008c00);
 		PHY_SetBBReg(pDM_Odm->Adapter, rRx_IQK_Tone_A, bMaskDWord, 0x01008c00);
-
 	}
-
 }
 
 

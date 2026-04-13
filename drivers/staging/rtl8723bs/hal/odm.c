@@ -249,7 +249,6 @@ u32 ODM_Get_Rate_Bitmap(
 	}
 
 	return ra_mask & rate_bitmap;
-
 }
 
 static void odm_RefreshRateAdaptiveMaskCE(struct dm_odm_t *pDM_Odm)
@@ -273,7 +272,6 @@ static void odm_RefreshRateAdaptiveMaskCE(struct dm_odm_t *pDM_Odm)
 			if (true == ODM_RAStateCheck(pDM_Odm, pstat->rssi_stat.UndecoratedSmoothedPWDB, false, &pstat->rssi_level)) {
 				rtw_hal_update_ra_mask(pstat, pstat->rssi_level);
 			}
-
 		}
 	}
 }
@@ -297,7 +295,6 @@ static void odm_RefreshRateAdaptiveMaskCE(struct dm_odm_t *pDM_Odm)
 */
 static void odm_RefreshRateAdaptiveMask(struct dm_odm_t *pDM_Odm)
 {
-
 	if (!(pDM_Odm->SupportAbility & ODM_BB_RA_MASK))
 		return;
 
@@ -369,7 +366,6 @@ static void odm_RSSIMonitorInit(struct dm_odm_t *pDM_Odm)
 	struct ra_t *pRA_Table = &pDM_Odm->DM_RA_Table;
 
 	pRA_Table->firstconnect = false;
-
 }
 
 static void FindMinimumRSSI(struct adapter *padapter)
@@ -543,7 +539,6 @@ void odm_TXPowerTrackingInit(struct dm_odm_t *pDM_Odm)
 		pDM_Odm->RFCalibrateInfo.DeltaPowerIndexLast[p] = 0;
 		pDM_Odm->RFCalibrateInfo.PowerIndexOffset[p] = 0;
 	}
-
 }
 
 void ODM_TXPowerTrackingCheck(struct dm_odm_t *pDM_Odm)
@@ -573,7 +568,6 @@ void ODM_TXPowerTrackingCheck(struct dm_odm_t *pDM_Odm)
 /*  */
 void ODM_DMInit(struct dm_odm_t *pDM_Odm)
 {
-
 	odm_CommonInfoSelfInit(pDM_Odm);
 	odm_DIGInit(pDM_Odm);
 	odm_NHMCounterStatisticsInit(pDM_Odm);
@@ -732,7 +726,6 @@ void ODM_CmnInfoInit(struct dm_odm_t *pDM_Odm, enum odm_cmninfo_e CmnInfo, u32 V
 		/* do nothing */
 		break;
 	}
-
 }
 
 
@@ -856,7 +849,6 @@ void ODM_CmnInfoHook(struct dm_odm_t *pDM_Odm, enum odm_cmninfo_e CmnInfo, void 
 		/* do nothing */
 		break;
 	}
-
 }
 
 
@@ -882,7 +874,6 @@ void ODM_CmnInfoPtrArrayHook(
 		/* do nothing */
 		break;
 	}
-
 }
 
 
@@ -984,7 +975,6 @@ void ODM_CmnInfoUpdate(struct dm_odm_t *pDM_Odm, u32 CmnInfo, u64 Value)
 		/* do nothing */
 		break;
 	}
-
 
 }
 

@@ -33,7 +33,6 @@ void ODM_RF_Saving(void *pDM_VOID, u8 bForceInNormal)
 	}
 
 	if (pDM_PSTable->initialize == 0) {
-
 		pDM_PSTable->Reg874 = (PHY_QueryBBReg(pDM_Odm->Adapter, 0x874, bMaskDWord) & 0x1CC000) >> 14;
 		pDM_PSTable->RegC70 = (PHY_QueryBBReg(pDM_Odm->Adapter, 0xc70, bMaskDWord) & BIT3) >> 3;
 		pDM_PSTable->Reg85C = (PHY_QueryBBReg(pDM_Odm->Adapter, 0x85c, bMaskDWord) & 0xFF000000) >> 24;

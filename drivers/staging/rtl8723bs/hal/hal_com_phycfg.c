@@ -445,7 +445,6 @@ void PHY_SetTxPowerIndexByRateSection(
 					       pHalData->CurrentChannelBW,
 					       Channel, htRates1T,
 					       ARRAY_SIZE(htRates1T));
-
 	}
 }
 
@@ -590,7 +589,6 @@ s8 PHY_GetTxPowerByRate(struct adapter *padapter, u8 RFPath, u8 Rate)
 		return value;
 
 	return pHalData->TxPwrByRateOffset[RFPath][rateIndex];
-
 }
 
 void PHY_SetTxPowerByRate(

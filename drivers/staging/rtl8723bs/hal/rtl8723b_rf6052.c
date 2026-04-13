@@ -76,7 +76,6 @@ void PHY_RF6052SetBandwidth8723B(
 	default:
 		break;
 	}
-
 }
 
 static int phy_RF6052_Config_ParaFile(struct adapter *Adapter)
@@ -91,7 +90,6 @@ static int phy_RF6052_Config_ParaFile(struct adapter *Adapter)
 	/* 3----------------------------------------------------------------- */
 	/* for (eRFPath = RF_PATH_A; eRFPath <pHalData->NumTotalRFPath; eRFPath++) */
 	for (eRFPath = 0; eRFPath < pHalData->NumTotalRFPath; eRFPath++) {
-
 		pPhyReg = &pHalData->PHYRegDef[eRFPath];
 
 		/*----Store original RFENV control type----*/
@@ -162,7 +160,6 @@ int PHY_RF6052_Config8723B(struct adapter *Adapter)
 	/*  Config BB and RF */
 	/*  */
 	return phy_RF6052_Config_ParaFile(Adapter);
-
 }
 
 /* End of HalRf6052.c */

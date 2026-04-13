@@ -18,7 +18,6 @@ static u8 odm_query_rx_pwr_percentage(s8 ant_power)
 		return	100;
 	else
 		return 100 + ant_power;
-
 }
 
 s32 odm_signal_scale_mapping(struct dm_odm_t *dm_odm, s32 curr_sig)
@@ -162,7 +161,6 @@ static void odm_rx_phy_status_parsing(struct dm_odm_t *dm_odm,
 					sq = 100;
 				else
 					sq = ((64 - sq_rpt) * 100) / 44;
-
 			}
 
 			phy_info->signal_quality = sq;
@@ -250,7 +248,6 @@ static void odm_Process_RSSIForDM(
 	struct dm_odm_t *pDM_Odm, struct odm_phy_info *pPhyInfo, struct odm_packet_info *pPktinfo
 )
 {
-
 	s32 UndecoratedSmoothedPWDB, UndecoratedSmoothedCCK, UndecoratedSmoothedOFDM, RSSI_Ave;
 	u8 isCCKrate = 0;
 	u8 RSSI_max, RSSI_min, i;
@@ -278,7 +275,6 @@ static void odm_Process_RSSIForDM(
 
 	/* Statistic for antenna/path diversity------------------ */
 	if (pDM_Odm->SupportAbility & ODM_BB_ANT_DIV) {
-
 	}
 
 	/* Smart Antenna Debug Message------------------ */
@@ -288,7 +284,6 @@ static void odm_Process_RSSIForDM(
 	UndecoratedSmoothedPWDB = pEntry->rssi_stat.UndecoratedSmoothedPWDB;
 
 	if (pPktinfo->to_self || pPktinfo->is_beacon) {
-
 		if (!isCCKrate) { /* ofdm rate */
 			if (pPhyInfo->rx_mimo_signal_strength[RF_PATH_B] == 0) {
 				RSSI_Ave = pPhyInfo->rx_mimo_signal_strength[RF_PATH_A];
@@ -385,7 +380,6 @@ static void odm_Process_RSSIForDM(
 			pEntry->rssi_stat.UndecoratedSmoothedOFDM = UndecoratedSmoothedOFDM;
 			pEntry->rssi_stat.UndecoratedSmoothedPWDB = UndecoratedSmoothedPWDB;
 		}
-
 	}
 }
 
@@ -396,7 +390,6 @@ static void odm_Process_RSSIForDM(
 void odm_phy_status_query(struct dm_odm_t *dm_odm, struct odm_phy_info *phy_info,
 			  u8 *phy_status, struct odm_packet_info *pkt_info)
 {
-
 	odm_rx_phy_status_parsing(dm_odm, phy_info, phy_status, pkt_info);
 
 	if (!dm_odm->RSSI_test)

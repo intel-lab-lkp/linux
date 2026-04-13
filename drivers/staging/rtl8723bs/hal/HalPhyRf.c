@@ -57,7 +57,6 @@ void ODM_ClearTxPowerTrackingState(struct dm_odm_t *pDM_Odm)
 
 void ODM_TXPowerTrackingCallback_ThermalMeter(struct adapter *Adapter)
 {
-
 	struct hal_com_data *pHalData = GET_HAL_DATA(Adapter);
 	struct dm_odm_t *pDM_Odm = &pHalData->odmpriv;
 

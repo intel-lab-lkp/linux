@@ -293,7 +293,6 @@ void ODM_Write_DIG(void *pDM_VOID, u8 CurrentIGI)
 		if (!pDM_DigTable->bPSDInProgress) {
 			if (CurrentIGI > pDM_DigTable->rx_gain_range_max)
 				CurrentIGI = pDM_DigTable->rx_gain_range_max;
-
 		}
 
 		/* 1 Set IGI value */
@@ -303,7 +302,6 @@ void ODM_Write_DIG(void *pDM_VOID, u8 CurrentIGI)
 
 		pDM_DigTable->CurIGValue = CurrentIGI;
 	}
-
 }
 
 bool odm_DigAbort(void *pDM_VOID)
@@ -477,7 +475,6 @@ void odm_DIG(void *pDM_VOID)
 
 	/* 1 Adjust initial gain by false alarm */
 	if (pDM_Odm->bLinked && bPerformance) {
-
 		if (bFirstTpTarget || FirstConnect) {
 			pDM_DigTable->LargeFAHit = 0;
 
@@ -506,7 +503,6 @@ void odm_DIG(void *pDM_VOID)
 			}
 		}
 	} else {
-
 		if (FirstDisConnect || bFirstCoverage) {
 			CurrentIGI = dm_dig_min;
 		} else {
@@ -754,7 +750,6 @@ u8 odm_ForbiddenIGICheck(void *pDM_VOID, u8 DIG_Dynamic_MIN, u8 CurrentIGI)
 	}
 
 	return rx_gain_range_min;
-
 }
 
 /* 3 ============================================================ */

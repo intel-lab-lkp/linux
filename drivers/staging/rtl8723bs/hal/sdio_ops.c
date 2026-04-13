@@ -614,7 +614,6 @@ static u16 sdio_local_cmd52_read2byte(struct adapter *adapter, u32 addr)
 
 static u32 sdio_local_cmd53_read4byte(struct adapter *adapter, u32 addr)
 {
-
 	u8 mac_pwr_ctrl_on;
 	u32 val = 0;
 	struct intf_hdl *intfhdl = &adapter->iopriv.intf;

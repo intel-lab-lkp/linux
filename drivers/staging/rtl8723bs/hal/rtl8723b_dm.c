@@ -17,7 +17,6 @@
 /*  */
 static void Init_ODM_ComInfo_8723b(struct adapter *Adapter)
 {
-
 	struct hal_com_data *pHalData = GET_HAL_DATA(Adapter);
 	struct dm_odm_t *pDM_Odm = &pHalData->odmpriv;
 	struct dm_priv *pdmpriv = &pHalData->dmpriv;
@@ -193,7 +192,6 @@ void rtl8723b_hal_dm_in_lps(struct adapter *padapter)
 
 		rtl8723b_set_rssi_cmd(padapter, (u8 *)&PWDB_rssi);
 	}
-
 }
 
 void rtl8723b_HalDmWatchDog_in_LPS(struct adapter *Adapter)
@@ -251,7 +249,6 @@ void rtl8723b_HalDmWatchDog_in_LPS(struct adapter *Adapter)
 skip_lps_dm:
 
 	return;
-
 }
 
 void rtl8723b_init_dm_priv(struct adapter *Adapter)

@@ -1579,7 +1579,6 @@ static void halbtc8723b2ant_TdmaDurationAdjust(
 
 		if (!bScan && !bLink && !bRoam)
 			halbtc8723b2ant_PsTdma(pBtCoexist, NORMAL_EXEC, true, pCoexDm->psTdmaDuAdjType);
-
 	}
 }
 
@@ -2483,7 +2482,6 @@ void EXhalbtc8723b2ant_BtInfoNotify(
 		pCoexSta->btInfoC2h[rspSource][i] = tmpBuf[i];
 		if (i == 1)
 			btInfo = tmpBuf[i];
-
 	}
 
 	if (pBtCoexist->bManualControl) {

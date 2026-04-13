@@ -232,7 +232,6 @@ static void _InitNormalChipOneOutEpPriority(struct adapter *Adapter)
 	_InitNormalChipRegPriority(
 		Adapter, value, value, value, value, value, value
 	);
-
 }
 
 static void _InitNormalChipTwoOutEpPriority(struct adapter *Adapter)
@@ -280,7 +279,6 @@ static void _InitNormalChipTwoOutEpPriority(struct adapter *Adapter)
 	}
 
 	_InitNormalChipRegPriority(Adapter, beQ, bkQ, viQ, voQ, mgtQ, hiQ);
-
 }
 
 static void _InitNormalChipThreeOutEpPriority(struct adapter *padapter)
@@ -325,7 +323,6 @@ static void _InitQueuePriority(struct adapter *Adapter)
 	default:
 		break;
 	}
-
 
 }
 
@@ -530,7 +527,6 @@ static void _InitOperationMode(struct adapter *padapter)
 	}
 
 	rtw_write8(padapter, REG_BWOPMODE, regBwOpMode);
-
 }
 
 static void _InitInterrupt(struct adapter *padapter)
@@ -619,7 +615,6 @@ u32 rtl8723bs_hal_init(struct adapter *padapter)
 		/* do polling cpwm */
 		start_time = jiffies;
 		do {
-
 			mdelay(1);
 
 			rtw_hal_get_hwreg(padapter, HW_VAR_CPWM, &cpwm_now);

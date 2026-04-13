@@ -520,7 +520,6 @@ s32	rtl8723bs_hal_xmitframe_enqueue(
 	}
 
 	return err;
-
 }
 
 /*

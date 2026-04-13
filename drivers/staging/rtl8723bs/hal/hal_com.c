@@ -294,7 +294,6 @@ void HalSetBrateCfg(struct adapter *Adapter, u8 *mBratesOS, u16 *pBrateCfg)
 	u8 i, is_brate, brate;
 
 	for (i = 0; i < NDIS_802_11_LENGTH_RATES_EX; i++) {
-
 		is_brate = mBratesOS[i] & IEEE80211_BASIC_RATE_MASK;
 		brate = mBratesOS[i] & 0x7f;
 
@@ -392,9 +391,7 @@ static void _TwoOutPipeMapping(struct adapter *padapter, bool bWIFICfg)
 		pdvobjpriv->Queue2Pipe[5] = pdvobjpriv->RtOutPipe[0];/* MGT */
 		pdvobjpriv->Queue2Pipe[6] = pdvobjpriv->RtOutPipe[0];/* HIGH */
 		pdvobjpriv->Queue2Pipe[7] = pdvobjpriv->RtOutPipe[0];/* TXCMD */
-
 	}
-
 }
 
 static void _ThreeOutPipeMapping(struct adapter *padapter, bool bWIFICfg)
@@ -434,7 +431,6 @@ static void _ThreeOutPipeMapping(struct adapter *padapter, bool bWIFICfg)
 		pdvobjpriv->Queue2Pipe[6] = pdvobjpriv->RtOutPipe[0];/* HIGH */
 		pdvobjpriv->Queue2Pipe[7] = pdvobjpriv->RtOutPipe[0];/* TXCMD */
 	}
-
 }
 
 bool Hal_MappingOutPipe(struct adapter *padapter, u8 NumOutPipe)
@@ -462,7 +458,6 @@ bool Hal_MappingOutPipe(struct adapter *padapter, u8 NumOutPipe)
 	}
 
 	return result;
-
 }
 
 void hal_init_macaddr(struct adapter *adapter)

@@ -236,7 +236,6 @@ static void halbtc8723b1ant_LimitedRx(
 	/*  real update aggregation setting */
 	pBtCoexist->fBtcSet(pBtCoexist, BTC_SET_ACT_AGGREGATE_CTRL, NULL);
 
-
 }
 
 static void halbtc8723b1ant_QueryBtInfo(struct btc_coexist *pBtCoexist)
@@ -368,7 +367,6 @@ static void halbtc8723b1ant_MonitorWiFiCtr(struct btc_coexist *pBtCoexist)
 	}
 
 	if (!pCoexSta->bPreCCKLock) {
-
 		if (nCCKLockCounter >= 5)
 			pCoexSta->bCCKLock = true;
 		else
@@ -381,7 +379,6 @@ static void halbtc8723b1ant_MonitorWiFiCtr(struct btc_coexist *pBtCoexist)
 	}
 
 	pCoexSta->bPreCCKLock =  pCoexSta->bCCKLock;
-
 
 }
 
@@ -585,7 +582,6 @@ static u8 halbtc8723b1ant_ActionAlgorithm(struct btc_coexist *pBtCoexist)
 			) {
 				if (!bBtHsOn)
 					algorithm = BT_8723B_1ANT_COEX_ALGO_PANEDR_HID;
-
 			}
 		}
 	}
@@ -914,13 +910,11 @@ static void halbtc8723b1ant_SetAntPath(
 			pBtCoexist->fBtcWrite1ByteBitMask(pBtCoexist, 0x64, 0x1, 0x0);
 
 			if (pBoardInfo->btdmAntPos == BTC_ANTENNA_AT_MAIN_PORT) {
-
 				/* tell firmware "no antenna inverse" */
 				H2C_Parameter[0] = 0;
 				H2C_Parameter[1] = 0;  /* internal switch type */
 				pBtCoexist->fBtcFillH2c(pBtCoexist, 0x65, 2, H2C_Parameter);
 			} else {
-
 				/* tell firmware "antenna inverse" */
 				H2C_Parameter[0] = 1;
 				H2C_Parameter[1] = 0;  /* internal switch type */
@@ -1234,7 +1228,6 @@ static void halbtc8723b1ant_PsTdma(
 			break;
 		}
 	} else {
-
 		/*  disable PS tdma */
 		switch (type) {
 		case 8: /* PTA Control */
@@ -1912,7 +1905,6 @@ static void halbtc8723b1ant_RunSwCoexistMechanism(struct btc_coexist *pBtCoexist
 	pCoexDm->curAlgorithm = algorithm;
 
 	if (halbtc8723b1ant_IsCommonAction(pBtCoexist)) {
-
 	} else {
 		switch (pCoexDm->curAlgorithm) {
 		case BT_8723B_1ANT_COEX_ALGO_SCO:
