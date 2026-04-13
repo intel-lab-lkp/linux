@@ -780,10 +780,6 @@ struct static_key paravirt_steal_rq_enabled;
 
 static void update_rq_clock_task(struct rq *rq, s64 delta)
 {
-/*
- * In theory, the compile should just see 0 here, and optimize out the call
- * to sched_rt_avg_update. But I don't trust it...
- */
 	s64 __maybe_unused steal = 0, irq_delta = 0;
 
 #ifdef CONFIG_IRQ_TIME_ACCOUNTING
@@ -3526,7 +3522,7 @@ int select_task_rq(struct task_struct *p, int cpu, int *wake_flags)
 	 *
 	 * Since this is common to all placement strategies, this lives here.
 	 *
-	 * [ this allows ->select_task() to simply return task_cpu(p) and
+	 * [ this allows ->select_task_rq() to simply return task_cpu(p) and
 	 *   not worry about this generic constraint ]
 	 */
 	if (unlikely(!is_cpu_allowed(p, cpu)))
