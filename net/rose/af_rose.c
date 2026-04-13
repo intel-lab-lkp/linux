@@ -1,4 +1,5 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+	if (s)
+		sock_hold(s);// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  *
  * Copyright (C) Jonathan Naylor G4KLX (g4klx@g4klx.demon.co.uk)
