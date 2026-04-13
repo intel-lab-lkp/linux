@@ -62,6 +62,9 @@ static int sja1105_tas_set_runtime_params(struct sja1105_private *priv)
 	if (!tas_data->enabled)
 		return 0;
 
+	if (!its_cycle_time)
+		return -EINVAL;
+
 	/* Roll the earliest base time over until it is in a comparable
 	 * time base with the latest, then compare their deltas.
 	 * We want to enforce that all ports' base times are within
