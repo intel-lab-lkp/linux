@@ -416,7 +416,7 @@ void __init numa_emulation(struct numa_meminfo *numa_meminfo, int numa_dist_cnt)
 					n, &pi.blk[0], nid);
 			if (ret < 0)
 				break;
-			if (ret < n) {
+			if (ret - nid < n) {
 				pr_info("%s: phys: %d only got %d of %ld nodes, failing\n",
 						__func__, i, ret, n);
 				ret = -1;
