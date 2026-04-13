@@ -1965,7 +1965,8 @@ static int alloc_nid_bottom_up_numa_part_reserved_check(void)
 	max_addr = memblock_end_of_DRAM();
 	total_size = size + r1.size;
 
-	memblock_reserve(r1.base, r1.size);
+	ASSERT_EQ(0, __memblock_reserve(r1.base, r1.size, nid_req,
+					MEMBLOCK_RSRV_KERN));
 	allocated_ptr = run_memblock_alloc_nid(size, SMP_CACHE_BYTES,
 					       min_addr, max_addr, nid_req);
 
@@ -2382,14 +2383,17 @@ static int alloc_nid_numa_large_region_generic_check(void)
  *  |             | r2 |          new          | r1 |                  |
  *  +-------------+----+-----------------------+----+------------------+
  *
- * Expect to merge all of the regions into one. The region counter and total
- * size fields get updated.
+ * Expect to allocate the requested node as a separate kernel-reserved region.
+ * The neighboring reservations remain distinct because the new region records
+ * the requested NUMA node and MEMBLOCK_RSRV_KERN flag.
  */
 static int alloc_nid_numa_reserved_full_merge_generic_check(void)
 {
 	int nid_req = 6;
 	int nid_next = nid_req + 1;
-	struct memblock_region *new_rgn = &memblock.reserved.regions[0];
+	struct memblock_region *left_rgn = &memblock.reserved.regions[0];
+	struct memblock_region *new_rgn = &memblock.reserved.regions[1];
+	struct memblock_region *right_rgn = &memblock.reserved.regions[2];
 	struct memblock_region *req_node = &memblock.memory.regions[nid_req];
 	struct memblock_region *next_node = &memblock.memory.regions[nid_next];
 	void *allocated_ptr = NULL;
@@ -2421,13 +2425,18 @@ static int alloc_nid_numa_reserved_full_merge_generic_check(void)
 	ASSERT_NE(allocated_ptr, NULL);
 	assert_mem_content(allocated_ptr, size, alloc_nid_test_flags);
 
-	ASSERT_EQ(new_rgn->size, total_size);
-	ASSERT_EQ(new_rgn->base, r2.base);
+	ASSERT_EQ(left_rgn->base, r2.base);
+	ASSERT_EQ(left_rgn->size, r2.size);
+	ASSERT_EQ(right_rgn->base, r1.base);
+	ASSERT_EQ(right_rgn->size, r1.size);
+	ASSERT_EQ(new_rgn->base, req_node->base);
+	ASSERT_EQ(new_rgn->size, size);
+	ASSERT_EQ(new_rgn->flags, MEMBLOCK_RSRV_KERN);
+	ASSERT_EQ(memblock_get_region_node(new_rgn), nid_req);
+	ASSERT_LE(req_node->base, new_rgn->base);
+	ASSERT_LE(region_end(new_rgn), region_end(req_node));
 
-	ASSERT_LE(new_rgn->base, req_node->base);
-	ASSERT_LE(region_end(req_node), region_end(new_rgn));
-
-	ASSERT_EQ(memblock.reserved.cnt, 1);
+	ASSERT_EQ(memblock.reserved.cnt, 3);
 	ASSERT_EQ(memblock.reserved.total_size, total_size);
 
 	test_pass_pop();
@@ -2496,15 +2505,18 @@ static int alloc_nid_numa_split_all_reserved_generic_check(void)
 
 /*
  * A simple test that tries to allocate a memory region through the
- * memblock_alloc_node() on a NUMA node with id `nid`. Expected to have the
- * correct NUMA node set for the new region.
+ * memblock_alloc_node() on a NUMA node with id `nid`. Expected to allocate
+ * the region within the requested node and mark the new reservation with the
+ * correct NUMA node.
  */
 static int alloc_node_on_correct_nid(void)
 {
 	int nid_req = 2;
 	void *allocated_ptr = NULL;
 #ifdef CONFIG_NUMA
+	struct memblock_region *new_rgn = &memblock.reserved.regions[0];
 	struct memblock_region *req_node = &memblock.memory.regions[nid_req];
+	phys_addr_t req_node_end = region_end(req_node);
 #endif
 	phys_addr_t size = SZ_512;
 
@@ -2515,7 +2527,13 @@ static int alloc_node_on_correct_nid(void)
 
 	ASSERT_NE(allocated_ptr, NULL);
 #ifdef CONFIG_NUMA
-	ASSERT_EQ(nid_req, req_node->nid);
+	ASSERT_EQ(memblock.reserved.cnt, 1);
+	ASSERT_EQ(new_rgn->size, size);
+	ASSERT_EQ(new_rgn->base, (phys_addr_t)allocated_ptr);
+	ASSERT_EQ(new_rgn->flags, MEMBLOCK_RSRV_KERN);
+	ASSERT_EQ(nid_req, memblock_get_region_node(new_rgn));
+	ASSERT_LE(req_node->base, new_rgn->base);
+	ASSERT_LE(region_end(new_rgn), req_node_end);
 #endif
 
 	test_pass_pop();
