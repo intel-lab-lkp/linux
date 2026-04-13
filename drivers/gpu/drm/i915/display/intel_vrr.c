@@ -591,6 +591,29 @@ static u32 trans_vrr_ctl(const struct intel_crtc_state *crtc_state)
 			VRR_CTL_PIPELINE_FULL_OVERRIDE;
 }
 
+static
+void intel_vrr_write_emp_as_sdp_tl(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
+
+	/*
+	 * For BMG and LNL+ onwards the EMP_AS_SDP_TL is used for programming
+	 * double buffering point and transmission line for VRR packets for
+	 * HDMI2.1/DP/eDP/DP->HDMI2.1 PCON.
+	 */
+	if (!HAS_EMP_AS_SDP_TL(display))
+		return;
+
+	/*
+	 * Since currently we support VRR only for DP/eDP, so this is programmed
+	 * only for Adaptive Sync SDP to Vsync start.
+	 */
+	intel_de_write(display,
+		       EMP_AS_SDP_TL(display, cpu_transcoder),
+		       EMP_AS_SDP_DB_TL(crtc_state->vrr.vsync_start));
+}
+
 void intel_vrr_set_transcoder_timings(const struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
@@ -649,17 +672,7 @@ void intel_vrr_set_transcoder_timings(const struct intel_crtc_state *crtc_state)
 			       VRR_VSYNC_END(crtc_state->vrr.vsync_end) |
 			       VRR_VSYNC_START(crtc_state->vrr.vsync_start));
 
-	/*
-	 * For BMG and LNL+ onwards the EMP_AS_SDP_TL is used for programming
-	 * double buffering point and transmission line for VRR packets for
-	 * HDMI2.1/DP/eDP/DP->HDMI2.1 PCON.
-	 * Since currently we support VRR only for DP/eDP, so this is programmed
-	 * to for Adaptive Sync SDP to Vsync start.
-	 */
-	if (HAS_EMP_AS_SDP_TL(display))
-		intel_de_write(display,
-			       EMP_AS_SDP_TL(display, cpu_transcoder),
-			       EMP_AS_SDP_DB_TL(crtc_state->vrr.vsync_start));
+	intel_vrr_write_emp_as_sdp_tl(crtc_state);
 }
 
 void
