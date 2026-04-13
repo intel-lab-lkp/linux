@@ -4722,8 +4722,10 @@ static int __init do_floppy_init(void)
 		floppy_device[drive].dev.groups = floppy_dev_groups;
 
 		err = platform_device_register(&floppy_device[drive]);
-		if (err)
+		if (err) {
+			put_device(&floppy_device[drive].dev);
 			goto out_remove_drives;
+		}
 
 		registered[drive] = true;
 
