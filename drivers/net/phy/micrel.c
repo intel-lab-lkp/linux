@@ -287,6 +287,11 @@
 /* PHY Control 2 / PHY Control (if no PHY Control 1) */
 #define MII_KSZPHY_CTRL_2			0x1f
 #define MII_KSZPHY_CTRL				MII_KSZPHY_CTRL_2
+
+/* Vendor-specific Clause 22 register, virtualized by KSZ87xx embedded PHYs DSA driver */
+#define MII_KSZ87XX_LOW_LOSS			0x1c
+#define KSZ87XX_LOW_LOSS_MAX			5
+
 /* bitmap of PHY register to set interrupt mode */
 #define KSZ8081_CTRL2_HP_MDIX			BIT(15)
 #define KSZ8081_CTRL2_MDI_MDI_X_SELECT		BIT(14)
@@ -938,6 +943,38 @@ static int ksz8795_match_phy_device(struct phy_device *phydev,
 				    const struct phy_driver *phydrv)
 {
 	return ksz8051_ksz8795_match_phy_device(phydev, false);
+}
+
+static int ksz87xx_get_tunable(struct phy_device *phydev,
+			       struct ethtool_tunable *tuna, void *data)
+{
+	int ret;
+
+	switch (tuna->id) {
+	case ETHTOOL_PHY_KSZ87XX_LOW_LOSS:
+		ret = phy_read(phydev, MII_KSZ87XX_LOW_LOSS);
+		if (ret < 0)
+			return ret;
+		*(u8 *)data = ret;
+		return 0;
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
+static int ksz87xx_set_tunable(struct phy_device *phydev,
+			       struct ethtool_tunable *tuna, const void *data)
+{
+	u8 val = *(const u8 *)data;
+
+	switch (tuna->id) {
+	case ETHTOOL_PHY_KSZ87XX_LOW_LOSS:
+		if (val > KSZ87XX_LOW_LOSS_MAX)
+			return -EINVAL;
+		return phy_write(phydev, MII_KSZ87XX_LOW_LOSS, val);
+	default:
+		return -EOPNOTSUPP;
+	}
 }
 
 static int ksz9021_load_values_from_of(struct phy_device *phydev,
@@ -6809,6 +6846,8 @@ static struct phy_driver ksphy_driver[] = {
 	/* PHY_BASIC_FEATURES */
 	.config_init	= kszphy_config_init,
 	.match_phy_device = ksz8795_match_phy_device,
+	.get_tunable	= ksz87xx_get_tunable,
+	.set_tunable	= ksz87xx_set_tunable,
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,
 }, {
