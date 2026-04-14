@@ -186,7 +186,7 @@ static int snd_compr_update_tstamp(struct snd_compr_stream *stream,
 	int ret;
 
 	if (!stream->ops->pointer)
-		return -ENOTSUPP;
+		return -EOPNOTSUPP;
 
 	switch (stream->runtime->state) {
 	case SNDRV_PCM_STATE_OPEN:
