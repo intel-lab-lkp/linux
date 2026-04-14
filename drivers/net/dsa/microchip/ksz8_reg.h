@@ -202,6 +202,10 @@
 #define REG_PORT_3_STATUS_0		0x38
 #define REG_PORT_4_STATUS_0		0x48
 
+/* KSZ87xx LinkMD registers (TABLE_LINK_MD_V) */
+#define KSZ87XX_REG_EQ_TRAIN		0x3C
+#define KSZ87XX_REG_PHY_LPF			0x4C
+
 /* For KSZ8765. */
 #define PORT_REMOTE_ASYM_PAUSE		BIT(5)
 #define PORT_REMOTE_SYM_PAUSE		BIT(4)
@@ -342,7 +346,7 @@
 #define TABLE_EEE			(TABLE_EEE_V << TABLE_EXT_SELECT_S)
 #define TABLE_ACL			(TABLE_ACL_V << TABLE_EXT_SELECT_S)
 #define TABLE_PME			(TABLE_PME_V << TABLE_EXT_SELECT_S)
-#define TABLE_LINK_MD			(TABLE_LINK_MD << TABLE_EXT_SELECT_S)
+#define TABLE_LINK_MD			(TABLE_LINK_MD_V << TABLE_EXT_SELECT_S)
 #define TABLE_READ			BIT(4)
 #define TABLE_SELECT_S			2
 #define TABLE_STATIC_MAC_V		0
@@ -728,6 +732,36 @@
 #define PHY_FORCE_LINK			BIT(3)
 #define PHY_POWER_SAVING_ENABLE		BIT(2)
 #define PHY_REMOTE_LOOPBACK		BIT(1)
+
+/* Equalizer low-loss workaround */
+#define PHY_REG_KSZ87XX_LOW_LOSS       0x1C
+#define PHY_KSZ87XX_LOW_LOSS_MASK      GENMASK(2, 0)
+
+/* KSZ87xx low-loss EQ mode selector (vendor-specific PHY reg 0x1c)
+ *
+ * Values:
+ *  0: disabled (default behavior)
+ *  1: EQ training workaround
+ *  2: LPF 90 MHz
+ *  3: LPF 62 MHz
+ *  4: LPF 55 MHz
+ *  5: LPF 44 MHz
+ */
+#define PHY_LOW_LOSS_ERRATA_DISABLED		0
+#define KSZ87XX_LOW_LOSS_EQ_TRAIN			1
+#define KSZ87XX_LOW_LOSS_LPF_90MHZ			2
+#define KSZ87XX_LOW_LOSS_LPF_62MHZ			3
+#define KSZ87XX_LOW_LOSS_LPF_55MHZ			4
+#define KSZ87XX_LOW_LOSS_LPF_44MHZ			5
+
+#define KSZ87XX_EQ_TRAIN_DEFAULT       0x0A
+#define KSZ87XX_EQ_TRAIN_LOW_LOSS      0x15
+
+/* LPF bandwidth bits [7:6]: 00 = 90MHz, 01 = 62MHz, 10 = 55MHz, 11 = 44MHz  */
+#define KSZ87XX_PHY_LPF_90MHZ          0x00
+#define KSZ87XX_PHY_LPF_62MHZ          0x40
+#define KSZ87XX_PHY_LPF_55MHZ          0x80
+#define KSZ87XX_PHY_LPF_44MHZ          0xC0
 
 /* KSZ8463 specific registers. */
 #define P1MBCR				0x4C

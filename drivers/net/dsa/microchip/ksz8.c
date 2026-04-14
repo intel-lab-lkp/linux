@@ -1059,6 +1059,11 @@ int ksz8_r_phy(struct ksz_device *dev, u16 phy, u16 reg, u16 *val)
 			return ret;
 
 		break;
+	case PHY_REG_KSZ87XX_LOW_LOSS:
+		if (!ksz_is_ksz87xx(dev))
+			return -EOPNOTSUPP;
+		data = dev->low_loss_wa_mode;
+		break;
 	default:
 		processed = false;
 		break;
@@ -1271,6 +1276,46 @@ int ksz8_w_phy(struct ksz_device *dev, u16 phy, u16 reg, u16 val)
 		if (ret)
 			return ret;
 		break;
+	case PHY_REG_KSZ87XX_LOW_LOSS:
+		if (!ksz_is_ksz87xx(dev))
+			return -EOPNOTSUPP;
+
+		switch (val & PHY_KSZ87XX_LOW_LOSS_MASK) {
+		case PHY_LOW_LOSS_ERRATA_DISABLED:
+			ret = ksz8_ind_write8(dev, TABLE_LINK_MD, KSZ87XX_REG_EQ_TRAIN,
+					      KSZ87XX_EQ_TRAIN_DEFAULT);
+			if (!ret)
+				ret = ksz8_ind_write8(dev, TABLE_LINK_MD,
+						      KSZ87XX_REG_PHY_LPF,
+						      KSZ87XX_LOW_LOSS_LPF_90MHZ);
+			break;
+		case KSZ87XX_LOW_LOSS_EQ_TRAIN:
+			ret = ksz8_ind_write8(dev, TABLE_LINK_MD, KSZ87XX_REG_EQ_TRAIN,
+					      KSZ87XX_EQ_TRAIN_LOW_LOSS);
+			break;
+		case KSZ87XX_LOW_LOSS_LPF_90MHZ:
+			ret = ksz8_ind_write8(dev, TABLE_LINK_MD, KSZ87XX_REG_PHY_LPF,
+					      KSZ87XX_PHY_LPF_90MHZ);
+			break;
+		case KSZ87XX_LOW_LOSS_LPF_62MHZ:
+			ret = ksz8_ind_write8(dev, TABLE_LINK_MD, KSZ87XX_REG_PHY_LPF,
+					      KSZ87XX_PHY_LPF_62MHZ);
+			break;
+		case KSZ87XX_LOW_LOSS_LPF_55MHZ:
+			ret = ksz8_ind_write8(dev, TABLE_LINK_MD, KSZ87XX_REG_PHY_LPF,
+					      KSZ87XX_PHY_LPF_55MHZ);
+			break;
+		case KSZ87XX_LOW_LOSS_LPF_44MHZ:
+			ret = ksz8_ind_write8(dev, TABLE_LINK_MD, KSZ87XX_REG_PHY_LPF,
+					      KSZ87XX_PHY_LPF_44MHZ);
+			break;
+		default:
+			return -EINVAL;
+		}
+
+		if (!ret)
+			dev->low_loss_wa_mode = val & PHY_KSZ87XX_LOW_LOSS_MASK;
+		return ret;
 	default:
 		break;
 	}
