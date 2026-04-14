@@ -1258,8 +1258,8 @@ out:
 
 static void seccomp_nack_syscall(int this_syscall, int data, bool force_coredump)
 {
-	/* Show the handler or coredump the original registers. */
-	syscall_rollback(current, current_pt_regs());
+	/* check_force_sig_seccomp() will restore the original registers */
+	syscall_set_return_value(current, current_pt_regs(), -EINTR, 0);
 	/* Let the filter pass back 16 bits of data. */
 	force_sig_seccomp(this_syscall, data, force_coredump);
 }

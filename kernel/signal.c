@@ -2796,6 +2796,24 @@ static void hide_si_addr_tag_bits(struct ksignal *ksig)
 	}
 }
 
+static inline void check_force_sig_seccomp(kernel_siginfo_t *info)
+{
+	/*
+	 * See seccomp_nack_syscall(). Show the original registers to
+	 * the handler or coredump.
+	 *
+	 * Note: a task can send a .si_code == SYS_SECCOMP signal to
+	 * itself, but syscall_rollback() is harmless in this case.
+	 * SYS_SECCOMP can also be missed if a prior SIGSYS was pending
+	 * and blocked before force_sig_seccomp(), but in that case the
+	 * seccomp siginfo is already lost anyway.
+	 */
+	if (IS_ENABLED(CONFIG_SECCOMP_FILTER)) {
+		if (info->si_code == SYS_SECCOMP)
+			syscall_rollback(current, current_pt_regs());
+	}
+}
+
 bool get_signal(struct ksignal *ksig)
 {
 	struct sighand_struct *sighand = current->sighand;
@@ -2915,6 +2933,8 @@ relock:
 
 		if (!signr)
 			break; /* will return 0 */
+
+		check_force_sig_seccomp(&ksig->info);
 
 		if (unlikely(current->ptrace) && (signr != SIGKILL) &&
 		    !(sighand->action[signr -1].sa.sa_flags & SA_IMMUTABLE)) {
