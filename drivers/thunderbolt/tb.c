@@ -1848,9 +1848,26 @@ static struct tb_port *tb_find_pcie_down(struct tb_switch *sw,
 	}
 
 	if (down) {
+		u32 data;
+		int ret;
+
 		if (WARN_ON(!tb_port_is_pcie_down(down)))
 			goto out;
-		if (tb_pci_port_is_enabled(down))
+
+		ret = tb_port_read(down, &data, TB_CFG_PORT,
+				   down->cap_adap + ADP_PCIE_CS_0, 1);
+		if (ret) {
+			/*
+			 * Cannot read the adapter register, this could
+			 * mean the hardware is not ready yet (e.g. after
+			 * resume). Skip this port and fall back to
+			 * finding an unused port to avoid activating a
+			 * tunnel on an already mapped port.
+			 */
+			tb_port_dbg(down, "failed to read PCIe adapter status: %d\n", ret);
+			goto out;
+		}
+		if (data & ADP_PCIE_CS_0_PE)
 			goto out;
 
 		return down;
