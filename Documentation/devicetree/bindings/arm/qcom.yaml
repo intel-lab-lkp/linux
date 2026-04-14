@@ -183,6 +183,7 @@ properties:
               - motorola,harpia
               - motorola,osprey
               - motorola,surnia
+              - panasonic,eluga-u2
               - qcom,msm8916-mtp
               - samsung,a3u-eur
               - samsung,a5u-eur
