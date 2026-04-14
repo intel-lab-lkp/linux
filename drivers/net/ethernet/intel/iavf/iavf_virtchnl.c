@@ -2,6 +2,7 @@
 /* Copyright(c) 2013 - 2018 Intel Corporation. */
 
 #include <linux/net/intel/libie/rx.h>
+#include <net/netdev_lock.h>
 
 #include "iavf.h"
 #include "iavf_ptp.h"
@@ -555,8 +556,10 @@ iavf_set_mac_addr_type(struct virtchnl_ether_addr *virtchnl_ether_addr,
  * @adapter: adapter structure
  *
  * Request that the PF add one or more addresses to our filters.
+ *
+ * Return: 0 on success, negative on failure
  **/
-void iavf_add_ether_addrs(struct iavf_adapter *adapter)
+int iavf_add_ether_addrs(struct iavf_adapter *adapter)
 {
 	struct virtchnl_ether_addr_list *veal;
 	struct iavf_mac_filter *f;
@@ -568,7 +571,7 @@ void iavf_add_ether_addrs(struct iavf_adapter *adapter)
 		/* bail because we already have a command pending */
 		dev_err(&adapter->pdev->dev, "Cannot add filters, command %d pending\n",
 			adapter->current_op);
-		return;
+		return -EBUSY;
 	}
 
 	spin_lock_bh(&adapter->mac_vlan_list_lock);
@@ -580,7 +583,7 @@ void iavf_add_ether_addrs(struct iavf_adapter *adapter)
 	if (!count) {
 		adapter->aq_required &= ~IAVF_FLAG_AQ_ADD_MAC_FILTER;
 		spin_unlock_bh(&adapter->mac_vlan_list_lock);
-		return;
+		return 0;
 	}
 	adapter->current_op = VIRTCHNL_OP_ADD_ETH_ADDR;
 
@@ -595,7 +598,7 @@ void iavf_add_ether_addrs(struct iavf_adapter *adapter)
 	veal = kzalloc(len, GFP_ATOMIC);
 	if (!veal) {
 		spin_unlock_bh(&adapter->mac_vlan_list_lock);
-		return;
+		return -ENOMEM;
 	}
 
 	veal->vsi_id = adapter->vsi_res->vsi_id;
@@ -617,6 +620,7 @@ void iavf_add_ether_addrs(struct iavf_adapter *adapter)
 
 	iavf_send_pf_msg(adapter, VIRTCHNL_OP_ADD_ETH_ADDR, (u8 *)veal, len);
 	kfree(veal);
+	return 0;
 }
 
 /**
@@ -2955,4 +2959,103 @@ void iavf_virtchnl_completion(struct iavf_adapter *adapter,
 		break;
 	} /* switch v_opcode */
 	adapter->current_op = VIRTCHNL_OP_UNKNOWN;
+}
+
+/**
+ * iavf_virtchnl_done - Check if virtchnl operation completed
+ * @adapter: board private structure
+ * @condition: optional callback for custom completion check
+ *   (takes priority)
+ * @cond_data: context data for callback
+ * @v_opcode: virtchnl opcode value we're waiting for if no condition
+ *   configured (typically VIRTCHNL_OP_UNKNOWN), if condition not used
+ *
+ * Checks completion status. Callback takes priority if provided. Otherwise
+ * waits for current_op to reach v_opcode (typically VIRTCHNL_OP_UNKNOWN
+ * after completion).
+ *
+ * Return: true if operation completed
+ */
+static inline bool iavf_virtchnl_done(struct iavf_adapter *adapter,
+				      bool (*condition)(struct iavf_adapter *, const void *),
+				      const void *cond_data,
+				      enum virtchnl_ops v_opcode)
+{
+	if (condition)
+		return condition(adapter, cond_data);
+
+	return adapter->current_op == v_opcode;
+}
+
+/**
+ * iavf_poll_virtchnl_response - Poll admin queue for virtchnl response
+ * @adapter: board private structure
+ * @condition: optional callback to check if desired response received
+ *   (takes priority)
+ * @cond_data: context data passed to condition callback
+ * @v_opcode: virtchnl opcode value to wait for if no condition configured
+ *   (typically VIRTCHNL_OP_UNKNOWN), if condition, not used
+ * @timeout_ms: maximum time to wait in milliseconds
+ *
+ * Polls admin queue and processes all messages until condition returns true
+ * or timeout expires. If condition is NULL, waits for current_op to become
+ * v_opcode (typically VIRTCHNL_OP_UNKNOWN after operation completes).
+ * Caller must hold netdev_lock. This can sleep for up to timeout_ms while
+ * polling hardware.
+ *
+ * Return: 0 on success (condition met), -EAGAIN on timeout or error
+ */
+int iavf_poll_virtchnl_response(struct iavf_adapter *adapter,
+				bool (*condition)(struct iavf_adapter *, const void *),
+				const void *cond_data,
+				enum virtchnl_ops v_opcode,
+				unsigned int timeout_ms)
+{
+	struct iavf_hw *hw = &adapter->hw;
+	struct iavf_arq_event_info event;
+	enum virtchnl_ops v_op;
+	enum iavf_status v_ret;
+	unsigned long timeout;
+	u16 pending;
+	int ret;
+
+	netdev_assert_locked(adapter->netdev);
+
+	event.buf_len = IAVF_MAX_AQ_BUF_SIZE;
+	event.msg_buf = kzalloc(event.buf_len, GFP_KERNEL);
+	if (!event.msg_buf)
+		return -ENOMEM;
+
+	timeout = jiffies + msecs_to_jiffies(timeout_ms);
+	do {
+		if (iavf_virtchnl_done(adapter, condition, cond_data, v_opcode)) {
+			ret = 0;
+			goto out;
+		}
+
+		ret = iavf_clean_arq_element(hw, &event, &pending);
+		if (!ret) {
+			v_op = (enum virtchnl_ops)le32_to_cpu(event.desc.cookie_high);
+			v_ret = (enum iavf_status)le32_to_cpu(event.desc.cookie_low);
+
+			iavf_virtchnl_completion(adapter, v_op, v_ret,
+						 event.msg_buf, event.msg_len);
+
+			memset(event.msg_buf, 0, IAVF_MAX_AQ_BUF_SIZE);
+
+			if (pending)
+				continue;
+		}
+
+		usleep_range(50, 75);
+	} while (time_before(jiffies, timeout));
+
+	if (iavf_virtchnl_done(adapter, condition, cond_data, v_opcode))
+		ret = 0;
+	else
+		ret = -EAGAIN;
+
+out:
+	kfree(event.msg_buf);
+	return ret;
 }
