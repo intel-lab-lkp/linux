@@ -1744,7 +1744,6 @@ static void mma8452_remove(struct i2c_client *client)
 	regulator_disable(data->vdd_reg);
 }
 
-#ifdef CONFIG_PM
 static int mma8452_runtime_suspend(struct device *dev)
 {
 	struct iio_dev *indio_dev = i2c_get_clientdata(to_i2c_client(dev));
@@ -1812,7 +1811,6 @@ runtime_resume_failed:
 
 	return ret;
 }
-#endif
 
 static const struct dev_pm_ops mma8452_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend, pm_runtime_force_resume)
@@ -1835,7 +1833,7 @@ static struct i2c_driver mma8452_driver = {
 	.driver = {
 		.name	= "mma8452",
 		.of_match_table = mma8452_dt_ids,
-		.pm	= &mma8452_pm_ops,
+		.pm	= pm_ptr(&mma8452_pm_ops),
 	},
 	.probe = mma8452_probe,
 	.remove = mma8452_remove,
