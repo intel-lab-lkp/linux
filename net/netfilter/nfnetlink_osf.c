@@ -326,6 +326,15 @@ static int nfnl_osf_add_callback(struct sk_buff *skb,
 		if (f->opt[i].kind == OSFOPT_MSS && f->opt[i].length < 4)
 			return -EINVAL;
 
+		switch (f->wss.wc) {
+		case OSF_WSS_MODULO:
+			if (f->wss.val == 0)
+				return -EINVAL;
+			break;
+		default:
+			break;
+		}
+
 		tot_opt_len += f->opt[i].length;
 		if (tot_opt_len > MAX_IPOPTLEN)
 			return -EINVAL;
