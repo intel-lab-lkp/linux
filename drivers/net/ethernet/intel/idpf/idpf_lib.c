@@ -758,12 +758,15 @@ static int idpf_init_mac_addr(struct idpf_vport *vport,
 	return 0;
 }
 
-static void idpf_detach_and_close(struct idpf_adapter *adapter)
+void idpf_detach_and_close(struct idpf_adapter *adapter)
 {
 	int max_vports = adapter->max_vports;
 
 	for (int i = 0; i < max_vports; i++) {
 		struct net_device *netdev = adapter->netdevs[i];
+
+		if (!netdev)
+			continue;
 
 		/* If the interface is in detached state, that means the
 		 * previous reset was not handled successfully for this
@@ -1908,6 +1911,10 @@ static void idpf_init_hard_reset(struct idpf_adapter *adapter)
 
 	dev_info(dev, "Device HW Reset initiated\n");
 
+	/* Reset has already happened, skip to recovery. */
+	if (test_and_clear_bit(IDPF_PCI_CB_RESET, adapter->flags))
+		goto check_rst_complete;
+
 	/* Prepare for reset */
 	if (test_bit(IDPF_HR_DRV_LOAD, adapter->flags)) {
 		reg_ops->trigger_reset(adapter, IDPF_HR_DRV_LOAD);
@@ -1925,6 +1932,7 @@ static void idpf_init_hard_reset(struct idpf_adapter *adapter)
 		goto unlock_mutex;
 	}
 
+check_rst_complete:
 	/* Wait for reset to complete */
 	err = idpf_check_reset_complete(adapter, &adapter->reset_reg);
 	if (err) {
@@ -1984,7 +1992,8 @@ void idpf_vc_event_task(struct work_struct *work)
 	if (test_bit(IDPF_HR_FUNC_RESET, adapter->flags))
 		goto func_reset;
 
-	if (test_bit(IDPF_HR_DRV_LOAD, adapter->flags))
+	if (test_bit(IDPF_HR_DRV_LOAD, adapter->flags) ||
+	    test_bit(IDPF_PCI_CB_RESET, adapter->flags))
 		goto drv_load;
 
 	return;

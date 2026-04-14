@@ -234,6 +234,7 @@ static int idpf_cfg_device(struct idpf_adapter *adapter)
 	if (err)
 		pci_dbg(pdev, "PCIe PTM is not supported by PCIe bus/controller\n");
 
+	pci_save_state(pdev);
 	pci_set_drvdata(pdev, adapter);
 
 	return 0;
@@ -360,6 +361,116 @@ err_free:
 	return err;
 }
 
+static void idpf_reset_prepare(struct idpf_adapter *adapter)
+{
+	pci_dbg(adapter->pdev, "resetting\n");
+	set_bit(IDPF_HR_RESET_IN_PROG, adapter->flags);
+	cancel_delayed_work_sync(&adapter->serv_task);
+	cancel_delayed_work_sync(&adapter->vc_event_task);
+	idpf_detach_and_close(adapter);
+	idpf_idc_issue_reset_event(adapter->cdev_info);
+	idpf_vc_core_deinit(adapter);
+}
+
+/**
+ * idpf_pci_err_detected - PCI error detected, about to attempt recovery
+ * @pdev: PCI device struct
+ * @err: err detected
+ *
+ * Return: %PCI_ERS_RESULT_NEED_RESET to attempt recovery,
+ * %PCI_ERS_RESULT_DISCONNECT if recovery is not possible.
+ */
+static pci_ers_result_t
+idpf_pci_err_detected(struct pci_dev *pdev, pci_channel_state_t err)
+{
+	struct idpf_adapter *adapter = pci_get_drvdata(pdev);
+
+	/* Shutdown the mailbox if PCI I/O is in a bad state to avoid MBX
+	 * timeouts during the prepare stage.
+	 */
+	if (pci_channel_offline(pdev))
+		libie_ctlq_xn_shutdown(adapter->xnm);
+
+	idpf_reset_prepare(adapter);
+
+	if (err == pci_channel_io_perm_failure)
+		return PCI_ERS_RESULT_DISCONNECT;
+
+	/* When called due to PCI error, driver will have to force PFR on
+	 * resume, in order to complete the recovery via the event task.
+	 */
+	set_bit(IDPF_PCI_CB_RESET, adapter->flags);
+
+	return PCI_ERS_RESULT_NEED_RESET;
+}
+
+/**
+ * idpf_pci_err_slot_reset - PCI undergoing reset
+ * @pdev: PCI device struct
+ *
+ * Reset PCI state and use a register read to see if we're good.
+ *
+ * Return: %PCI_ERS_RESULT_RECOVERED on success,
+ * %PCI_ERS_RESULT_DISCONNECT on failure.
+ */
+static pci_ers_result_t
+idpf_pci_err_slot_reset(struct pci_dev *pdev)
+{
+	struct idpf_adapter *adapter = pci_get_drvdata(pdev);
+
+	pci_restore_state(pdev);
+	pci_set_master(pdev);
+	pci_wake_from_d3(pdev, false);
+	if (readl(adapter->reset_reg.rstat) != 0xFFFFFFFF)
+		return PCI_ERS_RESULT_RECOVERED;
+
+	return PCI_ERS_RESULT_DISCONNECT;
+}
+
+/**
+ * idpf_pci_err_resume - Resume operations after PCI error recovery
+ * @pdev: PCI device struct
+ */
+static void idpf_pci_err_resume(struct pci_dev *pdev)
+{
+	struct idpf_adapter *adapter = pci_get_drvdata(pdev);
+
+	/* Force a PFR when resuming from PCI error. */
+	if (test_and_set_bit(IDPF_PCI_CB_RESET, adapter->flags))
+		adapter->dev_ops.reg_ops.trigger_reset(adapter, IDPF_HR_FUNC_RESET);
+
+	queue_delayed_work(adapter->vc_event_wq,
+			   &adapter->vc_event_task,
+			   msecs_to_jiffies(300));
+}
+
+/**
+ * idpf_pci_err_reset_prepare - Prepare driver for PCI reset
+ * @pdev: PCI device struct
+ */
+static void idpf_pci_err_reset_prepare(struct pci_dev *pdev)
+{
+	idpf_reset_prepare(pci_get_drvdata(pdev));
+}
+
+/**
+ * idpf_pci_err_reset_done - PCI err reset recovery complete
+ * @pdev: PCI device struct
+ */
+static void idpf_pci_err_reset_done(struct pci_dev *pdev)
+{
+	pci_dbg(pdev, "reset: done\n");
+	idpf_pci_err_resume(pdev);
+}
+
+static const struct pci_error_handlers idpf_pci_err_handler = {
+	.error_detected = idpf_pci_err_detected,
+	.slot_reset = idpf_pci_err_slot_reset,
+	.reset_prepare = idpf_pci_err_reset_prepare,
+	.reset_done = idpf_pci_err_reset_done,
+	.resume = idpf_pci_err_resume,
+};
+
 /* idpf_pci_tbl - PCI Dev idpf ID Table
  */
 static const struct pci_device_id idpf_pci_tbl[] = {
@@ -377,5 +488,6 @@ static struct pci_driver idpf_driver = {
 	.sriov_configure	= idpf_sriov_configure,
 	.remove			= idpf_remove,
 	.shutdown		= idpf_shutdown,
+	.err_handler		= &idpf_pci_err_handler,
 };
 module_pci_driver(idpf_driver);
