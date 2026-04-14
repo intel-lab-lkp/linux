@@ -102,6 +102,7 @@
     KERNEL_IMAGE_TYPE: ""
     LAVA_FIRMWARE: qcom-lava
 
+# eDP panel (ti sn65dsi86 dsi->edp bridge)
 msm:sc7180-trogdor-lazor-limozeen:
   extends:
     - .msm-sc7180
@@ -112,6 +113,7 @@ msm:sc7180-trogdor-lazor-limozeen:
     GPU_VERSION: ${DEVICE_TYPE}
     RUNNER_TAG: mesa-ci-x86-64-lava-sc7180-trogdor-lazor-limozeen
 
+# eDP panel (parade ps8640 dsi->edp bridge)
 msm:sc7180-trogdor-kingoftown:
   extends:
     - .msm-sc7180
@@ -121,6 +123,17 @@ msm:sc7180-trogdor-kingoftown:
     DTB: sc7180-trogdor-kingoftown
     GPU_VERSION: ${DEVICE_TYPE}
     RUNNER_TAG: mesa-ci-x86-64-lava-sc7180-trogdor-kingoftown
+
+# MIPI DSI panel
+msm:sc7180-trogdor-wormdingler:
+  extends:
+    - .msm-sc7180
+  parallel: 6
+  variables:
+    DEVICE_TYPE: sc7180-trogdor-wormdingler-rev1-boe
+    DTB: sc7180-trogdor-wormdingler-rev1-boe
+    GPU_VERSION: ${DEVICE_TYPE}
+    RUNNER_TAG: mesa-ci-x86-64-lava-sc7180-trogdor-wormdingler-rev1-boe
 
 msm:apq8016:
   extends:
