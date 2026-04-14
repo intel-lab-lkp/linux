@@ -1233,9 +1233,12 @@ Committed_AS
 VmallocTotal
               total size of vmalloc virtual address space
 VmallocUsed
-              amount of vmalloc area which is used
+              Amount of memory allocated by vmalloc() calls.
+              Note that VmallocTotal is a constant that refers to the size of
+              the vmalloc VA space, while VmallocUsed reports the amount of
+              memory allocated by vmalloc() calls.
 VmallocChunk
-              largest contiguous block of vmalloc area which is free
+              Deprecated, hardcoded to zero.
 Percpu
               Memory allocated to the percpu allocator used to back percpu
               allocations. This stat excludes the cost of metadata.
