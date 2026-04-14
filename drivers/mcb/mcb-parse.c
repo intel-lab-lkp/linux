@@ -200,8 +200,8 @@ int chameleon_parse_cells(struct mcb_bus *bus, phys_addr_t mapbase,
 	bus->revision = header->revision;
 	bus->model = header->model;
 	bus->minor = header->minor;
-	snprintf(bus->name, CHAMELEON_FILENAME_LEN + 1, "%s",
-		 header->filename);
+	memcpy(bus->name, header->filename, CHAMELEON_FILENAME_LEN);
+	bus->name[CHAMELEON_FILENAME_LEN] = '\0';
 
 	bar_count = chameleon_get_bar(&p, mapbase, &cb);
 	if (bar_count < 0) {
