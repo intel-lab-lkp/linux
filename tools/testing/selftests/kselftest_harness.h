@@ -1151,6 +1151,8 @@ static bool test_enabled(int argc, char **argv,
 	return !has_positive;
 }
 
+struct __test_metadata *current_test_metadata;
+
 static void __run_test(struct __fixture_metadata *f,
 		       struct __fixture_variant_metadata *variant,
 		       struct __test_metadata *t)
@@ -1182,7 +1184,9 @@ static void __run_test(struct __fixture_metadata *f,
 		t->exit_code = KSFT_FAIL;
 	} else if (child == 0) {
 		setpgrp();
+		current_test_metadata = t;
 		t->fn(t, variant);
+		current_test_metadata = NULL;
 		_exit(t->exit_code);
 	} else {
 		t->pid = child;
