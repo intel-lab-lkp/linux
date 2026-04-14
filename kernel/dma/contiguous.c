@@ -415,8 +415,9 @@ static struct page *cma_alloc_aligned(struct cma *cma, size_t size, gfp_t gfp)
  */
 struct page *dma_alloc_contiguous(struct device *dev, size_t size, gfp_t gfp)
 {
-#ifdef CONFIG_DMA_NUMA_CMA
+#ifdef CONFIG_NUMA
 	int nid = dev_to_node(dev);
+	struct page *page;
 #endif
 
 	/* CMA can be used only in the context which permits sleeping */
@@ -430,7 +431,6 @@ struct page *dma_alloc_contiguous(struct device *dev, size_t size, gfp_t gfp)
 #ifdef CONFIG_DMA_NUMA_CMA
 	if (nid != NUMA_NO_NODE && !(gfp & (GFP_DMA | GFP_DMA32))) {
 		struct cma *cma = dma_contiguous_pernuma_area[nid];
-		struct page *page;
 
 		if (cma) {
 			page = cma_alloc_aligned(cma, size, gfp);
@@ -446,6 +446,14 @@ struct page *dma_alloc_contiguous(struct device *dev, size_t size, gfp_t gfp)
 		}
 	}
 #endif
+
+#ifdef CONFIG_NUMA
+	/* Try first to allocate memory on the same node as the device */
+	page = alloc_pages_node(nid, gfp, get_order(size));
+	if (page)
+		return page;
+#endif
+
 	if (!dma_contiguous_default_area)
 		return NULL;
 
