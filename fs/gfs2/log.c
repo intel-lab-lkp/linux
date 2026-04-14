@@ -467,7 +467,7 @@ void gfs2_log_release(struct gfs2_sbd *sdp, unsigned int blks)
 {
 	atomic_add(blks, &sdp->sd_log_blks_free);
 	trace_gfs2_log_blocks(sdp, blks);
-	gfs2_assert_withdraw(sdp, !sdp->sd_jdesc ||
+	gfs2_assert_withdraw(sdp,
 			atomic_read(&sdp->sd_log_blks_free) <=
 			sdp->sd_jdesc->jd_blocks);
 	if (atomic_read(&sdp->sd_log_blks_needed))
@@ -1137,8 +1137,9 @@ repeat:
 	lops_before_commit(sdp, tr);
 	if (gfs2_withdrawn(sdp))
 		goto out_withdraw;
-	if (sdp->sd_jdesc)
-		gfs2_log_submit_write(&sdp->sd_jdesc->jd_log_bio);
+
+	gfs2_log_submit_write(&sdp->sd_jdesc->jd_log_bio);
+
 	if (gfs2_withdrawn(sdp))
 		goto out_withdraw;
 
