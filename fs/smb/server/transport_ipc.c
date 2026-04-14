@@ -497,6 +497,8 @@ static int ipc_validate_msg(struct ipc_msg_table_entry *entry)
 	{
 		struct ksmbd_rpc_command *resp = entry->response;
 
+		if (resp->payload_sz > KSMBD_IPC_MAX_PAYLOAD)
+			return -EINVAL;
 		msg_sz = sizeof(struct ksmbd_rpc_command) + resp->payload_sz;
 		break;
 	}
@@ -513,7 +515,8 @@ static int ipc_validate_msg(struct ipc_msg_table_entry *entry)
 		struct ksmbd_share_config_response *resp = entry->response;
 
 		if (resp->payload_sz) {
-			if (resp->payload_sz < resp->veto_list_sz)
+			if (resp->payload_sz < resp->veto_list_sz ||
+			    resp->payload_sz > KSMBD_IPC_MAX_PAYLOAD)
 				return -EINVAL;
 
 			msg_sz = sizeof(struct ksmbd_share_config_response) +
@@ -526,6 +529,8 @@ static int ipc_validate_msg(struct ipc_msg_table_entry *entry)
 		struct ksmbd_login_response_ext *resp = entry->response;
 
 		if (resp->ngroups) {
+			if (resp->ngroups < 0 || resp->ngroups > NGROUPS_MAX)
+				return -EINVAL;
 			msg_sz = sizeof(struct ksmbd_login_response_ext) +
 					resp->ngroups * sizeof(gid_t);
 		}
