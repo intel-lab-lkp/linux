@@ -15,6 +15,7 @@ Source0: linux.tar.gz
 Source1: config
 Source2: diff.patch
 Provides: kernel-%{KERNELRELEASE}
+Provides: kernel-uname-r = %{KERNELRELEASE}
 BuildRequires: bc binutils bison dwarves
 BuildRequires: (elfutils-devel or libdw-devel)
 BuildRequires: (elfutils-libelf-devel or libelf-devel) flex
@@ -40,6 +41,7 @@ glibc package.
 Summary: Development package for building kernel modules to match the %{version} kernel
 Group: System Environment/Kernel
 AutoReqProv: no
+Provides: kernel-devel-uname-r = %{KERNELRELEASE}
 %description -n kernel-devel
 This package provides kernel headers and makefiles sufficient to build modules
 against the %{version} kernel package.
