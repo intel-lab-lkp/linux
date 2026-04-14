@@ -113,7 +113,7 @@ static ssize_t proc_bus_pci_write(struct file *file, const char __user *buf,
 {
 	struct inode *ino = file_inode(file);
 	struct pci_dev *dev = pde_data(ino);
-	int off = *ppos;
+	loff_t off = *ppos;
 	unsigned int size = nbytes;
 	int ret;
 
