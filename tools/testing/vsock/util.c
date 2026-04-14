@@ -381,7 +381,13 @@ void send_buf(int fd, const void *buf, size_t len, int flags,
 	}
 }
 
+#define RECV_PEEK_RETRY_USEC 10
+
 /* Receive bytes in a buffer and check the return value.
+ *
+ * MSG_PEEK note: MSG_PEEK doesn't consume bytes from the buffer, so partial
+ * reads cannot be summed. Instead, the function retries until recv() returns
+ * exactly expected_ret bytes in a single call.
  *
  * expected_ret:
  *  <0 Negative errno (for testing errors)
@@ -402,6 +408,15 @@ void recv_buf(int fd, void *buf, size_t len, int flags, ssize_t expected_ret)
 			continue;
 		if (ret <= 0)
 			break;
+
+		if (flags & MSG_PEEK) {
+			if (ret == expected_ret) {
+				nread = ret;
+				break;
+			}
+			timeout_usleep(RECV_PEEK_RETRY_USEC);
+			continue;
+		}
 
 		nread += ret;
 	} while (nread < len);
