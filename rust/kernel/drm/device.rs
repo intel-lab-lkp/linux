@@ -7,7 +7,10 @@
 use crate::{
     alloc::allocator::Kmalloc,
     bindings,
-    device,
+    device::{
+        self,
+        AsBusDevice as _, //
+    },
     drm::{
         self,
         driver::AllocImpl,
@@ -352,6 +355,83 @@ impl<T: drm::Driver, C: DeviceContext> Device<T, C> {
     pub(crate) unsafe fn assume_ctx<NewCtx: DeviceContext>(&self) -> &Device<T, NewCtx> {
         // SAFETY: The data layout is identical via our type invariants.
         unsafe { mem::transmute(self) }
+    }
+}
+
+impl<T: drm::Driver> Device<T, Registered> {
+    /// Guard against the parent bus device being unbound.
+    ///
+    /// Returns an [`UnbindGuard`] if the device has not been unplugged, [`None`] otherwise.
+    ///
+    /// The returned guard dereferences to the parent bus device in the [`device::Bound`] context
+    /// (see [`Driver::ParentDevice`](drm::Driver::ParentDevice)).
+    ///
+    /// While [`UnbindGuard`] is held the parent device is guaranteed to be bound.
+    #[must_use]
+    pub fn unbind_guard(&self) -> Option<UnbindGuard<'_, T>> {
+        let mut idx: i32 = 0;
+        // SAFETY: `self.as_raw()` is a valid pointer to a `struct drm_device` by the type
+        // invariants of `Device<T, Registered>`.
+        if unsafe { bindings::drm_dev_enter(self.as_raw(), &mut idx) } {
+            Some(UnbindGuard { dev: self, idx })
+        } else {
+            None
+        }
+    }
+
+    /// Execute a closure while the parent bus device is guaranteed to be bound.
+    ///
+    /// Acquires the [`UnbindGuard`] and, if the device has not been unplugged, calls `f` with the
+    /// parent bus device. Returns `None` if the device has been unplugged.
+    pub fn with_unbind_guard<R>(
+        &self,
+        f: impl FnOnce(&T::ParentDevice<device::Bound>) -> R,
+    ) -> Option<R> {
+        let guard = self.unbind_guard()?;
+        Some(f(&guard))
+    }
+}
+
+/// A guard preventing the parent bus device from being unbound.
+///
+/// The guard dereferences to [`Driver::ParentDevice<Bound>`](drm::Driver::ParentDevice), providing
+/// access to the parent bus device with the guarantee that it is bound for the entire duration of
+/// the critical section.
+///
+/// Internally this is backed by a `drm_dev_enter()` / `drm_dev_exit()` SRCU critical section.
+///
+/// See [`Device::unbind_guard`] for details on the safety argument.
+///
+/// # Invariants
+///
+/// - `idx` is the SRCU read lock index returned by a successful `drm_dev_enter()` call.
+/// - The parent bus device of `dev` is bound for the lifetime of this guard.
+#[must_use]
+pub struct UnbindGuard<'a, T: drm::Driver> {
+    dev: &'a Device<T, Registered>,
+    idx: i32,
+}
+
+impl<T: drm::Driver> Deref for UnbindGuard<'_, T> {
+    type Target = T::ParentDevice<device::Bound>;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        // SAFETY:
+        // - The parent `struct device` is embedded in a `T::ParentDevice`, as guaranteed by
+        //   `UnregisteredDevice::new` taking a `&T::ParentDevice<device::Bound>`.
+        // - By the type invariants of `UnbindGuard`, the parent device is bound for the lifetime
+        //   of this guard.
+        unsafe { T::ParentDevice::from_device(self.dev.as_ref().as_bound()) }
+    }
+}
+
+impl<T: drm::Driver> Drop for UnbindGuard<'_, T> {
+    #[inline]
+    fn drop(&mut self) {
+        // SAFETY: `self.idx` was returned by a successful `drm_dev_enter()` call, as guaranteed
+        // by the type invariants of `UnbindGuard`.
+        unsafe { bindings::drm_dev_exit(self.idx) };
     }
 }
 
