@@ -9,6 +9,7 @@
 #include <execinfo.h>
 #include <sys/syscall.h>
 
+#include "kselftest_harness_structs.h"
 #include "kselftest.h"
 
 /* Dumps the current stack trace to stderr. */
@@ -63,6 +64,8 @@ static pid_t _gettid(void)
 	return syscall(SYS_gettid);
 }
 
+struct __test_metadata *current_test_metadata __attribute__((weak)) = NULL;
+
 void __attribute__((noinline))
 test_assert(bool exp, const char *exp_str,
 	const char *file, unsigned int line, const char *fmt, ...)
@@ -89,6 +92,19 @@ test_assert(bool exp, const char *exp_str,
 			print_skip("Access denied - Exiting");
 			exit(KSFT_SKIP);
 		}
+
+		/*
+		 * When used with kselftest_harness, do teardown like
+		 * __bail() does. KVM only has TEST_ASSERT (no EXPECT
+		 * equivalent) and will definitely exit.
+		 */
+		if (current_test_metadata) {
+			struct __test_metadata *t = current_test_metadata;
+
+			if (t->teardown_fn)
+				t->teardown_fn(false, t, t->self, t->variant);
+		}
+
 		exit(254);
 	}
 
