@@ -70,9 +70,8 @@ static inline void __blake2s_init(struct blake2s_ctx *ctx, size_t outlen,
 	ctx->buflen = 0;
 	ctx->outlen = outlen;
 	if (keylen) {
-		memcpy(ctx->buf, key, keylen);
-		memset(&ctx->buf[keylen], 0, BLAKE2S_BLOCK_SIZE - keylen);
-		ctx->buflen = BLAKE2S_BLOCK_SIZE;
+		memcpy_and_pad(ctx->buf, sizeof(ctx->buf), key, keylen, 0);
+		ctx->buflen = sizeof(ctx->buf);
 	}
 }
 
