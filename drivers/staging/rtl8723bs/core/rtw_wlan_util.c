@@ -934,6 +934,9 @@ void HT_caps_handler(struct adapter *padapter, struct ndis_80211_var_ie *pIE)
 	if (phtpriv->ht_option == false)
 		return;
 
+	if (pIE->length > sizeof(pmlmeinfo->HT_caps))
+		return;
+
 	pmlmeinfo->HT_caps_enable = 1;
 
 	for (i = 0; i < (pIE->length); i++) {
