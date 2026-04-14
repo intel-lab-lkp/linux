@@ -251,13 +251,20 @@ impl Vbios {
             // Convert to a specific image type
             match BiosImageType::try_from(image.pcir.code_type) {
                 Ok(BiosImageType::PciAt) => {
+                    if pci_at_image.is_some() {
+                        dev_err!(dev, "More than 1 PCI-AT image found\n");
+                        return Err(EINVAL);
+                    }
                     pci_at_image = Some(PciAtBiosImage::try_from(image)?);
                 }
                 Ok(BiosImageType::FwSec) => {
                     if first_fwsec_image.is_none() {
                         first_fwsec_image = Some(image);
-                    } else {
+                    } else if second_fwsec_image.is_none() {
                         second_fwsec_image = Some(image);
+                    } else {
+                        dev_err!(dev, "More than 2 FwSec images found\n");
+                        return Err(EINVAL);
                     }
                 }
                 _ => {
