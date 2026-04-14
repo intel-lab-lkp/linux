@@ -18,6 +18,7 @@
 #include <linux/pm_wakeirq.h>
 #include <linux/regmap.h>
 #include <linux/remoteproc.h>
+#include <linux/remoteproc_tee.h>
 #include <linux/reset.h>
 #include <linux/slab.h>
 #include <linux/workqueue.h>
@@ -89,6 +90,7 @@ struct stm32_rproc {
 	struct stm32_rproc_mem *rmems;
 	struct stm32_mbox mb[MBOX_NB_MBX];
 	struct workqueue_struct *workqueue;
+	struct of_phandle_args tee_phandle;
 	bool hold_boot_smc;
 	void __iomem *rsc_va;
 };
@@ -253,6 +255,19 @@ static int stm32_rproc_release(struct rproc *rproc)
 	}
 
 	return 0;
+}
+
+static int stm32_rproc_tee_stop(struct rproc *rproc)
+{
+	int err;
+
+	stm32_rproc_request_shutdown(rproc);
+
+	err = rproc_tee_stop(rproc);
+	if (err)
+		return err;
+
+	return stm32_rproc_release(rproc);
 }
 
 static int stm32_rproc_prepare(struct rproc *rproc)
@@ -683,6 +698,17 @@ static const struct rproc_ops st_rproc_ops = {
 	.get_boot_addr	= rproc_elf_get_boot_addr,
 };
 
+static const struct rproc_ops st_rproc_tee_ops = {
+	.prepare	= stm32_rproc_prepare,
+	.start		= rproc_tee_start,
+	.stop		= stm32_rproc_tee_stop,
+	.kick		= stm32_rproc_kick,
+	.load		= rproc_tee_load_fw,
+	.parse_fw	= rproc_tee_parse_fw,
+	.find_loaded_rsc_table = rproc_tee_find_loaded_rsc_table,
+	.release_fw	= rproc_tee_release_fw,
+};
+
 static const struct of_device_id stm32_rproc_match[] = {
 	{ .compatible = "st,stm32mp1-m4" },
 	{},
@@ -716,6 +742,7 @@ static int stm32_rproc_parse_dt(struct platform_device *pdev,
 {
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev->of_node;
+	struct of_phandle_args tee_phandle;
 	struct stm32_syscon tz;
 	unsigned int tzen;
 	int err, irq;
@@ -741,51 +768,69 @@ static int stm32_rproc_parse_dt(struct platform_device *pdev,
 		dev_info(dev, "wdg irq registered\n");
 	}
 
-	ddata->rst = devm_reset_control_get_optional(dev, "mcu_rst");
-	if (!ddata->rst) {
-		/* Try legacy fallback method: get it by index */
-		ddata->rst = devm_reset_control_get_by_index(dev, 0);
+	if (of_find_property(np, "st,rproc-tee", NULL)) {
+		err = of_parse_phandle_with_fixed_args(np, "st,rproc-tee",
+						       1, 0, &tee_phandle);
+		if (err)
+			return dev_err_probe(dev, err,
+					     "failed to parse st,rproc-tee\n");
+
+		if (!IS_ENABLED(CONFIG_REMOTEPROC_TEE)) {
+			of_node_put(tee_phandle.np);
+			return dev_err_probe(dev, -ENODEV,
+					     "st,rproc-tee requires REMOTEPROC_TEE support\n");
+		}
+
+		ddata->tee_phandle = tee_phandle;
 	}
-	if (IS_ERR(ddata->rst))
-		return dev_err_probe(dev, PTR_ERR(ddata->rst),
-				     "failed to get mcu_reset\n");
 
-	/*
-	 * Three ways to manage the hold boot
-	 * - using SCMI: the hold boot is managed as a reset
-	 *    The DT "reset-mames" property should be defined with 2 items:
-	 *        reset-names = "mcu_rst", "hold_boot";
-	 * - using SMC call (deprecated): use SMC reset interface
-	 *    The DT "reset-mames" property is optional, "st,syscfg-tz" is required
-	 * - default(no SCMI, no SMC): the hold boot is managed as a syscon register
-	 *    The DT "reset-mames" property is optional, "st,syscfg-holdboot" is required
-	 */
+	if (!ddata->tee_phandle.np) {
+		ddata->rst = devm_reset_control_get_optional(dev, "mcu_rst");
+		if (!ddata->rst) {
+			/* Try legacy fallback method: get it by index */
+			ddata->rst = devm_reset_control_get_by_index(dev, 0);
+		}
+		if (IS_ERR(ddata->rst))
+			return dev_err_probe(dev, PTR_ERR(ddata->rst),
+					"failed to get mcu_reset\n");
 
-	ddata->hold_boot_rst = devm_reset_control_get_optional(dev, "hold_boot");
-	if (IS_ERR(ddata->hold_boot_rst))
-		return dev_err_probe(dev, PTR_ERR(ddata->hold_boot_rst),
-				     "failed to get hold_boot reset\n");
+		/*
+		 * Three ways to manage the hold boot
+		 * - using SCMI: the hold boot is managed as a reset
+		 *    The DT "reset-mames" property should be defined with 2 items:
+		 *        reset-names = "mcu_rst", "hold_boot";
+		 * - using SMC call (deprecated): use SMC reset interface
+		 *    The DT "reset-mames" property is optional, "st,syscfg-tz" is required
+		 * - default(no SCMI, no SMC): the hold boot is managed as a syscon register
+		 *    The DT "reset-mames" property is optional, "st,syscfg-holdboot" is required
+		 */
 
-	if (!ddata->hold_boot_rst && IS_ENABLED(CONFIG_HAVE_ARM_SMCCC)) {
-		/* Manage the MCU_BOOT using SMC call */
-		err = stm32_rproc_get_syscon(np, "st,syscfg-tz", &tz);
-		if (!err) {
-			err = regmap_read(tz.map, tz.reg, &tzen);
+		ddata->hold_boot_rst = devm_reset_control_get_optional(dev, "hold_boot");
+		if (IS_ERR(ddata->hold_boot_rst))
+			return dev_err_probe(dev, PTR_ERR(ddata->hold_boot_rst),
+					"failed to get hold_boot reset\n");
+
+		if (!ddata->hold_boot_rst && IS_ENABLED(CONFIG_HAVE_ARM_SMCCC)) {
+			/* Manage the MCU_BOOT using SMC call */
+			err = stm32_rproc_get_syscon(np, "st,syscfg-tz", &tz);
+			if (!err) {
+				err = regmap_read(tz.map, tz.reg, &tzen);
+				if (err) {
+					dev_err(dev, "failed to read tzen\n");
+					return err;
+				}
+				ddata->hold_boot_smc = tzen & tz.mask;
+			}
+		}
+
+		if (!ddata->hold_boot_rst && !ddata->hold_boot_smc) {
+			/* Default: hold boot manage it through the syscon controller */
+			err = stm32_rproc_get_syscon(np, "st,syscfg-holdboot",
+						     &ddata->hold_boot);
 			if (err) {
-				dev_err(dev, "failed to read tzen\n");
+				dev_err(dev, "failed to get hold boot\n");
 				return err;
 			}
-			ddata->hold_boot_smc = tzen & tz.mask;
-		}
-	}
-
-	if (!ddata->hold_boot_rst && !ddata->hold_boot_smc) {
-		/* Default: hold boot manage it through the syscon controller */
-		err = stm32_rproc_get_syscon(np, "st,syscfg-holdboot",
-					     &ddata->hold_boot);
-		if (err) {
-			dev_err(dev, "failed to get hold boot\n");
-			return err;
 		}
 	}
 
@@ -857,17 +902,30 @@ static int stm32_rproc_probe(struct platform_device *pdev)
 	if (ret < 0 && ret != -EINVAL)
 		return ret;
 
-	rproc = devm_rproc_alloc(dev, np->name, &st_rproc_ops, fw_name, sizeof(*ddata));
+	if (of_find_property(np, "st,rproc-tee", NULL))
+		rproc = devm_rproc_alloc(dev, np->name, &st_rproc_tee_ops, fw_name,
+					 sizeof(*ddata));
+	else
+		rproc = devm_rproc_alloc(dev, np->name, &st_rproc_ops, fw_name,
+					 sizeof(*ddata));
+
 	if (!rproc)
 		return -ENOMEM;
 
 	ddata = rproc->priv;
-
 	rproc_coredump_set_elf_info(rproc, ELFCLASS32, EM_NONE);
 
 	ret = stm32_rproc_parse_dt(pdev, ddata, &rproc->auto_boot);
 	if (ret)
 		goto free_rproc;
+
+	if (ddata->tee_phandle.np &&
+	    !of_device_is_available(ddata->tee_phandle.np)) {
+		of_node_put(ddata->tee_phandle.np);
+		ddata->tee_phandle.np = NULL;
+		ret = -EPROBE_DEFER;
+		goto free_rproc;
+	}
 
 	ret = stm32_rproc_of_memory_translations(pdev, ddata);
 	if (ret)
@@ -877,8 +935,14 @@ static int stm32_rproc_probe(struct platform_device *pdev)
 	if (ret)
 		goto free_rproc;
 
-	if (state == M4_STATE_CRUN)
+	if (state == M4_STATE_CRUN) {
+		if (ddata->tee_phandle.np) {
+			dev_err(dev, "TEE support not yet compatible with attached state\n");
+			ret = -EINVAL;
+			goto free_rproc;
+		}
 		rproc->state = RPROC_DETACHED;
+	}
 
 	rproc->has_iommu = false;
 	ddata->workqueue = create_workqueue(dev_name(dev));
@@ -894,10 +958,12 @@ static int stm32_rproc_probe(struct platform_device *pdev)
 	if (ret)
 		goto free_wkq;
 
-	ret = rproc_add(rproc);
+	if (ddata->tee_phandle.np)
+		ret = rproc_tee_register(dev, rproc, &ddata->tee_phandle);
+	else
+		ret = rproc_add(rproc);
 	if (ret)
 		goto free_mb;
-
 	return 0;
 
 free_mb:
@@ -911,6 +977,11 @@ free_rproc:
 		dev_pm_clear_wake_irq(dev);
 		device_init_wakeup(dev, false);
 	}
+	if (ddata->tee_phandle.np) {
+		of_node_put(ddata->tee_phandle.np);
+		ddata->tee_phandle.np = NULL;
+	}
+
 	return ret;
 }
 
@@ -919,17 +990,25 @@ static void stm32_rproc_remove(struct platform_device *pdev)
 	struct rproc *rproc = platform_get_drvdata(pdev);
 	struct stm32_rproc *ddata = rproc->priv;
 	struct device *dev = &pdev->dev;
+	struct device_node *tee_np = ddata->tee_phandle.np;
 
 	if (atomic_read(&rproc->power) > 0)
 		rproc_shutdown(rproc);
 
-	rproc_del(rproc);
 	stm32_rproc_free_mbox(rproc);
 	destroy_workqueue(ddata->workqueue);
 
 	if (device_may_wakeup(dev)) {
 		dev_pm_clear_wake_irq(dev);
 		device_init_wakeup(dev, false);
+	}
+
+	if (tee_np) {
+		ddata->tee_phandle.np = NULL;
+		rproc_tee_unregister(dev, rproc);
+		of_node_put(tee_np);
+	} else {
+		rproc_del(rproc);
 	}
 }
 
