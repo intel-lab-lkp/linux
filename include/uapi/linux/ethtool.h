@@ -295,6 +295,7 @@ enum phy_tunable_id {
 	 * Add your fresh new phy tunable attribute above and remember to update
 	 * phy_tunable_strings[] in net/ethtool/common.c
 	 */
+	ETHTOOL_PHY_KSZ87XX_LOW_LOSS,
 	__ETHTOOL_PHY_TUNABLE_COUNT,
 };
 
