@@ -2,6 +2,7 @@
 /*
  * Copyright (c) 2015 Samsung Electronics Co., Ltd
  * Copyright (c) 2025 Kaustabh Chakraborty <kauschluss@disroot.org>
+ * Copyright (c) 2026 Łukasz Lebiedziński <kernel@lvkasz.us>
  */
 
 #ifndef __LINUX_MFD_S2MU005_H
@@ -186,9 +187,11 @@ enum s2mu005_reg {
 #define S2MU005_CHGR_OTG_OCP_ON		BIT(5)
 #define S2MU005_CHGR_OTG_OCP_OFF	BIT(4)
 #define S2MU005_CHGR_OTG_OCP		GENMASK(3, 2)
+#define S2MU005_CHGR_OTG_OCP_1P5A	0x3
 
 /* S2MU005_REG_CHGR_CTRL5 */
 #define S2MU005_CHGR_VMID_BOOST		GENMASK(4, 0)
+#define S2MU005_CHGR_VMID_BOOST_5P1V	0x16
 
 /* S2MU005_REG_CHGR_CTRL6 */
 #define S2MU005_CHGR_COOL_CHG_CURR	GENMASK(5, 0)
@@ -205,6 +208,7 @@ enum s2mu005_reg {
 /* S2MU005_REG_CHGR_CTRL11 */
 #define S2MU005_CHGR_OSC_BOOST		GENMASK(6, 5)
 #define S2MU005_CHGR_OSC_BUCK		GENMASK(4, 3)
+#define S2MU005_CHGR_OSC_BOOST_2MHZ	0x3
 
 /* S2MU005_REG_CHGR_CTRL12 */
 #define S2MU005_CHGR_WDT		GENMASK(2, 0)
@@ -214,6 +218,7 @@ enum s2mu005_reg {
 
 /* S2MU005_REG_CHGR_CTRL15 */
 #define S2MU005_CHGR_OTG_EN		GENMASK(3, 2)
+#define S2MU005_CHGR_OTG_EN_ON		0x3
 
 /* S2MU005_REG_FLED_STATUS */
 #define S2MU005_FLED_FLASH_STATUS(x)	(BIT(7) >> 2 * (x))
