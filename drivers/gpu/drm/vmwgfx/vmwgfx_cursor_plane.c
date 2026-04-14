@@ -588,6 +588,17 @@ int vmw_cursor_plane_prepare_fb(struct drm_plane *plane,
 		break;
 	case VMW_CURSOR_UPDATE_GB_ONLY:
 	case VMW_CURSOR_UPDATE_MOB: {
+		if (!vmw_user_object_is_null(&vps->uo)) {
+			if (!vmw_cursor_plane_changed(vps, old_vps) &&
+			    !vmw_cursor_buffer_changed(vps, old_vps)) {
+				vps->cursor.update_type = VMW_CURSOR_UPDATE_NONE;
+				return 0;
+			}
+			if (vps->cursor.update_type == VMW_CURSOR_UPDATE_MOB) {
+				vmw_cursor_mob_get(vcp, vps);
+				vmw_cursor_mob_map(vps);
+			}
+		}
 		bo = vmw_user_object_buffer(&vps->uo);
 		if (bo) {
 			u32 size;
@@ -616,16 +627,6 @@ int vmw_cursor_plane_prepare_fb(struct drm_plane *plane,
 			}
 			ttm_bo_kmap(&bo->tbo, 0, PFN_UP(size), &vps->cursor.src_map);
 			ttm_bo_unreserve(&bo->tbo);
-		}
-		if (!vmw_user_object_is_null(&vps->uo)) {
-			if (!vmw_cursor_plane_changed(vps, old_vps) &&
-			    !vmw_cursor_buffer_changed(vps, old_vps)) {
-				vps->cursor.update_type =
-					VMW_CURSOR_UPDATE_NONE;
-			} else {
-				vmw_cursor_mob_get(vcp, vps);
-				vmw_cursor_mob_map(vps);
-			}
 		}
 	}
 		break;
