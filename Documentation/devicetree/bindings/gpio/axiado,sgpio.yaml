@@ -1,0 +1,98 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/gpio/axiado,sgpio.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Axiado SGPIO Controller
+
+maintainers:
+  - Petar Stepanovic <pstepanovic@axiado.com>
+  - SriNavmani A <srinavmani@axiado.com>
+  - Prasad Bolisetty <pbolisetty@axiado.com>
+
+description: |
+  The SGPIO controller provides a serialized interface for controlling
+  multiple GPIO signals over a limited number of physical lines.
+  It supports configurable data direction and interrupt handling.
+
+properties:
+  compatible:
+    enum:
+      - axiado,sgpio
+
+  reg:
+    maxItems: 1
+
+  gpio-controller: true
+
+  '#gpio-cells':
+    const: 2
+
+  interrupts:
+    maxItems: 1
+
+  interrupt-controller: true
+
+  '#interrupt-cells':
+    const: 2
+
+  design-variant:
+    description: SGPIO design variant size in bits (e.g. 128 or 512).
+    enum: [128, 512]
+    $ref: /schemas/types.yaml#/definitions/uint32
+
+  ngpios:
+    description: The number of gpios this controller has.
+    $ref: /schemas/types.yaml#/definitions/uint32
+
+  bus-frequency:
+    description: The SGPIO shift clock frequency in Hz.
+    $ref: /schemas/types.yaml#/definitions/uint32
+
+  apb-frequency:
+    description: The APB bus frequency in Hz.
+    $ref: /schemas/types.yaml#/definitions/uint32
+
+  dout-init:
+    description: Initial values for the dout registers.
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 4
+    maxItems: 4
+
+required:
+  - compatible
+  - reg
+  - gpio-controller
+  - '#gpio-cells'
+  - interrupts
+  - interrupt-controller
+  - '#interrupt-cells'
+  - design-variant
+  - ngpios
+  - bus-frequency
+  - apb-frequency
+  - dout-init
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    sgpio@a000 {
+            compatible = "axiado,sgpio";
+            reg = <0xa000 0x800>;
+            gpio-controller;
+            #gpio-cells = <2>;
+
+            interrupt-controller;
+            #interrupt-cells = <2>;
+            interrupt-parent = <&gpio6>;
+            interrupts = <17 IRQ_TYPE_LEVEL_HIGH>;
+            design-variant = <128>;
+            ngpios = <128>;
+            bus-frequency = <1000000>;
+            apb-frequency = <100000000>;
+            dout-init = <0x00300000 0x00006371 0x00003800 0x00000000>;
+    };
