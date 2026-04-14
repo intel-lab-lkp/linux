@@ -249,7 +249,7 @@ void mlock_folio(struct folio *folio)
 	if (!folio_test_set_mlocked(folio)) {
 		int nr_pages = folio_nr_pages(folio);
 
-		zone_stat_mod_folio(folio, NR_MLOCK, nr_pages);
+		zone_stat_add_folio(folio, NR_MLOCK);
 		__count_vm_events(UNEVICTABLE_PGMLOCKED, nr_pages);
 	}
 
@@ -273,7 +273,7 @@ void mlock_new_folio(struct folio *folio)
 	fbatch = this_cpu_ptr(&mlock_fbatch.fbatch);
 	folio_set_mlocked(folio);
 
-	zone_stat_mod_folio(folio, NR_MLOCK, nr_pages);
+	zone_stat_add_folio(folio, NR_MLOCK);
 	__count_vm_events(UNEVICTABLE_PGMLOCKED, nr_pages);
 
 	folio_get(folio);

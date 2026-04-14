@@ -1327,7 +1327,7 @@ __always_inline bool __free_pages_prepare(struct page *page,
 		long nr_pages = folio_nr_pages(folio);
 
 		__folio_clear_mlocked(folio);
-		zone_stat_mod_folio(folio, NR_MLOCK, -nr_pages);
+		zone_stat_sub_folio(folio, NR_MLOCK);
 		count_vm_events(UNEVICTABLE_PGCLEARED, nr_pages);
 	}
 
