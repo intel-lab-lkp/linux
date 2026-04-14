@@ -160,7 +160,7 @@ void __swap_cache_add_folio(struct swap_cluster_info *ci,
 	folio_set_swapcache(folio);
 	folio->swap = entry;
 
-	node_stat_mod_folio(folio, NR_FILE_PAGES, nr_pages);
+	node_stat_add_folio(folio, NR_FILE_PAGES);
 	lruvec_stat_mod_folio(folio, NR_SWAPCACHE, nr_pages);
 }
 
@@ -265,7 +265,7 @@ void __swap_cache_del_folio(struct swap_cluster_info *ci, struct folio *folio,
 
 	folio->swap.val = 0;
 	folio_clear_swapcache(folio);
-	node_stat_mod_folio(folio, NR_FILE_PAGES, -nr_pages);
+	node_stat_sub_folio(folio, NR_FILE_PAGES);
 	lruvec_stat_mod_folio(folio, NR_SWAPCACHE, -nr_pages);
 
 	if (!folio_swapped) {

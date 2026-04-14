@@ -871,7 +871,7 @@ static void nfs_folio_clear_commit(struct folio *folio)
 	if (folio) {
 		long nr = folio_nr_pages(folio);
 
-		node_stat_mod_folio(folio, NR_WRITEBACK, -nr);
+		node_stat_sub_folio(folio, NR_WRITEBACK);
 		bdi_wb_stat_mod(folio->mapping->host, WB_WRITEBACK, -nr);
 	}
 }

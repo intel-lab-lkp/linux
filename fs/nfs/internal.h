@@ -858,7 +858,7 @@ static inline void nfs_folio_mark_unstable(struct folio *folio,
 		/* This page is really still in write-back - just that the
 		 * writeback is happening on the server now.
 		 */
-		node_stat_mod_folio(folio, NR_WRITEBACK, nr);
+		node_stat_add_folio(folio, NR_WRITEBACK);
 		bdi_wb_stat_mod(inode, WB_WRITEBACK, nr);
 		__mark_inode_dirty(inode, I_DIRTY_DATASYNC);
 	}

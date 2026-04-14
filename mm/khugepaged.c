@@ -502,9 +502,8 @@ void __khugepaged_exit(struct mm_struct *mm)
 
 static void release_pte_folio(struct folio *folio)
 {
-	node_stat_mod_folio(folio,
-			NR_ISOLATED_ANON + folio_is_file_lru(folio),
-			-folio_nr_pages(folio));
+	node_stat_sub_folio(folio,
+			NR_ISOLATED_ANON + folio_is_file_lru(folio));
 	folio_unlock(folio);
 	folio_putback_lru(folio);
 }
@@ -650,9 +649,8 @@ static enum scan_result __collapse_huge_page_isolate(struct vm_area_struct *vma,
 			result = SCAN_DEL_PAGE_LRU;
 			goto out;
 		}
-		node_stat_mod_folio(folio,
-				NR_ISOLATED_ANON + folio_is_file_lru(folio),
-				folio_nr_pages(folio));
+		node_stat_add_folio(folio,
+				NR_ISOLATED_ANON + folio_is_file_lru(folio));
 		VM_BUG_ON_FOLIO(!folio_test_locked(folio), folio);
 		VM_BUG_ON_FOLIO(folio_test_lru(folio), folio);
 

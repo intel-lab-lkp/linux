@@ -2304,9 +2304,8 @@ static unsigned long collect_longterm_unpinnable_folios(
 			continue;
 
 		list_add_tail(&folio->lru, movable_folio_list);
-		node_stat_mod_folio(folio,
-				    NR_ISOLATED_ANON + folio_is_file_lru(folio),
-				    folio_nr_pages(folio));
+		node_stat_add_folio(folio,
+				    NR_ISOLATED_ANON + folio_is_file_lru(folio));
 	}
 
 	return collected;

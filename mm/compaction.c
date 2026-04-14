@@ -1215,9 +1215,8 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 
 		/* Successfully isolated */
 		lruvec_del_folio(lruvec, folio);
-		node_stat_mod_folio(folio,
-				NR_ISOLATED_ANON + folio_is_file_lru(folio),
-				folio_nr_pages(folio));
+		node_stat_add_folio(folio,
+				NR_ISOLATED_ANON + folio_is_file_lru(folio));
 
 isolate_success:
 		list_add(&folio->lru, &cc->migratepages);

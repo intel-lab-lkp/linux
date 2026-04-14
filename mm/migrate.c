@@ -268,8 +268,8 @@ void putback_movable_pages(struct list_head *l)
 		if (unlikely(page_has_movable_ops(&folio->page))) {
 			putback_movable_ops_page(&folio->page);
 		} else {
-			node_stat_mod_folio(folio, NR_ISOLATED_ANON +
-					folio_is_file_lru(folio), -folio_nr_pages(folio));
+			node_stat_sub_folio(folio, NR_ISOLATED_ANON +
+					folio_is_file_lru(folio));
 			folio_putback_lru(folio);
 		}
 	}
@@ -2272,9 +2272,8 @@ static int __add_folio_for_migration(struct folio *folio, int node,
 			return 1;
 	} else if (folio_isolate_lru(folio)) {
 		list_add_tail(&folio->lru, pagelist);
-		node_stat_mod_folio(folio,
-			NR_ISOLATED_ANON + folio_is_file_lru(folio),
-			folio_nr_pages(folio));
+		node_stat_add_folio(folio,
+			NR_ISOLATED_ANON + folio_is_file_lru(folio));
 		return 1;
 	}
 	return -EBUSY;
@@ -2726,8 +2725,7 @@ int migrate_misplaced_folio_prepare(struct folio *folio,
 	if (!folio_isolate_lru(folio))
 		return -EAGAIN;
 
-	node_stat_mod_folio(folio, NR_ISOLATED_ANON + folio_is_file_lru(folio),
-			    nr_pages);
+	node_stat_add_folio(folio, NR_ISOLATED_ANON + folio_is_file_lru(folio));
 	return 0;
 }
 

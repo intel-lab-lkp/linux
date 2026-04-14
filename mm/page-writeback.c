@@ -2750,7 +2750,7 @@ bool folio_redirty_for_writepage(struct writeback_control *wbc,
 
 		wb = unlocked_inode_to_wb_begin(inode, &cookie);
 		current->nr_dirtied -= nr;
-		node_stat_mod_folio(folio, NR_DIRTIED, -nr);
+		node_stat_sub_folio(folio, NR_DIRTIED);
 		wb_stat_mod(wb, WB_DIRTIED, -nr);
 		unlocked_inode_to_wb_end(inode, &cookie);
 	}
@@ -2981,7 +2981,7 @@ bool __folio_end_writeback(struct folio *folio)
 
 	lruvec_stat_mod_folio(folio, NR_WRITEBACK, -nr);
 	zone_stat_mod_folio(folio, NR_ZONE_WRITE_PENDING, -nr);
-	node_stat_mod_folio(folio, NR_WRITTEN, nr);
+	node_stat_add_folio(folio, NR_WRITTEN);
 
 	return ret;
 }

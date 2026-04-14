@@ -1259,9 +1259,8 @@ static bool migrate_folio_add(struct folio *folio, struct list_head *foliolist,
 	if ((flags & MPOL_MF_MOVE_ALL) || !folio_maybe_mapped_shared(folio)) {
 		if (folio_isolate_lru(folio)) {
 			list_add_tail(&folio->lru, foliolist);
-			node_stat_mod_folio(folio,
-				NR_ISOLATED_ANON + folio_is_file_lru(folio),
-				folio_nr_pages(folio));
+			node_stat_add_folio(folio,
+				NR_ISOLATED_ANON + folio_is_file_lru(folio));
 		} else {
 			/*
 			 * Non-movable folio may reach here.  And, there may be
