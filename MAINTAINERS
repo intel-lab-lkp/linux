@@ -20878,6 +20878,11 @@ F:	tools/perf/pmu-events/arch/arm64/
 F:	tools/perf/util/arm-spe*
 F:	tools/perf/util/cs-etm*
 
+PERFORMANCE EVENTS TOOLING LOONGARCH
+L:	loongarch@lists.linux.dev
+F:	tools/perf/arch/loongarch/
+F:	tools/perf/util/*/*loongarch*
+
 PERSONALITY HANDLING
 M:	Christoph Hellwig <hch@infradead.org>
 L:	linux-abi-devel@lists.sourceforge.net
