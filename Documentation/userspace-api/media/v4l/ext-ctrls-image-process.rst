@@ -41,6 +41,11 @@ Image Process Control IDs
     The configuration of the frame rate is performed by selecting the desired
     horizontal and vertical blanking. The unit of this control is Hz.
 
+    Note that this control isn't affected by analogue binning as the pixels are
+    still being read at the same frequency as without analogue binning, only
+    what is being read is different (a single pixel value vs. a binned pixel
+    value based on the values of two or more pixels).
+
 ``V4L2_CID_TEST_PATTERN (menu)``
     Some capture/display/sensor devices have the capability to generate
     test pattern images. These hardware specific test patterns can be
