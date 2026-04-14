@@ -1,0 +1,36 @@
+drm drm-fixes 028ef9c96e96197026887c0f092424679298aae8
+	Linux 7.0
+drm-misc drm-misc-fixes be19b43f92fae4794f271ed9e338bdbcfa725aa2
+	drm/bridge: dw-mipi-dsi: Fix bridge leak when host attach fails
+drm-rust drm-rust-fixes f338e77383789c0cae23ca3d48adcc5e9e137e3c
+	Linux 7.0-rc4
+drm-intel drm-intel-fixes 028ef9c96e96197026887c0f092424679298aae8
+	Linux 7.0
+drm-xe drm-xe-fixes 028ef9c96e96197026887c0f092424679298aae8
+	Linux 7.0
+drm drm-next 83e8d8bbffa8161e94f3aeee4dd09a35062a78c8
+	Merge tag 'drm-misc-next-fixes-2026-04-09' of https://gitlab.freedesktop.org/drm/misc/kernel into drm-next
+drm-misc drm-misc-next-fixes dc6d51959ec0c08366d5aaeb5b8fb02d814d1e4b
+	dma-buf: fix htmldocs error for dma_buf_attach_revocable
+drm-intel drm-intel-next-fixes a97c88a176b6b8d116f4d3f508f3bd02bc77b462
+	drm/i915/wm: Verify the correct plane DDB entry
+drm-xe drm-xe-next-fixes 6de23f81a5e08be8fbf5e8d7e9febc72a5b5f27f
+	Linux 7.0-rc1
+drm-misc drm-misc-next c83ad8ea6b0a53f1ed61ae0b4b9606bdfe338b33
+	accel/amdxdna: Fix order of canceled mailbox messages
+drm-rust drm-rust-next a7a080bb4236ebe577b6776d940d1717912ff6dd
+	gpu: nova-core: fix missing colon in SEC2 boot debug message
+drm-intel drm-intel-next 86fe1ecdc4a2196e934194f20e22c3a747568cc8
+	drm/i915/dp: Make the RGB fallback for "4:2:0 only" modes the last resort
+drm-intel drm-intel-gt-next f6d4afc9ec6a0bc326151b35a7a3369369180079
+	drm/i915/gem: Drop check for changed VM in EXECBUF
+drm-xe drm-xe-next 37c831f401746a45d510b312b0ed7a77b1e06ec8
+	drm/xe: Fix error cleanup in xe_exec_queue_create_ioctl()
+drm-intel topic/core-for-CI 3d15d7e81d498d56ca6ba3af63f2fa1106da87ad
+	ACPI: PM: s2idle: Add module parameter for LPS0 constraints checking
+drm-xe topic/xe-for-CI bd9ef8d19f9e9ff47518ce48fb2002d58bfeeaaa
+	drm/xe/nvlp: Define GuC firmware for NVL-P
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
+drm-intel topic/pipe-reorder f49499e635c18ead4ba6b573c63955c02056b840
+	drm/i915: Walk crtcs in pipe order
