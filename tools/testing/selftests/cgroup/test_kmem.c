@@ -19,12 +19,19 @@
 
 
 /*
- * Memory cgroup charging is performed using percpu batches 64 pages
- * big (look at MEMCG_CHARGE_BATCH), whereas memory.stat is exact. So
- * the maximum discrepancy between charge and vmstat entries is number
- * of cpus multiplied by 64 pages.
+ * Memory cgroup charging is performed using per-CPU batches to reduce
+ * accounting overhead. Each cache slot can hold up to MEMCG_CHARGE_BATCH
+ * pages for a specific memcg. The per-CPU charge cache supports multiple
+ * memcgs simultaneously (NR_MEMCG_STOCK slots).
+ *
+ * While memory.stat reports exact usage, per-CPU charges are pending
+ * until flushed. Therefore, the maximum discrepancy between charge and
+ * vmstat entries is:
+ *
+ *   PAGE_SIZE * MEMCG_CHARGE_BATCH * NR_MEMCG_STOCK * num_cpus
  */
-#define MAX_VMSTAT_ERROR (4096 * 64 * get_nprocs())
+#define NR_MEMCG_STOCK 7
+#define MAX_VMSTAT_ERROR (4096 * 64 * NR_MEMCG_STOCK * get_nprocs())
 
 #define KMEM_DEAD_WAIT_RETRIES        80
 
