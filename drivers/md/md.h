@@ -463,6 +463,7 @@ struct mddev {
 	int				delta_disks, new_level, new_layout;
 	int				new_chunk_sectors;
 	int				reshape_backwards;
+	int				dm_suspending;
 
 	struct md_thread __rcu		*thread;	/* management thread */
 	struct md_thread __rcu		*sync_thread;	/* doing resync or reconstruct */
