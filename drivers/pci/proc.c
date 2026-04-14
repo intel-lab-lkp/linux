@@ -29,7 +29,7 @@ static ssize_t proc_bus_pci_read(struct file *file, char __user *buf,
 				 size_t nbytes, loff_t *ppos)
 {
 	struct pci_dev *dev = pde_data(file_inode(file));
-	unsigned int off = *ppos;
+	loff_t off = *ppos;
 	unsigned int count = nbytes;
 	unsigned int size;
 
