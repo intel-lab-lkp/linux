@@ -404,24 +404,6 @@ static inline void drain_zonestat(struct zone *zone,
 			struct per_cpu_zonestat *pzstats) { }
 #endif		/* CONFIG_SMP */
 
-static inline void __zone_stat_mod_folio(struct folio *folio,
-		enum zone_stat_item item, long nr)
-{
-	__mod_zone_page_state(folio_zone(folio), item, nr);
-}
-
-static inline void __zone_stat_add_folio(struct folio *folio,
-		enum zone_stat_item item)
-{
-	__mod_zone_page_state(folio_zone(folio), item, folio_nr_pages(folio));
-}
-
-static inline void __zone_stat_sub_folio(struct folio *folio,
-		enum zone_stat_item item)
-{
-	__mod_zone_page_state(folio_zone(folio), item, -folio_nr_pages(folio));
-}
-
 static inline void zone_stat_mod_folio(struct folio *folio,
 		enum zone_stat_item item, long nr)
 {
