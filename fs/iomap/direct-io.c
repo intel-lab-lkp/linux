@@ -5,10 +5,14 @@
  */
 #include <linux/blk-crypto.h>
 #include <linux/fscrypt.h>
+#include <linux/fsverity.h>
 #include <linux/pagemap.h>
 #include <linux/iomap.h>
 #include <linux/task_io_accounting_ops.h>
 #include <linux/fserror.h>
+#include <linux/kobject.h>
+#include <linux/sysfs.h>
+#include <linux/init.h>
 #include "internal.h"
 #include "trace.h"
 
@@ -880,12 +884,231 @@ out_free_dio:
 }
 EXPORT_SYMBOL_GPL(__iomap_dio_rw);
 
+static bool iomap_dio_fast_read_enabled = true;
+
+struct iomap_dio_fast_read {
+	struct kiocb	*iocb;
+	size_t		size;
+	bool		should_dirty;
+	struct work_struct	work;
+	struct bio	bio ____cacheline_aligned_in_smp;
+};
+
+static struct bio_set iomap_dio_fast_read_pool;
+
+static void iomap_dio_fast_read_complete_work(struct work_struct *work)
+{
+	struct iomap_dio_fast_read *fr =
+		container_of(work, struct iomap_dio_fast_read, work);
+	struct kiocb *iocb = fr->iocb;
+	struct inode *inode = file_inode(iocb->ki_filp);
+	bool should_dirty = fr->should_dirty;
+	struct bio *bio = &fr->bio;
+	ssize_t ret;
+
+	WRITE_ONCE(iocb->private, NULL);
+
+	if (likely(!bio->bi_status)) {
+		ret = fr->size;
+		iocb->ki_pos += ret;
+	} else {
+		ret = blk_status_to_errno(bio->bi_status);
+		fserror_report_io(inode, FSERR_DIRECTIO_READ, iocb->ki_pos,
+				  fr->size, ret, GFP_NOFS);
+	}
+
+	if (should_dirty) {
+		bio_check_pages_dirty(bio);
+	} else {
+		bio_release_pages(bio, false);
+		bio_put(bio);
+	}
+
+	inode_dio_end(inode);
+
+	trace_iomap_dio_complete(iocb, ret < 0 ? ret : 0, ret > 0 ? ret : 0);
+	iocb->ki_complete(iocb, ret);
+}
+
+static void iomap_dio_fast_read_end_io(struct bio *bio)
+{
+	struct iomap_dio_fast_read *fr = bio->bi_private;
+	struct kiocb *iocb = fr->iocb;
+
+	if (unlikely(bio->bi_status)) {
+		struct inode *inode = file_inode(iocb->ki_filp);
+
+		INIT_WORK(&fr->work, iomap_dio_fast_read_complete_work);
+		queue_work(inode->i_sb->s_dio_done_wq, &fr->work);
+		return;
+	}
+
+	iomap_dio_fast_read_complete_work(&fr->work);
+}
+
+static inline bool iomap_dio_fast_read_supported(struct kiocb *iocb,
+					  struct iov_iter *iter,
+					  unsigned int dio_flags,
+					  size_t done_before)
+{
+	struct inode *inode = file_inode(iocb->ki_filp);
+	size_t count = iov_iter_count(iter);
+	unsigned int alignment;
+
+	if (!iomap_dio_fast_read_enabled)
+		return false;
+	if (iov_iter_rw(iter) != READ)
+		return false;
+
+	/*
+	 * Fast read is an optimization for small IO. Filter out large IO early
+	 * as it's the most common case to fail for typical direct IO workloads.
+	 */
+	if (count > inode->i_sb->s_blocksize)
+		return false;
+
+	if (is_sync_kiocb(iocb) || done_before)
+		return false;
+	if (dio_flags & (IOMAP_DIO_FORCE_WAIT | IOMAP_DIO_BOUNCE))
+		return false;
+	if (iocb->ki_pos + count > i_size_read(inode))
+		return false;
+	if (IS_ENCRYPTED(inode) || fsverity_active(inode))
+		return false;
+
+	if (count < bdev_logical_block_size(inode->i_sb->s_bdev))
+		return false;
+
+	if (dio_flags & IOMAP_DIO_FSBLOCK_ALIGNED)
+		alignment = i_blocksize(inode);
+	else
+		alignment = bdev_logical_block_size(inode->i_sb->s_bdev);
+
+	if ((iocb->ki_pos | count) & (alignment - 1))
+		return false;
+
+	return true;
+}
+
+static ssize_t iomap_dio_fast_read_async(struct kiocb *iocb,
+					 struct iov_iter *iter,
+					 const struct iomap_ops *ops,
+					 void *private)
+{
+	struct inode *inode = file_inode(iocb->ki_filp);
+	size_t count = iov_iter_count(iter);
+	int nr_pages = bio_iov_vecs_to_alloc(iter, BIO_MAX_VECS);
+	bool should_dirty = user_backed_iter(iter);
+	struct iomap_dio_fast_read *fr;
+	struct iomap_iter iomi = {
+		.inode		= inode,
+		.pos		= iocb->ki_pos,
+		.len		= count,
+		.flags		= IOMAP_DIRECT,
+		.private	= private,
+	};
+	struct bio *bio;
+	ssize_t ret;
+
+	if (iocb->ki_flags & IOCB_NOWAIT)
+		iomi.flags |= IOMAP_NOWAIT;
+
+	ret = kiocb_write_and_wait(iocb, count);
+	if (ret)
+		return ret;
+
+	inode_dio_begin(inode);
+
+	ret = ops->iomap_begin(inode, iomi.pos, count, iomi.flags,
+			       &iomi.iomap, &iomi.srcmap);
+	if (ret) {
+		inode_dio_end(inode);
+		return ret;
+	}
+
+	if (iomi.iomap.type != IOMAP_MAPPED ||
+	    iomi.iomap.offset > iomi.pos ||
+	    iomi.iomap.offset + iomi.iomap.length < iomi.pos + count ||
+	    (iomi.iomap.flags & IOMAP_F_ANON_WRITE)) {
+		ret = -EAGAIN;
+		goto out_iomap_end;
+	}
+
+	if (!inode->i_sb->s_dio_done_wq) {
+		ret = sb_init_dio_done_wq(inode->i_sb);
+		if (ret < 0)
+			goto out_iomap_end;
+	}
+
+	trace_iomap_dio_rw_begin(iocb, iter, 0, 0);
+
+	bio = bio_alloc_bioset(iomi.iomap.bdev, nr_pages,
+			       REQ_OP_READ | REQ_SYNC | REQ_IDLE,
+			       GFP_KERNEL, &iomap_dio_fast_read_pool);
+	fr = container_of(bio, struct iomap_dio_fast_read, bio);
+	fr->iocb = iocb;
+	fr->should_dirty = should_dirty;
+
+	bio->bi_iter.bi_sector = iomap_sector(&iomi.iomap, iomi.pos);
+	bio->bi_ioprio = iocb->ki_ioprio;
+	bio->bi_private = fr;
+	bio->bi_end_io = iomap_dio_fast_read_end_io;
+
+	ret = bio_iov_iter_get_pages(bio, iter,
+				     bdev_logical_block_size(iomi.iomap.bdev) - 1);
+	if (unlikely(ret)) {
+		bio_put(bio);
+		goto out_iomap_end;
+	}
+
+	if (bio->bi_iter.bi_size != count) {
+		iov_iter_revert(iter, bio->bi_iter.bi_size);
+		bio_release_pages(bio, false);
+		bio_put(bio);
+		ret = -EAGAIN;
+		goto out_iomap_end;
+	}
+
+	fr->size = bio->bi_iter.bi_size;
+
+	if (should_dirty)
+		bio_set_pages_dirty(bio);
+
+	if (iocb->ki_flags & IOCB_NOWAIT)
+		bio->bi_opf |= REQ_NOWAIT;
+	if (iocb->ki_flags & IOCB_HIPRI) {
+		bio->bi_opf |= REQ_POLLED;
+		bio_set_polled(bio, iocb);
+		WRITE_ONCE(iocb->private, bio);
+	}
+	submit_bio(bio);
+
+	if (ops->iomap_end)
+		ops->iomap_end(inode, iomi.pos, count, count, iomi.flags,
+			       &iomi.iomap);
+	return -EIOCBQUEUED;
+
+out_iomap_end:
+	if (ops->iomap_end)
+		ops->iomap_end(inode, iomi.pos, count, 0, iomi.flags,
+			       &iomi.iomap);
+	inode_dio_end(inode);
+	return ret;
+}
+
 ssize_t
 iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 		const struct iomap_ops *ops, const struct iomap_dio_ops *dops,
 		unsigned int dio_flags, void *private, size_t done_before)
 {
 	struct iomap_dio *dio;
+	ssize_t ret;
+
+	if (!dops && iomap_dio_fast_read_supported(iocb, iter, dio_flags, done_before)) {
+		ret = iomap_dio_fast_read_async(iocb, iter, ops, private);
+		if (ret != -EAGAIN)
+			return ret;
+	}
 
 	dio = __iomap_dio_rw(iocb, iter, ops, dops, dio_flags, private,
 			     done_before);
@@ -894,3 +1117,55 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 	return iomap_dio_complete(dio);
 }
 EXPORT_SYMBOL_GPL(iomap_dio_rw);
+
+static ssize_t fast_read_enable_show(struct kobject *kobj,
+				     struct kobj_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "%d\n", iomap_dio_fast_read_enabled);
+}
+
+static ssize_t fast_read_enable_store(struct kobject *kobj,
+				      struct kobj_attribute *attr,
+				      const char *buf, size_t count)
+{
+	bool enable;
+	int ret;
+
+	ret = kstrtobool(buf, &enable);
+	if (ret)
+		return ret;
+
+	iomap_dio_fast_read_enabled = enable;
+	return count;
+}
+
+static struct kobj_attribute fast_read_enable_attr =
+	__ATTR(fast_read_enable, 0644, fast_read_enable_show, fast_read_enable_store);
+
+static struct kobject *iomap_kobj;
+
+static int __init iomap_dio_sysfs_init(void)
+{
+	int ret;
+
+	ret = bioset_init(&iomap_dio_fast_read_pool, 4,
+			  offsetof(struct iomap_dio_fast_read, bio),
+			  BIOSET_NEED_BVECS | BIOSET_PERCPU_CACHE);
+	if (ret)
+		return ret;
+
+	iomap_kobj = kobject_create_and_add("iomap", fs_kobj);
+	if (!iomap_kobj) {
+		bioset_exit(&iomap_dio_fast_read_pool);
+		return -ENOMEM;
+	}
+
+	if (sysfs_create_file(iomap_kobj, &fast_read_enable_attr.attr)) {
+		kobject_put(iomap_kobj);
+		bioset_exit(&iomap_dio_fast_read_pool);
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+fs_initcall(iomap_dio_sysfs_init);
