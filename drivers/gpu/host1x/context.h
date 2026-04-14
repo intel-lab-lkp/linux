@@ -8,12 +8,11 @@
 #ifndef __HOST1X_CONTEXT_H
 #define __HOST1X_CONTEXT_H
 
+#include <linux/context_bus.h>
 #include <linux/mutex.h>
 #include <linux/refcount.h>
 
 struct host1x;
-
-extern struct bus_type host1x_context_device_bus_type;
 
 struct host1x_memory_context_list {
 	struct mutex lock;

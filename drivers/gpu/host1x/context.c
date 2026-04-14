@@ -54,7 +54,7 @@ int host1x_memory_context_list_init(struct host1x *host1x)
 		ctx->dev.dma_mask = &ctx->dma_mask;
 		ctx->dev.coherent_dma_mask = ctx->dma_mask;
 		dev_set_name(&ctx->dev, "host1x-ctx.%d", i);
-		ctx->dev.bus = &host1x_context_device_bus_type;
+		ctx->dev.bus = &context_device_bus_type;
 		ctx->dev.parent = host1x->dev;
 		ctx->dev.release = host1x_memory_context_release;
 
