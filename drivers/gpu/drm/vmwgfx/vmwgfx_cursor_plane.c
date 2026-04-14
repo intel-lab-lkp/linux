@@ -156,34 +156,9 @@ static void vmw_cursor_mob_destroy(struct vmw_bo **vbo)
 	if (!(*vbo))
 		return;
 
+	vmw_bo_unmap(*vbo);
 	ttm_bo_unpin(&(*vbo)->tbo);
 	vmw_bo_unreference(vbo);
-}
-
-/**
- * vmw_cursor_mob_unmap - Unmaps the cursor mobs.
- *
- * @vps: state of the cursor plane
- *
- * Returns 0 on success
- */
-
-static int
-vmw_cursor_mob_unmap(struct vmw_plane_state *vps)
-{
-	int ret = 0;
-	struct vmw_bo *vbo = vps->cursor.mob;
-
-	if (!vbo || !vbo->map.virtual)
-		return 0;
-
-	ret = ttm_bo_reserve(&vbo->tbo, true, false, NULL);
-	if (likely(ret == 0)) {
-		vmw_bo_unmap(vbo);
-		ttm_bo_unreserve(&vbo->tbo);
-	}
-
-	return ret;
 }
 
 static void vmw_cursor_mob_put(struct vmw_cursor_plane *vcp,
@@ -194,7 +169,6 @@ static void vmw_cursor_mob_put(struct vmw_cursor_plane *vcp,
 	if (!vps->cursor.mob)
 		return;
 
-	vmw_cursor_mob_unmap(vps);
 
 	/* Look for a free slot to return this mob to the cache. */
 	for (i = 0; i < ARRAY_SIZE(vcp->cursor_mobs); i++) {
@@ -257,7 +231,7 @@ static int vmw_cursor_mob_get(struct vmw_cursor_plane *vcp,
 			return 0;
 		}
 	}
-	/* Create a new mob if we can't find an existing one. */
+	/* Create a new pinned mob if we can't find an existing one. */
 	ret = vmw_bo_create_and_populate(dev_priv, size, VMW_BO_DOMAIN_MOB,
 					 &vps->cursor.mob);
 
@@ -274,14 +248,13 @@ static int vmw_cursor_mob_get(struct vmw_cursor_plane *vcp,
 		ttm_bo_unreserve(&vps->cursor.mob->tbo);
 		goto teardown;
 	}
-
+	vmw_bo_map_and_cache(vps->cursor.mob);
 	dma_fence_wait(&fence->base, false);
 	dma_fence_put(&fence->base);
 
 	ttm_bo_unreserve(&vps->cursor.mob->tbo);
 
 	return 0;
-
 teardown:
 	vmw_cursor_mob_destroy(&vps->cursor.mob);
 	return ret;
@@ -419,42 +392,6 @@ void vmw_cursor_plane_destroy(struct drm_plane *plane)
 }
 
 /**
- * vmw_cursor_mob_map - Maps the cursor mobs.
- *
- * @vps: plane_state
- *
- * Returns 0 on success
- */
-
-static int
-vmw_cursor_mob_map(struct vmw_plane_state *vps)
-{
-	int ret;
-	u32 size = vmw_cursor_mob_size(vps->cursor.update_type,
-				       vps->base.crtc_w, vps->base.crtc_h);
-	struct vmw_bo *vbo = vps->cursor.mob;
-
-	if (!vbo)
-		return -EINVAL;
-
-	if (vbo->tbo.base.size < size)
-		return -EINVAL;
-
-	if (vbo->map.virtual)
-		return 0;
-
-	ret = ttm_bo_reserve(&vbo->tbo, false, false, NULL);
-	if (unlikely(ret != 0))
-		return -ENOMEM;
-
-	vmw_bo_map_and_cache(vbo);
-
-	ttm_bo_unreserve(&vbo->tbo);
-
-	return 0;
-}
-
-/**
  * vmw_cursor_plane_cleanup_fb - Unpins the plane surface
  *
  * @plane: cursor plane
@@ -481,7 +418,6 @@ vmw_cursor_plane_cleanup_fb(struct drm_plane *plane,
 			ttm_bo_unreserve(bo);
 	}
 
-	vmw_cursor_mob_unmap(vps);
 	vmw_cursor_mob_put(vcp, vps);
 
 	vmw_du_plane_unpin_surf(vps);
@@ -594,10 +530,8 @@ int vmw_cursor_plane_prepare_fb(struct drm_plane *plane,
 				vps->cursor.update_type = VMW_CURSOR_UPDATE_NONE;
 				return 0;
 			}
-			if (vps->cursor.update_type == VMW_CURSOR_UPDATE_MOB) {
+			if (vps->cursor.update_type == VMW_CURSOR_UPDATE_MOB)
 				vmw_cursor_mob_get(vcp, vps);
-				vmw_cursor_mob_map(vps);
-			}
 		}
 		bo = vmw_user_object_buffer(&vps->uo);
 		if (bo) {
