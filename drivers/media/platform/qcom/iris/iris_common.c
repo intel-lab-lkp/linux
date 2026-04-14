@@ -49,10 +49,17 @@ void iris_set_ts_metadata(struct iris_inst *inst, struct vb2_v4l2_buffer *vbuf)
 int iris_process_streamon_input(struct iris_inst *inst)
 {
 	const struct iris_hfi_command_ops *hfi_ops = inst->core->hfi_ops;
+	bool dual_core = inst->core->iris_platform_data->dual_core;
 	enum iris_inst_sub_state set_sub_state = 0;
 	int ret;
 
 	iris_scale_power(inst);
+
+	if (dual_core) {
+		ret = hfi_ops->session_set_core_id(inst, inst->core_id);
+		if (ret)
+			return ret;
+	}
 
 	ret = hfi_ops->session_start(inst, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
 	if (ret)
