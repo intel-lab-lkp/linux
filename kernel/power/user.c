@@ -218,6 +218,7 @@ static int snapshot_set_swap_area(struct snapshot_data *data,
 {
 	sector_t offset;
 	dev_t swdev;
+	int type, swap;
 
 	if (swsusp_swap_in_use())
 		return -EPERM;
@@ -239,18 +240,34 @@ static int snapshot_set_swap_area(struct snapshot_data *data,
 	}
 
 	/*
-	 * Unpin the swap device if a swap area was already
-	 * set by SNAPSHOT_SET_SWAP_AREA.
+	 * User space encodes device types as two-byte values, so we need to
+	 * recode them.
 	 */
-	unpin_hibernation_swap_type(data->swap);
-
-	/*
-	 * User space encodes device types as two-byte values,
-	 * so we need to recode them
-	 */
-	data->swap = pin_hibernation_swap_type(swdev, offset);
-	if (data->swap < 0)
+	type = find_hibernation_swap_type(swdev, offset);
+	if (type < 0)
 		return swdev ? -ENODEV : -EINVAL;
+
+	if (type == data->swap) {
+		/*
+		 * Re-selecting the already pinned swap area is a no-op.
+		 * Keep the existing pin and just refresh the cached device id.
+		 */
+		data->dev = swdev;
+		return 0;
+	}
+
+	swap = pin_hibernation_swap_type(swdev, offset);
+	if (swap < 0) {
+		/*
+		 * Preserve the existing pin on failure.  This can happen if the
+		 * target swap area disappears before pinning, or via the
+		 * defensive -EBUSY path in pin_hibernation_swap_type().
+		 */
+		return swdev ? -ENODEV : -EINVAL;
+	}
+
+	unpin_hibernation_swap_type(data->swap);
+	data->swap = swap;
 	data->dev = swdev;
 	return 0;
 }
