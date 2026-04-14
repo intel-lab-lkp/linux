@@ -5037,7 +5037,31 @@ static struct perf_guest_switch_msr *intel_guest_get_msrs(int *nr, void *data)
 		return arr;
 	}
 
+	/*
+	 * If the guest won't use PEBS or the CPU doesn't support PEBS in the
+	 * guest, then there's nothing more to do as disabling PMCs via
+	 * PERF_GLOBAL_CTRL is sufficient on CPUs with guest/host isolation.
+	 */
 	if (!kvm_pmu || !x86_pmu.pebs_ept)
+		return arr;
+
+	/*
+	 * Disable counters where the guest PMC is different than the host PMC
+	 * being used on behalf of the guest, as the PEBS record includes
+	 * PERF_GLOBAL_STATUS, i.e. the guest will see overflow status for the
+	 * wrong counter(s).  Similarly, disallow PEBS in the guest if the host
+	 * is using PEBS, to avoid bleeding host state into PEBS records.
+	 */
+	guest_pebs_mask &= kvm_pmu->pebs_enable & ~kvm_pmu->host_cross_mapped_mask;
+	if (pebs_mask & ~cpuc->intel_ctrl_guest_mask)
+		guest_pebs_mask = 0;
+
+	/*
+	 * Context switch DS_AREA and PEBS_DATA_CFG if and only if PEBS will be
+	 * active in the guest; if no records will be generated while the guest
+	 * is running, then running with host values is safe (see above).
+	 */
+	if (!guest_pebs_mask)
 		return arr;
 
 	arr[(*nr)++] = (struct perf_guest_switch_msr){
@@ -5053,17 +5077,6 @@ static struct perf_guest_switch_msr *intel_guest_get_msrs(int *nr, void *data)
 			.guest = kvm_pmu->pebs_data_cfg,
 		};
 	}
-
-	/*
-	 * Disable counters where the guest PMC is different than the host PMC
-	 * being used on behalf of the guest, as the PEBS record includes
-	 * PERF_GLOBAL_STATUS, i.e. the guest will see overflow status for the
-	 * wrong counter(s).  Similarly, disallow PEBS in the guest if the host
-	 * is using PEBS, to avoid bleeding host state into PEBS records.
-	 */
-	guest_pebs_mask &= kvm_pmu->pebs_enable & ~kvm_pmu->host_cross_mapped_mask;
-	if (pebs_mask & ~cpuc->intel_ctrl_guest_mask)
-		guest_pebs_mask = 0;
 
 	/*
 	 * Do NOT mess with PEBS_ENABLED.  As above, disabling counters via
