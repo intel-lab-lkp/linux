@@ -101,6 +101,74 @@ struct thread_info {
 void arch_release_task_struct(struct task_struct *tsk);
 int arch_dup_task_struct(struct task_struct *dst, struct task_struct *src);
 
+/*
+ * RISC-V stack frame layout (with frame pointer enabled).
+ *
+ * Reference: RISC-V ELF psABI, Frame Pointer Convention
+ *   https://github.com/riscv-non-isa/riscv-elf-psabi-doc/blob/master/
+ *   riscv-cc.adoc#frame-pointer-convention
+ *
+ * high addr
+ *   +------------------+  <--- fp (s0) points here
+ *   |   saved ra       |  fp - 1*sizeof(void*) (return address)
+ *   |   saved fp       |  fp - 2*sizeof(void*) (previous frame pointer)
+ *   +------------------+
+ *   |   local vars     |
+ *   |   arguments      |
+ *   +------------------+  <--- sp
+ * low addr
+ *
+ * The struct stackframe { fp, ra } lives at (fp - sizeof(stackframe)),
+ * i.e. fp[-2]=saved_fp and fp[-1]=saved_ra.
+ *
+ * For usercopy safety, we allow copies within [prev_fp, fp - 2*sizeof(void*))
+ * for each frame in the chain, where prev_fp is the fp of the previous
+ * (lower) frame.  This covers local variables and arguments but excludes
+ * the saved ra/fp slots at the top of the frame.
+ *
+ * We walk the frame chain starting from __builtin_frame_address(0) (the
+ * current frame), with prev_fp initialized to current_stack_pointer.
+ * Using current_stack_pointer -- rather than the 'stack' argument (which is
+ * the thread's entire stack base) -- ensures that objects in already-returned
+ * frames (address below current sp) are correctly detected as BAD_STACK,
+ * because no live frame in the chain will claim that region.
+ */
+__no_kmsan_checks
+static inline int arch_within_stack_frames(const void * const stack,
+					   const void * const stackend,
+					   const void *obj, unsigned long len)
+{
+#if defined(CONFIG_FRAME_POINTER)
+	const void *fp = (const void *)__builtin_frame_address(0);
+	const void *prev_fp = (const void *)current_stack_pointer;
+
+	/*
+	 * Walk the frame chain. Each iteration checks whether [obj, obj+len)
+	 * falls within the local-variable area of the current frame:
+	 *
+	 *   [prev_fp, fp - 2*sizeof(void*))
+	 *
+	 * i.e. from the base of this frame (sp of this frame, which equals
+	 * the fp of the frame below) up to (but not including) the saved
+	 * fp/ra area at the top of this frame.
+	 */
+	while (stack + 2 * sizeof(void *) <= fp && fp < stackend) {
+		const void *frame_vars_end = (const char *)fp - 2 * sizeof(void *);
+
+		if (obj + len <= frame_vars_end) {
+			if (obj >= prev_fp)
+				return GOOD_FRAME;
+			return BAD_STACK;
+		}
+		prev_fp = fp;
+		fp = *(const void * const *)frame_vars_end;
+	}
+	return BAD_STACK;
+#else
+	return NOT_STACK;
+#endif
+}
+
 #endif /* !__ASSEMBLER__ */
 
 /*
