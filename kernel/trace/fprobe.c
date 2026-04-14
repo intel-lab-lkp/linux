@@ -79,20 +79,27 @@ static const struct rhashtable_params fprobe_rht_params = {
 };
 
 /* Node insertion and deletion requires the fprobe_mutex */
-static int insert_fprobe_node(struct fprobe_hlist_node *node)
+static int insert_fprobe_node(struct fprobe_hlist_node *node, struct fprobe *fp)
 {
+	int ret;
+
 	lockdep_assert_held(&fprobe_mutex);
 
-	return rhltable_insert(&fprobe_ip_table, &node->hlist, fprobe_rht_params);
+	ret = rhltable_insert(&fprobe_ip_table, &node->hlist, fprobe_rht_params);
+	/* Set the fprobe pointer if insertion was successful. */
+	if (!ret)
+		WRITE_ONCE(node->fp, fp);
+	return ret;
 }
 
 /* Return true if there are synonims */
 static bool delete_fprobe_node(struct fprobe_hlist_node *node)
 {
-	lockdep_assert_held(&fprobe_mutex);
 	bool ret;
 
-	/* Avoid double deleting */
+	lockdep_assert_held(&fprobe_mutex);
+
+	/* Avoid double deleting and non-inserted nodes */
 	if (READ_ONCE(node->fp) != NULL) {
 		WRITE_ONCE(node->fp, NULL);
 		rhltable_remove(&fprobe_ip_table, &node->hlist,
@@ -757,7 +764,6 @@ static int fprobe_init(struct fprobe *fp, unsigned long *addrs, int num)
 	fp->hlist_array = hlist_array;
 	hlist_array->fp = fp;
 	for (i = 0; i < num; i++) {
-		hlist_array->array[i].fp = fp;
 		addr = ftrace_location(addrs[i]);
 		if (!addr) {
 			fprobe_fail_cleanup(fp);
@@ -821,6 +827,8 @@ int register_fprobe(struct fprobe *fp, const char *filter, const char *notfilter
 }
 EXPORT_SYMBOL_GPL(register_fprobe);
 
+static int unregister_fprobe_nolock(struct fprobe *fp, bool force);
+
 /**
  * register_fprobe_ips() - Register fprobe to ftrace by address.
  * @fp: A fprobe data structure to be registered.
@@ -847,28 +855,25 @@ int register_fprobe_ips(struct fprobe *fp, unsigned long *addrs, int num)
 	if (ret)
 		return ret;
 
-	hlist_array = fp->hlist_array;
 	if (fprobe_is_ftrace(fp))
 		ret = fprobe_ftrace_add_ips(addrs, num);
 	else
 		ret = fprobe_graph_add_ips(addrs, num);
-
-	if (!ret) {
-		add_fprobe_hash(fp);
-		for (i = 0; i < hlist_array->size; i++) {
-			ret = insert_fprobe_node(&hlist_array->array[i]);
-			if (ret)
-				break;
-		}
-		/* fallback on insert error */
-		if (ret) {
-			for (i--; i >= 0; i--)
-				delete_fprobe_node(&hlist_array->array[i]);
-		}
+	if (ret) {
+		fprobe_fail_cleanup(fp);
+		return ret;
 	}
 
-	if (ret)
-		fprobe_fail_cleanup(fp);
+	hlist_array = fp->hlist_array;
+	add_fprobe_hash(fp);
+	for (i = 0; i < hlist_array->size; i++) {
+		ret = insert_fprobe_node(&hlist_array->array[i], fp);
+		if (ret) {
+			if (unregister_fprobe_nolock(fp, true))
+				pr_warn("Failed to cleanup fprobe after insertion failure.\n");
+			break;
+		}
+	}
 
 	return ret;
 }
@@ -912,6 +917,51 @@ bool fprobe_is_registered(struct fprobe *fp)
 	return true;
 }
 
+static int unregister_fprobe_nolock(struct fprobe *fp, bool force)
+{
+	struct fprobe_hlist *hlist_array = fp->hlist_array;
+	unsigned long *addrs = NULL;
+	int i, count;
+
+	addrs = kcalloc(hlist_array->size, sizeof(unsigned long), GFP_KERNEL);
+	if (!addrs && !force)
+		return -ENOMEM;
+	/*
+	 * If @force is set, this function will remove fprobe_hash_node
+	 * from the hash table even if memory allocation fails. However,
+	 * ftrace_ops will not be updated. Anyway, when the last fprobe
+	 * is unregistered, ftrace_ops is also unregistered.
+	 */
+
+	/* Remove non-synonim ips from table and hash */
+	count = 0;
+	for (i = 0; i < hlist_array->size; i++) {
+		if (delete_fprobe_node(&hlist_array->array[i]))
+			continue;
+
+		if (addrs)
+			addrs[count++] = hlist_array->array[i].addr;
+	}
+	del_fprobe_hash(fp);
+
+	if (fprobe_is_ftrace(fp))
+		fprobe_ftrace_remove_ips(addrs, count);
+	else
+		fprobe_graph_remove_ips(addrs, count);
+	/*
+	 * If count == 0, instead of calling ftrace_set_filter_ips(),
+	 * we must wait for RCU grace period to finish del_fprobe_hash().
+	 */
+	if (!count)
+		synchronize_rcu();
+
+	kfree_rcu(hlist_array, rcu);
+	fp->hlist_array = NULL;
+	kfree(addrs);
+
+	return !addrs ? -ENOMEM : 0;
+}
+
 /**
  * unregister_fprobe() - Unregister fprobe.
  * @fp: A fprobe data structure to be unregistered.
@@ -922,44 +972,11 @@ bool fprobe_is_registered(struct fprobe *fp)
  */
 int unregister_fprobe(struct fprobe *fp)
 {
-	struct fprobe_hlist *hlist_array;
-	unsigned long *addrs = NULL;
-	int ret = 0, i, count;
+	guard(mutex)(&fprobe_mutex);
+	if (!fp || !fprobe_registered(fp))
+		return -EINVAL;
 
-	mutex_lock(&fprobe_mutex);
-	if (!fp || !fprobe_registered(fp)) {
-		ret = -EINVAL;
-		goto out;
-	}
-
-	hlist_array = fp->hlist_array;
-	addrs = kcalloc(hlist_array->size, sizeof(unsigned long), GFP_KERNEL);
-	if (!addrs) {
-		ret = -ENOMEM;	/* TODO: Fallback to one-by-one loop */
-		goto out;
-	}
-
-	/* Remove non-synonim ips from table and hash */
-	count = 0;
-	for (i = 0; i < hlist_array->size; i++) {
-		if (!delete_fprobe_node(&hlist_array->array[i]))
-			addrs[count++] = hlist_array->array[i].addr;
-	}
-	del_fprobe_hash(fp);
-
-	if (fprobe_is_ftrace(fp))
-		fprobe_ftrace_remove_ips(addrs, count);
-	else
-		fprobe_graph_remove_ips(addrs, count);
-
-	kfree_rcu(hlist_array, rcu);
-	fp->hlist_array = NULL;
-
-out:
-	mutex_unlock(&fprobe_mutex);
-
-	kfree(addrs);
-	return ret;
+	return unregister_fprobe_nolock(fp, false);
 }
 EXPORT_SYMBOL_GPL(unregister_fprobe);
 
