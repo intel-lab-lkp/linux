@@ -269,6 +269,9 @@ static char *do_read_string(struct feat_fd *ff)
 	if (do_read_u32(ff, &len))
 		return NULL;
 
+	if (len == 0)
+		return NULL;
+
 	buf = malloc(len);
 	if (!buf)
 		return NULL;
@@ -279,7 +282,10 @@ static char *do_read_string(struct feat_fd *ff)
 		 * thus the actual strlen of buf
 		 * may be less than len
 		 */
-		return buf;
+		for (int i = (int)len - 1; i >= 0; i--) {
+			if (buf[i] == '\0')
+				return buf;
+		}
 	}
 
 	free(buf);
