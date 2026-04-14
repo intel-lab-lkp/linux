@@ -425,6 +425,118 @@ int ftrfs_write_inode(struct inode *inode, struct writeback_control *wbc)
 /* dir inode_operations — exported                                     */
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/* rename — move/rename a directory entry                              */
+/* ------------------------------------------------------------------ */
+
+static int ftrfs_rename(struct mnt_idmap *idmap,
+			struct inode *old_dir, struct dentry *old_dentry,
+			struct inode *new_dir, struct dentry *new_dentry,
+			unsigned int flags)
+{
+	struct inode *old_inode = d_inode(old_dentry);
+	struct inode *new_inode = d_inode(new_dentry);
+	int	      is_dir    = S_ISDIR(old_inode->i_mode);
+	int	      ret;
+
+	/* FTRFS v1: no RENAME_EXCHANGE or RENAME_WHITEOUT */
+	if (flags & ~RENAME_NOREPLACE)
+		return -EINVAL;
+
+	if (flags & RENAME_NOREPLACE && new_inode)
+		return -EEXIST;
+
+	/*
+	 * If destination exists, unlink it first.
+	 * For directories: target must be empty (nlink == 2: . and ..)
+	 */
+	if (new_inode) {
+		if (is_dir) {
+			if (new_inode->i_nlink > 2)
+				return -ENOTEMPTY;
+		}
+
+		ret = ftrfs_del_dirent(new_dir, &new_dentry->d_name);
+		if (ret)
+			return ret;
+
+		if (is_dir) {
+			inode_dec_link_count(new_inode);
+			inode_dec_link_count(new_inode);
+			inode_dec_link_count(new_dir);
+		} else {
+			inode_dec_link_count(new_inode);
+		}
+
+		inode_set_ctime_to_ts(new_inode, current_time(new_inode));
+	}
+
+	/* Add entry in new_dir */
+	ret = ftrfs_add_dirent(new_dir, &new_dentry->d_name,
+			       old_inode->i_ino,
+			       is_dir ? 4 /* DT_DIR */ : 1 /* DT_REG */);
+	if (ret)
+		return ret;
+
+	/* Remove entry from old_dir */
+	ret = ftrfs_del_dirent(old_dir, &old_dentry->d_name);
+	if (ret) {
+		pr_err("ftrfs: rename: del_dirent failed after add, fs may be inconsistent\n");
+		return ret;
+	}
+
+	/*
+	 * Update ".." in the moved directory to point to new_dir.
+	 * Also fix nlink on old_dir and new_dir.
+	 */
+	if (is_dir && old_dir != new_dir) {
+		struct qstr dotdot = QSTR_INIT("..", 2);
+
+		ret = ftrfs_del_dirent(old_inode, &dotdot);
+		if (ret)
+			return ret;
+
+		ret = ftrfs_add_dirent(old_inode, &dotdot,
+				       new_dir->i_ino, 4 /* DT_DIR */);
+		if (ret)
+			return ret;
+
+		inode_dec_link_count(old_dir);
+		inode_inc_link_count(new_dir);
+
+		ret = ftrfs_write_inode_raw(old_inode);
+		if (ret)
+			return ret;
+	}
+
+	/* Update timestamps */
+	inode_set_ctime_to_ts(old_inode, current_time(old_inode));
+	inode_set_mtime_to_ts(old_dir,   current_time(old_dir));
+	inode_set_ctime_to_ts(old_dir,   current_time(old_dir));
+	inode_set_mtime_to_ts(new_dir,   current_time(new_dir));
+	inode_set_ctime_to_ts(new_dir,   current_time(new_dir));
+
+	/* Persist all touched inodes */
+	ret = ftrfs_write_inode_raw(old_inode);
+	if (ret)
+		return ret;
+
+	ret = ftrfs_write_inode_raw(old_dir);
+	if (ret)
+		return ret;
+
+	if (old_dir != new_dir) {
+		ret = ftrfs_write_inode_raw(new_dir);
+		if (ret)
+			return ret;
+	}
+
+	if (new_inode)
+		ftrfs_write_inode_raw(new_inode);
+
+	return 0;
+}
+
 const struct inode_operations ftrfs_dir_inode_operations = {
 	.lookup  = ftrfs_lookup,
 	.create  = ftrfs_create,
@@ -432,4 +544,5 @@ const struct inode_operations ftrfs_dir_inode_operations = {
 	.unlink  = ftrfs_unlink,
 	.rmdir   = ftrfs_rmdir,
 	.link    = ftrfs_link,
+	.rename  = ftrfs_rename,
 };

@@ -89,6 +89,47 @@ static const struct super_operations ftrfs_super_ops = {
 };
 
 /*
+ * ftrfs_log_rs_event - record a Reed-Solomon correction in the superblock
+ * @sb:        mounted superblock
+ * @block_no:  block number where correction occurred
+ * @err_bits:  number of symbols corrected
+ *
+ * Writes to the persistent ring buffer in the superblock.
+ * Safe to call from any context (spinlock protected).
+ */
+void ftrfs_log_rs_event(struct super_block *sb, u64 block_no, u32 err_bits)
+{
+	struct ftrfs_sb_info     *sbi = FTRFS_SB(sb);
+	struct ftrfs_super_block *fsb;
+	struct ftrfs_rs_event    *ev;
+	u8 head;
+
+	if (!sbi || !sbi->s_sbh)
+		return;
+
+	spin_lock(&sbi->s_lock);
+
+	fsb  = (struct ftrfs_super_block *)sbi->s_sbh->b_data;
+	head = fsb->s_rs_journal_head % FTRFS_RS_JOURNAL_SIZE;
+	ev   = &fsb->s_rs_journal[head];
+
+	ev->re_block_no   = cpu_to_le64(block_no);
+	ev->re_timestamp  = cpu_to_le64(ktime_get_ns());
+	ev->re_error_bits = cpu_to_le32(err_bits);
+	ev->re_crc32      = cpu_to_le32(
+		ftrfs_crc32(ev, offsetof(struct ftrfs_rs_event, re_crc32)));
+
+	fsb->s_rs_journal_head = (head + 1) % FTRFS_RS_JOURNAL_SIZE;
+
+	mark_buffer_dirty(sbi->s_sbh);
+
+	spin_unlock(&sbi->s_lock);
+
+	pr_debug("ftrfs: RS correction block=%llu symbols=%u\n",
+		 block_no, err_bits);
+}
+
+/*
  * ftrfs_fill_super — read superblock from disk and initialize VFS sb
  */
 int ftrfs_fill_super(struct super_block *sb, struct fs_context *fc)

@@ -36,6 +36,21 @@
 #define FTRFS_DINDIRECT_BLOCKS 1
 
 /*
+ * Radiation Event Journal entry — 24 bytes
+ * Records each RS FEC correction event persistently in the superblock.
+ * 64 entries give operators a map of physical degradation over time.
+ * No existing Linux filesystem provides this at the block layer.
+ */
+struct ftrfs_rs_event {
+	__le64  re_block_no;    /* corrected block number */
+	__le64  re_timestamp;   /* nanoseconds since boot  */
+	__le32  re_error_bits;  /* number of symbols corrected */
+	__le32  re_crc32;       /* CRC32 of this entry */
+} __packed;                 /* 24 bytes */
+
+#define FTRFS_RS_JOURNAL_SIZE  64   /* entries in the radiation event journal */
+
+/*
  * On-disk superblock — block 0
  * Total size: fits in one 4096-byte block
  */
@@ -53,7 +68,9 @@ struct ftrfs_super_block {
 	__le32  s_crc32;            /* CRC32 of this superblock */
 	__u8    s_uuid[16];         /* UUID */
 	__u8    s_label[32];        /* Volume label */
-	__u8    s_pad[3980];        /* Padding to 4096 bytes */
+	 struct ftrfs_rs_event s_rs_journal[FTRFS_RS_JOURNAL_SIZE]; /* 1536 bytes */
+	__u8    s_rs_journal_head;  /* next write index (ring buffer) */
+	__u8    s_pad[2443];        /* Padding to 4096 bytes */
 } __packed;
 
 /*
@@ -142,6 +159,7 @@ static inline struct ftrfs_sb_info *FTRFS_SB(struct super_block *sb)
 /* Function prototypes */
 /* super.c */
 int ftrfs_fill_super(struct super_block *sb, struct fs_context *fc);
+void ftrfs_log_rs_event(struct super_block *sb, u64 block_no, u32 err_bits);
 
 /* inode.c */
 struct inode *ftrfs_iget(struct super_block *sb, unsigned long ino);
