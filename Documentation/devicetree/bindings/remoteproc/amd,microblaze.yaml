@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/remoteproc/amd,microblaze.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: AMD MicroBlaze remote processor
+
+maintainers:
+  - Ben Levinsky <ben.levinsky@amd.com>
+
+description:
+  MicroBlaze remote processor controlled by Linux through the remoteproc
+  framework.
+
+  The executable firmware memory window is described in the
+  MicroBlaze-local address space by the node's reg property and translated
+  to the system physical address space with standard devicetree address
+  translation provided by the parent bus node's ranges property.
+
+properties:
+  $nodename:
+    pattern: "^remoteproc@[0-9a-f]+$"
+
+  compatible:
+    const: amd,microblaze
+
+  reg:
+    maxItems: 1
+    description:
+      MicroBlaze-local address and size of the executable firmware memory
+      window.
+
+  firmware-name:
+    maxItems: 1
+
+  reset-gpios:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+  - reset-gpios
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+
+    / {
+      #address-cells = <2>;
+      #size-cells = <2>;
+
+      bus@b0000000 {
+        compatible = "simple-pm-bus";
+        #address-cells = <1>;
+        #size-cells = <1>;
+        ranges = <0x0 0x0 0xb0000000 0x40000>;
+
+        remoteproc@0 {
+          compatible = "amd,microblaze";
+          reg = <0x0 0x40000>;
+          reset-gpios = <&mbv_reset_gpio 0 GPIO_ACTIVE_LOW>;
+        };
+      };
+    };
