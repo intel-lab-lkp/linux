@@ -29,8 +29,9 @@ static ssize_t proc_bus_pci_read(struct file *file, char __user *buf,
 				 size_t nbytes, loff_t *ppos)
 {
 	struct pci_dev *dev = pde_data(file_inode(file));
-	unsigned int pos = *ppos;
-	unsigned int cnt, size;
+	unsigned int off = *ppos;
+	unsigned int count = nbytes;
+	unsigned int size;
 
 	/*
 	 * Normal users can read only the standardized portion of the
@@ -45,66 +46,65 @@ static ssize_t proc_bus_pci_read(struct file *file, char __user *buf,
 	else
 		size = 64;
 
-	if (pos >= size)
+	if (off >= size)
 		return 0;
-	if (nbytes >= size)
-		nbytes = size;
-	if (pos + nbytes > size)
-		nbytes = size - pos;
-	cnt = nbytes;
+	if (off + count > size) {
+		count = size - off;
+		nbytes = count;
+	}
 
-	if (!access_ok(buf, cnt))
+	if (!access_ok(buf, count))
 		return -EINVAL;
 
 	pci_config_pm_runtime_get(dev);
 
-	if ((pos & 1) && cnt) {
+	if ((off & 1) && count) {
 		unsigned char val;
-		pci_user_read_config_byte(dev, pos, &val);
+		pci_user_read_config_byte(dev, off, &val);
 		__put_user(val, buf);
 		buf++;
-		pos++;
-		cnt--;
+		off++;
+		count--;
 	}
 
-	if ((pos & 3) && cnt > 2) {
+	if ((off & 3) && count > 2) {
 		unsigned short val;
-		pci_user_read_config_word(dev, pos, &val);
+		pci_user_read_config_word(dev, off, &val);
 		__put_user(cpu_to_le16(val), (__le16 __user *) buf);
 		buf += 2;
-		pos += 2;
-		cnt -= 2;
+		off += 2;
+		count -= 2;
 	}
 
-	while (cnt >= 4) {
+	while (count >= 4) {
 		unsigned int val;
-		pci_user_read_config_dword(dev, pos, &val);
+		pci_user_read_config_dword(dev, off, &val);
 		__put_user(cpu_to_le32(val), (__le32 __user *) buf);
 		buf += 4;
-		pos += 4;
-		cnt -= 4;
+		off += 4;
+		count -= 4;
 		cond_resched();
 	}
 
-	if (cnt >= 2) {
+	if (count >= 2) {
 		unsigned short val;
-		pci_user_read_config_word(dev, pos, &val);
+		pci_user_read_config_word(dev, off, &val);
 		__put_user(cpu_to_le16(val), (__le16 __user *) buf);
 		buf += 2;
-		pos += 2;
-		cnt -= 2;
+		off += 2;
+		count -= 2;
 	}
 
-	if (cnt) {
+	if (count) {
 		unsigned char val;
-		pci_user_read_config_byte(dev, pos, &val);
+		pci_user_read_config_byte(dev, off, &val);
 		__put_user(val, buf);
-		pos++;
+		off++;
 	}
 
 	pci_config_pm_runtime_put(dev);
 
-	*ppos = pos;
+	*ppos = off;
 	return nbytes;
 }
 
