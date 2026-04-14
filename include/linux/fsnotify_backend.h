@@ -275,6 +275,9 @@ struct fsnotify_group {
 			mempool_t error_events_pool;
 			/* chained on perm_group_list */
 			struct list_head perm_grp_list;
+			/* protects queue fd open/release */
+			struct mutex queue_mutex;
+			bool queue_opened;
 		} fanotify_data;
 #endif /* CONFIG_FANOTIFY */
 	};

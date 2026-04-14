@@ -552,3 +552,7 @@ static inline u32 fanotify_get_response_errno(int res)
 {
 	return (res >> FAN_ERRNO_SHIFT) & FAN_ERRNO_MASK;
 }
+
+extern const struct file_operations fanotify_fops;
+extern const struct file_operations fanotify_control_fops;
+extern const struct file_operations fanotify_queue_fops;
