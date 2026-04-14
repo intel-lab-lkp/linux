@@ -215,6 +215,14 @@ int dw_pcie_allocate_domains(struct dw_pcie_rp *pp)
 		.host_data	= pp,
 	};
 
+	/*
+	 * Initialize the lock here rather than in dw_pcie_host_init() so that
+	 * drivers using a custom msi_init() callback that call
+	 * dw_pcie_allocate_domains() directly also have the lock properly
+	 * initialized before dw_pcie_irq_domain_alloc() can be invoked.
+	 */
+	raw_spin_lock_init(&pp->lock);
+
 	pp->irq_domain = msi_create_parent_irq_domain(&info, &dw_pcie_msi_parent_ops);
 	if (!pp->irq_domain) {
 		dev_err(pci->dev, "Failed to create IRQ domain\n");
@@ -572,8 +580,6 @@ int dw_pcie_host_init(struct dw_pcie_rp *pp)
 	struct device_node *np = dev->of_node;
 	struct pci_host_bridge *bridge;
 	int ret;
-
-	raw_spin_lock_init(&pp->lock);
 
 	bridge = devm_pci_alloc_host_bridge(dev, 0);
 	if (!bridge)
