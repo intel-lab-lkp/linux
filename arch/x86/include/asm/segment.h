@@ -341,13 +341,23 @@ static inline void __loadsegment_fs(u16 value)
 
 #define loadsegment(seg, val) __loadsegment_##seg(val)
 
+#ifdef CONFIG_X86_32
+/*
+ * Bits 31:16 are undefined for Intel Quark X1000 processors,
+ * Pentium, and earlier processors.
+ */
+typedef u16 __seg_return_t;
+#else
+typedef unsigned long __seg_return_t;
+#endif
+
 /*
  * Save a segment register away:
  */
 #define SAVE_SEGMENT(seg)				\
 static inline unsigned long __savesegment_##seg(void)	\
 {							\
-	unsigned long v;				\
+	__seg_return_t v;				\
 	asm volatile("movl %%" #seg ",%k0" : "=r" (v));	\
 	return v;					\
 }
