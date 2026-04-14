@@ -164,6 +164,8 @@ struct dw_mci {
 	void __iomem		*fifo_reg;
 	u32			data_addr_override;
 	bool			wm_aligned;
+	/* Configurable data byte threshold value for DMA transfer. */
+	u32			dma_threshold;
 
 	struct scatterlist	*sg;
 	struct sg_mapping_iter	sg_miter;
