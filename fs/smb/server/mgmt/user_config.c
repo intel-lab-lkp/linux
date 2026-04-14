@@ -56,8 +56,8 @@ struct ksmbd_user *ksmbd_alloc_user(struct ksmbd_login_response *resp,
 		goto err_free;
 
 	if (resp_ext) {
-		if (resp_ext->ngroups > NGROUPS_MAX) {
-			pr_err("ngroups(%u) from login response exceeds max groups(%d)\n",
+		if (resp_ext->ngroups < 0 || resp_ext->ngroups > NGROUPS_MAX) {
+			pr_err("ngroups(%d) from login response exceeds max groups(%d)\n",
 					resp_ext->ngroups, NGROUPS_MAX);
 			goto err_free;
 		}
