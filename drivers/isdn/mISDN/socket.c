@@ -266,6 +266,11 @@ data_sock_release(struct socket *sock)
 
 	lock_sock(sk);
 
+	if (_pms(sk)->dev) {
+		put_device(&_pms(sk)->dev->dev);
+		_pms(sk)->dev = NULL;
+	}
+
 	sock_orphan(sk);
 	skb_queue_purge(&sk->sk_receive_queue);
 
@@ -387,6 +392,7 @@ data_sock_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			strscpy(di.name, dev_name(&dev->dev), sizeof(di.name));
 			if (copy_to_user((void __user *)arg, &di, sizeof(di)))
 				err = -EFAULT;
+			put_device(&dev->dev);
 		} else
 			err = -ENODEV;
 		break;
@@ -623,6 +629,11 @@ base_sock_release(struct socket *sock)
 	if (!sk)
 		return 0;
 
+	if (_pms(sk)->dev) {
+		put_device(&_pms(sk)->dev->dev);
+		_pms(sk)->dev = NULL;
+	}
+
 	mISDN_sock_unlink(&base_sockets, sk);
 	sock_orphan(sk);
 	sock_put(sk);
@@ -670,6 +681,7 @@ base_sock_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			strscpy(di.name, dev_name(&dev->dev), sizeof(di.name));
 			if (copy_to_user((void __user *)arg, &di, sizeof(di)))
 				err = -EFAULT;
+			put_device(&dev->dev);
 		} else
 			err = -ENODEV;
 		break;
@@ -683,10 +695,12 @@ base_sock_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		}
 		dn.name[sizeof(dn.name) - 1] = '\0';
 		dev = get_mdevice(dn.id);
-		if (dev)
+		if (dev) {
 			err = device_rename(&dev->dev, dn.name);
-		else
+			put_device(&dev->dev);
+		} else {
 			err = -ENODEV;
+		}
 	}
 	break;
 	default:
