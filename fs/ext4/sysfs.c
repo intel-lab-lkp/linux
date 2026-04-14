@@ -41,6 +41,7 @@ typedef enum {
 	attr_pointer_atomic,
 	attr_journal_task,
 	attr_err_report_sec,
+	attr_mb_stats_clear,
 } attr_id_t;
 
 typedef enum {
@@ -161,6 +162,25 @@ out:
 	return count;
 }
 
+static ssize_t mb_stats_clear_store(struct ext4_sb_info *sbi,
+				    const char *buf, size_t count)
+{
+	int val;
+	int ret;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	ret = kstrtoint(skip_spaces(buf), 0, &val);
+	if (ret)
+		return ret;
+	if (val != 1)
+		return -EINVAL;
+
+	ext4_mb_stats_clear(sbi);
+	return count;
+}
+
 static ssize_t journal_task_show(struct ext4_sb_info *sbi, char *buf)
 {
 	if (!sbi->s_journal)
@@ -251,6 +271,7 @@ EXT4_ATTR_OFFSET(mb_best_avail_max_trim_order, 0644, mb_order,
 EXT4_ATTR_OFFSET(err_report_sec, 0644, err_report_sec, ext4_sb_info, s_err_report_sec);
 EXT4_RW_ATTR_SBI_UI(inode_goal, s_inode_goal);
 EXT4_RW_ATTR_SBI_UI(mb_stats, s_mb_stats);
+EXT4_ATTR(mb_stats_clear, 0200, mb_stats_clear);
 EXT4_RW_ATTR_SBI_UI(mb_max_to_scan, s_mb_max_to_scan);
 EXT4_RW_ATTR_SBI_UI(mb_min_to_scan, s_mb_min_to_scan);
 EXT4_RW_ATTR_SBI_UI(mb_order2_req, s_mb_order2_reqs);
@@ -301,6 +322,7 @@ static struct attribute *ext4_attrs[] = {
 	ATTR_LIST(inode_readahead_blks),
 	ATTR_LIST(inode_goal),
 	ATTR_LIST(mb_stats),
+	ATTR_LIST(mb_stats_clear),
 	ATTR_LIST(mb_max_to_scan),
 	ATTR_LIST(mb_min_to_scan),
 	ATTR_LIST(mb_order2_req),
@@ -561,6 +583,8 @@ static ssize_t ext4_attr_store(struct kobject *kobj,
 		return trigger_test_error(sbi, buf, len);
 	case attr_err_report_sec:
 		return err_report_sec_store(sbi, buf, len);
+	case attr_mb_stats_clear:
+		return mb_stats_clear_store(sbi, buf, len);
 	default:
 		return ext4_generic_attr_store(a, sbi, buf, len);
 	}
