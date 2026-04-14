@@ -783,7 +783,7 @@ static int otx2_cptpf_probe(struct pci_dev *pdev,
 	/* Initialize AF-PF mailbox */
 	err = cptpf_afpf_mbox_init(cptpf);
 	if (err)
-		goto clear_drvdata;
+		goto free_irq_vectors;
 	/* Register mailbox interrupt */
 	err = cptpf_register_afpf_mbox_intr(cptpf);
 	if (err)
@@ -826,6 +826,8 @@ unregister_intr:
 	cptpf_disable_afpf_mbox_intr(cptpf);
 destroy_afpf_mbox:
 	cptpf_afpf_mbox_destroy(cptpf);
+free_irq_vectors:
+	pci_free_irq_vectors(pdev);
 clear_drvdata:
 	pci_set_drvdata(pdev, NULL);
 	return err;
