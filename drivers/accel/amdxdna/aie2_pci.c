@@ -592,14 +592,14 @@ static int aie2_init(struct amdxdna_dev *xdna)
 	if (!ndev->psp_hdl) {
 		XDNA_ERR(xdna, "failed to create psp");
 		ret = -ENOMEM;
-		goto release_fw;
+		goto free_irq_vectors;
 	}
 	xdna->dev_handle = ndev;
 
 	ret = aie2_hw_start(xdna);
 	if (ret) {
 		XDNA_ERR(xdna, "start npu failed, ret %d", ret);
-		goto release_fw;
+		goto free_irq_vectors;
 	}
 
 	xrs_cfg.clk_list.num_levels = ndev->max_dpm_level + 1;
@@ -624,6 +624,8 @@ static int aie2_init(struct amdxdna_dev *xdna)
 
 stop_hw:
 	aie2_hw_stop(xdna);
+free_irq_vectors:
+	pci_free_irq_vectors(pdev);
 release_fw:
 	release_firmware(fw);
 
