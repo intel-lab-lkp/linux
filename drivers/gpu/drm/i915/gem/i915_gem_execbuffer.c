@@ -894,6 +894,7 @@ static struct i915_vma *eb_lookup_vma(struct i915_execbuffer *eb, u32 handle)
 		struct i915_vma *vma;
 		int err;
 
+		mutex_lock(&eb->gem_context->lut_mutex);
 		rcu_read_lock();
 		vma = radix_tree_lookup(&eb->gem_context->handles_vma, handle);
 		if (likely(vma))
@@ -901,6 +902,7 @@ static struct i915_vma *eb_lookup_vma(struct i915_execbuffer *eb, u32 handle)
 		else
 			vma = NULL;
 		rcu_read_unlock();
+		mutex_unlock(&eb->gem_context->lut_mutex);
 		if (likely(vma))
 			return vma;
 
