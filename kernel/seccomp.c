@@ -1256,6 +1256,14 @@ out:
 	return -1;
 }
 
+static void seccomp_nack_syscall(int this_syscall, int data, bool force_coredump)
+{
+	/* Show the handler or coredump the original registers. */
+	syscall_rollback(current, current_pt_regs());
+	/* Let the filter pass back 16 bits of data. */
+	force_sig_seccomp(this_syscall, data, force_coredump);
+}
+
 static int __seccomp_filter(int this_syscall, const bool recheck_after_trace)
 {
 	u32 filter_ret, action;
@@ -1285,10 +1293,7 @@ static int __seccomp_filter(int this_syscall, const bool recheck_after_trace)
 		goto skip;
 
 	case SECCOMP_RET_TRAP:
-		/* Show the handler the original registers. */
-		syscall_rollback(current, current_pt_regs());
-		/* Let the filter pass back 16 bits of data. */
-		force_sig_seccomp(this_syscall, data, false);
+		seccomp_nack_syscall(this_syscall, data, false);
 		goto skip;
 
 	case SECCOMP_RET_TRACE:
@@ -1360,10 +1365,7 @@ static int __seccomp_filter(int this_syscall, const bool recheck_after_trace)
 		/* Dump core only if this is the last remaining thread. */
 		if (action != SECCOMP_RET_KILL_THREAD ||
 		    (atomic_read(&current->signal->live) == 1)) {
-			/* Show the original registers in the dump. */
-			syscall_rollback(current, current_pt_regs());
-			/* Trigger a coredump with SIGSYS */
-			force_sig_seccomp(this_syscall, data, true);
+			seccomp_nack_syscall(this_syscall, data, true);
 		} else {
 			do_exit(SIGSYS);
 		}
