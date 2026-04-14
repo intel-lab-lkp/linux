@@ -38,11 +38,10 @@ static int ftrfs_write_inode_raw(struct inode *inode)
 	raw = (struct ftrfs_inode *)bh->b_data + offset;
 
 	raw->i_mode   = cpu_to_le16(inode->i_mode);
-	raw->i_uid    = cpu_to_le16(i_uid_read(inode));
-	raw->i_gid    = cpu_to_le16(i_gid_read(inode));
+	raw->i_uid    = cpu_to_le32(i_uid_read(inode));
+	raw->i_gid    = cpu_to_le32(i_gid_read(inode));
 	raw->i_nlink  = cpu_to_le16(inode->i_nlink);
 	raw->i_size   = cpu_to_le64(inode->i_size);
-	raw->i_blocks = cpu_to_le32(inode->i_blocks);
 	raw->i_atime  = cpu_to_le64(inode_get_atime_sec(inode) * NSEC_PER_SEC
 				     + inode_get_atime_nsec(inode));
 	raw->i_mtime  = cpu_to_le64(inode_get_mtime_sec(inode) * NSEC_PER_SEC
@@ -54,6 +53,7 @@ static int ftrfs_write_inode_raw(struct inode *inode)
 	memcpy(raw->i_direct, fi->i_direct, sizeof(fi->i_direct));
 	raw->i_indirect  = fi->i_indirect;
 	raw->i_dindirect = fi->i_dindirect;
+	raw->i_tindirect = fi->i_tindirect;
 
 	raw->i_crc32 = ftrfs_crc32(raw,
 				    offsetof(struct ftrfs_inode, i_crc32));
@@ -145,7 +145,6 @@ static int ftrfs_add_dirent(struct inode *dir, const struct qstr *name,
 
 	fi->i_direct[i] = cpu_to_le64(block_no);
 	dir->i_size += FTRFS_BLOCK_SIZE;
-	dir->i_blocks++;
 	inode_set_mtime_to_ts(dir, current_time(dir));
 	mark_inode_dirty(dir);
 
@@ -223,7 +222,6 @@ struct inode *ftrfs_new_inode(struct inode *dir, umode_t mode)
 
 	inode_init_owner(&nop_mnt_idmap, inode, dir, mode);
 	inode->i_ino    = ino;
-	inode->i_blocks = 0;
 	inode->i_size   = 0;
 	inode_set_atime_to_ts(inode, current_time(inode));
 	inode_set_mtime_to_ts(inode, current_time(inode));
@@ -242,12 +240,17 @@ struct inode *ftrfs_new_inode(struct inode *dir, umode_t mode)
 	} else {
 		inode->i_op  = &ftrfs_file_inode_operations;
 		inode->i_fop = &ftrfs_file_operations;
+		inode->i_mapping->a_ops = &ftrfs_aops;
 		set_nlink(inode, 1);
 	}
 
-	insert_inode_hash(inode);
+	if (insert_inode_locked(inode) < 0) {
+		make_bad_inode(inode);
+		iput(inode);
+		return ERR_PTR(-EIO);
+	}
 	mark_inode_dirty(inode);
-	return ERR_CAST(inode);
+	return inode;
 }
 
 /* ------------------------------------------------------------------ */
@@ -277,9 +280,11 @@ static int ftrfs_create(struct mnt_idmap *idmap, struct inode *dir,
 		goto out_iput;
 
 	d_instantiate(dentry, inode);
+	unlock_new_inode(inode);
 	return 0;
 
 out_iput:
+	unlock_new_inode(inode);
 	iput(inode);
 	return ret;
 }
@@ -327,9 +332,11 @@ static struct dentry *ftrfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 		goto out_fail;
 
 	d_instantiate(dentry, inode);
+	unlock_new_inode(inode);
 	return NULL;
 
 out_fail:
+	unlock_new_inode(inode);
 	inode_dec_link_count(inode);
 	inode_dec_link_count(inode);
 	iput(inode);
