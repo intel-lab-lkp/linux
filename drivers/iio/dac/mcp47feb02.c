@@ -1095,9 +1095,10 @@ static int mcp47feb02_probe(struct i2c_client *client)
 {
 	const struct mcp47feb02_features *chip_features;
 	struct device *dev = &client->dev;
+	int vdd_uV, vref_uV, vref1_uV;
 	struct mcp47feb02_data *data;
 	struct iio_dev *indio_dev;
-	int vref1_uV, vref_uV, vdd_uV, ret;
+	int ret;
 
 	indio_dev = devm_iio_device_alloc(dev, sizeof(*data));
 	if (!indio_dev)
@@ -1146,13 +1147,13 @@ static int mcp47feb02_probe(struct i2c_client *client)
 		dev_dbg(dev, "Vref is unavailable.\n");
 	}
 
+	vref1_uV = 0;
 	if (chip_features->have_ext_vref1) {
 		ret = devm_regulator_get_enable_read_voltage(dev, "vref1");
 		if (ret > 0) {
 			vref1_uV = ret;
 			data->use_vref1 = true;
 		} else {
-			vref1_uV = 0;
 			dev_dbg(dev, "using internal band gap as voltage reference 1.\n");
 			dev_dbg(dev, "Vref1 is unavailable.\n");
 		}
