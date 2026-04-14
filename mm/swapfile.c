@@ -2216,6 +2216,67 @@ int pin_hibernation_swap_type(dev_t device, sector_t offset)
 }
 
 /**
+ * repin_hibernation_swap_type - Retarget a hibernation pin without dropping it
+ * @old_type: Currently pinned swap type, or a negative value if none is pinned
+ * @device: Block device containing the resume image
+ * @offset: Offset identifying the swap area
+ *
+ * Locate the swap device for @device/@offset and make it the hibernation-pinned
+ * device. If @old_type already refers to the same swap area, the existing pin
+ * is kept. On failure, the previous pin is preserved.
+ *
+ * Return:
+ * >= 0 on success (new swap type).
+ * -EINVAL if @device is invalid.
+ * -ENODEV if the swap device is not found.
+ * -EBUSY if another device is already pinned for hibernation.
+ */
+int repin_hibernation_swap_type(int old_type, dev_t device, sector_t offset)
+{
+	int type;
+	struct swap_info_struct *old_si = NULL, *new_si;
+
+	spin_lock(&swap_lock);
+
+	if (old_type >= 0) {
+		old_si = swap_type_to_info(old_type);
+		if (WARN_ON_ONCE(!old_si || !(old_si->flags & SWP_HIBERNATION))) {
+			spin_unlock(&swap_lock);
+			return -EINVAL;
+		}
+	}
+
+	type = __find_hibernation_swap_type(device, offset);
+	if (type < 0) {
+		spin_unlock(&swap_lock);
+		return type;
+	}
+
+	if (type == old_type) {
+		spin_unlock(&swap_lock);
+		return type;
+	}
+
+	new_si = swap_type_to_info(type);
+	if (WARN_ON_ONCE(!new_si)) {
+		spin_unlock(&swap_lock);
+		return -ENODEV;
+	}
+
+	if (WARN_ON_ONCE(new_si->flags & SWP_HIBERNATION)) {
+		spin_unlock(&swap_lock);
+		return -EBUSY;
+	}
+
+	if (old_si)
+		old_si->flags &= ~SWP_HIBERNATION;
+	new_si->flags |= SWP_HIBERNATION;
+
+	spin_unlock(&swap_lock);
+	return type;
+}
+
+/**
  * unpin_hibernation_swap_type - Unpin the swap device for hibernation
  * @type: Swap type previously returned by pin_hibernation_swap_type()
  *
