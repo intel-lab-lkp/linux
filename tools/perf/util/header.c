@@ -2141,6 +2141,13 @@ static struct evsel *read_event_desc(struct feat_fd *ff)
 	if (do_read_u32(ff, &sz))
 		goto error;
 
+	/*
+	 * The minimum section footprint per event is sz bytes for the attr
+	 * plus a u32 for the id count, check that nre events fit.
+	 */
+	if (sz == 0 || sz > ff->size || nre > (ff->size - ff->offset) / (sz + sizeof(u32)))
+		goto error;
+
 	/* buffer to hold on file attr struct */
 	buf = malloc(sz);
 	if (!buf)
@@ -2185,6 +2192,9 @@ static struct evsel *read_event_desc(struct feat_fd *ff)
 
 		if (!nr)
 			continue;
+
+		if (nr > (ff->size - ff->offset) / sizeof(*id))
+			goto error;
 
 		id = calloc(nr, sizeof(*id));
 		if (!id)
