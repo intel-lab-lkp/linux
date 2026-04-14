@@ -608,6 +608,14 @@ void __exfat_fs_error(struct super_block *sb, int report, const char *fmt, ...)
 		__exfat_fs_error(sb, __ratelimit(&EXFAT_SB(sb)->ratelimit), \
 		fmt, ## args)
 
+/* exfat/tables.c */
+/* Upcase table macro */
+#define EXFAT_NUM_UPCASE	(2918)
+#define EXFAT_UTBL_COUNT	(0x10000)
+
+extern const unsigned short exfat_uni_def_upcase[EXFAT_NUM_UPCASE];
+extern const unsigned short exfat_bad_uni_chars[];
+
 /* expand to pr_*() with prefix */
 #define exfat_err(sb, fmt, ...)						\
 	pr_err("exFAT-fs (%s): " fmt "\n", (sb)->s_id, ##__VA_ARGS__)
