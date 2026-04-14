@@ -359,7 +359,6 @@ static int parse_resource(char *c, int *intval)
 {
 	substring_t argstr;
 	char *name, *value = c;
-	size_t len;
 	int ret, i;
 
 	name = strsep(&value, "=");
@@ -370,10 +369,8 @@ static int parse_resource(char *c, int *intval)
 	if (i < 0)
 		return i;
 
-	len = strlen(value);
-
 	argstr.from = value;
-	argstr.to = value + len;
+	argstr.to = value + strlen(value);
 
 	ret = match_int(&argstr, intval);
 	if (ret >= 0) {
@@ -381,7 +378,7 @@ static int parse_resource(char *c, int *intval)
 			return -EINVAL;
 		return i;
 	}
-	if (strncmp(value, RDMACG_MAX_STR, len) == 0) {
+	if (strcmp(value, RDMACG_MAX_STR) == 0) {
 		*intval = S32_MAX;
 		return i;
 	}
