@@ -2972,25 +2972,12 @@ struct amdgpu_vm *amdgpu_vm_lock_by_pasid(struct amdgpu_device *adev,
 		return NULL;
 
 	r = amdgpu_bo_reserve(*root, true);
-	if (r)
-		goto error_unref;
-
-	/* Double check that the VM still exists */
-	xa_lock_irqsave(&adev->vm_manager.pasids, irqflags);
-	vm = xa_load(&adev->vm_manager.pasids, pasid);
-	if (vm && vm->root.bo != *root)
-		vm = NULL;
-	xa_unlock_irqrestore(&adev->vm_manager.pasids, irqflags);
-	if (!vm)
-		goto error_unlock;
+	if (r) {
+		amdgpu_bo_unref(root);
+		return NULL;
+	}
 
 	return vm;
-error_unlock:
-	amdgpu_bo_unreserve(*root);
-
-error_unref:
-	amdgpu_bo_unref(root);
-	return NULL;
 }
 
 /**
@@ -3023,11 +3010,19 @@ bool amdgpu_vm_handle_fault(struct amdgpu_device *adev, u32 pasid,
 
 	is_compute_context = vm->is_compute_context;
 
-	if (is_compute_context && !svm_range_restore_pages(adev, pasid, vmid,
-	    node_id, addr >> PAGE_SHIFT, ts, write_fault)) {
+	if (is_compute_context) {
+		/* Unreserve root since svm_range_restore_pages might try to reserve it. */
 		amdgpu_bo_unreserve(root);
 		amdgpu_bo_unref(&root);
-		return true;
+
+		if (!svm_range_restore_pages(adev, pasid, vmid,
+					     node_id, addr >> PAGE_SHIFT, ts, write_fault))
+			return true;
+
+		/* Double check that the VM still exists. */
+		vm = amdgpu_vm_lock_by_pasid(adev, &root, pasid);
+		if (!vm)
+			return false;
 	}
 
 	addr /= AMDGPU_GPU_PAGE_SIZE;
