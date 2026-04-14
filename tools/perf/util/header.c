@@ -269,6 +269,9 @@ static char *do_read_string(struct feat_fd *ff)
 	if (do_read_u32(ff, &len))
 		return NULL;
 
+	if (len > ff->size - ff->offset)
+		return NULL;
+
 	buf = malloc(len);
 	if (!buf)
 		return NULL;
