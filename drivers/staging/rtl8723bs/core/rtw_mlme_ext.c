@@ -2954,7 +2954,9 @@ void issue_assocreq(struct adapter *padapter)
 			if (padapter->mlmepriv.htpriv.ht_option) {
 				if (!(is_ap_in_tkip(padapter))) {
 					memcpy(&(pmlmeinfo->HT_caps), pIE->data, sizeof(struct HT_caps_element));
-					pframe = rtw_set_ie(pframe, WLAN_EID_HT_CAPABILITY, pIE->length, (u8 *)(&(pmlmeinfo->HT_caps)), &(pattrib->pktlen));
+					pframe = rtw_set_ie(pframe, WLAN_EID_HT_CAPABILITY,
+					min_t(uint, pIE->length, sizeof(struct HT_caps_element)),
+					(u8 *)&pmlmeinfo->HT_caps, &pattrib->pktlen);
 				}
 			}
 			break;
