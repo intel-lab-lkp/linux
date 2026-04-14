@@ -607,11 +607,10 @@ void iavf_disable_vlan_stripping(struct iavf_adapter *adapter);
 void iavf_virtchnl_completion(struct iavf_adapter *adapter,
 			      enum virtchnl_ops v_opcode,
 			      enum iavf_status v_retval, u8 *msg, u16 msglen);
-int iavf_poll_virtchnl_response(struct iavf_adapter *adapter,
-				bool (*condition)(struct iavf_adapter *, const void *),
-				const void *cond_data,
-				enum virtchnl_ops v_opcode,
-				unsigned int timeout_ms);
+int iavf_poll_virtchnl_msg(struct iavf_hw *hw, struct iavf_arq_event_info *event,
+			   enum virtchnl_ops op_to_poll, unsigned int timeout_ms,
+			   bool (*condition)(struct iavf_adapter *, const void *),
+			   const void *cond_data);
 int iavf_config_rss(struct iavf_adapter *adapter);
 void iavf_cfg_queues_bw(struct iavf_adapter *adapter);
 void iavf_cfg_queues_quanta_size(struct iavf_adapter *adapter);

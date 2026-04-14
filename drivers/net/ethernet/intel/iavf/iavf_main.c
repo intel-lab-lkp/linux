@@ -1075,6 +1075,7 @@ static bool iavf_mac_change_done(struct iavf_adapter *adapter, const void *data)
  */
 static int iavf_set_mac_sync(struct iavf_adapter *adapter, const u8 *addr)
 {
+	struct iavf_arq_event_info event;
 	int ret;
 
 	netdev_assert_locked(adapter->netdev);
@@ -1083,8 +1084,16 @@ static int iavf_set_mac_sync(struct iavf_adapter *adapter, const u8 *addr)
 	if (ret)
 		return ret;
 
-	return iavf_poll_virtchnl_response(adapter, iavf_mac_change_done, addr,
-					   VIRTCHNL_OP_UNKNOWN, 2500);
+	event.buf_len = IAVF_MAX_AQ_BUF_SIZE;
+	event.msg_buf = kzalloc(event.buf_len, GFP_KERNEL);
+	if (!event.msg_buf)
+		return -ENOMEM;
+
+	ret = iavf_poll_virtchnl_msg(&adapter->hw, &event, VIRTCHNL_OP_UNKNOWN,
+				     2500, iavf_mac_change_done, addr);
+
+	kfree(event.msg_buf);
+	return ret;
 }
 
 /**

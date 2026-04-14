@@ -54,55 +54,121 @@ int iavf_send_api_ver(struct iavf_adapter *adapter)
 }
 
 /**
- * iavf_poll_virtchnl_msg
+ * iavf_virtchnl_completion_done - Check if virtchnl operation completed
+ * @adapter: adapter structure
+ * @condition: optional callback for custom completion check
+ * @cond_data: context data for callback
+ * @op_to_poll: opcode to check against current_op (if no callback)
+ *
+ * Checks if operation is complete. Callback takes priority if provided,
+ * otherwise checks if current_op matches op_to_poll.
+ *
+ * Return: true if operation completed
+ */
+static inline bool
+iavf_virtchnl_completion_done(struct iavf_adapter *adapter,
+			      bool (*condition)(struct iavf_adapter *, const void *),
+			      const void *cond_data,
+			      enum virtchnl_ops op_to_poll)
+{
+	if (condition)
+		return condition(adapter, cond_data);
+
+	return adapter->current_op == op_to_poll;
+}
+
+/**
+ * iavf_poll_virtchnl_msg - Poll admin queue for virtchnl message
  * @hw: HW configuration structure
  * @event: event to populate on success
- * @op_to_poll: requested virtchnl op to poll for
+ * @op_to_poll: virtchnl opcode to poll for (used for init-time and runtime
+ *              without callback)
+ * @timeout_ms: timeout in milliseconds (0 = no timeout, exit on empty queue)
+ * @condition: optional callback to check custom completion (runtime use,
+ *             takes priority over op_to_poll check)
+ * @cond_data: context data for condition callback
  *
- * Initialize poll for virtchnl msg matching the requested_op. Returns 0
- * if a message of the correct opcode is in the queue or an error code
- * if no message matching the op code is waiting and other failures.
+ * Enhanced polling function that handles both init-time and runtime use cases:
+ * - Init-time: Set op_to_poll, timeout_ms=0, condition=NULL
+ *   Polls until matching opcode found or queue empty
+ * - Runtime with callback: Set timeout_ms>0, condition callback, cond_data
+ *   Polls with timeout until condition returns true (op_to_poll not used)
+ * - Runtime without callback: Set op_to_poll, timeout_ms>0, condition=NULL
+ *   Polls with timeout until adapter->current_op == op_to_poll
+ *
+ * Runtime messages are processed through iavf_virtchnl_completion().
+ * For init-time use, returns 0 with raw message data in event buffer.
+ * For runtime use, returns 0 when completion condition is met.
+ *
+ * Return: 0 on success, -EAGAIN on timeout, or error code
  */
-static int
-iavf_poll_virtchnl_msg(struct iavf_hw *hw, struct iavf_arq_event_info *event,
-		       enum virtchnl_ops op_to_poll)
+int iavf_poll_virtchnl_msg(struct iavf_hw *hw, struct iavf_arq_event_info *event,
+			   enum virtchnl_ops op_to_poll, unsigned int timeout_ms,
+			   bool (*condition)(struct iavf_adapter *, const void *),
+			   const void *cond_data)
 {
+	struct iavf_adapter *adapter = hw->back;
+	unsigned long timeout = timeout_ms ? jiffies + msecs_to_jiffies(timeout_ms) : 0;
 	enum virtchnl_ops received_op;
 	enum iavf_status status;
-	u32 v_retval;
+	u32 v_retval = 0;
+	u16 pending;
 
-	while (1) {
-		/* When the AQ is empty, iavf_clean_arq_element will return
-		 * nonzero and this loop will terminate.
-		 */
-		status = iavf_clean_arq_element(hw, event, NULL);
-		if (status != IAVF_SUCCESS)
-			return iavf_status_to_errno(status);
-		received_op =
-		    (enum virtchnl_ops)le32_to_cpu(event->desc.cookie_high);
+	do {
+		if (timeout_ms && iavf_virtchnl_completion_done(adapter, condition,
+								cond_data, op_to_poll))
+			return 0;
 
-		if (received_op == VIRTCHNL_OP_EVENT) {
-			struct iavf_adapter *adapter = hw->back;
-			struct virtchnl_pf_event *vpe =
-				(struct virtchnl_pf_event *)event->msg_buf;
+		status = iavf_clean_arq_element(hw, event, &pending);
+		if (status == IAVF_SUCCESS) {
+			received_op = (enum virtchnl_ops)le32_to_cpu(event->desc.cookie_high);
 
-			if (vpe->event != VIRTCHNL_EVENT_RESET_IMPENDING)
+			/* Handle reset events specially */
+			if (received_op == VIRTCHNL_OP_EVENT) {
+				struct virtchnl_pf_event *vpe =
+					(struct virtchnl_pf_event *)event->msg_buf;
+
+				if (vpe->event != VIRTCHNL_EVENT_RESET_IMPENDING)
+					continue;
+
+				dev_info(&adapter->pdev->dev,
+					 "Reset indication received from the PF\n");
+				if (!(adapter->flags & IAVF_FLAG_RESET_PENDING))
+					iavf_schedule_reset(adapter,
+							    IAVF_FLAG_RESET_PENDING);
+
+				return -EIO;
+			}
+
+			v_retval = le32_to_cpu(event->desc.cookie_low);
+
+			if (!timeout_ms) {
+				if (received_op == op_to_poll)
+					return virtchnl_status_to_errno((enum virtchnl_status_code)
+							v_retval);
+			} else {
+				iavf_virtchnl_completion(adapter, received_op,
+							 (enum iavf_status)v_retval,
+							 event->msg_buf, event->msg_len);
+			}
+
+			if (pending)
 				continue;
-
-			dev_info(&adapter->pdev->dev, "Reset indication received from the PF\n");
-			if (!(adapter->flags & IAVF_FLAG_RESET_PENDING))
-				iavf_schedule_reset(adapter,
-						    IAVF_FLAG_RESET_PENDING);
-
-			return -EIO;
+		} else if (!timeout_ms) {
+			return iavf_status_to_errno(status);
 		}
 
-		if (op_to_poll == received_op)
-			break;
-	}
+		if (timeout_ms) {
+			memset(event->msg_buf, 0, IAVF_MAX_AQ_BUF_SIZE);
+			usleep_range(50, 75);
+		}
 
-	v_retval = le32_to_cpu(event->desc.cookie_low);
-	return virtchnl_status_to_errno((enum virtchnl_status_code)v_retval);
+	} while (!timeout_ms || time_before(jiffies, timeout));
+
+	if (iavf_virtchnl_completion_done(adapter, condition, cond_data, op_to_poll))
+		return 0;
+
+	return -EAGAIN;
 }
 
 /**
@@ -124,7 +190,8 @@ int iavf_verify_api_ver(struct iavf_adapter *adapter)
 	if (!event.msg_buf)
 		return -ENOMEM;
 
-	err = iavf_poll_virtchnl_msg(&adapter->hw, &event, VIRTCHNL_OP_VERSION);
+	err = iavf_poll_virtchnl_msg(&adapter->hw, &event, VIRTCHNL_OP_VERSION,
+				     0, NULL, NULL);
 	if (!err) {
 		struct virtchnl_version_info *pf_vvi =
 			(struct virtchnl_version_info *)event.msg_buf;
@@ -294,7 +361,8 @@ int iavf_get_vf_config(struct iavf_adapter *adapter)
 	if (!event.msg_buf)
 		return -ENOMEM;
 
-	err = iavf_poll_virtchnl_msg(hw, &event, VIRTCHNL_OP_GET_VF_RESOURCES);
+	err = iavf_poll_virtchnl_msg(hw, &event, VIRTCHNL_OP_GET_VF_RESOURCES,
+				     0, NULL, NULL);
 	memcpy(adapter->vf_res, event.msg_buf, min(event.msg_len, len));
 
 	/* some PFs send more queues than we should have so validate that
@@ -322,7 +390,8 @@ int iavf_get_vf_vlan_v2_caps(struct iavf_adapter *adapter)
 		return -ENOMEM;
 
 	err = iavf_poll_virtchnl_msg(&adapter->hw, &event,
-				     VIRTCHNL_OP_GET_OFFLOAD_VLAN_V2_CAPS);
+				     VIRTCHNL_OP_GET_OFFLOAD_VLAN_V2_CAPS,
+				     0, NULL, NULL);
 	if (!err)
 		memcpy(&adapter->vlan_v2_caps, event.msg_buf,
 		       min(event.msg_len, len));
@@ -342,7 +411,8 @@ int iavf_get_vf_supported_rxdids(struct iavf_adapter *adapter)
 	event.buf_len = sizeof(rxdids);
 
 	err = iavf_poll_virtchnl_msg(&adapter->hw, &event,
-				     VIRTCHNL_OP_GET_SUPPORTED_RXDIDS);
+				     VIRTCHNL_OP_GET_SUPPORTED_RXDIDS,
+				     0, NULL, NULL);
 	if (!err)
 		adapter->supp_rxdids = rxdids;
 
@@ -359,7 +429,8 @@ int iavf_get_vf_ptp_caps(struct iavf_adapter *adapter)
 	event.buf_len = sizeof(caps);
 
 	err = iavf_poll_virtchnl_msg(&adapter->hw, &event,
-				     VIRTCHNL_OP_1588_PTP_GET_CAPS);
+				     VIRTCHNL_OP_1588_PTP_GET_CAPS,
+				     0, NULL, NULL);
 	if (!err)
 		adapter->ptp.hw_caps = caps;
 
@@ -2961,101 +3032,3 @@ void iavf_virtchnl_completion(struct iavf_adapter *adapter,
 	adapter->current_op = VIRTCHNL_OP_UNKNOWN;
 }
 
-/**
- * iavf_virtchnl_done - Check if virtchnl operation completed
- * @adapter: board private structure
- * @condition: optional callback for custom completion check
- *   (takes priority)
- * @cond_data: context data for callback
- * @v_opcode: virtchnl opcode value we're waiting for if no condition
- *   configured (typically VIRTCHNL_OP_UNKNOWN), if condition not used
- *
- * Checks completion status. Callback takes priority if provided. Otherwise
- * waits for current_op to reach v_opcode (typically VIRTCHNL_OP_UNKNOWN
- * after completion).
- *
- * Return: true if operation completed
- */
-static inline bool iavf_virtchnl_done(struct iavf_adapter *adapter,
-				      bool (*condition)(struct iavf_adapter *, const void *),
-				      const void *cond_data,
-				      enum virtchnl_ops v_opcode)
-{
-	if (condition)
-		return condition(adapter, cond_data);
-
-	return adapter->current_op == v_opcode;
-}
-
-/**
- * iavf_poll_virtchnl_response - Poll admin queue for virtchnl response
- * @adapter: board private structure
- * @condition: optional callback to check if desired response received
- *   (takes priority)
- * @cond_data: context data passed to condition callback
- * @v_opcode: virtchnl opcode value to wait for if no condition configured
- *   (typically VIRTCHNL_OP_UNKNOWN), if condition, not used
- * @timeout_ms: maximum time to wait in milliseconds
- *
- * Polls admin queue and processes all messages until condition returns true
- * or timeout expires. If condition is NULL, waits for current_op to become
- * v_opcode (typically VIRTCHNL_OP_UNKNOWN after operation completes).
- * Caller must hold netdev_lock. This can sleep for up to timeout_ms while
- * polling hardware.
- *
- * Return: 0 on success (condition met), -EAGAIN on timeout or error
- */
-int iavf_poll_virtchnl_response(struct iavf_adapter *adapter,
-				bool (*condition)(struct iavf_adapter *, const void *),
-				const void *cond_data,
-				enum virtchnl_ops v_opcode,
-				unsigned int timeout_ms)
-{
-	struct iavf_hw *hw = &adapter->hw;
-	struct iavf_arq_event_info event;
-	enum virtchnl_ops v_op;
-	enum iavf_status v_ret;
-	unsigned long timeout;
-	u16 pending;
-	int ret;
-
-	netdev_assert_locked(adapter->netdev);
-
-	event.buf_len = IAVF_MAX_AQ_BUF_SIZE;
-	event.msg_buf = kzalloc(event.buf_len, GFP_KERNEL);
-	if (!event.msg_buf)
-		return -ENOMEM;
-
-	timeout = jiffies + msecs_to_jiffies(timeout_ms);
-	do {
-		if (iavf_virtchnl_done(adapter, condition, cond_data, v_opcode)) {
-			ret = 0;
-			goto out;
-		}
-
-		ret = iavf_clean_arq_element(hw, &event, &pending);
-		if (!ret) {
-			v_op = (enum virtchnl_ops)le32_to_cpu(event.desc.cookie_high);
-			v_ret = (enum iavf_status)le32_to_cpu(event.desc.cookie_low);
-
-			iavf_virtchnl_completion(adapter, v_op, v_ret,
-						 event.msg_buf, event.msg_len);
-
-			memset(event.msg_buf, 0, IAVF_MAX_AQ_BUF_SIZE);
-
-			if (pending)
-				continue;
-		}
-
-		usleep_range(50, 75);
-	} while (time_before(jiffies, timeout));
-
-	if (iavf_virtchnl_done(adapter, condition, cond_data, v_opcode))
-		ret = 0;
-	else
-		ret = -EAGAIN;
-
-out:
-	kfree(event.msg_buf);
-	return ret;
-}
