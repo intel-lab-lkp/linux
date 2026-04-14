@@ -68,6 +68,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "kselftest_harness_structs.h"
 #include "kselftest.h"
 
 static inline void __kselftest_memset_safe(void *s, int c, size_t n)
@@ -845,25 +846,9 @@ struct __test_results {
 	char reason[1024];	/* Reason for test result */
 };
 
-struct __test_metadata;
-struct __fixture_variant_metadata;
-
-/* Contains all the information about a fixture. */
-struct __fixture_metadata {
-	const char *name;
-	struct __test_metadata *tests;
-	struct __fixture_variant_metadata *variant;
-	struct __fixture_metadata *prev, *next;
-} _fixture_global __attribute__((unused)) = {
+struct __fixture_metadata _fixture_global __attribute__((unused)) = {
 	.name = "global",
 	.prev = &_fixture_global,
-};
-
-struct __test_xfail {
-	struct __fixture_metadata *fixture;
-	struct __fixture_variant_metadata *variant;
-	struct __test_metadata *test;
-	struct __test_xfail *prev, *next;
 };
 
 /**
@@ -899,40 +884,12 @@ static inline void __register_fixture(struct __fixture_metadata *f)
 	__LIST_APPEND(__fixture_list, f);
 }
 
-struct __fixture_variant_metadata {
-	const char *name;
-	const void *data;
-	struct __test_xfail *xfails;
-	struct __fixture_variant_metadata *prev, *next;
-};
-
 static inline void
 __register_fixture_variant(struct __fixture_metadata *f,
 			   struct __fixture_variant_metadata *variant)
 {
 	__LIST_APPEND(f->variant, variant);
 }
-
-/* Contains all the information for test execution and status checking. */
-struct __test_metadata {
-	const char *name;
-	void (*fn)(struct __test_metadata *,
-		   struct __fixture_variant_metadata *);
-	pid_t pid;	/* pid of test when being run */
-	struct __fixture_metadata *fixture;
-	void (*teardown_fn)(bool in_parent, struct __test_metadata *_metadata,
-			    void *self, const void *variant);
-	int termsig;
-	int exit_code;
-	int trigger; /* extra handler after the evaluation */
-	int timeout;	/* seconds to wait for test timeout */
-	bool aborted;	/* stopped test due to failed ASSERT */
-	bool *no_teardown; /* fixture needs teardown */
-	void *self;
-	const void *variant;
-	struct __test_results *results;
-	struct __test_metadata *prev, *next;
-};
 
 static inline bool __test_passed(struct __test_metadata *metadata)
 {
