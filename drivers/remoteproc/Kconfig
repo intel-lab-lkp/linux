@@ -23,6 +23,21 @@ config REMOTEPROC_CDEV
 
 	  It's safe to say N if you don't want to use this interface.
 
+config AMD_MICROBLAZE_REMOTEPROC
+	tristate "AMD MicroBlaze remoteproc support"
+	depends on OF
+	depends on GPIOLIB || COMPILE_TEST
+	help
+	  Say y or m here to support a MicroBlaze remote processor controlled
+	  by Linux through the remoteproc framework.
+
+	  This driver matches designs where executable firmware memory is
+	  described in the MicroBlaze-local address space and translated to
+	  the system physical address space with standard devicetree address
+	  translation.
+
+	  If unsure, say N.
+
 config IMX_REMOTEPROC
 	tristate "i.MX remoteproc support"
 	depends on ARCH_MXC
