@@ -423,8 +423,15 @@ int hfsplus_delete_cat(u32 cnid, struct inode *dir, const struct qstr *str)
 	hfsplus_mark_inode_dirty(dir, HFSPLUS_I_CAT_DIRTY);
 
 	if (type == HFSPLUS_FILE || type == HFSPLUS_FOLDER) {
-		if (HFSPLUS_SB(sb)->attr_tree)
-			hfsplus_delete_all_attrs(dir, cnid);
+		if (HFSPLUS_SB(sb)->attr_tree) {
+			int attr_err = hfsplus_delete_all_attrs(dir, cnid);
+
+			if (attr_err && attr_err != -ENOENT) {
+				pr_err("hfsplus: failed to delete xattrs for cnid %u: %d\n",
+				       cnid, attr_err);
+				err = attr_err;
+			}
+		}
 	}
 
 out:
