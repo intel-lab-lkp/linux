@@ -1399,13 +1399,18 @@ int ice_set_vf_trust(struct net_device *netdev, int vf_id, bool trusted)
 
 	mutex_lock(&vf->cfg_lock);
 
-	while (!trusted && vf->num_mac_lldp)
-		ice_vf_update_mac_lldp_num(vf, ice_get_vf_vsi(vf), false);
-
 	vf->trusted = trusted;
-	ice_reset_vf(vf, ICE_VF_RESET_NOTIFY);
 	dev_info(ice_pf_to_dev(pf), "VF %u is now %strusted\n",
 		 vf_id, trusted ? "" : "un");
+
+	/* Only reset VF if removing trust and there are MAC LLDP filters
+	 * to clean up. Reset is needed to ensure filter removal completes.
+	 */
+	if (!trusted && vf->num_mac_lldp) {
+		while (vf->num_mac_lldp)
+			ice_vf_update_mac_lldp_num(vf, ice_get_vf_vsi(vf), false);
+		ice_reset_vf(vf, ICE_VF_RESET_NOTIFY);
+	}
 
 	mutex_unlock(&vf->cfg_lock);
 
