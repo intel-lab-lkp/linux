@@ -129,6 +129,31 @@ queue:
 	return ret;
 }
 
+/*
+ * Reinsert an event to the head of the notification queue for reprocessing.
+ * No merge or overflow handling.
+ * The function returns:
+ * 0 if the event was added to a queue
+ * 2 if the event was not queued - the group is shutting down.
+ */
+int fsnotify_restart_event(struct fsnotify_group *group,
+			   struct fsnotify_event *event)
+{
+	spin_lock(&group->notification_lock);
+
+	if (group->shutdown) {
+		spin_unlock(&group->notification_lock);
+		return 2;
+	}
+
+	group->q_len++;
+	list_add(&event->list, &group->notification_list);
+	spin_unlock(&group->notification_lock);
+
+	wake_up(&group->notification_waitq);
+	return 0;
+}
+
 void fsnotify_remove_queued_event(struct fsnotify_group *group,
 				  struct fsnotify_event *event)
 {

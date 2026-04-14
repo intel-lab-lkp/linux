@@ -739,6 +739,10 @@ static inline int fsnotify_add_event(struct fsnotify_group *group,
 	return fsnotify_insert_event(group, event, merge, NULL);
 }
 
+/* Reinsert event at head of queue for reprocessing */
+extern int fsnotify_restart_event(struct fsnotify_group *group,
+				  struct fsnotify_event *event);
+
 /* Queue overflow event to a notification group */
 static inline void fsnotify_queue_overflow(struct fsnotify_group *group)
 {

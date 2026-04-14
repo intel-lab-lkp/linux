@@ -1095,6 +1095,33 @@ static ssize_t fanotify_write(struct file *file, const char __user *buf, size_t 
 	return count;
 }
 
+static void fanotify_restart_pending_events(struct fsnotify_group *group)
+{
+	spin_lock(&group->notification_lock);
+	while (!list_empty(&group->fanotify_data.access_list)) {
+		struct fanotify_perm_event *event;
+		int ret;
+
+		event = list_first_entry(&group->fanotify_data.access_list,
+					 struct fanotify_perm_event,
+					 fae.fse.list);
+		list_del_init(&event->fae.fse.list);
+		spin_unlock(&group->notification_lock);
+
+		ret = fsnotify_restart_event(group, &event->fae.fse);
+		if (ret) {
+			/*
+			 * Group is being shut down. Reply ALLOW for the event.
+			 */
+			spin_lock(&group->notification_lock);
+			finish_permission_event(group, event, FAN_ALLOW, NULL);
+		}
+
+		spin_lock(&group->notification_lock);
+	}
+	spin_unlock(&group->notification_lock);
+}
+
 static int fanotify_release(struct inode *ignored, struct file *file)
 {
 	struct fsnotify_group *group = file->private_data;
