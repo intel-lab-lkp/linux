@@ -66,7 +66,6 @@ static const struct amdxdna_dev_priv npu5_dev_priv = {
 	.fw_path        = "amdnpu/17f0_11/",
 	.rt_config	= npu4_default_rt_cfg,
 	.dpm_clk_tbl	= npu4_dpm_clk_table,
-	.fw_feature_tbl = npu4_fw_feature_table,
 	.col_align	= COL_ALIGN_NATURE,
 	.mbox_dev_addr  = NPU5_MBOX_BAR_BASE,
 	.mbox_size      = 0, /* Use BAR size */
@@ -93,9 +92,7 @@ static const struct amdxdna_dev_priv npu5_dev_priv = {
 		DEFINE_BAR_OFFSET(SMU_RESP_REG, NPU5_SMU, MP1_C2PMSG_61),
 		DEFINE_BAR_OFFSET(SMU_OUT_REG,  NPU5_SMU, MP1_C2PMSG_60),
 	},
-	.hw_ops		= {
-		.set_dpm = npu4_set_dpm,
-	},
+	.hw_ops		= &npu4_hw_ops
 };
 
 const struct amdxdna_dev_info dev_npu5_info = {
@@ -111,5 +108,6 @@ const struct amdxdna_dev_info dev_npu5_info = {
 	.vbnv              = "RyzenAI-npu5",
 	.device_type       = AMDXDNA_DEV_TYPE_KMQ,
 	.dev_priv          = &npu5_dev_priv,
+	.fw_feature_tbl    = npu4_fw_feature_table,
 	.ops               = &aie2_ops,
 };
