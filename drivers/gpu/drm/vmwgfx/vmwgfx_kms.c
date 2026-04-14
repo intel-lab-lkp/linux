@@ -274,6 +274,7 @@ vmw_du_plane_duplicate_state(struct drm_plane *plane)
 	vps->pinned = 0;
 	vps->cpp = 0;
 
+	memset(&vps->cursor.src_map, 0, sizeof(vps->cursor.src_map));
 	vps->cursor.mob = NULL;
 
 	/* Each ref counted resource needs to be acquired again */

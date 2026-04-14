@@ -112,9 +112,11 @@ static void vmw_cursor_update_mob(struct vmw_private *vmw,
 {
 	SVGAGBCursorHeader *header;
 	SVGAGBAlphaCursorHeader *alpha_header;
-	struct vmw_bo *bo = vmw_user_object_buffer(&vps->uo);
-	u32 *image = vmw_bo_map_and_cache(bo);
+	bool is_iomem;
+	u32 *image = ttm_kmap_obj_virtual(&vps->cursor.src_map, &is_iomem);
 	const u32 image_size = vps->base.crtc_w * vps->base.crtc_h * sizeof(*image);
+
+	WARN_ON(is_iomem || !image);
 
 	header = vmw_bo_map_and_cache(vps->cursor.mob);
 	alpha_header = &header->header.alphaHeader;
@@ -132,7 +134,6 @@ static void vmw_cursor_update_mob(struct vmw_private *vmw,
 	memcpy(header + 1, image, image_size);
 	vmw_write(vmw, SVGA_REG_CURSOR_MOBID, vmw_bo_mobid(vps->cursor.mob));
 
-	vmw_bo_unmap(bo);
 	vmw_bo_unmap(vps->cursor.mob);
 }
 
@@ -469,9 +470,16 @@ vmw_cursor_plane_cleanup_fb(struct drm_plane *plane,
 {
 	struct vmw_cursor_plane *vcp = vmw_plane_to_vcp(plane);
 	struct vmw_plane_state *vps = vmw_plane_state_to_vps(old_state);
+	struct ttm_buffer_object *bo = vps->cursor.src_map.bo;
+	int ret;
 
-	if (!vmw_user_object_is_null(&vps->uo))
-		vmw_user_object_unmap(&vps->uo);
+	if (bo) {
+		ret = ttm_bo_reserve(bo, false, false, NULL);
+		ttm_bo_kunmap(&vps->cursor.src_map);
+		ttm_bo_unpin(bo);
+		if (ret == 0)
+			ttm_bo_unreserve(bo);
+	}
 
 	vmw_cursor_mob_unmap(vps);
 	vmw_cursor_mob_put(vcp, vps);
@@ -488,7 +496,6 @@ vmw_cursor_buffer_changed(struct vmw_plane_state *new_vps,
 	struct vmw_bo *old_bo = vmw_user_object_buffer(&old_vps->uo);
 	struct vmw_surface *surf;
 	bool dirty = false;
-	int ret;
 
 	if (new_bo != old_bo)
 		return true;
@@ -507,52 +514,6 @@ vmw_cursor_buffer_changed(struct vmw_plane_state *new_vps,
 					vmw_bo_dirty_clear(new_bo);
 			}
 			return dirty;
-		} else if (new_bo != old_bo) {
-			/*
-			 * Currently unused because the top exits right away.
-			 * In most cases buffer being different will mean
-			 * that the contents is different. For the few percent
-			 * of cases where that's not true the cost of doing
-			 * the memcmp on all other seems to outweight the
-			 * benefits. Leave the conditional to be able to
-			 * trivially validate it by removing the initial
-			 * if (new_bo != old_bo) at the start.
-			 */
-			void *old_image;
-			void *new_image;
-			bool changed = false;
-			struct ww_acquire_ctx ctx;
-			const u32 size = new_vps->base.crtc_w *
-					 new_vps->base.crtc_h * sizeof(u32);
-
-			ww_acquire_init(&ctx, &reservation_ww_class);
-
-			ret = ttm_bo_reserve(&old_bo->tbo, false, false, &ctx);
-			if (ret != 0) {
-				ww_acquire_fini(&ctx);
-				return true;
-			}
-
-			ret = ttm_bo_reserve(&new_bo->tbo, false, false, &ctx);
-			if (ret != 0) {
-				ttm_bo_unreserve(&old_bo->tbo);
-				ww_acquire_fini(&ctx);
-				return true;
-			}
-
-			old_image = vmw_bo_map_and_cache(old_bo);
-			new_image = vmw_bo_map_and_cache(new_bo);
-
-			if (old_image && new_image && old_image != new_image)
-				changed = memcmp(old_image, new_image, size) !=
-					  0;
-
-			ttm_bo_unreserve(&new_bo->tbo);
-			ttm_bo_unreserve(&old_bo->tbo);
-
-			ww_acquire_fini(&ctx);
-
-			return changed;
 		}
 		return false;
 	}
@@ -605,7 +566,6 @@ int vmw_cursor_plane_prepare_fb(struct drm_plane *plane,
 	int ret = 0;
 
 	if (!vmw_user_object_is_null(&vps->uo)) {
-		vmw_user_object_unmap(&vps->uo);
 		vmw_user_object_unref(&vps->uo);
 	}
 
@@ -630,6 +590,7 @@ int vmw_cursor_plane_prepare_fb(struct drm_plane *plane,
 	case VMW_CURSOR_UPDATE_MOB: {
 		bo = vmw_user_object_buffer(&vps->uo);
 		if (bo) {
+			u32 size;
 			struct ttm_operation_ctx ctx = { false, false };
 
 			ret = ttm_bo_reserve(&bo->tbo, true, false, NULL);
@@ -644,18 +605,16 @@ int vmw_cursor_plane_prepare_fb(struct drm_plane *plane,
 			 * vmw_bo_pin_reserved also validates, so to skip
 			 * the extra validation use ttm_bo_pin directly
 			 */
-			if (!bo->tbo.pin_count)
-				ttm_bo_pin(&bo->tbo);
+			ttm_bo_pin(&bo->tbo);
 
 			if (vmw_framebuffer_to_vfb(fb)->bo) {
-				const u32 size = new_state->crtc_w *
-						 new_state->crtc_h *
-						 sizeof(u32);
-
-				(void)vmw_bo_map_and_cache_size(bo, size);
+				size = new_state->crtc_w *
+					new_state->crtc_h *
+					sizeof(u32);
 			} else {
-				vmw_bo_map_and_cache(bo);
+				size = bo->tbo.base.size;
 			}
+			ttm_bo_kmap(&bo->tbo, 0, PFN_UP(size), &vps->cursor.src_map);
 			ttm_bo_unreserve(&bo->tbo);
 		}
 		if (!vmw_user_object_is_null(&vps->uo)) {
@@ -770,7 +729,8 @@ vmw_cursor_plane_atomic_update(struct drm_plane *plane,
 	case VMW_CURSOR_UPDATE_GB_ONLY:
 		bo = vmw_user_object_buffer(&vps->uo);
 		if (bo)
-			vmw_send_define_cursor_cmd(dev_priv, bo->map.virtual,
+			vmw_send_define_cursor_cmd(dev_priv,
+						   vps->cursor.src_map.virtual,
 						   vps->base.crtc_w,
 						   vps->base.crtc_h,
 						   vps->base.hotspot_x,

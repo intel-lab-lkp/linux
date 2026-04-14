@@ -13,6 +13,7 @@
 #include "drm/drm_file.h"
 #include "drm/drm_fourcc.h"
 #include "drm/drm_plane.h"
+#include <drm/ttm/ttm_bo.h>
 
 #include <linux/types.h>
 
@@ -39,8 +40,7 @@ enum vmw_cursor_update_type {
 
 struct vmw_cursor_plane_state {
 	enum vmw_cursor_update_type update_type;
-	bool changed;
-	bool surface_changed;
+	struct ttm_bo_kmap_obj src_map;
 	struct vmw_bo *mob;
 	struct {
 		s32 hotspot_x;
