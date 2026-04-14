@@ -1293,7 +1293,6 @@ static void idxd_remove(struct pci_dev *pdev)
 {
 	struct idxd_device *idxd = pci_get_drvdata(pdev);
 
-	idxd_unregister_devices(idxd);
 	/*
 	 * When ->release() is called for the idxd->conf_dev, it frees all the memory related
 	 * to the idxd context. The driver still needs those bits in order to do the rest of
@@ -1303,6 +1302,7 @@ static void idxd_remove(struct pci_dev *pdev)
 	 */
 	get_device(idxd_confdev(idxd));
 	device_unregister(idxd_confdev(idxd));
+	idxd_unregister_devices(idxd);
 	idxd_shutdown(pdev);
 	idxd_device_remove_debugfs(idxd);
 	perfmon_pmu_remove(idxd);
