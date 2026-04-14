@@ -19,6 +19,13 @@ static int erofs_fill_dentries(struct inode *dir, struct dir_context *ctx,
 		const char *de_name = (char *)dentry_blk + nameoff;
 		unsigned int de_namelen;
 
+		if (nameoff < nameoff0 || nameoff > maxsize) {
+			erofs_err(dir->i_sb, "bogus dirent @ nid %llu",
+				  EROFS_I(dir)->nid);
+			DBG_BUGON(1);
+			return -EFSCORRUPTED;
+		}
+
 		/* the last dirent in the block? */
 		if (de + 1 >= end)
 			de_namelen = strnlen(de_name, maxsize - nameoff);
