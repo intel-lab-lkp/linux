@@ -38,7 +38,7 @@ static int octeon_mdiobus_probe(struct platform_device *pdev)
 	oct_mdio_writeq(smi_en.u64, bus->register_base + SMI_EN);
 
 	bus->mii_bus->name = KBUILD_MODNAME;
-	snprintf(bus->mii_bus->id, MII_BUS_ID_SIZE, "%px", bus->register_base);
+	snprintf(bus->mii_bus->id, MII_BUS_ID_SIZE, "%p", bus->register_base);
 	bus->mii_bus->parent = &pdev->dev;
 
 	bus->mii_bus->read = cavium_mdiobus_read_c22;
