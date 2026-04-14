@@ -143,24 +143,45 @@ properties:
     maxItems: 1
     description: Default name of the remote processor firmware.
 
+  st,rproc-tee:
+    description:
+      Reference the remote processor node on TEE bus. The value is a phandle
+      reference to the remote processor node, followed by a cell specifying
+      the remote processor device identifier used by the TEE.
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    items:
+      - items:
+          - description: Phandle of the remote processor node on the TEE bus
+          - description: Remote processor device identifier used by the TEE
+
 required:
   - compatible
   - reg
-  - resets
 
 allOf:
   - if:
-      properties:
-        reset-names:
-          not:
-            contains:
-              const: hold_boot
-    then:
       required:
-        - st,syscfg-holdboot
-    else:
+        - st,rproc-tee
+    then:
       properties:
+        resets: false
+        reset-names: false
         st,syscfg-holdboot: false
+    else:
+      required:
+        - resets
+      if:
+        properties:
+          reset-names:
+            not:
+              contains:
+                const: hold_boot
+      then:
+        required:
+          - st,syscfg-holdboot
+      else:
+        properties:
+          st,syscfg-holdboot: false
 
 additionalProperties: false
 
@@ -189,6 +210,22 @@ examples:
       /* Hold boot managed using SCMI reset controller */
       resets = <&scmi MCU_R>, <&scmi MCU_HOLD_BOOT_R>;
       reset-names = "mcu_rst", "hold_boot";
+      st,syscfg-rsc-tbl = <&tamp 0x144 0xFFFFFFFF>;
+      st,syscfg-m4-state = <&tamp 0x148 0xFFFFFFFF>;
+    };
+  - |
+    firmware {
+      tee_rproc: optee-rproc {
+        compatible = "80a4c275-0a47-4905-8285-1486a9771a08";
+      };
+    };
+
+    m4@10000000 {
+      compatible = "st,stm32mp1-m4";
+      reg = <0x10000000 0x40000>,
+            <0x30000000 0x40000>,
+            <0x38000000 0x10000>;
+      st,rproc-tee = <&tee_rproc 0>;
       st,syscfg-rsc-tbl = <&tamp 0x144 0xFFFFFFFF>;
       st,syscfg-m4-state = <&tamp 0x148 0xFFFFFFFF>;
     };
