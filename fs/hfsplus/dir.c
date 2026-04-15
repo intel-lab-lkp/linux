@@ -362,9 +362,11 @@ static int hfsplus_link(struct dentry *src_dentry, struct inode *dst_dir,
 	if (res)
 		goto out;
 
-	res = hfsplus_cat_write_inode(sbi->hidden_dir);
-	if (res)
-		goto out;
+	if (sbi->hidden_dir) {
+		res = hfsplus_cat_write_inode(sbi->hidden_dir);
+		if (res)
+			goto out;
+	}
 
 	res = hfsplus_cat_write_inode(inode);
 
@@ -431,11 +433,10 @@ static int hfsplus_unlink(struct inode *dir, struct dentry *dentry)
 out:
 	if (!res) {
 		res = hfsplus_cat_write_inode(dir);
-		if (!res) {
+		if (!res && sbi->hidden_dir)
 			res = hfsplus_cat_write_inode(sbi->hidden_dir);
-			if (!res)
-				res = hfsplus_cat_write_inode(inode);
-		}
+		if (!res)
+			res = hfsplus_cat_write_inode(inode);
 	}
 
 	mutex_unlock(&sbi->vh_mutex);
