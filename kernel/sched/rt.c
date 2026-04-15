@@ -2172,7 +2172,8 @@ static int rto_next_cpu(struct root_domain *rd)
 
 static inline bool rto_start_trylock(atomic_t *v)
 {
-	return !atomic_cmpxchg_acquire(v, 0, 1);
+	int zero = 0;
+	return atomic_try_cmpxchg_acquire(v, &zero, 1);
 }
 
 static inline void rto_start_unlock(atomic_t *v)
