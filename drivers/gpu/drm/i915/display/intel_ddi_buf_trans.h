@@ -51,11 +51,11 @@ struct dg2_snps_phy_buf_trans {
 };
 
 struct xe3plpd_lt_phy_buf_trans {
+	u8 main_cursor;
+	u8 pre_cursor;
+	u8 post_cursor;
 	u8 txswing;
 	u8 txswing_level;
-	u8 pre_cursor;
-	u8 main_cursor;
-	u8 post_cursor;
 };
 
 union intel_ddi_buf_trans_entry {
