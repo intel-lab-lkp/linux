@@ -682,23 +682,147 @@ struct ext4_proc_orphan {
 	struct ext4_inode_info cursor;
 };
 
+static struct inode *ext4_list_next(struct ext4_proc_orphan *s,
+				    struct list_head *head,
+				    struct list_head *p)
+{
+	list_for_each_continue(p, head) {
+		struct ext4_inode_info *ei;
+		struct inode *inode;
+
+		ei = list_entry(p, typeof(*ei), i_orphan);
+		inode = &ei->vfs_inode;
+
+		/*
+		 * It is safe to insert a cursor into the orphan list
+		 * because ext4_orphan_del() will skip cursor. When the
+		 * orphan list is processed in ext4_put_super(),
+		 * ext4_seq_orphan_release() must have already been called,
+		 * so the cursor must have already been removed from the
+		 * orphan list.Therefore, there will be no access to a
+		 * stale cursor.
+		 */
+		list_move(&s->cursor.i_orphan, &ei->i_orphan);
+
+		/*
+		 * Because the cursor has moved to the node after the
+		 * current node, the traversal cannot continue from the
+		 * current node. Instead, the traversal should continue
+		 * from the cursor.
+		 */
+		p = &s->cursor.i_orphan;
+
+		if (ext4_is_cursor(inode))
+			continue;
+
+		if (!igrab(inode))
+			continue;
+
+		return inode;
+	}
+
+	return NULL;
+}
+
 static void *ext4_orphan_seq_start(struct seq_file *seq, loff_t *pos)
 {
-	return NULL;
+	struct ext4_proc_orphan *s = seq->private;
+	struct super_block *sb = pde_data(file_inode(seq->file));
+	struct ext4_sb_info *sbi = EXT4_SB(sb);
+	struct list_head *prev;
+
+	mutex_lock(&sbi->s_orphan_lock);
+
+	if (!*pos) {
+		prev = &sbi->s_orphan;
+	} else {
+		prev = &s->cursor.i_orphan;
+		if (list_empty(prev))
+			return NULL;
+	}
+
+	return ext4_list_next(s, &sbi->s_orphan, prev);
 }
 
 static void *ext4_orphan_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 {
-	return NULL;
+	struct super_block *sb = pde_data(file_inode(seq->file));
+	struct ext4_sb_info *sbi = EXT4_SB(sb);
+	struct ext4_proc_orphan *s = seq->private;
+	struct inode *inode = v;
+
+	++*pos;
+
+	/*
+	 * To prevent the deadlock caused by orphan node deletion when the
+	 * last inode reference count is released, the inode reference
+	 * count needs to be released in the unlocked state.
+	 */
+	mutex_unlock(&sbi->s_orphan_lock);
+	iput(inode);
+	mutex_lock(&sbi->s_orphan_lock);
+
+	return ext4_list_next(s, &sbi->s_orphan, &s->cursor.i_orphan);
+}
+
+static void ext4_show_filename(struct seq_file *seq, struct inode *inode)
+{
+	struct dentry *dentry;
+
+	dentry = d_find_alias(inode);
+	if (!dentry)
+		dentry = d_find_any_alias(inode);
+
+	if (dentry)
+		seq_dentry(seq, dentry, " \t\n\\");
+	else
+		seq_puts(seq, "unknown");
+
+	seq_puts(seq, "\"\n");
+
+	/*
+	 * Since igrab() has already been called in ext4_list_next(), the
+	 * inode will not be released here, so there will be no deadlock.
+	 */
+	dput(dentry);
 }
 
 static int ext4_orphan_seq_show(struct seq_file *seq, void *v)
 {
+	struct inode *inode = v;
+
+	/*
+	 * Print the original data without differentiating namespaces.
+	 */
+	seq_printf(seq, "ino: %llu, link: %u, size: %llu, blocks: %llu, proj: %u, path: \"",
+		   inode->i_ino, inode->i_nlink,
+		   i_size_read(inode), inode->i_blocks,
+		   __kprojid_val(EXT4_I(inode)->i_projid));
+
+	ext4_show_filename(seq, inode);
+
 	return 0;
 }
 
 static void ext4_orphan_seq_stop(struct seq_file *seq, void *v)
 {
+	struct super_block *sb = pde_data(file_inode(seq->file));
+	struct ext4_sb_info *sbi = EXT4_SB(sb);
+	struct ext4_proc_orphan *s = seq->private;
+	struct inode *inode = v;
+
+	/*
+	 * stop() is called when the cache is full, so the traversal
+	 * position needs to be moved back to the front of the current
+	 * inode.
+	 */
+	if (v)
+		list_move_tail(&s->cursor.i_orphan,
+			       &EXT4_I(inode)->i_orphan);
+
+	mutex_unlock(&sbi->s_orphan_lock);
+
+	iput(inode);
 }
 
 const struct seq_operations ext4_orphan_seq_ops = {
