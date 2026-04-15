@@ -2464,13 +2464,18 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 
 			if (flags & TTU_SPLIT_HUGE_PMD) {
 				/*
-				 * split_huge_pmd_locked() might leave the
+				 * If split_huge_pmd_locked() does split PMD
+				 * to migration entry, we are done.
+				 * If split_huge_pmd_locked() leave the
 				 * folio mapped through PTEs. Retry the walk
 				 * so we can detect this scenario and properly
 				 * abort the walk.
 				 */
-				split_huge_pmd_locked(vma, pvmw.address,
-						      pvmw.pmd, true);
+				if (split_huge_pmd_locked(vma, pvmw.address,
+						      pvmw.pmd, true)) {
+					page_vma_mapped_walk_done(&pvmw);
+					break;
+				}
 				flags &= ~TTU_SPLIT_HUGE_PMD;
 				page_vma_mapped_walk_restart(&pvmw);
 				continue;
