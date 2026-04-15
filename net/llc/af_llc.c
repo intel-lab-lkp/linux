@@ -517,6 +517,8 @@ static int llc_ui_connect(struct socket *sock, struct sockaddr_unsized *uaddr,
 		goto out;
 	}
 
+	rc = -EINPROGRESS;
+
 	if (sk->sk_state == TCP_SYN_SENT) {
 		const long timeo = sock_sndtimeo(sk, flags & O_NONBLOCK);
 
