@@ -2016,7 +2016,7 @@ struct mem_section {
 	 */
 	unsigned long section_mem_map;
 
-	struct mem_section_usage *usage;
+	struct mem_section_usage __rcu *usage;
 #ifdef CONFIG_PAGE_EXTENSION
 	/*
 	 * If SPARSEMEM, pgdat doesn't have page_ext pointer. We use
@@ -2207,14 +2207,14 @@ static inline int subsection_map_index(unsigned long pfn)
 static inline int pfn_section_valid(struct mem_section *ms, unsigned long pfn)
 {
 	int idx = subsection_map_index(pfn);
-	struct mem_section_usage *usage = READ_ONCE(ms->usage);
+	struct mem_section_usage *usage = rcu_dereference_sched(ms->usage);
 
 	return usage ? test_bit(idx, usage->subsection_map) : 0;
 }
 
 static inline bool pfn_section_first_valid(struct mem_section *ms, unsigned long *pfn)
 {
-	struct mem_section_usage *usage = READ_ONCE(ms->usage);
+	struct mem_section_usage *usage = rcu_dereference_sched(ms->usage);
 	int idx = subsection_map_index(*pfn);
 	unsigned long bit;
 
