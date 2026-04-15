@@ -25,11 +25,11 @@ struct bxt_ddi_buf_trans {
 };
 
 struct icl_ddi_buf_trans {
-	u32 dw2_swing_sel;
-	u32 dw7_n_scalar;
-	u32 dw4_cursor_coeff;
-	u32 dw4_post_cursor_2;
-	u32 dw4_post_cursor_1;
+	u8 dw2_swing_sel;
+	u8 dw7_n_scalar;
+	u8 dw4_cursor_coeff;
+	u8 dw4_post_cursor_2;
+	u8 dw4_post_cursor_1;
 };
 
 struct icl_mg_phy_ddi_buf_trans {
