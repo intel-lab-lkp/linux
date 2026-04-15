@@ -97,9 +97,21 @@ struct tipc_monitor {
 	unsigned long timer_intv;
 };
 
-static struct tipc_monitor *tipc_monitor(struct net *net, int bearer_id)
+/*
+ * tipc_monitor_rcu_bh - dereference monitors[] from softirq / data path.
+ * Caller must be in an RCU-bh read-side critical section (softirq context
+ * implicitly satisfies this on non-PREEMPT_RT kernels; use explicit
+ * rcu_read_lock_bh() where needed on RT).
+ */
+static struct tipc_monitor *tipc_monitor_rcu_bh(struct net *net, int bearer_id)
 {
-	return tipc_net(net)->monitors[bearer_id];
+	return rcu_dereference_bh(tipc_net(net)->monitors[bearer_id]);
+}
+
+/* tipc_monitor_rtnl - dereference monitors[] from RTNL-held control path. */
+static struct tipc_monitor *tipc_monitor_rtnl(struct net *net, int bearer_id)
+{
+	return rtnl_dereference(tipc_net(net)->monitors[bearer_id]);
 }
 
 const int tipc_max_domain_size = sizeof(struct tipc_mon_domain);
@@ -194,7 +206,7 @@ static struct tipc_peer *get_peer(struct tipc_monitor *mon, u32 addr)
 
 static struct tipc_peer *get_self(struct net *net, int bearer_id)
 {
-	struct tipc_monitor *mon = tipc_monitor(net, bearer_id);
+	struct tipc_monitor *mon = tipc_monitor_rcu_bh(net, bearer_id);
 
 	return mon->self;
 }
@@ -351,7 +363,7 @@ static void mon_assign_roles(struct tipc_monitor *mon, struct tipc_peer *head)
 
 void tipc_mon_remove_peer(struct net *net, u32 addr, int bearer_id)
 {
-	struct tipc_monitor *mon = tipc_monitor(net, bearer_id);
+	struct tipc_monitor *mon = tipc_monitor_rcu_bh(net, bearer_id);
 	struct tipc_peer *self;
 	struct tipc_peer *peer, *prev, *head;
 
@@ -421,7 +433,7 @@ static bool tipc_mon_add_peer(struct tipc_monitor *mon, u32 addr,
 
 void tipc_mon_peer_up(struct net *net, u32 addr, int bearer_id)
 {
-	struct tipc_monitor *mon = tipc_monitor(net, bearer_id);
+	struct tipc_monitor *mon = tipc_monitor_rcu_bh(net, bearer_id);
 	struct tipc_peer *self = get_self(net, bearer_id);
 	struct tipc_peer *peer, *head;
 
@@ -440,7 +452,7 @@ exit:
 
 void tipc_mon_peer_down(struct net *net, u32 addr, int bearer_id)
 {
-	struct tipc_monitor *mon = tipc_monitor(net, bearer_id);
+	struct tipc_monitor *mon = tipc_monitor_rcu_bh(net, bearer_id);
 	struct tipc_peer *self;
 	struct tipc_peer *peer, *head;
 	struct tipc_mon_domain *dom;
@@ -480,7 +492,7 @@ exit:
 void tipc_mon_rcv(struct net *net, void *data, u16 dlen, u32 addr,
 		  struct tipc_mon_state *state, int bearer_id)
 {
-	struct tipc_monitor *mon = tipc_monitor(net, bearer_id);
+	struct tipc_monitor *mon = tipc_monitor_rcu_bh(net, bearer_id);
 	struct tipc_mon_domain *arrv_dom = data;
 	struct tipc_mon_domain dom_bef;
 	struct tipc_mon_domain *dom;
@@ -566,7 +578,7 @@ exit:
 void tipc_mon_prep(struct net *net, void *data, int *dlen,
 		   struct tipc_mon_state *state, int bearer_id)
 {
-	struct tipc_monitor *mon = tipc_monitor(net, bearer_id);
+	struct tipc_monitor *mon = tipc_monitor_rcu_bh(net, bearer_id);
 	struct tipc_mon_domain *dom = data;
 	u16 gen = mon->dom_gen;
 	u16 len;
@@ -600,7 +612,7 @@ void tipc_mon_get_state(struct net *net, u32 addr,
 			struct tipc_mon_state *state,
 			int bearer_id)
 {
-	struct tipc_monitor *mon = tipc_monitor(net, bearer_id);
+	struct tipc_monitor *mon = tipc_monitor_rcu_bh(net, bearer_id);
 	struct tipc_peer *peer;
 
 	if (!tipc_mon_is_active(net, mon)) {
@@ -651,7 +663,7 @@ int tipc_mon_create(struct net *net, int bearer_id)
 	struct tipc_peer *self;
 	struct tipc_mon_domain *dom;
 
-	if (tn->monitors[bearer_id])
+	if (rtnl_dereference(tn->monitors[bearer_id]))
 		return 0;
 
 	mon = kzalloc_obj(*mon, GFP_ATOMIC);
@@ -663,7 +675,7 @@ int tipc_mon_create(struct net *net, int bearer_id)
 		kfree(dom);
 		return -ENOMEM;
 	}
-	tn->monitors[bearer_id] = mon;
+	rcu_assign_pointer(tn->monitors[bearer_id], mon);
 	rwlock_init(&mon->lock);
 	mon->net = net;
 	mon->peer_cnt = 1;
@@ -682,7 +694,7 @@ int tipc_mon_create(struct net *net, int bearer_id)
 void tipc_mon_delete(struct net *net, int bearer_id)
 {
 	struct tipc_net *tn = tipc_net(net);
-	struct tipc_monitor *mon = tipc_monitor(net, bearer_id);
+	struct tipc_monitor *mon = rtnl_dereference(tn->monitors[bearer_id]);
 	struct tipc_peer *self;
 	struct tipc_peer *peer, *tmp;
 
@@ -691,7 +703,7 @@ void tipc_mon_delete(struct net *net, int bearer_id)
 
 	self = get_self(net, bearer_id);
 	write_lock_bh(&mon->lock);
-	tn->monitors[bearer_id] = NULL;
+	RCU_INIT_POINTER(tn->monitors[bearer_id], NULL);
 	list_for_each_entry_safe(peer, tmp, &self->list, list) {
 		list_del(&peer->list);
 		hlist_del(&peer->hash);
@@ -700,6 +712,7 @@ void tipc_mon_delete(struct net *net, int bearer_id)
 	}
 	mon->self = NULL;
 	write_unlock_bh(&mon->lock);
+	synchronize_rcu();
 	timer_shutdown_sync(&mon->timer);
 	kfree(self->domain);
 	kfree(self);
@@ -712,7 +725,7 @@ void tipc_mon_reinit_self(struct net *net)
 	int bearer_id;
 
 	for (bearer_id = 0; bearer_id < MAX_BEARERS; bearer_id++) {
-		mon = tipc_monitor(net, bearer_id);
+		mon = rtnl_dereference(tipc_net(net)->monitors[bearer_id]);
 		if (!mon)
 			continue;
 		write_lock_bh(&mon->lock);
@@ -798,7 +811,7 @@ msg_full:
 int tipc_nl_add_monitor_peer(struct net *net, struct tipc_nl_msg *msg,
 			     u32 bearer_id, u32 *prev_node)
 {
-	struct tipc_monitor *mon = tipc_monitor(net, bearer_id);
+	struct tipc_monitor *mon = rtnl_dereference(tipc_net(net)->monitors[bearer_id]);
 	struct tipc_peer *peer;
 
 	if (!mon)
@@ -827,7 +840,7 @@ int tipc_nl_add_monitor_peer(struct net *net, struct tipc_nl_msg *msg,
 int __tipc_nl_add_monitor(struct net *net, struct tipc_nl_msg *msg,
 			  u32 bearer_id)
 {
-	struct tipc_monitor *mon = tipc_monitor(net, bearer_id);
+	struct tipc_monitor *mon = rtnl_dereference(tipc_net(net)->monitors[bearer_id]);
 	char bearer_name[TIPC_MAX_BEARER_NAME];
 	struct nlattr *attrs;
 	void *hdr;
