@@ -751,14 +751,28 @@ alloc_data:
 	if (total_truesize)
 		refcount_add(total_truesize, &xs->sk.sk_wmem_alloc);
 
-	/* Phase 3: Build SKBs with packet data */
+	/* Phase 3: Build SKBs with packet data. */
+	struct xsk_buff_pool *pool = xs->pool;
+	void *pool_addrs = pool->addrs;
+	bool unaligned = pool->unaligned;
+
 	for (j = 0; j < alloc_descs; j++) {
+		u64 addr = descs[j].addr;
+		void *buffer;
+
+		if (unaligned)
+			addr = xp_unaligned_add_offset_to_addr(addr);
+		buffer = pool_addrs + addr;
+
+		if (j + 1 < alloc_descs)
+			prefetch(pool_addrs + descs[j + 1].addr);
+
 		if (!xs->skb) {
 			skb = skbs[skb_count - 1 - k];
 			k++;
 		}
 
-		skb = xsk_build_skb(xs, skb, &descs[j]);
+		skb = xsk_build_skb(xs, skb, &descs[j], buffer);
 		if (IS_ERR(skb)) {
 			*err = PTR_ERR(skb);
 			break;

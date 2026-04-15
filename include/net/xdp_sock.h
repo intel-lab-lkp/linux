@@ -139,7 +139,8 @@ void __xsk_map_flush(struct list_head *flush_list);
 INDIRECT_CALLABLE_DECLARE(void xsk_destruct_skb(struct sk_buff *));
 struct sk_buff *xsk_build_skb(struct xdp_sock *xs,
 			      struct sk_buff *allocated_skb,
-			      struct xdp_desc *desc);
+			      struct xdp_desc *desc,
+			      void *buffer);
 int xsk_alloc_batch_skb(struct xdp_sock *xs, u32 nb_pkts, u32 nb_descs, int *err);
 int xsk_direct_xmit_batch(struct xdp_sock *xs, struct net_device *dev);
 

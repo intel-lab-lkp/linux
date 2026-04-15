@@ -811,7 +811,8 @@ static struct sk_buff *xsk_build_skb_zerocopy(struct xdp_sock *xs,
 
 struct sk_buff *xsk_build_skb(struct xdp_sock *xs,
 			      struct sk_buff *allocated_skb,
-			      struct xdp_desc *desc)
+			      struct xdp_desc *desc,
+			      void *buffer)
 {
 	struct net_device *dev = xs->dev;
 	struct sk_buff *skb = xs->skb;
@@ -825,11 +826,10 @@ struct sk_buff *xsk_build_skb(struct xdp_sock *xs,
 			goto free_err;
 		}
 	} else {
-		u32 hr, tr, len;
-		void *buffer;
+		u32 hr, tr, len = desc->len;
 
-		buffer = xsk_buff_raw_get_data(xs->pool, desc->addr);
-		len = desc->len;
+		if (!buffer)
+			buffer = xsk_buff_raw_get_data(xs->pool, desc->addr);
 
 		if (!skb) {
 			hr = max(NET_SKB_PAD, L1_CACHE_ALIGN(dev->needed_headroom));
@@ -844,10 +844,7 @@ struct sk_buff *xsk_build_skb(struct xdp_sock *xs,
 
 			skb_reserve(skb, hr);
 			skb_put(skb, len);
-
-			err = skb_store_bits(skb, 0, buffer, len);
-			if (unlikely(err))
-				goto free_err;
+			memcpy(skb->data, buffer, len);
 
 			xsk_skb_init_misc(skb, xs, desc->addr);
 			if (desc->options & XDP_TX_METADATA) {
