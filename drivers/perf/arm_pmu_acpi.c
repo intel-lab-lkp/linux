@@ -119,8 +119,10 @@ arm_acpi_register_pmu_device(struct platform_device *pdev, u8 len,
 
 	pdev->resource[0].start = irq;
 	ret = platform_device_register(pdev);
-	if (ret)
+	if (ret) {
 		acpi_unregister_gsi(gsi);
+		platform_device_put(pdev);
+	}
 
 	return ret;
 }
