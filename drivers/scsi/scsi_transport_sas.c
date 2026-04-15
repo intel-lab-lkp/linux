@@ -31,6 +31,7 @@
 #include <linux/string.h>
 #include <linux/blkdev.h>
 #include <linux/bsg.h>
+#include <linux/delay.h>
 
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>
@@ -1703,6 +1704,26 @@ static void scan_channel_zero(struct Scsi_Host *shost, uint id, u64 lun)
 }
 
 /*
+ * For wildcard scans on hosts that provide a scan_start method,
+ * use that instead of blindly scanning everything.
+ */
+static int sas_user_scan_with_scan_start(struct Scsi_Host *shost)
+{
+	unsigned long start;
+
+	if (!shost->hostt->scan_finished || !shost->hostt->scan_start)
+		return 1;
+
+	start = jiffies;
+	shost->hostt->scan_start(shost);
+
+	while (!shost->hostt->scan_finished(shost, jiffies - start))
+		msleep(10);
+
+	return 0;
+}
+
+/*
  * SCSI scan helper
  */
 
@@ -1721,6 +1742,11 @@ static int sas_user_scan(struct Scsi_Host *shost, uint channel,
 		break;
 
 	case SCAN_WILD_CARD:
+
+		if (id == SCAN_WILD_CARD && lun == SCAN_WILD_CARD
+			&& !sas_user_scan_with_scan_start(shost))
+			return 0;
+
 		mutex_lock(&sas_host->lock);
 		scan_channel_zero(shost, id, lun);
 		mutex_unlock(&sas_host->lock);
