@@ -314,6 +314,14 @@ xskq_cons_read_desc_batch(struct xsk_queue *q, struct xsk_buff_pool *pool,
 					   NULL, pool->xdp_zc_max_segs);
 }
 
+static inline u32
+xskq_cons_read_desc_batch_copy(struct xsk_queue *q, struct xsk_buff_pool *pool,
+			       struct xdp_desc *descs, u32 max, u32 *nb_pkts)
+{
+	return __xskq_cons_read_desc_batch(q, pool, descs, max,
+					   nb_pkts, MAX_SKB_FRAGS);
+}
+
 /* Functions for consumers */
 
 static inline void __xskq_cons_release(struct xsk_queue *q)
