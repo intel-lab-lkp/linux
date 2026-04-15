@@ -89,8 +89,10 @@ static int __init digsy_mtc_eeprom_devices_init(void)
 		return ret;
 
 	ret = platform_device_register(&digsy_mtc_eeprom);
-	if (ret)
+	if (ret) {
 		device_remove_software_node(&digsy_mtc_eeprom.dev);
+		platform_device_put(&digsy_mtc_eeprom);
+	}
 
 	return ret;
 }
