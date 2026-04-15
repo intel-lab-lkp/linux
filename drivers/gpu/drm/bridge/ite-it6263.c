@@ -906,6 +906,24 @@ static int it6263_probe(struct i2c_client *client)
 	return devm_drm_bridge_add(dev, &it->bridge);
 }
 
+static int it6263_resume(struct device *dev)
+{
+	struct it6263 *it = dev_get_drvdata(dev);
+	int ret;
+
+	ret = it6263_lvds_set_i2c_addr(it);
+	if (ret)
+		return ret;
+
+	it6263_lvds_config(it);
+
+	return 0;
+}
+
+static const struct dev_pm_ops it6263_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(NULL, it6263_resume)
+};
+
 static const struct of_device_id it6263_of_match[] = {
 	{ .compatible = "ite,it6263", },
 	{ }
@@ -922,6 +940,7 @@ static struct i2c_driver it6263_driver = {
 	.probe = it6263_probe,
 	.driver = {
 		.name = "it6263",
+		.pm = pm_sleep_ptr(&it6263_pm_ops),
 		.of_match_table = it6263_of_match,
 	},
 	.id_table = it6263_i2c_ids,
