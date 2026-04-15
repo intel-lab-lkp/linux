@@ -249,6 +249,9 @@ int vfio_pci_core_feature_dma_buf(struct vfio_pci_core_device *vdev, u32 flags,
 	if (get_dma_buf.region_index >= VFIO_PCI_ROM_REGION_INDEX)
 		return -ENODEV;
 
+	if (!vdev->bar_mmap_supported[get_dma_buf.region_index])
+		return -EINVAL;
+
 	dma_ranges = memdup_array_user(&arg->dma_ranges, get_dma_buf.nr_ranges,
 				       sizeof(*dma_ranges));
 	if (IS_ERR(dma_ranges))
