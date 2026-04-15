@@ -194,6 +194,16 @@ static void ssp_disable_wdt_timer(struct ssp_data *data)
 	cancel_work_sync(&data->work_wdt);
 }
 
+static void ssp_shutdown_action(struct ssp_data *data)
+{
+	if (ssp_command(data, SSP_MSG2SSP_AP_STATUS_SHUTDOWN, 0) < 0)
+		dev_err(&data->spi->dev,
+			"SSP_MSG2SSP_AP_STATUS_SHUTDOWN failed\n");
+
+	ssp_enable_mcu(data, false);
+	ssp_clean_pending_list(data);
+}
+
 /**
  * ssp_get_sensor_delay() - gets sensor data acquisition period
  * @data:	sensorhub structure
@@ -491,9 +501,9 @@ static int ssp_probe(struct spi_device *spi)
 		return -ENODEV;
 	}
 
-	ret = mfd_add_devices(&spi->dev, PLATFORM_DEVID_NONE,
-			      sensorhub_sensor_devs,
-			      ARRAY_SIZE(sensorhub_sensor_devs), NULL, 0, NULL);
+	ret = devm_mfd_add_devices(&spi->dev, PLATFORM_DEVID_NONE,
+				   sensorhub_sensor_devs,
+				   ARRAY_SIZE(sensorhub_sensor_devs), NULL, 0, NULL);
 	if (ret < 0) {
 		dev_err(&spi->dev, "mfd add devices fail\n");
 		return ret;
@@ -503,14 +513,16 @@ static int ssp_probe(struct spi_device *spi)
 	ret = spi_setup(spi);
 	if (ret < 0) {
 		dev_err(&spi->dev, "Failed to setup spi\n");
-		goto err_setup_spi;
+		return ret;
 	}
 
 	data->fw_dl_state = SSP_FW_DL_STATE_NONE;
 	data->spi = spi;
 	spi_set_drvdata(spi, data);
 
-	mutex_init(&data->comm_lock);
+	ret = devm_mutex_init(&spi->dev, &data->comm_lock);
+	if (ret < 0)
+		return ret;
 
 	for (i = 0; i < SSP_SENSOR_MAX; ++i) {
 		data->delay_buf[i] = SSP_DEFAULT_POLLING_DELAY;
@@ -523,7 +535,9 @@ static int ssp_probe(struct spi_device *spi)
 
 	data->time_syncing = true;
 
-	mutex_init(&data->pending_lock);
+	ret = devm_mutex_init(&spi->dev, &data->pending_lock);
+	if (ret < 0)
+		return ret;
 	INIT_LIST_HEAD(&data->pending_list);
 
 	atomic_set(&data->enable_refcount, 0);
@@ -533,14 +547,17 @@ static int ssp_probe(struct spi_device *spi)
 
 	timer_setup(&data->wdt_timer, ssp_wdt_timer_func, 0);
 
-	ret = request_threaded_irq(data->spi->irq, NULL,
-				   ssp_irq_thread_fn,
-				   IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
-				   "SSP_Int", data);
-	if (ret < 0) {
-		dev_err(&spi->dev, "Irq request fail\n");
-		goto err_setup_irq;
-	}
+	ret = devm_add_action_or_reset(&spi->dev,
+				       ssp_disable_wdt_timer, data);
+	if (ret)
+		return ret;
+
+	ret = devm_request_threaded_irq(&spi->dev, data->spi->irq, NULL,
+					ssp_irq_thread_fn,
+					IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+					"SSP_Int", data);
+	if (ret < 0)
+		return ret;
 
 	/* Let's start with enabled one so irq balance could be ok */
 	data->shut_down = false;
@@ -548,53 +565,24 @@ static int ssp_probe(struct spi_device *spi)
 	/* just to avoid unbalanced irq set wake up */
 	enable_irq_wake(data->spi->irq);
 
+	ret = devm_add_action_or_reset(&spi->dev,
+				       ssp_shutdown_action, data);
+	if (ret)
+		return ret;
+
 	data->fw_dl_state = ssp_check_fwbl(data);
 	if (data->fw_dl_state == SSP_FW_DL_STATE_NONE) {
 		ret = ssp_initialize_mcu(data);
 		if (ret < 0) {
 			dev_err(&spi->dev, "Initialize_mcu failed\n");
-			goto err_read_reg;
+			return ret;
 		}
 	} else {
 		dev_err(&spi->dev, "Firmware version not supported\n");
-		ret = -EPERM;
-		goto err_read_reg;
+		return -EPERM;
 	}
 
 	return 0;
-
-err_read_reg:
-	free_irq(data->spi->irq, data);
-err_setup_irq:
-	mutex_destroy(&data->pending_lock);
-	mutex_destroy(&data->comm_lock);
-err_setup_spi:
-	mfd_remove_devices(&spi->dev);
-
-	dev_err(&spi->dev, "Probe failed!\n");
-
-	return ret;
-}
-
-static void ssp_remove(struct spi_device *spi)
-{
-	struct ssp_data *data = spi_get_drvdata(spi);
-
-	if (ssp_command(data, SSP_MSG2SSP_AP_STATUS_SHUTDOWN, 0) < 0)
-		dev_err(&data->spi->dev,
-			"SSP_MSG2SSP_AP_STATUS_SHUTDOWN failed\n");
-
-	ssp_enable_mcu(data, false);
-	ssp_clean_pending_list(data);
-
-	free_irq(data->spi->irq, data);
-
-	ssp_disable_wdt_timer(data);
-
-	mutex_destroy(&data->comm_lock);
-	mutex_destroy(&data->pending_lock);
-
-	mfd_remove_devices(&spi->dev);
 }
 
 static int ssp_suspend(struct device *dev)
