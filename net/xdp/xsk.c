@@ -1229,14 +1229,22 @@ static void xsk_delete_from_maps(struct xdp_sock *xs)
 }
 
 static void xsk_batch_reset(struct xsk_batch *batch, struct sk_buff **skbs,
-			    struct xdp_desc *descs, unsigned int size)
+			    struct xdp_desc *descs, void **data,
+			    unsigned int size)
 {
+	if (batch->data_count)
+		kmem_cache_free_bulk(net_hotdata.skb_small_head_cache,
+				     batch->data_count,
+				     batch->data_cache);
+	kfree(batch->data_cache);
 	if (batch->skb_count)
 		kmem_cache_free_bulk(net_hotdata.skbuff_cache,
 				     batch->skb_count,
 				     (void **)batch->skb_cache);
 	kfree(batch->skb_cache);
 	kvfree(batch->desc_cache);
+	batch->data_cache = data;
+	batch->data_count = 0;
 	batch->skb_cache = skbs;
 	batch->desc_cache = descs;
 	batch->skb_count = 0;
@@ -1272,7 +1280,7 @@ static int xsk_release(struct socket *sock)
 	xskq_destroy(xs->tx);
 	xskq_destroy(xs->fq_tmp);
 	xskq_destroy(xs->cq_tmp);
-	xsk_batch_reset(&xs->batch, NULL, NULL, 0);
+	xsk_batch_reset(&xs->batch, NULL, NULL, NULL, 0);
 
 	sock_orphan(sk);
 	sock->sk = NULL;
@@ -1620,6 +1628,7 @@ static int xsk_setsockopt(struct socket *sock, int level, int optname,
 		struct xsk_batch *batch = &xs->batch;
 		struct xdp_desc *descs;
 		struct sk_buff **skbs;
+		void **data;
 		unsigned int size;
 		int ret = 0;
 
@@ -1638,14 +1647,21 @@ static int xsk_setsockopt(struct socket *sock, int level, int optname,
 			ret = -ENOMEM;
 			goto out;
 		}
+		data = kmalloc_array(size, sizeof(void *), GFP_KERNEL);
+		if (!data) {
+			kfree(skbs);
+			ret = -ENOMEM;
+			goto out;
+		}
 		descs = kvcalloc(size, sizeof(struct xdp_desc), GFP_KERNEL);
 		if (!descs) {
+			kfree(data);
 			kfree(skbs);
 			ret = -ENOMEM;
 			goto out;
 		}
 
-		xsk_batch_reset(batch, skbs, descs, size);
+		xsk_batch_reset(batch, skbs, descs, data, size);
 out:
 		mutex_unlock(&xs->mutex);
 		return ret;

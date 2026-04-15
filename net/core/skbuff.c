@@ -660,9 +660,11 @@ int xsk_alloc_batch_skb(struct xdp_sock *xs, u32 nb_pkts, u32 nb_descs, int *err
 	unsigned int total_truesize = 0;
 	struct sk_buff *skb = NULL;
 	int node = NUMA_NO_NODE;
+	void **dc = batch->data_cache;
+	unsigned int dc_count = batch->data_count;
 	u32 i = 0, j, k = 0;
 	bool need_alloc;
-	u8 *data;
+	void *data;
 
 	base_len = max(NET_SKB_PAD, L1_CACHE_ALIGN(dev->needed_headroom));
 	if (!(dev->priv_flags & IFF_TX_SKB_NO_LINEAR))
@@ -682,6 +684,13 @@ int xsk_alloc_batch_skb(struct xdp_sock *xs, u32 nb_pkts, u32 nb_descs, int *err
 		nb_pkts = skb_count;
 
 alloc_data:
+	if (dc_count < nb_pkts && !(gfp_mask & KMALLOC_NOT_NORMAL_BITS))
+		dc_count += kmem_cache_alloc_bulk(
+				net_hotdata.skb_small_head_cache,
+				gfp_mask | __GFP_NOMEMALLOC | __GFP_NOWARN,
+				batch->generic_xmit_batch - dc_count,
+				&dc[dc_count]);
+
 	/*
 	 * Phase 1: Allocate data buffers and initialize SKBs.
 	 * Pre-scan descriptors to determine packet boundaries, so we can
@@ -709,10 +718,17 @@ alloc_data:
 
 			skb = skbs[skb_count - 1 - i];
 			skbuff_clear(skb);
-			data = kmalloc_reserve(&size, gfp_mask, node, skb);
-			if (unlikely(!data)) {
-				*err = -ENOBUFS;
-				break;
+			if (dc_count &&
+			    SKB_HEAD_ALIGN(size) <= SKB_SMALL_HEAD_CACHE_SIZE) {
+				data = dc[--dc_count];
+				size = SKB_SMALL_HEAD_CACHE_SIZE;
+			} else {
+				data = kmalloc_reserve(&size, gfp_mask,
+						       node, skb);
+				if (unlikely(!data)) {
+					*err = -ENOBUFS;
+					break;
+				}
 			}
 			__finalize_skb_around(skb, data, size);
 			/* Replace skb_set_owner_w() with the following */
@@ -761,6 +777,7 @@ alloc_data:
 	while (k < i)
 		kfree_skb(skbs[skb_count - 1 - k++]);
 
+	batch->data_count = dc_count;
 	batch->skb_count = skb_count - i;
 
 	return j;

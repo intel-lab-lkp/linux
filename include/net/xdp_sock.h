@@ -51,6 +51,8 @@ struct xsk_batch {
 	struct sk_buff **skb_cache;
 	struct xdp_desc *desc_cache;
 	struct sk_buff_head send_queue;
+	unsigned int data_count;
+	void **data_cache;
 };
 
 struct xdp_sock {
