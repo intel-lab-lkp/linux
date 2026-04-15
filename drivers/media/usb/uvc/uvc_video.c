@@ -1517,6 +1517,8 @@ static void uvc_video_next_buffers(struct uvc_streaming *stream,
 						  *meta_buf);
 	}
 	*video_buf = uvc_queue_next_buffer(&stream->queue, *video_buf);
+	if (*video_buf && *meta_buf)
+		(*meta_buf)->state = UVC_BUF_STATE_ACTIVE;
 }
 
 static void uvc_video_decode_isoc(struct uvc_urb *uvc_urb,
@@ -1718,8 +1720,22 @@ static void uvc_video_complete(struct urb *urb)
 
 	buf = uvc_queue_get_current_buffer(queue);
 
-	if (vb2_qmeta)
+	if (buf && vb2_qmeta)
 		buf_meta = uvc_queue_get_current_buffer(qmeta);
+
+	/*
+	 * Avoid partial metadata buffers, by making sure that the data buffer
+	 * and metadata buffer state is in sync.
+	 *
+	 * A new (QUEUED) buffer is only allowed to become ACTIVE if we are also
+	 * at the start of a new data buffer.
+	 */
+	if (buf_meta && buf_meta->state == UVC_BUF_STATE_QUEUED) {
+		if (buf->state != UVC_BUF_STATE_QUEUED)
+			buf_meta = NULL;
+		else
+			buf_meta->state = UVC_BUF_STATE_ACTIVE;
+	}
 
 	/* Re-initialise the URB async work. */
 	uvc_urb->async_operations = 0;
