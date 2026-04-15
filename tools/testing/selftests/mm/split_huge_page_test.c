@@ -16,6 +16,7 @@
 #include <sys/mman.h>
 #include <sys/mount.h>
 #include <sys/param.h>
+#include <sys/wait.h>
 #include <malloc.h>
 #include <stdbool.h>
 #include <time.h>
@@ -330,6 +331,74 @@ static void split_pmd_zero_pages(void)
 	verify_rss_anon_split_huge_page_all_zeroes(one_page, nr_hpages, len);
 	ksft_test_result_pass("Split zero filled huge pages successful\n");
 	free(one_page);
+}
+
+static void split_shared_pmd(void)
+{
+	char *one_page;
+	int nr_pmds = 1;
+	size_t len = nr_pmds * pmd_pagesize;
+	size_t i;
+	pid_t pid;
+	int status;
+	int ret = 0, level = 0;
+
+	one_page = memalign(pmd_pagesize, len);
+	if (!one_page)
+		ksft_exit_fail_msg("Fail to allocate memory: %s\n", strerror(errno));
+
+	madvise(one_page, len, MADV_HUGEPAGE);
+
+	for (i = 0; i < len; i++)
+		one_page[i] = (char)i;
+
+	if (!check_huge_anon(one_page, nr_pmds, pmd_pagesize))
+		ksft_exit_fail_msg("No THP is allocated\n");
+
+	for (;;) {
+		pid = fork();
+
+		if (pid < 0) {
+			perror("Error: fork\n");
+			exit(KSFT_SKIP);
+		}
+
+		if (pid != 0)
+			break;
+
+		/*
+		 * Current /sys/kernel/debug/split_huge_pages interface would
+		 * call folio_split() for each page in the range. So we need
+		 * to create one more map to the PMD, otherwise it still split
+		 * successfully after 512 = (pmd_pagesize / pagesize) trials.
+		 */
+		if (++level == (pmd_pagesize / pagesize)) {
+			/* split THPs */
+			write_debugfs(PID_FMT, getpid(), (uint64_t)one_page,
+				(uint64_t)one_page + len, 0);
+
+			memset(expected_orders, 0, sizeof(int) * (pmd_order + 1));
+			expected_orders[0] = nr_pmds << pmd_order;
+
+			if (check_after_split_folio_orders(one_page, len, pagemap_fd,
+							   kpageflags_fd, expected_orders,
+							   (pmd_order + 1)))
+				exit(KSFT_FAIL);
+
+			exit(KSFT_PASS);
+		}
+	}
+
+	wait(&status);
+	free(one_page);
+
+	if (WIFEXITED(status))
+		ret = WEXITSTATUS(status);
+
+	if (level != 0)
+		exit(ret);
+
+	ksft_test_result_report(ret, "Split shared pmd\n");
 }
 
 static void split_pmd_thp_to_order(int order)
@@ -777,7 +846,7 @@ int main(int argc, char **argv)
 	if (!expected_orders)
 		ksft_exit_fail_msg("Fail to allocate memory: %s\n", strerror(errno));
 
-	tests = 2 + (pmd_order - 1) + (2 * pmd_order) + (pmd_order - 1) * 4 + 2;
+	tests = 3 + (pmd_order - 1) + (2 * pmd_order) + (pmd_order - 1) * 4 + 2;
 	ksft_set_plan(tests);
 
 	pagemap_fd = open(pagemap_proc, O_RDONLY);
@@ -791,6 +860,8 @@ int main(int argc, char **argv)
 	fd_size = 2 * pmd_pagesize;
 
 	split_pmd_zero_pages();
+
+	split_shared_pmd();
 
 	for (i = 0; i < pmd_order; i++)
 		if (i != 1)
