@@ -25,7 +25,13 @@ static struct platform_device accent_device = {
 
 static int __init accent_init(void)
 {
-	return platform_device_register(&accent_device);
+	int ret;
+
+	ret = platform_device_register(&accent_device);
+	if (ret)
+		platform_device_put(&accent_device);
+
+	return ret;
 }
 
 module_init(accent_init);
