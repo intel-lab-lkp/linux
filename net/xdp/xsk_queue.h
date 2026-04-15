@@ -263,12 +263,12 @@ static inline void parse_desc(struct xsk_queue *q, struct xsk_buff_pool *pool,
 	parsed->mb = xp_mb_desc(desc);
 }
 
-static inline
-u32 xskq_cons_read_desc_batch(struct xsk_queue *q, struct xsk_buff_pool *pool,
-			      u32 max)
+static inline u32
+__xskq_cons_read_desc_batch(struct xsk_queue *q, struct xsk_buff_pool *pool,
+			    struct xdp_desc *descs, u32 max, u32 *nb_pkts,
+			    u32 max_segs)
 {
 	u32 cached_cons = q->cached_cons, nb_entries = 0;
-	struct xdp_desc *descs = pool->tx_descs;
 	u32 total_descs = 0, nr_frags = 0;
 
 	/* track first entry, if stumble upon *any* invalid descriptor, rewind
@@ -288,9 +288,11 @@ u32 xskq_cons_read_desc_batch(struct xsk_queue *q, struct xsk_buff_pool *pool,
 		if (likely(!parsed.mb)) {
 			total_descs += (nr_frags + 1);
 			nr_frags = 0;
+			if (nb_pkts)
+				(*nb_pkts)++;
 		} else {
 			nr_frags++;
-			if (nr_frags == pool->xdp_zc_max_segs) {
+			if (nr_frags == max_segs) {
 				nr_frags = 0;
 				break;
 			}
@@ -302,6 +304,14 @@ u32 xskq_cons_read_desc_batch(struct xsk_queue *q, struct xsk_buff_pool *pool,
 	/* Release valid plus any invalid entries */
 	xskq_cons_release_n(q, cached_cons - q->cached_cons);
 	return total_descs;
+}
+
+static inline u32
+xskq_cons_read_desc_batch(struct xsk_queue *q, struct xsk_buff_pool *pool,
+			  u32 max)
+{
+	return __xskq_cons_read_desc_batch(q, pool, pool->tx_descs, max,
+					   NULL, pool->xdp_zc_max_segs);
 }
 
 /* Functions for consumers */
