@@ -2202,9 +2202,9 @@ parse_vswing_preemph_snps(union intel_ddi_buf_trans_entry **bufs_mtrx,
 			vals = &tables[offset];
 
 			entry = &bufs_mtrx[idx][row];
-			entry->snps.vswing = vals[0];
-			entry->snps.pre_cursor = vals[1];
-			entry->snps.post_cursor = vals[2];
+			entry->snps.vswing = (u8) vals[0];
+			entry->snps.pre_cursor = (u8) vals[1];
+			entry->snps.post_cursor = (u8) vals[2];
 
 			offset += block->num_columns;
 		}
