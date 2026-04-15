@@ -2200,6 +2200,9 @@ parse_vswing_preemph_override(struct intel_display *display)
 		return;
 
 	drm_dbg_kms(display->drm, "VS/PE-O parsing not yet supported\n");
+
+	display->vbt.num_tables = block->num_tables;
+	display->vbt.num_rows = DISPLAY_VER(display) >= 14 ? 16 : 10;
 }
 
 static u8 translate_iboost(struct intel_display *display, u8 val)
@@ -2997,6 +3000,10 @@ init_vbt_defaults(struct intel_display *display)
 							      !HAS_PCH_SPLIT(display));
 	drm_dbg_kms(display->drm, "Set default to SSC at %d kHz\n",
 		    display->vbt.lvds_ssc_freq);
+
+	/* Vswing / Preemphasis Override */
+	display->vbt.num_tables = 0;
+	display->vbt.num_rows = 0;
 }
 
 /* Common defaults which may be overridden by VBT. */
