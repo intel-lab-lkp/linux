@@ -900,10 +900,14 @@ static int get_capabilities(struct scsi_cd *cd)
 		cd->cdi.mask |= CDC_CLOSE_TRAY; */
 
 	/*
-	 * if DVD-RAM, MRW-W or CD-RW, we are randomly writable
+	 * Check if the drive has write capabilities. Only consider
+	 * capabilities that are determined from the MODE SENSE capabilities
+	 * page here. CDC_MRW_W (MRW writing) and CDC_RAM (random writable)
+	 * require the SCSI GET CONFIGURATION command to determine, which
+	 * is issued later by cdrom_open_write() at device open time.
 	 */
-	if ((cd->cdi.mask & (CDC_DVD_RAM | CDC_MRW_W | CDC_RAM | CDC_CD_RW)) !=
-			(CDC_DVD_RAM | CDC_MRW_W | CDC_RAM | CDC_CD_RW)) {
+	if ((cd->cdi.mask & (CDC_DVD_RAM | CDC_CD_RW)) !=
+			(CDC_DVD_RAM | CDC_CD_RW)) {
 		cd->writeable = 1;
 	}
 
