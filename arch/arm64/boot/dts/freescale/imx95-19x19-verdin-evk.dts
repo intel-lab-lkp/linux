@@ -65,6 +65,11 @@
 			linux,cma-default;
 			reusable;
 		};
+
+		vpu_boot: memory@a0000000 {
+			reg = <0 0xa0000000 0 0x100000>;
+			no-map;
+		};
 	};
 
 	reg_1p8v: regulator-1p8v {
@@ -692,4 +697,9 @@
 			<IMX95_PAD_SD3_DATA2__USDHC3_DATA2		0x138e>,
 			<IMX95_PAD_SD3_DATA3__USDHC3_DATA3		0x138e>;
 	};
+};
+
+&vpu {
+	memory-region = <&vpu_boot>;
+	sram = <&sram1>;
 };

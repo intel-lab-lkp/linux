@@ -2005,6 +2005,41 @@
 			assigned-clock-rates = <133333333>, <667000000>, <500000000>;
 		};
 
+		vpu: video-codec@4c4c0000 {
+			compatible = "nxp,imx95-vpu";
+			reg = <0x0 0x4c4c0000 0x0 0x10000>;
+			clocks = <&scmi_clk IMX95_CLK_VPU>,
+				 <&vpu_blk_ctrl IMX95_CLK_VPUBLK_WAVE>;
+			clock-names = "core", "vpublk";
+			power-domains = <&scmi_devpd IMX95_PD_VPU>,
+					<&scmi_perf IMX95_PERF_VPU>;
+			power-domain-names = "vpu", "perf";
+			#cooling-cells = <2>;
+			#address-cells = <2>;
+			#size-cells = <2>;
+			ranges;
+
+			interface@4c480000 {
+				reg = <0x0 0x4c480000 0x0 0x10000>;
+				interrupts = <GIC_SPI 299 IRQ_TYPE_LEVEL_HIGH>;
+			};
+
+			interface@4c490000 {
+				reg = <0x0 0x4c490000 0x0 0x10000>;
+				interrupts = <GIC_SPI 300 IRQ_TYPE_LEVEL_HIGH>;
+			};
+
+			interface@4c4a0000 {
+				reg = <0x0 0x4c4a0000 0x0 0x10000>;
+				interrupts = <GIC_SPI 301 IRQ_TYPE_LEVEL_HIGH>;
+			};
+
+			interface@4c4b0000 {
+				reg = <0x0 0x4c4b0000 0x0 0x10000>;
+				interrupts = <GIC_SPI 302 IRQ_TYPE_LEVEL_HIGH>;
+			};
+		};
+
 		jpegdec: jpegdec@4c500000 {
 			compatible = "nxp,imx95-jpgdec", "nxp,imx8qxp-jpgdec";
 			reg = <0x0 0x4C500000 0x0 0x00050000>;
