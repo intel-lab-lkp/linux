@@ -83,6 +83,7 @@
 #include <net/psp/types.h>
 #include <net/dropreason.h>
 #include <net/xdp_sock.h>
+#include <net/xsk_buff_pool.h>
 
 #include <linux/uaccess.h>
 #include <trace/events/skb.h>
@@ -645,6 +646,126 @@ static void *kmalloc_reserve(unsigned int *size, gfp_t flags, int node,
 out:
 	return obj;
 }
+
+#ifdef CONFIG_XDP_SOCKETS
+int xsk_alloc_batch_skb(struct xdp_sock *xs, u32 nb_pkts, u32 nb_descs, int *err)
+{
+	struct xsk_batch *batch = &xs->batch;
+	struct xdp_desc *descs = batch->desc_cache;
+	struct sk_buff **skbs = batch->skb_cache;
+	u32 alloc_descs, base_len, wmem, sndbuf;
+	gfp_t gfp_mask = xs->sk.sk_allocation;
+	u32 skb_count = batch->skb_count;
+	struct net_device *dev = xs->dev;
+	unsigned int total_truesize = 0;
+	struct sk_buff *skb = NULL;
+	int node = NUMA_NO_NODE;
+	u32 i = 0, j, k = 0;
+	bool need_alloc;
+	u8 *data;
+
+	base_len = max(NET_SKB_PAD, L1_CACHE_ALIGN(dev->needed_headroom));
+	if (!(dev->priv_flags & IFF_TX_SKB_NO_LINEAR))
+		base_len += dev->needed_tailroom;
+
+	if (xs->skb)
+		nb_pkts--;
+
+	if (skb_count >= nb_pkts)
+		goto alloc_data;
+
+	skb_count += kmem_cache_alloc_bulk(net_hotdata.skbuff_cache,
+					   gfp_mask,
+					   nb_pkts - skb_count,
+					   (void **)&skbs[skb_count]);
+	if (skb_count < nb_pkts)
+		nb_pkts = skb_count;
+
+alloc_data:
+	/*
+	 * Phase 1: Allocate data buffers and initialize SKBs.
+	 * Pre-scan descriptors to determine packet boundaries, so we can
+	 * batch the sk_wmem_alloc charge in Phase 2.
+	 */
+	need_alloc = !xs->skb;
+	wmem = sk_wmem_alloc_get(&xs->sk);
+	sndbuf = READ_ONCE(xs->sk.sk_sndbuf);
+	for (j = 0; j < nb_descs; j++) {
+		if (need_alloc) {
+			u32 size = base_len;
+
+			if (!(dev->priv_flags & IFF_TX_SKB_NO_LINEAR))
+				size += descs[j].len;
+
+			if (i >= nb_pkts) {
+				*err = -EAGAIN;
+				break;
+			}
+
+			if (wmem + size + total_truesize > sndbuf) {
+				*err = -EAGAIN;
+				break;
+			}
+
+			skb = skbs[skb_count - 1 - i];
+			skbuff_clear(skb);
+			data = kmalloc_reserve(&size, gfp_mask, node, skb);
+			if (unlikely(!data)) {
+				*err = -ENOBUFS;
+				break;
+			}
+			__finalize_skb_around(skb, data, size);
+			/* Replace skb_set_owner_w() with the following */
+			skb->sk = &xs->sk;
+			skb->destructor = sock_wfree;
+			total_truesize += skb->truesize;
+			i++;
+			need_alloc = false;
+		}
+		if (!xp_mb_desc(&descs[j]))
+			need_alloc = true;
+	}
+	alloc_descs = j;
+
+	/*
+	 * Phase 2: Batch charge sk_wmem_alloc.
+	 * One refcount_add() replaces N per-SKB skb_set_owner_w() calls,
+	 * which gains much performance improvement.
+	 */
+	if (total_truesize)
+		refcount_add(total_truesize, &xs->sk.sk_wmem_alloc);
+
+	/* Phase 3: Build SKBs with packet data */
+	for (j = 0; j < alloc_descs; j++) {
+		if (!xs->skb) {
+			skb = skbs[skb_count - 1 - k];
+			k++;
+		}
+
+		skb = xsk_build_skb(xs, skb, &descs[j]);
+		if (IS_ERR(skb)) {
+			*err = PTR_ERR(skb);
+			break;
+		}
+
+		if (xp_mb_desc(&descs[j])) {
+			xs->skb = skb;
+			continue;
+		}
+
+		xs->skb = NULL;
+		__skb_queue_tail(&batch->send_queue, skb);
+	}
+
+	/* Phase 4: Reclaim unused allocated SKBs */
+	while (k < i)
+		kfree_skb(skbs[skb_count - 1 - k++]);
+
+	batch->skb_count = skb_count - i;
+
+	return j;
+}
+#endif
 
 /* 	Allocate a new skbuff. We do this ourselves so we can fill in a few
  *	'private' fields and also do memory statistics to find all the

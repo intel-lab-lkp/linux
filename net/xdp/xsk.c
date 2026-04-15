@@ -25,6 +25,7 @@
 #include <linux/vmalloc.h>
 #include <net/xdp_sock_drv.h>
 #include <net/busy_poll.h>
+#include <net/hotdata.h>
 #include <net/netdev_lock.h>
 #include <net/netdev_rx_queue.h>
 #include <net/xdp.h>
@@ -1230,10 +1231,15 @@ static void xsk_delete_from_maps(struct xdp_sock *xs)
 static void xsk_batch_reset(struct xsk_batch *batch, struct sk_buff **skbs,
 			    struct xdp_desc *descs, unsigned int size)
 {
+	if (batch->skb_count)
+		kmem_cache_free_bulk(net_hotdata.skbuff_cache,
+				     batch->skb_count,
+				     (void **)batch->skb_cache);
 	kfree(batch->skb_cache);
 	kvfree(batch->desc_cache);
 	batch->skb_cache = skbs;
 	batch->desc_cache = descs;
+	batch->skb_count = 0;
 	batch->generic_xmit_batch = size;
 }
 
@@ -1946,6 +1952,7 @@ static int xsk_create(struct net *net, struct socket *sock, int protocol,
 
 	INIT_LIST_HEAD(&xs->map_list);
 	spin_lock_init(&xs->map_list_lock);
+	__skb_queue_head_init(&xs->batch.send_queue);
 
 	mutex_lock(&net->xdp.lock);
 	sk_add_node_rcu(sk, &net->xdp.list);
