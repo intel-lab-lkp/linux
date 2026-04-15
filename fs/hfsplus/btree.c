@@ -337,6 +337,11 @@ struct hfs_btree *hfs_btree_open(struct super_block *sb, u32 id)
 			pr_err("invalid catalog btree flag\n");
 			goto fail_page;
 		}
+		if (tree->node_size < 2) {
+			pr_err("invalid catalog btree node size %u\n",
+				tree->node_size);
+			goto fail_page;
+		}
 
 		if (test_bit(HFSPLUS_SB_HFSX, &HFSPLUS_SB(sb)->flags) &&
 		    (head->key_type == HFSPLUS_KEY_BINARY))
