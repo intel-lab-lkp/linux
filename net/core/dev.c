@@ -4898,6 +4898,7 @@ int xsk_direct_xmit_batch(struct xdp_sock *xs, struct net_device *dev)
 	u16 queue_id = xs->queue_id;
 	struct netdev_queue *txq = netdev_get_tx_queue(dev, queue_id);
 	struct sk_buff_head *send_queue = &xs->batch.send_queue;
+	bool need_validate = !(dev->features & NETIF_F_SG);
 	int ret = NETDEV_TX_BUSY;
 	struct sk_buff *skb;
 	bool more = true;
@@ -4905,15 +4906,17 @@ int xsk_direct_xmit_batch(struct xdp_sock *xs, struct net_device *dev)
 	local_bh_disable();
 	HARD_TX_LOCK(dev, txq, smp_processor_id());
 	while ((skb = __skb_dequeue(send_queue)) != NULL) {
-		struct sk_buff *orig_skb = skb;
-		bool again = false;
+		if (unlikely(need_validate)) {
+			struct sk_buff *orig_skb = skb;
+			bool again = false;
 
-		skb = validate_xmit_skb_list(skb, dev, &again);
-		if (skb != orig_skb) {
-			dev_core_stats_tx_dropped_inc(dev);
-			kfree_skb_list(skb);
-			ret = NET_XMIT_DROP;
-			break;
+			skb = validate_xmit_skb_list(skb, dev, &again);
+			if (skb != orig_skb) {
+				dev_core_stats_tx_dropped_inc(dev);
+				kfree_skb_list(skb);
+				ret = NET_XMIT_DROP;
+				break;
+			}
 		}
 
 		if (netif_xmit_frozen_or_drv_stopped(txq)) {
