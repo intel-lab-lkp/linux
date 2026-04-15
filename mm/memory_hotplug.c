@@ -340,6 +340,7 @@ struct page *pfn_to_online_page(unsigned long pfn)
 	unsigned long nr = pfn_to_section_nr(pfn);
 	struct dev_pagemap *pgmap;
 	struct mem_section *ms;
+	bool valid;
 
 	if (nr >= NR_MEM_SECTIONS)
 		return NULL;
@@ -355,7 +356,10 @@ struct page *pfn_to_online_page(unsigned long pfn)
 	if (IS_ENABLED(CONFIG_HAVE_ARCH_PFN_VALID) && !pfn_valid(pfn))
 		return NULL;
 
-	if (!pfn_section_valid(ms, pfn))
+	rcu_read_lock_sched();
+	valid = pfn_section_valid(ms, pfn);
+	rcu_read_unlock_sched();
+	if (!valid)
 		return NULL;
 
 	if (!online_device_section(ms))
