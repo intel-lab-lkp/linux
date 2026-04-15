@@ -548,6 +548,7 @@ int platform_add_devices(struct platform_device **devs, int num)
 
 	for (i = 0; i < num; i++) {
 		ret = platform_device_register(devs[i]);
+		platform_device_put(devs[i]);
 		if (ret) {
 			while (--i >= 0)
 				platform_device_unregister(devs[i]);
