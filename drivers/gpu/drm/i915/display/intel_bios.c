@@ -2663,7 +2663,7 @@ static void override_vswing_preemph(struct intel_bios_encoder_data *devdata)
 
 	devdata->buf_trans = NULL;
 
-	if (devdata->display->vbt.version < 218 || !devdata->child.use_vbt_vswing)
+	if (!intel_bios_encoder_overrides_vswing(devdata))
 		return;
 
 	buf_trans = kzalloc(sizeof(*buf_trans), GFP_KERNEL);
@@ -3855,6 +3855,12 @@ bool intel_bios_encoder_supports_typec_usb(const struct intel_bios_encoder_data 
 bool intel_bios_encoder_supports_tbt(const struct intel_bios_encoder_data *devdata)
 {
 	return devdata->display->vbt.version >= 209 && devdata->child.tbt;
+}
+
+bool intel_bios_encoder_overrides_vswing(const struct intel_bios_encoder_data *devdata)
+{
+	return devdata->display->vbt.version >= 218 &&
+		devdata->child.use_vbt_vswing;
 }
 
 bool intel_bios_encoder_is_dedicated_external(const struct intel_bios_encoder_data *devdata)
