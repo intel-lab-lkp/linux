@@ -1036,101 +1036,14 @@ out:
 	return err;
 }
 
-static int __xsk_generic_xmit(struct sock *sk)
-{
-	struct xdp_sock *xs = xdp_sk(sk);
-	bool sent_frame = false;
-	struct xdp_desc desc;
-	struct sk_buff *skb;
-	u32 max_batch;
-	int err = 0;
-
-	mutex_lock(&xs->mutex);
-
-	/* Since we dropped the RCU read lock, the socket state might have changed. */
-	if (unlikely(!xsk_is_bound(xs))) {
-		err = -ENXIO;
-		goto out;
-	}
-
-	if (xs->queue_id >= xs->dev->real_num_tx_queues)
-		goto out;
-
-	max_batch = READ_ONCE(xs->max_tx_budget);
-	while (xskq_cons_peek_desc(xs->tx, &desc, xs->pool)) {
-		if (max_batch-- == 0) {
-			err = -EAGAIN;
-			goto out;
-		}
-
-		/* This is the backpressure mechanism for the Tx path.
-		 * Reserve space in the completion queue and only proceed
-		 * if there is space in it. This avoids having to implement
-		 * any buffering in the Tx path.
-		 */
-		if (!xsk_cq_reserve_locked(xs->pool, 1)) {
-			err = -EAGAIN;
-			goto out;
-		}
-
-		skb = xsk_build_skb(xs, NULL, &desc);
-		if (IS_ERR(skb)) {
-			err = PTR_ERR(skb);
-			if (err != -EOVERFLOW)
-				goto out;
-			err = 0;
-			continue;
-		}
-
-		xskq_cons_release(xs->tx);
-
-		if (xp_mb_desc(&desc)) {
-			xs->skb = skb;
-			continue;
-		}
-
-		err = __dev_direct_xmit(skb, xs->queue_id);
-		if  (err == NETDEV_TX_BUSY) {
-			/* Tell user-space to retry the send */
-			xskq_cons_cancel_n(xs->tx, xsk_get_num_desc(skb));
-			xsk_consume_skb(skb);
-			err = -EAGAIN;
-			goto out;
-		}
-
-		/* Ignore NET_XMIT_CN as packet might have been sent */
-		if (err == NET_XMIT_DROP) {
-			/* SKB completed but not sent */
-			err = -EBUSY;
-			xs->skb = NULL;
-			goto out;
-		}
-
-		sent_frame = true;
-		xs->skb = NULL;
-	}
-
-	if (xskq_has_descs(xs->tx)) {
-		if (xs->skb)
-			xsk_drop_skb(xs->skb);
-		xskq_cons_release(xs->tx);
-	}
-
-out:
-	if (sent_frame)
-		__xsk_tx_release(xs);
-
-	mutex_unlock(&xs->mutex);
-	return err;
-}
-
 static int xsk_generic_xmit(struct sock *sk)
 {
+	struct xdp_sock *xs = xdp_sk(sk);
 	int ret;
 
 	/* Drop the RCU lock since the SKB path might sleep. */
 	rcu_read_unlock();
-	ret = __xsk_generic_xmit(sk);
+	ret = __xsk_generic_xmit_batch(xs);
 	/* Reaquire RCU lock before going into common code. */
 	rcu_read_lock();
 
@@ -1626,6 +1539,34 @@ struct xdp_umem_reg_v1 {
 	__u32 headroom;
 };
 
+static int xsk_init_batch(struct xsk_batch *batch, unsigned int size)
+{
+	struct xdp_desc *descs;
+	struct sk_buff **skbs;
+	void **data;
+
+	skbs = kmalloc(size * sizeof(struct sk_buff *), GFP_KERNEL);
+	if (!skbs)
+		return -ENOMEM;
+
+	data = kmalloc_array(size, sizeof(void *), GFP_KERNEL);
+	if (!data) {
+		kfree(skbs);
+		return -ENOMEM;
+	}
+
+	descs = kvcalloc(size, sizeof(struct xdp_desc), GFP_KERNEL);
+	if (!descs) {
+		kfree(data);
+		kfree(skbs);
+		return -ENOMEM;
+	}
+
+	xsk_batch_reset(batch, skbs, descs, data, size);
+
+	return 0;
+}
+
 static int xsk_setsockopt(struct socket *sock, int level, int optname,
 			  sockptr_t optval, unsigned int optlen)
 {
@@ -1746,9 +1687,6 @@ static int xsk_setsockopt(struct socket *sock, int level, int optname,
 	{
 		struct xsk_buff_pool *pool = xs->pool;
 		struct xsk_batch *batch = &xs->batch;
-		struct xdp_desc *descs;
-		struct sk_buff **skbs;
-		void **data;
 		unsigned int size;
 		int ret = 0;
 
@@ -1762,27 +1700,7 @@ static int xsk_setsockopt(struct socket *sock, int level, int optname,
 			return -EACCES;
 
 		mutex_lock(&xs->mutex);
-		skbs = kmalloc(size * sizeof(struct sk_buff *), GFP_KERNEL);
-		if (!skbs) {
-			ret = -ENOMEM;
-			goto out;
-		}
-		data = kmalloc_array(size, sizeof(void *), GFP_KERNEL);
-		if (!data) {
-			kfree(skbs);
-			ret = -ENOMEM;
-			goto out;
-		}
-		descs = kvcalloc(size, sizeof(struct xdp_desc), GFP_KERNEL);
-		if (!descs) {
-			kfree(data);
-			kfree(skbs);
-			ret = -ENOMEM;
-			goto out;
-		}
-
-		xsk_batch_reset(batch, skbs, descs, data, size);
-out:
+		ret = xsk_init_batch(batch, size);
 		mutex_unlock(&xs->mutex);
 		return ret;
 	}
@@ -2056,6 +1974,7 @@ static int xsk_create(struct net *net, struct socket *sock, int protocol,
 {
 	struct xdp_sock *xs;
 	struct sock *sk;
+	int ret;
 
 	if (!ns_capable(net->user_ns, CAP_NET_RAW))
 		return -EPERM;
@@ -2071,6 +1990,11 @@ static int xsk_create(struct net *net, struct socket *sock, int protocol,
 	if (!sk)
 		return -ENOBUFS;
 
+	xs = xdp_sk(sk);
+	ret = xsk_init_batch(&xs->batch, 1);
+	if (ret)
+		return ret;
+
 	sock->ops = &xsk_proto_ops;
 
 	sock_init_data(sock, sk);
@@ -2081,7 +2005,6 @@ static int xsk_create(struct net *net, struct socket *sock, int protocol,
 
 	sock_set_flag(sk, SOCK_RCU_FREE);
 
-	xs = xdp_sk(sk);
 	xs->state = XSK_READY;
 	xs->max_tx_budget = TX_BATCH_SIZE;
 	mutex_init(&xs->mutex);
