@@ -139,7 +139,11 @@ static __init int add_rtc_cmos(void)
 	if (!x86_platform.legacy.rtc)
 		return -ENODEV;
 
-	platform_device_register(&rtc_device);
+	ret = platform_device_register(&rtc_device);
+	if (ret) {
+		platform_device_put(&rtc_device);
+		return ret;
+	}
 	dev_info(&rtc_device.dev, "registered fallback platform RTC device\n");
 
 	return 0;
