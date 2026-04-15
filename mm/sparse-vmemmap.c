@@ -296,10 +296,16 @@ static int __meminit vmemmap_populate_range(unsigned long start,
 	return 0;
 }
 
+static int __meminit vmemmap_populate_compound_pages(unsigned long start,
+						     unsigned long end, int node,
+						     struct dev_pagemap *pgmap);
+
 int __meminit vmemmap_populate_basepages(unsigned long start, unsigned long end,
 					 int node, struct vmem_altmap *altmap,
 					 struct dev_pagemap *pgmap)
 {
+	if (vmemmap_can_optimize(altmap, pgmap))
+		return vmemmap_populate_compound_pages(start, end, node, pgmap);
 	return vmemmap_populate_range(start, end, node, altmap, -1, 0);
 }
 
@@ -411,6 +417,9 @@ int __meminit vmemmap_populate_hugepages(unsigned long start, unsigned long end,
 	pud_t *pud;
 	pmd_t *pmd;
 
+	if (vmemmap_can_optimize(altmap, pgmap))
+		return vmemmap_populate_compound_pages(start, end, node, pgmap);
+
 	for (addr = start; addr < end; addr = next) {
 		next = pmd_addr_end(addr, end);
 
@@ -453,7 +462,6 @@ int __meminit vmemmap_populate_hugepages(unsigned long start, unsigned long end,
 	return 0;
 }
 
-#ifndef vmemmap_populate_compound_pages
 /*
  * For compound pages bigger than section size (e.g. x86 1G compound
  * pages with 2M subsection size) fill the rest of sections as tail
@@ -491,14 +499,14 @@ static pte_t * __meminit compound_section_tail_page(unsigned long addr)
 	return pte;
 }
 
-static int __meminit vmemmap_populate_compound_pages(unsigned long start_pfn,
-						     unsigned long start,
+static int __meminit vmemmap_populate_compound_pages(unsigned long start,
 						     unsigned long end, int node,
 						     struct dev_pagemap *pgmap)
 {
 	unsigned long size, addr;
 	pte_t *pte;
 	int rc;
+	unsigned long start_pfn = page_to_pfn((struct page *)start);
 
 	if (reuse_compound_section(start_pfn, pgmap)) {
 		pte = compound_section_tail_page(start);
@@ -544,26 +552,18 @@ static int __meminit vmemmap_populate_compound_pages(unsigned long start_pfn,
 	return 0;
 }
 
-#endif
-
 struct page * __meminit __populate_section_memmap(unsigned long pfn,
 		unsigned long nr_pages, int nid, struct vmem_altmap *altmap,
 		struct dev_pagemap *pgmap)
 {
 	unsigned long start = (unsigned long) pfn_to_page(pfn);
 	unsigned long end = start + nr_pages * sizeof(struct page);
-	int r;
 
 	if (WARN_ON_ONCE(!IS_ALIGNED(pfn, PAGES_PER_SUBSECTION) ||
 		!IS_ALIGNED(nr_pages, PAGES_PER_SUBSECTION)))
 		return NULL;
 
-	if (vmemmap_can_optimize(altmap, pgmap))
-		r = vmemmap_populate_compound_pages(pfn, start, end, nid, pgmap);
-	else
-		r = vmemmap_populate(start, end, nid, altmap, pgmap);
-
-	if (r < 0)
+	if (vmemmap_populate(start, end, nid, altmap, pgmap))
 		return NULL;
 
 	return pfn_to_page(pfn);
