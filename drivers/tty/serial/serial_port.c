@@ -110,7 +110,16 @@ void serial_base_port_shutdown(struct uart_port *port)
 {
 	struct serial_port_device *port_dev = port->port_dev;
 
-	serial_base_port_set_tx(port, port_dev, false);
+	/*
+	 * Do not disable TX on a console port. When an init system calls
+	 * TIOCSCTTY with force=1, the kernel hangs up the previous session,
+	 * triggering uart_hangup() -> uart_shutdown() -> here. Stopping TX
+	 * kills all kernel console output permanently.
+	 * uart_hangup() already skips uart_change_pm(PM_OFF) for consoles
+	 * via uart_console(); apply the same guard here.
+	 */
+	if (!uart_console(port))
+		serial_base_port_set_tx(port, port_dev, false);
 }
 
 static DEFINE_RUNTIME_DEV_PM_OPS(serial_port_pm,
