@@ -43,9 +43,14 @@ static struct platform_device hub6_device = {
 
 static int __init hub6_init(void)
 {
-	return platform_device_register(&hub6_device);
-}
+	int ret;
 
+	ret = platform_device_register(&hub6_device);
+	if (ret)
+		platform_device_put(&hub6_device);
+
+	return ret;
+}
 module_init(hub6_init);
 
 MODULE_AUTHOR("Russell King");
