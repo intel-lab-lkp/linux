@@ -1711,13 +1711,10 @@ struct kfd_ioctl_profiler_args {
 #define AMDKFD_IOC_CREATE_PROCESS		\
 		AMDKFD_IO(0x27)
 
-#define AMDKFD_COMMAND_START		0x01
-#define AMDKFD_COMMAND_END		0x28
-
 #define AMDKFD_IOC_PROFILER			\
-		AMDKFD_IOWR(0x86, struct kfd_ioctl_profiler_args)
+		AMDKFD_IOWR(0x28, struct kfd_ioctl_profiler_args)
 
-#define AMDKFD_COMMAND_START_2		0x80
-#define AMDKFD_COMMAND_END_2		0x87
+#define AMDKFD_COMMAND_START		0x01
+#define AMDKFD_COMMAND_END		0x29
 
 #endif
