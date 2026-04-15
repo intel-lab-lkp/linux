@@ -384,20 +384,32 @@ static struct jffs2_raw_node_ref *sum_link_node_ref(struct jffs2_sb_info *c,
 /* Process the stored summary information - helper function for jffs2_sum_scan_sumnode() */
 
 static int jffs2_sum_process_sum_data(struct jffs2_sb_info *c, struct jffs2_eraseblock *jeb,
-				struct jffs2_raw_summary *summary, uint32_t *pseudo_random)
+				struct jffs2_raw_summary *summary, uint32_t sumsize,
+				uint32_t *pseudo_random)
 {
 	struct jffs2_inode_cache *ic;
 	struct jffs2_full_dirent *fd;
-	void *sp;
+	void *sp, *sum_end;
 	int i, ino;
 	int err;
 
 	sp = summary->sum;
+	/* Entries must fit before the trailing jffs2_sum_marker. */
+	sum_end = (char *)summary + sumsize - sizeof(struct jffs2_sum_marker);
 
 	for (i=0; i<je32_to_cpu(summary->sum_num); i++) {
 		dbg_summary("processing summary index %d\n", i);
 
 		cond_resched();
+
+		/* Make sure the nodetype dispatched on is in-bounds; each
+		 * case re-checks the specific entry size before advancing
+		 * sp past the node's fields. */
+		if ((char *)sp + sizeof(struct jffs2_sum_unknown_flash) > (char *)sum_end) {
+			JFFS2_WARNING("Summary entry %d nodetype past payload (sum_num=%u)\n",
+				      i, je32_to_cpu(summary->sum_num));
+			return -ENOTRECOVERABLE;
+		}
 
 		/* Make sure there's a spare ref for dirty space */
 		err = jffs2_prealloc_raw_node_refs(c, jeb, 2);
@@ -407,6 +419,9 @@ static int jffs2_sum_process_sum_data(struct jffs2_sb_info *c, struct jffs2_eras
 		switch (je16_to_cpu(((struct jffs2_sum_unknown_flash *)sp)->nodetype)) {
 			case JFFS2_NODETYPE_INODE: {
 				struct jffs2_sum_inode_flash *spi;
+
+				if ((char *)sp + JFFS2_SUMMARY_INODE_SIZE > (char *)sum_end)
+					goto ent_past_end;
 				spi = sp;
 
 				ino = je32_to_cpu(spi->inode);
@@ -434,7 +449,12 @@ static int jffs2_sum_process_sum_data(struct jffs2_sb_info *c, struct jffs2_eras
 			case JFFS2_NODETYPE_DIRENT: {
 				struct jffs2_sum_dirent_flash *spd;
 				int checkedlen;
+
+				if ((char *)sp + sizeof(*spd) > (char *)sum_end)
+					goto ent_past_end;
 				spd = sp;
+				if ((char *)sp + JFFS2_SUMMARY_DIRENT_SIZE(spd->nsize) > (char *)sum_end)
+					goto ent_past_end;
 
 				dbg_summary("Dirent at 0x%08x-0x%08x\n",
 					    jeb->offset + je32_to_cpu(spd->offset),
@@ -492,6 +512,8 @@ static int jffs2_sum_process_sum_data(struct jffs2_sb_info *c, struct jffs2_eras
 				struct jffs2_xattr_datum *xd;
 				struct jffs2_sum_xattr_flash *spx;
 
+				if ((char *)sp + JFFS2_SUMMARY_XATTR_SIZE > (char *)sum_end)
+					goto ent_past_end;
 				spx = (struct jffs2_sum_xattr_flash *)sp;
 				dbg_summary("xattr at %#08x-%#08x (xid=%u, version=%u)\n", 
 					    jeb->offset + je32_to_cpu(spx->offset),
@@ -523,6 +545,8 @@ static int jffs2_sum_process_sum_data(struct jffs2_sb_info *c, struct jffs2_eras
 				struct jffs2_xattr_ref *ref;
 				struct jffs2_sum_xref_flash *spr;
 
+				if ((char *)sp + JFFS2_SUMMARY_XREF_SIZE > (char *)sum_end)
+					goto ent_past_end;
 				spr = (struct jffs2_sum_xref_flash *)sp;
 				dbg_summary("xref at %#08x-%#08x\n",
 					    jeb->offset + je32_to_cpu(spr->offset),
@@ -566,6 +590,11 @@ static int jffs2_sum_process_sum_data(struct jffs2_sb_info *c, struct jffs2_eras
 		}
 	}
 	return 0;
+
+ent_past_end:
+	JFFS2_WARNING("Summary entry %d past payload end (sum_num=%u)\n",
+		      i, je32_to_cpu(summary->sum_num));
+	return -ENOTRECOVERABLE;
 }
 
 /* Process the summary node - called from jffs2_scan_eraseblock() */
@@ -646,7 +675,7 @@ int jffs2_sum_scan_sumnode(struct jffs2_sb_info *c, struct jffs2_eraseblock *jeb
 		}
 	}
 
-	ret = jffs2_sum_process_sum_data(c, jeb, summary, pseudo_random);
+	ret = jffs2_sum_process_sum_data(c, jeb, summary, sumsize, pseudo_random);
 	/* -ENOTRECOVERABLE isn't a fatal error -- it means we should do a full
 	   scan of this eraseblock. So return zero */
 	if (ret == -ENOTRECOVERABLE)
