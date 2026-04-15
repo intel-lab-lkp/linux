@@ -79,19 +79,6 @@ static inline struct nt36672a_panel *to_nt36672a_panel(struct drm_panel *panel)
 	return container_of(panel, struct nt36672a_panel, base);
 }
 
-static void nt36672a_send_cmds(struct mipi_dsi_multi_context *dsi_ctx,
-			       const struct nt36672a_panel_cmd *cmds, int num)
-{
-	unsigned int i;
-
-	for (i = 0; i < num; i++) {
-		const struct nt36672a_panel_cmd *cmd = &cmds[i];
-
-		/* cmd->data[0] is the DCS command, cmd->data[1] is the parameter */
-		mipi_dsi_dcs_write_buffer_multi(dsi_ctx, cmd->data, sizeof(cmd->data));
-	}
-}
-
 static void nt36672a_panel_power_off(struct drm_panel *panel)
 {
 	struct nt36672a_panel *pinfo = to_nt36672a_panel(panel);
@@ -108,10 +95,14 @@ static int nt36672a_panel_unprepare(struct drm_panel *panel)
 {
 	struct nt36672a_panel *pinfo = to_nt36672a_panel(panel);
 	struct mipi_dsi_multi_context dsi_ctx = { .dsi = pinfo->link };
+	unsigned int i;
 
 	/* send off cmds */
-	nt36672a_send_cmds(&dsi_ctx, pinfo->desc->off_cmds,
-			   pinfo->desc->num_off_cmds);
+	for (i = 0; i < pinfo->desc->num_off_cmds; i++) {
+		const struct nt36672a_panel_cmd *cmd = &pinfo->desc->off_cmds[i];
+
+		mipi_dsi_dcs_write_buffer_multi(&dsi_ctx, (const u8 *)cmd->data, sizeof(cmd->data));
+	}
 
 	/* Reset error to continue with display off even if send_cmds failed */
 	dsi_ctx.accum_err = 0;
@@ -158,12 +149,16 @@ static int nt36672a_panel_prepare(struct drm_panel *panel)
 {
 	struct nt36672a_panel *pinfo = to_nt36672a_panel(panel);
 	struct mipi_dsi_multi_context dsi_ctx = { .dsi = pinfo->link };
+	unsigned int i;
 
 	dsi_ctx.accum_err = nt36672a_panel_power_on(pinfo);
 
 	/* send first part of init cmds */
-	nt36672a_send_cmds(&dsi_ctx, pinfo->desc->on_cmds_1,
-			   pinfo->desc->num_on_cmds_1);
+	for (i = 0; i < pinfo->desc->num_on_cmds_1; i++) {
+		const struct nt36672a_panel_cmd *cmd = &pinfo->desc->on_cmds_1[i];
+
+		mipi_dsi_dcs_write_buffer_multi(&dsi_ctx, (const u8 *)cmd->data, sizeof(cmd->data));
+	}
 
 	mipi_dsi_dcs_exit_sleep_mode_multi(&dsi_ctx);
 
@@ -173,8 +168,11 @@ static int nt36672a_panel_prepare(struct drm_panel *panel)
 	mipi_dsi_dcs_set_display_on_multi(&dsi_ctx);
 
 	/* Send rest of the init cmds */
-	nt36672a_send_cmds(&dsi_ctx, pinfo->desc->on_cmds_2,
-			   pinfo->desc->num_on_cmds_2);
+	for (i = 0; i < pinfo->desc->num_on_cmds_2; i++) {
+		const struct nt36672a_panel_cmd *cmd = &pinfo->desc->on_cmds_2[i];
+
+		mipi_dsi_dcs_write_buffer_multi(&dsi_ctx, (const u8 *)cmd->data, sizeof(cmd->data));
+	}
 
 	mipi_dsi_msleep(&dsi_ctx, 120);
 
