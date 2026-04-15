@@ -416,19 +416,16 @@ static int __init warn_bootconfig(char *str)
 	return 0;
 }
 
-static void __init setup_boot_config(void)
+/*
+ * Parse bootconfig data and extract kernel/init command line parameters.
+ * Shared by both the early embedded path and the late initrd path.
+ */
+static void __init __boot_config_load(const char *data, size_t size)
 {
 	static char tmp_cmdline[COMMAND_LINE_SIZE] __initdata;
-	const char *msg, *data;
+	const char *msg;
 	int pos, ret;
-	size_t size;
 	char *err;
-
-	/* Cut out the bootconfig data even if we have no bootconfig option */
-	data = get_boot_config_from_initrd(&size);
-	/* If there is no bootconfig in initrd, try embedded one. */
-	if (!data)
-		data = xbc_get_embedded_bootconfig(&size);
 
 	strscpy(tmp_cmdline, boot_command_line, COMMAND_LINE_SIZE);
 	err = parse_args("bootconfig", tmp_cmdline, NULL, 0, 0, 0, NULL,
@@ -471,7 +468,50 @@ static void __init setup_boot_config(void)
 		/* Also, "init." keys are init arguments */
 		extra_init_args = xbc_make_cmdline("init", extra_initargs_buf);
 	}
-	return;
+}
+
+/*
+ * Load embedded bootconfig before setup_arch(). This runs before memblock
+ * is available, relying on static buffers in the bootconfig parser.
+ * The embedded data lives in .init.rodata so no allocation is needed
+ * to access it.
+ */
+static void __init setup_boot_config_from_embedded(void)
+{
+	const char *data;
+	size_t size;
+
+	data = xbc_get_embedded_bootconfig(&size);
+	if (!data)
+		return;
+
+	pr_info("Load embedded bootconfig early\n");
+	__boot_config_load(data, size);
+}
+
+/*
+ * Load bootconfig from initrd. This MUST run after setup_arch() when initrd
+ * boundaries are known. If initrd bootconfig exists, it overrides any embedded
+ * bootconfig that was loaded early, preserving the original priority (initrd
+ * > embedded).
+ */
+static void __init setup_boot_config_from_initrd(void)
+{
+	const char *data;
+	size_t size;
+
+	/* Cut out the bootconfig data even if we have no bootconfig option */
+	data = get_boot_config_from_initrd(&size);
+
+	/* No initrd bootconfig — keep embedded if already loaded */
+	if (!data)
+		return;
+
+	/* Initrd overrides embedded — tear down and re-parse */
+	if (xbc_get_info(NULL, NULL) == 0)
+		_xbc_exit(true);
+
+	__boot_config_load(data, size);
 }
 
 static void __init exit_boot_config(void)
@@ -481,7 +521,9 @@ static void __init exit_boot_config(void)
 
 #else	/* !CONFIG_BOOT_CONFIG */
 
-static void __init setup_boot_config(void)
+static void __init setup_boot_config_from_embedded(void) { }
+
+static void __init setup_boot_config_from_initrd(void)
 {
 	/* Remove bootconfig data from initrd */
 	get_boot_config_from_initrd(NULL);
@@ -1036,13 +1078,14 @@ void start_kernel(void)
 	boot_cpu_init();
 	page_address_init();
 	pr_notice("%s", linux_banner);
+	setup_boot_config_from_embedded();
 	setup_arch(&command_line);
 	mm_core_init_early();
 	/* Static keys and static calls are needed by LSMs */
 	jump_label_init();
 	static_call_init();
 	early_security_init();
-	setup_boot_config();
+	setup_boot_config_from_initrd();
 	setup_command_line(command_line);
 	setup_nr_cpu_ids();
 	setup_per_cpu_areas();
