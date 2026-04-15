@@ -220,6 +220,23 @@ out:
 	return ret;
 }
 
+static inline bool ext4_is_cursor(struct inode *inode)
+{
+	return (inode->i_ino == 0);
+}
+
+static inline struct list_head *ext4_orphan_prev_node(
+					struct ext4_inode_info *pos,
+					struct list_head *head)
+{
+	list_for_each_entry_continue_reverse(pos, head, i_orphan) {
+		if (likely(!ext4_is_cursor(&pos->vfs_inode)))
+			return &pos->i_orphan;
+	}
+
+	return head;
+}
+
 /*
  * ext4_orphan_del() removes an unlinked or truncated inode from the list
  * of such inodes stored on disk, because it is finally being cleaned up.
@@ -253,7 +270,8 @@ int ext4_orphan_del(handle_t *handle, struct inode *inode)
 	mutex_lock(&sbi->s_orphan_lock);
 	ext4_debug("remove inode %llu from orphan list\n", inode->i_ino);
 
-	prev = ei->i_orphan.prev;
+	prev = ext4_orphan_prev_node(ei, &sbi->s_orphan);
+
 	list_del_init(&ei->i_orphan);
 
 	/* If we're on an error path, we may not have a valid
