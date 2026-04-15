@@ -1786,6 +1786,31 @@ xe3plpd_get_lt_buf_trans(struct intel_encoder *encoder,
 		return intel_get_buf_trans(&xe3plpd_lt_trans_dp14, n_entries);
 }
 
+static int
+jsl_compute_index(struct intel_encoder *encoder,
+		  const struct intel_crtc_state *crtc_state)
+{
+	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP)) {
+		if (use_edp_low_vswing(encoder)) {
+			if (crtc_state->port_clock > 540000)
+				return 0;
+			else if (crtc_state->port_clock > 270000)
+				return 2;
+			else
+				return 1;
+		}
+	}
+
+	if (intel_crtc_has_dp_encoder(crtc_state))
+		return 0;
+
+	drm_WARN(to_intel_display(crtc_state)->drm, 1,
+		 "non-DP (%d) encoder asks to compute VS/PE-O index\n",
+		 crtc_state->output_types);
+
+	return -1;
+}
+
 static enum ehl_vspeo_index
 ehl_compute_index(struct intel_encoder *encoder,
 		  const struct intel_crtc_state *crtc_state)
@@ -1887,6 +1912,8 @@ vspeo_compute_index(struct intel_encoder *encoder,
 	} else if (DISPLAY_VER(display) == 11) {
 		if (display->platform.elkhartlake) {
 			return ehl_compute_index(encoder, crtc_state);
+		} else if (display->platform.jasperlake) {
+			return jsl_compute_index(encoder, crtc_state);
 		}
 	}
 
