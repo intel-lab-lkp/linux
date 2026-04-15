@@ -401,6 +401,17 @@ static struct acpi_generic_address *einj_get_trigger_parameter_region(
 
 	return NULL;
 }
+
+static bool is_memory_injection(u32 type, u64 param2)
+{
+	if (is_v2)
+		return type & BIT(1);
+	else if (param_extension || acpi5)
+		return (type & MEM_ERROR_MASK) && param2;
+
+	return false;
+}
+
 /* Execute instructions in trigger error action table */
 static int __einj_error_trigger(u64 trigger_paddr, u32 type,
 				u64 param1, u64 param2)
@@ -480,7 +491,7 @@ static int __einj_error_trigger(u64 trigger_paddr, u32 type,
 	 * This will cause resource conflict with regular memory.  So
 	 * remove it from trigger table resources.
 	 */
-	if ((param_extension || acpi5) && (type & MEM_ERROR_MASK) && param2) {
+	if (is_memory_injection(type, param2)) {
 		struct apei_resources addr_resources;
 
 		apei_resources_init(&addr_resources);
