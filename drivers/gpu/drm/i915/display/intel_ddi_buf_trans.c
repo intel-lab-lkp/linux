@@ -1786,6 +1786,30 @@ xe3plpd_get_lt_buf_trans(struct intel_encoder *encoder,
 		return intel_get_buf_trans(&xe3plpd_lt_trans_dp14, n_entries);
 }
 
+static int
+snps_c10_compute_index(const struct intel_crtc_state *crtc_state)
+{
+	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP)) {
+		if (crtc_state->port_clock > 540000)
+			return 3;
+		else
+			return 2;
+	}
+
+	if (intel_crtc_has_dp_encoder(crtc_state)) {
+		if (crtc_state->port_clock > 270000)
+			return 1;
+		else
+			return 0;
+	}
+
+	drm_WARN(to_intel_display(crtc_state)->drm, 1,
+		 "non-DP (%d) encoder asks to compute VS/PE-O index\n",
+		 crtc_state->output_types);
+
+	return -1;
+}
+
 static enum snps_c20_vspeo_index
 snps_c20_compute_index(const struct intel_crtc_state *crtc_state)
 {
@@ -1829,7 +1853,9 @@ vspeo_compute_index(struct intel_encoder *encoder,
 	if (HAS_LT_PHY(display)) {
 		return lt_compute_index(crtc_state);
 	} else if (DISPLAY_VER(display) >= 14) {
-		if (!intel_encoder_is_c10phy(encoder))
+		if (intel_encoder_is_c10phy(encoder))
+			return snps_c10_compute_index(crtc_state);
+		else
 			return snps_c20_compute_index(crtc_state);
 	}
 
