@@ -414,33 +414,31 @@ static unsigned long convert_to_physical(struct edac_priv *priv, union ecc_error
 static void handle_error(struct mem_ctl_info *mci, struct ecc_status *stat)
 {
 	struct edac_priv *priv = mci->pvt_info;
+	enum hw_event_mc_err_type type;
 	union ecc_error_info pinf;
+	unsigned long pa, pfn;
 
 	if (stat->error_type == XDDR_ERR_TYPE_CE) {
 		priv->ce_cnt++;
 		pinf = stat->ceinfo[stat->channel];
-		snprintf(priv->message, XDDR_EDAC_MSG_SIZE,
-			 "Error type:%s MC ID: %d Addr at %lx Burst Pos: %d\n",
-			 "CE", priv->mc_id,
-			 convert_to_physical(priv, pinf), pinf.burstpos);
-
-		edac_mc_handle_error(HW_EVENT_ERR_CORRECTED, mci,
-				     1, 0, 0, 0, 0, 0, -1,
-				     priv->message, "");
-	}
-
-	if (stat->error_type == XDDR_ERR_TYPE_UE) {
+		type = HW_EVENT_ERR_CORRECTED;
+	} else if (stat->error_type == XDDR_ERR_TYPE_UE) {
 		priv->ue_cnt++;
 		pinf = stat->ueinfo[stat->channel];
-		snprintf(priv->message, XDDR_EDAC_MSG_SIZE,
-			 "Error type:%s MC ID: %d Addr at %lx Burst Pos: %d\n",
-			 "UE", priv->mc_id,
-			 convert_to_physical(priv, pinf), pinf.burstpos);
-
-		edac_mc_handle_error(HW_EVENT_ERR_UNCORRECTED, mci,
-				     1, 0, 0, 0, 0, 0, -1,
-				     priv->message, "");
+		type = HW_EVENT_ERR_UNCORRECTED;
+	} else {
+		return;
 	}
+
+	pa = convert_to_physical(priv, pinf);
+	pfn = PHYS_PFN(pa);
+	snprintf(priv->message, XDDR_EDAC_MSG_SIZE,
+		 "Error type:%s MC ID: %d Addr at %lx Burst Pos: %d\n",
+		 type == HW_EVENT_ERR_UNCORRECTED ? "UE" : "CE", priv->mc_id,
+		 pa, pinf.burstpos);
+	edac_mc_handle_error(type, mci,
+			     1, pfn, offset_in_page(pa), 0, 0, 0, -1,
+			     priv->message, "");
 
 	memset(stat, 0, sizeof(*stat));
 }
