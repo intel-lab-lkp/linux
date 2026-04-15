@@ -11,6 +11,10 @@
 #include <asm/paravirt-spinlock.h>
 #endif
 
+#ifdef CONFIG_HQSPINLOCKS
+#include <asm/hq-spinlock.h>
+#endif
+
 #define _Q_PENDING_LOOPS	(1 << 9)
 
 #define queued_fetch_set_pending_acquire queued_fetch_set_pending_acquire
@@ -25,7 +29,7 @@ static __always_inline u32 queued_fetch_set_pending_acquire(struct qspinlock *lo
 	 */
 	val = GEN_BINARY_RMWcc(LOCK_PREFIX "btsl", lock->val.counter, c,
 			       "I", _Q_PENDING_OFFSET) * _Q_PENDING_VAL;
-	val |= atomic_read(&lock->val) & ~_Q_PENDING_MASK;
+	val |= atomic_read(&lock->val) & ~_Q_PENDING_VAL;
 
 	return val;
 }

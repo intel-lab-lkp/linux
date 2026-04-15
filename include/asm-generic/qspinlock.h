@@ -54,7 +54,7 @@ static __always_inline int queued_spin_is_locked(struct qspinlock *lock)
 	 * Any !0 state indicates it is locked, even if _Q_LOCKED_VAL
 	 * isn't immediately observable.
 	 */
-	return atomic_read(&lock->val);
+	return atomic_read(&lock->val) & ~_Q_SERVICE_MASK;
 }
 #endif
 
@@ -70,7 +70,7 @@ static __always_inline int queued_spin_is_locked(struct qspinlock *lock)
  */
 static __always_inline int queued_spin_value_unlocked(struct qspinlock lock)
 {
-	return !lock.val.counter;
+	return !(lock.val.counter & ~_Q_SERVICE_MASK);
 }
 
 /**
@@ -80,8 +80,10 @@ static __always_inline int queued_spin_value_unlocked(struct qspinlock lock)
  */
 static __always_inline int queued_spin_is_contended(struct qspinlock *lock)
 {
-	return atomic_read(&lock->val) & ~_Q_LOCKED_MASK;
+	return atomic_read(&lock->val) & ~(_Q_LOCKED_MASK | _Q_SERVICE_MASK);
 }
+
+#ifndef queued_spin_trylock
 /**
  * queued_spin_trylock - try to acquire the queued spinlock
  * @lock : Pointer to queued spinlock structure
@@ -91,11 +93,12 @@ static __always_inline int queued_spin_trylock(struct qspinlock *lock)
 {
 	int val = atomic_read(&lock->val);
 
-	if (unlikely(val))
+	if (unlikely(val & ~_Q_SERVICE_MASK))
 		return 0;
 
-	return likely(atomic_try_cmpxchg_acquire(&lock->val, &val, _Q_LOCKED_VAL));
+	return likely(atomic_try_cmpxchg_acquire(&lock->val, &val, val | _Q_LOCKED_VAL));
 }
+#endif
 
 extern void queued_spin_lock_slowpath(struct qspinlock *lock, u32 val);
 
@@ -106,14 +109,16 @@ extern void queued_spin_lock_slowpath(struct qspinlock *lock, u32 val);
  */
 static __always_inline void queued_spin_lock(struct qspinlock *lock)
 {
-	int val = 0;
+	int val = atomic_read(&lock->val);
 
-	if (likely(atomic_try_cmpxchg_acquire(&lock->val, &val, _Q_LOCKED_VAL)))
-		return;
+	if (likely(!(val & ~_Q_SERVICE_MASK))) {
+		if (likely(atomic_try_cmpxchg_acquire(&lock->val, &val, val | _Q_LOCKED_VAL)))
+			return;
+	}
 
 	queued_spin_lock_slowpath(lock, val);
 }
-#endif
+#endif // queued_spin_lock
 
 #ifndef queued_spin_unlock
 /**

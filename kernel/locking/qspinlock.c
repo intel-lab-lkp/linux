@@ -11,7 +11,7 @@
  *          Peter Zijlstra <peterz@infradead.org>
  */
 
-#ifndef _GEN_PV_LOCK_SLOWPATH
+#if !defined(_GEN_PV_LOCK_SLOWPATH) && !defined(_GEN_HQ_SPINLOCK_SLOWPATH)
 
 #include <linux/smp.h>
 #include <linux/bug.h>
@@ -100,7 +100,7 @@ static __always_inline u32  __pv_wait_head_or_lock(struct qspinlock *lock,
 #define pv_kick_node		__pv_kick_node
 #define pv_wait_head_or_lock	__pv_wait_head_or_lock
 
-#ifdef CONFIG_PARAVIRT_SPINLOCKS
+#if defined(CONFIG_PARAVIRT_SPINLOCKS) || defined(CONFIG_HQSPINLOCKS)
 #define queued_spin_lock_slowpath	native_queued_spin_lock_slowpath
 #endif
 
@@ -133,6 +133,11 @@ void __lockfunc queued_spin_lock_slowpath(struct qspinlock *lock, u32 val)
 	u32 old, tail;
 	int idx;
 
+#if defined(_GEN_HQ_SPINLOCK_SLOWPATH) && !defined(_GEN_PV_LOCK_SLOWPATH)
+	bool is_numa_lock = val & _Q_LOCKTYPE_MASK;
+	bool numa_awareness_on = is_numa_lock && !(val & _Q_LOCK_MODE_QSPINLOCK_VAL);
+#endif
+
 	BUILD_BUG_ON(CONFIG_NR_CPUS >= (1U << _Q_TAIL_CPU_BITS));
 
 	if (pv_enabled())
@@ -147,16 +152,16 @@ void __lockfunc queued_spin_lock_slowpath(struct qspinlock *lock, u32 val)
 	 *
 	 * 0,1,0 -> 0,0,1
 	 */
-	if (val == _Q_PENDING_VAL) {
+	if ((val & ~_Q_SERVICE_MASK) == _Q_PENDING_VAL) {
 		int cnt = _Q_PENDING_LOOPS;
 		val = atomic_cond_read_relaxed(&lock->val,
-					       (VAL != _Q_PENDING_VAL) || !cnt--);
+						((VAL & ~_Q_SERVICE_MASK) != _Q_PENDING_VAL) || !cnt--);
 	}
 
 	/*
 	 * If we observe any contention; queue.
 	 */
-	if (val & ~_Q_LOCKED_MASK)
+	if (val & ~(_Q_LOCKED_MASK | _Q_SERVICE_MASK))
 		goto queue;
 
 	/*
@@ -173,11 +178,15 @@ void __lockfunc queued_spin_lock_slowpath(struct qspinlock *lock, u32 val)
 	 * n,0,0 -> 0,0,0 transition fail and it will now be waiting
 	 * on @next to become !NULL.
 	 */
-	if (unlikely(val & ~_Q_LOCKED_MASK)) {
-
+	if (unlikely(val & ~(_Q_LOCKED_MASK | _Q_SERVICE_MASK))) {
 		/* Undo PENDING if we set it. */
-		if (!(val & _Q_PENDING_MASK))
+		if (!(val & _Q_PENDING_VAL)) {
+#if defined(_GEN_HQ_SPINLOCK_SLOWPATH) && !defined(_GEN_PV_LOCK_SLOWPATH)
+			hqlock_clear_pending(lock, val);
+#else
 			clear_pending(lock);
+#endif
+		}
 
 		goto queue;
 	}
@@ -194,14 +203,18 @@ void __lockfunc queued_spin_lock_slowpath(struct qspinlock *lock, u32 val)
 	 * barriers.
 	 */
 	if (val & _Q_LOCKED_MASK)
-		smp_cond_load_acquire(&lock->locked, !VAL);
+		smp_cond_load_acquire(&lock->locked_pending, !(VAL & _Q_LOCKED_MASK));
 
 	/*
 	 * take ownership and clear the pending bit.
 	 *
 	 * 0,1,0 -> 0,0,1
 	 */
+#if defined(_GEN_HQ_SPINLOCK_SLOWPATH) && !defined(_GEN_PV_LOCK_SLOWPATH)
+	hqlock_clear_pending_set_locked(lock, val);
+#else
 	clear_pending_set_locked(lock);
+#endif
 	lockevent_inc(lock_pending);
 	return;
 
@@ -274,7 +287,17 @@ pv_queue:
 	 *
 	 * p,*,* -> n,*,*
 	 */
+#if defined(_GEN_HQ_SPINLOCK_SLOWPATH) && !defined(_GEN_PV_LOCK_SLOWPATH)
+	if (is_numa_lock)
+		old = hqlock_xchg_tail(lock, tail, node, &numa_awareness_on);
+	else
+		old = xchg_tail(lock, tail);
+
+	if (numa_awareness_on && old == Q_NEW_NODE_QUEUE)
+		goto mcs_spin;
+#else
 	old = xchg_tail(lock, tail);
+#endif
 	next = NULL;
 
 	/*
@@ -288,6 +311,9 @@ pv_queue:
 		WRITE_ONCE(prev->next, node);
 
 		pv_wait_node(node, prev);
+#if defined(_GEN_HQ_SPINLOCK_SLOWPATH) && !defined(_GEN_PV_LOCK_SLOWPATH)
+mcs_spin:
+#endif
 		arch_mcs_spin_lock_contended(&node->locked);
 
 		/*
@@ -349,6 +375,12 @@ locked:
 	 *       above wait condition, therefore any concurrent setting of
 	 *       PENDING will make the uncontended transition fail.
 	 */
+#if defined(_GEN_HQ_SPINLOCK_SLOWPATH) && !defined(_GEN_PV_LOCK_SLOWPATH)
+	if (is_numa_lock) {
+		hqlock_clear_tail_handoff(lock, val, tail, node, next, prev, numa_awareness_on);
+		goto release;
+	}
+#endif
 	if ((val & _Q_TAIL_MASK) == tail) {
 		if (atomic_try_cmpxchg_relaxed(&lock->val, &val, _Q_LOCKED_VAL))
 			goto release; /* No contention */
@@ -379,6 +411,21 @@ release:
 	__this_cpu_dec(qnodes[0].mcs.count);
 }
 EXPORT_SYMBOL(queued_spin_lock_slowpath);
+
+/* Generate the code for NUMA-aware qspinlock (HQspinlock) */
+#if !defined(_GEN_HQ_SPINLOCK_SLOWPATH) && defined(CONFIG_HQSPINLOCKS)
+#define _GEN_HQ_SPINLOCK_SLOWPATH
+
+#undef pv_init_node
+#define pv_init_node		hqlock_init_node
+
+#undef  queued_spin_lock_slowpath
+#include "hqlock_core.h"
+#define queued_spin_lock_slowpath	__hq_queued_spin_lock_slowpath
+
+#include "qspinlock.c"
+
+#endif
 
 /*
  * Generate the paravirt code for queued_spin_unlock_slowpath().

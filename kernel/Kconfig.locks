@@ -243,6 +243,35 @@ config QUEUED_SPINLOCKS
 	def_bool y if ARCH_USE_QUEUED_SPINLOCKS
 	depends on SMP
 
+config HQSPINLOCKS
+	bool "(NUMA-aware) Hierarchical Queued spinlock"
+	depends on NUMA
+	depends on QUEUED_SPINLOCKS
+	depends on NR_CPUS < 16384
+	depends on !CPU_BIG_ENDIAN
+	help
+	  Introduce NUMA (Non Uniform Memory Access) awareness into
+	  the slow path of kernel's spinlocks.
+
+	  We preallocate 'LOCK_ID_MAX' lock_metadata structures with corresponing per-NUMA queues,
+	  and the first queueing contender finds metadata corresponding to its lock by lock's hash and occupies it.
+	  If the metadata is already occupied, perform fallback to default qspinlock approach.
+	  Upcomming contenders then exchange the tail of per-NUMA queue instead of global tail,
+	  and until threshold is reached, we pass the lock to the condenters from the local queue.
+	  At the global tail we keep NUMA nodes to maintain FIFO on per-node level.
+
+	  That approach helps to reduce cross-numa accesses and thus improve lock's performance
+	  in high-load scenarios on multi-NUMA node machines.
+
+	  Say N, if you want absolute first come first serve fairness.
+
+config HQSPINLOCKS_DEBUG
+	bool "Enable debug output for numa-aware spinlocks"
+	depends on HQSPINLOCKS
+	default n
+	help
+	  This option enables statistics for dynamic metadata allocation for HQspinlock
+
 config BPF_ARCH_SPINLOCK
 	bool
 

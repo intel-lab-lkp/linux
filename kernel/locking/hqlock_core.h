@@ -771,3 +771,80 @@ static inline void hqlock_handoff(struct qspinlock *lock,
 	handoff_remote(lock, qnode, tail, handoff_info);
 	reset_handoff_counter(qnode);
 }
+
+static void __init hqlock_alloc_global_queues(void)
+{
+	int nid;
+	unsigned long meta_pool_size, queues_size;
+
+	meta_pool_size = ALIGN(sizeof(struct lock_metadata), L1_CACHE_BYTES) * LOCK_ID_MAX;
+
+	pr_info("Init HQspinlock lock_metadata info: size = 0x%lx B\n",
+		meta_pool_size);
+
+	meta_pool = kvzalloc(meta_pool_size, GFP_KERNEL);
+
+	if (!meta_pool)
+		panic("HQspinlock lock_metadata metadata info: allocation failure.\n");
+
+	for (int i = 0; i < LOCK_ID_MAX; i++)
+		atomic_set(&meta_pool[i].seq_counter, 0);
+
+	queues_size = LOCK_ID_MAX * ALIGN(sizeof(struct numa_queue), L1_CACHE_BYTES);
+
+	pr_info("Init HQspinlock per-NUMA metadata (per-node size = 0x%lx B)\n",
+		queues_size);
+
+	for_each_node(nid) {
+		queue_table[nid] = kvzalloc_node(queues_size, GFP_KERNEL, nid);
+
+		if (!queue_table[nid])
+			panic("HQspinlock per-NUMA metadata: allocation failure for node %d.\n", nid);
+	}
+}
+
+#ifdef CONFIG_PARAVIRT_SPINLOCKS
+#define hq_queued_spin_lock_slowpath	pv_ops_lock.queued_spin_lock_slowpath
+#else
+void (*hq_queued_spin_lock_slowpath)(struct qspinlock *lock, u32 val) =
+		native_queued_spin_lock_slowpath;
+EXPORT_SYMBOL(hq_queued_spin_lock_slowpath);
+#endif
+
+static int numa_spinlock_flag;
+
+static int __init numa_spinlock_setup(char *str)
+{
+	if (!strcmp(str, "auto")) {
+		numa_spinlock_flag = 0;
+		return 1;
+	} else if (!strcmp(str, "on")) {
+		numa_spinlock_flag = 1;
+		return 1;
+	} else if (!strcmp(str, "off")) {
+		numa_spinlock_flag = -1;
+		return 1;
+	}
+
+	return 0;
+}
+__setup("numa_spinlock=", numa_spinlock_setup);
+
+void __hq_queued_spin_lock_slowpath(struct qspinlock *lock, u32 val);
+
+void __init hq_configure_spin_lock_slowpath(void)
+{
+	if (numa_spinlock_flag < 0)
+		return;
+
+	if (numa_spinlock_flag == 0 && (nr_node_ids < 2 ||
+		    hq_queued_spin_lock_slowpath !=
+			native_queued_spin_lock_slowpath)) {
+		return;
+	}
+
+	numa_spinlock_flag = 1;
+	hq_queued_spin_lock_slowpath = __hq_queued_spin_lock_slowpath;
+	pr_info("Enabling HQspinlock\n");
+	hqlock_alloc_global_queues();
+}
