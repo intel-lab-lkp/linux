@@ -3413,6 +3413,11 @@ SYSCALL_DEFINE2(swapon, const char __user *, specialfile, int, swap_flags)
 		goto bad_swap_unlock_inode;
 	}
 
+	if (init_swap_ops(si)) {
+		error = -EINVAL;
+		goto bad_swap_unlock_inode;
+	}
+
 	si->max = maxpages;
 	si->pages = maxpages - 1;
 	nr_extents = setup_swap_extents(si, &span);
