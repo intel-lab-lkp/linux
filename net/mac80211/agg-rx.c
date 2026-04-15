@@ -376,6 +376,23 @@ void __ieee80211_start_rx_ba_session(struct sta_info *sta,
 			ht_dbg_ratelimited(sta->sdata,
 					   "updated AddBA Req from %pM on tid %u\n",
 					   sta->sta.addr, tid);
+			/*
+			 * For drivers with SUPPORTS_REORDERING_BUFFER set, let
+			 * the driver handle the BA update, as it manages the BA
+			 * state.
+			 */
+			if (ieee80211_hw_check(&local->hw,
+					       SUPPORTS_REORDERING_BUFFER)) {
+				ret = drv_ampdu_action(local, sta->sdata,
+						       &params);
+				ht_dbg_ratelimited(sta->sdata,
+						   "Updated AddBA Req result %d\n",
+						   ret);
+				if (!ret)
+					status = WLAN_STATUS_SUCCESS;
+				goto end;
+			}
+
 			/* We have no API to update the timeout value in the
 			 * driver so reject the timeout update if the timeout
 			 * changed. If it did not change, i.e., no real update,
