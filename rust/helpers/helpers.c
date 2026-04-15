@@ -62,6 +62,7 @@
 #include "irq.c"
 #include "fs.c"
 #include "io.c"
+#include "io_uring.c"
 #include "jump_label.c"
 #include "kunit.c"
 #include "maple_tree.c"
