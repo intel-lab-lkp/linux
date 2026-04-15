@@ -4900,6 +4900,7 @@ int xsk_direct_xmit_batch(struct xdp_sock *xs, struct net_device *dev)
 	struct sk_buff_head *send_queue = &xs->batch.send_queue;
 	int ret = NETDEV_TX_BUSY;
 	struct sk_buff *skb;
+	bool more = true;
 
 	local_bh_disable();
 	HARD_TX_LOCK(dev, txq, smp_processor_id());
@@ -4919,8 +4920,12 @@ int xsk_direct_xmit_batch(struct xdp_sock *xs, struct net_device *dev)
 			__skb_queue_head(send_queue, skb);
 			break;
 		}
+
+		if (!skb_peek(send_queue))
+			more = false;
+
 		skb_set_queue_mapping(skb, queue_id);
-		ret = netdev_start_xmit(skb, dev, txq, false);
+		ret = netdev_start_xmit(skb, dev, txq, more);
 		if (ret != NETDEV_TX_OK) {
 			if (ret == NETDEV_TX_BUSY)
 				__skb_queue_head(send_queue, skb);
