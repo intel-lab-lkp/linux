@@ -369,11 +369,18 @@ static int __init xbc_snprint_cmdline(char *buf, size_t size,
 }
 #undef rest
 
+/*
+ * Static buffers for bootconfig-generated command line parameters.
+ * Two separate buffers are needed because both "kernel" and "init"
+ * parameters are stored simultaneously.
+ */
+static char extra_cmdline_buf[COMMAND_LINE_SIZE] __initdata;
+static char extra_initargs_buf[COMMAND_LINE_SIZE] __initdata;
+
 /* Make an extra command line under given key word */
-static char * __init xbc_make_cmdline(const char *key)
+static char * __init xbc_make_cmdline(const char *key, char *new_cmdline)
 {
 	struct xbc_node *root;
-	char *new_cmdline;
 	int ret, len = 0;
 
 	root = xbc_find_node(key);
@@ -382,19 +389,12 @@ static char * __init xbc_make_cmdline(const char *key)
 
 	/* Count required buffer size */
 	len = xbc_snprint_cmdline(NULL, 0, root);
-	if (len <= 0)
+	if (len <= 0 || len >= COMMAND_LINE_SIZE)
 		return NULL;
-
-	new_cmdline = memblock_alloc(len + 1, SMP_CACHE_BYTES);
-	if (!new_cmdline) {
-		pr_err("Failed to allocate memory for extra kernel cmdline.\n");
-		return NULL;
-	}
 
 	ret = xbc_snprint_cmdline(new_cmdline, len + 1, root);
 	if (ret < 0 || ret > len) {
 		pr_err("Failed to print extra kernel cmdline.\n");
-		memblock_free(new_cmdline, len + 1);
 		return NULL;
 	}
 
@@ -467,9 +467,9 @@ static void __init setup_boot_config(void)
 		xbc_get_info(&ret, NULL);
 		pr_info("Load bootconfig: %ld bytes %d nodes\n", (long)size, ret);
 		/* keys starting with "kernel." are passed via cmdline */
-		extra_command_line = xbc_make_cmdline("kernel");
+		extra_command_line = xbc_make_cmdline("kernel", extra_cmdline_buf);
 		/* Also, "init." keys are init arguments */
-		extra_init_args = xbc_make_cmdline("init");
+		extra_init_args = xbc_make_cmdline("init", extra_initargs_buf);
 	}
 	return;
 }
