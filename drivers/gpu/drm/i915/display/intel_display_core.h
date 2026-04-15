@@ -233,6 +233,7 @@ struct intel_vbt_data {
 	struct list_head display_devices;
 	struct list_head bdb_blocks;
 
+	union intel_ddi_buf_trans_entry **bufs_mtrx;
 	int num_tables;
 	int num_rows;
 

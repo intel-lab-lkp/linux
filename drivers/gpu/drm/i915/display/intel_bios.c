@@ -34,6 +34,7 @@
 #include <drm/drm_fixed.h>
 #include <drm/drm_print.h>
 
+#include "intel_ddi_buf_trans.h"
 #include "intel_display.h"
 #include "intel_display_core.h"
 #include "intel_display_rpm.h"
@@ -2188,7 +2189,9 @@ parse_compression_parameters(struct intel_display *display)
 static void
 parse_vswing_preemph_override(struct intel_display *display)
 {
+	union intel_ddi_buf_trans_entry **bufs_mtrx;
 	const struct bdb_vswing_preemph *block;
+	u8 num_rows;
 
 	if (display->vbt.version < 218)
 		return;
@@ -2199,10 +2202,18 @@ parse_vswing_preemph_override(struct intel_display *display)
 	if (!block)
 		return;
 
+	num_rows = DISPLAY_VER(display) >= 14 ? 16 : 10;
+
+	bufs_mtrx = kzalloc(block->num_tables * sizeof(*bufs_mtrx), GFP_KERNEL);
+
+	for (int idx = 0; idx < block->num_tables; idx++)
+		bufs_mtrx[idx] = kzalloc(num_rows * sizeof(**bufs_mtrx), GFP_KERNEL);
+
 	drm_dbg_kms(display->drm, "VS/PE-O parsing not yet supported\n");
 
+	display->vbt.bufs_mtrx = bufs_mtrx;
 	display->vbt.num_tables = block->num_tables;
-	display->vbt.num_rows = DISPLAY_VER(display) >= 14 ? 16 : 10;
+	display->vbt.num_rows = num_rows;
 }
 
 static u8 translate_iboost(struct intel_display *display, u8 val)
@@ -3002,6 +3013,7 @@ init_vbt_defaults(struct intel_display *display)
 		    display->vbt.lvds_ssc_freq);
 
 	/* Vswing / Preemphasis Override */
+	display->vbt.bufs_mtrx = NULL;
 	display->vbt.num_tables = 0;
 	display->vbt.num_rows = 0;
 }
@@ -3384,6 +3396,13 @@ void intel_bios_driver_remove(struct intel_display *display)
 	list_for_each_entry_safe(entry, ne, &display->vbt.bdb_blocks, node) {
 		list_del(&entry->node);
 		kfree(entry);
+	}
+
+	if (display->vbt.bufs_mtrx) {
+		for (int idx = 0; idx < display->vbt.num_tables; idx++)
+			kfree(display->vbt.bufs_mtrx[idx]);
+
+		kfree(display->vbt.bufs_mtrx);
 	}
 }
 
