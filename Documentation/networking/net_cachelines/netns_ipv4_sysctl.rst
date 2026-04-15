@@ -140,6 +140,7 @@ int                             sysctl_udp_rmem_min
 u8                              sysctl_fib_notify_on_flag_change
 u8                              sysctl_udp_l3mdev_accept
 u8                              sysctl_igmp_llm_reports
+u8                              sysctl_igmp_llm_reports_drop
 int                             sysctl_igmp_max_memberships
 int                             sysctl_igmp_max_msf
 int                             sysctl_igmp_qrv

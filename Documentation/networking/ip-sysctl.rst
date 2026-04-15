@@ -2306,6 +2306,18 @@ igmp_link_local_mcast_reports - BOOLEAN
 
 	Default TRUE
 
+igmp_link_local_mcast_reports_drop - BOOLEAN
+	Drop inbound IGMP reports for link local multicast groups in
+	the 224.0.0.X range. When enabled, IGMP membership reports for
+	link local multicast addresses are silently dropped without
+	processing.
+	When the kernel gets inbound IGMP reports it stops sending own
+	IGMP reports. With allowing to drop and process the inbound reports,
+	the kernel will not stop sending the own reports, even when IGMP
+	reports from other hosts are seen on the network.
+
+	Default FALSE
+
 Alexey Kuznetsov.
 kuznet@ms2.inr.ac.ru
 

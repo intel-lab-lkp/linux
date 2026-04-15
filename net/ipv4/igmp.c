@@ -931,6 +931,8 @@ static bool igmp_heard_report(struct in_device *in_dev, __be32 group)
 	if (ipv4_is_local_multicast(group) &&
 	    !READ_ONCE(net->ipv4.sysctl_igmp_llm_reports))
 		return false;
+	if (READ_ONCE(net->ipv4.sysctl_igmp_llm_reports_drop))
+		return true;
 
 	rcu_read_lock();
 	for_each_pmc_rcu(in_dev, im) {
