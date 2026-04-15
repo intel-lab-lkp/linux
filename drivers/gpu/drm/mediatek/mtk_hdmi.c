@@ -1013,6 +1013,8 @@ static void mtk_hdmi_bridge_atomic_disable(struct drm_bridge *bridge,
 	hdmi->curr_conn = NULL;
 
 	hdmi->enabled = false;
+
+	mtk_hdmi_update_plugged_status(hdmi);
 }
 
 static void mtk_hdmi_bridge_atomic_post_disable(struct drm_bridge *bridge,
@@ -1082,6 +1084,8 @@ static void mtk_hdmi_bridge_atomic_enable(struct drm_bridge *bridge,
 	mtk_hdmi_clk_enable_audio(hdmi);
 
 	hdmi->enabled = true;
+
+	mtk_hdmi_update_plugged_status(hdmi);
 }
 
 static const struct drm_bridge_funcs mtk_hdmi_bridge_funcs = {
