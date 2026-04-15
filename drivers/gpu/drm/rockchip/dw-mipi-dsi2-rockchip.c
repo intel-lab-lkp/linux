@@ -483,7 +483,8 @@ static const struct rockchip_dw_dsi2_chip_data rk3588_chip_data[] = {
 		.reg = 0xfde30000,
 		.grf_regs = rk3588_dsi1_grf_reg_fields,
 		.max_bit_rate_per_lane = 4500000ULL,
-	}
+	},
+	{ /* sentinel */ }
 };
 
 static const struct of_device_id dw_mipi_dsi2_rockchip_dt_ids[] = {
