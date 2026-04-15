@@ -112,6 +112,23 @@ struct panthor_mmu {
 struct panthor_vm_pool {
 	/** @xa: Array used for VM handle tracking. */
 	struct xarray xa;
+
+	/** @dummy: Dummy drm object related fields
+	 *
+	 * Sparse bindings map virtual address ranges onto a dummy
+	 * BO in a modulo fashion. Even though sparse writes are meant
+	 * to be discarded and reads undefined, writes are still reflected
+	 * in the dummy buffer. That means we must keep a dummy object per
+	 * file context, to avoid data leaks between them.
+	 *
+	 */
+	struct {
+		/** @dummy.obj: Dummy object used for sparse mappings. */
+		struct panthor_gem_object *obj;
+
+		/** @dummy.lock: Lock protecting against races on dummy object. */
+		struct mutex lock;
+	} dummy;
 };
 
 /**
@@ -391,6 +408,15 @@ struct panthor_vm {
 		 */
 		struct list_head lru_node;
 	} reclaim;
+
+	/** @dummy: Dummy object used for sparse mappings.
+	 *
+	 * VM's must keep a reference to the file context-wide dummy BO because
+	 * they can outlive the file context, which includes the VM pool holding
+	 * the original dummy BO reference.
+	 *
+	 */
+	struct panthor_gem_object *dummy;
 };
 
 /**
@@ -1020,6 +1046,46 @@ panthor_vm_map_pages(struct panthor_vm *vm, u64 iova, int prot,
 	return 0;
 }
 
+static int
+panthor_vm_map_sparse(struct panthor_vm *vm, u64 iova, int prot,
+		      struct sg_table *sgt, u64 size)
+{
+	u64 first_iova = iova;
+	u64 first_size = size;
+	int ret;
+
+	if (iova & (SZ_2M - 1)) {
+		u64 unaligned_size = min(ALIGN(iova, SZ_2M) - iova, size);
+
+		ret = panthor_vm_map_pages(vm, iova, prot, sgt,
+					   0, unaligned_size);
+		if (ret)
+			return ret;
+
+		size -= unaligned_size;
+		iova += unaligned_size;
+	}
+
+	/* TODO: we should probably optimize this at the io_pgtable level. */
+	while (size > 0) {
+		u64 next_size = min(size, sg_dma_len(sgt->sgl));
+
+		ret = panthor_vm_map_pages(vm, iova, prot,
+					   sgt, 0, next_size);
+		if (ret)
+			goto err_unmap;
+
+		size -= next_size;
+		iova += next_size;
+	}
+
+	return 0;
+
+err_unmap:
+	panthor_vm_unmap_pages(vm, first_iova, first_size - size);
+	return ret;
+}
+
 static int flags_to_prot(u32 flags)
 {
 	int prot = 0;
@@ -1258,38 +1324,71 @@ static int panthor_vm_op_ctx_prealloc_pts(struct panthor_vm_op_ctx *op_ctx)
 	return 0;
 }
 
+static struct panthor_gem_object *
+panthor_vm_get_dummy_obj(struct panthor_vm_pool *pool,
+			 struct panthor_vm *vm)
+{
+	scoped_guard(mutex, &pool->dummy.lock) {
+		if (!vm->dummy) {
+			if (!pool->dummy.obj) {
+				struct panthor_gem_object *obj =
+					panthor_dummy_bo_create(vm->ptdev);
+				if (IS_ERR(obj))
+					return obj;
+
+				pool->dummy.obj = obj;
+			}
+
+			drm_gem_object_get(&pool->dummy.obj->base);
+			vm->dummy = pool->dummy.obj;
+		}
+	}
+
+	return vm->dummy;
+}
+
 #define PANTHOR_VM_BIND_OP_MAP_FLAGS \
 	(DRM_PANTHOR_VM_BIND_OP_MAP_READONLY | \
 	 DRM_PANTHOR_VM_BIND_OP_MAP_NOEXEC | \
 	 DRM_PANTHOR_VM_BIND_OP_MAP_UNCACHED | \
+	 DRM_PANTHOR_VM_BIND_OP_MAP_SPARSE | \
 	 DRM_PANTHOR_VM_BIND_OP_TYPE_MASK)
 
 static int panthor_vm_prepare_map_op_ctx(struct panthor_vm_op_ctx *op_ctx,
+					 struct panthor_vm_pool *pool,
 					 struct panthor_vm *vm,
 					 struct panthor_gem_object *bo,
 					 const struct drm_panthor_vm_bind_op *op)
 {
+	bool is_sparse = op->flags & DRM_PANTHOR_VM_BIND_OP_MAP_SPARSE;
 	struct drm_gpuvm_bo *preallocated_vm_bo;
 	struct sg_table *sgt = NULL;
 	int ret;
-
-	if (!bo)
-		return -EINVAL;
 
 	if ((op->flags & ~PANTHOR_VM_BIND_OP_MAP_FLAGS) ||
 	    (op->flags & DRM_PANTHOR_VM_BIND_OP_TYPE_MASK) != DRM_PANTHOR_VM_BIND_OP_TYPE_MAP)
 		return -EINVAL;
 
 	/* Make sure the VA and size are in-bounds. */
-	if (op->size > bo->base.size || op->bo_offset > bo->base.size - op->size)
+	if (bo && (is_sparse || op->size > bo->base.size ||
+		   op->bo_offset > bo->base.size - op->size))
 		return -EINVAL;
+	else if (is_sparse && (!pool || op->bo_handle || op->bo_offset))
+		return -EINVAL;
+
+	if (is_sparse) {
+		bo = panthor_vm_get_dummy_obj(pool, vm);
+		if (IS_ERR_OR_NULL(bo))
+			return PTR_ERR(bo);
+	}
 
 	/* If the BO has an exclusive VM attached, it can't be mapped to other VMs. */
 	if (bo->exclusive_vm_root_gem &&
 	    bo->exclusive_vm_root_gem != panthor_vm_root_gem(vm))
 		return -EINVAL;
 
-	panthor_vm_init_op_ctx(op_ctx, op->size, op->va, op->flags);
+	panthor_vm_init_op_ctx(op_ctx, op->size, op->va, op->flags
+			       | ((is_sparse) ? DRM_PANTHOR_VM_BIND_OP_MAP_NOEXEC : 0));
 
 	ret = panthor_vm_op_ctx_prealloc_vmas(op_ctx);
 	if (ret)
@@ -1634,6 +1733,13 @@ void panthor_vm_pool_destroy(struct panthor_file *pfile)
 	xa_for_each(&pfile->vms->xa, i, vm)
 		panthor_vm_destroy(vm);
 
+	scoped_guard(mutex, &pfile->vms->dummy.lock) {
+		struct panthor_gem_object *bo = pfile->vms->dummy.obj;
+
+		if (bo)
+			drm_gem_object_put(&bo->base);
+	}
+
 	xa_destroy(&pfile->vms->xa);
 	kfree(pfile->vms);
 }
@@ -1651,6 +1757,8 @@ int panthor_vm_pool_create(struct panthor_file *pfile)
 		return -ENOMEM;
 
 	xa_init_flags(&pfile->vms->xa, XA_FLAGS_ALLOC1);
+
+	mutex_init(&pfile->vms->dummy.lock);
 	return 0;
 }
 
@@ -1968,6 +2076,9 @@ static void panthor_vm_free(struct drm_gpuvm *gpuvm)
 
 	free_io_pgtable_ops(vm->pgtbl_ops);
 
+	if (vm->dummy)
+		drm_gem_object_put(&vm->dummy->base);
+
 	drm_mm_takedown(&vm->mm);
 	kfree(vm);
 }
@@ -2127,7 +2238,26 @@ static void panthor_vma_init(struct panthor_vma *vma, u32 flags)
 #define PANTHOR_VM_MAP_FLAGS \
 	(DRM_PANTHOR_VM_BIND_OP_MAP_READONLY | \
 	 DRM_PANTHOR_VM_BIND_OP_MAP_NOEXEC | \
-	 DRM_PANTHOR_VM_BIND_OP_MAP_UNCACHED)
+	 DRM_PANTHOR_VM_BIND_OP_MAP_UNCACHED | \
+	 DRM_PANTHOR_VM_BIND_OP_MAP_SPARSE)
+
+static int
+panthor_vm_exec_map_op(struct panthor_vm *vm, u32 flags,
+		       const struct drm_gpuva_op_map *op)
+{
+	struct panthor_gem_object *bo = to_panthor_bo(op->gem.obj);
+	int prot = flags_to_prot(flags);
+
+	if (!op->va.range)
+		return 0;
+
+	if (flags & DRM_PANTHOR_VM_BIND_OP_MAP_SPARSE)
+		return panthor_vm_map_sparse(vm, op->va.addr, prot,
+					     bo->dmap.sgt, op->va.range);
+
+	return panthor_vm_map_pages(vm, op->va.addr, prot, bo->dmap.sgt,
+				    op->gem.offset, op->va.range);
+}
 
 static int panthor_gpuva_sm_step_map(struct drm_gpuva_op *op, void *priv)
 {
@@ -2141,9 +2271,7 @@ static int panthor_gpuva_sm_step_map(struct drm_gpuva_op *op, void *priv)
 
 	panthor_vma_init(vma, op_ctx->flags & PANTHOR_VM_MAP_FLAGS);
 
-	ret = panthor_vm_map_pages(vm, op->map.va.addr, flags_to_prot(vma->flags),
-				   op_ctx->map.bo->dmap.sgt, op->map.gem.offset,
-				   op->map.va.range);
+	ret = panthor_vm_exec_map_op(vm, vma->flags, &op->map);
 	if (ret) {
 		panthor_vm_op_ctx_return_vma(op_ctx, vma);
 		return ret;
@@ -2159,13 +2287,15 @@ static int panthor_gpuva_sm_step_map(struct drm_gpuva_op *op, void *priv)
 }
 
 static bool
-iova_mapped_as_huge_page(struct drm_gpuva_op_map *op, u64 addr)
+iova_mapped_as_huge_page(struct drm_gpuva_op_map *op, u64 addr, bool is_sparse)
 {
 	struct panthor_gem_object *bo = to_panthor_bo(op->gem.obj);
 	const struct page *pg;
 	pgoff_t bo_offset;
 
 	bo_offset = addr - op->va.addr + op->gem.offset;
+	if (is_sparse)
+		bo_offset %= bo->base.size;
 	pg = bo->backing.pages[bo_offset >> PAGE_SHIFT];
 
 	return folio_size(page_folio(pg)) >= SZ_2M;
@@ -2175,6 +2305,8 @@ static void
 unmap_hugepage_align(const struct drm_gpuva_op_remap *op,
 		     u64 *unmap_start, u64 *unmap_range)
 {
+	struct panthor_vma *unmap_vma = container_of(op->unmap->va, struct panthor_vma, base);
+	bool is_sparse = unmap_vma->flags & DRM_PANTHOR_VM_BIND_OP_MAP_SPARSE;
 	u64 aligned_unmap_start, aligned_unmap_end, unmap_end;
 
 	unmap_end = *unmap_start + *unmap_range;
@@ -2186,7 +2318,7 @@ unmap_hugepage_align(const struct drm_gpuva_op_remap *op,
 	 */
 	if (op->prev && aligned_unmap_start < *unmap_start &&
 	    op->prev->va.addr <= aligned_unmap_start &&
-	    iova_mapped_as_huge_page(op->prev, *unmap_start)) {
+	    (iova_mapped_as_huge_page(op->prev, *unmap_start, is_sparse))) {
 		*unmap_range += *unmap_start - aligned_unmap_start;
 		*unmap_start = aligned_unmap_start;
 	}
@@ -2196,7 +2328,7 @@ unmap_hugepage_align(const struct drm_gpuva_op_remap *op,
 	 */
 	if (op->next && aligned_unmap_end > unmap_end &&
 	    op->next->va.addr + op->next->va.range >= aligned_unmap_end &&
-	    iova_mapped_as_huge_page(op->next, unmap_end - 1)) {
+	    (iova_mapped_as_huge_page(op->next, *unmap_start, is_sparse))) {
 		*unmap_range += aligned_unmap_end - unmap_end;
 	}
 }
@@ -2232,14 +2364,17 @@ static int panthor_gpuva_sm_step_remap(struct drm_gpuva_op *op,
 	}
 
 	if (op->remap.prev) {
-		struct panthor_gem_object *bo = to_panthor_bo(op->remap.prev->gem.obj);
-		u64 offset = op->remap.prev->gem.offset + unmap_start - op->remap.prev->va.addr;
-		u64 size = op->remap.prev->va.addr + op->remap.prev->va.range - unmap_start;
+		const struct drm_gpuva_op_map map_op = {
+			.va.addr = unmap_start,
+			.va.range =
+			op->remap.prev->va.addr + op->remap.prev->va.range - unmap_start,
+			.gem.obj = op->remap.prev->gem.obj,
+			.gem.offset =
+			op->remap.prev->gem.offset + unmap_start - op->remap.prev->va.addr,
+		};
 
 		if (!unmap_vma->evicted) {
-			ret = panthor_vm_map_pages(vm, unmap_start,
-						   flags_to_prot(unmap_vma->flags),
-						   bo->dmap.sgt, offset, size);
+			ret = panthor_vm_exec_map_op(vm, unmap_vma->flags, &map_op);
 			if (ret)
 				return ret;
 		}
@@ -2250,14 +2385,15 @@ static int panthor_gpuva_sm_step_remap(struct drm_gpuva_op *op,
 	}
 
 	if (op->remap.next) {
-		struct panthor_gem_object *bo = to_panthor_bo(op->remap.next->gem.obj);
-		u64 addr = op->remap.next->va.addr;
-		u64 size = unmap_start + unmap_range - op->remap.next->va.addr;
+		const struct drm_gpuva_op_map map_op = {
+			.va.addr = op->remap.next->va.addr,
+			.va.range = unmap_start + unmap_range - op->remap.next->va.addr,
+			.gem.obj = op->remap.next->gem.obj,
+			.gem.offset = op->remap.next->gem.offset,
+		};
 
 		if (!unmap_vma->evicted) {
-			ret = panthor_vm_map_pages(vm, addr, flags_to_prot(unmap_vma->flags),
-						   bo->dmap.sgt, op->remap.next->gem.offset,
-						   size);
+			ret = panthor_vm_exec_map_op(vm, unmap_vma->flags, &map_op);
 			if (ret)
 				return ret;
 		}
@@ -2806,6 +2942,7 @@ panthor_vm_bind_prepare_op_ctx(struct drm_file *file,
 			       const struct drm_panthor_vm_bind_op *op,
 			       struct panthor_vm_op_ctx *op_ctx)
 {
+	struct panthor_file *pfile = file->driver_priv;
 	ssize_t vm_pgsz = panthor_vm_page_size(vm);
 	struct drm_gem_object *gem;
 	int ret;
@@ -2817,7 +2954,7 @@ panthor_vm_bind_prepare_op_ctx(struct drm_file *file,
 	switch (op->flags & DRM_PANTHOR_VM_BIND_OP_TYPE_MASK) {
 	case DRM_PANTHOR_VM_BIND_OP_TYPE_MAP:
 		gem = drm_gem_object_lookup(file, op->bo_handle);
-		ret = panthor_vm_prepare_map_op_ctx(op_ctx, vm,
+		ret = panthor_vm_prepare_map_op_ctx(op_ctx, pfile->vms, vm,
 						    gem ? to_panthor_bo(gem) : NULL,
 						    op);
 		drm_gem_object_put(gem);
@@ -3024,7 +3161,10 @@ int panthor_vm_map_bo_range(struct panthor_vm *vm, struct panthor_gem_object *bo
 	struct panthor_vm_op_ctx op_ctx;
 	int ret;
 
-	ret = panthor_vm_prepare_map_op_ctx(&op_ctx, vm, bo, &op);
+	if (drm_WARN_ON(&vm->ptdev->base, flags & DRM_PANTHOR_VM_BIND_OP_MAP_SPARSE))
+		return -EINVAL;
+
+	ret = panthor_vm_prepare_map_op_ctx(&op_ctx, NULL, vm, bo, &op);
 	if (ret)
 		return ret;
 

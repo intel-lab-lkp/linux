@@ -1345,6 +1345,41 @@ err_free_kbo:
 	return ERR_PTR(ret);
 }
 
+/**
+ * panthor_dummy_bo_create() - Create a Panthor BO meant to back sparse bindings.
+ * @ptdev: Device.
+ *
+ * Return: A valid pointer in case of success, an ERR_PTR() otherwise.
+ */
+struct panthor_gem_object *
+panthor_dummy_bo_create(struct panthor_device *ptdev)
+{
+	u32 dummy_flags = DRM_PANTHOR_BO_NO_MMAP;
+	struct panthor_gem_object *bo;
+	struct page **pages;
+
+	bo = panthor_gem_create(&ptdev->base, SZ_2M, dummy_flags, NULL, 0);
+	if (IS_ERR_OR_NULL(bo))
+		return bo;
+
+	pages = drm_gem_get_pages(&bo->base);
+	if (PTR_ERR(pages) == -ENOMEM) {
+		drm_gem_object_put(&bo->base);
+		bo = panthor_gem_create(&ptdev->base, SZ_4K, dummy_flags, NULL, 0);
+		if (IS_ERR_OR_NULL(bo))
+			return bo;
+		pages = drm_gem_get_pages(&bo->base);
+	}
+
+	if (IS_ERR_OR_NULL(pages)) {
+		drm_gem_object_put(&bo->base);
+		return ERR_CAST(pages);
+	}
+
+	bo->backing.pages = pages;
+	return bo;
+}
+
 static bool can_swap(void)
 {
 	return get_nr_swap_pages() > 0;

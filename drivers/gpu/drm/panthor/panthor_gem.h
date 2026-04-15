@@ -264,6 +264,8 @@ void panthor_gem_kernel_bo_set_label(struct panthor_kernel_bo *bo, const char *l
 int panthor_gem_sync(struct drm_gem_object *obj,
 		     u32 type, u64 offset, u64 size);
 
+struct panthor_gem_object *panthor_dummy_bo_create(struct panthor_device *ptdev);
+
 struct drm_gem_object *
 panthor_gem_prime_import(struct drm_device *dev,
 			 struct dma_buf *dma_buf);
