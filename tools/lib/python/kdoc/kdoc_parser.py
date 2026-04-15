@@ -541,6 +541,31 @@ class KernelDoc:
                 self.emit_msg(ln,
                               f"Excess {dname} '{section}' description in '{decl_name}'")
 
+        #
+        # Check that documented parameter names (from doc comments, including
+        # inline ``/** @member: */`` tags) actually match real members in
+        # the declaration.  This catches mismatched or stale kernel-doc
+        # member tags that don't correspond to any actual struct/union
+        # member or function parameter.
+        #
+        for param_name, desc in self.entry.parameterdescs.items():
+            # Skip auto-generated entries from push_parameter()
+            if desc == self.undescribed:
+                continue
+            if desc in ("no arguments", "anonymous\n", "variable arguments"):
+                continue
+            if param_name.startswith("{unnamed_"):
+                continue
+            if param_name in self.entry.parameterlist:
+                continue
+
+            if decl_type == 'function':
+                dname = f"{decl_type} parameter"
+            else:
+                dname = f"{decl_type} member"
+            self.emit_msg(ln,
+                          f"Excess {dname} '{param_name}' description in '{decl_name}'")
+
     def check_return_section(self, ln, declaration_name, return_type):
         """
         If the function doesn't return void, warns about the lack of a
