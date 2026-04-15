@@ -427,9 +427,10 @@ static int pca954x_irq_set_type(struct irq_data *idata, unsigned int type)
 	return 0;
 }
 
-static struct irq_chip pca954x_irq_chip = {
+static const struct irq_chip pca954x_irq_chip = {
 	.name = "i2c-mux-pca954x",
 	.irq_set_type = pca954x_irq_set_type,
+	.flags = IRQCHIP_IMMUTABLE,
 };
 
 static int pca954x_irq_setup(struct i2c_mux_core *muxc)
