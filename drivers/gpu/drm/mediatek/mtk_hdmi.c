@@ -1065,6 +1065,22 @@ static void mtk_hdmi_bridge_atomic_enable(struct drm_bridge *bridge,
 	phy_power_on(hdmi->phy);
 	mtk_hdmi_send_infoframe(hdmi, &hdmi->mode);
 
+	/*
+	 * Pulse the HDMI TX audio clocks off/on on every bridge enable.
+	 * The CLK_MM_HDMI_AUDIO and CLK_MM_HDMI_SPDIF mmsys gates feed
+	 * the HDMI TX internal audio measurement block that derives CTS
+	 * for the ACR packets embedded in the TMDS stream. Without an
+	 * off->on edge at bridge enable the block can stay armed against
+	 * stale state from a previous enable (e.g. after blank/unblank,
+	 * or after a monitor that was off at boot is plugged in later)
+	 * and fails to latch a valid CTS, leaving the audio path silent
+	 * even though video recovers. The pulse is what an unbind+bind
+	 * of the HDMI platform driver effectively does, and it recovers
+	 * audio in all observed stale-state scenarios.
+	 */
+	mtk_hdmi_clk_disable_audio(hdmi);
+	mtk_hdmi_clk_enable_audio(hdmi);
+
 	hdmi->enabled = true;
 }
 
