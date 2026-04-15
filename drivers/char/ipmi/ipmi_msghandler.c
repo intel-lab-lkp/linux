@@ -2599,7 +2599,13 @@ retry:
 	if (rv)
 		goto out_reset_handler;
 
-	wait_event(intf->waitq, bmc->dyn_id_set != 2);
+	if (!wait_event_timeout(intf->waitq, bmc->dyn_id_set != 2,
+				msecs_to_jiffies(1000))) {
+		dev_warn(intf->si_dev,
+			 "Timed out waiting for get bmc device id response\n");
+		rv = -EIO;
+		goto out_reset_handler;
+	}
 
 	if (!bmc->dyn_id_set) {
 		if (bmc->cc != IPMI_CC_NO_ERROR &&
