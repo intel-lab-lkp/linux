@@ -2852,7 +2852,134 @@ static void tb_test_property_copy(struct kunit *test)
 	tb_property_free_dir(src);
 }
 
+/*
+ * Reproducers for three memory-safety defects in
+ * drivers/thunderbolt/property.c reached from a crafted XDomain
+ * PROPERTIES_RESPONSE payload.  Without the fix these trip KASAN or
+ * smash the kernel stack; with the fix each returns NULL cleanly.
+ */
+static void tb_test_property_parse_u32_wrap(struct kunit *test)
+{
+	u32 *block = kunit_kzalloc(test, 500 * sizeof(u32), GFP_KERNEL);
+	struct tb_property_dir *dir;
+	struct {
+		u32 key_hi, key_lo;
+		u16 length;
+		u8 reserved;
+		u8 type;
+		u32 value;
+	} *e;
+
+	/* Root header: magic + length=6 (single entry body of 4 dwords +
+	 * 2 slack, keeps walk within block[]). */
+	block[0] = 0x55584401;
+	block[1] = 6;
+
+	/* Crafted DATA entry at block[2..5]: value = 0xFFFFFF00 and
+	 * length = 0x100 are u32/u16 such that the u32 sum 0x100000000
+	 * wraps to 0, passing the sum <= block_len guard even though
+	 * the real offset is block + 0xFFFFFF00 * 4 (~16 GiB past the
+	 * block).  The subsequent parse_dwdata() at property.c:132
+	 * copies entry->length*4 = 1024 bytes from that wild address
+	 * into a fresh kcalloc buffer.
+	 */
+	e = (void *)&block[2];
+	e->key_hi = 0x61616161;
+	e->key_lo = 0x61616161;
+	e->length = 0x100;
+	e->type   = 0x64;		/* TB_PROPERTY_TYPE_DATA */
+	e->value  = 0xFFFFFF00;
+
+	dir = tb_property_parse_dir(block, 500);
+	/* With the fix this returns NULL; without it, KASAN splats in
+	 * be32_to_cpu_array() / memcpy reading block + value*4 out of
+	 * bounds.  Assert on the safe outcome: a NULL dir. */
+	KUNIT_EXPECT_NULL(test, dir);
+	tb_property_free_dir(dir);
+}
+
+static void tb_test_property_parse_recursion(struct kunit *test)
+{
+	u32 *block = kunit_kzalloc(test, 500 * sizeof(u32), GFP_KERNEL);
+	struct tb_property_dir *dir;
+	struct entry {
+		u32 key_hi, key_lo;
+		u16 length;
+		u8 reserved;
+		u8 type;
+		u32 value;
+	} *e, *child_e;
+
+	block[0] = 0x55584401;
+	block[1] = 4;		/* rootdir length = one entry */
+
+	/* DIRECTORY entry pointing at dir_offset=2 with length=16.
+	 * When parsed as non-root: content_offset = 6, content_len = 12,
+	 * nentries = 3.  The child's first entry at block[6] is also
+	 * DIRECTORY pointing at 2, so the recursion oscillates between
+	 * two dir_offsets until the kernel stack is exhausted.
+	 */
+	e = (void *)&block[2];
+	e->key_hi = 0x61616161;
+	e->key_lo = 0x61616161;
+	e->length = 16;
+	e->type   = 0x44;		/* TB_PROPERTY_TYPE_DIRECTORY */
+	e->value  = 2;
+
+	child_e = (void *)&block[6];
+	child_e->key_hi = 0x62626262;
+	child_e->key_lo = 0x62626262;
+	child_e->length = 16;
+	child_e->type   = 0x44;
+	child_e->value  = 2;
+
+	dir = tb_property_parse_dir(block, 500);
+	/* With the fix this returns NULL at TB_PROPERTY_MAX_DEPTH (8).
+	 * Without it, the kernel stack-guard fires ~50-80 frames in
+	 * and the kunit thread oopses. */
+	KUNIT_EXPECT_NULL(test, dir);
+	tb_property_free_dir(dir);
+}
+
+static void tb_test_property_parse_dir_len_underflow(struct kunit *test)
+{
+	u32 *block = kunit_kzalloc(test, 500 * sizeof(u32), GFP_KERNEL);
+	struct tb_property_dir *dir;
+	struct entry {
+		u32 key_hi, key_lo;
+		u16 length;
+		u8 reserved;
+		u8 type;
+		u32 value;
+	} *e;
+
+	block[0] = 0x55584401;
+	block[1] = 4;
+
+	/* DIRECTORY entry with length=3.  When parsed as non-root,
+	 * content_len = dir_len - 4 underflows size_t to ~SIZE_MAX,
+	 * nentries = SIZE_MAX/4.  The for-loop walks entries past the
+	 * block, reading OOB on each iteration.
+	 */
+	e = (void *)&block[2];
+	e->key_hi = 0x61616161;
+	e->key_lo = 0x61616161;
+	e->length = 3;
+	e->type   = 0x44;
+	e->value  = 6;
+
+	dir = tb_property_parse_dir(block, 500);
+	/* With the fix: NULL.  Without: KASAN splat on
+	 * block[content_offset + i*4] for i > 124 (past the 500-dword
+	 * block). */
+	KUNIT_EXPECT_NULL(test, dir);
+	tb_property_free_dir(dir);
+}
+
 static struct kunit_case tb_test_cases[] = {
+	KUNIT_CASE(tb_test_property_parse_u32_wrap),
+	KUNIT_CASE(tb_test_property_parse_recursion),
+	KUNIT_CASE(tb_test_property_parse_dir_len_underflow),
 	KUNIT_CASE(tb_test_path_basic),
 	KUNIT_CASE(tb_test_path_not_connected_walk),
 	KUNIT_CASE(tb_test_path_single_hop_walk),
