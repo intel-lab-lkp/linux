@@ -141,8 +141,10 @@ static int __init q40fb_init(void)
 
 	if (!ret) {
 		ret = platform_device_register(&q40fb_device);
-		if (ret)
+		if (ret) {
+			platform_device_put(&q40fb_device);
 			platform_driver_unregister(&q40fb_driver);
+		}
 	}
 	return ret;
 }
