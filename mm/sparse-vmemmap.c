@@ -764,8 +764,10 @@ static void section_deactivate(unsigned long pfn, unsigned long nr_pages,
 		 * was allocated during boot.
 		 */
 		if (!PageReserved(virt_to_page(ms->usage))) {
-			kfree_rcu(ms->usage, rcu);
-			WRITE_ONCE(ms->usage, NULL);
+			struct mem_section_usage *usage;
+
+			usage = rcu_replace_pointer(ms->usage, NULL, true);
+			kfree_rcu(usage, rcu);
 		}
 		memmap = pfn_to_page(SECTION_ALIGN_DOWN(pfn));
 	}
