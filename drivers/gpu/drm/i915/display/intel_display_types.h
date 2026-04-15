@@ -297,6 +297,7 @@ struct intel_encoder {
 
 	/* VBT information for this encoder (may be NULL for older platforms) */
 	const struct intel_bios_encoder_data *devdata;
+	const struct intel_ddi_buf_trans *vspeo;
 };
 
 struct intel_panel_bl_funcs {
