@@ -2202,9 +2202,9 @@ parse_vswing_preemph_lt(union intel_ddi_buf_trans_entry **bufs_mtrx,
 			vals = &tables[offset];
 
 			entry = &bufs_mtrx[idx][row];
-			entry->lt.main_cursor = vals[0];
-			entry->lt.pre_cursor = vals[1];
-			entry->lt.post_cursor = vals[2];
+			entry->lt.main_cursor = (u8) vals[0];
+			entry->lt.pre_cursor = (u8) vals[1];
+			entry->lt.post_cursor = (u8) vals[2];
 
 			offset += block->num_columns;
 		}
