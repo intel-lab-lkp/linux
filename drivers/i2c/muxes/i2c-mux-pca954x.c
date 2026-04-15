@@ -116,6 +116,7 @@ struct pca954x {
 	struct irq_domain *irq;
 	unsigned int irq_mask;
 	raw_spinlock_t lock;
+	bool irq_requested;
 	struct regulator *supply;
 
 	struct gpio_desc *reset_gpio;
@@ -464,7 +465,13 @@ static int pca954x_irq_setup(struct i2c_mux_core *muxc)
 static void pca954x_cleanup(struct i2c_mux_core *muxc)
 {
 	struct pca954x *data = i2c_mux_priv(muxc);
+	struct i2c_client *client = data->client;
 	int c, irq;
+
+	if (data->irq && data->irq_requested) {
+		devm_free_irq(&client->dev, client->irq, data);
+		data->irq_requested = false;
+	}
 
 	i2c_mux_del_adapters(muxc);
 
@@ -656,6 +663,7 @@ static int pca954x_probe(struct i2c_client *client)
 						"pca954x", data);
 		if (ret)
 			goto fail_cleanup;
+		data->irq_requested = true;
 	}
 
 	/*
