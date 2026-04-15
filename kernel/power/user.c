@@ -69,9 +69,13 @@ static int snapshot_open(struct inode *inode, struct file *filp)
 	data = &snapshot_state;
 	filp->private_data = data;
 	memset(&data->handle, 0, sizeof(struct snapshot_handle));
+	data->dev = 0;
 	if ((filp->f_flags & O_ACCMODE) == O_RDONLY) {
 		/* Hibernating.  The image device should be accessible. */
-		data->swap = pin_hibernation_swap_type(swsusp_resume_device, 0);
+		data->swap = pin_hibernation_swap_type(swsusp_resume_device,
+						      swsusp_resume_block);
+		if (data->swap >= 0)
+			data->dev = swsusp_resume_device;
 		data->mode = O_RDONLY;
 		data->free_bitmaps = false;
 		error = pm_notifier_call_chain_robust(PM_HIBERNATION_PREPARE, PM_POST_HIBERNATION);
@@ -92,13 +96,13 @@ static int snapshot_open(struct inode *inode, struct file *filp)
 	}
 	if (error) {
 		unpin_hibernation_swap_type(data->swap);
+		data->dev = 0;
 		hibernate_release();
 	}
 
 	data->frozen = false;
 	data->ready = false;
 	data->platform_support = false;
-	data->dev = 0;
 
  Unlock:
 	unlock_system_sleep(sleep_flags);
