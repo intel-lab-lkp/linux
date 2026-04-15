@@ -23,6 +23,7 @@
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
+#include "acpi/actypes.h"
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/init.h>
@@ -351,16 +352,19 @@ static int __init pcc_cpufreq_do_osc(acpi_handle *handle)
 		goto out_free;
 	}
 
-	kfree(output.pointer);
 	capabilities[0] = 0x0;
 	capabilities[1] = 0x1;
 
 	status = acpi_evaluate_object(*handle, "_OSC", &input, &output);
-	if (ACPI_FAILURE(status))
-		return -ENODEV;
+	if (ACPI_FAILURE(status)) {
+		ret = -ENODEV;
+		goto out_free;
+	}
 
-	if (!output.length)
-		return -ENODEV;
+	if (!output.length) {
+		ret = -ENODEV;
+		goto out_free;
+	}
 
 	out_obj = output.pointer;
 	if (out_obj->type != ACPI_TYPE_BUFFER) {
