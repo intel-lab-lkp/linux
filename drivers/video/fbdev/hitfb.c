@@ -495,8 +495,10 @@ static int __init hitfb_init(void)
 	ret = platform_driver_register(&hitfb_driver);
 	if (!ret) {
 		ret = platform_device_register(&hitfb_device);
-		if (ret)
+		if (ret) {
+			platform_device_put(&hitfb_device);
 			platform_driver_unregister(&hitfb_driver);
+		}
 	}
 	return ret;
 }
