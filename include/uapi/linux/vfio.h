@@ -1321,6 +1321,60 @@ struct vfio_precopy_info {
 
 #define VFIO_MIG_GET_PRECOPY_INFO _IO(VFIO_TYPE, VFIO_BASE + 21)
 
+/* PCIe TPH capability query */
+struct vfio_pci_tph_cap {
+	__u8  supported_modes;
+#define VFIO_PCI_TPH_MODE_NS	(1u << 0) /* No steering */
+#define VFIO_PCI_TPH_MODE_IV	(1u << 1) /* Interrupt vector */
+#define VFIO_PCI_TPH_MODE_DS	(1u << 2) /* Device specific */
+	__u8  st_table_present;	/* Indicates whether ST table present */
+	__u16 st_table_sz;	/* ST table size */
+	__u32 reserved;
+};
+
+/* PCIe TPH enable control */
+struct vfio_pci_tph_ctrl {
+	__u8 mode;	/* VFIO_PCI_TPH_MODE_* */
+	__u8 reserved[7];
+};
+
+/* PCIe TPH steer-tag single entry */
+struct vfio_pci_tph_entry {
+	__u32 cpu;	/* [IN] CPU identifier, used with get/set ops */
+	__u8  mem_type;	/* [IN] Memory type, used with get/set ops */
+#define VFIO_PCI_TPH_MEM_TYPE_VM	0
+#define VFIO_PCI_TPH_MEM_TYPE_PM	1
+	__u8  reserved0;
+	__u16 index;	/* [IN] ST table index, used with set ops */
+	__u16 st;	/* [OUT] steer-tag, used with get ops */
+	__u16 reserved1;
+};
+
+/* PCIe TPH batch steer-tags request */
+struct vfio_pci_tph_st {
+	__u32 count;
+	__u32 reserved;
+	struct vfio_pci_tph_entry ents[];
+};
+
+/* IOCTL argument for VFIO_DEVICE_PCI_TPH */
+struct vfio_device_pci_tph_op {
+	__u32 argsz;
+	__u32 op;
+#define VFIO_PCI_TPH_GET_CAP	0
+#define VFIO_PCI_TPH_ENABLE	1
+#define VFIO_PCI_TPH_DISABLE	2
+#define VFIO_PCI_TPH_GET_ST	3
+#define VFIO_PCI_TPH_SET_ST	4
+	union {
+		struct vfio_pci_tph_cap cap;	/* GET_CAP: out */
+		struct vfio_pci_tph_ctrl ctrl;	/* ENABLE: in */
+		struct vfio_pci_tph_st st;	/* GET_ST/SET_ST */
+	};
+};
+
+#define VFIO_DEVICE_PCI_TPH	_IO(VFIO_TYPE, VFIO_BASE + 22)
+
 /*
  * Upon VFIO_DEVICE_FEATURE_SET, allow the device to be moved into a low power
  * state with the platform-based power management.  Device use of lower power
