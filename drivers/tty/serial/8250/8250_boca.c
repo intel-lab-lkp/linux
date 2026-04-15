@@ -39,7 +39,13 @@ static struct platform_device boca_device = {
 
 static int __init boca_init(void)
 {
-	return platform_device_register(&boca_device);
+	int ret;
+
+	ret = platform_device_register(&boca_device);
+	if (ret)
+		platform_device_put(&boca_device);
+
+	return ret;
 }
 
 module_init(boca_init);
