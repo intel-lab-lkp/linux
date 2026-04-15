@@ -225,6 +225,7 @@ xfs_da3_node_verify(
 	struct xfs_da_intnode	*hdr = bp->b_addr;
 	struct xfs_da3_icnode_hdr ichdr;
 	xfs_failaddr_t		fa;
+	int			i;
 
 	xfs_da3_node_hdr_from_disk(mp, &ichdr, hdr);
 
@@ -247,7 +248,12 @@ xfs_da3_node_verify(
 	    ichdr.count > mp->m_attr_geo->node_ents)
 		return __this_address;
 
-	/* XXX: hash order check? */
+	/* Check hash value order. */
+	for (i = 0; i + 1 < ichdr.count; i++) {
+		if (be32_to_cpu(ichdr.btree[i].hashval) >
+				be32_to_cpu(ichdr.btree[i + 1].hashval))
+			return __this_address;
+	}
 
 	return NULL;
 }
