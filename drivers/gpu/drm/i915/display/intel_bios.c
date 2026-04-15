@@ -2660,10 +2660,14 @@ static void sanitize_hdmi_level_shift(struct intel_bios_encoder_data *devdata,
 static void override_vswing_preemph(struct intel_bios_encoder_data *devdata)
 {
 	struct intel_ddi_buf_trans *buf_trans;
+	bool parseable = false;
 
 	devdata->buf_trans = NULL;
 
 	if (!intel_bios_encoder_overrides_vswing(devdata))
+		return;
+
+	if (!parseable)
 		return;
 
 	buf_trans = kzalloc(sizeof(*buf_trans), GFP_KERNEL);

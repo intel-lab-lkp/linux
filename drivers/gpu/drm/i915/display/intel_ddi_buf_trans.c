@@ -3,6 +3,8 @@
  * Copyright © 2020 Intel Corporation
  */
 
+#include <drm/drm_print.h>
+
 #include "intel_cx0_phy.h"
 #include "intel_ddi.h"
 #include "intel_ddi_buf_trans.h"
@@ -1857,5 +1859,8 @@ const struct intel_ddi_buf_trans *intel_ddi_buf_trans_get(struct intel_encoder *
 							  const struct intel_crtc_state *crtc_state,
 							  int *n_entries)
 {
+	if (encoder->vspeo)
+		drm_dbg_kms(to_intel_display(encoder)->drm, "VS/PE-O unsupported, using default VS/PE tables");
+
 	return encoder->get_buf_trans(encoder, crtc_state, n_entries);
 }
