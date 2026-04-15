@@ -90,6 +90,8 @@ static struct platform_device platform_dev = {
 static int sl811_hc_init(struct device *parent, resource_size_t base_addr,
 			 int irq)
 {
+	int ret;
+
 	if (platform_dev.dev.parent)
 		return -EBUSY;
 	platform_dev.dev.parent = parent;
@@ -108,7 +110,13 @@ static int sl811_hc_init(struct device *parent, resource_size_t base_addr,
 	 * by referencing "sl811h_driver".
 	 */
 	platform_dev.name = sl811h_driver.driver.name;
-	return platform_device_register(&platform_dev);
+	ret = platform_device_register(&platform_dev);
+	if (ret) {
+		platform_device_put(&platform_dev);
+		platform_dev.dev.parent = NULL;
+	}
+
+	return ret;
 }
 
 /*====================================================================*/
@@ -128,7 +136,10 @@ static void sl811_cs_release(struct pcmcia_device * link)
 	dev_dbg(&link->dev, "sl811_cs_release\n");
 
 	pcmcia_disable_device(link);
-	platform_device_unregister(&platform_dev);
+	if (platform_dev.dev.parent == &link->dev)
+		platform_device_unregister(&platform_dev);
+	platform_dev.dev.parent = NULL;
+
 }
 
 static int sl811_cs_config_check(struct pcmcia_device *p_dev, void *priv_data)
