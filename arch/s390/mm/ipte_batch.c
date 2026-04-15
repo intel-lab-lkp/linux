@@ -16,6 +16,22 @@ struct ipte_batch {
 };
 
 static DEFINE_PER_CPU(struct ipte_batch, ipte_range);
+static DEFINE_STATIC_KEY_TRUE_RO(lazy_mmu);
+
+static int __init setup_lazy_mmu(char *str)
+{
+	bool enable;
+
+	if (kstrtobool(str, &enable)) {
+		pr_warn("Failed to setup lazy MMU mode, set to enabled\n");
+	} else if (!enable) {
+		pr_warn("Disabling lazy MMU mode\n");
+		static_key_disable(&lazy_mmu.key);
+	}
+
+	return 0;
+}
+early_param("lazy_mmu", setup_lazy_mmu);
 
 static int count_contiguous(pte_t *start, pte_t *end, bool *valid)
 {
@@ -169,6 +185,8 @@ void arch_enter_lazy_mmu_mode_for_pte_range(struct mm_struct *mm,
 {
 	if (!test_facility(13))
 		return;
+	if (!static_branch_likely(&lazy_mmu))
+		return;
 	enter_ipte_batch(mm, addr, end, pte);
 }
 EXPORT_SYMBOL_IF_KUNIT(arch_enter_lazy_mmu_mode_for_pte_range);
@@ -177,6 +195,8 @@ void arch_leave_lazy_mmu_mode(void)
 {
 	if (!test_facility(13))
 		return;
+	if (!static_branch_likely(&lazy_mmu))
+		return;
 	leave_ipte_batch();
 }
 EXPORT_SYMBOL_IF_KUNIT(arch_leave_lazy_mmu_mode);
@@ -184,6 +204,8 @@ EXPORT_SYMBOL_IF_KUNIT(arch_leave_lazy_mmu_mode);
 void arch_flush_lazy_mmu_mode(void)
 {
 	if (!test_facility(13))
+		return;
+	if (!static_branch_likely(&lazy_mmu))
 		return;
 	flush_lazy_mmu_mode();
 }
