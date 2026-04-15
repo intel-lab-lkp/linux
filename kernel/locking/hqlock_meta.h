@@ -307,6 +307,10 @@ static inline void release_lock_meta(struct qspinlock *lock,
 			goto do_rollback;
 	}
 
+	if (qnode->remote_handoffs < hqlock_remote_handoffs_keep_numa) {
+		upd_val |= _Q_LOCK_MODE_QSPINLOCK_VAL;
+	}
+
 	/*
 	 * We need wait until pending is gone.
 	 * Otherwise, clearing pending can erase a mode we will set here

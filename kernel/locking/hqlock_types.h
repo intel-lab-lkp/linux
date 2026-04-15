@@ -37,9 +37,13 @@ struct numa_qnode {
 
 	u16 lock_id;
 	u16 wrong_fallback_tail;
-	u16 general_handoffs;
-
 	u16 numa_node;
+
+
+	u16 general_handoffs;
+	u16 remote_handoffs;
+	u16 prev_general_handoffs;
+	u16 prev_numa_node;
 };
 
 struct numa_queue {
