@@ -168,8 +168,10 @@ no_flash:
 
 	for (i = 0; i < ARRAY_SIZE(subdevs); i++) {
 		subdevs[i].dev.parent = dev;
-		if (platform_device_register(&subdevs[i]))
+		if (platform_device_register(&subdevs[i])) {
 			dev_warn(dev, "Error registering sub device %s\n", subdevs[i].name);
+			platform_device_put(&subdevs[i]);
+		}
 	}
 
 	dev_info(&pdev->dev, "Registered MPFS system controller\n");
