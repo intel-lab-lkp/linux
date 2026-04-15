@@ -30,7 +30,13 @@ static struct platform_device exar_device = {
 
 static int __init exar_init(void)
 {
-	return platform_device_register(&exar_device);
+	int ret;
+
+	ret = platform_device_register(&exar_device);
+	if (ret)
+		platform_device_put(&exar_device);
+
+	return ret;
 }
 
 module_init(exar_init);
