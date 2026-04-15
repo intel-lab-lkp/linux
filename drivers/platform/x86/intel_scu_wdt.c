@@ -58,13 +58,18 @@ static const struct x86_cpu_id intel_mid_cpu_ids[] = {
 static int __init register_mid_wdt(void)
 {
 	const struct x86_cpu_id *id;
+	int ret;
 
 	id = x86_match_cpu(intel_mid_cpu_ids);
 	if (!id)
 		return -ENODEV;
 
 	wdt_dev.dev.platform_data = (struct intel_mid_wdt_pdata *)id->driver_data;
-	return platform_device_register(&wdt_dev);
+	ret = platform_device_register(&wdt_dev);
+	if (ret)
+		platform_device_put(&wdt_dev);
+
+	return ret;
 }
 arch_initcall(register_mid_wdt);
 
