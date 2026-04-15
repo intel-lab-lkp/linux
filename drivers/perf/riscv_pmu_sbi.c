@@ -60,6 +60,33 @@ asm volatile(ALTERNATIVE(						\
 #define PERF_EVENT_FLAG_LEGACY		BIT(SYSCTL_LEGACY)
 
 PMU_FORMAT_ATTR(event, "config:0-55");
+static inline bool rvpmu_perf_event_is_throttled(struct perf_event *event)
+{
+	return event->hw.interrupts == MAX_INTERRUPTS;
+}
+
+/*
+ * Return a mask of counters that must not be restarted.
+ * `base` is the starting bit index to limit the mask to this long word.
+ */
+static inline unsigned long rvpmu_get_throttled_mask(struct perf_event **events,
+						     unsigned long mask,
+						     int base)
+{
+	unsigned long tmp = mask, throttled = 0;
+	int bit = -1;
+	int nr_bits = min_t(int, BITS_PER_LONG, RISCV_MAX_COUNTERS - base);
+
+	for_each_set_bit(bit, &tmp, nr_bits) {
+		struct perf_event *event = events[bit];
+
+		if (!event || rvpmu_perf_event_is_throttled(event))
+			throttled |= BIT(bit);
+	}
+
+	return throttled;
+}
+
 PMU_FORMAT_ATTR(firmware, "config:62-63");
 
 static bool sbi_v2_available;
@@ -1005,6 +1032,8 @@ static inline void pmu_sbi_start_ovf_ctrs_snapshot(struct cpu_hw_events *cpu_hw_
 	for_each_set_bit(idx, cpu_hw_evt->used_hw_ctrs, RISCV_MAX_COUNTERS) {
 		if (ctr_ovf_mask & BIT(idx)) {
 			event = cpu_hw_evt->events[idx];
+			if (!event || rvpmu_perf_event_is_throttled(event))
+				continue;
 			hwc = &event->hw;
 			max_period = riscv_pmu_ctr_get_width_mask(event);
 			init_val = local64_read(&hwc->prev_count) & max_period;
@@ -1017,13 +1046,25 @@ static inline void pmu_sbi_start_ovf_ctrs_snapshot(struct cpu_hw_events *cpu_hw_
 	}
 
 	for (i = 0; i < BITS_TO_LONGS(RISCV_MAX_COUNTERS); i++) {
+		int base = i * BITS_PER_LONG;
+		unsigned long throttled;
+		unsigned long used;
+		unsigned long start_mask;
+
+		used = cpu_hw_evt->used_hw_ctrs[i];
+		throttled = rvpmu_get_throttled_mask(cpu_hw_evt->events + base,
+						     used, base);
+		start_mask = used & ~throttled;
+		if (!start_mask)
+			continue;
+
 		/* Restore the counter values to relative indices for used hw counters */
 		for_each_set_bit(idx, &cpu_hw_evt->used_hw_ctrs[i], BITS_PER_LONG)
 			sdata->ctr_values[idx] =
 					cpu_hw_evt->snapshot_cval_shcopy[idx + i * BITS_PER_LONG];
 		/* Start all the counters in a single shot */
-		sbi_ecall(SBI_EXT_PMU, SBI_EXT_PMU_COUNTER_START, idx * BITS_PER_LONG,
-			  cpu_hw_evt->used_hw_ctrs[i], flag, 0, 0, 0);
+		sbi_ecall(SBI_EXT_PMU, SBI_EXT_PMU_COUNTER_START, i * BITS_PER_LONG,
+			  start_mask, flag, 0, 0, 0);
 	}
 }
 
