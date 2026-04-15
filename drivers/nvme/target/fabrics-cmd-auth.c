@@ -412,6 +412,13 @@ static int nvmet_auth_challenge(struct nvmet_req *req, void *d, int al)
 	int hash_len = nvme_auth_hmac_hash_len(ctrl->shash_id);
 	int data_size = sizeof(*d) + hash_len;
 
+	/*
+	 * If replacing the keys then we have previous successful keys
+	 * that might be leaked, so we need to free them here.
+	 */
+	if (req->sq->dhchap_c1)
+		nvmet_auth_sq_free(req->sq);
+
 	if (ctrl->dh_tfm)
 		data_size += ctrl->dh_keysize;
 	if (al < data_size) {
