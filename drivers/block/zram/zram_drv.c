@@ -948,6 +948,8 @@ static int zram_writeback_complete(struct zram *zram, struct zram_wb_req *req)
 	clear_slot_flag(zram, index, ZRAM_IDLE);
 	if (test_slot_flag(zram, index, ZRAM_HUGE))
 		atomic64_dec(&zram->stats.huge_pages);
+	if (test_slot_flag(zram, index, ZRAM_INCOMPRESSIBLE))
+		atomic64_dec(&zram->stats.incompressible_pages);
 	atomic64_sub(get_slot_size(zram, index), &zram->stats.compr_data_size);
 	zs_free(zram->mem_pool, get_slot_handle(zram, index));
 	set_slot_handle(zram, index, req->blk_idx);
@@ -1908,7 +1910,7 @@ static ssize_t mm_stat_show(struct device *dev, struct device_attribute *attr,
 	max_used = atomic_long_read(&zram->stats.max_used_pages);
 
 	ret = sysfs_emit(buf,
-			"%8llu %8llu %8llu %8lu %8ld %8llu %8lu %8llu %8llu\n",
+			"%8llu %8llu %8llu %8lu %8ld %8llu %8lu %8llu %8llu %8llu %8llu\n",
 			orig_size << PAGE_SHIFT,
 			(u64)atomic64_read(&zram->stats.compr_data_size),
 			mem_used << PAGE_SHIFT,
@@ -1917,7 +1919,9 @@ static ssize_t mm_stat_show(struct device *dev, struct device_attribute *attr,
 			(u64)atomic64_read(&zram->stats.same_pages),
 			atomic_long_read(&pool_stats.pages_compacted),
 			(u64)atomic64_read(&zram->stats.huge_pages),
-			(u64)atomic64_read(&zram->stats.huge_pages_since));
+			(u64)atomic64_read(&zram->stats.huge_pages_since),
+			(u64)atomic64_read(&zram->stats.incompressible_pages),
+			(u64)atomic64_read(&zram->stats.incompressible_pages_since));
 
 	return ret;
 }
@@ -1989,9 +1993,14 @@ static void slot_free(struct zram *zram, u32 index)
 #endif
 
 	clear_slot_flag(zram, index, ZRAM_IDLE);
-	clear_slot_flag(zram, index, ZRAM_INCOMPRESSIBLE);
 	clear_slot_flag(zram, index, ZRAM_PP_SLOT);
 	set_slot_comp_priority(zram, index, 0);
+
+	if (test_slot_flag(zram, index, ZRAM_INCOMPRESSIBLE)) {
+		if (!test_slot_flag(zram, index, ZRAM_WB))
+			atomic64_dec(&zram->stats.incompressible_pages);
+		clear_slot_flag(zram, index, ZRAM_INCOMPRESSIBLE);
+	}
 
 	if (test_slot_flag(zram, index, ZRAM_HUGE)) {
 		/*
@@ -2197,7 +2206,7 @@ static int write_same_filled_page(struct zram *zram, unsigned long fill,
 	return 0;
 }
 
-static int write_incompressible_page(struct zram *zram, struct page *page,
+static int write_huge_page(struct zram *zram, struct page *page,
 				     u32 index)
 {
 	unsigned long handle;
@@ -2268,7 +2277,7 @@ static int zram_write_page(struct zram *zram, struct page *page, u32 index)
 
 	if (comp_len >= huge_class_size) {
 		zcomp_stream_put(zstrm);
-		return write_incompressible_page(zram, page, index);
+		return write_huge_page(zram, page, index);
 	}
 
 	handle = zs_malloc(zram->mem_pool, comp_len,
@@ -2487,6 +2496,8 @@ static int recompress_slot(struct zram *zram, u32 index, struct page *page,
 		if (prio < zram->num_active_comps)
 			return 0;
 		set_slot_flag(zram, index, ZRAM_INCOMPRESSIBLE);
+		atomic64_inc(&zram->stats.incompressible_pages);
+		atomic64_inc(&zram->stats.incompressible_pages_since);
 		return 0;
 	}
 
