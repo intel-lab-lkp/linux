@@ -4,6 +4,9 @@
  * Copyright (c) 2015, Intel Corporation.
  */
 
+#include <linux/overflow.h>
+#include <linux/slab.h>
+
 #include "sh_css_param_dvs.h"
 #include <assert_support.h>
 #include <type_support.h>
@@ -48,16 +51,17 @@ alloc_dvs_6axis_table(const struct ia_css_resolution *frame_res,
 		}
 
 		/* Generate Y buffers  */
-		dvs_config->xcoords_y = kvmalloc(width_y * height_y * sizeof(uint32_t),
-						 GFP_KERNEL);
+		size_t cnt_y = array_size(width_y, height_y);
+		size_t cnt_uv = array_size(width_uv, height_uv);
+
+		dvs_config->xcoords_y = kvmalloc_objs(*dvs_config->xcoords_y, cnt_y);
 		if (!dvs_config->xcoords_y) {
 			IA_CSS_ERROR("out of memory");
 			err = -ENOMEM;
 			goto exit;
 		}
 
-		dvs_config->ycoords_y = kvmalloc(width_y * height_y * sizeof(uint32_t),
-						 GFP_KERNEL);
+		dvs_config->ycoords_y = kvmalloc_objs(*dvs_config->ycoords_y, cnt_y);
 		if (!dvs_config->ycoords_y) {
 			IA_CSS_ERROR("out of memory");
 			err = -ENOMEM;
@@ -67,16 +71,14 @@ alloc_dvs_6axis_table(const struct ia_css_resolution *frame_res,
 		/* Generate UV buffers  */
 		IA_CSS_LOG("UV W %d H %d", width_uv, height_uv);
 
-		dvs_config->xcoords_uv = kvmalloc(width_uv * height_uv * sizeof(uint32_t),
-						  GFP_KERNEL);
+		dvs_config->xcoords_uv = kvmalloc_objs(*dvs_config->xcoords_uv, cnt_uv);
 		if (!dvs_config->xcoords_uv) {
 			IA_CSS_ERROR("out of memory");
 			err = -ENOMEM;
 			goto exit;
 		}
 
-		dvs_config->ycoords_uv = kvmalloc(width_uv * height_uv * sizeof(uint32_t),
-						  GFP_KERNEL);
+		dvs_config->ycoords_uv = kvmalloc_objs(*dvs_config->ycoords_uv, cnt_uv);
 		if (!dvs_config->ycoords_uv) {
 			IA_CSS_ERROR("out of memory");
 			err = -ENOMEM;
