@@ -2659,7 +2659,15 @@ static void sanitize_hdmi_level_shift(struct intel_bios_encoder_data *devdata,
 
 static void override_vswing_preemph(struct intel_bios_encoder_data *devdata)
 {
+	struct intel_ddi_buf_trans *buf_trans;
+
 	devdata->buf_trans = NULL;
+
+	if (devdata->display->vbt.version < 218 || !devdata->child.use_vbt_vswing)
+		return;
+
+	buf_trans = kzalloc(sizeof(*buf_trans), GFP_KERNEL);
+	devdata->buf_trans = buf_trans;
 }
 
 static bool
@@ -3398,6 +3406,10 @@ void intel_bios_driver_remove(struct intel_display *display)
 				 node) {
 		list_del(&devdata->node);
 		kfree(devdata->dsc);
+
+		if (devdata->buf_trans)
+			kfree(devdata->buf_trans);
+
 		kfree(devdata);
 	}
 
