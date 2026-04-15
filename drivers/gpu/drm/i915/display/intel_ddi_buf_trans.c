@@ -1786,21 +1786,21 @@ xe3plpd_get_lt_buf_trans(struct intel_encoder *encoder,
 		return intel_get_buf_trans(&xe3plpd_lt_trans_dp14, n_entries);
 }
 
-static int
+static enum lt_vspeo_index
 lt_compute_index(const struct intel_crtc_state *crtc_state)
 {
 	if (intel_crtc_has_dp_encoder(crtc_state)) {
 		if (intel_dp_is_uhbr(crtc_state))
-			return 5;
+			return LT_DP21;
 		else
-			return 4;
+			return LT_DP14;
 	}
 
 	drm_WARN(to_intel_display(crtc_state)->drm, 1,
 		 "non-DP (%d) encoder asks to compute VS/PE-O index\n",
 		 crtc_state->output_types);
 
-	return -1;
+	return LT_ERR;
 }
 
 static int

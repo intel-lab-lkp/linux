@@ -74,6 +74,18 @@ struct intel_ddi_buf_trans {
 	u8 hdmi_default_entry;
 };
 
+enum lt_vspeo_index {
+	LT_ERR = -1,
+
+	_LT_unused0 = 0,
+	_LT_unused1,
+	_LT_unused2,
+	_LT_unused3,
+
+	LT_DP14 = 4,
+	LT_DP21
+};
+
 bool is_hobl_buf_trans(const struct intel_ddi_buf_trans *table);
 
 void intel_ddi_buf_trans_init(struct intel_encoder *encoder);
