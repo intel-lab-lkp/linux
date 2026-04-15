@@ -74,6 +74,8 @@ static int sysctl_memory_failure_recovery __read_mostly = 1;
 
 static int sysctl_enable_soft_offline __read_mostly = 1;
 
+static int sysctl_panic_on_unrecoverable_mf __read_mostly;
+
 atomic_long_t num_poisoned_pages __read_mostly = ATOMIC_LONG_INIT(0);
 
 static bool hw_memory_failure __read_mostly = false;
@@ -151,6 +153,15 @@ static const struct ctl_table memory_failure_table[] = {
 		.procname	= "enable_soft_offline",
 		.data		= &sysctl_enable_soft_offline,
 		.maxlen		= sizeof(sysctl_enable_soft_offline),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
+	{
+		.procname	= "panic_on_unrecoverable_memory_failure",
+		.data		= &sysctl_panic_on_unrecoverable_mf,
+		.maxlen		= sizeof(sysctl_panic_on_unrecoverable_mf),
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= SYSCTL_ZERO,
@@ -1282,6 +1293,59 @@ static void update_per_node_mf_stats(unsigned long pfn,
 }
 
 /*
+ * Determine whether to panic on an unrecoverable memory failure.
+ *
+ * Design rationale: This design opts for immediate panic on kernel memory
+ * failures, capturing clean crashes rather than random crashes on MF_IGNORED
+ * pages.
+ *
+ * This panics on three categories of failures (all requiring result ==
+ * MF_IGNORED, meaning the page was not recovered):
+ *
+ * - MF_MSG_KERNEL: Reserved pages (identified via PageReserved) that belong
+ *   to the kernel and cannot be recovered.
+ *
+ * - MF_MSG_KERNEL_HIGH_ORDER: Pages that get_hwpoison_page() observed as free
+ *   (refcount 0) but are not in the buddy allocator. These are kernel pages
+ *   in a transient state between allocation and freeing. A TOCTOU race
+ *   (page allocated between get_hwpoison_page() and is_free_buddy_page())
+ *   is possible when CONFIG_DEBUG_VM is disabled, since check_new_pages()
+ *   is gated by is_check_pages_enabled() and becomes a no-op. However,
+ *   panicking is still correct in this case: the physical memory has a
+ *   hardware error, so an allocated hwpoisoned page is unrecoverable.
+ *
+ * - MF_MSG_UNKNOWN: Pages that reached identify_page_state() but did not
+ *   match any known recoverable state in error_states[]. This is the
+ *   catch-all for pages whose flags do not indicate a recoverable user or
+ *   cache page (no LRU, no swapcache, no mlock, etc). A theoretical false
+ *   positive exists if concurrent LRU isolation clears PG_lru between
+ *   folio_lock() and saving page_flags, but this window is very narrow and
+ *   mitigated by identify_page_state()'s two-pass design which rechecks
+ *   using saved page_flags.
+ *
+ * Pages intentionally NOT included:
+ * - MF_MSG_GET_HWPOISON: get_hwpoison_page() failure on non-reserved pages.
+ *   This includes dynamically allocated kernel memory (SLAB/SLUB, vmalloc,
+ *   kernel stacks, page tables) which are not PageReserved and fail
+ *   get_hwpoison_page() with -EBUSY/-EIO. These share the return path with
+ *   transient refcount races, so panicking here would risk false positives.
+ *
+ * Note: Some transient races in the buddy allocator path are mitigated by
+ * memory_failure()'s retry mechanism. When take_page_off_buddy() fails,
+ * the code clears PageHWPoison and retries the entire memory_failure()
+ * flow, allowing pages to be properly reclassified with updated flags.
+ */
+static bool panic_on_unrecoverable_mf(enum mf_action_page_type type,
+				      enum mf_result result)
+{
+	return sysctl_panic_on_unrecoverable_mf &&
+	       result == MF_IGNORED &&
+	       (type == MF_MSG_KERNEL ||
+		type == MF_MSG_KERNEL_HIGH_ORDER ||
+		type == MF_MSG_UNKNOWN);
+}
+
+/*
  * "Dirty/Clean" indication is not 100% accurate due to the possibility of
  * setting PG_dirty outside page lock. See also comment above set_page_dirty().
  */
@@ -1297,6 +1361,9 @@ static int action_result(unsigned long pfn, enum mf_action_page_type type,
 
 	pr_err("%#lx: recovery action for %s: %s\n",
 		pfn, action_page_types[type], action_name[result]);
+
+	if (panic_on_unrecoverable_mf(type, result))
+		panic("Memory failure: %#lx: unrecoverable page", pfn);
 
 	return (result == MF_RECOVERED || result == MF_DELAYED) ? 0 : -EBUSY;
 }
@@ -2428,6 +2495,20 @@ try_again:
 			}
 			res = action_result(pfn, MF_MSG_BUDDY, res);
 		} else {
+			/*
+			 * The page has refcount 0 but is not in the buddy
+			 * allocator — it is a non-compound high-order kernel
+			 * page (e.g., a tail page of a high-order allocation).
+			 *
+			 * A TOCTOU race where the page transitions from
+			 * free-buddy to allocated between get_hwpoison_page()
+			 * and is_free_buddy_page() is possible when
+			 * CONFIG_DEBUG_VM is disabled (check_new_pages() is
+			 * gated by is_check_pages_enabled() and becomes a
+			 * no-op). Panicking is still correct: the physical
+			 * memory has a hardware error regardless of who
+			 * allocated the page.
+			 */
 			res = action_result(pfn, MF_MSG_KERNEL_HIGH_ORDER, MF_IGNORED);
 		}
 		goto unlock_mutex;
