@@ -1768,6 +1768,7 @@ static int omapfb_probe(struct platform_device *pdev)
 	r = platform_device_register(&omapdss_device);
 	if (r) {
 		dev_err(&pdev->dev, "can't register omapdss device\n");
+		platform_device_put(&omapdss_device);
 		return r;
 	}
 
