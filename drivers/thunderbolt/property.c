@@ -173,6 +173,7 @@ static struct tb_property_dir *__tb_property_parse_dir(const u32 *block,
 	dir = kzalloc_obj(*dir);
 	if (!dir)
 		return NULL;
+	INIT_LIST_HEAD(&dir->properties);
 
 	if (is_root) {
 		content_offset = dir_offset + 2;
@@ -184,14 +185,16 @@ static struct tb_property_dir *__tb_property_parse_dir(const u32 *block,
 			tb_property_free_dir(dir);
 			return NULL;
 		}
+		if (dir_len < 4) {
+			tb_property_free_dir(dir);
+			return NULL;
+		}
 		content_offset = dir_offset + 4;
 		content_len = dir_len - 4; /* Length includes UUID */
 	}
 
 	entries = (const struct tb_property_entry *)&block[content_offset];
 	nentries = content_len / (sizeof(*entries) / 4);
-
-	INIT_LIST_HEAD(&dir->properties);
 
 	for (i = 0; i < nentries; i++) {
 		struct tb_property *property;
