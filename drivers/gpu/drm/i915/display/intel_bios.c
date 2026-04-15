@@ -2188,6 +2188,30 @@ parse_compression_parameters(struct intel_display *display)
 }
 
 static void
+parse_vswing_preemph_lt(union intel_ddi_buf_trans_entry **bufs_mtrx,
+			const struct bdb_vswing_preemph *block)
+{
+	union intel_ddi_buf_trans_entry *entry;
+	const u32 *tables = block->tables;
+	u8 num_rows = 16;
+	size_t offset = 0;
+	const u32 *vals;
+
+	for (int idx = 0; idx < block->num_tables; idx++) {
+		for (int row = 0; row < num_rows; row++) {
+			vals = &tables[offset];
+
+			entry = &bufs_mtrx[idx][row];
+			entry->lt.main_cursor = vals[0];
+			entry->lt.pre_cursor = vals[1];
+			entry->lt.post_cursor = vals[2];
+
+			offset += block->num_columns;
+		}
+	}
+}
+
+static void
 parse_vswing_preemph_override(struct intel_display *display)
 {
 	union intel_ddi_buf_trans_entry **bufs_mtrx;
@@ -2210,7 +2234,11 @@ parse_vswing_preemph_override(struct intel_display *display)
 	for (int idx = 0; idx < block->num_tables; idx++)
 		bufs_mtrx[idx] = kzalloc(num_rows * sizeof(**bufs_mtrx), GFP_KERNEL);
 
-	drm_dbg_kms(display->drm, "VS/PE-O parsing not yet supported\n");
+	if (HAS_LT_PHY(display)) {
+		parse_vswing_preemph_lt(bufs_mtrx, block);
+	} else {
+		drm_dbg_kms(display->drm, "VS/PE-O parsing not yet supported\n");
+	}
 
 	display->vbt.vspeo.bufs_mtrx = bufs_mtrx;
 	display->vbt.vspeo.num_tables = block->num_tables;
@@ -2659,6 +2687,7 @@ static void sanitize_hdmi_level_shift(struct intel_bios_encoder_data *devdata,
 
 static void override_vswing_preemph(struct intel_bios_encoder_data *devdata)
 {
+	struct intel_display *display = devdata->display;
 	struct intel_ddi_buf_trans *buf_trans;
 	bool parseable = false;
 
@@ -2666,6 +2695,10 @@ static void override_vswing_preemph(struct intel_bios_encoder_data *devdata)
 
 	if (!intel_bios_encoder_overrides_vswing(devdata))
 		return;
+
+	if (HAS_LT_PHY(display)) {
+		parseable = true;
+	}
 
 	if (!parseable)
 		return;
