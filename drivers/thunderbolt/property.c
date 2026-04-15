@@ -8,10 +8,20 @@
  */
 
 #include <linux/err.h>
+#include <linux/overflow.h>
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/uuid.h>
 #include <linux/thunderbolt.h>
+
+/*
+ * Bounds recursion depth when parsing a malicious XDomain property
+ * block whose DIRECTORY entries are crafted to self-refer.  The
+ * XDomain spec gives no hard limit; 8 is comfortably larger than any
+ * legitimate property layout observed in practice and leaves the
+ * kernel stack headroom.
+ */
+#define TB_PROPERTY_MAX_DEPTH	8
 
 struct tb_property_entry {
 	u32 key_hi;
@@ -37,7 +47,7 @@ struct tb_property_dir_entry {
 
 static struct tb_property_dir *__tb_property_parse_dir(const u32 *block,
 	size_t block_len, unsigned int dir_offset, size_t dir_len,
-	bool is_root);
+	bool is_root, unsigned int depth);
 
 static inline void parse_dwdata(void *dst, const void *src, size_t dwords)
 {
@@ -52,13 +62,23 @@ static inline void format_dwdata(void *dst, const void *src, size_t dwords)
 static bool tb_property_entry_valid(const struct tb_property_entry *entry,
 				  size_t block_len)
 {
+	u32 end;
+
 	switch (entry->type) {
 	case TB_PROPERTY_TYPE_DIRECTORY:
 	case TB_PROPERTY_TYPE_DATA:
 	case TB_PROPERTY_TYPE_TEXT:
 		if (entry->length > block_len)
 			return false;
-		if (entry->value + entry->length > block_len)
+		/*
+		 * entry->value is u32 and entry->length is u16; the sum is
+		 * performed in u32 and wraps for crafted inputs.  Use an
+		 * overflow-aware check so a wrapped sum is rejected instead
+		 * of appearing to satisfy the bound.
+		 */
+		if (check_add_overflow(entry->value, (u32)entry->length, &end))
+			return false;
+		if (end > block_len)
 			return false;
 		break;
 
@@ -93,7 +113,8 @@ tb_property_alloc(const char *key, enum tb_property_type type)
 }
 
 static struct tb_property *tb_property_parse(const u32 *block, size_t block_len,
-					const struct tb_property_entry *entry)
+					const struct tb_property_entry *entry,
+					unsigned int depth)
 {
 	char key[TB_PROPERTY_KEY_SIZE + 1];
 	struct tb_property *property;
@@ -114,7 +135,8 @@ static struct tb_property *tb_property_parse(const u32 *block, size_t block_len,
 	switch (property->type) {
 	case TB_PROPERTY_TYPE_DIRECTORY:
 		dir = __tb_property_parse_dir(block, block_len, entry->value,
-					      entry->length, false);
+					      entry->length, false,
+					      depth + 1);
 		if (!dir) {
 			kfree(property);
 			return NULL;
@@ -159,16 +181,33 @@ static struct tb_property *tb_property_parse(const u32 *block, size_t block_len,
 }
 
 static struct tb_property_dir *__tb_property_parse_dir(const u32 *block,
-	size_t block_len, unsigned int dir_offset, size_t dir_len, bool is_root)
+	size_t block_len, unsigned int dir_offset, size_t dir_len, bool is_root,
+	unsigned int depth)
 {
 	const struct tb_property_entry *entries;
 	size_t i, content_len, nentries;
 	unsigned int content_offset;
 	struct tb_property_dir *dir;
 
+	/*
+	 * A malicious XDomain peer can craft DIRECTORY entries whose
+	 * offsets point back at their own container, making the recursion
+	 * unbounded without this gate.
+	 */
+	if (depth > TB_PROPERTY_MAX_DEPTH)
+		return NULL;
+
 	dir = kzalloc_obj(*dir);
 	if (!dir)
 		return NULL;
+	/*
+	 * Initialize the list head immediately so every error-return path
+	 * that calls tb_property_free_dir() (the new dir_len reject and
+	 * the existing uuid-alloc failure path) sees a walkable empty
+	 * list rather than the zero-initialized NULL next/prev that
+	 * would oops list_for_each_entry_safe().
+	 */
+	INIT_LIST_HEAD(&dir->properties);
 
 	if (is_root) {
 		content_offset = dir_offset + 2;
@@ -181,18 +220,28 @@ static struct tb_property_dir *__tb_property_parse_dir(const u32 *block,
 			return NULL;
 		}
 		content_offset = dir_offset + 4;
+		/*
+		 * dir_len arrives here as the u16 entry->length widened to
+		 * size_t; values below 4 underflow size_t on the subtraction
+		 * below and produce a gigantic content_len, driving the
+		 * nentries loop off the block with OOB reads on each
+		 * iteration.
+		 */
+		if (dir_len < 4) {
+			tb_property_free_dir(dir);
+			return NULL;
+		}
 		content_len = dir_len - 4; /* Length includes UUID */
 	}
 
 	entries = (const struct tb_property_entry *)&block[content_offset];
 	nentries = content_len / (sizeof(*entries) / 4);
 
-	INIT_LIST_HEAD(&dir->properties);
-
 	for (i = 0; i < nentries; i++) {
 		struct tb_property *property;
 
-		property = tb_property_parse(block, block_len, &entries[i]);
+		property = tb_property_parse(block, block_len, &entries[i],
+					     depth);
 		if (!property) {
 			tb_property_free_dir(dir);
 			return NULL;
@@ -231,7 +280,7 @@ struct tb_property_dir *tb_property_parse_dir(const u32 *block,
 		return NULL;
 
 	return __tb_property_parse_dir(block, block_len, 0, rootdir->length,
-				       true);
+				       true, 0);
 }
 
 /**
