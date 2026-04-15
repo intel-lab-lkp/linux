@@ -60,6 +60,8 @@
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
 #include <linux/io-pgtable.h>
+#include <linux/io_uring.h>
+#include <linux/io_uring/cmd.h>
 #include <linux/ioport.h>
 #include <linux/jiffies.h>
 #include <linux/jump_label.h>
