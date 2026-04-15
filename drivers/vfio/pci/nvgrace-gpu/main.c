@@ -189,7 +189,7 @@ static int nvgrace_gpu_open_device(struct vfio_device *core_vdev)
 	 * register reads on first fault before establishing any GPU
 	 * memory mapping.
 	 */
-	ret = vfio_pci_core_setup_barmap(vdev, 0);
+	ret = vfio_pci_core_lock_setup_barmap(vdev, 0);
 	if (ret)
 		goto error_exit;
 

@@ -1769,7 +1769,7 @@ int vfio_pci_core_mmap(struct vfio_device *core_vdev, struct vm_area_struct *vma
 	 * Even though we don't make use of the barmap for the mmap,
 	 * we need to request the region and the barmap tracks that.
 	 */
-	ret = vfio_pci_core_setup_barmap(vdev, index);
+	ret = vfio_pci_core_lock_setup_barmap(vdev, index);
 	if (ret)
 		return ret;
 

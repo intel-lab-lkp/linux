@@ -198,14 +198,11 @@ ssize_t vfio_pci_core_do_io_rw(struct vfio_pci_core_device *vdev, bool test_mem,
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_do_io_rw);
 
-int vfio_pci_core_setup_barmap(struct vfio_pci_core_device *vdev, int bar)
+static int __vfio_pci_core_iomap_barmap(struct vfio_pci_core_device *vdev, int bar)
 {
 	struct pci_dev *pdev = vdev->pdev;
 	int ret;
 	void __iomem *io;
-
-	if (vdev->barmap[bar])
-		return 0;
 
 	ret = pci_request_selected_regions(pdev, 1 << bar, "vfio");
 	if (ret)
@@ -220,6 +217,40 @@ int vfio_pci_core_setup_barmap(struct vfio_pci_core_device *vdev, int bar)
 	vdev->barmap[bar] = io;
 
 	return 0;
+}
+
+int vfio_pci_core_lock_setup_barmap(struct vfio_pci_core_device *vdev, int bar)
+{
+	int ret;
+
+	lockdep_assert_not_held(&vdev->memory_lock);
+
+	if (likely(READ_ONCE(vdev->barmap[bar])))
+		return 0;
+
+	down_write(&vdev->memory_lock);
+	if (unlikely(READ_ONCE(vdev->barmap[bar]))) {
+		up_write(&vdev->memory_lock);
+		return 0;
+	}
+
+	ret = __vfio_pci_core_iomap_barmap(vdev, bar);
+	up_write(&vdev->memory_lock);
+
+	return ret;
+}
+
+int vfio_pci_core_setup_barmap(struct vfio_pci_core_device *vdev, int bar)
+{
+	/*
+	 * An external caller must prevent concurrent calls of this,
+	 * including via other VFIO-internal paths (for example, by
+	 * holding vdev->memory_lock).
+	 */
+	if (vdev->barmap[bar])
+		return 0;
+
+	return __vfio_pci_core_iomap_barmap(vdev, bar);
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_setup_barmap);
 
@@ -274,7 +305,7 @@ ssize_t vfio_pci_bar_rw(struct vfio_pci_core_device *vdev, char __user *buf,
 		 */
 		max_width = VFIO_PCI_IO_WIDTH_4;
 	} else {
-		int ret = vfio_pci_core_setup_barmap(vdev, bar);
+		int ret = vfio_pci_core_lock_setup_barmap(vdev, bar);
 		if (ret) {
 			done = ret;
 			goto out;
@@ -452,7 +483,7 @@ int vfio_pci_ioeventfd(struct vfio_pci_core_device *vdev, loff_t offset,
 	if (count == 8)
 		return -EINVAL;
 
-	ret = vfio_pci_core_setup_barmap(vdev, bar);
+	ret = vfio_pci_core_lock_setup_barmap(vdev, bar);
 	if (ret)
 		return ret;
 

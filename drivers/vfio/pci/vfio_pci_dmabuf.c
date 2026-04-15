@@ -262,7 +262,7 @@ int vfio_pci_core_feature_dma_buf(struct vfio_pci_core_device *vdev, u32 flags,
 	 * were requested before returning DMABUFs that reference
 	 * them.  Barmap setup does this:
 	 */
-	ret = vfio_pci_core_setup_barmap(vdev, get_dma_buf.region_index);
+	ret = vfio_pci_core_lock_setup_barmap(vdev, get_dma_buf.region_index);
 	if (ret)
 		goto err_free_phys;
 
