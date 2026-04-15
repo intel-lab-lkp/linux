@@ -2238,8 +2238,10 @@ static int __init vicodec_init(void)
 	int ret;
 
 	ret = platform_device_register(&vicodec_pdev);
-	if (ret)
+	if (ret) {
+		platform_device_put(&vicodec_pdev);
 		return ret;
+	}
 
 	ret = platform_driver_register(&vicodec_pdrv);
 	if (ret)
