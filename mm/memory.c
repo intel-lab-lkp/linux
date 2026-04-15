@@ -5670,7 +5670,7 @@ unlock:
 	return ret;
 }
 
-static unsigned long fault_around_pages __read_mostly =
+unsigned long fault_around_pages __read_mostly =
 	65536 >> PAGE_SHIFT;
 
 #ifdef CONFIG_DEBUG_FS

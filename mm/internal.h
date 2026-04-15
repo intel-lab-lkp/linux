@@ -1770,4 +1770,5 @@ static inline int io_remap_pfn_range_complete(struct vm_area_struct *vma,
 	return remap_pfn_range_complete(vma, addr, pfn, size, prot);
 }
 
+extern unsigned long fault_around_pages;
 #endif	/* __MM_INTERNAL_H */

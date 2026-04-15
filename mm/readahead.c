@@ -476,7 +476,7 @@ void page_cache_ra_order(struct readahead_control *ractl,
 	unsigned int nofs;
 	int err = 0;
 	gfp_t gfp = readahead_gfp_mask(mapping);
-	unsigned int new_order = ra->order;
+	unsigned int new_order = max(ra->order, ractl->sync_mmap_order);
 
 	trace_page_cache_ra_order(mapping->host, start, ra);
 	if (!mapping_large_folio_support(mapping)) {
@@ -490,7 +490,8 @@ void page_cache_ra_order(struct readahead_control *ractl,
 	new_order = min_t(unsigned int, new_order, ilog2(ra->size));
 	new_order = max(new_order, min_order);
 
-	ra->order = new_order;
+	if (ra->order >= ractl->sync_mmap_order)
+		ra->order = new_order;
 
 	/* See comment in page_cache_ra_unbounded() */
 	nofs = memalloc_nofs_save();

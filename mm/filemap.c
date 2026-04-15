@@ -3398,6 +3398,7 @@ static struct file *do_sync_mmap_readahead(struct vm_fault *vmf)
 		ra->size = ra->ra_pages;
 		ra->async_size = ra->ra_pages / 4;
 		ra->order = 0;
+		ractl.sync_mmap_order = __ffs(fault_around_pages);
 	}
 
 	fpin = maybe_unlock_mmap_for_io(vmf, fpin);
