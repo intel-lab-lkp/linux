@@ -331,7 +331,6 @@ static void sprd_thm_toggle_sensor(struct sprd_thermal_sensor *sen, bool on)
 static int sprd_thm_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
-	struct device_node *sen_child;
 	struct sprd_thermal_data *thm;
 	struct sprd_thermal_sensor *sen;
 	const struct sprd_thm_variant_data *pdata;
@@ -380,12 +379,10 @@ static int sprd_thm_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	for_each_child_of_node(np, sen_child) {
+	for_each_child_of_node_scoped(np, sen_child) {
 		sen = devm_kzalloc(&pdev->dev, sizeof(*sen), GFP_KERNEL);
-		if (!sen) {
-			ret = -ENOMEM;
-			goto of_put;
-		}
+		if (!sen)
+			return -ENOMEM;
 
 		sen->data = thm;
 		sen->dev = &pdev->dev;
@@ -393,13 +390,13 @@ static int sprd_thm_probe(struct platform_device *pdev)
 		ret = of_property_read_u32(sen_child, "reg", &sen->id);
 		if (ret) {
 			dev_err(&pdev->dev, "get sensor reg failed");
-			goto of_put;
+			return ret;
 		}
 
 		ret = sprd_thm_sensor_calibration(sen_child, thm, sen);
 		if (ret) {
 			dev_err(&pdev->dev, "efuse cal analysis failed");
-			goto of_put;
+			return ret;
 		}
 
 		sprd_thm_sensor_init(thm, sen);
@@ -411,31 +408,25 @@ static int sprd_thm_probe(struct platform_device *pdev)
 		if (IS_ERR(sen->tzd)) {
 			dev_err(&pdev->dev, "register thermal zone failed %d\n",
 				sen->id);
-			ret = PTR_ERR(sen->tzd);
-			goto of_put;
+			return PTR_ERR(sen->tzd);
 		}
 
 		thm->sensor[sen->id] = sen;
 	}
-	/* sen_child set to NULL at this point */
 
 	ret = sprd_thm_set_ready(thm);
 	if (ret)
-		goto of_put;
+		return ret;
 
 	ret = sprd_thm_wait_temp_ready(thm);
 	if (ret)
-		goto of_put;
+		return ret;
 
 	for (i = 0; i < thm->nr_sensors; i++)
 		sprd_thm_toggle_sensor(thm->sensor[i], true);
 
 	platform_set_drvdata(pdev, thm);
 	return 0;
-
-of_put:
-	of_node_put(sen_child);
-	return ret;
 }
 
 #ifdef CONFIG_PM_SLEEP
