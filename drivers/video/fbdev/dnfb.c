@@ -296,8 +296,10 @@ static int __init dnfb_init(void)
 
 	if (!ret) {
 		ret = platform_device_register(&dnfb_device);
-		if (ret)
+		if (ret) {
+			platform_device_put(&dnfb_device);
 			platform_driver_unregister(&dnfb_driver);
+		}
 	}
 	return ret;
 }
