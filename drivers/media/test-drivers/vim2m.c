@@ -1601,8 +1601,10 @@ static int __init vim2m_init(void)
 	int ret;
 
 	ret = platform_device_register(&vim2m_pdev);
-	if (ret)
+	if (ret) {
+		platform_device_put(&vim2m_pdev);
 		return ret;
+	}
 
 	ret = platform_driver_register(&vim2m_pdrv);
 	if (ret)
