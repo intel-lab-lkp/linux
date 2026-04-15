@@ -874,6 +874,7 @@ struct mem_size_stats {
 	unsigned long shared_hugetlb;
 	unsigned long private_hugetlb;
 	unsigned long ksm;
+	unsigned long cont_pte;
 	u64 pss;
 	u64 pss_anon;
 	u64 pss_file;
@@ -915,7 +916,7 @@ static void smaps_page_accumulate(struct mem_size_stats *mss,
 
 static void smaps_account(struct mem_size_stats *mss, struct page *page,
 		bool compound, bool young, bool dirty, bool locked,
-		bool present)
+		bool present, bool cont)
 {
 	struct folio *folio = page_folio(page);
 	int i, nr = compound ? compound_nr(page) : 1;
@@ -938,6 +939,8 @@ static void smaps_account(struct mem_size_stats *mss, struct page *page,
 		mss->ksm += size;
 
 	mss->resident += size;
+	if (cont)
+		mss->cont_pte += PAGE_SIZE;
 	/* Accumulate the size in pages that have been accessed. */
 	if (young || folio_test_young(folio) || folio_test_referenced(folio))
 		mss->referenced += size;
@@ -1015,6 +1018,10 @@ static void smaps_pte_hole_lookup(unsigned long addr, struct mm_walk *walk)
 #endif
 }
 
+#ifndef pte_cont
+#define pte_cont(pte) (false)
+#endif
+
 static void smaps_pte_entry(pte_t *pte, unsigned long addr,
 		struct mm_walk *walk)
 {
@@ -1023,12 +1030,14 @@ static void smaps_pte_entry(pte_t *pte, unsigned long addr,
 	bool locked = !!(vma->vm_flags & VM_LOCKED);
 	struct page *page = NULL;
 	bool present = false, young = false, dirty = false;
+	bool cont = false;
 	pte_t ptent = ptep_get(pte);
 
 	if (pte_present(ptent)) {
 		page = vm_normal_page(vma, addr, ptent);
 		young = pte_young(ptent);
 		dirty = pte_dirty(ptent);
+		cont = pte_cont(ptent);
 		present = true;
 	} else if (pte_none(ptent)) {
 		smaps_pte_hole_lookup(addr, walk);
@@ -1058,7 +1067,7 @@ static void smaps_pte_entry(pte_t *pte, unsigned long addr,
 	if (!page)
 		return;
 
-	smaps_account(mss, page, false, young, dirty, locked, present);
+	smaps_account(mss, page, false, young, dirty, locked, present, cont);
 }
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
@@ -1096,7 +1105,7 @@ static void smaps_pmd_entry(pmd_t *pmd, unsigned long addr,
 		mss->file_thp += HPAGE_PMD_SIZE;
 
 	smaps_account(mss, page, true, pmd_young(*pmd), pmd_dirty(*pmd),
-		      locked, present);
+		      locked, present, false);
 }
 #else
 static void smaps_pmd_entry(pmd_t *pmd, unsigned long addr,
@@ -1356,6 +1365,11 @@ static void __show_smap(struct seq_file *m, const struct mem_size_stats *mss,
 	SEQ_PUT_DEC(" kB\nAnonHugePages:  ", mss->anonymous_thp);
 	SEQ_PUT_DEC(" kB\nShmemPmdMapped: ", mss->shmem_thp);
 	SEQ_PUT_DEC(" kB\nFilePmdMapped:  ", mss->file_thp);
+	if (mss->cont_pte) {
+		SEQ_PUT_DEC(" kB\nContPTE(Rss):        ", mss->cont_pte);
+		SEQ_PUT_DEC(" ", mss->resident);
+	}
+
 	SEQ_PUT_DEC(" kB\nShared_Hugetlb: ", mss->shared_hugetlb);
 	seq_put_decimal_ull_width(m, " kB\nPrivate_Hugetlb: ",
 				  mss->private_hugetlb >> 10, 7);
