@@ -24,6 +24,9 @@ realm_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	const struct xt_realm_info *info = par->matchinfo;
 	const struct dst_entry *dst = skb_dst(skb);
 
+	if (!dst)
+		return false;
+
 	return (info->id == (dst->tclassid & info->mask)) ^ info->invert;
 }
 
