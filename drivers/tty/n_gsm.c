@@ -4288,14 +4288,20 @@ static int gsmtty_install(struct tty_driver *driver, struct tty_struct *tty)
 
 	if (mux >= MAX_MUX)
 		return -ENXIO;
-	/* FIXME: we need to lock gsm_mux for lifetimes of ttys eventually */
-	if (gsm_mux[mux] == NULL)
-		return -EUNATCH;
 	if (line == 0 || line > 61)	/* 62/63 reserved */
 		return -ECHRNG;
+
+	/* Acquire gsm_mux_lock to prevent concurrent gsmld_close() from
+	 * freeing the mux between reading gsm_mux[] and taking a refcount.
+	 */
+	spin_lock(&gsm_mux_lock);
 	gsm = gsm_mux[mux];
-	if (gsm->dead)
-		return -EL2HLT;
+	if (!gsm || gsm->dead) {
+		spin_unlock(&gsm_mux_lock);
+		return gsm ? -EL2HLT : -EUNATCH;
+	}
+	kref_get(&gsm->ref);
+	spin_unlock(&gsm_mux_lock);
 	/* If DLCI 0 is not yet fully open return an error.
 	This is ok from a locking
 	perspective as we don't have to worry about this
@@ -4309,8 +4315,10 @@ static int gsmtty_install(struct tty_driver *driver, struct tty_struct *tty)
 		if (dlci0->state == DLCI_OPENING)
 			wait_event(gsm->event, dlci0->state != DLCI_OPENING);
 
-		if (dlci0->state != DLCI_OPEN)
+		if (dlci0->state != DLCI_OPEN) {
+			mux_put(gsm);
 			return -EL2NSYNC;
+		}
 
 		mutex_lock(&gsm->mutex);
 	}
@@ -4322,6 +4330,7 @@ static int gsmtty_install(struct tty_driver *driver, struct tty_struct *tty)
 	}
 	if (dlci == NULL) {
 		mutex_unlock(&gsm->mutex);
+		mux_put(gsm);
 		return -ENOMEM;
 	}
 	ret = tty_port_install(&dlci->port, driver, tty);
@@ -4329,12 +4338,12 @@ static int gsmtty_install(struct tty_driver *driver, struct tty_struct *tty)
 		if (alloc)
 			dlci_put(dlci);
 		mutex_unlock(&gsm->mutex);
+		mux_put(gsm);
 		return ret;
 	}
 
 	dlci_get(dlci);
 	dlci_get(gsm->dlci[0]);
-	mux_get(gsm);
 	tty->driver_data = dlci;
 	mutex_unlock(&gsm->mutex);
 
