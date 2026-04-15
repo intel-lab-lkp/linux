@@ -74,25 +74,35 @@ static int bnge_func_qcaps(struct bnge_dev *bd)
 		return rc;
 	}
 
+	rc = bnge_alloc_ctx_mem(bd);
+	if (rc) {
+		dev_err(bd->dev, "Failed to allocate ctx mem rc: %d\n", rc);
+		goto err_free_ctx_mem;
+	}
+
 	rc = bnge_hwrm_func_resc_qcaps(bd);
 	if (rc) {
 		dev_err(bd->dev, "query resc caps failure rc: %d\n", rc);
-		return rc;
+		goto err_free_ctx_mem;
 	}
 
 	rc = bnge_hwrm_func_qcfg(bd);
 	if (rc) {
 		dev_err(bd->dev, "query config failure rc: %d\n", rc);
-		return rc;
+		goto err_free_ctx_mem;
 	}
 
 	rc = bnge_hwrm_vnic_qcaps(bd);
 	if (rc) {
 		dev_err(bd->dev, "vnic caps failure rc: %d\n", rc);
-		return rc;
+		goto err_free_ctx_mem;
 	}
 
 	return 0;
+
+err_free_ctx_mem:
+	bnge_free_ctx_mem(bd);
+	return rc;
 }
 
 static void bnge_fw_unregister_dev(struct bnge_dev *bd)
@@ -133,32 +143,25 @@ static int bnge_fw_register_dev(struct bnge_dev *bd)
 
 	bnge_hwrm_fw_set_time(bd);
 
-	rc =  bnge_hwrm_func_drv_rgtr(bd);
-	if (rc) {
-		dev_err(bd->dev, "Failed to rgtr with firmware rc: %d\n", rc);
-		return rc;
-	}
-
-	rc = bnge_alloc_ctx_mem(bd);
-	if (rc) {
-		dev_err(bd->dev, "Failed to allocate ctx mem rc: %d\n", rc);
-		goto err_func_unrgtr;
-	}
-
 	/* Get the resources and configuration from firmware */
 	rc = bnge_func_qcaps(bd);
 	if (rc) {
 		dev_err(bd->dev, "Failed initial configuration rc: %d\n", rc);
-		rc = -ENODEV;
-		goto err_func_unrgtr;
+		return rc;
+	}
+
+	rc = bnge_hwrm_func_drv_rgtr(bd);
+	if (rc) {
+		dev_err(bd->dev, "Failed to rgtr with firmware rc: %d\n", rc);
+		goto err_free_ctx_mem;
 	}
 
 	bnge_set_dflt_rss_hash_type(bd);
 
 	return 0;
 
-err_func_unrgtr:
-	bnge_fw_unregister_dev(bd);
+err_free_ctx_mem:
+	bnge_free_ctx_mem(bd);
 	return rc;
 }
 
