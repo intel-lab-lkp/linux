@@ -2188,6 +2188,32 @@ parse_compression_parameters(struct intel_display *display)
 }
 
 static void
+parse_vswing_preemph_icl(union intel_ddi_buf_trans_entry **bufs_mtrx,
+			 const struct bdb_vswing_preemph *block)
+{
+	union intel_ddi_buf_trans_entry *entry;
+	const u32 *tables = block->tables;
+	u8 num_rows = 10;
+	size_t offset = 0;
+	const u32 *vals;
+
+	for (int idx = 0; idx < block->num_tables; idx++) {
+		for (int row = 0; row < num_rows; row++) {
+			vals = &tables[offset];
+
+			entry = &bufs_mtrx[idx][row];
+			entry->icl.dw2_swing_sel = vals[0];
+			entry->icl.dw7_n_scalar = vals[1];
+			entry->icl.dw4_cursor_coeff = vals[2];
+			entry->icl.dw4_post_cursor_2 = vals[3];
+			entry->icl.dw4_post_cursor_1 = vals[4];
+
+			offset += block->num_columns;
+		}
+	}
+}
+
+static void
 parse_vswing_preemph_snps(union intel_ddi_buf_trans_entry **bufs_mtrx,
 			  const struct bdb_vswing_preemph *block)
 {
@@ -2262,6 +2288,12 @@ parse_vswing_preemph_override(struct intel_display *display)
 		parse_vswing_preemph_lt(bufs_mtrx, block);
 	} else if (DISPLAY_VER(display) >= 14) {
 		parse_vswing_preemph_snps(bufs_mtrx, block);
+	} else if (DISPLAY_VER(display) == 11) {
+		if (display->platform.elkhartlake) {
+			parse_vswing_preemph_icl(bufs_mtrx, block);
+		} else {
+			drm_dbg_kms(display->drm, "VS/PE-O parsing not yet supported\n");
+		}
 	} else {
 		drm_dbg_kms(display->drm, "VS/PE-O parsing not yet supported\n");
 	}
@@ -2726,6 +2758,10 @@ static void override_vswing_preemph(struct intel_bios_encoder_data *devdata)
 		parseable = true;
 	} else if (DISPLAY_VER(display) >= 14) {
 		parseable = true;
+	} else if (DISPLAY_VER(display) == 11) {
+		if (display->platform.elkhartlake) {
+			parseable = true;
+		}
 	}
 
 	if (!parseable)
