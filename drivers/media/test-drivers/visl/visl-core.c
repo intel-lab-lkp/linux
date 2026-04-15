@@ -558,8 +558,11 @@ static int __init visl_init(void)
 	int ret;
 
 	ret = platform_device_register(&visl_pdev);
-	if (ret)
+	if (ret) {
+		platform_device_put(&visl_pdev);
 		return ret;
+	}
+
 
 	ret = platform_driver_register(&visl_pdrv);
 	if (ret)
