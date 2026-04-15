@@ -61,6 +61,13 @@ int wlcore_event_fw_logger(struct wl1271 *wl)
 	if (actual_len == 0)
 		goto free_out;
 
+	if (le32_to_cpu(fw_log.max_buff_size) >
+	    WL18XX_LOGGER_SDIO_BUFF_MAX - WL18XX_LOGGER_BUFF_OFFSET) {
+		wl1271_error("fw logger: max_buff_size %u exceeds buffer\n",
+			     le32_to_cpu(fw_log.max_buff_size));
+		goto free_out;
+	}
+
 	/* Calculate the internal pointer to the fwlog structure */
 	addr_ptr = internal_fw_addrbase + addr;
 
