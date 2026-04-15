@@ -466,7 +466,7 @@ static void pca954x_cleanup(struct i2c_mux_core *muxc)
 	struct pca954x *data = i2c_mux_priv(muxc);
 	int c, irq;
 
-	regulator_disable(data->supply);
+	i2c_mux_del_adapters(muxc);
 
 	if (data->irq) {
 		for (c = 0; c < data->chip->nchans; c++) {
@@ -475,7 +475,8 @@ static void pca954x_cleanup(struct i2c_mux_core *muxc)
 		}
 		irq_domain_remove(data->irq);
 	}
-	i2c_mux_del_adapters(muxc);
+
+	regulator_disable(data->supply);
 }
 
 static int pca954x_init(struct i2c_client *client, struct pca954x *data)
