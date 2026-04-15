@@ -7,6 +7,7 @@
 #ifndef _IIO_TYPES_H_
 #define _IIO_TYPES_H_
 
+#include <linux/wordpart.h>
 #include <uapi/linux/iio/types.h>
 
 enum iio_event_info {
@@ -33,6 +34,38 @@ enum iio_event_info {
 #define IIO_VAL_FRACTIONAL 10
 #define IIO_VAL_FRACTIONAL_LOG2 11
 #define IIO_VAL_CHAR 12
+
+#define IIO_VAL_DECIMAL64_BASE		100
+#define IIO_VAL_DECIMAL64_MILLI		(IIO_VAL_DECIMAL64_BASE + 3)
+#define IIO_VAL_DECIMAL64_MICRO		(IIO_VAL_DECIMAL64_BASE + 6)
+#define IIO_VAL_DECIMAL64_NANO		(IIO_VAL_DECIMAL64_BASE + 9)
+#define IIO_VAL_DECIMAL64_PICO		(IIO_VAL_DECIMAL64_BASE + 12)
+
+#define iio_val_s64_compose(_val0, _val1)				\
+	({ (s64)((((u64)(_val1)) << 32) | (u32)(_val0)); })
+
+#define iio_val_s64_from_array(_vals)					\
+	({								\
+		const int *_arr = (const int *)(_vals);			\
+		s64 _dec64 = iio_val_s64_compose(_arr[0], _arr[1]);	\
+									\
+		_dec64;							\
+	})
+
+#define iio_val_s64_decompose(_dec64, _val0, _val1)			\
+	do {								\
+		s64 _tmp64 = (s64)(_dec64);				\
+									\
+		*(_val0) = lower_32_bits(_tmp64);			\
+		*(_val1) = upper_32_bits(_tmp64);			\
+	} while (0)
+
+#define iio_val_s64_array_populate(_dec64, _vals)			\
+	do {								\
+		int *_arr = (int *)(_vals);				\
+									\
+		iio_val_s64_decompose((_dec64), &_arr[0], &_arr[1]);	\
+	} while (0)
 
 enum iio_available_type {
 	IIO_AVAIL_LIST,
