@@ -1022,6 +1022,7 @@ int zd_mac_rx(struct ieee80211_hw *hw, const u8 *buffer, unsigned int length)
 	const struct rx_status *status;
 	struct sk_buff *skb;
 	int bad_frame = 0;
+	u8 channel;
 	__le16 fc;
 	int need_padding;
 	int i;
@@ -1055,7 +1056,9 @@ int zd_mac_rx(struct ieee80211_hw *hw, const u8 *buffer, unsigned int length)
 		}
 	}
 
-	stats.freq = zd_channels[_zd_chip_get_channel(&mac->chip) - 1].center_freq;
+	channel = _zd_chip_get_channel(&mac->chip);
+	if (channel > 0 && channel <= ARRAY_SIZE(zd_channels))
+		stats.freq = zd_channels[channel - 1].center_freq;
 	stats.band = NL80211_BAND_2GHZ;
 	stats.signal = zd_check_signal(hw, status->signal_strength);
 
