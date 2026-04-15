@@ -1714,6 +1714,11 @@ static int yt8521_config_init(struct phy_device *phydev)
 		if (ret < 0)
 			goto err_restore_page;
 	}
+
+	if (phydev->drv->phy_id == PHY_ID_YT8531S &&
+	    phydev->interface != PHY_INTERFACE_MODE_SGMII)
+		ret = yt8531_set_ds(phydev, true);
+
 err_restore_page:
 	return phy_restore_page(phydev, old_page, ret);
 }
