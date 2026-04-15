@@ -195,6 +195,11 @@ xen_swiotlb_free_coherent(struct device *dev, size_t size, void *vaddr,
 }
 #endif /* CONFIG_X86 */
 
+static inline bool dev_has_private_dma_pool(struct device *dev)
+{
+	return dev && dev->dma_mem;
+}
+
 /*
  * Map a single buffer of the indicated size for DMA in streaming mode.  The
  * physical address to use is returned.
@@ -262,7 +267,8 @@ static dma_addr_t xen_swiotlb_map_phys(struct device *dev, phys_addr_t phys,
 
 done:
 	if (!dev_is_dma_coherent(dev) && !(attrs & DMA_ATTR_SKIP_CPU_SYNC)) {
-		if (pfn_valid(PFN_DOWN(dma_to_phys(dev, dev_addr)))) {
+		if (pfn_valid(PFN_DOWN(dma_to_phys(dev, dev_addr))) &&
+		    !dev_has_private_dma_pool(dev)) {
 			arch_sync_dma_for_device(phys, size, dir);
 			arch_sync_dma_flush();
 		} else {
@@ -289,7 +295,8 @@ static void xen_swiotlb_unmap_phys(struct device *hwdev, dma_addr_t dev_addr,
 	BUG_ON(dir == DMA_NONE);
 
 	if (!dev_is_dma_coherent(hwdev) && !(attrs & DMA_ATTR_SKIP_CPU_SYNC)) {
-		if (pfn_valid(PFN_DOWN(dma_to_phys(hwdev, dev_addr)))) {
+		if (pfn_valid(PFN_DOWN(dma_to_phys(hwdev, dev_addr))) &&
+		    !dev_has_private_dma_pool(hwdev)) {
 			arch_sync_dma_for_cpu(paddr, size, dir);
 			arch_sync_dma_flush();
 		} else {
@@ -312,7 +319,8 @@ xen_swiotlb_sync_single_for_cpu(struct device *dev, dma_addr_t dma_addr,
 	struct io_tlb_pool *pool;
 
 	if (!dev_is_dma_coherent(dev)) {
-		if (pfn_valid(PFN_DOWN(dma_to_phys(dev, dma_addr)))) {
+		if (pfn_valid(PFN_DOWN(dma_to_phys(dev, dma_addr))) &&
+		    !dev_has_private_dma_pool(dev)) {
 			arch_sync_dma_for_cpu(paddr, size, dir);
 			arch_sync_dma_flush();
 		} else {
@@ -337,7 +345,8 @@ xen_swiotlb_sync_single_for_device(struct device *dev, dma_addr_t dma_addr,
 		__swiotlb_sync_single_for_device(dev, paddr, size, dir, pool);
 
 	if (!dev_is_dma_coherent(dev)) {
-		if (pfn_valid(PFN_DOWN(dma_to_phys(dev, dma_addr)))) {
+		if (pfn_valid(PFN_DOWN(dma_to_phys(dev, dma_addr))) &&
+		    !dev_has_private_dma_pool(dev)) {
 			arch_sync_dma_for_device(paddr, size, dir);
 			arch_sync_dma_flush();
 		} else {
