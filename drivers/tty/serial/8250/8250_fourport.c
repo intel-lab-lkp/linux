@@ -34,7 +34,13 @@ static struct platform_device fourport_device = {
 
 static int __init fourport_init(void)
 {
-	return platform_device_register(&fourport_device);
+	int ret;
+
+	ret = platform_device_register(&fourport_device);
+	if (ret)
+		platform_device_put(&fourport_device);
+
+	return ret;
 }
 
 module_init(fourport_init);
