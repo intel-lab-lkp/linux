@@ -2591,9 +2591,10 @@ int __meminit vmemmap_check_pmd(pmd_t *pmdp, int node,
 }
 
 int __meminit vmemmap_populate(unsigned long vstart, unsigned long vend,
-			       int node, struct vmem_altmap *altmap)
+			       int node, struct vmem_altmap *altmap,
+			       struct dev_pagemap *pgmap)
 {
-	return vmemmap_populate_hugepages(vstart, vend, node, NULL);
+	return vmemmap_populate_hugepages(vstart, vend, node, NULL, pgmap);
 }
 #endif /* CONFIG_SPARSEMEM_VMEMMAP */
 

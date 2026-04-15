@@ -297,7 +297,8 @@ static int __meminit vmemmap_populate_range(unsigned long start,
 }
 
 int __meminit vmemmap_populate_basepages(unsigned long start, unsigned long end,
-					 int node, struct vmem_altmap *altmap)
+					 int node, struct vmem_altmap *altmap,
+					 struct dev_pagemap *pgmap)
 {
 	return vmemmap_populate_range(start, end, node, altmap, -1, 0);
 }
@@ -400,7 +401,8 @@ int __weak __meminit vmemmap_check_pmd(pmd_t *pmd, int node,
 }
 
 int __meminit vmemmap_populate_hugepages(unsigned long start, unsigned long end,
-					 int node, struct vmem_altmap *altmap)
+					 int node, struct vmem_altmap *altmap,
+					 struct dev_pagemap *pgmap)
 {
 	unsigned long addr;
 	unsigned long next;
@@ -445,7 +447,7 @@ int __meminit vmemmap_populate_hugepages(unsigned long start, unsigned long end,
 			}
 		} else if (vmemmap_check_pmd(pmd, node, addr, next))
 			continue;
-		if (vmemmap_populate_basepages(addr, next, node, altmap))
+		if (vmemmap_populate_basepages(addr, next, node, altmap, pgmap))
 			return -ENOMEM;
 	}
 	return 0;
@@ -559,7 +561,7 @@ struct page * __meminit __populate_section_memmap(unsigned long pfn,
 	if (vmemmap_can_optimize(altmap, pgmap))
 		r = vmemmap_populate_compound_pages(pfn, start, end, nid, pgmap);
 	else
-		r = vmemmap_populate(start, end, nid, altmap);
+		r = vmemmap_populate(start, end, nid, altmap, pgmap);
 
 	if (r < 0)
 		return NULL;

@@ -1790,7 +1790,7 @@ int __meminit vmemmap_check_pmd(pmd_t *pmdp, int node,
 }
 
 int __meminit vmemmap_populate(unsigned long start, unsigned long end, int node,
-		struct vmem_altmap *altmap)
+		struct vmem_altmap *altmap, struct dev_pagemap *pgmap)
 {
 	WARN_ON((start < VMEMMAP_START) || (end > VMEMMAP_END));
 	/* [start, end] should be within one section */
@@ -1798,9 +1798,9 @@ int __meminit vmemmap_populate(unsigned long start, unsigned long end, int node,
 
 	if (!IS_ENABLED(CONFIG_ARM64_4K_PAGES) ||
 	    (end - start < PAGES_PER_SECTION * sizeof(struct page)))
-		return vmemmap_populate_basepages(start, end, node, altmap);
+		return vmemmap_populate_basepages(start, end, node, altmap, pgmap);
 	else
-		return vmemmap_populate_hugepages(start, end, node, altmap);
+		return vmemmap_populate_hugepages(start, end, node, altmap, pgmap);
 }
 
 #ifdef CONFIG_MEMORY_HOTPLUG

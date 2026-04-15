@@ -1112,7 +1112,7 @@ static inline pte_t *vmemmap_pte_alloc(pmd_t *pmdp, int node,
 
 
 int __meminit radix__vmemmap_populate(unsigned long start, unsigned long end, int node,
-				      struct vmem_altmap *altmap)
+				      struct vmem_altmap *altmap, struct dev_pagemap *pgmap)
 {
 	unsigned long addr;
 	unsigned long next;

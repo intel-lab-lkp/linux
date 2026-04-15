@@ -829,7 +829,7 @@ void __init hugetlb_vmemmap_init_late(int nid)
 			 */
 			list_del(&m->list);
 
-			vmemmap_populate(start, end, nid, NULL);
+			vmemmap_populate(start, end, nid, NULL, NULL);
 			nr_mmap = end - start;
 			memmap_boot_pages_add(DIV_ROUND_UP(nr_mmap, PAGE_SIZE));
 
@@ -845,7 +845,7 @@ void __init hugetlb_vmemmap_init_late(int nid)
 		if (vmemmap_populate_hvo(start, end, huge_page_order(h), zone,
 					 HUGETLB_VMEMMAP_RESERVE_SIZE) < 0) {
 			/* Fallback if HVO population fails */
-			vmemmap_populate(start, end, nid, NULL);
+			vmemmap_populate(start, end, nid, NULL, NULL);
 			nr_mmap = end - start;
 		} else {
 			m->flags |= HUGE_BOOTMEM_ZONES_VALID;
