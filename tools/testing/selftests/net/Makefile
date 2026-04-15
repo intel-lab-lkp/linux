@@ -38,6 +38,7 @@ TEST_PROGS := \
 	fib_rule_tests.sh \
 	fib_tests.sh \
 	fin_ack_lat.sh \
+	fou_mcast_encap.sh \
 	fq_band_pktlimit.sh \
 	gre_gso.sh \
 	gre_ipv6_lladdr.sh \
@@ -195,6 +196,7 @@ TEST_GEN_PROGS := \
 
 TEST_FILES := \
 	fcnal-test.sh \
+	fou_mcast_encap.py \
 	in_netns.sh \
 	lib.sh \
 	settings \
