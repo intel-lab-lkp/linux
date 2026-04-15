@@ -17,6 +17,7 @@
 #include <linux/ioport.h>
 #include <linux/io.h>
 #include <linux/mfd/syscon.h>
+#include <linux/mutex.h>
 #include <linux/platform_device.h>
 #include <linux/pwm.h>
 #include <linux/of.h>
@@ -47,7 +48,7 @@ struct atmel_tcb_channel {
 };
 
 struct atmel_tcb_pwm_chip {
-	spinlock_t lock;
+	struct mutex lock;
 	u8 channel;
 	u8 width;
 	struct regmap *regmap;
@@ -81,7 +82,7 @@ static int atmel_tcb_pwm_request(struct pwm_chip *chip,
 	tcbpwm->period = 0;
 	tcbpwm->div = 0;
 
-	guard(spinlock)(&tcbpwmc->lock);
+	guard(mutex)(&tcbpwmc->lock);
 
 	regmap_read(tcbpwmc->regmap, ATMEL_TC_REG(tcbpwmc->channel, CMR), &cmr);
 	/*
@@ -335,7 +336,7 @@ static int atmel_tcb_pwm_apply(struct pwm_chip *chip, struct pwm_device *pwm,
 	int duty_cycle, period;
 	int ret;
 
-	guard(spinlock)(&tcbpwmc->lock);
+	guard(mutex)(&tcbpwmc->lock);
 
 	if (!state->enabled) {
 		atmel_tcb_pwm_disable(chip, pwm, state->polarity);
@@ -438,7 +439,7 @@ static int atmel_tcb_pwm_probe(struct platform_device *pdev)
 	if (err)
 		goto err_gclk;
 
-	spin_lock_init(&tcbpwmc->lock);
+	mutex_init(&tcbpwmc->lock);
 
 	err = pwmchip_add(chip);
 	if (err < 0)
