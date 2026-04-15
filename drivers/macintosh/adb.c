@@ -883,6 +883,8 @@ adb_dummy_probe(struct platform_device *dev)
 static void __init
 adbdev_init(void)
 {
+	int err;
+
 	if (register_chrdev(ADB_MAJOR, "adb", &adb_fops)) {
 		pr_err("adb: unable to get major %d\n", ADB_MAJOR);
 		return;
@@ -893,6 +895,9 @@ adbdev_init(void)
 
 	device_create(&adb_dev_class, NULL, MKDEV(ADB_MAJOR, 0), NULL, "adb");
 
-	platform_device_register(&adb_pfdev);
+	err = platform_device_register(&adb_pfdev);
+	if (err)
+		platform_device_put(&adb_pfdev);
+
 	platform_driver_probe(&adb_pfdrv, adb_dummy_probe);
 }
