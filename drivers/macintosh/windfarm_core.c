@@ -436,9 +436,14 @@ EXPORT_SYMBOL_GPL(wf_clear_overtemp);
 
 static int __init windfarm_core_init(void)
 {
+	int err;
+
 	DBG("wf: core loaded\n");
 
-	platform_device_register(&wf_platform_device);
+	err = platform_device_register(&wf_platform_device);
+	if (err)
+		platform_device_put(&wf_platform_device);
+
 	return 0;
 }
 
