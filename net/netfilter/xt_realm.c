@@ -27,24 +27,35 @@ realm_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	return (info->id == (dst->tclassid & info->mask)) ^ info->invert;
 }
 
-static struct xt_match realm_mt_reg __read_mostly = {
-	.name		= "realm",
-	.match		= realm_mt,
-	.matchsize	= sizeof(struct xt_realm_info),
-	.hooks		= (1 << NF_INET_POST_ROUTING) | (1 << NF_INET_FORWARD) |
-			  (1 << NF_INET_LOCAL_OUT) | (1 << NF_INET_LOCAL_IN),
-	.family		= NFPROTO_UNSPEC,
-	.me		= THIS_MODULE
+static struct xt_match realm_mt_reg[] __read_mostly = {
+	{
+		.name		= "realm",
+		.match		= realm_mt,
+		.matchsize	= sizeof(struct xt_realm_info),
+		.hooks		= (1 << NF_INET_POST_ROUTING) | (1 << NF_INET_FORWARD) |
+				  (1 << NF_INET_LOCAL_OUT) | (1 << NF_INET_LOCAL_IN),
+		.family		= NFPROTO_IPV4,
+		.me		= THIS_MODULE
+	},
+	{
+		.name		= "realm",
+		.match		= realm_mt,
+		.matchsize	= sizeof(struct xt_realm_info),
+		.hooks		= (1 << NF_INET_POST_ROUTING) | (1 << NF_INET_FORWARD) |
+				  (1 << NF_INET_LOCAL_OUT) | (1 << NF_INET_LOCAL_IN),
+		.family		= NFPROTO_IPV6,
+		.me		= THIS_MODULE
+	}
 };
 
 static int __init realm_mt_init(void)
 {
-	return xt_register_match(&realm_mt_reg);
+	return xt_register_matches(realm_mt_reg, ARRAY_SIZE(realm_mt_reg));
 }
 
 static void __exit realm_mt_exit(void)
 {
-	xt_unregister_match(&realm_mt_reg);
+	xt_unregister_matches(realm_mt_reg, ARRAY_SIZE(realm_mt_reg));
 }
 
 module_init(realm_mt_init);
