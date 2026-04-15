@@ -32,6 +32,7 @@ const char help_fmt[] =
 "  -P            Print out DSQ content and event counters to trace_pipe every second\n"
 "  -M            Print out debug messages to trace_pipe\n"
 "  -H            Boost nice -20 tasks in SHARED_DSQ, use with -b\n"
+"  -c CG_PATH    Cgroup path to attach as sub-scheduler, must run parent scheduler first\n"
 "  -d PID        Disallow a process from switching into SCHED_EXT (-1 for self)\n"
 "  -D LEN        Set scx_exit_info.dump buffer length\n"
 "  -S            Suppress qmap-specific debug dump\n"
