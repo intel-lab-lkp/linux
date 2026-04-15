@@ -2262,6 +2262,8 @@ decay_va_pool_node(struct vmap_node *vn, bool full_decay)
 			WRITE_ONCE(vn->pool[i].len, pool_len);
 			spin_unlock(&vn->pool_lock);
 		}
+
+		cond_resched();
 	}
 
 	reclaim_list_global(&decay_list);
