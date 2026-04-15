@@ -216,6 +216,20 @@ struct imx_thermal_data {
 	const char *temp_grade;
 };
 
+static int imx_thermal_sync_zone_trip(struct thermal_trip *trip, void *arg)
+{
+	struct imx_thermal_data *data = arg;
+	int temp;
+
+	if (trip->type != THERMAL_TRIP_PASSIVE && trip->type != THERMAL_TRIP_CRITICAL)
+		return 0;
+
+	temp = trips[trip->type].temperature;
+	thermal_zone_set_trip_temp(data->tz, trip, temp);
+
+	return 0;
+}
+
 static void imx_set_panic_temp(struct imx_thermal_data *data,
 			       int panic_temp)
 {
@@ -679,19 +693,16 @@ static int imx_thermal_probe(struct platform_device *pdev)
 		goto legacy_cleanup;
 	}
 
-	data->tz = thermal_zone_device_register_with_trips("imx_thermal_zone",
-							   trips,
-							   ARRAY_SIZE(trips),
-							   data,
-							   &imx_tz_ops, NULL,
-							   IMX_PASSIVE_DELAY,
-							   IMX_POLLING_DELAY);
+	data->irq_enabled = true;
+	data->tz = devm_thermal_of_zone_register(dev, 0, data, &imx_tz_ops);
 	if (IS_ERR(data->tz)) {
 		ret = PTR_ERR(data->tz);
 		dev_err(dev, "failed to register thermal zone device %d\n",
 			ret);
 		goto clk_disable;
 	}
+
+	thermal_zone_for_each_trip(data->tz, imx_thermal_sync_zone_trip, data);
 
 	dev_info(dev, "%s CPU temperature grade - max:%dC"
 		 " critical:%dC passive:%dC\n", data->temp_grade,
@@ -724,25 +735,18 @@ static int imx_thermal_probe(struct platform_device *pdev)
 	if (ret < 0)
 		goto disable_runtime_pm;
 
-	data->irq_enabled = true;
-	ret = thermal_zone_device_enable(data->tz);
-	if (ret)
-		goto thermal_zone_unregister;
-
 	ret = devm_request_threaded_irq(dev, data->irq,
 			imx_thermal_alarm_irq, imx_thermal_alarm_irq_thread,
 			0, "imx_thermal", data);
 	if (ret < 0) {
 		dev_err(dev, "failed to request alarm irq: %d\n", ret);
-		goto thermal_zone_unregister;
+		goto disable_runtime_pm;
 	}
 
 	pm_runtime_put(data->dev);
 
 	return 0;
 
-thermal_zone_unregister:
-	thermal_zone_device_unregister(data->tz);
 disable_runtime_pm:
 	pm_runtime_put_noidle(data->dev);
 	pm_runtime_disable(data->dev);
@@ -761,7 +765,6 @@ static void imx_thermal_remove(struct platform_device *pdev)
 	pm_runtime_put_noidle(data->dev);
 	pm_runtime_disable(data->dev);
 
-	thermal_zone_device_unregister(data->tz);
 	imx_thermal_unregister_legacy_cooling(data);
 }
 
