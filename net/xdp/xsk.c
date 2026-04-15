@@ -546,12 +546,17 @@ static int xsk_wakeup(struct xdp_sock *xs, u8 flags)
 	return dev->netdev_ops->ndo_xsk_wakeup(dev, xs->queue_id, flags);
 }
 
-static int xsk_cq_reserve_locked(struct xsk_buff_pool *pool)
+/* The function tries to reserve as many descs as possible. If there
+ * is no single slot to allocate, return zero. Otherwise, return how
+ * many slots are available, even though it might stop reserving at
+ * certain point.
+ */
+static int xsk_cq_reserve_locked(struct xsk_buff_pool *pool, u32 n)
 {
 	int ret;
 
 	spin_lock(&pool->cq->cq_cached_prod_lock);
-	ret = xskq_prod_reserve(pool->cq);
+	ret = xskq_prod_reserve(pool->cq, n);
 	spin_unlock(&pool->cq->cq_cached_prod_lock);
 
 	return ret;
@@ -947,8 +952,7 @@ static int __xsk_generic_xmit(struct sock *sk)
 		 * if there is space in it. This avoids having to implement
 		 * any buffering in the Tx path.
 		 */
-		err = xsk_cq_reserve_locked(xs->pool);
-		if (err) {
+		if (!xsk_cq_reserve_locked(xs->pool, 1)) {
 			err = -EAGAIN;
 			goto out;
 		}

@@ -413,14 +413,16 @@ static inline void xskq_prod_cancel_n(struct xsk_queue *q, u32 cnt)
 	q->cached_prod -= cnt;
 }
 
-static inline int xskq_prod_reserve(struct xsk_queue *q)
+static inline int xskq_prod_reserve(struct xsk_queue *q, u32 n)
 {
-	if (xskq_prod_is_full(q))
-		return -ENOSPC;
+	u32 nr_free = xskq_prod_nb_free(q, n);
+
+	if (!nr_free)
+		return 0;
 
 	/* A, matches D */
-	q->cached_prod++;
-	return 0;
+	q->cached_prod += nr_free;
+	return nr_free;
 }
 
 static inline int xskq_prod_reserve_addr(struct xsk_queue *q, u64 addr)
