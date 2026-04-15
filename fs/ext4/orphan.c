@@ -4,6 +4,8 @@
 #include <linux/fs.h>
 #include <linux/quotaops.h>
 #include <linux/buffer_head.h>
+#include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 
 #include "ext4.h"
 #include "ext4_jbd2.h"
@@ -657,3 +659,78 @@ int ext4_orphan_file_empty(struct super_block *sb)
 			return 0;
 	return 1;
 }
+
+struct ext4_proc_orphan {
+	struct ext4_inode_info cursor;
+};
+
+static void *ext4_orphan_seq_start(struct seq_file *seq, loff_t *pos)
+{
+	return NULL;
+}
+
+static void *ext4_orphan_seq_next(struct seq_file *seq, void *v, loff_t *pos)
+{
+	return NULL;
+}
+
+static int ext4_orphan_seq_show(struct seq_file *seq, void *v)
+{
+	return 0;
+}
+
+static void ext4_orphan_seq_stop(struct seq_file *seq, void *v)
+{
+}
+
+const struct seq_operations ext4_orphan_seq_ops = {
+	.start  = ext4_orphan_seq_start,
+	.next   = ext4_orphan_seq_next,
+	.stop   = ext4_orphan_seq_stop,
+	.show   = ext4_orphan_seq_show,
+};
+
+static int ext4_seq_orphan_open(struct inode *inode, struct file *file)
+{
+	int rc;
+	struct seq_file *m;
+	struct ext4_proc_orphan *private;
+
+	rc = seq_open_private(file, &ext4_orphan_seq_ops,
+			      sizeof(struct ext4_proc_orphan));
+	if (!rc) {
+		m = file->private_data;
+		private = m->private;
+		INIT_LIST_HEAD(&private->cursor.i_orphan);
+		private->cursor.vfs_inode.i_ino = 0;
+	}
+
+	return rc;
+}
+
+static int ext4_seq_orphan_release(struct inode *inode, struct file *file)
+{
+	struct seq_file *seq = file->private_data;
+	struct ext4_proc_orphan *s = seq->private;
+	struct ext4_sb_info *sbi = EXT4_SB(pde_data(inode));
+
+	/*
+	 * The function close_pdeo() is called when deleting the procfs
+	 * in ext4_unregister_sysfs(), and this function is used to remove
+	 * the entry from the 'pde->pde_openers' list. Therefore, when the
+	 * file is closed, proc_reg_release() will not call close_pdeo()
+	 * again because it cannot find the node on the 'pde->pde_openers'
+	 * list. This prevents the UAF issue from occurring.
+	 */
+	mutex_lock(&sbi->s_orphan_lock);
+	list_del(&s->cursor.i_orphan);
+	mutex_unlock(&sbi->s_orphan_lock);
+
+	return seq_release_private(inode, file);
+}
+
+const struct proc_ops ext4_orphan_proc_ops = {
+	.proc_open      = ext4_seq_orphan_open,
+	.proc_read      = seq_read,
+	.proc_release   = ext4_seq_orphan_release,
+};
