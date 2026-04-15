@@ -73,23 +73,27 @@ struct xsk_buff_pool {
 	u64 addrs_cnt;
 	u32 free_list_cnt;
 	u32 dma_pages_cnt;
-	u32 free_heads_cnt;
+
+	/* Read-mostly fields */
 	u32 headroom;
 	u32 chunk_size;
 	u32 chunk_shift;
 	u32 frame_len;
 	u32 xdp_zc_max_segs;
 	u8 tx_metadata_len; /* inherited from umem */
-	u8 cached_need_wakeup;
 	bool uses_need_wakeup;
 	bool unaligned;
 	bool tx_sw_csum;
 	void *addrs;
+
+	/* Write-heavy fields */
 	/* Mutual exclusion of the completion ring in the SKB mode.
 	 * Protect: NAPI TX thread and sendmsg error paths in the SKB
 	 * destructor callback.
 	 */
-	spinlock_t cq_prod_lock;
+	spinlock_t cq_prod_lock ____cacheline_aligned_in_smp;
+	u8 cached_need_wakeup;
+	u32 free_heads_cnt;
 	struct xdp_buff_xsk *free_heads[];
 };
 
