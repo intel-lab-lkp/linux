@@ -8065,7 +8065,19 @@ static void ixgbe_watchdog_update_link(struct ixgbe_adapter *adapter)
 		pfc_en |= !!(adapter->ixgbe_ieee_pfc->pfc_en);
 
 	if (link_up && !((adapter->flags & IXGBE_FLAG_DCB_ENABLED) && pfc_en)) {
-		hw->mac.ops.fc_enable(hw);
+		/* Skip setup_fc() on backplane links: it resolves to
+		 * prot_autoc_write() -> ixgbe_reset_pipeline_82599() and
+		 * toggles IXGBE_AUTOC_AN_RESTART, causing infinite link-flap
+		 * on 82599 backplane interfaces.
+		 * If setup_fc() fails its output is invalid; skip fc_enable()
+		 * to avoid committing stale capability bits that trigger MDD.
+		 */
+		if (hw->mac.ops.setup_fc &&
+		    hw->mac.ops.get_media_type(hw) != ixgbe_media_type_backplane &&
+		    hw->mac.ops.setup_fc(hw))
+			e_warn(drv, "setup_fc failed, skipping fc_enable\n");
+		else
+			hw->mac.ops.fc_enable(hw);
 		ixgbe_set_rx_drop_en(adapter);
 	}
 
