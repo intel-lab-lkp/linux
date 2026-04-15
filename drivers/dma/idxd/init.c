@@ -1293,13 +1293,30 @@ static void idxd_remove(struct pci_dev *pdev)
 {
 	struct idxd_device *idxd = pci_get_drvdata(pdev);
 
-	idxd_unregister_devices(idxd);
 	/*
-	 * When ->release() is called for the idxd->conf_dev, it frees all the memory related
-	 * to the idxd context. The driver still needs those bits in order to do the rest of
-	 * the cleanup. However, we do need to unbound the idxd sub-driver. So take a ref
-	 * on the device here to hold off the freeing while allowing the idxd sub-driver
-	 * to unbind.
+	 * The idxd sub-driver's remove callback (idxd_device_drv_remove())
+	 * iterates idxd->wqs[] and accesses wq objects. We must unbind the
+	 * sub-driver before idxd_unregister_devices() frees these objects,
+	 * otherwise a use-after-free occurs.
+	 *
+	 * We cannot simply reorder device_unregister(idxd_confdev) before
+	 * idxd_unregister_devices() because device_del() -> kobject_del()
+	 * recursively removes the parent's sysfs directory, which destroys
+	 * children's sysfs entries. Subsequent device_unregister() on the
+	 * children then fails with "sysfs group 'power' not found".
+	 *
+	 * Use device_release_driver() to only unbind the driver (triggering
+	 * idxd_device_drv_remove()) without touching sysfs. Then safely
+	 * unregister children before the parent.
+	 */
+	device_release_driver(idxd_confdev(idxd));
+	idxd_unregister_devices(idxd);
+
+	/*
+	 * When ->release() is called for the idxd->conf_dev, it frees all the
+	 * memory related to the idxd context. The driver still needs those bits
+	 * in order to do the rest of the cleanup. So take a ref on the device
+	 * here to hold off the freeing.
 	 */
 	get_device(idxd_confdev(idxd));
 	device_unregister(idxd_confdev(idxd));
