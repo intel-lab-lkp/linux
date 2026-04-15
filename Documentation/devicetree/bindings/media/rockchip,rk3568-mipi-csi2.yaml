@@ -18,6 +18,7 @@ properties:
   compatible:
     enum:
       - fsl,imx93-mipi-csi2
+      - fsl,imx95-mipi-csi2
       - rockchip,rk3568-mipi-csi2
 
   reg:
@@ -124,7 +125,9 @@ allOf:
       properties:
         compatible:
           contains:
-            const: fsl,imx93-mipi-csi2
+            enum:
+              - fsl,imx93-mipi-csi2
+              - fsl,imx95-mipi-csi2
     then:
       properties:
         interrupts:
