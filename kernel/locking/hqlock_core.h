@@ -530,6 +530,11 @@ static __always_inline void low_contention_mcs_lock_handoff(struct mcs_spinlock 
 	if (next != prev && likely(general_handoffs + 1 != max_u16))
 		general_handoffs++;
 
+#ifdef CONFIG_HQSPINLOCKS_DEBUG
+	if (READ_ONCE(max_general_handoffs) < general_handoffs)
+		WRITE_ONCE(max_general_handoffs, general_handoffs);
+#endif
+
 	qnext->general_handoffs = general_handoffs;
 	qnext->remote_handoffs = qnode->remote_handoffs;
 	qnext->prev_general_handoffs = qnode->prev_general_handoffs;

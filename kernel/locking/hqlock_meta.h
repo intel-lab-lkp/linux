@@ -124,6 +124,12 @@ init_meta:
 	}
 
 	*seq = seq_counter;
+#ifdef CONFIG_HQSPINLOCKS_DEBUG
+	int current_used = atomic_inc_return_relaxed(&cur_buckets_in_use);
+
+	if (READ_ONCE(max_buckets_in_use) < current_used)
+		WRITE_ONCE(max_buckets_in_use, current_used);
+#endif
 	return META_GRABBED;
 }
 
@@ -252,6 +258,9 @@ hqlock_mode_t setup_lock_mode(struct qspinlock *lock, u16 lock_id, u32 *meta_seq
 		 */
 		if (status == META_GRABBED && mode != LOCK_MODE_HQLOCK) {
 			smp_store_release(&meta_pool[lock_id].lock_ptr, NULL);
+#ifdef CONFIG_HQSPINLOCKS_DEBUG
+			atomic_dec(&cur_buckets_in_use);
+#endif
 		}
 	} while (mode == LOCK_NO_MODE);
 
@@ -307,8 +316,15 @@ static inline void release_lock_meta(struct qspinlock *lock,
 			goto do_rollback;
 	}
 
+#ifdef CONFIG_HQSPINLOCKS_DEBUG
+	atomic_dec(&cur_buckets_in_use);
+#endif
+
 	if (qnode->remote_handoffs < hqlock_remote_handoffs_keep_numa) {
 		upd_val |= _Q_LOCK_MODE_QSPINLOCK_VAL;
+#ifdef CONFIG_HQSPINLOCKS_DEBUG
+		atomic_inc(&transitions_from_hq_to_qspinlock);
+#endif
 	}
 
 	/*
