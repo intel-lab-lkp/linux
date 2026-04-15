@@ -366,7 +366,8 @@ firmware_upload_register(struct module *module, struct device *parent,
 	return fw_upload;
 
 free_fw_sysfs:
-	kfree(fw_sysfs);
+	put_device(fw_dev);
+	goto exit_module_put;
 
 free_fw_upload_priv:
 	kfree(fw_upload_priv);
