@@ -5391,6 +5391,25 @@ static int arm_smmu_device_hw_probe(struct arm_smmu_device *smmu)
 
 	dev_info(smmu->dev, "oas %lu-bit (features 0x%08x)\n",
 		 smmu->oas, smmu->features);
+
+	/*
+	 * If SMMU is already active in kdump case, there could be in-flight DMA
+	 * from devices initiated by the crashed kernel. Mark ARM_SMMU_OPT_KDUMP
+	 * to let the init functions adopt the crashed kernel's stream table.
+	 *
+	 * Note that arm_smmu_adopt_strtab() uses memremap that can only work on
+	 * a coherent SMMU. A non-coherent SMMU has no choice but to continue to
+	 * abort any in-flight DMA.
+	 */
+	if (is_kdump_kernel() &&
+	    (readl_relaxed(smmu->base + ARM_SMMU_CR0) & CR0_SMMUEN)) {
+		if (coherent)
+			smmu->options |= ARM_SMMU_OPT_KDUMP;
+		else
+			dev_warn(smmu->dev,
+				 "kdump: in-flight DMA would be rejected\n");
+	}
+
 	return 0;
 }
 
