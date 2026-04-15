@@ -450,6 +450,10 @@ __init static int append_e820_table(struct boot_e820_entry *entries, u32 nr_entr
 {
 	struct boot_e820_entry *entry = entries;
 
+	/* If there aren't any entries, we'll want to fall-back to another source. */
+	if (!nr_entries)
+		return -1;
+
 	while (nr_entries) {
 		u64 start = entry->addr;
 		u64 size  = entry->size;
