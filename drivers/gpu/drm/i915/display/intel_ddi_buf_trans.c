@@ -1787,9 +1787,33 @@ xe3plpd_get_lt_buf_trans(struct intel_encoder *encoder,
 }
 
 static int
-vspeo_compute_index(struct intel_encoder *encoder)
+lt_compute_index(const struct intel_crtc_state *crtc_state)
 {
-	drm_dbg_kms(to_intel_display(encoder)->drm, "VS/PE-O unsupported, using default VS/PE tables");
+	if (intel_crtc_has_dp_encoder(crtc_state)) {
+		if (intel_dp_is_uhbr(crtc_state))
+			return 5;
+		else
+			return 4;
+	}
+
+	drm_WARN(to_intel_display(crtc_state)->drm, 1,
+		 "non-DP (%d) encoder asks to compute VS/PE-O index\n",
+		 crtc_state->output_types);
+
+	return -1;
+}
+
+static int
+vspeo_compute_index(struct intel_encoder *encoder,
+		    const struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(encoder);
+
+	if (HAS_LT_PHY(display)) {
+		return lt_compute_index(crtc_state);
+	}
+
+	drm_dbg_kms(display->drm, "VS/PE-O unsupported, using default VS/PE tables");
 
 	return -1;
 }
@@ -1867,10 +1891,20 @@ const struct intel_ddi_buf_trans *intel_ddi_buf_trans_get(struct intel_encoder *
 							  const struct intel_crtc_state *crtc_state,
 							  int *n_entries)
 {
-	if (!encoder->vspeo)
+	struct intel_display *display = to_intel_display(encoder);
+	struct intel_ddi_buf_trans *buf_trans;
+	int idx;
+
+	buf_trans = (void *) encoder->vspeo;
+	if (!buf_trans)
 		return encoder->get_buf_trans(encoder, crtc_state, n_entries);
 
-	vspeo_compute_index(encoder);
+	idx = vspeo_compute_index(encoder, crtc_state);
+	if (idx < 0)
+		return encoder->get_buf_trans(encoder, crtc_state, n_entries);
 
-	return encoder->get_buf_trans(encoder, crtc_state, n_entries);
+	buf_trans->entries = display->vbt.vspeo.bufs_mtrx[idx];
+	buf_trans->num_entries = display->vbt.vspeo.num_rows;
+
+	return intel_get_buf_trans(buf_trans, n_entries);
 }
