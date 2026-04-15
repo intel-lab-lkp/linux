@@ -970,22 +970,26 @@ static const struct ytphy_ldo_vol_map yt8531_ldo_vol[] = {
 	{.vol = YT8531_LDO_VOL_3V3, .ds = 7, .cur = 6140},
 };
 
-static u32 yt8531_get_ldo_vol(struct phy_device *phydev)
+static u32 yt8531_get_ldo_vol(struct phy_device *phydev, bool mdio_locked)
 {
 	u32 val;
 
-	val = ytphy_read_ext_with_lock(phydev, YT8521_CHIP_CONFIG_REG);
+	if (mdio_locked)
+		val = ytphy_read_ext(phydev, YT8521_CHIP_CONFIG_REG);
+	else
+		val = ytphy_read_ext_with_lock(phydev, YT8521_CHIP_CONFIG_REG);
+
 	val = FIELD_GET(YT8531_RGMII_LDO_VOL_MASK, val);
 
 	return val <= YT8531_LDO_VOL_1V8 ? val : YT8531_LDO_VOL_1V8;
 }
 
-static int yt8531_get_ds_map(struct phy_device *phydev, u32 cur)
+static int yt8531_get_ds_map(struct phy_device *phydev, u32 cur, bool mdio_locked)
 {
 	u32 vol;
 	int i;
 
-	vol = yt8531_get_ldo_vol(phydev);
+	vol = yt8531_get_ldo_vol(phydev, mdio_locked);
 	for (i = 0; i < ARRAY_SIZE(yt8531_ldo_vol); i++) {
 		if (yt8531_ldo_vol[i].vol == vol && yt8531_ldo_vol[i].cur == cur)
 			return yt8531_ldo_vol[i].ds;
@@ -994,7 +998,7 @@ static int yt8531_get_ds_map(struct phy_device *phydev, u32 cur)
 	return -EINVAL;
 }
 
-static int yt8531_set_ds(struct phy_device *phydev)
+static int yt8531_set_ds(struct phy_device *phydev, bool mdio_locked)
 {
 	struct device_node *node = phydev->mdio.dev.of_node;
 	u32 ds_field_low, ds_field_hi, val;
@@ -1002,7 +1006,7 @@ static int yt8531_set_ds(struct phy_device *phydev)
 
 	/* set rgmii rx clk driver strength */
 	if (!of_property_read_u32(node, "motorcomm,rx-clk-drv-microamp", &val)) {
-		ds = yt8531_get_ds_map(phydev, val);
+		ds = yt8531_get_ds_map(phydev, val, mdio_locked);
 		if (ds < 0)
 			return dev_err_probe(&phydev->mdio.dev, ds,
 					     "No matching current value was found.\n");
@@ -1010,16 +1014,23 @@ static int yt8531_set_ds(struct phy_device *phydev)
 		ds = YT8531_RGMII_RX_DS_DEFAULT;
 	}
 
-	ret = ytphy_modify_ext_with_lock(phydev,
-					 YTPHY_PAD_DRIVE_STRENGTH_REG,
-					 YT8531_RGMII_RXC_DS_MASK,
-					 FIELD_PREP(YT8531_RGMII_RXC_DS_MASK, ds));
+	if (mdio_locked)
+		ret = ytphy_modify_ext(phydev,
+				       YTPHY_PAD_DRIVE_STRENGTH_REG,
+				       YT8531_RGMII_RXC_DS_MASK,
+				       FIELD_PREP(YT8531_RGMII_RXC_DS_MASK, ds));
+	else
+		ret = ytphy_modify_ext_with_lock(phydev,
+						 YTPHY_PAD_DRIVE_STRENGTH_REG,
+						 YT8531_RGMII_RXC_DS_MASK,
+						 FIELD_PREP(YT8531_RGMII_RXC_DS_MASK, ds));
+
 	if (ret < 0)
 		return ret;
 
 	/* set rgmii rx data driver strength */
 	if (!of_property_read_u32(node, "motorcomm,rx-data-drv-microamp", &val)) {
-		ds = yt8531_get_ds_map(phydev, val);
+		ds = yt8531_get_ds_map(phydev, val, mdio_locked);
 		if (ds < 0)
 			return dev_err_probe(&phydev->mdio.dev, ds,
 					     "No matching current value was found.\n");
@@ -1033,10 +1044,18 @@ static int yt8531_set_ds(struct phy_device *phydev)
 	ds_field_low = FIELD_GET(GENMASK(1, 0), ds);
 	ds_field_low = FIELD_PREP(YT8531_RGMII_RXD_DS_LOW_MASK, ds_field_low);
 
-	ret = ytphy_modify_ext_with_lock(phydev,
-					 YTPHY_PAD_DRIVE_STRENGTH_REG,
-					 YT8531_RGMII_RXD_DS_LOW_MASK | YT8531_RGMII_RXD_DS_HI_MASK,
-					 ds_field_low | ds_field_hi);
+	if (mdio_locked)
+		ret = ytphy_modify_ext(phydev,
+				       YTPHY_PAD_DRIVE_STRENGTH_REG,
+				       YT8531_RGMII_RXD_DS_LOW_MASK | YT8531_RGMII_RXD_DS_HI_MASK,
+				       ds_field_low | ds_field_hi);
+	else
+		ret = ytphy_modify_ext_with_lock(phydev,
+						 YTPHY_PAD_DRIVE_STRENGTH_REG,
+						 YT8531_RGMII_RXD_DS_LOW_MASK |
+						 YT8531_RGMII_RXD_DS_HI_MASK,
+						 ds_field_low | ds_field_hi);
+
 	if (ret < 0)
 		return ret;
 
@@ -1826,7 +1845,7 @@ static int yt8531_config_init(struct phy_device *phydev)
 			return ret;
 	}
 
-	ret = yt8531_set_ds(phydev);
+	ret = yt8531_set_ds(phydev, false);
 	if (ret < 0)
 		return ret;
 
