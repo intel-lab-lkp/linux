@@ -212,6 +212,12 @@ int wl18xx_process_mailbox_events(struct wl1271 *wl)
 		u8 win_size = mbox->rx_ba_win_size;
 		const u8 *addr;
 
+		if (link_id >= WLCORE_MAX_LINKS) {
+			wl1271_error("BA event: invalid link_id %u\n",
+				     link_id);
+			goto out;
+		}
+
 		wlvif = wl->links[link_id].wlvif;
 		vif = wl12xx_wlvif_to_vif(wlvif);
 
