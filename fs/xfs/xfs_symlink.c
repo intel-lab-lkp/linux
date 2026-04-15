@@ -148,6 +148,12 @@ xfs_symlink(
 
 	error = xfs_trans_alloc_icreate(mp, &M_RES(mp)->tr_symlink, udqp, gdqp,
 			pdqp, resblks, &tp);
+	if (error == -ENOSPC) {
+		/* flush outstanding delalloc blocks and retry */
+		xfs_flush_inodes(mp);
+		error = xfs_trans_alloc_icreate(mp, &M_RES(mp)->tr_symlink,
+				udqp, gdqp, pdqp, resblks, &tp);
+	}
 	if (error)
 		goto out_parent;
 
