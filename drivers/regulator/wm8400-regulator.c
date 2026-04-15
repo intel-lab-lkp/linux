@@ -243,6 +243,7 @@ int wm8400_register_regulator(struct device *dev, int reg,
 			      struct regulator_init_data *initdata)
 {
 	struct wm8400 *wm8400 = dev_get_drvdata(dev);
+	int ret;
 
 	if (wm8400->regulators[reg].name)
 		return -EBUSY;
@@ -254,7 +255,12 @@ int wm8400_register_regulator(struct device *dev, int reg,
 	wm8400->regulators[reg].dev.parent = dev;
 	wm8400->regulators[reg].dev.platform_data = initdata;
 
-	return platform_device_register(&wm8400->regulators[reg]);
+	ret = platform_device_register(&wm8400->regulators[reg]);
+	if (ret)
+		platform_device_put(&wm8400->regulators[reg]);
+
+	return ret;
+
 }
 EXPORT_SYMBOL_GPL(wm8400_register_regulator);
 
