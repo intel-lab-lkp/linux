@@ -127,8 +127,13 @@ static int __init chromeos_pstore_init(void)
 	/* First check ACPI for non-hardcoded values from firmware. */
 	acpi_dev_found = chromeos_check_acpi();
 
-	if (acpi_dev_found || dmi_check_system(chromeos_pstore_dmi_table))
-		return platform_device_register(&chromeos_ramoops);
+	if (acpi_dev_found || dmi_check_system(chromeos_pstore_dmi_table)) {
+		ret = platform_device_register(&chromeos_ramoops);
+		if (ret)
+			platform_device_put(&chromeos_ramoops);
+
+		return ret;
+	}
 
 	return -ENODEV;
 }
