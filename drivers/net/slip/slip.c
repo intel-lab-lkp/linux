@@ -333,9 +333,13 @@ static void sl_bump(struct slip *sl)
 				printk(KERN_WARNING "%s: compressed packet ignored\n", dev->name);
 				return;
 			}
-			/* make sure we've reserved enough space for uncompress
-			   to use */
-			if (count + 80 > sl->buffsize) {
+			/* slhc_uncompress() prepends up to
+			 * ip->ihl * 4 + thp->doff * 4 bytes of reconstructed
+			 * IPv4 + TCP header. IHL and doff are 4-bit fields
+			 * (max 15) counting 4-byte units, so the header is
+			 * at most 2 * 15 * 4 = 120 bytes.
+			 */
+			if (count + 2 * 15 * 4 > sl->buffsize) {
 				dev->stats.rx_over_errors++;
 				return;
 			}
