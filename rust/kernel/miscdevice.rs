@@ -14,6 +14,7 @@ use crate::{
     error::{to_result, Error, Result, VTABLE_DEFAULT_ERROR},
     ffi::{c_int, c_long, c_uint, c_ulong},
     fs::{File, Kiocb},
+    io_uring::{self, IoUringCmd, UringCmdAction},
     iov::{IovIterDest, IovIterSource},
     mm::virt::VmaNew,
     prelude::*,
@@ -188,6 +189,31 @@ pub trait MiscDevice: Sized {
         _m: &SeqFile,
         _file: &File,
     ) {
+        build_error!(VTABLE_DEFAULT_ERROR)
+    }
+
+    /// Handler for `uring_cmd`.
+    ///
+    /// Invoked when userspace submits an `IORING_OP_URING_CMD` entry to the
+    /// io-uring submission queue for a file backed by this driver.
+    ///
+    /// The driver must either complete the command synchronously by calling
+    /// [`IoUringCmd::complete`] and returning `Ok(UringCmdAction::Complete(_))`,
+    /// or queue it for asynchronous completion by calling [`IoUringCmd::queue`]
+    /// and returning `Ok(UringCmdAction::Queued(_))`.  In the latter case the
+    /// driver must eventually call [`crate::io_uring::QueuedIoUringCmd::done`]
+    /// to post the completion to userspace.
+    ///
+    /// `issue_flags` carries `IO_URING_F_*` flags (e.g. `IO_URING_F_NONBLOCK`)
+    /// describing the current execution context.  When completing
+    /// asynchronously, do **not** forward this value to
+    /// [`crate::io_uring::QueuedIoUringCmd::done`]; see its documentation for
+    /// the correct flags to use in each completion context.
+    fn uring_cmd(
+        _device: <Self::Ptr as ForeignOwnable>::Borrowed<'_>,
+        _io_uring_cmd: IoUringCmd,
+        _issue_flags: u32,
+    ) -> Result<UringCmdAction> {
         build_error!(VTABLE_DEFAULT_ERROR)
     }
 }
@@ -387,6 +413,56 @@ impl<T: MiscDevice> MiscdeviceVTable<T> {
         T::show_fdinfo(device, m, file);
     }
 
+    /// # Safety
+    ///
+    /// - The pointer `ioucmd` is not null and points to a valid `bindings::io_uring_cmd`.
+    unsafe extern "C" fn uring_cmd(
+        ioucmd: *mut bindings::io_uring_cmd,
+        issue_flags: ffi::c_uint,
+    ) -> c_int {
+        // SAFETY: `file` referenced by `ioucmd` is valid pointer. It's assigned in
+        // uring cmd preparation. So dereferencing is safe.
+        let raw_file = unsafe { (*ioucmd).file };
+
+        // SAFETY: `private_data` is guaranteed that it has valid pointer after
+        // this file opened. So dereferencing is safe.
+        let private = unsafe { (*raw_file).private_data }.cast();
+
+        // SAFETY: `ioucmd` is not null and points to valid memory `bindings::io_uring_cmd`
+        // and the memory pointed by `ioucmd` is valid and will not be moved or
+        // freed for the lifetime of returned value `ioucmd`
+        let ioucmd = unsafe { IoUringCmd::from_raw(ioucmd) };
+        let mut ioucmd = match ioucmd {
+            Ok(ioucmd) => ioucmd,
+            Err(e) => {
+                return e.to_errno();
+            }
+        };
+
+        // Zero-initialize the PDU for fresh (non-reissued) commands so that
+        // drivers reading from it always start from a clean state.  On reissue
+        // the PDU retains its contents from the previous attempt, which is the
+        // expected behaviour (e.g. a driver may store state there across
+        // -EAGAIN retries).
+        if (ioucmd.flags() & bindings::IORING_URING_CMD_REISSUE) == 0 {
+            if let Err(e) = ioucmd.write_pdu(&[0u8; io_uring::PDU_SIZE]) {
+                return e.to_errno();
+            }
+        }
+
+        // SAFETY: This call is safe because `private` is returned by
+        // `into_foreign` in [`open`]. And it's guaranteed
+        // that `from_foreign` is called by [`release`] after the end of
+        // the lifetime of `device`
+        let device = unsafe { <T::Ptr as ForeignOwnable>::borrow(private) };
+
+        match T::uring_cmd(device, ioucmd, issue_flags) {
+            Ok(UringCmdAction::Complete(action)) => action.ret(),
+            Ok(UringCmdAction::Queued(_)) => EIOCBQUEUED.to_errno(),
+            Err(e) => e.to_errno(),
+        }
+    }
+
     const VTABLE: bindings::file_operations = bindings::file_operations {
         open: Some(Self::open),
         release: Some(Self::release),
@@ -416,6 +492,11 @@ impl<T: MiscDevice> MiscdeviceVTable<T> {
         },
         show_fdinfo: if T::HAS_SHOW_FDINFO {
             Some(Self::show_fdinfo)
+        } else {
+            None
+        },
+        uring_cmd: if T::HAS_URING_CMD {
+            Some(Self::uring_cmd)
         } else {
             None
         },
