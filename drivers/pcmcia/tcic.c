@@ -362,6 +362,7 @@ static int __init init_tcic(void)
 {
     int i, sock, ret = 0;
     u_int mask, scan;
+	bool irq_registered = false;
 
     if (platform_driver_register(&tcic_driver))
 	return -1;
@@ -464,8 +465,10 @@ static int __init init_tcic(void)
 	for (i = 15; i > 0; i--)
 	    if ((cs_mask & (1 << i)) &&
 		(request_irq(i, tcic_interrupt, 0, "tcic",
-			     tcic_interrupt) == 0))
+				tcic_interrupt) == 0)) {
+		irq_registered = true;
 		break;
+		}
 	cs_irq = i;
 	if (cs_irq == 0) poll_interval = HZ;
     }
@@ -486,20 +489,33 @@ static int __init init_tcic(void)
     /* jump start interrupt handler, if needed */
     tcic_interrupt(0, NULL);
 
-    platform_device_register(&tcic_device);
+	ret = platform_device_register(&tcic_device);
+	if (ret) {
+		platform_device_put(&tcic_device);
+		goto out_cleanup;
+	}
 
     for (i = 0; i < sockets; i++) {
 	    socket_table[i].socket.ops = &tcic_operations;
 	    socket_table[i].socket.resource_ops = &pccard_nonstatic_ops;
 	    socket_table[i].socket.dev.parent = &tcic_device.dev;
 	    ret = pcmcia_register_socket(&socket_table[i].socket);
-	    if (ret && i)
-		    pcmcia_unregister_socket(&socket_table[0].socket);
+		if (ret)
+			goto out_unregister_sockets;
     }
     
     return ret;
 
-    return 0;
+out_unregister_sockets:
+	while (i--)
+		pcmcia_unregister_socket(&socket_table[i].socket);
+	platform_device_unregister(&tcic_device);
+out_cleanup:
+	if (irq_registered)
+		free_irq(cs_irq, tcic_interrupt);
+	release_region(tcic_base, 16);
+	platform_driver_unregister(&tcic_driver);
+	return ret;
     
 } /* init_tcic */
 
