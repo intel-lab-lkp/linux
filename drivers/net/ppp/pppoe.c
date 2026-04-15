@@ -688,22 +688,6 @@ err_put:
 	goto end;
 }
 
-static int pppoe_getname(struct socket *sock, struct sockaddr *uaddr,
-		  int peer)
-{
-	int len = sizeof(struct sockaddr_pppox);
-	struct sockaddr_pppox sp;
-
-	sp.sa_family	= AF_PPPOX;
-	sp.sa_protocol	= PX_PROTO_OE;
-	memcpy(&sp.sa_addr.pppoe, &pppox_sk(sock->sk)->pppoe_pa,
-	       sizeof(struct pppoe_addr));
-
-	memcpy(uaddr, &sp, len);
-
-	return len;
-}
-
 static int pppoe_ioctl(struct socket *sock, unsigned int cmd,
 		unsigned long arg)
 {
@@ -1049,7 +1033,7 @@ static const struct proto_ops pppoe_ops = {
 	.connect	= pppoe_connect,
 	.socketpair	= sock_no_socketpair,
 	.accept		= sock_no_accept,
-	.getname	= pppoe_getname,
+	.getname	= sock_no_getname,
 	.poll		= datagram_poll,
 	.listen		= sock_no_listen,
 	.shutdown	= sock_no_shutdown,
