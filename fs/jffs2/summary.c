@@ -577,6 +577,15 @@ int jffs2_sum_scan_sumnode(struct jffs2_sb_info *c, struct jffs2_eraseblock *jeb
 	int ret, ofs;
 	uint32_t crc;
 
+	/* Reject frames that can't hold the header + marker the writer
+	 * always emits (also blocks the sumsize - sizeof(*summary)
+	 * size_t underflow at the sum_crc check below). */
+	if (sumsize < JFFS2_SUMMARY_FRAME_SIZE) {
+		JFFS2_WARNING("Summary node too small (%u bytes), skipping.\n",
+			      sumsize);
+		return 0;
+	}
+
 	ofs = c->sector_size - sumsize;
 
 	dbg_summary("summary found for 0x%08x at 0x%08x (0x%x bytes)\n",
