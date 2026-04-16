@@ -414,7 +414,9 @@ static void fbtft_ops_damage_range(struct fb_info *info, off_t off, size_t len)
 {
 	struct fbtft_par *par = info->par;
 
-	/* TODO: only mark changed area update all for now */
+	/* TODO: Optimize to update only the changed area instead of
+	 * refreshing the entire display
+	 */
 	par->fbtftops.mkdirty(info, -1, 0);
 }
 
