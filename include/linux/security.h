@@ -67,6 +67,7 @@ enum fs_value_type;
 struct watch;
 struct watch_notification;
 struct lsm_ctx;
+struct lsm_id;
 
 /* Default (no) options for the capable function */
 #define CAP_OPT_NONE 0x0
@@ -98,6 +99,14 @@ enum lsm_integrity_type {
 	LSM_INT_DMVERITY_SIG_VALID,
 	LSM_INT_DMVERITY_ROOTHASH,
 	LSM_INT_FSVERITY_BUILTINSIG_VALID,
+};
+
+enum lsm_integrity_verdict {
+	LSM_INT_VERDICT_NONE = 0,
+	LSM_INT_VERDICT_OK,
+	LSM_INT_VERDICT_UNSIGNED,
+	LSM_INT_VERDICT_PARTIALSIG,
+	LSM_INT_VERDICT_BADSIG,
 };
 
 /*
@@ -2269,6 +2278,12 @@ extern int security_bpf_prog(struct bpf_prog *prog);
 extern int security_bpf_map_create(struct bpf_map *map, union bpf_attr *attr,
 				   struct bpf_token *token, bool kernel);
 extern void security_bpf_map_free(struct bpf_map *map);
+extern int security_bpf_prog_load_post_integrity(struct bpf_prog *prog,
+					union bpf_attr *attr,
+					struct bpf_token *token,
+					bool kernel,
+					const struct lsm_id *lsmid,
+					enum lsm_integrity_verdict verdict);
 extern int security_bpf_prog_load(struct bpf_prog *prog, union bpf_attr *attr,
 				  struct bpf_token *token, bool kernel);
 extern void security_bpf_prog_free(struct bpf_prog *prog);
@@ -2302,6 +2317,16 @@ static inline int security_bpf_map_create(struct bpf_map *map, union bpf_attr *a
 
 static inline void security_bpf_map_free(struct bpf_map *map)
 { }
+
+static inline int security_bpf_prog_load_post_integrity(struct bpf_prog *prog,
+					  union bpf_attr *attr,
+					  struct bpf_token *token,
+					  bool kernel,
+					  const struct lsm_id *lsmid,
+					  enum lsm_integrity_verdict verdict)
+{
+	return 0;
+}
 
 static inline int security_bpf_prog_load(struct bpf_prog *prog, union bpf_attr *attr,
 					 struct bpf_token *token, bool kernel)
