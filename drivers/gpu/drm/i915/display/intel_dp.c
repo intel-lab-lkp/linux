@@ -7389,6 +7389,8 @@ int intel_dp_sdp_compute_config_late(struct intel_crtc_state *crtc_state)
 		return -EINVAL;
 	}
 
+	intel_dip_sdp_tl_compute_config_late(crtc_state);
+
 	return 0;
 }
 
@@ -7477,6 +7479,15 @@ bool intel_dp_joiner_candidate_valid(struct intel_connector *connector,
 
 int intel_dp_get_as_sdp_transmission_line(const struct intel_crtc_state *crtc_state)
 {
+	struct intel_display *display = to_intel_display(crtc_state);
+
+	if (!HAS_EMP_AS_SDP_TL(display))
+		return 0;
+
+	if (!(crtc_state->infoframes.enable &
+	      intel_hdmi_infoframe_enable(DP_SDP_ADAPTIVE_SYNC)))
+		return 0;
+
 	/*
 	 * EMP_AS_SDP_TL defines the T1 position as the default AS SDP
 	 * Transmission Line, which corresponds to the start of the
