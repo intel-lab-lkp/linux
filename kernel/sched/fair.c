@@ -1665,6 +1665,8 @@ static unsigned int task_nr_scan_windows(struct task_struct *p)
 	 * on resident pages
 	 */
 	nr_scan_pages = MB_TO_PAGES(sysctl_numa_balancing_scan_size);
+	if (!nr_scan_pages)
+		nr_scan_pages = 1;
 	rss = get_mm_rss(p->mm);
 	if (!rss)
 		rss = nr_scan_pages;
@@ -1682,6 +1684,8 @@ static unsigned int task_scan_min(struct task_struct *p)
 	unsigned int scan, floor;
 	unsigned int windows = 1;
 
+	if (!scan_size)
+		scan_size = 1;
 	if (scan_size < MAX_SCAN_WINDOW)
 		windows = MAX_SCAN_WINDOW / scan_size;
 	floor = 1000 / windows;
