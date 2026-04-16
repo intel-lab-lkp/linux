@@ -1525,6 +1525,15 @@ int ocfs2_validate_inode_block(struct super_block *sb,
 		}
 	}
 
+	if (ocfs2_dinode_has_extents(di) &&
+	    le16_to_cpu(di->id2.i_list.l_tree_depth) >= OCFS2_MAX_PATH_DEPTH) {
+		rc = ocfs2_error(sb,
+				 "Invalid dinode %llu: extent list tree depth %u\n",
+				 (unsigned long long)bh->b_blocknr,
+				 le16_to_cpu(di->id2.i_list.l_tree_depth));
+		goto bail;
+	}
+
 	if (le32_to_cpu(di->i_flags) & OCFS2_CHAIN_FL) {
 		struct ocfs2_chain_list *cl = &di->id2.i_chain;
 		u16 bpc = 1 << (OCFS2_SB(sb)->s_clustersize_bits -
@@ -1626,6 +1635,15 @@ static int ocfs2_filecheck_validate_inode_block(struct super_block *sb,
 		rc = -OCFS2_FILECHECK_ERR_GENERATION;
 	}
 
+	if (ocfs2_dinode_has_extents(di) &&
+	    le16_to_cpu(di->id2.i_list.l_tree_depth) >= OCFS2_MAX_PATH_DEPTH) {
+		mlog(ML_ERROR,
+		     "Filecheck: invalid dinode #%llu: extent list tree depth %u\n",
+		     (unsigned long long)bh->b_blocknr,
+		     le16_to_cpu(di->id2.i_list.l_tree_depth));
+		rc = -OCFS2_FILECHECK_ERR_UNSUPPORTED;
+	}
+
 bail:
 	return rc;
 }
@@ -1633,11 +1651,14 @@ bail:
 static int ocfs2_filecheck_repair_inode_block(struct super_block *sb,
 					      struct buffer_head *bh)
 {
-	int changed = 0;
+	int changed = 0, rc;
 	struct ocfs2_dinode *di = (struct ocfs2_dinode *)bh->b_data;
 
-	if (!ocfs2_filecheck_validate_inode_block(sb, bh))
+	rc = ocfs2_filecheck_validate_inode_block(sb, bh);
+	if (!rc)
 		return 0;
+	if (rc == -OCFS2_FILECHECK_ERR_UNSUPPORTED)
+		return rc;
 
 	trace_ocfs2_filecheck_repair_inode_block(
 		(unsigned long long)bh->b_blocknr);
