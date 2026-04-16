@@ -263,6 +263,9 @@ int ipu7_boot_init_boot_config(struct ipu7_bus_device *adev,
 					   GFP_KERNEL, 0);
 	if (!syscom->queue_mem) {
 		dev_err(dev, "Failed to allocate queue memory.\n");
+		ipu7_dma_free(adev, adev->boot_config_size,
+			      adev->boot_config, adev->boot_config_dma_addr, 0);
+		adev->boot_config = NULL;
 		return -ENOMEM;
 	}
 	syscom->queue_mem_size = total_queue_size_aligned;
