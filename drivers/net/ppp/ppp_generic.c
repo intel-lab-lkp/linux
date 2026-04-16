@@ -106,7 +106,7 @@ struct ppp_file {
 #define PF_TO_X(pf, X)		container_of(pf, X, file)
 
 #define PF_TO_PPP(pf)		PF_TO_X(pf, struct ppp)
-#define PF_TO_CHANNEL(pf)	PF_TO_X(pf, struct channel)
+#define PF_TO_CHANNEL(pf)	PF_TO_X(pf, struct ppp_channel)
 
 struct ppp_xmit_recursion {
 	struct task_struct *owner;
@@ -172,10 +172,11 @@ struct ppp {
  * Private data structure for each channel.
  * This includes the data structure used for multilink.
  */
-struct channel {
+struct ppp_channel {
 	struct ppp_file	file;		/* stuff for read/write/poll */
 	struct list_head list;		/* link in all/new_channels list */
-	struct ppp_channel *chan;	/* public channel data structure */
+	const struct ppp_channel_ops *ops; /* operations for this channel */
+	void *private;			/* channel private data */
 	struct rw_semaphore chan_sem;	/* protects `chan' during chan ioctl */
 	spinlock_t	downl;		/* protects `chan', file.xq dequeue */
 	struct ppp __rcu *ppp;		/* ppp unit we're connected to */
@@ -183,11 +184,13 @@ struct channel {
 	netns_tracker	ns_tracker;
 	struct list_head clist;		/* link in list of channels per unit */
 	spinlock_t	upl;		/* protects `ppp' and 'bridge' */
-	struct channel __rcu *bridge;	/* "bridged" ppp channel */
+	struct ppp_channel __rcu *bridge;	/* "bridged" ppp channel */
+	bool direct_xmit;		/* no qdisc, xmit directly */
 #ifdef CONFIG_PPP_MULTILINK
 	u8		avail;		/* flag used in multilink stuff */
 	u8		had_frag;	/* >= 1 fragments have been sent */
 	u32		lastseq;	/* MP: last sequence # received */
+	int		mtu;		/* max transmit packet size */
 	int		speed;		/* speed of the corresponding ppp channel*/
 #endif /* CONFIG_PPP_MULTILINK */
 };
@@ -265,16 +268,16 @@ static int ppp_unattached_ioctl(struct net *net, struct ppp_file *pf,
 static void ppp_xmit_process(struct ppp *ppp, struct sk_buff *skb);
 static int ppp_prepare_tx_skb(struct ppp *ppp, struct sk_buff **pskb);
 static int ppp_push(struct ppp *ppp, struct sk_buff *skb);
-static void ppp_channel_push(struct channel *pch);
+static void ppp_channel_push(struct ppp_channel *pch);
 static void ppp_receive_frame(struct ppp *ppp, struct sk_buff *skb,
-			      struct channel *pch);
+			      struct ppp_channel *pch);
 static void ppp_receive_error(struct ppp *ppp);
 static void ppp_receive_nonmp_frame(struct ppp *ppp, struct sk_buff *skb);
 static struct sk_buff *ppp_decompress_frame(struct ppp *ppp,
 					    struct sk_buff *skb);
 #ifdef CONFIG_PPP_MULTILINK
 static void ppp_receive_mp_frame(struct ppp *ppp, struct sk_buff *skb,
-				struct channel *pch);
+				struct ppp_channel *pch);
 static void ppp_mp_insert(struct ppp *ppp, struct sk_buff *skb);
 static struct sk_buff *ppp_mp_reconstruct(struct ppp *ppp);
 static int ppp_mp_explode(struct ppp *ppp, struct sk_buff *skb);
@@ -288,10 +291,10 @@ static int ppp_create_interface(struct net *net, struct file *file, int *unit);
 static void init_ppp_file(struct ppp_file *pf, int kind);
 static void ppp_release_interface(struct ppp *ppp);
 static struct ppp *ppp_find_unit(struct ppp_net *pn, int unit);
-static struct channel *ppp_find_channel(struct ppp_net *pn, int unit);
-static int ppp_connect_channel(struct channel *pch, int unit);
-static int ppp_disconnect_channel(struct channel *pch);
-static void ppp_release_channel(struct channel *pch);
+static struct ppp_channel *ppp_find_channel(struct ppp_net *pn, int unit);
+static int ppp_connect_channel(struct ppp_channel *pch, int unit);
+static int ppp_disconnect_channel(struct ppp_channel *pch);
+static void ppp_release_channel(struct ppp_channel *pch);
 static int unit_get(struct idr *p, void *ptr, int min);
 static int unit_set(struct idr *p, void *ptr, int n);
 static void unit_put(struct idr *p, int n);
@@ -638,7 +641,7 @@ static struct bpf_prog *compat_ppp_get_filter(struct sock_fprog32 __user *p)
  * Once successfully bridged, each channel holds a reference on the other
  * to prevent it being freed while the bridge is extant.
  */
-static int ppp_bridge_channels(struct channel *pch, struct channel *pchb)
+static int ppp_bridge_channels(struct ppp_channel *pch, struct ppp_channel *pchb)
 {
 	spin_lock(&pch->upl);
 	if (rcu_dereference_protected(pch->ppp, lockdep_is_held(&pch->upl)) ||
@@ -676,9 +679,9 @@ err_unset:
 	return -EALREADY;
 }
 
-static int ppp_unbridge_channels(struct channel *pch)
+static int ppp_unbridge_channels(struct ppp_channel *pch)
 {
-	struct channel *pchb, *pchbb;
+	struct ppp_channel *pchb, *pchbb;
 
 	spin_lock(&pch->upl);
 	pchb = rcu_dereference_protected(pch->bridge, lockdep_is_held(&pch->upl));
@@ -745,8 +748,7 @@ static long ppp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	}
 
 	if (pf->kind == CHANNEL) {
-		struct channel *pch, *pchb;
-		struct ppp_channel *chan;
+		struct ppp_channel *pch, *pchb;
 		struct ppp_net *pn;
 
 		pch = PF_TO_CHANNEL(pf);
@@ -788,10 +790,9 @@ static long ppp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 		default:
 			down_read(&pch->chan_sem);
-			chan = pch->chan;
 			err = -ENOTTY;
-			if (!pch->file.dead && chan->ops->ioctl)
-				err = chan->ops->ioctl(chan, cmd, arg);
+			if (!pch->file.dead && pch->ops->ioctl)
+				err = pch->ops->ioctl(pch->private, cmd, arg);
 			up_read(&pch->chan_sem);
 		}
 		goto out;
@@ -1044,7 +1045,7 @@ static int ppp_unattached_ioctl(struct net *net, struct ppp_file *pf,
 {
 	int unit, err = -EFAULT;
 	struct ppp *ppp;
-	struct channel *chan;
+	struct ppp_channel *chan;
 	struct ppp_net *pn;
 	int __user *p = (int __user *)arg;
 
@@ -1586,21 +1587,19 @@ static int ppp_fill_forward_path(struct net_device_path_ctx *ctx,
 				 struct net_device_path *path)
 {
 	struct ppp *ppp = netdev_priv(ctx->dev);
-	struct ppp_channel *chan;
-	struct channel *pch;
+	struct ppp_channel *pch;
 
 	if (ppp->flags & SC_MULTILINK)
 		return -EOPNOTSUPP;
 
-	pch = list_first_or_null_rcu(&ppp->channels, struct channel, clist);
+	pch = list_first_or_null_rcu(&ppp->channels, struct ppp_channel, clist);
 	if (!pch)
 		return -ENODEV;
 
-	chan = pch->chan;
-	if (!chan->ops->fill_forward_path)
+	if (!pch->ops->fill_forward_path)
 		return -EOPNOTSUPP;
 
-	return chan->ops->fill_forward_path(ctx, path, chan);
+	return pch->ops->fill_forward_path(ctx, path, pch->private);
 }
 
 static const struct net_device_ops ppp_netdev_ops = {
@@ -1901,7 +1900,6 @@ static int
 ppp_push(struct ppp *ppp, struct sk_buff *skb)
 {
 	struct list_head *list;
-	struct channel *pch;
 
 	list = &ppp->channels;
 	if (list_empty(list)) {
@@ -1911,15 +1909,14 @@ ppp_push(struct ppp *ppp, struct sk_buff *skb)
 	}
 
 	if ((ppp->flags & SC_MULTILINK) == 0) {
-		struct ppp_channel *chan;
+		struct ppp_channel *pch;
 		int ret;
 		/* not doing multilink: send it down the first channel */
 		list = list->next;
-		pch = list_entry(list, struct channel, clist);
+		pch = list_entry(list, struct ppp_channel, clist);
 
 		spin_lock(&pch->downl);
-		chan = pch->chan;
-		if (unlikely(!chan->direct_xmit && skb_linearize(skb))) {
+		if (unlikely(!pch->direct_xmit && skb_linearize(skb))) {
 			/* channel requires a linear skb but linearization
 			 * failed
 			 */
@@ -1928,7 +1925,7 @@ ppp_push(struct ppp *ppp, struct sk_buff *skb)
 			goto out;
 		}
 
-		ret = chan->ops->start_xmit(chan, skb);
+		ret = pch->ops->start_xmit(pch->private, skb);
 
 out:
 		spin_unlock(&pch->downl);
@@ -1967,9 +1964,8 @@ static int ppp_mp_explode(struct ppp *ppp, struct sk_buff *skb)
 	int totfree;
 	unsigned char *p, *q;
 	struct list_head *list;
-	struct channel *pch;
+	struct ppp_channel *pch;
 	struct sk_buff *frag;
-	struct ppp_channel *chan;
 
 	totspeed = 0; /*total bitrate of the bundle*/
 	nfree = 0; /* # channels which have no packet already queued */
@@ -1984,8 +1980,6 @@ static int ppp_mp_explode(struct ppp *ppp, struct sk_buff *skb)
 	list_for_each_entry(pch, &ppp->channels, clist) {
 		pch->avail = 1;
 		navail++;
-		pch->speed = pch->chan->speed;
-
 		if (skb_queue_empty(&pch->file.xq) || !pch->had_frag) {
 			if (pch->speed == 0)
 				nzero++;
@@ -2041,7 +2035,7 @@ static int ppp_mp_explode(struct ppp *ppp, struct sk_buff *skb)
 			i = 0;
 			continue;
 		}
-		pch = list_entry(list, struct channel, clist);
+		pch = list_entry(list, struct ppp_channel, clist);
 		++i;
 		if (!pch->avail)
 			continue;
@@ -2108,7 +2102,7 @@ static int ppp_mp_explode(struct ppp *ppp, struct sk_buff *skb)
 		 * MTU counts only the payload excluding the protocol field.
 		 * (RFC1661 Section 2)
 		 */
-		mtu = pch->chan->mtu - (hdrlen - 2);
+		mtu = pch->mtu - (hdrlen - 2);
 		if (mtu < 4)
 			mtu = 4;
 		if (flen > mtu)
@@ -2135,9 +2129,8 @@ static int ppp_mp_explode(struct ppp *ppp, struct sk_buff *skb)
 		memcpy(q + hdrlen, p, flen);
 
 		/* try to send it down the channel */
-		chan = pch->chan;
 		if (!skb_queue_empty(&pch->file.xq) ||
-			!chan->ops->start_xmit(chan, frag))
+			!pch->ops->start_xmit(pch->private, frag))
 			skb_queue_tail(&pch->file.xq, frag);
 		pch->had_frag = 1;
 		p += flen;
@@ -2162,7 +2155,7 @@ static int ppp_mp_explode(struct ppp *ppp, struct sk_buff *skb)
 #endif /* CONFIG_PPP_MULTILINK */
 
 /* Try to send data out on a channel */
-static void __ppp_channel_push(struct channel *pch, struct ppp *ppp)
+static void __ppp_channel_push(struct ppp_channel *pch, struct ppp *ppp)
 {
 	struct sk_buff *skb;
 
@@ -2170,7 +2163,7 @@ static void __ppp_channel_push(struct channel *pch, struct ppp *ppp)
 	if (!pch->file.dead) {
 		while (!skb_queue_empty(&pch->file.xq)) {
 			skb = skb_dequeue(&pch->file.xq);
-			if (!pch->chan->ops->start_xmit(pch->chan, skb)) {
+			if (!pch->ops->start_xmit(pch->private, skb)) {
 				/* put the packet back and try again later */
 				skb_queue_head(&pch->file.xq, skb);
 				break;
@@ -2192,7 +2185,7 @@ static void __ppp_channel_push(struct channel *pch, struct ppp *ppp)
 	}
 }
 
-static void ppp_channel_push(struct channel *pch)
+static void ppp_channel_push(struct ppp_channel *pch)
 {
 	struct ppp_xmit_recursion *xmit_recursion;
 	struct ppp *ppp;
@@ -2223,7 +2216,7 @@ struct ppp_mp_skb_parm {
 #define PPP_MP_CB(skb)	((struct ppp_mp_skb_parm *)((skb)->cb))
 
 static inline void
-ppp_do_recv(struct ppp *ppp, struct sk_buff *skb, struct channel *pch)
+ppp_do_recv(struct ppp *ppp, struct sk_buff *skb, struct ppp_channel *pch)
 {
 	ppp_recv_lock(ppp);
 	if (!ppp->closing)
@@ -2278,9 +2271,9 @@ static bool ppp_decompress_proto(struct sk_buff *skb)
  * If not, the caller must handle the frame by normal recv mechanisms.
  * Returns true if the frame is consumed, false otherwise.
  */
-static bool ppp_channel_bridge_input(struct channel *pch, struct sk_buff *skb)
+static bool ppp_channel_bridge_input(struct ppp_channel *pch, struct sk_buff *skb)
 {
-	struct channel *pchb;
+	struct ppp_channel *pchb;
 
 	rcu_read_lock();
 	pchb = rcu_dereference(pch->bridge);
@@ -2295,7 +2288,7 @@ static bool ppp_channel_bridge_input(struct channel *pch, struct sk_buff *skb)
 	}
 
 	skb_scrub_packet(skb, !net_eq(pch->chan_net, pchb->chan_net));
-	if (!pchb->chan->ops->start_xmit(pchb->chan, skb))
+	if (!pchb->ops->start_xmit(pchb->private, skb))
 		kfree_skb(skb);
 
 outl:
@@ -2308,9 +2301,8 @@ out_rcu:
 }
 
 void
-ppp_input(struct ppp_channel *chan, struct sk_buff *skb)
+ppp_input(struct ppp_channel *pch, struct sk_buff *skb)
 {
-	struct channel *pch = chan->ppp;
 	struct ppp *ppp;
 	int proto;
 
@@ -2352,9 +2344,8 @@ done:
 }
 
 void
-ppp_input_error(struct ppp_channel *chan)
+ppp_input_error(struct ppp_channel *pch)
 {
-	struct channel *pch = chan->ppp;
 	struct ppp *ppp;
 
 	if (!pch)
@@ -2375,7 +2366,7 @@ ppp_input_error(struct ppp_channel *chan)
  * The receive side of the ppp unit is locked.
  */
 static void
-ppp_receive_frame(struct ppp *ppp, struct sk_buff *skb, struct channel *pch)
+ppp_receive_frame(struct ppp *ppp, struct sk_buff *skb, struct ppp_channel *pch)
 {
 	skb_checksum_complete_unset(skb);
 #ifdef CONFIG_PPP_MULTILINK
@@ -2611,10 +2602,10 @@ ppp_decompress_frame(struct ppp *ppp, struct sk_buff *skb)
  * as many completed frames as we can.
  */
 static void
-ppp_receive_mp_frame(struct ppp *ppp, struct sk_buff *skb, struct channel *pch)
+ppp_receive_mp_frame(struct ppp *ppp, struct sk_buff *skb, struct ppp_channel *pch)
 {
 	u32 mask, seq;
-	struct channel *ch;
+	struct ppp_channel *ch;
 	int mphdrlen = (ppp->flags & SC_MP_SHORTSEQ)? MPHDRLEN_SSN: MPHDRLEN;
 
 	if (!pskb_may_pull(skb, mphdrlen + 1) || ppp->mrru == 0)
@@ -2885,6 +2876,13 @@ ppp_mp_reconstruct(struct ppp *ppp)
 
 	return skb;
 }
+
+/* Update the MTU of a multilink channel */
+void ppp_channel_update_mtu(struct ppp_channel *pch, int mtu)
+{
+	pch->mtu = mtu;
+}
+EXPORT_SYMBOL(ppp_channel_update_mtu);
 #endif /* CONFIG_PPP_MULTILINK */
 
 /*
@@ -2892,29 +2890,33 @@ ppp_mp_reconstruct(struct ppp *ppp)
  */
 
 /* Create a new, unattached ppp channel. */
-int ppp_register_channel(struct ppp_channel *chan)
+struct ppp_channel *ppp_register_channel(const struct ppp_channel_conf *conf)
 {
-	return ppp_register_net_channel(current->nsproxy->net_ns, chan);
+	return ppp_register_net_channel(current->nsproxy->net_ns, conf);
 }
 
 /* Create a new, unattached ppp channel for specified net. */
-int ppp_register_net_channel(struct net *net, struct ppp_channel *chan)
+struct ppp_channel *ppp_register_net_channel(struct net *net,
+					     const struct ppp_channel_conf *conf)
 {
-	struct channel *pch;
+	struct ppp_channel *pch;
 	struct ppp_net *pn;
 
-	pch = kzalloc_obj(struct channel);
+	pch = kzalloc_obj(struct ppp_channel);
 	if (!pch)
-		return -ENOMEM;
+		return NULL;
 
 	pn = ppp_pernet(net);
 
-	pch->chan = chan;
 	pch->chan_net = get_net_track(net, &pch->ns_tracker, GFP_KERNEL);
-	chan->ppp = pch;
 	init_ppp_file(&pch->file, CHANNEL);
-	pch->file.hdrlen = chan->hdrlen;
+	pch->file.hdrlen = conf->hdrlen;
+	pch->ops = conf->ops;
+	pch->private = conf->private;
+	pch->direct_xmit = conf->direct_xmit;
 #ifdef CONFIG_PPP_MULTILINK
+	pch->speed = conf->speed;
+	pch->mtu = conf->mtu;
 	pch->lastseq = -1;
 #endif /* CONFIG_PPP_MULTILINK */
 	init_rwsem(&pch->chan_sem);
@@ -2927,16 +2929,14 @@ int ppp_register_net_channel(struct net *net, struct ppp_channel *chan)
 	atomic_inc(&channel_count);
 	spin_unlock_bh(&pn->all_channels_lock);
 
-	return 0;
+	return pch;
 }
 
 /*
  * Return the index of a channel.
  */
-int ppp_channel_index(struct ppp_channel *chan)
+int ppp_channel_index(struct ppp_channel *pch)
 {
-	struct channel *pch = chan->ppp;
-
 	if (pch)
 		return pch->file.index;
 	return -1;
@@ -2945,9 +2945,8 @@ int ppp_channel_index(struct ppp_channel *chan)
 /*
  * Return the PPP unit number to which a channel is connected.
  */
-int ppp_unit_number(struct ppp_channel *chan)
+int ppp_unit_number(struct ppp_channel *pch)
 {
-	struct channel *pch = chan->ppp;
 	struct ppp *ppp;
 	int unit = -1;
 
@@ -2965,9 +2964,8 @@ int ppp_unit_number(struct ppp_channel *chan)
  * Return the PPP device interface name of a channel.
  * Caller must hold RCU read lock.
  */
-char *ppp_dev_name(struct ppp_channel *chan)
+char *ppp_dev_name(struct ppp_channel *pch)
 {
-	struct channel *pch = chan->ppp;
 	char *name = NULL;
 	struct ppp *ppp;
 
@@ -2985,15 +2983,12 @@ char *ppp_dev_name(struct ppp_channel *chan)
  * This must be called in process context.
  */
 void
-ppp_unregister_channel(struct ppp_channel *chan)
+ppp_unregister_channel(struct ppp_channel *pch)
 {
-	struct channel *pch = chan->ppp;
 	struct ppp_net *pn;
 
 	if (!pch)
 		return;		/* should never happen */
-
-	chan->ppp = NULL;
 
 	/*
 	 * This ensures that we have returned from any calls into
@@ -3023,10 +3018,8 @@ ppp_unregister_channel(struct ppp_channel *chan)
  * This should be called at BH/softirq level, not interrupt level.
  */
 void
-ppp_output_wakeup(struct ppp_channel *chan)
+ppp_output_wakeup(struct ppp_channel *pch)
 {
-	struct channel *pch = chan->ppp;
-
 	if (!pch)
 		return;
 	ppp_channel_push(pch);
@@ -3459,10 +3452,10 @@ ppp_find_unit(struct ppp_net *pn, int unit)
  * we move it to the all_channels list.  This is for speed
  * when we have a lot of channels in use.
  */
-static struct channel *
+static struct ppp_channel *
 ppp_find_channel(struct ppp_net *pn, int unit)
 {
-	struct channel *pch;
+	struct ppp_channel *pch;
 
 	list_for_each_entry(pch, &pn->new_channels, list) {
 		if (pch->file.index == unit) {
@@ -3483,7 +3476,7 @@ ppp_find_channel(struct ppp_net *pn, int unit)
  * Connect a PPP channel to a PPP interface unit.
  */
 static int
-ppp_connect_channel(struct channel *pch, int unit)
+ppp_connect_channel(struct ppp_channel *pch, int unit)
 {
 	struct ppp *ppp;
 	struct ppp_net *pn;
@@ -3511,7 +3504,7 @@ ppp_connect_channel(struct channel *pch, int unit)
 		ret = -ENOTCONN;
 		goto outl;
 	}
-	if (pch->chan->direct_xmit)
+	if (pch->direct_xmit)
 		ppp->dev->priv_flags |= IFF_NO_QUEUE;
 	else
 		ppp->dev->priv_flags &= ~IFF_NO_QUEUE;
@@ -3539,7 +3532,7 @@ ppp_connect_channel(struct channel *pch, int unit)
  * Disconnect a channel from its ppp unit.
  */
 static int
-ppp_disconnect_channel(struct channel *pch)
+ppp_disconnect_channel(struct ppp_channel *pch)
 {
 	struct ppp *ppp;
 	int err = -EINVAL;
@@ -3565,7 +3558,7 @@ ppp_disconnect_channel(struct channel *pch)
  * Drop a reference to a ppp channel and free its memory if the refcount reaches
  * zero.
  */
-static void ppp_release_channel(struct channel *pch)
+static void ppp_release_channel(struct ppp_channel *pch)
 {
 	if (!refcount_dec_and_test(&pch->file.refcnt))
 		return;
