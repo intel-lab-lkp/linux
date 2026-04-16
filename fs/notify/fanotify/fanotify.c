@@ -1015,6 +1015,7 @@ finish:
 
 static void fanotify_free_group_priv(struct fsnotify_group *group)
 {
+	mutex_destroy(&group->fanotify_data.queue_mutex);
 	put_user_ns(group->user_ns);
 	kfree(group->fanotify_data.merge_hash);
 	if (group->fanotify_data.ucounts)
