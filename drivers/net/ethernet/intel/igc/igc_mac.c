@@ -446,6 +446,16 @@ s32 igc_config_fc_after_link_up(struct igc_hw *hw)
 	u16 speed, duplex;
 	s32 ret_val = 0;
 
+	/* When autoneg is disabled, force the MAC flow control settings
+	 * to match the "fc" parameter.
+	 */
+	if (!hw->mac.autoneg_enabled) {
+		ret_val = igc_force_mac_fc(hw);
+		if (ret_val)
+			hw_dbg("Error forcing flow control settings\n");
+		goto out;
+	}
+
 	/* In auto-neg, we need to check and see if Auto-Neg has completed,
 	 * and if so, how the PHY and link partner has flow control
 	 * configured.
