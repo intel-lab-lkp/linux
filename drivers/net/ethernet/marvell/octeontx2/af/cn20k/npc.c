@@ -3541,6 +3541,7 @@ fail_free_alloc:
 			dev_err(rvu->dev,
 				"%s: Error to free mcam idx=%u\n",
 				__func__, save[i]);
+			rc = -EFAULT;
 			break;
 		}
 	}
