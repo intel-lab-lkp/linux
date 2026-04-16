@@ -1148,24 +1148,26 @@ int pm8001_abort_task(struct sas_task *task)
 				phy->reset_completion = NULL;
 			} else {
 				/* 3. Wait for Port Reset complete or
-				 * Port reset TMO
+				 * Port reset TMO, if Phy Link is still up
 				 */
-				pm8001_dbg(pm8001_ha, MSG,
-					   "Waiting for Port reset\n");
-				ret = wait_for_completion_timeout(
-					&completion_reset,
-					PM8001_TASK_TIMEOUT * HZ);
-				if (!ret)
-					phy->reset_completion = NULL;
-				WARN_ON(phy->port_reset_status ==
-						PORT_RESET_TMO);
-				if (phy->port_reset_status == PORT_RESET_TMO) {
-					pm8001_dev_gone_notify(dev);
-					PM8001_CHIP_DISP->hw_event_ack_req(
-						pm8001_ha, 0,
-						0x07, /*HW_EVENT_PHY_DOWN ack*/
-						port_id, phy_id, 0, 0);
-					goto out;
+				if (phy->phy_state != PHY_LINK_DISABLE) {
+					pm8001_dbg(pm8001_ha, MSG,
+						   "Waiting for Port reset\n");
+					ret = wait_for_completion_timeout(
+						&completion_reset,
+						PM8001_TASK_TIMEOUT * HZ);
+					if (!ret)
+						phy->reset_completion = NULL;
+					WARN_ON(phy->port_reset_status ==
+							PORT_RESET_TMO);
+					if (phy->port_reset_status == PORT_RESET_TMO) {
+						pm8001_dev_gone_notify(dev);
+						PM8001_CHIP_DISP->hw_event_ack_req(
+							pm8001_ha, 0,
+							0x07, /*HW_EVENT_PHY_DOWN ack*/
+							port_id, phy_id, 0, 0);
+						goto out;
+					}
 				}
 			}
 
