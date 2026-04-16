@@ -1095,6 +1095,36 @@ static ssize_t fanotify_write(struct file *file, const char __user *buf, size_t 
 	return count;
 }
 
+/*
+ * Reinsert pending permission events at the head of the notification
+ * queue for reprocessing. No merge or overflow handling.
+ */
+static void fanotify_restart_pending_events(struct fsnotify_group *group)
+{
+	spin_lock(&group->notification_lock);
+	while (!list_empty(&group->fanotify_data.access_list)) {
+		struct fanotify_perm_event *event;
+
+		event = list_first_entry(&group->fanotify_data.access_list,
+					 struct fanotify_perm_event,
+					 fae.fse.list);
+		list_del_init(&event->fae.fse.list);
+
+		if (group->shutdown) {
+			/* Group is being shut down. Reply ALLOW for the event. */
+			finish_permission_event(group, event, FAN_ALLOW, NULL);
+			spin_lock(&group->notification_lock);
+		} else {
+			group->q_len++;
+			list_add(&event->fae.fse.list,
+				 &group->notification_list);
+		}
+	}
+	spin_unlock(&group->notification_lock);
+
+	wake_up(&group->notification_waitq);
+}
+
 static int fanotify_release(struct inode *ignored, struct file *file)
 {
 	struct fsnotify_group *group = file->private_data;
