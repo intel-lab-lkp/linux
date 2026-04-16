@@ -46,6 +46,7 @@
 
 #include "i915_gtt_view_types.h"
 #include "intel_bios.h"
+#include "intel_dip.h"
 #include "intel_display.h"
 #include "intel_display_conversion.h"
 #include "intel_display_limits.h"
@@ -1297,6 +1298,8 @@ struct intel_crtc_state {
 		struct drm_dp_vsc_sdp vsc;
 		struct drm_dp_as_sdp as_sdp;
 	} infoframes;
+
+	struct intel_dip dip;
 
 	u8 eld[MAX_ELD_BYTES];
 
