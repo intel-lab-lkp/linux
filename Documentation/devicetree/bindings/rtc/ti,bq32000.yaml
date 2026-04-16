@@ -29,6 +29,15 @@ properties:
 
   trickle-diode-disable: true
 
+  ti,read-settle-us:
+    default: 0
+    description:
+      Delay in microseconds to wait before reading RTC registers.
+      Aggressive I2C polling on systems without an interrupt line
+      can prevent the BQ32000's internal refresh cycle, leading to
+      stale data. This delay ensures the hardware has sufficient
+      idle time to update its registers.
+
 required:
   - compatible
   - reg
