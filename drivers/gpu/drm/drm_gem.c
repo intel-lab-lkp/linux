@@ -374,14 +374,8 @@ drm_gem_object_release_handle(int id, void *ptr, void *data)
 	if (obj->funcs->close)
 		obj->funcs->close(obj, file_priv);
 
-	mutex_lock(&file_priv->prime.lock);
-
 	drm_prime_remove_buf_handle(&file_priv->prime, id);
-
-	mutex_unlock(&file_priv->prime.lock);
-
 	drm_vma_node_revoke(&obj->vma_node, file_priv);
-
 	drm_gem_object_handle_put_unlocked(obj);
 
 	return 0;
@@ -401,13 +395,16 @@ drm_gem_handle_delete(struct drm_file *filp, u32 handle)
 {
 	struct drm_gem_object *obj;
 
+	mutex_lock(&filp->prime.lock);
 	spin_lock(&filp->table_lock);
 
 	/* Check if we currently have a reference on the object */
 	obj = idr_replace(&filp->object_idr, NULL, handle);
 	spin_unlock(&filp->table_lock);
-	if (IS_ERR_OR_NULL(obj))
+	if (IS_ERR_OR_NULL(obj)) {
+		mutex_unlock(&filp->prime.lock);
 		return -EINVAL;
+	}
 
 	/* Release driver's reference and decrement refcount. */
 	drm_gem_object_release_handle(handle, obj, filp);
@@ -416,6 +413,7 @@ drm_gem_handle_delete(struct drm_file *filp, u32 handle)
 	spin_lock(&filp->table_lock);
 	idr_remove(&filp->object_idr, handle);
 	spin_unlock(&filp->table_lock);
+	mutex_unlock(&filp->prime.lock);
 
 	return 0;
 }
@@ -1030,16 +1028,17 @@ int drm_gem_change_handle_ioctl(struct drm_device *dev, void *data,
 		return -EINVAL;
 	handle = args->new_handle;
 
+	mutex_lock(&file_priv->prime.lock);
 	obj = drm_gem_object_lookup(file_priv, args->handle);
-	if (!obj)
+	if (!obj) {
+		mutex_unlock(&file_priv->prime.lock);
 		return -ENOENT;
+	}
 
 	if (args->handle == handle) {
 		ret = 0;
-		goto out;
+		goto out_unlock;
 	}
-
-	mutex_lock(&file_priv->prime.lock);
 
 	spin_lock(&file_priv->table_lock);
 	ret = idr_alloc(&file_priv->object_idr, obj, handle, handle + 1,
@@ -1069,9 +1068,8 @@ int drm_gem_change_handle_ioctl(struct drm_device *dev, void *data,
 	spin_unlock(&file_priv->table_lock);
 
 out_unlock:
-	mutex_unlock(&file_priv->prime.lock);
-out:
 	drm_gem_object_put(obj);
+	mutex_unlock(&file_priv->prime.lock);
 
 	return ret;
 }
@@ -1103,8 +1101,10 @@ drm_gem_open(struct drm_device *dev, struct drm_file *file_private)
 void
 drm_gem_release(struct drm_device *dev, struct drm_file *file_private)
 {
+	mutex_lock(&file_private->prime.lock);
 	idr_for_each(&file_private->object_idr,
 		     &drm_gem_object_release_handle, file_private);
+	mutex_unlock(&file_private->prime.lock);
 	idr_destroy(&file_private->object_idr);
 }
 
