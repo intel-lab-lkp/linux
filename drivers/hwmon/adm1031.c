@@ -897,13 +897,14 @@ static ssize_t update_interval_store(struct device *dev,
 	}
 	/* if not found, we point to the last entry (lowest update interval) */
 
+	mutex_lock(&data->update_lock);
+
 	/* set the new update rate while preserving other settings */
 	reg = adm1031_read_value(client, ADM1031_REG_FAN_FILTER);
 	reg &= ~ADM1031_UPDATE_RATE_MASK;
 	reg |= i << ADM1031_UPDATE_RATE_SHIFT;
 	adm1031_write_value(client, ADM1031_REG_FAN_FILTER, reg);
 
-	mutex_lock(&data->update_lock);
 	data->update_interval = update_intervals[i];
 	mutex_unlock(&data->update_lock);
 
