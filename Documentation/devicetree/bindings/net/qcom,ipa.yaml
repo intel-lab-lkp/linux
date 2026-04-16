@@ -60,6 +60,7 @@ properties:
           - const: qcom,sc7180-ipa
       - items:
           - enum:
+              - qcom,eliza-ipa
               - qcom,sm8650-ipa
           - const: qcom,sm8550-ipa
 
