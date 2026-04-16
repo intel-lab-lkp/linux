@@ -1062,18 +1062,21 @@ EXPORT_SYMBOL_GPL(acpi_driver_match_device);
  * __acpi_bus_register_driver - register a driver with the ACPI bus
  * @driver: driver being registered
  * @owner: owning module/driver
+ * @mod_name: module name string
  *
  * Registers a driver with the ACPI bus.  Searches the namespace for all
  * devices that match the driver's criteria and binds.  Returns zero for
  * success or a negative error status for failure.
  */
-int __acpi_bus_register_driver(struct acpi_driver *driver, struct module *owner)
+int __acpi_bus_register_driver(struct acpi_driver *driver, struct module *owner,
+			       const char *mod_name)
 {
 	if (acpi_disabled)
 		return -ENODEV;
 	driver->drv.name = driver->name;
 	driver->drv.bus = &acpi_bus_type;
 	driver->drv.owner = owner;
+	driver->drv.mod_name = mod_name;
 
 	return driver_register(&driver->drv);
 }

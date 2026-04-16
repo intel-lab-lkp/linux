@@ -672,8 +672,9 @@ int acpi_scan_add_handler(struct acpi_scan_handler *handler);
  * use a macro to avoid include chaining to get THIS_MODULE
  */
 #define acpi_bus_register_driver(drv) \
-	__acpi_bus_register_driver(drv, THIS_MODULE)
-int __acpi_bus_register_driver(struct acpi_driver *driver, struct module *owner);
+	__acpi_bus_register_driver(drv, THIS_MODULE, KBUILD_MODNAME)
+int __acpi_bus_register_driver(struct acpi_driver *driver, struct module *owner,
+			       const char *mod_name);
 void acpi_bus_unregister_driver(struct acpi_driver *driver);
 int acpi_bus_scan(acpi_handle handle);
 void acpi_bus_trim(struct acpi_device *start);
