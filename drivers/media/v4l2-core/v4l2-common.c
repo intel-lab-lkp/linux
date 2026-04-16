@@ -332,6 +332,16 @@ const struct v4l2_format_info *v4l2_format_info(u32 format)
 		{ .format = V4L2_PIX_FMT_NV12MT_16X16,  .pixel_enc = V4L2_PIXEL_ENC_YUV, .mem_planes = 2, .comp_planes = 2, .bpp = { 1, 2, 0, 0 }, .bpp_div = { 1, 1, 1, 1 }, .hdiv = 2, .vdiv = 2,
 		  .block_w = { 16,  8, 0, 0 },	.block_h = { 16,  8, 0, 0 }},
 
+		/* AFBC formats */
+		{ .format = V4L2_PIX_FMT_AFBC_YUV420_16x16, .pixel_enc = V4L2_PIXEL_ENC_YUV, .mem_planes = 1, .comp_planes = 1, .bpp = { 6, 0, 0, 0 }, .bpp_div = { 4, 1, 1, 1 }, .hdiv = 1, .vdiv = 1,
+		  .block_w = { 16, 0, 0, 0 },	.block_h = { 16, 0, 0, 0 }},
+		{ .format = V4L2_PIX_FMT_AFBC_YUV420_32x8, .pixel_enc = V4L2_PIXEL_ENC_YUV, .mem_planes = 1, .comp_planes = 1, .bpp = { 6, 0, 0, 0 }, .bpp_div = { 4, 1, 1, 1 }, .hdiv = 1, .vdiv = 1,
+		  .block_w = { 32, 0, 0, 0 },	.block_h = { 8, 0, 0, 0 }},
+		{ .format = V4L2_PIX_FMT_AFBC_YUV420_16x16_10, .pixel_enc = V4L2_PIXEL_ENC_YUV, .mem_planes = 1, .comp_planes = 1, .bpp = { 15, 0, 0, 0 }, .bpp_div = { 8, 1, 1, 1 }, .hdiv = 1, .vdiv = 1,
+		   .block_w = { 16, 0, 0, 0 },	.block_h = { 16, 0, 0, 0 }},
+		{ .format = V4L2_PIX_FMT_AFBC_YUV420_32x8_10, .pixel_enc = V4L2_PIXEL_ENC_YUV, .mem_planes = 1, .comp_planes = 1, .bpp = { 15, 0, 0, 0 }, .bpp_div = { 8, 1, 1, 1 }, .hdiv = 1, .vdiv = 1,
+		   .block_w = { 32, 0, 0, 0 },	.block_h = { 8, 0, 0, 0 }},
+
 		/* Bayer RGB formats */
 		{ .format = V4L2_PIX_FMT_SBGGR8,	.pixel_enc = V4L2_PIXEL_ENC_BAYER, .mem_planes = 1, .comp_planes = 1, .bpp = { 1, 0, 0, 0 }, .bpp_div = { 1, 1, 1, 1 }, .hdiv = 1, .vdiv = 1 },
 		{ .format = V4L2_PIX_FMT_SGBRG8,	.pixel_enc = V4L2_PIXEL_ENC_BAYER, .mem_planes = 1, .comp_planes = 1, .bpp = { 1, 0, 0, 0 }, .bpp_div = { 1, 1, 1, 1 }, .hdiv = 1, .vdiv = 1 },
@@ -448,6 +458,97 @@ void v4l2_apply_frmsize_constraints(u32 *width, u32 *height,
 }
 EXPORT_SYMBOL_GPL(v4l2_apply_frmsize_constraints);
 
+size_t v4l2_pixfmt_afbc_header_size(int fourcc, int width, int height)
+{
+	int width_in_block, height_in_block;
+
+	if (!v4l2_is_format_afbc(fourcc))
+		return 0;
+
+	switch (fourcc) {
+	case V4L2_PIX_FMT_AFBC_YUV420_16x16:
+	case V4L2_PIX_FMT_AFBC_YUV420_16x16_10:
+		width_in_block = ALIGN(width, 16) >> 4;
+		height_in_block = ALIGN(height, 16) >> 4;
+		break;
+	case V4L2_PIX_FMT_AFBC_YUV420_32x8:
+	case V4L2_PIX_FMT_AFBC_YUV420_32x8_10:
+		width_in_block = ALIGN(width, 32) >> 5;
+		height_in_block = ALIGN(height, 8) >> 3;
+		break;
+	}
+
+	return ALIGN(width_in_block * 16 * height_in_block, 128);
+}
+EXPORT_SYMBOL_GPL(v4l2_pixfmt_afbc_header_size);
+
+size_t v4l2_pixfmt_afbc_payload_size(int fourcc, int width, int height)
+{
+	int width_in_block, height_in_block, block_payload_size;
+
+	if (!v4l2_is_format_afbc(fourcc))
+		return 0;
+
+	switch (fourcc) {
+	case V4L2_PIX_FMT_AFBC_YUV420_16x16:
+	case V4L2_PIX_FMT_AFBC_YUV420_16x16_10:
+		width_in_block = ALIGN(width, 16) >> 4;
+		height_in_block = ALIGN(height, 16) >> 4;
+		break;
+	case V4L2_PIX_FMT_AFBC_YUV420_32x8:
+	case V4L2_PIX_FMT_AFBC_YUV420_32x8_10:
+		width_in_block = ALIGN(width, 32) >> 5;
+		height_in_block = ALIGN(height, 8) >> 3;
+		break;
+	}
+
+	switch (fourcc) {
+	case V4L2_PIX_FMT_AFBC_YUV420_16x16:
+	case V4L2_PIX_FMT_AFBC_YUV420_32x8:
+		block_payload_size = 384;
+		break;
+	case V4L2_PIX_FMT_AFBC_YUV420_16x16_10:
+	case V4L2_PIX_FMT_AFBC_YUV420_32x8_10:
+		block_payload_size = 512;
+		break;
+	}
+
+	return ALIGN(block_payload_size * width_in_block * height_in_block, 128);
+}
+EXPORT_SYMBOL_GPL(v4l2_pixfmt_afbc_payload_size);
+
+static int v4l2_fill_pixfmt_afbc(struct v4l2_pix_format_mplane *pixfmt,
+				 const struct v4l2_format_info *info)
+{
+	struct v4l2_plane_pix_format *plane = &pixfmt->plane_fmt[0];
+	unsigned int width = pixfmt->width;
+	unsigned int height = pixfmt->height;
+	unsigned int aligned_width = ALIGN(width, v4l2_format_block_width(info, 0));
+	unsigned int stride = DIV_ROUND_UP(aligned_width, info->hdiv) *
+			      info->bpp[0] / info->bpp_div[0];
+	size_t header_size = v4l2_pixfmt_afbc_header_size(info->format, width, height);
+	size_t payload_size = v4l2_pixfmt_afbc_payload_size(info->format, width, height);
+
+	plane->bytesperline = stride;
+	plane->sizeimage = header_size + payload_size;
+
+	return 0;
+}
+
+bool v4l2_is_format_afbc(int fourcc)
+{
+	switch (fourcc) {
+	case V4L2_PIX_FMT_AFBC_YUV420_16x16:
+	case V4L2_PIX_FMT_AFBC_YUV420_32x8:
+	case V4L2_PIX_FMT_AFBC_YUV420_16x16_10:
+	case V4L2_PIX_FMT_AFBC_YUV420_32x8_10:
+		return true;
+	}
+
+	return false;
+}
+EXPORT_SYMBOL_GPL(v4l2_is_format_afbc);
+
 int v4l2_fill_pixfmt_mp(struct v4l2_pix_format_mplane *pixfmt,
 			u32 pixelformat, u32 width, u32 height)
 {
@@ -463,6 +564,9 @@ int v4l2_fill_pixfmt_mp(struct v4l2_pix_format_mplane *pixfmt,
 	pixfmt->height = height;
 	pixfmt->pixelformat = pixelformat;
 	pixfmt->num_planes = info->mem_planes;
+
+	if (v4l2_is_format_afbc(info->format))
+		return v4l2_fill_pixfmt_afbc(pixfmt, info);
 
 	if (info->mem_planes == 1) {
 		plane = &pixfmt->plane_fmt[0];

@@ -1387,6 +1387,10 @@ static void v4l_fill_fmtdesc(struct v4l2_fmtdesc *fmt)
 	case V4L2_PIX_FMT_YVU422M:	descr = "Planar YVU 4:2:2 (N-C)"; break;
 	case V4L2_PIX_FMT_YUV444M:	descr = "Planar YUV 4:4:4 (N-C)"; break;
 	case V4L2_PIX_FMT_YVU444M:	descr = "Planar YVU 4:4:4 (N-C)"; break;
+	case V4L2_PIX_FMT_AFBC_YUV420_16x16: descr = "AFBC 8-bit YUV420 16x16"; break;
+	case V4L2_PIX_FMT_AFBC_YUV420_32x8: descr = "AFBC 8-bit YUV420 32x8"; break;
+	case V4L2_PIX_FMT_AFBC_YUV420_16x16_10: descr = "AFBC 10-bit YUV420 16x16"; break;
+	case V4L2_PIX_FMT_AFBC_YUV420_32x8_10: descr = "AFBC 10-bit YUV420 32x8"; break;
 	case V4L2_PIX_FMT_SBGGR8:	descr = "8-bit Bayer BGBG/GRGR"; break;
 	case V4L2_PIX_FMT_SGBRG8:	descr = "8-bit Bayer GBGB/RGRG"; break;
 	case V4L2_PIX_FMT_SGRBG8:	descr = "8-bit Bayer GRGR/BGBG"; break;

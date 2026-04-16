@@ -549,6 +549,10 @@ static inline bool v4l2_is_format_bayer(const struct v4l2_format_info *f)
 	return f && f->pixel_enc == V4L2_PIXEL_ENC_BAYER;
 }
 
+bool v4l2_is_format_afbc(int fourcc);
+size_t v4l2_pixfmt_afbc_header_size(int fourcc, int width, int height);
+size_t v4l2_pixfmt_afbc_payload_size(int fourcc, int width, int height);
+
 const struct v4l2_format_info *v4l2_format_info(u32 format);
 void v4l2_apply_frmsize_constraints(u32 *width, u32 *height,
 				    const struct v4l2_frmsize_stepwise *frmsize);
