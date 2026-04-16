@@ -662,6 +662,20 @@ static inline int iptunnel_pull_offloads(struct sk_buff *skb)
 	return 0;
 }
 
+static inline void iptunnel_rebuild_transport_header(struct sk_buff *skb)
+{
+	skb->transport_header = (typeof(skb->transport_header))~0U;
+	skb_probe_transport_header(skb);
+
+	if (!skb_transport_header_was_set(skb) && skb_is_gso(skb)) {
+		struct skb_shared_info *shinfo = skb_shinfo(skb);
+
+		shinfo->gso_type = 0;
+		shinfo->gso_size = 0;
+		shinfo->gso_segs = 0;
+	}
+}
+
 static inline void iptunnel_xmit_stats(struct net_device *dev, int pkt_len)
 {
 	if (pkt_len > 0) {
