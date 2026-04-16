@@ -378,6 +378,78 @@ cleanup:
 		kunit_skip(test, "Allocation failed");
 	KUNIT_EXPECT_EQ(test, 0, slab_errors);
 }
+
+struct dummy_struct {
+	struct rcu_ptr rcu;
+};
+
+static void overflow_handler_test_kfree_rcu_nolock(struct perf_event *event,
+						   struct perf_sample_data *data,
+						   struct pt_regs *regs)
+{
+	struct dummy_struct *dummy;
+	gfp_t gfp;
+	struct test_nolock_context *ctx = event->overflow_handler_context;
+
+	/* __GFP_ACCOUNT to test kmalloc_nolock() in alloc_slab_obj_exts() */
+	gfp = (ctx->callback_count % 2) ? 0 : __GFP_ACCOUNT;
+	dummy = kmalloc_nolock(sizeof(*dummy), gfp, NUMA_NO_NODE);
+
+	if (dummy) {
+		ctx->alloc_ok++;
+		kfree_rcu_nolock(dummy, rcu);
+	} else {
+		ctx->alloc_fail++;
+	}
+	ctx->callback_count++;
+}
+
+static void test_kfree_rcu_nolock(struct kunit *test)
+{
+	int i, j;
+	struct test_nolock_context ctx = { .test = test };
+	struct perf_event *event;
+	bool alloc_fail = false;
+	struct dummy_struct *dummy;
+
+	if (IS_BUILTIN(CONFIG_SLUB_KUNIT_TEST))
+		kunit_skip(test, "can't do kfree_rcu_nolock() when test is built-in");
+
+	event = perf_event_create_kernel_counter(&hw_attr, -1, current,
+						 overflow_handler_test_kfree_rcu_nolock,
+						 &ctx);
+	if (IS_ERR(event))
+		kunit_skip(test, "Failed to create perf event");
+	ctx.event = event;
+	perf_event_enable(ctx.event);
+	for (i = 0; i < NR_ITERATIONS; i++) {
+		for (j = 0; j < NR_OBJECTS; j++) {
+			gfp_t gfp = (i % 2) ? GFP_KERNEL : GFP_KERNEL_ACCOUNT;
+
+			objects[j] = kmalloc(sizeof(*dummy), gfp);
+			if (!objects[j]) {
+				j--;
+				while (j >= 0)
+					kfree(objects[j--]);
+				alloc_fail = true;
+				goto cleanup;
+			}
+		}
+		for (j = 0; j < NR_OBJECTS; j++)
+			kfree_rcu((struct dummy_struct *)objects[j], rcu);
+	}
+
+cleanup:
+	perf_event_disable(ctx.event);
+	perf_event_release_kernel(ctx.event);
+
+	kunit_info(test, "callback_count: %d, alloc_ok: %d, alloc_fail: %d\n",
+		   ctx.callback_count, ctx.alloc_ok, ctx.alloc_fail);
+
+	if (alloc_fail)
+		kunit_skip(test, "Allocation failed");
+	KUNIT_EXPECT_EQ(test, 0, slab_errors);
+}
 #endif
 
 static int test_init(struct kunit *test)
@@ -406,6 +478,7 @@ static struct kunit_case test_cases[] = {
 	KUNIT_CASE(test_krealloc_redzone_zeroing),
 #ifdef CONFIG_PERF_EVENTS
 	KUNIT_CASE_SLOW(test_kmalloc_kfree_nolock),
+	KUNIT_CASE_SLOW(test_kfree_rcu_nolock),
 #endif
 	{}
 };
