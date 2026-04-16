@@ -605,6 +605,9 @@ static bool hci_pio_process_cmd(struct i3c_hci *hci, struct hci_pio_data *pio)
 		 * Finally send the command.
 		 */
 		hci_pio_write_cmd(hci, pio->curr_xfer);
+
+		pio->curr_xfer->start_time = jiffies;
+		pio->curr_xfer->started = true;
 		/*
 		 * And move on.
 		 */
