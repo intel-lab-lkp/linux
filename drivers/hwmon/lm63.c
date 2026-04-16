@@ -372,12 +372,14 @@ static ssize_t show_pwm1(struct device *dev, struct device_attribute *devattr,
 	int nr = attr->index;
 	int pwm;
 
+	mutex_lock(&data->update_lock);
 	if (data->pwm_highres)
 		pwm = data->pwm1[nr];
 	else
 		pwm = data->pwm1[nr] >= 2 * data->pwm1_freq ?
 		       255 : (data->pwm1[nr] * 255 + data->pwm1_freq) /
 		       (2 * data->pwm1_freq);
+	mutex_unlock(&data->update_lock);
 
 	return sprintf(buf, "%d\n", pwm);
 }
@@ -535,6 +537,7 @@ static ssize_t show_temp11(struct device *dev, struct device_attribute *devattr,
 	int nr = attr->index;
 	int temp;
 
+	mutex_lock(&data->update_lock);
 	if (!nr) {
 		/*
 		 * Use unsigned temperature unless its value is zero.
@@ -550,7 +553,10 @@ static ssize_t show_temp11(struct device *dev, struct device_attribute *devattr,
 		else
 			temp = TEMP11_FROM_REG(data->temp11[nr]);
 	}
-	return sprintf(buf, "%d\n", temp + data->temp2_offset);
+	temp += data->temp2_offset;
+	mutex_unlock(&data->update_lock);
+
+	return sprintf(buf, "%d\n", temp);
 }
 
 static ssize_t set_temp11(struct device *dev, struct device_attribute *devattr,
