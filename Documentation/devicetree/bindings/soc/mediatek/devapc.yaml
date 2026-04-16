@@ -22,6 +22,7 @@ properties:
       - mediatek,mt6779-devapc
       - mediatek,mt8186-devapc
       - mediatek,mt8189-devapc
+      - mediatek,mt8196-devapc
 
   reg:
     description: The base address of devapc register bank
