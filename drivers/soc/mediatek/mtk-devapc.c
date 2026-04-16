@@ -12,6 +12,7 @@
 #include <linux/of_irq.h>
 #include <linux/of_address.h>
 
+#define MAX_VIO_NUM 20
 #define VIO_MOD_TO_REG_IND(m)	((m) / 32)
 #define VIO_MOD_TO_REG_OFF(m)	((m) % 32)
 
@@ -188,12 +189,17 @@ static void devapc_extract_vio_dbg(struct mtk_devapc_context *ctx)
  */
 static irqreturn_t devapc_violation_irq(int irq_number, void *data)
 {
+	u32 vio_num = 0;
 	struct mtk_devapc_context *ctx = data;
 
-	while (devapc_sync_vio_dbg(ctx))
+	mask_module_irq(ctx, true);
+
+	for (vio_num = 0; (vio_num < MAX_VIO_NUM) && (devapc_sync_vio_dbg(ctx)); ++vio_num)
 		devapc_extract_vio_dbg(ctx);
 
 	clear_vio_status(ctx);
+
+	mask_module_irq(ctx, false);
 
 	return IRQ_HANDLED;
 }
