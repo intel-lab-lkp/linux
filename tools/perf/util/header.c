@@ -300,6 +300,11 @@ static int do_read_bitmap(struct feat_fd *ff, unsigned long **pset, u64 *psize)
 	if (ret)
 		return ret;
 
+	/* bitmap_zalloc() takes an int; reject u64 values that truncate. */
+	if (size > INT_MAX ||
+	    BITS_TO_U64(size) > (ff->size - ff->offset) / sizeof(u64))
+		return -1;
+
 	set = bitmap_zalloc(size);
 	if (!set)
 		return -ENOMEM;
