@@ -83,11 +83,9 @@ static int adxl313_spi_probe(struct spi_device *spi)
 	regmap = devm_regmap_init_spi(spi,
 				      &adxl31x_spi_regmap_config[chip_data->type]);
 
-	if (IS_ERR(regmap)) {
-		dev_err(&spi->dev, "Error initializing spi regmap: %ld\n",
-			PTR_ERR(regmap));
-		return PTR_ERR(regmap);
-	}
+	if (IS_ERR(regmap))
+		return dev_err_probe(&spi->dev, PTR_ERR(regmap),
+				     "Error initializing spi regmap\n");
 
 	return adxl313_core_probe(&spi->dev, regmap,
 				  chip_data, &adxl313_spi_setup);

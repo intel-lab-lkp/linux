@@ -75,11 +75,9 @@ static int adxl313_i2c_probe(struct i2c_client *client)
 
 	regmap = devm_regmap_init_i2c(client,
 				      &adxl31x_i2c_regmap_config[chip_data->type]);
-	if (IS_ERR(regmap)) {
-		dev_err(&client->dev, "Error initializing i2c regmap: %ld\n",
-			PTR_ERR(regmap));
-		return PTR_ERR(regmap);
-	}
+	if (IS_ERR(regmap))
+		return dev_err_probe(&client->dev, PTR_ERR(regmap),
+				     "Error initializing i2c regmap\n");
 
 	return adxl313_core_probe(&client->dev, regmap, chip_data, NULL);
 }
