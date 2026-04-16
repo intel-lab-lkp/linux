@@ -421,7 +421,9 @@ struct slub_percpu_sheaves {
 	local_trylock_t lock;
 	struct slab_sheaf *main; /* never NULL when unlocked */
 	struct slab_sheaf *spare; /* empty or full, may be NULL */
+#ifdef CONFIG_KVFREE_RCU_BATCHED
 	struct slab_sheaf *rcu_free; /* for batching kfree_rcu() */
+#endif
 };
 
 /*
@@ -2923,6 +2925,7 @@ static void sheaf_flush_unused(struct kmem_cache *s, struct slab_sheaf *sheaf)
 	sheaf->size = 0;
 }
 
+#ifdef CONFIG_KVFREE_RCU_BATCHED
 static bool __rcu_free_sheaf_prepare(struct kmem_cache *s,
 				     struct slab_sheaf *sheaf)
 {
@@ -2965,6 +2968,7 @@ static void rcu_free_sheaf_nobarn(struct rcu_head *head)
 
 	free_empty_sheaf(s, sheaf);
 }
+#endif
 
 /*
  * Caller needs to make sure migration is disabled in order to fully flush
@@ -2978,7 +2982,10 @@ static void rcu_free_sheaf_nobarn(struct rcu_head *head)
 static void pcs_flush_all(struct kmem_cache *s)
 {
 	struct slub_percpu_sheaves *pcs;
-	struct slab_sheaf *spare, *rcu_free;
+	struct slab_sheaf *spare;
+#ifdef CONFIG_KVFREE_RCU_BATCHED
+	struct slab_sheaf *rcu_free;
+#endif
 
 	local_lock(&s->cpu_sheaves->lock);
 	pcs = this_cpu_ptr(s->cpu_sheaves);
@@ -2986,8 +2993,10 @@ static void pcs_flush_all(struct kmem_cache *s)
 	spare = pcs->spare;
 	pcs->spare = NULL;
 
+#ifdef CONFIG_KVFREE_RCU_BATCHED
 	rcu_free = pcs->rcu_free;
 	pcs->rcu_free = NULL;
+#endif
 
 	local_unlock(&s->cpu_sheaves->lock);
 
@@ -2996,8 +3005,10 @@ static void pcs_flush_all(struct kmem_cache *s)
 		free_empty_sheaf(s, spare);
 	}
 
+#ifdef CONFIG_KVFREE_RCU_BATCHED
 	if (rcu_free)
 		call_rcu(&rcu_free->rcu_head, rcu_free_sheaf_nobarn);
+#endif
 
 	sheaf_flush_main(s);
 }
@@ -3016,10 +3027,12 @@ static void __pcs_flush_all_cpu(struct kmem_cache *s, unsigned int cpu)
 		pcs->spare = NULL;
 	}
 
+#ifdef CONFIG_KVFREE_RCU_BATCHED
 	if (pcs->rcu_free) {
 		call_rcu(&pcs->rcu_free->rcu_head, rcu_free_sheaf_nobarn);
 		pcs->rcu_free = NULL;
 	}
+#endif
 }
 
 static void pcs_destroy(struct kmem_cache *s)
@@ -3056,7 +3069,9 @@ static void pcs_destroy(struct kmem_cache *s)
 		 */
 
 		WARN_ON(pcs->spare);
+#ifdef CONFIG_KVFREE_RCU_BATCHED
 		WARN_ON(pcs->rcu_free);
+#endif
 
 		if (!WARN_ON(pcs->main->size)) {
 			free_empty_sheaf(s, pcs->main);
@@ -3937,7 +3952,11 @@ static bool has_pcs_used(int cpu, struct kmem_cache *s)
 
 	pcs = per_cpu_ptr(s->cpu_sheaves, cpu);
 
-	return (pcs->spare || pcs->rcu_free || pcs->main->size);
+#ifdef CONFIG_KVFREE_RCU_BATCHED
+	if (pcs->rcu_free)
+		return true;
+#endif
+	return (pcs->spare || pcs->main->size);
 }
 
 /*
@@ -3995,6 +4014,7 @@ static void flush_all(struct kmem_cache *s)
 	cpus_read_unlock();
 }
 
+#ifdef CONFIG_KVFREE_RCU_BATCHED
 static void flush_rcu_sheaf(struct work_struct *w)
 {
 	struct slub_percpu_sheaves *pcs;
@@ -4071,6 +4091,7 @@ void flush_all_rcu_sheaves(void)
 
 	rcu_barrier();
 }
+#endif /* CONFIG_KVFREE_RCU_BATCHED */
 
 static int slub_cpu_setup(unsigned int cpu)
 {
@@ -5825,6 +5846,7 @@ bool free_to_pcs(struct kmem_cache *s, void *object, bool allow_spin)
 	return true;
 }
 
+#ifdef CONFIG_KVFREE_RCU_BATCHED
 static void rcu_free_sheaf(struct rcu_head *head)
 {
 	struct slab_sheaf *sheaf;
@@ -6005,6 +6027,7 @@ fail:
 	lock_map_release(&kfree_rcu_sheaf_map);
 	return false;
 }
+#endif /* CONFIG_KVFREE_RCU_BATCHED */
 
 static __always_inline bool can_free_to_pcs(struct slab *slab)
 {
