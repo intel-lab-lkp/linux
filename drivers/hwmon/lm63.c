@@ -109,8 +109,14 @@ static const unsigned short normal_i2c[] = { 0x18, 0x4c, 0x4e, I2C_CLIENT_END };
  * adapted accordingly.
  */
 
-#define FAN_FROM_REG(reg)	((reg) == 0xFFFC || (reg) == 0 ? 0 : \
-				 5400000 / (reg))
+static int fan_from_reg(int reg)
+{
+	if (reg == 0xFFFC || reg == 0)
+		return 0;
+
+	return 5400000 / reg;
+}
+
 #define FAN_TO_REG(val)		((val) <= 82 ? 0xFFFC : \
 				 (5400000 / (val)) & 0xFFFC)
 #define TEMP8_FROM_REG(reg)	((reg) * 1000)
@@ -333,7 +339,7 @@ static ssize_t show_fan(struct device *dev, struct device_attribute *devattr,
 {
 	struct sensor_device_attribute *attr = to_sensor_dev_attr(devattr);
 	struct lm63_data *data = lm63_update_device(dev);
-	return sprintf(buf, "%d\n", FAN_FROM_REG(data->fan[attr->index]));
+	return sprintf(buf, "%d\n", fan_from_reg(data->fan[attr->index]));
 }
 
 static ssize_t set_fan(struct device *dev, struct device_attribute *dummy,
