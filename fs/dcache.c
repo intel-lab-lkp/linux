@@ -325,12 +325,12 @@ static inline int dentry_cmp(const struct dentry *dentry, const unsigned char *c
 /*
  * long names are allocated separately from dentry and never modified.
  * Refcounted, freeing is RCU-delayed.  See take_dentry_name_snapshot()
- * for the reason why ->count and ->head can't be combined into a union.
+ * for the reason why ->count and ->rcu can't be combined into a union.
  * dentry_string_cmp() relies upon ->name[] being word-aligned.
  */
 struct external_name {
 	atomic_t count;
-	struct rcu_head head;
+	struct rcu_ptr rcu;
 	unsigned char name[] __aligned(sizeof(unsigned long));
 };
 
@@ -393,7 +393,7 @@ void release_dentry_name_snapshot(struct name_snapshot *name)
 		struct external_name *p;
 		p = container_of(name->name.name, struct external_name, name[0]);
 		if (unlikely(atomic_dec_and_test(&p->count)))
-			kfree_rcu(p, head);
+			kfree_rcu(p, rcu);
 	}
 }
 EXPORT_SYMBOL(release_dentry_name_snapshot);
@@ -2863,7 +2863,7 @@ static void copy_name(struct dentry *dentry, struct dentry *target)
 		dentry->__d_name.hash_len = target->__d_name.hash_len;
 	}
 	if (old_name && likely(atomic_dec_and_test(&old_name->count)))
-		kfree_rcu(old_name, head);
+		kfree_rcu(old_name, rcu);
 }
 
 /*
