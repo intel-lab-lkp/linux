@@ -62,7 +62,7 @@ static int uio_pci_sva_release(struct uio_info *info, struct inode *inode)
 static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	struct uio_pci_sva_dev *udev;
-	int ret, i, irq = 0;
+	int ret, i, irq = 0, have_irq_vectors = 0;
 
 	ret = pci_enable_device(pdev);
 	if (ret) {
@@ -83,6 +83,7 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 			dev_err(&pdev->dev, "Failed to get MSI vector\n");
 			ret = irq;
 			goto out_disable;
+			have_irq_vectors = 1;
 		}
 	} else
 		dev_warn(&pdev->dev,
@@ -139,6 +140,8 @@ static int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 out_free:
 	kfree(udev);
 out_disable:
+	if (have_irq_vectors)
+		pci_free_irq_vectors(pdev);
 	pci_disable_device(pdev);
 
 	return ret;
@@ -148,6 +151,7 @@ static void remove(struct pci_dev *pdev)
 {
 	struct uio_pci_sva_dev *udev = pci_get_drvdata(pdev);
 
+	pci_free_irq_vectors(pdev);
 	pci_release_regions(pdev);
 	pci_disable_device(pdev);
 	kfree(udev);
