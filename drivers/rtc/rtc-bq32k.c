@@ -16,6 +16,7 @@
 #include <linux/kstrtox.h>
 #include <linux/errno.h>
 #include <linux/bcd.h>
+#include <linux/delay.h>
 
 #define BQ32K_SECONDS		0x00	/* Seconds register address */
 #define BQ32K_SECONDS_MASK	0x7F	/* Mask over seconds value */
@@ -46,6 +47,11 @@ struct bq32k_regs {
 	uint8_t		date;
 	uint8_t		month;
 	uint8_t		years;
+};
+
+struct bq32k_data {
+	struct rtc_device *rtc;
+	u32 read_delay_us;
 };
 
 static struct i2c_driver bq32k_driver;
@@ -89,8 +95,16 @@ static int bq32k_write(struct device *dev, void *data, uint8_t off, uint8_t len)
 
 static int bq32k_rtc_read_time(struct device *dev, struct rtc_time *tm)
 {
+	struct bq32k_data *bq32k = dev_get_drvdata(dev);
 	struct bq32k_regs regs;
 	int error;
+
+	/*
+	 * When the device doesn't have the interrupt connected, prevent
+	 * userpace from polling the RTC registers to frequently.
+	 */
+	if (bq32k && bq32k->read_delay_us)
+		usleep_range(bq32k->read_delay_us, bq32k->read_delay_us + 50);
 
 	error = bq32k_read(dev, &regs, 0, sizeof(regs));
 	if (error)
@@ -253,12 +267,17 @@ static void bq32k_sysfs_unregister(struct device *dev)
 static int bq32k_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
-	struct rtc_device *rtc;
+	struct bq32k_data *bq32k;
 	uint8_t reg;
 	int error;
+	uint32_t settle_us = 0;
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
 		return -ENODEV;
+
+	bq32k = devm_kzalloc(dev, sizeof(*bq32k), GFP_KERNEL);
+	if (!bq32k)
+		return -ENOMEM;
 
 	/* Check Oscillator Stop flag */
 	error = bq32k_read(dev, &reg, BQ32K_SECONDS, 1);
@@ -280,10 +299,13 @@ static int bq32k_probe(struct i2c_client *client)
 	if (client->dev.of_node)
 		trickle_charger_of_init(dev, client->dev.of_node);
 
-	rtc = devm_rtc_device_register(&client->dev, bq32k_driver.driver.name,
-						&bq32k_rtc_ops, THIS_MODULE);
-	if (IS_ERR(rtc))
-		return PTR_ERR(rtc);
+	bq32k->rtc = devm_rtc_device_register(&client->dev, bq32k_driver.driver.name,
+					      &bq32k_rtc_ops, THIS_MODULE);
+	if (IS_ERR(bq32k->rtc))
+		return PTR_ERR(bq32k->rtc);
+
+	device_property_read_u32(dev, "ti,read-settle-us", &settle_us);
+	bq32k->read_delay_us = settle_us;
 
 	error = bq32k_sysfs_register(&client->dev);
 	if (error) {
@@ -293,7 +315,7 @@ static int bq32k_probe(struct i2c_client *client)
 	}
 
 
-	i2c_set_clientdata(client, rtc);
+	i2c_set_clientdata(client, bq32k);
 
 	return 0;
 }
