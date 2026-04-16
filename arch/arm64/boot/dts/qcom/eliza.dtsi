@@ -662,16 +662,16 @@
 			};
 		};
 
-		config_noc: interconnect@1600000 {
-			compatible = "qcom,eliza-cnoc-cfg";
-			reg = <0x0 0x01600000 0x0 0x5200>;
+		cnoc_main: interconnect@1500000 {
+			compatible = "qcom,eliza-cnoc-main";
+			reg = <0x0 0x01500000 0x0 0x16080>;
 			qcom,bcm-voters = <&apps_bcm_voter>;
 			#interconnect-cells = <2>;
 		};
 
-		cnoc_main: interconnect@1500000 {
-			compatible = "qcom,eliza-cnoc-main";
-			reg = <0x0 0x01500000 0x0 0x16080>;
+		config_noc: interconnect@1600000 {
+			compatible = "qcom,eliza-cnoc-cfg";
+			reg = <0x0 0x01600000 0x0 0x5200>;
 			qcom,bcm-voters = <&apps_bcm_voter>;
 			#interconnect-cells = <2>;
 		};
@@ -862,13 +862,6 @@
 			#reset-cells = <1>;
 		};
 
-		lpass_ag_noc: interconnect@7e40000 {
-			compatible = "qcom,eliza-lpass-ag-noc";
-			reg = <0x0 0x07e40000 0x0 0xe080>;
-			qcom,bcm-voters = <&apps_bcm_voter>;
-			#interconnect-cells = <2>;
-		};
-
 		lpass_lpiaon_noc: interconnect@7400000 {
 			compatible = "qcom,eliza-lpass-lpiaon-noc";
 			reg = <0x0 0x07400000 0x0 0x19080>;
@@ -879,6 +872,13 @@
 		lpass_lpicx_noc: interconnect@7420000 {
 			compatible = "qcom,eliza-lpass-lpicx-noc";
 			reg = <0x0 0x07420000 0x0 0x44080>;
+			qcom,bcm-voters = <&apps_bcm_voter>;
+			#interconnect-cells = <2>;
+		};
+
+		lpass_ag_noc: interconnect@7e40000 {
+			compatible = "qcom,eliza-lpass-ag-noc";
+			reg = <0x0 0x07e40000 0x0 0xe080>;
 			qcom,bcm-voters = <&apps_bcm_voter>;
 			#interconnect-cells = <2>;
 		};
@@ -1002,6 +1002,30 @@
 
 				#address-cells = <2>;
 				#size-cells = <0>;
+			};
+		};
+
+		tlmm: pinctrl@f100000 {
+			compatible = "qcom,eliza-tlmm";
+			reg = <0x0 0x0f100000 0x0 0xf00000>;
+
+			interrupts = <GIC_SPI 208 IRQ_TYPE_LEVEL_HIGH>;
+
+			gpio-controller;
+			#gpio-cells = <2>;
+
+			interrupt-controller;
+			#interrupt-cells = <2>;
+
+			gpio-ranges = <&tlmm 0 0 184>;
+			wakeup-parent = <&pdc>;
+
+			qup_uart14_default: qup-uart14-default-state {
+				/* TX, RX */
+				pins = "gpio18", "gpio19";
+				function = "qup2_se5";
+				drive-strength = <2>;
+				bias-pull-up;
 			};
 		};
 
@@ -1317,30 +1341,6 @@
 
 			#freq-domain-cells = <1>;
 			#clock-cells = <1>;
-		};
-
-		tlmm: pinctrl@f100000 {
-			compatible = "qcom,eliza-tlmm";
-			reg = <0x0 0x0f100000 0x0 0xf00000>;
-
-			interrupts = <GIC_SPI 208 IRQ_TYPE_LEVEL_HIGH>;
-
-			gpio-controller;
-			#gpio-cells = <2>;
-
-			interrupt-controller;
-			#interrupt-cells = <2>;
-
-			gpio-ranges = <&tlmm 0 0 184>;
-			wakeup-parent = <&pdc>;
-
-			qup_uart14_default: qup-uart14-default-state {
-				/* TX, RX */
-				pins = "gpio18", "gpio19";
-				function = "qup2_se5";
-				drive-strength = <2>;
-				bias-pull-up;
-			};
 		};
 
 		gem_noc: interconnect@24100000 {
