@@ -340,3 +340,40 @@ int ipe_inode_setintegrity(const struct inode *inode,
 	return -EINVAL;
 }
 #endif /* CONFIG_IPE_PROP_FS_VERITY_BUILTIN_SIG */
+
+#ifdef CONFIG_IPE_PROP_BPF_SIGNATURE
+/**
+ * ipe_bpf_prog_load_post_integrity() - ipe security hook for BPF program load.
+ * @prog: Supplies the BPF program being loaded.
+ * @attr: Supplies the bpf syscall attributes.
+ * @token: Supplies the BPF token, if any.
+ * @kernel: Whether the call originated from the kernel.
+ * @lsmid: Supplies the LSM ID of the integrity provider.
+ * @verdict: Supplies the integrity verdict from the provider (e.g. Hornet).
+ *
+ * This LSM hook is called after an integrity verification LSM (such as Hornet)
+ * has evaluated a BPF program's cryptographic signature. IPE uses the verdict
+ * to make a policy-based allow/deny decision.
+ *
+ * Return:
+ * * %0		- Success
+ * * %-EACCES	- Did not pass IPE policy
+ */
+int ipe_bpf_prog_load_post_integrity(struct bpf_prog *prog,
+				     union bpf_attr *attr,
+				     struct bpf_token *token,
+				     bool kernel,
+				     const struct lsm_id *lsmid,
+				     enum lsm_integrity_verdict verdict)
+{
+	struct ipe_eval_ctx ctx = IPE_EVAL_CTX_INIT;
+
+	ctx.op = IPE_OP_BPF_PROG_LOAD;
+	ctx.hook = IPE_HOOK_BPF_PROG_LOAD;
+	ctx.bpf_verdict = verdict;
+	ctx.bpf_keyring_id = attr->keyring_id;
+	ctx.bpf_kernel = kernel;
+
+	return ipe_evaluate_event(&ctx);
+}
+#endif /* CONFIG_IPE_PROP_BPF_SIGNATURE */
