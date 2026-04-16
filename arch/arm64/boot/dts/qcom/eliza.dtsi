@@ -1343,6 +1343,26 @@
 			};
 		};
 
+		sram@14680000 {
+			compatible = "qcom,eliza-imem", "mmio-sram";
+			reg = <0x0 0x14680000 0x0 0x2c000>;
+			ranges = <0x0 0x0 0x14680000 0x2c000>;
+
+			no-memory-wc;
+
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			pilreloc-sram@94c {
+				compatible = "qcom,pil-reloc-info";
+				reg = <0x94c 0xc8>;
+			};
+
+			ipa_modem_tables: modem-tables-sram@3000 {
+				reg = <0x3000 0x2000>;
+			};
+		};
+
 		gem_noc: interconnect@24100000 {
 			compatible = "qcom,eliza-gem-noc";
 			reg = <0x0 0x24100000 0x0 0x163080>;
