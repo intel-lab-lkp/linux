@@ -33,7 +33,8 @@ void intel_dip_write_emp_as_sdp_tl(const struct intel_crtc_state *crtc_state)
 	 * Since currently we support VRR only for DP/eDP, so this is programmed
 	 * only for Adaptive Sync SDP to Vsync start.
 	 */
-	intel_de_write(display,
-		       EMP_AS_SDP_TL(display, cpu_transcoder),
-		       EMP_AS_SDP_DB_TL(crtc_state->vrr.vsync_start));
+	if (intel_crtc_has_dp_encoder(crtc_state))
+		intel_de_write(display,
+			       EMP_AS_SDP_TL(display, cpu_transcoder),
+			       EMP_AS_SDP_DB_TL(crtc_state->vrr.vsync_start));
 }
