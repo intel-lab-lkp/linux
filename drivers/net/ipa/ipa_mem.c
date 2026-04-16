@@ -631,6 +631,8 @@ int ipa_mem_init(struct ipa *ipa, struct platform_device *pdev,
 	ipa->mem_count = mem_data->local_count;
 	ipa->mem = mem_data->local;
 
+	ipa->fnr_idx_cnt = mem_data->fnr_idx_cnt;
+
 	/* Check the route and filter table memory regions */
 	if (!ipa_table_mem_valid(ipa, false))
 		return -EINVAL;

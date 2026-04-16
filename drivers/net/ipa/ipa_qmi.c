@@ -74,6 +74,8 @@
 #define IPA_MODEM_SERVICE_INS_ID	2
 #define IPA_MODEM_SVC_VERS		1
 
+#define IPA_MODEM_FNR_IDX_START		128
+
 #define QMI_INIT_DRIVER_TIMEOUT		60000	/* A minute in milliseconds */
 
 /* Send an INIT_COMPLETE indication message to the modem */
@@ -391,6 +393,22 @@ init_modem_driver_req(struct ipa_qmi *ipa_qmi)
 				ipa->mem_offset + mem->offset;
 			req.hw_stats_drop_size_valid = 1;
 			req.hw_stats_drop_size = ipa->mem_offset + mem->size;
+		}
+	}
+
+	if (ipa->version >= IPA_VERSION_4_5 && ipa->fnr_idx_cnt) {
+		mem = ipa_mem_find(ipa, IPA_MEM_STATS_FILTER_ROUTE);
+		if (mem && mem->size) {
+			req.hw_stats_filter_info_valid = 1;
+			req.hw_stats_filter_info.start_addr =
+				ipa->mem_offset + mem->offset;
+			req.hw_stats_filter_info.size =
+				ipa->fnr_idx_cnt * 16;
+			req.hw_stats_filter_info.start_index =
+				IPA_MODEM_FNR_IDX_START;
+			req.hw_stats_filter_info.end_index =
+				IPA_MODEM_FNR_IDX_START +
+				ipa->fnr_idx_cnt - 1;
 		}
 	}
 

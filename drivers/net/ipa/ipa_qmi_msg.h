@@ -27,7 +27,7 @@
  */
 #define IPA_QMI_INDICATION_REGISTER_REQ_SZ	20	/* -> server handle */
 #define IPA_QMI_INDICATION_REGISTER_RSP_SZ	7	/* <- server handle */
-#define IPA_QMI_INIT_DRIVER_REQ_SZ		162	/* client handle -> */
+#define IPA_QMI_INIT_DRIVER_REQ_SZ		186	/* client handle -> */
 #define IPA_QMI_INIT_DRIVER_RSP_SZ		25	/* client handle <- */
 #define IPA_QMI_INIT_COMPLETE_IND_SZ		7	/* <- server handle */
 #define IPA_QMI_DRIVER_INIT_COMPLETE_REQ_SZ	4	/* -> server handle */
@@ -117,6 +117,13 @@ struct ipa_mem_array {
 struct ipa_mem_range {
 	u32 start;
 	u32 size;
+};
+
+struct ipa_stats_filter {
+	u32 start_addr;
+	u32 size;
+	u8 start_index;
+	u8 end_index;
 };
 
 /* The message for the IPA_QMI_INIT_DRIVER request contains information
@@ -216,6 +223,11 @@ struct ipa_init_modem_driver_req {
 	u32			hw_stats_drop_base_addr;
 	u8			hw_stats_drop_size_valid;
 	u32			hw_stats_drop_size;
+
+	/* Hardware filter statistics information. (IPA v4.5 and above)
+	 */
+	u8			hw_stats_filter_info_valid;
+	struct ipa_stats_filter	hw_stats_filter_info;
 };
 
 /* The response to a IPA_QMI_INIT_DRIVER request begins with a standard
@@ -256,6 +268,7 @@ extern const struct qmi_elem_info ipa_init_complete_ind_ei[];
 extern const struct qmi_elem_info ipa_mem_bounds_ei[];
 extern const struct qmi_elem_info ipa_mem_array_ei[];
 extern const struct qmi_elem_info ipa_mem_range_ei[];
+extern const struct qmi_elem_info ipa_stats_filter_ei[];
 extern const struct qmi_elem_info ipa_init_modem_driver_req_ei[];
 extern const struct qmi_elem_info ipa_init_modem_driver_rsp_ei[];
 

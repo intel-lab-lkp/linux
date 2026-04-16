@@ -181,6 +181,7 @@ struct ipa_resource_data {
  * @imem_addr:		physical address of IPA region within IMEM
  * @imem_size:		size in bytes of IPA IMEM region
  * @smem_size:		size in bytes of the IPA SMEM region
+ * @fnr_idx_cnt:	Number of FnR counters
  */
 struct ipa_mem_data {
 	u32 local_count;
@@ -193,6 +194,8 @@ struct ipa_mem_data {
 	u32 imem_size; /* DEPRECATED */
 
 	u32 smem_size;
+
+	u8 fnr_idx_cnt;
 };
 
 /**
