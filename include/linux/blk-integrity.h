@@ -87,6 +87,20 @@ static inline unsigned int bio_integrity_bytes(struct blk_integrity *bi,
 	return bio_integrity_intervals(bi, sectors) * bi->metadata_size;
 }
 
+/**
+ * bip_set_seed - Set bip reference tag seed from bio device address
+ * @bip:	struct bio_integrity_payload whose ref tag seed to set
+ * @bi:		struct blk_integrity profile for device
+ * @bio:	struct bio whose device address to use for the ref tag seed
+ */
+static inline void bip_set_seed(struct bio_integrity_payload *bip,
+				const struct blk_integrity *bi,
+				const struct bio *bio)
+{
+	bip->bip_iter.bi_sector =
+		bio_integrity_intervals(bi, bio->bi_iter.bi_sector);
+}
+
 static inline bool blk_integrity_rq(const struct request *rq)
 {
 	return rq->cmd_flags & REQ_INTEGRITY;
