@@ -4155,7 +4155,16 @@ static int iavf_delete_clsflower(struct iavf_adapter *adapter,
 	if (filter) {
 		filter->del = true;
 		adapter->aq_required |= IAVF_FLAG_AQ_DEL_CLOUD_FILTER;
-	} else {
+	} else if (adapter->num_cloud_filters) {
+		/* When the egress qdisc is detached the driver implicitly
+		 * deletes all associated cloud filters to prevent stale
+		 * hardware entries, reducing num_cloud_filters to zero.
+		 * The netdev layer is unaware of this implicit cleanup and
+		 * may still request deletion of individual filters.  Only
+		 * return -EINVAL when a filter lookup fails and
+		 * num_cloud_filters is non-zero, indicating a genuine
+		 * lookup failure rather than a post-teardown stale delete.
+		 */
 		err = -EINVAL;
 	}
 	spin_unlock_bh(&adapter->cloud_filter_list_lock);
