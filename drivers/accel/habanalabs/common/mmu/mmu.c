@@ -50,13 +50,13 @@ int hl_mmu_init(struct hl_device *hdev)
 
 	mutex_init(&hdev->mmu_lock);
 
-	if (hdev->mmu_func[MMU_DR_PGT].init != NULL) {
+	if (hdev->mmu_func[MMU_DR_PGT].init) {
 		rc = hdev->mmu_func[MMU_DR_PGT].init(hdev);
 		if (rc)
 			return rc;
 	}
 
-	if (hdev->mmu_func[MMU_HR_PGT].init != NULL) {
+	if (hdev->mmu_func[MMU_HR_PGT].init) {
 		rc = hdev->mmu_func[MMU_HR_PGT].init(hdev);
 		if (rc)
 			goto fini_dr_mmu;
@@ -65,7 +65,7 @@ int hl_mmu_init(struct hl_device *hdev)
 	return 0;
 
 fini_dr_mmu:
-	if (hdev->mmu_func[MMU_DR_PGT].fini != NULL)
+	if (hdev->mmu_func[MMU_DR_PGT].fini)
 		hdev->mmu_func[MMU_DR_PGT].fini(hdev);
 
 	return rc;
@@ -86,10 +86,10 @@ void hl_mmu_fini(struct hl_device *hdev)
 	if (hdev->mmu_disable)
 		return;
 
-	if (hdev->mmu_func[MMU_DR_PGT].fini != NULL)
+	if (hdev->mmu_func[MMU_DR_PGT].fini)
 		hdev->mmu_func[MMU_DR_PGT].fini(hdev);
 
-	if (hdev->mmu_func[MMU_HR_PGT].fini != NULL)
+	if (hdev->mmu_func[MMU_HR_PGT].fini)
 		hdev->mmu_func[MMU_HR_PGT].fini(hdev);
 
 	mutex_destroy(&hdev->mmu_lock);
@@ -111,13 +111,13 @@ int hl_mmu_ctx_init(struct hl_ctx *ctx)
 	if (hdev->mmu_disable)
 		return 0;
 
-	if (hdev->mmu_func[MMU_DR_PGT].ctx_init != NULL) {
+	if (hdev->mmu_func[MMU_DR_PGT].ctx_init) {
 		rc = hdev->mmu_func[MMU_DR_PGT].ctx_init(ctx);
 		if (rc)
 			return rc;
 	}
 
-	if (hdev->mmu_func[MMU_HR_PGT].ctx_init != NULL) {
+	if (hdev->mmu_func[MMU_HR_PGT].ctx_init) {
 		rc = hdev->mmu_func[MMU_HR_PGT].ctx_init(ctx);
 		if (rc)
 			goto fini_dr_ctx;
@@ -126,7 +126,7 @@ int hl_mmu_ctx_init(struct hl_ctx *ctx)
 	return 0;
 
 fini_dr_ctx:
-	if (hdev->mmu_func[MMU_DR_PGT].fini != NULL)
+	if (hdev->mmu_func[MMU_DR_PGT].fini)
 		hdev->mmu_func[MMU_DR_PGT].fini(hdev);
 
 	return rc;
@@ -149,10 +149,10 @@ void hl_mmu_ctx_fini(struct hl_ctx *ctx)
 	if (hdev->mmu_disable)
 		return;
 
-	if (hdev->mmu_func[MMU_DR_PGT].ctx_fini != NULL)
+	if (hdev->mmu_func[MMU_DR_PGT].ctx_fini)
 		hdev->mmu_func[MMU_DR_PGT].ctx_fini(ctx);
 
-	if (hdev->mmu_func[MMU_HR_PGT].ctx_fini != NULL)
+	if (hdev->mmu_func[MMU_HR_PGT].ctx_fini)
 		hdev->mmu_func[MMU_HR_PGT].ctx_fini(ctx);
 }
 
