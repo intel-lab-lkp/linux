@@ -162,8 +162,10 @@ do {										\
 #ifdef CONFIG_BTRFS_DEBUG
 /* Verbose warning only under debug build. */
 #define DEBUG_WARN(args...)			WARN(1, KERN_ERR args)
+#define DEBUG_WARN_ON_ONCE(condition)		WARN_ON_ONCE(condition)
 #else
-#define DEBUG_WARN(...)				do {} while(0)
+#define DEBUG_WARN(...)				do {} while (0)
+#define DEBUG_WARN_ON_ONCE(condition)		(unlikely(condition))
 #endif
 
 __printf(5, 6)
