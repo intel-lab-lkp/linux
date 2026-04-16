@@ -535,6 +535,12 @@ static int evsel__merge_aggr_counters(struct evsel *evsel, struct evsel *alias)
 		aggr_counts_a->run += aggr_counts_b->run;
 	}
 
+	/*
+	 * Merge the CPU maps so that the display logic (e.g. should_skip_zero_counter)
+	 * knows this merged event covers all CPUs from both aliases.
+	 */
+	perf_cpu_map__merge(&evsel->core.cpus, alias->core.cpus);
+
 	return 0;
 }
 
