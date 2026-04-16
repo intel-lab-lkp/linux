@@ -411,6 +411,21 @@ static inline unsigned int cluster_offset(struct swap_info_struct *si,
 	return cluster_index(si, ci) * SWAPFILE_CLUSTER;
 }
 
+static struct swap_memcg_table *swap_memcg_table_alloc(gfp_t gfp)
+{
+	if (!IS_ENABLED(CONFIG_MEMCG))
+		return NULL;
+	return kzalloc(sizeof(struct swap_memcg_table), gfp);
+}
+
+static void swap_memcg_table_assign(struct swap_cluster_info *ci,
+				    struct swap_memcg_table *memcg_table)
+{
+#ifdef CONFIG_MEMCG
+	ci->memcg_table = memcg_table;
+#endif
+}
+
 static struct swap_table *swap_table_alloc(gfp_t gfp)
 {
 	struct folio *folio;
@@ -434,6 +449,9 @@ static void swap_table_free_folio_rcu_cb(struct rcu_head *head)
 
 static void swap_table_free(struct swap_table *table)
 {
+	if (!table)
+		return;
+
 	if (!SWP_TABLE_USE_PAGE) {
 		kmem_cache_free(swap_table_cachep, table);
 		return;
@@ -465,6 +483,7 @@ static void swap_cluster_assert_empty(struct swap_cluster_info *ci,
 			bad_slots++;
 		else
 			WARN_ON_ONCE(!swp_tb_is_null(swp_tb));
+		WARN_ON_ONCE(__swap_cgroup_get(ci, ci_off));
 	} while (++ci_off < ci_end);
 
 	WARN_ON_ONCE(bad_slots != (swapoff ? ci->count : 0));
@@ -481,6 +500,11 @@ static void swap_cluster_free_table(struct swap_cluster_info *ci)
 	rcu_assign_pointer(ci->table, NULL);
 
 	swap_table_free(table);
+
+#ifdef CONFIG_MEMCG
+	kfree(ci->memcg_table);
+	ci->memcg_table = NULL;
+#endif
 }
 
 /*
@@ -492,6 +516,8 @@ swap_cluster_alloc_table(struct swap_info_struct *si,
 			 struct swap_cluster_info *ci)
 {
 	struct swap_table *table;
+	struct swap_memcg_table *memcg_table;
+	gfp_t gfp = __GFP_HIGH | __GFP_NOMEMALLOC | __GFP_NOWARN;
 
 	/*
 	 * Only cluster isolation from the allocator does table allocation.
@@ -505,8 +531,10 @@ swap_cluster_alloc_table(struct swap_info_struct *si,
 	/* The cluster must be free and was just isolated from the free list. */
 	VM_WARN_ON_ONCE(ci->flags || !cluster_is_empty(ci));
 
-	table = swap_table_alloc(__GFP_HIGH | __GFP_NOMEMALLOC | __GFP_NOWARN);
-	if (table) {
+	table = swap_table_alloc(gfp);
+	memcg_table = swap_memcg_table_alloc(gfp);
+	if (table && (!IS_ENABLED(CONFIG_MEMCG) || memcg_table)) {
+		swap_memcg_table_assign(ci, memcg_table);
 		rcu_assign_pointer(ci->table, table);
 		return ci;
 	}
@@ -516,12 +544,16 @@ swap_cluster_alloc_table(struct swap_info_struct *si,
 	 * a sleep allocation, but there is a limited number of them, so
 	 * the potential recursive allocation is limited.
 	 */
+	gfp |= GFP_KERNEL;
 	spin_unlock(&ci->lock);
 	if (!(si->flags & SWP_SOLIDSTATE))
 		spin_unlock(&si->global_cluster_lock);
 	local_unlock(&percpu_swap_cluster.lock);
 
-	table = swap_table_alloc(__GFP_HIGH | __GFP_NOMEMALLOC | GFP_KERNEL);
+	if (!table)
+		table = swap_table_alloc(gfp);
+	if (!memcg_table)
+		memcg_table = swap_memcg_table_alloc(gfp);
 
 	/*
 	 * Back to atomic context. We might have migrated to a new CPU with a
@@ -538,17 +570,20 @@ swap_cluster_alloc_table(struct swap_info_struct *si,
 
 	/* Nothing except this helper should touch a dangling empty cluster. */
 	if (WARN_ON_ONCE(cluster_table_is_alloced(ci))) {
-		if (table)
-			swap_table_free(table);
+		swap_table_free(table);
+		kfree(memcg_table);
 		return ci;
 	}
 
-	if (!table) {
+	if (!table || (IS_ENABLED(CONFIG_MEMCG) && !memcg_table)) {
 		move_cluster(si, ci, &si->free_clusters, CLUSTER_FLAG_FREE);
 		spin_unlock(&ci->lock);
+		swap_table_free(table);
+		kfree(memcg_table);
 		return NULL;
 	}
 
+	swap_memcg_table_assign(ci, memcg_table);
 	rcu_assign_pointer(ci->table, table);
 	return ci;
 }
@@ -768,6 +803,7 @@ static int swap_cluster_setup_bad_slot(struct swap_info_struct *si,
 {
 	unsigned int ci_off = offset % SWAPFILE_CLUSTER;
 	unsigned long idx = offset / SWAPFILE_CLUSTER;
+	struct swap_memcg_table *memcg_table;
 	struct swap_cluster_info *ci;
 	struct swap_table *table;
 	int ret = 0;
@@ -794,6 +830,12 @@ static int swap_cluster_setup_bad_slot(struct swap_info_struct *si,
 		table = swap_table_alloc(GFP_KERNEL);
 		if (!table)
 			return -ENOMEM;
+		memcg_table = swap_memcg_table_alloc(GFP_KERNEL);
+		if (IS_ENABLED(CONFIG_MEMCG) && !memcg_table) {
+			swap_table_free(table);
+			return -ENOMEM;
+		}
+		swap_memcg_table_assign(ci, memcg_table);
 		rcu_assign_pointer(ci->table, table);
 	}
 	spin_lock(&ci->lock);
@@ -1872,12 +1914,10 @@ void __swap_cluster_free_entries(struct swap_info_struct *si,
 				 unsigned int ci_start, unsigned int nr_pages)
 {
 	unsigned long old_tb;
-	unsigned int type = si->type;
 	unsigned short id = 0, id_cur;
 	unsigned int ci_off = ci_start, ci_end = ci_start + nr_pages;
 	unsigned long offset = cluster_offset(si, ci);
 	unsigned int ci_batch = ci_off;
-	swp_entry_t entry;
 
 	VM_WARN_ON(ci->count < nr_pages);
 
@@ -1895,21 +1935,17 @@ void __swap_cluster_free_entries(struct swap_info_struct *si,
 		 * Uncharge swap slots by memcg in batches. Consecutive
 		 * slots with the same cgroup id are uncharged together.
 		 */
-		entry = swp_entry(type, offset + ci_off);
-		id_cur = lookup_swap_cgroup_id(entry);
+		id_cur = __swap_cgroup_clear(ci, ci_off, 1);
 		if (id != id_cur) {
 			if (id)
-				mem_cgroup_uncharge_swap(swp_entry(type, offset + ci_batch),
-							 ci_off - ci_batch);
+				mem_cgroup_uncharge_swap(id, ci_off - ci_batch);
 			id = id_cur;
 			ci_batch = ci_off;
 		}
 	} while (++ci_off < ci_end);
 
-	if (id) {
-		mem_cgroup_uncharge_swap(swp_entry(type, offset + ci_batch),
-					 ci_off - ci_batch);
-	}
+	if (id)
+		mem_cgroup_uncharge_swap(id, ci_off - ci_batch);
 
 	swap_range_free(si, offset + ci_start, nr_pages);
 	swap_cluster_assert_empty(ci, ci_start, nr_pages, false);
