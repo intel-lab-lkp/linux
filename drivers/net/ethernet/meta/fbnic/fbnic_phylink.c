@@ -237,6 +237,7 @@ int fbnic_phylink_create(struct net_device *netdev)
 		dev_err(netdev->dev.parent,
 			"Failed to create Phylink interface, err: %d\n", err);
 		xpcs_destroy_pcs(pcs);
+		fbn->pcs = NULL;
 		return err;
 	}
 
