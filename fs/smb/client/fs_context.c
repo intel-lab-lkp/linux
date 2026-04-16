@@ -1085,6 +1085,7 @@ static int smb3_reconfigure(struct fs_context *fc)
 	struct dentry *root = fc->root;
 	struct cifs_sb_info *cifs_sb = CIFS_SB(root->d_sb);
 	struct cifs_ses *ses = cifs_sb_master_tcon(cifs_sb)->ses;
+	unsigned int old_chan_max;
 	unsigned int rsize = ctx->rsize, wsize = ctx->wsize;
 	char *new_password = NULL, *new_password2 = NULL;
 	bool need_recon = false;
@@ -1170,9 +1171,6 @@ static int smb3_reconfigure(struct fs_context *fc)
 	if ((ctx->multichannel != cifs_sb->ctx->multichannel) ||
 	    (ctx->max_channels != cifs_sb->ctx->max_channels)) {
 
-		/* Synchronize ses->chan_max with the new mount context */
-		smb3_sync_ses_chan_max(ses, ctx->max_channels);
-		/* Now update the session's channels to match the new configuration */
 		/* Prevent concurrent scaling operations */
 		spin_lock(&ses->ses_lock);
 		if (ses->flags & CIFS_SES_FLAG_SCALE_CHANNELS) {
@@ -1183,16 +1181,31 @@ static int smb3_reconfigure(struct fs_context *fc)
 		ses->flags |= CIFS_SES_FLAG_SCALE_CHANNELS;
 		spin_unlock(&ses->ses_lock);
 
+		old_chan_max = ses->chan_max;
+		/* Synchronize ses->chan_max with the new mount context */
+		smb3_sync_ses_chan_max(ses, ctx->max_channels);
+
 		mutex_unlock(&ses->session_mutex);
 
 		rc = smb3_update_ses_channels(ses, ses->server,
 					       false /* from_reconnect */,
 					       false /* disable_mchan */);
 
+		/*
+		 * On failure, restore chan_max while still holding
+		 * CIFS_SES_FLAG_SCALE_CHANNELS so a concurrent reconfigure
+		 * cannot observe or race with the rollback.
+		 */
+		if (rc < 0)
+			smb3_sync_ses_chan_max(ses, old_chan_max);
+
 		/* Clear scaling flag after operation */
 		spin_lock(&ses->ses_lock);
 		ses->flags &= ~CIFS_SES_FLAG_SCALE_CHANNELS;
 		spin_unlock(&ses->ses_lock);
+
+		if (rc < 0)
+			return rc;
 	} else {
 		mutex_unlock(&ses->session_mutex);
 	}
