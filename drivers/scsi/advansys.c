@@ -11373,9 +11373,17 @@ static int advansys_eisa_probe(struct device *dev)
 	return 0;
 
  free_data:
-	kfree(data->host[0]);
-	kfree(data->host[1]);
-	kfree(data);
+	for (i = 0; i < 2; i++) {
+		struct Scsi_Host *shost = data->host[i];
+		int ioport;
+
+		if (!shost)
+			continue;
+
+		ioport = shost->io_port;
+		advansys_release(shost);
+		release_region(ioport, ASC_IOADR_GAP);
+	}
  fail:
 	return err;
 }
