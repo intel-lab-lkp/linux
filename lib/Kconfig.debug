@@ -705,6 +705,22 @@ config MAGIC_SYSRQ_SERIAL_SEQUENCE
 
 	  If unsure, leave an empty string and the option will not be enabled.
 
+config MAGIC_SYSRQ_TRIGGER_LOG
+	bool "Log caller info on /proc/sysrq-trigger write"
+	depends on MAGIC_SYSRQ
+	default n
+	help
+	  If you say Y here, the kernel can log the process name, pid,
+	  tgid, uid and parent process chain when /proc/sysrq-trigger
+	  is written to. This is useful for auditing who triggered a
+	  sysrq operation.
+
+	  The logging is controlled at runtime via module parameter
+	  sysrq.trigger_log (default off). Enable it with:
+	    echo 1 > /sys/module/sysrq/parameters/trigger_log
+
+	  If unsure, say N.
+
 config DEBUG_FS
 	bool "Debug Filesystem"
 	help

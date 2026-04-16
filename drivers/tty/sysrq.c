@@ -48,6 +48,9 @@
 #include <linux/uaccess.h>
 #include <linux/moduleparam.h>
 #include <linux/jiffies.h>
+#ifdef CONFIG_MAGIC_SYSRQ_TRIGGER_LOG
+#include <linux/cred.h>
+#endif
 #include <linux/syscalls.h>
 #include <linux/of.h>
 #include <linux/rcupdate.h>
@@ -58,6 +61,12 @@
 /* Whether we react on sysrq keys or just ignore them */
 static int __read_mostly sysrq_enabled = CONFIG_MAGIC_SYSRQ_DEFAULT_ENABLE;
 static bool __read_mostly sysrq_always_enabled;
+
+#ifdef CONFIG_MAGIC_SYSRQ_TRIGGER_LOG
+static bool sysrq_trigger_log;
+module_param_named(trigger_log, sysrq_trigger_log, bool, 0644);
+MODULE_PARM_DESC(trigger_log, "Log caller info on /proc/sysrq-trigger write");
+#endif
 
 static bool sysrq_on(void)
 {
@@ -1208,6 +1217,26 @@ static ssize_t write_sysrq_trigger(struct file *file, const char __user *buf,
 {
 	bool bulk = false;
 	size_t i;
+
+#ifdef CONFIG_MAGIC_SYSRQ_TRIGGER_LOG
+	if (sysrq_trigger_log) {
+		struct task_struct *task;
+		int depth = 0;
+
+		pr_info("proc trigger: comm=%s pid=%d tgid=%d uid=%u\n",
+			current->comm, current->pid, current->tgid,
+			from_kuid(&init_user_ns, current_uid()));
+
+		rcu_read_lock();
+		task = current;
+		while (task->pid > 1 && depth < 5) {
+			task = rcu_dereference(task->real_parent);
+			pr_info("  parent[%d]: comm=%s pid=%d tgid=%d\n",
+				depth++, task->comm, task->pid, task->tgid);
+		}
+		rcu_read_unlock();
+	}
+#endif
 
 	for (i = 0; i < count; i++) {
 		char c;
