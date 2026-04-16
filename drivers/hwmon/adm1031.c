@@ -203,16 +203,24 @@ static struct adm1031_data *adm1031_update_device(struct device *dev)
 #define TEMP_FROM_REG_EXT(val, ext)	(TEMP_FROM_REG(val) + (ext) * 125)
 
 #define TEMP_OFFSET_TO_REG(val)		(TEMP_TO_REG(val) & 0x8f)
-#define TEMP_OFFSET_FROM_REG(val)	TEMP_FROM_REG((val) < 0 ? \
-						      (val) | 0x70 : (val))
 
-#define FAN_FROM_REG(reg, div)		((reg) ? \
-					 (11250 * 60) / ((reg) * (div)) : 0)
+static int temp_offset_from_reg(int val)
+{
+	return TEMP_FROM_REG(val < 0 ? val | 0x70 : val);
+}
+
+static int fan_from_reg(int reg, int div)
+{
+	if (!reg)
+		return 0;
+
+	return (11250 * 60) / (reg * div);
+}
 
 static int FAN_TO_REG(int reg, int div)
 {
 	int tmp;
-	tmp = FAN_FROM_REG(clamp_val(reg, 0, 65535), div);
+	tmp = fan_from_reg(clamp_val(reg, 0, 65535), div);
 	return tmp > 255 ? 255 : tmp;
 }
 
@@ -235,9 +243,10 @@ static int FAN_TO_REG(int reg, int div)
 #define AUTO_TEMP_OFF_FROM_REG(reg)		\
 	(AUTO_TEMP_MIN_FROM_REG(reg) - 5000)
 
-#define AUTO_TEMP_MAX_FROM_REG(reg)		\
-	(AUTO_TEMP_RANGE_FROM_REG(reg) +	\
-	AUTO_TEMP_MIN_FROM_REG(reg))
+static int auto_temp_max_from_reg(int reg)
+{
+	return AUTO_TEMP_RANGE_FROM_REG(reg) + AUTO_TEMP_MIN_FROM_REG(reg);
+}
 
 static int AUTO_TEMP_MAX_TO_REG(int val, int reg, int pwm)
 {
@@ -426,7 +435,7 @@ static ssize_t auto_temp_max_show(struct device *dev,
 	int nr = to_sensor_dev_attr(attr)->index;
 	struct adm1031_data *data = adm1031_update_device(dev);
 	return sprintf(buf, "%d\n",
-		       AUTO_TEMP_MAX_FROM_REG(data->auto_temp[nr]));
+		       auto_temp_max_from_reg(data->auto_temp[nr]));
 }
 static ssize_t
 auto_temp_max_store(struct device *dev, struct device_attribute *attr,
@@ -559,7 +568,7 @@ static ssize_t fan_show(struct device *dev, struct device_attribute *attr,
 	struct adm1031_data *data = adm1031_update_device(dev);
 	int value;
 
-	value = trust_fan_readings(data, nr) ? FAN_FROM_REG(data->fan[nr],
+	value = trust_fan_readings(data, nr) ? fan_from_reg(data->fan[nr],
 				 FAN_DIV_FROM_REG(data->fan_div[nr])) : 0;
 	return sprintf(buf, "%d\n", value);
 }
@@ -577,7 +586,7 @@ static ssize_t fan_min_show(struct device *dev, struct device_attribute *attr,
 	int nr = to_sensor_dev_attr(attr)->index;
 	struct adm1031_data *data = adm1031_update_device(dev);
 	return sprintf(buf, "%d\n",
-		       FAN_FROM_REG(data->fan_min[nr],
+		       fan_from_reg(data->fan_min[nr],
 				    FAN_DIV_FROM_REG(data->fan_div[nr])));
 }
 static ssize_t fan_min_store(struct device *dev,
@@ -679,7 +688,7 @@ static ssize_t temp_offset_show(struct device *dev,
 	int nr = to_sensor_dev_attr(attr)->index;
 	struct adm1031_data *data = adm1031_update_device(dev);
 	return sprintf(buf, "%d\n",
-		       TEMP_OFFSET_FROM_REG(data->temp_offset[nr]));
+		       temp_offset_from_reg(data->temp_offset[nr]));
 }
 static ssize_t temp_min_show(struct device *dev,
 			     struct device_attribute *attr, char *buf)
