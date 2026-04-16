@@ -1311,6 +1311,14 @@ struct kfree_rcu_cpu_work {
  * the interactions with the slab allocators.
  */
 struct kfree_rcu_cpu {
+	// Objects queued on a lockless linked list, used to free objects
+	// in unknown contexts when trylock fails.
+	struct llist_head defer_head;
+
+	struct irq_work defer_free;
+	struct irq_work sched_delayed_monitor;
+	struct irq_work run_page_cache_worker;
+
 	// Objects queued on a linked list
 	struct rcu_ptr *head;
 	unsigned long head_gp_snap;
@@ -1333,12 +1341,99 @@ struct kfree_rcu_cpu {
 	struct llist_head bkvcache;
 	int nr_bkv_objs;
 };
+
+static void defer_kfree_rcu_irq_work_fn(struct irq_work *work);
+static void sched_delayed_monitor_irq_work_fn(struct irq_work *work);
+static void run_page_cache_worker_irq_work_fn(struct irq_work *work);
+
+static DEFINE_PER_CPU(struct kfree_rcu_cpu, krc) = {
+	.lock = __RAW_SPIN_LOCK_UNLOCKED(krc.lock),
+	.defer_head = LLIST_HEAD_INIT(defer_head),
+	.defer_free = IRQ_WORK_INIT(defer_kfree_rcu_irq_work_fn),
+	.sched_delayed_monitor =
+		IRQ_WORK_INIT_LAZY(sched_delayed_monitor_irq_work_fn),
+	.run_page_cache_worker =
+		IRQ_WORK_INIT_LAZY(run_page_cache_worker_irq_work_fn),
+};
+#else
+struct kfree_rcu_cpu {
+	struct llist_head defer_head;
+	struct irq_work defer_free;
+};
+
+static void defer_kfree_rcu_irq_work_fn(struct irq_work *work);
+
+static DEFINE_PER_CPU(struct kfree_rcu_cpu, krc) = {
+	.defer_head = LLIST_HEAD_INIT(defer_head),
+	.defer_free = IRQ_WORK_INIT(defer_kfree_rcu_irq_work_fn),
+};
 #endif
 
-#ifndef CONFIG_KVFREE_RCU_BATCHED
-
-void kvfree_call_rcu_head(struct rcu_head *head, void *ptr)
+/* Wait for deferred work from kfree_rcu_nolock() */
+void defer_kvfree_rcu_barrier(void)
 {
+	int cpu;
+
+	for_each_possible_cpu(cpu)
+		irq_work_sync(&per_cpu_ptr(&krc, cpu)->defer_free);
+}
+
+static void *object_start_addr(void *ptr)
+{
+	struct slab *slab;
+	void *start;
+
+	if (is_vmalloc_addr(ptr)) {
+		start  = (void *)PAGE_ALIGN_DOWN((unsigned long)ptr);
+	} else {
+		slab = virt_to_slab(ptr);
+		if (!slab)
+			start = (void *)PAGE_ALIGN_DOWN((unsigned long)ptr);
+		else if (is_kfence_address(ptr))
+			start = kfence_object_start(ptr);
+		else
+			start = nearest_obj(slab->slab_cache, slab, ptr);
+	}
+
+	return start;
+}
+
+static void defer_kfree_rcu_irq_work_fn(struct irq_work *work)
+{
+	struct kfree_rcu_cpu *krcp;
+	struct llist_head *head;
+	struct llist_node *llnode, *pos, *t;
+
+	krcp = container_of(work, struct kfree_rcu_cpu, defer_free);
+	head = &krcp->defer_head;
+
+	if (llist_empty(head))
+		return;
+
+	llnode = llist_del_all(head);
+	llist_for_each_safe(pos, t, llnode) {
+		void *objp;
+		struct rcu_ptr *rcup = (struct rcu_ptr *)pos;
+
+		objp = object_start_addr(rcup);
+		kvfree_call_rcu(rcup, objp, true);
+	}
+}
+
+#ifndef CONFIG_KVFREE_RCU_BATCHED
+void kvfree_call_rcu_head(struct rcu_head *head, void *ptr, bool allow_spin)
+{
+	if (!allow_spin) {
+		struct kfree_rcu_cpu *krcp;
+
+		guard(preempt)();
+
+		krcp = this_cpu_ptr(&krc);
+		if (llist_add((struct llist_node *)head, &krcp->defer_head))
+			irq_work_queue(&krcp->defer_free);
+		return;
+	}
+
 	if (head) {
 		kasan_record_aux_stack(ptr);
 		call_rcu(head, kvfree_rcu_cb);
@@ -1355,6 +1450,19 @@ EXPORT_SYMBOL_GPL(kvfree_call_rcu_head);
 void __init kvfree_rcu_init(void)
 {
 }
+
+void kvfree_rcu_barrier(void)
+{
+	defer_kvfree_rcu_barrier();
+	rcu_barrier();
+}
+EXPORT_SYMBOL_GPL(kvfree_rcu_barrier);
+
+void kvfree_rcu_barrier_on_cache(struct kmem_cache *s)
+{
+	kvfree_rcu_barrier();
+}
+EXPORT_SYMBOL_GPL(kvfree_rcu_barrier_on_cache);
 
 #else /* CONFIG_KVFREE_RCU_BATCHED */
 
@@ -1405,9 +1513,16 @@ struct kvfree_rcu_bulk_data {
 #define KVFREE_BULK_MAX_ENTR \
 	((PAGE_SIZE - sizeof(struct kvfree_rcu_bulk_data)) / sizeof(void *))
 
-static DEFINE_PER_CPU(struct kfree_rcu_cpu, krc) = {
-	.lock = __RAW_SPIN_LOCK_UNLOCKED(krc.lock),
-};
+
+static void schedule_delayed_monitor_work(struct kfree_rcu_cpu *krcp);
+
+static void sched_delayed_monitor_irq_work_fn(struct irq_work *work)
+{
+	struct kfree_rcu_cpu *krcp;
+
+	krcp = container_of(work, struct kfree_rcu_cpu, sched_delayed_monitor);
+	schedule_delayed_monitor_work(krcp);
+}
 
 static __always_inline void
 debug_rcu_bhead_unqueue(struct kvfree_rcu_bulk_data *bhead)
@@ -1421,13 +1536,18 @@ debug_rcu_bhead_unqueue(struct kvfree_rcu_bulk_data *bhead)
 }
 
 static inline struct kfree_rcu_cpu *
-krc_this_cpu_lock(unsigned long *flags)
+krc_this_cpu_lock(unsigned long *flags, bool allow_spin)
 {
 	struct kfree_rcu_cpu *krcp;
 
 	local_irq_save(*flags);	// For safely calling this_cpu_ptr().
 	krcp = this_cpu_ptr(&krc);
-	raw_spin_lock(&krcp->lock);
+	if (allow_spin) {
+		raw_spin_lock(&krcp->lock);
+	} else if (!raw_spin_trylock(&krcp->lock)) {
+		local_irq_restore(*flags);
+		return NULL;
+	}
 
 	return krcp;
 }
@@ -1531,20 +1651,8 @@ kvfree_rcu_list(struct rcu_ptr *head)
 	for (; head; head = next) {
 		void *ptr;
 		unsigned long offset;
-		struct slab *slab;
 
-		if (is_vmalloc_addr(head)) {
-			ptr = (void *)PAGE_ALIGN_DOWN((unsigned long)head);
-		} else {
-			slab = virt_to_slab(head);
-			if (!slab)
-				ptr = (void *)PAGE_ALIGN_DOWN((unsigned long)head);
-			else if (is_kfence_address(head))
-				ptr = kfence_object_start(head);
-			else
-				ptr = nearest_obj(slab->slab_cache, slab, head);
-		}
-
+		ptr = object_start_addr(head);
 		offset = (void *)head - ptr;
 		next = head->next;
 		debug_rcu_head_unqueue((struct rcu_head *)ptr);
@@ -1663,18 +1771,26 @@ static int krc_count(struct kfree_rcu_cpu *krcp)
 }
 
 static void
-__schedule_delayed_monitor_work(struct kfree_rcu_cpu *krcp)
+__schedule_delayed_monitor_work(struct kfree_rcu_cpu *krcp, bool allow_spin)
 {
 	long delay, delay_left;
 
 	delay = krc_count(krcp) >= KVFREE_BULK_MAX_ENTR ? 1:KFREE_DRAIN_JIFFIES;
 	if (delayed_work_pending(&krcp->monitor_work)) {
 		delay_left = krcp->monitor_work.timer.expires - jiffies;
-		if (delay < delay_left)
-			mod_delayed_work(rcu_reclaim_wq, &krcp->monitor_work, delay);
+		if (delay < delay_left) {
+			if (allow_spin)
+				mod_delayed_work(rcu_reclaim_wq, &krcp->monitor_work, delay);
+			else
+				irq_work_queue(&krcp->sched_delayed_monitor);
+		}
 		return;
 	}
-	queue_delayed_work(rcu_reclaim_wq, &krcp->monitor_work, delay);
+
+	if (allow_spin)
+		queue_delayed_work(rcu_reclaim_wq, &krcp->monitor_work, delay);
+	else
+		irq_work_queue(&krcp->sched_delayed_monitor);
 }
 
 static void
@@ -1683,7 +1799,7 @@ schedule_delayed_monitor_work(struct kfree_rcu_cpu *krcp)
 	unsigned long flags;
 
 	raw_spin_lock_irqsave(&krcp->lock, flags);
-	__schedule_delayed_monitor_work(krcp);
+	__schedule_delayed_monitor_work(krcp, true);
 	raw_spin_unlock_irqrestore(&krcp->lock, flags);
 }
 
@@ -1847,25 +1963,25 @@ static void fill_page_cache_func(struct work_struct *work)
 // Returns true if ptr was successfully recorded, else the caller must
 // use a fallback.
 static inline bool
-add_ptr_to_bulk_krc_lock(struct kfree_rcu_cpu **krcp,
-	unsigned long *flags, void *ptr, bool can_alloc)
+add_ptr_to_bulk_krc_lock(struct kfree_rcu_cpu *krcp,
+	unsigned long *flags, void *ptr, bool can_alloc, bool allow_spin)
 {
 	struct kvfree_rcu_bulk_data *bnode;
 	int idx;
 
-	*krcp = krc_this_cpu_lock(flags);
-	if (unlikely(!(*krcp)->initialized))
+	if (unlikely(!krcp->initialized))
 		return false;
 
 	idx = !!is_vmalloc_addr(ptr);
-	bnode = list_first_entry_or_null(&(*krcp)->bulk_head[idx],
+	bnode = list_first_entry_or_null(&krcp->bulk_head[idx],
 		struct kvfree_rcu_bulk_data, list);
 
 	/* Check if a new block is required. */
 	if (!bnode || bnode->nr_records == KVFREE_BULK_MAX_ENTR) {
-		bnode = get_cached_bnode(*krcp);
+		bnode = get_cached_bnode(krcp);
 		if (!bnode && can_alloc) {
-			krc_this_cpu_unlock(*krcp, *flags);
+			krc_this_cpu_unlock(krcp, *flags);
+			VM_WARN_ON_ONCE(!allow_spin);
 
 			// __GFP_NORETRY - allows a light-weight direct reclaim
 			// what is OK from minimizing of fallback hitting point of
@@ -1880,7 +1996,7 @@ add_ptr_to_bulk_krc_lock(struct kfree_rcu_cpu **krcp,
 			// scenarios.
 			bnode = (struct kvfree_rcu_bulk_data *)
 				__get_free_page(GFP_KERNEL | __GFP_NORETRY | __GFP_NOMEMALLOC | __GFP_NOWARN);
-			raw_spin_lock_irqsave(&(*krcp)->lock, *flags);
+			raw_spin_lock_irqsave(&krcp->lock, *flags);
 		}
 
 		if (!bnode)
@@ -1888,14 +2004,14 @@ add_ptr_to_bulk_krc_lock(struct kfree_rcu_cpu **krcp,
 
 		// Initialize the new block and attach it.
 		bnode->nr_records = 0;
-		list_add(&bnode->list, &(*krcp)->bulk_head[idx]);
+		list_add(&bnode->list, &krcp->bulk_head[idx]);
 	}
 
 	// Finally insert and update the GP for this page.
 	bnode->nr_records++;
 	bnode->records[bnode->nr_records - 1] = ptr;
 	get_state_synchronize_rcu_full(&bnode->gp_snap);
-	atomic_inc(&(*krcp)->bulk_count[idx]);
+	atomic_inc(&krcp->bulk_count[idx]);
 
 	return true;
 }
@@ -1911,7 +2027,32 @@ schedule_page_work_fn(struct hrtimer *t)
 }
 
 static void
-run_page_cache_worker(struct kfree_rcu_cpu *krcp)
+__run_page_cache_worker(struct kfree_rcu_cpu *krcp)
+{
+	if (atomic_read(&krcp->backoff_page_cache_fill)) {
+		queue_delayed_work(rcu_reclaim_wq,
+			&krcp->page_cache_work,
+				msecs_to_jiffies(rcu_delay_page_cache_fill_msec));
+	} else {
+		hrtimer_setup(&krcp->hrtimer, schedule_page_work_fn, CLOCK_MONOTONIC,
+			      HRTIMER_MODE_REL);
+		hrtimer_start(&krcp->hrtimer, 0, HRTIMER_MODE_REL);
+	}
+}
+
+static void run_page_cache_worker_irq_work_fn(struct irq_work *work)
+{
+	unsigned long flags;
+	struct kfree_rcu_cpu *krcp =
+		container_of(work, struct kfree_rcu_cpu, run_page_cache_worker);
+
+	raw_spin_lock_irqsave(&krcp->lock, flags);
+	__run_page_cache_worker(krcp);
+	raw_spin_unlock_irqrestore(&krcp->lock, flags);
+}
+
+static void
+run_page_cache_worker(struct kfree_rcu_cpu *krcp, bool allow_spin)
 {
 	// If cache disabled, bail out.
 	if (!rcu_min_cached_objs)
@@ -1919,15 +2060,10 @@ run_page_cache_worker(struct kfree_rcu_cpu *krcp)
 
 	if (rcu_scheduler_active == RCU_SCHEDULER_RUNNING &&
 			!atomic_xchg(&krcp->work_in_progress, 1)) {
-		if (atomic_read(&krcp->backoff_page_cache_fill)) {
-			queue_delayed_work(rcu_reclaim_wq,
-				&krcp->page_cache_work,
-					msecs_to_jiffies(rcu_delay_page_cache_fill_msec));
-		} else {
-			hrtimer_setup(&krcp->hrtimer, schedule_page_work_fn, CLOCK_MONOTONIC,
-				      HRTIMER_MODE_REL);
-			hrtimer_start(&krcp->hrtimer, 0, HRTIMER_MODE_REL);
-		}
+		if (allow_spin)
+			__run_page_cache_worker(krcp);
+		else
+			irq_work_queue(&krcp->run_page_cache_worker);
 	}
 }
 
@@ -1955,7 +2091,7 @@ void __init kfree_rcu_scheduler_running(void)
  * be free'd in workqueue context. This allows us to: batch requests together to
  * reduce the number of grace periods during heavy kfree_rcu()/kvfree_rcu() load.
  */
-void kvfree_call_rcu_ptr(struct rcu_ptr *head, void *ptr)
+void kvfree_call_rcu_ptr(struct rcu_ptr *head, void *ptr, bool allow_spin)
 {
 	unsigned long flags;
 	struct kfree_rcu_cpu *krcp;
@@ -1971,7 +2107,12 @@ void kvfree_call_rcu_ptr(struct rcu_ptr *head, void *ptr)
 	if (!head)
 		might_sleep();
 
-	if (!IS_ENABLED(CONFIG_PREEMPT_RT) && kfree_rcu_sheaf(ptr))
+	if (!allow_spin && (IS_ENABLED(CONFIG_DEBUG_OBJECTS_RCU_HEAD) ||
+				IS_ENABLED(CONFIG_DEBUG_KMEMLEAK)))
+		goto defer_free;
+
+	if (!IS_ENABLED(CONFIG_PREEMPT_RT) &&
+			(allow_spin && kfree_rcu_sheaf(ptr)))
 		return;
 
 	// Queue the object but don't yet schedule the batch.
@@ -1985,9 +2126,14 @@ void kvfree_call_rcu_ptr(struct rcu_ptr *head, void *ptr)
 	}
 
 	kasan_record_aux_stack(ptr);
-	success = add_ptr_to_bulk_krc_lock(&krcp, &flags, ptr, !head);
+
+	krcp = krc_this_cpu_lock(&flags, allow_spin);
+	if (!krcp)
+		goto defer_free;
+
+	success = add_ptr_to_bulk_krc_lock(krcp, &flags, ptr, !head, allow_spin);
 	if (!success) {
-		run_page_cache_worker(krcp);
+		run_page_cache_worker(krcp, allow_spin);
 
 		if (head == NULL)
 			// Inline if kvfree_rcu(one_arg) call.
@@ -2012,7 +2158,7 @@ void kvfree_call_rcu_ptr(struct rcu_ptr *head, void *ptr)
 
 	// Set timer to drain after KFREE_DRAIN_JIFFIES.
 	if (rcu_scheduler_active == RCU_SCHEDULER_RUNNING)
-		__schedule_delayed_monitor_work(krcp);
+		__schedule_delayed_monitor_work(krcp, allow_spin);
 
 unlock_return:
 	krc_this_cpu_unlock(krcp, flags);
@@ -2023,10 +2169,22 @@ unlock_return:
 	 * CPU can pass the QS state.
 	 */
 	if (!success) {
+		VM_WARN_ON_ONCE(!allow_spin);
 		debug_rcu_head_unqueue((struct rcu_head *) ptr);
 		synchronize_rcu();
 		kvfree(ptr);
 	}
+	return;
+
+defer_free:
+	VM_WARN_ON_ONCE(allow_spin);
+	guard(preempt)();
+
+	krcp = this_cpu_ptr(&krc);
+	if (llist_add((struct llist_node *)head, &krcp->defer_head))
+		irq_work_queue(&krcp->defer_free);
+	return;
+
 }
 EXPORT_SYMBOL_GPL(kvfree_call_rcu_ptr);
 
@@ -2125,6 +2283,8 @@ EXPORT_SYMBOL_GPL(kvfree_rcu_barrier);
  */
 void kvfree_rcu_barrier_on_cache(struct kmem_cache *s)
 {
+	defer_kvfree_rcu_barrier();
+
 	if (cache_has_sheaves(s)) {
 		flush_rcu_sheaves_on_cache(s);
 		rcu_barrier();

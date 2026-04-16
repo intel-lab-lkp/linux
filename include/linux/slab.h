@@ -1238,23 +1238,13 @@ extern void kvfree_sensitive(const void *addr, size_t len);
 
 unsigned int kmem_cache_size(struct kmem_cache *s);
 
-#ifndef CONFIG_KVFREE_RCU_BATCHED
-static inline void kvfree_rcu_barrier(void)
-{
-	rcu_barrier();
-}
-
-static inline void kvfree_rcu_barrier_on_cache(struct kmem_cache *s)
-{
-	rcu_barrier();
-}
-
-static inline void kfree_rcu_scheduler_running(void) { }
-#else
 void kvfree_rcu_barrier(void);
 
 void kvfree_rcu_barrier_on_cache(struct kmem_cache *s);
 
+#ifndef CONFIG_KVFREE_RCU_BATCHED
+static inline void kfree_rcu_scheduler_running(void) { }
+#else
 void kfree_rcu_scheduler_running(void);
 #endif
 

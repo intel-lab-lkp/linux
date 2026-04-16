@@ -4018,7 +4018,10 @@ static void flush_rcu_sheaf(struct work_struct *w)
 }
 
 
-/* needed for kvfree_rcu_barrier() */
+/*
+ * Needed for kvfree_rcu_barrier(). The caller should invoke
+ * defer_kvfree_rcu_barrier() before calling this function.
+ */
 void flush_rcu_sheaves_on_cache(struct kmem_cache *s)
 {
 	struct slub_flush_work *sfw;
@@ -4053,6 +4056,7 @@ void flush_all_rcu_sheaves(void)
 {
 	struct kmem_cache *s;
 
+	defer_kvfree_rcu_barrier();
 	cpus_read_lock();
 	mutex_lock(&slab_mutex);
 
