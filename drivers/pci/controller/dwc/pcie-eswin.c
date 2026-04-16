@@ -348,7 +348,7 @@ static int eswin_pcie_probe(struct platform_device *pdev)
 	ret = dw_pcie_host_init(&pci->pp);
 	if (ret) {
 		dev_err(dev, "Failed to init host\n");
-		goto err_init;
+		goto err_pm_runtime_put;
 	}
 
 	return 0;
@@ -358,7 +358,6 @@ err_pm_runtime_put:
 		reset_control_put(port->perst);
 		list_del(&port->list);
 	}
-err_init:
 	pm_runtime_put(dev);
 
 	return ret;
