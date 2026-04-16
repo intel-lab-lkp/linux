@@ -3234,7 +3234,10 @@ static inline unsigned char *skb_checksum_start(const struct sk_buff *skb)
 
 static inline int skb_transport_offset(const struct sk_buff *skb)
 {
-	return skb_transport_header(skb) - skb->data;
+	int off = skb_transport_header(skb) - skb->data;
+
+	DEBUG_NET_WARN_ON_ONCE(off < 0);
+	return off;
 }
 
 static inline u32 skb_network_header_len(const struct sk_buff *skb)
