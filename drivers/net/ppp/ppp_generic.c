@@ -790,7 +790,7 @@ static long ppp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			down_read(&pch->chan_sem);
 			chan = pch->chan;
 			err = -ENOTTY;
-			if (chan && chan->ops->ioctl)
+			if (!pch->file.dead && chan->ops->ioctl)
 				err = chan->ops->ioctl(chan, cmd, arg);
 			up_read(&pch->chan_sem);
 		}
@@ -2167,7 +2167,7 @@ static void __ppp_channel_push(struct channel *pch, struct ppp *ppp)
 	struct sk_buff *skb;
 
 	spin_lock(&pch->downl);
-	if (pch->chan) {
+	if (!pch->file.dead) {
 		while (!skb_queue_empty(&pch->file.xq)) {
 			skb = skb_dequeue(&pch->file.xq);
 			if (!pch->chan->ops->start_xmit(pch->chan, skb)) {
@@ -2288,7 +2288,7 @@ static bool ppp_channel_bridge_input(struct channel *pch, struct sk_buff *skb)
 		goto out_rcu;
 
 	spin_lock_bh(&pchb->downl);
-	if (!pchb->chan) {
+	if (pchb->file.dead) {
 		/* channel got unregistered */
 		kfree_skb(skb);
 		goto outl;
@@ -3002,7 +3002,7 @@ ppp_unregister_channel(struct ppp_channel *chan)
 	ppp_disconnect_channel(pch);
 	down_write(&pch->chan_sem);
 	spin_lock_bh(&pch->downl);
-	pch->chan = NULL;
+	pch->file.dead = 1;
 	spin_unlock_bh(&pch->downl);
 	up_write(&pch->chan_sem);
 
@@ -3013,7 +3013,6 @@ ppp_unregister_channel(struct ppp_channel *chan)
 
 	ppp_unbridge_channels(pch);
 
-	pch->file.dead = 1;
 	wake_up_interruptible(&pch->file.rwait);
 
 	ppp_release_channel(pch);
@@ -3505,7 +3504,7 @@ ppp_connect_channel(struct channel *pch, int unit)
 
 	ppp_lock(ppp);
 	spin_lock_bh(&pch->downl);
-	if (!pch->chan) {
+	if (pch->file.dead) {
 		/* Don't connect unregistered channels */
 		spin_unlock_bh(&pch->downl);
 		ppp_unlock(ppp);
