@@ -559,21 +559,23 @@ static int function_stat_show(struct seq_file *m, void *v)
 		unsigned long offset;
 
 		if (core_kernel_text(rec->ip)) {
-			refsymbol = "_text";
 			offset = rec->ip - (unsigned long)_text;
+			snprintf(str, sizeof(str), "  %s+%#lx",
+				 "_text", offset);
+			refsymbol = str;
 		} else {
 			struct module *mod;
 
 			guard(rcu)();
 			mod = __module_text_address(rec->ip);
 			if (mod) {
-				refsymbol = mod->name;
 				/* Calculate offset from module's text entry address. */
 				offset = rec->ip - (unsigned long)mod->mem[MOD_TEXT].base;
+				snprintf(str, sizeof(str), "  %s+%#lx",
+					 mod->name, offset);
+				refsymbol = str;
 			}
 		}
-		if (refsymbol)
-			snprintf(str, sizeof(str), "  %s+%#lx", refsymbol, offset);
 	}
 	if (!refsymbol)
 		kallsyms_lookup(rec->ip, NULL, NULL, NULL, str);
