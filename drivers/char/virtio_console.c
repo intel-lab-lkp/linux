@@ -464,6 +464,8 @@ static struct port_buffer *get_inbuf(struct port *port)
 
 	if (port->inbuf)
 		return port->inbuf;
+	if (!port->in_vq)
+		return NULL;
 
 	buf = virtqueue_get_buf(port->in_vq, &len);
 	if (buf) {
@@ -547,6 +549,8 @@ static ssize_t __send_control_msg(struct ports_device *portdev, u32 port_id,
 		return 0;
 
 	vq = portdev->c_ovq;
+	if (!vq)
+		return -ENODEV;
 
 	spin_lock(&portdev->c_ovq_lock);
 
@@ -583,8 +587,8 @@ static void reclaim_consumed_buffers(struct port *port)
 	struct port_buffer *buf;
 	unsigned int len;
 
-	if (!port->portdev) {
-		/* Device has been unplugged.  vqs are already gone. */
+	if (!port->portdev || !port->out_vq) {
+		/* Device has been unplugged or the queues have been torn down. */
 		return;
 	}
 	while ((buf = virtqueue_get_buf(port->out_vq, &len))) {
@@ -603,6 +607,8 @@ static ssize_t __send_to_port(struct port *port, struct scatterlist *sg,
 	unsigned int len;
 
 	out_vq = port->out_vq;
+	if (!out_vq)
+		return -ENODEV;
 
 	spin_lock_irqsave(&port->outvq_lock, flags);
 
@@ -684,7 +690,9 @@ static ssize_t fill_readbuf(struct port *port, u8 __user *out_buf,
 		spin_lock_irqsave(&port->inbuf_lock, flags);
 		port->inbuf = NULL;
 
-		if (add_inbuf(port->in_vq, buf) < 0)
+		if (!port->in_vq)
+			free_buf(buf, false);
+		else if (add_inbuf(port->in_vq, buf) < 0)
 			dev_warn(port->dev, "failed add_buf\n");
 
 		spin_unlock_irqrestore(&port->inbuf_lock, flags);
@@ -777,6 +785,9 @@ static int wait_port_writable(struct port *port, bool nonblock)
 {
 	int ret;
 
+	if (!port->out_vq)
+		return -ENODEV;
+
 	if (will_write_block(port)) {
 		if (nonblock)
 			return -EAGAIN;
@@ -786,8 +797,8 @@ static int wait_port_writable(struct port *port, bool nonblock)
 		if (ret < 0)
 			return ret;
 	}
-	/* Port got hot-unplugged. */
-	if (!port->guest_connected)
+	/* Port got hot-unplugged or lost its queues. */
+	if (!port->guest_connected || !port->out_vq)
 		return -ENODEV;
 
 	return 0;
@@ -919,6 +930,8 @@ static ssize_t port_fops_splice_write(struct pipe_inode_info *pipe,
 	 * regular pages to dma pages. And alloc_buf and free_buf must
 	 * support allocating and freeing such a list of dma-buffers.
 	 */
+	if (!port->portdev || !port->out_vq)
+		return -ENODEV;
 	if (is_rproc_serial(port->out_vq->vdev))
 		return -EINVAL;
 
@@ -1039,12 +1052,16 @@ static int port_fops_open(struct inode *inode, struct file *filp)
 		ret = -ENXIO;
 		goto out;
 	}
-
 	/* Allow only one process to open a particular port at a time */
 	spin_lock_irq(&port->inbuf_lock);
 	if (port->guest_connected) {
 		spin_unlock_irq(&port->inbuf_lock);
 		ret = -EBUSY;
+		goto out;
+	}
+	if (!port->in_vq || !port->out_vq) {
+		spin_unlock_irq(&port->inbuf_lock);
+		ret = -ENODEV;
 		goto out;
 	}
 
@@ -1141,7 +1158,8 @@ static ssize_t get_chars(u32 vtermno, u8 *buf, size_t count)
 		return -EPIPE;
 
 	/* If we don't have an input queue yet, we can't get input. */
-	BUG_ON(!port->in_vq);
+	if (!port->in_vq)
+		return -EPIPE;
 
 	return fill_readbuf(port, (__force u8 __user *)buf, count, false);
 }
@@ -1666,6 +1684,8 @@ static void control_work_handler(struct work_struct *work)
 
 	portdev = container_of(work, struct ports_device, control_work);
 	vq = portdev->c_ivq;
+	if (!vq)
+		return;
 
 	spin_lock(&portdev->c_ivq_lock);
 	while ((buf = virtqueue_get_buf(vq, &len))) {
@@ -1869,7 +1889,11 @@ static int init_vqs(struct ports_device *portdev)
 
 free:
 	kfree(portdev->out_vqs);
+	portdev->out_vqs = NULL;
 	kfree(portdev->in_vqs);
+	portdev->in_vqs = NULL;
+	portdev->c_ivq = NULL;
+	portdev->c_ovq = NULL;
 	kfree(vqs_info);
 	kfree(vqs);
 
@@ -1882,6 +1906,7 @@ static const struct file_operations portdev_fops = {
 
 static void remove_vqs(struct ports_device *portdev)
 {
+	struct port *port;
 	struct virtqueue *vq;
 
 	virtio_device_for_each_vq(portdev->vdev, vq) {
@@ -1892,9 +1917,17 @@ static void remove_vqs(struct ports_device *portdev)
 			free_buf(buf, true);
 		cond_resched();
 	}
+	list_for_each_entry(port, &portdev->ports, list) {
+		port->in_vq = NULL;
+		port->out_vq = NULL;
+	}
+	portdev->c_ivq = NULL;
+	portdev->c_ovq = NULL;
 	portdev->vdev->config->del_vqs(portdev->vdev);
 	kfree(portdev->in_vqs);
+	portdev->in_vqs = NULL;
 	kfree(portdev->out_vqs);
+	portdev->out_vqs = NULL;
 }
 
 static void virtcons_remove(struct virtio_device *vdev)
@@ -2094,7 +2127,7 @@ static int virtcons_freeze(struct virtio_device *vdev)
 
 	virtio_reset_device(vdev);
 
-	if (use_multiport(portdev))
+	if (use_multiport(portdev) && portdev->c_ivq)
 		virtqueue_disable_cb(portdev->c_ivq);
 	cancel_work_sync(&portdev->control_work);
 	cancel_work_sync(&portdev->config_work);
@@ -2102,12 +2135,14 @@ static int virtcons_freeze(struct virtio_device *vdev)
 	 * Once more: if control_work_handler() was running, it would
 	 * enable the cb as the last step.
 	 */
-	if (use_multiport(portdev))
+	if (use_multiport(portdev) && portdev->c_ivq)
 		virtqueue_disable_cb(portdev->c_ivq);
 
 	list_for_each_entry(port, &portdev->ports, list) {
-		virtqueue_disable_cb(port->in_vq);
-		virtqueue_disable_cb(port->out_vq);
+		if (port->in_vq)
+			virtqueue_disable_cb(port->in_vq);
+		if (port->out_vq)
+			virtqueue_disable_cb(port->out_vq);
 		/*
 		 * We'll ask the host later if the new invocation has
 		 * the port opened or closed.
