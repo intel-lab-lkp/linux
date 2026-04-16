@@ -350,9 +350,8 @@ fan_auto_channel_store(struct device *dev, struct device_attribute *attr,
 	if (ret)
 		return ret;
 
-	old_fan_mode = data->conf1;
-
 	mutex_lock(&data->update_lock);
+	old_fan_mode = data->conf1;
 
 	ret = get_fan_auto_nearest(data, nr, val, data->conf1);
 	if (ret < 0) {
@@ -568,8 +567,10 @@ static ssize_t fan_show(struct device *dev, struct device_attribute *attr,
 	struct adm1031_data *data = adm1031_update_device(dev);
 	int value;
 
+	mutex_lock(&data->update_lock);
 	value = trust_fan_readings(data, nr) ? fan_from_reg(data->fan[nr],
 				 FAN_DIV_FROM_REG(data->fan_div[nr])) : 0;
+	mutex_unlock(&data->update_lock);
 	return sprintf(buf, "%d\n", value);
 }
 
@@ -585,9 +586,13 @@ static ssize_t fan_min_show(struct device *dev, struct device_attribute *attr,
 {
 	int nr = to_sensor_dev_attr(attr)->index;
 	struct adm1031_data *data = adm1031_update_device(dev);
-	return sprintf(buf, "%d\n",
-		       fan_from_reg(data->fan_min[nr],
-				    FAN_DIV_FROM_REG(data->fan_div[nr])));
+	int value;
+
+	mutex_lock(&data->update_lock);
+	value = fan_from_reg(data->fan_min[nr],
+			     FAN_DIV_FROM_REG(data->fan_div[nr]));
+	mutex_unlock(&data->update_lock);
+	return sprintf(buf, "%d\n", value);
 }
 static ssize_t fan_min_store(struct device *dev,
 			     struct device_attribute *attr, const char *buf,
@@ -677,10 +682,15 @@ static ssize_t temp_show(struct device *dev, struct device_attribute *attr,
 	int nr = to_sensor_dev_attr(attr)->index;
 	struct adm1031_data *data = adm1031_update_device(dev);
 	int ext;
+	int temp;
+
+	mutex_lock(&data->update_lock);
 	ext = nr == 0 ?
 	    ((data->ext_temp[nr] >> 6) & 0x3) * 2 :
 	    (((data->ext_temp[nr] >> ((nr - 1) * 3)) & 7));
-	return sprintf(buf, "%d\n", TEMP_FROM_REG_EXT(data->temp[nr], ext));
+	temp = TEMP_FROM_REG_EXT(data->temp[nr], ext);
+	mutex_unlock(&data->update_lock);
+	return sprintf(buf, "%d\n", temp);
 }
 static ssize_t temp_offset_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
