@@ -29,7 +29,7 @@
  * Uses huge page stride if the backing page is huge and the guest mapping
  * is properly aligned; otherwise falls back to single page stride.
  *
- * Return: Stride in pages, or -EINVAL if page order is unsupported.
+ * Return: Stride in pages.
  */
 static int mshv_chunk_stride(struct page *page,
 			     u64 gfn, u64 page_count)
@@ -47,9 +47,6 @@ static int mshv_chunk_stride(struct page *page,
 		return 1;
 
 	page_order = folio_order(page_folio(page));
-	/* The hypervisor only supports 2M huge page */
-	if (page_order != PMD_ORDER)
-		return -EINVAL;
 
 	return 1 << page_order;
 }
