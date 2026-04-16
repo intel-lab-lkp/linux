@@ -307,7 +307,9 @@ static int idxd_cdev_open(struct inode *inode, struct file *filp)
 
 failed_dev_add:
 failed_dev_name:
+	mutex_unlock(&wq->wq_lock);
 	put_device(fdev);
+	return rc;
 failed_ida:
 failed_set_pasid:
 	if (device_user_pasid_enabled(idxd))
