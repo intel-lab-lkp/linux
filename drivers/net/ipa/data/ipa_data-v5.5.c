@@ -50,13 +50,13 @@ enum ipa_rsrc_group_id {
 /* QSB configuration data for an SoC having IPA v5.5 */
 static const struct ipa_qsb_data ipa_qsb_data[] = {
 	[IPA_QSB_MASTER_DDR] = {
-		.max_writes		= 0,	/* Unlimited */
-		.max_reads		= 12,
+		.max_writes		= 12,
+		.max_reads		= 0,	/* Unlimited */
 		.max_reads_beats	= 0,
 	},
 	[IPA_QSB_MASTER_PCIE] = {
-		.max_writes		= 0,	/* Unlimited */
-		.max_reads		= 8,
+		.max_writes		= 8,
+		.max_reads		= 0,	/* Unlimited */
 		.max_reads_beats	= 0,
 	},
 };
@@ -86,8 +86,8 @@ static const struct ipa_gsi_endpoint_data ipa_gsi_endpoint_data[] = {
 	},
 	[IPA_ENDPOINT_AP_LAN_RX] = {
 		.ee_id		= GSI_EE_AP,
-		.channel_id	= 13,
-		.endpoint_id	= 16,
+		.channel_id	= 14,
+		.endpoint_id	= 17,
 		.toward_ipa	= false,
 		.channel = {
 			.tre_count	= 256,
@@ -135,7 +135,7 @@ static const struct ipa_gsi_endpoint_data ipa_gsi_endpoint_data[] = {
 	[IPA_ENDPOINT_AP_MODEM_RX] = {
 		.ee_id		= GSI_EE_AP,
 		.channel_id	= 1,
-		.endpoint_id	= 23,
+		.endpoint_id	= 24,
 		.toward_ipa	= false,
 		.channel = {
 			.tre_count	= 256,
@@ -168,7 +168,7 @@ static const struct ipa_gsi_endpoint_data ipa_gsi_endpoint_data[] = {
 	[IPA_ENDPOINT_MODEM_AP_RX] = {
 		.ee_id		= GSI_EE_MODEM,
 		.channel_id	= 7,
-		.endpoint_id	= 21,
+		.endpoint_id	= 22,
 		.toward_ipa	= false,
 	},
 	[IPA_ENDPOINT_MODEM_DL_NLO_TX] = {
