@@ -1111,8 +1111,10 @@ out_clear:
 	return retval;
 
 out_frag:
-	if (err != -EINPROGRESS)
+	if (err != -EINPROGRESS) {
 		tcf_action_inc_drop_qstats(&c->common);
+		return TC_ACT_SHOT;
+	}
 	return TC_ACT_CONSUMED;
 
 drop:
