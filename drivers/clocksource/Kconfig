@@ -79,7 +79,10 @@ config ECONET_EN751221_TIMER
 	select CLKSRC_MMIO
 	select TIMER_OF
 	help
-	  Support for CPU timer found on EcoNet MIPS based SoCs.
+	  Support for CPU timer found on EcoNet EN75xx MIPS based SoCs
+	  (EN751221, EN751627, EN7528). The driver supports both GIC-based
+	  (separate IRQ per CPU) and legacy interrupt controller (percpu IRQ)
+	  modes.
 
 config FTTMR010_TIMER
 	bool "Faraday Technology timer driver" if COMPILE_TEST
