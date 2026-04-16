@@ -284,16 +284,28 @@ static int mtk_devapc_probe(struct platform_device *pdev)
 		goto err;
 	}
 
-	ctx->infra_clk = devm_clk_get_enabled(&pdev->dev, "devapc-infra-clock");
+	/*
+	 * The new design of DAPC clock is controlled by HW power domains,
+	 * making it unnecessary to provide the clock control driver.
+	 */
+	ctx->infra_clk = devm_clk_get_optional(&pdev->dev, "devapc-infra-clock");
 	if (IS_ERR(ctx->infra_clk)) {
-		ret = -EINVAL;
-		goto err;
+		dev_err(ctx->dev, "Cannot get devapc clock from CCF\n");
+		ctx->infra_clk = NULL;
+	} else {
+		if (clk_prepare_enable(ctx->infra_clk)) {
+			ret = -EINVAL;
+			goto err;
+		}
 	}
 
 	ret = devm_request_irq(&pdev->dev, devapc_irq, devapc_violation_irq,
-			       IRQF_TRIGGER_NONE, "devapc", ctx);
-	if (ret)
+			       IRQF_TRIGGER_NONE | IRQF_SHARED, "devapc", ctx);
+	if (ret) {
+		if (ctx->infra_clk)
+			clk_disable_unprepare(ctx->infra_clk);
 		goto err;
+	}
 
 	platform_set_drvdata(pdev, ctx);
 
@@ -311,6 +323,9 @@ static void mtk_devapc_remove(struct platform_device *pdev)
 	struct mtk_devapc_context *ctx = platform_get_drvdata(pdev);
 
 	stop_devapc(ctx);
+
+	clk_disable_unprepare(ctx->infra_clk);
+
 	iounmap(ctx->infra_base);
 }
 
