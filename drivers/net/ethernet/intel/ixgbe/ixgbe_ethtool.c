@@ -2265,21 +2265,28 @@ static void ixgbe_diag_test(struct net_device *netdev,
 		struct ixgbe_hw *hw = &adapter->hw;
 
 		if (adapter->flags & IXGBE_FLAG_SRIOV_ENABLED) {
+			struct vf_data_storage *vfinfo;
 			int i;
-			for (i = 0; i < adapter->num_vfs; i++) {
-				if (adapter->vfinfo[i].clear_to_send) {
-					netdev_warn(netdev, "offline diagnostic is not supported when VFs are present\n");
-					data[0] = 1;
-					data[1] = 1;
-					data[2] = 1;
-					data[3] = 1;
-					data[4] = 1;
-					eth_test->flags |= ETH_TEST_FL_FAILED;
-					clear_bit(__IXGBE_TESTING,
-						  &adapter->state);
-					return;
+
+			rcu_read_lock();
+			vfinfo = rcu_dereference(adapter->vfinfo);
+			if (vfinfo)
+				for (i = 0; i < adapter->num_vfs; i++) {
+					if (vfinfo[i].clear_to_send) {
+						netdev_warn(netdev, "offline diagnostic is not supported when VFs are present\n");
+						data[0] = 1;
+						data[1] = 1;
+						data[2] = 1;
+						data[3] = 1;
+						data[4] = 1;
+						eth_test->flags |= ETH_TEST_FL_FAILED;
+						clear_bit(__IXGBE_TESTING,
+							  &adapter->state);
+						rcu_read_unlock();
+						return;
+					}
 				}
-			}
+			rcu_read_unlock();
 		}
 
 		/* Offline tests */
@@ -3700,9 +3707,14 @@ static int ixgbe_set_priv_flags(struct net_device *netdev, u32 priv_flags)
 	if (priv_flags & IXGBE_PRIV_FLAGS_AUTO_DISABLE_VF) {
 		if (adapter->hw.mac.type == ixgbe_mac_82599EB) {
 			/* Reset primary abort counter */
-			for (i = 0; i < adapter->num_vfs; i++)
-				adapter->vfinfo[i].primary_abort_count = 0;
+			struct vf_data_storage *vfinfo;
 
+			rcu_read_lock();
+			vfinfo = rcu_dereference(adapter->vfinfo);
+			if (vfinfo)
+				for (i = 0; i < adapter->num_vfs; i++)
+					vfinfo[i].primary_abort_count = 0;
+			rcu_read_unlock();
 			flags2 |= IXGBE_FLAG2_AUTO_DISABLE_VF;
 		} else {
 			e_info(probe,
