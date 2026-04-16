@@ -5479,6 +5479,11 @@ intel_pipe_config_compare(const struct intel_crtc_state *current_config,
 	PIPE_CONF_CHECK_I(set_context_latency);
 
 	PIPE_CONF_CHECK_I(dip.emp_as_sdp_tl);
+	PIPE_CONF_CHECK_I(dip.gmp_sdp_tl);
+	PIPE_CONF_CHECK_I(dip.pps_sdp_tl);
+	PIPE_CONF_CHECK_I(dip.vsc_sdp_tl);
+	PIPE_CONF_CHECK_I(dip.vsc_ext_sdp_tl);
+	PIPE_CONF_CHECK_I(dip.cmn_sdp_tl);
 
 #undef PIPE_CONF_CHECK_X
 #undef PIPE_CONF_CHECK_I
