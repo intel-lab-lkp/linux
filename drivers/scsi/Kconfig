@@ -1237,6 +1237,28 @@ config SCSI_DEBUG
 	  See <http://sg.danny.cz/sg/sdebug26.html> for more information.
 	  Mainly used for testing and best as a module. If unsure, say N.
 
+
+config SCSI_JAMMER
+	tristate "SCSI initiator-side fault injector for error recovery testing"
+	depends on SCSI && DEBUG_FS
+	default n
+	help
+	  Loadable module providing transport-agnostic SCSI command fault
+	  injection on the initiator side. Intercepts commands at the
+	  queuecommand level to simulate fabric events such as path loss,
+	  slow drain, and repeated RSCNs (flapping paths).
+
+	  Three injection modes are available via debugfs controls:
+	    0 (drop)    - immediate DID_NO_CONNECT, triggers multipath failover
+	    1 (timeout) - delayed completion to trigger SCSI EH
+	    2 (flap)    - periodic arm/disarm simulating repeated RSCNs
+
+	  Works identically for FC, FCoE, iSCSI, SAS and any other transport
+	  using a Scsi_Host. Requires no target-side configuration.
+
+	  Controls appear under /sys/kernel/debug/scsi_jammer/ when loaded.
+
+	  If unsure, say N. Do NOT enable in production kernels.
 config SCSI_MESH
 	tristate "MESH (Power Mac internal SCSI) support"
 	depends on PPC32 && PPC_PMAC && SCSI

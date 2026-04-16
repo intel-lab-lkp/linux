@@ -23739,6 +23739,12 @@ F:	Documentation/scsi/scsi-generic.rst
 F:	drivers/scsi/sg.c
 F:	include/scsi/sg.h
 
+SCSI JAMMER
+M:	Laurence Oberman <loberman@redhat.com>
+L:	linux-scsi@vger.kernel.org
+S:	Maintained
+F:	drivers/scsi/scsi_jammer.c
+
 SCSI SUBSYSTEM
 M:	"James E.J. Bottomley" <James.Bottomley@HansenPartnership.com>
 M:	"Martin K. Petersen" <martin.petersen@oracle.com>
