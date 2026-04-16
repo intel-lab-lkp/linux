@@ -255,13 +255,13 @@ do {								\
 		__first = true;					\
 		if (WARN(btrfs_abort_should_print_stack(error),	\
 			KERN_ERR				\
-			"BTRFS: Transaction aborted (error %d)\n",	\
-			(error))) {					\
+			"BTRFS: Transaction %llu aborted (error %d)\n",	\
+			(trans)->transid, (error))) {			\
 			/* Stack trace printed. */			\
 		} else {						\
 			btrfs_err((trans)->fs_info,			\
-				  "Transaction aborted (error %d)",	\
-				  (error));			\
+			"Transaction %llu aborted (error %d)",	\
+				  (trans)->transid, (error));	\
 		}						\
 	}							\
 	__btrfs_abort_transaction((trans), __func__,		\
