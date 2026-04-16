@@ -62,7 +62,7 @@ static void cdns_mhdp_j721e_enable(struct cdns_mhdp_device *mhdp)
 static void cdns_mhdp_j721e_disable(struct cdns_mhdp_device *mhdp)
 {
 	/* Put everything to defaults  */
-	writel(0, mhdp->j721e_regs + DPTX_DSC_CFG);
+	writel(0, mhdp->j721e_regs + DPTX_SRC_CFG);
 }
 
 const struct mhdp_platform_ops mhdp_ti_j721e_ops = {
