@@ -4152,6 +4152,8 @@ static int slub_cpu_dead(unsigned int cpu)
 			__pcs_flush_all_cpu(s, cpu);
 	}
 	mutex_unlock(&slab_mutex);
+
+	/* pending IRQ work should have been flushed before going offline */
 	return 0;
 }
 
@@ -5847,7 +5849,7 @@ bool free_to_pcs(struct kmem_cache *s, void *object, bool allow_spin)
 }
 
 #ifdef CONFIG_KVFREE_RCU_BATCHED
-static void rcu_free_sheaf(struct rcu_head *head)
+void rcu_free_sheaf(struct rcu_head *head)
 {
 	struct slab_sheaf *sheaf;
 	struct node_barn *barn = NULL;
@@ -5999,12 +6001,6 @@ do_free:
 	if (likely(rcu_sheaf->size < s->sheaf_capacity)) {
 		rcu_sheaf = NULL;
 	} else {
-		if (unlikely(!allow_spin)) {
-			/* call_rcu() cannot be called in an unknown context */
-			rcu_sheaf->size--;
-			local_unlock(&s->cpu_sheaves->lock);
-			goto fail;
-		}
 		pcs->rcu_free = NULL;
 		rcu_sheaf->node = numa_node_id();
 	}
@@ -6014,7 +6010,7 @@ do_free:
 	 * flush_all_rcu_sheaves() doesn't miss this sheaf
 	 */
 	if (rcu_sheaf)
-		call_rcu(&rcu_sheaf->rcu_head, rcu_free_sheaf);
+		submit_rcu_sheaf(&rcu_sheaf->rcu_head, allow_spin);
 
 	local_unlock(&s->cpu_sheaves->lock);
 

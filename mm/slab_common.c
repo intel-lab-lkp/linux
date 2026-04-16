@@ -1314,8 +1314,11 @@ struct kfree_rcu_cpu {
 	// Objects queued on a lockless linked list, used to free objects
 	// in unknown contexts when trylock fails.
 	struct llist_head defer_head;
-
 	struct irq_work defer_free;
+
+	struct llist_head defer_call_rcu_head;
+	struct irq_work defer_call_rcu;
+
 	struct irq_work sched_delayed_monitor;
 	struct irq_work run_page_cache_worker;
 
@@ -1345,11 +1348,14 @@ struct kfree_rcu_cpu {
 static void defer_kfree_rcu_irq_work_fn(struct irq_work *work);
 static void sched_delayed_monitor_irq_work_fn(struct irq_work *work);
 static void run_page_cache_worker_irq_work_fn(struct irq_work *work);
+static void defer_call_rcu_irq_work_fn(struct irq_work *work);
 
 static DEFINE_PER_CPU(struct kfree_rcu_cpu, krc) = {
 	.lock = __RAW_SPIN_LOCK_UNLOCKED(krc.lock),
 	.defer_head = LLIST_HEAD_INIT(defer_head),
 	.defer_free = IRQ_WORK_INIT(defer_kfree_rcu_irq_work_fn),
+	.defer_call_rcu_head = LLIST_HEAD_INIT(defer_call_rcu_head),
+	.defer_call_rcu = IRQ_WORK_INIT(defer_call_rcu_irq_work_fn),
 	.sched_delayed_monitor =
 		IRQ_WORK_INIT_LAZY(sched_delayed_monitor_irq_work_fn),
 	.run_page_cache_worker =
@@ -1374,8 +1380,12 @@ void defer_kvfree_rcu_barrier(void)
 {
 	int cpu;
 
-	for_each_possible_cpu(cpu)
+	for_each_possible_cpu(cpu) {
 		irq_work_sync(&per_cpu_ptr(&krc, cpu)->defer_free);
+#ifdef CONFIG_KVFREE_RCU_BATCHED
+		irq_work_sync(&per_cpu_ptr(&krc, cpu)->defer_call_rcu);
+#endif
+	}
 }
 
 static void *object_start_addr(void *ptr)
@@ -1522,6 +1532,21 @@ static void sched_delayed_monitor_irq_work_fn(struct irq_work *work)
 
 	krcp = container_of(work, struct kfree_rcu_cpu, sched_delayed_monitor);
 	schedule_delayed_monitor_work(krcp);
+}
+
+static void defer_call_rcu_irq_work_fn(struct irq_work *work)
+{
+	struct kfree_rcu_cpu *krcp;
+	struct llist_node *llnode, *pos, *t;
+
+	krcp = container_of(work, struct kfree_rcu_cpu, defer_call_rcu);
+
+	if (llist_empty(&krcp->defer_call_rcu_head))
+		return;
+
+	llnode = llist_del_all(&krcp->defer_call_rcu_head);
+	llist_for_each_safe(pos, t, llnode)
+		call_rcu((struct rcu_head *)pos, rcu_free_sheaf);
 }
 
 static __always_inline void
@@ -2186,6 +2211,26 @@ defer_free:
 
 }
 EXPORT_SYMBOL_GPL(kvfree_call_rcu_ptr);
+
+static inline void defer_call_rcu(struct rcu_head *head)
+{
+	struct kfree_rcu_cpu *krcp;
+
+	VM_WARN_ON_ONCE(!irqs_disabled());
+
+	krcp = this_cpu_ptr(&krc);
+	if (llist_add((struct llist_node *)head, &krcp->defer_call_rcu_head))
+		irq_work_queue(&krcp->defer_call_rcu);
+}
+
+void submit_rcu_sheaf(struct rcu_head *head, bool allow_spin)
+{
+	/* Might be in the middle of call_rcu(), defer it */
+	if (unlikely(!allow_spin && irqs_disabled()))
+		defer_call_rcu(head);
+	else
+		call_rcu(head, rcu_free_sheaf);
+}
 
 static inline void __kvfree_rcu_barrier(void)
 {
