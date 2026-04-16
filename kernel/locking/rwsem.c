@@ -638,7 +638,7 @@ static inline bool rwsem_try_write_lock(struct rw_semaphore *sem,
 		if (has_handoff) {
 			/*
 			 * Honor handoff bit and yield only when the first
-			 * waiter is the one that set it. Otherwisee, we
+			 * waiter is the one that set it. Otherwise, we
 			 * still try to acquire the rwsem.
 			 */
 			if (first->handoff_set && (waiter != first))
@@ -737,8 +737,8 @@ static inline bool rwsem_can_spin_on_owner(struct rw_semaphore *sem)
 	}
 
 	/*
-	 * Disable preemption is equal to the RCU read-side crital section,
-	 * thus the task_strcut structure won't go away.
+	 * Disable preemption is equal to the RCU read-side critical section,
+	 * thus the task_struct structure won't go away.
 	 */
 	owner = rwsem_owner_flags(sem, &flags);
 	/*
@@ -796,7 +796,7 @@ rwsem_spin_on_owner(struct rw_semaphore *sem)
 		 * checking sem->owner still matches owner, if that fails,
 		 * owner might point to free()d memory, if it still matches,
 		 * our spinning context already disabled preemption which is
-		 * equal to RCU read-side crital section ensures the memory
+		 * equal to RCU read-side critical section ensures the memory
 		 * stays valid.
 		 */
 		barrier();

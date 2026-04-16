@@ -380,8 +380,8 @@ bool mutex_spin_on_owner(struct mutex *lock, struct task_struct *owner,
 		 * Ensure we emit the owner->on_cpu, dereference _after_
 		 * checking lock->owner still matches owner. And we already
 		 * disabled preemption which is equal to the RCU read-side
-		 * crital section in optimistic spinning code. Thus the
-		 * task_strcut structure won't go away during the spinning
+		 * critical section in optimistic spinning code. Thus the
+		 * task_struct structure won't go away during the spinning
 		 * period
 		 */
 		barrier();
@@ -420,7 +420,7 @@ static inline int mutex_can_spin_on_owner(struct mutex *lock)
 
 	/*
 	 * We already disabled preemption which is equal to the RCU read-side
-	 * crital section in optimistic spinning code. Thus the task_strcut
+	 * critical section in optimistic spinning code. Thus the task_struct
 	 * structure won't go away during the spinning period.
 	 */
 	owner = __mutex_owner(lock);
