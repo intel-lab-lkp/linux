@@ -765,16 +765,14 @@ int i3c_hci_rpm_suspend(struct device *dev)
 	int ret;
 
 	ret = i3c_hci_bus_disable(hci);
-	if (ret) {
-		/* Fall back to software reset to disable the bus */
+
+	/* Fall back to software reset to disable the bus */
+	if (ret)
 		ret = i3c_hci_software_reset(hci);
-		i3c_hci_sync_irq_inactive(hci);
-		return ret;
-	}
 
 	hci->io->suspend(hci);
 
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL_GPL(i3c_hci_rpm_suspend);
 
