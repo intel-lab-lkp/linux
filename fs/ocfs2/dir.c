@@ -578,6 +578,29 @@ out:
 	return ret;
 }
 
+static int ocfs2_validate_dx_entry_list(struct super_block *sb, u64 blkno,
+					struct ocfs2_dx_entry_list *entry_list,
+					unsigned int expected,
+					const char *owner)
+{
+	unsigned int count = le16_to_cpu(entry_list->de_count);
+	unsigned int num_used = le16_to_cpu(entry_list->de_num_used);
+
+	if (count != expected)
+		return ocfs2_error(sb,
+				   "%s # %llu has invalid de_count %u (expected %u)\n",
+				   owner, (unsigned long long)blkno, count,
+				   expected);
+
+	if (num_used > count)
+		return ocfs2_error(sb,
+				   "%s # %llu has invalid de_num_used %u (de_count %u)\n",
+				   owner, (unsigned long long)blkno, num_used,
+				   count);
+
+	return 0;
+}
+
 static int ocfs2_validate_dx_root(struct super_block *sb,
 				  struct buffer_head *bh)
 {
@@ -604,7 +627,14 @@ static int ocfs2_validate_dx_root(struct super_block *sb,
 		goto bail;
 	}
 
-	if (!(dx_root->dr_flags & OCFS2_DX_FLAG_INLINE)) {
+	if (dx_root->dr_flags & OCFS2_DX_FLAG_INLINE) {
+		ret = ocfs2_validate_dx_entry_list(sb, bh->b_blocknr,
+						   &dx_root->dr_entries,
+						   ocfs2_dx_entries_per_root(sb),
+						   "Dir Index Root");
+		if (ret)
+			goto bail;
+	} else {
 		struct ocfs2_extent_list *el = &dx_root->dr_list;
 
 		if (le16_to_cpu(el->l_count) != ocfs2_extent_recs_per_dx_root(sb)) {
@@ -660,13 +690,21 @@ static int ocfs2_validate_dx_leaf(struct super_block *sb,
 		mlog(ML_ERROR,
 		     "Checksum failed for dir index leaf block %llu\n",
 		     (unsigned long long)bh->b_blocknr);
-		return ret;
+		goto bail;
 	}
 
 	if (!OCFS2_IS_VALID_DX_LEAF(dx_leaf)) {
 		ret = ocfs2_error(sb, "Dir Index Leaf has bad signature %.*s\n",
 				  7, dx_leaf->dl_signature);
+		goto bail;
 	}
+
+	ret = ocfs2_validate_dx_entry_list(sb, bh->b_blocknr,
+					   &dx_leaf->dl_list,
+					   ocfs2_dx_entries_per_leaf(sb),
+					   "Dir Index Leaf");
+
+bail:
 
 	return ret;
 }
