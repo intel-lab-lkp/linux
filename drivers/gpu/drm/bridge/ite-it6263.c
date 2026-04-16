@@ -200,9 +200,13 @@ struct it6263 {
 	struct regmap *lvds_regmap;
 	struct drm_bridge bridge;
 	struct drm_bridge *next_bridge;
+	struct gpio_desc *reset_gpio;
+	struct regulator_bulk_data *supplies;
+	unsigned int num_supplies;
 	int lvds_data_mapping;
 	bool lvds_dual_link;
 	bool lvds_link12_swap;
+	bool powered;
 };
 
 static inline struct it6263 *bridge_to_it6263(struct drm_bridge *bridge)
@@ -578,6 +582,41 @@ static int it6263_read_edid(void *data, u8 *buf, unsigned int block, size_t len)
 	return 0;
 }
 
+static int it6263_bridge_init(struct it6263 *it)
+{
+	int ret;
+
+	ret = regulator_bulk_enable(it->num_supplies, it->supplies);
+	if (ret) {
+		dev_err(it->dev, "failed to enable power supplies\n");
+		return ret;
+	}
+
+	it6263_hw_reset(it->reset_gpio);
+
+	ret = it6263_lvds_set_i2c_addr(it);
+	if (ret) {
+		dev_err(it->dev, "failed to set I2C addr\n");
+		regulator_bulk_disable(it->num_supplies, it->supplies);
+		return ret;
+	}
+
+	it6263_lvds_config(it);
+	it6263_hdmi_config(it);
+
+	it->powered = true;
+
+	return 0;
+}
+
+static int it6263_bridge_uninit(struct it6263 *it)
+{
+	regulator_bulk_disable(it->num_supplies, it->supplies);
+	it->powered = false;
+
+	return 0;
+}
+
 static void it6263_bridge_atomic_disable(struct drm_bridge *bridge,
 					 struct drm_atomic_state *state)
 {
@@ -587,6 +626,8 @@ static void it6263_bridge_atomic_disable(struct drm_bridge *bridge,
 	regmap_write(it->hdmi_regmap, HDMI_REG_PKT_GENERAL_CTRL, 0);
 	regmap_write(it->hdmi_regmap, HDMI_REG_AFE_DRV_CTRL,
 		     AFE_DRV_RST | AFE_DRV_PWD);
+
+	it6263_bridge_uninit(it);
 }
 
 static void it6263_bridge_atomic_enable(struct drm_bridge *bridge,
@@ -602,6 +643,9 @@ static void it6263_bridge_atomic_enable(struct drm_bridge *bridge,
 	unsigned int val;
 	bool pclk_high;
 	int i, ret;
+
+	if (!it->powered)
+		it6263_bridge_init(it);
 
 	connector = drm_atomic_get_new_connector_for_encoder(state,
 							     bridge->encoder);
@@ -840,7 +884,6 @@ static const struct drm_bridge_funcs it6263_bridge_funcs = {
 static int it6263_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
-	struct gpio_desc *reset_gpio;
 	struct it6263 *it;
 	int ret;
 
@@ -858,25 +901,27 @@ static int it6263_probe(struct i2c_client *client)
 		return dev_err_probe(dev, PTR_ERR(it->hdmi_regmap),
 				     "failed to init I2C regmap for HDMI\n");
 
-	reset_gpio = devm_gpiod_get_optional(dev, "reset", GPIOD_OUT_LOW);
-	if (IS_ERR(reset_gpio))
-		return dev_err_probe(dev, PTR_ERR(reset_gpio),
+	it->reset_gpio = devm_gpiod_get_optional(dev, "reset", GPIOD_OUT_LOW);
+	if (IS_ERR(it->reset_gpio))
+		return dev_err_probe(dev, PTR_ERR(it->reset_gpio),
 				     "failed to get reset gpio\n");
 
-	ret = devm_regulator_bulk_get_enable(dev, ARRAY_SIZE(it6263_supplies),
-					     it6263_supplies);
+	it->num_supplies = ARRAY_SIZE(it6263_supplies);
+	it->supplies = devm_kcalloc(dev, it->num_supplies,
+				    sizeof(*it->supplies), GFP_KERNEL);
+	if (!it->supplies)
+		return -ENOMEM;
+
+	for (unsigned int i = 0; i < it->num_supplies; i++)
+		it->supplies[i].supply = it6263_supplies[i];
+
+	ret = devm_regulator_bulk_get(dev, it->num_supplies, it->supplies);
 	if (ret)
 		return dev_err_probe(dev, ret, "failed to get power supplies\n");
 
 	ret = it6263_parse_dt(it);
 	if (ret)
 		return ret;
-
-	it6263_hw_reset(reset_gpio);
-
-	ret = it6263_lvds_set_i2c_addr(it);
-	if (ret)
-		return dev_err_probe(dev, ret, "failed to set I2C addr\n");
 
 	it->lvds_i2c = devm_i2c_new_dummy_device(dev, client->adapter,
 						 LVDS_INPUT_CTRL_I2C_ADDR);
@@ -890,8 +935,9 @@ static int it6263_probe(struct i2c_client *client)
 		return dev_err_probe(dev, PTR_ERR(it->lvds_regmap),
 				     "failed to init I2C regmap for LVDS\n");
 
-	it6263_lvds_config(it);
-	it6263_hdmi_config(it);
+	ret = it6263_bridge_init(it);
+	if (ret)
+		return ret;
 
 	i2c_set_clientdata(client, it);
 
@@ -903,7 +949,18 @@ static int it6263_probe(struct i2c_client *client)
 	it->bridge.vendor = "ITE";
 	it->bridge.product = "IT6263";
 
-	return devm_drm_bridge_add(dev, &it->bridge);
+	ret = devm_drm_bridge_add(dev, &it->bridge);
+	if (ret)
+		it6263_bridge_uninit(it);
+
+	return ret;
+}
+
+static void it6263_remove(struct i2c_client *i2c)
+{
+	struct it6263 *it = i2c_get_clientdata(i2c);
+
+	it6263_bridge_uninit(it);
 }
 
 static const struct of_device_id it6263_of_match[] = {
@@ -920,6 +977,7 @@ MODULE_DEVICE_TABLE(i2c, it6263_i2c_ids);
 
 static struct i2c_driver it6263_driver = {
 	.probe = it6263_probe,
+	.remove = it6263_remove,
 	.driver = {
 		.name = "it6263",
 		.of_match_table = it6263_of_match,
