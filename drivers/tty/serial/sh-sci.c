@@ -3369,8 +3369,11 @@ static int sci_init_single(struct platform_device *dev,
 	}
 
 	port->type		= SCI_PUBLIC_PORT_ID(p->type);
-	port->flags		= UPF_FIXED_PORT | UPF_BOOT_AUTOCONF | p->flags;
+	port->flags		= UPF_FIXED_PORT | UPF_BOOT_AUTOCONF |
+				  (p->flags & ~UPF_CONS_FLOW);
 	port->fifosize		= sci_port->params->fifosize;
+
+	uart_set_cons_flow(port, p->flags & UPF_CONS_FLOW);
 
 	if (p->type == PORT_SCI && !dev->dev.of_node) {
 		if (sci_port->reg_size >= 0x20)
