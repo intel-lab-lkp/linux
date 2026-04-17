@@ -33,6 +33,13 @@ def err(s):
     sys.exit(1)
 
 
+def objexts_flags_mask():
+    try:
+        return int(prog.constant('__NR_OBJEXTS_FLAGS')) - 1
+    except:
+        return 0x7
+
+
 def find_memcg_ids(css=prog['root_mem_cgroup'].css, prefix=''):
     if not list_empty(css.children.address_of_()):
         for css in list_for_each_entry('struct cgroup_subsys_state',
@@ -192,23 +199,24 @@ def main():
         # look over all slab folios and look for objects belonging
         # to the given memory cgroup
         for slab in for_each_slab(prog):
-            objcg_vec_raw = slab.memcg_data.value_()
-            if objcg_vec_raw == 0:
+            objext_vec_raw = slab.obj_exts.value_()
+            if objext_vec_raw == 0:
                 continue
             cache = slab.slab_cache
             if not cache:
                 continue
             addr = cache.value_()
             caches[addr] = cache
-            # clear the lowest bit to get the true obj_cgroups
-            objcg_vec = Object(prog, 'struct obj_cgroup **',
-                               value=objcg_vec_raw & ~1)
 
             if addr not in stats:
                 stats[addr] = 0
 
+            # clear OBJEXTS_FLAGS_MASK bits to get the true slabobj_ext
+            mask = objexts_flags_mask()
+            objext_vec = Object(prog, 'struct slabobj_ext *',
+                                value=objext_vec_raw & ~mask)
             for i in range(oo_objects(cache)):
-                if objcg_vec[i].value_() in obj_cgroups:
+                if objext_vec[i].objcg.value_() in obj_cgroups:
                     stats[addr] += 1
 
         for addr in caches:
