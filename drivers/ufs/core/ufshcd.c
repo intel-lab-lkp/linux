@@ -460,20 +460,11 @@ static void ufshcd_add_uic_command_trace(struct ufs_hba *hba,
 					 const struct uic_command *ucmd,
 					 enum ufs_trace_str_t str_t)
 {
-	u32 cmd;
-
 	if (!trace_ufshcd_uic_command_enabled())
 		return;
 
-	if (str_t == UFS_CMD_SEND)
-		cmd = ucmd->command;
-	else
-		cmd = ufshcd_readl(hba, REG_UIC_COMMAND);
-
-	trace_ufshcd_uic_command(hba, str_t, cmd,
-				 ufshcd_readl(hba, REG_UIC_COMMAND_ARG_1),
-				 ufshcd_readl(hba, REG_UIC_COMMAND_ARG_2),
-				 ufshcd_readl(hba, REG_UIC_COMMAND_ARG_3));
+	trace_ufshcd_uic_command(hba, str_t, ucmd->command, ucmd->argument1,
+				 ucmd->argument2, ucmd->argument3);
 }
 
 static void ufshcd_add_command_trace(struct ufs_hba *hba, struct scsi_cmnd *cmd,
@@ -5689,13 +5680,11 @@ static irqreturn_t ufshcd_uic_cmd_compl(struct ufs_hba *hba, u32 intr_status)
 	if (ufshcd_is_auto_hibern8_error(hba, intr_status))
 		hba->errors |= (UFSHCD_UIC_HIBERN8_MASK & intr_status);
 
+	/* Store the UIC command result in the lowest byte of cmd->argument2. */
+	cmd->argument2 |= ufshcd_readl(hba, REG_UIC_COMMAND_ARG_2) &
+		MASK_UIC_COMMAND_RESULT;
+
 	if (intr_status & UIC_COMMAND_COMPL) {
-		/*
-		 * Store the UIC command result in the lowest byte of
-		 * cmd->argument2.
-		 */
-		cmd->argument2 |= ufshcd_readl(hba, REG_UIC_COMMAND_ARG_2) &
-				  MASK_UIC_COMMAND_RESULT;
 		/* Store the DME attribute value in cmd->argument3. */
 		cmd->argument3 = ufshcd_readl(hba, REG_UIC_COMMAND_ARG_3);
 		if (!hba->uic_async_done)
