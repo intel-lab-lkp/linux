@@ -708,6 +708,7 @@ static void rcu_exp_wait_wake(unsigned long s)
 		}
 		smp_mb(); /* All above changes before wakeup. */
 		wake_up_all(&rnp->exp_wq[rcu_seq_ctr(s) & 0x3]);
+		rcu_exp_wake_nocb(rnp);
 	}
 	trace_rcu_exp_grace_period(rcu_state.name, s, TPS("endwake"));
 	mutex_unlock(&rcu_state.exp_wake_mutex);

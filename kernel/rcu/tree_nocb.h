@@ -190,6 +190,31 @@ static void rcu_init_one_nocb(struct rcu_node *rnp)
 	init_swait_queue_head(&rnp->nocb_gp_wq[1]);
 }
 
+/*
+ * Wake NOCB rcuog kthreads for leaf-node CPUs so that they can advance
+ * callbacks that were waiting for the just-completed expedited GP.
+ * Deduplicate via nocb_gp_rdp since multiple CPUs share one rcuog
+ * kthread.  Use for_each_leaf_node_possible_cpu() because offline CPUs
+ * may have pending callbacks.
+ */
+static void rcu_exp_wake_nocb(struct rcu_node *rnp)
+{
+	struct rcu_data *last_rdp_gp = NULL;
+	int cpu;
+
+	if (!rcu_is_leaf_node(rnp))
+		return;
+
+	for_each_leaf_node_possible_cpu(rnp, cpu) {
+		struct rcu_data *rdp = per_cpu_ptr(&rcu_data, cpu);
+
+		if (rdp->nocb_gp_rdp == last_rdp_gp)
+			continue;
+		last_rdp_gp = rdp->nocb_gp_rdp;
+		wake_nocb_gp(rdp);
+	}
+}
+
 /* Clear any pending deferred wakeup timer (nocb_gp_lock must be held). */
 static void nocb_defer_wakeup_cancel(struct rcu_data *rdp_gp)
 {
@@ -1665,6 +1690,10 @@ static struct swait_queue_head *rcu_nocb_gp_get(struct rcu_node *rnp)
 }
 
 static void rcu_init_one_nocb(struct rcu_node *rnp)
+{
+}
+
+static void rcu_exp_wake_nocb(struct rcu_node *rnp)
 {
 }
 
