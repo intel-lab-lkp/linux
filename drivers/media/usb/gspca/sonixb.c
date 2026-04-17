@@ -900,11 +900,11 @@ static void do_autogain(struct gspca_dev *gspca_dev)
 	if (sd->brightness)
 		desired_avg_lum = sd->brightness->val * desired_avg_lum / 127;
 
-	if (gspca_dev->exposure->maximum < 500) {
+	if (gspca_dev->exposure && gspca_dev->exposure->maximum < 500) {
 		if (gspca_coarse_grained_expo_autogain(gspca_dev, avg_lum,
 				desired_avg_lum, deadzone))
 			sd->autogain_ignore_frames = AUTOGAIN_IGNORE_FRAMES;
-	} else {
+	} else if (gspca_dev->autogain) {
 		int gain_knee = (s32)gspca_dev->gain->maximum * 9 / 10;
 		if (gspca_expo_autogain(gspca_dev, avg_lum, desired_avg_lum,
 				deadzone, gain_knee, sd->exposure_knee))
@@ -926,6 +926,9 @@ static int sd_config(struct gspca_dev *gspca_dev,
 	/* copy the webcam info from the device id */
 	sd->sensor = id->driver_info >> 8;
 	sd->bridge = id->driver_info & 0xff;
+
+	dev_info(gspca_dev->v4l2_dev.dev, "%s(sensor=%02x bridge=%02x)\n",
+		__func__, sd->sensor, sd->bridge);
 
 	cam = &gspca_dev->cam;
 	if (!(sensor_data[sd->sensor].flags & F_SIF)) {
@@ -958,7 +961,7 @@ static int sd_s_ctrl(struct v4l2_ctrl *ctrl)
 
 	gspca_dev->usb_err = 0;
 
-	if (ctrl->id == V4L2_CID_AUTOGAIN && ctrl->is_new && ctrl->val) {
+	if (ctrl->id == V4L2_CID_AUTOGAIN && ctrl->is_new && ctrl->val && gspca_dev->exposure) {
 		/* when switching to autogain set defaults to make sure
 		   we are on a valid point of the autogain gain /
 		   exposure knee graph, and give this change time to
@@ -976,7 +979,8 @@ static int sd_s_ctrl(struct v4l2_ctrl *ctrl)
 		setbrightness(gspca_dev);
 		break;
 	case V4L2_CID_AUTOGAIN:
-		if (gspca_dev->exposure->is_new || (ctrl->is_new && ctrl->val))
+		if ((gspca_dev->exposure && gspca_dev->exposure->is_new) ||
+			(ctrl->is_new && ctrl->val))
 			setexposure(gspca_dev);
 		if (gspca_dev->gain->is_new || (ctrl->is_new && ctrl->val))
 			setgain(gspca_dev);
