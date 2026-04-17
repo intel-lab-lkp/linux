@@ -24,7 +24,7 @@ static inline void syscall_set_nr(struct task_struct *task,
 static inline void syscall_rollback(struct task_struct *task,
 				    struct pt_regs *regs)
 {
-	/* TODO.  */
+	regs->r12 = regs->r0;
 }
 
 static inline long syscall_get_error(struct task_struct *task,
