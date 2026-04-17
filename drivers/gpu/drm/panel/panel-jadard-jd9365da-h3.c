@@ -46,10 +46,21 @@ struct jadard {
 	struct gpio_desc *reset;
 };
 
+#define JD9161Z_DCS_SWITCH_PAGE		0xde
+
+#define jd9161z_switch_page(dsi_ctx, page) \
+	mipi_dsi_dcs_write_seq_multi(dsi_ctx, JD9161Z_DCS_SWITCH_PAGE, (page))
+
 #define JD9365DA_DCS_SWITCH_PAGE	0xe0
 
 #define jd9365da_switch_page(dsi_ctx, page) \
 	mipi_dsi_dcs_write_seq_multi(dsi_ctx, JD9365DA_DCS_SWITCH_PAGE, (page))
+
+static void jd9161z_enable_standard_cmds(struct mipi_dsi_multi_context *dsi_ctx)
+{
+	// Enable access to DCS and internal commands
+	mipi_dsi_dcs_write_seq_multi(dsi_ctx, 0xdf, 0x91, 0x62, 0xf3);
+}
 
 static void jadard_enable_standard_cmds(struct mipi_dsi_multi_context *dsi_ctx)
 {
@@ -1606,6 +1617,300 @@ static const struct jadard_panel_desc taiguan_xti05101_01a_desc = {
 	.enter_sleep_to_reset_down_delay_ms = 100,
 };
 
+// Sequence retrieved from Xiaomi Mi Smart Clock x04g kernel in boot.bin
+static int zhunyi_z40046_init_cmds_ctc(struct jadard *jadard_data)
+{
+	struct mipi_dsi_multi_context dsi_ctx = { .dsi = jadard_data->dsi };
+
+	// Init configuration sequence
+	jd9161z_switch_page(&dsi_ctx, 0x00);
+	jd9161z_enable_standard_cmds(&dsi_ctx);
+
+	// GAMMA_SET (pos/neg voltage of gamma power)
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb7,
+		0x10, 0x04, 0x86, 0x00, 0x1b, 0x35);
+
+	// DCDC_SEL (power mode and charge pump settings)
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xbb,
+		0x69, 0x0b, 0x30, 0xb2, 0xb2, 0xc0, 0xe0, 0x20,
+		0xf0, 0x50, 0x60);
+
+	mipi_dsi_msleep(&dsi_ctx, 1);
+
+	// VDDD_CTRL (control logic voltage setting)
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xbc,
+		0x73, 0x14);
+
+	mipi_dsi_msleep(&dsi_ctx, 1);
+
+	// SETRGBCYC (display waveform cycle of RGB mode)
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xc3,
+		0x74, 0x04, 0x08, 0x0e, 0x00, 0x0e, 0x0c, 0x08,
+		0x0e, 0x00, 0x0e, 0x82, 0x0a, 0x82);
+
+	// SET_TCON (timing control setting)
+	// param[0][5:4] + param[1]: number of panel lines / 2
+	//   400 = 01 1001 0000 -> 0x10, 0x90
+	// param[2]: scan line time width
+	// param[3]: vfp: 14
+	// param[4]: vs + vbp - 1: 11
+	// param[5]: hbp: 4
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xc4,
+		0x10, 0x90, 0x92, 0x0e, 0x0b, 0x04);
+
+	mipi_dsi_msleep(&dsi_ctx, 1);
+
+	// SET_R_GAMMA (set red gamma output voltage)
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xc8,
+		0x7e, 0x76, 0x68, 0x57, 0x4c, 0x39, 0x3a, 0x23,
+		0x3d, 0x3d, 0x40, 0x61, 0x54, 0x64, 0x5d, 0x62,
+		0x5a, 0x50, 0x32, 0x7e, 0x76, 0x68, 0x57, 0x4c,
+		0x39, 0x3a, 0x23, 0x3d, 0x3d, 0x40, 0x61, 0x54,
+		0x64, 0x5d, 0x62, 0x5a, 0x50, 0x32);
+
+	// SET_GIP_L (CGOUTx_L signal mapping, gs_panel = 0)
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xd0,
+		0x1f, 0x0a, 0x08, 0x06, 0x04, 0x1f, 0x00, 0x1f,
+		0x17, 0x1f, 0x18, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f);
+
+	// SET_GIP_R (CGOUTx_R signal mapping, gs_panel = 0)
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xd1,
+		0x1f, 0x0b, 0x09, 0x07, 0x05, 0x1f, 0x01, 0x1f,
+		0x17, 0x1f, 0x18, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f);
+
+	// SETGIP1 (GIP signal timing 1)
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xd4,
+		0x10, 0x00, 0x00, 0x03, 0x60, 0x05, 0x10, 0x00,
+		0x02, 0x06, 0x68, 0x00, 0x6c, 0x00, 0x00, 0x00,
+		0x00, 0x06, 0x78, 0x71, 0x07, 0x06, 0x68, 0x0c,
+		0x25, 0x00, 0x63, 0x03, 0x00);
+
+	// SETGIP2 (GIP signal timing 1)
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xd5,
+		0x20, 0x10, 0x8c, 0x18, 0x00, 0x80, 0x00, 0x08,
+		0x00, 0x00, 0x06, 0x60, 0x00, 0x81, 0x70, 0x02,
+		0x30, 0x01, 0x00, 0x00, 0xc0, 0x00, 0x00, 0x00,
+		0x03, 0x60, 0x83, 0x90, 0x00, 0x00, 0x03, 0x4f,
+		0x03, 0x00, 0x1f, 0x3f, 0x00, 0x00, 0x00, 0x00);
+
+	jd9161z_switch_page(&dsi_ctx, 0x04);
+
+	mipi_dsi_msleep(&dsi_ctx, 1);
+
+	// Unknown command
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0,
+		0x24, 0x01);
+
+	mipi_dsi_msleep(&dsi_ctx, 1);
+
+	jd9161z_switch_page(&dsi_ctx, 0x02);
+
+	mipi_dsi_msleep(&dsi_ctx, 1);
+
+	// SETRGBCYC2 (RGB IF source switch control timing)
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xc1,
+		0x71);
+
+	mipi_dsi_msleep(&dsi_ctx, 1);
+
+	// Unknown command
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xc2,
+		0x00, 0x18, 0x08, 0x1e, 0x25, 0x7c, 0xc7);
+
+	mipi_dsi_msleep(&dsi_ctx, 1);
+
+	jd9161z_switch_page(&dsi_ctx, 0x00);
+
+	mipi_dsi_msleep(&dsi_ctx, 1);
+
+	mipi_dsi_dcs_set_tear_on_multi(&dsi_ctx, MIPI_DSI_DCS_TEAR_MODE_VBLANK);
+
+	mipi_dsi_msleep(&dsi_ctx, 1);
+
+	mipi_dsi_dcs_exit_sleep_mode_multi(&dsi_ctx);
+
+	mipi_dsi_msleep(&dsi_ctx, 120);
+
+	mipi_dsi_dcs_set_display_on_multi(&dsi_ctx);
+
+	mipi_dsi_msleep(&dsi_ctx, 5);
+
+	return dsi_ctx.accum_err;
+};
+
+static const struct jadard_panel_desc zhunyi_z40046_ctc_desc = {
+	.mode = {
+		.clock		= (480 + 20 + 20 + 20) * (800 + 14 + 4 + 8) * 60 / 1000,
+
+		.hdisplay	= 480,
+		.hsync_start	= 480 + 20,
+		.hsync_end	= 480 + 20 + 20,
+		.htotal		= 480 + 20 + 20 + 20,
+
+		.vdisplay	= 800,
+		.vsync_start	= 800 + 14,
+		.vsync_end	= 800 + 14 + 4,
+		.vtotal		= 800 + 14 + 4 + 8,
+
+		.width_mm	= 52,
+		.height_mm	= 86,
+		.flags		= DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_NVSYNC,
+		.type		= DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED,
+	},
+	.lanes = 2,
+	.format = MIPI_DSI_FMT_RGB888,
+	.mode_flags = MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_VIDEO_SYNC_PULSE |
+		MIPI_DSI_MODE_LPM,
+	.lp11_before_reset = true,
+	.reset_before_power_off_vcioo = true,
+	.vcioo_to_lp11_delay_ms = 5,
+	.lp11_to_reset_delay_ms = 10,
+	.backlight_off_to_display_off_delay_ms = 100,
+	.display_off_to_enter_sleep_delay_ms = 50,
+	.enter_sleep_to_reset_down_delay_ms = 100,
+	.init = zhunyi_z40046_init_cmds_ctc,
+};
+
+// Sequence retrieved from Xiaomi Mi Smart Clock x04g kernel in boot.bin
+static int zhunyi_z40046_init_cmds_boe(struct jadard *jadard_data)
+{
+	struct mipi_dsi_multi_context dsi_ctx = { .dsi = jadard_data->dsi };
+
+	// Init configuration sequence
+	jd9161z_switch_page(&dsi_ctx, 0x00);
+	jd9161z_enable_standard_cmds(&dsi_ctx);
+
+	// GAMMA_SET (pos/neg voltage of gamma power)
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb7,
+		0x10, 0x08, 0x42, 0x00, 0x56, 0x42);
+
+	// DCDC_SEL (power mode and charge pump settings)
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xbb,
+		0x52, 0x0f, 0xb2, 0xb2, 0xb2, 0xc0, 0xd0, 0x50,
+		0xf0, 0x40, 0x50);
+
+	// VDDD_CTRL (control logic voltage setting)
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xbc,
+		0x73, 0x14);
+
+	// SETRGBCYC (display waveform cycle of RGB mode)
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xc3,
+		0x04, 0x07, 0x0b, 0x17, 0x00, 0x17, 0x04, 0x17,
+		0x17, 0x00, 0x17, 0x82, 0x0b, 0x82);
+
+	// SET_TCON (timing control setting)
+	// param[0][5:4] + param[1]: number of panel lines / 2
+	//   400 = 01 1001 0000 -> 0x10, 0x90
+	// param[2]: scan line time width
+	// param[3]: vfp: 14
+	// param[4]: vs + vbp - 1: 11
+	// param[5]: hbp: 6
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xc4,
+		0x10, 0x90, 0x92, 0x0e, 0x06);
+
+	// SET_R_GAMMA (set red gamma output voltage)
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xc8,
+		0x7f, 0x78, 0x69, 0x56, 0x47, 0x33, 0x34, 0x1e,
+		0x3b, 0x3e, 0x43, 0x67, 0x5d, 0x6f, 0x68, 0x70,
+		0x6a, 0x61, 0x3c, 0x7f, 0x78, 0x69, 0x56, 0x47,
+		0x33, 0x34, 0x1e, 0x3b, 0x3e, 0x43, 0x67, 0x5d,
+		0x6f, 0x68, 0x70, 0x6a, 0x61, 0x3c);
+
+	// SET_GIP_L (CGOUTx_L signal mapping, gs_panel = 0)
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xd0,
+		0x1f, 0x1e, 0x07, 0x05, 0x01, 0x1f, 0x1f, 0x1f,
+		0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f);
+
+	// SET_GIP_R (CGOUTx_R signal mapping, gs_panel = 0)
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xd1,
+		0x1f, 0x1e, 0x06, 0x04, 0x00, 0x1f, 0x1f, 0x1f,
+		0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f);
+
+	// SET_GIP_L_GS (CGOUTx_L signal mapping, gs_panel = 1)
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xd2,
+		0x1f, 0x1f, 0x04, 0x06, 0x00, 0x1e, 0x1f, 0x1f,
+		0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f);
+
+	// SET_GIP_R_GS (CGOUTx_R signal mapping, gs_panel = 1)
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xd3,
+		0x1f, 0x1f, 0x05, 0x07, 0x01, 0x1e, 0x1f, 0x1f,
+		0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f);
+
+	// SETGIP1 (GIP signal timing 1)
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xd4,
+		0x30, 0x00, 0x00, 0x00, 0x00, 0x01, 0x10, 0x00,
+		0x03, 0x03, 0x68, 0x03, 0x40, 0x05, 0x00, 0x00,
+		0x00, 0xcc, 0x2d, 0x31, 0x02, 0x03, 0x68, 0x0c,
+		0x25, 0x00, 0x63, 0x03, 0x00);
+
+	// SETGIP2 (GIP signal timing 1)
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xd5,
+		0x30, 0x08, 0x80, 0x18, 0x00, 0x00, 0x00, 0x18,
+		0x00, 0x00, 0x06, 0x60, 0x00, 0x07, 0x50, 0x00,
+		0x33, 0xc0, 0x00, 0x60, 0xc0, 0x00, 0x00, 0x00,
+		0x03, 0x60, 0x06, 0x10, 0x00, 0x00, 0x0f, 0x4f,
+		0x00, 0x10, 0x1f, 0x3f);
+
+	jd9161z_switch_page(&dsi_ctx, 0x02);
+
+	// SETRGBCYC2 (RGB IF source switch control timing)
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xc1,
+		0x60);
+
+	// Unknown command
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xc2,
+		0x00, 0x18, 0x08, 0x1e, 0x25, 0x7c, 0xc7);
+
+	jd9161z_switch_page(&dsi_ctx, 0x00);
+
+	// GAS_CTRL (GAS function control)
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xbe,
+		0x4e);
+
+	mipi_dsi_dcs_exit_sleep_mode_multi(&dsi_ctx);
+
+	mipi_dsi_msleep(&dsi_ctx, 120);
+
+	mipi_dsi_dcs_set_display_on_multi(&dsi_ctx);
+
+	mipi_dsi_msleep(&dsi_ctx, 10);
+
+	return dsi_ctx.accum_err;
+};
+
+static const struct jadard_panel_desc zhunyi_z40046_boe_desc = {
+	.mode = {
+		.clock		= (480 + 20 + 20 + 20) * (800 + 14 + 4 + 8) * 60 / 1000,
+
+		.hdisplay	= 480,
+		.hsync_start	= 480 + 20,
+		.hsync_end	= 480 + 20 + 20,
+		.htotal		= 480 + 20 + 20 + 20,
+
+		.vdisplay	= 800,
+		.vsync_start	= 800 + 14,
+		.vsync_end	= 800 + 14 + 4,
+		.vtotal		= 800 + 14 + 4 + 8,
+
+		.width_mm	= 52,
+		.height_mm	= 86,
+		.flags		= DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_NVSYNC,
+		.type		= DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED,
+	},
+	.lanes = 2,
+	.format = MIPI_DSI_FMT_RGB888,
+	.mode_flags = MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_VIDEO_SYNC_PULSE |
+		MIPI_DSI_MODE_LPM,
+	.lp11_before_reset = true,
+	.reset_before_power_off_vcioo = true,
+	.vcioo_to_lp11_delay_ms = 5,
+	.lp11_to_reset_delay_ms = 10,
+	.backlight_off_to_display_off_delay_ms = 100,
+	.display_off_to_enter_sleep_delay_ms = 50,
+	.enter_sleep_to_reset_down_delay_ms = 100,
+	.init = zhunyi_z40046_init_cmds_boe,
+};
+
 static int jadard_dsi_probe(struct mipi_dsi_device *dsi)
 {
 	struct device *dev = &dsi->dev;
@@ -1706,6 +2011,14 @@ static const struct of_device_id jadard_of_match[] = {
 	{
 		.compatible = "taiguanck,xti05101-01a",
 		.data = &taiguan_xti05101_01a_desc
+	},
+	{
+		.compatible = "zhunyikeji,z40046-ctc",
+		.data = &zhunyi_z40046_ctc_desc
+	},
+	{
+		.compatible = "zhunyikeji,z40046-boe",
+		.data = &zhunyi_z40046_boe_desc
 	},
 	{ /* sentinel */ }
 };
