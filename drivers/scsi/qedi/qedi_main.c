@@ -657,6 +657,8 @@ static struct qedi_ctx *qedi_host_alloc(struct pci_dev *pdev)
 	qedi->max_sqes = QEDI_SQ_SIZE;
 
 	shost->nr_hw_queues = MIN_NUM_CPUS_MSIX(qedi);
+	if (shost->nr_hw_queues > 1)
+		shost->host_tagset = 1;
 
 	pci_set_drvdata(pdev, qedi);
 
