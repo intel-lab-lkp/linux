@@ -325,6 +325,7 @@ enum {
 	ALC897_FIXUP_UNIS_H3C_X500S,
 	ALC897_FIXUP_HEADSET_MIC_PIN3,
 	ALC662_FIXUP_CSL_GPIO,
+	ALC897_FIXUP_RAZER_BLADE_14,
 };
 
 static const struct hda_fixup alc662_fixups[] = {
@@ -782,6 +783,16 @@ static const struct hda_fixup alc662_fixups[] = {
 		.type = HDA_FIXUP_FUNC,
 		.v.func = alc662_fixup_csl_amp,
 	},
+	[ALC897_FIXUP_RAZER_BLADE_14] = {
+		.type = HDA_FIXUP_VERBS,
+		.v.verbs = (const struct hda_verb[]) {
+			/* Enable GPIO 0-2 for headphone amp */
+			{ 0x01, AC_VERB_SET_GPIO_MASK, 0x07 },
+			{ 0x01, AC_VERB_SET_GPIO_DIRECTION, 0x07 },
+			{ 0x01, AC_VERB_SET_GPIO_DATA, 0x07 },
+			{ }
+		},
+	},
 };
 
 static const struct hda_quirk alc662_fixup_tbl[] = {
@@ -846,6 +857,7 @@ static const struct hda_quirk alc662_fixup_tbl[] = {
 	SND_PCI_QUIRK(0x17aa, 0x3742, "Lenovo TianYi510Pro-14IOB", ALC897_FIXUP_HEADSET_MIC_PIN2),
 	SND_PCI_QUIRK(0x17aa, 0x38af, "Lenovo Ideapad Y550P", ALC662_FIXUP_IDEAPAD),
 	SND_PCI_QUIRK(0x17aa, 0x3a0d, "Lenovo Ideapad Y550", ALC662_FIXUP_IDEAPAD),
+	SND_PCI_QUIRK(0x1a58, 0x2014, "Razer Blade 14 (2021)", ALC897_FIXUP_RAZER_BLADE_14),
 	SND_PCI_QUIRK(0x1849, 0x5892, "ASRock B150M", ALC892_FIXUP_ASROCK_MOBO),
 	SND_PCI_QUIRK(0x19da, 0xa130, "Zotac Z68", ALC662_FIXUP_ZOTAC_Z68),
 	SND_PCI_QUIRK(0x1b0a, 0x01b8, "ACER Veriton", ALC662_FIXUP_ACER_VERITON),
