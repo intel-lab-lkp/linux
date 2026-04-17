@@ -484,6 +484,13 @@ data_sock_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		if (dev) {
 			struct mISDN_devinfo di;
 
+			device_lock(&dev->dev);
+			if (!device_is_registered(&dev->dev)) {
+				device_unlock(&dev->dev);
+				put_device(&dev->dev);
+				err = -ENODEV;
+				break;
+			}
 			memset(&di, 0, sizeof(di));
 			di.id = dev->id;
 			di.Dprotocols = dev->Dprotocols;
@@ -493,8 +500,10 @@ data_sock_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			       sizeof(di.channelmap));
 			di.nrbchan = dev->nrbchan;
 			strscpy(di.name, dev_name(&dev->dev), sizeof(di.name));
+			device_unlock(&dev->dev);
 			if (copy_to_user((void __user *)arg, &di, sizeof(di)))
 				err = -EFAULT;
+			put_device(&dev->dev);
 		} else
 			err = -ENODEV;
 		break;
@@ -802,6 +811,13 @@ base_sock_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		if (dev) {
 			struct mISDN_devinfo di;
 
+			device_lock(&dev->dev);
+			if (!device_is_registered(&dev->dev)) {
+				device_unlock(&dev->dev);
+				put_device(&dev->dev);
+				err = -ENODEV;
+				break;
+			}
 			memset(&di, 0, sizeof(di));
 			di.id = dev->id;
 			di.Dprotocols = dev->Dprotocols;
@@ -811,8 +827,10 @@ base_sock_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			       sizeof(di.channelmap));
 			di.nrbchan = dev->nrbchan;
 			strscpy(di.name, dev_name(&dev->dev), sizeof(di.name));
+			device_unlock(&dev->dev);
 			if (copy_to_user((void __user *)arg, &di, sizeof(di)))
 				err = -EFAULT;
+			put_device(&dev->dev);
 		} else
 			err = -ENODEV;
 		break;
@@ -826,10 +844,17 @@ base_sock_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		}
 		dn.name[sizeof(dn.name) - 1] = '\0';
 		dev = get_mdevice(dn.id);
-		if (dev)
-			err = device_rename(&dev->dev, dn.name);
-		else
+		if (dev) {
+			device_lock(&dev->dev);
+			if (!device_is_registered(&dev->dev))
+				err = -ENODEV;
+			else
+				err = device_rename(&dev->dev, dn.name);
+			device_unlock(&dev->dev);
+			put_device(&dev->dev);
+		} else {
 			err = -ENODEV;
+		}
 	}
 	break;
 	default:
