@@ -3100,8 +3100,17 @@ static struct inode *__shmem_get_inode(struct mnt_idmap *idmap,
 	if (sbinfo->noswap)
 		mapping_set_unevictable(inode->i_mapping);
 
-	/* Don't consider 'deny' for emergencies and 'force' for testing */
-	if (sbinfo->huge)
+	/*
+	 * Always support large folios for the internal shmem mount (e.g.,
+	 * anonymous shmem), and which large order allocations are allowed
+	 * can be configured dynamically via the 'shmem_enabled' interfaces.
+	 *
+	 * For tmpfs, honour the 'huge=' mount option to determine whether
+	 * large folios are supported.
+	 *
+	 * Note: don't consider 'deny' for emergencies and 'force' for testing.
+	 */
+	if (sbinfo->huge || (sb->s_flags & SB_KERNMOUNT))
 		mapping_set_large_folios(inode->i_mapping);
 
 	switch (mode & S_IFMT) {
