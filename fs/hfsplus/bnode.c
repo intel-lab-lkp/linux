@@ -598,14 +598,18 @@ struct hfs_bnode *hfs_bnode_find(struct hfs_btree *tree, u32 num)
 		if (key_size >= entry_size || key_size & 1)
 			goto node_error;
 	}
-	clear_bit(HFS_BNODE_NEW, &node->flags);
-	wake_up(&node->lock_wq);
+	if (num != HFSPLUS_TREE_HEAD) {
+		clear_bit(HFS_BNODE_NEW, &node->flags);
+		wake_up(&node->lock_wq);
+	}
 	return node;
 
 node_error:
 	set_bit(HFS_BNODE_ERROR, &node->flags);
-	clear_bit(HFS_BNODE_NEW, &node->flags);
-	wake_up(&node->lock_wq);
+	if (num != HFSPLUS_TREE_HEAD) {
+		clear_bit(HFS_BNODE_NEW, &node->flags);
+		wake_up(&node->lock_wq);
+	}
 	hfs_bnode_put(node);
 	return ERR_PTR(-EIO);
 }
@@ -693,6 +697,10 @@ void hfs_bnode_put(struct hfs_bnode *node)
 			hfs_bmap_free(node);
 			hfs_bnode_free(node);
 			return;
+		}
+		if (test_bit(HFS_BNODE_NEW, &node->flags)) {
+			hfs_bnode_unhash(node);
+			hfs_bnode_free(node);
 		}
 		spin_unlock(&tree->hash_lock);
 	}
