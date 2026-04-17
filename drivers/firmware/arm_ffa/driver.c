@@ -42,6 +42,8 @@
 #include <linux/uuid.h>
 #include <linux/xarray.h>
 
+#include <asm/virt.h>
+
 #include "common.h"
 
 #define FFA_DRIVER_VERSION	FFA_VERSION_1_2
@@ -2034,6 +2036,16 @@ static int __init ffa_init(void)
 	int ret;
 	u32 buf_sz;
 	size_t rxtx_bufsz = SZ_4K;
+
+	/*
+	 * When pKVM is enabled, the FF-A driver must be initialized
+	 * after pKVM initialization. Otherwise, pKVM cannot negotiate
+	 * the FF-A version or obtain RX/TX buffer information,
+	 * which leads to failures in FF-A calls.
+	 */
+	if (IS_ENABLED(CONFIG_KVM) && is_protected_kvm_enabled() &&
+	    !is_kvm_arm_initialised())
+		return -EPROBE_DEFER;
 
 	ret = ffa_transport_init(&invoke_ffa_fn);
 	if (ret)
