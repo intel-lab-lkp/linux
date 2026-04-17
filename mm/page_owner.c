@@ -585,7 +585,14 @@ print_page_owner(char __user *buf, size_t count, unsigned long pfn,
 			migratetype_names[pageblock_mt],
 			&page->flags);
 
-	ret += stack_depot_snprint(handle, kbuf + ret, count - ret, 0);
+	/* Compact mode: print handle instead of full stack trace */
+	if (READ_ONCE(owner_filter.compact)) {
+		ret += scnprintf(kbuf + ret, count - ret,
+				"handle: %d\n", handle);
+	} else {
+		ret += stack_depot_snprint(handle, kbuf + ret, count - ret, 0);
+	}
+
 	if (ret >= count)
 		goto err;
 
@@ -980,6 +987,24 @@ static int page_owner_threshold_set(void *data, u64 val)
 DEFINE_SIMPLE_ATTRIBUTE(page_owner_threshold_fops, &page_owner_threshold_get,
 			&page_owner_threshold_set, "%llu");
 
+static int page_owner_compact_get(void *data, u64 *val)
+{
+	*val = READ_ONCE(owner_filter.compact);
+	return 0;
+}
+
+static int page_owner_compact_set(void *data, u64 val)
+{
+	if (val != 0 && val != 1)
+		return -EINVAL;
+	WRITE_ONCE(owner_filter.compact, val);
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(page_owner_compact_fops,
+			&page_owner_compact_get,
+			&page_owner_compact_set, "%lld");
+
 
 static int __init pageowner_init(void)
 {
@@ -993,6 +1018,8 @@ static int __init pageowner_init(void)
 	debugfs_create_file("page_owner", 0400, NULL, NULL, &page_owner_fops);
 
 	filter_dir = debugfs_create_dir("page_owner_filter", NULL);
+	debugfs_create_file("compact", 0600, filter_dir, NULL,
+			    &page_owner_compact_fops);
 
 	dir = debugfs_create_dir("page_owner_stacks", NULL);
 	debugfs_create_file("show_stacks", 0400, dir,
