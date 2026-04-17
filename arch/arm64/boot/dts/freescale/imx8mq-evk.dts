@@ -6,6 +6,8 @@
 
 /dts-v1/;
 
+#include <dt-bindings/media/video-interfaces.h>
+
 #include "imx8mq.dtsi"
 
 / {
@@ -48,6 +50,20 @@
 		gpio = <&gpio2 19 GPIO_ACTIVE_HIGH>;
 		off-on-delay-us = <20000>;
 		enable-active-high;
+	};
+
+	reg_1v5: regulator-1v5 {
+		compatible = "regulator-fixed";
+		regulator-name = "VDD_1V5";
+		regulator-min-microvolt = <1500000>;
+		regulator-max-microvolt = <1500000>;
+	};
+
+	reg_2v8: regulator-2v8 {
+		compatible = "regulator-fixed";
+		regulator-name = "VDD_2V8";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
 	};
 
 	buck2_reg: regulator-buck2 {
@@ -170,6 +186,14 @@
 
 &A53_3 {
 	cpu-supply = <&buck2_reg>;
+};
+
+&csi1 {
+	status = "okay";
+};
+
+&csi2 {
+	status = "okay";
 };
 
 &ddrc {
@@ -330,10 +354,99 @@
 			};
 		};
 	};
+
+	camera@3c {
+		compatible = "ovti,ov5640";
+		reg = <0x3c>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_camera2_pwdn>;
+		clocks = <&clk IMX8MQ_CLK_CLKO2>;
+		clock-names = "xclk";
+		assigned-clocks = <&clk IMX8MQ_CLK_CLKO2>;
+		assigned-clock-parents = <&clk IMX8MQ_SYS2_PLL_200M>;
+		assigned-clock-rates = <20000000>;
+		powerdown-gpios = <&gpio1 5 GPIO_ACTIVE_HIGH>;
+		DOVDD-supply = <&sw4_reg>;
+		AVDD-supply = <&reg_2v8>;
+		DVDD-supply = <&reg_1v5>;
+		status = "okay";
+
+		port {
+			camera2_ep: endpoint {
+				remote-endpoint = <&mipi_csi2_in_ep>;
+				clock-lanes = <0>;
+				data-lanes = <1 2>;
+			};
+		};
+	};
+};
+
+&i2c2 {
+	clock-frequency = <100000>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_i2c2>;
+	status = "okay";
+
+	camera@3c {
+		compatible = "ovti,ov5640";
+		reg = <0x3c>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_camera1_pwdn>, <&pinctrl_camera_rst>;
+		clocks = <&clk IMX8MQ_CLK_CLKO2>;
+		clock-names = "xclk";
+		assigned-clocks = <&clk IMX8MQ_CLK_CLKO2>;
+		assigned-clock-parents = <&clk IMX8MQ_SYS2_PLL_200M>;
+		assigned-clock-rates = <20000000>;
+		powerdown-gpios = <&gpio1 3 GPIO_ACTIVE_HIGH>;
+		DOVDD-supply = <&sw4_reg>;
+		AVDD-supply = <&reg_2v8>;
+		DVDD-supply = <&reg_1v5>;
+		status = "okay";
+
+		port {
+			camera1_ep: endpoint {
+				remote-endpoint = <&mipi_csi1_in_ep>;
+				clock-lanes = <0>;
+				data-lanes = <1 2>;
+			};
+		};
+	};
 };
 
 &lcdif {
 	status = "okay";
+};
+
+&mipi_csi1 {
+	status = "okay";
+
+	ports {
+		port@0 {
+			reg = <0>;
+
+			mipi_csi1_in_ep: endpoint {
+				remote-endpoint = <&camera1_ep>;
+				data-lanes = <1 2>;
+				bus-type = <MEDIA_BUS_TYPE_CSI2_DPHY>;
+			};
+		};
+	};
+};
+
+&mipi_csi2 {
+	status = "okay";
+
+	ports {
+		port@0 {
+			reg = <0>;
+
+			mipi_csi2_in_ep: endpoint {
+				remote-endpoint = <&camera2_ep>;
+				data-lanes = <1 2>;
+				bus-type = <4>;
+			};
+		};
+	};
 };
 
 &mipi_dsi {
@@ -532,9 +645,38 @@
 };
 
 &iomuxc {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_hog>;
+
+	pinctrl_hog: hoggrp {
+		fsl,pins = <
+			/* MCLK for cameras on both CSI1 and CSI2 */
+			MX8MQ_IOMUXC_GPIO1_IO15_CCMSRCGPCMIX_CLKO2	0x59
+		>;
+	};
+
 	pinctrl_buck2: vddarmgrp {
 		fsl,pins = <
 			MX8MQ_IOMUXC_GPIO1_IO13_GPIO1_IO13		0x19
+		>;
+	};
+
+	pinctrl_camera1_pwdn: camera1pwdngrp {
+		fsl,pins = <
+			MX8MQ_IOMUXC_GPIO1_IO03_GPIO1_IO3		0x19
+		>;
+	};
+
+	pinctrl_camera2_pwdn: camera2pwdngrp {
+		fsl,pins = <
+			MX8MQ_IOMUXC_GPIO1_IO05_GPIO1_IO5		0x19
+		>;
+	};
+
+	pinctrl_camera_rst: camerarstgrp {
+		fsl,pins = <
+			/* Reset PIN for cameras on both CSI1 and CSI2 */
+			MX8MQ_IOMUXC_GPIO1_IO06_GPIO1_IO6		0x19
 		>;
 	};
 
@@ -562,6 +704,13 @@
 		fsl,pins = <
 			MX8MQ_IOMUXC_I2C1_SCL_I2C1_SCL			0x4000007f
 			MX8MQ_IOMUXC_I2C1_SDA_I2C1_SDA			0x4000007f
+		>;
+	};
+
+	pinctrl_i2c2: i2c2grp {
+		fsl,pins = <
+			MX8MQ_IOMUXC_I2C2_SCL_I2C2_SCL			0x4000007f
+			MX8MQ_IOMUXC_I2C2_SDA_I2C2_SDA			0x4000007f
 		>;
 	};
 
