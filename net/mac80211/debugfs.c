@@ -9,6 +9,7 @@
 
 #include <linux/debugfs.h>
 #include <linux/rtnetlink.h>
+#include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include "ieee80211_i.h"
 #include "driver-ops.h"
@@ -596,17 +597,24 @@ static ssize_t queues_read(struct file *file, char __user *user_buf,
 {
 	struct ieee80211_local *local = file->private_data;
 	unsigned long flags;
-	char buf[IEEE80211_MAX_QUEUES * 20];
-	int q, res = 0;
+	char *buf;
+	int q, res = 0, ret;
+
+	buf = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
 
 	spin_lock_irqsave(&local->queue_stop_reason_lock, flags);
-	for (q = 0; q < local->hw.queues; q++)
-		res += sprintf(buf + res, "%02d: %#.8lx/%d\n", q,
-				local->queue_stop_reasons[q],
-				skb_queue_len(&local->pending[q]));
+	for (q = 0; q < local->hw.queues && res < PAGE_SIZE; q++)
+		res += scnprintf(buf + res, PAGE_SIZE - res,
+				 "%02d: %#.8lx/%d\n", q,
+				 local->queue_stop_reasons[q],
+				 skb_queue_len(&local->pending[q]));
 	spin_unlock_irqrestore(&local->queue_stop_reason_lock, flags);
 
-	return simple_read_from_buffer(user_buf, count, ppos, buf, res);
+	ret = simple_read_from_buffer(user_buf, count, ppos, buf, res);
+	kfree(buf);
+	return ret;
 }
 
 DEBUGFS_READONLY_FILE_OPS(queues);
