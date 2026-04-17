@@ -80,6 +80,20 @@ static const struct yogafan_config yoga_continuous_8bit_cfg = {
 	.paths = { "\\_SB.PCI0.LPC0.EC0.FANS", "\\_SB.PCI0.LPC0.EC0.FAN0" }
 };
 
+/* Yoga Slim Series (d=45mm) - Reduced inertia (J ∝ d²) */
+static const struct yogafan_config yoga_slim_cfg = {
+	.multiplier = 100, .fan_count = 1, .n_max = 0,
+	.r_max = 5500, .tau_ms = 900, .slew_time_s = 3, .stop_threshold = 50,
+	.paths = { "\\_SB.PCI0.LPC0.EC0.FANS", NULL }
+};
+
+/* ThinkPad L-Series / V580 (d=50mm) - Standard inertia */
+static const struct yogafan_config thinkpad_l_cfg = {
+	.multiplier = 100, .fan_count = 1, .n_max = 0,
+	.r_max = 5500, .tau_ms = 1000, .slew_time_s = 4, .stop_threshold = 50,
+	.paths = { "\\_SB.PCI0.LPC0.EC0.FAN0", "\\_SB.PCI0.LPC0.EC0.FAN1" }
+};
+
 /* 1.2 Dual-Fan Continuous (Gaming & Pro) */
 
 /* Legion 5 / GeekPro (d=60mm) - Gaming high inertia */
@@ -87,6 +101,118 @@ static const struct yogafan_config legion_5_cfg = {
 	.multiplier = 1, .fan_count = 2, .n_max = 0,
 	.r_max = 6500, .tau_ms = 1300, .slew_time_s = 5, .stop_threshold = 50,
 	.paths = { "\\_SB.PCI0.LPC0.EC0.FANS", "\\_SB.PCI0.LPC0.EC0.FA2S" }
+};
+
+/* Legion 7i / Yoga Pro 9i (d=65mm) - High inertia (Heavy blades) */
+static const struct yogafan_config legion_high_perf_cfg = {
+	.multiplier = 1, .fan_count = 2, .n_max = 0,
+	.r_max = 8000, .tau_ms = 1400, .slew_time_s = 6, .stop_threshold = 50,
+	.paths = { "\\_SB.PCI0.LPC0.EC0.FANS", "\\_SB.PCI0.LPC0.EC0.FA2S" }
+};
+
+/* LOQ Series (d=55mm) - Medium-high inertia */
+static const struct yogafan_config loq_cfg = {
+	.multiplier = 1, .fan_count = 2, .n_max = 0,
+	.r_max = 6500, .tau_ms = 1200, .slew_time_s = 5, .stop_threshold = 50,
+	.paths = { "\\_SB.PCI0.LPC0.EC0.FANS", "\\_SB.PCI0.LPC0.EC0.FA2S" }
+};
+
+/* Yoga Pro 7i Aura Edition (83KF) - Dual-fan 8-bit architecture (d=55mm) */
+static const struct yogafan_config yoga_aura_cfg = {
+	.multiplier = 100, .fan_count = 2, .n_max = 0,
+	.r_max = 6000, .tau_ms = 1100, .slew_time_s = 4, .stop_threshold = 50,
+	.paths = { "\\_SB.PC00.LPCB.EC0.FA1S", "\\_SB.PC00.LPCB.EC0.FA2S" }
+};
+
+/* Yoga 13 (d=40mm) - Dual small fans, low inertia */
+static const struct yogafan_config yoga13_continous_cfg = {
+	.multiplier = 100, .fan_count = 2, .n_max = 0,
+	.r_max = 5000, .tau_ms = 800, .slew_time_s = 3, .stop_threshold = 50,
+	.paths = { "\\_SB.PCI0.LPC0.EC0.FAN1", "\\_SB.PCI0.LPC0.EC0.FAN2" }
+};
+
+/* Standard Dual-Fan (d=50/55mm) - Baseline inertia (Reference J) */
+static const struct yogafan_config yoga_dual_8bit_cfg = {
+	.multiplier = 100, .fan_count = 2, .n_max = 0,
+	.r_max = 6000, .tau_ms = 1100, .slew_time_s = 4, .stop_threshold = 50,
+	.paths = { "\\_SB.PCI0.LPC0.EC0.FANS", "\\_SB.PCI0.LPC0.EC0.FA2S" }
+};
+
+/* 1.3 Triple-Fan Continuous */
+
+/* Legion 9i (d=70mm primary) - Massive inertia, triple assembly */
+static const struct yogafan_config legion_triple_16bit_cfg = {
+	.multiplier = 1, .fan_count = 3, .n_max = 0,
+	.r_max = 8000, .tau_ms = 1500, .slew_time_s = 6, .stop_threshold = 50,
+	.paths = { "\\_SB.PCI0.LPC0.EC0.FANS"
+		 , "\\_SB.PCI0.LPC0.EC0.FA2S"
+		 , "\\_SB.PCI0.LPC0.EC0.FA3S" }
+};
+
+//* --- 2. DISCRETE ESTIMATION PROFILES (Nmax > 0) --- */
+
+/* 2.1 Single-Fan Discrete */
+
+/* Legacy Performance (d=55mm) - Higher inertia (J ∝ d²) */
+static const struct yogafan_config ideapad_y580_discrete_cfg = {
+	.multiplier = 0, .fan_count = 1, .n_max = 35, .r_max = 4800,
+	.tau_ms = 1100, .slew_time_s = 4, .stop_threshold = 50,
+	.paths = { "\\_SB.PCI0.LPC0.EC0.FAN0", "\\_SB.PCI0.LPC0.EC0.FANS" }
+};
+
+/* Standard Legacy (d=50mm) - Baseline inertia (Reference J) */
+static const struct yogafan_config yoga_710_discrete_cfg = {
+	.multiplier = 0, .fan_count = 1, .n_max = 59, .r_max = 4500,
+	.tau_ms = 1000, .slew_time_s = 4, .stop_threshold = 50,
+	.paths = { "\\_SB.PCI0.LPC0.EC0.FAN0", NULL }
+};
+
+static const struct yogafan_config yoga_510_discrete_cfg = {
+	.multiplier = 0, .fan_count = 1, .n_max = 41, .r_max = 4500,
+	.tau_ms = 1000, .slew_time_s = 4, .stop_threshold = 50,
+	.paths = { "\\_SB.PCI0.LPC0.EC0.FAN0", NULL }
+};
+
+/* Slim Discrete Models (d=45mm) - Reduced inertia */
+static const struct yogafan_config ideapad_500s_discrete_cfg = {
+	.multiplier = 0, .fan_count = 1, .n_max = 44, .r_max = 5500,
+	.tau_ms = 900, .slew_time_s = 3, .stop_threshold = 50,
+	.paths = { "\\_SB.PCI0.LPC0.EC0.FAN0", NULL }
+};
+
+/* Standard Discrete (d=50mm) */
+static const struct yogafan_config yoga3_14_discrete_cfg = {
+	.multiplier = 0, .fan_count = 1, .n_max = 80, .r_max = 5000,
+	.tau_ms = 1000, .slew_time_s = 4, .stop_threshold = 50,
+	.paths = { "\\_SB.PCI0.LPC0.EC0.FAN0", "\\_SB.PCI0.LPC0.EC0.FANS" }
+};
+
+/* Ultra-portable (d=35mm) - Minimal inertia, fast response */
+static const struct yogafan_config yoga_11s_discrete_cfg = {
+	.multiplier = 0, .fan_count = 1, .n_max = 80, .r_max = 4500,
+	.tau_ms = 600, .slew_time_s = 2, .stop_threshold = 50,
+	.paths = { "\\_SB.PCI0.LPC0.EC0.FAN0", "\\_SB.PCI0.LPC0.EC0.FANS" }
+};
+
+/* Small Discrete (d=45mm) */
+static const struct yogafan_config yoga2_13_discrete_cfg = {
+	.multiplier = 0, .fan_count = 1, .n_max = 8, .r_max = 4200,
+	.tau_ms = 800, .slew_time_s = 3, .stop_threshold = 50,
+	.paths = { "\\_SB.PCI0.LPC0.EC0.FAN0", NULL }
+};
+
+/* Legacy U-Series / High-Res Discrete (d=40mm) - Small blade mass */
+static const struct yogafan_config legacy_u_discrete_cfg = {
+	.multiplier = 0, .fan_count = 1, .n_max = 768, .r_max = 5000,
+	.tau_ms = 800, .slew_time_s = 3, .stop_threshold = 50,
+	.paths = { "\\_SB.PCI0.LPC0.EC0.FAN0", NULL }
+};
+
+/* ThinkPad Discrete (d=50mm) */
+static const struct yogafan_config thinkpad_discrete_cfg = {
+	.multiplier = 0, .fan_count = 1, .n_max = 7,
+	.r_max = 5500, .tau_ms = 1000, .slew_time_s = 4, .stop_threshold = 50,
+	.paths = { "\\_SB.PCI0.LPC0.EC0.FAN0", "\\_SB.PCI0.LPC0.EC0.FANS" }
 };
 
 /*
@@ -260,7 +386,79 @@ static const struct hwmon_ops yoga_fan_hwmon_ops = {
 
 static const struct dmi_system_id yogafan_quirks[] = {
 /* --- 1. YOGA SERIES --- */
-{
+	{
+		.ident = "Lenovo Yoga Pro 9i (83DN)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "83DN")
+		},
+		.driver_data = (void *)&legion_high_perf_cfg, /* 16" Chassis - High Inertia */
+	},
+	{
+		.ident = "Lenovo Yoga Pro 9 (83CV) - Aura Edition",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "83CV")
+		},
+		.driver_data = (void *)&yoga_slim_cfg,
+	},
+	{
+		.ident = "Lenovo Yoga Pro 9i (83E2 - Alt)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "83E2")
+		},
+		.driver_data = (void *)&yoga_dual_8bit_cfg,
+	},
+	{
+		.ident = "Lenovo Yoga Pro 7i Aura (83KF)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "83KF")
+		},
+		.driver_data = (void *)&yoga_aura_cfg, /* Aura Edition - Modern PC00 Path */
+	},
+	{
+		.ident = "Lenovo Yoga Pro (Legacy ID)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Yoga Pro")
+		},
+		.driver_data = (void *)&legion_high_perf_cfg,
+	},
+	{
+		.ident = "Lenovo Yoga Slim 7 (82A2)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "82A2")
+		},
+		.driver_data = (void *)&yoga_slim_cfg,
+	},
+	{
+		.ident = "Lenovo Yoga Slim 7 (82A3)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "82A3")
+		},
+		.driver_data = (void *)&yoga_slim_cfg,
+	},
+	{
+		.ident = "Lenovo Yoga Slim 7 Pro / ProX",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Yoga Slim 7 Pro")
+		},
+		.driver_data = (void *)&yoga_dual_8bit_cfg,
+	},
+	{
+		.ident = "Lenovo Yoga Slim 7 Carbon",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Yoga Slim 7 Carbon")
+		},
+		.driver_data = (void *)&yoga_slim_cfg,
+	},
+	{
 		.ident = "Lenovo Yoga 14cACN (82N7)",
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
@@ -268,8 +466,153 @@ static const struct dmi_system_id yogafan_quirks[] = {
 		},
 		.driver_data = (void *)&yoga_continuous_8bit_cfg,
 	},
+	{
+		.ident = "Lenovo Yoga 14s",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Yoga 14s")
+		},
+		.driver_data = (void *)&yoga_continuous_8bit_cfg,
+	},
+	{
+		.ident = "Lenovo Yoga 710 (80V2)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "80V2")
+		},
+		.driver_data = (void *)&yoga_710_discrete_cfg,
+	},
+	{
+		.ident = "Lenovo Yoga 720 (81C3)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "81C3")
+		},
+		.driver_data = (void *)&yoga_710_discrete_cfg,
+	},
+	{
+		.ident = "Lenovo Yoga 710/720 (String Match)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Yoga 710")
+		},
+		.driver_data = (void *)&yoga_710_discrete_cfg,
+	},
+	{
+		.ident = "Lenovo Yoga 510 (80S7)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "80S7")
+		},
+		.driver_data = (void *)&yoga_510_discrete_cfg,
+	},
+	{
+		.ident = "Lenovo Yoga 510 (String Match)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Yoga 510")
+		},
+		.driver_data = (void *)&yoga_510_discrete_cfg,
+	},
+	{
+		.ident = "Lenovo Yoga 3 14 (80JH)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "80JH")
+		},
+		.driver_data = (void *)&yoga3_14_discrete_cfg,
+	},
+	{
+		.ident = "Lenovo Yoga 2 13 (20344)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "20344")
+		},
+		.driver_data = (void *)&yoga2_13_discrete_cfg,
+	},
+	{
+		.ident = "Lenovo Yoga 13 (20191)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "20191") },
+		.driver_data = (void *)&yoga13_continous_cfg,
+	},
+	{
+		.ident = "Lenovo Yoga 11s (Legacy)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Yoga 11s")
+		},
+		.driver_data = (void *)&yoga_11s_discrete_cfg,
+	},
+	{
+		.ident = "Lenovo Yoga Aura Edition",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Aura Edition")
+		},
+		.driver_data = (void *)&yoga_continuous_8bit_cfg,
+	},
+
+/* --- 2. XIAOXIN SERIES (PRC) --- */
+	{
+		.ident = "Lenovo Xiaoxin Pro (83JC)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "83JC")
+		},
+		.driver_data = (void *)&yoga3_14_discrete_cfg,
+	},
+	{
+		.ident = "Lenovo Xiaoxin Pro (83DX)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "83DX")
+		},
+		.driver_data = (void *)&yoga3_14_discrete_cfg,
+	},
+	{
+		.ident = "Lenovo Xiaoxin Pro (83FD)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "83FD")
+		},
+		.driver_data = (void *)&yoga_continuous_8bit_cfg,
+	},
+	{
+		.ident = "Lenovo Xiaoxin Pro (83DE)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "83DE")
+		},
+		.driver_data = (void *)&yoga_continuous_8bit_cfg,
+	},
 
 /* --- 3. LEGION SERIES --- */
+	{
+		.ident = "Lenovo Legion 9i / Extreme",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Legion 9")
+		},
+		.driver_data = (void *)&legion_triple_16bit_cfg,
+	},
+	{
+		.ident = "Lenovo Legion High Perf (P-Series)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Legion P")
+		},
+		.driver_data = (void *)&legion_high_perf_cfg,
+	},
+	{
+		.ident = "Lenovo Legion 7i (82WQ)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "82WQ")
+		},
+		.driver_data = (void *)&legion_high_perf_cfg,
+	},
 	{
 		.ident = "Lenovo Legion 5 (82JW)",
 		.matches = {
@@ -277,6 +620,40 @@ static const struct dmi_system_id yogafan_quirks[] = {
 			DMI_MATCH(DMI_PRODUCT_NAME, "82JW")
 		},
 		.driver_data = (void *)&legion_5_cfg,
+	},
+	{
+		.ident = "Lenovo Legion 5 (82JU)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "82JU")
+		},
+		.driver_data = (void *)&legion_5_cfg,
+	},
+	{
+		.ident = "Lenovo GeekPro G5000/6000",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_FAMILY, "GeekPro")
+		},
+		.driver_data = (void *)&legion_5_cfg,
+	},
+
+/* --- 4. LOQ SERIES --- */
+	{
+		.ident = "Lenovo LOQ (82XV)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "82XV")
+		},
+		.driver_data = (void *)&loq_cfg,
+	},
+	{
+		.ident = "Lenovo LOQ (83DV)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "83DV")
+		},
+		.driver_data = (void *)&loq_cfg,
 	},
 
 /* --- 5. IDEAPAD SERIES --- */
@@ -287,6 +664,228 @@ static const struct dmi_system_id yogafan_quirks[] = {
 			DMI_MATCH(DMI_PRODUCT_NAME, "81YM")
 		},
 		.driver_data = (void *)&yoga_continuous_8bit_cfg,
+	},
+	{
+		.ident = "Lenovo IdeaPad 5 (82FG)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "82FG")
+
+		},
+		.driver_data = (void *)&yoga_continuous_8bit_cfg,
+	},
+	{
+		.ident = "Lenovo IdeaPad Y580",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "IdeaPad Y580")
+		},
+		.driver_data = (void *)&ideapad_y580_discrete_cfg,
+	},
+	{
+		.ident = "Lenovo IdeaPad Y580 (Legacy Match)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Lenovo IdeaPad Y580")
+		},
+		.driver_data = (void *)&ideapad_y580_discrete_cfg,
+	},
+	{
+		.ident = "Lenovo Ideapad 500S-13 (80SR)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "80SR")
+		},
+		.driver_data = (void *)&ideapad_500s_discrete_cfg,
+	},
+	{
+		.ident = "Lenovo Ideapad 500S-13 (80SX)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "80SX")
+		},
+		.driver_data = (void *)&ideapad_500s_discrete_cfg,
+	},
+	{
+		.ident = "Lenovo Ideapad 500S (String Match)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Ideapad 500S")
+		},
+		.driver_data = (void *)&ideapad_500s_discrete_cfg,
+	},
+	{
+		.ident = "Lenovo Ideapad 510S (80TK)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "80TK")
+		},
+		.driver_data = (void *)&yoga_510_discrete_cfg,
+	},
+	{
+		.ident = "Lenovo Ideapad 510s (String Match)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Ideapad 510s")
+		},
+		.driver_data = (void *)&yoga_510_discrete_cfg,
+	},
+	{
+		.ident = "Lenovo Ideapad 710S (80S9)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "80S9")
+		},
+		.driver_data = (void *)&yoga13_continous_cfg,
+	},
+	{
+		.ident = "Lenovo Ideapad 710S (String Match)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Ideapad 710S")
+		},
+		.driver_data = (void *)&yoga13_continous_cfg,
+	},
+	{
+		.ident = "Lenovo IdeaPad Pro 5 (Modern)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "IdeaPad Pro 5")
+		},
+		.driver_data = (void *)&yoga_dual_8bit_cfg,
+	},
+
+/* --- 6. FLEX SERIES --- */
+	{
+		.ident = "Lenovo Flex 5 (81X1)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "81X1")
+
+		},
+		.driver_data = (void *)&yoga_continuous_8bit_cfg,
+	},
+
+/* --- 7. THINKPAD SERIES --- */
+	{
+		.ident = "ThinkPad 13 (20GJ/20GK)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "ThinkPad 13")
+
+		},
+		.driver_data = (void *)&thinkpad_discrete_cfg,
+	},
+	{
+		.ident = "ThinkPad Helix (3698)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "3698")
+		},
+		.driver_data = (void *)&thinkpad_discrete_cfg,
+	},
+	{
+		.ident = "ThinkPad Classic (Generic T/X/Edge)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "ThinkPad")
+		},
+		.driver_data = (void *)&thinkpad_discrete_cfg,
+	},
+	{
+		.ident = "ThinkPad L-Series (Generic Match)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "ThinkPad L")
+		},
+		.driver_data = (void *)&thinkpad_l_cfg,
+	},
+	{
+		.ident = "ThinkPad x121e (3051)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "3051")
+		},
+		.driver_data = (void *)&yoga_11s_discrete_cfg,
+	},
+
+/* --- 8. THINKBOOK SERIES --- */
+	{
+		.ident = "Lenovo ThinkBook 14 G7+ (83GD)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "83GD")
+		},
+		/* Force single profile if WMI is off */
+		.driver_data = (void *)&yoga_continuous_8bit_cfg,
+	},
+	{
+		.ident = "Lenovo ThinkBook 14/16 Plus/p",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "ThinkBook 1")
+		},
+		.driver_data = (void *)&yoga_dual_8bit_cfg,
+	},
+
+/* --- 9. V-SERIES --- */
+	{
+		.ident = "Lenovo V330-15IKB (81AX)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "81AX")
+		},
+		.driver_data = (void *)&thinkpad_l_cfg,
+	},
+	{
+		.ident = "Lenovo V330 (String Match)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "V330-15IKB")
+		},
+		.driver_data = (void *)&thinkpad_l_cfg,
+	},
+	{
+		.ident = "Lenovo V580 (String Match)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "V580")
+		},
+		.driver_data = (void *)&thinkpad_l_cfg,
+	},
+	{
+		.ident = "Lenovo Edge E520 / V580 (20147)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "20147")
+		},
+		.driver_data = (void *)&thinkpad_l_cfg,
+	},
+
+/* --- 10. U-SERIES (LEGACY) --- */
+	{
+		.ident = "Lenovo U330p/U430p",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Lenovo u330p")
+		},
+		.driver_data = (void *)&legacy_u_discrete_cfg,
+	},
+	{
+		.ident = "Lenovo U31-70 (80KU)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "80KU")
+		},
+		.driver_data = (void *)&ideapad_500s_discrete_cfg,
+	},
+	{
+		.ident = "Lenovo U31-70 (String Match)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "U31-70")
+		},
+		.driver_data = (void *)&ideapad_500s_discrete_cfg,
 	},
 	{ }
 };

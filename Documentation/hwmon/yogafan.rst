@@ -17,13 +17,37 @@ between 2011 and 2026. Hardware is categorized by the following
 series:
 
 * 1. YOGA SERIES (8-bit Continuous / Discrete Logic)
+  - Yoga Pro 7 (83E2)
+  - Yoga Slim 7, 7i, 7 Pro, 7 Carbon, 7 ProX
   - Yoga 14cACN (82N7), 14s, 13
+  - Yoga 710, 720, 510, 5 Pro
+  - Yoga 3 14, Yoga 2 13, Yoga 11s (Discrete Step Logic)
 
 * 2. IDEAPAD SERIES (8-bit Continuous / Discrete Logic)
-  - IdeaPad 5, 5i (81YM)
+  - IdeaPad 5, 5i, 5 Pro (81YM, 82FG)
+  - IdeaPad 3, 3i (Modern 8-bit variants)
+  - IdeaPad 500S, 510S, 710S
+  - IdeaPad Y580 (Discrete Step Logic)
 
-* 3. Legion SERIES (8-bit Continuous / 16-bit Logic)
-  - Legion 5 (82JW)
+* 3. FLEX SERIES (8-bit Continuous)
+  - Flex 5, 5i (81X1), Flex 6
+
+* 4. THINKPAD SERIES (8-bit Continuous / Discrete Logic)
+  - ThinkPad L-Series (L380, L390, L530)
+  - ThinkPad T/X/Edge Series (T430s, T440s, T540p, X220, X230)
+  - ThinkPad 13, Helix, x121e
+
+* 5. THINKBOOK SERIES (8-bit Continuous)
+  - ThinkBook 14, 16 (Plus, p series)
+  - ThinkBook 13s, 14s (83AK)
+
+* 6. V-SERIES (8-bit Continuous)
+  - V330-14, V330-15IKB (81AX)
+  - V580, V580c
+
+* 7. U-SERIES & LEGACY (Discrete Logic)
+  - U330p, U430p (High-resolution discrete)
+  - U31-70, U41-70, U160
 
     Prefix: 'yogafan'
 
@@ -244,8 +268,53 @@ Which gives the table here:
 	ID   FAMILY       OFF  PATH  WID NMAX RMAX MULT Tms SLW NOTES
 	==== ============ === ====== === ==== ==== ==== === === =============
 	82N7 Yoga 14cACN  06  .FANS  8b  0    5500 100  1k   4   **[REF]**
+	83E2 Yoga Pro 7   FE  .FANS  8b  0    6000 100  1.1k 4   Dual Fan
+	83CV Slim 7 (14") 06  .FANS  8b  0    5500 100  0.9k 3   Low Inertia
+	82A2 Slim 7       06  .FANS  8b  0    5500 100  0.9k 3   Low Inertia
+	82A3 Slim 7       06  .FANS  8b  0    5500 100  0.9k 3   Low Inertia
+	80V2 Yoga 710     06  .FAN0  8b  59   4500 0    1k   4   Discrete
+	81C3 Yoga 720     06  .FAN0  8b  59   4500 0    1k   4   Discrete
+	80S7 Yoga 510     06  .FAN0  8b  41   4500 0    1k   4   Discrete
+	80JH Yoga 3 (P1)  06  .FAN0  8b  80   5000 0    1k   4   Discrete
+	80JH Yoga 3 (P2)  06  .FANS  8b  80   5000 0    1k   4   Discrete
+	2034 Yoga 2 13    AB  .FANS  8b  8    4200 0    0.8k 3   Small Fan
+	2019 Yoga 13 (F1) F2  .FAN1  8b  0    5000 100  0.8k 3   Dual Small
+	2191 Yoga 13 (F2) F3  .FAN2  8b  0    5000 100  0.8k 3   Dual Small
+	Leg. 11s (P1)     56  .FAN0  8b  80   4500 0    0.6k 2   Ultra-port
+	Leg. 11s (P2)     56  .FANS  8b  80   4500 0    0.6k 2   Ultra-port
 	81YM IdeaPad 5    06  .FAN0  8b  0    4500 100  1k   4   Standard
-	82JW Legion 5     06  .FANS  8b  0    6500 1    1.3k 5   Gaming dual
+	82FG IdeaPad 5i   06  .FAN0  8b  0    4500 100  1k   4   Standard
+	80SR 500S-13      06  .FAN0  8b  44   5500 0    0.9k 3   Slim
+	80SX 500S-13      06  .FAN0  8b  44   5500 0    0.9k 3   Slim
+	80S1 500S-14      95  .FAN0  8b  116  5000 0    1k   4   Standard
+	80TK 510S         06  .FAN0  8b  41   5100 0    1k   4   Standard
+	80S9 710S         95  .FAN1  8b  0    5200 100  0.9k 3   Slim
+	81X1 Flex 5       06  .FAN0  8b  0    4500 100  1k   4   Standard
+	83AK ThinkBook G7 06  .FAN0  8b  0    5400 100  1k   4   Modern 8b
+	20GJ ThinkPad 13  85  .FAN0  8b  7    5500 0    0.8k 3   Compact
+	20GK ThinkPad 13  85  .FAN0  8b  7    5500 0    0.8k 3   Compact
+	3698 Helix        2F  .FANS  8b  7    4500 0    0.7  2   Hybrid
+	20M7 L380         95  .FAN1  8b  0    4600 100  1k   4   Standard
+	20M8 L380         95  .FAN1  8b  0    4600 100  1k   4   Standard
+	20NR L390         95  .FAN0  8b  0    5500 100  1k   4   Standard
+	20NS L390         95  .FAN0  8b  0    5500 100  1k   4   Standard
+	2464 L530         95  .FAN0  8b  0    4400 100  1.1k 4   Standard
+	2468 L530         95  .FAN0  8b  0    4400 100  1.1k 4   Standard
+	2356 T430s        2F  .FANS  8b  7    5000 0    1k   4   Discrete
+	20AQ T440s        4E  .FANS  8b  7    5200 0    1k   4   Discrete
+	20AR T440s        4E  .FANS  8b  7    5200 0    1k   4   Discrete
+	20BE T540p        2F  .FANS  8b  7    5500 0    1.1k 4   High Mass
+	20BF T540p        2F  .FANS  8b  7    5500 0    1.1k 4   High Mass
+	3051 x121e        2F  .FANS  8b  7    4500 0    0.6k 2   Small Fan
+	4290 x220i        2F  .FANS  8b  7    5000 0    0.8k 3   Compact
+	2324 x230         2F  .FANS  8b  7    5000 0    0.8k 3   Compact
+	2325 x230         2F  .FANS  8b  7    5000 0    0.8k 3   Compact
+	81AX V330-15IKB   95  .FAN0  8b  0    5100 100  1k   4   Standard
+	80KU U31-70       06  .FAN0  8b  44   5500 0    0.9k 3   Slim
+	80S1 U41-70       95  .FAN0  8b  116  5000 0    1k   4   Standard
+	U330p U330p       92  .FAN0  16b 768  5000 0    0.8k 3   Multi-Res
+	U430p U430p       92  .FAN0  16b 768  5000 0    0.8k 3   Multi-Res
+	Leg. U160         95  .FAN0  8b  64   4500 0    0.6  2   Small Fan
 	==== ============ === ===== === ==== ==== ==== === === =============
 
 
