@@ -114,22 +114,6 @@ struct tcg_pcr_event2_head {
 	struct tpm_digest digests[];
 } __packed;
 
-struct tcg_algorithm_size {
-	u16 algorithm_id;
-	u16 algorithm_size;
-};
-
-struct tcg_algorithm_info {
-	u8 signature[16];
-	u32 platform_class;
-	u8 spec_version_minor;
-	u8 spec_version_major;
-	u8 spec_errata;
-	u8 uintn_size;
-	u32 number_of_algorithms;
-	struct tcg_algorithm_size digest_sizes[];
-};
-
 #ifndef TPM_MEMREMAP
 static inline void *TPM_MEMREMAP(unsigned long start, size_t size)
 {
