@@ -239,7 +239,18 @@ void hsr_del_port(struct hsr_port *port)
 	if (port != master) {
 		netdev_update_features(master->dev);
 		dev_set_mtu(master->dev, hsr_get_max_mtu(hsr));
-		netdev_rx_handler_unregister(port->dev);
+		/* Open-code netdev_rx_handler_unregister() without the
+		 * synchronize_net() step: holding rtnl_mutex across the
+		 * grace-period wait stalls other rtnl_mutex waiters long
+		 * enough to trip the hung-task detector under load.
+		 * Skipping synchronize_net() is safe because the port is
+		 * freed via kfree_rcu() below (so rx_handler_data memory
+		 * outlives any in-flight reader), and hsr_handle_frame()
+		 * re-validates rx_handler via hsr_port_get_rcu() before
+		 * dereferencing rx_handler_data.
+		 */
+		RCU_INIT_POINTER(port->dev->rx_handler, NULL);
+		RCU_INIT_POINTER(port->dev->rx_handler_data, NULL);
 		if (!port->hsr->fwd_offloaded)
 			dev_set_promiscuity(port->dev, -1);
 		netdev_upper_dev_unlink(port->dev, master->dev);
