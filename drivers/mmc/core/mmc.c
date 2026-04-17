@@ -1371,8 +1371,12 @@ static void mmc_select_driver_type(struct mmc_card *card)
 
 	card->drive_strength = drive_strength;
 
-	if (drv_type)
+	if (fixed_drv_type >= 0) {
+		if (drive_strength)
+			mmc_set_driver_type(card->host, drive_strength);
+	} else if (drv_type) {
 		mmc_set_driver_type(card->host, drv_type);
+	}
 }
 
 static int mmc_select_hs400es(struct mmc_card *card)
