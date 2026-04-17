@@ -1090,14 +1090,9 @@ static union recv_frame *recvframe_defrag(struct adapter *adapter,
 	pfhdr = &prframe->u.hdr;
 	list_del_init(&(prframe->u.list));
 
-	if (curfragnum != pfhdr->attrib.frag_num) {
-		/* the first fragment number must be 0 */
-		/* free the whole queue */
-		rtw_free_recvframe(prframe, pfree_recv_queue);
-		rtw_free_recvframe_queue(defrag_q, pfree_recv_queue);
-
-		return NULL;
-	}
+	/* the first fragment number must be 0 */
+	if (curfragnum != pfhdr->attrib.frag_num)
+		goto out_err;
 
 	curfragnum++;
 
@@ -1112,13 +1107,9 @@ static union recv_frame *recvframe_defrag(struct adapter *adapter,
 
 		/* check the fragment sequence  (2nd ~n fragment frame) */
 
-		if (curfragnum != pnfhdr->attrib.frag_num) {
-			/* the fragment number must be increasing  (after decache) */
-			/* release the defrag_q & prframe */
-			rtw_free_recvframe(prframe, pfree_recv_queue);
-			rtw_free_recvframe_queue(defrag_q, pfree_recv_queue);
-			return NULL;
-		}
+		/* the fragment number must be increasing  (after decache) */
+		if (curfragnum != pnfhdr->attrib.frag_num)
+			goto out_err;
 
 		curfragnum++;
 
@@ -1127,12 +1118,17 @@ static union recv_frame *recvframe_defrag(struct adapter *adapter,
 
 		wlanhdr_offset = pnfhdr->attrib.hdrlen + pnfhdr->attrib.iv_len;
 
-		recvframe_pull(pnextrframe, wlanhdr_offset);
+		if (!recvframe_pull(pnextrframe, wlanhdr_offset))
+			goto out_err;
 
 		/* append  to first fragment frame's tail (if privacy frame, pull the ICV) */
-		recvframe_pull_tail(prframe, pfhdr->attrib.icv_len);
+		if (!recvframe_pull_tail(prframe, pfhdr->attrib.icv_len))
+			goto out_err;
 
-		/* memcpy */
+		/* Verify the receiving buffer has enough space for the fragment */
+		if (pnfhdr->len > pfhdr->rx_end - pfhdr->rx_tail)
+			goto out_err;
+
 		memcpy(pfhdr->rx_tail, pnfhdr->rx_data, pnfhdr->len);
 
 		recvframe_put(prframe, pnfhdr->len);
@@ -1146,6 +1142,11 @@ static union recv_frame *recvframe_defrag(struct adapter *adapter,
 	rtw_free_recvframe_queue(defrag_q, pfree_recv_queue);
 
 	return prframe;
+
+out_err:
+	rtw_free_recvframe(prframe, pfree_recv_queue);
+	rtw_free_recvframe_queue(defrag_q, pfree_recv_queue);
+	return NULL;
 }
 
 /* check if need to defrag, if needed queue the frame to defrag_q */
