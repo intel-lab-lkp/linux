@@ -2936,6 +2936,14 @@ static void blk_mq_dispatch_list(struct rq_list *rqs, bool from_sched)
 	*rqs = requeue_list;
 	trace_block_unplug(this_hctx->queue, depth, !from_sched);
 
+	/*
+	 * When called from schedule(), prevent preemption and interrupts between
+	 * ref_get and ref_put. This ensures percpu_ref_get() and percpu_ref_put()
+	 * are atomic with respect to context switches, avoiding a deadlock with
+	 * blk_mq_freeze_queue where a blocked task holds a percpu_ref reference.
+	 */
+	if (from_sched)
+		local_irq_disable();
 	percpu_ref_get(&this_hctx->queue->q_usage_counter);
 	/* passthrough requests should never be issued to the I/O scheduler */
 	if (is_passthrough) {
@@ -2951,6 +2959,8 @@ static void blk_mq_dispatch_list(struct rq_list *rqs, bool from_sched)
 		blk_mq_insert_requests(this_hctx, this_ctx, &list, from_sched);
 	}
 	percpu_ref_put(&this_hctx->queue->q_usage_counter);
+	if (from_sched)
+		local_irq_enable();
 }
 
 static void blk_mq_dispatch_multiple_queue_requests(struct rq_list *rqs)
