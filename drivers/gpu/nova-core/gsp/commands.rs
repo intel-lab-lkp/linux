@@ -23,6 +23,7 @@ use crate::{
         cmdq::{
             Cmdq,
             CommandToGsp,
+            GspRpcError,
             MessageFromGsp,
             NoReply, //
         },
@@ -169,8 +170,8 @@ pub(crate) fn wait_gsp_init_done(cmdq: &Cmdq) -> Result {
     loop {
         match cmdq.receive_msg::<GspInitDone>(Cmdq::RECEIVE_TIMEOUT) {
             Ok(_) => break Ok(()),
-            Err(ERANGE) => continue,
-            Err(e) => break Err(e),
+            Err(GspRpcError::Transport(ERANGE)) => continue,
+            Err(e) => break Err(e.into()),
         }
     }
 }
@@ -234,6 +235,6 @@ impl GetGspStaticInfoReply {
 }
 
 /// Send the [`GetGspInfo`] command and awaits for its reply.
-pub(crate) fn get_gsp_info(cmdq: &Cmdq, bar: &Bar0) -> Result<GetGspStaticInfoReply> {
+pub(crate) fn get_gsp_info(cmdq: &Cmdq, bar: &Bar0) -> Result<GetGspStaticInfoReply, GspRpcError> {
     cmdq.send_command(bar, GetGspStaticInfo)
 }

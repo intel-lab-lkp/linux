@@ -41,6 +41,7 @@ use crate::{
     gsp::{
         fw::{
             GspMsgElement,
+            GspMsgRmError,
             MsgFunction,
             MsgqRxHeader,
             MsgqTxHeader,
@@ -54,6 +55,24 @@ use crate::{
     regs,
     sbuffer::SBufferIter, //
 };
+
+/// Error returned by GSP RPC operations.
+#[derive(Debug)]
+pub(crate) enum GspRpcError {
+    /// The command transport or reply decoding failed.
+    Transport(Error),
+    /// The GSP-RM RPC returned an RM-specific error status.
+    Rm(GspMsgRmError),
+}
+
+impl From<GspRpcError> for Error {
+    fn from(err: GspRpcError) -> Self {
+        match err {
+            GspRpcError::Transport(err) => err,
+            GspRpcError::Rm(status) => status.into(),
+        }
+    }
+}
 
 /// Marker type representing the absence of a reply for a command. Commands using this as their
 /// reply type are sent using [`Cmdq::send_command_no_wait`].
@@ -547,13 +566,14 @@ impl Cmdq {
     ///
     /// # Errors
     ///
-    /// - `ETIMEDOUT` if space does not become available to send the command, or if the reply is
-    ///   not received within the timeout.
-    /// - `EIO` if the variable payload requested by the command has not been entirely
+    /// - `Transport(ETIMEDOUT)` if space does not become available to send the command, or if the
+    ///   reply is not received within the timeout.
+    /// - `Transport(EIO)` if the variable payload requested by the command has not been entirely
     ///   written to by its [`CommandToGsp::init_variable_payload`] method.
+    /// - `Rm(status)` if GSP-RM returned an error for this RPC.
     ///
-    /// Error codes returned by the command and reply initializers are propagated as-is.
-    pub(crate) fn send_command<M>(&self, bar: &Bar0, command: M) -> Result<M::Reply>
+    /// Error codes returned by the command and reply initializers are propagated as `Transport`.
+    pub(crate) fn send_command<M>(&self, bar: &Bar0, command: M) -> Result<M::Reply, GspRpcError>
     where
         M: CommandToGsp,
         M::Reply: MessageFromGsp,
@@ -561,12 +581,14 @@ impl Cmdq {
         Error: From<<M::Reply as MessageFromGsp>::InitError>,
     {
         let mut inner = self.inner.lock();
-        inner.send_command(bar, command)?;
+        inner
+            .send_command(bar, command)
+            .map_err(GspRpcError::Transport)?;
 
         loop {
             match inner.receive_msg::<M::Reply>(Self::RECEIVE_TIMEOUT) {
                 Ok(reply) => break Ok(reply),
-                Err(ERANGE) => continue,
+                Err(GspRpcError::Transport(ERANGE)) => continue,
                 Err(e) => break Err(e),
             }
         }
@@ -592,7 +614,7 @@ impl Cmdq {
     /// Receive a message from the GSP.
     ///
     /// See [`CmdqInner::receive_msg`] for details.
-    pub(crate) fn receive_msg<M: MessageFromGsp>(&self, timeout: Delta) -> Result<M>
+    pub(crate) fn receive_msg<M: MessageFromGsp>(&self, timeout: Delta) -> Result<M, GspRpcError>
     where
         // This allows all error types, including `Infallible`, to be used for `M::InitError`.
         Error: From<M::InitError>,
@@ -801,52 +823,68 @@ impl CmdqInner {
     /// Receive a message from the GSP.
     ///
     /// The expected message type is specified using the `M` generic parameter. If the pending
-    /// message has a different function code, `ERANGE` is returned and the message is consumed.
+    /// message has a different function code, `Transport(ERANGE)` is returned and the message is
+    /// consumed.
     ///
     /// The read pointer is always advanced past the message, regardless of whether it matched.
     ///
     /// # Errors
     ///
-    /// - `ETIMEDOUT` if `timeout` has elapsed before any message becomes available.
-    /// - `EIO` if there was some inconsistency (e.g. message shorter than advertised) on the
-    ///   message queue.
-    /// - `EINVAL` if the function code of the message was not recognized.
-    /// - `ERANGE` if the message had a recognized but non-matching function code.
+    /// - `Transport(ETIMEDOUT)` if `timeout` has elapsed before any message becomes available.
+    /// - `Transport(EIO)` if there was some inconsistency (e.g. message shorter than advertised)
+    ///   on the message queue.
+    /// - `Transport(EINVAL)` if the function code of the message was not recognized.
+    /// - `Transport(ERANGE)` if the message had a recognized but non-matching function code.
+    /// - `Rm(status)` if GSP-RM returned an error for this RPC.
     ///
-    /// Error codes returned by [`MessageFromGsp::read`] are propagated as-is.
-    fn receive_msg<M: MessageFromGsp>(&mut self, timeout: Delta) -> Result<M>
+    /// Error codes returned by [`MessageFromGsp::read`] are propagated as `Transport`.
+    fn receive_msg<M: MessageFromGsp>(&mut self, timeout: Delta) -> Result<M, GspRpcError>
     where
         // This allows all error types, including `Infallible`, to be used for `M::InitError`.
         Error: From<M::InitError>,
     {
-        let message = self.wait_for_msg(timeout)?;
-        let function = message.header.function().map_err(|_| EINVAL)?;
+        let message = self.wait_for_msg(timeout).map_err(GspRpcError::Transport)?;
+        let function = message
+            .header
+            .function()
+            .map_err(|_| GspRpcError::Transport(EINVAL))?;
 
         // Extract the message. Store the result as we want to advance the read pointer even in
         // case of failure.
-        let result = if function == M::FUNCTION {
-            let (cmd, contents_1) = M::Message::from_bytes_prefix(message.contents.0).ok_or(EIO)?;
+        let result = (|| -> Result<M, GspRpcError> {
+            message
+                .header
+                .status()
+                .map_err(GspRpcError::Transport)?
+                .log_if_warning(&self.dev, function)
+                .map_err(GspRpcError::Rm)?;
+
+            if function != M::FUNCTION {
+                return Err(GspRpcError::Transport(ERANGE));
+            }
+
+            let (cmd, contents_1) = M::Message::from_bytes_prefix(message.contents.0)
+                .ok_or(GspRpcError::Transport(EIO))?;
             let mut sbuffer = SBufferIter::new_reader([contents_1, message.contents.1]);
 
-            M::read(cmd, &mut sbuffer)
-                .map_err(|e| e.into())
-                .inspect(|_| {
-                    if !sbuffer.is_empty() {
-                        dev_warn!(
-                            &self.dev,
-                            "GSP message {:?} has unprocessed data\n",
-                            function
-                        );
-                    }
-                })
-        } else {
-            Err(ERANGE)
-        };
+            let msg = M::read(cmd, &mut sbuffer).map_err(|e| GspRpcError::Transport(e.into()))?;
+
+            if !sbuffer.is_empty() {
+                dev_warn!(
+                    &self.dev,
+                    "GSP message {:?} has unprocessed data\n",
+                    function
+                );
+            }
+
+            Ok(msg)
+        })();
 
         // Advance the read pointer past this message.
-        self.gsp_mem.advance_cpu_read_ptr(u32::try_from(
-            message.header.length().div_ceil(GSP_PAGE_SIZE),
-        )?);
+        self.gsp_mem.advance_cpu_read_ptr(
+            u32::try_from(message.header.length().div_ceil(GSP_PAGE_SIZE))
+                .map_err(|_| GspRpcError::Transport(EINVAL))?,
+        );
 
         result
     }

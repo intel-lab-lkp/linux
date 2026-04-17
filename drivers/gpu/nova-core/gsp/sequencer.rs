@@ -29,6 +29,7 @@ use crate::{
     gsp::{
         cmdq::{
             Cmdq,
+            GspRpcError,
             MessageFromGsp, //
         },
         fw,
@@ -360,8 +361,8 @@ impl<'a> GspSequencer<'a> {
         let seq_info = loop {
             match cmdq.receive_msg::<GspSequence>(Cmdq::RECEIVE_TIMEOUT) {
                 Ok(seq_info) => break seq_info,
-                Err(ERANGE) => continue,
-                Err(e) => return Err(e),
+                Err(GspRpcError::Transport(ERANGE)) => continue,
+                Err(e) => return Err(e.into()),
             }
         };
 
