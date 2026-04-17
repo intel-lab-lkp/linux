@@ -10,4 +10,6 @@
 #define R_TEXT32	R_X86_64_PC32
 #define R_TEXT64	R_X86_64_PC32
 
+#define ARCH_HAS_PREFIX_SYMBOLS 1
+
 #endif /* _OBJTOOL_ARCH_ELF */

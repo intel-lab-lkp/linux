@@ -20,6 +20,7 @@
 #include <linux/stringify.h>
 #include <linux/string.h>
 #include <linux/jhash.h>
+#include <linux/kconfig.h>
 
 #define sizeof_field(TYPE, MEMBER) sizeof((((TYPE *)0)->MEMBER))
 
@@ -213,6 +214,98 @@ static int read_sym_checksums(struct elf *elf)
 	return 0;
 }
 
+/*
+ * For non-x86, detect the offset from the function entry point to its
+ * __patchable_function_entries (PFE) relocation target.  x86 doesn't need this,
+ * it clones the __cfi/__pfx symbol instead.
+ *
+ * offset < 0 (before function entry):
+ *
+ *    CONFIG_DYNAMIC_FTRACE_WITH_CALL_OPS (arm64)
+ *
+ * offset == 0 (at function entry):
+ *
+ *    CONFIG_DYNAMIC_FTRACE_WITH_ARGS without BTI (arm64)
+ *
+ * offset > 0 (after function entry):
+ *
+ *    CONFIG_DYNAMIC_FTRACE_WITH_ARGS with BTI (arm64)
+ */
+static int read_pfe_offset(struct elf *elf)
+{
+	bool has_pfe = false;
+	struct section *sec;
+
+	if (__is_defined(ARCH_HAS_PREFIX_SYMBOLS))
+		return 0;
+
+	for_each_sec(elf, sec) {
+		struct reloc *reloc;
+
+		if (strcmp(sec->name, "__patchable_function_entries"))
+			continue;
+		if (!sec->rsec)
+			continue;
+
+		has_pfe = true;
+
+		for_each_reloc(sec->rsec, reloc) {
+			unsigned long target = reloc->sym->offset + reloc_addend(reloc);
+			struct symbol *func;
+
+			/* arm64 func */
+			func = find_func_containing(reloc->sym->sec, target);
+			if (func) {
+				elf->pfe_offset = target - func->offset;
+				return 0;
+			}
+
+			/* arm64 CALL_OPS */
+			func = find_func_by_offset(reloc->sym->sec, target + 8);
+			if (func) {
+				elf->pfe_offset = -8;
+				return 0;
+			}
+		}
+	}
+
+	if (has_pfe) {
+		ERROR("can't find __patchable_function_entries offset");
+		return -1;
+	}
+
+	return 0;
+}
+
+/*
+ * Detect the size of the area before a function's entry point.  This prefix
+ * area is used for CFI type hashes or ftrace call ops.
+ *
+ *  $d mapping symbol (arm64):
+ *
+ *    CONFIG_CFI
+ *
+ *  PFE before function entry, no symbol (arm64):
+ *
+ *    CONFIG_DYNAMIC_FTRACE_WITH_CALL_OPS
+ */
+static unsigned long func_pfx_size(struct elf *elf, struct symbol *func)
+{
+	if (__is_defined(ARCH_HAS_PREFIX_SYMBOLS))
+		return 0;
+
+	/* arm64 kCFI $d data mapping symbol */
+	if (func->offset >= 4 &&
+	    find_data_mapping_sym(func->sec, func->offset - 4))
+		return 4;
+
+	/* arm64 CALL_OPS (mutually exclusive with kCFI) */
+	if (elf->pfe_offset < 0 && func->offset >= -elf->pfe_offset)
+		return -elf->pfe_offset;
+
+	return 0;
+}
+
 static struct symbol *first_file_symbol(struct elf *elf)
 {
 	struct symbol *sym;
@@ -302,6 +395,9 @@ static bool is_special_section(struct section *sec)
 		"__ex_table",
 		"__jump_table",
 		"__mcount_loc",
+#ifndef ARCH_HAS_PREFIX_SYMBOLS
+		"__patchable_function_entries",
+#endif
 
 		/*
 		 * Extract .static_call_sites here to inherit non-module
@@ -931,7 +1027,7 @@ static struct symbol *__clone_symbol(struct elf *elf, struct symbol *patched_sym
 				     bool data_too)
 {
 	struct section *out_sec = NULL;
-	unsigned long offset = 0;
+	unsigned long offset = 0, pfx_size = 0;
 	struct symbol *out_sym;
 
 	if (data_too && !is_undef_sym(patched_sym)) {
@@ -963,17 +1059,22 @@ static struct symbol *__clone_symbol(struct elf *elf, struct symbol *patched_sym
 			void *data = NULL;
 			size_t size;
 
+			/* Clone (non-x86) function prefix area */
+			pfx_size = is_func_sym(patched_sym) ? func_pfx_size(elf, patched_sym) : 0;
+
 			/* bss doesn't have data */
 			if (patched_sym->sec->data && patched_sym->sec->data->d_buf)
-				data = patched_sym->sec->data->d_buf + patched_sym->offset;
+				data = patched_sym->sec->data->d_buf + patched_sym->offset - pfx_size;
 
 			if (is_sec_sym(patched_sym))
 				size = sec_size(patched_sym->sec);
 			else
-				size = patched_sym->len;
+				size = patched_sym->len + pfx_size;
 
 			if (!elf_add_data(elf, out_sec, data, size))
 				return NULL;
+
+			offset += pfx_size;
 		}
 	}
 
@@ -1251,21 +1352,41 @@ static int convert_reloc_sym_to_secsym(struct elf *elf, struct reloc *reloc)
 	return 0;
 }
 
+/*
+ * __patchable_function_entries relocs point to the patchable entry NOPs,
+ * which are at 'pfe_offset' bytes from the function symbol.
+ *
+ * Some entries (e.g., removed weak functions, syscall -ENOSYS stubs) don't
+ * have a corresponding function symbol.  Skip those with a return value of 1.
+ */
+static int convert_pfe_reloc(struct elf *elf, struct reloc *reloc)
+{
+	struct symbol *func;
+
+	func = find_func_by_offset(reloc->sym->sec,
+				   reloc->sym->offset +
+				   reloc_addend(reloc) - elf->pfe_offset);
+	if (!func)
+		return 1;
+
+	reloc->sym = func;
+	set_reloc_sym(elf, reloc, func->idx);
+	set_reloc_addend(elf, reloc, elf->pfe_offset);
+	return 0;
+}
+
 /* Return -1 error, 0 success, 1 skip */
 static int convert_reloc_secsym_to_sym(struct elf *elf, struct reloc *reloc)
 {
 	struct symbol *sym = reloc->sym;
 	struct section *sec = sym->sec;
 
+	if (!strcmp(reloc->sec->name, ".rela__patchable_function_entries"))
+		return convert_pfe_reloc(elf, reloc);
+
 	if (!is_sec_sym(sym))
 		return 0;
 
-	/* If the symbol has a dedicated section, it's easy to find */
-	sym = find_symbol_by_offset(sec, 0);
-	if (sym && sym->len == sec_size(sec))
-		goto found_sym;
-
-	/* No dedicated section; find the symbol manually */
 	sym = find_symbol_containing_inclusive(sec, arch_adjusted_addend(reloc));
 	if (!sym) {
 		/*
@@ -1293,7 +1414,6 @@ static int convert_reloc_secsym_to_sym(struct elf *elf, struct reloc *reloc)
 		return -1;
 	}
 
-found_sym:
 	reloc->sym = sym;
 	set_reloc_sym(elf, reloc, sym->idx);
 	set_reloc_addend(elf, reloc, reloc_addend(reloc) - sym->offset);
@@ -1856,6 +1976,9 @@ static int validate_special_section_klp_reloc(struct elfs *e, struct symbol *sym
 
 static int clone_special_section(struct elfs *e, struct section *patched_sec)
 {
+	bool is_pfe = !strcmp(patched_sec->name, "__patchable_function_entries");
+	struct section *out_sec = NULL;
+	struct reloc *patched_reloc;
 	struct symbol *patched_sym;
 
 	/*
@@ -1863,6 +1986,7 @@ static int clone_special_section(struct elfs *e, struct section *patched_sec)
 	 * reference included functions.
 	 */
 	sec_for_each_sym(patched_sec, patched_sym) {
+		struct symbol *out_sym;
 		int ret;
 
 		if (!is_object_sym(patched_sym))
@@ -1877,8 +2001,23 @@ static int clone_special_section(struct elfs *e, struct section *patched_sec)
 		if (ret > 0)
 			continue;
 
-		if (!clone_symbol(e, patched_sym, true))
+		out_sym = clone_symbol(e, patched_sym, true);
+		if (!out_sym)
 			return -1;
+
+		if (!is_pfe || (out_sec && out_sec->sh.sh_link))
+			continue;
+
+		/*
+		 * For reasons, the patched object has multiple PFE sections,
+		 * but we only need to create one combined section for the
+		 * output.  Link the single PFE ouput section to a random text
+		 * section to satisfy the linker for SHF_LINK_ORDER.
+		 */
+		out_sec = out_sym->sec;
+		patched_reloc = find_reloc_by_dest(e->patched, patched_sec,
+						   patched_sym->offset);
+		out_sec->sh.sh_link = patched_reloc->sym->clone->sec->idx;
 	}
 
 	return 0;
@@ -2175,6 +2314,9 @@ int cmd_klp_diff(int argc, const char **argv)
 	if (read_sym_checksums(e.patched))
 		return -1;
 
+	if (read_pfe_offset(e.patched))
+		return -1;
+
 	if (correlate_symbols(&e))
 		return -1;
 
@@ -2187,6 +2329,8 @@ int cmd_klp_diff(int argc, const char **argv)
 	e.out = elf_create_file(&e.orig->ehdr, argv[2]);
 	if (!e.out)
 		return -1;
+
+	e.out->pfe_offset = e.patched->pfe_offset;
 
 	/*
 	 * Special section fake symbols are needed so that individual special
