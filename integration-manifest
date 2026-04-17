@@ -1,0 +1,36 @@
+drm drm-fixes 028ef9c96e96197026887c0f092424679298aae8
+	Linux 7.0
+drm-misc drm-misc-fixes 4a92ef0c57df610ba0b2eb7f308c5472020ce8ea
+	drm/panel: visionox-rm69299: Make use of prepare_prev_first
+drm-rust drm-rust-fixes f338e77383789c0cae23ca3d48adcc5e9e137e3c
+	Linux 7.0-rc4
+drm-intel drm-intel-fixes 028ef9c96e96197026887c0f092424679298aae8
+	Linux 7.0
+drm-xe drm-xe-fixes 028ef9c96e96197026887c0f092424679298aae8
+	Linux 7.0
+drm drm-next a7756371e57f69a137f295a418fb56f15ff2c10f
+	Merge tag 'drm-misc-next-fixes-2026-04-17' of https://gitlab.freedesktop.org/drm/misc/kernel into drm-next
+drm-misc drm-misc-next-fixes dc6d51959ec0c08366d5aaeb5b8fb02d814d1e4b
+	dma-buf: fix htmldocs error for dma_buf_attach_revocable
+drm-intel drm-intel-next-fixes a97c88a176b6b8d116f4d3f508f3bd02bc77b462
+	drm/i915/wm: Verify the correct plane DDB entry
+drm-xe drm-xe-next-fixes 6de23f81a5e08be8fbf5e8d7e9febc72a5b5f27f
+	Linux 7.0-rc1
+drm-misc drm-misc-next 506255d46bdb93a281cf39e72abbca124f5c7a1b
+	accel/amdxdna: Guard management mailbox channel cleanup against NULL pointer
+drm-rust drm-rust-next a7a080bb4236ebe577b6776d940d1717912ff6dd
+	gpu: nova-core: fix missing colon in SEC2 boot debug message
+drm-intel drm-intel-next 71096693e8eb94554807309956ca5f787be36709
+	drm/i915/reset: Disable execlist per-engine reset for display reset tests
+drm-intel drm-intel-gt-next f6d4afc9ec6a0bc326151b35a7a3369369180079
+	drm/i915/gem: Drop check for changed VM in EXECBUF
+drm-xe drm-xe-next c973f7a672d07b9c297c27011bab299bc61732ba
+	drm/xe/hwmon: Enable energy attributes for CRI
+drm-intel topic/core-for-CI 3d15d7e81d498d56ca6ba3af63f2fa1106da87ad
+	ACPI: PM: s2idle: Add module parameter for LPS0 constraints checking
+drm-xe topic/xe-for-CI bd9ef8d19f9e9ff47518ce48fb2002d58bfeeaaa
+	drm/xe/nvlp: Define GuC firmware for NVL-P
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
+drm-intel topic/pipe-reorder 2c683e9b419328da3433a49f7c467da71aaf0469
+	drm/i915/display: change pipe allocation order for discrete platforms
