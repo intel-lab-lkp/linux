@@ -338,6 +338,16 @@ on a 64-bit one.
 The current default value for ``max_user_watches`` is 4% of the
 available low memory, divided by the "watch" cost in bytes.
 
+force_async_wake
+----------------
+
+When an epoll event occurs, the kernel will attempt to "pull" the epoll
+waiter task closer to the cpu where the task that initiated the event is
+and switch to it sooner.  While most workloads benefit from this
+behavior, this switch allows disabling it, leaving the epoll task where
+it is.  Setting it to 1 can harm performance for most applications, but
+might benefit others.
+
 5. /proc/sys/fs/fuse - Configuration options for FUSE filesystems
 =====================================================================
 

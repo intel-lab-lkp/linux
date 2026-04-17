@@ -257,6 +257,9 @@ struct ep_pqueue {
 /* Maximum number of epoll watched descriptors, per user */
 static long max_user_watches __read_mostly;
 
+/* Whether wakee should always be waken up asynchronously */
+static bool sysctl_force_async_wake __read_mostly = false;
+
 /* Used for cycles detection */
 static DEFINE_MUTEX(epnested_mutex);
 
@@ -331,6 +334,13 @@ static const struct ctl_table epoll_table[] = {
 		.proc_handler	= proc_doulongvec_minmax,
 		.extra1		= &long_zero,
 		.extra2		= &long_max,
+	},
+	{
+		.procname	= "force_async_wake",
+		.data		= &sysctl_force_async_wake,
+		.maxlen		= sizeof(sysctl_force_async_wake),
+		.mode		= 0644,
+		.proc_handler	= proc_dobool,
 	},
 };
 
@@ -1318,7 +1328,7 @@ static int ep_poll_callback(wait_queue_entry_t *wait, unsigned mode, int sync, v
 				break;
 			}
 		}
-		if (sync)
+		if (sync && !sysctl_force_async_wake)
 			wake_up_sync(&ep->wq);
 		else
 			wake_up(&ep->wq);
