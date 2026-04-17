@@ -11,6 +11,7 @@
 
 #include <linux/init.h>
 #include <linux/perf_event.h>
+#include <linux/sysfs.h>
 #include <asm/firmware.h>
 #include <asm/hvcall.h>
 #include <asm/io.h>
@@ -134,6 +135,7 @@ static unsigned long systeminfo_gpci_request(u32 req, u32 starting_index,
 			size_t *n, struct hv_gpci_request_buffer *arg)
 {
 	unsigned long ret;
+	int len;
 	size_t i, j;
 
 	arg->params.counter_request = cpu_to_be32(req);
@@ -176,9 +178,17 @@ static unsigned long systeminfo_gpci_request(u32 req, u32 starting_index,
 	for (i = 0; i < be16_to_cpu(arg->params.returned_values); i++) {
 		j = i * be16_to_cpu(arg->params.cv_element_size);
 
-		for (; j < (i + 1) * be16_to_cpu(arg->params.cv_element_size); j++)
-			*n += sprintf(buf + *n,  "%02x", (u8)arg->bytes[j]);
-		*n += sprintf(buf + *n,  "\n");
+		for (; j < (i + 1) * be16_to_cpu(arg->params.cv_element_size);
+		     j++) {
+			len = sysfs_emit_at(buf, *n, "%02x", (u8)arg->bytes[j]);
+			if (!len)
+				return -EFBIG;
+			*n += len;
+		}
+		len = sysfs_emit_at(buf, *n, "\n");
+		if (!len)
+			return -EFBIG;
+		*n += len;
 	}
 
 	if (*n >= PAGE_SIZE) {
@@ -465,6 +475,7 @@ static void affinity_domain_via_partition_result_parse(int returned_values,
 			int element_size, char *buf, size_t *last_element,
 			size_t *n, struct hv_gpci_request_buffer *arg)
 {
+	int len;
 	size_t i = 0, j = 0;
 	size_t k, l, m;
 	uint16_t total_affinity_domain_ele, size_of_each_affinity_domain_ele;
@@ -483,22 +494,49 @@ static void affinity_domain_via_partition_result_parse(int returned_values,
 	 */
 	while (i < returned_values) {
 		k = j;
-		for (; k < j + element_size; k++)
-			*n += sprintf(buf + *n,  "%02x", (u8)arg->bytes[k]);
-		*n += sprintf(buf + *n,  "\n");
+		for (; k < j + element_size; k++) {
+			len = sysfs_emit_at(buf, *n, "%02x", (u8)arg->bytes[k]);
+			if (!len) {
+				*n = PAGE_SIZE;
+				return;
+			}
+			*n += len;
+		}
+		len = sysfs_emit_at(buf, *n, "\n");
+		if (!len) {
+			*n = PAGE_SIZE;
+			return;
+		}
+		*n += len;
 
 		total_affinity_domain_ele = (u8)arg->bytes[k - 2] << 8 | (u8)arg->bytes[k - 3];
 		size_of_each_affinity_domain_ele = (u8)arg->bytes[k] << 8 | (u8)arg->bytes[k - 1];
 
 		for (l = 0; l < total_affinity_domain_ele; l++) {
 			for (m = 0; m < size_of_each_affinity_domain_ele; m++) {
-				*n += sprintf(buf + *n,  "%02x", (u8)arg->bytes[k]);
+				len = sysfs_emit_at(buf, *n, "%02x",
+						    (u8)arg->bytes[k]);
+				if (!len) {
+					*n = PAGE_SIZE;
+					return;
+				}
+				*n += len;
 				k++;
 			}
-			*n += sprintf(buf + *n,  "\n");
+			len = sysfs_emit_at(buf, *n, "\n");
+			if (!len) {
+				*n = PAGE_SIZE;
+				return;
+			}
+			*n += len;
 		}
 
-		*n += sprintf(buf + *n,  "\n");
+		len = sysfs_emit_at(buf, *n, "\n");
+		if (!len) {
+			*n = PAGE_SIZE;
+			return;
+		}
+		*n += len;
 		i++;
 		j = k;
 	}
