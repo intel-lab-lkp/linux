@@ -675,7 +675,7 @@ static void wait_for_xmitr(struct uart_port *port)
 	}
 
 	/* Wait up to 1s for flow control if necessary */
-	if (port->flags & UPF_CONS_FLOW) {
+	if (uart_get_cons_flow(port)) {
 		tmout = 1000000;
 		while (--tmout) {
 			unsigned int val;
