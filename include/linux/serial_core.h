@@ -1175,6 +1175,14 @@ static inline bool uart_get_cons_flow(const struct uart_port *uport)
 	return uport->cons_flow;
 }
 
+static inline bool uart_console_hwflow_active(struct uart_port *uport)
+{
+	return uart_console(uport) &&
+	       !(uport->rs485.flags & SER_RS485_ENABLED) &&
+	       uart_get_cons_flow(uport) &&
+	       uart_cts_enabled(uport);
+}
+
 /*
  * The following are helper functions for the low level drivers.
  */
