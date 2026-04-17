@@ -3671,6 +3671,7 @@ EXPORT_SYMBOL_GPL(cond_synchronize_rcu_full);
 static int rcu_pending(int user)
 {
 	bool gp_in_progress;
+	struct rcu_gp_oldstate gp_state;
 	struct rcu_data *rdp = this_cpu_ptr(&rcu_data);
 	struct rcu_node *rnp = rdp->mynode;
 
@@ -3699,6 +3700,12 @@ static int rcu_pending(int user)
 	/* Does this CPU have callbacks ready to invoke? */
 	if (!rcu_rdp_is_offloaded(rdp) &&
 	    rcu_segcblist_ready_cbs(&rdp->cblist))
+		return 1;
+
+	/* Has a GP (normal or expedited) completed for pending callbacks? */
+	if (!rcu_rdp_is_offloaded(rdp) &&
+	    rcu_segcblist_nextgp(&rdp->cblist, &gp_state) &&
+	    poll_state_synchronize_rcu_full(&gp_state))
 		return 1;
 
 	/* Has RCU gone idle with this CPU needing another grace period? */
