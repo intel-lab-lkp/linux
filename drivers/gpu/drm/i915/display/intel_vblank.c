@@ -527,13 +527,15 @@ static void intel_crtc_active_timings(struct drm_display_mode *mode,
 	drm_mode_init(mode, &crtc_state->hw.adjusted_mode);
 	*vmax_vblank_start = 0;
 
-	if (!vrr_enable)
+	if (!vrr_enable && !intel_vrr_always_use_vrr_tg(to_intel_display(crtc_state)))
 		return;
 
 	mode->crtc_vtotal = intel_vrr_vmax_vtotal(crtc_state);
 	mode->crtc_vblank_end = intel_vrr_vmax_vtotal(crtc_state);
 	mode->crtc_vblank_start = intel_vrr_vmin_vblank_start(crtc_state);
-	*vmax_vblank_start = intel_vrr_vmax_vblank_start(crtc_state);
+
+	if (vrr_enable)
+		*vmax_vblank_start = intel_vrr_vmax_vblank_start(crtc_state);
 }
 
 void intel_crtc_update_active_timings(const struct intel_crtc_state *crtc_state,
