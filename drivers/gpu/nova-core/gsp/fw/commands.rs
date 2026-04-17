@@ -10,7 +10,14 @@ use kernel::{
     }, //
 };
 
-use crate::gsp::GSP_PAGE_SIZE;
+use crate::gsp::{
+    commands::{
+        Client,
+        Handle,
+        Subdevice, //
+    },
+    GSP_PAGE_SIZE, //
+};
 
 use super::bindings;
 
@@ -120,6 +127,16 @@ impl GspStaticConfigInfo {
     /// Returns a bytes array containing the (hopefully) zero-terminated name of this GPU.
     pub(crate) fn gpu_name_str(&self) -> [u8; 64] {
         self.0.gpuNameString
+    }
+
+    /// Returns the client handle allocated by GSP-RM.
+    pub(crate) fn client(&self) -> Handle<Client> {
+        Handle::new(self.0.hInternalClient)
+    }
+
+    /// Returns the subdevice handle allocated by GSP-RM.
+    pub(crate) fn subdevice(&self) -> Handle<Subdevice> {
+        Handle::new(self.0.hInternalSubdevice)
     }
 }
 
