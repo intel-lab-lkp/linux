@@ -301,31 +301,31 @@ static const struct btmrvl_sdio_device btmrvl_sdio_sd8997 = {
 static const struct sdio_device_id btmrvl_sdio_ids[] = {
 	/* Marvell SD8688 Bluetooth device */
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_MARVELL, SDIO_DEVICE_ID_MARVELL_8688_BT),
-			.driver_data = (unsigned long)&btmrvl_sdio_sd8688 },
+			.driver_data_ptr = &btmrvl_sdio_sd8688 },
 	/* Marvell SD8787 Bluetooth device */
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_MARVELL, SDIO_DEVICE_ID_MARVELL_8787_BT),
-			.driver_data = (unsigned long)&btmrvl_sdio_sd8787 },
+			.driver_data_ptr = &btmrvl_sdio_sd8787 },
 	/* Marvell SD8787 Bluetooth AMP device */
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_MARVELL, SDIO_DEVICE_ID_MARVELL_8787_BT_AMP),
-			.driver_data = (unsigned long)&btmrvl_sdio_sd8787 },
+			.driver_data_ptr = &btmrvl_sdio_sd8787 },
 	/* Marvell SD8797 Bluetooth device */
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_MARVELL, SDIO_DEVICE_ID_MARVELL_8797_BT),
-			.driver_data = (unsigned long)&btmrvl_sdio_sd8797 },
+			.driver_data_ptr = &btmrvl_sdio_sd8797 },
 	/* Marvell SD8887 Bluetooth device */
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_MARVELL, SDIO_DEVICE_ID_MARVELL_8887_BT),
-			.driver_data = (unsigned long)&btmrvl_sdio_sd8887 },
+			.driver_data_ptr = &btmrvl_sdio_sd8887 },
 	/* Marvell SD8897 Bluetooth device */
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_MARVELL, SDIO_DEVICE_ID_MARVELL_8897_BT),
-			.driver_data = (unsigned long)&btmrvl_sdio_sd8897 },
+			.driver_data_ptr = &btmrvl_sdio_sd8897 },
 	/* Marvell SD8977 Bluetooth device */
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_MARVELL, SDIO_DEVICE_ID_MARVELL_8977_BT),
-			.driver_data = (unsigned long)&btmrvl_sdio_sd8977 },
+			.driver_data_ptr = &btmrvl_sdio_sd8977 },
 	/* Marvell SD8987 Bluetooth device */
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_MARVELL, SDIO_DEVICE_ID_MARVELL_8987_BT),
-			.driver_data = (unsigned long)&btmrvl_sdio_sd8987 },
+			.driver_data_ptr = &btmrvl_sdio_sd8987 },
 	/* Marvell SD8997 Bluetooth device */
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_MARVELL, SDIO_DEVICE_ID_MARVELL_8997_BT),
-			.driver_data = (unsigned long)&btmrvl_sdio_sd8997 },
+			.driver_data_ptr = &btmrvl_sdio_sd8997 },
 
 	{ }	/* Terminating entry */
 };
@@ -1523,8 +1523,8 @@ static int btmrvl_sdio_probe(struct sdio_func *func,
 
 	card->func = func;
 
-	if (id->driver_data) {
-		struct btmrvl_sdio_device *data = (void *) id->driver_data;
+	if (id->driver_data_ptr) {
+		const struct btmrvl_sdio_device *data = id->driver_data_ptr;
 		card->helper = data->helper;
 		card->firmware = data->firmware;
 		card->reg = data->reg;
