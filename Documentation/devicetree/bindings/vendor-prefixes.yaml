@@ -1915,6 +1915,8 @@ patternProperties:
     description: Zealz
   "^zeitec,.*":
     description: ZEITEC Semiconductor Co., LTD.
+  "^zhunyikeji,.*":
+    description: Shenzhen Zhunyi Technology Co., Ltd.
   "^zidoo,.*":
     description: Shenzhen Zidoo Technology Co., Ltd.
   "^zii,.*":
