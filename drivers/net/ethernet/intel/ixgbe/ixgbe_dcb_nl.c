@@ -640,17 +640,21 @@ static int ixgbe_dcbnl_ieee_setapp(struct net_device *dev,
 	/* VF devices should use default UP when available */
 	if (app->selector == IEEE_8021QAZ_APP_SEL_ETHERTYPE &&
 	    app->protocol == 0) {
+		struct vf_data_storage *vfinfo;
 		int vf;
 
 		adapter->default_up = app->priority;
 
-		for (vf = 0; vf < adapter->num_vfs; vf++) {
-			struct vf_data_storage *vfinfo = &adapter->vfinfo[vf];
-
-			if (!vfinfo->pf_qos)
-				ixgbe_set_vmvir(adapter, vfinfo->pf_vlan,
-						app->priority, vf);
-		}
+		rcu_read_lock();
+		vfinfo = rcu_dereference(adapter->vfinfo);
+		if (vfinfo)
+			for (vf = 0; vf < adapter->num_vfs; vf++) {
+				if (!vfinfo[vf].pf_qos)
+					ixgbe_set_vmvir(adapter,
+							vfinfo[vf].pf_vlan,
+							app->priority, vf);
+			}
+		rcu_read_unlock();
 	}
 
 	return 0;
@@ -683,19 +687,23 @@ static int ixgbe_dcbnl_ieee_delapp(struct net_device *dev,
 	/* IF default priority is being removed clear VF default UP */
 	if (app->selector == IEEE_8021QAZ_APP_SEL_ETHERTYPE &&
 	    app->protocol == 0 && adapter->default_up == app->priority) {
+		struct vf_data_storage *vfinfo;
 		int vf;
 		long unsigned int app_mask = dcb_ieee_getapp_mask(dev, app);
 		int qos = app_mask ? find_first_bit(&app_mask, 8) : 0;
 
 		adapter->default_up = qos;
 
-		for (vf = 0; vf < adapter->num_vfs; vf++) {
-			struct vf_data_storage *vfinfo = &adapter->vfinfo[vf];
-
-			if (!vfinfo->pf_qos)
-				ixgbe_set_vmvir(adapter, vfinfo->pf_vlan,
-						qos, vf);
-		}
+		rcu_read_lock();
+		vfinfo = rcu_dereference(adapter->vfinfo);
+		if (vfinfo)
+			for (vf = 0; vf < adapter->num_vfs; vf++) {
+				if (!vfinfo[vf].pf_qos)
+					ixgbe_set_vmvir(adapter,
+							vfinfo[vf].pf_vlan,
+							qos, vf);
+			}
+		rcu_read_unlock();
 	}
 
 	return err;
