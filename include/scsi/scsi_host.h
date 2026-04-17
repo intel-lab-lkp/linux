@@ -443,6 +443,7 @@ struct scsi_host_template {
 	 */
 #define SCSI_DEFAULT_MAX_SECTORS	1024
 
+#define SCSI_UNLIMITED_CMD_PER_LUN	-1
 	/*
 	 * True if this host adapter can make good use of linked commands.
 	 * This will allow more than one command to be queued to a given
@@ -451,6 +452,9 @@ struct scsi_host_template {
 	 * command block per lun, 2 for two, etc.  Do not set this to 0.
 	 * You should make sure that the host adapter will do the right thing
 	 * before you try setting this above 1.
+	 *
+	 * Adapters that do not have a device limit can set this to
+	 * SCSI_UNLIMITED_CMD_PER_LUN.
 	 */
 	short cmd_per_lun;
 

@@ -352,18 +352,20 @@ static struct scsi_device *scsi_alloc_sdev(struct scsi_target *starget,
 	if (scsi_device_is_pseudo_dev(sdev))
 		return sdev;
 
-	depth = sdev->host->cmd_per_lun ?: 1;
+	if (sdev->host->cmd_per_lun != SCSI_UNLIMITED_CMD_PER_LUN) {
+		depth = sdev->host->cmd_per_lun ?: 1;
 
-	/*
-	 * Use .can_queue as budget map's depth because we have to
-	 * support adjusting queue depth from sysfs. Meantime use
-	 * default device queue depth to figure out sbitmap shift
-	 * since we use this queue depth most of times.
-	 */
-	if (scsi_realloc_sdev_budget_map(sdev, depth))
-		goto out_device_destroy;
+		/*
+		 * Use .can_queue as budget map's depth because we have to
+		 * support adjusting queue depth from sysfs. Meantime use
+		 * default device queue depth to figure out sbitmap shift
+		 * since we use this queue depth most of times.
+		 */
+		if (scsi_realloc_sdev_budget_map(sdev, depth))
+			goto out_device_destroy;
 
-	scsi_change_queue_depth(sdev, depth);
+		scsi_change_queue_depth(sdev, depth);
+	}
 
 	if (shost->hostt->sdev_init) {
 		ret = shost->hostt->sdev_init(sdev);
@@ -1108,7 +1110,8 @@ static int scsi_add_lun(struct scsi_device *sdev, unsigned char *inq_result,
 	 * Set up budget map again since memory consumption of the map depends
 	 * on actual queue depth.
 	 */
-	if (hostt->sdev_configure)
+	if (hostt->sdev_configure &&
+	    sdev->host->cmd_per_lun != SCSI_UNLIMITED_CMD_PER_LUN)
 		scsi_realloc_sdev_budget_map(sdev, sdev->queue_depth);
 
 	if (sdev->scsi_level >= SCSI_3)
