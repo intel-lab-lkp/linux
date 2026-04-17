@@ -190,6 +190,9 @@ static int ax25_rcv(struct sk_buff *skb, struct net_device *dev,
 	ax25_cb *ax25;
 	ax25_dev *ax25_dev;
 
+	if (skb_linearize(skb))
+		goto free;
+
 	/*
 	 *	Process the AX.25/LAPB frame.
 	 */
@@ -216,6 +219,9 @@ static int ax25_rcv(struct sk_buff *skb, struct net_device *dev,
 	 *	Pull of the AX.25 headers leaving the CTRL/PID bytes
 	 */
 	skb_pull(skb, ax25_addr_size(&dp));
+
+	if (skb->len < 2)
+		goto free;
 
 	/* For our port addresses ? */
 	if (ax25cmp(&dest, dev_addr) == 0 && dp.lastrepeat + 1 == dp.ndigi)
