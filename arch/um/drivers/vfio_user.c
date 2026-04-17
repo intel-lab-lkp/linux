@@ -81,7 +81,12 @@ int uml_vfio_user_get_group_id(const char *device)
 	if (!path)
 		return -ENOMEM;
 
-	sprintf(path, "/sys/bus/pci/devices/%s/iommu_group", device);
+	r = snprintf(path, PATH_MAX, "/sys/bus/pci/devices/%s/iommu_group",
+		     device);
+	if (r >= PATH_MAX) {
+		r = -ENAMETOOLONG;
+		goto free_path;
+	}
 
 	buf = uml_kmalloc(PATH_MAX + 1, UM_GFP_KERNEL);
 	if (!buf) {
