@@ -4850,6 +4850,11 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 		goto out;
 	}
 
+	/* Swapin installs anonymous rmap state into the faulting VMA. */
+	ret = vmf_anon_prepare(vmf);
+	if (ret)
+		goto out;
+
 	/* Prevent swapoff from happening to us. */
 	si = get_swap_device(entry);
 	if (unlikely(!si))
