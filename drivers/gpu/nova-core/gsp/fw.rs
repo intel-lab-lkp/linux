@@ -97,6 +97,514 @@ pub(super) mod gsp_mem {
 pub(crate) const GSP_MSG_QUEUE_ELEMENT_SIZE_MAX: usize =
     num::u32_as_usize(bindings::GSP_MSG_QUEUE_ELEMENT_SIZE_MAX);
 
+/// Status code returned by GSP-RM operations.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[expect(dead_code)]
+pub(crate) enum GspMsgRmStatus {
+    /// The operation succeeded.
+    Ok,
+    /// The operation completed with a non-fatal warning.
+    Warning(GspMsgRmWarning),
+    /// The operation failed with a GSP-RM-specific error.
+    Error(GspMsgRmError),
+}
+
+/// Warning code returned by GSP-RM RPCs.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[repr(u32)]
+pub(crate) enum GspMsgRmWarning {
+    HotSwitch = bindings::NV_WARN_HOT_SWITCH,
+    IncorrectPerfmonData = bindings::NV_WARN_INCORRECT_PERFMON_DATA,
+    MismatchedSlave = bindings::NV_WARN_MISMATCHED_SLAVE,
+    MismatchedTarget = bindings::NV_WARN_MISMATCHED_TARGET,
+    MoreProcessingRequired = bindings::NV_WARN_MORE_PROCESSING_REQUIRED,
+    NothingToDo = bindings::NV_WARN_NOTHING_TO_DO,
+    NullObject = bindings::NV_WARN_NULL_OBJECT,
+    OutOfRange = bindings::NV_WARN_OUT_OF_RANGE,
+}
+
+// TODO[FPRI]: This is a temporary solution to be replaced with the corresponding derive macros
+// once they land.
+impl TryFrom<u32> for GspMsgRmWarning {
+    type Error = Error;
+
+    fn try_from(value: u32) -> Result<Self> {
+        match value {
+            bindings::NV_WARN_HOT_SWITCH => Ok(Self::HotSwitch),
+            bindings::NV_WARN_INCORRECT_PERFMON_DATA => Ok(Self::IncorrectPerfmonData),
+            bindings::NV_WARN_MISMATCHED_SLAVE => Ok(Self::MismatchedSlave),
+            bindings::NV_WARN_MISMATCHED_TARGET => Ok(Self::MismatchedTarget),
+            bindings::NV_WARN_MORE_PROCESSING_REQUIRED => Ok(Self::MoreProcessingRequired),
+            bindings::NV_WARN_NOTHING_TO_DO => Ok(Self::NothingToDo),
+            bindings::NV_WARN_NULL_OBJECT => Ok(Self::NullObject),
+            bindings::NV_WARN_OUT_OF_RANGE => Ok(Self::OutOfRange),
+            _ => Err(EINVAL),
+        }
+    }
+}
+
+/// Error code returned by GSP-RM RPCs.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[repr(u32)]
+pub(crate) enum GspMsgRmError {
+    AlreadySignalled = bindings::NV_ERR_ALREADY_SIGNALLED,
+    BrokenFb = bindings::NV_ERR_BROKEN_FB,
+    BufferTooSmall = bindings::NV_ERR_BUFFER_TOO_SMALL,
+    BusyRetry = bindings::NV_ERR_BUSY_RETRY,
+    CallbackNotScheduled = bindings::NV_ERR_CALLBACK_NOT_SCHEDULED,
+    CardNotPresent = bindings::NV_ERR_CARD_NOT_PRESENT,
+    CycleDetected = bindings::NV_ERR_CYCLE_DETECTED,
+    DmaInUse = bindings::NV_ERR_DMA_IN_USE,
+    DmaMemNotLocked = bindings::NV_ERR_DMA_MEM_NOT_LOCKED,
+    DmaMemNotUnlocked = bindings::NV_ERR_DMA_MEM_NOT_UNLOCKED,
+    DualLinkInuse = bindings::NV_ERR_DUAL_LINK_INUSE,
+    EccError = bindings::NV_ERR_ECC_ERROR,
+    FabricManagerNotPresent = bindings::NV_ERR_FABRIC_MANAGER_NOT_PRESENT,
+    FatalError = bindings::NV_ERR_FATAL_ERROR,
+    FeatureNotEnabled = bindings::NV_ERR_FEATURE_NOT_ENABLED,
+    FifoBadAccess = bindings::NV_ERR_FIFO_BAD_ACCESS,
+    FlcnError = bindings::NV_ERR_FLCN_ERROR,
+    FreqNotSupported = bindings::NV_ERR_FREQ_NOT_SUPPORTED,
+    Generic = bindings::NV_ERR_GENERIC,
+    GpuDmaNotInitialized = bindings::NV_ERR_GPU_DMA_NOT_INITIALIZED,
+    GpuInDebugMode = bindings::NV_ERR_GPU_IN_DEBUG_MODE,
+    GpuInFullchipReset = bindings::NV_ERR_GPU_IN_FULLCHIP_RESET,
+    GpuIsLost = bindings::NV_ERR_GPU_IS_LOST,
+    GpuMemoryOnliningFailure = bindings::NV_ERR_GPU_MEMORY_ONLINING_FAILURE,
+    GpuNotFullPower = bindings::NV_ERR_GPU_NOT_FULL_POWER,
+    GpuUuidNotFound = bindings::NV_ERR_GPU_UUID_NOT_FOUND,
+    HotSwitch = bindings::NV_ERR_HOT_SWITCH,
+    I2cError = bindings::NV_ERR_I2C_ERROR,
+    I2cSpeedTooHigh = bindings::NV_ERR_I2C_SPEED_TOO_HIGH,
+    IllegalAction = bindings::NV_ERR_ILLEGAL_ACTION,
+    InUse = bindings::NV_ERR_IN_USE,
+    InflateCompressedDataFailed = bindings::NV_ERR_INFLATE_COMPRESSED_DATA_FAILED,
+    InsertDuplicateName = bindings::NV_ERR_INSERT_DUPLICATE_NAME,
+    InsufficientPermissions = bindings::NV_ERR_INSUFFICIENT_PERMISSIONS,
+    InsufficientPower = bindings::NV_ERR_INSUFFICIENT_POWER,
+    InsufficientResources = bindings::NV_ERR_INSUFFICIENT_RESOURCES,
+    InsufficientZbcEntry = bindings::NV_ERR_INSUFFICIENT_ZBC_ENTRY,
+    InvalidAccessType = bindings::NV_ERR_INVALID_ACCESS_TYPE,
+    InvalidAddress = bindings::NV_ERR_INVALID_ADDRESS,
+    InvalidArgument = bindings::NV_ERR_INVALID_ARGUMENT,
+    InvalidBase = bindings::NV_ERR_INVALID_BASE,
+    InvalidChannel = bindings::NV_ERR_INVALID_CHANNEL,
+    InvalidClass = bindings::NV_ERR_INVALID_CLASS,
+    InvalidClient = bindings::NV_ERR_INVALID_CLIENT,
+    InvalidCommand = bindings::NV_ERR_INVALID_COMMAND,
+    InvalidData = bindings::NV_ERR_INVALID_DATA,
+    InvalidDevice = bindings::NV_ERR_INVALID_DEVICE,
+    InvalidDmaSpecifier = bindings::NV_ERR_INVALID_DMA_SPECIFIER,
+    InvalidEvent = bindings::NV_ERR_INVALID_EVENT,
+    InvalidFlags = bindings::NV_ERR_INVALID_FLAGS,
+    InvalidFunction = bindings::NV_ERR_INVALID_FUNCTION,
+    InvalidHeap = bindings::NV_ERR_INVALID_HEAP,
+    InvalidIndex = bindings::NV_ERR_INVALID_INDEX,
+    InvalidIrqLevel = bindings::NV_ERR_INVALID_IRQ_LEVEL,
+    InvalidLicense = bindings::NV_ERR_INVALID_LICENSE,
+    InvalidLimit = bindings::NV_ERR_INVALID_LIMIT,
+    InvalidLockState = bindings::NV_ERR_INVALID_LOCK_STATE,
+    InvalidMethod = bindings::NV_ERR_INVALID_METHOD,
+    InvalidObject = bindings::NV_ERR_INVALID_OBJECT,
+    InvalidObjectBuffer = bindings::NV_ERR_INVALID_OBJECT_BUFFER,
+    InvalidObjectHandle = bindings::NV_ERR_INVALID_OBJECT_HANDLE,
+    InvalidObjectNew = bindings::NV_ERR_INVALID_OBJECT_NEW,
+    InvalidObjectOld = bindings::NV_ERR_INVALID_OBJECT_OLD,
+    InvalidObjectParent = bindings::NV_ERR_INVALID_OBJECT_PARENT,
+    InvalidOffset = bindings::NV_ERR_INVALID_OFFSET,
+    InvalidOperation = bindings::NV_ERR_INVALID_OPERATION,
+    InvalidOwner = bindings::NV_ERR_INVALID_OWNER,
+    InvalidParamStruct = bindings::NV_ERR_INVALID_PARAM_STRUCT,
+    InvalidParameter = bindings::NV_ERR_INVALID_PARAMETER,
+    InvalidPath = bindings::NV_ERR_INVALID_PATH,
+    InvalidPointer = bindings::NV_ERR_INVALID_POINTER,
+    InvalidRead = bindings::NV_ERR_INVALID_READ,
+    InvalidRegistryKey = bindings::NV_ERR_INVALID_REGISTRY_KEY,
+    InvalidRequest = bindings::NV_ERR_INVALID_REQUEST,
+    InvalidState = bindings::NV_ERR_INVALID_STATE,
+    InvalidStringLength = bindings::NV_ERR_INVALID_STRING_LENGTH,
+    InvalidWrite = bindings::NV_ERR_INVALID_WRITE,
+    InvalidXlate = bindings::NV_ERR_INVALID_XLATE,
+    IrqEdgeTriggered = bindings::NV_ERR_IRQ_EDGE_TRIGGERED,
+    IrqNotFiring = bindings::NV_ERR_IRQ_NOT_FIRING,
+    KeyRotationInProgress = bindings::NV_ERR_KEY_ROTATION_IN_PROGRESS,
+    LibRmVersionMismatch = bindings::NV_ERR_LIB_RM_VERSION_MISMATCH,
+    MaxSessionLimitReached = bindings::NV_ERR_MAX_SESSION_LIMIT_REACHED,
+    MemoryError = bindings::NV_ERR_MEMORY_ERROR,
+    MemoryTrainingFailed = bindings::NV_ERR_MEMORY_TRAINING_FAILED,
+    MismatchedSlave = bindings::NV_ERR_MISMATCHED_SLAVE,
+    MismatchedTarget = bindings::NV_ERR_MISMATCHED_TARGET,
+    MissingTableEntry = bindings::NV_ERR_MISSING_TABLE_ENTRY,
+    ModuleLoadFailed = bindings::NV_ERR_MODULE_LOAD_FAILED,
+    MoreDataAvailable = bindings::NV_ERR_MORE_DATA_AVAILABLE,
+    MoreProcessingRequired = bindings::NV_ERR_MORE_PROCESSING_REQUIRED,
+    MultipleMemoryTypes = bindings::NV_ERR_MULTIPLE_MEMORY_TYPES,
+    NoFreeFifos = bindings::NV_ERR_NO_FREE_FIFOS,
+    NoIntrPending = bindings::NV_ERR_NO_INTR_PENDING,
+    NoMemory = bindings::NV_ERR_NO_MEMORY,
+    NoSuchDomain = bindings::NV_ERR_NO_SUCH_DOMAIN,
+    NoValidPath = bindings::NV_ERR_NO_VALID_PATH,
+    NotCompatible = bindings::NV_ERR_NOT_COMPATIBLE,
+    NotReady = bindings::NV_ERR_NOT_READY,
+    NotSupported = bindings::NV_ERR_NOT_SUPPORTED,
+    NvlinkClockError = bindings::NV_ERR_NVLINK_CLOCK_ERROR,
+    NvlinkConfigurationError = bindings::NV_ERR_NVLINK_CONFIGURATION_ERROR,
+    NvlinkFabricFailure = bindings::NV_ERR_NVLINK_FABRIC_FAILURE,
+    NvlinkFabricNotReady = bindings::NV_ERR_NVLINK_FABRIC_NOT_READY,
+    NvlinkInitError = bindings::NV_ERR_NVLINK_INIT_ERROR,
+    NvlinkMinionError = bindings::NV_ERR_NVLINK_MINION_ERROR,
+    NvlinkTrainingError = bindings::NV_ERR_NVLINK_TRAINING_ERROR,
+    ObjectNotFound = bindings::NV_ERR_OBJECT_NOT_FOUND,
+    ObjectTypeMismatch = bindings::NV_ERR_OBJECT_TYPE_MISMATCH,
+    OperatingSystem = bindings::NV_ERR_OPERATING_SYSTEM,
+    OtherDeviceFound = bindings::NV_ERR_OTHER_DEVICE_FOUND,
+    OutOfRange = bindings::NV_ERR_OUT_OF_RANGE,
+    OverlappingUvmCommit = bindings::NV_ERR_OVERLAPPING_UVM_COMMIT,
+    PageTableNotAvail = bindings::NV_ERR_PAGE_TABLE_NOT_AVAIL,
+    PidNotFound = bindings::NV_ERR_PID_NOT_FOUND,
+    PmuNotReady = bindings::NV_ERR_PMU_NOT_READY,
+    PrivSecViolation = bindings::NV_ERR_PRIV_SEC_VIOLATION,
+    ProtectionFault = bindings::NV_ERR_PROTECTION_FAULT,
+    QueueTaskSlotNotAvailable = bindings::NV_ERR_QUEUE_TASK_SLOT_NOT_AVAILABLE,
+    RcError = bindings::NV_ERR_RC_ERROR,
+    ReductionManagerNotAvailable = bindings::NV_ERR_REDUCTION_MANAGER_NOT_AVAILABLE,
+    RejectedVbios = bindings::NV_ERR_REJECTED_VBIOS,
+    ResetRequired = bindings::NV_ERR_RESET_REQUIRED,
+    ResourceLost = bindings::NV_ERR_RESOURCE_LOST,
+    ResourceRetirementError = bindings::NV_ERR_RESOURCE_RETIREMENT_ERROR,
+    RiscvError = bindings::NV_ERR_RISCV_ERROR,
+    SecureBootFailed = bindings::NV_ERR_SECURE_BOOT_FAILED,
+    SignalPending = bindings::NV_ERR_SIGNAL_PENDING,
+    StateInUse = bindings::NV_ERR_STATE_IN_USE,
+    TestOnlyCodeNotEnabled = bindings::NV_ERR_TEST_ONLY_CODE_NOT_ENABLED,
+    Timeout = bindings::NV_ERR_TIMEOUT,
+    TimeoutRetry = bindings::NV_ERR_TIMEOUT_RETRY,
+    TooManyPrimaries = bindings::NV_ERR_TOO_MANY_PRIMARIES,
+    UvmAddressInUse = bindings::NV_ERR_UVM_ADDRESS_IN_USE,
+}
+
+impl From<GspMsgRmError> for Error {
+    fn from(status: GspMsgRmError) -> Self {
+        match status {
+            GspMsgRmError::BufferTooSmall | GspMsgRmError::MoreDataAvailable => ETOOSMALL,
+
+            GspMsgRmError::DmaInUse
+            | GspMsgRmError::DmaMemNotUnlocked
+            | GspMsgRmError::DualLinkInuse
+            | GspMsgRmError::GpuInDebugMode
+            | GspMsgRmError::GpuInFullchipReset
+            | GspMsgRmError::KeyRotationInProgress
+            | GspMsgRmError::NotReady
+            | GspMsgRmError::NvlinkFabricNotReady
+            | GspMsgRmError::PmuNotReady
+            | GspMsgRmError::StateInUse
+            | GspMsgRmError::UvmAddressInUse => EBUSY,
+
+            GspMsgRmError::CardNotPresent
+            | GspMsgRmError::FabricManagerNotPresent
+            | GspMsgRmError::GpuDmaNotInitialized
+            | GspMsgRmError::GpuIsLost
+            | GspMsgRmError::GpuUuidNotFound
+            | GspMsgRmError::OtherDeviceFound
+            | GspMsgRmError::ReductionManagerNotAvailable
+            | GspMsgRmError::ResetRequired => ENODEV,
+
+            GspMsgRmError::FeatureNotEnabled
+            | GspMsgRmError::FreqNotSupported
+            | GspMsgRmError::NotSupported
+            | GspMsgRmError::TestOnlyCodeNotEnabled => ENOTSUPP,
+
+            GspMsgRmError::CallbackNotScheduled
+            | GspMsgRmError::MissingTableEntry
+            | GspMsgRmError::NoIntrPending
+            | GspMsgRmError::NoSuchDomain
+            | GspMsgRmError::NoValidPath
+            | GspMsgRmError::ObjectNotFound
+            | GspMsgRmError::ResourceLost => ENOENT,
+
+            GspMsgRmError::DmaMemNotLocked
+            | GspMsgRmError::I2cSpeedTooHigh
+            | GspMsgRmError::InflateCompressedDataFailed
+            | GspMsgRmError::InvalidArgument
+            | GspMsgRmError::InvalidBase
+            | GspMsgRmError::InvalidChannel
+            | GspMsgRmError::InvalidClass
+            | GspMsgRmError::InvalidClient
+            | GspMsgRmError::InvalidCommand
+            | GspMsgRmError::InvalidData
+            | GspMsgRmError::InvalidDevice
+            | GspMsgRmError::InvalidDmaSpecifier
+            | GspMsgRmError::InvalidEvent
+            | GspMsgRmError::InvalidFlags
+            | GspMsgRmError::InvalidFunction
+            | GspMsgRmError::InvalidHeap
+            | GspMsgRmError::InvalidIndex
+            | GspMsgRmError::InvalidIrqLevel
+            | GspMsgRmError::InvalidLimit
+            | GspMsgRmError::InvalidLockState
+            | GspMsgRmError::InvalidMethod
+            | GspMsgRmError::InvalidObject
+            | GspMsgRmError::InvalidObjectBuffer
+            | GspMsgRmError::InvalidObjectHandle
+            | GspMsgRmError::InvalidObjectNew
+            | GspMsgRmError::InvalidObjectOld
+            | GspMsgRmError::InvalidObjectParent
+            | GspMsgRmError::InvalidOffset
+            | GspMsgRmError::InvalidOperation
+            | GspMsgRmError::InvalidOwner
+            | GspMsgRmError::InvalidParamStruct
+            | GspMsgRmError::InvalidParameter
+            | GspMsgRmError::InvalidPath
+            | GspMsgRmError::InvalidRegistryKey
+            | GspMsgRmError::InvalidRequest
+            | GspMsgRmError::InvalidState
+            | GspMsgRmError::InvalidStringLength
+            | GspMsgRmError::InvalidXlate
+            | GspMsgRmError::LibRmVersionMismatch
+            | GspMsgRmError::MismatchedSlave
+            | GspMsgRmError::MismatchedTarget
+            | GspMsgRmError::MultipleMemoryTypes
+            | GspMsgRmError::NotCompatible
+            | GspMsgRmError::ObjectTypeMismatch
+            | GspMsgRmError::OverlappingUvmCommit
+            | GspMsgRmError::RejectedVbios => EINVAL,
+
+            GspMsgRmError::IllegalAction | GspMsgRmError::InsufficientPermissions => EPERM,
+
+            GspMsgRmError::AlreadySignalled
+            | GspMsgRmError::InUse
+            | GspMsgRmError::InsertDuplicateName => EEXIST,
+
+            GspMsgRmError::FifoBadAccess
+            | GspMsgRmError::InvalidAccessType
+            | GspMsgRmError::InvalidLicense
+            | GspMsgRmError::PrivSecViolation
+            | GspMsgRmError::SecureBootFailed => EACCES,
+
+            GspMsgRmError::GpuMemoryOnliningFailure
+            | GspMsgRmError::InsufficientResources
+            | GspMsgRmError::NoMemory
+            | GspMsgRmError::PageTableNotAvail => ENOMEM,
+
+            GspMsgRmError::InsufficientZbcEntry
+            | GspMsgRmError::MaxSessionLimitReached
+            | GspMsgRmError::NoFreeFifos
+            | GspMsgRmError::QueueTaskSlotNotAvailable
+            | GspMsgRmError::TooManyPrimaries => ENOSPC,
+
+            GspMsgRmError::InvalidAddress
+            | GspMsgRmError::InvalidPointer
+            | GspMsgRmError::InvalidRead
+            | GspMsgRmError::InvalidWrite
+            | GspMsgRmError::ProtectionFault => EFAULT,
+
+            GspMsgRmError::BusyRetry
+            | GspMsgRmError::GpuNotFullPower
+            | GspMsgRmError::HotSwitch
+            | GspMsgRmError::InsufficientPower
+            | GspMsgRmError::MoreProcessingRequired => EAGAIN,
+
+            GspMsgRmError::OutOfRange => EOVERFLOW,
+
+            GspMsgRmError::PidNotFound => ESRCH,
+
+            GspMsgRmError::SignalPending => EINTR,
+
+            GspMsgRmError::Timeout | GspMsgRmError::TimeoutRetry => ETIMEDOUT,
+
+            GspMsgRmError::ModuleLoadFailed => ENXIO,
+
+            GspMsgRmError::BrokenFb
+            | GspMsgRmError::CycleDetected
+            | GspMsgRmError::EccError
+            | GspMsgRmError::FatalError
+            | GspMsgRmError::FlcnError
+            | GspMsgRmError::Generic
+            | GspMsgRmError::I2cError
+            | GspMsgRmError::IrqEdgeTriggered
+            | GspMsgRmError::IrqNotFiring
+            | GspMsgRmError::MemoryError
+            | GspMsgRmError::MemoryTrainingFailed
+            | GspMsgRmError::NvlinkClockError
+            | GspMsgRmError::NvlinkConfigurationError
+            | GspMsgRmError::NvlinkFabricFailure
+            | GspMsgRmError::NvlinkInitError
+            | GspMsgRmError::NvlinkMinionError
+            | GspMsgRmError::NvlinkTrainingError
+            | GspMsgRmError::OperatingSystem
+            | GspMsgRmError::RcError
+            | GspMsgRmError::ResourceRetirementError
+            | GspMsgRmError::RiscvError => EIO,
+        }
+    }
+}
+
+// TODO[FPRI]: This is a temporary solution to be replaced with the corresponding derive macros
+// once they land.
+impl TryFrom<u32> for GspMsgRmError {
+    type Error = Error;
+
+    fn try_from(value: u32) -> Result<Self> {
+        match value {
+            bindings::NV_ERR_ALREADY_SIGNALLED => Ok(Self::AlreadySignalled),
+            bindings::NV_ERR_BROKEN_FB => Ok(Self::BrokenFb),
+            bindings::NV_ERR_BUFFER_TOO_SMALL => Ok(Self::BufferTooSmall),
+            bindings::NV_ERR_BUSY_RETRY => Ok(Self::BusyRetry),
+            bindings::NV_ERR_CALLBACK_NOT_SCHEDULED => Ok(Self::CallbackNotScheduled),
+            bindings::NV_ERR_CARD_NOT_PRESENT => Ok(Self::CardNotPresent),
+            bindings::NV_ERR_CYCLE_DETECTED => Ok(Self::CycleDetected),
+            bindings::NV_ERR_DMA_IN_USE => Ok(Self::DmaInUse),
+            bindings::NV_ERR_DMA_MEM_NOT_LOCKED => Ok(Self::DmaMemNotLocked),
+            bindings::NV_ERR_DMA_MEM_NOT_UNLOCKED => Ok(Self::DmaMemNotUnlocked),
+            bindings::NV_ERR_DUAL_LINK_INUSE => Ok(Self::DualLinkInuse),
+            bindings::NV_ERR_ECC_ERROR => Ok(Self::EccError),
+            bindings::NV_ERR_FABRIC_MANAGER_NOT_PRESENT => Ok(Self::FabricManagerNotPresent),
+            bindings::NV_ERR_FATAL_ERROR => Ok(Self::FatalError),
+            bindings::NV_ERR_FEATURE_NOT_ENABLED => Ok(Self::FeatureNotEnabled),
+            bindings::NV_ERR_FIFO_BAD_ACCESS => Ok(Self::FifoBadAccess),
+            bindings::NV_ERR_FLCN_ERROR => Ok(Self::FlcnError),
+            bindings::NV_ERR_FREQ_NOT_SUPPORTED => Ok(Self::FreqNotSupported),
+            bindings::NV_ERR_GENERIC => Ok(Self::Generic),
+            bindings::NV_ERR_GPU_DMA_NOT_INITIALIZED => Ok(Self::GpuDmaNotInitialized),
+            bindings::NV_ERR_GPU_IN_DEBUG_MODE => Ok(Self::GpuInDebugMode),
+            bindings::NV_ERR_GPU_IN_FULLCHIP_RESET => Ok(Self::GpuInFullchipReset),
+            bindings::NV_ERR_GPU_IS_LOST => Ok(Self::GpuIsLost),
+            bindings::NV_ERR_GPU_MEMORY_ONLINING_FAILURE => Ok(Self::GpuMemoryOnliningFailure),
+            bindings::NV_ERR_GPU_NOT_FULL_POWER => Ok(Self::GpuNotFullPower),
+            bindings::NV_ERR_GPU_UUID_NOT_FOUND => Ok(Self::GpuUuidNotFound),
+            bindings::NV_ERR_HOT_SWITCH => Ok(Self::HotSwitch),
+            bindings::NV_ERR_I2C_ERROR => Ok(Self::I2cError),
+            bindings::NV_ERR_I2C_SPEED_TOO_HIGH => Ok(Self::I2cSpeedTooHigh),
+            bindings::NV_ERR_ILLEGAL_ACTION => Ok(Self::IllegalAction),
+            bindings::NV_ERR_IN_USE => Ok(Self::InUse),
+            bindings::NV_ERR_INFLATE_COMPRESSED_DATA_FAILED => {
+                Ok(Self::InflateCompressedDataFailed)
+            }
+            bindings::NV_ERR_INSERT_DUPLICATE_NAME => Ok(Self::InsertDuplicateName),
+            bindings::NV_ERR_INSUFFICIENT_PERMISSIONS => Ok(Self::InsufficientPermissions),
+            bindings::NV_ERR_INSUFFICIENT_POWER => Ok(Self::InsufficientPower),
+            bindings::NV_ERR_INSUFFICIENT_RESOURCES => Ok(Self::InsufficientResources),
+            bindings::NV_ERR_INSUFFICIENT_ZBC_ENTRY => Ok(Self::InsufficientZbcEntry),
+            bindings::NV_ERR_INVALID_ACCESS_TYPE => Ok(Self::InvalidAccessType),
+            bindings::NV_ERR_INVALID_ADDRESS => Ok(Self::InvalidAddress),
+            bindings::NV_ERR_INVALID_ARGUMENT => Ok(Self::InvalidArgument),
+            bindings::NV_ERR_INVALID_BASE => Ok(Self::InvalidBase),
+            bindings::NV_ERR_INVALID_CHANNEL => Ok(Self::InvalidChannel),
+            bindings::NV_ERR_INVALID_CLASS => Ok(Self::InvalidClass),
+            bindings::NV_ERR_INVALID_CLIENT => Ok(Self::InvalidClient),
+            bindings::NV_ERR_INVALID_COMMAND => Ok(Self::InvalidCommand),
+            bindings::NV_ERR_INVALID_DATA => Ok(Self::InvalidData),
+            bindings::NV_ERR_INVALID_DEVICE => Ok(Self::InvalidDevice),
+            bindings::NV_ERR_INVALID_DMA_SPECIFIER => Ok(Self::InvalidDmaSpecifier),
+            bindings::NV_ERR_INVALID_EVENT => Ok(Self::InvalidEvent),
+            bindings::NV_ERR_INVALID_FLAGS => Ok(Self::InvalidFlags),
+            bindings::NV_ERR_INVALID_FUNCTION => Ok(Self::InvalidFunction),
+            bindings::NV_ERR_INVALID_HEAP => Ok(Self::InvalidHeap),
+            bindings::NV_ERR_INVALID_INDEX => Ok(Self::InvalidIndex),
+            bindings::NV_ERR_INVALID_IRQ_LEVEL => Ok(Self::InvalidIrqLevel),
+            bindings::NV_ERR_INVALID_LICENSE => Ok(Self::InvalidLicense),
+            bindings::NV_ERR_INVALID_LIMIT => Ok(Self::InvalidLimit),
+            bindings::NV_ERR_INVALID_LOCK_STATE => Ok(Self::InvalidLockState),
+            bindings::NV_ERR_INVALID_METHOD => Ok(Self::InvalidMethod),
+            bindings::NV_ERR_INVALID_OBJECT => Ok(Self::InvalidObject),
+            bindings::NV_ERR_INVALID_OBJECT_BUFFER => Ok(Self::InvalidObjectBuffer),
+            bindings::NV_ERR_INVALID_OBJECT_HANDLE => Ok(Self::InvalidObjectHandle),
+            bindings::NV_ERR_INVALID_OBJECT_NEW => Ok(Self::InvalidObjectNew),
+            bindings::NV_ERR_INVALID_OBJECT_OLD => Ok(Self::InvalidObjectOld),
+            bindings::NV_ERR_INVALID_OBJECT_PARENT => Ok(Self::InvalidObjectParent),
+            bindings::NV_ERR_INVALID_OFFSET => Ok(Self::InvalidOffset),
+            bindings::NV_ERR_INVALID_OPERATION => Ok(Self::InvalidOperation),
+            bindings::NV_ERR_INVALID_OWNER => Ok(Self::InvalidOwner),
+            bindings::NV_ERR_INVALID_PARAM_STRUCT => Ok(Self::InvalidParamStruct),
+            bindings::NV_ERR_INVALID_PARAMETER => Ok(Self::InvalidParameter),
+            bindings::NV_ERR_INVALID_PATH => Ok(Self::InvalidPath),
+            bindings::NV_ERR_INVALID_POINTER => Ok(Self::InvalidPointer),
+            bindings::NV_ERR_INVALID_READ => Ok(Self::InvalidRead),
+            bindings::NV_ERR_INVALID_REGISTRY_KEY => Ok(Self::InvalidRegistryKey),
+            bindings::NV_ERR_INVALID_REQUEST => Ok(Self::InvalidRequest),
+            bindings::NV_ERR_INVALID_STATE => Ok(Self::InvalidState),
+            bindings::NV_ERR_INVALID_STRING_LENGTH => Ok(Self::InvalidStringLength),
+            bindings::NV_ERR_INVALID_WRITE => Ok(Self::InvalidWrite),
+            bindings::NV_ERR_INVALID_XLATE => Ok(Self::InvalidXlate),
+            bindings::NV_ERR_IRQ_EDGE_TRIGGERED => Ok(Self::IrqEdgeTriggered),
+            bindings::NV_ERR_IRQ_NOT_FIRING => Ok(Self::IrqNotFiring),
+            bindings::NV_ERR_KEY_ROTATION_IN_PROGRESS => Ok(Self::KeyRotationInProgress),
+            bindings::NV_ERR_LIB_RM_VERSION_MISMATCH => Ok(Self::LibRmVersionMismatch),
+            bindings::NV_ERR_MAX_SESSION_LIMIT_REACHED => Ok(Self::MaxSessionLimitReached),
+            bindings::NV_ERR_MEMORY_ERROR => Ok(Self::MemoryError),
+            bindings::NV_ERR_MEMORY_TRAINING_FAILED => Ok(Self::MemoryTrainingFailed),
+            bindings::NV_ERR_MISMATCHED_SLAVE => Ok(Self::MismatchedSlave),
+            bindings::NV_ERR_MISMATCHED_TARGET => Ok(Self::MismatchedTarget),
+            bindings::NV_ERR_MISSING_TABLE_ENTRY => Ok(Self::MissingTableEntry),
+            bindings::NV_ERR_MODULE_LOAD_FAILED => Ok(Self::ModuleLoadFailed),
+            bindings::NV_ERR_MORE_DATA_AVAILABLE => Ok(Self::MoreDataAvailable),
+            bindings::NV_ERR_MORE_PROCESSING_REQUIRED => Ok(Self::MoreProcessingRequired),
+            bindings::NV_ERR_MULTIPLE_MEMORY_TYPES => Ok(Self::MultipleMemoryTypes),
+            bindings::NV_ERR_NO_FREE_FIFOS => Ok(Self::NoFreeFifos),
+            bindings::NV_ERR_NO_INTR_PENDING => Ok(Self::NoIntrPending),
+            bindings::NV_ERR_NO_MEMORY => Ok(Self::NoMemory),
+            bindings::NV_ERR_NO_SUCH_DOMAIN => Ok(Self::NoSuchDomain),
+            bindings::NV_ERR_NO_VALID_PATH => Ok(Self::NoValidPath),
+            bindings::NV_ERR_NOT_COMPATIBLE => Ok(Self::NotCompatible),
+            bindings::NV_ERR_NOT_READY => Ok(Self::NotReady),
+            bindings::NV_ERR_NOT_SUPPORTED => Ok(Self::NotSupported),
+            bindings::NV_ERR_NVLINK_CLOCK_ERROR => Ok(Self::NvlinkClockError),
+            bindings::NV_ERR_NVLINK_CONFIGURATION_ERROR => Ok(Self::NvlinkConfigurationError),
+            bindings::NV_ERR_NVLINK_FABRIC_FAILURE => Ok(Self::NvlinkFabricFailure),
+            bindings::NV_ERR_NVLINK_FABRIC_NOT_READY => Ok(Self::NvlinkFabricNotReady),
+            bindings::NV_ERR_NVLINK_INIT_ERROR => Ok(Self::NvlinkInitError),
+            bindings::NV_ERR_NVLINK_MINION_ERROR => Ok(Self::NvlinkMinionError),
+            bindings::NV_ERR_NVLINK_TRAINING_ERROR => Ok(Self::NvlinkTrainingError),
+            bindings::NV_ERR_OBJECT_NOT_FOUND => Ok(Self::ObjectNotFound),
+            bindings::NV_ERR_OBJECT_TYPE_MISMATCH => Ok(Self::ObjectTypeMismatch),
+            bindings::NV_ERR_OPERATING_SYSTEM => Ok(Self::OperatingSystem),
+            bindings::NV_ERR_OTHER_DEVICE_FOUND => Ok(Self::OtherDeviceFound),
+            bindings::NV_ERR_OUT_OF_RANGE => Ok(Self::OutOfRange),
+            bindings::NV_ERR_OVERLAPPING_UVM_COMMIT => Ok(Self::OverlappingUvmCommit),
+            bindings::NV_ERR_PAGE_TABLE_NOT_AVAIL => Ok(Self::PageTableNotAvail),
+            bindings::NV_ERR_PID_NOT_FOUND => Ok(Self::PidNotFound),
+            bindings::NV_ERR_PMU_NOT_READY => Ok(Self::PmuNotReady),
+            bindings::NV_ERR_PRIV_SEC_VIOLATION => Ok(Self::PrivSecViolation),
+            bindings::NV_ERR_PROTECTION_FAULT => Ok(Self::ProtectionFault),
+            bindings::NV_ERR_QUEUE_TASK_SLOT_NOT_AVAILABLE => Ok(Self::QueueTaskSlotNotAvailable),
+            bindings::NV_ERR_RC_ERROR => Ok(Self::RcError),
+            bindings::NV_ERR_REDUCTION_MANAGER_NOT_AVAILABLE => {
+                Ok(Self::ReductionManagerNotAvailable)
+            }
+            bindings::NV_ERR_REJECTED_VBIOS => Ok(Self::RejectedVbios),
+            bindings::NV_ERR_RESET_REQUIRED => Ok(Self::ResetRequired),
+            bindings::NV_ERR_RESOURCE_LOST => Ok(Self::ResourceLost),
+            bindings::NV_ERR_RESOURCE_RETIREMENT_ERROR => Ok(Self::ResourceRetirementError),
+            bindings::NV_ERR_RISCV_ERROR => Ok(Self::RiscvError),
+            bindings::NV_ERR_SECURE_BOOT_FAILED => Ok(Self::SecureBootFailed),
+            bindings::NV_ERR_SIGNAL_PENDING => Ok(Self::SignalPending),
+            bindings::NV_ERR_STATE_IN_USE => Ok(Self::StateInUse),
+            bindings::NV_ERR_TEST_ONLY_CODE_NOT_ENABLED => Ok(Self::TestOnlyCodeNotEnabled),
+            bindings::NV_ERR_TIMEOUT => Ok(Self::Timeout),
+            bindings::NV_ERR_TIMEOUT_RETRY => Ok(Self::TimeoutRetry),
+            bindings::NV_ERR_TOO_MANY_PRIMARIES => Ok(Self::TooManyPrimaries),
+            bindings::NV_ERR_UVM_ADDRESS_IN_USE => Ok(Self::UvmAddressInUse),
+            _ => Err(EINVAL),
+        }
+    }
+}
+
+impl TryFrom<u32> for GspMsgRmStatus {
+    type Error = Error;
+
+    fn try_from(value: u32) -> Result<Self> {
+        if value == bindings::NV_OK {
+            return Ok(Self::Ok);
+        }
+
+        if let Ok(warning) = GspMsgRmWarning::try_from(value) {
+            return Ok(Self::Warning(warning));
+        }
+
+        Ok(Self::Error(GspMsgRmError::try_from(value)?))
+    }
+}
+
 /// Empty type to group methods related to heap parameters for running the GSP firmware.
 enum GspFwHeapParams {}
 
