@@ -16,6 +16,7 @@
 #include <linux/slab.h>
 #include <linux/mutex.h>
 #include <linux/regmap.h>
+#include <linux/regulator/consumer.h>
 #include <linux/videodev2.h>
 #include <media/i2c/lm3560.h>
 #include <media/v4l2-ctrls.h>
@@ -433,6 +434,11 @@ static int lm3560_probe(struct i2c_client *client)
 	if (IS_ERR(flash->hwen_gpio))
 		return dev_err_probe(&client->dev, PTR_ERR(flash->hwen_gpio),
 				     "failed to get hwen gpio\n");
+
+	rval = devm_regulator_get_enable(&client->dev, "vin");
+	if (rval)
+		return dev_err_probe(&client->dev, rval,
+				     "failed to enable regulator\n");
 
 	rval = lm3560_subdev_init(flash, LM3560_LED0, "lm3560-led0");
 	if (rval < 0)
