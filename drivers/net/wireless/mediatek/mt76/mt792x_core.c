@@ -763,7 +763,7 @@ out:
 struct ieee80211_ops *
 mt792x_get_mac80211_ops(struct device *dev,
 			const struct ieee80211_ops *mac80211_ops,
-			void *drv_data, u8 *fw_features)
+			const void *drv_data, u8 *fw_features)
 {
 	struct ieee80211_ops *ops;
 

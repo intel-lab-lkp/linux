@@ -18,7 +18,7 @@
 
 static const struct sdio_device_id mt7921s_table[] = {
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_MEDIATEK, 0x7901),
-		.driver_data = (kernel_ulong_t)MT7921_FIRMWARE_WM },
+		.driver_data_ptr = MT7921_FIRMWARE_WM },
 	{ }	/* Terminating entry */
 };
 
@@ -129,7 +129,7 @@ static int mt7921s_probe(struct sdio_func *func,
 	int ret;
 
 	ops = mt792x_get_mac80211_ops(&func->dev, &mt7921_ops,
-				      (void *)id->driver_data, &features);
+				      id->driver_data_ptr, &features);
 	if (!ops)
 		return -ENOMEM;
 
