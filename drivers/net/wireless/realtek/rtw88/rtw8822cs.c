@@ -13,7 +13,7 @@ static const struct sdio_device_id rtw_8822cs_id_table[] =  {
 	{
 		SDIO_DEVICE(SDIO_VENDOR_ID_REALTEK,
 			    SDIO_DEVICE_ID_REALTEK_RTW8822CS),
-		.driver_data = (kernel_ulong_t)&rtw8822c_hw_spec,
+		.driver_data_ptr = &rtw8822c_hw_spec,
 	},
 	{}
 };

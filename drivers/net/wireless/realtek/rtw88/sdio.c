@@ -1334,7 +1334,7 @@ int rtw_sdio_probe(struct sdio_func *sdio_func,
 	rtwdev = hw->priv;
 	rtwdev->hw = hw;
 	rtwdev->dev = &sdio_func->dev;
-	rtwdev->chip = (struct rtw_chip_info *)id->driver_data;
+	rtwdev->chip = id->driver_data_ptr;
 	rtwdev->hci.ops = &rtw_sdio_ops;
 	rtwdev->hci.type = RTW_HCI_TYPE_SDIO;
 
