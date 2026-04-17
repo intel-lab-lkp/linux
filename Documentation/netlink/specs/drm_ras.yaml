@@ -150,3 +150,15 @@ operations:
             - error-id
             - error-name
             - error-threshold
+    -
+      name: set-error-threshold
+      doc: >-
+           Set threshold value of the error.
+      attribute-set: error-threshold-attrs
+      flags: [admin-perm]
+      do:
+        request:
+          attributes:
+            - node-id
+            - error-id
+            - error-threshold

@@ -41,6 +41,9 @@
  *    Userspace must provide Node ID and Error ID.
  *    Returns the threshold value of a specific error.
  *
+ * 4. SET_ERROR_THRESHOLD: Set threshold value of the error.
+ *    Userspace must provide Node ID, Error ID and Threshold value to be set.
+ *
  * Node registration:
  *
  * - drm_ras_node_register(): Registers a new node and assigns
@@ -72,6 +75,8 @@
  *   operation, fetching a counter value from a specific node.
  * - drm_ras_nl_get_error_threshold_doit(): Implements the GET_ERROR_THRESHOLD doit
  *   operation, fetching the threshold value of a specific error.
+ * - drm_ras_nl_set_error_threshold_doit(): Implements the SET_ERROR_THRESHOLD doit
+ *   operation, setting the threshold value of a specific error.
  */
 
 static DEFINE_XARRAY_ALLOC(drm_ras_xa);
@@ -182,6 +187,21 @@ static int get_node_error_threshold(u32 node_id, u32 error_id,
 		return -EINVAL;
 
 	return node->query_error_threshold(node, error_id, name, value);
+}
+
+static int set_node_error_threshold(u32 node_id, u32 error_id, u32 value)
+{
+	struct drm_ras_node *node;
+
+	node = xa_load(&drm_ras_xa, node_id);
+	if (!node || !node->set_error_threshold)
+		return -ENOENT;
+
+	if (error_id < node->error_counter_range.first ||
+	    error_id > node->error_counter_range.last)
+		return -EINVAL;
+
+	return node->set_error_threshold(node, error_id, value);
 }
 
 static int msg_reply_counter_value(struct sk_buff *msg, u32 error_id,
@@ -415,6 +435,34 @@ int drm_ras_nl_get_error_threshold_doit(struct sk_buff *skb,
 	error_id = nla_get_u32(info->attrs[DRM_RAS_A_ERROR_THRESHOLD_ATTRS_ERROR_ID]);
 
 	return doit_reply_threshold_value(info, node_id, error_id);
+}
+
+/**
+ * drm_ras_nl_set_error_threshold_doit() - Set threshold value of the error
+ * @skb: Netlink message buffer
+ * @info: Generic Netlink info containing attributes of the request
+ *
+ * Extracts the node ID, error ID and threshold value from the netlink attributes
+ * and sets the threshold of the corresponding error.
+ *
+ * Return: 0 on success, or negative errno on failure.
+ */
+int drm_ras_nl_set_error_threshold_doit(struct sk_buff *skb,
+				      struct genl_info *info)
+{
+	u32 node_id, error_id, value;
+
+	if (!info->attrs ||
+	    GENL_REQ_ATTR_CHECK(info, DRM_RAS_A_ERROR_THRESHOLD_ATTRS_NODE_ID) ||
+	    GENL_REQ_ATTR_CHECK(info, DRM_RAS_A_ERROR_THRESHOLD_ATTRS_ERROR_ID) ||
+	    GENL_REQ_ATTR_CHECK(info, DRM_RAS_A_ERROR_THRESHOLD_ATTRS_ERROR_THRESHOLD))
+		return -EINVAL;
+
+	node_id = nla_get_u32(info->attrs[DRM_RAS_A_ERROR_THRESHOLD_ATTRS_NODE_ID]);
+	error_id = nla_get_u32(info->attrs[DRM_RAS_A_ERROR_THRESHOLD_ATTRS_ERROR_ID]);
+	value = nla_get_u32(info->attrs[DRM_RAS_A_ERROR_THRESHOLD_ATTRS_ERROR_THRESHOLD]);
+
+	return set_node_error_threshold(node_id, error_id, value);
 }
 
 /**
