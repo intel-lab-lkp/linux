@@ -1364,7 +1364,7 @@ struct ieee80211_tx_info {
 			u8 pad;
 			u16 tx_time;
 			u8 flags;
-			u8 pad2;
+			u8 link_valid:1, link_id:4, pad2:3;
 			void *status_driver_data[16 / sizeof(void *)];
 		} status;
 		struct {

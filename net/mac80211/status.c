@@ -622,7 +622,8 @@ static void ieee80211_report_ack_skb(struct ieee80211_local *local,
 		return;
 
 	if (info->flags & IEEE80211_TX_INTFL_NL80211_FRAME_TX) {
-		u64 cookie = IEEE80211_SKB_CB(skb)->ack.cookie;
+		struct ieee80211_tx_info *skb_info = IEEE80211_SKB_CB(skb);
+		u64 cookie = skb_info->ack.cookie;
 		struct ieee80211_sub_if_data *sdata;
 		struct ieee80211_hdr *hdr = (void *)skb->data;
 		bool is_valid_ack_signal =
@@ -652,12 +653,33 @@ static void ieee80211_report_ack_skb(struct ieee80211_local *local,
 								skb->len,
 								acked,
 								GFP_ATOMIC);
-			else if (ieee80211_is_any_nullfunc(hdr->frame_control))
-				cfg80211_probe_status(sdata->dev, hdr->addr1,
-						      cookie, -1, acked,
+			else if (ieee80211_is_any_nullfunc(hdr->frame_control)) {
+				const u8 *peer_addr;
+				int link_id = -1;
+
+				/*
+				 * STA/P2P client: peer_addr omitted;
+				 * AP/GO: report RA
+				 */
+				if (sdata->vif.type ==
+				    NL80211_IFTYPE_STATION ||
+				    sdata->vif.type ==
+				    NL80211_IFTYPE_P2P_CLIENT) {
+					peer_addr = NULL;
+
+					if (ieee80211_vif_is_mld(&sdata->vif) &&
+					    info->status.link_valid)
+						link_id = info->status.link_id;
+				} else {
+					peer_addr = hdr->addr1;
+				}
+
+				cfg80211_probe_status(sdata->dev, peer_addr,
+						      cookie, link_id, acked,
 						      info->status.ack_signal,
 						      is_valid_ack_signal,
 						      GFP_ATOMIC);
+			}
 			else if (ieee80211_is_mgmt(hdr->frame_control))
 				cfg80211_mgmt_tx_status_ext(&sdata->wdev,
 							    &status,
