@@ -12,6 +12,7 @@ amdxdna-y := \
 	aie2_solver.o \
 	aie4_message.o \
 	aie4_pci.o \
+	amdxdna_cbuf.o \
 	amdxdna_ctx.o \
 	amdxdna_gem.o \
 	amdxdna_iommu.o \
