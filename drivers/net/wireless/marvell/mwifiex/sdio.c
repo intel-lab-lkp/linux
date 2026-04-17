@@ -566,8 +566,8 @@ mwifiex_sdio_probe(struct sdio_func *func, const struct sdio_device_id *id)
 
 	func->card->quirks |= MMC_QUIRK_BLKSZ_FOR_BYTE_MODE;
 
-	if (id->driver_data) {
-		struct mwifiex_sdio_device *data = (void *)id->driver_data;
+	if (id->driver_data_ptr) {
+		const struct mwifiex_sdio_device *data = id->driver_data_ptr;
 
 		card->firmware = data->firmware;
 		card->firmware_sdiouart = data->firmware_sdiouart;
@@ -955,25 +955,25 @@ static void mwifiex_sdio_coredump(struct device *dev)
 /* WLAN IDs */
 static const struct sdio_device_id mwifiex_ids[] = {
 	{SDIO_DEVICE(SDIO_VENDOR_ID_MARVELL, SDIO_DEVICE_ID_MARVELL_8786_WLAN),
-		.driver_data = (unsigned long) &mwifiex_sdio_sd8786},
+		.driver_data_ptr = &mwifiex_sdio_sd8786},
 	{SDIO_DEVICE(SDIO_VENDOR_ID_MARVELL, SDIO_DEVICE_ID_MARVELL_8787_WLAN),
-		.driver_data = (unsigned long) &mwifiex_sdio_sd8787},
+		.driver_data_ptr = &mwifiex_sdio_sd8787},
 	{SDIO_DEVICE(SDIO_VENDOR_ID_MARVELL, SDIO_DEVICE_ID_MARVELL_8797_WLAN),
-		.driver_data = (unsigned long) &mwifiex_sdio_sd8797},
+		.driver_data_ptr = &mwifiex_sdio_sd8797},
 	{SDIO_DEVICE(SDIO_VENDOR_ID_MARVELL, SDIO_DEVICE_ID_MARVELL_8897_WLAN),
-		.driver_data = (unsigned long) &mwifiex_sdio_sd8897},
+		.driver_data_ptr = &mwifiex_sdio_sd8897},
 	{SDIO_DEVICE(SDIO_VENDOR_ID_MARVELL, SDIO_DEVICE_ID_MARVELL_8887_WLAN),
-		.driver_data = (unsigned long)&mwifiex_sdio_sd8887},
+		.driver_data_ptr = &mwifiex_sdio_sd8887},
 	{SDIO_DEVICE(SDIO_VENDOR_ID_MARVELL, SDIO_DEVICE_ID_MARVELL_8801_WLAN),
-		.driver_data = (unsigned long)&mwifiex_sdio_sd8801},
+		.driver_data_ptr = &mwifiex_sdio_sd8801},
 	{SDIO_DEVICE(SDIO_VENDOR_ID_MARVELL, SDIO_DEVICE_ID_MARVELL_8977_WLAN),
-		.driver_data = (unsigned long)&mwifiex_sdio_sd8977},
+		.driver_data_ptr = &mwifiex_sdio_sd8977},
 	{SDIO_DEVICE(SDIO_VENDOR_ID_MARVELL, SDIO_DEVICE_ID_MARVELL_8978_WLAN),
-		.driver_data = (unsigned long)&mwifiex_sdio_sd8978},
+		.driver_data_ptr = &mwifiex_sdio_sd8978},
 	{SDIO_DEVICE(SDIO_VENDOR_ID_MARVELL, SDIO_DEVICE_ID_MARVELL_8987_WLAN),
-		.driver_data = (unsigned long)&mwifiex_sdio_sd8987},
+		.driver_data_ptr = &mwifiex_sdio_sd8987},
 	{SDIO_DEVICE(SDIO_VENDOR_ID_MARVELL, SDIO_DEVICE_ID_MARVELL_8997_WLAN),
-		.driver_data = (unsigned long)&mwifiex_sdio_sd8997},
+		.driver_data_ptr = &mwifiex_sdio_sd8997},
 	{},
 };
 
