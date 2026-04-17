@@ -1320,5 +1320,5 @@ DEFINE_LSM(ima) = {
 	.order = LSM_ORDER_LAST,
 	.blobs = &ima_blob_sizes,
 	/* Start IMA after the TPM is available */
-	.initcall_late = init_ima,
+	.initcall_late_sync = init_ima,
 };
