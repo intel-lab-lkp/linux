@@ -320,8 +320,13 @@ static irqreturn_t pcc_mbox_irq(int irq, void *p)
 	if (pcc_chan_reg_read_modify_write(&pchan->plat_irq_ack))
 		return IRQ_NONE;
 
+	/*
+	 * For Master Subspaces, we must ensure we see the latest chan_in_use
+	 * value updated by pcc_send_data() on another core. smp_load_acquire
+	 * provides the necessary barrier to avoid probabilistic IRQ misses.
+	 */
 	if (pchan->type == ACPI_PCCT_TYPE_EXT_PCC_MASTER_SUBSPACE &&
-	    !pchan->chan_in_use)
+	    !smp_load_acquire(&pchan->chan_in_use))
 		return IRQ_NONE;
 
 	if (!pcc_mbox_cmd_complete_check(pchan))
@@ -336,7 +341,7 @@ static irqreturn_t pcc_mbox_irq(int irq, void *p)
 	 * where the flag is set again to start new transfer. This is
 	 * required to avoid any possible race in updatation of this flag.
 	 */
-	pchan->chan_in_use = false;
+	smp_store_release(&pchan->chan_in_use, false);
 	mbox_chan_received_data(chan, NULL);
 	mbox_chan_txdone(chan, 0);
 
@@ -438,9 +443,16 @@ static int pcc_send_data(struct mbox_chan *chan, void *data)
 	if (ret)
 		return ret;
 
+	/*
+	 * Set chan_in_use before ringing the doorbell. Using smp_store_release
+	 * ensures the flag is visible to the interrupt handler before the
+	 * hardware is actually notified.
+	 */
+	if (pchan->plat_irq > 0)
+		smp_store_release(&pchan->chan_in_use, true);
 	ret = pcc_chan_reg_read_modify_write(&pchan->db);
-	if (!ret && pchan->plat_irq > 0)
-		pchan->chan_in_use = true;
+	if (ret && pchan->plat_irq > 0)
+		smp_store_release(&pchan->chan_in_use, false);
 
 	return ret;
 }
