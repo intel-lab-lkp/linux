@@ -1479,6 +1479,9 @@ static ssize_t bootargs_append_store(struct kobject *kobj,
 	if (!fw_dump.fadump_enabled || fw_dump.dump_active)
 		return -EPERM;
 
+	if (!count)
+		return -EINVAL;
+
 	if (count >= COMMAND_LINE_SIZE)
 		return -EINVAL;
 
