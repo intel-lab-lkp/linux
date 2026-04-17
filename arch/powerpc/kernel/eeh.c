@@ -1729,11 +1729,18 @@ static ssize_t eeh_force_recover_write(struct file *filp,
 	uint32_t phbid, pe_no;
 	struct eeh_pe *pe;
 	char buf[20];
-	int ret;
+	ssize_t ret;
 
-	ret = simple_write_to_buffer(buf, sizeof(buf), ppos, user_buf, count);
+	if (*ppos != 0 || count >= sizeof(buf))
+		return -EINVAL;
+
+	ret = simple_write_to_buffer(buf, sizeof(buf) - 1, ppos, user_buf,
+				     count);
+	if (ret < 0)
+		return ret;
 	if (!ret)
 		return -EFAULT;
+	buf[ret] = '\0';
 
 	/*
 	 * When PE is NULL the event is a "special" event. Rather than

@@ -71,15 +71,22 @@ static ssize_t pnv_eeh_ei_write(struct file *filp,
 	int pe_no, type, func;
 	unsigned long addr, mask;
 	char buf[50];
-	int ret;
+	ssize_t ret;
 
 	if (!eeh_ops || !eeh_ops->err_inject)
 		return -ENXIO;
 
+	if (*ppos != 0 || count >= sizeof(buf))
+		return -EINVAL;
+
 	/* Copy over argument buffer */
-	ret = simple_write_to_buffer(buf, sizeof(buf), ppos, user_buf, count);
+	ret = simple_write_to_buffer(buf, sizeof(buf) - 1, ppos, user_buf,
+				     count);
+	if (ret < 0)
+		return ret;
 	if (!ret)
 		return -EFAULT;
+	buf[ret] = '\0';
 
 	/* Retrieve parameters */
 	ret = sscanf(buf, "%x:%x:%x:%lx:%lx",
