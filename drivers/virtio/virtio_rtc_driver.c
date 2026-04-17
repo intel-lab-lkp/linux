@@ -427,6 +427,15 @@ static int viortc_msg_xfer(struct viortc_vq *vq, struct viortc_msg *msg,
 	sg_init_one(out_sg, msg->req, msg->req_size);
 	sg_init_one(in_sg, msg->resp, msg->resp_cap);
 
+	if (!vq->vq) {
+		/*
+		 * Keep runtime interfaces in a safe failed state if restore
+		 * teardown removed the virtqueues.
+		 */
+		viortc_msg_release(msg);
+		return -ENODEV;
+	}
+
 	spin_lock_irqsave(&vq->lock, flags);
 
 	ret = virtqueue_add_sgs(vq->vq, sgs, 1, 1, msg, GFP_ATOMIC);
@@ -476,6 +485,17 @@ static int viortc_msg_xfer(struct viortc_vq *vq, struct viortc_msg *msg,
 		return -EINVAL;
 
 	return 0;
+}
+
+static void viortc_del_vqs(struct viortc_dev *viortc)
+{
+	struct virtio_device *vdev = viortc->vdev;
+	unsigned int i;
+
+	vdev->config->del_vqs(vdev);
+
+	for (i = 0; i < ARRAY_SIZE(viortc->vqs); i++)
+		viortc->vqs[i].vq = NULL;
 }
 
 /*
@@ -1316,7 +1336,7 @@ err_deinit_clocks:
 
 err_reset_vdev:
 	virtio_reset_device(vdev);
-	vdev->config->del_vqs(vdev);
+	viortc_del_vqs(viortc);
 
 	return ret;
 }
@@ -1332,7 +1352,7 @@ static void viortc_remove(struct virtio_device *vdev)
 	viortc_clocks_deinit(viortc);
 
 	virtio_reset_device(vdev);
-	vdev->config->del_vqs(vdev);
+	viortc_del_vqs(viortc);
 }
 
 static int viortc_freeze(struct virtio_device *dev)
@@ -1353,9 +1373,11 @@ static int viortc_restore(struct virtio_device *dev)
 	bool notify = false;
 	int ret;
 
+	viortc_del_vqs(viortc);
+
 	ret = viortc_init_vqs(viortc);
 	if (ret)
-		return ret;
+		goto err_del_vqs;
 
 	alarm_viortc_vq = &viortc->vqs[VIORTC_ALARMQ];
 	alarm_vq = alarm_viortc_vq->vq;
@@ -1364,16 +1386,22 @@ static int viortc_restore(struct virtio_device *dev)
 		ret = viortc_populate_vq(viortc, alarm_viortc_vq,
 					 VIORTC_ALARMQ_BUF_CAP, false);
 		if (ret)
-			return ret;
+			goto err_del_vqs;
 
 		notify = virtqueue_kick_prepare(alarm_vq);
 	}
 
 	virtio_device_ready(dev);
 
-	if (notify && !virtqueue_notify(alarm_vq))
+	if (notify && !virtqueue_notify(alarm_vq)) {
 		ret = -EIO;
+		goto err_del_vqs;
+	}
 
+	return ret;
+
+err_del_vqs:
+	viortc_del_vqs(viortc);
 	return ret;
 }
 
