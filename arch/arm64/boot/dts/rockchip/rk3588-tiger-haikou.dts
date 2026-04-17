@@ -173,7 +173,8 @@
 	 * connected on Haikou itself.
 	 */
 	pinctrl-names = "default";
-	pinctrl-0 = <&hdmim0_tx0_hpd &hdmim1_tx0_scl &hdmim1_tx0_sda>;
+	pinctrl-0 = <&hdmim0_tx0_hpd &hdmim1_tx0_scl &hdmim1_tx0_sda
+		     &hdmi0_frl_en>;
 	status = "okay";
 };
 
