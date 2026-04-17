@@ -2106,7 +2106,7 @@ free_drv_info:
 	kfree(drv_info);
 	return ret;
 }
-rootfs_initcall(ffa_init);
+device_initcall(ffa_init);
 
 static void __exit ffa_exit(void)
 {
