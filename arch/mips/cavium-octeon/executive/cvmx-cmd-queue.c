@@ -46,7 +46,7 @@
  * This application uses this pointer to access the global queue
  * state. It points to a bootmem named block.
  */
-__cvmx_cmd_queue_all_state_t *__cvmx_cmd_queue_state_ptr;
+struct __cvmx_cmd_queue_all_state *__cvmx_cmd_queue_state_ptr;
 EXPORT_SYMBOL_GPL(__cvmx_cmd_queue_state_ptr);
 
 /*
@@ -109,7 +109,7 @@ cvmx_cmd_queue_result_t cvmx_cmd_queue_initialize(cvmx_cmd_queue_id_t queue_id,
 						  int max_depth, int fpa_pool,
 						  int pool_size)
 {
-	__cvmx_cmd_queue_state_t *qstate;
+	struct __cvmx_cmd_queue_state *qstate;
 	cvmx_cmd_queue_result_t result = __cvmx_cmd_queue_init_state_ptr();
 	if (result != CVMX_CMD_QUEUE_SUCCESS)
 		return result;
@@ -202,7 +202,7 @@ cvmx_cmd_queue_result_t cvmx_cmd_queue_initialize(cvmx_cmd_queue_id_t queue_id,
  */
 cvmx_cmd_queue_result_t cvmx_cmd_queue_shutdown(cvmx_cmd_queue_id_t queue_id)
 {
-	__cvmx_cmd_queue_state_t *qptr = __cvmx_cmd_queue_get_state(queue_id);
+	struct __cvmx_cmd_queue_state *qptr = __cvmx_cmd_queue_get_state(queue_id);
 	if (qptr == NULL) {
 		cvmx_dprintf("ERROR: cvmx_cmd_queue_shutdown: Unable to "
 			     "get queue information.\n");
@@ -295,7 +295,7 @@ int cvmx_cmd_queue_length(cvmx_cmd_queue_id_t queue_id)
  */
 void *cvmx_cmd_queue_buffer(cvmx_cmd_queue_id_t queue_id)
 {
-	__cvmx_cmd_queue_state_t *qptr = __cvmx_cmd_queue_get_state(queue_id);
+	struct __cvmx_cmd_queue_state *qptr = __cvmx_cmd_queue_get_state(queue_id);
 	if (qptr && qptr->base_ptr_div128)
 		return cvmx_phys_to_ptr((uint64_t) qptr->base_ptr_div128 << 7);
 	else

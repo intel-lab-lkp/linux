@@ -71,6 +71,12 @@
  *
  */
 
+/* Global pointer to the state of command the queues
+ * Moved here to satisfy requirements in cvmx-cmd-queue.c for EXPORT_SYMBOL_GPL
+ */
+extern struct __cvmx_cmd_queue_all_state
+	    *__cvmx_cmd_queue_state_ptr;
+
 #ifndef __CVMX_CMD_QUEUE_H__
 #define __CVMX_CMD_QUEUE_H__
 
@@ -125,7 +131,7 @@ typedef enum {
 	CVMX_CMD_QUEUE_ALREADY_SETUP = -4,
 } cvmx_cmd_queue_result_t;
 
-typedef struct {
+struct  __cvmx_cmd_queue_state {
 	/* You have lock when this is your ticket */
 	uint8_t now_serving;
 	uint64_t unused1:24;
@@ -140,7 +146,7 @@ typedef struct {
 	uint64_t pool_size_m1:13;
 	/* Number of commands already used in buffer */
 	uint64_t index:13;
-} __cvmx_cmd_queue_state_t;
+};
 
 /**
  * This structure contains the global state of all command queues.
@@ -150,10 +156,10 @@ typedef struct {
  * ll/sc used to get a ticket. If this is not the case, the update
  * of queue state causes the ll/sc to fail quite often.
  */
-typedef struct {
+struct __cvmx_cmd_queue_all_state {
 	uint64_t ticket[(CVMX_CMD_QUEUE_END >> 16) * 256];
-	__cvmx_cmd_queue_state_t state[(CVMX_CMD_QUEUE_END >> 16) * 256];
-} __cvmx_cmd_queue_all_state_t;
+	struct __cvmx_cmd_queue_state state[(CVMX_CMD_QUEUE_END >> 16) * 256];
+};
 
 /**
  * Initialize a command queue for use. The initial FPA buffer is
@@ -234,10 +240,8 @@ static inline int __cvmx_cmd_queue_get_index(cvmx_cmd_queue_id_t queue_id)
  * @qptr:     Pointer to the queue's global state
  */
 static inline void __cvmx_cmd_queue_lock(cvmx_cmd_queue_id_t queue_id,
-					 __cvmx_cmd_queue_state_t *qptr)
+					 struct __cvmx_cmd_queue_state *qptr)
 {
-	extern __cvmx_cmd_queue_all_state_t
-	    *__cvmx_cmd_queue_state_ptr;
 	int tmp;
 	int my_ticket;
 	prefetch(qptr);
@@ -286,7 +290,7 @@ static inline void __cvmx_cmd_queue_lock(cvmx_cmd_queue_id_t queue_id,
  *
  * @qptr:   Queue to unlock
  */
-static inline void __cvmx_cmd_queue_unlock(__cvmx_cmd_queue_state_t *qptr)
+static inline void __cvmx_cmd_queue_unlock(struct __cvmx_cmd_queue_state *qptr)
 {
 	qptr->now_serving++;
 	CVMX_SYNCWS;
@@ -299,10 +303,10 @@ static inline void __cvmx_cmd_queue_unlock(__cvmx_cmd_queue_state_t *qptr)
  *
  * Returns Queue structure or NULL on failure
  */
-static inline __cvmx_cmd_queue_state_t
+static inline struct __cvmx_cmd_queue_state
     *__cvmx_cmd_queue_get_state(cvmx_cmd_queue_id_t queue_id)
 {
-	extern __cvmx_cmd_queue_all_state_t
+	extern struct __cvmx_cmd_queue_all_state
 	    *__cvmx_cmd_queue_state_ptr;
 	return &__cvmx_cmd_queue_state_ptr->
 	    state[__cvmx_cmd_queue_get_index(queue_id)];
@@ -329,7 +333,7 @@ static inline cvmx_cmd_queue_result_t cvmx_cmd_queue_write(cvmx_cmd_queue_id_t
 							   int cmd_count,
 							   uint64_t *cmds)
 {
-	__cvmx_cmd_queue_state_t *qptr = __cvmx_cmd_queue_get_state(queue_id);
+	struct __cvmx_cmd_queue_state *qptr = __cvmx_cmd_queue_get_state(queue_id);
 
 	/* Make sure nobody else is updating the same queue */
 	if (likely(use_locking))
@@ -427,7 +431,7 @@ static inline cvmx_cmd_queue_result_t cvmx_cmd_queue_write2(cvmx_cmd_queue_id_t
 							    uint64_t cmd1,
 							    uint64_t cmd2)
 {
-	__cvmx_cmd_queue_state_t *qptr = __cvmx_cmd_queue_get_state(queue_id);
+	struct __cvmx_cmd_queue_state *qptr = __cvmx_cmd_queue_get_state(queue_id);
 
 	/* Make sure nobody else is updating the same queue */
 	if (likely(use_locking))
@@ -528,7 +532,7 @@ static inline cvmx_cmd_queue_result_t cvmx_cmd_queue_write3(cvmx_cmd_queue_id_t
 							    uint64_t cmd2,
 							    uint64_t cmd3)
 {
-	__cvmx_cmd_queue_state_t *qptr = __cvmx_cmd_queue_get_state(queue_id);
+	struct __cvmx_cmd_queue_state *qptr = __cvmx_cmd_queue_get_state(queue_id);
 
 	/* Make sure nobody else is updating the same queue */
 	if (likely(use_locking))
