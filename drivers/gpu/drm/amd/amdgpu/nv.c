@@ -352,6 +352,12 @@ static struct soc15_allowed_register_entry nv_allowed_read_registers[] = {
 	{ SOC15_REG_ENTRY(GC, 0, mmCP_CPC_STALLED_STAT1)},
 	{ SOC15_REG_ENTRY(GC, 0, mmCP_CPC_STATUS)},
 	{ SOC15_REG_ENTRY(GC, 0, mmGB_ADDR_CONFIG)},
+	/*
+	 * GC_THROTTLE_STATUS (offset 0x2032): read-only thermal throttle FSM.
+	 * FSM_STATE [3:0] != 0 indicates the GPU is currently being throttled.
+	 * Defined in gc_10_3_0_offset.h / gc_10_3_0_sh_mask.h
+	 */
+	{ SOC15_REG_ENTRY(GC, 0, mmGC_THROTTLE_STATUS)},
 };
 
 static uint32_t nv_read_indexed_register(struct amdgpu_device *adev, u32 se_num,
