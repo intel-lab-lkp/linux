@@ -16,6 +16,19 @@
 int pt_iommu_init(struct pt_iommu_table *fmt_table,
 		  const struct pt_iommu_table_cfg *cfg, gfp_t gfp);
 
+/*
+ * iommu_pages_flush_incoherent() uses clflush directly on x86 but falls back to
+ * dma_sync_single_for_device() elsewhere, which needs a real DMA device. The
+ * kunit's dummy_dev is a kunit_device_register() stub and cannot service the
+ * DMA API, so skip this feature in kunit on non-x86.
+ */
+#if IS_ENABLED(CONFIG_X86)
+#define KUNIT_PT_SUPPORTED_FEATURES PT_SUPPORTED_FEATURES
+#else
+#define KUNIT_PT_SUPPORTED_FEATURES \
+	(PT_SUPPORTED_FEATURES & ~BIT(PT_FEAT_DMA_INCOHERENT))
+#endif
+
 /* The format can provide a list of configurations it would like to test */
 #ifdef kunit_fmt_cfgs
 static const void *kunit_pt_gen_params_cfg(struct kunit *test, const void *prev,
@@ -125,10 +138,10 @@ static int pt_kunit_priv_init(struct kunit *test, struct kunit_iommu_priv *priv)
 	 * The format can set a list of features that the kunit_fmt_cfgs
 	 * controls, other features are default to on.
 	 */
-	priv->cfg.common.features |= PT_SUPPORTED_FEATURES &
+	priv->cfg.common.features |= KUNIT_PT_SUPPORTED_FEATURES &
 				     (~KUNIT_FMT_FEATURES);
 #else
-	priv->cfg.common.features = PT_SUPPORTED_FEATURES;
+	priv->cfg.common.features = KUNIT_PT_SUPPORTED_FEATURES;
 #endif
 
 	/* Defaults, for the kunit */
