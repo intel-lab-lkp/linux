@@ -307,6 +307,11 @@ static void tipc_crypto_work_tx(struct work_struct *work);
 static void tipc_crypto_work_rx(struct work_struct *work);
 static int tipc_aead_key_generate(struct tipc_aead_key *skey);
 
+static bool tipc_aead_alg_name_valid(const char *alg_name)
+{
+	return strnlen(alg_name, TIPC_AEAD_ALG_NAME) < TIPC_AEAD_ALG_NAME;
+}
+
 #define is_tx(crypto) (!(crypto)->node)
 #define is_rx(crypto) (!is_tx(crypto))
 
@@ -334,6 +339,11 @@ do {									\
 int tipc_aead_key_validate(struct tipc_aead_key *ukey, struct genl_info *info)
 {
 	int keylen;
+
+	if (unlikely(!tipc_aead_alg_name_valid(ukey->alg_name))) {
+		GENL_SET_ERR_MSG(info, "algorithm name is not NUL-terminated");
+		return -EINVAL;
+	}
 
 	/* Check if algorithm exists */
 	if (unlikely(!crypto_has_alg(ukey->alg_name, 0, 0))) {
@@ -2296,6 +2306,10 @@ static bool tipc_crypto_key_rcv(struct tipc_crypto *rx, struct tipc_msg *hdr)
 	if (unlikely(keylen > TIPC_AEAD_KEY_SIZE_MAX ||
 		     size != keylen + sizeof(struct tipc_aead_key))) {
 		pr_debug("%s: invalid MSG_CRYPTO key size\n", rx->name);
+		goto exit;
+	}
+	if (unlikely(!tipc_aead_alg_name_valid(data))) {
+		pr_debug("%s: invalid MSG_CRYPTO algorithm name\n", rx->name);
 		goto exit;
 	}
 
