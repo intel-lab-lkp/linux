@@ -197,9 +197,17 @@ static int __init luo_late_startup(void)
 	if (!liveupdate_enabled())
 		return 0;
 
-	err = luo_fdt_setup();
-	if (err)
+	err = luo_session_fs_init();
+	if (err) {
 		luo_global.enabled = false;
+		return err;
+	}
+
+	err = luo_fdt_setup();
+	if (err) {
+		luo_session_fs_cleanup();
+		luo_global.enabled = false;
+	}
 
 	return err;
 }
