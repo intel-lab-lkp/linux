@@ -22,10 +22,16 @@
 #define SD3078_REG_CTRL1		0x0f
 #define SD3078_REG_CTRL2		0x10
 #define SD3078_REG_CTRL3		0x11
+#define SD3078_REG_AGTC			0x17
+#define SD3078_REG_CHARGE		0x18
 
 #define KEY_WRITE1		0x80
 #define KEY_WRITE2		0x04
 #define KEY_WRITE3		0x80
+
+#define CLK_F32K		0x40
+
+#define BAT_IIC			0x80
 
 #define NUM_TIME_REGS   (SD3078_REG_YR - SD3078_REG_SC + 1)
 
@@ -35,6 +41,13 @@
  * Write protection is turned off by default.
  */
 #define WRITE_PROTECT_EN	0
+
+static const char * const sd3078_charge_names[] = {
+	"10k", /* 0x00 */
+	"5k",  /* 0x01 */
+	"2k",  /* 0x02 */
+	"inf", /* 0x03 */
+};
 
 /*
  * In order to prevent arbitrary modification of the time register,
@@ -148,13 +161,15 @@ static const struct rtc_class_ops sd3078_rtc_ops = {
 static const struct regmap_config regmap_config = {
 	.reg_bits = 8,
 	.val_bits = 8,
-	.max_register = 0x11,
+	.max_register = 0x18,
 };
 
 static int sd3078_probe(struct i2c_client *client)
 {
 	int ret;
+	unsigned int val;
 	struct regmap *regmap;
+	bool f32k_out, bat_iic;
 	struct rtc_device *rtc;
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
@@ -181,6 +196,36 @@ static int sd3078_probe(struct i2c_client *client)
 		return ret;
 
 	sd3078_enable_reg_write(regmap);
+
+	f32k_out = device_property_read_bool(&client->dev, "CLOCK_F32K");
+	regmap_update_bits(regmap, SD3078_REG_CTRL3,
+			   CLK_F32K, !f32k_out);
+
+	bat_iic = device_property_read_bool(&client->dev, "IIC_ON_BAT");
+	regmap_update_bits(regmap, SD3078_REG_AGTC,
+			   BAT_IIC, bat_iic);
+
+	ret = regmap_read(regmap, SD3078_REG_CHARGE, &val);
+	if (!ret) {
+		dev_info(&client->dev, "RTC BAT Charge: %s",
+			 (val & 0x80) ? "ON" : "OFF");
+	}
+
+	ret = device_property_read_u32(&client->dev, "BAT_CHARGE", &val);
+	if (!ret) {
+		// 0: 10k, 1: 5k, 2: 2k, 3: inf
+		dev_info(&client->dev, "Enable Battery Charge.\n");
+		regmap_write(regmap, SD3078_REG_CHARGE,
+			     (val < 3) ? (u8)(val|0x80) : 0x03);
+	}
+
+	ret = regmap_read(regmap, SD3078_REG_CHARGE, &val);
+	if (!ret) {
+		dev_info(&client->dev, "RTC BAT charge: %s",
+			 (val & 0x80) ? "ON" : "OFF");
+		dev_info(&client->dev, "RTC BAT Charge Strength: %s",
+			 sd3078_charge_names[val & 0x03]);
+	}
 
 	return 0;
 }
