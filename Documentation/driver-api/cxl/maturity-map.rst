@@ -52,12 +52,12 @@ in place, but there are several corner cases that are pending closure.
 * [2] CXL Window Enumeration
 
   * [2] :ref:`Extended-linear memory-side cache <extended-linear>`
-  * [0] Low Memory-hole
+  * [X] Low Memory-hole
   * [X] Hetero-interleave
 
 * [2] Switch Enumeration
 
-  * [0] CXL register enumeration link-up dependency
+  * [2] CXL register enumeration link-up dependency
 
 * [2] HDM Decoder Configuration
 
@@ -78,7 +78,7 @@ in place, but there are several corner cases that are pending closure.
 * [2] Hotplug
   (see CXL Window Enumeration)
 
-  * [0] Handle Soft Reserved conflicts
+  * [2] Handle Soft Reserved conflicts
 
 * [0] :ref:`RCH link status <rch-link-status>`
 * [0] Fabrics / G-FAM (chapter 7)
@@ -95,15 +95,15 @@ mainly caused by the enumeration corner cases above.
 * [2] Component events (FFM)
 * [1] Endpoint protocol errors (OS)
 * [1] Endpoint protocol errors (FFM)
-* [0] Switch protocol errors (OS)
+* [1] Switch protocol errors (OS)
 * [1] Switch protocol errors (FFM)
 * [2] DPA->HPA Address translation
 
-    * [1] XOR Interleave translation
+    * [2] XOR Interleave translation
       (see CXL Window Enumeration)
 
 * [1] Memory Failure coordination
-* [0] Scrub control
+* [1] Scrub control
 * [2] ACPI error injection EINJ
 
   * [0] EINJ v2
@@ -112,8 +112,8 @@ mainly caused by the enumeration corner cases above.
 * [2] Native error injection
 * [3] RCH error handling
 * [1] VH error handling
-* [0] PPR
-* [0] Sparing
+* [1] PPR
+* [1] Sparing
 * [0] Device built in test
 
 
