@@ -1,8 +1,17 @@
-#!/bin/bash
+#!/bin/sh
 # SPDX-License-Identifier: GPL-2.0
 #
 # Runs a set of tests in a given subdirectory.
-. $(dirname "$(readlink -e "${BASH_SOURCE[0]}")")/ktap_helpers.sh
+
+# There isn't a shell-agnostic way to find the path of a sourced file,
+# so we must rely on BASE_DIR being set to find other tools.
+if [ -z "$BASE_DIR" ]; then
+	echo "Error: BASE_DIR must be set before sourcing." >&2
+	exit 1
+fi
+
+. ${BASE_DIR}/kselftest/ktap_helpers.sh
+
 export timeout_rc=124
 export logfile=/dev/stdout
 export per_test_logging=
@@ -13,13 +22,6 @@ export RUN_IN_NETNS=
 # "timeout" how many seconds to let each test run before running
 # over our soft timeout limit.
 export kselftest_default_timeout=45
-
-# There isn't a shell-agnostic way to find the path of a sourced file,
-# so we must rely on BASE_DIR being set to find other tools.
-if [ -z "$BASE_DIR" ]; then
-	echo "Error: BASE_DIR must be set before sourcing." >&2
-	exit 1
-fi
 
 TR_CMD=$(command -v tr)
 
@@ -191,7 +193,7 @@ run_many()
 	DIR="${PWD#${BASE_DIR}/}"
 	test_num=0
 	local rc
-	pids=()
+	pids=
 
 	for TEST in "$@"; do
 		BASENAME_TEST=$(basename $TEST)
@@ -202,7 +204,7 @@ run_many()
 		fi
 		if [ -n "$RUN_IN_NETNS" ]; then
 			run_in_netns &
-			pids+=($!)
+			pids="$pids $!"
 		else
 			run_one "$DIR" "$TEST" "$test_num"
 		fi
@@ -210,7 +212,7 @@ run_many()
 
 	# These variables are outputs of ktap_helpers.sh but since we've
 	# run the test in a subprocess we need to update them manually
-	for pid in "${pids[@]}"; do
+	for pid in $pids; do
 		wait "$pid"
 		rc=$?
 		case "$rc" in
