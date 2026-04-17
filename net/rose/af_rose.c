@@ -277,8 +277,10 @@ static struct sock *rose_find_listener(rose_address *addr, ax25_address *call)
 
 		if (!rosecmp(&rose->source_addr, addr) &&
 		    !ax25cmp(&rose->source_call, call) &&
-		    !rose->source_ndigis && s->sk_state == TCP_LISTEN)
+		    !rose->source_ndigis && s->sk_state == TCP_LISTEN) {
+			sock_hold(s);
 			goto found;
+		}
 	}
 
 	sk_for_each(s, &rose_list) {
@@ -286,8 +288,10 @@ static struct sock *rose_find_listener(rose_address *addr, ax25_address *call)
 
 		if (!rosecmp(&rose->source_addr, addr) &&
 		    !ax25cmp(&rose->source_call, &null_ax25_address) &&
-		    s->sk_state == TCP_LISTEN)
+		    s->sk_state == TCP_LISTEN) {
+			sock_hold(s);
 			goto found;
+		}
 	}
 	s = NULL;
 found:
@@ -1056,10 +1060,13 @@ int rose_rx_call_request(struct sk_buff *skb, struct net_device *dev, struct ros
 	/*
 	 * We can't accept the Call Request.
 	 */
-	if (sk == NULL || sk_acceptq_is_full(sk) ||
+	if (sk == NULL)
+		goto out_clear_request;
+
+	if (sk_acceptq_is_full(sk) ||
 	    (make = rose_make_new(sk)) == NULL) {
-		rose_transmit_clear_request(neigh, lci, ROSE_NETWORK_CONGESTION, 120);
-		return 0;
+		sock_put(sk);
+		goto out_clear_request;
 	}
 
 	skb->sk     = make;
@@ -1110,7 +1117,14 @@ int rose_rx_call_request(struct sk_buff *skb, struct net_device *dev, struct ros
 	if (!sock_flag(sk, SOCK_DEAD))
 		sk->sk_data_ready(sk);
 
+	sock_put(sk);
+
 	return 1;
+
+out_clear_request:
+	rose_transmit_clear_request(neigh, lci, ROSE_NETWORK_CONGESTION, 120);
+
+	return 0;
 }
 
 static int rose_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
