@@ -520,8 +520,11 @@ static bool ghes_do_memory_failure(u64 physical_addr, int flags)
 		twcb->pfn = pfn;
 		twcb->flags = flags;
 		init_task_work(&twcb->twork, memory_failure_cb);
-		task_work_add(current, &twcb->twork, TWA_RESUME);
-		return true;
+		if (!task_work_add(current, &twcb->twork, TWA_RESUME))
+			return true;
+
+		gen_pool_free(ghes_estatus_pool, (unsigned long)twcb, sizeof(*twcb));
+		return false;
 	}
 
 	memory_failure_queue(pfn, flags);
