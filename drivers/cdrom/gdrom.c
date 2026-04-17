@@ -13,6 +13,7 @@
 #include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/slab.h>
+#include <linux/string.h>
 #include <linux/dma-mapping.h>
 #include <linux/cdrom.h>
 #include <linux/bio.h>
@@ -708,7 +709,7 @@ static void probe_gdrom_setupcd(void)
 {
 	gd.cd_info->ops = &gdrom_ops;
 	gd.cd_info->capacity = 1;
-	strcpy(gd.cd_info->name, GDROM_DEV_NAME);
+	strscpy(gd.cd_info->name, GDROM_DEV_NAME);
 	gd.cd_info->mask = CDC_CLOSE_TRAY|CDC_OPEN_TRAY|CDC_LOCK|
 		CDC_SELECT_DISC;
 }
@@ -719,7 +720,7 @@ static void probe_gdrom_setupdisk(void)
 	gd.disk->first_minor = 1;
 	gd.disk->minors = 1;
 	gd.disk->flags |= GENHD_FL_NO_PART;
-	strcpy(gd.disk->disk_name, GDROM_DEV_NAME);
+	strscpy(gd.disk->disk_name, GDROM_DEV_NAME);
 }
 
 static int probe_gdrom_setupqueue(void)
