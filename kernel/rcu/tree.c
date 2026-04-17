@@ -1164,7 +1164,7 @@ static bool rcu_accelerate_cbs(struct rcu_node *rnp, struct rcu_data *rdp)
 	 * accelerating callback invocation to an earlier grace-period
 	 * number.
 	 */
-	rgos.rgos_norm = rcu_seq_snap(&rcu_state.gp_seq);
+	get_state_synchronize_rcu_full(&rgos);
 	if (rcu_segcblist_accelerate(&rdp->cblist, &rgos))
 		ret = rcu_start_this_gp(rnp, rdp, rgos.rgos_norm);
 
@@ -1193,7 +1193,7 @@ static void rcu_accelerate_cbs_unlocked(struct rcu_node *rnp,
 	bool needwake;
 
 	rcu_lockdep_assert_cblist_protected(rdp);
-	rgos.rgos_norm = rcu_seq_snap(&rcu_state.gp_seq);
+	get_state_synchronize_rcu_full(&rgos);
 	if (!READ_ONCE(rdp->gpwrap) && ULONG_CMP_GE(rdp->gp_seq_needed, rgos.rgos_norm)) {
 		/* Old request still live, so mark recent callbacks. */
 		(void)rcu_segcblist_accelerate(&rdp->cblist, &rgos);
@@ -1218,8 +1218,6 @@ static void rcu_accelerate_cbs_unlocked(struct rcu_node *rnp,
  */
 static bool rcu_advance_cbs(struct rcu_node *rnp, struct rcu_data *rdp)
 {
-	struct rcu_gp_oldstate rgos;
-
 	rcu_lockdep_assert_cblist_protected(rdp);
 	raw_lockdep_assert_held_rcu_node(rnp);
 
@@ -1231,8 +1229,7 @@ static bool rcu_advance_cbs(struct rcu_node *rnp, struct rcu_data *rdp)
 	 * Find all callbacks whose ->gp_seq numbers indicate that they
 	 * are ready to invoke, and put them into the RCU_DONE_TAIL sublist.
 	 */
-	rgos.rgos_norm = rnp->gp_seq;
-	rcu_segcblist_advance(&rdp->cblist, &rgos);
+	rcu_segcblist_advance(&rdp->cblist);
 
 	/* Classify any remaining callbacks. */
 	return rcu_accelerate_cbs(rnp, rdp);

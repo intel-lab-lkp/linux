@@ -12,6 +12,7 @@
 #include <linux/kernel.h>
 #include <linux/types.h>
 
+#include "rcu.h"
 #include "rcu_segcblist.h"
 
 /* Initialize simple callback list. */
@@ -494,9 +495,9 @@ static void rcu_segcblist_advance_compact(struct rcu_segcblist *rsclp, int i)
 
 /*
  * Advance the callbacks in the specified rcu_segcblist structure based
- * on the current value passed in for the grace-period counter.
+ * on the current value of the grace-period counter.
  */
-void rcu_segcblist_advance(struct rcu_segcblist *rsclp, struct rcu_gp_oldstate *rgosp)
+void rcu_segcblist_advance(struct rcu_segcblist *rsclp)
 {
 	int i;
 
@@ -509,7 +510,7 @@ void rcu_segcblist_advance(struct rcu_segcblist *rsclp, struct rcu_gp_oldstate *
 	 * are ready to invoke, and put them into the RCU_DONE_TAIL segment.
 	 */
 	for (i = RCU_WAIT_TAIL; i < RCU_NEXT_TAIL; i++) {
-		if (ULONG_CMP_LT(rgosp->rgos_norm, rsclp->gp_seq_full[i].rgos_norm))
+		if (!poll_state_synchronize_rcu_full(&rsclp->gp_seq_full[i]))
 			break;
 		WRITE_ONCE(rsclp->tails[RCU_DONE_TAIL], rsclp->tails[i]);
 		rcu_segcblist_move_seglen(rsclp, i, RCU_DONE_TAIL);
@@ -595,7 +596,7 @@ bool rcu_segcblist_accelerate(struct rcu_segcblist *rsclp, struct rcu_gp_oldstat
 	 */
 	for (; i < RCU_NEXT_TAIL; i++) {
 		WRITE_ONCE(rsclp->tails[i], rsclp->tails[RCU_NEXT_TAIL]);
-		rsclp->gp_seq_full[i].rgos_norm = rgosp->rgos_norm;
+		rsclp->gp_seq_full[i] = *rgosp;
 	}
 	return true;
 }
@@ -637,14 +638,31 @@ void rcu_segcblist_merge(struct rcu_segcblist *dst_rsclp,
 
 void srcu_segcblist_advance(struct rcu_segcblist *rsclp, unsigned long seq)
 {
-	struct rcu_gp_oldstate rgos = { .rgos_norm = seq };
+	int i;
 
-	rcu_segcblist_advance(rsclp, &rgos);
+	WARN_ON_ONCE(!rcu_segcblist_is_enabled(rsclp));
+	if (rcu_segcblist_restempty(rsclp, RCU_DONE_TAIL))
+		return;
+
+	for (i = RCU_WAIT_TAIL; i < RCU_NEXT_TAIL; i++) {
+		if (ULONG_CMP_LT(seq, rsclp->gp_seq_full[i].rgos_norm))
+			break;
+		WRITE_ONCE(rsclp->tails[RCU_DONE_TAIL], rsclp->tails[i]);
+		rcu_segcblist_move_seglen(rsclp, i, RCU_DONE_TAIL);
+	}
+
+	/* If no callbacks moved, nothing more need be done. */
+	if (i == RCU_WAIT_TAIL)
+		return;
+
+	rcu_segcblist_advance_compact(rsclp, i);
 }
 
 bool srcu_segcblist_accelerate(struct rcu_segcblist *rsclp, unsigned long seq)
 {
 	struct rcu_gp_oldstate rgos = { .rgos_norm = seq };
 
+	if (IS_ENABLED(CONFIG_SMP))
+		rgos.rgos_exp = RCU_GET_STATE_NOT_TRACKED;
 	return rcu_segcblist_accelerate(rsclp, &rgos);
 }
