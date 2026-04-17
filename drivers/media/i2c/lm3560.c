@@ -11,6 +11,7 @@
 
 #include <linux/delay.h>
 #include <linux/module.h>
+#include <linux/gpio.h>
 #include <linux/i2c.h>
 #include <linux/slab.h>
 #include <linux/mutex.h>
@@ -45,6 +46,7 @@ enum led_enable {
  * @dev: pointer to &struct device
  * @pdata: platform data
  * @regmap: reg. map for i2c
+ * @hwen_gpio: line connected to hwen pin
  * @lock: muxtex for serial access.
  * @led_mode: V4L2 LED mode
  * @ctrls_led: V4L2 controls
@@ -54,6 +56,7 @@ struct lm3560_flash {
 	struct device *dev;
 	struct lm3560_platform_data *pdata;
 	struct regmap *regmap;
+	struct gpio_desc *hwen_gpio;
 	struct mutex lock;
 
 	enum v4l2_flash_led_mode led_mode;
@@ -425,6 +428,12 @@ static int lm3560_probe(struct i2c_client *client)
 	flash->dev = &client->dev;
 	mutex_init(&flash->lock);
 
+	flash->hwen_gpio = devm_gpiod_get_optional(&client->dev, "enable",
+						   GPIOD_OUT_HIGH);
+	if (IS_ERR(flash->hwen_gpio))
+		return dev_err_probe(&client->dev, PTR_ERR(flash->hwen_gpio),
+				     "failed to get hwen gpio\n");
+
 	rval = lm3560_subdev_init(flash, LM3560_LED0, "lm3560-led0");
 	if (rval < 0)
 		return rval;
@@ -452,6 +461,8 @@ static void lm3560_remove(struct i2c_client *client)
 		v4l2_ctrl_handler_free(&flash->ctrls_led[i]);
 		media_entity_cleanup(&flash->subdev_led[i].entity);
 	}
+
+	gpiod_set_value_cansleep(flash->hwen_gpio, 0);
 }
 
 static const struct i2c_device_id lm3560_id_table[] = {
