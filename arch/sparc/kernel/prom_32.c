@@ -245,15 +245,23 @@ void __init of_console_init(void)
 		if (!dp) {
 			prom_printf("Cannot find PROM_V0 console node.\n");
 			prom_halt();
-		}
-		of_console_device = dp;
+			}
+			of_console_device = dp;
 
-		sprintf(of_console_path, "%pOF", dp);
-		if (!strcmp(type, "serial")) {
-			strcat(of_console_path,
-			       (skip ? ":b" : ":a"));
-		}
-		break;
+			if (snprintf(of_console_path, of_console_path_sz,
+				     "%pOF", dp) >= of_console_path_sz) {
+				prom_printf("PROM_V0 console path is too long.\n");
+				prom_halt();
+			}
+			if (!strcmp(type, "serial")) {
+				if (strlcat(of_console_path, skip ? ":b" : ":a",
+					    of_console_path_sz) >=
+				    of_console_path_sz) {
+					prom_printf("PROM_V0 console path options are too long.\n");
+					prom_halt();
+				}
+			}
+			break;
 
 	default:
 	case PROM_V2:
@@ -279,18 +287,35 @@ void __init of_console_init(void)
 			prom_halt();
 		}
 
-		of_console_device = dp;
+			of_console_device = dp;
 
-		if (prom_vers == PROM_V2) {
-			sprintf(of_console_path, "%pOF", dp);
-			switch (*romvec->pv_stdout) {
-			case PROMDEV_TTYA:
-				strcat(of_console_path, ":a");
-				break;
-			case PROMDEV_TTYB:
-				strcat(of_console_path, ":b");
-				break;
-			}
+			if (prom_vers == PROM_V2) {
+				if (snprintf(of_console_path, of_console_path_sz,
+					     "%pOF", dp) >=
+				    of_console_path_sz) {
+					prom_printf("PROM_V2 console path is too long.\n");
+					prom_halt();
+				}
+				switch (*romvec->pv_stdout) {
+				case PROMDEV_TTYA:
+					if (strlcat(of_console_path, ":a",
+						    of_console_path_sz) >=
+					    of_console_path_sz) {
+						prom_printf("%s",
+							    "PROM_V2 console path options are too long.\n");
+						prom_halt();
+					}
+					break;
+				case PROMDEV_TTYB:
+					if (strlcat(of_console_path, ":b",
+						    of_console_path_sz) >=
+					    of_console_path_sz) {
+						prom_printf("%s",
+							    "PROM_V2 console path options are too long.\n");
+						prom_halt();
+					}
+					break;
+				}
 		} else {
 			const char *path;
 
