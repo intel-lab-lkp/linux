@@ -2296,3 +2296,9 @@ config ARCH_HAS_SYNC_CORE_BEFORE_USERMODE
 # <asm/syscall_wrapper.h>.
 config ARCH_HAS_SYSCALL_WRAPPER
 	def_bool n
+
+config TINY_DEFCONFIG
+    bool "Tiny yet usable kernel configuration"
+    help
+      A minimal but bootable configuration intended for
+      testing and development in virtual machines.
