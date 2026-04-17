@@ -141,10 +141,13 @@ These tests are introduced by the ``kunit_tests`` procedural macro, which takes
 the name of the test suite as an argument.
 
 For instance, assume we want to test the function ``f`` from the documentation
-tests section. We could write, in the same file where we have our function:
+tests section. We could write, in the same file where we have our function.
+Each test is protected with the corresponding Kconfig option, see
+rust/kernel/Kconfig.test.
 
 .. code-block:: rust
 
+	#[cfg(CONFIG_RUST_MYMOD_KUNIT_TEST)]
 	#[kunit_tests(rust_kernel_mymod)]
 	mod tests {
 	    use super::*;
