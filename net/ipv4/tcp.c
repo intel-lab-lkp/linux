@@ -3235,10 +3235,9 @@ adjudge_to_death:
 
 	local_bh_disable();
 	bh_lock_sock(sk);
+	tcp_orphan_count_inc();
 	/* remove backlog if any, without releasing ownership. */
 	__release_sock(sk);
-
-	tcp_orphan_count_inc();
 
 	/* Have we already been destroyed by a softirq or backlog? */
 	if (state != TCP_CLOSE && sk->sk_state == TCP_CLOSE)
