@@ -69,6 +69,25 @@ attribute-sets:
         name: error-value
         type: u32
         doc: Current value of the requested error counter.
+  -
+    name: error-threshold-attrs
+    attributes:
+      -
+        name: node-id
+        type: u32
+        doc: Node ID targeted by this operation.
+      -
+        name: error-id
+        type: u32
+        doc: Unique identifier for a specific error within the node.
+      -
+        name: error-name
+        type: string
+        doc: Name of the error.
+      -
+        name: error-threshold
+        type: u32
+        doc: Threshold value of the error.
 
 operations:
   list:
@@ -113,3 +132,21 @@ operations:
             - node-id
         reply:
           attributes: *errorinfo
+    -
+      name: get-error-threshold
+      doc: >-
+           Retrieve threshold value of the error.
+           The response includes the id, the name, and current threshold
+           value of the error.
+      attribute-set: error-threshold-attrs
+      flags: [admin-perm]
+      do:
+        request:
+          attributes:
+            - node-id
+            - error-id
+        reply:
+          attributes:
+            - error-id
+            - error-name
+            - error-threshold
