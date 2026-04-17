@@ -1984,6 +1984,7 @@ struct intel_digital_port {
 	enum intel_display_power_domain ddi_io_power_domain;
 	struct ref_tracker *ddi_io_wakeref;
 	struct ref_tracker *aux_wakeref;
+	atomic_t link_teardown;
 
 	struct intel_tc_port *tc;
 

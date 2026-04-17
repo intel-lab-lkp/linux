@@ -6830,6 +6830,11 @@ intel_dp_hpd_pulse(struct intel_digital_port *dig_port, bool long_hpd)
 	struct intel_dp *intel_dp = &dig_port->dp;
 	u8 dpcd[DP_RECEIVER_CAP_SIZE];
 
+	if (atomic_read(&dig_port->link_teardown)) {
+		drm_dbg_kms("Ignoring HPD since DPLL is getting disabled\n");
+		return IRQ_NONE;
+	}
+
 	if (dig_port->base.type == INTEL_OUTPUT_EDP &&
 	    (long_hpd ||
 	     intel_display_rpm_suspended(display) ||

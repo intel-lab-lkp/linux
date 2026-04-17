@@ -2086,8 +2086,12 @@ static struct intel_dpll *hsw_ddi_get_pll(struct intel_encoder *encoder)
 void intel_ddi_enable_clock(struct intel_encoder *encoder,
 			    const struct intel_crtc_state *crtc_state)
 {
+	struct intel_digital_port *dig_port = enc_to_dig_port(encoder);
+
 	if (encoder->enable_clock)
 		encoder->enable_clock(encoder, crtc_state);
+
+	atomic_set(&dig_port->link_teardown, 0);
 }
 
 void intel_ddi_disable_clock(struct intel_encoder *encoder)
@@ -3181,6 +3185,7 @@ static void intel_ddi_post_disable_dp(struct intel_atomic_state *state,
 					dig_port->ddi_io_power_domain,
 					wakeref);
 
+	atomic_set(&dig_port->link_teardown, 1);
 	intel_ddi_disable_clock(encoder);
 
 	/* De-select Thunderbolt */
