@@ -43,7 +43,7 @@ struct GspSequence {
     /// Current command index for error reporting.
     cmd_index: u32,
     /// Command data buffer containing the sequence of commands.
-    cmd_data: KVec<u8>,
+    cmd_data: KVVec<u8>,
 }
 
 impl MessageFromGsp for GspSequence {
@@ -55,7 +55,7 @@ impl MessageFromGsp for GspSequence {
         msg: &Self::Message,
         sbuffer: &mut SBufferIter<array::IntoIter<&[u8], 2>>,
     ) -> Result<Self, Self::InitError> {
-        let cmd_data = sbuffer.flush_into_kvec(GFP_KERNEL)?;
+        let cmd_data = sbuffer.read_to_vec(GFP_KERNEL)?;
         Ok(GspSequence {
             cmd_index: msg.cmd_index(),
             cmd_data,
