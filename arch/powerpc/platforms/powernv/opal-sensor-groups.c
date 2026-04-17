@@ -23,7 +23,7 @@ struct sg_attr {
 };
 
 static struct sensor_group {
-	char name[20];
+	char *name;
 	struct attribute_group sg;
 	struct sg_attr *sgattrs;
 } *sgs;
@@ -207,9 +207,12 @@ void __init opal_sensor_groups_init(void)
 		}
 
 		if (!of_property_read_u32(node, "ibm,chip-id", &chipid))
-			sprintf(sgs[i].name, "%pOFn%d", node, chipid);
+			sgs[i].name = kasprintf(GFP_KERNEL, "%pOFn%d",
+						node, chipid);
 		else
-			sprintf(sgs[i].name, "%pOFn", node);
+			sgs[i].name = kasprintf(GFP_KERNEL, "%pOFn", node);
+		if (!sgs[i].name)
+			goto out_sgs_sgattrs;
 
 		sgs[i].sg.name = sgs[i].name;
 		if (add_attr_group(ops, len, &sgs[i], sgid)) {
@@ -225,6 +228,7 @@ void __init opal_sensor_groups_init(void)
 
 out_sgs_sgattrs:
 	while (--i >= 0) {
+		kfree(sgs[i].name);
 		kfree(sgs[i].sgattrs);
 		kfree(sgs[i].sg.attrs);
 	}
