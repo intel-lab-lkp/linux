@@ -320,7 +320,13 @@ static bool tomoyo_parse_envp(char *left, char *right,
 {
 	const struct tomoyo_path_info *name;
 	const struct tomoyo_path_info *value;
-	char *cp = left + strlen(left) - 1;
+	size_t len = strlen(left);
+	char *cp;
+
+	if (len < 2)
+		goto out;
+
+	cp = left + len - 1;
 
 	if (*cp-- != ']' || *cp != '"')
 		goto out;
