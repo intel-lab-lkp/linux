@@ -381,10 +381,13 @@ struct scsi_host_template {
 	const char *proc_name;
 
 	/*
-	 * This determines if we will use a non-interrupt driven
-	 * or an interrupt driven scheme.  It is set to the maximum number
-	 * of simultaneous commands a single hw queue in HBA will accept
-	 * excluding internal commands.
+	 * If host_tagset is set, this is the maximum number of simultaneous
+	 * commands the host will accept excluding internal commands.
+	 *
+	 * If host_tagset is not set, this is the maximum number simultaneous
+	 * commands a single hw queue in the host will accept excluding
+	 * internal commands. In other words, the total queue depth per host
+	 * is nr_hw_queues * can_queue.
 	 */
 	int can_queue;
 
@@ -631,10 +634,7 @@ struct Scsi_Host {
 
 	int this_id;
 
-	/*
-	 * Number of commands this host can handle at the same time.
-	 * This excludes reserved commands as specified by nr_reserved_cmds.
-	 */
+	/* See scsi_host_template's can_queue. */
 	int can_queue;
 	/*
 	 * Number of reserved commands to allocate, if any.
@@ -653,10 +653,7 @@ struct Scsi_Host {
 	/*
 	 * In scsi-mq mode, the number of hardware queues supported by the LLD.
 	 *
-	 * Note: it is assumed that each hardware queue has a queue depth of
-	 * can_queue. In other words, the total queue depth per host
-	 * is nr_hw_queues * can_queue. However, for when host_tagset is set,
-	 * the total queue depth is can_queue.
+	 * See scsi_host_template's can_queue for queueing requirements.
 	 */
 	unsigned nr_hw_queues;
 	unsigned nr_maps;
