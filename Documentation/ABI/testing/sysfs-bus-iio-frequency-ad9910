@@ -1,0 +1,62 @@
+What:		/sys/bus/iio/devices/iio:deviceX/out_altvoltageY_frequency_offset
+KernelVersion:
+Contact:	linux-iio@vger.kernel.org
+Description:
+		For a channel that allows frequency control through buffers, this
+		represents the base frequency value in Hz. The actual output frequency
+		is a result with the sum of this value.
+
+What:		/sys/bus/iio/devices/iio:deviceX/out_altvoltageY_frequency_scale
+KernelVersion:
+Contact:	linux-iio@vger.kernel.org
+Description:
+		For a channel that allows frequency control through buffers, this
+		represents the frequency modulation gain. This value multiplies the
+		buffer input sample value before it is added to a frequency offset.
+
+What:		/sys/bus/iio/devices/iio:deviceX/out_altvoltageY_phase_offset
+KernelVersion:
+Contact:	linux-iio@vger.kernel.org
+Description:
+		For a channel that allows phase control through buffers, this
+		represents the base phase value in radians. The actual output phase
+		is a result with the sum of this value.
+
+What:		/sys/bus/iio/devices/iio:deviceX/out_altvoltageY_scale_offset
+KernelVersion:
+Contact:	linux-iio@vger.kernel.org
+Description:
+		For a channel that allows amplitude control through buffers, this
+		represents the value for a base amplitude scale. The actual output
+		amplitude scale is a result with the sum of this value.
+
+What:		/sys/bus/iio/devices/iio:deviceX/out_altvoltageY_frequency_step
+KernelVersion:
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Channels that sweep frequency values at determined rate use this value
+		to set the frequency step size in Hz.
+
+What:		/sys/bus/iio/devices/iio:deviceX/out_altvoltageY_phase_step
+KernelVersion:
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Channels that sweep phase values at determined rate use this value
+		to set the phase step size in radians.
+
+What:		/sys/bus/iio/devices/iio:deviceX/out_altvoltageY_scale_step
+KernelVersion:
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Channels that sweep amplitude values at determined rate use this value
+		to set the amplite scale step.
+
+What:		/sys/bus/iio/devices/iio:deviceX/out_altvoltageY_pinctrl_en
+KernelVersion:
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Channels that supports pin control to enable/disable its output use
+		this attribute to set the pin control mode. When set to 1, the output
+		state is controlled by a physical pin, and the channel is enabled when
+		the pin is active. When set to 0, only software control is used to
+		enable/disable the channel output.
