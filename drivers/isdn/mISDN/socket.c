@@ -7,6 +7,7 @@
  */
 
 #include <linux/mISDNif.h>
+#include <linux/device.h>
 #include <linux/slab.h>
 #include <linux/export.h>
 #include "core.h"
@@ -57,6 +58,97 @@ static void mISDN_sock_unlink(struct mISDN_sock_list *l, struct sock *sk)
 	write_unlock_bh(&l->lock);
 }
 
+/*
+ * Socket teardown driven by unregister takes device_lock(dev) before
+ * lock_sock(sk). Bind paths take the same order so unregister can close a
+ * socket without racing a new bind onto the same device.
+ */
+static struct sock *
+misdn_sock_get(struct mISDN_sock_list *l, struct mISDNdevice *dev)
+{
+	struct sock *sk;
+
+	read_lock_bh(&l->lock);
+	sk_for_each(sk, &l->head) {
+		if (READ_ONCE(_pms(sk)->dev) != dev)
+			continue;
+		sock_hold(sk);
+		read_unlock_bh(&l->lock);
+		return sk;
+	}
+	read_unlock_bh(&l->lock);
+	return NULL;
+}
+
+static void data_sock_reset_channel(struct sock *sk)
+{
+	_pms(sk)->ch.protocol = ISDN_P_NONE;
+	_pms(sk)->ch.nr = 0;
+	_pms(sk)->ch.addr = 0;
+	_pms(sk)->ch.st = NULL;
+	_pms(sk)->ch.peer = NULL;
+	_pms(sk)->ch.recv = NULL;
+}
+
+static void data_sock_close(struct sock *sk)
+{
+	bool active = _pms(sk)->ch.protocol != ISDN_P_NONE;
+
+	sk->sk_state = MISDN_CLOSED;
+
+	if (active)
+		delete_channel(&_pms(sk)->ch);
+
+	data_sock_reset_channel(sk);
+
+	if (_pms(sk)->dev) {
+		put_device(&_pms(sk)->dev->dev);
+		_pms(sk)->dev = NULL;
+	}
+}
+
+static void base_sock_close(struct sock *sk)
+{
+	sk->sk_state = MISDN_CLOSED;
+
+	if (_pms(sk)->dev) {
+		put_device(&_pms(sk)->dev->dev);
+		_pms(sk)->dev = NULL;
+	}
+}
+
+void
+misdn_sock_release_device(struct mISDNdevice *dev)
+{
+	struct sock *sk;
+
+	if (dev->D.st) {
+		while ((sk = misdn_sock_get(&dev->D.st->l1sock, dev))) {
+			lock_sock(sk);
+			if (_pms(sk)->dev == dev)
+				data_sock_close(sk);
+			release_sock(sk);
+			sock_put(sk);
+		}
+	}
+
+	while ((sk = misdn_sock_get(&data_sockets, dev))) {
+		lock_sock(sk);
+		if (_pms(sk)->dev == dev)
+			data_sock_close(sk);
+		release_sock(sk);
+		sock_put(sk);
+	}
+
+	while ((sk = misdn_sock_get(&base_sockets, dev))) {
+		lock_sock(sk);
+		if (_pms(sk)->dev == dev)
+			base_sock_close(sk);
+		release_sock(sk);
+		sock_put(sk);
+	}
+}
+
 static int
 mISDN_send(struct mISDNchannel *ch, struct sk_buff *skb)
 {
@@ -86,6 +178,14 @@ mISDN_ctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 	switch (cmd) {
 	case CLOSE_CHANNEL:
 		msk->sk.sk_state = MISDN_CLOSED;
+		if (msk->ch.protocol >= ISDN_P_B_START) {
+			msk->ch.protocol = ISDN_P_NONE;
+			msk->ch.nr = 0;
+			msk->ch.addr = 0;
+			msk->ch.st = NULL;
+			msk->ch.peer = NULL;
+			msk->ch.recv = NULL;
+		}
 		break;
 	}
 	return 0;
@@ -127,18 +227,30 @@ mISDN_sock_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 
 	if (msg->msg_name) {
 		DECLARE_SOCKADDR(struct sockaddr_mISDN *, maddr, msg->msg_name);
+		int dev_id, ch_nr, ch_addr;
+
+		lock_sock(sk);
+		if (!_pms(sk)->dev) {
+			release_sock(sk);
+			skb_free_datagram(sk, skb);
+			return -EBADFD;
+		}
+		dev_id = _pms(sk)->dev->id;
+		ch_nr = _pms(sk)->ch.nr;
+		ch_addr = _pms(sk)->ch.addr;
+		release_sock(sk);
 
 		maddr->family = AF_ISDN;
-		maddr->dev = _pms(sk)->dev->id;
+		maddr->dev = dev_id;
 		if ((sk->sk_protocol == ISDN_P_LAPD_TE) ||
 		    (sk->sk_protocol == ISDN_P_LAPD_NT)) {
 			maddr->channel = (mISDN_HEAD_ID(skb) >> 16) & 0xff;
 			maddr->tei =  (mISDN_HEAD_ID(skb) >> 8) & 0xff;
 			maddr->sapi = mISDN_HEAD_ID(skb) & 0xff;
 		} else {
-			maddr->channel = _pms(sk)->ch.nr;
-			maddr->sapi = _pms(sk)->ch.addr & 0xFF;
-			maddr->tei =  (_pms(sk)->ch.addr >> 8) & 0xFF;
+			maddr->channel = ch_nr;
+			maddr->sapi = ch_addr & 0xFF;
+			maddr->tei =  (ch_addr >> 8) & 0xFF;
 		}
 		msg->msg_namelen = sizeof(*maddr);
 	}
@@ -241,16 +353,14 @@ data_sock_release(struct socket *sock)
 		printk(KERN_DEBUG "%s(%p) sk=%p\n", __func__, sock, sk);
 	if (!sk)
 		return 0;
+
+	lock_sock(sk);
+
 	switch (sk->sk_protocol) {
 	case ISDN_P_TE_S0:
 	case ISDN_P_NT_S0:
 	case ISDN_P_TE_E1:
 	case ISDN_P_NT_E1:
-		if (sk->sk_state == MISDN_BOUND)
-			delete_channel(&_pms(sk)->ch);
-		else
-			mISDN_sock_unlink(&data_sockets, sk);
-		break;
 	case ISDN_P_LAPD_TE:
 	case ISDN_P_LAPD_NT:
 	case ISDN_P_B_RAW:
@@ -259,12 +369,10 @@ data_sock_release(struct socket *sock)
 	case ISDN_P_B_L2DTMF:
 	case ISDN_P_B_L2DSP:
 	case ISDN_P_B_L2DSPHDLC:
-		delete_channel(&_pms(sk)->ch);
+		data_sock_close(sk);
 		mISDN_sock_unlink(&data_sockets, sk);
 		break;
 	}
-
-	lock_sock(sk);
 
 	sock_orphan(sk);
 	skb_queue_purge(&sk->sk_receive_queue);
@@ -466,6 +574,7 @@ data_sock_bind(struct socket *sock, struct sockaddr_unsized *addr, int addr_len)
 {
 	struct sockaddr_mISDN *maddr = (struct sockaddr_mISDN *) addr;
 	struct sock *sk = sock->sk;
+	struct mISDNdevice *dev, *lockdev;
 	struct sock *csk;
 	int err = 0;
 
@@ -477,13 +586,35 @@ data_sock_bind(struct socket *sock, struct sockaddr_unsized *addr, int addr_len)
 		return -EINVAL;
 
 	lock_sock(sk);
+	if (sk->sk_state == MISDN_CLOSED) {
+		release_sock(sk);
+		return -EBADFD;
+	}
+	if (_pms(sk)->dev) {
+		release_sock(sk);
+		return -EALREADY;
+	}
+	release_sock(sk);
+
+	dev = get_mdevice(maddr->dev);
+	if (!dev)
+		return -ENODEV;
+
+	lockdev = dev;
+	device_lock(&dev->dev);
+	lock_sock(sk);
+
+	if (sk->sk_state == MISDN_CLOSED) {
+		err = -EBADFD;
+		goto done;
+	}
 
 	if (_pms(sk)->dev) {
 		err = -EALREADY;
 		goto done;
 	}
-	_pms(sk)->dev = get_mdevice(maddr->dev);
-	if (!_pms(sk)->dev) {
+
+	if (!device_is_registered(&dev->dev)) {
 		err = -ENODEV;
 		goto done;
 	}
@@ -493,7 +624,7 @@ data_sock_bind(struct socket *sock, struct sockaddr_unsized *addr, int addr_len)
 		sk_for_each(csk, &data_sockets.head) {
 			if (sk == csk)
 				continue;
-			if (_pms(csk)->dev != _pms(sk)->dev)
+			if (READ_ONCE(_pms(csk)->dev) != dev)
 				continue;
 			if (csk->sk_protocol >= ISDN_P_B_START)
 				continue;
@@ -516,15 +647,15 @@ data_sock_bind(struct socket *sock, struct sockaddr_unsized *addr, int addr_len)
 	case ISDN_P_TE_E1:
 	case ISDN_P_NT_E1:
 		mISDN_sock_unlink(&data_sockets, sk);
-		err = connect_layer1(_pms(sk)->dev, &_pms(sk)->ch,
-				     sk->sk_protocol, maddr);
+		err = connect_layer1(dev, &_pms(sk)->ch, sk->sk_protocol,
+				     maddr);
 		if (err)
 			mISDN_sock_link(&data_sockets, sk);
 		break;
 	case ISDN_P_LAPD_TE:
 	case ISDN_P_LAPD_NT:
-		err = create_l2entity(_pms(sk)->dev, &_pms(sk)->ch,
-				      sk->sk_protocol, maddr);
+		err = create_l2entity(dev, &_pms(sk)->ch, sk->sk_protocol,
+				      maddr);
 		break;
 	case ISDN_P_B_RAW:
 	case ISDN_P_B_HDLC:
@@ -532,19 +663,26 @@ data_sock_bind(struct socket *sock, struct sockaddr_unsized *addr, int addr_len)
 	case ISDN_P_B_L2DTMF:
 	case ISDN_P_B_L2DSP:
 	case ISDN_P_B_L2DSPHDLC:
-		err = connect_Bstack(_pms(sk)->dev, &_pms(sk)->ch,
-				     sk->sk_protocol, maddr);
+		err = connect_Bstack(dev, &_pms(sk)->ch, sk->sk_protocol,
+				     maddr);
 		break;
 	default:
 		err = -EPROTONOSUPPORT;
 	}
-	if (err)
+	if (err) {
+		data_sock_reset_channel(sk);
 		goto done;
+	}
+	_pms(sk)->dev = dev;
+	dev = NULL;
 	sk->sk_state = MISDN_BOUND;
 	_pms(sk)->ch.protocol = sk->sk_protocol;
 
 done:
 	release_sock(sk);
+	device_unlock(&lockdev->dev);
+	if (dev)
+		put_device(&dev->dev);
 	return err;
 }
 
@@ -555,10 +693,11 @@ data_sock_getname(struct socket *sock, struct sockaddr *addr,
 	struct sockaddr_mISDN	*maddr = (struct sockaddr_mISDN *) addr;
 	struct sock		*sk = sock->sk;
 
-	if (!_pms(sk)->dev)
-		return -EBADFD;
-
 	lock_sock(sk);
+	if (!_pms(sk)->dev) {
+		release_sock(sk);
+		return -EBADFD;
+	}
 
 	maddr->family = AF_ISDN;
 	maddr->dev = _pms(sk)->dev->id;
@@ -622,6 +761,10 @@ base_sock_release(struct socket *sock)
 	printk(KERN_DEBUG "%s(%p) sk=%p\n", __func__, sock, sk);
 	if (!sk)
 		return 0;
+
+	lock_sock(sk);
+	base_sock_close(sk);
+	release_sock(sk);
 
 	mISDN_sock_unlink(&base_sockets, sk);
 	sock_orphan(sk);
@@ -700,6 +843,7 @@ base_sock_bind(struct socket *sock, struct sockaddr_unsized *addr, int addr_len)
 {
 	struct sockaddr_mISDN *maddr = (struct sockaddr_mISDN *) addr;
 	struct sock *sk = sock->sk;
+	struct mISDNdevice *dev, *lockdev;
 	int err = 0;
 
 	if (addr_len < sizeof(struct sockaddr_mISDN))
@@ -709,21 +853,47 @@ base_sock_bind(struct socket *sock, struct sockaddr_unsized *addr, int addr_len)
 		return -EINVAL;
 
 	lock_sock(sk);
+	if (sk->sk_state == MISDN_CLOSED) {
+		release_sock(sk);
+		return -EBADFD;
+	}
+	if (_pms(sk)->dev) {
+		release_sock(sk);
+		return -EALREADY;
+	}
+	release_sock(sk);
+
+	dev = get_mdevice(maddr->dev);
+	if (!dev)
+		return -ENODEV;
+
+	lockdev = dev;
+	device_lock(&dev->dev);
+	lock_sock(sk);
+
+	if (sk->sk_state == MISDN_CLOSED) {
+		err = -EBADFD;
+		goto done;
+	}
 
 	if (_pms(sk)->dev) {
 		err = -EALREADY;
 		goto done;
 	}
 
-	_pms(sk)->dev = get_mdevice(maddr->dev);
-	if (!_pms(sk)->dev) {
+	if (!device_is_registered(&dev->dev)) {
 		err = -ENODEV;
 		goto done;
 	}
+	_pms(sk)->dev = dev;
+	dev = NULL;
 	sk->sk_state = MISDN_BOUND;
 
 done:
 	release_sock(sk);
+	device_unlock(&lockdev->dev);
+	if (dev)
+		put_device(&dev->dev);
 	return err;
 }
 

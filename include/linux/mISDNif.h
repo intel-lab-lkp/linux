@@ -499,6 +499,7 @@ struct mISDNdevice {
 	u_char			channelmap[MISDN_CHMAP_SIZE];
 	struct list_head	bchannels;
 	struct mISDNchannel	*teimgr;
+	struct completion	released;
 	struct device		dev;
 };
 

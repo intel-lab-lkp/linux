@@ -41,6 +41,7 @@ extern int	connect_layer1(struct mISDNdevice *, struct mISDNchannel *,
 			       u_int, struct sockaddr_mISDN *);
 extern int	create_l2entity(struct mISDNdevice *, struct mISDNchannel *,
 				u_int, struct sockaddr_mISDN *);
+void		misdn_sock_release_device(struct mISDNdevice *dev);
 
 extern int	create_stack(struct mISDNdevice *);
 extern int	create_teimanager(struct mISDNdevice *);

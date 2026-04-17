@@ -26,7 +26,9 @@ static DEFINE_RWLOCK(bp_lock);
 
 static void mISDN_dev_release(struct device *dev)
 {
-	/* nothing to do: the device is part of its parent's data structure */
+	struct mISDNdevice *mdev = container_of(dev, struct mISDNdevice, dev);
+
+	complete(&mdev->released);
 }
 
 static ssize_t id_show(struct device *dev,
@@ -219,6 +221,7 @@ mISDN_register_device(struct mISDNdevice *dev,
 		return err;
 	dev->id = err;
 
+	init_completion(&dev->released);
 	device_initialize(&dev->dev);
 	if (name && name[0])
 		dev_set_name(&dev->dev, "%s", name);
@@ -257,12 +260,24 @@ mISDN_unregister_device(struct mISDNdevice *dev) {
 		printk(KERN_DEBUG "mISDN_unregister %s %d\n",
 		       dev_name(&dev->dev), dev->id);
 	/* sysfs_remove_link(&dev->dev.kobj, "device"); */
+	/*
+	 * Remove the device from sysfs before taking dev->mutex so bind-side
+	 * get_mdevice() users will fail the later device_is_registered()
+	 * recheck after they acquire device_lock().
+	 */
 	device_del(&dev->dev);
 	dev_set_drvdata(&dev->dev, NULL);
-
+	device_lock(&dev->dev);
+	misdn_sock_release_device(dev);
 	test_and_clear_bit(dev->id, (u_long *)&device_ids);
 	delete_stack(dev);
+	device_unlock(&dev->dev);
 	put_device(&dev->dev);
+	/*
+	 * Drivers free the enclosing object after unregister returns, so wait
+	 * until the last outstanding device reference is dropped.
+	 */
+	wait_for_completion(&dev->released);
 }
 EXPORT_SYMBOL(mISDN_unregister_device);
 
