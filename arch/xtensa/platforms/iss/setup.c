@@ -64,15 +64,21 @@ void __init platform_setup(char **p_cmdline)
 			pr_err("%s: command line too long: argv_size = %d\n",
 			       __func__, argv_size);
 		} else {
-			int i;
+			int i, len = 0;
 
 			cmdline[0] = 0;
 			simc_argv((void *)argv);
 
 			for (i = 1; i < argc; ++i) {
-				if (i > 1)
-					strcat(cmdline, " ");
-				strcat(cmdline, argv[i]);
+				len += scnprintf(cmdline + len,
+						 COMMAND_LINE_SIZE - len,
+						 "%s%s", i > 1 ? " " : "",
+						 argv[i]);
+				if (len >= COMMAND_LINE_SIZE - 1) {
+					pr_err("%s: command line too long\n",
+					       __func__);
+					break;
+				}
 			}
 			*p_cmdline = cmdline;
 		}
