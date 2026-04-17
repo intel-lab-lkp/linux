@@ -951,7 +951,10 @@ static int virtscsi_probe(struct virtio_device *vdev)
 	shost->can_queue = virtqueue_get_vring_size(vscsi->req_vqs[0].vq);
 
 	cmd_per_lun = virtscsi_config_get(vdev, cmd_per_lun) ?: 1;
-	shost->cmd_per_lun = min_t(u32, cmd_per_lun, shost->can_queue);
+	if (cmd_per_lun == U32_MAX)
+		shost->cmd_per_lun = SCSI_UNLIMITED_CMD_PER_LUN;
+	else
+		shost->cmd_per_lun = min_t(u32, cmd_per_lun, shost->can_queue);
 	shost->max_sectors = virtscsi_config_get(vdev, max_sectors) ?: 0xFFFF;
 
 	/* LUNs > 256 are reported with format 1, so they go in the range
