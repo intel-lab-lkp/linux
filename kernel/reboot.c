@@ -16,6 +16,7 @@
 #include <linux/reboot.h>
 #include <linux/suspend.h>
 #include <linux/syscalls.h>
+#include <linux/sysctl.h>
 #include <linux/syscore_ops.h>
 #include <linux/uaccess.h>
 
@@ -1379,7 +1380,7 @@ static const struct ctl_table kern_reboot_table[] = {
 		.data           = &C_A_D,
 		.maxlen         = sizeof(int),
 		.mode           = 0644,
-		.proc_handler   = proc_dointvec,
+		.proc_handler   = proc_dointvec_sysadmin,
 	},
 };
 

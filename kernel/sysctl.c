@@ -844,6 +844,52 @@ int proc_dointvec(const struct ctl_table *table, int dir, void *buffer,
 }
 
 /**
+ * proc_dointvec_sysadmin - read/write a vector of integers with CAP_SYS_ADMIN check
+ * @table: the sysctl table
+ * @dir: %TRUE if this is a write to the sysctl file
+ * @buffer: the user buffer
+ * @lenp: the size of the user buffer
+ * @ppos: file position
+ *
+ * Same as proc_dointvec, but writes require CAP_SYS_ADMIN.
+ * This prevents unprivileged writes from user namespaces where
+ * the process has uid 0 and thus passes VFS permission checks.
+ *
+ * Returns 0 on success, -EPERM if a write lacks CAP_SYS_ADMIN.
+ */
+int proc_dointvec_sysadmin(const struct ctl_table *table, int dir, void *buffer,
+			   size_t *lenp, loff_t *ppos)
+{
+	if (dir && !capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	return proc_dointvec(table, dir, buffer, lenp, ppos);
+}
+EXPORT_SYMBOL_GPL(proc_dointvec_sysadmin);
+
+/**
+ * proc_dointvec_minmax_sysadmin - read/write a vector of integers with range and CAP_SYS_ADMIN check
+ * @table: the sysctl table
+ * @dir: %TRUE if this is a write to the sysctl file
+ * @buffer: the user buffer
+ * @lenp: the size of the user buffer
+ * @ppos: file position
+ *
+ * Same as proc_dointvec_minmax, but writes require CAP_SYS_ADMIN.
+ *
+ * Returns 0 on success, -EPERM if a write lacks CAP_SYS_ADMIN.
+ */
+int proc_dointvec_minmax_sysadmin(const struct ctl_table *table, int dir,
+				  void *buffer, size_t *lenp, loff_t *ppos)
+{
+	if (dir && !capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	return proc_dointvec_minmax(table, dir, buffer, lenp, ppos);
+}
+EXPORT_SYMBOL_GPL(proc_dointvec_minmax_sysadmin);
+
+/**
  * proc_douintvec - read a vector of unsigned integers
  * @table: the sysctl table
  * @dir: %TRUE if this is a write to the sysctl file
@@ -1260,6 +1306,12 @@ int proc_dointvec(const struct ctl_table *table, int dir,
 	return -ENOSYS;
 }
 
+int proc_dointvec_sysadmin(const struct ctl_table *table, int dir,
+			   void *buffer, size_t *lenp, loff_t *ppos)
+{
+	return -ENOSYS;
+}
+
 int proc_douintvec(const struct ctl_table *table, int dir,
 		  void *buffer, size_t *lenp, loff_t *ppos)
 {
@@ -1268,6 +1320,12 @@ int proc_douintvec(const struct ctl_table *table, int dir,
 
 int proc_dointvec_minmax(const struct ctl_table *table, int dir,
 		    void *buffer, size_t *lenp, loff_t *ppos)
+{
+	return -ENOSYS;
+}
+
+int proc_dointvec_minmax_sysadmin(const struct ctl_table *table, int dir,
+				  void *buffer, size_t *lenp, loff_t *ppos)
 {
 	return -ENOSYS;
 }
