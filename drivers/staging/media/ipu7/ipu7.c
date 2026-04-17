@@ -2228,6 +2228,7 @@ ipu7_psys_init(struct pci_dev *pdev, struct device *parent,
 
 	ret = ipu7_bus_add_device(psys_adev);
 	if (ret) {
+		ipu7_mmu_cleanup(psys_adev->mmu);
 		kfree(pdata);
 		return ERR_PTR(ret);
 	}
