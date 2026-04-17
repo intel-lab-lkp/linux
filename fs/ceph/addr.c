@@ -1476,7 +1476,8 @@ new_request:
 			unlock_page(page);
 		}
 
-		ceph_osdc_put_request(req);
+		if (!IS_ERR(req))
+			ceph_osdc_put_request(req);
 		return -EIO;
 	}
 
