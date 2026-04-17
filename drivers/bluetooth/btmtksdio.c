@@ -64,11 +64,11 @@ static const struct btmtksdio_data mt7921_data = {
 
 static const struct sdio_device_id btmtksdio_table[] = {
 	{SDIO_DEVICE(SDIO_VENDOR_ID_MEDIATEK, SDIO_DEVICE_ID_MEDIATEK_MT7663),
-	 .driver_data = (kernel_ulong_t)&mt7663_data },
+	 .driver_data_ptr = &mt7663_data },
 	{SDIO_DEVICE(SDIO_VENDOR_ID_MEDIATEK, SDIO_DEVICE_ID_MEDIATEK_MT7668),
-	 .driver_data = (kernel_ulong_t)&mt7668_data },
+	 .driver_data_ptr = &mt7668_data },
 	{SDIO_DEVICE(SDIO_VENDOR_ID_MEDIATEK, SDIO_DEVICE_ID_MEDIATEK_MT7961),
-	 .driver_data = (kernel_ulong_t)&mt7921_data },
+	 .driver_data_ptr = &mt7921_data },
 	{ }	/* Terminating entry */
 };
 MODULE_DEVICE_TABLE(sdio, btmtksdio_table);
@@ -1352,7 +1352,7 @@ static int btmtksdio_probe(struct sdio_func *func,
 	if (!bdev)
 		return -ENOMEM;
 
-	bdev->data = (void *)id->driver_data;
+	bdev->data = id->driver_data_ptr;
 	if (!bdev->data)
 		return -ENODEV;
 
