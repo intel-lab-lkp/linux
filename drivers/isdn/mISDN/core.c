@@ -89,8 +89,15 @@ static DEVICE_ATTR_RO(protocol);
 static ssize_t name_show(struct device *dev,
 			 struct device_attribute *attr, char *buf)
 {
-	strcpy(buf, dev_name(dev));
-	return strlen(buf);
+	struct mISDNdevice *mdev = dev_to_mISDN(dev);
+	ssize_t len;
+
+	if (!mdev)
+		return -ENODEV;
+	device_lock(dev);
+	len = sysfs_emit(buf, "%s", mdev->name);
+	device_unlock(dev);
+	return len;
 }
 static DEVICE_ATTR_RO(name);
 
@@ -227,9 +234,10 @@ mISDN_register_device(struct mISDNdevice *dev,
 		dev_set_name(&dev->dev, "%s", name);
 	else
 		dev_set_name(&dev->dev, "mISDN%d", dev->id);
+	strscpy(dev->name, dev_name(&dev->dev), sizeof(dev->name));
 	if (debug & DEBUG_CORE)
 		printk(KERN_DEBUG "mISDN_register %s %d\n",
-		       dev_name(&dev->dev), dev->id);
+		       dev->name, dev->id);
 	dev->dev.class = &mISDN_class;
 
 	err = create_stack(dev);
@@ -258,7 +266,7 @@ void
 mISDN_unregister_device(struct mISDNdevice *dev) {
 	if (debug & DEBUG_CORE)
 		printk(KERN_DEBUG "mISDN_unregister %s %d\n",
-		       dev_name(&dev->dev), dev->id);
+		       dev->name, dev->id);
 	/* sysfs_remove_link(&dev->dev.kobj, "device"); */
 	/*
 	 * Remove the device from sysfs before taking dev->mutex so bind-side
@@ -358,7 +366,7 @@ const char *mISDNDevName4ch(struct mISDNchannel *ch)
 		return msg_no_stack;
 	if (!ch->st->dev)
 		return msg_no_stackdev;
-	return dev_name(&ch->st->dev->dev);
+	return ch->st->dev->name;
 };
 EXPORT_SYMBOL(mISDNDevName4ch);
 

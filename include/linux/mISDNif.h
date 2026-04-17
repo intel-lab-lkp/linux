@@ -497,6 +497,7 @@ struct mISDNdevice {
 	u_int			Bprotocols;
 	u_int			nrbchan;
 	u_char			channelmap[MISDN_CHMAP_SIZE];
+	char			name[MISDN_MAX_IDLEN];
 	struct list_head	bchannels;
 	struct mISDNchannel	*teimgr;
 	struct completion	released;

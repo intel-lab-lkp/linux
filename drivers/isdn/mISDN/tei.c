@@ -990,7 +990,7 @@ create_teimgr(struct manager *mgr, struct channel_req *crq)
 
 	if (*debug & DEBUG_L2_TEI)
 		printk(KERN_DEBUG "%s: %s proto(%x) adr(%d %d %d %d)\n",
-		       __func__, dev_name(&mgr->ch.st->dev->dev),
+		       __func__, mgr->ch.st->dev->name,
 		       crq->protocol, crq->adr.dev, crq->adr.channel,
 		       crq->adr.sapi, crq->adr.tei);
 	if (crq->adr.tei > GROUP_TEI)
