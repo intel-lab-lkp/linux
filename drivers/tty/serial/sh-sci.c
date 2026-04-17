@@ -2711,14 +2711,15 @@ static void sci_set_termios(struct uart_port *port, struct ktermios *termios,
 	 * setup the baud rate generator hardware for us already.
 	 */
 	if (!port->uartclk) {
-		baud = uart_get_baud_rate(port, termios, old, 0, 115200);
-		goto done;
+		max_freq = 115200;
+	} else {
+		for (i = 0; i < SCI_NUM_CLKS; i++)
+			max_freq = max(max_freq, s->clk_rates[i]);
+
+		max_freq /= min_sr(s);
 	}
 
-	for (i = 0; i < SCI_NUM_CLKS; i++)
-		max_freq = max(max_freq, s->clk_rates[i]);
-
-	baud = uart_get_baud_rate(port, termios, old, 0, max_freq / min_sr(s));
+	baud = uart_get_baud_rate(port, termios, old, 0, max_freq);
 	if (!baud)
 		goto done;
 
