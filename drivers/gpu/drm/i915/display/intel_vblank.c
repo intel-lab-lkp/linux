@@ -527,8 +527,26 @@ static void intel_crtc_active_timings(struct drm_display_mode *mode,
 	drm_mode_init(mode, &crtc_state->hw.adjusted_mode);
 	*vmax_vblank_start = 0;
 
-	if (!vrr_enable)
+	if (!vrr_enable) {
+		/*
+		 * On platforms that always use the VRR timing generator
+		 * LNL+, even fixed refresh rate modes run
+		 * through the VRR TG. The actual frame boundary is at
+		 * flipline (= vtotal), not at vactive end. Without this
+		 * adjustment, vblank timestamps and flip-done fences are
+		 * signaled at vactive end (line 1800 for 60Hz) instead of
+		 * near the real frame boundary, causing
+		 * compositors like SurfaceFlinger to see ~8ms late fences
+		 * and drop frames during GPU-heavy workloads.
+		 */
+		if (intel_vrr_always_use_vrr_tg(to_intel_display(crtc_state))) {
+			mode->crtc_vtotal = intel_vrr_vmin_vtotal(crtc_state);
+			mode->crtc_vblank_end = intel_vrr_vmin_vtotal(crtc_state);
+			mode->crtc_vblank_start =
+				intel_vrr_vmin_vblank_start(crtc_state);
+		}
 		return;
+	}
 
 	mode->crtc_vtotal = intel_vrr_vmax_vtotal(crtc_state);
 	mode->crtc_vblank_end = intel_vrr_vmax_vtotal(crtc_state);
