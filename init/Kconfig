@@ -2212,6 +2212,8 @@ config RUST
 
 	  If unsure, say N.
 
+source "rust/kernel/Kconfig.test"
+
 config RUSTC_VERSION_TEXT
 	string
 	depends on RUST
