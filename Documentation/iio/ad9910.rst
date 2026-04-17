@@ -1,0 +1,586 @@
+.. SPDX-License-Identifier: GPL-2.0-only
+
+=============
+AD9910 driver
+=============
+
+DDS (Direct Digital Synthesizer) driver for the Analog Devices Inc. AD9910.
+The module name is ``ad9910``.
+
+* `AD9910 <https://www.analog.com/en/products/ad9910.html>`_
+
+The AD9910 is a 1 GSPS DDS with a 14-bit DAC, driven over SPI. The driver
+exposes the device through the IIO ``altvoltage`` channel type and supports
+five DDS operating modes: single tone, parallel port modulation, digital ramp
+generation (DRG), RAM playback and output shift keying (OSK). The device has
+8 hardware profiles, each capable of storing independent single tone and RAM
+playback parameters.
+
+
+Channel hierarchy
+=================
+
+The driver exposes the following IIO output channels, each identified by a
+unique channel number and a human-readable label:
+
+* ``out_altvoltage100``: ``phy``: Physical output: system clock and profile control
+
+  * ``out_altvoltage101``: ``profile[0]``: Single tone control for profile 0:
+    frequency, phase, amplitude
+
+  * ``out_altvoltage102``: ``profile[1]``: Single tone control for profile 1:
+    frequency, phase, amplitude
+
+  * ``out_altvoltage103``: ``profile[2]``: Single tone control for profile 2:
+    frequency, phase, amplitude
+
+  * ``out_altvoltage104``: ``profile[3]``: Single tone control for profile 3:
+    frequency, phase, amplitude
+
+  * ``out_altvoltage105``: ``profile[4]``: Single tone control for profile 4:
+    frequency, phase, amplitude
+
+  * ``out_altvoltage106``: ``profile[5]``: Single tone control for profile 5:
+    frequency, phase, amplitude
+
+  * ``out_altvoltage107``: ``profile[6]``: Single tone control for profile 6:
+    frequency, phase, amplitude
+
+  * ``out_altvoltage108``: ``profile[7]``: Single tone control for profile 7:
+    frequency, phase, amplitude
+
+  * ``out_altvoltage110``: ``parallel_port``: Parallel port modulation: enable
+    and offset/scale parameters
+
+  * ``out_altvoltage120``: ``digital_ramp_generator``: DRG control: enable
+
+    * ``out_altvoltage121``: ``digital_ramp_up``: DRG ramp-up parameters:
+      no-dwell enable, limits, step sizes, ramp rate
+    * ``out_altvoltage122``: ``digital_ramp_down``: DRG ramp-down parameters:
+      no-dwell enable, limits, step sizes, ramp rate
+
+  * ``out_altvoltage130``: ``ram_control``: RAM playback: enable, frequency,
+    phase and sampling frequency for active profile. Other configurations are
+    provided through a firmware upload interface.
+
+  * ``out_altvoltage150``: ``output_shift_keying``: OSK: enable, amplitude
+    scale, ramp rate, auto/manual control
+
+The ``phy`` channel is the root of the hierarchy. Changing its
+``sampling_frequency`` reconfigures the system clock (SYSCLK) which affects all
+other channels.
+
+All mode-specific channels (single-tone, parallel port, DRG, RAM, OSK) have an
+``enable`` attribute that turns the mode on/off.
+
+DDS modes
+=========
+
+The AD9910 supports multiple modes of operation that can be configured
+independently or in combination. Such modes and their corresponding IIO channels
+are described in this section. The following tables are extracted from the
+AD9910 datasheet and summarizes the control parameters for each mode and their
+priority when multiple sources are enabled simultaneously:
+
+.. flat-table:: DDS Frequency Control
+   :header-rows: 1
+
+   * - Priority
+     - Data Source
+     - Conditions
+
+   * - Highest Priority
+     - RAM
+     - RAM enabled and data destination is frequency
+
+   * -
+     - DRG
+     - DRG enabled and data destination is frequency
+
+   * -
+     - Parallel data and FTW (frequency_offset)
+     - Parallel data port enabled and data destination is frequency
+
+   * -
+     - FTW (frequency)
+     - RAM enabled and data destination is not frequency
+
+   * -
+     - FTW (frequency) in single tone channel for the active profile
+     - DRG enabled and data destination is not frequency
+
+   * -
+     - FTW (frequency) in single tone channel for the active profile
+     - Parallel data port enabled and data destination is not frequency
+
+   * - Lowest Priority
+     - FTW (frequency) in single tone channel for the active profile
+     - None
+
+.. flat-table:: DDS Phase Control
+   :header-rows: 1
+
+   * - Priority
+     - Data Source
+     - Conditions
+
+   * - Highest Priority
+     - RAM
+     - RAM enabled and data destination is phase or polar
+
+   * -
+     - DRG
+     - DRG enabled and data destination is phase
+
+   * -
+     - Parallel data port
+     - Parallel data port enabled and data destination is phase
+
+   * -
+     - Parallel data port and POW register LSBs (phase_offset)
+     - Parallel data port enabled and data destination is polar
+
+   * -
+     - POW (phase)
+     - RAM enabled and destination is not phase nor polar
+
+   * -
+     - POW (phase) in single tone channel for the active profile
+     - DRG enabled and data destination is not phase
+
+   * -
+     - POW (phase) in single tone channel for the active profile
+     - Parallel data port enabled and data destination is not phase nor polar
+
+   * - Lowest Priority
+     - POW (phase) in single tone channel for the active profile
+     - None
+
+.. flat-table:: DDS Amplitude Control
+   :header-rows: 1
+
+   * - Priority
+     - Data Source
+     - Conditions
+
+   * - Highest Priority
+     - OSK generator
+     - OSK enabled (auto mode)
+
+   * -
+     - ASF register
+     - OSK enabled (manual mode)
+
+   * -
+     - RAM
+     - RAM enabled and data destination is amplitude or polar
+
+   * -
+     - DRG
+     - DRG enabled and data destination is amplitude
+
+   * -
+     - Parallel data port
+     - Parallel data port enabled and data destination is amplitude
+
+   * -
+     - Parallel data port and ASF register LSBs (scale_offset)
+     - Parallel data port enabled and data destination is polar
+
+   * - Lowest Priority
+     - ASF (scale) in single tone channel for the active profile
+     - (Amplitude scale is already enabled by default)
+
+Single tone mode
+----------------
+
+Single tone is the baseline operating mode. The ``profile[Y]`` channels
+provides enable, frequency, phase and amplitude control:
+
+.. flat-table::
+   :header-rows: 1
+
+   * - Attribute
+     - Unit
+     - Description
+
+   * - ``en``
+     - boolean
+     - Enable/disable profile Y. Only one profile can be active at a
+       time. Then enabling a profile disables the current active profile.
+       Disabling an active profile enables the next profile in ascending order,
+       wrapping around from 7 to 0.
+
+   * - ``frequency``
+     - Hz
+     - Output frequency. Range [0, SYSCLK/2). Stored in the profile's frequency
+       tuning word (FTW).
+
+   * - ``phase``
+     - rad
+     - Phase offset. Range [0, 2*pi). Stored in the profile's phase offset word
+       (POW).
+
+   * - ``scale``
+     - fractional
+     - Amplitude scale factor. Range [0, 1]. Stored in the profile's amplitude
+       scale factor (ASF).
+
+Profile switching is allowed while RAM mode is enabled. In that case single tone
+parameters are stored in a shadow register and are not written to hardware until
+RAM mode is disabled.
+
+Usage examples
+^^^^^^^^^^^^^^
+
+Set the active profile to 2 and configure a 100 MHz tone:
+
+.. code-block:: bash
+
+	echo 1 > /sys/bus/iio/devices/iio:device0/out_altvoltage103_en
+	echo 100000000 > /sys/bus/iio/devices/iio:device0/out_altvoltage103_frequency
+	echo 0.5 > /sys/bus/iio/devices/iio:device0/out_altvoltage103_scale
+	echo 0 > /sys/bus/iio/devices/iio:device0/out_altvoltage103_phase
+
+Read back the current single tone frequency:
+
+.. code-block:: bash
+
+	cat /sys/bus/iio/devices/iio:device0/out_altvoltage103_frequency
+
+Parallel port mode
+------------------
+
+When enabled, the parallel port allows real-time modulation of DDS parameters
+through a 16-bit external data bus.
+
+.. flat-table::
+   :header-rows: 1
+
+   * - Attribute
+     - Unit
+     - Description
+
+   * - ``en``
+     - boolean
+     - Enable/disable the parallel data port.
+
+   * - ``frequency_scale``
+     - power-of-2
+     - FM gain multiplier applied to 16-bit parallel input. Range [1, 32768],
+       must be a power of 2.
+
+   * - ``frequency_offset``
+     - Hz
+     - Base FTW to which scaled parallel data is added. Range [0, SYSCLK/2).
+
+   * - ``phase_offset``
+     - rad
+     - Base phase for polar modulation. Lower 8 bits of POW register.
+       Range [0, 2*pi/256).
+
+   * - ``scale_offset``
+     - fractional
+     - Base amplitude for polar modulation. Lower 6 bits of ASF register.
+       Range [0, 1/256).
+
+Usage examples
+^^^^^^^^^^^^^^
+
+Enable parallel port with a frequency scale of 16 and a 50 MHz offset:
+
+.. code-block:: bash
+
+	echo 16 > /sys/bus/iio/devices/iio:device0/out_altvoltage110_frequency_scale
+	echo 50000000 > /sys/bus/iio/devices/iio:device0/out_altvoltage110_frequency_offset
+  echo 1 > /sys/bus/iio/devices/iio:device0/out_altvoltage110_en
+
+Digital ramp generator (DRG)
+----------------------------
+
+The DRG produces linear frequency, phase or amplitude sweeps using dedicated
+hardware. It is controlled through three channels: a parent control channel
+(``digital_ramp_generator``) and two child ramp channels
+(``digital_ramp_up``, ``digital_ramp_down``). DRG destination is set when
+ramp attributes are written, i.e. writing to ``frequency`` or ``frequency_step``
+sets the destination to frequency.
+
+Control channel attributes
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. flat-table::
+   :header-rows: 1
+
+   * - Attribute
+     - Unit
+     - Description
+
+   * - ``en``
+     - boolean
+     - Enable/disable the DRG.
+
+Ramp channel attributes
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+The ``digital_ramp_up`` and ``digital_ramp_down`` channels share the same
+attribute set but configure ascending and descending ramp parameters
+independently:
+
+.. flat-table::
+   :header-rows: 1
+
+   * - Attribute
+     - Unit
+     - Description
+
+   * - ``en``
+     - boolean
+     - Enable/disable the ramp no-dwell behavior. Enabling both creates a
+       bidirectional continuous ramp (Triangular pattern). Other configurations
+       creates a single-shot ramp at the trasition of the DRCTL pin: ramp-up
+       only, ramp-down only or bidirectional with dwell at the limits.
+
+   * - ``frequency``
+     - Hz
+     - Frequency ramp limit. Range [0, SYSCLK/2).
+
+   * - ``phase``
+     - rad
+     - Phase ramp limit. Range [0, 2*pi).
+
+   * - ``scale``
+     - fractional
+     - Amplitude scale ramp limit. Range [0, 1).
+
+   * - ``sampling_frequency``
+     - Hz
+     - Ramp clock rate: SYSCLK / (4 * divider).
+
+   * - ``frequency_step``
+     - Hz
+     - Per-tick frequency increment/decrement. Range [0, SYSCLK/2).
+
+   * - ``phase_step``
+     - rad
+     - Per-tick phase increment/decrement. Range [0, 2*pi).
+
+   * - ``scale_step``
+     - fractional
+     - Per-tick amplitude scale increment/decrement. Range [0, 1).
+
+Usage examples
+^^^^^^^^^^^^^^
+
+Configure a frequency sweep from 40 MHz to 60 MHz at a 1 kHz step:
+
+.. code-block:: bash
+
+	# Enable both no-dwell modes for a bidirectional ramp
+	echo 1 > /sys/bus/iio/devices/iio:device0/out_altvoltage121_en
+  echo 1 > /sys/bus/iio/devices/iio:device0/out_altvoltage122_en
+
+	# Set ramp limits
+	echo 60000000 > /sys/bus/iio/devices/iio:device0/out_altvoltage121_frequency
+	echo 40000000 > /sys/bus/iio/devices/iio:device0/out_altvoltage122_frequency
+
+	# Set ramp step size to 1 kHz
+	echo 1000 > /sys/bus/iio/devices/iio:device0/out_altvoltage121_frequency_step
+	echo 1000 > /sys/bus/iio/devices/iio:device0/out_altvoltage122_frequency_step
+
+	# Set ramp rate at 25 MHz
+	echo 25000000 > /sys/bus/iio/devices/iio:device0/out_altvoltage121_sampling_frequency
+  echo 25000000 > /sys/bus/iio/devices/iio:device0/out_altvoltage122_sampling_frequency
+
+	# Enable the DRG
+	echo 1 > /sys/bus/iio/devices/iio:device0/out_altvoltage120_en
+
+RAM mode
+--------
+
+The AD9910 contains a 1024 x 32-bit RAM that can be loaded with waveform data
+and played back to modulate frequency, phase, amplitude, or polar (phase +
+amplitude) parameters.
+
+RAM control channel attributes
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. flat-table::
+   :header-rows: 1
+
+   * - Attribute
+     - Unit
+     - Description
+
+   * - ``en``
+     - boolean
+     - Enable/disable RAM playback. Toggling swaps profile registers between
+       single tone and RAM configurations across all 8 profiles.
+
+   * - ``frequency``
+     - Hz
+     - Frequency tuning word used as the single tone frequency when
+       RAM destination is not ``frequency``. Range [0, SYSCLK/2).
+
+   * - ``phase``
+     - rad
+     - Phase offset word used as the single tone phase when RAM destination
+       is not ``phase``. Range [0, 2*pi).
+
+   * - ``sampling_frequency``
+     - Hz
+     - RAM playback step rate of the active profile, which controls how fast the
+       address counter advances: SYSCLK / (4 * step_rate).
+
+Loading RAM data
+^^^^^^^^^^^^^^^^
+
+RAM data is loaded through the firmware upload framework. The driver registers
+a firmware upload sysfs entry named ``iio_deviceX:ram``. The FW data follows
+a simple binary format:
+
+- 72-byte header:
+  - 4-byte big-endian word count: number of 32-bit words to be loaded (0-1024)
+  - 4-byte big-endian CFR1 value: configuration for the CFR1 register. Only
+    bits relevant to RAM mode (data destination and internal profile control)
+    are considered. Other bits are ignored and have no effect.
+    - Bits [30:29]: RAM data destination:
+      - 00: frequency
+      - 01: phase
+      - 10: amplitude
+      - 11: polar
+    - Bits [20:17]: Internal profile control (see Table 14 of the datasheet).
+  - 8 sets of 8-byte big-endian profile data for profiles 0-7. Each set contains:
+    - Bits [55:40]: Address step rate value
+    - Bits [39:30]: End address for the profile
+    - Bits [23:14]: Start address for the profile
+    - Bit [5]: no-dwell high for ramp-up mode
+    - Bit [3]: zero-crossing for direct-switch mode
+    - Bits [2:0]: operating mode:
+      - 000: direct switch
+      - 001: ramp-up
+      - 010: bidirectional
+      - 011: bidirectional continuous
+      - 100: ramp-up continuous
+- Followed by the specified number of 32-bit big-endian data words.
+
+Usage examples
+^^^^^^^^^^^^^^
+
+Configure RAM mode with frequency destination and load a waveform:
+
+.. code-block:: bash
+
+	# Load RAM data via firmware upload
+	echo 1 > /sys/class/firmware/iio\:device0\:ram/loading
+	cat waveform.bin > /sys/class/firmware/iio\:device0\:ram/data
+	echo 0 > /sys/class/firmware/iio\:device0\:ram/loading
+
+	# Enable RAM mode
+	echo 1 > /sys/bus/iio/devices/iio:device0/out_altvoltage130_en
+
+Output shift keying (OSK)
+-------------------------
+
+OSK controls the output amplitude envelope, allowing the output to be ramped
+on/off rather than switched abruptly.
+
+.. flat-table::
+   :header-rows: 1
+
+   * - Attribute
+     - Unit
+     - Description
+
+   * - ``en``
+     - boolean
+     - Enable/disable OSK.
+
+   * - ``scale``
+     - fractional
+     - Target amplitude for the OSK ramp. 14-bit ASF field. Range [0, 1).
+
+   * - ``sampling_frequency``
+     - Hz
+     - OSK ramp rate: SYSCLK / (4 * divider).
+
+   * - ``pinctrl_en``
+     - boolean
+     - Enable manual external pin control. When enabled, the OSK pin directly
+       gates the output on/off instead of using the automatic ramp.
+
+   * - ``scale_step``
+     - fractional
+     - Automatic OSK amplitude step. Writing non-zero enables automatic OSK
+       and sets the per-tick increment. Writing ``0`` disables it. Rounded to
+       nearest hardware step: 0.000061, 0.000122, 0.000244 or 0.000488.
+
+Usage examples
+^^^^^^^^^^^^^^
+
+Enable OSK with automatic ramping:
+
+.. code-block:: bash
+
+	# Set ramp rate
+	echo 1000000 > /sys/bus/iio/devices/iio:device0/out_altvoltage150_sampling_frequency
+
+	# Enable automatic OSK with step size
+	echo 0.000244 > /sys/bus/iio/devices/iio:device0/out_altvoltage150_scale_step
+
+	# Enable OSK
+	echo 1 > /sys/bus/iio/devices/iio:device0/out_altvoltage150_en
+
+Enable manual pin-controlled OSK:
+
+.. code-block:: bash
+
+	# Enable manual pin control
+	echo 1 > /sys/bus/iio/devices/iio:device0/out_altvoltage150_pinctrl_en
+	echo 1 > /sys/bus/iio/devices/iio:device0/out_altvoltage150_en
+
+	# Set target amplitude to full scale
+	echo 1.0 > /sys/bus/iio/devices/iio:device0/out_altvoltage150_scale
+
+Physical channel
+================
+
+The ``phy`` channel provides device-level control:
+
+.. flat-table::
+   :header-rows: 1
+
+   * - Attribute
+     - Unit
+     - Description
+
+   * - ``sampling_frequency``
+     - Hz
+     - System clock (SYSCLK) frequency. With PLL enabled, configures the PLL
+       multiplier (range 420-1000 MHz). Without PLL, ref clock can only be
+       divided by 2.
+
+   * - ``powerdown``
+     - boolean
+     - Software power-down. Writing 1 powers down the digital core, DAC,
+       reference clock input and auxiliary DAC simultaneously.
+
+Usage examples
+--------------
+
+Set the system clock to 1 GHz:
+
+.. code-block:: bash
+
+	echo 1000000000 > /sys/bus/iio/devices/iio:device0/out_altvoltage100_sampling_frequency
+
+Read current system clock frequency:
+
+.. code-block:: bash
+
+	cat /sys/bus/iio/devices/iio:device0/out_altvoltage100_sampling_frequency
+
+Power down the device:
+
+.. code-block:: bash
+
+	echo 1 > /sys/bus/iio/devices/iio:device0/out_altvoltage100_powerdown
