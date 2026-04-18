@@ -351,7 +351,8 @@ firmware_upload_register(struct module *module, struct device *parent,
 	if (ret != 0) {
 		if (ret > 0)
 			ret = -EINVAL;
-		goto free_fw_sysfs;
+		put_device(fw_dev);
+		goto exit_module_put;
 	}
 	fw_priv->is_paged_buf = true;
 	fw_sysfs->fw_priv = fw_priv;
@@ -364,9 +365,6 @@ firmware_upload_register(struct module *module, struct device *parent,
 	}
 
 	return fw_upload;
-
-free_fw_sysfs:
-	kfree(fw_sysfs);
 
 free_fw_upload_priv:
 	kfree(fw_upload_priv);
