@@ -783,20 +783,17 @@ out:
 
 static void collapse_single_pte_entry_compound(struct collapse_context *c, struct mem_ops *ops)
 {
+	int advise = MADV_DONTNEED;
 	void *p;
 
 	p = alloc_hpage(ops);
 
-	if (is_tmpfs(ops)) {
-		/* MADV_DONTNEED won't evict tmpfs pages */
-		printf("tmpfs...");
-		skip("Skip");
-		goto skip;
-	}
+	if (is_tmpfs(ops))
+		advise = MADV_REMOVE;
 
 	madvise(p, hpage_pmd_size, MADV_NOHUGEPAGE);
 	printf("Split huge page leaving single PTE mapping compound page...");
-	madvise(p + page_size, hpage_pmd_size - page_size, MADV_DONTNEED);
+	madvise(p + page_size, hpage_pmd_size - page_size, advise);
 	if (ops->check_huge(p, 0))
 		success("OK");
 	else
@@ -805,7 +802,6 @@ static void collapse_single_pte_entry_compound(struct collapse_context *c, struc
 	c->collapse("Collapse PTE table with single PTE mapping compound page",
 		    p, 1, ops, true);
 	validate_memory(p, 0, page_size);
-skip:
 	ops->cleanup_area(p, hpage_pmd_size);
 }
 
@@ -1251,8 +1247,10 @@ int main(int argc, char **argv)
 
 	TEST(collapse_single_pte_entry_compound, khugepaged_context, anon_ops);
 	TEST(collapse_single_pte_entry_compound, khugepaged_context, file_ops);
+	TEST(collapse_single_pte_entry_compound, khugepaged_context, shmem_ops);
 	TEST(collapse_single_pte_entry_compound, madvise_context, anon_ops);
 	TEST(collapse_single_pte_entry_compound, madvise_context, file_ops);
+	TEST(collapse_single_pte_entry_compound, madvise_context, shmem_ops);
 
 	TEST(collapse_full_of_compound, khugepaged_context, anon_ops);
 	TEST(collapse_full_of_compound, khugepaged_context, file_ops);
