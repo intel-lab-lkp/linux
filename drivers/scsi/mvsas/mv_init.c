@@ -120,11 +120,11 @@ static void mvs_free(struct mvs_info *mvi)
 		dma_free_coherent(mvi->dev, TRASH_BUCKET_SIZE,
 				  mvi->bulk_buffer1, mvi->bulk_buffer_dma1);
 
+	list_for_each_entry(mwq, &mvi->wq_list, entry)
+		cancel_delayed_work_sync(&mwq->work_q);
 	MVS_CHIP_DISP->chip_iounmap(mvi);
 	if (mvi->shost)
 		scsi_host_put(mvi->shost);
-	list_for_each_entry(mwq, &mvi->wq_list, entry)
-		cancel_delayed_work_sync(&mwq->work_q);
 	kfree(mvi->rsvd_tags);
 	kfree(mvi);
 }
