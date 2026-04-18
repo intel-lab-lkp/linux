@@ -124,6 +124,18 @@ int diMount(struct inode *ipimap)
 	atomic_set(&imap->im_numfree, le32_to_cpu(dinom_le->in_numfree));
 	imap->im_nbperiext = le32_to_cpu(dinom_le->in_nbperiext);
 	imap->im_l2nbperiext = le32_to_cpu(dinom_le->in_l2nbperiext);
+
+	if (imap->im_l2nbperiext < 0 ||
+	    imap->im_l2nbperiext > 30 ||
+	    imap->im_nbperiext != (1 << imap->im_l2nbperiext)) {
+		jfs_err("diMount: invalid imap parameters: "
+			"nbperiext(%d) l2nbperiext(%d)",
+			imap->im_nbperiext, imap->im_l2nbperiext);
+		release_metapage(mp);
+		kfree(imap);
+		return -EINVAL;
+	}
+
 	for (index = 0; index < MAXAG; index++) {
 		imap->im_agctl[index].inofree =
 		    le32_to_cpu(dinom_le->in_agctl[index].inofree);
