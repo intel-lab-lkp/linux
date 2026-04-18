@@ -501,7 +501,7 @@ void rtw_update_scanned_network(struct adapter *adapter, struct wlan_bssid_ex *t
 		}
 
 		if (rtw_roam_flags(adapter)) {
-			/* TODO: don't select network in the same ess as oldest if it's new enough*/
+			/* TODO: don't select network in the same ess as oldest if it's new enough */
 		}
 
 		if (!oldest || time_after(oldest->last_scanned, pnetwork->last_scanned))
@@ -1195,10 +1195,8 @@ void rtw_joinbss_event_prehandle(struct adapter *adapter, u8 *pbuf)
 						rtw_free_stainfo(adapter,  pcur_sta);
 
 					ptarget_wlan = rtw_find_network(&pmlmepriv->scanned_queue, pnetwork->network.mac_address);
-					if (check_fwstate(pmlmepriv, WIFI_STATION_STATE)) {
-						if (ptarget_wlan)
-							ptarget_wlan->fixed = true;
-					}
+					if (check_fwstate(pmlmepriv, WIFI_STATION_STATE) && ptarget_wlan)
+						ptarget_wlan->fixed = true;
 				}
 
 			} else {
