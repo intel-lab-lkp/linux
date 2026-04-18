@@ -748,7 +748,7 @@ static int hamachi_init_one(struct pci_dev *pdev,
 	printk(KERN_INFO "%s:  %d-bit %d Mhz PCI bus (%d), Virtual Jumpers "
 		   "%2.2x, LPA %4.4x.\n",
 		   dev->name, readw(ioaddr + MiscStatus) & 1 ? 64 : 32,
-		   i ? 2000/(i&0x7f) : 0, i&0x7f, (int)readb(ioaddr + VirtualJumpers),
+		   (i & 0x7f) ? 2000 / (i & 0x7f) : 0, i & 0x7f, (int)readb(ioaddr + VirtualJumpers),
 		   readw(ioaddr + ANLinkPartnerAbility));
 
 	if (chip_tbl[hmp->chip_id].flags & CanHaveMII) {
