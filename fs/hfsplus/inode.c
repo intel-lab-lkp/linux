@@ -592,6 +592,8 @@ int hfsplus_cat_read_inode(struct inode *inode, struct hfs_find_data *fd)
 		if (folder->flags & cpu_to_be16(HFSPLUS_HAS_FOLDER_COUNT)) {
 			HFSPLUS_I(inode)->subfolders =
 				be32_to_cpu(folder->subfolders);
+		} else {
+			HFSPLUS_I(inode)->subfolders = 0;
 		}
 		inode->i_op = &hfsplus_dir_inode_operations;
 		inode->i_fop = &hfsplus_dir_operations;
