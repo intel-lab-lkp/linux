@@ -12,6 +12,7 @@
  */
 
 #include <linux/bitfield.h>
+#include <linux/cleanup.h>
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
 #include <linux/init.h>
@@ -226,14 +227,13 @@ static int ads7924_read_raw(struct iio_dev *indio_dev,
 	struct ads7924_data *data = iio_priv(indio_dev);
 
 	switch (mask) {
-	case IIO_CHAN_INFO_RAW:
-		mutex_lock(&data->lock);
+	case IIO_CHAN_INFO_RAW: {
+		guard(mutex)(&data->lock);
 		ret = ads7924_get_adc_result(data, chan, val);
-		mutex_unlock(&data->lock);
 		if (ret < 0)
 			return ret;
-
 		return IIO_VAL_INT;
+		}
 	case IIO_CHAN_INFO_SCALE:
 		vref_uv = regulator_get_voltage(data->vref_reg);
 		if (vref_uv < 0)
