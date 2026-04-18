@@ -18,13 +18,16 @@
  *   9. call shutdown() for the second server
  *        and migrate the requests in the accept queue
  *        to the last server socket.
- *  10. call accept() for the last server socket.
+ *  10. for TCP_ESTABLISHED cases, call epoll_wait(..., 0)
+ *        for the last server socket.
+ *  11. call accept() for the last server socket.
  *
  * Author: Kuniyuki Iwashima <kuniyu@amazon.co.jp>
  */
 
 #include <bpf/bpf.h>
 #include <bpf/libbpf.h>
+#include <sys/epoll.h>
 
 #include "test_progs.h"
 #include "test_migrate_reuseport.skel.h"
@@ -520,6 +523,33 @@ static void run_test(struct migrate_reuseport_test_case *test_case,
 		err = pass_ack(test_case);
 		if (!ASSERT_OK(err, "pass_ack"))
 			goto close_clients;
+	}
+
+	/* Only TCP_ESTABLISHED has already-migrated accept-queue entries
+	 * here.  Later states still depend on follow-up handshake work.
+	 */
+	if (test_case->state == BPF_TCP_ESTABLISHED) {
+		struct epoll_event ev = {
+			.events = EPOLLIN,
+		};
+		int epfd;
+		int nfds;
+
+		epfd = epoll_create1(EPOLL_CLOEXEC);
+		if (!ASSERT_NEQ(epfd, -1, "epoll_create1"))
+			goto close_clients;
+
+		ev.data.fd = test_case->servers[MIGRATED_TO];
+		if (!ASSERT_OK(epoll_ctl(epfd, EPOLL_CTL_ADD,
+					 test_case->servers[MIGRATED_TO], &ev),
+			       "epoll_ctl"))
+			goto close_epfd;
+
+		nfds = epoll_wait(epfd, &ev, 1, 0);
+		ASSERT_EQ(nfds, 1, "epoll_wait");
+
+close_epfd:
+		close(epfd);
 	}
 
 	count_requests(test_case, skel);
