@@ -323,9 +323,23 @@ acpi_ds_load2_begin_op(struct acpi_walk_state *walk_state,
 	}
 
 	if (ACPI_FAILURE(status)) {
-		ACPI_ERROR_NAMESPACE(walk_state->scope_info,
-				     buffer_ptr, status);
-		return_ACPI_STATUS(status);
+		/*
+		 * If the object already exists, do not abort the table load.
+		 * Instead, issue a warning and continue with AE_OK.
+		 * This allows the rest of the SSDT to be loaded even if the
+		 * BIOS incorrectly attempts to redefine an existing object.
+		 */
+		if (status == AE_ALREADY_EXISTS) {
+			ACPI_WARNING((AE_INFO,
+				      "Namespace lookup: Object [%s] already exists, continuing table load",
+				      buffer_ptr));
+			status = AE_OK;
+		} else {
+			/* For all other fatal errors, abort the method/table load */
+			ACPI_ERROR_NAMESPACE(walk_state->scope_info,
+					     buffer_ptr, status);
+			return_ACPI_STATUS(status);
+		}
 	}
 
 	if (!op) {
