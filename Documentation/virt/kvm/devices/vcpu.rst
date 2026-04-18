@@ -162,6 +162,35 @@ explicitly selected, or the number of counters is out of range for the
 selected PMU. Selecting a new PMU cancels the effect of setting this
 attribute.
 
+1.6 ATTRIBUTE: KVM_ARM_VCPU_PMU_V3_FIXED_COUNTERS_ONLY
+------------------------------------------------------
+
+:Parameters: no additional parameter in kvm_device_attr.addr
+
+:Returns:
+
+	 =======  =====================================================
+	 -EBUSY   Attempted to set after initializing PMUv3 or running
+		  VCPU, or attempted to set for the first time after
+		  setting an event filter
+	 -ENXIO   Attempted to get before setting
+	 -ENODEV  Attempted to set while PMUv3 not supported
+	 =======  =====================================================
+
+If set, PMUv3 will be emulated without programmable event counters. The VCPU
+will use any compatible hardware PMU. This attribute is particularly useful on
+heterogeneous systems where different hardware PMUs cover different physical
+CPUs. The compatibility of hardware PMUs can be checked with
+KVM_ARM_VCPU_PMU_V3_SET_PMU. All VCPUs in a VM share this attribute. It isn't
+possible to set it for the first time if a PMU event filter is already present.
+
+Note that KVM will not make any attempts to run the VCPU on the physical CPUs
+with compatible hardware PMUs. This is entirely left to userspace. However,
+attempting to run the VCPU on an unsupported CPU will fail and KVM_RUN will
+return with exit_reason = KVM_EXIT_FAIL_ENTRY and populate the fail_entry struct
+by setting hardware_entry_failure_reason field to
+KVM_EXIT_FAIL_ENTRY_CPU_UNSUPPORTED and the cpu field to the processor id.
+
 2. GROUP: KVM_ARM_VCPU_TIMER_CTRL
 =================================
 
