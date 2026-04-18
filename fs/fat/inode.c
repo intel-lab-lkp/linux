@@ -47,9 +47,9 @@ struct fat_bios_param_block {
 	u16	fat_reserved;
 	u8	fat_fats;
 	u16	fat_dir_entries;
-	u16	fat_sectors;
+	u16	fat_total_sect16;
 	u16	fat_fat_length;
-	u32	fat_total_sect;
+	u32	fat_total_sect32;
 
 	u8	fat16_state;
 	u32	fat16_vol_id;
@@ -1403,9 +1403,9 @@ static int fat_read_bpb(struct super_block *sb, struct fat_boot_sector *b,
 	bpb->fat_reserved = le16_to_cpu(b->reserved);
 	bpb->fat_fats = b->fats;
 	bpb->fat_dir_entries = get_unaligned_le16(&b->dir_entries);
-	bpb->fat_sectors = get_unaligned_le16(&b->sectors);
+	bpb->fat_total_sect16 = get_unaligned_le16(&b->sectors);
 	bpb->fat_fat_length = le16_to_cpu(b->fat_length);
-	bpb->fat_total_sect = le32_to_cpu(b->total_sect);
+	bpb->fat_total_sect32 = le32_to_cpu(b->total_sect);
 
 	bpb->fat16_state = b->fat16.state;
 	bpb->fat16_vol_id = get_unaligned_le32(b->fat16.vol_id);
@@ -1523,7 +1523,7 @@ static int fat_read_static_bpb(struct super_block *sb,
 	bpb->fat_reserved = 1;
 	bpb->fat_fats = 2;
 	bpb->fat_dir_entries = fdefaults->dir_entries;
-	bpb->fat_sectors = fdefaults->nr_sectors;
+	bpb->fat_total_sect16 = fdefaults->nr_sectors;
 	bpb->fat_fat_length = fdefaults->fat_length;
 
 	error = 0;
@@ -1734,9 +1734,9 @@ int fat_fill_super(struct super_block *sb, struct fs_context *fc,
 	rootdir_sectors = sbi->dir_entries
 		* sizeof(struct msdos_dir_entry) / sb->s_blocksize;
 	sbi->data_start = sbi->dir_start + rootdir_sectors;
-	total_sectors = bpb.fat_sectors;
+	total_sectors = bpb.fat_total_sect16;
 	if (total_sectors == 0)
-		total_sectors = bpb.fat_total_sect;
+		total_sectors = bpb.fat_total_sect32;
 
 	total_clusters = (total_sectors - sbi->data_start) / sbi->sec_per_clus;
 
