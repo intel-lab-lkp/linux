@@ -37,6 +37,9 @@ int vxlan_igmp_join(struct vxlan_dev *vxlan, union vxlan_addr *rip,
 	} else {
 		struct vxlan_sock *sock6 = rtnl_dereference(vxlan->vn6_sock);
 
+		if (!sock6)
+			return 0;
+
 		sk = sock6->sock->sk;
 		lock_sock(sk);
 		ret = ipv6_stub->ipv6_sock_mc_join(sk, ifindex,
@@ -70,6 +73,9 @@ int vxlan_igmp_leave(struct vxlan_dev *vxlan, union vxlan_addr *rip,
 #if IS_ENABLED(CONFIG_IPV6)
 	} else {
 		struct vxlan_sock *sock6 = rtnl_dereference(vxlan->vn6_sock);
+
+		if (!sock6)
+			return 0;
 
 		sk = sock6->sock->sk;
 		lock_sock(sk);
