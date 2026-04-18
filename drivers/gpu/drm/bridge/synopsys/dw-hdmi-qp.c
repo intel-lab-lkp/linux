@@ -526,10 +526,10 @@ static void dw_hdmi_qp_audio_disable(struct drm_bridge *bridge,
 {
 	struct dw_hdmi_qp *hdmi = dw_hdmi_qp_from_bridge(bridge);
 
-	drm_atomic_helper_connector_hdmi_clear_audio_infoframe(connector);
-
-	if (hdmi->tmds_char_rate)
+	if (hdmi->tmds_char_rate) {
+		drm_atomic_helper_connector_hdmi_clear_audio_infoframe(connector);
 		dw_hdmi_qp_audio_disable_regs(hdmi);
+	}
 }
 
 static int dw_hdmi_qp_i2c_read(struct dw_hdmi_qp *hdmi,
