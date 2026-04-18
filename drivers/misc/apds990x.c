@@ -1053,9 +1053,10 @@ static const struct attribute_group apds990x_attribute_group[] = {
 static int apds990x_probe(struct i2c_client *client)
 {
 	struct apds990x_chip *chip;
+	struct device *dev = &client->dev;
 	int err;
 
-	chip = kzalloc_obj(*chip);
+	chip = devm_kzalloc(dev, sizeof(*chip), GFP_KERNEL);
 	if (!chip)
 		return -ENOMEM;
 
@@ -1066,11 +1067,8 @@ static int apds990x_probe(struct i2c_client *client)
 	mutex_init(&chip->mutex);
 	chip->pdata	= client->dev.platform_data;
 
-	if (chip->pdata == NULL) {
-		dev_err(&client->dev, "platform data is mandatory\n");
-		err = -EINVAL;
-		goto fail1;
-	}
+	if (chip->pdata == NULL)
+		return dev_err_probe(dev, -EINVAL, "platform data is mandatory\n");
 
 	if (chip->pdata->cf.ga == 0) {
 		/* set uncovered sensor default parameters */
@@ -1113,85 +1111,67 @@ static int apds990x_probe(struct i2c_client *client)
 	chip->regs[0].supply = reg_vcc;
 	chip->regs[1].supply = reg_vled;
 
-	err = regulator_bulk_get(&client->dev,
-				 ARRAY_SIZE(chip->regs), chip->regs);
-	if (err < 0) {
-		dev_err(&client->dev, "Cannot get regulators\n");
-		goto fail1;
-	}
+	err = devm_regulator_bulk_get(dev, ARRAY_SIZE(chip->regs), chip->regs);
+	if (err)
+		return dev_err_probe(dev, err, "failed to get supplies\n");
 
 	err = regulator_bulk_enable(ARRAY_SIZE(chip->regs), chip->regs);
-	if (err < 0) {
-		dev_err(&client->dev, "Cannot enable regulators\n");
-		goto fail2;
-	}
+	if (err < 0)
+		return dev_err_probe(dev, err, "cannot enable regulators\n");
 
 	usleep_range(APDS_STARTUP_DELAY, 2 * APDS_STARTUP_DELAY);
 
 	err = apds990x_detect(chip);
 	if (err < 0) {
-		dev_err(&client->dev, "APDS990X not found\n");
-		goto fail3;
+		dev_err(dev, "APDS990X not found\n");
+		goto error_regulator;
 	}
 
-	pm_runtime_set_active(&client->dev);
+	pm_runtime_set_active(dev);
 
 	apds990x_configure(chip);
 	apds990x_set_arate(chip, APDS_LUX_DEFAULT_RATE);
 	apds990x_mode_on(chip);
 
-	pm_runtime_enable(&client->dev);
+	pm_runtime_enable(dev);
 
 	if (chip->pdata->setup_resources) {
 		err = chip->pdata->setup_resources();
 		if (err) {
 			err = -EINVAL;
-			goto fail4;
+			goto error_pm;
 		}
 	}
 
-	err = sysfs_create_group(&chip->client->dev.kobj,
-				apds990x_attribute_group);
+	err = devm_device_add_group(dev, apds990x_attribute_group);
 	if (err < 0) {
-		dev_err(&chip->client->dev, "Sysfs registration failed\n");
-		goto fail5;
+		dev_err(dev, "Sysfs registration failed\n");
+		goto error_resourses;
 	}
 
-	err = request_threaded_irq(client->irq, NULL,
-				apds990x_irq,
-				IRQF_TRIGGER_FALLING | IRQF_TRIGGER_LOW |
-				IRQF_ONESHOT,
-				"apds990x", chip);
+	err = devm_request_threaded_irq(dev, client->irq, NULL, apds990x_irq,
+					IRQF_TRIGGER_FALLING | IRQF_TRIGGER_LOW |
+					IRQF_ONESHOT, "apds990x", chip);
 	if (err) {
-		dev_err(&client->dev, "could not get IRQ %d\n",
-			client->irq);
-		goto fail6;
+		dev_err(dev, "could not get IRQ %d\n", client->irq);
+		goto error_resourses;
 	}
+
 	return err;
-fail6:
-	sysfs_remove_group(&chip->client->dev.kobj,
-			&apds990x_attribute_group[0]);
-fail5:
+error_resourses:
 	if (chip->pdata && chip->pdata->release_resources)
 		chip->pdata->release_resources();
-fail4:
-	pm_runtime_disable(&client->dev);
-fail3:
+error_pm:
+	pm_runtime_disable(dev);
+error_regulator:
 	regulator_bulk_disable(ARRAY_SIZE(chip->regs), chip->regs);
-fail2:
-	regulator_bulk_free(ARRAY_SIZE(chip->regs), chip->regs);
-fail1:
-	kfree(chip);
+
 	return err;
 }
 
 static void apds990x_remove(struct i2c_client *client)
 {
 	struct apds990x_chip *chip = i2c_get_clientdata(client);
-
-	free_irq(client->irq, chip);
-	sysfs_remove_group(&chip->client->dev.kobj,
-			apds990x_attribute_group);
 
 	if (chip->pdata && chip->pdata->release_resources)
 		chip->pdata->release_resources();
@@ -1201,10 +1181,6 @@ static void apds990x_remove(struct i2c_client *client)
 
 	pm_runtime_disable(&client->dev);
 	pm_runtime_set_suspended(&client->dev);
-
-	regulator_bulk_free(ARRAY_SIZE(chip->regs), chip->regs);
-
-	kfree(chip);
 }
 
 #ifdef CONFIG_PM_SLEEP
