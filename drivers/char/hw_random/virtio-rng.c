@@ -47,6 +47,18 @@ static void random_recv_done(struct virtqueue *vq)
 	if (!virtqueue_get_buf(vi->vq, &len))
 		return;
 
+	/*
+	 * The device sets used.len; a malicious or buggy backend can
+	 * report more bytes than we posted.  Clamp before it reaches
+	 * copy_data() which indexes vi->data[].
+	 */
+	if (len > sizeof(vi->data)) {
+		dev_err(&vq->vdev->dev,
+			"bogus used.len %u > buffer size %zu\n",
+			len, sizeof(vi->data));
+		len = 0;
+	}
+
 	smp_store_release(&vi->data_avail, len);
 	complete(&vi->have_data);
 }
