@@ -1682,10 +1682,28 @@ retry_lookup:
 	}
 
 	if (rinfo->head->is_target) {
-		/* Should be filled in by handle_reply */
-		BUG_ON(!req->r_target_inode);
+		in = xchg(&req->r_new_inode, NULL);
+		tvino.ino  = le64_to_cpu(rinfo->targeti.in->ino);
+		tvino.snap = le64_to_cpu(rinfo->targeti.in->snapid);
 
-		in = req->r_target_inode;
+		/*
+		 * If we ended up opening an existing inode, discard
+		 * r_new_inode
+		 */
+		if (req->r_op == CEPH_MDS_OP_CREATE &&
+			!req->r_reply_info.has_create_ino) {
+			/* This should never happen on an async create */
+			WARN_ON_ONCE(req->r_deleg_ino);
+			iput(in);
+			in = NULL;
+		}
+
+		in = ceph_get_inode(fsc->sb, tvino, in);
+		if (IS_ERR(in)) {
+			err = PTR_ERR(in);
+			goto done;
+		}
+
 		err = ceph_fill_inode(in, req->r_locked_page, &rinfo->targeti,
 				NULL, session,
 				(!test_bit(CEPH_MDS_R_ABORTED, &req->r_req_flags) &&
@@ -1695,13 +1713,13 @@ retry_lookup:
 		if (err < 0) {
 			pr_err_client(cl, "badness %p %llx.%llx\n", in,
 				      ceph_vinop(in));
-			req->r_target_inode = NULL;
 			if (inode_state_read_once(in) & I_NEW)
 				discard_new_inode(in);
 			else
 				iput(in);
 			goto done;
 		}
+		req->r_target_inode = in;
 		if (inode_state_read_once(in) & I_NEW)
 			unlock_new_inode(in);
 	}

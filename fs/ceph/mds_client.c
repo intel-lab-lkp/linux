@@ -3985,36 +3985,7 @@ static void handle_reply(struct ceph_mds_session *session, struct ceph_msg *msg)
 				       session->s_con.peer_features);
 	mutex_unlock(&mdsc->mutex);
 
-	/* Must find target inode outside of mutexes to avoid deadlocks */
 	rinfo = &req->r_reply_info;
-	if ((err >= 0) && rinfo->head->is_target) {
-		struct inode *in = xchg(&req->r_new_inode, NULL);
-		struct ceph_vino tvino = {
-			.ino  = le64_to_cpu(rinfo->targeti.in->ino),
-			.snap = le64_to_cpu(rinfo->targeti.in->snapid)
-		};
-
-		/*
-		 * If we ended up opening an existing inode, discard
-		 * r_new_inode
-		 */
-		if (req->r_op == CEPH_MDS_OP_CREATE &&
-		    !req->r_reply_info.has_create_ino) {
-			/* This should never happen on an async create */
-			WARN_ON_ONCE(req->r_deleg_ino);
-			iput(in);
-			in = NULL;
-		}
-
-		in = ceph_get_inode(mdsc->fsc->sb, tvino, in);
-		if (IS_ERR(in)) {
-			err = PTR_ERR(in);
-			mutex_lock(&session->s_mutex);
-			goto out_err;
-		}
-		req->r_target_inode = in;
-	}
-
 	mutex_lock(&session->s_mutex);
 	if (err < 0) {
 		pr_err_client(cl, "got corrupt reply mds%d(tid:%lld)\n",
