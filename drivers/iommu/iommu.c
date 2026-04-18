@@ -2475,8 +2475,11 @@ static int __iommu_group_set_domain_internal(struct iommu_group *group,
 	/*
 	 * This is a concurrent attach during device recovery. Reject it until
 	 * pci_dev_reset_iommu_done() attaches the device to group->domain.
+	 *
+	 * Note: still allow MUST_SUCCEED callers (detach/teardown) through to
+	 * avoid UAF on domain release paths.
 	 */
-	if (group->recovery_cnt)
+	if (group->recovery_cnt && !(flags & IOMMU_SET_DOMAIN_MUST_SUCCEED))
 		return -EBUSY;
 
 	/*
@@ -2487,6 +2490,13 @@ static int __iommu_group_set_domain_internal(struct iommu_group *group,
 	 */
 	result = 0;
 	for_each_group_device(group, gdev) {
+		/*
+		 * Device under recovery is attached to group->blocking_domain.
+		 * Don't change that. pci_dev_reset_iommu_done() will re-attach
+		 * its domain to the updated group->domain, after the recovery.
+		 */
+		if (gdev->blocked)
+			continue;
 		ret = __iommu_device_set_domain(group, gdev->dev, new_domain,
 						group->domain, flags);
 		if (ret) {
@@ -2516,6 +2526,8 @@ err_revert:
 		/* No need to revert the last gdev that failed to set domain */
 		if (gdev == last_gdev)
 			break;
+		if (gdev->blocked)
+			continue;
 		/*
 		 * A NULL domain can happen only for first probe, in which case
 		 * we leave group->domain as NULL and let release clean
