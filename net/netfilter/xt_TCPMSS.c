@@ -102,7 +102,12 @@ tcpmss_mangle_packet(struct sk_buff *skb,
 	if (info->mss == XT_TCPMSS_CLAMP_PMTU) {
 		struct net *net = xt_net(par);
 		unsigned int in_mtu = tcpmss_reverse_mtu(net, skb, family);
-		unsigned int min_mtu = min(dst_mtu(skb_dst(skb)), in_mtu);
+		unsigned int min_mtu;
+
+		if (!skb_dst(skb))
+			return -1;
+
+		min_mtu = min(dst_mtu(skb_dst(skb)), in_mtu);
 
 		if (min_mtu <= minlen) {
 			net_err_ratelimited("unknown or invalid path-MTU (%u)\n",
