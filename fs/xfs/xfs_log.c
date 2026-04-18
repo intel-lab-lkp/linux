@@ -1619,6 +1619,8 @@ xlog_write_iclog(
 
 		split = bio_split(&iclog->ic_bio, log->l_logBBsize - bno,
 				  GFP_NOIO, &fs_bio_set);
+		if (IS_ERR(split))
+			goto shutdown;
 		bio_chain(split, &iclog->ic_bio);
 		submit_bio(split);
 
