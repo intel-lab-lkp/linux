@@ -1183,8 +1183,8 @@ static int apds990x_probe(struct i2c_client *client)
 	}
 
 	err = devm_request_threaded_irq(dev, client->irq, NULL, apds990x_irq,
-					IRQF_TRIGGER_FALLING | IRQF_TRIGGER_LOW |
-					IRQF_ONESHOT, "apds990x", chip);
+					IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+					"apds990x", chip);
 	if (err) {
 		dev_err(dev, "could not get IRQ %d\n", client->irq);
 		goto error_pm;
