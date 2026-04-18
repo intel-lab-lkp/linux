@@ -5175,6 +5175,75 @@ rtl8169_get_stats64(struct net_device *dev, struct rtnl_link_stats64 *stats)
 	pm_runtime_put_noidle(&pdev->dev);
 }
 
+static void rtl8169_fetch_sw_stats(struct net_device *dev,
+				   struct netdev_queue_stats_rx *rx,
+				   struct netdev_queue_stats_tx *tx)
+{
+	const struct pcpu_sw_netstats *stats;
+	unsigned int start;
+	int cpu;
+
+	for_each_possible_cpu(cpu) {
+		u64 rx_packets, rx_bytes, tx_packets, tx_bytes;
+
+		stats = per_cpu_ptr(dev->tstats, cpu);
+		do {
+			start = u64_stats_fetch_begin(&stats->syncp);
+			rx_packets = u64_stats_read(&stats->rx_packets);
+			rx_bytes = u64_stats_read(&stats->rx_bytes);
+			tx_packets = u64_stats_read(&stats->tx_packets);
+			tx_bytes = u64_stats_read(&stats->tx_bytes);
+		} while (u64_stats_fetch_retry(&stats->syncp, start));
+
+		rx->packets += rx_packets;
+		rx->bytes += rx_bytes;
+		tx->packets += tx_packets;
+		tx->bytes += tx_bytes;
+	}
+}
+
+static void rtl8169_get_queue_stats_rx(struct net_device *dev, int idx,
+				       struct netdev_queue_stats_rx *rx)
+{
+	struct netdev_queue_stats_tx tx = {};
+
+	if (idx)
+		return;
+
+	rx->packets = 0;
+	rx->bytes = 0;
+	rtl8169_fetch_sw_stats(dev, rx, &tx);
+}
+
+static void rtl8169_get_queue_stats_tx(struct net_device *dev, int idx,
+				       struct netdev_queue_stats_tx *tx)
+{
+	struct netdev_queue_stats_rx rx = {};
+
+	if (idx)
+		return;
+
+	tx->packets = 0;
+	tx->bytes = 0;
+	rtl8169_fetch_sw_stats(dev, &rx, tx);
+}
+
+static void rtl8169_get_base_stats(struct net_device *dev,
+				   struct netdev_queue_stats_rx *rx,
+				   struct netdev_queue_stats_tx *tx)
+{
+	rx->packets = 0;
+	rx->bytes = 0;
+	tx->packets = 0;
+	tx->bytes = 0;
+}
+
+static const struct netdev_stat_ops rtl8169_stat_ops = {
+	.get_queue_stats_rx	= rtl8169_get_queue_stats_rx,
+	.get_queue_stats_tx	= rtl8169_get_queue_stats_tx,
+	.get_base_stats		= rtl8169_get_base_stats,
+};
+
 static void rtl8169_net_suspend(struct rtl8169_private *tp)
 {
 	netif_device_detach(tp->dev);
@@ -5615,6 +5684,7 @@ static int rtl_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	SET_NETDEV_DEV(dev, &pdev->dev);
 	dev->netdev_ops = &rtl_netdev_ops;
+	dev->stat_ops = &rtl8169_stat_ops;
 	tp = netdev_priv(dev);
 	tp->dev = dev;
 	tp->pci_dev = pdev;
