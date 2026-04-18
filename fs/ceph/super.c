@@ -1577,13 +1577,10 @@ static void ceph_kill_sb(struct super_block *s)
 	spin_unlock(&mdsc->stopping_lock);
 
 	if (wait && atomic_read(&mdsc->stopping_blockers)) {
-		long timeleft = wait_for_completion_killable_timeout(
-					&mdsc->stopping_waiter,
-					fsc->client->options->mount_timeout);
-		if (!timeleft) /* timed out */
-			pr_warn_client(cl, "umount timed out, %ld\n", timeleft);
-		else if (timeleft < 0) /* killed */
-			pr_warn_client(cl, "umount was killed, %ld\n", timeleft);
+		int rc = wait_for_completion_killable(
+					&mdsc->stopping_waiter);
+		if (rc < 0) /* killed */
+			pr_warn_client(cl, "umount was killed\n");
 	}
 
 	mdsc->stopping = CEPH_MDSC_STOPPING_FLUSHED;
