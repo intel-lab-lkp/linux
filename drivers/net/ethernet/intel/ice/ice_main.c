@@ -2912,9 +2912,18 @@ ice_xdp_setup_prog(struct ice_vsi *vsi, struct bpf_prog *prog,
 	}
 
 	/* hot swap progs and avoid toggling link */
-	if (ice_is_xdp_ena_vsi(vsi) == !!prog ||
-	    test_bit(ICE_VSI_REBUILD_PENDING, vsi->state)) {
+	if (ice_is_xdp_ena_vsi(vsi) == !!prog) {
 		ice_vsi_assign_bpf_prog(vsi, prog);
+		return 0;
+	}
+
+	if (test_bit(ICE_VSI_REBUILD_PENDING, vsi->state)) {
+		if (prog) {
+			NL_SET_ERR_MSG_MOD(extack, "VSI rebuild is pending");
+			return -EAGAIN;
+		}
+
+		ice_vsi_assign_bpf_prog(vsi, NULL);
 		return 0;
 	}
 
