@@ -332,6 +332,28 @@ void cpuset_full_unlock(void)
 	mutex_unlock(&cpuset_top_mutex);
 }
 
+/*
+ * cpuset.mems writes cannot change isolated CPUs or sched domains. Skip
+ * cpuset_top_mutex, but verify that the path leaves finalizer state unchanged.
+ */
+static void cpuset_mems_lock(bool *hk_update, bool *sd_rebuild)
+{
+	cpus_read_lock();
+	mutex_lock(&cpuset_mutex);
+
+	*hk_update = update_housekeeping;
+	*sd_rebuild = force_sd_rebuild;
+}
+
+static void cpuset_mems_unlock(bool hk_update, bool sd_rebuild)
+{
+	WARN_ON_ONCE(update_housekeeping != hk_update);
+	WARN_ON_ONCE(force_sd_rebuild != sd_rebuild);
+
+	mutex_unlock(&cpuset_mutex);
+	cpus_read_unlock();
+}
+
 #ifdef CONFIG_LOCKDEP
 bool lockdep_is_cpuset_held(void)
 {
@@ -3214,6 +3236,10 @@ ssize_t cpuset_write_resmask(struct kernfs_open_file *of,
 {
 	struct cpuset *cs = css_cs(of_css(of));
 	struct cpuset *trialcs;
+	cpuset_filetype_t type = of_cft(of)->private;
+	bool mems = type == FILE_MEMLIST;
+	bool hk_update = false;
+	bool sd_rebuild = false;
 	int retval = -ENODEV;
 
 	/* root is read-only */
@@ -3221,7 +3247,10 @@ ssize_t cpuset_write_resmask(struct kernfs_open_file *of,
 		return -EACCES;
 
 	buf = strstrip(buf);
-	cpuset_full_lock();
+	if (mems)
+		cpuset_mems_lock(&hk_update, &sd_rebuild);
+	else
+		cpuset_full_lock();
 	if (!is_cpuset_online(cs))
 		goto out_unlock;
 
@@ -3231,7 +3260,7 @@ ssize_t cpuset_write_resmask(struct kernfs_open_file *of,
 		goto out_unlock;
 	}
 
-	switch (of_cft(of)->private) {
+	switch (type) {
 	case FILE_CPULIST:
 		retval = update_cpumask(cs, trialcs, buf);
 		break;
@@ -3248,9 +3277,12 @@ ssize_t cpuset_write_resmask(struct kernfs_open_file *of,
 
 	free_cpuset(trialcs);
 out_unlock:
-	cpuset_update_sd_hk_unlock();
-	if (of_cft(of)->private == FILE_MEMLIST)
+	if (mems) {
+		cpuset_mems_unlock(hk_update, sd_rebuild);
 		schedule_flush_migrate_mm();
+	} else {
+		cpuset_update_sd_hk_unlock();
+	}
 	return retval ?: nbytes;
 }
 
