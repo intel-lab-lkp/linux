@@ -1,0 +1,83 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/light/avago,apds9900.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Avago APDS-9900/9901 combined ALS/IR-LED/Proximity sensor
+
+maintainers:
+  - Svyatoslav Ryhel <clamor95@gmail.com>
+
+description: |
+  The APDS-9900/9901 provides digital ambient light sensing (ALS),
+  IR LED and a complete proximity detection system in a single
+  8 pin package over I2C interface.
+  Datasheet at https://docs.broadcom.com/doc/AV02-2867EN
+
+properties:
+  compatible:
+    enum:
+      - avago,apds9900
+      - avago,apds9901
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  vdd-supply: true
+
+  avago,pdrive-microamp:
+    description:
+      The LED drive current is controlled by a regulated current
+      sink on the LDR pin. This feature eliminates the need to use
+      a current limiting resistor to control LED current. The LED
+      drive current can be configured for 12.5 mA, 25 mA, 50 mA
+      or 100 mA. For higher LED drive requirements, an external
+      P type transistor can be used to control the LED current.
+    enum: [12500, 25000, 50000, 100000]
+    default: 100000
+
+  avago,ppcount:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      The number of LED pulses can be programmed to a value of 1 to
+      255 pulses as needed. Increasing the number of LED pulses at a
+      given current will increase the sensor sensitivity. Sensitivity
+      grows by the square root of the number of pulses. Each pulse
+      has a 16 mS period.
+    minimum: 1
+    maximum: 255
+    default: 1
+
+additionalProperties: false
+
+required:
+  - compatible
+  - reg
+  - interrupts
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        light-sensor@39 {
+            compatible = "avago,apds9900";
+            reg = <0x39>;
+
+            interrupt-parent = <&gpio>;
+            interrupts = <82 IRQ_TYPE_EDGE_RISING>;
+
+            vdd-supply = <&vdd_2v85_als>;
+
+            avago,pdrive-microamp = <100000>;
+            avago,ppcount = <3>;
+        };
+    };
+...
