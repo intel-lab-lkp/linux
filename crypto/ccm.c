@@ -42,6 +42,7 @@ struct crypto_ccm_req_priv_ctx {
 	u8 odata[16];
 	u8 idata[16];
 	u8 auth_tag[16];
+	u8 iv[16];
 	u32 flags;
 	struct scatterlist src[3];
 	struct scatterlist dst[3];
@@ -121,17 +122,17 @@ static int crypto_ccm_setauthsize(struct crypto_aead *tfm,
 	return 0;
 }
 
-static int format_input(u8 *info, struct aead_request *req,
+static int format_input(u8 *info, const u8 *iv, struct aead_request *req,
 			unsigned int cryptlen)
 {
 	struct crypto_aead *aead = crypto_aead_reqtfm(req);
-	unsigned int lp = req->iv[0];
+	unsigned int lp = iv[0];
 	unsigned int l = lp + 1;
 	unsigned int m;
 
 	m = crypto_aead_authsize(aead);
 
-	memcpy(info, req->iv, 16);
+	memcpy(info, iv, 16);
 
 	/* format control info per RFC 3610 and
 	 * NIST Special Publication 800-38C
@@ -176,7 +177,7 @@ static int crypto_ccm_auth(struct aead_request *req, struct scatterlist *plain,
 	int ilen, err;
 
 	/* format control data for input */
-	err = format_input(odata, req, cryptlen);
+	err = format_input(odata, pctx->iv, req, cryptlen);
 	if (err)
 		goto out;
 
@@ -248,8 +249,10 @@ static int crypto_ccm_init_crypt(struct aead_request *req, u8 *tag)
 {
 	struct crypto_ccm_req_priv_ctx *pctx = crypto_ccm_reqctx(req);
 	struct scatterlist *sg;
-	u8 *iv = req->iv;
+	u8 *iv = pctx->iv;
 	int err;
+
+	memcpy(iv, req->iv, sizeof(pctx->iv));
 
 	err = crypto_ccm_check_iv(iv);
 	if (err)
@@ -288,7 +291,7 @@ static int crypto_ccm_encrypt(struct aead_request *req)
 	struct scatterlist *dst;
 	unsigned int cryptlen = req->cryptlen;
 	u8 *odata = pctx->odata;
-	u8 *iv = req->iv;
+	u8 *iv = pctx->idata;
 	int err;
 
 	err = crypto_ccm_init_crypt(req, odata);
@@ -302,6 +305,8 @@ static int crypto_ccm_encrypt(struct aead_request *req)
 	dst = pctx->src;
 	if (req->src != req->dst)
 		dst = pctx->dst;
+
+	memcpy(iv, pctx->iv, 16);
 
 	skcipher_request_set_tfm(skreq, ctx->ctr);
 	skcipher_request_set_callback(skreq, pctx->flags,
@@ -365,7 +370,7 @@ static int crypto_ccm_decrypt(struct aead_request *req)
 	if (req->src != req->dst)
 		dst = pctx->dst;
 
-	memcpy(iv, req->iv, 16);
+	memcpy(iv, pctx->iv, 16);
 
 	skcipher_request_set_tfm(skreq, ctx->ctr);
 	skcipher_request_set_callback(skreq, pctx->flags,
