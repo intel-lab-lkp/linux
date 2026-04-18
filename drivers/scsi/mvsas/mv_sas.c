@@ -1729,9 +1729,13 @@ static void mvs_work_queue(struct work_struct *work)
 				PORTE_BROADCAST_RCVD, GFP_ATOMIC);
 		mv_dprintk("phy%d Got Broadcast Change\n", phy_no);
 	}
-	list_del(&mwq->entry);
-	spin_unlock_irqrestore(&mvi->lock, flags);
-	kfree(mwq);
+	if (!list_empty(&mwq->entry)) {
+		list_del_init(&mwq->entry);
+		spin_unlock_irqrestore(&mvi->lock, flags);
+		kfree(mwq);
+	} else {
+		spin_unlock_irqrestore(&mvi->lock, flags);
+	}
 }
 
 static int mvs_handle_event(struct mvs_info *mvi, void *data, int handler)

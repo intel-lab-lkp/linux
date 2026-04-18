@@ -85,6 +85,7 @@ static void mvs_phy_init(struct mvs_info *mvi, int phy_id)
 static void mvs_free(struct mvs_info *mvi)
 {
 	struct mvs_wq *mwq;
+	unsigned long flags;
 	int slot_nr;
 
 	if (!mvi)
@@ -120,8 +121,16 @@ static void mvs_free(struct mvs_info *mvi)
 		dma_free_coherent(mvi->dev, TRASH_BUCKET_SIZE,
 				  mvi->bulk_buffer1, mvi->bulk_buffer_dma1);
 
-	list_for_each_entry(mwq, &mvi->wq_list, entry)
+	spin_lock_irqsave(&mvi->lock, flags);
+	while (!list_empty(&mvi->wq_list)) {
+		mwq = list_first_entry(&mvi->wq_list, struct mvs_wq, entry);
+		list_del_init(&mwq->entry);
+		spin_unlock_irqrestore(&mvi->lock, flags);
 		cancel_delayed_work_sync(&mwq->work_q);
+		kfree(mwq);
+		spin_lock_irqsave(&mvi->lock, flags);
+	}
+	spin_unlock_irqrestore(&mvi->lock, flags);
 	MVS_CHIP_DISP->chip_iounmap(mvi);
 	if (mvi->shost)
 		scsi_host_put(mvi->shost);
