@@ -4418,7 +4418,14 @@ int arm_smmu_init_one_queue(struct arm_smmu_device *smmu,
 		qsz = ((1 << q->llq.max_n_shift) * dwords) << 3;
 		q->base = dmam_alloc_coherent(smmu->dev, qsz, &q->base_dma,
 					      GFP_KERNEL);
-		if (q->base || qsz < PAGE_SIZE)
+		/*
+		 * If allocation succeeds, we're done. If it fails, only retry
+		 * if the requested size is still larger than a page. Since
+		 * dmam_alloc_coherent() allocates at least PAGE_SIZE, retrying
+		 * with a sub-page size is logically redundant and could lead
+		 * to sub-optimal hardware configuration.
+		 */
+		if (q->base || qsz <= PAGE_SIZE)
 			break;
 
 		q->llq.max_n_shift--;
