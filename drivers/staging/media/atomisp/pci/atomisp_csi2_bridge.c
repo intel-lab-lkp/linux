@@ -547,6 +547,7 @@ int atomisp_csi2_bridge_parse_firmware(struct atomisp_device *isp)
 
 err_parse:
 		fwnode_handle_put(ep);
+		v4l2_async_nf_cleanup(&isp->notifier);
 		return ret;
 	}
 
