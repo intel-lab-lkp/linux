@@ -791,17 +791,20 @@ config HI8435
 	  called hi8435.
 
 config HX711
-	tristate "AVIA HX711 ADC for weight cells"
+	tristate "AVIA HX711 and HX710B ADC"
 	depends on GPIOLIB
 	select IIO_BUFFER
 	select IIO_TRIGGERED_BUFFER
 	help
-	  If you say yes here you get support for AVIA HX711 ADC which is used
-	  for weigh cells
+	  If you say yes here you get support for AVIA HX711 and HX710B ADCs
+	  which are used for bridge sensors such as weigh cells.
 
 	  This driver uses two GPIOs, one acts as the clock and controls the
 	  channel selection and gain, the other one is used for the measurement
 	  data
+
+	  The HX710B is a variant with fixed gain and a different channel
+	  selection scheme.
 
 	  Currently the raw value is read from the chip and delivered.
 	  To get an actual weight one needs to subtract the
