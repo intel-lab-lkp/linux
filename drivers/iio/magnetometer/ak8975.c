@@ -697,7 +697,7 @@ static int wait_conversion_complete_polled(struct ak8975_data *data)
 	return read_status;
 }
 
-/* Returns 0 if the end of conversion interrupt occured or -ETIME otherwise */
+/* Returns 0 if the end of conversion interrupt occurred or -ETIME otherwise */
 static int wait_conversion_complete_interrupt(struct ak8975_data *data)
 {
 	int ret;

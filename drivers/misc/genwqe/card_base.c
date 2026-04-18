@@ -922,7 +922,7 @@ static int genwqe_reload_bistream(struct genwqe_dev *cd)
  *
  * Condition for the health-thread to trigger:
  *   a) when a kthread_stop() request comes in or
- *   b) a critical GFIR occured
+ *   b) a critical GFIR occurred
  *
  * Informational GFIRs are checked and potentially printed in
  * GENWQE_HEALTH_CHECK_INTERVAL seconds.

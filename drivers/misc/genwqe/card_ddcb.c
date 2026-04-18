@@ -543,7 +543,7 @@ int __genwqe_wait_ddcb(struct genwqe_dev *cd, struct ddcb_requ *req)
 		return -EINVAL;
 	}
 
-	/* Severe error occured. Driver is forced to stop operation */
+	/* Severe error occurred. Driver is forced to stop operation */
 	if (cd->card_state != GENWQE_CARD_USED) {
 		dev_err(&pci_dev->dev,
 			"[%s] err: DDCB#%d forced to stop (rc=%d)\n",

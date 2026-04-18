@@ -66,7 +66,7 @@ struct st21nfca_i2c_phy {
 	int run_mode;
 
 	/*
-	 * < 0 if hardware error occured (e.g. i2c err)
+	 * < 0 if hardware error occurred (e.g. i2c err)
 	 * and prevents normal operation.
 	 */
 	int hard_fault;
