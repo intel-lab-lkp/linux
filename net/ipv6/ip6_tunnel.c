@@ -425,10 +425,15 @@ __u16 ip6_tnl_parse_tlv_enc_lim(struct sk_buff *skb, __u8 *raw)
 				break;
 		}
 		if (nexthdr == NEXTHDR_DEST) {
+			int tlv_max = abs(READ_ONCE(init_net.ipv6.sysctl.max_dst_opts_cnt));
+			int tlv_cnt = 0;
 			u16 i = 2;
 
 			while (1) {
 				struct ipv6_tlv_tnl_enc_lim *tel;
+
+				if (tlv_cnt++ >= tlv_max)
+					break;
 
 				/* No more room for encapsulation limit */
 				if (i + sizeof(*tel) > optlen)
