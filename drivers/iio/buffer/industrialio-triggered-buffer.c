@@ -44,6 +44,7 @@ int iio_triggered_buffer_setup_ext(struct iio_dev *indio_dev,
 	const struct iio_dev_attr **buffer_attrs)
 {
 	struct iio_buffer *buffer;
+	unsigned long flags = 0;
 	int ret;
 
 	/*
@@ -62,9 +63,11 @@ int iio_triggered_buffer_setup_ext(struct iio_dev *indio_dev,
 		goto error_ret;
 	}
 
+	if (thread)
+		flags |= IRQF_ONESHOT;
 	indio_dev->pollfunc = iio_alloc_pollfunc(h,
 						 thread,
-						 IRQF_ONESHOT,
+						 flags,
 						 indio_dev,
 						 "%s_consumer%d",
 						 indio_dev->name,
