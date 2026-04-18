@@ -482,6 +482,7 @@ static void update_triggers(struct psi_group *group, u64 now,
 	 */
 	list_for_each_entry(t, triggers, node) {
 		u64 growth;
+		int zero = 0;
 		bool new_stall;
 
 		new_stall = aggregator_total[t->state] != total[t->state];
@@ -510,7 +511,7 @@ static void update_triggers(struct psi_group *group, u64 now,
 			continue;
 
 		/* Generate an event */
-		if (cmpxchg(&t->event, 0, 1) == 0) {
+		if (try_cmpxchg(&t->event, &zero, 1)) {
 			if (t->of)
 				kernfs_notify(t->of->kn);
 			else
@@ -735,6 +736,12 @@ out:
 	mutex_unlock(&group->rtpoll_trigger_lock);
 }
 
+static bool psi_rtpoll_consume_wakeup(struct psi_group *group)
+{
+	int wakeup = 1;
+	return atomic_try_cmpxchg(&group->rtpoll_wakeup, &wakeup, 0);
+}
+
 static int psi_rtpoll_worker(void *data)
 {
 	struct psi_group *group = (struct psi_group *)data;
@@ -743,7 +750,7 @@ static int psi_rtpoll_worker(void *data)
 
 	while (true) {
 		wait_event_interruptible(group->rtpoll_wait,
-				atomic_cmpxchg(&group->rtpoll_wakeup, 1, 0) ||
+				psi_rtpoll_consume_wakeup(group) ||
 				kthread_should_stop());
 		if (kthread_should_stop())
 			break;
