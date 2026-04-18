@@ -811,6 +811,8 @@ xfs_zone_gc_split_write(
 	split_len = split_sectors << SECTOR_SHIFT;
 
 	split = bio_split(&chunk->bio, split_sectors, GFP_NOFS, &data->bio_set);
+	if (IS_ERR(split))
+		return ERR_CAST(split);
 	split_chunk = container_of(split, struct xfs_gc_bio, bio);
 	split_chunk->data = data;
 	ihold(VFS_I(chunk->ip));
@@ -859,8 +861,14 @@ xfs_zone_gc_write_chunk(
 	list_move_tail(&chunk->entry, &data->writing);
 
 	bio_reuse(&chunk->bio, REQ_OP_WRITE);
-	while ((split_chunk = xfs_zone_gc_split_write(data, chunk)))
+	while ((split_chunk = xfs_zone_gc_split_write(data, chunk))) {
+		if (IS_ERR(split_chunk)) {
+			xfs_force_shutdown(mp, SHUTDOWN_META_IO_ERROR);
+			xfs_zone_gc_free_chunk(chunk);
+			return;
+		}
 		xfs_zone_gc_submit_write(data, split_chunk);
+	}
 	xfs_zone_gc_submit_write(data, chunk);
 }
 
