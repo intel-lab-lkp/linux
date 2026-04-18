@@ -2945,6 +2945,241 @@ out_unlock:
 	return ret;
 }
 
+static int btrfs_insert_range(struct inode *inode, loff_t offset, loff_t len)
+{
+	struct btrfs_fs_info *fs_info = inode_to_fs_info(inode);
+	struct btrfs_root *root = BTRFS_I(inode)->root;
+	struct btrfs_path *path;
+	struct btrfs_trans_handle *trans = NULL;
+	struct extent_buffer *leaf;
+	struct btrfs_key key;
+	struct btrfs_key new_key;
+	u64 ino = btrfs_ino(BTRFS_I(inode));
+	int ret;
+
+	if (!IS_ENABLED(CONFIG_BTRFS_EXPERIMENTAL))
+		return -EOPNOTSUPP;
+
+	/* offset and len must be sector-aligned */
+	if (!IS_ALIGNED(offset | len, fs_info->sectorsize))
+		return -EINVAL;
+
+	/* offset must be within the file - use ftruncate to extend */
+	if (offset >= inode->i_size)
+		return -EINVAL;
+
+	/* result must not exceed the maximum file size */
+	if (len > inode->i_sb->s_maxbytes - inode->i_size)
+		return -EFBIG;
+
+	btrfs_info(fs_info,
+		   "btrfs_insert_range: ino=%llu offset=%lld len=%lld i_size=%lld",
+		   btrfs_ino(BTRFS_I(inode)), offset, len, inode->i_size);
+
+	/* wait for any ordered extents in [offset, i_size) to complete */
+	ret = btrfs_wait_ordered_range(BTRFS_I(inode), offset,
+				       inode->i_size - offset);
+	if (ret)
+		return ret;
+
+	/*
+	 * Flush and invalidate the page cache for [offset, i_size) upfront,
+	 * following the same pattern as btrfs_collapse_range().
+	 */
+	ret = filemap_write_and_wait_range(inode->i_mapping, offset, LLONG_MAX);
+	if (ret)
+		return ret;
+	truncate_pagecache_range(inode, offset, LLONG_MAX);
+
+	path = btrfs_alloc_path();
+	if (!path)
+		return -ENOMEM;
+
+	trans = btrfs_start_transaction(root, 1);
+	if (IS_ERR(trans)) {
+		ret = PTR_ERR(trans);
+		trans = NULL;
+		goto out_path;
+	}
+
+	/*
+	 * Shift all BTRFS_EXTENT_DATA_KEY items with key.offset >= offset
+	 * rightward by len bytes.
+	 *
+	 * We must iterate in reverse order (highest offset first) to avoid
+	 * colliding with a key we haven't shifted yet - shifting forward
+	 * would overwrite the next item's key before we process it.
+	 *
+	 * No pre-splitting of straddling extents is needed. If an extent
+	 * straddles offset, the left portion (key.offset < offset) stays
+	 * in place and the right portion is shifted. Both reference the
+	 * same physical extent via their existing extent_offset fields,
+	 * which remain correct after the key shift.
+	 */
+
+	int nr_shifted = 0;
+
+	/* Find the last extent item for this inode */
+	key.objectid = ino;
+	key.type = BTRFS_EXTENT_DATA_KEY;
+	key.offset = (u64)-1;
+
+	while (1) {
+		struct btrfs_file_extent_item *fi;
+		u64 disk_bytenr;
+		u64 num_bytes;
+		u64 extent_offset;
+		int extent_type;
+
+		ret = btrfs_search_slot(trans, root, &key, path, 0, 1);
+		if (ret < 0)
+			goto out_trans;
+
+		/*
+		 * Search for (ino, EXTENT_DATA, -1) will never find an exact
+		 * match, so ret == 1 and slot points one past the last item.
+		 * Step back one slot to land on the last extent item.
+		 */
+		if (path->slots[0] == 0) {
+			/* No items at all - nothing to shift */
+			ret = 0;
+			break;
+		}
+		path->slots[0]--;
+
+		leaf = path->nodes[0];
+		btrfs_item_key_to_cpu(leaf, &key, path->slots[0]);
+
+		/* If we've gone past this inode's items, we are done */
+		if (key.objectid != ino || key.type != BTRFS_EXTENT_DATA_KEY) {
+			ret = 0;
+			break;
+		}
+
+		/* If this item is before the insertion point, we are done */
+		if (key.offset < offset) {
+			ret = 0;
+			break;
+		}
+
+		btrfs_info(fs_info,
+			   "btrfs_insert_range: shifting key offset %llu -> %llu",
+			   key.offset, key.offset + len);
+
+		fi = btrfs_item_ptr(leaf, path->slots[0],
+				    struct btrfs_file_extent_item);
+		extent_type = btrfs_file_extent_type(leaf, fi);
+		disk_bytenr = btrfs_file_extent_disk_bytenr(leaf, fi);
+		num_bytes = btrfs_file_extent_disk_num_bytes(leaf, fi);
+		extent_offset = btrfs_file_extent_offset(leaf, fi);
+
+		/*
+		 * Inline extents must have key.offset == 0 and cannot be
+		 * shifted to a non-zero offset - the tree checker enforces
+		 * this invariant. Reject with -EOPNOTSUPP.
+		 *
+		 * An inline extent can only exist if the file's entire content
+		 * fits within a single sector, meaning it is the only extent
+		 * item for this inode. It will therefore always be the first
+		 * item we encounter in the reverse iteration, before any keys
+		 * have been shifted, so bailing here leaves the file in a
+		 * consistent state.
+		 *
+		 * TODO: support this case by converting the inline extent to
+		 * a regular extent first, then shifting it. This would allow
+		 * INSERT_RANGE on small files, which xfs supports.
+		 */
+		if (extent_type == BTRFS_FILE_EXTENT_INLINE) {
+			ret = -EOPNOTSUPP;
+			btrfs_release_path(path);
+			goto out_trans;
+		}
+
+		memcpy(&new_key, &key, sizeof(new_key));
+		new_key.offset += len;
+		btrfs_set_item_key_safe(trans, path, &new_key);
+
+		/* Update back-reference: drop old offset, add new offset */
+		if (extent_type != BTRFS_FILE_EXTENT_INLINE && disk_bytenr > 0) {
+			ret = btrfs_shift_extent_backref(trans, root, ino,
+					disk_bytenr, num_bytes,
+					key.offset - extent_offset,
+					new_key.offset - extent_offset);
+			if (unlikely(ret))
+				goto out_trans;
+		}
+
+		/*
+		 * Step back to the previous item for the next iteration.
+		 * If we've reached slot 0 we need to move to the previous leaf.
+		 */
+		nr_shifted++;
+		if (nr_shifted % BTRFS_INSERT_COLLAPSE_TRANSACTION_CYCLE_INTERVAL == 0) {
+			btrfs_info(fs_info,
+			   "btrfs_insert_range: cycling transaction, nr_shifted=%d", nr_shifted);
+
+			inode_inc_iversion(inode);
+			inode_set_mtime_to_ts(inode,
+					      inode_set_ctime_current(inode));
+			ret = btrfs_update_inode(trans, BTRFS_I(inode));
+			if (ret) {
+				btrfs_release_path(path);
+				goto out_trans;
+			}
+			btrfs_end_transaction(trans);
+			btrfs_btree_balance_dirty(fs_info);
+			trans = btrfs_start_transaction(root, 1);
+			if (IS_ERR(trans)) {
+				ret = PTR_ERR(trans);
+				trans = NULL;
+				btrfs_release_path(path);
+				goto out_path;
+			}
+		}
+
+		/*
+		 * Set key.offset to one below the current item so the next
+		 * btrfs_search_slot lands on the item before it.
+		 */
+		if (key.offset == 0) {
+			ret = 0;
+			break;
+		}
+		key.offset--;
+		btrfs_release_path(path);
+	}
+
+	if (ret)
+		goto out_trans;
+
+	/*
+	 * Drop stale extent map entries so subsequent reads re-load correct
+	 * mappings from the btree.
+	 */
+	btrfs_drop_extent_map_range(BTRFS_I(inode), offset, (u64)-1, false);
+
+	btrfs_info(fs_info,
+		   "btrfs_insert_range: updating i_size %lld -> %lld",
+		   inode->i_size, inode->i_size + len);
+	inode_inc_iversion(inode);
+	inode_set_mtime_to_ts(inode, inode_set_ctime_current(inode));
+	i_size_write(inode, inode->i_size + len);
+	btrfs_inode_safe_disk_i_size_write(BTRFS_I(inode), 0);
+	ret = btrfs_update_inode(trans, BTRFS_I(inode));
+
+out_trans:
+	if (trans) {
+		if (ret)
+			btrfs_end_transaction(trans);
+		else
+			ret = btrfs_end_transaction(trans);
+	}
+out_path:
+	btrfs_free_path(path);
+	btrfs_info(fs_info, "btrfs_insert_range: returning %d", ret);
+	return ret;
+}
+
 static int btrfs_punch_hole(struct file *file, loff_t offset, loff_t len)
 {
 	struct inode *inode = file_inode(file);
@@ -3595,6 +3830,9 @@ static long btrfs_fallocate(struct file *file, int mode,
 		break;
 	case FALLOC_FL_COLLAPSE_RANGE:
 		ret = btrfs_collapse_range(inode, offset, len);
+		break;
+	case FALLOC_FL_INSERT_RANGE:
+		ret = btrfs_insert_range(inode, offset, len);
 		break;
 	default:
 		ret = -EOPNOTSUPP;
