@@ -4,7 +4,7 @@
 $id: http://devicetree.org/schemas/iio/adc/avia-hx711.yaml#
 $schema: http://devicetree.org/meta-schemas/core.yaml#
 
-title: AVIA HX711 ADC chip for weight cells
+title: AVIA HX711 and HX710B ADCs
 
 maintainers:
   - Andreas Klinger <ak@it-klinger.de>
@@ -12,9 +12,19 @@ maintainers:
 description: |
   Bit-banging driver using two GPIOs:
   - sck-gpio gives a clock to the sensor with 24 cycles for data retrieval
-    and up to 3 cycles for selection of the input channel and gain for the
-    next measurement
-  - dout-gpio is the sensor data the sensor responds to the clock
+    and 1 to 3 additional cycles for selection of the input channel and gain
+    for the next measurement
+  - dout-gpio is the sensor data output the sensor drives in response to
+    the clock
+
+  HX711: 24-bit ADC with selectable gain (32/64/128) and two differential
+  input channels. Channel A supports gain 64 and 128; channel B supports
+  gain 32.
+
+  HX710B: 24-bit ADC with fixed gain of 128. Channel 0 is the differential
+  input and channel 1 measures the DVDD-AVDD supply voltage difference.
+  Channel selection for the next conversion is controlled by the number of
+  trailing PD_SCK pulses.
 
   Specifications about the driver can be found at:
   http://www.aviaic.com/ENProducts.aspx
@@ -23,11 +33,12 @@ properties:
   compatible:
     enum:
       - avia,hx711
+      - avia,hx710b
 
   sck-gpios:
     description:
       Definition of the GPIO for the clock (output). In the datasheet it is
-      named PD_SCK
+      named PD_SCK.
     maxItems: 1
 
   dout-gpios:
@@ -43,6 +54,9 @@ properties:
       Definition of the regulator used as analog supply
 
   clock-frequency:
+    description:
+      Bit-bang clock frequency on PD_SCK. Keep the PD_SCK high time below
+      the chip power-down threshold.
     minimum: 20000
     maximum: 2500000
     default: 400000
@@ -58,10 +72,20 @@ additionalProperties: false
 examples:
   - |
     #include <dt-bindings/gpio/gpio.h>
-    weight {
+    /* HX711 example */
+    weight0 {
         compatible = "avia,hx711";
         sck-gpios = <&gpio3 10 GPIO_ACTIVE_HIGH>;
         dout-gpios = <&gpio0 7 GPIO_ACTIVE_HIGH>;
         avdd-supply = <&avdd>;
         clock-frequency = <100000>;
+    };
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    /* HX710B example */
+    weight1 {
+        compatible = "avia,hx710b";
+        sck-gpios = <&gpio3 11 GPIO_ACTIVE_HIGH>;
+        dout-gpios = <&gpio0 8 GPIO_ACTIVE_HIGH>;
+        avdd-supply = <&avdd>;
     };
