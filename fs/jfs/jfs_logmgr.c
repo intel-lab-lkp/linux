@@ -1984,7 +1984,7 @@ static int lbmRead(struct jfs_log * log, int pn, struct lbuf ** bpp)
 		submit_bio(bio);
 	}
 
-	wait_event(bp->l_ioevent, (bp->l_flag != lbmREAD));
+	wait_event(bp->l_ioevent, (bp->l_flag & lbmDONE));
 
 	return 0;
 }
@@ -2192,9 +2192,6 @@ static void lbmIODone(struct bio *bio)
 	if (bp->l_flag & lbmREAD) {
 		bp->l_flag &= ~lbmREAD;
 
-		/* wakeup I/O initiator */
-		LCACHE_WAKEUP(&bp->l_ioevent);
-
 		goto out;
 	}
 
@@ -2217,10 +2214,8 @@ static void lbmIODone(struct bio *bio)
 	log = bp->l_log;
 	log->clsn = (bp->l_pn << L2LOGPSIZE) + bp->l_ceor;
 
-	if (bp->l_flag & lbmDIRECT) {
-		LCACHE_WAKEUP(&bp->l_ioevent);
+	if (bp->l_flag & lbmDIRECT)
 		goto out;
-	}
 
 	tail = log->wqueue;
 
@@ -2271,8 +2266,7 @@ static void lbmIODone(struct bio *bio)
 	 * leave buffer for i/o initiator to dispose
 	 */
 	if (bp->l_flag & lbmSYNC) {
-		/* wakeup I/O initiator */
-		LCACHE_WAKEUP(&bp->l_ioevent);
+		goto out;
 	}
 
 	/*
@@ -2298,6 +2292,8 @@ static void lbmIODone(struct bio *bio)
 
 out:
 	bp->l_flag |= lbmDONE;
+	/* wakeup I/O initiator */
+	LCACHE_WAKEUP(&bp->l_ioevent);
 	LCACHE_UNLOCK(flags);
 }
 
