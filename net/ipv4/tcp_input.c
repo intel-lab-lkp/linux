@@ -7720,7 +7720,8 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 		st = af_ops->init_seq_and_ts_off(net, skb);
 
 	if (tmp_opt.tstamp_ok) {
-		tcp_rsk(req)->req_usec_ts = dst_tcp_usec_ts(dst);
+		if (!want_cookie)
+			tcp_rsk(req)->req_usec_ts = dst_tcp_usec_ts(dst);
 		tcp_rsk(req)->ts_off = st.ts_off;
 	}
 	if (!want_cookie && !isn) {

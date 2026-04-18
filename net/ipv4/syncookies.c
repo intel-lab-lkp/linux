@@ -76,11 +76,8 @@ u64 cookie_init_timestamp(struct request_sock *req, u64 now)
 	if (ts > ts_now)
 		ts -= (1UL << TSBITS);
 
-	if (tcp_rsk(req)->req_usec_ts)
-		return ts * NSEC_PER_USEC;
 	return ts * NSEC_PER_MSEC;
 }
-
 
 static __u32 secure_tcp_syn_cookie(__be32 saddr, __be32 daddr, __be16 sport,
 				   __be16 dport, __u32 sseq, __u32 data)
