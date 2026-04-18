@@ -207,14 +207,9 @@ static int udf_expand_dir_adinicb(struct inode *inode, udf_pblk_t *block)
 		udf_fiiter_write_fi(&iter, impuse);
 	}
 	brelse(dbh);
-	/*
-	 * We don't expect the iteration to fail as the directory has been
-	 * already verified to be correct
-	 */
-	WARN_ON_ONCE(ret);
 	udf_fiiter_release(&iter);
 
-	return 0;
+	return ret;
 }
 
 static int udf_fiiter_add_entry(struct inode *dir, struct dentry *dentry,
