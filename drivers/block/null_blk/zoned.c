@@ -471,13 +471,12 @@ static blk_status_t null_open_zone(struct nullb_device *dev,
 	}
 
 	if (dev->need_zone_res_mgmt) {
-		spin_lock(&dev->zone_res_lock);
+		guard(spinlock)(&dev->zone_res_lock);
 
 		switch (zone->cond) {
 		case BLK_ZONE_COND_EMPTY:
 			ret = null_check_zone_resources(dev, zone);
 			if (ret != BLK_STS_OK) {
-				spin_unlock(&dev->zone_res_lock);
 				return ret;
 			}
 			break;
@@ -487,7 +486,6 @@ static blk_status_t null_open_zone(struct nullb_device *dev,
 		case BLK_ZONE_COND_CLOSED:
 			ret = null_check_zone_resources(dev, zone);
 			if (ret != BLK_STS_OK) {
-				spin_unlock(&dev->zone_res_lock);
 				return ret;
 			}
 			dev->nr_zones_closed--;
@@ -497,8 +495,6 @@ static blk_status_t null_open_zone(struct nullb_device *dev,
 		}
 
 		dev->nr_zones_exp_open++;
-
-		spin_unlock(&dev->zone_res_lock);
 	}
 
 	zone->cond = BLK_ZONE_COND_EXP_OPEN;
@@ -526,7 +522,7 @@ static blk_status_t null_close_zone(struct nullb_device *dev,
 	}
 
 	if (dev->need_zone_res_mgmt) {
-		spin_lock(&dev->zone_res_lock);
+		guard(spinlock)(&dev->zone_res_lock);
 
 		switch (zone->cond) {
 		case BLK_ZONE_COND_IMP_OPEN:
@@ -542,7 +538,6 @@ static blk_status_t null_close_zone(struct nullb_device *dev,
 		if (zone->wp > zone->start)
 			dev->nr_zones_closed++;
 
-		spin_unlock(&dev->zone_res_lock);
 	}
 
 	if (zone->wp == zone->start)
@@ -562,17 +557,15 @@ static blk_status_t null_finish_zone(struct nullb_device *dev,
 		return BLK_STS_IOERR;
 
 	if (dev->need_zone_res_mgmt) {
-		spin_lock(&dev->zone_res_lock);
+		guard(spinlock)(&dev->zone_res_lock);
 
 		switch (zone->cond) {
 		case BLK_ZONE_COND_FULL:
 			/* Finish operation on full is not an error */
-			spin_unlock(&dev->zone_res_lock);
 			return BLK_STS_OK;
 		case BLK_ZONE_COND_EMPTY:
 			ret = null_check_zone_resources(dev, zone);
 			if (ret != BLK_STS_OK) {
-				spin_unlock(&dev->zone_res_lock);
 				return ret;
 			}
 			break;
@@ -585,13 +578,11 @@ static blk_status_t null_finish_zone(struct nullb_device *dev,
 		case BLK_ZONE_COND_CLOSED:
 			ret = null_check_zone_resources(dev, zone);
 			if (ret != BLK_STS_OK) {
-				spin_unlock(&dev->zone_res_lock);
 				return ret;
 			}
 			dev->nr_zones_closed--;
 			break;
 		default:
-			spin_unlock(&dev->zone_res_lock);
 			return BLK_STS_IOERR;
 		}
 
@@ -611,7 +602,7 @@ static blk_status_t null_reset_zone(struct nullb_device *dev,
 		return BLK_STS_IOERR;
 
 	if (dev->need_zone_res_mgmt) {
-		spin_lock(&dev->zone_res_lock);
+		guard(spinlock)(&dev->zone_res_lock);
 
 		switch (zone->cond) {
 		case BLK_ZONE_COND_IMP_OPEN:
@@ -627,11 +618,9 @@ static blk_status_t null_reset_zone(struct nullb_device *dev,
 		case BLK_ZONE_COND_FULL:
 			break;
 		default:
-			spin_unlock(&dev->zone_res_lock);
 			return BLK_STS_IOERR;
 		}
 
-		spin_unlock(&dev->zone_res_lock);
 	}
 
 	zone->cond = BLK_ZONE_COND_EMPTY;
