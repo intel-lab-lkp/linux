@@ -172,6 +172,8 @@ r535_dmac_alloc(struct nvkm_disp *disp, u32 oclass, int inst, u32 put_offset,
 
 	args = nvkm_gsp_rm_alloc_get(&disp->rm.object, (oclass << 16) | inst, oclass,
 				     sizeof(*args), dmac);
+	if (!args)
+		return -ENOMEM;
 	if (IS_ERR(args))
 		return PTR_ERR(args);
 
