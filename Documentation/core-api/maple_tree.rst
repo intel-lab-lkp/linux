@@ -28,10 +28,11 @@ virtual memory areas.
 The Maple Tree can store values between ``0`` and ``ULONG_MAX``.  The Maple
 Tree reserves values with the bottom two bits set to '10' which are below 4096
 (ie 2, 6, 10 .. 4094) for internal use.  If the entries may use reserved
-entries then the users can convert the entries using xa_mk_value() and convert
-them back by calling xa_to_value().  If the user needs to use a reserved
-value, then the user can convert the value when using the
-:ref:`maple-tree-advanced-api`, but are blocked by the normal API.
+entries under the condition that their top bits are never 1, then the user can
+convert the entries using xa_mk_value() and convert them back by calling
+xa_to_value().  If the user needs to use a reserved value, then the user can
+convert the value when using the :ref:`maple-tree-advanced-api`, but are blocked
+by the normal API.
 
 The Maple Tree can also be configured to support searching for a gap of a given
 size (or larger).
