@@ -59,6 +59,7 @@
 #include <linux/hwmon-sysfs.h>
 #include <linux/err.h>
 #include <linux/delay.h>
+#include <asm/unaligned.h>
 
 #define DEVICE_NAME	"ads7871"
 
@@ -77,9 +78,14 @@ static int ads7871_read_reg8(struct spi_device *spi, int reg)
 static int ads7871_read_reg16(struct spi_device *spi, int reg)
 {
 	int ret;
+	u8 buf[2];
+
 	reg = reg | INST_READ_BM | INST_16BIT_BM;
-	ret = spi_w8r16(spi, reg);
-	return ret;
+	ret = spi_write_then_read(spi, &reg, 1, buf, 2);
+	if (ret < 0)
+		return ret;
+
+	return get_unaligned_le16(buf);
 }
 
 static int ads7871_write_reg8(struct spi_device *spi, int reg, u8 val)
