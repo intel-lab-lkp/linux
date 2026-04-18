@@ -12,13 +12,14 @@
 #include <linux/module.h>
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
+#include <linux/mod_devicetable.h>
 #include <linux/mutex.h>
+#include <linux/property.h>
 #include <linux/regulator/consumer.h>
 #include <linux/pm_runtime.h>
 #include <linux/delay.h>
 #include <linux/wait.h>
 #include <linux/slab.h>
-#include <linux/platform_data/apds990x.h>
 
 /* Register map */
 #define APDS990X_ENABLE	 0x00 /* Enable of states and interrupts */
@@ -100,6 +101,36 @@
 
 #define APDS990X_LUX_OUTPUT_SCALE 10
 
+#define APDS_IRLED_CURR_12mA	0x3
+#define APDS_IRLED_CURR_25mA	0x2
+#define APDS_IRLED_CURR_50mA	0x1
+#define APDS_IRLED_CURR_100mA	0x0
+
+#define APDS_PARAM_SCALE	4096
+
+/**
+ * struct apds990x_chip_factors - defines effect of the cover window
+ * @ga: Total glass attenuation
+ * @cf1: clear channel factor 1 for raw to lux conversion
+ * @irf1: IR channel factor 1 for raw to lux conversion
+ * @cf2: clear channel factor 2 for raw to lux conversion
+ * @irf2: IR channel factor 2 for raw to lux conversion
+ * @df: device factor for conversion formulas
+ *
+ * Structure for tuning ALS calculation to match with environment.
+ * Values depend on the material above the sensor and the sensor
+ * itself. If the GA is zero, driver will use uncovered sensor default values
+ * format: decimal value * APDS_PARAM_SCALE except df which is plain integer.
+ */
+struct apds990x_chip_factors {
+	int ga;
+	int cf1;
+	int irf1;
+	int cf2;
+	int irf2;
+	int df;
+};
+
 /* Reverse chip factors for threshold calculation */
 struct reverse_factors {
 	u32 afactor;
@@ -110,7 +141,6 @@ struct reverse_factors {
 };
 
 struct apds990x_chip {
-	struct apds990x_platform_data	*pdata;
 	struct i2c_client		*client;
 	struct mutex			mutex; /* avoid parallel access */
 	struct regulator		*vdd_supply;
@@ -131,6 +161,7 @@ struct apds990x_chip {
 	u8	pgain;
 	u8	pdiode;
 	u8	pdrive;
+	u8	ppcount;
 	u8	lux_persistence;
 	u8	prox_persistence;
 
@@ -546,7 +577,7 @@ static int apds990x_configure(struct apds990x_chip *chip)
 			(chip->lux_persistence << APDS990X_APERS_SHIFT) |
 			(chip->prox_persistence << APDS990X_PPERS_SHIFT));
 
-	apds990x_write_byte(chip, APDS990X_PPCOUNT, chip->pdata->ppcount);
+	apds990x_write_byte(chip, APDS990X_PPCOUNT, chip->ppcount);
 
 	/* Start with relatively small gain */
 	chip->again_meas = 1;
@@ -1051,6 +1082,7 @@ static int apds990x_probe(struct i2c_client *client)
 {
 	struct apds990x_chip *chip;
 	struct device *dev = &client->dev;
+	u32 pdrive_ua = 100000, ppcount = 1;
 	int err;
 
 	chip = devm_kzalloc(dev, sizeof(*chip), GFP_KERNEL);
@@ -1062,22 +1094,14 @@ static int apds990x_probe(struct i2c_client *client)
 
 	init_waitqueue_head(&chip->wait);
 	mutex_init(&chip->mutex);
-	chip->pdata	= client->dev.platform_data;
 
-	if (chip->pdata == NULL)
-		return dev_err_probe(dev, -EINVAL, "platform data is mandatory\n");
-
-	if (chip->pdata->cf.ga == 0) {
-		/* set uncovered sensor default parameters */
-		chip->cf.ga = 1966; /* 0.48 * APDS_PARAM_SCALE */
-		chip->cf.cf1 = 4096; /* 1.00 * APDS_PARAM_SCALE */
-		chip->cf.irf1 = 9134; /* 2.23 * APDS_PARAM_SCALE */
-		chip->cf.cf2 = 2867; /* 0.70 * APDS_PARAM_SCALE */
-		chip->cf.irf2 = 5816; /* 1.42 * APDS_PARAM_SCALE */
-		chip->cf.df = 52;
-	} else {
-		chip->cf = chip->pdata->cf;
-	}
+	/* set uncovered sensor default parameters */
+	chip->cf.ga = 1966; /* 0.48 * APDS_PARAM_SCALE */
+	chip->cf.cf1 = 4096; /* 1.00 * APDS_PARAM_SCALE */
+	chip->cf.irf1 = 9134; /* 2.23 * APDS_PARAM_SCALE */
+	chip->cf.cf2 = 2867; /* 0.70 * APDS_PARAM_SCALE */
+	chip->cf.irf2 = 5816; /* 1.42 * APDS_PARAM_SCALE */
+	chip->cf.df = 52;
 
 	/* precalculate inverse chip factors for threshold control */
 	chip->rcf.afactor =
@@ -1098,12 +1122,34 @@ static int apds990x_probe(struct i2c_client *client)
 	chip->lux_calib = APDS_LUX_NEUTRAL_CALIB_VALUE;
 
 	chip->prox_thres = APDS_PROX_DEF_THRES;
-	chip->pdrive = chip->pdata->pdrive;
 	chip->pdiode = APDS_PDIODE_IR;
 	chip->pgain = APDS_PGAIN_1X;
 	chip->prox_calib = APDS_PROX_NEUTRAL_CALIB_VALUE;
 	chip->prox_persistence = APDS_DEFAULT_PROX_PERS;
 	chip->prox_continuous_mode = false;
+
+	err = device_property_read_u32(dev, "avago,pdrive-microamp", &pdrive_ua);
+	if (!err) {
+		switch (pdrive_ua) {
+		case 12500:
+			chip->pdrive = APDS_IRLED_CURR_12mA;
+			break;
+		case 25000:
+			chip->pdrive = APDS_IRLED_CURR_25mA;
+			break;
+		case 50000:
+			chip->pdrive = APDS_IRLED_CURR_50mA;
+			break;
+		case 100000:
+			chip->pdrive = APDS_IRLED_CURR_100mA;
+			break;
+		default:
+			return -EINVAL;
+		}
+	}
+
+	device_property_read_u32(dev, "avago,ppcount", &ppcount);
+	chip->ppcount = ppcount;
 
 	chip->vdd_supply = devm_regulator_get(dev, "vdd");
 	if (IS_ERR(chip->vdd_supply))
@@ -1130,18 +1176,10 @@ static int apds990x_probe(struct i2c_client *client)
 
 	pm_runtime_enable(dev);
 
-	if (chip->pdata->setup_resources) {
-		err = chip->pdata->setup_resources();
-		if (err) {
-			err = -EINVAL;
-			goto error_pm;
-		}
-	}
-
 	err = devm_device_add_group(dev, apds990x_attribute_group);
 	if (err < 0) {
 		dev_err(dev, "Sysfs registration failed\n");
-		goto error_resourses;
+		goto error_pm;
 	}
 
 	err = devm_request_threaded_irq(dev, client->irq, NULL, apds990x_irq,
@@ -1149,13 +1187,10 @@ static int apds990x_probe(struct i2c_client *client)
 					IRQF_ONESHOT, "apds990x", chip);
 	if (err) {
 		dev_err(dev, "could not get IRQ %d\n", client->irq);
-		goto error_resourses;
+		goto error_pm;
 	}
 
 	return err;
-error_resourses:
-	if (chip->pdata && chip->pdata->release_resources)
-		chip->pdata->release_resources();
 error_pm:
 	pm_runtime_disable(dev);
 error_regulator:
@@ -1167,9 +1202,6 @@ error_regulator:
 static void apds990x_remove(struct i2c_client *client)
 {
 	struct apds990x_chip *chip = i2c_get_clientdata(client);
-
-	if (chip->pdata && chip->pdata->release_resources)
-		chip->pdata->release_resources();
 
 	if (!pm_runtime_suspended(&client->dev))
 		apds990x_chip_off(chip);
@@ -1224,6 +1256,13 @@ static int apds990x_runtime_resume(struct device *dev)
 
 #endif
 
+static const struct of_device_id apds990x_of_match[] = {
+	{ .compatible = "avago,apds9900" },
+	{ .compatible = "avago,apds9901" },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, apds990x_of_match);
+
 static const struct i2c_device_id apds990x_id[] = {
 	{ "apds990x" },
 	{}
@@ -1242,6 +1281,7 @@ static struct i2c_driver apds990x_driver = {
 	.driver	  = {
 		.name	= "apds990x",
 		.pm	= &apds990x_pm_ops,
+		.of_match_table = apds990x_of_match,
 	},
 	.probe    = apds990x_probe,
 	.remove	  = apds990x_remove,
