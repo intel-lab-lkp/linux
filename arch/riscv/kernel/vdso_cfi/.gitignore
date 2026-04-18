@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: GPL-2.0-only
+*.S
+*.c
+vdso.lds
+!vdso-cfi.S
