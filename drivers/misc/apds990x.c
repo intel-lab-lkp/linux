@@ -113,7 +113,7 @@ struct apds990x_chip {
 	struct apds990x_platform_data	*pdata;
 	struct i2c_client		*client;
 	struct mutex			mutex; /* avoid parallel access */
-	struct regulator_bulk_data	regs[2];
+	struct regulator		*vdd_supply;
 	wait_queue_head_t		wait;
 
 	int	prox_en;
@@ -178,10 +178,6 @@ static const u8 again[]	= {1, 8, 16, 120}; /* ALS gain steps */
 /* Following two tables must match i.e 10Hz rate means 1 as persistence value */
 static const u16 arates_hz[] = {10, 5, 2, 1};
 static const u8 apersis[] = {1, 2, 4, 5};
-
-/* Regulators */
-static const char reg_vcc[] = "Vdd";
-static const char reg_vled[] = "Vled";
 
 static int apds990x_read_byte(struct apds990x_chip *chip, u8 reg, u8 *data)
 {
@@ -597,8 +593,9 @@ static int apds990x_detect(struct apds990x_chip *chip)
 #ifdef CONFIG_PM
 static int apds990x_chip_on(struct apds990x_chip *chip)
 {
-	int err	 = regulator_bulk_enable(ARRAY_SIZE(chip->regs),
-					chip->regs);
+	int err;
+
+	err = regulator_enable(chip->vdd_supply);
 	if (err < 0)
 		return err;
 
@@ -615,7 +612,7 @@ static int apds990x_chip_on(struct apds990x_chip *chip)
 static int apds990x_chip_off(struct apds990x_chip *chip)
 {
 	apds990x_write_byte(chip, APDS990X_ENABLE, APDS990X_EN_DISABLE_ALL);
-	regulator_bulk_disable(ARRAY_SIZE(chip->regs), chip->regs);
+	regulator_disable(chip->vdd_supply);
 	return 0;
 }
 
@@ -1108,14 +1105,12 @@ static int apds990x_probe(struct i2c_client *client)
 	chip->prox_persistence = APDS_DEFAULT_PROX_PERS;
 	chip->prox_continuous_mode = false;
 
-	chip->regs[0].supply = reg_vcc;
-	chip->regs[1].supply = reg_vled;
+	chip->vdd_supply = devm_regulator_get(dev, "vdd");
+	if (IS_ERR(chip->vdd_supply))
+		return dev_err_probe(dev, PTR_ERR(chip->vdd_supply),
+				     "failed to get vdd-supply\n");
 
-	err = devm_regulator_bulk_get(dev, ARRAY_SIZE(chip->regs), chip->regs);
-	if (err)
-		return dev_err_probe(dev, err, "failed to get supplies\n");
-
-	err = regulator_bulk_enable(ARRAY_SIZE(chip->regs), chip->regs);
+	err = regulator_enable(chip->vdd_supply);
 	if (err < 0)
 		return dev_err_probe(dev, err, "cannot enable regulators\n");
 
@@ -1164,7 +1159,7 @@ error_resourses:
 error_pm:
 	pm_runtime_disable(dev);
 error_regulator:
-	regulator_bulk_disable(ARRAY_SIZE(chip->regs), chip->regs);
+	regulator_disable(chip->vdd_supply);
 
 	return err;
 }
