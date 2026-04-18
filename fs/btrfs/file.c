@@ -2668,8 +2668,6 @@ static int btrfs_punch_hole(struct file *file, loff_t offset, loff_t len)
 	bool truncated_block = false;
 	bool updated_inode = false;
 
-	btrfs_inode_lock(BTRFS_I(inode), BTRFS_ILOCK_MMAP);
-
 	ret = btrfs_wait_ordered_range(BTRFS_I(inode), offset, len);
 	if (ret)
 		goto out_only_mutex;
@@ -2712,7 +2710,6 @@ static int btrfs_punch_hole(struct file *file, loff_t offset, loff_t len)
 		truncated_block = true;
 		ret = btrfs_truncate_block(BTRFS_I(inode), offset, orig_start, orig_end);
 		if (ret) {
-			btrfs_inode_unlock(BTRFS_I(inode), BTRFS_ILOCK_MMAP);
 			return ret;
 		}
 	}
@@ -2809,7 +2806,6 @@ out_only_mutex:
 				ret = ret2;
 		}
 	}
-	btrfs_inode_unlock(BTRFS_I(inode), BTRFS_ILOCK_MMAP);
 	return ret;
 }
 
@@ -2932,6 +2928,8 @@ static int btrfs_zero_range(struct inode *inode,
 	u64 alloc_end = round_up(offset + len, sectorsize);
 	u64 bytes_to_reserve = 0;
 	bool space_reserved = false;
+
+	ASSERT((mode & FALLOC_FL_MODE_MASK) == FALLOC_FL_ZERO_RANGE);
 
 	em = btrfs_get_extent(BTRFS_I(inode), NULL, alloc_start,
 			      alloc_end - alloc_start);
@@ -3092,7 +3090,7 @@ reserve_space:
 	return ret;
 }
 
-static long btrfs_fallocate(struct file *file, int mode,
+static long btrfs_allocate_or_zero_range(struct file *file, int mode,
 			    loff_t offset, loff_t len)
 {
 	struct inode *inode = file_inode(file);
@@ -3115,26 +3113,11 @@ static long btrfs_fallocate(struct file *file, int mode,
 	int blocksize = BTRFS_I(inode)->root->fs_info->sectorsize;
 	int ret;
 
-	if (btrfs_is_shutdown(inode_to_fs_info(inode)))
-		return -EIO;
-
-	/* Do not allow fallocate in ZONED mode */
-	if (btrfs_is_zoned(inode_to_fs_info(inode)))
-		return -EOPNOTSUPP;
+	ASSERT((mode & FALLOC_FL_MODE_MASK) == FALLOC_FL_ALLOCATE_RANGE || (mode & FALLOC_FL_MODE_MASK) == FALLOC_FL_ZERO_RANGE);
 
 	alloc_start = round_down(offset, blocksize);
 	alloc_end = round_up(offset + len, blocksize);
 	cur_offset = alloc_start;
-
-	/* Make sure we aren't being give some crap mode */
-	if (mode & ~(FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE |
-		     FALLOC_FL_ZERO_RANGE))
-		return -EOPNOTSUPP;
-
-	if (mode & FALLOC_FL_PUNCH_HOLE)
-		return btrfs_punch_hole(file, offset, len);
-
-	btrfs_inode_lock(BTRFS_I(inode), BTRFS_ILOCK_MMAP);
 
 	if (!(mode & FALLOC_FL_KEEP_SIZE) && offset + len > inode->i_size) {
 		ret = inode_newsize_ok(inode, offset + len);
@@ -3185,7 +3168,6 @@ static long btrfs_fallocate(struct file *file, int mode,
 
 	if (mode & FALLOC_FL_ZERO_RANGE) {
 		ret = btrfs_zero_range(inode, offset, len, mode);
-		btrfs_inode_unlock(BTRFS_I(inode), BTRFS_ILOCK_MMAP);
 		return ret;
 	}
 
@@ -3282,8 +3264,43 @@ out_unlock:
 	btrfs_unlock_extent(&BTRFS_I(inode)->io_tree, alloc_start, locked_end,
 			    &cached_state);
 out:
-	btrfs_inode_unlock(BTRFS_I(inode), BTRFS_ILOCK_MMAP);
 	extent_changeset_free(data_reserved);
+	return ret;
+}
+
+static long btrfs_fallocate(struct file *file, int mode,
+			    loff_t offset, loff_t len)
+{
+	struct inode *inode = file_inode(file);
+	int ret;
+
+	if (btrfs_is_shutdown(inode_to_fs_info(inode)))
+		return -EIO;
+
+	/* Do not allow fallocate in ZONED mode */
+	if (btrfs_is_zoned(inode_to_fs_info(inode)))
+		return -EOPNOTSUPP;
+
+	/* Check for options we do not support. */
+	if (mode & ~(FALLOC_FL_MODE_MASK | FALLOC_FL_KEEP_SIZE))
+		return -EOPNOTSUPP;
+
+	btrfs_inode_lock(BTRFS_I(inode), BTRFS_ILOCK_MMAP);
+
+	/* Only one mode bit may be set. */
+	switch (mode & FALLOC_FL_MODE_MASK) {
+	case FALLOC_FL_ALLOCATE_RANGE:
+	case FALLOC_FL_ZERO_RANGE:
+		ret = btrfs_allocate_or_zero_range(file, mode, offset, len);
+		break;
+	case FALLOC_FL_PUNCH_HOLE:
+		ret = btrfs_punch_hole(file, offset, len);
+		break;
+	default:
+		ret = -EOPNOTSUPP;
+	}
+
+	btrfs_inode_unlock(BTRFS_I(inode), BTRFS_ILOCK_MMAP);
 	return ret;
 }
 
