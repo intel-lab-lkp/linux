@@ -13,6 +13,7 @@ static unsigned int
 target(struct sk_buff *skb, const struct xt_action_param *par)
 {
 	const struct arpt_mangle *mangle = par->targinfo;
+	bool has_tgt_devaddr = true;
 	const struct arphdr *arp;
 	unsigned char *arpptr;
 	int pln, hln;
@@ -39,13 +40,22 @@ target(struct sk_buff *skb, const struct xt_action_param *par)
 		memcpy(arpptr, &mangle->u_s.src_ip, pln);
 	}
 	arpptr += pln;
+
+	if (arp->ar_hrd == htons(ARPHRD_IEEE1394))
+		has_tgt_devaddr = false;
+
 	if (mangle->flags & ARPT_MANGLE_TDEV) {
+		if (!has_tgt_devaddr)
+			return NF_DROP;
+
 		if (ARPT_DEV_ADDR_LEN_MAX < hln ||
 		   (arpptr + hln > skb_tail_pointer(skb)))
 			return NF_DROP;
 		memcpy(arpptr, mangle->tgt_devaddr, hln);
 	}
-	arpptr += hln;
+	if (has_tgt_devaddr)
+		arpptr += hln;
+
 	if (mangle->flags & ARPT_MANGLE_TIP) {
 		if (ARPT_MANGLE_ADDR_LEN_MAX < pln ||
 		   (arpptr + pln > skb_tail_pointer(skb)))
