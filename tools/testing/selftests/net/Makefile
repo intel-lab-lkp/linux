@@ -184,6 +184,8 @@ TEST_GEN_PROGS := \
 	reuseport_bpf_cpu \
 	reuseport_bpf_numa \
 	reuseport_dualstack \
+	reuseport_migrate_accept \
+	reuseport_migrate_epoll \
 	sk_bind_sendto_listen \
 	sk_connect_zero_addr \
 	sk_so_peek_off \
@@ -232,6 +234,7 @@ $(OUTPUT)/reuseport_bpf_numa: LDLIBS += -lnuma
 $(OUTPUT)/tcp_mmap: LDLIBS += -lpthread -lcrypto
 $(OUTPUT)/tcp_inq: LDLIBS += -lpthread
 $(OUTPUT)/bind_bhash: LDLIBS += -lpthread
+$(OUTPUT)/reuseport_migrate_accept: LDLIBS += -lpthread
 $(OUTPUT)/io_uring_zerocopy_tx: CFLAGS += -I../../../include/
 
 include bpf.mk
