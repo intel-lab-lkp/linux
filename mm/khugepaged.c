@@ -1979,8 +1979,7 @@ static enum scan_result collapse_file(struct mm_struct *mm, unsigned long addr,
 				}
 			} else if (folio_test_dirty(folio)) {
 				/*
-				 * khugepaged only works on read-only fd,
-				 * so this page is dirty because it hasn't
+				 * This page is dirty because it hasn't
 				 * been flushed since first write. There
 				 * won't be new dirty pages.
 				 *
@@ -2038,8 +2037,8 @@ static enum scan_result collapse_file(struct mm_struct *mm, unsigned long addr,
 		if (!is_shmem && (folio_test_dirty(folio) ||
 				  folio_test_writeback(folio))) {
 			/*
-			 * khugepaged only works on read-only fd, so this
-			 * folio is dirty because it hasn't been flushed
+			 * khugepaged only works on clean file-backed folios,
+			 * so this folio is dirty because it hasn't been flushed
 			 * since first write.
 			 */
 			result = SCAN_PAGE_DIRTY_OR_WRITEBACK;
@@ -2080,6 +2079,24 @@ static enum scan_result collapse_file(struct mm_struct *mm, unsigned long addr,
 			result = SCAN_PAGE_COUNT;
 			xas_unlock_irq(&xas);
 			folio_putback_lru(folio);
+			goto out_unlock;
+		}
+
+		/*
+		 * At this point, the folio is locked, unmapped. Make sure the
+		 * folio is clean, so that no one else is able to write to it,
+		 * since that would require taking the folio lock first.
+		 * Otherwise that means the folio was pointed by a dirty PTE and
+		 * some CPU might have a valid TLB entry with dirty bit set
+		 * still pointing to this folio and writes can happen without
+		 * causing a page table walk and folio lock acquisition before
+		 * the try_to_unmap_flush() below is done. After the collapse,
+		 * file-backed folio is not set as dirty and can be discarded
+		 * before any new write marks the folio dirty, causing data
+		 * corruption.
+		 */
+		if (!is_shmem && folio_test_dirty(folio)) {
+			result = SCAN_PAGE_DIRTY_OR_WRITEBACK;
 			goto out_unlock;
 		}
 
