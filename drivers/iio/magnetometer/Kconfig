@@ -298,4 +298,15 @@ config YAMAHA_YAS530
 	  To compile this driver as a module, choose M here: the module
 	  will be called yamaha-yas.
 
+config QMC5883P
+	tristate "QMC5883P 3-Axis Magnetometer"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  Say yes here to build support for QMC5883P I2C-based
+	  3-axis magnetometer chip.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called qmc5883p.
+
 endmenu
