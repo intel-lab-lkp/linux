@@ -4,7 +4,7 @@
  *
  * Copyright 2026 Hardik Phalet <hardik.phalet@pm.me>
  *
- * TODO: add triggered buffer support, PM, DSR
+ * TODO: add triggered buffer support, DSR
  *
  */
 
@@ -15,6 +15,7 @@
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
 #include <linux/units.h>
@@ -208,6 +209,10 @@ static int qmc5883p_get_measure(struct qmc5883p_data *data, s16 *x, s16 *y,
 	u8 reg_data[6];
 	unsigned int status;
 
+	ret = pm_runtime_resume_and_get(data->dev);
+	if (ret < 0)
+		return ret;
+
 	/*
 	 * Poll the status register until DRDY is set or timeout.
 	 * Read the whole register in one shot so that OVFL is captured from
@@ -220,24 +225,26 @@ static int qmc5883p_get_measure(struct qmc5883p_data *data, s16 *x, s16 *y,
 				       QMC5883P_DRDY_POLL_US,
 				       150 * (MICRO / MILLI));
 	if (ret)
-		return ret;
+		goto out;
 
 	if (status & QMC5883P_STATUS_OVFL) {
 		dev_warn_ratelimited(data->dev,
 			"data overflow, consider reducing field range\n");
 		ret = -ERANGE;
-		return ret;
+		goto out;
 	}
 
 	ret = regmap_bulk_read(data->regmap, QMC5883P_REG_X_LSB, reg_data,
 			       ARRAY_SIZE(reg_data));
 	if (ret)
-		return ret;
+		goto out;
 
 	*x = (s16)get_unaligned_le16(&reg_data[0]);
 	*y = (s16)get_unaligned_le16(&reg_data[2]);
 	*z = (s16)get_unaligned_le16(&reg_data[4]);
 
+out:
+	pm_runtime_put_autosuspend(data->dev);
 	return ret;
 }
 
@@ -341,9 +348,13 @@ static int qmc5883p_write_raw(struct iio_dev *indio_dev,
 
 	guard(mutex)(&data->mutex);
 
-	ret = regmap_field_write(data->rf.mode, QMC5883P_MODE_SUSPEND);
+	ret = pm_runtime_resume_and_get(data->dev);
 	if (ret)
 		return ret;
+
+	ret = regmap_field_write(data->rf.mode, QMC5883P_MODE_SUSPEND);
+	if (ret)
+		goto out;
 
 	switch (mask) {
 	case IIO_CHAN_INFO_SAMP_FREQ:
@@ -364,6 +375,8 @@ static int qmc5883p_write_raw(struct iio_dev *indio_dev,
 	if (restore && !ret)
 		ret = restore;
 
+out:
+	pm_runtime_put_autosuspend(data->dev);
 	return ret;
 }
 
@@ -533,6 +546,18 @@ static int qmc5883p_chip_init(struct qmc5883p_data *data)
 	return 0;
 }
 
+static void qmc5883p_suspend_action(void *arg)
+{
+	struct qmc5883p_data *data = arg;
+
+	/*
+	 * PM is already disabled at this point (devm LIFO); put the hardware
+	 * into MODE_SUSPEND directly so the chip is not left sampling after
+	 * unbind.
+	 */
+	regmap_field_write(data->rf.mode, QMC5883P_MODE_SUSPEND);
+}
+
 static int qmc5883p_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
@@ -584,8 +609,41 @@ static int qmc5883p_probe(struct i2c_client *client)
 	if (ret)
 		return dev_err_probe(dev, ret, "failed to initialize chip\n");
 
+	ret = devm_add_action_or_reset(dev, qmc5883p_suspend_action, data);
+	if (ret)
+		return ret;
+
+	pm_runtime_set_autosuspend_delay(dev, 2000);
+	pm_runtime_use_autosuspend(dev);
+
+	ret = devm_pm_runtime_enable(dev);
+	if (ret)
+		return ret;
+
 	return devm_iio_device_register(dev, indio_dev);
 }
+
+static int qmc5883p_runtime_suspend(struct device *dev)
+{
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
+	struct qmc5883p_data *data = iio_priv(indio_dev);
+
+	return regmap_field_write(data->rf.mode, QMC5883P_MODE_SUSPEND);
+}
+
+static int qmc5883p_runtime_resume(struct device *dev)
+{
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
+	struct qmc5883p_data *data = iio_priv(indio_dev);
+
+	return regmap_field_write(data->rf.mode, QMC5883P_MODE_NORMAL);
+}
+
+static const struct dev_pm_ops qmc5883p_dev_pm_ops = {
+	SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend, pm_runtime_force_resume)
+		RUNTIME_PM_OPS(qmc5883p_runtime_suspend,
+			       qmc5883p_runtime_resume, NULL)
+};
 
 static const struct of_device_id qmc5883p_of_match[] = {
 	{ .compatible = "qstcorp,qmc5883p" },
@@ -603,6 +661,7 @@ static struct i2c_driver qmc5883p_driver = {
 	.driver = {
 		.name = "qmc5883p",
 		.of_match_table = qmc5883p_of_match,
+		.pm = pm_ptr(&qmc5883p_dev_pm_ops),
 	},
 	.probe = qmc5883p_probe,
 	.id_table = qmc5883p_id,
