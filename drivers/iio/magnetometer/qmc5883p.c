@@ -4,7 +4,7 @@
  *
  * Copyright 2026 Hardik Phalet <hardik.phalet@pm.me>
  *
- * TODO: add triggered buffer support, PM, OSR, DSR
+ * TODO: add triggered buffer support, PM, DSR
  *
  */
 
@@ -117,6 +117,13 @@ static const int qmc5883p_odr[] = {
 	[QMC5883P_ODR_50] = 50,
 	[QMC5883P_ODR_100] = 100,
 	[QMC5883P_ODR_200] = 200,
+};
+
+static const int qmc5883p_osr[] = {
+	[QMC5883P_OSR_1] = 1,
+	[QMC5883P_OSR_2] = 2,
+	[QMC5883P_OSR_4] = 4,
+	[QMC5883P_OSR_8] = 8,
 };
 
 static const struct regmap_range qmc5883p_readable_ranges[] = {
@@ -277,6 +284,13 @@ static int qmc5883p_read_raw(struct iio_dev *indio_dev,
 			return ret;
 		*val = qmc5883p_odr[regval];
 		return IIO_VAL_INT;
+
+	case IIO_CHAN_INFO_OVERSAMPLING_RATIO:
+		ret = regmap_field_read(data->rf.osr, &regval);
+		if (ret < 0)
+			return ret;
+		*val = qmc5883p_osr[regval];
+		return IIO_VAL_INT;
 	}
 
 	return -EINVAL;
@@ -306,6 +320,18 @@ static int qmc5883p_write_odr(struct qmc5883p_data *data, int val)
 	return -EINVAL;
 }
 
+static int qmc5883p_write_osr(struct qmc5883p_data *data, int val)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(qmc5883p_osr); i++) {
+		if (qmc5883p_osr[i] == val)
+			return regmap_field_write(data->rf.osr, i);
+	}
+
+	return -EINVAL;
+}
+
 static int qmc5883p_write_raw(struct iio_dev *indio_dev,
 			      struct iio_chan_spec const *chan, int val,
 			      int val2, long mask)
@@ -322,6 +348,9 @@ static int qmc5883p_write_raw(struct iio_dev *indio_dev,
 	switch (mask) {
 	case IIO_CHAN_INFO_SAMP_FREQ:
 		ret = qmc5883p_write_odr(data, val);
+		break;
+	case IIO_CHAN_INFO_OVERSAMPLING_RATIO:
+		ret = qmc5883p_write_osr(data, val);
 		break;
 	case IIO_CHAN_INFO_SCALE:
 		ret = qmc5883p_write_scale(data, val, val2);
@@ -357,6 +386,12 @@ static int qmc5883p_read_avail(struct iio_dev *indio_dev,
 		*length = ARRAY_SIZE(qmc5883p_odr);
 		return IIO_AVAIL_LIST;
 
+	case IIO_CHAN_INFO_OVERSAMPLING_RATIO:
+		*vals = qmc5883p_osr;
+		*type = IIO_VAL_INT;
+		*length = ARRAY_SIZE(qmc5883p_osr);
+		return IIO_AVAIL_LIST;
+
 	case IIO_CHAN_INFO_SCALE:
 		*vals = (const int *)qmc5883p_scale;
 		*type = IIO_VAL_INT_PLUS_NANO;
@@ -381,6 +416,8 @@ static int qmc5883p_write_raw_get_fmt(struct iio_dev *indio_dev,
 	case IIO_CHAN_INFO_SCALE:
 		return IIO_VAL_INT_PLUS_NANO;
 	case IIO_CHAN_INFO_SAMP_FREQ:
+		return IIO_VAL_INT;
+	case IIO_CHAN_INFO_OVERSAMPLING_RATIO:
 		return IIO_VAL_INT;
 	default:
 		return -EINVAL;
@@ -452,9 +489,12 @@ static int qmc5883p_read_chip_id(struct qmc5883p_data *data)
 		.info_mask_separate = BIT(IIO_CHAN_INFO_RAW) |            \
 				      BIT(IIO_CHAN_INFO_SCALE),           \
 		.info_mask_separate_available = BIT(IIO_CHAN_INFO_SCALE), \
-		.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SAMP_FREQ), \
+		.info_mask_shared_by_type =                               \
+			BIT(IIO_CHAN_INFO_SAMP_FREQ) |                    \
+			BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO),            \
 		.info_mask_shared_by_type_available =                     \
-			BIT(IIO_CHAN_INFO_SAMP_FREQ),                     \
+			BIT(IIO_CHAN_INFO_SAMP_FREQ) |                    \
+			BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO),            \
 	}
 
 static const struct iio_chan_spec qmc5883p_channels[] = {
