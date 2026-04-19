@@ -721,15 +721,15 @@ EXPORT_SYMBOL(path_put);
 
 #define EMBEDDED_LEVELS 2
 struct nameidata {
-	struct path	path;
-	struct qstr	last;
-	struct path	root;
-	struct inode	*inode; /* path.dentry.d_inode */
-	unsigned int	flags, state;
-	unsigned	seq, next_seq, m_seq, r_seq;
-	int		last_type;
-	unsigned	depth;
-	int		total_link_count;
+	struct path		path;
+	struct qstr		last;
+	struct path		root;
+	struct inode		*inode; /* path.dentry.d_inode */
+	unsigned int		flags, state;
+	unsigned		seq, next_seq, m_seq, r_seq;
+	enum component_type	last_type;
+	unsigned		depth;
+	int			total_link_count;
 	struct saved {
 		struct path link;
 		struct delayed_call done;
@@ -2220,7 +2220,7 @@ in_root:
 	return dget(nd->path.dentry);
 }
 
-static const char *handle_dots(struct nameidata *nd, int type)
+static const char *handle_dots(struct nameidata *nd, enum component_type type)
 {
 	if (type == LAST_DOTDOT) {
 		const char *error = NULL;
@@ -2868,7 +2868,7 @@ static int path_parentat(struct nameidata *nd, unsigned flags,
 /* Note: this does not consume "name" */
 static int __filename_parentat(int dfd, struct filename *name,
 			       unsigned int flags, struct path *parent,
-			       struct qstr *last, int *type,
+			       struct qstr *last, enum component_type *type,
 			       const struct path *root)
 {
 	int retval;
@@ -2893,7 +2893,7 @@ static int __filename_parentat(int dfd, struct filename *name,
 
 static int filename_parentat(int dfd, struct filename *name,
 			     unsigned int flags, struct path *parent,
-			     struct qstr *last, int *type)
+			     struct qstr *last, enum component_type *type)
 {
 	return __filename_parentat(dfd, name, flags, parent, last, type, NULL);
 }
@@ -2961,7 +2961,8 @@ static struct dentry *__start_removing_path(int dfd, struct filename *name,
 	struct path parent_path __free(path_put) = {};
 	struct dentry *d;
 	struct qstr last;
-	int type, error;
+	enum component_type type;
+	int error;
 
 	error = filename_parentat(dfd, name, 0, &parent_path, &last, &type);
 	if (error)
@@ -3007,7 +3008,8 @@ struct dentry *kern_path_parent(const char *name, struct path *path)
 	CLASS(filename_kernel, filename)(name);
 	struct dentry *d;
 	struct qstr last;
-	int type, error;
+	enum component_type type;
+	int error;
 
 	error = filename_parentat(AT_FDCWD, filename, 0, &parent_path, &last, &type);
 	if (error)
@@ -3055,7 +3057,7 @@ EXPORT_SYMBOL(kern_path);
  * @root: pointer to struct path of the base directory
  */
 int vfs_path_parent_lookup(struct filename *filename, unsigned int flags,
-			   struct path *parent, struct qstr *last, int *type,
+			   struct path *parent, struct qstr *last, enum component_type *type,
 			   const struct path *root)
 {
 	return  __filename_parentat(AT_FDCWD, filename, flags, parent, last,
@@ -4925,7 +4927,7 @@ static struct dentry *filename_create(int dfd, struct filename *name,
 	bool want_dir = lookup_flags & LOOKUP_DIRECTORY;
 	unsigned int reval_flag = lookup_flags & LOOKUP_REVAL;
 	unsigned int create_flags = LOOKUP_CREATE | LOOKUP_EXCL;
-	int type;
+	enum component_type type;
 	int error;
 
 	error = filename_parentat(dfd, name, reval_flag, path, &last, &type);
@@ -5387,7 +5389,7 @@ int filename_rmdir(int dfd, struct filename *name)
 	struct dentry *dentry;
 	struct path path;
 	struct qstr last;
-	int type;
+	enum component_type type;
 	unsigned int lookup_flags = 0;
 	struct delegated_inode delegated_inode = { };
 retry:
@@ -5405,6 +5407,7 @@ retry:
 	case LAST_ROOT:
 		error = -EBUSY;
 		goto exit2;
+	case LAST_NORM: ; // OK
 	}
 
 	error = mnt_want_write(path.mnt);
@@ -5529,7 +5532,7 @@ int filename_unlinkat(int dfd, struct filename *name)
 	struct dentry *dentry;
 	struct path path;
 	struct qstr last;
-	int type;
+	enum component_type type;
 	struct inode *inode;
 	struct delegated_inode delegated_inode = { };
 	unsigned int lookup_flags = 0;
@@ -6096,7 +6099,7 @@ int filename_renameat2(int olddfd, struct filename *from,
 	struct renamedata rd;
 	struct path old_path, new_path;
 	struct qstr old_last, new_last;
-	int old_type, new_type;
+	enum component_type old_type, new_type;
 	struct delegated_inode delegated_inode = { };
 	unsigned int lookup_flags = 0;
 	bool should_retry = false;

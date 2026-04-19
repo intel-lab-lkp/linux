@@ -56,7 +56,8 @@ static int ksmbd_vfs_path_lookup(struct ksmbd_share_config *share_conf,
 {
 	struct qstr last;
 	const struct path *root_share_path = &share_conf->vfs_path;
-	int err, type;
+	int err;
+	enum component_type type;
 	struct dentry *d;
 
 	if (pathname[0] == '\0') {
@@ -668,7 +669,7 @@ int ksmbd_vfs_rename(struct ksmbd_work *work, const struct path *old_path,
 	struct renamedata rd;
 	struct ksmbd_share_config *share_conf = work->tcon->share_conf;
 	struct ksmbd_file *parent_fp;
-	int new_type;
+	enum component_type new_type;
 	int err, lookup_flags = LOOKUP_NO_SYMLINKS;
 
 	if (ksmbd_override_fsids(work))
