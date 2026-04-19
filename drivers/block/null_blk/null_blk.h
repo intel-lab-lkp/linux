@@ -14,6 +14,7 @@
 #include <linux/fault-inject.h>
 #include <linux/spinlock.h>
 #include <linux/mutex.h>
+#include <linux/cleanup.h>
 
 struct nullb_cmd {
 	blk_status_t error;

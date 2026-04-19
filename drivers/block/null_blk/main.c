@@ -421,25 +421,15 @@ static int nullb_update_nr_hw_queues(struct nullb_device *dev,
 static int nullb_apply_submit_queues(struct nullb_device *dev,
 				     unsigned int submit_queues)
 {
-	int ret;
-
-	mutex_lock(&lock);
-	ret = nullb_update_nr_hw_queues(dev, submit_queues, dev->poll_queues);
-	mutex_unlock(&lock);
-
-	return ret;
+	guard(mutex)(&lock);
+	return nullb_update_nr_hw_queues(dev, submit_queues, dev->poll_queues);
 }
 
 static int nullb_apply_poll_queues(struct nullb_device *dev,
 				   unsigned int poll_queues)
 {
-	int ret;
-
-	mutex_lock(&lock);
-	ret = nullb_update_nr_hw_queues(dev, dev->submit_queues, poll_queues);
-	mutex_unlock(&lock);
-
-	return ret;
+	guard(mutex)(&lock);
+	return nullb_update_nr_hw_queues(dev, dev->submit_queues, poll_queues);
 }
 
 NULLB_DEVICE_ATTR(size, ulong, NULL);
@@ -493,15 +483,15 @@ static ssize_t nullb_device_power_store(struct config_item *item,
 		return ret;
 
 	ret = count;
-	mutex_lock(&lock);
+	guard(mutex)(&lock);
 	if (!dev->power && newp) {
 		if (test_and_set_bit(NULLB_DEV_FL_UP, &dev->flags))
-			goto out;
+			return ret;
 
 		ret = null_add_dev(dev);
 		if (ret) {
 			clear_bit(NULLB_DEV_FL_UP, &dev->flags);
-			goto out;
+			return ret;
 		}
 
 		set_bit(NULLB_DEV_FL_CONFIGURED, &dev->flags);
@@ -515,8 +505,6 @@ static ssize_t nullb_device_power_store(struct config_item *item,
 		clear_bit(NULLB_DEV_FL_CONFIGURED, &dev->flags);
 	}
 
-out:
-	mutex_unlock(&lock);
 	return ret;
 }
 
@@ -707,10 +695,9 @@ nullb_group_drop_item(struct config_group *group, struct config_item *item)
 	struct nullb_device *dev = to_nullb_device(item);
 
 	if (test_and_clear_bit(NULLB_DEV_FL_UP, &dev->flags)) {
-		mutex_lock(&lock);
+		guard(mutex)(&lock);
 		dev->power = false;
 		null_del_dev(dev->nullb);
-		mutex_unlock(&lock);
 	}
 	nullb_del_fault_config(dev);
 	config_item_put(item);
@@ -1205,7 +1192,7 @@ blk_status_t null_handle_discard(struct nullb_device *dev,
 	size_t n = nr_sectors << SECTOR_SHIFT;
 	size_t temp;
 
-	spin_lock_irq(&nullb->lock);
+	guard(spinlock_irq)(&nullb->lock);
 	while (n > 0) {
 		temp = min_t(size_t, n, dev->blocksize);
 		null_free_sector(nullb, sector, false);
@@ -1214,7 +1201,6 @@ blk_status_t null_handle_discard(struct nullb_device *dev,
 		sector += temp >> SECTOR_SHIFT;
 		n -= temp;
 	}
-	spin_unlock_irq(&nullb->lock);
 
 	return BLK_STS_OK;
 }
@@ -1226,7 +1212,7 @@ static blk_status_t null_handle_flush(struct nullb *nullb)
 	if (!null_cache_active(nullb))
 		return 0;
 
-	spin_lock_irq(&nullb->lock);
+	guard(spinlock_irq)(&nullb->lock);
 	while (true) {
 		err = null_make_cache_space(nullb,
 			nullb->dev->cache_size * 1024 * 1024);
@@ -1235,7 +1221,6 @@ static blk_status_t null_handle_flush(struct nullb *nullb)
 	}
 
 	WARN_ON(!radix_tree_empty(&nullb->dev->cache));
-	spin_unlock_irq(&nullb->lock);
 	return errno_to_blk_status(err);
 }
 
@@ -1292,7 +1277,7 @@ static blk_status_t null_handle_data_transfer(struct nullb_cmd *cmd,
 	struct req_iterator iter;
 	struct bio_vec bvec;
 
-	spin_lock_irq(&nullb->lock);
+	guard(spinlock_irq)(&nullb->lock);
 	rq_for_each_segment(bvec, rq, iter) {
 		len = bvec.bv_len;
 		if (transferred_bytes + len > max_bytes)
@@ -1307,7 +1292,6 @@ static blk_status_t null_handle_data_transfer(struct nullb_cmd *cmd,
 		if (transferred_bytes >= max_bytes)
 			break;
 	}
-	spin_unlock_irq(&nullb->lock);
 
 	return err;
 }
@@ -1592,11 +1576,11 @@ static int null_poll(struct blk_mq_hw_ctx *hctx, struct io_comp_batch *iob)
 	int nr = 0;
 	struct request *rq;
 
-	spin_lock(&nq->poll_lock);
-	list_splice_init(&nq->poll_list, &list);
-	list_for_each_entry(rq, &list, queuelist)
-		blk_mq_set_request_complete(rq);
-	spin_unlock(&nq->poll_lock);
+	scoped_guard(spinlock, &nq->poll_lock) {
+		list_splice_init(&nq->poll_list, &list);
+		list_for_each_entry(rq, &list, queuelist)
+			blk_mq_set_request_complete(rq);
+	}
 
 	while (!list_empty(&list)) {
 		struct nullb_cmd *cmd;
@@ -1624,14 +1608,12 @@ static enum blk_eh_timer_return null_timeout_rq(struct request *rq)
 	if (hctx->type == HCTX_TYPE_POLL) {
 		struct nullb_queue *nq = hctx->driver_data;
 
-		spin_lock(&nq->poll_lock);
-		/* The request may have completed meanwhile. */
-		if (blk_mq_request_completed(rq)) {
-			spin_unlock(&nq->poll_lock);
-			return BLK_EH_DONE;
+		scoped_guard(spinlock, &nq->poll_lock) {
+			/* The request may have completed meanwhile. */
+			if (blk_mq_request_completed(rq))
+				return BLK_EH_DONE;
+			list_del_init(&rq->queuelist);
 		}
-		list_del_init(&rq->queuelist);
-		spin_unlock(&nq->poll_lock);
 	}
 
 	pr_info("rq %p timed out\n", rq);
@@ -1692,9 +1674,9 @@ static blk_status_t null_queue_rq(struct blk_mq_hw_ctx *hctx,
 	blk_mq_start_request(rq);
 
 	if (is_poll) {
-		spin_lock(&nq->poll_lock);
-		list_add_tail(&rq->queuelist, &nq->poll_list);
-		spin_unlock(&nq->poll_lock);
+		scoped_guard(spinlock, &nq->poll_lock) {
+			list_add_tail(&rq->queuelist, &nq->poll_list);
+		}
 		return BLK_STS_OK;
 	}
 	if (cmd->fake_timeout)
@@ -2081,14 +2063,13 @@ static struct nullb *null_find_dev_by_name(const char *name)
 {
 	struct nullb *nullb = NULL, *nb;
 
-	mutex_lock(&lock);
+	guard(mutex)(&lock);
 	list_for_each_entry(nb, &nullb_list, list) {
 		if (strcmp(nb->disk_name, name) == 0) {
 			nullb = nb;
 			break;
 		}
 	}
-	mutex_unlock(&lock);
 
 	return nullb;
 }
@@ -2101,10 +2082,9 @@ static int null_create_dev(void)
 	dev = null_alloc_dev();
 	if (!dev)
 		return -ENOMEM;
-
-	mutex_lock(&lock);
-	ret = null_add_dev(dev);
-	mutex_unlock(&lock);
+	scoped_guard(mutex, &lock) {
+		ret = null_add_dev(dev);
+	}
 	if (ret) {
 		null_free_dev(dev);
 		return ret;
@@ -2202,12 +2182,12 @@ static void __exit null_exit(void)
 
 	unregister_blkdev(null_major, "nullb");
 
-	mutex_lock(&lock);
-	while (!list_empty(&nullb_list)) {
-		nullb = list_entry(nullb_list.next, struct nullb, list);
-		null_destroy_dev(nullb);
+	scoped_guard(mutex, &lock) {
+		while (!list_empty(&nullb_list)) {
+			nullb = list_entry(nullb_list.next, struct nullb, list);
+			null_destroy_dev(nullb);
+		}
 	}
-	mutex_unlock(&lock);
 
 	if (tag_set.ops)
 		blk_mq_free_tag_set(&tag_set);
