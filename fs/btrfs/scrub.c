@@ -6,6 +6,7 @@
 #include <linux/blkdev.h>
 #include <linux/ratelimit.h>
 #include <linux/sched/mm.h>
+#include <linux/timekeeping.h>
 #include "ctree.h"
 #include "discard.h"
 #include "volumes.h"
@@ -3152,6 +3153,18 @@ int btrfs_scrub_dev(struct btrfs_fs_info *fs_info, u64 devid, u64 start,
 	dev->scrub_ctx = sctx;
 	mutex_unlock(&fs_info->fs_devices->device_list_mutex);
 
+	if (!is_dev_replace) {
+		int i;
+
+		/* Reset session counters for this new scrub run */
+		for (i = 0; i < BTRFS_SCRUB_STAT_VALUES_MAX; i++)
+			atomic64_set(&dev->scrub_session_values[i], 0);
+		dev->scrub_session_last_physical = start;
+		dev->scrub_session_t_start = ktime_get_real_seconds();
+		dev->scrub_session_t_end = 0;
+		atomic_set(&dev->scrub_session_status, BTRFS_SCRUB_STATUS_RUNNING);
+	}
+
 	/*
 	 * checking @scrub_pause_req here, we can avoid
 	 * race between committing transaction and scrubbing.
@@ -3206,6 +3219,9 @@ int btrfs_scrub_dev(struct btrfs_fs_info *fs_info, u64 devid, u64 start,
 
 	if (progress)
 		memcpy(progress, &sctx->stat, sizeof(*progress));
+
+	if (!is_dev_replace)
+		btrfs_update_scrub_stats(dev, &sctx->stat, ret);
 
 	if (!is_dev_replace)
 		btrfs_info(fs_info, "scrub: %s on devid %llu with status: %d",
