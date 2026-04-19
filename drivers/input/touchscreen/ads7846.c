@@ -1072,6 +1072,8 @@ static int ads7846_setup_pendown(struct spi_device *spi,
 			dev_err(&spi->dev, "failed to request pendown GPIO\n");
 			return PTR_ERR(ts->gpio_pendown);
 		}
+		if (!spi->irq)
+			spi->irq = gpiod_to_irq(ts->gpio_pendown);
 		if (pdata->gpio_pendown_debounce)
 			gpiod_set_debounce(ts->gpio_pendown,
 					   pdata->gpio_pendown_debounce);
@@ -1362,11 +1364,6 @@ static int ads7846_probe(struct spi_device *spi)
 	unsigned long irq_flags;
 	int err;
 
-	if (!spi->irq) {
-		dev_dbg(dev, "no IRQ?\n");
-		return -EINVAL;
-	}
-
 	/* don't exceed max specified sample rate */
 	if (spi->max_speed_hz > (125000 * SAMPLE_BITS)) {
 		dev_err(dev, "f(sample) %d KHz?\n",
@@ -1442,6 +1439,11 @@ static int ads7846_probe(struct spi_device *spi)
 	err = ads7846_setup_pendown(spi, ts, pdata);
 	if (err)
 		return err;
+
+	if (!spi->irq) {
+		dev_dbg(dev, "no IRQ?\n");
+		return -EINVAL;
+	}
 
 	if (pdata->penirq_recheck_delay_usecs)
 		ts->penirq_recheck_delay_usecs =

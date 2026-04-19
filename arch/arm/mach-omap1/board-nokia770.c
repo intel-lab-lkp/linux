@@ -285,9 +285,6 @@ static void __init nokia770_cbus_init(void)
 static struct gpiod_lookup_table nokia770_irq_gpio_table = {
 	.dev_id = NULL,
 	.table = {
-		/* GPIO used by SPI device 1 */
-		GPIO_LOOKUP("gpio-0-15", 15, "ads7846_irq",
-			    GPIO_ACTIVE_HIGH),
 		/* GPIO used for retu IRQ */
 		GPIO_LOOKUP("gpio-48-63", 14, "retu_irq",
 			    GPIO_ACTIVE_HIGH),
@@ -307,8 +304,6 @@ static struct gpiod_lookup_table nokia770_irq_gpio_table = {
 
 static void __init omap_nokia770_init(void)
 {
-	struct gpio_desc *d;
-
 	/* On Nokia 770, the SleepX signal is masked with an
 	 * MPUIO line by default.  It has to be unmasked for it
 	 * to become functional */
@@ -322,12 +317,6 @@ static void __init omap_nokia770_init(void)
 	platform_add_devices(nokia770_devices, ARRAY_SIZE(nokia770_devices));
 
 	gpiod_add_lookup_table(&nokia770_irq_gpio_table);
-	d = gpiod_get(NULL, "ads7846_irq", GPIOD_IN);
-	if (IS_ERR(d))
-		pr_err("Unable to get ADS7846 IRQ GPIO descriptor\n");
-	else
-		nokia770_spi_board_info[1].irq = gpiod_to_irq(d);
-
 	spi_register_board_info(nokia770_spi_board_info,
 				ARRAY_SIZE(nokia770_spi_board_info));
 	omap_serial_init();
