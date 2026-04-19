@@ -27,6 +27,7 @@ Power Management
     swsusp
     video
     tricks
+    wakeup-count
 
     userland-swsusp
 
