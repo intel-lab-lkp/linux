@@ -196,10 +196,7 @@ static char *bcm_proc_getifname(struct net *net, char *result, int ifindex)
 
 	rcu_read_lock();
 	dev = dev_get_by_index_rcu(net, ifindex);
-	if (dev)
-		strcpy(result, dev->name);
-	else
-		strcpy(result, "???");
+	strscpy(result, dev ? dev->name : "???", IFNAMSIZ);
 	rcu_read_unlock();
 
 	return result;
