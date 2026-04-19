@@ -879,6 +879,8 @@ static int __ip6_tnl_rcv(struct ip6_tnl *tunnel, struct sk_buff *skb,
 	if (tun_dst)
 		skb_dst_set(skb, (struct dst_entry *)tun_dst);
 
+	iptunnel_rebuild_transport_header(skb);
+
 	gro_cells_receive(&tunnel->gro_cells, skb);
 	return 0;
 
