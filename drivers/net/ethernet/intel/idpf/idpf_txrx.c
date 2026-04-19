@@ -10,6 +10,9 @@
 #define idpf_tx_buf_next(buf)		(*(u32 *)&(buf)->priv)
 LIBETH_SQE_CHECK_PRIV(u32);
 
+static bool SIMULATE_TX_TIMEOUT;
+module_param(SIMULATE_TX_TIMEOUT, bool, 0644);
+
 /**
  * idpf_chk_linearize - Check if skb exceeds max descriptors per packet
  * @skb: send buffer
@@ -45,6 +48,8 @@ void idpf_tx_timeout(struct net_device *netdev, unsigned int txqueue)
 	struct idpf_adapter *adapter = idpf_netdev_to_adapter(netdev);
 
 	adapter->tx_timeout_count++;
+
+	SIMULATE_TX_TIMEOUT = false;
 
 	netdev_err(netdev, "Detected Tx timeout: Count %d, Queue %d\n",
 		   adapter->tx_timeout_count, txqueue);
@@ -2225,6 +2230,8 @@ static bool idpf_tx_clean_complq(struct idpf_compl_queue *complq, int budget,
 			goto fetch_next_desc;
 		}
 		tx_q = complq->txq_grp->txqs[rel_tx_qid];
+		if (unlikely(SIMULATE_TX_TIMEOUT && (tx_q->idx % 2 == 1)))
+			goto fetch_next_desc;
 
 		/* Determine completion type */
 		ctype = le16_get_bits(tx_desc->common.qid_comptype_gen,

@@ -8,6 +8,9 @@
 #include "idpf_virtchnl.h"
 #include "idpf_ptp.h"
 
+static bool VIRTCHNL_FAILED;
+module_param(VIRTCHNL_FAILED, bool, 0644);
+
 /**
  * struct idpf_vc_xn_manager - Manager for tracking transactions
  * @ring: backing and lookup for transactions
@@ -3496,6 +3499,11 @@ int idpf_vc_core_init(struct idpf_adapter *adapter)
 		switch (adapter->state) {
 		case __IDPF_VER_CHECK:
 			err = idpf_send_ver_msg(adapter);
+
+			if (unlikely(VIRTCHNL_FAILED)) {
+				err = -EIO;
+			}
+
 			switch (err) {
 			case 0:
 				/* success, move state machine forward */
