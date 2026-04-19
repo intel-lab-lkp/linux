@@ -198,7 +198,7 @@ static void gdrom_spicommand(void *spi_string, int buflen)
 		gdrom_getsense(NULL);
 		return;
 	}
-	outsw(GDROM_DATA_REG, cmd, 6);
+	writesw((void __iomem *)GDROM_DATA_REG, cmd, 6);
 }
 
 
@@ -282,7 +282,7 @@ static int gdrom_readtoc_cmd(struct gdromtoc *toc, int session)
 		err = -EINVAL;
 		goto cleanup_readtoc;
 	}
-	insw(GDROM_DATA_REG, toc, tocsize/2);
+	readsw((void __iomem *)GDROM_DATA_REG, toc, tocsize / 2);
 	if (gd.status & 0x01)
 		err = -EINVAL;
 
@@ -433,7 +433,7 @@ static int gdrom_getsense(short *bufstring)
 		GDROM_DEFAULT_TIMEOUT);
 	if (gd.pending)
 		goto cleanup_sense;
-	insw(GDROM_DATA_REG, &sense, sense_command->buflen/2);
+	readsw((void __iomem *)GDROM_DATA_REG, &sense, sense_command->buflen / 2);
 	if (sense[1] & 40) {
 		pr_info("Drive not ready - command aborted\n");
 		goto cleanup_sense;
@@ -612,7 +612,7 @@ static blk_status_t gdrom_readdisk_dma(struct request *req)
 		cpu_relax();
 	gd.pending = 1;
 	gd.transfer = 1;
-	outsw(GDROM_DATA_REG, &read_command->cmd, 6);
+	writesw((void __iomem *)GDROM_DATA_REG, read_command->cmd, 6);
 	timeout = jiffies + HZ / 2;
 	/* Wait for any pending DMA to finish */
 	while (__raw_readb(GDROM_DMA_STATUS_REG) &&
