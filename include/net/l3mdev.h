@@ -180,14 +180,17 @@ struct sk_buff *l3mdev_l3_rcv(struct sk_buff *skb, u16 proto)
 {
 	struct net_device *master = NULL;
 
-	if (netif_is_l3_slave(skb->dev))
+	if (netif_is_l3_slave(skb->dev)) {
 		master = netdev_master_upper_dev_get_rcu(skb->dev);
-	else if (netif_is_l3_master(skb->dev) ||
-		 netif_has_l3_rx_handler(skb->dev))
+		if (master && netif_is_l3_master(master) &&
+		    master->l3mdev_ops->l3mdev_l3_rcv)
+			skb = master->l3mdev_ops->l3mdev_l3_rcv(master, skb, proto);
+	} else if (netif_is_l3_master(skb->dev) ||
+		   netif_has_l3_rx_handler(skb->dev)) {
 		master = skb->dev;
-
-	if (master && master->l3mdev_ops->l3mdev_l3_rcv)
-		skb = master->l3mdev_ops->l3mdev_l3_rcv(master, skb, proto);
+		if (master->l3mdev_ops->l3mdev_l3_rcv)
+			skb = master->l3mdev_ops->l3mdev_l3_rcv(master, skb, proto);
+	}
 
 	return skb;
 }
@@ -215,7 +218,8 @@ struct sk_buff *l3mdev_l3_out(struct sock *sk, struct sk_buff *skb, u16 proto)
 		struct net_device *master;
 
 		master = netdev_master_upper_dev_get_rcu(dev);
-		if (master && master->l3mdev_ops->l3mdev_l3_out)
+		if (master && netif_is_l3_master(master) &&
+		    master->l3mdev_ops->l3mdev_l3_out)
 			skb = master->l3mdev_ops->l3mdev_l3_out(master, sk,
 								skb, proto);
 	}
