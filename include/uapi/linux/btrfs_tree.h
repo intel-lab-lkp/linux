@@ -82,6 +82,9 @@
 /* device stats in the device tree */
 #define BTRFS_DEV_STATS_OBJECTID 0ULL
 
+/* per-device scrub lifetime stats in the device tree */
+#define BTRFS_SCRUB_STATS_OBJECTID 1ULL
+
 /* for storing balance parameters in the root tree */
 #define BTRFS_BALANCE_OBJECTID -4ULL
 
@@ -1137,6 +1140,37 @@ struct btrfs_dev_stats_item {
 	 * the existing values unchanged
 	 */
 	__le64 values[BTRFS_DEV_STAT_VALUES_MAX];
+} __attribute__ ((__packed__));
+
+/*
+ * Scrub lifetime error counters, stored per device in the device tree.
+ * Key: (BTRFS_SCRUB_STATS_OBJECTID, BTRFS_PERSISTENT_ITEM_KEY, devid)
+ *
+ * Index values are defined by enum btrfs_scrub_stat_index in btrfs_tree.h
+ * (kernel-internal, not exposed via ioctl).
+ */
+#define BTRFS_SCRUB_STAT_DATA_EXTENTS_SCRUBBED		0
+#define BTRFS_SCRUB_STAT_TREE_EXTENTS_SCRUBBED		1
+#define BTRFS_SCRUB_STAT_DATA_BYTES_SCRUBBED		2
+#define BTRFS_SCRUB_STAT_TREE_BYTES_SCRUBBED		3
+#define BTRFS_SCRUB_STAT_READ_ERRORS			4
+#define BTRFS_SCRUB_STAT_CSUM_ERRORS			5
+#define BTRFS_SCRUB_STAT_VERIFY_ERRORS			6
+#define BTRFS_SCRUB_STAT_NO_CSUM			7
+#define BTRFS_SCRUB_STAT_CSUM_DISCARDS			8
+#define BTRFS_SCRUB_STAT_SUPER_ERRORS			9
+#define BTRFS_SCRUB_STAT_MALLOC_ERRORS			10
+#define BTRFS_SCRUB_STAT_UNCORRECTABLE_ERRORS		11
+#define BTRFS_SCRUB_STAT_CORRECTED_ERRORS		12
+#define BTRFS_SCRUB_STAT_UNVERIFIED_ERRORS		13
+#define BTRFS_SCRUB_STAT_VALUES_MAX			14
+
+struct btrfs_scrub_stats_item {
+	/*
+	 * Grow at the end for future enhancements; keep existing values
+	 * unchanged.  Index values defined by BTRFS_SCRUB_STAT_* above.
+	 */
+	__le64 values[BTRFS_SCRUB_STAT_VALUES_MAX];
 } __attribute__ ((__packed__));
 
 #define BTRFS_DEV_REPLACE_ITEM_CONT_READING_FROM_SRCDEV_MODE_ALWAYS	0
