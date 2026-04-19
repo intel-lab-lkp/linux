@@ -15,9 +15,13 @@ properties:
     oneOf:
       - const: allwinner,sun5i-a13-hstimer
       - const: allwinner,sun7i-a20-hstimer
+      - const: allwinner,sun50i-h616-hstimer
       - items:
           - const: allwinner,sun6i-a31-hstimer
           - const: allwinner,sun7i-a20-hstimer
+      - items:
+          - const: allwinner,sun8i-t113s-hstimer
+          - const: allwinner,sun50i-h616-hstimer
 
   reg:
     maxItems: 1
@@ -45,7 +49,9 @@ required:
 if:
   properties:
     compatible:
-      const: allwinner,sun5i-a13-hstimer
+      enum:
+        - allwinner,sun5i-a13-hstimer
+        - allwinner,sun50i-h616-hstimer
 
 then:
   properties:
