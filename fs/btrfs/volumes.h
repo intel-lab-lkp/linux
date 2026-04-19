@@ -201,6 +201,29 @@ struct btrfs_device {
 	atomic_t dev_stat_values[BTRFS_DEV_STAT_VALUES_MAX];
 
 	/*
+	 * Scrub lifetime counters. Persisted via BTRFS_SCRUB_STATS_OBJECTID
+	 * tree items in the device tree; loaded at mount by
+	 * btrfs_init_scrub_stats(), flushed at commit by btrfs_run_scrub_stats().
+	 * Index values defined by BTRFS_SCRUB_STAT_* in btrfs_tree.h.
+	 */
+	int scrub_stats_valid;
+	atomic_t scrub_stats_ccnt;
+	atomic64_t scrub_stat_values[BTRFS_SCRUB_STAT_VALUES_MAX];
+
+	/*
+	 * Per-session scrub counters. Reset to zero when a new scrub starts on
+	 * this device. Never persisted to disk.
+	 */
+	atomic64_t scrub_session_values[BTRFS_SCRUB_STAT_VALUES_MAX];
+	/* Resume offset at end of session */
+	u64 scrub_session_last_physical;
+	/* Unix time (seconds) when the session started / ended (0 if idle) */
+	u64 scrub_session_t_start;
+	u64 scrub_session_t_end;
+	/* BTRFS_SCRUB_STATUS_* */
+	atomic_t scrub_session_status;
+
+	/*
 	 * Device's major-minor number. Must be set even if the device is not
 	 * opened (bdev == NULL), unless the device is missing.
 	 */
@@ -211,6 +234,10 @@ struct btrfs_device {
 	struct completion kobj_unregister;
 	/* For sysfs/FSID/devinfo/devid/ */
 	struct kobject devid_kobj;
+	/* For sysfs/FSID/devinfo/devid/scrub/ hierarchy */
+	struct kobject *scrub_kobj;
+	struct kobject *scrub_lifetime_kobj;
+	struct kobject *scrub_session_kobj;
 
 	/* Bandwidth limit for scrub, in bytes */
 	u64 scrub_speed_max;
@@ -863,6 +890,58 @@ static inline void btrfs_dev_stat_set(struct btrfs_device *dev,
 	smp_mb__before_atomic();
 	atomic_inc(&dev->dev_stats_ccnt);
 }
+
+/*
+ * Scrub session status values stored in device->scrub_session_status.
+ */
+#define BTRFS_SCRUB_STATUS_IDLE		0
+#define BTRFS_SCRUB_STATUS_RUNNING	1
+#define BTRFS_SCRUB_STATUS_FINISHED	2
+#define BTRFS_SCRUB_STATUS_CANCELED	3
+
+static inline u64 btrfs_scrub_stat_read(const struct btrfs_device *dev,
+					int index)
+{
+	return (u64)atomic64_read(&dev->scrub_stat_values[index]);
+}
+
+static inline void btrfs_scrub_stat_add(struct btrfs_device *dev,
+					int index, u64 val)
+{
+	atomic64_add((long long)val, &dev->scrub_stat_values[index]);
+	/*
+	 * Order the stat update before the dirty-counter increment so that
+	 * btrfs_run_scrub_stats() observes a consistent snapshot.  Pairs with
+	 * smp_rmb() in btrfs_run_scrub_stats().
+	 */
+	smp_mb__before_atomic();
+	atomic_inc(&dev->scrub_stats_ccnt);
+}
+
+static inline void btrfs_scrub_stat_set(struct btrfs_device *dev,
+					int index, u64 val)
+{
+	atomic64_set(&dev->scrub_stat_values[index], (long long)val);
+	/*
+	 * Order the stat update before the dirty-counter increment so that
+	 * btrfs_run_scrub_stats() observes a consistent snapshot.  Pairs with
+	 * smp_rmb() in btrfs_run_scrub_stats().
+	 */
+	smp_mb__before_atomic();
+	atomic_inc(&dev->scrub_stats_ccnt);
+}
+
+static inline u64 btrfs_scrub_session_read(const struct btrfs_device *dev,
+					   int index)
+{
+	return (u64)atomic64_read(&dev->scrub_session_values[index]);
+}
+
+int btrfs_init_scrub_stats(struct btrfs_fs_info *fs_info);
+int btrfs_run_scrub_stats(struct btrfs_trans_handle *trans);
+void btrfs_update_scrub_stats(struct btrfs_device *dev,
+			      const struct btrfs_scrub_progress *progress,
+			      int scrub_ret);
 
 static inline const char *btrfs_dev_name(const struct btrfs_device *device)
 {

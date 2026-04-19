@@ -714,6 +714,11 @@ struct btrfs_fs_info {
 	struct kobject *qgroups_kobj;
 	struct kobject *discard_kobj;
 
+	/* For /sys/fs/btrfs/<UUID>/scrub/{lifetime,session}/ */
+	struct kobject *scrub_kobj;
+	struct kobject *scrub_lifetime_kobj;
+	struct kobject *scrub_session_kobj;
+
 	/* Track the number of blocks (sectors) read by the filesystem. */
 	struct percpu_counter stats_read_blocks;
 
