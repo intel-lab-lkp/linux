@@ -2293,6 +2293,9 @@ static long fuse_dev_ioctl_clone(struct file *file, __u32 __user *argp)
 		return -ENOMEM;
 
 	new_fud = fuse_file_to_fud(file);
+	if (fuse_dev_chan_get(new_fud))
+		return -EINVAL;
+
 	if (!fuse_dev_install_with_pq(new_fud, fud->chan, pq))
 		return -EINVAL;
 
