@@ -11,6 +11,7 @@
 #include <linux/bug.h>
 #include <linux/list.h>
 #include <linux/string_choices.h>
+#include <linux/timekeeping.h>
 #include "messages.h"
 #include "ctree.h"
 #include "discard.h"
@@ -1707,6 +1708,14 @@ static void btrfs_sysfs_remove_fs_devices(struct btrfs_fs_devices *fs_devices)
 	}
 }
 
+/* Forward declarations for scrub sysfs attribute arrays defined later. */
+static const struct attribute *scrub_attrs[];
+static const struct attribute *scrub_lifetime_attrs[];
+static const struct attribute *scrub_session_attrs[];
+static const struct attribute *devid_scrub_attrs[];
+static const struct attribute *devid_scrub_lifetime_attrs[];
+static const struct attribute *devid_scrub_session_attrs[];
+
 void btrfs_sysfs_remove_mounted(struct btrfs_fs_info *fs_info)
 {
 	struct kobject *fsid_kobj = &fs_info->fs_devices->fsid_kobj;
@@ -1722,6 +1731,21 @@ void btrfs_sysfs_remove_mounted(struct btrfs_fs_info *fs_info)
 		sysfs_remove_files(fs_info->discard_kobj, discard_attrs);
 		kobject_del(fs_info->discard_kobj);
 		kobject_put(fs_info->discard_kobj);
+	}
+	if (fs_info->scrub_session_kobj) {
+		sysfs_remove_files(fs_info->scrub_session_kobj, scrub_session_attrs);
+		kobject_del(fs_info->scrub_session_kobj);
+		kobject_put(fs_info->scrub_session_kobj);
+	}
+	if (fs_info->scrub_lifetime_kobj) {
+		sysfs_remove_files(fs_info->scrub_lifetime_kobj, scrub_lifetime_attrs);
+		kobject_del(fs_info->scrub_lifetime_kobj);
+		kobject_put(fs_info->scrub_lifetime_kobj);
+	}
+	if (fs_info->scrub_kobj) {
+		sysfs_remove_files(fs_info->scrub_kobj, scrub_attrs);
+		kobject_del(fs_info->scrub_kobj);
+		kobject_put(fs_info->scrub_kobj);
 	}
 #ifdef CONFIG_BTRFS_DEBUG
 	if (fs_info->debug_kobj) {
@@ -1970,6 +1994,28 @@ void btrfs_sysfs_remove_device(struct btrfs_device *device)
 	if (device->bdev)
 		sysfs_remove_link(devices_kobj, bdev_kobj(device->bdev)->name);
 
+	/* Tear down devinfo/<devid>/scrub/ hierarchy (children before parent) */
+	if (device->scrub_session_kobj) {
+		sysfs_remove_files(device->scrub_session_kobj,
+				   devid_scrub_session_attrs);
+		kobject_del(device->scrub_session_kobj);
+		kobject_put(device->scrub_session_kobj);
+		device->scrub_session_kobj = NULL;
+	}
+	if (device->scrub_lifetime_kobj) {
+		sysfs_remove_files(device->scrub_lifetime_kobj,
+				   devid_scrub_lifetime_attrs);
+		kobject_del(device->scrub_lifetime_kobj);
+		kobject_put(device->scrub_lifetime_kobj);
+		device->scrub_lifetime_kobj = NULL;
+	}
+	if (device->scrub_kobj) {
+		sysfs_remove_files(device->scrub_kobj, devid_scrub_attrs);
+		kobject_del(device->scrub_kobj);
+		kobject_put(device->scrub_kobj);
+		device->scrub_kobj = NULL;
+	}
+
 	if (device->devid_kobj.state_initialized) {
 		kobject_del(&device->devid_kobj);
 		kobject_put(&device->devid_kobj);
@@ -2099,6 +2145,482 @@ static ssize_t btrfs_devinfo_error_stats_show(struct kobject *kobj,
 }
 BTRFS_ATTR(devid, error_stats, btrfs_devinfo_error_stats_show);
 
+/* ---------- scrub/lifetime/ and scrub/session/ sysfs attributes ---------- */
+
+/*
+ * Return the btrfs_device owning a kobject that lives two levels below
+ * devid_kobj, i.e. kobj->parent is scrub_kobj, kobj->parent->parent is
+ * devid_kobj.
+ */
+static struct btrfs_device *kobj_to_scrub_device(struct kobject *kobj)
+{
+	return container_of(kobj->parent->parent, struct btrfs_device, devid_kobj);
+}
+
+/*
+ * Return the btrfs_fs_info owning a kobject that lives two levels below
+ * fsid_kobj, i.e. kobj->parent is fs_info->scrub_kobj,
+ * kobj->parent->parent is &fs_devs->fsid_kobj.
+ */
+static struct btrfs_fs_info *kobj_to_scrub_fs_info(struct kobject *kobj)
+{
+	struct btrfs_fs_devices *fs_devs =
+		container_of(kobj->parent->parent, struct btrfs_fs_devices, fsid_kobj);
+	return fs_devs->fs_info;
+}
+
+/*
+ * Per-device scrub/lifetime/ attributes.
+ * Each show function reads an atomic64 from btrfs_device::scrub_stat_values[].
+ */
+#define DEV_SCRUB_LIFETIME_ATTR(_name, _idx)					\
+static ssize_t btrfs_devid_scrub_lifetime_##_name##_show(			\
+		struct kobject *kobj, struct kobj_attribute *a, char *buf)	\
+{										\
+	struct btrfs_device *dev = kobj_to_scrub_device(kobj);			\
+	return sysfs_emit(buf, "%llu\n", btrfs_scrub_stat_read(dev, _idx));	\
+}										\
+BTRFS_ATTR(devid_scrub_lifetime, _name,					\
+	   btrfs_devid_scrub_lifetime_##_name##_show)
+
+DEV_SCRUB_LIFETIME_ATTR(data_extents_scrubbed, BTRFS_SCRUB_STAT_DATA_EXTENTS_SCRUBBED);
+DEV_SCRUB_LIFETIME_ATTR(tree_extents_scrubbed, BTRFS_SCRUB_STAT_TREE_EXTENTS_SCRUBBED);
+DEV_SCRUB_LIFETIME_ATTR(data_bytes_scrubbed,   BTRFS_SCRUB_STAT_DATA_BYTES_SCRUBBED);
+DEV_SCRUB_LIFETIME_ATTR(tree_bytes_scrubbed,   BTRFS_SCRUB_STAT_TREE_BYTES_SCRUBBED);
+DEV_SCRUB_LIFETIME_ATTR(read_errors,           BTRFS_SCRUB_STAT_READ_ERRORS);
+DEV_SCRUB_LIFETIME_ATTR(csum_errors,           BTRFS_SCRUB_STAT_CSUM_ERRORS);
+DEV_SCRUB_LIFETIME_ATTR(verify_errors,         BTRFS_SCRUB_STAT_VERIFY_ERRORS);
+DEV_SCRUB_LIFETIME_ATTR(no_csum,               BTRFS_SCRUB_STAT_NO_CSUM);
+DEV_SCRUB_LIFETIME_ATTR(csum_discards,         BTRFS_SCRUB_STAT_CSUM_DISCARDS);
+DEV_SCRUB_LIFETIME_ATTR(super_errors,          BTRFS_SCRUB_STAT_SUPER_ERRORS);
+DEV_SCRUB_LIFETIME_ATTR(malloc_errors,         BTRFS_SCRUB_STAT_MALLOC_ERRORS);
+DEV_SCRUB_LIFETIME_ATTR(uncorrectable_errors,  BTRFS_SCRUB_STAT_UNCORRECTABLE_ERRORS);
+DEV_SCRUB_LIFETIME_ATTR(corrected_errors,      BTRFS_SCRUB_STAT_CORRECTED_ERRORS);
+DEV_SCRUB_LIFETIME_ATTR(unverified_errors,     BTRFS_SCRUB_STAT_UNVERIFIED_ERRORS);
+
+static const struct attribute *devid_scrub_lifetime_attrs[] = {
+	BTRFS_ATTR_PTR(devid_scrub_lifetime, data_extents_scrubbed),
+	BTRFS_ATTR_PTR(devid_scrub_lifetime, tree_extents_scrubbed),
+	BTRFS_ATTR_PTR(devid_scrub_lifetime, data_bytes_scrubbed),
+	BTRFS_ATTR_PTR(devid_scrub_lifetime, tree_bytes_scrubbed),
+	BTRFS_ATTR_PTR(devid_scrub_lifetime, read_errors),
+	BTRFS_ATTR_PTR(devid_scrub_lifetime, csum_errors),
+	BTRFS_ATTR_PTR(devid_scrub_lifetime, verify_errors),
+	BTRFS_ATTR_PTR(devid_scrub_lifetime, no_csum),
+	BTRFS_ATTR_PTR(devid_scrub_lifetime, csum_discards),
+	BTRFS_ATTR_PTR(devid_scrub_lifetime, super_errors),
+	BTRFS_ATTR_PTR(devid_scrub_lifetime, malloc_errors),
+	BTRFS_ATTR_PTR(devid_scrub_lifetime, uncorrectable_errors),
+	BTRFS_ATTR_PTR(devid_scrub_lifetime, corrected_errors),
+	BTRFS_ATTR_PTR(devid_scrub_lifetime, unverified_errors),
+	NULL
+};
+
+/*
+ * Per-device scrub/session/ attributes.
+ */
+#define DEV_SCRUB_SESSION_ATTR(_name, _idx)					\
+static ssize_t btrfs_devid_scrub_session_##_name##_show(			\
+		struct kobject *kobj, struct kobj_attribute *a, char *buf)	\
+{										\
+	struct btrfs_device *dev = kobj_to_scrub_device(kobj);			\
+	return sysfs_emit(buf, "%llu\n", btrfs_scrub_session_read(dev, _idx));	\
+}										\
+BTRFS_ATTR(devid_scrub_session, _name,					\
+	   btrfs_devid_scrub_session_##_name##_show)
+
+DEV_SCRUB_SESSION_ATTR(data_extents_scrubbed, BTRFS_SCRUB_STAT_DATA_EXTENTS_SCRUBBED);
+DEV_SCRUB_SESSION_ATTR(tree_extents_scrubbed, BTRFS_SCRUB_STAT_TREE_EXTENTS_SCRUBBED);
+DEV_SCRUB_SESSION_ATTR(data_bytes_scrubbed,   BTRFS_SCRUB_STAT_DATA_BYTES_SCRUBBED);
+DEV_SCRUB_SESSION_ATTR(tree_bytes_scrubbed,   BTRFS_SCRUB_STAT_TREE_BYTES_SCRUBBED);
+DEV_SCRUB_SESSION_ATTR(read_errors,           BTRFS_SCRUB_STAT_READ_ERRORS);
+DEV_SCRUB_SESSION_ATTR(csum_errors,           BTRFS_SCRUB_STAT_CSUM_ERRORS);
+DEV_SCRUB_SESSION_ATTR(verify_errors,         BTRFS_SCRUB_STAT_VERIFY_ERRORS);
+DEV_SCRUB_SESSION_ATTR(no_csum,               BTRFS_SCRUB_STAT_NO_CSUM);
+DEV_SCRUB_SESSION_ATTR(csum_discards,         BTRFS_SCRUB_STAT_CSUM_DISCARDS);
+DEV_SCRUB_SESSION_ATTR(super_errors,          BTRFS_SCRUB_STAT_SUPER_ERRORS);
+DEV_SCRUB_SESSION_ATTR(malloc_errors,         BTRFS_SCRUB_STAT_MALLOC_ERRORS);
+DEV_SCRUB_SESSION_ATTR(uncorrectable_errors,  BTRFS_SCRUB_STAT_UNCORRECTABLE_ERRORS);
+DEV_SCRUB_SESSION_ATTR(corrected_errors,      BTRFS_SCRUB_STAT_CORRECTED_ERRORS);
+DEV_SCRUB_SESSION_ATTR(unverified_errors,     BTRFS_SCRUB_STAT_UNVERIFIED_ERRORS);
+
+static ssize_t btrfs_devid_scrub_session_last_physical_show(
+		struct kobject *kobj, struct kobj_attribute *a, char *buf)
+{
+	struct btrfs_device *dev = kobj_to_scrub_device(kobj);
+
+	return sysfs_emit(buf, "%llu\n", READ_ONCE(dev->scrub_session_last_physical));
+}
+BTRFS_ATTR(devid_scrub_session, last_physical,
+	   btrfs_devid_scrub_session_last_physical_show);
+
+static ssize_t btrfs_devid_scrub_session_t_start_show(
+		struct kobject *kobj, struct kobj_attribute *a, char *buf)
+{
+	struct btrfs_device *dev = kobj_to_scrub_device(kobj);
+
+	return sysfs_emit(buf, "%llu\n", READ_ONCE(dev->scrub_session_t_start));
+}
+BTRFS_ATTR(devid_scrub_session, t_start, btrfs_devid_scrub_session_t_start_show);
+
+static ssize_t btrfs_devid_scrub_session_t_end_show(
+		struct kobject *kobj, struct kobj_attribute *a, char *buf)
+{
+	struct btrfs_device *dev = kobj_to_scrub_device(kobj);
+
+	return sysfs_emit(buf, "%llu\n", READ_ONCE(dev->scrub_session_t_end));
+}
+BTRFS_ATTR(devid_scrub_session, t_end, btrfs_devid_scrub_session_t_end_show);
+
+static ssize_t btrfs_devid_scrub_session_duration_seconds_show(
+		struct kobject *kobj, struct kobj_attribute *a, char *buf)
+{
+	struct btrfs_device *dev = kobj_to_scrub_device(kobj);
+	u64 t_start = READ_ONCE(dev->scrub_session_t_start);
+	u64 t_end   = READ_ONCE(dev->scrub_session_t_end);
+	u64 dur;
+
+	if (t_start == 0)
+		dur = 0;
+	else if (t_end != 0)
+		dur = t_end - t_start;
+	else
+		dur = (u64)ktime_get_real_seconds() - t_start;
+	return sysfs_emit(buf, "%llu\n", dur);
+}
+BTRFS_ATTR(devid_scrub_session, duration_seconds,
+	   btrfs_devid_scrub_session_duration_seconds_show);
+
+static const char * const btrfs_scrub_status_strings[] = {
+	[BTRFS_SCRUB_STATUS_IDLE]     = "idle",
+	[BTRFS_SCRUB_STATUS_RUNNING]  = "running",
+	[BTRFS_SCRUB_STATUS_FINISHED] = "finished",
+	[BTRFS_SCRUB_STATUS_CANCELED] = "canceled",
+};
+
+static ssize_t btrfs_devid_scrub_session_status_show(
+		struct kobject *kobj, struct kobj_attribute *a, char *buf)
+{
+	struct btrfs_device *dev = kobj_to_scrub_device(kobj);
+	int status = atomic_read(&dev->scrub_session_status);
+
+	if (status < 0 || status >= ARRAY_SIZE(btrfs_scrub_status_strings))
+		return sysfs_emit(buf, "unknown\n");
+	return sysfs_emit(buf, "%s\n", btrfs_scrub_status_strings[status]);
+}
+BTRFS_ATTR(devid_scrub_session, status, btrfs_devid_scrub_session_status_show);
+
+static const struct attribute *devid_scrub_session_attrs[] = {
+	BTRFS_ATTR_PTR(devid_scrub_session, data_extents_scrubbed),
+	BTRFS_ATTR_PTR(devid_scrub_session, tree_extents_scrubbed),
+	BTRFS_ATTR_PTR(devid_scrub_session, data_bytes_scrubbed),
+	BTRFS_ATTR_PTR(devid_scrub_session, tree_bytes_scrubbed),
+	BTRFS_ATTR_PTR(devid_scrub_session, read_errors),
+	BTRFS_ATTR_PTR(devid_scrub_session, csum_errors),
+	BTRFS_ATTR_PTR(devid_scrub_session, verify_errors),
+	BTRFS_ATTR_PTR(devid_scrub_session, no_csum),
+	BTRFS_ATTR_PTR(devid_scrub_session, csum_discards),
+	BTRFS_ATTR_PTR(devid_scrub_session, super_errors),
+	BTRFS_ATTR_PTR(devid_scrub_session, malloc_errors),
+	BTRFS_ATTR_PTR(devid_scrub_session, uncorrectable_errors),
+	BTRFS_ATTR_PTR(devid_scrub_session, corrected_errors),
+	BTRFS_ATTR_PTR(devid_scrub_session, unverified_errors),
+	BTRFS_ATTR_PTR(devid_scrub_session, last_physical),
+	BTRFS_ATTR_PTR(devid_scrub_session, t_start),
+	BTRFS_ATTR_PTR(devid_scrub_session, t_end),
+	BTRFS_ATTR_PTR(devid_scrub_session, duration_seconds),
+	BTRFS_ATTR_PTR(devid_scrub_session, status),
+	NULL
+};
+
+/*
+ * Per-device scrub/reset (write-only): "echo 1 > reset" zeroes lifetime
+ * counters and marks them dirty for the next transaction commit.
+ */
+static ssize_t btrfs_devid_scrub_reset_store(struct kobject *kobj,
+		struct kobj_attribute *a, const char *buf, size_t len)
+{
+	struct btrfs_device *dev;
+	unsigned long val;
+	int i;
+
+	if (kstrtoul(buf, 10, &val) || val != 1)
+		return -EINVAL;
+
+	/* kobj here is the scrub_kobj, one level below devid_kobj */
+	dev = container_of(kobj->parent, struct btrfs_device, devid_kobj);
+
+	for (i = 0; i < BTRFS_SCRUB_STAT_VALUES_MAX; i++)
+		btrfs_scrub_stat_set(dev, i, 0);
+
+	btrfs_info(dev->fs_info,
+		   "scrub: lifetime stats reset for devid %llu by %s (%d)",
+		   dev->devid, current->comm, task_pid_nr(current));
+	return len;
+}
+BTRFS_ATTR_W(devid_scrub, reset, btrfs_devid_scrub_reset_store);
+
+static const struct attribute *devid_scrub_attrs[] = {
+	BTRFS_ATTR_PTR(devid_scrub, reset),
+	NULL
+};
+
+/* ---------- fs-level scrub/lifetime/ and scrub/session/ attributes ---------- */
+
+/*
+ * Filesystem-level lifetime counters: sum of all device lifetime counters.
+ */
+#define FS_SCRUB_LIFETIME_ATTR(_name, _idx)					\
+static ssize_t btrfs_scrub_lifetime_##_name##_show(				\
+		struct kobject *kobj, struct kobj_attribute *a, char *buf)	\
+{										\
+	struct btrfs_fs_info *fs_info = kobj_to_scrub_fs_info(kobj);		\
+	struct btrfs_fs_devices *fs_devs = fs_info->fs_devices;			\
+	struct btrfs_device *dev;						\
+	u64 total = 0;								\
+										\
+	mutex_lock(&fs_devs->device_list_mutex);				\
+	list_for_each_entry(dev, &fs_devs->devices, dev_list)			\
+		total += btrfs_scrub_stat_read(dev, _idx);			\
+	mutex_unlock(&fs_devs->device_list_mutex);				\
+	return sysfs_emit(buf, "%llu\n", total);				\
+}										\
+BTRFS_ATTR(scrub_lifetime, _name, btrfs_scrub_lifetime_##_name##_show)
+
+FS_SCRUB_LIFETIME_ATTR(data_extents_scrubbed, BTRFS_SCRUB_STAT_DATA_EXTENTS_SCRUBBED);
+FS_SCRUB_LIFETIME_ATTR(tree_extents_scrubbed, BTRFS_SCRUB_STAT_TREE_EXTENTS_SCRUBBED);
+FS_SCRUB_LIFETIME_ATTR(data_bytes_scrubbed,   BTRFS_SCRUB_STAT_DATA_BYTES_SCRUBBED);
+FS_SCRUB_LIFETIME_ATTR(tree_bytes_scrubbed,   BTRFS_SCRUB_STAT_TREE_BYTES_SCRUBBED);
+FS_SCRUB_LIFETIME_ATTR(read_errors,           BTRFS_SCRUB_STAT_READ_ERRORS);
+FS_SCRUB_LIFETIME_ATTR(csum_errors,           BTRFS_SCRUB_STAT_CSUM_ERRORS);
+FS_SCRUB_LIFETIME_ATTR(verify_errors,         BTRFS_SCRUB_STAT_VERIFY_ERRORS);
+FS_SCRUB_LIFETIME_ATTR(no_csum,               BTRFS_SCRUB_STAT_NO_CSUM);
+FS_SCRUB_LIFETIME_ATTR(csum_discards,         BTRFS_SCRUB_STAT_CSUM_DISCARDS);
+FS_SCRUB_LIFETIME_ATTR(super_errors,          BTRFS_SCRUB_STAT_SUPER_ERRORS);
+FS_SCRUB_LIFETIME_ATTR(malloc_errors,         BTRFS_SCRUB_STAT_MALLOC_ERRORS);
+FS_SCRUB_LIFETIME_ATTR(uncorrectable_errors,  BTRFS_SCRUB_STAT_UNCORRECTABLE_ERRORS);
+FS_SCRUB_LIFETIME_ATTR(corrected_errors,      BTRFS_SCRUB_STAT_CORRECTED_ERRORS);
+FS_SCRUB_LIFETIME_ATTR(unverified_errors,     BTRFS_SCRUB_STAT_UNVERIFIED_ERRORS);
+
+static const struct attribute *scrub_lifetime_attrs[] = {
+	BTRFS_ATTR_PTR(scrub_lifetime, data_extents_scrubbed),
+	BTRFS_ATTR_PTR(scrub_lifetime, tree_extents_scrubbed),
+	BTRFS_ATTR_PTR(scrub_lifetime, data_bytes_scrubbed),
+	BTRFS_ATTR_PTR(scrub_lifetime, tree_bytes_scrubbed),
+	BTRFS_ATTR_PTR(scrub_lifetime, read_errors),
+	BTRFS_ATTR_PTR(scrub_lifetime, csum_errors),
+	BTRFS_ATTR_PTR(scrub_lifetime, verify_errors),
+	BTRFS_ATTR_PTR(scrub_lifetime, no_csum),
+	BTRFS_ATTR_PTR(scrub_lifetime, csum_discards),
+	BTRFS_ATTR_PTR(scrub_lifetime, super_errors),
+	BTRFS_ATTR_PTR(scrub_lifetime, malloc_errors),
+	BTRFS_ATTR_PTR(scrub_lifetime, uncorrectable_errors),
+	BTRFS_ATTR_PTR(scrub_lifetime, corrected_errors),
+	BTRFS_ATTR_PTR(scrub_lifetime, unverified_errors),
+	NULL
+};
+
+/*
+ * Filesystem-level session counters: sum of per-device session values.
+ * Timing/status derive from per-device values.
+ */
+#define FS_SCRUB_SESSION_ATTR(_name, _idx)					\
+static ssize_t btrfs_scrub_session_##_name##_show(				\
+		struct kobject *kobj, struct kobj_attribute *a, char *buf)	\
+{										\
+	struct btrfs_fs_info *fs_info = kobj_to_scrub_fs_info(kobj);		\
+	struct btrfs_fs_devices *fs_devs = fs_info->fs_devices;			\
+	struct btrfs_device *dev;						\
+	u64 total = 0;								\
+										\
+	mutex_lock(&fs_devs->device_list_mutex);				\
+	list_for_each_entry(dev, &fs_devs->devices, dev_list)			\
+		total += btrfs_scrub_session_read(dev, _idx);			\
+	mutex_unlock(&fs_devs->device_list_mutex);				\
+	return sysfs_emit(buf, "%llu\n", total);				\
+}										\
+BTRFS_ATTR(scrub_session, _name, btrfs_scrub_session_##_name##_show)
+
+FS_SCRUB_SESSION_ATTR(data_extents_scrubbed, BTRFS_SCRUB_STAT_DATA_EXTENTS_SCRUBBED);
+FS_SCRUB_SESSION_ATTR(tree_extents_scrubbed, BTRFS_SCRUB_STAT_TREE_EXTENTS_SCRUBBED);
+FS_SCRUB_SESSION_ATTR(data_bytes_scrubbed,   BTRFS_SCRUB_STAT_DATA_BYTES_SCRUBBED);
+FS_SCRUB_SESSION_ATTR(tree_bytes_scrubbed,   BTRFS_SCRUB_STAT_TREE_BYTES_SCRUBBED);
+FS_SCRUB_SESSION_ATTR(read_errors,           BTRFS_SCRUB_STAT_READ_ERRORS);
+FS_SCRUB_SESSION_ATTR(csum_errors,           BTRFS_SCRUB_STAT_CSUM_ERRORS);
+FS_SCRUB_SESSION_ATTR(verify_errors,         BTRFS_SCRUB_STAT_VERIFY_ERRORS);
+FS_SCRUB_SESSION_ATTR(no_csum,               BTRFS_SCRUB_STAT_NO_CSUM);
+FS_SCRUB_SESSION_ATTR(csum_discards,         BTRFS_SCRUB_STAT_CSUM_DISCARDS);
+FS_SCRUB_SESSION_ATTR(super_errors,          BTRFS_SCRUB_STAT_SUPER_ERRORS);
+FS_SCRUB_SESSION_ATTR(malloc_errors,         BTRFS_SCRUB_STAT_MALLOC_ERRORS);
+FS_SCRUB_SESSION_ATTR(uncorrectable_errors,  BTRFS_SCRUB_STAT_UNCORRECTABLE_ERRORS);
+FS_SCRUB_SESSION_ATTR(corrected_errors,      BTRFS_SCRUB_STAT_CORRECTED_ERRORS);
+FS_SCRUB_SESSION_ATTR(unverified_errors,     BTRFS_SCRUB_STAT_UNVERIFIED_ERRORS);
+
+static ssize_t btrfs_scrub_session_status_show(
+		struct kobject *kobj, struct kobj_attribute *a, char *buf)
+{
+	struct btrfs_fs_info *fs_info = kobj_to_scrub_fs_info(kobj);
+
+	if (atomic_read(&fs_info->scrubs_running) > 0)
+		return sysfs_emit(buf, "running\n");
+
+	/*
+	 * Not running: check if any device's last session finished or was
+	 * canceled.
+	 */
+	{
+		struct btrfs_fs_devices *fs_devs = fs_info->fs_devices;
+		struct btrfs_device *dev;
+		int seen_finished = 0, seen_canceled = 0;
+
+		mutex_lock(&fs_devs->device_list_mutex);
+		list_for_each_entry(dev, &fs_devs->devices, dev_list) {
+			int st = atomic_read(&dev->scrub_session_status);
+
+			if (st == BTRFS_SCRUB_STATUS_FINISHED)
+				seen_finished = 1;
+			else if (st == BTRFS_SCRUB_STATUS_CANCELED)
+				seen_canceled = 1;
+		}
+		mutex_unlock(&fs_devs->device_list_mutex);
+
+		if (seen_canceled)
+			return sysfs_emit(buf, "canceled\n");
+		if (seen_finished)
+			return sysfs_emit(buf, "finished\n");
+	}
+	return sysfs_emit(buf, "idle\n");
+}
+BTRFS_ATTR(scrub_session, status, btrfs_scrub_session_status_show);
+
+static ssize_t btrfs_scrub_session_t_start_show(
+		struct kobject *kobj, struct kobj_attribute *a, char *buf)
+{
+	struct btrfs_fs_info *fs_info = kobj_to_scrub_fs_info(kobj);
+	struct btrfs_fs_devices *fs_devs = fs_info->fs_devices;
+	struct btrfs_device *dev;
+	u64 t_min = 0;
+
+	mutex_lock(&fs_devs->device_list_mutex);
+	list_for_each_entry(dev, &fs_devs->devices, dev_list) {
+		u64 t = READ_ONCE(dev->scrub_session_t_start);
+
+		if (t && (!t_min || t < t_min))
+			t_min = t;
+	}
+	mutex_unlock(&fs_devs->device_list_mutex);
+	return sysfs_emit(buf, "%llu\n", t_min);
+}
+BTRFS_ATTR(scrub_session, t_start, btrfs_scrub_session_t_start_show);
+
+static ssize_t btrfs_scrub_session_t_end_show(
+		struct kobject *kobj, struct kobj_attribute *a, char *buf)
+{
+	struct btrfs_fs_info *fs_info = kobj_to_scrub_fs_info(kobj);
+	struct btrfs_fs_devices *fs_devs = fs_info->fs_devices;
+	struct btrfs_device *dev;
+	u64 t_max = 0;
+
+	mutex_lock(&fs_devs->device_list_mutex);
+	list_for_each_entry(dev, &fs_devs->devices, dev_list) {
+		u64 t = READ_ONCE(dev->scrub_session_t_end);
+
+		if (t > t_max)
+			t_max = t;
+	}
+	mutex_unlock(&fs_devs->device_list_mutex);
+	return sysfs_emit(buf, "%llu\n", t_max);
+}
+BTRFS_ATTR(scrub_session, t_end, btrfs_scrub_session_t_end_show);
+
+static ssize_t btrfs_scrub_session_duration_seconds_show(
+		struct kobject *kobj, struct kobj_attribute *a, char *buf)
+{
+	struct btrfs_fs_info *fs_info = kobj_to_scrub_fs_info(kobj);
+	struct btrfs_fs_devices *fs_devs = fs_info->fs_devices;
+	struct btrfs_device *dev;
+	u64 t_start = 0, t_end = 0, dur;
+
+	mutex_lock(&fs_devs->device_list_mutex);
+	list_for_each_entry(dev, &fs_devs->devices, dev_list) {
+		u64 ts = READ_ONCE(dev->scrub_session_t_start);
+		u64 te = READ_ONCE(dev->scrub_session_t_end);
+
+		if (ts && (!t_start || ts < t_start))
+			t_start = ts;
+		if (te > t_end)
+			t_end = te;
+	}
+	mutex_unlock(&fs_devs->device_list_mutex);
+
+	if (!t_start)
+		dur = 0;
+	else if (t_end)
+		dur = t_end - t_start;
+	else
+		dur = (u64)ktime_get_real_seconds() - t_start;
+	return sysfs_emit(buf, "%llu\n", dur);
+}
+BTRFS_ATTR(scrub_session, duration_seconds,
+	   btrfs_scrub_session_duration_seconds_show);
+
+static const struct attribute *scrub_session_attrs[] = {
+	BTRFS_ATTR_PTR(scrub_session, data_extents_scrubbed),
+	BTRFS_ATTR_PTR(scrub_session, tree_extents_scrubbed),
+	BTRFS_ATTR_PTR(scrub_session, data_bytes_scrubbed),
+	BTRFS_ATTR_PTR(scrub_session, tree_bytes_scrubbed),
+	BTRFS_ATTR_PTR(scrub_session, read_errors),
+	BTRFS_ATTR_PTR(scrub_session, csum_errors),
+	BTRFS_ATTR_PTR(scrub_session, verify_errors),
+	BTRFS_ATTR_PTR(scrub_session, no_csum),
+	BTRFS_ATTR_PTR(scrub_session, csum_discards),
+	BTRFS_ATTR_PTR(scrub_session, super_errors),
+	BTRFS_ATTR_PTR(scrub_session, malloc_errors),
+	BTRFS_ATTR_PTR(scrub_session, uncorrectable_errors),
+	BTRFS_ATTR_PTR(scrub_session, corrected_errors),
+	BTRFS_ATTR_PTR(scrub_session, unverified_errors),
+	BTRFS_ATTR_PTR(scrub_session, status),
+	BTRFS_ATTR_PTR(scrub_session, t_start),
+	BTRFS_ATTR_PTR(scrub_session, t_end),
+	BTRFS_ATTR_PTR(scrub_session, duration_seconds),
+	NULL
+};
+
+/*
+ * Filesystem-level scrub/reset (write-only): zeros all devices' lifetime
+ * counters and marks them dirty.
+ */
+static ssize_t btrfs_scrub_reset_store(struct kobject *kobj,
+		struct kobj_attribute *a, const char *buf, size_t len)
+{
+	/* kobj is fs_info->scrub_kobj, parent is fsid_kobj */
+	struct btrfs_fs_devices *fs_devs =
+		container_of(kobj->parent, struct btrfs_fs_devices, fsid_kobj);
+	struct btrfs_fs_info *fs_info = fs_devs->fs_info;
+	struct btrfs_device *dev;
+	unsigned long val;
+	int i;
+
+	if (kstrtoul(buf, 10, &val) || val != 1)
+		return -EINVAL;
+
+	mutex_lock(&fs_devs->device_list_mutex);
+	list_for_each_entry(dev, &fs_devs->devices, dev_list)
+		for (i = 0; i < BTRFS_SCRUB_STAT_VALUES_MAX; i++)
+			btrfs_scrub_stat_set(dev, i, 0);
+	mutex_unlock(&fs_devs->device_list_mutex);
+
+	btrfs_info(fs_info, "scrub: all lifetime stats reset by %s (%d)",
+		   current->comm, task_pid_nr(current));
+	return len;
+}
+BTRFS_ATTR_W(scrub, reset, btrfs_scrub_reset_store);
+
+static const struct attribute *scrub_attrs[] = {
+	BTRFS_ATTR_PTR(scrub, reset),
+	NULL
+};
+
 /*
  * Information about one device.
  *
@@ -2169,7 +2691,41 @@ int btrfs_sysfs_add_device(struct btrfs_device *device)
 		btrfs_warn(device->fs_info,
 			   "devinfo init for devid %llu failed: %d",
 			   device->devid, ret);
+		goto out;
 	}
+
+	/* Create devinfo/<devid>/scrub/ hierarchy */
+	device->scrub_kobj = kobject_create_and_add("scrub", &device->devid_kobj);
+	if (!device->scrub_kobj) {
+		ret = -ENOMEM;
+		btrfs_warn(device->fs_info,
+			   "scrub kobj init for devid %llu failed",
+			   device->devid);
+		goto out;
+	}
+	ret = sysfs_create_files(device->scrub_kobj, devid_scrub_attrs);
+	if (ret)
+		goto out;
+
+	device->scrub_lifetime_kobj = kobject_create_and_add("lifetime",
+							      device->scrub_kobj);
+	if (!device->scrub_lifetime_kobj) {
+		ret = -ENOMEM;
+		goto out;
+	}
+	ret = sysfs_create_files(device->scrub_lifetime_kobj,
+				 devid_scrub_lifetime_attrs);
+	if (ret)
+		goto out;
+
+	device->scrub_session_kobj = kobject_create_and_add("session",
+							     device->scrub_kobj);
+	if (!device->scrub_session_kobj) {
+		ret = -ENOMEM;
+		goto out;
+	}
+	ret = sysfs_create_files(device->scrub_session_kobj,
+				 devid_scrub_session_attrs);
 
 out:
 	memalloc_nofs_restore(nofs_flag);
@@ -2343,6 +2899,36 @@ int btrfs_sysfs_add_mounted(struct btrfs_fs_info *fs_info)
 	}
 
 	ret = sysfs_create_files(fs_info->space_info_kobj, allocation_attrs);
+	if (ret)
+		goto failure;
+
+	/* Create /sys/fs/btrfs/<UUID>/scrub/{lifetime,session}/ hierarchy */
+	fs_info->scrub_kobj = kobject_create_and_add("scrub", fsid_kobj);
+	if (!fs_info->scrub_kobj) {
+		ret = -ENOMEM;
+		goto failure;
+	}
+	ret = sysfs_create_files(fs_info->scrub_kobj, scrub_attrs);
+	if (ret)
+		goto failure;
+
+	fs_info->scrub_lifetime_kobj = kobject_create_and_add("lifetime",
+							       fs_info->scrub_kobj);
+	if (!fs_info->scrub_lifetime_kobj) {
+		ret = -ENOMEM;
+		goto failure;
+	}
+	ret = sysfs_create_files(fs_info->scrub_lifetime_kobj, scrub_lifetime_attrs);
+	if (ret)
+		goto failure;
+
+	fs_info->scrub_session_kobj = kobject_create_and_add("session",
+							      fs_info->scrub_kobj);
+	if (!fs_info->scrub_session_kobj) {
+		ret = -ENOMEM;
+		goto failure;
+	}
+	ret = sysfs_create_files(fs_info->scrub_session_kobj, scrub_session_attrs);
 	if (ret)
 		goto failure;
 
