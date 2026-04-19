@@ -3,6 +3,7 @@
 menuconfig CONNECTOR
 	tristate "Connector - unified userspace <-> kernelspace linker"
 	depends on NET
+	default y
 	help
 	  This is unified userspace <-> kernelspace connector working on top
 	  of the netlink socket protocol.
