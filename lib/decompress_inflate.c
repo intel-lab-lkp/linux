@@ -48,6 +48,7 @@ static int INIT __gunzip(unsigned char *buf, long len,
 	u8 *zbuf;
 	struct z_stream_s *strm;
 	int rc;
+	size_t rcved = 0;
 
 	rc = -1;
 	if (flush) {
@@ -143,7 +144,7 @@ static int INIT __gunzip(unsigned char *buf, long len,
 
 	while (rc == Z_OK) {
 		if (strm->avail_in == 0) {
-			/* TODO: handle case where both pos and fill are set */
+			rcved += strm->next_in - zbuf;
 			len = fill(zbuf, GZIP_IOBUF_SIZE);
 			if (len < 0) {
 				rc = -1;
@@ -180,7 +181,7 @@ static int INIT __gunzip(unsigned char *buf, long len,
 	zlib_inflateEnd(strm);
 	if (pos)
 		/* add + 8 to skip over trailer */
-		*pos = strm->next_in - zbuf+8;
+		*pos = rcved + (strm->next_in - zbuf) + 8;
 
 gunzip_5:
 	free(strm->workspace);
