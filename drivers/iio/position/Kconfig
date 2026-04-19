@@ -6,6 +6,19 @@
 
 menu "Linear and angular position sensors"
 
+config AS5600
+	tristate "ams AS5600 magnetic rotary position sensor"
+	depends on I2C && RUST
+	help	  
+	  Say Y here to build support for the ams AS5600 12-bit
+	  magnetic rotary position sensor.
+
+	  This driver provides hardware validation and I2C probing
+	  in Rust for the AS5600.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called as5600.
+
 config IQS624_POS
 	tristate "Azoteq IQS624/625 angular position sensors"
 	depends on MFD_IQS62X || COMPILE_TEST
