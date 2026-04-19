@@ -382,6 +382,10 @@ static int nft_target_validate(const struct nft_ctx *ctx,
 		if (target->hooks && !(hook_mask & target->hooks))
 			return -EINVAL;
 
+		if (target->nft_validate_chain &&
+		    !target->nft_validate_chain(nft_expr_priv(expr), hook_mask))
+			return -EINVAL;
+
 		ret = nft_compat_chain_validate_dependency(ctx, target->table);
 		if (ret < 0)
 			return ret;
@@ -611,10 +615,11 @@ static int nft_match_large_dump(struct sk_buff *skb,
 	return __nft_match_dump(skb, e, priv->info);
 }
 
-static int nft_match_validate(const struct nft_ctx *ctx,
-			      const struct nft_expr *expr)
+static int __nft_match_validate(const struct nft_ctx *ctx,
+				const struct nft_expr *expr,
+				const void *info)
 {
-	struct xt_match *match = expr->ops->data;
+	const struct xt_match *match = expr->ops->data;
 	unsigned int hook_mask = 0;
 	int ret;
 
@@ -643,11 +648,31 @@ static int nft_match_validate(const struct nft_ctx *ctx,
 		if (match->hooks && !(hook_mask & match->hooks))
 			return -EINVAL;
 
+		if (match->nft_validate_chain &&
+		    !match->nft_validate_chain(info, hook_mask))
+			return -EINVAL;
+
 		ret = nft_compat_chain_validate_dependency(ctx, match->table);
 		if (ret < 0)
 			return ret;
 	}
 	return 0;
+}
+
+static int nft_match_validate(const struct nft_ctx *ctx,
+			      const struct nft_expr *expr)
+{
+	const void *info = nft_expr_priv(expr);
+
+	return __nft_match_validate(ctx, expr, info);
+}
+
+static int nft_match_large_validate(const struct nft_ctx *ctx,
+			            const struct nft_expr *expr)
+{
+	struct nft_xt_match_priv *priv = nft_expr_priv(expr);
+
+	return __nft_match_validate(ctx, expr, priv->info);
 }
 
 static int
@@ -838,6 +863,7 @@ nft_match_select_ops(const struct nft_ctx *ctx,
 		ops->init = nft_match_large_init;
 		ops->destroy = nft_match_large_destroy;
 		ops->dump = nft_match_large_dump;
+		ops->validate = nft_match_large_validate;
 	}
 
 	ops->size = matchsize;

@@ -430,6 +430,20 @@ set_target_v3(struct sk_buff *skb, const struct xt_action_param *par)
 	return XT_CONTINUE;
 }
 
+static bool set_target_v3_validate(const void *targinfo, unsigned int hook_mask)
+{
+	const struct xt_set_info_target_v3 *info = targinfo;
+
+	if (((info->flags & IPSET_FLAG_MAP_SKBPRIO) |
+	     (info->flags & IPSET_FLAG_MAP_SKBQUEUE)) &&
+	     (hook_mask & ~(1 << NF_INET_FORWARD |
+			    1 << NF_INET_LOCAL_OUT |
+			    1 << NF_INET_POST_ROUTING)))
+		return false;
+
+	return true;
+}
+
 static int
 set_target_v3_checkentry(const struct xt_tgchk_param *par)
 {
@@ -464,11 +478,7 @@ set_target_v3_checkentry(const struct xt_tgchk_param *par)
 			ret = -EINVAL;
 			goto cleanup_del;
 		}
-		if (((info->flags & IPSET_FLAG_MAP_SKBPRIO) |
-		     (info->flags & IPSET_FLAG_MAP_SKBQUEUE)) &&
-		     (par->hook_mask & ~(1 << NF_INET_FORWARD |
-					 1 << NF_INET_LOCAL_OUT |
-					 1 << NF_INET_POST_ROUTING))) {
+		if (!set_target_v3_validate(info, par->hook_mask)) {
 			pr_info_ratelimited("mapping of prio or/and queue is allowed only from OUTPUT/FORWARD/POSTROUTING chains\n");
 			ret = -EINVAL;
 			goto cleanup_del;
@@ -673,6 +683,7 @@ static struct xt_target set_targets[] __read_mostly = {
 		.target		= set_target_v3,
 		.targetsize	= sizeof(struct xt_set_info_target_v3),
 		.checkentry	= set_target_v3_checkentry,
+		NFT_COMPAT_VALIDATE(set_target_v3_validate)
 		.destroy	= set_target_v3_destroy,
 		.me		= THIS_MODULE
 	},
@@ -683,6 +694,7 @@ static struct xt_target set_targets[] __read_mostly = {
 		.target		= set_target_v3,
 		.targetsize	= sizeof(struct xt_set_info_target_v3),
 		.checkentry	= set_target_v3_checkentry,
+		NFT_COMPAT_VALIDATE(set_target_v3_validate)
 		.destroy	= set_target_v3_destroy,
 		.me		= THIS_MODULE
 	},

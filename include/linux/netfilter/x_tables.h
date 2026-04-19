@@ -146,6 +146,10 @@ struct xt_match {
 	/* Called when user tries to insert an entry of this type. */
 	int (*checkentry)(const struct xt_mtchk_param *);
 
+#if IS_ENABLED(CONFIG_NFT_COMPAT)
+	/* only used by nft_compat, must be pure: no side effects allowed */
+	bool (*nft_validate_chain)(const void *matchinfo, unsigned int hook_mask);
+#endif
 	/* Called when entry of this type deleted. */
 	void (*destroy)(const struct xt_mtdtor_param *);
 #ifdef CONFIG_NETFILTER_XTABLES_COMPAT
@@ -187,6 +191,10 @@ struct xt_target {
 	/* Should return 0 on success or an error code otherwise (-Exxxx). */
 	int (*checkentry)(const struct xt_tgchk_param *);
 
+#if IS_ENABLED(CONFIG_NFT_COMPAT)
+	/* only used by nft_compat, must be pure: no side effects allowed */
+	bool (*nft_validate_chain)(const void *targinfo, unsigned int hook_mask);
+#endif
 	/* Called when entry of this type deleted. */
 	void (*destroy)(const struct xt_tgdtor_param *);
 #ifdef CONFIG_NETFILTER_XTABLES_COMPAT
@@ -524,4 +532,11 @@ int xt_compat_check_entry_offsets(const void *base, const char *elems,
 				  unsigned int next_offset);
 
 #endif /* CONFIG_NETFILTER_XTABLES_COMPAT */
+
+#if IS_ENABLED(CONFIG_NFT_COMPAT)
+#define NFT_COMPAT_VALIDATE(fname) .nft_validate_chain = fname,
+#else
+#define NFT_COMPAT_VALIDATE(fname)
+#endif
+
 #endif /* _X_TABLES_H */

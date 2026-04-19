@@ -91,6 +91,20 @@ match_outdev:
 	return (!!ret ^ !(info->invert & XT_PHYSDEV_OP_OUT));
 }
 
+static bool physdev_mt_validate(const void *matchinfo, unsigned int hook_mask)
+{
+	const struct xt_physdev_info *info = matchinfo;
+
+	if (info->bitmask & (XT_PHYSDEV_OP_OUT | XT_PHYSDEV_OP_ISOUT) &&
+	    (!(info->bitmask & XT_PHYSDEV_OP_BRIDGED) ||
+	     info->invert & XT_PHYSDEV_OP_BRIDGED) &&
+	     hook_mask & (1 << NF_INET_LOCAL_OUT)) {
+		return false;
+	}
+
+	return true;
+}
+
 static int physdev_mt_check(const struct xt_mtchk_param *par)
 {
 	const struct xt_physdev_info *info = par->matchinfo;
@@ -99,10 +113,8 @@ static int physdev_mt_check(const struct xt_mtchk_param *par)
 	if (!(info->bitmask & XT_PHYSDEV_OP_MASK) ||
 	    info->bitmask & ~XT_PHYSDEV_OP_MASK)
 		return -EINVAL;
-	if (info->bitmask & (XT_PHYSDEV_OP_OUT | XT_PHYSDEV_OP_ISOUT) &&
-	    (!(info->bitmask & XT_PHYSDEV_OP_BRIDGED) ||
-	     info->invert & XT_PHYSDEV_OP_BRIDGED) &&
-	    par->hook_mask & (1 << NF_INET_LOCAL_OUT)) {
+
+	if (!physdev_mt_validate(info, par->hook_mask)) {
 		pr_info_ratelimited("--physdev-out and --physdev-is-out only supported in the FORWARD and POSTROUTING chains with bridged traffic\n");
 		return -EINVAL;
 	}
@@ -120,6 +132,7 @@ static struct xt_match physdev_mt_reg __read_mostly = {
 	.revision   = 0,
 	.family     = NFPROTO_UNSPEC,
 	.checkentry = physdev_mt_check,
+	NFT_COMPAT_VALIDATE(physdev_mt_validate)
 	.match      = physdev_mt,
 	.matchsize  = sizeof(struct xt_physdev_info),
 	.me         = THIS_MODULE,

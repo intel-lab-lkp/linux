@@ -260,16 +260,26 @@ static inline bool find_syn_match(const struct xt_entry_match *m)
 	return false;
 }
 
+static bool tcpmss_validate_chain(const void *tginfo, unsigned int hook_mask)
+{
+	const struct xt_tcpmss_info *info = tginfo;
+
+	if ((info->mss == XT_TCPMSS_CLAMP_PMTU) &&
+	   (hook_mask & ~((1 << NF_INET_FORWARD) |
+			  (1 << NF_INET_LOCAL_OUT) |
+			  (1 << NF_INET_POST_ROUTING))) != 0)
+		return false;
+
+	return true;
+}
+
 static int tcpmss_tg4_check(const struct xt_tgchk_param *par)
 {
 	const struct xt_tcpmss_info *info = par->targinfo;
 	const struct ipt_entry *e = par->entryinfo;
 	const struct xt_entry_match *ematch;
 
-	if (info->mss == XT_TCPMSS_CLAMP_PMTU &&
-	    (par->hook_mask & ~((1 << NF_INET_FORWARD) |
-			   (1 << NF_INET_LOCAL_OUT) |
-			   (1 << NF_INET_POST_ROUTING))) != 0) {
+	if (!tcpmss_validate_chain(info, par->hook_mask)) {
 		pr_info_ratelimited("path-MTU clamping only supported in FORWARD, OUTPUT and POSTROUTING hooks\n");
 		return -EINVAL;
 	}
@@ -291,12 +301,11 @@ static int tcpmss_tg6_check(const struct xt_tgchk_param *par)
 	const struct xt_entry_match *ematch;
 
 	if (info->mss == XT_TCPMSS_CLAMP_PMTU &&
-	    (par->hook_mask & ~((1 << NF_INET_FORWARD) |
-			   (1 << NF_INET_LOCAL_OUT) |
-			   (1 << NF_INET_POST_ROUTING))) != 0) {
+	    !tcpmss_validate_chain(info, par->hook_mask)) {
 		pr_info_ratelimited("path-MTU clamping only supported in FORWARD, OUTPUT and POSTROUTING hooks\n");
 		return -EINVAL;
 	}
+
 	if (par->nft_compat)
 		return 0;
 
@@ -313,6 +322,7 @@ static struct xt_target tcpmss_tg_reg[] __read_mostly = {
 		.family		= NFPROTO_IPV4,
 		.name		= "TCPMSS",
 		.checkentry	= tcpmss_tg4_check,
+		NFT_COMPAT_VALIDATE(tcpmss_validate_chain)
 		.target		= tcpmss_tg4,
 		.targetsize	= sizeof(struct xt_tcpmss_info),
 		.proto		= IPPROTO_TCP,
@@ -323,6 +333,7 @@ static struct xt_target tcpmss_tg_reg[] __read_mostly = {
 		.family		= NFPROTO_IPV6,
 		.name		= "TCPMSS",
 		.checkentry	= tcpmss_tg6_check,
+		NFT_COMPAT_VALIDATE(tcpmss_validate_chain)
 		.target		= tcpmss_tg6,
 		.targetsize	= sizeof(struct xt_tcpmss_info),
 		.proto		= IPPROTO_TCP,

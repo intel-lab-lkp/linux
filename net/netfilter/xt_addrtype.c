@@ -153,6 +153,21 @@ addrtype_mt_v1(const struct sk_buff *skb, struct xt_action_param *par)
 	return ret;
 }
 
+static bool addrtype_mt_validate(const void *matchinfo, unsigned int hook_mask)
+{
+	const struct xt_addrtype_info_v1 *info = matchinfo;
+
+	if (hook_mask & ((1 << NF_INET_PRE_ROUTING) | (1 << NF_INET_LOCAL_IN)) &&
+	    info->flags & XT_ADDRTYPE_LIMIT_IFACE_OUT)
+		return false;
+
+	if (hook_mask & ((1 << NF_INET_POST_ROUTING) | (1 << NF_INET_LOCAL_OUT)) &&
+	    info->flags & XT_ADDRTYPE_LIMIT_IFACE_IN)
+		return false;
+
+	return true;
+}
+
 static int addrtype_mt_checkentry_v1(const struct xt_mtchk_param *par)
 {
 	const char *errmsg = "both incoming and outgoing interface limitation cannot be selected";
@@ -162,16 +177,14 @@ static int addrtype_mt_checkentry_v1(const struct xt_mtchk_param *par)
 	    info->flags & XT_ADDRTYPE_LIMIT_IFACE_OUT)
 		goto err;
 
-	if (par->hook_mask & ((1 << NF_INET_PRE_ROUTING) |
-	    (1 << NF_INET_LOCAL_IN)) &&
-	    info->flags & XT_ADDRTYPE_LIMIT_IFACE_OUT) {
+	if ((info->flags & XT_ADDRTYPE_LIMIT_IFACE_OUT) &&
+	    !addrtype_mt_validate(info, par->hook_mask)) {
 		errmsg = "output interface limitation not valid in PREROUTING and INPUT";
 		goto err;
 	}
 
-	if (par->hook_mask & ((1 << NF_INET_POST_ROUTING) |
-	    (1 << NF_INET_LOCAL_OUT)) &&
-	    info->flags & XT_ADDRTYPE_LIMIT_IFACE_IN) {
+	if ((info->flags & XT_ADDRTYPE_LIMIT_IFACE_IN) &&
+	    !addrtype_mt_validate(info, par->hook_mask)) {
 		errmsg = "input interface limitation not valid in POSTROUTING and OUTPUT";
 		goto err;
 	}
@@ -212,6 +225,7 @@ static struct xt_match addrtype_mt_reg[] __read_mostly = {
 		.revision	= 1,
 		.match		= addrtype_mt_v1,
 		.checkentry	= addrtype_mt_checkentry_v1,
+		NFT_COMPAT_VALIDATE(addrtype_mt_validate)
 		.matchsize	= sizeof(struct xt_addrtype_info_v1),
 		.me		= THIS_MODULE
 	},
@@ -222,6 +236,7 @@ static struct xt_match addrtype_mt_reg[] __read_mostly = {
 		.revision	= 1,
 		.match		= addrtype_mt_v1,
 		.checkentry	= addrtype_mt_checkentry_v1,
+		NFT_COMPAT_VALIDATE(addrtype_mt_validate)
 		.matchsize	= sizeof(struct xt_addrtype_info_v1),
 		.me		= THIS_MODULE
 	},

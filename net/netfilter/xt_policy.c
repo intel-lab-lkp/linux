@@ -126,6 +126,20 @@ policy_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	return ret;
 }
 
+static bool policy_mt_validate(const void *matchinfo, unsigned int hook_mask)
+{
+	const struct xt_policy_info *info = matchinfo;
+
+	if (hook_mask & ((1 << NF_INET_PRE_ROUTING) |
+	    (1 << NF_INET_LOCAL_IN)) && info->flags & XT_POLICY_MATCH_OUT)
+		return false;
+	if (hook_mask & ((1 << NF_INET_POST_ROUTING) |
+	    (1 << NF_INET_LOCAL_OUT)) && info->flags & XT_POLICY_MATCH_IN)
+		return false;
+
+	return true;
+}
+
 static int policy_mt_check(const struct xt_mtchk_param *par)
 {
 	const struct xt_policy_info *info = par->matchinfo;
@@ -134,13 +148,13 @@ static int policy_mt_check(const struct xt_mtchk_param *par)
 	if (!(info->flags & (XT_POLICY_MATCH_IN|XT_POLICY_MATCH_OUT)))
 		goto err;
 
-	if (par->hook_mask & ((1 << NF_INET_PRE_ROUTING) |
-	    (1 << NF_INET_LOCAL_IN)) && info->flags & XT_POLICY_MATCH_OUT) {
+	if ((info->flags & XT_POLICY_MATCH_OUT) &&
+	    !policy_mt_validate(info, par->hook_mask)) {
 		errmsg = "output policy not valid in PREROUTING and INPUT";
 		goto err;
 	}
-	if (par->hook_mask & ((1 << NF_INET_POST_ROUTING) |
-	    (1 << NF_INET_LOCAL_OUT)) && info->flags & XT_POLICY_MATCH_IN) {
+	if ((info->flags & XT_POLICY_MATCH_IN) &&
+	    !policy_mt_validate(info, par->hook_mask)) {
 		errmsg = "input policy not valid in POSTROUTING and OUTPUT";
 		goto err;
 	}
@@ -159,6 +173,7 @@ static struct xt_match policy_mt_reg[] __read_mostly = {
 		.name		= "policy",
 		.family		= NFPROTO_IPV4,
 		.checkentry 	= policy_mt_check,
+		NFT_COMPAT_VALIDATE(policy_mt_validate)
 		.match		= policy_mt,
 		.matchsize	= sizeof(struct xt_policy_info),
 		.me		= THIS_MODULE,
@@ -167,6 +182,7 @@ static struct xt_match policy_mt_reg[] __read_mostly = {
 		.name		= "policy",
 		.family		= NFPROTO_IPV6,
 		.checkentry	= policy_mt_check,
+		NFT_COMPAT_VALIDATE(policy_mt_validate)
 		.match		= policy_mt,
 		.matchsize	= sizeof(struct xt_policy_info),
 		.me		= THIS_MODULE,
