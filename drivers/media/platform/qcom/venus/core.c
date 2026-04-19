@@ -1119,6 +1119,16 @@ static const struct venus_resources qcm2290_res = {
 	.min_fw = &min_fw,
 };
 
+MODULE_FIRMWARE("qcom/venus-1.8/venus.mbn");
+MODULE_FIRMWARE("qcom/venus-4.2/venus.mbn");
+MODULE_FIRMWARE("qcom/venus-4.4/venus.mbn");
+MODULE_FIRMWARE("qcom/venus-4.4/venus.mdt");
+MODULE_FIRMWARE("qcom/venus-5.2/venus.mbn");
+MODULE_FIRMWARE("qcom/venus-5.4/venus.mbn");
+MODULE_FIRMWARE("qcom/vpu-1.0/venus.mbn");
+MODULE_FIRMWARE("qcom/vpu-2.0/venus.mbn");
+MODULE_FIRMWARE("qcom/venus-6.0/venus.mbn");
+
 static const struct of_device_id venus_dt_match[] = {
 	{ .compatible = "qcom,msm8916-venus", .data = &msm8916_res, },
 	{ .compatible = "qcom,msm8996-venus", .data = &msm8996_res, },
