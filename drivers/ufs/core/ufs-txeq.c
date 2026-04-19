@@ -14,6 +14,83 @@
 #include <ufs/unipro.h>
 #include "ufshcd-priv.h"
 
+#define TX_EQ_SETTING_MASK		0x7
+#define TX_EQ_SETTINGS_VALID_BIT	BIT(15)
+
+/*
+ * Decode Device TX Equalization settings based on qTxEQGnSettings bit assignment:
+ * bit[3:0]: Device TX Logical LANE 0 PreShoot
+ * bit[7:4]: Device TX Logical LANE 1 PreShoot
+ * bit[19:16]: Device TX Logical LANE 0 DeEmphasis
+ * bit[23:20]: Device TX Logical LANE 1 DeEmphasis
+ */
+#define TX_EQ_DEVICE_PRESHOOT_DECODE(eq, lane) \
+	(((eq) >> ((lane) * TX_HS_PRESHOOT_SHIFT)) & TX_EQ_SETTING_MASK)
+#define TX_EQ_DEVICE_DEEMPHASIS_DECODE(eq, lane) \
+	(((eq) >> ((lane) * TX_HS_DEEMPHASIS_SHIFT + 16)) & TX_EQ_SETTING_MASK)
+/*
+ * Decode Host TX Equalization settings based on qTxEQGnSettings bit assignment:
+ * bit[35:32]: Host TX Logical LANE 0 PreShoot
+ * bit[39:36]: Host TX Logical LANE 1 PreShoot
+ * bit[51:48]: Host TX Logical LANE 0 DeEmphasis
+ * bit[55:52]: Host TX Logical LANE 1 DeEmphasis
+ */
+#define TX_EQ_HOST_PRESHOOT_DECODE(eq, lane) \
+	(((eq) >> ((lane) * TX_HS_PRESHOOT_SHIFT + 32)) & TX_EQ_SETTING_MASK)
+#define TX_EQ_HOST_DEEMPHASIS_DECODE(eq, lane) \
+	(((eq) >> ((lane) * TX_HS_DEEMPHASIS_SHIFT + 48)) & TX_EQ_SETTING_MASK)
+
+/*
+ * Decode Device TX precode_en indication based on dTxEQGnSettingsExt bit assignment:
+ * bit[0]: PreCodeEn for Device TX Logical LANE 0
+ * bit[1]: PreCodeEn for Device TX Logical LANE 1
+ */
+#define TX_EQ_DEVICE_PRECODE_EN_DECODE(eq_ext, lane) \
+	(!!((eq_ext) & (1 << (lane))))
+/*
+ * Decode Host TX precode_en indication based on dTxEQGnSettingsExt bit assignment:
+ * bit[4]: PreCodeEn for Device RX Logical LANE 0
+ * bit[5]: PreCodeEn for Device RX Logical LANE 1
+ */
+#define TX_EQ_HOST_PRECODE_EN_DECODE(eq_ext, lane) \
+	(!!((eq_ext) & (1 << ((lane) + 4))))
+
+/*
+ * Encode qTxEQGnSettings based on bit assignment:
+ * bit[3:0]: Device TX Logical LANE 0 PreShoot
+ * bit[7:4]: Device TX Logical LANE 1 PreShoot
+ * bit[19:16]: Device TX Logical LANE 0 DeEmphasis
+ * bit[23:20]: Device TX Logical LANE 1 DeEmphasis
+ */
+#define TX_EQ_DEVICE_PRESHOOT_ENCODE(val, lane) \
+	(((val) & TX_EQ_SETTING_MASK) << ((lane) * TX_HS_PRESHOOT_SHIFT))
+#define TX_EQ_DEVICE_DEEMPHASIS_ENCODE(val, lane) \
+	(((val) & TX_EQ_SETTING_MASK) << ((lane) * TX_HS_DEEMPHASIS_SHIFT + 16))
+/*
+ * Encode qTxEQGnSettings based on bit assignment:
+ * bit[35:32]: Host TX Logical LANE 0 PreShoot
+ * bit[39:36]: Host TX Logical LANE 1 PreShoot
+ * bit[51:48]: Host TX Logical LANE 0 DeEmphasis
+ * bit[55:52]: Host TX Logical LANE 1 DeEmphasis
+ */
+#define TX_EQ_HOST_PRESHOOT_ENCODE(val, lane) \
+	(((val) & TX_EQ_SETTING_MASK) << ((lane) * TX_HS_PRESHOOT_SHIFT + 32))
+#define TX_EQ_HOST_DEEMPHASIS_ENCODE(val, lane) \
+	(((val) & TX_EQ_SETTING_MASK) << ((lane) * TX_HS_DEEMPHASIS_SHIFT + 48))
+
+/*
+ * Encode dTxEQGnSettingsExt based on bit assignment:
+ * bit[0]: PreCodeEn for Device TX Logical LANE 0
+ * bit[1]: PreCodeEn for Device TX Logical LANE 1
+ */
+#define TX_EQ_DEVICE_PRECODE_EN_ENCODE(val, lane)	((val) << (lane))
+/*
+ * Encode dTxEQGnSettingsExt based on bit assignment:
+ * bit[4]: PreCodeEn for Device RX Logical LANE 0
+ * bit[5]: PreCodeEn for Device RX Logical LANE 1
+ */
+#define TX_EQ_HOST_PRECODE_EN_ENCODE(val, lane)		((val) << ((lane) + 4))
+
 static bool use_adaptive_txeq;
 module_param(use_adaptive_txeq, bool, 0644);
 MODULE_PARM_DESC(use_adaptive_txeq, "Find and apply optimal TX Equalization settings before changing Power Mode (default: false)");
@@ -39,6 +116,28 @@ MODULE_PARM_DESC(use_txeq_presets, "Use only the 8 TX Equalization Presets (pre-
 static bool txeq_presets_selected[UFS_TX_EQ_PRESET_MAX] = {[0 ... (UFS_TX_EQ_PRESET_MAX - 1)] = 1};
 module_param_array(txeq_presets_selected, bool, NULL, 0644);
 MODULE_PARM_DESC(txeq_presets_selected, "Use only the selected Presets out of the 8 TX Equalization Presets for TX EQTR");
+
+static int txeq_setting_sel_set(const char *val, const struct kernel_param *kp)
+{
+	return param_set_uint_minmax(val, kp, 0, 1);
+}
+
+static const struct kernel_param_ops txeq_setting_sel_ops = {
+	.set = txeq_setting_sel_set,
+	.get = param_get_uint,
+};
+
+static unsigned int txeq_setting_sel;
+module_param_cb(txeq_setting_sel, &txeq_setting_sel_ops, &txeq_setting_sel, 0644);
+MODULE_PARM_DESC(txeq_setting_sel, "The qTxEQGnSettings and dTxEQGnSettingsExt Attributes selector used to retrieve and store TX Equalization settings");
+
+static bool retrieve_txeq_setting = true;
+module_param(retrieve_txeq_setting, bool, 0644);
+MODULE_PARM_DESC(retrieve_txeq_setting, "Retrieve TX Equalization settings from qTxEQGnSettings and dTxEQGnSettingsExt Attributes (default: true)");
+
+static bool store_txeq_setting = true;
+module_param(store_txeq_setting, bool, 0644);
+MODULE_PARM_DESC(store_txeq_setting, "Store the optimal TX Equalization settings to qTxEQGnSettings and dTxEQGnSettingsExt Attributes (default: true)");
 
 /*
  * ufs_tx_eq_preset - Table of minimum required list of presets.
@@ -1164,6 +1263,7 @@ int ufshcd_config_tx_eq_settings(struct ufs_hba *hba,
 
 		/* Mark TX Equalization settings as valid */
 		params->is_valid = true;
+		params->is_trained = true;
 		params->is_applied = false;
 	}
 
@@ -1290,4 +1390,145 @@ out:
 	ufshcd_release(hba);
 
 	return ret;
+}
+
+/**
+ * ufshcd_extract_tx_eq_settings_attrs - Extract TX Equalization settings from UFS attributes
+ * @hba: per adapter instance
+ * @gear: target gear
+ *
+ * This function extracts previously stored TX Equalization settings from UFS
+ * attributes qTxEQGnSettings and dTxEQGnSettingsExt. These attributes contain
+ * the optimal TX Equalization parameters (PreShoot, DeEmphasis, and PreCoding
+ * enable) that were determined during a previous EQTR procedure.
+ *
+ * The function reads:
+ * 1. qTxEQGnSettings (64-bit): Main attribute containing PreShoot and
+ *    DeEmphasis values for both host and device TX lanes
+ * 2. dTxEQGnSettingsExt (32-bit): Extended attribute containing PreCoding
+ *    enable flags and validity indicator
+ */
+static void ufshcd_extract_tx_eq_settings_attrs(struct ufs_hba *hba, u8 gear)
+{
+	struct ufshcd_tx_eq_params *params;
+	u32 lane, eq_ext;
+	int ret;
+	u64 eq;
+
+	ret = ufshcd_query_attr_retry(hba, UPIU_QUERY_OPCODE_READ_ATTR,
+				      QUERY_ATTR_IDN_TX_EQ_GN_SETTINGS_EXT,
+				      gear - 1, (u8)txeq_setting_sel, &eq_ext);
+	if (ret)
+		return;
+
+	dev_dbg(hba->dev, "%s: HS-G%u dTxEQGnSettingsExt (Selector %u) = 0x%08x\n",
+		__func__, gear, txeq_setting_sel, eq_ext);
+
+	if (!(eq_ext & TX_EQ_SETTINGS_VALID_BIT))
+		return;
+
+	ret = ufshcd_query_attr_qword(hba, UPIU_QUERY_OPCODE_READ_ATTR,
+				      QUERY_ATTR_IDN_TX_EQ_GN_SETTINGS,
+				      gear - 1, (u8)txeq_setting_sel, &eq);
+	if (ret)
+		return;
+
+	dev_dbg(hba->dev, "%s: HS-G%u qTxEQGnSettings (Selector %u) = 0x%016llx\n",
+		__func__, gear, txeq_setting_sel, eq);
+
+	params = &hba->tx_eq_params[gear - 1];
+
+	for (lane = 0; lane < UFS_MAX_LANES; lane++) {
+		params->host[lane].preshoot = TX_EQ_HOST_PRESHOOT_DECODE(eq, lane);
+		params->host[lane].deemphasis = TX_EQ_HOST_DEEMPHASIS_DECODE(eq, lane);
+		params->host[lane].precode_en = TX_EQ_HOST_PRECODE_EN_DECODE(eq_ext, lane);
+
+		params->device[lane].preshoot = TX_EQ_DEVICE_PRESHOOT_DECODE(eq, lane);
+		params->device[lane].deemphasis = TX_EQ_DEVICE_DEEMPHASIS_DECODE(eq, lane);
+		params->device[lane].precode_en = TX_EQ_DEVICE_PRECODE_EN_DECODE(eq_ext, lane);
+	}
+
+	params->is_valid = true;
+}
+
+void ufshcd_retrieve_tx_eq_settings(struct ufs_hba *hba)
+{
+	u8 gear = (u8)adaptive_txeq_gear;
+
+	if (!hba->max_pwr_info.is_valid || !ufshcd_is_tx_eq_supported(hba) ||
+	    !use_adaptive_txeq || !retrieve_txeq_setting)
+		return;
+
+	for (; gear <= UFS_HS_GEAR_MAX; gear++)
+		ufshcd_extract_tx_eq_settings_attrs(hba, gear);
+}
+
+/**
+ * ufshcd_update_tx_eq_settings_attrs - Update TX EQ settings in UFS attributes
+ * @hba: per adapter instance
+ * @gear: target gear
+ *
+ * This function stores the optimal TX Equalization settings obtained from
+ * TX EQTR procedure into UFS device attributes for future fast-path retrieval.
+ * The settings are stored in two complementary attributes:
+ *
+ * 1. qTxEQGnSettings (64-bit): Main attribute containing PreShoot and
+ *    DeEmphasis values for both host and device TX lanes
+ * 2. dTxEQGnSettingsExt (32-bit): Extended attribute containing PreCoding
+ *    enable flags and validity indicator
+ */
+static void ufshcd_update_tx_eq_settings_attrs(struct ufs_hba *hba, u8 gear)
+{
+	struct ufshcd_tx_eq_params *params;
+	u32 lane, eq_ext = 0;
+	u64 eq = 0;
+	int ret;
+
+	params = &hba->tx_eq_params[gear - 1];
+	if (!params->is_valid || !params->is_trained)
+		return;
+
+	for (lane = 0; lane < UFS_MAX_LANES; lane++) {
+		eq |= TX_EQ_HOST_PRESHOOT_ENCODE((u64)params->host[lane].preshoot, lane);
+		eq |= TX_EQ_HOST_DEEMPHASIS_ENCODE((u64)params->host[lane].deemphasis, lane);
+		eq_ext |= TX_EQ_HOST_PRECODE_EN_ENCODE(params->host[lane].precode_en, lane);
+
+		eq |= TX_EQ_DEVICE_PRESHOOT_ENCODE((u64)params->device[lane].preshoot, lane);
+		eq |= TX_EQ_DEVICE_DEEMPHASIS_ENCODE((u64)params->device[lane].deemphasis, lane);
+		eq_ext |= TX_EQ_DEVICE_PRECODE_EN_ENCODE(params->device[lane].precode_en, lane);
+	}
+
+	/* Set validity flag to indicate valid settings are stored */
+	eq_ext |= TX_EQ_SETTINGS_VALID_BIT;
+
+	/* Write qTxEQGnSettings */
+	ret = ufshcd_query_attr_qword(hba, UPIU_QUERY_OPCODE_WRITE_ATTR,
+				      QUERY_ATTR_IDN_TX_EQ_GN_SETTINGS,
+				      gear - 1, (u8)txeq_setting_sel, &eq);
+	if (ret)
+		return;
+
+	/* Write dTxEQGnSettingsExt */
+	ret = ufshcd_query_attr_retry(hba, UPIU_QUERY_OPCODE_WRITE_ATTR,
+				      QUERY_ATTR_IDN_TX_EQ_GN_SETTINGS_EXT,
+				      gear - 1, (u8)txeq_setting_sel, &eq_ext);
+	if (ret)
+		return;
+
+	dev_dbg(hba->dev, "%s: Saved HS-G%u qTxEQGnSettings (Selector %u) = 0x%016llx\n",
+		__func__, gear, txeq_setting_sel, eq);
+	dev_dbg(hba->dev, "%s: Saved HS-G%u dTxEQGnSettingsExt (Selector %u) = 0x%08x\n",
+		__func__, gear, txeq_setting_sel, eq_ext);
+}
+
+void ufshcd_store_tx_eq_settings(struct ufs_hba *hba)
+{
+	u8 gear = (u8)adaptive_txeq_gear;
+
+	if (!hba->max_pwr_info.is_valid || !ufshcd_is_tx_eq_supported(hba) ||
+	    !use_adaptive_txeq || !store_txeq_setting)
+		return;
+
+	for (; gear <= UFS_HS_GEAR_MAX; gear++)
+		ufshcd_update_tx_eq_settings_attrs(hba, gear);
 }
