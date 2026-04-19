@@ -9,6 +9,7 @@
 #include <linux/ratelimit.h>
 #include <linux/kthread.h>
 #include <linux/semaphore.h>
+#include <linux/timekeeping.h>
 #include <linux/uuid.h>
 #include <linux/list_sort.h>
 #include <linux/namei.h>
@@ -8386,6 +8387,242 @@ int btrfs_get_dev_stats(struct btrfs_fs_info *fs_info,
 	return 0;
 }
 
+/* ---------- scrub lifetime stats: on-disk load/flush ---------- */
+
+static u64 btrfs_scrub_stats_value(const struct extent_buffer *eb,
+				   const struct btrfs_scrub_stats_item *ptr,
+				   int index)
+{
+	u64 val;
+
+	read_extent_buffer(eb, &val,
+			   offsetof(struct btrfs_scrub_stats_item, values) +
+			    ((unsigned long)ptr) + (index * sizeof(u64)),
+			   sizeof(val));
+	return le64_to_cpu(val);
+}
+
+static void btrfs_set_scrub_stats_value(struct extent_buffer *eb,
+					struct btrfs_scrub_stats_item *ptr,
+					int index, u64 val)
+{
+	__le64 leval = cpu_to_le64(val);
+
+	write_extent_buffer(eb, &leval,
+			    offsetof(struct btrfs_scrub_stats_item, values) +
+			     ((unsigned long)ptr) + (index * sizeof(u64)),
+			    sizeof(leval));
+}
+
+static int btrfs_device_init_scrub_stats(struct btrfs_device *device,
+					 struct btrfs_path *path)
+{
+	struct btrfs_scrub_stats_item *ptr;
+	struct extent_buffer *eb;
+	struct btrfs_key key;
+	int item_size;
+	int i, ret, slot;
+
+	key.objectid = BTRFS_SCRUB_STATS_OBJECTID;
+	key.type = BTRFS_PERSISTENT_ITEM_KEY;
+	key.offset = device->devid;
+
+	ret = btrfs_search_slot(NULL, device->fs_info->dev_root, &key, path, 0, 0);
+	if (ret) {
+		for (i = 0; i < BTRFS_SCRUB_STAT_VALUES_MAX; i++)
+			atomic64_set(&device->scrub_stat_values[i], 0);
+		device->scrub_stats_valid = 1;
+		btrfs_release_path(path);
+		return ret < 0 ? ret : 0;
+	}
+
+	slot = path->slots[0];
+	eb = path->nodes[0];
+	item_size = btrfs_item_size(eb, slot);
+	ptr = btrfs_item_ptr(eb, slot, struct btrfs_scrub_stats_item);
+
+	for (i = 0; i < BTRFS_SCRUB_STAT_VALUES_MAX; i++) {
+		u64 val = 0;
+
+		if (item_size >= (i + 1) * sizeof(__le64))
+			val = btrfs_scrub_stats_value(eb, ptr, i);
+		atomic64_set(&device->scrub_stat_values[i], (long long)val);
+	}
+
+	device->scrub_stats_valid = 1;
+	btrfs_release_path(path);
+	return 0;
+}
+
+int btrfs_init_scrub_stats(struct btrfs_fs_info *fs_info)
+{
+	struct btrfs_fs_devices *fs_devices = fs_info->fs_devices;
+	struct btrfs_device *device;
+	int ret = 0;
+
+	BTRFS_PATH_AUTO_FREE(path);
+
+	path = btrfs_alloc_path();
+	if (!path)
+		return -ENOMEM;
+
+	mutex_lock(&fs_devices->device_list_mutex);
+	list_for_each_entry(device, &fs_devices->devices, dev_list) {
+		ret = btrfs_device_init_scrub_stats(device, path);
+		if (ret)
+			goto out;
+	}
+out:
+	mutex_unlock(&fs_devices->device_list_mutex);
+	return ret;
+}
+
+static int update_scrub_stat_item(struct btrfs_trans_handle *trans,
+				  struct btrfs_device *device)
+{
+	struct btrfs_fs_info *fs_info = trans->fs_info;
+	struct btrfs_root *dev_root = fs_info->dev_root;
+	struct btrfs_key key;
+	struct extent_buffer *eb;
+	struct btrfs_scrub_stats_item *ptr;
+	int ret;
+	int i;
+
+	BTRFS_PATH_AUTO_FREE(path);
+
+	key.objectid = BTRFS_SCRUB_STATS_OBJECTID;
+	key.type = BTRFS_PERSISTENT_ITEM_KEY;
+	key.offset = device->devid;
+
+	path = btrfs_alloc_path();
+	if (!path)
+		return -ENOMEM;
+
+	ret = btrfs_search_slot(trans, dev_root, &key, path, -1, 1);
+	if (ret < 0) {
+		btrfs_warn(fs_info,
+			"error %d searching for scrub_stats item for device %s",
+			ret, btrfs_dev_name(device));
+		return ret;
+	}
+
+	if (ret == 0 &&
+	    btrfs_item_size(path->nodes[0], path->slots[0]) < sizeof(*ptr)) {
+		ret = btrfs_del_item(trans, dev_root, path);
+		if (ret) {
+			btrfs_warn(fs_info,
+				"delete undersized scrub_stats item for device %s failed %d",
+				btrfs_dev_name(device), ret);
+			return ret;
+		}
+		ret = 1;
+	}
+
+	if (ret == 1) {
+		btrfs_release_path(path);
+		ret = btrfs_insert_empty_item(trans, dev_root, path,
+					      &key, sizeof(*ptr));
+		if (ret < 0) {
+			btrfs_warn(fs_info,
+				"insert scrub_stats item for device %s failed %d",
+				btrfs_dev_name(device), ret);
+			return ret;
+		}
+	}
+
+	eb = path->nodes[0];
+	ptr = btrfs_item_ptr(eb, path->slots[0], struct btrfs_scrub_stats_item);
+	for (i = 0; i < BTRFS_SCRUB_STAT_VALUES_MAX; i++)
+		btrfs_set_scrub_stats_value(eb, ptr, i,
+					    btrfs_scrub_stat_read(device, i));
+	return 0;
+}
+
+/*
+ * Called from commit_transaction.  Flushes changed scrub lifetime stats to
+ * disk.  Mirrors btrfs_run_dev_stats().
+ */
+int btrfs_run_scrub_stats(struct btrfs_trans_handle *trans)
+{
+	struct btrfs_fs_info *fs_info = trans->fs_info;
+	struct btrfs_fs_devices *fs_devices = fs_info->fs_devices;
+	struct btrfs_device *device;
+	int stats_cnt;
+	int ret = 0;
+
+	mutex_lock(&fs_devices->device_list_mutex);
+	list_for_each_entry(device, &fs_devices->devices, dev_list) {
+		stats_cnt = atomic_read(&device->scrub_stats_ccnt);
+		if (!device->scrub_stats_valid || stats_cnt == 0)
+			continue;
+
+		/*
+		 * LOAD-LOAD control dependency: reading scrub_stats_ccnt before
+		 * the counter values requires an explicit read barrier.  Pairs
+		 * with smp_mb__before_atomic() in btrfs_scrub_stat_add/set.
+		 */
+		smp_rmb();
+
+		ret = update_scrub_stat_item(trans, device);
+		if (ret)
+			break;
+		atomic_sub(stats_cnt, &device->scrub_stats_ccnt);
+	}
+	mutex_unlock(&fs_devices->device_list_mutex);
+
+	return ret;
+}
+
+/*
+ * Update per-device scrub stats after a scrub run completes (or is canceled).
+ * Accumulates session counters into the lifetime totals and records session
+ * metadata (timestamps, status, last_physical).
+ *
+ * @scrub_ret: return value from btrfs_scrub_dev(); 0=finished, -ECANCELED=
+ *             canceled, other nonzero = error/incomplete.
+ */
+void btrfs_update_scrub_stats(struct btrfs_device *dev,
+			      const struct btrfs_scrub_progress *progress,
+			      int scrub_ret)
+{
+	int i;
+	static const u64 offsets[BTRFS_SCRUB_STAT_VALUES_MAX] = {
+#define OFF(field) offsetof(struct btrfs_scrub_progress, field)
+		[BTRFS_SCRUB_STAT_DATA_EXTENTS_SCRUBBED]  = OFF(data_extents_scrubbed),
+		[BTRFS_SCRUB_STAT_TREE_EXTENTS_SCRUBBED]  = OFF(tree_extents_scrubbed),
+		[BTRFS_SCRUB_STAT_DATA_BYTES_SCRUBBED]    = OFF(data_bytes_scrubbed),
+		[BTRFS_SCRUB_STAT_TREE_BYTES_SCRUBBED]    = OFF(tree_bytes_scrubbed),
+		[BTRFS_SCRUB_STAT_READ_ERRORS]            = OFF(read_errors),
+		[BTRFS_SCRUB_STAT_CSUM_ERRORS]            = OFF(csum_errors),
+		[BTRFS_SCRUB_STAT_VERIFY_ERRORS]          = OFF(verify_errors),
+		[BTRFS_SCRUB_STAT_NO_CSUM]                = OFF(no_csum),
+		[BTRFS_SCRUB_STAT_CSUM_DISCARDS]          = OFF(csum_discards),
+		[BTRFS_SCRUB_STAT_SUPER_ERRORS]           = OFF(super_errors),
+		[BTRFS_SCRUB_STAT_MALLOC_ERRORS]          = OFF(malloc_errors),
+		[BTRFS_SCRUB_STAT_UNCORRECTABLE_ERRORS]   = OFF(uncorrectable_errors),
+		[BTRFS_SCRUB_STAT_CORRECTED_ERRORS]       = OFF(corrected_errors),
+		[BTRFS_SCRUB_STAT_UNVERIFIED_ERRORS]      = OFF(unverified_errors),
+#undef OFF
+	};
+
+	/* Update session counters from this run's progress struct */
+	for (i = 0; i < BTRFS_SCRUB_STAT_VALUES_MAX; i++) {
+		u64 val = *(const u64 *)((const u8 *)progress + offsets[i]);
+
+		atomic64_set(&dev->scrub_session_values[i], (long long)val);
+		/* Accumulate into lifetime totals */
+		btrfs_scrub_stat_add(dev, i, val);
+	}
+
+	dev->scrub_session_last_physical = progress->last_physical;
+	dev->scrub_session_t_end = ktime_get_real_seconds();
+
+	if (scrub_ret == -ECANCELED)
+		atomic_set(&dev->scrub_session_status, BTRFS_SCRUB_STATUS_CANCELED);
+	else
+		atomic_set(&dev->scrub_session_status, BTRFS_SCRUB_STATUS_FINISHED);
+}
+
 /*
  * Update the size and bytes used for each device where it changed.  This is
  * delayed since we would otherwise get errors while writing out the
@@ -8609,7 +8846,7 @@ int btrfs_verify_dev_extents(struct btrfs_fs_info *fs_info)
 
 		btrfs_item_key_to_cpu(leaf, &key, slot);
 		if (key.type != BTRFS_DEV_EXTENT_KEY)
-			break;
+			goto next;
 		devid = key.objectid;
 		physical_offset = key.offset;
 
@@ -8631,7 +8868,7 @@ int btrfs_verify_dev_extents(struct btrfs_fs_info *fs_info)
 			return ret;
 		prev_devid = devid;
 		prev_dev_ext_end = physical_offset + physical_len;
-
+next:
 		ret = btrfs_next_item(root, path);
 		if (ret < 0)
 			return ret;

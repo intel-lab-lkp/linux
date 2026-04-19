@@ -1377,6 +1377,9 @@ static noinline int commit_cowonly_roots(struct btrfs_trans_handle *trans)
 	ret = btrfs_run_dev_stats(trans);
 	if (ret)
 		return ret;
+	ret = btrfs_run_scrub_stats(trans);
+	if (ret)
+		return ret;
 	ret = btrfs_run_dev_replace(trans);
 	if (ret)
 		return ret;

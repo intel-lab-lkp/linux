@@ -3545,6 +3545,12 @@ int __cold open_ctree(struct super_block *sb, struct btrfs_fs_devices *fs_device
 		goto fail_block_groups;
 	}
 
+	ret = btrfs_init_scrub_stats(fs_info);
+	if (ret) {
+		btrfs_err(fs_info, "failed to init scrub_stats: %d", ret);
+		goto fail_block_groups;
+	}
+
 	ret = btrfs_init_dev_replace(fs_info);
 	if (ret) {
 		btrfs_err(fs_info, "failed to init dev_replace: %d", ret);
