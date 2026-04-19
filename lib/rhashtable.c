@@ -442,7 +442,15 @@ static void rht_deferred_worker(struct work_struct *work)
 	mutex_unlock(&ht->mutex);
 
 	if (err)
-		schedule_work(&ht->run_work);
+		rhashtable_kick_deferred_worker(ht);
+}
+
+static void rht_deferred_irq_work(struct irq_work *irq_work)
+{
+	struct rhashtable *ht = container_of(irq_work, struct rhashtable,
+					     run_irq_work);
+
+	schedule_work(&ht->run_work);
 }
 
 static int rhashtable_insert_rehash(struct rhashtable *ht,
@@ -477,7 +485,7 @@ static int rhashtable_insert_rehash(struct rhashtable *ht,
 		if (err == -EEXIST)
 			err = 0;
 	} else
-		schedule_work(&ht->run_work);
+		rhashtable_kick_deferred_worker(ht);
 
 	return err;
 
@@ -488,7 +496,7 @@ fail:
 
 	/* Schedule async rehash to retry allocation in process context. */
 	if (err == -ENOMEM)
-		schedule_work(&ht->run_work);
+		rhashtable_kick_deferred_worker(ht);
 
 	return err;
 }
@@ -629,7 +637,7 @@ static void *rhashtable_try_insert(struct rhashtable *ht, const void *key,
 			rht_unlock(tbl, bkt, flags);
 
 			if (inserted && rht_grow_above_75(ht, tbl))
-				schedule_work(&ht->run_work);
+				rhashtable_kick_deferred_worker(ht);
 		}
 	} while (!IS_ERR_OR_NULL(new_tbl));
 
@@ -1084,6 +1092,8 @@ int rhashtable_init_noprof(struct rhashtable *ht,
 	RCU_INIT_POINTER(ht->tbl, tbl);
 
 	INIT_WORK(&ht->run_work, rht_deferred_worker);
+	if (ht->p.insecure_elasticity)
+		init_irq_work(&ht->run_irq_work, rht_deferred_irq_work);
 
 	return 0;
 }
@@ -1149,6 +1159,8 @@ void rhashtable_free_and_destroy(struct rhashtable *ht,
 	struct bucket_table *tbl, *next_tbl;
 	unsigned int i;
 
+	if (ht->p.insecure_elasticity)
+		irq_work_sync(&ht->run_irq_work);
 	cancel_work_sync(&ht->run_work);
 
 	mutex_lock(&ht->mutex);

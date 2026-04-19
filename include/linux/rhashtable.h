@@ -20,6 +20,7 @@
 
 #include <linux/err.h>
 #include <linux/errno.h>
+#include <linux/irq_work.h>
 #include <linux/jhash.h>
 #include <linux/list_nulls.h>
 #include <linux/workqueue.h>
@@ -754,6 +755,22 @@ static __always_inline struct rhlist_head *rhltable_lookup_likely(
 	return likely(he) ? container_of(he, struct rhlist_head, rhead) : NULL;
 }
 
+/*
+ * Kick the deferred rehash worker. With insecure_elasticity the caller may
+ * hold a raw spinlock. schedule_work() under a raw spinlock records
+ * caller_lock -> pool->lock -> pi_lock -> rq->__lock. If any of these
+ * locks is acquired in the reverse direction elsewhere, the cycle closes.
+ * Bounce through irq_work so schedule_work() runs from hard IRQ context
+ * with the caller's lock no longer held.
+ */
+static void rhashtable_kick_deferred_worker(struct rhashtable *ht)
+{
+	if (ht->p.insecure_elasticity)
+		irq_work_queue(&ht->run_irq_work);
+	else
+		schedule_work(&ht->run_work);
+}
+
 /* Internal function, please use rhashtable_insert_fast() instead. This
  * function returns the existing element already in hashes if there is a clash,
  * otherwise it returns an error via ERR_PTR().
@@ -853,7 +870,7 @@ slow_path:
 	rht_assign_unlock(tbl, bkt, obj, flags);
 
 	if (rht_grow_above_75(ht, tbl))
-		schedule_work(&ht->run_work);
+		rhashtable_kick_deferred_worker(ht);
 
 	data = NULL;
 out:
