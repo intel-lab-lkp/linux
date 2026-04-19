@@ -7,6 +7,7 @@
 #include <linux/blkdev.h>
 #include <linux/build_bug.h>
 #include <linux/debugfs.h>
+#include <linux/percpu.h>
 
 #include "blk.h"
 #include "blk-mq.h"
@@ -484,6 +485,54 @@ static int hctx_dispatch_busy_show(void *data, struct seq_file *m)
 	return 0;
 }
 
+/**
+ * hctx_wait_on_hw_tag_show - display hardware tag starvation count
+ * @data: generic pointer to the associated hardware context (hctx)
+ * @m: seq_file pointer for debugfs output formatting
+ *
+ * Prints the cumulative number of times a submitting context was forced
+ * to block due to the exhaustion of physical hardware driver tags.
+ *
+ * Return: 0 on success.
+ */
+static int hctx_wait_on_hw_tag_show(void *data, struct seq_file *m)
+{
+	struct blk_mq_hw_ctx *hctx = data;
+	unsigned long count = 0;
+	int cpu;
+
+	if (hctx->wait_on_hw_tag) {
+		for_each_possible_cpu(cpu)
+			count += *per_cpu_ptr(hctx->wait_on_hw_tag, cpu);
+	}
+	seq_printf(m, "%lu\n", count);
+	return 0;
+}
+
+/**
+ * hctx_wait_on_sched_tag_show - display scheduler tag starvation count
+ * @data: generic pointer to the associated hardware context (hctx)
+ * @m: seq_file pointer for debugfs output formatting
+ *
+ * Prints the cumulative number of times a submitting context was forced
+ * to block due to the exhaustion of software scheduler tags.
+ *
+ * Return: 0 on success.
+ */
+static int hctx_wait_on_sched_tag_show(void *data, struct seq_file *m)
+{
+	struct blk_mq_hw_ctx *hctx = data;
+	unsigned long count = 0;
+	int cpu;
+
+	if (hctx->wait_on_sched_tag) {
+		for_each_possible_cpu(cpu)
+			count += *per_cpu_ptr(hctx->wait_on_sched_tag, cpu);
+	}
+	seq_printf(m, "%lu\n", count);
+	return 0;
+}
+
 #define CTX_RQ_SEQ_OPS(name, type)					\
 static void *ctx_##name##_rq_list_start(struct seq_file *m, loff_t *pos) \
 	__acquires(&ctx->lock)						\
@@ -599,6 +648,8 @@ static const struct blk_mq_debugfs_attr blk_mq_debugfs_hctx_attrs[] = {
 	{"active", 0400, hctx_active_show},
 	{"dispatch_busy", 0400, hctx_dispatch_busy_show},
 	{"type", 0400, hctx_type_show},
+	{"wait_on_hw_tag", 0400, hctx_wait_on_hw_tag_show},
+	{"wait_on_sched_tag", 0400, hctx_wait_on_sched_tag_show},
 	{},
 };
 
@@ -670,6 +721,11 @@ void blk_mq_debugfs_register_hctx(struct request_queue *q,
 	snprintf(name, sizeof(name), "hctx%u", hctx->queue_num);
 	hctx->debugfs_dir = debugfs_create_dir(name, q->debugfs_dir);
 
+	if (!hctx->wait_on_hw_tag)
+		hctx->wait_on_hw_tag = alloc_percpu(unsigned long);
+	if (!hctx->wait_on_sched_tag)
+		hctx->wait_on_sched_tag = alloc_percpu(unsigned long);
+
 	debugfs_create_files(q, hctx->debugfs_dir, hctx,
 			     blk_mq_debugfs_hctx_attrs);
 
@@ -684,6 +740,11 @@ void blk_mq_debugfs_unregister_hctx(struct blk_mq_hw_ctx *hctx)
 	debugfs_remove_recursive(hctx->debugfs_dir);
 	hctx->sched_debugfs_dir = NULL;
 	hctx->debugfs_dir = NULL;
+
+	free_percpu(hctx->wait_on_hw_tag);
+	hctx->wait_on_hw_tag = NULL;
+	free_percpu(hctx->wait_on_sched_tag);
+	hctx->wait_on_sched_tag = NULL;
 }
 
 void blk_mq_debugfs_register_hctxs(struct request_queue *q)
@@ -814,4 +875,27 @@ void blk_mq_debugfs_unregister_sched_hctx(struct blk_mq_hw_ctx *hctx)
 		return;
 	debugfs_remove_recursive(hctx->sched_debugfs_dir);
 	hctx->sched_debugfs_dir = NULL;
+}
+
+/**
+ * blk_mq_debugfs_inc_wait_tags - increment the tag starvation counters
+ * @hctx: hardware context associated with the tag allocation
+ * @is_sched: true if the starved pool is the software scheduler
+ *
+ * Evaluates the exhausted tag pool and safely increments the appropriate
+ * per-cpu debugfs starvation counter.
+ *
+ * Note: A race window exists during rapid device probe or CPU hotplug
+ * where I/O might be submitted before blk_mq_debugfs_register_hctx() has
+ * completed allocating the per-CPU counters. Therefore, the pointer is
+ * explicitly checked to prevent a NULL pointer dereference.
+ */
+void blk_mq_debugfs_inc_wait_tags(struct blk_mq_hw_ctx *hctx,
+				  bool is_sched)
+{
+	unsigned long __percpu *tags = is_sched ? hctx->wait_on_sched_tag :
+						  hctx->wait_on_hw_tag;
+
+	if (likely(tags))
+		this_cpu_inc(*tags);
 }
