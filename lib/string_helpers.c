@@ -121,6 +121,18 @@ int string_get_size(u64 size, u64 blk_size, const enum string_size_units units,
 		size += 1;
 	}
 
+	/*
+	 * Renormalize into the next named unit, but preserve the top-end
+	 * UNK fallback. After promotion the value is exactly 1 of the next
+	 * unit, so keep two fractional digits for the usual 1.00 formatting.
+	 */
+	if (size >= divisor[units_base] && i + 1 < ARRAY_SIZE(units_2)) {
+		size = 1;
+		remainder = 0;
+		i++;
+		j = 2;
+	}
+
 	if (j) {
 		snprintf(tmp, sizeof(tmp), ".%03u", remainder);
 		tmp[j+1] = '\0';

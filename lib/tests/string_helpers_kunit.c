@@ -558,6 +558,31 @@ static void test_get_size(struct kunit *test)
 	/* weird block sizes */
 	test_string_get_size_one(3000, 1900, "5.70 MB", "5.44 MiB");
 
+	/* rounding carry into the next unit at the first decimal boundary */
+	test_string_get_size_one(999499, 1, "999 kB", "976 KiB");
+	test_string_get_size_one(999500, 1, "1.00 MB", "976 KiB");
+	test_string_get_size_one(999999, 1, "1.00 MB", "977 KiB");
+	test_string_get_size_one(1000000, 1, "1.00 MB", "977 KiB");
+	test_string_get_size_one(1000001, 1, "1.00 MB", "977 KiB");
+
+	/* rounding carry into the next unit at the first binary boundary */
+	test_string_get_size_one(1048063, 1, "1.05 MB", "1023 KiB");
+	test_string_get_size_one(1048064, 1, "1.05 MB", "1.00 MiB");
+	test_string_get_size_one(1048575, 1, "1.05 MB", "1.00 MiB");
+	test_string_get_size_one(1048576, 1, "1.05 MB", "1.00 MiB");
+	test_string_get_size_one(1048577, 1, "1.05 MB", "1.00 MiB");
+
+	/* values already in the next binary unit stay unchanged */
+	test_string_get_size_one(2097151, 1, "2.10 MB", "2.00 MiB");
+	test_string_get_size_one(2097152, 1, "2.10 MB", "2.00 MiB");
+	test_string_get_size_one(2097153, 1, "2.10 MB", "2.00 MiB");
+
+	/* non-byte block sizes hit the same carry path */
+	test_string_get_size_one(4997, 200, "999 kB", "976 KiB");
+	test_string_get_size_one(4998, 200, "1.00 MB", "976 KiB");
+	test_string_get_size_one(9981, 105, "1.05 MB", "1023 KiB");
+	test_string_get_size_one(9982, 105, "1.05 MB", "1.00 MiB");
+
 	/* huge values */
 	test_string_get_size_one(U64_MAX, 4096, "75.6 ZB", "64.0 ZiB");
 	test_string_get_size_one(4096, U64_MAX, "75.6 ZB", "64.0 ZiB");
