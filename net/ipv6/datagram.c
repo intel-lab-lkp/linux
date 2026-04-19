@@ -643,7 +643,10 @@ void ip6_datagram_recv_specific_ctl(struct sock *sk, struct msghdr *msg,
 	/* HbH is allowed only once */
 	if (np->rxopt.bits.hopopts && (opt->flags & IP6SKB_HOPBYHOP)) {
 		u8 *ptr = nh + sizeof(struct ipv6hdr);
-		put_cmsg(msg, SOL_IPV6, IPV6_HOPOPTS, (ptr[1]+1)<<3, ptr);
+		u16 hbhlen = (ptr[1] + 1) << 3;
+
+		if (ptr + hbhlen <= skb_tail_pointer(skb))
+			put_cmsg(msg, SOL_IPV6, IPV6_HOPOPTS, hbhlen, ptr);
 	}
 
 	if (opt->lastopt &&
@@ -668,27 +671,37 @@ void ip6_datagram_recv_specific_ctl(struct sock *sk, struct msghdr *msg,
 			case IPPROTO_DSTOPTS:
 				nexthdr = ptr[0];
 				len = (ptr[1] + 1) << 3;
+				if (ptr + len > skb_tail_pointer(skb))
+					goto ext_hdr_done;
 				if (np->rxopt.bits.dstopts)
 					put_cmsg(msg, SOL_IPV6, IPV6_DSTOPTS, len, ptr);
 				break;
 			case IPPROTO_ROUTING:
 				nexthdr = ptr[0];
 				len = (ptr[1] + 1) << 3;
+				if (ptr + len > skb_tail_pointer(skb))
+					goto ext_hdr_done;
 				if (np->rxopt.bits.srcrt)
 					put_cmsg(msg, SOL_IPV6, IPV6_RTHDR, len, ptr);
 				break;
 			case IPPROTO_AH:
 				nexthdr = ptr[0];
 				len = (ptr[1] + 2) << 2;
+				if (ptr + len > skb_tail_pointer(skb))
+					goto ext_hdr_done;
 				break;
 			default:
 				nexthdr = ptr[0];
 				len = (ptr[1] + 1) << 3;
+				if (ptr + len > skb_tail_pointer(skb))
+					goto ext_hdr_done;
 				break;
 			}
 
 			off += len;
 		}
+ext_hdr_done:
+		;
 	}
 
 	/* socket options in old style */
@@ -705,19 +718,31 @@ void ip6_datagram_recv_specific_ctl(struct sock *sk, struct msghdr *msg,
 	}
 	if (np->rxopt.bits.ohopopts && (opt->flags & IP6SKB_HOPBYHOP)) {
 		u8 *ptr = nh + sizeof(struct ipv6hdr);
-		put_cmsg(msg, SOL_IPV6, IPV6_2292HOPOPTS, (ptr[1]+1)<<3, ptr);
+		u16 hbhlen = (ptr[1] + 1) << 3;
+
+		if (ptr + hbhlen <= skb_tail_pointer(skb))
+			put_cmsg(msg, SOL_IPV6, IPV6_2292HOPOPTS, hbhlen, ptr);
 	}
 	if (np->rxopt.bits.odstopts && opt->dst0) {
 		u8 *ptr = nh + opt->dst0;
-		put_cmsg(msg, SOL_IPV6, IPV6_2292DSTOPTS, (ptr[1]+1)<<3, ptr);
+		u16 doptlen = (ptr[1] + 1) << 3;
+
+		if (ptr + doptlen <= skb_tail_pointer(skb))
+			put_cmsg(msg, SOL_IPV6, IPV6_2292DSTOPTS, doptlen, ptr);
 	}
 	if (np->rxopt.bits.osrcrt && opt->srcrt) {
 		struct ipv6_rt_hdr *rthdr = (struct ipv6_rt_hdr *)(nh + opt->srcrt);
-		put_cmsg(msg, SOL_IPV6, IPV6_2292RTHDR, (rthdr->hdrlen+1) << 3, rthdr);
+		u16 rtlen = (rthdr->hdrlen + 1) << 3;
+
+		if ((u8 *)rthdr + rtlen <= skb_tail_pointer(skb))
+			put_cmsg(msg, SOL_IPV6, IPV6_2292RTHDR, rtlen, rthdr);
 	}
 	if (np->rxopt.bits.odstopts && opt->dst1) {
 		u8 *ptr = nh + opt->dst1;
-		put_cmsg(msg, SOL_IPV6, IPV6_2292DSTOPTS, (ptr[1]+1)<<3, ptr);
+		u16 doptlen = (ptr[1] + 1) << 3;
+
+		if (ptr + doptlen <= skb_tail_pointer(skb))
+			put_cmsg(msg, SOL_IPV6, IPV6_2292DSTOPTS, doptlen, ptr);
 	}
 	if (np->rxopt.bits.rxorigdstaddr) {
 		struct sockaddr_in6 sin6;
