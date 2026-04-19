@@ -1,0 +1,17 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Device Tree overlay for the AA104XD12 panel connected to LVDS0 on a Geist board
+ *
+ * Copyright 2026 Marek Vasut
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+
+#include "salvator-panel-aa104xd12.dtso"
+
+&{/panel} {
+	data-mapping = "jeida-24";
+};
