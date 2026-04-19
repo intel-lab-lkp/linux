@@ -42,6 +42,7 @@ properties:
       - renesas,du-r8a779a0 # for R-Car V3U compatible DU
       - renesas,du-r8a779g0 # for R-Car V4H compatible DU
       - renesas,du-r8a779h0 # for R-Car V4M compatible DU
+      - renesas,du-r8a779md # for R-Car M3Le compatible DU
 
   reg:
     maxItems: 1
@@ -882,6 +883,75 @@ allOf:
 
         renesas,vsps:
           maxItems: 1
+
+      required:
+        - clock-names
+        - interrupts
+        - resets
+        - reset-names
+        - renesas,vsps
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - renesas,du-r8a779md
+    then:
+      properties:
+        clocks:
+          minItems: 3
+          items:
+            - description: Functional clock for DU0
+            - description: Functional clock for DU1
+            - description: Functional clock for DU3
+            - description: DU_DOTCLKIN0 input clock
+            - description: DU_DOTCLKIN1 input clock
+            - description: DU_DOTCLKIN3 input clock
+
+        clock-names:
+          minItems: 3
+          items:
+            - const: du.0
+            - const: du.1
+            - const: du.3
+            - pattern: '^dclkin\.[013]$'
+            - pattern: '^dclkin\.[013]$'
+            - pattern: '^dclkin\.[013]$'
+
+        interrupts:
+          minItems: 3
+          maxItems: 3
+
+        resets:
+          minItems: 2
+          maxItems: 2
+
+        reset-names:
+          items:
+            - const: du.0
+            - const: du.3
+
+        ports:
+          properties:
+            port@0:
+              description: DPAD 0
+            port@1: false
+            port@2:
+              description: LVDS 0
+            port@3: false
+
+          required:
+            - port@0
+            - port@2
+
+        renesas,cmms:
+          minItems: 3
+          maxItems: 3
+
+        renesas,vsps:
+          minItems: 3
+          maxItems: 3
 
       required:
         - clock-names
