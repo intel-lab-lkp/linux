@@ -61,9 +61,11 @@ Here is what the fields mean:
             vector for this purpose, thus preserving the original ``argv[0]``.
             e.g. If your interp is set to ``/bin/foo`` and you run ``blah``
             (which is in ``/usr/local/bin``), then the kernel will execute
-            ``/bin/foo`` with ``argv[]`` set to ``["/bin/foo", "/usr/local/bin/blah", "blah"]``.  The interp has to be aware of this so it can
-            execute ``/usr/local/bin/blah``
-            with ``argv[]`` set to ``["blah"]``.
+            ``/bin/foo`` with ``argv[]`` set to ``["/bin/foo",
+            "/usr/local/bin/blah", "blah"]``.  The interp can be aware of this
+            by checking if bit 0 in AT_FLAGS in the auxilary vector is set to 1
+            so it can execute ``/usr/local/bin/blah`` with ``argv[]`` set to
+            ``["blah"]``.
       ``O`` - open-binary
 	    Legacy behavior of binfmt_misc is to pass the full path
             of the binary to the interpreter as an argument. When this flag is
