@@ -880,7 +880,7 @@ static int idxd_device_config_save(struct idxd_device *idxd,
 		saved_groups[i] = no_free_ptr(saved_group);
 	}
 
-	struct idxd_engine **saved_engines =
+	struct idxd_engine **saved_engines __free(kfree) =
 			kcalloc_node(idxd->max_engines,
 				     sizeof(struct idxd_engine *),
 				     GFP_KERNEL, dev_to_node(dev));
