@@ -68,6 +68,21 @@ config INTEL_QEP
 	  To compile this driver as a module, choose M here: the module
 	  will be called intel-qep.
 
+config GPIO_QUADRATURE_ENCODER
+	tristate "GPIO-based quadrature encoder counter driver"
+	depends on GPIOLIB
+	help
+	  Select this option to enable the GPIO-based quadrature encoder
+	  counter driver.  It reads A/B quadrature signals and an optional
+	  index pulse via edge-triggered GPIO interrupts, supporting X1, X2,
+	  X4 quadrature decoding and pulse-direction mode.
+
+	  This is useful on SoCs that lack a dedicated hardware quadrature
+	  decoder or where the encoder is wired to generic GPIO pins.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called gpio-quadrature-encoder.
+
 config INTERRUPT_CNT
 	tristate "Interrupt counter driver"
 	depends on GPIOLIB
