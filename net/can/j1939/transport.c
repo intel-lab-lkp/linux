@@ -10,8 +10,10 @@
 
 #include <linux/can/skb.h>
 #include <net/can.h>
+#include <kunit/visibility.h>
 
 #include "j1939-priv.h"
+#include "j1939-test.h"
 
 #define J1939_XTP_TX_RETRY_LIMIT 100
 
@@ -37,7 +39,7 @@ static unsigned int j1939_tp_packet_delay;
 static unsigned int j1939_tp_padding = 1;
 
 /* helpers */
-static const char *j1939_xtp_abort_to_str(enum j1939_xtp_abort abort)
+VISIBLE_IF_KUNIT const char *j1939_xtp_abort_to_str(enum j1939_xtp_abort abort)
 {
 	switch (abort) {
 	case J1939_XTP_ABORT_BUSY:
@@ -76,9 +78,10 @@ static const char *j1939_xtp_abort_to_str(enum j1939_xtp_abort abort)
 		return "<unknown>";
 	}
 }
+EXPORT_SYMBOL_IF_KUNIT(j1939_xtp_abort_to_str);
 
-static int j1939_xtp_abort_to_errno(struct j1939_priv *priv,
-				    enum j1939_xtp_abort abort)
+VISIBLE_IF_KUNIT int j1939_xtp_abort_to_errno(struct j1939_priv *priv,
+					       enum j1939_xtp_abort abort)
 {
 	int err;
 
@@ -142,6 +145,7 @@ static int j1939_xtp_abort_to_errno(struct j1939_priv *priv,
 
 	return err;
 }
+EXPORT_SYMBOL_IF_KUNIT(j1939_xtp_abort_to_errno);
 
 static inline void j1939_session_list_lock(struct j1939_priv *priv)
 {
@@ -375,14 +379,47 @@ static inline unsigned int j1939_etp_ctl_to_size(const u8 *dat)
 		(dat[2] << 8) | (dat[1] << 0);
 }
 
+#if IS_ENABLED(CONFIG_KUNIT)
+/* Wrappers for testing inline functions - no production overhead */
+VISIBLE_IF_KUNIT bool j1939_cb_is_broadcast_wrapper(const struct j1939_sk_buff_cb *skcb)
+{
+	return j1939_cb_is_broadcast(skcb);
+}
+EXPORT_SYMBOL_IF_KUNIT(j1939_cb_is_broadcast_wrapper);
+
+VISIBLE_IF_KUNIT pgn_t j1939_xtp_ctl_to_pgn_wrapper(const u8 *dat)
+{
+	return j1939_xtp_ctl_to_pgn(dat);
+}
+EXPORT_SYMBOL_IF_KUNIT(j1939_xtp_ctl_to_pgn_wrapper);
+
+VISIBLE_IF_KUNIT unsigned int j1939_tp_ctl_to_size_wrapper(const u8 *dat)
+{
+	return j1939_tp_ctl_to_size(dat);
+}
+EXPORT_SYMBOL_IF_KUNIT(j1939_tp_ctl_to_size_wrapper);
+
+VISIBLE_IF_KUNIT unsigned int j1939_etp_ctl_to_packet_wrapper(const u8 *dat)
+{
+	return j1939_etp_ctl_to_packet(dat);
+}
+EXPORT_SYMBOL_IF_KUNIT(j1939_etp_ctl_to_packet_wrapper);
+
+VISIBLE_IF_KUNIT unsigned int j1939_etp_ctl_to_size_wrapper(const u8 *dat)
+{
+	return j1939_etp_ctl_to_size(dat);
+}
+EXPORT_SYMBOL_IF_KUNIT(j1939_etp_ctl_to_size_wrapper);
+#endif
+
 /* find existing session:
  * reverse: swap cb's src & dst
  * there is no problem with matching broadcasts, since
  * broadcasts (no dst, no da) would never call this
  * with reverse == true
  */
-static bool j1939_session_match(struct j1939_addr *se_addr,
-				struct j1939_addr *sk_addr, bool reverse)
+VISIBLE_IF_KUNIT bool j1939_session_match(struct j1939_addr *se_addr,
+					  struct j1939_addr *sk_addr, bool reverse)
 {
 	if (se_addr->type != sk_addr->type)
 		return false;
@@ -419,6 +456,7 @@ static bool j1939_session_match(struct j1939_addr *se_addr,
 
 	return true;
 }
+EXPORT_SYMBOL_IF_KUNIT(j1939_session_match);
 
 static struct
 j1939_session *j1939_session_get_by_addr_locked(struct j1939_priv *priv,
@@ -478,7 +516,7 @@ j1939_session *j1939_session_get_by_addr(struct j1939_priv *priv,
 	return session;
 }
 
-static void j1939_skbcb_swap(struct j1939_sk_buff_cb *skcb)
+VISIBLE_IF_KUNIT void j1939_skbcb_swap(struct j1939_sk_buff_cb *skcb)
 {
 	u8 tmp = 0;
 
@@ -493,6 +531,7 @@ static void j1939_skbcb_swap(struct j1939_sk_buff_cb *skcb)
 	skcb->flags &= ~(J1939_ECU_LOCAL_SRC | J1939_ECU_LOCAL_DST);
 	skcb->flags |= tmp;
 }
+EXPORT_SYMBOL_IF_KUNIT(j1939_skbcb_swap);
 
 static struct
 sk_buff *j1939_tp_tx_dat_new(struct j1939_priv *priv,

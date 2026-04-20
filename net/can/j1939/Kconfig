@@ -13,3 +13,15 @@ config CAN_J1939
 	  The relevant parts in kernel are
 	  SAE j1939-21 (datalink & transport protocol)
 	  & SAE j1939-81 (network management).
+
+config CAN_J1939_KUNIT_TEST
+	tristate "KUnit tests for CAN J1939 sockets" if !KUNIT_ALL_TESTS
+	depends on KUNIT && CAN_J1939
+	default KUNIT_ALL_TESTS
+	help
+	  This builds unit tests for the J1939 socket utility functions.
+
+	  For more information on KUnit and unit tests in general, please refer
+	  to the KUnit documentation in Documentation/dev-tools/kunit/.
+
+	  If unsure, say N.

@@ -18,8 +18,10 @@
 #include <linux/errqueue.h>
 #include <linux/if_arp.h>
 #include <net/can.h>
+#include <kunit/visibility.h>
 
 #include "j1939-priv.h"
+#include "j1939-test.h"
 
 /* conversion function between struct sock::sk_priority from linux and
  * j1939 priority field
@@ -50,6 +52,33 @@ static inline bool j1939_pgn_is_clean_pdu(pgn_t pgn)
 	else
 		return true;
 }
+
+#if IS_ENABLED(CONFIG_KUNIT)
+/* Wrappers for testing inline functions - no production overhead */
+VISIBLE_IF_KUNIT priority_t j1939_prio_wrapper(u32 sk_priority)
+{
+	return j1939_prio(sk_priority);
+}
+EXPORT_SYMBOL_IF_KUNIT(j1939_prio_wrapper);
+
+VISIBLE_IF_KUNIT u32 j1939_to_sk_priority_wrapper(priority_t prio)
+{
+	return j1939_to_sk_priority(prio);
+}
+EXPORT_SYMBOL_IF_KUNIT(j1939_to_sk_priority_wrapper);
+
+VISIBLE_IF_KUNIT bool j1939_pgn_is_valid_wrapper(pgn_t pgn)
+{
+	return j1939_pgn_is_valid(pgn);
+}
+EXPORT_SYMBOL_IF_KUNIT(j1939_pgn_is_valid_wrapper);
+
+VISIBLE_IF_KUNIT bool j1939_pgn_is_clean_pdu_wrapper(pgn_t pgn)
+{
+	return j1939_pgn_is_clean_pdu(pgn);
+}
+EXPORT_SYMBOL_IF_KUNIT(j1939_pgn_is_clean_pdu_wrapper);
+#endif
 
 static inline void j1939_sock_pending_add(struct sock *sk)
 {
@@ -422,7 +451,7 @@ static int j1939_sk_init(struct sock *sk)
 	return 0;
 }
 
-static int j1939_sk_sanity_check(struct sockaddr_can *addr, int len)
+VISIBLE_IF_KUNIT int j1939_sk_sanity_check(struct sockaddr_can *addr, int len)
 {
 	if (!addr)
 		return -EDESTADDRREQ;
@@ -438,6 +467,7 @@ static int j1939_sk_sanity_check(struct sockaddr_can *addr, int len)
 
 	return 0;
 }
+EXPORT_SYMBOL_IF_KUNIT(j1939_sk_sanity_check);
 
 static int j1939_sk_bind(struct socket *sock, struct sockaddr_unsized *uaddr, int len)
 {
@@ -587,8 +617,9 @@ static int j1939_sk_connect(struct socket *sock, struct sockaddr_unsized *uaddr,
 	return ret;
 }
 
-static void j1939_sk_sock2sockaddr_can(struct sockaddr_can *addr,
-				       const struct j1939_sock *jsk, int peer)
+VISIBLE_IF_KUNIT void j1939_sk_sock2sockaddr_can(struct sockaddr_can *addr,
+						 const struct j1939_sock *jsk,
+						 int peer)
 {
 	/* There are two holes (2 bytes and 3 bytes) to clear to avoid
 	 * leaking kernel information to user space.
@@ -606,6 +637,7 @@ static void j1939_sk_sock2sockaddr_can(struct sockaddr_can *addr,
 		addr->can_addr.j1939.addr = jsk->addr.sa;
 	}
 }
+EXPORT_SYMBOL_IF_KUNIT(j1939_sk_sock2sockaddr_can);
 
 static int j1939_sk_getname(struct socket *sock, struct sockaddr *uaddr,
 			    int peer)
@@ -937,7 +969,7 @@ failure:
 	return NULL;
 }
 
-static size_t j1939_sk_opt_stats_get_size(enum j1939_sk_errqueue_type type)
+VISIBLE_IF_KUNIT size_t j1939_sk_opt_stats_get_size(enum j1939_sk_errqueue_type type)
 {
 	switch (type) {
 	case J1939_ERRQUEUE_RX_RTS:
@@ -955,6 +987,7 @@ static size_t j1939_sk_opt_stats_get_size(enum j1939_sk_errqueue_type type)
 			0;
 	}
 }
+EXPORT_SYMBOL_IF_KUNIT(j1939_sk_opt_stats_get_size);
 
 static struct sk_buff *
 j1939_sk_get_timestamping_opt_stats(struct j1939_session *session,
