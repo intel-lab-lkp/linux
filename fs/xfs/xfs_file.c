@@ -1388,7 +1388,8 @@ xfs_falloc_write_zeroes(
 	if (xfs_is_always_cow_inode(ip) ||
 	    !bdev_write_zeroes_unmap_sectors(
 		    xfs_inode_buftarg(XFS_I(inode))->bt_bdev))
-		return -EOPNOTSUPP;
+		if (!xfs_globals.allow_write_zero)
+			return -EOPNOTSUPP;
 
 	error = xfs_falloc_newsize(file, mode, offset, len, &new_size);
 	if (error)

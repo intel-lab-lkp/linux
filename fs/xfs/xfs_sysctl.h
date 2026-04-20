@@ -86,6 +86,7 @@ struct xfs_globals {
 	int	mount_delay;		/* mount setup delay (secs) */
 	bool	bug_on_assert;		/* BUG() the kernel on assert failure */
 	bool	always_cow;		/* use COW fork for all overwrites */
+	bool    allow_write_zero;       /* Allow WRITE_ZERO on any HW */
 };
 extern struct xfs_globals	xfs_globals;
 

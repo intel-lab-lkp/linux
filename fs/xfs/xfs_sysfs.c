@@ -315,6 +315,30 @@ bload_node_slack_show(
 }
 XFS_SYSFS_ATTR_RW(bload_node_slack);
 
+static ssize_t
+allow_write_zero_store(
+       struct kobject  *kobject,
+       const char      *buf,
+       size_t          count)
+{
+       ssize_t         ret;
+
+       ret = kstrtobool(buf, &xfs_globals.allow_write_zero);
+       if (ret < 0)
+               return ret;
+       return count;
+}
+
+static ssize_t
+allow_write_zero_show(
+       struct kobject  *kobject,
+       char            *buf)
+{
+       return sysfs_emit(buf, "%d\n", xfs_globals.allow_write_zero);
+}
+XFS_SYSFS_ATTR_RW(allow_write_zero);
+
+
 static struct attribute *xfs_dbg_attrs[] = {
 	ATTR_LIST(bug_on_assert),
 	ATTR_LIST(log_recovery_delay),
@@ -324,6 +348,7 @@ static struct attribute *xfs_dbg_attrs[] = {
 	ATTR_LIST(larp),
 	ATTR_LIST(bload_leaf_slack),
 	ATTR_LIST(bload_node_slack),
+	ATTR_LIST(allow_write_zero),
 	NULL,
 };
 ATTRIBUTE_GROUPS(xfs_dbg);
