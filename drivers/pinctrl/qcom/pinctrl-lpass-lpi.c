@@ -38,32 +38,46 @@ struct lpi_pinctrl {
 	const struct lpi_pinctrl_variant_data *data;
 };
 
-static int lpi_gpio_read(struct lpi_pinctrl *state, unsigned int pin,
+static u32 lpi_gpio_read(struct lpi_pinctrl *state, unsigned int pin,
 			 unsigned int addr)
 {
-	u32 pin_offset;
+	u32 pin_offset, val;
+	int ret;
 
 	if (state->data->flags & LPI_FLAG_USE_PREDEFINED_PIN_OFFSET)
 		pin_offset = state->data->groups[pin].pin_offset;
 	else
 		pin_offset = LPI_TLMM_REG_OFFSET * pin;
 
-	return ioread32(state->tlmm_base + pin_offset + addr);
+	ret = pm_runtime_resume_and_get(state->dev);
+	if (ret < 0)
+		return 0;
+
+	val = ioread32(state->tlmm_base + pin_offset + addr);
+	pm_runtime_put_autosuspend(state->dev);
+
+	return val;
 }
 
-static int lpi_gpio_write(struct lpi_pinctrl *state, unsigned int pin,
-			  unsigned int addr, unsigned int val)
+static void lpi_gpio_write(struct lpi_pinctrl *state, unsigned int pin,
+			   unsigned int addr, unsigned int val)
 {
 	u32 pin_offset;
+	int ret;
 
 	if (state->data->flags & LPI_FLAG_USE_PREDEFINED_PIN_OFFSET)
 		pin_offset = state->data->groups[pin].pin_offset;
 	else
 		pin_offset = LPI_TLMM_REG_OFFSET * pin;
 
-	iowrite32(val, state->tlmm_base + pin_offset + addr);
+	ret = pm_runtime_resume_and_get(state->dev);
+	if (ret < 0)
+		return;
 
-	return 0;
+	iowrite32(val, state->tlmm_base + pin_offset + addr);
+	pm_runtime_put_autosuspend(state->dev);
+
+	return;
 }
 
 static const struct pinctrl_ops lpi_gpio_pinctrl_ops = {
