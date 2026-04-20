@@ -1456,6 +1456,11 @@ static int ip_get_mcast_msfilter(struct sock *sk, sockptr_t optval,
 		return -EFAULT;
 
 	num = gsf.gf_numsrc;
+
+	if (num > (len - size0) / sizeof(struct sockaddr_storage))
+		num = (len - size0) / sizeof(struct sockaddr_storage);
+	gsf.gf_numsrc = num;
+
 	err = ip_mc_gsfget(sk, &gsf, optval,
 			   offsetof(struct group_filter, gf_slist_flex));
 	if (err)
@@ -1486,8 +1491,12 @@ static int compat_ip_get_mcast_msfilter(struct sock *sk, sockptr_t optval,
 	gf.gf_interface = gf32.gf_interface;
 	gf.gf_fmode = gf32.gf_fmode;
 	num = gf.gf_numsrc = gf32.gf_numsrc;
-	gf.gf_group = gf32.gf_group;
 
+	if (num > (len - size0) / sizeof(struct sockaddr_storage))
+		num = (len - size0) / sizeof(struct sockaddr_storage);
+	gf.gf_numsrc = num;
+
+	gf.gf_group = gf32.gf_group;
 	err = ip_mc_gsfget(sk, &gf, optval,
 			   offsetof(struct compat_group_filter, gf_slist_flex));
 	if (err)
