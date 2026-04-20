@@ -39,7 +39,6 @@ drm_bridge_to_tfp410(struct drm_bridge *bridge)
 {
 	return container_of(bridge, struct tfp410, bridge);
 }
-
 static inline struct tfp410 *
 drm_connector_to_tfp410(struct drm_connector *connector)
 {
@@ -110,7 +109,8 @@ static void tfp410_hpd_work_func(struct work_struct *work)
 		drm_helper_hpd_irq_event(dvi->bridge.dev);
 }
 
-static void tfp410_hpd_callback(void *arg, enum drm_connector_status status)
+static void tfp410_hpd_callback(void *arg, enum drm_connector_status status,
+				enum drm_connector_status_extra extra_status)
 {
 	struct tfp410 *dvi = arg;
 
