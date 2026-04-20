@@ -294,7 +294,13 @@ static int sw43408_probe(struct mipi_dsi_device *dsi)
 
 	dsi->dsc = &ctx->dsc;
 
-	return mipi_dsi_attach(dsi);
+	ret = mipi_dsi_attach(dsi);
+	if (ret < 0) {
+		drm_panel_remove(&ctx->base);
+		return ret;
+	}
+
+	return 0;
 }
 
 static void sw43408_remove(struct mipi_dsi_device *dsi)
