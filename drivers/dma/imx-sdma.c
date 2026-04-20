@@ -2364,7 +2364,18 @@ static int sdma_probe(struct platform_device *pdev)
 			return dev_err_probe(&pdev->dev, ret,
 					     "failed to register controller\n");
 
-		spba_bus = of_find_compatible_node(NULL, NULL, "fsl,spba-bus");
+		/*
+		 * On i.MX8M platforms with multiple SPBA buses, we need to find
+		 * the SPBA bus that's under the same AIPS bus as this SDMA controller.
+		 * First check the SDMA's parent (AIPS bus) for a child SPBA bus.
+		 * If not found, fall back to searching the entire device tree for
+		 * backward compatibility with older platforms.
+		 */
+		struct device_node *sdma_parent_np __free(device_node) = of_get_parent(np);
+
+		spba_bus = of_get_compatible_child(sdma_parent_np, "fsl,spba-bus");
+		if (!spba_bus)
+			spba_bus = of_find_compatible_node(NULL, NULL, "fsl,spba-bus");
 		ret = of_address_to_resource(spba_bus, 0, &spba_res);
 		if (!ret) {
 			sdma->spba_start_addr = spba_res.start;
