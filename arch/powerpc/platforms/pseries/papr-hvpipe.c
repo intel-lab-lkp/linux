@@ -480,6 +480,7 @@ static const struct file_operations papr_hvpipe_handle_ops = {
 static int papr_hvpipe_dev_create_handle(u32 srcID)
 {
 	struct hvpipe_source_info *src_info __free(kfree) = NULL;
+	struct hvpipe_source_info *owned_src_info;
 
 	spin_lock(&hvpipe_src_list_lock);
 	/*
@@ -509,7 +510,7 @@ static int papr_hvpipe_dev_create_handle(u32 srcID)
 	if (fdf.err)
 		return fdf.err;
 
-	retain_and_null_ptr(src_info);
+	owned_src_info = retain_and_null_ptr(src_info);
 	spin_lock(&hvpipe_src_list_lock);
 	/*
 	 * If two processes are executing ioctl() for the same
@@ -520,7 +521,7 @@ static int papr_hvpipe_dev_create_handle(u32 srcID)
 		spin_unlock(&hvpipe_src_list_lock);
 		return -EALREADY;
 	}
-	list_add(&src_info->list, &hvpipe_src_list);
+	list_add(&owned_src_info->list, &hvpipe_src_list);
 	spin_unlock(&hvpipe_src_list_lock);
 	return fd_publish(fdf);
 }
