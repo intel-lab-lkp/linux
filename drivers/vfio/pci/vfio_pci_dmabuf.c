@@ -17,6 +17,9 @@ struct vfio_pci_dma_buf {
 	struct phys_vec *phys_vec;
 	struct p2pdma_provider *provider;
 	u32 nr_ranges;
+	u16 steering_tag;
+	u8 ph;
+	u8 tph_present : 1;
 	u8 revoked : 1;
 };
 
@@ -60,6 +63,22 @@ vfio_pci_dma_buf_map(struct dma_buf_attachment *attachment,
 				       priv->size, dir);
 }
 
+static int vfio_pci_dma_buf_get_tph(struct dma_buf *dmabuf, u16 *steering_tag,
+				    u8 *ph, u8 st_width)
+{
+	struct vfio_pci_dma_buf *priv = dmabuf->priv;
+
+	if (!priv->tph_present)
+		return -EOPNOTSUPP;
+
+	if (st_width < 16 && priv->steering_tag > ((1U << st_width) - 1))
+		return -EINVAL;
+
+	*steering_tag = priv->steering_tag;
+	*ph = priv->ph;
+	return 0;
+}
+
 static void vfio_pci_dma_buf_unmap(struct dma_buf_attachment *attachment,
 				   struct sg_table *sgt,
 				   enum dma_data_direction dir)
@@ -89,6 +108,7 @@ static const struct dma_buf_ops vfio_pci_dmabuf_ops = {
 	.pin = vfio_pci_dma_buf_pin,
 	.unpin = vfio_pci_dma_buf_unpin,
 	.attach = vfio_pci_dma_buf_attach,
+	.get_tph = vfio_pci_dma_buf_get_tph,
 	.map_dma_buf = vfio_pci_dma_buf_map,
 	.unmap_dma_buf = vfio_pci_dma_buf_unmap,
 	.release = vfio_pci_dma_buf_release,
@@ -211,7 +231,9 @@ int vfio_pci_core_feature_dma_buf(struct vfio_pci_core_device *vdev, u32 flags,
 				  size_t argsz)
 {
 	struct vfio_device_feature_dma_buf get_dma_buf = {};
-	struct vfio_region_dma_range *dma_ranges;
+	bool tph_supplied;
+	u32 tph_index;
+	struct vfio_region_dma_range *entries;
 	DEFINE_DMA_BUF_EXPORT_INFO(exp_info);
 	struct vfio_pci_dma_buf *priv;
 	size_t length;
@@ -228,7 +250,10 @@ int vfio_pci_core_feature_dma_buf(struct vfio_pci_core_device *vdev, u32 flags,
 	if (copy_from_user(&get_dma_buf, arg, sizeof(get_dma_buf)))
 		return -EFAULT;
 
-	if (!get_dma_buf.nr_ranges || get_dma_buf.flags)
+	tph_supplied = !!(get_dma_buf.flags & VFIO_DMABUF_FLAG_TPH);
+	tph_index = get_dma_buf.nr_ranges;
+	if (!get_dma_buf.nr_ranges ||
+	    (get_dma_buf.flags & ~VFIO_DMABUF_FLAG_TPH))
 		return -EINVAL;
 
 	/*
@@ -237,19 +262,21 @@ int vfio_pci_core_feature_dma_buf(struct vfio_pci_core_device *vdev, u32 flags,
 	if (get_dma_buf.region_index >= VFIO_PCI_ROM_REGION_INDEX)
 		return -ENODEV;
 
-	dma_ranges = memdup_array_user(&arg->dma_ranges, get_dma_buf.nr_ranges,
-				       sizeof(*dma_ranges));
-	if (IS_ERR(dma_ranges))
-		return PTR_ERR(dma_ranges);
+	entries = memdup_array_user(&arg->entries,
+				    get_dma_buf.nr_ranges +
+					(tph_supplied ? 1 : 0),
+				    sizeof(*entries));
+	if (IS_ERR(entries))
+		return PTR_ERR(entries);
 
-	ret = validate_dmabuf_input(&get_dma_buf, dma_ranges, &length);
+	ret = validate_dmabuf_input(&get_dma_buf, entries, &length);
 	if (ret)
-		goto err_free_ranges;
+		goto err_free_entries;
 
 	priv = kzalloc_obj(*priv);
 	if (!priv) {
 		ret = -ENOMEM;
-		goto err_free_ranges;
+		goto err_free_entries;
 	}
 	priv->phys_vec = kzalloc_objs(*priv->phys_vec, get_dma_buf.nr_ranges);
 	if (!priv->phys_vec) {
@@ -260,15 +287,22 @@ int vfio_pci_core_feature_dma_buf(struct vfio_pci_core_device *vdev, u32 flags,
 	priv->vdev = vdev;
 	priv->nr_ranges = get_dma_buf.nr_ranges;
 	priv->size = length;
+
+	if (tph_supplied) {
+		priv->steering_tag = entries[tph_index].tph.steering_tag;
+		priv->ph = entries[tph_index].tph.ph;
+		priv->tph_present = 1;
+	}
+
 	ret = vdev->pci_ops->get_dmabuf_phys(vdev, &priv->provider,
 					     get_dma_buf.region_index,
-					     priv->phys_vec, dma_ranges,
+					     priv->phys_vec, entries,
 					     priv->nr_ranges);
 	if (ret)
 		goto err_free_phys;
 
-	kfree(dma_ranges);
-	dma_ranges = NULL;
+	kfree(entries);
+	entries = NULL;
 
 	if (!vfio_device_try_get_registration(&vdev->vdev)) {
 		ret = -ENODEV;
@@ -311,8 +345,8 @@ err_free_phys:
 	kfree(priv->phys_vec);
 err_free_priv:
 	kfree(priv);
-err_free_ranges:
-	kfree(dma_ranges);
+err_free_entries:
+	kfree(entries);
 	return ret;
 }
 

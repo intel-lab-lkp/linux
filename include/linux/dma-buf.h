@@ -114,6 +114,23 @@ struct dma_buf_ops {
 	void (*unpin)(struct dma_buf_attachment *attach);
 
 	/**
+	 * @get_tph:
+	 * @dmabuf: DMA buffer for which to retrieve TPH metadata
+	 * @steering_tag: Returns the raw TPH steering tag
+	 * @ph: Returns the TPH processing hint
+	 * @st_width: Consumer's supported steering tag width in bits (8 or 16)
+	 *
+	 * Return the TPH (TLP Processing Hints) metadata associated with this
+	 * DMA buffer. Exporters that do not provide TPH metadata should return
+	 * -EOPNOTSUPP. If the steering tag exceeds @st_width bits, return
+	 * -EINVAL.
+	 *
+	 * This callback is optional.
+	 */
+	int (*get_tph)(struct dma_buf *dmabuf, u16 *steering_tag, u8 *ph,
+		       u8 st_width);
+
+	/**
 	 * @map_dma_buf:
 	 *
 	 * This is called by dma_buf_map_attachment() and is used to map a

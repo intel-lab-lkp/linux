@@ -1490,16 +1490,36 @@ struct vfio_device_feature_bus_master {
  * open_flags are the typical flags passed to open(2), eg O_RDWR, O_CLOEXEC,
  * etc. offset/length specify a slice of the region to create the dmabuf from.
  * nr_ranges is the total number of (P2P DMA) ranges that comprise the dmabuf.
+ * When VFIO_DMABUF_FLAG_TPH is set, entries[] contains one extra trailing
+ * object after the nr_ranges DMA ranges carrying the TPH steering tag and
+ * processing hint.
  *
- * flags should be 0.
+ * flags should be 0 or VFIO_DMABUF_FLAG_TPH.
  *
  * Return: The fd number on success, -1 and errno is set on failure.
  */
 #define VFIO_DEVICE_FEATURE_DMA_BUF 11
 
+enum vfio_device_feature_dma_buf_flags {
+	VFIO_DMABUF_FLAG_TPH = 1 << 0,
+};
+
+struct vfio_region_dma_tph {
+	__u16 steering_tag;
+	__u8 ph;
+	__u8 reserved;
+	__u32 reserved2;
+};
+
 struct vfio_region_dma_range {
-	__u64 offset;
-	__u64 length;
+	union {
+		__u64 offset;
+		struct vfio_region_dma_tph tph;
+	};
+	union {
+		__u64 length;
+		__u64 reserved;
+	};
 };
 
 struct vfio_device_feature_dma_buf {
@@ -1507,7 +1527,7 @@ struct vfio_device_feature_dma_buf {
 	__u32	open_flags;
 	__u32   flags;
 	__u32   nr_ranges;
-	struct vfio_region_dma_range dma_ranges[] __counted_by(nr_ranges);
+	struct vfio_region_dma_range entries[];
 };
 
 /* -------- API for Type1 VFIO IOMMU -------- */
