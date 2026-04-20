@@ -107,10 +107,17 @@ int atomisp_csi2_set_ffmt(struct v4l2_subdev *sd,
 					     &tmp_ffmt);
 	}
 
-	/* FIXME: DPCM decompression */
-	*actual_ffmt = *ffmt = *__csi2_get_format(csi2, sd_state, which,
-						  CSI2_PAD_SINK);
-
+	/*
+	 * The source pad must expose the uncompressed format even when the sink
+	 * pad receives DPCM-compressed data. The hardware decompresses DPCM
+	 * (e.g. SGRBG10_DPCM8_1X8 -> SGRBG10_1X10) between sink and source,
+	 * so propagate the sink format but map the mbus code to its uncompressed
+	 * equivalent. atomisp_subdev_uncompressed_code() returns the code
+	 * unchanged for formats that are not DPCM-compressed.
+	 */
+	*actual_ffmt = *__csi2_get_format(csi2, sd_state, which, CSI2_PAD_SINK);
+	actual_ffmt->code = atomisp_subdev_uncompressed_code(actual_ffmt->code);
+	*ffmt = *actual_ffmt;
 	return 0;
 }
 
