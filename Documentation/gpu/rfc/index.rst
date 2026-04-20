@@ -29,8 +29,4 @@ host such documentation:
     i915_small_bar.rst
 
 .. toctree::
-
-    i915_vm_bind.rst
-
-.. toctree::
     color_pipeline.rst
