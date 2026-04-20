@@ -5,6 +5,7 @@
 
 #include <linux/clk.h>
 #include <linux/delay.h>
+#include <linux/err.h>
 #include <linux/of.h>
 #include <linux/of_graph.h>
 #include <linux/mfd/syscon.h>
@@ -182,8 +183,18 @@ static void kmb_dsi_clk_disable(struct kmb_dsi *kmb_dsi)
 
 void kmb_dsi_host_unregister(struct kmb_dsi *kmb_dsi)
 {
-	kmb_dsi_clk_disable(kmb_dsi);
-	mipi_dsi_host_unregister(kmb_dsi->host);
+	if (!IS_ERR_OR_NULL(kmb_dsi))
+		kmb_dsi_clk_disable(kmb_dsi);
+
+	if (dsi_host) {
+		mipi_dsi_host_unregister(dsi_host);
+		kfree(dsi_host);
+		dsi_host = NULL;
+	}
+
+	kfree(dsi_device);
+	dsi_device = NULL;
+	adv_bridge = NULL;
 }
 
 /*
@@ -217,6 +228,8 @@ static const struct mipi_dsi_host_ops kmb_dsi_host_ops = {
 int kmb_dsi_host_bridge_init(struct device *dev)
 {
 	struct device_node *encoder_node, *dsi_out;
+	bool host_registered = false;
+	int ret;
 
 	/* Create and register MIPI DSI host */
 	if (!dsi_host) {
@@ -230,25 +243,38 @@ int kmb_dsi_host_bridge_init(struct device *dev)
 			dsi_device = kzalloc_obj(*dsi_device);
 			if (!dsi_device) {
 				kfree(dsi_host);
+				dsi_host = NULL;
 				return -ENOMEM;
 			}
 		}
 
 		dsi_host->dev = dev;
-		mipi_dsi_host_register(dsi_host);
+		ret = mipi_dsi_host_register(dsi_host);
+		if (ret) {
+			DRM_ERROR("failed to register dsi host\n");
+			kfree(dsi_device);
+			dsi_device = NULL;
+			kfree(dsi_host);
+			dsi_host = NULL;
+			return ret;
+		}
+
+		host_registered = true;
 	}
 
 	/* Find ADV7535 node and initialize it */
 	dsi_out = of_graph_get_endpoint_by_regs(dev->of_node, 0, 1);
 	if (!dsi_out) {
 		DRM_ERROR("Failed to get dsi_out node info from DT\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err_unregister_host;
 	}
 	encoder_node = of_graph_get_remote_port_parent(dsi_out);
 	if (!encoder_node) {
 		of_node_put(dsi_out);
 		DRM_ERROR("Failed to get bridge info from DT\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err_unregister_host;
 	}
 	/* Locate drm bridge from the hdmi encoder DT node */
 	adv_bridge = of_drm_find_bridge(encoder_node);
@@ -256,10 +282,16 @@ int kmb_dsi_host_bridge_init(struct device *dev)
 	of_node_put(encoder_node);
 	if (!adv_bridge) {
 		DRM_DEBUG("Wait for external bridge driver DT\n");
-		return -EPROBE_DEFER;
+		ret = -EPROBE_DEFER;
+		goto err_unregister_host;
 	}
 
 	return 0;
+
+err_unregister_host:
+	if (host_registered)
+		kmb_dsi_host_unregister(NULL);
+	return ret;
 }
 
 static u32 mipi_get_datatype_params(u32 data_type, u32 data_mode,
