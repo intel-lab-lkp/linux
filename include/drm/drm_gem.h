@@ -53,6 +53,7 @@ struct drm_gem_object;
  * @DRM_GEM_OBJECT_RESIDENT: object is resident in memory (ie. not unpinned)
  * @DRM_GEM_OBJECT_PURGEABLE: object marked as purgeable by userspace
  * @DRM_GEM_OBJECT_ACTIVE: object is currently used by an active submission
+ * @DRM_GEM_OBJECT_EVICTED: object is evicted to swap
  *
  * Bitmask of status used for fdinfo memory stats, see &drm_gem_object_funcs.status
  * and drm_show_fdinfo().  Note that an object can report DRM_GEM_OBJECT_PURGEABLE
@@ -67,6 +68,7 @@ enum drm_gem_object_status {
 	DRM_GEM_OBJECT_RESIDENT  = BIT(0),
 	DRM_GEM_OBJECT_PURGEABLE = BIT(1),
 	DRM_GEM_OBJECT_ACTIVE    = BIT(2),
+	DRM_GEM_OBJECT_EVICTED   = BIT(3),
 };
 
 /**

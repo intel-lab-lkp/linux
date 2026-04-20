@@ -500,6 +500,7 @@ void drm_send_event_timestamp_locked(struct drm_device *dev,
  * @resident: Total size of GEM objects backing pages
  * @purgeable: Total size of GEM objects that can be purged (resident and not active)
  * @active: Total size of GEM objects active on one or more engines
+ * @evicted: Total size of GEM objects that have been evicted to swap
  *
  * Used by drm_print_memory_stats()
  */
@@ -509,6 +510,7 @@ struct drm_memory_stats {
 	u64 resident;
 	u64 purgeable;
 	u64 active;
+	u64 evicted;
 };
 
 enum drm_gem_object_status;

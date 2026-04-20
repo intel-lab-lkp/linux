@@ -868,6 +868,7 @@ int drm_memory_stats_is_zero(const struct drm_memory_stats *stats)
 		stats->private == 0 &&
 		stats->resident == 0 &&
 		stats->purgeable == 0 &&
+		stats->evicted == 0 &&
 		stats->active == 0);
 }
 EXPORT_SYMBOL(drm_memory_stats_is_zero);
@@ -901,6 +902,10 @@ void drm_print_memory_stats(struct drm_printer *p,
 	if (supported_status & DRM_GEM_OBJECT_PURGEABLE)
 		drm_fdinfo_print_size(p, prefix, "purgeable", region,
 				      stats->purgeable);
+
+	if (supported_status & DRM_GEM_OBJECT_EVICTED)
+		drm_fdinfo_print_size(p, prefix, "evicted", region,
+				      stats->evicted);
 }
 EXPORT_SYMBOL(drm_print_memory_stats);
 
@@ -954,6 +959,9 @@ void drm_show_memory_stats(struct drm_printer *p, struct drm_file *file)
 
 		if (s & DRM_GEM_OBJECT_PURGEABLE)
 			status.purgeable += add_size;
+
+		if (s & DRM_GEM_OBJECT_EVICTED)
+			status.evicted += add_size;
 	}
 	spin_unlock(&file->table_lock);
 
