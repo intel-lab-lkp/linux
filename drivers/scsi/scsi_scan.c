@@ -351,6 +351,15 @@ static struct scsi_device *scsi_alloc_sdev(struct scsi_target *starget,
 
 	scsi_sysfs_device_initialize(sdev);
 
+	ret = percpu_counter_init(&sdev->iorequest_cnt, 0, GFP_KERNEL);
+	if (ret)
+		goto out_device_destroy;
+	ret = percpu_counter_init(&sdev->iodone_cnt, 0, GFP_KERNEL);
+	if (ret) {
+		percpu_counter_destroy(&sdev->iorequest_cnt);
+		goto out_device_destroy;
+	}
+
 	if (scsi_device_is_pseudo_dev(sdev))
 		return sdev;
 

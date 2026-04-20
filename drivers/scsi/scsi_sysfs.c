@@ -516,6 +516,10 @@ static void scsi_device_dev_release(struct device *dev)
 	if (vpd_pgb7)
 		kfree_rcu(vpd_pgb7, rcu);
 	kfree(sdev->inquiry);
+	if (percpu_counter_initialized(&sdev->iodone_cnt))
+		percpu_counter_destroy(&sdev->iodone_cnt);
+	if (percpu_counter_initialized(&sdev->iorequest_cnt))
+		percpu_counter_destroy(&sdev->iorequest_cnt);
 	kfree(sdev);
 
 	if (parent)
@@ -936,10 +940,25 @@ static ssize_t
 show_iostat_counterbits(struct device *dev, struct device_attribute *attr,
 			char *buf)
 {
-	return snprintf(buf, 20, "%d\n", (int)sizeof(atomic_t) * 8);
+	/*
+	 * iorequest_cnt and iodone_cnt are per-CPU sums (s64); ioerr_cnt and
+	 * iotmo_cnt remain atomic_t.  Report the widest counter for tools.
+	 */
+	return snprintf(buf, 20, "%zu\n", sizeof(s64) * 8);
 }
 
 static DEVICE_ATTR(iocounterbits, S_IRUGO, show_iostat_counterbits, NULL);
+
+#define show_sdev_iostat_percpu(field)					\
+static ssize_t								\
+show_iostat_##field(struct device *dev, struct device_attribute *attr,	\
+		    char *buf)						\
+{									\
+	struct scsi_device *sdev = to_scsi_device(dev);			\
+	unsigned long long count = percpu_counter_sum(&sdev->field);	\
+	return snprintf(buf, 20, "0x%llx\n", count);			\
+}									\
+static DEVICE_ATTR(field, 0444, show_iostat_##field, NULL)
 
 #define show_sdev_iostat(field)						\
 static ssize_t								\
@@ -950,10 +969,10 @@ show_iostat_##field(struct device *dev, struct device_attribute *attr,	\
 	unsigned long long count = atomic_read(&sdev->field);		\
 	return snprintf(buf, 20, "0x%llx\n", count);			\
 }									\
-static DEVICE_ATTR(field, S_IRUGO, show_iostat_##field, NULL)
+static DEVICE_ATTR(field, 0444, show_iostat_##field, NULL)
 
-show_sdev_iostat(iorequest_cnt);
-show_sdev_iostat(iodone_cnt);
+show_sdev_iostat_percpu(iorequest_cnt);
+show_sdev_iostat_percpu(iodone_cnt);
 show_sdev_iostat(ioerr_cnt);
 show_sdev_iostat(iotmo_cnt);
 
