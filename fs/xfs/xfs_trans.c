@@ -1186,6 +1186,9 @@ xfs_trans_reserve_more_inode(
 /*
  * Allocate an transaction in preparation for inode creation by reserving quota
  * against the given dquots.  Callers are not required to hold any inode locks.
+ * If the block reservation fails with ENOSPC, flush all delalloc blocks to
+ * reclaim space from speculative preallocation and retry.  This is similar to
+ * the quota retry but targets FS-wide ENOSPC.
  */
 int
 xfs_trans_alloc_icreate(
@@ -1199,10 +1202,16 @@ xfs_trans_alloc_icreate(
 {
 	struct xfs_trans	*tp;
 	bool			retried = false;
+	bool			flushed = false;
 	int			error;
 
 retry:
 	error = xfs_trans_alloc(mp, resv, dblocks, 0, 0, &tp);
+	if (error == -ENOSPC && !flushed) {
+		xfs_flush_inodes(mp);
+		flushed = true;
+		goto retry;
+	}
 	if (error)
 		return error;
 
