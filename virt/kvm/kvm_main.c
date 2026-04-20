@@ -3961,11 +3961,13 @@ void kvm_vcpu_on_spin(struct kvm_vcpu *me, bool yield_to_kernel_mode)
 	int nr_vcpus, start, i, idx, yielded;
 	struct kvm *kvm = me->kvm;
 	struct kvm_vcpu *vcpu;
-	int try = 3;
+	int try = 0;
 
 	nr_vcpus = atomic_read(&kvm->online_vcpus);
 	if (nr_vcpus < 2)
 		return;
+
+	try = min(nr_vcpus - 1, 8);
 
 	/* Pairs with the smp_wmb() in kvm_vm_ioctl_create_vcpu(). */
 	smp_rmb();
