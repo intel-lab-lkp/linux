@@ -70,10 +70,16 @@ struct device;
 #if IS_ENABLED(CONFIG_EXYNOS_ACPM_PROTOCOL)
 struct acpm_handle *devm_acpm_get_by_node(struct device *dev,
 					  struct device_node *np);
+struct acpm_handle *devm_acpm_get_by_phandle(struct device *dev);
 #else
 
 static inline struct acpm_handle *devm_acpm_get_by_node(struct device *dev,
 							struct device_node *np)
+{
+	return NULL;
+}
+
+static inline struct acpm_handle *devm_acpm_get_by_phandle(struct device *dev)
 {
 	return NULL;
 }
