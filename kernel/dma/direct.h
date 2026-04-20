@@ -86,9 +86,14 @@ static inline dma_addr_t dma_direct_map_phys(struct device *dev,
 		phys_addr_t phys, size_t size, enum dma_data_direction dir,
 		unsigned long attrs, bool flush)
 {
+	bool force_swiotlb_map = false;
 	dma_addr_t dma_addr;
 
-	if (is_swiotlb_force_bounce(dev)) {
+	/* if phys addr attribute is encrypted but the device is forcing an encrypted dma addr */
+	if (!(attrs & DMA_ATTR_CC_SHARED) && force_dma_unencrypted(dev))
+		force_swiotlb_map = true;
+
+	if (is_swiotlb_force_bounce(dev) || force_swiotlb_map) {
 		if (!(attrs & DMA_ATTR_CC_SHARED)) {
 			if (attrs & (DMA_ATTR_MMIO | DMA_ATTR_REQUIRE_COHERENT))
 				return DMA_MAPPING_ERROR;
@@ -105,18 +110,16 @@ static inline dma_addr_t dma_direct_map_phys(struct device *dev,
 			goto err_overflow;
 	} else if (attrs & DMA_ATTR_CC_SHARED) {
 		dma_addr = phys_to_dma_unencrypted(dev, phys);
-		if (unlikely(!dma_capable(dev, dma_addr, size, false)))
-			goto err_overflow;
 	} else {
-		dma_addr = phys_to_dma(dev, phys);
-		if (unlikely(!dma_capable(dev, dma_addr, size, true)) ||
-		    dma_kmalloc_needs_bounce(dev, size, dir)) {
-			if (is_swiotlb_active(dev) &&
-			    !(attrs & DMA_ATTR_REQUIRE_COHERENT))
-				return swiotlb_map(dev, phys, size, dir, attrs);
+		dma_addr = phys_to_dma_encrypted(dev, phys);
+	}
 
-			goto err_overflow;
-		}
+	if (unlikely(!dma_capable(dev, dma_addr, size, true)) ||
+	    dma_kmalloc_needs_bounce(dev, size, dir)) {
+		if (is_swiotlb_active(dev) &&
+		    !(attrs & DMA_ATTR_REQUIRE_COHERENT))
+			return swiotlb_map(dev, phys, size, dir, attrs);
+		goto err_overflow;
 	}
 
 	if (!dev_is_dma_coherent(dev) &&
