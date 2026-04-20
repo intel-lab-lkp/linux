@@ -32,6 +32,10 @@ properties:
           - enum:
               - qcom,kaanapali-qmp-ufs-phy
           - const: qcom,sm8750-qmp-ufs-phy
+      - items:
+          - enum:
+              - qcom,nord-qmp-ufs-phy
+          - const: qcom,sm8650-qmp-ufs-phy
       - enum:
           - qcom,milos-qmp-ufs-phy
           - qcom,msm8996-qmp-ufs-phy
