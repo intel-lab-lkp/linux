@@ -27,11 +27,19 @@ static int pvr2_context_cleaned_flag;
 static struct task_struct *pvr2_context_thread_ptr;
 
 
-static void pvr2_context_set_notify(struct pvr2_context *mp, int fl)
+static void pvr2_context_put(struct pvr2_context *mp)
+{
+	if (refcount_dec_and_test(&mp->refcount))
+		kfree(mp);
+}
+
+static int pvr2_context_set_notify_locked(struct pvr2_context *mp, int fl)
 {
 	int signal_flag = 0;
-	mutex_lock(&pvr2_context_mutex);
+
 	if (fl) {
+		if (mp->destroying_flag)
+			return 0;
 		if (!mp->notify_flag) {
 			signal_flag = (pvr2_context_notify_first == NULL);
 			mp->notify_prev = pvr2_context_notify_last;
@@ -59,6 +67,15 @@ static void pvr2_context_set_notify(struct pvr2_context *mp, int fl)
 			}
 		}
 	}
+	return signal_flag;
+}
+
+static void pvr2_context_set_notify(struct pvr2_context *mp, int fl)
+{
+	int signal_flag = 0;
+
+	mutex_lock(&pvr2_context_mutex);
+	signal_flag = pvr2_context_set_notify_locked(mp, fl);
 	mutex_unlock(&pvr2_context_mutex);
 	if (signal_flag) wake_up(&pvr2_context_sync_data);
 }
@@ -66,10 +83,13 @@ static void pvr2_context_set_notify(struct pvr2_context *mp, int fl)
 
 static void pvr2_context_destroy(struct pvr2_context *mp)
 {
+	int signal_flag = 0;
+
 	pvr2_trace(PVR2_TRACE_CTXT,"pvr2_context %p (destroy)",mp);
 	pvr2_hdw_destroy(mp->hdw);
-	pvr2_context_set_notify(mp, 0);
 	mutex_lock(&pvr2_context_mutex);
+	mp->destroying_flag = !0;
+	pvr2_context_set_notify_locked(mp, 0);
 	if (mp->exist_next) {
 		mp->exist_next->exist_prev = mp->exist_prev;
 	} else {
@@ -83,10 +103,12 @@ static void pvr2_context_destroy(struct pvr2_context *mp)
 	if (!pvr2_context_exist_first) {
 		/* Trigger wakeup on control thread in case it is waiting
 		   for an exit condition. */
-		wake_up(&pvr2_context_sync_data);
+		signal_flag = !0;
 	}
 	mutex_unlock(&pvr2_context_mutex);
-	kfree(mp);
+	if (signal_flag)
+		wake_up(&pvr2_context_sync_data);
+	pvr2_context_put(mp);
 }
 
 
@@ -209,6 +231,7 @@ struct pvr2_context *pvr2_context_create(
 	pvr2_trace(PVR2_TRACE_CTXT,"pvr2_context %p (create)",mp);
 	mp->setup_func = setup_func;
 	mutex_init(&mp->mutex);
+	refcount_set(&mp->refcount, 1);
 	mutex_lock(&pvr2_context_mutex);
 	mp->exist_prev = pvr2_context_exist_last;
 	mp->exist_next = NULL;
@@ -256,25 +279,41 @@ static void pvr2_context_enter(struct pvr2_context *mp)
 static void pvr2_context_exit(struct pvr2_context *mp)
 {
 	int destroy_flag = 0;
+	int signal_flag = 0;
 	if (!(mp->mc_first || !mp->disconnect_flag)) {
 		destroy_flag = !0;
 	}
 	mutex_unlock(&mp->mutex);
-	if (destroy_flag) pvr2_context_notify(mp);
+	if (destroy_flag) {
+		mutex_lock(&pvr2_context_mutex);
+		signal_flag = pvr2_context_set_notify_locked(mp, !0);
+		mutex_unlock(&pvr2_context_mutex);
+		if (signal_flag)
+			wake_up(&pvr2_context_sync_data);
+	}
 }
 
 
 void pvr2_context_disconnect(struct pvr2_context *mp)
 {
+	int signal_flag = 0;
+
+	refcount_inc(&mp->refcount);
 	pvr2_hdw_disconnect(mp->hdw);
-	if (!pvr2_context_shutok())
-		pvr2_context_notify(mp);
+	mutex_lock(&pvr2_context_mutex);
 	mp->disconnect_flag = !0;
+	if (!pvr2_context_shutok())
+		signal_flag = pvr2_context_set_notify_locked(mp, !0);
+	mutex_unlock(&pvr2_context_mutex);
+	if (signal_flag)
+		wake_up(&pvr2_context_sync_data);
+	pvr2_context_put(mp);
 }
 
 
 void pvr2_channel_init(struct pvr2_channel *cp,struct pvr2_context *mp)
 {
+	refcount_inc(&mp->refcount);
 	pvr2_context_enter(mp);
 	cp->hdw = mp->hdw;
 	cp->mc_head = mp;
@@ -318,6 +357,7 @@ void pvr2_channel_done(struct pvr2_channel *cp)
 	}
 	cp->hdw = NULL;
 	pvr2_context_exit(mp);
+	pvr2_context_put(mp);
 }
 
 

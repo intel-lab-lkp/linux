@@ -7,6 +7,7 @@
 #define __PVRUSB2_CONTEXT_H
 
 #include <linux/mutex.h>
+#include <linux/refcount.h>
 #include <linux/usb.h>
 #include <linux/workqueue.h>
 
@@ -33,9 +34,11 @@ struct pvr2_context {
 	struct pvr2_hdw *hdw;
 	struct pvr2_context_stream video_stream;
 	struct mutex mutex;
+	refcount_t refcount;
 	int notify_flag;
 	int initialized_flag;
 	int disconnect_flag;
+	int destroying_flag;
 
 	/* Called after pvr2_context initialization is complete */
 	void (*setup_func)(struct pvr2_context *);
