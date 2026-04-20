@@ -99,6 +99,11 @@ nfs4_ff_alloc_deviceid_node(struct nfs_server *server, struct pnfs_device *pdev,
 	version_count = be32_to_cpup(p);
 	dprintk("%s: version count %d\n", __func__, version_count);
 
+	if (version_count == 0) {
+		ret = -EINVAL;
+		goto out_err_drain_dsaddrs;
+	}
+
 	ds_versions = kzalloc_objs(struct nfs4_ff_ds_version, version_count,
 				   gfp_flags);
 	if (!ds_versions)
