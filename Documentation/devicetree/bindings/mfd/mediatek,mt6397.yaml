@@ -42,6 +42,10 @@ properties:
           - mediatek,mt6397
       - items:
           - enum:
+              - mediatek,mt6392
+          - const: mediatek,mt6323
+      - items:
+          - enum:
               - mediatek,mt6366
           - const: mediatek,mt6358
 
@@ -68,6 +72,10 @@ properties:
               - mediatek,mt6331-rtc
               - mediatek,mt6358-rtc
               - mediatek,mt6397-rtc
+          - items:
+              - enum:
+                  - mediatek,mt6392-rtc
+              - const: mediatek,mt6323-rtc
           - items:
               - enum:
                   - mediatek,mt6366-rtc
@@ -98,9 +106,6 @@ properties:
               - enum:
                   - mediatek,mt6366-regulator
               - const: mediatek,mt6358-regulator
-
-    required:
-      - compatible
 
   adc:
     type: object
@@ -230,6 +235,22 @@ required:
   - regulators
 
 additionalProperties: false
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: mediatek,mt6392
+    then:
+      properties:
+        regulators:
+          $ref: /schemas/regulator/mediatek,mt6392-regulator.yaml
+    else:
+      properties:
+        regulators:
+          required:
+            - compatible
 
 examples:
   - |
