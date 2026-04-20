@@ -2407,9 +2407,28 @@ static int nvme_update_ns_info_block(struct nvme_ns *ns,
 	lim = queue_limits_start_update(ns->disk->queue);
 
 	memflags = blk_mq_freeze_queue(ns->disk->queue);
+	if (id->lbaf[lbaf].ds == 0) {
+		dev_warn_once(ns->ctrl->device,
+			"LBA format not available, skipping namespace\n");
+		ret = -ENODEV;
+		queue_limits_cancel_update(ns->disk->queue);
+		blk_mq_unfreeze_queue(ns->disk->queue, memflags);
+		goto out;
+	}
+	if (id->lbaf[lbaf].ds < SECTOR_SHIFT ||
+	    check_shl_overflow(le64_to_cpu(id->nsze),
+			       id->lbaf[lbaf].ds - SECTOR_SHIFT,
+			       &capacity)) {
+		dev_warn_once(ns->ctrl->device,
+			"invalid LBA data size %u, skipping namespace\n",
+			id->lbaf[lbaf].ds);
+		ret = -ENODEV;
+		queue_limits_cancel_update(ns->disk->queue);
+		blk_mq_unfreeze_queue(ns->disk->queue, memflags);
+		goto out;
+	}
 	ns->head->lba_shift = id->lbaf[lbaf].ds;
 	ns->head->nuse = le64_to_cpu(id->nuse);
-	capacity = nvme_lba_to_sect(ns->head, le64_to_cpu(id->nsze));
 	nvme_set_ctrl_limits(ns->ctrl, &lim, false);
 	nvme_configure_metadata(ns->ctrl, ns->head, id, nvm, info);
 	nvme_set_chunk_sectors(ns, id, &lim);
