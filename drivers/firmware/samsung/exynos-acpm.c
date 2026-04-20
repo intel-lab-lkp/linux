@@ -464,6 +464,29 @@ int acpm_do_xfer(struct acpm_handle *handle, const struct acpm_xfer *xfer)
 }
 
 /**
+ * acpm_set_xfer() - initialize an ACPM IPC transfer structure.
+ * @xfer:	pointer to the ACPM transfer structure that is being initialized.
+ * @cmd:	pointer to the buffer containing the command to be transmitted
+ *              to the ACPM firmware.
+ * @cmdlen:	size (count) of the command.
+ * @acpm_chan_id: mailbox channel identifier.
+ * @response:	boolean flag indicating whether the kernel expects the ACPM
+ *              firmware to send a reply to this specific command.
+ */
+void acpm_set_xfer(struct acpm_xfer *xfer, u32 *cmd, size_t cmdlen,
+		   unsigned int acpm_chan_id, bool response)
+{
+	xfer->acpm_chan_id = acpm_chan_id;
+	xfer->txcnt = cmdlen;
+	xfer->txd = cmd;
+
+	if (response) {
+		xfer->rxcnt = cmdlen;
+		xfer->rxd = cmd;
+	}
+}
+
+/**
  * acpm_chan_shmem_get_params() - get channel parameters and addresses of the
  * TX/RX queues.
  * @achan:	ACPM channel info.
