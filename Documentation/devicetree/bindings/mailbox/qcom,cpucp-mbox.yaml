@@ -23,6 +23,7 @@ properties:
               - qcom,sm8750-cpucp-mbox
           - const: qcom,x1e80100-cpucp-mbox
       - enum:
+          - qcom,nord-cpucp-mbox
           - qcom,x1e80100-cpucp-mbox
 
   reg:
