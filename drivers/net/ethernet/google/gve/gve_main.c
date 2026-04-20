@@ -105,9 +105,22 @@ static netdev_tx_t gve_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		return gve_tx_dqo(skb, dev);
 }
 
-static void gve_get_stats(struct net_device *dev, struct rtnl_link_stats64 *s)
+static void gve_add_base_stats(struct gve_priv *priv,
+			       struct rtnl_link_stats64 *s)
 {
-	struct gve_priv *priv = netdev_priv(dev);
+	struct rtnl_link_stats64 *base_stats = &priv->base_net_stats;
+
+	s->rx_packets += base_stats->rx_packets;
+	s->rx_bytes += base_stats->rx_bytes;
+	s->rx_dropped += base_stats->rx_dropped;
+	s->tx_packets += base_stats->tx_packets;
+	s->tx_bytes += base_stats->tx_bytes;
+	s->tx_dropped += base_stats->tx_dropped;
+}
+
+static void gve_get_ring_stats(struct gve_priv *priv,
+			       struct rtnl_link_stats64 *s)
+{
 	unsigned int start;
 	u64 packets, bytes;
 	int num_tx_queues;
@@ -140,6 +153,14 @@ static void gve_get_stats(struct net_device *dev, struct rtnl_link_stats64 *s)
 			s->tx_bytes += bytes;
 		}
 	}
+}
+
+static void gve_get_stats(struct net_device *dev, struct rtnl_link_stats64 *s)
+{
+	struct gve_priv *priv = netdev_priv(dev);
+
+	gve_get_ring_stats(priv, s);
+	gve_add_base_stats(priv, s);
 }
 
 static int gve_alloc_flow_rule_caches(struct gve_priv *priv)
@@ -1492,6 +1513,23 @@ err:
 	return gve_reset_recovery(priv, false);
 }
 
+static void gve_get_ring_err_stats(struct gve_priv *priv,
+				   struct gve_ring_err_stats *err_stats)
+{
+	int ring;
+
+	for (ring = 0; ring < priv->rx_cfg.num_queues; ring++) {
+		unsigned int start;
+		struct gve_rx_ring *rx = &priv->rx[ring];
+
+		do {
+			start = u64_stats_fetch_begin(&rx->statss);
+			err_stats->rx_alloc_fails +=
+				rx->rx_skb_alloc_fail + rx->rx_buf_alloc_fail;
+		} while (u64_stats_fetch_retry(&rx->statss, start));
+	}
+}
+
 static int gve_close(struct net_device *dev)
 {
 	struct gve_priv *priv = netdev_priv(dev);
@@ -1500,6 +1538,10 @@ static int gve_close(struct net_device *dev)
 	err = gve_queues_stop(priv);
 	if (err)
 		return err;
+
+	/* Save ring queue and err stats before closing the interface */
+	gve_get_ring_stats(priv, &priv->base_net_stats);
+	gve_get_ring_err_stats(priv, &priv->base_ring_err_stats);
 
 	gve_queues_mem_remove(priv);
 	return 0;
@@ -2742,12 +2784,20 @@ static void gve_get_base_stats(struct net_device *dev,
 			       struct netdev_queue_stats_rx *rx,
 			       struct netdev_queue_stats_tx *tx)
 {
-	rx->packets = 0;
-	rx->bytes = 0;
-	rx->alloc_fail = 0;
+	const struct gve_ring_err_stats *base_err_stats;
+	const struct rtnl_link_stats64 *base_stats;
+	struct gve_priv *priv;
 
-	tx->packets = 0;
-	tx->bytes = 0;
+	priv = netdev_priv(dev);
+	base_stats = &priv->base_net_stats;
+	base_err_stats = &priv->base_ring_err_stats;
+
+	rx->packets = base_stats->rx_packets;
+	rx->bytes = base_stats->rx_bytes;
+	rx->alloc_fail = base_err_stats->rx_alloc_fails;
+
+	tx->packets = base_stats->tx_packets;
+	tx->bytes = base_stats->tx_bytes;
 }
 
 static const struct netdev_stat_ops gve_stat_ops = {
