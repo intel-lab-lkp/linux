@@ -643,7 +643,7 @@ int rmi_read_register_desc(struct rmi_device *d, u16 addr,
 	reg = find_first_bit(rdesc->presense_map, RMI_REG_DESC_PRESENSE_BITS);
 	for (i = 0; i < rdesc->num_registers; i++) {
 		struct rmi_register_desc_item *item = &rdesc->registers[i];
-		int reg_size;
+		u32 reg_size;
 
 		if (offset >= rdesc->struct_size)
 			goto malformed;
