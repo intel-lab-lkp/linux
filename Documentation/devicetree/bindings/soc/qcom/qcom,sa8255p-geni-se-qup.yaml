@@ -19,7 +19,12 @@ description:
 
 properties:
   compatible:
-    const: qcom,sa8255p-geni-se-qup
+    oneOf:
+      - enum:
+          - qcom,sa8255p-geni-se-qup
+      - items:
+          - const: qcom,nord-auto-geni-se-qup
+          - const: qcom,sa8255p-geni-se-qup
 
   reg:
     description: QUP wrapper common register address and length.
@@ -67,9 +72,16 @@ patternProperties:
 
     properties:
       compatible:
-        enum:
-          - qcom,sa8255p-geni-uart
-          - qcom,sa8255p-geni-debug-uart
+        oneOf:
+          - enum:
+            - qcom,sa8255p-geni-uart
+            - qcom,sa8255p-geni-debug-uart
+          - items:
+            - const: qcom,nord-auto-geni-uart
+            - const: qcom,sa8255p-geni-uart
+          - items:
+            - const: qcom,nord-auto-geni-debug-uart
+            - const: qcom,sa8255p-geni-debug-uart
 
 required:
   - compatible
