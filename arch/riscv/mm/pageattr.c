@@ -32,6 +32,8 @@ static int pageattr_p4d_entry(p4d_t *p4d, unsigned long addr,
 	p4d_t val = p4dp_get(p4d);
 
 	if (p4d_leaf(val)) {
+		if (WARN_ON_ONCE((next - addr) != P4D_SIZE))
+			return -EINVAL;
 		val = __p4d(set_pageattr_masks(p4d_val(val), walk));
 		set_p4d(p4d, val);
 	}
@@ -45,6 +47,8 @@ static int pageattr_pud_entry(pud_t *pud, unsigned long addr,
 	pud_t val = pudp_get(pud);
 
 	if (pud_leaf(val)) {
+		if (WARN_ON_ONCE((next - addr) != PUD_SIZE))
+			return -EINVAL;
 		val = __pud(set_pageattr_masks(pud_val(val), walk));
 		set_pud(pud, val);
 	}
@@ -58,6 +62,8 @@ static int pageattr_pmd_entry(pmd_t *pmd, unsigned long addr,
 	pmd_t val = pmdp_get(pmd);
 
 	if (pmd_leaf(val)) {
+		if (WARN_ON_ONCE((next - addr) != PMD_SIZE))
+			return -EINVAL;
 		val = __pmd(set_pageattr_masks(pmd_val(val), walk));
 		set_pmd(pmd, val);
 	}
