@@ -13,6 +13,7 @@
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
 #include <sound/soc.h>
+#include <sound/pcm_params.h>
 #include "aw88261.h"
 #include "aw88395/aw88395_data_type.h"
 #include "aw88395/aw88395_device.h"
@@ -158,7 +159,7 @@ static int aw88261_dev_get_iis_status(struct aw_device *aw_dev)
 	return ret;
 }
 
-static int aw88261_dev_check_mode1_pll(struct aw_device *aw_dev)
+static int aw88261_dev_check_pll(struct aw_device *aw_dev)
 {
 	int ret, i;
 
@@ -175,71 +176,95 @@ static int aw88261_dev_check_mode1_pll(struct aw_device *aw_dev)
 	return -EPERM;
 }
 
-static int aw88261_dev_check_mode2_pll(struct aw_device *aw_dev)
+static int aw88261_dev_configure_syspll(struct aw88261 *aw88261)
 {
-	unsigned int reg_val;
-	int ret, i;
-
-	ret = regmap_read(aw_dev->regmap, AW88261_PLLCTRL1_REG, &reg_val);
-	if (ret)
-		return ret;
-
-	reg_val &= (~AW88261_CCO_MUX_MASK);
-	if (reg_val == AW88261_CCO_MUX_DIVIDED_VALUE) {
-		dev_dbg(aw_dev->dev, "CCO_MUX is already divider");
-		return -EPERM;
-	}
-
-	/* change mode2 */
-	ret = regmap_update_bits(aw_dev->regmap, AW88261_PLLCTRL1_REG,
-			~AW88261_CCO_MUX_MASK, AW88261_CCO_MUX_DIVIDED_VALUE);
-	if (ret)
-		return ret;
-
-	for (i = 0; i < AW88261_DEV_SYSST_CHECK_MAX; i++) {
-		ret = aw88261_dev_get_iis_status(aw_dev);
-		if (ret) {
-			dev_err(aw_dev->dev, "mode2 iis signal check error");
-			usleep_range(AW88261_2000_US, AW88261_2000_US + 10);
-		} else {
-			break;
-		}
-	}
-
-	/* change mode1 */
-	ret = regmap_update_bits(aw_dev->regmap, AW88261_PLLCTRL1_REG,
-			~AW88261_CCO_MUX_MASK, AW88261_CCO_MUX_BYPASS_VALUE);
-	if (ret == 0) {
-		usleep_range(AW88261_2000_US, AW88261_2000_US + 10);
-		for (i = 0; i < AW88261_DEV_SYSST_CHECK_MAX; i++) {
-			ret = aw88261_dev_check_mode1_pll(aw_dev);
-			if (ret) {
-				dev_err(aw_dev->dev, "mode2 switch to mode1, iis signal check error");
-				usleep_range(AW88261_2000_US, AW88261_2000_US + 10);
-			} else {
-				break;
-			}
-		}
-	}
-
-	return ret;
-}
-
-static int aw88261_dev_check_syspll(struct aw_device *aw_dev)
-{
+	struct aw_device *aw_dev = aw88261->aw_pa;
+	uint32_t sr_value, fs_value, cco_mux_value, bck_value;
 	int ret;
 
-	ret = aw88261_dev_check_mode1_pll(aw_dev);
-	if (ret) {
-		dev_dbg(aw_dev->dev, "mode1 check iis failed try switch to mode2 check");
-		ret = aw88261_dev_check_mode2_pll(aw_dev);
-		if (ret) {
-			dev_err(aw_dev->dev, "mode2 check iis failed");
-			return ret;
-		}
+	switch (aw88261->sample_rate) {
+	case 8000:
+		sr_value = AW88261_I2SSR_8KHZ_VALUE;
+		cco_mux_value = AW88261_CCO_MUX_DIVIDED_VALUE;
+		break;
+	case 16000:
+		sr_value = AW88261_I2SSR_16KHZ_VALUE;
+		cco_mux_value = AW88261_CCO_MUX_DIVIDED_VALUE;
+		break;
+	case 32000:
+		sr_value = AW88261_I2SSR_32KHZ_VALUE;
+		cco_mux_value = AW88261_CCO_MUX_DIVIDED_VALUE;
+		break;
+	case 44100:
+		sr_value = AW88261_I2SSR_44P1KHZ_VALUE;
+		cco_mux_value = AW88261_CCO_MUX_BYPASS_VALUE;
+		break;
+	case 48000:
+		sr_value = AW88261_I2SSR_48KHZ_VALUE;
+		cco_mux_value = AW88261_CCO_MUX_BYPASS_VALUE;
+		break;
+	case 96000:
+		sr_value = AW88261_I2SSR_96KHZ_VALUE;
+		cco_mux_value = AW88261_CCO_MUX_BYPASS_VALUE;
+		break;
+	case 192000:
+		sr_value = AW88261_I2SSR_192KHZ_VALUE;
+		cco_mux_value = AW88261_CCO_MUX_BYPASS_VALUE;
+		break;
+	default:
+		dev_err(aw_dev->dev, "unsupported sample rate %d\n",
+			aw88261->sample_rate);
+		return -EINVAL;
 	}
 
-	return ret;
+	switch (aw88261->bit_width) {
+	case 16:
+		fs_value = AW88261_I2SFS_16_BITS_VALUE;
+		bck_value = AW88261_I2SBCK_32FS_VALUE;
+		break;
+	case 20:
+		fs_value = AW88261_I2SFS_20_BITS_VALUE;
+		bck_value = AW88261_I2SBCK_48FS_VALUE;
+		break;
+	case 24:
+		fs_value = AW88261_I2SFS_24_BITS_VALUE;
+		bck_value = AW88261_I2SBCK_48FS_VALUE;
+		break;
+	case 32:
+		fs_value = AW88261_I2SFS_32_BITS_VALUE;
+		bck_value = AW88261_I2SBCK_64FS_VALUE;
+		break;
+	default:
+		dev_err(aw_dev->dev, "unsupported bit width %d\n",
+			aw88261->bit_width);
+		return -EINVAL;
+	}
+
+	/* PLL divider must be used for 8/16/32 kHz modes */
+	ret = regmap_update_bits(aw_dev->regmap, AW88261_PLLCTRL1_REG,
+			~AW88261_CCO_MUX_MASK, cco_mux_value);
+	if (ret)
+		return ret;
+
+	/* The word clock (WCK) defines the beginning of a frame */
+	ret = regmap_update_bits(aw_dev->regmap, AW88261_I2SCTRL1_REG,
+			~AW88261_I2SSR_MASK, sr_value);
+	if (ret)
+		return ret;
+
+	/* The bit clock (BCK) defines the length of a frame */
+	ret = regmap_update_bits(aw_dev->regmap, AW88261_I2SCTRL1_REG,
+			~AW88261_I2SBCK_MASK, bck_value);
+	if (ret)
+		return ret;
+
+	/* The logical frame size is the width of data for 1 slot */
+	ret = regmap_update_bits(aw_dev->regmap, AW88261_I2SCTRL1_REG,
+			~AW88261_I2SFS_MASK, fs_value);
+	if (ret)
+		return ret;
+
+	return aw88261_dev_check_pll(aw_dev);
 }
 
 static int aw88261_dev_check_sysst(struct aw_device *aw_dev)
@@ -558,7 +583,7 @@ static int aw88261_dev_start(struct aw88261 *aw88261)
 	aw88261_dev_pwd(aw_dev, false);
 	usleep_range(AW88261_2000_US, AW88261_2000_US + 10);
 
-	ret = aw88261_dev_check_syspll(aw_dev);
+	ret = aw88261_dev_configure_syspll(aw88261);
 	if (ret) {
 		dev_err(aw_dev->dev, "pll check failed cannot start");
 		goto pll_check_fail;
@@ -712,6 +737,26 @@ static void aw88261_start(struct aw88261 *aw88261, bool sync_start)
 			AW88261_START_WORK_DELAY_MS);
 }
 
+static int aw88261_hw_params(struct snd_pcm_substream *substream,
+	struct snd_pcm_hw_params *params,
+	struct snd_soc_dai *dai)
+{
+	struct snd_soc_component *component = dai->component;
+	struct aw88261 *aw88261 = snd_soc_component_get_drvdata(component);
+
+	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
+		return 0;
+
+	/* Only store the settings as the regs do get reset when starting */
+	aw88261->sample_rate = params_rate(params);
+	aw88261->bit_width = params_width(params);
+	return 0;
+}
+
+static const struct snd_soc_dai_ops aw88261_dai_ops = {
+	.hw_params = aw88261_hw_params,
+};
+
 static struct snd_soc_dai_driver aw88261_dai[] = {
 	{
 		.name = "aw88261-aif",
@@ -730,6 +775,7 @@ static struct snd_soc_dai_driver aw88261_dai[] = {
 			.rates = AW88261_RATES,
 			.formats = AW88261_FORMATS,
 		},
+		.ops = &aw88261_dai_ops,
 	},
 };
 
@@ -1248,6 +1294,10 @@ static int aw88261_i2c_probe(struct i2c_client *i2c)
 	aw88261 = devm_kzalloc(&i2c->dev, sizeof(*aw88261), GFP_KERNEL);
 	if (!aw88261)
 		return -ENOMEM;
+
+	/* set defaults */
+	aw88261->sample_rate = 48000;
+	aw88261->bit_width = 32;
 
 	mutex_init(&aw88261->lock);
 
