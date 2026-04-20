@@ -392,7 +392,7 @@ static void kho_init_folio(struct page *page, unsigned int order)
 
 	/* For higher order folios, tail pages get a page count of zero. */
 	for (unsigned long i = 1; i < nr_pages; i++)
-		set_page_count(page + i, 0);
+		set_page_count_as_frozen(page + i);
 
 	if (order > 0)
 		prep_compound_page(page, order);
