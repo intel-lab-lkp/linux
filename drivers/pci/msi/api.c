@@ -280,14 +280,17 @@ int pci_alloc_irq_vectors_affinity(struct pci_dev *dev, unsigned int min_vecs,
 	/* use INTx IRQ if allowed */
 	if (flags & PCI_IRQ_INTX) {
 		if (min_vecs == 1 && dev->irq) {
+			struct irq_affinity_desc *masks = NULL;
+
 			/*
 			 * Invoke the affinity spreading logic to ensure that
 			 * the device driver can adjust queue configuration
 			 * for the single interrupt case.
 			 */
 			if (affd)
-				irq_create_affinity_masks(1, affd);
+				masks = irq_create_affinity_masks(1, affd);
 			pci_intx(dev, 1);
+			kfree(masks);
 			return 1;
 		}
 	}
