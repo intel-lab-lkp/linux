@@ -89,6 +89,24 @@ static void amdgpu_svm_put(struct amdgpu_svm *svm)
 		kref_put(&svm->refcount, amdgpu_svm_release);
 }
 
+static struct amdgpu_svm *
+amdgpu_svm_lookup_by_pasid(struct amdgpu_device *adev, uint32_t pasid)
+{
+	struct amdgpu_svm *svm = NULL;
+	struct amdgpu_vm *vm;
+	unsigned long irqflags;
+
+	xa_lock_irqsave(&adev->vm_manager.pasids, irqflags);
+	vm = xa_load(&adev->vm_manager.pasids, pasid);
+	if (vm && vm->svm) {
+		svm = vm->svm;
+		kref_get(&svm->refcount);
+	}
+	xa_unlock_irqrestore(&adev->vm_manager.pasids, irqflags);
+
+	return svm;
+}
+
 int amdgpu_svm_cache_init(void)
 {
 	int ret = 0;
@@ -119,6 +137,33 @@ void amdgpu_svm_cache_fini(void)
 
 	amdgpu_svm_attr_cache_fini();
 	AMDGPU_SVM_KMEM_CACHE_DESTROY(amdgpu_svm_range_cache);
+}
+
+static int amdgpu_svm_set_attr(struct amdgpu_vm *vm,
+			      uint64_t start,
+			      uint64_t size,
+			      uint32_t nattr,
+			      const struct drm_amdgpu_svm_attribute *attrs)
+{
+	struct amdgpu_svm *svm = vm->svm;
+
+	/* cause drm_gpusvm_range_find_or_insert acquire the mmap_read lock
+	 * can not acquire the mmap lock in the entire time in ioctl
+	 * just flush the work to  reduce the probability of failure
+	 */
+	amdgpu_svm_range_sync_work(svm);
+
+	return amdgpu_svm_attr_set(svm->attr_tree, start, size, nattr,
+				   attrs);
+}
+
+static int amdgpu_svm_get_attr(struct amdgpu_vm *vm,
+			      uint64_t start,
+			      uint64_t size,
+			      uint32_t nattr,
+			      struct drm_amdgpu_svm_attribute *attrs)
+{
+	return amdgpu_svm_attr_get(vm->svm->attr_tree, start, size, nattr, attrs);
 }
 
 static bool amdgpu_svm_default_xnack_enabled(struct amdgpu_device *adev)
@@ -262,9 +307,124 @@ void amdgpu_svm_fini(struct amdgpu_vm *vm)
 	amdgpu_svm_put(svm);
 }
 
+int amdgpu_svm_handle_fault(struct amdgpu_device *adev, uint32_t pasid,
+			    uint64_t fault_addr, bool write_fault)
+{
+	struct amdgpu_svm *svm;
+	unsigned long fault_page;
+	int ret;
+
+	AMDGPU_SVM_TRACE("handle_fault enter: pasid=%u addr=0x%llx write=%d\n",
+			 pasid, fault_addr, write_fault ? 1 : 0);
+
+	svm = amdgpu_svm_lookup_by_pasid(adev, pasid);
+	if (!svm) {
+		AMDGPU_SVM_TRACE("handle_fault: pasid %u lookup failed\n", pasid);
+		return -EOPNOTSUPP;
+	}
+
+	AMDGPU_SVM_TRACE("handle_fault: pasid %u svm=%p exiting=%d xnack=%d\n",
+			 pasid, svm, atomic_read(&svm->exiting),
+			 svm->xnack_enabled ? 1 : 0);
+
+	if (atomic_read(&svm->exiting)) {
+		ret = -EAGAIN;
+		goto out;
+	}
+
+	if (!svm->xnack_enabled) {
+		ret = -EOPNOTSUPP;
+		goto out;
+	}
+
+	fault_page = fault_addr >> PAGE_SHIFT;
+	AMDGPU_SVM_TRACE("handle_fault: map_attr page=0x%lx\n", fault_page);
+
+	down_write(&svm->svm_lock);
+	ret = amdgpu_svm_range_map_attr_ranges(svm, fault_page, fault_page);
+	up_write(&svm->svm_lock);
+
+	if (ret)
+		AMDGPU_SVM_TRACE("fault map failed: ret=%d addr=0x%llx write=%d\n",
+				 ret, fault_addr, write_fault ? 1 : 0);
+	else
+		AMDGPU_SVM_TRACE("fault map success: addr=0x%llx write=%d\n",
+				 fault_addr, write_fault ? 1 : 0);
+
+out:
+	AMDGPU_SVM_TRACE("handle_fault exit: pasid=%u addr=0x%llx ret=%d\n",
+			 pasid, fault_addr, ret);
+	amdgpu_svm_put(svm);
+	return ret;
+}
+
 bool amdgpu_svm_is_enabled(struct amdgpu_vm *vm)
 {
 	return vm->svm != NULL;
+}
+
+static int amdgpu_svm_copy_attrs(const struct drm_amdgpu_gem_svm *args,
+					   struct drm_amdgpu_svm_attribute **attrs,
+					   size_t *size)
+{
+	if (!args->nattr || args->nattr > AMDGPU_SVM_MAX_ATTRS)
+		return -EINVAL;
+	if (!args->attrs_ptr)
+		return -EINVAL;
+
+	*size = args->nattr * sizeof(**attrs);
+	*attrs = memdup_user(u64_to_user_ptr(args->attrs_ptr), *size);
+
+	return PTR_ERR_OR_ZERO(*attrs);
+}
+
+int amdgpu_gem_svm_ioctl(struct drm_device *dev, void *data,
+			 struct drm_file *filp)
+{
+	struct amdgpu_fpriv *fpriv = filp->driver_priv;
+	struct drm_amdgpu_gem_svm *args = data;
+	struct drm_amdgpu_svm_attribute *attrs = NULL;
+	struct amdgpu_vm *vm;
+	size_t attrs_size = 0;
+	int ret = 0;
+
+	AMDGPU_SVM_TRACE("ioctl op=%u va:[0x%llx-0x%llx)-0x%llx nattr=%u\n",
+			 args->operation, args->start_addr, args->start_addr + args->size,
+			 args->size, args->nattr);
+
+	vm = &fpriv->vm;
+	if (!amdgpu_svm_is_enabled(vm))
+		return -EOPNOTSUPP;
+
+	if ((args->start_addr & ~PAGE_MASK) || (args->size & ~PAGE_MASK))
+		return -EINVAL;
+
+	if (!args->start_addr || !args->size)
+		return -EINVAL;
+
+	ret = amdgpu_svm_copy_attrs(args, &attrs, &attrs_size);
+	if (ret)
+		return ret;
+
+	switch (args->operation) {
+	case AMDGPU_SVM_OP_SET_ATTR:
+		ret = amdgpu_svm_set_attr(vm, args->start_addr, args->size,
+					 args->nattr, attrs);
+		break;
+	case AMDGPU_SVM_OP_GET_ATTR:
+		ret = amdgpu_svm_get_attr(vm, args->start_addr, args->size,
+					 args->nattr, attrs);
+		if (!ret && copy_to_user(u64_to_user_ptr(args->attrs_ptr),
+					 attrs, attrs_size))
+			ret = -EFAULT;
+		break;
+	default:
+		ret = -EINVAL;
+		break;
+	}
+
+	kvfree(attrs);
+	return ret;
 }
 
 #endif /* CONFIG_DRM_AMDGPU_SVM */
