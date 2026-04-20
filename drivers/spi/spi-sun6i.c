@@ -201,6 +201,50 @@ static size_t sun6i_spi_max_transfer_size(struct spi_device *spi)
 	return SUN6I_MAX_XFER_SIZE - 1;
 }
 
+static int sun6i_spi_prepare_message(struct spi_controller *ctlr,
+				     struct spi_message *msg)
+{
+	struct sun6i_spi *sspi = spi_controller_get_devdata(ctlr);
+	struct spi_device *spi = msg->spi;
+	u32 reg;
+
+	/*
+	 * Set up the transfer control register: Chip Select,
+	 * polarities, etc.
+	 */
+	reg = sun6i_spi_read(sspi, SUN6I_TFR_CTL_REG);
+
+	if (spi->mode & SPI_CPOL)
+		reg |= SUN6I_TFR_CTL_CPOL;
+	else
+		reg &= ~SUN6I_TFR_CTL_CPOL;
+
+	if (spi->mode & SPI_CPHA)
+		reg |= SUN6I_TFR_CTL_CPHA;
+	else
+		reg &= ~SUN6I_TFR_CTL_CPHA;
+
+	if (spi->mode & SPI_LSB_FIRST)
+		reg |= SUN6I_TFR_CTL_FBS;
+	else
+		reg &= ~SUN6I_TFR_CTL_FBS;
+
+	/* We want to control the chip select manually */
+	reg |= SUN6I_TFR_CTL_CS_MANUAL;
+
+	sun6i_spi_write(sspi, SUN6I_TFR_CTL_REG, reg);
+
+	/*
+	 * Now that the clock polarity is configured, enable the bus if the
+	 * controller was previously suspended.
+	 */
+	reg = sun6i_spi_read(sspi, SUN6I_GBL_CTL_REG);
+	reg |= SUN6I_GBL_CTL_BUS_ENABLE;
+	sun6i_spi_write(sspi, SUN6I_GBL_CTL_REG, reg);
+
+	return 0;
+}
+
 static void sun6i_spi_dma_rx_cb(void *param)
 {
 	struct sun6i_spi *sspi = param;
@@ -333,39 +377,17 @@ static int sun6i_spi_transfer_one(struct spi_controller *host,
 	sun6i_spi_write(sspi, SUN6I_FIFO_CTL_REG, reg);
 
 	/*
-	 * Setup the transfer control register: Chip Select,
-	 * polarities, etc.
-	 */
-	reg = sun6i_spi_read(sspi, SUN6I_TFR_CTL_REG);
-
-	if (spi->mode & SPI_CPOL)
-		reg |= SUN6I_TFR_CTL_CPOL;
-	else
-		reg &= ~SUN6I_TFR_CTL_CPOL;
-
-	if (spi->mode & SPI_CPHA)
-		reg |= SUN6I_TFR_CTL_CPHA;
-	else
-		reg &= ~SUN6I_TFR_CTL_CPHA;
-
-	if (spi->mode & SPI_LSB_FIRST)
-		reg |= SUN6I_TFR_CTL_FBS;
-	else
-		reg &= ~SUN6I_TFR_CTL_FBS;
-
-	/*
 	 * If it's a TX only transfer, we don't want to fill the RX
 	 * FIFO with bogus data
 	 */
+	reg = sun6i_spi_read(sspi, SUN6I_TFR_CTL_REG);
+
 	if (sspi->rx_buf) {
 		reg &= ~SUN6I_TFR_CTL_DHB;
 		rx_len = tfr->len;
 	} else {
 		reg |= SUN6I_TFR_CTL_DHB;
 	}
-
-	/* We want to control the chip select manually */
-	reg |= SUN6I_TFR_CTL_CS_MANUAL;
 
 	sun6i_spi_write(sspi, SUN6I_TFR_CTL_REG, reg);
 
@@ -427,11 +449,6 @@ static int sun6i_spi_transfer_one(struct spi_controller *host,
 
 		sun6i_spi_write(sspi, SUN6I_TFR_CTL_REG, reg);
 	}
-
-	/* Finally enable the bus - doing so before might raise SCK to HIGH */
-	reg = sun6i_spi_read(sspi, SUN6I_GBL_CTL_REG);
-	reg |= SUN6I_GBL_CTL_BUS_ENABLE;
-	sun6i_spi_write(sspi, SUN6I_GBL_CTL_REG, reg);
 
 	/* Setup the transfer now... */
 	if (sspi->tx_buf) {
@@ -667,6 +684,7 @@ static int sun6i_spi_probe(struct platform_device *pdev)
 	host->max_speed_hz = 100 * 1000 * 1000;
 	host->min_speed_hz = 3 * 1000;
 	host->use_gpio_descriptors = true;
+	host->prepare_message = sun6i_spi_prepare_message;
 	host->set_cs = sun6i_spi_set_cs;
 	host->transfer_one = sun6i_spi_transfer_one;
 	host->num_chipselect = 4;
