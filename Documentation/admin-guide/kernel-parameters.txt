@@ -2891,6 +2891,22 @@ Kernel parameters
 			  PCI device ID 00:14.5, write the parameter as:
 				ivrs_acpihid[0001:00:14.5]=AMD0020:0
 
+	ivmd		[HW,X86-64]
+			Supplement IVMD unity mapping or exclusion ranges from
+			the kernel command line (in addition to the IVRS ACPI
+			table). May be specified multiple times.
+
+			Form:
+				ivmd=segment:bus:dev.fn,start,length,flags
+
+			start and length are byte counts (decimal or 0x hex).
+			flags is the IVMD flags byte (UNITY, IR, IW, EXCL bits
+			per the AMD IOMMU specification). Use segment 0 for
+			PCI segment zero.
+
+			Example:
+				ivmd=0000:00:01.0,0xe0000000,0x100000,0xb
+
 	js=		[HW,JOY] Analog joystick
 			See Documentation/input/joydev/joystick.rst.
 

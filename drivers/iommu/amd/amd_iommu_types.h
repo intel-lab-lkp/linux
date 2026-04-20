@@ -894,6 +894,20 @@ struct ivmd_entry {
 };
 
 /*
+ * IVMD-style ranges from ivrs_ivmd=... ; applied in
+ * init_memory_definitions() once per-PCI-segment
+ * ivmd_entry_map exists.
+ */
+struct ivmd_cmdline {
+	struct list_head list;
+	u16 pci_seg;
+	u16 devid;
+	u64 range_start;
+	u64 range_length;
+	u8 flags;
+};
+
+/*
  * Data structures for device handling
  */
 

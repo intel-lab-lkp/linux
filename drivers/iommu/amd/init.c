@@ -208,10 +208,12 @@ enum iommu_init_state {
 static struct devid_map __initdata early_ioapic_map[EARLY_MAP_SIZE];
 static struct devid_map __initdata early_hpet_map[EARLY_MAP_SIZE];
 static struct acpihid_map_entry __initdata early_acpihid_map[EARLY_MAP_SIZE];
+static struct ivmd_cmdline early_ivmd_cmdline_map[EARLY_MAP_SIZE] __initdata;
 
 static int __initdata early_ioapic_map_size;
 static int __initdata early_hpet_map_size;
 static int __initdata early_acpihid_map_size;
+static int early_ivmd_cmdline_map_size __initdata;
 
 static bool __initdata cmdline_maps;
 
@@ -2656,6 +2658,47 @@ static int __init init_ivmd_map_range(struct ivmd_header *m,
 	return 0;
 }
 
+static int __init apply_ivmd_cmdline_entries(struct acpi_table_header *ivrs_base)
+{
+	int i;
+	struct ivmd_entry *e;
+	struct amd_iommu_pci_seg *pci_seg;
+
+	for (i = 0; i < early_ivmd_cmdline_map_size; i++) {
+		struct ivmd_cmdline *cmd = &early_ivmd_cmdline_map[i];
+
+		pci_seg = get_pci_segment(cmd->pci_seg, ivrs_base);
+		if (!pci_seg) {
+			pr_err("ivmd: PCI segment %#x unavailable\n",
+			       cmd->pci_seg);
+			continue;
+		}
+
+		if (cmd->devid > pci_seg->last_bdf) {
+			pr_err("%s: requestor %#x:%#02x:%#02x.%#02x exceeds segment %#x last BDF %#x\n",
+			       __func__, cmd->pci_seg, PCI_BUS_NUM(cmd->devid),
+			       PCI_SLOT(cmd->devid), PCI_FUNC(cmd->devid),
+			       pci_seg->id, pci_seg->last_bdf);
+			continue;
+		}
+
+		e = kzalloc(sizeof(*e), GFP_KERNEL);
+		if (!e) {
+			kfree(cmd);
+			return -ENOMEM;
+		}
+
+		e->devid_start = cmd->devid;
+		e->devid_end = cmd->devid;
+		e->address_start = PAGE_ALIGN(cmd->range_start);
+		e->address_end = e->address_start + PAGE_ALIGN(cmd->range_length);
+		e->flags = cmd->flags;
+		list_add_tail(&e->list, &pci_seg->ivmd_entry_map);
+	}
+
+	return 0;
+}
+
 /* iterates over all memory definitions we find in the ACPI table */
 static int __init init_memory_definitions(struct acpi_table_header *table)
 {
@@ -2673,7 +2716,7 @@ static int __init init_memory_definitions(struct acpi_table_header *table)
 		p += m->length;
 	}
 
-	return 0;
+	return apply_ivmd_cmdline_entries(table);
 }
 
 /*
@@ -3815,12 +3858,71 @@ found:
 	return 1;
 }
 
+/*
+ * ivmd=seg:bus:dev.fn,start,length,flags
+ *
+ * start and length are in bytes (decimal or 0x hex). flags is the IVMD flags
+ * byte (IVMD_FLAG_UNITY, IVMD_FLAG_IR, IVMD_FLAG_IW, IVMD_FLAG_EXCL). May be
+ * repeated for multiple ranges.
+ */
+static int __init parse_ivmd(char *str)
+{
+	u32 seg, bus, dev, fn;
+	unsigned long long range_start, range_len;
+	unsigned int flags;
+	struct ivmd_cmdline *cmd;
+
+	if (!str)
+		goto invalid;
+
+	if (sscanf(str, "%x:%x:%x.%x,%llu,%llu,%x",
+		   &seg, &bus, &dev, &fn, &range_start,
+		   &range_len, &flags) != 7)
+		goto invalid;
+
+	if (flags & ~IVMD_FLAG_MASK) {
+		pr_err("%s: flags %#x contains unknown flags\n", __func__, flags);
+		return 1;
+	}
+
+	if (!(flags & (IVMD_FLAG_UNITY | IVMD_FLAG_EXCL)))
+		pr_warn("%s: flags %#02x omit UNITY/EXCL; entry may have no effect\n",
+			__func__, (u8)flags);
+
+	if (early_ivmd_cmdline_map_size == EARLY_MAP_SIZE) {
+		pr_err("%s: Early IVMD command line map overflow - ignoring ivmd=%s\n",
+			__func__, str);
+		return 1;
+	}
+
+	cmd = &early_ivmd_cmdline_map[early_ivmd_cmdline_map_size];
+	early_ivmd_cmdline_map_size++;
+
+	cmd->pci_seg = (u16)seg;
+	cmd->devid = PCI_DEVID(bus & 0xff, PCI_DEVFN(dev & 0x1f, fn & 0x7));
+	cmd->range_start = range_start;
+	cmd->range_length = range_len;
+	cmd->flags = (u8)flags;
+
+	pr_info("%s: segment=%04x dev=%02x:%02x.%x start=%#llx len=%#llx flags=%#02x\n",
+		__func__, cmd->pci_seg,
+		PCI_BUS_NUM(cmd->devid), PCI_SLOT(cmd->devid),
+		PCI_FUNC(cmd->devid), range_start, range_len, cmd->flags);
+
+	return 1;
+
+invalid:
+	pr_err("Invalid command line: ivmd=%s\n", str ? str : "");
+	return 1;
+}
+
 __setup("amd_iommu_dump",	parse_amd_iommu_dump);
 __setup("amd_iommu=",		parse_amd_iommu_options);
 __setup("amd_iommu_intr=",	parse_amd_iommu_intr);
 __setup("ivrs_ioapic",		parse_ivrs_ioapic);
 __setup("ivrs_hpet",		parse_ivrs_hpet);
 __setup("ivrs_acpihid",		parse_ivrs_acpihid);
+__setup("ivmd=",		parse_ivmd);
 
 bool amd_iommu_pasid_supported(void)
 {
