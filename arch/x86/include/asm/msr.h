@@ -227,6 +227,44 @@ static __always_inline u64 rdpmc(int counter)
 
 #endif	/* !CONFIG_PARAVIRT_XXL */
 
+/*
+ * New set of MSR access functions. New code should use those instead of the
+ * legacy wrmsr*() and rdmsr*() ones.
+ */
+static __always_inline u64 msr_read(u32 msr)
+{
+	u64 val;
+
+	rdmsrq(msr, val);
+
+	return val;
+}
+
+static __always_inline int msr_read_safe(u32 msr, u64 *val)
+{
+	return rdmsrq_safe(msr, val);
+}
+
+static __always_inline void msr_write_ser(u32 msr, u64 val)
+{
+	wrmsrq(msr, val);
+}
+
+static __always_inline int msr_write_safe_ser(u32 msr, u64 val)
+{
+	return wrmsrq_safe(msr, val);
+}
+
+static __always_inline void msr_write_noser(u32 msr, u64 val)
+{
+	wrmsrq(msr, val);
+}
+
+static __always_inline int msr_write_safe_noser(u32 msr, u64 val)
+{
+	return wrmsrq_safe(msr, val);
+}
+
 /* Instruction opcode for WRMSRNS supported in binutils >= 2.40 */
 #define ASM_WRMSRNS _ASM_BYTES(0x0f,0x01,0xc6)
 
