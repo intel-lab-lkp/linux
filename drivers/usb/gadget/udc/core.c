@@ -1614,14 +1614,13 @@ static int gadget_bind_driver(struct device *dev)
 			struct usb_gadget_driver, driver);
 	int ret = 0;
 
-	mutex_lock(&udc_lock);
-	if (driver->is_bound) {
-		mutex_unlock(&udc_lock);
-		return -ENXIO;		/* Driver binds to only one gadget */
+	scoped_guard(mutex, &udc_lock) {
+		/* Driver binds to only one gadget */
+		if (driver->is_bound)
+			return -ENXIO;
+		driver->is_bound = true;
+		udc->driver = driver;
 	}
-	driver->is_bound = true;
-	udc->driver = driver;
-	mutex_unlock(&udc_lock);
 
 	dev_dbg(&udc->dev, "binding gadget driver [%s]\n", driver->function);
 
@@ -1664,10 +1663,9 @@ static int gadget_bind_driver(struct device *dev)
 		dev_err(&udc->dev, "failed to start %s: %d\n",
 			driver->function, ret);
 
-	mutex_lock(&udc_lock);
+	guard(mutex)(&udc_lock);
 	udc->driver = NULL;
 	driver->is_bound = false;
-	mutex_unlock(&udc_lock);
 
 	return ret;
 }
@@ -1695,10 +1693,10 @@ static void gadget_unbind_driver(struct device *dev)
 	usb_gadget_udc_stop_locked(udc);
 	mutex_unlock(&udc->connect_lock);
 
-	mutex_lock(&udc_lock);
-	driver->is_bound = false;
-	udc->driver = NULL;
-	mutex_unlock(&udc_lock);
+	scoped_guard(mutex, &udc_lock) {
+		driver->is_bound = false;
+		udc->driver = NULL;
+	}
 
 	kobject_uevent(&udc->dev.kobj, KOBJ_CHANGE);
 }
