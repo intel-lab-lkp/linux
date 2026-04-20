@@ -2143,7 +2143,6 @@ exit:
 static int recv_func_posthandle(struct adapter *padapter, union recv_frame *prframe)
 {
 	int ret = _SUCCESS;
-	union recv_frame *orig_prframe = prframe;
 	struct recv_priv *precvpriv = &padapter->recvpriv;
 	struct __queue *pfree_recv_queue = &padapter->recvpriv.free_recv_queue;
 
@@ -2167,7 +2166,7 @@ static int recv_func_posthandle(struct adapter *padapter, union recv_frame *prfr
 
 	ret = process_recv_indicatepkts(padapter, prframe);
 	if (ret != _SUCCESS) {
-		rtw_free_recvframe(orig_prframe, pfree_recv_queue);/* free this recv_frame */
+		rtw_free_recvframe(prframe, pfree_recv_queue);/* free this recv_frame */
 		goto _recv_data_drop;
 	}
 
