@@ -636,9 +636,23 @@ static int xsk_cq_reserve_locked(struct xsk_buff_pool *pool)
 	return ret;
 }
 
+/*
+ * On 64-bit, destructor_arg can store an inline address directly
+ * (tagged with bit 0 set). On 32-bit, all addresses go through an
+ * allocated xsk_addrs struct instead. In that case this function
+ * returns true only when destructor_arg is NULL (set_addr has not
+ * yet been called or has failed).
+ *
+ * For all callers:
+ *   return true: no xsk_addrs struct to handle
+ *   return false: destructor_arg points to an xsk_addrs struct
+ */
 static bool xsk_skb_destructor_is_addr(struct sk_buff *skb)
 {
-	return (uintptr_t)skb_shinfo(skb)->destructor_arg & 0x1UL;
+	if (IS_ENABLED(CONFIG_64BIT))
+		return (uintptr_t)skb_shinfo(skb)->destructor_arg & 0x1UL;
+	else
+		return !skb_shinfo(skb)->destructor_arg;
 }
 
 static u64 xsk_skb_destructor_get_addr(struct sk_buff *skb)
@@ -646,9 +660,21 @@ static u64 xsk_skb_destructor_get_addr(struct sk_buff *skb)
 	return (u64)((uintptr_t)skb_shinfo(skb)->destructor_arg & ~0x1UL);
 }
 
-static void xsk_skb_destructor_set_addr(struct sk_buff *skb, u64 addr)
+static int xsk_skb_destructor_set_addr(struct sk_buff *skb, u64 addr)
 {
+	if (!IS_ENABLED(CONFIG_64BIT)) {
+		struct xsk_addrs *xsk_addr;
+
+		xsk_addr = kmem_cache_zalloc(xsk_tx_generic_cache, GFP_KERNEL);
+		if (!xsk_addr)
+			return -ENOMEM;
+		xsk_addr->addrs[0] = addr;
+		skb_shinfo(skb)->destructor_arg = (void *)xsk_addr;
+		return 0;
+	}
+
 	skb_shinfo(skb)->destructor_arg = (void *)((uintptr_t)addr | 0x1UL);
+	return 0;
 }
 
 static void xsk_inc_num_desc(struct sk_buff *skb)
@@ -724,14 +750,14 @@ void xsk_destruct_skb(struct sk_buff *skb)
 	sock_wfree(skb);
 }
 
-static void xsk_skb_init_misc(struct sk_buff *skb, struct xdp_sock *xs,
-			      u64 addr)
+static int xsk_skb_init_misc(struct sk_buff *skb, struct xdp_sock *xs,
+			     u64 addr)
 {
 	skb->dev = xs->dev;
 	skb->priority = READ_ONCE(xs->sk.sk_priority);
 	skb->mark = READ_ONCE(xs->sk.sk_mark);
 	skb->destructor = xsk_destruct_skb;
-	xsk_skb_destructor_set_addr(skb, addr);
+	return xsk_skb_destructor_set_addr(skb, addr);
 }
 
 static void xsk_consume_skb(struct sk_buff *skb)
@@ -799,6 +825,12 @@ static int xsk_skb_metadata(struct sk_buff *skb, void *buffer,
 
 static void xsk_drop_untrans_skb(struct sk_buff *skb)
 {
+	if (!IS_ENABLED(CONFIG_64BIT) && !xsk_skb_destructor_is_addr(skb)) {
+		struct xsk_addrs *xsk_addr;
+
+		xsk_addr = (struct xsk_addrs *)skb_shinfo(skb)->destructor_arg;
+		kmem_cache_free(xsk_tx_generic_cache, xsk_addr);
+	}
 	skb->destructor = sock_wfree;
 	kfree_skb(skb);
 }
@@ -826,7 +858,12 @@ static struct sk_buff *xsk_build_skb_zerocopy(struct xdp_sock *xs,
 
 		skb_reserve(skb, hr);
 
-		xsk_skb_init_misc(skb, xs, desc->addr);
+		err = xsk_skb_init_misc(skb, xs, desc->addr);
+		if (unlikely(err)) {
+			xsk_drop_untrans_skb(skb);
+			return ERR_PTR(err);
+		}
+
 		if (desc->options & XDP_TX_METADATA) {
 			err = xsk_skb_metadata(skb, buffer, desc, pool, hr);
 			if (unlikely(err)) {
@@ -925,7 +962,10 @@ static struct sk_buff *xsk_build_skb(struct xdp_sock *xs,
 			if (unlikely(err))
 				goto free_err;
 
-			xsk_skb_init_misc(skb, xs, desc->addr);
+			err = xsk_skb_init_misc(skb, xs, desc->addr);
+			if (unlikely(err))
+				goto free_err;
+
 			if (desc->options & XDP_TX_METADATA) {
 				err = xsk_skb_metadata(skb, buffer, desc,
 						       xs->pool, hr);
