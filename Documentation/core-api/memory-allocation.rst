@@ -135,7 +135,7 @@ Selecting memory allocator
 The most straightforward way to allocate memory is to use a function
 from the kmalloc() family. And, to be on the safe side it's best to use
 routines that set memory to zero, like kzalloc(). If you need to
-allocate memory for an array, there are kmalloc_array() and kcalloc()
+allocate memory for an array, there are kmalloc_objs() and kzalloc_objs()
 helpers. The helpers struct_size(), array_size() and array3_size() can
 be used to safely calculate object sizes without overflowing.
 
@@ -151,7 +151,7 @@ sizes, the alignment is guaranteed to be at least the largest power-of-two
 divisor of the size.
 
 Chunks allocated with kmalloc() can be resized with krealloc(). Similarly
-to kmalloc_array(): a helper for resizing arrays is provided in the form of
+to kmalloc_objs(): a helper for resizing arrays is provided in the form of
 krealloc_array().
 
 For large allocations you can use vmalloc() and vzalloc(), or directly
