@@ -13,6 +13,7 @@
 #include <linux/platform_device.h>
 #include <linux/err.h>
 #include <linux/string.h>
+#include <linux/sysfs.h>
 #include <asm/dma.h>
 
 static const struct bus_type dma_subsys = {
@@ -33,9 +34,9 @@ static ssize_t dma_show_devices(struct device *dev,
 		if (unlikely(!info) || !channel)
 			continue;
 
-		len += sprintf(buf + len, "%2d: %14s    %s\n",
-			       channel->chan, info->name,
-			       channel->dev_id);
+		len += sysfs_emit_at(buf, len, "%2d: %14s    %s\n",
+				     channel->chan, info->name,
+				     channel->dev_id);
 	}
 
 	return len;
@@ -65,7 +66,7 @@ static ssize_t dma_show_dev_id(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
 	struct dma_channel *channel = to_dma_channel(dev);
-	return sprintf(buf, "%s\n", channel->dev_id);
+	return sysfs_emit(buf, "%s\n", channel->dev_id);
 }
 
 static ssize_t dma_store_dev_id(struct device *dev,
@@ -98,7 +99,7 @@ static ssize_t dma_show_mode(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
 	struct dma_channel *channel = to_dma_channel(dev);
-	return sprintf(buf, "0x%08x\n", channel->mode);
+	return sysfs_emit(buf, "0x%08x\n", channel->mode);
 }
 
 static ssize_t dma_store_mode(struct device *dev,
@@ -117,7 +118,7 @@ static ssize_t dma_show_##field(struct device *dev,		\
 				struct device_attribute *attr, char *buf)\
 {									\
 	struct dma_channel *channel = to_dma_channel(dev);		\
-	return sprintf(buf, fmt, channel->field);			\
+	return sysfs_emit(buf, fmt, channel->field);			\
 }									\
 static DEVICE_ATTR(field, S_IRUGO, dma_show_##field, NULL);
 
