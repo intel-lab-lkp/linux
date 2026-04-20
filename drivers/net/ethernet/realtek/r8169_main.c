@@ -77,6 +77,23 @@
 #define R8169_RX_RING_BYTES	(NUM_RX_DESC * sizeof(struct RxDesc))
 #define R8169_TX_STOP_THRS	(MAX_SKB_FRAGS + 1)
 #define R8169_TX_START_THRS	(2 * R8169_TX_STOP_THRS)
+#define R8169_MAX_RX_QUEUES	8
+#define R8169_MAX_TX_QUEUES	1
+#define R8169_MAX_MSIX_VEC	32
+#define R8127_MAX_TX_QUEUES	1
+#define R8127_MAX_RX_QUEUES	8
+#define R8127_MAX_IRQ		32
+#define R8127_MIN_IRQ		30
+#define RTL8127_RSS_KEY_SIZE	40
+#define RSS_CPU_NUM_OFFSET	16
+#define RSS_MASK_BITS_OFFSET	8
+#define RTL8127_MAX_INDIRECTION_TABLE_ENTRIES 128
+#define RXS_8125B_RSS_UDP_V4 BIT(27)
+#define RXS_8125_RSS_IPV4_V4 BIT(28)
+#define RXS_8125_RSS_IPV6_V4 BIT(29)
+#define RXS_8125_RSS_TCP_V4 BIT(30)
+#define RTL8127_RXS_RSS_L3_TYPE_MASK_V4 (RXS_8125_RSS_IPV4_V4 | RXS_8125_RSS_IPV6_V4)
+#define RTL8127_RXS_RSS_L4_TYPE_MASK_V4 (RXS_8125_RSS_TCP_V4 | RXS_8125B_RSS_UDP_V4)
 
 #define OCP_STD_PHY_BASE	0xa400
 
@@ -435,6 +452,8 @@ enum rtl8125_registers {
 #define INT_CFG0_CLKREQEN		BIT(3)
 	IntrMask_8125		= 0x38,
 	IntrStatus_8125		= 0x3c,
+	IntrMask1_8125		= 0x800,
+	IntrStatus1_8125	= 0x802,
 	INT_CFG1_8125		= 0x7a,
 	LEDSEL2			= 0x84,
 	LEDSEL1			= 0x86,
@@ -444,6 +463,36 @@ enum rtl8125_registers {
 	RSS_CTRL_8125		= 0x4500,
 	Q_NUM_CTRL_8125		= 0x4800,
 	EEE_TXIDLE_TIMER_8125	= 0x6048,
+	TNPDS_Q1_LOW		= 0x2100,
+	RDSAR_Q1_LOW		= 0x4000,
+	IMR_V2_SET_REG_8125	= 0x0d0c,
+	IMR_V2_CLEAR_REG_8125	= 0x0d00,
+	IMR_V4_L2_CLEAR_REG_8125 = 0x0d10,
+	ISR_V2_8125		= 0x0d04,
+	ISR_V4_L2_8125		= 0x0d14,
+};
+
+enum rtl8127_msix_id {
+	MSIX_ID_V4_LINKCHG	= 29,
+};
+
+enum rtl8127_rss_register_content {
+	RSS_CTRL_TCP_IPV4_SUPP		= (1 << 0),
+	RSS_CTRL_IPV4_SUPP		= (1 << 1),
+	RSS_CTRL_TCP_IPV6_SUPP		= (1 << 2),
+	RSS_CTRL_IPV6_SUPP		= (1 << 3),
+	RSS_CTRL_IPV6_EXT_SUPP		= (1 << 4),
+	RSS_CTRL_TCP_IPV6_EXT_SUPP	= (1 << 5),
+	RSS_CTRL_UDP_IPV4_SUPP		= (1 << 11),
+	RSS_CTRL_UDP_IPV6_SUPP		= (1 << 12),
+	RSS_CTRL_UDP_IPV6_EXT_SUPP	= (1 << 13),
+	RSS_INDIRECTION_TBL_8125_V2	= 0x4700,
+	RSS_KEY_8125			= 0x4600,
+};
+
+enum rtl8127_rss_flag {
+	RTL_8125_RSS_FLAG_HASH_UDP_IPV4  = (1 << 0),
+	RTL_8125_RSS_FLAG_HASH_UDP_IPV6  = (1 << 1),
 };
 
 #define LEDSEL_MASK_8125	0x23f
@@ -473,6 +522,10 @@ enum rtl_register_content {
 	RxRES	= (1 << 21),
 	RxRUNT	= (1 << 20),
 	RxCRC	= (1 << 19),
+
+	RxRES_RSS	= (1 << 22),
+	RxRUNT_RSS	= (1 << 21),
+	RxCRC_RSS	= (1 << 20),
 
 	/* ChipCmdBits */
 	StopReq		= 0x80,
@@ -576,6 +629,9 @@ enum rtl_register_content {
 
 	/* magic enable v2 */
 	MagicPacket_v2	= (1 << 16),	/* Wake up when receives a Magic Packet */
+	ISRIMR_V6_LINKCHG	= (1 << 29),
+	ISRIMR_V6_TOK_Q0	= (1 << 8),
+	ISRIMR_V6_ROK_Q0	= (1 << 0),
 };
 
 enum rtl_desc_bit {
@@ -633,6 +689,11 @@ enum rtl_rx_desc_bit {
 #define RxProtoIP	(PID1 | PID0)
 #define RxProtoMask	RxProtoIP
 
+	RxUDPT_v4	= (1 << 19),
+	RxTCPT_v4	= (1 << 18),
+	RxUDPF_v4	= (1 << 16), /* UDP/IP checksum failed */
+	RxTCPF_v4	= (1 << 15), /* TCP/IP checksum failed */
+
 	IPFail		= (1 << 16), /* IP checksum failed */
 	UDPFail		= (1 << 15), /* UDP/IP checksum failed */
 	TCPFail		= (1 << 14), /* TCP/IP checksum failed */
@@ -657,6 +718,11 @@ struct RxDesc {
 	__le32 opts1;
 	__le32 opts2;
 	__le64 addr;
+};
+
+enum features {
+	RTL_FEATURE_MSI		= (1 << 1),
+	RTL_FEATURE_MSIX	= (1 << 2),
 };
 
 struct ring_info {
@@ -728,6 +794,13 @@ enum rtl_dash_type {
 	RTL_DASH_25_BP,
 };
 
+enum rx_desc_ring_type {
+	RX_DESC_RING_TYPE_UNKNOWN = 0,
+	RX_DESC_RING_TYPE_DEAFULT,
+	RX_DESC_RING_TYPE_RSS,
+	RX_DESC_RING_TYPE_MAX
+};
+
 struct rtl8169_private {
 	void __iomem *mmio_addr;	/* memory map physical address */
 	struct pci_dev *pci_dev;
@@ -763,6 +836,8 @@ struct rtl8169_private {
 	unsigned aspm_manageable:1;
 	unsigned dash_enabled:1;
 	bool sfp_mode:1;
+	bool rss_support:1;
+	bool rss_enable:1;
 	dma_addr_t counters_phys_addr;
 	struct rtl8169_counters *counters;
 	struct rtl8169_tc_offsets tc_offset;
