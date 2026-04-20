@@ -18,6 +18,7 @@
 #include <linux/mfd/mt6357/core.h>
 #include <linux/mfd/mt6358/core.h>
 #include <linux/mfd/mt6359/core.h>
+#include <linux/mfd/mt6392/core.h>
 #include <linux/mfd/mt6397/core.h>
 #include <linux/mfd/mt6323/registers.h>
 #include <linux/mfd/mt6328/registers.h>
@@ -25,7 +26,19 @@
 #include <linux/mfd/mt6357/registers.h>
 #include <linux/mfd/mt6358/registers.h>
 #include <linux/mfd/mt6359/registers.h>
+#include <linux/mfd/mt6392/registers.h>
 #include <linux/mfd/mt6397/registers.h>
+
+enum mfd_match_data {
+	MATCH_DATA_MT6323 = 23,
+	MATCH_DATA_MT6328 = 28,
+	MATCH_DATA_MT6331 = 31,
+	MATCH_DATA_MT6357 = 57,
+	MATCH_DATA_MT6358 = 58,
+	MATCH_DATA_MT6359 = 59,
+	MATCH_DATA_MT6392 = 92,
+	MATCH_DATA_MT6397 = 97,
+};
 
 #define MT6323_RTC_BASE		0x8000
 #define MT6323_RTC_SIZE		0x40
@@ -38,6 +51,9 @@
 
 #define MT6358_RTC_BASE		0x0588
 #define MT6358_RTC_SIZE		0x3c
+
+#define MT6392_RTC_BASE		0x8000
+#define MT6392_RTC_SIZE		0x3e
 
 #define MT6397_RTC_BASE		0xe000
 #define MT6397_RTC_SIZE		0x3e
@@ -63,6 +79,11 @@ static const struct resource mt6331_rtc_resources[] = {
 static const struct resource mt6358_rtc_resources[] = {
 	DEFINE_RES_MEM(MT6358_RTC_BASE, MT6358_RTC_SIZE),
 	DEFINE_RES_IRQ(MT6358_IRQ_RTC),
+};
+
+static const struct resource mt6392_rtc_resources[] = {
+	DEFINE_RES_MEM(MT6392_RTC_BASE, MT6392_RTC_SIZE),
+	DEFINE_RES_IRQ(MT6392_IRQ_RTC),
 };
 
 static const struct resource mt6397_rtc_resources[] = {
@@ -112,6 +133,11 @@ static const struct resource mt6357_keys_resources[] = {
 static const struct resource mt6331_keys_resources[] = {
 	DEFINE_RES_IRQ_NAMED(MT6331_IRQ_STATUS_PWRKEY, "powerkey"),
 	DEFINE_RES_IRQ_NAMED(MT6331_IRQ_STATUS_HOMEKEY, "homekey"),
+};
+
+static const struct resource mt6392_keys_resources[] = {
+	DEFINE_RES_IRQ_NAMED(MT6392_IRQ_PWRKEY, "powerkey"),
+	DEFINE_RES_IRQ_NAMED(MT6392_IRQ_FCHRKEY, "homekey"),
 };
 
 static const struct resource mt6397_keys_resources[] = {
@@ -253,6 +279,25 @@ static const struct mfd_cell mt6359_devs[] = {
 	},
 };
 
+static const struct mfd_cell mt6392_devs[] = {
+	{
+		.name = "mt6392-rtc",
+		.num_resources = ARRAY_SIZE(mt6392_rtc_resources),
+		.resources = mt6392_rtc_resources,
+		.of_compatible = "mediatek,mt6392-rtc",
+	}, {
+		.name = "mt6392-regulator",
+	}, {
+		.name = "mt6392-pinctrl",
+		.of_compatible = "mediatek,mt6392-pinctrl",
+	}, {
+		.name = "mt6392-keys",
+		.num_resources = ARRAY_SIZE(mt6392_keys_resources),
+		.resources = mt6392_keys_resources,
+		.of_compatible = "mediatek,mt6392-keys"
+	},
+};
+
 static const struct mfd_cell mt6397_devs[] = {
 	{
 		.name = "mt6397-rtc",
@@ -335,6 +380,14 @@ static const struct chip_data mt6359_core = {
 	.irq_init = mt6358_irq_init,
 };
 
+static const struct chip_data mt6392_core = {
+	.cid_addr = MT6392_CID,
+	.cid_shift = 0,
+	.cells = mt6392_devs,
+	.cell_size = ARRAY_SIZE(mt6392_devs),
+	.irq_init = mt6397_irq_init,
+};
+
 static const struct chip_data mt6397_core = {
 	.cid_addr = MT6397_CID,
 	.cid_shift = 0,
@@ -349,6 +402,7 @@ static int mt6397_probe(struct platform_device *pdev)
 	unsigned int id = 0;
 	struct mt6397_chip *pmic;
 	const struct chip_data *pmic_core;
+	enum mfd_match_data device_data;
 
 	pmic = devm_kzalloc(&pdev->dev, sizeof(*pmic), GFP_KERNEL);
 	if (!pmic)
@@ -364,9 +418,36 @@ static int mt6397_probe(struct platform_device *pdev)
 	if (!pmic->regmap)
 		return -ENODEV;
 
-	pmic_core = of_device_get_match_data(&pdev->dev);
-	if (!pmic_core)
+	device_data = (unsigned int)(uintptr_t)of_device_get_match_data(&pdev->dev);
+	switch (device_data) {
+	case MATCH_DATA_MT6323:
+		pmic_core = &mt6323_core;
+		break;
+	case MATCH_DATA_MT6328:
+		pmic_core = &mt6328_core;
+		break;
+	case MATCH_DATA_MT6331:
+		pmic_core = &mt6331_mt6332_core;
+		break;
+	case MATCH_DATA_MT6357:
+		pmic_core = &mt6357_core;
+		break;
+	case MATCH_DATA_MT6358:
+		pmic_core = &mt6358_core;
+		break;
+	case MATCH_DATA_MT6359:
+		pmic_core = &mt6359_core;
+		break;
+	case MATCH_DATA_MT6392:
+		pmic_core = &mt6392_core;
+		break;
+	case MATCH_DATA_MT6397:
+		pmic_core = &mt6397_core;
+		break;
+	default:
+		dev_err(&pdev->dev, "Unknown device match data %u\n", device_data);
 		return -ENODEV;
+	}
 
 	ret = regmap_read(pmic->regmap, pmic_core->cid_addr, &id);
 	if (ret) {
@@ -398,30 +479,15 @@ static int mt6397_probe(struct platform_device *pdev)
 }
 
 static const struct of_device_id mt6397_of_match[] = {
-	{
-		.compatible = "mediatek,mt6323",
-		.data = &mt6323_core,
-	}, {
-		.compatible = "mediatek,mt6328",
-		.data = &mt6328_core,
-	}, {
-		.compatible = "mediatek,mt6331",
-		.data = &mt6331_mt6332_core,
-	}, {
-		.compatible = "mediatek,mt6357",
-		.data = &mt6357_core,
-	}, {
-		.compatible = "mediatek,mt6358",
-		.data = &mt6358_core,
-	}, {
-		.compatible = "mediatek,mt6359",
-		.data = &mt6359_core,
-	}, {
-		.compatible = "mediatek,mt6397",
-		.data = &mt6397_core,
-	}, {
-		/* sentinel */
-	}
+	{ .compatible = "mediatek,mt6323", .data = (void *)MATCH_DATA_MT6323, },
+	{ .compatible = "mediatek,mt6328", .data = (void *)MATCH_DATA_MT6328, },
+	{ .compatible = "mediatek,mt6331", .data = (void *)MATCH_DATA_MT6331, },
+	{ .compatible = "mediatek,mt6357", .data = (void *)MATCH_DATA_MT6357, },
+	{ .compatible = "mediatek,mt6358", .data = (void *)MATCH_DATA_MT6358, },
+	{ .compatible = "mediatek,mt6359", .data = (void *)MATCH_DATA_MT6359, },
+	{ .compatible = "mediatek,mt6392", .data = (void *)MATCH_DATA_MT6392, },
+	{ .compatible = "mediatek,mt6397", .data = (void *)MATCH_DATA_MT6397, },
+	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, mt6397_of_match);
 
