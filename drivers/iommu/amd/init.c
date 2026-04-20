@@ -352,28 +352,6 @@ static void iommu_write_l2(struct amd_iommu *iommu, u8 address, u32 val)
  *
  ****************************************************************************/
 
-/*
- * This function set the exclusion range in the IOMMU. DMA accesses to the
- * exclusion range are passed through untranslated
- */
-static void iommu_set_exclusion_range(struct amd_iommu *iommu)
-{
-	u64 start = iommu->exclusion_start & PAGE_MASK;
-	u64 limit = (start + iommu->exclusion_length - 1) & PAGE_MASK;
-	u64 entry;
-
-	if (!iommu->exclusion_start)
-		return;
-
-	entry = start | MMIO_EXCL_ENABLE_MASK;
-	memcpy_toio(iommu->mmio_base + MMIO_EXCL_BASE_OFFSET,
-			&entry, sizeof(entry));
-
-	entry = limit;
-	memcpy_toio(iommu->mmio_base + MMIO_EXCL_LIMIT_OFFSET,
-			&entry, sizeof(entry));
-}
-
 static void iommu_set_cwwb_range(struct amd_iommu *iommu)
 {
 	u64 start = iommu_virt_to_phys((void *)iommu->cmd_sem);
@@ -386,14 +364,14 @@ static void iommu_set_cwwb_range(struct amd_iommu *iommu)
 	 * Re-purpose Exclusion base/limit registers for Completion wait
 	 * write-back base/limit.
 	 */
-	memcpy_toio(iommu->mmio_base + MMIO_EXCL_BASE_OFFSET,
+	memcpy_toio(iommu->mmio_base + MMIO_COMPL_STORE_BASE_OFFSET,
 		    &entry, sizeof(entry));
 
 	/* Note:
 	 * Default to 4 Kbytes, which can be specified by setting base
 	 * address equal to the limit address.
 	 */
-	memcpy_toio(iommu->mmio_base + MMIO_EXCL_LIMIT_OFFSET,
+	memcpy_toio(iommu->mmio_base + MMIO_COMPL_STORE_LIMIT_OFFSET,
 		    &entry, sizeof(entry));
 }
 
@@ -1016,7 +994,7 @@ static int __init remap_or_alloc_cwwb_sem(struct amd_iommu *iommu)
 		 * completion wait buffer (CWB) address. Read and re-use it.
 		 */
 		pr_info_once("Re-using CWB buffers from the previous kernel\n");
-		paddr = readq(iommu->mmio_base + MMIO_EXCL_BASE_OFFSET) & PM_ADDR_MASK;
+		paddr = readq(iommu->mmio_base + MMIO_COMPL_STORE_BASE_OFFSET) & PM_ADDR_MASK;
 		iommu->cmd_sem = iommu_memremap(paddr, PAGE_SIZE);
 		if (!iommu->cmd_sem)
 			return -ENOMEM;
@@ -2894,7 +2872,6 @@ static void early_enable_iommu(struct amd_iommu *iommu)
 	iommu_set_device_table(iommu);
 	iommu_enable_command_buffer(iommu);
 	iommu_enable_event_buffer(iommu);
-	iommu_set_exclusion_range(iommu);
 	iommu_enable_gt(iommu);
 	iommu_enable_ga(iommu);
 	iommu_enable_xt(iommu);

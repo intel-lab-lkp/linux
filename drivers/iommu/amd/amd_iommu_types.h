@@ -50,17 +50,13 @@
 #define MMIO_GET_BUS(x) (((x) & MMIO_RANGE_BUS_MASK) >> MMIO_RANGE_BUS_SHIFT)
 #define MMIO_MSI_NUM(x)	((x) & 0x1f)
 
-/* Flag masks for the AMD IOMMU exclusion range */
-#define MMIO_EXCL_ENABLE_MASK 0x01ULL
-#define MMIO_EXCL_ALLOW_MASK  0x02ULL
-
 /* Used offsets into the MMIO space */
 #define MMIO_DEV_TABLE_OFFSET   0x0000
 #define MMIO_CMD_BUF_OFFSET     0x0008
 #define MMIO_EVT_BUF_OFFSET     0x0010
 #define MMIO_CONTROL_OFFSET     0x0018
-#define MMIO_EXCL_BASE_OFFSET   0x0020
-#define MMIO_EXCL_LIMIT_OFFSET  0x0028
+#define MMIO_COMPL_STORE_BASE_OFFSET   0x0020
+#define MMIO_COMPL_STORE_LIMIT_OFFSET  0x0028
 #define MMIO_EXT_FEATURES	0x0030
 #define MMIO_PPR_LOG_OFFSET	0x0038
 #define MMIO_GA_LOG_BASE_OFFSET	0x00e0
@@ -679,11 +675,6 @@ struct amd_iommu {
 
 	/* pci domain of this IOMMU */
 	struct amd_iommu_pci_seg *pci_seg;
-
-	/* start of exclusion range of that IOMMU */
-	u64 exclusion_start;
-	/* length of exclusion range of that IOMMU */
-	u64 exclusion_length;
 
 	/* command buffer virtual address */
 	u8 *cmd_buf;
