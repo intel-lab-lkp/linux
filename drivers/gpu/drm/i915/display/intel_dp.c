@@ -2125,12 +2125,52 @@ static int dsc_compute_link_config(struct intel_dp *intel_dp,
 	return -EINVAL;
 }
 
+static u16 intel_dp_dsc_max_delta_bppx16(const struct intel_connector *connector,
+					 enum intel_output_format output_format)
+{
+	const u8 *dsc_dpcd = connector->dp.dsc_dpcd;
+
+	if (dsc_dpcd[DP_DSC_MAX_BITS_PER_PIXEL_HI - DP_DSC_SUPPORT] &
+	    DP_DSC_MAX_BPP_DELTA_AVAILABILITY) {
+		int max_bpp_delta = 0;
+
+		switch (output_format) {
+		case INTEL_OUTPUT_FORMAT_RGB:
+		case INTEL_OUTPUT_FORMAT_YCBCR444:
+			max_bpp_delta = dsc_dpcd[DP_DSC_MAX_BPP_DELTA - DP_DSC_SUPPORT] &
+				DP_DSC_RGB_YCbCr444_MAX_BPP_DELTA_MASK;
+			if (max_bpp_delta >= 1 && max_bpp_delta <= 21)
+				max_bpp_delta =  max_bpp_delta + MIN_DSC_BPP_DELTA_444 - 1;
+			break;
+		case INTEL_OUTPUT_FORMAT_YCBCR420:
+			max_bpp_delta = (dsc_dpcd[DP_DSC_MAX_BPP_DELTA - DP_DSC_SUPPORT] &
+					DP_DSC_RGB_YCbCr420_MAX_BPP_DELTA_MASK) >>
+					BPP_DELTA_SHIFT_420;
+			if (max_bpp_delta >= 1 && max_bpp_delta <= 7)
+				max_bpp_delta = max_bpp_delta + MIN_DSC_BPP_DELTA_420 - 1;
+			break;
+		default:
+			MISSING_CASE(output_format);
+			return 0;
+		}
+
+		return max_bpp_delta << 4;
+	}
+
+	return 0;
+}
+
 static
 u16 intel_dp_dsc_max_sink_compressed_bppx16(const struct intel_connector *connector,
 					    enum intel_output_format output_format,
 					    int bpc)
 {
 	u16 max_bppx16 = drm_edp_dsc_sink_output_bpp(connector->dp.dsc_dpcd);
+
+	if (max_bppx16)
+		return max_bppx16;
+
+	max_bppx16 = intel_dp_dsc_max_delta_bppx16(connector, output_format);
 
 	if (max_bppx16)
 		return max_bppx16;
