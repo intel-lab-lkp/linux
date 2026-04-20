@@ -283,6 +283,8 @@ static void fsnotify_conn_set_children_dentry_flags(
 	fsnotify_set_children_dentry_flags(fsnotify_conn_inode(conn));
 }
 
+static void fsnotify_drop_object(unsigned int type, void *objp);
+
 /*
  * Calculate mask of events for a list of marks. The caller must make sure
  * connector and connector->obj cannot disappear under us.  Callers achieve
@@ -292,15 +294,19 @@ static void fsnotify_conn_set_children_dentry_flags(
 void fsnotify_recalc_mask(struct fsnotify_mark_connector *conn)
 {
 	bool update_children;
+	unsigned int type;
+	void *objp;
 
 	if (!conn)
 		return;
 
 	spin_lock(&conn->lock);
 	update_children = !fsnotify_conn_watches_children(conn);
-	__fsnotify_recalc_mask(conn);
+	objp = __fsnotify_recalc_mask(conn);
+	type = conn->type;
 	update_children &= fsnotify_conn_watches_children(conn);
 	spin_unlock(&conn->lock);
+	fsnotify_drop_object(type, objp);
 	/*
 	 * Set children's PARENT_WATCHED flags only if parent started watching.
 	 * When parent stops watching, we clear false positive PARENT_WATCHED
