@@ -533,9 +533,14 @@ static ssize_t memcg_path_show(struct kobject *kobj,
 {
 	struct damon_sysfs_scheme_filter *filter = container_of(kobj,
 			struct damon_sysfs_scheme_filter, kobj);
+	ssize_t len;
 
-	return sysfs_emit(buf, "%s\n",
+	mutex_lock(&damon_sysfs_lock);
+	len = sysfs_emit(buf, "%s\n",
 			filter->memcg_path ? filter->memcg_path : "");
+	mutex_unlock(&damon_sysfs_lock);
+
+	return len;
 }
 
 static ssize_t memcg_path_store(struct kobject *kobj,
@@ -543,15 +548,20 @@ static ssize_t memcg_path_store(struct kobject *kobj,
 {
 	struct damon_sysfs_scheme_filter *filter = container_of(kobj,
 			struct damon_sysfs_scheme_filter, kobj);
-	char *path = kmalloc_array(size_add(count, 1), sizeof(*path),
-				   GFP_KERNEL);
+	char *path, *old;
 
+	path = kmalloc_array(size_add(count, 1), sizeof(*path), GFP_KERNEL);
 	if (!path)
 		return -ENOMEM;
 
 	strscpy(path, buf, count + 1);
-	kfree(filter->memcg_path);
+
+	mutex_lock(&damon_sysfs_lock);
+	old = filter->memcg_path;
 	filter->memcg_path = path;
+	mutex_unlock(&damon_sysfs_lock);
+
+	kfree(old);
 	return count;
 }
 
@@ -1187,8 +1197,13 @@ static ssize_t path_show(struct kobject *kobj,
 {
 	struct damos_sysfs_quota_goal *goal = container_of(kobj,
 			struct damos_sysfs_quota_goal, kobj);
+	ssize_t len;
 
-	return sysfs_emit(buf, "%s\n", goal->path ? goal->path : "");
+	mutex_lock(&damon_sysfs_lock);
+	len = sysfs_emit(buf, "%s\n", goal->path ? goal->path : "");
+	mutex_unlock(&damon_sysfs_lock);
+
+	return len;
 }
 
 static ssize_t path_store(struct kobject *kobj,
@@ -1196,15 +1211,20 @@ static ssize_t path_store(struct kobject *kobj,
 {
 	struct damos_sysfs_quota_goal *goal = container_of(kobj,
 			struct damos_sysfs_quota_goal, kobj);
-	char *path = kmalloc_array(size_add(count, 1), sizeof(*path),
-				   GFP_KERNEL);
+	char *path, *old;
 
+	path = kmalloc_array(size_add(count, 1), sizeof(*path), GFP_KERNEL);
 	if (!path)
 		return -ENOMEM;
 
 	strscpy(path, buf, count + 1);
-	kfree(goal->path);
+
+	mutex_lock(&damon_sysfs_lock);
+	old = goal->path;
 	goal->path = path;
+	mutex_unlock(&damon_sysfs_lock);
+
+	kfree(old);
 	return count;
 }
 
