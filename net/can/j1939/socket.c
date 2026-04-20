@@ -21,8 +21,6 @@
 
 #include "j1939-priv.h"
 
-#define J1939_MIN_NAMELEN CAN_REQUIRED_SIZE(struct sockaddr_can, can_addr.j1939)
-
 /* conversion function between struct sock::sk_priority from linux and
  * j1939 priority field
  */

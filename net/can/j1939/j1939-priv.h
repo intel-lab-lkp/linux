@@ -12,6 +12,8 @@
 #include <linux/can/j1939.h>
 #include <net/sock.h>
 
+#define J1939_MIN_NAMELEN CAN_REQUIRED_SIZE(struct sockaddr_can, can_addr.j1939)
+
 /* Timeout to receive the abort signal over loop back. In case CAN
  * bus is open, the timeout should be triggered.
  */
