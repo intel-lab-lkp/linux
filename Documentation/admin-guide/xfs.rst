@@ -565,3 +565,7 @@ For zoned file systems, the following attributes are exposed in:
 	bursts at the cost of increased write amplification.  Regardless
 	of this value, garbage collection will always aim to free a minimum
 	amount of blocks to keep max_open_zones open for data placement purposes.
+
+  zonegc_required		(Min:  0  Default:  Varies  Max:  1)
+	This read-only attribute exposes if GC is currently required by the file
+	system.
