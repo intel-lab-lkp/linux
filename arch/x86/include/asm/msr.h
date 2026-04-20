@@ -369,5 +369,37 @@ static inline int wrmsr_safe_regs_on_cpu(unsigned int cpu, u32 regs[8])
 #define wrmsrl(msr, val) wrmsrq(msr, val)
 #define rdmsrl_on_cpu(cpu, msr, q) rdmsrq_on_cpu(cpu, msr, q)
 
+static inline int msr_read_on_cpu(unsigned int cpu, u32 msr, u64 *val)
+{
+	return rdmsrq_on_cpu(cpu, msr, val);
+}
+
+static inline int msr_read_safe_on_cpu(unsigned int cpu, u32 msr, u64 *val)
+{
+	return rdmsrq_safe_on_cpu(cpu, msr, val);
+}
+
+static inline int msr_write_on_cpu(unsigned int cpu, u32 msr, u64 val)
+{
+	return wrmsrq_on_cpu(cpu, msr, val);
+}
+
+static inline int msr_write_safe_on_cpu(unsigned int cpu, u32 msr, u64 val)
+{
+	return wrmsrq_safe_on_cpu(cpu, msr, val);
+}
+
+static inline void msr_read_on_cpus(const struct cpumask *cpus, u32 msr,
+				    struct msr __percpu *msrs)
+{
+	rdmsr_on_cpus(cpus, msr, msrs);
+}
+
+static inline void msr_write_on_cpus(const struct cpumask *cpus, u32 msr,
+				     struct msr __percpu *msrs)
+{
+	wrmsr_on_cpus(cpus, msr, msrs);
+}
+
 #endif /* __ASSEMBLER__ */
 #endif /* _ASM_X86_MSR_H */
