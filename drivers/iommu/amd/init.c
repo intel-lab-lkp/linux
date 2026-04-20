@@ -70,11 +70,6 @@
 #define IVHD_FLAG_RESPASSPW_EN_MASK     0x04
 #define IVHD_FLAG_ISOC_EN_MASK          0x08
 
-#define IVMD_FLAG_EXCL_RANGE            0x08
-#define IVMD_FLAG_IW                    0x04
-#define IVMD_FLAG_IR                    0x02
-#define IVMD_FLAG_UNITY_MAP             0x01
-
 #define ACPI_DEVFLAG_INITPASS           0x01
 #define ACPI_DEVFLAG_EXTINT             0x02
 #define ACPI_DEVFLAG_NMI                0x04
@@ -134,7 +129,7 @@ struct ivhd_entry {
 
 /*
  * An AMD IOMMU memory definition structure. It defines things like exclusion
- * ranges for devices and regions that should be unity mapped.
+ * ranges, unity mapping for devices and regions.
  */
 struct ivmd_header {
 	u8 type;
@@ -1711,7 +1706,7 @@ static struct amd_iommu_pci_seg *__init alloc_pci_segment(u16 id,
 
 	pci_seg->id = id;
 	init_llist_head(&pci_seg->dev_data_list);
-	INIT_LIST_HEAD(&pci_seg->unity_map);
+	INIT_LIST_HEAD(&pci_seg->ivmd_entry_map);
 	list_add_tail(&pci_seg->list, &amd_iommu_pci_seg_list);
 
 	if (alloc_dev_table(pci_seg))
@@ -2304,8 +2299,8 @@ static int __init amd_iommu_init_pci(void)
 	}
 
 	/*
-	 * Order is important here to make sure any unity map requirements are
-	 * fulfilled. The unity mappings are created and written to the device
+	 * Order is important here to make sure any ivmd map requirements are
+	 * fulfilled. The ivmd mappings are created and written to the device
 	 * table during the iommu_init_pci() call.
 	 *
 	 * After that we call init_device_table_dma() to make sure any
@@ -2591,28 +2586,28 @@ enable_faults:
  *
  * The next functions belong to the third pass of parsing the ACPI
  * table. In this last pass the memory mapping requirements are
- * gathered (like exclusion and unity mapping ranges).
+ * gathered (like exclusion and ivmd mapping ranges).
  *
  ****************************************************************************/
 
-static void __init free_unity_maps(void)
+static void __init free_ivmd_maps(void)
 {
-	struct unity_map_entry *entry, *next;
+	struct ivmd_entry *entry, *next;
 	struct amd_iommu_pci_seg *p, *pci_seg;
 
 	for_each_pci_segment_safe(pci_seg, p) {
-		list_for_each_entry_safe(entry, next, &pci_seg->unity_map, list) {
+		list_for_each_entry_safe(entry, next, &pci_seg->ivmd_entry_map, list) {
 			list_del(&entry->list);
 			kfree(entry);
 		}
 	}
 }
 
-/* called for unity map ACPI definition */
-static int __init init_unity_map_range(struct ivmd_header *m,
-				       struct acpi_table_header *ivrs_base)
+/* called for ivmd map ACPI definition */
+static int __init init_ivmd_map_range(struct ivmd_header *m,
+				      struct acpi_table_header *ivrs_base)
 {
-	struct unity_map_entry *e = NULL;
+	struct ivmd_entry *e = NULL;
 	struct amd_iommu_pci_seg *pci_seg;
 	char *s;
 
@@ -2645,7 +2640,7 @@ static int __init init_unity_map_range(struct ivmd_header *m,
 	}
 	e->address_start = PAGE_ALIGN(m->range_start);
 	e->address_end = e->address_start + PAGE_ALIGN(m->range_length);
-	e->prot = m->flags >> 1;
+	e->flags = m->flags;
 
 	DUMP_printk("%s devid_start: %04x:%02x:%02x.%x devid_end: "
 		    "%04x:%02x:%02x.%x range_start: %016llx range_end: %016llx"
@@ -2656,7 +2651,7 @@ static int __init init_unity_map_range(struct ivmd_header *m,
 		    PCI_SLOT(e->devid_end), PCI_FUNC(e->devid_end),
 		    e->address_start, e->address_end, m->flags);
 
-	list_add_tail(&e->list, &pci_seg->unity_map);
+	list_add_tail(&e->list, &pci_seg->ivmd_entry_map);
 
 	return 0;
 }
@@ -2672,8 +2667,8 @@ static int __init init_memory_definitions(struct acpi_table_header *table)
 
 	while (p < end) {
 		m = (struct ivmd_header *)p;
-		if (m->flags & (IVMD_FLAG_UNITY_MAP | IVMD_FLAG_EXCL_RANGE))
-			init_unity_map_range(m, table);
+		if (m->flags & (IVMD_FLAG_UNITY | IVMD_FLAG_EXCL))
+			init_ivmd_map_range(m, table);
 
 		p += m->length;
 	}
@@ -3118,7 +3113,7 @@ static bool __init check_ioapic_information(void)
 static void __init free_dma_resources(void)
 {
 	amd_iommu_pdom_id_destroy();
-	free_unity_maps();
+	free_ivmd_maps();
 }
 
 static void __init ivinfo_init(void *ivrs)

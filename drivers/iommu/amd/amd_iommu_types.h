@@ -376,11 +376,11 @@
 /* DTE[128:179] | DTE[184:191] */
 #define DTE_DATA2_INTR_MASK	~GENMASK_ULL(55, 52)
 
-#define IOMMU_PROT_MASK 0x03
-#define IOMMU_PROT_IR 0x01
-#define IOMMU_PROT_IW 0x02
-
-#define IOMMU_UNITY_MAP_FLAG_EXCL_RANGE	(1 << 2)
+#define IVMD_FLAG_UNITY		BIT(0)
+#define IVMD_FLAG_IR		BIT(1)
+#define IVMD_FLAG_IW		BIT(2)
+#define IVMD_FLAG_EXCL		BIT(3)
+#define IVMD_FLAG_MASK		GENMASK_U32(3, 0)
 
 /* IOMMU capabilities */
 #define IOMMU_CAP_IOTLB   24
@@ -616,11 +616,11 @@ struct amd_iommu_pci_seg {
 	u16 *alias_table;
 
 	/*
-	 * A list of required unity mappings we find in ACPI. It is not locked
+	 * A list of required IVMD entry we find in ACPI. It is not locked
 	 * because as runtime it is only read. It is created at ACPI table
 	 * parsing time.
 	 */
-	struct list_head unity_map;
+	struct list_head ivmd_entry_map;
 };
 
 /*
@@ -876,7 +876,7 @@ struct ivhd_dte_flags {
 /*
  * One entry for unity mappings parsed out of the ACPI table.
  */
-struct unity_map_entry {
+struct ivmd_entry {
 	struct list_head list;
 
 	/* starting device id this entry is used for (including) */
@@ -889,8 +889,8 @@ struct unity_map_entry {
 	/* end address to unity map (including) */
 	u64 address_end;
 
-	/* required protection */
-	int prot;
+	/* IVMD flags for the entry */
+	u8 flags;
 };
 
 /*

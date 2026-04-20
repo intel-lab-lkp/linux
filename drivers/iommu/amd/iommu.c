@@ -3055,7 +3055,7 @@ static void amd_iommu_get_resv_regions(struct device *dev,
 				       struct list_head *head)
 {
 	struct iommu_resv_region *region;
-	struct unity_map_entry *entry;
+	struct ivmd_entry *entry;
 	struct amd_iommu *iommu;
 	struct amd_iommu_pci_seg *pci_seg;
 	int devid, sbdf;
@@ -3068,28 +3068,42 @@ static void amd_iommu_get_resv_regions(struct device *dev,
 	iommu = get_amd_iommu_from_dev(dev);
 	pci_seg = iommu->pci_seg;
 
-	list_for_each_entry(entry, &pci_seg->unity_map, list) {
+	list_for_each_entry(entry, &pci_seg->ivmd_entry_map, list) {
 		int type, prot = 0;
 		size_t length;
 
 		if (devid < entry->devid_start || devid > entry->devid_end)
 			continue;
 
+		/*
+		 * IVMD_FLAG_UNITY, IVMD_FLAG_IR, IVMD_FLAG_IW are ignored if
+		 * IVMD_FLAG_EXCL is set.
+		 */
+		if ((entry->flags & IVMD_FLAG_EXCL) &&
+		    (entry->flags & (IVMD_FLAG_UNITY | IVMD_FLAG_IR | IVMD_FLAG_IW)))
+			pr_err(FW_BUG "%s: Invalid IVMD flags combination: %#02x for sbdf=%#x. Ignore IW/IR/Unity flags\n",
+			       __func__, entry->flags, sbdf);
+
+		if (entry->flags & ~IVMD_FLAG_MASK)
+			pr_err("%s: Unknown flags: %#02x for sbdf=%#x\n",
+			       __func__, entry->flags & ~IVMD_FLAG_MASK, sbdf);
+
 		type   = IOMMU_RESV_DIRECT;
 		length = entry->address_end - entry->address_start;
-		if (entry->prot & IOMMU_PROT_IR)
+		if (entry->flags & IVMD_FLAG_IR)
 			prot |= IOMMU_READ;
-		if (entry->prot & IOMMU_PROT_IW)
+		if (entry->flags & IVMD_FLAG_IW)
 			prot |= IOMMU_WRITE;
-		if (entry->prot & IOMMU_UNITY_MAP_FLAG_EXCL_RANGE)
-			/* Exclusion range */
+		if (entry->flags & IVMD_FLAG_EXCL) {
 			type = IOMMU_RESV_RESERVED;
+			prot = 0;
+		}
 
 		region = iommu_alloc_resv_region(entry->address_start,
 						 length, prot, type,
 						 GFP_KERNEL);
 		if (!region) {
-			dev_err(dev, "Out of memory allocating dm-regions\n");
+			pr_err("%s: Out of memory allocating reserved regions for sbdf=%#x\n", __func__, sbdf);
 			return;
 		}
 		list_add_tail(&region->list, head);
