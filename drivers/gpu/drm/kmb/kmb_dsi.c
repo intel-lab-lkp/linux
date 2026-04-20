@@ -1526,17 +1526,23 @@ static int kmb_dsi_clk_enable(struct kmb_dsi *kmb_dsi)
 	ret = clk_prepare_enable(kmb_dsi->clk_mipi_ecfg);
 	if (ret) {
 		dev_err(dev, "Failed to enable MIPI_ECFG clock: %d\n", ret);
-		return ret;
+		goto err_disable_mipi;
 	}
 
 	ret = clk_prepare_enable(kmb_dsi->clk_mipi_cfg);
 	if (ret) {
 		dev_err(dev, "Failed to enable MIPI_CFG clock: %d\n", ret);
-		return ret;
+		goto err_disable_mipi_ecfg;
 	}
 
 	dev_info(dev, "SUCCESS : enabled MIPI clocks\n");
 	return 0;
+
+err_disable_mipi_ecfg:
+	clk_disable_unprepare(kmb_dsi->clk_mipi_ecfg);
+err_disable_mipi:
+	clk_disable_unprepare(kmb_dsi->clk_mipi);
+	return ret;
 }
 
 int kmb_dsi_clk_init(struct kmb_dsi *kmb_dsi)
