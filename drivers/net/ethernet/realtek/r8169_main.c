@@ -1764,26 +1764,40 @@ static u32 rtl_get_events(struct rtl8169_private *tp)
 
 static void rtl_ack_events(struct rtl8169_private *tp, u32 bits)
 {
-	if (rtl_is_8125(tp))
+	if (rtl_is_8125(tp)) {
 		RTL_W32(tp, IntrStatus_8125, bits);
-	else
+		if (tp->features & RTL_FEATURE_MSIX) {
+			RTL_W32(tp, ISR_V2_8125, 0xffffffff);
+			RTL_W32(tp, ISR_V4_L2_8125, 0xffffffff);
+		}
+	} else {
 		RTL_W16(tp, IntrStatus, bits);
+	}
 }
 
 static void rtl_irq_disable(struct rtl8169_private *tp)
 {
-	if (rtl_is_8125(tp))
+	if (rtl_is_8125(tp)) {
 		RTL_W32(tp, IntrMask_8125, 0);
-	else
+		if (tp->features & RTL_FEATURE_MSIX) {
+			RTL_W32(tp, IMR_V2_CLEAR_REG_8125, 0xffffffff);
+			RTL_W32(tp, IMR_V4_L2_CLEAR_REG_8125, 0xffffffff);
+		}
+	} else {
 		RTL_W16(tp, IntrMask, 0);
+	}
 }
 
 static void rtl_irq_enable(struct rtl8169_private *tp)
 {
-	if (rtl_is_8125(tp))
-		RTL_W32(tp, IntrMask_8125, tp->irq_mask);
-	else
+	if (rtl_is_8125(tp)) {
+		if (tp->features & RTL_FEATURE_MSIX)
+			RTL_W32(tp, IMR_V2_SET_REG_8125, tp->irq_mask);
+		else
+			RTL_W32(tp, IntrMask_8125, tp->irq_mask);
+	} else {
 		RTL_W16(tp, IntrMask, tp->irq_mask);
+	}
 }
 
 static void rtl8169_irq_mask_and_ack(struct rtl8169_private *tp)
@@ -2893,6 +2907,10 @@ static void rtl_software_parameter_initialize(struct rtl8169_private *tp)
 	}
 	tp->InitRxDescType = RX_DESC_RING_TYPE_DEAFULT;
 	tp->HwCurrIsrVer = tp->HwSuppIsrVer;
+
+	/* This just force nvecs, and will be remove in the following patch*/
+	tp->min_irq_nvecs = 1;
+	tp->max_irq_nvecs = 1;
 
 	rtl_setup_mqs_reg(tp);
 	rtl_set_ring_size(tp, NUM_RX_DESC, NUM_TX_DESC);
@@ -5321,6 +5339,44 @@ static void rtl8169_free_irq(struct rtl8169_private *tp)
 	}
 }
 
+static void rtl8169_disable_hw_interrupt_msix(struct rtl8169_private *tp, int message_id)
+{
+	RTL_W32(tp, IMR_V2_CLEAR_REG_8125, BIT(message_id));
+}
+
+static void rtl8169_clear_hw_isr(struct rtl8169_private *tp, int message_id)
+{
+	RTL_W32(tp, ISR_V2_8125, BIT(message_id));
+}
+
+static void rtl8169_enable_hw_interrupt_msix(struct rtl8169_private *tp, int message_id)
+{
+	RTL_W32(tp, IMR_V2_SET_REG_8125, BIT(message_id));
+}
+
+static irqreturn_t rtl8169_interrupt_msix(int irq, void *dev_instance)
+{
+	struct rtl8169_napi *napi = dev_instance;
+	struct rtl8169_private *tp = napi->priv;
+	int message_id = napi->index;
+
+	rtl8169_disable_hw_interrupt_msix(tp, message_id);
+
+	rtl8169_clear_hw_isr(tp, message_id);
+
+	if (message_id == MSIX_ID_V4_LINKCHG) {
+		phy_mac_interrupt(tp->phydev);
+		rtl8169_enable_hw_interrupt_msix(tp, message_id);
+		return IRQ_HANDLED;
+	}
+
+	tp->recheck_desc_ownbit = true;
+
+	napi_schedule(&napi->napi);
+
+	return IRQ_HANDLED;
+}
+
 static int rtl8169_request_irq(struct rtl8169_private *tp)
 {
 	struct net_device *dev = tp->dev;
@@ -5331,10 +5387,14 @@ static int rtl8169_request_irq(struct rtl8169_private *tp)
 
 	for (int i = 0; i < tp->irq_nvecs; i++) {
 		irq = &tp->irq_tbl[i];
+		if (tp->features & RTL_FEATURE_MSIX && tp->HwCurrIsrVer > 1)
+			irq->handler = rtl8169_interrupt_msix;
+		else
+			irq->handler = rtl8169_interrupt;
 
 		napi = &tp->r8169napi[i];
 		snprintf(irq->name, len, "%s-%d", dev->name, i);
-		rc = pci_request_irq(tp->pci_dev, i, rtl8169_interrupt, NULL, napi, irq->name);
+		rc = pci_request_irq(tp->pci_dev, i, irq->handler, NULL, napi, irq->name);
 
 		if (rc)
 			break;
@@ -5786,10 +5846,18 @@ static const struct net_device_ops rtl_netdev_ops = {
 
 static void rtl_set_irq_mask(struct rtl8169_private *tp)
 {
-	tp->irq_mask = RxOK | RxErr | TxOK | TxErr | LinkChg;
+	if (tp->features & RTL_FEATURE_MSIX) {
+		tp->irq_mask = ISRIMR_V6_LINKCHG;
+		for (int i = 0; i < tp->num_tx_rings; i++)
+			tp->irq_mask |= ISRIMR_V6_TOK_Q0 << i;
+		for (int i = 0; i < tp->num_rx_rings; i++)
+			tp->irq_mask |= ISRIMR_V6_ROK_Q0 << i;
+	} else {
+		tp->irq_mask = RxOK | RxErr | TxOK | TxErr | LinkChg;
 
-	if (tp->mac_version <= RTL_GIGA_MAC_VER_06)
-		tp->irq_mask |= SYSErr | RxFIFOOver;
+		if (tp->mac_version <= RTL_GIGA_MAC_VER_06)
+			tp->irq_mask |= SYSErr | RxFIFOOver;
+	}
 }
 
 static int rtl_alloc_irq(struct rtl8169_private *tp)
@@ -5816,6 +5884,18 @@ static int rtl_alloc_irq(struct rtl8169_private *tp)
 
 	if (nvecs < 0)
 		nvecs = pci_alloc_irq_vectors(pdev, 1, 1, PCI_IRQ_ALL_TYPES);
+
+	tp->features &= ~(RTL_FEATURE_MSIX | RTL_FEATURE_MSI);
+
+	if (nvecs > 0) {
+		tp->irq_nvecs = nvecs;
+		tp->irq = pci_irq_vector(pdev, 0);
+		if (nvecs > 1)
+			tp->features |= RTL_FEATURE_MSIX;
+		else if (pci_dev_msi_enabled(pdev))
+			tp->features |= RTL_FEATURE_MSI;
+		return 0;
+	}
 
 	tp->irq = pdev->irq;
 	tp->irq_nvecs = 1;
@@ -6087,6 +6167,52 @@ static bool rtl_aspm_is_safe(struct rtl8169_private *tp)
 	return false;
 }
 
+static int rtl8169_poll_msix_rx(struct napi_struct *napi, int budget)
+{
+	struct rtl8169_napi *r8169_napi = container_of(napi, struct rtl8169_napi, napi);
+	struct rtl8169_private *tp = r8169_napi->priv;
+	struct net_device *dev = tp->dev;
+	const int message_id = r8169_napi->index;
+	int work_done = 0;
+
+	if (message_id < tp->num_rx_rings)
+		work_done += rtl_rx(dev, tp, &tp->rx_ring[message_id], budget);
+
+	if (work_done < budget && napi_complete_done(napi, work_done))
+		rtl8169_enable_hw_interrupt_msix(tp, message_id);
+
+	return work_done;
+}
+
+static int rtl8169_poll_msix_tx(struct napi_struct *napi, int budget)
+{
+	struct rtl8169_napi *r8169_napi = container_of(napi, struct rtl8169_napi, napi);
+	struct rtl8169_private *tp = r8169_napi->priv;
+	struct net_device *dev = tp->dev;
+	unsigned int work_done = 0;
+	const int message_id = r8169_napi->index;
+	int tx_ring_idx = message_id - 8;
+
+	if (tx_ring_idx >= 0 && tx_ring_idx < tp->num_tx_rings)
+		work_done += rtl_tx(dev, tp, &tp->tx_ring[tx_ring_idx], budget);
+
+	if (work_done < budget && napi_complete_done(napi, work_done))
+		rtl8169_enable_hw_interrupt_msix(tp, message_id);
+
+	return work_done;
+}
+
+static int rtl8169_poll_msix_other(struct napi_struct *napi, int budget)
+{
+	struct rtl8169_napi *r8169_napi = container_of(napi, struct rtl8169_napi, napi);
+	struct rtl8169_private *tp = r8169_napi->priv;
+	const int message_id = r8169_napi->index;
+
+	napi_complete_done(napi, budget);
+	rtl8169_enable_hw_interrupt_msix(tp, message_id);
+
+	return 1;
+}
 
 static void r8169_init_napi(struct rtl8169_private *tp)
 {
@@ -6095,6 +6221,20 @@ static void r8169_init_napi(struct rtl8169_private *tp)
 		int (*poll)(struct napi_struct *napi, int budget);
 
 		poll = rtl8169_poll;
+		if (tp->features & RTL_FEATURE_MSIX) {
+			switch (tp->HwCurrIsrVer) {
+			case 6:
+				if (i < R8127_MAX_RX_QUEUES)
+					poll = rtl8169_poll_msix_rx;
+				else if (i > 7 && i < 16)
+					poll = rtl8169_poll_msix_tx;
+				else
+					poll = rtl8169_poll_msix_other;
+				break;
+			default:
+				break;
+			}
+		}
 		netif_napi_add(tp->dev, &r8169napi->napi, poll);
 		r8169napi->priv = tp;
 		r8169napi->index = i;
