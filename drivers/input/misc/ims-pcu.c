@@ -451,6 +451,8 @@ static void ims_pcu_process_data(struct ims_pcu *pcu, struct urb *urb)
 
 		if (pcu->have_dle) {
 			pcu->have_dle = false;
+			if (pcu->read_pos >= IMS_PCU_BUF_SIZE)
+				goto frame_overflow;
 			pcu->read_buf[pcu->read_pos++] = data;
 			pcu->check_sum += data;
 			continue;
@@ -491,10 +493,19 @@ static void ims_pcu_process_data(struct ims_pcu *pcu, struct urb *urb)
 			break;
 
 		default:
+			if (pcu->read_pos >= IMS_PCU_BUF_SIZE)
+				goto frame_overflow;
 			pcu->read_buf[pcu->read_pos++] = data;
 			pcu->check_sum += data;
 			break;
 		}
+		continue;
+
+frame_overflow:
+		dev_warn(pcu->dev, "Frame longer than %d bytes, discarding\n", IMS_PCU_BUF_SIZE);
+		pcu->have_stx = false;
+		pcu->have_dle = false;
+		pcu->read_pos = 0;
 	}
 }
 
