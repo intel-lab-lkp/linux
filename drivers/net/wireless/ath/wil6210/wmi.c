@@ -1629,7 +1629,7 @@ wmi_evt_auth_status(struct wil6210_vif *vif, int id, void *d, int len)
 	struct cfg80211_ft_event_params ft;
 	u16 d_len;
 	/* auth_alg(u16) + auth_transaction(u16) + status_code(u16) */
-	const size_t auth_ie_offset = sizeof(u16) * 3;
+	const int auth_ie_offset = sizeof(u16) * 3;
 	struct auth_no_hdr *auth = (struct auth_no_hdr *)data->ie_info;
 
 	/* check the status */
