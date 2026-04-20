@@ -1023,7 +1023,7 @@ static int pidfs_xattr_get(const struct xattr_handler *handler,
 
 	xattrs = READ_ONCE(attr->xattrs);
 	if (!xattrs)
-		return 0;
+		return -ENODATA;
 
 	name = xattr_full_name(handler, suffix);
 	return simple_xattr_get(xattrs, name, value, size);
