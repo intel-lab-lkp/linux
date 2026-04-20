@@ -106,6 +106,21 @@ static int dbInitTree(struct dmaptree * dtp);
 static int dbInitDmapCtl(struct dmapctl * dcp, int level, int i);
 static int dbGetL2AGSize(s64 nblocks);
 
+static bool db_valid_agno(struct bmap *bmp, s64 blkno, int *agno)
+{
+	int idx;
+
+	if (unlikely(blkno < 0 || blkno >= bmp->db_mapsize))
+		return false;
+
+	idx = blkno >> bmp->db_agl2size;
+	if (unlikely(idx < 0 || idx >= bmp->db_numag || idx >= MAXAG))
+		return false;
+
+	*agno = idx;
+	return true;
+}
+
 /*
  *	buddy table
  *
@@ -2235,12 +2250,17 @@ static void dbAllocBits(struct bmap * bmp, struct dmap * dp, s64 blkno,
 	le32_add_cpu(&dp->nfree, -nblocks);
 
 	BMAP_LOCK(bmp);
+	if (unlikely(!db_valid_agno(bmp, blkno, &agno))) {
+		BMAP_UNLOCK(bmp);
+		jfs_error(bmp->db_ipbmap->i_sb,
+			  "invalid agno in %s\n", __func__);
+		return;
+	}
 
 	/* if this allocation group is completely free,
 	 * update the maximum allocation group number if this allocation
 	 * group is the new max.
 	 */
-	agno = blkno >> bmp->db_agl2size;
 	if (agno > bmp->db_maxag)
 		bmp->db_maxag = agno;
 
@@ -2383,7 +2403,12 @@ static int dbFreeBits(struct bmap * bmp, struct dmap * dp, s64 blkno,
 	/* update the free count for the allocation group and
 	 * map.
 	 */
-	agno = blkno >> bmp->db_agl2size;
+	if (unlikely(!db_valid_agno(bmp, blkno, &agno))) {
+		BMAP_UNLOCK(bmp);
+		jfs_error(bmp->db_ipbmap->i_sb,
+			  "invalid agno in %s\n", __func__);
+		return -EIO;
+	}
 	bmp->db_nfree += nblocks;
 	bmp->db_agfree[agno] += nblocks;
 
@@ -3296,7 +3321,12 @@ static int dbAllocDmapBU(struct bmap * bmp, struct dmap * dp, s64 blkno,
 	 * update the highest active allocation group number
 	 * if this allocation group is the new max.
 	 */
-	agno = blkno >> bmp->db_agl2size;
+	if (unlikely(!db_valid_agno(bmp, blkno, &agno))) {
+		BMAP_UNLOCK(bmp);
+		jfs_error(bmp->db_ipbmap->i_sb,
+			  "invalid agno in %s\n", __func__);
+		return -EIO;
+	}
 	if (agno > bmp->db_maxag)
 		bmp->db_maxag = agno;
 
