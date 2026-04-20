@@ -1368,6 +1368,57 @@ xfs_falloc_force_zero(
 	return XFS_TEST_ERROR(ip->i_mount, XFS_ERRTAG_FORCE_ZERO_RANGE);
 }
 
+static int
+xfs_falloc_write_zeroes(
+	struct file		*file,
+	int			mode,
+	loff_t			offset,
+	loff_t			len,
+	struct xfs_zone_alloc_ctx *ac)
+{
+	struct inode		*inode = file_inode(file);
+	struct xfs_inode	*ip = XFS_I(inode);
+	loff_t			new_size = 0;
+	loff_t			old_size = XFS_ISIZE(ip);
+	int			error;
+	unsigned int		blksize = i_blocksize(inode);
+	loff_t			offset_aligned = round_down(offset, blksize);
+	bool			did_zero;
+
+	if (xfs_is_always_cow_inode(ip) ||
+	    !bdev_write_zeroes_unmap_sectors(
+		    xfs_inode_buftarg(XFS_I(inode))->bt_bdev))
+		return -EOPNOTSUPP;
+
+	error = xfs_falloc_newsize(file, mode, offset, len, &new_size);
+	if (error)
+		return error;
+
+	error = xfs_free_file_space(ip, offset, len, ac);
+	if (error)
+		return error;
+
+	/*
+	 * Zero the tail of the old EOF block and any space up to the new
+	 * offset.
+	 * In the usual truncate path, xfs_falloc_setsize takes care of
+	 * zeroing those blocks.
+	 */
+	if (offset_aligned > old_size)
+		error = xfs_zero_range(ip, old_size, offset_aligned - old_size,
+				NULL, &did_zero);
+	if (error)
+		return error;
+
+	error = xfs_bmap_alloc_or_convert_range(ip, offset, len,
+			XFS_BMAPI_CONVERT | XFS_BMAPI_ZERO,
+			new_size ? true : false);
+	if (error)
+		return error;
+
+	return error;
+}
+
 /*
  * Punch a hole and prealloc the range.  We use a hole punch rather than
  * unwritten extent conversion for two reasons:
@@ -1470,7 +1521,7 @@ xfs_falloc_allocate_range(
 		(FALLOC_FL_ALLOCATE_RANGE | FALLOC_FL_KEEP_SIZE |	\
 		 FALLOC_FL_PUNCH_HOLE |	FALLOC_FL_COLLAPSE_RANGE |	\
 		 FALLOC_FL_ZERO_RANGE |	FALLOC_FL_INSERT_RANGE |	\
-		 FALLOC_FL_UNSHARE_RANGE)
+		 FALLOC_FL_UNSHARE_RANGE | FALLOC_FL_WRITE_ZEROES)
 
 STATIC long
 __xfs_file_fallocate(
@@ -1521,6 +1572,9 @@ __xfs_file_fallocate(
 		break;
 	case FALLOC_FL_ALLOCATE_RANGE:
 		error = xfs_falloc_allocate_range(file, mode, offset, len);
+		break;
+	case FALLOC_FL_WRITE_ZEROES:
+		error = xfs_falloc_write_zeroes(file, mode, offset, len, ac);
 		break;
 	default:
 		error = -EOPNOTSUPP;
