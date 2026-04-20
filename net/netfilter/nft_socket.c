@@ -116,8 +116,13 @@ static void nft_socket_eval(const struct nft_expr *expr,
 	if (sk && !net_eq(nft_net(pkt), sock_net(sk)))
 		sk = NULL;
 
-	if (!sk)
+	if (!sk) {
+		if (pkt->fragoff) {
+			regs->verdict.code = NFT_BREAK;
+			return;
+		}
 		sk = nft_socket_do_lookup(pkt);
+	}
 
 	if (!sk) {
 		regs->verdict.code = NFT_BREAK;
