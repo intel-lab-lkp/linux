@@ -170,8 +170,20 @@
 #define   AN8811HB_CLK_DRV_CKO_LDPWD		BIT(13)
 #define   AN8811HB_CLK_DRV_CKO_LPPWD		BIT(14)
 
+#define AN8811HB_MCU_SW_RST		0x5cf9f8
+#define   AN8811HB_MCU_SW_RST_HOLD		BIT(16)
+#define   AN8811HB_MCU_SW_RST_RUN		(BIT(16) | BIT(0))
+#define AN8811HB_MCU_SW_START		0x5cf9fc
+#define   AN8811HB_MCU_SW_START_EN		BIT(16)
+
+/* MII register constants for PBUS access (PHY addr + 8) */
+#define AIR_PBUS_ADDR_HIGH		0x1c
+#define AIR_PBUS_DATA_HIGH		0x10
+
 /* Led definitions */
 #define EN8811H_LED_COUNT	3
+
+#define EN8811H_PBUS_ADDR_OFFS	8
 
 /* Default LED setup:
  * GPIO5 <-> LED0  On: Link detected, blink Rx/Tx
@@ -201,6 +213,7 @@ struct en8811h_priv {
 	struct clk_hw		hw;
 	struct phy_device	*phydev;
 	unsigned int		cko_is_enabled;
+	struct mdio_device	*pbusdev;
 };
 
 enum {
@@ -252,6 +265,31 @@ static int air_phy_read_page(struct phy_device *phydev)
 static int air_phy_write_page(struct phy_device *phydev, int page)
 {
 	return __phy_write(phydev, AIR_EXT_PAGE_ACCESS, page);
+}
+
+static int __air_pbus_reg_write(struct mdio_device *mdiodev,
+				u32 pbus_reg, u32 pbus_data)
+{
+	int ret;
+
+	ret = __mdiobus_write(mdiodev->bus, mdiodev->addr, AIR_EXT_PAGE_ACCESS,
+			      upper_16_bits(pbus_reg));
+	if (ret < 0)
+		return ret;
+
+	ret = __mdiobus_write(mdiodev->bus, mdiodev->addr, AIR_PBUS_ADDR_HIGH,
+			      (pbus_reg & GENMASK(15, 6)) >> 6);
+	if (ret < 0)
+		return ret;
+
+	ret = __mdiobus_write(mdiodev->bus, mdiodev->addr,
+			      (pbus_reg & GENMASK(5, 2)) >> 2,
+			      lower_16_bits(pbus_data));
+	if (ret < 0)
+		return ret;
+
+	return __mdiobus_write(mdiodev->bus, mdiodev->addr, AIR_PBUS_DATA_HIGH,
+			       upper_16_bits(pbus_data));
 }
 
 static int __air_buckpbus_reg_write(struct phy_device *phydev,
@@ -570,9 +608,66 @@ static int an8811hb_load_file(struct phy_device *phydev, const char *name,
 	return ret;
 }
 
+static int an8811hb_mcu_assert(struct phy_device *phydev)
+{
+	struct en8811h_priv *priv = phydev->priv;
+	int ret;
+
+	phy_lock_mdio_bus(phydev);
+
+	ret = __air_pbus_reg_write(priv->pbusdev, AN8811HB_MCU_SW_RST,
+				   AN8811HB_MCU_SW_RST_HOLD);
+	if (ret < 0)
+		goto unlock;
+
+	ret = __air_pbus_reg_write(priv->pbusdev, AN8811HB_MCU_SW_START, 0);
+	if (ret < 0)
+		goto unlock;
+
+	msleep(50);
+	phydev_dbg(phydev, "MCU asserted\n");
+
+unlock:
+	phy_unlock_mdio_bus(phydev);
+	return ret;
+}
+
+static int an8811hb_mcu_deassert(struct phy_device *phydev)
+{
+	struct en8811h_priv *priv = phydev->priv;
+	int ret;
+
+	phy_lock_mdio_bus(phydev);
+
+	ret = __air_pbus_reg_write(priv->pbusdev, AN8811HB_MCU_SW_START,
+				   AN8811HB_MCU_SW_START_EN);
+	if (ret < 0)
+		goto unlock;
+
+	ret = __air_pbus_reg_write(priv->pbusdev, AN8811HB_MCU_SW_RST,
+				   AN8811HB_MCU_SW_RST_RUN);
+	if (ret < 0)
+		goto unlock;
+
+	msleep(50);
+	phydev_dbg(phydev, "MCU deasserted\n");
+
+unlock:
+	phy_unlock_mdio_bus(phydev);
+	return ret;
+}
+
 static int an8811hb_load_firmware(struct phy_device *phydev)
 {
 	int ret;
+
+	ret = an8811hb_mcu_assert(phydev);
+	if (ret < 0)
+		return ret;
+
+	ret = an8811hb_mcu_deassert(phydev);
+	if (ret < 0)
+		return ret;
 
 	ret = air_buckpbus_reg_write(phydev, EN8811H_FW_CTRL_1,
 				     EN8811H_FW_CTRL_1_START);
@@ -661,6 +756,16 @@ en8811h_load_firmware_rel1:
 static int en8811h_restart_mcu(struct phy_device *phydev)
 {
 	int ret;
+
+	if (phy_id_compare_model(phydev->phy_id, AN8811HB_PHY_ID)) {
+		ret = an8811hb_mcu_assert(phydev);
+		if (ret < 0)
+			return ret;
+
+		ret = an8811hb_mcu_deassert(phydev);
+		if (ret < 0)
+			return ret;
+	}
 
 	ret = air_buckpbus_reg_write(phydev, EN8811H_FW_CTRL_1,
 				     EN8811H_FW_CTRL_1_START);
@@ -1166,6 +1271,7 @@ static int en8811h_leds_setup(struct phy_device *phydev)
 
 static int an8811hb_probe(struct phy_device *phydev)
 {
+	struct mdio_device *mdiodev;
 	struct en8811h_priv *priv;
 	int ret;
 
@@ -1175,10 +1281,22 @@ static int an8811hb_probe(struct phy_device *phydev)
 		return -ENOMEM;
 	phydev->priv = priv;
 
+	mdiodev = mdio_device_create(phydev->mdio.bus,
+				     phydev->mdio.addr + EN8811H_PBUS_ADDR_OFFS);
+	if (IS_ERR(mdiodev))
+		return PTR_ERR(mdiodev);
+
+	ret = mdio_device_register(mdiodev);
+	if (ret) {
+		mdio_device_free(mdiodev);
+		return ret;
+	}
+	priv->pbusdev = mdiodev;
+
 	ret = an8811hb_load_firmware(phydev);
 	if (ret < 0) {
 		phydev_err(phydev, "Load firmware failed: %d\n", ret);
-		return ret;
+		goto error;
 	}
 
 	en8811h_print_fw_version(phydev);
@@ -1191,22 +1309,27 @@ static int an8811hb_probe(struct phy_device *phydev)
 
 	ret = en8811h_leds_setup(phydev);
 	if (ret < 0)
-		return ret;
+		goto error;
 
 	priv->phydev = phydev;
 	/* Co-Clock Output */
 	ret = an8811hb_clk_provider_setup(&phydev->mdio.dev, &priv->hw);
 	if (ret)
-		return ret;
+		goto error;
 
 	/* Configure led gpio pins as output */
 	ret = air_buckpbus_reg_modify(phydev, AN8811HB_GPIO_OUTPUT,
 				      AN8811HB_GPIO_OUTPUT_345,
 				      AN8811HB_GPIO_OUTPUT_345);
 	if (ret < 0)
-		return ret;
+		goto error;
 
 	return 0;
+
+error:
+	mdio_device_remove(priv->pbusdev);
+	mdio_device_free(priv->pbusdev);
+	return ret;
 }
 
 static int en8811h_probe(struct phy_device *phydev)
@@ -1561,6 +1684,16 @@ static int en8811h_suspend(struct phy_device *phydev)
 	return genphy_suspend(phydev);
 }
 
+static void an8811hb_remove(struct phy_device *phydev)
+{
+	struct en8811h_priv *priv = phydev->priv;
+
+	if (priv->pbusdev) {
+		mdio_device_remove(priv->pbusdev);
+		mdio_device_free(priv->pbusdev);
+	}
+}
+
 static struct phy_driver en8811h_driver[] = {
 {
 	PHY_ID_MATCH_MODEL(EN8811H_PHY_ID),
@@ -1587,6 +1720,7 @@ static struct phy_driver en8811h_driver[] = {
 	PHY_ID_MATCH_MODEL(AN8811HB_PHY_ID),
 	.name			= "Airoha AN8811HB",
 	.probe			= an8811hb_probe,
+	.remove			= an8811hb_remove,
 	.get_features		= en8811h_get_features,
 	.config_init		= an8811hb_config_init,
 	.get_rate_matching	= en8811h_get_rate_matching,
