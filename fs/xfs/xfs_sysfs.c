@@ -721,6 +721,17 @@ max_open_zones_show(
 XFS_SYSFS_ATTR_RO(max_open_zones);
 
 static ssize_t
+nr_free_zones_show(
+	struct kobject		*kobj,
+	char			*buf)
+{
+	struct xfs_zone_info	*zi = zoned_to_mp(kobj)->m_zone_info;
+
+	return sysfs_emit(buf, "%d\n", atomic_read(&zi->zi_nr_free_zones));
+}
+XFS_SYSFS_ATTR_RO(nr_free_zones);
+
+static ssize_t
 nr_open_zones_show(
 	struct kobject		*kobj,
 	char			*buf)
@@ -768,6 +779,7 @@ XFS_SYSFS_ATTR_RW(zonegc_low_space);
 
 static struct attribute *xfs_zoned_attrs[] = {
 	ATTR_LIST(max_open_zones),
+	ATTR_LIST(nr_free_zones),
 	ATTR_LIST(nr_open_zones),
 	ATTR_LIST(zonegc_low_space),
 	NULL,
