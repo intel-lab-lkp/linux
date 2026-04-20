@@ -431,14 +431,6 @@ static int v4l2_open(struct inode *inode, struct file *filp)
 	}
 
 	ret = vdev->fops->open(filp);
-	if (ret)
-		goto done;
-
-	/* All drivers must use v4l2_fh. */
-	if (WARN_ON(!test_bit(V4L2_FL_USES_V4L2_FH, &vdev->flags))) {
-		vdev->fops->release(filp);
-		ret = -ENODEV;
-	}
 
 done:
 	if (vdev->dev_debug & V4L2_DEV_DEBUG_FOP)
