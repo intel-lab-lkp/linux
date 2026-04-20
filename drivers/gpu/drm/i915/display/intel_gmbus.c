@@ -833,9 +833,9 @@ int intel_gmbus_output_aksv(struct i2c_adapter *adapter)
 	struct ref_tracker *wakeref;
 	int ret;
 
-	wakeref = intel_display_power_get(display, POWER_DOMAIN_GMBUS);
-
 	adapter->lock_ops->lock_bus(adapter, 0);
+
+	wakeref = intel_display_power_get(display, POWER_DOMAIN_GMBUS);
 
 	/*
 	 * In order to output Aksv to the receiver, use an indexed write to
@@ -844,9 +844,9 @@ int intel_gmbus_output_aksv(struct i2c_adapter *adapter)
 	 */
 	ret = do_gmbus_xfer(adapter, msgs, ARRAY_SIZE(msgs), GMBUS_AKSV_SELECT);
 
-	adapter->lock_ops->unlock_bus(adapter, 0);
-
 	intel_display_power_put(display, POWER_DOMAIN_GMBUS, wakeref);
+
+	adapter->lock_ops->unlock_bus(adapter, 0);
 
 	return ret;
 }
