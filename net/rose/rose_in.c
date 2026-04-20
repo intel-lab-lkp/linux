@@ -274,7 +274,7 @@ int rose_process_rx_frame(struct sock *sk, struct sk_buff *skb)
 	 * ROSE_CLEAR_REQUEST carries cause and diagnostic in bytes 3..4.
 	 * Reject a malformed frame that is too short to contain them.
 	 */
-	if (frametype == ROSE_CLEAR_REQUEST && skb->len < 5)
+	if (frametype == ROSE_CLEAR_REQUEST && !pskb_may_pull(skb, 5))
 		return 0;
 
 	switch (rose->state) {
