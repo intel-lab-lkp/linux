@@ -68,6 +68,10 @@
     and the limit of estimators per kthread
   - est_add_ktid: ktid where to add new ests, can point to empty slot where
     we should add kt data
+  - data protected by service_mutex: est_temp_list, est_add_ktid
+  - data protected by est_mutex: est_kt_count, est_kt_arr, est_max_threads,
+    sysctl_est_cpulist, est_cpulist_valid, sysctl_est_nice, est_stopped,
+    sysctl_run_estimation
  */
 
 static struct lock_class_key __ipvs_est_key;
@@ -229,6 +233,8 @@ static int ip_vs_estimation_kthread(void *data)
 /* Schedule stop/start for kthread tasks */
 void ip_vs_est_reload_start(struct netns_ipvs *ipvs)
 {
+	lockdep_assert_held(&ipvs->est_mutex);
+
 	/* Ignore reloads before first service is added */
 	if (!READ_ONCE(ipvs->enable))
 		return;
@@ -304,11 +310,16 @@ static int ip_vs_est_add_kthread(struct netns_ipvs *ipvs)
 	void *arr = NULL;
 	int i;
 
-	if ((unsigned long)ipvs->est_kt_count >= ipvs->est_max_threads &&
-	    READ_ONCE(ipvs->enable) && ipvs->est_max_threads)
-		return -EINVAL;
-
 	mutex_lock(&ipvs->est_mutex);
+
+	/* Allow kt 0 data to be created before the services are added
+	 * and limit the kthreads when services are present.
+	 */
+	if ((unsigned long)ipvs->est_kt_count >= ipvs->est_max_threads &&
+	    READ_ONCE(ipvs->enable) && ipvs->est_max_threads) {
+		ret = -EINVAL;
+		goto out;
+	}
 
 	for (i = 0; i < id; i++) {
 		if (!ipvs->est_kt_arr[i])
@@ -484,9 +495,6 @@ int ip_vs_start_estimator(struct netns_ipvs *ipvs, struct ip_vs_stats *stats)
 {
 	struct ip_vs_estimator *est = &stats->est;
 	int ret;
-
-	if (!ipvs->est_max_threads && READ_ONCE(ipvs->enable))
-		ipvs->est_max_threads = ip_vs_est_max_threads(ipvs);
 
 	est->ktid = -1;
 	est->ktrow = IPVS_EST_NTICKS - 1;	/* Initial delay */
