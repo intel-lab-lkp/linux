@@ -4208,6 +4208,35 @@ static const struct panel_desc rocktech_rk043fn48h = {
 	.connector_type = DRM_MODE_CONNECTOR_DPI,
 };
 
+static const struct display_timing raspberrypi_7inch_timing = {
+	.pixelclock = { 10000000, 30000000, 50000000 },
+	.hactive = { 800, 800, 800 },
+	.hfront_porch = { 16, 72, 354 },
+	.hsync_len = { 1, 32, 40 },
+	.hback_porch = { 46, 46, 46 },
+	.vactive = { 480, 480, 480 },
+	.vfront_porch = { 7, 21, 147 },
+	.vsync_len = { 1, 2, 20 },
+	.vback_porch = { 23, 23, 23 },
+	.flags = DISPLAY_FLAGS_VSYNC_HIGH | DISPLAY_FLAGS_HSYNC_HIGH,
+	/* Note: the rest of the flags are defined below in bus_flags */
+};
+
+static const struct panel_desc raspberrypi_7inch = {
+	.timings = &raspberrypi_7inch_timing,
+	.num_timings = 1,
+	.bpc = 8,
+	.size = {
+		.width = 154,
+		.height = 86,
+	},
+	.bus_format = MEDIA_BUS_FMT_RGB888_1X24,
+	.connector_type = DRM_MODE_CONNECTOR_DPI,
+	.bus_flags = DRM_BUS_FLAG_DE_HIGH |
+		DRM_BUS_FLAG_SYNC_DRIVE_POSEDGE |
+		DRM_BUS_FLAG_PIXDATA_DRIVE_POSEDGE,
+};
+
 static const struct display_timing rocktech_rk070er9427_timing = {
 	.pixelclock = { 26400000, 33300000, 46800000 },
 	.hactive = { 800, 800, 800 },
@@ -5490,6 +5519,9 @@ static const struct of_device_id platform_of_match[] = {
 	}, {
 		.compatible = "qishenglong,gopher2b-lcd",
 		.data = &qishenglong_gopher2b_lcd,
+	}, {
+		.compatible = "raspberrypi,7inch-dsi",
+		.data = &raspberrypi_7inch,
 	}, {
 		.compatible = "raystar,rff500f-awh-dnn",
 		.data = &raystar_rff500f_awh_dnn,
