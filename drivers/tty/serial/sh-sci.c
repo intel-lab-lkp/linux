@@ -2915,7 +2915,7 @@ done:
 	}
 
 	/* Calculate delay for 2 DMA buffers (4 FIFO). */
-	s->rx_frame = (10000 * bits) / (baud / 100);
+	s->rx_frame = (10000 * bits) * 100 / baud;
 #ifdef CONFIG_SERIAL_SH_SCI_DMA
 	s->rx_timeout = s->buf_len_rx * 2 * s->rx_frame;
 #endif
