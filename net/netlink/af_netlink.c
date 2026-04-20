@@ -2250,6 +2250,20 @@ static int netlink_dump_done(struct netlink_sock *nlk, struct sk_buff *skb,
 	return 0;
 }
 
+static void netlink_dump_cleanup(struct netlink_sock *nlk)
+{
+	struct module *module = nlk->cb.module;
+	struct sk_buff *skb = nlk->cb.skb;
+
+	if (nlk->cb.done)
+		nlk->cb.done(&nlk->cb);
+
+	WRITE_ONCE(nlk->cb_running, false);
+	mutex_unlock(&nlk->nl_cb_mutex);
+	module_put(module);
+	consume_skb(skb);
+}
+
 static int netlink_dump(struct sock *sk, bool lock_taken)
 {
 	struct netlink_sock *nlk = nlk_sk(sk);
@@ -2258,7 +2272,6 @@ static int netlink_dump(struct sock *sk, bool lock_taken)
 	struct sk_buff *skb = NULL;
 	unsigned int rmem, rcvbuf;
 	size_t max_recvmsg_len;
-	struct module *module;
 	int err = -ENOBUFS;
 	int alloc_min_size;
 	int alloc_size;
@@ -2366,19 +2379,14 @@ static int netlink_dump(struct sock *sk, bool lock_taken)
 	else
 		__netlink_sendskb(sk, skb);
 
-	if (cb->done)
-		cb->done(cb);
-
-	WRITE_ONCE(nlk->cb_running, false);
-	module = cb->module;
-	skb = cb->skb;
-	mutex_unlock(&nlk->nl_cb_mutex);
-	module_put(module);
-	consume_skb(skb);
+	netlink_dump_cleanup(nlk);
 	return 0;
 
 errout_skb:
-	mutex_unlock(&nlk->nl_cb_mutex);
+	if (lock_taken)
+		netlink_dump_cleanup(nlk);
+	else
+		mutex_unlock(&nlk->nl_cb_mutex);
 	kfree_skb(skb);
 	return err;
 }
