@@ -6518,6 +6518,72 @@ static void r8169_init_napi(struct rtl8169_private *tp)
 	}
 }
 
+static void rtl8169_get_channels(struct net_device *dev,
+				 struct ethtool_channels *ch)
+{
+	struct rtl8169_private *tp = netdev_priv(dev);
+
+	ch->max_rx = tp->HwSuppNumRxQueues ? tp->HwSuppNumRxQueues : 1;
+	ch->max_tx = tp->HwSuppNumTxQueues ? tp->HwSuppNumTxQueues : 1;
+	ch->max_other = 0;
+	ch->max_combined = 0;
+
+	ch->rx_count = tp->num_rx_rings;
+	ch->tx_count = tp->num_tx_rings;
+	ch->other_count = 0;
+	ch->combined_count = 0;
+}
+
+static int rtl8169_set_channels(struct net_device *dev,
+				struct ethtool_channels *ch)
+{
+	struct rtl8169_private *tp = netdev_priv(dev);
+	bool if_running = netif_running(dev);
+	int i;
+
+	if (!tp->rss_support && (ch->rx_count > 1 || ch->tx_count > 1)) {
+		netdev_warn(dev, "This chip does not support multiple channels/RSS.\n");
+		return -EOPNOTSUPP;
+	}
+
+	if (ch->rx_count == 0 || ch->tx_count == 0)
+		return -EINVAL;
+	if (ch->rx_count > tp->HwSuppNumRxQueues ||
+	    ch->tx_count > tp->HwSuppNumTxQueues)
+		return -EINVAL;
+	if (ch->other_count || ch->combined_count)
+		return -EINVAL;
+
+	if (ch->rx_count == tp->num_rx_rings &&
+	    ch->tx_count == tp->num_tx_rings)
+		return 0;
+
+	if (if_running)
+		rtl8169_close(dev);
+
+	tp->num_rx_rings = ch->rx_count;
+	tp->num_tx_rings = ch->tx_count;
+
+	tp->rss_enable = (tp->num_rx_rings > 1 && tp->rss_support);
+
+	for (i = 0; i < tp->HwSuppIndirTblEntries; i++) {
+		if (tp->rss_enable)
+			tp->rss_indir_tbl[i] = ethtool_rxfh_indir_default(i, tp->num_rx_rings);
+		else
+			tp->rss_indir_tbl[i] = 0;
+	}
+
+	if (tp->rss_enable)
+		tp->InitRxDescType = RX_DESC_RING_TYPE_RSS;
+	else
+		tp->InitRxDescType = RX_DESC_RING_TYPE_DEAFULT;
+
+	if (if_running)
+		return rtl_open(dev);
+
+	return 0;
+}
+
 static const struct ethtool_ops rtl8169_ethtool_ops = {
 	.supported_coalesce_params = ETHTOOL_COALESCE_USECS |
 				     ETHTOOL_COALESCE_MAX_FRAMES,
@@ -6536,6 +6602,8 @@ static const struct ethtool_ops rtl8169_ethtool_ops = {
 	.nway_reset		= phy_ethtool_nway_reset,
 	.get_eee		= rtl8169_get_eee,
 	.set_eee		= rtl8169_set_eee,
+	.get_channels		= rtl8169_get_channels,
+	.set_channels		= rtl8169_set_channels,
 	.get_link_ksettings	= phy_ethtool_get_link_ksettings,
 	.set_link_ksettings	= rtl8169_set_link_ksettings,
 	.get_ringparam		= rtl8169_get_ringparam,
