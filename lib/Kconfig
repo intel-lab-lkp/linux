@@ -62,6 +62,10 @@ config HAVE_ARCH_BITREVERSE
 	  This option enables the use of hardware bit-reversal instructions on
 	  architectures which support such operations.
 
+config NEED_BYTE_REVERSE_TABLE
+	bool
+	default y if !HAVE_ARCH_BITREVERSE
+
 config ARCH_HAS_STRNCPY_FROM_USER
 	bool
 
