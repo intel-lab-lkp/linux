@@ -12,8 +12,8 @@
  * reg layout: u32 gprs[eax, ecx, edx, ebx, esp, ebp, esi, edi]
  *
  */
-.macro op_safe_regs op
-SYM_TYPED_FUNC_START(\op\()_safe_regs)
+.macro op_safe_regs name op
+SYM_TYPED_FUNC_START(\name)
 	pushq %rbx
 	pushq %r12
 	movq	%rdi, %r10	/* Save pointer */
@@ -42,13 +42,13 @@ SYM_TYPED_FUNC_START(\op\()_safe_regs)
 	jmp     2b
 
 	_ASM_EXTABLE(1b, 3b)
-SYM_FUNC_END(\op\()_safe_regs)
+SYM_FUNC_END(\name)
 .endm
 
 #else /* X86_32 */
 
-.macro op_safe_regs op
-SYM_FUNC_START(\op\()_safe_regs)
+.macro op_safe_regs name op
+SYM_FUNC_START(\name)
 	pushl %ebx
 	pushl %ebp
 	pushl %esi
@@ -84,11 +84,11 @@ SYM_FUNC_START(\op\()_safe_regs)
 	jmp     2b
 
 	_ASM_EXTABLE(1b, 3b)
-SYM_FUNC_END(\op\()_safe_regs)
+SYM_FUNC_END(\name)
 .endm
 
 #endif
 
-op_safe_regs rdmsr
-op_safe_regs wrmsr
+op_safe_regs msr_read_safe_regs rdmsr
+op_safe_regs msr_write_safe_regs wrmsr
 

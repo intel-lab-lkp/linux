@@ -156,9 +156,6 @@ static inline int notrace native_write_msr_safe(u32 msr, u64 val)
 	return err;
 }
 
-extern int rdmsr_safe_regs(u32 regs[8]);
-extern int wrmsr_safe_regs(u32 regs[8]);
-
 static inline u64 native_read_pmc(int counter)
 {
 	EAX_EDX_DECLARE_ARGS(val, low, high);
@@ -292,6 +289,8 @@ struct msr __percpu *msrs_alloc(void);
 void msrs_free(struct msr __percpu *msrs);
 int msr_set_bit(u32 msr, u8 bit);
 int msr_clear_bit(u32 msr, u8 bit);
+int msr_read_safe_regs(u32 regs[8]);
+int msr_write_safe_regs(u32 regs[8]);
 
 #ifdef CONFIG_SMP
 int rdmsr_on_cpu(unsigned int cpu, u32 msr_no, u32 *l, u32 *h);
@@ -304,8 +303,8 @@ int rdmsr_safe_on_cpu(unsigned int cpu, u32 msr_no, u32 *l, u32 *h);
 int wrmsr_safe_on_cpu(unsigned int cpu, u32 msr_no, u32 l, u32 h);
 int rdmsrq_safe_on_cpu(unsigned int cpu, u32 msr_no, u64 *q);
 int wrmsrq_safe_on_cpu(unsigned int cpu, u32 msr_no, u64 q);
-int rdmsr_safe_regs_on_cpu(unsigned int cpu, u32 regs[8]);
-int wrmsr_safe_regs_on_cpu(unsigned int cpu, u32 regs[8]);
+int msr_read_safe_regs_on_cpu(unsigned int cpu, u32 regs[8]);
+int msr_write_safe_regs_on_cpu(unsigned int cpu, u32 regs[8]);
 #else  /*  CONFIG_SMP  */
 static inline int rdmsr_on_cpu(unsigned int cpu, u32 msr_no, u32 *l, u32 *h)
 {
@@ -354,13 +353,13 @@ static inline int wrmsrq_safe_on_cpu(unsigned int cpu, u32 msr_no, u64 q)
 {
 	return wrmsrq_safe(msr_no, q);
 }
-static inline int rdmsr_safe_regs_on_cpu(unsigned int cpu, u32 regs[8])
+static inline int msr_read_safe_regs_on_cpu(unsigned int cpu, u32 regs[8])
 {
-	return rdmsr_safe_regs(regs);
+	return msr_read_safe_regs(regs);
 }
-static inline int wrmsr_safe_regs_on_cpu(unsigned int cpu, u32 regs[8])
+static inline int msr_write_safe_regs_on_cpu(unsigned int cpu, u32 regs[8])
 {
-	return wrmsr_safe_regs(regs);
+	return msr_write_safe_regs(regs);
 }
 #endif  /* CONFIG_SMP */
 

@@ -44,7 +44,7 @@ static inline int rdmsrq_amd_safe(unsigned msr, u64 *p)
 	gprs[1] = msr;
 	gprs[7] = 0x9c5a203a;
 
-	err = rdmsr_safe_regs(gprs);
+	err = msr_read_safe_regs(gprs);
 
 	*p = gprs[0] | ((u64)gprs[2] << 32);
 
@@ -63,7 +63,7 @@ static inline int wrmsrq_amd_safe(unsigned msr, u64 val)
 	gprs[2] = val >> 32;
 	gprs[7] = 0x9c5a203a;
 
-	return wrmsr_safe_regs(gprs);
+	return msr_write_safe_regs(gprs);
 }
 
 /*

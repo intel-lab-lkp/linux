@@ -162,7 +162,7 @@ static long msr_ioctl(struct file *file, unsigned int ioc, unsigned long arg)
 			err = -EFAULT;
 			break;
 		}
-		err = rdmsr_safe_regs_on_cpu(cpu, regs);
+		err = msr_read_safe_regs_on_cpu(cpu, regs);
 		if (err)
 			break;
 		if (copy_to_user(uregs, &regs, sizeof(regs)))
@@ -188,7 +188,7 @@ static long msr_ioctl(struct file *file, unsigned int ioc, unsigned long arg)
 
 		add_taint(TAINT_CPU_OUT_OF_SPEC, LOCKDEP_STILL_OK);
 
-		err = wrmsr_safe_regs_on_cpu(cpu, regs);
+		err = msr_write_safe_regs_on_cpu(cpu, regs);
 		if (err)
 			break;
 		if (copy_to_user(uregs, &regs, sizeof(regs)))

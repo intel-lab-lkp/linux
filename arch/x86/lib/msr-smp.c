@@ -236,42 +236,42 @@ EXPORT_SYMBOL(rdmsrq_safe_on_cpu);
  * These variants are significantly slower, but allows control over
  * the entire 32-bit GPR set.
  */
-static void __rdmsr_safe_regs_on_cpu(void *info)
+static void __msr_read_safe_regs(void *info)
 {
 	struct msr_regs_info *rv = info;
 
-	rv->err = rdmsr_safe_regs(rv->regs);
+	rv->err = msr_read_safe_regs(rv->regs);
 }
 
-static void __wrmsr_safe_regs_on_cpu(void *info)
+static void __msr_write_safe_regs(void *info)
 {
 	struct msr_regs_info *rv = info;
 
-	rv->err = wrmsr_safe_regs(rv->regs);
+	rv->err = msr_write_safe_regs(rv->regs);
 }
 
-int rdmsr_safe_regs_on_cpu(unsigned int cpu, u32 regs[8])
+int msr_read_safe_regs_on_cpu(unsigned int cpu, u32 regs[8])
 {
 	int err;
 	struct msr_regs_info rv;
 
 	rv.regs   = regs;
 	rv.err    = -EIO;
-	err = smp_call_function_single(cpu, __rdmsr_safe_regs_on_cpu, &rv, 1);
+	err = smp_call_function_single(cpu, __msr_read_safe_regs, &rv, 1);
 
 	return err ? err : rv.err;
 }
-EXPORT_SYMBOL(rdmsr_safe_regs_on_cpu);
+EXPORT_SYMBOL(msr_read_safe_regs_on_cpu);
 
-int wrmsr_safe_regs_on_cpu(unsigned int cpu, u32 regs[8])
+int msr_write_safe_regs_on_cpu(unsigned int cpu, u32 regs[8])
 {
 	int err;
 	struct msr_regs_info rv;
 
 	rv.regs = regs;
 	rv.err  = -EIO;
-	err = smp_call_function_single(cpu, __wrmsr_safe_regs_on_cpu, &rv, 1);
+	err = smp_call_function_single(cpu, __msr_write_safe_regs, &rv, 1);
 
 	return err ? err : rv.err;
 }
-EXPORT_SYMBOL(wrmsr_safe_regs_on_cpu);
+EXPORT_SYMBOL(msr_write_safe_regs_on_cpu);
