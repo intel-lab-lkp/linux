@@ -38,6 +38,11 @@ module_param(disable_msipolling, bool, 0444);
 MODULE_PARM_DESC(disable_msipolling,
 	"Disable MSI-based polling for CMD_SYNC completion.");
 
+static bool disable_s1;
+module_param(disable_s1, bool, 0444);
+MODULE_PARM_DESC(disable_s1,
+	"Disable Stage 1 translation even if supported by hardware.");
+
 static const struct iommu_ops arm_smmu_ops;
 static struct iommu_dirty_ops arm_smmu_dirty_ops;
 
@@ -4443,13 +4448,13 @@ static int arm_smmu_device_hw_probe(struct arm_smmu_device *smmu)
 		smmu->features |= ARM_SMMU_FEAT_STALLS;
 	}
 
-	if (reg & IDR0_S1P)
+	if ((reg & IDR0_S1P) && !disable_s1)
 		smmu->features |= ARM_SMMU_FEAT_TRANS_S1;
 
 	if (reg & IDR0_S2P)
 		smmu->features |= ARM_SMMU_FEAT_TRANS_S2;
 
-	if (!(reg & (IDR0_S1P | IDR0_S2P))) {
+	if (!(smmu->features & (ARM_SMMU_FEAT_TRANS_S1 | ARM_SMMU_FEAT_TRANS_S2))) {
 		dev_err(smmu->dev, "no translation support!\n");
 		return -ENXIO;
 	}
