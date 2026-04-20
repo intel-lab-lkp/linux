@@ -21,8 +21,4 @@ host such documentation:
     gpusvm.rst
 
 .. toctree::
-
-    i915_scheduler.rst
-
-.. toctree::
     color_pipeline.rst
