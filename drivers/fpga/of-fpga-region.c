@@ -405,7 +405,7 @@ static int of_fpga_region_probe(struct platform_device *pdev)
 	/* Find the FPGA mgr specified by region or parent region. */
 	mgr = of_fpga_region_get_mgr(np);
 	if (IS_ERR(mgr))
-		return -EPROBE_DEFER;
+		return dev_err_probe(dev, -EPROBE_DEFER, "FPGA manager not found\n");
 
 	region = fpga_region_register(dev, mgr, of_fpga_region_get_bridges);
 	if (IS_ERR(region)) {
