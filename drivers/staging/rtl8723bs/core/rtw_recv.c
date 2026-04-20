@@ -1538,7 +1538,6 @@ static signed int validate_recv_frame(struct adapter *adapter, union recv_frame 
 			precvpriv->rx_drop++;
 		} else if (retval == _SUCCESS) {
 #ifdef DBG_RX_DUMP_EAP
-			u8 bDumpRxPkt;
 			u16 eth_type;
 
 			/*  dump eapol */
