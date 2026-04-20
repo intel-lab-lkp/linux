@@ -1,0 +1,31 @@
+// SPDX-License-Identifier: GPL-2.0
+//
+// RFC 5961 Section 5.2 / RFC 793 Section 3.9: when a received
+// segment's SEG.ACK acknowledges data we have never sent
+// (SEG.ACK > SND.NXT), the receiver MUST discard the segment and
+// send a challenge ACK back.
+//
+// Complement the existing mitigation for the symmetric
+// (SEG.ACK < SND.UNA - MAX.SND.WND) case.
+
+`./defaults.sh`
+
+   // Open listener socket
+    0 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+   +0 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+   +0 bind(3, ..., ...) = 0
+   +0 listen(3, 1) = 0
+
+   // Three-way handshake
+   +0 < S 0:0(0) win 32792 <mss 1000,sackOK,nop,nop,nop,wscale 7>
+   +0 > S. 0:0(0) ack 1 <...>
+ +.1 < . 1:1(0) ack 1 win 257
+   +0 accept(3, ..., ...) = 4
+
+   // Server has sent no data yet: SND.UNA = SND.NXT = 1, RCV.NXT = 1.
+   // Peer sends a pure ACK with SEG.ACK = 2, which is > SND.NXT.
+   +0 < . 1:1(0) ack 2 win 257
+
+   // Expect an immediate challenge ACK:
+   //   <SEQ = SND.NXT = 1, ACK = RCV.NXT = 1, CTL = ACK>
+   +0 > . 1:1(0) ack 1
