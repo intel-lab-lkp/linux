@@ -49,8 +49,8 @@ enum allow_write_msrs {
 
 static enum allow_write_msrs allow_writes = MSR_WRITES_DEFAULT;
 
-static ssize_t msr_read(struct file *file, char __user *buf,
-			size_t count, loff_t *ppos)
+static ssize_t msr_do_read(struct file *file, char __user *buf,
+			   size_t count, loff_t *ppos)
 {
 	u32 __user *tmp = (u32 __user *) buf;
 	u32 data[2];
@@ -105,8 +105,8 @@ static int filter_write(u32 reg)
 	return 0;
 }
 
-static ssize_t msr_write(struct file *file, const char __user *buf,
-			 size_t count, loff_t *ppos)
+static ssize_t msr_do_write(struct file *file, const char __user *buf,
+			    size_t count, loff_t *ppos)
 {
 	const u32 __user *tmp = (const u32 __user *)buf;
 	u32 data[2];
@@ -227,8 +227,8 @@ static int msr_open(struct inode *inode, struct file *file)
 static const struct file_operations msr_fops = {
 	.owner = THIS_MODULE,
 	.llseek = no_seek_end_llseek,
-	.read = msr_read,
-	.write = msr_write,
+	.read = msr_do_read,
+	.write = msr_do_write,
 	.open = msr_open,
 	.unlocked_ioctl = msr_ioctl,
 	.compat_ioctl = msr_ioctl,

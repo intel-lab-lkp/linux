@@ -28,7 +28,7 @@ void msrs_free(struct msr __percpu *msrs)
 EXPORT_SYMBOL(msrs_free);
 
 /**
- * msr_read - Read an MSR with error handling
+ * msr_do_read - Read an MSR with error handling
  * @msr: MSR to read
  * @m: value to read into
  *
@@ -37,7 +37,7 @@ EXPORT_SYMBOL(msrs_free);
  *
  * Return: %0 for success, otherwise an error code
  */
-static int msr_read(u32 msr, struct msr *m)
+static int msr_do_read(u32 msr, struct msr *m)
 {
 	int err;
 	u64 val;
@@ -50,14 +50,14 @@ static int msr_read(u32 msr, struct msr *m)
 }
 
 /**
- * msr_write - Write an MSR with error handling
+ * msr_do_write - Write an MSR with error handling
  *
  * @msr: MSR to write
  * @m: value to write
  *
  * Return: %0 for success, otherwise an error code
  */
-static int msr_write(u32 msr, struct msr *m)
+static int msr_do_write(u32 msr, struct msr *m)
 {
 	return wrmsrq_safe(msr, m->q);
 }
@@ -70,7 +70,7 @@ static inline int __flip_bit(u32 msr, u8 bit, bool set)
 	if (bit > 63)
 		return err;
 
-	err = msr_read(msr, &m);
+	err = msr_do_read(msr, &m);
 	if (err)
 		return err;
 
@@ -83,7 +83,7 @@ static inline int __flip_bit(u32 msr, u8 bit, bool set)
 	if (m1.q == m.q)
 		return 0;
 
-	err = msr_write(msr, &m1);
+	err = msr_do_write(msr, &m1);
 	if (err)
 		return err;
 
