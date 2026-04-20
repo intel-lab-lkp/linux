@@ -834,7 +834,8 @@ int intel_gmbus_output_aksv(struct i2c_adapter *adapter)
 	int ret;
 
 	wakeref = intel_display_power_get(display, POWER_DOMAIN_GMBUS);
-	mutex_lock(&display->gmbus.mutex);
+
+	adapter->lock_ops->lock_bus(adapter, 0);
 
 	/*
 	 * In order to output Aksv to the receiver, use an indexed write to
@@ -843,7 +844,8 @@ int intel_gmbus_output_aksv(struct i2c_adapter *adapter)
 	 */
 	ret = do_gmbus_xfer(adapter, msgs, ARRAY_SIZE(msgs), GMBUS_AKSV_SELECT);
 
-	mutex_unlock(&display->gmbus.mutex);
+	adapter->lock_ops->unlock_bus(adapter, 0);
+
 	intel_display_power_put(display, POWER_DOMAIN_GMBUS, wakeref);
 
 	return ret;
@@ -863,6 +865,36 @@ static const struct i2c_algorithm gmbus_algorithm = {
 	.functionality	= gmbus_func
 };
 
+static void gmbus_lock_aux(struct intel_display *display)
+{
+	struct intel_encoder *encoder;
+
+	/*
+	 * GMBUS can interfere with AUX CH on the same pins, causing
+	 * the AUX hardware to not raise the timeout interrupt.
+	 *
+	 * TODO: only lock the AUX CH using the same pins as
+	 *       GMBUS is currently using...
+	 */
+	for_each_intel_dp(display->drm, encoder) {
+		struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
+
+		mutex_lock_nest_lock(&intel_dp->aux.hw_mutex,
+				     &display->gmbus.mutex);
+	}
+}
+
+static void gmbus_unlock_aux(struct intel_display *display)
+{
+	struct intel_encoder *encoder;
+
+	for_each_intel_dp(display->drm, encoder) {
+		struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
+
+		mutex_unlock(&intel_dp->aux.hw_mutex);
+	}
+}
+
 static void gmbus_lock_bus(struct i2c_adapter *adapter,
 			   unsigned int flags)
 {
@@ -870,6 +902,8 @@ static void gmbus_lock_bus(struct i2c_adapter *adapter,
 	struct intel_display *display = bus->display;
 
 	mutex_lock(&display->gmbus.mutex);
+
+	gmbus_lock_aux(display);
 }
 
 static int gmbus_trylock_bus(struct i2c_adapter *adapter,
@@ -877,8 +911,19 @@ static int gmbus_trylock_bus(struct i2c_adapter *adapter,
 {
 	struct intel_gmbus *bus = to_intel_gmbus(adapter);
 	struct intel_display *display = bus->display;
+	int locked;
 
-	return mutex_trylock(&display->gmbus.mutex);
+	locked = mutex_trylock(&display->gmbus.mutex);
+	if (!locked)
+		return 0;
+
+	/*
+	 * TODO use mutex_trylock_next_lock() here? Would need
+	 * to track which mutexes to unlocks on failure...
+	 */
+	gmbus_lock_aux(display);
+
+	return 1;
 }
 
 static void gmbus_unlock_bus(struct i2c_adapter *adapter,
@@ -886,6 +931,8 @@ static void gmbus_unlock_bus(struct i2c_adapter *adapter,
 {
 	struct intel_gmbus *bus = to_intel_gmbus(adapter);
 	struct intel_display *display = bus->display;
+
+	gmbus_unlock_aux(display);
 
 	mutex_unlock(&display->gmbus.mutex);
 }
