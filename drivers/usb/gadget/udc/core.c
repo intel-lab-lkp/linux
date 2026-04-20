@@ -1615,6 +1615,13 @@ static int gadget_bind_driver(struct device *dev)
 	int ret = 0;
 
 	mutex_lock(&udc_lock);
+	if (udc->driver) {
+		dev_err(&udc->dev, "UDC (%s) is already in use.\n",
+			dev_name(&udc->dev));
+		mutex_unlock(&udc_lock);
+		return -EBUSY;
+	}
+
 	if (driver->is_bound) {
 		mutex_unlock(&udc_lock);
 		return -ENXIO;		/* Driver binds to only one gadget */
