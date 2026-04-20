@@ -2704,8 +2704,12 @@ static void gve_get_rx_queue_stats(struct net_device *dev, int idx,
 				   struct netdev_queue_stats_rx *rx_stats)
 {
 	struct gve_priv *priv = netdev_priv(dev);
-	struct gve_rx_ring *rx = &priv->rx[idx];
+	struct gve_rx_ring *rx;
 	unsigned int start;
+
+	if (!priv->rx)
+		return;
+	rx = &priv->rx[idx];
 
 	do {
 		start = u64_stats_fetch_begin(&rx->statss);
@@ -2720,8 +2724,12 @@ static void gve_get_tx_queue_stats(struct net_device *dev, int idx,
 				   struct netdev_queue_stats_tx *tx_stats)
 {
 	struct gve_priv *priv = netdev_priv(dev);
-	struct gve_tx_ring *tx = &priv->tx[idx];
+	struct gve_tx_ring *tx;
 	unsigned int start;
+
+	if (!priv->tx)
+		return;
+	tx = &priv->tx[idx];
 
 	do {
 		start = u64_stats_fetch_begin(&tx->statss);
