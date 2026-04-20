@@ -14,6 +14,7 @@
 #include <linux/regulator/consumer.h>
 #include <sound/soc.h>
 #include <sound/pcm_params.h>
+#include "aw88258.h"
 #include "aw88261.h"
 #include "aw88395/aw88395_data_type.h"
 #include "aw88395/aw88395_device.h"
@@ -179,37 +180,36 @@ static int aw88261_dev_check_pll(struct aw_device *aw_dev)
 static int aw88261_dev_configure_syspll(struct aw88261 *aw88261)
 {
 	struct aw_device *aw_dev = aw88261->aw_pa;
-	uint32_t sr_value, fs_value, cco_mux_value, bck_value;
+	uint32_t sr_value, fs_value, bck_value;
+	bool bypass_divider = false;
 	int ret;
 
 	switch (aw88261->sample_rate) {
 	case 8000:
 		sr_value = AW88261_I2SSR_8KHZ_VALUE;
-		cco_mux_value = AW88261_CCO_MUX_DIVIDED_VALUE;
 		break;
 	case 16000:
 		sr_value = AW88261_I2SSR_16KHZ_VALUE;
-		cco_mux_value = AW88261_CCO_MUX_DIVIDED_VALUE;
 		break;
 	case 32000:
 		sr_value = AW88261_I2SSR_32KHZ_VALUE;
-		cco_mux_value = AW88261_CCO_MUX_DIVIDED_VALUE;
+		bypass_divider = true;
 		break;
 	case 44100:
 		sr_value = AW88261_I2SSR_44P1KHZ_VALUE;
-		cco_mux_value = AW88261_CCO_MUX_BYPASS_VALUE;
+		bypass_divider = true;
 		break;
 	case 48000:
 		sr_value = AW88261_I2SSR_48KHZ_VALUE;
-		cco_mux_value = AW88261_CCO_MUX_BYPASS_VALUE;
+		bypass_divider = true;
 		break;
 	case 96000:
 		sr_value = AW88261_I2SSR_96KHZ_VALUE;
-		cco_mux_value = AW88261_CCO_MUX_BYPASS_VALUE;
+		bypass_divider = true;
 		break;
 	case 192000:
 		sr_value = AW88261_I2SSR_192KHZ_VALUE;
-		cco_mux_value = AW88261_CCO_MUX_BYPASS_VALUE;
+		bypass_divider = true;
 		break;
 	default:
 		dev_err(aw_dev->dev, "unsupported sample rate %d\n",
@@ -241,8 +241,21 @@ static int aw88261_dev_configure_syspll(struct aw88261 *aw88261)
 	}
 
 	/* PLL divider must be used for 8/16/32 kHz modes */
-	ret = regmap_update_bits(aw_dev->regmap, AW88261_PLLCTRL1_REG,
-			~AW88261_CCO_MUX_MASK, cco_mux_value);
+	switch (aw_dev->chip_id) {
+	case AW88261_CHIP_ID:
+		ret = regmap_update_bits(aw_dev->regmap, AW88261_PLLCTRL1_REG,
+				~AW88261_CCO_MUX_MASK, bypass_divider ?
+				AW88261_CCO_MUX_BYPASS_VALUE : AW88261_CCO_MUX_DIVIDED);
+		break;
+	case AW88258_CHIP_ID:
+		ret = regmap_update_bits(aw_dev->regmap, AW88258_PLLCTRL1_REG,
+				~AW88258_CCO_MUX_MASK, bypass_divider ?
+				AW88258_CCO_MUX_BYPASS_VALUE : AW88258_CCO_MUX_DIVIDED);
+		break;
+	default:
+		WARN_ONCE(1, "missing PLL regs for chip %x", aw_dev->chip_id);
+		return -ENXIO;
+	}
 	if (ret)
 		return ret;
 
@@ -306,7 +319,9 @@ static void aw88261_dev_uls_hmute(struct aw_device *aw_dev, bool uls_hmute)
 
 static void aw88261_reg_force_set(struct aw88261 *aw88261)
 {
-	if (aw88261->frcset_en == AW88261_FRCSET_ENABLE) {
+	if (aw88261->aw_pa->chip_id == AW88258_CHIP_ID) {
+		dev_dbg(aw88261->aw_pa->dev, "force_set not supported on aw88258");
+	} else if (aw88261->frcset_en == AW88261_FRCSET_ENABLE) {
 		/* set FORCE_PWM */
 		regmap_update_bits(aw88261->regmap, AW88261_BSTCTRL3_REG,
 				AW88261_FORCE_PWM_MASK, AW88261_FORCE_PWM_FORCEMINUS_PWM_VALUE);
