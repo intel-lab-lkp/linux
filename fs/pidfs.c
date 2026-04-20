@@ -897,14 +897,28 @@ static int pidfs_export_permission(struct handle_to_path_ctx *ctx,
 	return 0;
 }
 
+/*
+ * Open a pidfs dentry. Pidfds are always O_RDWR and PIDFD_THREAD (O_EXCL)
+ * must be restored after dentry_open() as do_dentry_open() strips it.
+ */
+static struct file *pidfs_open_file(const struct path *path, unsigned int flags)
+{
+	struct file *f;
+
+	flags |= O_RDWR;
+	f = dentry_open(path, flags, current_cred());
+	if (!IS_ERR(f))
+		f->f_flags |= (flags & PIDFD_THREAD);
+	return f;
+}
+
 static struct file *pidfs_export_open(const struct path *path, unsigned int oflags)
 {
 	/*
-	 * Clear O_LARGEFILE as open_by_handle_at() forces it and raise
-	 * O_RDWR as pidfds always are.
+	 * Clear O_LARGEFILE as open_by_handle_at() forces it.
 	 */
 	oflags &= ~O_LARGEFILE;
-	return dentry_open(path, oflags | O_RDWR, current_cred());
+	return pidfs_open_file(path, oflags);
 }
 
 static const struct export_operations pidfs_export_operations = {
@@ -1086,7 +1100,6 @@ static struct file_system_type pidfs_type = {
 
 struct file *pidfs_alloc_file(struct pid *pid, unsigned int flags)
 {
-	struct file *pidfd_file;
 	struct path path __free(path_put) = {};
 	int ret;
 
@@ -1104,13 +1117,7 @@ struct file *pidfs_alloc_file(struct pid *pid, unsigned int flags)
 	VFS_WARN_ON_ONCE(!pid->attr);
 
 	flags &= ~PIDFD_STALE;
-	flags |= O_RDWR;
-	pidfd_file = dentry_open(&path, flags, current_cred());
-	/* Raise PIDFD_THREAD explicitly as do_dentry_open() strips it. */
-	if (!IS_ERR(pidfd_file))
-		pidfd_file->f_flags |= (flags & PIDFD_THREAD);
-
-	return pidfd_file;
+	return pidfs_open_file(&path, flags);
 }
 
 void __init pidfs_init(void)
