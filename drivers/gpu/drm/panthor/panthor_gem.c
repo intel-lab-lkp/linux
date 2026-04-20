@@ -687,6 +687,10 @@ static void panthor_gem_evict_locked(struct panthor_gem_object *bo)
 	if (drm_WARN_ON_ONCE(bo->base.dev, !bo->backing.pages))
 		return;
 
+	/* Don't ever wrap around as far as 0, jump from INT_MIN to 1 */
+	if (!atomic_inc_unless_negative(&bo->reclaimed_count))
+		atomic_set(&bo->reclaimed_count, 1);
+
 	panthor_gem_dev_map_cleanup_locked(bo);
 	panthor_gem_backing_cleanup_locked(bo);
 	panthor_gem_update_reclaim_state_locked(bo, NULL);
@@ -788,6 +792,8 @@ static enum drm_gem_object_status panthor_gem_status(struct drm_gem_object *obj)
 
 	if (drm_gem_is_imported(&bo->base) || bo->backing.pages)
 		res |= DRM_GEM_OBJECT_RESIDENT;
+	else if (atomic_read(&bo->reclaimed_count))
+		res |= DRM_GEM_OBJECT_EVICTED;
 
 	return res;
 }
@@ -1595,6 +1601,7 @@ static void panthor_gem_debugfs_print_flag_names(struct seq_file *m)
 	static const char * const gem_state_flags_names[] = {
 		[PANTHOR_DEBUGFS_GEM_STATE_IMPORTED_BIT] = "imported",
 		[PANTHOR_DEBUGFS_GEM_STATE_EXPORTED_BIT] = "exported",
+		[PANTHOR_DEBUGFS_GEM_STATE_EVICTED_BIT] = "evicted",
 	};
 
 	static const char * const gem_usage_flags_names[] = {
@@ -1648,6 +1655,9 @@ static void panthor_gem_debugfs_bo_print(struct panthor_gem_object *bo,
 
 	if (drm_gem_is_imported(&bo->base))
 		gem_state_flags |= PANTHOR_DEBUGFS_GEM_STATE_FLAG_IMPORTED;
+	else if (!resident_size && atomic_read(&bo->reclaimed_count))
+		gem_state_flags |= PANTHOR_DEBUGFS_GEM_STATE_FLAG_EVICTED;
+
 	if (bo->base.dma_buf)
 		gem_state_flags |= PANTHOR_DEBUGFS_GEM_STATE_FLAG_EXPORTED;
 
