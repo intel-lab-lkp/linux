@@ -777,11 +777,22 @@ zonegc_low_space_show(
 }
 XFS_SYSFS_ATTR_RW(zonegc_low_space);
 
+static ssize_t
+zonegc_required_show(
+	struct kobject		*kobj,
+	char			*buf)
+{
+	return sysfs_emit(buf, "%d\n",
+			xfs_zoned_need_gc(zoned_to_mp(kobj)));
+}
+XFS_SYSFS_ATTR_RO(zonegc_required);
+
 static struct attribute *xfs_zoned_attrs[] = {
 	ATTR_LIST(max_open_zones),
 	ATTR_LIST(nr_free_zones),
 	ATTR_LIST(nr_open_zones),
 	ATTR_LIST(zonegc_low_space),
+	ATTR_LIST(zonegc_required),
 	NULL,
 };
 ATTRIBUTE_GROUPS(xfs_zoned);
