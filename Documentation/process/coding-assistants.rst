@@ -57,3 +57,16 @@ Basic development tools (git, gcc, make, editors) should not be listed.
 Example::
 
   Assisted-by: Claude:claude-3-opus coccinelle sparse
+
+Contributors may optionally add an ``Acted-By:`` tag identifying the
+human sovereign identity under which the work was performed, in a form
+stable across pseudonymous and legal-name contexts::
+
+  Acted-By: handle
+
+``Acted-By:`` is informational. It does not replace ``Signed-off-by:``;
+DCO attestation remains mandatory. Where ``Assisted-by:`` identifies
+*what tooling* contributed, ``Acted-By:`` identifies *who* the human
+was, as a stable handle. Handle format is out of scope for this
+document; draft-morrison-identity-attributed-commits in the IETF
+document stream describes one such scheme.
