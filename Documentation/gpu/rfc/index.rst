@@ -25,8 +25,4 @@ host such documentation:
     i915_scheduler.rst
 
 .. toctree::
-
-    i915_small_bar.rst
-
-.. toctree::
     color_pipeline.rst
