@@ -77,7 +77,7 @@ EXPORT_SYMBOL_GPL(nsh_pop);
 static struct sk_buff *nsh_gso_segment(struct sk_buff *skb,
 				       netdev_features_t features)
 {
-	unsigned int outer_hlen, mac_len, nsh_len;
+	unsigned int outer_hlen, mac_len, nsh_len, total_pull_len = 0;
 	struct sk_buff *segs = ERR_PTR(-EINVAL);
 	u16 mac_offset = skb->mac_header;
 	__be16 outer_proto, proto;
@@ -88,39 +88,72 @@ static struct sk_buff *nsh_gso_segment(struct sk_buff *skb,
 	outer_hlen = skb_mac_header_len(skb);
 	mac_len = skb->mac_len;
 
-	if (unlikely(!pskb_may_pull(skb, NSH_BASE_HDR_LEN)))
-		goto out;
-	nsh_len = nsh_hdr_len(nsh_hdr(skb));
-	if (nsh_len < NSH_BASE_HDR_LEN)
-		goto out;
-	if (unlikely(!pskb_may_pull(skb, nsh_len)))
-		goto out;
+	while (true) {
+		if (unlikely(!pskb_may_pull(skb, NSH_BASE_HDR_LEN)))
+			goto err;
+		nsh_len = nsh_hdr_len(nsh_hdr(skb));
+		if (nsh_len < NSH_BASE_HDR_LEN)
+			goto err;
+		if (unlikely(!pskb_may_pull(skb, nsh_len)))
+			goto err;
 
-	proto = tun_p_to_eth_p(nsh_hdr(skb)->np);
-	if (!proto)
-		goto out;
+		proto = tun_p_to_eth_p(nsh_hdr(skb)->np);
+		if (!proto)
+			goto err;
 
-	__skb_pull(skb, nsh_len);
+		__skb_pull(skb, nsh_len);
+		total_pull_len += nsh_len;
 
-	skb_reset_mac_header(skb);
-	skb->mac_len = proto == htons(ETH_P_TEB) ? ETH_HLEN : 0;
-	skb->protocol = proto;
+		skb_reset_mac_header(skb);
+		skb->mac_len = proto == htons(ETH_P_TEB) ? ETH_HLEN : 0;
+		skb->protocol = proto;
+
+		/* Keep unwrapping any payload that would redispatch back into
+		 * nsh_gso_segment(), including Ethernet-encapsulated NSH.
+		 */
+		if (proto == htons(ETH_P_NSH))
+			continue;
+
+		if (proto == htons(ETH_P_TEB)) {
+			int depth = skb->mac_len;
+
+			proto = skb_network_protocol(skb, &depth);
+			if (!proto)
+				goto err;
+
+			if (proto == htons(ETH_P_NSH)) {
+				__skb_pull(skb, depth);
+				total_pull_len += depth;
+
+				skb_reset_mac_header(skb);
+				skb->mac_len = 0;
+				skb->protocol = proto;
+				continue;
+			}
+		}
+
+		break;
+	}
 
 	features &= NETIF_F_SG;
 	segs = skb_mac_gso_segment(skb, features);
-	if (IS_ERR_OR_NULL(segs)) {
-		skb_gso_error_unwind(skb, htons(ETH_P_NSH), nsh_len,
-				     mac_offset, mac_len);
-		goto out;
-	}
+	if (IS_ERR_OR_NULL(segs))
+		goto err;
 
 	for (skb = segs; skb; skb = skb->next) {
 		skb->protocol = outer_proto;
-		__skb_push(skb, nsh_len + outer_hlen);
+		__skb_push(skb, total_pull_len + outer_hlen);
 		skb_reset_mac_header(skb);
 		skb_set_network_header(skb, outer_hlen);
 		skb->mac_len = mac_len;
 	}
+
+	goto out;
+
+err:
+	if (total_pull_len)
+		skb_gso_error_unwind(skb, outer_proto, total_pull_len,
+				     mac_offset, mac_len);
 
 out:
 	return segs;
