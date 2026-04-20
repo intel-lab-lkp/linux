@@ -28,6 +28,98 @@ enum j1939_sk_errqueue_type {
 	J1939_ERRQUEUE_RX_ABORT,
 };
 
+/* J1939 Transport Protocol Abort Codes */
+enum j1939_xtp_abort {
+	J1939_XTP_NO_ABORT = 0,
+	J1939_XTP_ABORT_BUSY = 1,
+	/* Already in one or more connection managed sessions and
+	 * cannot support another.
+	 *
+	 * EALREADY:
+	 * Operation already in progress
+	 */
+
+	J1939_XTP_ABORT_RESOURCE = 2,
+	/* System resources were needed for another task so this
+	 * connection managed session was terminated.
+	 *
+	 * EMSGSIZE:
+	 * The socket type requires that message be sent atomically,
+	 * and the size of the message to be sent made this
+	 * impossible.
+	 */
+
+	J1939_XTP_ABORT_TIMEOUT = 3,
+	/* A timeout occurred and this is the connection abort to
+	 * close the session.
+	 *
+	 * EHOSTUNREACH:
+	 * The destination host cannot be reached (probably because
+	 * the host is down or a remote router cannot reach it).
+	 */
+
+	J1939_XTP_ABORT_GENERIC = 4,
+	/* CTS messages received when data transfer is in progress
+	 *
+	 * EBADMSG:
+	 * Not a data message
+	 */
+
+	J1939_XTP_ABORT_FAULT = 5,
+	/* Maximal retransmit request limit reached
+	 *
+	 * ENOTRECOVERABLE:
+	 * State not recoverable
+	 */
+
+	J1939_XTP_ABORT_UNEXPECTED_DATA = 6,
+	/* Unexpected data transfer packet
+	 *
+	 * ENOTCONN:
+	 * Transport endpoint is not connected
+	 */
+
+	J1939_XTP_ABORT_BAD_SEQ = 7,
+	/* Bad sequence number (and software is not able to recover)
+	 *
+	 * EILSEQ:
+	 * Illegal byte sequence
+	 */
+
+	J1939_XTP_ABORT_DUP_SEQ = 8,
+	/* Duplicate sequence number (and software is not able to
+	 * recover)
+	 */
+
+	J1939_XTP_ABORT_EDPO_UNEXPECTED = 9,
+	/* Unexpected EDPO packet (ETP) or Message size > 1785 bytes
+	 * (TP)
+	 */
+
+	J1939_XTP_ABORT_BAD_EDPO_PGN = 10,
+	/* Unexpected EDPO PGN (PGN in EDPO is bad) */
+
+	J1939_XTP_ABORT_EDPO_OUTOF_CTS = 11,
+	/* EDPO number of packets is greater than CTS */
+
+	J1939_XTP_ABORT_BAD_EDPO_OFFSET = 12,
+	/* Bad EDPO offset */
+
+	J1939_XTP_ABORT_OTHER_DEPRECATED = 13,
+	/* Deprecated. Use 250 instead (Any other reason)  */
+
+	J1939_XTP_ABORT_ECTS_UNXPECTED_PGN = 14,
+	/* Unexpected ECTS PGN (PGN in ECTS is bad) */
+
+	J1939_XTP_ABORT_ECTS_TOO_BIG = 15,
+	/* ECTS requested packets exceeds message size */
+
+	J1939_XTP_ABORT_OTHER = 250,
+	/* Any other reason (if a Connection Abort reason is
+	 * identified that is not listed in the table use code 250)
+	 */
+};
+
 /* j1939 devices */
 struct j1939_ecu {
 	struct list_head list;
