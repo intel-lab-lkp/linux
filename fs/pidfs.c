@@ -375,7 +375,7 @@ static long pidfd_info(struct file *file, unsigned int cmd, unsigned long arg)
 		}
 	}
 
-	if (mask & PIDFD_INFO_COREDUMP) {
+	if ((mask & PIDFD_INFO_COREDUMP) && usize >= PIDFD_INFO_SIZE_VER1) {
 		if (test_bit(PIDFS_ATTR_BIT_COREDUMP, &attr->attr_mask)) {
 			smp_rmb();
 			kinfo.mask |= PIDFD_INFO_COREDUMP | PIDFD_INFO_COREDUMP_SIGNAL;
@@ -400,7 +400,8 @@ static long pidfd_info(struct file *file, unsigned int cmd, unsigned long arg)
 	if (!c)
 		return -ESRCH;
 
-	if ((mask & PIDFD_INFO_COREDUMP) && !kinfo.coredump_mask) {
+	if ((mask & PIDFD_INFO_COREDUMP) && usize >= PIDFD_INFO_SIZE_VER1 &&
+	    !kinfo.coredump_mask) {
 		guard(task_lock)(task);
 		if (task->mm) {
 			unsigned long flags = __mm_flags_get_dumpable(task->mm);
@@ -455,7 +456,7 @@ static long pidfd_info(struct file *file, unsigned int cmd, unsigned long arg)
 		return -ESRCH;
 
 copy_out:
-	if (mask & PIDFD_INFO_SUPPORTED_MASK) {
+	if ((mask & PIDFD_INFO_SUPPORTED_MASK) && usize >= PIDFD_INFO_SIZE_VER2) {
 		kinfo.mask |= PIDFD_INFO_SUPPORTED_MASK;
 		kinfo.supported_mask = PIDFD_INFO_SUPPORTED;
 	}
