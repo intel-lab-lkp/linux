@@ -13,6 +13,7 @@
 #include <linux/string.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/rcupdate.h>
 #include <linux/ctype.h>
 #include <linux/list.h>
 #include <linux/slab.h>
@@ -24,15 +25,27 @@
 /*
  * modules trace_printk()'s formats are autosaved in struct trace_bprintk_fmt
  * which are queued on trace_bprintk_fmt_list.
+ *
+ * modules tracepoint_string() entries are kept as ranges into the owning
+ * module's __tracepoint_str section and are removed again when the module
+ * goes away.
  */
 static LIST_HEAD(trace_bprintk_fmt_list);
+static LIST_HEAD(tracepoint_str_list);
 
-/* serialize accesses to trace_bprintk_fmt_list */
+/* serialize accesses to module trace printk and tracepoint string lists */
 static DEFINE_MUTEX(btrace_mutex);
 
 struct trace_bprintk_fmt {
 	struct list_head list;
 	const char *fmt;
+};
+
+struct tracepoint_mod_str {
+	struct list_head list;
+	struct module *mod;
+	const char **start;
+	unsigned int num;
 };
 
 static inline struct trace_bprintk_fmt *lookup_format(const char *fmt)
@@ -85,16 +98,70 @@ void hold_module_trace_bprintk_format(const char **start, const char **end)
 	mutex_unlock(&btrace_mutex);
 }
 
+static void hold_module_tracepoint_strings(struct module *mod)
+{
+	struct tracepoint_mod_str *tp_str;
+
+	if (!mod->num_tracepoint_strings)
+		return;
+
+	tp_str = kmalloc_obj(*tp_str);
+	if (!tp_str) {
+		pr_warn("tracing: Failed to expose module tracepoint strings for %s\n",
+			mod->name);
+		return;
+	}
+
+	tp_str->mod = mod;
+	tp_str->start = mod->tracepoint_strings_start;
+	tp_str->num = mod->num_tracepoint_strings;
+
+	mutex_lock(&btrace_mutex);
+	list_add_tail_rcu(&tp_str->list, &tracepoint_str_list);
+	mutex_unlock(&btrace_mutex);
+}
+
+static void release_module_tracepoint_strings(struct module *mod)
+{
+	struct tracepoint_mod_str *tp_str, *next;
+	struct tracepoint_mod_str *found = NULL;
+
+	mutex_lock(&btrace_mutex);
+	list_for_each_entry_safe(tp_str, next, &tracepoint_str_list, list) {
+		if (tp_str->mod != mod)
+			continue;
+
+		list_del_rcu(&tp_str->list);
+		found = tp_str;
+		break;
+	}
+	mutex_unlock(&btrace_mutex);
+
+	if (found) {
+		synchronize_rcu();
+		kfree(found);
+	}
+}
+
 static int module_trace_bprintk_format_notify(struct notifier_block *self,
 		unsigned long val, void *data)
 {
 	struct module *mod = data;
-	if (mod->num_trace_bprintk_fmt) {
-		const char **start = mod->trace_bprintk_fmt_start;
-		const char **end = start + mod->num_trace_bprintk_fmt;
 
-		if (val == MODULE_STATE_COMING)
+	switch (val) {
+	case MODULE_STATE_COMING:
+		if (mod->num_trace_bprintk_fmt) {
+			const char **start = mod->trace_bprintk_fmt_start;
+			const char **end = start + mod->num_trace_bprintk_fmt;
+
 			hold_module_trace_bprintk_format(start, end);
+		}
+		hold_module_tracepoint_strings(mod);
+		break;
+	case MODULE_STATE_GOING:
+		/* trace event teardown runs first and clears module event buffers. */
+		release_module_tracepoint_strings(mod);
+		break;
 	}
 	return NOTIFY_OK;
 }
@@ -159,6 +226,55 @@ find_next_mod_format(int start_index, void *v, const char **fmt, loff_t *pos)
 	return &mod_fmt->fmt;
 }
 
+static int count_mod_formats(void)
+{
+	struct trace_bprintk_fmt *p;
+	int count = 0;
+
+	list_for_each_entry(p, &trace_bprintk_fmt_list, list)
+		count++;
+
+	return count;
+}
+
+static const char **
+find_next_mod_tracepoint_str(int start_index, loff_t *pos)
+{
+	struct tracepoint_mod_str *tp_str;
+	int index = start_index;
+	unsigned int i;
+
+	list_for_each_entry(tp_str, &tracepoint_str_list, list) {
+		for (i = 0; i < tp_str->num; i++) {
+			if (index == *pos)
+				return tp_str->start + i;
+			index++;
+		}
+	}
+
+	return NULL;
+}
+
+static bool is_module_tracepoint_string(const char *str)
+{
+	struct tracepoint_mod_str *tp_str;
+	unsigned int i;
+	bool found = false;
+
+	rcu_read_lock();
+	list_for_each_entry_rcu(tp_str, &tracepoint_str_list, list) {
+		for (i = 0; i < tp_str->num; i++) {
+			if (str == tp_str->start[i]) {
+				found = true;
+				goto out;
+			}
+		}
+	}
+out:
+	rcu_read_unlock();
+	return found;
+}
+
 static void format_mod_start(void)
 {
 	mutex_lock(&btrace_mutex);
@@ -181,6 +297,22 @@ find_next_mod_format(int start_index, void *v, const char **fmt, loff_t *pos)
 {
 	return NULL;
 }
+
+static inline int count_mod_formats(void)
+{
+	return 0;
+}
+
+static inline const char **
+find_next_mod_tracepoint_str(int start_index, loff_t *pos)
+{
+	return NULL;
+}
+
+static inline bool is_module_tracepoint_string(const char *str)
+{
+	return false;
+}
 static inline void format_mod_start(void) { }
 static inline void format_mod_stop(void) { }
 #endif /* CONFIG_MODULES */
@@ -195,6 +327,7 @@ void trace_printk_control(bool enabled)
 __initdata_or_module static
 struct notifier_block module_trace_bprintk_format_nb = {
 	.notifier_call = module_trace_bprintk_format_notify,
+	.priority = 0,
 };
 
 int __trace_bprintk(unsigned long ip, const char *fmt, ...)
@@ -259,12 +392,13 @@ bool trace_is_tracepoint_string(const char *str)
 		if (str == *ptr)
 			return true;
 	}
-	return false;
+	return is_module_tracepoint_string(str);
 }
 
 static const char **find_next(void *v, loff_t *pos)
 {
 	const char **fmt = v;
+	int mod_formats;
 	int start_index;
 	int last_index;
 
@@ -292,7 +426,12 @@ static const char **find_next(void *v, loff_t *pos)
 		return __start___tracepoint_str + (*pos - last_index);
 
 	start_index += last_index;
-	return find_next_mod_format(start_index, v, fmt, pos);
+	mod_formats = count_mod_formats();
+	if (*pos < start_index + mod_formats)
+		return find_next_mod_format(start_index, v, fmt, pos);
+
+	start_index += mod_formats;
+	return find_next_mod_tracepoint_str(start_index, pos);
 }
 
 static void *
