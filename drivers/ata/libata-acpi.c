@@ -153,8 +153,8 @@ static void ata_acpi_uevent(struct ata_port *ap, struct ata_device *dev,
 	char *envp[] = { event_string, NULL };
 
 	if (dev) {
-		if (dev->sdev)
-			kobj = &dev->sdev->sdev_gendev.kobj;
+		if (dev->sdev[0])
+			kobj = &dev->sdev[0]->sdev_gendev.kobj;
 	} else
 		kobj = &ap->dev->kobj;
 
