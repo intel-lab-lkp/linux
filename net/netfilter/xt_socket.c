@@ -55,8 +55,11 @@ socket_match(const struct sk_buff *skb, struct xt_action_param *par,
 	if (sk && !net_eq(xt_net(par), sock_net(sk)))
 		sk = NULL;
 
-	if (!sk)
+	if (!sk) {
+		if (par->fragoff)
+			return false;
 		sk = nf_sk_lookup_slow_v4(xt_net(par), skb, xt_in(par));
+	}
 
 	if (sk) {
 		bool wildcard;
@@ -116,8 +119,11 @@ socket_mt6_v1_v2_v3(const struct sk_buff *skb, struct xt_action_param *par)
 	if (sk && !net_eq(xt_net(par), sock_net(sk)))
 		sk = NULL;
 
-	if (!sk)
+	if (!sk) {
+		if (par->fragoff)
+			return false;
 		sk = nf_sk_lookup_slow_v6(xt_net(par), skb, xt_in(par));
+	}
 
 	if (sk) {
 		bool wildcard;
