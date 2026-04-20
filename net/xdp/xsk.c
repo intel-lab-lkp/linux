@@ -797,6 +797,12 @@ static int xsk_skb_metadata(struct sk_buff *skb, void *buffer,
 	return 0;
 }
 
+static void xsk_drop_untrans_skb(struct sk_buff *skb)
+{
+	skb->destructor = sock_wfree;
+	kfree_skb(skb);
+}
+
 static struct sk_buff *xsk_build_skb_zerocopy(struct xdp_sock *xs,
 					      struct xdp_desc *desc)
 {
@@ -970,7 +976,7 @@ static struct sk_buff *xsk_build_skb(struct xdp_sock *xs,
 
 free_err:
 	if (skb && !xs->skb && !skb_shinfo(skb)->nr_frags)
-		kfree_skb(skb);
+		xsk_drop_untrans_skb(skb);
 
 	if (err == -EOVERFLOW) {
 		if (xs->skb) {
