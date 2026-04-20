@@ -229,6 +229,20 @@ static int nft_parse_compat(const struct nlattr *attr, u16 *proto, bool *inv)
 	return 0;
 }
 
+static int nft_compat_check_target(const struct nft_ctx *ctx,
+				   const struct nft_expr *expr,
+				   void *info, size_t size,
+				   u16 proto, bool inv)
+{
+	struct xt_target *target = expr->ops->data;
+	struct xt_tgchk_param par;
+	union nft_entry e = {};
+
+	nft_target_set_tgchk_param(&par, ctx, target, info, &e, proto, inv);
+
+	return xt_check_target(&par, size, proto, inv);
+}
+
 static void nft_compat_wait_for_destructors(struct net *net)
 {
 	/* xtables matches or targets can have side effects, e.g.
@@ -244,13 +258,11 @@ static int
 nft_target_init(const struct nft_ctx *ctx, const struct nft_expr *expr,
 		const struct nlattr * const tb[])
 {
-	void *info = nft_expr_priv(expr);
 	struct xt_target *target = expr->ops->data;
-	struct xt_tgchk_param par;
 	size_t size = XT_ALIGN(nla_len(tb[NFTA_TARGET_INFO]));
-	u16 proto = 0;
+	void *info = nft_expr_priv(expr);
 	bool inv = false;
-	union nft_entry e = {};
+	u16 proto = 0;
 	int ret;
 
 	target_compat_from_user(target, nla_data(tb[NFTA_TARGET_INFO]), info);
@@ -261,11 +273,9 @@ nft_target_init(const struct nft_ctx *ctx, const struct nft_expr *expr,
 			return ret;
 	}
 
-	nft_target_set_tgchk_param(&par, ctx, target, info, &e, proto, inv);
-
 	nft_compat_wait_for_destructors(ctx->net);
 
-	ret = xt_check_target(&par, size, proto, inv);
+	ret = nft_compat_check_target(ctx, expr, info, size, proto, inv);
 	if (ret < 0) {
 		if (ret == -ENOENT) {
 			const char *modname = NULL;
@@ -382,6 +392,26 @@ static int nft_target_validate(const struct nft_ctx *ctx,
 		if (target->hooks && !(hook_mask & target->hooks))
 			return -EINVAL;
 
+		/* At least one target needs to validate hooks at checkentry()
+		 * stage because such validation depends on the match
+		 * configuration. This cannot be enabled for all matches,
+		 * because some of them perform more than simple validation,
+		 * such as bumping reference counter on objects.
+		 */
+		if (!strcmp(target->name, "TCPMSS")) {
+			struct xt_target *target = expr->ops->data;
+			size_t size = XT_ALIGN(target->targetsize);
+			void *info = nft_expr_priv(expr);
+
+			/* nft_target_init() already checked for protocol and
+			 * inverse, not available in this patch, lie here.
+			 */
+			ret = nft_compat_check_target(ctx, expr, info, size,
+						      target->proto, false);
+			if (ret < 0)
+				return ret;
+		}
+
 		ret = nft_compat_chain_validate_dependency(ctx, target->table);
 		if (ret < 0)
 			return ret;
@@ -494,17 +524,29 @@ static void match_compat_from_user(struct xt_match *m, void *in, void *out)
 		memset(out + m->matchsize, 0, pad);
 }
 
+static int nft_compat_check_match(const struct nft_ctx *ctx,
+				  const struct nft_expr *expr,
+				  void *info, size_t size,
+				  u16 proto, bool inv)
+{
+	struct xt_match *match = expr->ops->data;
+	struct xt_mtchk_param par;
+	union nft_entry e = {};
+
+	nft_match_set_mtchk_param(&par, ctx, match, info, &e, proto, inv);
+
+	return xt_check_match(&par, size, proto, inv);
+}
+
 static int
 __nft_match_init(const struct nft_ctx *ctx, const struct nft_expr *expr,
 		 const struct nlattr * const tb[],
 		 void *info)
 {
-	struct xt_match *match = expr->ops->data;
-	struct xt_mtchk_param par;
 	size_t size = XT_ALIGN(nla_len(tb[NFTA_MATCH_INFO]));
-	u16 proto = 0;
+	struct xt_match *match = expr->ops->data;
 	bool inv = false;
-	union nft_entry e = {};
+	u16 proto = 0;
 	int ret;
 
 	match_compat_from_user(match, nla_data(tb[NFTA_MATCH_INFO]), info);
@@ -515,11 +557,9 @@ __nft_match_init(const struct nft_ctx *ctx, const struct nft_expr *expr,
 			return ret;
 	}
 
-	nft_match_set_mtchk_param(&par, ctx, match, info, &e, proto, inv);
-
 	nft_compat_wait_for_destructors(ctx->net);
 
-	return xt_check_match(&par, size, proto, inv);
+	return nft_compat_check_match(ctx, expr, info, size, proto, inv);
 }
 
 static int
@@ -547,12 +587,9 @@ nft_match_large_init(const struct nft_ctx *ctx, const struct nft_expr *expr,
 	return ret;
 }
 
-static void
-__nft_match_destroy(const struct nft_ctx *ctx, const struct nft_expr *expr,
-		    void *info)
+static void nft_mt_destroy(const struct nft_ctx *ctx, struct xt_match *match,
+			   void *info)
 {
-	struct xt_match *match = expr->ops->data;
-	struct module *me = match->me;
 	struct xt_mtdtor_param par;
 
 	par.net = ctx->net;
@@ -561,7 +598,16 @@ __nft_match_destroy(const struct nft_ctx *ctx, const struct nft_expr *expr,
 	par.family = ctx->family;
 	if (par.match->destroy != NULL)
 		par.match->destroy(&par);
+}
 
+static void
+__nft_match_destroy(const struct nft_ctx *ctx, const struct nft_expr *expr,
+		    void *info)
+{
+	struct xt_match *match = expr->ops->data;
+	struct module *me = match->me;
+
+	nft_mt_destroy(ctx, match, info);
 	__nft_mt_tg_destroy(me, expr);
 }
 
@@ -642,6 +688,40 @@ static int nft_match_validate(const struct nft_ctx *ctx,
 		hook_mask = 1 << ops->hooknum;
 		if (match->hooks && !(hook_mask & match->hooks))
 			return -EINVAL;
+
+		/* Several matches need to validate hooks at checkentry() stage
+		 * because such validation depends on the match configuration.
+		 */
+		if (!strcmp(match->name, "addrtype") ||
+		    !strcmp(match->name, "devgroup") ||
+		    !strcmp(match->name, "physdev") ||
+		    !strcmp(match->name, "policy") ||
+		    !strcmp(match->name, "set")) {
+			struct xt_match *match = expr->ops->data;
+			size_t size = XT_ALIGN(match->matchsize);
+			void *info;
+
+			if (NFT_EXPR_SIZE(size) > NFT_MATCH_LARGE_THRESH) {
+				struct nft_xt_match_priv *priv = nft_expr_priv(expr);
+
+				info = priv->info;
+			} else {
+				info = nft_expr_priv(expr);
+			}
+
+			/* __nft_match_init() already checked for protocol and
+			 * inverse, not available in this patch, lie here.
+			 */
+			ret = nft_compat_check_match(ctx, expr, info, size,
+						     match->proto, false);
+			if (ret < 0)
+				return ret;
+
+			 /* The set match bumps reference count, restore after
+			  * this checkentry call.
+			  */
+			nft_mt_destroy(ctx, match, info);
+		}
 
 		ret = nft_compat_chain_validate_dependency(ctx, match->table);
 		if (ret < 0)
