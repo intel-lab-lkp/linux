@@ -40,7 +40,7 @@ static __always_inline void __pmr_local_irq_enable(void)
 	barrier();
 }
 
-static inline void arch_local_irq_enable(void)
+static __always_inline void arch_local_irq_enable(void)
 {
 	if (system_uses_irq_prio_masking()) {
 		__pmr_local_irq_enable();
