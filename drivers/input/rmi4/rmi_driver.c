@@ -643,16 +643,24 @@ int rmi_read_register_desc(struct rmi_device *d, u16 addr,
 	reg = find_first_bit(rdesc->presense_map, RMI_REG_DESC_PRESENSE_BITS);
 	for (i = 0; i < rdesc->num_registers; i++) {
 		struct rmi_register_desc_item *item = &rdesc->registers[i];
-		int reg_size = struct_buf[offset];
+		int reg_size;
+
+		if (offset >= rdesc->struct_size)
+			goto malformed;
+		reg_size = struct_buf[offset];
 
 		++offset;
 		if (reg_size == 0) {
+			if (offset + 2 > rdesc->struct_size)
+				goto malformed;
 			reg_size = struct_buf[offset] |
 					(struct_buf[offset + 1] << 8);
 			offset += 2;
 		}
 
 		if (reg_size == 0) {
+			if (offset + 4 > rdesc->struct_size)
+				goto malformed;
 			reg_size = struct_buf[offset] |
 					(struct_buf[offset + 1] << 8) |
 					(struct_buf[offset + 2] << 16) |
@@ -666,6 +674,9 @@ int rmi_read_register_desc(struct rmi_device *d, u16 addr,
 		map_offset = 0;
 
 		do {
+			if (offset >= rdesc->struct_size ||
+			    map_offset >= RMI_REG_DESC_SUBPACKET_BITS)
+				goto malformed;
 			for (b = 0; b < 7; b++) {
 				if (struct_buf[offset] & (0x1 << b))
 					bitmap_set(item->subpacket_map,
@@ -688,6 +699,12 @@ int rmi_read_register_desc(struct rmi_device *d, u16 addr,
 free_struct_buff:
 	kfree(struct_buf);
 	return ret;
+
+malformed:
+	dev_err(&d->dev,
+		"register descriptor structure does not match its declared size\n");
+	ret = -EIO;
+	goto free_struct_buff;
 }
 
 const struct rmi_register_desc_item *rmi_get_register_desc_item(
