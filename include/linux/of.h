@@ -135,7 +135,7 @@ static inline struct device_node *of_node_get(struct device_node *node)
 }
 static inline void of_node_put(struct device_node *node) { }
 #endif /* !CONFIG_OF_DYNAMIC */
-DEFINE_FREE(device_node, struct device_node *, if (_T) of_node_put(_T))
+DEFINE_FREE(device_node, struct device_node *, if (_T && !IS_ERR(_T)) of_node_put(_T))
 
 /* Pointer for first entry in chain of all nodes. */
 extern struct device_node *of_root;
