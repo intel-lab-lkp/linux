@@ -595,7 +595,7 @@ free_stage_buffer:
  *
  * Work handler for composing and computing CRCs. work_struct scheduled in
  * an ordered workqueue that's periodically scheduled to run by
- * vkms_vblank_simulate() and flushed at vkms_atomic_commit_tail().
+ * vkms_crtc_handle_vblank_timeout() and flushed at vkms_atomic_commit_tail().
  */
 void vkms_composer_worker(struct work_struct *work)
 {
@@ -637,7 +637,7 @@ void vkms_composer_worker(struct work_struct *work)
 	spin_unlock_irq(&out->composer_lock);
 
 	/*
-	 * We raced with the vblank hrtimer and previous work already computed
+	 * We raced with the vblank timer and previous work already computed
 	 * the crc, nothing to do.
 	 */
 	if (!crc_pending)

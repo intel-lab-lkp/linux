@@ -3,8 +3,6 @@
 #ifndef _VKMS_DRV_H_
 #define _VKMS_DRV_H_
 
-#include <linux/hrtimer.h>
-
 #include <drm/drm.h>
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_gem.h>
@@ -205,9 +203,6 @@ struct vkms_crtc_state {
  * @encoder: DRM encoder used for this output
  * @connector: DRM connector used for this output
  * @wb_connecter: DRM writeback connector used for this output
- * @vblank_hrtimer: Timer used to trigger the vblank
- * @period_ns: vblank period, in nanoseconds, used to configure @vblank_hrtimer and to compute
- *	       vblank timestamps
  * @composer_workq: Ordered workqueue for @composer_state.composer_work.
  * @lock: Lock used to protect concurrent access to the composer
  * @composer_enabled: Protected by @lock, true when the VKMS composer is active (crc needed or
