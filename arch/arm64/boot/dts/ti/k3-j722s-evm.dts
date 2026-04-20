@@ -242,6 +242,7 @@
 };
 
 &main_pmx0 {
+	compatible = "ti,j7200-padconf", "pinctrl-single";
 
 	main_mcan0_pins_default: main-mcan0-default-pins {
 		pinctrl-single,pins = <
@@ -418,6 +419,7 @@
 };
 
 &mcu_pmx0 {
+	compatible = "ti,j7200-padconf", "pinctrl-single";
 
 	mcu_i2c0_pins_default: mcu-i2c0-default-pins {
 		pinctrl-single,pins = <
