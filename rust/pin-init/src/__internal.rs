@@ -5,6 +5,8 @@
 //! These items must not be used outside of this crate and the pin-init-internal crate located at
 //! `../internal`.
 
+use core::ops::{Deref, DerefMut};
+
 use super::*;
 
 /// See the [nomicon] for what subtyping is. See also [this table].
@@ -238,6 +240,10 @@ fn stack_init_reuse() {
 /// When a value of this type is dropped, it drops a `T`.
 ///
 /// Can be forgotten to prevent the drop.
+///
+/// # Invariants
+///
+/// `ptr` is convertible to a mutable reference and `*ptr` is owned by `DropGuard`.
 pub struct DropGuard<T: ?Sized> {
     ptr: *mut T,
 }
@@ -259,11 +265,28 @@ impl<T: ?Sized> DropGuard<T> {
     }
 }
 
+impl<T: ?Sized> Deref for DropGuard<T> {
+    type Target = T;
+
+    #[inline]
+    fn deref(&self) -> &T {
+        // SAFETY: `ptr` is convertible to reference
+        unsafe { &*self.ptr }
+    }
+}
+
+impl<T: ?Sized> DerefMut for DropGuard<T> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut T {
+        // SAFETY: `ptr` is convertible to a mutable reference
+        unsafe { &mut *self.ptr }
+    }
+}
+
 impl<T: ?Sized> Drop for DropGuard<T> {
     #[inline]
     fn drop(&mut self) {
-        // SAFETY: A `DropGuard` can only be constructed using the unsafe `new` function
-        // ensuring that this operation is safe.
+        // SAFETY: `DropGuard` owns the `*ptr`.
         unsafe { ptr::drop_in_place(self.ptr) }
     }
 }
