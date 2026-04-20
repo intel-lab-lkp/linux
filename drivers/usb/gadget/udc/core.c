@@ -1630,30 +1630,25 @@ static int gadget_bind_driver(struct device *dev)
 	if (ret)
 		goto err_bind;
 
-	mutex_lock(&udc->connect_lock);
-	ret = usb_gadget_udc_start_locked(udc);
-	if (ret) {
-		mutex_unlock(&udc->connect_lock);
-		goto err_start;
+	scoped_guard(mutex, &udc->connect_lock) {
+		ret = usb_gadget_udc_start_locked(udc);
+		if (ret)
+			goto err_start;
+		usb_gadget_enable_async_callbacks(udc);
+		udc->allow_connect = true;
+		ret = usb_udc_connect_control_locked(udc);
+		if (ret) {
+			udc->allow_connect = false;
+			usb_gadget_disable_async_callbacks(udc);
+			if (gadget->irq)
+				synchronize_irq(gadget->irq);
+			usb_gadget_udc_stop_locked(udc);
+			goto err_start;
+		}
 	}
-	usb_gadget_enable_async_callbacks(udc);
-	udc->allow_connect = true;
-	ret = usb_udc_connect_control_locked(udc);
-	if (ret)
-		goto err_connect_control;
-
-	mutex_unlock(&udc->connect_lock);
 
 	kobject_uevent(&udc->dev.kobj, KOBJ_CHANGE);
 	return 0;
-
- err_connect_control:
-	udc->allow_connect = false;
-	usb_gadget_disable_async_callbacks(udc);
-	if (gadget->irq)
-		synchronize_irq(gadget->irq);
-	usb_gadget_udc_stop_locked(udc);
-	mutex_unlock(&udc->connect_lock);
 
  err_start:
 	driver->unbind(udc->gadget);
@@ -1680,18 +1675,18 @@ static void gadget_unbind_driver(struct device *dev)
 
 	udc->allow_connect = false;
 	cancel_work_sync(&udc->vbus_work);
-	mutex_lock(&udc->connect_lock);
-	usb_gadget_disconnect_locked(gadget);
-	usb_gadget_disable_async_callbacks(udc);
-	if (gadget->irq)
-		synchronize_irq(gadget->irq);
-	mutex_unlock(&udc->connect_lock);
+	scoped_guard(mutex, &udc->connect_lock) {
+		usb_gadget_disconnect_locked(gadget);
+		usb_gadget_disable_async_callbacks(udc);
+		if (gadget->irq)
+			synchronize_irq(gadget->irq);
+	}
 
 	udc->driver->unbind(gadget);
 
-	mutex_lock(&udc->connect_lock);
-	usb_gadget_udc_stop_locked(udc);
-	mutex_unlock(&udc->connect_lock);
+	scoped_guard(mutex, &udc->connect_lock) {
+		usb_gadget_udc_stop_locked(udc);
+	}
 
 	scoped_guard(mutex, &udc_lock) {
 		driver->is_bound = false;
