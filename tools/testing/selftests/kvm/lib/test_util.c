@@ -42,6 +42,22 @@ uint32_t kvm_random_u32(struct kvm_random_state *state)
 	return state->seed;
 }
 
+uint64_t kvm_random_u64_in_range(struct kvm_random_state *state, uint64_t min, uint64_t max)
+{
+	uint64_t value;
+	uint64_t range;
+
+	TEST_ASSERT(min <= max, "min (0x%lx) cannot be greater than max (0x%lx)", min, max);
+
+	value = kvm_random_u64(state);
+
+	range = max - min;
+	if (range == ULLONG_MAX)
+		return value;
+
+	return min + (value % (range + 1));
+}
+
 /*
  * Parses "[0-9]+[kmgt]?".
  */

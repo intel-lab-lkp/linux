@@ -132,6 +132,10 @@ static inline uint64_t kvm_random_u64(struct kvm_random_state *state)
 	return ((uint64_t)kvm_random_u32(state) << 32) | kvm_random_u32(state);
 }
 
+/* Returns a random u64 in the inclusive range [min, max] */
+uint64_t kvm_random_u64_in_range(struct kvm_random_state *state, uint64_t min,
+				 uint64_t max);
+
 enum vm_mem_backing_src_type {
 	VM_MEM_SRC_ANONYMOUS,
 	VM_MEM_SRC_ANONYMOUS_THP,
