@@ -287,7 +287,8 @@ static bool bl_map_stripe(struct pnfs_block_dev *dev, u64 offset,
 
 static int
 bl_parse_deviceid(struct nfs_server *server, struct pnfs_block_dev *d,
-		struct pnfs_block_volume *volumes, int idx, gfp_t gfp_mask);
+		struct pnfs_block_volume *volumes, int nr_volumes, int idx,
+		int depth, gfp_t gfp_mask);
 
 
 static int
@@ -442,12 +443,14 @@ out_blkdev_put:
 
 static int
 bl_parse_slice(struct nfs_server *server, struct pnfs_block_dev *d,
-		struct pnfs_block_volume *volumes, int idx, gfp_t gfp_mask)
+		struct pnfs_block_volume *volumes, int nr_volumes, int idx,
+		int depth, gfp_t gfp_mask)
 {
 	struct pnfs_block_volume *v = &volumes[idx];
 	int ret;
 
-	ret = bl_parse_deviceid(server, d, volumes, v->slice.volume, gfp_mask);
+	ret = bl_parse_deviceid(server, d, volumes, nr_volumes,
+				v->slice.volume, depth + 1, gfp_mask);
 	if (ret)
 		return ret;
 
@@ -458,7 +461,8 @@ bl_parse_slice(struct nfs_server *server, struct pnfs_block_dev *d,
 
 static int
 bl_parse_concat(struct nfs_server *server, struct pnfs_block_dev *d,
-		struct pnfs_block_volume *volumes, int idx, gfp_t gfp_mask)
+		struct pnfs_block_volume *volumes, int nr_volumes, int idx,
+		int depth, gfp_t gfp_mask)
 {
 	struct pnfs_block_volume *v = &volumes[idx];
 	u64 len = 0;
@@ -470,8 +474,9 @@ bl_parse_concat(struct nfs_server *server, struct pnfs_block_dev *d,
 		return -ENOMEM;
 
 	for (i = 0; i < v->concat.volumes_count; i++) {
-		ret = bl_parse_deviceid(server, &d->children[i],
-				volumes, v->concat.volumes[i], gfp_mask);
+		ret = bl_parse_deviceid(server, &d->children[i], volumes,
+				nr_volumes, v->concat.volumes[i],
+				depth + 1, gfp_mask);
 		if (ret)
 			return ret;
 
@@ -487,7 +492,8 @@ bl_parse_concat(struct nfs_server *server, struct pnfs_block_dev *d,
 
 static int
 bl_parse_stripe(struct nfs_server *server, struct pnfs_block_dev *d,
-		struct pnfs_block_volume *volumes, int idx, gfp_t gfp_mask)
+		struct pnfs_block_volume *volumes, int nr_volumes, int idx,
+		int depth, gfp_t gfp_mask)
 {
 	struct pnfs_block_volume *v = &volumes[idx];
 	u64 len = 0;
@@ -499,8 +505,9 @@ bl_parse_stripe(struct nfs_server *server, struct pnfs_block_dev *d,
 		return -ENOMEM;
 
 	for (i = 0; i < v->stripe.volumes_count; i++) {
-		ret = bl_parse_deviceid(server, &d->children[i],
-				volumes, v->stripe.volumes[i], gfp_mask);
+		ret = bl_parse_deviceid(server, &d->children[i], volumes,
+				nr_volumes, v->stripe.volumes[i],
+				depth + 1, gfp_mask);
 		if (ret)
 			return ret;
 
@@ -516,19 +523,34 @@ bl_parse_stripe(struct nfs_server *server, struct pnfs_block_dev *d,
 
 static int
 bl_parse_deviceid(struct nfs_server *server, struct pnfs_block_dev *d,
-		struct pnfs_block_volume *volumes, int idx, gfp_t gfp_mask)
+		struct pnfs_block_volume *volumes, int nr_volumes, int idx,
+		int depth, gfp_t gfp_mask)
 {
+	if (idx < 0 || idx >= nr_volumes) {
+		dprintk("volume index %d out of range (0..%d)\n",
+			idx, nr_volumes - 1);
+		return -EIO;
+	}
+
+	if (depth >= PNFS_BLOCK_MAX_DEPTH) {
+		dprintk("volume nesting too deep (%d)\n", depth);
+		return -EIO;
+	}
+
 	d->type = volumes[idx].type;
 
 	switch (d->type) {
 	case PNFS_BLOCK_VOLUME_SIMPLE:
 		return bl_parse_simple(server, d, volumes, idx, gfp_mask);
 	case PNFS_BLOCK_VOLUME_SLICE:
-		return bl_parse_slice(server, d, volumes, idx, gfp_mask);
+		return bl_parse_slice(server, d, volumes, nr_volumes,
+				idx, depth, gfp_mask);
 	case PNFS_BLOCK_VOLUME_CONCAT:
-		return bl_parse_concat(server, d, volumes, idx, gfp_mask);
+		return bl_parse_concat(server, d, volumes, nr_volumes,
+				idx, depth, gfp_mask);
 	case PNFS_BLOCK_VOLUME_STRIPE:
-		return bl_parse_stripe(server, d, volumes, idx, gfp_mask);
+		return bl_parse_stripe(server, d, volumes, nr_volumes,
+				idx, depth, gfp_mask);
 	case PNFS_BLOCK_VOLUME_SCSI:
 		return bl_parse_scsi(server, d, volumes, idx, gfp_mask);
 	default:
@@ -562,6 +584,9 @@ bl_alloc_deviceid_node(struct nfs_server *server, struct pnfs_device *pdev,
 		goto out_free_scratch;
 	nr_volumes = be32_to_cpup(p++);
 
+	if (nr_volumes <= 0)
+		goto out_free_scratch;
+
 	volumes = kzalloc_objs(struct pnfs_block_volume, nr_volumes, gfp_mask);
 	if (!volumes)
 		goto out_free_scratch;
@@ -576,7 +601,8 @@ bl_alloc_deviceid_node(struct nfs_server *server, struct pnfs_device *pdev,
 	if (!top)
 		goto out_free_volumes;
 
-	ret = bl_parse_deviceid(server, top, volumes, nr_volumes - 1, gfp_mask);
+	ret = bl_parse_deviceid(server, top, volumes, nr_volumes,
+				nr_volumes - 1, 0, gfp_mask);
 
 	node = &top->node;
 	nfs4_init_deviceid_node(node, server, &pdev->dev_id);

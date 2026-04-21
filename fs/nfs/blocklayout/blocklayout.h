@@ -48,6 +48,7 @@ struct pnfs_block_dev;
 
 #define PNFS_BLOCK_MAX_UUIDS	4
 #define PNFS_BLOCK_MAX_DEVICES	64
+#define PNFS_BLOCK_MAX_DEPTH	16
 
 /*
  * Random upper cap for the uuid length to avoid unbounded allocation.
