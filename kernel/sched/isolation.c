@@ -38,7 +38,8 @@ EXPORT_SYMBOL_GPL(housekeeping_enabled);
 
 static bool housekeeping_dereference_check(enum hk_type type)
 {
-	if (IS_ENABLED(CONFIG_LOCKDEP) && type == HK_TYPE_DOMAIN) {
+	if (IS_ENABLED(CONFIG_LOCKDEP) &&
+	   (BIT(type) & (HK_FLAG_DOMAIN | HK_FLAG_KERNEL_NOISE | HK_FLAG_MANAGED_IRQ))) {
 		/* Cpuset isn't even writable yet? */
 		if (system_state <= SYSTEM_SCHEDULING)
 			return true;
