@@ -344,8 +344,38 @@ static inline void fscrypt_prepare_dentry(struct dentry *dentry,
 /* crypto.c */
 void fscrypt_enqueue_decrypt_work(struct work_struct *);
 
+/**
+ * fscrypt_crypt_fs_layer_page_inplace() - encrypt or decrypt one page region
+ *                                         in place
+ * @inode: encrypted inode whose contents encryption policy is used
+ * @page: page containing the region to encrypt or decrypt
+ * @len: length of the region in bytes
+ * @offs: byte offset of the region within @page
+ * @dun: data unit number to use as the IV/index
+ * @encrypt: true to encrypt, false to decrypt
+ *
+ * Encrypt or decrypt @len bytes in @page at @offs using @inode's contents
+ * encryption semantics, but always using filesystem-layer software crypto.
+ * If @inode's normal contents path uses blk-crypto, this may require fscrypt
+ * to derive and prepare an additional filesystem-layer software key.
+ *
+ * This is intended for filesystem-managed data regions that are not submitted
+ * through a bio and therefore cannot be encrypted or decrypted by blk-crypto.
+ * The caller must ensure that @offs and @len stay within @page and satisfy the
+ * block-size requirements of @inode's encryption mode.
+ *
+ * Return: 0 on success, -EINVAL for invalid arguments, -ENOKEY if the inode's
+ * key is unavailable, -EOPNOTSUPP if filesystem-layer software crypto is
+ * unsupported for this inode/key, or another negative error from the crypto
+ * API.
+ */
+int fscrypt_crypt_fs_layer_page_inplace(const struct inode *inode,
+					struct page *page, unsigned int len,
+					unsigned int offs, u64 dun,
+					bool encrypt);
 struct page *fscrypt_encrypt_pagecache_blocks(struct folio *folio,
 		size_t len, size_t offs, gfp_t gfp_flags);
+
 int fscrypt_encrypt_block_inplace(const struct inode *inode, struct page *page,
 				  unsigned int len, unsigned int offs,
 				  u64 lblk_num);
@@ -537,6 +567,14 @@ static inline int fscrypt_decrypt_block_inplace(const struct inode *inode,
 						struct page *page,
 						unsigned int len,
 						unsigned int offs, u64 lblk_num)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int
+fscrypt_crypt_fs_layer_page_inplace(const struct inode *inode,
+				    struct page *page, unsigned int len,
+				    unsigned int offs, u64 dun, bool encrypt)
 {
 	return -EOPNOTSUPP;
 }

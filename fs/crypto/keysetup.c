@@ -144,6 +144,130 @@ err_free_tfm:
 	return ERR_PTR(err);
 }
 
+static int fscrypt_prepare_software_key(struct fscrypt_prepared_key *prep_key,
+					const u8 *raw_key,
+					const struct fscrypt_inode_info *ci)
+{
+	struct crypto_sync_skcipher *tfm;
+
+	tfm = fscrypt_allocate_skcipher(ci->ci_mode, raw_key, ci->ci_inode);
+	if (IS_ERR(tfm))
+		return PTR_ERR(tfm);
+	/*
+	 * Pairs with fscrypt_is_key_prepared() and
+	 * fscrypt_fs_layer_key_prepared().
+	 */
+	smp_store_release(&prep_key->tfm, tfm);
+	return 0;
+}
+
+#ifdef CONFIG_FS_ENCRYPTION_INLINE_CRYPT
+static int
+fscrypt_derive_v2_fs_layer_key(const struct fscrypt_inode_info *ci,
+			       const struct fscrypt_master_key *mk,
+			       u8 *raw_key)
+{
+	const struct super_block *sb = ci->ci_inode->i_sb;
+	const u8 mode_num = ci->ci_mode - fscrypt_modes;
+	u8 hkdf_info[sizeof(mode_num) + sizeof(sb->s_uuid)];
+	u8 hkdf_context;
+	unsigned int hkdf_infolen = 0;
+	bool include_fs_uuid = false;
+
+	if (ci->ci_policy.v2.flags & FSCRYPT_POLICY_FLAG_DIRECT_KEY) {
+		hkdf_context = HKDF_CONTEXT_DIRECT_KEY;
+	} else if (ci->ci_policy.v2.flags & FSCRYPT_POLICY_FLAG_IV_INO_LBLK_64) {
+		hkdf_context = HKDF_CONTEXT_IV_INO_LBLK_64_KEY;
+		include_fs_uuid = true;
+	} else if (ci->ci_policy.v2.flags & FSCRYPT_POLICY_FLAG_IV_INO_LBLK_32) {
+		hkdf_context = HKDF_CONTEXT_IV_INO_LBLK_32_KEY;
+		include_fs_uuid = true;
+	} else {
+		fscrypt_hkdf_expand(&mk->mk_secret.hkdf,
+				    HKDF_CONTEXT_PER_FILE_ENC_KEY,
+				    ci->ci_nonce, FSCRYPT_FILE_NONCE_SIZE,
+				    raw_key, ci->ci_mode->keysize);
+		return 0;
+	}
+
+	/* Keep this per-mode KDF in sync with setup_per_mode_enc_key(). */
+	BUILD_BUG_ON(sizeof(mode_num) != 1);
+	BUILD_BUG_ON(sizeof(sb->s_uuid) != 16);
+	BUILD_BUG_ON(sizeof(hkdf_info) != 17);
+	hkdf_info[hkdf_infolen++] = mode_num;
+	if (include_fs_uuid) {
+		memcpy(&hkdf_info[hkdf_infolen], &sb->s_uuid,
+		       sizeof(sb->s_uuid));
+		hkdf_infolen += sizeof(sb->s_uuid);
+	}
+	fscrypt_hkdf_expand(&mk->mk_secret.hkdf, hkdf_context, hkdf_info,
+			    hkdf_infolen, raw_key, ci->ci_mode->keysize);
+	return 0;
+}
+
+static int
+fscrypt_derive_fs_layer_key(const struct fscrypt_inode_info *ci,
+			    const struct fscrypt_master_key *mk,
+			    u8 *raw_key)
+{
+	switch (ci->ci_policy.version) {
+	case FSCRYPT_POLICY_V1:
+		return -EOPNOTSUPP;
+	case FSCRYPT_POLICY_V2:
+		return fscrypt_derive_v2_fs_layer_key(ci, mk, raw_key);
+	default:
+		WARN_ON_ONCE(1);
+		return -EINVAL;
+	}
+}
+
+int fscrypt_prepare_fs_layer_key(struct fscrypt_inode_info *ci)
+{
+	struct fscrypt_master_key *mk = ci->ci_master_key;
+	u8 raw_key[FSCRYPT_MAX_RAW_KEY_SIZE];
+	int err = 0;
+
+	if (!fscrypt_using_inline_encryption(ci))
+		return -EOPNOTSUPP;
+	if (fscrypt_fs_layer_key_prepared(ci))
+		return 0;
+	if (!mk)
+		return -EOPNOTSUPP;
+
+	down_read(&mk->mk_sem);
+	if (!mk->mk_present) {
+		err = -ENOKEY;
+		goto out_unlock_key;
+	}
+	if (mk->mk_secret.is_hw_wrapped) {
+		err = -EOPNOTSUPP;
+		goto out_unlock_key;
+	}
+
+	mutex_lock(&fscrypt_mode_key_setup_mutex);
+	/* Another thread may have prepared the fs-layer key while we waited. */
+	if (fscrypt_fs_layer_key_prepared(ci))
+		goto out_unlock_mutex;
+	err = fscrypt_derive_fs_layer_key(ci, mk, raw_key);
+	if (!err) {
+		ci->ci_owns_fs_layer_key = true;
+		err = fscrypt_prepare_software_key(&ci->ci_fs_layer_key,
+						   raw_key, ci);
+	}
+	memzero_explicit(raw_key, ci->ci_mode->keysize);
+out_unlock_mutex:
+	mutex_unlock(&fscrypt_mode_key_setup_mutex);
+out_unlock_key:
+	up_read(&mk->mk_sem);
+	return err;
+}
+#else
+int fscrypt_prepare_fs_layer_key(struct fscrypt_inode_info *ci)
+{
+	return -EOPNOTSUPP;
+}
+#endif
+
 /*
  * Prepare the crypto transform object or blk-crypto key in @prep_key, given the
  * raw key, encryption mode (@ci->ci_mode), flag indicating which encryption
@@ -153,24 +277,12 @@ err_free_tfm:
 int fscrypt_prepare_key(struct fscrypt_prepared_key *prep_key,
 			const u8 *raw_key, const struct fscrypt_inode_info *ci)
 {
-	struct crypto_sync_skcipher *tfm;
-
 	if (fscrypt_using_inline_encryption(ci))
 		return fscrypt_prepare_inline_crypt_key(prep_key, raw_key,
 							ci->ci_mode->keysize,
 							false, ci);
 
-	tfm = fscrypt_allocate_skcipher(ci->ci_mode, raw_key, ci->ci_inode);
-	if (IS_ERR(tfm))
-		return PTR_ERR(tfm);
-	/*
-	 * Pairs with the smp_load_acquire() in fscrypt_is_key_prepared().
-	 * I.e., here we publish ->tfm with a RELEASE barrier so that
-	 * concurrent tasks can ACQUIRE it.  Note that this concurrency is only
-	 * possible for per-mode keys, not for per-file keys.
-	 */
-	smp_store_release(&prep_key->tfm, tfm);
-	return 0;
+	return fscrypt_prepare_software_key(prep_key, raw_key, ci);
 }
 
 /* Destroy a crypto transform object and/or blk-crypto key. */
@@ -558,6 +670,11 @@ static void put_crypt_info(struct fscrypt_inode_info *ci)
 	else if (ci->ci_owns_key)
 		fscrypt_destroy_prepared_key(ci->ci_inode->i_sb,
 					     &ci->ci_enc_key);
+#ifdef CONFIG_FS_ENCRYPTION_INLINE_CRYPT
+	if (ci->ci_owns_fs_layer_key)
+		fscrypt_destroy_prepared_key(ci->ci_inode->i_sb,
+					     &ci->ci_fs_layer_key);
+#endif
 
 	mk = ci->ci_master_key;
 	if (mk) {

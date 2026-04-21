@@ -266,6 +266,13 @@ struct fscrypt_inode_info {
 	 * the traditional filesystem-layer encryption.
 	 */
 	u8 ci_inlinecrypt : 1;
+
+	/*
+	 * Optional filesystem-layer software key for data regions that cannot
+	 * be handled by blk-crypto.
+	 */
+	struct fscrypt_prepared_key ci_fs_layer_key;
+	u8 ci_owns_fs_layer_key : 1;
 #endif
 
 	/* True if ci_dirhash_key is initialized */
@@ -322,6 +329,18 @@ struct fscrypt_inode_info {
 	/* This inode's nonce, copied from the fscrypt_context */
 	u8 ci_nonce[FSCRYPT_FILE_NONCE_SIZE];
 };
+
+#ifdef CONFIG_FS_ENCRYPTION_INLINE_CRYPT
+static inline bool
+fscrypt_fs_layer_key_prepared(const struct fscrypt_inode_info *ci)
+{
+	/*
+	 * Pairs with the smp_store_release() in
+	 * fscrypt_prepare_software_key().
+	 */
+	return smp_load_acquire(&ci->ci_fs_layer_key.tfm);
+}
+#endif
 
 typedef enum {
 	FS_DECRYPT = 0,
@@ -722,6 +741,7 @@ void fscrypt_destroy_prepared_key(struct super_block *sb,
 
 int fscrypt_set_per_file_enc_key(struct fscrypt_inode_info *ci,
 				 const u8 *raw_key);
+int fscrypt_prepare_fs_layer_key(struct fscrypt_inode_info *ci);
 
 void fscrypt_derive_dirhash_key(struct fscrypt_inode_info *ci,
 				const struct fscrypt_master_key *mk);

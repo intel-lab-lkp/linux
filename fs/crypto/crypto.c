@@ -144,6 +144,95 @@ int fscrypt_crypt_data_unit(const struct fscrypt_inode_info *ci,
 	return err;
 }
 
+static const struct fscrypt_prepared_key *
+fscrypt_fs_layer_key(const struct fscrypt_inode_info *ci)
+{
+#ifdef CONFIG_FS_ENCRYPTION_INLINE_CRYPT
+	if (!fscrypt_fs_layer_key_prepared(ci))
+		return NULL;
+	return &ci->ci_fs_layer_key;
+#else
+	return NULL;
+#endif
+}
+
+static int fscrypt_crypt_fs_layer_page_prepare(const struct inode *inode,
+				    const struct fscrypt_inode_info **ci_ret,
+				    const struct fscrypt_prepared_key **prep_key_ret)
+{
+	struct fscrypt_inode_info *ci = fscrypt_get_inode_info(inode);
+	const struct fscrypt_prepared_key *prep_key;
+	int err;
+
+	if (!ci)
+		return -ENOKEY;
+
+	err = fscrypt_prepare_fs_layer_key(ci);
+	if (err)
+		return err;
+	prep_key = fscrypt_fs_layer_key(ci);
+	if (!prep_key || !prep_key->tfm)
+		return -ENOKEY;
+
+	*ci_ret = ci;
+	*prep_key_ret = prep_key;
+	return 0;
+}
+
+static int
+fscrypt_crypt_page_inplace_with_key(const struct fscrypt_inode_info *ci,
+				    const struct fscrypt_prepared_key *prep_key,
+				    struct page *page, unsigned int len,
+				    unsigned int offs, u64 dun, bool encrypt)
+{
+	struct crypto_sync_skcipher *tfm = prep_key->tfm;
+
+	SYNC_SKCIPHER_REQUEST_ON_STACK(req, tfm);
+	union fscrypt_iv iv;
+	struct scatterlist sg;
+	int err;
+
+	if (WARN_ON_ONCE(len <= 0))
+		return -EINVAL;
+	if (WARN_ON_ONCE(len % FSCRYPT_CONTENTS_ALIGNMENT != 0))
+		return -EINVAL;
+
+	fscrypt_generate_iv(&iv, dun, ci);
+
+	skcipher_request_set_callback(req, CRYPTO_TFM_REQ_MAY_BACKLOG |
+				       CRYPTO_TFM_REQ_MAY_SLEEP, NULL, NULL);
+	sg_init_table(&sg, 1);
+	sg_set_page(&sg, page, len, offs);
+	skcipher_request_set_crypt(req, &sg, &sg, len, &iv);
+	if (encrypt)
+		err = crypto_skcipher_encrypt(req);
+	else
+		err = crypto_skcipher_decrypt(req);
+	if (err)
+		fscrypt_err(ci->ci_inode,
+			    "%scryption failed for data unit %llu: %d",
+			    (encrypt ? "En" : "De"), dun, err);
+	return err;
+}
+
+int fscrypt_crypt_fs_layer_page_inplace(const struct inode *inode,
+					struct page *page, unsigned int len,
+					unsigned int offs, u64 dun,
+					bool encrypt)
+{
+	const struct fscrypt_inode_info *ci;
+	const struct fscrypt_prepared_key *prep_key;
+	int err;
+
+	err = fscrypt_crypt_fs_layer_page_prepare(inode, &ci, &prep_key);
+	if (err)
+		return err;
+
+	return fscrypt_crypt_page_inplace_with_key(ci, prep_key, page, len, offs,
+					       dun, encrypt);
+}
+EXPORT_SYMBOL_GPL(fscrypt_crypt_fs_layer_page_inplace);
+
 /**
  * fscrypt_encrypt_pagecache_blocks() - Encrypt data from a pagecache folio
  * @folio: the locked pagecache folio containing the data to encrypt
