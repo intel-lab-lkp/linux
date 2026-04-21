@@ -12,9 +12,75 @@
 #include <syscall.h>
 #include <sys/mount.h>
 #include <sys/wait.h>
+#include <unistd.h>
 
 #include "kselftest_harness.h"
 #include "../pidfd/pidfd.h"
+
+/*
+ * The kernel computes the minimum allowed pid_max as:
+ *   max(RESERVED_PIDS + 1, PIDS_PER_CPU_MIN * num_possible_cpus())
+ * Mirror that here so the test values are always valid.
+ *
+ * Note: glibc's get_nprocs_conf() returns the number of *configured*
+ * (present) CPUs, not *possible* CPUs.  The kernel uses
+ * num_possible_cpus() which corresponds to /sys/devices/system/cpu/possible.
+ * These can differ significantly (e.g. 16 configured vs 128 possible).
+ */
+#define RESERVED_PIDS		300
+#define PIDS_PER_CPU_MIN	8
+
+/* Count CPUs from a range list like "0-31" or "0-15,32-47". */
+static int num_possible_cpus(void)
+{
+	FILE *f;
+	int count = 0;
+	int lo, hi;
+
+	f = fopen("/sys/devices/system/cpu/possible", "r");
+	if (!f)
+		return 0;
+
+	while (fscanf(f, "%d", &lo) == 1) {
+		if (fscanf(f, "-%d", &hi) == 1)
+			count += hi - lo + 1;
+		else
+			count++;
+		/* skip comma separator */
+		fscanf(f, ",");
+	}
+
+	fclose(f);
+	return count;
+}
+
+static int pid_min(void)
+{
+	int cpu_min = PIDS_PER_CPU_MIN * num_possible_cpus();
+
+	return cpu_min > (RESERVED_PIDS + 1) ? cpu_min : (RESERVED_PIDS + 1);
+}
+
+struct pid_max_cfg {
+	int outer;
+	int inner;
+};
+
+/*
+ * Outer and inner pid_max limits used by the tests.  The outer limit is
+ * the more restrictive ancestor; the inner limit is set higher in a
+ * nested namespace but must still be capped by the outer limit.
+ * Both are derived from the kernel's minimum so they are always writable.
+ */
+#define PID_MAX_CFG_INIT { .outer = pid_min() + 100, .inner = pid_min() + 200 }
+
+static int write_int_to_fd(int fd, int val)
+{
+	char buf[24];
+	int len = snprintf(buf, sizeof(buf), "%d", val);
+
+	return write(fd, buf, len);
+}
 
 #define __STACK_SIZE (8 * 1024 * 1024)
 static pid_t do_clone(int (*fn)(void *), void *arg, int flags)
@@ -37,6 +103,7 @@ static pid_t do_clone(int (*fn)(void *), void *arg, int flags)
 
 static int pid_max_cb(void *data)
 {
+	struct pid_max_cfg *cfg = data;
 	int fd, ret;
 	pid_t pid;
 
@@ -60,18 +127,18 @@ static int pid_max_cb(void *data)
 		return -1;
 	}
 
-	ret = write(fd, "500", sizeof("500") - 1);
+	ret = write_int_to_fd(fd, cfg->inner);
 	if (ret < 0) {
 		fprintf(stderr, "%m - Failed to write pid_max\n");
 		return -1;
 	}
 
-	for (int i = 0; i < 501; i++) {
+	for (int i = 0; i < cfg->inner + 1; i++) {
 		pid = fork();
 		if (pid == 0)
 			exit(EXIT_SUCCESS);
 		wait_for_pid(pid);
-		if (pid > 500) {
+		if (pid > cfg->inner) {
 			fprintf(stderr, "Managed to create pid number beyond limit\n");
 			return -1;
 		}
@@ -82,6 +149,7 @@ static int pid_max_cb(void *data)
 
 static int pid_max_nested_inner(void *data)
 {
+	struct pid_max_cfg *cfg = data;
 	int fret = -1;
 	pid_t pids[2];
 	int fd, i, ret;
@@ -106,7 +174,7 @@ static int pid_max_nested_inner(void *data)
 		return fret;
 	}
 
-	ret = write(fd, "500", sizeof("500") - 1);
+	ret = write_int_to_fd(fd, cfg->inner);
 	close(fd);
 	if (ret < 0) {
 		fprintf(stderr, "%m - Failed to write pid_max\n");
@@ -133,8 +201,8 @@ static int pid_max_nested_inner(void *data)
 		return fret;
 	}
 
-	/* Now make sure that we wrap pids at 400. */
-	for (i = 0; i < 510; i++) {
+	/* Now make sure that we wrap pids at outer_limit. */
+	for (i = 0; i < cfg->inner + 10; i++) {
 		pid_t pid;
 
 		pid = fork();
@@ -145,7 +213,7 @@ static int pid_max_nested_inner(void *data)
 			exit(EXIT_SUCCESS);
 
 		wait_for_pid(pid);
-		if (pid >= 500) {
+		if (pid >= cfg->inner) {
 			fprintf(stderr, "Managed to create process with pid %d beyond configured limit\n", pid);
 			return fret;
 		}
@@ -156,15 +224,20 @@ static int pid_max_nested_inner(void *data)
 
 static int pid_max_nested_outer(void *data)
 {
-	int fret = -1, nr_procs = 400;
-	pid_t pids[1000];
-	int fd, i, ret;
+	struct pid_max_cfg *cfg = data;
+	int fret = -1, nr_procs = 0;
+	pid_t *pids;
+	int fd, ret;
 	pid_t pid;
+
+	pids = malloc(cfg->outer * sizeof(pid_t));
+	if (!pids)
+		return -1;
 
 	ret = mount("", "/", NULL, MS_PRIVATE | MS_REC, 0);
 	if (ret) {
 		fprintf(stderr, "%m - Failed to make rootfs private mount\n");
-		return fret;
+		goto out;
 	}
 
 	umount2("/proc", MNT_DETACH);
@@ -172,27 +245,27 @@ static int pid_max_nested_outer(void *data)
 	ret = mount("proc", "/proc", "proc", 0, NULL);
 	if (ret) {
 		fprintf(stderr, "%m - Failed to mount proc\n");
-		return fret;
+		goto out;
 	}
 
 	fd = open("/proc/sys/kernel/pid_max", O_RDWR | O_CLOEXEC | O_NOCTTY);
 	if (fd < 0) {
 		fprintf(stderr, "%m - Failed to open pid_max\n");
-		return fret;
+		goto out;
 	}
 
-	ret = write(fd, "400", sizeof("400") - 1);
+	ret = write_int_to_fd(fd, cfg->outer);
 	close(fd);
 	if (ret < 0) {
 		fprintf(stderr, "%m - Failed to write pid_max\n");
-		return fret;
+		goto out;
 	}
 
 	/*
-	 * Create 397 processes. This leaves room for do_clone() (398) and
-	 * one more 399. So creating another process needs to fail.
+	 * Create (outer - 4) processes. This leaves room for do_clone()
+	 * and one more process. So creating another process needs to fail.
 	 */
-	for (nr_procs = 0; nr_procs < 396; nr_procs++) {
+	for (nr_procs = 0; nr_procs < cfg->outer - 4; nr_procs++) {
 		pid = fork();
 		if (pid < 0)
 			goto reap;
@@ -203,7 +276,7 @@ static int pid_max_nested_outer(void *data)
 		pids[nr_procs] = pid;
 	}
 
-	pid = do_clone(pid_max_nested_inner, NULL, CLONE_NEWPID | CLONE_NEWNS);
+	pid = do_clone(pid_max_nested_inner, cfg, CLONE_NEWPID | CLONE_NEWNS);
 	if (pid < 0) {
 		fprintf(stderr, "%m - Failed to clone nested pidns\n");
 		goto reap;
@@ -220,20 +293,27 @@ reap:
 	for (int i = 0; i < nr_procs; i++)
 		wait_for_pid(pids[i]);
 
+out:
+	free(pids);
 	return fret;
 }
 
 static int pid_max_nested_limit_inner(void *data)
 {
-	int fret = -1, nr_procs = 400;
+	struct pid_max_cfg *cfg = data;
+	int fret = -1, nr_procs = 0;
 	int fd, ret;
 	pid_t pid;
-	pid_t pids[1000];
+	pid_t *pids;
+
+	pids = malloc(cfg->inner * sizeof(pid_t));
+	if (!pids)
+		return -1;
 
 	ret = mount("", "/", NULL, MS_PRIVATE | MS_REC, 0);
 	if (ret) {
 		fprintf(stderr, "%m - Failed to make rootfs private mount\n");
-		return fret;
+		goto out;
 	}
 
 	umount2("/proc", MNT_DETACH);
@@ -241,23 +321,23 @@ static int pid_max_nested_limit_inner(void *data)
 	ret = mount("proc", "/proc", "proc", 0, NULL);
 	if (ret) {
 		fprintf(stderr, "%m - Failed to mount proc\n");
-		return fret;
+		goto out;
 	}
 
 	fd = open("/proc/sys/kernel/pid_max", O_RDWR | O_CLOEXEC | O_NOCTTY);
 	if (fd < 0) {
 		fprintf(stderr, "%m - Failed to open pid_max\n");
-		return fret;
+		goto out;
 	}
 
-	ret = write(fd, "500", sizeof("500") - 1);
+	ret = write_int_to_fd(fd, cfg->inner);
 	close(fd);
 	if (ret < 0) {
 		fprintf(stderr, "%m - Failed to write pid_max\n");
-		return fret;
+		goto out;
 	}
 
-	for (nr_procs = 0; nr_procs < 500; nr_procs++) {
+	for (nr_procs = 0; nr_procs < cfg->inner; nr_procs++) {
 		pid = fork();
 		if (pid < 0)
 			break;
@@ -268,7 +348,7 @@ static int pid_max_nested_limit_inner(void *data)
 		pids[nr_procs] = pid;
 	}
 
-	if (nr_procs >= 400) {
+	if (nr_procs >= cfg->outer) {
 		fprintf(stderr, "Managed to create processes beyond the configured outer limit\n");
 		goto reap;
 	}
@@ -279,11 +359,14 @@ reap:
 	for (int i = 0; i < nr_procs; i++)
 		wait_for_pid(pids[i]);
 
+out:
+	free(pids);
 	return fret;
 }
 
 static int pid_max_nested_limit_outer(void *data)
 {
+	struct pid_max_cfg *cfg = data;
 	int fd, ret;
 	pid_t pid;
 
@@ -307,14 +390,14 @@ static int pid_max_nested_limit_outer(void *data)
 		return -1;
 	}
 
-	ret = write(fd, "400", sizeof("400") - 1);
+	ret = write_int_to_fd(fd, cfg->outer);
 	close(fd);
 	if (ret < 0) {
 		fprintf(stderr, "%m - Failed to write pid_max\n");
 		return -1;
 	}
 
-	pid = do_clone(pid_max_nested_limit_inner, NULL, CLONE_NEWPID | CLONE_NEWNS);
+	pid = do_clone(pid_max_nested_limit_inner, cfg, CLONE_NEWPID | CLONE_NEWNS);
 	if (pid < 0) {
 		fprintf(stderr, "%m - Failed to clone nested pidns\n");
 		return -1;
@@ -330,28 +413,30 @@ static int pid_max_nested_limit_outer(void *data)
 
 TEST(pid_max_simple)
 {
+	struct pid_max_cfg cfg = PID_MAX_CFG_INIT;
 	pid_t pid;
 
-
-	pid = do_clone(pid_max_cb, NULL, CLONE_NEWPID | CLONE_NEWNS);
+	pid = do_clone(pid_max_cb, &cfg, CLONE_NEWPID | CLONE_NEWNS);
 	ASSERT_GT(pid, 0);
 	ASSERT_EQ(0, wait_for_pid(pid));
 }
 
 TEST(pid_max_nested_limit)
 {
+	struct pid_max_cfg cfg = PID_MAX_CFG_INIT;
 	pid_t pid;
 
-	pid = do_clone(pid_max_nested_limit_outer, NULL, CLONE_NEWPID | CLONE_NEWNS);
+	pid = do_clone(pid_max_nested_limit_outer, &cfg, CLONE_NEWPID | CLONE_NEWNS);
 	ASSERT_GT(pid, 0);
 	ASSERT_EQ(0, wait_for_pid(pid));
 }
 
 TEST(pid_max_nested)
 {
+	struct pid_max_cfg cfg = PID_MAX_CFG_INIT;
 	pid_t pid;
 
-	pid = do_clone(pid_max_nested_outer, NULL, CLONE_NEWPID | CLONE_NEWNS);
+	pid = do_clone(pid_max_nested_outer, &cfg, CLONE_NEWPID | CLONE_NEWNS);
 	ASSERT_GT(pid, 0);
 	ASSERT_EQ(0, wait_for_pid(pid));
 }
