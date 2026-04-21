@@ -21,6 +21,18 @@
  */
 
 /*
+ * Optional: only supported since gcc >= 11
+ * Optional: not supported by clang
+ *
+ *   gcc: https://gcc.gnu.org/onlinedocs/gcc/Common-Attributes.html#index-access
+ */
+#if __has_attribute(__access__)
+# define __access(x, ...)		__attribute__((__access__(x, ## __VA_ARGS__)))
+#else
+# define __access(x, ...)
+#endif
+
+/*
  *   gcc: https://gcc.gnu.org/onlinedocs/gcc/Common-Function-Attributes.html#index-alias-function-attribute
  */
 #define __alias(symbol)                 __attribute__((__alias__(#symbol)))
