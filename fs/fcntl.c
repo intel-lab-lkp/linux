@@ -349,6 +349,7 @@ static bool rw_hint_valid(u64 hint)
 	case RWH_WRITE_LIFE_MEDIUM:
 	case RWH_WRITE_LIFE_LONG:
 	case RWH_WRITE_LIFE_EXTREME:
+	case RWH_RMAP_EXCLUDE:
 		return true;
 	default:
 		return false;

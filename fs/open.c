@@ -46,6 +46,10 @@ int do_truncate(struct mnt_idmap *idmap, struct dentry *dentry,
 	if (length < 0)
 		return -EINVAL;
 
+	/* Prevent truncate on files marked as RMAP_EXCLUDE (e.g., libc, ld.so) */
+	if (filp && (filp->f_mode & FMODE_RMAP_EXCLUDE))
+		return -EPERM;
+
 	newattrs.ia_size = length;
 	newattrs.ia_valid = ATTR_SIZE | time_attrs;
 	if (filp) {
@@ -892,6 +896,8 @@ static int do_dentry_open(struct file *f,
 	path_get(&f->f_path);
 	f->f_inode = inode;
 	f->f_mapping = inode->i_mapping;
+	if (inode->i_write_hint == RWH_RMAP_EXCLUDE)
+		f->f_mode |= FMODE_RMAP_EXCLUDE;
 	f->f_wb_err = filemap_sample_wb_err(f->f_mapping);
 	f->f_sb_err = file_sample_sb_err(f);
 

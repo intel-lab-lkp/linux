@@ -72,6 +72,7 @@
 #define RWH_WRITE_LIFE_MEDIUM	3
 #define RWH_WRITE_LIFE_LONG	4
 #define RWH_WRITE_LIFE_EXTREME	5
+#define RWH_RMAP_EXCLUDE	6
 
 /*
  * The originally introduced spelling is remained from the first

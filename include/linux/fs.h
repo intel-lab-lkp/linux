@@ -189,6 +189,9 @@ typedef int (dio_iodone_t)(struct kiocb *iocb, loff_t offset,
 /* File does not contribute to nr_files count */
 #define FMODE_NOACCOUNT		((__force fmode_t)(1 << 29))
 
+/* File should exclude vma from rmap interval tree */
+#define FMODE_RMAP_EXCLUDE	((__force fmode_t)(1 << 30))
+
 /*
  * The two FMODE_NONOTIFY* define which fsnotify events should not be generated
  * for an open file. These are the possible values of

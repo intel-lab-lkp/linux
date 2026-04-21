@@ -234,7 +234,8 @@ static void __vma_link_file(struct vm_area_struct *vma,
 		mapping_allow_writable(mapping);
 
 	flush_dcache_mmap_lock(mapping);
-	vma_interval_tree_insert(vma, &mapping->i_mmap);
+	if (!(vma->vm_file->f_mode & FMODE_RMAP_EXCLUDE))
+		vma_interval_tree_insert(vma, &mapping->i_mmap);
 	flush_dcache_mmap_unlock(mapping);
 }
 
@@ -339,10 +340,11 @@ static void vma_complete(struct vma_prepare *vp, struct vma_iterator *vmi,
 			 struct mm_struct *mm)
 {
 	if (vp->file) {
-		if (vp->adj_next)
+		if (vp->adj_next && !(vp->adj_next->vm_file->f_mode & FMODE_RMAP_EXCLUDE))
 			vma_interval_tree_insert(vp->adj_next,
 						 &vp->mapping->i_mmap);
-		vma_interval_tree_insert(vp->vma, &vp->mapping->i_mmap);
+		if (!(vp->vma->vm_file->f_mode & FMODE_RMAP_EXCLUDE))
+			vma_interval_tree_insert(vp->vma, &vp->mapping->i_mmap);
 		flush_dcache_mmap_unlock(vp->mapping);
 	}
 
