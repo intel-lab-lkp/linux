@@ -1850,6 +1850,35 @@ The following nested keys are defined.
 	Swap usage hard limit.  If a cgroup's swap usage reaches this
 	limit, anonymous memory of the cgroup will not be swapped out.
 
+  memory.swap.tiers
+        A read-write file which exists on non-root cgroups.
+        Format is similar to cgroup.subtree_control.
+
+        Controls which swap tiers this cgroup is allowed to swap
+        out to. All tiers are enabled by default.
+
+        ::
+
+            (-|+)TIER [(-|+)TIER ...]
+
+        "-" disables a tier, "+" re-enables it.
+        Entries are whitespace-delimited.
+
+        Changes here are combined with parent restrictions to
+        compute memory.swap.tiers.effective.
+
+        If a tier is removed from /sys/kernel/mm/swap/tiers,
+        any prior disable for that tier is invalidated.
+
+  memory.swap.tiers.effective
+        A read-only file which exists on non-root cgroups.
+
+        Shows the tiers this cgroup can actually swap out to.
+        This is the intersection of the parent's effective tiers
+        and this cgroup's own memory.swap.tiers configuration.
+        A child cannot enable a tier that is disabled in its
+        parent.
+
   memory.swap.events
 	A read-only flat-keyed file which exists on non-root cgroups.
 	The following entries are defined.  Unless specified
