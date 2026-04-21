@@ -2023,7 +2023,7 @@ static void scsi_finish_async_scan(struct async_scan_data *data)
 	kfree(data);
 }
 
-static void do_scsi_scan_host(struct Scsi_Host *shost)
+void do_scsi_scan_host(struct Scsi_Host *shost)
 {
 	if (shost->hostt->scan_finished) {
 		unsigned long start = jiffies;
@@ -2037,6 +2037,7 @@ static void do_scsi_scan_host(struct Scsi_Host *shost)
 				SCAN_WILD_CARD, SCSI_SCAN_INITIAL);
 	}
 }
+EXPORT_SYMBOL(do_scsi_scan_host);
 
 static void do_scan_async(void *_data, async_cookie_t c)
 {

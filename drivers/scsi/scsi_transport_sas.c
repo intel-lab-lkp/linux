@@ -1703,6 +1703,20 @@ static void scan_channel_zero(struct Scsi_Host *shost, uint id, u64 lun)
 }
 
 /*
+ * For wildcard scans on hosts that provide a scan_start method,
+ * use that instead of blindly scanning everything.
+ */
+static int sas_user_scan_with_scan_start(struct Scsi_Host *shost)
+{
+	if (!shost->hostt->scan_finished || !shost->hostt->scan_start)
+		return 1;
+
+	/* scan_finished exists, thus do_scsi_scan_host() will use it  */
+	do_scsi_scan_host(shost);
+	return 0;
+}
+
+/*
  * SCSI scan helper
  */
 
@@ -1721,6 +1735,11 @@ static int sas_user_scan(struct Scsi_Host *shost, uint channel,
 		break;
 
 	case SCAN_WILD_CARD:
+
+		if (id == SCAN_WILD_CARD && lun == SCAN_WILD_CARD
+			&& !sas_user_scan_with_scan_start(shost))
+			return 0;
+
 		mutex_lock(&sas_host->lock);
 		scan_channel_zero(shost, id, lun);
 		mutex_unlock(&sas_host->lock);

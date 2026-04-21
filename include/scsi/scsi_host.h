@@ -806,6 +806,7 @@ scsi_template_proc_dir(const struct scsi_host_template *sht);
 #else
 #define scsi_template_proc_dir(sht) NULL
 #endif
+extern void do_scsi_scan_host(struct Scsi_Host *shost);
 extern void scsi_scan_host(struct Scsi_Host *);
 extern int scsi_resume_device(struct scsi_device *sdev);
 extern int scsi_rescan_device(struct scsi_device *sdev);
