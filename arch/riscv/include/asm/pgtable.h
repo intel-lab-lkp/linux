@@ -11,6 +11,10 @@
 
 #include <asm/pgtable-bits.h>
 
+#ifndef __ASSEMBLER__
+#include <asm/cmpxchg.h>
+#endif
+
 #ifndef CONFIG_MMU
 #ifdef CONFIG_RELOCATABLE
 #define KERNEL_LINK_ADDR	UL(0)
@@ -316,6 +320,12 @@ static inline unsigned long pte_napot(pte_t pte)
 	return 0;
 }
 
+static inline pte_t pte_mknapot(pte_t pte, unsigned int order)
+{
+	(void)order;
+	return pte;
+}
+
 #endif /* CONFIG_RISCV_ISA_SVNAPOT */
 
 /* Yields the page frame number (PFN) of a page table entry */
@@ -352,6 +362,11 @@ static inline pgprot_t pte_pgprot(pte_t pte)
 static inline int pte_present(pte_t pte)
 {
 	return (pte_val(pte) & (_PAGE_PRESENT | _PAGE_PROT_NONE));
+}
+
+static inline bool pte_present_napot(pte_t pte)
+{
+	return pte_present(pte) && pte_napot(pte);
 }
 
 #define pte_accessible pte_accessible
@@ -405,6 +420,23 @@ static inline int pte_young(pte_t pte)
 static inline int pte_special(pte_t pte)
 {
 	return pte_val(pte) & _PAGE_SPECIAL;
+}
+
+static inline pte_t pte_mknonnapot(pte_t pte, unsigned long addr)
+{
+	unsigned long pfn;
+	unsigned long offset;
+	pgprot_t prot;
+
+	if (!pte_present_napot(pte))
+		return pte;
+
+	offset = (addr & (napot_cont_size(napot_cont_order(pte)) - 1)) >>
+		 PAGE_SHIFT;
+	pfn = pte_pfn(pte) + offset;
+	prot = __pgprot((pte_val(pte) & ~_PAGE_PFN_MASK) & ~_PAGE_NAPOT);
+
+	return pfn_pte(pfn, prot);
 }
 
 /* static inline pte_t pte_rdprotect(pte_t pte) */
@@ -657,22 +689,10 @@ static inline void __set_ptes(struct mm_struct *mm, unsigned long addr,
 
 #define __set_ptes __set_ptes
 
-static inline void set_ptes(struct mm_struct *mm, unsigned long addr,
-			    pte_t *ptep, pte_t pteval, unsigned int nr)
-{
-	__set_ptes(mm, addr, ptep, pteval, nr);
-}
-
 static inline void __pte_clear(struct mm_struct *mm,
 			       unsigned long addr, pte_t *ptep)
 {
 	__set_pte_at(mm, ptep, __pte(0));
-}
-
-static inline void pte_clear(struct mm_struct *mm,
-	unsigned long addr, pte_t *ptep)
-{
-	__pte_clear(mm, addr, ptep);
 }
 
 #define __ptep_get __ptep_get
@@ -685,6 +705,47 @@ static inline pte_t __ptep_get(pte_t *ptep)
 static inline pte_t __ptep_get_lockless(pte_t *ptep)
 {
 	return __ptep_get(ptep);
+}
+
+static inline void __clear_young_dirty_pte(struct vm_area_struct *vma,
+					   unsigned long addr, pte_t *ptep,
+					   pte_t pte, cydp_t flags)
+{
+	pte_t old_pte;
+
+	do {
+		old_pte = pte;
+
+		if (flags & CYDP_CLEAR_YOUNG)
+			pte = pte_mkold(pte);
+		if (flags & CYDP_CLEAR_DIRTY)
+			pte = pte_mkclean(pte);
+
+		pte_val(pte) = cmpxchg_relaxed(&pte_val(*ptep),
+					       pte_val(old_pte),
+					       pte_val(pte));
+	} while (pte_val(pte) != pte_val(old_pte));
+}
+
+static inline void __clear_young_dirty_ptes(struct vm_area_struct *vma,
+					    unsigned long addr, pte_t *ptep,
+					    unsigned int nr, cydp_t flags)
+{
+	pte_t pte;
+
+	for (;;) {
+		pte = __ptep_get(ptep);
+
+		if (flags == (CYDP_CLEAR_YOUNG | CYDP_CLEAR_DIRTY))
+			__set_pte(ptep, pte_mkclean(pte_mkold(pte)));
+		else
+			__clear_young_dirty_pte(vma, addr, ptep, pte, flags);
+
+		if (--nr == 0)
+			break;
+		ptep++;
+		addr += PAGE_SIZE;
+	}
 }
 
 #define __HAVE_ARCH_PTEP_SET_ACCESS_FLAGS	/* defined in mm/pgtable.c */
@@ -718,12 +779,6 @@ __ptep_get_and_clear(struct mm_struct *mm, unsigned long address, pte_t *ptep)
 
 #define __ptep_get_and_clear __ptep_get_and_clear
 
-static inline pte_t ptep_get_and_clear(struct mm_struct *mm,
-				       unsigned long address, pte_t *ptep)
-{
-	return __ptep_get_and_clear(mm, address, ptep);
-}
-
 static inline void
 __ptep_set_wrprotect(struct mm_struct *mm, unsigned long address, pte_t *ptep)
 {
@@ -740,13 +795,6 @@ __ptep_set_wrprotect(struct mm_struct *mm, unsigned long address, pte_t *ptep)
 
 #define __ptep_set_wrprotect __ptep_set_wrprotect
 
-#define __HAVE_ARCH_PTEP_SET_WRPROTECT
-static inline void ptep_set_wrprotect(struct mm_struct *mm,
-				      unsigned long address, pte_t *ptep)
-{
-	__ptep_set_wrprotect(mm, address, ptep);
-}
-
 static inline pte_t __ptep_clear_flush(struct vm_area_struct *vma,
 				       unsigned long address,
 				       pte_t *ptep)
@@ -759,9 +807,8 @@ static inline pte_t __ptep_clear_flush(struct vm_area_struct *vma,
 	return pte;
 }
 
-#define __HAVE_ARCH_PTEP_CLEAR_YOUNG_FLUSH
-static inline bool ptep_clear_flush_young(struct vm_area_struct *vma,
-		unsigned long address, pte_t *ptep)
+static inline bool __ptep_clear_flush_young(struct vm_area_struct *vma,
+					    unsigned long address, pte_t *ptep)
 {
 	/*
 	 * This comment is borrowed from x86, but applies equally to RISC-V:
@@ -778,8 +825,191 @@ static inline bool ptep_clear_flush_young(struct vm_area_struct *vma,
 	 * shouldn't really matter because there's no real memory
 	 * pressure for swapout to react to. ]
 	 */
-	return ptep_test_and_clear_young(vma, address, ptep);
+	return __ptep_test_and_clear_young(vma, address, ptep);
 }
+
+#define __ptep_clear_flush_young __ptep_clear_flush_young
+
+#ifdef CONFIG_RISCV_ISA_SVNAPOT
+
+/*
+ * The Svnapot helpers transparently manage napot-encoded PTEs for the public
+ * core-MM-facing API below. The napot bit is a private implementation detail
+ * of those public helpers. Callers that need direct access to the underlying
+ * PTE encoding must use the low-level __* helpers instead.
+ */
+void __napotpte_try_fold(struct mm_struct *mm, unsigned long addr,
+			 pte_t *ptep, pte_t pte);
+void __napotpte_try_unfold(struct mm_struct *mm, unsigned long addr,
+			   pte_t *ptep, pte_t pte);
+pte_t napotpte_ptep_get(pte_t *ptep, pte_t orig_pte);
+pte_t napotpte_ptep_get_lockless(pte_t *ptep);
+void napotpte_set_ptes(struct mm_struct *mm, unsigned long addr,
+		       pte_t *ptep, pte_t pte, unsigned int nr);
+void napotpte_clear_young_dirty_ptes(struct vm_area_struct *vma,
+				     unsigned long addr, pte_t *ptep,
+			     unsigned int nr, cydp_t flags);
+bool napotpte_ptep_set_access_flags(struct vm_area_struct *vma,
+				    unsigned long address, pte_t *ptep,
+			    pte_t entry, int dirty);
+bool napotpte_ptep_test_and_clear_young(struct vm_area_struct *vma,
+					unsigned long address, pte_t *ptep);
+bool napotpte_ptep_clear_flush_young(struct vm_area_struct *vma,
+				     unsigned long address, pte_t *ptep);
+
+static __always_inline bool riscv_pte_present_napot(pte_t pte)
+{
+	return riscv_has_extension_unlikely(RISCV_ISA_EXT_SVNAPOT) &&
+	       pte_present_napot(pte);
+}
+
+static __always_inline void
+napotpte_try_fold(struct mm_struct *mm, unsigned long addr, pte_t *ptep,
+		  pte_t pte)
+{
+	const unsigned long contmask = napot_pte_num(NAPOT_CONT64KB_ORDER) - 1;
+	bool valign = ((addr >> PAGE_SHIFT) & contmask) == contmask;
+
+	if (unlikely(valign)) {
+		bool palign = (pte_pfn(pte) & contmask) == contmask;
+
+		if (unlikely(palign && pte_present(pte) && !pte_napot(pte) &&
+			     !pte_special(pte)))
+			__napotpte_try_fold(mm, addr, ptep, pte);
+	}
+}
+
+static __always_inline void
+napotpte_try_unfold(struct mm_struct *mm, unsigned long addr, pte_t *ptep,
+		    pte_t pte)
+{
+	if (unlikely(pte_present_napot(pte)))
+		__napotpte_try_unfold(mm, addr, ptep, pte);
+}
+
+#define set_ptes set_ptes
+static inline void set_ptes(struct mm_struct *mm, unsigned long addr,
+			    pte_t *ptep, pte_t pteval, unsigned int nr)
+{
+	pteval = pte_mknonnapot(pteval, addr);
+
+	if (likely(nr == 1)) {
+		napotpte_try_unfold(mm, addr, ptep, __ptep_get(ptep));
+		__set_ptes(mm, addr, ptep, pteval, 1);
+		napotpte_try_fold(mm, addr, ptep, pteval);
+		return;
+	}
+
+	napotpte_set_ptes(mm, addr, ptep, pteval, nr);
+}
+
+static inline void pte_clear(struct mm_struct *mm,
+			     unsigned long addr, pte_t *ptep)
+{
+	napotpte_try_unfold(mm, addr, ptep, __ptep_get(ptep));
+	__pte_clear(mm, addr, ptep);
+}
+
+#define ptep_get ptep_get
+static inline pte_t ptep_get(pte_t *ptep)
+{
+	pte_t pte = __ptep_get(ptep);
+
+	if (likely(!pte_present_napot(pte)))
+		return pte;
+
+	return napotpte_ptep_get(ptep, pte);
+}
+
+#define ptep_get_lockless ptep_get_lockless
+static inline pte_t ptep_get_lockless(pte_t *ptep)
+{
+	pte_t pte = __ptep_get_lockless(ptep);
+
+	if (likely(!pte_present_napot(pte)))
+		return pte;
+
+	return napotpte_ptep_get_lockless(ptep);
+}
+
+static inline pte_t ptep_get_and_clear(struct mm_struct *mm,
+				       unsigned long address, pte_t *ptep)
+{
+	napotpte_try_unfold(mm, address, ptep, __ptep_get(ptep));
+
+	return __ptep_get_and_clear(mm, address, ptep);
+}
+
+#define clear_young_dirty_ptes clear_young_dirty_ptes
+static inline void clear_young_dirty_ptes(struct vm_area_struct *vma,
+					  unsigned long addr, pte_t *ptep,
+				  unsigned int nr, cydp_t flags)
+{
+	napotpte_clear_young_dirty_ptes(vma, addr, ptep, nr, flags);
+}
+
+#define __HAVE_ARCH_PTEP_SET_WRPROTECT
+static inline void ptep_set_wrprotect(struct mm_struct *mm,
+				      unsigned long address, pte_t *ptep)
+{
+	__ptep_set_wrprotect(mm, address, ptep);
+}
+
+#define __HAVE_ARCH_PTEP_CLEAR_YOUNG_FLUSH
+static inline bool ptep_clear_flush_young(struct vm_area_struct *vma,
+					  unsigned long address, pte_t *ptep)
+{
+	pte_t orig_pte = __ptep_get(ptep);
+
+	if (likely(!riscv_pte_present_napot(orig_pte)))
+		return __ptep_clear_flush_young(vma, address, ptep);
+
+	return napotpte_ptep_clear_flush_young(vma, address, ptep);
+}
+
+#else /* CONFIG_RISCV_ISA_SVNAPOT */
+
+static __always_inline bool riscv_pte_present_napot(pte_t pte)
+{
+	return false;
+}
+
+static inline bool napotpte_ptep_set_access_flags(struct vm_area_struct *vma,
+						  unsigned long address,
+					  pte_t *ptep, pte_t entry,
+					  int dirty)
+{
+	return false;
+}
+
+static inline bool
+napotpte_ptep_test_and_clear_young(struct vm_area_struct *vma,
+				   unsigned long address,
+					   pte_t *ptep)
+{
+	return false;
+}
+
+static inline bool
+napotpte_ptep_clear_flush_young(struct vm_area_struct *vma,
+				unsigned long address,
+					pte_t *ptep)
+{
+	return false;
+}
+
+#define set_ptes				__set_ptes
+#define pte_clear				__pte_clear
+#define ptep_get				__ptep_get
+#define ptep_get_lockless			__ptep_get_lockless
+#define ptep_get_and_clear			__ptep_get_and_clear
+#define clear_young_dirty_ptes			__clear_young_dirty_ptes
+#define __HAVE_ARCH_PTEP_SET_WRPROTECT
+#define ptep_set_wrprotect			__ptep_set_wrprotect
+#define __HAVE_ARCH_PTEP_CLEAR_YOUNG_FLUSH
+#define ptep_clear_flush_young			__ptep_clear_flush_young
+
+#endif /* CONFIG_RISCV_ISA_SVNAPOT */
 
 #define pgprot_nx pgprot_nx
 static inline pgprot_t pgprot_nx(pgprot_t _prot)
