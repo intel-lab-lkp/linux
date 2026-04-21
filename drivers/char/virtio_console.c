@@ -27,6 +27,7 @@
 #include <linux/module.h>
 #include <linux/dma-mapping.h>
 #include <linux/string_choices.h>
+#include <linux/timekeeping.h>
 #include "../tty/hvc/hvc_console.h"
 
 #define is_rproc_enabled IS_ENABLED(CONFIG_REMOTEPROC)
@@ -601,6 +602,7 @@ static ssize_t __send_to_port(struct port *port, struct scatterlist *sg,
 	int err;
 	unsigned long flags;
 	unsigned int len;
+	u64 deadline;
 
 	out_vq = port->out_vq;
 
@@ -632,10 +634,18 @@ static ssize_t __send_to_port(struct port *port, struct scatterlist *sg,
 	 * buffer and relax the spinning requirement.  The downside is
 	 * we need to kmalloc a GFP_ATOMIC buffer each time the
 	 * console driver writes something out.
+	 *
+	 * To avoid spinning forever if the host stops processing the
+	 * TX virtqueue (e.g. during VM shutdown), a 200ms deadline is
+	 * used to break out of the loop as a fallback.
 	 */
-	while (!virtqueue_get_buf(out_vq, &len)
-		&& !virtqueue_is_broken(out_vq))
+	deadline = ktime_get_mono_fast_ns() + 200ULL * NSEC_PER_MSEC;
+	while (!virtqueue_get_buf(out_vq, &len) &&
+	       !virtqueue_is_broken(out_vq)) {
+		if (ktime_get_mono_fast_ns() >= deadline)
+			break;
 		cpu_relax();
+	}
 done:
 	spin_unlock_irqrestore(&port->outvq_lock, flags);
 
