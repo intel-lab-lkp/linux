@@ -1043,6 +1043,48 @@ void release_pages(release_pages_arg arg, int nr)
 }
 EXPORT_SYMBOL(release_pages);
 
+static inline void free_file_cache(struct folio *folio)
+{
+	if (folio_trylock(folio)) {
+		mapping_evict_folio(folio_mapping(folio), folio);
+		folio_unlock(folio);
+	}
+}
+
+/*
+ * Passed an array of pages, drop them all from swapcache and then release
+ * them.  They are removed from the LRU and freed if this is their last use.
+ *
+ * If @try_evict_file_folios is true, this function will proactively evict clean
+ * file-backed folios if they are no longer mapped.
+ */
+void free_pages_and_caches(struct mm_struct *mm, struct encoded_page **pages, int nr)
+{
+	bool try_evict_file_folios = mm_flags_test(MMF_UNSTABLE, mm);
+	struct folio_batch folios;
+	unsigned int refs[PAGEVEC_SIZE];
+
+	folio_batch_init(&folios);
+	for (int i = 0; i < nr; i++) {
+		struct folio *folio = page_folio(encoded_page_ptr(pages[i]));
+
+		if (folio_test_anon(folio))
+			free_swap_cache(folio);
+		else if (unlikely(try_evict_file_folios))
+			free_file_cache(folio);
+
+		refs[folios.nr] = 1;
+		if (unlikely(encoded_page_flags(pages[i]) &
+			     ENCODED_PAGE_BIT_NR_PAGES_NEXT))
+			refs[folios.nr] = encoded_nr_pages(pages[++i]);
+
+		if (folio_batch_add(&folios, folio) == 0)
+			folios_put_refs(&folios, refs);
+	}
+	if (folios.nr)
+		folios_put_refs(&folios, refs);
+}
+
 /*
  * The folios which we're about to release may be in the deferred lru-addition
  * queues.  That would prevent them from really being freed right now.  That's

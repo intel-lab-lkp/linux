@@ -414,7 +414,9 @@ extern int sysctl_min_unmapped_ratio;
 extern int sysctl_min_slab_ratio;
 #endif
 
+struct mm_struct;
 void check_move_unevictable_folios(struct folio_batch *fbatch);
+void free_pages_and_caches(struct mm_struct *mm, struct encoded_page **pages, int nr);
 
 extern void __meminit kswapd_run(int nid);
 extern void __meminit kswapd_stop(int nid);
@@ -433,7 +435,6 @@ static inline unsigned long total_swapcache_pages(void)
 
 void free_swap_cache(struct folio *folio);
 void free_folio_and_swap_cache(struct folio *folio);
-void free_pages_and_swap_cache(struct encoded_page **, int);
 /* linux/mm/swapfile.c */
 extern atomic_long_t nr_swap_pages;
 extern long total_swap_pages;
@@ -510,8 +511,6 @@ static inline void put_swap_device(struct swap_info_struct *si)
 	do { (val)->freeswap = (val)->totalswap = 0; } while (0)
 #define free_folio_and_swap_cache(folio) \
 	folio_put(folio)
-#define free_pages_and_swap_cache(pages, nr) \
-	release_pages((pages), (nr));
 
 static inline void free_swap_cache(struct folio *folio)
 {

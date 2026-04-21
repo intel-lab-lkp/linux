@@ -62,7 +62,7 @@ static inline bool __tlb_remove_folio_pages(struct mmu_gather *tlb,
 	VM_WARN_ON_ONCE(delay_rmap);
 	VM_WARN_ON_ONCE(page_folio(page) != page_folio(page + nr_pages - 1));
 
-	free_pages_and_swap_cache(encoded_pages, ARRAY_SIZE(encoded_pages));
+	free_pages_and_caches(tlb->mm, encoded_pages, ARRAY_SIZE(encoded_pages));
 	return false;
 }
 

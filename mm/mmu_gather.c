@@ -100,7 +100,8 @@ void tlb_flush_rmaps(struct mmu_gather *tlb, struct vm_area_struct *vma)
  */
 #define MAX_NR_FOLIOS_PER_FREE		512
 
-static void __tlb_batch_free_encoded_pages(struct mmu_gather_batch *batch)
+static void __tlb_batch_free_encoded_pages(struct mm_struct *mm,
+		struct mmu_gather_batch *batch)
 {
 	struct encoded_page **pages = batch->encoded_pages;
 	unsigned int nr, nr_pages;
@@ -135,7 +136,7 @@ static void __tlb_batch_free_encoded_pages(struct mmu_gather_batch *batch)
 			}
 		}
 
-		free_pages_and_swap_cache(pages, nr);
+		free_pages_and_caches(mm, pages, nr);
 		pages += nr;
 		batch->nr -= nr;
 
@@ -148,7 +149,7 @@ static void tlb_batch_pages_flush(struct mmu_gather *tlb)
 	struct mmu_gather_batch *batch;
 
 	for (batch = &tlb->local; batch && batch->nr; batch = batch->next)
-		__tlb_batch_free_encoded_pages(batch);
+		__tlb_batch_free_encoded_pages(tlb->mm, batch);
 	tlb->active = &tlb->local;
 }
 
