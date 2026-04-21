@@ -62,7 +62,6 @@ int skl_main_to_aux_plane(const struct drm_framebuffer *fb, int main_plane);
 unsigned int intel_tile_size(struct intel_display *display);
 unsigned int intel_tile_width_bytes(const struct drm_framebuffer *fb, int color_plane);
 unsigned int intel_tile_height(const struct drm_framebuffer *fb, int color_plane);
-unsigned int intel_tile_row_size(const struct drm_framebuffer *fb, int color_plane);
 unsigned int intel_fb_align_height(const struct drm_framebuffer *fb,
 				   int color_plane, unsigned int height);
 
@@ -78,7 +77,6 @@ u32 intel_plane_compute_aligned_offset(int *x, int *y,
 				       const struct intel_plane_state *plane_state,
 				       int color_plane);
 
-bool intel_fb_needs_pot_stride_remap(const struct intel_framebuffer *fb);
 bool intel_plane_uses_fence(const struct intel_plane_state *plane_state);
 bool intel_fb_supports_90_270_rotation(const struct intel_framebuffer *fb);
 
