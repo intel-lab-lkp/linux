@@ -111,13 +111,21 @@ static void kvm_route_msi(struct kvm_vm *vm, u32 gsi, struct kvm_vcpu *vcpu,
 	vm_ioctl(vm, KVM_SET_GSI_ROUTING, routes);
 }
 
+static void kvm_clear_gsi_routes(struct kvm_vm *vm)
+{
+	struct kvm_irq_routing routes = {};
+
+	vm_ioctl(vm, KVM_SET_GSI_ROUTING, &routes);
+}
+
 static void help(const char *name)
 {
-	printf("Usage: %s [-a] [-b] [-d <segment:bus:device.function>] [-h]\n", name);
+	printf("Usage: %s [-a] [-b] [-c] [-d <segment:bus:device.function>] [-h]\n", name);
 	printf("\n");
 	printf("Tests KVM IRQ injection via irqfd using an emulated eventfd.\n");
 	printf("-a	Randomly affinitize the device's host IRQ to different physical CPUs throughout the test\n");
 	printf("-b	Block vCPUs (e.g. HLT) instead of spinning in guest-mode\n");
+	printf("-c	Destroy and recreate KVM's GSI routing table in between some interrupts\n");
 	printf("-d	Use a VFIO device to send MSI-X interrupts instead of using an emulated eventfd\n");
 	printf("\n");
 	exit(KSFT_FAIL);
@@ -147,10 +155,11 @@ int main(int argc, char **argv)
 	int nr_irqs = 1000, nr_vcpus = 1;
 	const char *device_bdf = NULL;
 	FILE *irq_affinity_fp = NULL;
+	bool clear_routes = false;
 	struct iommu *iommu;
 	struct kvm_vm *vm;
 
-	while ((c = getopt(argc, argv, "abd:h")) != -1) {
+	while ((c = getopt(argc, argv, "abcd:h")) != -1) {
 		switch (c) {
 		case 'a':
 			irq_affinity = true;
@@ -160,6 +169,9 @@ int main(int argc, char **argv)
 			break;
 		case 'd':
 			device_bdf = optarg;
+			break;
+		case 'c':
+			clear_routes = true;
 			break;
 		case 'h':
 		default:
@@ -207,8 +219,12 @@ int main(int argc, char **argv)
 	}
 
 	for (i = 0; i < nr_irqs; i++) {
+		const bool do_clear_routes = clear_routes && (i & BIT(3));
 		struct kvm_vcpu *vcpu = vcpus[i % nr_vcpus];
 		struct timespec start;
+
+		if (do_clear_routes)
+			kvm_clear_gsi_routes(vm);
 
 		kvm_route_msi(vm, gsi, vcpu, vector);
 
