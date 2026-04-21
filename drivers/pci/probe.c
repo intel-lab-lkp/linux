@@ -3513,16 +3513,30 @@ EXPORT_SYMBOL_GPL(pci_rescan_bus);
  * routines should always be executed under this mutex.
  */
 DEFINE_MUTEX(pci_rescan_remove_lock);
+static struct task_struct *pci_rescan_remove_owner;
+static unsigned int pci_rescan_remove_depth;
 
 void pci_lock_rescan_remove(void)
 {
-	mutex_lock(&pci_rescan_remove_lock);
+	if (pci_rescan_remove_owner == current) {
+		pci_rescan_remove_depth++;
+	} else {
+		mutex_lock(&pci_rescan_remove_lock);
+		pci_rescan_remove_owner = current;
+		pci_rescan_remove_depth = 1;
+	}
 }
 EXPORT_SYMBOL_GPL(pci_lock_rescan_remove);
 
 void pci_unlock_rescan_remove(void)
 {
-	mutex_unlock(&pci_rescan_remove_lock);
+	if (WARN_ON(pci_rescan_remove_owner != current))
+		return;
+
+	if (--pci_rescan_remove_depth == 0) {
+		pci_rescan_remove_owner = NULL;
+		mutex_unlock(&pci_rescan_remove_lock);
+	}
 }
 EXPORT_SYMBOL_GPL(pci_unlock_rescan_remove);
 
