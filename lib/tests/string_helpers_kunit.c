@@ -558,6 +558,39 @@ static void test_get_size(struct kunit *test)
 	/* weird block sizes */
 	test_string_get_size_one(3000, 1900, "5.70 MB", "5.44 MiB");
 
+	/* decimal boundary around 1 MB */
+	test_string_get_size_one(999499, 1, "999 kB", "976 KiB");
+	test_string_get_size_one(999500, 1, "1000 kB", "976 KiB");
+	test_string_get_size_one(999999, 1, "1000 kB", "977 KiB");
+	test_string_get_size_one(1000000, 1, "1.00 MB", "977 KiB");
+	test_string_get_size_one(1000001, 1, "1.00 MB", "977 KiB");
+
+	/* binary values stay in bytes until the 1 KiB boundary */
+	test_string_get_size_one(1000, 1, "1.00 kB", "1000 B");
+	test_string_get_size_one(1018, 1, "1.02 kB", "1018 B");
+	test_string_get_size_one(1023, 1, "1.02 kB", "1023 B");
+	test_string_get_size_one(1024, 1, "1.02 kB", "1.00 KiB");
+	test_string_get_size_one(1025, 1, "1.03 kB", "1.00 KiB");
+
+	/* binary rounding around 1000 KiB */
+	test_string_get_size_one(1023487, 1, "1.02 MB", "999 KiB");
+	test_string_get_size_one(1023488, 1, "1.02 MB", "1000 KiB");
+	test_string_get_size_one(1024000, 1, "1.02 MB", "1000 KiB");
+	test_string_get_size_one(1024511, 1, "1.02 MB", "1000 KiB");
+	test_string_get_size_one(1024512, 1, "1.02 MB", "1001 KiB");
+
+	/* binary boundary around 1 MiB */
+	test_string_get_size_one(1048063, 1, "1.05 MB", "1023 KiB");
+	test_string_get_size_one(1048064, 1, "1.05 MB", "1024 KiB");
+	test_string_get_size_one(1048575, 1, "1.05 MB", "1024 KiB");
+	test_string_get_size_one(1048576, 1, "1.05 MB", "1.00 MiB");
+	test_string_get_size_one(1048577, 1, "1.05 MB", "1.00 MiB");
+
+	/* binary boundary around 2 MiB */
+	test_string_get_size_one(2097151, 1, "2.10 MB", "2.00 MiB");
+	test_string_get_size_one(2097152, 1, "2.10 MB", "2.00 MiB");
+	test_string_get_size_one(2097153, 1, "2.10 MB", "2.00 MiB");
+
 	/* huge values */
 	test_string_get_size_one(U64_MAX, 4096, "75.6 ZB", "64.0 ZiB");
 	test_string_get_size_one(4096, U64_MAX, "75.6 ZB", "64.0 ZiB");
