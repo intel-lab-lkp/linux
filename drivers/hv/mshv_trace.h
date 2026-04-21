@@ -538,6 +538,42 @@ TRACE_EVENT(mshv_handle_gpa_intercept,
 	    )
 );
 
+TRACE_EVENT(mshv_map_pfns,
+	    TP_PROTO(u64 partition_id, u64 gfn, u64 pfn_count, u64 page_count, u32 flags,
+		     u64 mmio_spa, int done, int ret),
+	    TP_ARGS(partition_id, gfn, pfn_count, page_count, flags, mmio_spa, done, ret),
+	    TP_STRUCT__entry(
+		    __field(u64, partition_id)
+		    __field(u64, gfn)
+		    __field(u64, pfn_count)
+		    __field(u64, page_count)
+		    __field(u32, flags)
+		    __field(u64, mmio_spa)
+		    __field(int, done)
+		    __field(int, ret)
+	    ),
+	    TP_fast_assign(
+		    __entry->partition_id = partition_id;
+		    __entry->gfn = gfn;
+		    __entry->page_count = page_count;
+		    __entry->pfn_count = pfn_count;
+		    __entry->flags = flags;
+		    __entry->mmio_spa = mmio_spa;
+		    __entry->done = done;
+		    __entry->ret = ret;
+	    ),
+	    TP_printk("partition_id=%llu gfn=0x%llx pfn_count=%llu page_count=%llu flags=0x%x mmio_spa=0x%llx done=%d ret=%d",
+		    __entry->partition_id,
+		    __entry->gfn,
+		    __entry->pfn_count,
+		    __entry->page_count,
+		    __entry->flags,
+		    __entry->mmio_spa,
+		    __entry->done,
+		    __entry->ret
+	    )
+);
+
 #endif /* _MSHV_TRACE_H_ */
 
 /* This part must be outside protection */

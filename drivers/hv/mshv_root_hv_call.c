@@ -260,6 +260,9 @@ static int hv_do_map_pfns(u64 partition_id, u64 gfn, u64 pfns_count,
 		done += completed;
 	}
 
+	trace_mshv_map_pfns(partition_id, gfn, pfns_count, page_count,
+			    flags, mmio_spa, done, ret);
+
 	if (ret && done) {
 		u32 unmap_flags = 0;
 
