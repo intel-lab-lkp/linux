@@ -106,30 +106,30 @@ struct timespec timespec_sub(struct timespec ts1, struct timespec ts2);
 struct timespec timespec_elapsed(struct timespec start);
 struct timespec timespec_div(struct timespec ts, int divisor);
 
-struct guest_random_state {
+struct kvm_random_state {
 	uint32_t seed;
 };
 
-extern uint32_t guest_random_seed;
-extern struct guest_random_state guest_rng;
+extern uint32_t kvm_random_seed;
+extern struct kvm_random_state kvm_rng;
 
-struct guest_random_state new_guest_random_state(uint32_t seed);
-uint32_t guest_random_u32(struct guest_random_state *state);
+struct kvm_random_state new_kvm_random_state(uint32_t seed);
+uint32_t kvm_random_u32(struct kvm_random_state *state);
 
-static inline bool __guest_random_bool(struct guest_random_state *state,
+static inline bool __kvm_random_bool(struct kvm_random_state *state,
 				       uint8_t percent)
 {
-	return (guest_random_u32(state) % 100) < percent;
+	return (kvm_random_u32(state) % 100) < percent;
 }
 
-static inline bool guest_random_bool(struct guest_random_state *state)
+static inline bool kvm_random_bool(struct kvm_random_state *state)
 {
-	return __guest_random_bool(state, 50);
+	return __kvm_random_bool(state, 50);
 }
 
-static inline uint64_t guest_random_u64(struct guest_random_state *state)
+static inline uint64_t kvm_random_u64(struct kvm_random_state *state)
 {
-	return ((uint64_t)guest_random_u32(state) << 32) | guest_random_u32(state);
+	return ((uint64_t)kvm_random_u32(state) << 32) | kvm_random_u32(state);
 }
 
 enum vm_mem_backing_src_type {
