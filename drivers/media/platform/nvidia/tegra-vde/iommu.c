@@ -25,6 +25,7 @@ int tegra_vde_iommu_map(struct tegra_vde *vde,
 	unsigned long shift;
 	unsigned long end;
 	dma_addr_t addr;
+	ssize_t map_err;
 
 	end = vde->domain->geometry.aperture_end;
 	size = iova_align(&vde->iova, size);
@@ -36,11 +37,11 @@ int tegra_vde_iommu_map(struct tegra_vde *vde,
 
 	addr = iova_dma_addr(&vde->iova, iova);
 
-	size = iommu_map_sgtable(vde->domain, addr, sgt,
-				 IOMMU_READ | IOMMU_WRITE);
-	if (!size) {
+	map_err = iommu_map_sgtable(vde->domain, addr, sgt,
+				    IOMMU_READ | IOMMU_WRITE);
+	if (map_err < 0) {
 		__free_iova(&vde->iova, iova);
-		return -ENXIO;
+		return map_err;
 	}
 
 	*iovap = iova;
