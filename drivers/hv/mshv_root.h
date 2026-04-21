@@ -367,15 +367,11 @@ extern u8 * __percpu *hv_synic_eventring_tail;
 
 struct mshv_mem_region *mshv_region_create(u64 guest_pfn, u64 nr_pages,
 					   u64 uaddr, u32 flags);
-int mshv_region_share(struct mshv_mem_region *region);
-int mshv_region_unshare(struct mshv_mem_region *region);
-int mshv_region_map(struct mshv_mem_region *region);
-void mshv_region_invalidate(struct mshv_mem_region *region);
-int mshv_region_pin(struct mshv_mem_region *region);
 void mshv_region_put(struct mshv_mem_region *region);
 int mshv_region_get(struct mshv_mem_region *region);
 bool mshv_region_handle_gfn_fault(struct mshv_mem_region *region, u64 gfn);
 void mshv_region_movable_fini(struct mshv_mem_region *region);
 bool mshv_region_movable_init(struct mshv_mem_region *region);
+int mshv_map_pinned_region(struct mshv_mem_region *region);
 
 #endif /* _MSHV_ROOT_H_ */

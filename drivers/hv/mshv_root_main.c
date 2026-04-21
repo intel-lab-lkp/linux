@@ -1253,74 +1253,6 @@ static int mshv_partition_create_region(struct mshv_partition *partition,
 	return 0;
 }
 
-/**
- * mshv_prepare_pinned_region - Pin and map memory regions
- * @region: Pointer to the memory region structure
- *
- * This function processes memory regions that are explicitly marked as pinned.
- * Pinned regions are preallocated, mapped upfront, and do not rely on fault-based
- * population. The function ensures the region is properly populated, handles
- * encryption requirements for SNP partitions if applicable, maps the region,
- * and performs necessary sharing or eviction operations based on the mapping
- * result.
- *
- * Return: 0 on success, negative error code on failure.
- */
-static int mshv_prepare_pinned_region(struct mshv_mem_region *region)
-{
-	struct mshv_partition *partition = region->partition;
-	int ret;
-
-	ret = mshv_region_pin(region);
-	if (ret) {
-		pt_err(partition, "Failed to pin memory region: %d\n",
-		       ret);
-		goto err_out;
-	}
-
-	/*
-	 * For an SNP partition it is a requirement that for every memory region
-	 * that we are going to map for this partition we should make sure that
-	 * host access to that region is released. This is ensured by doing an
-	 * additional hypercall which will update the SLAT to release host
-	 * access to guest memory regions.
-	 */
-	if (mshv_partition_encrypted(partition)) {
-		ret = mshv_region_unshare(region);
-		if (ret) {
-			pt_err(partition,
-			       "Failed to unshare memory region (guest_pfn: %llu): %d\n",
-			       region->start_gfn, ret);
-			goto invalidate_region;
-		}
-	}
-
-	ret = mshv_region_map(region);
-	if (ret && mshv_partition_encrypted(partition)) {
-		int shrc;
-
-		shrc = mshv_region_share(region);
-		if (!shrc)
-			goto invalidate_region;
-
-		pt_err(partition,
-		       "Failed to share memory region (guest_pfn: %llu): %d\n",
-		       region->start_gfn, shrc);
-		/*
-		 * Don't unpin if marking shared failed because pages are no
-		 * longer mapped in the host, ie root, anymore.
-		 */
-		goto err_out;
-	}
-
-	return 0;
-
-invalidate_region:
-	mshv_region_invalidate(region);
-err_out:
-	return ret;
-}
-
 /*
  * This maps two things: guest RAM and for pci passthru mmio space.
  *
@@ -1363,7 +1295,7 @@ mshv_map_user_memory(struct mshv_partition *partition,
 
 	switch (region->mreg_type) {
 	case MSHV_REGION_TYPE_MEM_PINNED:
-		ret = mshv_prepare_pinned_region(region);
+		ret = mshv_map_pinned_region(region);
 		break;
 	case MSHV_REGION_TYPE_MEM_MOVABLE:
 		/*

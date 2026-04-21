@@ -287,7 +287,7 @@ static int mshv_region_chunk_share(struct mshv_mem_region *region,
 					      flags, true);
 }
 
-int mshv_region_share(struct mshv_mem_region *region)
+static int mshv_region_share(struct mshv_mem_region *region)
 {
 	u32 flags = HV_MODIFY_SPA_PAGE_HOST_ACCESS_MAKE_SHARED;
 
@@ -313,7 +313,7 @@ static int mshv_region_chunk_unshare(struct mshv_mem_region *region,
 					      flags, false);
 }
 
-int mshv_region_unshare(struct mshv_mem_region *region)
+static int mshv_region_unshare(struct mshv_mem_region *region)
 {
 	u32 flags = HV_MODIFY_SPA_PAGE_HOST_ACCESS_MAKE_EXCLUSIVE;
 
@@ -353,7 +353,7 @@ static int mshv_region_remap_pfns(struct mshv_mem_region *region,
 					 mshv_region_chunk_remap);
 }
 
-int mshv_region_map(struct mshv_mem_region *region)
+static int mshv_region_map(struct mshv_mem_region *region)
 {
 	u32 map_flags = region->hv_map_flags;
 
@@ -377,12 +377,12 @@ static void mshv_region_invalidate_pfns(struct mshv_mem_region *region,
 	}
 }
 
-void mshv_region_invalidate(struct mshv_mem_region *region)
+static void mshv_region_invalidate(struct mshv_mem_region *region)
 {
 	mshv_region_invalidate_pfns(region, 0, region->nr_pfns);
 }
 
-int mshv_region_pin(struct mshv_mem_region *region)
+static int mshv_region_pin(struct mshv_mem_region *region)
 {
 	u64 done_count, nr_pfns, i;
 	unsigned long *pfns;
@@ -731,4 +731,73 @@ bool mshv_region_movable_init(struct mshv_mem_region *region)
 	mutex_init(&region->mreg_mutex);
 
 	return true;
+}
+
+/**
+ * mshv_map_pinned_region - Pin and map memory regions
+ * @region: Pointer to the memory region structure
+ *
+ * This function processes memory regions that are explicitly marked as pinned.
+ * Pinned regions are preallocated, mapped upfront, and do not rely on fault-based
+ * population. The function ensures the region is properly populated, handles
+ * encryption requirements for SNP partitions if applicable, maps the region,
+ * and performs necessary sharing or eviction operations based on the mapping
+ * result.
+ *
+ * Return: 0 on success, negative error code on failure.
+ */
+int mshv_map_pinned_region(struct mshv_mem_region *region)
+{
+	struct mshv_partition *partition = region->partition;
+	int ret;
+
+	ret = mshv_region_pin(region);
+	if (ret) {
+		pt_err(partition, "Failed to pin memory region: %d\n",
+		       ret);
+		goto err_out;
+	}
+
+	/*
+	 * For an SNP partition it is a requirement that for every memory region
+	 * that we are going to map for this partition we should make sure that
+	 * host access to that region is released. This is ensured by doing an
+	 * additional hypercall which will update the SLAT to release host
+	 * access to guest memory regions.
+	 */
+	if (mshv_partition_encrypted(partition)) {
+		ret = mshv_region_unshare(region);
+		if (ret) {
+			pt_err(partition,
+			       "Failed to unshare memory region (guest_pfn: %llu): %d\n",
+			       region->start_gfn, ret);
+			goto invalidate_region;
+		}
+	}
+
+	ret = mshv_region_map(region);
+	if (!ret)
+		return 0;
+
+	if (mshv_partition_encrypted(partition)) {
+		int shrc;
+
+		shrc = mshv_region_share(region);
+		if (!shrc)
+			goto invalidate_region;
+
+		pt_err(partition,
+		       "Failed to share memory region (guest_pfn: %llu): %d\n",
+		       region->start_gfn, shrc);
+		/*
+		 * Don't unpin if marking shared failed because pages are no
+		 * longer mapped in the host, ie root, anymore.
+		 */
+		goto err_out;
+	}
+
+invalidate_region:
+	mshv_region_invalidate(region);
+err_out:
+	return ret;
 }
