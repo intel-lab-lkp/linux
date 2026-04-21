@@ -120,13 +120,14 @@ static void kvm_clear_gsi_routes(struct kvm_vm *vm)
 
 static void help(const char *name)
 {
-	printf("Usage: %s [-a] [-b] [-c] [-d <segment:bus:device.function>] [-h]\n", name);
+	printf("Usage: %s [-a] [-b] [-c] [-d <segment:bus:device.function>] [-h] [-i nr_irqs]\n", name);
 	printf("\n");
 	printf("Tests KVM IRQ injection via irqfd using an emulated eventfd.\n");
 	printf("-a	Randomly affinitize the device's host IRQ to different physical CPUs throughout the test\n");
 	printf("-b	Block vCPUs (e.g. HLT) instead of spinning in guest-mode\n");
 	printf("-c	Destroy and recreate KVM's GSI routing table in between some interrupts\n");
 	printf("-d	Use a VFIO device to send MSI-X interrupts instead of using an emulated eventfd\n");
+	printf("-i	The number of IRQs to generate during the test\n");
 	printf("\n");
 	exit(KSFT_FAIL);
 }
@@ -159,7 +160,7 @@ int main(int argc, char **argv)
 	struct iommu *iommu;
 	struct kvm_vm *vm;
 
-	while ((c = getopt(argc, argv, "abcd:h")) != -1) {
+	while ((c = getopt(argc, argv, "abcd:hi:")) != -1) {
 		switch (c) {
 		case 'a':
 			irq_affinity = true;
@@ -172,6 +173,9 @@ int main(int argc, char **argv)
 			break;
 		case 'c':
 			clear_routes = true;
+			break;
+		case 'i':
+			nr_irqs = atoi_positive("Number of IRQs", optarg);
 			break;
 		case 'h':
 		default:
