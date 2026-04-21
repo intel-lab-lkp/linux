@@ -263,6 +263,7 @@ int irq_do_set_affinity(struct irq_data *data, const struct cpumask *mask, bool 
 	    housekeeping_enabled(HK_TYPE_MANAGED_IRQ)) {
 		const struct cpumask *hk_mask;
 
+		guard(rcu)();
 		hk_mask = housekeeping_cpumask(HK_TYPE_MANAGED_IRQ);
 
 		cpumask_and(tmp_mask, mask, hk_mask);

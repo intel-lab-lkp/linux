@@ -196,6 +196,7 @@ static bool hk_should_isolate(struct irq_data *data, unsigned int cpu)
 	if (!housekeeping_enabled(HK_TYPE_MANAGED_IRQ))
 		return false;
 
+	guard(rcu)();
 	hk_mask = housekeeping_cpumask(HK_TYPE_MANAGED_IRQ);
 	if (cpumask_subset(irq_data_get_effective_affinity_mask(data), hk_mask))
 		return false;
