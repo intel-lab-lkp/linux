@@ -104,7 +104,7 @@ static unsigned int cs_dbs_update(struct cpufreq_policy *policy)
 		dbs_info->down_skip = 0;
 
 		/* if we are already at full speed then break out early */
-		if (requested_freq == policy->max)
+		if (dbs_info->requested_freq == policy->max)
 			goto out;
 
 		requested_freq += freq_step;
@@ -127,7 +127,7 @@ static unsigned int cs_dbs_update(struct cpufreq_policy *policy)
 		/*
 		 * if we cannot reduce the frequency anymore, break out early
 		 */
-		if (requested_freq == policy->min)
+		if (dbs_info->requested_freq == policy->min)
 			goto out;
 
 		if (requested_freq > freq_step)
