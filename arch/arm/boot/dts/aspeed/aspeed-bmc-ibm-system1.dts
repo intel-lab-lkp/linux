@@ -68,6 +68,38 @@
 		i2c69 = &i2c15mux0chn5;
 		i2c70 = &i2c15mux0chn6;
 		i2c71 = &i2c15mux0chn7;
+		i2c72 = &i2c8mux2chn0;
+		i2c73 = &i2c8mux2chn1;
+		i2c74 = &i2c8mux3chn0;
+		i2c75 = &i2c8mux3chn1;
+		i2c76 = &i2c8mux4chn0;
+		i2c77 = &i2c8mux4chn1;
+		i2c78 = &i2c8mux5chn0;
+		i2c79 = &i2c8mux5chn1;
+		i2c80 = &i2c8mux6chn0;
+		i2c81 = &i2c8mux6chn1;
+		i2c82 = &i2c8mux7chn0;
+		i2c83 = &i2c8mux7chn1;
+		i2c84 = &i2c8mux8chn0;
+		i2c85 = &i2c8mux8chn1;
+		i2c86 = &i2c8mux9chn0;
+		i2c87 = &i2c8mux9chn1;
+		i2c88 = &i2c15mux2chn0;
+		i2c89 = &i2c15mux2chn1;
+		i2c90 = &i2c15mux3chn0;
+		i2c91 = &i2c15mux3chn1;
+		i2c92 = &i2c15mux4chn0;
+		i2c93 = &i2c15mux4chn1;
+		i2c94 = &i2c15mux5chn0;
+		i2c95 = &i2c15mux5chn1;
+		i2c96 = &i2c15mux6chn0;
+		i2c97 = &i2c15mux6chn1;
+		i2c98 = &i2c15mux7chn0;
+		i2c99 = &i2c15mux7chn1;
+		i2c100 = &i2c15mux8chn0;
+		i2c101 = &i2c15mux8chn1;
+		i2c102 = &i2c15mux9chn0;
+		i2c103 = &i2c15mux9chn1;
 	};
 
 	chosen {
@@ -1148,48 +1180,280 @@
 					#address-cells = <1>;
 					#size-cells = <0>;
 					reg = <0>;
+					i2c-mux@76 {
+						compatible = "nxp,pca9548";
+						reg = <0x76>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						i2c-mux-idle-disconnect;
+
+						i2c8mux2chn0: i2c@0 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <0>;
+
+							temperature-sensor@4b {
+								compatible = "ti,tmp112";
+								reg = <0x4b>;
+							};
+						};
+
+						i2c8mux2chn1: i2c@1 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <1>;
+
+							temperature-sensor@48 {
+								compatible = "ti,tmp112";
+								reg = <0x48>;
+							};
+						};
+					};
 				};
 
 				i2c8mux1chn1: i2c@1 {
 					#address-cells = <1>;
 					#size-cells = <0>;
 					reg = <1>;
+					i2c-mux@76 {
+						compatible = "nxp,pca9548";
+						reg = <0x76>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						i2c-mux-idle-disconnect;
+
+						i2c8mux3chn0: i2c@0 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <0>;
+
+							temperature-sensor@4b {
+								compatible = "ti,tmp112";
+								reg = <0x4b>;
+							};
+						};
+
+						i2c8mux3chn1: i2c@1 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <1>;
+
+							temperature-sensor@48 {
+								compatible = "ti,tmp112";
+								reg = <0x48>;
+							};
+						};
+					};
 				};
 
 				i2c8mux1chn2: i2c@2 {
 					#address-cells = <1>;
 					#size-cells = <0>;
 					reg = <2>;
+					i2c-mux@76 {
+						compatible = "nxp,pca9548";
+						reg = <0x76>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						i2c-mux-idle-disconnect;
+
+						i2c8mux4chn0: i2c@0 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <0>;
+
+							temperature-sensor@4b {
+								compatible = "ti,tmp112";
+								reg = <0x4b>;
+							};
+						};
+
+						i2c8mux4chn1: i2c@1 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <1>;
+
+							temperature-sensor@48 {
+								compatible = "ti,tmp112";
+								reg = <0x48>;
+							};
+						};
+					};
 				};
 
 				i2c8mux1chn3: i2c@3 {
 					#address-cells = <1>;
 					#size-cells = <0>;
 					reg = <3>;
+					i2c-mux@76 {
+						compatible = "nxp,pca9548";
+						reg = <0x76>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						i2c-mux-idle-disconnect;
+
+						i2c8mux5chn0: i2c@0 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <0>;
+
+							temperature-sensor@4b {
+								compatible = "ti,tmp112";
+								reg = <0x4b>;
+							};
+						};
+
+						i2c8mux5chn1: i2c@1 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <1>;
+
+							temperature-sensor@48 {
+								compatible = "ti,tmp112";
+								reg = <0x48>;
+							};
+						};
+					};
 				};
 
 				i2c8mux1chn4: i2c@4 {
 					#address-cells = <1>;
 					#size-cells = <0>;
 					reg = <4>;
+					i2c-mux@76 {
+						compatible = "nxp,pca9548";
+						reg = <0x76>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						i2c-mux-idle-disconnect;
+
+						i2c8mux6chn0: i2c@0 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <0>;
+
+							temperature-sensor@4b {
+								compatible = "ti,tmp112";
+								reg = <0x4b>;
+							};
+						};
+
+						i2c8mux6chn1: i2c@1 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <1>;
+
+							temperature-sensor@48 {
+								compatible = "ti,tmp112";
+								reg = <0x48>;
+							};
+						};
+					};
 				};
 
 				i2c8mux1chn5: i2c@5 {
 					#address-cells = <1>;
 					#size-cells = <0>;
 					reg = <5>;
+					i2c-mux@76 {
+						compatible = "nxp,pca9548";
+						reg = <0x76>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						i2c-mux-idle-disconnect;
+
+						i2c8mux7chn0: i2c@0 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <0>;
+
+							temperature-sensor@4b {
+								compatible = "ti,tmp112";
+								reg = <0x4b>;
+							};
+						};
+
+						i2c8mux7chn1: i2c@1 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <1>;
+
+							temperature-sensor@48 {
+								compatible = "ti,tmp112";
+								reg = <0x48>;
+							};
+						};
+					};
 				};
 
 				i2c8mux1chn6: i2c@6 {
 					#address-cells = <1>;
 					#size-cells = <0>;
 					reg = <6>;
+					i2c-mux@76 {
+						compatible = "nxp,pca9548";
+						reg = <0x76>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						i2c-mux-idle-disconnect;
+
+						i2c8mux8chn0: i2c@0 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <0>;
+
+							temperature-sensor@4b {
+								compatible = "ti,tmp112";
+								reg = <0x4b>;
+							};
+						};
+
+						i2c8mux8chn1: i2c@1 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <1>;
+
+							temperature-sensor@48 {
+								compatible = "ti,tmp112";
+								reg = <0x48>;
+							};
+						};
+					};
 				};
 
 				i2c8mux1chn7: i2c@7 {
 					#address-cells = <1>;
 					#size-cells = <0>;
 					reg = <7>;
+					i2c-mux@76 {
+						compatible = "nxp,pca9548";
+						reg = <0x76>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						i2c-mux-idle-disconnect;
+
+						i2c8mux9chn0: i2c@0 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <0>;
+
+							temperature-sensor@4b {
+								compatible = "ti,tmp112";
+								reg = <0x4b>;
+							};
+						};
+
+						i2c8mux9chn1: i2c@1 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <1>;
+
+							temperature-sensor@48 {
+								compatible = "ti,tmp112";
+								reg = <0x48>;
+							};
+						};
+					};
 				};
 			};
 		};
@@ -1593,48 +1857,280 @@
 					#address-cells = <1>;
 					#size-cells = <0>;
 					reg = <0>;
+					i2c-mux@76 {
+						compatible = "nxp,pca9548";
+						reg = <0x76>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						i2c-mux-idle-disconnect;
+
+						i2c15mux2chn0: i2c@0 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <0>;
+
+							temperature-sensor@4b {
+								compatible = "ti,tmp112";
+								reg = <0x4b>;
+							};
+						};
+
+						i2c15mux2chn1: i2c@1 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <1>;
+
+							temperature-sensor@48 {
+								compatible = "ti,tmp112";
+								reg = <0x48>;
+							};
+						};
+					};
 				};
 
 				i2c15mux1chn1: i2c@1 {
 					#address-cells = <1>;
 					#size-cells = <0>;
 					reg = <1>;
+					i2c-mux@76 {
+						compatible = "nxp,pca9548";
+						reg = <0x76>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						i2c-mux-idle-disconnect;
+
+						i2c15mux3chn0: i2c@0 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <0>;
+
+							temperature-sensor@4b {
+								compatible = "ti,tmp112";
+								reg = <0x4b>;
+							};
+						};
+
+						i2c15mux3chn1: i2c@1 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <1>;
+
+							temperature-sensor@48 {
+								compatible = "ti,tmp112";
+								reg = <0x48>;
+							};
+						};
+					};
 				};
 
 				i2c15mux1chn2: i2c@2 {
 					#address-cells = <1>;
 					#size-cells = <0>;
 					reg = <2>;
+					i2c-mux@76 {
+						compatible = "nxp,pca9548";
+						reg = <0x76>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						i2c-mux-idle-disconnect;
+
+						i2c15mux4chn0: i2c@0 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <0>;
+
+							temperature-sensor@4b {
+								compatible = "ti,tmp112";
+								reg = <0x4b>;
+							};
+						};
+
+						i2c15mux4chn1: i2c@1 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <1>;
+
+							temperature-sensor@48 {
+								compatible = "ti,tmp112";
+								reg = <0x48>;
+							};
+						};
+					};
 				};
 
 				i2c15mux1chn3: i2c@3 {
 					#address-cells = <1>;
 					#size-cells = <0>;
 					reg = <3>;
+					i2c-mux@76 {
+						compatible = "nxp,pca9548";
+						reg = <0x76>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						i2c-mux-idle-disconnect;
+
+						i2c15mux5chn0: i2c@0 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <0>;
+
+							temperature-sensor@4b {
+								compatible = "ti,tmp112";
+								reg = <0x4b>;
+							};
+						};
+
+						i2c15mux5chn1: i2c@1 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <1>;
+
+							temperature-sensor@48 {
+								compatible = "ti,tmp112";
+								reg = <0x48>;
+							};
+						};
+					};
 				};
 
 				i2c15mux1chn4: i2c@4 {
 					#address-cells = <1>;
 					#size-cells = <0>;
 					reg = <4>;
+					i2c-mux@76 {
+						compatible = "nxp,pca9548";
+						reg = <0x76>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						i2c-mux-idle-disconnect;
+
+						i2c15mux6chn0: i2c@0 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <0>;
+
+							temperature-sensor@4b {
+								compatible = "ti,tmp112";
+								reg = <0x4b>;
+							};
+						};
+
+						i2c15mux6chn1: i2c@1 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <1>;
+
+							temperature-sensor@48 {
+								compatible = "ti,tmp112";
+								reg = <0x48>;
+							};
+						};
+					};
 				};
 
 				i2c15mux1chn5: i2c@5 {
 					#address-cells = <1>;
 					#size-cells = <0>;
 					reg = <5>;
+					i2c-mux@76 {
+						compatible = "nxp,pca9548";
+						reg = <0x76>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						i2c-mux-idle-disconnect;
+
+						i2c15mux7chn0: i2c@0 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <0>;
+
+							temperature-sensor@4b {
+								compatible = "ti,tmp112";
+								reg = <0x4b>;
+							};
+						};
+
+						i2c15mux7chn1: i2c@1 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <1>;
+
+							temperature-sensor@48 {
+								compatible = "ti,tmp112";
+								reg = <0x48>;
+							};
+						};
+					};
 				};
 
 				i2c15mux1chn6: i2c@6 {
 					#address-cells = <1>;
 					#size-cells = <0>;
 					reg = <6>;
+					i2c-mux@76 {
+						compatible = "nxp,pca9548";
+						reg = <0x76>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						i2c-mux-idle-disconnect;
+
+						i2c15mux8chn0: i2c@0 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <0>;
+
+							temperature-sensor@4b {
+								compatible = "ti,tmp112";
+								reg = <0x4b>;
+							};
+						};
+
+						i2c15mux8chn1: i2c@1 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <1>;
+
+							temperature-sensor@48 {
+								compatible = "ti,tmp112";
+								reg = <0x48>;
+							};
+						};
+					};
 				};
 
 				i2c15mux1chn7: i2c@7 {
 					#address-cells = <1>;
 					#size-cells = <0>;
 					reg = <7>;
+					i2c-mux@76 {
+						compatible = "nxp,pca9548";
+						reg = <0x76>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						i2c-mux-idle-disconnect;
+
+						i2c15mux9chn0: i2c@0 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <0>;
+
+							temperature-sensor@4b {
+								compatible = "ti,tmp112";
+								reg = <0x4b>;
+							};
+						};
+
+						i2c15mux9chn1: i2c@1 {
+							#address-cells = <1>;
+							#size-cells = <0>;
+							reg = <1>;
+
+							temperature-sensor@48 {
+								compatible = "ti,tmp112";
+								reg = <0x48>;
+							};
+						};
+					};
 				};
 			};
 		};
