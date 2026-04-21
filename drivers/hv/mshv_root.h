@@ -84,15 +84,15 @@ enum mshv_region_type {
 struct mshv_mem_region {
 	struct hlist_node hnode;
 	struct kref mreg_refcount;
-	u64 nr_pages;
+	u64 nr_pfns;
 	u64 start_gfn;
 	u64 start_uaddr;
 	u32 hv_map_flags;
 	struct mshv_partition *partition;
 	enum mshv_region_type mreg_type;
 	struct mmu_interval_notifier mreg_mni;
-	struct mutex mreg_mutex;	/* protects region pages remapping */
-	struct page *mreg_pages[];
+	struct mutex mreg_mutex;	/* protects region PFNs remapping */
+	unsigned long mreg_pfns[];
 };
 
 struct mshv_irq_ack_notifier {
@@ -281,11 +281,11 @@ int hv_call_create_partition(u64 flags,
 int hv_call_initialize_partition(u64 partition_id);
 int hv_call_finalize_partition(u64 partition_id);
 int hv_call_delete_partition(u64 partition_id);
-int hv_call_map_mmio_pages(u64 partition_id, u64 gfn, u64 mmio_spa, u64 numpgs);
-int hv_call_map_gpa_pages(u64 partition_id, u64 gpa_target, u64 page_count,
-			  u32 flags, struct page **pages);
-int hv_call_unmap_gpa_pages(u64 partition_id, u64 gpa_target, u64 page_count,
-			    u32 flags);
+int hv_call_map_mmio_pfns(u64 partition_id, u64 gfn, u64 mmio_spa, u64 numpgs);
+int hv_call_map_ram_pfns(u64 partition_id, u64 gpa_target, u64 pfn_count,
+			 u32 flags, unsigned long *pfns);
+int hv_call_unmap_pfns(u64 partition_id, u64 gpa_target, u64 pfn_count,
+		       u32 flags);
 int hv_call_delete_vp(u64 partition_id, u32 vp_index);
 int hv_call_assert_virtual_interrupt(u64 partition_id, u32 vector,
 				     u64 dest_addr,
@@ -328,8 +328,8 @@ int hv_map_stats_page(enum hv_stats_object_type type,
 int hv_unmap_stats_page(enum hv_stats_object_type type,
 			struct hv_stats_page *page_addr,
 			const union hv_stats_object_identity *identity);
-int hv_call_modify_spa_host_access(u64 partition_id, struct page **pages,
-				   u64 page_struct_count, u32 host_access,
+int hv_call_modify_spa_host_access(u64 partition_id, unsigned long *pfns,
+				   u64 pfns_count, u32 host_access,
 				   u32 flags, u8 acquire);
 int hv_call_get_partition_property_ex(u64 partition_id, u64 property_code, u64 arg,
 				      void *property_value, size_t property_value_sz);

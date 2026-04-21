@@ -618,7 +618,7 @@ mshv_partition_region_by_gfn(struct mshv_partition *partition, u64 gfn)
 
 	hlist_for_each_entry(region, &partition->pt_mem_regions, hnode) {
 		if (gfn >= region->start_gfn &&
-		    gfn < region->start_gfn + region->nr_pages)
+		    gfn < region->start_gfn + region->nr_pfns)
 			return region;
 	}
 
@@ -1220,20 +1220,20 @@ static int mshv_partition_create_region(struct mshv_partition *partition,
 					bool is_mmio)
 {
 	struct mshv_mem_region *rg;
-	u64 nr_pages = HVPFN_DOWN(mem->size);
+	u64 nr_pfns = HVPFN_DOWN(mem->size);
 
 	/* Reject overlapping regions */
 	spin_lock(&partition->pt_mem_regions_lock);
 	hlist_for_each_entry(rg, &partition->pt_mem_regions, hnode) {
-		if (mem->guest_pfn + nr_pages <= rg->start_gfn ||
-		    rg->start_gfn + rg->nr_pages <= mem->guest_pfn)
+		if (mem->guest_pfn + nr_pfns <= rg->start_gfn ||
+		    rg->start_gfn + rg->nr_pfns <= mem->guest_pfn)
 			continue;
 		spin_unlock(&partition->pt_mem_regions_lock);
 		return -EEXIST;
 	}
 	spin_unlock(&partition->pt_mem_regions_lock);
 
-	rg = mshv_region_create(mem->guest_pfn, nr_pages,
+	rg = mshv_region_create(mem->guest_pfn, nr_pfns,
 				mem->userspace_addr, mem->flags);
 	if (IS_ERR(rg))
 		return PTR_ERR(rg);
@@ -1371,21 +1371,21 @@ mshv_map_user_memory(struct mshv_partition *partition,
 		 * the hypervisor track dirty pages, enabling pre-copy live
 		 * migration.
 		 */
-		ret = hv_call_map_gpa_pages(partition->pt_id,
-					    region->start_gfn,
-					    region->nr_pages,
-					    HV_MAP_GPA_NO_ACCESS, NULL);
+		ret = hv_call_map_ram_pfns(partition->pt_id,
+					   region->start_gfn,
+					   region->nr_pfns,
+					   HV_MAP_GPA_NO_ACCESS, NULL);
 		break;
 	case MSHV_REGION_TYPE_MMIO:
-		ret = hv_call_map_mmio_pages(partition->pt_id,
-					     region->start_gfn,
-					     mmio_pfn,
-					     region->nr_pages);
+		ret = hv_call_map_mmio_pfns(partition->pt_id,
+					    region->start_gfn,
+					    mmio_pfn,
+					    region->nr_pfns);
 		break;
 	}
 
 	trace_mshv_map_user_memory(partition->pt_id, region->start_uaddr,
-				   region->start_gfn, region->nr_pages,
+				   region->start_gfn, region->nr_pfns,
 				   region->hv_map_flags, ret);
 
 	if (ret)
@@ -1423,7 +1423,7 @@ mshv_unmap_user_memory(struct mshv_partition *partition,
 	/* Paranoia check */
 	if (region->start_uaddr != mem->userspace_addr ||
 	    region->start_gfn != mem->guest_pfn ||
-	    region->nr_pages != HVPFN_DOWN(mem->size)) {
+	    region->nr_pfns != HVPFN_DOWN(mem->size)) {
 		spin_unlock(&partition->pt_mem_regions_lock);
 		return -EINVAL;
 	}
