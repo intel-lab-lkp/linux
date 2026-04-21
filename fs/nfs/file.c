@@ -73,7 +73,7 @@ nfs_file_open(struct inode *inode, struct file *filp)
 
 	res = nfs_open(inode, filp);
 	if (res == 0)
-		filp->f_mode |= FMODE_CAN_ODIRECT;
+		filp->f_mode |= FMODE_CAN_ODIRECT | FMODE_NOWAIT;
 	return res;
 }
 
