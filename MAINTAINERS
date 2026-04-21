@@ -27164,6 +27164,7 @@ UNIVERSAL FLASH STORAGE HOST CONTROLLER DRIVER STARFIVE
 M:	Minda Chen <minda.cheb@starfivetech.com>
 S:	Maintained
 F:	Documentation/devicetree/bindings/ufs/starfive,ufs.yaml
+F:	drivers/ufs/host/ufs-starfive.c
 
 UNIWILL LAPTOP DRIVER
 M:	Armin Wolf <W_Armin@gmx.de>
