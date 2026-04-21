@@ -2495,6 +2495,8 @@ exit:
 	return 0;
 }
 
+static void em28xx_vdev_release(struct video_device *vfd);
+
 static const struct v4l2_file_operations em28xx_v4l_fops = {
 	.owner         = THIS_MODULE,
 	.open          = em28xx_v4l2_open,
@@ -2552,7 +2554,7 @@ static const struct v4l2_ioctl_ops video_ioctl_ops = {
 static const struct video_device em28xx_video_template = {
 	.fops		= &em28xx_v4l_fops,
 	.ioctl_ops	= &video_ioctl_ops,
-	.release	= video_device_release_empty,
+	.release	= em28xx_vdev_release,
 	.tvnorms	= V4L2_STD_ALL,
 };
 
@@ -2581,7 +2583,7 @@ static const struct v4l2_ioctl_ops radio_ioctl_ops = {
 static struct video_device em28xx_radio_template = {
 	.fops		= &radio_fops,
 	.ioctl_ops	= &radio_ioctl_ops,
-	.release	= video_device_release_empty,
+	.release	= em28xx_vdev_release,
 };
 
 /* I2C possible address to saa7115, tvp5150, msp3400, tvaudio */
@@ -2619,6 +2621,29 @@ static void em28xx_vdev_init(struct em28xx *dev,
 		 dev_name(&dev->intf->dev), type_name);
 
 	video_set_drvdata(vfd, dev);
+
+	/*
+	 * Get a reference to struct em28xx_v4l2 as embedded struct video_device
+	 * may be accessed from elsewhere after video_register_device() returns.
+	 *
+	 * If video_register_device() succeeds, this reference will be released
+	 * automatically in em28xx_vdev_release(); on error it must be released
+	 * explicitly.
+	 */
+	kref_get(&dev->v4l2->ref);
+}
+
+static void em28xx_vdev_release(struct video_device *vfd)
+{
+	struct em28xx_v4l2 *v4l2;
+
+	/*
+	 * Find struct em28xx_v4l2 with its embedded struct v4l2_device,
+	 * as video_get_drvdata() returns dev and dev->v4l2 may be NULL
+	 * (e.g., after em28xx_v4l2_init()'s error path).
+	 */
+	v4l2 = container_of(vfd->v4l2_dev, struct em28xx_v4l2, v4l2_dev);
+	kref_put(&v4l2->ref, em28xx_free_v4l2);
 }
 
 static void em28xx_tuner_setup(struct em28xx *dev, unsigned short tuner_addr)
@@ -2961,6 +2986,7 @@ static int em28xx_v4l2_init(struct em28xx *dev)
 	if (ret) {
 		dev_err(&dev->intf->dev,
 			"unable to register video device (error=%i).\n", ret);
+		em28xx_vdev_release(&v4l2->vdev);
 		goto unregister_dev;
 	}
 
@@ -2995,6 +3021,7 @@ static int em28xx_v4l2_init(struct em28xx *dev)
 		if (ret < 0) {
 			dev_err(&dev->intf->dev,
 				"unable to register vbi device\n");
+			em28xx_vdev_release(&v4l2->vbi_dev);
 			goto unregister_dev;
 		}
 	}
@@ -3008,6 +3035,7 @@ static int em28xx_v4l2_init(struct em28xx *dev)
 		if (ret < 0) {
 			dev_err(&dev->intf->dev,
 				"can't register radio device\n");
+			em28xx_vdev_release(&v4l2->radio_dev);
 			goto unregister_dev;
 		}
 		dev_info(&dev->intf->dev,
