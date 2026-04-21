@@ -107,6 +107,38 @@ __napot_ptep_get_and_clear(struct mm_struct *mm, unsigned long addr, pte_t *ptep
 	return pte;
 }
 
+static void __napot_clear_full_ptes(struct mm_struct *mm, unsigned long addr,
+				    pte_t *ptep, unsigned int nr)
+{
+	for (;;) {
+		__napot_ptep_get_and_clear(mm, addr, ptep);
+		if (--nr == 0)
+			break;
+		ptep++;
+		addr += PAGE_SIZE;
+	}
+}
+
+static pte_t __napot_get_and_clear_full_ptes(struct mm_struct *mm,
+					     unsigned long addr, pte_t *ptep,
+					     unsigned int nr)
+{
+	pte_t pte, tmp_pte;
+
+	pte = __napot_ptep_get_and_clear(mm, addr, ptep);
+	while (--nr) {
+		ptep++;
+		addr += PAGE_SIZE;
+		tmp_pte = __napot_ptep_get_and_clear(mm, addr, ptep);
+		if (pte_dirty(tmp_pte))
+			pte = pte_mkdirty(pte);
+		if (pte_young(tmp_pte))
+			pte = pte_mkyoung(pte);
+	}
+
+	return pte;
+}
+
 static void napotpte_convert(struct mm_struct *mm, unsigned long addr,
 			     pte_t *ptep, pte_t target)
 {
@@ -201,6 +233,33 @@ void __napotpte_try_fold(struct mm_struct *mm, unsigned long addr,
 	napotpte_convert(mm, addr, ptep, expected);
 }
 EXPORT_SYMBOL(__napotpte_try_fold);
+
+static void napotpte_try_unfold_range(struct mm_struct *mm,
+				      unsigned long addr, pte_t *ptep,
+				      unsigned int nr)
+{
+	unsigned long next;
+	pte_t pte;
+	unsigned int chunk;
+
+	while (nr) {
+		pte = READ_ONCE(*ptep);
+		if (pte_present_napot(pte)) {
+			__napotpte_try_unfold(mm, addr, ptep, pte);
+			next = napot_align_addr(addr) + napotpte_size();
+			chunk = (next - addr) >> PAGE_SHIFT;
+		} else {
+			chunk = 1;
+		}
+
+		if (chunk > nr)
+			chunk = nr;
+
+		ptep += chunk;
+		addr += chunk * PAGE_SIZE;
+		nr -= chunk;
+	}
+}
 
 void __napotpte_try_unfold(struct mm_struct *mm, unsigned long addr,
 			   pte_t *ptep, pte_t pte)
@@ -348,6 +407,43 @@ void napotpte_set_ptes(struct mm_struct *mm, unsigned long addr,
 	} while (addr != end);
 }
 EXPORT_SYMBOL(napotpte_set_ptes);
+
+void napotpte_clear_full_ptes(struct mm_struct *mm, unsigned long addr,
+			      pte_t *ptep, unsigned int nr, int full)
+{
+	(void)full;
+
+	if (!napot_hw_supported() || !mm_is_user(mm)) {
+		__napot_clear_full_ptes(mm, addr, ptep, nr);
+		return;
+	}
+
+	/*
+	 * Unlike arm64 contpte, a Svnapot PTE block stores identical
+	 * napot-encoded entries across the whole block rather than per-page
+	 * PFNs. Batch zap paths must therefore unfold the whole covered range
+	 * so the core MM later sees ordinary per-page PTEs for rmap/rss/tlb
+	 * batching.
+	 */
+	napotpte_try_unfold_range(mm, addr, ptep, nr);
+	__napot_clear_full_ptes(mm, addr, ptep, nr);
+}
+EXPORT_SYMBOL(napotpte_clear_full_ptes);
+
+pte_t napotpte_get_and_clear_full_ptes(struct mm_struct *mm,
+				       unsigned long addr, pte_t *ptep,
+				       unsigned int nr, int full)
+{
+	(void)full;
+
+	if (!napot_hw_supported() || !mm_is_user(mm))
+		return __napot_get_and_clear_full_ptes(mm, addr, ptep, nr);
+
+	napotpte_try_unfold_range(mm, addr, ptep, nr);
+
+	return __napot_get_and_clear_full_ptes(mm, addr, ptep, nr);
+}
+EXPORT_SYMBOL(napotpte_get_and_clear_full_ptes);
 
 void napotpte_clear_young_dirty_ptes(struct vm_area_struct *vma,
 				     unsigned long addr, pte_t *ptep,
