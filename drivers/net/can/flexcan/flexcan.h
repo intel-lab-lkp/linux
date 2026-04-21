@@ -75,8 +75,15 @@
  */
 #define FLEXCAN_QUIRK_SECONDARY_MB_IRQ	BIT(18)
 
+#define FLEXCAN_NR_MB_IRQS	2
+
 struct flexcan_devtype_data {
 	u32 quirks;		/* quirks needed for different IP cores */
+};
+
+struct flexcan_mb_irq {
+	u64 rx_mask;
+	u64 tx_mask;
 };
 
 struct flexcan_stop_mode {
@@ -99,8 +106,7 @@ struct flexcan_priv {
 	u8 clk_src;	/* clock source of CAN Protocol Engine */
 	u8 scu_idx;
 
-	u64 rx_mask;
-	u64 tx_mask;
+	struct flexcan_mb_irq mb_irq[FLEXCAN_NR_MB_IRQS];
 	u32 reg_ctrl_default;
 
 	struct clk *clk_ipg;
