@@ -300,9 +300,6 @@
 
 #define GA_GUEST_NR		0x1
 
-#define IOMMU_IN_ADDR_BIT_SIZE  52
-#define IOMMU_OUT_ADDR_BIT_SIZE 52
-
 /*
  * This bitmap is used to advertise the page sizes our hardware support
  * to the IOMMU core, which will then use this information to split
