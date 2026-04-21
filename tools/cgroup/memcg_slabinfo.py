@@ -33,6 +33,21 @@ def err(s):
     sys.exit(1)
 
 
+def objexts_flags_mask():
+    try:
+        return int(prog.constant('__NR_OBJEXTS_FLAGS')) - 1
+    except:
+        return 0x7
+
+
+def slab_obj_ext_stride(slab):
+    # Match slab_obj_ext() for both layouts: contiguous ext[] or ext-in-object
+    try:
+        return slab.stride.value_()
+    except AttributeError:
+        return prog.type('struct slabobj_ext').size
+
+
 def find_memcg_ids(css=prog['root_mem_cgroup'].css, prefix=''):
     if not list_empty(css.children.address_of_()):
         for css in list_for_each_entry('struct cgroup_subsys_state',
@@ -192,23 +207,30 @@ def main():
         # look over all slab folios and look for objects belonging
         # to the given memory cgroup
         for slab in for_each_slab(prog):
-            objcg_vec_raw = slab.memcg_data.value_()
-            if objcg_vec_raw == 0:
+            objext_vec_raw = slab.obj_exts.value_()
+            if objext_vec_raw == 0:
                 continue
             cache = slab.slab_cache
             if not cache:
                 continue
             addr = cache.value_()
             caches[addr] = cache
-            # clear the lowest bit to get the true obj_cgroups
-            objcg_vec = Object(prog, 'struct obj_cgroup **',
-                               value=objcg_vec_raw & ~1)
 
             if addr not in stats:
                 stats[addr] = 0
 
+            # clear OBJEXTS_FLAGS_MASK bits to get the true slabobj_ext base.
+            # If OBJEXTS_ALLOC_FAIL, masked base is 0 — not tied to any cgroup.
+            mask = objexts_flags_mask()
+            objext_base = objext_vec_raw & ~mask
+            if objext_base == 0:
+                continue
+
+            stride = slab_obj_ext_stride(slab)
             for i in range(oo_objects(cache)):
-                if objcg_vec[i].value_() in obj_cgroups:
+                objext = Object(prog, 'struct slabobj_ext *',
+                                value=objext_base + stride * i)
+                if objext.objcg.value_() in obj_cgroups:
                     stats[addr] += 1
 
         for addr in caches:
