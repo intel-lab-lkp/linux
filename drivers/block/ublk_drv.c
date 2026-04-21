@@ -1174,7 +1174,7 @@ static inline struct ublk_queue *ublk_get_queue(struct ublk_device *dev,
 
 static inline bool ublk_rq_has_data(const struct request *rq)
 {
-	return bio_has_data(rq->bio);
+	return blk_rq_bytes(rq);
 }
 
 static inline struct ublksrv_io_desc *
