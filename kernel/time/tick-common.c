@@ -17,6 +17,7 @@
 #include <linux/profile.h>
 #include <linux/sched.h>
 #include <linux/module.h>
+#include <linux/sched/isolation.h>
 #include <trace/events/power.h>
 
 #include <asm/irq_regs.h>
@@ -395,12 +396,19 @@ int tick_cpu_dying(unsigned int dying_cpu)
 {
 	/*
 	 * If the current CPU is the timekeeper, it's the only one that can
-	 * safely hand over its duty. Also all online CPUs are in stop
-	 * machine, guaranteed not to be idle, therefore there is no
+	 * safely hand over its duty. Also all online housekeeping CPUs are
+	 * in stop machine, guaranteed not to be idle, therefore there is no
 	 * concurrency and it's safe to pick any online successor.
 	 */
-	if (tick_do_timer_cpu == dying_cpu)
-		tick_do_timer_cpu = cpumask_first(cpu_online_mask);
+	if (READ_ONCE(tick_do_timer_cpu) == dying_cpu) {
+		unsigned int new_cpu;
+
+		guard(rcu)();
+		new_cpu = cpumask_first_and(cpu_online_mask, housekeeping_cpumask(HK_TYPE_TICK));
+		if (WARN_ON_ONCE(new_cpu >= nr_cpu_ids))
+			new_cpu = cpumask_first(cpu_online_mask);
+		WRITE_ONCE(tick_do_timer_cpu, new_cpu);
+	}
 
 	/* Make sure the CPU won't try to retake the timekeeping duty */
 	tick_sched_timer_dying(dying_cpu);
