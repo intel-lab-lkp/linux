@@ -4812,6 +4812,34 @@ static inline bool user_alloc_needs_zeroing(void)
 				   &init_on_alloc);
 }
 
+/**
+ * __page_test_clear_zeroed - test and clear the zeroed marker.
+ * @page: the page to test.
+ *
+ * Returns true if the page was zeroed by the host, and clears
+ * the marker. Caller must have exclusive access to @page.
+ */
+static inline bool __page_test_clear_zeroed(struct page *page)
+{
+	if (PageZeroed(page)) {
+		__ClearPageZeroed(page);
+		return true;
+	}
+	return false;
+}
+
+/**
+ * folio_test_clear_zeroed - test and clear the zeroed marker.
+ * @folio: the folio to test.
+ *
+ * Returns true if the folio was zeroed by the host, and clears
+ * the marker.  Callers can skip their own zeroing.
+ */
+static inline bool folio_test_clear_zeroed(struct folio *folio)
+{
+	return __page_test_clear_zeroed(&folio->page);
+}
+
 int arch_get_shadow_stack_status(struct task_struct *t, unsigned long __user *status);
 int arch_set_shadow_stack_status(struct task_struct *t, unsigned long status);
 int arch_lock_shadow_stack_status(struct task_struct *t, unsigned long status);
