@@ -1520,6 +1520,76 @@ int remove_cpu(unsigned int cpu)
 }
 EXPORT_SYMBOL_GPL(remove_cpu);
 
+bool cpuhp_offline_cb_mode;
+
+/**
+ * cpuhp_offline_cb - offline CPUs, invoke callback function & online CPUs afterward
+ * @mask: A mask of CPUs to be taken offline and then online
+ * @func: A callback function to be invoked while the given CPUs are offline
+ * @arg:  Argument to be passed back to the callback function
+ *
+ * Return: 0 if successful, an error code otherwise
+ */
+int cpuhp_offline_cb(struct cpumask *mask, cpuhp_cb_t func, void *arg)
+{
+	int off_cpu, on_cpu, ret, ret2 = 0;
+
+	if (WARN_ON_ONCE(cpumask_empty(mask) ||
+	   !cpumask_subset(mask, cpu_online_mask)))
+		return -EINVAL;
+
+	pr_debug("%s: begin (CPU list = %*pbl)\n", __func__, cpumask_pr_args(mask));
+	lock_device_hotplug();
+	cpuhp_offline_cb_mode = true;
+	/*
+	 * If all offline operations succeed, off_cpu should become nr_cpu_ids.
+	 */
+	for_each_cpu(off_cpu, mask) {
+		ret = device_offline(get_cpu_device(off_cpu));
+		if (unlikely(ret))
+			break;
+	}
+	if (!ret)
+		ret = func(arg);
+
+	/* Bring previously offline CPUs back online */
+	for_each_cpu(on_cpu, mask) {
+		int retries = 0;
+
+		if (on_cpu == off_cpu)
+			break;
+
+retry:
+		ret2 = device_online(get_cpu_device(on_cpu));
+
+		/*
+		 * With the unlikely event that CPU hotplug is disabled while
+		 * this operation is in progress, we will need to wait a bit
+		 * for hotplug to hopefully be re-enabled again. If not, print
+		 * a warning and return the error.
+		 *
+		 * cpu_hotplug_disabled is supposed to be accessed while
+		 * holding the cpu_add_remove_lock mutex. So we need to
+		 * use the data_race() macro to access it here.
+		 */
+		while ((ret2 == -EBUSY) && data_race(cpu_hotplug_disabled) &&
+		       (++retries <= 5)) {
+			msleep(20);
+			if (!data_race(cpu_hotplug_disabled))
+				goto retry;
+		}
+		if (ret2) {
+			pr_warn("%s: Failed to bring CPU %d back online!\n",
+				__func__, on_cpu);
+			break;
+		}
+	}
+	cpuhp_offline_cb_mode = false;
+	unlock_device_hotplug();
+	pr_debug("%s: end\n", __func__);
+	return ret ? ret : ret2;
+}
+
 void smp_shutdown_nonboot_cpus(unsigned int primary_cpu)
 {
 	unsigned int cpu;

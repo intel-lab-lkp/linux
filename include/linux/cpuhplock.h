@@ -9,7 +9,9 @@
 
 #include <linux/cleanup.h>
 #include <linux/errno.h>
+#include <linux/cpumask_types.h>
 
+typedef int (*cpuhp_cb_t)(void *arg);
 struct device;
 
 extern int lockdep_is_cpus_held(void);
@@ -29,6 +31,8 @@ void clear_tasks_mm_cpumask(int cpu);
 int remove_cpu(unsigned int cpu);
 int cpu_device_down(struct device *dev);
 void smp_shutdown_nonboot_cpus(unsigned int primary_cpu);
+int cpuhp_offline_cb(struct cpumask *mask, cpuhp_cb_t func, void *arg);
+extern bool cpuhp_offline_cb_mode;
 
 #else /* CONFIG_HOTPLUG_CPU */
 
@@ -43,6 +47,11 @@ static inline void cpu_hotplug_disable(void) { }
 static inline void cpu_hotplug_enable(void) { }
 static inline int remove_cpu(unsigned int cpu) { return -EPERM; }
 static inline void smp_shutdown_nonboot_cpus(unsigned int primary_cpu) { }
+static inline int cpuhp_offline_cb(struct cpumask *mask, cpuhp_cb_t func, void *arg)
+{
+	return -EPERM;
+}
+#define cpuhp_offline_cb_mode	false
 #endif	/* !CONFIG_HOTPLUG_CPU */
 
 DEFINE_LOCK_GUARD_0(cpus_read_lock, cpus_read_lock(), cpus_read_unlock())
