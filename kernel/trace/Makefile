@@ -140,29 +140,6 @@ obj-$(CONFIG_TRACE_REMOTE_TEST) += remote_test.o
 # undefsyms_base generates a set of compiler and tooling-generated symbols that can
 # safely be ignored for simple_ring_buffer.
 #
-filechk_undefsyms_base = \
-	echo '$(pound)include <linux/atomic.h>'; \
-	echo '$(pound)include <linux/string.h>'; \
-	echo '$(pound)include <asm/page.h>'; \
-	echo 'static char page[PAGE_SIZE] __aligned(PAGE_SIZE);'; \
-	echo 'void undefsyms_base(void *p, int n);'; \
-	echo 'void undefsyms_base(void *p, int n) {'; \
-	echo '	char buffer[256] = { 0 };'; \
-	echo '	u32 u = 0;'; \
-	echo '	memset((char * volatile)page, 8, PAGE_SIZE);'; \
-	echo '	memset((char * volatile)buffer, 8, sizeof(buffer));'; \
-	echo '	memcpy((void * volatile)p, buffer, sizeof(buffer));'; \
-	echo '	cmpxchg((u32 * volatile)&u, 0, 8);'; \
-	echo '	WARN_ON(n == 0xdeadbeef);'; \
-	echo '}'
-
-$(obj)/undefsyms_base.c: FORCE
-	$(call filechk,undefsyms_base)
-
-clean-files += undefsyms_base.c
-
-$(obj)/undefsyms_base.o: $(obj)/undefsyms_base.c
-
 targets += undefsyms_base.o
 
 # Ensure KASAN is enabled to avoid logic that may disable FORTIFY_SOURCE when
