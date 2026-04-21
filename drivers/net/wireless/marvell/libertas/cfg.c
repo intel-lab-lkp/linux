@@ -554,6 +554,14 @@ static int lbs_ret_scan(struct lbs_private *priv, unsigned long dummy,
 
 	bsssize = get_unaligned_le16(&scanresp->bssdescriptsize);
 
+	if (bsssize > le16_to_cpu(resp->size) -
+	    sizeof(struct cmd_ds_802_11_scan_rsp)) {
+		lbs_deb_scan(
+			"scan response: bssdescriptsize %d exceeds response\n",
+			bsssize);
+		goto done;
+	}
+
 	lbs_deb_scan("scan response: %d BSSs (%d bytes); resp size %d bytes\n",
 			scanresp->nr_sets, bsssize, le16_to_cpu(resp->size));
 
