@@ -141,15 +141,9 @@ static void swap_two_test_pages(vm_paddr_t pte_gva1, vm_paddr_t pte_gva2)
 	*(uint64_t *)pte_gva2 = tmp;
 }
 
-/*
- * TODO: replace the silly NOP loop with a proper udelay() implementation.
- */
 static inline void do_delay(void)
 {
-	int i;
-
-	for (i = 0; i < 1000000; i++)
-		asm volatile("nop");
+	udelay(100);
 }
 
 /*
