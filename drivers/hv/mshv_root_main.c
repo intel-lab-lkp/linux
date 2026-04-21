@@ -1298,15 +1298,7 @@ mshv_map_user_memory(struct mshv_partition *partition,
 		ret = mshv_map_pinned_region(region);
 		break;
 	case MSHV_REGION_TYPE_MEM_MOVABLE:
-		/*
-		 * For movable memory regions, remap with no access to let
-		 * the hypervisor track dirty pages, enabling pre-copy live
-		 * migration.
-		 */
-		ret = hv_call_map_ram_pfns(partition->pt_id,
-					   region->start_gfn,
-					   region->nr_pfns,
-					   HV_MAP_GPA_NO_ACCESS, NULL);
+		ret = mshv_map_movable_region(region);
 		break;
 	case MSHV_REGION_TYPE_MMIO:
 		ret = hv_call_map_mmio_pfns(partition->pt_id,

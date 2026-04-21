@@ -519,7 +519,8 @@ int mshv_region_get(struct mshv_mem_region *region)
 static int mshv_region_hmm_fault_and_lock(struct mshv_mem_region *region,
 					  unsigned long start,
 					  unsigned long end,
-					  unsigned long *pfns)
+					  unsigned long *pfns,
+					  bool do_fault)
 {
 	struct hmm_range range = {
 		.notifier = &region->mreg_mni,
@@ -541,9 +542,12 @@ static int mshv_region_hmm_fault_and_lock(struct mshv_mem_region *region,
 		range.hmm_pfns = pfns;
 		range.start = start;
 		range.end = min(vma->vm_end, end);
-		range.default_flags = HMM_PFN_REQ_FAULT;
-		if (vma->vm_flags & VM_WRITE)
-			range.default_flags |= HMM_PFN_REQ_WRITE;
+		range.default_flags = 0;
+		if (do_fault) {
+			range.default_flags = HMM_PFN_REQ_FAULT;
+			if (vma->vm_flags & VM_WRITE)
+				range.default_flags |= HMM_PFN_REQ_WRITE;
+		}
 
 		ret = hmm_range_fault(&range);
 		if (ret)
@@ -568,26 +572,40 @@ static int mshv_region_hmm_fault_and_lock(struct mshv_mem_region *region,
 }
 
 /**
- * mshv_region_range_fault - Handle memory range faults for a given region.
- * @region: Pointer to the memory region structure.
- * @pfn_offset: Offset of the page within the region.
- * @pfn_count: Number of pages to handle.
+ * mshv_region_collect_and_map - Collect PFNs for a user range and map them
+ * @region    : memory region being processed
+ * @pfn_offset: PFNs offset within the region
+ * @pfn_count : number of PFNs to process
+ * @do_fault  : if true, fault in missing pages;
+ *              if false, collect only present pages
  *
- * This function resolves memory faults for a specified range of pages
- * within a memory region. It uses HMM (Heterogeneous Memory Management)
- * to fault in the required pages and updates the region's page array.
+ * Collects PFNs for the specified portion of @region from the
+ * corresponding userspace VMAs and maps them into the hypervisor. The
+ * behavior depends on @do_fault:
  *
- * Return: 0 on success, negative error code on failure.
+ * - true: Fault in missing pages from userspace, ensuring all pages in the
+ *   range are present. Used for on-demand page population.
+ * - false: Collect PFNs only for pages already present in userspace,
+ *   leaving missing pages as invalid PFN markers.
+ *   Used for initial region setup.
+ *
+ * Collected PFNs are stored in region->mreg_pfns[] with HMM bookkeeping
+ * flags cleared, then the range is mapped into the hypervisor. Present
+ * PFNs get mapped with region access permissions; missing PFNs (invalid
+ * entries) get mapped with no-access permissions.
+ *
+ * Return: 0 on success, negative errno on failure.
  */
-static int mshv_region_range_fault(struct mshv_mem_region *region,
-				   u64 pfn_offset, u64 pfn_count)
+static int mshv_region_collect_and_map(struct mshv_mem_region *region,
+				       u64 pfn_offset, u64 pfn_count,
+				       bool do_fault)
 {
 	unsigned long start, end;
 	unsigned long *pfns;
 	int ret;
 	u64 i;
 
-	pfns = kmalloc_array(pfn_count, sizeof(*pfns), GFP_KERNEL);
+	pfns = vmalloc_array(pfn_count, sizeof(unsigned long));
 	if (!pfns)
 		return -ENOMEM;
 
@@ -596,7 +614,7 @@ static int mshv_region_range_fault(struct mshv_mem_region *region,
 
 	do {
 		ret = mshv_region_hmm_fault_and_lock(region, start, end,
-						     pfns);
+						     pfns, do_fault);
 	} while (ret == -EBUSY);
 
 	if (ret)
@@ -614,8 +632,15 @@ static int mshv_region_range_fault(struct mshv_mem_region *region,
 
 	mutex_unlock(&region->mreg_mutex);
 out:
-	kfree(pfns);
+	vfree(pfns);
 	return ret;
+}
+
+static int mshv_region_range_fault(struct mshv_mem_region *region,
+				   u64 pfn_offset, u64 pfn_count)
+{
+	return mshv_region_collect_and_map(region, pfn_offset, pfn_count,
+					   true);
 }
 
 bool mshv_region_handle_gfn_fault(struct mshv_mem_region *region, u64 gfn)
@@ -800,4 +825,10 @@ invalidate_region:
 	mshv_region_invalidate(region);
 err_out:
 	return ret;
+}
+
+int mshv_map_movable_region(struct mshv_mem_region *region)
+{
+	return mshv_region_collect_and_map(region, 0, region->nr_pfns,
+					   false);
 }

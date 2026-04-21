@@ -373,5 +373,6 @@ bool mshv_region_handle_gfn_fault(struct mshv_mem_region *region, u64 gfn);
 void mshv_region_movable_fini(struct mshv_mem_region *region);
 bool mshv_region_movable_init(struct mshv_mem_region *region);
 int mshv_map_pinned_region(struct mshv_mem_region *region);
+int mshv_map_movable_region(struct mshv_mem_region *region);
 
 #endif /* _MSHV_ROOT_H_ */
