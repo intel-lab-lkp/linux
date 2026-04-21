@@ -33,6 +33,7 @@ use crate::{
     },
     gpu::Chipset,
     gsp::{
+        cmdq::Cmdq,
         commands,
         sequencer::{
             GspSequencer,
@@ -234,6 +235,45 @@ impl super::Gsp {
             Ok(name) => dev_info!(pdev, "GPU name: {}\n", name),
             Err(e) => dev_warn!(pdev, "GPU name unavailable: {:?}\n", e),
         }
+
+        Ok(())
+    }
+
+    /// Shut down the GSP and wait until it is offline.
+    fn shutdown_gsp(
+        cmdq: &Cmdq,
+        bar: &Bar0,
+        gsp_falcon: &Falcon<Gsp>,
+        suspend: bool,
+    ) -> Result<()> {
+        // Send command to shutdown GSP and wait for response.
+        cmdq.send_command(bar, commands::UnloadingGuestDriver::new(suspend))?;
+
+        // Wait until GSP signals it is suspended.
+        const LIBOS_INTERRUPT_PROCESSOR_SUSPENDED: u32 = 0x8000_0000;
+        read_poll_timeout(
+            || Ok(gsp_falcon.read_mailbox0(bar)),
+            |&mb0| mb0 == LIBOS_INTERRUPT_PROCESSOR_SUSPENDED,
+            Delta::from_millis(10),
+            Delta::from_secs(5),
+        )
+        .map(|_| ())
+    }
+
+    /// Attempts to unload the GSP firmware.
+    ///
+    /// This stops all activity on the GSP.
+    pub(crate) fn unload(
+        &self,
+        dev: &device::Device<device::Bound>,
+        bar: &Bar0,
+        gsp_falcon: &Falcon<Gsp>,
+    ) -> Result {
+        // Shut down the GSP.
+
+        Self::shutdown_gsp(&self.cmdq, bar, gsp_falcon, false)
+            .inspect_err(|e| dev_err!(dev, "unload guest driver failed: {:?}", e))?;
+        dev_dbg!(dev, "GSP shut down\n");
 
         Ok(())
     }

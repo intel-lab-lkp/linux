@@ -277,11 +277,16 @@ impl Gpu {
 
     /// Called when the corresponding [`Device`](device::Device) is unbound.
     ///
+    /// Prepares the GPU for unbinding by shutting down the GSP and unregistering the sysmem flush
+    /// memory page.
+    ///
     /// Note: This method must only be called from `Driver::unbind`.
     pub(crate) fn unbind(&self, dev: &device::Device<device::Core>) {
         let Ok(bar) = kernel::warn_on_err!(self.bar.access(dev)) else {
             return;
         };
+
+        let _ = kernel::warn_on_err!(self.gsp.unload(dev, bar, &self.gsp_falcon));
 
         self.sysmem_flush.unregister(bar);
     }
