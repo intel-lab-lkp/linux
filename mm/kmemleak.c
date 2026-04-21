@@ -92,6 +92,7 @@
 #include <linux/nodemask.h>
 #include <linux/mm.h>
 #include <linux/workqueue.h>
+#include <linux/xarray.h>
 #include <linux/crc32.h>
 
 #include <asm/sections.h>
@@ -1685,6 +1686,82 @@ unlock_put:
 }
 
 /*
+ * Per-scan dedup table for verbose leak printing. Each entry collapses all
+ * leaks that share one allocation backtrace (keyed by stackdepot
+ * trace_handle) into a single representative object plus a count.
+ */
+struct kmemleak_dedup_entry {
+	struct kmemleak_object *object;
+	unsigned long count;
+};
+
+/*
+ * Record a leaked object in the dedup table. The representative object's
+ * use_count is incremented so it can be safely dereferenced by dedup_flush()
+ * outside the RCU read section; dedup_flush() drops the reference. On
+ * allocation failure (or a concurrent insert) the object is printed
+ * immediately, preserving today's "always log every leak" guarantee.
+ * Caller must not hold object->lock and must hold rcu_read_lock().
+ */
+static void dedup_record(struct xarray *dedup, struct kmemleak_object *object,
+			 depot_stack_handle_t trace_handle)
+{
+	struct kmemleak_dedup_entry *entry;
+
+	entry = xa_load(dedup, trace_handle);
+	if (entry) {
+		/* This is a known beast, just increase the counter */
+		entry->count++;
+		return;
+	}
+
+	/*
+	 * A brand new report. Object will have object->use_count increased
+	 * in here, and released put_object() at dedup_flush
+	 */
+	entry = kmalloc(sizeof(*entry), GFP_ATOMIC);
+	if (entry && get_object(object)) {
+		if (xa_insert(dedup, trace_handle, entry, GFP_ATOMIC) == 0) {
+			entry->object = object;
+			entry->count = 1;
+			return;
+		}
+		put_object(object);
+	}
+	kfree(entry);
+
+	/*
+	 * Fallback for kmalloc/get_object(): Just print it straight away
+	 */
+	raw_spin_lock_irq(&object->lock);
+	print_unreferenced(NULL, object);
+	raw_spin_unlock_irq(&object->lock);
+}
+
+/*
+ * Drain the dedup table: print one full record per unique backtrace,
+ * followed by a summary line whenever more than one object shared it.
+ * Releases the reference dedup_record() took on each representative object.
+ */
+static void dedup_flush(struct xarray *dedup)
+{
+	struct kmemleak_dedup_entry *entry;
+	unsigned long idx;
+
+	xa_for_each(dedup, idx, entry) {
+		raw_spin_lock_irq(&entry->object->lock);
+		print_unreferenced(NULL, entry->object);
+		raw_spin_unlock_irq(&entry->object->lock);
+		if (entry->count > 1)
+			pr_warn("  ... and %lu more object(s) with the same backtrace\n",
+				entry->count - 1);
+		put_object(entry->object);
+		kfree(entry);
+		xa_erase(dedup, idx);
+	}
+}
+
+/*
  * Scan data sections and all the referenced memory blocks allocated via the
  * kernel's standard allocators. This function must be called with the
  * scan_mutex held.
@@ -1834,10 +1911,19 @@ static void kmemleak_scan(void)
 		return;
 
 	/*
-	 * Scanning result reporting.
+	 * Scanning result reporting. When verbose printing is enabled, dedupe
+	 * by stackdepot trace_handle so each unique backtrace is logged once
+	 * per scan, annotated with the number of objects that share it. The
+	 * per-leak count below still reflects every object, and
+	 * /sys/kernel/debug/kmemleak still lists them individually.
 	 */
+	struct xarray dedup;
+
+	xa_init(&dedup);
 	rcu_read_lock();
 	list_for_each_entry_rcu(object, &object_list, object_list) {
+		depot_stack_handle_t trace_handle;
+
 		if (need_resched())
 			kmemleak_cond_resched(object);
 
@@ -1849,18 +1935,41 @@ static void kmemleak_scan(void)
 		if (!color_white(object))
 			continue;
 		raw_spin_lock_irq(&object->lock);
+		trace_handle = 0;
 		if (unreferenced_object(object) &&
 		    !(object->flags & OBJECT_REPORTED)) {
 			object->flags |= OBJECT_REPORTED;
 
 			if (kmemleak_verbose)
-				print_unreferenced(NULL, object);
+				trace_handle = object->trace_handle;
 
 			new_leaks++;
 		}
 		raw_spin_unlock_irq(&object->lock);
+
+		/*
+		 * Dedup bookkeeping must happen outside object->lock.
+		 * dedup_record() may call kmalloc(GFP_ATOMIC), and the slab
+		 * path takes locks (n->list_lock, etc.) at a higher
+		 * wait-context level than the raw_spinlock_t object->lock;
+		 *
+		 * Passing object without object->lock here is safe:
+		 *  - the surrounding rcu_read_lock() keeps the memory alive
+		 *    even if a concurrent kmemleak_free() drops use_count to
+		 *    zero and queues free_object_rcu();
+		 *  - dedup_record() only manipulates use_count via the atomic
+		 *    get_object()/put_object() helpers and stores the bare
+		 *    pointer into the xarray;
+		 *  - on the fallback print path it re-acquires object->lock
+		 *    before calling print_unreferenced().
+		 */
+		if (trace_handle)
+			dedup_record(&dedup, object, trace_handle);
 	}
 	rcu_read_unlock();
+	/* Flush'em all */
+	dedup_flush(&dedup);
+	xa_destroy(&dedup);
 
 	if (new_leaks) {
 		kmemleak_found_leaks = true;
