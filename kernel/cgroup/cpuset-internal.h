@@ -35,6 +35,7 @@ enum prs_errcode {
 	PERR_HKEEPING,
 	PERR_ACCESS,
 	PERR_REMOTE,
+	PERR_OL_DISABLED,
 };
 
 /* bits in struct cpuset flags field */

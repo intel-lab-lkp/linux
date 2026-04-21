@@ -20,6 +20,8 @@
  */
 #include "cpuset-internal.h"
 
+#include <linux/cpu.h>
+#include <linux/device.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
@@ -48,7 +50,7 @@ DEFINE_STATIC_KEY_FALSE(cpusets_enabled_key);
  */
 DEFINE_STATIC_KEY_FALSE(cpusets_insane_config_key);
 
-static const char * const perr_strings[] = {
+static const char *perr_strings[] __ro_after_init = {
 	[PERR_INVCPUS]   = "Invalid cpu list in cpuset.cpus.exclusive",
 	[PERR_INVPARENT] = "Parent is an invalid partition root",
 	[PERR_NOTPART]   = "Parent is not a partition root",
@@ -59,6 +61,7 @@ static const char * const perr_strings[] = {
 	[PERR_HKEEPING]  = "partition config conflicts with housekeeping setup",
 	[PERR_ACCESS]    = "Enable partition not permitted",
 	[PERR_REMOTE]    = "Have remote partition underneath",
+	[PERR_OL_DISABLED] = "", /* To be set up later */
 };
 
 /*
@@ -163,6 +166,12 @@ static cpumask_var_t	isolated_mirq_cpus;	/* T */
 
 static bool		boot_nohz_le_domain __ro_after_init;
 static bool		boot_mirq_le_domain __ro_after_init;
+
+/*
+ * Cpumask of CPUs with offline_disabled set
+ * The cpumask is effectively __ro_after_init.
+ */
+static cpumask_var_t	offline_disabled_cpus;
 
 /*
  * A flag to force sched domain rebuild at the end of an operation.
@@ -1652,6 +1661,8 @@ static int remote_partition_enable(struct cpuset *cs, int new_prs,
 	 * The effective_xcpus mask can contain offline CPUs, but there must
 	 * be at least one or more online CPUs present before it can be enabled.
 	 *
+	 * An isolated partition cannot contain CPUs with offline disabled.
+	 *
 	 * Note that creating a remote partition with any local partition root
 	 * above it or remote partition root underneath it is not allowed.
 	 */
@@ -1664,6 +1675,9 @@ static int remote_partition_enable(struct cpuset *cs, int new_prs,
 	     !isolated_cpus_can_update(tmp->new_cpus, NULL)) ||
 	    prstate_housekeeping_conflict(new_prs, tmp->new_cpus))
 		return PERR_HKEEPING;
+	if (tick_nohz_full_enabled() && (new_prs == PRS_ISOLATED) &&
+	    cpumask_intersects(tmp->new_cpus, offline_disabled_cpus))
+		return PERR_OL_DISABLED;
 
 	spin_lock_irq(&callback_lock);
 	partition_xcpus_add(new_prs, NULL, tmp->new_cpus);
@@ -1746,6 +1760,16 @@ static void remote_cpus_update(struct cpuset *cs, struct cpumask *xcpus,
 
 	if (cpumask_empty(excpus)) {
 		cs->prs_err = PERR_CPUSEMPTY;
+		goto invalidate;
+	}
+
+	/*
+	 * Isolated partition cannot contains CPUs with offline_disabled
+	 * bit set.
+	 */
+	if (tick_nohz_full_enabled() && (prs == PRS_ISOLATED) &&
+	    cpumask_intersects(excpus, offline_disabled_cpus)) {
+		cs->prs_err = PERR_OL_DISABLED;
 		goto invalidate;
 	}
 
@@ -1916,6 +1940,11 @@ static int update_parent_effective_cpumask(struct cpuset *cs, int cmd,
 		if (tasks_nocpu_error(parent, cs, xcpus))
 			return PERR_NOCPUS;
 
+		if (tick_nohz_full_enabled() &&
+		    (new_prs == PRS_ISOLATED) &&
+		    cpumask_intersects(xcpus, offline_disabled_cpus))
+			return PERR_OL_DISABLED;
+
 		/*
 		 * This function will only be called when all the preliminary
 		 * checks have passed. At this point, the following condition
@@ -1983,11 +2012,20 @@ static int update_parent_effective_cpumask(struct cpuset *cs, int cmd,
 		}
 
 		/*
+		 * Isolated partition cannot contain CPUs with offline_disabled
+		 * bit set.
+		 */
+		if (tick_nohz_full_enabled() &&
+		   ((old_prs == PRS_ISOLATED) ||
+		    (old_prs == PRS_INVALID_ISOLATED)) &&
+		    cpumask_intersects(newmask, offline_disabled_cpus)) {
+			part_error = PERR_OL_DISABLED;
+		/*
 		 * TBD: Invalidate a currently valid child root partition may
 		 * still break isolated_cpus_can_update() rule if parent is an
 		 * isolated partition.
 		 */
-		if (is_partition_valid(cs) && (old_prs != parent_prs)) {
+		} else if (is_partition_valid(cs) && (old_prs != parent_prs)) {
 			if ((parent_prs == PRS_ROOT) &&
 			    /* Adding to parent means removing isolated CPUs */
 			    !isolated_cpus_can_update(tmp->delmask, tmp->addmask))
@@ -1996,6 +2034,19 @@ static int update_parent_effective_cpumask(struct cpuset *cs, int cmd,
 			    /* Adding to parent means adding isolated CPUs */
 			    !isolated_cpus_can_update(tmp->addmask, tmp->delmask))
 				part_error = PERR_HKEEPING;
+		}
+
+		if (part_error) {
+			deleting = false;
+			/*
+			 * For a previously valid partition, we need to move
+			 * the exclusive CPUs back to its parent.
+			 */
+			if (is_partition_valid(cs) &&
+			    !cpumask_empty(cs->effective_xcpus)) {
+				cpumask_copy(tmp->addmask, cs->effective_xcpus);
+				adding = true;
+			}
 		}
 
 		/*
@@ -3834,6 +3885,7 @@ int __init cpuset_init(void)
 	BUG_ON(!zalloc_cpumask_var(&subpartitions_cpus, GFP_KERNEL));
 	BUG_ON(!zalloc_cpumask_var(&isolated_cpus, GFP_KERNEL));
 	BUG_ON(!zalloc_cpumask_var(&isolated_hk_cpus, GFP_KERNEL));
+	BUG_ON(!zalloc_cpumask_var(&offline_disabled_cpus, GFP_KERNEL));
 
 	cpumask_setall(top_cpuset.cpus_allowed);
 	nodes_setall(top_cpuset.mems_allowed);
@@ -4192,6 +4244,39 @@ void __init cpuset_init_smp(void)
 	cpuset_migrate_mm_wq = alloc_ordered_workqueue("cpuset_migrate_mm", 0);
 	BUG_ON(!cpuset_migrate_mm_wq);
 }
+
+/**
+ * cpuset_init_late - initialize the list of CPUs with offline_disabled set
+ *
+ * Description: Initialize a cpumask with CPUs that have the offline_disabled
+ *		bit set. It is done in a separate initcall as cpuset_init_smp()
+ *		is called before driver_init() where the CPU devices will be
+ *		set up.
+ */
+static int __init cpuset_init_late(void)
+{
+	int cpu;
+
+	if (!tick_nohz_full_enabled())
+		return 0;
+	/*
+	 * Iterate all the possible CPUs to see which one has offline disabled.
+	 */
+	for_each_possible_cpu(cpu) {
+		if (get_cpu_device(cpu)->offline_disabled)
+			__cpumask_set_cpu(cpu, offline_disabled_cpus);
+	}
+	if (!cpumask_empty(offline_disabled_cpus)) {
+		char buf[128];
+
+		snprintf(buf, sizeof(buf),
+			 "CPU %*pbl with offline disabled not allowed in isolated partition",
+			 cpumask_pr_args(offline_disabled_cpus));
+		perr_strings[PERR_OL_DISABLED] = kstrdup(buf, GFP_KERNEL);
+	}
+	return 0;
+}
+pure_initcall(cpuset_init_late);
 
 /*
  * Return cpus_allowed mask from a task's cpuset.
