@@ -1196,6 +1196,28 @@ int rcu_nocb_cpu_offload(int cpu)
 }
 EXPORT_SYMBOL_GPL(rcu_nocb_cpu_offload);
 
+void rcu_nocb_update_cpus(struct cpumask *cpumask)
+{
+	int cpu, ret;
+
+	if (!rcu_state.nocb_is_setup) {
+		pr_warn_once("Dynamic RCU NOCB cannot be enabled without nohz_full/rcu_nocbs kernel boot parameter!\n");
+		return;
+	}
+
+	for_each_cpu_andnot(cpu, cpumask, rcu_nocb_mask) {
+		ret = rcu_nocb_cpu_offload(cpu);
+		if (WARN_ON_ONCE(ret))
+			return;
+	}
+
+	for_each_cpu_andnot(cpu, rcu_nocb_mask, cpumask) {
+		ret = rcu_nocb_cpu_deoffload(cpu);
+		if (WARN_ON_ONCE(ret))
+			return;
+	}
+}
+
 #ifdef CONFIG_RCU_LAZY
 static unsigned long
 lazy_rcu_shrink_count(struct shrinker *shrink, struct shrink_control *sc)

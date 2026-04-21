@@ -150,6 +150,7 @@ void rcu_init_nohz(void);
 int rcu_nocb_cpu_offload(int cpu);
 int rcu_nocb_cpu_deoffload(int cpu);
 void rcu_nocb_flush_deferred_wakeup(void);
+void rcu_nocb_update_cpus(struct cpumask *cpumask);
 
 #define RCU_NOCB_LOCKDEP_WARN(c, s) RCU_LOCKDEP_WARN(c, s)
 
@@ -159,6 +160,7 @@ static inline void rcu_init_nohz(void) { }
 static inline int rcu_nocb_cpu_offload(int cpu) { return -EINVAL; }
 static inline int rcu_nocb_cpu_deoffload(int cpu) { return 0; }
 static inline void rcu_nocb_flush_deferred_wakeup(void) { }
+static inline void rcu_nocb_update_cpus(struct cpumask *cpumask) { }
 
 #define RCU_NOCB_LOCKDEP_WARN(c, s)
 
