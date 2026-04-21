@@ -134,6 +134,12 @@ static int u2fzero_recv(struct u2fzero_device *dev,
 
 	memcpy(dev->buf_out, req, sizeof(struct u2f_hid_report));
 
+	if (!dev->urb) {
+		hid_err(hdev, "recv called without initialized URB");
+		ret = -ENODEV;
+		goto err;
+	}
+
 	dev->urb->context = &ctx;
 	init_completion(&ctx.done);
 
@@ -341,7 +347,11 @@ static int u2fzero_probe(struct hid_device *hdev,
 	if (ret)
 		return ret;
 
-	u2fzero_fill_in_urb(dev);
+	ret = u2fzero_fill_in_urb(dev);
+	if (ret) {
+		hid_hw_stop(hdev);
+		return ret;
+	}
 
 	dev->present = true;
 
