@@ -1822,6 +1822,7 @@ static const struct of_device_id dw_i3c_master_of_match[] = {
 	{ .compatible = "altr,agilex5-dw-i3c-master",
 	  .data = &altr_agilex5_drvdata,
 	},
+	{ .compatible = "amd,versalnet-dw-i3c-master", },
 	{},
 };
 MODULE_DEVICE_TABLE(of, dw_i3c_master_of_match);
