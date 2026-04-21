@@ -61,7 +61,7 @@ static inline struct page *siw_get_upage(struct siw_umem *umem, u64 addr)
 		     chunk_idx = page_idx >> CHUNK_SHIFT,
 		     page_in_chunk = page_idx & ~CHUNK_MASK;
 
-	if (likely(page_idx < umem->num_pages))
+	if (likely(chunk_idx < umem->num_chunks))
 		return umem->page_chunk[chunk_idx].plist[page_in_chunk];
 
 	return NULL;
