@@ -560,7 +560,11 @@ pipe_line_stop:
 
 static void rzg2l_cru_stop_streaming(struct rzg2l_cru_dev *cru)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&cru->qlock, flags);
 	cru->state = RZG2L_CRU_DMA_STOPPING;
+	spin_unlock_irqrestore(&cru->qlock, flags);
 
 	rzg2l_cru_set_stream(cru, 0);
 }
@@ -749,6 +753,7 @@ irqreturn_t rzg3e_cru_irq(int irq, void *data)
 static int rzg2l_cru_start_streaming_vq(struct vb2_queue *vq, unsigned int count)
 {
 	struct rzg2l_cru_dev *cru = vb2_get_drv_priv(vq);
+	unsigned long flags;
 	int ret;
 
 	ret = pm_runtime_resume_and_get(cru->dev);
@@ -791,7 +796,9 @@ static int rzg2l_cru_start_streaming_vq(struct vb2_queue *vq, unsigned int count
 		goto out;
 	}
 
+	spin_lock_irqsave(&cru->qlock, flags);
 	cru->state = RZG2L_CRU_DMA_STARTING;
+	spin_unlock_irqrestore(&cru->qlock, flags);
 	dev_dbg(cru->dev, "Starting to capture\n");
 	return 0;
 
