@@ -766,45 +766,75 @@ static __init bool need_page_alloc_tagging(void)
  * Some pages are allocated before page_ext becomes available, leaving
  * their codetag uninitialized. Track these early PFNs so we can clear
  * their codetag refs later to avoid warnings when they are freed.
- *
- * Early allocations include:
- *   - Base allocations independent of CPU count
- *   - Per-CPU allocations (e.g., CPU hotplug callbacks during smp_init,
- *     such as trace ring buffers, scheduler per-cpu data)
- *
- * For simplicity, we fix the size to 8192.
- * If insufficient, a warning will be triggered to alert the user.
- *
- * TODO: Replace fixed-size array with dynamic allocation using
- * a GFP flag similar to ___GFP_NO_OBJ_EXT to avoid recursion.
  */
-#define EARLY_ALLOC_PFN_MAX		8192
+struct early_pfn_node {
+	struct early_pfn_node	*next;
+	unsigned long		pfn;
+};
 
-static unsigned long early_pfns[EARLY_ALLOC_PFN_MAX] __initdata;
-static atomic_t early_pfn_count __initdata = ATOMIC_INIT(0);
+#define NODES_PER_PAGE		(PAGE_SIZE / sizeof(struct early_pfn_node))
 
-static void __init __alloc_tag_add_early_pfn(unsigned long pfn)
+static struct early_pfn_node *early_pfn_list __initdata;
+static struct early_pfn_node *early_pfn_freelist __initdata;
+static struct page *early_pfn_pages __initdata;
+
+static struct early_pfn_node *__init alloc_early_pfn_node(gfp_t gfp_flags)
 {
-	int old_idx, new_idx;
+	struct early_pfn_node *ep, *new;
+	struct page *page, *old_page;
+	gfp_t gfp = gfpflags_allow_blocking(gfp_flags) ? GFP_KERNEL : GFP_ATOMIC;
+	int i;
+
+retry:
+	ep = READ_ONCE(early_pfn_freelist);
+	if (ep) {
+		struct early_pfn_node *next = READ_ONCE(ep->next);
+
+		if (try_cmpxchg(&early_pfn_freelist, &ep, next))
+			return ep;
+		goto retry;
+	}
+
+	page = alloc_page(gfp | __GFP_NO_CODETAG | __GFP_ZERO);
+	if (!page)
+		return NULL;
+
+	new = page_address(page);
+	for (i = 0; i < NODES_PER_PAGE - 1; i++)
+		new[i].next = &new[i + 1];
+	new[NODES_PER_PAGE - 1].next = NULL;
+
+	if (cmpxchg(&early_pfn_freelist, NULL, new + 1)) {
+		__free_page(page);
+		goto retry;
+	}
 
 	do {
-		old_idx = atomic_read(&early_pfn_count);
-		if (old_idx >= EARLY_ALLOC_PFN_MAX) {
-			pr_warn_once("Early page allocations before page_ext init exceeded EARLY_ALLOC_PFN_MAX (%d)\n",
-				      EARLY_ALLOC_PFN_MAX);
-			return;
-		}
-		new_idx = old_idx + 1;
-	} while (!atomic_try_cmpxchg(&early_pfn_count, &old_idx, new_idx));
+		old_page = READ_ONCE(early_pfn_pages);
+		page->private = (unsigned long)old_page;
+	} while (cmpxchg(&early_pfn_pages, old_page, page) != old_page);
 
-	early_pfns[old_idx] = pfn;
+	return new;
 }
 
-typedef void alloc_tag_add_func(unsigned long pfn);
+static void __init __alloc_tag_add_early_pfn(unsigned long pfn, gfp_t gfp_flags)
+{
+	struct early_pfn_node *ep = alloc_early_pfn_node(gfp_flags);
+
+	if (!ep)
+		return;
+
+	ep->pfn = pfn;
+	do {
+		ep->next = READ_ONCE(early_pfn_list);
+	} while (!try_cmpxchg(&early_pfn_list, &ep->next, ep));
+}
+
+typedef void alloc_tag_add_func(unsigned long pfn, gfp_t gfp_flags);
 static alloc_tag_add_func __rcu *alloc_tag_add_early_pfn_ptr __refdata =
 	RCU_INITIALIZER(__alloc_tag_add_early_pfn);
 
-void alloc_tag_add_early_pfn(unsigned long pfn)
+void alloc_tag_add_early_pfn(unsigned long pfn, gfp_t gfp_flags)
 {
 	alloc_tag_add_func *alloc_tag_add;
 
@@ -814,13 +844,14 @@ void alloc_tag_add_early_pfn(unsigned long pfn)
 	rcu_read_lock();
 	alloc_tag_add = rcu_dereference(alloc_tag_add_early_pfn_ptr);
 	if (alloc_tag_add)
-		alloc_tag_add(pfn);
+		alloc_tag_add(pfn, gfp_flags);
 	rcu_read_unlock();
 }
 
 static void __init clear_early_alloc_pfn_tag_refs(void)
 {
-	unsigned int i;
+	struct early_pfn_node *ep;
+	struct page *page, *next;
 
 	if (static_key_enabled(&mem_profiling_compressed))
 		return;
@@ -829,14 +860,13 @@ static void __init clear_early_alloc_pfn_tag_refs(void)
 	/* Make sure we are not racing with __alloc_tag_add_early_pfn() */
 	synchronize_rcu();
 
-	for (i = 0; i < atomic_read(&early_pfn_count); i++) {
-		unsigned long pfn = early_pfns[i];
+	for (ep = early_pfn_list; ep; ep = ep->next) {
 
-		if (pfn_valid(pfn)) {
-			struct page *page = pfn_to_page(pfn);
+		if (pfn_valid(ep->pfn)) {
 			union pgtag_ref_handle handle;
 			union codetag_ref ref;
 
+			page = pfn_to_page(ep->pfn);
 			if (get_page_tag_ref(page, &ref, &handle)) {
 				/*
 				 * An early-allocated page could be freed and reallocated
@@ -860,6 +890,12 @@ static void __init clear_early_alloc_pfn_tag_refs(void)
 			}
 		}
 
+	}
+
+	for (page = early_pfn_pages; page; page = next) {
+		next = (struct page *)page->private;
+		clear_page_tag_ref(page);
+		__free_page(page);
 	}
 }
 #else /* !CONFIG_MEM_ALLOC_PROFILING_DEBUG */
