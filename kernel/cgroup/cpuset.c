@@ -152,9 +152,17 @@ static cpumask_var_t	isolated_cpus;		/* CSCB */
 static bool		update_housekeeping;	/* RWCS */
 
 /*
- * Copy of isolated_cpus to be passed to housekeeping_update()
+ * Cpumasks to be passed to housekeeping_update()
+ * isolated_hk_cpus - copy of isolated_cpus for HK_TYPE_DOMAIN
+ * isolated_nohz_cpus - for HK_TYPE_KERNEL_NOISE
+ * isolated_mirq_cpus - for HK_TYPE_MANAGED_IRQ
  */
 static cpumask_var_t	isolated_hk_cpus;	/* T */
+static cpumask_var_t	isolated_nohz_cpus;	/* T */
+static cpumask_var_t	isolated_mirq_cpus;	/* T */
+
+static bool		boot_nohz_le_domain __ro_after_init;
+static bool		boot_mirq_le_domain __ro_after_init;
 
 /*
  * A flag to force sched domain rebuild at the end of an operation.
@@ -1331,6 +1339,135 @@ static bool prstate_housekeeping_conflict(int prstate, struct cpumask *new_cpus)
 	return false;
 }
 
+static int cpuset_nohz_update_cbfunc(void *arg)
+{
+	struct cpumask *isol_cpus = (struct cpumask *)arg;
+
+	if (isol_cpus)
+		housekeeping_update(isol_cpus, BIT(HK_TYPE_KERNEL_NOISE));
+	return 0;
+}
+
+/*
+ */
+static void cpuset_update_housekeeping_unlock(void)
+{
+	bool update_nohz, update_mirq;
+	cpumask_var_t cpus;
+	int ret;
+
+	if (!tick_nohz_full_enabled())
+		return;
+
+	update_nohz = boot_nohz_le_domain;
+	update_mirq = boot_mirq_le_domain;
+
+	if (WARN_ON_ONCE(!alloc_cpumask_var(&cpus, GFP_KERNEL))) {
+		cpuset_full_unlock();
+		return;
+	}
+
+	/*
+	 * Update isolated_nohz_cpus/isolated_mirq_cpus if necessary
+	 */
+	if (!boot_nohz_le_domain) {
+		cpumask_andnot(cpus, cpu_possible_mask,
+			       housekeeping_cpumask(HK_TYPE_KERNEL_NOISE));
+		cpumask_or(cpus, cpus, isolated_cpus);
+		update_nohz = !cpumask_equal(isolated_nohz_cpus, cpus);
+		if (update_nohz)
+			cpumask_copy(isolated_nohz_cpus, cpus);
+	}
+	if (!boot_mirq_le_domain) {
+		cpumask_andnot(cpus, cpu_possible_mask,
+			       housekeeping_cpumask(HK_TYPE_MANAGED_IRQ));
+		cpumask_or(cpus, cpus, isolated_cpus);
+		update_mirq = !cpumask_equal(isolated_mirq_cpus, cpus);
+		if (update_mirq)
+			cpumask_copy(isolated_mirq_cpus, cpus);
+	}
+
+	/*
+	 * Compute list of CPUs to be brought offline into "cpus"
+	 * isolated_hk_cpus - old cpumask
+	 * isolated_cpus    - new cpumask
+	 *
+	 * With update_nohz, we need to offline both the newly isolated
+	 * and de-isolated CPUs. With only update_mirq, we only need to
+	 * offline the new isolated CPUs.
+	 */
+	if (update_nohz)
+		cpumask_xor(cpus, isolated_hk_cpus, isolated_cpus);
+	else if (update_mirq)
+		cpumask_andnot(cpus, isolated_cpus, isolated_hk_cpus);
+	cpumask_copy(isolated_hk_cpus, isolated_cpus);
+
+	/*
+	 * housekeeping_update() is now called without holding
+	 * cpus_read_lock and cpuset_mutex. Only cpuset_top_mutex
+	 * is still being held for mutual exclusion.
+	 */
+	mutex_unlock(&cpuset_mutex);
+	cpus_read_unlock();
+
+	if (!update_mirq) {
+		ret = housekeeping_update(isolated_hk_cpus, BIT(HK_TYPE_DOMAIN));
+	} else if (boot_mirq_le_domain) {
+		ret = housekeeping_update(isolated_hk_cpus,
+					  BIT(HK_TYPE_DOMAIN)|BIT(HK_TYPE_MANAGED_IRQ));
+	} else {
+		ret = housekeeping_update(isolated_hk_cpus, BIT(HK_TYPE_DOMAIN));
+		if (!ret)
+			ret = housekeeping_update(isolated_mirq_cpus,
+						  BIT(HK_TYPE_MANAGED_IRQ));
+	}
+
+	if (WARN_ON_ONCE(ret))
+		goto out_free;
+
+	/*
+	 * Calling cpuhp_offline_cb() is only needed if either
+	 * HK_TYPE_KERNEL_NOISE and/or HK_TYPE_MANAGED_IRQ cpumasks
+	 * needed to be updated.
+	 *
+	 * TODO: When tearing down a CPU from CPUHP_TEARDOWN_CPU state
+	 * downward to CPUHP_AP_OFFLINE, the stop_machine code will be
+	 * invoked to stop all the other CPUs in the system. This will
+	 * cause latency spikes on existing isolated CPUs. We will need
+	 * some new mechanism to enable us to not stop the existing
+	 * isolated CPUs whenever possible. A possible workaround is
+	 * to pre-allocate a set of nohz_full and manged_irq CPUs at
+	 * boot time and use them to create isolated cpuset partitions
+	 * so that CPU hotplug won't need to be used.
+	 */
+	if (update_mirq || update_nohz) {
+		struct cpumask *nohz_cpus;
+
+		/*
+		 * Calling housekeeping_update() is only needed if
+		 * update_nohz is set.
+		 */
+		nohz_cpus = !update_nohz ? NULL : boot_nohz_le_domain
+					 ? isolated_hk_cpus
+					 : isolated_nohz_cpus;
+		/*
+		 * Mask out offline CPUs in cpus
+		 * If there is no online CPUs, we can call
+		 * housekeeping_update() directly if needed.
+		 */
+		cpumask_and(cpus, cpus, cpu_online_mask);
+		if (!cpumask_empty(cpus))
+			ret = cpuhp_offline_cb(cpus, cpuset_nohz_update_cbfunc,
+					       nohz_cpus);
+		else if (nohz_cpus)
+			ret = housekeeping_update(nohz_cpus, BIT(HK_TYPE_KERNEL_NOISE));
+	}
+	WARN_ON_ONCE(ret);
+out_free:
+	free_cpumask_var(cpus);
+	mutex_unlock(&cpuset_top_mutex);
+}
+
 /*
  * cpuset_update_sd_hk_unlock - Rebuild sched domains, update HK & unlock
  *
@@ -1342,29 +1479,31 @@ static void cpuset_update_sd_hk_unlock(void)
 	__releases(&cpuset_mutex)
 	__releases(&cpuset_top_mutex)
 {
-	update_housekeeping = false;
-
 	/* force_sd_rebuild will be cleared in rebuild_sched_domains_locked() */
 	if (force_sd_rebuild)
 		rebuild_sched_domains_locked();
 
-	if (cpumask_equal(isolated_hk_cpus, isolated_cpus)) {
-		/* No housekeeping cpumask update needed */
+	update_housekeeping = false;
+
+	if (cpumask_equal(isolated_cpus, isolated_hk_cpus)) {
 		cpuset_full_unlock();
 		return;
 	}
 
-	cpumask_copy(isolated_hk_cpus, isolated_cpus);
-
-	/*
-	 * housekeeping_update() is now called without holding
-	 * cpus_read_lock and cpuset_mutex. Only cpuset_top_mutex
-	 * is still being held for mutual exclusion.
-	 */
-	mutex_unlock(&cpuset_mutex);
-	cpus_read_unlock();
-	WARN_ON_ONCE(housekeeping_update(isolated_hk_cpus, BIT(HK_TYPE_DOMAIN)));
-	mutex_unlock(&cpuset_top_mutex);
+	if (!tick_nohz_full_enabled()) {
+		/*
+		 * housekeeping_update() is now called without holding
+		 * cpus_read_lock and cpuset_mutex. Only cpuset_top_mutex
+		 * is still being held for mutual exclusion.
+		 */
+		mutex_unlock(&cpuset_mutex);
+		cpus_read_unlock();
+		WARN_ON_ONCE(housekeeping_update(isolated_hk_cpus,
+						 BIT(HK_TYPE_DOMAIN)));
+		mutex_unlock(&cpuset_top_mutex);
+	} else {
+		cpuset_update_housekeeping_unlock();
+	}
 }
 
 /*
@@ -3705,6 +3844,29 @@ int __init cpuset_init(void)
 			       housekeeping_cpumask(HK_TYPE_DOMAIN_BOOT));
 		cpumask_copy(isolated_hk_cpus, isolated_cpus);
 	}
+
+	/*
+	 * If nohz_full and/or managed_irq cpu list, if present, is a subset
+	 * of the domain cpu list, i.e. HK_TYPE_DOMAIN_BOOT cpumask is a subset
+	 * of HK_TYPE_KERNEL_NOISE_BOOT/HK_TYPE_MANAGED_IRQ_BOOT cpumask, the
+	 * corresponding non-boot housekeeping cpumasks will follow changes
+	 * in the HK_TYPE_DOMAIN cpumask. So we don't need to use separate
+	 * cpumasks to isolate them.
+	 */
+	boot_nohz_le_domain = cpumask_subset(housekeeping_cpumask(HK_TYPE_DOMAIN_BOOT),
+					     housekeeping_cpumask(HK_TYPE_KERNEL_NOISE_BOOT));
+	boot_mirq_le_domain = cpumask_subset(housekeeping_cpumask(HK_TYPE_DOMAIN_BOOT),
+					     housekeeping_cpumask(HK_TYPE_MANAGED_IRQ_BOOT));
+	if (!boot_nohz_le_domain) {
+		BUG_ON(!alloc_cpumask_var(&isolated_nohz_cpus, GFP_KERNEL));
+		cpumask_andnot(isolated_nohz_cpus, cpu_possible_mask,
+			       housekeeping_cpumask(HK_TYPE_KERNEL_NOISE));
+	}
+	if (!boot_mirq_le_domain) {
+		BUG_ON(!alloc_cpumask_var(&isolated_mirq_cpus, GFP_KERNEL));
+		cpumask_andnot(isolated_mirq_cpus, cpu_possible_mask,
+			       housekeeping_cpumask(HK_TYPE_MANAGED_IRQ));
+	}
 	return 0;
 }
 
@@ -3959,7 +4121,10 @@ static void cpuset_handle_hotplug(void)
 	 */
 	if (force_sd_rebuild)
 		rebuild_sched_domains_cpuslocked();
-	if (update_housekeeping)
+	/*
+	 * Don't need to update housekeeping cpumasks in cpuhp_offline_cb mode.
+	 */
+	if (update_housekeeping && !cpuhp_offline_cb_mode)
 		queue_work(system_dfl_wq, &hk_sd_work);
 
 	free_tmpmasks(ptmp);
