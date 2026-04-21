@@ -662,6 +662,25 @@ void kvm_print_vcpu_pinning_help(void)
 	       "     (default: no pinning)\n", name, name);
 }
 
+void pin_task_to_random_cpu(pthread_t task, cpu_set_t *possible_cpus)
+{
+	int i = 0, nr_cpus = CPU_COUNT(possible_cpus);
+	int cpu, target_idx;
+
+	target_idx = kvm_random_u64(&kvm_rng) % nr_cpus;
+
+	for (cpu = 0; i < nr_cpus; cpu++) {
+		if (!CPU_ISSET(cpu, possible_cpus))
+			continue;
+
+		if (i == target_idx) {
+			pin_task_to_cpu(task, cpu);
+			return;
+		}
+		i++;
+	}
+}
+
 void kvm_parse_vcpu_pinning(const char *pcpus_string, uint32_t vcpu_to_pcpu[],
 			    int nr_vcpus)
 {
