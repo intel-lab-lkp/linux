@@ -1326,6 +1326,8 @@ static int boe_panel_disable(struct drm_panel *panel)
 
 	mipi_dsi_msleep(&ctx, 150);
 
+	boe->dsi->mode_flags |= MIPI_DSI_MODE_LPM;
+
 	return ctx.accum_err;
 }
 
