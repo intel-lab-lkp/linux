@@ -12447,8 +12447,17 @@ static void kick_ilb(unsigned int flags)
 	 * Increase nohz.next_balance only when if full ilb is triggered but
 	 * not if we only update stats.
 	 */
-	if (flags & NOHZ_BALANCE_KICK)
-		nohz.next_balance = jiffies+1;
+	if (flags & NOHZ_BALANCE_KICK) {
+		unsigned int nr_idle = cpumask_weight(nohz.idle_cpus_mask);
+
+		/*
+		 * On large systems, there may always be some idle CPU(s) with
+		 * rq->next_balance close to or at current time, thus causing
+		 * frequent invocation of kick_ilb() from nohz_balancer_kick().
+		 * Adjust next_balance based on the number of idle CPUs.
+		 */
+		nohz.next_balance = jiffies + 1 + ((nr_idle > 32) ? ilog2(nr_idle) - 4 : 0);
+	}
 
 	ilb_cpu = find_new_ilb();
 	if (ilb_cpu < 0)
