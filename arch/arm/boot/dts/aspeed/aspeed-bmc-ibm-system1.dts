@@ -535,6 +535,10 @@
 	status = "okay";
 };
 
+&vhub {
+	status = "okay";
+};
+
 &i2c0 {
 	status = "okay";
 
