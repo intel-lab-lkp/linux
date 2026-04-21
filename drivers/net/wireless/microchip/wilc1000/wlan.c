@@ -1123,6 +1123,11 @@ static void wilc_wlan_handle_rx_buff(struct wilc *wilc, u8 *buffer, int size)
 		if (pkt_len == 0 || tp_len == 0)
 			break;
 
+		if (tp_len > size - offset || pkt_len > tp_len) {
+			dev_err(wilc->dev, "invalid RX header: tp=%u pkt=%u remain=%d\n",
+				tp_len, pkt_len, size - offset);
+			break;
+		}
 		if (pkt_offset & IS_MANAGMEMENT) {
 			buff_ptr += HOST_HDR_OFFSET;
 			wilc_wfi_mgmt_rx(wilc, buff_ptr, pkt_len,
