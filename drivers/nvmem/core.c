@@ -282,6 +282,9 @@ static umode_t nvmem_bin_attr_get_umode(struct nvmem_device *nvmem)
 	if (!nvmem->root_only)
 		mode |= 0044;
 
+	if (nvmem->read_only && nvmem->reg_write)
+		mode |= 0200;
+
 	if (!nvmem->read_only)
 		mode |= 0200;
 

@@ -627,7 +627,8 @@ static int at24_probe(struct i2c_client *client)
 		page_size = 1;
 
 	flags = cdata->flags;
-	if (device_property_present(dev, "read-only"))
+	if (device_property_present(dev, "read-only") &&
+	    !device_property_present(dev, "wp-gpios"))
 		flags |= AT24_FLAG_READONLY;
 	if (device_property_present(dev, "no-read-rollover"))
 		flags |= AT24_FLAG_NO_RDROL;
