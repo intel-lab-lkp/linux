@@ -632,6 +632,8 @@ static void ne2k_pci_block_output(struct net_device *dev, int count,
 				outw(le16_to_cpu(*b++), NE_BASE + NE_DATAPORT);
 				buf = (char *)b;
 			}
+			if (count & 1)
+				outb(*buf, NE_BASE + NE_DATAPORT);
 		}
 	}
 
