@@ -744,13 +744,16 @@ static void init_vp_index(struct vmbus_channel *channel)
 	u32 i, ncpu = num_online_cpus();
 	cpumask_var_t available_mask;
 	struct cpumask *allocated_mask;
-	const struct cpumask *hk_mask = housekeeping_cpumask(HK_TYPE_MANAGED_IRQ);
+	const struct cpumask *hk_mask;
 	u32 target_cpu;
 	int numa_node;
+	bool alloc_ok;
 
-	if (!perf_chn ||
-	    !alloc_cpumask_var(&available_mask, GFP_KERNEL) ||
-	    cpumask_empty(hk_mask)) {
+	alloc_ok = alloc_cpumask_var(&available_mask, GFP_KERNEL);
+	guard(rcu)();
+	hk_mask = housekeeping_cpumask(HK_TYPE_MANAGED_IRQ);
+
+	if (!perf_chn || !alloc_ok || cpumask_empty(hk_mask)) {
 		/*
 		 * If the channel is not a performance critical
 		 * channel, bind it to VMBUS_CONNECT_CPU.
@@ -762,7 +765,7 @@ static void init_vp_index(struct vmbus_channel *channel)
 		channel->target_cpu = VMBUS_CONNECT_CPU;
 		if (perf_chn)
 			hv_set_allocated_cpu(VMBUS_CONNECT_CPU);
-		return;
+		goto out_free;
 	}
 
 	for (i = 1; i <= ncpu + 1; i++) {
@@ -800,7 +803,7 @@ retry:
 	}
 
 	channel->target_cpu = target_cpu;
-
+out_free:
 	free_cpumask_var(available_mask);
 }
 
