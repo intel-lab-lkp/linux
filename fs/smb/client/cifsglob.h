@@ -504,7 +504,7 @@ struct smb_version_operations {
 			       struct cifs_search_info *);
 	/* continue readdir */
 	int (*query_dir_next)(const unsigned int, struct cifs_tcon *,
-			      struct cifs_fid *,
+			      struct cifs_sb_info *, struct cifs_fid *,
 			      __u16, struct cifs_search_info *srch_inf);
 	/* close dir */
 	int (*close_dir)(const unsigned int, struct cifs_tcon *,
@@ -1395,6 +1395,25 @@ struct cifs_search_info {
 	bool unicode:1;
 	bool smallBuf:1; /* so we know which buf_release function to call */
 	bool is_dynamic_buf:1; /* dynamically allocated buffer - can be variable size */
+};
+
+/* Structure for QueryDirectory with multi-credit support */
+struct cifs_query_dir_io {
+	struct cifs_tcon *tcon;
+	struct TCP_Server_Info *server;
+	struct cifs_search_info *srch_inf;
+	unsigned int xid;
+	u64 persistent_fid;
+	u64 volatile_fid;
+	int index;
+	struct kvec combined_iov;	/* Pre-allocated buffer to hold resp */
+	struct completion done;
+	int result;
+	struct cifs_credits credits;
+	bool replay;
+	unsigned int retries;
+	unsigned int cur_sleep;
+	struct kvec iov[2];		/* For response handling */
 };
 
 #define ACL_NO_MODE	((umode_t)(-1))
