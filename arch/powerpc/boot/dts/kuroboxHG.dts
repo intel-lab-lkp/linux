@@ -1,5 +1,5 @@
 /*
- * Device Tree Souce for Buffalo KuroboxHG
+ * Device Tree Source for Buffalo KuroboxHG
  *
  * Choose CONFIG_LINKSTATION to build a kernel for KuroboxHG, or use
  * the default configuration linkstation_defconfig.

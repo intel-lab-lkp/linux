@@ -287,7 +287,7 @@ END_FTR_SECTION_IFSET(CPU_FTR_ALTIVEC)
 
 4:	sub	r5,r5,r6
 
-	/* Get the desination 128B aligned */
+	/* Get the destination 128B aligned */
 	neg	r6,r3
 	srdi	r7,r6,4
 	mtocrf	0x01,r7
@@ -461,7 +461,7 @@ END_FTR_SECTION_IFSET(CPU_FTR_ALTIVEC)
 
 4:	sub	r5,r5,r6
 
-	/* Get the desination 128B aligned */
+	/* Get the destination 128B aligned */
 	neg	r6,r3
 	srdi	r7,r6,4
 	mtocrf	0x01,r7

@@ -540,7 +540,7 @@ void smp_release_cpus(void)
  * Initialize some remaining members of the ppc64_caches and systemcfg
  * structures
  * (at least until we get rid of them completely). This is mostly some
- * cache informations about the CPU that will be used by cache flush
+ * cache information about the CPU that will be used by cache flush
  * routines and/or provided to userland
  */
 
@@ -682,7 +682,7 @@ void __init initialize_cache_info(void)
 
 /*
  * This returns the limit below which memory accesses to the linear
- * mapping are guarnateed not to cause an architectural exception (e.g.,
+ * mapping are guaranteed not to cause an architectural exception (e.g.,
  * TLB or SLB miss fault).
  *
  * This is used to allocate PACAs and various interrupt stacks that

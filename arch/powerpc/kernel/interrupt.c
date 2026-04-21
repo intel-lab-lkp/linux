@@ -417,7 +417,7 @@ again:
 		if (!prep_irq_for_enabled_exit(unlikely(stack_store))) {
 			/*
 			 * Replay pending soft-masked interrupts now. Don't
-			 * just local_irq_enabe(); local_irq_disable(); because
+			 * just local_irq_enable(); local_irq_disable(); because
 			 * if we are returning from an asynchronous interrupt
 			 * here, another one might hit after irqs are enabled,
 			 * and it would exit via this same path allowing

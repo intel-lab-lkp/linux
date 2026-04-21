@@ -159,7 +159,7 @@ static long set_instruction_bp(struct task_struct *child,
 		if (bp_info->addr2 >= TASK_SIZE)
 			return -EIO;
 
-		/* We need a pair of IAC regsisters */
+		/* We need a pair of IAC registers */
 		if (!slot1_in_use && !slot2_in_use) {
 			slot = 1;
 			child->thread.debug.iac1 = bp_info->addr;

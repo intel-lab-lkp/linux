@@ -67,7 +67,7 @@ void xics_update_irq_servers(void)
 
 	/* Global interrupt distribution server is specified in the last
 	 * entry of "ibm,ppc-interrupt-gserver#s" property. Get the last
-	 * entry fom this property for current boot cpu id and use it as
+	 * entry from this property for current boot cpu id and use it as
 	 * default distribution server
 	 */
 	for (j = 0; j < i; j += 2) {

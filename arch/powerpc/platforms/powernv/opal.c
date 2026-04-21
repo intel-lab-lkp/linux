@@ -285,7 +285,7 @@ static void dequeue_replay_msg(enum opal_msg_type msg_type)
 
 /*
  * Opal message notifier based on message type. Allow subscribers to get
- * notified for specific messgae type.
+ * notified for specific message type.
  */
 int opal_message_notifier_register(enum opal_msg_type msg_type,
 					struct notifier_block *nb)
@@ -1017,7 +1017,7 @@ static int __init opal_init(void)
 	/* Initialise OPAL sensor interface */
 	opal_sensor_init();
 
-	/* Initialise OPAL hypervisor maintainence interrupt handling */
+	/* Initialise OPAL hypervisor maintenance interrupt handling */
 	opal_hmi_handler_init();
 
 	/* Create i2c platform devices */
@@ -1026,7 +1026,7 @@ static int __init opal_init(void)
 	/* Handle non-volatile memory devices */
 	opal_pdev_init("pmem-region");
 
-	/* Setup a heatbeat thread if requested by OPAL */
+	/* Setup a heartbeat thread if requested by OPAL */
 	opal_init_heartbeat();
 
 	/* Detect In-Memory Collection counters and create devices*/

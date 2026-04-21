@@ -141,7 +141,7 @@ static struct lppaca * __init new_lppaca(int cpu, unsigned long limit)
 #ifdef CONFIG_PPC_64S_HASH_MMU
 /*
  * 3 persistent SLBs are allocated here.  The buffer will be zero
- * initially, hence will all be invaild until we actually write them.
+ * initially, hence will all be invalid until we actually write them.
  *
  * If you make the number of persistent SLB entries dynamic, please also
  * update PR KVM to flush and restore them accordingly.

@@ -337,7 +337,7 @@ static int __init add_system_ram_resources(void)
 			res->start = start;
 			/*
 			 * In memblock, end points to the first byte after
-			 * the range while in resourses, end points to the
+			 * the range while in resources, end points to the
 			 * last byte in the range.
 			 */
 			res->end = end - 1;

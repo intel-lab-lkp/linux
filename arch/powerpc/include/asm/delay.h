@@ -32,7 +32,7 @@ extern void udelay(unsigned long usecs);
 
 /**
  * spin_event_timeout - spin until a condition gets true or a timeout elapses
- * @condition: a C expression to evalate
+ * @condition: a C expression to evaluate
  * @timeout: timeout, in microseconds
  * @delay: the number of microseconds to delay between each evaluation of
  *         @condition

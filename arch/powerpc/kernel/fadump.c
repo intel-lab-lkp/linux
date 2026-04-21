@@ -75,7 +75,7 @@ static struct cma *fadump_cma;
  * Initialize only the area equivalent to boot memory size for CMA use.
  * The remaining portion of fadump reserved memory will be not given
  * to CMA and pages for those will stay reserved. boot memory size is
- * aligned per CMA requirement to satisy cma_init_reserved_mem() call.
+ * aligned per CMA requirement to satisfy cma_init_reserved_mem() call.
  * But for some reason even if it fails we still have the memory reservation
  * with us and we can still continue doing fadump.
  */
@@ -388,7 +388,7 @@ static unsigned long __init get_fadump_area_size(void)
 	size += fw_dump.hpte_region_size;
 	/*
 	 * Account for pagesize alignment of boot memory area destination address.
-	 * This faciliates in mmap reading of first kernel's memory.
+	 * This facilitates in mmap reading of first kernel's memory.
 	 */
 	size = PAGE_ALIGN(size);
 	size += fw_dump.boot_memory_size;
@@ -1426,8 +1426,8 @@ static ssize_t enabled_show(struct kobject *kobj,
 }
 
 /*
- * /sys/kernel/fadump/hotplug_ready sysfs node returns 1, which inidcates
- * to usersapce that fadump re-registration is not required on memory
+ * /sys/kernel/fadump/hotplug_ready sysfs node returns 1, which indicates
+ * to userspace that fadump re-registration is not required on memory
  * hotplug events.
  */
 static ssize_t hotplug_ready_show(struct kobject *kobj,

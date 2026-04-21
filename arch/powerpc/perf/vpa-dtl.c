@@ -93,7 +93,7 @@ struct vpa_pmu_buf {
 };
 
 /*
- * To corelate each DTL entry with other events across CPU's,
+ * To correlate each DTL entry with other events across CPU's,
  * we need to map timebase from "struct dtl_entry" which phyp
  * provides with boot timebase. This also needs timebase frequency.
  * Formula is: ((timbase from DTL entry - boot time) / frequency)
@@ -170,7 +170,7 @@ static void vpa_dtl_capture_aux(long *n_entries, struct vpa_pmu_buf *buf,
  *
  * Here in the private aux structure, we maintain head to know where
  * to copy data next time in the PMU driver. vpa_pmu_buf->head is moved to
- * maintain the aux head for PMU driver. It is responsiblity of PMU
+ * maintain the aux head for PMU driver. It is responsibility of PMU
  * driver to make sure data is copied between perf_aux_output_begin and
  * perf_aux_output_end.
  *

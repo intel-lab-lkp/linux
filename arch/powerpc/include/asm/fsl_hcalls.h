@@ -336,7 +336,7 @@ static inline unsigned int fh_partition_stop(unsigned int partition)
  * structures.  The array must be guest physically contiguous.
  *
  * This structure must be aligned on 32-byte boundary, so that no single
- * strucuture can span two pages.
+ * structure can span two pages.
  */
 struct fh_sg_list {
 	uint64_t source;   /**< guest physical address to copy from */
@@ -555,7 +555,7 @@ static inline unsigned int fh_get_core_state(unsigned int handle,
  * fh_enter_nap - enter nap on a vcpu
  *
  * Note that though the API supports entering nap on a vcpu other
- * than the caller, this may not be implmented and may return EINVAL.
+ * than the caller, this may not be implemented and may return EINVAL.
  *
  * @handle: handle of partition containing the vcpu
  * @vcpu: vcpu number within the partition

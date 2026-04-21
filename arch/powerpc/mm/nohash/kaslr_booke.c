@@ -57,7 +57,7 @@ static unsigned long __init rotate_xor(unsigned long hash, const void *area,
 	return hash;
 }
 
-/* Attempt to create a simple starting entropy. This can make it defferent for
+/* Attempt to create a simple starting entropy. This can make it different for
  * every build but it is still not enough. Stronger entropy should
  * be added to make it change for every boot.
  */

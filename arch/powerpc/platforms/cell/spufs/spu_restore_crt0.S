@@ -86,7 +86,7 @@ restore_reg_insts:       /* must be quad-word aligned. */
 	 * However it is possible that instructions immediately
 	 * following the 'stop 0x3ffc' have been modified at run
 	 * time so as to recreate the exact SPU_Status settings
-	 * from the application, e.g. illegal instruciton, halt,
+	 * from the application, e.g. illegal instruction, halt,
 	 * etc.
 	 */
 .global exit_fini

@@ -44,7 +44,7 @@
  */
 
 /*
- * Align to 4k in order to ensure that all functions modyfing srr0/srr1
+ * Align to 4k in order to ensure that all functions modifying srr0/srr1
  * fit into one page in order to not encounter a TLB miss between the
  * modification of srr0/srr1 and the associated rfi.
  */

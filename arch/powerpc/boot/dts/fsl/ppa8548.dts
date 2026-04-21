@@ -95,7 +95,7 @@
 
 	/*
 	 * Only ethernet controller @25000 and @26000 are used.
-	 * Use alias enet2 and enet3 for the remainig controllers,
+	 * Use alias enet2 and enet3 for the remaining controllers,
 	 * to stay compatible with mpc8548si-pre.dtsi.
 	 */
 	enet2: ethernet@24000 {

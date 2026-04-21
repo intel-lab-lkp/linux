@@ -21,7 +21,7 @@
  * These will get masked from the level 2 descriptor at TLB load time, and
  * copied to the MD_TWC before it gets loaded.
  * Large page sizes added.  We currently support two sizes, 4K and 8M.
- * This also allows a TLB hander optimization because we can directly
+ * This also allows a TLB handler optimization because we can directly
  * load the PMD into MD_TWC.  The 8M pages are only used for kernel
  * mapping of well known areas.  The PMD (PGD) entries contain control
  * flags in addition to the address, so care must be taken that the

@@ -331,7 +331,7 @@ pgtable_t hash__pgtable_trans_huge_withdraw(struct mm_struct *mm, pmd_t *pmdp)
 
 /*
  * A linux hugepage PMD was changed and the corresponding hash table entries
- * neesd to be flushed.
+ * needs to be flushed.
  */
 void hpte_do_hugepage_flush(struct mm_struct *mm, unsigned long addr,
 			    pmd_t *pmdp, unsigned long old_pmd)

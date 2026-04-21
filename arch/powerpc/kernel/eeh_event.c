@@ -134,7 +134,7 @@ int __eeh_send_failure_event(struct eeh_pe *pe)
 	list_add(&event->list, &eeh_eventlist);
 	spin_unlock_irqrestore(&eeh_eventlist_lock, flags);
 
-	/* For EEH deamon to knick in */
+	/* For EEH daemon to knick in */
 	complete(&eeh_eventlist_event);
 
 	return 0;

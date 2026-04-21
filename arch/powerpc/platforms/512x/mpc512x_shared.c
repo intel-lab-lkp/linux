@@ -107,7 +107,7 @@ static void mpc512x_set_pixel_clock(unsigned int pixclock)
 	 *   higher frequency to not overload the hardware) until the
 	 *   first match is found -- any potential subsequent match
 	 *   would only be as good as the former match or typically
-	 *   would be less preferrable
+	 *   would be less preferable
 	 *
 	 * the offset increment of pixelclock divided by 64 is an
 	 * arbitrary choice -- it's simple to calculate, in the typical

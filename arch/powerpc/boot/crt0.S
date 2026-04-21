@@ -184,7 +184,7 @@ p_base:	mflr	r10		/* r10 now points to runtime addr of p_base */
 	cmpdi	r14,0
 	beq	3f
 
-	/* Calcuate the runtime offset. */
+	/* Calculate the runtime offset. */
 	subf	r13,r13,r9
 
 	/* Run through the list of relocations and process the

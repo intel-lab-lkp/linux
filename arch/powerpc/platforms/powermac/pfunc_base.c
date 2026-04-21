@@ -283,7 +283,7 @@ static int unin_do_write_reg32(PMF_STD_ARGS, u32 offset, u32 value, u32 mask)
 
 	raw_spin_lock_irqsave(&feature_lock, flags);
 	/* This is fairly bogus in darwin, but it should work for our needs
-	 * implemeted that way:
+	 * implemented that way:
 	 */
 	UN_OUT(offset, (UN_IN(offset) & ~mask) | (value & mask));
 	raw_spin_unlock_irqrestore(&feature_lock, flags);

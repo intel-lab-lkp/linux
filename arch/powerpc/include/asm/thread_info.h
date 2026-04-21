@@ -52,7 +52,7 @@
  * low level task data.
  */
 struct thread_info {
-	int		preempt_count;		/* 0 => preemptable,
+	int		preempt_count;		/* 0 => preemptible,
 						   <0 => BUG */
 #ifdef CONFIG_SMP
 	unsigned int	cpu;

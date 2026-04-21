@@ -363,7 +363,7 @@ static long h_get_24x7_catalog_page(char page[], u64 version, u32 index)
  * parameters.
  *
  * NOTE: For the Core domain events, rather than making domain a required
- *	 parameter we could default it to PHYS_CORE and allowe users to
+ *	 parameter we could default it to PHYS_CORE and allow users to
  *	 override the domain to one of the VCPU domains.
  *
  *	 However, this can make the interface a little inconsistent.

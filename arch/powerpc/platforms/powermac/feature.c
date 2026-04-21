@@ -2588,7 +2588,7 @@ static void __init probe_uninorth(void)
 	       (unsigned int)res.start, uninorth_rev);
 	printk(KERN_INFO "Mapped at 0x%08lx\n", (unsigned long)uninorth_base);
 
-	/* Set the arbitrer QAck delay according to what Apple does
+	/* Set the arbiter QAck delay according to what Apple does
 	 */
 	if (uninorth_rev < 0x11) {
 		actrl = UN_IN(UNI_N_ARB_CTRL) & ~UNI_N_ARB_CTRL_QACK_DELAY_MASK;

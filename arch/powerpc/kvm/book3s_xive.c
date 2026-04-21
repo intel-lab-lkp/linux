@@ -430,7 +430,7 @@ static void xive_vm_scan_for_rerouted_irqs(struct kvmppc_xive *xive,
 				goto next;
 
 			/*
-			 * Allright, it *has* been re-routed, kill it from
+			 * Alright, it *has* been re-routed, kill it from
 			 * the queue.
 			 */
 			qpage[idx] = cpu_to_be32((entry & 0x80000000) | XICS_DUMMY);
@@ -1117,7 +1117,7 @@ static u8 xive_lock_and_mask(struct kvmppc_xive *xive,
 	state->old_q = !!(val & 1);
 
 	/*
-	 * Synchronize hardware to sensure the queues are updated when
+	 * Synchronize hardware to ensure the queues are updated when
 	 * masking
 	 */
 	xive_native_sync_source(hw_num);
@@ -1174,7 +1174,7 @@ bail:
 
 /*
  * Target an interrupt to a given server/prio, this will fallback
- * to another server if necessary and perform the HW targetting
+ * to another server if necessary and perform the HW targeting
  * updates as needed
  *
  * NOTE: Must be called with the state lock held
@@ -1225,16 +1225,16 @@ static int xive_target_interrupt(struct kvm *kvm,
 }
 
 /*
- * Targetting rules: In order to avoid losing track of
+ * Targeting rules: In order to avoid losing track of
  * pending interrupts across mask and unmask, which would
  * allow queue overflows, we implement the following rules:
  *
  *  - Unless it was never enabled (or we run out of capacity)
- *    an interrupt is always targetted at a valid server/queue
+ *    an interrupt is always targeted at a valid server/queue
  *    pair even when "masked" by the guest. This pair tends to
  *    be the last one used but it can be changed under some
- *    circumstances. That allows us to separate targetting
- *    from masking, we only handle accounting during (re)targetting,
+ *    circumstances. That allows us to separate targeting
+ *    from masking, we only handle accounting during (re)targeting,
  *    this also allows us to let an interrupt drain into its target
  *    queue after masking, avoiding complex schemes to remove
  *    interrupts out of remote processor queues.
@@ -1300,16 +1300,16 @@ int kvmppc_xive_set_xive(struct kvm *kvm, u32 irq, u32 server,
 	/*
 	 * We first handle masking/unmasking since the locking
 	 * might need to be retried due to EOIs, we'll handle
-	 * targetting changes later. These functions will return
+	 * targeting changes later. These functions will return
 	 * with the SB lock held.
 	 *
 	 * xive_lock_and_mask() will also set state->guest_priority
 	 * but won't otherwise change other fields of the state.
 	 *
 	 * xive_lock_for_unmask will not actually unmask, this will
-	 * be done later by xive_finish_unmask() once the targetting
+	 * be done later by xive_finish_unmask() once the targeting
 	 * has been done, so we don't try to unmask an interrupt
-	 * that hasn't yet been targetted.
+	 * that hasn't yet been targeted.
 	 */
 	if (priority == MASKED)
 		xive_lock_and_mask(xive, sb, state);
@@ -1318,7 +1318,7 @@ int kvmppc_xive_set_xive(struct kvm *kvm, u32 irq, u32 server,
 
 
 	/*
-	 * Then we handle targetting.
+	 * Then we handle targeting.
 	 *
 	 * First calculate a new "actual priority"
 	 */
@@ -1332,14 +1332,14 @@ int kvmppc_xive_set_xive(struct kvm *kvm, u32 irq, u32 server,
 	/*
 	 * Then check if we actually need to change anything,
 	 *
-	 * The condition for re-targetting the interrupt is that
+	 * The condition for re-targeting the interrupt is that
 	 * we have a valid new priority (new_act_prio is not 0xff)
 	 * and either the server or the priority changed.
 	 *
 	 * Note: If act_priority was ff and the new priority is
 	 *       also ff, we don't do anything and leave the interrupt
-	 *       untargetted. An attempt of doing an int_on on an
-	 *       untargetted interrupt will fail. If that is a problem
+	 *       untargeted. An attempt of doing an int_on on an
+	 *       untargeted interrupt will fail. If that is a problem
 	 *       we could initialize interrupts with valid default
 	 */
 
@@ -1406,10 +1406,10 @@ int kvmppc_xive_int_on(struct kvm *kvm, u32 irq)
 	pr_devel("int_on(irq=0x%x)\n", irq);
 
 	/*
-	 * Check if interrupt was not targetted
+	 * Check if interrupt was not targeted
 	 */
 	if (state->act_priority == MASKED) {
-		pr_devel("int_on on untargetted interrupt\n");
+		pr_devel("int_on on untargeted interrupt\n");
 		return -EINVAL;
 	}
 
@@ -1615,7 +1615,7 @@ int kvmppc_xive_set_mapped(struct kvm *kvm, unsigned long guest_irq,
 
 	/*
 	 * Configure the IRQ to match the existing configuration of
-	 * the IPI if it was already targetted. Otherwise this will
+	 * the IPI if it was already targeted. Otherwise this will
 	 * mask the interrupt in a lossy way (act_priority is 0xff)
 	 * which is fine for a never started interrupt.
 	 */
@@ -2387,12 +2387,12 @@ static int xive_set_source(struct kvmppc_xive *xive, long irq, u64 addr)
 
 	/*
 	 * Now, we select a target if we have one. If we don't we
-	 * leave the interrupt untargetted. It means that an interrupt
-	 * can become "untargetted" across migration if it was masked
+	 * leave the interrupt untargeted. It means that an interrupt
+	 * can become "untargeted" across migration if it was masked
 	 * by set_xive() but there is little we can do about it.
 	 */
 
-	/* First convert prio and mark interrupt as untargetted */
+	/* First convert prio and mark interrupt as untargeted */
 	act_prio = xive_prio_from_guest(guest_prio);
 	state->act_priority = MASKED;
 
@@ -2415,7 +2415,7 @@ static int xive_set_source(struct kvmppc_xive *xive, long irq, u64 addr)
 			rc = xive_target_interrupt(xive->kvm, state,
 						   server, act_prio);
 		/*
-		 * If provisioning or targetting failed, leave it
+		 * If provisioning or targeting failed, leave it
 		 * alone and masked. It will remain disabled until
 		 * the guest re-targets it.
 		 */

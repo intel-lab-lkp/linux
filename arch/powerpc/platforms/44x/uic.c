@@ -108,7 +108,7 @@ static void uic_mask_ack_irq(struct irq_data *d)
 	 * a level irq will have no effect if the interrupt
 	 * is still asserted by the device, even if
 	 * the interrupt is already masked. Therefore
-	 * we only ack the egde interrupts here, while
+	 * we only ack the edge interrupts here, while
 	 * level interrupts are ack'ed after the actual
 	 * isr call in the uic_unmask_irq()
 	 */

@@ -69,7 +69,7 @@
 	 PERF_SAMPLE_BRANCH_KERNEL      |\
 	 PERF_SAMPLE_BRANCH_HV)
 
-/* Contants to support power9 raw encoding format */
+/* Constants to support power9 raw encoding format */
 #define p9_EVENT_COMBINE_SHIFT	10	/* Combine bit */
 #define p9_EVENT_COMBINE_MASK	0x3ull
 #define p9_EVENT_COMBINE(v)	(((v) >> p9_EVENT_COMBINE_SHIFT) & p9_EVENT_COMBINE_MASK)
@@ -89,7 +89,7 @@
 	 EVENT_LINUX_MASK					|	\
 	 EVENT_PSEL_MASK))
 
-/* Contants to support power10 raw encoding format */
+/* Constants to support power10 raw encoding format */
 #define p10_SDAR_MODE_SHIFT		22
 #define p10_SDAR_MODE_MASK		0x3ull
 #define p10_SDAR_MODE(v)		(((v) >> p10_SDAR_MODE_SHIFT) & \

@@ -77,7 +77,7 @@ static __always_inline void mtpmr(unsigned int rn, unsigned int val)
 
 #define PMGC0_FAC	0x80000000	/* Freeze all Counters */
 #define PMGC0_PMIE	0x40000000	/* Interrupt Enable */
-#define PMGC0_FCECE	0x20000000	/* Freeze countes on
+#define PMGC0_FCECE	0x20000000	/* Freeze counters on
 					   Enabled Condition or
 					   Event */
 

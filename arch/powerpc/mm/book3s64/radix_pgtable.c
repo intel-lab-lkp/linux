@@ -763,7 +763,7 @@ static void __meminit free_vmemmap_pages(struct page *page,
 		unsigned long base_pfn = page_to_pfn(page);
 
 		/*
-		 * with 2M vmemmap mmaping we can have things setup
+		 * with 2M vmemmap mmapping we can have things setup
 		 * such that even though atlmap is specified we never
 		 * used altmap.
 		 */

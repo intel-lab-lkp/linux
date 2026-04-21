@@ -65,7 +65,7 @@ _GLOBAL(_start);
 /*
  * Relocate ourselves to the current runtime address.
  * This is called only by the Boot CPU.
- * "relocate" is called with our current runtime virutal
+ * "relocate" is called with our current runtime virtual
  * address.
  * r21 will be loaded with the physical runtime address of _stext
  */
@@ -75,7 +75,7 @@ _GLOBAL(_start);
 	addi	r21,r21,(_stext - 0b)@l 	/* Get our current runtime base */
 
 	/*
-	 * We have the runtime (virutal) address of our base.
+	 * We have the runtime (virtual) address of our base.
 	 * We calculate our shift of offset from a 256M page.
 	 * We could map the 256M page we belong to at PAGE_OFFSET and
 	 * get going from there.
@@ -85,7 +85,7 @@ _GLOBAL(_start);
 	rlwinm	r6,r21,0,4,31			/* r6 = PHYS_START % 256M */
 	rlwinm	r5,r4,0,4,31			/* r5 = KERNELBASE % 256M */
 	subf	r3,r5,r6			/* r3 = r6 - r5 */
-	add	r3,r4,r3			/* Required Virutal Address */
+	add	r3,r4,r3			/* Required Virtual Address */
 
 	bl	relocate
 #endif
@@ -152,7 +152,7 @@ _GLOBAL(_start);
 	 */
 
 	/* KERNELBASE&~0xfffffff => (r4,r5) */
-	li	r4, 0		/* higer 32bit */
+	li	r4, 0		/* higher 32bit */
 	lis	r5,KERNELBASE@h
 	rlwinm	r5,r5,0,0,3	/* Align to 256M, lower 32bit */
 
@@ -283,7 +283,7 @@ interrupt_base:
 
 	/* Auxiliary Processor Unavailable Interrupt */
 	EXCEPTION(0x2020, BOOKE_INTERRUPT_AP_UNAVAIL, \
-		  AuxillaryProcessorUnavailable, unknown_exception)
+		  AuxiliaryProcessorUnavailable, unknown_exception)
 
 	/* Decrementer Interrupt */
 	DECREMENTER_EXCEPTION
@@ -981,7 +981,7 @@ skpinv:	addi	r4,r4,1				/* Increment */
 	SET_IVOR(6,  Program);
 	SET_IVOR(7,  FloatingPointUnavailable);
 	SET_IVOR(8,  SystemCall);
-	SET_IVOR(9,  AuxillaryProcessorUnavailable);
+	SET_IVOR(9,  AuxiliaryProcessorUnavailable);
 	SET_IVOR(10, Decrementer);
 	SET_IVOR(11, FixedIntervalTimer);
 	SET_IVOR(12, WatchdogTimer);
@@ -1199,7 +1199,7 @@ clear_utlb_entry:
 	SET_IVOR(6,  Program);
 	SET_IVOR(7,  FloatingPointUnavailable);
 	SET_IVOR(8,  SystemCall);
-	SET_IVOR(9,  AuxillaryProcessorUnavailable);
+	SET_IVOR(9,  AuxiliaryProcessorUnavailable);
 	SET_IVOR(10, Decrementer);
 	SET_IVOR(11, FixedIntervalTimer);
 	SET_IVOR(12, WatchdogTimer);

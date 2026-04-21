@@ -45,7 +45,7 @@ static ssize_t update_total_credits_store(struct vas_cop_feat_caps *caps,
 	 * QoS capabilities from the hypervisor.
 	 */
 	if (!err)
-		err = vas_reconfig_capabilties(caps->win_type, creds);
+		err = vas_reconfig_capabilities(caps->win_type, creds);
 
 	if (err)
 		return -EINVAL;

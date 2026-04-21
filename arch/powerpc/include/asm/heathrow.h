@@ -49,7 +49,7 @@
 #define HRW_SWIM_CLONE_FLOPPY	0x00080000	/* ??? (0) */
 #define HRW_AUD_RUN22		0x00100000	/* ??? (1) */
 #define HRW_SCSI_LINK_MODE	0x00200000	/* Read ??? (1) */
-#define HRW_ARB_BYPASS		0x00400000	/* Disable internal PCI arbitrer */
+#define HRW_ARB_BYPASS		0x00400000	/* Disable internal PCI arbiter */
 #define HRW_IDE1_RESET_N	0x00800000	/* Media bay */
 #define HRW_SLOW_SCC_PCLK	0x01000000	/* ??? (0) */
 #define HRW_RESET_SCC		0x02000000

@@ -1150,7 +1150,7 @@ static void __init mpc5121_clk_provide_backwards_compat(void)
 	 * provide a full list of what is missing, to avoid noise in the
 	 * absence of up-to-date device tree data -- backwards
 	 * compatibility to old DTBs is a requirement, updates may be
-	 * desirable or preferrable but are not at all mandatory
+	 * desirable or preferable but are not at all mandatory
 	 */
 	if (did_register) {
 		pr_notice("device tree lacks clock specs, adding fallbacks (0x%x,%s%s%s%s%s%s%s%s%s%s)\n",

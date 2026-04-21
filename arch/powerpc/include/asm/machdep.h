@@ -96,7 +96,7 @@ struct machdep_calls {
 	int		(*hmi_exception_early)(struct pt_regs *regs);
 	long		(*machine_check_early)(struct pt_regs *regs);
 
-	/* Called during machine check exception to retrive fixup address. */
+	/* Called during machine check exception to retrieve fixup address. */
 	bool		(*mce_check_early_recovery)(struct pt_regs *regs);
 
 	void            (*machine_check_log_err)(void);

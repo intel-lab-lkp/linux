@@ -586,7 +586,7 @@ static inline void slb_set_size(u16 size) { }
  * Now certain config support MAX_PHYSMEM more than 512TB. Hence we will need
  * to use more than one context for linear mapping the kernel.
  * For vmalloc and memmap, we use just one context with 512TB. With 64 byte
- * struct page size, we need ony 32 TB in memmap for 2PB (51 bits (MAX_PHYSMEM_BITS)).
+ * struct page size, we need only 32 TB in memmap for 2PB (51 bits (MAX_PHYSMEM_BITS)).
  */
 #if (H_MAX_PHYSMEM_BITS > MAX_EA_BITS_PER_CONTEXT)
 #define MAX_KERNEL_CTX_CNT	(1UL << (H_MAX_PHYSMEM_BITS - MAX_EA_BITS_PER_CONTEXT))
@@ -600,7 +600,7 @@ static inline void slb_set_size(u16 size) { }
 
 /*
  * 256MB segment
- * The proto-VSID space has 2^(CONTEX_BITS + ESID_BITS) - 1 segments
+ * The proto-VSID space has 2^(CONTEXT_BITS + ESID_BITS) - 1 segments
  * available for user + kernel mapping. VSID 0 is reserved as invalid, contexts
  * 1-4 are used for kernel mapping. Each segment contains 2^28 bytes. Each
  * context maps 2^49 bytes (512TB).
@@ -622,11 +622,11 @@ static inline void slb_set_size(u16 size) { }
 #define MAX_USER_CONTEXT_65BIT_VA ((ASM_CONST(1) << (65 - (SID_SHIFT + ESID_BITS))) - 2)
 
 /*
- * This should be computed such that protovosid * vsid_mulitplier
- * doesn't overflow 64 bits. The vsid_mutliplier should also be
+ * This should be computed such that protovosid * vsid_multiplier
+ * doesn't overflow 64 bits. The vsid_multiplier should also be
  * co-prime to vsid_modulus. We also need to make sure that number
  * of bits in multiplied result (dividend) is less than twice the number of
- * protovsid bits for our modulus optmization to work.
+ * protovsid bits for our modulus optimization to work.
  *
  * The below table shows the current values used.
  * |-------+------------+----------------------+------------+-------------------|
@@ -756,7 +756,7 @@ static inline unsigned long vsid_scramble(unsigned long protovsid,
 	unsigned long vsid;
 	unsigned long vsid_modulus = ((1UL << vsid_bits) - 1);
 	/*
-	 * We have same multipler for both 256 and 1T segements now
+	 * We have same multiplier for both 256 and 1T segments now
 	 */
 	vsid = protovsid * vsid_multiplier;
 	vsid = (vsid >> vsid_bits) + (vsid & vsid_modulus);

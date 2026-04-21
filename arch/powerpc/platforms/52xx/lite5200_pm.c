@@ -124,7 +124,7 @@ static void lite5200_restore_regs(void)
 	_memcpy_toio(gps, &sgps, sizeof(*gps));
 
 
-	/* XLB Arbitrer */
+	/* XLB Arbiter */
 	out_be32(&xlb->snoop_window, sxlb.snoop_window);
 	out_be32(&xlb->master_priority, sxlb.master_priority);
 	out_be32(&xlb->master_pri_enable, sxlb.master_pri_enable);

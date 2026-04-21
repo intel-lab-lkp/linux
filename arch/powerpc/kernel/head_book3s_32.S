@@ -236,7 +236,7 @@ __secondary_hold_acknowledge:
 	.long	-1
 
 /* System reset */
-/* core99 pmac starts the seconary here by changing the vector, and
+/* core99 pmac starts the secondary here by changing the vector, and
    putting it back to what it was (unknown_async_exception) when done.  */
 	EXCEPTION(INTERRUPT_SYSTEM_RESET, Reset, unknown_async_exception)
 

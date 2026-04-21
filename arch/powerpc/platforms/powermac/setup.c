@@ -485,7 +485,7 @@ machine_device_initcall(powermac, pmac_declare_of_platform_devices);
 #ifdef CONFIG_SERIAL_PMACZILOG_CONSOLE
 /*
  * This is called very early, as part of console_init() (typically just after
- * time_init()). This function is respondible for trying to find a good
+ * time_init()). This function is responsible for trying to find a good
  * default console on serial ports. It tries to match the open firmware
  * default output with one of the available serial console drivers.
  */

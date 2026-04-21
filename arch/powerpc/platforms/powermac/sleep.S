@@ -229,7 +229,7 @@ END_FTR_SECTION_IFSET(CPU_FTR_SPEC7450)
 	mtspr	SPRN_HID0,r2
 	sync
 
-/* This loop puts us back to sleep in case we have a spurrious
+/* This loop puts us back to sleep in case we have a spurious
  * wakeup so that the host bridge properly stays asleep. The
  * CPU will be turned off, either after a known time (about 1
  * second) on wallstreet & lombard, or as soon as the CPU enters

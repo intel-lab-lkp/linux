@@ -17,7 +17,7 @@ struct external_filehdr {
 };
 
         /* IBM RS/6000 */
-#define U802WRMAGIC     0730    /* writeable text segments **chh**      */
+#define U802WRMAGIC     0730    /* writable text segments **chh**      */
 #define U802ROMAGIC     0735    /* readonly sharable text segments      */
 #define U802TOCMAGIC    0737    /* readonly text segments and TOC       */
 
@@ -63,7 +63,7 @@ AOUTHDR;
 #define SMALL_AOUTSZ (28)
 #define AOUTHDRSZ 72
 
-#define	RS6K_AOUTHDR_OMAGIC	0x0107	/* old: text & data writeable */
+#define	RS6K_AOUTHDR_OMAGIC	0x0107	/* old: text & data writable */
 #define	RS6K_AOUTHDR_NMAGIC	0x0108	/* new: text r/o, data r/w */
 #define	RS6K_AOUTHDR_ZMAGIC	0x010B	/* paged: text r/o, both page-aligned */
 

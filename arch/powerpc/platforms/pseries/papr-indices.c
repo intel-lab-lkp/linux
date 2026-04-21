@@ -191,7 +191,7 @@ static const char *indices_sequence_fill_work_area(struct papr_rtas_sequence *se
 /*
  * papr_indices_handle_read - returns indices blob data to the user space
  *
- * ibm,get-indices RTAS call fills the work area with the certian
+ * ibm,get-indices RTAS call fills the work area with the certain
  * format but does not return the bytes written in the buffer and
  * copied RTAS_GET_INDICES_BUF_SIZE data to the blob for each RTAS
  * call. So send RTAS_GET_INDICES_BUF_SIZE buffer to the user space

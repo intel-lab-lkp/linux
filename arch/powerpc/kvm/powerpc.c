@@ -112,7 +112,7 @@ int kvmppc_prepare_to_enter(struct kvm_vcpu *vcpu)
 		smp_mb();
 
 		if (kvm_request_pending(vcpu)) {
-			/* Make sure we process requests preemptable */
+			/* Make sure we process requests preemptible */
 			local_irq_enable();
 			trace_kvm_check_requests(vcpu);
 			r = kvmppc_core_check_requests(vcpu);

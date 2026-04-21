@@ -13,7 +13,7 @@
 #include <linux/kvm_host.h>
 
 /*
- * Number of available lpids. Only the low-order 6 bits of LPID rgister are
+ * Number of available lpids. Only the low-order 6 bits of LPID register are
  * implemented on e500mc+ cores.
  */
 #define KVMPPC_NR_LPIDS                        64

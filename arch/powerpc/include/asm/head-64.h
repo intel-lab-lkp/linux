@@ -6,7 +6,7 @@
 
 #ifdef __ASSEMBLER__
 /*
- * We can't do CPP stringification and concatination directly into the section
+ * We can't do CPP stringification and concatenation directly into the section
  * name for some reason, so these macros can do it for us.
  */
 .macro define_ftsec name
@@ -29,7 +29,7 @@
  *
  * For each fixed section, code is generated into it in the order which it
  * appears in the source.  Fixed section entries can be placed at a fixed
- * location within the section using _LOCATION postifx variants. These must
+ * location within the section using _LOCATION postfix variants. These must
  * be ordered according to their relative placements within the section.
  *
  * OPEN_FIXED_SECTION(section_name, start_address, end_address)

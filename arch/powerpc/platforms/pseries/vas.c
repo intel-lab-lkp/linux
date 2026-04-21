@@ -848,7 +848,7 @@ static int reconfig_close_windows(struct vas_caps *vcap, int excess_creds,
  * changes. Reconfig window configurations based on the credits
  * availability from this new capabilities.
  */
-int vas_reconfig_capabilties(u8 type, int new_nr_creds)
+int vas_reconfig_capabilities(u8 type, int new_nr_creds)
 {
 	struct vas_cop_feat_caps *caps;
 	int old_nr_creds;
@@ -915,7 +915,7 @@ int pseries_vas_dlpar_cpu(void)
 				      (u64)virt_to_phys(&hv_cop_caps));
 	if (!rc) {
 		new_nr_creds = be16_to_cpu(hv_cop_caps.target_lpar_creds);
-		rc = vas_reconfig_capabilties(VAS_GZIP_DEF_FEAT_TYPE, new_nr_creds);
+		rc = vas_reconfig_capabilities(VAS_GZIP_DEF_FEAT_TYPE, new_nr_creds);
 	}
 
 	if (rc)

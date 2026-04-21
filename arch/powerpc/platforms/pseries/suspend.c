@@ -106,7 +106,7 @@ static ssize_t store_hibernate(struct device *dev,
 #define KERN_DT_UPDATE	1
 
 /**
- * show_hibernate - Report device tree update responsibilty
+ * show_hibernate - Report device tree update responsibility
  * @dev:		subsys root device
  * @attr:		device attribute struct
  * @buf:		buffer

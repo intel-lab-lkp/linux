@@ -1775,7 +1775,7 @@ static int kvmppc_handle_exit_hv(struct kvm_vcpu *vcpu,
 	/*
 	 * We get these next two if the guest accesses a page which it thinks
 	 * it has mapped but which is not actually present, either because
-	 * it is for an emulated I/O device or because the corresonding
+	 * it is for an emulated I/O device or because the corresponding
 	 * host page has been paged out.
 	 *
 	 * Any other HDSI/HISI interrupts have been handled already for P7/8
@@ -2029,7 +2029,7 @@ static int kvmppc_handle_nested_exit(struct kvm_vcpu *vcpu)
 	/*
 	 * We get these next two if the guest accesses a page which it thinks
 	 * it has mapped but which is not actually present, either because
-	 * it is for an emulated I/O device or because the corresonding
+	 * it is for an emulated I/O device or because the corresponding
 	 * host page has been paged out.
 	 */
 	case BOOK3S_INTERRUPT_H_DATA_STORAGE:
@@ -5242,7 +5242,7 @@ static int kvm_vm_ioctl_get_smmu_info_hv(struct kvm *kvm,
 	info->flags = KVM_PPC_PAGE_SIZES_REAL | KVM_PPC_1T_SEGMENTS;
 	info->slb_size = 32;
 
-	/* We only support these sizes for now, and no muti-size segments */
+	/* We only support these sizes for now, and no multi-size segments */
 	sps = &info->sps[0];
 	kvmppc_add_seg_page_size(&sps, 12, 0);
 	kvmppc_add_seg_page_size(&sps, 16, SLB_VSID_L | SLB_VSID_LP_01);

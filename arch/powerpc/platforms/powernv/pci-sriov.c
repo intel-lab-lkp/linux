@@ -86,7 +86,7 @@
  *    When using mode a) described above segment 0 in maps to PE#0 which might
  *    be already being used by another device on the PHB.
  *
- *    As a result we need allocate a contigious range of PE numbers, then shift
+ *    As a result we need allocate a contiguous range of PE numbers, then shift
  *    the address programmed into the SR-IOV BAR of the PF so that the address
  *    of VF0 matches up with the segment corresponding to the first allocated
  *    PE number. This is handled in pnv_pci_vf_resource_shift().

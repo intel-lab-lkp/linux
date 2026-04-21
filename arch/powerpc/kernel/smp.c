@@ -1180,7 +1180,7 @@ void __init smp_prepare_cpus(unsigned int max_cpus)
 	if (smp_ops && smp_ops->probe)
 		smp_ops->probe();
 
-	// Initalise the generic SMT topology support
+	// Initialise the generic SMT topology support
 	num_threads = 1;
 	if (smt_enabled_at_boot)
 		num_threads = smt_enabled_at_boot;

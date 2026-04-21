@@ -41,7 +41,7 @@ _GLOBAL(isa300_idle_stop_noloss)
  * The SRESET wakeup returns to this function's caller by calling
  * idle_return_gpr_loss with r3 set to desired return value.
  *
- * A wakeup without GPR loss may alteratively be handled as in
+ * A wakeup without GPR loss may alternatively be handled as in
  * isa300_idle_stop_noloss and blr directly, as an optimisation.
  *
  * The caller is responsible for saving/restoring SPRs, MSR, timebase,
@@ -148,7 +148,7 @@ _GLOBAL(idle_return_gpr_loss)
  * The SRESET wakeup returns to this function's caller by calling
  * idle_return_gpr_loss with r3 set to desired return value.
  *
- * A wakeup without GPR loss may alteratively be handled as in
+ * A wakeup without GPR loss may alternatively be handled as in
  * isa300_idle_stop_noloss and blr directly, as an optimisation.
  *
  * The caller is responsible for saving/restoring SPRs, MSR, timebase,

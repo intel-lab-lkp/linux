@@ -95,7 +95,7 @@ __unsafe_save_general_regs(struct pt_regs *regs, struct mcontext __user *frame)
 	int val, i;
 
 	for (i = 0; i <= PT_RESULT; i ++) {
-		/* Force usr to alway see softe as 1 (interrupts enabled) */
+		/* Force usr to always see softe as 1 (interrupts enabled) */
 		if (i == PT_SOFTE)
 			val = 1;
 		else

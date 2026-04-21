@@ -384,7 +384,7 @@ int ps3_send_event_locally(unsigned int virq)
  * @virq: The assigned Linux virq.
  *
  * An event irq represents a virtual device interrupt.  The interrupt_id
- * coresponds to the software interrupt number.
+ * corresponds to the software interrupt number.
  */
 
 int ps3_sb_event_receive_port_setup(struct ps3_system_bus_device *dev,
@@ -460,7 +460,7 @@ EXPORT_SYMBOL(ps3_sb_event_receive_port_destroy);
  * @virq: The assigned Linux virq.
  *
  * An io irq represents a non-virtualized device interrupt.  interrupt_id
- * coresponds to the interrupt number of the interrupt controller.
+ * corresponds to the interrupt number of the interrupt controller.
  */
 
 int ps3_io_irq_setup(enum ps3_cpu_binding cpu, unsigned int interrupt_id,

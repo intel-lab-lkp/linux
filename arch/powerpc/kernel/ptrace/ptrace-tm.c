@@ -53,7 +53,7 @@ static int set_user_ckpt_trap(struct task_struct *task, unsigned long trap)
  * @regset:	The user regset structure.
  *
  * This function checks for the active number of available
- * regisers in transaction checkpointed GPR category.
+ * registers in transaction checkpointed GPR category.
  */
 int tm_cgpr_active(struct task_struct *target, const struct user_regset *regset)
 {
@@ -195,7 +195,7 @@ int tm_cgpr_set(struct task_struct *target, const struct user_regset *regset,
  * @regset:	The user regset structure.
  *
  * This function checks for the active number of available
- * regisers in transaction checkpointed FPR category.
+ * registers in transaction checkpointed FPR category.
  */
 int tm_cfpr_active(struct task_struct *target, const struct user_regset *regset)
 {
@@ -307,7 +307,7 @@ int tm_cfpr_set(struct task_struct *target, const struct user_regset *regset,
  * @regset:	The user regset structure.
  *
  * This function checks for the active number of available
- * regisers in checkpointed VMX category.
+ * registers in checkpointed VMX category.
  */
 int tm_cvmx_active(struct task_struct *target, const struct user_regset *regset)
 {
@@ -435,7 +435,7 @@ int tm_cvmx_set(struct task_struct *target, const struct user_regset *regset,
  * @regset:	The user regset structure.
  *
  * This function checks for the active number of available
- * regisers in transaction checkpointed VSX category.
+ * registers in transaction checkpointed VSX category.
  */
 int tm_cvsx_active(struct task_struct *target, const struct user_regset *regset)
 {
@@ -546,7 +546,7 @@ int tm_cvsx_set(struct task_struct *target, const struct user_regset *regset,
  * @regset:	The user regset structure.
  *
  * This function checks the active number of available
- * regisers in the transactional memory SPR category.
+ * registers in the transactional memory SPR category.
  */
 int tm_spr_active(struct task_struct *target, const struct user_regset *regset)
 {

@@ -81,7 +81,7 @@ struct sigcontext {
  *
  * FPR/VSR 0-31 doubleword 0 is stored in fp_regs, and VMX/VSR 32-63
  * is stored at the start of vmx_reserve.  vmx_reserve is extended for
- * backwards compatility to store VSR 0-31 doubleword 1 after the VMX
+ * backwards compatibility to store VSR 0-31 doubleword 1 after the VMX
  * registers and vscr/vrsave.
  */
 	elf_vrreg_t	__user *v_regs;

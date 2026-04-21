@@ -633,7 +633,7 @@ static void kvmppc_set_pvr_pr(struct kvm_vcpu *vcpu, u32 pvr)
  * emulate 32 bytes dcbz length.
  *
  * The Book3s_64 inventors also realized this case and implemented a special bit
- * in the HID5 register, which is a hypervisor ressource. Thus we can't use it.
+ * in the HID5 register, which is a hypervisor resource. Thus we can't use it.
  *
  * My approach here is to patch the dcbz instruction on executing pages.
  */

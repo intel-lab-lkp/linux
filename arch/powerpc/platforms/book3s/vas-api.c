@@ -489,7 +489,7 @@ static void vas_mmap_close(struct vm_area_struct *vma)
 	 * address. So it has to be the same VMA that is getting freed.
 	 */
 	if (WARN_ON(txwin->task_ref.vma != vma)) {
-		pr_err("Invalid paste address mmaping\n");
+		pr_err("Invalid paste address mmapping\n");
 		return;
 	}
 
@@ -564,7 +564,7 @@ static int coproc_mmap(struct file *fp, struct vm_area_struct *vma)
 
 	pfn = paste_addr >> PAGE_SHIFT;
 
-	/* flags, page_prot from cxl_mmap(), except we want cachable */
+	/* flags, page_prot from cxl_mmap(), except we want cacheable */
 	vm_flags_set(vma, VM_IO | VM_PFNMAP);
 	vma->vm_page_prot = pgprot_cached(vma->vm_page_prot);
 

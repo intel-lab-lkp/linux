@@ -349,7 +349,7 @@ void default_machine_kexec(struct kimage *image)
 
 	printk("kexec: Starting switchover sequence.\n");
 
-	/* switch to a staticly allocated stack.  Based on irq stack code.
+	/* switch to a statically allocated stack.  Based on irq stack code.
 	 * We setup preempt_count to avoid using VMX in memcpy.
 	 * XXX: the task struct will likely be invalid once we do the copy!
 	 */

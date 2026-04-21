@@ -90,14 +90,14 @@
 			compatible = "nxp,sja1000";
 			reg = <0x1 0x0 0x80>;
 			interrupts = <18 0x8>;
-			interrups-parent = <&ipic>;
+			interrupts-parent = <&ipic>;
 		};
 
 		cpld@2,0 {
 			compatible = "denx,mpc8308_p1m-cpld";
 			reg = <0x2 0x0 0x8>;
 			interrupts = <48 0x8>;
-			interrups-parent = <&ipic>;
+			interrupts-parent = <&ipic>;
 		};
 	};
 

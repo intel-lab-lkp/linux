@@ -477,7 +477,7 @@ typedef struct iic {
 } iic_t;
 
 /*
- * RISC Controller Configuration Register definitons
+ * RISC Controller Configuration Register definitions
  */
 #define RCCR_TIME	0x8000			/* RISC Timer Enable */
 #define RCCR_TIMEP(t)	(((t) & 0x3F)<<8)	/* RISC Timer Period */

@@ -38,7 +38,7 @@
  */
 
 /* A "hypercall" is an "sc 1" instruction.  This header file provides C
- * wrapper functions for the ePAPR hypervisor interface.  It is inteded
+ * wrapper functions for the ePAPR hypervisor interface.  It is intended
  * for use by Linux device drivers and other operating systems.
  *
  * The hypercalls are implemented as inline assembly, rather than assembly

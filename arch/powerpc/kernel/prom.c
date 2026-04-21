@@ -814,7 +814,7 @@ void __init early_init_devtree(void *params)
 	of_scan_flat_dt(early_init_dt_scan_fw_dump, NULL);
 #endif
 
-	/* Retrieve various informations from the /chosen node of the
+	/* Retrieve various information from the /chosen node of the
 	 * device-tree, including the platform type, initrd location and
 	 * size, TCE reserve, and more ...
 	 */
@@ -888,7 +888,7 @@ void __init early_init_devtree(void *params)
 
 	dt_cpu_ftrs_scan();
 
-	/* Retrieve CPU related informations from the flat tree
+	/* Retrieve CPU related information from the flat tree
 	 * (altivec support, boot CPU ID, ...)
 	 */
 	of_scan_flat_dt(early_init_dt_scan_cpus, NULL);

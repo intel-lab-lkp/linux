@@ -70,7 +70,7 @@ do
 		fi
 	done
 
-	# ignore register save/restore funcitons
+	# ignore register save/restore functions
 	case $UNDEF in
 	_restgpr_*|_restgpr0_*|_rest32gpr_*)
 		OK=1

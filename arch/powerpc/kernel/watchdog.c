@@ -309,7 +309,7 @@ static void wd_smp_clear_cpu_pending(int cpu)
 	 * normal operation there will be no race here, no problem.
 	 *
 	 * In the lockup case, this atomic clear-bit vs a store that refills
-	 * other bits in the accessed word wll not be a problem. The bit clear
+	 * other bits in the accessed word will not be a problem. The bit clear
 	 * is atomic so it will not cause the store to get lost, and the store
 	 * will never set this bit so it will not overwrite the bit clear. The
 	 * only way for a stuck CPU to return to the pending bitmap is to
