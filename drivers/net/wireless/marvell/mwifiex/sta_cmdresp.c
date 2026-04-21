@@ -976,8 +976,16 @@ static int mwifiex_ret_uap_sta_list(struct mwifiex_private *priv,
 	struct mwifiex_ie_types_sta_info *sta_info = (void *)&sta_list->tlv;
 	int i;
 	struct mwifiex_sta_node *sta_node;
+	u16 resp_size = le16_to_cpu(resp->size);
+	u16 count = le16_to_cpu(sta_list->sta_count);
+	u16 max_count;
 
-	for (i = 0; i < (le16_to_cpu(sta_list->sta_count)); i++) {
+	if (resp_size < sizeof(*resp) - sizeof(resp->params) + sizeof(*sta_list))
+		return -EINVAL;
+	max_count = (resp_size - sizeof(*resp) + sizeof(resp->params) -
+		     sizeof(*sta_list)) / sizeof(*sta_info);
+	count = min(count, max_count);
+	for (i = 0; i < count; i++) {
 		sta_node = mwifiex_get_sta_entry(priv, sta_info->mac);
 		if (unlikely(!sta_node))
 			continue;
