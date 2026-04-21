@@ -21,9 +21,11 @@
 #include <linux/array_size.h>
 #include <linux/delay.h>
 #include <linux/dev_printk.h>
+#include <linux/iopoll.h>
 #include <linux/irqreturn.h>
 #include <linux/minmax.h>
 #include <linux/property.h>
+#include <linux/time.h>
 #include <linux/types.h>
 #include <linux/wait.h>
 
@@ -653,17 +655,15 @@ static int ak8975_setup(struct i2c_client *client)
 static int wait_conversion_complete_gpio(struct ak8975_data *data)
 {
 	struct i2c_client *client = data->client;
-	u32 timeout_ms = AK8975_MAX_CONVERSION_TIMEOUT;
 	int ret;
+	int val;
 
 	/* Wait for the conversion to complete. */
-	while (timeout_ms) {
-		msleep(AK8975_CONVERSION_DONE_POLL_TIME);
-		if (gpiod_get_value(data->eoc_gpiod))
-			break;
-		timeout_ms -= AK8975_CONVERSION_DONE_POLL_TIME;
-	}
-	if (!timeout_ms) {
+	ret = readx_poll_timeout(gpiod_get_value, data->eoc_gpiod, val,
+				 val != 0,
+				 AK8975_CONVERSION_DONE_POLL_TIME * USEC_PER_MSEC,
+				 AK8975_MAX_CONVERSION_TIMEOUT * USEC_PER_MSEC);
+	if (ret) {
 		dev_err(&client->dev, "Conversion timeout happened\n");
 		return -EINVAL;
 	}
@@ -678,30 +678,26 @@ static int wait_conversion_complete_gpio(struct ak8975_data *data)
 static int wait_conversion_complete_polled(struct ak8975_data *data)
 {
 	struct i2c_client *client = data->client;
-	u8 read_status;
-	u32 timeout_ms = AK8975_MAX_CONVERSION_TIMEOUT;
 	int ret;
+	int val;
 
 	/* Wait for the conversion to complete. */
-	while (timeout_ms) {
-		msleep(AK8975_CONVERSION_DONE_POLL_TIME);
-		ret = i2c_smbus_read_byte_data(client,
-					       data->def->ctrl_regs[ST1]);
-		if (ret < 0) {
-			dev_err(&client->dev, "Error in reading ST1\n");
-			return ret;
-		}
-		read_status = ret;
-		if (read_status)
-			break;
-		timeout_ms -= AK8975_CONVERSION_DONE_POLL_TIME;
+	ret = read_poll_timeout(i2c_smbus_read_byte_data, val, val != 0,
+				AK8975_CONVERSION_DONE_POLL_TIME * USEC_PER_MSEC,
+				AK8975_MAX_CONVERSION_TIMEOUT * USEC_PER_MSEC,
+				true,
+				client, data->def->ctrl_regs[ST1]);
+	if (val < 0) {
+		dev_err(&client->dev, "Error in reading ST1\n");
+		return val;
 	}
-	if (!timeout_ms) {
+
+	if (ret == -ETIMEDOUT) {
 		dev_err(&client->dev, "Conversion timeout happened\n");
 		return -EINVAL;
 	}
 
-	return read_status;
+	return val;
 }
 
 /* Returns 0 if the end of conversion interrupt occurred or -ETIME otherwise */
