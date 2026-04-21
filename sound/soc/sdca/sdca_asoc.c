@@ -359,16 +359,81 @@ static int entity_parse_ot(struct device *dev,
 	return 0;
 }
 
+/**
+ * sdca_asoc_set_pde_poll_sync - change PDE state and wait for trasntion to
+ * complete or timeout.
+ * @dev: Pointer to the device for error logging.
+ * @regmap: Register map for reading ACTUAL_PS register.
+ * @function_id: SDCA function identifier.
+ * @entity_id: SDCA entity identifier for the power domain.
+ * @from_ps: Source power state (SDCA_PDE_PSn value).
+ * @to_ps: Target power state (SDCA_PDE_PSn value).
+ * @pde_delays: Pointer to array of PDE delay specifications for this device,
+ *              or NULL to use default polling interval.
+ * @num_delays: Number of entries in pde_delays array.
+ *
+ * This function writes the REQUESTED_PS register and polls the ACTUAL_PS register to
+ * verify that a PDE power state transition has completed. Per SDCA specification,
+ * after writing REQUESTED_PS, the caller must poll ACTUAL_PS until it reflects the
+ * requested state.
+ *
+ * If a delay table is provided, appropriate polling intervals are extracted based
+ * on the from_ps and to_ps transition. If no table is provided or no matching entry
+ * is found, a default polling interval is used.
+ *
+ * Return: Returns zero when ACTUAL_PS becomes REQUESTED_PS, -ETIMEDOUT if the
+ * polling times out before reaching the target state, or a negative error code if
+ * a register access fails.
+ */
+int sdca_asoc_set_pde_poll_sync(struct device *dev, struct regmap *regmap,
+				int function_id, int entity_id, int from_ps, int to_ps,
+				const struct sdca_pde_delay *pde_delays, int num_delays)
+{
+	static const int polls = 100;
+	static const int default_poll_us = 100;
+	unsigned int requested_ps_reg, actual_ps_reg, val;
+	int poll_us;
+	int i, ret;
+
+	requested_ps_reg = SDW_SDCA_CTL(function_id, entity_id, SDCA_CTL_PDE_REQUESTED_PS, 0);
+	ret = regmap_write(regmap, requested_ps_reg, to_ps);
+	if (ret)
+		return ret;
+
+	poll_us = default_poll_us;
+	if (pde_delays && num_delays > 0) {
+		for (i = 0; i < num_delays; i++) {
+			if (pde_delays[i].from_ps == from_ps && pde_delays[i].to_ps == to_ps) {
+				poll_us = pde_delays[i].us / polls;
+				break;
+			}
+		}
+	}
+
+	actual_ps_reg = SDW_SDCA_CTL(function_id, entity_id, SDCA_CTL_PDE_ACTUAL_PS, 0);
+	for (i = 0; i < polls; i++) {
+		if (i)
+			fsleep(poll_us);
+
+		ret = regmap_read(regmap, actual_ps_reg, &val);
+		if (ret)
+			return ret;
+		else if (val == to_ps)
+			return 0;
+	}
+
+	dev_err(dev, "PDE power transition failed: expected 0x%x, got 0x%x\n", to_ps, val);
+	return -ETIMEDOUT;
+}
+EXPORT_SYMBOL(sdca_asoc_set_pde_poll_sync);
+
 static int entity_pde_event(struct snd_soc_dapm_widget *widget,
 			    struct snd_kcontrol *kctl, int event)
 {
 	struct snd_soc_component *component = snd_soc_dapm_to_component(widget->dapm);
 	struct sdca_entity *entity = widget->priv;
-	static const int polls = 100;
-	unsigned int reg, val;
-	int from, to, i;
-	int poll_us;
-	int ret;
+	struct sdca_function_data *function;
+	int from, to;
 
 	if (!component)
 		return -EIO;
@@ -385,34 +450,12 @@ static int entity_pde_event(struct snd_soc_dapm_widget *widget,
 	default:
 		return 0;
 	}
+	function = entity->parent_func;
 
-	for (i = 0; i < entity->pde.num_max_delay; i++) {
-		struct sdca_pde_delay *delay = &entity->pde.max_delay[i];
-
-		if (delay->from_ps == from && delay->to_ps == to) {
-			poll_us = delay->us / polls;
-			break;
-		}
-	}
-
-	reg = SDW_SDCA_CTL(SDW_SDCA_CTL_FUNC(widget->reg),
-			   SDW_SDCA_CTL_ENT(widget->reg),
-			   SDCA_CTL_PDE_ACTUAL_PS, 0);
-
-	for (i = 0; i < polls; i++) {
-		if (i)
-			fsleep(poll_us);
-
-		ret = regmap_read(component->regmap, reg, &val);
-		if (ret)
-			return ret;
-		else if (val == to)
-			return 0;
-	}
-
-	dev_err(component->dev, "%s: power transition failed: %x\n",
-		entity->label, val);
-	return -ETIMEDOUT;
+	return sdca_asoc_set_pde_poll_sync(component->dev, component->regmap,
+				       function->desc->adr, entity->id, from, to,
+				       entity->pde.max_delay,
+				       entity->pde.num_max_delay);
 }
 
 static int entity_parse_pde(struct device *dev,
@@ -449,8 +492,8 @@ static int entity_parse_pde(struct device *dev,
 	}
 
 	(*widget)->id = snd_soc_dapm_supply;
-	(*widget)->reg = SDW_SDCA_CTL(function->desc->adr, entity->id, control->sel, 0);
-	(*widget)->mask = GENMASK(control->nbits - 1, 0);
+	(*widget)->reg = SND_SOC_NOPM;
+	(*widget)->mask = 0;
 	(*widget)->on_val = SDCA_PDE_PS0;
 	(*widget)->off_val = SDCA_PDE_PS3;
 	(*widget)->event_flags = SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_POST_PMD;

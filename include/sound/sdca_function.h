@@ -1173,6 +1173,7 @@ struct sdca_entity_xu {
  * @sources: Dynamically allocated array pointing to each input Entity
  * connected to this Entity.
  * @controls: Dynamically allocated array of Controls.
+ * @parent_func: Pointer to sdca_function_data to which this entity belongs to.
  * @num_sources: Number of sources for the Entity.
  * @num_controls: Number of Controls for the Entity.
  * @iot: Input/Output Terminal specific Entity properties.
@@ -1190,6 +1191,7 @@ struct sdca_entity {
 	struct sdca_entity *group;
 	struct sdca_entity **sources;
 	struct sdca_control *controls;
+	struct sdca_function_data *parent_func;
 	int num_sources;
 	int num_controls;
 	union {

@@ -1559,8 +1559,10 @@ static int find_sdca_entities(struct device *dev, struct sdw_slave *sdw,
 	fwnode_property_read_u32_array(function_node, "mipi-sdca-entity-id-list",
 				       entity_list, num_entities);
 
-	for (i = 0; i < num_entities; i++)
+	for (i = 0; i < num_entities; i++) {
 		entities[i].id = entity_list[i];
+		entities[i].parent_func = function;
+	}
 
 	/* now read subproperties */
 	for (i = 0; i < num_entities; i++) {
