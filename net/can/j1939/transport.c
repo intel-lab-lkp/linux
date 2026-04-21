@@ -1479,7 +1479,7 @@ j1939_xtp_rx_cts_one(struct j1939_session *session, struct sk_buff *skb)
 		}
 	} else {
 		/* CTS(0) */
-		j1939_tp_set_rxtimeout(session, 550);
+		j1939_tp_set_rxtimeout(session, 1050);
 	}
 	return;
 
