@@ -472,10 +472,6 @@
 	status = "okay";
 };
 
-&vuart2 {
-	status = "okay";
-};
-
 &lpc_ctrl {
 	status = "okay";
 	memory-region = <&flash_memory>;
