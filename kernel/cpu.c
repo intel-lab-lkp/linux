@@ -1890,6 +1890,8 @@ int freeze_secondary_cpus(int primary)
 	cpu_maps_update_begin();
 	if (primary == -1) {
 		primary = cpumask_first(cpu_online_mask);
+
+		guard(rcu)();
 		if (!housekeeping_cpu(primary, HK_TYPE_TIMER))
 			primary = housekeeping_any_cpu(HK_TYPE_TIMER);
 	} else {
