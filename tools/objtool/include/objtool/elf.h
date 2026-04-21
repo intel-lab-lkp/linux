@@ -106,6 +106,8 @@ struct symbol {
 	u8 included	     : 1;
 	u8 klp		     : 1;
 	u8 dont_correlate    : 1;
+	u8 fake		     : 1;
+	u8 unalign	     : 1;
 	struct list_head pv_target;
 	struct reloc *relocs;
 	struct section *group_sec;
@@ -186,7 +188,7 @@ struct symbol *elf_create_symbol(struct elf *elf, const char *name,
 struct symbol *elf_create_section_symbol(struct elf *elf, struct section *sec);
 
 void *elf_add_data(struct elf *elf, struct section *sec, const void *data,
-		   size_t size);
+		   size_t size, bool align);
 
 int elf_find_string(struct elf *elf, struct section *strtab, const char *str);
 int elf_add_string(struct elf *elf, struct section *strtab, const char *str);
@@ -531,6 +533,9 @@ static inline void set_sym_next_reloc(struct reloc *reloc, struct reloc *next)
 
 #define sec_for_each_sym_from(sec, sym)					\
 	list_for_each_entry_from(sym, &sec->symbol_list, list)
+
+#define sec_for_each_sym_continue(sec, sym)				\
+	list_for_each_entry_continue(sym, &sec->symbol_list, list)
 
 #define sec_prev_sym(sym)						\
 	sym->sec && sym->list.prev != &sym->sec->symbol_list ?		\

@@ -1413,14 +1413,15 @@ int elf_add_string(struct elf *elf, struct section *strtab, const char *str)
 		return -1;
 	}
 
-	data = elf_add_data(elf, strtab, str, strlen(str) + 1);
+	data = elf_add_data(elf, strtab, str, strlen(str) + 1, true);
 	if (!data)
 		return -1;
 
 	return data - strtab->data->d_buf;
 }
 
-void *elf_add_data(struct elf *elf, struct section *sec, const void *data, size_t size)
+void *elf_add_data(struct elf *elf, struct section *sec, const void *data,
+		   size_t size, bool align)
 {
 	unsigned long offset, size_old, size_new, alloc_size_old, alloc_size_new;
 	Elf_Scn *s;
@@ -1447,7 +1448,7 @@ void *elf_add_data(struct elf *elf, struct section *sec, const void *data, size_
 	}
 
 	size_old = sec->data->d_size;
-	offset = ALIGN(size_old, sec->sh.sh_addralign);
+	offset = ALIGN(size_old, align ? sec->sh.sh_addralign : 1);
 	size_new = offset + size;
 
 	if (!sec->data_overallocated)
@@ -1590,7 +1591,7 @@ static int elf_alloc_reloc(struct elf *elf, struct section *rsec)
 	unsigned long nr_alloc_old = 0, nr_alloc_new;
 	struct symbol *sym;
 
-	if (!elf_add_data(elf, rsec, NULL, elf_rela_size(elf)))
+	if (!elf_add_data(elf, rsec, NULL, elf_rela_size(elf), true))
 		return -1;
 
 	rsec->data->d_type = ELF_T_RELA;
