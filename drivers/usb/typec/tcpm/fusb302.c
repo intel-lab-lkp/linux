@@ -1776,10 +1776,15 @@ static int fusb302_probe(struct i2c_client *client)
 
 	ret = devm_drm_dp_hpd_bridge_add(chip->dev, bridge_dev);
 	if (ret)
-		return ret;
+		goto free_irq;
 
-	return ret;
+	return 0;
 
+free_irq:
+	disable_irq_wake(chip->gpio_int_n_irq);
+	free_irq(chip->gpio_int_n_irq, chip);
+	cancel_work_sync(&chip->irq_work);
+	cancel_delayed_work_sync(&chip->bc_lvl_handler);
 tcpm_unregister_port:
 	tcpm_unregister_port(chip->tcpm_port);
 	fwnode_handle_put(chip->tcpc_dev.fwnode);
