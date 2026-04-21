@@ -829,16 +829,14 @@ static struct sk_buff *nsim_dev_trap_skb_build(void)
 	skb->protocol = htons(ETH_P_IP);
 
 	skb_set_network_header(skb, skb->len);
-	iph = skb_put(skb, sizeof(struct iphdr));
+	iph = skb_put_zero(skb, sizeof(struct iphdr));
+	iph->ihl = 0x5;
+	iph->version = 0x4;
+	iph->tot_len = htons(tot_len);
+	iph->ttl = 100;
 	iph->protocol = IPPROTO_UDP;
 	iph->saddr = in_aton("192.0.2.1");
 	iph->daddr = in_aton("198.51.100.1");
-	iph->version = 0x4;
-	iph->frag_off = 0;
-	iph->ihl = 0x5;
-	iph->tot_len = htons(tot_len);
-	iph->ttl = 100;
-	iph->check = 0;
 	iph->check = ip_fast_csum((unsigned char *)iph, iph->ihl);
 
 	skb_set_transport_header(skb, skb->len);
