@@ -453,6 +453,18 @@ config INPUT_KXTJ9
 	  To compile this driver as a module, choose M here: the module will
 	  be called kxtj9.
 
+config INPUT_PAJ7620
+	tristate "PixArt PAJ7620 Gesture Sensor"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  Say Y here if you want to support the PixArt PAJ7620 gesture
+	  sensor. This sensor supports 9 hand gestures and communicates
+	  over the I2C bus.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called paj7620.
+
 config INPUT_POWERMATE
 	tristate "Griffin PowerMate and Contour Jog support"
 	depends on USB_ARCH_HAS_HCD
