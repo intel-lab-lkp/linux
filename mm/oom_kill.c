@@ -20,6 +20,7 @@
 
 #include <linux/oom.h>
 #include <linux/mm.h>
+#include <uapi/linux/mman.h>
 #include <linux/err.h>
 #include <linux/gfp.h>
 #include <linux/sched.h>
@@ -850,7 +851,7 @@ bool oom_killer_disable(signed long timeout)
 	return true;
 }
 
-static inline bool __task_will_free_mem(struct task_struct *task)
+static inline bool __task_will_free_mem(struct task_struct *task, bool ignore_exit)
 {
 	struct signal_struct *sig = task->signal;
 
@@ -861,6 +862,9 @@ static inline bool __task_will_free_mem(struct task_struct *task)
 	 */
 	if (sig->core_state)
 		return false;
+
+	if (ignore_exit)
+		return true;
 
 	if (sig->flags & SIGNAL_GROUP_EXIT)
 		return true;
@@ -878,7 +882,7 @@ static inline bool __task_will_free_mem(struct task_struct *task)
  * Caller has to make sure that task->mm is stable (hold task_lock or
  * it operates on the current).
  */
-static bool task_will_free_mem(struct task_struct *task)
+static bool task_will_free_mem(struct task_struct *task, bool ignore_exit)
 {
 	struct mm_struct *mm = task->mm;
 	struct task_struct *p;
@@ -892,7 +896,7 @@ static bool task_will_free_mem(struct task_struct *task)
 	if (!mm)
 		return false;
 
-	if (!__task_will_free_mem(task))
+	if (!__task_will_free_mem(task, ignore_exit))
 		return false;
 
 	/*
@@ -916,7 +920,7 @@ static bool task_will_free_mem(struct task_struct *task)
 			continue;
 		if (same_thread_group(task, p))
 			continue;
-		ret = __task_will_free_mem(p);
+		ret = __task_will_free_mem(p, false);
 		if (!ret)
 			break;
 	}
@@ -1034,7 +1038,7 @@ static void oom_kill_process(struct oom_control *oc, const char *message)
 	 * so it can die quickly
 	 */
 	task_lock(victim);
-	if (task_will_free_mem(victim)) {
+	if (task_will_free_mem(victim, false)) {
 		mark_oom_victim(victim);
 		queue_oom_reaper(victim);
 		task_unlock(victim);
@@ -1135,7 +1139,7 @@ bool out_of_memory(struct oom_control *oc)
 	 * select it.  The goal is to allow it to allocate so that it may
 	 * quickly exit and free its memory.
 	 */
-	if (task_will_free_mem(current)) {
+	if (task_will_free_mem(current, false)) {
 		mark_oom_victim(current);
 		queue_oom_reaper(current);
 		return true;
@@ -1217,8 +1221,9 @@ SYSCALL_DEFINE2(process_mrelease, int, pidfd, unsigned int, flags)
 	unsigned int f_flags;
 	bool reap = false;
 	long ret = 0;
+	bool reap_kill;
 
-	if (flags)
+	if (flags & ~PROCESS_MRELEASE_VALID_FLAGS)
 		return -EINVAL;
 
 	task = pidfd_get_task(pidfd, &f_flags);
@@ -1236,19 +1241,33 @@ SYSCALL_DEFINE2(process_mrelease, int, pidfd, unsigned int, flags)
 	}
 
 	mm = p->mm;
-	mmgrab(mm);
 
-	if (task_will_free_mem(p))
-		reap = true;
-	else {
-		/* Error only if the work has not been done already */
-		if (!mm_flags_test(MMF_OOM_SKIP, mm))
+	reap_kill = !!(flags & PROCESS_MRELEASE_REAP_KILL);
+	reap = task_will_free_mem(p, reap_kill);
+	if (!reap) {
+		if (reap_kill || !mm_flags_test(MMF_OOM_SKIP, mm))
 			ret = -EINVAL;
-	}
-	task_unlock(p);
 
-	if (!reap)
-		goto drop_mm;
+		task_unlock(p);
+		goto put_task;
+	}
+
+	if (reap_kill) {
+		/*
+		 * We use mmget() instead of mmgrab() to keep mm_users > 0,
+		 * preventing the victim from calling exit_mmap() in its
+		 * own exit path. This ensures that the memory is reclaimed
+		 * synchronously and deterministically by the reaper.
+		 */
+		mmget(mm);
+		task_unlock(p);
+		ret = kill_pid(task_tgid(task), SIGKILL, 0);
+		if (ret)
+			goto drop_mm;
+	} else {
+		mmgrab(mm);
+		task_unlock(p);
+	}
 
 	if (mmap_read_lock_killable(mm)) {
 		ret = -EINTR;
@@ -1263,7 +1282,10 @@ SYSCALL_DEFINE2(process_mrelease, int, pidfd, unsigned int, flags)
 	mmap_read_unlock(mm);
 
 drop_mm:
-	mmdrop(mm);
+	if (reap_kill)
+		mmput(mm);
+	else
+		mmdrop(mm);
 put_task:
 	put_task_struct(task);
 	return ret;
