@@ -165,6 +165,15 @@ static inline bool slot_allocated(struct zram *zram, u32 index)
 		test_slot_flag(zram, index, ZRAM_WB);
 }
 
+#define ZRAM_FLAGS_TO_CLEAR_ON_FREE	(BIT(ZRAM_IDLE) | \
+					 BIT(ZRAM_INCOMPRESSIBLE) | \
+					 BIT(ZRAM_PP_SLOT))
+
+static inline void clear_slot_flags_on_free(struct zram *zram, u32 index)
+{
+	zram->table[index].attr.flags &= ~ZRAM_FLAGS_TO_CLEAR_ON_FREE;
+}
+
 static inline void set_slot_comp_priority(struct zram *zram, u32 index,
 					  u32 prio)
 {
@@ -2000,17 +2009,20 @@ static bool zram_meta_alloc(struct zram *zram, u64 disksize)
 	return true;
 }
 
-static void slot_free(struct zram *zram, u32 index)
+/*
+ * Clear slot metadata and extract the zsmalloc handle for freeing.
+ * Returns the handle that needs to be freed via zs_free(), or 0 if
+ * no zsmalloc freeing is needed (e.g. same-filled or writeback slots).
+ */
+static unsigned long slot_free_extract(struct zram *zram, u32 index)
 {
-	unsigned long handle;
+	unsigned long handle = 0;
 
 #ifdef CONFIG_ZRAM_TRACK_ENTRY_ACTIME
 	zram->table[index].attr.ac_time = 0;
 #endif
 
-	clear_slot_flag(zram, index, ZRAM_IDLE);
-	clear_slot_flag(zram, index, ZRAM_INCOMPRESSIBLE);
-	clear_slot_flag(zram, index, ZRAM_PP_SLOT);
+	clear_slot_flags_on_free(zram, index);
 	set_slot_comp_priority(zram, index, 0);
 
 	if (test_slot_flag(zram, index, ZRAM_HUGE)) {
@@ -2041,9 +2053,7 @@ static void slot_free(struct zram *zram, u32 index)
 
 	handle = get_slot_handle(zram, index);
 	if (!handle)
-		return;
-
-	zs_free(zram->mem_pool, handle);
+		return 0;
 
 	atomic64_sub(get_slot_size(zram, index),
 		     &zram->stats.compr_data_size);
@@ -2051,6 +2061,15 @@ out:
 	atomic64_dec(&zram->stats.pages_stored);
 	set_slot_handle(zram, index, 0);
 	set_slot_size(zram, index, 0);
+
+	return handle;
+}
+
+static void slot_free(struct zram *zram, u32 index)
+{
+	unsigned long handle = slot_free_extract(zram, index);
+
+	zs_free(zram->mem_pool, handle);
 }
 
 static int read_same_filled_page(struct zram *zram, struct page *page,
@@ -2797,7 +2816,7 @@ static void zram_slot_free_notify(struct block_device *bdev,
 		return;
 	}
 
-	slot_free(zram, index);
+	zs_free_deferred(zram->mem_pool, slot_free_extract(zram, index));
 	slot_unlock(zram, index);
 }
 
