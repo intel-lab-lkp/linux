@@ -2227,6 +2227,12 @@ lock_errdad:
 
 errdad:
 	/* transition from _POSTDAD to _ERRDAD */
+	if (ifp->state == INET6_IFADDR_STATE_DEAD) {
+		/* ipv6_del_addr() already removed ifp while lock was dropped */
+		spin_unlock_bh(&ifp->lock);
+		in6_ifa_put(ifp);
+		return;
+	}
 	ifp->state = INET6_IFADDR_STATE_ERRDAD;
 	spin_unlock_bh(&ifp->lock);
 
