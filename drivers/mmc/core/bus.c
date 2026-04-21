@@ -160,7 +160,6 @@ static void mmc_bus_shutdown(struct device *dev)
 	}
 }
 
-#ifdef CONFIG_PM_SLEEP
 static int mmc_bus_suspend(struct device *dev)
 {
 	struct mmc_card *card = mmc_dev_to_card(dev);
@@ -192,9 +191,7 @@ static int mmc_bus_resume(struct device *dev)
 	ret = pm_generic_resume(dev);
 	return ret;
 }
-#endif
 
-#ifdef CONFIG_PM
 static int mmc_runtime_suspend(struct device *dev)
 {
 	struct mmc_card *card = mmc_dev_to_card(dev);
@@ -210,11 +207,10 @@ static int mmc_runtime_resume(struct device *dev)
 
 	return host->bus_ops->runtime_resume(host);
 }
-#endif /* !CONFIG_PM */
 
 static const struct dev_pm_ops mmc_bus_pm_ops = {
-	SET_RUNTIME_PM_OPS(mmc_runtime_suspend, mmc_runtime_resume, NULL)
-	SET_SYSTEM_SLEEP_PM_OPS(mmc_bus_suspend, mmc_bus_resume)
+	RUNTIME_PM_OPS(mmc_runtime_suspend, mmc_runtime_resume, NULL)
+	SYSTEM_SLEEP_PM_OPS(mmc_bus_suspend, mmc_bus_resume)
 };
 
 static const struct bus_type mmc_bus_type = {
@@ -224,7 +220,7 @@ static const struct bus_type mmc_bus_type = {
 	.probe		= mmc_bus_probe,
 	.remove		= mmc_bus_remove,
 	.shutdown	= mmc_bus_shutdown,
-	.pm		= &mmc_bus_pm_ops,
+	.pm		= pm_ptr(&mmc_bus_pm_ops),
 };
 
 int mmc_register_bus(void)
