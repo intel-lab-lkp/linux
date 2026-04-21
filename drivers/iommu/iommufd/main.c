@@ -212,6 +212,8 @@ static int iommufd_destroy(struct iommufd_ucmd *ucmd)
 	obj = iommufd_object_remove(ucmd->ictx, cmd->id, false);
 	if (IS_ERR(obj))
 		return PTR_ERR(obj);
+	down_write(&obj->destroy_rwsem);
+	up_write(&obj->destroy_rwsem);
 	iommufd_object_ops[obj->type].destroy(obj);
 	kfree(obj);
 	return 0;
