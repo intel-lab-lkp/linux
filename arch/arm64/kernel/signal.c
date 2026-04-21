@@ -67,6 +67,8 @@ struct rt_sigframe_user_layout {
 	unsigned long end_offset;
 };
 
+#define UA_STATE_HAS_POR_EL0	BIT(0)
+
 /*
  * Holds any EL0-controlled state that influences unprivileged memory accesses.
  * This includes both accesses done in userspace and uaccess done in the kernel.
@@ -74,8 +76,12 @@ struct rt_sigframe_user_layout {
  * This state needs to be carefully managed to ensure that it doesn't cause
  * uaccess to fail when setting up the signal frame, and the signal handler
  * itself also expects a well-defined state when entered.
+ *
+ * The valid_fields member is a bitfield (see UA_STATE_HAS_*), specifying which
+ * of the remaining fields is valid (has been set to a value).
  */
 struct user_access_state {
+	unsigned int valid_fields;
 	u64 por_el0;
 };
 
@@ -95,6 +101,7 @@ static void save_reset_user_access_state(struct user_access_state *ua_state)
 			por_enable_all |= POR_ELx_PERM_PREP(pkey, POE_RWX);
 
 		ua_state->por_el0 = read_sysreg_s(SYS_POR_EL0);
+		ua_state->valid_fields |= UA_STATE_HAS_POR_EL0;
 		write_sysreg_s(por_enable_all, SYS_POR_EL0);
 		/*
 		 * No ISB required as we can tolerate spurious Overlay faults -
@@ -122,7 +129,7 @@ static void set_handler_user_access_state(void)
  */
 static void restore_user_access_state(const struct user_access_state *ua_state)
 {
-	if (system_supports_poe())
+	if (ua_state->valid_fields & UA_STATE_HAS_POR_EL0)
 		write_sysreg_s(ua_state->por_el0, SYS_POR_EL0);
 }
 
@@ -352,8 +359,10 @@ static int restore_poe_context(struct user_ctxs *user,
 		return -EINVAL;
 
 	__get_user_error(por_el0, &(user->poe->por_el0), err);
-	if (!err)
+	if (!err) {
 		ua_state->por_el0 = por_el0;
+		ua_state->valid_fields |= UA_STATE_HAS_POR_EL0;
+	}
 
 	return err;
 }
@@ -1095,7 +1104,7 @@ SYSCALL_DEFINE0(rt_sigreturn)
 {
 	struct pt_regs *regs = current_pt_regs();
 	struct rt_sigframe __user *frame;
-	struct user_access_state ua_state;
+	struct user_access_state ua_state = {0};
 
 	/* Always make any pending restarted system calls return -EINTR */
 	current->restart_block.fn = do_no_restart_syscall;
@@ -1302,7 +1311,7 @@ static int setup_sigframe(struct rt_sigframe_user_layout *user,
 		err |= preserve_fpmr_context(fpmr_ctx);
 	}
 
-	if (system_supports_poe() && err == 0) {
+	if ((ua_state->valid_fields & UA_STATE_HAS_POR_EL0) && err == 0) {
 		struct poe_context __user *poe_ctx =
 			apply_user_offset(user, user->poe_offset);
 
@@ -1507,7 +1516,7 @@ static int setup_rt_frame(int usig, struct ksignal *ksig, sigset_t *set,
 {
 	struct rt_sigframe_user_layout user;
 	struct rt_sigframe __user *frame;
-	struct user_access_state ua_state;
+	struct user_access_state ua_state = {0};
 	int err = 0;
 
 	fpsimd_save_and_flush_current_state();
