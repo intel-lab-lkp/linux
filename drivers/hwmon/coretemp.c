@@ -563,8 +563,10 @@ static int create_core_data(struct platform_device *pdev, unsigned int cpu,
 	u32 eax, edx;
 	int err;
 
-	if (!housekeeping_cpu(cpu, HK_TYPE_MISC))
-		return 0;
+	scoped_guard(rcu) {
+		if (!housekeeping_cpu(cpu, HK_TYPE_MISC))
+			return 0;
+	}
 
 	tdata = init_temp_data(pdata, cpu, pkg_flag);
 	if (!tdata)
