@@ -241,9 +241,6 @@ static void tick_sched_do_timer(struct tick_sched *ts, ktime_t now)
 	tick_cpu = READ_ONCE(tick_do_timer_cpu);
 
 	if (IS_ENABLED(CONFIG_NO_HZ_COMMON) && unlikely(tick_cpu == TICK_DO_TIMER_NONE)) {
-#ifdef CONFIG_NO_HZ_FULL
-		WARN_ON_ONCE(tick_nohz_full_running);
-#endif
 		WRITE_ONCE(tick_do_timer_cpu, cpu);
 		tick_cpu = cpu;
 	}
@@ -627,6 +624,36 @@ void __init tick_nohz_full_setup(cpumask_var_t cpumask)
 	alloc_bootmem_cpumask_var(&tick_nohz_full_mask);
 	cpumask_copy(tick_nohz_full_mask, cpumask);
 	tick_nohz_full_running = true;
+}
+
+/* Get the new set of run-time nohz CPU list & update accordingly */
+void tick_nohz_full_update_cpus(struct cpumask *cpumask)
+{
+	int cpu;
+
+	if (!tick_nohz_full_running) {
+		pr_warn_once("Full dynticks cannot be enabled without the nohz_full kernel boot parameter!\n");
+		return;
+	}
+
+	/*
+	 * To properly enable/disable nohz_full dynticks for the affected CPUs,
+	 * the new nohz_full CPUs have to be copied to tick_nohz_full_mask and
+	 * ct_cpu_track_user/ct_cpu_untrack_user() will have to be called
+	 * for those CPUs that have their states changed. Those CPUs should be
+	 * in an offline state.
+	 */
+	for_each_cpu_andnot(cpu, cpumask, tick_nohz_full_mask) {
+		WARN_ON_ONCE(cpu_online(cpu));
+		ct_cpu_track_user(cpu);
+		cpumask_set_cpu(cpu, tick_nohz_full_mask);
+	}
+
+	for_each_cpu_andnot(cpu, tick_nohz_full_mask, cpumask) {
+		WARN_ON_ONCE(cpu_online(cpu));
+		ct_cpu_untrack_user(cpu);
+		cpumask_clear_cpu(cpu, tick_nohz_full_mask);
+	}
 }
 
 bool tick_nohz_cpu_hotpluggable(unsigned int cpu)
@@ -1237,10 +1264,6 @@ static bool can_stop_idle_tick(int cpu, struct tick_sched *ts)
 		 * if there are full dynticks CPUs around
 		 */
 		if (tick_cpu == cpu)
-			return false;
-
-		/* Should not happen for nohz-full */
-		if (WARN_ON_ONCE(tick_cpu == TICK_DO_TIMER_NONE))
 			return false;
 	}
 

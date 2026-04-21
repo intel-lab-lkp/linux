@@ -411,7 +411,7 @@ static __always_inline void ct_kernel_enter(bool user, int offset) { }
 #define CREATE_TRACE_POINTS
 #include <trace/events/context_tracking.h>
 
-DEFINE_STATIC_KEY_FALSE_RO(context_tracking_key);
+DEFINE_STATIC_KEY_FALSE(context_tracking_key);
 EXPORT_SYMBOL_GPL(context_tracking_key);
 
 static noinstr bool context_tracking_recursion_enter(void)
@@ -674,9 +674,9 @@ void user_exit_callable(void)
 }
 NOKPROBE_SYMBOL(user_exit_callable);
 
-void __init ct_cpu_track_user(int cpu)
+void ct_cpu_track_user(int cpu)
 {
-	static __initdata bool initialized = false;
+	static bool initialized;
 
 	if (cpu == CONTEXT_TRACKING_FORCE_ENABLE) {
 		static_branch_inc(&context_tracking_key);
@@ -698,6 +698,15 @@ void __init ct_cpu_track_user(int cpu)
 	WARN_ON_ONCE(!tasklist_empty());
 
 	initialized = true;
+}
+
+void ct_cpu_untrack_user(int cpu)
+{
+	if (!per_cpu(context_tracking.active, cpu))
+		return;
+
+	per_cpu(context_tracking.active, cpu) = false;
+	static_branch_dec(&context_tracking_key);
 }
 
 #ifdef CONFIG_CONTEXT_TRACKING_USER_FORCE
