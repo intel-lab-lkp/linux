@@ -120,48 +120,87 @@ bool housekeeping_test_cpu(int cpu, enum hk_type type)
 }
 EXPORT_SYMBOL_GPL(housekeeping_test_cpu);
 
-int housekeeping_update(struct cpumask *isol_mask)
+/* HK type processing table */
+static struct {
+	int type;
+	int boot_type;
+} hk_types[] = {
+	{ HK_TYPE_DOMAIN,       HK_TYPE_DOMAIN_BOOT	  },
+	{ HK_TYPE_MANAGED_IRQ,  HK_TYPE_MANAGED_IRQ_BOOT  },
+	{ HK_TYPE_KERNEL_NOISE, HK_TYPE_KERNEL_NOISE_BOOT }
+};
+
+#define HK_TYPE_CNT	ARRAY_SIZE(hk_types)
+
+int housekeeping_update(struct cpumask *isol_mask, unsigned long flags)
 {
-	struct cpumask *trial, *old = NULL;
-	int err;
+	struct cpumask *trial[HK_TYPE_CNT];
+	int i, err = 0;
 
-	trial = kmalloc(cpumask_size(), GFP_KERNEL);
-	if (!trial)
-		return -ENOMEM;
+	for (i = 0; i < HK_TYPE_CNT; i++) {
+		int type = hk_types[i].type;
+		int boot = hk_types[i].boot_type;
 
-	cpumask_andnot(trial, housekeeping_cpumask(HK_TYPE_DOMAIN_BOOT), isol_mask);
-	if (!cpumask_intersects(trial, cpu_online_mask)) {
-		kfree(trial);
-		return -EINVAL;
+		trial[i] = NULL;
+		if (flags & BIT(type)) {
+			trial[i] = kmalloc(cpumask_size(), GFP_KERNEL);
+			if (!trial[i]) {
+				err = -ENOMEM;
+				goto out;
+			}
+			/*
+			 * The new HK cpumask must be a subset of its boot
+			 * cpumask.
+			 */
+			cpumask_andnot(trial[i], cpu_possible_mask, isol_mask);
+			if (!cpumask_intersects(trial[i], cpu_online_mask) ||
+			    !cpumask_subset(trial[i], housekeeping_cpumask(boot))) {
+				i++;
+				err = -EINVAL;
+				goto out;
+			}
+		}
 	}
 
 	if (!housekeeping.flags)
 		static_branch_enable(&housekeeping_overridden);
 
-	if (housekeeping.flags & HK_FLAG_DOMAIN)
-		old = housekeeping_cpumask_dereference(HK_TYPE_DOMAIN);
-	else
-		WRITE_ONCE(housekeeping.flags, housekeeping.flags | HK_FLAG_DOMAIN);
-	rcu_assign_pointer(housekeeping.cpumasks[HK_TYPE_DOMAIN], trial);
+	for (i = 0; i < HK_TYPE_CNT; i++) {
+		int type =  hk_types[i].type;
+		struct cpumask *old;
+
+		if (!trial[i])
+			continue;
+		old = NULL;
+		if (housekeeping.flags & BIT(type))
+			old = housekeeping_cpumask_dereference(type);
+		rcu_assign_pointer(housekeeping.cpumasks[type], trial[i]);
+		trial[i] = old;
+	}
+
+	if ((housekeeping.flags & flags) != flags)
+		WRITE_ONCE(housekeeping.flags, housekeeping.flags | flags);
 
 	synchronize_rcu();
 
-	pci_probe_flush_workqueue();
-	mem_cgroup_flush_workqueue();
-	vmstat_flush_workqueue();
+	if (flags & HK_FLAG_DOMAIN) {
+		/*
+		 * HK_TYPE_DOMAIN specific callbacks
+		 */
+		pci_probe_flush_workqueue();
+		mem_cgroup_flush_workqueue();
+		vmstat_flush_workqueue();
 
-	err = workqueue_unbound_housekeeping_update(housekeeping_cpumask(HK_TYPE_DOMAIN));
-	WARN_ON_ONCE(err < 0);
+		WARN_ON_ONCE(workqueue_unbound_housekeeping_update(
+				housekeeping_cpumask(HK_TYPE_DOMAIN)) < 0);
+		WARN_ON_ONCE(tmigr_isolated_exclude_cpumask(isol_mask) < 0);
+		WARN_ON_ONCE(kthreads_update_housekeeping() < 0);
+	}
 
-	err = tmigr_isolated_exclude_cpumask(isol_mask);
-	WARN_ON_ONCE(err < 0);
-
-	err = kthreads_update_housekeeping();
-	WARN_ON_ONCE(err < 0);
-
-	kfree(old);
-
-	return 0;
+out:
+	while (--i >= 0)
+		kfree(trial[i]);
+	return err;
 }
 
 void __init housekeeping_init(void)

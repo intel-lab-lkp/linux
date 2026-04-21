@@ -1357,7 +1357,7 @@ static void cpuset_update_sd_hk_unlock(void)
 		 */
 		mutex_unlock(&cpuset_mutex);
 		cpus_read_unlock();
-		WARN_ON_ONCE(housekeeping_update(isolated_hk_cpus));
+		WARN_ON_ONCE(housekeeping_update(isolated_hk_cpus, BIT(HK_TYPE_DOMAIN)));
 		mutex_unlock(&cpuset_top_mutex);
 	} else {
 		cpuset_full_unlock();
