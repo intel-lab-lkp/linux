@@ -14,10 +14,22 @@ enum hk_type {
 	 * is always a subset of HK_TYPE_DOMAIN_BOOT.
 	 */
 	HK_TYPE_DOMAIN,
-	/* Inverse of boot-time isolcpus=managed_irq argument */
-	HK_TYPE_MANAGED_IRQ,
+
 	/* Inverse of boot-time nohz_full= or isolcpus=nohz arguments */
+	HK_TYPE_KERNEL_NOISE_BOOT,
+	/*
+	 * A subset of HK_TYPE_KERNEL_NOISE_BOOT as it may excludes some
+	 * additional isolated CPUs at run time.
+	 */
 	HK_TYPE_KERNEL_NOISE,
+
+	/* Inverse of boot-time isolcpus=managed_irq argument */
+	HK_TYPE_MANAGED_IRQ_BOOT,
+	/*
+	 * A subset of HK_TYPE_MANAGED_IRQ_BOOT as it may excludes some
+	 * additional isolated CPUs at run time.
+	 */
+	HK_TYPE_MANAGED_IRQ,
 	HK_TYPE_MAX,
 
 	/*
