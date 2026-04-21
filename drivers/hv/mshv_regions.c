@@ -120,6 +120,57 @@ static long mshv_region_process_pfns(struct mshv_mem_region *region,
 }
 
 /**
+ * mshv_region_process_hole - Handle a hole (invalid PFNs) in a memory
+ *                            region
+ * @region    : Memory region containing the hole
+ * @flags     : Flags to pass to the handler function
+ * @pfn_offset: Starting PFN offset within the region
+ * @pfn_count : Number of PFNs in the hole
+ * @handler   : Callback function to invoke for the hole
+ *
+ * Invokes the handler function for a contiguous hole with the specified
+ * parameters.
+ *
+ * Return: Number of PFNs handled, or negative error code.
+ */
+static long mshv_region_process_hole(struct mshv_mem_region *region,
+				     u32 flags,
+				     u64 pfn_offset, u64 pfn_count,
+				     int (*handler)(struct mshv_mem_region *region,
+						    u32 flags,
+						    u64 pfn_offset,
+						    u64 pfn_count,
+						    bool huge_page))
+{
+	long ret;
+
+	ret = handler(region, flags, pfn_offset, pfn_count, 0);
+	if (ret)
+		return ret;
+
+	return pfn_count;
+}
+
+static long mshv_region_process_chunk(struct mshv_mem_region *region,
+				      u32 flags,
+				      u64 pfn_offset, u64 pfn_count,
+				      int (*handler)(struct mshv_mem_region *region,
+						     u32 flags,
+						     u64 pfn_offset,
+						     u64 pfn_count,
+						     bool huge_page))
+{
+	if (pfn_valid(region->mreg_pfns[pfn_offset]))
+		return mshv_region_process_pfns(region, flags,
+				pfn_offset, pfn_count,
+				handler);
+	else
+		return mshv_region_process_hole(region, flags,
+				pfn_offset, pfn_count,
+				handler);
+}
+
+/**
  * mshv_region_process_range - Processes a range of PFNs in a region.
  * @region    : Pointer to the memory region structure.
  * @flags     : Flags to pass to the handler.
@@ -146,8 +197,11 @@ static int mshv_region_process_range(struct mshv_mem_region *region,
 						    u64 pfn_count,
 						    bool huge_page))
 {
-	u64 end;
+	u64 start, end;
 	long ret;
+
+	if (!pfn_count)
+		return 0;
 
 	if (check_add_overflow(pfn_offset, pfn_count, &end))
 		return -EOVERFLOW;
@@ -155,23 +209,34 @@ static int mshv_region_process_range(struct mshv_mem_region *region,
 	if (end > region->nr_pfns)
 		return -EINVAL;
 
-	while (pfn_count) {
-		/* Skip non-present pages */
-		if (!pfn_valid(region->mreg_pfns[pfn_offset])) {
-			pfn_offset++;
-			pfn_count--;
+	start = pfn_offset;
+	end = pfn_offset + 1;
+
+	while (end < pfn_offset + pfn_count) {
+		/*
+		 * Accumulate contiguous pfns with the same validity
+		 * (valid or not).
+		 */
+		if (pfn_valid(region->mreg_pfns[start]) ==
+		    pfn_valid(region->mreg_pfns[end])) {
+			end++;
 			continue;
 		}
 
-		ret = mshv_region_process_pfns(region, flags,
-					       pfn_offset, pfn_count,
-					       handler);
+		ret = mshv_region_process_chunk(region, flags,
+						start, end - start,
+						handler);
 		if (ret < 0)
 			return ret;
 
-		pfn_offset += ret;
-		pfn_count -= ret;
+		start += ret;
 	}
+
+	ret = mshv_region_process_chunk(region, flags,
+					start, end - start,
+					handler);
+	if (ret < 0)
+		return ret;
 
 	return 0;
 }
@@ -208,6 +273,9 @@ static int mshv_region_chunk_share(struct mshv_mem_region *region,
 				   u64 pfn_offset, u64 pfn_count,
 				   bool huge_page)
 {
+	if (!pfn_valid(region->mreg_pfns[pfn_offset]))
+		return -EINVAL;
+
 	if (huge_page)
 		flags |= HV_MODIFY_SPA_PAGE_HOST_ACCESS_LARGE_PAGE;
 
@@ -233,6 +301,9 @@ static int mshv_region_chunk_unshare(struct mshv_mem_region *region,
 				     u64 pfn_offset, u64 pfn_count,
 				     bool huge_page)
 {
+	if (!pfn_valid(region->mreg_pfns[pfn_offset]))
+		return -EINVAL;
+
 	if (huge_page)
 		flags |= HV_MODIFY_SPA_PAGE_HOST_ACCESS_LARGE_PAGE;
 
@@ -256,6 +327,14 @@ static int mshv_region_chunk_remap(struct mshv_mem_region *region,
 				   u64 pfn_offset, u64 pfn_count,
 				   bool huge_page)
 {
+	/*
+	 * Remap missing pages with no access to let the
+	 * hypervisor track dirty pages, enabling precopy live
+	 * migration.
+	 */
+	if (!pfn_valid(region->mreg_pfns[pfn_offset]))
+		flags = HV_MAP_GPA_NO_ACCESS;
+
 	if (huge_page)
 		flags |= HV_MAP_GPA_LARGE_PAGE;
 
@@ -357,6 +436,9 @@ static int mshv_region_chunk_unmap(struct mshv_mem_region *region,
 				   u64 pfn_offset, u64 pfn_count,
 				   bool huge_page)
 {
+	if (!pfn_valid(region->mreg_pfns[pfn_offset]))
+		return 0;
+
 	if (huge_page)
 		flags |= HV_UNMAP_GPA_LARGE_PAGE;
 
