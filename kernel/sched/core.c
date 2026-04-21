@@ -1266,6 +1266,8 @@ int get_nohz_timer_target(void)
 	struct sched_domain *sd;
 	const struct cpumask *hk_mask;
 
+	guard(rcu)();
+
 	if (housekeeping_cpu(cpu, HK_TYPE_KERNEL_NOISE)) {
 		if (!idle_cpu(cpu))
 			return cpu;
@@ -1273,8 +1275,6 @@ int get_nohz_timer_target(void)
 	}
 
 	hk_mask = housekeeping_cpumask(HK_TYPE_KERNEL_NOISE);
-
-	guard(rcu)();
 
 	for_each_domain(cpu, sd) {
 		for_each_cpu_and(i, sched_domain_span(sd), hk_mask) {
