@@ -118,6 +118,7 @@ static int replace_anon_vma_name(struct vm_area_struct *vma,
 				 struct anon_vma_name *anon_name)
 {
 	struct anon_vma_name *orig_name = anon_vma_name(vma);
+	struct anon_vma_name *new_name;
 
 	if (!anon_name) {
 		vma->anon_name = NULL;
@@ -128,7 +129,11 @@ static int replace_anon_vma_name(struct vm_area_struct *vma,
 	if (anon_vma_name_eq(orig_name, anon_name))
 		return 0;
 
-	vma->anon_name = anon_vma_name_reuse(anon_name);
+	new_name = anon_vma_name_reuse(anon_name);
+	if (!new_name)
+		return -ENOMEM;
+
+	vma->anon_name = new_name;
 	anon_vma_name_put(orig_name);
 
 	return 0;
