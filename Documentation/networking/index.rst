@@ -41,11 +41,9 @@ Contents:
    tls-handshake
    nfc
    6lowpan
-   6pack
    arcnet-hardware
    arcnet
    atm
-   ax25
    bonding
    cdc_mbim
    dctcp
