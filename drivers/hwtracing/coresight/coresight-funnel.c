@@ -415,7 +415,7 @@ static struct amba_driver dynamic_funnel_driver = {
 static int __init funnel_init(void)
 {
 	return coresight_init_driver("funnel", &dynamic_funnel_driver, &funnel_driver,
-				     THIS_MODULE);
+				     THIS_MODULE, KBUILD_MODNAME);
 }
 
 static void __exit funnel_exit(void)

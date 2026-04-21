@@ -346,7 +346,8 @@ static struct platform_driver itnoc_driver = {
 
 static int __init tnoc_init(void)
 {
-	return coresight_init_driver("tnoc", &trace_noc_driver, &itnoc_driver, THIS_MODULE);
+	return coresight_init_driver("tnoc", &trace_noc_driver, &itnoc_driver,
+				     THIS_MODULE, KBUILD_MODNAME);
 }
 
 static void __exit tnoc_exit(void)
