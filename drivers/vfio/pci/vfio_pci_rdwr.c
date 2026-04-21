@@ -198,18 +198,6 @@ ssize_t vfio_pci_core_do_io_rw(struct vfio_pci_core_device *vdev, bool test_mem,
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_do_io_rw);
 
-int vfio_pci_core_setup_barmap(struct vfio_pci_core_device *vdev, int bar)
-{
-	/*
-	 * The barmap is now always set up in vfio_pci_core_enable().
-	 * Some legacy callers use this function to check if the BAR
-	 * is legitimate, so maintain that:
-	 */
-
-	return vdev->barmap[bar] ? 0 : -EBUSY;
-}
-EXPORT_SYMBOL_GPL(vfio_pci_core_setup_barmap);
-
 ssize_t vfio_pci_bar_rw(struct vfio_pci_core_device *vdev, char __user *buf,
 			size_t count, loff_t *ppos, bool iswrite)
 {
@@ -261,9 +249,8 @@ ssize_t vfio_pci_bar_rw(struct vfio_pci_core_device *vdev, char __user *buf,
 		 */
 		max_width = VFIO_PCI_IO_WIDTH_4;
 	} else {
-		int ret = vfio_pci_core_setup_barmap(vdev, bar);
-		if (ret) {
-			done = ret;
+		if (!vdev->barmap[bar]) {
+			done = -EINVAL;
 			goto out;
 		}
 
@@ -439,9 +426,8 @@ int vfio_pci_ioeventfd(struct vfio_pci_core_device *vdev, loff_t offset,
 	if (count == 8)
 		return -EINVAL;
 
-	ret = vfio_pci_core_setup_barmap(vdev, bar);
-	if (ret)
-		return ret;
+	if (!vdev->barmap[bar])
+		return -EINVAL;
 
 	mutex_lock(&vdev->ioeventfds_lock);
 
