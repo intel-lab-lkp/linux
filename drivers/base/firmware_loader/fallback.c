@@ -117,7 +117,8 @@ static int fw_load_sysfs_fallback(struct fw_sysfs *fw_sysfs, long timeout)
 		retval = -ENOMEM;
 
 out:
-	device_del(f_dev);
+	if (device_is_registered(f_dev))
+		device_del(f_dev);
 err_put_dev:
 	put_device(f_dev);
 	return retval;
