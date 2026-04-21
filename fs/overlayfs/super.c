@@ -218,7 +218,7 @@ static void ovl_destroy_inode(struct inode *inode)
 	ovl_stack_put(ovl_lowerstack(oi->oe), ovl_numlower(oi->oe));
 	if (S_ISDIR(inode->i_mode))
 		ovl_dir_cache_free(inode);
-	else
+	else if (oi->lowerdata_redirect)
 		kfree(oi->lowerdata_redirect);
 }
 
