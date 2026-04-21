@@ -42,7 +42,13 @@ properties:
     description: State bits used by the AP to signal the modem.
     items:
       - description: Power control
+        items:
+          - description: Phandle to ???
+          - description: ???
       - description: Power control acknowledgment
+        items:
+          - description: Phandle to ???
+          - description: ???
 
   qcom,smem-state-names:
     description: Names for the state bits used by the AP to signal the modem.

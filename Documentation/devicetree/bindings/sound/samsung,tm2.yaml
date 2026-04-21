@@ -46,7 +46,9 @@ properties:
     $ref: /schemas/types.yaml#/definitions/phandle-array
     items:
       - description: Phandle to I2S0.
+        maxItems: 1
       - description: Phandle to I2S1.
+        maxItems: 1
 
   mic-bias-gpios:
     description: GPIO pin that enables the Main Mic bias regulator.

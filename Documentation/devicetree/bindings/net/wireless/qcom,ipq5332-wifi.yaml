@@ -167,8 +167,17 @@ properties:
     description: States used by the AP to signal the remote processor
     items:
       - description: Shutdown WCSS pd
+        items:
+          - description: Phandle to ???
+          - description: ???
       - description: Stop WCSS pd
+        items:
+          - description: Phandle to ???
+          - description: ???
       - description: Spawn WCSS pd
+        items:
+          - description: Phandle to ???
+          - description: ???
 
   qcom,smem-state-names:
     description:

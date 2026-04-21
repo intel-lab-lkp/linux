@@ -101,6 +101,9 @@ properties:
     description: States used by the AP to signal the Hexagon core
     items:
       - description: Stop modem
+        items:
+          - description: Phandle to ???
+          - description: ???
 
   qcom,smem-state-names:
     description: Names of the states used by the AP to signal the Hexagon core
