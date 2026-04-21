@@ -1301,10 +1301,7 @@ mshv_map_user_memory(struct mshv_partition *partition,
 		ret = mshv_map_movable_region(region);
 		break;
 	case MSHV_REGION_TYPE_MMIO:
-		ret = hv_call_map_mmio_pfns(partition->pt_id,
-					    region->start_gfn,
-					    mmio_pfn,
-					    region->nr_pfns);
+		ret = mshv_map_mmio_region(region, mmio_pfn);
 		break;
 	}
 

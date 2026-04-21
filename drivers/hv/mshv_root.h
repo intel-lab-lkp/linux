@@ -374,5 +374,7 @@ void mshv_region_movable_fini(struct mshv_mem_region *region);
 bool mshv_region_movable_init(struct mshv_mem_region *region);
 int mshv_map_pinned_region(struct mshv_mem_region *region);
 int mshv_map_movable_region(struct mshv_mem_region *region);
+int mshv_map_mmio_region(struct mshv_mem_region *region,
+			 unsigned long mmio_pfn);
 
 #endif /* _MSHV_ROOT_H_ */

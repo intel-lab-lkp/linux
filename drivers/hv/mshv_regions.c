@@ -832,3 +832,12 @@ int mshv_map_movable_region(struct mshv_mem_region *region)
 	return mshv_region_collect_and_map(region, 0, region->nr_pfns,
 					   false);
 }
+
+int mshv_map_mmio_region(struct mshv_mem_region *region,
+			 unsigned long mmio_pfn)
+{
+	struct mshv_partition *partition = region->partition;
+
+	return hv_call_map_mmio_pfns(partition->pt_id, region->start_gfn,
+				     mmio_pfn, region->nr_pfns);
+}
