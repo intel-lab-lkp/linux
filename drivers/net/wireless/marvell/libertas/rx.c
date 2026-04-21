@@ -73,6 +73,15 @@ int lbs_process_rxed_packet(struct lbs_private *priv, struct sk_buff *skb)
 	}
 
 	p_rx_pd = (struct rxpd *) skb->data;
+
+	if (le32_to_cpu(p_rx_pd->pkt_ptr) + sizeof(struct rxpackethdr) >
+	    skb->len) {
+		lbs_deb_rx("rx err: pkt_ptr %u beyond skb len %u\n",
+			   le32_to_cpu(p_rx_pd->pkt_ptr), skb->len);
+		ret = -EINVAL;
+		dev_kfree_skb(skb);
+		goto done;
+	}
 	p_rx_pkt = (struct rxpackethdr *) ((u8 *)p_rx_pd +
 		le32_to_cpu(p_rx_pd->pkt_ptr));
 
