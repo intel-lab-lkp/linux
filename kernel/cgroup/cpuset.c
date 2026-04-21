@@ -1342,26 +1342,29 @@ static void cpuset_update_sd_hk_unlock(void)
 	__releases(&cpuset_mutex)
 	__releases(&cpuset_top_mutex)
 {
+	update_housekeeping = false;
+
 	/* force_sd_rebuild will be cleared in rebuild_sched_domains_locked() */
 	if (force_sd_rebuild)
 		rebuild_sched_domains_locked();
 
-	if (update_housekeeping) {
-		update_housekeeping = false;
-		cpumask_copy(isolated_hk_cpus, isolated_cpus);
-
-		/*
-		 * housekeeping_update() is now called without holding
-		 * cpus_read_lock and cpuset_mutex. Only cpuset_top_mutex
-		 * is still being held for mutual exclusion.
-		 */
-		mutex_unlock(&cpuset_mutex);
-		cpus_read_unlock();
-		WARN_ON_ONCE(housekeeping_update(isolated_hk_cpus, BIT(HK_TYPE_DOMAIN)));
-		mutex_unlock(&cpuset_top_mutex);
-	} else {
+	if (cpumask_equal(isolated_hk_cpus, isolated_cpus)) {
+		/* No housekeeping cpumask update needed */
 		cpuset_full_unlock();
+		return;
 	}
+
+	cpumask_copy(isolated_hk_cpus, isolated_cpus);
+
+	/*
+	 * housekeeping_update() is now called without holding
+	 * cpus_read_lock and cpuset_mutex. Only cpuset_top_mutex
+	 * is still being held for mutual exclusion.
+	 */
+	mutex_unlock(&cpuset_mutex);
+	cpus_read_unlock();
+	WARN_ON_ONCE(housekeeping_update(isolated_hk_cpus, BIT(HK_TYPE_DOMAIN)));
+	mutex_unlock(&cpuset_top_mutex);
 }
 
 /*
@@ -3697,10 +3700,11 @@ int __init cpuset_init(void)
 
 	BUG_ON(!alloc_cpumask_var(&cpus_attach, GFP_KERNEL));
 
-	if (housekeeping_enabled(HK_TYPE_DOMAIN_BOOT))
+	if (housekeeping_enabled(HK_TYPE_DOMAIN_BOOT)) {
 		cpumask_andnot(isolated_cpus, cpu_possible_mask,
 			       housekeeping_cpumask(HK_TYPE_DOMAIN_BOOT));
-
+		cpumask_copy(isolated_hk_cpus, isolated_cpus);
+	}
 	return 0;
 }
 
