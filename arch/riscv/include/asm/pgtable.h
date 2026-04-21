@@ -887,6 +887,13 @@ static inline bool __ptep_clear_flush_young(struct vm_area_struct *vma,
 
 #define __ptep_clear_flush_young __ptep_clear_flush_young
 
+static inline unsigned int __pte_batch_hint(pte_t *ptep, pte_t pte)
+{
+	return 1;
+}
+
+#define __pte_batch_hint __pte_batch_hint
+
 #ifdef CONFIG_RISCV_ISA_SVNAPOT
 
 /*
@@ -901,6 +908,7 @@ void __napotpte_try_unfold(struct mm_struct *mm, unsigned long addr,
 			   pte_t *ptep, pte_t pte);
 pte_t napotpte_ptep_get(pte_t *ptep, pte_t orig_pte);
 pte_t napotpte_ptep_get_lockless(pte_t *ptep);
+unsigned int napotpte_pte_batch_hint(pte_t *ptep);
 void napotpte_set_ptes(struct mm_struct *mm, unsigned long addr,
 		       pte_t *ptep, pte_t pte, unsigned int nr);
 void napotpte_clear_full_ptes(struct mm_struct *mm, unsigned long addr,
@@ -1071,6 +1079,15 @@ static inline bool ptep_clear_flush_young(struct vm_area_struct *vma,
 	return napotpte_ptep_clear_flush_young(vma, address, ptep);
 }
 
+#define pte_batch_hint pte_batch_hint
+static inline unsigned int pte_batch_hint(pte_t *ptep, pte_t pte)
+{
+	if (!pte_present(pte))
+		return 1;
+
+	return napotpte_pte_batch_hint(ptep);
+}
+
 #else /* CONFIG_RISCV_ISA_SVNAPOT */
 
 static __always_inline bool riscv_pte_present_napot(pte_t pte)
@@ -1115,9 +1132,9 @@ napotpte_ptep_clear_flush_young(struct vm_area_struct *vma,
 #define ptep_set_wrprotect			__ptep_set_wrprotect
 #define __HAVE_ARCH_PTEP_CLEAR_YOUNG_FLUSH
 #define ptep_clear_flush_young			__ptep_clear_flush_young
+#define pte_batch_hint				__pte_batch_hint
 
 #endif /* CONFIG_RISCV_ISA_SVNAPOT */
-
 #define pgprot_nx pgprot_nx
 static inline pgprot_t pgprot_nx(pgprot_t _prot)
 {
