@@ -943,6 +943,11 @@ int mwifiex_ret_wmm_get_status(struct mwifiex_private *priv,
 				    tlv_wmm_qstatus->flow_required,
 				    tlv_wmm_qstatus->disabled);
 
+
+			if (tlv_wmm_qstatus->queue_index >=
+			    IEEE80211_NUM_ACS) {
+				break;
+			}
 			ac_status = &priv->wmm.ac_status[tlv_wmm_qstatus->
 							 queue_index];
 			ac_status->disabled = tlv_wmm_qstatus->disabled;
