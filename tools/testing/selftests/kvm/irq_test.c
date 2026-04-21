@@ -11,11 +11,13 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <sys/eventfd.h>
+#include <sys/sysinfo.h>
 #include <libvfio.h>
 
 static u64 timeout_ns = 2ULL * 1000 * 1000 * 1000;
 static bool guest_ready_for_irqs[KVM_MAX_VCPUS];
 static bool guest_received_irq[KVM_MAX_VCPUS];
+static bool irq_affinity;
 static bool done;
 
 static u32 guest_get_vcpu_id(void)
@@ -106,9 +108,10 @@ static void kvm_route_msi(struct kvm_vm *vm, u32 gsi, struct kvm_vcpu *vcpu,
 
 static void help(const char *name)
 {
-	printf("Usage: %s [-d <segment:bus:device.function>] [-h]\n", name);
+	printf("Usage: %s [-a] [-d <segment:bus:device.function>] [-h]\n", name);
 	printf("\n");
 	printf("Tests KVM IRQ injection via irqfd using an emulated eventfd.\n");
+	printf("-a	Randomly affinitize the device's host IRQ to different physical CPUs throughout the test\n");
 	printf("-d	Use a VFIO device to send MSI-X interrupts instead of using an emulated eventfd\n");
 	printf("\n");
 	exit(KSFT_FAIL);
@@ -131,17 +134,21 @@ int main(int argc, char **argv)
 	u32 gsi = kvm_random_u64_in_range(&kvm_rng, 24, KVM_MAX_IRQ_ROUTES - 1);
 	u8 vector = kvm_random_u64_in_range(&kvm_rng, 32, UINT8_MAX);
 
+	int i, j, c, msi, irq, eventfd, irq_cpu;
 	struct kvm_vcpu *vcpus[KVM_MAX_VCPUS];
 	pthread_t vcpu_threads[KVM_MAX_VCPUS];
 	struct vfio_pci_device *device = NULL;
 	int nr_irqs = 1000, nr_vcpus = 1;
-	int i, j, c, msi, irq, eventfd;
 	const char *device_bdf = NULL;
+	FILE *irq_affinity_fp = NULL;
 	struct iommu *iommu;
 	struct kvm_vm *vm;
 
-	while ((c = getopt(argc, argv, "d:h")) != -1) {
+	while ((c = getopt(argc, argv, "ad:h")) != -1) {
 		switch (c) {
+		case 'a':
+			irq_affinity = true;
+			break;
 		case 'd':
 			device_bdf = optarg;
 			break;
@@ -168,6 +175,11 @@ int main(int argc, char **argv)
 		eventfd = kvm_new_eventfd();
 	}
 
+	if (irq_affinity) {
+		TEST_ASSERT(device_bdf, "-a requires -d");
+		irq_affinity_fp = open_proc_irq_affinity(irq);
+	}
+
 	printf("Injecting interrupts for GSI %d (Vector 0x%x) %d times\n",
 	       gsi, vector, nr_irqs);
 
@@ -189,6 +201,11 @@ int main(int argc, char **argv)
 
 		kvm_route_msi(vm, gsi, vcpu, vector);
 
+		if (irq_affinity && vcpu->id == 0) {
+			irq_cpu = kvm_random_u64(&kvm_rng) % get_nprocs();
+			write_proc_irq_affinity(irq_affinity_fp, irq, irq_cpu);
+		}
+
 		for (j = 0; j < nr_vcpus; j++)
 			TEST_ASSERT(
 				!SYNC_FROM_GUEST_AND_READ(vm, guest_received_irq[vcpus[j]->id]),
@@ -202,10 +219,15 @@ int main(int argc, char **argv)
 			if (SYNC_FROM_GUEST_AND_READ(vm, guest_received_irq[vcpu->id]))
 				break;
 
-			if (timespec_to_ns(timespec_elapsed(start)) > timeout_ns)
-				TEST_FAIL(
-					"vCPU %d timed out waiting for IRQ from GSI %d (Vector 0x%x) !\n",
+			if (timespec_to_ns(timespec_elapsed(start)) > timeout_ns) {
+				printf("Timeout waiting for interrupt!\n");
+				printf("  vCPU: %d\n", vcpu->id);
+				if (irq_affinity)
+					printf("  irq_cpu: %d\n", irq_cpu);
+
+				TEST_FAIL("vCPU %d timed out waiting for IRQ from GSI %d (Vector 0x%x) !\n",
 					vcpu->id, gsi, vector);
+			}
 		}
 
 		WRITE_AND_SYNC_TO_GUEST(vm, guest_received_irq[vcpu->id], false);
@@ -215,6 +237,9 @@ int main(int argc, char **argv)
 
 	for (i = 0; i < nr_vcpus; i++)
 		pthread_join(vcpu_threads[i], NULL);
+
+	if (irq_affinity)
+		fclose(irq_affinity_fp);
 
 	printf("Test passed!\n");
 

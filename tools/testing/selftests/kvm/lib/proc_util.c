@@ -40,3 +40,23 @@ int get_proc_vfio_irq_number(const char *device_bdf, int msi)
 	return irq;
 }
 
+FILE *open_proc_irq_affinity(int irq)
+{
+	char path[PATH_MAX];
+	FILE *fp;
+
+	snprintf(path, sizeof(path), "/proc/irq/%d/smp_affinity_list", irq);
+	fp = fopen(path, "w");
+	TEST_ASSERT(fp, "fopen(%s) failed", path);
+
+	return fp;
+}
+
+void write_proc_irq_affinity(FILE *fp, int irq, int irq_cpu)
+{
+	int ret;
+
+	ret = fprintf(fp, "%d\n", irq_cpu);
+	TEST_ASSERT(ret > 0, "Failed to affinitize IRQ-%d to CPU %d", irq, irq_cpu);
+	fflush(fp);
+}
