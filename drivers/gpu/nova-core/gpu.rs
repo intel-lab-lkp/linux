@@ -279,10 +279,10 @@ impl Gpu {
     ///
     /// Note: This method must only be called from `Driver::unbind`.
     pub(crate) fn unbind(&self, dev: &device::Device<device::Core>) {
-        kernel::warn_on!(self
-            .bar
-            .access(dev)
-            .inspect(|bar| self.sysmem_flush.unregister(bar))
-            .is_err());
+        let Ok(bar) = kernel::warn_on_err!(self.bar.access(dev)) else {
+            return;
+        };
+
+        self.sysmem_flush.unregister(bar);
     }
 }
