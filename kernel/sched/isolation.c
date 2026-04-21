@@ -184,6 +184,7 @@ int housekeeping_update(struct cpumask *isol_mask, unsigned long flags)
 	if (flags & HK_FLAG_KERNEL_NOISE) {
 		tick_nohz_full_update_cpus(isol_mask);
 		rcu_nocb_update_cpus(isol_mask);
+		watchdog_cpumask_update(isol_mask);
 	}
 
 	synchronize_rcu();

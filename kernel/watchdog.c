@@ -1072,6 +1072,30 @@ static inline void lockup_detector_setup(void)
 #endif /* !CONFIG_SOFTLOCKUP_DETECTOR */
 
 /**
+ * watchdog_cpumask_update - update watchdog_cpumask & watchdog_allowed_mask
+ * @isol_mask: cpumask of isolated CPUs
+ *
+ * Update watchdog_cpumask and watchdog_allowed_mask to be inverse of the
+ * given isolated cpumask to disable watchdog activities on isolated CPUs.
+ * It should be called with the affected CPUs in offline state which will be
+ * brought up online later.
+ *
+ * Any changes made in watchdog_cpumask by users via the sysctl parameter will
+ * be overridden. However, proc_watchdog_update() isn't called. So change will
+ * only happens on CPUs that will brought up later on to minimize changes to
+ * the existing watchdog configuration.
+ */
+void watchdog_cpumask_update(struct cpumask *isol_mask)
+{
+	mutex_lock(&watchdog_mutex);
+	cpumask_andnot(&watchdog_cpumask, cpu_possible_mask, isol_mask);
+#ifdef CONFIG_SOFTLOCKUP_DETECTOR
+	cpumask_copy(&watchdog_allowed_mask, &watchdog_cpumask);
+#endif
+	mutex_unlock(&watchdog_mutex);
+}
+
+/**
  * lockup_detector_soft_poweroff - Interface to stop lockup detector(s)
  *
  * Special interface for parisc. It prevents lockup detector warnings from
