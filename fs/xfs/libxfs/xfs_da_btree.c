@@ -318,6 +318,8 @@ xfs_da3_node_write_verify(
 	if (bip)
 		hdr3->info.lsn = cpu_to_be64(bip->bli_item.li_lsn);
 
+	hdr3->__pad32 = 0;
+
 	xfs_buf_update_cksum(bp, XFS_DA3_NODE_CRC_OFF);
 }
 
