@@ -285,8 +285,10 @@ int pci_alloc_irq_vectors_affinity(struct pci_dev *dev, unsigned int min_vecs,
 			 * the device driver can adjust queue configuration
 			 * for the single interrupt case.
 			 */
-			if (affd)
-				irq_create_affinity_masks(1, affd);
+			if (affd) {
+				struct irq_affinity_desc *masks __free(kfree) =
+					irq_create_affinity_masks(1, affd);
+			}
 			pci_intx(dev, 1);
 			return 1;
 		}
