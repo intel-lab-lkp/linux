@@ -82,6 +82,9 @@ static int wlcore_smart_config_decode_event(struct wl1271 *wl,
 {
 	struct sk_buff *skb;
 
+	ssid_len = min_t(u8, ssid_len, 32);
+	pwd_len = min_t(u8, pwd_len, 64);
+
 	wl1271_debug(DEBUG_EVENT, "SMART_CONFIG_DECODE_EVENT_ID");
 	wl1271_dump_ascii(DEBUG_EVENT, "SSID:", ssid, ssid_len);
 
