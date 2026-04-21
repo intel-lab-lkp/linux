@@ -761,11 +761,16 @@ static void zswap_entry_cache_free(struct zswap_entry *entry)
 /*
  * Carries out the common pattern of freeing an entry's zsmalloc allocation,
  * freeing the entry itself, and decrementing the number of stored pages.
+ * When @deferred is true, the zsmalloc handle is queued for async freeing
+ * instead of being freed immediately.
  */
-static void zswap_entry_free(struct zswap_entry *entry)
+static void __zswap_entry_free(struct zswap_entry *entry, bool deferred)
 {
 	zswap_lru_del(&zswap_list_lru, entry);
-	zs_free(entry->pool->zs_pool, entry->handle);
+	if (deferred)
+		zs_free_deferred(entry->pool->zs_pool, entry->handle);
+	else
+		zs_free(entry->pool->zs_pool, entry->handle);
 	zswap_pool_put(entry->pool);
 	if (entry->objcg) {
 		obj_cgroup_uncharge_zswap(entry->objcg, entry->length);
@@ -775,6 +780,11 @@ static void zswap_entry_free(struct zswap_entry *entry)
 		atomic_long_dec(&zswap_stored_incompressible_pages);
 	zswap_entry_cache_free(entry);
 	atomic_long_dec(&zswap_stored_pages);
+}
+
+static void zswap_entry_free(struct zswap_entry *entry)
+{
+	__zswap_entry_free(entry, false);
 }
 
 /*********************************
@@ -1648,7 +1658,7 @@ void zswap_invalidate(swp_entry_t swp)
 
 	entry = xa_erase(tree, offset);
 	if (entry)
-		zswap_entry_free(entry);
+		__zswap_entry_free(entry, true);
 }
 
 int zswap_swapon(int type, unsigned long nr_pages)
