@@ -34,7 +34,7 @@
  * @size: size of access
  * @type: access type modifier
  */
-void __kcsan_check_access(const volatile void *ptr, size_t size, int type);
+void __kcsan_check_access(const volatile void *ptr, size_t size, int type) __access(none, 1);
 
 /*
  * See definition of __tsan_atomic_signal_fence() in kernel/kcsan/core.c.
