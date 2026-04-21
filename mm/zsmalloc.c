@@ -53,6 +53,10 @@
 
 #define ZS_HANDLE_SIZE (sizeof(unsigned long))
 
+#define ZS_DEFERRED_FREE_MAX_BYTES	(128 << 20)
+#define ZS_DEFERRED_FREE_CAPACITY	(ZS_DEFERRED_FREE_MAX_BYTES >> PAGE_SHIFT)
+#define ZS_DEFERRED_FREE_THRESHOLD	(ZS_DEFERRED_FREE_CAPACITY / 2)
+
 /*
  * Object location (<PFN>, <obj_idx>) is encoded as
  * a single (unsigned long) handle value.
@@ -217,6 +221,13 @@ struct zs_pool {
 	/* protect zspage migration/compaction */
 	rwlock_t lock;
 	atomic_t compaction_in_progress;
+
+	/* deferred free support */
+	spinlock_t deferred_lock;
+	unsigned long *deferred_handles;
+	unsigned int deferred_count;
+	unsigned int deferred_capacity;
+	struct work_struct deferred_free_work;
 };
 
 static inline void zpdesc_set_first(struct zpdesc *zpdesc)
@@ -579,6 +590,19 @@ static int zs_stats_size_show(struct seq_file *s, void *v)
 }
 DEFINE_SHOW_ATTRIBUTE(zs_stats_size);
 
+static int zs_stats_deferred_show(struct seq_file *s, void *v)
+{
+	struct zs_pool *pool = s->private;
+
+	spin_lock(&pool->deferred_lock);
+	seq_printf(s, "pending: %u\n", pool->deferred_count);
+	seq_printf(s, "capacity: %u\n", pool->deferred_capacity);
+	spin_unlock(&pool->deferred_lock);
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(zs_stats_deferred);
+
 static void zs_pool_stat_create(struct zs_pool *pool, const char *name)
 {
 	if (!zs_stat_root) {
@@ -590,6 +614,9 @@ static void zs_pool_stat_create(struct zs_pool *pool, const char *name)
 
 	debugfs_create_file("classes", S_IFREG | 0444, pool->stat_dentry, pool,
 			    &zs_stats_size_fops);
+	debugfs_create_file("deferred_free", S_IFREG | 0444,
+			    pool->stat_dentry, pool,
+			    &zs_stats_deferred_fops);
 }
 
 static void zs_pool_stat_destroy(struct zs_pool *pool)
@@ -1432,6 +1459,76 @@ void zs_free(struct zs_pool *pool, unsigned long handle)
 }
 EXPORT_SYMBOL_GPL(zs_free);
 
+static void zs_deferred_free_work(struct work_struct *work)
+{
+	struct zs_pool *pool = container_of(work, struct zs_pool,
+					    deferred_free_work);
+	unsigned long handle;
+
+	while (1) {
+		spin_lock(&pool->deferred_lock);
+		if (pool->deferred_count == 0) {
+			spin_unlock(&pool->deferred_lock);
+			break;
+		}
+		handle = pool->deferred_handles[--pool->deferred_count];
+		spin_unlock(&pool->deferred_lock);
+
+		zs_free(pool, handle);
+		cond_resched();
+	}
+}
+
+/**
+ * zs_free_deferred - queue a handle for asynchronous freeing
+ * @pool: pool to free from
+ * @handle: handle to free
+ *
+ * Place @handle into a deferred free queue for later processing by a
+ * workqueue.  This is intended for callers that are in atomic context
+ * (e.g. under a spinlock) and cannot afford the cost of zs_free()
+ * directly.  When the queue reaches a threshold the work is scheduled.
+ * Falls back to synchronous zs_free() if the lock is contended (drain
+ * in progress) or if the queue is full.
+ */
+void zs_free_deferred(struct zs_pool *pool, unsigned long handle)
+{
+	if (IS_ERR_OR_NULL((void *)handle))
+		return;
+
+	if (!spin_trylock(&pool->deferred_lock))
+		goto sync_free;
+
+	if (pool->deferred_count >= pool->deferred_capacity) {
+		spin_unlock(&pool->deferred_lock);
+		goto sync_free;
+	}
+
+	pool->deferred_handles[pool->deferred_count++] = handle;
+	if (pool->deferred_count >= ZS_DEFERRED_FREE_THRESHOLD)
+		queue_work(system_wq, &pool->deferred_free_work);
+	spin_unlock(&pool->deferred_lock);
+	return;
+
+sync_free:
+	zs_free(pool, handle);
+}
+EXPORT_SYMBOL_GPL(zs_free_deferred);
+
+/**
+ * zs_free_deferred_flush - flush all pending deferred frees
+ * @pool: pool to flush
+ *
+ * Wait for any scheduled work to complete, then drain any remaining
+ * handles.  Must be called from process context.
+ */
+void zs_free_deferred_flush(struct zs_pool *pool)
+{
+	flush_work(&pool->deferred_free_work);
+	zs_deferred_free_work(&pool->deferred_free_work);
+}
+EXPORT_SYMBOL_GPL(zs_free_deferred_flush);
+
 static void zs_object_copy(struct size_class *class, unsigned long dst,
 				unsigned long src)
 {
@@ -2099,6 +2196,18 @@ struct zs_pool *zs_create_pool(const char *name)
 	rwlock_init(&pool->lock);
 	atomic_set(&pool->compaction_in_progress, 0);
 
+	spin_lock_init(&pool->deferred_lock);
+	pool->deferred_capacity = ZS_DEFERRED_FREE_CAPACITY;
+	pool->deferred_handles = kvmalloc_array(pool->deferred_capacity,
+						sizeof(unsigned long),
+						GFP_KERNEL);
+	if (!pool->deferred_handles) {
+		kfree(pool);
+		return NULL;
+	}
+	pool->deferred_count = 0;
+	INIT_WORK(&pool->deferred_free_work, zs_deferred_free_work);
+
 	pool->name = kstrdup(name, GFP_KERNEL);
 	if (!pool->name)
 		goto err;
@@ -2201,6 +2310,7 @@ void zs_destroy_pool(struct zs_pool *pool)
 	int i;
 
 	zs_unregister_shrinker(pool);
+	zs_free_deferred_flush(pool);
 	zs_flush_migration(pool);
 	zs_pool_stat_destroy(pool);
 
@@ -2224,6 +2334,7 @@ void zs_destroy_pool(struct zs_pool *pool)
 		kfree(class);
 	}
 
+	kvfree(pool->deferred_handles);
 	kfree(pool->name);
 	kfree(pool);
 }

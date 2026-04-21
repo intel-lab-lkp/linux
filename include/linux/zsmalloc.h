@@ -30,6 +30,8 @@ void zs_destroy_pool(struct zs_pool *pool);
 unsigned long zs_malloc(struct zs_pool *pool, size_t size, gfp_t flags,
 			const int nid);
 void zs_free(struct zs_pool *pool, unsigned long obj);
+void zs_free_deferred(struct zs_pool *pool, unsigned long handle);
+void zs_free_deferred_flush(struct zs_pool *pool);
 
 size_t zs_huge_class_size(struct zs_pool *pool);
 
