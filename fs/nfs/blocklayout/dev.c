@@ -288,7 +288,7 @@ static bool bl_map_stripe(struct pnfs_block_dev *dev, u64 offset,
 static int
 bl_parse_deviceid(struct nfs_server *server, struct pnfs_block_dev *d,
 		struct pnfs_block_volume *volumes, int nr_volumes, int idx,
-		int depth, gfp_t gfp_mask);
+		int depth, int *remaining, gfp_t gfp_mask);
 
 
 static int
@@ -444,13 +444,14 @@ out_blkdev_put:
 static int
 bl_parse_slice(struct nfs_server *server, struct pnfs_block_dev *d,
 		struct pnfs_block_volume *volumes, int nr_volumes, int idx,
-		int depth, gfp_t gfp_mask)
+		int depth, int *remaining, gfp_t gfp_mask)
 {
 	struct pnfs_block_volume *v = &volumes[idx];
 	int ret;
 
 	ret = bl_parse_deviceid(server, d, volumes, nr_volumes,
-				v->slice.volume, depth + 1, gfp_mask);
+				v->slice.volume, depth + 1, remaining,
+				gfp_mask);
 	if (ret)
 		return ret;
 
@@ -462,7 +463,7 @@ bl_parse_slice(struct nfs_server *server, struct pnfs_block_dev *d,
 static int
 bl_parse_concat(struct nfs_server *server, struct pnfs_block_dev *d,
 		struct pnfs_block_volume *volumes, int nr_volumes, int idx,
-		int depth, gfp_t gfp_mask)
+		int depth, int *remaining, gfp_t gfp_mask)
 {
 	struct pnfs_block_volume *v = &volumes[idx];
 	u64 len = 0;
@@ -476,7 +477,7 @@ bl_parse_concat(struct nfs_server *server, struct pnfs_block_dev *d,
 	for (i = 0; i < v->concat.volumes_count; i++) {
 		ret = bl_parse_deviceid(server, &d->children[i], volumes,
 				nr_volumes, v->concat.volumes[i],
-				depth + 1, gfp_mask);
+				depth + 1, remaining, gfp_mask);
 		if (ret)
 			return ret;
 
@@ -493,7 +494,7 @@ bl_parse_concat(struct nfs_server *server, struct pnfs_block_dev *d,
 static int
 bl_parse_stripe(struct nfs_server *server, struct pnfs_block_dev *d,
 		struct pnfs_block_volume *volumes, int nr_volumes, int idx,
-		int depth, gfp_t gfp_mask)
+		int depth, int *remaining, gfp_t gfp_mask)
 {
 	struct pnfs_block_volume *v = &volumes[idx];
 	u64 len = 0;
@@ -507,7 +508,7 @@ bl_parse_stripe(struct nfs_server *server, struct pnfs_block_dev *d,
 	for (i = 0; i < v->stripe.volumes_count; i++) {
 		ret = bl_parse_deviceid(server, &d->children[i], volumes,
 				nr_volumes, v->stripe.volumes[i],
-				depth + 1, gfp_mask);
+				depth + 1, remaining, gfp_mask);
 		if (ret)
 			return ret;
 
@@ -524,7 +525,7 @@ bl_parse_stripe(struct nfs_server *server, struct pnfs_block_dev *d,
 static int
 bl_parse_deviceid(struct nfs_server *server, struct pnfs_block_dev *d,
 		struct pnfs_block_volume *volumes, int nr_volumes, int idx,
-		int depth, gfp_t gfp_mask)
+		int depth, int *remaining, gfp_t gfp_mask)
 {
 	if (idx < 0 || idx >= nr_volumes) {
 		dprintk("volume index %d out of range (0..%d)\n",
@@ -537,6 +538,11 @@ bl_parse_deviceid(struct nfs_server *server, struct pnfs_block_dev *d,
 		return -EIO;
 	}
 
+	if (--(*remaining) < 0) {
+		dprintk("volume topology too complex\n");
+		return -EIO;
+	}
+
 	d->type = volumes[idx].type;
 
 	switch (d->type) {
@@ -544,13 +550,13 @@ bl_parse_deviceid(struct nfs_server *server, struct pnfs_block_dev *d,
 		return bl_parse_simple(server, d, volumes, idx, gfp_mask);
 	case PNFS_BLOCK_VOLUME_SLICE:
 		return bl_parse_slice(server, d, volumes, nr_volumes,
-				idx, depth, gfp_mask);
+				idx, depth, remaining, gfp_mask);
 	case PNFS_BLOCK_VOLUME_CONCAT:
 		return bl_parse_concat(server, d, volumes, nr_volumes,
-				idx, depth, gfp_mask);
+				idx, depth, remaining, gfp_mask);
 	case PNFS_BLOCK_VOLUME_STRIPE:
 		return bl_parse_stripe(server, d, volumes, nr_volumes,
-				idx, depth, gfp_mask);
+				idx, depth, remaining, gfp_mask);
 	case PNFS_BLOCK_VOLUME_SCSI:
 		return bl_parse_scsi(server, d, volumes, idx, gfp_mask);
 	default:
@@ -570,6 +576,7 @@ bl_alloc_deviceid_node(struct nfs_server *server, struct pnfs_device *pdev,
 	struct xdr_buf buf;
 	struct folio *scratch;
 	int nr_volumes, ret, i;
+	int remaining = PNFS_BLOCK_MAX_PARSE_OPS;
 	__be32 *p;
 
 	scratch = folio_alloc(gfp_mask, 0);
@@ -602,7 +609,7 @@ bl_alloc_deviceid_node(struct nfs_server *server, struct pnfs_device *pdev,
 		goto out_free_volumes;
 
 	ret = bl_parse_deviceid(server, top, volumes, nr_volumes,
-				nr_volumes - 1, 0, gfp_mask);
+				nr_volumes - 1, 0, &remaining, gfp_mask);
 
 	node = &top->node;
 	nfs4_init_deviceid_node(node, server, &pdev->dev_id);
