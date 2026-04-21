@@ -28,7 +28,7 @@ struct aia_hgei_control {
 static DEFINE_PER_CPU(struct aia_hgei_control, aia_hgei);
 static int hgei_parent_irq;
 
-unsigned int kvm_riscv_aia_nr_hgei;
+bool kvm_riscv_aia_hgei_enabled;
 unsigned int kvm_riscv_aia_max_ids;
 DEFINE_STATIC_KEY_FALSE(kvm_riscv_aia_available);
 
@@ -491,7 +491,7 @@ static int aia_hgei_init(void)
 	struct irq_domain *domain;
 
 	/* Skip SGEI interrupt setup for zero guest external interrupts */
-	if (!kvm_riscv_aia_nr_hgei)
+	if (!kvm_riscv_aia_hgei_enabled)
 		goto skip_sgei_interrupt;
 
 	/* Find INTC irq domain */
@@ -524,7 +524,7 @@ skip_sgei_interrupt:
 static void aia_hgei_exit(void)
 {
 	/* Do nothing for zero guest external interrupts */
-	if (!kvm_riscv_aia_nr_hgei)
+	if (!kvm_riscv_aia_hgei_enabled)
 		return;
 
 	/* Free per-CPU SGEI interrupt */
@@ -631,6 +631,7 @@ int kvm_riscv_aia_init(void)
 {
 	int rc;
 	const struct imsic_global_config *gc;
+	unsigned int kvm_riscv_aia_nr_hgei;
 
 	if (!riscv_isa_extension_available(NULL, SxAIA))
 		return -ENODEV;
@@ -641,21 +642,18 @@ int kvm_riscv_aia_init(void)
 	kvm_riscv_aia_nr_hgei = fls_long(csr_read(CSR_HGEIE));
 	csr_write(CSR_HGEIE, 0);
 	if (kvm_riscv_aia_nr_hgei)
-		kvm_riscv_aia_nr_hgei--;
+		kvm_riscv_aia_hgei_enabled = true;
 
 	/*
 	 * Number of usable HGEI lines should be minimum of per-HART
 	 * IMSIC guest files and number of bits in HGEIE
 	 */
-	if (gc)
-		kvm_riscv_aia_nr_hgei = min((ulong)kvm_riscv_aia_nr_hgei,
-					    gc->nr_guest_files);
-	else
-		kvm_riscv_aia_nr_hgei = 0;
+	if (!gc)
+		kvm_riscv_aia_hgei_enabled = 0;
 
 	/* Find number of guest MSI IDs */
 	kvm_riscv_aia_max_ids = IMSIC_MAX_ID;
-	if (gc && kvm_riscv_aia_nr_hgei)
+	if (gc && kvm_riscv_aia_hgei_enabled)
 		kvm_riscv_aia_max_ids = gc->nr_guest_ids + 1;
 
 	/* Initialize guest external interrupt line management */
