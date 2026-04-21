@@ -1023,7 +1023,7 @@ int rps_cpumask_housekeeping(struct cpumask *mask)
 {
 	if (!cpumask_empty(mask)) {
 		cpumask_and(mask, mask, housekeeping_cpumask(HK_TYPE_DOMAIN_BOOT));
-		cpumask_and(mask, mask, housekeeping_cpumask(HK_TYPE_WQ));
+		cpumask_and(mask, mask, housekeeping_cpumask(HK_TYPE_KERNEL_NOISE_BOOT));
 		if (cpumask_empty(mask))
 			return -EINVAL;
 	}
