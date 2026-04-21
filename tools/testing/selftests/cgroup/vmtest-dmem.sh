@@ -23,6 +23,7 @@ readonly WAIT_TOTAL=$((WAIT_PERIOD * WAIT_PERIOD_MAX))
 readonly QEMU_PIDFILE="$(mktemp /tmp/qemu_dmem_vmtest_XXXX.pid)"
 readonly QEMU_OPTS=" --pidfile ${QEMU_PIDFILE} "
 
+BUILD=0
 QEMU="qemu-system-$(uname -m)"
 VERBOSE=0
 SHELL_MODE=0
@@ -72,17 +73,46 @@ check_deps() {
 	done
 }
 
+handle_build() {
+	if [[ ! "${BUILD}" -eq 1 ]]; then
+		return
+	fi
+
+	if [[ ! -d "${KERNEL_CHECKOUT}" ]]; then
+		echo "-b requires vmtest.sh called from the kernel source tree" >&2
+		exit 1
+	fi
+
+	pushd "${KERNEL_CHECKOUT}" &>/dev/null
+
+	if ! vng --kconfig --config "${SCRIPT_DIR}"/config; then
+		die "failed to generate .config for kernel source tree (${KERNEL_CHECKOUT})"
+	fi
+
+	if ! make -j"$(nproc)"; then
+		die "failed to build kernel from source tree (${KERNEL_CHECKOUT})"
+	fi
+
+	popd &>/dev/null
+}
+
 vm_start() {
 	local logfile=/dev/null
 	local verbose_opt=""
+	local kernel_opt=""
 
 	if [[ "${VERBOSE}" -eq 2 ]]; then
 		verbose_opt="--verbose"
 		logfile=/dev/stdout
 	fi
 
+	if [[ "${BUILD}" -eq 1 ]]; then
+		kernel_opt="${KERNEL_CHECKOUT}"
+	fi
+
 	vng \
 		--run \
+		"$kernel_opt" \
 		${verbose_opt} \
 		--qemu-opts="${QEMU_OPTS}" \
 		--qemu="$(command -v "${QEMU}")" \
@@ -165,10 +195,11 @@ run_test() {
 	vm_ssh -- "cd '${GUEST_TREE}' && ./tools/testing/selftests/cgroup/test_dmem"
 }
 
-while getopts ":hvq:s" o; do
+while getopts ":hvq:sb" o; do
 	case "${o}" in
 	v) VERBOSE=$((VERBOSE + 1)) ;;
 	q) QEMU="${OPTARG}" ;;
+	b) BUILD=1 ;;
 	s) SHELL_MODE=1 ;;
 	h|*) usage ;;
 	esac
@@ -177,6 +208,7 @@ done
 trap cleanup EXIT
 
 check_deps
+handle_build
 echo "Booting virtme-ng VM..."
 vm_start
 vm_wait_for_ssh
