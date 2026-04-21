@@ -436,6 +436,13 @@ static inline bool partition_is_populated(struct cpuset *cs,
 	struct cgroup_subsys_state *pos_css;
 
 	/*
+	 * Hack: In cpuhp_offline_cb_mode, pretend all partitions are empty
+	 * to prevent unnecessary partition invalidation.
+	 */
+	if (cpuhp_offline_cb_mode)
+		return false;
+
+	/*
 	 * We cannot call cs_is_populated(cs) directly, as
 	 * nr_populated_domain_children may include populated
 	 * csets from descendants that are partitions.
@@ -3885,6 +3892,17 @@ hotplug_update_tasks(struct cpuset *cs,
 	cpumask_copy(cs->effective_cpus, new_cpus);
 	cs->effective_mems = *new_mems;
 	spin_unlock_irq(&callback_lock);
+
+	/*
+	 * When cpuhp_offline_cb_mode is active, valid isolated partition
+	 * with tasks may have no online CPUs available for a short while.
+	 * In that case, we fall back to parent's effective CPUs temporarily
+	 * which will be reset back to their rightful value once the affected
+	 * CPUs are online again.
+	 */
+	if (cpuhp_offline_cb_mode && cpumask_empty(new_cpus) &&
+	   (cs->partition_root_state == PRS_ISOLATED))
+		cpumask_copy(new_cpus, parent_cs(cs)->effective_cpus);
 
 	if (cpus_updated)
 		cpuset_update_tasks_cpumask(cs, new_cpus);
