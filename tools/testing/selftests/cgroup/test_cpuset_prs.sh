@@ -67,6 +67,12 @@ then
 	echo Y > /sys/kernel/debug/sched/verbose
 fi
 
+# Enable dynamic debug message if available
+DYN_DEBUG=/proc/dynamic_debug/control
+[[ -f $DYN_DEBUG ]] && {
+	echo "file kernel/cpu.c +p" > $DYN_DEBUG
+}
+
 cd $CGROUP2
 echo +cpuset > cgroup.subtree_control
 
@@ -83,6 +89,15 @@ RESULT=$?
 echo member > test/cpuset.cpus.partition
 echo "" > test/cpuset.cpus
 [[ $RESULT -eq 0 ]] && skip_test "Child cgroups are using cpuset!"
+
+#
+# If nohz_full parameter is specified and nohz_full file exists, CPU hotplug
+# will be used to modify nohz_full cpumask to include all the isolated CPUs
+# in cpuset isolated partitions.
+#
+NOHZ_FULL=/sys/devices/system/cpu/nohz_full
+BOOT_NOHZ_FULL=$(fmt -1 /proc/cmdline | grep "^nohz_full")
+[[ "$BOOT_NOHZ_FULL" = nohz_full ]] && CHK_NOHZ_FULL=1
 
 #
 # If isolated CPUs have been reserved at boot time (as shown in
@@ -318,8 +333,8 @@ TEST_MATRIX=(
 	# Invalid to valid local partition direct transition tests
 	" C1-3:P2  X4:P2    .      .      .      .      .      .     0 A1:1-3|XA1:1-3|A2:1-3:XA2: A1:P2|A2:P-2 1-3"
 	" C1-3:P2  X4:P2    .      .      .    X3:P2    .      .     0 A1:1-2|XA1:1-3|A2:3:XA2:3 A1:P2|A2:P2 1-3"
-	" C0-3:P2    .      .    C4-6   C0-4     .      .      .     0 A1:0-4|B1:5-6 A1:P2|B1:P0"
-	" C0-3:P2    .      .    C4-6 C0-4:C0-3  .      .      .     0 A1:0-3|B1:4-6 A1:P2|B1:P0 0-3"
+	" C1-3:P2    .      .    C4-6   C1-4     .      .      .     0 A1:1-4|B1:5-6 A1:P2|B1:P0"
+	" C1-3:P2    .      .    C4-6 C1-4:C1-3  .      .      .     0 A1:1-3|B1:4-6 A1:P2|B1:P0 1-3"
 
 	# Local partition invalidation tests
 	" C0-3:X1-3:P2 C1-3:X2-3:P2 C2-3:X3:P2 \
@@ -329,8 +344,8 @@ TEST_MATRIX=(
 	" C0-3:X1-3:P2 C1-3:X2-3:P2 C2-3:X3:P2 \
 				   .      .    C4:X     .      .     0 A1:1-3|A2:1-3|A3:2-3|XA2:|XA3: A1:P2|A2:P-2|A3:P-2 1-3"
 	# Local partition CPU change tests
-	" C0-5:P2  C4-5:P1  .      .      .    C3-5     .      .     0 A1:0-2|A2:3-5 A1:P2|A2:P1 0-2"
-	" C0-5:P2  C4-5:P1  .      .    C1-5     .      .      .     0 A1:1-3|A2:4-5 A1:P2|A2:P1 1-3"
+	" C1-5:P2  C4-5:P1  .      .      .    C3-5     .      .     0 A1:1-2|A2:3-5 A1:P2|A2:P1 1-2"
+	" C1-5:P2  C4-5:P1  .      .    C2-5     .      .      .     0 A1:2-3|A2:4-5 A1:P2|A2:P1 2-3"
 
 	# cpus_allowed/exclusive_cpus update tests
 	" C0-3:X2-3 C1-3:X2-3 C2-3:X2-3 \
@@ -443,6 +458,21 @@ TEST_MATRIX=(
 )
 
 #
+# Test matrix to verify that using CPU 0 in isolated (local or remote) partition
+# will fail when offline isn't allowed for CPU 0.
+#
+CPU0_ISOLCPUS_MATRIX=(
+	#  old-A1 old-A2 old-A3 old-B1 new-A1 new-A2 new-A3 new-B1 fail ECPUs Pstate ISOLCPUS
+	#  ------ ------ ------ ------ ------ ------ ------ ------ ---- ----- ------ --------
+	"   C0-3     .      .    C4-5     P2     .      .      .     0 A1:0-3|B1:4-5 A1:P-2"
+	"   C1-3     .      .      .      P2     .      .      .     0 A1:1-3 A1:P2"
+	"   C1-3     .      .      .    P2:C0-3  .      .      .     0 A1:0-3 A1:P-2"
+	"  CX0-3   C0-3     .      .       .     P2     .      .     0 A1:0-3|A2:0-3 A2:P-2"
+	"  CX0-3 C0-3:X1-3  .      .       .     P2     .      .     0 A1:0|A2:1-3 A2:P2"
+	"  CX0-3 C0-3:X1-3  .      .       .   P2:X0-3  .      .     0 A1:0-3|A2:0-3 A2:P-2"
+)
+
+#
 # Cpuset controller remote partition test matrix.
 #
 # Cgroup test hierarchy
@@ -513,7 +543,7 @@ write_cpu_online()
 		}
 	fi
 	echo $VAL > $CPUFILE
-	pause 0.05
+	pause 0.10
 }
 
 #
@@ -654,6 +684,8 @@ dump_states()
 		[[ -e $PCPUS  ]] && echo "$PCPUS: $(cat $PCPUS)"
 		[[ -e $ISCPUS ]] && echo "$ISCPUS: $(cat $ISCPUS)"
 	done
+	# Dump nohz_full
+	[[ -f $NOHZ_FULL ]] && echo "nohz_full: $(cat $NOHZ_FULL)"
 }
 
 #
@@ -788,6 +820,18 @@ check_isolcpus()
 	else
 		EXPECTED_SDOMAIN=$EXPECTED_ISOLCPUS
 	fi
+
+	#
+	# Check if nohz_full match cpuset.cpus.isolated if nohz_boot parameter
+	# specified with no parameter.
+	#
+	[[ -f $NOHZ_FULL && "$BOOT_NOHZ_FULL" = nohz_full ]] && {
+		NOHZ_FULL_CPUS=$(cat $NOHZ_FULL)
+		[[ "$ISOLCPUS" != "$NOHZ_FULL_CPUS" ]] && {
+			echo "nohz_full ($NOHZ_FULL_CPUS) does not match cpuset.cpus.isolated ($ISOLCPUS)"
+			return 1
+		}
+	}
 
 	#
 	# Appending pre-isolated CPUs
@@ -1071,6 +1115,21 @@ run_remote_state_test()
 }
 
 #
+# Testing CPU 0 isolated partition test when offline is disabled
+#
+run_cpu0_isol_test()
+{
+	# Skip the test if CPU0 offline is allowed or if nohz_full kernel
+	# boot parameter is missing.
+	CPU0_ONLINE=/sys/devices/system/cpu/cpu0/online
+	[[ -f $CPU0_ONLINE ]] && return
+	grep -q -w nohz_full /proc/cmdline
+	[[ $? -ne 0 ]] && return
+
+	run_state_test CPU0_ISOLCPUS_MATRIX
+}
+
+#
 # Testing the new "isolated" partition root type
 #
 test_isolated()
@@ -1207,6 +1266,7 @@ test_inotify()
 trap cleanup 0 2 3 6
 run_state_test TEST_MATRIX
 run_remote_state_test REMOTE_TEST_MATRIX
+run_cpu0_isol_test
 test_isolated
 test_inotify
 echo "All tests PASSED."

@@ -2604,11 +2604,12 @@ Cpuset Interface Files
 
 	It accepts only the following input values when written to.
 
-	  ==========	=====================================
+	  ==========	===============================================
 	  "member"	Non-root member of a partition
 	  "root"	Partition root
-	  "isolated"	Partition root without load balancing
-	  ==========	=====================================
+	  "isolated"	Partition root without load balancing and other
+		        OS noises
+	  ==========	===============================================
 
 	A cpuset partition is a collection of cpuset-enabled cgroups with
 	a partition root at the top of the hierarchy and its descendants
@@ -2652,11 +2653,29 @@ Cpuset Interface Files
 	partition or scheduling domain.  The set of exclusive CPUs is
 	determined by the value of its "cpuset.cpus.exclusive.effective".
 
-	When set to "isolated", the CPUs in that partition will be in
-	an isolated state without any load balancing from the scheduler
-	and excluded from the unbound workqueues.  Tasks placed in such
-	a partition with multiple CPUs should be carefully distributed
-	and bound to each of the individual CPUs for optimal performance.
+	When set to "isolated", the CPUs in that partition will be in an
+	isolated state without any load balancing from the scheduler and
+	excluded from the unbound workqueues as well as other OS noises.
+	Tasks placed in such a partition with multiple CPUs should be
+	carefully distributed and bound to each of the individual CPUs
+	for optimal performance.
+
+	As CPU hotplug, if supported, is used to improve the degree of
+	CPU isolation close to the "nohz_full" kernel boot parameter.
+	In some architectures, like x86-64, the boot CPU (typically CPU
+	0) cannot be brought offline, so the boot CPU should not be used
+	for forming isolated partitions.  The "nohz_full" kernel boot
+	parameter needs to be present to enable full dynticks support
+	and RCU no-callback CPU mode for CPUs in isolated partitions
+	even if the optional cpu list isn't provided.
+
+	Using CPU hotplug for creating or destroying an isolated
+	partition can cause latency spike in applications running
+	in other isolated partitions.  A reserved list of CPUs can
+	optionally be put in the "nohz_full" kernel boot parameter to
+	alleviate this problem.  When these reserved CPUs are used for
+	isolated partitions, CPU hotplug won't need to be invoked and
+	so there won't be latency spike in other isolated partitions.
 
 	A partition root ("root" or "isolated") can be in one of the
 	two possible states - valid or invalid.  An invalid partition
