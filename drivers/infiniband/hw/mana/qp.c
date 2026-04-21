@@ -151,6 +151,13 @@ static int mana_ib_create_qp_rss(struct ib_qp *ibqp, struct ib_pd *pd,
 		return -EINVAL;
 	}
 
+	if (ucmd.rx_hash_key_len > MANA_HASH_KEY_SIZE) {
+		ibdev_dbg(&mdev->ib_dev,
+			  "RX Hash key length %u exceeds maximum %u\n",
+			  ucmd.rx_hash_key_len, MANA_HASH_KEY_SIZE);
+		return -EINVAL;
+	}
+
 	/* IB ports start with 1, MANA start with 0 */
 	port = ucmd.port;
 	ndev = mana_ib_get_netdev(pd->device, port);
