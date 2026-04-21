@@ -459,7 +459,7 @@ static int sun8i_dwmac_dma_interrupt(struct stmmac_priv *priv,
 
 	if (v & EMAC_TX_UNDERFLOW_INT) {
 		ret |= tx_hard_error;
-		x->tx_undeflow_irq++;
+		x->tx_underflow_irq++;
 	}
 
 	if (v & EMAC_TX_EARLY_INT)

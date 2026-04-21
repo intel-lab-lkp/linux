@@ -248,7 +248,7 @@ static int loongson_dwmac_dma_interrupt(struct stmmac_priv *priv,
 	if (unlikely(abnor_intr_status)) {
 		if (unlikely(intr_status & DMA_STATUS_UNF)) {
 			ret = tx_hard_error_bump_tc;
-			x->tx_undeflow_irq++;
+			x->tx_underflow_irq++;
 		}
 		if (unlikely(intr_status & DMA_STATUS_TJT))
 			x->tx_jabber_irq++;
