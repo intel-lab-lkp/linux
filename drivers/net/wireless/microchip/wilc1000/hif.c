@@ -1576,6 +1576,7 @@ void wilc_network_info_received(struct wilc *wilc, u8 *buffer, u32 length)
 	struct wilc_vif *vif;
 	int srcu_idx;
 	int result;
+	u16 frame_len;
 	int id;
 
 	id = get_unaligned_le32(&buffer[length - 4]);
@@ -1594,7 +1595,15 @@ void wilc_network_info_received(struct wilc *wilc, u8 *buffer, u32 length)
 	if (IS_ERR(msg))
 		goto out;
 
-	msg->body.net_info.frame_len = get_unaligned_le16(&buffer[6]) - 1;
+	frame_len = get_unaligned_le16(&buffer[6]);
+	if (frame_len == 0 || frame_len > length - 9) {
+		netdev_err(vif->ndev,
+			   "%s: invalid frame_len %u (buffer %u)\n",
+			   __func__, frame_len, length);
+		kfree(msg);
+		goto out;
+	}
+	msg->body.net_info.frame_len = frame_len - 1;
 	msg->body.net_info.rssi = buffer[8];
 	msg->body.net_info.mgmt = kmemdup(&buffer[9],
 					  msg->body.net_info.frame_len,
