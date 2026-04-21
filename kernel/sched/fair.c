@@ -7213,6 +7213,7 @@ static struct {
 	cpumask_var_t idle_cpus_mask;
 	int has_blocked_load;		/* Idle CPUS has blocked load */
 	int needs_update;		/* Newly idle CPUs need their next_balance collated */
+	int ilb_cpu_last;		/* Last CPU selected for nohz ILB */
 	unsigned long next_balance;     /* in jiffy units */
 	unsigned long next_blocked;	/* Next update of blocked load in jiffies */
 } nohz ____cacheline_aligned;
@@ -12420,13 +12421,17 @@ static inline int find_new_ilb(void)
 
 	hk_mask = housekeeping_cpumask(HK_TYPE_KERNEL_NOISE);
 
-	for_each_cpu_and(ilb_cpu, nohz.idle_cpus_mask, hk_mask) {
+	for_each_cpu_wrap(ilb_cpu, nohz.idle_cpus_mask, nohz.ilb_cpu_last + 1) {
+		if (!cpumask_test_cpu(ilb_cpu, hk_mask))
+			continue;
 
 		if (ilb_cpu == smp_processor_id())
 			continue;
 
-		if (idle_cpu(ilb_cpu))
+		if (idle_cpu(ilb_cpu)) {
+			nohz.ilb_cpu_last = ilb_cpu;
 			return ilb_cpu;
+		}
 	}
 
 	return -1;
