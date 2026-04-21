@@ -306,6 +306,8 @@ int main(int argc, char **argv)
 				printf("  is interrupt NMI: %s\n", do_use_nmi ? "true" : "false");
 				if (irq_affinity)
 					printf("  irq_cpu: %d\n", irq_cpu);
+				if (migrate_vcpus)
+					kvm_print_vcpu_affinity(vcpu, vcpu_tids[vcpu->id]);
 
 				TEST_FAIL("vCPU %d timed out waiting for IRQ from GSI %d (Vector 0x%x) !\n",
 					vcpu->id, gsi, vector);
