@@ -828,13 +828,30 @@ __ptep_set_wrprotect(struct mm_struct *mm, unsigned long address, pte_t *ptep)
 	 * shadow stack memory is XWR = 010 and thus clearing _PAGE_WRITE will lead to
 	 * encoding 000b which is wrong encoding with V = 1. This should lead to page fault
 	 * but we dont want this wrong configuration to be set in page tables.
+	 * Keep the entry readable when clearing write permissions so we don't create
+	 * an invalid present encoding.
 	 */
 	atomic_long_set((atomic_long_t *)ptep,
-			((pte_val(read_pte) & ~(unsigned long)_PAGE_WRITE) | _PAGE_READ));
+			(pte_val(read_pte) & ~(unsigned long)_PAGE_WRITE) |
+			_PAGE_READ);
 }
 
 #define __ptep_set_wrprotect __ptep_set_wrprotect
 
+static inline void __wrprotect_ptes(struct mm_struct *mm,
+				    unsigned long address,
+				    pte_t *ptep, unsigned int nr)
+{
+	for (;;) {
+		__ptep_set_wrprotect(mm, address, ptep);
+		if (--nr == 0)
+			break;
+		ptep++;
+		address += PAGE_SIZE;
+	}
+}
+
+#define __wrprotect_ptes __wrprotect_ptes
 static inline pte_t __ptep_clear_flush(struct vm_area_struct *vma,
 				       unsigned long address,
 				       pte_t *ptep)
@@ -894,6 +911,8 @@ pte_t napotpte_get_and_clear_full_ptes(struct mm_struct *mm,
 void napotpte_clear_young_dirty_ptes(struct vm_area_struct *vma,
 				     unsigned long addr, pte_t *ptep,
 			     unsigned int nr, cydp_t flags);
+void napotpte_wrprotect_ptes(struct mm_struct *mm, unsigned long addr,
+			     pte_t *ptep, unsigned int nr);
 bool napotpte_ptep_set_access_flags(struct vm_area_struct *vma,
 				    unsigned long address, pte_t *ptep,
 			    pte_t entry, int dirty);
@@ -1019,11 +1038,25 @@ static inline pte_t get_and_clear_full_ptes(struct mm_struct *mm,
 	return napotpte_get_and_clear_full_ptes(mm, addr, ptep, nr, full);
 }
 
+#define wrprotect_ptes wrprotect_ptes
+static inline void wrprotect_ptes(struct mm_struct *mm,
+				  unsigned long address, pte_t *ptep,
+				  unsigned int nr)
+{
+	if (likely(nr == 1)) {
+		napotpte_try_unfold(mm, address, ptep, __ptep_get(ptep));
+		__ptep_set_wrprotect(mm, address, ptep);
+		return;
+	}
+
+	napotpte_wrprotect_ptes(mm, address, ptep, nr);
+}
+
 #define __HAVE_ARCH_PTEP_SET_WRPROTECT
 static inline void ptep_set_wrprotect(struct mm_struct *mm,
 				      unsigned long address, pte_t *ptep)
 {
-	__ptep_set_wrprotect(mm, address, ptep);
+	wrprotect_ptes(mm, address, ptep, 1);
 }
 
 #define __HAVE_ARCH_PTEP_CLEAR_YOUNG_FLUSH
@@ -1077,6 +1110,7 @@ napotpte_ptep_clear_flush_young(struct vm_area_struct *vma,
 #define clear_young_dirty_ptes			__clear_young_dirty_ptes
 #define clear_full_ptes				__clear_full_ptes
 #define get_and_clear_full_ptes			__get_and_clear_full_ptes
+#define wrprotect_ptes				__wrprotect_ptes
 #define __HAVE_ARCH_PTEP_SET_WRPROTECT
 #define ptep_set_wrprotect			__ptep_set_wrprotect
 #define __HAVE_ARCH_PTEP_CLEAR_YOUNG_FLUSH
