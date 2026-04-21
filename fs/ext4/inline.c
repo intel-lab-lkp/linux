@@ -211,6 +211,14 @@ static int ext4_read_inline_data(struct inode *inode, void *buffer,
 	len = min_t(unsigned int, len,
 		    (unsigned int)le32_to_cpu(entry->e_value_size));
 
+	if (unlikely((void *)IFIRST(header) + le16_to_cpu(entry->e_value_offs) +
+		     len > (void *)ITAIL(inode, raw_inode))) {
+		EXT4_ERROR_INODE(inode,
+			"inline data value out of bounds (offs %u len %u)",
+			le16_to_cpu(entry->e_value_offs), len);
+		return -EFSCORRUPTED;
+	}
+
 	memcpy(buffer,
 	       (void *)IFIRST(header) + le16_to_cpu(entry->e_value_offs), len);
 	cp_len += len;
@@ -535,7 +543,8 @@ static int ext4_read_inline_folio(struct inode *inode, struct folio *folio)
 	ret = ext4_read_inline_data(inode, kaddr, len, &iloc);
 	kaddr = folio_zero_tail(folio, len, kaddr + len);
 	kunmap_local(kaddr);
-	folio_mark_uptodate(folio);
+	if (ret >= 0)
+		folio_mark_uptodate(folio);
 	brelse(iloc.bh);
 
 out:
