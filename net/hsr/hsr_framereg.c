@@ -14,11 +14,17 @@
 #include <kunit/visibility.h>
 #include <linux/if_ether.h>
 #include <linux/etherdevice.h>
+#include <linux/moduleparam.h>
 #include <linux/slab.h>
 #include <linux/rculist.h>
 #include "hsr_main.h"
 #include "hsr_framereg.h"
 #include "hsr_netlink.h"
+
+static unsigned int hsr_node_table_size = 1024;
+module_param_named(node_table_size, hsr_node_table_size, uint, 0644);
+MODULE_PARM_DESC(node_table_size,
+		 "Maximum number of learned entries in each HSR/PRP node table (0 = unlimited)");
 
 bool hsr_addr_is_redbox(struct hsr_priv *hsr, unsigned char *addr)
 {
@@ -189,6 +195,7 @@ static struct hsr_node *hsr_add_node(struct hsr_priv *hsr,
 				     enum hsr_port_type rx_port)
 {
 	struct hsr_node *new_node, *node = NULL;
+	unsigned int node_count = 0;
 	unsigned long now;
 	size_t block_sz;
 	int i;
@@ -226,20 +233,31 @@ static struct hsr_node *hsr_add_node(struct hsr_priv *hsr,
 	spin_lock_bh(&hsr->list_lock);
 	list_for_each_entry_rcu(node, node_db, mac_list,
 				lockdep_is_held(&hsr->list_lock)) {
+		node_count++;
 		if (ether_addr_equal(node->macaddress_A, addr))
-			goto out;
+			goto out_found;
 		if (ether_addr_equal(node->macaddress_B, addr))
-			goto out;
+			goto out_found;
 	}
+
+	if (hsr_node_table_size && node_count >= hsr_node_table_size)
+		goto out_drop;
 	list_add_tail_rcu(&new_node->mac_list, node_db);
 	spin_unlock_bh(&hsr->list_lock);
 	return new_node;
-out:
+out_found:
 	spin_unlock_bh(&hsr->list_lock);
+	xa_destroy(&new_node->seq_blocks);
+	kfree(new_node->block_buf);
+	kfree(new_node);
+	return node;
+out_drop:
+	spin_unlock_bh(&hsr->list_lock);
+	xa_destroy(&new_node->seq_blocks);
 	kfree(new_node->block_buf);
 free:
 	kfree(new_node);
-	return node;
+	return NULL;
 }
 
 void prp_update_san_info(struct hsr_node *node, bool is_sup)
