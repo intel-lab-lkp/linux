@@ -874,6 +874,11 @@ static struct buffer_desc *chainup_buffers(struct device *dev,
 		struct buffer_desc *buf, gfp_t flags,
 		enum dma_data_direction dir)
 {
+	struct buffer_desc *first = buf;
+
+	first->next = NULL;
+	first->phys_next = 0;
+
 	for (; nbytes > 0; sg = sg_next(sg)) {
 		unsigned int len = min(nbytes, sg->length);
 		struct buffer_desc *next_buf;
@@ -883,10 +888,15 @@ static struct buffer_desc *chainup_buffers(struct device *dev,
 		nbytes -= len;
 		ptr = sg_virt(sg);
 		next_buf = dma_pool_alloc(buffer_pool, flags, &next_buf_phys);
-		if (!next_buf) {
-			buf = NULL;
-			break;
-		}
+		if (!next_buf)
+			goto err_unwind;
+
+		/*
+		 * Keep the chain well-formed even on partial construction,
+		 * so free_buf_chain() can safely unwind it on failure.
+		 */
+		next_buf->next = NULL;
+		next_buf->phys_next = 0;
 		sg_dma_address(sg) = dma_map_single(dev, ptr, len, dir);
 		buf->next = next_buf;
 		buf->phys_next = next_buf_phys;
@@ -899,6 +909,12 @@ static struct buffer_desc *chainup_buffers(struct device *dev,
 	buf->next = NULL;
 	buf->phys_next = 0;
 	return buf;
+
+err_unwind:
+	free_buf_chain(dev, first->next, first->phys_next);
+	first->next = NULL;
+	first->phys_next = 0;
+	return NULL;
 }
 
 static int ablk_setkey(struct crypto_skcipher *tfm, const u8 *key,
