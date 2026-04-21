@@ -4563,13 +4563,16 @@ Kernel parameters
 			Valid arguments: on, off
 			Default: on
 
-	nohz_full=	[KNL,BOOT,SMP,ISOL]
-			The argument is a cpu list, as described above.
+	nohz_full[=cpu-list]
+			[KNL,BOOT,SMP,ISOL]
 			In kernels built with CONFIG_NO_HZ_FULL=y, set
-			the specified list of CPUs whose tick will be stopped
-			whenever possible. The boot CPU will be forced outside
-			the range to maintain the timekeeping.  Any CPUs
-			in this list will have their RCU callbacks offloaded,
+			the specified list of CPUs whose tick will be
+			stopped whenever possible.  If the argument is
+			not specified, nohz_full will be forced enabled
+			without any CPU in the nohz_full list yet.
+			The boot CPU will be forced outside the range
+			to maintain the timekeeping.  Any CPUs in this
+			list will have their RCU callbacks offloaded,
 			just as if they had also been called out in the
 			rcu_nocbs= boot parameter.
 

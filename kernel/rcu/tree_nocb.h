@@ -1290,7 +1290,7 @@ void __init rcu_init_nohz(void)
 	struct shrinker * __maybe_unused lazy_rcu_shrinker;
 
 #if defined(CONFIG_NO_HZ_FULL)
-	if (tick_nohz_full_running && !cpumask_empty(tick_nohz_full_mask))
+	if (tick_nohz_full_running)
 		cpumask = tick_nohz_full_mask;
 #endif
 

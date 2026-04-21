@@ -258,6 +258,7 @@ static int __init housekeeping_setup(char *str, unsigned long flags)
 	}
 
 	alloc_bootmem_cpumask_var(&non_housekeeping_mask);
+
 	if (cpulist_parse(str, non_housekeeping_mask) < 0) {
 		pr_warn("Housekeeping: nohz_full= or isolcpus= incorrect CPU range\n");
 		goto free_non_housekeeping_mask;
@@ -266,6 +267,13 @@ static int __init housekeeping_setup(char *str, unsigned long flags)
 	alloc_bootmem_cpumask_var(&housekeeping_staging);
 	cpumask_andnot(housekeeping_staging,
 		       cpu_possible_mask, non_housekeeping_mask);
+
+	/*
+	 * Allow "nohz_full" without parameter to force enable nohz_full
+	 * at boot time without any CPUs in the nohz_full list yet.
+	 */
+	if ((flags & HK_FLAG_KERNEL_NOISE) && !*str)
+		goto setup_housekeeping_staging;
 
 	first_cpu = cpumask_first_and(cpu_present_mask, housekeeping_staging);
 	if (first_cpu >= nr_cpu_ids || first_cpu >= setup_max_cpus) {
@@ -280,6 +288,7 @@ static int __init housekeeping_setup(char *str, unsigned long flags)
 	if (cpumask_empty(non_housekeeping_mask))
 		goto free_housekeeping_staging;
 
+setup_housekeeping_staging:
 	if (!housekeeping.flags) {
 		/* First setup call ("nohz_full=" or "isolcpus=") */
 		enum hk_type type;
@@ -347,10 +356,12 @@ static int __init housekeeping_nohz_full_setup(char *str)
 	unsigned long flags;
 
 	flags = HK_FLAG_KERNEL_NOISE | HK_FLAG_KERNEL_NOISE_BOOT;
+	if (*str == '=')
+		str++;
 
 	return housekeeping_setup(str, flags);
 }
-__setup("nohz_full=", housekeeping_nohz_full_setup);
+__setup("nohz_full", housekeeping_nohz_full_setup);
 
 static int __init housekeeping_isolcpus_setup(char *str)
 {

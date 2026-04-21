@@ -676,8 +676,15 @@ void __init tick_nohz_init(void)
 		}
 	}
 
-	for_each_cpu(cpu, tick_nohz_full_mask)
-		ct_cpu_track_user(cpu);
+	/*
+	 * Force enable context_tracking_key if tick_nohz_full_mask empty
+	 */
+	if (cpumask_empty(tick_nohz_full_mask)) {
+		ct_cpu_track_user(CONTEXT_TRACKING_FORCE_ENABLE);
+	} else {
+		for_each_cpu(cpu, tick_nohz_full_mask)
+			ct_cpu_track_user(cpu);
+	}
 
 	ret = cpuhp_setup_state_nocalls(CPUHP_AP_ONLINE_DYN,
 					"kernel/nohz:predown", NULL,

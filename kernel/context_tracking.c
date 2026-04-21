@@ -678,7 +678,9 @@ void __init ct_cpu_track_user(int cpu)
 {
 	static __initdata bool initialized = false;
 
-	if (!per_cpu(context_tracking.active, cpu)) {
+	if (cpu == CONTEXT_TRACKING_FORCE_ENABLE) {
+		static_branch_inc(&context_tracking_key);
+	} else if (!per_cpu(context_tracking.active, cpu)) {
 		per_cpu(context_tracking.active, cpu) = true;
 		static_branch_inc(&context_tracking_key);
 	}

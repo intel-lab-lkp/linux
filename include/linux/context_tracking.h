@@ -9,8 +9,13 @@
 
 #include <asm/ptrace.h>
 
-
 #ifdef CONFIG_CONTEXT_TRACKING_USER
+/*
+ * Pass CONTEXT_TRACKING_FORCE_ENABLE to ct_cpu_track_user() to force enable
+ * user context tracking.
+ */
+#define CONTEXT_TRACKING_FORCE_ENABLE	(-1)
+
 extern void ct_cpu_track_user(int cpu);
 
 /* Called with interrupts disabled.  */
