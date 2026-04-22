@@ -7349,6 +7349,12 @@ static void bpf_scx_unreg(void *kdata, struct bpf_link *link)
 	struct scx_sched *sch = rcu_dereference_protected(ops->priv, true);
 
 	scx_disable(sch, SCX_EXIT_UNREG);
+	/*
+	 * sch->disable_work might still not queued, causing kthread_flush_work()
+	 * as a noop. Syncing the irq_work first is required to guarantee the
+	 * kthread work has been queued before waiting for it.
+	 */
+	irq_work_sync(&sch->disable_irq_work);
 	kthread_flush_work(&sch->disable_work);
 	RCU_INIT_POINTER(ops->priv, NULL);
 	kobject_put(&sch->kobj);
