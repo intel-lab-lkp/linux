@@ -130,3 +130,13 @@ macro_rules! warn_on {
         cond
     }};
 }
+
+/// Report a warning if `res` is an error and return `res` unmodified.
+#[macro_export]
+macro_rules! warn_on_err {
+    ($res:expr) => {{
+        let res = $res;
+        let _ = $crate::warn_on!(res.is_err());
+        res
+    }};
+}
