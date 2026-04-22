@@ -447,6 +447,12 @@ struct cxl_region_params {
  */
 #define CXL_REGION_F_NORMALIZED_ADDRESSING 3
 
+/* Indicate that this region is being unregistered to prevent a race. */
+#define CXL_REGION_F_UNREGISTER 4
+
+/* Indicate that this region called devm_remove_action. */
+#define CXL_REGION_F_DEVM_REMOVE 5
+
 /**
  * struct cxl_region - CXL region
  * @dev: This region's device
@@ -462,6 +468,7 @@ struct cxl_region_params {
  * @coord: QoS access coordinates for the region
  * @node_notifier: notifier for setting the access coordinates to node
  * @adist_notifier: notifier for calculating the abstract distance of node
+ * @remove_work: trigger the remove action in a safe context to acquire locks
  */
 struct cxl_region {
 	struct device dev;
@@ -477,6 +484,7 @@ struct cxl_region {
 	struct access_coordinate coord[ACCESS_COORDINATE_MAX];
 	struct notifier_block node_notifier;
 	struct notifier_block adist_notifier;
+	struct work_struct remove_work;
 };
 
 struct cxl_nvdimm_bridge {
