@@ -31,6 +31,8 @@
 #include "xattr.h"
 #include "acl.h"
 
+#include <trace/events/ext4.h>
+
 static struct kmem_cache *io_end_cachep;
 static struct kmem_cache *io_end_vec_cachep;
 
@@ -673,6 +675,9 @@ static int ext4_iomap_wb_update_disksize(handle_t *handle, struct inode *inode,
 	 * never be exposed.
 	 */
 	new_disksize = is_ordered ? i_size : min(end, i_size);
+	trace_ext4_iomap_disksize_update(inode, end, i_size, ei->i_disksize,
+					 new_disksize, is_ordered);
+
 	if (new_disksize > ei->i_disksize)
 		ei->i_disksize = new_disksize;
 	up_write(&ei->i_data_sem);
@@ -782,6 +787,9 @@ void ext4_iomap_end_bio(struct bio *bio)
 		 * waiters.
 		 */
 		smp_store_release(&ei->i_ordered_len, 0);
+		trace_ext4_iomap_ordered_complete(inode, ioend->io_offset,
+				ioend->io_size, READ_ONCE(ei->i_ordered_lblk),
+				READ_ONCE(ei->i_ordered_len));
 		wake_up_all(&ei->i_ordered_wq);
 		goto defer;
 	}

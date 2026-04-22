@@ -3141,6 +3141,103 @@ DEFINE_SET_IOMAP_EVENT(ext4_iomap_buffered_write_begin);
 DEFINE_SET_IOMAP_EVENT(ext4_iomap_map_writeback_range);
 DEFINE_SET_IOMAP_EVENT(ext4_iomap_zero_begin);
 
+/* Ordered I/O tracepoints for iomap buffered I/O path */
+DECLARE_EVENT_CLASS(ext4_iomap_ordered_io,
+	TP_PROTO(struct inode *inode, loff_t io_offset, size_t io_size,
+		 ext4_lblk_t i_ordered_lblk, unsigned int i_ordered_len),
+	TP_ARGS(inode, io_offset, io_size, i_ordered_lblk, i_ordered_len),
+	TP_STRUCT__entry(
+		__field(dev_t, dev)
+		__field(u64, ino)
+		__field(loff_t, io_offset)
+		__field(size_t, io_size)
+		__field(ext4_lblk_t, i_ordered_lblk)
+		__field(unsigned int, i_ordered_len)
+	),
+	TP_fast_assign(
+		__entry->dev = inode->i_sb->s_dev;
+		__entry->ino = inode->i_ino;
+		__entry->io_offset = io_offset;
+		__entry->io_size = io_size;
+		__entry->i_ordered_lblk = i_ordered_lblk;
+		__entry->i_ordered_len = i_ordered_len;
+	),
+	TP_printk("dev %d:%d ino %llu io_offset %lld io_size %zu i_ordered_lblk %u i_ordered_len %u",
+		  MAJOR(__entry->dev), MINOR(__entry->dev),
+		  __entry->ino, __entry->io_offset, __entry->io_size,
+		  __entry->i_ordered_lblk, __entry->i_ordered_len)
+);
+
+DEFINE_EVENT(ext4_iomap_ordered_io, ext4_iomap_ordered_submit,
+	TP_PROTO(struct inode *inode, loff_t io_offset, size_t io_size,
+		 ext4_lblk_t i_ordered_lblk, unsigned int i_ordered_len),
+	TP_ARGS(inode, io_offset, io_size, i_ordered_lblk, i_ordered_len)
+);
+
+DEFINE_EVENT(ext4_iomap_ordered_io, ext4_iomap_ordered_complete,
+	TP_PROTO(struct inode *inode, loff_t io_offset, size_t io_size,
+		 ext4_lblk_t i_ordered_lblk, unsigned int i_ordered_len),
+	TP_ARGS(inode, io_offset, io_size, i_ordered_lblk, i_ordered_len)
+);
+
+
+/* i_disksize update tracepoint */
+TRACE_EVENT(ext4_iomap_disksize_update,
+	TP_PROTO(struct inode *inode, loff_t end, loff_t i_size,
+		 loff_t i_disksize, loff_t new_disksize, bool is_ordered),
+	TP_ARGS(inode, end, i_size, i_disksize, new_disksize, is_ordered),
+	TP_STRUCT__entry(
+		__field(dev_t, dev)
+		__field(u64, ino)
+		__field(loff_t, end)
+		__field(loff_t, i_size)
+		__field(loff_t, i_disksize)
+		__field(loff_t, new_disksize)
+		__field(bool, is_ordered)
+	),
+	TP_fast_assign(
+		__entry->dev = inode->i_sb->s_dev;
+		__entry->ino = inode->i_ino;
+		__entry->end = end;
+		__entry->i_size = i_size;
+		__entry->i_disksize = i_disksize;
+		__entry->new_disksize = new_disksize;
+		__entry->is_ordered = is_ordered;
+	),
+	TP_printk("dev %d:%d ino %llu end %lld i_size %lld i_disksize %lld new_disksize %lld is_ordered %d",
+		  MAJOR(__entry->dev), MINOR(__entry->dev),
+		  __entry->ino, __entry->end, __entry->i_size,
+		  __entry->i_disksize, __entry->new_disksize,
+		  __entry->is_ordered)
+);
+
+/* Block zero EOF tracepoint */
+TRACE_EVENT(ext4_block_zero_eof,
+	TP_PROTO(struct inode *inode, loff_t from, loff_t length,
+		 bool did_zero, bool zero_written),
+	TP_ARGS(inode, from, length, did_zero, zero_written),
+	TP_STRUCT__entry(
+		__field(dev_t, dev)
+		__field(u64, ino)
+		__field(loff_t, from)
+		__field(loff_t, length)
+		__field(bool, did_zero)
+		__field(bool, zero_written)
+	),
+	TP_fast_assign(
+		__entry->dev = inode->i_sb->s_dev;
+		__entry->ino = inode->i_ino;
+		__entry->from = from;
+		__entry->length = length;
+		__entry->did_zero = did_zero;
+		__entry->zero_written = zero_written;
+	),
+	TP_printk("dev %d:%d ino %llu zero EOF from %lld length %lld did_zero %d zero_written %d",
+		  MAJOR(__entry->dev), MINOR(__entry->dev),
+		  __entry->ino, __entry->from, __entry->length,
+		  __entry->did_zero, __entry->zero_written)
+);
+
 #endif /* _TRACE_EXT4_H */
 
 /* This part must be outside protection */

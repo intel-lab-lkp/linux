@@ -4377,6 +4377,9 @@ static int ext4_iomap_writeback_submit(struct iomap_writepage_ctx *wpc,
 				     ioend->io_offset + ioend->io_size);
 
 		if (start <= order_lblk && end >= order_lblk + order_len) {
+			trace_ext4_iomap_ordered_submit(ioend->io_inode,
+					ioend->io_offset, ioend->io_size,
+					order_lblk, order_len);
 			ioend->io_bio.bi_end_io = ext4_iomap_end_bio;
 			ioend->io_private = (void *)EXT4_IOMAP_IOEND_ORDER_IO;
 			ioend->io_flags |= IOMAP_IOEND_BOUNDARY;
@@ -4879,6 +4882,7 @@ int ext4_block_zero_eof(struct inode *inode, loff_t from, loff_t end)
 		}
 	}
 
+	trace_ext4_block_zero_eof(inode, from, length, did_zero, zero_written);
 	return 0;
 }
 
