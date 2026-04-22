@@ -656,6 +656,7 @@ static int ncsi_rsp_handler_oem_gma(struct ncsi_request *nr, int mfr_id)
 	struct net_device *ndev = ndp->ndev.dev;
 	struct ncsi_rsp_oem_pkt *rsp;
 	u32 mac_addr_off = 0;
+	unsigned int payload;
 
 	/* Get the response header */
 	rsp = (struct ncsi_rsp_oem_pkt *)skb_network_header(nr->rsp);
@@ -667,6 +668,11 @@ static int ncsi_rsp_handler_oem_gma(struct ncsi_request *nr, int mfr_id)
 		mac_addr_off = MLX_MAC_ADDR_OFFSET;
 	else if (mfr_id == NCSI_OEM_MFR_INTEL_ID)
 		mac_addr_off = INTEL_MAC_ADDR_OFFSET;
+
+	payload = ncsi_rsp_payload(nr->rsp);
+	if (payload < sizeof(rsp->mfr_id) + mac_addr_off + ETH_ALEN +
+		      sizeof(__be32))
+		return -EINVAL;
 
 	saddr->ss_family = ndev->type;
 	memcpy(saddr->__data, &rsp->data[mac_addr_off], ETH_ALEN);
@@ -686,9 +692,14 @@ static int ncsi_rsp_handler_oem_mlx(struct ncsi_request *nr)
 {
 	struct ncsi_rsp_oem_mlx_pkt *mlx;
 	struct ncsi_rsp_oem_pkt *rsp;
+	unsigned int payload;
 
 	/* Get the response header */
 	rsp = (struct ncsi_rsp_oem_pkt *)skb_network_header(nr->rsp);
+	payload = ncsi_rsp_payload(nr->rsp);
+	if (payload < sizeof(rsp->mfr_id) + sizeof(*mlx) + sizeof(__be32))
+		return -EINVAL;
+
 	mlx = (struct ncsi_rsp_oem_mlx_pkt *)(rsp->data);
 
 	if (mlx->cmd == NCSI_OEM_MLX_CMD_GMA &&
@@ -702,9 +713,14 @@ static int ncsi_rsp_handler_oem_bcm(struct ncsi_request *nr)
 {
 	struct ncsi_rsp_oem_bcm_pkt *bcm;
 	struct ncsi_rsp_oem_pkt *rsp;
+	unsigned int payload;
 
 	/* Get the response header */
 	rsp = (struct ncsi_rsp_oem_pkt *)skb_network_header(nr->rsp);
+	payload = ncsi_rsp_payload(nr->rsp);
+	if (payload < sizeof(rsp->mfr_id) + sizeof(*bcm) + sizeof(__be32))
+		return -EINVAL;
+
 	bcm = (struct ncsi_rsp_oem_bcm_pkt *)(rsp->data);
 
 	if (bcm->type == NCSI_OEM_BCM_CMD_GMA)
@@ -717,9 +733,14 @@ static int ncsi_rsp_handler_oem_intel(struct ncsi_request *nr)
 {
 	struct ncsi_rsp_oem_intel_pkt *intel;
 	struct ncsi_rsp_oem_pkt *rsp;
+	unsigned int payload;
 
 	/* Get the response header */
 	rsp = (struct ncsi_rsp_oem_pkt *)skb_network_header(nr->rsp);
+	payload = ncsi_rsp_payload(nr->rsp);
+	if (payload < sizeof(rsp->mfr_id) + sizeof(*intel) + sizeof(__be32))
+		return -EINVAL;
+
 	intel = (struct ncsi_rsp_oem_intel_pkt *)(rsp->data);
 
 	if (intel->cmd == NCSI_OEM_INTEL_CMD_GMA)
@@ -742,10 +763,15 @@ static int ncsi_rsp_handler_oem(struct ncsi_request *nr)
 {
 	struct ncsi_rsp_oem_handler *nrh = NULL;
 	struct ncsi_rsp_oem_pkt *rsp;
+	unsigned int payload;
 	unsigned int mfr_id, i;
 
 	/* Get the response header */
 	rsp = (struct ncsi_rsp_oem_pkt *)skb_network_header(nr->rsp);
+	payload = ncsi_rsp_payload(nr->rsp);
+	if (payload < sizeof(rsp->mfr_id) + sizeof(__be32))
+		return -EINVAL;
+
 	mfr_id = ntohl(rsp->mfr_id);
 
 	/* Check for manufacturer id and Find the handler */
