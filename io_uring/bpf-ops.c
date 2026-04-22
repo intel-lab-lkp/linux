@@ -162,6 +162,8 @@ static int io_install_bpf(struct io_ring_ctx *ctx, struct io_uring_bpf_ops *ops)
 		return -EOPNOTSUPP;
 	if (!(ctx->flags & IORING_SETUP_DEFER_TASKRUN))
 		return -EOPNOTSUPP;
+	if (ctx->submitter_task && ctx->submitter_task != current)
+		return -EPERM;
 
 	if (ctx->bpf_ops)
 		return -EBUSY;
