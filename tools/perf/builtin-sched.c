@@ -4695,11 +4695,15 @@ static int perf_sched__schedstat_live(struct perf_sched *sched,
 	if (err < 0)
 		goto out;
 
-	if (argc)
-		evlist__start_workload(evlist);
+	done = 0;
 
-	/* wait for signal */
-	pause();
+	if (argc) {
+		evlist__start_workload(evlist);
+		waitpid(evlist->workload.pid, NULL, 0);
+	} else {
+		while (!done)
+			sleep(1);
+	}
 
 	if (reset) {
 		err = disable_sched_schedstat();
