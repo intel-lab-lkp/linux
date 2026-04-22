@@ -132,17 +132,6 @@ config APNE
 	  To compile this driver as a module, choose M here: the module
 	  will be called apne.
 
-config PCMCIA_PCNET
-	tristate "NE2000 compatible PCMCIA support"
-	depends on PCMCIA && HAS_IOPORT
-	select CRC32
-	help
-	  Say Y here if you intend to attach an NE2000 compatible PCMCIA
-	  (PC-card) Ethernet or Fast Ethernet card to your computer.
-
-	  To compile this driver as a module, choose M here: the module will be
-	  called pcnet_cs.  If unsure, say N.
-
 config STNIC
 	tristate "National DP83902AV  support"
 	depends on SUPERH
