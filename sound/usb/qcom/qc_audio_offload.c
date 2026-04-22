@@ -699,7 +699,6 @@ static void uaudio_event_ring_cleanup_free(struct uaudio_dev *dev)
 		uaudio_iommu_unmap(MEM_EVENT_RING, IOVA_BASE, PAGE_SIZE,
 				   PAGE_SIZE);
 		xhci_sideband_remove_interrupter(uadev[dev->chip->card->number].sb);
-		usb_offload_put(dev->udev);
 	}
 }
 
@@ -1183,16 +1182,12 @@ static int uaudio_event_ring_setup(struct snd_usb_substream *subs,
 	dma_coherent = dev_is_dma_coherent(subs->dev->bus->sysdev);
 	er_pa = 0;
 
-	ret = usb_offload_get(subs->dev);
-	if (ret < 0)
-		goto exit;
-
 	/* event ring */
 	ret = xhci_sideband_create_interrupter(uadev[card_num].sb, 1, false,
 					       0, uaudio_qdev->data->intr_num);
 	if (ret < 0) {
 		dev_err(&subs->dev->dev, "failed to fetch interrupter\n");
-		goto put_offload;
+		goto exit;
 	}
 
 	sgt = xhci_sideband_get_event_buffer(uadev[card_num].sb);
@@ -1224,8 +1219,6 @@ clear_pa:
 	mem_info->dma = 0;
 remove_interrupter:
 	xhci_sideband_remove_interrupter(uadev[card_num].sb);
-put_offload:
-	usb_offload_put(subs->dev);
 exit:
 	return ret;
 }
@@ -1489,7 +1482,6 @@ unmap_er:
 	uaudio_iommu_unmap(MEM_EVENT_RING, IOVA_BASE, PAGE_SIZE, PAGE_SIZE);
 free_sec_ring:
 	xhci_sideband_remove_interrupter(uadev[card_num].sb);
-	usb_offload_put(subs->dev);
 drop_sync_ep:
 	if (subs->sync_endpoint) {
 		uaudio_iommu_unmap(MEM_XFER_RING,
@@ -1605,6 +1597,12 @@ static void handle_uaudio_stream_req(struct qmi_handle *handle,
 	uadev[pcm_card_num].ctrl_intf = chip->ctrl_intf;
 
 	if (req_msg->enable) {
+		ret = usb_offload_get(subs->dev);
+		if (ret < 0) {
+			guard(mutex)(&chip->mutex);
+			subs->opened = 0;
+			goto response;
+		}
 		ret = enable_audio_stream(subs,
 					  map_pcm_format(req_msg->audio_format),
 					  req_msg->number_of_ch, req_msg->bit_rate,
@@ -1614,6 +1612,7 @@ static void handle_uaudio_stream_req(struct qmi_handle *handle,
 			ret = prepare_qmi_response(subs, req_msg, &resp,
 						   info_idx);
 		if (ret < 0) {
+			usb_offload_put(subs->dev);
 			guard(mutex)(&chip->mutex);
 			subs->opened = 0;
 		}
@@ -1658,9 +1657,11 @@ response:
 			uaudio_dev_intf_cleanup(uadev[pcm_card_num].udev,
 						info);
 		}
-		if (atomic_read(&uadev[pcm_card_num].in_use))
+		if (atomic_read(&uadev[pcm_card_num].in_use)) {
 			kref_put(&uadev[pcm_card_num].kref,
 				 uaudio_dev_release);
+			usb_offload_put(subs->dev);
+		}
 	}
 	mutex_unlock(&qdev_mutex);
 
