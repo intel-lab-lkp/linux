@@ -1046,6 +1046,24 @@ intel_legacy_cursor_update(struct drm_plane *_plane,
 		intel_plane_disable_arm(NULL, plane, crtc_state);
 	}
 
+	for (int i = 0; i < num_sec; i++) {
+		struct intel_plane *sec_plane = to_intel_plane(new_sec_states[i]->uapi.plane);
+		struct intel_crtc *sec_crtc = to_intel_crtc(new_sec_states[i]->hw.crtc);
+		const struct intel_crtc_state *sec_crtc_state =
+						to_intel_crtc_state(sec_crtc->base.state);
+
+		if (new_sec_states[i]->uapi.visible) {
+			intel_plane_update_noarm(NULL, sec_plane,
+						 sec_crtc_state,
+						 new_sec_states[i]);
+			intel_plane_update_arm(NULL, sec_plane,
+					       sec_crtc_state,
+					       new_sec_states[i]);
+		} else {
+			intel_plane_disable_arm(NULL, sec_plane, sec_crtc_state);
+		}
+	}
+
 	local_irq_enable();
 
 	intel_psr_unlock(crtc_state);
