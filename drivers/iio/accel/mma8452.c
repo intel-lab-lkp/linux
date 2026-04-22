@@ -704,8 +704,8 @@ static int mma8452_set_hp_filter_frequency(struct mma8452_data *data,
 }
 
 static int __mma8452_write_raw(struct iio_dev *indio_dev,
-			     struct iio_chan_spec const *chan,
-			     int val, int val2, long mask)
+			       struct iio_chan_spec const *chan,
+			       int val, int val2, long mask)
 {
 	struct mma8452_data *data = iio_priv(indio_dev);
 	int i, j, ret;
@@ -786,8 +786,9 @@ static int mma8452_write_raw(struct iio_dev *indio_dev,
 }
 
 static int mma8452_get_event_regs(struct mma8452_data *data,
-		const struct iio_chan_spec *chan, enum iio_event_direction dir,
-		const struct mma8452_event_regs **ev_reg)
+				  const struct iio_chan_spec *chan,
+				  enum iio_event_direction dir,
+				  const struct mma8452_event_regs **ev_reg)
 {
 	if (!chan)
 		return -EINVAL;
@@ -816,11 +817,11 @@ static int mma8452_get_event_regs(struct mma8452_data *data,
 }
 
 static int mma8452_read_event_value(struct iio_dev *indio_dev,
-			       const struct iio_chan_spec *chan,
-			       enum iio_event_type type,
-			       enum iio_event_direction dir,
-			       enum iio_event_info info,
-			       int *val, int *val2)
+				    const struct iio_chan_spec *chan,
+				    enum iio_event_type type,
+				    enum iio_event_direction dir,
+				    enum iio_event_info info,
+				    int *val, int *val2)
 {
 	struct mma8452_data *data = iio_priv(indio_dev);
 	int ret, us, power_mode;
@@ -879,11 +880,11 @@ static int mma8452_read_event_value(struct iio_dev *indio_dev,
 }
 
 static int mma8452_write_event_value(struct iio_dev *indio_dev,
-				const struct iio_chan_spec *chan,
-				enum iio_event_type type,
-				enum iio_event_direction dir,
-				enum iio_event_info info,
-				int val, int val2)
+				     const struct iio_chan_spec *chan,
+				     enum iio_event_type type,
+				     enum iio_event_direction dir,
+				     enum iio_event_info info,
+				     int val, int val2)
 {
 	struct mma8452_data *data = iio_priv(indio_dev);
 	int ret, reg, steps;
@@ -953,8 +954,7 @@ static int mma8452_read_event_config(struct iio_dev *indio_dev,
 	case IIO_EV_DIR_FALLING:
 		return mma8452_freefall_mode_enabled(data);
 	case IIO_EV_DIR_RISING:
-		ret = i2c_smbus_read_byte_data(data->client,
-				ev_regs->ev_cfg);
+		ret = i2c_smbus_read_byte_data(data->client, ev_regs->ev_cfg);
 		if (ret < 0)
 			return ret;
 
@@ -1191,7 +1191,7 @@ static const struct attribute_group mma8452_event_attribute_group = {
 
 static const struct iio_mount_matrix *
 mma8452_get_mount_matrix(const struct iio_dev *indio_dev,
-			   const struct iio_chan_spec *chan)
+			 const struct iio_chan_spec *chan)
 {
 	struct mma8452_data *data = iio_priv(indio_dev);
 
@@ -1514,8 +1514,9 @@ static int mma8452_reset(struct i2c_client *client)
 	 * The following code will read the reset register, and check whether
 	 * this reset works.
 	 */
-	i2c_smbus_write_byte_data(client, MMA8452_CTRL_REG2,
-					MMA8452_CTRL_REG2_RST);
+	i2c_smbus_write_byte_data(client,
+				  MMA8452_CTRL_REG2,
+				  MMA8452_CTRL_REG2_RST);
 
 	for (i = 0; i < 10; i++) {
 		usleep_range(100, 200);
@@ -1645,8 +1646,8 @@ static int mma8452_probe(struct i2c_client *client)
 			dev_dbg(&client->dev, "using interrupt line INT2\n");
 		} else {
 			ret = i2c_smbus_write_byte_data(client,
-						MMA8452_CTRL_REG5,
-						data->chip_info->all_events);
+							MMA8452_CTRL_REG5,
+							data->chip_info->all_events);
 			if (ret < 0)
 				goto disable_regulators;
 
@@ -1654,8 +1655,8 @@ static int mma8452_probe(struct i2c_client *client)
 		}
 
 		ret = i2c_smbus_write_byte_data(client,
-					MMA8452_CTRL_REG4,
-					data->chip_info->enabled_events);
+						MMA8452_CTRL_REG4,
+						data->chip_info->enabled_events);
 		if (ret < 0)
 			goto disable_regulators;
 
