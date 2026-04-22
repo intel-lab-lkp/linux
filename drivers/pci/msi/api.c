@@ -297,6 +297,57 @@ int pci_alloc_irq_vectors_affinity(struct pci_dev *dev, unsigned int min_vecs,
 EXPORT_SYMBOL(pci_alloc_irq_vectors_affinity);
 
 /**
+ * pcim_alloc_irq_vectors - devres managed pci_alloc_irq_vectors()
+ * @dev: the PCI device to operate on
+ * @min_vecs: minimum number of vectors required (must be >= 1)
+ * @max_vecs: maximum (desired) number of vectors
+ * @flags: flags for this allocation, see pci_alloc_irq_vectors()
+ *
+ * This is a device resource managed version of pci_alloc_irq_vectors().
+ * Interrupt vectors are automatically freed on driver detach by the
+ * devres. Drivers do not need to explicitly call pci_free_irq_vectors().
+ *
+ * Returns number of vectors allocated (which might be smaller than
+ * @max_vecs) on success, or a negative error code on failure.
+ */
+int pcim_alloc_irq_vectors(struct pci_dev *dev, unsigned int min_vecs,
+			   unsigned int max_vecs, unsigned int flags)
+{
+	return pcim_alloc_irq_vectors_affinity(dev, min_vecs, max_vecs,
+					       flags, NULL);
+}
+EXPORT_SYMBOL(pcim_alloc_irq_vectors);
+
+/**
+ * pcim_alloc_irq_vectors_affinity - devres managed pci_alloc_irq_vectors_affinity()
+ * @dev: the PCI device to operate on
+ * @min_vecs: minimum number of vectors required (must be >= 1)
+ * @max_vecs: maximum (desired) number of vectors
+ * @flags: flags for this allocation, see pci_alloc_irq_vectors()
+ * @affd: optional description of the affinity requirements
+ *
+ * This is a device resource managed version of pci_alloc_irq_vectors_affinity().
+ * Interrupt vectors are automatically freed on driver detach by the devres
+ * machinery. Drivers do not need to explicitly call pci_free_irq_vectors().
+ *
+ * The function sets dev->is_msi_managed to true before allocating
+ * vectors. If allocation fails and is_msi_managed was not already set
+ * before calling this function, the flag is restored to false. This
+ * ensures proper state cleanup on failure.
+ *
+ * Returns number of vectors allocated (which might be smaller than
+ * @max_vecs) on success, or a negative error code on failure.
+ */
+int pcim_alloc_irq_vectors_affinity(struct pci_dev *dev, unsigned int min_vecs,
+				   unsigned int max_vecs, unsigned int flags,
+				   struct irq_affinity *affd)
+{
+	return pci_alloc_irq_vectors_affinity(dev, min_vecs, max_vecs,
+					      flags, affd);
+}
+EXPORT_SYMBOL(pcim_alloc_irq_vectors_affinity);
+
+/**
  * pci_irq_vector() - Get Linux IRQ number of a device interrupt vector
  * @dev: the PCI device to operate on
  * @nr:  device-relative interrupt vector index (0-based); has different
