@@ -2012,7 +2012,7 @@ static int nfs4_reclaim_lease(struct nfs_client *clp)
 		return nfs4_handle_reclaim_lease_error(clp, status);
 	if (test_and_clear_bit(NFS4CLNT_SERVER_SCOPE_MISMATCH, &clp->cl_state))
 		nfs4_state_start_reclaim_nograce(clp);
-	if (!test_bit(NFS4CLNT_RECLAIM_NOGRACE, &clp->cl_state))
+	else
 		set_bit(NFS4CLNT_RECLAIM_REBOOT, &clp->cl_state);
 	clear_bit(NFS4CLNT_CHECK_LEASE, &clp->cl_state);
 	clear_bit(NFS4CLNT_LEASE_EXPIRED, &clp->cl_state);
