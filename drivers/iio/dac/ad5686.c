@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * AD5686R, AD5685R, AD5684R Digital to analog converters  driver
+ * Core driver for AD5686R and similar Digital to analog converters
  *
- * Copyright 2011 Analog Devices Inc.
+ * Copyright 2011-2026 Analog Devices Inc.
  */
 
 #include <linux/array_size.h>
