@@ -196,6 +196,112 @@ Return buffers back to the kernel to be used again::
   rqe->len = cqe->res;
   IO_URING_WRITE_ONCE(*refill_ring.ktail, ++refill_ring.rq_tail);
 
+Notifications
+-------------
+
+When zero-copy receive encounters conditions that affect performance or
+functionality, the kernel can notify userspace via dedicated CQE notifications.
+The application must register a notification descriptor during
+``IORING_REGISTER_ZCRX_IFQ`` to receive them.
+
+Supported features can be detected by checking for ``ZCRX_FEATURE_NOTIFICATION``
+in the features bitmask returned by ``IO_URING_QUERY_ZCRX``.
+
+**Notification types**
+
+``ZCRX_NOTIF_NO_BUFFERS``
+  Fired when the page pool fails to allocate because the zcrx buffer area is
+  exhausted.
+
+``ZCRX_NOTIF_COPY``
+  Fired when a received fragment could not be delivered zero-copy and was
+  instead copied into a buffer.
+
+**Registering notifications**
+
+Allocate and fill a ``struct zcrx_notification_desc``::
+
+  struct zcrx_notification_desc notif = {
+    .user_data = MY_NOTIF_USER_DATA,
+    .type_mask = ZCRX_NOTIF_NO_BUFFERS | ZCRX_NOTIF_COPY,
+  };
+
+  reg.notif_desc = (__u64)(unsigned long)&notif;
+
+``user_data`` is the value that will appear in the notification CQE's
+``user_data`` field. ``type_mask`` selects which notification types the
+application wants to receive.
+
+When a registered event occurs, the kernel posts a CQE with the specified
+``user_data`` and ``cqe->res`` set to a bitmask of the triggered notification
+types.
+
+**Rate limiting**
+
+Each notification type fires once until the application explicitly re-arms it.
+To re-arm, issue ``IORING_REGISTER_ZCRX_CTRL`` with
+``ZCRX_CTRL_ARM_NOTIFICATION``::
+
+  struct zcrx_ctrl ctrl = {
+    .zcrx_id = zcrx_id,
+    .op = ZCRX_CTRL_ARM_NOTIFICATION,
+    .zc_arm_notif = {
+      .type_mask = ZCRX_NOTIF_NO_BUFFERS | ZCRX_NOTIF_COPY,
+    },
+  };
+
+  io_uring_register(ring_fd, IORING_REGISTER_ZCRX_CTRL, &ctrl, 0);
+
+Only notification types that have previously fired can be re-armed.
+
+Notification statistics
+-----------------------
+
+In addition to CQE-based notifications, the kernel can maintain a shared-memory
+statistics structure that is updated on every relevant event. All stats are
+updated regardless of which notification flags were registered.
+
+The statistics structure layout and alignment requirements can be queried via
+``IO_URING_QUERY_ZCRX_NOTIF``. The application must query the structure size
+and alignment requirements so that it allocates enough memory for the region
+to fit both the refill ring and the stats structure.
+
+To enable statistics, place the stats structure after the refill ring entries
+within the same mapped region, and set the ``ZCRX_NOTIF_DESC_FLAG_STATS`` flag
+in the notification descriptor::
+
+  /* Compute offset for the stats struct (after refill ring entries) */
+  size_t stats_offset = ring_size;
+  ring_size += ALIGN_UP(sizeof(struct io_uring_zcrx_notif_stats), PAGE_SIZE);
+
+  /* Map the region with the extra space */
+  ring_ptr = mmap(NULL, ring_size, PROT_READ | PROT_WRITE,
+                  MAP_ANONYMOUS | MAP_PRIVATE, 0, 0);
+
+  struct zcrx_notification_desc notif = {
+    .user_data = MY_NOTIF_USER_DATA,
+    .type_mask = ZCRX_NOTIF_COPY,
+    .flags = ZCRX_NOTIF_DESC_FLAG_STATS,
+    .stats_offset = stats_offset,
+  };
+
+The ``stats_offset`` must satisfy the alignment reported by
+``notif_stats_off_alignment`` and must point to a location within the mapped
+region that does not overlap with the refill ring header or entries.
+
+Application can read stat counters them at any time::
+
+  volatile struct io_uring_zcrx_notif_stats *stats =
+    (void *)((char *)ring_ptr + stats_offset);
+
+  printf("copy fallbacks: %llu (%llu bytes)\n",
+         IO_URING_READ_ONCE(stats->copy_count),
+	 IO_URING_READ_ONCE(stats->copy_bytes));
+
+``copy_count`` is incremented each time a fragment is copied instead of being
+delivered via zero-copy. ``copy_bytes`` accumulates the total number of bytes
+copied.
+
 Area chunking
 -------------
 
