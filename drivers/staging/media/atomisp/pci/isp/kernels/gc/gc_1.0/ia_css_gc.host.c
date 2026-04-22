@@ -58,7 +58,7 @@ ia_css_gc_vamem_encode(
     unsigned int size)
 {
 	(void)size;
-	memcpy(&to->gc,  &from->data, sizeof(to->gc));
+	memcpy(&to->gc, &from->data, sizeof(to->gc));
 }
 
 #ifndef IA_CSS_NO_DEBUG
