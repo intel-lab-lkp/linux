@@ -7458,6 +7458,7 @@ static noinstr void vmx_vcpu_enter_exit(struct kvm_vcpu *vcpu,
 					unsigned int flags)
 {
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
+	unsigned long host_cr2;
 
 	guest_state_enter_irqoff();
 
@@ -7465,13 +7466,25 @@ static noinstr void vmx_vcpu_enter_exit(struct kvm_vcpu *vcpu,
 
 	vmx_disable_fb_clear(vmx);
 
-	if (vcpu->arch.cr2 != native_read_cr2())
+	host_cr2 = native_read_cr2();
+	if (vcpu->arch.cr2 != host_cr2)
 		native_write_cr2(vcpu->arch.cr2);
 
 	vmx->fail = __vmx_vcpu_run(vmx, (unsigned long *)&vcpu->arch.regs,
 				   flags);
 
 	vcpu->arch.cr2 = native_read_cr2();
+
+	/*
+	 * Restore host CR2 if the guest modified it.  The rest of the
+	 * kernel relies on CR2 holding the address of the last host
+	 * #PF; leaving the guest value there can mislead any code path
+	 * that reads CR2 without the CPU having just taken a real host
+	 * #PF (exc_page_fault(), __show_regs() from oops/crash paths,
+	 * NMI/MCE report, nested-virt corner cases, etc.).
+	 */
+	if (unlikely(vcpu->arch.cr2 != host_cr2))
+		native_write_cr2(host_cr2);
 	vcpu->arch.regs_avail &= ~VMX_REGS_LAZY_LOAD_SET;
 
 	vmx->idt_vectoring_info = 0;
