@@ -41,7 +41,9 @@ def set_flow_rule_rss(cfg, rss_ctx_id):
     return int(values)
 
 
-def single(cfg):
+def single_no_flow(cfg):
+    """Like single() but without a flow rule."""
+
     channels = cfg.ethnl.channels_get({'header': {'dev-index': cfg.ifindex}})
     channels = channels['combined-count']
     if channels < 2:
@@ -64,6 +66,9 @@ def single(cfg):
     cfg.target = channels - 1
     ethtool(f"-X {cfg.ifname} equal {cfg.target}")
     defer(ethtool, f"-X {cfg.ifname} default")
+
+def single(cfg):
+    single_no_flow(cfg)
 
     flow_rule_id = set_flow_rule(cfg)
     defer(ethtool, f"-N {cfg.ifname} delete {flow_rule_id}")
@@ -130,6 +135,26 @@ def test_zcrx_oneshot(cfg, setup) -> None:
         cmd(tx_cmd, host=cfg.remote)
 
 
+@ksft_variants([
+    KsftNamedVariant("single", single_no_flow),
+])
+def test_zcrx_notif(cfg, setup) -> None:
+    """Test zcrx copy fallback notification.
+
+    Omits the flow rule so traffic arrives on non-zcrx queues as regular
+    pages, forcing the kernel copy-fallback path. Asserts that the
+    ZCRX_NOTIF_COPY notification CQE is delivered."""
+
+    cfg.require_ipver('6')
+
+    setup(cfg)
+    rx_cmd = f"{cfg.bin_local} -s -p {cfg.port} -i {cfg.ifname} -q {cfg.target} -n"
+    tx_cmd = f"{cfg.bin_remote} -c -h {cfg.addr_v['6']} -p {cfg.port} -l 12840"
+    with bkg(rx_cmd, exit_wait=True):
+        wait_port_listen(cfg.port, proto="tcp")
+        cmd(tx_cmd, host=cfg.remote)
+
+
 def test_zcrx_large_chunks(cfg) -> None:
     """Test zcrx with large buffer chunks."""
 
@@ -157,6 +182,25 @@ def test_zcrx_large_chunks(cfg) -> None:
         cmd(tx_cmd, host=cfg.remote)
 
 
+@ksft_variants([
+    KsftNamedVariant("single", single),
+])
+def test_zcrx_notif_no_buffers(cfg, setup) -> None:
+    """Test zcrx out-of-buffer notification.
+
+    Skips buffer refill so the pool is quickly exhausted, triggering
+    a ZCRX_NOTIF_NO_BUFFERS notification CQE."""
+
+    cfg.require_ipver('6')
+
+    setup(cfg)
+    rx_cmd = f"{cfg.bin_local} -s -p {cfg.port} -i {cfg.ifname} -q {cfg.target} -b -a 64"
+    tx_cmd = f"{cfg.bin_remote} -c -h {cfg.addr_v['6']} -p {cfg.port} -l 12840"
+    with bkg(rx_cmd, exit_wait=True):
+        wait_port_listen(cfg.port, proto="tcp")
+        cmd(tx_cmd, host=cfg.remote, fail=False)
+
+
 def main() -> None:
     with NetDrvEpEnv(__file__) as cfg:
         cfg.bin_local = path.abspath(path.dirname(__file__) + "/../../../drivers/net/hw/iou-zcrx")
@@ -166,7 +210,8 @@ def main() -> None:
         cfg.netnl = NetdevFamily()
         cfg.port = rand_port()
         ksft_run(globs=globals(), cases=[test_zcrx, test_zcrx_oneshot,
-                                        test_zcrx_large_chunks], args=(cfg, ))
+                                        test_zcrx_large_chunks, test_zcrx_notif,
+                                        test_zcrx_notif_no_buffers], args=(cfg, ))
     ksft_exit()
 
 
