@@ -861,6 +861,60 @@ void mmc_release_host(struct mmc_host *host)
 }
 EXPORT_SYMBOL(mmc_release_host);
 
+/**
+ *	mmc_panic_claim_host - force-claim a host in panic context
+ *	@host: mmc host to claim
+ *
+ *	Force-claims the MMC host without locking during kernel panic. Other CPUs
+ *	are stopped and may be holding mmc_host->lock (e.g. inside __mmc_claim_host
+ *	or mmc_release_host). Unlike sdhci_host->lock which is freed by the hardware
+ *	drain+reset, mmc_host->lock has no hardware counterpart, so we must bypass
+ *	it with WRITE_ONCE.
+ *
+ *	This function first checks the current host state (claimed/suspended/ongoing),
+ *	then calls panic_prepare() to let the controller driver safely drain any
+ *	in-flight hardware requests and handle runtime PM suspend state. After
+ *	panic_prepare() returns, the host is forcefully claimed for panic I/O.
+ */
+void mmc_panic_claim_host(struct mmc_host *host)
+{
+	bool claimed;
+	bool suspended;
+	struct mmc_request *ongoing;
+
+	if (!host)
+		return;
+
+	/* Check current state for visibility into what we're dealing with */
+	claimed = READ_ONCE(host->claimed);
+	suspended = pm_runtime_suspended(&host->class_dev);
+	ongoing = READ_ONCE(host->ongoing_mrq);
+
+	if (claimed || suspended || ongoing) {
+		pr_info("mmc_panic_claim: host state: claimed=%d suspended=%d ongoing_mrq=%p\n",
+			claimed, suspended, ongoing);
+	}
+
+	/* Always call panic_prepare to drain/reset hardware, regardless of claimed state.
+	 * This ensures the controller is in a safe state for panic I/O even if the
+	 * host was already claimed (which shouldn't happen, but we handle it safely).
+	 */
+	if (host->ops && host->ops->panic_prepare) {
+		int ret = host->ops->panic_prepare(host);
+
+		if (ret)
+			pr_warn("mmc_panic_claim: panic_prepare failed: %d\n", ret);
+	}
+
+	/* Force-claim the host. Safe because all other CPUs are stopped. */
+	WRITE_ONCE(host->claimed, 1);
+	host->claimer = &host->default_ctx;
+	host->claimer->task = current;
+	WRITE_ONCE(host->claim_cnt, 1);
+	WRITE_ONCE(host->ongoing_mrq, NULL);
+}
+EXPORT_SYMBOL(mmc_panic_claim_host);
+
 /*
  * This is a helper function, which fetches a runtime pm reference for the
  * card device and also claims the host.

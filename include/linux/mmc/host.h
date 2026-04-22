@@ -272,6 +272,16 @@ struct mmc_host_ops {
 	 * negative errno in case of a failure or zero for success.
 	 */
 	int	(*uhs2_control)(struct mmc_host *host, enum sd_uhs2_operation op);
+
+	/*
+	 * Optional panic-context ops for pstore backends that write to MMC
+	 * during kernel panic with interrupts disabled.
+	 */
+	int	(*panic_prepare)(struct mmc_host *host);
+	bool	(*panic_poll_completion)(struct mmc_host *host,
+					 struct mmc_request *mrq);
+	void	(*panic_complete)(struct mmc_host *host,
+				  struct mmc_request *mrq);
 };
 
 struct mmc_cqe_ops {
@@ -757,5 +767,7 @@ int mmc_send_tuning(struct mmc_host *host, u32 opcode, int *cmd_error);
 int mmc_send_abort_tuning(struct mmc_host *host, u32 opcode);
 int mmc_get_ext_csd(struct mmc_card *card, u8 **new_ext_csd);
 int mmc_read_tuning(struct mmc_host *host, unsigned int blksz, unsigned int blocks);
+
+void mmc_panic_claim_host(struct mmc_host *host);
 
 #endif /* LINUX_MMC_HOST_H */
