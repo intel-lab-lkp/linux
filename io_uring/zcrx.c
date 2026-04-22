@@ -414,6 +414,7 @@ static void io_free_rbuf_ring(struct io_zcrx_ifq *ifq)
 	io_free_region(ifq->user, &ifq->rq_region);
 	ifq->rq.ring = NULL;
 	ifq->rq.rqes = NULL;
+	ifq->notif_stats = NULL;
 }
 
 static void io_zcrx_free_area(struct io_zcrx_ifq *ifq,
@@ -841,6 +842,33 @@ netdev_put_unlock:
 	return ret;
 }
 
+static int zcrx_validate_notif_stats(struct io_zcrx_ifq *ifq,
+				     const struct io_uring_zcrx_ifq_reg *reg,
+				     const struct zcrx_notification_desc *notif)
+{
+	size_t stats_off = notif->stats_offset;
+	size_t used, end;
+
+	used = reg->offsets.rqes +
+	       sizeof(struct io_uring_zcrx_rqe) * reg->rq_entries;
+
+	if (!IS_ALIGNED(stats_off, __alignof__(struct io_uring_zcrx_notif_stats)))
+		return -EINVAL;
+	if (stats_off < used)
+		return -ERANGE;
+	if (check_add_overflow(stats_off,
+			       sizeof(struct io_uring_zcrx_notif_stats),
+			       &end))
+		return -ERANGE;
+	if (end > io_region_size(&ifq->rq_region))
+		return -ERANGE;
+
+	ifq->notif_stats = io_region_get_ptr(&ifq->rq_region) + stats_off;
+	memset(ifq->notif_stats, 0, sizeof(*ifq->notif_stats));
+
+	return 0;
+}
+
 int io_register_zcrx(struct io_ring_ctx *ctx,
 		     struct io_uring_zcrx_ifq_reg __user *arg)
 {
@@ -894,7 +922,9 @@ int io_register_zcrx(struct io_ring_ctx *ctx,
 		return -EFAULT;
 	if (notif.type_mask & ~ZCRX_NOTIF_TYPE_MASK)
 		return -EINVAL;
-	if (notif.__resv1 || !mem_is_zero(&notif.__resv2, sizeof(notif.__resv2)))
+	if (notif.flags & ~ZCRX_NOTIF_DESC_FLAG_STATS)
+		return -EINVAL;
+	if (!mem_is_zero(&notif.__resv2, sizeof(notif.__resv2)))
 		return -EINVAL;
 
 	ifq = io_zcrx_ifq_alloc(ctx);
@@ -924,6 +954,12 @@ int io_register_zcrx(struct io_ring_ctx *ctx,
 	ret = io_allocate_rbuf_ring(ctx, ifq, &reg, &rd, id);
 	if (ret)
 		goto err;
+
+	if (notif.flags & ZCRX_NOTIF_DESC_FLAG_STATS) {
+		ret = zcrx_validate_notif_stats(ifq, &reg, &notif);
+		if (ret)
+			goto err;
+	}
 
 	ifq->kern_readable = !(area.flags & IORING_ZCRX_AREA_DMABUF);
 
@@ -1131,6 +1167,11 @@ static void zcrx_notif_tw(struct io_tw_req tw_req, io_tw_token_t tw)
 	io_post_aux_cqe(ctx, req->cqe.user_data, req->cqe.res, 0);
 	percpu_ref_put(&ctx->refs);
 	kfree_rcu(req, rcu_head);
+}
+
+static void zcrx_stat_add(__u64 *p, s64 v)
+{
+	WRITE_ONCE(*p, READ_ONCE(*p) + v);
 }
 
 static void zcrx_send_notif(struct io_zcrx_ifq *ifq, u32 type_mask)
@@ -1513,8 +1554,13 @@ static int io_zcrx_copy_frag(struct io_kiocb *req, struct io_zcrx_ifq *ifq,
 	int ret;
 
 	ret = io_zcrx_copy_chunk(req, ifq, page, off + skb_frag_off(frag), len);
-	if (ret > 0)
+	if (ret > 0) {
+		if (ifq->notif_stats) {
+			zcrx_stat_add(&ifq->notif_stats->copy_count, 1);
+			zcrx_stat_add(&ifq->notif_stats->copy_bytes, ret);
+		}
 		zcrx_send_notif(ifq, ZCRX_NOTIF_COPY);
+	}
 
 	return ret;
 }

@@ -82,6 +82,7 @@ struct io_zcrx_ifq {
 	u32				allowed_notif_mask;
 	u32				fired_notifs;
 	u64				notif_data;
+	struct io_uring_zcrx_notif_stats *notif_stats;
 };
 
 #if defined(CONFIG_IO_URING_ZCRX)
