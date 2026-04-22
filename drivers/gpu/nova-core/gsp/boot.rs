@@ -268,7 +268,9 @@ impl super::Gsp {
         &self,
         dev: &device::Device<device::Bound>,
         bar: &Bar0,
+        chipset: Chipset,
         gsp_falcon: &Falcon<Gsp>,
+        sec2_falcon: &Falcon<Sec2>,
     ) -> Result {
         // Shut down the GSP.
 
@@ -279,6 +281,57 @@ impl super::Gsp {
             commands::PowerStateLevel::Level0,
         )
         .inspect_err(|e| dev_err!(dev, "unload guest driver failed: {:?}\n", e))?;
+
+        // Run FWSEC-SB to reset the GSP falcon to its pre-libos state.
+
+        let bios = Vbios::new(dev, bar)?;
+        let fwsec_sb = FwsecFirmware::new(dev, gsp_falcon, bar, &bios, FwsecCommand::Sb)?;
+
+        if chipset.needs_fwsec_bootloader() {
+            let fwsec_sb_bl = FwsecFirmwareWithBl::new(fwsec_sb, dev, chipset)?;
+            // Load and run the bootloader, which will load FWSEC-SB and run it.
+            fwsec_sb_bl.run(dev, gsp_falcon, bar)?;
+        } else {
+            // Load and run FWSEC-SB directly.
+            fwsec_sb.run(dev, gsp_falcon, bar)?;
+        }
+
+        // Remove WPR2 region if set.
+
+        let wpr2_hi = bar.read(regs::NV_PFB_PRI_MMU_WPR2_ADDR_HI);
+        if wpr2_hi.is_wpr2_set() {
+            let booter_unloader = BooterFirmware::new(
+                dev,
+                BooterKind::Unloader,
+                chipset,
+                FIRMWARE_VERSION,
+                sec2_falcon,
+                bar,
+            )?;
+
+            sec2_falcon.reset(bar)?;
+            sec2_falcon.load(dev, bar, &booter_unloader)?;
+
+            // Sentinel value to confirm that Booter Unloader has run.
+            const MAILBOX_SENTINEL: u32 = 0xff;
+            let (mbox0, _) = sec2_falcon.boot(bar, Some(MAILBOX_SENTINEL), None)?;
+            if mbox0 != 0 {
+                dev_err!(dev, "Booter Unloader returned error 0x{:x}\n", mbox0);
+                return Err(EINVAL);
+            }
+
+            // Confirm that the WPR2 region has been removed.
+            let wpr2_hi = bar.read(regs::NV_PFB_PRI_MMU_WPR2_ADDR_HI);
+            if wpr2_hi.is_wpr2_set() {
+                dev_err!(
+                    dev,
+                    "WPR2 region still set after Booter Unloader returned\n"
+                );
+                return Err(EBUSY);
+            }
+        }
+
+        dev_info!(dev, "successfully unloaded\n");
 
         Ok(())
     }

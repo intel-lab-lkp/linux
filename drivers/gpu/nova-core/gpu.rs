@@ -286,7 +286,13 @@ impl Gpu {
             return;
         };
 
-        let _ = kernel::warn_on_err!(self.gsp.unload(dev, bar, &self.gsp_falcon));
+        let _ = kernel::warn_on_err!(self.gsp.unload(
+            dev,
+            bar,
+            self.spec.chipset,
+            &self.gsp_falcon,
+            &self.sec2_falcon,
+        ));
 
         self.sysmem_flush.unregister(bar);
     }
