@@ -450,6 +450,8 @@ void ahci_save_initial_config(struct device *dev, struct ahci_host_priv *hpriv)
 	void __iomem *port_mmio;
 	unsigned long port_map;
 	u32 cap, cap2, vers;
+	unsigned long long mmio_size = 0;
+	bool is_pci_dev = false;
 	int i;
 
 	/* make sure AHCI mode is enabled before accessing CAP */
@@ -578,6 +580,13 @@ void ahci_save_initial_config(struct device *dev, struct ahci_host_priv *hpriv)
 		hpriv->saved_port_map = port_map;
 	}
 
+	is_pci_dev = dev_is_pci(dev);
+	if (is_pci_dev) {
+		struct pci_dev *pdev = to_pci_dev(dev);
+
+		mmio_size = (unsigned long long)pci_resource_len(pdev, 5);
+	}
+
 	/*
 	 * Preserve the ports capabilities defined by the platform. Note there
 	 * is no need in storing the rest of the P#.CMD fields since they are
@@ -588,6 +597,29 @@ void ahci_save_initial_config(struct device *dev, struct ahci_host_priv *hpriv)
 			continue;
 
 		port_mmio = __ahci_port_base(hpriv, i);
+
+		/* Calculate offset from MMIO base */
+		unsigned long long port_offset = (unsigned long long)port_mmio -
+						 (unsigned long long)mmio;
+		/* Check if port register block is within MMIO region */
+		if (is_pci_dev && port_offset >= mmio_size) {
+			/*
+			 * Port registers exceed MMIO region boundary.
+			 * Since ports are sequentially mapped (0x100 + i*0x80),
+			 * all subsequent ports will also exceed the boundary.
+			 *
+			 * Update port_map to exclude this and all higher ports,
+			 * then break out of the loop.
+			 */
+			dev_warn(dev, "Port %d (offset 0x%llx) exceeds MMIO region (0x%llx),
+				       truncating port map at port %d\n",
+				       i, port_offset, mmio_size, i-1);
+
+			port_map = (1UL << i) - 1;
+			hpriv->saved_port_map = port_map;
+			break;
+		}
+
 		hpriv->saved_port_cap[i] =
 			readl(port_mmio + PORT_CMD) & PORT_CMD_CAP;
 	}
