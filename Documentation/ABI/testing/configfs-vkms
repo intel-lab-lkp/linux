@@ -162,6 +162,42 @@ Description:
 	use '-' prefix. Use '+*' to add all formats, '-*' to
 	remove all.
 
+What:		/sys/kernel/config/vkms/<device>/planes/<plane>/zpos_enabled
+Date:		Nov 2025
+Contact:	dri-devel@lists.freedesktop.org
+Description:
+	Enable or disable the zpos property. Value: 1 - enabled,
+	0 - disabled.
+
+What:		/sys/kernel/config/vkms/<device>/planes/<plane>/zpos_mutable
+Date:		Nov 2025
+Contact:	dri-devel@lists.freedesktop.org
+Description:
+	Create the zpos property as mutable or immutable.
+	Value: 1 - mutable, 0 - immutable. No effect if
+	zpos_enabled is not set.
+
+What:		/sys/kernel/config/vkms/<device>/planes/<plane>/zpos_initial
+Date:		Nov 2025
+Contact:	dri-devel@lists.freedesktop.org
+Description:
+	Set the initial zpos value. Must be between zpos_min
+	and zpos_max. No effect if zpos_enabled is not set.
+
+What:		/sys/kernel/config/vkms/<device>/planes/<plane>/zpos_min
+Date:		Nov 2025
+Contact:	dri-devel@lists.freedesktop.org
+Description:
+	Set the minimal zpos value. No effect if zpos_enabled
+	is not set.
+
+What:		/sys/kernel/config/vkms/<device>/planes/<plane>/zpos_max
+Date:		Nov 2025
+Contact:	dri-devel@lists.freedesktop.org
+Description:
+	Set the maximal zpos value. No effect if zpos_enabled
+	is not set.
+
 What:		/sys/kernel/config/vkms/<device>/planes/<plane>/possible_crtcs
 Date:		Nov 2025
 Contact:	dri-devel@lists.freedesktop.org
