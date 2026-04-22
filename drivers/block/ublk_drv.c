@@ -5421,16 +5421,39 @@ err_free_pages:
 	return ret;
 }
 
+static void ublk_unpin_range_pages(unsigned long base_pfn,
+				   unsigned long nr_pages)
+{
+#define UBLK_UNPIN_BATCH	32
+	struct page *pages[UBLK_UNPIN_BATCH];
+	unsigned long off;
+
+	for (off = 0; off < nr_pages; ) {
+		unsigned int batch = min_t(unsigned long,
+					   nr_pages - off, UBLK_UNPIN_BATCH);
+		unsigned int j;
+
+		for (j = 0; j < batch; j++)
+			pages[j] = pfn_to_page(base_pfn + off + j);
+		unpin_user_pages(pages, batch);
+		off += batch;
+	}
+}
+
+/*
+ * Drop mas_lock during iteration to avoid unpinning pages under spinlock.
+ * Safe because callers hold ub->mutex (via ublk_lock_buf_tree), preventing
+ * concurrent tree modifications.
+ */
 static int __ublk_ctrl_unreg_buf(struct ublk_device *ub, int buf_index)
 {
 	MA_STATE(mas, &ub->buf_tree, 0, ULONG_MAX);
 	struct ublk_buf_range *range;
-	struct page *pages[32];
 	int ret = -ENOENT;
 
 	mas_lock(&mas);
 	mas_for_each(&mas, range, ULONG_MAX) {
-		unsigned long base, nr, off;
+		unsigned long base, nr;
 
 		if (range->buf_index != buf_index)
 			continue;
@@ -5439,18 +5462,12 @@ static int __ublk_ctrl_unreg_buf(struct ublk_device *ub, int buf_index)
 		base = mas.index;
 		nr = mas.last - base + 1;
 		mas_erase(&mas);
+		mas_unlock(&mas);
 
-		for (off = 0; off < nr; ) {
-			unsigned int batch = min_t(unsigned long,
-						   nr - off, 32);
-			unsigned int j;
-
-			for (j = 0; j < batch; j++)
-				pages[j] = pfn_to_page(base + off + j);
-			unpin_user_pages(pages, batch);
-			off += batch;
-		}
+		ublk_unpin_range_pages(base, nr);
 		kfree(range);
+
+		mas_lock(&mas);
 	}
 	mas_unlock(&mas);
 
@@ -5480,29 +5497,27 @@ static int ublk_ctrl_unreg_buf(struct ublk_device *ub,
 	return ret;
 }
 
+/*
+ * Drop mas_lock during iteration to avoid unpinning pages under spinlock.
+ * Safe because this is called from device release with exclusive access.
+ */
 static void ublk_buf_cleanup(struct ublk_device *ub)
 {
 	MA_STATE(mas, &ub->buf_tree, 0, ULONG_MAX);
 	struct ublk_buf_range *range;
-	struct page *pages[32];
 
+	mas_lock(&mas);
 	mas_for_each(&mas, range, ULONG_MAX) {
 		unsigned long base = mas.index;
 		unsigned long nr = mas.last - base + 1;
-		unsigned long off;
 
-		for (off = 0; off < nr; ) {
-			unsigned int batch = min_t(unsigned long,
-						   nr - off, 32);
-			unsigned int j;
-
-			for (j = 0; j < batch; j++)
-				pages[j] = pfn_to_page(base + off + j);
-			unpin_user_pages(pages, batch);
-			off += batch;
-		}
+		mas_erase(&mas);
+		mas_unlock(&mas);
+		ublk_unpin_range_pages(base, nr);
 		kfree(range);
+		mas_lock(&mas);
 	}
+	mas_unlock(&mas);
 	mtree_destroy(&ub->buf_tree);
 	ida_destroy(&ub->buf_ida);
 }
