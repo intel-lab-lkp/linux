@@ -187,6 +187,12 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
 		goto unlock_vm;
 	}
 
+	if (xe_vma_read_only(vma) &&
+	    pf->consumer.access_type != XE_PAGEFAULT_ACCESS_TYPE_READ) {
+		err = -EPERM;
+		goto unlock_vm;
+	}
+
 	atomic = xe_pagefault_access_is_atomic(pf->consumer.access_type);
 
 	if (xe_vma_is_cpu_addr_mirror(vma))
@@ -285,10 +291,9 @@ static int xe_pagefault_queue_init(struct xe_device *xe,
 		xe_dss_mask_t all_dss;
 		int num_dss, num_eus;
 
-		bitmap_or(all_dss, gt->fuse_topo.g_dss_mask,
+		num_dss = bitmap_weighted_or(all_dss, gt->fuse_topo.g_dss_mask,
 			  gt->fuse_topo.c_dss_mask, XE_MAX_DSS_FUSE_BITS);
 
-		num_dss = bitmap_weight(all_dss, XE_MAX_DSS_FUSE_BITS);
 		num_eus = bitmap_weight(gt->fuse_topo.eu_mask_per_dss,
 					XE_MAX_EU_FUSE_BITS) * num_dss;
 

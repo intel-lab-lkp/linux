@@ -23,6 +23,7 @@ struct zl3073x_dev;
  * @sync_ctrl: reference sync control
  * @config: reference config
  * @ffo: current fractional frequency offset
+ * @meas_freq: measured input frequency in Hz
  * @mon_status: reference monitor status
  */
 struct zl3073x_ref {
@@ -40,6 +41,7 @@ struct zl3073x_ref {
 	);
 	struct_group(stat, /* Status */
 		s64	ffo;
+		u32	meas_freq;
 		u8	mon_status;
 	);
 };
@@ -66,6 +68,18 @@ static inline s64
 zl3073x_ref_ffo_get(const struct zl3073x_ref *ref)
 {
 	return ref->ffo;
+}
+
+/**
+ * zl3073x_ref_meas_freq_get - get measured input frequency
+ * @ref: pointer to ref state
+ *
+ * Return: measured input frequency in Hz
+ */
+static inline u32
+zl3073x_ref_meas_freq_get(const struct zl3073x_ref *ref)
+{
+	return ref->meas_freq;
 }
 
 /**
@@ -104,6 +118,52 @@ zl3073x_ref_freq_set(struct zl3073x_ref *ref, u32 freq)
 	ref->freq_ratio_n = 1;
 
 	return 0;
+}
+
+/**
+ * zl3073x_ref_sync_mode_get - get sync control mode
+ * @ref: pointer to ref state
+ *
+ * Return: sync control mode (ZL_REF_SYNC_CTRL_MODE_*)
+ */
+static inline u8
+zl3073x_ref_sync_mode_get(const struct zl3073x_ref *ref)
+{
+	return FIELD_GET(ZL_REF_SYNC_CTRL_MODE, ref->sync_ctrl);
+}
+
+/**
+ * zl3073x_ref_sync_mode_set - set sync control mode
+ * @ref: pointer to ref state
+ * @mode: sync control mode (ZL_REF_SYNC_CTRL_MODE_*)
+ */
+static inline void
+zl3073x_ref_sync_mode_set(struct zl3073x_ref *ref, u8 mode)
+{
+	FIELD_MODIFY(ZL_REF_SYNC_CTRL_MODE, &ref->sync_ctrl, mode);
+}
+
+/**
+ * zl3073x_ref_sync_pair_get - get sync pair reference index
+ * @ref: pointer to ref state
+ *
+ * Return: paired reference index
+ */
+static inline u8
+zl3073x_ref_sync_pair_get(const struct zl3073x_ref *ref)
+{
+	return FIELD_GET(ZL_REF_SYNC_CTRL_PAIR, ref->sync_ctrl);
+}
+
+/**
+ * zl3073x_ref_sync_pair_set - set sync pair reference index
+ * @ref: pointer to ref state
+ * @pair: paired reference index
+ */
+static inline void
+zl3073x_ref_sync_pair_set(struct zl3073x_ref *ref, u8 pair)
+{
+	FIELD_MODIFY(ZL_REF_SYNC_CTRL_PAIR, &ref->sync_ctrl, pair);
 }
 
 /**

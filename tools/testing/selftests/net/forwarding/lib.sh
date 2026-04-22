@@ -467,17 +467,18 @@ if [ "${DRIVER_TEST_CONFORMANT}" = "yes" ]; then
 	TARGETS[$remote_netif]="$REMOTE_TYPE:$REMOTE_ARGS"
 else
 	count=0
+	# Prime NETIFS from the command line, but retain if none given.
+	if [[ $# -gt 0 ]]; then
+		unset NETIFS
+		declare -A NETIFS
 
-	while [[ $# -gt 0 ]]; do
-		if [[ "$count" -eq "0" ]]; then
-			unset NETIFS
-			declare -A NETIFS
-		fi
-		count=$((count + 1))
-		NETIFS[p$count]="$1"
-		TARGETS[$1]="local:"
-		shift
-	done
+		while [[ $# -gt 0 ]]; do
+			count=$((count + 1))
+			NETIFS[p$count]="$1"
+			TARGETS[$1]="local:"
+			shift
+		done
+	fi
 fi
 
 ##############################################################################
@@ -1749,12 +1750,17 @@ tcpdump_start()
 	sleep 1
 }
 
-tcpdump_stop()
+tcpdump_stop_nosleep()
 {
 	local if_name=$1
 	local pid=${cappid[$if_name]}
 
 	$ns_cmd kill "$pid" && wait "$pid"
+}
+
+tcpdump_stop()
+{
+	tcpdump_stop_nosleep "$1"
 	sleep 1
 }
 
@@ -1769,7 +1775,7 @@ tcpdump_show()
 {
 	local if_name=$1
 
-	tcpdump -e -n -r ${capfile[$if_name]} 2>&1
+	tcpdump -e -nn -r ${capfile[$if_name]} 2>&1
 }
 
 # return 0 if the packet wasn't seen on host2_if or 1 if it was

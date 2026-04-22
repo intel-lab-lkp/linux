@@ -300,7 +300,8 @@ static int raw_rcv_skb(struct sock *sk, struct sk_buff *skb)
 	/* Charge it to the socket. */
 
 	ipv4_pktinfo_prepare(sk, skb, true);
-	if (sock_queue_rcv_skb_reason(sk, skb, &reason) < 0) {
+	reason = sock_queue_rcv_skb_reason(sk, skb);
+	if (reason) {
 		sk_skb_reason_drop(sk, skb, reason);
 		return NET_RX_DROP;
 	}
@@ -1041,7 +1042,7 @@ static void raw_sock_seq_show(struct seq_file *seq, struct sock *sp, int i)
 	      srcp  = inet->inet_num;
 
 	seq_printf(seq, "%4d: %08X:%04X %08X:%04X"
-		" %02X %08X:%08X %02X:%08lX %08X %5u %8d %lu %d %pK %u\n",
+		" %02X %08X:%08X %02X:%08lX %08X %5u %8d %llu %d %pK %u\n",
 		i, src, srcp, dest, destp, sp->sk_state,
 		sk_wmem_alloc_get(sp),
 		sk_rmem_alloc_get(sp),

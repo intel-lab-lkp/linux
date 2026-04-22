@@ -888,9 +888,7 @@ ssize_t tcp_splice_read(struct socket *sock, loff_t *ppos,
 		release_sock(sk);
 		lock_sock(sk);
 
-		if (sk->sk_err || sk->sk_state == TCP_CLOSE ||
-		    (sk->sk_shutdown & RCV_SHUTDOWN) ||
-		    signal_pending(current))
+		if (tcp_recv_should_stop(sk))
 			break;
 	}
 
@@ -1860,6 +1858,11 @@ int tcp_set_rcvlowat(struct sock *sk, int val)
 	return 0;
 }
 
+void tcp_set_rcvbuf(struct sock *sk, int val)
+{
+	tcp_set_window_clamp(sk, tcp_win_from_space(sk, val));
+}
+
 #ifdef CONFIG_MMU
 static const struct vm_operations_struct tcp_vm_ops = {
 };
@@ -2755,10 +2758,7 @@ static int tcp_recvmsg_locked(struct sock *sk, struct msghdr *msg, size_t len,
 
 		if (copied) {
 			if (!timeo ||
-			    sk->sk_err ||
-			    sk->sk_state == TCP_CLOSE ||
-			    (sk->sk_shutdown & RCV_SHUTDOWN) ||
-			    signal_pending(current))
+			    tcp_recv_should_stop(sk))
 				break;
 		} else {
 			if (sock_flag(sk, SOCK_DONE))

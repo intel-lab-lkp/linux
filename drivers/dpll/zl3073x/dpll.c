@@ -13,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/netlink.h>
 #include <linux/platform_device.h>
+#include <linux/property.h>
 #include <linux/slab.h>
 #include <linux/sprintf.h>
 
@@ -30,6 +31,7 @@
  * @dpll: DPLL the pin is registered to
  * @dpll_pin: pointer to registered dpll_pin
  * @tracker: tracking object for the acquired reference
+ * @fwnode: firmware node handle
  * @label: package label
  * @dir: pin direction
  * @id: pin id
@@ -39,12 +41,14 @@
  * @pin_state: last saved pin state
  * @phase_offset: last saved pin phase offset
  * @freq_offset: last saved fractional frequency offset
+ * @measured_freq: last saved measured frequency
  */
 struct zl3073x_dpll_pin {
 	struct list_head	list;
 	struct zl3073x_dpll	*dpll;
 	struct dpll_pin		*dpll_pin;
 	dpll_tracker		tracker;
+	struct fwnode_handle	*fwnode;
 	char			label[8];
 	enum dpll_pin_direction	dir;
 	u8			id;
@@ -54,6 +58,7 @@ struct zl3073x_dpll_pin {
 	enum dpll_pin_state	pin_state;
 	s64			phase_offset;
 	s64			freq_offset;
+	u32			measured_freq;
 };
 
 /*
@@ -131,7 +136,13 @@ zl3073x_dpll_input_pin_esync_get(const struct dpll_pin *dpll_pin,
 	ref_id = zl3073x_input_pin_ref_get(pin->id);
 	ref = zl3073x_ref_state_get(zldev, ref_id);
 
-	switch (FIELD_GET(ZL_REF_SYNC_CTRL_MODE, ref->sync_ctrl)) {
+	if (!pin->esync_control || zl3073x_ref_freq_get(ref) <= 1)
+		return -EOPNOTSUPP;
+
+	esync->range = esync_freq_ranges;
+	esync->range_num = ARRAY_SIZE(esync_freq_ranges);
+
+	switch (zl3073x_ref_sync_mode_get(ref)) {
 	case ZL_REF_SYNC_CTRL_MODE_50_50_ESYNC_25_75:
 		esync->freq = ref->esync_n_div == ZL_REF_ESYNC_DIV_1HZ ? 1 : 0;
 		esync->pulse = 25;
@@ -140,17 +151,6 @@ zl3073x_dpll_input_pin_esync_get(const struct dpll_pin *dpll_pin,
 		esync->freq = 0;
 		esync->pulse = 0;
 		break;
-	}
-
-	/* If the pin supports esync control expose its range but only
-	 * if the current reference frequency is > 1 Hz.
-	 */
-	if (pin->esync_control && zl3073x_ref_freq_get(ref) > 1) {
-		esync->range = esync_freq_ranges;
-		esync->range_num = ARRAY_SIZE(esync_freq_ranges);
-	} else {
-		esync->range = NULL;
-		esync->range_num = 0;
 	}
 
 	return 0;
@@ -178,8 +178,7 @@ zl3073x_dpll_input_pin_esync_set(const struct dpll_pin *dpll_pin,
 	else
 		sync_mode = ZL_REF_SYNC_CTRL_MODE_50_50_ESYNC_25_75;
 
-	ref.sync_ctrl &= ~ZL_REF_SYNC_CTRL_MODE;
-	ref.sync_ctrl |= FIELD_PREP(ZL_REF_SYNC_CTRL_MODE, sync_mode);
+	zl3073x_ref_sync_mode_set(&ref, sync_mode);
 
 	if (freq) {
 		/* 1 Hz is only supported frequency now */
@@ -191,6 +190,109 @@ zl3073x_dpll_input_pin_esync_set(const struct dpll_pin *dpll_pin,
 }
 
 static int
+zl3073x_dpll_input_pin_ref_sync_get(const struct dpll_pin *dpll_pin,
+				    void *pin_priv,
+				    const struct dpll_pin *ref_sync_pin,
+				    void *ref_sync_pin_priv,
+				    enum dpll_pin_state *state,
+				    struct netlink_ext_ack *extack)
+{
+	struct zl3073x_dpll_pin *sync_pin = ref_sync_pin_priv;
+	struct zl3073x_dpll_pin *pin = pin_priv;
+	struct zl3073x_dpll *zldpll = pin->dpll;
+	struct zl3073x_dev *zldev = zldpll->dev;
+	const struct zl3073x_ref *ref;
+	u8 ref_id, mode, pair;
+
+	ref_id = zl3073x_input_pin_ref_get(pin->id);
+	ref = zl3073x_ref_state_get(zldev, ref_id);
+	mode = zl3073x_ref_sync_mode_get(ref);
+	pair = zl3073x_ref_sync_pair_get(ref);
+
+	if (mode == ZL_REF_SYNC_CTRL_MODE_REFSYNC_PAIR &&
+	    pair == zl3073x_input_pin_ref_get(sync_pin->id))
+		*state = DPLL_PIN_STATE_CONNECTED;
+	else
+		*state = DPLL_PIN_STATE_DISCONNECTED;
+
+	return 0;
+}
+
+static int
+zl3073x_dpll_input_pin_ref_sync_set(const struct dpll_pin *dpll_pin,
+				    void *pin_priv,
+				    const struct dpll_pin *ref_sync_pin,
+				    void *ref_sync_pin_priv,
+				    const enum dpll_pin_state state,
+				    struct netlink_ext_ack *extack)
+{
+	struct zl3073x_dpll_pin *sync_pin = ref_sync_pin_priv;
+	struct zl3073x_dpll_pin *pin = pin_priv;
+	struct zl3073x_dpll *zldpll = pin->dpll;
+	struct zl3073x_dev *zldev = zldpll->dev;
+	u8 mode, ref_id, sync_ref_id;
+	struct zl3073x_chan chan;
+	struct zl3073x_ref ref;
+	int rc;
+
+	ref_id = zl3073x_input_pin_ref_get(pin->id);
+	sync_ref_id = zl3073x_input_pin_ref_get(sync_pin->id);
+	ref = *zl3073x_ref_state_get(zldev, ref_id);
+
+	if (state == DPLL_PIN_STATE_CONNECTED) {
+		const struct zl3073x_ref *sync_ref;
+		u32 ref_freq, sync_freq;
+
+		sync_ref = zl3073x_ref_state_get(zldev, sync_ref_id);
+		ref_freq = zl3073x_ref_freq_get(&ref);
+		sync_freq = zl3073x_ref_freq_get(sync_ref);
+
+		/* Sync signal must be 8 kHz or less and clock reference
+		 * must be 1 kHz or more and higher than the sync signal.
+		 */
+		if (sync_freq > 8000) {
+			NL_SET_ERR_MSG(extack,
+				       "sync frequency must be 8 kHz or less");
+			return -EINVAL;
+		}
+		if (ref_freq < 1000) {
+			NL_SET_ERR_MSG(extack,
+				       "clock frequency must be 1 kHz or more");
+			return -EINVAL;
+		}
+		if (ref_freq <= sync_freq) {
+			NL_SET_ERR_MSG(extack,
+				       "clock frequency must be higher than sync frequency");
+			return -EINVAL;
+		}
+
+		zl3073x_ref_sync_pair_set(&ref, sync_ref_id);
+		mode = ZL_REF_SYNC_CTRL_MODE_REFSYNC_PAIR;
+	} else {
+		mode = ZL_REF_SYNC_CTRL_MODE_REFSYNC_PAIR_OFF;
+	}
+
+	zl3073x_ref_sync_mode_set(&ref, mode);
+
+	rc = zl3073x_ref_state_set(zldev, ref_id, &ref);
+	if (rc)
+		return rc;
+
+	/* Exclude sync source from automatic reference selection by setting
+	 * its priority to NONE. On disconnect the priority is left as NONE
+	 * and the user must explicitly make the pin selectable again.
+	 */
+	if (state == DPLL_PIN_STATE_CONNECTED) {
+		chan = *zl3073x_chan_state_get(zldev, zldpll->id);
+		zl3073x_chan_ref_prio_set(&chan, sync_ref_id,
+					  ZL_DPLL_REF_PRIO_NONE);
+		return zl3073x_chan_state_set(zldev, zldpll->id, &chan);
+	}
+
+	return 0;
+}
+
+static int
 zl3073x_dpll_input_pin_ffo_get(const struct dpll_pin *dpll_pin, void *pin_priv,
 			       const struct dpll_device *dpll, void *dpll_priv,
 			       s64 *ffo, struct netlink_ext_ack *extack)
@@ -198,6 +300,21 @@ zl3073x_dpll_input_pin_ffo_get(const struct dpll_pin *dpll_pin, void *pin_priv,
 	struct zl3073x_dpll_pin *pin = pin_priv;
 
 	*ffo = pin->freq_offset;
+
+	return 0;
+}
+
+static int
+zl3073x_dpll_input_pin_measured_freq_get(const struct dpll_pin *dpll_pin,
+					 void *pin_priv,
+					 const struct dpll_device *dpll,
+					 void *dpll_priv, u64 *measured_freq,
+					 struct netlink_ext_ack *extack)
+{
+	struct zl3073x_dpll_pin *pin = pin_priv;
+
+	*measured_freq = pin->measured_freq;
+	*measured_freq *= DPLL_PIN_MEASURED_FREQUENCY_DIVIDER;
 
 	return 0;
 }
@@ -582,8 +699,8 @@ zl3073x_dpll_output_pin_esync_get(const struct dpll_pin *dpll_pin,
 	struct zl3073x_dpll_pin *pin = pin_priv;
 	const struct zl3073x_synth *synth;
 	const struct zl3073x_out *out;
-	u8 clock_type, out_id;
-	u32 synth_freq;
+	u32 synth_freq, out_freq;
+	u8 out_id;
 
 	out_id = zl3073x_output_pin_out_get(pin->id);
 	out = zl3073x_out_state_get(zldev, out_id);
@@ -592,29 +709,30 @@ zl3073x_dpll_output_pin_esync_get(const struct dpll_pin *dpll_pin,
 	 * for N-division is also used for the esync divider so both cannot
 	 * be used.
 	 */
-	switch (zl3073x_out_signal_format_get(out)) {
-	case ZL_OUTPUT_MODE_SIGNAL_FORMAT_2_NDIV:
-	case ZL_OUTPUT_MODE_SIGNAL_FORMAT_2_NDIV_INV:
+	if (zl3073x_out_is_ndiv(out))
 		return -EOPNOTSUPP;
-	default:
-		break;
-	}
 
 	/* Get attached synth frequency */
 	synth = zl3073x_synth_state_get(zldev, zl3073x_out_synth_get(out));
 	synth_freq = zl3073x_synth_freq_get(synth);
+	out_freq = synth_freq / out->div;
 
-	clock_type = FIELD_GET(ZL_OUTPUT_MODE_CLOCK_TYPE, out->mode);
-	if (clock_type != ZL_OUTPUT_MODE_CLOCK_TYPE_ESYNC) {
+	if (!pin->esync_control || out_freq <= 1)
+		return -EOPNOTSUPP;
+
+	esync->range = esync_freq_ranges;
+	esync->range_num = ARRAY_SIZE(esync_freq_ranges);
+
+	if (zl3073x_out_clock_type_get(out) != ZL_OUTPUT_MODE_CLOCK_TYPE_ESYNC) {
 		/* No need to read esync data if it is not enabled */
 		esync->freq = 0;
 		esync->pulse = 0;
 
-		goto finish;
+		return 0;
 	}
 
 	/* Compute esync frequency */
-	esync->freq = synth_freq / out->div / out->esync_n_period;
+	esync->freq = out_freq / out->esync_n_period;
 
 	/* By comparing the esync_pulse_width to the half of the pulse width
 	 * the esync pulse percentage can be determined.
@@ -622,18 +740,6 @@ zl3073x_dpll_output_pin_esync_get(const struct dpll_pin *dpll_pin,
 	 * is why it reduces down to be output_div.
 	 */
 	esync->pulse = (50 * out->esync_n_width) / out->div;
-
-finish:
-	/* Set supported esync ranges if the pin supports esync control and
-	 * if the output frequency is > 1 Hz.
-	 */
-	if (pin->esync_control && (synth_freq / out->div) > 1) {
-		esync->range = esync_freq_ranges;
-		esync->range_num = ARRAY_SIZE(esync_freq_ranges);
-	} else {
-		esync->range = NULL;
-		esync->range_num = 0;
-	}
 
 	return 0;
 }
@@ -650,8 +756,8 @@ zl3073x_dpll_output_pin_esync_set(const struct dpll_pin *dpll_pin,
 	struct zl3073x_dpll_pin *pin = pin_priv;
 	const struct zl3073x_synth *synth;
 	struct zl3073x_out out;
-	u8 clock_type, out_id;
 	u32 synth_freq;
+	u8 out_id;
 
 	out_id = zl3073x_output_pin_out_get(pin->id);
 	out = *zl3073x_out_state_get(zldev, out_id);
@@ -660,23 +766,16 @@ zl3073x_dpll_output_pin_esync_set(const struct dpll_pin *dpll_pin,
 	 * for N-division is also used for the esync divider so both cannot
 	 * be used.
 	 */
-	switch (zl3073x_out_signal_format_get(&out)) {
-	case ZL_OUTPUT_MODE_SIGNAL_FORMAT_2_NDIV:
-	case ZL_OUTPUT_MODE_SIGNAL_FORMAT_2_NDIV_INV:
+	if (zl3073x_out_is_ndiv(&out))
 		return -EOPNOTSUPP;
-	default:
-		break;
-	}
-
-	/* Select clock type */
-	if (freq)
-		clock_type = ZL_OUTPUT_MODE_CLOCK_TYPE_ESYNC;
-	else
-		clock_type = ZL_OUTPUT_MODE_CLOCK_TYPE_NORMAL;
 
 	/* Update clock type in output mode */
-	out.mode &= ~ZL_OUTPUT_MODE_CLOCK_TYPE;
-	out.mode |= FIELD_PREP(ZL_OUTPUT_MODE_CLOCK_TYPE, clock_type);
+	if (freq)
+		zl3073x_out_clock_type_set(&out,
+					   ZL_OUTPUT_MODE_CLOCK_TYPE_ESYNC);
+	else
+		zl3073x_out_clock_type_set(&out,
+					   ZL_OUTPUT_MODE_CLOCK_TYPE_NORMAL);
 
 	/* If esync is being disabled just write mailbox and finish */
 	if (!freq)
@@ -728,9 +827,9 @@ zl3073x_dpll_output_pin_frequency_set(const struct dpll_pin *dpll_pin,
 	struct zl3073x_dev *zldev = zldpll->dev;
 	struct zl3073x_dpll_pin *pin = pin_priv;
 	const struct zl3073x_synth *synth;
-	u8 out_id, signal_format;
 	u32 new_div, synth_freq;
 	struct zl3073x_out out;
+	u8 out_id;
 
 	out_id = zl3073x_output_pin_out_get(pin->id);
 	out = *zl3073x_out_state_get(zldev, out_id);
@@ -740,12 +839,8 @@ zl3073x_dpll_output_pin_frequency_set(const struct dpll_pin *dpll_pin,
 	synth_freq = zl3073x_synth_freq_get(synth);
 	new_div = synth_freq / (u32)frequency;
 
-	/* Get used signal format for the given output */
-	signal_format = zl3073x_out_signal_format_get(&out);
-
 	/* Check signal format */
-	if (signal_format != ZL_OUTPUT_MODE_SIGNAL_FORMAT_2_NDIV &&
-	    signal_format != ZL_OUTPUT_MODE_SIGNAL_FORMAT_2_NDIV_INV) {
+	if (!zl3073x_out_is_ndiv(&out)) {
 		/* For non N-divided signal formats the frequency is computed
 		 * as division of synth frequency and output divisor.
 		 */
@@ -1116,6 +1211,35 @@ zl3073x_dpll_phase_offset_monitor_set(const struct dpll_device *dpll,
 	return 0;
 }
 
+static int
+zl3073x_dpll_freq_monitor_get(const struct dpll_device *dpll,
+			      void *dpll_priv,
+			      enum dpll_feature_state *state,
+			      struct netlink_ext_ack *extack)
+{
+	struct zl3073x_dpll *zldpll = dpll_priv;
+
+	if (zldpll->freq_monitor)
+		*state = DPLL_FEATURE_STATE_ENABLE;
+	else
+		*state = DPLL_FEATURE_STATE_DISABLE;
+
+	return 0;
+}
+
+static int
+zl3073x_dpll_freq_monitor_set(const struct dpll_device *dpll,
+			      void *dpll_priv,
+			      enum dpll_feature_state state,
+			      struct netlink_ext_ack *extack)
+{
+	struct zl3073x_dpll *zldpll = dpll_priv;
+
+	zldpll->freq_monitor = (state == DPLL_FEATURE_STATE_ENABLE);
+
+	return 0;
+}
+
 static const struct dpll_pin_ops zl3073x_dpll_input_pin_ops = {
 	.direction_get = zl3073x_dpll_pin_direction_get,
 	.esync_get = zl3073x_dpll_input_pin_esync_get,
@@ -1123,11 +1247,14 @@ static const struct dpll_pin_ops zl3073x_dpll_input_pin_ops = {
 	.ffo_get = zl3073x_dpll_input_pin_ffo_get,
 	.frequency_get = zl3073x_dpll_input_pin_frequency_get,
 	.frequency_set = zl3073x_dpll_input_pin_frequency_set,
+	.measured_freq_get = zl3073x_dpll_input_pin_measured_freq_get,
 	.phase_offset_get = zl3073x_dpll_input_pin_phase_offset_get,
 	.phase_adjust_get = zl3073x_dpll_input_pin_phase_adjust_get,
 	.phase_adjust_set = zl3073x_dpll_input_pin_phase_adjust_set,
 	.prio_get = zl3073x_dpll_input_pin_prio_get,
 	.prio_set = zl3073x_dpll_input_pin_prio_set,
+	.ref_sync_get = zl3073x_dpll_input_pin_ref_sync_get,
+	.ref_sync_set = zl3073x_dpll_input_pin_ref_sync_set,
 	.state_on_dpll_get = zl3073x_dpll_input_pin_state_on_dpll_get,
 	.state_on_dpll_set = zl3073x_dpll_input_pin_state_on_dpll_set,
 };
@@ -1151,6 +1278,8 @@ static const struct dpll_device_ops zl3073x_dpll_device_ops = {
 	.phase_offset_avg_factor_set = zl3073x_dpll_phase_offset_avg_factor_set,
 	.phase_offset_monitor_get = zl3073x_dpll_phase_offset_monitor_get,
 	.phase_offset_monitor_set = zl3073x_dpll_phase_offset_monitor_set,
+	.freq_monitor_get = zl3073x_dpll_freq_monitor_get,
+	.freq_monitor_set = zl3073x_dpll_freq_monitor_set,
 	.supported_modes_get = zl3073x_dpll_supported_modes_get,
 };
 
@@ -1218,8 +1347,11 @@ zl3073x_dpll_pin_register(struct zl3073x_dpll_pin *pin, u32 index)
 	if (IS_ERR(props))
 		return PTR_ERR(props);
 
-	/* Save package label, esync capability and phase adjust granularity */
+	/* Save package label, fwnode, esync capability and phase adjust
+	 * granularity.
+	 */
 	strscpy(pin->label, props->package_label);
+	pin->fwnode = fwnode_handle_get(props->fwnode);
 	pin->esync_control = props->esync_control;
 	pin->phase_gran = props->dpll_props.phase_gran;
 
@@ -1264,6 +1396,8 @@ err_register:
 	dpll_pin_put(pin->dpll_pin, &pin->tracker);
 	pin->dpll_pin = NULL;
 err_pin_get:
+	fwnode_handle_put(pin->fwnode);
+	pin->fwnode = NULL;
 	zl3073x_pin_props_put(props);
 
 	return rc;
@@ -1293,6 +1427,9 @@ zl3073x_dpll_pin_unregister(struct zl3073x_dpll_pin *pin)
 
 	dpll_pin_put(pin->dpll_pin, &pin->tracker);
 	pin->dpll_pin = NULL;
+
+	fwnode_handle_put(pin->fwnode);
+	pin->fwnode = NULL;
 }
 
 /**
@@ -1572,6 +1709,7 @@ zl3073x_dpll_pin_ffo_check(struct zl3073x_dpll_pin *pin)
 	struct zl3073x_dev *zldev = zldpll->dev;
 	const struct zl3073x_ref *ref;
 	u8 ref_id;
+	s64 ffo;
 
 	/* Get reference monitor status */
 	ref_id = zl3073x_input_pin_ref_get(pin->id);
@@ -1582,10 +1720,47 @@ zl3073x_dpll_pin_ffo_check(struct zl3073x_dpll_pin *pin)
 		return false;
 
 	/* Compare with previous value */
-	if (pin->freq_offset != ref->ffo) {
+	ffo = zl3073x_ref_ffo_get(ref);
+	if (pin->freq_offset != ffo) {
 		dev_dbg(zldev->dev, "%s freq offset changed: %lld -> %lld\n",
-			pin->label, pin->freq_offset, ref->ffo);
-		pin->freq_offset = ref->ffo;
+			pin->label, pin->freq_offset, ffo);
+		pin->freq_offset = ffo;
+
+		return true;
+	}
+
+	return false;
+}
+
+/**
+ * zl3073x_dpll_pin_measured_freq_check - check for pin measured frequency
+ * change
+ * @pin: pin to check
+ *
+ * Check for the given pin's measured frequency change.
+ *
+ * Return: true on measured frequency change, false otherwise
+ */
+static bool
+zl3073x_dpll_pin_measured_freq_check(struct zl3073x_dpll_pin *pin)
+{
+	struct zl3073x_dpll *zldpll = pin->dpll;
+	struct zl3073x_dev *zldev = zldpll->dev;
+	const struct zl3073x_ref *ref;
+	u8 ref_id;
+	u32 freq;
+
+	if (!zldpll->freq_monitor)
+		return false;
+
+	ref_id = zl3073x_input_pin_ref_get(pin->id);
+	ref = zl3073x_ref_state_get(zldev, ref_id);
+
+	freq = zl3073x_ref_meas_freq_get(ref);
+	if (pin->measured_freq != freq) {
+		dev_dbg(zldev->dev, "%s measured freq changed: %u -> %u\n",
+			pin->label, pin->measured_freq, freq);
+		pin->measured_freq = freq;
 
 		return true;
 	}
@@ -1677,12 +1852,17 @@ zl3073x_dpll_changes_check(struct zl3073x_dpll *zldpll)
 			pin_changed = true;
 		}
 
-		/* Check for phase offset and ffo change once per second */
+		/* Check for phase offset, ffo, and measured freq change
+		 * once per second.
+		 */
 		if (zldpll->check_count % 2 == 0) {
 			if (zl3073x_dpll_pin_phase_offset_check(pin))
 				pin_changed = true;
 
 			if (zl3073x_dpll_pin_ffo_check(pin))
+				pin_changed = true;
+
+			if (zl3073x_dpll_pin_measured_freq_check(pin))
 				pin_changed = true;
 		}
 
@@ -1764,6 +1944,88 @@ zl3073x_dpll_free(struct zl3073x_dpll *zldpll)
 }
 
 /**
+ * zl3073x_dpll_ref_sync_pair_register - register ref_sync pairs for a pin
+ * @pin: pointer to zl3073x_dpll_pin structure
+ *
+ * Iterates 'ref-sync-sources' phandles in the pin's firmware node and
+ * registers each declared pairing.
+ *
+ * Return: 0 on success, <0 on error
+ */
+static int
+zl3073x_dpll_ref_sync_pair_register(struct zl3073x_dpll_pin *pin)
+{
+	struct zl3073x_dev *zldev = pin->dpll->dev;
+	struct fwnode_handle *fwnode;
+	struct dpll_pin *sync_pin;
+	dpll_tracker tracker;
+	int n, rc;
+
+	for (n = 0; ; n++) {
+		/* Get n'th ref-sync source */
+		fwnode = fwnode_find_reference(pin->fwnode, "ref-sync-sources",
+					       n);
+		if (IS_ERR(fwnode)) {
+			rc = PTR_ERR(fwnode);
+			break;
+		}
+
+		/* Find associated dpll pin */
+		sync_pin = fwnode_dpll_pin_find(fwnode, &tracker);
+		fwnode_handle_put(fwnode);
+		if (!sync_pin) {
+			dev_warn(zldev->dev, "%s: ref-sync source %d not found",
+				 pin->label, n);
+			continue;
+		}
+
+		/* Register new ref-sync pair */
+		rc = dpll_pin_ref_sync_pair_add(pin->dpll_pin, sync_pin);
+		dpll_pin_put(sync_pin, &tracker);
+
+		/* -EBUSY means pairing already exists from another DPLL's
+		 * registration.
+		 */
+		if (rc && rc != -EBUSY) {
+			dev_err(zldev->dev,
+				"%s: failed to add ref-sync source %d: %pe",
+				pin->label, n, ERR_PTR(rc));
+			break;
+		}
+	}
+
+	return rc != -ENOENT ? rc : 0;
+}
+
+/**
+ * zl3073x_dpll_ref_sync_pairs_register - register ref_sync pairs for a DPLL
+ * @zldpll: pointer to zl3073x_dpll structure
+ *
+ * Iterates all registered input pins of the given DPLL and establishes
+ * ref_sync pairings declared by 'ref-sync-sources' phandles in the
+ * device tree.
+ *
+ * Return: 0 on success, <0 on error
+ */
+static int
+zl3073x_dpll_ref_sync_pairs_register(struct zl3073x_dpll *zldpll)
+{
+	struct zl3073x_dpll_pin *pin;
+	int rc;
+
+	list_for_each_entry(pin, &zldpll->pins, list) {
+		if (!zl3073x_dpll_is_input_pin(pin) || !pin->fwnode)
+			continue;
+
+		rc = zl3073x_dpll_ref_sync_pair_register(pin);
+		if (rc)
+			return rc;
+	}
+
+	return 0;
+}
+
+/**
  * zl3073x_dpll_register - register DPLL device and all its pins
  * @zldpll: pointer to zl3073x_dpll structure
  *
@@ -1782,6 +2044,13 @@ zl3073x_dpll_register(struct zl3073x_dpll *zldpll)
 
 	rc = zl3073x_dpll_pins_register(zldpll);
 	if (rc) {
+		zl3073x_dpll_device_unregister(zldpll);
+		return rc;
+	}
+
+	rc = zl3073x_dpll_ref_sync_pairs_register(zldpll);
+	if (rc) {
+		zl3073x_dpll_pins_unregister(zldpll);
 		zl3073x_dpll_device_unregister(zldpll);
 		return rc;
 	}
