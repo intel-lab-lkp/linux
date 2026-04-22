@@ -192,11 +192,8 @@ static const struct dentry_operations efivarfs_d_ops = {
 static struct dentry *efivarfs_alloc_dentry(struct dentry *parent, char *name)
 {
 	struct dentry *d;
-	struct qstr q;
+	struct qstr q = QSTR(name);
 	int err;
-
-	q.name = name;
-	q.len = strlen(name);
 
 	err = efivarfs_d_hash(parent, &q);
 	if (err)
