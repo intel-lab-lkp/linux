@@ -45,6 +45,15 @@ properties:
     $ref: /schemas/types.yaml#/definitions/uint32
     description: Number of daisy-chained shift registers
 
+  registers-default:
+    $ref: /schemas/types.yaml#/definitions/uint8-array
+    description:
+      Initial state of the daisy-chained outputs, written by the driver
+      before the gpiochip is registered. One byte per cascaded register,
+      in the same order used by the driver's buffer (the first byte
+      targets the last register in the chain). When absent, outputs come
+      up zeroed. The number of entries must match 'registers-number'.
+
   enable-gpios:
     description: GPIO connected to the OE (Output Enable) pin.
     maxItems: 1
@@ -79,6 +88,7 @@ examples:
             gpio-controller;
             #gpio-cells = <2>;
             registers-number = <4>;
+            registers-default = /bits/ 8 <0xff 0xff 0x00 0x00>;
             spi-max-frequency = <100000>;
         };
     };
