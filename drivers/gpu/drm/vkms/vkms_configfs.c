@@ -114,6 +114,7 @@ struct vkms_configfs_encoder {
 struct vkms_configfs_connector {
 	struct config_group group;
 	struct config_group possible_encoders_group;
+	struct config_group parent_group;
 	struct vkms_configfs_device *dev;
 	struct vkms_config_connector *config;
 };
@@ -150,6 +151,10 @@ struct vkms_configfs_connector {
 #define connector_possible_encoders_item_to_vkms_configfs_connector(item) \
 	container_of(to_config_group((item)), struct vkms_configfs_connector, \
 		     possible_encoders_group)
+
+#define connector_parent_item_to_vkms_configfs_connector(item) \
+	container_of(to_config_group((item)), struct vkms_configfs_connector, \
+		     parent_group)
 
 static ssize_t crtc_writeback_show(struct config_item *item, char *page)
 {
@@ -1457,6 +1462,42 @@ static ssize_t connector_dynamic_store(struct config_item *item,
 	return count;
 }
 
+static ssize_t connector_port_id_show(struct config_item *item, char *page)
+{
+	struct vkms_configfs_connector *connector;
+	u8 port_id;
+
+	connector = connector_item_to_vkms_configfs_connector(item);
+
+	scoped_guard(mutex, &connector->dev->lock)
+		port_id = vkms_config_connector_get_port_id(connector->config);
+
+	return sprintf(page, "%u\n", port_id);
+}
+
+static ssize_t connector_port_id_store(struct config_item *item,
+				   const char *page, size_t count)
+{
+	struct vkms_configfs_connector *connector;
+	u8 port_id;
+	int ret;
+
+	connector = connector_item_to_vkms_configfs_connector(item);
+
+	ret = kstrtou8(page, 10, &port_id);
+	if (ret)
+		return ret;
+
+	scoped_guard(mutex, &connector->dev->lock) {
+		if (connector->dev->enabled && connector_is_enabled(connector->config))
+			return -EBUSY;
+
+		vkms_config_connector_set_port_id(connector->config, port_id);
+	}
+
+	return count;
+}
+
 CONFIGFS_ATTR(connector_, status);
 CONFIGFS_ATTR(connector_, type);
 CONFIGFS_ATTR(connector_, supported_colorspaces);
@@ -1464,6 +1505,7 @@ CONFIGFS_ATTR(connector_, edid_enabled);
 CONFIGFS_ATTR(connector_, edid);
 CONFIGFS_ATTR(connector_, dynamic);
 CONFIGFS_ATTR(connector_, enabled);
+CONFIGFS_ATTR(connector_, port_id);
 
 static struct configfs_attribute *connector_item_attrs[] = {
 	&connector_attr_status,
@@ -1473,6 +1515,7 @@ static struct configfs_attribute *connector_item_attrs[] = {
 	&connector_attr_edid,
 	&connector_attr_dynamic,
 	&connector_attr_enabled,
+	&connector_attr_port_id,
 	NULL,
 };
 
@@ -1568,6 +1611,63 @@ static const struct config_item_type connector_possible_encoders_group_type = {
 	.ct_owner	= THIS_MODULE,
 };
 
+static int connector_parent_connector_allow_link(struct config_item *src,
+						 struct config_item *target)
+{
+	struct vkms_configfs_connector *connector;
+	struct vkms_config_connector *connector_cfg;
+	struct vkms_configfs_connector *parent;
+	struct vkms_config_connector *parent_cfg;
+	int ret;
+
+	if (target->ci_type != &connector_item_type)
+		return -EINVAL;
+
+	connector = connector_parent_item_to_vkms_configfs_connector(src);
+	connector_cfg = connector->config;
+	parent = connector_item_to_vkms_configfs_connector(target);
+	parent_cfg = parent->config;
+
+	if (connector->dev != parent->dev)
+		return -EINVAL;
+
+	scoped_guard(mutex, &connector->dev->lock) {
+		if (vkms_config_connector_get_parent(connector_cfg))
+			return -EMLINK;
+
+		if (connector->dev->enabled && connector_cfg->enabled)
+			return -EBUSY;
+
+		vkms_config_connector_attach_parent(connector_cfg,
+						    parent_cfg);
+	}
+
+	return ret;
+}
+
+static void connector_parent_connector_drop_link(struct config_item *src,
+						  struct config_item *target)
+{
+	struct vkms_configfs_connector *connector;
+	struct vkms_config_connector *connector_cfg;
+
+	connector = connector_parent_item_to_vkms_configfs_connector(src);
+	connector_cfg = connector->config;
+
+	scoped_guard(mutex, &connector->dev->lock)
+		vkms_config_connector_attach_parent(connector_cfg, NULL);
+}
+
+static struct configfs_item_operations connector_parent_item_operations = {
+	.allow_link	= connector_parent_connector_allow_link,
+	.drop_link	= connector_parent_connector_drop_link,
+};
+
+static const struct config_item_type connector_parent_group_type = {
+	.ct_item_ops	= &connector_parent_item_operations,
+	.ct_owner	= THIS_MODULE,
+};
+
 static struct config_group *make_connector_group(struct config_group *group,
 						 const char *name)
 {
@@ -1600,6 +1700,10 @@ static struct config_group *make_connector_group(struct config_group *group,
 		config_group_init_type_name(&connector->possible_encoders_group,
 					    "possible_encoders",
 					    &connector_possible_encoders_group_type);
+		config_group_init_type_name(&connector->parent_group,
+					    "parent",
+					    &connector_parent_group_type);
+		configfs_add_default_group(&connector->parent_group, &connector->group);
 		configfs_add_default_group(&connector->possible_encoders_group,
 					   &connector->group);
 	}
