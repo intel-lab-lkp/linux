@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+
+$id: http://devicetree.org/schemas/hwmon/pmbus/luxshare,lx1308.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Luxshare LX1308 Digital DC/DC Power Module
+
+maintainers:
+  - Brian Chiang <chiang.brian@inventec.com>
+
+description: |
+  The LX1308 is a high-efficiency, non-isolated, regulated 12V, 860W,
+  digital DC/DC power module. The module operates from a 40V to 60V DC
+  primary bus and provides a 12V regulated output voltage. It can deliver
+  up to 860W continuous and 1300W in transient.
+
+properties:
+  compatible:
+    enum:
+      - luxshare,lx1308lch
+      - luxshare,lx1308nch
+      - luxshare,lx1308sch
+      - luxshare,lx1308ldh
+      - luxshare,lx1308ndh
+      - luxshare,lx1308sdh
+      - luxshare,lx1308
+
+  reg:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      power-module@60 {
+        compatible = "luxshare,lx1308";
+        reg = <0x60>;
+      };
+    };

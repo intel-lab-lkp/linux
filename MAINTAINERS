@@ -15175,6 +15175,14 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/iio/light/liteon,ltr390.yaml
 F:	drivers/iio/light/ltr390.c
 
+LUXSHARE LX1308 PMBUS DRIVER
+M:	Brian Chiang <chiang.brian@inventec.com>
+L:	linux-hwmon@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/hwmon/pmbus/luxshare,lx1308.yaml
+F:	Documentation/hwmon/lx1308.rst
+F:	drivers/hwmon/pmbus/lx1308.c
+
 LYNX 28G SERDES PHY DRIVER
 M:	Ioana Ciornei <ioana.ciornei@nxp.com>
 L:	netdev@vger.kernel.org
