@@ -302,6 +302,13 @@ void intel_display_power_set_target_dc_state(struct intel_display *display,
 	struct i915_power_domains *power_domains = &display->power.domains;
 
 	mutex_lock(&power_domains->lock);
+
+	if ((state & power_domains->allowed_dc_mask) != state) {
+		drm_dbg_kms(display->drm,
+			    "Rejecting DC state 0x%x (allowed mask 0x%x)\n",
+			     state, power_domains->allowed_dc_mask);
+		goto unlock;
+	}
 	power_well = lookup_power_well(display, SKL_DISP_DC_OFF);
 
 	if (drm_WARN_ON(display->drm, !power_well))
@@ -356,6 +363,13 @@ unlock:
 	mutex_unlock(&power_domains->lock);
 
 	return current_dc_state;
+}
+
+bool intel_display_power_dc3co_supported(struct intel_display *display)
+{
+	struct i915_power_domains *power_domains = &display->power.domains;
+
+	return (power_domains->allowed_dc_mask & DC_STATE_EN_UPTO_DC3CO) == DC_STATE_EN_UPTO_DC3CO;
 }
 
 static void __async_put_domains_mask(struct i915_power_domains *power_domains,
