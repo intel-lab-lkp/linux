@@ -70,6 +70,7 @@ enum zcrx_features {
 
 enum zcrx_notification_type {
 	ZCRX_NOTIF_NO_BUFFERS = 1 << 0,
+	ZCRX_NOTIF_COPY = 1 << 1
 };
 
 struct zcrx_notification_desc {
