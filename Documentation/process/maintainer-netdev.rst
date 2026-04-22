@@ -363,6 +363,18 @@ just do it. As a result, a sequence of smaller series gets merged quicker and
 with better review coverage. Re-posting large series also increases the mailing
 list traffic.
 
+Limit patches outstanding on mailing list
+-----------------------------------------
+
+Avoid having more than 15 patches, across all series, outstanding for
+review on the mailing list for a single tree. In other words, a maximum of
+15 patches under review on net, and a maximum of 15 patches under review on
+net-next.
+
+This limit is intended to focus developer effort on testing patches before
+upstream review. Aiding the quality of upstream submissions, and easing the
+load on reviewers.
+
 .. _rcs:
 
 Local variable ordering ("reverse xmas tree", "RCS")
@@ -407,7 +419,7 @@ Clean-up patches
 Netdev discourages patches which perform simple clean-ups, which are not in
 the context of other work. For example:
 
-* Addressing ``checkpatch.pl`` warnings
+* Addressing ``checkpatch.pl``, and other trivial coding style warnings
 * Addressing :ref:`Local variable ordering<rcs>` issues
 * Conversions to device-managed APIs (``devm_`` helpers)
 
@@ -467,8 +479,14 @@ netdevsim
 
 ``netdevsim`` is a test driver which can be used to exercise driver
 configuration APIs without requiring capable hardware.
-Mock-ups and tests based on ``netdevsim`` are strongly encouraged when
-adding new APIs, but ``netdevsim`` in itself is **not** considered
+Mock-ups and tests based on ``netdevsim`` are encouraged when
+adding new APIs with complex logic in the stack. The tests should
+be written so that they can run both against ``netdevsim`` and a real
+device (see ``tools/testing/selftests/drivers/net/README.rst``).
+``netdevsim``-only tests should focus on testing corner cases
+and failure paths in the core which are hard to exercise with a real driver.
+
+``netdevsim`` in itself is **not** considered
 a use case/user. You must also implement the new APIs in a real driver.
 
 We give no guarantees that ``netdevsim`` won't change in the future

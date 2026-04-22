@@ -8,8 +8,22 @@ like to know when a security bug is found so that it can be fixed and
 disclosed as quickly as possible.  Please report security bugs to the
 Linux kernel security team.
 
-Contact
--------
+The security team and maintainers almost always require additional
+information beyond what was initially provided in a report and rely on
+active and efficient collaboration with the reporter to perform further
+testing (e.g., verifying versions, configuration options, mitigations, or
+patches). Before contacting the security team, the reporter must ensure
+they are available to explain their findings, engage in discussions, and
+run additional tests.  Reports where the reporter does not respond promptly
+or cannot effectively discuss their findings may be abandoned if the
+communication does not quickly improve.
+
+As it is with any bug, the more information provided the easier it
+will be to diagnose and fix.  Please review the procedure outlined in
+'Documentation/admin-guide/reporting-issues.rst' if you are unclear about what
+information is helpful.  Any exploit code is very helpful and will not
+be released without consent from the reporter unless it has already been
+made public.
 
 The Linux kernel security team can be contacted by email at
 <security@kernel.org>.  This is a private list of security officers
@@ -19,19 +33,16 @@ that can speed up the process considerably.  It is possible that the
 security team will bring in extra help from area maintainers to
 understand and fix the security vulnerability.
 
-As it is with any bug, the more information provided the easier it
-will be to diagnose and fix.  Please review the procedure outlined in
-'Documentation/admin-guide/reporting-issues.rst' if you are unclear about what
-information is helpful.  Any exploit code is very helpful and will not
-be released without consent from the reporter unless it has already been
-made public.
-
-Please send plain text emails without attachments where possible.
+Please send **plain text** emails without attachments where possible.
 It is much harder to have a context-quoted discussion about a complex
 issue if all the details are hidden away in attachments.  Think of it like a
 :doc:`regular patch submission <../process/submitting-patches>`
 (even if you don't have a patch yet): describe the problem and impact, list
 reproduction steps, and follow it with a proposed fix, all in plain text.
+Markdown, HTML and RST formatted reports are particularly frowned upon since
+they're quite hard to read for humans and encourage to use dedicated viewers,
+sometimes online, which by definition is not acceptable for a confidential
+security report.
 
 Disclosure and embargoed information
 ------------------------------------
