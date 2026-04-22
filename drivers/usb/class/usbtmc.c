@@ -2452,7 +2452,7 @@ static int usbtmc_probe(struct usb_interface *intf,
 		kref_get(&data->kref);
 
 		/* allocate buffer for interrupt in */
-		data->iin_buffer = kmalloc(data->iin_wMaxPacketSize,
+		data->iin_buffer = kmalloc(max(2, data->iin_wMaxPacketSize),
 					GFP_KERNEL);
 		if (!data->iin_buffer) {
 			retcode = -ENOMEM;
