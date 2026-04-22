@@ -40,6 +40,14 @@ static bool ncsi_filter_is_enabled(unsigned long enable, unsigned int index,
 	return index < nbits && (enable & BIT(index));
 }
 
+static unsigned int ncsi_rsp_payload(struct sk_buff *skb)
+{
+	struct ncsi_rsp_pkt_hdr *h;
+
+	h = (struct ncsi_rsp_pkt_hdr *)skb_network_header(skb);
+	return ntohs(h->common.length);
+}
+
 static int ncsi_validate_rsp_pkt(struct ncsi_request *nr,
 				 unsigned short payload)
 {
@@ -1127,9 +1135,21 @@ static int ncsi_rsp_handler_gmcma(struct ncsi_request *nr)
 	struct sockaddr_storage *saddr = &ndp->pending_mac;
 	struct net_device *ndev = ndp->ndev.dev;
 	struct ncsi_rsp_gmcma_pkt *rsp;
+	unsigned int addr_bytes;
+	unsigned int payload;
 	int i;
 
 	rsp = (struct ncsi_rsp_gmcma_pkt *)skb_network_header(nr->rsp);
+	payload = ncsi_rsp_payload(nr->rsp);
+	if (payload < sizeof(rsp->address_count) + sizeof(rsp->reserved) +
+		      sizeof(__be32))
+		return -EINVAL;
+
+	addr_bytes = payload - sizeof(rsp->address_count) -
+		     sizeof(rsp->reserved) - sizeof(__be32);
+	if (rsp->address_count > addr_bytes / ETH_ALEN)
+		return -EINVAL;
+
 	ndev->priv_flags |= IFF_LIVE_ADDR_CHANGE;
 
 	netdev_info(ndev, "NCSI: Received %d provisioned MAC addresses\n",
