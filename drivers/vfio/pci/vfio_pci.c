@@ -60,6 +60,10 @@ static bool disable_denylist;
 module_param(disable_denylist, bool, 0444);
 MODULE_PARM_DESC(disable_denylist, "Disable use of device denylist. Disabling the denylist allows binding to devices with known errata that may lead to exploitable stability or security issues when accessed by untrusted users.");
 
+static char disable_idle_d3_ids[1024];
+module_param_string(disable_idle_d3_ids, disable_idle_d3_ids, sizeof(disable_idle_d3_ids), 0444);
+MODULE_PARM_DESC(disable_idle_d3_ids, "Comma-separated list of vendor:device IDs to disable idle D3");
+
 static bool vfio_pci_dev_in_denylist(struct pci_dev *pdev)
 {
 	switch (pdev->vendor) {
@@ -262,7 +266,8 @@ static int __init vfio_pci_init(void)
 	is_disable_vga = disable_vga;
 #endif
 
-	vfio_pci_core_set_params(nointxmask, is_disable_vga, disable_idle_d3);
+	vfio_pci_core_set_params(nointxmask, is_disable_vga, disable_idle_d3,
+			disable_idle_d3_ids);
 
 	/* Register and scan for devices */
 	ret = pci_register_driver(&vfio_pci_driver);

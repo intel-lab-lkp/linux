@@ -42,6 +42,73 @@ static bool nointxmask;
 static bool disable_vga;
 static bool disable_idle_d3;
 
+struct vfio_pci_d3_info {
+	struct list_head list;
+	unsigned int vendor;
+	unsigned int device;
+};
+
+/*
+ * disable_idle_d3_list is built in vfio_pci_core_set_params() before
+ * pci_register_driver(), and is read-only after that, so no locking is
+ * needed. It is freed in vfio_pci_core_cleanup() after
+ * pci_unregister_driver() completes.
+ */
+static LIST_HEAD(disable_idle_d3_list);
+
+static void vfio_pci_parse_d3_ids(const char *disable_idle_d3_ids)
+{
+	char *tmp, *p, *id_str;
+
+	if (*disable_idle_d3_ids == '\0')
+		return;
+
+	tmp = kstrdup(disable_idle_d3_ids, GFP_KERNEL);
+	if (!tmp)
+		return;
+
+	p = tmp;
+	while ((id_str = strsep(&p, ","))) {
+		unsigned int v, d;
+		struct vfio_pci_d3_info *info;
+
+		if (*id_str == '\0')
+			continue;
+
+		if (sscanf(id_str, "%x:%x", &v, &d) == 2) {
+			info = kzalloc_obj(*info, GFP_KERNEL);
+			if (!info)
+				break;
+			info->vendor = v;
+			info->device = d;
+			list_add_tail(&info->list, &disable_idle_d3_list);
+		} else
+			pr_warn("vfio-pci: invalid ids '%s'\n", id_str);
+	}
+	kfree(tmp);
+}
+
+static void vfio_pci_free_d3_ids(void)
+{
+	struct vfio_pci_d3_info *info, *next;
+
+	list_for_each_entry_safe(info, next, &disable_idle_d3_list, list) {
+		list_del(&info->list);
+		kfree(info);
+	}
+}
+
+static bool vfio_pci_dev_in_d3_list(struct pci_dev *pdev)
+{
+	struct vfio_pci_d3_info *info;
+
+	list_for_each_entry(info, &disable_idle_d3_list, list) {
+		if (pdev->vendor == info->vendor && pdev->device == info->device)
+			return true;
+	}
+	return false;
+}
+
 static void vfio_pci_eventfd_rcu_free(struct rcu_head *rcu)
 {
 	struct vfio_pci_eventfd *eventfd =
@@ -501,7 +568,7 @@ int vfio_pci_core_enable(struct vfio_pci_core_device *vdev)
 	u16 cmd;
 	u8 msix_pos;
 
-	if (!disable_idle_d3) {
+	if (!vdev->disable_idle_d3) {
 		ret = pm_runtime_resume_and_get(&pdev->dev);
 		if (ret < 0)
 			return ret;
@@ -579,7 +646,7 @@ out_free_state:
 out_disable_device:
 	pci_disable_device(pdev);
 out_power:
-	if (!disable_idle_d3)
+	if (!vdev->disable_idle_d3)
 		pm_runtime_put(&pdev->dev);
 	return ret;
 }
@@ -715,7 +782,7 @@ out:
 	vfio_pci_dev_set_try_reset(vdev->vdev.dev_set);
 
 	/* Put the pm-runtime usage counter acquired during enable */
-	if (!disable_idle_d3)
+	if (!vdev->disable_idle_d3)
 		pm_runtime_put(&pdev->dev);
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_disable);
@@ -2107,6 +2174,9 @@ int vfio_pci_core_init_dev(struct vfio_device *core_vdev)
 	init_rwsem(&vdev->memory_lock);
 	xa_init(&vdev->ctx);
 
+	vdev->disable_idle_d3 = disable_idle_d3 ||
+			vfio_pci_dev_in_d3_list(vdev->pdev);
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_init_dev);
@@ -2202,7 +2272,7 @@ int vfio_pci_core_register_device(struct vfio_pci_core_device *vdev)
 
 	dev->driver->pm = &vfio_pci_core_pm_ops;
 	pm_runtime_allow(dev);
-	if (!disable_idle_d3)
+	if (!vdev->disable_idle_d3)
 		pm_runtime_put(dev);
 
 	ret = vfio_register_group_dev(&vdev->vdev);
@@ -2211,7 +2281,7 @@ int vfio_pci_core_register_device(struct vfio_pci_core_device *vdev)
 	return 0;
 
 out_power:
-	if (!disable_idle_d3)
+	if (!vdev->disable_idle_d3)
 		pm_runtime_get_noresume(dev);
 
 	pm_runtime_forbid(dev);
@@ -2230,7 +2300,7 @@ void vfio_pci_core_unregister_device(struct vfio_pci_core_device *vdev)
 	vfio_pci_vf_uninit(vdev);
 	vfio_pci_vga_uninit(vdev);
 
-	if (!disable_idle_d3)
+	if (!vdev->disable_idle_d3)
 		pm_runtime_get_noresume(&vdev->pdev->dev);
 
 	pm_runtime_forbid(&vdev->pdev->dev);
@@ -2541,6 +2611,7 @@ static void vfio_pci_dev_set_try_reset(struct vfio_device_set *dev_set)
 	struct vfio_pci_core_device *cur;
 	struct pci_dev *pdev;
 	bool reset_done = false;
+	int ret;
 
 	if (!vfio_pci_dev_set_needs_reset(dev_set))
 		return;
@@ -2554,8 +2625,16 @@ static void vfio_pci_dev_set_try_reset(struct vfio_device_set *dev_set)
 	 * state. Increment the usage count for all the devices in the dev_set
 	 * before reset and decrement the same after reset.
 	 */
-	if (!disable_idle_d3 && vfio_pci_dev_set_pm_runtime_get(dev_set))
-		return;
+	list_for_each_entry(cur, &dev_set->device_list, vdev.dev_set_list) {
+		if (!cur->disable_idle_d3) {
+			ret = pm_runtime_resume_and_get(&cur->pdev->dev);
+			if (ret < 0) {
+				pci_warn(cur->pdev,
+					"failed to resume device for bus reset, ret=%d\n", ret);
+				goto out;
+			}
+		}
+	}
 
 	if (!pci_reset_bus(pdev))
 		reset_done = true;
@@ -2564,23 +2643,33 @@ static void vfio_pci_dev_set_try_reset(struct vfio_device_set *dev_set)
 		if (reset_done)
 			cur->needs_reset = false;
 
-		if (!disable_idle_d3)
+		if (!cur->disable_idle_d3)
+			pm_runtime_put(&cur->pdev->dev);
+	}
+	return;
+
+out:
+	list_for_each_entry_continue_reverse(cur, &dev_set->device_list, vdev.dev_set_list) {
+		if (!cur->disable_idle_d3)
 			pm_runtime_put(&cur->pdev->dev);
 	}
 }
 
 void vfio_pci_core_set_params(bool is_nointxmask, bool is_disable_vga,
-			      bool is_disable_idle_d3)
+			      bool is_disable_idle_d3, const char *ids)
 {
 	nointxmask = is_nointxmask;
 	disable_vga = is_disable_vga;
 	disable_idle_d3 = is_disable_idle_d3;
+	vfio_pci_free_d3_ids();
+	vfio_pci_parse_d3_ids(ids);
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_set_params);
 
 static void vfio_pci_core_cleanup(void)
 {
 	vfio_pci_uninit_perm_bits();
+	vfio_pci_free_d3_ids();
 }
 
 static int __init vfio_pci_core_init(void)
