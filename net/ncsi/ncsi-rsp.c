@@ -22,6 +22,8 @@
 /* Nibbles within [0xA, 0xF] add zero "0" to the returned value.
  * Optional fields (encoded as 0xFF) will default to zero.
  */
+#define NCSI_FILTER_BITS	BITS_PER_TYPE(u64)
+
 static u8 decode_bcd_u8(u8 x)
 {
 	int lo = x & 0xF;
@@ -30,6 +32,12 @@ static u8 decode_bcd_u8(u8 x)
 	lo = lo < 0xA ? lo : 0;
 	hi = hi < 0xA ? hi : 0;
 	return lo + hi * 10;
+}
+
+static bool ncsi_filter_is_enabled(unsigned long enable, unsigned int index,
+				      unsigned int nbits)
+{
+	return index < nbits && (enable & BIT(index));
 }
 
 static int ncsi_validate_rsp_pkt(struct ncsi_request *nr,
@@ -481,7 +489,8 @@ static int ncsi_rsp_handler_sma(struct ncsi_request *nr)
 	bitmap = &ncf->bitmap;
 
 	if (cmd->index == 0 ||
-	    cmd->index > ncf->n_uc + ncf->n_mc + ncf->n_mixed)
+	    cmd->index > ncf->n_uc + ncf->n_mc + ncf->n_mixed ||
+	    cmd->index > NCSI_FILTER_BITS)
 		return -ERANGE;
 
 	index = (cmd->index - 1) * ETH_ALEN;
@@ -798,6 +807,7 @@ static int ncsi_rsp_handler_gc(struct ncsi_request *nr)
 	struct ncsi_channel *nc;
 	struct ncsi_package *np;
 	size_t size;
+	unsigned int vlan_cnt;
 
 	/* Find the channel */
 	rsp = (struct ncsi_rsp_gc_pkt *)skb_network_header(nr->rsp);
@@ -819,6 +829,12 @@ static int ncsi_rsp_handler_gc(struct ncsi_request *nr)
 	nc->caps[NCSI_CAP_VLAN].cap = rsp->vlan_mode &
 				      NCSI_CAP_VLAN_MASK;
 
+	vlan_cnt = min_t(unsigned int, rsp->vlan_cnt, NCSI_FILTER_BITS);
+	if (vlan_cnt != rsp->vlan_cnt)
+		netdev_warn(ndp->ndev.dev,
+			    "NCSI: VLAN filter count %u exceeds software limit %u\n",
+			    rsp->vlan_cnt, (unsigned int)NCSI_FILTER_BITS);
+
 	size = (rsp->uc_cnt + rsp->mc_cnt + rsp->mixed_cnt) * ETH_ALEN;
 	nc->mac_filter.addrs = kzalloc(size, GFP_ATOMIC);
 	if (!nc->mac_filter.addrs)
@@ -827,7 +843,7 @@ static int ncsi_rsp_handler_gc(struct ncsi_request *nr)
 	nc->mac_filter.n_mc = rsp->mc_cnt;
 	nc->mac_filter.n_mixed = rsp->mixed_cnt;
 
-	nc->vlan_filter.vids = kcalloc(rsp->vlan_cnt,
+	nc->vlan_filter.vids = kcalloc(vlan_cnt,
 				       sizeof(*nc->vlan_filter.vids),
 				       GFP_ATOMIC);
 	if (!nc->vlan_filter.vids)
@@ -836,7 +852,7 @@ static int ncsi_rsp_handler_gc(struct ncsi_request *nr)
 	 * configuration state
 	 */
 	nc->vlan_filter.bitmap = U64_MAX;
-	nc->vlan_filter.n_vids = rsp->vlan_cnt;
+	nc->vlan_filter.n_vids = vlan_cnt;
 	np->ndp->channel_count = rsp->channel_cnt;
 
 	return 0;
@@ -853,6 +869,9 @@ static int ncsi_rsp_handler_gp(struct ncsi_request *nr)
 	unsigned char *pdata;
 	unsigned long flags;
 	void *bitmap;
+	unsigned int mac_cnt;
+	unsigned int mac_nbits;
+	unsigned int vlan_cnt;
 	int i;
 
 	/* Find the channel */
@@ -861,6 +880,15 @@ static int ncsi_rsp_handler_gp(struct ncsi_request *nr)
 				      NULL, &nc);
 	if (!nc)
 		return -ENODEV;
+
+	ncmf = &nc->mac_filter;
+	ncvf = &nc->vlan_filter;
+	mac_cnt = min_t(unsigned int, rsp->mac_cnt, NCSI_FILTER_BITS);
+	mac_nbits = ncmf->n_uc + ncmf->n_mc + ncmf->n_mixed;
+	vlan_cnt = min_t(unsigned int, rsp->vlan_cnt, ncvf->n_vids);
+
+	if (rsp->mac_cnt > mac_nbits || rsp->vlan_cnt > ncvf->n_vids)
+		return -ERANGE;
 
 	/* Modes with explicit enabled indications */
 	if (ntohl(rsp->valid_modes) & 0x1) {	/* BC filter mode */
@@ -887,11 +915,11 @@ static int ncsi_rsp_handler_gp(struct ncsi_request *nr)
 	/* MAC addresses filter table */
 	pdata = (unsigned char *)rsp + 48;
 	enable = rsp->mac_enable;
-	ncmf = &nc->mac_filter;
 	spin_lock_irqsave(&nc->lock, flags);
 	bitmap = &ncmf->bitmap;
-	for (i = 0; i < rsp->mac_cnt; i++, pdata += 6) {
-		if (!(enable & (0x1 << i)))
+	for (i = 0; i < mac_cnt; i++, pdata += 6) {
+		if (!ncsi_filter_is_enabled(enable, i,
+					    BITS_PER_TYPE(rsp->mac_enable)))
 			clear_bit(i, bitmap);
 		else
 			set_bit(i, bitmap);
@@ -902,11 +930,11 @@ static int ncsi_rsp_handler_gp(struct ncsi_request *nr)
 
 	/* VLAN filter table */
 	enable = ntohs(rsp->vlan_enable);
-	ncvf = &nc->vlan_filter;
 	bitmap = &ncvf->bitmap;
 	spin_lock_irqsave(&nc->lock, flags);
-	for (i = 0; i < rsp->vlan_cnt; i++, pdata += 2) {
-		if (!(enable & (0x1 << i)))
+	for (i = 0; i < vlan_cnt; i++, pdata += 2) {
+		if (!ncsi_filter_is_enabled(enable, i,
+					    BITS_PER_TYPE(rsp->vlan_enable)))
 			clear_bit(i, bitmap);
 		else
 			set_bit(i, bitmap);
