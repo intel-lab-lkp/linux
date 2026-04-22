@@ -3956,6 +3956,7 @@ static int smb2_populate_readdir_entry(struct ksmbd_conn *conn, int info_level,
 		rc = -ENOSPC;
 		goto free_conv_name;
 	}
+	memset(d_info->wptr, 0, next_entry_offset);
 
 	kstat = d_info->wptr;
 	if (info_level != FILE_NAMES_INFORMATION)
