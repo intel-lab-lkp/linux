@@ -134,6 +134,20 @@ static int gen_74x164_probe(struct spi_device *spi)
 
 	chip->registers = nregs;
 
+	/*
+	 * Optionally seed the chain with a board-specified pattern so that
+	 * the outputs come up in a known state on the first SPI write. When
+	 * the property is absent, the buffer stays zeroed by devm_kzalloc()
+	 * and the existing behaviour is preserved.
+	 */
+	if (device_property_present(dev, "registers-default")) {
+		ret = device_property_read_u8_array(dev, "registers-default",
+						    chip->buffer, nregs);
+		if (ret)
+			return dev_err_probe(dev, ret,
+					     "Invalid 'registers-default'\n");
+	}
+
 	chip->gpiod_oe = devm_gpiod_get_optional(dev, "enable", GPIOD_OUT_LOW);
 	if (IS_ERR(chip->gpiod_oe))
 		return PTR_ERR(chip->gpiod_oe);
