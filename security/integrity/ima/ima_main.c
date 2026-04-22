@@ -38,6 +38,7 @@ int ima_appraise;
 #endif
 
 int __ro_after_init ima_hash_algo = HASH_ALGO_SHA1;
+bool ima_initialised __ro_after_init = false;
 static int hash_setup_done;
 static int ima_disabled __ro_after_init;
 
@@ -1237,6 +1238,35 @@ static int ima_kernel_module_request(char *kmod_name)
 
 #endif /* CONFIG_INTEGRITY_ASYMMETRIC_KEYS */
 
+static int __init init_ima_core(bool late)
+{
+	int err;
+
+	if (ima_initialised)
+		return 0;
+
+	err = ima_init(late);
+	if (err == -EPROBE_DEFER)
+		return 0;
+
+	if (err && strcmp(hash_algo_name[ima_hash_algo],
+			  CONFIG_IMA_DEFAULT_HASH) != 0) {
+		pr_info("Allocating %s failed, going to use default hash algorithm %s\n",
+			hash_algo_name[ima_hash_algo], CONFIG_IMA_DEFAULT_HASH);
+		hash_setup_done = 0;
+		hash_setup(CONFIG_IMA_DEFAULT_HASH);
+		err = ima_init(late);
+	}
+
+	if (!err) {
+		ima_update_policy_flags();
+		ima_initialised = true;
+	} else
+		ima_disabled = 1;
+
+	return err;
+}
+
 static int __init init_ima(void)
 {
 	int error;
@@ -1250,28 +1280,40 @@ static int __init init_ima(void)
 	ima_appraise_parse_cmdline();
 	ima_init_template_list();
 	hash_setup(CONFIG_IMA_DEFAULT_HASH);
-	error = ima_init();
-
-	if (error && strcmp(hash_algo_name[ima_hash_algo],
-			    CONFIG_IMA_DEFAULT_HASH) != 0) {
-		pr_info("Allocating %s failed, going to use default hash algorithm %s\n",
-			hash_algo_name[ima_hash_algo], CONFIG_IMA_DEFAULT_HASH);
-		hash_setup_done = 0;
-		hash_setup(CONFIG_IMA_DEFAULT_HASH);
-		error = ima_init();
-	}
-
-	if (error)
-		return error;
 
 	error = register_blocking_lsm_notifier(&ima_lsm_policy_notifier);
-	if (error)
+	if (error) {
 		pr_warn("Couldn't register LSM notifier, error %d\n", error);
+		goto disable_ima;
+	}
 
-	if (!error)
-		ima_update_policy_flags();
+	error = init_ima_core(false);
+	if (error) {
+		unregister_blocking_lsm_notifier(&ima_lsm_policy_notifier);
+		goto disable_ima;
+	}
 
+	return 0;
+
+disable_ima:
+	ima_disabled = 1;
 	return error;
+}
+
+static int __init late_init_ima(void)
+{
+	int err;
+
+	if (ima_disabled)
+		return 0;
+
+	err = init_ima_core(true);
+	if (err) {
+		unregister_blocking_lsm_notifier(&ima_lsm_policy_notifier);
+		ima_disabled = 1;
+	}
+
+	return err;
 }
 
 static struct security_hook_list ima_hooks[] __ro_after_init = {
@@ -1321,4 +1363,6 @@ DEFINE_LSM(ima) = {
 	.blobs = &ima_blob_sizes,
 	/* Start IMA after the TPM is available */
 	.initcall_late = init_ima,
+	/* Start IMA late in case of probing TPM is deferred. */
+	.initcall_late_sync = late_init_ima,
 };

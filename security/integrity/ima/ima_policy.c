@@ -501,6 +501,9 @@ static void ima_lsm_update_rules(void)
 int ima_lsm_policy_change(struct notifier_block *nb, unsigned long event,
 			  void *lsm_data)
 {
+	if (!ima_initialised)
+		return NOTIFY_DONE;
+
 	if (event != LSM_POLICY_CHANGE)
 		return NOTIFY_DONE;
 

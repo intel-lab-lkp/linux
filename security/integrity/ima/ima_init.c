@@ -115,13 +115,19 @@ void __init ima_load_x509(void)
 }
 #endif
 
-int __init ima_init(void)
+int __init ima_init(bool late)
 {
 	int rc;
 
 	ima_tpm_chip = tpm_default_chip();
-	if (!ima_tpm_chip)
+	if (!ima_tpm_chip) {
+		if (!late) {
+			pr_info("Defer initialisation to the late_initcall_sync stage.\n");
+			return -EPROBE_DEFER;
+		}
+
 		pr_info("No TPM chip found, activating TPM-bypass!\n");
+	}
 
 	rc = integrity_init_keyring(INTEGRITY_KEYRING_IMA);
 	if (rc)
