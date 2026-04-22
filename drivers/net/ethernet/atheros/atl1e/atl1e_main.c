@@ -1232,7 +1232,7 @@ static bool atl1e_clean_tx_irq(struct atl1e_adapter *adapter)
 	struct atl1e_tx_ring *tx_ring = &adapter->tx_ring;
 	struct atl1e_tx_buffer *tx_buffer = NULL;
 	u16 hw_next_to_clean = AT_READ_REGW(&adapter->hw, REG_TPD_CONS_IDX);
-	u16 next_to_clean = atomic_read(&tx_ring->next_to_clean);
+	u16 next_to_clean = atomic_read_acquire(&tx_ring->next_to_clean);
 
 	while (next_to_clean != hw_next_to_clean) {
 		tx_buffer = &tx_ring->tx_buffer[next_to_clean];
@@ -1259,7 +1259,7 @@ static bool atl1e_clean_tx_irq(struct atl1e_adapter *adapter)
 			next_to_clean = 0;
 	}
 
-	atomic_set(&tx_ring->next_to_clean, next_to_clean);
+	atomic_set_release(&tx_ring->next_to_clean, next_to_clean);
 
 	if (netif_queue_stopped(adapter->netdev) &&
 			netif_carrier_ok(adapter->netdev)) {
@@ -1562,7 +1562,7 @@ static inline u16 atl1e_tpd_avail(struct atl1e_adapter *adapter)
 	u16 next_to_use = 0;
 	u16 next_to_clean = 0;
 
-	next_to_clean = atomic_read(&tx_ring->next_to_clean);
+	next_to_clean = atomic_read_acquire(&tx_ring->next_to_clean);
 	next_to_use   = tx_ring->next_to_use;
 
 	return (u16)(next_to_clean > next_to_use) ?
