@@ -68,6 +68,10 @@
     and the limit of estimators per kthread
   - est_add_ktid: ktid where to add new ests, can point to empty slot where
     we should add kt data
+  - data protected by service_mutex: est_temp_list, est_add_ktid,
+    est_kt_count, est_kt_arr, est_genid_done, kd->task
+  - data protected by est_mutex: est_genid, est_max_threads, sysctl_est_cpulist,
+    est_cpulist_valid, sysctl_est_nice, est_stopped, sysctl_run_estimation
  */
 
 static struct lock_class_key __ipvs_est_key;
@@ -229,6 +233,8 @@ static int ip_vs_estimation_kthread(void *data)
 /* Schedule stop/start for kthread tasks */
 void ip_vs_est_reload_start(struct netns_ipvs *ipvs)
 {
+	lockdep_assert_held(&ipvs->est_mutex);
+
 	/* Ignore reloads before first service is added */
 	if (!READ_ONCE(ipvs->enable))
 		return;
@@ -304,11 +310,16 @@ static int ip_vs_est_add_kthread(struct netns_ipvs *ipvs)
 	void *arr = NULL;
 	int i;
 
-	if ((unsigned long)ipvs->est_kt_count >= ipvs->est_max_threads &&
-	    READ_ONCE(ipvs->enable) && ipvs->est_max_threads)
-		return -EINVAL;
-
 	mutex_lock(&ipvs->est_mutex);
+
+	/* Allow kt 0 data to be created before the services are added
+	 * and limit the kthreads when services are present.
+	 */
+	if ((unsigned long)ipvs->est_kt_count >= ipvs->est_max_threads &&
+	    READ_ONCE(ipvs->enable) && ipvs->est_max_threads) {
+		ret = -EINVAL;
+		goto out;
+	}
 
 	for (i = 0; i < id; i++) {
 		if (!ipvs->est_kt_arr[i])
@@ -485,9 +496,6 @@ int ip_vs_start_estimator(struct netns_ipvs *ipvs, struct ip_vs_stats *stats)
 	struct ip_vs_estimator *est = &stats->est;
 	int ret;
 
-	if (!ipvs->est_max_threads && READ_ONCE(ipvs->enable))
-		ipvs->est_max_threads = ip_vs_est_max_threads(ipvs);
-
 	est->ktid = -1;
 	est->ktrow = IPVS_EST_NTICKS - 1;	/* Initial delay */
 
@@ -561,7 +569,6 @@ void ip_vs_stop_estimator(struct netns_ipvs *ipvs, struct ip_vs_stats *stats)
 	}
 
 	if (ktid > 0) {
-		mutex_lock(&ipvs->est_mutex);
 		ip_vs_est_kthread_destroy(kd);
 		ipvs->est_kt_arr[ktid] = NULL;
 		if (ktid == ipvs->est_kt_count - 1) {
@@ -570,7 +577,6 @@ void ip_vs_stop_estimator(struct netns_ipvs *ipvs, struct ip_vs_stats *stats)
 			       !ipvs->est_kt_arr[ipvs->est_kt_count - 1])
 				ipvs->est_kt_count--;
 		}
-		mutex_unlock(&ipvs->est_mutex);
 
 		/* This slot is now empty, prefer another available kt slot */
 		if (ktid == ipvs->est_add_ktid)
@@ -582,13 +588,11 @@ end_kt0:
 	if (ipvs->est_kt_count == 1 && hlist_empty(&ipvs->est_temp_list)) {
 		kd = ipvs->est_kt_arr[0];
 		if (!kd || !kd->est_count) {
-			mutex_lock(&ipvs->est_mutex);
 			if (kd) {
 				ip_vs_est_kthread_destroy(kd);
 				ipvs->est_kt_arr[0] = NULL;
 			}
 			ipvs->est_kt_count--;
-			mutex_unlock(&ipvs->est_mutex);
 			ipvs->est_add_ktid = 0;
 		}
 	}
@@ -602,13 +606,17 @@ static void ip_vs_est_drain_temp_list(struct netns_ipvs *ipvs)
 	while (1) {
 		int max = 16;
 
-		mutex_lock(&ipvs->service_mutex);
+		while (!mutex_trylock(&ipvs->service_mutex)) {
+			if (kthread_should_stop() || !READ_ONCE(ipvs->enable))
+				return;
+			cond_resched();
+		}
 
 		while (max-- > 0) {
 			est = hlist_entry_safe(ipvs->est_temp_list.first,
 					       struct ip_vs_estimator, list);
 			if (est) {
-				if (kthread_should_stop())
+				if (!READ_ONCE(ipvs->enable))
 					goto unlock;
 				hlist_del_init(&est->list);
 				if (ip_vs_enqueue_estimator(ipvs, est) >= 0)
@@ -647,7 +655,11 @@ static int ip_vs_est_calc_limits(struct netns_ipvs *ipvs, int *chain_max)
 	u64 val;
 
 	INIT_HLIST_HEAD(&chain);
-	mutex_lock(&ipvs->service_mutex);
+	while (!mutex_trylock(&ipvs->service_mutex)) {
+		if (kthread_should_stop() || !READ_ONCE(ipvs->enable))
+			return 0;
+		cond_resched();
+	}
 	kd = ipvs->est_kt_arr[0];
 	mutex_unlock(&ipvs->service_mutex);
 	s = kd ? kd->calc_stats : NULL;
@@ -748,22 +760,24 @@ static void ip_vs_est_calc_phase(struct netns_ipvs *ipvs)
 	if (!ip_vs_est_calc_limits(ipvs, &chain_max))
 		return;
 
-	mutex_lock(&ipvs->service_mutex);
+	while (!mutex_trylock(&ipvs->service_mutex)) {
+		if (kthread_should_stop() || !READ_ONCE(ipvs->enable))
+			return;
+		cond_resched();
+	}
 
 	/* Stop all other tasks, so that we can immediately move the
 	 * estimators to est_temp_list without RCU grace period
 	 */
-	mutex_lock(&ipvs->est_mutex);
 	for (id = 1; id < ipvs->est_kt_count; id++) {
 		/* netns clean up started, abort */
-		if (!READ_ONCE(ipvs->enable))
-			goto unlock2;
+		if (kthread_should_stop() || !READ_ONCE(ipvs->enable))
+			goto unlock;
 		kd = ipvs->est_kt_arr[id];
 		if (!kd)
 			continue;
 		ip_vs_est_kthread_stop(kd);
 	}
-	mutex_unlock(&ipvs->est_mutex);
 
 	/* Move all estimators to est_temp_list but carefully,
 	 * all estimators and kthread data can be released while
@@ -817,7 +831,11 @@ walk_chain:
 		 */
 		mutex_unlock(&ipvs->service_mutex);
 		cond_resched();
-		mutex_lock(&ipvs->service_mutex);
+		while (!mutex_trylock(&ipvs->service_mutex)) {
+			if (kthread_should_stop() || !READ_ONCE(ipvs->enable))
+				return;
+			cond_resched();
+		}
 
 		/* Current kt released ? */
 		if (id >= ipvs->est_kt_count)
@@ -889,7 +907,6 @@ end_dequeue:
 	if (genid == atomic_read(&ipvs->est_genid))
 		ipvs->est_calc_phase = 0;
 
-unlock2:
 	mutex_unlock(&ipvs->est_mutex);
 
 unlock:

@@ -250,7 +250,7 @@ static void est_reload_work_handler(struct work_struct *work)
 	int genid;
 	int id;
 
-	mutex_lock(&ipvs->est_mutex);
+	mutex_lock(&ipvs->service_mutex);
 	genid = atomic_read(&ipvs->est_genid);
 	for (id = 0; id < ipvs->est_kt_count; id++) {
 		struct ip_vs_est_kt_data *kd = ipvs->est_kt_arr[id];
@@ -263,12 +263,14 @@ static void est_reload_work_handler(struct work_struct *work)
 		/* New config ? Stop kthread tasks */
 		if (genid != genid_done)
 			ip_vs_est_kthread_stop(kd);
+		mutex_lock(&ipvs->est_mutex);
 		if (!kd->task && !ip_vs_est_stopped(ipvs)) {
 			/* Do not start kthreads above 0 in calc phase */
 			if ((!id || !ipvs->est_calc_phase) &&
 			    ip_vs_est_kthread_start(ipvs, kd) < 0)
 				repeat = true;
 		}
+		mutex_unlock(&ipvs->est_mutex);
 	}
 
 	atomic_set(&ipvs->est_genid_done, genid);
@@ -278,7 +280,7 @@ static void est_reload_work_handler(struct work_struct *work)
 				   delay);
 
 unlock:
-	mutex_unlock(&ipvs->est_mutex);
+	mutex_unlock(&ipvs->service_mutex);
 }
 
 static int get_conn_tab_size(struct netns_ipvs *ipvs)
@@ -1812,11 +1814,16 @@ ip_vs_add_service(struct netns_ipvs *ipvs, struct ip_vs_service_user_kern *u,
 	*svc_p = svc;
 
 	if (!READ_ONCE(ipvs->enable)) {
+		mutex_lock(&ipvs->est_mutex);
+
 		/* Now there is a service - full throttle */
 		WRITE_ONCE(ipvs->enable, 1);
 
+		ipvs->est_max_threads = ip_vs_est_max_threads(ipvs);
+
 		/* Start estimation for first time */
 		ip_vs_est_reload_start(ipvs);
+		mutex_unlock(&ipvs->est_mutex);
 	}
 
 	return 0;
