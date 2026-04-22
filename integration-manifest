@@ -1,0 +1,36 @@
+drm drm-fixes 028ef9c96e96197026887c0f092424679298aae8
+	Linux 7.0
+drm-misc drm-misc-fixes 2fc87d37be1b730a149b035f9375fdb8cc5333a5
+	drm/nouveau: fix u32 overflow in pushbuf reloc bounds check
+drm-rust drm-rust-fixes f338e77383789c0cae23ca3d48adcc5e9e137e3c
+	Linux 7.0-rc4
+drm-intel drm-intel-fixes 028ef9c96e96197026887c0f092424679298aae8
+	Linux 7.0
+drm-xe drm-xe-fixes 028ef9c96e96197026887c0f092424679298aae8
+	Linux 7.0
+drm drm-next 0389aa700912ad14c43b8cfbabd707dfce22de6a
+	Merge tag 'amd-drm-next-7.1-2026-04-17' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm-misc drm-misc-next-fixes dc6d51959ec0c08366d5aaeb5b8fb02d814d1e4b
+	dma-buf: fix htmldocs error for dma_buf_attach_revocable
+drm-intel drm-intel-next-fixes 314f6179e370988ac00dadf373a4f6166eb3db15
+	drm/i915/psr: Init variable to avoid early exit from et alignment loop
+drm-xe drm-xe-next-fixes 6de23f81a5e08be8fbf5e8d7e9febc72a5b5f27f
+	Linux 7.0-rc1
+drm-misc drm-misc-next 4c95b2b7d49edc5846730970cef322a6d8d967ba
+	drm/panel: ilitek-ili9881c: support Waveshare 7.0" DSI panel
+drm-rust drm-rust-next a7a080bb4236ebe577b6776d940d1717912ff6dd
+	gpu: nova-core: fix missing colon in SEC2 boot debug message
+drm-intel drm-intel-next 4fe8f83264c5e47121725ba0fc4a23bf03fb07cf
+	drm/i915: Don't pass the framebuffer to low level pinning functions
+drm-intel drm-intel-gt-next f6d4afc9ec6a0bc326151b35a7a3369369180079
+	drm/i915/gem: Drop check for changed VM in EXECBUF
+drm-xe drm-xe-next dc9ccf14dc2ad44e3df4928015923735f0101bfd
+	drm/xe/pat: Introduce xe_cache_pat_idx() macro helper
+drm-intel topic/core-for-CI 3d15d7e81d498d56ca6ba3af63f2fa1106da87ad
+	ACPI: PM: s2idle: Add module parameter for LPS0 constraints checking
+drm-xe topic/xe-for-CI bd9ef8d19f9e9ff47518ce48fb2002d58bfeeaaa
+	drm/xe/nvlp: Define GuC firmware for NVL-P
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
+drm-intel topic/pipe-reorder 2c683e9b419328da3433a49f7c467da71aaf0469
+	drm/i915/display: change pipe allocation order for discrete platforms
