@@ -1444,6 +1444,9 @@ static struct inode *ext4_alloc_inode(struct super_block *sb)
 	ext4_fc_init_inode(&ei->vfs_inode);
 	spin_lock_init(&ei->i_fc_lock);
 	mmb_init(&ei->i_metadata_bhs, &ei->vfs_inode.i_data);
+	ei->i_ordered_lblk = 0;
+	ei->i_ordered_len = 0;
+	init_waitqueue_head(&ei->i_ordered_wq);
 	return &ei->vfs_inode;
 }
 
@@ -1480,12 +1483,20 @@ static void ext4_destroy_inode(struct inode *inode)
 		dump_stack();
 	}
 
-	if (!(EXT4_SB(inode->i_sb)->s_mount_state & EXT4_ERROR_FS) &&
-	    WARN_ON_ONCE(EXT4_I(inode)->i_reserved_data_blocks))
-		ext4_msg(inode->i_sb, KERN_ERR,
-			 "Inode %llu (%p): i_reserved_data_blocks (%u) not cleared!",
-			 inode->i_ino, EXT4_I(inode),
-			 EXT4_I(inode)->i_reserved_data_blocks);
+	if (!(EXT4_SB(inode->i_sb)->s_mount_state & EXT4_ERROR_FS)) {
+		if (WARN_ON_ONCE(EXT4_I(inode)->i_reserved_data_blocks))
+			ext4_msg(inode->i_sb, KERN_ERR,
+				 "Inode %llu (%p): i_reserved_data_blocks (%u) not cleared!",
+				 inode->i_ino, EXT4_I(inode),
+				 EXT4_I(inode)->i_reserved_data_blocks);
+
+		if (WARN_ON_ONCE(EXT4_I(inode)->i_ordered_len))
+			ext4_msg(inode->i_sb, KERN_ERR,
+				 "Inode %llu (%p): i_ordered_lblk (%u) and i_ordered_len (%u) not cleared!",
+				 inode->i_ino, EXT4_I(inode),
+				 EXT4_I(inode)->i_ordered_lblk,
+				 EXT4_I(inode)->i_ordered_len);
+	}
 }
 
 static void ext4_shutdown(struct super_block *sb)

@@ -1195,6 +1195,15 @@ struct ext4_inode_info {
 #ifdef CONFIG_FS_ENCRYPTION
 	struct fscrypt_inode_info *i_crypt_info;
 #endif
+
+	/*
+	 * Track ordered zeroed data during post-EOF append writes, fallocate,
+	 * and truncate-up operations. These parameters are used only in the
+	 * iomap buffered I/O path.
+	 */
+	ext4_lblk_t i_ordered_lblk;
+	ext4_lblk_t i_ordered_len;
+	wait_queue_head_t i_ordered_wq;
 };
 
 /*
@@ -3877,6 +3886,8 @@ extern int ext4_move_extents(struct file *o_filp, struct file *d_filp,
 			     __u64 len, __u64 *moved_len);
 
 /* page-io.c */
+#define EXT4_IOMAP_IOEND_ORDER_IO	1UL	/* This I/O is an ordered one */
+
 extern int __init ext4_init_pageio(void);
 extern void ext4_exit_pageio(void);
 extern ext4_io_end_t *ext4_init_io_end(struct inode *inode, gfp_t flags);

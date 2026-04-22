@@ -4352,11 +4352,36 @@ static int ext4_iomap_writeback_submit(struct iomap_writepage_ctx *wpc,
 {
 	struct iomap_ioend *ioend = wpc->wb_ctx;
 	struct ext4_inode_info *ei = EXT4_I(ioend->io_inode);
+	ext4_lblk_t start, end, order_lblk, order_len;
 
 	/* Need to convert unwritten extents when I/Os are completed. */
 	if ((ioend->io_flags & IOMAP_IOEND_UNWRITTEN) ||
 	    ioend->io_offset + ioend->io_size > READ_ONCE(ei->i_disksize))
 		ioend->io_bio.bi_end_io = ext4_iomap_end_bio;
+
+	/*
+	 * Mark the I/O as ordered. Ordered I/O requires separate endio
+	 * handling and must not be merged with regular I/O operations.
+	 */
+	order_len = READ_ONCE(ei->i_ordered_len);
+	if (order_len) {
+		/*
+		 * Pair with smp_store_release() in ext4_block_zero_eof().
+		 * Ensure we see the updated i_ordered_lblk that was written
+		 * before the release store to i_ordered_len.
+		 */
+		smp_rmb();
+		order_lblk = READ_ONCE(ei->i_ordered_lblk);
+		start = ioend->io_offset >> ioend->io_inode->i_blkbits;
+		end = EXT4_B_TO_LBLK(ioend->io_inode,
+				     ioend->io_offset + ioend->io_size);
+
+		if (start <= order_lblk && end >= order_lblk + order_len) {
+			ioend->io_bio.bi_end_io = ext4_iomap_end_bio;
+			ioend->io_private = (void *)EXT4_IOMAP_IOEND_ORDER_IO;
+			ioend->io_flags |= IOMAP_IOEND_BOUNDARY;
+		}
+	}
 
 	return iomap_ioend_writeback_submit(wpc, error);
 }
@@ -4799,12 +4824,12 @@ int ext4_block_zero_eof(struct inode *inode, loff_t from, loff_t end)
 				return err;
 		/*
 		 * inodes using the iomap buffered I/O path do not use the
-		 * data=ordered mode. We submit zeroed range here.
-		 *
-		 * TODO: The end_io process needs to wait for I/O to completes
-		 * before updating i_disksize.
+		 * data=ordered mode. Submit zeroed range here. The end_io
+		 * handler ext4_iomap_wb_ordered_wait() will wait for I/O
+		 * completion before updating i_disksize.
 		 */
 		} else if (ext4_inode_buffered_iomap(inode)) {
+			struct ext4_inode_info *ei = EXT4_I(inode);
 			struct folio *folio;
 			bool do_submit = false;
 
@@ -4818,16 +4843,41 @@ int ext4_block_zero_eof(struct inode *inode, loff_t from, loff_t end)
 			folio_wait_writeback(folio);
 			WARN_ON_ONCE(folio_test_writeback(folio));
 
-			if (likely(folio_test_dirty(folio)))
+			/*
+			 * Mark the ordered range. It will be cleared upon
+			 * I/O completion in ext4_iomap_end_bio().
+			 */
+			if (likely(folio_test_dirty(folio)) &&
+			    READ_ONCE(ei->i_ordered_len) == 0) {
+				WRITE_ONCE(ei->i_ordered_lblk,
+					   from >> inode->i_blkbits);
+				/*
+				 * Pairs with smp_rmb() in
+				 * ext4_iomap_writeback_submit() and
+				 * ext4_iomap_wb_ordered_wait(). Ensure the
+				 * updated i_ordered_lblk is visible when
+				 * i_ordered_len becomes non-zero.
+				 */
+				smp_store_release(&ei->i_ordered_len, 1);
 				do_submit = true;
+			}
 			folio_unlock(folio);
 			folio_put(folio);
 
 			if (do_submit) {
 				err = filemap_fdatawrite_range(inode->i_mapping,
 							       from, end - 1);
-				if (err)
+				if (err) {
+					/*
+					 * Pairs with wait_event() in
+					 * ext4_iomap_wb_ordered_wait(). Ensure
+					 * i_ordered_len = 0 is visible before
+					 * waking up waiters.
+					 */
+					smp_store_release(&ei->i_ordered_len, 0);
+					wake_up_all(&ei->i_ordered_wq);
 					return err;
+				}
 			}
 		}
 	}

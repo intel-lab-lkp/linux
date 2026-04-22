@@ -613,6 +613,39 @@ int ext4_bio_write_folio(struct ext4_io_submit *io, struct folio *folio,
 	return 0;
 }
 
+/*
+ * If the old disk size is not block size aligned and the current
+ * writeback range is entirely beyond the old EOF block, we should
+ * wait for the zeroed data written in ext4_block_zero_eof() to be
+ * written out, otherwise, it may expose stale data in that block.
+ */
+static void ext4_iomap_wb_ordered_wait(struct inode *inode,
+				       loff_t pos, loff_t end)
+{
+	struct ext4_inode_info *ei = EXT4_I(inode);
+	unsigned int blocksize = i_blocksize(inode);
+	loff_t disksize = READ_ONCE(ei->i_disksize);
+	ext4_lblk_t order_lblk, order_len;
+
+	if (!(disksize & (blocksize - 1)) ||
+	    pos <= round_up(disksize, blocksize))
+		return;
+
+	order_len = READ_ONCE(ei->i_ordered_len);
+	if (!order_len)
+		return;
+
+	/*
+	 * Pair with smp_store_release() in ext4_iomap_end_bio() and
+	 * ext4_block_zero_eof(). Ensure we see the updated i_ordered_lblk
+	 * that was written before the release store to i_ordered_len.
+	 */
+	smp_rmb();
+	order_lblk = READ_ONCE(ei->i_ordered_lblk);
+	if ((pos >> inode->i_blkbits) >= order_lblk + order_len)
+		wait_event(ei->i_ordered_wq, READ_ONCE(ei->i_ordered_len) == 0);
+}
+
 static int ext4_iomap_wb_update_disksize(handle_t *handle, struct inode *inode,
 					 loff_t end)
 {
@@ -655,6 +688,9 @@ static void ext4_iomap_finish_ioend(struct iomap_ioend *ioend)
 			jbd2_journal_abort(EXT4_SB(sb)->s_journal, ret);
 		goto out;
 	}
+
+	/* Wait ordered zero data to be written out. */
+	ext4_iomap_wb_ordered_wait(inode, pos, pos + size);
 
 	/* We may need to convert one extent and dirty the inode. */
 	credits = ext4_chunk_trans_blocks(inode,
@@ -717,8 +753,25 @@ void ext4_iomap_end_bio(struct bio *bio)
 	struct inode *inode = ioend->io_inode;
 	struct ext4_inode_info *ei = EXT4_I(inode);
 	struct ext4_sb_info *sbi = EXT4_SB(inode->i_sb);
+	unsigned long io_mode = (unsigned long)ioend->io_private;
 	unsigned long flags;
 	int ret;
+
+	/*
+	 * This is an ordered I/O, clear the ordered range set in
+	 * ext4_block_zero_eof() and wake up all waiters that will update
+	 * the inode i_disksize.
+	 */
+	if (io_mode == EXT4_IOMAP_IOEND_ORDER_IO) {
+		/*
+		 * Pairs with wait_event() in ext4_iomap_wb_ordered_wait().
+		 * Ensure i_ordered_len = 0 is visible before waking up
+		 * waiters.
+		 */
+		smp_store_release(&ei->i_ordered_len, 0);
+		wake_up_all(&ei->i_ordered_wq);
+		goto defer;
+	}
 
 	/* Needs to convert unwritten extents or update the i_disksize. */
 	if ((ioend->io_flags & IOMAP_IOEND_UNWRITTEN) ||
