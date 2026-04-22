@@ -1026,7 +1026,7 @@ int drm_gem_change_handle_ioctl(struct drm_device *dev, void *data,
 		return -EOPNOTSUPP;
 
 	/* idr_alloc() limitation. */
-	if (args->new_handle > INT_MAX)
+	if (args->new_handle <= 0 || args->new_handle > INT_MAX)
 		return -EINVAL;
 	handle = args->new_handle;
 
