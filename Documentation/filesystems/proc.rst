@@ -1634,6 +1634,9 @@ directory are shown in Table 1-12, below.
  ==============  ==========================================================
  File            Content
  mb_groups       details of multiblock allocator buddy cache of free blocks
+ mb_stats        reports runtime statistics from the multiblock allocator
+                 (mballoc). Writing 0 to this file clears the current
+                 statistics.
  ==============  ==========================================================
 
 1.9 /proc/consoles

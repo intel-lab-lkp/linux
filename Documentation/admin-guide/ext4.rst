@@ -436,6 +436,11 @@ Files in /proc/fs/ext4/<devname>
   mb_groups
         details of multiblock allocator buddy cache of free blocks
 
+  mb_stats
+        reports runtime statistics from the multiblock allocator
+        (mballoc). Writing 0 to this file clears the current
+        statistics.
+
 /sys entries
 ============
 
