@@ -1006,6 +1006,19 @@ intel_legacy_cursor_update(struct drm_plane *_plane,
 	 */
 	crtc_state->active_planes = new_crtc_state->active_planes;
 
+	for (int i = 0; i < num_sec; i++) {
+		struct intel_plane *sec_plane = to_intel_plane(new_sec_states[i]->uapi.plane);
+		struct intel_crtc *sec_crtc = to_intel_crtc(new_sec_states[i]->hw.crtc);
+		struct intel_crtc_state *sec_crtc_state = to_intel_crtc_state(sec_crtc->base.state);
+
+		sec_plane->base.state = &new_sec_states[i]->uapi;
+
+		if (new_sec_states[i]->uapi.visible)
+			sec_crtc_state->active_planes |= BIT(PLANE_CURSOR);
+		else
+			sec_crtc_state->active_planes &= ~BIT(PLANE_CURSOR);
+	}
+
 	intel_vblank_evade_init(crtc_state, crtc_state, &evade);
 
 	intel_psr_lock(crtc_state);
