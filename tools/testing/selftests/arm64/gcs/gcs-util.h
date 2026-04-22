@@ -7,6 +7,7 @@
 #define GCS_UTIL_H
 
 #include <stdbool.h>
+#include <asm/ptrace.h>
 
 #ifndef __NR_map_shadow_stack
 #define __NR_map_shadow_stack 453
