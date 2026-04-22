@@ -8179,6 +8179,60 @@ out:
 	return ret;
 }
 
+/*
+ * At maximum we submit writeback bios 64MB in size to avoid too large
+ * submission latencies
+ */
+#define BTRFS_MAX_WB_BIO_SIZE (64 << 20)
+
+int btrfs_init_writeback_bio_size(struct btrfs_fs_info *fs_info)
+{
+	struct rb_node *node;
+	u32 writeback_bio_sectors = 1;
+
+	read_lock(&fs_info->mapping_tree_lock);
+	/*
+	 * For each data chunk compute the size of bio large enough to submit
+	 * optimum size request for each of chunk's disk and take maximum
+	 * over all data chunks.
+	 */
+	for (node = rb_first_cached(&fs_info->mapping_tree); node;
+	     node = rb_next(node)) {
+		struct btrfs_chunk_map *map;
+		unsigned int data_stripes, opt_rq_size = fs_info->sectorsize;
+		int i;
+
+		map = rb_entry(node, struct btrfs_chunk_map, rb_node);
+		if (!(map->type & BTRFS_BLOCK_GROUP_DATA))
+			continue;
+		data_stripes = calc_data_stripes(map->type, map->num_stripes);
+		for (i = 0; i < map->num_stripes; i++) {
+			struct request_queue *queue;
+			unsigned int io_opt;
+
+			if (!map->stripes[i].dev)
+				continue;
+			queue = bdev_get_queue(map->stripes[i].dev->bdev);
+			io_opt = queue_io_opt(queue) ? :
+				queue_max_sectors(queue) << SECTOR_SHIFT;
+			opt_rq_size = max(opt_rq_size, io_opt);
+		}
+		opt_rq_size >>= fs_info->sectorsize_bits;
+		writeback_bio_sectors = max(writeback_bio_sectors,
+					    data_stripes * opt_rq_size);
+	}
+	read_unlock(&fs_info->mapping_tree_lock);
+
+	if (BTRFS_MAX_WB_BIO_SIZE >> fs_info->sectorsize_bits <=
+						writeback_bio_sectors)
+		fs_info->writeback_bio_size = BTRFS_MAX_WB_BIO_SIZE;
+	else
+		fs_info->writeback_bio_size =
+			writeback_bio_sectors << fs_info->sectorsize_bits;
+
+	return 0;
+}
+
 static int update_dev_stat_item(struct btrfs_trans_handle *trans,
 				struct btrfs_device *device)
 {

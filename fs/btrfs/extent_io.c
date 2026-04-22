@@ -2556,6 +2556,16 @@ retry:
 			}
 
 			/*
+			 * If we have accumulated decent amount of IO, send it
+			 * to the block layer so that IO can run while we are
+			 * accumulating more folios to write.
+			 */
+			if (bio_ctrl->bbio &&
+			    bio_ctrl->bbio->bio.bi_iter.bi_size >=
+			    inode_to_fs_info(inode)->writeback_bio_size)
+				submit_write_bio(bio_ctrl, 0);
+
+			/*
 			 * The filesystem may choose to bump up nr_to_write.
 			 * We have to make sure to honor the new nr_to_write
 			 * at any time.
