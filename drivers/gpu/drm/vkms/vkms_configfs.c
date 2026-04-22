@@ -3,6 +3,8 @@
 #include <linux/configfs.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
+#include <linux/string.h>
+#include <kunit/visibility.h>
 
 #include "vkms_drv.h"
 #include "vkms_config.h"
@@ -636,6 +638,115 @@ static ssize_t plane_default_color_encoding_store(struct config_item *item,
 	return count;
 }
 
+static ssize_t plane_supported_formats_show(struct config_item *item, char *page)
+{
+	struct vkms_configfs_plane *plane;
+
+	plane = plane_item_to_vkms_configfs_plane(item);
+
+	page[0] = '\0';
+
+	scoped_guard(mutex, &plane->dev->lock) {
+		u32 *formats = vkms_config_plane_get_supported_formats(plane->config);
+
+		for (int i = 0;
+		     i < vkms_config_plane_get_supported_formats_count(plane->config);
+		     i++) {
+			char tmp[6] = { 0 };
+			const ssize_t ret = snprintf(tmp, ARRAY_SIZE(tmp), "%.*s\n",
+					       (int)sizeof(*formats),
+					       (char *)&formats[i]);
+			if (ret < 0)
+				return ret;
+			/*
+			 * Limitation of ConfigFS attributes, an attribute can't be bigger
+			 * than PAGE_SIZE. This will crop the result if this plane support
+			 * more than ≈1000 formats.
+			 */
+			if (ret + strlen(page) > PAGE_SIZE - 1)
+				return -ENOMEM;
+			strncat(page, tmp, ARRAY_SIZE(tmp));
+		}
+	}
+
+	return strlen(page);
+}
+
+/**
+ * vkms_configfs_parse_next_format() - Parse the next format in page,
+ *				       skipping all non fourcc-related characters
+ * @page: page to search into
+ * @page_end: last character of the page
+ * @out: Output pointer, will point inside page
+ *
+ * Returns: size of the matched format, @out will point to the + or -
+ */
+VISIBLE_IF_KUNIT
+int vkms_configfs_parse_next_format(const char *page, const char *page_end, char **out)
+{
+	int count = page - page_end;
+	char *tmp_plus = strnchr(page, count, '+');
+	char *tmp_minus = strnchr(page, count, '-');
+
+	if (!tmp_plus && !tmp_minus)
+		return 0;
+	if (!tmp_plus)
+		*out = tmp_minus;
+	else if (!tmp_minus)
+		*out = tmp_plus;
+	else
+		*out = min(tmp_plus, tmp_minus);
+
+	char *end = *out + 1;
+
+	while (end < page_end) {
+		if (!isalnum(*end) && *end != '*')
+			break;
+		end++;
+	}
+
+	return end - *out;
+}
+EXPORT_SYMBOL_IF_KUNIT(vkms_configfs_parse_next_format);
+
+static ssize_t plane_supported_formats_store(struct config_item *item,
+					     const char *page, size_t count)
+{
+	struct vkms_configfs_plane *plane;
+
+	plane = plane_item_to_vkms_configfs_plane(item);
+	int ret = 0;
+
+	if (count < 2 || count > 5)
+		return -EINVAL;
+
+	if (page[0] != '+' && page[0] != '-')
+		return -EINVAL;
+
+	if (page[1] == '*' && count != 2)
+		return -EINVAL;
+
+	scoped_guard(mutex, &plane->dev->lock) {
+		char fmt[4] = {' ', ' ', ' ', ' '};
+
+		memcpy(fmt, &page[1], min(count - 1, 4));
+
+		if (page[0] == '+' && page[1] == '*')
+			ret = vkms_config_plane_add_all_formats(plane->config);
+		else if (page[0] == '-' && page[1] == '*')
+			vkms_config_plane_remove_all_formats(plane->config);
+		else if (page[0] == '+')
+			ret = vkms_config_plane_add_format(plane->config, *(int *)fmt);
+		else if (page[0] == '-')
+			vkms_config_plane_remove_format(plane->config, *(int *)fmt);
+
+		if (ret)
+			return ret;
+	}
+
+	return count;
+}
+
 CONFIGFS_ATTR(plane_, type);
 CONFIGFS_ATTR(plane_, name);
 CONFIGFS_ATTR(plane_, supported_rotations);
@@ -644,6 +755,7 @@ CONFIGFS_ATTR(plane_, supported_color_ranges);
 CONFIGFS_ATTR(plane_, default_color_range);
 CONFIGFS_ATTR(plane_, supported_color_encodings);
 CONFIGFS_ATTR(plane_, default_color_encoding);
+CONFIGFS_ATTR(plane_, supported_formats);
 
 static struct configfs_attribute *plane_item_attrs[] = {
 	&plane_attr_type,
@@ -654,6 +766,7 @@ static struct configfs_attribute *plane_item_attrs[] = {
 	&plane_attr_default_color_range,
 	&plane_attr_supported_color_encodings,
 	&plane_attr_default_color_encoding,
+	&plane_attr_supported_formats,
 	NULL,
 };
 
