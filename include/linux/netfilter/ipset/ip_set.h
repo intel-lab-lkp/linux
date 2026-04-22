@@ -336,6 +336,7 @@ extern size_t ip_set_elem_len(struct ip_set *set, struct nlattr *tb[],
 			      size_t len, size_t align);
 extern int ip_set_get_extensions(struct ip_set *set, struct nlattr *tb[],
 				 struct ip_set_ext *ext);
+extern int ip_set_ext_copy(struct ip_set *set, void *dst, const void *src);
 extern int ip_set_put_extensions(struct sk_buff *skb, const struct ip_set *set,
 				 const void *e, bool active);
 extern bool ip_set_match_extensions(struct ip_set *set,

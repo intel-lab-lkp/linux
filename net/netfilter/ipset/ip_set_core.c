@@ -367,6 +367,42 @@ ip_set_init_comment(struct ip_set *set, struct ip_set_comment *comment,
 }
 EXPORT_SYMBOL_GPL(ip_set_init_comment);
 
+static int
+ip_set_copy_comment(struct ip_set *set, struct ip_set_comment *dst,
+		    const struct ip_set_comment *src)
+{
+	struct ip_set_comment_rcu *c, *newc;
+	size_t len;
+
+	RCU_INIT_POINTER(dst->c, NULL);
+
+	c = rcu_dereference_bh(src->c);
+	if (!c)
+		return 0;
+
+	len = strlen(c->str);
+	newc = kmalloc(sizeof(*newc) + len + 1, GFP_ATOMIC);
+	if (unlikely(!newc))
+		return -ENOMEM;
+
+	memcpy(newc->str, c->str, len + 1);
+	set->ext_size += sizeof(*newc) + len + 1;
+	rcu_assign_pointer(dst->c, newc);
+
+	return 0;
+}
+
+int
+ip_set_ext_copy(struct ip_set *set, void *dst, const void *src)
+{
+	if (SET_WITH_COMMENT(set))
+		return ip_set_copy_comment(set, ext_comment(dst, set),
+					   ext_comment(src, set));
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(ip_set_ext_copy);
+
 /* Used only when dumping a set, protected by rcu_read_lock() */
 static int
 ip_set_put_comment(struct sk_buff *skb, const struct ip_set_comment *comment)
