@@ -1972,6 +1972,7 @@ enum {
 	EXT4_STATE_FC_COMMITTING,	/* Fast commit ongoing */
 	EXT4_STATE_FC_FLUSHING_DATA,	/* Fast commit flushing data */
 	EXT4_STATE_ORPHAN_FILE,		/* Inode orphaned in orphan file */
+	EXT4_STATE_BUFFERED_IOMAP,	/* Inode use iomap for buffered IO */
 };
 
 #define EXT4_INODE_BIT_FNS(name, field, offset)				\
@@ -2038,6 +2039,12 @@ static inline bool ext4_inode_orphan_tracked(struct inode *inode)
 {
 	return ext4_test_inode_state(inode, EXT4_STATE_ORPHAN_FILE) ||
 		!list_empty(&EXT4_I(inode)->i_orphan);
+}
+
+/* Whether the inode pass through the iomap infrastructure for buffered I/O */
+static inline bool ext4_inode_buffered_iomap(struct inode *inode)
+{
+	return ext4_test_inode_state(inode, EXT4_STATE_BUFFERED_IOMAP);
 }
 
 /*
