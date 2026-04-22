@@ -16,11 +16,19 @@
 #include "internal.h"
 #include "ncsi-pkt.h"
 
-static int ncsi_validate_aen_pkt(struct ncsi_aen_pkt_hdr *h,
+static int ncsi_validate_aen_pkt(struct sk_buff *skb,
 				 const unsigned short payload)
 {
+	struct ncsi_aen_pkt_hdr *h;
 	u32 checksum;
 	__be32 *pchecksum;
+	unsigned int len;
+
+	len = skb_network_offset(skb) + sizeof(*h) + ALIGN(payload, 4);
+	if (!pskb_may_pull(skb, len))
+		return -EINVAL;
+
+	h = (struct ncsi_aen_pkt_hdr *)skb_network_header(skb);
 
 	if (h->common.revision != NCSI_PKT_REVISION)
 		return -EINVAL;
@@ -31,7 +39,7 @@ static int ncsi_validate_aen_pkt(struct ncsi_aen_pkt_hdr *h,
 	 * sender doesn't support checksum according to NCSI
 	 * specification.
 	 */
-	pchecksum = (__be32 *)((void *)(h + 1) + payload - 4);
+	pchecksum = (__be32 *)((void *)(h + 1) + ALIGN(payload, 4) - 4);
 	if (ntohl(*pchecksum) == 0)
 		return 0;
 
@@ -210,12 +218,19 @@ int ncsi_aen_handler(struct ncsi_dev_priv *ndp, struct sk_buff *skb)
 {
 	struct ncsi_aen_pkt_hdr *h;
 	struct ncsi_aen_handler *nah = NULL;
+	unsigned char type;
 	int i, ret;
+
+	if (!pskb_may_pull(skb, skb_network_offset(skb) + sizeof(*h))) {
+		ret = -EINVAL;
+		goto out;
+	}
 
 	/* Find the handler */
 	h = (struct ncsi_aen_pkt_hdr *)skb_network_header(skb);
+	type = h->type;
 	for (i = 0; i < ARRAY_SIZE(ncsi_aen_handlers); i++) {
-		if (ncsi_aen_handlers[i].type == h->type) {
+		if (ncsi_aen_handlers[i].type == type) {
 			nah = &ncsi_aen_handlers[i];
 			break;
 		}
@@ -223,24 +238,25 @@ int ncsi_aen_handler(struct ncsi_dev_priv *ndp, struct sk_buff *skb)
 
 	if (!nah) {
 		netdev_warn(ndp->ndev.dev, "Invalid AEN (0x%x) received\n",
-			    h->type);
+			    type);
 		ret = -ENOENT;
 		goto out;
 	}
 
-	ret = ncsi_validate_aen_pkt(h, nah->payload);
+	ret = ncsi_validate_aen_pkt(skb, nah->payload);
 	if (ret) {
 		netdev_warn(ndp->ndev.dev,
 			    "NCSI: 'bad' packet ignored for AEN type 0x%x\n",
-			    h->type);
+			    type);
 		goto out;
 	}
 
+	h = (struct ncsi_aen_pkt_hdr *)skb_network_header(skb);
 	ret = nah->handler(ndp, h);
 	if (ret)
 		netdev_err(ndp->ndev.dev,
 			   "NCSI: Handler for AEN type 0x%x returned %d\n",
-			   h->type, ret);
+			   type, ret);
 out:
 	consume_skb(skb);
 	return ret;
