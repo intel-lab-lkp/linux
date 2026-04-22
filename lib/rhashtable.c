@@ -119,6 +119,16 @@ static void bucket_table_free_rcu(struct rcu_head *head)
 	bucket_table_free(container_of(head, struct bucket_table, rcu));
 }
 
+static void bucket_table_free_atomic(struct bucket_table *tbl)
+{
+	if (is_vmalloc_addr(tbl)) {
+		call_rcu(&tbl->rcu, bucket_table_free_rcu);
+		return;
+	}
+
+	bucket_table_free(tbl);
+}
+
 static union nested_table *nested_table_alloc(struct rhashtable *ht,
 					      union nested_table __rcu **prev,
 					      bool leaf)
@@ -473,7 +483,7 @@ static int rhashtable_insert_rehash(struct rhashtable *ht,
 
 	err = rhashtable_rehash_attach(ht, tbl, new_tbl);
 	if (err) {
-		bucket_table_free(new_tbl);
+		bucket_table_free_atomic(new_tbl);
 		if (err == -EEXIST)
 			err = 0;
 	} else
