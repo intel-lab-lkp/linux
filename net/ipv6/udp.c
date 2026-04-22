@@ -1706,8 +1706,11 @@ back_from_confirm:
 				   dst_rt6_info(dst),
 				   msg->msg_flags, &cork);
 		err = PTR_ERR(skb);
-		if (!IS_ERR_OR_NULL(skb))
+		if (!IS_ERR_OR_NULL(skb)) {
 			err = udp_v6_send_skb(skb, fl6, &cork.base);
+		} else {
+			dst_release(dst);
+		}
 		/* ip6_make_skb steals dst reference */
 		goto out_no_dst;
 	}
