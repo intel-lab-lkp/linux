@@ -43,16 +43,17 @@ static ssize_t exitcode_proc_write(struct file *file,
 	size_t size;
 	int tmp;
 
-	size = min(count, sizeof(buf));
+	size = min(count, sizeof(buf) - 1);
 	if (copy_from_user(buf, buffer, size))
 		return -EFAULT;
+	buf[size] = '\0';
 
 	tmp = simple_strtol(buf, &end, 0);
 	if ((*end != '\0') && !isspace(*end))
 		return -EINVAL;
 
 	uml_exitcode = tmp;
-	return count;
+	return size;
 }
 
 static const struct proc_ops exitcode_proc_ops = {
