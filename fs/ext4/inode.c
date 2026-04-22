@@ -5750,6 +5750,8 @@ void ext4_enable_buffered_iomap(struct inode *inode)
 {
 	struct super_block *sb = inode->i_sb;
 
+	if (!test_opt2(sb, BUFFERED_IOMAP))
+		return;
 	if (!S_ISREG(inode->i_mode))
 		return;
 	if (ext4_test_inode_flag(inode, EXT4_INODE_EA_INODE))
