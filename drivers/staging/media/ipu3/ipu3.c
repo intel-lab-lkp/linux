@@ -62,6 +62,12 @@ unsigned int imgu_map_node(struct imgu_device *imgu, unsigned int css_queue)
 		if (imgu_node_map[i].css_queue == css_queue)
 			break;
 
+	/*
+	 * If no entry matched, i == IMGU_NODE_NUM which is one past the end
+	 * of every array indexed by node id.  Callers must check for this
+	 * sentinel before using the returned value as an array index.
+	 */
+	WARN_ON(i >= IMGU_NODE_NUM);
 	return i;
 }
 
@@ -115,6 +121,8 @@ static int imgu_dummybufs_init(struct imgu_device *imgu, unsigned int pipe)
 	/* Allocate a dummy buffer for each queue where buffer is optional */
 	for (i = 0; i < IPU3_CSS_QUEUES; i++) {
 		node = imgu_map_node(imgu, i);
+		if (node >= IMGU_NODE_NUM)
+			continue;
 		if (!imgu_pipe->queue_enabled[node] || i == IMGU_QUEUE_MASTER)
 			continue;
 
@@ -535,6 +543,12 @@ static irqreturn_t imgu_isr_threaded(int irq, void *imgu_ptr)
 		}
 
 		node = imgu_map_node(imgu, b->queue);
+		if (node >= IMGU_NODE_NUM) {
+			dev_err(&imgu->pci_dev->dev,
+				"dequeued buffer with unknown css queue %u, skipping\n",
+				b->queue);
+			continue;
+		}
 		pipe = b->pipe;
 		dummy = imgu_dummybufs_check(imgu, b, pipe);
 		if (!dummy)
