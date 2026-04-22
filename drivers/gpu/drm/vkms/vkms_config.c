@@ -170,7 +170,7 @@ void vkms_config_destroy(struct vkms_config *config)
 		vkms_config_destroy_encoder(config, encoder_cfg);
 
 	list_for_each_entry_safe(connector_cfg, connector_tmp, &config->connectors, link)
-		vkms_config_destroy_connector(connector_cfg);
+		vkms_config_destroy_connector(config, connector_cfg);
 
 	kfree_const(config->dev_name);
 	kfree(config);
@@ -437,6 +437,41 @@ static bool valid_connector_possible_encoders(const struct vkms_config *config)
 	return true;
 }
 
+static bool valid_connector_parents(const struct vkms_config *config)
+{
+	struct drm_device *dev = config->dev ? &config->dev->drm : NULL;
+
+	struct vkms_config_connector *connector_cfg;
+	struct vkms_config_connector *connector_cfg_parent;
+
+	vkms_config_for_each_connector(config, connector_cfg) {
+		bool expected_status = connector_cfg->enabled;
+
+		vkms_config_for_each_connector(config, connector_cfg_parent)
+			connector_cfg_parent->visited = false;
+
+		connector_cfg_parent = connector_cfg;
+		while (connector_cfg_parent) {
+			if (connector_cfg_parent->visited) {
+				drm_info(dev, "Parents of connector should not form a loop\n");
+				return false;
+			}
+
+			if (expected_status && connector_cfg_parent->enabled != expected_status) {
+				drm_info(dev, "All parents of an enabled connector must be enabled\n");
+				return false;
+			}
+
+
+
+			connector_cfg_parent->visited = true;
+			connector_cfg_parent = connector_cfg_parent->parent;
+		}
+	}
+
+	return true;
+}
+
 bool vkms_config_is_valid(const struct vkms_config *config)
 {
 	struct drm_device *dev = config->dev ? &config->dev->drm : NULL;
@@ -501,6 +536,9 @@ bool vkms_config_is_valid(const struct vkms_config *config)
 		return false;
 
 	if (!valid_connector_possible_encoders(config))
+		return false;
+
+	if (!valid_connector_parents(config))
 		return false;
 
 	return true;
@@ -962,8 +1000,16 @@ struct vkms_config_connector *vkms_config_create_connector(struct vkms_config *c
 }
 EXPORT_SYMBOL_IF_KUNIT(vkms_config_create_connector);
 
-void vkms_config_destroy_connector(struct vkms_config_connector *connector_cfg)
+void vkms_config_destroy_connector(struct vkms_config *config,
+				   struct vkms_config_connector *connector_cfg)
 {
+	struct vkms_config_connector *connector_cfg_tmp;
+
+	vkms_config_for_each_connector(config, connector_cfg_tmp) {
+		if (connector_cfg_tmp->parent == connector_cfg)
+			connector_cfg_tmp->parent = NULL;
+	}
+
 	xa_destroy(&connector_cfg->possible_encoders);
 	list_del(&connector_cfg->link);
 	kfree(connector_cfg);

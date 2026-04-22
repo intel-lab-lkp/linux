@@ -8,6 +8,76 @@
 #include "vkms_config.h"
 #include "vkms_connector.h"
 
+/**
+ * vkms_connector_build_path_property() - Build the PATH property string for MST connectors
+ * @connector: The connector to build the PATH property for
+ * @connector_cfg: The connector configuration
+ *
+ * The PATH property format is:
+ *     mst:<drm object ID of root connector>-<dash-separated list of port_id>
+ * For nested MST connectors, this builds the full path like mst:45-2-3-4-2
+ */
+static void vkms_connector_build_path_property(struct vkms_connector *connector,
+						const struct vkms_config_connector *connector_cfg)
+{
+	const struct vkms_config_connector *current_cfg = connector_cfg;
+	const struct vkms_config_connector *root_cfg = NULL;
+	struct vkms_connector *root_connector = NULL;
+	char path[128]; /* Increased size for nested MST paths */
+	int len = 0;
+	u8 port_ids[16]; /* Max 16 levels of nesting */
+	int port_count = 0;
+	int i;
+
+	if (!vkms_config_connector_get_parent(connector_cfg))
+		return;
+
+	while (current_cfg) {
+		if (port_count < ARRAY_SIZE(port_ids))
+			port_ids[port_count++] = current_cfg->port_id;
+
+		if (!vkms_config_connector_get_parent(current_cfg)) {
+			root_cfg = current_cfg;
+			break;
+		}
+
+		current_cfg = vkms_config_connector_get_parent(current_cfg);
+	}
+
+	if (!root_cfg || !root_cfg->connector)
+		return;
+
+	root_connector = root_cfg->connector;
+
+	len = snprintf(path, sizeof(path), "mst:%d", root_connector->base.base.id);
+
+	for (i = port_count - 2; i >= 0; i--) {
+		int added = snprintf(path + len, sizeof(path) - len,
+				     "-%u", port_ids[i]);
+		if (added < 0 || len + added >= sizeof(path))
+			return;
+		len += added;
+	}
+
+	drm_connector_set_path_property(&connector->base, path);
+}
+
+/**
+ * vkms_connector_update_path_properties() - Update PATH properties for all connectors
+ * @vkmsdev: VKMS device
+ *
+ * This should be called after all connectors are created to ensure parent connectors
+ * have valid DRM object IDs.
+ */
+void vkms_connector_update_path_properties(struct vkms_device *vkmsdev)
+{
+	struct vkms_config_connector *connector_cfg;
+
+	vkms_config_for_each_connector(vkmsdev->config, connector_cfg)
+		if (connector_cfg->connector)
+			vkms_connector_build_path_property(connector_cfg->connector, connector_cfg);
+}
+
 static enum drm_connector_status vkms_connector_detect(struct drm_connector *connector,
 						       bool force)
 {
@@ -239,6 +309,8 @@ struct vkms_connector *vkms_connector_hot_add(struct vkms_device *vkmsdev,
 	ret = vkms_connector_init(connector, connector_cfg);
 	if (ret)
 		return ERR_PTR(ret);
+
+	vkms_connector_build_path_property(connector, connector_cfg);
 
 	ret = drm_connector_dynamic_register(&connector->base);
 	if (ret) {

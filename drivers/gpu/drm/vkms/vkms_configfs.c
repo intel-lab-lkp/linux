@@ -1491,7 +1491,7 @@ static void connector_release(struct config_item *item)
 			vkms_connector_hot_remove(connector->dev->config->dev,
 						  connector_cfg->connector);
 
-		vkms_config_destroy_connector(connector->config);
+		vkms_config_destroy_connector(connector->dev->config, connector->config);
 
 		kfree(connector);
 	}

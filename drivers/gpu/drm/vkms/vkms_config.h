@@ -142,10 +142,14 @@ struct vkms_config_encoder {
  * @edid: Stores the current EDID. The value will be ignored if @edid_enabled is false
  * @edid_len: Current EDID length. The value will be ignored if @edid_enabled is false
  * @possible_encoders: Array of encoders that can be used with this connector
+ * @parent: To emulate MST connector, this will contains a pointer to the parent
+ * @port_id: To emulate MST connector, this contains the physical port id. Used to
+ *           generate the PATH property.
  * @connector: Internal usage. This pointer should never be considered as valid.
  *             It can be used to store a temporary reference to a VKMS connector
  *             during device creation. This pointer is not managed by the
  *             configuration and must be managed by other means.
+ * @visited: Internal usage. This boolean is used to do some verification on the connectors.
  */
 struct vkms_config_connector {
 	struct list_head link;
@@ -160,9 +164,12 @@ struct vkms_config_connector {
 	u8 *edid;
 	unsigned int edid_len;
 	struct xarray possible_encoders;
+	struct vkms_config_connector *parent;
+	u8 port_id;
 
 	/* Internal usage */
 	struct vkms_connector *connector;
+	bool visited;
 };
 
 /**
@@ -369,6 +376,56 @@ vkms_config_connector_set_edid(struct vkms_config_connector *connector_cfg,
 		connector_cfg->edid_len = len;
 	}
 }
+/**
+ * vkms_config_connector_attach_parent - Attach a connector to a parent connector
+ * @connector_cfg: Connector to attach
+ * @parent: Parent connector to attach @connector_cfg to. Can be NULL to detach the parent.
+ */
+static inline void
+vkms_config_connector_attach_parent(struct vkms_config_connector *connector_cfg,
+				    struct vkms_config_connector *parent)
+{
+	connector_cfg->parent = parent;
+}
+
+/**
+ * vkms_config_connector_get_parent - Get the parent connector of a connector
+ * @connector_cfg: Connector to get the parent from
+ *
+ * Returns:
+ * The parent connector of @connector_cfg or NULL if none is assigned yet.
+ */
+static inline struct vkms_config_connector*
+vkms_config_connector_get_parent(const struct vkms_config_connector *connector_cfg)
+{
+	return connector_cfg->parent;
+}
+
+/**
+ * vkms_config_connector_get_port_id() - Get the port ID for a connector
+ * @connector_cfg: Connector configuration to query
+ *
+ * Returns:
+ * The port ID for this connector.
+ */
+static inline u8
+vkms_config_connector_get_port_id(const struct vkms_config_connector *connector_cfg)
+{
+	return connector_cfg->port_id;
+}
+
+/**
+ * vkms_config_connector_set_port_id() - Set the port ID for a connector
+ * @connector_cfg: Connector configuration to modify
+ * @port_id: New port ID for this connector
+ */
+static inline void
+vkms_config_connector_set_port_id(struct vkms_config_connector *connector_cfg,
+				  u8 port_id)
+{
+	connector_cfg->port_id = port_id;
+}
+
 
 /**
  * vkms_config_get_device_name() - Return the name of the device
@@ -1026,7 +1083,8 @@ struct vkms_config_connector *vkms_config_create_connector(struct vkms_config *c
  * vkms_config_destroy_connector() - Remove and free a connector configuration
  * @connector_cfg: Connector configuration to destroy
  */
-void vkms_config_destroy_connector(struct vkms_config_connector *connector_cfg);
+void vkms_config_destroy_connector(struct vkms_config *config,
+				   struct vkms_config_connector *connector_cfg);
 
 /**
  * vkms_config_connector_attach_encoder - Attach a connector to an encoder
