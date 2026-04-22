@@ -238,8 +238,10 @@ static int hv_do_map_gpa_hcall(u64 partition_id, u64 gfn, u64 page_struct_count,
 			} else {
 				pfnlist[i] = mmio_spa + done + i;
 			}
-		if (ret)
+		if (ret) {
+			local_irq_restore(irq_flags);
 			break;
+		}
 
 		status = hv_do_rep_hypercall(HVCALL_MAP_GPA_PAGES, rep_count, 0,
 					     input_page, NULL);
