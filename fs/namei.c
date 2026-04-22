@@ -3617,7 +3617,7 @@ int path_pts(struct path *path)
 	 */
 	struct dentry *parent = dget_parent(path->dentry);
 	struct dentry *child;
-	struct qstr this = QSTR_INIT("pts", 3);
+	struct qstr this = QSTR("pts");
 
 	if (unlikely(!path_connected(path->mnt, parent))) {
 		dput(parent);
