@@ -92,19 +92,19 @@ static const struct hwmon_channel_info * const mcp9985_info[] = {
 			   HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_MIN |
 			   HWMON_T_MIN_ALARM | HWMON_T_MAX | HWMON_T_MAX_ALARM |
 			   HWMON_T_MAX_HYST | HWMON_T_CRIT | HWMON_T_CRIT_ALARM |
-			   HWMON_T_CRIT_HYST,
+			   HWMON_T_CRIT_HYST | HWMON_T_FAULT,
 			   HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_MIN |
 			   HWMON_T_MIN_ALARM | HWMON_T_MAX | HWMON_T_MAX_ALARM |
 			   HWMON_T_MAX_HYST | HWMON_T_CRIT | HWMON_T_CRIT_ALARM |
-			   HWMON_T_CRIT_HYST,
+			   HWMON_T_CRIT_HYST | HWMON_T_FAULT,
 			   HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_MIN |
 			   HWMON_T_MIN_ALARM | HWMON_T_MAX | HWMON_T_MAX_ALARM |
 			   HWMON_T_MAX_HYST | HWMON_T_CRIT | HWMON_T_CRIT_ALARM |
-			   HWMON_T_CRIT_HYST,
+			   HWMON_T_CRIT_HYST | HWMON_T_FAULT,
 			   HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_MIN |
 			   HWMON_T_MIN_ALARM | HWMON_T_MAX | HWMON_T_MAX_ALARM |
 			   HWMON_T_MAX_HYST | HWMON_T_CRIT | HWMON_T_CRIT_ALARM |
-			   HWMON_T_CRIT_HYST),
+			   HWMON_T_CRIT_HYST | HWMON_T_FAULT),
 	HWMON_CHANNEL_INFO(chip,
 			   HWMON_C_UPDATE_INTERVAL),
 	NULL
@@ -511,6 +511,18 @@ static int mcp9982_read(struct device *dev, enum hwmon_sensor_types type, u32 at
 			*val -= hyst * 1000;
 
 			return 0;
+		case hwmon_temp_fault:
+			/*
+			 * Because the ALERT/THERM pin is set in Therm(Comparator)
+			 * mode, the external diode fault status register
+			 * does not clear the bits after reading.
+			 */
+			*val = regmap_test_bits(priv->regmap, MCP9982_EXT_FAULT_STATUS_ADDR,
+						BIT(channel));
+			if (*val < 0)
+				return *val;
+
+			return 0;
 		default:
 			return -EINVAL;
 		}
@@ -681,6 +693,7 @@ static umode_t mcp9982_is_visible(const void *_data, enum hwmon_sensor_types typ
 		case hwmon_temp_max_alarm:
 		case hwmon_temp_max_hyst:
 		case hwmon_temp_crit_alarm:
+		case hwmon_temp_fault:
 			return 0444;
 		case hwmon_temp_min:
 		case hwmon_temp_max:
