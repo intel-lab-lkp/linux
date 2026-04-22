@@ -180,7 +180,7 @@ static int ad7625_set_sampling_freq(struct ad7625_state *st, u32 freq)
 	int ret;
 
 	target = DIV_ROUND_UP(NSEC_PER_SEC, freq);
-	cnv_wf.period_length_ns = clamp(target, 100, 10 * KILO);
+	cnv_wf.period_length_ns = clamp_t(u32, target, 100, 10 * KILO);
 
 	/*
 	 * Use the maximum conversion time t_CNVH from the datasheet as
