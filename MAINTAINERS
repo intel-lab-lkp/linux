@@ -18237,6 +18237,12 @@ F:	drivers/mmc/
 F:	include/linux/mmc/
 F:	include/uapi/linux/mmc/
 
+MULTIMEDIA CARD (MMC) PSTORE BACKEND
+M:	Kamal Dasu <kamal.dasu@broadcom.com>
+L:	linux-mmc@vger.kernel.org
+S:	Maintained
+F:	drivers/mmc/core/mmcpstore.c
+
 MULTIPLEXER SUBSYSTEM
 M:	Peter Rosin <peda@axentia.se>
 S:	Odd Fixes
