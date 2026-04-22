@@ -1333,7 +1333,7 @@ static int mshv_partition_create_region(struct mshv_partition *partition,
 
 	if (is_mmio)
 		rg->mreg_type = MSHV_REGION_TYPE_MMIO;
-	else if (mshv_partition_encrypted(partition) ||
+	else if (mshv_pt_regions_pinned(partition) ||
 		 !mshv_region_movable_init(rg))
 		rg->mreg_type = MSHV_REGION_TYPE_MEM_PINNED;
 	else
@@ -1405,6 +1405,9 @@ static int mshv_prepare_pinned_region(struct mshv_mem_region *region)
 		 */
 		goto err_out;
 	}
+
+	/* For now, all regions must be pinned if there is device passthru. */
+	partition->pt_regions_pinned = true;
 
 	return 0;
 

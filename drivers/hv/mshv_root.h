@@ -141,6 +141,7 @@ struct mshv_partition {
 	pid_t pt_vmm_tgid;
 	bool import_completed;
 	bool pt_initialized;
+	bool pt_regions_pinned;
 #if IS_ENABLED(CONFIG_DEBUG_FS)
 	struct dentry *pt_stats_dentry;
 	struct dentry *pt_vp_dentry;
@@ -275,6 +276,11 @@ void mshv_synic_exit(void);
 static inline bool mshv_partition_encrypted(struct mshv_partition *partition)
 {
 	return partition->isolation_type == HV_PARTITION_ISOLATION_TYPE_SNP;
+}
+
+static inline bool mshv_pt_regions_pinned(struct mshv_partition *pt)
+{
+	return pt->pt_regions_pinned || mshv_partition_encrypted(pt);
 }
 
 struct mshv_partition *mshv_partition_get(struct mshv_partition *partition);
