@@ -4805,9 +4805,6 @@ int ext4_block_zero_eof(struct inode *inode, loff_t from, loff_t end)
 	 * truncating up or performing an append write, because there might be
 	 * exposing stale on-disk data which may caused by concurrent post-EOF
 	 * mmap write during folio writeback.
-	 *
-	 * TODO: In the iomap path, handle this by updating i_disksize to
-	 * i_size after the zeroed data has been written back.
 	 */
 	if (did_zero && zero_written && !IS_DAX(inode)) {
 		if (ext4_should_order_data(inode)) {

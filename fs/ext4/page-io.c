@@ -647,13 +647,13 @@ static void ext4_iomap_wb_ordered_wait(struct inode *inode,
 }
 
 static int ext4_iomap_wb_update_disksize(handle_t *handle, struct inode *inode,
-					 loff_t end)
+					 loff_t end, bool is_ordered)
 {
-	loff_t new_disksize = end;
+	loff_t new_disksize, i_size;
 	struct ext4_inode_info *ei = EXT4_I(inode);
 	int ret;
 
-	if (new_disksize <= READ_ONCE(ei->i_disksize))
+	if (end <= READ_ONCE(ei->i_disksize) && !is_ordered)
 		return 0;
 
 	/*
@@ -661,7 +661,18 @@ static int ext4_iomap_wb_update_disksize(handle_t *handle, struct inode *inode,
 	 * are avoided by checking i_size under i_data_sem.
 	 */
 	down_write(&ei->i_data_sem);
-	new_disksize = min(new_disksize, i_size_read(inode));
+	i_size = i_size_read(inode);
+
+	/*
+	 * Update i_disksize to i_size when completing an ordered I/O that
+	 * zeroes the old EOF partial block. This ensures i_disksize is
+	 * correctly advanced during truncate-up on a blocksize-unaligned
+	 * file, preventing it from remaining stale. A downside is that
+	 * zeroed data may be exposed after crash recovery if the dirty
+	 * data in this range is not yet on disk, but stale data will
+	 * never be exposed.
+	 */
+	new_disksize = is_ordered ? i_size : min(end, i_size);
 	if (new_disksize > ei->i_disksize)
 		ei->i_disksize = new_disksize;
 	up_write(&ei->i_data_sem);
@@ -678,6 +689,7 @@ static void ext4_iomap_finish_ioend(struct iomap_ioend *ioend)
 	struct super_block *sb = inode->i_sb;
 	loff_t pos = ioend->io_offset;
 	size_t size = ioend->io_size;
+	unsigned long io_mode = (unsigned long)ioend->io_private;
 	handle_t *handle;
 	int credits;
 	int ret, err;
@@ -707,7 +719,8 @@ static void ext4_iomap_finish_ioend(struct iomap_ioend *ioend)
 			goto out_journal;
 	}
 
-	ret = ext4_iomap_wb_update_disksize(handle, inode, pos + size);
+	ret = ext4_iomap_wb_update_disksize(handle, inode, pos + size,
+			io_mode == EXT4_IOMAP_IOEND_ORDER_IO);
 out_journal:
 	err = ext4_journal_stop(handle);
 	if (!ret)

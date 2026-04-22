@@ -3495,13 +3495,21 @@ do {								\
 #define EXT4_FREECLUSTERS_WATERMARK 0
 #endif
 
-/* Update i_disksize. Requires i_rwsem to avoid races with truncate */
+/*
+ * Update i_disksize. Requires i_rwsem to avoid races with truncate.
+ *
+ * In the iomap buffered I/O path, a non-zero i_ordered_len indicates that
+ * an ordered I/O (zeroing the EOF partial block) is still in progress.
+ * In that case, i_disksize will be updated after the ordered data has
+ * been written out.
+ */
 static inline void ext4_update_i_disksize(struct inode *inode, loff_t newsize)
 {
 	WARN_ON_ONCE(S_ISREG(inode->i_mode) &&
 		     !inode_is_locked(inode));
 	down_write(&EXT4_I(inode)->i_data_sem);
-	if (newsize > EXT4_I(inode)->i_disksize)
+	if (newsize > EXT4_I(inode)->i_disksize &&
+	    READ_ONCE(EXT4_I(inode)->i_ordered_len) == 0)
 		WRITE_ONCE(EXT4_I(inode)->i_disksize, newsize);
 	up_write(&EXT4_I(inode)->i_data_sem);
 }
@@ -3515,7 +3523,8 @@ static inline int ext4_update_inode_size(struct inode *inode, loff_t newsize)
 		i_size_write(inode, newsize);
 		changed = 1;
 	}
-	if (newsize > EXT4_I(inode)->i_disksize) {
+	if (newsize > EXT4_I(inode)->i_disksize &&
+	    READ_ONCE(EXT4_I(inode)->i_ordered_len) == 0) {
 		ext4_update_i_disksize(inode, newsize);
 		changed |= 2;
 	}
@@ -3523,19 +3532,32 @@ static inline int ext4_update_inode_size(struct inode *inode, loff_t newsize)
 }
 
 /*
- * Set i_size and i_disksize to 'newsize'.
+ * Set i_size and i_disksize to 'newsize'.  In the iomap buffered I/O path,
+ * if i_ordered_len is non-zero and newsize exceeds the current i_disksize,
+ * the actual i_disksize update is deferred until after the ordered data is
+ * written out. In that case, i_disksize will be set to i_size upon I/O
+ * completion.
  *
  * Both i_rwsem and i_data_sem are required here to avoid races between
- * generic append writeback and concurrent truncate that also modify
- * i_size and i_disksize.
+ * generic append writeback (or ordered I/O writeback) and concurrent
+ * operations like fallocate and truncate that also modify i_size and
+ * i_disksize.
  */
-static inline void ext4_set_inode_size(struct inode *inode, loff_t newsize)
+static inline void __ext4_set_inode_size(struct inode *inode, loff_t newsize)
 {
 	WARN_ON_ONCE(S_ISREG(inode->i_mode) && !inode_is_locked(inode));
+	WARN_ON_ONCE(!rwsem_is_locked(&EXT4_I(inode)->i_data_sem));
 
-	down_write(&EXT4_I(inode)->i_data_sem);
 	i_size_write(inode, newsize);
-	EXT4_I(inode)->i_disksize = newsize;
+	if (READ_ONCE(EXT4_I(inode)->i_ordered_len) == 0 ||
+	    newsize < EXT4_I(inode)->i_disksize)
+		EXT4_I(inode)->i_disksize = newsize;
+}
+
+static inline void ext4_set_inode_size(struct inode *inode, loff_t newsize)
+{
+	down_write(&EXT4_I(inode)->i_data_sem);
+	__ext4_set_inode_size(inode, newsize);
 	up_write(&EXT4_I(inode)->i_data_sem);
 }
 
