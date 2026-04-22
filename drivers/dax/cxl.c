@@ -4,7 +4,26 @@
 #include <linux/dax.h>
 
 #include "../cxl/cxl.h"
+#include "../cxl/cxlmem.h"
 #include "bus.h"
+
+static void cxl_dax_set_numa_node(struct cxl_region *cxlr, int nid)
+{
+	struct cxl_region_params *p;
+	struct cxl_endpoint_decoder *cxled;
+	struct cxl_memdev *cxlmd;
+	int i;
+
+	p = &cxlr->params;
+	for (i = 0; i < p->nr_targets; i++) {
+		cxled = p->targets[i];
+		if (!cxled)
+			continue;
+
+		cxlmd = cxled_to_memdev(cxled);
+		set_dev_node(&cxlmd->dev, nid);
+	}
+}
 
 static int cxl_dax_region_probe(struct device *dev)
 {
@@ -28,6 +47,7 @@ static int cxl_dax_region_probe(struct device *dev)
 		.size = range_len(&cxlr_dax->hpa_range),
 		.memmap_on_memory = true,
 	};
+	cxl_dax_set_numa_node(cxlr, nid);
 
 	return PTR_ERR_OR_ZERO(devm_create_dev_dax(&data));
 }
