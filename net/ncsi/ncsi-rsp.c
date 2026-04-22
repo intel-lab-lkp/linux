@@ -38,11 +38,18 @@ static int ncsi_validate_rsp_pkt(struct ncsi_request *nr,
 	struct ncsi_rsp_pkt_hdr *h;
 	u32 checksum;
 	__be32 *pchecksum;
+	unsigned int len;
 
 	/* Check NCSI packet header. We don't need validate
 	 * the packet type, which should have been checked
 	 * before calling this function.
 	 */
+	len = skb_network_offset(nr->rsp) + sizeof(*h) + ALIGN(payload, 4);
+	if (!pskb_may_pull(nr->rsp, len)) {
+		netdev_dbg(nr->ndp->ndev.dev, "NCSI: packet too short\n");
+		return -EINVAL;
+	}
+
 	h = (struct ncsi_rsp_pkt_hdr *)skb_network_header(nr->rsp);
 
 	if (h->common.revision != NCSI_PKT_REVISION) {
@@ -1182,6 +1189,11 @@ int ncsi_rcv_rsp(struct sk_buff *skb, struct net_device *dev,
 	}
 
 	/* Check if it is AEN packet */
+	if (!pskb_may_pull(skb, skb_network_offset(skb) + sizeof(*hdr))) {
+		ret = -EINVAL;
+		goto err_free_skb;
+	}
+
 	hdr = (struct ncsi_pkt_hdr *)skb_network_header(skb);
 	if (hdr->type == NCSI_PKT_AEN)
 		return ncsi_aen_handler(ndp, skb);
