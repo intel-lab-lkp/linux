@@ -508,6 +508,12 @@ static void __do_ffa_mem_xfer(const u64 func_id,
 	buf = hyp_buffers.tx;
 	memcpy(buf, host_buffers.tx, fraglen);
 
+	if (FFA_MEM_REGION_HAS_EP_MEM_OFFSET(hyp_ffa_version) &&
+	    buf->ep_mem_offset != sizeof(struct ffa_mem_region)) {
+		ret = FFA_RET_INVALID_PARAMETERS;
+		goto out_unlock;
+	}
+
 	ep_mem_access = (void *)buf +
 			ffa_mem_desc_offset(buf, 0, hyp_ffa_version);
 	offset = ep_mem_access->composite_off;
