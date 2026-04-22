@@ -899,6 +899,8 @@ static int ncsi_rsp_handler_gp(struct ncsi_request *nr)
 	struct ncsi_dev_priv *ndp = nr->ndp;
 	struct ncsi_rsp_gp_pkt *rsp;
 	struct ncsi_channel *nc;
+	size_t needed;
+	unsigned int payload;
 	unsigned short enable;
 	unsigned char *pdata;
 	unsigned long flags;
@@ -923,6 +925,14 @@ static int ncsi_rsp_handler_gp(struct ncsi_request *nr)
 
 	if (rsp->mac_cnt > mac_nbits || rsp->vlan_cnt > ncvf->n_vids)
 		return -ERANGE;
+
+	payload = ncsi_rsp_payload(nr->rsp);
+	needed = offsetof(struct ncsi_rsp_gp_pkt, mac) - sizeof(rsp->rsp);
+	needed += mac_cnt * ETH_ALEN;
+	needed += vlan_cnt * sizeof(__be16);
+	needed += sizeof(rsp->checksum);
+	if (payload < needed)
+		return -EINVAL;
 
 	/* Modes with explicit enabled indications */
 	if (ntohl(rsp->valid_modes) & 0x1) {	/* BC filter mode */
