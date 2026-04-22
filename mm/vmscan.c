@@ -6964,6 +6964,13 @@ static bool pgdat_balanced(pg_data_t *pgdat, int order, int highest_zoneidx)
 		if (__zone_watermark_ok(zone, order, mark, highest_zoneidx,
 					0, free_pages))
 			return true;
+		/*
+		 * Free pages may be well above the watermark, but if
+		 * higher-order pages are unavailable, kswapd may still
+		 * trigger excessive reclamation.
+		 */
+		if (order && compaction_suitable(zone, order, mark, highest_zoneidx))
+			return true;
 	}
 
 	/*
