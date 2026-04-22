@@ -204,14 +204,14 @@ static int pn_socket_autobind(struct socket *sock)
 	struct sockaddr_pn sa;
 	int err;
 
+	if (pn_port(pn_sk(sock->sk)->sobject))
+		return 0; /* socket was already bound */
+
 	memset(&sa, 0, sizeof(sa));
 	sa.spn_family = AF_PHONET;
 	err = pn_socket_bind(sock, (struct sockaddr_unsized *)&sa,
 			     sizeof(struct sockaddr_pn));
-	if (err != -EINVAL)
-		return err;
-	BUG_ON(!pn_port(pn_sk(sock->sk)->sobject));
-	return 0; /* socket was already bound */
+	return err;
 }
 
 static int pn_socket_connect(struct socket *sock, struct sockaddr_unsized *addr,
