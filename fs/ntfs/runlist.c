@@ -749,6 +749,12 @@ struct runlist_element *ntfs_mapping_pairs_decompress(const struct ntfs_volume *
 #endif
 	/* Start at vcn = lowest_vcn and lcn 0. */
 	vcn = le64_to_cpu(attr->data.non_resident.lowest_vcn);
+	/* Validate lowest_vcn from on-disk metadata to ensure it is sane. */
+	if (unlikely(vcn < 0)) {
+		ntfs_error(vol->sb, "Invalid lowest_vcn in mapping pairs.");
+		goto err_out;
+	}
+
 	lcn = 0;
 	/* Get start of the mapping pairs array. */
 	buf = (u8 *)attr +
@@ -823,8 +829,17 @@ struct runlist_element *ntfs_mapping_pairs_decompress(const struct ntfs_volume *
 		 * element.
 		 */
 		rl[rlpos].length = deltaxcn;
-		/* Increment the current vcn by the current run length. */
-		vcn += deltaxcn;
+		/*
+		 * Increment the current vcn by the current run length.
+		 * Guard against s64 overflow from a crafted mapping
+		 * pairs array to preserve the monotonically-increasing
+		 * vcn invariant.
+		 */
+		if (unlikely(check_add_overflow(vcn, deltaxcn, &vcn))) {
+			ntfs_error(vol->sb, "VCN overflow in mapping pairs array.");
+			goto err_out;
+		}
+
 		/*
 		 * There might be no lcn change at all, as is the case for
 		 * sparse clusters on NTFS 3.0+, in which case we set the lcn
