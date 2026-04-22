@@ -324,10 +324,72 @@ static ssize_t plane_type_store(struct config_item *item, const char *page,
 	return (ssize_t)count;
 }
 
+static ssize_t plane_name_show(struct config_item *item, char *page)
+{
+	struct vkms_configfs_plane *plane;
+	const char *name;
+
+	plane = plane_item_to_vkms_configfs_plane(item);
+
+	scoped_guard(mutex, &plane->dev->lock)
+		name = vkms_config_plane_get_name(plane->config);
+
+	if (name)
+		return sysfs_emit(page, "%s\n", name);
+
+	return sysfs_emit(page, "\n");
+}
+
+static ssize_t plane_name_store(struct config_item *item, const char *page,
+				size_t count)
+{
+	struct vkms_configfs_plane *plane;
+	char name_tmp[PAGE_SIZE];
+	size_t str_len;
+	int ret;
+
+	memcpy(name_tmp, page, PAGE_SIZE);
+
+	plane = plane_item_to_vkms_configfs_plane(item);
+
+	// strspn is not lenght-protected, ensure that page is a null-terminated string.
+	str_len = strnlen(name_tmp, count);
+	if (str_len > count)
+		return -EINVAL;
+
+	if (count > 0) {
+		size_t expected_count = count;
+
+		if (name_tmp[count-1] == '\n') {
+			expected_count = count - 1;
+			name_tmp[count-1] = '\0';
+		}
+
+		if (strspn(name_tmp,
+			   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-")
+		    != expected_count)
+			return -EINVAL;
+	}
+
+
+	scoped_guard(mutex, &plane->dev->lock) {
+		if (plane->dev->enabled)
+			return -EBUSY;
+
+		ret = vkms_config_plane_set_name(plane->config, name_tmp);
+		if (ret)
+			return ret;
+	}
+
+	return (ssize_t)count;
+}
+
 CONFIGFS_ATTR(plane_, type);
+CONFIGFS_ATTR(plane_, name);
 
 static struct configfs_attribute *plane_item_attrs[] = {
 	&plane_attr_type,
+	&plane_attr_name,
 	NULL,
 };
 
