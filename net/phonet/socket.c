@@ -210,7 +210,15 @@ static int pn_socket_autobind(struct socket *sock)
 			     sizeof(struct sockaddr_pn));
 	if (err != -EINVAL)
 		return err;
-	BUG_ON(!pn_port(pn_sk(sock->sk)->sobject));
+	/*
+	 * pn_socket_bind() can return -EINVAL both when the socket is
+	 * already bound (pn_port() != 0) and when sk_state != TCP_CLOSE
+	 * without a prior bind.  Only the former is an "already bound"
+	 * success for autobind; otherwise propagate -EINVAL instead of
+	 * crashing the kernel.
+	 */
+	if (!pn_port(pn_sk(sock->sk)->sobject))
+		return -EINVAL;
 	return 0; /* socket was already bound */
 }
 
