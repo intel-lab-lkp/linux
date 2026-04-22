@@ -30,7 +30,7 @@
  * function's configuration space is zero.
  *
  * The rest of this driver mostly maps PCI concepts onto underlying Hyper-V
- * facilities.  For instance, the configuration space of a function exposed
+ * facilities.	For instance, the configuration space of a function exposed
  * by Hyper-V is mapped into a single page of memory space, and the
  * read and write handlers for config space must be aware of this mechanism.
  * Similarly, device setup and teardown involves messages sent to and from
@@ -109,33 +109,33 @@ enum pci_message_type {
 	/*
 	 * Version 1.1
 	 */
-	PCI_MESSAGE_BASE                = 0x42490000,
-	PCI_BUS_RELATIONS               = PCI_MESSAGE_BASE + 0,
-	PCI_QUERY_BUS_RELATIONS         = PCI_MESSAGE_BASE + 1,
-	PCI_POWER_STATE_CHANGE          = PCI_MESSAGE_BASE + 4,
+	PCI_MESSAGE_BASE		= 0x42490000,
+	PCI_BUS_RELATIONS		= PCI_MESSAGE_BASE + 0,
+	PCI_QUERY_BUS_RELATIONS		= PCI_MESSAGE_BASE + 1,
+	PCI_POWER_STATE_CHANGE		= PCI_MESSAGE_BASE + 4,
 	PCI_QUERY_RESOURCE_REQUIREMENTS = PCI_MESSAGE_BASE + 5,
-	PCI_QUERY_RESOURCE_RESOURCES    = PCI_MESSAGE_BASE + 6,
-	PCI_BUS_D0ENTRY                 = PCI_MESSAGE_BASE + 7,
-	PCI_BUS_D0EXIT                  = PCI_MESSAGE_BASE + 8,
-	PCI_READ_BLOCK                  = PCI_MESSAGE_BASE + 9,
-	PCI_WRITE_BLOCK                 = PCI_MESSAGE_BASE + 0xA,
-	PCI_EJECT                       = PCI_MESSAGE_BASE + 0xB,
-	PCI_QUERY_STOP                  = PCI_MESSAGE_BASE + 0xC,
-	PCI_REENABLE                    = PCI_MESSAGE_BASE + 0xD,
-	PCI_QUERY_STOP_FAILED           = PCI_MESSAGE_BASE + 0xE,
-	PCI_EJECTION_COMPLETE           = PCI_MESSAGE_BASE + 0xF,
-	PCI_RESOURCES_ASSIGNED          = PCI_MESSAGE_BASE + 0x10,
-	PCI_RESOURCES_RELEASED          = PCI_MESSAGE_BASE + 0x11,
-	PCI_INVALIDATE_BLOCK            = PCI_MESSAGE_BASE + 0x12,
-	PCI_QUERY_PROTOCOL_VERSION      = PCI_MESSAGE_BASE + 0x13,
-	PCI_CREATE_INTERRUPT_MESSAGE    = PCI_MESSAGE_BASE + 0x14,
-	PCI_DELETE_INTERRUPT_MESSAGE    = PCI_MESSAGE_BASE + 0x15,
+	PCI_QUERY_RESOURCE_RESOURCES	= PCI_MESSAGE_BASE + 6,
+	PCI_BUS_D0ENTRY			= PCI_MESSAGE_BASE + 7,
+	PCI_BUS_D0EXIT			= PCI_MESSAGE_BASE + 8,
+	PCI_READ_BLOCK			= PCI_MESSAGE_BASE + 9,
+	PCI_WRITE_BLOCK			= PCI_MESSAGE_BASE + 0xA,
+	PCI_EJECT			= PCI_MESSAGE_BASE + 0xB,
+	PCI_QUERY_STOP			= PCI_MESSAGE_BASE + 0xC,
+	PCI_REENABLE			= PCI_MESSAGE_BASE + 0xD,
+	PCI_QUERY_STOP_FAILED		= PCI_MESSAGE_BASE + 0xE,
+	PCI_EJECTION_COMPLETE		= PCI_MESSAGE_BASE + 0xF,
+	PCI_RESOURCES_ASSIGNED		= PCI_MESSAGE_BASE + 0x10,
+	PCI_RESOURCES_RELEASED		= PCI_MESSAGE_BASE + 0x11,
+	PCI_INVALIDATE_BLOCK		= PCI_MESSAGE_BASE + 0x12,
+	PCI_QUERY_PROTOCOL_VERSION	= PCI_MESSAGE_BASE + 0x13,
+	PCI_CREATE_INTERRUPT_MESSAGE	= PCI_MESSAGE_BASE + 0x14,
+	PCI_DELETE_INTERRUPT_MESSAGE	= PCI_MESSAGE_BASE + 0x15,
 	PCI_RESOURCES_ASSIGNED2		= PCI_MESSAGE_BASE + 0x16,
 	PCI_CREATE_INTERRUPT_MESSAGE2	= PCI_MESSAGE_BASE + 0x17,
 	PCI_DELETE_INTERRUPT_MESSAGE2	= PCI_MESSAGE_BASE + 0x18, /* unused */
 	PCI_BUS_RELATIONS2		= PCI_MESSAGE_BASE + 0x19,
-	PCI_RESOURCES_ASSIGNED3         = PCI_MESSAGE_BASE + 0x1A,
-	PCI_CREATE_INTERRUPT_MESSAGE3   = PCI_MESSAGE_BASE + 0x1B,
+	PCI_RESOURCES_ASSIGNED3		= PCI_MESSAGE_BASE + 0x1A,
+	PCI_CREATE_INTERRUPT_MESSAGE3	= PCI_MESSAGE_BASE + 0x1B,
 	PCI_MESSAGE_MAXIMUM
 };
 
@@ -1774,20 +1774,21 @@ static u32 hv_compose_msi_req_v1(
  * via the HVCALL_RETARGET_INTERRUPT hypercall. But the choice of dummy vCPU is
  * not irrelevant because Hyper-V chooses the physical CPU to handle the
  * interrupts based on the vCPU specified in message sent to the vPCI VSP in
- * hv_compose_msi_msg(). Hyper-V's choice of pCPU is not visible to the guest,
- * but assigning too many vPCI device interrupts to the same pCPU can cause a
- * performance bottleneck. So we spread out the dummy vCPUs to influence Hyper-V
- * to spread out the pCPUs that it selects.
+ * hv_vmbus_compose_msi_msg(). Hyper-V's choice of pCPU is not visible to the
+ * guest, but assigning too many vPCI device interrupts to the same pCPU can
+ * cause a performance bottleneck. So we spread out the dummy vCPUs to influence
+ * Hyper-V to spread out the pCPUs that it selects.
  *
  * For the single-MSI and MSI-X cases, it's OK for hv_compose_msi_req_get_cpu()
  * to always return the same dummy vCPU, because a second call to
- * hv_compose_msi_msg() contains the "real" vCPU, causing Hyper-V to choose a
- * new pCPU for the interrupt. But for the multi-MSI case, the second call to
- * hv_compose_msi_msg() exits without sending a message to the vPCI VSP, so the
- * original dummy vCPU is used. This dummy vCPU must be round-robin'ed so that
- * the pCPUs are spread out. All interrupts for a multi-MSI device end up using
- * the same pCPU, even though the vCPUs will be spread out by later calls
- * to hv_irq_unmask(), but that is the best we can do now.
+ * hv_vmbus_compose_msi_msg() contains the "real" vCPU, causing Hyper-V to
+ * choose a new pCPU for the interrupt. But for the multi-MSI case, the second
+ * call to hv_vmbus_compose_msi_msg() exits without sending a message to the
+ * vPCI VSP, so the original dummy vCPU is used. This dummy vCPU must be
+ * round-robin'ed so that the pCPUs are spread out. All interrupts for a
+ * multi-MSI device end up using the same pCPU, even though the vCPUs will be
+ * spread out by later calls to hv_irq_unmask(), but that is the best we can do
+ * now.
  *
  * With Hyper-V in Nov 2022, the HVCALL_RETARGET_INTERRUPT hypercall does *not*
  * cause Hyper-V to reselect the pCPU based on the specified vCPU. Such an
@@ -1862,7 +1863,7 @@ static u32 hv_compose_msi_req_v3(
 }
 
 /**
- * hv_compose_msi_msg() - Supplies a valid MSI address/data
+ * hv_vmbus_compose_msi_msg() - Supplies a valid MSI address/data
  * @data:	Everything about this MSI
  * @msg:	Buffer that is filled in by this function
  *
@@ -1872,7 +1873,7 @@ static u32 hv_compose_msi_req_v3(
  * response supplies a data value and address to which that data
  * should be written to trigger that interrupt.
  */
-static void hv_compose_msi_msg(struct irq_data *data, struct msi_msg *msg)
+static void hv_vmbus_compose_msi_msg(struct irq_data *data, struct msi_msg *msg)
 {
 	struct hv_pcibus_device *hbus;
 	struct vmbus_channel *channel;
@@ -1954,7 +1955,7 @@ static void hv_compose_msi_msg(struct irq_data *data, struct msi_msg *msg)
 			return;
 		}
 		/*
-		 * The vector we select here is a dummy value.  The correct
+		 * The vector we select here is a dummy value.	The correct
 		 * value gets sent to the hypervisor in unmask().  This needs
 		 * to be aligned with the count, and also not zero.  Multi-msi
 		 * is powers of 2 up to 32, so 32 will always work here.
@@ -2046,7 +2047,7 @@ static void hv_compose_msi_msg(struct irq_data *data, struct msi_msg *msg)
 
 		/*
 		 * Make sure that the ring buffer data structure doesn't get
-		 * freed while we dereference the ring buffer pointer.  Test
+		 * freed while we dereference the ring buffer pointer.	Test
 		 * for the channel's onchannel_callback being NULL within a
 		 * sched_lock critical section.  See also the inline comments
 		 * in vmbus_reset_channel_cb().
@@ -2146,7 +2147,7 @@ static const struct msi_parent_ops hv_pcie_msi_parent_ops = {
 /* HW Interrupt Chip Descriptor */
 static struct irq_chip hv_msi_irq_chip = {
 	.name			= "Hyper-V PCIe MSI",
-	.irq_compose_msi_msg	= hv_compose_msi_msg,
+	.irq_compose_msi_msg	= hv_vmbus_compose_msi_msg,
 	.irq_set_affinity	= irq_chip_set_affinity_parent,
 	.irq_ack		= irq_chip_ack_parent,
 	.irq_eoi		= irq_chip_eoi_parent,
@@ -2158,8 +2159,8 @@ static int hv_pcie_domain_alloc(struct irq_domain *d, unsigned int virq, unsigne
 			       void *arg)
 {
 	/*
-	 * TODO: Allocating and populating struct tran_int_desc in hv_compose_msi_msg()
-	 * should be moved here.
+	 * TODO: Allocating and populating struct tran_int_desc in
+	 *	 hv_vmbus_compose_msi_msg() should be moved here.
 	 */
 	int ret;
 
@@ -2226,7 +2227,7 @@ static int hv_pcie_init_irq_domain(struct hv_pcibus_device *hbus)
 /**
  * get_bar_size() - Get the address space consumed by a BAR
  * @bar_val:	Value that a BAR returned after -1 was written
- *              to it.
+ *		to it.
  *
  * This function returns the size of the BAR, rounded up to 1
  * page.  It has to be rounded up because the hypervisor's page
@@ -2580,7 +2581,7 @@ static void q_resource_requirements(void *context, struct pci_response *resp,
  * new_pcichild_device() - Create a new child device
  * @hbus:	The internal struct tracking this root PCI bus.
  * @desc:	The information supplied so far from the host
- *              about the device.
+ *		about the device.
  *
  * This function creates the tracking structure for a new child
  * device and kicks off the process of figuring out what it is.
@@ -3105,7 +3106,7 @@ static void hv_pci_onchannelcallback(void *context)
 			 * sure that the packet pointer is still valid during the call:
 			 * here 'valid' means that there's a task still waiting for the
 			 * completion, and that the packet data is still on the waiting
-			 * task's stack.  Cf. hv_compose_msi_msg().
+			 * task's stack.  Cf. hv_vmbus_compose_msi_msg().
 			 */
 			comp_packet->completion_func(comp_packet->compl_ctxt,
 						     response,
@@ -3422,7 +3423,7 @@ static int hv_allocate_config_window(struct hv_pcibus_device *hbus)
 	 * vmbus_allocate_mmio() gets used for allocating both device endpoint
 	 * resource claims (those which cannot be overlapped) and the ranges
 	 * which are valid for the children of this bus, which are intended
-	 * to be overlapped by those children.  Set the flag on this claim
+	 * to be overlapped by those children.	Set the flag on this claim
 	 * meaning that this region can't be overlapped.
 	 */
 
@@ -4069,7 +4070,7 @@ static int hv_pci_restore_msi_msg(struct pci_dev *pdev, void *arg)
 		irq_data = irq_get_irq_data(entry->irq);
 		if (WARN_ON_ONCE(!irq_data))
 			return -EINVAL;
-		hv_compose_msi_msg(irq_data, &entry->msg);
+		hv_vmbus_compose_msi_msg(irq_data, &entry->msg);
 	}
 	return 0;
 }
@@ -4077,7 +4078,7 @@ static int hv_pci_restore_msi_msg(struct pci_dev *pdev, void *arg)
 /*
  * Upon resume, pci_restore_msi_state() -> ... ->  __pci_write_msi_msg()
  * directly writes the MSI/MSI-X registers via MMIO, but since Hyper-V
- * doesn't trap and emulate the MMIO accesses, here hv_compose_msi_msg()
+ * doesn't trap and emulate the MMIO accesses, here hv_vmbus_compose_msi_msg()
  * must be used to ask Hyper-V to re-create the IOMMU Interrupt Remapping
  * Table entries.
  */
