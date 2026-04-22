@@ -745,12 +745,35 @@ void module_param_sysfs_remove(struct module *mod)
 }
 #endif
 
+static int uevent_filter(const struct kobject *kobj)
+{
+	const struct kobj_type *ktype = get_ktype(kobj);
+
+	if (ktype == &module_ktype)
+		return 1;
+	return 0;
+}
+
+static const struct kset_uevent_ops module_uevent_ops = {
+	.filter = uevent_filter,
+};
+
+static struct kset *__init_or_module ensure_module_kset(void)
+{
+	if (!module_kset)
+		module_kset = kset_create_and_add("module", &module_uevent_ops, NULL);
+	return module_kset;
+}
+
 struct module_kobject * __init_or_module
 lookup_or_create_module_kobject(const char *name)
 {
 	struct module_kobject *mk;
 	struct kobject *kobj;
 	int err;
+
+	if (!ensure_module_kset())
+		return NULL;
 
 	kobj = kset_find_obj(module_kset, name);
 	if (kobj)
@@ -911,19 +934,6 @@ static const struct sysfs_ops module_sysfs_ops = {
 	.store = module_attr_store,
 };
 
-static int uevent_filter(const struct kobject *kobj)
-{
-	const struct kobj_type *ktype = get_ktype(kobj);
-
-	if (ktype == &module_ktype)
-		return 1;
-	return 0;
-}
-
-static const struct kset_uevent_ops module_uevent_ops = {
-	.filter = uevent_filter,
-};
-
 struct kset *module_kset;
 
 static void module_kobj_release(struct kobject *kobj)
@@ -940,7 +950,7 @@ const struct kobj_type module_ktype = {
 };
 
 /*
- * param_sysfs_init - create "module" kset
+ * param_sysfs_init - create module_kset if not already done
  *
  * This must be done before the initramfs is unpacked and
  * request_module() thus becomes possible, because otherwise the
@@ -948,8 +958,7 @@ const struct kobj_type module_ktype = {
  */
 static int __init param_sysfs_init(void)
 {
-	module_kset = kset_create_and_add("module", &module_uevent_ops, NULL);
-	if (!module_kset) {
+	if (!ensure_module_kset()) {
 		printk(KERN_WARNING "%s (%d): error creating kset\n",
 			__FILE__, __LINE__);
 		return -ENOMEM;
