@@ -792,6 +792,13 @@ static void adv7511_bridge_atomic_enable(struct drm_bridge *bridge,
 
 	adv7511_power_on(adv);
 
+	/*
+	 * Clear the HPD status bit (ADV7511_INT0_HPD), so that any HPD
+	 * interrupt latched before or during power loss is dismissed before
+	 * normal operation resumes.
+	 */
+	regmap_write(adv->regmap, ADV7511_REG_INT(0), ADV7511_INT0_HPD);
+
 	connector = drm_atomic_get_new_connector_for_encoder(state, bridge->encoder);
 	if (WARN_ON(!connector))
 		return;
