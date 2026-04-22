@@ -435,6 +435,15 @@ static void __init hyp_mode_check(void)
 	}
 }
 
+void __init arch_disable_smp_support(void)
+{
+	/*
+	 * Under nosmp/maxcpus=0, only the boot CPU can ever be brought up.
+	 * Limit nr_cpu_ids so that secondary CPUs are never set up.
+	 */
+	set_nr_cpu_ids(1);
+}
+
 void __init smp_cpus_done(unsigned int max_cpus)
 {
 	pr_info("SMP: Total of %d processors activated.\n", num_online_cpus());
