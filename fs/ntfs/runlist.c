@@ -823,7 +823,16 @@ struct runlist_element *ntfs_mapping_pairs_decompress(const struct ntfs_volume *
 		 * element.
 		 */
 		rl[rlpos].length = deltaxcn;
-		/* Increment the current vcn by the current run length. */
+		/*
+		 * Increment the current vcn by the current run length.
+		 * Both are non-negative here; guard against s64 overflow
+		 * from a crafted mapping pairs array to preserve the
+		 * monotonically-increasing vcn invariant.
+		 */
+		if (unlikely(deltaxcn > S64_MAX - vcn)) {
+			ntfs_error(vol->sb, "VCN overflow in mapping pairs array.");
+			goto err_out;
+		}
 		vcn += deltaxcn;
 		/*
 		 * There might be no lcn change at all, as is the case for
