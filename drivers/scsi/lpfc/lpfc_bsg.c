@@ -3111,7 +3111,7 @@ lpfc_bsg_diag_loopback_run(struct bsg_job *job)
 		if (size <= (64 * 1024))
 			total_mem = full_size;
 		else
-			total_mem = 64 * 1024;
+			total_mem = full_size;
 	} else
 		/* Allocate memory for ioctl data */
 		total_mem = BUF_SZ_4K;
