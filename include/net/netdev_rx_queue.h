@@ -7,13 +7,15 @@
 #include <linux/sysfs.h>
 #include <net/xdp.h>
 #include <net/page_pool/types.h>
+#include <net/netdev_queues.h>
+#include <net/rps-types.h>
 
 /* This structure contains an instance of an RX queue. */
 struct netdev_rx_queue {
 	struct xdp_rxq_info		xdp_rxq;
 #ifdef CONFIG_RPS
 	struct rps_map __rcu		*rps_map;
-	struct rps_dev_flow_table __rcu	*rps_flow_table;
+	rps_tag_ptr			rps_flow_table;
 #endif
 	struct kobject			kobj;
 	const struct attribute_group	**groups;
@@ -27,6 +29,7 @@ struct netdev_rx_queue {
 	struct xsk_buff_pool            *pool;
 #endif
 	struct napi_struct		*napi;
+	struct netdev_queue_config	qcfg;
 	struct pp_memory_provider_params mp_params;
 } ____cacheline_aligned_in_smp;
 

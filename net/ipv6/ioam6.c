@@ -127,7 +127,7 @@ static int ioam6_genl_addns(struct sk_buff *skb, struct genl_info *info)
 		goto out_unlock;
 	}
 
-	ns = kzalloc(sizeof(*ns), GFP_KERNEL);
+	ns = kzalloc_obj(*ns);
 	if (!ns) {
 		err = -ENOMEM;
 		goto out_unlock;
@@ -245,7 +245,7 @@ static int ioam6_genl_dumpns_start(struct netlink_callback *cb)
 	struct rhashtable_iter *iter = (struct rhashtable_iter *)cb->args[0];
 
 	if (!iter) {
-		iter = kmalloc(sizeof(*iter), GFP_KERNEL);
+		iter = kmalloc_obj(*iter);
 		if (!iter)
 			return -ENOMEM;
 
@@ -431,7 +431,7 @@ static int ioam6_genl_dumpsc_start(struct netlink_callback *cb)
 	struct rhashtable_iter *iter = (struct rhashtable_iter *)cb->args[0];
 
 	if (!iter) {
-		iter = kmalloc(sizeof(*iter), GFP_KERNEL);
+		iter = kmalloc_obj(*iter);
 		if (!iter)
 			return -ENOMEM;
 
@@ -690,11 +690,25 @@ struct ioam6_namespace *ioam6_namespace(struct net *net, __be16 id)
 	return rhashtable_lookup_fast(&nsdata->namespaces, &id, rht_ns_params);
 }
 
+#define IOAM6_MASK_SHORT_FIELDS 0xff1ffc00
+#define IOAM6_MASK_WIDE_FIELDS  0x00e00000
+
+u8 ioam6_trace_compute_nodelen(u32 trace_type)
+{
+	u8 nodelen = hweight32(trace_type & IOAM6_MASK_SHORT_FIELDS)
+				* (sizeof(__be32) / 4);
+
+	nodelen += hweight32(trace_type & IOAM6_MASK_WIDE_FIELDS)
+				* (sizeof(__be64) / 4);
+
+	return nodelen;
+}
+
 static void __ioam6_fill_trace_data(struct sk_buff *skb,
 				    struct ioam6_namespace *ns,
 				    struct ioam6_trace_hdr *trace,
 				    struct ioam6_schema *sc,
-				    u8 sclen, bool is_input)
+				    unsigned int sclen, bool is_input)
 {
 	struct net_device *dev = skb_dst_dev(skb);
 	struct timespec64 ts;
@@ -925,7 +939,7 @@ void ioam6_fill_trace_data(struct sk_buff *skb,
 			   bool is_input)
 {
 	struct ioam6_schema *sc;
-	u8 sclen = 0;
+	unsigned int sclen = 0;
 
 	/* Skip if Overflow flag is set
 	 */
@@ -961,7 +975,7 @@ static int __net_init ioam6_net_init(struct net *net)
 	struct ioam6_pernet_data *nsdata;
 	int err = -ENOMEM;
 
-	nsdata = kzalloc(sizeof(*nsdata), GFP_KERNEL);
+	nsdata = kzalloc_obj(*nsdata);
 	if (!nsdata)
 		goto out;
 
