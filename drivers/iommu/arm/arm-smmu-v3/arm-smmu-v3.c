@@ -2733,15 +2733,27 @@ static void arm_smmu_enable_ats(struct arm_smmu_master *master)
 
 static int arm_smmu_enable_pasid(struct arm_smmu_master *master)
 {
-	int ret;
-	int features;
-	int num_pasids;
+	struct iommu_fwspec *fwspec = dev_iommu_fwspec_get(master->dev);
 	struct pci_dev *pdev;
+	int features, num_pasids, ret, rc_width;
 
 	if (!dev_is_pci(master->dev))
 		return -ENODEV;
 
 	pdev = to_pci_dev(master->dev);
+
+	/*
+	 * IORT E.c (RC node revision >= 4) reports whether the root
+	 * complex actually supports PASID. If it does not, enabling
+	 * PASID on the endpoint is futile - the RC will not forward
+	 * the PASID prefix - so skip silently. Older firmware is
+	 * treated as "unknown / assume supported" to preserve the
+	 * pre-E.c behaviour.
+	 */
+	if (fwspec &&
+	    !(fwspec->flags & IOMMU_FWSPEC_PCI_RC_PASID) &&
+	    iort_pci_rc_pasid_max_width_known(master->dev))
+		return 0;
 
 	features = pci_pasid_features(pdev);
 	if (features < 0)
@@ -2750,6 +2762,14 @@ static int arm_smmu_enable_pasid(struct arm_smmu_master *master)
 	num_pasids = pci_max_pasids(pdev);
 	if (num_pasids <= 0)
 		return num_pasids;
+
+	/* Clamp by what the root complex can carry, when known. */
+	rc_width = iort_pci_rc_pasid_max_width_for_dev(master->dev);
+	if (rc_width >= 0)
+		num_pasids = min_t(int, num_pasids, 1 << rc_width);
+
+	if (num_pasids <= 1)
+		return 0;
 
 	ret = pci_enable_pasid(pdev, features);
 	if (ret) {
