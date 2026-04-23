@@ -311,4 +311,11 @@ static inline void hmem_register_resource(int target_nid, struct resource *r)
 typedef int (*walk_hmem_fn)(struct device *dev, int target_nid,
 			    const struct resource *res);
 int walk_hmem_resources(struct device *dev, walk_hmem_fn fn);
+
+extern const struct file_operations dax_fops;
+static inline bool is_file_dax(struct file *file)
+{
+	return file->f_op == &dax_fops;
+}
+
 #endif
