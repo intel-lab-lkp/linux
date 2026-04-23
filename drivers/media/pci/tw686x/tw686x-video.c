@@ -552,9 +552,9 @@ static void tw686x_stop_streaming(struct vb2_queue *vq)
 	/* Check device presence */
 	spin_lock_irqsave(&dev->lock, flags);
 	pci_dev = dev->pci_dev;
-	spin_unlock_irqrestore(&dev->lock, flags);
 	if (pci_dev)
 		tw686x_disable_channel(dev, vc->ch);
+	spin_unlock_irqrestore(&dev->lock, flags);
 
 	spin_lock_irqsave(&vc->qlock, flags);
 	tw686x_clear_queue(vc, VB2_BUF_STATE_ERROR);
