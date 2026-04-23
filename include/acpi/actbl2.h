@@ -748,7 +748,8 @@ struct acpi_iort_root_complex {
 	u32 pci_segment_number;
 	u8 memory_address_limit;	/* Memory address size limit */
 	u16 pasid_capabilities;	/* PASID Capabilities */
-	u8 reserved[];		/* Reserved, must be zero */
+	u8 reserved[1];		/* Reserved, must be zero */
+	u32 flags;		/* Flags (IORT E.c, RC node revision >= 4) */
 };
 
 /* Masks for ats_attribute field above */
@@ -759,6 +760,9 @@ struct acpi_iort_root_complex {
 
 /* Masks for pasid_capabilities field above */
 #define ACPI_IORT_PASID_MAX_WIDTH       (0x1F)	/* Bits 0-4 */
+
+/* Masks for flags field above */
+#define ACPI_IORT_RC_PASID_SUPPORTED    (1)	/* The root complex PASID support */
 
 struct acpi_iort_smmu {
 	u64 base_address;	/* SMMU base address */
