@@ -635,12 +635,7 @@ static struct mux_control *mux_get(struct device *dev, const char *mux_name,
  */
 struct mux_control *mux_control_get(struct device *dev, const char *mux_name)
 {
-	struct mux_control *mux = mux_get(dev, mux_name, NULL, false);
-
-	if (!mux)
-		return ERR_PTR(-ENOENT);
-
-	return mux;
+	return mux_get(dev, mux_name, NULL, false);
 }
 EXPORT_SYMBOL_GPL(mux_control_get);
 
