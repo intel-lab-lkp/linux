@@ -306,7 +306,7 @@ static int cifs_debug_dirs_proc_show(struct seq_file *m, void *v)
 	LIST_HEAD(entry);
 
 	seq_puts(m, "# Version:1\n");
-#ifdef CONFIG_CIFS_DEBUG
+#ifdef CONFIG_CIFS_DEBUG2
 	seq_puts(m, "# Write 0 to this file to drop all cached directory entries\n");
 #endif /* CONFIG_CIFS_DEBUG */
 	seq_puts(m, "# Format:\n");
@@ -356,7 +356,7 @@ static int cifs_debug_dirs_proc_show(struct seq_file *m, void *v)
 	return 0;
 }
 
-#ifdef CONFIG_CIFS_DEBUG
+#ifdef CONFIG_CIFS_DEBUG2
 static int cifs_debug_dirs_proc_open(struct inode *inode, struct file *file)
 {
 	return single_open(file, cifs_debug_dirs_proc_show, NULL);
