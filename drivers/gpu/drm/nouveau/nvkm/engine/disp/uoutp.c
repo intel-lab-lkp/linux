@@ -253,8 +253,7 @@ nvkm_uoutp_mthd_hdmi(struct nvkm_outp *outp, void *argv, u32 argc)
 
 	if (!ior->func->hdmi ||
 	    args->v0.max_ac_packet > 0x1f ||
-	    args->v0.rekey > 0x7f ||
-	    (args->v0.scdc && !ior->func->hdmi->scdc))
+	    args->v0.rekey > 0x7f)
 		return -EINVAL;
 
 	if (!args->v0.enable) {
@@ -474,6 +473,21 @@ nvkm_uoutp_mthd_edid_get(struct nvkm_outp *outp, void *argv, u32 argc)
 }
 
 static int
+nvkm_uoutp_mthd_hdmi_sink_caps(struct nvkm_outp *outp, void *argv, u32 argc)
+{
+	union nvif_outp_hdmi_sink_caps_args *args = argv;
+
+	if (argc != sizeof(args->v0) || args->v0.version != 0)
+		return -ENOSYS;
+	if (!outp->func->hdmi_sink_caps)
+		return -EINVAL;
+
+	outp->func->hdmi_sink_caps(outp, args->v0.scdc, args->v0.scdc_scrambling,
+				   args->v0.scdc_low_rates);
+	return 0;
+}
+
+static int
 nvkm_uoutp_mthd_detect(struct nvkm_outp *outp, void *argv, u32 argc)
 {
 	union nvif_outp_detect_args *args = argv;
@@ -522,8 +536,9 @@ static int
 nvkm_uoutp_mthd_noacquire(struct nvkm_outp *outp, u32 mthd, void *argv, u32 argc, bool *invalid)
 {
 	switch (mthd) {
-	case NVIF_OUTP_V0_DETECT     : return nvkm_uoutp_mthd_detect     (outp, argv, argc);
-	case NVIF_OUTP_V0_EDID_GET   : return nvkm_uoutp_mthd_edid_get   (outp, argv, argc);
+	case NVIF_OUTP_V0_DETECT         : return nvkm_uoutp_mthd_detect         (outp, argv, argc);
+	case NVIF_OUTP_V0_EDID_GET       : return nvkm_uoutp_mthd_edid_get       (outp, argv, argc);
+	case NVIF_OUTP_V0_HDMI_SINK_CAPS : return nvkm_uoutp_mthd_hdmi_sink_caps (outp, argv, argc);
 	case NVIF_OUTP_V0_INHERIT    : return nvkm_uoutp_mthd_inherit    (outp, argv, argc);
 	case NVIF_OUTP_V0_ACQUIRE    : return nvkm_uoutp_mthd_acquire    (outp, argv, argc);
 	case NVIF_OUTP_V0_LOAD_DETECT: return nvkm_uoutp_mthd_load_detect(outp, argv, argc);

@@ -469,31 +469,6 @@ r535_sor_dp = {
 };
 
 static void
-r535_sor_hdmi_scdc(struct nvkm_ior *sor, u32 khz, bool support, bool scrambling,
-		   bool scrambling_low_rates)
-{
-	struct nvkm_outp *outp = sor->asy.outp;
-	struct nvkm_disp *disp = outp->disp;
-	NV0073_CTRL_SPECIFIC_SET_HDMI_SINK_CAPS_PARAMS *ctrl;
-
-	ctrl = nvkm_gsp_rm_ctrl_get(&disp->rm.objcom,
-				    NV0073_CTRL_CMD_SPECIFIC_SET_HDMI_SINK_CAPS, sizeof(*ctrl));
-	if (WARN_ON(IS_ERR(ctrl)))
-		return;
-
-	ctrl->displayId = BIT(outp->index);
-	ctrl->caps = 0;
-	if (support)
-		ctrl->caps |= NVDEF(NV0073_CTRL_CMD_SPECIFIC, SET_HDMI_SINK_CAPS, SCDC_SUPPORTED, TRUE);
-	if (scrambling)
-		ctrl->caps |= NVDEF(NV0073_CTRL_CMD_SPECIFIC, SET_HDMI_SINK_CAPS, GT_340MHZ_CLOCK_SUPPORTED, TRUE);
-	if (scrambling_low_rates)
-		ctrl->caps |= NVDEF(NV0073_CTRL_CMD_SPECIFIC, SET_HDMI_SINK_CAPS, LTE_340MHZ_SCRAMBLING_SUPPORTED, TRUE);
-
-	WARN_ON(nvkm_gsp_rm_ctrl_wr(&disp->rm.objcom, ctrl));
-}
-
-static void
 r535_sor_hdmi_ctrl_audio_mute(struct nvkm_outp *outp, bool mute)
 {
 	struct nvkm_disp *disp = outp->disp;
@@ -580,7 +555,6 @@ r535_sor_hdmi_ctrl(struct nvkm_ior *sor, int head, bool enable, u8 max_ac_packet
 static const struct nvkm_ior_func_hdmi
 r535_sor_hdmi = {
 	.ctrl = r535_sor_hdmi_ctrl,
-	.scdc = r535_sor_hdmi_scdc,
 	/*TODO: SF_USER -> KMS. */
 	.infoframe_avi = gv100_sor_hdmi_infoframe_avi,
 	.infoframe_vsi = gv100_sor_hdmi_infoframe_vsi,
@@ -1242,6 +1216,30 @@ r535_tmds_edid_get(struct nvkm_outp *outp, u8 *data, u16 *psize)
 	return ret;
 }
 
+static void
+r535_outp_hdmi_sink_caps(struct nvkm_outp *outp, bool scdc, bool scrambling,
+			 bool low_rates)
+{
+	struct nvkm_disp *disp = outp->disp;
+	NV0073_CTRL_SPECIFIC_SET_HDMI_SINK_CAPS_PARAMS *ctrl;
+
+	ctrl = nvkm_gsp_rm_ctrl_get(&disp->rm.objcom,
+				    NV0073_CTRL_CMD_SPECIFIC_SET_HDMI_SINK_CAPS, sizeof(*ctrl));
+	if (WARN_ON(IS_ERR(ctrl)))
+		return;
+
+	ctrl->displayId = BIT(outp->index);
+	ctrl->caps = 0;
+	if (scdc)
+		ctrl->caps |= NVDEF(NV0073_CTRL_CMD_SPECIFIC, SET_HDMI_SINK_CAPS, SCDC_SUPPORTED, TRUE);
+	if (scrambling)
+		ctrl->caps |= NVDEF(NV0073_CTRL_CMD_SPECIFIC, SET_HDMI_SINK_CAPS, GT_340MHZ_CLOCK_SUPPORTED, TRUE);
+	if (low_rates)
+		ctrl->caps |= NVDEF(NV0073_CTRL_CMD_SPECIFIC, SET_HDMI_SINK_CAPS, LTE_340MHZ_SCRAMBLING_SUPPORTED, TRUE);
+
+	WARN_ON(nvkm_gsp_rm_ctrl_wr(&disp->rm.objcom, ctrl));
+}
+
 static const struct nvkm_outp_func
 r535_tmds = {
 	.detect = r535_outp_detect,
@@ -1249,6 +1247,7 @@ r535_tmds = {
 	.acquire = r535_outp_acquire,
 	.release = r535_outp_release,
 	.edid_get = r535_tmds_edid_get,
+	.hdmi_sink_caps = r535_outp_hdmi_sink_caps,
 };
 
 static int

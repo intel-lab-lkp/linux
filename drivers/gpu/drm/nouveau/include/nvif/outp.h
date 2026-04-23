@@ -66,6 +66,8 @@ enum nvif_outp_detect_status {
 
 enum nvif_outp_detect_status nvif_outp_detect(struct nvif_outp *);
 int nvif_outp_edid_get(struct nvif_outp *, u8 **pedid);
+int nvif_outp_hdmi_sink_caps(struct nvif_outp *, bool scdc, bool scdc_scrambling,
+			     bool scdc_low_rates);
 
 int nvif_outp_load_detect(struct nvif_outp *, u32 loadval);
 int nvif_outp_acquire_dac(struct nvif_outp *);

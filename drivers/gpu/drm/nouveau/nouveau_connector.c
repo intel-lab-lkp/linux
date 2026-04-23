@@ -48,6 +48,7 @@
 
 #include <nvif/class.h>
 #include <nvif/if0011.h>
+#include <nvif/outp.h>
 
 struct drm_display_mode *
 nouveau_conn_native_mode(struct drm_connector *connector)
@@ -636,6 +637,16 @@ nouveau_connector_detect(struct drm_connector *connector, bool force)
 
 		nouveau_connector_set_encoder(connector, nv_encoder);
 		conn_status = connector_status_connected;
+
+		if (nv_encoder->dcb->type == DCB_OUTPUT_TMDS &&
+		    drm->client.device.info.family >= NV_DEVICE_INFO_V0_TURING) {
+			struct drm_hdmi_info *hdmi = &connector->display_info.hdmi;
+
+			nvif_outp_hdmi_sink_caps(&nv_encoder->outp,
+						hdmi->scdc.supported,
+						hdmi->scdc.scrambling.supported,
+						hdmi->scdc.scrambling.low_rates);
+		}
 
 		if (nv_encoder->dcb->type == DCB_OUTPUT_DP)
 			drm_dp_cec_set_edid(&nv_connector->aux, nv_connector->edid);

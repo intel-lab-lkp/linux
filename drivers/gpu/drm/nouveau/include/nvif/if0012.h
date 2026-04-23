@@ -43,6 +43,7 @@ union nvif_outp_args {
 
 #define NVIF_OUTP_V0_DETECT        0x00
 #define NVIF_OUTP_V0_EDID_GET      0x01
+#define NVIF_OUTP_V0_HDMI_SINK_CAPS 0x02
 
 #define NVIF_OUTP_V0_INHERIT       0x10
 #define NVIF_OUTP_V0_ACQUIRE       0x11
@@ -162,6 +163,16 @@ union nvif_outp_lvds_args {
 		__u8  version;
 		__u8  dual;
 		__u8  bpc8;
+	} v0;
+};
+
+union nvif_outp_hdmi_sink_caps_args {
+	struct nvif_outp_hdmi_sink_caps_v0 {
+		__u8 version;
+		__u8 scdc;
+		__u8 scdc_scrambling;
+		__u8 scdc_low_rates;
+		__u8 pad04[4];
 	} v0;
 };
 
