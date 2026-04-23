@@ -2019,8 +2019,27 @@ static long __get_user_pages_locked(struct mm_struct *mm, unsigned long start,
 
 		if (pages) {
 			pages[i] = virt_to_page((void *)start);
-			if (pages[i])
-				get_page(pages[i]);
+			if (pages[i]) {
+				/*
+				 * pin_user_pages*() arrives here with FOLL_PIN
+				 * set; unpin_user_page() (which is not
+				 * !CONFIG_MMU-specific) calls
+				 * gup_put_folio(..., FOLL_PIN) which subtracts
+				 * GUP_PIN_COUNTING_BIAS (1024).  A bare
+				 * get_page() here adds only 1, so 1023 pins on
+				 * a fresh page bring refcount to 1024 and a
+				 * single unpin then frees it out from under the
+				 * remaining 1022 pins and any live VMA
+				 * mappings. Use the same grab path as the MMU
+				 * implementation so pin and unpin are
+				 * symmetric.
+				 */
+				if (try_grab_folio(page_folio(pages[i]), 1,
+						   foll_flags)) {
+					pages[i] = NULL;
+					break;
+				}
+			}
 		}
 
 		start = (start + PAGE_SIZE) & PAGE_MASK;
