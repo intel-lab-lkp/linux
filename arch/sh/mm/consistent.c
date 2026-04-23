@@ -23,7 +23,7 @@ static void __init memchunk_cmdline_override(char *name, unsigned long *sizep)
 	int k = strlen(name);
 
 	while ((p = strstr(p, "memchunk."))) {
-		p += 9; /* strlen("memchunk.") */
+		p += sizeof("memchunk.") - 1;
 		if (!strncmp(name, p, k) && p[k] == '=') {
 			p += k + 1;
 			*sizep = memparse(p, NULL);
