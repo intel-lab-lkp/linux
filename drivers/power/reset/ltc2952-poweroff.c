@@ -77,12 +77,7 @@ struct ltc2952_poweroff {
 
 #define to_ltc2952(p, m) container_of(p, struct ltc2952_poweroff, m)
 
-/*
- * This global variable is only needed for pm_power_off. We should
- * remove it entirely once we don't need the global state anymore.
- */
-static struct ltc2952_poweroff *ltc2952_data;
-
+static struct gpio_desc *ltc2952_poweroff_gpio_kill;
 /**
  * ltc2952_poweroff_timer_wde - Timer callback
  * Toggles the watchdog reset signal each wde_interval
@@ -154,7 +149,7 @@ static irqreturn_t ltc2952_poweroff_handler(int irq, void *dev_id)
 
 static void ltc2952_poweroff_kill(void)
 {
-	gpiod_set_value(ltc2952_data->gpio_kill, 1);
+	gpiod_set_value(ltc2952_poweroff_gpio_kill, 1);
 }
 
 static void ltc2952_poweroff_default(struct ltc2952_poweroff *data)
@@ -274,8 +269,7 @@ static int ltc2952_poweroff_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	/* TODO: remove ltc2952_data */
-	ltc2952_data = data;
+	ltc2952_poweroff_gpio_kill = data->gpio_kill;
 	pm_power_off = ltc2952_poweroff_kill;
 
 	data->panic_notifier.notifier_call = ltc2952_poweroff_notify_panic;
