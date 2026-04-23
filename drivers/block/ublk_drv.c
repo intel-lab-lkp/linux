@@ -92,7 +92,7 @@
 	(UBLK_PARAM_TYPE_BASIC | UBLK_PARAM_TYPE_DISCARD | \
 	 UBLK_PARAM_TYPE_DEVT | UBLK_PARAM_TYPE_ZONED |    \
 	 UBLK_PARAM_TYPE_DMA_ALIGN | UBLK_PARAM_TYPE_SEGMENT | \
-	 UBLK_PARAM_TYPE_INTEGRITY)
+	 UBLK_PARAM_TYPE_INTEGRITY | UBLK_PARAM_TYPE_UUID)
 
 #define UBLK_BATCH_F_ALL  \
 	(UBLK_BATCH_F_HAS_ZONE_LBA | \
@@ -938,6 +938,14 @@ static int ublk_validate_params(const struct ublk_device *ub)
 			return -EINVAL;
 	}
 
+	if (ub->params.types & UBLK_PARAM_TYPE_UUID) {
+		const struct ublk_param_uuid *p = &ub->params.uuid;
+		uuid_t uuid;
+
+		import_uuid(&uuid, p->uuid);
+		if (uuid_is_null(&uuid))
+			return -EINVAL;
+	}
 	return 0;
 }
 
@@ -4240,6 +4248,49 @@ static int ublk_add_chdev(struct ublk_device *ub)
 	return ret;
 }
 
+static ssize_t uuid_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct gendisk *disk = dev_to_disk(dev);
+	struct ublk_device *ub = disk->private_data;
+	const struct ublk_param_uuid *p = &ub->params.uuid;
+	uuid_t uuid;
+
+	import_uuid(&uuid, p->uuid);
+	return sprintf(buf, "%pU\n", &uuid);
+}
+
+static DEVICE_ATTR_RO(uuid);
+
+static struct attribute *ublk_attrs[] = {
+	&dev_attr_uuid.attr,
+	NULL,
+};
+
+static umode_t ublk_attrs_are_visible(struct kobject *kobj,
+		struct attribute *a, int n)
+{
+	struct device *dev = kobj_to_dev(kobj);
+	struct gendisk *disk = dev_to_disk(dev);
+	struct ublk_device *ub = disk->private_data;
+
+	if (a == &dev_attr_uuid.attr &&
+	    (ub->params.types & UBLK_PARAM_TYPE_UUID))
+		return S_IRUGO;
+
+	return a->mode;
+}
+
+static const struct attribute_group ublk_attr_group = {
+	.attrs = ublk_attrs,
+	.is_visible = ublk_attrs_are_visible,
+};
+
+static const struct attribute_group *ublk_attr_groups[] = {
+	&ublk_attr_group,
+	NULL,
+};
+
 /* align max io buffer size with PAGE_SIZE */
 static void ublk_align_max_io_size(struct ublk_device *ub)
 {
@@ -4435,7 +4486,7 @@ static int ublk_ctrl_start_dev(struct ublk_device *ub,
 			goto out_put_cdev;
 	}
 
-	ret = add_disk(disk);
+	ret = device_add_disk(NULL, disk, ublk_attr_groups);
 	if (ret)
 		goto out_put_cdev;
 
