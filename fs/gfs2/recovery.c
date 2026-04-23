@@ -566,6 +566,7 @@ done:
 
 int gfs2_recover_journal(struct gfs2_jdesc *jd, bool wait)
 {
+	struct gfs2_sbd *sdp = GFS2_SB(jd->jd_inode);
 	int rv;
 
 	if (test_and_set_bit(JDF_RECOVERY, &jd->jd_flags))
@@ -575,9 +576,12 @@ int gfs2_recover_journal(struct gfs2_jdesc *jd, bool wait)
 	rv = queue_work(gfs2_recovery_wq, &jd->jd_work);
 	BUG_ON(!rv);
 
-	if (wait)
+	if (wait) {
 		wait_on_bit(&jd->jd_flags, JDF_RECOVERY,
 			    TASK_UNINTERRUPTIBLE);
+		/* Synchronous recovery must not return while its log bio is live. */
+		log_flush_wait(sdp);
+	}
 
 	return wait ? jd->jd_recover_error : 0;
 }
