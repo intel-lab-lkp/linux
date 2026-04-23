@@ -868,7 +868,8 @@ static int reset_add_gpio_aux_device(struct device *parent,
 static int __reset_add_reset_gpio_device(const struct of_phandle_args *args)
 {
 	struct property_entry properties[3] = { };
-	unsigned int offset, of_flags, lflags;
+	unsigned int offset[2], of_flags, lflags;
+	struct software_node_ref_args sw_ref[1];
 	struct reset_gpio_lookup *rgpio_dev;
 	struct device *parent;
 	int id, ret, prop = 0;
@@ -879,7 +880,7 @@ static int __reset_add_reset_gpio_device(const struct of_phandle_args *args)
 	 * args[1]: GPIO flags
 	 * TODO: Handle other cases.
 	 */
-	if (args->args_count != 2)
+	if (args->args_count != 2 && args->args_count != 3)
 		return -ENOENT;
 
 	/*
@@ -889,8 +890,13 @@ static int __reset_add_reset_gpio_device(const struct of_phandle_args *args)
 	 */
 	lockdep_assert_not_held(&reset_list_mutex);
 
-	offset = args->args[0];
-	of_flags = args->args[1];
+	offset[0] = args->args[0];
+	if (args->args_count == 2) {
+		of_flags = args->args[1];
+	} else {
+		offset[1] = args->args[1];
+		of_flags = args->args[2];
+	}
 
 	/*
 	 * Later we map GPIO flags between OF and Linux, however not all
@@ -902,7 +908,7 @@ static int __reset_add_reset_gpio_device(const struct of_phandle_args *args)
 	 */
 	if (of_flags > GPIO_ACTIVE_LOW) {
 		pr_err("reset-gpio code does not support GPIO flags %u for GPIO %u\n",
-		       of_flags, offset);
+		       of_flags, offset[0]);
 		return -EINVAL;
 	}
 
@@ -923,7 +929,13 @@ static int __reset_add_reset_gpio_device(const struct of_phandle_args *args)
 	lflags = GPIO_PERSISTENT | (of_flags & GPIO_ACTIVE_LOW);
 	parent = gpio_device_to_device(gdev);
 	properties[prop++] = PROPERTY_ENTRY_STRING("compatible", "reset-gpio");
-	properties[prop++] = PROPERTY_ENTRY_GPIO("reset-gpios", parent->fwnode, offset, lflags);
+
+	if (args->args_count == 2)
+		sw_ref[0] = SOFTWARE_NODE_REFERENCE(parent->fwnode, offset[0], lflags);
+	else
+		sw_ref[0] = SOFTWARE_NODE_REFERENCE(parent->fwnode, offset[0], offset[1],
+						    lflags);
+	properties[prop++] = PROPERTY_ENTRY_REF_ARRAY("reset-gpios", sw_ref);
 
 	id = ida_alloc(&reset_gpio_ida, GFP_KERNEL);
 	if (id < 0)
@@ -1048,10 +1060,11 @@ __of_reset_control_get(struct device_node *node, const char *id, int index,
 		goto out_unlock;
 	}
 
-	if (WARN_ON(args.args_count != rcdev->of_reset_n_cells)) {
-		rstc = ERR_PTR(-EINVAL);
-		goto out_unlock;
-	}
+	if (!(rcdev->dev && fwnode_device_is_compatible(dev_fwnode(rcdev->dev), "reset-gpio")))
+		if (WARN_ON(args.args_count != rcdev->of_reset_n_cells)) {
+			rstc = ERR_PTR(-EINVAL);
+			goto out_unlock;
+		}
 
 	rstc_id = rcdev->of_xlate(rcdev, &args);
 	if (rstc_id < 0) {
