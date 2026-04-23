@@ -48,9 +48,7 @@ properties:
 
   spi-max-frequency: true
 
-  wakeup-source:
-    type: boolean
-    description: Flag to indicate this device can wake system (suspend/resume).
+  wakeup-source: true
 
 required:
   - compatible

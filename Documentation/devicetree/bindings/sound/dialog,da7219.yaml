@@ -45,10 +45,7 @@ properties:
       - wakeup
       - irq
 
-  wakeup-source:
-    type: boolean
-    description:
-      Flag to indicate this device can wake system (suspend/resume).
+  wakeup-source: true
 
   "#clock-cells":
     const: 1
