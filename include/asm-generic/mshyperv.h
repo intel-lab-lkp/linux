@@ -25,6 +25,7 @@
 #include <linux/nmi.h>
 #include <asm/ptrace.h>
 #include <hyperv/hvhdk.h>
+#include <hyperv/hvgdk.h>
 
 #define VTPM_BASE_ADDRESS 0xfed40000
 
@@ -299,6 +300,16 @@ do { \
 #define hv_status_debug(status, fmt, ...) \
 	hv_status_printk(debug, status, fmt, ##__VA_ARGS__)
 
+extern struct hv_vp_assist_page **hv_vp_assist_page;
+
+static inline struct hv_vp_assist_page *hv_get_vp_assist_page(unsigned int cpu)
+{
+	if (!hv_vp_assist_page)
+		return NULL;
+
+	return hv_vp_assist_page[cpu];
+}
+
 const char *hv_result_to_string(u64 hv_status);
 int hv_result_to_errno(u64 status);
 void hyperv_report_panic(struct pt_regs *regs, long err, bool in_die);
@@ -326,6 +337,11 @@ static inline bool hv_is_isolation_supported(void) { return false; }
 static inline enum hv_isolation_type hv_get_isolation_type(void)
 {
 	return HV_ISOLATION_TYPE_NONE;
+}
+
+static inline struct hv_vp_assist_page *hv_get_vp_assist_page(unsigned int cpu)
+{
+	return NULL;
 }
 #endif /* CONFIG_HYPERV */
 
