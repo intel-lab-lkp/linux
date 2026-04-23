@@ -599,6 +599,7 @@ static void platform_device_release(struct device *dev)
 	struct platform_object *pa = container_of(dev, struct platform_object,
 						  pdev.dev);
 
+	device_remove_software_node(dev);
 	of_node_put(pa->pdev.dev.of_node);
 	kfree(pa->pdev.dev.platform_data);
 	kfree(pa->pdev.mfd_cell);
@@ -884,6 +885,16 @@ struct platform_device *platform_device_register_full(const struct platform_devi
 		if (ret)
 			goto err;
 	}
+
+	/*
+	 * If the primary firmware node is a software node and there's no
+	 * secondary firmware node, the primary will be affected by the call
+	 * to device_remove_software_node() in platform_device_release() and
+	 * its reference count will be dropped by one. Take another reference
+	 * here to make it have no effect.
+	 */
+	if (is_software_node(pdevinfo->fwnode) && !pdevinfo->swnode)
+		fwnode_handle_get(pdevinfo->fwnode);
 
 	ret = platform_device_add(pdev);
 	if (ret) {
