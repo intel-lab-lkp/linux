@@ -82,6 +82,8 @@ static inline int hv_vtl_get_set_reg(struct hv_register_assoc *regs, bool set, b
 	return 1;
 }
 
+/* Stubbed for arm64 */
+static inline int mshv_vtl_return_call_init(void) { return 0; }
 #endif
 
 #include <asm-generic/mshyperv.h>
