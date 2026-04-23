@@ -393,6 +393,7 @@ static int tcm_loop_driver_probe(struct device *dev)
 	if (error) {
 		pr_err("%s: scsi_add_host failed\n", __func__);
 		scsi_host_put(sh);
+		tl_hba->sh = NULL;
 		return -ENODEV;
 	}
 	return 0;
@@ -435,6 +436,9 @@ static int tcm_loop_setup_hba_bus(struct tcm_loop_hba *tl_hba, int tcm_loop_host
 		put_device(&tl_hba->dev);
 		return -ENODEV;
 	}
+
+	if (!tl_hba->sh)
+		return -ENODEV;
 
 	return 0;
 }
