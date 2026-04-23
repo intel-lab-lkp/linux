@@ -185,6 +185,10 @@ static void sun6i_spi_set_cs(struct spi_device *spi, bool enable)
 	u32 reg;
 
 	reg = sun6i_spi_read(sspi, SUN6I_TFR_CTL_REG);
+
+	/* SUN6I_TFR_CTL_CS_LEVEL sets CS rather than the controller doing it automatically */
+	reg |= SUN6I_TFR_CTL_CS_MANUAL;
+
 	reg &= ~SUN6I_TFR_CTL_CS_MASK;
 	reg |= SUN6I_TFR_CTL_CS(spi_get_chipselect(spi, 0));
 
@@ -363,9 +367,6 @@ static int sun6i_spi_transfer_one(struct spi_controller *host,
 	} else {
 		reg |= SUN6I_TFR_CTL_DHB;
 	}
-
-	/* We want to control the chip select manually */
-	reg |= SUN6I_TFR_CTL_CS_MANUAL;
 
 	sun6i_spi_write(sspi, SUN6I_TFR_CTL_REG, reg);
 
