@@ -211,6 +211,7 @@ struct compress_ioctl {
  *	BB consider moving to a different header
  */
 
+/* See MS-FSCC 2.4.16 */
 struct smb2_file_full_ea_info { /* encoding of response for level 15 */
 	__le32 next_entry_offset;
 	__u8   flags;
