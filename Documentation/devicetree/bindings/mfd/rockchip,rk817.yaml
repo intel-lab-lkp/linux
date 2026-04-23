@@ -55,10 +55,7 @@ properties:
 
   system-power-controller: true
 
-  wakeup-source:
-    type: boolean
-    description:
-      Device can be used as a wakeup source.
+  wakeup-source: true
 
   vcc1-supply:
     description:
