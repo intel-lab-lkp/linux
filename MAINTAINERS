@@ -25717,6 +25717,7 @@ S:	Maintained
 Q:	http://patchwork.kernel.org/project/linux-sh/list/
 F:	Documentation/arch/sh/
 F:	arch/sh/
+F:	drivers/cdrom/gdrom.c
 F:	drivers/sh/
 
 SUSPEND TO RAM
