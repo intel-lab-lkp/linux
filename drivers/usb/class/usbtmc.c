@@ -2431,6 +2431,10 @@ static int usbtmc_probe(struct usb_interface *intf,
 		data->iin_ep_present = 1;
 		data->iin_ep = int_in->bEndpointAddress;
 		data->iin_wMaxPacketSize = usb_endpoint_maxp(int_in);
+		if (data->iin_wMaxPacketSize < 2) {
+			retcode = -EINVAL;
+			goto err_put;
+		}
 		data->iin_interval = int_in->bInterval;
 		dev_dbg(&intf->dev, "Found Int in endpoint at %u\n",
 				data->iin_ep);
