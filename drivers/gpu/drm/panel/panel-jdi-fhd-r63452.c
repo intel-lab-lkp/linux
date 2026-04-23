@@ -200,7 +200,9 @@ static int jdi_fhd_r63452_probe(struct mipi_dsi_device *dsi)
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to get backlight\n");
 
-	drm_panel_add(&ctx->panel);
+	ret = devm_drm_panel_add(dev, &ctx->panel);
+	if (ret)
+		return dev_err_probe(dev, ret, "Failed to add panel\n");
 
 	ret = mipi_dsi_attach(dsi);
 	if (ret < 0) {
@@ -213,14 +215,11 @@ static int jdi_fhd_r63452_probe(struct mipi_dsi_device *dsi)
 
 static void jdi_fhd_r63452_remove(struct mipi_dsi_device *dsi)
 {
-	struct jdi_fhd_r63452 *ctx = mipi_dsi_get_drvdata(dsi);
 	int ret;
 
 	ret = mipi_dsi_detach(dsi);
 	if (ret < 0)
 		dev_err(&dsi->dev, "Failed to detach from DSI host: %d\n", ret);
-
-	drm_panel_remove(&ctx->panel);
 }
 
 static const struct of_device_id jdi_fhd_r63452_of_match[] = {
