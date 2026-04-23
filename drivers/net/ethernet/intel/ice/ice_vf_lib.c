@@ -623,7 +623,7 @@ ice_vf_get_promisc_masks(struct ice_vf *vf, struct ice_vsi *vsi,
  *
  * Clear all promiscuous/allmulticast filters for a VF
  */
-static int
+int
 ice_vf_clear_all_promisc_modes(struct ice_vf *vf, struct ice_vsi *vsi)
 {
 	struct ice_pf *pf = vf->pf;

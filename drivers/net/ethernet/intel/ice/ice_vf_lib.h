@@ -310,6 +310,7 @@ bool ice_is_any_vf_in_unicast_promisc(struct ice_pf *pf);
 void
 ice_vf_get_promisc_masks(struct ice_vf *vf, struct ice_vsi *vsi,
 			 u8 *ucast_m, u8 *mcast_m);
+int ice_vf_clear_all_promisc_modes(struct ice_vf *vf, struct ice_vsi *vsi);
 int
 ice_vf_set_vsi_promisc(struct ice_vf *vf, struct ice_vsi *vsi, u8 promisc_m);
 int
