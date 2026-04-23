@@ -215,7 +215,7 @@ int tegra_drm_ioctl_channel_map(struct drm_device *drm, void *data, struct drm_f
 	kref_init(&mapping->ref);
 
 	if (context->memory_context)
-		mapping_dev = &context->memory_context->dev;
+		mapping_dev = context->memory_context->dev;
 	else
 		mapping_dev = context->client->base.dev;
 

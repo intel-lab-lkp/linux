@@ -13,16 +13,12 @@
 #include "context.h"
 #include "dev.h"
 
-static void host1x_memory_context_release(struct device *dev)
-{
-	/* context device is freed in host1x_memory_context_list_free() */
-}
-
 int host1x_memory_context_list_init(struct host1x *host1x)
 {
 	struct host1x_memory_context_list *cdl = &host1x->context_list;
 	struct device_node *node = host1x->dev->of_node;
 	struct host1x_memory_context *ctx;
+	struct device *dev;
 	unsigned int i;
 	int err;
 
@@ -44,42 +40,27 @@ int host1x_memory_context_list_init(struct host1x *host1x)
 
 		ctx->host = host1x;
 
-		device_initialize(&ctx->dev);
-
 		/*
 		 * Due to an issue with T194 NVENC, only 38 bits can be used.
 		 * Anyway, 256GiB of IOVA ought to be enough for anyone.
 		 */
 		ctx->dma_mask = DMA_BIT_MASK(38);
-		ctx->dev.dma_mask = &ctx->dma_mask;
-		ctx->dev.coherent_dma_mask = ctx->dma_mask;
-		dev_set_name(&ctx->dev, "host1x-ctx.%d", i);
-		ctx->dev.bus = &host1x_context_device_bus_type;
-		ctx->dev.parent = host1x->dev;
-		ctx->dev.release = host1x_memory_context_release;
 
-		ctx->dev.dma_parms = &ctx->dma_parms;
-		dma_set_max_seg_size(&ctx->dev, UINT_MAX);
-
-		err = device_add(&ctx->dev);
-		if (err) {
+		dev = create_dma_context_bus_device(host1x->dev, NULL, ctx->dma_mask, &i);
+		if (IS_ERR(dev)) {
+			err = PTR_ERR(dev);
 			dev_err(host1x->dev, "could not add context device %d: %d\n", i, err);
-			put_device(&ctx->dev);
 			goto unreg_devices;
 		}
 
-		err = of_dma_configure_id(&ctx->dev, node, true, &i);
-		if (err) {
-			dev_err(host1x->dev, "IOMMU configuration failed for context device %d: %d\n",
-				i, err);
-			device_unregister(&ctx->dev);
-			goto unreg_devices;
-		}
+		ctx->dev = dev;
+		ctx->dev->dma_parms = &ctx->dma_parms;
+		dma_set_max_seg_size(ctx->dev, UINT_MAX);
 
-		if (!tegra_dev_iommu_get_stream_id(&ctx->dev, &ctx->stream_id) ||
-		    !device_iommu_mapped(&ctx->dev)) {
+		if (!tegra_dev_iommu_get_stream_id(ctx->dev, &ctx->stream_id) ||
+		    !device_iommu_mapped(ctx->dev)) {
 			dev_err(host1x->dev, "Context device %d has no IOMMU!\n", i);
-			device_unregister(&ctx->dev);
+			device_unregister(ctx->dev);
 
 			/*
 			 * This means that if IOMMU is disabled but context devices
@@ -96,7 +77,7 @@ int host1x_memory_context_list_init(struct host1x *host1x)
 
 unreg_devices:
 	while (i--)
-		device_unregister(&cdl->devs[i].dev);
+		device_unregister(cdl->devs[i].dev);
 
 	kfree(cdl->devs);
 	cdl->devs = NULL;
@@ -110,7 +91,7 @@ void host1x_memory_context_list_free(struct host1x_memory_context_list *cdl)
 	unsigned int i;
 
 	for (i = 0; i < cdl->len; i++)
-		device_unregister(&cdl->devs[i].dev);
+		device_unregister(cdl->devs[i].dev);
 
 	kfree(cdl->devs);
 	cdl->len = 0;
@@ -132,7 +113,7 @@ struct host1x_memory_context *host1x_memory_context_alloc(struct host1x *host1x,
 	for (i = 0; i < cdl->len; i++) {
 		struct host1x_memory_context *cd = &cdl->devs[i];
 
-		if (cd->dev.iommu->iommu_dev != dev->iommu->iommu_dev)
+		if (cd->dev->iommu->iommu_dev != dev->iommu->iommu_dev)
 			continue;
 
 		if (cd->owner == pid) {
