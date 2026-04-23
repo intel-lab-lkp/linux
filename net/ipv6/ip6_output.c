@@ -1934,7 +1934,7 @@ struct sk_buff *__ip6_make_skb(struct sock *sk,
 
 	skb = __skb_dequeue(queue);
 	if (!skb)
-		goto out;
+		goto out_cork_release;
 	tail_skb = &(skb_shinfo(skb)->frag_list);
 
 	/* move skb->data to ip header from ext header */
@@ -1998,8 +1998,8 @@ struct sk_buff *__ip6_make_skb(struct sock *sk,
 		ICMP6_INC_STATS(net, idev, ICMP6_MIB_OUTMSGS);
 	}
 
+out_cork_release:
 	ip6_cork_release(cork);
-out:
 	return skb;
 }
 
