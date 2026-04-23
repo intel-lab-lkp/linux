@@ -2,6 +2,7 @@
 /* Copyright(c) 2017-2018 Intel Corporation. All rights reserved. */
 #include <linux/memremap.h>
 #include <linux/highmem.h>
+#include <linux/kvm_host.h>
 #include <linux/device.h>
 #include <linux/mutex.h>
 #include <linux/list.h>

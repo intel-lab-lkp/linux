@@ -5,6 +5,7 @@
 #include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/radix-tree.h>
+#include <linux/kvm_host.h>
 
 typedef unsigned long dax_entry_t;
 

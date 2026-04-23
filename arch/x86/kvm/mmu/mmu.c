@@ -4588,16 +4588,52 @@ static int kvm_mmu_faultin_pfn_gmem(struct kvm_vcpu *vcpu,
 	return RET_PF_CONTINUE;
 }
 
+static pgoff_t kvm_gmem_get_index(struct kvm_memory_slot *slot, gfn_t gfn)
+{
+	return gfn - slot->base_gfn + slot->gmem.pgoff;
+}
+
+static kvm_pfn_t kvm_faultin_dax_pfn(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault)
+{
+	kvm_pfn_t pfn;
+	pgoff_t index;
+	int rc;
+
+	if (!kvm_memslot_is_dax_only(fault->slot))
+		return KVM_PFN_ERR_FAULT;
+
+	index = kvm_gmem_get_index(fault->slot, fault->gfn);
+	rc = kvm_dax_get_pfn(fault->slot, index, &pfn, &fault->refcounted_page);
+	if (rc)
+		return KVM_PFN_ERR_FAULT;
+
+	return pfn;
+}
+
 static int __kvm_mmu_faultin_pfn(struct kvm_vcpu *vcpu,
 				 struct kvm_page_fault *fault)
 {
 	unsigned int foll = fault->write ? FOLL_WRITE : 0;
+	gfn_t gfn = fault->gfn;
 
-	if (fault->is_private || kvm_memslot_is_gmem_only(fault->slot))
+	if (fault->is_private || (kvm_memslot_is_gmem_only(fault->slot) &&
+	    !kvm_memslot_is_dax_only(fault->slot)))
 		return kvm_mmu_faultin_pfn_gmem(vcpu, fault);
 
+	if (kvm_memslot_is_dax_only(fault->slot)) {
+		gfn = kvm_gmem_get_index(fault->slot, fault->gfn);
+		fault->pfn = kvm_faultin_dax_pfn(vcpu, fault);
+		if (fault->pfn == KVM_PFN_ERR_FAULT) {
+			kvm_mmu_prepare_memory_fault_exit(vcpu, fault);
+			return RET_PF_INVALID;
+		}
+		fault->map_writable = !(fault->slot->flags & KVM_MEM_READONLY);
+
+		return RET_PF_CONTINUE;
+	}
+
 	foll |= FOLL_NOWAIT;
-	fault->pfn = __kvm_faultin_pfn(fault->slot, fault->gfn, foll,
+	fault->pfn = __kvm_faultin_pfn(fault->slot, gfn, foll,
 				       &fault->map_writable, &fault->refcounted_page);
 
 	/*
@@ -4610,9 +4646,9 @@ static int __kvm_mmu_faultin_pfn(struct kvm_vcpu *vcpu,
 		return RET_PF_CONTINUE;
 
 	if (!fault->prefetch && kvm_can_do_async_pf(vcpu)) {
-		trace_kvm_try_async_get_page(fault->addr, fault->gfn);
-		if (kvm_find_async_pf_gfn(vcpu, fault->gfn)) {
-			trace_kvm_async_pf_repeated_fault(fault->addr, fault->gfn);
+		trace_kvm_try_async_get_page(fault->addr, gfn);
+		if (kvm_find_async_pf_gfn(vcpu, gfn)) {
+			trace_kvm_async_pf_repeated_fault(fault->addr, gfn);
 			kvm_make_request(KVM_REQ_APF_HALT, vcpu);
 			return RET_PF_RETRY;
 		} else if (kvm_arch_setup_async_pf(vcpu, fault)) {
@@ -4627,7 +4663,7 @@ static int __kvm_mmu_faultin_pfn(struct kvm_vcpu *vcpu,
 	 */
 	foll |= FOLL_INTERRUPTIBLE;
 	foll &= ~FOLL_NOWAIT;
-	fault->pfn = __kvm_faultin_pfn(fault->slot, fault->gfn, foll,
+	fault->pfn = __kvm_faultin_pfn(fault->slot, gfn, foll,
 				       &fault->map_writable, &fault->refcounted_page);
 
 	return RET_PF_CONTINUE;

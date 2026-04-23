@@ -840,6 +840,48 @@ int kvm_gmem_get_pfn(struct kvm *kvm, struct kvm_memory_slot *slot,
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_gmem_get_pfn);
 
+int kvm_dax_get_pfn(struct kvm_memory_slot *slot, pgoff_t index, kvm_pfn_t *pfn,
+		    struct page **refcounted_page)
+{
+	struct dev_pagemap *pgmap;
+	struct dev_dax *dev_dax;
+	struct page *page;
+	void *kaddr;
+	long rc;
+	int id;
+
+	CLASS(gmem_get_file, file)(slot);
+	if (!file)
+		return -EFAULT;
+
+	dev_dax = file->private_data;
+	if (!dev_dax)
+		return -ENODEV;
+
+	id = dax_read_lock();
+	rc = dax_direct_access(dax_get_dev_dax(dev_dax), index, 1, DAX_ACCESS,
+			       &kaddr, (unsigned long *)pfn);
+	dax_read_unlock(id);
+	if (rc < 0)
+		return rc;
+
+	/* Verify that 'struct page' exists for this PFN */
+	pgmap = get_dev_pagemap(*pfn);
+	if (!pgmap)
+		return -ENODEV;
+
+	page = pfn_to_page(*pfn);
+	if (!try_get_page(page)) {
+		put_dev_pagemap(pgmap);
+		return -EFAULT;
+	}
+
+	*refcounted_page = page;
+
+	return 0;
+}
+EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_dax_get_pfn);
+
 #ifdef CONFIG_HAVE_KVM_ARCH_GMEM_POPULATE
 long kvm_gmem_populate(struct kvm *kvm, gfn_t start_gfn, void __user *src, long npages,
 		       kvm_gmem_populate_cb post_populate, void *opaque)
