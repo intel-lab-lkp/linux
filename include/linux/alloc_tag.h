@@ -150,6 +150,23 @@ static inline struct alloc_tag_counters alloc_tag_read(struct alloc_tag *tag)
 }
 
 #ifdef CONFIG_MEM_ALLOC_PROFILING_DEBUG
+/*
+ * Skip early PFN recording for a page allocation.  Reuses the
+ * %__GFP_NO_OBJ_EXT bit.  Used by __alloc_tag_add_early_pfn() to avoid
+ * recursion when allocating pages for the early PFN tracking list
+ * itself.
+ *
+ * Callers must set the codetag to CODETAG_EMPTY (via
+ * clear_page_tag_ref()) before freeing pages allocated with this
+ * flag once page_ext becomes available, otherwise
+ * alloc_tag_sub_check() will trigger a warning.
+ */
+#define __GFP_NO_CODETAG	__GFP_NO_OBJ_EXT
+
+static inline bool should_record_early_pfn(gfp_t gfp_flags)
+{
+	return !(gfp_flags & __GFP_NO_CODETAG);
+}
 static inline void alloc_tag_add_check(union codetag_ref *ref, struct alloc_tag *tag)
 {
 	WARN_ONCE(ref && ref->ct && !is_codetag_empty(ref),
@@ -163,11 +180,12 @@ static inline void alloc_tag_sub_check(union codetag_ref *ref)
 {
 	WARN_ONCE(ref && !ref->ct, "alloc_tag was not set\n");
 }
-void alloc_tag_add_early_pfn(unsigned long pfn);
+void alloc_tag_add_early_pfn(unsigned long pfn, gfp_t gfp_flags);
 #else
 static inline void alloc_tag_add_check(union codetag_ref *ref, struct alloc_tag *tag) {}
 static inline void alloc_tag_sub_check(union codetag_ref *ref) {}
-static inline void alloc_tag_add_early_pfn(unsigned long pfn) {}
+static inline void alloc_tag_add_early_pfn(unsigned long pfn, gfp_t gfp_flags) {}
+static inline bool should_record_early_pfn(gfp_t gfp_flags) { return false; }
 #endif
 
 /* Caller should verify both ref and tag to be valid */

@@ -1237,7 +1237,7 @@ void __clear_page_tag_ref(struct page *page)
 /* Should be called only if mem_alloc_profiling_enabled() */
 static noinline
 void __pgalloc_tag_add(struct page *page, struct task_struct *task,
-		       unsigned int nr)
+		       unsigned int nr, gfp_t gfp_flags)
 {
 	union pgtag_ref_handle handle;
 	union codetag_ref ref;
@@ -1247,21 +1247,24 @@ void __pgalloc_tag_add(struct page *page, struct task_struct *task,
 		update_page_tag_ref(handle, &ref);
 		put_page_tag_ref(handle);
 	} else {
-		/*
-		 * page_ext is not available yet, record the pfn so we can
-		 * clear the tag ref later when page_ext is initialized.
-		 */
-		alloc_tag_add_early_pfn(page_to_pfn(page));
+
 		if (task->alloc_tag)
 			alloc_tag_set_inaccurate(task->alloc_tag);
+
+		/*
+		 * page_ext is not available yet, record the pfn so the
+		 * tag ref can be cleared later when page_ext is initialized.
+		 */
+		if (should_record_early_pfn(gfp_flags))
+			alloc_tag_add_early_pfn(page_to_pfn(page), gfp_flags);
 	}
 }
 
 static inline void pgalloc_tag_add(struct page *page, struct task_struct *task,
-				   unsigned int nr)
+				   unsigned int nr, gfp_t gfp_flags)
 {
 	if (mem_alloc_profiling_enabled())
-		__pgalloc_tag_add(page, task, nr);
+		__pgalloc_tag_add(page, task, nr, gfp_flags);
 }
 
 /* Should be called only if mem_alloc_profiling_enabled() */
@@ -1294,7 +1297,7 @@ static inline void pgalloc_tag_sub_pages(struct alloc_tag *tag, unsigned int nr)
 #else /* CONFIG_MEM_ALLOC_PROFILING */
 
 static inline void pgalloc_tag_add(struct page *page, struct task_struct *task,
-				   unsigned int nr) {}
+				   unsigned int nr, gfp_t gfp_flags) {}
 static inline void pgalloc_tag_sub(struct page *page, unsigned int nr) {}
 static inline void pgalloc_tag_sub_pages(struct alloc_tag *tag, unsigned int nr) {}
 
@@ -1860,7 +1863,7 @@ inline void post_alloc_hook(struct page *page, unsigned int order,
 
 	set_page_owner(page, order, gfp_flags);
 	page_table_check_alloc(page, order);
-	pgalloc_tag_add(page, current, 1 << order);
+	pgalloc_tag_add(page, current, 1 << order, gfp_flags);
 }
 
 static void prep_new_page(struct page *page, unsigned int order, gfp_t gfp_flags,
