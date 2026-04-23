@@ -60,6 +60,7 @@
 #include <nvhw/class/cl887d.h>
 #include <nvhw/class/cl907d.h>
 #include <nvhw/class/cl917d.h>
+#include <nvhw/class/clca7d.h>
 
 #include "nouveau_drv.h"
 #include "nouveau_dma.h"
@@ -774,6 +775,20 @@ nv50_audio_enable(struct drm_encoder *encoder, struct nouveau_crtc *nv_crtc,
 /******************************************************************************
  * HDMI
  *****************************************************************************/
+static int
+nv50_hdmi_pick_frl_rate(struct drm_hdmi_info *hdmi, unsigned clock)
+{
+	int max_rate = nouveau_hdmi_get_max_frl_rate(hdmi->max_frl_rate_per_lane,
+						     hdmi->max_lanes);
+	int rate;
+
+	for (rate = 1; rate <= max_rate; rate++) {
+		if (nouveau_hdmi_frl_max_clock[rate] >= clock)
+			return rate;
+	}
+	return max_rate;
+}
+
 static void
 nv50_hdmi_enable(struct drm_encoder *encoder, struct nouveau_crtc *nv_crtc,
 		 struct nouveau_connector *nv_connector, struct drm_atomic_state *state,
@@ -794,7 +809,8 @@ nv50_hdmi_enable(struct drm_encoder *encoder, struct nouveau_crtc *nv_crtc,
 	max_ac_packet -= 18; /* constant from tegra */
 	max_ac_packet /= 32;
 
-	if (nv_encoder->i2c && hdmi->scdc.scrambling.supported) {
+	if (nv_encoder->i2c && hdmi->scdc.scrambling.supported &&
+	    !(mode->clock >= 594000 && hdmi->max_frl_rate_per_lane)) {
 		const bool high_tmds_clock_ratio = mode->clock > 340000;
 		u8 scdc;
 
@@ -848,6 +864,11 @@ nv50_hdmi_enable(struct drm_encoder *encoder, struct nouveau_crtc *nv_crtc,
 	nvif_outp_infoframe(&nv_encoder->outp, NVIF_OUTP_INFOFRAME_V0_VSI, args, size);
 
 	nv_encoder->hdmi.enabled = true;
+
+	if (mode->clock >= 594000 && hdmi->max_frl_rate_per_lane)
+		nv_encoder->hdmi.frl_rate = nv50_hdmi_pick_frl_rate(hdmi, mode->clock);
+	else
+		nv_encoder->hdmi.frl_rate = 0;
 }
 
 /******************************************************************************
@@ -1585,6 +1606,7 @@ nv50_sor_atomic_disable(struct drm_encoder *encoder, struct drm_atomic_state *st
 		nvif_outp_hdmi(&nv_encoder->outp, head->base.index,
 			       false, 0, 0, 0, false, false, false);
 		nv_encoder->hdmi.enabled = false;
+		nv_encoder->hdmi.frl_rate = 0;
 	}
 
 	if (nv_encoder->dcb->type == DCB_OUTPUT_DP)
@@ -1780,7 +1802,9 @@ nv50_sor_atomic_enable(struct drm_encoder *encoder, struct drm_atomic_state *sta
 		    nv_connector->base.display_info.is_hdmi)
 			nv50_hdmi_enable(encoder, nv_crtc, nv_connector, state, mode, hda);
 
-		if (nv_encoder->outp.or.link & 1) {
+		if (nv_encoder->hdmi.frl_rate) {
+			proto = NVCA7D_SOR_SET_CONTROL_PROTOCOL_HDMI_FRL;
+		} else if (nv_encoder->outp.or.link & 1) {
 			proto = NV507D_SOR_SET_CONTROL_PROTOCOL_SINGLE_TMDS_A;
 			/* Only enable dual-link if:
 			 *  - Need to (i.e. rate > 165MHz)
@@ -1852,6 +1876,10 @@ nv50_sor_atomic_enable(struct drm_encoder *encoder, struct drm_atomic_state *sta
 		head->func->display_id(head, BIT(nv_encoder->outp.id));
 
 	nv_encoder->update(nv_encoder, nv_crtc->index, asyh, proto, depth);
+
+	if (nv_encoder->hdmi.frl_rate)
+		nvif_outp_hdmi_frl(&nv_encoder->outp, nv_crtc->index,
+				   nv_encoder->hdmi.frl_rate);
 }
 
 static const struct drm_encoder_helper_funcs
@@ -2525,7 +2553,9 @@ nv50_disp_outp_atomic_check_clr(struct nv50_atom *atom,
 			return PTR_ERR(outp);
 
 		if (outp->encoder->encoder_type == DRM_MODE_ENCODER_DPMST ||
-		    nouveau_encoder(outp->encoder)->dcb->type == DCB_OUTPUT_DP)
+		    nouveau_encoder(outp->encoder)->dcb->type == DCB_OUTPUT_DP ||
+		    nouveau_encoder(outp->encoder)->hdmi.frl_rate ||
+		    old_connector_state->connector->display_info.hdmi.max_frl_rate_per_lane)
 			atom->flush_disable = true;
 		outp->clr.ctrl = true;
 		atom->lock_core = true;

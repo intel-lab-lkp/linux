@@ -126,6 +126,7 @@ struct nouveau_connector {
 	u64 hpd_pending;
 	struct nvif_event hpd;
 	struct nvif_event irq;
+	struct nvif_event frl;
 	struct work_struct irq_work;
 
 	struct drm_dp_aux aux;

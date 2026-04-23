@@ -396,6 +396,7 @@ static void
 nouveau_connector_destroy(struct drm_connector *connector)
 {
 	struct nouveau_connector *nv_connector = nouveau_connector(connector);
+	nvif_event_dtor(&nv_connector->frl);
 	nvif_event_dtor(&nv_connector->irq);
 	nvif_event_dtor(&nv_connector->hpd);
 	kfree(nv_connector->edid);
@@ -560,21 +561,23 @@ nouveau_connector_set_edid(struct nouveau_connector *nv_connector,
 	}
 }
 
-static int
-nouveau_hdmi_get_frl_rate(u8 max_frl_rate_per_lane, u8 max_lanes)
+bool
+nouveau_hdmi_frl_retrain(struct nouveau_connector *nv_connector)
 {
-	switch (max_lanes) {
-	case 3:
-		switch (max_frl_rate_per_lane) {
-		case 3: return 1;
-		case 6: return 2;
-		}
-		return 0;
-	case 4:
-		return max_frl_rate_per_lane / 2;
-	default:
-		return 0;
-	}
+	struct nouveau_encoder *nv_encoder;
+	struct nouveau_crtc *nv_crtc;
+
+	nv_encoder = find_encoder(&nv_connector->base, DCB_OUTPUT_TMDS);
+	if (!nv_encoder || !nv_encoder->hdmi.frl_rate)
+		return true;
+
+	if (!nv_encoder->crtc)
+		return true;
+
+	nv_crtc = nouveau_crtc(nv_encoder->crtc);
+	nvif_outp_hdmi_frl(&nv_encoder->outp, nv_crtc->index,
+			   nv_encoder->hdmi.frl_rate);
+	return true;
 }
 
 static enum drm_connector_status
@@ -663,10 +666,10 @@ nouveau_connector_detect(struct drm_connector *connector, bool force)
 						hdmi->scdc.supported,
 						hdmi->scdc.scrambling.supported,
 						hdmi->scdc.scrambling.low_rates,
-						nouveau_hdmi_get_frl_rate(hdmi->max_frl_rate_per_lane,
+						nouveau_hdmi_get_max_frl_rate(hdmi->max_frl_rate_per_lane,
 									 hdmi->max_lanes),
 						hdmi->dsc_cap.v_1p2 ?
-							nouveau_hdmi_get_frl_rate(hdmi->dsc_cap.max_frl_rate_per_lane,
+							nouveau_hdmi_get_max_frl_rate(hdmi->dsc_cap.max_frl_rate_per_lane,
 										  hdmi->dsc_cap.max_lanes) : 0);
 		}
 
@@ -1085,6 +1088,12 @@ get_tmds_link_bandwidth(struct drm_connector *connector)
 			const int max_tmds_clock =
 				info->hdmi.scdc.scrambling.supported ?
 				594000 : 340000;
+			int frl_rate = nouveau_hdmi_get_max_frl_rate(
+				info->hdmi.max_frl_rate_per_lane,
+				info->hdmi.max_lanes);
+			if (drm->client.device.info.family >= NV_DEVICE_INFO_V0_TURING &&
+			    frl_rate > 0)
+				return nouveau_hdmi_frl_max_clock[frl_rate];
 			return info->max_tmds_clock ?
 				min(info->max_tmds_clock, max_tmds_clock) :
 				max_tmds_clock;
@@ -1241,6 +1250,16 @@ nouveau_connector_irq(struct nvif_event *event, void *repv, u32 repc)
 	struct nouveau_connector *nv_connector = container_of(event, typeof(*nv_connector), irq);
 
 	schedule_work(&nv_connector->irq_work);
+	return NVIF_EVENT_KEEP;
+}
+
+static int
+nouveau_connector_frl(struct nvif_event *event, void *repv, u32 repc)
+{
+	struct nouveau_connector *nv_connector = container_of(event, typeof(*nv_connector), frl);
+	struct nvif_conn_event_v0 *rep = repv;
+
+	nouveau_connector_hpd(nv_connector, rep->types);
 	return NVIF_EVENT_KEEP;
 }
 
@@ -1471,6 +1490,15 @@ nouveau_connector_create(struct drm_device *dev, int index)
 			ret = nvif_conn_event_ctor(&nv_connector->conn, "kmsDpIrq",
 						   nouveau_connector_irq, NVIF_CONN_EVENT_V0_IRQ,
 						   &nv_connector->irq);
+			if (ret) {
+				nvif_event_dtor(&nv_connector->hpd);
+				nvif_conn_dtor(&nv_connector->conn);
+				goto drm_conn_err;
+			}
+		} else if (type == DRM_MODE_CONNECTOR_HDMIA) {
+			ret = nvif_conn_event_ctor(&nv_connector->conn, "kmsFrlRetrain",
+						   nouveau_connector_frl, NVIF_CONN_EVENT_V0_FRL,
+						   &nv_connector->frl);
 			if (ret) {
 				nvif_event_dtor(&nv_connector->hpd);
 				nvif_conn_dtor(&nv_connector->conn);

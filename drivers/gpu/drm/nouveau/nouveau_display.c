@@ -456,14 +456,20 @@ nouveau_display_hpd_work(struct work_struct *work)
 		nv_connector->hpd_pending = 0;
 		spin_unlock_irq(&drm->hpd_lock);
 
-		drm_dbg_kms(dev, "[CONNECTOR:%d:%s] plug:%d unplug:%d irq:%d\n",
+		drm_dbg_kms(dev, "[CONNECTOR:%d:%s] plug:%d unplug:%d irq:%d frl:%d\n",
 			    connector->base.id, connector->name,
 			    !!(bits & NVIF_CONN_EVENT_V0_PLUG),
 			    !!(bits & NVIF_CONN_EVENT_V0_UNPLUG),
-			    !!(bits & NVIF_CONN_EVENT_V0_IRQ));
+			    !!(bits & NVIF_CONN_EVENT_V0_IRQ),
+			    !!(bits & NVIF_CONN_EVENT_V0_FRL));
 
 		if (bits & NVIF_CONN_EVENT_V0_IRQ) {
 			if (nouveau_dp_link_check(nv_connector))
+				continue;
+		}
+
+		if (bits & NVIF_CONN_EVENT_V0_FRL) {
+			if (nouveau_hdmi_frl_retrain(nv_connector))
 				continue;
 		}
 

@@ -72,6 +72,7 @@ struct nouveau_encoder {
 	struct {
 		struct {
 			bool enabled;
+			int frl_rate;
 		} hdmi;
 
 		struct {
@@ -163,6 +164,36 @@ void nouveau_dp_irq(struct work_struct *);
 enum drm_mode_status nv50_dp_mode_valid(struct nouveau_encoder *,
 					const struct drm_display_mode *,
 					unsigned *clock);
+
+/* nouveau_connector.c */
+bool nouveau_hdmi_frl_retrain(struct nouveau_connector *);
+
+/* Max pixel clock (kHz) at 8bpc for each FRL rate, after 16b/18b encoding. */
+static const unsigned nouveau_hdmi_frl_max_clock[] __maybe_unused = {
+	[1] = 333333,   /* 3L×3G */
+	[2] = 666666,   /* 3L×6G */
+	[3] = 888888,   /* 4L×6G */
+	[4] = 1185185,  /* 4L×8G */
+	[5] = 1481481,  /* 4L×10G */
+	[6] = 1777777,  /* 4L×12G */
+};
+
+static inline int
+nouveau_hdmi_get_max_frl_rate(u8 max_frl_rate_per_lane, u8 max_lanes)
+{
+	switch (max_lanes) {
+	case 3:
+		switch (max_frl_rate_per_lane) {
+		case 3: return 1;
+		case 6: return 2;
+		}
+		return 0;
+	case 4:
+		return max_frl_rate_per_lane / 2;
+	default:
+		return 0;
+	}
+}
 
 struct nouveau_connector *
 nv50_outp_get_new_connector(struct drm_atomic_state *state, struct nouveau_encoder *outp);
