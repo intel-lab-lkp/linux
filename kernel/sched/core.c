@@ -7238,7 +7238,9 @@ static inline void sched_submit_work(struct task_struct *tsk)
 	 * If we are going to sleep and we have plugged IO queued,
 	 * make sure to submit it to avoid deadlocks.
 	 */
+	preempt_disable_notrace();
 	blk_flush_plug(tsk->plug, true);
+	preempt_enable_no_resched_notrace();
 
 	lock_map_release(&sched_map);
 }
