@@ -184,12 +184,10 @@ static int nvgrace_gpu_open_device(struct vfio_device *core_vdev)
 
 	/*
 	 * GPU readiness is checked by reading the BAR0 registers.
-	 *
-	 * ioremap BAR0 to ensure that the BAR0 mapping is present before
-	 * register reads on first fault before establishing any GPU
-	 * memory mapping.
+	 * Ensure that the BAR0 mapping is present before that
+	 * happens.
 	 */
-	ret = vfio_pci_core_setup_barmap(vdev, 0);
+	ret = vfio_pci_core_check_barmap_valid(vdev, 0);
 	if (ret)
 		goto error_exit;
 

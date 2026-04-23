@@ -189,7 +189,6 @@ int vfio_pci_core_match_token_uuid(struct vfio_device *core_vdev,
 int vfio_pci_core_enable(struct vfio_pci_core_device *vdev);
 void vfio_pci_core_disable(struct vfio_pci_core_device *vdev);
 void vfio_pci_core_finish_enable(struct vfio_pci_core_device *vdev);
-int vfio_pci_core_setup_barmap(struct vfio_pci_core_device *vdev, int bar);
 pci_ers_result_t vfio_pci_core_aer_err_detected(struct pci_dev *pdev,
 						pci_channel_state_t state);
 ssize_t vfio_pci_core_do_io_rw(struct vfio_pci_core_device *vdev, bool test_mem,
@@ -224,6 +223,28 @@ VFIO_IOREAD_DECLARATION(32)
 #ifdef ioread64
 VFIO_IOREAD_DECLARATION(64)
 #endif
+
+/* Returns 0 if vdev->barmap[bar] can be accessed, otherwise errno */
+static inline int
+vfio_pci_core_check_barmap_valid(struct vfio_pci_core_device *vdev, int bar)
+{
+	if (bar < 0 || bar >= PCI_STD_NUM_BARS)
+		return -EINVAL;
+	if (vdev->barmap[bar] == 0)
+		return -ENOMEM;
+	return 0;
+}
+
+/* Returns 0 if BAR has a valid resource reserved for use, otherwise errno */
+static inline int vfio_pci_core_check_bar_rsrc(struct vfio_pci_core_device *vdev,
+					       int bar)
+{
+	if (bar < 0 || bar >= PCI_STD_NUM_BARS)
+		return -EINVAL;
+	if (!vdev->have_bar_resource[bar])
+		return -EBUSY;
+	return 0;
+}
 
 static inline bool is_aligned_for_order(struct vm_area_struct *vma,
 					unsigned long addr,

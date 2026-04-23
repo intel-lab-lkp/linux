@@ -304,8 +304,8 @@ static int virtiovf_set_notify_addr(struct virtiovf_pci_core_device *virtvdev)
 	 * Setup the BAR where the 'notify' exists to be used by vfio as well
 	 * This will let us mmap it only once and use it when needed.
 	 */
-	ret = vfio_pci_core_setup_barmap(core_device,
-					 virtvdev->notify_bar);
+	ret = vfio_pci_core_check_barmap_valid(core_device,
+					       virtvdev->notify_bar);
 	if (ret)
 		return ret;
 
