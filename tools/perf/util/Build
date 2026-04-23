@@ -94,7 +94,6 @@ perf-util-y += tool_pmu.o
 perf-util-y += tp_pmu.o
 perf-util-y += svghelper.o
 perf-util-y += trace-event-info.o
-perf-util-y += trace-event-scripting.o
 perf-util-$(CONFIG_LIBTRACEEVENT) += trace-event.o
 perf-util-$(CONFIG_LIBTRACEEVENT) += trace-event-parse.o
 perf-util-$(CONFIG_LIBTRACEEVENT) += trace-event-read.o
