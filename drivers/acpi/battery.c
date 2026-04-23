@@ -267,6 +267,15 @@ static int acpi_battery_get_property(struct power_supply *psy,
 		else
 			val->intval = battery->full_charge_capacity * 1000;
 		break;
+	case POWER_SUPPLY_PROP_STATE_OF_HEALTH:
+		if (!ACPI_BATTERY_CAPACITY_VALID(battery->full_charge_capacity) ||
+		    !ACPI_BATTERY_CAPACITY_VALID(battery->design_capacity))
+			return -ENODEV;
+
+		full_capacity = battery->full_charge_capacity;
+		val->intval = DIV_ROUND_CLOSEST_ULL(full_capacity * 100ULL,
+					battery->design_capacity);
+		break;
 	case POWER_SUPPLY_PROP_CHARGE_NOW:
 	case POWER_SUPPLY_PROP_ENERGY_NOW:
 		if (battery->capacity_now == ACPI_BATTERY_VALUE_UNKNOWN)
@@ -323,6 +332,7 @@ static const enum power_supply_property charge_battery_props[] = {
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
 	POWER_SUPPLY_PROP_CHARGE_FULL,
+	POWER_SUPPLY_PROP_STATE_OF_HEALTH,
 	POWER_SUPPLY_PROP_CHARGE_NOW,
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_CAPACITY_LEVEL,
@@ -355,6 +365,7 @@ static const enum power_supply_property energy_battery_props[] = {
 	POWER_SUPPLY_PROP_POWER_NOW,
 	POWER_SUPPLY_PROP_ENERGY_FULL_DESIGN,
 	POWER_SUPPLY_PROP_ENERGY_FULL,
+	POWER_SUPPLY_PROP_STATE_OF_HEALTH,
 	POWER_SUPPLY_PROP_ENERGY_NOW,
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_CAPACITY_LEVEL,
