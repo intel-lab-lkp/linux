@@ -1469,6 +1469,7 @@ static void handle_fwk_notif_callbacks(u32 bitmap)
 	int notify_id = 0, target;
 	struct ffa_indirect_msg_hdr *msg;
 	struct notifier_cb_info *cb_info = NULL;
+	size_t min_offset = offsetof(struct ffa_indirect_msg_hdr, uuid);
 
 	/* Only one framework notification defined and supported for now */
 	if (!(bitmap & FRAMEWORK_NOTIFY_RX_BUFFER_FULL))
@@ -1476,6 +1477,13 @@ static void handle_fwk_notif_callbacks(u32 bitmap)
 
 	scoped_guard(mutex, &drv_info->rx_lock) {
 		msg = drv_info->rx_buffer;
+		if ((msg->offset != min_offset && msg->offset < sizeof(*msg)) ||
+		    msg->offset > drv_info->rxtx_bufsz ||
+		    msg->size > drv_info->rxtx_bufsz - msg->offset) {
+			pr_err("invalid framework notification message\n");
+			goto release_rx;
+		}
+
 		buf = kmemdup((void *)msg + msg->offset, msg->size, GFP_KERNEL);
 		if (!buf)
 			goto release_rx;
