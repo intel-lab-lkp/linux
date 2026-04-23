@@ -2360,7 +2360,7 @@ static void cs_amp_lib_test_ssidexv2_fetch_invalid(struct kunit *test)
 				   cs_amp_lib_test_get_efi_vendor_sysid);
 
 	got = cs_amp_devm_get_vendor_specific_variant_id(dev, PCI_VENDOR_ID_DELL, 0xabcd);
-	KUNIT_EXPECT_NOT_NULL(test, got);
+	KUNIT_EXPECT_NOT_ERR_OR_NULL(test, got);
 	KUNIT_EXPECT_EQ(test, PTR_ERR_OR_ZERO(got), -ENOENT);
 }
 
@@ -2376,7 +2376,7 @@ static void cs_amp_lib_test_ssidexv2_not_dell(struct kunit *test)
 
 	/* Not returned if SSID vendor is not Dell */
 	got = cs_amp_devm_get_vendor_specific_variant_id(dev, PCI_VENDOR_ID_CIRRUS, 0xabcd);
-	KUNIT_EXPECT_NOT_NULL(test, got);
+	KUNIT_EXPECT_NOT_ERR_OR_NULL(test, got);
 	KUNIT_EXPECT_EQ(test, PTR_ERR_OR_ZERO(got), -ENOENT);
 }
 
@@ -2391,11 +2391,11 @@ static void cs_amp_lib_test_vendor_variant_id_not_found(struct kunit *test)
 				   cs_amp_lib_test_get_efi_variable_none);
 
 	got = cs_amp_devm_get_vendor_specific_variant_id(dev, PCI_VENDOR_ID_DELL, 0xabcd);
-	KUNIT_EXPECT_NOT_NULL(test, got);
+	KUNIT_EXPECT_NOT_ERR_OR_NULL(test, got);
 	KUNIT_EXPECT_EQ(test, PTR_ERR_OR_ZERO(got), -ENOENT);
 
 	got = cs_amp_devm_get_vendor_specific_variant_id(dev, -1, -1);
-	KUNIT_EXPECT_NOT_NULL(test, got);
+	KUNIT_EXPECT_NOT_ERR_OR_NULL(test, got);
 	KUNIT_EXPECT_EQ(test, PTR_ERR_OR_ZERO(got), -ENOENT);
 }
 
