@@ -50,6 +50,7 @@
 #include <linux/rw_hint.h>
 #include <linux/major.h>
 #include <linux/mutex.h>
+#include <linux/string_choices.h>
 #include <linux/string_helpers.h>
 #include <linux/slab.h>
 #include <linux/sed-opal.h>
@@ -3084,7 +3085,7 @@ sd_read_write_protect_flag(struct scsi_disk *sdkp, unsigned char *buffer)
 		set_disk_ro(sdkp->disk, sdkp->write_prot);
 		if (sdkp->first_scan || old_wp != sdkp->write_prot) {
 			sd_printk(KERN_NOTICE, sdkp, "Write Protect is %s\n",
-				  sdkp->write_prot ? "on" : "off");
+				  str_on_off(sdkp->write_prot));
 			sd_printk(KERN_DEBUG, sdkp, "Mode Sense: %4ph\n", buffer);
 		}
 	}
@@ -3235,8 +3236,8 @@ sd_read_cache_type(struct scsi_disk *sdkp, unsigned char *buffer)
 		    old_rcd != sdkp->RCD || old_dpofua != sdkp->DPOFUA)
 			sd_printk(KERN_NOTICE, sdkp,
 				  "Write cache: %s, read cache: %s, %s\n",
-				  sdkp->WCE ? "enabled" : "disabled",
-				  sdkp->RCD ? "disabled" : "enabled",
+				  str_enabled_disabled(sdkp->WCE),
+				  str_disabled_enabled(sdkp->RCD),
 				  sdkp->DPOFUA ? "supports DPO and FUA"
 				  : "doesn't support DPO or FUA");
 
