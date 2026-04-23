@@ -96,6 +96,11 @@ config MSHV_VTL
 	# MTRRs are controlled by VTL0, and are not specific to individual VTLs.
 	# Therefore, do not attempt to access or modify MTRRs here.
 	depends on !MTRR
+	# The hypervisor interface operates on 4k pages. Enforcing it here
+	# simplifies many assumptions in the mshv_vtl code.
+	# VTL0 VMs can still support higher page size in ARM64 and is not limited
+	# by this setting.
+	depends on PAGE_SIZE_4KB
 	select CPUMASK_OFFSTACK
 	select VIRT_XFER_TO_GUEST_WORK
 	default n
