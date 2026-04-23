@@ -3981,17 +3981,6 @@ int read_extent_buffer_pages(struct extent_buffer *eb, int mirror_num,
 	return 0;
 }
 
-static bool report_eb_range(const struct extent_buffer *eb, unsigned long start,
-			    unsigned long len)
-{
-	btrfs_warn(eb->fs_info,
-		"access to eb bytenr %llu len %u out of range start %lu len %lu",
-		eb->start, eb->len, start, len);
-	DEBUG_WARN();
-
-	return true;
-}
-
 /*
  * Check if the [start, start + len) range is valid before reading/writing
  * the eb.
@@ -4005,8 +3994,13 @@ static inline int check_eb_range(const struct extent_buffer *eb,
 	unsigned long offset;
 
 	/* start, start + len should not go beyond eb->len nor overflow */
-	if (unlikely(check_add_overflow(start, len, &offset) || offset > eb->len))
-		return report_eb_range(eb, start, len);
+	if (unlikely(check_add_overflow(start, len, &offset) || offset > eb->len)) {
+		btrfs_warn(eb->fs_info,
+		   "access to eb bytenr %llu len %u out of range start %lu len %lu",
+			   eb->start, eb->len, start, len);
+		DEBUG_WARN();
+		return true;
+	}
 
 	return false;
 }
