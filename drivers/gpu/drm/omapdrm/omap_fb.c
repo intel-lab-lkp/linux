@@ -335,39 +335,10 @@ void omap_framebuffer_describe(struct drm_framebuffer *fb, struct seq_file *m)
 }
 #endif
 
-struct drm_framebuffer *omap_framebuffer_create(struct drm_device *dev,
-		struct drm_file *file, const struct drm_format_info *info,
-		const struct drm_mode_fb_cmd2 *mode_cmd)
-{
-	unsigned int num_planes = info->num_planes;
-	struct drm_gem_object *bos[4];
-	struct drm_framebuffer *fb;
-	int i;
-
-	for (i = 0; i < num_planes; i++) {
-		bos[i] = drm_gem_object_lookup(file, mode_cmd->handles[i]);
-		if (!bos[i]) {
-			fb = ERR_PTR(-ENOENT);
-			goto error;
-		}
-	}
-
-	fb = omap_framebuffer_init(dev, info, mode_cmd, bos);
-	if (IS_ERR(fb))
-		goto error;
-
-	return fb;
-
-error:
-	while (--i >= 0)
-		drm_gem_object_put(bos[i]);
-
-	return fb;
-}
-
-struct drm_framebuffer *omap_framebuffer_init(struct drm_device *dev,
-		const struct drm_format_info *info,
-		const struct drm_mode_fb_cmd2 *mode_cmd, struct drm_gem_object **bos)
+static struct drm_framebuffer *
+omap_framebuffer_init(struct drm_device *dev,
+		      const struct drm_format_info *info,
+		      const struct drm_mode_fb_cmd2 *mode_cmd, struct drm_gem_object **bos)
 {
 	struct omap_framebuffer *omap_fb = NULL;
 	struct drm_framebuffer *fb = NULL;
@@ -454,4 +425,35 @@ fail:
 	kfree(omap_fb);
 
 	return ERR_PTR(ret);
+}
+
+struct drm_framebuffer *omap_framebuffer_create(struct drm_device *dev,
+						struct drm_file *file,
+						const struct drm_format_info *info,
+						const struct drm_mode_fb_cmd2 *mode_cmd)
+{
+	unsigned int num_planes = info->num_planes;
+	struct drm_gem_object *bos[4];
+	struct drm_framebuffer *fb;
+	int i;
+
+	for (i = 0; i < num_planes; i++) {
+		bos[i] = drm_gem_object_lookup(file, mode_cmd->handles[i]);
+		if (!bos[i]) {
+			fb = ERR_PTR(-ENOENT);
+			goto error;
+		}
+	}
+
+	fb = omap_framebuffer_init(dev, info, mode_cmd, bos);
+	if (IS_ERR(fb))
+		goto error;
+
+	return fb;
+
+error:
+	while (--i >= 0)
+		drm_gem_object_put(bos[i]);
+
+	return fb;
 }
