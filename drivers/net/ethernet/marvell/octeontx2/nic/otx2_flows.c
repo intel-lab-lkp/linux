@@ -340,6 +340,7 @@ int otx2_mcam_entry_init(struct otx2_nic *pfvf)
 	req->kw_type = NPC_MCAM_KEY_X2;
 	if (is_cn20k(pfvf->pdev) && kw_type == NPC_MCAM_KEY_X4) {
 		req->kw_type = NPC_MCAM_KEY_X4;
+		/* In X4 profile, x4_slots is equal to bank depth */
 		ref &= (x4_slots - 1);
 	}
 	req->contig = false;

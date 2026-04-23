@@ -1753,7 +1753,7 @@ int rvu_npc_exact_mac_addr_set(struct rvu *rvu, struct cgx_mac_addr_set_or_get *
 	u32 seq_id = req->index;
 	struct rvu_pfvf *pfvf;
 	u8 cgx_id, lmac_id;
-	u32 mcam_idx = -1;
+	int mcam_idx = -1;
 	int rc, nixlf;
 
 	rvu_get_cgx_lmac_id(rvu->pf2cgxlmac_map[pf], &cgx_id, &lmac_id);
@@ -1783,9 +1783,20 @@ int rvu_npc_exact_mac_addr_set(struct rvu *rvu, struct cgx_mac_addr_set_or_get *
 
 	/* find mcam entry if exist */
 	rc = nix_get_nixlf(rvu, req->hdr.pcifunc, &nixlf, NULL);
-	if (!rc) {
-		mcam_idx = npc_get_nixlf_mcam_index(&rvu->hw->mcam, req->hdr.pcifunc,
-						    nixlf, NIXLF_UCAST_ENTRY);
+	if (rc) {
+		dev_err(rvu->dev,
+			"%s: Error to get nixlf pcifunc=%#x\n",
+			__func__, req->hdr.pcifunc);
+		return LMAC_AF_ERR_PERM_DENIED;
+	}
+
+	mcam_idx = npc_get_nixlf_mcam_index(&rvu->hw->mcam, req->hdr.pcifunc,
+					    nixlf, NIXLF_UCAST_ENTRY);
+	if (mcam_idx < 0) {
+		dev_err(rvu->dev,
+			"%s: Error to get ucast entry for pcifunc=%#x\n",
+			__func__, req->hdr.pcifunc);
+		return LMAC_AF_ERR_INVALID_PARAM;
 	}
 
 	rc = rvu_npc_exact_add_table_entry(rvu, cgx_id, lmac_id, req->mac_addr,
