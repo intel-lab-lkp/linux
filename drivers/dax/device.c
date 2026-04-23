@@ -10,6 +10,8 @@
 #include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/mman.h>
+#include <linux/range.h>
+#include <linux/falloc.h>
 #include "dax-private.h"
 #include "bus.h"
 
@@ -383,7 +385,31 @@ static int dax_release(struct inode *inode, struct file *filp)
 	return 0;
 }
 
-static const struct file_operations dax_fops = {
+static long dax_fallocate(struct file *file, int mode, loff_t offset,
+			  loff_t len)
+{
+	struct dev_dax *dev_dax = file->private_data;
+
+	if (!IS_ALIGNED(offset, dev_dax->align) ||
+	    !IS_ALIGNED(len, dev_dax->align))
+		return -EINVAL;
+
+	if (offset + len > dev_dax->cached_size)
+		return -ERANGE;
+
+	/* DAX device does not change size */
+	if (!(mode & FALLOC_FL_KEEP_SIZE))
+		return -EOPNOTSUPP;
+
+	if ((mode & ~FALLOC_FL_KEEP_SIZE) &&
+	    ((mode & (FALLOC_FL_PUNCH_HOLE | FALLOC_FL_ZERO_RANGE)) == 0))
+		return -EOPNOTSUPP;
+
+	memset(dev_dax->virt_addr + offset, 0, len);
+	return 0;
+}
+
+const struct file_operations dax_fops = {
 	.llseek = noop_llseek,
 	.owner = THIS_MODULE,
 	.open = dax_open,
@@ -391,7 +417,9 @@ static const struct file_operations dax_fops = {
 	.get_unmapped_area = dax_get_unmapped_area,
 	.mmap_prepare = dax_mmap_prepare,
 	.fop_flags = FOP_MMAP_SYNC,
+	.fallocate = dax_fallocate,
 };
+EXPORT_SYMBOL_GPL(dax_fops);
 
 static void dev_dax_cdev_del(void *cdev)
 {
