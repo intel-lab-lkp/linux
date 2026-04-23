@@ -3221,23 +3221,17 @@ bool uart_match_port(const struct uart_port *port1,
 {
 	if (port1->iotype != port2->iotype)
 		return false;
-
-	switch (port1->iotype) {
-	case UPIO_PORT:
-		return port1->iobase == port2->iobase;
-	case UPIO_HUB6:
-		return port1->iobase == port2->iobase &&
-		       port1->hub6   == port2->hub6;
-	case UPIO_MEM:
-	case UPIO_MEM16:
-	case UPIO_MEM32:
-	case UPIO_MEM32BE:
-	case UPIO_AU:
-	case UPIO_TSI:
+	else if (uart_iotype_mmio(port1->iotype))
 		return port1->mapbase == port2->mapbase;
-	default:
+	else if (uart_iotype_legacy_io(port1->iotype))
+		if (port1->iobase != port2->iobase)
+			return false;
+		else if (port1->iotype == UPIO_HUB6 && port1->hub6 != port2->hub6)
+			return false;
+		else
+			return true;
+	else
 		return false;
-	}
 }
 EXPORT_SYMBOL(uart_match_port);
 
