@@ -1240,20 +1240,26 @@ static void ixgbe_pf_handle_tx_hang(struct ixgbe_ring *tx_ring,
 static void ixgbe_vf_handle_tx_hang(struct ixgbe_adapter *adapter, u16 vf)
 {
 	struct ixgbe_hw *hw = &adapter->hw;
+	struct vf_data_storage *vfinfo;
 
 	if (adapter->hw.mac.type != ixgbe_mac_e610)
 		return;
 
-	e_warn(drv,
-	       "Malicious Driver Detection tx hang detected on PF %d VF %d MAC: %pM",
-	       hw->bus.func, vf, adapter->vfinfo[vf].vf_mac_addresses);
+	rcu_read_lock();
+	vfinfo = rcu_dereference(adapter->vfinfo);
+	if (vfinfo) {
+		e_warn(drv,
+		       "Malicious Driver Detection tx hang detected on PF %d VF %d MAC: %pM",
+		       hw->bus.func, vf, vfinfo[vf].vf_mac_addresses);
 
-	adapter->tx_hang_count[vf]++;
-	if (adapter->tx_hang_count[vf] == IXGBE_MAX_TX_VF_HANGS) {
-		ixgbe_set_vf_link_state(adapter, vf,
-					IFLA_VF_LINK_STATE_DISABLE);
-		adapter->tx_hang_count[vf] = 0;
+		adapter->tx_hang_count[vf]++;
+		if (adapter->tx_hang_count[vf] == IXGBE_MAX_TX_VF_HANGS) {
+			ixgbe_set_vf_link_state(adapter, vf,
+						IFLA_VF_LINK_STATE_DISABLE);
+			adapter->tx_hang_count[vf] = 0;
+		}
 	}
+	rcu_read_unlock();
 }
 
 static u32 ixgbe_poll_tx_icache(struct ixgbe_hw *hw, u16 queue, u16 idx)
@@ -4625,6 +4631,7 @@ static void ixgbe_configure_virtualization(struct ixgbe_adapter *adapter)
 	struct ixgbe_hw *hw = &adapter->hw;
 	u16 pool = adapter->num_rx_pools;
 	u32 reg_offset, vf_shift, vmolr;
+	struct vf_data_storage *vfinfo;
 	u32 gcr_ext, vmdctl;
 	int i;
 
@@ -4680,15 +4687,19 @@ static void ixgbe_configure_virtualization(struct ixgbe_adapter *adapter)
 
 	IXGBE_WRITE_REG(hw, IXGBE_GCR_EXT, gcr_ext);
 
-	for (i = 0; i < adapter->num_vfs; i++) {
-		/* configure spoof checking */
-		ixgbe_ndo_set_vf_spoofchk(adapter->netdev, i,
-					  adapter->vfinfo[i].spoofchk_enabled);
+	rcu_read_lock();
+	vfinfo = rcu_dereference(adapter->vfinfo);
+	if (vfinfo)
+		for (i = 0; i < adapter->num_vfs; i++) {
+			/* configure spoof checking */
+			ixgbe_ndo_set_vf_spoofchk(adapter->netdev, i,
+						  vfinfo[i].spoofchk_enabled);
 
-		/* Enable/Disable RSS query feature  */
-		ixgbe_ndo_set_vf_rss_query_en(adapter->netdev, i,
-					  adapter->vfinfo[i].rss_query_enabled);
-	}
+			/* Enable/Disable RSS query feature  */
+			ixgbe_ndo_set_vf_rss_query_en(adapter->netdev, i,
+						  vfinfo[i].rss_query_enabled);
+		}
+	rcu_read_unlock();
 }
 
 static void ixgbe_set_rx_buffer_len(struct ixgbe_adapter *adapter)
@@ -6093,35 +6104,40 @@ static void ixgbe_check_media_subtask(struct ixgbe_adapter *adapter)
 static void ixgbe_clear_vf_stats_counters(struct ixgbe_adapter *adapter)
 {
 	struct ixgbe_hw *hw = &adapter->hw;
+	struct vf_data_storage *vfinfo;
 	int i;
 
-	for (i = 0; i < adapter->num_vfs; i++) {
-		adapter->vfinfo[i].last_vfstats.gprc =
-			IXGBE_READ_REG(hw, IXGBE_PVFGPRC(i));
-		adapter->vfinfo[i].saved_rst_vfstats.gprc +=
-			adapter->vfinfo[i].vfstats.gprc;
-		adapter->vfinfo[i].vfstats.gprc = 0;
-		adapter->vfinfo[i].last_vfstats.gptc =
-			IXGBE_READ_REG(hw, IXGBE_PVFGPTC(i));
-		adapter->vfinfo[i].saved_rst_vfstats.gptc +=
-			adapter->vfinfo[i].vfstats.gptc;
-		adapter->vfinfo[i].vfstats.gptc = 0;
-		adapter->vfinfo[i].last_vfstats.gorc =
-			IXGBE_READ_REG(hw, IXGBE_PVFGORC_LSB(i));
-		adapter->vfinfo[i].saved_rst_vfstats.gorc +=
-			adapter->vfinfo[i].vfstats.gorc;
-		adapter->vfinfo[i].vfstats.gorc = 0;
-		adapter->vfinfo[i].last_vfstats.gotc =
-			IXGBE_READ_REG(hw, IXGBE_PVFGOTC_LSB(i));
-		adapter->vfinfo[i].saved_rst_vfstats.gotc +=
-			adapter->vfinfo[i].vfstats.gotc;
-		adapter->vfinfo[i].vfstats.gotc = 0;
-		adapter->vfinfo[i].last_vfstats.mprc =
-			IXGBE_READ_REG(hw, IXGBE_PVFMPRC(i));
-		adapter->vfinfo[i].saved_rst_vfstats.mprc +=
-			adapter->vfinfo[i].vfstats.mprc;
-		adapter->vfinfo[i].vfstats.mprc = 0;
-	}
+	rcu_read_lock();
+	vfinfo = rcu_dereference(adapter->vfinfo);
+	if (vfinfo)
+		for (i = 0; i < adapter->num_vfs; i++) {
+			vfinfo[i].last_vfstats.gprc =
+				IXGBE_READ_REG(hw, IXGBE_PVFGPRC(i));
+			vfinfo[i].saved_rst_vfstats.gprc +=
+				vfinfo[i].vfstats.gprc;
+			vfinfo[i].vfstats.gprc = 0;
+			vfinfo[i].last_vfstats.gptc =
+				IXGBE_READ_REG(hw, IXGBE_PVFGPTC(i));
+			vfinfo[i].saved_rst_vfstats.gptc +=
+				vfinfo[i].vfstats.gptc;
+			vfinfo[i].vfstats.gptc = 0;
+			vfinfo[i].last_vfstats.gorc =
+				IXGBE_READ_REG(hw, IXGBE_PVFGORC_LSB(i));
+			vfinfo[i].saved_rst_vfstats.gorc +=
+				vfinfo[i].vfstats.gorc;
+			vfinfo[i].vfstats.gorc = 0;
+			vfinfo[i].last_vfstats.gotc =
+				IXGBE_READ_REG(hw, IXGBE_PVFGOTC_LSB(i));
+			vfinfo[i].saved_rst_vfstats.gotc +=
+				vfinfo[i].vfstats.gotc;
+			vfinfo[i].vfstats.gotc = 0;
+			vfinfo[i].last_vfstats.mprc =
+				IXGBE_READ_REG(hw, IXGBE_PVFMPRC(i));
+			vfinfo[i].saved_rst_vfstats.mprc +=
+				vfinfo[i].vfstats.mprc;
+			vfinfo[i].vfstats.mprc = 0;
+		}
+	rcu_read_unlock();
 }
 
 static void ixgbe_setup_gpie(struct ixgbe_adapter *adapter)
@@ -6729,15 +6745,22 @@ void ixgbe_down(struct ixgbe_adapter *adapter)
 	timer_delete_sync(&adapter->service_timer);
 
 	if (adapter->num_vfs) {
+		struct vf_data_storage *vfinfo;
+
 		/* Clear EITR Select mapping */
 		IXGBE_WRITE_REG(&adapter->hw, IXGBE_EITRSEL, 0);
 
+		rcu_read_lock();
+		vfinfo = rcu_dereference(adapter->vfinfo);
 		/* Mark all the VFs as inactive */
-		for (i = 0 ; i < adapter->num_vfs; i++)
-			adapter->vfinfo[i].clear_to_send = false;
+		if (vfinfo) {
+			for (i = 0 ; i < adapter->num_vfs; i++)
+				vfinfo[i].clear_to_send = false;
 
-		/* update setting rx tx for all active vfs */
-		ixgbe_set_all_vfs(adapter);
+			/* update setting rx tx for all active vfs */
+			ixgbe_set_all_vfs(adapter);
+		}
+		rcu_read_unlock();
 	}
 
 	/* disable transmits in the hardware now that interrupts are off */
@@ -7015,9 +7038,6 @@ static int ixgbe_sw_init(struct ixgbe_adapter *adapter,
 #endif
 	/* n-tuple support exists, always init our spinlock */
 	spin_lock_init(&adapter->fdir_perfect_lock);
-
-	/* init spinlock to avoid concurrency of VF resources */
-	spin_lock_init(&adapter->vfs_lock);
 
 #ifdef CONFIG_IXGBE_DCB
 	ixgbe_init_dcb(adapter);
@@ -7920,25 +7940,31 @@ void ixgbe_update_stats(struct ixgbe_adapter *adapter)
 	 * crazy values.
 	 */
 	if (!test_bit(__IXGBE_RESETTING, &adapter->state)) {
-		for (i = 0; i < adapter->num_vfs; i++) {
-			UPDATE_VF_COUNTER_32bit(IXGBE_PVFGPRC(i),
-						adapter->vfinfo[i].last_vfstats.gprc,
-						adapter->vfinfo[i].vfstats.gprc);
-			UPDATE_VF_COUNTER_32bit(IXGBE_PVFGPTC(i),
-						adapter->vfinfo[i].last_vfstats.gptc,
-						adapter->vfinfo[i].vfstats.gptc);
-			UPDATE_VF_COUNTER_36bit(IXGBE_PVFGORC_LSB(i),
-						IXGBE_PVFGORC_MSB(i),
-						adapter->vfinfo[i].last_vfstats.gorc,
-						adapter->vfinfo[i].vfstats.gorc);
-			UPDATE_VF_COUNTER_36bit(IXGBE_PVFGOTC_LSB(i),
-						IXGBE_PVFGOTC_MSB(i),
-						adapter->vfinfo[i].last_vfstats.gotc,
-						adapter->vfinfo[i].vfstats.gotc);
-			UPDATE_VF_COUNTER_32bit(IXGBE_PVFMPRC(i),
-						adapter->vfinfo[i].last_vfstats.mprc,
-						adapter->vfinfo[i].vfstats.mprc);
-		}
+		struct vf_data_storage *vfinfo;
+
+		rcu_read_lock();
+		vfinfo = rcu_dereference(adapter->vfinfo);
+		if (vfinfo)
+			for (i = 0; i < adapter->num_vfs; i++) {
+				UPDATE_VF_COUNTER_32bit(IXGBE_PVFGPRC(i),
+							vfinfo[i].last_vfstats.gprc,
+							vfinfo[i].vfstats.gprc);
+				UPDATE_VF_COUNTER_32bit(IXGBE_PVFGPTC(i),
+							vfinfo[i].last_vfstats.gptc,
+							vfinfo[i].vfstats.gptc);
+				UPDATE_VF_COUNTER_36bit(IXGBE_PVFGORC_LSB(i),
+							IXGBE_PVFGORC_MSB(i),
+							vfinfo[i].last_vfstats.gorc,
+							vfinfo[i].vfstats.gorc);
+				UPDATE_VF_COUNTER_36bit(IXGBE_PVFGOTC_LSB(i),
+							IXGBE_PVFGOTC_MSB(i),
+							vfinfo[i].last_vfstats.gotc,
+							vfinfo[i].vfstats.gotc);
+				UPDATE_VF_COUNTER_32bit(IXGBE_PVFMPRC(i),
+							vfinfo[i].last_vfstats.mprc,
+							vfinfo[i].vfstats.mprc);
+			}
+		rcu_read_unlock();
 	}
 }
 
@@ -8286,22 +8312,27 @@ static void ixgbe_watchdog_flush_tx(struct ixgbe_adapter *adapter)
 static void ixgbe_bad_vf_abort(struct ixgbe_adapter *adapter, u32 vf)
 {
 	struct ixgbe_hw *hw = &adapter->hw;
+	struct vf_data_storage *vfinfo;
 
-	if (adapter->hw.mac.type == ixgbe_mac_82599EB &&
+	rcu_read_lock();
+	vfinfo = rcu_dereference(adapter->vfinfo);
+	if (vfinfo &&
+	    adapter->hw.mac.type == ixgbe_mac_82599EB &&
 	    adapter->flags2 & IXGBE_FLAG2_AUTO_DISABLE_VF) {
-		adapter->vfinfo[vf].primary_abort_count++;
-		if (adapter->vfinfo[vf].primary_abort_count ==
+		vfinfo[vf].primary_abort_count++;
+		if (vfinfo[vf].primary_abort_count ==
 		    IXGBE_PRIMARY_ABORT_LIMIT) {
 			ixgbe_set_vf_link_state(adapter, vf,
 						IFLA_VF_LINK_STATE_DISABLE);
-			adapter->vfinfo[vf].primary_abort_count = 0;
+			vfinfo[vf].primary_abort_count = 0;
 
 			e_info(drv,
 			       "Malicious Driver Detection event detected on PF %d VF %d MAC: %pM mdd-disable-vf=on",
 			       hw->bus.func, vf,
-			       adapter->vfinfo[vf].vf_mac_addresses);
+			       vfinfo[vf].vf_mac_addresses);
 		}
 	}
+	rcu_read_unlock();
 }
 
 static void ixgbe_check_for_bad_vf(struct ixgbe_adapter *adapter)
@@ -8328,9 +8359,15 @@ static void ixgbe_check_for_bad_vf(struct ixgbe_adapter *adapter)
 
 	/* check status reg for all VFs owned by this PF */
 	for (vf = 0; vf < adapter->num_vfs; ++vf) {
-		struct pci_dev *vfdev = adapter->vfinfo[vf].vfdev;
+		struct vf_data_storage *vfinfo;
+		struct pci_dev *vfdev = NULL;
 		u16 status_reg;
 
+		rcu_read_lock();
+		vfinfo = rcu_dereference(adapter->vfinfo);
+		if (vfinfo)
+			vfdev = vfinfo[vf].vfdev;
+		rcu_read_unlock();
 		if (!vfdev)
 			continue;
 		pci_read_config_word(vfdev, PCI_STATUS, &status_reg);
@@ -9763,15 +9800,21 @@ static int ixgbe_ndo_get_vf_stats(struct net_device *netdev, int vf,
 				  struct ifla_vf_stats *vf_stats)
 {
 	struct ixgbe_adapter *adapter = ixgbe_from_netdev(netdev);
+	struct vf_data_storage *vfinfo;
 
 	if (vf < 0 || vf >= adapter->num_vfs)
 		return -EINVAL;
 
-	vf_stats->rx_packets = adapter->vfinfo[vf].vfstats.gprc;
-	vf_stats->rx_bytes   = adapter->vfinfo[vf].vfstats.gorc;
-	vf_stats->tx_packets = adapter->vfinfo[vf].vfstats.gptc;
-	vf_stats->tx_bytes   = adapter->vfinfo[vf].vfstats.gotc;
-	vf_stats->multicast  = adapter->vfinfo[vf].vfstats.mprc;
+	rcu_read_lock();
+	vfinfo = rcu_dereference(adapter->vfinfo);
+	if (vfinfo) {
+		vf_stats->rx_packets = vfinfo[vf].vfstats.gprc;
+		vf_stats->rx_bytes   = vfinfo[vf].vfstats.gorc;
+		vf_stats->tx_packets = vfinfo[vf].vfstats.gptc;
+		vf_stats->tx_bytes   = vfinfo[vf].vfstats.gotc;
+		vf_stats->multicast  = vfinfo[vf].vfstats.mprc;
+	}
+	rcu_read_unlock();
 
 	return 0;
 }
@@ -10090,20 +10133,26 @@ static int handle_redirect_action(struct ixgbe_adapter *adapter, int ifindex,
 {
 	struct ixgbe_ring_feature *vmdq = &adapter->ring_feature[RING_F_VMDQ];
 	unsigned int num_vfs = adapter->num_vfs, vf;
+	struct vf_data_storage *vfinfo;
 	struct netdev_nested_priv priv;
 	struct upper_walk_data data;
 	struct net_device *upper;
 
 	/* redirect to a SRIOV VF */
-	for (vf = 0; vf < num_vfs; ++vf) {
-		upper = pci_get_drvdata(adapter->vfinfo[vf].vfdev);
-		if (upper->ifindex == ifindex) {
-			*queue = vf * __ALIGN_MASK(1, ~vmdq->mask);
-			*action = vf + 1;
-			*action <<= ETHTOOL_RX_FLOW_SPEC_RING_VF_OFF;
-			return 0;
+	rcu_read_lock();
+	vfinfo = rcu_dereference(adapter->vfinfo);
+	if (vfinfo)
+		for (vf = 0; vf < num_vfs; ++vf) {
+			upper = pci_get_drvdata(vfinfo[vf].vfdev);
+			if (upper->ifindex == ifindex) {
+				*queue = vf * __ALIGN_MASK(1, ~vmdq->mask);
+				*action = vf + 1;
+				*action <<= ETHTOOL_RX_FLOW_SPEC_RING_VF_OFF;
+				rcu_read_unlock();
+				return 0;
+			}
 		}
-	}
+	rcu_read_unlock();
 
 	/* redirect to a offloaded macvlan netdev */
 	data.adapter = adapter;
