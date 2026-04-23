@@ -1777,14 +1777,25 @@ static void switch_to_super_page(struct dmar_domain *domain,
 			pte = pfn_to_dma_pte(domain, start_pfn, &level,
 					     GFP_ATOMIC);
 
-		if (dma_pte_present(pte)) {
-			dma_pte_free_pagetable(domain, start_pfn,
-					       start_pfn + lvl_pages - 1,
-					       level + 1);
-
-			cache_tag_flush_range(domain, start_pfn << VTD_PAGE_SHIFT,
-					      end_pfn << VTD_PAGE_SHIFT, 0);
-		}
+    		if (dma_pte_present(pte)) {
+    			/*
+    			 * A live DMA PTE is already installed at this vPFN.
+    			 * This violates the map/unmap contract: an IOVA must be
+    			 * fully unmapped and the IOTLB drained before reuse.
+    			 *
+    			 * Root cause: missing iommu_iotlb_sync() before
+    			 * free_iova_fast() in __iommu_dma_unmap_sg() on the
+    			 * lazy-flush path.  The companion patch in dma-iommu.c
+    			 * fixes that; this guard makes the violation explicit.
+    			 */
+    			pr_err_ratelimited(
+    				"DMAR: stale PTE at vPFN 0x%lx (val=0x%016llx) "
+    				"-- IOVA reused before IOTLB drain
+",
+    				iov_pfn, (unsigned long long)pte->val);
+    			WARN_ON_ONCE(1);
+    			return -EEXIST;
+    		}
 
 		pte++;
 		start_pfn += lvl_pages;
@@ -3663,10 +3674,25 @@ int prepare_domain_attach_device(struct iommu_domain *domain,
 		struct dma_pte *pte;
 
 		pte = dmar_domain->pgd;
-		if (dma_pte_present(pte)) {
-			dmar_domain->pgd = phys_to_virt(dma_pte_addr(pte));
-			iommu_free_page(pte);
-		}
+    		if (dma_pte_present(pte)) {
+    			/*
+    			 * A live DMA PTE is already installed at this vPFN.
+    			 * This violates the map/unmap contract: an IOVA must be
+    			 * fully unmapped and the IOTLB drained before reuse.
+    			 *
+    			 * Root cause: missing iommu_iotlb_sync() before
+    			 * free_iova_fast() in __iommu_dma_unmap_sg() on the
+    			 * lazy-flush path.  The companion patch in dma-iommu.c
+    			 * fixes that; this guard makes the violation explicit.
+    			 */
+    			pr_err_ratelimited(
+    				"DMAR: stale PTE at vPFN 0x%lx (val=0x%016llx) "
+    				"-- IOVA reused before IOTLB drain
+",
+    				iov_pfn, (unsigned long long)pte->val);
+    			WARN_ON_ONCE(1);
+    			return -EEXIST;
+    		}
 		dmar_domain->agaw--;
 	}
 
