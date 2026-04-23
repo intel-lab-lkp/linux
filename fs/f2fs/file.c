@@ -3463,6 +3463,14 @@ int f2fs_fileattr_get(struct dentry *dentry, struct file_kattr *fa)
 	if (f2fs_sb_has_project_quota(F2FS_I_SB(inode)))
 		fa->fsx_projid = from_kprojid(&init_user_ns, fi->i_projid);
 
+	/*
+	 * Casefold is a per-directory attribute in f2fs; the on-disk
+	 * name is preserved regardless. Report FS_XFLAG_CASEFOLD for
+	 * casefolded directories so callers (e.g. NFS export) can
+	 * advertise case-insensitive lookup semantics for that tree.
+	 */
+	if (IS_CASEFOLDED(inode))
+		fa->fsx_xflags |= FS_XFLAG_CASEFOLD;
 	return 0;
 }
 
