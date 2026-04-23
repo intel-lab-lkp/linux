@@ -482,6 +482,55 @@ static int vfio_pci_core_runtime_resume(struct device *dev)
 }
 #endif /* CONFIG_PM */
 
+static void __vfio_pci_core_unmap_bars(struct vfio_pci_core_device *vdev)
+{
+	struct pci_dev *pdev = vdev->pdev;
+	int i;
+
+	for (i = 0; i < PCI_STD_NUM_BARS; i++) {
+		int bar = i + PCI_STD_RESOURCES;
+
+		if (vdev->barmap[bar])
+			pci_iounmap(pdev, vdev->barmap[bar]);
+		if (vdev->have_bar_resource[bar])
+			pci_release_selected_regions(pdev, 1 << bar);
+		vdev->barmap[bar] = NULL;
+		vdev->have_bar_resource[bar] = false;
+	}
+}
+
+static void __vfio_pci_core_map_bars(struct vfio_pci_core_device *vdev)
+{
+	struct pci_dev *pdev = vdev->pdev;
+	int i;
+
+	/*
+	 * Eager-request BAR resources, and iomap; soft failures are
+	 * allowed, and consumers must check before use.
+	 */
+	for (i = 0; i < PCI_STD_NUM_BARS; i++) {
+		int ret;
+		int bar = i + PCI_STD_RESOURCES;
+		void __iomem *io;
+
+		if (pci_resource_len(pdev, i) == 0)
+			continue;
+
+		ret = pci_request_selected_regions(pdev, 1 << bar, "vfio");
+		if (ret) {
+			pci_warn(vdev->pdev, "Failed to reserve region %d\n", bar);
+			continue;
+		}
+		vdev->have_bar_resource[bar] = true;
+
+		io = pci_iomap(pdev, bar, 0);
+		if (io)
+			vdev->barmap[bar] = io;
+		else
+			pci_warn(vdev->pdev, "Failed to iomap region %d\n", bar);
+	}
+}
+
 /*
  * The pci-driver core runtime PM routines always save the device state
  * before going into suspended state. If the device is going into low power
@@ -568,6 +617,7 @@ int vfio_pci_core_enable(struct vfio_pci_core_device *vdev)
 	if (!vfio_vga_disabled() && vfio_pci_is_vga(pdev))
 		vdev->has_vga = true;
 
+	 __vfio_pci_core_map_bars(vdev);
 
 	return 0;
 
@@ -591,7 +641,7 @@ void vfio_pci_core_disable(struct vfio_pci_core_device *vdev)
 	struct pci_dev *pdev = vdev->pdev;
 	struct vfio_pci_dummy_resource *dummy_res, *tmp;
 	struct vfio_pci_ioeventfd *ioeventfd, *ioeventfd_tmp;
-	int i, bar;
+	int i;
 
 	/* For needs_reset */
 	lockdep_assert_held(&vdev->vdev.dev_set->lock);
@@ -646,14 +696,7 @@ void vfio_pci_core_disable(struct vfio_pci_core_device *vdev)
 
 	vfio_config_free(vdev);
 
-	for (i = 0; i < PCI_STD_NUM_BARS; i++) {
-		bar = i + PCI_STD_RESOURCES;
-		if (!vdev->barmap[bar])
-			continue;
-		pci_iounmap(pdev, vdev->barmap[bar]);
-		pci_release_selected_regions(pdev, 1 << bar);
-		vdev->barmap[bar] = NULL;
-	}
+	__vfio_pci_core_unmap_bars(vdev);
 
 	list_for_each_entry_safe(dummy_res, tmp,
 				 &vdev->dummy_resources_list, res_next) {

@@ -200,25 +200,18 @@ EXPORT_SYMBOL_GPL(vfio_pci_core_do_io_rw);
 
 int vfio_pci_core_setup_barmap(struct vfio_pci_core_device *vdev, int bar)
 {
-	struct pci_dev *pdev = vdev->pdev;
-	int ret;
-	void __iomem *io;
-
-	if (vdev->barmap[bar])
-		return 0;
-
-	ret = pci_request_selected_regions(pdev, 1 << bar, "vfio");
-	if (ret)
-		return ret;
-
-	io = pci_iomap(pdev, bar, 0);
-	if (!io) {
-		pci_release_selected_regions(pdev, 1 << bar);
+	/*
+	 * The barmap is now always set up in vfio_pci_core_enable().
+	 * Some legacy callers use this function to ensure the BAR
+	 * resources are requested, and others to ensure the
+	 * pci_iomap() was done, so check here:
+	 */
+	if (bar < 0 || bar >= PCI_STD_NUM_BARS)
+		return -EINVAL;
+	if (vdev->barmap[bar] == 0)
 		return -ENOMEM;
-	}
-
-	vdev->barmap[bar] = io;
-
+	if (!vdev->bar_has_rsrc[bar])
+		return -EBUSY;
 	return 0;
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_setup_barmap);
