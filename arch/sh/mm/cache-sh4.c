@@ -274,8 +274,6 @@ static void sh4_flush_cache_page(void *args)
 /*
  * Write back and invalidate D-caches.
  *
- * START, END: Virtual Address (U0 address)
- *
  * NOTE: We need to flush the _physical_ page entry.
  * Flushing the cache lines for U0 only isn't enough.
  * We need to flush for P1 too, which may contain aliases.
@@ -284,11 +282,8 @@ static void sh4_flush_cache_range(void *args)
 {
 	struct flusher_data *data = args;
 	struct vm_area_struct *vma;
-	unsigned long start, end;
 
 	vma = data->vma;
-	start = data->addr1;
-	end = data->addr2;
 
 	if (cpu_context(smp_processor_id(), vma->vm_mm) == NO_CONTEXT)
 		return;
