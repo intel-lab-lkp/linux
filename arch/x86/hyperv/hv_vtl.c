@@ -293,10 +293,25 @@ EXPORT_SYMBOL_GPL(hv_vtl_configure_reg_page);
 
 DEFINE_STATIC_CALL_NULL(__mshv_vtl_return_hypercall, void (*)(void));
 
-void mshv_vtl_return_call_init(u64 vtl_return_offset)
+int mshv_vtl_return_call_init(void)
 {
+	struct hv_register_assoc vsm_pg_offset_reg;
+	union hv_register_vsm_page_offsets offsets;
+	int ret;
+
+	vsm_pg_offset_reg.name = HV_REGISTER_VSM_CODE_PAGE_OFFSETS;
+
+	ret = hv_call_get_vp_registers(HV_VP_INDEX_SELF, HV_PARTITION_ID_SELF,
+				       1, input_vtl_zero, &vsm_pg_offset_reg);
+	if (ret)
+		return ret;
+
+	offsets.as_uint64 = vsm_pg_offset_reg.value.reg64;
+
 	static_call_update(__mshv_vtl_return_hypercall,
-			   (void *)((u8 *)hv_hypercall_pg + vtl_return_offset));
+			   (void *)((u8 *)hv_hypercall_pg + offsets.vtl_return_offset));
+
+	return 0;
 }
 EXPORT_SYMBOL(mshv_vtl_return_call_init);
 
