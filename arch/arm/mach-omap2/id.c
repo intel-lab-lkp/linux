@@ -209,10 +209,8 @@ void __init omap2xxx_check_revision(void)
 static void __init omap3_cpuinfo(void)
 {
 	const char *cpu_name;
-	char buf[64];
+	char buf[64] = { 0 };
 	int n = 0;
-
-	memset(buf, 0, sizeof(buf));
 
 	/*
 	 * OMAP3430 and OMAP3530 are assumed to be same.
