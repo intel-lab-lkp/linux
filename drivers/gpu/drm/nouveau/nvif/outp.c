@@ -463,7 +463,7 @@ done:
 
 int
 nvif_outp_hdmi_sink_caps(struct nvif_outp *outp, bool scdc, bool scdc_scrambling,
-			 bool scdc_low_rates)
+			 bool scdc_low_rates, int max_frl_rate, int dsc_1p2)
 {
 	struct nvif_outp_hdmi_sink_caps_v0 args;
 	int ret;
@@ -472,11 +472,14 @@ nvif_outp_hdmi_sink_caps(struct nvif_outp *outp, bool scdc, bool scdc_scrambling
 	args.scdc = scdc;
 	args.scdc_scrambling = scdc_scrambling;
 	args.scdc_low_rates = scdc_low_rates;
+	args.max_frl_rate = max_frl_rate;
+	args.dsc_1p2 = dsc_1p2;
 
 	ret = nvif_mthd(&outp->object, NVIF_OUTP_V0_HDMI_SINK_CAPS, &args, sizeof(args));
 	NVIF_ERRON(ret, &outp->object,
-		   "[HDMI_SINK_CAPS scdc:%d scrambling:%d low_rates:%d]",
-		   args.scdc, args.scdc_scrambling, args.scdc_low_rates);
+		   "[HDMI_SINK_CAPS scdc:%d scrambling:%d low_rates:%d max_frl_rate:%d dsc_1p2:%d]",
+		   args.scdc, args.scdc_scrambling, args.scdc_low_rates,
+		   args.max_frl_rate, args.dsc_1p2);
 	return ret;
 }
 

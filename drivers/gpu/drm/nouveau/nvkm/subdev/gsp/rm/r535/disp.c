@@ -1218,7 +1218,7 @@ r535_tmds_edid_get(struct nvkm_outp *outp, u8 *data, u16 *psize)
 
 static void
 r535_outp_hdmi_sink_caps(struct nvkm_outp *outp, bool scdc, bool scrambling,
-			 bool low_rates)
+			 bool low_rates, int max_frl_rate, int dsc_1p2)
 {
 	struct nvkm_disp *disp = outp->disp;
 	NV0073_CTRL_SPECIFIC_SET_HDMI_SINK_CAPS_PARAMS *ctrl;
@@ -1236,7 +1236,27 @@ r535_outp_hdmi_sink_caps(struct nvkm_outp *outp, bool scdc, bool scrambling,
 		ctrl->caps |= NVDEF(NV0073_CTRL_CMD_SPECIFIC, SET_HDMI_SINK_CAPS, GT_340MHZ_CLOCK_SUPPORTED, TRUE);
 	if (low_rates)
 		ctrl->caps |= NVDEF(NV0073_CTRL_CMD_SPECIFIC, SET_HDMI_SINK_CAPS, LTE_340MHZ_SCRAMBLING_SUPPORTED, TRUE);
+	switch (max_frl_rate) {
+	case 1: ctrl->caps |= NVDEF(NV0073_CTRL_CMD_SPECIFIC, SET_HDMI_SINK_CAPS, MAX_FRL_RATE_SUPPORTED, 3LANES_3G); break;
+	case 2: ctrl->caps |= NVDEF(NV0073_CTRL_CMD_SPECIFIC, SET_HDMI_SINK_CAPS, MAX_FRL_RATE_SUPPORTED, 3LANES_6G); break;
+	case 3: ctrl->caps |= NVDEF(NV0073_CTRL_CMD_SPECIFIC, SET_HDMI_SINK_CAPS, MAX_FRL_RATE_SUPPORTED, 4LANES_6G); break;
+	case 4: ctrl->caps |= NVDEF(NV0073_CTRL_CMD_SPECIFIC, SET_HDMI_SINK_CAPS, MAX_FRL_RATE_SUPPORTED, 4LANES_8G); break;
+	case 5: ctrl->caps |= NVDEF(NV0073_CTRL_CMD_SPECIFIC, SET_HDMI_SINK_CAPS, MAX_FRL_RATE_SUPPORTED, 4LANES_10G); break;
+	case 6: ctrl->caps |= NVDEF(NV0073_CTRL_CMD_SPECIFIC, SET_HDMI_SINK_CAPS, MAX_FRL_RATE_SUPPORTED, 4LANES_12G); break;
+	default: break;
+	}
 
+	if (dsc_1p2) {
+		ctrl->caps |= NVDEF(NV0073_CTRL_CMD_SPECIFIC, SET_HDMI_SINK_CAPS, DSC_12_SUPPORTED, TRUE);
+		switch (dsc_1p2) {
+		case 1: ctrl->caps |= NVDEF(NV0073_CTRL_CMD_SPECIFIC, SET_HDMI_SINK_CAPS, DSC_MAX_FRL_RATE_SUPPORTED, 3LANES_3G); break;
+		case 2: ctrl->caps |= NVDEF(NV0073_CTRL_CMD_SPECIFIC, SET_HDMI_SINK_CAPS, DSC_MAX_FRL_RATE_SUPPORTED, 3LANES_6G); break;
+		case 3: ctrl->caps |= NVDEF(NV0073_CTRL_CMD_SPECIFIC, SET_HDMI_SINK_CAPS, DSC_MAX_FRL_RATE_SUPPORTED, 4LANES_6G); break;
+		case 4: ctrl->caps |= NVDEF(NV0073_CTRL_CMD_SPECIFIC, SET_HDMI_SINK_CAPS, DSC_MAX_FRL_RATE_SUPPORTED, 4LANES_8G); break;
+		case 5: ctrl->caps |= NVDEF(NV0073_CTRL_CMD_SPECIFIC, SET_HDMI_SINK_CAPS, DSC_MAX_FRL_RATE_SUPPORTED, 4LANES_10G); break;
+		case 6: ctrl->caps |= NVDEF(NV0073_CTRL_CMD_SPECIFIC, SET_HDMI_SINK_CAPS, DSC_MAX_FRL_RATE_SUPPORTED, 4LANES_12G); break;
+		}
+	}
 	WARN_ON(nvkm_gsp_rm_ctrl_wr(&disp->rm.objcom, ctrl));
 }
 

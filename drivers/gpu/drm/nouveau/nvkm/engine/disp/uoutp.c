@@ -483,7 +483,8 @@ nvkm_uoutp_mthd_hdmi_sink_caps(struct nvkm_outp *outp, void *argv, u32 argc)
 		return -EINVAL;
 
 	outp->func->hdmi_sink_caps(outp, args->v0.scdc, args->v0.scdc_scrambling,
-				   args->v0.scdc_low_rates);
+				   args->v0.scdc_low_rates, args->v0.max_frl_rate,
+				   args->v0.dsc_1p2);
 	return 0;
 }
 

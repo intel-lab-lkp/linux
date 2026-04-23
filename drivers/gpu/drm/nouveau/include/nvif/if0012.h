@@ -172,7 +172,9 @@ union nvif_outp_hdmi_sink_caps_args {
 		__u8 scdc;
 		__u8 scdc_scrambling;
 		__u8 scdc_low_rates;
-		__u8 pad04[4];
+		__u8 max_frl_rate;
+		__u8 dsc_1p2;
+		__u8 pad06[2];
 	} v0;
 };
 

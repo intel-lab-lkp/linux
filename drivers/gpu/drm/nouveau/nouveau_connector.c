@@ -560,6 +560,23 @@ nouveau_connector_set_edid(struct nouveau_connector *nv_connector,
 	}
 }
 
+static int
+nouveau_hdmi_get_frl_rate(u8 max_frl_rate_per_lane, u8 max_lanes)
+{
+	switch (max_lanes) {
+	case 3:
+		switch (max_frl_rate_per_lane) {
+		case 3: return 1;
+		case 6: return 2;
+		}
+		return 0;
+	case 4:
+		return max_frl_rate_per_lane / 2;
+	default:
+		return 0;
+	}
+}
+
 static enum drm_connector_status
 nouveau_connector_detect(struct drm_connector *connector, bool force)
 {
@@ -645,7 +662,12 @@ nouveau_connector_detect(struct drm_connector *connector, bool force)
 			nvif_outp_hdmi_sink_caps(&nv_encoder->outp,
 						hdmi->scdc.supported,
 						hdmi->scdc.scrambling.supported,
-						hdmi->scdc.scrambling.low_rates);
+						hdmi->scdc.scrambling.low_rates,
+						nouveau_hdmi_get_frl_rate(hdmi->max_frl_rate_per_lane,
+									 hdmi->max_lanes),
+						hdmi->dsc_cap.v_1p2 ?
+							nouveau_hdmi_get_frl_rate(hdmi->dsc_cap.max_frl_rate_per_lane,
+										  hdmi->dsc_cap.max_lanes) : 0);
 		}
 
 		if (nv_encoder->dcb->type == DCB_OUTPUT_DP)

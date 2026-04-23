@@ -96,7 +96,7 @@ struct nvkm_outp_func {
 	int (*detect)(struct nvkm_outp *);
 	int (*edid_get)(struct nvkm_outp *, u8 *data, u16 *size);
 	void (*hdmi_sink_caps)(struct nvkm_outp *, bool scdc, bool scrambling,
-			       bool low_rates);
+			       bool low_rates, int max_frl_rate, int dsc_1p2);
 
 	struct nvkm_ior *(*inherit)(struct nvkm_outp *);
 	int (*acquire)(struct nvkm_outp *, bool hda);
