@@ -10,6 +10,7 @@
 
 #include <linux/memcontrol.h>
 #include <linux/mutex.h>
+#include <linux/prandom.h>
 #include <linux/time64.h>
 #include <linux/types.h>
 #include <linux/random.h>
@@ -843,7 +844,34 @@ struct damon_ctx {
 
 	struct list_head adaptive_targets;
 	struct list_head schemes;
+
+	/*
+	 * Per-ctx lockless PRNG state for damon_rand_fast(). Seeded from
+	 * get_random_u64() in damon_new_ctx(). Owned exclusively by the
+	 * kdamond thread of this ctx, so no locking is required.
+	 */
+	struct rnd_state rnd_state;
 };
+
+/*
+ * damon_rand_fast - per-ctx PRNG variant of damon_rand() for hot paths.
+ *
+ * Uses the lockless lfsr113 state kept in @ctx->rnd_state. Safe because
+ * kdamond is the single consumer of a given ctx, so no synchronization
+ * is required. Quality is sufficient for statistical sampling; do NOT
+ * use for any security-sensitive randomness.
+ *
+ * Range mapping uses Lemire's (u64)rnd * span >> 32 to avoid a division;
+ * bias is bounded by span / 2^32, negligible for DAMON.
+ */
+static inline unsigned long damon_rand_fast(struct damon_ctx *ctx,
+					    unsigned long l, unsigned long r)
+{
+	u32 rnd = prandom_u32_state(&ctx->rnd_state);
+	u32 span = (u32)(r - l);
+
+	return l + (unsigned long)(((u64)rnd * span) >> 32);
+}
 
 static inline struct damon_region *damon_next_region(struct damon_region *r)
 {
