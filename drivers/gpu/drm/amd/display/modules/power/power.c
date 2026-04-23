@@ -470,7 +470,7 @@ static bool validate_ext_backlight_caps(
 static void initialize_backlight_caps(struct core_power *core_power, unsigned int inst)
 {
 	unsigned int i;
-	struct dm_acpi_atif_backlight_caps *ext_backlight_caps = NULL;
+	struct dm_acpi_atif_backlight_caps *ext_backlight_caps;
 	bool custom_curve_present = false;
 	unsigned int num_levels = 0;
 	struct dc *dc = NULL;
@@ -486,11 +486,8 @@ static void initialize_backlight_caps(struct core_power *core_power, unsigned in
 	/* Allocate memory for ATIF output
 	 * (do not want to use 256 bytes on the stack)
 	 */
-	ext_backlight_caps = (struct dm_acpi_atif_backlight_caps *)
-		(kzalloc(sizeof(struct dm_acpi_atif_backlight_caps),
-				GFP_KERNEL));
-
-	if (ext_backlight_caps == NULL)
+	ext_backlight_caps = kzalloc_obj(*ext_backlight_caps);
+	if (!ext_backlight_caps)
 		return;
 
 	/* Retrieve ACPI extended brightness caps */
@@ -611,8 +608,7 @@ static void initialize_backlight_caps(struct core_power *core_power, unsigned in
 		}
 	}
 
-	if (ext_backlight_caps != NULL)
-		kfree(ext_backlight_caps);
+	kfree(ext_backlight_caps);
 
 	/* Successfully initialized */
 	core_power->bl_prop[inst].backlight_caps_valid = true;
