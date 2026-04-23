@@ -240,6 +240,23 @@ nvkm_uoutp_mthd_infoframe(struct nvkm_outp *outp, void *argv, u32 argc)
 }
 
 static int
+nvkm_uoutp_mthd_hdmi_frl(struct nvkm_outp *outp, void *argv, u32 argc)
+{
+	union nvif_outp_hdmi_frl_args *args = argv;
+	struct nvkm_ior *ior = outp->ior;
+
+	if (argc != sizeof(args->v0) || args->v0.version != 0)
+		return -ENOSYS;
+	if (!ior->func->hdmi || !ior->func->hdmi->frl_train)
+		return -EINVAL;
+	if (!nvkm_head_find(outp->disp, args->v0.head))
+		return -EINVAL;
+
+	ior->func->hdmi->frl_train(ior, args->v0.head, args->v0.frl_rate);
+	return 0;
+}
+
+static int
 nvkm_uoutp_mthd_hdmi(struct nvkm_outp *outp, void *argv, u32 argc)
 {
 	union nvif_outp_hdmi_args *args = argv;
@@ -257,6 +274,8 @@ nvkm_uoutp_mthd_hdmi(struct nvkm_outp *outp, void *argv, u32 argc)
 		return -EINVAL;
 
 	if (!args->v0.enable) {
+		if (ior->func->hdmi->frl_train)
+			ior->func->hdmi->frl_train(ior, args->v0.head, 0);
 		ior->func->hdmi->infoframe_avi(ior, args->v0.head, NULL, 0);
 		ior->func->hdmi->infoframe_vsi(ior, args->v0.head, NULL, 0);
 		ior->func->hdmi->ctrl(ior, args->v0.head, false, 0, 0);
@@ -518,6 +537,7 @@ nvkm_uoutp_mthd_acquired(struct nvkm_outp *outp, u32 mthd, void *argv, u32 argc)
 	case NVIF_OUTP_V0_RELEASE      : return nvkm_uoutp_mthd_release      (outp, argv, argc);
 	case NVIF_OUTP_V0_LVDS         : return nvkm_uoutp_mthd_lvds         (outp, argv, argc);
 	case NVIF_OUTP_V0_HDMI         : return nvkm_uoutp_mthd_hdmi         (outp, argv, argc);
+	case NVIF_OUTP_V0_HDMI_FRL     : return nvkm_uoutp_mthd_hdmi_frl     (outp, argv, argc);
 	case NVIF_OUTP_V0_INFOFRAME    : return nvkm_uoutp_mthd_infoframe    (outp, argv, argc);
 	case NVIF_OUTP_V0_HDA_ELD      : return nvkm_uoutp_mthd_hda_eld      (outp, argv, argc);
 	case NVIF_OUTP_V0_DP_TRAIN     : return nvkm_uoutp_mthd_dp_train     (outp, argv, argc);

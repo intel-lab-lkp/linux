@@ -18,12 +18,14 @@ struct nvkm_disp {
 		struct nvkm_gsp_object objcom;
 		struct nvkm_gsp_object object;
 
-#define NVKM_DPYID_PLUG   BIT(0)
-#define NVKM_DPYID_UNPLUG BIT(1)
-#define NVKM_DPYID_IRQ    BIT(2)
+#define NVKM_DPYID_PLUG       BIT(0)
+#define NVKM_DPYID_UNPLUG     BIT(1)
+#define NVKM_DPYID_IRQ        BIT(2)
+#define NVKM_DPYID_FRL_RETRAIN BIT(3)
 		struct nvkm_event event;
 		struct nvkm_gsp_event hpd;
 		struct nvkm_gsp_event irq;
+		struct nvkm_gsp_event frl_retrain;
 
 		u32 assigned_sors;
 	} rm;

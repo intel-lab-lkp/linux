@@ -26,6 +26,7 @@ union nvif_conn_event_args {
 #define NVIF_CONN_EVENT_V0_PLUG   0x01
 #define NVIF_CONN_EVENT_V0_UNPLUG 0x02
 #define NVIF_CONN_EVENT_V0_IRQ    0x04
+#define NVIF_CONN_EVENT_V0_FRL    0x08
 		__u8 types;
 		__u8 pad02[6];
 	} v0;

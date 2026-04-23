@@ -223,6 +223,22 @@ nvif_outp_infoframe(struct nvif_outp *outp, u8 type, struct nvif_outp_infoframe_
 }
 
 int
+nvif_outp_hdmi_frl(struct nvif_outp *outp, int head, int frl_rate)
+{
+	struct nvif_outp_hdmi_frl_v0 args;
+	int ret;
+
+	args.version = 0;
+	args.head = head;
+	args.frl_rate = frl_rate;
+
+	ret = nvif_mthd(&outp->object, NVIF_OUTP_V0_HDMI_FRL, &args, sizeof(args));
+	NVIF_ERRON(ret, &outp->object, "[HDMI_FRL head:%d frl_rate:%d]",
+		   args.head, args.frl_rate);
+	return ret;
+}
+
+int
 nvif_outp_hdmi(struct nvif_outp *outp, int head, bool enable, u8 max_ac_packet, u8 rekey,
 	       u32 khz, bool scdc, bool scdc_scrambling, bool scdc_low_rates)
 {

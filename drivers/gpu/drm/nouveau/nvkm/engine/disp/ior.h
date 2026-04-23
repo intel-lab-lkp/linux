@@ -75,6 +75,7 @@ struct nvkm_ior_func {
 		void (*infoframe_avi)(struct nvkm_ior *, int head, void *data, u32 size);
 		void (*infoframe_vsi)(struct nvkm_ior *, int head, void *data, u32 size);
 		void (*audio)(struct nvkm_ior *, int head, bool enable);
+		void (*frl_train)(struct nvkm_ior *, int head, int frl_rate);
 	} *hdmi;
 
 	const struct nvkm_ior_func_dp {

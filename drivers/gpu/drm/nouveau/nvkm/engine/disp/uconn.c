@@ -43,6 +43,8 @@ nvkm_uconn_uevent_gsp(struct nvkm_object *object, u64 token, u32 bits)
 		args.v0.types |= NVIF_CONN_EVENT_V0_UNPLUG;
 	if (bits & NVKM_DPYID_IRQ)
 		args.v0.types |= NVIF_CONN_EVENT_V0_IRQ;
+	if (bits & NVKM_DPYID_FRL_RETRAIN)
+		args.v0.types |= NVIF_CONN_EVENT_V0_FRL;
 
 	return object->client->event(token, &args, sizeof(args.v0));
 }
@@ -122,6 +124,7 @@ nvkm_uconn_uevent(struct nvkm_object *object, void *argv, u32 argc, struct nvkm_
 		if (args->v0.types & NVIF_CONN_EVENT_V0_PLUG  ) bits |= NVKM_DPYID_PLUG;
 		if (args->v0.types & NVIF_CONN_EVENT_V0_UNPLUG) bits |= NVKM_DPYID_UNPLUG;
 		if (args->v0.types & NVIF_CONN_EVENT_V0_IRQ   ) bits |= NVKM_DPYID_IRQ;
+		if (args->v0.types & NVIF_CONN_EVENT_V0_FRL   ) bits |= NVKM_DPYID_FRL_RETRAIN;
 
 		return nvkm_uevent_add(uevent, &disp->rm.event, outp->index, bits,
 				       nvkm_uconn_uevent_gsp);

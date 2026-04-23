@@ -552,6 +552,46 @@ r535_sor_hdmi_ctrl(struct nvkm_ior *sor, int head, bool enable, u8 max_ac_packet
 	WARN_ON(nvkm_gsp_rm_ctrl_wr(&disp->rm.objcom, ctrl));
 }
 
+static int
+r535_sor_frl_train_one(struct nvkm_ior *sor, int frl_rate, bool fake_lt)
+{
+	struct nvkm_disp *disp = sor->disp;
+	NV0073_CTRL_SPECIFIC_SET_HDMI_FRL_LINK_CONFIG_PARAMS *ctrl;
+	int ret;
+
+	ctrl = nvkm_gsp_rm_ctrl_get(&disp->rm.objcom,
+				    NV0073_CTRL_CMD_SPECIFIC_SET_HDMI_FRL_CONFIG,
+				    sizeof(*ctrl));
+	if (IS_ERR(ctrl))
+		return PTR_ERR(ctrl);
+
+	ctrl->displayId = BIT(sor->asy.outp->index);
+	ctrl->data = NVVAL(NV0073_CTRL, HDMI_FRL_DATA, SET_FRL_RATE, frl_rate);
+	ctrl->bFakeLt = fake_lt;
+	ctrl->bDoNotSkipLt = true;
+
+	ret = nvkm_gsp_rm_ctrl_push(&disp->rm.objcom, &ctrl, sizeof(*ctrl));
+	if (ret) {
+		nvkm_gsp_rm_ctrl_done(&disp->rm.objcom, ctrl);
+		return ret;
+	}
+
+	ret = ctrl->bLtSkipped ? -EIO : 0;
+
+	nvkm_gsp_rm_ctrl_done(&disp->rm.objcom, ctrl);
+	return ret;
+}
+
+static void
+r535_sor_frl_train(struct nvkm_ior *sor, int head, int frl_rate)
+{
+	if (!frl_rate)
+		return;
+
+	if (r535_sor_frl_train_one(sor, frl_rate, false))
+		r535_sor_frl_train_one(sor, frl_rate, true);
+}
+
 static const struct nvkm_ior_func_hdmi
 r535_sor_hdmi = {
 	.ctrl = r535_sor_hdmi_ctrl,
@@ -559,6 +599,7 @@ r535_sor_hdmi = {
 	.infoframe_avi = gv100_sor_hdmi_infoframe_avi,
 	.infoframe_vsi = gv100_sor_hdmi_infoframe_vsi,
 	.audio = r535_sor_hdmi_audio,
+	.frl_train = r535_sor_frl_train,
 };
 
 static const struct nvkm_ior_func
@@ -1384,6 +1425,21 @@ r535_outp_new(struct nvkm_disp *disp, u32 id)
 }
 
 static void
+r535_disp_frl_retrain(struct nvkm_gsp_event *event, void *repv, u32 repc)
+{
+	struct nvkm_disp *disp = container_of(event, typeof(*disp), rm.frl_retrain);
+	Nv2080HdmiFrlRetrainingRequestNotification *frl = repv;
+
+	if (WARN_ON(repc < sizeof(*frl)))
+		return;
+
+	nvkm_debug(&disp->engine.subdev, "event: frl retrain displayId %08x\n", frl->displayId);
+
+	if (frl->displayId)
+		nvkm_event_ntfy(&disp->rm.event, fls(frl->displayId) - 1, NVKM_DPYID_FRL_RETRAIN);
+}
+
+static void
 r535_disp_irq(struct nvkm_gsp_event *event, void *repv, u32 repc)
 {
 	struct nvkm_disp *disp = container_of(event, typeof(*disp), rm.irq);
@@ -1465,6 +1521,7 @@ r535_disp_fini(struct nvkm_disp *disp, bool suspend)
 	nvkm_gsp_rm_free(&disp->rm.object);
 
 	if (!suspend) {
+		nvkm_gsp_event_dtor(&disp->rm.frl_retrain);
 		nvkm_gsp_event_dtor(&disp->rm.irq);
 		nvkm_gsp_event_dtor(&disp->rm.hpd);
 		nvkm_event_fini(&disp->rm.event);
@@ -1706,7 +1763,7 @@ r535_disp_oneinit(struct nvkm_disp *disp)
 			return ret;
 	}
 
-	ret = nvkm_event_init(&r535_disp_event, &gsp->subdev, 3, 32, &disp->rm.event);
+	ret = nvkm_event_init(&r535_disp_event, &gsp->subdev, 4, 32, &disp->rm.event);
 	if (WARN_ON(ret))
 		return ret;
 
@@ -1717,6 +1774,12 @@ r535_disp_oneinit(struct nvkm_disp *disp)
 
 	ret = nvkm_gsp_device_event_ctor(&disp->rm.device, 0x007e0001, NV2080_NOTIFIERS_DP_IRQ,
 					 r535_disp_irq, &disp->rm.irq);
+	if (ret)
+		return ret;
+
+	ret = nvkm_gsp_device_event_ctor(&disp->rm.device, 0x007e0002,
+					 NV2080_NOTIFIERS_HDMI_FRL_RETRAINING_REQUEST,
+					 r535_disp_frl_retrain, &disp->rm.frl_retrain);
 	if (ret)
 		return ret;
 

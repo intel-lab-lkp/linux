@@ -57,6 +57,7 @@ union nvif_outp_args {
 #define NVIF_OUTP_V0_LVDS          0x40
 
 #define NVIF_OUTP_V0_HDMI          0x50
+#define NVIF_OUTP_V0_HDMI_FRL      0x51
 
 #define NVIF_OUTP_V0_INFOFRAME     0x60
 #define NVIF_OUTP_V0_HDA_ELD       0x61
@@ -189,6 +190,15 @@ union nvif_outp_hdmi_args {
 		__u8 scdc_scrambling;
 		__u8 scdc_low_rates;
 		__u32 khz;
+	} v0;
+};
+
+union nvif_outp_hdmi_frl_args {
+	struct nvif_outp_hdmi_frl_v0 {
+		__u8 version;
+		__u8 head;
+		__u8 frl_rate;
+		__u8 pad03[5];
 	} v0;
 };
 
