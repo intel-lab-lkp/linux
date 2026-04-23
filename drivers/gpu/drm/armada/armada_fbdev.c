@@ -45,20 +45,20 @@ int armada_fbdev_driver_fbdev_probe(struct drm_fb_helper *fbh,
 {
 	struct drm_device *dev = fbh->dev;
 	struct fb_info *info = fbh->info;
+	u32 fourcc, pitch;
+	u64 size;
+	const struct drm_format_info *format;
 	struct drm_mode_fb_cmd2 mode;
 	struct armada_framebuffer *dfb;
 	struct armada_gem_object *obj;
-	int size, ret;
+	int ret;
 	void *ptr;
 
-	memset(&mode, 0, sizeof(mode));
-	mode.width = sizes->surface_width;
-	mode.height = sizes->surface_height;
-	mode.pitches[0] = armada_pitch(mode.width, sizes->surface_bpp);
-	mode.pixel_format = drm_mode_legacy_fb_format(sizes->surface_bpp,
-					sizes->surface_depth);
+	fourcc = drm_mode_legacy_fb_format(sizes->surface_bpp, sizes->surface_depth);
+	format = drm_get_format_info(dev, fourcc, DRM_FORMAT_MOD_LINEAR);
+	pitch = armada_pitch(sizes->surface_width, drm_format_info_bpp(format, 0));
+	size = ALIGN(pitch * sizes->surface_height, PAGE_SIZE);
 
-	size = mode.pitches[0] * mode.height;
 	obj = armada_gem_alloc_private_object(dev, size);
 	if (!obj) {
 		DRM_ERROR("failed to allocate fb memory\n");
@@ -66,30 +66,26 @@ int armada_fbdev_driver_fbdev_probe(struct drm_fb_helper *fbh,
 	}
 
 	ret = armada_gem_linear_back(dev, obj);
-	if (ret) {
-		drm_gem_object_put(&obj->obj);
-		return ret;
-	}
+	if (ret)
+		goto err_drm_gem_object_put;
 
 	ptr = armada_gem_map_object(dev, obj);
 	if (!ptr) {
-		drm_gem_object_put(&obj->obj);
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto err_drm_gem_object_put;
 	}
 
-	dfb = armada_framebuffer_create(dev,
-					drm_get_format_info(dev, mode.pixel_format,
-							    mode.modifier[0]),
-					&mode, obj);
+	memset(&mode, 0, sizeof(mode));
+	mode.width = sizes->surface_width;
+	mode.height = sizes->surface_height;
+	mode.pitches[0] = pitch;
+	mode.pixel_format = fourcc;
 
-	/*
-	 * A reference is now held by the framebuffer object if
-	 * successful, otherwise this drops the ref for the error path.
-	 */
-	drm_gem_object_put(&obj->obj);
-
-	if (IS_ERR(dfb))
-		return PTR_ERR(dfb);
+	dfb = armada_framebuffer_create(dev, format, &mode, obj);
+	if (IS_ERR(dfb)) {
+		ret = PTR_ERR(dfb);
+		goto err_drm_gem_object_put;
+	}
 
 	info->fbops = &armada_fb_ops;
 	info->fix.smem_start = obj->phys_addr;
@@ -105,5 +101,12 @@ int armada_fbdev_driver_fbdev_probe(struct drm_fb_helper *fbh,
 		dfb->fb.width, dfb->fb.height, dfb->fb.format->cpp[0] * 8,
 		(unsigned long long)obj->phys_addr);
 
+	/* The framebuffer still holds a reference on the GEM object. */
+	drm_gem_object_put(&obj->obj);
+
 	return 0;
+
+err_drm_gem_object_put:
+	drm_gem_object_put(&obj->obj);
+	return ret;
 }
