@@ -254,8 +254,11 @@ static int sw43408_add(struct sw43408_panel *ctx)
 
 	ctx->base.prepare_prev_first = true;
 
-	drm_panel_add(&ctx->base);
-	return ret;
+	ret = devm_drm_panel_add(dev, &ctx->base);
+	if (ret < 0)
+		return dev_err_probe(dev, ret, "Failed to add panel\n");
+
+	return 0;
 }
 
 static int sw43408_probe(struct mipi_dsi_device *dsi)
@@ -299,14 +302,11 @@ static int sw43408_probe(struct mipi_dsi_device *dsi)
 
 static void sw43408_remove(struct mipi_dsi_device *dsi)
 {
-	struct sw43408_panel *ctx = mipi_dsi_get_drvdata(dsi);
 	int ret;
 
 	ret = mipi_dsi_detach(dsi);
 	if (ret < 0)
 		dev_err(&dsi->dev, "failed to detach from DSI host: %d\n", ret);
-
-	drm_panel_remove(&ctx->base);
 }
 
 static struct mipi_dsi_driver sw43408_driver = {
