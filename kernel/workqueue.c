@@ -2529,7 +2529,8 @@ void delayed_work_timer_fn(struct timer_list *t)
 EXPORT_SYMBOL(delayed_work_timer_fn);
 
 static void __queue_delayed_work(int cpu, struct workqueue_struct *wq,
-				struct delayed_work *dwork, unsigned long delay)
+				struct delayed_work *dwork, unsigned long delay,
+				bool dwork_active_cpu)
 {
 	struct timer_list *timer = &dwork->timer;
 	struct work_struct *work = &dwork->work;
@@ -2549,7 +2550,8 @@ static void __queue_delayed_work(int cpu, struct workqueue_struct *wq,
 		return;
 	}
 
-	WARN_ON_ONCE(cpu != WORK_CPU_UNBOUND && !cpu_online(cpu));
+	WARN_ON_ONCE(!dwork_active_cpu && cpu != WORK_CPU_UNBOUND &&
+		     !cpu_online(cpu));
 	dwork->wq = wq;
 	dwork->cpu = cpu;
 	timer->expires = jiffies + delay;
@@ -2561,11 +2563,60 @@ static void __queue_delayed_work(int cpu, struct workqueue_struct *wq,
 			cpu = housekeeping_any_cpu(HK_TYPE_TIMER);
 		add_timer_on(timer, cpu);
 	} else {
-		if (likely(cpu == WORK_CPU_UNBOUND))
+		if (likely(cpu == WORK_CPU_UNBOUND)) {
 			add_timer_global(timer);
-		else
+		} else if (dwork_active_cpu) {
+			add_timer_active_cpu(timer, cpu);
+			/* The target CPU may change if it is offline. */
+			/* Avoid selecting the same offline CPU. */
+			dwork->cpu = READ_ONCE(timer->flags) &
+				TIMER_CPUMASK;
+		} else {
 			add_timer_on(timer, cpu);
+		}
 	}
+}
+
+/**
+ * queue_delayed_work_on - queue work on specific CPU after delay
+ * @cpu: CPU number to execute work on
+ * @wq: workqueue to use
+ * @dwork: work to queue
+ * @delay: number of jiffies to wait before queueing
+ *
+ * We queue the delayed_work to a specific CPU, for non-zero delays and
+ * dwork_active_cpu is not set,  caller must ensure it is online and can't
+ * go away. Callers that fail to ensure this, may get @dwork->timer
+ * queued to an offlined CPU and this will prevent queueing of
+ * @dwork->work unless the offlined CPU becomes online again.
+ *
+ * If dwork_active_cpu is set, timer queued to an offlined CPU will be
+ * queued to the current cpu.
+ *
+ * Return: %false if @work was already on a queue, %true otherwise.  If
+ * @delay is zero and @dwork is idle, it will be scheduled for immediate
+ * execution.
+ */
+static inline bool
+__queue_delayed_work_on(int cpu, struct workqueue_struct *wq,
+			struct delayed_work *dwork, unsigned long delay,
+			bool dwork_active_cpu)
+{
+	struct work_struct *work = &dwork->work;
+	bool ret = false;
+	unsigned long irq_flags;
+
+	/* read the comment in __queue_work() */
+	local_irq_save(irq_flags);
+
+	if (!test_and_set_bit(WORK_STRUCT_PENDING_BIT, work_data_bits(work)) &&
+	    !clear_pending_if_disabled(work)) {
+		__queue_delayed_work(cpu, wq, dwork, delay, dwork_active_cpu);
+		ret = true;
+	}
+
+	local_irq_restore(irq_flags);
+	return ret;
 }
 
 /**
@@ -2588,23 +2639,41 @@ static void __queue_delayed_work(int cpu, struct workqueue_struct *wq,
 bool queue_delayed_work_on(int cpu, struct workqueue_struct *wq,
 			   struct delayed_work *dwork, unsigned long delay)
 {
-	struct work_struct *work = &dwork->work;
 	bool ret = false;
-	unsigned long irq_flags;
+	bool dwork_active_cpu = false;
 
-	/* read the comment in __queue_work() */
-	local_irq_save(irq_flags);
-
-	if (!test_and_set_bit(WORK_STRUCT_PENDING_BIT, work_data_bits(work)) &&
-	    !clear_pending_if_disabled(work)) {
-		__queue_delayed_work(cpu, wq, dwork, delay);
-		ret = true;
-	}
-
-	local_irq_restore(irq_flags);
+	ret = __queue_delayed_work_on(cpu, wq, dwork, delay, dwork_active_cpu);
 	return ret;
 }
 EXPORT_SYMBOL(queue_delayed_work_on);
+
+/**
+ * queue_delayed_work_active_cpu - queue delayed work for an active CPU
+ * @cpu: CPU number to execute work on
+ * @wq: workqueue to use
+ * @dwork: work to queue
+ * @delay: number of jiffies to wait before queueing
+ *
+ * This is like queue_delayed_work_on(), except that for delayed work
+ * the timer is queued on @cpu only if that CPU is online or is the
+ * current CPU.
+ *
+ * Return: %false if @work was already on a queue, %true otherwise.  If
+ * @delay is zero and @dwork is idle, it will be scheduled for immediate
+ * execution.
+ *
+ */
+bool queue_delayed_work_active_cpu(int cpu, struct workqueue_struct *wq,
+				   struct delayed_work *dwork,
+				   unsigned long delay)
+{
+	bool ret = false;
+	bool dwork_active_cpu = true;
+
+	ret = __queue_delayed_work_on(cpu, wq, dwork, delay, dwork_active_cpu);
+	return ret;
+}
+EXPORT_SYMBOL(queue_delayed_work_active_cpu);
 
 /**
  * mod_delayed_work_on - modify delay of or queue a delayed work on specific CPU
@@ -2629,11 +2698,12 @@ bool mod_delayed_work_on(int cpu, struct workqueue_struct *wq,
 {
 	unsigned long irq_flags;
 	bool ret;
+	bool dwork_active_cpu = false;
 
 	ret = work_grab_pending(&dwork->work, WORK_CANCEL_DELAYED, &irq_flags);
 
 	if (!clear_pending_if_disabled(&dwork->work))
-		__queue_delayed_work(cpu, wq, dwork, delay);
+		__queue_delayed_work(cpu, wq, dwork, delay, dwork_active_cpu);
 
 	local_irq_restore(irq_flags);
 	return ret;
