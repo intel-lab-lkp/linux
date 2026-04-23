@@ -38,27 +38,35 @@ static void nft_bitwise_eval_mask_xor(u32 *dst, const u32 *src,
 static void nft_bitwise_eval_lshift(u32 *dst, const u32 *src,
 				    const struct nft_bitwise *priv)
 {
+	unsigned int i, n = DIV_ROUND_UP(priv->len, sizeof(u32));
 	u32 shift = priv->data.data[0];
-	unsigned int i;
+	u32 res[NFT_REG_SIZE];
 	u32 carry = 0;
 
-	for (i = DIV_ROUND_UP(priv->len, sizeof(u32)); i > 0; i--) {
-		dst[i - 1] = (src[i - 1] << shift) | carry;
+	for (i = n; i > 0; i--) {
+		res[i - 1] = (src[i - 1] << shift) | carry;
 		carry = src[i - 1] >> (BITS_PER_TYPE(u32) - shift);
 	}
+
+	for (i = 0; i < n; i++)
+		dst[i] = res[i];
 }
 
 static void nft_bitwise_eval_rshift(u32 *dst, const u32 *src,
 				    const struct nft_bitwise *priv)
 {
+	unsigned int i, n = DIV_ROUND_UP(priv->len, sizeof(u32));
 	u32 shift = priv->data.data[0];
-	unsigned int i;
+	u32 res[NFT_REG_SIZE];
 	u32 carry = 0;
 
-	for (i = 0; i < DIV_ROUND_UP(priv->len, sizeof(u32)); i++) {
-		dst[i] = carry | (src[i] >> shift);
+	for (i = 0; i < n; i++) {
+		res[i] = carry | (src[i] >> shift);
 		carry = src[i] << (BITS_PER_TYPE(u32) - shift);
 	}
+
+	for (i = 0; i < n; i++)
+		dst[i] = res[i];
 }
 
 static void nft_bitwise_eval_and(u32 *dst, const u32 *src, const u32 *src2,
