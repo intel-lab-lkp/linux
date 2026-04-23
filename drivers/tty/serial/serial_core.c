@@ -2011,13 +2011,18 @@ static void uart_line_info(struct seq_file *m, struct uart_state *state)
 	if (!uport)
 		return;
 
-	mmio = uport->iotype >= UPIO_MEM;
-	seq_printf(m, "%u: uart:%s %s%08llX irq:%u",
-			uport->line, uart_type(uport),
-			mmio ? "mmio:0x" : "port:",
-			mmio ? (unsigned long long)uport->mapbase
-			     : (unsigned long long)uport->iobase,
-			uport->irq);
+	seq_printf(m, "%u: uart:%s", uport->line, uart_type(uport));
+
+	mmio = uart_iotype_mmio(uport->iotype);
+
+	if (mmio || uart_iotype_legacy_io(uport->iotype)) {
+		seq_printf(m, " %s%08llX",
+			   mmio ? "mmio:0x" : "port:",
+			   mmio ? (unsigned long long)uport->mapbase
+			   : (unsigned long long)uport->iobase);
+	}
+
+	seq_printf(m, "irq:%u", uport->irq);
 
 	if (uport->type == PORT_UNKNOWN) {
 		seq_putc(m, '\n');
@@ -2482,31 +2487,20 @@ EXPORT_SYMBOL(uart_resume_port);
 static inline void
 uart_report_port(struct uart_driver *drv, struct uart_port *port)
 {
-	char address[64];
+	char address[64] = "";
 
-	switch (port->iotype) {
-	case UPIO_PORT:
-		snprintf(address, sizeof(address), "I/O 0x%lx", port->iobase);
-		break;
-	case UPIO_HUB6:
+	if (uart_iotype_mmio(port->iotype))
 		snprintf(address, sizeof(address),
-			 "I/O 0x%lx offset 0x%x", port->iobase, port->hub6);
-		break;
-	case UPIO_MEM:
-	case UPIO_MEM16:
-	case UPIO_MEM32:
-	case UPIO_MEM32BE:
-	case UPIO_AU:
-	case UPIO_TSI:
-		snprintf(address, sizeof(address),
-			 "MMIO 0x%llx", (unsigned long long)port->mapbase);
-		break;
-	default:
-		strscpy(address, "*unknown*", sizeof(address));
-		break;
+			 " at MMIO 0x%llx", (unsigned long long)port->mapbase);
+	else if (uart_iotype_legacy_io(port->iotype)) {
+		if (port->iotype == UPIO_PORT)
+			snprintf(address, sizeof(address), " at I/O 0x%lx", port->iobase);
+		else if (port->iotype == UPIO_HUB6)
+			snprintf(address, sizeof(address),
+				 " at I/O 0x%lx offset 0x%x", port->iobase, port->hub6);
 	}
 
-	pr_info("%s%s%s at %s (irq = %u, base_baud = %u) is a %s\n",
+	pr_info("%s%s%s%s (irq = %u, base_baud = %u) is a %s\n",
 		port->dev ? dev_name(port->dev) : "",
 		port->dev ? ": " : "",
 		port->name,
