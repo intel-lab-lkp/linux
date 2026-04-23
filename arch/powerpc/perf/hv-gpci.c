@@ -11,6 +11,7 @@
 
 #include <linux/init.h>
 #include <linux/perf_event.h>
+#include <linux/sysfs.h>
 #include <asm/firmware.h>
 #include <asm/hvcall.h>
 #include <asm/io.h>
@@ -129,11 +130,36 @@ static int sysinfo_counter_request[] = {
 
 static DEFINE_PER_CPU(char, hv_gpci_reqb[HGPCI_REQ_BUFFER_SIZE]) __aligned(sizeof(uint64_t));
 
+static int hv_gpci_emit_hex_byte(char *buf, size_t *n, u8 byte)
+{
+	int len;
+
+	len = sysfs_emit_at(buf, *n, "%02x", byte);
+	if (len <= 0)
+		return -EFBIG;
+
+	*n += len;
+	return 0;
+}
+
+static int hv_gpci_emit_newline(char *buf, size_t *n)
+{
+	int len;
+
+	len = sysfs_emit_at(buf, *n, "\n");
+	if (len <= 0)
+		return -EFBIG;
+
+	*n += len;
+	return 0;
+}
+
 static unsigned long systeminfo_gpci_request(u32 req, u32 starting_index,
 			u16 secondary_index, char *buf,
 			size_t *n, struct hv_gpci_request_buffer *arg)
 {
 	unsigned long ret;
+	int rc;
 	size_t i, j;
 
 	arg->params.counter_request = cpu_to_be32(req);
@@ -176,9 +202,14 @@ static unsigned long systeminfo_gpci_request(u32 req, u32 starting_index,
 	for (i = 0; i < be16_to_cpu(arg->params.returned_values); i++) {
 		j = i * be16_to_cpu(arg->params.cv_element_size);
 
-		for (; j < (i + 1) * be16_to_cpu(arg->params.cv_element_size); j++)
-			*n += sprintf(buf + *n,  "%02x", (u8)arg->bytes[j]);
-		*n += sprintf(buf + *n,  "\n");
+		for (; j < (i + 1) * be16_to_cpu(arg->params.cv_element_size); j++) {
+			rc = hv_gpci_emit_hex_byte(buf, n, (u8)arg->bytes[j]);
+			if (rc)
+				return rc;
+		}
+		rc = hv_gpci_emit_newline(buf, n);
+		if (rc)
+			return rc;
 	}
 
 	if (*n >= PAGE_SIZE) {
@@ -461,10 +492,14 @@ out:
 	return ret;
 }
 
-static void affinity_domain_via_partition_result_parse(int returned_values,
-			int element_size, char *buf, size_t *last_element,
-			size_t *n, struct hv_gpci_request_buffer *arg)
+static int affinity_domain_via_partition_result_parse(int returned_values,
+						      int element_size,
+						      char *buf,
+						      size_t *last_element,
+						      size_t *n,
+						      struct hv_gpci_request_buffer *arg)
 {
+	int rc;
 	size_t i = 0, j = 0;
 	size_t k, l, m;
 	uint16_t total_affinity_domain_ele, size_of_each_affinity_domain_ele;
@@ -483,27 +518,40 @@ static void affinity_domain_via_partition_result_parse(int returned_values,
 	 */
 	while (i < returned_values) {
 		k = j;
-		for (; k < j + element_size; k++)
-			*n += sprintf(buf + *n,  "%02x", (u8)arg->bytes[k]);
-		*n += sprintf(buf + *n,  "\n");
+		for (; k < j + element_size; k++) {
+			rc = hv_gpci_emit_hex_byte(buf, n, (u8)arg->bytes[k]);
+			if (rc)
+				return rc;
+		}
+		rc = hv_gpci_emit_newline(buf, n);
+		if (rc)
+			return rc;
 
 		total_affinity_domain_ele = (u8)arg->bytes[k - 2] << 8 | (u8)arg->bytes[k - 3];
 		size_of_each_affinity_domain_ele = (u8)arg->bytes[k] << 8 | (u8)arg->bytes[k - 1];
 
 		for (l = 0; l < total_affinity_domain_ele; l++) {
 			for (m = 0; m < size_of_each_affinity_domain_ele; m++) {
-				*n += sprintf(buf + *n,  "%02x", (u8)arg->bytes[k]);
+				rc = hv_gpci_emit_hex_byte(buf, n, (u8)arg->bytes[k]);
+				if (rc)
+					return rc;
 				k++;
 			}
-			*n += sprintf(buf + *n,  "\n");
+			rc = hv_gpci_emit_newline(buf, n);
+			if (rc)
+				return rc;
 		}
 
-		*n += sprintf(buf + *n,  "\n");
+		rc = hv_gpci_emit_newline(buf, n);
+		if (rc)
+			return rc;
 		i++;
 		j = k;
 	}
 
 	*last_element = k;
+
+	return 0;
 }
 
 static ssize_t affinity_domain_via_partition_show(struct device *dev, struct device_attribute *attr,
@@ -514,6 +562,7 @@ static ssize_t affinity_domain_via_partition_show(struct device *dev, struct dev
 	size_t n = 0;
 	size_t last_element = 0;
 	u32 starting_index;
+	int element_size, rc, returned_values;
 
 	arg = (void *)get_cpu_var(hv_gpci_reqb);
 	memset(arg, 0, HGPCI_REQ_BUFFER_SIZE);
@@ -546,10 +595,16 @@ static ssize_t affinity_domain_via_partition_show(struct device *dev, struct dev
 	 * to buffer util we get all the information.
 	 */
 	while (ret == H_PARAMETER) {
-		affinity_domain_via_partition_result_parse(
-			be16_to_cpu(arg->params.returned_values) - 1,
-			be16_to_cpu(arg->params.cv_element_size), buf,
-			&last_element, &n, arg);
+		returned_values = be16_to_cpu(arg->params.returned_values);
+		element_size = be16_to_cpu(arg->params.cv_element_size);
+		rc = affinity_domain_via_partition_result_parse(returned_values - 1,
+								element_size, buf,
+								&last_element, &n,
+								arg);
+		if (rc) {
+			put_cpu_var(hv_gpci_reqb);
+			return rc;
+		}
 
 		if (n >= PAGE_SIZE) {
 			put_cpu_var(hv_gpci_reqb);
@@ -578,10 +633,15 @@ static ssize_t affinity_domain_via_partition_show(struct device *dev, struct dev
 	}
 
 parse_result:
-	affinity_domain_via_partition_result_parse(
-		be16_to_cpu(arg->params.returned_values),
-		be16_to_cpu(arg->params.cv_element_size),
-		buf, &last_element, &n, arg);
+	returned_values = be16_to_cpu(arg->params.returned_values);
+	element_size = be16_to_cpu(arg->params.cv_element_size);
+	rc = affinity_domain_via_partition_result_parse(returned_values,
+							element_size, buf,
+							&last_element, &n, arg);
+	if (rc) {
+		put_cpu_var(hv_gpci_reqb);
+		return rc;
+	}
 
 	put_cpu_var(hv_gpci_reqb);
 	return n;
