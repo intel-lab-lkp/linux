@@ -244,9 +244,11 @@ static vm_fault_t dev_dax_huge_fault(struct vm_fault *vmf, unsigned int order)
 	int id;
 	struct dev_dax *dev_dax = filp->private_data;
 
-	dev_dbg(&dev_dax->dev, "%s: op=%s addr=%#lx order=%d\n", current->comm,
-		(vmf->flags & FAULT_FLAG_WRITE) ? "write" : "read",
-		vmf->address & ~((1UL << (order + PAGE_SHIFT)) - 1), order);
+	dev_dbg_ratelimited(&dev_dax->dev, "%s: op=%s addr=%#lx order=%d\n",
+			    current->comm,
+			    (vmf->flags & FAULT_FLAG_WRITE) ? "write" : "read",
+			    vmf->address & ~((1UL << (order + PAGE_SHIFT)) - 1),
+			    order);
 
 	id = dax_read_lock();
 	if (order == 0)
