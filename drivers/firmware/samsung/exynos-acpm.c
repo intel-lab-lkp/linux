@@ -311,8 +311,10 @@ static int acpm_dequeue_by_polling(struct acpm_chan *achan,
 	timeout = ktime_add_us(ktime_get(), ACPM_POLL_TIMEOUT_US);
 	do {
 		ret = acpm_get_rx(achan, xfer);
-		if (ret)
+		if (ret) {
+			clear_bit(seqnum - 1, achan->bitmap_seqnum);
 			return ret;
+		}
 
 		if (!test_bit(seqnum - 1, achan->bitmap_seqnum))
 			return 0;
@@ -323,6 +325,8 @@ static int acpm_dequeue_by_polling(struct acpm_chan *achan,
 
 	dev_err(dev, "Timeout! ch:%u s:%u bitmap:%lx.\n",
 		achan->id, seqnum, achan->bitmap_seqnum[0]);
+
+	clear_bit(seqnum - 1, achan->bitmap_seqnum);
 
 	return -ETIME;
 }
@@ -455,8 +459,10 @@ int acpm_do_xfer(struct acpm_handle *handle, const struct acpm_xfer *xfer)
 		writel(idx, achan->tx.front);
 
 		ret = mbox_send_message(achan->chan, (void *)&msg);
-		if (ret < 0)
+		if (ret < 0) {
+			clear_bit(achan->seqnum - 1, achan->bitmap_seqnum);
 			return ret;
+		}
 
 		mbox_client_txdone(achan->chan, 0);
 	}
