@@ -691,15 +691,13 @@ static ssize_t gpio_sim_device_config_dev_name_show(struct config_item *item,
 						    char *page)
 {
 	struct gpio_sim_device *dev = to_gpio_sim_device(item);
-	struct platform_device *pdev;
 
 	guard(mutex)(&dev->lock);
 
-	pdev = dev->probe_data.pdev;
-	if (pdev)
-		return sprintf(page, "%s\n", dev_name(&pdev->dev));
+	if (dev->probe_data.pdev)
+		return sysfs_emit(page, "%s\n", dev_name(&dev->probe_data.pdev->dev));
 
-	return sprintf(page, "gpio-sim.%d\n", dev->id);
+	return sysfs_emit(page, "gpio-sim.%d\n", dev->id);
 }
 
 CONFIGFS_ATTR_RO(gpio_sim_device_config_, dev_name);
