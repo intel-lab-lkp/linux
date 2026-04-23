@@ -20,12 +20,11 @@ description:
   instead of having to encode the IP version number in the device tree
   compatible.
 
-allOf:
-  - $ref: pwm.yaml#
-
 properties:
   compatible:
-    const: snps,dw-apb-timers-pwm2
+    enum:
+      - snps,dw-apb-timers-pwm2
+      - eswin,eic7700-pwm
 
   reg:
     maxItems: 1
@@ -43,6 +42,12 @@ properties:
       - const: bus
       - const: timer
 
+  resets:
+    minItems: 1
+    items:
+      - description: Interface bus reset
+      - description: PWM timer logic reset
+
   snps,pwm-number:
     $ref: /schemas/types.yaml#/definitions/uint32
     description: The number of PWM channels configured for this instance
@@ -53,6 +58,22 @@ required:
   - reg
   - clocks
   - clock-names
+
+allOf:
+  - $ref: pwm.yaml#
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: eswin,eic7700-pwm
+    then:
+      properties:
+        resets:
+          items:
+            - description: Interface bus reset
+      required:
+        - resets
 
 additionalProperties: false
 
