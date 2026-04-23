@@ -790,8 +790,10 @@ int smc_clc_wait_msg(struct smc_sock *smc, void *buf, int buflen,
 		smc->peer_diagnosis = ntohl(dclc->peer_diagnosis);
 		if (((struct smc_clc_msg_decline *)buf)->hdr.typev2 &
 						SMC_FIRST_CONTACT_MASK) {
-			smc->conn.lgr->sync_err = 1;
-			smc_lgr_terminate_sched(smc->conn.lgr);
+			if (smc->conn.lgr) {
+				smc->conn.lgr->sync_err = 1;
+				smc_lgr_terminate_sched(smc->conn.lgr);
+			}
 		}
 	}
 
