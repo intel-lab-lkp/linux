@@ -282,12 +282,32 @@ static struct hfs_bnode *hfs_bnode_split(struct hfs_find_data *fd)
 		old_rec_off -= rec_size;
 		if (++num_recs < node->num_recs)
 			continue;
-		hfs_bnode_put(node);
-		hfs_bnode_unlink(new_node);
-		hfs_bnode_put(new_node);
-		if (next_node)
-			hfs_bnode_put(next_node);
-		return ERR_PTR(-ENOSPC);
+		/*
+		 * All data fits within the node_size/2 threshold,
+		 * so re-scan using the actual data midpoint.
+		 */
+		size = hfs_bnode_read_u16(node, tree->node_size -
+			(node->num_recs + 1) * rec_size);
+		size = ((int)node_desc_size + size) / 2;
+		old_rec_off = tree->node_size - (2 * rec_size);
+		num_recs = 1;
+		for (;;) {
+			data_start = hfs_bnode_read_u16(node,
+							old_rec_off);
+			if (data_start > size)
+				break;
+			old_rec_off -= rec_size;
+			if (++num_recs < node->num_recs)
+				continue;
+			/* last record holds most of the data */
+			num_recs = node->num_recs - 1;
+			old_rec_off = tree->node_size -
+				(num_recs + 1) * rec_size;
+			data_start = hfs_bnode_read_u16(node,
+							old_rec_off);
+			break;
+		}
+		break;
 	}
 
 	if (fd->record + 1 < num_recs) {
