@@ -53,7 +53,6 @@ struct feature_status supported_features[] = {
 	FEATURE_STATUS("libopencsd", HAVE_CSTRACE_SUPPORT),
 
 	FEATURE_STATUS("libpfm4", HAVE_LIBPFM),
-	FEATURE_STATUS("libpython", HAVE_LIBPYTHON_SUPPORT),
 	FEATURE_STATUS("libslang", HAVE_SLANG_SUPPORT),
 	FEATURE_STATUS("libtraceevent", HAVE_LIBTRACEEVENT),
 	FEATURE_STATUS_TIP("libunwind", HAVE_LIBUNWIND_SUPPORT, "Deprecated, use LIBUNWIND=1 and install libunwind-dev[el] to build with it"),
