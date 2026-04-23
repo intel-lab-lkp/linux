@@ -10,6 +10,7 @@
 #include <linux/mmu_notifier.h>
 #include <linux/page_idle.h>
 #include <linux/pagemap.h>
+#include <linux/prefetch.h>
 #include <linux/rmap.h>
 #include <linux/swap.h>
 #include <linux/memory-tiers.h>
@@ -48,10 +49,29 @@ static void damon_pa_mkold(phys_addr_t paddr)
 	folio_put(folio);
 }
 
+static void damon_pa_prefetch_page(unsigned long sampling_addr,
+				   unsigned long addr_unit)
+{
+	phys_addr_t paddr = damon_pa_phys_addr(sampling_addr, addr_unit);
+
+	prefetchw(pfn_to_page(PHYS_PFN(paddr)));
+}
+
 static void __damon_pa_prepare_access_check(struct damon_ctx *ctx,
+					    struct damon_target *t,
 					    struct damon_region *r)
 {
-	r->sampling_addr = damon_rand_fast(ctx, r->ar.start, r->ar.end);
+	struct damon_region *next = list_next_entry(r, list);
+
+	/* First region has no predecessor to have pre-picked its addr. */
+	if (r->list.prev == &t->regions_list)
+		r->sampling_addr = damon_rand_fast(ctx, r->ar.start, r->ar.end);
+
+	if (&next->list != &t->regions_list) {
+		next->sampling_addr = damon_rand_fast(ctx, next->ar.start,
+						      next->ar.end);
+		damon_pa_prefetch_page(next->sampling_addr, ctx->addr_unit);
+	}
 
 	damon_pa_mkold(damon_pa_phys_addr(r->sampling_addr, ctx->addr_unit));
 }
@@ -63,7 +83,7 @@ static void damon_pa_prepare_access_checks(struct damon_ctx *ctx)
 
 	damon_for_each_target(t, ctx) {
 		damon_for_each_region(r, t)
-			__damon_pa_prepare_access_check(ctx, r);
+			__damon_pa_prepare_access_check(ctx, t, r);
 	}
 }
 
@@ -106,11 +126,16 @@ static void __damon_pa_check_access(struct damon_region *r,
 static unsigned int damon_pa_check_accesses(struct damon_ctx *ctx)
 {
 	struct damon_target *t;
-	struct damon_region *r;
+	struct damon_region *r, *next;
 	unsigned int max_nr_accesses = 0;
 
 	damon_for_each_target(t, ctx) {
 		damon_for_each_region(r, t) {
+			next = list_next_entry(r, list);
+			if (&next->list != &t->regions_list)
+				damon_pa_prefetch_page(next->sampling_addr,
+						       ctx->addr_unit);
+
 			__damon_pa_check_access(
 					r, &ctx->attrs, ctx->addr_unit);
 			max_nr_accesses = max(r->nr_accesses, max_nr_accesses);
