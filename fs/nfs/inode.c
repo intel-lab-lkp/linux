@@ -41,6 +41,7 @@
 #include <linux/freezer.h>
 #include <linux/uaccess.h>
 #include <linux/iversion.h>
+#include <linux/fileattr.h>
 
 #include "nfs4_fs.h"
 #include "callback.h"
@@ -1100,6 +1101,26 @@ out:
 	return err;
 }
 EXPORT_SYMBOL_GPL(nfs_getattr);
+
+int nfs_fileattr_get(struct dentry *dentry, struct file_kattr *fa)
+{
+	struct inode *inode = d_inode(dentry);
+
+	/*
+	 * Case handling is a property of the exported filesystem on the
+	 * NFS server, reported to the client at mount via PATHCONF
+	 * (NFSv3) or FATTR4_CASE_INSENSITIVE / FATTR4_CASE_PRESERVING
+	 * (NFSv4). Unlike filesystems that always preserve case, an NFS
+	 * mount may front a backend that does not, so both flags can
+	 * appear.
+	 */
+	if (nfs_server_capable(inode, NFS_CAP_CASE_INSENSITIVE))
+		fa->fsx_xflags |= FS_XFLAG_CASEFOLD;
+	if (nfs_server_capable(inode, NFS_CAP_CASE_NONPRESERVING))
+		fa->fsx_xflags |= FS_XFLAG_CASENONPRESERVING;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(nfs_fileattr_get);
 
 static void nfs_init_lock_context(struct nfs_lock_context *l_ctx)
 {
