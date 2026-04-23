@@ -192,8 +192,8 @@ void __init omap2xxx_check_revision(void)
 		j = i;
 	}
 
-	sprintf(soc_name, "OMAP%04x", omap_rev() >> 16);
-	sprintf(soc_rev, "ES%x", (omap_rev() >> 12) & 0xf);
+	snprintf(soc_name, sizeof(soc_name), "OMAP%04x", omap_rev() >> 16);
+	snprintf(soc_rev, sizeof(soc_rev), "ES%x", (omap_rev() >> 12) & 0xf);
 
 	pr_info("%s", soc_name);
 	if ((omap_rev() >> 8) & 0x0f)
@@ -519,7 +519,7 @@ void __init omap3xxx_check_revision(void)
 		pr_warn("Warning: unknown chip type: hawkeye %04x, assuming OMAP3630ES1.2\n",
 			hawkeye);
 	}
-	sprintf(soc_rev, "ES%s", cpu_rev);
+	snprintf(soc_rev, sizeof(soc_rev), "ES%s", cpu_rev);
 }
 
 void __init omap4xxx_check_revision(void)
@@ -594,9 +594,9 @@ void __init omap4xxx_check_revision(void)
 		omap_revision = OMAP4430_REV_ES2_3;
 	}
 
-	sprintf(soc_name, "OMAP%04x", omap_rev() >> 16);
-	sprintf(soc_rev, "ES%d.%d", (omap_rev() >> 12) & 0xf,
-						(omap_rev() >> 8) & 0xf);
+	snprintf(soc_name, sizeof(soc_name), "OMAP%04x", omap_rev() >> 16);
+	snprintf(soc_rev, sizeof(soc_rev), "ES%d.%d", (omap_rev() >> 12) & 0xf,
+		 (omap_rev() >> 8) & 0xf);
 	pr_info("%s %s\n", soc_name, soc_rev);
 }
 
@@ -637,8 +637,8 @@ void __init omap5xxx_check_revision(void)
 		omap_revision = OMAP5430_REV_ES2_0;
 	}
 
-	sprintf(soc_name, "OMAP%04x", omap_rev() >> 16);
-	sprintf(soc_rev, "ES%d.0", (omap_rev() >> 12) & 0xf);
+	snprintf(soc_name, sizeof(soc_name), "OMAP%04x", omap_rev() >> 16);
+	snprintf(soc_rev, sizeof(soc_rev), "ES%d.0", (omap_rev() >> 12) & 0xf);
 
 	pr_info("%s %s\n", soc_name, soc_rev);
 }
@@ -712,9 +712,9 @@ void __init dra7xxx_check_revision(void)
 		omap_revision = DRA752_REV_ES2_0;
 	}
 
-	sprintf(soc_name, "DRA%03x", omap_rev() >> 16);
-	sprintf(soc_rev, "ES%d.%d", (omap_rev() >> 12) & 0xf,
-		(omap_rev() >> 8) & 0xf);
+	snprintf(soc_name, sizeof(soc_name), "DRA%03x", omap_rev() >> 16);
+	snprintf(soc_rev, sizeof(soc_rev), "ES%d.%d", (omap_rev() >> 12) & 0xf,
+		 (omap_rev() >> 8) & 0xf);
 
 	pr_info("%s %s\n", soc_name, soc_rev);
 }
