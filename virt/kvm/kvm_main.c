@@ -4953,6 +4953,12 @@ static int kvm_vm_ioctl_check_extension_generic(struct kvm *kvm, long arg)
 	case KVM_CAP_GUEST_MEMFD_FLAGS:
 		return kvm_gmem_get_supported_flags(kvm);
 #endif
+#ifdef CONFIG_KVM_GUEST_DAXFD
+	case KVM_CAP_GUEST_DAXFD:
+		return 1;
+	case KVM_CAP_GUEST_DAXFD_FLAGS:
+		return kvm_dax_get_supported_flags(kvm);
+#endif
 	default:
 		break;
 	}

@@ -743,6 +743,13 @@ static inline u64 kvm_gmem_get_supported_flags(struct kvm *kvm)
 }
 #endif
 
+#ifdef CONFIG_KVM_GUEST_DAXFD
+static inline u64 kvm_dax_get_supported_flags(struct kvm *kvm)
+{
+	return GUEST_MEMFD_FLAG_MMAP;
+}
+#endif
+
 #ifndef kvm_arch_has_readonly_mem
 static inline bool kvm_arch_has_readonly_mem(struct kvm *kvm)
 {
