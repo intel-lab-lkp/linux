@@ -45,6 +45,7 @@ static int mana_gd_init_pf_regs(struct pci_dev *pdev)
 	struct gdma_context *gc = pci_get_drvdata(pdev);
 	void __iomem *sriov_base_va;
 	u64 sriov_base_off;
+	u64 sriov_shm_off;
 
 	gc->db_page_size = mana_gd_r32(gc, GDMA_PF_REG_DB_PAGE_SIZE) & 0xFFFF;
 
@@ -73,10 +74,25 @@ static int mana_gd_init_pf_regs(struct pci_dev *pdev)
 	gc->phys_db_page_base = gc->bar0_pa + gc->db_page_off;
 
 	sriov_base_off = mana_gd_r64(gc, GDMA_SRIOV_REG_CFG_BASE_OFF);
+	if (sriov_base_off >= gc->bar0_size ||
+	    !IS_ALIGNED(sriov_base_off, sizeof(u32))) {
+		dev_err(gc->dev,
+			"SRIOV base offset 0x%llx out of range or unaligned (BAR0 size 0x%llx)\n",
+			sriov_base_off, (u64)gc->bar0_size);
+		return -EPROTO;
+	}
 
 	sriov_base_va = gc->bar0_va + sriov_base_off;
-	gc->shm_base = sriov_base_va +
-			mana_gd_r64(gc, sriov_base_off + GDMA_PF_REG_SHM_OFF);
+
+	sriov_shm_off = mana_gd_r64(gc, sriov_base_off + GDMA_PF_REG_SHM_OFF);
+	if (sriov_base_off + sriov_shm_off >= gc->bar0_size ||
+	    !IS_ALIGNED(sriov_shm_off, sizeof(u32))) {
+		dev_err(gc->dev,
+			"SRIOV SHM offset 0x%llx out of range or unaligned (BAR0 size 0x%llx)\n",
+			sriov_shm_off, (u64)gc->bar0_size);
+		return -EPROTO;
+	}
+	gc->shm_base = sriov_base_va + sriov_shm_off;
 
 	return 0;
 }
@@ -84,6 +100,7 @@ static int mana_gd_init_pf_regs(struct pci_dev *pdev)
 static int mana_gd_init_vf_regs(struct pci_dev *pdev)
 {
 	struct gdma_context *gc = pci_get_drvdata(pdev);
+	u64 shm_off;
 
 	gc->db_page_size = mana_gd_r32(gc, GDMA_REG_DB_PAGE_SIZE) & 0xFFFF;
 
@@ -111,7 +128,16 @@ static int mana_gd_init_vf_regs(struct pci_dev *pdev)
 	gc->db_page_base = gc->bar0_va + gc->db_page_off;
 	gc->phys_db_page_base = gc->bar0_pa + gc->db_page_off;
 
-	gc->shm_base = gc->bar0_va + mana_gd_r64(gc, GDMA_REG_SHM_OFFSET);
+	shm_off = mana_gd_r64(gc, GDMA_REG_SHM_OFFSET);
+	if (shm_off >= gc->bar0_size ||
+	    !IS_ALIGNED(shm_off, sizeof(u32))) {
+		dev_err(gc->dev,
+			"SHM offset 0x%llx out of range or unaligned (BAR0 size 0x%llx)\n",
+			shm_off, (u64)gc->bar0_size);
+		return -EPROTO;
+	}
+
+	gc->shm_base = gc->bar0_va + shm_off;
 
 	return 0;
 }
