@@ -47,6 +47,7 @@ struct amd_northbridge_info {
 u16 amd_nb_num(void);
 bool amd_nb_has_feature(unsigned int feature);
 struct amd_northbridge *node_to_amd_nb(int node);
+int amd_nb_set_cache(struct amd_northbridge *nb, u16 num);
 
 static inline bool amd_gart_present(void)
 {
@@ -69,6 +70,12 @@ static inline struct amd_northbridge *node_to_amd_nb(int node)
 {
 	return NULL;
 }
+
+static inline int amd_nb_set_cache(struct amd_northbridge *nb, u16 num)
+{
+	return -ENODEV;
+}
+
 #define amd_gart_present(x)	false
 
 #endif

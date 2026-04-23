@@ -58,6 +58,25 @@ struct amd_northbridge *node_to_amd_nb(int node)
 }
 EXPORT_SYMBOL_GPL(node_to_amd_nb);
 
+/*
+ * Register a pre-built NB cache from a vendor-specific module (e.g. Hygon).
+ * Must be called at most once, before any amd_nb consumer is active.
+ * Returns -EBUSY if the cache is already populated.
+ */
+int amd_nb_set_cache(struct amd_northbridge *nb, u16 num)
+{
+	if (!nb || !num)
+		return -EINVAL;
+
+	if (amd_northbridges.num)
+		return -EBUSY;
+
+	amd_northbridges.nb  = nb;
+	amd_northbridges.num = num;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(amd_nb_set_cache);
+
 static int amd_cache_northbridges(void)
 {
 	struct amd_northbridge *nb;
@@ -65,6 +84,9 @@ static int amd_cache_northbridges(void)
 
 	if (amd_northbridges.num)
 		return 0;
+
+	if (boot_cpu_data.x86_vendor != X86_VENDOR_AMD)
+		return -ENODEV;
 
 	amd_northbridges.num = amd_num_nodes();
 
