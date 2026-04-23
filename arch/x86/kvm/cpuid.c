@@ -1505,7 +1505,7 @@ static inline int __do_cpuid_func(struct kvm_cpuid_array *array, u32 function)
 		break;
 	case 0xa: { /* Architectural Performance Monitoring */
 		union cpuid10_eax eax = { };
-		union cpuid10_edx edx = { };
+		union cpuid10_edx edx = { }, host_edx;
 
 		if (!enable_pmu || !static_cpu_has(X86_FEATURE_ARCH_PERFMON)) {
 			entry->eax = entry->ebx = entry->ecx = entry->edx = 0;
@@ -1516,8 +1516,13 @@ static inline int __do_cpuid_func(struct kvm_cpuid_array *array, u32 function)
 		eax.split.num_counters = kvm_pmu_cap.num_counters_gp;
 		eax.split.bit_width = kvm_pmu_cap.bit_width_gp;
 		eax.split.mask_length = kvm_pmu_cap.events_mask_len;
-		edx.split.num_counters_fixed = kvm_pmu_cap.num_counters_fixed;
 		edx.split.bit_width_fixed = kvm_pmu_cap.bit_width_fixed;
+
+		/* Guest does not support non-contiguous fixed counters. */
+		host_edx = (union cpuid10_edx)entry->edx;
+		edx.split.num_counters_fixed =
+			 min_t(int, kvm_pmu_cap.num_counters_fixed,
+			       host_edx.split.num_counters_fixed);
 
 		if (kvm_pmu_cap.version)
 			edx.split.anythread_deprecated = 1;
