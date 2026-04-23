@@ -131,6 +131,7 @@ static const char *const nlk_cb_mutex_key_strings[MAX_LINKS + 1] = {
 };
 
 static int netlink_dump(struct sock *sk, bool lock_taken);
+static void netlink_dump_cleanup(struct netlink_sock *nlk, bool drop);
 
 /* nl_table locking explained:
  * Lookup and traversal are protected with an RCU read-side lock. Insertion
@@ -763,13 +764,8 @@ static int netlink_release(struct socket *sock)
 	}
 
 	/* Terminate any outstanding dump */
-	if (nlk->cb_running) {
-		if (nlk->cb.done)
-			nlk->cb.done(&nlk->cb);
-		module_put(nlk->cb.module);
-		kfree_skb(nlk->cb.skb);
-		WRITE_ONCE(nlk->cb_running, false);
-	}
+	if (nlk->cb_running)
+		netlink_dump_cleanup(nlk, true);
 
 	module_put(nlk->module);
 
@@ -2250,6 +2246,26 @@ static int netlink_dump_done(struct netlink_sock *nlk, struct sk_buff *skb,
 	return 0;
 }
 
+/* Must be called with nl_cb_mutex NOT held. @drop=true frees the skb
+ * via kfree_skb() so drop-monitor sees the teardown; @drop=false uses
+ * consume_skb() for the normal-completion path.
+ */
+static void netlink_dump_cleanup(struct netlink_sock *nlk, bool drop)
+{
+	struct module *module = nlk->cb.module;
+	struct sk_buff *skb = nlk->cb.skb;
+
+	if (nlk->cb.done)
+		nlk->cb.done(&nlk->cb);
+
+	WRITE_ONCE(nlk->cb_running, false);
+	module_put(module);
+	if (drop)
+		kfree_skb(skb);
+	else
+		consume_skb(skb);
+}
+
 static int netlink_dump(struct sock *sk, bool lock_taken)
 {
 	struct netlink_sock *nlk = nlk_sk(sk);
@@ -2258,7 +2274,6 @@ static int netlink_dump(struct sock *sk, bool lock_taken)
 	struct sk_buff *skb = NULL;
 	unsigned int rmem, rcvbuf;
 	size_t max_recvmsg_len;
-	struct module *module;
 	int err = -ENOBUFS;
 	int alloc_min_size;
 	int alloc_size;
@@ -2366,19 +2381,19 @@ static int netlink_dump(struct sock *sk, bool lock_taken)
 	else
 		__netlink_sendskb(sk, skb);
 
-	if (cb->done)
-		cb->done(cb);
-
-	WRITE_ONCE(nlk->cb_running, false);
-	module = cb->module;
-	skb = cb->skb;
 	mutex_unlock(&nlk->nl_cb_mutex);
-	module_put(module);
-	consume_skb(skb);
+	netlink_dump_cleanup(nlk, false);
 	return 0;
 
 errout_skb:
 	mutex_unlock(&nlk->nl_cb_mutex);
+	/* The recvmsg() retry path (lock_taken=false) keeps cb_running so
+	 * the next recvmsg() can drive the dump forward once receive room
+	 * is available; only the initial __netlink_dump_start() failure
+	 * owns the teardown.
+	 */
+	if (lock_taken)
+		netlink_dump_cleanup(nlk, true);
 	kfree_skb(skb);
 	return err;
 }
