@@ -2711,9 +2711,16 @@ static struct cxl_region *devm_cxl_add_region(struct cxl_root_decoder *cxlrd,
 	if (rc)
 		goto err;
 
-	rc = devm_add_action_or_reset(port->uport_dev, unregister_region, cxlr);
-	if (rc)
-		return ERR_PTR(rc);
+	/*
+	 * For accelerators/type2, region release linked to endpoint device.
+	 * See handling of cxl_endpoint_region_autoremove() below by
+	 * cxl_memdev_attach_region().
+	 */
+	if (type == CXL_DECODER_HOSTONLYMEM) {
+		rc = devm_add_action_or_reset(port->uport_dev, unregister_region, cxlr);
+		if (rc)
+			return ERR_PTR(rc);
+	}
 
 	dev_dbg(port->uport_dev, "%s: created %s\n",
 		dev_name(&cxlrd->cxlsd.cxld.dev), dev_name(dev));
@@ -4042,6 +4049,111 @@ static int cxl_region_can_probe(struct cxl_region *cxlr)
 
 	return 0;
 }
+
+static int first_mapped_decoder(struct device *dev, const void *data)
+{
+	struct cxl_endpoint_decoder *cxled;
+
+	if (!is_endpoint_decoder(dev))
+		return 0;
+
+	cxled = to_cxl_endpoint_decoder(dev);
+	if (cxled->cxld.region)
+		return 1;
+
+	return 0;
+}
+
+/*
+ * As this is running in endpoint port remove context it does not race cxl_root
+ * destruction since port topologies are always removed depth first.
+ */
+static void cxl_endpoint_region_autoremove(void *_cxlr)
+{
+	unregister_region(_cxlr);
+}
+
+/**
+ * cxl_memdev_attach_region - bind region to accelerator memdev
+ *
+ * @cxlmd: a pointer to cxl_memdev to use
+ * @attach: a pointer to region attach struct with callbacks for
+ * 	    safely working with a region range by the caller
+ *
+ * Returns 0 or error.
+ */
+int cxl_memdev_attach_region(struct cxl_memdev *cxlmd,
+			     struct cxl_attach_region *attach)
+{
+	struct cxl_port *endpoint = cxlmd->endpoint;
+	struct cxl_endpoint_decoder *cxled;
+	struct cxl_region *cxlr;
+	int rc;
+
+	/* hold endpoint lock to setup autoremove of the region */
+	guard(device)(&endpoint->dev);
+	if (!endpoint->dev.driver)
+		return -ENXIO;
+	guard(rwsem_read)(&cxl_rwsem.region);
+	guard(rwsem_read)(&cxl_rwsem.dpa);
+
+	/*
+	 * TODO auto-instantiate a region, for now assume this will find an
+	 * auto-region
+	 */
+	struct device *dev __free(put_device) =
+		device_find_child(&endpoint->dev, NULL, first_mapped_decoder);
+
+	if (!dev) {
+		dev_dbg(cxlmd->cxlds->dev, "no region found for memdev %s\n",
+			dev_name(&cxlmd->dev));
+		return -ENXIO;
+	}
+
+	cxled = to_cxl_endpoint_decoder(dev);
+	cxlr = cxled->cxld.region;
+
+	if (cxlr->params.state < CXL_CONFIG_COMMIT) {
+		dev_dbg(cxlmd->cxlds->dev,
+			"region %s not committed for memdev %s\n",
+			dev_name(&cxlr->dev), dev_name(&cxlmd->dev));
+		return -ENXIO;
+	}
+
+	if (cxlr->params.nr_targets > 1) {
+		dev_dbg(cxlmd->cxlds->dev,
+			"Only attach to local non-interleaved region\n");
+		return -ENXIO;
+	}
+
+	attach->region = (struct range) {
+		.start = cxlr->params.res->start,
+		.end = cxlr->params.res->end,
+	};
+
+	/*
+	 * With endpoint locked leave the caller to safely work with the region
+	 * range.
+	 */
+	rc = attach->attach(attach->data);
+	if (rc)
+		return rc;
+
+	/* Only teardown regions that pass validation, ignore the rest */
+	rc = devm_add_action_or_reset(&endpoint->dev,
+				      cxl_endpoint_region_autoremove, cxlr);
+	if (rc)
+		return rc;
+
+	/* Link type2 driver callback for stopping use of the region range. */
+	rc = devm_add_action_or_reset(&endpoint->dev,
+				      attach->detach, attach->data);
+	if (rc)
+		return rc;
+
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_memdev_attach_region, "CXL");
 
 static int cxl_region_probe(struct device *dev)
 {
