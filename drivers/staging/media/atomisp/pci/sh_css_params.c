@@ -1928,10 +1928,8 @@ sh_css_set_per_frame_isp_config_on_pipe(
 	params = stream->per_frame_isp_params_configs;
 
 	/* update new ISP params object with the new config */
-	if (!sh_css_init_isp_params_from_global(stream, params, false, pipe)) {
-		err1 = -EINVAL;
-	}
-
+	if (!sh_css_init_isp_params_from_global(stream, params, false, pipe))	err1 = -EINVAL;
+	
 	err2 = sh_css_init_isp_params_from_config(stream->pipes[0], params, config, pipe);
 
 	if (per_frame_config_created) {
