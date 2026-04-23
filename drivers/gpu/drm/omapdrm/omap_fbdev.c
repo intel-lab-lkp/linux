@@ -5,6 +5,7 @@
  */
 
 #include <linux/fb.h>
+#include <linux/overflow.h>
 
 #include <drm/clients/drm_client_setup.h>
 #include <drm/drm_drv.h>
@@ -155,6 +156,9 @@ int omap_fbdev_driver_fbdev_probe(struct drm_fb_helper *helper,
 	struct omap_drm_private *priv = dev->dev_private;
 	struct omap_fbdev *fbdev = priv->fbdev;
 	struct fb_info *fbi = helper->info;
+	u32 fourcc;
+	u64 pitch, size;
+	const struct drm_format_info *format;
 	struct drm_framebuffer *fb = NULL;
 	union omap_gem_size gsize;
 	struct drm_mode_fb_cmd2 mode_cmd = {0};
@@ -169,24 +173,24 @@ int omap_fbdev_driver_fbdev_probe(struct drm_fb_helper *helper,
 			sizes->surface_height, sizes->surface_bpp,
 			sizes->fb_width, sizes->fb_height);
 
-	mode_cmd.pixel_format = drm_mode_legacy_fb_format(sizes->surface_bpp,
-			sizes->surface_depth);
-
-	mode_cmd.width = sizes->surface_width;
-	mode_cmd.height = sizes->surface_height;
-
-	mode_cmd.pitches[0] =
-			DIV_ROUND_UP(mode_cmd.width * sizes->surface_bpp, 8);
-
 	fbdev->ywrap_enabled = priv->has_dmm && ywrap_enabled;
-	if (fbdev->ywrap_enabled) {
-		/* need to align pitch to page size if using DMM scrolling */
-		mode_cmd.pitches[0] = PAGE_ALIGN(mode_cmd.pitches[0]);
-	}
+
+	fourcc = drm_mode_legacy_fb_format(sizes->surface_bpp, sizes->surface_depth);
+	format = drm_get_format_info(dev, fourcc, DRM_FORMAT_MOD_LINEAR);
+	if (!format)
+		return -EINVAL;
+	pitch = drm_format_info_min_pitch(format, 0, sizes->surface_width);
+	if (!pitch)
+		return -EINVAL;
+	if (fbdev->ywrap_enabled)
+		pitch = PAGE_ALIGN(pitch); /* required if using DMM scrolling */
+	if (check_mul_overflow(pitch, sizes->surface_height, &size))
+		return -EINVAL;
+	size = PAGE_ALIGN(size);
 
 	/* allocate backing bo */
 	gsize = (union omap_gem_size){
-		.bytes = PAGE_ALIGN(mode_cmd.pitches[0] * mode_cmd.height),
+		.bytes = size,
 	};
 	DBG("allocating %d bytes for fb %d", gsize.bytes, dev->primary->index);
 	bo = omap_gem_new(dev, gsize, OMAP_BO_SCANOUT | OMAP_BO_WC);
@@ -196,10 +200,12 @@ int omap_fbdev_driver_fbdev_probe(struct drm_fb_helper *helper,
 		goto fail;
 	}
 
-	fb = omap_framebuffer_init(dev,
-				   drm_get_format_info(dev, mode_cmd.pixel_format,
-						       mode_cmd.modifier[0]),
-				   &mode_cmd, &bo);
+	mode_cmd.pixel_format = fourcc;
+	mode_cmd.width = sizes->surface_width;
+	mode_cmd.height = sizes->surface_height;
+	mode_cmd.pitches[0] = pitch;
+
+	fb = omap_framebuffer_init(dev, format,  &mode_cmd, &bo);
 	if (IS_ERR(fb)) {
 		dev_err(dev->dev, "failed to allocate fb\n");
 		/* note: if fb creation failed, we can't rely on fb destroy
