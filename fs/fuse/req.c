@@ -97,3 +97,12 @@ int fuse_simple_notify_reply(struct fuse_mount *fm, struct fuse_args *args, u64 
 
 	return fuse_chan_send_notify_reply(fc->chan, args, unique);
 }
+
+int fuse_prepare_force_args(struct fuse_mount *fm, struct fuse_args *args)
+{
+	WARN_ON(!args->force);
+	WARN_ON(args->nocreds);
+
+	return fuse_req_prep(fm, args, &invalid_mnt_idmap);
+}
+EXPORT_SYMBOL_GPL(fuse_prepare_force_args);

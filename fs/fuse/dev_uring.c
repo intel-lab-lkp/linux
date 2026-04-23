@@ -1114,6 +1114,9 @@ static int fuse_uring_register(struct io_uring_cmd *cmd,
 	if (IS_ERR(ent))
 		return PTR_ERR(ent);
 
+	if (READ_ONCE(cmd_req->flags) & FUSE_IO_URING_REGISTER_FORGET_COMMIT)
+		ring->forget_ring_commit = true;
+
 	fuse_uring_do_register(ent, cmd, issue_flags);
 
 	return 0;

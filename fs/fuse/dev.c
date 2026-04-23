@@ -26,6 +26,7 @@
 #include <linux/seq_file.h>
 
 #include "fuse_trace.h"
+#include "fuse_i.h"
 
 MODULE_ALIAS_MISCDEV(FUSE_MINOR);
 MODULE_ALIAS("devname:fuse");
@@ -224,8 +225,9 @@ struct fuse_forget_link *fuse_alloc_forget(void)
 	return kzalloc_obj(struct fuse_forget_link, GFP_KERNEL_ACCOUNT);
 }
 
-void fuse_dev_queue_forget(struct fuse_iqueue *fiq,
-			   struct fuse_forget_link *forget)
+
+static inline void fuse_dev_queue_forget_list(struct fuse_iqueue *fiq,
+					      struct fuse_forget_link *forget)
 {
 	spin_lock(&fiq->lock);
 	if (fiq->connected) {
@@ -237,6 +239,21 @@ void fuse_dev_queue_forget(struct fuse_iqueue *fiq,
 		spin_unlock(&fiq->lock);
 	}
 }
+
+void fuse_dev_queue_forget(struct fuse_iqueue *fiq,
+			   struct fuse_forget_link *forget)
+{
+#ifdef CONFIG_FUSE_IO_URING
+	struct fuse_chan *fch = container_of(fiq, struct fuse_chan, iq);
+
+	if (fuse_uring_ready(fch) && fuse_uring_forget_via_ring(fch)) {
+		fuse_io_uring_send_forget(fiq, forget);
+		return;
+	}
+#endif
+	fuse_dev_queue_forget_list(fiq, forget);
+}
+
 
 void fuse_dev_queue_interrupt(struct fuse_iqueue *fiq, struct fuse_req *req)
 {
@@ -799,6 +816,95 @@ static void fuse_args_to_req(struct fuse_req *req, struct fuse_args *args)
 	if (args->end)
 		__set_bit(FR_ASYNC, &req->flags);
 }
+
+struct fuse_forget_uring_data {
+	struct fuse_args args;
+	struct fuse_forget_in inarg;
+};
+
+static void fuse_forget_uring_free(struct fuse_args *args, int error)
+{
+	struct fuse_forget_uring_data *d =
+		container_of(args, struct fuse_forget_uring_data, args);
+
+	kfree(d);
+}
+
+
+#ifdef CONFIG_FUSE_IO_URING
+void fuse_io_uring_send_forget(struct fuse_iqueue *fiq,
+			       struct fuse_forget_link *forget)
+{
+	struct fuse_chan *fch = container_of(fiq, struct fuse_chan, iq);
+	struct fuse_conn *fc = fch->conn;
+	struct fuse_mount *fm;
+	struct fuse_req *req;
+	struct fuse_forget_uring_data *d;
+	int err;
+
+	if (!fuse_uring_ready(fch)) {
+		fuse_dev_queue_forget_list(fiq, forget);
+		return;
+	}
+
+	down_read(&fc->killsb);
+	if (list_empty(&fc->mounts)) {
+		up_read(&fc->killsb);
+		fuse_dev_queue_forget_list(fiq, forget);
+		return;
+	}
+	fm = list_first_entry(&fc->mounts, struct fuse_mount, fc_entry);
+	up_read(&fc->killsb);
+
+	d = kmalloc(sizeof(*d), GFP_KERNEL);
+	if (!d)
+		goto fallback;
+
+	atomic_inc(&fch->num_waiting);
+	req = fuse_request_alloc(fm->fc->chan, GFP_KERNEL);
+	if (!req) {
+		kfree(d);
+		fuse_drop_waiting(fch);
+		goto fallback;
+	}
+
+	memset(&d->args, 0, sizeof(d->args));
+	d->inarg.nlookup = forget->forget_one.nlookup;
+	d->args.opcode = FUSE_FORGET;
+	d->args.nodeid = forget->forget_one.nodeid;
+	d->args.in_numargs = 1;
+	d->args.in_args[0].size = sizeof(d->inarg);
+	d->args.in_args[0].value = &d->inarg;
+	d->args.force = true;
+	d->args.noreply = true;
+	d->args.end = fuse_forget_uring_free;
+
+	err = fuse_prepare_force_args(fm, &d->args);
+	if (err) {
+		kfree(d);
+		fuse_put_request(req);
+		fuse_drop_waiting(fch);
+		goto fallback;
+	}
+
+	__set_bit(FR_WAITING, &req->flags);
+	if (!d->args.abort_on_kill)
+		__set_bit(FR_FORCE, &req->flags);
+	fuse_adjust_compat(fch, &d->args);
+	fuse_args_to_req(req, &d->args);
+	req->in.h.len = sizeof(struct fuse_in_header) +
+		fuse_len_args(req->args->in_numargs,
+			      (struct fuse_arg *)req->args->in_args);
+
+	kfree(forget);
+	fuse_uring_queue_fuse_req(fiq, req);
+	return;
+
+fallback:
+	fuse_dev_queue_forget_list(fiq, forget);
+}
+#endif
+
 
 ssize_t fuse_chan_send(struct fuse_chan *fch, struct fuse_args *args)
 {

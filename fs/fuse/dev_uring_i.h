@@ -133,6 +133,12 @@ struct fuse_ring {
 	atomic_t queue_refs;
 
 	bool ready;
+
+	/*
+	 * Set when any REGISTER SQE sets FUSE_IO_URING_REGISTER_FORGET_COMMIT.
+	 * Until then, FORGET stays on the legacy forget list.
+	 */
+	bool forget_ring_commit;
 };
 
 void fuse_uring_stop_queues(struct fuse_ring *ring);
@@ -168,6 +174,13 @@ static inline void fuse_uring_wait_stopped_queues(struct fuse_chan *fch)
 static inline bool fuse_uring_ready(struct fuse_chan *fch)
 {
 	return fch->ring && fch->ring->ready;
+}
+
+static inline bool fuse_uring_forget_via_ring(struct fuse_chan *fch)
+{
+	struct fuse_ring *ring = READ_ONCE(fch->ring);
+
+	return ring && ring->forget_ring_commit;
 }
 
 #else /* CONFIG_FUSE_IO_URING */
