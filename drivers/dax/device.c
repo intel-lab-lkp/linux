@@ -370,6 +370,7 @@ static int dax_open(struct inode *inode, struct file *filp)
 	filp->f_sb_err = file_sample_sb_err(filp);
 	filp->private_data = dev_dax;
 	inode->i_flags = S_DAX;
+	inode->i_size = dev_dax->cached_size;
 
 	return 0;
 }
@@ -408,7 +409,9 @@ static int dev_dax_probe(struct dev_dax *dev_dax)
 	struct device *dev = &dev_dax->dev;
 	struct dev_pagemap *pgmap;
 	struct inode *inode;
+	u64 data_offset = 0;
 	struct cdev *cdev;
+	u64 len = 0;
 	void *addr;
 	int rc, i;
 
@@ -451,6 +454,7 @@ static int dev_dax_probe(struct dev_dax *dev_dax)
 					i, range->start, range->end);
 			return -EBUSY;
 		}
+		len += range_len(range);
 	}
 
 	pgmap->type = MEMORY_DEVICE_GENERIC;
@@ -460,6 +464,21 @@ static int dev_dax_probe(struct dev_dax *dev_dax)
 	addr = devm_memremap_pages(dev, pgmap);
 	if (IS_ERR(addr))
 		return PTR_ERR(addr);
+
+	/* Detect whether the data is at a non-zero offset into the memory */
+	if (pgmap->range.start != dev_dax->ranges[0].range.start) {
+		u64 phys = dev_dax->ranges[0].range.start;
+		u64 pgmap_phys = dev_dax->pgmap[0].range.start;
+
+		if (!WARN_ON(pgmap_phys > phys))
+			data_offset = phys - pgmap_phys;
+
+		pr_debug("%s: offset detected phys=%llx pgmap_phys=%llx offset=%llx\n",
+			 __func__, phys, pgmap_phys, data_offset);
+	}
+
+	dev_dax->virt_addr = addr + data_offset;
+	dev_dax->cached_size = len;
 
 	inode = dax_inode(dax_dev);
 	cdev = inode->i_cdev;
