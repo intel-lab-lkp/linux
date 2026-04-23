@@ -1515,6 +1515,12 @@ static int dev_dax_zero_page_range(struct dax_device *dax_dev,
 	return 0;
 }
 
+struct dax_device *dax_get_dev_dax(struct dev_dax *dev_dax)
+{
+	return dev_dax->dax_dev;
+}
+EXPORT_SYMBOL_GPL(dax_get_dev_dax);
+
 static long dev_dax_direct_access(struct dax_device *dax_dev, pgoff_t pgoff,
 				  long nr_pages, enum dax_access_mode mode,
 				  void **kaddr, unsigned long *pfn)

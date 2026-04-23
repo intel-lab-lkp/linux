@@ -62,6 +62,9 @@ void set_dax_nomc(struct dax_device *dax_dev);
 void set_dax_synchronous(struct dax_device *dax_dev);
 size_t dax_recovery_write(struct dax_device *dax_dev, pgoff_t pgoff,
 		void *addr, size_t bytes, struct iov_iter *i);
+struct dev_dax;
+struct dax_device *dax_get_dev_dax(struct dev_dax *dev_dax);
+
 /*
  * Check if given mapping is supported by the file / underlying device.
  */
@@ -121,6 +124,10 @@ static inline size_t dax_recovery_write(struct dax_device *dax_dev,
 		pgoff_t pgoff, void *addr, size_t bytes, struct iov_iter *i)
 {
 	return 0;
+}
+static inline struct dax_device *dax_get_dev_dax(struct dev_dax *dev_dax)
+{
+	return NULL;
 }
 #endif
 
