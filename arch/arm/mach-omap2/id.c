@@ -18,6 +18,7 @@
 #include <linux/random.h>
 #include <linux/slab.h>
 #include <linux/string.h>
+#include <linux/sysfs.h>
 
 #ifdef CONFIG_SOC_BUS
 #include <linux/sys_soc.h>
@@ -771,7 +772,7 @@ static const char * __init omap_get_family(void)
 static ssize_t
 type_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return sprintf(buf, "%s\n", omap_types[omap_type()]);
+	return sysfs_emit(buf, "%s\n", omap_types[omap_type()]);
 }
 
 static DEVICE_ATTR_RO(type);
