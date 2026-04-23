@@ -28,26 +28,38 @@
 static int acpi_enable_dpc(struct pci_dev *pdev)
 {
 	struct acpi_device *adev = ACPI_COMPANION(&pdev->dev);
-	union acpi_object *obj, argv4, req;
+	union acpi_object *obj, *arg3, pkg, req;
 	int status = 0;
-
-	/*
-	 * Per PCI Firmware r3.3, sec 4.6.12, EDR_PORT_DPC_ENABLE_DSM is
-	 * optional. Return success if it's not implemented.
-	 */
-	if (!acpi_check_dsm(adev->handle, &pci_acpi_dsm_guid, 6,
-			    1ULL << EDR_PORT_DPC_ENABLE_DSM))
-		return 0;
+	u64 rev = 0;
 
 	req.type = ACPI_TYPE_INTEGER;
 	req.integer.value = 1;
 
-	argv4.type = ACPI_TYPE_PACKAGE;
-	argv4.package.count = 1;
-	argv4.package.elements = &req;
+	pkg.type = ACPI_TYPE_PACKAGE;
+	pkg.package.count = 1;
+	pkg.package.elements = &req;
 
-	obj = acpi_evaluate_dsm(adev->handle, &pci_acpi_dsm_guid, 6,
-				EDR_PORT_DPC_ENABLE_DSM, &argv4);
+	/*
+	 * EDR_PORT_DPC_ENABLE_DSM is defined in PCI Firmware r3.3, sec 4.6.12.
+	 * Revision ID 6 is the variant that appears in the spec, Revision ID 5
+	 * corresponds to the variant defined in ECN #12888, known to be
+	 * implemented in some platforms.
+	 */
+	if (acpi_check_dsm(adev->handle, &pci_acpi_dsm_guid, 6,
+			   1ULL << EDR_PORT_DPC_ENABLE_DSM)) {
+		rev = 6;
+		arg3 = &pkg;
+	} else if (acpi_check_dsm(adev->handle, &pci_acpi_dsm_guid, 5,
+				  1ULL << EDR_PORT_DPC_ENABLE_DSM)) {
+		rev = 5;
+		arg3 = &req;
+	} else {
+		/* Return success if not implemented. */
+		return 0;
+	}
+
+	obj = acpi_evaluate_dsm(adev->handle, &pci_acpi_dsm_guid, rev,
+				EDR_PORT_DPC_ENABLE_DSM, arg3);
 	if (!obj)
 		return 0;
 
