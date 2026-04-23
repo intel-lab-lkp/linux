@@ -93,8 +93,7 @@ static int omap_fbdev_fb_mmap(struct fb_info *info, struct vm_area_struct *vma)
 static void omap_fbdev_fb_destroy(struct fb_info *info)
 {
 	struct drm_fb_helper *helper = info->par;
-	struct drm_framebuffer *fb = helper->fb;
-	struct drm_gem_object *bo = drm_gem_fb_get_obj(fb, 0);
+	struct drm_gem_object *bo = drm_gem_fb_get_obj(helper->fb, 0);
 
 	DBG();
 
@@ -102,8 +101,8 @@ static void omap_fbdev_fb_destroy(struct fb_info *info)
 	drm_fb_helper_fini(helper);
 
 	omap_gem_unpin(bo);
-	drm_framebuffer_remove(fb);
 
+	drm_client_buffer_delete(helper->buffer);
 	drm_client_release(&helper->client);
 }
 
@@ -152,18 +151,20 @@ static struct drm_fb_helper *get_fb(struct fb_info *fbi)
 int omap_fbdev_driver_fbdev_probe(struct drm_fb_helper *helper,
 				  struct drm_fb_helper_surface_size *sizes)
 {
-	struct drm_device *dev = helper->dev;
+	struct drm_client_dev *client = &helper->client;
+	struct drm_device *dev = client->dev;
+	struct drm_file *file = client->file;
 	struct omap_drm_private *priv = dev->dev_private;
 	struct omap_fbdev *fbdev = priv->fbdev;
 	struct fb_info *fbi = helper->info;
 	u32 fourcc;
 	u64 pitch, size;
 	const struct drm_format_info *format;
-	struct drm_framebuffer *fb = NULL;
 	union omap_gem_size gsize;
-	struct drm_mode_fb_cmd2 mode_cmd = {0};
 	struct drm_gem_object *bo;
+	struct drm_client_buffer *buffer;
 	dma_addr_t dma_addr;
+	u32 handle;
 	int ret;
 
 	sizes->surface_bpp = 32;
@@ -196,24 +197,18 @@ int omap_fbdev_driver_fbdev_probe(struct drm_fb_helper *helper,
 	bo = omap_gem_new(dev, gsize, OMAP_BO_SCANOUT | OMAP_BO_WC);
 	if (!bo) {
 		dev_err(dev->dev, "failed to allocate buffer object\n");
-		ret = -ENOMEM;
-		goto fail;
+		return -ENOMEM;
 	}
 
-	mode_cmd.pixel_format = fourcc;
-	mode_cmd.width = sizes->surface_width;
-	mode_cmd.height = sizes->surface_height;
-	mode_cmd.pitches[0] = pitch;
+	ret = drm_gem_handle_create(file, bo, &handle);
+	if (ret)
+		goto err_drm_gem_object_put;
 
-	fb = omap_framebuffer_init(dev, format,  &mode_cmd, &bo);
-	if (IS_ERR(fb)) {
-		dev_err(dev->dev, "failed to allocate fb\n");
-		/* note: if fb creation failed, we can't rely on fb destroy
-		 * to unref the bo:
-		 */
-		drm_gem_object_put(bo);
-		ret = PTR_ERR(fb);
-		goto fail;
+	buffer = drm_client_buffer_create(client, sizes->surface_width, sizes->surface_height,
+					  fourcc, handle, pitch);
+	if (IS_ERR(buffer)) {
+		ret = PTR_ERR(buffer);
+		goto err_drm_gem_handle_delete;
 	}
 
 	/* note: this keeps the bo pinned.. which is perhaps not ideal,
@@ -228,13 +223,14 @@ int omap_fbdev_driver_fbdev_probe(struct drm_fb_helper *helper,
 	if (ret) {
 		dev_err(dev->dev, "could not pin framebuffer\n");
 		ret = -ENOMEM;
-		goto fail;
+		goto err_drm_client_buffer_delete;
 	}
 
 	DBG("fbi=%p, dev=%p", fbi, dev);
 
 	helper->funcs = &omap_fbdev_helper_funcs;
-	helper->fb = fb;
+	helper->buffer = buffer;
+	helper->fb = buffer->fb;
 
 	fbi->fbops = &omap_fb_ops;
 
@@ -253,7 +249,7 @@ int omap_fbdev_driver_fbdev_probe(struct drm_fb_helper *helper,
 	fbi->fbdefio = &helper->fbdefio;
 	ret = fb_deferred_io_init(fbi);
 	if (ret)
-		goto fail;
+		goto err_omap_gem_unpin;
 
 	/* if we have DMM, then we can use it for scrolling by just
 	 * shuffling pages around in DMM rather than doing sw blit.
@@ -264,19 +260,25 @@ int omap_fbdev_driver_fbdev_probe(struct drm_fb_helper *helper,
 		fbi->fix.ywrapstep = 1;
 	}
 
-
 	DBG("par=%p, %dx%d", fbi->par, fbi->var.xres, fbi->var.yres);
-	DBG("allocated %dx%d fb", fb->width, fb->height);
+	DBG("allocated %dx%d fb", buffer->fb->width, buffer->fb->height);
+
+	/* The handle is only needed for creating the framebuffer. */
+	drm_gem_handle_delete(file, handle);
+
+	/* The framebuffer still holds a reference on the GEM object. */
+	drm_gem_object_put(bo);
 
 	return 0;
 
-fail:
-
-	if (ret) {
-		if (fb)
-			drm_framebuffer_remove(fb);
-	}
-
+err_omap_gem_unpin:
+	omap_gem_unpin(bo);
+err_drm_client_buffer_delete:
+	drm_client_buffer_delete(buffer);
+err_drm_gem_handle_delete:
+	drm_gem_handle_delete(file, handle);
+err_drm_gem_object_put:
+	drm_gem_object_put(bo);
 	return ret;
 }
 
