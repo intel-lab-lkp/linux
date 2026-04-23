@@ -43,8 +43,10 @@ static void nft_bitwise_eval_lshift(u32 *dst, const u32 *src,
 	u32 carry = 0;
 
 	for (i = DIV_ROUND_UP(priv->len, sizeof(u32)); i > 0; i--) {
-		dst[i - 1] = (src[i - 1] << shift) | carry;
-		carry = src[i - 1] >> (BITS_PER_TYPE(u32) - shift);
+		u32 tmp_src = src[i - 1];
+
+		dst[i - 1] = (tmp_src << shift) | carry;
+		carry = tmp_src >> (BITS_PER_TYPE(u32) - shift);
 	}
 }
 
@@ -56,8 +58,10 @@ static void nft_bitwise_eval_rshift(u32 *dst, const u32 *src,
 	u32 carry = 0;
 
 	for (i = 0; i < DIV_ROUND_UP(priv->len, sizeof(u32)); i++) {
-		dst[i] = carry | (src[i] >> shift);
-		carry = src[i] << (BITS_PER_TYPE(u32) - shift);
+		u32 tmp_src = src[i];
+
+		dst[i] = carry | (tmp_src >> shift);
+		carry = tmp_src << (BITS_PER_TYPE(u32) - shift);
 	}
 }
 
@@ -177,6 +181,7 @@ err_xor_err:
 static int nft_bitwise_init_shift(struct nft_bitwise *priv,
 				  const struct nlattr *const tb[])
 {
+	unsigned int n = DIV_ROUND_UP(priv->len, sizeof(u32));
 	struct nft_data_desc desc = {
 		.type	= NFT_DATA_VALUE,
 		.size	= sizeof(priv->data),
@@ -200,6 +205,11 @@ static int nft_bitwise_init_shift(struct nft_bitwise *priv,
 		nft_data_release(&priv->data, desc.type);
 		return -EINVAL;
 	}
+
+	if (priv->sreg != priv->dreg &&
+	    priv->dreg < priv->sreg + n &&
+	    priv->sreg < priv->dreg + n)
+		return -EINVAL;
 
 	return 0;
 }
