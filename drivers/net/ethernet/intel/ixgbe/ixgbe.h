@@ -210,6 +210,7 @@ struct vf_stats {
 };
 
 struct vf_data_storage {
+	struct rcu_head rcu_head;
 	struct pci_dev *vfdev;
 	unsigned char vf_mac_addresses[ETH_ALEN];
 	u16 vf_mc_hashes[IXGBE_MAX_VF_MC_ENTRIES];
@@ -240,6 +241,7 @@ enum ixgbevf_xcast_modes {
 };
 
 struct vf_macvlans {
+	struct rcu_head rcu_head;
 	struct list_head l;
 	int vf;
 	bool free;
@@ -809,10 +811,10 @@ struct ixgbe_adapter {
 	/* SR-IOV */
 	DECLARE_BITMAP(active_vfs, IXGBE_MAX_VF_FUNCTIONS);
 	unsigned int num_vfs;
-	struct vf_data_storage *vfinfo;
+	struct vf_data_storage __rcu *vfinfo;
 	int vf_rate_link_speed;
 	struct vf_macvlans vf_mvs;
-	struct vf_macvlans *mv_list;
+	struct vf_macvlans __rcu *mv_list;
 
 	u32 timer_event_accumulator;
 	u32 vferr_refcount;
@@ -845,7 +847,6 @@ struct ixgbe_adapter {
 #ifdef CONFIG_IXGBE_IPSEC
 	struct ixgbe_ipsec *ipsec;
 #endif /* CONFIG_IXGBE_IPSEC */
-	spinlock_t vfs_lock;
 };
 
 struct ixgbe_netdevice_priv {

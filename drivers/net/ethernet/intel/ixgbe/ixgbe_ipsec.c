@@ -874,6 +874,7 @@ void ixgbe_ipsec_vf_clear(struct ixgbe_adapter *adapter, u32 vf)
 int ixgbe_ipsec_vf_add_sa(struct ixgbe_adapter *adapter, u32 *msgbuf, u32 vf)
 {
 	struct ixgbe_ipsec *ipsec = adapter->ipsec;
+	struct vf_data_storage *vfinfo;
 	struct xfrm_algo_desc *algo;
 	struct sa_mbx_msg *sam;
 	struct xfrm_state *xs;
@@ -883,7 +884,13 @@ int ixgbe_ipsec_vf_add_sa(struct ixgbe_adapter *adapter, u32 *msgbuf, u32 vf)
 	int err;
 
 	sam = (struct sa_mbx_msg *)(&msgbuf[1]);
-	if (!adapter->vfinfo[vf].trusted ||
+
+	lockdep_assert_in_rcu_read_lock();
+	vfinfo = rcu_dereference(adapter->vfinfo);
+	if (!vfinfo)
+		return 0;
+
+	if (!vfinfo[vf].trusted ||
 	    !(adapter->flags2 & IXGBE_FLAG2_VF_IPSEC_ENABLED)) {
 		e_warn(drv, "VF %d attempted to add an IPsec SA\n", vf);
 		err = -EACCES;
@@ -984,11 +991,17 @@ err_out:
 int ixgbe_ipsec_vf_del_sa(struct ixgbe_adapter *adapter, u32 *msgbuf, u32 vf)
 {
 	struct ixgbe_ipsec *ipsec = adapter->ipsec;
+	struct vf_data_storage *vfinfo;
 	struct xfrm_state *xs;
 	u32 pfsa = msgbuf[1];
 	u16 sa_idx;
 
-	if (!adapter->vfinfo[vf].trusted) {
+	lockdep_assert_in_rcu_read_lock();
+	vfinfo = rcu_dereference(adapter->vfinfo);
+	if (!vfinfo)
+		return 0;
+
+	if (!vfinfo[vf].trusted) {
 		e_err(drv, "vf %d attempted to delete an SA\n", vf);
 		return -EPERM;
 	}
