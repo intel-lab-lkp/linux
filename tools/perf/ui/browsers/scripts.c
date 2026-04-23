@@ -200,14 +200,13 @@ static int find_scripts(char **scripts_array, char **scripts_path_array, int num
 		if (!strcmp(lang_dirent->d_name, ".") || !strcmp(lang_dirent->d_name, ".."))
 			continue;
 
-#ifndef HAVE_LIBPERL_SUPPORT
-		if (strstr(lang_dirent->d_name, "perl"))
-			continue;
-#endif
+
 #ifndef HAVE_LIBPYTHON_SUPPORT
 		if (strstr(lang_dirent->d_name, "python"))
 			continue;
 #endif
+		if (strstr(lang_dirent->d_name, "perl"))
+			continue;
 
 		lang_dir_fd = openat(scripts_dir_fd, lang_dirent->d_name, O_DIRECTORY);
 		if (lang_dir_fd == -1)

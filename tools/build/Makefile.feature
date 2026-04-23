@@ -118,7 +118,6 @@ FEATURE_TESTS_EXTRA :=                  \
          libbfd-liberty                 \
          libbfd-liberty-z               \
          libopencsd                     \
-         libperl                        \
          cxx                            \
          llvm                           \
          clang                          \
