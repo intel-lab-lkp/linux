@@ -18,10 +18,11 @@ static const struct drm_framebuffer_funcs armada_fb_funcs = {
 	.create_handle	= drm_gem_fb_create_handle,
 };
 
-struct armada_framebuffer *armada_framebuffer_create(struct drm_device *dev,
-						     const struct drm_format_info *info,
-						     const struct drm_mode_fb_cmd2 *mode,
-						     struct armada_gem_object *obj)
+static struct armada_framebuffer *
+armada_framebuffer_create(struct drm_device *dev,
+			  const struct drm_format_info *info,
+			  const struct drm_mode_fb_cmd2 *mode,
+			  struct armada_gem_object *obj)
 {
 	struct armada_framebuffer *dfb;
 	uint8_t format, config;
