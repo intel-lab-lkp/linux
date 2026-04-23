@@ -54,9 +54,11 @@
 #include "display/intel_bw.h"
 #include "display/intel_cdclk.h"
 #include "display/intel_crtc.h"
+#include "display/intel_display_core.h"
 #include "display/intel_display_device.h"
 #include "display/intel_display_driver.h"
 #include "display/intel_display_power.h"
+#include "display/intel_display_types.h"
 #include "display/intel_dmc.h"
 #include "display/intel_dp.h"
 #include "display/intel_dpt.h"
@@ -749,8 +751,9 @@ static void fence_priority_display(struct dma_fence *fence)
 static bool has_auxccs(struct drm_device *drm)
 {
 	struct drm_i915_private *i915 = to_i915(drm);
+	struct intel_display *display = i915->display;
 
-	return IS_GRAPHICS_VER(i915, 9, 12) ||
+	return IS_DISPLAY_VER(display, 9, 12) ||
 	       IS_ALDERLAKE_P(i915) ||
 	       IS_METEORLAKE(i915);
 }
