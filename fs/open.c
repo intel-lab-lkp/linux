@@ -322,7 +322,8 @@ int vfs_fallocate(struct file *file, int mode, loff_t offset, loff_t len)
 	if (S_ISDIR(inode->i_mode))
 		return -EISDIR;
 
-	if (!S_ISREG(inode->i_mode) && !S_ISBLK(inode->i_mode))
+	if (!S_ISREG(inode->i_mode) && !S_ISBLK(inode->i_mode) &&
+	    !S_ISCHR(inode->i_mode))
 		return -ENODEV;
 
 	/* Check for wraparound */
