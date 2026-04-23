@@ -9,6 +9,7 @@
  */
 
 #include <linux/debugfs.h>
+#include <asm/processor.h>
 #include <asm/amd/node.h>
 
 /*
@@ -34,7 +35,8 @@ struct pci_dev *amd_node_get_func(u16 node, u8 func)
 	return pci_get_domain_bus_and_slot(0, 0, PCI_DEVFN(AMD_NODE0_PCI_SLOT + node, func));
 }
 
-static struct pci_dev **amd_roots;
+static struct pci_dev **smn_roots;
+static u16 smn_num_nodes;
 
 /* Protect the PCI config register pairs used for SMN. */
 static DEFINE_MUTEX(smn_mutex);
@@ -88,10 +90,10 @@ static int __amd_smn_rw(u8 i_off, u8 d_off, u16 node, u32 address, u32 *value, b
 	struct pci_dev *root;
 	int err = -ENODEV;
 
-	if (node >= amd_num_nodes())
+	if (node >= smn_num_nodes)
 		return err;
 
-	root = amd_roots[node];
+	root = smn_roots[node];
 	if (!root)
 		return err;
 
@@ -151,7 +153,7 @@ static ssize_t smn_node_write(struct file *file, const char __user *userbuf,
 	if (ret)
 		return ret;
 
-	if (node >= amd_num_nodes())
+	if (node >= smn_num_nodes)
 		return -ENODEV;
 
 	debug_node = node;
@@ -225,8 +227,7 @@ static struct pci_dev *get_next_root(struct pci_dev *root)
 		if (root->devfn)
 			continue;
 
-		if (root->vendor != PCI_VENDOR_ID_AMD &&
-		    root->vendor != PCI_VENDOR_ID_HYGON)
+		if (root->vendor != PCI_VENDOR_ID_AMD)
 			continue;
 
 		break;
@@ -244,17 +245,78 @@ static int __init amd_smn_enable_dfs(char *str)
 }
 __setup("amd_smn_debugfs_enable", amd_smn_enable_dfs);
 
+/*
+ * Register a pre-built per-node SMN root array.  The caller allocates
+ * @roots and transfers ownership to the SMN layer; the array must remain
+ * valid for the lifetime of the system.
+ *
+ * This is a pure data registration; the SMN access layer is not yet
+ * usable until smn_activate() is called.
+ *
+ * Not concurrency-safe.  Intended to be called exactly once during boot
+ * (e.g. from an fs_initcall).  The caller is responsible for any
+ * serialization required by its own init path.
+ */
+int smn_set_roots(struct pci_dev **roots, u16 num_nodes)
+{
+	if (!roots || !num_nodes)
+		return -EINVAL;
+
+	if (smn_roots)
+		return -EBUSY;
+
+	smn_roots = roots;
+	smn_num_nodes = num_nodes;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(smn_set_roots);
+
+/*
+ * Activate the SMN access layer after roots have been registered via
+ * smn_set_roots().  Creates the optional debugfs interface (gated by
+ * the amd_smn_debugfs_enable boot parameter) and sets smn_exclusive so
+ * that amd_smn_read()/amd_smn_write() begin accepting requests.
+ *
+ * @debugfs_name: directory name under arch_debugfs_dir (e.g. "amd_smn")
+ *
+ * Same serialization rules as smn_set_roots(): must be called exactly
+ * once, at boot, after smn_set_roots() succeeds.
+ */
+int smn_activate(const char *debugfs_name)
+{
+	if (!smn_roots || !smn_num_nodes)
+		return -EINVAL;
+
+	if (smn_exclusive)
+		return -EBUSY;
+
+	if (enable_dfs) {
+		debugfs_dir = debugfs_create_dir(debugfs_name, arch_debugfs_dir);
+
+		debugfs_create_file("node",	0600, debugfs_dir, NULL, &smn_node_fops);
+		debugfs_create_file("address",	0600, debugfs_dir, NULL, &smn_address_fops);
+		debugfs_create_file("value",	0600, debugfs_dir, NULL, &smn_value_fops);
+	}
+
+	smn_exclusive = true;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(smn_activate);
+
 static int __init amd_smn_init(void)
 {
 	u16 count, num_roots, roots_per_node, node, num_nodes;
-	struct pci_dev *root;
+	struct pci_dev **roots, *root;
+	int ret;
 
-	if (!cpu_feature_enabled(X86_FEATURE_ZEN))
+	if (!cpu_feature_enabled(X86_FEATURE_ZEN) ||
+	    boot_cpu_data.x86_vendor != X86_VENDOR_AMD)
 		return 0;
 
 	guard(mutex)(&smn_mutex);
 
-	if (amd_roots)
+	if (smn_roots)
 		return 0;
 
 	num_roots = 0;
@@ -268,7 +330,9 @@ static int __init amd_smn_init(void)
 		 * entire PCI config space for simplicity rather than covering
 		 * specific registers piecemeal.
 		 */
-		if (!pci_request_config_region_exclusive(root, 0, PCI_CFG_SPACE_SIZE, NULL)) {
+		if (!pci_request_config_region_exclusive(root, 0,
+							 PCI_CFG_SPACE_SIZE,
+							 NULL)) {
 			pci_err(root, "Failed to reserve config space\n");
 			return -EEXIST;
 		}
@@ -276,14 +340,14 @@ static int __init amd_smn_init(void)
 		num_roots++;
 	}
 
-	pr_debug("Found %d AMD root devices\n", num_roots);
+	pr_debug("Found %d SMN root devices\n", num_roots);
 
 	if (!num_roots)
 		return -ENODEV;
 
 	num_nodes = amd_num_nodes();
-	amd_roots = kzalloc_objs(*amd_roots, num_nodes);
-	if (!amd_roots)
+	roots = kzalloc_objs(*roots, num_nodes);
+	if (!roots)
 		return -ENOMEM;
 
 	roots_per_node = num_roots / num_nodes;
@@ -297,20 +361,16 @@ static int __init amd_smn_init(void)
 			continue;
 
 		pci_dbg(root, "is root for AMD node %u\n", node);
-		amd_roots[node++] = root;
+		roots[node++] = root;
 	}
 
-	if (enable_dfs) {
-		debugfs_dir = debugfs_create_dir("amd_smn", arch_debugfs_dir);
-
-		debugfs_create_file("node",	0600, debugfs_dir, NULL, &smn_node_fops);
-		debugfs_create_file("address",	0600, debugfs_dir, NULL, &smn_address_fops);
-		debugfs_create_file("value",	0600, debugfs_dir, NULL, &smn_value_fops);
+	ret = smn_set_roots(roots, num_nodes);
+	if (ret) {
+		kfree(roots);
+		return ret;
 	}
 
-	smn_exclusive = true;
-
-	return 0;
+	return smn_activate("amd_smn");
 }
 
 fs_initcall(amd_smn_init);

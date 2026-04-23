@@ -32,12 +32,16 @@ static inline u16 amd_num_nodes(void)
 #ifdef CONFIG_AMD_NODE
 int __must_check amd_smn_read(u16 node, u32 address, u32 *value);
 int __must_check amd_smn_write(u16 node, u32 address, u32 value);
+int smn_set_roots(struct pci_dev **roots, u16 num_nodes);
+int smn_activate(const char *debugfs_name);
 
 /* Should only be used by the HSMP driver. */
 int __must_check amd_smn_hsmp_rdwr(u16 node, u32 address, u32 *value, bool write);
 #else
 static inline int __must_check amd_smn_read(u16 node, u32 address, u32 *value) { return -ENODEV; }
 static inline int __must_check amd_smn_write(u16 node, u32 address, u32 value) { return -ENODEV; }
+static inline int smn_set_roots(struct pci_dev **roots, u16 num_nodes) { return -ENODEV; }
+static inline int smn_activate(const char *debugfs_name) { return -ENODEV; }
 
 static inline int __must_check amd_smn_hsmp_rdwr(u16 node, u32 address, u32 *value, bool write)
 {
