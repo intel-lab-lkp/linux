@@ -260,6 +260,7 @@ struct timer_base {
 	bool			next_expiry_recalc;
 	bool			is_idle;
 	bool			timers_pending;
+	bool			is_active;
 	DECLARE_BITMAP(pending_map, WHEEL_SIZE);
 	struct hlist_head	vectors[WHEEL_SIZE];
 } ____cacheline_aligned;
@@ -1296,7 +1297,7 @@ EXPORT_SYMBOL(add_timer_global);
  *
  * See add_timer() for further details.
  */
-void add_timer_on(struct timer_list *timer, int cpu)
+static void __add_timer_on(struct timer_list *timer, int cpu, bool need_ol_cpu)
 {
 	struct timer_base *new_base, *base;
 	unsigned long flags;
@@ -1333,6 +1334,18 @@ void add_timer_on(struct timer_list *timer, int cpu)
 		WRITE_ONCE(timer->flags,
 			   (timer->flags & ~TIMER_BASEMASK) | cpu);
 	}
+#ifdef CONFIG_HOTPLUG_CPU
+	if (need_ol_cpu) {
+		if (!base->is_active) {
+			raw_spin_unlock(&base->lock);
+			base = this_cpu_ptr(&timer_bases[BASE_LOCAL]);
+			raw_spin_lock(&base->lock);
+			cpu = smp_processor_id();
+			WRITE_ONCE(timer->flags,
+				   (timer->flags & ~TIMER_BASEMASK) | cpu);
+		}
+	}
+#endif /* CONFIG_HOTPLUG_CPU */
 	forward_timer_base(base);
 
 	debug_timer_activate(timer);
@@ -1340,7 +1353,30 @@ void add_timer_on(struct timer_list *timer, int cpu)
 out_unlock:
 	raw_spin_unlock_irqrestore(&base->lock, flags);
 }
+
+void add_timer_on(struct timer_list *timer, int cpu)
+{
+	bool need_ol_cpu = false;
+
+	__add_timer_on(timer, cpu, need_ol_cpu);
+}
 EXPORT_SYMBOL_GPL(add_timer_on);
+
+/**
+ * add_timer_active_cpu - Start a timer on a particular CPU if online or current
+ * @timer:      The timer to be started
+ * @cpu:        The CPU to start it on
+ *
+ * This is like add_timer_on(), except that it queues the timer on the
+ * given CPU only when that CPU is online or on the current CPU.
+ */
+void add_timer_active_cpu(struct timer_list *timer, int cpu)
+{
+	bool need_ol_cpu = true;
+
+	__add_timer_on(timer, cpu, need_ol_cpu);
+}
+EXPORT_SYMBOL_GPL(add_timer_active_cpu);
 
 /**
  * __timer_delete - Internal function: Deactivate a timer
@@ -2508,6 +2544,7 @@ int timers_prepare_cpu(unsigned int cpu)
 		base->next_expiry_recalc = false;
 		base->timers_pending = false;
 		base->is_idle = false;
+		base->is_active = true;
 	}
 	return 0;
 }
@@ -2536,6 +2573,11 @@ int timers_dead_cpu(unsigned int cpu)
 
 		WARN_ON_ONCE(old_base->running_timer);
 		old_base->running_timer = NULL;
+		/*
+		 * Make the dead CPU base unavailable to add_timer_on()
+		 * when the caller wants an active target CPU.
+		 */
+		old_base->is_active = false;
 
 		for (i = 0; i < WHEEL_SIZE; i++)
 			migrate_timer_list(new_base, old_base->vectors + i);
@@ -2560,6 +2602,7 @@ static void __init init_timer_cpu(int cpu)
 		raw_spin_lock_init(&base->lock);
 		base->clk = jiffies;
 		base->next_expiry = base->clk + TIMER_NEXT_MAX_DELTA;
+		base->is_active = true;
 		timer_base_init_expiry_lock(base);
 	}
 }
