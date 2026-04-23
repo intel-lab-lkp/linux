@@ -223,8 +223,19 @@ static void phy_mdio_device_free(struct mdio_device *mdiodev)
 
 static void phy_device_release(struct device *dev)
 {
+	struct phy_device *phydev = to_phy_device(dev);
+
+	/* bus_for_each_dev() holds get_device() across each iteration
+	 * step, deferring this release callback until any in-flight PSE
+	 * notifier walk has advanced past this phy. pse_control_put()
+	 * takes pse_list_mutex, so this path must run in sleepable
+	 * context.
+	 */
+	might_sleep();
+	pse_control_put(phydev->psec);
+
 	fwnode_handle_put(dev->fwnode);
-	kfree(to_phy_device(dev));
+	kfree(phydev);
 }
 
 static void phy_mdio_device_remove(struct mdio_device *mdiodev)
@@ -1102,13 +1113,101 @@ struct phy_device *get_phy_device(struct mii_bus *bus, int addr, bool is_c45)
 }
 EXPORT_SYMBOL(get_phy_device);
 
-/**
- * phy_device_register - Register the phy device on the MDIO bus
- * @phydev: phy_device structure to be added to the MDIO bus
+/* Best-effort attach of phydev->psec from a DT `pses = <&...>` phandle.
+ * Caller must hold rtnl. Errors are swallowed; the notifier retries
+ * at PSE_REGISTERED time.
  */
-int phy_device_register(struct phy_device *phydev)
+static void phy_try_attach_pse(struct phy_device *phydev)
+{
+	struct pse_control *psec;
+	struct device_node *np;
+
+	ASSERT_RTNL();
+
+	np = phydev->mdio.dev.of_node;
+	if (!np)
+		return;
+
+	if (phydev->psec)
+		return;
+
+	psec = of_pse_control_get(np, phydev);
+	if (IS_ERR(psec))
+		return;
+
+	phydev->psec = psec;
+}
+
+static int phy_pse_attach_one(struct device *dev, void *data __maybe_unused)
+{
+	ASSERT_RTNL();
+
+	if (dev->type != &mdio_bus_phy_type)
+		return 0;
+
+	phy_try_attach_pse(to_phy_device(dev));
+	return 0;
+}
+
+static int phy_pse_detach_one(struct device *dev, void *data)
+{
+	struct pse_controller_dev *pcdev = data;
+	struct phy_device *phydev;
+	struct pse_control *psec;
+
+	ASSERT_RTNL();
+
+	if (dev->type != &mdio_bus_phy_type)
+		return 0;
+
+	phydev = to_phy_device(dev);
+	psec = phydev->psec;
+	if (!psec || !pse_control_matches_pcdev(psec, pcdev))
+		return 0;
+
+	phydev->psec = NULL;
+	pse_control_put(psec);
+	return 0;
+}
+
+static int phy_pse_notifier_event(struct notifier_block *nb,
+				  unsigned long event, void *data)
+{
+	switch (event) {
+	case PSE_REGISTERED:
+		rtnl_lock();
+		bus_for_each_dev(&mdio_bus_type, NULL, NULL,
+				 phy_pse_attach_one);
+		rtnl_unlock();
+		return NOTIFY_OK;
+	case PSE_UNREGISTERED:
+		rtnl_lock();
+		bus_for_each_dev(&mdio_bus_type, NULL, data,
+				 phy_pse_detach_one);
+		rtnl_unlock();
+		return NOTIFY_OK;
+	default:
+		return NOTIFY_DONE;
+	}
+}
+
+static struct notifier_block phy_pse_notifier __read_mostly = {
+	.notifier_call = phy_pse_notifier_event,
+};
+
+/**
+ * phy_device_register_locked - Register the phy device on the MDIO bus
+ * @phydev: phy_device structure to be added to the MDIO bus
+ *
+ * Same as phy_device_register() but caller must already hold rtnl_lock().
+ *
+ * Return: 0 on success, negative error code on failure.
+ */
+int phy_device_register_locked(struct phy_device *phydev)
 {
 	int err;
+
+	ASSERT_RTNL();
 
 	err = mdiobus_register_device(&phydev->mdio);
 	if (err)
@@ -1124,6 +1223,8 @@ int phy_device_register(struct phy_device *phydev)
 		goto out;
 	}
 
+	phy_try_attach_pse(phydev);
+
 	err = device_add(&phydev->mdio.dev);
 	if (err) {
 		phydev_err(phydev, "failed to add\n");
@@ -1133,10 +1234,30 @@ int phy_device_register(struct phy_device *phydev)
 	return 0;
 
  out:
-	/* Assert the reset signal */
+	/* If phy_try_attach_pse() set phydev->psec before device_add()
+	 * failed, the caller's phy_device_free() -> phy_device_release()
+	 * chain will drop it.
+	 */
 	phy_device_reset(phydev, 1);
-
 	mdiobus_unregister_device(&phydev->mdio);
+	return err;
+}
+EXPORT_SYMBOL(phy_device_register_locked);
+
+/**
+ * phy_device_register - Register the phy device on the MDIO bus
+ * @phydev: phy_device structure to be added to the MDIO bus
+ *
+ * Return: 0 on success, negative error code on failure.
+ */
+int phy_device_register(struct phy_device *phydev)
+{
+	int err;
+
+	rtnl_lock();
+	err = phy_device_register_locked(phydev);
+	rtnl_unlock();
+
 	return err;
 }
 EXPORT_SYMBOL(phy_device_register);
@@ -1152,8 +1273,6 @@ EXPORT_SYMBOL(phy_device_register);
 void phy_device_remove(struct phy_device *phydev)
 {
 	unregister_mii_timestamper(phydev->mii_ts);
-	pse_control_put(phydev->psec);
-
 	device_del(&phydev->mdio.dev);
 
 	/* Assert the reset signal */
@@ -3962,8 +4081,14 @@ static int __init phy_init(void)
 	if (rc)
 		goto err_c45;
 
+	rc = pse_register_notifier(&phy_pse_notifier);
+	if (rc)
+		goto err_genphy;
+
 	return 0;
 
+err_genphy:
+	phy_driver_unregister(&genphy_driver);
 err_c45:
 	phy_driver_unregister(&genphy_c45_driver);
 err_ethtool_phy_ops:
@@ -3980,6 +4105,7 @@ err_class:
 
 static void __exit phy_exit(void)
 {
+	pse_unregister_notifier(&phy_pse_notifier);
 	phy_driver_unregister(&genphy_c45_driver);
 	phy_driver_unregister(&genphy_driver);
 	rtnl_lock();
