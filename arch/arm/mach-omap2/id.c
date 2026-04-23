@@ -255,7 +255,7 @@ static void __init omap3_cpuinfo(void)
 	strscpy(soc_name, cpu_name);
 
 	/* Print verbose information */
-	n += scnprintf(buf, sizeof(buf) - n, "%s %s (", soc_name, soc_rev);
+	n += scnprintf(buf, sizeof(buf), "%s %s (", soc_name, soc_rev);
 
 	OMAP3_SHOW_FEATURE(l2cache);
 	OMAP3_SHOW_FEATURE(iva);
@@ -265,7 +265,7 @@ static void __init omap3_cpuinfo(void)
 	OMAP3_SHOW_FEATURE(192mhz_clk);
 	if (*(buf + n - 1) == ' ')
 		n--;
-	n += scnprintf(buf + n, sizeof(buf) - n, ")\n");
+	scnprintf(buf + n, sizeof(buf) - n, ")\n");
 	pr_info("%s", buf);
 }
 
