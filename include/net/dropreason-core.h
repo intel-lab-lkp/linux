@@ -69,11 +69,14 @@
 	FN(QDISC_DROP)			\
 	FN(QDISC_BURST_DROP)		\
 	FN(CPU_BACKLOG)			\
+	FN(MACVLAN_BROADCAST_BACKLOG)		\
+	FN(IPVLAN_MULTICAST_BACKLOG)		\
 	FN(XDP)				\
 	FN(TC_INGRESS)			\
 	FN(UNHANDLED_PROTO)		\
 	FN(SKB_CSUM)			\
 	FN(SKB_GSO_SEG)			\
+	FN(SKB_BAD_GSO)			\
 	FN(SKB_UCOPY_FAULT)		\
 	FN(DEV_HDR)			\
 	FN(DEV_READY)			\
@@ -382,6 +385,16 @@ enum skb_drop_reason {
 	 * netdev_max_backlog in net.rst) or RPS flow limit
 	 */
 	SKB_DROP_REASON_CPU_BACKLOG,
+	/**
+	 * @SKB_DROP_REASON_MACVLAN_BROADCAST_BACKLOG: failed to enqueue the skb
+	 * to macvlan broadcast queue.
+	 */
+	SKB_DROP_REASON_MACVLAN_BROADCAST_BACKLOG,
+	/**
+	 * @SKB_DROP_REASON_IPVLAN_MULTICAST_BACKLOG: failed to enqueue the skb
+	 * to ipvlan multicast queue.
+	 */
+	SKB_DROP_REASON_IPVLAN_MULTICAST_BACKLOG,
 	/** @SKB_DROP_REASON_XDP: dropped by XDP in input path */
 	SKB_DROP_REASON_XDP,
 	/** @SKB_DROP_REASON_TC_INGRESS: dropped in TC ingress HOOK */
@@ -392,6 +405,8 @@ enum skb_drop_reason {
 	SKB_DROP_REASON_SKB_CSUM,
 	/** @SKB_DROP_REASON_SKB_GSO_SEG: gso segmentation error */
 	SKB_DROP_REASON_SKB_GSO_SEG,
+	/** @SKB_DROP_REASON_SKB_BAD_GSO: malicious gso packet. */
+	SKB_DROP_REASON_SKB_BAD_GSO,
 	/**
 	 * @SKB_DROP_REASON_SKB_UCOPY_FAULT: failed to copy data from user space,
 	 * e.g., via zerocopy_sg_from_iter() or skb_orphan_frags_rx()
