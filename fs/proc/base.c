@@ -1727,8 +1727,10 @@ static ssize_t comm_write(struct file *file, const char __user *buf,
 	struct task_struct *p;
 	char buffer[TASK_COMM_LEN] = {};
 	const size_t maxlen = sizeof(buffer) - 1;
+	size_t len = count > maxlen ? maxlen : count;
+	ssize_t ret;
 
-	if (copy_from_user(buffer, buf, count > maxlen ? maxlen : count))
+	if (copy_from_user(buffer, buf, len))
 		return -EFAULT;
 
 	p = get_proc_task(inode);
@@ -1738,13 +1740,14 @@ static ssize_t comm_write(struct file *file, const char __user *buf,
 	if (same_thread_group(current, p)) {
 		set_task_comm(p, buffer);
 		proc_comm_connector(p);
+		ret = len;
+	} else {
+		ret = -EINVAL;
 	}
-	else
-		count = -EINVAL;
 
 	put_task_struct(p);
 
-	return count;
+	return ret;
 }
 
 static int comm_show(struct seq_file *m, void *v)
