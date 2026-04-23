@@ -323,7 +323,7 @@ found:
 		sock_set_flag(sk, SOCK_RCU_FREE);
 
 		sk_add_node_rcu(sk, &hslot->head);
-		hslot->count++;
+		WRITE_ONCE(hslot->count, hslot->count + 1);
 		sock_prot_inuse_add(sock_net(sk), sk->sk_prot, 1);
 
 		hslot2 = udp_hashslot2(udptable, udp_sk(sk)->udp_portaddr_hash);
@@ -2200,7 +2200,7 @@ void udp_lib_unhash(struct sock *sk)
 		if (rcu_access_pointer(sk->sk_reuseport_cb))
 			reuseport_detach_sock(sk);
 		if (sk_del_node_init_rcu(sk)) {
-			hslot->count--;
+			WRITE_ONCE(hslot->count, hslot->count - 1);
 			inet_sk(sk)->inet_num = 0;
 			sock_prot_inuse_add(net, sk->sk_prot, -1);
 
@@ -2471,7 +2471,7 @@ static int __udp4_lib_mcast_deliver(struct net *net, struct sk_buff *skb,
 	hash2_any = 0;
 	hash2 = 0;
 	hslot = udp_hashslot(udptable, net, hnum);
-	use_hash2 = hslot->count > 10;
+	use_hash2 = READ_ONCE(hslot->count) > 10;
 	offset = offsetof(typeof(*sk), sk_node);
 
 	if (use_hash2) {
@@ -2703,7 +2703,7 @@ static struct sock *__udp4_lib_mcast_demux_lookup(struct net *net,
 	hslot = &udptable->hash[slot];
 
 	/* Do not bother scanning a too big list */
-	if (hslot->count > 10)
+	if (READ_ONCE(hslot->count) > 10)
 		return NULL;
 
 	result = NULL;
