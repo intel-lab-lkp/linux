@@ -24,6 +24,7 @@
 #include <drm/drm_managed.h>
 #include <drm/drm_module.h>
 #include <drm/drm_vblank.h>
+#include <drm/drm_probe_helper.h>
 
 #include "hibmc_drm_drv.h"
 #include "hibmc_drm_regs.h"
@@ -162,6 +163,8 @@ static int hibmc_kms_init(struct hibmc_drm_private *priv)
 	drm_for_each_encoder(encoder, dev)
 		encoder->possible_clones = clone_mask;
 
+	drm_kms_helper_poll_init(dev);
+
 	return 0;
 }
 
@@ -279,6 +282,7 @@ static int hibmc_hw_init(struct hibmc_drm_private *priv)
 
 static void hibmc_unload(struct drm_device *dev)
 {
+	drm_kms_helper_poll_fini(dev);
 	drm_atomic_helper_shutdown(dev);
 }
 
