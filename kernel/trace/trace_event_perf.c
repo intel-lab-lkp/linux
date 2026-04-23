@@ -73,8 +73,18 @@ static int perf_trace_event_perm(struct trace_event_call *tp_event,
 	}
 
 	/* No tracing, just counting, so no obvious leak */
-	if (!(p_event->attr.sample_type & PERF_SAMPLE_RAW))
+	if (!(p_event->attr.sample_type & PERF_SAMPLE_RAW)) {
+		/*
+		 * Only allow CAP_ANY tracepoints for unprivileged
+		 * task-attached events in case kernel context is exposed.
+		 */
+		if (!p_event->attr.exclude_kernel && !perfmon_capable()) {
+			if (!(p_event->attach_state == PERF_ATTACH_TASK &&
+			      (tp_event->flags & TRACE_EVENT_FL_CAP_ANY)))
+				return -EACCES;
+		}
 		return 0;
+	}
 
 	/* Some events are ok to be traced by non-root users... */
 	if (p_event->attach_state == PERF_ATTACH_TASK) {
