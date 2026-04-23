@@ -215,6 +215,61 @@ static int ocfs2_dinode_has_extents(struct ocfs2_dinode *di)
 	return 1;
 }
 
+static int ocfs2_validate_inode_extent_list(struct super_block *sb,
+					    struct buffer_head *bh,
+					    struct ocfs2_dinode *di)
+{
+	struct ocfs2_extent_list *el = &di->id2.i_list;
+	u16 count = le16_to_cpu(el->l_count);
+	u16 next_free = le16_to_cpu(el->l_next_free_rec);
+	u16 expected = ocfs2_extent_recs_per_inode_with_xattr(sb, di);
+	u32 prev_end = 0;
+	bool have_prev = false;
+	int i;
+
+	if (count != expected)
+		return ocfs2_error(sb,
+				   "Invalid dinode #%llu: extent list count %u (expected %u)\n",
+				   (unsigned long long)bh->b_blocknr, count,
+				   expected);
+
+	if (next_free > count)
+		return ocfs2_error(sb,
+				   "Invalid dinode #%llu: extent list index %u (count %u)\n",
+				   (unsigned long long)bh->b_blocknr, next_free,
+				   count);
+
+	for (i = 0; i < next_free; i++) {
+		struct ocfs2_extent_rec *rec = &el->l_recs[i];
+		u32 rec_cpos = le32_to_cpu(rec->e_cpos);
+		u32 rec_clusters = ocfs2_rec_clusters(el, rec);
+		u32 rec_end = rec_cpos + rec_clusters;
+
+		if (!rec_clusters) {
+			if (!el->l_tree_depth && i == 0)
+				continue;
+
+			return ocfs2_error(sb,
+					   "Invalid dinode #%llu: empty extent record %d at depth %u\n",
+					   (unsigned long long)bh->b_blocknr,
+					   i, le16_to_cpu(el->l_tree_depth));
+		}
+
+		if (have_prev &&
+		    ((el->l_tree_depth && rec_cpos != prev_end) ||
+		     (!el->l_tree_depth && rec_cpos < prev_end)))
+			return ocfs2_error(sb,
+					   "Invalid dinode #%llu: extent record %d starts at %u after previous end %u\n",
+					   (unsigned long long)bh->b_blocknr, i,
+					   rec_cpos, prev_end);
+
+		prev_end = rec_end;
+		have_prev = true;
+	}
+
+	return 0;
+}
+
 /*
  * here's how inodes get read from disk:
  * iget5_locked -> find_actor -> OCFS2_FIND_ACTOR
@@ -1552,6 +1607,12 @@ int ocfs2_validate_inode_block(struct super_block *sb,
 		}
 	}
 
+	if (ocfs2_dinode_has_extents(di)) {
+		rc = ocfs2_validate_inode_extent_list(sb, bh, di);
+		if (rc)
+			goto bail;
+	}
+
 	if ((le16_to_cpu(di->i_dyn_features) & OCFS2_HAS_REFCOUNT_FL) &&
 	    !di->i_refcount_loc) {
 		rc = ocfs2_error(sb, "Inode #%llu has refcount flag but no i_refcount_loc\n",
@@ -1812,4 +1873,3 @@ const struct ocfs2_caching_operations ocfs2_inode_caching_ops = {
 	.co_io_lock		= ocfs2_inode_cache_io_lock,
 	.co_io_unlock		= ocfs2_inode_cache_io_unlock,
 };
-
