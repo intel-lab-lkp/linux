@@ -1352,6 +1352,36 @@ static bool iort_pci_rc_supports_canwbs(struct acpi_iort_node *node)
 	return memory_access->memory_flags & ACPI_IORT_MF_CANWBS;
 }
 
+static bool iort_pci_rc_supports_pasid(struct acpi_iort_node *node)
+{
+	struct acpi_iort_root_complex *pci_rc;
+
+	if (node->revision < 4)
+		return false;
+
+	pci_rc = (struct acpi_iort_root_complex *)node->node_data;
+	return pci_rc->flags & ACPI_IORT_RC_PASID_SUPPORTED;
+}
+
+static bool iort_pci_rc_supports_pasid_fwd(struct acpi_iort_node *node)
+{
+	struct acpi_iort_root_complex *pci_rc;
+
+	pci_rc = (struct acpi_iort_root_complex *)node->node_data;
+	return pci_rc->ats_attribute & ACPI_IORT_PASID_FWD_SUPPORTED;
+}
+
+static int iort_pci_rc_pasid_max_width(struct acpi_iort_node *node)
+{
+	struct acpi_iort_root_complex *pci_rc;
+
+	if (node->revision < 4)
+		return -ENODEV;
+
+	pci_rc = (struct acpi_iort_root_complex *)node->node_data;
+	return FIELD_GET(ACPI_IORT_PASID_MAX_WIDTH, pci_rc->pasid_capabilities);
+}
+
 static int iort_iommu_xlate(struct device *dev, struct acpi_iort_node *node,
 			    u32 streamid)
 {
@@ -1471,6 +1501,10 @@ int iort_iommu_configure_id(struct device *dev, const u32 *id_in)
 			fwspec->flags |= IOMMU_FWSPEC_PCI_RC_ATS;
 		if (fwspec && iort_pci_rc_supports_canwbs(node))
 			fwspec->flags |= IOMMU_FWSPEC_PCI_RC_CANWBS;
+		if (fwspec && iort_pci_rc_supports_pasid(node))
+			fwspec->flags |= IOMMU_FWSPEC_PCI_RC_PASID;
+		if (fwspec && iort_pci_rc_supports_pasid_fwd(node))
+			fwspec->flags |= IOMMU_FWSPEC_PCI_RC_PASID_FWD;
 	} else {
 		node = iort_scan_node(ACPI_IORT_NODE_NAMED_COMPONENT,
 				      iort_match_node_callback, dev);
@@ -1554,6 +1588,52 @@ int iort_dma_get_ranges(struct device *dev, u64 *limit)
 		return rc_dma_get_range(dev, limit);
 	else
 		return nc_dma_get_range(dev, limit);
+}
+
+static struct acpi_iort_node *iort_pci_rc_node_for_dev(struct device *dev)
+{
+	struct pci_bus *pbus;
+
+	if (!dev_is_pci(dev))
+		return NULL;
+
+	pbus = to_pci_dev(dev)->bus;
+	return iort_scan_node(ACPI_IORT_NODE_PCI_ROOT_COMPLEX,
+			      iort_match_node_callback, &pbus->dev);
+}
+
+/**
+ * iort_pci_rc_pasid_max_width_known() - Whether IORT firmware describes the
+ * Root Complex PASID width for the given PCI device.
+ * @dev: PCI device to lookup
+ *
+ * Returns true iff a matching IORT Root Complex node exists and has revision
+ * >= 4 (IORT spec E.c), i.e. the PASID Capabilities descriptor is present.
+ */
+bool iort_pci_rc_pasid_max_width_known(struct device *dev)
+{
+	struct acpi_iort_node *node = iort_pci_rc_node_for_dev(dev);
+
+	return node && node->revision >= 4;
+}
+
+/**
+ * iort_pci_rc_pasid_max_width_for_dev() - Look up the Root Complex Max PASID
+ * Width for the given PCI device.
+ * @dev: PCI device to lookup
+ *
+ * Returns the Max PASID Width (bits[4:0] of PASID Capabilities) declared by
+ * the Root Complex node in IORT firmware, or a negative errno when the field
+ * is not present (RC node revision < 4) or the device is not PCI.
+ */
+int iort_pci_rc_pasid_max_width_for_dev(struct device *dev)
+{
+	struct acpi_iort_node *node = iort_pci_rc_node_for_dev(dev);
+
+	if (!node)
+		return -ENODEV;
+
+	return iort_pci_rc_pasid_max_width(node);
 }
 
 static void __init acpi_iort_register_irq(int hwirq, const char *name,

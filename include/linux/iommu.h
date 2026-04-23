@@ -1115,6 +1115,10 @@ struct iommu_fwspec {
 #define IOMMU_FWSPEC_PCI_RC_ATS			(1 << 0)
 /* CANWBS is supported */
 #define IOMMU_FWSPEC_PCI_RC_CANWBS		(1 << 1)
+/* Root complex declares PASID support (IORT E.c Flags bit 0) */
+#define IOMMU_FWSPEC_PCI_RC_PASID		(1 << 2)
+/* Root complex forwards PASID on translated transactions (IORT ATS bit 2) */
+#define IOMMU_FWSPEC_PCI_RC_PASID_FWD		(1 << 3)
 
 /*
  * An iommu attach handle represents a relationship between an iommu domain

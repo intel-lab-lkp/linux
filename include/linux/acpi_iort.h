@@ -45,6 +45,8 @@ void iort_put_rmr_sids(struct fwnode_handle *iommu_fwnode,
 int iort_dma_get_ranges(struct device *dev, u64 *limit);
 int iort_iommu_configure_id(struct device *dev, const u32 *id_in);
 void iort_iommu_get_resv_regions(struct device *dev, struct list_head *head);
+bool iort_pci_rc_pasid_max_width_known(struct device *dev);
+int iort_pci_rc_pasid_max_width_for_dev(struct device *dev);
 phys_addr_t acpi_iort_dma_get_max_cpu_address(void);
 #else
 static inline u32 iort_msi_map_id(struct device *dev, u32 id)
@@ -71,6 +73,10 @@ static inline int iort_iommu_configure_id(struct device *dev, const u32 *id_in)
 static inline
 void iort_iommu_get_resv_regions(struct device *dev, struct list_head *head)
 { }
+static inline bool iort_pci_rc_pasid_max_width_known(struct device *dev)
+{ return false; }
+static inline int iort_pci_rc_pasid_max_width_for_dev(struct device *dev)
+{ return -ENODEV; }
 
 static inline phys_addr_t acpi_iort_dma_get_max_cpu_address(void)
 { return PHYS_ADDR_MAX; }
