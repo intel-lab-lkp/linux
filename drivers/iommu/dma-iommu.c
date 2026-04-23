@@ -159,6 +159,15 @@ static void fq_ring_free_locked(struct iommu_dma_cookie *cookie, struct iova_fq 
 			break;
 
 		iommu_put_pages_list(&fq->entries[idx].freelist);
+/*
+ * Bug fix (Bugzilla #221389, regression v6.12.75/v6.12.76):
+ * Drain the IOTLB before handing the IOVA back to the allocator.
+ * On the lazy-flush path, free_iova_fast() makes the IOVA
+ * immediately reusable.  A concurrent map() call can then receive
+ * the same IOVA while the old PTE is still live in hardware,
+ * triggering a stale-PTE WARN in __domain_mapping().
+ */
+iommu_iotlb_sync(domain, &iotlb_gather);
 		free_iova_fast(&cookie->iovad,
 			       fq->entries[idx].iova_pfn,
 			       fq->entries[idx].pages);
