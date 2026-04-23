@@ -7,25 +7,11 @@
 #include <linux/mempolicy.h>
 #include <linux/pseudo_fs.h>
 #include <linux/pagemap.h>
+#include <linux/dax.h>
 
 #include "kvm_mm.h"
 
 static struct vfsmount *kvm_gmem_mnt;
-
-/*
- * A guest_memfd instance can be associated multiple VMs, each with its own
- * "view" of the underlying physical memory.
- *
- * The gmem's inode is effectively the raw underlying physical storage, and is
- * used to track properties of the physical memory, while each gmem file is
- * effectively a single VM's view of that storage, and is used to track assets
- * specific to its associated VM, e.g. memslots=>gmem bindings.
- */
-struct gmem_file {
-	struct kvm *kvm;
-	struct xarray bindings;
-	struct list_head entry;
-};
 
 struct gmem_inode {
 	struct shared_policy policy;
@@ -644,6 +630,32 @@ int kvm_gmem_create(struct kvm *kvm, struct kvm_create_guest_memfd *args)
 	return __kvm_gmem_create(kvm, size, flags);
 }
 
+/*
+ * DAX fd files are not initialized with gmem bits since it's passed in from
+ * user space and not created by the kernel (at least right now). So when
+ * the daxfd is being bound during kvm_gmem_bind(), the gmem bits needs to be
+ * initialized.
+ */
+static int kvm_daxfd_init(struct file *file, struct kvm_memory_slot *slot,
+			  struct kvm *kvm)
+{
+	struct gmem_file *f;
+	struct inode *inode;
+
+	if (!is_file_dax(file))
+		return -EINVAL;
+
+	inode = file_inode(file);
+	GMEM_I(inode)->flags |= GUEST_MEMFD_FLAG_MMAP;
+	slot->flags |= KVM_MEMSLOT_DAX_ONLY;
+
+	kvm_get_kvm(kvm);
+	f = file->private_data;
+	f->kvm = kvm;
+
+	return 0;
+}
+
 int kvm_gmem_bind(struct kvm *kvm, struct kvm_memory_slot *slot,
 		  unsigned int fd, loff_t offset)
 {
@@ -660,7 +672,13 @@ int kvm_gmem_bind(struct kvm *kvm, struct kvm_memory_slot *slot,
 	if (!file)
 		return -EBADF;
 
-	if (file->f_op != &kvm_gmem_fops)
+	if (is_file_dax(file)) {
+		r = kvm_daxfd_init(file, slot, kvm);
+		if (r)
+			goto err;
+	}
+
+	if (file->f_op != &kvm_gmem_fops && !is_file_dax(file))
 		goto err;
 
 	f = file->private_data;

@@ -1621,6 +1621,9 @@ static struct dev_dax *__devm_create_dev_dax(struct dev_dax_data *data)
 	dev->parent = parent;
 	dev->type = &dev_dax_type;
 
+	xa_init(&dev_dax->gmem_file.bindings);
+	list_add(&dev_dax->gmem_file.entry, &inode->i_mapping->i_private_list);
+
 	rc = device_add(dev);
 	if (rc) {
 		kill_dev_dax(dev_dax);

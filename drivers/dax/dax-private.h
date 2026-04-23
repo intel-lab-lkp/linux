@@ -8,6 +8,7 @@
 #include <linux/device.h>
 #include <linux/cdev.h>
 #include <linux/idr.h>
+#include <linux/kvm_host.h>
 
 /* private routines between core files */
 struct dax_device;
@@ -67,6 +68,8 @@ struct dev_dax_range {
 /**
  * struct dev_dax - instance data for a subdivision of a dax region, and
  * data while the device is activated in the driver.
+ *
+ * @gmem_file: guest mem file for this dev_dax. Must be first member
  * @region: parent region
  * @dax_dev: core dax functionality
  * @virt_addr: kva from memremap; used by fsdev_dax
@@ -83,6 +86,7 @@ struct dev_dax_range {
  * @ranges: range tuples of memory used
  */
 struct dev_dax {
+	struct gmem_file gmem_file;
 	struct dax_region *region;
 	struct dax_device *dax_dev;
 	void *virt_addr;
