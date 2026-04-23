@@ -312,7 +312,7 @@ static int get_entry_track(int track)
 static int gdrom_get_last_session(struct cdrom_device_info *cd_info,
 	struct cdrom_multisession *ms_info)
 {
-	int fentry, lentry, track, data, err;
+	int fentry, track, data, err;
 
 	if (!gd.toc)
 		return -ENOMEM;
@@ -329,7 +329,6 @@ static int gdrom_get_last_session(struct cdrom_device_info *cd_info,
 	}
 
 	fentry = get_entry_track(gd.toc->first);
-	lentry = get_entry_track(gd.toc->last);
 	/* Find the first data track */
 	track = get_entry_track(gd.toc->last);
 	do {
