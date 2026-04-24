@@ -68,6 +68,9 @@
 #define SD_SLEEP_US       5
 #define SD_TIMEOUT_US 20000
 
+#define SD_INIT_DELAY_US  1000
+#define SD_INIT_CLK_HZ    400000
+
 #define SDIRQ_CARD_DETECT    1
 #define SDIRQ_SD_TO_MEM_DONE 2
 #define SDIRQ_MEM_TO_SD_DONE 4
@@ -99,6 +102,8 @@ struct litex_mmc_host {
 	bool app_cmd;
 };
 
+static void litex_mmc_setclk(struct litex_mmc_host *host, unsigned int freq);
+
 static int litex_mmc_sdcard_wait_done(void __iomem *reg, struct device *dev)
 {
 	u8 evt;
@@ -127,6 +132,12 @@ static int litex_mmc_send_cmd(struct litex_mmc_host *host,
 	void __iomem *reg;
 	int ret;
 	u8 evt;
+
+	if (cmd == MMC_GO_IDLE_STATE) {
+		litex_mmc_setclk(host, SD_INIT_CLK_HZ);
+		litex_write8(host->sdphy + LITEX_PHY_INITIALIZE, 1);
+		fsleep(SD_INIT_DELAY_US);
+	}
 
 	litex_write32(host->sdcore + LITEX_CORE_CMDARG, arg);
 	litex_write32(host->sdcore + LITEX_CORE_CMDCMD,
