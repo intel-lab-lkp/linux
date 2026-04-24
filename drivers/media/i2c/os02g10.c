@@ -112,6 +112,11 @@
 #define OS02G10_ORIENTATION_BAYER_FIX		0x32
 
 #define OS02G10_LINK_FREQ_720MHZ		(720 * HZ_PER_MHZ)
+#define OS02G10_WINDOW_WIDTH_MIN		2
+#define OS02G10_WINDOW_HEIGHT_MIN		2
+#define OS02G10_VBLANK_DEF			166
+#define OS02G10_VBLANK_MIN			25
+#define OS02G10_EXPOSURE_DEF			1100
 
 /* OS02G10 native and active pixel array size */
 static const struct v4l2_rect os02g10_native_area = {
@@ -150,15 +155,6 @@ struct os02g10 {
 	struct v4l2_ctrl *exposure;
 	struct v4l2_ctrl *vflip;
 	struct v4l2_ctrl *hflip;
-};
-
-struct os02g10_mode {
-	u32 width;
-	u32 height;
-	u32 vts_def;
-	u32 exp_def;
-	u32 x_start;
-	u32 y_start;
 };
 
 static const struct cci_reg_sequence os02g10_common_regs[] = {
@@ -245,17 +241,6 @@ static const struct cci_reg_sequence os02g10_common_regs[] = {
 	{ OS02G10_REG_MIPI_TX_SPEED_CTRL,	0x05},
 };
 
-static const struct os02g10_mode supported_modes[] = {
-	{
-		.width = 1920,
-		.height = 1080,
-		.vts_def = 1246,
-		.exp_def = 1100,
-		.x_start = 2,
-		.y_start = 6,
-	},
-};
-
 static const s64 link_freq_menu_items[] = {
 	OS02G10_LINK_FREQ_720MHZ,
 };
@@ -295,11 +280,12 @@ static int os02g10_set_ctrl(struct v4l2_ctrl *ctrl)
 	if (ctrl->id == V4L2_CID_VBLANK) {
 		/* Honour the VBLANK limits when setting exposure */
 		s64 max = fmt->height + ctrl->val - OS02G10_EXPOSURE_MARGIN;
+		s64 def = (max < OS02G10_EXPOSURE_DEF) ? max
+			  : OS02G10_EXPOSURE_DEF;
 
 		ret = __v4l2_ctrl_modify_range(os02g10->exposure,
 					       os02g10->exposure->minimum, max,
-					       os02g10->exposure->step,
-					       os02g10->exposure->default_value);
+					       os02g10->exposure->step, def);
 		if (ret)
 			return ret;
 	}
@@ -362,10 +348,9 @@ static const struct v4l2_ctrl_ops os02g10_ctrl_ops = {
 
 static int os02g10_init_controls(struct os02g10 *os02g10)
 {
-	const struct os02g10_mode *mode = &supported_modes[0];
 	struct v4l2_fwnode_device_properties props;
-	u64 vblank_def, exp_max, pixel_rate;
 	struct v4l2_ctrl_handler *ctrl_hdlr;
+	u64 exp_max, pixel_rate;
 	int ret;
 
 	ctrl_hdlr = &os02g10->handler;
@@ -384,18 +369,19 @@ static int os02g10_init_controls(struct os02g10 *os02g10)
 	if (os02g10->link_freq)
 		os02g10->link_freq->flags |= V4L2_CTRL_FLAG_READ_ONLY;
 
-	vblank_def = mode->vts_def - mode->height;
 	os02g10->vblank = v4l2_ctrl_new_std(ctrl_hdlr, &os02g10_ctrl_ops,
-					    V4L2_CID_VBLANK, vblank_def,
-					    OS02G10_FRAME_LENGTH_MAX - mode->height,
-					    1, vblank_def);
+					    V4L2_CID_VBLANK, OS02G10_VBLANK_MIN,
+					    OS02G10_FRAME_LENGTH_MAX -
+					    os02g10_active_area.height,
+					    1, OS02G10_VBLANK_DEF);
 
-	exp_max = mode->vts_def - OS02G10_EXPOSURE_MARGIN;
+	exp_max = OS02G10_VBLANK_DEF + os02g10_active_area.height
+		  - OS02G10_EXPOSURE_MARGIN;
 	os02g10->exposure =
 		v4l2_ctrl_new_std(ctrl_hdlr, &os02g10_ctrl_ops,
 				  V4L2_CID_EXPOSURE,
 				  OS02G10_EXPOSURE_MIN, exp_max,
-				  OS02G10_EXPOSURE_STEP, mode->exp_def);
+				  OS02G10_EXPOSURE_STEP, OS02G10_EXPOSURE_DEF);
 
 	v4l2_ctrl_new_std(ctrl_hdlr, &os02g10_ctrl_ops,
 			  V4L2_CID_ANALOGUE_GAIN, OS02G10_ANALOG_GAIN_MIN,
@@ -445,20 +431,18 @@ static int os02g10_set_framefmt(struct os02g10 *os02g10,
 				struct v4l2_subdev_state *state)
 {
 	const struct v4l2_mbus_framefmt *format;
-	const struct os02g10_mode *mode;
+	const struct v4l2_rect *crop;
 	int ret = 0;
 
+	crop = v4l2_subdev_state_get_crop(state, 0);
 	format = v4l2_subdev_state_get_format(state, 0);
-	mode = v4l2_find_nearest_size(supported_modes,
-				      ARRAY_SIZE(supported_modes), width,
-				      height, format->width, format->height);
 
-	cci_write(os02g10->cci, OS02G10_REG_V_START, mode->y_start, &ret);
-	cci_write(os02g10->cci, OS02G10_REG_V_SIZE, mode->height, &ret);
-	cci_write(os02g10->cci, OS02G10_REG_V_SIZE_MIPI, mode->height, &ret);
-	cci_write(os02g10->cci, OS02G10_REG_H_START, mode->x_start, &ret);
-	cci_write(os02g10->cci, OS02G10_REG_H_SIZE, mode->width, &ret);
-	cci_write(os02g10->cci, OS02G10_REG_H_SIZE_MIPI, mode->width, &ret);
+	cci_write(os02g10->cci, OS02G10_REG_V_START, crop->top, &ret);
+	cci_write(os02g10->cci, OS02G10_REG_V_SIZE, crop->height, &ret);
+	cci_write(os02g10->cci, OS02G10_REG_V_SIZE_MIPI, format->height, &ret);
+	cci_write(os02g10->cci, OS02G10_REG_H_START, crop->left, &ret);
+	cci_write(os02g10->cci, OS02G10_REG_H_SIZE, crop->width, &ret);
+	cci_write(os02g10->cci, OS02G10_REG_H_SIZE_MIPI, format->width, &ret);
 
 	return ret;
 }
@@ -528,16 +512,67 @@ static int os02g10_disable_streams(struct v4l2_subdev *sd,
 	return ret;
 }
 
+static int os02g10_set_selection(struct v4l2_subdev *sd,
+				 struct v4l2_subdev_state *sd_state,
+				 struct v4l2_subdev_selection *sel)
+{
+	struct v4l2_mbus_framefmt *format;
+	struct v4l2_rect *crop;
+	struct v4l2_rect rect;
+
+	if (sel->target != V4L2_SEL_TGT_CROP)
+		return -EINVAL;
+
+	rect.left = clamp_t(unsigned int, ALIGN(sel->r.left, 2),
+			    os02g10_active_area.left,
+			    os02g10_active_area.left +
+			    os02g10_active_area.width -
+			    OS02G10_WINDOW_WIDTH_MIN);
+	rect.top = clamp_t(unsigned int, ALIGN(sel->r.top, 2),
+			   os02g10_active_area.top,
+			   os02g10_active_area.top +
+			   os02g10_active_area.height -
+			   OS02G10_WINDOW_HEIGHT_MIN);
+	rect.width = clamp_t(unsigned int, ALIGN(sel->r.width, 2),
+			     OS02G10_WINDOW_WIDTH_MIN,
+			     os02g10_active_area.width);
+	rect.height = clamp_t(unsigned int, ALIGN(sel->r.height, 2),
+			      OS02G10_WINDOW_HEIGHT_MIN,
+			      os02g10_active_area.height);
+
+	rect.width = min_t(unsigned int, rect.width,
+			   os02g10_active_area.left +
+			   os02g10_active_area.width - rect.left);
+	rect.height = min_t(unsigned int, rect.height,
+			    os02g10_active_area.top +
+			    os02g10_active_area.height - rect.top);
+
+	crop = v4l2_subdev_state_get_crop(sd_state, sel->pad);
+
+	if (rect.width != crop->width || rect.height != crop->height) {
+		format = v4l2_subdev_state_get_format(sd_state, sel->pad);
+		format->width = rect.width;
+		format->height = rect.height;
+	}
+
+	*crop = rect;
+	sel->r = rect;
+
+	return 0;
+}
+
 static int os02g10_get_selection(struct v4l2_subdev *sd,
 				 struct v4l2_subdev_state *sd_state,
 				 struct v4l2_subdev_selection *sel)
 {
 	switch (sel->target) {
+	case V4L2_SEL_TGT_CROP:
+		sel->r = *v4l2_subdev_state_get_crop(sd_state, sel->pad);
+		return 0;
 	case V4L2_SEL_TGT_CROP_BOUNDS:
 	case V4L2_SEL_TGT_NATIVE_SIZE:
 		sel->r = os02g10_native_area;
 		return 0;
-	case V4L2_SEL_TGT_CROP:
 	case V4L2_SEL_TGT_CROP_DEFAULT:
 		sel->r = os02g10_active_area;
 		return 0;
@@ -566,16 +601,16 @@ static int os02g10_enum_frame_size(struct v4l2_subdev *sd,
 {
 	struct os02g10 *os02g10 = to_os02g10(sd);
 
-	if (fse->index >= ARRAY_SIZE(supported_modes))
+	if (fse->index)
 		return -EINVAL;
 
 	if (fse->code != os02g10_get_format_code(os02g10))
 		return -EINVAL;
 
-	fse->min_width = supported_modes[fse->index].width;
-	fse->max_width = fse->min_width;
-	fse->min_height = supported_modes[fse->index].height;
-	fse->max_height = fse->min_height;
+	fse->min_width = OS02G10_WINDOW_WIDTH_MIN;
+	fse->max_width = os02g10_active_area.width;
+	fse->min_height = OS02G10_WINDOW_HEIGHT_MIN;
+	fse->max_height = os02g10_active_area.height;
 
 	return 0;
 }
@@ -586,18 +621,14 @@ static int os02g10_set_pad_format(struct v4l2_subdev *sd,
 {
 	struct os02g10 *os02g10 = to_os02g10(sd);
 	struct v4l2_mbus_framefmt *format;
-	const struct os02g10_mode *mode;
+	struct v4l2_rect *crop;
 
+	crop = v4l2_subdev_state_get_crop(sd_state, 0);
 	format = v4l2_subdev_state_get_format(sd_state, 0);
 
-	mode = v4l2_find_nearest_size(supported_modes,
-				      ARRAY_SIZE(supported_modes),
-				      width, height,
-				      fmt->format.width, fmt->format.height);
-
 	fmt->format.code = os02g10_get_format_code(os02g10);
-	fmt->format.width = mode->width;
-	fmt->format.height = mode->height;
+	fmt->format.width = crop->width;
+	fmt->format.height = crop->height;
 	fmt->format.field = V4L2_FIELD_NONE;
 	fmt->format.colorspace = V4L2_COLORSPACE_RAW;
 	fmt->format.quantization = V4L2_QUANTIZATION_FULL_RANGE;
@@ -606,11 +637,19 @@ static int os02g10_set_pad_format(struct v4l2_subdev *sd,
 	*format = fmt->format;
 
 	if (fmt->which == V4L2_SUBDEV_FORMAT_ACTIVE) {
-		u32 vblank_def = mode->vts_def - mode->height;
+		int ret, vblank;
 
-		int ret = __v4l2_ctrl_modify_range(os02g10->vblank, vblank_def,
-						   OS02G10_FRAME_LENGTH_MAX -
-						   mode->height, 1, vblank_def);
+		ret = __v4l2_ctrl_modify_range(os02g10->vblank, OS02G10_VBLANK_MIN,
+					       OS02G10_FRAME_LENGTH_MAX -
+					       fmt->format.height, 1,
+					       OS02G10_VBLANK_DEF);
+		if (ret)
+			return ret;
+
+		/* Set VBLANK to maintain 30 fps for the selected format. */
+		vblank = os02g10_active_area.height - fmt->format.height
+			 + OS02G10_VBLANK_DEF;
+		ret = __v4l2_ctrl_s_ctrl(os02g10->vblank, vblank);
 		if (ret)
 			return ret;
 	}
@@ -626,14 +665,14 @@ static int os02g10_init_state(struct v4l2_subdev *sd,
 		.which = V4L2_SUBDEV_FORMAT_TRY,
 		.format = {
 			.code = os02g10_get_format_code(os02g10),
-			.width = supported_modes[0].width,
-			.height = supported_modes[0].height,
+			.width = os02g10_active_area.width,
+			.height = os02g10_active_area.height,
 		},
 	};
+	struct v4l2_rect *crop = v4l2_subdev_state_get_crop(state, 0);
+	*crop = os02g10_active_area;
 
-	os02g10_set_pad_format(sd, state, &fmt);
-
-	return 0;
+	return os02g10_set_pad_format(sd, state, &fmt);
 }
 
 static const struct v4l2_subdev_video_ops os02g10_video_ops = {
@@ -645,6 +684,7 @@ static const struct v4l2_subdev_pad_ops os02g10_pad_ops = {
 	.get_fmt = v4l2_subdev_get_fmt,
 	.set_fmt = os02g10_set_pad_format,
 	.get_selection = os02g10_get_selection,
+	.set_selection = os02g10_set_selection,
 	.enum_frame_size = os02g10_enum_frame_size,
 	.enable_streams = os02g10_enable_streams,
 	.disable_streams = os02g10_disable_streams,
