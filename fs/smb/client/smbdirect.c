@@ -3332,7 +3332,7 @@ static ssize_t smb_extract_iter_to_rdma(struct iov_iter *iter, size_t len,
 
 	if (ret < 0) {
 		while (rdma->nr_sge > before) {
-			struct ib_sge *sge = &rdma->sge[rdma->nr_sge--];
+			struct ib_sge *sge = &rdma->sge[--rdma->nr_sge];
 
 			ib_dma_unmap_single(rdma->device, sge->addr, sge->length,
 					    rdma->direction);
