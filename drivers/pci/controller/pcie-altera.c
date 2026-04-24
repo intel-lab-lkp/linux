@@ -12,6 +12,8 @@
 #include <linux/irqchip/chained_irq.h>
 #include <linux/irqdomain.h>
 #include <linux/init.h>
+#include <linux/bitfield.h>
+#include <linux/iopoll.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_pci.h>
@@ -93,16 +95,36 @@
 #define AGLX_CFG_TARGET_LOCAL_2000	2
 #define AGLX_CFG_TARGET_LOCAL_3000	3
 
+/* PCIe subsystem indirect register access */
+#define PCIE_SS_IA_CTL			0xc8 /* control register */
+#define PCIE_SS_IA_FN_NUM		0xcc /* function number */
+#define PCIE_SS_IA_FN_WRDATA		0xd0 /* write data */
+#define PCIE_SS_IA_FN_RDDATA		0xd4 /* read data */
+
+/* PCIE_SS_IA_CTL bitfields */
+#define PCIE_SS_IA_CTL_INITIATE		BIT(0)
+#define PCIE_SS_IA_CTL_WRITE		BIT(1)
+#define PCIE_SS_IA_CTL_BYTE_EN		GENMASK(5, 2)
+#define PCIE_SS_IA_CTL_ADDR		GENMASK(31, 6)
+
+/* PCIE_SS_IA_FN_NUM function types */
+#define PCIE_SS_IA_FN_TYPE_HIP		2
+
+#define AGLX5_INDIRECT_SLEEP_US		1
+#define AGLX5_INDIRECT_TIMEOUT_US	1000
+
 enum altera_pcie_version {
 	ALTERA_PCIE_V1 = 0,
 	ALTERA_PCIE_V2,
 	ALTERA_PCIE_V3,
+	ALTERA_PCIE_V4,
 };
 
 struct altera_pcie {
 	struct platform_device	*pdev;
 	void __iomem		*cra_base;
 	void __iomem		*hip_base;
+	void __iomem		*controller_base;
 	int			irq;
 	u8			root_bus_nr;
 	struct irq_domain	*irq_domain;
@@ -849,6 +871,98 @@ static void aglx_isr(struct irq_desc *desc)
 	chained_irq_exit(chip, desc);
 }
 
+/*
+ * Indirect register access to HIP registers via the PCIe Subsystem
+ * AXI-Lite mailbox, documented in the GTS AXI Streaming IP for PCIe
+ * User Guide. Called from chained IRQ handler (hardirq) and probe
+ * (before handler is installed), so no locking is required.
+ */
+static int aglx5_indirect_readl(const struct altera_pcie *pcie,
+				unsigned int addr, unsigned int *val)
+{
+	unsigned int ctl;
+	int ret;
+
+	writel(PCIE_SS_IA_FN_TYPE_HIP,
+	       pcie->controller_base + PCIE_SS_IA_FN_NUM);
+
+	ctl = FIELD_PREP(PCIE_SS_IA_CTL_ADDR, addr >> 2) |
+	      PCIE_SS_IA_CTL_BYTE_EN | PCIE_SS_IA_CTL_INITIATE;
+	writel(ctl, (pcie->controller_base + PCIE_SS_IA_CTL));
+
+	ret = readl_poll_timeout_atomic(pcie->controller_base + PCIE_SS_IA_CTL,
+					ctl, !(ctl & PCIE_SS_IA_CTL_INITIATE),
+					AGLX5_INDIRECT_SLEEP_US,
+					AGLX5_INDIRECT_TIMEOUT_US);
+	if (ret)
+		return ret;
+
+	*val = readl(pcie->controller_base + PCIE_SS_IA_FN_RDDATA);
+
+	return 0;
+}
+
+static int aglx5_indirect_writel(const struct altera_pcie *pcie,
+				 unsigned int addr, unsigned int val)
+{
+	unsigned int ctl;
+	int ret;
+
+	writel(PCIE_SS_IA_FN_TYPE_HIP,
+	       pcie->controller_base + PCIE_SS_IA_FN_NUM);
+	writel(val, pcie->controller_base + PCIE_SS_IA_FN_WRDATA);
+
+	ctl = FIELD_PREP(PCIE_SS_IA_CTL_ADDR, addr >> 2) |
+	      PCIE_SS_IA_CTL_BYTE_EN | PCIE_SS_IA_CTL_WRITE |
+	      PCIE_SS_IA_CTL_INITIATE;
+	writel(ctl, pcie->controller_base + PCIE_SS_IA_CTL);
+
+	ret = readl_poll_timeout_atomic(pcie->controller_base + PCIE_SS_IA_CTL,
+					ctl, !(ctl & PCIE_SS_IA_CTL_INITIATE),
+					AGLX5_INDIRECT_SLEEP_US,
+					AGLX5_INDIRECT_TIMEOUT_US);
+
+	return ret;
+}
+
+static void aglx5_isr(struct irq_desc *desc)
+{
+	struct irq_chip *chip = irq_desc_get_chip(desc);
+	struct altera_pcie *pcie;
+	struct device *dev;
+	u32 status = 0;
+	int ret;
+
+	chained_irq_enter(chip, desc);
+	pcie = irq_desc_get_handler_data(desc);
+	dev = &pcie->pdev->dev;
+
+	ret = aglx5_indirect_readl(pcie, pcie->pcie_data->port_irq_status_offset, &status);
+	if (ret) {
+		dev_err(dev, "timeout reading IRQ status, masking IRQ\n");
+		disable_irq_nosync(pcie->irq);
+		goto out;
+	}
+
+	if (status & CFG_AER) {
+		ret = generic_handle_domain_irq(pcie->irq_domain, 0);
+		if (ret)
+			dev_err_ratelimited(dev, "unexpected IRQ\n");
+
+		/* W1C: clear the handled bit */
+		ret = aglx5_indirect_writel(pcie,
+					    pcie->pcie_data->port_irq_status_offset,
+					    CFG_AER);
+		if (ret) {
+			dev_err(dev, "timeout clearing IRQ status, masking IRQ\n");
+			disable_irq_nosync(pcie->irq);
+		}
+	}
+
+out:
+	chained_irq_exit(chip, desc);
+}
+
 static int altera_pcie_init_irq_domain(struct altera_pcie *pcie)
 {
 	struct device *dev = &pcie->pdev->dev;
@@ -880,10 +994,17 @@ static int altera_pcie_parse_dt(struct altera_pcie *pcie)
 		return PTR_ERR(pcie->cra_base);
 
 	if (pcie->pcie_data->version == ALTERA_PCIE_V2 ||
-	    pcie->pcie_data->version == ALTERA_PCIE_V3) {
+	    pcie->pcie_data->version == ALTERA_PCIE_V3 ||
+	    pcie->pcie_data->version == ALTERA_PCIE_V4) {
 		pcie->hip_base = devm_platform_ioremap_resource_byname(pdev, "Hip");
 		if (IS_ERR(pcie->hip_base))
 			return PTR_ERR(pcie->hip_base);
+	}
+
+	if (pcie->pcie_data->version == ALTERA_PCIE_V4) {
+		pcie->controller_base = devm_platform_ioremap_resource_byname(pdev, "Txs");
+		if (IS_ERR(pcie->controller_base))
+			return PTR_ERR(pcie->controller_base);
 	}
 
 	/* setup IRQ */
@@ -922,6 +1043,15 @@ static const struct altera_pcie_ops altera_pcie_ops_3_0 = {
 	.ep_read_cfg = aglx_ep_read_cfg,
 	.ep_write_cfg = aglx_ep_write_cfg,
 	.rp_isr = aglx_isr,
+};
+
+static const struct altera_pcie_ops altera_pcie_ops_4_0 = {
+	.rp_read_cfg = aglx_rp_read_cfg,
+	.rp_write_cfg = aglx_rp_write_cfg,
+	.get_link_status = aglx_altera_pcie_link_up,
+	.ep_read_cfg = aglx_ep_read_cfg,
+	.ep_write_cfg = aglx_ep_write_cfg,
+	.rp_isr = aglx5_isr,
 };
 
 static const struct altera_pcie_data altera_pcie_1_0_data = {
@@ -971,6 +1101,20 @@ static const struct altera_pcie_data altera_pcie_3_0_r_tile_data = {
 	.port_irq_enable_offset = 0x4,
 };
 
+static const struct altera_pcie_data altera_pcie_4_0_data = {
+	.ops = &altera_pcie_ops_4_0,
+	.version = ALTERA_PCIE_V4,
+	.cap_offset = 0x70,
+	.port_conf_offset = 0x14000,
+	/*
+	 * Unlike V3 where IRQ offsets are relative to port_conf_offset,
+	 * V4 IRQ offsets are absolute addresses in the HIP indirect access
+	 * space documented in the GTS AXI Streaming IP for PCIe User Guide.
+	 */
+	.port_irq_status_offset = 0x1414c,
+	.port_irq_enable_offset = 0x14150,
+};
+
 static const struct of_device_id altera_pcie_of_match[] = {
 	{.compatible = "altr,pcie-root-port-1.0",
 	 .data = &altera_pcie_1_0_data },
@@ -982,6 +1126,8 @@ static const struct of_device_id altera_pcie_of_match[] = {
 	 .data = &altera_pcie_3_0_p_tile_data },
 	{.compatible = "altr,pcie-root-port-3.0-r-tile",
 	 .data = &altera_pcie_3_0_r_tile_data },
+	{.compatible = "altr,pcie-root-port-4.0",
+	 .data = &altera_pcie_4_0_data },
 	{},
 };
 
@@ -1035,6 +1181,14 @@ static int altera_pcie_probe(struct platform_device *pdev)
 		writel(CFG_AER,
 		       pcie->hip_base + pcie->pcie_data->port_conf_offset +
 		       pcie->pcie_data->port_irq_enable_offset);
+	} else if (pcie->pcie_data->version == ALTERA_PCIE_V4) {
+		ret = aglx5_indirect_writel(pcie,
+					    pcie->pcie_data->port_irq_enable_offset,
+					    CFG_AER);
+		if (ret) {
+			dev_err(dev, "Failed to enable AER IRQ\n");
+			goto err_teardown_irq;
+		}
 	}
 
 	bridge->sysdata = pcie;
