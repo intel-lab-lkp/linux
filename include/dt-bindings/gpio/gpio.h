@@ -42,4 +42,12 @@
 /* Bit 6 express pull disable */
 #define GPIO_PULL_DISABLE 64
 
+/*
+ * Bit 24 indicates the GPIO data source is from a remote device.
+ * This is used in serializer/deserializer setups where the GPIO pin
+ * on the local device (e.g., TI DS90UB953 serializer) reflects the
+ * state of a GPIO on the remote device (e.g., TI DS90UB960 deserializer).
+ */
+#define GPIO_DATA_SOURCE_REMOTE		0x01000000
+
 #endif

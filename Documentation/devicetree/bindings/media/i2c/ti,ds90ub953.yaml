@@ -21,8 +21,10 @@ properties:
   '#gpio-cells':
     const: 2
     description:
-      First cell is the GPIO pin number, second cell is the flags. The GPIO pin
-      number must be in range of [0, 3].
+      First cell is the GPIO pin number (0-3) and the second cell is used
+      to specify flags. See <dt-bindings/gpio/gpio.h> for available flags
+      including GPIO_DATA_SOURCE_REMOTE for remote GPIO data source.
+      Flags can be OR'd together.
 
   gpio-controller: true
 
