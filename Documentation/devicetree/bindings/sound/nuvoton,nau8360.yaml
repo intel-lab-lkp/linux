@@ -1,0 +1,115 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/sound/nuvoton,nau8360.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Nuvoton NAU83G60 Stereo Class-D Amplifier with DSP
+
+description: |
+  Stereo Class-D Amplifier with DSP and I/V-sense driver.
+  This device supports I2C.
+
+maintainers:
+  - Neo Chang <YLCHANG2@nuvoton.com>
+
+properties:
+  compatible:
+    enum:
+      - nuvoton,nau8360
+
+  reg:
+    maxItems: 1
+    description: |
+      The I2C address of the device. The address is determined by the external
+      hardware configuration of GPIO1 and GPIO2 pins:
+       - 0x1a (GPIO2=Low, GPIO1=Low)
+       - 0x1b (GPIO2=Low, GPIO1=High)
+       - 0x4a (GPIO2=High, GPIO1=Low)
+       - 0x4b (GPIO2=High, GPIO1=High)
+
+  "#sound-dai-cells":
+    const: 0
+
+  clocks:
+    maxItems: 1
+
+  clock-names:
+    const: mclk
+
+  nuvoton,dsp-bypass:
+    type: boolean
+    description: |
+      Forcibly disable/bypass DSP path.
+
+  nuvoton,low-latency:
+    type: boolean
+    description: |
+      Enable low latency mode.
+      Please note the feature helps sensing performance
+      but worsens power consumption.
+
+  nuvoton,anc-enable:
+    type: boolean
+    description: |
+      Enable ANC (Active Noise Cancellation) feature.
+      NAU83G60 provides configurable low latency ANC path to Advanced DSP through TDM-RX.
+      To reduce latency, the ANC path only supports 48 kHz sample rates.
+
+  nuvoton,aec-enable:
+    type: boolean
+    description: |
+      Enable AEC (Acoustic Echo Cancellation) feature.
+      NAU83G60 provides Advanced DSP processed audio data as AEC reference through TDM-TX.
+      The AEC path only supports 48 kHz sample rates.
+
+  nuvoton,pbtl-enable:
+    type: boolean
+    description: |
+      NAU83G60 supports PBTL mode for mono output.
+
+  nuvoton,vbat-microvolt:
+    minimum: 8000000 # 8V
+    maximum: 24000000 # 24V
+    description: |
+      VBAT supply voltage in microvolts.
+      This is the analog power supply, provided by an external power source
+      or battery, and must be between 8V and 24V.
+
+  nuvoton,tdm-channel-length:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [16, 24, 32]
+    description: |
+      Assign TDM channel length.
+      The length must be 16, 24, or 32.
+
+  nuvoton,dsp-fw-names:
+    $ref: /schemas/types.yaml#/definitions/string-array
+    minItems: 2
+    maxItems: 2
+    description: |
+      Assign firmware filenames for left and right DSP cores.
+
+required:
+  - compatible
+  - reg
+
+allOf:
+  - $ref: dai-common.yaml#
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        codec@1a {
+            #sound-dai-cells = <0>;
+            compatible = "nuvoton,nau8360";
+            reg = <0x1a>;
+            nuvoton,dsp-bypass;
+            nuvoton,vbat-microvolt = <12000000>;
+        };
+    };
