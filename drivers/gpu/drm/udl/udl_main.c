@@ -285,7 +285,7 @@ static struct urb *udl_get_urb_locked(struct udl_device *udl, long timeout)
 	return unode->urb;
 }
 
-#define GET_URB_TIMEOUT	HZ
+#define GET_URB_TIMEOUT	(HZ * 2)
 struct urb *udl_get_urb(struct udl_device *udl)
 {
 	struct urb *urb;
