@@ -320,6 +320,16 @@ static int fsl_asoc_card_startup(struct snd_pcm_substream *substream)
 	static struct snd_pcm_hw_constraint_list constraint_channels;
 	int ret;
 
+	/*
+	 * Remove S20_3LE as the clock (sysclk, bclk) can't be acquired
+	 * due to non-integer divider ratios.
+	 */
+	ret = snd_pcm_hw_constraint_mask64(runtime,
+					   SNDRV_PCM_HW_PARAM_FORMAT,
+					   ~SNDRV_PCM_FMTBIT_S20_3LE);
+	if (ret)
+		return ret;
+
 	constraint_channels.list = priv->support_channels;
 	constraint_channels.count = priv->num_channels;
 	constraint_rates.list = priv->support_rates;
