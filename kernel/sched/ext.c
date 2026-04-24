@@ -1428,7 +1428,6 @@ static void local_dsq_post_enq(struct scx_sched *sch, struct scx_dispatch_q *dsq
 			       struct task_struct *p, u64 enq_flags)
 {
 	struct rq *rq = container_of(dsq, struct rq, scx.local_dsq);
-	bool preempt = false;
 
 	call_task_dequeue(sch, rq, p, 0);
 
@@ -1443,11 +1442,19 @@ static void local_dsq_post_enq(struct scx_sched *sch, struct scx_dispatch_q *dsq
 	if ((enq_flags & SCX_ENQ_PREEMPT) && p != rq->curr &&
 	    rq->curr->sched_class == &ext_sched_class) {
 		rq->curr->scx.slice = 0;
-		preempt = true;
+		resched_curr(rq);
 	}
 
-	if (preempt || sched_class_above(&ext_sched_class, rq->curr->sched_class))
-		resched_curr(rq);
+	/*
+	 * If @rq->next_class is currently idle, we need to bump it
+	 * to &ext_sched_class using wakeup_preempt(). Otherwise, if we drop
+	 * the rq lock later in the pick and an RT task wakes up on @rq,
+	 * wakeup_preempt_idle() will be called during RT task wakeup and
+	 * SCX won't have an opportunity to re-enqueue IMMED tasks from @rq's
+	 * local DSQ.
+	 */
+	if (sched_class_above(&ext_sched_class, rq->next_class))
+		wakeup_preempt(rq, p, 0);
 }
 
 static void dispatch_enqueue(struct scx_sched *sch, struct rq *rq,
