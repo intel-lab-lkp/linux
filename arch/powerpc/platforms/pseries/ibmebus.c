@@ -51,9 +51,7 @@
 #include <asm/ibmebus.h>
 #include <asm/machdep.h>
 
-static struct device ibmebus_bus_device = { /* fake "parent" device */
-	.init_name = "ibmebus",
-};
+static struct device *ibmebus_bus_device;	/* fake "parent" device */
 
 const struct bus_type ibmebus_bus_type;
 
@@ -171,7 +169,7 @@ static int ibmebus_create_device(struct device_node *dn)
 	struct platform_device *dev;
 	int ret;
 
-	dev = of_device_alloc(dn, NULL, &ibmebus_bus_device);
+	dev = of_device_alloc(dn, NULL, ibmebus_bus_device);
 	if (!dev)
 		return -ENOMEM;
 
@@ -458,11 +456,11 @@ static int __init ibmebus_bus_init(void)
 		return err;
 	}
 
-	err = device_register(&ibmebus_bus_device);
-	if (err) {
-		printk(KERN_WARNING "%s: device_register returned %i\n",
+	ibmebus_bus_device = root_device_register("ibmebus");
+	if (IS_ERR(ibmebus_bus_device)) {
+		err = PTR_ERR(ibmebus_bus_device);
+		printk(KERN_WARNING "%s: root_device_register returned %i\n",
 		       __func__, err);
-		put_device(&ibmebus_bus_device);
 		bus_unregister(&ibmebus_bus_type);
 
 		return err;
@@ -470,7 +468,7 @@ static int __init ibmebus_bus_init(void)
 
 	err = ibmebus_create_devices(ibmebus_matches);
 	if (err) {
-		device_unregister(&ibmebus_bus_device);
+		root_device_unregister(ibmebus_bus_device);
 		bus_unregister(&ibmebus_bus_type);
 		return err;
 	}
