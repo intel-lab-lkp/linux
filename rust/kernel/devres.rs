@@ -24,6 +24,7 @@ use crate::{
         Arc, //
     },
     types::{
+        ForLt,
         ForeignOwnable,
         Opaque, //
     },
@@ -324,22 +325,26 @@ impl<T: Send> Devres<T> {
         // SAFETY: `dev` being the same device as the device this `Devres` has been created for
         // proves that `self.data` hasn't been revoked and is guaranteed to not be revoked as long
         // as `dev` lives; `dev` lives at least as long as `self`.
-        Ok(unsafe { self.data().access() })
+        Ok(<ForLt!(T)>::cast_ref(unsafe { self.data().access() }))
     }
 
     /// [`Devres`] accessor for [`Revocable::try_access`].
-    pub fn try_access(&self) -> Option<RevocableGuard<'_, T>> {
-        self.data().try_access()
+    #[allow(clippy::type_complexity)]
+    pub fn try_access(&self) -> Option<DevresGuard<'_, ForLt!(T)>> {
+        self.data().try_access().map(DevresGuard)
     }
 
     /// [`Devres`] accessor for [`Revocable::try_access_with`].
     pub fn try_access_with<R, F: FnOnce(&T) -> R>(&self, f: F) -> Option<R> {
-        self.data().try_access_with(f)
+        self.data()
+            .try_access_with(|data| f(<ForLt!(T)>::cast_ref(data)))
     }
 
     /// [`Devres`] accessor for [`Revocable::try_access_with_guard`].
     pub fn try_access_with_guard<'a>(&'a self, guard: &'a rcu::Guard) -> Option<&'a T> {
-        self.data().try_access_with_guard(guard)
+        self.data()
+            .try_access_with_guard(guard)
+            .map(<ForLt!(T)>::cast_ref)
     }
 }
 
@@ -362,6 +367,20 @@ impl<T: Send> Drop for Devres<T> {
                 drop(unsafe { Arc::from_raw(Arc::as_ptr(&self.inner)) });
             }
         }
+    }
+}
+
+/// Guard returned by [`Devres::try_access`].
+///
+/// Dereferences to `F::Of<'a>`, applying [`ForLt::cast_ref`] to shorten the lifetime of the
+/// stored data to the guard's borrow lifetime.
+pub struct DevresGuard<'a, F: ForLt>(RevocableGuard<'a, F::Of<'static>>);
+
+impl<'a, F: ForLt> core::ops::Deref for DevresGuard<'a, F> {
+    type Target = F::Of<'a>;
+
+    fn deref(&self) -> &Self::Target {
+        F::cast_ref(&*self.0)
     }
 }
 
