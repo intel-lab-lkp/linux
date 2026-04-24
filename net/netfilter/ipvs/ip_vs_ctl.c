@@ -261,12 +261,28 @@ static void est_reload_work_handler(struct work_struct *work)
 		if (!kd)
 			continue;
 		/* New config ? Stop kthread tasks */
-		if (genid != genid_done)
-			ip_vs_est_kthread_stop(kd);
+		if (genid != genid_done) {
+			if (!id) {
+				/* Only we can stop kt 0 but not under mutex */
+				mutex_unlock(&ipvs->est_mutex);
+				ip_vs_est_kthread_stop(kd);
+				mutex_lock(&ipvs->est_mutex);
+				if (!READ_ONCE(ipvs->enable))
+					goto unlock;
+				/* kd for kt 0 is never destroyed */
+			} else {
+				ip_vs_est_kthread_stop(kd);
+			}
+		}
 		if (!kd->task && !ip_vs_est_stopped(ipvs)) {
+			bool start;
+
 			/* Do not start kthreads above 0 in calc phase */
-			if ((!id || !ipvs->est_calc_phase) &&
-			    ip_vs_est_kthread_start(ipvs, kd) < 0)
+			if (id)
+				start = !ipvs->est_calc_phase;
+			else
+				start = kd->needed;
+			if (start && ip_vs_est_kthread_start(ipvs, kd) < 0)
 				repeat = true;
 		}
 	}
@@ -1812,11 +1828,16 @@ ip_vs_add_service(struct netns_ipvs *ipvs, struct ip_vs_service_user_kern *u,
 	*svc_p = svc;
 
 	if (!READ_ONCE(ipvs->enable)) {
+		mutex_lock(&ipvs->est_mutex);
+
 		/* Now there is a service - full throttle */
 		WRITE_ONCE(ipvs->enable, 1);
 
+		ipvs->est_max_threads = ip_vs_est_max_threads(ipvs);
+
 		/* Start estimation for first time */
-		ip_vs_est_reload_start(ipvs);
+		ip_vs_est_reload_start(ipvs, true);
+		mutex_unlock(&ipvs->est_mutex);
 	}
 
 	return 0;
@@ -2331,7 +2352,7 @@ static int ipvs_proc_est_cpumask_set(const struct ctl_table *table,
 	/* est_max_threads may depend on cpulist size */
 	ipvs->est_max_threads = ip_vs_est_max_threads(ipvs);
 	ipvs->est_calc_phase = 1;
-	ip_vs_est_reload_start(ipvs);
+	ip_vs_est_reload_start(ipvs, true);
 
 unlock:
 	mutex_unlock(&ipvs->est_mutex);
@@ -2411,7 +2432,7 @@ static int ipvs_proc_est_nice(const struct ctl_table *table, int write,
 			mutex_lock(&ipvs->est_mutex);
 			if (*valp != val) {
 				*valp = val;
-				ip_vs_est_reload_start(ipvs);
+				ip_vs_est_reload_start(ipvs, true);
 			}
 			mutex_unlock(&ipvs->est_mutex);
 		}
@@ -2438,7 +2459,7 @@ static int ipvs_proc_run_estimation(const struct ctl_table *table, int write,
 		mutex_lock(&ipvs->est_mutex);
 		if (*valp != val) {
 			*valp = val;
-			ip_vs_est_reload_start(ipvs);
+			ip_vs_est_reload_start(ipvs, true);
 		}
 		mutex_unlock(&ipvs->est_mutex);
 	}
