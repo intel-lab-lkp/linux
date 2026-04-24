@@ -1619,6 +1619,7 @@ int fuse_reverse_inval_entry(struct fuse_conn *fc, u64 parent_nodeid,
 	if (!(flags & FUSE_EXPIRE_ONLY))
 		d_invalidate(entry);
 	fuse_invalidate_entry_cache(entry);
+	fuse_rdc_reset(entry->d_inode);
 
 	if (child_nodeid != 0) {
 		inode_lock(d_inode(entry));
@@ -1641,7 +1642,7 @@ int fuse_reverse_inval_entry(struct fuse_conn *fc, u64 parent_nodeid,
 		dont_mount(entry);
 		clear_nlink(d_inode(entry));
 		err = 0;
- badentry:
+badentry:
 		inode_unlock(d_inode(entry));
 		if (!err)
 			d_delete(entry);
@@ -1650,7 +1651,7 @@ int fuse_reverse_inval_entry(struct fuse_conn *fc, u64 parent_nodeid,
 	}
 
 	end_removing(entry);
- put_parent:
+put_parent:
 	dput(dir);
 	iput(parent);
 	return err;

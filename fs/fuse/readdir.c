@@ -434,7 +434,7 @@ static enum fuse_parse_result fuse_parse_cache(struct fuse_file *ff,
 	return res;
 }
 
-static void fuse_rdc_reset(struct inode *inode)
+void __fuse_rdc_reset(struct inode *inode)
 {
 	struct fuse_inode *fi = get_fuse_inode(inode);
 
@@ -497,7 +497,7 @@ retry_locked:
 
 		if (inode_peek_iversion(inode) != fi->rdc.iversion ||
 		    !timespec64_equal(&fi->rdc.mtime, &mtime)) {
-			fuse_rdc_reset(inode);
+			__fuse_rdc_reset(inode);
 			goto retry_locked;
 		}
 	}
@@ -545,7 +545,7 @@ retry_locked:
 		 * Uh-oh: page gone missing, cache is useless
 		 */
 		if (fi->rdc.version == ff->readdir.version)
-			fuse_rdc_reset(inode);
+			__fuse_rdc_reset(inode);
 		goto retry_locked;
 	}
 

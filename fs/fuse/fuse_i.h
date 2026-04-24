@@ -1493,6 +1493,19 @@ int fuse_set_acl(struct mnt_idmap *, struct dentry *dentry,
 
 /* readdir.c */
 int fuse_readdir(struct file *file, struct dir_context *ctx);
+void __fuse_rdc_reset(struct inode *inode);
+
+static inline void fuse_rdc_reset(struct inode *inode)
+{
+	struct fuse_inode *fi;
+
+	if (S_ISDIR(inode->i_mode)) {
+		fi = get_fuse_inode(inode);
+		spin_lock(&fi->rdc.lock);
+		__fuse_rdc_reset(inode);
+		spin_unlock(&fi->rdc.lock);
+	}
+}
 
 /**
  * Return the number of bytes in an arguments list

@@ -573,6 +573,7 @@ int fuse_reverse_inval_inode(struct fuse_conn *fc, u64 nodeid,
 	fi->attr_version = atomic64_inc_return(&fc->attr_version);
 	spin_unlock(&fi->lock);
 
+	fuse_rdc_reset(inode);
 	fuse_invalidate_attr(inode);
 	forget_all_cached_acls(inode);
 	if (offset >= 0) {
