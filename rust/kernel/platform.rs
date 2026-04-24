@@ -101,7 +101,7 @@ impl<T: Driver + 'static> Adapter<T> {
         //
         // INVARIANT: `pdev` is valid for the duration of `probe_callback()`.
         let pdev = unsafe { &*pdev.cast::<Device<device::CoreInternal>>() };
-        let info = <Self as driver::Adapter>::id_info(pdev.as_ref());
+        let info = <Self as driver::Adapter<'_>>::id_info(pdev.as_ref());
 
         from_result(|| {
             let data = T::probe(pdev, info);
@@ -127,7 +127,7 @@ impl<T: Driver + 'static> Adapter<T> {
     }
 }
 
-impl<T: Driver + 'static> driver::Adapter for Adapter<T> {
+impl<'a, T: Driver + 'static> driver::Adapter<'a> for Adapter<T> {
     type IdInfo = T::IdInfo;
 
     fn of_id_table() -> Option<of::IdTable<Self::IdInfo>> {

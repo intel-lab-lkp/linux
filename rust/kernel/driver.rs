@@ -96,7 +96,11 @@
 
 use crate::{
     acpi,
-    device,
+    device::{
+        self,
+        Bound,
+        Device, //
+    },
     of,
     prelude::*,
     types::{
@@ -192,7 +196,7 @@ impl<T: RegistrationOps + 'static> Registration<T> {
         // a `struct device`.
         //
         // INVARIANT: `dev` is valid for the duration of the `post_unbind_callback()`.
-        let dev = unsafe { &*dev.cast::<device::Device<device::CoreInternal>>() };
+        let dev = unsafe { &*dev.cast::<Device<device::CoreInternal>>() };
 
         // `remove()` has been completed at this point; devres resources are still valid and will
         // be released after the driver's bus device private data is dropped.
@@ -289,7 +293,7 @@ macro_rules! module_driver {
 /// of a device and a driver.
 ///
 /// It provides bus independent functions for device / driver interactions.
-pub trait Adapter {
+pub trait Adapter<'a> {
     /// The type holding driver private data about each device id supported by the driver.
     type IdInfo: 'static;
 
@@ -299,7 +303,7 @@ pub trait Adapter {
     /// Returns the driver's private data from the matching entry in the [`acpi::IdTable`], if any.
     ///
     /// If this returns `None`, it means there is no match with an entry in the [`acpi::IdTable`].
-    fn acpi_id_info(dev: &device::Device) -> Option<&'static Self::IdInfo> {
+    fn acpi_id_info(dev: &'a Device<Bound>) -> Option<&'a Self::IdInfo> {
         #[cfg(not(CONFIG_ACPI))]
         {
             let _ = dev;
@@ -333,7 +337,7 @@ pub trait Adapter {
     /// Returns the driver's private data from the matching entry in the [`of::IdTable`], if any.
     ///
     /// If this returns `None`, it means there is no match with an entry in the [`of::IdTable`].
-    fn of_id_info(dev: &device::Device) -> Option<&'static Self::IdInfo> {
+    fn of_id_info(dev: &'a Device<Bound>) -> Option<&'a Self::IdInfo> {
         #[cfg(not(CONFIG_OF))]
         {
             let _ = dev;
@@ -369,7 +373,7 @@ pub trait Adapter {
     ///
     /// If this returns `None`, it means that there is no match in any of the ID tables directly
     /// associated with a [`device::Device`].
-    fn id_info(dev: &device::Device) -> Option<&'static Self::IdInfo> {
+    fn id_info(dev: &'a Device<Bound>) -> Option<&'a Self::IdInfo> {
         let id = Self::acpi_id_info(dev);
         if id.is_some() {
             return id;
