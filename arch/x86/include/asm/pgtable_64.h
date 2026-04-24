@@ -237,6 +237,42 @@ static inline void native_pgd_clear(pgd_t *pgd)
 #define __swp_entry_to_pte(x)		(__pte((x).val))
 #define __swp_entry_to_pmd(x)		(__pmd((x).val))
 
+#ifdef CONFIG_DYNAMIC_STACK
+
+/*
+ * Skip the present bit. And skip dirty and accessed bits due to
+ * erratum where they can be incorrectly set on non-present ptes.
+ *
+ * Also skip bit 8, which is used for pte_present for PROT_NONE. This
+ * isn't necessary in the strictest sense since PROT_NONE doesn't apply
+ * to kernel PTEs, but it's easier to let pte_present just continue
+ * to work.
+ */
+#define KPTE_AVAILABLE_DATA_BITS 58
+
+static inline pte_t make_data_kpte(unsigned long val)
+{
+	unsigned long low_part, mid_part, high_part;
+
+	low_part = (val & 0xf) << 1;
+	mid_part = (val & 0x10) << 3;
+	high_part = (val & ~0x1f) << 4;
+
+	return __pte(low_part | mid_part | high_part);
+}
+
+static inline unsigned long unpack_data_kpte(pte_t pte)
+{
+	unsigned long val = pte_val(pte), high_part, mid_part, low_part;
+
+	low_part = (val >> 1) & 0xf;
+	mid_part = (val >> 3) & 0x10;
+	high_part = (val >> 4) & ~0x1f;
+
+	return low_part | mid_part | high_part;
+}
+#endif /* CONFIG_DYNAMIC_STACK */
+
 extern void cleanup_highmap(void);
 
 #define HAVE_ARCH_UNMAPPED_AREA

@@ -306,11 +306,17 @@ static void note_page(struct ptdump_state *pt_st, unsigned long addr, int level,
 	static const char units[] = "BKMGTPE";
 	struct seq_file *m = st->seq;
 
-	new_prot = val & PTE_FLAGS_MASK;
-	if (!val)
+	/* Ignore prot/eff from data kptes. */
+	if (val & _PAGE_PRESENT || addr < address_markers[KERNEL_SPACE_NR].start_address) {
+		new_prot = val & PTE_FLAGS_MASK;
+		if (!val)
+			new_eff = 0;
+		else
+			new_eff = st->prot_levels[level];
+	} else {
+		new_prot = 0;
 		new_eff = 0;
-	else
-		new_eff = st->prot_levels[level];
+	}
 
 	/*
 	 * If we have a "break" in the series, we need to flush the state that

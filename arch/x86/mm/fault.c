@@ -1480,6 +1480,59 @@ handle_page_fault(struct pt_regs *regs, unsigned long error_code,
 	local_irq_disable();
 }
 
+#ifdef CONFIG_DYNAMIC_STACK
+
+static noinstr unsigned long copy_stack_data(struct pt_regs *regs)
+{
+	unsigned long new_sp;
+	unsigned long data_len;
+
+	new_sp = regs->sp - (FRED_CONFIG_REDZONE_AMOUNT << 6);
+	new_sp &= FRED_STACK_FRAME_RSP_MASK;
+	data_len = sizeof(struct fred_frame);
+	new_sp -= data_len;
+
+	memcpy((void *)new_sp, regs, data_len);
+
+	return new_sp;
+}
+
+__visible noinstr unsigned long switch_to_kstack(struct pt_regs *regs)
+{
+	return copy_stack_data(regs);
+}
+
+#define ALIGN_TO_STACK(addr) ((addr) & ~(THREAD_ALIGN - 1))
+
+__visible noinstr unsigned long handle_dynamic_stack_kernel_faults(struct pt_regs *regs)
+{
+	unsigned long address;
+	struct task_struct *tsk;
+	bool on_stack;
+
+	address = fred_event_data(regs);
+	if (fault_in_kernel_space(address) && !in_nmi()) {
+		tsk = task_from_stack_address(address);
+
+		if (tsk && dynamic_stack_fault(tsk, address, &on_stack)) {
+			WARN_ON_ONCE(tsk != current &&
+				     ALIGN_TO_STACK(regs->sp) != ALIGN_TO_STACK(address));
+			return 0;
+		}
+	}
+
+	/*
+	 * The regular fault handler won't sleep when executing in an
+	 * atomic context, so we can complete the #PF directly on the
+	 * #PF stack.
+	 */
+	if (in_atomic())
+		return (unsigned long)regs;
+	else
+		return copy_stack_data(regs);
+}
+#endif
+
 DEFINE_IDTENTRY_RAW_ERRORCODE(exc_page_fault)
 {
 	irqentry_state_t state;

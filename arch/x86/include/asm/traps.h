@@ -15,6 +15,11 @@ asmlinkage __visible notrace struct pt_regs *sync_regs(struct pt_regs *eregs);
 asmlinkage __visible notrace
 struct pt_regs *fixup_bad_iret(struct pt_regs *bad_regs);
 asmlinkage __visible noinstr struct pt_regs *vc_switch_off_ist(struct pt_regs *eregs);
+
+#ifdef CONFIG_DYNAMIC_STACK
+asmlinkage __visible noinstr unsigned long switch_to_kstack(struct pt_regs *regs);
+asmlinkage __visible noinstr unsigned long handle_dynamic_stack_kernel_faults(struct pt_regs *regs);
+#endif
 #endif
 
 extern int ibt_selftest(void);

@@ -9,6 +9,8 @@
 
 /* #DB in the kernel would imply the use of a kernel debugger. */
 #define FRED_DB_STACK_LEVEL		1UL
+#define FRED_PF_STACK_LEVEL		1UL
+#define FRED_INT_STACK_LEVEL		1UL
 #define FRED_NMI_STACK_LEVEL		2UL
 #define FRED_MC_STACK_LEVEL		2UL
 /*
@@ -24,6 +26,11 @@
 
 DEFINE_PER_CPU(unsigned long, fred_rsp0);
 EXPORT_PER_CPU_SYMBOL(fred_rsp0);
+
+#define FRED_CONFIG_VAL(int_stklvl) \
+	(FRED_CONFIG_REDZONE /* Reserve for CALL emulation */ | \
+	 FRED_CONFIG_INT_STKLVL(int_stklvl) | \
+	 FRED_CONFIG_ENTRYPOINT(asm_fred_entrypoint_user))
 
 void cpu_init_fred_exceptions(void)
 {
@@ -44,11 +51,7 @@ void cpu_init_fred_exceptions(void)
 	 */
 	loadsegment(ss, __KERNEL_DS);
 
-	wrmsrq(MSR_IA32_FRED_CONFIG,
-	       /* Reserve for CALL emulation */
-	       FRED_CONFIG_REDZONE |
-	       FRED_CONFIG_INT_STKLVL(0) |
-	       FRED_CONFIG_ENTRYPOINT(asm_fred_entrypoint_user));
+	wrmsrq(MSR_IA32_FRED_CONFIG, FRED_CONFIG_VAL(0));
 
 	wrmsrq(MSR_IA32_FRED_STKLVLS, 0);
 
@@ -84,7 +87,14 @@ void cpu_init_fred_rsps(void)
 	       FRED_STKLVL(X86_TRAP_DB,  FRED_DB_STACK_LEVEL) |
 	       FRED_STKLVL(X86_TRAP_NMI, FRED_NMI_STACK_LEVEL) |
 	       FRED_STKLVL(X86_TRAP_MC,  FRED_MC_STACK_LEVEL) |
+#ifdef CONFIG_DYNAMIC_STACK
+	       FRED_STKLVL(X86_TRAP_PF,  FRED_PF_STACK_LEVEL) |
+#endif
 	       FRED_STKLVL(X86_TRAP_DF,  FRED_DF_STACK_LEVEL));
+
+#ifdef CONFIG_DYNAMIC_STACK
+	wrmsrq(MSR_IA32_FRED_CONFIG, FRED_CONFIG_VAL(FRED_INT_STACK_LEVEL));
+#endif
 
 	/* The FRED equivalents to IST stacks... */
 	wrmsrq(MSR_IA32_FRED_RSP1, __this_cpu_ist_top_va(DB));

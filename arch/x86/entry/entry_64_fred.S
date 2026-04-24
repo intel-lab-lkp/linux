@@ -54,7 +54,62 @@ SYM_CODE_END(asm_fred_entrypoint_user)
 	.org asm_fred_entrypoint_user + 256, 0xcc
 SYM_CODE_START_NOALIGN(asm_fred_entrypoint_kernel)
 	FRED_ENTER
+
+#ifdef CONFIG_DYNAMIC_STACK
+	/* Extract event type and vector from augmented SS. */
+	movl	(SS + 4)(%rsp), %esi
+	andl	$0x000f00ff, %esi
+
+	/* Check if event type is hardware exception and vector is #PF. */
+	cmpl	$0x0003000e, %esi
+	jne	.Lcheck_for_extint
+
+	call	handle_dynamic_stack_kernel_faults
+	testq	%rax, %rax
+	jz	.Lentrypoint_done
+	cmpq	%rax, %rsp
+	je	.Lskip_stack_switch
+	jmp	.Ldo_stack_switch
+
+.Lcheck_for_extint:
+	/* Check if event type is external interrupt. */
+	andl	$0xf0000, %esi
+	testl	%esi, %esi
+	jne	.Lcall_primary_entry
+	call	switch_to_kstack
+
+.Ldo_stack_switch:
+#ifdef CONFIG_DEBUG_ENTRY
+	/*
+	 * We should only do a stack switch for an external interrupt or a page
+	 * fault in a non-atomic context. These should only ever happen in user
+	 * space or from a regular kernel stack (i.e. CSL == 0).
+	 */
+	movw	(CS + 2)(%rsp), %si
+	testw	$0x3, %si
+	jz	.Lcsl_ok
+	ud2
+.Lcsl_ok:
+#endif
+	movq	%rax, %rsp
+
+	UNWIND_HINT_REGS
+	ENCODE_FRAME_POINTER
+
+	mov	$MSR_IA32_FRED_CONFIG, %ecx
+	rdmsr
+	andl	$~0x3, %eax
+	wrmsr
+
+	movq	%rsp, %rdi
+#endif
+
+.Lskip_stack_switch:
+	movq	%rsp, %rdi
+.Lcall_primary_entry:
 	call	fred_entry_from_kernel
+
+.Lentrypoint_done:
 	FRED_EXIT
 	ERETS
 SYM_CODE_END(asm_fred_entrypoint_kernel)
