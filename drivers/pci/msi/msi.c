@@ -420,11 +420,9 @@ static int msi_capability_init(struct pci_dev *dev, int nvec,
 	return __msi_capability_init(dev, nvec, masks);
 }
 
-int __pci_enable_msi_range(struct pci_dev *dev, int minvec, int maxvec,
-			   struct irq_affinity *affd)
+static int pci_msi_range_alloc(struct pci_dev *dev, int minvec, int maxvec)
 {
 	int nvec;
-	int rc;
 
 	if (!pci_msi_supported(dev, minvec) || dev->current_state != PCI_D0)
 		return -EINVAL;
@@ -451,9 +449,13 @@ int __pci_enable_msi_range(struct pci_dev *dev, int minvec, int maxvec,
 	if (nvec < minvec)
 		return -ENOSPC;
 
-	rc = pci_setup_msi_context(dev);
-	if (rc)
-		return rc;
+	return nvec;
+}
+
+static int pci_msi_range_init(struct pci_dev *dev, int minvec, int maxvec,
+			      int nvec, struct irq_affinity *affd)
+{
+	int rc;
 
 	if (!pci_setup_msi_device_domain(dev, nvec))
 		return -ENODEV;
@@ -479,6 +481,22 @@ int __pci_enable_msi_range(struct pci_dev *dev, int minvec, int maxvec,
 
 		nvec = rc;
 	}
+}
+
+int __pci_enable_msi_range(struct pci_dev *dev, int minvec, int maxvec,
+			   struct irq_affinity *affd)
+{
+	int nvec, rc;
+
+	nvec = pci_msi_range_alloc(dev, minvec, maxvec);
+	if (nvec < 0)
+		return nvec;
+
+	rc = pci_setup_msi_context(dev);
+	if (rc)
+		return rc;
+
+	return pci_msi_range_init(dev, minvec, maxvec, nvec, affd);
 }
 
 /**
