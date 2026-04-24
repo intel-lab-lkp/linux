@@ -2506,6 +2506,12 @@ static const struct s3c24xx_serial_drv_data exynos8895_serial_drv_data = {
 	.fifosize = { 0 },
 };
 
+static const struct s3c24xx_serial_drv_data exynosauto_serial_drv_data = {
+	EXYNOS_COMMON_SERIAL_DRV_DATA,
+	/* samsung,uart-fifosize must be specified in the device tree. */
+	.fifosize = { 0 },
+};
+
 static const struct s3c24xx_serial_drv_data gs101_serial_drv_data = {
 	.info = {
 		.name		= "Google GS101 UART",
@@ -2537,6 +2543,7 @@ static const struct s3c24xx_serial_drv_data gs101_serial_drv_data = {
 #define EXYNOS5433_SERIAL_DRV_DATA (&exynos5433_serial_drv_data)
 #define EXYNOS850_SERIAL_DRV_DATA (&exynos850_serial_drv_data)
 #define EXYNOS8895_SERIAL_DRV_DATA (&exynos8895_serial_drv_data)
+#define EXYNOSAUTO_SERIAL_DRV_DATA (&exynosauto_serial_drv_data)
 #define GS101_SERIAL_DRV_DATA (&gs101_serial_drv_data)
 
 #else
@@ -2544,6 +2551,7 @@ static const struct s3c24xx_serial_drv_data gs101_serial_drv_data = {
 #define EXYNOS5433_SERIAL_DRV_DATA NULL
 #define EXYNOS850_SERIAL_DRV_DATA NULL
 #define EXYNOS8895_SERIAL_DRV_DATA NULL
+#define EXYNOSAUTO_SERIAL_DRV_DATA NULL
 #define GS101_SERIAL_DRV_DATA NULL
 #endif
 
@@ -2628,6 +2636,12 @@ static const struct platform_device_id s3c24xx_serial_driver_ids[] = {
 		.name		= "exynos850-uart",
 		.driver_data	= (kernel_ulong_t)EXYNOS850_SERIAL_DRV_DATA,
 	}, {
+		.name		= "exynosautov9-uart",
+		.driver_data	= (kernel_ulong_t)EXYNOSAUTO_SERIAL_DRV_DATA,
+	}, {
+		.name		= "exynosautov920-uart",
+		.driver_data	= (kernel_ulong_t)EXYNOSAUTO_SERIAL_DRV_DATA,
+	}, {
 		.name		= "artpec8-uart",
 		.driver_data	= (kernel_ulong_t)ARTPEC8_SERIAL_DRV_DATA,
 	}, {
@@ -2655,6 +2669,10 @@ static const struct of_device_id s3c24xx_uart_dt_match[] = {
 		.data = S5L_SERIAL_DRV_DATA },
 	{ .compatible = "samsung,exynos850-uart",
 		.data = EXYNOS850_SERIAL_DRV_DATA },
+	{ .compatible = "samsung,exynosautov9-uart",
+		.data = EXYNOSAUTO_SERIAL_DRV_DATA },
+	{ .compatible = "samsung,exynosautov920-uart",
+		.data = EXYNOSAUTO_SERIAL_DRV_DATA },
 	{ .compatible = "axis,artpec8-uart",
 		.data = ARTPEC8_SERIAL_DRV_DATA },
 	{ .compatible = "google,gs101-uart",
@@ -2831,6 +2849,10 @@ OF_EARLYCON_DECLARE(exynos4210, "samsung,exynos4210-uart",
 OF_EARLYCON_DECLARE(artpec8, "axis,artpec8-uart",
 			s5pv210_early_console_setup);
 OF_EARLYCON_DECLARE(exynos850, "samsung,exynos850-uart",
+			s5pv210_early_console_setup);
+OF_EARLYCON_DECLARE(exynosauto, "samsung,exynosautov9-uart",
+			s5pv210_early_console_setup);
+OF_EARLYCON_DECLARE(exynosauto, "samsung,exynosautov920-uart",
 			s5pv210_early_console_setup);
 
 static int __init gs101_early_console_setup(struct earlycon_device *device,
