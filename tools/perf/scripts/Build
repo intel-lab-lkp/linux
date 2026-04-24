@@ -1,6 +1,4 @@
 
-perf-util-$(CONFIG_LIBPYTHON) += python/Perf-Trace-Util/
-
 ifdef MYPY
   PY_TESTS := $(shell find python -type f -name '*.py')
   MYPY_TEST_LOGS := $(PY_TESTS:python/%=python/%.mypy_log)
