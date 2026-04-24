@@ -26,16 +26,19 @@ struct AuxiliaryDriver;
 kernel::auxiliary_device_table!(
     AUX_TABLE,
     MODULE_AUX_TABLE,
-    <AuxiliaryDriver as auxiliary::Driver>::IdInfo,
+    <AuxiliaryDriver as auxiliary::Driver<'_>>::IdInfo,
     [(auxiliary::DeviceId::new(MODULE_NAME, AUXILIARY_NAME), ())]
 );
 
-impl auxiliary::Driver for AuxiliaryDriver {
+impl<'a> auxiliary::Driver<'a> for AuxiliaryDriver {
     type IdInfo = ();
 
     const ID_TABLE: auxiliary::IdTable<Self::IdInfo> = &AUX_TABLE;
 
-    fn probe(adev: &auxiliary::Device<Core>, _info: &Self::IdInfo) -> impl PinInit<Self, Error> {
+    fn probe(
+        adev: &'a auxiliary::Device<Core>,
+        _info: &'a Self::IdInfo,
+    ) -> impl PinInit<Self, Error> + 'a {
         dev_info!(
             adev,
             "Probing auxiliary driver for auxiliary device with id={}\n",
@@ -123,7 +126,8 @@ struct SampleModule {
     #[allow(clippy::type_complexity)]
     _pci_driver: driver::Registration<pci::Adapter<ForLt!(ParentDriver)>>,
     #[pin]
-    _aux_driver: driver::Registration<auxiliary::Adapter<AuxiliaryDriver>>,
+    #[allow(clippy::type_complexity)]
+    _aux_driver: driver::Registration<auxiliary::Adapter<ForLt!(AuxiliaryDriver)>>,
 }
 
 impl InPlaceModule for SampleModule {
