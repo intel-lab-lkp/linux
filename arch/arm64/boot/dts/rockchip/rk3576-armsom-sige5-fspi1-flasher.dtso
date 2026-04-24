@@ -1,0 +1,80 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * DT-overlay to use the SD card slot on the Sige5 for flashing SPI chips via
+ * the hardware FSPI1 controller.
+ *
+ * This is specifically targeted at 1.8V SPI flash chips, and requires an
+ * external regulator or power supply to provide the power to the flash chip,
+ * as the one on Sige5 is fixed at 3.3V.
+ *
+ * Here's an example circuit:
+ * -----------------------------------------------------------------
+ * SD card slot                    SPI flash chip (e.g. MX25U12832F)
+ * (Pin 1)    DAT2 <----------------------------> WP/SIO2    (Pin 3)
+ * (Pin 2) CD/DAT3 <----------------------------> RESET/SIO3 (Pin 7)
+ * (Pin 3)     CMD <----------------------------> CS#        (Pin 1)
+ * (Pin 5)     CLK <----------------------------> SCLK       (Pin 6)
+ * (Pin 7)    DAT0 <----------------------------> SI/SIO0    (Pin 5)
+ * (Pin 8)    DAT1 <----------------------------> SO/SIO1    (Pin 2)
+ *                           +-------+
+ * (Pin 4) 3V3 VDD <-> VIN 3 |MCP1700| 2 VOUT <-> 1V8 VCC    (Pin 8)
+ *                           +-------+
+ *                             1 GND
+ *                               |
+ * (Pin 6)     VSS <-------------+--------------> GND        (Pin 4)
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/pinctrl/rockchip.h>
+
+&{/} {
+	vcc3v3_sd_s0: regulator-vcc-3v3-sd {
+		compatible = "regulator-fixed";
+		pinctrl-0 = <&sdmmc0_pwren>;
+		pinctrl-names = "default";
+		regulator-name = "vcc3v3_sd_s0";
+		regulator-always-on;
+		regulator-boot-on;
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		enable-active-high;
+		gpios = <&gpio0 RK_PB6 GPIO_ACTIVE_HIGH>;
+		vin-supply = <&vcc_3v3_s3>;
+	};
+};
+
+&pinctrl {
+	sd {
+		sdmmc0_pwren: sdmmc0-pwren {
+			rockchip,pins = <0 RK_PB6 RK_FUNC_GPIO &pcfg_pull_none>;
+		};
+	};
+};
+
+&sfc1 {
+	pinctrl-0 = <&fspi1m0_csn0>, <&fspi1m0_pins>;
+	pinctrl-names = "default";
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+
+	flash@0 {
+		compatible = "jedec,spi-nor";
+		reg = <0>;
+		spi-max-frequency = <50000000>;
+		spi-rx-bus-width = <4>;
+		spi-tx-bus-width = <1>;
+		vcc-supply = <&vcc3v3_sd_s0>; /* Need a discrete LDO!!! */
+	};
+};
+
+&sdmmc {
+	status = "disabled";
+};
+
+&vccio_sd_s0 {
+	regulator-max-microvolt = <1800000>;
+};
