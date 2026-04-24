@@ -305,4 +305,23 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_realloc_zero_size_is_free() -> Result {
+        const INIT_SIZE: usize = 64;
+
+        let old = Layout::from_size_align(INIT_SIZE, 1).unwrap();
+        let new = Layout::from_size_align(0, 1).unwrap();
+
+        let ptr = unsafe { Kmalloc::realloc(None, new, old, GFP_KERNEL, NumaNode::NO_NODE)? };
+        assert_eq!(ptr.len(), 0);
+
+        let ptr = unsafe { Vmalloc::realloc(None, new, old, GFP_KERNEL, NumaNode::NO_NODE)? };
+        assert_eq!(ptr.len(), 0);
+
+        let ptr = unsafe { KVmalloc::realloc(None, new, old, GFP_KERNEL, NumaNode::NO_NODE)? };
+        assert_eq!(ptr.len(), 0);
+
+        Ok(())
+    }
 }
