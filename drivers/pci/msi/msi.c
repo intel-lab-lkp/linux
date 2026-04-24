@@ -499,6 +499,26 @@ int __pci_enable_msi_range(struct pci_dev *dev, int minvec, int maxvec,
 	return pci_msi_range_init(dev, minvec, maxvec, nvec, affd);
 }
 
+int __pcim_enable_msi_range(struct pci_dev *dev, int minvec, int maxvec,
+			    struct irq_affinity *affd)
+{
+	int nvec, rc;
+
+	nvec = pci_msi_range_alloc(dev, minvec, maxvec);
+	if (nvec < 0)
+		return nvec;
+
+	rc = msi_setup_device_data(&dev->dev);
+	if (rc)
+		return rc;
+
+	rc = devm_add_action(&dev->dev, pcim_msi_release, dev);
+	if (rc)
+		return rc;
+
+	return pci_msi_range_init(dev, minvec, maxvec, nvec, affd);
+}
+
 /**
  * pci_msi_vec_count - Return the number of MSI vectors a device can send
  * @dev: device to report about
