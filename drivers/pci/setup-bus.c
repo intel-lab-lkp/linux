@@ -2303,6 +2303,7 @@ static int pbus_reassign_bridge_resources(struct pci_bus *bus, struct resource *
 	unsigned long type = res->flags;
 	struct pci_dev_resource *dev_res;
 	struct pci_dev *bridge = NULL;
+	struct resource *r;
 	LIST_HEAD(added);
 	LIST_HEAD(failed);
 	unsigned int i;
@@ -2329,6 +2330,21 @@ static int pbus_reassign_bridge_resources(struct pci_bus *bus, struct resource *
 			pci_warn(bridge,
 				 "%s %pR: was not released (still contains assigned resources)\n",
 				 res_name, res);
+		}
+
+		pci_dev_for_each_resource(bridge, r, i) {
+			if (!resource_assigned(r) || r->child)
+				continue;
+
+			if ((r->flags & IORESOURCE_TYPE_BITS) !=
+			    (type & IORESOURCE_TYPE_BITS))
+				continue;
+
+			ret = pci_dev_res_add_to_list(saved, bridge, r, 0, 0);
+			if (ret)
+				return ret;
+
+			pci_release_resource(bridge, i);
 		}
 
 		bus = bus->parent;
