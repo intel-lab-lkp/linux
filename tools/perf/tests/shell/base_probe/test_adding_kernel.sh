@@ -23,10 +23,23 @@ TEST_RESULT=0
 . "$DIR_PATH/../lib/probe_vfs_getname.sh"
 
 TEST_PROBE=${TEST_PROBE:-"inode_permission"}
+PROBE_NO_LINE_CHECK=1
 
 # set NO_DEBUGINFO to skip testcase if debuginfo is not present
 # skip_if_no_debuginfo returns 2 if debuginfo is not present
-skip_if_no_debuginfo
+#
+# The perf probe checks which depends on presence of debuginfo and
+# used in this testcase are:
+# 1. probe add for inode_permission
+# 2. probe max-probes option using 'vfs_* $params'
+# 3. non-existing variable probing
+#
+# For these tests, probe check for specific line is not
+# required ( add_probe_vfs_getname does that ). So call
+# skip_if_no_debuginfo with argument as 1. This is to convey
+# that test only needs to check for debuginfo, and not specifically
+# line number
+skip_if_no_debuginfo $PROBE_NO_LINE_CHECK
 if [ $? -eq 2 ]; then
 	NO_DEBUGINFO=1
 fi

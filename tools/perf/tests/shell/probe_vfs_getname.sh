@@ -16,8 +16,13 @@ skip_if_no_perf_probe || exit 2
 add_probe_vfs_getname
 err=$?
 
+# Invoke skip_if_no_debuginfo with argument as 0,
+# since the test needs suitable line number for getname
+# along with debuginfo check.
+# Argument "1" is used when to convey that test only needs to
+# check for debuginfo, and not specifically line number.
 if [ $err -eq 1 ] ; then
-	skip_if_no_debuginfo
+	skip_if_no_debuginfo 0
 	err=$?
 fi
 
