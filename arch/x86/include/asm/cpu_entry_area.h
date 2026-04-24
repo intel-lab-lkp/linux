@@ -26,6 +26,12 @@
 	char	DB_stack[EXCEPTION_STKSZ];			\
 	char	MCE_stack_guard[guardsize];			\
 	char	MCE_stack[EXCEPTION_STKSZ];			\
+	char	PF_stack_guard[guardsize];			\
+	char	PF_stack[EXCEPTION_STKSZ];			\
+	char	PF2_stack_guard[guardsize];			\
+	char	PF2_stack[EXCEPTION_STKSZ];			\
+	char	UDI_stack_guard[guardsize];			\
+	char	UDI_stack[EXCEPTION_STKSZ];			\
 	char	VC_stack_guard[guardsize];			\
 	char	VC_stack[optional_stack_size];			\
 	char	VC2_stack_guard[guardsize];			\
@@ -50,6 +56,9 @@ enum exception_stack_ordering {
 	ESTACK_NMI,
 	ESTACK_DB,
 	ESTACK_MCE,
+	ESTACK_PF,
+	ESTACK_PF2,
+	ESTACK_UDI,
 	ESTACK_VC,
 	ESTACK_VC2,
 	N_EXCEPTION_STACKS
@@ -143,6 +152,15 @@ static __always_inline struct entry_stack *cpu_entry_stack(int cpu)
 {
 	return &get_cpu_entry_area(cpu)->entry_stack_page.stack;
 }
+
+#ifdef CONFIG_DYNAMIC_STACK
+bool is_pf_ist_stack(unsigned long addr);
+#else
+static inline bool is_pf_ist_stack(unsigned long addr)
+{
+	return false;
+}
+#endif
 
 #define __this_cpu_ist_top_va(name)					\
 	CEA_ESTACK_TOP(__this_cpu_read(cea_exception_stacks), name)

@@ -2377,6 +2377,8 @@ static inline void tss_setup_ist(struct tss_struct *tss)
 	tss->x86_tss.ist[IST_INDEX_NMI] = __this_cpu_ist_top_va(NMI);
 	tss->x86_tss.ist[IST_INDEX_DB] = __this_cpu_ist_top_va(DB);
 	tss->x86_tss.ist[IST_INDEX_MCE] = __this_cpu_ist_top_va(MCE);
+	tss->x86_tss.ist[IST_INDEX_PF] = __this_cpu_ist_top_va(PF) - IST_ENTRY_OFFSET;
+	tss->x86_tss.ist[IST_INDEX_UDI] = __this_cpu_ist_top_va(UDI) - IST_ENTRY_OFFSET;
 	/* Only mapped when SEV-ES is active */
 	tss->x86_tss.ist[IST_INDEX_VC] = __this_cpu_ist_top_va(VC);
 }
@@ -2665,3 +2667,12 @@ void __init arch_cpu_finalize_init(void)
 	 */
 	mem_encrypt_init();
 }
+
+#ifdef CONFIG_DYNAMIC_STACK
+noinstr void install_nmi_pf_stack(bool use_nmi_pf_stack)
+{
+	unsigned long stack = use_nmi_pf_stack ? __this_cpu_ist_top_va(PF2)
+					       : __this_cpu_ist_top_va(PF);
+	this_cpu_write(cpu_tss_rw.x86_tss.ist[IST_INDEX_PF], stack - IST_ENTRY_OFFSET);
+}
+#endif

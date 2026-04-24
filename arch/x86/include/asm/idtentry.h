@@ -164,6 +164,16 @@ noinstr void fred_##func(struct pt_regs *regs)
 	DECLARE_IDTENTRY_ERRORCODE(vector, func)
 
 /**
+ * DECLARE_IDTENTRY_PF - Declare functions for page fault entry point
+ * @vector:	Vector number (ignored for C)
+ * @func:	Function name of the entry point
+ *
+ * Maps to @DECLARE_IDTENTRY_ERRORCODE().
+ */
+#define DECLARE_IDTENTRY_PF(vector, func)			\
+	DECLARE_IDTENTRY_RAW_ERRORCODE(vector, func)
+
+/**
  * DEFINE_IDTENTRY_RAW_ERRORCODE - Emit code for raw IDT entry points
  * @func:	Function name of the entry point
  *
@@ -392,6 +402,15 @@ static __always_inline void __##func(struct pt_regs *regs)
 	DEFINE_IDTENTRY_RAW_ERRORCODE(func)
 
 /**
+ * DEFINE_IDTENTRY_PF - Emit code for page fault
+ * @func:	Function name of the entry point
+ *
+ * Maps to DEFINE_IDTENTRY_RAW_ERRORCODE
+ */
+#define DEFINE_IDTENTRY_PF(func)					\
+	DEFINE_IDTENTRY_RAW_ERRORCODE(func)
+
+/**
  * DEFINE_IDTENTRY_VC_KERNEL - Emit code for VMM communication handler
  *			       when raised from kernel mode
  * @func:	Function name of the entry point
@@ -480,6 +499,15 @@ void fred_install_sysvec(unsigned int vector, const idtentry_t function);
 #define DECLARE_IDTENTRY_ERRORCODE(vector, func)			\
 	idtentry vector asm_##func func has_error_code=1
 
+#ifdef CONFIG_DYNAMIC_STACK
+#define DECLARE_IDTENTRY_PF(vector, func)				\
+	idtentry vector asm_##func func has_error_code=1		\
+	kernel_reentry_fn=handle_dynamic_stack_kernel_faults
+#else
+#define DECLARE_IDTENTRY_PF(vector, func)				\
+	DECLARE_IDTENTRY_RAW_ERRORCODE(vector, func)
+#endif
+
 /* Special case for 32bit IRET 'trap'. Do not emit ASM code */
 #define DECLARE_IDTENTRY_SW(vector, func)
 
@@ -494,8 +522,14 @@ void fred_install_sysvec(unsigned int vector, const idtentry_t function);
 	idtentry_irq vector func
 
 /* System vector entries */
+#ifdef CONFIG_DYNAMIC_STACK
+#define DECLARE_IDTENTRY_SYSVEC(vector, func)				\
+	idtentry vector asm_##func func has_error_code=0		\
+	kernel_reentry_fn=switch_to_kstack
+#else
 #define DECLARE_IDTENTRY_SYSVEC(vector, func)				\
 	DECLARE_IDTENTRY(vector, func)
+#endif
 
 #ifdef CONFIG_X86_64
 # define DECLARE_IDTENTRY_MCE(vector, func)				\
@@ -615,7 +649,7 @@ DECLARE_IDTENTRY_ERRORCODE(X86_TRAP_AC,	exc_alignment_check);
 /* Raw exception entries which need extra work */
 DECLARE_IDTENTRY_RAW(X86_TRAP_UD,		exc_invalid_op);
 DECLARE_IDTENTRY_RAW(X86_TRAP_BP,		exc_int3);
-DECLARE_IDTENTRY_RAW_ERRORCODE(X86_TRAP_PF,	exc_page_fault);
+DECLARE_IDTENTRY_PF(X86_TRAP_PF,		exc_page_fault);
 
 #if defined(CONFIG_IA32_EMULATION)
 DECLARE_IDTENTRY_RAW(IA32_SYSCALL_VECTOR,	int80_emulation);
@@ -699,7 +733,7 @@ DECLARE_IDTENTRY_SYSVEC(X86_PLATFORM_IPI_VECTOR,	sysvec_x86_platform_ipi);
 #endif
 
 #ifdef CONFIG_SMP
-DECLARE_IDTENTRY(RESCHEDULE_VECTOR,			sysvec_reschedule_ipi);
+DECLARE_IDTENTRY_SYSVEC(RESCHEDULE_VECTOR,		sysvec_reschedule_ipi);
 DECLARE_IDTENTRY_SYSVEC(REBOOT_VECTOR,			sysvec_reboot);
 DECLARE_IDTENTRY_SYSVEC(CALL_FUNCTION_SINGLE_VECTOR,	sysvec_call_function_single);
 DECLARE_IDTENTRY_SYSVEC(CALL_FUNCTION_VECTOR,		sysvec_call_function);

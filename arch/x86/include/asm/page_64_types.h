@@ -28,7 +28,15 @@
 #define	IST_INDEX_NMI		1
 #define	IST_INDEX_DB		2
 #define	IST_INDEX_MCE		3
-#define	IST_INDEX_VC		4
+#define	IST_INDEX_PF		4
+#define	IST_INDEX_UDI		5
+#define	IST_INDEX_VC		6
+
+/*
+ * Offset used for some IST stacks to reserve a slot for re-entry
+ * canary. At the very top of the stack for cache friendliness.
+ */
+#define IST_ENTRY_OFFSET	8
 
 /*
  * Set __PAGE_OFFSET to the most negative possible address +

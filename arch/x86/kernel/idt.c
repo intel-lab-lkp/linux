@@ -116,6 +116,10 @@ static const __initconst struct idt_data def_idts[] = {
 	ISTG(X86_TRAP_VC,		asm_exc_vmm_communication, IST_INDEX_VC),
 #endif
 
+#ifdef CONFIG_DYNAMIC_STACK
+	ISTG(X86_TRAP_PF,		asm_exc_page_fault, IST_INDEX_PF),
+#endif
+
 	SYSG(X86_TRAP_OF,		asm_exc_overflow),
 };
 
@@ -127,47 +131,55 @@ static const struct idt_data ia32_idt[] __initconst = {
 #endif
 };
 
+#ifdef CONFIG_DYNAMIC_STACK
+#define EXTERNAL_INTR(_vector, _addr)	ISTG(_vector, _addr, IST_INDEX_UDI)
+#define EXTERNAL_INTR_IST_VALUE		(IST_INDEX_UDI + 1)
+#else
+#define EXTERNAL_INTR(_vector, _addr)	INTG(_vector, _addr)
+#define EXTERNAL_INTR_IST_VALUE		0
+#endif
+
 /*
  * The APIC and SMP idt entries
  */
 static const __initconst struct idt_data apic_idts[] = {
 #ifdef CONFIG_SMP
-	INTG(RESCHEDULE_VECTOR,			asm_sysvec_reschedule_ipi),
-	INTG(CALL_FUNCTION_VECTOR,		asm_sysvec_call_function),
-	INTG(CALL_FUNCTION_SINGLE_VECTOR,	asm_sysvec_call_function_single),
-	INTG(REBOOT_VECTOR,			asm_sysvec_reboot),
+	EXTERNAL_INTR(RESCHEDULE_VECTOR,		asm_sysvec_reschedule_ipi),
+	EXTERNAL_INTR(CALL_FUNCTION_VECTOR,		asm_sysvec_call_function),
+	EXTERNAL_INTR(CALL_FUNCTION_SINGLE_VECTOR,	asm_sysvec_call_function_single),
+	EXTERNAL_INTR(REBOOT_VECTOR,			asm_sysvec_reboot),
 #endif
 
 #ifdef CONFIG_X86_THERMAL_VECTOR
-	INTG(THERMAL_APIC_VECTOR,		asm_sysvec_thermal),
+	EXTERNAL_INTR(THERMAL_APIC_VECTOR,		asm_sysvec_thermal),
 #endif
 
 #ifdef CONFIG_X86_MCE_THRESHOLD
-	INTG(THRESHOLD_APIC_VECTOR,		asm_sysvec_threshold),
+	EXTERNAL_INTR(THRESHOLD_APIC_VECTOR,		asm_sysvec_threshold),
 #endif
 
 #ifdef CONFIG_X86_MCE_AMD
-	INTG(DEFERRED_ERROR_VECTOR,		asm_sysvec_deferred_error),
+	EXTERNAL_INTR(DEFERRED_ERROR_VECTOR,		asm_sysvec_deferred_error),
 #endif
 
 #ifdef CONFIG_X86_LOCAL_APIC
-	INTG(LOCAL_TIMER_VECTOR,		asm_sysvec_apic_timer_interrupt),
-	INTG(X86_PLATFORM_IPI_VECTOR,		asm_sysvec_x86_platform_ipi),
+	EXTERNAL_INTR(LOCAL_TIMER_VECTOR,		asm_sysvec_apic_timer_interrupt),
+	EXTERNAL_INTR(X86_PLATFORM_IPI_VECTOR,		asm_sysvec_x86_platform_ipi),
 # if IS_ENABLED(CONFIG_KVM)
-	INTG(POSTED_INTR_VECTOR,		asm_sysvec_kvm_posted_intr_ipi),
-	INTG(POSTED_INTR_WAKEUP_VECTOR,		asm_sysvec_kvm_posted_intr_wakeup_ipi),
-	INTG(POSTED_INTR_NESTED_VECTOR,		asm_sysvec_kvm_posted_intr_nested_ipi),
+	EXTERNAL_INTR(POSTED_INTR_VECTOR,		asm_sysvec_kvm_posted_intr_ipi),
+	EXTERNAL_INTR(POSTED_INTR_WAKEUP_VECTOR,	asm_sysvec_kvm_posted_intr_wakeup_ipi),
+	EXTERNAL_INTR(POSTED_INTR_NESTED_VECTOR,	asm_sysvec_kvm_posted_intr_nested_ipi),
 # endif
 #ifdef CONFIG_GUEST_PERF_EVENTS
 	INTG(PERF_GUEST_MEDIATED_PMI_VECTOR,	asm_sysvec_perf_guest_mediated_pmi_handler),
 #endif
 # ifdef CONFIG_IRQ_WORK
-	INTG(IRQ_WORK_VECTOR,			asm_sysvec_irq_work),
+	EXTERNAL_INTR(IRQ_WORK_VECTOR,			asm_sysvec_irq_work),
 # endif
-	INTG(SPURIOUS_APIC_VECTOR,		asm_sysvec_spurious_apic_interrupt),
-	INTG(ERROR_APIC_VECTOR,			asm_sysvec_error_interrupt),
+	EXTERNAL_INTR(SPURIOUS_APIC_VECTOR,		asm_sysvec_spurious_apic_interrupt),
+	EXTERNAL_INTR(ERROR_APIC_VECTOR,		asm_sysvec_error_interrupt),
 # ifdef CONFIG_X86_POSTED_MSI
-	INTG(POSTED_MSI_NOTIFICATION_VECTOR,	asm_sysvec_posted_msi_notification),
+	EXTERNAL_INTR(POSTED_MSI_NOTIFICATION_VECTOR,	asm_sysvec_posted_msi_notification),
 # endif
 #endif
 };
@@ -206,11 +218,12 @@ idt_setup_from_table(gate_desc *idt, const struct idt_data *t, int size, bool sy
 	}
 }
 
-static __init void set_intr_gate(unsigned int n, const void *addr)
+static __init void set_intr_gate(unsigned int n, const void *addr, int ist)
 {
 	struct idt_data data;
 
 	init_idt_data(&data, n, addr);
+	data.bits.ist = ist;
 
 	idt_setup_from_table(idt_table, &data, 1, false);
 }
@@ -293,7 +306,7 @@ void __init idt_setup_apic_and_irq_gates(void)
 
 	for_each_clear_bit_from(i, system_vectors, FIRST_SYSTEM_VECTOR) {
 		entry = irq_entries_start + IDT_ALIGN * (i - FIRST_EXTERNAL_VECTOR);
-		set_intr_gate(i, entry);
+		set_intr_gate(i, entry, EXTERNAL_INTR_IST_VALUE);
 	}
 
 #ifdef CONFIG_X86_LOCAL_APIC
@@ -304,7 +317,7 @@ void __init idt_setup_apic_and_irq_gates(void)
 		 * /proc/interrupts.
 		 */
 		entry = spurious_entries_start + IDT_ALIGN * (i - FIRST_SYSTEM_VECTOR);
-		set_intr_gate(i, entry);
+		set_intr_gate(i, entry, EXTERNAL_INTR_IST_VALUE);
 	}
 #endif
 	/* Map IDT into CPU entry area and reload it. */
@@ -325,10 +338,10 @@ void __init idt_setup_early_handler(void)
 	int i;
 
 	for (i = 0; i < NUM_EXCEPTION_VECTORS; i++)
-		set_intr_gate(i, early_idt_handler_array[i]);
+		set_intr_gate(i, early_idt_handler_array[i], DEFAULT_STACK);
 #ifdef CONFIG_X86_32
 	for ( ; i < NR_VECTORS; i++)
-		set_intr_gate(i, early_ignore_irq);
+		set_intr_gate(i, early_ignore_irq, DEFAULT_STACK);
 #endif
 	load_idt(&idt_descr);
 }
@@ -352,5 +365,5 @@ void __init idt_install_sysvec(unsigned int n, const void *function)
 		return;
 
 	if (!WARN_ON(test_and_set_bit(n, system_vectors)))
-		set_intr_gate(n, function);
+		set_intr_gate(n, function, EXTERNAL_INTR_IST_VALUE);
 }

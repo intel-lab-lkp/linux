@@ -156,6 +156,12 @@ static void __init percpu_setup_exception_stacks(unsigned int cpu)
 	cea_map_stack(DB);
 	cea_map_stack(MCE);
 
+	if (IS_ENABLED(CONFIG_DYNAMIC_STACK)) {
+		cea_map_stack(PF);
+		cea_map_stack(PF2);
+		cea_map_stack(UDI);
+	}
+
 	if (IS_ENABLED(CONFIG_AMD_MEM_ENCRYPT)) {
 		if (cc_platform_has(CC_ATTR_GUEST_STATE_ENCRYPT)) {
 			cea_map_stack(VC);
@@ -170,6 +176,17 @@ static void __init percpu_setup_exception_stacks(unsigned int cpu)
 
 	cea_map_percpu_pages(&cea->doublefault_stack,
 			     &per_cpu(doublefault_stack, cpu), 1, PAGE_KERNEL);
+}
+#endif
+
+#ifdef CONFIG_DYNAMIC_STACK
+bool noinstr is_pf_ist_stack(unsigned long addr)
+{
+	struct cea_exception_stacks *cs = __this_cpu_read(cea_exception_stacks);
+	unsigned long top = CEA_ESTACK_TOP(cs, PF2);
+	unsigned long bot = CEA_ESTACK_BOT(cs, PF);
+
+	return addr >= bot && addr < top;
 }
 #endif
 

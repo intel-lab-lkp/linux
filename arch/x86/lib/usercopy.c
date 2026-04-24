@@ -9,6 +9,7 @@
 #include <linux/instrumented.h>
 
 #include <asm/tlbflush.h>
+#include <asm/cpu_entry_area.h>
 
 /**
  * copy_from_user_nmi - NMI safe copy from user
@@ -37,6 +38,14 @@ copy_from_user_nmi(void *to, const void __user *from, unsigned long n)
 		return n;
 
 	if (!nmi_uaccess_okay())
+		return n;
+
+	/*
+	 * IST stacks aren't reentrant, so bail before the possibility of
+	 * a #PF. While on the #PF IST stack, we should only need this
+	 * function for stack dumps (WARN/panic/etc).
+	 */
+	if (is_pf_ist_stack(current_stack_pointer))
 		return n;
 
 	/*

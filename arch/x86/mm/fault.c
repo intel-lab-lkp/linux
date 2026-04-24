@@ -1482,15 +1482,60 @@ handle_page_fault(struct pt_regs *regs, unsigned long error_code,
 
 #ifdef CONFIG_DYNAMIC_STACK
 
-static noinstr unsigned long copy_stack_data(struct pt_regs *regs)
+static noinstr unsigned long copy_stack_data(struct pt_regs *regs, bool is_dynamic_stack_fault)
 {
 	unsigned long new_sp;
 	unsigned long data_len;
+	bool must_avoid_dynamic_stack_fault;
 
-	new_sp = regs->sp - (FRED_CONFIG_REDZONE_AMOUNT << 6);
-	new_sp &= FRED_STACK_FRAME_RSP_MASK;
-	data_len = sizeof(struct fred_frame);
+	if (cpu_feature_enabled(X86_FEATURE_FRED)) {
+		new_sp = regs->sp - (FRED_CONFIG_REDZONE_AMOUNT << 6);
+		new_sp &= FRED_STACK_FRAME_RSP_MASK;
+		data_len = sizeof(struct fred_frame);
+		must_avoid_dynamic_stack_fault = false;
+	} else {
+		// Hardware aligns sp to a 16 byte boundary when going through the IDT.
+		new_sp = ALIGN_DOWN(regs->sp, 16);
+		data_len = sizeof(struct pt_regs);
+		must_avoid_dynamic_stack_fault = is_dynamic_stack_fault;
+	}
 	new_sp -= data_len;
+
+	if (must_avoid_dynamic_stack_fault) {
+		bool new_sp_on_stack;
+
+		/*
+		 * We don't have to worry about the window where current_task
+		 * is inconsistent during a context switch because interrupts
+		 * are disabled during that window and the only #PF that can
+		 * happen there is a dynamic stack fault, in which case we
+		 * return directly from handle_dynamic_stack_kernel_faults().
+		 */
+		if (!in_nmi())
+			dynamic_stack_fault(current, new_sp, &new_sp_on_stack);
+		else
+			new_sp_on_stack = false;
+
+		/*
+		 * If new_sp isn't on the current task's stack, verify that it's
+		 * on an exception/irq/entry stack. This is a little expensive,
+		 * but #PFs in those contexts should be rare.
+		 */
+		if (!new_sp_on_stack) {
+			struct stack_info info, info2;
+
+			if (!get_stack_info_noinstr((void *)new_sp, current, &info)) {
+				instrumentation_begin();
+				if (get_stack_info_noinstr((void *)(new_sp - PAGE_SIZE),
+							   current, &info2)) {
+					pr_emerg("Stack overflow during stack switch\n");
+					handle_stack_overflow(regs, new_sp, &info2);
+				} else {
+					die("Stack switch back to unknown stack", regs, 0);
+				}
+			}
+		}
+	}
 
 	memcpy((void *)new_sp, regs, data_len);
 
@@ -1499,7 +1544,7 @@ static noinstr unsigned long copy_stack_data(struct pt_regs *regs)
 
 __visible noinstr unsigned long switch_to_kstack(struct pt_regs *regs)
 {
-	return copy_stack_data(regs);
+	return copy_stack_data(regs, false);
 }
 
 #define ALIGN_TO_STACK(addr) ((addr) & ~(THREAD_ALIGN - 1))
@@ -1510,7 +1555,7 @@ __visible noinstr unsigned long handle_dynamic_stack_kernel_faults(struct pt_reg
 	struct task_struct *tsk;
 	bool on_stack;
 
-	address = fred_event_data(regs);
+	address = cpu_feature_enabled(X86_FEATURE_FRED) ? fred_event_data(regs) : read_cr2();
 	if (fault_in_kernel_space(address) && !in_nmi()) {
 		tsk = task_from_stack_address(address);
 
@@ -1522,18 +1567,19 @@ __visible noinstr unsigned long handle_dynamic_stack_kernel_faults(struct pt_reg
 	}
 
 	/*
-	 * The regular fault handler won't sleep when executing in an
-	 * atomic context, so we can complete the #PF directly on the
-	 * #PF stack.
+	 * The regular fault handler won't sleep when executing in an atomic
+	 * context, so we can complete the #PF directly on the #PF stack.
+	 * However, IST doesn't support nested exceptions, so we need to avoid
+	 * running any non-noinstr code on the IST #PF stack.
 	 */
-	if (in_atomic())
+	if (in_atomic() && cpu_feature_enabled(X86_FEATURE_FRED))
 		return (unsigned long)regs;
 	else
-		return copy_stack_data(regs);
+		return copy_stack_data(regs, true);
 }
 #endif
 
-DEFINE_IDTENTRY_RAW_ERRORCODE(exc_page_fault)
+DEFINE_IDTENTRY_PF(exc_page_fault)
 {
 	irqentry_state_t state;
 	unsigned long address;

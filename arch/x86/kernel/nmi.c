@@ -37,6 +37,7 @@
 #include <asm/microcode.h>
 #include <asm/sev.h>
 #include <asm/fred.h>
+#include <asm/cpu_entry_area.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/nmi.h>
@@ -581,6 +582,11 @@ nmi_restart:
 	if (IS_ENABLED(CONFIG_NMI_CHECK_CPU) && ignore_nmis) {
 		WRITE_ONCE(nsp->idt_ignored, nsp->idt_ignored + 1);
 	} else if (!ignore_nmis) {
+		bool protect_pf_ist_stack = is_pf_ist_stack(regs->sp);
+
+		if (protect_pf_ist_stack)
+			install_nmi_pf_stack(true);
+
 		if (IS_ENABLED(CONFIG_NMI_CHECK_CPU)) {
 			WRITE_ONCE(nsp->idt_nmi_seq, nsp->idt_nmi_seq + 1);
 			WARN_ON_ONCE(!(nsp->idt_nmi_seq & 0x1));
@@ -590,6 +596,9 @@ nmi_restart:
 			WRITE_ONCE(nsp->idt_nmi_seq, nsp->idt_nmi_seq + 1);
 			WARN_ON_ONCE(nsp->idt_nmi_seq & 0x1);
 		}
+
+		if (protect_pf_ist_stack)
+			install_nmi_pf_stack(false);
 	}
 
 	irqentry_nmi_exit(regs, irq_state);

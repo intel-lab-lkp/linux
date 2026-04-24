@@ -286,7 +286,7 @@ SYM_CODE_END(xen_error_entry)
  * @cfunc:		C function to be called
  * @has_error_code:	Hardware pushed error code on stack
  */
-.macro idtentry_body cfunc has_error_code:req
+.macro idtentry_body cfunc has_error_code:req kernel_reentry_fn=
 
 	/*
 	 * Call error_entry() and switch to the task stack if from userspace.
@@ -302,6 +302,38 @@ SYM_CODE_END(xen_error_entry)
 	ENCODE_FRAME_POINTER
 	UNWIND_HINT_REGS
 
+#ifdef CONFIG_DYNAMIC_STACK
+.ifnb \kernel_reentry_fn
+	/*
+	 * For entry from userspace, we've also already moved off of
+	 * the IST after calling error_entry above.
+	 */
+	testb	$3, CS(%rsp)
+	jnz	.Lregular_fault_\cfunc
+
+	/* Check and set the reentry canary reserved by IST_ENTRY_OFFSET. */
+	cmpq	$0, (SS + 8)(%rsp)
+	jne	.List_reentry_abort_\cfunc
+	movq	$1, (SS + 8)(%rsp)
+
+	movq	%rsp, %rdi
+	call	\kernel_reentry_fn
+
+	movq	$0, (SS + 8)(%rsp)
+
+	testq	%rax, %rax
+	jnz	.Lchange_stack_\cfunc
+	jmp	error_return
+
+.Lchange_stack_\cfunc:
+	movq	%rax, %rsp
+
+	ENCODE_FRAME_POINTER
+	UNWIND_HINT_REGS
+.Lregular_fault_\cfunc:
+.endif
+#endif
+
 	movq	%rsp, %rdi			/* pt_regs pointer into 1st argument*/
 
 	.if \has_error_code == 1
@@ -314,6 +346,13 @@ SYM_CODE_END(xen_error_entry)
 	call	\cfunc
 
 	jmp	error_return
+
+#ifdef CONFIG_DYNAMIC_STACK
+.ifnb \kernel_reentry_fn
+.List_reentry_abort_\cfunc:
+	ud2
+.endif
+#endif
 .endm
 
 /**
@@ -322,11 +361,13 @@ SYM_CODE_END(xen_error_entry)
  * @asmsym:		ASM symbol for the entry point
  * @cfunc:		C function to be called
  * @has_error_code:	Hardware pushed error code on stack
+ * @kernel_reentry_fn:  If set, C function to be called on re-entry from
+ *			kernel space before the main handler is invoked.
  *
  * The macro emits code to set up the kernel context for straight forward
  * and simple IDT entries. No IST stack, no paranoid entry checks.
  */
-.macro idtentry vector asmsym cfunc has_error_code:req
+.macro idtentry vector asmsym cfunc has_error_code:req kernel_reentry_fn=
 SYM_CODE_START(\asmsym)
 
 	.if \vector == X86_TRAP_BP
@@ -358,7 +399,7 @@ SYM_CODE_START(\asmsym)
 .Lfrom_usermode_no_gap_\@:
 	.endif
 
-	idtentry_body \cfunc \has_error_code
+	idtentry_body \cfunc \has_error_code \kernel_reentry_fn
 
 _ASM_NOKPROBE(\asmsym)
 SYM_CODE_END(\asmsym)
@@ -375,7 +416,7 @@ SYM_CODE_END(\asmsym)
  */
 .macro idtentry_irq vector cfunc
 	.p2align CONFIG_X86_L1_CACHE_SHIFT
-	idtentry \vector asm_\cfunc \cfunc has_error_code=1
+	idtentry \vector asm_\cfunc \cfunc has_error_code=1 kernel_reentry_fn=switch_to_kstack
 .endm
 
 /**

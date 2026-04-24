@@ -573,6 +573,12 @@ static inline void load_sp0(unsigned long sp0)
 
 #endif /* CONFIG_PARAVIRT_XXL */
 
+#ifdef CONFIG_DYNAMIC_STACK
+void install_nmi_pf_stack(bool use_nmi_pf_stack);
+#else
+static inline void install_nmi_pf_stack(bool use_nmi_pf_stack) {}
+#endif
+
 unsigned long __get_wchan(struct task_struct *p);
 
 extern void select_idle_routine(void);
