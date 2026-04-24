@@ -138,9 +138,7 @@ static void process_event_unsupported(union perf_event *event __maybe_unused,
 				      struct addr_location *al __maybe_unused,
 				      struct addr_location *addr_al __maybe_unused)
 {
-}
-
-static void print_python_unsupported_msg(void)
+} static void print_python_unsupported_msg(void)
 {
 	fprintf(stderr, "Python scripting not supported."
 		"  Install libpython and rebuild perf to enable it.\n"
@@ -192,20 +190,10 @@ static void register_python_scripting(struct scripting_ops *scripting_ops)
 	}
 }
 
-#ifndef HAVE_LIBPYTHON_SUPPORT
 void setup_python_scripting(void)
 {
 	register_python_scripting(&python_scripting_unsupported_ops);
 }
-#else
-extern struct scripting_ops python_scripting_ops;
-
-void setup_python_scripting(void)
-{
-	register_python_scripting(&python_scripting_ops);
-}
-#endif
-
 
 
 static const struct {
