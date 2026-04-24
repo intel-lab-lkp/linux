@@ -19,7 +19,10 @@ use crate::{
     },
     prelude::*,
     str::CStr,
-    types::Opaque,
+    types::{
+        ForLt,
+        Opaque, //
+    },
     ThisModule, //
 };
 use core::{
@@ -64,7 +67,7 @@ pub struct Adapter<T: Driver>(T);
 // - `DEVICE_DRIVER_OFFSET` is the correct byte offset to the embedded `struct device_driver`.
 unsafe impl<T: Driver + 'static> driver::DriverLayout for Adapter<T> {
     type DriverType = bindings::pci_driver;
-    type DriverData = T;
+    type DriverData = ForLt!(T);
     const DEVICE_DRIVER_OFFSET: usize = core::mem::offset_of!(Self::DriverType, driver);
 }
 
@@ -115,7 +118,7 @@ impl<T: Driver + 'static> Adapter<T> {
         from_result(|| {
             let data = T::probe(pdev, info);
 
-            pdev.as_ref().set_drvdata(data)?;
+            pdev.as_ref().set_drvdata::<ForLt!(T)>(data)?;
             Ok(0)
         })
     }
@@ -130,7 +133,7 @@ impl<T: Driver + 'static> Adapter<T> {
         // SAFETY: `remove_callback` is only ever called after a successful call to
         // `probe_callback`, hence it's guaranteed that `Device::set_drvdata()` has been called
         // and stored a `Pin<KBox<T>>`.
-        let data = unsafe { pdev.as_ref().drvdata_borrow::<T>() };
+        let data = unsafe { pdev.as_ref().drvdata_borrow::<ForLt!(T)>() };
 
         T::unbind(pdev, data);
     }

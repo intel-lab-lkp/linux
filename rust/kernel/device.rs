@@ -10,6 +10,7 @@ use crate::{
     prelude::*,
     sync::aref::ARef,
     types::{
+        ForLt,
         ForeignOwnable,
         Opaque, //
     }, //
@@ -202,23 +203,41 @@ impl Device {
 }
 
 impl Device<CoreInternal> {
-    /// Store a pointer to the bound driver's private data.
-    pub fn set_drvdata<T: 'static>(&self, data: impl PinInit<T, Error>) -> Result {
+    /// Store the bound driver's private data.
+    ///
+    /// `F` is the [`ForLt`] encoding of the data type. For types without a lifetime parameter,
+    /// use [`ForLt!(T)`](macro@ForLt). For lifetime-parameterized types, the data is
+    /// initialized as `F::Of<'a>` and stored as `F::Of<'static>`; lifetimes are erased and do not
+    /// affect layout, while [`ForLt`] guarantees covariance for safe lifetime shortening.
+    ///
+    /// [`ForLt`]: trait@ForLt
+    pub fn set_drvdata<'a, F: ForLt>(&self, data: impl PinInit<F::Of<'a>, Error>) -> Result
+    where
+        F::Of<'static>: 'static,
+    {
         let data = KBox::pin_init(data, GFP_KERNEL)?;
 
+        // SAFETY: Lifetimes are erased and do not affect layout, so Of<'a> and Of<'static> have
+        // identical representation. The raw pointer is type-erased through c_void anyway.
+        let ptr = KBox::into_raw(unsafe { Pin::into_inner_unchecked(data) });
+
         // SAFETY: By the type invariants, `self.as_raw()` is a valid pointer to a `struct device`.
-        unsafe { bindings::dev_set_drvdata(self.as_raw(), data.into_foreign().cast()) };
+        unsafe { bindings::dev_set_drvdata(self.as_raw(), ptr.cast()) };
 
         Ok(())
     }
 
     /// Take ownership of the private data stored in this [`Device`].
     ///
+    /// `F` is the [`ForLt`] encoding of the data type. The returned [`KBox`] has its lifetime
+    /// tied to `&self`, ensuring it is dropped before the device goes away.
+    ///
     /// # Safety
     ///
-    /// - The type `T` must match the type of the `ForeignOwnable` previously stored by
-    ///   [`Device::set_drvdata`].
-    pub(crate) unsafe fn drvdata_obtain<T: 'static>(&self) -> Option<Pin<KBox<T>>> {
+    /// - `F` must match the [`ForLt`] type previously stored by [`Device::set_drvdata`].
+    ///
+    /// [`ForLt`]: trait@ForLt
+    pub(crate) unsafe fn drvdata_obtain<F: ForLt>(&self) -> Option<Pin<KBox<F::Of<'_>>>> {
         // SAFETY: By the type invariants, `self.as_raw()` is a valid pointer to a `struct device`.
         let ptr = unsafe { bindings::dev_get_drvdata(self.as_raw()) };
 
@@ -230,24 +249,34 @@ impl Device<CoreInternal> {
         }
 
         // SAFETY:
-        // - If `ptr` is not NULL, it comes from a previous call to `into_foreign()`.
-        // - `dev_get_drvdata()` guarantees to return the same pointer given to `dev_set_drvdata()`
-        //   in `into_foreign()`.
-        Some(unsafe { Pin::<KBox<T>>::from_foreign(ptr.cast()) })
+        // - If `ptr` is not NULL, it was stored by a previous call to `set_drvdata()`, which
+        //   stores a pointer via `KBox::into_raw()`.
+        // - Lifetimes are erased and do not affect layout, so reconstructing as `F::Of<'_>`
+        //   (tied to `&self`) is sound.
+        // - `dev_get_drvdata()` guarantees to return the same pointer given to
+        //   `dev_set_drvdata()`.
+        Some(unsafe { Pin::new_unchecked(KBox::from_raw(ptr.cast())) })
     }
 
     /// Borrow the driver's private data bound to this [`Device`].
+    ///
+    /// `F` is the [`ForLt`] encoding of the data type. The returned reference has its lifetime
+    /// shortened from `'static` to `&self`'s borrow lifetime via [`ForLt::cast_ref`].
     ///
     /// # Safety
     ///
     /// - Must only be called after a preceding call to [`Device::set_drvdata`] and before the
     ///   device is fully unbound.
-    /// - The type `T` must match the type of the `ForeignOwnable` previously stored by
-    ///   [`Device::set_drvdata`].
-    pub unsafe fn drvdata_borrow<T: 'static>(&self) -> Pin<&T> {
+    /// - `F` must match the [`ForLt`] type previously stored by [`Device::set_drvdata`].
+    ///
+    /// [`ForLt`]: trait@ForLt
+    pub unsafe fn drvdata_borrow<F: ForLt>(&self) -> Pin<&F::Of<'_>>
+    where
+        F::Of<'static>: 'static,
+    {
         // SAFETY: `drvdata_unchecked()` has the exact same safety requirements as the ones
         // required by this method.
-        unsafe { self.drvdata_unchecked() }
+        unsafe { self.drvdata_unchecked::<F>() }
     }
 }
 
@@ -258,18 +287,25 @@ impl Device<Bound> {
     ///
     /// - Must only be called after a preceding call to [`Device::set_drvdata`] and before
     ///   the device is fully unbound.
-    /// - The type `T` must match the type of the `ForeignOwnable` previously stored by
-    ///   [`Device::set_drvdata`].
-    unsafe fn drvdata_unchecked<T: 'static>(&self) -> Pin<&T> {
+    /// - `F` must match the [`ForLt`] type previously stored by [`Device::set_drvdata`].
+    unsafe fn drvdata_unchecked<F: ForLt>(&self) -> Pin<&F::Of<'_>>
+    where
+        F::Of<'static>: 'static,
+    {
         // SAFETY: By the type invariants, `self.as_raw()` is a valid pointer to a `struct device`.
         let ptr = unsafe { bindings::dev_get_drvdata(self.as_raw()) };
 
         // SAFETY:
-        // - By the safety requirements of this function, `ptr` comes from a previous call to
-        //   `into_foreign()`.
-        // - `dev_get_drvdata()` guarantees to return the same pointer given to `dev_set_drvdata()`
-        //   in `into_foreign()`.
-        unsafe { Pin::<KBox<T>>::borrow(ptr.cast()) }
+        // - By the safety requirements of this function, `ptr` was stored by a previous call to
+        //   `set_drvdata()` via `KBox::into_raw()`.
+        // - `dev_get_drvdata()` guarantees to return the same pointer given to
+        //   `dev_set_drvdata()`.
+        let pinned: Pin<&F::Of<'static>> =
+            unsafe { Pin::<KBox<F::Of<'static>>>::borrow(ptr.cast()) };
+
+        // SAFETY: `ForLt` guarantees covariance, making it sound to shorten 'static to &self's
+        // lifetime via cast_ref().
+        unsafe { Pin::new_unchecked(F::cast_ref(pinned.get_ref())) }
     }
 }
 

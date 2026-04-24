@@ -99,7 +99,10 @@ use crate::{
     device,
     of,
     prelude::*,
-    types::Opaque,
+    types::{
+        ForLt,
+        Opaque, //
+    },
     ThisModule, //
 };
 
@@ -112,14 +115,16 @@ use crate::{
 ///
 /// Implementors must guarantee that:
 /// - `DriverType` is `repr(C)`,
-/// - `DriverData` is the type of the driver's device private data.
+/// - `DriverData` is the [`ForLt`] encoding of the driver's device private data type.
 /// - `DriverType` embeds a valid `struct device_driver` at byte offset `DEVICE_DRIVER_OFFSET`.
+///
+/// [`ForLt`]: trait@ForLt
 pub unsafe trait DriverLayout {
     /// The specific driver type embedding a `struct device_driver`.
     type DriverType: Default;
 
-    /// The type of the driver's device private data.
-    type DriverData;
+    /// The [`ForLt`](trait@ForLt) encoding of the driver's device private data type.
+    type DriverData: ForLt;
 
     /// Byte offset of the embedded `struct device_driver` within `DriverType`.
     ///
@@ -193,7 +198,7 @@ impl<T: RegistrationOps + 'static> Registration<T> {
         // be released after the driver's bus device private data is dropped.
         //
         // SAFETY: By the safety requirements of the `Driver` trait, `T::DriverData` is the
-        // driver's device private data type.
+        // ForLt encoding of the driver's device private data type.
         drop(unsafe { dev.drvdata_obtain::<T::DriverData>() });
     }
 
