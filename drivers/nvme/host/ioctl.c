@@ -8,6 +8,7 @@
 #include <linux/nvme_ioctl.h>
 #include <linux/io_uring/cmd.h>
 #include "nvme.h"
+#include "trace.h"
 
 enum {
 	NVME_IOCTL_VEC		= (1 << 0),
@@ -373,6 +374,51 @@ static int nvme_user_cmd64(struct nvme_ctrl *ctrl, struct nvme_ns *ns,
 	return status;
 }
 
+static int nvme_user_cdq(struct nvme_ctrl *ctrl, struct nvme_ns *ns,
+		struct nvme_cdq_cmd __user *ucmd, unsigned int flags,
+		bool open_for_write)
+{
+	int status;
+	u16 cdq_id = 0;
+	struct nvme_cdq_cmd cmd = {};
+
+	if (copy_from_user(&cmd, ucmd, sizeof(cmd)))
+		return -EFAULT;
+
+	/* 21 = 12 (PAGE_SHIFT) + 9 (PAGE_SHIFT / sizeof(u64)) */
+	if (cmd.size_nbyte > MAX_NR_CDQ_PRPS << 21)
+		return -EINVAL;
+
+	if (cmd.size_nbyte == 0) {
+		status = nvme_cdq_delete(ctrl, cmd.id);
+	} else {
+		status = nvme_cdq_create(ctrl, cmd.mos, cmd.cqs, cmd.entries,
+					 cmd.size_nbyte, &cdq_id);
+		if (status)
+			return status;
+
+		if (cmd.tpt_fd > 0) {
+			status = nvme_cdq_set_tpt(ctrl, cdq_id, cmd.tpt_fd);
+			if (status)
+				goto del_cdq;
+		}
+
+		cmd.id = cdq_id;
+
+		if (copy_to_user(ucmd, &cmd, sizeof(cmd))) {
+			status = -EINVAL;
+			goto del_cdq;
+		}
+	}
+
+	return status;
+
+del_cdq:
+	// Ignore return; already in error
+	nvme_cdq_delete(ctrl, cdq_id);
+	return status;
+}
+
 struct nvme_uring_data {
 	__u64	metadata;
 	__u64	addr;
@@ -540,7 +586,8 @@ out_free_req:
 
 static bool is_ctrl_ioctl(unsigned int cmd)
 {
-	if (cmd == NVME_IOCTL_ADMIN_CMD || cmd == NVME_IOCTL_ADMIN64_CMD)
+	if (cmd == NVME_IOCTL_ADMIN_CMD || cmd == NVME_IOCTL_ADMIN64_CMD ||
+	    cmd == NVME_IOCTL_CDQ)
 		return true;
 	if (is_sed_ioctl(cmd))
 		return true;
@@ -555,6 +602,8 @@ static int nvme_ctrl_ioctl(struct nvme_ctrl *ctrl, unsigned int cmd,
 		return nvme_user_cmd(ctrl, NULL, argp, 0, open_for_write);
 	case NVME_IOCTL_ADMIN64_CMD:
 		return nvme_user_cmd64(ctrl, NULL, argp, 0, open_for_write);
+	case NVME_IOCTL_CDQ:
+		return nvme_user_cdq(ctrl, NULL, argp, 0, open_for_write);
 	default:
 		return sed_ioctl(ctrl->opal_dev, cmd, argp);
 	}
@@ -873,6 +922,8 @@ long nvme_dev_ioctl(struct file *file, unsigned int cmd,
 			return -EACCES;
 		nvme_queue_scan(ctrl);
 		return 0;
+	case NVME_IOCTL_CDQ:
+		return nvme_user_cdq(ctrl, NULL, argp, 0, open_for_write);
 	default:
 		return -ENOTTY;
 	}
