@@ -536,11 +536,9 @@ devlink_param_value_get_from_info(const struct devlink_param *param,
 		value->vu64 = nla_get_u64(param_data);
 		break;
 	case DEVLINK_PARAM_TYPE_STRING:
-		len = strnlen(nla_data(param_data), nla_len(param_data));
-		if (len == nla_len(param_data) ||
-		    len >= __DEVLINK_PARAM_MAX_STRING_VALUE)
+		len = strscpy(value->vstr, nla_data(param_data));
+		if (len < 0)
 			return -EINVAL;
-		strcpy(value->vstr, nla_data(param_data));
 		break;
 	case DEVLINK_PARAM_TYPE_BOOL:
 		if (param_data && nla_len(param_data))
