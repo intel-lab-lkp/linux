@@ -1806,6 +1806,8 @@ static int lbmLogInit(struct jfs_log * log)
 	 * avoid deadlock here.
 	 */
 	init_waitqueue_head(&log->free_wait);
+	init_waitqueue_head(&log->io_waitq);
+	atomic_set(&log->io_inflight, 0);
 
 	log->lbuf_free = NULL;
 
@@ -1856,6 +1858,8 @@ static void lbmLogShutdown(struct jfs_log * log)
 	struct lbuf *lbuf;
 
 	jfs_info("lbmLogShutdown: log:0x%p", log);
+
+	wait_event(log->io_waitq, !atomic_read(&log->io_inflight));
 
 	lbuf = log->lbuf_free;
 	while (lbuf) {
@@ -1978,6 +1982,7 @@ static int lbmRead(struct jfs_log * log, int pn, struct lbuf ** bpp)
 
 	bio->bi_end_io = lbmIODone;
 	bio->bi_private = bp;
+	atomic_inc(&log->io_inflight);
 	/*check if journaling to disk has been disabled*/
 	if (log->no_integrity) {
 		bio->bi_iter.bi_size = 0;
@@ -2124,6 +2129,7 @@ static void lbmStartIO(struct lbuf * bp)
 
 	bio->bi_end_io = lbmIODone;
 	bio->bi_private = bp;
+	atomic_inc(&log->io_inflight);
 
 	/* check if journaling to disk has been disabled */
 	if (log->no_integrity) {
@@ -2170,7 +2176,7 @@ static void lbmIODone(struct bio *bio)
 {
 	struct lbuf *bp = bio->bi_private;
 	struct lbuf *nextbp, *tail;
-	struct jfs_log *log;
+	struct jfs_log *log = bp->l_log;
 	unsigned long flags;
 
 	/*
@@ -2201,6 +2207,9 @@ static void lbmIODone(struct bio *bio)
 		/* wakeup I/O initiator */
 		LCACHE_WAKEUP(&bp->l_ioevent);
 
+		if (atomic_dec_and_test(&log->io_inflight))
+			wake_up(&log->io_waitq);
+
 		return;
 	}
 
@@ -2220,12 +2229,13 @@ static void lbmIODone(struct bio *bio)
 	INCREMENT(lmStat.pagedone);
 
 	/* update committed lsn */
-	log = bp->l_log;
 	log->clsn = (bp->l_pn << L2LOGPSIZE) + bp->l_ceor;
 
 	if (bp->l_flag & lbmDIRECT) {
 		LCACHE_WAKEUP(&bp->l_ioevent);
 		LCACHE_UNLOCK(flags);
+		if (atomic_dec_and_test(&log->io_inflight))
+			wake_up(&log->io_waitq);
 		return;
 	}
 
@@ -2305,6 +2315,9 @@ static void lbmIODone(struct bio *bio)
 
 		LCACHE_UNLOCK(flags);	/* unlock+enable */
 	}
+
+	if (atomic_dec_and_test(&log->io_inflight))
+		wake_up(&log->io_waitq);
 }
 
 int jfsIOWait(void *arg)
