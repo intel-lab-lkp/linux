@@ -120,6 +120,10 @@ static int rkisp2_config_isp(struct rkisp2_isp *isp,
 		    RKISP2_CIF_ISP_PIC_SIZE_ERROR;
 	rkisp2_write(rkisp2, RKISP2_CIF_ISP_IMSC, irq_mask);
 
+	src_frm = v4l2_subdev_state_get_format(sd_state,
+					       RKISP2_ISP_PAD_SOURCE_VIDEO);
+	rkisp2_params_pre_configure(&rkisp2->params, sink_fmt->bayer_pat);
+
 	isp->sink_fmt = sink_fmt;
 
 	return 0;
@@ -247,6 +251,8 @@ static int rkisp2_isp_start(struct rkisp2_isp *isp,
 	       RKISP2_CIF_ISP_CTRL_ISP_ENABLE |
 	       RKISP2_CIF_ISP_CTRL_ISP_INFORM_ENABLE | RKISP2_CIF_ISP_CTRL_ISP_CFG_UPD_PERMANENT;
 	rkisp2_write(rkisp2, RKISP2_CIF_ISP_CTRL, val);
+
+	rkisp2_params_post_configure(&rkisp2->params);
 
 	return 0;
 }
@@ -804,6 +810,7 @@ int rkisp2_isp_register(struct rkisp2_device *rkisp2)
 
 	pads[RKISP2_ISP_PAD_SINK_VIDEO].flags = MEDIA_PAD_FL_SINK |
 						MEDIA_PAD_FL_MUST_CONNECT;
+	pads[RKISP2_ISP_PAD_SINK_PARAMS].flags = MEDIA_PAD_FL_SINK;
 	pads[RKISP2_ISP_PAD_SOURCE_VIDEO].flags = MEDIA_PAD_FL_SOURCE;
 
 	ret = media_entity_pads_init(&sd->entity, RKISP2_ISP_PAD_MAX, pads);
@@ -893,8 +900,10 @@ irqreturn_t rkisp2_isp_isr(int irq, void *ctx)
 		rkisp2->debug.data_loss++;
 	}
 
-	if (status & RKISP2_CIF_ISP_FRAME)
+	if (status & RKISP2_CIF_ISP_FRAME) {
 		rkisp2->debug.complete_frames++;
+		rkisp2_params_isr(&rkisp2->params);
+	}
 
 	rkisp2_write(rkisp2, RKISP2_CIF_ISP_ICR, status);
 

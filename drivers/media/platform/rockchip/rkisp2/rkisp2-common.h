@@ -22,6 +22,7 @@
 #include <media/media-entity.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
+#include <media/v4l2-isp.h>
 #include <media/videobuf2-v4l2.h>
 
 #include "rkisp2-regs.h"
@@ -88,6 +89,7 @@ enum rkisp2_fmt_raw_pat_type {
 /* enum for the isp pads */
 enum rkisp2_isp_pad {
 	RKISP2_ISP_PAD_SINK_VIDEO,
+	RKISP2_ISP_PAD_SINK_PARAMS,
 	RKISP2_ISP_PAD_SOURCE_VIDEO,
 	RKISP2_ISP_PAD_MAX
 };
@@ -181,6 +183,26 @@ struct rkisp2_buffer {
 	struct list_head queue;
 	dma_addr_t buff_addr[VIDEO_MAX_PLANES];
 };
+
+/*
+ * struct rkisp2_params_buffer - A container for the vb2 buffers used by the
+ *				 params video device
+ *
+ * @vb:		vb2 buffer
+ * @queue:	entry of the buffer in the queue
+ * @cfg:	scratch buffer used for caching the ISP configuration parameters
+ */
+struct rkisp2_params_buffer {
+	struct vb2_v4l2_buffer vb;
+	struct list_head queue;
+	struct v4l2_isp_params_buffer *cfg;
+};
+
+static inline struct rkisp2_params_buffer *
+to_rkisp2_params_buffer(struct vb2_v4l2_buffer *vbuf)
+{
+	return container_of(vbuf, struct rkisp2_params_buffer, vb);
+}
 
 /*
  * struct rkisp2_dummy_buffer - A buffer to write the next frame to in case
@@ -292,6 +314,25 @@ struct rkisp2_capture {
 	struct v4l2_rect crop;
 };
 
+/*
+ * struct rkisp2_params - ISP input parameters device
+ *
+ * @vnode:		video node
+ * @rkisp2:		pointer to the rkisp2 device
+ * @buf_lock:	locks the buffer list 'params'
+ * @params:		queue of rkisp2_buffer
+ * @raw_type:		the bayer pattern on the isp video sink pad
+ */
+struct rkisp2_params {
+	struct rkisp2_vdev_node vnode;
+	struct rkisp2_device *rkisp2;
+
+	spinlock_t buf_lock; /* locks the buffers list 'params' */
+	struct list_head params;
+
+	enum rkisp2_fmt_raw_pat_type raw_type;
+};
+
 struct rkisp2_debug {
 	struct dentry *debugfs_dir;
 	unsigned long data_loss;
@@ -324,6 +365,7 @@ struct rkisp2_debug {
  * @resizer_devs:  resizer sub-devices
  * @capture_devs:  capture devices
  * @dmarx:	   ISP memory read device
+ * @params:	   ISP parameters metadata output device
  * @pipe:	   media pipeline
  * @stream_lock:   serializes {start/stop}_streaming callbacks between the capture devices.
  * @debug:	   debug params to be exposed on debugfs
@@ -345,6 +387,7 @@ struct rkisp2_device {
 	struct rkisp2_isp isp;
 	struct rkisp2_capture capture_devs[2];
 	struct rkisp2_dmarx dmarx;
+	struct rkisp2_params params;
 	struct media_pipeline pipe;
 	struct mutex stream_lock; /* serialize {start/stop}_streaming cb between capture devices */
 	struct rkisp2_debug debug;
@@ -434,6 +477,7 @@ irqreturn_t rkisp2_isp_isr(int irq, void *ctx);
 irqreturn_t rkisp2_capture_isr(int irq, void *ctx);
 irqreturn_t rkisp2_mipi_isr(int irq, void *ctx);
 void rkisp2_dmarx_isr(struct rkisp2_device *rkisp2, u32 status);
+void rkisp2_params_isr(struct rkisp2_params *params);
 
 /* register/unregisters functions of the entities */
 int rkisp2_capture_devs_register(struct rkisp2_device *rkisp2);
@@ -443,6 +487,12 @@ int rkisp2_isp_register(struct rkisp2_device *rkisp2);
 void rkisp2_isp_unregister(struct rkisp2_device *rkisp2);
 int rkisp2_dmarx_register(struct rkisp2_device *rkisp2);
 void rkisp2_dmarx_unregister(struct rkisp2_device *rkisp2);
+
+int rkisp2_params_register(struct rkisp2_device *rkisp2);
+void rkisp2_params_unregister(struct rkisp2_device *rkisp2);
+void rkisp2_params_pre_configure(struct rkisp2_params *params,
+				 enum rkisp2_fmt_raw_pat_type bayer_pat);
+void rkisp2_params_post_configure(struct rkisp2_params *params);
 
 #if IS_ENABLED(CONFIG_DEBUG_FS)
 void rkisp2_debug_init(struct rkisp2_device *rkisp2);

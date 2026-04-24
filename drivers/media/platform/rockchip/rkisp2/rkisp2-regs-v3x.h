@@ -881,6 +881,15 @@
 #define ISP3X_LSC_YSIZE_CD			(ISP3X_LSC_BASE + 0x000A8)
 #define ISP3X_LSC_YSIZE_EF			(ISP3X_LSC_BASE + 0x000AC)
 
+#define ISP3X_LSC_XGRAD(n)		(n < 4 ? (ISP3X_LSC_XGRAD_01 + (n) * 4) : \
+						 (ISP3X_LSC_XGRAD_89 + ((n) - 4) * 4))
+#define ISP3X_LSC_YGRAD(n)		(n < 4 ? (ISP3X_LSC_YGRAD_01 + (n) * 4) : \
+						 (ISP3X_LSC_YGRAD_89 + ((n) - 4) * 4))
+#define ISP3X_LSC_XSIZE(n)		(n < 4 ? (ISP3X_LSC_XSIZE_01 + (n) * 4) : \
+						 (ISP3X_LSC_XSIZE_89 + ((n) - 4) * 4))
+#define ISP3X_LSC_YSIZE(n)		(n < 4 ? (ISP3X_LSC_YSIZE_01 + (n) * 4) : \
+						 (ISP3X_LSC_YSIZE_89 + ((n) - 4) * 4))
+
 #define ISP3X_DEBAYER_BASE			0x00002500
 #define ISP3X_DEBAYER_CONTROL			(ISP3X_DEBAYER_BASE + 0x00000)
 #define ISP3X_DEBAYER_G_INTERP			(ISP3X_DEBAYER_BASE + 0x00004)
@@ -3235,6 +3244,12 @@
 #define ISP33_IIR_WR_ID(x)		(((x) & 0x3f) << 16)
 #define ISP33_IIR_WR_CLEAR		BIT(24)
 
+/* GAMMA_OUT */
+#define ISP3X_GAMMA_OUT_CTRL_EN			BIT(0)
+#define ISP3X_GAMMA_OUT_CTRL_MODE_EQUIDISTANT	BIT(1)
+#define ISP3X_GAMMA_OUT_CTRL_SEGMENTS_48		BIT(2)
+#define ISP3X_GAMMA_OUT_SAMPLE(a, b)		(((a) & 0xfff) | (((b) & 0xfff) << 16))
+
 /* HDRTMO */
 
 /* HDRDRC */
@@ -3264,6 +3279,7 @@
 #define ISP3X_DPCC_WORKING		BIT(30)
 
 /* CCM */
+#define ISP3X_CCM_COEFF(a, b)		((a & 0x7ff) | (b << 16))
 #define ISP3X_CCM_HIGHY_ADJ_DIS		BIT(1)
 #define ISP32_CCM_ENH_ADJ_EN		BIT(2)
 #define ISP32_CCM_ASYM_ADJ_EN		BIT(3)
@@ -3287,6 +3303,21 @@
 #define ISP3X_LSC_ACTIVE_TABLE		BIT(1)
 #define ISP3X_LSC_TABLE_ADDRESS_0	0
 #define ISP3X_LSC_TABLE_ADDRESS_153	153
+
+#define ISP3X_LSC_CTRL_EN		BIT(0)
+
+#define ISP3X_LSC_ACTIVE_TABLE		BIT(1)
+
+#define ISP3X_LSC_LUT_EN		BIT(1)
+#define ISP3X_LSC_SECTOR_16X16		BIT(2)
+#define ISP3X_LSC_PRE_RD_ST_MODE	BIT(4)
+
+#define ISP3X_LSC_TABLE_DATA(v0, v1)     \
+	(((v0) & 0x1FFF) | (((v1) & 0x1FFF) << 16))
+#define ISP3X_LSC_SECT_SIZE(v0, v1)      \
+	(((v0) & 0xFFF) | (((v1) & 0xFFF) << 16))
+#define ISP3X_LSC_GRAD_SIZE(v0, v1)      \
+	(((v0) & 0xFFF) | (((v1) & 0xFFF) << 16))
 
 #define ISP3X_LSC_LUT_EN		BIT(1)
 #define ISP3X_LSC_SECTOR_16X16		BIT(2)

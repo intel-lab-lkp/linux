@@ -4,7 +4,8 @@ rockchip-isp2-y := rkisp2-capture.o \
            rkisp2-common.o \
            rkisp2-dev.o \
            rkisp2-dmarx.o \
-           rkisp2-isp.o
+           rkisp2-isp.o \
+           rkisp2-params.o
 
 rockchip-isp2-$(CONFIG_DEBUG_FS) += rkisp2-debug.o
 
