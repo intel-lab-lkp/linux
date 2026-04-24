@@ -15,25 +15,25 @@ struct SampleDriver;
 kernel::acpi_device_table! {
     ACPI_TABLE,
     MODULE_ACPI_TABLE,
-    <SampleDriver as i2c::Driver>::IdInfo,
+    <SampleDriver as i2c::Driver<'_>>::IdInfo,
     [(acpi::DeviceId::new(c"LNUXBEEF"), 0)]
 }
 
 kernel::i2c_device_table! {
     I2C_TABLE,
     MODULE_I2C_TABLE,
-    <SampleDriver as i2c::Driver>::IdInfo,
+    <SampleDriver as i2c::Driver<'_>>::IdInfo,
     [(i2c::DeviceId::new(c"rust_driver_i2c"), 0)]
 }
 
 kernel::of_device_table! {
     OF_TABLE,
     MODULE_OF_TABLE,
-    <SampleDriver as i2c::Driver>::IdInfo,
+    <SampleDriver as i2c::Driver<'_>>::IdInfo,
     [(of::DeviceId::new(c"test,rust_driver_i2c"), 0)]
 }
 
-impl i2c::Driver for SampleDriver {
+impl<'a> i2c::Driver<'a> for SampleDriver {
     type IdInfo = u32;
 
     const ACPI_ID_TABLE: Option<acpi::IdTable<Self::IdInfo>> = Some(&ACPI_TABLE);
@@ -41,9 +41,9 @@ impl i2c::Driver for SampleDriver {
     const OF_ID_TABLE: Option<of::IdTable<Self::IdInfo>> = Some(&OF_TABLE);
 
     fn probe(
-        idev: &i2c::I2cClient<Core>,
-        info: Option<&Self::IdInfo>,
-    ) -> impl PinInit<Self, Error> {
+        idev: &'a i2c::I2cClient<Core>,
+        info: Option<&'a Self::IdInfo>,
+    ) -> impl PinInit<Self, Error> + 'a {
         let dev = idev.as_ref();
 
         dev_info!(dev, "Probe Rust I2C driver sample.\n");
@@ -55,11 +55,11 @@ impl i2c::Driver for SampleDriver {
         Ok(Self)
     }
 
-    fn shutdown(idev: &i2c::I2cClient<Core>, _this: Pin<&Self>) {
+    fn shutdown(idev: &'a i2c::I2cClient<Core>, _this: Pin<&'a Self>) {
         dev_info!(idev.as_ref(), "Shutdown Rust I2C driver sample.\n");
     }
 
-    fn unbind(idev: &i2c::I2cClient<Core>, _this: Pin<&Self>) {
+    fn unbind(idev: &'a i2c::I2cClient<Core>, _this: Pin<&'a Self>) {
         dev_info!(idev.as_ref(), "Unbind Rust I2C driver sample.\n");
     }
 }

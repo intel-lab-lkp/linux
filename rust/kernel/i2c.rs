@@ -92,43 +92,57 @@ macro_rules! i2c_device_table {
 }
 
 /// An adapter for the registration of I2C drivers.
-pub struct Adapter<T: Driver>(T);
+///
+/// `F` is a [`ForLt`](trait@ForLt) type that maps lifetimes to the driver's device
+/// private data type, i.e. `F::Of<'a>` is the driver struct parameterized by `'a`. The macro
+/// `module_i2c_driver!` generates this automatically via `ForLt!()`.
+pub struct Adapter<F>(PhantomData<F>);
 
 // SAFETY:
 // - `bindings::i2c_driver` is a C type declared as `repr(C)`.
-// - `T` is the type of the driver's device private data.
+// - `F::Of<'static>` is the stored type of the driver's device private data.
 // - `struct i2c_driver` embeds a `struct device_driver`.
 // - `DEVICE_DRIVER_OFFSET` is the correct byte offset to the embedded `struct device_driver`.
-unsafe impl<T: Driver + 'static> driver::DriverLayout for Adapter<T> {
+unsafe impl<F> driver::DriverLayout for Adapter<F>
+where
+    F: ForLt + 'static,
+    for<'a> F::Of<'a>: Driver<'a>,
+{
     type DriverType = bindings::i2c_driver;
-    type DriverData = ForLt!(T);
+    type DriverData = F;
     const DEVICE_DRIVER_OFFSET: usize = core::mem::offset_of!(Self::DriverType, driver);
 }
 
 // SAFETY: A call to `unregister` for a given instance of `DriverType` is guaranteed to be valid if
 // a preceding call to `register` has been successful.
-unsafe impl<T: Driver + 'static> driver::RegistrationOps for Adapter<T> {
+unsafe impl<F> driver::RegistrationOps for Adapter<F>
+where
+    F: ForLt + 'static,
+    for<'a> F::Of<'a>: Driver<'a>,
+{
     unsafe fn register(
         idrv: &Opaque<Self::DriverType>,
         name: &'static CStr,
         module: &'static ThisModule,
     ) -> Result {
         build_assert!(
-            T::ACPI_ID_TABLE.is_some() || T::OF_ID_TABLE.is_some() || T::I2C_ID_TABLE.is_some(),
+            <F::Of<'static> as Driver<'static>>::ACPI_ID_TABLE.is_some()
+                || <F::Of<'static> as Driver<'static>>::OF_ID_TABLE.is_some()
+                || <F::Of<'static> as Driver<'static>>::I2C_ID_TABLE.is_some(),
             "At least one of ACPI/OF/Legacy tables must be present when registering an i2c driver"
         );
 
-        let i2c_table = match T::I2C_ID_TABLE {
+        let i2c_table = match <F::Of<'static> as Driver<'static>>::I2C_ID_TABLE {
             Some(table) => table.as_ptr(),
             None => core::ptr::null(),
         };
 
-        let of_table = match T::OF_ID_TABLE {
+        let of_table = match <F::Of<'static> as Driver<'static>>::OF_ID_TABLE {
             Some(table) => table.as_ptr(),
             None => core::ptr::null(),
         };
 
-        let acpi_table = match T::ACPI_ID_TABLE {
+        let acpi_table = match <F::Of<'static> as Driver<'static>>::ACPI_ID_TABLE {
             Some(table) => table.as_ptr(),
             None => core::ptr::null(),
         };
@@ -154,7 +168,11 @@ unsafe impl<T: Driver + 'static> driver::RegistrationOps for Adapter<T> {
     }
 }
 
-impl<T: Driver + 'static> Adapter<T> {
+impl<F> Adapter<F>
+where
+    F: ForLt + 'static,
+    for<'a> F::Of<'a>: Driver<'a>,
+{
     extern "C" fn probe_callback(idev: *mut bindings::i2c_client) -> kernel::ffi::c_int {
         // SAFETY: The I2C bus only ever calls the probe callback with a valid pointer to a
         // `struct i2c_client`.
@@ -162,13 +180,12 @@ impl<T: Driver + 'static> Adapter<T> {
         // INVARIANT: `idev` is valid for the duration of `probe_callback()`.
         let idev = unsafe { &*idev.cast::<I2cClient<device::CoreInternal>>() };
 
-        let info = Self::i2c_id_info(idev)
-            .or_else(|| <Self as driver::Adapter<'_>>::id_info(idev.as_ref()));
-
         from_result(|| {
-            let data = T::probe(idev, info);
+            let info = Self::i2c_id_info(idev)
+                .or_else(|| <Self as driver::Adapter<'_>>::id_info(idev.as_ref()));
+            let data = <F::Of<'_> as Driver<'_>>::probe(idev, info);
 
-            idev.as_ref().set_drvdata::<ForLt!(T)>(data)?;
+            idev.as_ref().set_drvdata::<F>(data)?;
             Ok(0)
         })
     }
@@ -178,11 +195,10 @@ impl<T: Driver + 'static> Adapter<T> {
         let idev = unsafe { &*idev.cast::<I2cClient<device::CoreInternal>>() };
 
         // SAFETY: `remove_callback` is only ever called after a successful call to
-        // `probe_callback`, hence it's guaranteed that `I2cClient::set_drvdata()` has been called
-        // and stored a `Pin<KBox<T>>`.
-        let data = unsafe { idev.as_ref().drvdata_borrow::<ForLt!(T)>() };
+        // `probe_callback`, hence it's guaranteed that drvdata has been set.
+        let data = unsafe { idev.as_ref().drvdata_borrow::<F>() };
 
-        T::unbind(idev, data);
+        <F::Of<'_> as Driver<'_>>::unbind(idev, data);
     }
 
     extern "C" fn shutdown_callback(idev: *mut bindings::i2c_client) {
@@ -190,23 +206,22 @@ impl<T: Driver + 'static> Adapter<T> {
         let idev = unsafe { &*idev.cast::<I2cClient<device::CoreInternal>>() };
 
         // SAFETY: `shutdown_callback` is only ever called after a successful call to
-        // `probe_callback`, hence it's guaranteed that `Device::set_drvdata()` has been called
-        // and stored a `Pin<KBox<T>>`.
-        let data = unsafe { idev.as_ref().drvdata_borrow::<ForLt!(T)>() };
+        // `probe_callback`, hence it's guaranteed that drvdata has been set.
+        let data = unsafe { idev.as_ref().drvdata_borrow::<F>() };
 
-        T::shutdown(idev, data);
+        <F::Of<'_> as Driver<'_>>::shutdown(idev, data);
     }
 
     /// The [`i2c::IdTable`] of the corresponding driver.
-    fn i2c_id_table() -> Option<IdTable<<Self as driver::Adapter<'static>>::IdInfo>> {
-        T::I2C_ID_TABLE
+    fn i2c_id_table<'a>() -> Option<IdTable<<F::Of<'a> as Driver<'a>>::IdInfo>> {
+        <F::Of<'a> as Driver<'a>>::I2C_ID_TABLE
     }
 
     /// Returns the driver's private data from the matching entry in the [`i2c::IdTable`], if any.
     ///
     /// If this returns `None`, it means there is no match with an entry in the [`i2c::IdTable`].
-    fn i2c_id_info(dev: &I2cClient) -> Option<&'static <Self as driver::Adapter<'static>>::IdInfo> {
-        let table = Self::i2c_id_table()?;
+    fn i2c_id_info<'a>(dev: &I2cClient) -> Option<&'a <F::Of<'a> as Driver<'a>>::IdInfo> {
+        let table = Self::i2c_id_table::<'a>()?;
 
         // SAFETY:
         // - `table` has static lifetime, hence it's valid for reads
@@ -225,15 +240,19 @@ impl<T: Driver + 'static> Adapter<T> {
     }
 }
 
-impl<'a, T: Driver + 'static> driver::Adapter<'a> for Adapter<T> {
-    type IdInfo = T::IdInfo;
+impl<'a, F> driver::Adapter<'a> for Adapter<F>
+where
+    F: ForLt + 'static,
+    F::Of<'a>: Driver<'a>,
+{
+    type IdInfo = <F::Of<'a> as Driver<'a>>::IdInfo;
 
     fn of_id_table() -> Option<of::IdTable<Self::IdInfo>> {
-        T::OF_ID_TABLE
+        <F::Of<'a> as Driver<'a>>::OF_ID_TABLE
     }
 
     fn acpi_id_table() -> Option<acpi::IdTable<Self::IdInfo>> {
-        T::ACPI_ID_TABLE
+        <F::Of<'a> as Driver<'a>>::ACPI_ID_TABLE
     }
 }
 
@@ -252,8 +271,11 @@ impl<'a, T: Driver + 'static> driver::Adapter<'a> for Adapter<T> {
 /// ```
 #[macro_export]
 macro_rules! module_i2c_driver {
-    ($($f:tt)*) => {
-        $crate::module_driver!(<T>, $crate::i2c::Adapter<T>, { $($f)* });
+    (type: $type:ty, $($rest:tt)*) => {
+        $crate::module_driver!(<T>, $crate::i2c::Adapter<T>, {
+            type: $crate::types::ForLt!($type),
+            $($rest)*
+        });
     };
 }
 
@@ -271,7 +293,7 @@ macro_rules! module_i2c_driver {
 /// kernel::acpi_device_table!(
 ///     ACPI_TABLE,
 ///     MODULE_ACPI_TABLE,
-///     <MyDriver as i2c::Driver>::IdInfo,
+///     <MyDriver as i2c::Driver<'_>>::IdInfo,
 ///     [
 ///         (acpi::DeviceId::new(c"LNUXBEEF"), ())
 ///     ]
@@ -280,7 +302,7 @@ macro_rules! module_i2c_driver {
 /// kernel::i2c_device_table!(
 ///     I2C_TABLE,
 ///     MODULE_I2C_TABLE,
-///     <MyDriver as i2c::Driver>::IdInfo,
+///     <MyDriver as i2c::Driver<'_>>::IdInfo,
 ///     [
 ///          (i2c::DeviceId::new(c"rust_driver_i2c"), ())
 ///     ]
@@ -289,30 +311,30 @@ macro_rules! module_i2c_driver {
 /// kernel::of_device_table!(
 ///     OF_TABLE,
 ///     MODULE_OF_TABLE,
-///     <MyDriver as i2c::Driver>::IdInfo,
+///     <MyDriver as i2c::Driver<'_>>::IdInfo,
 ///     [
 ///         (of::DeviceId::new(c"test,device"), ())
 ///     ]
 /// );
 ///
-/// impl i2c::Driver for MyDriver {
+/// impl<'a> i2c::Driver<'a> for MyDriver {
 ///     type IdInfo = ();
 ///     const I2C_ID_TABLE: Option<i2c::IdTable<Self::IdInfo>> = Some(&I2C_TABLE);
 ///     const OF_ID_TABLE: Option<of::IdTable<Self::IdInfo>> = Some(&OF_TABLE);
 ///     const ACPI_ID_TABLE: Option<acpi::IdTable<Self::IdInfo>> = Some(&ACPI_TABLE);
 ///
 ///     fn probe(
-///         _idev: &i2c::I2cClient<Core>,
-///         _id_info: Option<&Self::IdInfo>,
-///     ) -> impl PinInit<Self, Error> {
+///         _idev: &'a i2c::I2cClient<Core>,
+///         _id_info: Option<&'a Self::IdInfo>,
+///     ) -> impl PinInit<Self, Error> + 'a {
 ///         Err(ENODEV)
 ///     }
 ///
-///     fn shutdown(_idev: &i2c::I2cClient<Core>, this: Pin<&Self>) {
+///     fn shutdown(_idev: &'a i2c::I2cClient<Core>, _this: Pin<&'a Self>) {
 ///     }
 /// }
 ///```
-pub trait Driver: Send {
+pub trait Driver<'a>: Send {
     /// The type holding information about each device id supported by the driver.
     // TODO: Use `associated_type_defaults` once stabilized:
     //
@@ -335,9 +357,9 @@ pub trait Driver: Send {
     /// Called when a new i2c client is added or discovered.
     /// Implementers should attempt to initialize the client here.
     fn probe(
-        dev: &I2cClient<device::Core>,
-        id_info: Option<&Self::IdInfo>,
-    ) -> impl PinInit<Self, Error>;
+        dev: &'a I2cClient<device::Core>,
+        id_info: Option<&'a Self::IdInfo>,
+    ) -> impl PinInit<Self, Error> + 'a;
 
     /// I2C driver shutdown.
     ///
@@ -350,7 +372,7 @@ pub trait Driver: Send {
     /// This callback is distinct from final resource cleanup, as the driver instance remains valid
     /// after it returns. Any deallocation or teardown of driver-owned resources should instead be
     /// handled in `Self::drop`.
-    fn shutdown(dev: &I2cClient<device::Core>, this: Pin<&Self>) {
+    fn shutdown(dev: &'a I2cClient<device::Core>, this: Pin<&'a Self>) {
         let _ = (dev, this);
     }
 
@@ -364,7 +386,7 @@ pub trait Driver: Send {
     /// operations to gracefully tear down the device.
     ///
     /// Otherwise, release operations for driver resources should be performed in `Self::drop`.
-    fn unbind(dev: &I2cClient<device::Core>, this: Pin<&Self>) {
+    fn unbind(dev: &'a I2cClient<device::Core>, this: Pin<&'a Self>) {
         let _ = (dev, this);
     }
 }
