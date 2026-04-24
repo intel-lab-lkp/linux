@@ -1061,7 +1061,7 @@ struct iommu_group *iommu_group_alloc(void)
 	mutex_init(&group->mutex);
 	INIT_LIST_HEAD(&group->devices);
 	INIT_LIST_HEAD(&group->entry);
-	xa_init(&group->pasid_array);
+	xa_init_flags(&group->pasid_array, XA_FLAGS_ALLOC);
 
 	ret = ida_alloc(&iommu_group_ida, GFP_KERNEL);
 	if (ret < 0) {
@@ -3628,6 +3628,89 @@ out_unlock:
 	return ret;
 }
 EXPORT_SYMBOL_GPL(iommu_attach_device_pasid);
+
+/**
+ * iommu_attach_device_pasid_any() - Allocate a pasid of device and attach a
+ * domain to it
+ * @domain: the iommu domain.
+ * @dev: the attached device.
+ * @pasid: pointer to the pasid of the device to be allocated.
+ * @handle: the attach handle.
+ *
+ * Caller should always provide a new handle to avoid race with the paths
+ * that have lockless reference to handle if it intends to pass a valid handle.
+ *
+ * Return: 0 on success, or an error.
+ */
+int iommu_attach_device_pasid_any(struct iommu_domain *domain,
+				  struct device *dev,
+				  ioasid_t *pasid,
+				  struct iommu_attach_handle *handle)
+{
+	/* Caller must be a probed driver on dev */
+	struct iommu_group *group = dev->iommu_group;
+	const struct iommu_ops *ops;
+	void *entry;
+	u32 new_pasid;
+	int ret;
+
+	if (!group)
+		return -ENODEV;
+
+	ops = dev_iommu_ops(dev);
+
+	if (!domain->ops->set_dev_pasid ||
+	    !ops->blocked_domain ||
+	    !ops->blocked_domain->ops->set_dev_pasid)
+		return -EOPNOTSUPP;
+
+	if (!domain_iommu_ops_compatible(ops, domain) || !pasid)
+		return -EINVAL;
+
+	mutex_lock(&group->mutex);
+
+	/*
+	 * This is a concurrent attach during a device reset. Reject it until
+	 * pci_dev_reset_iommu_done() attaches the device to group->domain.
+	 */
+	if (group->resetting_domain) {
+		ret = -EBUSY;
+		goto out_unlock;
+	}
+
+	entry = iommu_make_pasid_array_entry(domain, handle);
+
+	struct xa_limit limit = {
+		.min = IOMMU_FIRST_GLOBAL_PASID,
+		.max = dev->iommu->max_pasids - 1,
+	};
+
+	ret = xa_alloc(&group->pasid_array, &new_pasid, XA_ZERO_ENTRY, limit, GFP_KERNEL);
+	if (ret)
+		goto out_unlock;
+
+	ret = __iommu_set_group_pasid(domain, group, new_pasid, NULL);
+	if (ret) {
+		xa_release(&group->pasid_array, new_pasid);
+		goto out_unlock;
+	}
+
+	/*
+	 * The xa_insert() above reserved the memory, and the group->mutex is
+	 * held, this cannot fail. The new domain cannot be visible until the
+	 * operation succeeds as we cannot tolerate PRIs becoming concurrently
+	 * queued and then failing attach.
+	 */
+	WARN_ON(xa_is_err(xa_store(&group->pasid_array,
+				   new_pasid, entry, GFP_KERNEL)));
+
+	*pasid = new_pasid;
+
+out_unlock:
+	mutex_unlock(&group->mutex);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(iommu_attach_device_pasid_any);
 
 /**
  * iommu_replace_device_pasid - Replace the domain that a specific pasid

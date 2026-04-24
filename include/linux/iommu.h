@@ -271,6 +271,7 @@ enum iommu_cap {
 	 */
 	IOMMU_CAP_DEFERRED_FLUSH,
 	IOMMU_CAP_DIRTY_TRACKING,	/* IOMMU supports dirty tracking */
+	IOMMU_CAP_PER_DEV_PASID_SPACE,	/* IOMMU supports per-device PASID space */
 };
 
 /* These are the possible reserved region types */
@@ -1137,6 +1138,7 @@ struct iommu_sva {
 
 struct iommu_mm_data {
 	u32			pasid;
+	bool			pasid_global;
 	struct mm_struct	*mm;
 	struct list_head	sva_domains;
 	struct list_head	mm_list_elm;
@@ -1185,6 +1187,9 @@ void iommu_device_release_dma_owner(struct device *dev);
 int iommu_attach_device_pasid(struct iommu_domain *domain,
 			      struct device *dev, ioasid_t pasid,
 			      struct iommu_attach_handle *handle);
+int iommu_attach_device_pasid_any(struct iommu_domain *domain,
+				  struct device *dev, ioasid_t *pasid,
+				  struct iommu_attach_handle *handle);
 void iommu_detach_device_pasid(struct iommu_domain *domain,
 			       struct device *dev, ioasid_t pasid);
 ioasid_t iommu_alloc_global_pasid(struct device *dev);
