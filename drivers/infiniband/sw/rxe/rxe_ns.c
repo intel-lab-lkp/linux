@@ -16,6 +16,7 @@
 struct rxe_ns_sock {
 	struct sock __rcu *rxe_sk4;
 	struct sock __rcu *rxe_sk6;
+	struct mutex rxe_sk_lock;
 };
 
 /*
@@ -28,9 +29,12 @@ static unsigned int rxe_pernet_id;
  */
 static int rxe_ns_init(struct net *net)
 {
+	struct rxe_ns_sock *ns_sk = net_generic(net, rxe_pernet_id);
+
 	/* defer socket create in the namespace to the first
 	 * device create.
 	 */
+	mutex_init(&ns_sk->rxe_sk_lock);
 
 	return 0;
 }
@@ -70,6 +74,20 @@ static struct pernet_operations rxe_net_ops = {
 	.id = &rxe_pernet_id,
 	.size = sizeof(struct rxe_ns_sock),
 };
+
+void rxe_ns_pernet_sk_lock(struct net *net)
+{
+	struct rxe_ns_sock *ns_sk = net_generic(net, rxe_pernet_id);
+
+	mutex_lock(&ns_sk->rxe_sk_lock);
+}
+
+void rxe_ns_pernet_sk_unlock(struct net *net)
+{
+	struct rxe_ns_sock *ns_sk = net_generic(net, rxe_pernet_id);
+
+	mutex_unlock(&ns_sk->rxe_sk_lock);
+}
 
 struct sock *rxe_ns_pernet_sk4(struct net *net)
 {
