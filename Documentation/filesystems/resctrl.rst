@@ -28,6 +28,7 @@ SMBA (Slow Memory Bandwidth Allocation)				""
 BMEC (Bandwidth Monitoring Event Configuration)			""
 ABMC (Assignable Bandwidth Monitoring Counters)			""
 SDCIAE (Smart Data Cache Injection Allocation Enforcement)	""
+GMBA (Global Memory Bandwidth Allocation)			""
 =============================================================== ================================
 
 Historically, new features were made visible by default in /proc/cpuinfo. This
@@ -964,6 +965,23 @@ Memory bandwidth domain is L3 cache.
 
 	MB:<cache_id0>=bw_MiBps0;<cache_id1>=bw_MiBps1;...
 
+Global Memory Bandwidth Allocation (GMBA)
+-----------------------------------------
+
+AMD hardware supports Global Memory Bandwidth Allocation (GMBA). GMBA
+provides a mechanism for software to specify bandwidth limits for groups
+of threads that span multiple QoS (L3) domains. Each such collection of
+QoS domains is called a GMBA control domain and is aligned to the system's
+NPS (Nodes Per Socket) configuration. NPS is a BIOS-level setting on AMD
+processors that selects how many NUMA (Non-Uniform Memory Access) nodes
+each CPU socket is divided into.
+
+The bandwidth domain for GMBA is the GMBA control domain. GMBA is exposed
+in the schemata file under the resource label ``GMB``, with values
+expressed in multiples of 1 GB/s::
+
+	GMB:<domain_id0>=bw_GBps0;<domain_id1>=bw_GBps1;...
+
 Slow Memory Bandwidth Allocation (SMBA)
 ---------------------------------------
 AMD hardware supports Slow Memory Bandwidth Allocation (SMBA).
@@ -1017,6 +1035,27 @@ For example, to allocate 2GB/s limit on the first cache id:
   # cat schemata
     MB:0=2048;1=  16;2=2048;3=2048
     L3:0=ffff;1=ffff;2=ffff;3=ffff
+
+Reading/writing the schemata file (on AMD systems) with GMBA feature
+--------------------------------------------------------------------
+Reading the schemata file shows the current bandwidth limit on every
+GMBA control domain. Values are in multiples of 1 GB/s.
+
+For example, to set an 8 GB/s limit on GMBA control domain 0, leaving
+control domain 1 at its previous limit:
+
+::
+
+  # cat schemata
+    GMB:0=4096;1=4096
+     MB:0=8192;1=8192;2=8192;3=8192
+     L3:0=ffff;1=ffff;2=ffff;3=ffff
+
+  # echo "GMB:0=8" > schemata
+  # cat schemata
+    GMB:0=   8;1=4096
+     MB:0=8192;1=8192;2=8192;3=8192
+     L3:0=ffff;1=ffff;2=ffff;3=ffff
 
 Reading/writing the schemata file (on AMD systems) with SMBA feature
 --------------------------------------------------------------------
