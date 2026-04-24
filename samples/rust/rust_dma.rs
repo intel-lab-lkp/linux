@@ -52,15 +52,18 @@ unsafe impl kernel::transmute::FromBytes for MyStruct {}
 kernel::pci_device_table!(
     PCI_TABLE,
     MODULE_PCI_TABLE,
-    <DmaSampleDriver as pci::Driver>::IdInfo,
+    <DmaSampleDriver as pci::Driver<'_>>::IdInfo,
     [(pci::DeviceId::from_id(pci::Vendor::REDHAT, 0x5), ())]
 );
 
-impl pci::Driver for DmaSampleDriver {
+impl<'a> pci::Driver<'a> for DmaSampleDriver {
     type IdInfo = ();
     const ID_TABLE: pci::IdTable<Self::IdInfo> = &PCI_TABLE;
 
-    fn probe(pdev: &pci::Device<Core>, _info: &Self::IdInfo) -> impl PinInit<Self, Error> {
+    fn probe(
+        pdev: &'a pci::Device<Core>,
+        _info: &'a Self::IdInfo,
+    ) -> impl PinInit<Self, Error> + 'a {
         pin_init::pin_init_scope(move || {
             dev_info!(pdev, "Probe DMA test driver.\n");
 

@@ -77,7 +77,7 @@ struct SampleDriver {
 kernel::pci_device_table!(
     PCI_TABLE,
     MODULE_PCI_TABLE,
-    <SampleDriver as pci::Driver>::IdInfo,
+    <SampleDriver as pci::Driver<'_>>::IdInfo,
     [(
         pci::DeviceId::from_id(pci::Vendor::REDHAT, 0x5),
         TestIndex::NO_EVENTFD
@@ -138,12 +138,15 @@ impl SampleDriver {
     }
 }
 
-impl pci::Driver for SampleDriver {
+impl<'a> pci::Driver<'a> for SampleDriver {
     type IdInfo = TestIndex;
 
     const ID_TABLE: pci::IdTable<Self::IdInfo> = &PCI_TABLE;
 
-    fn probe(pdev: &pci::Device<Core>, info: &Self::IdInfo) -> impl PinInit<Self, Error> {
+    fn probe(
+        pdev: &'a pci::Device<Core>,
+        info: &'a Self::IdInfo,
+    ) -> impl PinInit<Self, Error> + 'a {
         pin_init::pin_init_scope(move || {
             let vendor = pdev.vendor_id();
             dev_dbg!(
@@ -174,7 +177,7 @@ impl pci::Driver for SampleDriver {
         })
     }
 
-    fn unbind(pdev: &pci::Device<Core>, this: Pin<&Self>) {
+    fn unbind(pdev: &'a pci::Device<Core>, this: Pin<&'a Self>) {
         if let Ok(bar) = this.bar.access(pdev.as_ref()) {
             // Reset pci-testdev by writing a new test index.
             bar.write_reg(regs::TEST::zeroed().with_index(this.index));

@@ -7,6 +7,7 @@ use kernel::{
     driver::Registration,
     pci,
     prelude::*,
+    types::ForLt,
     InPlaceModule, //
 };
 
@@ -46,8 +47,9 @@ impl Drop for DebugfsRootGuard {
 struct NovaCoreModule {
     // Fields are dropped in declaration order, so `_driver` is dropped first,
     // then `_debugfs_guard` clears `DEBUGFS_ROOT`.
+    #[allow(clippy::type_complexity)]
     #[pin]
-    _driver: Registration<pci::Adapter<driver::NovaCore>>,
+    _driver: Registration<pci::Adapter<ForLt!(driver::NovaCore)>>,
     _debugfs_guard: DebugfsRootGuard,
 }
 
