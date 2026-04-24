@@ -1859,14 +1859,14 @@ static int nvmet_pci_epf_enable_ctrl(struct nvmet_pci_epf_ctrl *ctrl)
 	ctrl->mps_mask = ctrl->mps - 1;
 
 	ctrl->io_sqes = 1UL << nvmet_cc_iosqes(ctrl->cc);
-	if (ctrl->io_sqes < sizeof(struct nvme_command)) {
+	if (ctrl->io_sqes != sizeof(struct nvme_command)) {
 		dev_err(ctrl->dev, "Unsupported I/O SQES %zu (need %zu)\n",
 			ctrl->io_sqes, sizeof(struct nvme_command));
 		goto err;
 	}
 
 	ctrl->io_cqes = 1UL << nvmet_cc_iocqes(ctrl->cc);
-	if (ctrl->io_cqes < sizeof(struct nvme_completion)) {
+	if (ctrl->io_cqes != sizeof(struct nvme_completion)) {
 		dev_err(ctrl->dev, "Unsupported I/O CQES %zu (need %zu)\n",
 			ctrl->io_cqes, sizeof(struct nvme_completion));
 		goto err;
