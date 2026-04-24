@@ -22,16 +22,22 @@ Image Source Control IDs
     The IMAGE_SOURCE class descriptor.
 
 ``V4L2_CID_VBLANK (integer)``
-    Vertical blanking. The idle period after every frame during which no
-    image data is produced. The unit of vertical blanking is a line.
-    Every line has length of the image width plus horizontal blanking at
-    the pixel rate defined by ``V4L2_CID_PIXEL_RATE`` control in the
-    same sub-device.
+    Difference between the reference analogue crop rectangle (CCS) height or
+    output format height and the frame length in lines. See :ref:`frame interval
+    configuration <media_camera_sensor_frame_rate_raw>`.
+
+    The primary purpose of this control is low level frame interval
+    configuration. The value may also reflect vertical blanking but this is not
+    guaranteed.
 
 ``V4L2_CID_HBLANK (integer)``
-    Horizontal blanking. The idle period after every line of image data
-    during which no image data is produced. The unit of horizontal
-    blanking is pixels.
+    Difference between the reference analogue crop rectangle (CCS) width or
+    output format width and the line length in pixels. See :ref:`frame interval
+    configuration <media_camera_sensor_frame_rate_raw>`.
+
+    The primary purpose of this control is low level frame interval
+    configuration. The value may also reflect horizontal blanking but this is
+    not guaranteed.
 
 ``V4L2_CID_ANALOGUE_GAIN (integer)``
     Analogue gain is gain affecting all colour components in the pixel
