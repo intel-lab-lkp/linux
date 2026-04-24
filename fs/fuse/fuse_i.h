@@ -107,6 +107,14 @@ struct fuse_submount_lookup {
 struct fuse_backing {
 	struct file *file;
 	struct cred *cred;
+	/**
+	 * fd: fd installed in the daemon's fd table on BACKING_OPEN, or -1.
+	 * Valid only while this entry is in fc->backing_files_map.
+	 * Closed by BACKING_CLOSE (daemon ioctl context) or by a task_work
+	 * callback scheduled on fc->daemon_task during connection teardown.
+	 * Must be -1 before fuse_backing_free() is called.
+	 */
+	int fd;
 
 	/** refcount */
 	refcount_t count;
@@ -980,6 +988,13 @@ struct fuse_conn {
 #ifdef CONFIG_FUSE_PASSTHROUGH
 	/** IDR for backing files ids */
 	struct idr backing_files_map;
+	/**
+	 * daemon_task: task_struct of the daemon, held with a reference.
+	 * Used during connection teardown to schedule task_work that closes
+	 * any remaining backing fds in the daemon's fd table.  Set on the
+	 * first BACKING_OPEN ioctl; NULL if no backing files were registered.
+	 */
+	struct task_struct *daemon_task;
 #endif
 
 #ifdef CONFIG_FUSE_IO_URING
