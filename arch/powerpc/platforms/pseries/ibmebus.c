@@ -206,8 +206,7 @@ static int ibmebus_create_devices(const struct of_device_id *matches)
 
 		ret = ibmebus_create_device(child);
 		if (ret) {
-			printk(KERN_ERR "%s: failed to create device (%i)",
-			       __func__, ret);
+			pr_err("%s: failed to create device: %d\n", __func__, ret);
 			of_node_put(child);
 			break;
 		}
@@ -285,8 +284,7 @@ static ssize_t probe_store(const struct bus_type *bus, const char *buf, size_t c
 			      ibmebus_match_path);
 	if (dev) {
 		put_device(dev);
-		printk(KERN_WARNING "%s: %s has already been probed\n",
-		       __func__, path);
+		pr_warn("%s: %s has already been probed\n", __func__, path);
 		rc = -EEXIST;
 		goto out;
 	}
@@ -295,8 +293,7 @@ static ssize_t probe_store(const struct bus_type *bus, const char *buf, size_t c
 		rc = ibmebus_create_device(dn);
 		of_node_put(dn);
 	} else {
-		printk(KERN_WARNING "%s: no such device node: %s\n",
-		       __func__, path);
+		pr_warn("%s: no such device node: %s\n", __func__, path);
 		rc = -ENODEV;
 	}
 
@@ -325,8 +322,7 @@ static ssize_t remove_store(const struct bus_type *bus, const char *buf, size_t 
 		kfree(path);
 		return count;
 	} else {
-		printk(KERN_WARNING "%s: %s not on the bus\n",
-		       __func__, path);
+		pr_warn("%s: %s not on the bus\n", __func__, path);
 
 		kfree(path);
 		return -ENODEV;
@@ -451,20 +447,18 @@ static int __init ibmebus_bus_init(void)
 	struct device *root;
 	int err;
 
-	printk(KERN_INFO "IBM eBus Device Driver\n");
+	pr_info("IBM eBus Device Driver\n");
 
 	err = bus_register(&ibmebus_bus_type);
 	if (err) {
-		printk(KERN_ERR "%s: failed to register IBM eBus.\n",
-		       __func__);
+		pr_err("%s: failed to register IBM eBus\n", __func__);
 		return err;
 	}
 
 	root = root_device_register("ibmebus");
 	if (IS_ERR(root)) {
 		err = PTR_ERR(root);
-		printk(KERN_WARNING "%s: root_device_register returned %i\n",
-		       __func__, err);
+		pr_err("%s: failed to register root device: %d\n", __func__, err);
 		goto err_deregister_bus;
 	}
 
