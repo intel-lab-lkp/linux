@@ -57,6 +57,7 @@ extern struct kvm_x86_ops svm_x86_ops __initdata;
 
 enum inject_type {
 	INJECT_IRQ,
+	INJECT_NMI,
 };
 
 /*
