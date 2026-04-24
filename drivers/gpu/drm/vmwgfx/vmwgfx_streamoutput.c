@@ -55,9 +55,9 @@ struct vmw_dx_streamoutput {
 
 static int vmw_dx_streamoutput_create(struct vmw_resource *res);
 static int vmw_dx_streamoutput_bind(struct vmw_resource *res,
-				    struct ttm_validate_buffer *val_buf);
+				    struct vmw_validate_buffer *val_buf);
 static int vmw_dx_streamoutput_unbind(struct vmw_resource *res, bool readback,
-				      struct ttm_validate_buffer *val_buf);
+				      struct vmw_validate_buffer *val_buf);
 static void vmw_dx_streamoutput_commit_notify(struct vmw_resource *res,
 					      enum vmw_cmdbuf_res_state state);
 
@@ -136,7 +136,7 @@ static int vmw_dx_streamoutput_create(struct vmw_resource *res)
 }
 
 static int vmw_dx_streamoutput_bind(struct vmw_resource *res,
-				    struct ttm_validate_buffer *val_buf)
+				    struct vmw_validate_buffer *val_buf)
 {
 	struct vmw_private *dev_priv = res->dev_priv;
 	struct ttm_buffer_object *bo = val_buf->bo;
@@ -191,7 +191,7 @@ static int vmw_dx_streamoutput_scrub(struct vmw_resource *res)
 }
 
 static int vmw_dx_streamoutput_unbind(struct vmw_resource *res, bool readback,
-				      struct ttm_validate_buffer *val_buf)
+				      struct vmw_validate_buffer *val_buf)
 {
 	struct vmw_private *dev_priv = res->dev_priv;
 	struct vmw_fence_obj *fence;

@@ -93,10 +93,10 @@ struct vmw_res_func {
 	int (*create) (struct vmw_resource *res);
 	int (*destroy) (struct vmw_resource *res);
 	int (*bind) (struct vmw_resource *res,
-		     struct ttm_validate_buffer *val_buf);
+		     struct vmw_validate_buffer *val_buf);
 	int (*unbind) (struct vmw_resource *res,
 		       bool readback,
-		       struct ttm_validate_buffer *val_buf);
+		       struct vmw_validate_buffer *val_buf);
 	void (*commit_notify)(struct vmw_resource *res,
 			      enum vmw_cmdbuf_res_state state);
 	int (*dirty_alloc)(struct vmw_resource *res);

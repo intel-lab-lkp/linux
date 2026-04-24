@@ -65,6 +65,16 @@ struct vmw_validation_context {
 	u8 *page_address;
 };
 
+/**
+ * struct vmw_validate_buffer - Linked list of TTM BOs for validation
+ * @head: linked list node
+ * @bo: The TTM BO
+ */
+struct vmw_validate_buffer {
+	struct list_head head;
+	struct ttm_buffer_object *bo;
+};
+
 struct vmw_bo;
 struct vmw_resource;
 struct vmw_fence_obj;
