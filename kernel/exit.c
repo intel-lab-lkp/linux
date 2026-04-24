@@ -71,6 +71,7 @@
 #include <linux/unwind_deferred.h>
 #include <linux/uaccess.h>
 #include <linux/pidfs.h>
+#include <linux/vmalloc.h>
 
 #include <uapi/linux/wait.h>
 
@@ -791,6 +792,26 @@ unsigned long stack_not_used(struct task_struct *p)
 	return (unsigned long)end_of_stack(p) - (unsigned long)n;
 }
 #else /* !CONFIG_STACK_GROWSUP */
+#ifdef CONFIG_DYNAMIC_STACK
+unsigned long stack_not_used(struct task_struct *p)
+{
+	struct vm_struct *vm_area = task_stack_vm_area(p);
+	unsigned long stack = (unsigned long)task_stack_page(p);
+	unsigned long alloc_size, *n;
+
+	/* This is NULL only for init_task, where init_stack is fully allocated. */
+	if (likely(vm_area))
+		alloc_size = vm_area->nr_pages << PAGE_SHIFT;
+	else
+		alloc_size = THREAD_SIZE;
+	n = (unsigned long *)(stack + THREAD_SIZE - alloc_size);
+
+	while (!*n)
+		n++;
+
+	return (unsigned long)n - stack;
+}
+#else
 unsigned long stack_not_used(struct task_struct *p)
 {
 	unsigned long *n = end_of_stack(p);
@@ -801,6 +822,7 @@ unsigned long stack_not_used(struct task_struct *p)
 
 	return (unsigned long)n - (unsigned long)end_of_stack(p);
 }
+#endif /* CONFIG_DYNAMIC_STACK */
 #endif /* CONFIG_STACK_GROWSUP */
 
 /* Count the maximum pages reached in kernel stacks */

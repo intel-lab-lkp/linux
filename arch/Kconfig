@@ -1542,7 +1542,6 @@ config DYNAMIC_STACK
 	depends on VMAP_STACK
 	depends on INIT_STACK_ALL_ZERO || INIT_STACK_ALL_PATTERN
 	depends on !KASAN
-	depends on !DEBUG_STACK_USAGE
 	depends on !STACK_GROWSUP
 	depends on !PREEMPT_RT
 	help
