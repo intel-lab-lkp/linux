@@ -1427,10 +1427,13 @@ static int vd56g3_subdev_init(struct vd56g3 *sensor)
 	v4l2_subdev_unlock_state(state);
 	if (ret) {
 		dev_err(sensor->dev, "Controls update failed: %d\n", ret);
-		goto err_ctrls;
+		goto err_subdev;
 	}
 
 	return 0;
+
+err_subdev:
+	v4l2_subdev_cleanup(&sensor->sd);
 
 err_ctrls:
 	v4l2_ctrl_handler_free(sensor->sd.ctrl_handler);
