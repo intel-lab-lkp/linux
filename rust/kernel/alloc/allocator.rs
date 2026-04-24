@@ -305,4 +305,29 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_realloc_zero_size_does_not_error() -> Result {
+        // Note: this test only verifies that zero-size realloc completes without
+        // error. The actual deallocation is performed by the underlying C functions
+        // and is not verified here.
+        const INIT_SIZE: usize = 64;
+
+        let old = Layout::from_size_align(INIT_SIZE, 1).unwrap();
+        let new = Layout::from_size_align(0, 1).unwrap();
+
+        let existing = unsafe { Kmalloc::realloc(None, old, old, GFP_KERNEL, NumaNode::NO_NODE)? };
+        let existing_ptr = existing.cast::<u8>();
+        unsafe { Kmalloc::realloc(Some(existing_ptr), new, old, GFP_KERNEL, NumaNode::NO_NODE)? };
+
+        let existing = unsafe { Vmalloc::realloc(None, old, old, GFP_KERNEL, NumaNode::NO_NODE)? };
+        let existing_ptr = existing.cast::<u8>();
+        unsafe { Vmalloc::realloc(Some(existing_ptr), new, old, GFP_KERNEL, NumaNode::NO_NODE)? };
+
+        let existing = unsafe { KVmalloc::realloc(None, old, old, GFP_KERNEL, NumaNode::NO_NODE)? };
+        let existing_ptr = existing.cast::<u8>();
+        unsafe { KVmalloc::realloc(Some(existing_ptr), new, old, GFP_KERNEL, NumaNode::NO_NODE)? };
+
+        Ok(())
+    }
 }
