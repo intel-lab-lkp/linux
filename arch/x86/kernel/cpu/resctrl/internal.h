@@ -223,6 +223,7 @@ union l3_qos_abmc_cfg {
 };
 
 void rdt_ctrl_update(void *arg);
+void resctrl_arch_update_nps(struct msr_param *mp, struct rdt_ctrl_domain *d);
 
 int rdt_get_l3_mon_config(struct rdt_resource *r);
 

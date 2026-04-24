@@ -41,6 +41,86 @@ int resctrl_arch_update_one(struct rdt_resource *r, struct rdt_ctrl_domain *d,
 	return 0;
 }
 
+/**
+ * resctrl_get_l3_mask() - One CPU per distinct L3 within a resctrl domain
+ * @domain_mask: Full domain CPU mask (typically &d->hdr.cpu_mask).
+ * @l3_mask:	 Output mask. Cleared on entry, then populated with exactly
+ *		 one CPU per unique L3 cacheinfo id observed in @domain_mask.
+ *		 Always a subset of @domain_mask; may end up empty if no CPU
+ *		 in @domain_mask has a valid L3 id.
+ *
+ * For %RESCTRL_NPS_NODE controls (e.g. AMD GMBA) the control MSRs are
+ * instantiated per L3 complex, so a single IPI per resctrl domain is not
+ * sufficient. Callers are expected to run rdt_ctrl_update() on each CPU in
+ * @l3_mask to cover every L3 that participates in the domain
+ * (see resctrl_arch_update_nps()).
+ *
+ * Return: @l3_mask on success, %NULL if the scratch L3-id bitmap could not
+ *	   be allocated (in which case @l3_mask is left cleared).
+ */
+static struct cpumask *resctrl_get_l3_mask(const struct cpumask *domain_mask,
+					   struct cpumask *l3_mask)
+{
+	unsigned long *l3_dom_id;
+	int cpu, id;
+
+	cpumask_clear(l3_mask);
+	l3_dom_id = bitmap_zalloc(nr_cpu_ids, GFP_KERNEL);
+	if (!l3_dom_id)
+		return NULL;
+
+	for_each_cpu(cpu, domain_mask) {
+		id = get_cpu_cacheinfo_id(cpu, RESCTRL_L3_CACHE);
+		if (id < 0 || id >= nr_cpu_ids)
+			continue;
+		if (test_bit(id, l3_dom_id))
+			continue;
+		set_bit(id, l3_dom_id);
+		cpumask_set_cpu(cpu, l3_mask);
+	}
+
+	bitmap_free(l3_dom_id);
+	return l3_mask;
+}
+
+/**
+ * resctrl_arch_update_nps() - Apply staged ctrl MSRs for NPS-scoped resources
+ * @mp:	Parameters describing the MSR index range, resource and domain
+ *	passed through to rdt_ctrl_update().
+ * @d:	Control domain whose CPUs must see the MSR update.
+ *
+ * %RESCTRL_NPS_NODE resources program control MSRs per L3 complex, so one
+ * IPI per resctrl domain is not enough when the domain spans multiple L3s.
+ * Build a per-L3 representative mask with resctrl_get_l3_mask() and issue
+ * rdt_ctrl_update() via smp_call_function_many() on that mask.
+ *
+ * If the temporary cpumask or the scratch L3-id bitmap cannot be allocated,
+ * or the resulting per-L3 mask is empty, fall back to invoking
+ * smp_call_function_many() on the full domain CPU mask. This is
+ * conservative (more IPIs than strictly needed) but guarantees every L3 in
+ * the domain is covered.
+ */
+void resctrl_arch_update_nps(struct msr_param *mp, struct rdt_ctrl_domain *d)
+{
+	const struct cpumask *mask = &d->hdr.cpu_mask;
+	struct cpumask *new_mask;
+	cpumask_var_t l3_mask;
+	bool l3_alloc;
+
+	l3_alloc = zalloc_cpumask_var(&l3_mask, GFP_KERNEL);
+	if (l3_alloc) {
+		new_mask = resctrl_get_l3_mask(&d->hdr.cpu_mask, l3_mask);
+
+		if (new_mask && !cpumask_empty(new_mask))
+			mask = new_mask;
+	}
+
+	smp_call_function_many(mask, rdt_ctrl_update, mp, 1);
+
+	if (l3_alloc)
+		free_cpumask_var(l3_mask);
+}
+
 int resctrl_arch_update_domains(struct rdt_resource *r, u32 closid)
 {
 	struct resctrl_staged_config *cfg;
@@ -76,8 +156,14 @@ int resctrl_arch_update_domains(struct rdt_resource *r, u32 closid)
 				msr_param.high = max(msr_param.high, idx + 1);
 			}
 		}
-		if (msr_param.res)
-			smp_call_function_any(&d->hdr.cpu_mask, rdt_ctrl_update, &msr_param, 1);
+
+		if (msr_param.res) {
+			if (msr_param.res->ctrl_scope == RESCTRL_NPS_NODE)
+				resctrl_arch_update_nps(&msr_param, d);
+			else
+				smp_call_function_any(&d->hdr.cpu_mask,
+						      rdt_ctrl_update, &msr_param, 1);
+		}
 	}
 
 	return 0;

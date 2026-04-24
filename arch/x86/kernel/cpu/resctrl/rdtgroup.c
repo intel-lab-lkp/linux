@@ -245,9 +245,12 @@ void resctrl_arch_reset_all_ctrls(struct rdt_resource *r)
 	msr_param.high = hw_res->num_closid;
 
 	/*
-	 * Disable resource control for this resource by setting all
-	 * CBMs in all ctrl_domains to the maximum mask value. Pick one CPU
-	 * from each domain to update the MSRs below.
+	 * Disable resource control for this resource by setting all CBMs in
+	 * all ctrl_domains to the maximum mask value. For non-NPS scopes pick
+	 * one CPU from each domain to update the MSRs below; for
+	 * %RESCTRL_NPS_NODE the MSRs are per-L3, so defer to
+	 * resctrl_arch_update_nps() which issues the update on one CPU per
+	 * distinct L3 in the domain.
 	 */
 	list_for_each_entry(d, &r->ctrl_domains, hdr.list) {
 		hw_dom = resctrl_to_arch_ctrl_dom(d);
@@ -255,7 +258,11 @@ void resctrl_arch_reset_all_ctrls(struct rdt_resource *r)
 		for (i = 0; i < hw_res->num_closid; i++)
 			hw_dom->ctrl_val[i] = resctrl_get_default_ctrl(r);
 		msr_param.dom = d;
-		smp_call_function_any(&d->hdr.cpu_mask, rdt_ctrl_update, &msr_param, 1);
+		if (msr_param.res->ctrl_scope == RESCTRL_NPS_NODE)
+			resctrl_arch_update_nps(&msr_param, d);
+		else
+			smp_call_function_any(&d->hdr.cpu_mask, rdt_ctrl_update,
+					      &msr_param, 1);
 	}
 
 	return;
