@@ -57,6 +57,7 @@ documentation, or deleted if it has served its purpose.
    page_frags
    page_owner
    page_table_check
+   page_consistency
    remap_file_pages
    split_page_table_lock
    transhuge
