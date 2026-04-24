@@ -1578,6 +1578,7 @@ virtio_transport_recv_listen(struct sock *sk, struct sk_buff *skb,
 	 */
 	if (ret || vchild->transport != &t->transport) {
 		release_sock(child);
+		sk_acceptq_removed(sk);
 		virtio_transport_reset_no_sock(t, skb, sock_net(sk));
 		sock_put(child);
 		return ret;
@@ -1588,10 +1589,18 @@ virtio_transport_recv_listen(struct sock *sk, struct sk_buff *skb,
 		child->sk_write_space(child);
 
 	vsock_insert_connected(vchild);
-	vsock_enqueue_accept(sk, child);
-	virtio_transport_send_response(vchild, skb);
-
 	release_sock(child);
+	lock_sock(sk);
+	if (sk->sk_shutdown == SHUTDOWN_MASK) {
+		release_sock(sk);
+		sk_acceptq_removed(sk);
+		virtio_transport_reset_no_sock(t, skb, sock_net(sk));
+		sock_put(child);
+		return -ESHUTDOWN;
+	}
+	vsock_enqueue_accept(sk, child);
+	release_sock(sk);
+	virtio_transport_send_response(vchild, skb);
 
 	sk->sk_data_ready(sk);
 	return 0;
