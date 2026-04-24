@@ -1301,6 +1301,8 @@ int register_pstore_zone(struct pstore_zone_info *info)
 {
 	int err = -EINVAL;
 	struct psz_context *cxt = &pstore_zone_cxt;
+	char buf[256] = "";
+	size_t len = 0;
 
 	if (info->total_size < 4096) {
 		pr_warn("total_size must be >= 4096\n");
@@ -1383,30 +1385,28 @@ int register_pstore_zone(struct pstore_zone_info *info)
 	}
 	cxt->pstore.data = cxt;
 
-	pr_info("registered %s as backend for", info->name);
 	cxt->pstore.max_reason = info->max_reason;
 	cxt->pstore.name = info->name;
 	if (info->kmsg_size) {
 		cxt->pstore.flags |= PSTORE_FLAGS_DMESG;
-		pr_cont(" kmsg(%s",
-			kmsg_dump_reason_str(cxt->pstore.max_reason));
-		if (cxt->pstore_zone_info->panic_write)
-			pr_cont(",panic_write");
-		pr_cont(")");
+		len += scnprintf(buf + len, sizeof(buf) - len, " kmsg(%s%s)",
+			       kmsg_dump_reason_str(cxt->pstore.max_reason),
+			       cxt->pstore_zone_info->panic_write ? ",panic_write" : "");
 	}
 	if (info->pmsg_size) {
 		cxt->pstore.flags |= PSTORE_FLAGS_PMSG;
-		pr_cont(" pmsg");
+		len += scnprintf(buf + len, sizeof(buf) - len, " pmsg");
 	}
 	if (info->console_size) {
 		cxt->pstore.flags |= PSTORE_FLAGS_CONSOLE;
-		pr_cont(" console");
+		len += scnprintf(buf + len, sizeof(buf) - len, " console");
 	}
 	if (info->ftrace_size) {
 		cxt->pstore.flags |= PSTORE_FLAGS_FTRACE;
-		pr_cont(" ftrace");
+		len += scnprintf(buf + len, sizeof(buf) - len, " ftrace");
 	}
-	pr_cont("\n");
+
+	pr_info("registered %s as backend for%s\n", info->name, buf);
 
 	err = pstore_register(&cxt->pstore);
 	if (err) {
