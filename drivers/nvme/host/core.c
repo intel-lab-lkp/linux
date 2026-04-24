@@ -4747,6 +4747,16 @@ static u32 nvme_aer_subtype(u32 result)
 	return (result & 0xff00) >> 8;
 }
 
+static bool nvme_handle_aen_oneshot(struct nvme_ctrl *ctrl, u32 result, u32 event_param)
+{
+	u32 aer_subtype = nvme_aer_subtype(result);
+
+	/* Will be extended to handle specific one-shot event types */
+	if (aer_subtype == NVME_AER_ONE_SHOT_CDQ_TAIL_PTR)
+		return -ENOSYS;
+	return false;
+}
+
 static bool nvme_handle_aen_notice(struct nvme_ctrl *ctrl, u32 result)
 {
 	u32 aer_notice_type = nvme_aer_subtype(result);
@@ -4795,6 +4805,7 @@ void nvme_complete_async_event(struct nvme_ctrl *ctrl, __le16 status,
 		volatile union nvme_result *res)
 {
 	u32 result = le32_to_cpu(res->u32);
+	u32 event_param = 0;
 	u32 aer_type = nvme_aer_type(result);
 	u32 aer_subtype = nvme_aer_subtype(result);
 	bool requeue = true;
@@ -4806,6 +4817,15 @@ void nvme_complete_async_event(struct nvme_ctrl *ctrl, __le16 status,
 	switch (aer_type) {
 	case NVME_AER_NOTICE:
 		requeue = nvme_handle_aen_notice(ctrl, result);
+		break;
+	case NVME_AER_ONE_SHOT:
+		/*
+		 * One-shot events like CDQ tail pointer events.
+		 * Extract event parameter from upper 32 bits.
+		 */
+		event_param = le64_to_cpu(res->u64) >> 32;
+		requeue = nvme_handle_aen_oneshot(ctrl, result, event_param);
+		trace_nvme_async_event(ctrl, result);
 		break;
 	case NVME_AER_ERROR:
 		/*
