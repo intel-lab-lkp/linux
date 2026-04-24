@@ -144,6 +144,65 @@ config PAGE_TABLE_CHECK_ENFORCED
 
 	  If unsure say "n".
 
+config DEBUG_PAGE_CONSISTENCY
+	bool "Debug page allocator with dual-bitmap consistency checking"
+	depends on DEBUG_KERNEL
+	depends on !MEMORY_HOTPLUG
+	select DEBUG_FS
+	help
+	  Enable dual-bitmap tracking of page allocations for corruption
+	  detection. Uses two complementary bitmaps where the invariant
+	  (primary == ~secondary) must hold. Any bit flip in either bitmap
+	  will be detected.
+
+	  This is useful for safety-critical systems requiring Freedom From
+	  Interference (FFI) guarantees per ISO 26262 (ASIL-D) and IEC 61508
+	  (SIL-3).
+
+	  When disabled, the hooks compile away. When enabled, a static key
+	  gates tracking until initialization succeeds. The bitmaps are flat,
+	  covering the entire PFN range from memblock_start_of_DRAM() to
+	  memblock_end_of_DRAM() including any holes. This is deliberate:
+	  simple (pfn - min_pfn) indexing is trivially auditable and avoids
+	  auxiliary data structures that could themselves be subject to
+	  corruption. Memory overhead is two bits per PFN in the spanned
+	  range, e.g. ~4 MB total for a 64 GB system. Waste from holes is
+	  typically under 2%.
+
+	  Based on NVIDIA safety research.
+
+	  If unsure, say N.
+
+config DEBUG_PAGE_CONSISTENCY_PANIC
+	bool "Panic on page consistency failure"
+	depends on DEBUG_PAGE_CONSISTENCY
+	default y
+	help
+	  If enabled, the kernel will panic when a page consistency
+	  violation is detected, such as double-alloc or double-free.
+
+	  If disabled, a WARN with a stack trace is emitted and execution
+	  continues.
+
+	  For safety-critical systems, say Y.
+	  For debugging/development, say N.
+
+config DEBUG_PAGE_CONSISTENCY_KUNIT_TEST
+	tristate "KUnit tests for dual-bitmap consistency primitives" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  Enable KUnit tests for the dual-bitmap primitives defined in
+	  <linux/dual_bitmap.h>. These tests verify the core algorithm:
+	  setting and clearing bits in complementary bitmaps, detecting
+	  double-set and double-clear conditions, and detecting simulated
+	  corruption.
+
+	  The tests exercise only the header-only dual_bitmap library and
+	  do not require CONFIG_DEBUG_PAGE_CONSISTENCY.
+
+	  If unsure, say N.
+
 config PAGE_POISONING
 	bool "Poison pages after freeing"
 	help
