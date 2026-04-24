@@ -207,19 +207,35 @@ TRACE_EVENT(kvm_pio,
 /*
  * Tracepoint for fast mmio.
  */
+#define KVM_TRACE_FAST_MMIO_READ	0
+#define KVM_TRACE_FAST_MMIO_WRITE	1
+
+#define kvm_trace_symbol_fast_mmio \
+	{ KVM_TRACE_FAST_MMIO_READ, "read" }, \
+	{ KVM_TRACE_FAST_MMIO_WRITE, "write" }
+
 TRACE_EVENT(kvm_fast_mmio,
-	TP_PROTO(u64 gpa),
-	TP_ARGS(gpa),
+	TP_PROTO(u64 gpa, u32 type, u32 len, u64 val),
+	TP_ARGS(gpa, type, len, val),
 
 	TP_STRUCT__entry(
 		__field(u64,	gpa)
+		__field(u32,	type)
+		__field(u32,	len)
+		__field(u64,	val)
 	),
 
 	TP_fast_assign(
 		__entry->gpa		= gpa;
+		__entry->type		= type;
+		__entry->len		= len;
+		__entry->val		= val;
 	),
 
-	TP_printk("fast mmio at gpa 0x%llx", __entry->gpa)
+	TP_printk("fast mmio %s len %u gpa 0x%llx val 0x%llx",
+		  __print_symbolic(__entry->type, kvm_trace_symbol_fast_mmio),
+		  __entry->len,
+		  __entry->gpa, __entry->val)
 );
 
 /*

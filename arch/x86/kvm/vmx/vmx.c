@@ -5970,7 +5970,7 @@ static int handle_ept_misconfig(struct kvm_vcpu *vcpu)
 	gpa = vmcs_read64(GUEST_PHYSICAL_ADDRESS);
 	if (!is_guest_mode(vcpu) &&
 	    !kvm_io_bus_write(vcpu, KVM_FAST_MMIO_BUS, gpa, 0, NULL)) {
-		trace_kvm_fast_mmio(gpa);
+		trace_kvm_fast_mmio(gpa, KVM_TRACE_FAST_MMIO_WRITE, 0, 0);
 		return kvm_skip_emulated_instruction(vcpu);
 	}
 

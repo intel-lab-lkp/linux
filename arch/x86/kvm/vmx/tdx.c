@@ -1403,7 +1403,7 @@ static inline int tdx_mmio_write(struct kvm_vcpu *vcpu, gpa_t gpa, int size,
 				 unsigned long val)
 {
 	if (!kvm_io_bus_write(vcpu, KVM_FAST_MMIO_BUS, gpa, 0, NULL)) {
-		trace_kvm_fast_mmio(gpa);
+		trace_kvm_fast_mmio(gpa, KVM_TRACE_FAST_MMIO_WRITE, size, val);
 		return 0;
 	}
 

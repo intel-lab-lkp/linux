@@ -1981,7 +1981,7 @@ static int npf_interception(struct kvm_vcpu *vcpu)
 
 		if (nrips && svm->vmcb->control.next_rip &&
 		    !kvm_io_bus_write(vcpu, KVM_FAST_MMIO_BUS, gpa, 0, NULL)) {
-			trace_kvm_fast_mmio(gpa);
+			trace_kvm_fast_mmio(gpa, KVM_TRACE_FAST_MMIO_WRITE, 0, 0);
 			return kvm_skip_emulated_instruction(vcpu);
 		}
 	}
