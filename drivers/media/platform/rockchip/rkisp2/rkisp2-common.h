@@ -91,6 +91,7 @@ enum rkisp2_isp_pad {
 	RKISP2_ISP_PAD_SINK_VIDEO,
 	RKISP2_ISP_PAD_SINK_PARAMS,
 	RKISP2_ISP_PAD_SOURCE_VIDEO,
+	RKISP2_ISP_PAD_SOURCE_STATS,
 	RKISP2_ISP_PAD_MAX
 };
 
@@ -315,6 +316,46 @@ struct rkisp2_capture {
 };
 
 /*
+ * struct rkisp2_stats - ISP Statistics device
+ *
+ * @vnode:	  video node
+ * @rkisp2:	  pointer to the rkisp2 device
+ * @lock:	  locks the buffer list 'stat'
+ * @stat:	  queue of rkisp2_buffer
+ * @vdev_fmt:	  v4l2_format of the metadata format
+ * @imsc:	  interrupts that the stats is listening for (for stats 3a)
+ * @icr:	  interrupts that the stats has handled for the current frame (for stats 3a)
+ * @cur_buf:	  the current buffer to accumulate stats over multiple interrupts
+ *
+ * The imsc and icr fields are necessary to accumulate the stats because there
+ * seem to be separate interrupts in stats 3a for big modules and non-big
+ * modules. The conditions that cause separate interrupts are not yet fully
+ * understood, but is hypothesized to be big-mode & different window size
+ * compared to lite mode. We may need a similar construct for the core stats,
+ * but they have not been implemented yet (and they may not even exist).
+ *
+ * The imsc field is filled at v_start time to store what stats 3a interrupts
+ * we expect, then as they come in they are cleared by signalling in icr. The
+ * interrupt that fully sets icr (compared to imsc) will complete the stats
+ * buffer. On the next v_start any leftovers are cleared and logged as a
+ * counter to debugfs.
+ */
+struct rkisp2_stats {
+	struct rkisp2_vdev_node vnode;
+	struct rkisp2_device *rkisp2;
+
+	spinlock_t lock; /* locks the buffers list 'stats' */
+	struct list_head stat;
+	struct v4l2_format vdev_fmt;
+
+	u32 imsc;
+	u32 icr;
+	struct rkisp2_buffer *cur_buf;
+
+	unsigned int awb_window_offset;
+};
+
+/*
  * struct rkisp2_params - ISP input parameters device
  *
  * @vnode:		video node
@@ -342,9 +383,17 @@ struct rkisp2_debug {
 	unsigned long irq_delay;
 	unsigned long mipi_error;
 	unsigned long stats_error;
+	unsigned long stats3a_irq;
+	unsigned long stats_irq_delay;
 	unsigned long stop_timeout[2];
 	unsigned long frame_drop[2];
 	unsigned long complete_frames;
+	unsigned long stats3a_hist_ch0_count;
+	unsigned long stats3a_hist_ch1_count;
+	unsigned long stats3a_hist_ch2_count;
+	unsigned long stats3a_hist_big_count;
+	unsigned long stats3a_awb_count;
+	unsigned long stats3a_awb_done_count;
 };
 
 /*
@@ -366,6 +415,7 @@ struct rkisp2_debug {
  * @capture_devs:  capture devices
  * @dmarx:	   ISP memory read device
  * @params:	   ISP parameters metadata output device
+ * @stats:	   ISP statistics metadata capture device
  * @pipe:	   media pipeline
  * @stream_lock:   serializes {start/stop}_streaming callbacks between the capture devices.
  * @debug:	   debug params to be exposed on debugfs
@@ -388,6 +438,7 @@ struct rkisp2_device {
 	struct rkisp2_capture capture_devs[2];
 	struct rkisp2_dmarx dmarx;
 	struct rkisp2_params params;
+	struct rkisp2_stats stats;
 	struct media_pipeline pipe;
 	struct mutex stream_lock; /* serialize {start/stop}_streaming cb between capture devices */
 	struct rkisp2_debug debug;
@@ -478,6 +529,8 @@ irqreturn_t rkisp2_capture_isr(int irq, void *ctx);
 irqreturn_t rkisp2_mipi_isr(int irq, void *ctx);
 void rkisp2_dmarx_isr(struct rkisp2_device *rkisp2, u32 status);
 void rkisp2_params_isr(struct rkisp2_params *params);
+void rkisp2_stats_isr_v_start(struct rkisp2_stats *);
+irqreturn_t rkisp2_stats_isr_3a(struct rkisp2_stats *);
 
 /* register/unregisters functions of the entities */
 int rkisp2_capture_devs_register(struct rkisp2_device *rkisp2);
@@ -493,6 +546,9 @@ void rkisp2_params_unregister(struct rkisp2_device *rkisp2);
 void rkisp2_params_pre_configure(struct rkisp2_params *params,
 				 enum rkisp2_fmt_raw_pat_type bayer_pat);
 void rkisp2_params_post_configure(struct rkisp2_params *params);
+
+int rkisp2_stats_register(struct rkisp2_device *rkisp2);
+void rkisp2_stats_unregister(struct rkisp2_device *rkisp2);
 
 #if IS_ENABLED(CONFIG_DEBUG_FS)
 void rkisp2_debug_init(struct rkisp2_device *rkisp2);

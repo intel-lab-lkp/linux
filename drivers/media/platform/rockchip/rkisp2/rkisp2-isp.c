@@ -812,6 +812,7 @@ int rkisp2_isp_register(struct rkisp2_device *rkisp2)
 						MEDIA_PAD_FL_MUST_CONNECT;
 	pads[RKISP2_ISP_PAD_SINK_PARAMS].flags = MEDIA_PAD_FL_SINK;
 	pads[RKISP2_ISP_PAD_SOURCE_VIDEO].flags = MEDIA_PAD_FL_SOURCE;
+	pads[RKISP2_ISP_PAD_SOURCE_STATS].flags = MEDIA_PAD_FL_SOURCE;
 
 	ret = media_entity_pads_init(&sd->entity, RKISP2_ISP_PAD_MAX, pads);
 	if (ret)
@@ -876,6 +877,9 @@ irqreturn_t rkisp2_isp_isr(int irq, void *ctx)
 	if (!status)
 		return IRQ_NONE;
 
+	/* This is in a separate register so we need to check it separately */
+	rkisp2_stats_isr_3a(&rkisp2->stats);
+
 	/* Vertical sync signal, starting generating new frame */
 	if (status & RKISP2_CIF_ISP_V_START) {
 		rkisp2->isp.frame_sequence++;
@@ -884,6 +888,8 @@ irqreturn_t rkisp2_isp_isr(int irq, void *ctx)
 			WARN_ONCE(1, "irq delay is too long, buffers might not be in sync\n");
 			rkisp2->debug.irq_delay++;
 		}
+
+		rkisp2_stats_isr_v_start(&rkisp2->stats);
 	}
 	if (status & RKISP2_CIF_ISP_PIC_SIZE_ERROR) {
 		/* Clear pic_size_error */

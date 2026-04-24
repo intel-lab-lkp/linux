@@ -1429,7 +1429,7 @@
 #define ISP_RAWAE_LITE_BLK_SIZ			(ISP_RAWAE_LITE_BASE + 0x00004)
 #define ISP_RAWAE_LITE_OFFSET			(ISP_RAWAE_LITE_BASE + 0x00008)
 #define ISP_RAWAE_LITE_R2Y_CC			(ISP_RAWAE_LITE_BASE + 0x0000c)
-#define ISP_RAWAE_LITE_RO_MEAN			(ISP_RAWAE_LITE_BASE + 0x00010)
+#define ISP_RAWAE_LITE_RO_MEAN(i)		(ISP_RAWAE_LITE_BASE + 0x00010 + ((i) * 4))
 #define ISP_RAWAE_LITE_RO_DBG1			(ISP_RAWAE_LITE_BASE + 0x00074)
 #define ISP_RAWAE_LITE_RO_DBG2			(ISP_RAWAE_LITE_BASE + 0x00078)
 
@@ -2584,5 +2584,42 @@
 
 /* ISP21 DHAZ/DRC/BAY3D */
 #define ISP21_SELF_FORCE_UPD		BIT(31)
+
+/* RAWHIST */
+#define ISP_RAWHIST_CTRL_EN			BIT(0)
+#define ISP_RAWHIST_CTRL_STEPSIZE(a)		(((a) & 0x7) << 1)
+#define ISP_RAWHIST_CTRL_MODE(a)		(((a) & 0x7) << 8)
+#define ISP_RAWHIST_CTRL_WATERLINE(a)		(((a) & 0xfff) << 12)
+#define ISP_RAWHIST_CTRL_DATA_SEL(a)		(((a) & 0x7) << 24)
+#define ISP_RAWHIST_CTRL_MEAS_DONE		BIT(31)
+#define ISP_RAWHIST_BIG_CTRL_WND_5X5_1		BIT(28)
+#define ISP_RAWHIST_BIG_CTRL_WND_15X15_0	BIT(29)
+#define ISP_RAWHIST_BIG_CTRL_WND_15X15_1	(0x3 << 28)
+#define ISP_RAWHIST_BIG_CTRL_WND_MASK		GENMASK(29, 28)
+
+#define ISP_RAWHIST_H_SIZE(a)			((a) & 0x7ff)
+#define ISP_RAWHIST_V_SIZE(a)			(((a) & 0x7ff) << 16)
+#define ISP_RAWHIST_H_OFFS(a)			((a) & 0x1fff)
+#define ISP_RAWHIST_V_OFFS(a)			(((a) & 0x1fff) << 16)
+
+#define ISP_RAWHIST_RAW2Y_CC_RCC(a)		((a) & 0xff)
+#define ISP_RAWHIST_RAW2Y_CC_GCC(a)		(((a) & 0xff) << 8)
+#define ISP_RAWHIST_RAW2Y_CC_BCC(a)		(((a) & 0xff) << 16)
+#define ISP_RAWHIST_RAW2Y_CC_OFF(a)		(((a) & 0xff) << 24)
+
+#define ISP_RAWHIST_LITE_WEIGHT_WND0(a)		((a) & 0x3f)
+#define ISP_RAWHIST_LITE_WEIGHT_WND1(a)		(((a) & 0x3f) << 8)
+#define ISP_RAWHIST_LITE_WEIGHT_WND2(a)		(((a) & 0x3f) << 16)
+#define ISP_RAWHIST_LITE_WEIGHT_WND3(a)		(((a) & 0x3f) << 24)
+
+#define ISP_RAWHIST_BIG_WEIGHT_WND0(a)		((a) & 0x3f)
+#define ISP_RAWHIST_BIG_WEIGHT_WND1(a)		(((a) & 0x3f) << 6)
+#define ISP_RAWHIST_BIG_WEIGHT_WND2(a)		(((a) & 0x3f) << 12)
+#define ISP_RAWHIST_BIG_WEIGHT_WND3(a)		(((a) & 0x3f) << 18)
+#define ISP_RAWHIST_BIG_WEIGHT_WND4(a)		(((a) & 0x3f) << 24)
+
+#define ISP_RAWHIST_BIN_MASK 			GENMASK(27, 0)
+
+#define ISP_RAWHIST_RAM_OFFSET(a)		((a) & 0xff)
 
 #endif /* _RKISP_REGS_V2X_H */

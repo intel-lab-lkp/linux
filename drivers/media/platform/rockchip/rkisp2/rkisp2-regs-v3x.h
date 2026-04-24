@@ -3367,6 +3367,13 @@
 #define ISP3X_RAWAE_BIG_WND3_EN		BIT(6)
 #define ISP3X_RAWAE_BIG_WND4_EN		BIT(7)
 
+#define ISP3X_RAWAE_LITE_H(a)			((a) & 0x1fff)
+#define ISP3X_RAWAE_LITE_V(a)			(((a) & 0x1fff) << 16)
+
+#define ISP3X_RAWAE_LITE_RO_MEAN_R(a)		(((a) >> 22) & 0x3ff)
+#define ISP3X_RAWAE_LITE_RO_MEAN_B(a)		(((a) >> 12) & 0x3ff)
+#define ISP3X_RAWAE_LITE_RO_MEAN_G(a)		((a) & 0xfff)
+
 /* RAWHIST */
 #define ISP3X_RAWHIST_EN		BIT(0)
 #define ISP3X_RAWHIST_STEPSIZE(x)	(((x) & 0x7) << 1)
@@ -3397,6 +3404,12 @@
 #define ISP3X_RAWAF_INTLINE0_EN		BIT(27)
 
 /* RAWAWB */
+#define ISP3X_RAWAWB_CTRL_EN		BIT(0)
+#define ISP3X_RAWAWB_CTRL_MEAS_DONE	BIT(31)
+
+#define ISP3X_RAWAWB_WIN(h, v)		(((h) & 0x1fff) | (((v) & 0x1fff) << 16))
+#define ISP3X_RAWAWB_LIMITS(a, b)		(((a) & 0xff) | (((b) & 0xff) << 16))
+
 #define ISP32_RAWAWB_2DDR_PATH_EN	BIT(23)
 #define ISP32_RAWAWB_2DDR_PATH_DS	BIT(27)
 #define ISP32_RAWAWB_2DDR_PATH_ERR	BIT(29)
