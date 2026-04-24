@@ -820,10 +820,10 @@ static bool pci_msix_validate_entries(struct pci_dev *dev, struct msix_entry *en
 	return true;
 }
 
-int __pci_enable_msix_range(struct pci_dev *dev, struct msix_entry *entries, int minvec,
-			    int maxvec, struct irq_affinity *affd, int flags)
+static int pci_msix_range_alloc(struct pci_dev *dev, struct msix_entry *entries,
+				int minvec, int maxvec, int flags, int *nvec_ret)
 {
-	int hwsize, rc, nvec = maxvec;
+	int hwsize, nvec = maxvec;
 
 	if (maxvec < minvec)
 		return -ERANGE;
@@ -858,12 +858,16 @@ int __pci_enable_msix_range(struct pci_dev *dev, struct msix_entry *entries, int
 			nvec = hwsize;
 	}
 
-	if (nvec < minvec)
-		return -ENOSPC;
+	*nvec_ret = nvec;
 
-	rc = pci_setup_msi_context(dev);
-	if (rc)
-		return rc;
+	return hwsize;
+}
+
+static int pci_msix_range_init(struct pci_dev *dev, struct msix_entry *entries,
+			       int minvec, int nvec, int hwsize,
+			       struct irq_affinity *affd)
+{
+	int rc;
 
 	if (!pci_setup_msix_device_domain(dev, hwsize))
 		return -ENODEV;
@@ -886,6 +890,24 @@ int __pci_enable_msix_range(struct pci_dev *dev, struct msix_entry *entries, int
 
 		nvec = rc;
 	}
+}
+
+int __pci_enable_msix_range(struct pci_dev *dev, struct msix_entry *entries,
+			    int minvec, int maxvec, struct irq_affinity *affd,
+			    int flags)
+{
+	int hwsize, nvec, rc;
+
+	hwsize = pci_msix_range_alloc(dev, entries, minvec,
+				      maxvec, flags, &nvec);
+	if (hwsize < 0)
+		return hwsize;
+
+	rc = pci_setup_msi_context(dev);
+	if (rc)
+		return rc;
+
+	return pci_msix_range_init(dev, entries, minvec, nvec, hwsize, affd);
 }
 
 void __pci_restore_msix_state(struct pci_dev *dev)
