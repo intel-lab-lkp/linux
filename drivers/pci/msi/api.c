@@ -297,6 +297,90 @@ int pci_alloc_irq_vectors_affinity(struct pci_dev *dev, unsigned int min_vecs,
 EXPORT_SYMBOL(pci_alloc_irq_vectors_affinity);
 
 /**
+ * pcim_alloc_irq_vectors - devres managed pci_alloc_irq_vectors()
+ * @dev: the PCI device to operate on
+ * @min_vecs: minimum number of vectors required (must be >= 1)
+ * @max_vecs: maximum (desired) number of vectors
+ * @flags: flags for this allocation, see pci_alloc_irq_vectors()
+ *
+ * This is a device resource managed version of pci_alloc_irq_vectors().
+ * Interrupt vectors are automatically freed on driver detach by devres.
+ * Drivers MUST NOT call pci_free_irq_vectors().
+ *
+ * Returns number of vectors allocated (which might be smaller than
+ * @max_vecs) on success, or a negative error code on failure.
+ */
+int pcim_alloc_irq_vectors(struct pci_dev *dev, unsigned int min_vecs,
+			   unsigned int max_vecs, unsigned int flags)
+{
+	return pcim_alloc_irq_vectors_affinity(dev, min_vecs, max_vecs,
+					       flags, NULL);
+}
+EXPORT_SYMBOL(pcim_alloc_irq_vectors);
+
+/**
+ * pcim_alloc_irq_vectors_affinity - devres managed pci_alloc_irq_vectors_affinity()
+ * @dev: the PCI device to operate on
+ * @min_vecs: minimum number of vectors required (must be >= 1)
+ * @max_vecs: maximum (desired) number of vectors
+ * @flags: flags for this allocation, see pci_alloc_irq_vectors()
+ * @affd: optional description of the affinity requirements
+ *
+ * This is a device resource managed version of pci_alloc_irq_vectors_affinity().
+ * Interrupt vectors are automatically freed on driver detach by devres.
+ * Drivers MUST NOT call pci_free_irq_vectors().
+ *
+ * Returns number of vectors allocated (which might be smaller than
+ * @max_vecs) on success, or a negative error code on failure.
+ */
+int pcim_alloc_irq_vectors_affinity(struct pci_dev *dev, unsigned int min_vecs,
+				    unsigned int max_vecs, unsigned int flags,
+				    struct irq_affinity *affd)
+{
+	struct irq_affinity msi_default_affd = {0};
+	int nvecs = -ENOSPC;
+
+	if (flags & PCI_IRQ_AFFINITY) {
+		if (!affd)
+			affd = &msi_default_affd;
+	} else {
+		if (WARN_ON(affd))
+			affd = NULL;
+	}
+
+	if (flags & PCI_IRQ_MSIX) {
+		nvecs = __pcim_enable_msix_range(dev, NULL, min_vecs, max_vecs,
+						 affd, flags);
+		if (nvecs > 0)
+			return nvecs;
+	}
+
+	if (flags & PCI_IRQ_MSI) {
+		nvecs = __pcim_enable_msi_range(dev, min_vecs, max_vecs, affd);
+		if (nvecs > 0)
+			return nvecs;
+	}
+
+	/* use INTx IRQ if allowed */
+	if (flags & PCI_IRQ_INTX) {
+		if (min_vecs == 1 && dev->irq) {
+			/*
+			 * Invoke the affinity spreading logic to ensure that
+			 * the device driver can adjust queue configuration
+			 * for the single interrupt case.
+			 */
+			if (affd)
+				kfree(irq_create_affinity_masks(1, affd));
+			pci_intx(dev, 1);
+			return 1;
+		}
+	}
+
+	return nvecs;
+}
+EXPORT_SYMBOL(pcim_alloc_irq_vectors_affinity);
+
+/**
  * pci_irq_vector() - Get Linux IRQ number of a device interrupt vector
  * @dev: the PCI device to operate on
  * @nr:  device-relative interrupt vector index (0-based); has different
