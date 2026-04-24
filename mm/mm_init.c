@@ -22,6 +22,7 @@
 #include <linux/kmemleak.h>
 #include <linux/kfence.h>
 #include <linux/page_ext.h>
+#include <linux/page_consistency.h>
 #include <linux/pti.h>
 #include <linux/pgtable.h>
 #include <linux/stackdepot.h>
@@ -2720,6 +2721,14 @@ void __init mm_core_init(void)
 	 */
 	kho_memory_init();
 
+	/*
+	 * page_consistency_init() must run while memblock is active so it
+	 * can use memblock_alloc() for the bitmaps.  Boot-time reserved pages
+	 * may be freed before SYSTEM_RUNNING without ever having been allocated
+	 * through the buddy allocator, so the checker suppresses double-free
+	 * reports until boot has completed.
+	 */
+	page_consistency_init();
 	memblock_free_all();
 	mem_init();
 	kmem_cache_init();

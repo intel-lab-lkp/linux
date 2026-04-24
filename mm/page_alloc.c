@@ -46,6 +46,7 @@
 #include <linux/sched/mm.h>
 #include <linux/page_owner.h>
 #include <linux/page_table_check.h>
+#include <linux/page_consistency.h>
 #include <linux/memcontrol.h>
 #include <linux/ftrace.h>
 #include <linux/lockdep.h>
@@ -1338,6 +1339,7 @@ static __always_inline bool __free_pages_prepare(struct page *page,
 		/* Do not let hwpoison pages hit pcplists/buddy */
 		reset_page_owner(page, order);
 		page_table_check_free(page, order);
+		page_consistency_free(page, order);
 		pgalloc_tag_sub(page, 1 << order);
 
 		/*
@@ -1404,6 +1406,7 @@ static __always_inline bool __free_pages_prepare(struct page *page,
 	page->private = 0;
 	reset_page_owner(page, order);
 	page_table_check_free(page, order);
+	page_consistency_free(page, order);
 	pgalloc_tag_sub(page, 1 << order);
 
 	if (!PageHighMem(page) && !(fpi_flags & FPI_TRYLOCK)) {
@@ -1860,6 +1863,7 @@ inline void post_alloc_hook(struct page *page, unsigned int order,
 
 	set_page_owner(page, order, gfp_flags);
 	page_table_check_alloc(page, order);
+	page_consistency_alloc(page, order);
 	pgalloc_tag_add(page, current, 1 << order);
 }
 
