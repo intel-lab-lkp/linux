@@ -1672,6 +1672,23 @@ done:
 	return 0;
 }
 
+static int irq_setup_linear(unsigned int *irqs, unsigned int len)
+{
+	int cpu;
+
+	rcu_read_lock();
+	for_each_online_cpu(cpu) {
+		if (len <= 0)
+			break;
+
+		irq_set_affinity_and_hint(*irqs++, cpumask_of(cpu));
+		len--;
+	}
+	rcu_read_unlock();
+
+	return 0;
+}
+
 static int mana_gd_setup_dyn_irqs(struct pci_dev *pdev, int nvec)
 {
 	struct gdma_context *gc = pci_get_drvdata(pdev);
@@ -1722,10 +1739,24 @@ static int mana_gd_setup_dyn_irqs(struct pci_dev *pdev, int nvec)
 	 * first CPU sibling group since they are already affinitized to HWC IRQ
 	 */
 	cpus_read_lock();
-	if (gc->num_msix_usable <= num_online_cpus())
+	if (gc->num_msix_usable <= num_online_cpus()) {
 		skip_first_cpu = true;
+		err = irq_setup(irqs, nvec, gc->numa_node, skip_first_cpu);
+	} else {
+		/*
+		 * In case our IRQs are more than num_online_cpus, we try to
+		 * make sure we are using all vcpus. In such a case NUMA or
+		 * CPU core affinity does not matter.
+		 * Note that in this case the total mana IRQ should always be
+		 * num_online_cpu + 1. The first HWC IRQ is already handled
+		 * in HWC setup calls
+		 * So, the nvec value in this path should always be equal to
+		 * num_online_cpu
+		 */
+		WARN_ON(nvec > num_online_cpus());
+		err = irq_setup_linear(irqs, nvec);
+	}
 
-	err = irq_setup(irqs, nvec, gc->numa_node, skip_first_cpu);
 	if (err) {
 		cpus_read_unlock();
 		goto free_irq;
