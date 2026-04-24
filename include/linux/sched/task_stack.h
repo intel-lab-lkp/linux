@@ -105,6 +105,7 @@ void exit_task_stack_account(struct task_struct *tsk);
 void dynamic_stack_refill_pages(void);
 unsigned long dynamic_stack_accounting(struct task_struct *tsk, bool finalize);
 bool dynamic_stack_fault(struct task_struct *tsk, unsigned long address, bool *on_stack);
+struct task_struct *task_from_stack_address(unsigned long address);
 
 /*
  * Refill and charge for the used pages.

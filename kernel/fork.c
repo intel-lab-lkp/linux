@@ -296,15 +296,39 @@ static bool try_release_thread_stack_to_cache(struct vm_struct *vm_area)
 
 static DEFINE_PER_CPU(struct page *, dynamic_stack_pages[DYNSTK_PAGE_POOL_NR]);
 
+#define TASK_PTR_SHIFT (ilog2(__alignof__(struct task_struct)))
+
 static void link_vmap_stack_to_task(struct task_struct *tsk, struct vm_struct *vm_area)
 {
+	int i;
+	unsigned long addr;
+	pte_t *ptep, pte;
+
+	pte = make_data_kpte(((unsigned long)tsk) >> TASK_PTR_SHIFT);
+
 	tsk->stack_vm_area = vm_area;
 	tsk->packed_stack = (unsigned long)kasan_reset_tag(vm_area->addr);
+
+	addr = (unsigned long)vm_area->addr;
+	ptep = virt_to_kpte(addr);
+	for (i = vm_area->nr_pages; i < THREAD_SIZE >> PAGE_SHIFT;
+	     i++, addr += PAGE_SIZE, ptep++)
+		set_pte_at(&init_mm, addr, ptep, pte);
 }
 
-static void free_vmap_stack(struct vm_struct *vm_area)
+static void free_vmap_stack(struct vm_struct *vm_area, bool was_mapped)
 {
 	int i;
+
+	/* Clear data kptes since vunmap expects present or none. */
+	if (was_mapped) {
+		unsigned long addr = (unsigned long)vm_area->addr;
+		pte_t *ptep = virt_to_kpte(addr);
+		unsigned int nr_to_clear = (THREAD_SIZE >> PAGE_SHIFT) - vm_area->nr_pages;
+
+		if (nr_to_clear)
+			clear_ptes(&init_mm, addr, ptep, nr_to_clear);
+	}
 
 	remove_vm_area(vm_area->addr);
 
@@ -354,7 +378,7 @@ static struct vm_struct *alloc_vmap_stack(int node)
 
 	return vm_area;
 cleanup_err:
-	free_vmap_stack(vm_area);
+	free_vmap_stack(vm_area, false);
 	return NULL;
 }
 
@@ -477,6 +501,42 @@ unsigned long dynamic_stack_accounting(struct task_struct *tsk, bool finalize)
 	return i;
 }
 
+noinstr struct task_struct *task_from_stack_address(unsigned long address)
+{
+	pgd_t *pgd;
+	p4d_t *p4d;
+	pud_t *pud;
+	pmd_t *pmd;
+	pte_t *pte;
+
+	BUILD_BUG_ON((BITS_PER_LONG - TASK_PTR_SHIFT) > KPTE_AVAILABLE_DATA_BITS);
+
+	if (!is_vmalloc_addr((void *)address))
+		return NULL;
+
+	pgd = pgd_offset_k(address);
+	if (pgd_none(*pgd) || pgd_leaf(*pgd))
+		return NULL;
+
+	p4d = p4d_offset(pgd, address);
+	if (p4d_none(*p4d) || p4d_leaf(*p4d))
+		return NULL;
+
+	pud = pud_offset(p4d, address);
+	if (pud_none(*pud) || pud_leaf(*pud))
+		return NULL;
+
+	pmd = pmd_offset(pud, address);
+	if (pmd_none(*pmd) || pmd_leaf(*pmd))
+		return NULL;
+
+	pte = pte_offset_kernel(pmd, address);
+	if (pte_present(*pte) || pte_none(*pte))
+		return NULL;
+
+	return (struct task_struct *)(unpack_data_kpte(*pte) << TASK_PTR_SHIFT);
+}
+
 bool noinstr dynamic_stack_fault(struct task_struct *tsk, unsigned long address, bool *on_stack)
 {
 	unsigned long stack, hole_end, addr;
@@ -570,7 +630,7 @@ static inline struct vm_struct *alloc_vmap_stack(int node)
 	return stack ? find_vm_area(stack) : NULL;
 }
 
-static inline void free_vmap_stack(struct vm_struct *vm_area)
+static inline void free_vmap_stack(struct vm_struct *vm_area, bool was_mapped)
 {
 	vfree(vm_area->addr);
 }
@@ -590,7 +650,7 @@ static void thread_stack_free_work(struct work_struct *work)
 	if (try_release_thread_stack_to_cache(vm_stack->stack_vm_area))
 		return;
 
-	free_vmap_stack(vm_area);
+	free_vmap_stack(vm_area, true);
 }
 
 static void thread_stack_delayed_free(struct task_struct *tsk)
@@ -618,7 +678,7 @@ static int free_vm_stack_cache(unsigned int cpu)
 		if (!vm_area)
 			continue;
 
-		free_vmap_stack(vm_area);
+		free_vmap_stack(vm_area, true);
 		cached_vm_stack_areas[i] = NULL;
 	}
 
@@ -653,7 +713,7 @@ static int alloc_thread_stack_node(struct task_struct *tsk, int node)
 		unsigned long memset_offset = 0;
 
 		if (memcg_charge_kernel_stack(vm_area)) {
-			free_vmap_stack(vm_area);
+			free_vmap_stack(vm_area, true);
 			return -ENOMEM;
 		}
 
@@ -674,7 +734,7 @@ static int alloc_thread_stack_node(struct task_struct *tsk, int node)
 		return -ENOMEM;
 
 	if (memcg_charge_kernel_stack(vm_area)) {
-		free_vmap_stack(vm_area);
+		free_vmap_stack(vm_area, true);
 		return -ENOMEM;
 	}
 	link_vmap_stack_to_task(tsk, vm_area);
