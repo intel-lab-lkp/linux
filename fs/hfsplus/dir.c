@@ -98,7 +98,7 @@ again:
 				dentry->d_fsdata = (void *)(unsigned long)cnid;
 				linkid =
 					be32_to_cpu(entry.file.permissions.dev);
-				str.len = sprintf(name, "iNode%d", linkid);
+				str.len = scnprintf(name, sizeof(name), "iNode%d", linkid);
 				str.name = name;
 				err = hfsplus_cat_build_key(sb, fd.search_key,
 					HFSPLUS_SB(sb)->hidden_dir->i_ino,
@@ -322,7 +322,7 @@ static int hfsplus_link(struct dentry *src_dentry, struct inode *dst_dir,
 			get_random_bytes(&id, sizeof(cnid));
 			id &= 0x3fffffff;
 			str.name = name;
-			str.len = sprintf(name, "iNode%d", id);
+			str.len = scnprintf(name, sizeof(name), "iNode%d", id);
 			res = hfsplus_rename_cat(inode->i_ino,
 						 src_dir, &src_dentry->d_name,
 						 sbi->hidden_dir, &str);
@@ -393,7 +393,7 @@ static int hfsplus_unlink(struct inode *dir, struct dentry *dentry)
 	if (inode->i_ino == cnid &&
 	    atomic_read(&HFSPLUS_I(inode)->opencnt)) {
 		str.name = name;
-		str.len = sprintf(name, "temp%llu", inode->i_ino);
+		str.len = scnprintf(name, sizeof(name), "temp%llu", inode->i_ino);
 		res = hfsplus_rename_cat(inode->i_ino,
 					 dir, &dentry->d_name,
 					 sbi->hidden_dir, &str);
