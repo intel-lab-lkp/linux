@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/hwlock/starfive,jhb100-hwspinlock.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: StarFive Hardware Spinlock
+
+maintainers:
+  - Xingyu Wu <xingyu.wu@starfivetech.com>
+
+properties:
+  compatible:
+    const: starfive,jhb100-hwspinlock
+
+  reg:
+    maxItems: 1
+
+  resets:
+    maxItems: 1
+
+  "#hwlock-cells":
+    const: 1
+
+required:
+  - compatible
+  - reg
+  - resets
+  - "#hwlock-cells"
+
+additionalProperties: false
+
+examples:
+  - |
+    hwspinlock@13012000 {
+        compatible = "starfive,jhb100-hwspinlock";
+        reg = <0x13012000 0x400>;
+        resets = <&sys0crg 0>;
+        #hwlock-cells = <1>;
+    };
