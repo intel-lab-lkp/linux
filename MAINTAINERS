@@ -25273,6 +25273,12 @@ F:	Documentation/devicetree/bindings/power/starfive*
 F:	drivers/pmdomain/starfive/
 F:	include/dt-bindings/power/starfive,jh7110-pmu.h
 
+STARFIVE JHB100 HARDWARE SPINLOCK DRIVER
+M:      Xingyu Wu <xingyu.wu@starfivetech.com>
+S:      Supported
+F:      Documentation/devicetree/bindings/hwlock/starfive,jhb100-hwspinlock.yaml
+F:      drivers/hwspinlock/starfive_hwspinlock.c
+
 STARFIVE SOC DRIVERS
 M:	Conor Dooley <conor@kernel.org>
 S:	Maintained
