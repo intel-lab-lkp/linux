@@ -31,8 +31,7 @@
 #include <linux/list.h>
 #include <linux/hashtable.h>
 #include <linux/ww_mutex.h>
-
-#include <drm/ttm/ttm_execbuf_util.h>
+#include <drm/drm_exec.h>
 
 #define VMW_RES_DIRTY_NONE 0
 #define VMW_RES_DIRTY_SET BIT(0)
@@ -59,7 +58,7 @@ struct vmw_validation_context {
 	struct list_head resource_ctx_list;
 	struct list_head bo_list;
 	struct list_head page_list;
-	struct ww_acquire_ctx ticket;
+	struct drm_exec exec;
 	struct mutex *res_mutex;
 	unsigned int merge_dups;
 	unsigned int mem_size_left;
@@ -104,39 +103,6 @@ static inline bool
 vmw_validation_has_bos(struct vmw_validation_context *ctx)
 {
 	return !list_empty(&ctx->bo_list);
-}
-
-/**
- * vmw_validation_bo_reserve - Reserve buffer objects registered with a
- * validation context
- * @ctx: The validation context
- * @intr: Perform waits interruptible
- *
- * Return: Zero on success, -ERESTARTSYS when interrupted, negative error
- * code on failure
- */
-static inline int
-vmw_validation_bo_reserve(struct vmw_validation_context *ctx,
-			  bool intr)
-{
-	return ttm_eu_reserve_buffers(&ctx->ticket, &ctx->bo_list, intr,
-				      NULL);
-}
-
-/**
- * vmw_validation_bo_fence - Unreserve and fence buffer objects registered
- * with a validation context
- * @ctx: The validation context
- *
- * This function unreserves the buffer objects previously reserved using
- * vmw_validation_bo_reserve, and fences them with a fence object.
- */
-static inline void
-vmw_validation_bo_fence(struct vmw_validation_context *ctx,
-			struct vmw_fence_obj *fence)
-{
-	ttm_eu_fence_buffer_objects(&ctx->ticket, &ctx->bo_list,
-				    (void *) fence);
 }
 
 /**
@@ -185,6 +151,9 @@ int vmw_validation_preload_res(struct vmw_validation_context *ctx,
 			       unsigned int size);
 void vmw_validation_res_set_dirty(struct vmw_validation_context *ctx,
 				  void *val_private, u32 dirty);
+int vmw_validation_bo_reserve(struct vmw_validation_context *ctx, bool intr);
+void vmw_validation_bo_fence(struct vmw_validation_context *ctx,
+			     struct vmw_fence_obj *fence);
 void vmw_validation_bo_backoff(struct vmw_validation_context *ctx);
 
 #endif
