@@ -36,6 +36,14 @@ config HWSPINLOCK_SPRD
 
 	  If unsure, say N.
 
+config HWSPINLOCK_STARFIVE
+	tristate "StarFive Hardware Spinlock device"
+	depends on ARCH_STARFIVE || COMPILE_TEST
+	help
+	  Say y here to support the StarFive Hardware Spinlock device.
+
+	  If unsure, say N.
+
 config HWSPINLOCK_STM32
 	tristate "STM32 Hardware Spinlock device"
 	depends on MACH_STM32MP157 || COMPILE_TEST
