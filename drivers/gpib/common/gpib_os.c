@@ -19,6 +19,7 @@
 #include <linux/string.h>
 #include <linux/vmalloc.h>
 #include <linux/fcntl.h>
+#include <linux/nospec.h>
 #include <linux/kmod.h>
 #include <linux/uaccess.h>
 
@@ -1312,6 +1313,8 @@ static int close_dev_ioctl(struct file *filep, struct gpib_board *board, unsigne
 
 	if (cmd.handle >= GPIB_MAX_NUM_DESCRIPTORS)
 		return -EINVAL;
+	
+	cmd.handle = array_index_nospec(cmd.handle, GPIB_MAX_NUM_DESCRIPTORS);
 
 	mutex_lock(&file_priv->descriptors_mutex);
 	desc = file_priv->descriptors[cmd.handle];
