@@ -481,12 +481,16 @@ static void gfs2_jhead_process_page(struct gfs2_jdesc *jd, unsigned long index,
 static struct bio *gfs2_chain_bio(struct bio *prev, unsigned int nr_iovecs,
 				  sector_t sector, blk_opf_t opf)
 {
+	bio_end_io_t *end_io = prev->bi_end_io;
+	void *private = prev->bi_private;
 	struct bio *new;
 
 	new = bio_alloc(prev->bi_bdev, nr_iovecs, opf, GFP_NOIO);
 	bio_clone_blkg_association(new, prev);
 	new->bi_iter.bi_sector = sector;
-	bio_chain(new, prev);
+	/* Each journal read bio must complete its own folios. */
+	new->bi_end_io = end_io;
+	new->bi_private = private;
 	submit_bio(prev);
 	return new;
 }
