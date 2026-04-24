@@ -107,7 +107,6 @@ int atomisp_csi2_set_ffmt(struct v4l2_subdev *sd,
 					     &tmp_ffmt);
 	}
 
-	/* FIXME: DPCM decompression */
 	*actual_ffmt = *ffmt = *__csi2_get_format(csi2, sd_state, which,
 						  CSI2_PAD_SINK);
 
