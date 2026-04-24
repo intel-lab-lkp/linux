@@ -2494,6 +2494,8 @@ static bool arm_smmu_capable(struct device *dev, enum iommu_cap cap)
 		return true;
 	case IOMMU_CAP_DIRTY_TRACKING:
 		return arm_smmu_dbm_capable(master->smmu);
+	case IOMMU_CAP_PER_DEV_PASID_SPACE:
+		return true;
 	default:
 		return false;
 	}

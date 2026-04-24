@@ -21,6 +21,7 @@ static struct iommu_mm_data *iommu_alloc_mm_data(struct mm_struct *mm, struct de
 {
 	struct iommu_mm_data *iommu_mm;
 	ioasid_t pasid;
+	const struct iommu_ops *ops = dev_iommu_ops(dev);
 
 	lockdep_assert_held(&iommu_sva_lock);
 
@@ -39,11 +40,18 @@ static struct iommu_mm_data *iommu_alloc_mm_data(struct mm_struct *mm, struct de
 	if (!iommu_mm)
 		return ERR_PTR(-ENOMEM);
 
-	pasid = iommu_alloc_global_pasid(dev);
-	if (pasid == IOMMU_PASID_INVALID) {
-		kfree(iommu_mm);
-		return ERR_PTR(-ENOSPC);
+	if (ops->capable && ops->capable(dev, IOMMU_CAP_PER_DEV_PASID_SPACE)) {
+		pasid = IOMMU_NO_PASID;
+		iommu_mm->pasid_global = false;
+	} else {
+		pasid = iommu_alloc_global_pasid(dev);
+		if (pasid == IOMMU_PASID_INVALID) {
+			kfree(iommu_mm);
+			return ERR_PTR(-ENOSPC);
+		}
+		iommu_mm->pasid_global = true;
 	}
+
 	iommu_mm->pasid = pasid;
 	iommu_mm->mm = mm;
 	INIT_LIST_HEAD(&iommu_mm->sva_domains);
@@ -114,13 +122,15 @@ struct iommu_sva *iommu_sva_bind_device(struct device *dev, struct mm_struct *mm
 		goto out_unlock;
 	}
 
-	/* Search for an existing domain. */
-	list_for_each_entry(domain, &mm->iommu_mm->sva_domains, next) {
-		ret = iommu_attach_device_pasid(domain, dev, iommu_mm->pasid,
-						&handle->handle);
-		if (!ret) {
-			domain->users++;
-			goto out;
+	if (iommu_mm->pasid != IOMMU_NO_PASID) {
+		/* Search for an existing domain. */
+		list_for_each_entry(domain, &mm->iommu_mm->sva_domains, next) {
+			ret = iommu_attach_device_pasid(domain, dev, iommu_mm->pasid,
+							&handle->handle);
+			if (!ret) {
+				domain->users++;
+				goto out;
+			}
 		}
 	}
 
@@ -131,8 +141,13 @@ struct iommu_sva *iommu_sva_bind_device(struct device *dev, struct mm_struct *mm
 		goto out_free_handle;
 	}
 
-	ret = iommu_attach_device_pasid(domain, dev, iommu_mm->pasid,
-					&handle->handle);
+	if (iommu_mm->pasid != IOMMU_NO_PASID) {
+		ret = iommu_attach_device_pasid(domain, dev, iommu_mm->pasid,
+						&handle->handle);
+	} else {
+		ret = iommu_attach_device_pasid_any(domain, dev, &iommu_mm->pasid,
+						    &handle->handle);
+	}
 	if (ret)
 		goto out_free_domain;
 	domain->users = 1;
@@ -211,7 +226,8 @@ void mm_pasid_drop(struct mm_struct *mm)
 	if (!iommu_mm)
 		return;
 
-	iommu_free_global_pasid(iommu_mm->pasid);
+	if (iommu_mm->pasid_global)
+		iommu_free_global_pasid(iommu_mm->pasid);
 	kfree(iommu_mm);
 }
 
