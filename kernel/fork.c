@@ -332,6 +332,8 @@ static int alloc_thread_stack_node(struct task_struct *tsk, int node)
 
 	vm_area = alloc_thread_stack_node_from_cache(tsk, node);
 	if (vm_area) {
+		unsigned long memset_offset = 0;
+
 		if (memcg_charge_kernel_stack(vm_area)) {
 			vfree(vm_area->addr);
 			return -ENOMEM;
@@ -343,7 +345,9 @@ static int alloc_thread_stack_node(struct task_struct *tsk, int node)
 		stack = kasan_reset_tag(vm_area->addr);
 
 		/* Clear stale pointers from reused stack. */
-		memset(stack, 0, THREAD_SIZE);
+		if (!IS_ENABLED(CONFIG_STACK_GROWSUP))
+			memset_offset = THREAD_SIZE - vm_area->nr_pages * PAGE_SIZE;
+		memset(stack + memset_offset, 0, vm_area->nr_pages * PAGE_SIZE);
 
 		tsk->stack_vm_area = vm_area;
 		tsk->stack = stack;
