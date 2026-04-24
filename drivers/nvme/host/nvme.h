@@ -1285,6 +1285,11 @@ u32 nvme_passthru_start(struct nvme_ctrl *ctrl, struct nvme_ns *ns, u8 opcode);
 int nvme_execute_rq(struct request *rq, bool at_head);
 void nvme_passthru_end(struct nvme_ctrl *ctrl, struct nvme_ns *ns, u32 effects,
 		       struct nvme_command *cmd, int status);
+int nvme_cdq_create(struct nvme_ctrl *ctrl, const u16 mos, const u16 cqs,
+		    unsigned long uaddr, const u32 size_nbyte,
+		    u16 *cdq_id);
+int nvme_cdq_delete(struct nvme_ctrl *ctrl, const u16 cdq_id);
+int nvme_cdq_set_tpt(struct nvme_ctrl *ctrl, u16 cdq_id, const int tpt_fd);
 struct nvme_ctrl *nvme_ctrl_from_file(struct file *file);
 struct nvme_ns *nvme_find_get_ns(struct nvme_ctrl *ctrl, unsigned nsid);
 bool nvme_get_ns(struct nvme_ns *ns);
