@@ -1278,6 +1278,11 @@ struct macb_queue {
 	dma_addr_t		tx_ring_dma;
 	struct work_struct	tx_error_task;
 	bool			txubr_pending;
+
+	/* TX stall watchdog -- see macb_tx_stall_watchdog() in macb_main.c */
+	struct delayed_work	tx_stall_watchdog_work;
+	unsigned int		tx_stall_last_tail;
+
 	struct napi_struct	napi_tx;
 
 	dma_addr_t		rx_ring_dma;
