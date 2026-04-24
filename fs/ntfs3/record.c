@@ -311,7 +311,8 @@ struct ATTRIB *mi_enum_attr(struct ntfs_inode *ni, struct mft_inode *mi,
 		goto out;
 
 	/* Check start/end vcn. */
-	if (le64_to_cpu(attr->nres.svcn) > le64_to_cpu(attr->nres.evcn) + 1)
+	if (le64_to_cpu(attr->nres.evcn) == (u64)-1 ||
+	    le64_to_cpu(attr->nres.svcn) > le64_to_cpu(attr->nres.evcn) + 1)
 		goto out;
 
 	data_size = le64_to_cpu(attr->nres.data_size);
