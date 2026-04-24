@@ -378,6 +378,14 @@ static int amdgpu_cs_p2_ib(struct amdgpu_cs_parser *p,
 	if (chunk_ib->flags & AMDGPU_IB_FLAG_PREAMBLE)
 		job->preamble_status |= AMDGPU_PREAMBLE_IB_PRESENT;
 
+	/* Reject IB addresses with reserved byte-swap bits set.
+	 * On legacy HW (pre-amdgpu), bits [1:0] encoded byte-swap mode
+	 * for IB fetches. That feature is deprecated on all HW that
+	 * amdgpu supports, so these bits must be zero.
+	 */
+	if (chunk_ib->va_start & 0x3)
+		return -EINVAL;
+
 	r =  amdgpu_ib_get(p->adev, vm, ring->funcs->parse_cs ?
 			   chunk_ib->ib_bytes : 0,
 			   AMDGPU_IB_POOL_DELAYED, ib);

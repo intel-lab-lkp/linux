@@ -272,6 +272,16 @@ int amdgpu_ib_schedule(struct amdgpu_ring *ring, unsigned int num_ibs,
 	for (i = 0; i < num_ibs; ++i) {
 		ib = &ibs[i];
 
+		/* Defense-in-depth: the CS parser rejects misaligned IB
+		 * addresses, but catch any that slip through before they
+		 * hit BUG_ON(addr & 0x3) in ring emission callbacks.
+		 */
+		if (WARN_ON_ONCE(ib->gpu_addr & 0x3)) {
+			r = -EINVAL;
+			amdgpu_ring_undo(ring);
+			goto free_fence;
+		}
+
 		if (job && ring->funcs->emit_frame_cntl) {
 			if (secure != !!(ib->flags & AMDGPU_IB_FLAGS_SECURE)) {
 				amdgpu_ring_emit_frame_cntl(ring, false, secure);
