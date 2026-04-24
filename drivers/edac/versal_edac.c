@@ -856,7 +856,7 @@ static ssize_t inject_data_ue_store(struct file *file, const char __user *data,
 	u8 len, ue0, ue1;
 	int i, ret;
 
-	len = min_t(size_t, count, sizeof(buf));
+	len = min_t(size_t, count, sizeof(buf) - 1);
 	if (copy_from_user(buf, data, len))
 		return -EFAULT;
 
