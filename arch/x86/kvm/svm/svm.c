@@ -392,6 +392,9 @@ static void svm_inject_exception(struct kvm_vcpu *vcpu)
 	    svm_update_soft_interrupt_rip(vcpu, ex->vector))
 		return;
 
+	if (sev_snp_queue_exception(vcpu))
+		return;
+
 	svm->vmcb->control.event_inj = ex->vector
 		| SVM_EVTINJ_VALID
 		| (ex->has_error_code ? SVM_EVTINJ_VALID_ERR : 0)
@@ -3807,9 +3810,11 @@ static void svm_inject_irq(struct kvm_vcpu *vcpu, bool reinjected)
 	}
 
 	trace_kvm_inj_virq(intr->nr, intr->soft, reinjected);
-	++vcpu->stat.irq_injections;
 
-	svm->vmcb->control.event_inj = intr->nr | SVM_EVTINJ_VALID | type;
+	if (!sev_snp_inject(INJECT_IRQ, vcpu))
+		svm->vmcb->control.event_inj = intr->nr | SVM_EVTINJ_VALID | type;
+
+	++vcpu->stat.irq_injections;
 }
 
 static void svm_fixup_nested_rips(struct kvm_vcpu *vcpu)
@@ -3983,6 +3988,9 @@ bool svm_interrupt_blocked(struct kvm_vcpu *vcpu)
 
 	if (!gif_set(svm))
 		return true;
+
+	if (sev_snp_is_rinj_active(vcpu))
+		return sev_snp_blocked(INJECT_IRQ, vcpu);
 
 	if (is_guest_mode(vcpu)) {
 		/* As long as interrupts are being delivered...  */
@@ -4333,6 +4341,8 @@ static void svm_cancel_injection(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
 	struct vmcb_control_area *control = &svm->vmcb->control;
+
+	sev_snp_cancel_injection(vcpu);
 
 	control->exit_int_info = control->event_inj;
 	control->exit_int_info_err = control->event_inj_err;
