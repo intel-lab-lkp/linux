@@ -1790,7 +1790,7 @@ static void ntb_memcpy_tx_on_stack(struct ntb_queue_entry *entry, void __iomem *
 #endif
 
 	/* Ensure that the data is fully copied out before setting the flags */
-	wmb();
+	dma_wmb();
 
 	ntb_tx_copy_callback(entry, NULL);
 }
