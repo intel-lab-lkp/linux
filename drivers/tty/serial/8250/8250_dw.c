@@ -35,13 +35,13 @@
 #include "8250_dwlib.h"
 
 /* Offsets for the DesignWare specific registers */
-#define DW_UART_USR	0x1f /* UART Status Register */
-#define DW_UART_DMASA	0xa8 /* DMA Software Ack */
+#define DW_UART_USR			0x1f /* UART Status Register */
+#define DW_UART_DMASA			0xa8 /* DMA Software Ack */
 
-#define OCTEON_UART_USR	0x27 /* UART Status Register */
+#define OCTEON_UART_USR			0x27 /* UART Status Register */
 
-#define RZN1_UART_TDMACR 0x10c /* DMA Control Register Transmit Mode */
-#define RZN1_UART_RDMACR 0x110 /* DMA Control Register Receive Mode */
+#define RZN1_UART_TDMACR		0x10c /* DMA Control Register Transmit Mode */
+#define RZN1_UART_RDMACR		0x110 /* DMA Control Register Receive Mode */
 
 /* DesignWare specific register fields */
 #define DW_UART_IIR_IID			GENMASK(3, 0)
@@ -52,9 +52,10 @@
 
 /* Renesas specific register fields */
 #define RZN1_UART_xDMACR_DMA_EN		BIT(0)
-#define RZN1_UART_xDMACR_1_WORD_BURST	(0 << 1)
-#define RZN1_UART_xDMACR_4_WORD_BURST	(1 << 1)
-#define RZN1_UART_xDMACR_8_WORD_BURST	(2 << 1)
+#define RZN1_UART_xDMACR_BURST_MASK	GENMASK(2, 1)
+#define RZN1_UART_xDMACR_1_WORD_BURST	FIELD_PREP(RZN1_UART_xDMACR_BURST_MASK, 0)
+#define RZN1_UART_xDMACR_4_WORD_BURST	FIELD_PREP(RZN1_UART_xDMACR_BURST_MASK, 1)
+#define RZN1_UART_xDMACR_8_WORD_BURST	FIELD_PREP(RZN1_UART_xDMACR_BURST_MASK, 2)
 #define RZN1_UART_xDMACR_BLK_SZ(x)	((x) << 3)
 
 /* Quirks */
@@ -729,9 +730,7 @@ static int dw8250_probe(struct platform_device *pdev)
 
 	err = uart_read_port_properties(p);
 	/* no interrupt -> fall back to polling */
-	if (err == -ENXIO)
-		err = 0;
-	if (err)
+	if (err && err != -ENXIO)
 		return err;
 
 	switch (p->iotype) {
