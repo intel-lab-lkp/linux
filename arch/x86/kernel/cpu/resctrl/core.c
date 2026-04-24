@@ -451,6 +451,24 @@ cleanup:
 	return -ENOMEM;
 }
 
+/**
+ * get_domain_id_nps() - Domain id for %RESCTRL_NPS_NODE (AMD NPS / GMBA)
+ * @cpu:	CPU to query.
+ *
+ * Global memory bandwidth allocation (GMBA) control domains on AMD follow
+ * the socket NPS layout. With NPS 4 there is a single control domain per
+ * package, so every CPU maps to domain id 0. For other NPS settings the
+ * domain matches the CPU's NUMA node.
+ *
+ * Return: 0 when NPS is 4, otherwise the NUMA node id for @cpu.
+ */
+static int get_domain_id_nps(int cpu)
+{
+	if (topology_num_nodes_per_package() == 4)
+		return 0;
+	return cpu_to_node(cpu);
+}
+
 static int get_domain_id_from_scope(int cpu, enum resctrl_scope scope)
 {
 	switch (scope) {
@@ -459,6 +477,8 @@ static int get_domain_id_from_scope(int cpu, enum resctrl_scope scope)
 		return get_cpu_cacheinfo_id(cpu, scope);
 	case RESCTRL_L3_NODE:
 		return cpu_to_node(cpu);
+	case RESCTRL_NPS_NODE:
+		return get_domain_id_nps(cpu);
 	case RESCTRL_PACKAGE:
 		return topology_physical_package_id(cpu);
 	default:
