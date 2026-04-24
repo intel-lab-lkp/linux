@@ -14,6 +14,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sysfs.h>
 #include <linux/vmalloc.h>
 #include <linux/mm.h>
 #include <linux/io.h>
@@ -289,14 +290,14 @@ static ssize_t sq_sysfs_store(struct kobject *kobj, struct attribute *attr,
 static ssize_t mapping_show(char *buf)
 {
 	struct sq_mapping **list, *entry;
-	char *p = buf;
+	ssize_t len = 0;
 
 	for (list = &sq_mapping_list; (entry = *list); list = &entry->next)
-		p += sprintf(p, "%08lx-%08lx [%08lx]: %s\n",
-			     entry->sq_addr, entry->sq_addr + entry->size,
-			     entry->addr, entry->name);
+		len += sysfs_emit_at(buf, len, "%08lx-%08lx [%08lx]: %s\n",
+				entry->sq_addr, entry->sq_addr + entry->size,
+				entry->addr, entry->name);
 
-	return p - buf;
+	return len;
 }
 
 static ssize_t mapping_store(const char *buf, size_t count)
