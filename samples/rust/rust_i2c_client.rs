@@ -88,14 +88,14 @@ struct SampleDriver {
 kernel::of_device_table!(
     OF_TABLE,
     MODULE_OF_TABLE,
-    <SampleDriver as platform::Driver>::IdInfo,
+    <SampleDriver as platform::Driver<'_>>::IdInfo,
     [(of::DeviceId::new(c"test,rust-device"), ())]
 );
 
 kernel::acpi_device_table!(
     ACPI_TABLE,
     MODULE_ACPI_TABLE,
-    <SampleDriver as platform::Driver>::IdInfo,
+    <SampleDriver as platform::Driver<'_>>::IdInfo,
     [(acpi::DeviceId::new(c"LNUXBEEF"), ())]
 );
 
@@ -104,15 +104,15 @@ const SAMPLE_I2C_ADAPTER_INDEX: i32 = 0;
 const BOARD_INFO: i2c::I2cBoardInfo =
     i2c::I2cBoardInfo::new(c"rust_driver_i2c", SAMPLE_I2C_CLIENT_ADDR);
 
-impl platform::Driver for SampleDriver {
+impl<'a> platform::Driver<'a> for SampleDriver {
     type IdInfo = ();
     const OF_ID_TABLE: Option<of::IdTable<Self::IdInfo>> = Some(&OF_TABLE);
     const ACPI_ID_TABLE: Option<acpi::IdTable<Self::IdInfo>> = Some(&ACPI_TABLE);
 
     fn probe(
-        pdev: &platform::Device<device::Core>,
-        _info: Option<&Self::IdInfo>,
-    ) -> impl PinInit<Self, Error> {
+        pdev: &'a platform::Device<device::Core>,
+        _info: Option<&'a Self::IdInfo>,
+    ) -> impl PinInit<Self, Error> + 'a {
         dev_info!(
             pdev.as_ref(),
             "Probe Rust I2C Client registration sample.\n"

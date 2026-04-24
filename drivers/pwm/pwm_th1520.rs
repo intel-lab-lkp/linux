@@ -310,18 +310,18 @@ struct Th1520PwmPlatformDriver;
 kernel::of_device_table!(
     OF_TABLE,
     MODULE_OF_TABLE,
-    <Th1520PwmPlatformDriver as platform::Driver>::IdInfo,
+    <Th1520PwmPlatformDriver as platform::Driver<'_>>::IdInfo,
     [(of::DeviceId::new(c"thead,th1520-pwm"), ())]
 );
 
-impl platform::Driver for Th1520PwmPlatformDriver {
+impl<'a> platform::Driver<'a> for Th1520PwmPlatformDriver {
     type IdInfo = ();
     const OF_ID_TABLE: Option<of::IdTable<Self::IdInfo>> = Some(&OF_TABLE);
 
     fn probe(
-        pdev: &platform::Device<Core>,
-        _id_info: Option<&Self::IdInfo>,
-    ) -> impl PinInit<Self, Error> {
+        pdev: &'a platform::Device<Core>,
+        _id_info: Option<&'a Self::IdInfo>,
+    ) -> impl PinInit<Self, Error> + 'a {
         let dev = pdev.as_ref();
         let request = pdev.io_request_by_index(0).ok_or(ENODEV)?;
 

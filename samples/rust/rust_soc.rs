@@ -24,26 +24,26 @@ struct SampleSocDriver {
 kernel::of_device_table!(
     OF_TABLE,
     MODULE_OF_TABLE,
-    <SampleSocDriver as platform::Driver>::IdInfo,
+    <SampleSocDriver as platform::Driver<'_>>::IdInfo,
     [(of::DeviceId::new(c"test,rust-device"), ())]
 );
 
 kernel::acpi_device_table!(
     ACPI_TABLE,
     MODULE_ACPI_TABLE,
-    <SampleSocDriver as platform::Driver>::IdInfo,
+    <SampleSocDriver as platform::Driver<'_>>::IdInfo,
     [(acpi::DeviceId::new(c"LNUXBEEF"), ())]
 );
 
-impl platform::Driver for SampleSocDriver {
+impl<'a> platform::Driver<'a> for SampleSocDriver {
     type IdInfo = ();
     const OF_ID_TABLE: Option<of::IdTable<Self::IdInfo>> = Some(&OF_TABLE);
     const ACPI_ID_TABLE: Option<acpi::IdTable<Self::IdInfo>> = Some(&ACPI_TABLE);
 
     fn probe(
-        pdev: &platform::Device<Core>,
-        _info: Option<&Self::IdInfo>,
-    ) -> impl PinInit<Self, Error> {
+        pdev: &'a platform::Device<Core>,
+        _info: Option<&'a Self::IdInfo>,
+    ) -> impl PinInit<Self, Error> + 'a {
         dev_dbg!(pdev, "Probe Rust SoC driver sample.\n");
 
         let pdev = pdev.into();

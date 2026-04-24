@@ -886,14 +886,14 @@ pub trait Driver {
 ///     }
 /// }
 ///
-/// impl platform::Driver for SampleDriver {
+/// impl<'a> platform::Driver<'a> for SampleDriver {
 ///     type IdInfo = ();
 ///     const OF_ID_TABLE: Option<of::IdTable<Self::IdInfo>> = None;
 ///
 ///     fn probe(
-///         pdev: &platform::Device<Core>,
-///         _id_info: Option<&Self::IdInfo>,
-///     ) -> impl PinInit<Self, Error> {
+///         pdev: &'a platform::Device<Core>,
+///         _id_info: Option<&'a Self::IdInfo>,
+///     ) -> impl PinInit<Self, Error> + 'a {
 ///         cpufreq::Registration::<SampleDriver>::new_foreign_owned(pdev.as_ref())?;
 ///         Ok(Self {})
 ///     }

@@ -88,26 +88,26 @@ struct Info(u32);
 kernel::of_device_table!(
     OF_TABLE,
     MODULE_OF_TABLE,
-    <SampleDriver as platform::Driver>::IdInfo,
+    <SampleDriver as platform::Driver<'_>>::IdInfo,
     [(of::DeviceId::new(c"test,rust-device"), Info(42))]
 );
 
 kernel::acpi_device_table!(
     ACPI_TABLE,
     MODULE_ACPI_TABLE,
-    <SampleDriver as platform::Driver>::IdInfo,
+    <SampleDriver as platform::Driver<'_>>::IdInfo,
     [(acpi::DeviceId::new(c"LNUXBEEF"), Info(0))]
 );
 
-impl platform::Driver for SampleDriver {
+impl<'a> platform::Driver<'a> for SampleDriver {
     type IdInfo = Info;
     const OF_ID_TABLE: Option<of::IdTable<Self::IdInfo>> = Some(&OF_TABLE);
     const ACPI_ID_TABLE: Option<acpi::IdTable<Self::IdInfo>> = Some(&ACPI_TABLE);
 
     fn probe(
-        pdev: &platform::Device<Core>,
-        info: Option<&Self::IdInfo>,
-    ) -> impl PinInit<Self, Error> {
+        pdev: &'a platform::Device<Core>,
+        info: Option<&'a Self::IdInfo>,
+    ) -> impl PinInit<Self, Error> + 'a {
         let dev = pdev.as_ref();
 
         dev_dbg!(dev, "Probe Rust Platform driver sample.\n");

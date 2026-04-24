@@ -13,7 +13,7 @@
 //! The main driver interface is defined by a bus specific driver trait. For instance:
 //!
 //! ```ignore
-//! pub trait Driver: Send {
+//! pub trait Driver<'a>: Send {
 //!     /// The type holding information about each device ID supported by the driver.
 //!     type IdInfo: 'static;
 //!
@@ -24,10 +24,13 @@
 //!     const ACPI_ID_TABLE: Option<acpi::IdTable<Self::IdInfo>> = None;
 //!
 //!     /// Driver probe.
-//!     fn probe(dev: &Device<device::Core>, id_info: &Self::IdInfo) -> impl PinInit<Self, Error>;
+//!     fn probe(
+//!         dev: &'a Device<device::Core>,
+//!         id_info: &'a Self::IdInfo,
+//!     ) -> impl PinInit<Self, Error> + 'a;
 //!
 //!     /// Driver unbind (optional).
-//!     fn unbind(dev: &Device<device::Core>, this: Pin<&Self>) {
+//!     fn unbind(dev: &'a Device<device::Core>, this: Pin<&'a Self>) {
 //!         let _ = (dev, this);
 //!     }
 //! }

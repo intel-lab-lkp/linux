@@ -44,33 +44,45 @@ use core::{
 };
 
 /// An adapter for the registration of platform drivers.
-pub struct Adapter<T: Driver>(T);
+///
+/// `F` is a [`ForLt`](trait@ForLt) type that maps lifetimes to the driver's device
+/// private data type, i.e. `F::Of<'a>` is the driver struct parameterized by `'a`. The macro
+/// `module_platform_driver!` generates this automatically via `ForLt!()`.
+pub struct Adapter<F>(PhantomData<F>);
 
 // SAFETY:
 // - `bindings::platform_driver` is a C type declared as `repr(C)`.
-// - `T` is the type of the driver's device private data.
+// - `F::Of<'static>` is the stored type of the driver's device private data.
 // - `struct platform_driver` embeds a `struct device_driver`.
 // - `DEVICE_DRIVER_OFFSET` is the correct byte offset to the embedded `struct device_driver`.
-unsafe impl<T: Driver + 'static> driver::DriverLayout for Adapter<T> {
+unsafe impl<F> driver::DriverLayout for Adapter<F>
+where
+    F: ForLt + 'static,
+    for<'a> F::Of<'a>: Driver<'a>,
+{
     type DriverType = bindings::platform_driver;
-    type DriverData = ForLt!(T);
+    type DriverData = F;
     const DEVICE_DRIVER_OFFSET: usize = core::mem::offset_of!(Self::DriverType, driver);
 }
 
 // SAFETY: A call to `unregister` for a given instance of `DriverType` is guaranteed to be valid if
 // a preceding call to `register` has been successful.
-unsafe impl<T: Driver + 'static> driver::RegistrationOps for Adapter<T> {
+unsafe impl<F> driver::RegistrationOps for Adapter<F>
+where
+    F: ForLt + 'static,
+    for<'a> F::Of<'a>: Driver<'a>,
+{
     unsafe fn register(
         pdrv: &Opaque<Self::DriverType>,
         name: &'static CStr,
         module: &'static ThisModule,
     ) -> Result {
-        let of_table = match T::OF_ID_TABLE {
+        let of_table = match <F::Of<'static> as Driver<'static>>::OF_ID_TABLE {
             Some(table) => table.as_ptr(),
             None => core::ptr::null(),
         };
 
-        let acpi_table = match T::ACPI_ID_TABLE {
+        let acpi_table = match <F::Of<'static> as Driver<'static>>::ACPI_ID_TABLE {
             Some(table) => table.as_ptr(),
             None => core::ptr::null(),
         };
@@ -94,19 +106,23 @@ unsafe impl<T: Driver + 'static> driver::RegistrationOps for Adapter<T> {
     }
 }
 
-impl<T: Driver + 'static> Adapter<T> {
+impl<F> Adapter<F>
+where
+    F: ForLt + 'static,
+    for<'a> F::Of<'a>: Driver<'a>,
+{
     extern "C" fn probe_callback(pdev: *mut bindings::platform_device) -> kernel::ffi::c_int {
         // SAFETY: The platform bus only ever calls the probe callback with a valid pointer to a
         // `struct platform_device`.
         //
         // INVARIANT: `pdev` is valid for the duration of `probe_callback()`.
         let pdev = unsafe { &*pdev.cast::<Device<device::CoreInternal>>() };
-        let info = <Self as driver::Adapter<'_>>::id_info(pdev.as_ref());
 
         from_result(|| {
-            let data = T::probe(pdev, info);
+            let info = <Self as driver::Adapter<'_>>::id_info(pdev.as_ref());
+            let data = <F::Of<'_> as Driver<'_>>::probe(pdev, info);
 
-            pdev.as_ref().set_drvdata::<ForLt!(T)>(data)?;
+            pdev.as_ref().set_drvdata::<F>(data)?;
             Ok(0)
         })
     }
@@ -119,27 +135,33 @@ impl<T: Driver + 'static> Adapter<T> {
         let pdev = unsafe { &*pdev.cast::<Device<device::CoreInternal>>() };
 
         // SAFETY: `remove_callback` is only ever called after a successful call to
-        // `probe_callback`, hence it's guaranteed that `Device::set_drvdata()` has been called
-        // and stored a `Pin<KBox<T>>`.
-        let data = unsafe { pdev.as_ref().drvdata_borrow::<ForLt!(T)>() };
+        // `probe_callback`, hence it's guaranteed that drvdata has been set.
+        let data = unsafe { pdev.as_ref().drvdata_borrow::<F>() };
 
-        T::unbind(pdev, data);
+        <F::Of<'_> as Driver<'_>>::unbind(pdev, data);
     }
 }
 
-impl<'a, T: Driver + 'static> driver::Adapter<'a> for Adapter<T> {
-    type IdInfo = T::IdInfo;
+impl<'a, F> driver::Adapter<'a> for Adapter<F>
+where
+    F: ForLt + 'static,
+    for<'b> F::Of<'b>: Driver<'b>,
+{
+    type IdInfo = <F::Of<'a> as Driver<'a>>::IdInfo;
 
     fn of_id_table() -> Option<of::IdTable<Self::IdInfo>> {
-        T::OF_ID_TABLE
+        <F::Of<'a> as Driver<'a>>::OF_ID_TABLE
     }
 
     fn acpi_id_table() -> Option<acpi::IdTable<Self::IdInfo>> {
-        T::ACPI_ID_TABLE
+        <F::Of<'a> as Driver<'a>>::ACPI_ID_TABLE
     }
 }
 
 /// Declares a kernel module that exposes a single platform driver.
+///
+/// The `type` field accepts a driver type, optionally with a lifetime placeholder `'_` for
+/// lifetime-parameterized drivers. The macro wraps it in [`ForLt!`] automatically.
 ///
 /// # Examples
 ///
@@ -152,10 +174,16 @@ impl<'a, T: Driver + 'static> driver::Adapter<'a> for Adapter<T> {
 ///     license: "GPL v2",
 /// }
 /// ```
+///
+/// [`ForLt!`]: macro@ForLt
+/// [`ForLt`]: trait@ForLt
 #[macro_export]
 macro_rules! module_platform_driver {
-    ($($f:tt)*) => {
-        $crate::module_driver!(<T>, $crate::platform::Adapter<T>, { $($f)* });
+    (type: $type:ty, $($rest:tt)*) => {
+        $crate::module_driver!(<T>, $crate::platform::Adapter<T>, {
+            type: $crate::types::ForLt!($type),
+            $($rest)*
+        });
     };
 }
 
@@ -178,7 +206,7 @@ macro_rules! module_platform_driver {
 /// kernel::of_device_table!(
 ///     OF_TABLE,
 ///     MODULE_OF_TABLE,
-///     <MyDriver as platform::Driver>::IdInfo,
+///     <MyDriver as platform::Driver<'_>>::IdInfo,
 ///     [
 ///         (of::DeviceId::new(c"test,device"), ())
 ///     ]
@@ -187,26 +215,26 @@ macro_rules! module_platform_driver {
 /// kernel::acpi_device_table!(
 ///     ACPI_TABLE,
 ///     MODULE_ACPI_TABLE,
-///     <MyDriver as platform::Driver>::IdInfo,
+///     <MyDriver as platform::Driver<'_>>::IdInfo,
 ///     [
 ///         (acpi::DeviceId::new(c"LNUXBEEF"), ())
 ///     ]
 /// );
 ///
-/// impl platform::Driver for MyDriver {
+/// impl<'a> platform::Driver<'a> for MyDriver {
 ///     type IdInfo = ();
 ///     const OF_ID_TABLE: Option<of::IdTable<Self::IdInfo>> = Some(&OF_TABLE);
 ///     const ACPI_ID_TABLE: Option<acpi::IdTable<Self::IdInfo>> = Some(&ACPI_TABLE);
 ///
 ///     fn probe(
-///         _pdev: &platform::Device<Core>,
-///         _id_info: Option<&Self::IdInfo>,
-///     ) -> impl PinInit<Self, Error> {
+///         _pdev: &'a platform::Device<Core>,
+///         _id_info: Option<&'a Self::IdInfo>,
+///     ) -> impl PinInit<Self, Error> + 'a {
 ///         Err(ENODEV)
 ///     }
 /// }
 ///```
-pub trait Driver: Send {
+pub trait Driver<'a>: Send {
     /// The type holding driver private data about each device id supported by the driver.
     // TODO: Use associated_type_defaults once stabilized:
     //
@@ -226,9 +254,9 @@ pub trait Driver: Send {
     /// Called when a new platform device is added or discovered.
     /// Implementers should attempt to initialize the device here.
     fn probe(
-        dev: &Device<device::Core>,
-        id_info: Option<&Self::IdInfo>,
-    ) -> impl PinInit<Self, Error>;
+        dev: &'a Device<device::Core>,
+        id_info: Option<&'a Self::IdInfo>,
+    ) -> impl PinInit<Self, Error> + 'a;
 
     /// Platform driver unbind.
     ///
@@ -240,7 +268,7 @@ pub trait Driver: Send {
     /// operations to gracefully tear down the device.
     ///
     /// Otherwise, release operations for driver resources should be performed in `Self::drop`.
-    fn unbind(dev: &Device<device::Core>, this: Pin<&Self>) {
+    fn unbind(dev: &'a Device<device::Core>, this: Pin<&'a Self>) {
         let _ = (dev, this);
     }
 }
