@@ -1479,14 +1479,19 @@ static int rzg2l_mipi_dsi_probe(struct platform_device *pdev)
 
 	dsi->dcs_buf_virt = dma_alloc_coherent(dsi->host.dev, RZG2L_DCS_BUF_SIZE,
 					       &dsi->dcs_buf_phys, GFP_KERNEL);
-	if (!dsi->dcs_buf_virt)
-		return -ENOMEM;
+	if (!dsi->dcs_buf_virt) {
+		ret = -ENOMEM;
+		goto err_host_unregister;
+	}
 
 	return 0;
 
 err_phy:
 	dsi->info->dphy_exit(dsi);
 	pm_runtime_put(dsi->dev);
+	goto err_pm_disable;
+err_host_unregister:
+	mipi_dsi_host_unregister(&dsi->host);
 err_pm_disable:
 	pm_runtime_disable(dsi->dev);
 	return ret;
