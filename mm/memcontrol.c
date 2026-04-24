@@ -318,6 +318,9 @@ static const unsigned int memcg_node_stat_items[] = {
 	NR_FILE_THPS,
 	NR_ANON_THPS,
 	NR_KERNEL_STACK_KB,
+#ifdef CONFIG_DYNAMIC_STACK
+	NR_DYNAMIC_STACKS_FAULTS_KB,
+#endif
 	NR_PAGETABLE,
 	NR_SECONDARY_PAGETABLE,
 #ifdef CONFIG_SWAP
@@ -1403,6 +1406,10 @@ static const struct memory_stat memory_stats[] = {
 #ifdef CONFIG_NUMA_BALANCING
 	{ "pgpromote_success",		PGPROMOTE_SUCCESS	},
 #endif
+
+#ifdef CONFIG_DYNAMIC_STACK
+	{ "dynamic_stack_faults",	NR_DYNAMIC_STACKS_FAULTS_KB     },
+#endif
 };
 
 /* The actual unit of the state item, not the same as the output unit */
@@ -1415,6 +1422,9 @@ static int memcg_page_state_unit(int item)
 	case NR_SLAB_UNRECLAIMABLE_B:
 		return 1;
 	case NR_KERNEL_STACK_KB:
+#ifdef CONFIG_DYNAMIC_STACK
+	case NR_DYNAMIC_STACKS_FAULTS_KB:
+#endif
 		return SZ_1K;
 	default:
 		return PAGE_SIZE;

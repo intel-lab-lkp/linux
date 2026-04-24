@@ -1256,6 +1256,9 @@ const char * const vmstat_text[] = {
 	[I(NR_FOLL_PIN_ACQUIRED)]		= "nr_foll_pin_acquired",
 	[I(NR_FOLL_PIN_RELEASED)]		= "nr_foll_pin_released",
 	[I(NR_KERNEL_STACK_KB)]			= "nr_kernel_stack",
+#ifdef CONFIG_DYNAMIC_STACK
+	[I(NR_DYNAMIC_STACKS_FAULTS_KB)]	= "nr_dynamic_stacks_faults",
+#endif
 #if IS_ENABLED(CONFIG_SHADOW_CALL_STACK)
 	[I(NR_KERNEL_SCS_KB)]			= "nr_shadow_call_stack",
 #endif
