@@ -930,6 +930,28 @@ int __pci_enable_msix_range(struct pci_dev *dev, struct msix_entry *entries,
 	return pci_msix_range_init(dev, entries, minvec, nvec, hwsize, affd);
 }
 
+int __pcim_enable_msix_range(struct pci_dev *dev, struct msix_entry *entries,
+			     int minvec, int maxvec, struct irq_affinity *affd,
+			     int flags)
+{
+	int hwsize, nvec, rc;
+
+	hwsize = pci_msix_range_alloc(dev, entries, minvec,
+				      maxvec, flags, &nvec);
+	if (hwsize < 0)
+		return hwsize;
+
+	rc = msi_setup_device_data(&dev->dev);
+	if (rc)
+		return rc;
+
+	rc = devm_add_action(&dev->dev, pcim_msi_release, dev);
+	if (rc)
+		return rc;
+
+	return pci_msix_range_init(dev, entries, minvec, nvec, hwsize, affd);
+}
+
 void __pci_restore_msix_state(struct pci_dev *dev)
 {
 	struct msi_desc *entry;
