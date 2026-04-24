@@ -398,6 +398,7 @@ static irqreturn_t lt9611_irq_thread_handler(int irq, void *dev_id)
 		dev_info(lt9611->dev, "hdmi cable disconnected\n");
 
 		regmap_write(lt9611->regmap, 0x8207, 0xbf);
+		regmap_write(lt9611->regmap, 0x8207, 0xff);
 		regmap_write(lt9611->regmap, 0x8207, 0x3f);
 	}
 
@@ -406,6 +407,7 @@ static irqreturn_t lt9611_irq_thread_handler(int irq, void *dev_id)
 		dev_info(lt9611->dev, "hdmi cable connected\n");
 
 		regmap_write(lt9611->regmap, 0x8207, 0x7f);
+		regmap_write(lt9611->regmap, 0x8207, 0xff);
 		regmap_write(lt9611->regmap, 0x8207, 0x3f);
 	}
 
