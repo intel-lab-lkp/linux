@@ -13,6 +13,10 @@
 
 #ifdef CONFIG_THREAD_INFO_IN_TASK
 
+#ifdef CONFIG_DYNAMIC_STACK
+#define DYNAMIC_STACK_MAX_ACCOUNT_MASK  ((1 << (THREAD_SIZE_ORDER + 1)) - 1)
+#endif
+
 /*
  * When accessing the stack of a non-current task that might exit, use
  * try_get_task_stack() instead.  task_stack_page will return a pointer
@@ -20,7 +24,11 @@
  */
 static __always_inline void *task_stack_page(const struct task_struct *task)
 {
+#ifdef CONFIG_DYNAMIC_STACK
+	return (void *)(task->packed_stack & ~DYNAMIC_STACK_MAX_ACCOUNT_MASK);
+#else
 	return task->stack;
+#endif
 }
 
 #define setup_thread_stack(new,old)	do { } while(0)
@@ -30,7 +38,7 @@ static __always_inline unsigned long *end_of_stack(const struct task_struct *tas
 #ifdef CONFIG_STACK_GROWSUP
 	return (unsigned long *)((unsigned long)task->stack + THREAD_SIZE) - 1;
 #else
-	return task->stack;
+	return task_stack_page(task);
 #endif
 }
 
@@ -83,8 +91,44 @@ static inline void put_task_stack(struct task_struct *tsk) {}
 
 void exit_task_stack_account(struct task_struct *tsk);
 
+#ifdef CONFIG_DYNAMIC_STACK
+
+#define task_stack_end_corrupted(task)	0
+
+#ifndef THREAD_PREALLOC_PAGES
+#define THREAD_PREALLOC_PAGES		1
+#endif
+
+#define THREAD_DYNAMIC_PAGES						\
+	((THREAD_SIZE >> PAGE_SHIFT) - THREAD_PREALLOC_PAGES)
+
+void dynamic_stack_refill_pages(void);
+unsigned long dynamic_stack_accounting(struct task_struct *tsk, bool finalize);
+bool dynamic_stack_fault(struct task_struct *tsk, unsigned long address, bool *on_stack);
+
+/*
+ * Refill and charge for the used pages.
+ */
+static inline void dynamic_stack(struct task_struct *tsk)
+{
+	if (unlikely(tsk->flags & PF_DYNAMIC_STACK)) {
+		dynamic_stack_refill_pages();
+		dynamic_stack_accounting(tsk, false);
+		tsk->flags &= ~PF_DYNAMIC_STACK;
+	}
+}
+
+static inline void set_task_stack_end_magic(struct task_struct *tsk) {}
+
+#else /* !CONFIG_DYNAMIC_STACK */
+
 #define task_stack_end_corrupted(task) \
 		(*(end_of_stack(task)) != STACK_END_MAGIC)
+
+void set_task_stack_end_magic(struct task_struct *tsk);
+static inline void dynamic_stack(struct task_struct *tsk) {}
+
+#endif /* CONFIG_DYNAMIC_STACK */
 
 static inline int object_is_on_stack(const void *obj)
 {
@@ -104,7 +148,6 @@ static inline unsigned long stack_not_used(struct task_struct *p)
 	return 0;
 }
 #endif
-extern void set_task_stack_end_magic(struct task_struct *tsk);
 
 static inline int kstack_end(void *addr)
 {

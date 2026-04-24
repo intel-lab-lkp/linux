@@ -99,7 +99,11 @@ struct task_struct init_task __aligned(L1_CACHE_BYTES) = {
 	.stack_refcount	= REFCOUNT_INIT(1),
 #endif
 	.__state	= 0,
+#ifdef CONFIG_DYNAMIC_STACK
+	.packed_stack	= (unsigned long)init_stack,
+#else
 	.stack		= init_stack,
+#endif
 	.usage		= REFCOUNT_INIT(2),
 	.flags		= PF_KTHREAD,
 	.prio		= MAX_PRIO - 20,
