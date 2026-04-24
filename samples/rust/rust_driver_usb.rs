@@ -20,26 +20,26 @@ struct SampleDriver {
 kernel::usb_device_table!(
     USB_TABLE,
     MODULE_USB_TABLE,
-    <SampleDriver as usb::Driver>::IdInfo,
+    <SampleDriver as usb::Driver<'_>>::IdInfo,
     [(usb::DeviceId::from_id(0x1234, 0x5678), ()),]
 );
 
-impl usb::Driver for SampleDriver {
+impl<'a> usb::Driver<'a> for SampleDriver {
     type IdInfo = ();
     const ID_TABLE: usb::IdTable<Self::IdInfo> = &USB_TABLE;
 
     fn probe(
-        intf: &usb::Interface<Core>,
-        _id: &usb::DeviceId,
-        _info: &Self::IdInfo,
-    ) -> impl PinInit<Self, Error> {
+        intf: &'a usb::Interface<Core>,
+        _id: &'a usb::DeviceId,
+        _info: &'a Self::IdInfo,
+    ) -> impl PinInit<Self, Error> + 'a {
         let dev: &device::Device<Core> = intf.as_ref();
         dev_info!(dev, "Rust USB driver sample probed\n");
 
         Ok(Self { _intf: intf.into() })
     }
 
-    fn disconnect(intf: &usb::Interface<Core>, _data: Pin<&Self>) {
+    fn disconnect(intf: &'a usb::Interface<Core>, _data: Pin<&'a Self>) {
         let dev: &device::Device<Core> = intf.as_ref();
         dev_info!(dev, "Rust USB driver sample disconnected\n");
     }
