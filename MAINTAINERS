@@ -20152,6 +20152,16 @@ F:	mm/page-writeback.c
 F:	mm/readahead.c
 F:	mm/truncate.c
 
+PAGE CONSISTENCY CHECKER
+M:	Sasha Levin <sashal@kernel.org>
+L:	linux-mm@kvack.org
+S:	Maintained
+F:	Documentation/mm/page_consistency.rst
+F:	include/linux/dual_bitmap.h
+F:	include/linux/page_consistency.h
+F:	mm/page_consistency.c
+F:	mm/page_consistency_test.c
+
 PAGE POOL
 M:	Jesper Dangaard Brouer <hawk@kernel.org>
 M:	Ilias Apalodimas <ilias.apalodimas@linaro.org>
