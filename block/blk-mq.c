@@ -3096,22 +3096,23 @@ static struct request *blk_mq_peek_cached_request(struct blk_plug *plug,
 	return rq;
 }
 
-static void blk_mq_use_cached_rq(struct request *rq, struct blk_plug *plug,
+static bool blk_mq_use_cached_rq(struct request *rq, struct blk_plug *plug,
 		struct bio *bio)
 {
-	if (rq_list_pop(&plug->cached_rqs) != rq)
-		WARN_ON_ONCE(1);
-
 	/*
-	 * If any qos ->throttle() end up blocking, we will have flushed the
-	 * plug and hence killed the cached_rq list as well. Pop this entry
-	 * before we throttle.
+	 * We will have flushed the plug and hence killed the cached_rq list as
+	 * well if anything had blocked. Pop this entry before we throttle if
+	 * the entry is still valid.
 	 */
+	if (rq_list_pop(&plug->cached_rqs) != rq)
+		return false;
+
 	rq_qos_throttle(rq->q, bio);
 
 	blk_mq_rq_time_init(rq, blk_time_get_ns());
 	rq->cmd_flags = bio->bi_opf;
 	INIT_LIST_HEAD(&rq->queuelist);
+	return true;
 }
 
 static bool bio_unaligned(const struct bio *bio, struct request_queue *q)
@@ -3211,8 +3212,13 @@ void blk_mq_submit_bio(struct bio *bio)
 
 new_request:
 	if (rq) {
-		blk_mq_use_cached_rq(rq, plug, bio);
-	} else {
+		if (!blk_mq_use_cached_rq(rq, plug, bio)) {
+			rq = NULL;
+			if (unlikely(bio_queue_enter(bio)))
+				return;
+		}
+	}
+	if (!rq) {
 		rq = blk_mq_get_new_requests(q, plug, bio);
 		if (unlikely(!rq)) {
 			if (bio->bi_opf & REQ_NOWAIT)
