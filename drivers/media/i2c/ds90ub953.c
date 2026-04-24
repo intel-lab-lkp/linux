@@ -27,6 +27,8 @@
 #include <media/v4l2-mediabus.h>
 #include <media/v4l2-subdev.h>
 
+#include <dt-bindings/gpio/gpio.h>
+
 #include "ds90ub953.h"
 
 #define UB953_PAD_SINK			0
@@ -71,6 +73,7 @@ struct ub953_data {
 	bool			non_continous_clk;
 
 	struct gpio_chip	gpio_chip;
+	u32			gpio_flags[UB953_NUM_GPIOS];
 
 	struct v4l2_subdev	sd;
 	struct media_pad	pads[2];
@@ -258,6 +261,12 @@ out_unlock:
 /*
  * GPIO chip
  */
+
+static inline bool ub953_gpio_is_remote(unsigned int flag)
+{
+	return !!(flag & GPIO_DATA_SOURCE_REMOTE);
+}
+
 static int ub953_gpio_get_direction(struct gpio_chip *gc, unsigned int offset)
 {
 	struct ub953_data *priv = gpiochip_get_data(gc);
@@ -288,13 +297,23 @@ static int ub953_gpio_direction_out(struct gpio_chip *gc, unsigned int offset,
 				    int value)
 {
 	struct ub953_data *priv = gpiochip_get_data(gc);
+	bool is_remote = ub953_gpio_is_remote(priv->gpio_flags[offset]);
+	unsigned int mask, val;
 	int ret;
 
-	ret = regmap_update_bits(priv->regmap, UB953_REG_LOCAL_GPIO_DATA,
-				 UB953_REG_LOCAL_GPIO_DATA_GPIO_OUT_SRC(offset),
-				 value ? UB953_REG_LOCAL_GPIO_DATA_GPIO_OUT_SRC(offset) :
-					 0);
+	mask = UB953_REG_LOCAL_GPIO_DATA_GPIO_OUT_SRC(offset) |
+	       UB953_REG_LOCAL_GPIO_DATA_GPIO_RMTEN(offset);
 
+	if (is_remote) {
+		/* Enable remote deserializer GPIO data on local GPIO */
+		val = UB953_REG_LOCAL_GPIO_DATA_GPIO_RMTEN(offset);
+	} else {
+		/* Set output value on local GPIO and disable remote mode */
+		val = value ? UB953_REG_LOCAL_GPIO_DATA_GPIO_OUT_SRC(offset) : 0;
+	}
+
+	ret = regmap_update_bits(priv->regmap, UB953_REG_LOCAL_GPIO_DATA,
+				 mask, val);
 	if (ret)
 		return ret;
 
@@ -330,10 +349,30 @@ static int ub953_gpio_of_xlate(struct gpio_chip *gc,
 			       const struct of_phandle_args *gpiospec,
 			       u32 *flags)
 {
-	if (flags)
-		*flags = gpiospec->args[1];
+	struct ub953_data *priv = gpiochip_get_data(gc);
+	struct device *dev = &priv->client->dev;
+	u32 pin;
 
-	return gpiospec->args[0];
+	if (WARN_ON(gc->of_gpio_n_cells < 2))
+		return -EINVAL;
+
+	if (WARN_ON(gpiospec->args_count < gc->of_gpio_n_cells))
+		return -EINVAL;
+
+	pin = gpiospec->args[0];
+	if (pin >= UB953_NUM_GPIOS) {
+		dev_err(dev, "Invalid GPIO pin number: %u\n", pin);
+		return -EINVAL;
+	}
+
+	/* Store GPIO flags for each pin */
+	priv->gpio_flags[pin] = gpiospec->args[1];
+
+	/* Return standard flags to GPIO core */
+	if (flags)
+		*flags = gpiospec->args[1] & ~GPIO_DATA_SOURCE_REMOTE;
+
+	return pin;
 }
 
 static int ub953_gpiochip_probe(struct ub953_data *priv)
