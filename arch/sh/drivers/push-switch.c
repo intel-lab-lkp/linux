@@ -9,6 +9,7 @@
 #include <linux/module.h>
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
+#include <linux/sysfs.h>
 #include <asm/push-switch.h>
 
 #define DRV_NAME "push-switch"
@@ -19,7 +20,7 @@ static ssize_t switch_show(struct device *dev,
 			   char *buf)
 {
 	struct push_switch_platform_info *psw_info = dev->platform_data;
-	return sprintf(buf, "%s\n", psw_info->name);
+	return sysfs_emit(buf, "%s\n", psw_info->name);
 }
 static DEVICE_ATTR_RO(switch);
 
