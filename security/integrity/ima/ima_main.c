@@ -1254,7 +1254,7 @@ static int ima_kernel_module_request(char *kmod_name)
 
 #endif /* CONFIG_INTEGRITY_ASYMMETRIC_KEYS */
 
-static int __init init_ima(void)
+static int __init init_ima(bool late)
 {
 	int error;
 
@@ -1264,10 +1264,26 @@ static int __init init_ima(void)
 		return 0;
 	}
 
+	/*
+	 * If we found the TPM during our first attempt, or we know there's no
+	 * TPM, nothing further to do
+	 */
+	if (late && (ima_tpm_chip || !IS_ENABLED(CONFIG_TCG_TPM)))
+		return 0;
+
+	ima_tpm_chip = tpm_default_chip();
+	if (!ima_tpm_chip && !late && IS_ENABLED(CONFIG_TCG_TPM)) {
+		pr_debug("TPM not available, will try later\n");
+		return -EPROBE_DEFER;
+	}
+
+	if (!ima_tpm_chip)
+		pr_info("No TPM chip found, activating TPM-bypass!\n");
+
 	ima_appraise_parse_cmdline();
 	ima_init_template_list();
 	hash_setup(CONFIG_IMA_DEFAULT_HASH);
-	error = ima_init();
+	error = ima_init_core(late);
 
 	if (error && strcmp(hash_algo_name[ima_hash_algo],
 			    CONFIG_IMA_DEFAULT_HASH) != 0) {
@@ -1275,7 +1291,7 @@ static int __init init_ima(void)
 			hash_algo_name[ima_hash_algo], CONFIG_IMA_DEFAULT_HASH);
 		hash_setup_done = 0;
 		hash_setup(CONFIG_IMA_DEFAULT_HASH);
-		error = ima_init();
+		error = ima_init_core(late);
 	}
 
 	if (error)
@@ -1289,6 +1305,16 @@ static int __init init_ima(void)
 		ima_update_policy_flags();
 
 	return error;
+}
+
+static int __init init_ima_late(void)
+{
+	return init_ima(false);
+}
+
+static int __init init_ima_late_sync(void)
+{
+	return init_ima(true);
 }
 
 static struct security_hook_list ima_hooks[] __ro_after_init = {
@@ -1336,6 +1362,7 @@ DEFINE_LSM(ima) = {
 	.init = init_ima_lsm,
 	.order = LSM_ORDER_LAST,
 	.blobs = &ima_blob_sizes,
-	/* Start IMA after the TPM is available */
-	.initcall_late = init_ima,
+	/* Ensure we start IMA after the TPM is available */
+	.initcall_late = init_ima_late,
+	.initcall_late_sync = init_ima_late_sync,
 };

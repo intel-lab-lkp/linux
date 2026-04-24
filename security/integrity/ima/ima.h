@@ -66,6 +66,7 @@ extern struct ima_algo_desc *ima_algo_array __ro_after_init;
 extern int ima_appraise;
 extern struct tpm_chip *ima_tpm_chip;
 extern const char boot_aggregate_name[];
+extern const char boot_aggregate_late_name[];
 
 /* IMA event related data */
 struct ima_event_data {
@@ -284,7 +285,7 @@ static inline void ima_measure_kexec_event(const char *event_name) {}
 extern bool ima_canonical_fmt;
 
 /* Internal IMA function definitions */
-int ima_init(void);
+int ima_init_core(bool late);
 int ima_fs_init(void);
 int ima_add_template_entry(struct ima_template_entry *entry, int violation,
 			   const char *op, struct inode *inode,
