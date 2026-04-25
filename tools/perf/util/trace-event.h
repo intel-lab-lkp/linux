@@ -116,7 +116,7 @@ extern unsigned int scripting_max_stack;
 struct scripting_ops *script_spec__lookup(const char *spec);
 int script_spec__for_each(int (*cb)(struct scripting_ops *ops, const char *spec));
 
-void setup_perl_scripting(void);
+
 void setup_python_scripting(void);
 
 struct scripting_context {
