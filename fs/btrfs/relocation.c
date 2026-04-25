@@ -835,10 +835,11 @@ static int get_new_location(struct inode *reloc_inode, u64 *new_bytenr,
 	fi = btrfs_item_ptr(leaf, path->slots[0],
 			    struct btrfs_file_extent_item);
 
-	BUG_ON(btrfs_file_extent_offset(leaf, fi) ||
-	       btrfs_file_extent_compression(leaf, fi) ||
-	       btrfs_file_extent_encryption(leaf, fi) ||
-	       btrfs_file_extent_other_encoding(leaf, fi));
+	if (unlikely(btrfs_file_extent_offset(leaf, fi) ||
+		     btrfs_file_extent_compression(leaf, fi) ||
+		     btrfs_file_extent_encryption(leaf, fi) ||
+		     btrfs_file_extent_other_encoding(leaf, fi)))
+		return -EUCLEAN;
 
 	if (num_bytes != btrfs_file_extent_disk_num_bytes(leaf, fi))
 		return -EINVAL;
