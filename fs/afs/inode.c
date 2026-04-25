@@ -78,10 +78,19 @@ const char *afs_get_link(struct dentry *dentry, struct inode *inode,
 		goto good;
 
 fetch:
-	ret = afs_read_single(vnode, NULL);
-	if (ret < 0)
-		return ERR_PTR(ret);
-	set_bit(AFS_VNODE_DIR_READ, &vnode->flags);
+	if (down_write_killable(&vnode->validate_lock) < 0)
+		return ERR_PTR(-ERESTARTSYS);
+	if (test_and_clear_bit(AFS_VNODE_ZAP_DATA, &vnode->flags) ||
+	    !test_bit(AFS_VNODE_DIR_READ, &vnode->flags)) {
+		ret = afs_read_single(vnode, NULL);
+		if (ret < 0) {
+			up_write(&vnode->validate_lock);
+			return ERR_PTR(ret);
+		}
+		set_bit(AFS_VNODE_DIR_READ, &vnode->flags);
+	}
+
+	up_write(&vnode->validate_lock);
 
 good:
 	folio = folioq_folio(vnode->directory, 0);
