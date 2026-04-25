@@ -133,16 +133,21 @@ static struct dst_entry *rxe_find_route6(struct rxe_qp *qp,
 					 struct in6_addr *saddr,
 					 struct in6_addr *daddr)
 {
-	struct dst_entry *ndst;
+	struct dst_entry *ndst = NULL;
 	struct flowi6 fl6 = {};
+	struct sock *sk;
 
 	fl6.flowi6_oif = ndev->ifindex;
 	memcpy(&fl6.saddr, saddr, sizeof(*saddr));
 	memcpy(&fl6.daddr, daddr, sizeof(*daddr));
 	fl6.flowi6_proto = IPPROTO_UDP;
 
-	ndst = ip6_dst_lookup_flow(net, rxe_ns_pernet_sk6(net), &fl6, NULL);
-	if (IS_ERR(ndst)) {
+	rcu_read_lock();
+	sk = rxe_ns_pernet_sk6(net);
+	if (sk)
+		ndst = ip6_dst_lookup_flow(net, sk, &fl6, NULL);
+	rcu_read_unlock();
+	if (IS_ERR_OR_NULL(ndst)) {
 		rxe_dbg_qp(qp, "no route to %pI6\n", daddr);
 		return NULL;
 	}

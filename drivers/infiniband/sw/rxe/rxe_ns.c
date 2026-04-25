@@ -91,13 +91,8 @@ static struct pernet_operations rxe_net_ops = {
 struct sock *rxe_ns_pernet_sk6(struct net *net)
 {
 	struct rxe_ns_sock *ns_sk = net_generic(net, rxe_pernet_id);
-	struct sock *sk;
 
-	rcu_read_lock();
-	sk = rcu_dereference(ns_sk->rxe_sk6);
-	rcu_read_unlock();
-
-	return sk;
+	return rcu_dereference(ns_sk->rxe_sk6);
 }
 #endif /* IPV6 */
 
