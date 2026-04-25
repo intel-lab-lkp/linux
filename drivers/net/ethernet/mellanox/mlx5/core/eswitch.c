@@ -2059,7 +2059,7 @@ int mlx5_eswitch_init(struct mlx5_core_dev *dev)
 	esw->mode = MLX5_ESWITCH_LEGACY;
 	err = mlx5_esw_qos_init(esw);
 	if (err)
-		goto reps_err;
+		goto qos_err;
 
 	mutex_init(&esw->offloads.encap_tbl_lock);
 	hash_init(esw->offloads.encap_tbl);
@@ -2088,6 +2088,8 @@ int mlx5_eswitch_init(struct mlx5_core_dev *dev)
 		 MLX5_MAX_MC_PER_VPORT(dev));
 	return 0;
 
+qos_err:
+	esw_offloads_cleanup(esw);
 reps_err:
 	mlx5_esw_vports_cleanup(esw);
 	dev->priv.eswitch = NULL;
