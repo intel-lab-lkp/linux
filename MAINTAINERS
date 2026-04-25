@@ -7324,6 +7324,14 @@ F:	drivers/devfreq/event/
 F:	include/dt-bindings/pmu/exynos_ppmu.h
 F:	include/linux/devfreq-event.h
 
+DEVICE HINTS
+M:	Antheas Kapenekakis <lkml@antheas.dev>
+L:	driver-core@lists.linux.dev
+S:	Maintained
+F:	Documentation/ABI/testing/sysfs-class-hint
+F:	drivers/base/hint.c
+F:	include/linux/hint.h
+
 DEVICE I/O & IRQ [RUST]
 M:	Danilo Krummrich <dakr@kernel.org>
 M:	Alice Ryhl <aliceryhl@google.com>

@@ -222,6 +222,9 @@ config DMA_FENCE_TRACE
 	  lockup related problems for dma-buffers shared across multiple
 	  devices.
 
+config HINT
+	bool
+
 config GENERIC_ARCH_TOPOLOGY
 	bool
 	help
