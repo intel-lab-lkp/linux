@@ -786,7 +786,7 @@ static int meson_sar_adc_clk_init(struct iio_dev *indio_dev,
 static int meson_sar_adc_temp_sensor_init(struct iio_dev *indio_dev)
 {
 	struct meson_sar_adc_priv *priv = iio_priv(indio_dev);
-	u8 *buf, trimming_bits, trimming_mask, upper_adc_val;
+	u8 trimming_bits, trimming_mask, upper_adc_val;
 	struct device *dev = indio_dev->dev.parent;
 	struct nvmem_cell *temperature_calib;
 	size_t read_len;
@@ -807,14 +807,12 @@ static int meson_sar_adc_temp_sensor_init(struct iio_dev *indio_dev)
 	}
 
 	read_len = MESON_SAR_ADC_EFUSE_BYTES;
-	buf = nvmem_cell_read(temperature_calib, &read_len);
+	u8 *buf __free(kfree) = nvmem_cell_read(temperature_calib, &read_len);
 	nvmem_cell_put(temperature_calib);
 	if (IS_ERR(buf))
 		return dev_err_probe(dev, PTR_ERR(buf), "failed to read temperature_calib cell\n");
-	if (read_len != MESON_SAR_ADC_EFUSE_BYTES) {
-		kfree(buf);
+	if (read_len != MESON_SAR_ADC_EFUSE_BYTES)
 		return dev_err_probe(dev, -EINVAL, "invalid read size of temperature_calib cell\n");
-	}
 
 	priv->tsc_regmap = syscon_regmap_lookup_by_phandle(dev->of_node, "amlogic,hhi-sysctrl");
 	if (IS_ERR(priv->tsc_regmap))
@@ -834,8 +832,6 @@ static int meson_sar_adc_temp_sensor_init(struct iio_dev *indio_dev)
 	priv->temperature_sensor_adc_val = buf[2];
 	priv->temperature_sensor_adc_val |= upper_adc_val << BITS_PER_BYTE;
 	priv->temperature_sensor_adc_val >>= trimming_bits;
-
-	kfree(buf);
 
 	return 0;
 }
