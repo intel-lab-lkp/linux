@@ -230,6 +230,9 @@ asmlinkage __visible void smp_callin(void)
 			return;
 	}
 
+	if (verify_cpu_asid_bits())
+		return;
+
 	/* All kernel threads share the same mm context.  */
 	mmgrab(mm);
 	current->active_mm = mm;
