@@ -576,6 +576,7 @@ static int r8a779f0_pcie_ltssm_control(struct rcar_gen4_pcie *rcar, bool enable)
 static void rcar_gen4_pcie_additional_common_init(struct rcar_gen4_pcie *rcar)
 {
 	struct dw_pcie *dw = &rcar->dw;
+	u16 offset = dw_pcie_find_capability(dw, PCI_CAP_ID_EXP);
 	u32 val;
 
 	val = dw_pcie_readl_dbi(dw, PCIE_PORT_LANE_SKEW);
@@ -584,10 +585,65 @@ static void rcar_gen4_pcie_additional_common_init(struct rcar_gen4_pcie *rcar)
 		val |= BIT(6);
 	dw_pcie_writel_dbi(dw, PCIE_PORT_LANE_SKEW, val);
 
+	val = dw_pcie_readl_dbi(dw, offset + PCI_EXP_DEVCTL);
+	val &= ~(PCI_EXP_DEVCTL_PAYLOAD | PCI_EXP_DEVCTL_READRQ);
+	val |= PCI_EXP_DEVCTL_PAYLOAD_256B | PCI_EXP_DEVCTL_READRQ_256B;
+	dw_pcie_writel_dbi(dw, offset + PCI_EXP_DEVCTL, val);
+
 	val = readl(rcar->base + PCIEPWRMNGCTRL);
 	val |= APP_CLK_REQ_N | APP_CLK_PM_EN;
 	writel(val, rcar->base + PCIEPWRMNGCTRL);
 }
+
+static void rcar_gen4_rc_pcie_quirk(struct pci_dev *dev)
+{
+	static const struct pci_device_id rcar_gen4_pcie_rc_devid = {
+		PCI_DEVICE(PCI_VENDOR_ID_RENESAS, 0x0030),
+		.class = PCI_CLASS_BRIDGE_PCI_NORMAL, .class_mask = ~0
+	};
+	struct pci_bus *bus = dev->bus;
+	struct pci_dev *bridge;
+
+	if (pci_is_root_bus(bus))
+		bridge = dev;
+
+	/* Look for the host bridge */
+	while (!pci_is_root_bus(bus)) {
+		bridge = bus->self;
+		bus = bus->parent;
+	}
+
+	if (!bridge)
+		return;
+
+	if (!pci_match_one_device(&rcar_gen4_pcie_rc_devid, bridge))
+		return;
+
+	/*
+	 * R-Car Gen4 PCIe controller has a hardware limitation of 256 Bytes
+	 * maximum payload size. The PCIe DMA generates requests of size up
+	 * to minimum(Max_Read_Request_Size, Max_Payload_Size). Force limit
+	 * both Max_Read_Request_Size and Max_Payload_Size to 256 Bytes and
+	 * propagate this limit to all downstream devices.
+	 *
+	 * For details, refer to:
+	 * R-Car S4 R19UH0161EJ0130 Rev.1.30 Jun. 16, 2025 or
+	 * R-Car V4H R19UH0186EJ0130 Rev.1.30 Apr. 21, 2025 or
+	 * R-Car V4M R19UH0217EJ0100 Rev.1.00 Dec. 12, 2025,
+	 * chapters 104.1.1 Features and 104.3.9 DMA Transfer
+	 * section DMA Read Transfer.
+	 */
+	if (pcie_get_readrq(dev) > 256) {
+		dev_info(&dev->dev, "Limiting MRRS to 256 bytes\n");
+		pcie_set_readrq(dev, 256);
+	}
+
+	if (pcie_get_mps(dev) > 256) {
+		dev_info(&dev->dev, "Limiting MPS to 256 bytes\n");
+		pcie_set_mps(dev, 256);
+	}
+}
+DECLARE_PCI_FIXUP_ENABLE(PCI_ANY_ID, PCI_ANY_ID, rcar_gen4_rc_pcie_quirk);
 
 static void rcar_gen4_pcie_phy_reg_update_bits(struct rcar_gen4_pcie *rcar,
 					       u32 offset, u32 mask, u32 val)
