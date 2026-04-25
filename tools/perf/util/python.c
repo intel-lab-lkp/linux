@@ -9,8 +9,10 @@
 #include <perf/mmap.h>
 
 #include "callchain.h"
+#include "comm.h"
 #include "counts.h"
 #include "data.h"
+#include "debug.h"
 #include "event.h"
 #include "evlist.h"
 #include "evsel.h"
@@ -20,8 +22,12 @@
 #include "pmus.h"
 #include "print_binary.h"
 #include "record.h"
+#include "session.h"
 #include "strbuf.h"
+#include "symbol.h"
+#include "thread.h"
 #include "thread_map.h"
+#include "tool.h"
 #include "tp_pmu.h"
 #include "trace-event.h"
 #include "util/sample.h"
@@ -2413,6 +2419,256 @@ static int pyrf_data__setup_types(void)
 	return PyType_Ready(&pyrf_data__type);
 }
 
+struct pyrf_thread {
+	PyObject_HEAD
+
+	struct thread *thread;
+};
+
+static void pyrf_thread__delete(struct pyrf_thread *pthread)
+{
+	thread__put(pthread->thread);
+	Py_TYPE(pthread)->tp_free((PyObject *)pthread);
+}
+
+static PyObject *pyrf_thread__comm(PyObject *obj)
+{
+	struct pyrf_thread *pthread = (void *)obj;
+	const char *str = thread__comm_str(pthread->thread);
+
+	if (!str)
+		Py_RETURN_NONE;
+
+	return PyUnicode_FromString(str);
+}
+
+static PyMethodDef pyrf_thread__methods[] = {
+	{
+		.ml_name  = "comm",
+		.ml_meth  = (PyCFunction)pyrf_thread__comm,
+		.ml_flags = METH_NOARGS,
+		.ml_doc	  = PyDoc_STR("Comm(and) associated with this thread.")
+	},
+	{ .ml_name = NULL, }
+};
+
+static const char pyrf_thread__doc[] = PyDoc_STR("perf thread object.");
+
+static PyTypeObject pyrf_thread__type = {
+	PyVarObject_HEAD_INIT(NULL, 0)
+	.tp_name	= "perf.thread",
+	.tp_basicsize	= sizeof(struct pyrf_thread),
+	.tp_dealloc	= (destructor)pyrf_thread__delete,
+	.tp_flags	= Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
+	.tp_methods	= pyrf_thread__methods,
+	.tp_doc		= pyrf_thread__doc,
+};
+
+static int pyrf_thread__setup_types(void)
+{
+	return PyType_Ready(&pyrf_thread__type);
+}
+
+static PyObject *pyrf_thread__from_thread(struct thread *thread)
+{
+	struct pyrf_thread *pthread = PyObject_New(struct pyrf_thread, &pyrf_thread__type);
+
+	if (!pthread)
+		return NULL;
+
+	pthread->thread = thread__get(thread);
+	return (PyObject *)pthread;
+}
+
+struct pyrf_session {
+	PyObject_HEAD
+
+	struct perf_session *session;
+	struct perf_tool tool;
+	struct pyrf_data *pdata;
+	PyObject *sample;
+	PyObject *stat;
+};
+
+static int pyrf_session_tool__sample(const struct perf_tool *tool,
+				     union perf_event *event,
+				     struct perf_sample *sample,
+				     struct evsel *evsel,
+				     struct machine *machine __maybe_unused)
+{
+	struct pyrf_session *psession = container_of(tool, struct pyrf_session, tool);
+	PyObject *pyevent = pyrf_event__new(event);
+	struct pyrf_event *pevent = (struct pyrf_event *)pyevent;
+	PyObject *ret;
+
+	if (pyevent == NULL)
+		return -ENOMEM;
+
+	memcpy(&pevent->event, event, event->header.size);
+	if (evsel__parse_sample(evsel, &pevent->event, &pevent->sample) < 0) {
+		Py_DECREF(pyevent);
+		return -1;
+	}
+	/* Avoid shallow copy pointing to lazily allocated memory that would be double freed. */
+	pevent->sample.user_regs = NULL;
+	pevent->sample.intr_regs = NULL;
+	if (pevent->sample.merged_callchain)
+		pevent->sample.callchain = NULL;
+
+	ret = PyObject_CallFunction(psession->sample, "O", pyevent);
+	if (!ret) {
+		PyErr_Print();
+		Py_DECREF(pyevent);
+		return -1;
+	}
+	Py_DECREF(ret);
+	Py_DECREF(pyevent);
+	return 0;
+}
+
+static PyObject *pyrf_session__find_thread(struct pyrf_session *psession, PyObject *args)
+{
+	struct machine *machine;
+	struct thread *thread = NULL;
+	PyObject *result;
+	int pid;
+
+	if (!PyArg_ParseTuple(args, "i", &pid))
+		return NULL;
+
+	machine = &psession->session->machines.host;
+	thread = machine__find_thread(machine, pid, pid);
+
+	if (!thread) {
+		machine = perf_session__find_machine(psession->session, pid);
+		if (machine)
+			thread = machine__find_thread(machine, pid, pid);
+	}
+
+	if (!thread) {
+		PyErr_Format(PyExc_TypeError, "Failed to find thread %d", pid);
+		return NULL;
+	}
+	result = pyrf_thread__from_thread(thread);
+	thread__put(thread);
+	return result;
+}
+
+static int pyrf_session__init(struct pyrf_session *psession, PyObject *args, PyObject *kwargs)
+{
+	struct pyrf_data *pdata;
+	PyObject *sample = NULL;
+	static char *kwlist[] = { "data", "sample", NULL };
+
+	if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O!|O", kwlist, &pyrf_data__type, &pdata,
+					 &sample))
+		return -1;
+
+	Py_INCREF(pdata);
+	psession->pdata = pdata;
+	perf_tool__init(&psession->tool, /*ordered_events=*/true);
+	psession->tool.ordering_requires_timestamps = true;
+
+	#define ADD_TOOL(name)						\
+	do {								\
+		if (name) {						\
+			if (!PyCallable_Check(name)) {			\
+				PyErr_SetString(PyExc_TypeError, #name " must be callable"); \
+				return -1;				\
+			}						\
+			psession->tool.name = pyrf_session_tool__##name; \
+			Py_INCREF(name);				\
+			psession->name = name;				\
+		}							\
+	} while (0)
+
+	ADD_TOOL(sample);
+	#undef ADD_TOOL
+
+	psession->tool.comm		= perf_event__process_comm;
+	psession->tool.mmap		= perf_event__process_mmap;
+	psession->tool.mmap2            = perf_event__process_mmap2;
+	psession->tool.namespaces       = perf_event__process_namespaces;
+	psession->tool.cgroup           = perf_event__process_cgroup;
+	psession->tool.exit             = perf_event__process_exit;
+	psession->tool.fork             = perf_event__process_fork;
+	psession->tool.ksymbol          = perf_event__process_ksymbol;
+	psession->tool.text_poke        = perf_event__process_text_poke;
+	psession->tool.build_id         = perf_event__process_build_id;
+	psession->session = perf_session__new(&pdata->data, &psession->tool);
+	if (IS_ERR(psession->session)) {
+		PyErr_Format(PyExc_IOError, "failed to create session: %ld",
+			     PTR_ERR(psession->session));
+		psession->session = NULL;
+		Py_DECREF(pdata);
+		psession->pdata = NULL;
+		return -1;
+	}
+
+	if (symbol__init(perf_session__env(psession->session)) < 0) {
+		perf_session__delete(psession->session);
+		psession->session = NULL;
+		Py_DECREF(psession->pdata);
+		psession->pdata = NULL;
+		return -1;
+	}
+
+	if (perf_session__create_kernel_maps(psession->session) < 0)
+		pr_warning("Cannot read kernel map\n");
+
+	return 0;
+}
+
+static void pyrf_session__delete(struct pyrf_session *psession)
+{
+	Py_XDECREF(psession->pdata);
+	Py_XDECREF(psession->sample);
+	perf_session__delete(psession->session);
+	Py_TYPE(psession)->tp_free((PyObject *)psession);
+}
+
+static PyObject *pyrf_session__find_thread_events(struct pyrf_session *psession)
+{
+	int err = perf_session__process_events(psession->session);
+
+	return PyLong_FromLong(err);
+}
+
+static PyMethodDef pyrf_session__methods[] = {
+	{
+		.ml_name  = "process_events",
+		.ml_meth  = (PyCFunction)pyrf_session__find_thread_events,
+		.ml_flags = METH_NOARGS,
+		.ml_doc	  = PyDoc_STR("Iterate and process events.")
+	},
+	{
+		.ml_name  = "find_thread",
+		.ml_meth  = (PyCFunction)pyrf_session__find_thread,
+		.ml_flags = METH_VARARGS,
+		.ml_doc	  = PyDoc_STR("Returns the thread associated with a pid.")
+	},
+	{ .ml_name = NULL, }
+};
+
+static const char pyrf_session__doc[] = PyDoc_STR("perf session object.");
+
+static PyTypeObject pyrf_session__type = {
+	PyVarObject_HEAD_INIT(NULL, 0)
+	.tp_name	= "perf.session",
+	.tp_basicsize	= sizeof(struct pyrf_session),
+	.tp_dealloc	= (destructor)pyrf_session__delete,
+	.tp_flags	= Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
+	.tp_methods	= pyrf_session__methods,
+	.tp_doc		= pyrf_session__doc,
+	.tp_init	= (initproc)pyrf_session__init,
+};
+
+static int pyrf_session__setup_types(void)
+{
+	pyrf_session__type.tp_new = PyType_GenericNew;
+	return PyType_Ready(&pyrf_session__type);
+}
+
 static PyMethodDef perf__methods[] = {
 	{
 		.ml_name  = "metrics",
@@ -2467,8 +2723,10 @@ PyMODINIT_FUNC PyInit_perf(void)
 	};
 	PyObject *module = PyModule_Create(&moduledef);
 
-	if (module == NULL ||
-	    pyrf_event__setup_types() < 0 ||
+	if (module == NULL)
+		return NULL;
+
+	if (pyrf_event__setup_types() < 0 ||
 	    pyrf_evlist__setup_types() < 0 ||
 	    pyrf_evsel__setup_types() < 0 ||
 	    pyrf_thread_map__setup_types() < 0 ||
@@ -2476,8 +2734,12 @@ PyMODINIT_FUNC PyInit_perf(void)
 	    pyrf_pmu_iterator__setup_types() < 0 ||
 	    pyrf_pmu__setup_types() < 0 ||
 	    pyrf_counts_values__setup_types() < 0 ||
-	    pyrf_data__setup_types() < 0)
-		return module;
+	    pyrf_data__setup_types() < 0 ||
+	    pyrf_session__setup_types() < 0 ||
+	    pyrf_thread__setup_types() < 0) {
+		Py_DECREF(module);
+		return NULL;
+	}
 
 	/* The page_size is placed in util object. */
 	page_size = sysconf(_SC_PAGE_SIZE);
@@ -2527,6 +2789,9 @@ PyMODINIT_FUNC PyInit_perf(void)
 	Py_INCREF(&pyrf_data__type);
 	PyModule_AddObject(module, "data", (PyObject *)&pyrf_data__type);
 
+	Py_INCREF(&pyrf_session__type);
+	PyModule_AddObject(module, "session", (PyObject *)&pyrf_session__type);
+
 	dict = PyModule_GetDict(module);
 	if (dict == NULL)
 		goto error;
@@ -2540,7 +2805,9 @@ PyMODINIT_FUNC PyInit_perf(void)
 	}
 
 error:
-	if (PyErr_Occurred())
-		PyErr_SetString(PyExc_ImportError, "perf: Init failed!");
+	if (PyErr_Occurred()) {
+		Py_XDECREF(module);
+		return NULL;
+	}
 	return module;
 }
