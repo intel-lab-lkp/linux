@@ -472,6 +472,13 @@ xfs_fill_fsxattr(
 
 	fileattr_fill_xflags(fa, xfs_ip2xflags(ip));
 
+	/*
+	 * FS_XFLAG_CASEFOLD is read-only; hide it from the legacy
+	 * flags view so chattr's RMW cycle does not pass it back to
+	 * xfs_fileattr_set().
+	 */
+	fa->flags &= ~FS_CASEFOLD_FL;
+
 	if (ip->i_diflags & XFS_DIFLAG_EXTSIZE) {
 		fa->fsx_extsize = XFS_FSB_TO_B(mp, ip->i_extsize);
 	} else if (ip->i_diflags & XFS_DIFLAG_EXTSZINHERIT) {
