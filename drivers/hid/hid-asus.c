@@ -53,10 +53,6 @@ MODULE_DESCRIPTION("Asus HID Keyboard and TouchPad");
 #define FEATURE_KBD_LED_REPORT_ID1 0x5d
 #define FEATURE_KBD_LED_REPORT_ID2 0x5e
 
-#define ROG_ALLY_REPORT_SIZE 64
-#define ROG_ALLY_X_MIN_MCU 313
-#define ROG_ALLY_MIN_MCU 319
-
 /* Spurious HID codes sent by QUIRK_ROG_NKEY_KEYBOARD devices */
 #define ASUS_SPURIOUS_CODE_0XEA 0xea
 #define ASUS_SPURIOUS_CODE_0XEC 0xec
@@ -99,9 +95,8 @@ MODULE_DESCRIPTION("Asus HID Keyboard and TouchPad");
 #define QUIRK_MEDION_E1239T		BIT(10)
 #define QUIRK_ROG_NKEY_KEYBOARD		BIT(11)
 #define QUIRK_ROG_CLAYMORE_II_KEYBOARD	BIT(12)
-#define QUIRK_ROG_ALLY_XPAD		BIT(13)
-#define QUIRK_HID_FN_LOCK		BIT(14)
-#define QUIRK_ROG_NKEY_ID1ID2_INIT	BIT(15)
+#define QUIRK_HID_FN_LOCK		BIT(13)
+#define QUIRK_ROG_NKEY_ID1ID2_INIT	BIT(14)
 
 #define I2C_KEYBOARD_QUIRKS			(QUIRK_FIX_NOTEBOOK_REPORT | \
 						 QUIRK_NO_INIT_REPORTS | \
@@ -631,102 +626,9 @@ static void asus_kbd_backlight_work(struct work_struct *work)
 		hid_err(led->hdev, "Asus failed to set keyboard backlight: %d\n", ret);
 }
 
-/*
- * We don't care about any other part of the string except the version section.
- * Example strings: FGA80100.RC72LA.312_T01, FGA80100.RC71LS.318_T01
- * The bytes "5a 05 03 31 00 1a 13" and possibly more come before the version
- * string, and there may be additional bytes after the version string such as
- * "75 00 74 00 65 00" or a postfix such as "_T01"
- */
-static int mcu_parse_version_string(const u8 *response, size_t response_size)
-{
-	const u8 *end = response + response_size;
-	const u8 *p = response;
-	int dots, err, version;
-	char buf[4];
-
-	dots = 0;
-	while (p < end && dots < 2) {
-		if (*p++ == '.')
-			dots++;
-	}
-
-	if (dots != 2 || p >= end || (p + 3) >= end)
-		return -EINVAL;
-
-	memcpy(buf, p, 3);
-	buf[3] = '\0';
-
-	err = kstrtoint(buf, 10, &version);
-	if (err || version < 0)
-		return -EINVAL;
-
-	return version;
-}
-
-static int mcu_request_version(struct hid_device *hdev)
-{
-	u8 *response __free(kfree) = kzalloc(ROG_ALLY_REPORT_SIZE, GFP_KERNEL);
-	const u8 request[] = { 0x5a, 0x05, 0x03, 0x31, 0x00, 0x20 };
-	int ret;
-
-	if (!response)
-		return -ENOMEM;
-
-	ret = asus_kbd_set_report(hdev, request, sizeof(request));
-	if (ret < 0)
-		return ret;
-
-	ret = hid_hw_raw_request(hdev, FEATURE_REPORT_ID, response,
-				ROG_ALLY_REPORT_SIZE, HID_FEATURE_REPORT,
-				HID_REQ_GET_REPORT);
-	if (ret < 0)
-		return ret;
-
-	ret = mcu_parse_version_string(response, ROG_ALLY_REPORT_SIZE);
-	if (ret < 0) {
-		pr_err("Failed to parse MCU version: %d\n", ret);
-		print_hex_dump(KERN_ERR, "MCU: ", DUMP_PREFIX_NONE,
-			      16, 1, response, ROG_ALLY_REPORT_SIZE, false);
-	}
-
-	return ret;
-}
-
-static void validate_mcu_fw_version(struct hid_device *hdev, int idProduct)
-{
-	int min_version, version;
-
-	version = mcu_request_version(hdev);
-	if (version < 0)
-		return;
-
-	switch (idProduct) {
-	case USB_DEVICE_ID_ASUSTEK_ROG_NKEY_ALLY:
-		min_version = ROG_ALLY_MIN_MCU;
-		break;
-	case USB_DEVICE_ID_ASUSTEK_ROG_NKEY_ALLY_X:
-		min_version = ROG_ALLY_X_MIN_MCU;
-		break;
-	default:
-		min_version = 0;
-	}
-
-	if (version < min_version) {
-		hid_warn(hdev,
-			"The MCU firmware version must be %d or greater to avoid issues with suspend.\n",
-			min_version);
-	} else {
-		set_ally_mcu_hack(ASUS_WMI_ALLY_MCU_HACK_DISABLED);
-		set_ally_mcu_powersave(true);
-	}
-}
-
 static int asus_kbd_register_leds(struct hid_device *hdev)
 {
 	struct asus_drvdata *drvdata = hid_get_drvdata(hdev);
-	struct usb_interface *intf;
-	struct usb_device *udev;
 	unsigned char kbd_func;
 	int ret;
 
@@ -752,13 +654,6 @@ static int asus_kbd_register_leds(struct hid_device *hdev)
 		ret = asus_kbd_disable_oobe(hdev);
 		if (ret < 0)
 			return ret;
-	}
-
-	if (drvdata->quirks & QUIRK_ROG_ALLY_XPAD) {
-		intf = to_usb_interface(hdev->dev.parent);
-		udev = interface_to_usbdev(intf);
-		validate_mcu_fw_version(hdev,
-			le16_to_cpu(udev->descriptor.idProduct));
 	}
 
 	drvdata->kbd_backlight = devm_kzalloc(&hdev->dev,
@@ -1493,10 +1388,10 @@ static const struct hid_device_id asus_devices[] = {
 	  QUIRK_USE_KBD_BACKLIGHT | QUIRK_ROG_NKEY_KEYBOARD },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_ASUSTEK,
 	    USB_DEVICE_ID_ASUSTEK_ROG_NKEY_ALLY),
-	  QUIRK_USE_KBD_BACKLIGHT | QUIRK_ROG_NKEY_KEYBOARD | QUIRK_ROG_ALLY_XPAD},
+	  QUIRK_USE_KBD_BACKLIGHT | QUIRK_ROG_NKEY_KEYBOARD},
 	{ HID_USB_DEVICE(USB_VENDOR_ID_ASUSTEK,
 	    USB_DEVICE_ID_ASUSTEK_ROG_NKEY_ALLY_X),
-	  QUIRK_USE_KBD_BACKLIGHT | QUIRK_ROG_NKEY_KEYBOARD | QUIRK_ROG_ALLY_XPAD },
+	  QUIRK_USE_KBD_BACKLIGHT | QUIRK_ROG_NKEY_KEYBOARD },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_ASUSTEK,
 	    USB_DEVICE_ID_ASUSTEK_XGM_2022),
 	},
