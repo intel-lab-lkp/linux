@@ -861,6 +861,8 @@ struct mmap_action {
 	 * it is not valid to clear the error here.
 	 */
 	int (*error_hook)(int err);
+	
+	void (*abort_hook)(struct vm_area_desc *desc);
 
 	/*
 	 * This should be set in rare instances where the operation required

@@ -102,6 +102,14 @@ static int hugetlb_file_mmap_prepare_success(const struct vm_area_struct *vma)
 	return hugetlb_vma_lock_alloc((struct vm_area_struct *)vma);
 }
 
+static void hugetlb_file_mmap_prepare_abort(struct vm_area_desc *desc)
+{
+	/*
+	 * TODO: Implement the proper rollback for hugetlb_reserve_pages()
+	 * and drop the resv_map reference held in the desc here.
+	 */
+}
+
 static int hugetlbfs_file_mmap_prepare(struct vm_area_desc *desc)
 {
 	struct file *file = desc->file;
@@ -172,6 +180,7 @@ out:
 	if (!ret) {
 		/* Allocate the VMA lock after we set it up. */
 		desc->action.success_hook = hugetlb_file_mmap_prepare_success;
+		desc->action.abort_hook = hugetlb_file_mmap_prepare_abort;
 		/*
 		 * We cannot permit the rmap finding this VMA in the time
 		 * between the VMA being inserted into the VMA tree and the

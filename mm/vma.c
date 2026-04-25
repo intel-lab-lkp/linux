@@ -2800,6 +2800,10 @@ abort_munmap:
 	 */
 	if (map.file_doesnt_need_get)
 		fput(map.file);
+	
+	if (have_mmap_prepare && desc.action.abort_hook)
+		desc.action.abort_hook(&desc);
+	
 	vms_abort_munmap_vmas(&map.vms, &map.mas_detach);
 	return error;
 }
