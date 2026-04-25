@@ -70,6 +70,7 @@ static int lps0_dsm_state;
 
 static enum hint_idle_option current_idle = HINT_IDLE_ACTIVE;
 static enum hint_idle_option presuspend_idle = HINT_IDLE_ACTIVE;
+static unsigned long idle_transition_jiffies;
 
 /* Device constraint entry structure */
 struct lpi_device_info {
@@ -507,6 +508,7 @@ static int acpi_s2idle_idle_set(struct device *dev, enum hint_idle_option idle)
 						lps0_dsm_guid_microsoft);
 
 		current_idle = HINT_IDLE_RESUME;
+		idle_transition_jiffies = jiffies;
 		return 0;
 	}
 
@@ -594,6 +596,7 @@ static int acpi_s2idle_idle_set(struct device *dev, enum hint_idle_option idle)
 		}
 	}
 
+	idle_transition_jiffies = jiffies;
 	return 0;
 }
 
@@ -694,6 +697,7 @@ static struct acpi_scan_handler lps0_handler = {
 static int acpi_s2idle_begin_lps0(void)
 {
 	struct acpi_s2idle_dev_ops *handler;
+	unsigned int elapsed;
 	int delay = 0;
 
 	if (!lps0_device_handle || sleep_no_lps0)
@@ -726,8 +730,15 @@ static int acpi_s2idle_begin_lps0(void)
 		if (handler->begin_delay && handler->begin_delay > delay)
 			delay = handler->begin_delay;
 	}
-	if (delay > 0)
-		msleep(delay);
+	if (delay > 0) {
+		elapsed = jiffies_to_msecs(jiffies - idle_transition_jiffies);
+		if (delay > elapsed) {
+			msleep(delay - elapsed);
+			acpi_handle_debug(lps0_device_handle,
+					  "Waited %d ms for begin quirk\n",
+					  delay - elapsed);
+		}
+	}
 
 	return acpi_s2idle_begin();
 }
