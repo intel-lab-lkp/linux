@@ -236,10 +236,6 @@ static int rxe_newlink(const char *ibdev_name, struct net_device *ndev)
 		goto err;
 	}
 
-	err = rxe_net_init(ndev);
-	if (err)
-		return err;
-
 	err = rxe_net_add(ibdev_name, ndev);
 	if (err) {
 		rxe_err("failed to add %s\n", ndev->name);
@@ -251,8 +247,6 @@ err:
 
 static int rxe_dellink(struct ib_device *dev)
 {
-	rxe_net_del(dev);
-
 	return 0;
 }
 

@@ -7,8 +7,10 @@
 #include <linux/skbuff.h>
 #include <linux/pid_namespace.h>
 #include <net/udp_tunnel.h>
+#include <rdma/ib_verbs.h>
 
 #include "rxe_ns.h"
+#include "rxe_net.h"
 
 /*
  * Per network namespace data
@@ -23,40 +25,54 @@ struct rxe_ns_sock {
  */
 static unsigned int rxe_pernet_id;
 
-/*
- * Called for every existing and added network namespaces
- */
-static int rxe_ns_init(struct net *net)
+static __net_init int rxe_ns_init(struct net *net)
 {
-	/* defer socket create in the namespace to the first
-	 * device create.
-	 */
+	struct rxe_ns_sock *ns_sk = net_generic(net, rxe_pernet_id);
+	struct sock *sk;
+	int err = 0;
 
-	return 0;
+	sk = rxe_setup_udp_tunnel(net, htons(ROCE_V2_UDP_DPORT), false);
+	if (IS_ERR(sk)) {
+		err = PTR_ERR(sk);
+		goto out;
+	}
+
+	RCU_INIT_POINTER(ns_sk->rxe_sk4, sk);
+
+#if IS_ENABLED(CONFIG_IPV6)
+	sk = rxe_setup_udp_tunnel(net, htons(ROCE_V2_UDP_DPORT), true);
+	if (IS_ERR(sk)) {
+		err = PTR_ERR(sk);
+		if (err == -EAFNOSUPPORT) {
+			err = 0;
+			goto out;
+		}
+
+		sk = rcu_dereference_protected(ns_sk->rxe_sk4, 1);
+		rxe_release_udp_tunnel(sk);
+		goto out;
+	}
+
+	RCU_INIT_POINTER(ns_sk->rxe_sk6, sk);
+#endif
+out:
+	return err;
 }
 
-static void rxe_ns_exit(struct net *net)
+static __net_exit void rxe_ns_exit(struct net *net)
 {
-	/* called when the network namespace is removed
-	 */
 	struct rxe_ns_sock *ns_sk = net_generic(net, rxe_pernet_id);
 	struct sock *sk;
 
-	rcu_read_lock();
-	sk = rcu_dereference(ns_sk->rxe_sk4);
-	rcu_read_unlock();
-	if (sk) {
-		rcu_assign_pointer(ns_sk->rxe_sk4, NULL);
-		udp_tunnel_sock_release(sk->sk_socket);
-	}
+	sk = rcu_dereference_protected(ns_sk->rxe_sk4, 1);
+	RCU_INIT_POINTER(ns_sk->rxe_sk4, NULL);
+	rxe_release_udp_tunnel(sk);
 
 #if IS_ENABLED(CONFIG_IPV6)
-	rcu_read_lock();
-	sk = rcu_dereference(ns_sk->rxe_sk6);
-	rcu_read_unlock();
+	sk = rcu_dereference_protected(ns_sk->rxe_sk6, 1);
 	if (sk) {
-		rcu_assign_pointer(ns_sk->rxe_sk6, NULL);
-		udp_tunnel_sock_release(sk->sk_socket);
+		RCU_INIT_POINTER(ns_sk->rxe_sk6, NULL);
+		rxe_release_udp_tunnel(sk);
 	}
 #endif
 }
@@ -71,26 +87,6 @@ static struct pernet_operations rxe_net_ops = {
 	.size = sizeof(struct rxe_ns_sock),
 };
 
-struct sock *rxe_ns_pernet_sk4(struct net *net)
-{
-	struct rxe_ns_sock *ns_sk = net_generic(net, rxe_pernet_id);
-	struct sock *sk;
-
-	rcu_read_lock();
-	sk = rcu_dereference(ns_sk->rxe_sk4);
-	rcu_read_unlock();
-
-	return sk;
-}
-
-void rxe_ns_pernet_set_sk4(struct net *net, struct sock *sk)
-{
-	struct rxe_ns_sock *ns_sk = net_generic(net, rxe_pernet_id);
-
-	rcu_assign_pointer(ns_sk->rxe_sk4, sk);
-	synchronize_rcu();
-}
-
 #if IS_ENABLED(CONFIG_IPV6)
 struct sock *rxe_ns_pernet_sk6(struct net *net)
 {
@@ -102,14 +98,6 @@ struct sock *rxe_ns_pernet_sk6(struct net *net)
 	rcu_read_unlock();
 
 	return sk;
-}
-
-void rxe_ns_pernet_set_sk6(struct net *net, struct sock *sk)
-{
-	struct rxe_ns_sock *ns_sk = net_generic(net, rxe_pernet_id);
-
-	rcu_assign_pointer(ns_sk->rxe_sk6, sk);
-	synchronize_rcu();
 }
 #endif /* IPV6 */
 

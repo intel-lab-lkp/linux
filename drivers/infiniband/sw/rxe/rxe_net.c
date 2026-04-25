@@ -256,8 +256,8 @@ drop:
 	return 0;
 }
 
-static struct socket *rxe_setup_udp_tunnel(struct net *net, __be16 port,
-					   bool ipv6)
+struct sock *rxe_setup_udp_tunnel(struct net *net, __be16 port,
+				  bool ipv6)
 {
 	int err;
 	struct socket *sock;
@@ -285,13 +285,12 @@ static struct socket *rxe_setup_udp_tunnel(struct net *net, __be16 port,
 	/* Setup UDP tunnel */
 	setup_udp_tunnel_sock(net, sock, &tnl_cfg);
 
-	return sock;
+	return sock->sk;
 }
 
-static void rxe_release_udp_tunnel(struct socket *sk)
+void rxe_release_udp_tunnel(struct sock *sk)
 {
-	if (sk)
-		udp_tunnel_sock_release(sk);
+	udp_tunnel_sock_release(sk->sk_socket);
 }
 
 static void prepare_udp_hdr(struct sk_buff *skb, __be16 src_port,
@@ -629,43 +628,6 @@ int rxe_net_add(const char *ibdev_name, struct net_device *ndev)
 	return 0;
 }
 
-static void rxe_sock_put(struct sock *sk,
-					void (*set_sk)(struct net *, struct sock *),
-					struct net *net)
-{
-	if (refcount_read(&sk->sk_refcnt) > SK_REF_FOR_TUNNEL) {
-		__sock_put(sk);
-	} else {
-		rxe_release_udp_tunnel(sk->sk_socket);
-		sk = NULL;
-		set_sk(net, sk);
-	}
-}
-
-void rxe_net_del(struct ib_device *dev)
-{
-	struct rxe_dev *rxe = container_of(dev, struct rxe_dev, ib_dev);
-	struct net_device *ndev;
-	struct sock *sk;
-	struct net *net;
-
-	ndev = rxe_ib_device_get_netdev(&rxe->ib_dev);
-	if (!ndev)
-		return;
-
-	net = dev_net(ndev);
-
-	sk = rxe_ns_pernet_sk4(net);
-	if (sk)
-		rxe_sock_put(sk, rxe_ns_pernet_set_sk4, net);
-
-	sk = rxe_ns_pernet_sk6(net);
-	if (sk)
-		rxe_sock_put(sk, rxe_ns_pernet_set_sk6, net);
-
-	dev_put(ndev);
-}
-
 static void rxe_port_event(struct rxe_dev *rxe,
 			   enum ib_event_type event)
 {
@@ -722,7 +684,6 @@ static int rxe_notify(struct notifier_block *not_blk,
 	switch (event) {
 	case NETDEV_UNREGISTER:
 		ib_unregister_device_queued(&rxe->ib_dev);
-		rxe_net_del(&rxe->ib_dev);
 		break;
 	case NETDEV_CHANGEMTU:
 		rxe_dbg_dev(rxe, "%s changed mtu to %d\n", ndev->name, ndev->mtu);
@@ -752,56 +713,6 @@ static struct notifier_block rxe_net_notifier = {
 	.notifier_call = rxe_notify,
 };
 
-static int rxe_net_ipv4_init(struct net *net)
-{
-	struct sock *sk;
-	struct socket *sock;
-
-	sk = rxe_ns_pernet_sk4(net);
-	if (sk) {
-		sock_hold(sk);
-		return 0;
-	}
-
-	sock = rxe_setup_udp_tunnel(net, htons(ROCE_V2_UDP_DPORT), false);
-	if (IS_ERR(sock)) {
-		pr_err("Failed to create IPv4 UDP tunnel\n");
-		return -1;
-	}
-	rxe_ns_pernet_set_sk4(net, sock->sk);
-
-	return 0;
-}
-
-static int rxe_net_ipv6_init(struct net *net)
-{
-#if IS_ENABLED(CONFIG_IPV6)
-	struct sock *sk;
-	struct socket *sock;
-
-	sk = rxe_ns_pernet_sk6(net);
-	if (sk) {
-		sock_hold(sk);
-		return 0;
-	}
-
-	sock = rxe_setup_udp_tunnel(net, htons(ROCE_V2_UDP_DPORT), true);
-	if (PTR_ERR(sock) == -EAFNOSUPPORT) {
-		pr_warn("IPv6 is not supported, can not create a UDPv6 socket\n");
-		return 0;
-	}
-
-	if (IS_ERR(sock)) {
-		pr_err("Failed to create IPv6 UDP tunnel\n");
-		return -1;
-	}
-
-	rxe_ns_pernet_set_sk6(net, sock->sk);
-
-#endif
-	return 0;
-}
-
 int rxe_register_notifier(void)
 {
 	int err;
@@ -818,31 +729,4 @@ int rxe_register_notifier(void)
 void rxe_net_exit(void)
 {
 	unregister_netdevice_notifier(&rxe_net_notifier);
-}
-
-int rxe_net_init(struct net_device *ndev)
-{
-	struct net *net;
-	struct sock *sk;
-	int err;
-
-	net = dev_net(ndev);
-
-	err = rxe_net_ipv4_init(net);
-	if (err)
-		return err;
-
-	err = rxe_net_ipv6_init(net);
-	if (err)
-		goto err_out;
-
-	return 0;
-
-err_out:
-	/* If ipv6 error, release ipv4 resource */
-	sk = rxe_ns_pernet_sk4(net);
-	if (sk)
-		rxe_sock_put(sk, rxe_ns_pernet_set_sk4, net);
-
-	return err;
 }
