@@ -111,8 +111,4 @@ impl<'a> pci::Driver<'a> for NovaCore<'a> {
             }))
         })
     }
-
-    fn unbind(_pdev: &'a pci::Device<Core>, this: Pin<&'a Self>) {
-        this.gpu.unbind();
-    }
 }
