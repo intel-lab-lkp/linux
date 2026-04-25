@@ -64,6 +64,19 @@ Available options:
 
    Output only one line per report.
 
+ - --json
+
+   Output results as a JSON object.  The object includes total error,
+   warning, and check counts, plus an array of individual issues with
+   structured fields for level, type, message, file, and line number.
+   Output is one compact JSON document per input file, suitable for CI
+   and scripted post-processing.  Cannot be used with --terse or --emacs.
+
+ - --json-pretty
+
+   Like --json, but emit pretty-printed (indented, multi-line) JSON for
+   human reading.
+
  - --showfile
 
    Show the diffed file position instead of the input file position.
