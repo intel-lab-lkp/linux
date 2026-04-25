@@ -915,7 +915,7 @@ int mlx5r_umr_update_xlt(struct mlx5_ib_mr *mr, u64 idx, int npages,
 		 */
 		err = mlx5_odp_populate_xlt(xlt, idx, npages, mr, flags);
 		if (err)
-			return err;
+			goto out;
 		dma_sync_single_for_device(ddev, sg.addr, sg.length,
 					   DMA_TO_DEVICE);
 		sg.length = ALIGN(size_to_map, MLX5_UMR_FLEX_ALIGNMENT);
@@ -925,6 +925,7 @@ int mlx5r_umr_update_xlt(struct mlx5_ib_mr *mr, u64 idx, int npages,
 		mlx5r_umr_update_offset(&wqe.ctrl_seg, idx * desc_size);
 		err = mlx5r_umr_post_send_wait(dev, mr->mmkey.key, &wqe, true);
 	}
+out:
 	sg.length = orig_sg_length;
 	mlx5r_umr_unmap_free_xlt(dev, xlt, &sg);
 	return err;
