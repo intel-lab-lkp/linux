@@ -654,7 +654,7 @@ isl1208_rtc_interrupt(int irq, void *data)
 		if (time_after(jiffies, timeout)) {
 			dev_err(&client->dev, "%s: reading SR failed\n",
 				__func__);
-			return sr;
+			return IRQ_NONE;
 		}
 	}
 
@@ -666,7 +666,7 @@ isl1208_rtc_interrupt(int irq, void *data)
 		/* Disable the alarm */
 		err = isl1208_rtc_toggle_alarm(client, 0);
 		if (err)
-			return err;
+			return IRQ_HANDLED;
 
 		fsleep(275);
 
