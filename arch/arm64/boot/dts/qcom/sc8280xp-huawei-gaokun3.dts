@@ -22,12 +22,18 @@
 #include "sc8280xp.dtsi"
 #include "sc8280xp-pmics.dtsi"
 
+/* remove due to gpio pins collision, skip 2nd instance won't break things */
+/delete-node/ &cci1_i2c1;
+/delete-node/ &cci1_i2c1_default;
+/delete-node/ &cci1_i2c1_sleep;
+
 / {
 	chassis-type = "tablet";
 	model = "Matebook E Go";
 	compatible = "huawei,gaokun3", "qcom,sc8280xp";
 
 	aliases {
+		i2c1 = &cci1_i2c0;
 		i2c2 = &cci2_i2c1;
 		i2c4 = &i2c4;
 		i2c15 = &i2c15;
@@ -52,8 +58,16 @@
 	leds {
 		compatible = "gpio-leds";
 
-		pinctrl-0 = <&cam_indicator_en>;
+		pinctrl-0 = <&cam_indicator_en>, <&camera_flash_en>;
 		pinctrl-names = "default";
+
+		camera_flash: led {
+			function = LED_FUNCTION_FLASH;
+			color = <LED_COLOR_ID_WHITE>;
+			gpios = <&tlmm 93 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "none";
+			default-state = "off";
+		};
 
 		privacy_led: privacy-led {
 			function = LED_FUNCTION_INDICATOR;
@@ -126,6 +140,18 @@
 		enable-active-high;
 
 		pinctrl-0 = <&camf_1p2_reg_en>;
+		pinctrl-names = "default";
+	};
+
+	vreg_camr: regulator-camr {
+		compatible = "regulator-fixed";
+
+		regulator-name = "vreg_camr";
+
+		gpio = <&tlmm 92 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+
+		pinctrl-0 = <&camr_reg_en>;
 		pinctrl-names = "default";
 	};
 
@@ -387,8 +413,8 @@
 
 		vreg_l2b: ldo2 {
 			regulator-name = "vreg_l2b";
-			regulator-min-microvolt = <1904000>;
-			regulator-max-microvolt = <1904000>;
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <2800000>;
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
 		};
 
@@ -433,10 +459,9 @@
 
 		vreg_l7b: ldo7 {
 			regulator-name = "vreg_l7b";
-			regulator-min-microvolt = <1800000>;
-			regulator-max-microvolt = <1800000>;
+			regulator-min-microvolt = <2800000>;
+			regulator-max-microvolt = <2800000>;
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
-			regulator-boot-on;
 		};
 
 		vreg_l9b: ldo9 {
@@ -622,6 +647,16 @@
 	status = "okay";
 
 	ports {
+		port@0 {
+			csiphy0_ep: endpoint@0 {
+				reg = <0>;
+
+				clock-lanes = <7>;
+				data-lanes = <0 1 2 3>;
+				remote-endpoint = <&s5k3l6_ep>;
+			};
+		};
+
 		port@3 {
 			csiphy3_ep: endpoint@0 {
 				reg = <0>;
@@ -632,6 +667,58 @@
 			};
 		};
 	};
+};
+
+&cci1 {
+	status = "okay";
+};
+
+&cci1_i2c0 {
+	voice_coil_motor: vcm@c {
+		compatible = "dongwoon,dw9714";
+		reg = <0xc>;
+		vcc-supply = <&vreg_l7b>; /* FIXME: require l2c on first */
+	};
+
+	/*
+	 * https://source.puri.sm/Librem5/linux/-/blob/pureos/latest/drivers/media/i2c/s5k3l6xx.c
+	 *
+	 * This sensor has never been detected on Goakun3(2.69GHz)
+	 */
+	camera_rear: camera@10 {
+		reg = <0x10>;
+
+		pinctrl-0 = <&camr_rgb_default>;
+		pinctrl-names = "default";
+
+		clocks = <&camcc CAMCC_MCLK4_CLK>;
+		clock-names = "mclk";
+		clock-frequency = <24000000>;
+
+		rstn-gpios = <&tlmm 7 GPIO_ACTIVE_LOW>;
+
+		vddio-supply = <&vreg_camr>;
+		vdda-supply = <&vreg_l2b>;
+		vddd-supply = <&vreg_l2c>;
+
+		/* &camera_flash can't be enabled directly for now */
+		leds = <&privacy_led>;
+		led-names = "privacy";
+
+		lens-focus = <&voice_coil_motor>;
+
+		orientation = <1>;
+		rotation = <180>;
+
+		port {
+			s5k3l6_ep: endpoint {
+				data-lanes = <1 2 3 4>;
+				remote-endpoint = <&csiphy0_ep>;
+			};
+		};
+	};
+
+	/* eeprom@50/51 */
 };
 
 &cci2 {
@@ -1423,6 +1510,13 @@
 		bias-disable;
 	};
 
+	camera_flash_en: camera-flash-en-state {
+		pins = "gpio93";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+
 	camf_1p2_reg_en: camf-1p2-reg-en-state {
 		pins = "gpio44";
 		function = "gpio";
@@ -1440,6 +1534,29 @@
 
 		sc-rgb-xshut-n-pins {
 			pins = "gpio15";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-disable;
+		};
+	};
+
+	camr_reg_en: camr-reg-en-state {
+		pins = "gpio92";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+
+	camr_rgb_default: camr-rgb-default-state {
+		mclk-pins {
+			pins = "gpio6";
+			function = "cam_mclk";
+			drive-strength = <6>;
+			bias-disable;
+		};
+
+		sc-rgb-xshut-n-pins {
+			pins = "gpio7";
 			function = "gpio";
 			drive-strength = <2>;
 			bias-disable;
