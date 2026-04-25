@@ -248,4 +248,14 @@ static inline struct pid_namespace *proc_pid_ns(struct super_block *sb)
 
 bool proc_ns_file(const struct file *file);
 
+static inline void proc_make_permanent(struct proc_dir_entry *pde)
+{
+	/* Don't give matches to modules. */
+#if defined CONFIG_PROC_FS && !defined MODULE
+	/* This mess is created by defining "struct proc_dir_entry" elsewhere. */
+	void impl_proc_make_permanent(struct proc_dir_entry *pde);
+	impl_proc_make_permanent(pde);
+#endif
+}
+
 #endif /* _LINUX_PROC_FS_H */
