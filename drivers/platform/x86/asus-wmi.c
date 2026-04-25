@@ -140,32 +140,9 @@ module_param(fnlock_default, bool, 0444);
 #define ASUS_MINI_LED_2024_STRONG	0x01
 #define ASUS_MINI_LED_2024_OFF		0x02
 
-#define ASUS_USB0_PWR_EC0_CSEE "\\_SB.PCI0.SBRG.EC0.CSEE"
-/*
- * The period required to wait after screen off/on/s2idle.check in MS.
- * Time here greatly impacts the wake behaviour. Used in suspend/wake.
- */
-#define ASUS_USB0_PWR_EC0_CSEE_WAIT	600
-#define ASUS_USB0_PWR_EC0_CSEE_OFF	0xB7
-#define ASUS_USB0_PWR_EC0_CSEE_ON	0xB8
-
 static const char * const ashs_ids[] = { "ATK4001", "ATK4002", NULL };
 
 static int throttle_thermal_policy_write(struct asus_wmi *);
-
-static const struct dmi_system_id asus_rog_ally_device[] = {
-	{
-		.matches = {
-			DMI_MATCH(DMI_BOARD_NAME, "RC71L"),
-		},
-	},
-	{
-		.matches = {
-			DMI_MATCH(DMI_BOARD_NAME, "RC72L"),
-		},
-	},
-	{ },
-};
 
 static bool ashs_present(void)
 {
@@ -340,9 +317,6 @@ struct asus_wmi {
 
 	struct acpi_s2idle_dev_ops s2idle_dev_ops;
 };
-
-/* Global to allow setting externally without requiring driver data */
-static enum asus_ally_mcu_hack use_ally_mcu_hack = ASUS_WMI_ALLY_MCU_HACK_INIT;
 
 #if IS_ENABLED(CONFIG_ASUS_WMI_DEPRECATED_ATTRS)
 static void asus_wmi_show_deprecated(void)
@@ -1435,43 +1409,6 @@ static DEVICE_ATTR_RW(nv_temp_target);
 #endif /* IS_ENABLED(CONFIG_ASUS_WMI_DEPRECATED_ATTRS) */
 
 /* Ally MCU Powersave ********************************************************/
-
-/*
- * The HID driver needs to check MCU version and set this to false if the MCU FW
- * version is >= the minimum requirements. New FW do not need the hacks.
- */
-void set_ally_mcu_hack(enum asus_ally_mcu_hack status)
-{
-	use_ally_mcu_hack = status;
-	pr_debug("%s Ally MCU suspend quirk\n",
-		 status == ASUS_WMI_ALLY_MCU_HACK_ENABLED ? "Enabled" : "Disabled");
-}
-EXPORT_SYMBOL_NS_GPL(set_ally_mcu_hack, "ASUS_WMI");
-
-/*
- * mcu_powersave should be enabled always, as it is fixed in MCU FW versions:
- * - v313 for Ally X
- * - v319 for Ally 1
- * The HID driver checks MCU versions and so should set this if requirements match
- */
-void set_ally_mcu_powersave(bool enabled)
-{
-	int result, err;
-
-	err = asus_wmi_set_devstate(ASUS_WMI_DEVID_MCU_POWERSAVE, enabled, &result);
-	if (err) {
-		pr_warn("Failed to set MCU powersave: %d\n", err);
-		return;
-	}
-	if (result > 1) {
-		pr_warn("Failed to set MCU powersave (result): 0x%x\n", result);
-		return;
-	}
-
-	pr_debug("%s MCU Powersave\n",
-		 enabled ? "Enabled" : "Disabled");
-}
-EXPORT_SYMBOL_NS_GPL(set_ally_mcu_powersave, "ASUS_WMI");
 
 #if IS_ENABLED(CONFIG_ASUS_WMI_DEPRECATED_ATTRS)
 static ssize_t mcu_powersave_show(struct device *dev,
@@ -5038,21 +4975,6 @@ static int asus_wmi_add(struct platform_device *pdev)
 		acpi_register_lps0_dev(&asus->s2idle_dev_ops);
 	}
 
-	if (use_ally_mcu_hack == ASUS_WMI_ALLY_MCU_HACK_INIT) {
-		if (acpi_has_method(NULL, ASUS_USB0_PWR_EC0_CSEE)
-					&& dmi_check_system(asus_rog_ally_device))
-			use_ally_mcu_hack = ASUS_WMI_ALLY_MCU_HACK_ENABLED;
-		if (dmi_match(DMI_BOARD_NAME, "RC71")) {
-			/*
-			 * These steps ensure the device is in a valid good state, this is
-			 * especially important for the Ally 1 after a reboot.
-			 */
-			acpi_execute_simple_method(NULL, ASUS_USB0_PWR_EC0_CSEE,
-						   ASUS_USB0_PWR_EC0_CSEE_ON);
-			msleep(ASUS_USB0_PWR_EC0_CSEE_WAIT);
-		}
-	}
-
 	/* ensure defaults for tunables */
 #if IS_ENABLED(CONFIG_ASUS_WMI_DEPRECATED_ATTRS)
 	asus->ppt_pl2_sppt = 5;
@@ -5306,51 +5228,10 @@ static int asus_hotk_restore(struct device *device)
 	return 0;
 }
 
-static int asus_hotk_prepare(struct device *device)
-{
-	if (use_ally_mcu_hack == ASUS_WMI_ALLY_MCU_HACK_ENABLED) {
-		acpi_execute_simple_method(NULL, ASUS_USB0_PWR_EC0_CSEE,
-					   ASUS_USB0_PWR_EC0_CSEE_OFF);
-		msleep(ASUS_USB0_PWR_EC0_CSEE_WAIT);
-	}
-	return 0;
-}
-
-#if defined(CONFIG_SUSPEND)
-static void asus_ally_s2idle_restore(void)
-{
-	if (use_ally_mcu_hack == ASUS_WMI_ALLY_MCU_HACK_ENABLED) {
-		acpi_execute_simple_method(NULL, ASUS_USB0_PWR_EC0_CSEE,
-					   ASUS_USB0_PWR_EC0_CSEE_ON);
-		msleep(ASUS_USB0_PWR_EC0_CSEE_WAIT);
-	}
-}
-
-/* Use only for Ally devices due to the wake_on_ac */
-static struct acpi_s2idle_dev_ops asus_ally_s2idle_dev_ops = {
-	.restore = asus_ally_s2idle_restore,
-};
-
-static void asus_s2idle_check_register(void)
-{
-	if (acpi_register_lps0_dev(&asus_ally_s2idle_dev_ops))
-		pr_warn("failed to register LPS0 sleep handler in asus-wmi\n");
-}
-
-static void asus_s2idle_check_unregister(void)
-{
-	acpi_unregister_lps0_dev(&asus_ally_s2idle_dev_ops);
-}
-#else
-static void asus_s2idle_check_register(void) {}
-static void asus_s2idle_check_unregister(void) {}
-#endif /* CONFIG_SUSPEND */
-
 static const struct dev_pm_ops asus_pm_ops = {
 	.thaw = asus_hotk_thaw,
 	.restore = asus_hotk_restore,
 	.resume = asus_hotk_resume,
-	.prepare = asus_hotk_prepare,
 };
 
 /* Registration ***************************************************************/
@@ -5377,11 +5258,7 @@ static int asus_wmi_probe(struct platform_device *pdev)
 			return ret;
 	}
 
-	asus_s2idle_check_register();
-
 	ret = asus_wmi_add(pdev);
-	if (ret)
-		asus_s2idle_check_unregister();
 
 	return ret;
 }
@@ -5418,7 +5295,6 @@ EXPORT_SYMBOL_GPL(asus_wmi_register_driver);
 void asus_wmi_unregister_driver(struct asus_wmi_driver *driver)
 {
 	guard(mutex)(&register_mutex);
-	asus_s2idle_check_unregister();
 
 	platform_device_unregister(driver->platform_device);
 	platform_driver_unregister(&driver->platform_driver);
