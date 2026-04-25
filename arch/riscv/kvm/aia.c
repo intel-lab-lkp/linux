@@ -534,6 +534,9 @@ static void aia_hgei_exit(void)
 void kvm_riscv_aia_enable(void)
 {
 	struct aia_hgei_control *hgctrl;
+	const struct imsic_global_config *gc;
+	const struct imsic_local_config *lc;
+	unsigned int nr_hgei;
 
 	if (!kvm_riscv_aia_available())
 		return;
@@ -547,8 +550,13 @@ void kvm_riscv_aia_enable(void)
 	if (hgctrl->nr_hgei)
 		hgctrl->nr_hgei--;
 
-	if (hgctrl->nr_hgei) {
-		hgctrl->free_bitmap = BIT(hgctrl->nr_hgei + 1) - 1;
+	gc = imsic_get_global_config();
+	lc = (gc) ? this_cpu_ptr(gc->local) : NULL;
+	if (lc)
+		nr_hgei = min(hgctrl->nr_hgei, lc->nr_guest_files);
+
+	if (nr_hgei) {
+		hgctrl->free_bitmap = BIT(nr_hgei + 1) - 1;
 		hgctrl->free_bitmap &= ~BIT(0);
 	} else {
 		hgctrl->free_bitmap = 0;
