@@ -221,8 +221,8 @@ void netfs_invalidate_folio(struct folio *folio, size_t offset, size_t length)
 		unsigned long long fpos = folio_pos(folio), end;
 
 		end = umin(fpos + flen, i_size);
-		if (fpos < i_size && end > ctx->zero_point)
-			ctx->zero_point = end;
+		if (fpos < i_size && end > netfs_read_zero_point(ctx))
+			netfs_write_zero_point(ctx, end);
 	}
 
 	folio_wait_private_2(folio); /* [DEPRECATED] */
@@ -297,14 +297,15 @@ EXPORT_SYMBOL(netfs_invalidate_folio);
 bool netfs_release_folio(struct folio *folio, gfp_t gfp)
 {
 	struct netfs_inode *ctx = netfs_inode(folio_inode(folio));
-	unsigned long long end;
+	unsigned long long remote_i_size, zero_point, end;
 
 	if (folio_test_dirty(folio))
 		return false;
 
-	end = umin(folio_next_pos(folio), ctx->remote_i_size);
-	if (end > ctx->zero_point)
-		ctx->zero_point = end;
+	netfs_read_sizes(ctx, &remote_i_size, &zero_point);
+	end = umin(folio_next_pos(folio), remote_i_size);
+	if (end > zero_point)
+		netfs_write_zero_point(ctx, end);
 
 	if (folio_test_private(folio))
 		return false;

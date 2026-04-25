@@ -236,7 +236,8 @@ static void netfs_read_to_pagecache(struct netfs_io_request *rreq,
 		source = netfs_cache_prepare_read(rreq, subreq, rreq->i_size);
 		subreq->source = source;
 		if (source == NETFS_DOWNLOAD_FROM_SERVER) {
-			unsigned long long zp = umin(ictx->zero_point, rreq->i_size);
+			unsigned long long zero_point = netfs_read_zero_point(ictx);
+			unsigned long long zp = umin(zero_point, rreq->i_size);
 			size_t len = subreq->len;
 
 			if (unlikely(rreq->origin == NETFS_READ_SINGLE))
@@ -252,7 +253,7 @@ static void netfs_read_to_pagecache(struct netfs_io_request *rreq,
 				pr_err("ZERO-LEN READ: R=%08x[%x] l=%zx/%zx s=%llx z=%llx i=%llx",
 				       rreq->debug_id, subreq->debug_index,
 				       subreq->len, size,
-				       subreq->start, ictx->zero_point, rreq->i_size);
+				       subreq->start, zero_point, rreq->i_size);
 				break;
 			}
 			subreq->len = len;

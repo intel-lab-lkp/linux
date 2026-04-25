@@ -3404,7 +3404,7 @@ static long smb3_zero_range(struct file *file, struct cifs_tcon *tcon,
 	filemap_invalidate_lock(inode->i_mapping);
 
 	i_size = i_size_read(inode);
-	remote_size = ictx->remote_i_size;
+	remote_size = netfs_read_remote_i_size(ictx);
 	if (offset + len >= remote_size && offset < i_size) {
 		unsigned long long top = umin(offset + len, i_size);
 
@@ -3439,8 +3439,8 @@ static long smb3_zero_range(struct file *file, struct cifs_tcon *tcon,
 		if (rc >= 0) {
 			truncate_setsize(inode, new_size);
 			netfs_resize_file(&cifsi->netfs, new_size, true);
-			if (offset < cifsi->netfs.zero_point)
-				cifsi->netfs.zero_point = offset;
+			if (offset < netfs_read_zero_point(&cifsi->netfs))
+				netfs_write_zero_point(&cifsi->netfs, offset);
 			fscache_resize_cookie(cifs_inode_cookie(inode), new_size);
 		}
 	}
@@ -3506,13 +3506,13 @@ static long smb3_punch_hole(struct file *file, struct cifs_tcon *tcon,
 	 * EOF update will end up in the wrong place.
 	 */
 	i_size = i_size_read(inode);
-	remote_i_size = netfs_inode(inode)->remote_i_size;
+	remote_i_size = netfs_read_remote_i_size(netfs_inode(inode));
 	if (end > remote_i_size && i_size > remote_i_size) {
 		unsigned long long extend_to = umin(end, i_size);
 		rc = SMB2_set_eof(xid, tcon, cfile->fid.persistent_fid,
 				  cfile->fid.volatile_fid, cfile->pid, extend_to);
 		if (rc >= 0)
-			netfs_inode(inode)->remote_i_size = extend_to;
+			netfs_write_remote_i_size(netfs_inode(inode), extend_to);
 	}
 
 unlock:
@@ -3794,7 +3794,7 @@ static long smb3_collapse_range(struct file *file, struct cifs_tcon *tcon,
 		goto out_2;
 
 	truncate_pagecache_range(inode, off, old_eof);
-	ictx->zero_point = old_eof;
+	netfs_write_zero_point(ictx, old_eof);
 	netfs_wait_for_outstanding_io(inode);
 
 	rc = smb2_copychunk_range(xid, cfile, cfile, off + len,
@@ -3812,7 +3812,7 @@ static long smb3_collapse_range(struct file *file, struct cifs_tcon *tcon,
 
 	truncate_setsize(inode, new_eof);
 	netfs_resize_file(&cifsi->netfs, new_eof, true);
-	ictx->zero_point = new_eof;
+	netfs_write_zero_point(ictx, new_eof);
 	fscache_resize_cookie(cifs_inode_cookie(inode), new_eof);
 out_2:
 	filemap_invalidate_unlock(inode->i_mapping);
@@ -3861,7 +3861,7 @@ static long smb3_insert_range(struct file *file, struct cifs_tcon *tcon,
 	rc = smb2_copychunk_range(xid, cfile, cfile, off, count, off + len);
 	if (rc < 0)
 		goto out_2;
-	cifsi->netfs.zero_point = new_eof;
+	netfs_write_zero_point(&cifsi->netfs, new_eof);
 
 	rc = smb3_zero_data(file, tcon, off, len, xid);
 	if (rc < 0)

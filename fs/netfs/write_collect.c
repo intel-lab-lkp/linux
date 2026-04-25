@@ -69,8 +69,7 @@ int netfs_folio_written_back(struct folio *folio)
 		unsigned long long fend;
 
 		fend = folio_pos(folio) + finfo->dirty_offset + finfo->dirty_len;
-		if (fend > ictx->zero_point)
-			ictx->zero_point = fend;
+		netfs_push_back_zero_point(ictx, fend);
 
 		folio_detach_private(folio);
 		group = finfo->netfs_group;

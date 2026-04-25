@@ -2518,16 +2518,19 @@ void cifs_write_subrequest_terminated(struct cifs_io_subrequest *wdata, ssize_t 
 {
 	struct netfs_io_request *wreq = wdata->rreq;
 	struct netfs_inode *ictx = netfs_inode(wreq->inode);
+	unsigned long long remote_i_size, zero_point;
 	loff_t wrend;
 
 	if (result > 0) {
+		netfs_read_sizes(ictx, &remote_i_size, &zero_point);
+
 		wrend = wdata->subreq.start + wdata->subreq.transferred + result;
 
-		if (wrend > ictx->zero_point &&
+		if (wrend > zero_point &&
 		    (wdata->rreq->origin == NETFS_UNBUFFERED_WRITE ||
 		     wdata->rreq->origin == NETFS_DIO_WRITE))
-			ictx->zero_point = wrend;
-		if (wrend > ictx->remote_i_size)
+			netfs_write_zero_point(ictx, wrend);
+		if (wrend > remote_i_size)
 			netfs_resize_file(ictx, wrend, true);
 	}
 
