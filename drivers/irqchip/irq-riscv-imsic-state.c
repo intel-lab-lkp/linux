@@ -878,7 +878,6 @@ int __init imsic_setup_state(struct fwnode_handle *fwnode, void *opaque)
 	}
 
 	/* Configure handlers for target CPUs */
-	global->nr_guest_files = BIT(global->guest_index_bits) - 1;
 	for (i = 0; i < nr_parent_irqs; i++) {
 		rc = imsic_get_parent_hartid(fwnode, i, &hartid);
 		if (rc) {
@@ -910,23 +909,26 @@ int __init imsic_setup_state(struct fwnode_handle *fwnode, void *opaque)
 			reloff -= ALIGN(resource_size(&mmios[j]),
 			BIT(global->guest_index_bits) * IMSIC_MMIO_PAGE_SZ);
 		}
+
+		local = per_cpu_ptr(global->local, cpu);
+		local->nr_guest_files = BIT(global->guest_index_bits) - 1;
+
 		if (index >= nr_mmios) {
 			pr_warn("%pfwP: MMIO not found for parent irq%d\n", fwnode, i);
 			continue;
 		}
 
-		local = per_cpu_ptr(global->local, cpu);
 		local->msi_pa = mmios[index].start + reloff;
 		local->msi_va = mmios_va[index] + reloff;
 
 		/*
-		 * KVM uses global->nr_guest_files to determine the available guest
+		 * KVM uses local->nr_guest_files to determine the available guest
 		 * interrupt files on each CPU. Take the minimum number of guest
 		 * interrupt files across all CPUs to avoid KVM incorrectly allocating
 		 * an unexisted or unmapped guest interrupt file on some CPUs.
 		 */
 		nr_guest_files = (resource_size(&mmios[index]) - reloff) / IMSIC_MMIO_PAGE_SZ - 1;
-		global->nr_guest_files = min(global->nr_guest_files, nr_guest_files);
+		local->nr_guest_files = min(local->nr_guest_files, nr_guest_files);
 
 		nr_handlers++;
 	}

@@ -40,6 +40,9 @@
 struct imsic_local_config {
 	phys_addr_t				msi_pa;
 	void __iomem				*msi_va;
+
+	/* Number of guest interrupt files per core */
+	u32					nr_guest_files;
 };
 
 struct imsic_global_config {
@@ -67,9 +70,6 @@ struct imsic_global_config {
 
 	/* Number of guest interrupt identities */
 	u32					nr_guest_ids;
-
-	/* Number of guest interrupt files per core */
-	u32					nr_guest_files;
 
 	/* Per-CPU IMSIC addresses */
 	struct imsic_local_config __percpu	*local;
