@@ -68,7 +68,7 @@ const struct inode_operations afs_dir_inode_operations = {
 };
 
 const struct address_space_operations afs_dir_aops = {
-	.writepages	= afs_single_writepages,
+	.writepages	= afs_dir_writepages,
 };
 
 const struct dentry_operations afs_fs_dentry_operations = {
@@ -294,7 +294,7 @@ static ssize_t afs_do_read_single(struct afs_vnode *dvnode, struct file *file)
 	return ret;
 }
 
-ssize_t afs_read_single(struct afs_vnode *dvnode, struct file *file)
+static ssize_t afs_read_single(struct afs_vnode *dvnode, struct file *file)
 {
 	ssize_t ret;
 
@@ -1763,13 +1763,20 @@ error:
 	return ret;
 }
 
+static void afs_symlink_put(struct afs_operation *op)
+{
+	kfree(op->create.symlink);
+	op->create.symlink = NULL;
+	afs_create_put(op);
+}
+
 static const struct afs_operation_ops afs_symlink_operation = {
 	.issue_afs_rpc	= afs_fs_symlink,
 	.issue_yfs_rpc	= yfs_fs_symlink,
 	.success	= afs_create_success,
 	.aborted	= afs_check_for_remote_deletion,
 	.edit_dir	= afs_create_edit_dir,
-	.put		= afs_create_put,
+	.put		= afs_symlink_put,
 };
 
 /*
@@ -1779,7 +1786,9 @@ static int afs_symlink(struct mnt_idmap *idmap, struct inode *dir,
 		       struct dentry *dentry, const char *content)
 {
 	struct afs_operation *op;
+	struct afs_symlink *symlink;
 	struct afs_vnode *dvnode = AFS_FS_I(dir);
+	size_t clen = strlen(content);
 	int ret;
 
 	_enter("{%llx:%llu},{%pd},%s",
@@ -1791,12 +1800,20 @@ static int afs_symlink(struct mnt_idmap *idmap, struct inode *dir,
 		goto error;
 
 	ret = -EINVAL;
-	if (strlen(content) >= AFSPATHMAX)
+	if (clen >= AFSPATHMAX)
 		goto error;
+
+	ret = -ENOMEM;
+	symlink = kmalloc_flex(struct afs_symlink, content, clen + 1, GFP_KERNEL);
+	if (!symlink)
+		goto error;
+	refcount_set(&symlink->ref, 1);
+	memcpy(symlink->content, content, clen + 1);
 
 	op = afs_alloc_operation(NULL, dvnode->volume);
 	if (IS_ERR(op)) {
 		ret = PTR_ERR(op);
+		kfree(symlink);
 		goto error;
 	}
 
@@ -1808,7 +1825,7 @@ static int afs_symlink(struct mnt_idmap *idmap, struct inode *dir,
 	op->dentry		= dentry;
 	op->ops			= &afs_symlink_operation;
 	op->create.reason	= afs_edit_dir_for_symlink;
-	op->create.symlink	= content;
+	op->create.symlink	= symlink;
 	op->mtime		= current_time(dir);
 	ret = afs_do_sync_operation(op);
 	afs_dir_unuse_cookie(dvnode, ret);
@@ -2192,10 +2209,10 @@ error:
 }
 
 /*
- * Write the file contents to the cache as a single blob.
+ * Write the directory contents to the cache as a single blob.
  */
-int afs_single_writepages(struct address_space *mapping,
-			  struct writeback_control *wbc)
+int afs_dir_writepages(struct address_space *mapping,
+		       struct writeback_control *wbc)
 {
 	struct afs_vnode *dvnode = AFS_FS_I(mapping->host);
 	struct iov_iter iter;
