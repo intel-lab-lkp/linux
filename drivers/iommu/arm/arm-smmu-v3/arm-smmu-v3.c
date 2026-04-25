@@ -14,6 +14,7 @@
 #include <linux/bitops.h>
 #include <linux/crash_dump.h>
 #include <linux/delay.h>
+#include <linux/dma-direct.h>
 #include <linux/err.h>
 #include <linux/interrupt.h>
 #include <linux/io-pgtable.h>
@@ -4556,9 +4557,194 @@ static int arm_smmu_init_strtab_linear(struct arm_smmu_device *smmu)
 	return 0;
 }
 
+/*
+ * Adopting the crashed kernel's stream table has risks: the physical addresses
+ * read from ARM_SMMU_STRTAB_BASE / L1 descriptors may be corrupted. Reject any
+ * range that overlaps the kdump kernel's critical regions.
+ *
+ * Note that we cannot reject an overlap on IORESOURCE_MEM, as reserved regions
+ * of the crashed kernel might reside there.
+ */
+static bool arm_smmu_kdump_phys_is_corrupted(phys_addr_t base, size_t size)
+{
+	/* Must NOT overlap kdump kernel's own RAM */
+	return region_intersects(base, size, IORESOURCE_SYSTEM_RAM,
+				 IORES_DESC_NONE) != REGION_DISJOINT;
+}
+
+static int arm_smmu_adopt_strtab_2lvl(struct arm_smmu_device *smmu, u32 cfg_reg,
+				      dma_addr_t dma)
+{
+	u32 log2size = FIELD_GET(STRTAB_BASE_CFG_LOG2SIZE, cfg_reg);
+	u32 split = FIELD_GET(STRTAB_BASE_CFG_SPLIT, cfg_reg);
+	struct arm_smmu_strtab_cfg *cfg = &smmu->strtab_cfg;
+	phys_addr_t base;
+	u32 num_l1_ents;
+	size_t size;
+	int i;
+
+	/*
+	 * Only a coherent SMMU is supported at this moment. For a non-coherent
+	 * SMMU that wants to support ARM_SMMU_OPT_KDUMP_ADOPT, try MEMREMAP_WC.
+	 */
+	if (WARN_ON(!(smmu->features & ARM_SMMU_FEAT_COHERENCY)))
+		return -EOPNOTSUPP;
+
+	if (log2size < split || log2size > smmu->sid_bits) {
+		dev_err(smmu->dev, "kdump: log2size %u out of range [%u, %u]\n",
+			log2size, split, smmu->sid_bits);
+		return -EINVAL;
+	}
+	if (split != STRTAB_SPLIT) {
+		dev_err(smmu->dev,
+			"kdump: unsupported STRTAB_SPLIT %u (expected %u)\n",
+			split, STRTAB_SPLIT);
+		return -EINVAL;
+	}
+
+	num_l1_ents = 1U << (log2size - split);
+	if (num_l1_ents > STRTAB_MAX_L1_ENTRIES) {
+		dev_err(smmu->dev, "kdump: l1 entries %u exceeds max %u\n",
+			num_l1_ents, STRTAB_MAX_L1_ENTRIES);
+		return -EINVAL;
+	}
+
+	cfg->l2.l1_dma = dma;
+	cfg->l2.num_l1_ents = num_l1_ents;
+
+	base = dma_to_phys(smmu->dev, dma);
+	size = num_l1_ents * sizeof(struct arm_smmu_strtab_l1);
+	if (arm_smmu_kdump_phys_is_corrupted(base, size)) {
+		dev_err(smmu->dev, "kdump: l1 stream table is corrupted\n");
+		return -EINVAL;
+	}
+
+	cfg->l2.l1tab = devm_memremap(smmu->dev, base, size, MEMREMAP_WB);
+	if (IS_ERR(cfg->l2.l1tab))
+		return PTR_ERR(cfg->l2.l1tab);
+
+	cfg->l2.l2ptrs = devm_kcalloc(smmu->dev, num_l1_ents,
+				      sizeof(*cfg->l2.l2ptrs), GFP_KERNEL);
+	if (!cfg->l2.l2ptrs)
+		return -ENOMEM;
+
+	for (i = 0; i < num_l1_ents; i++) {
+		u64 l2ptr = le64_to_cpu(cfg->l2.l1tab[i].l2ptr);
+		dma_addr_t l2_dma = l2ptr & STRTAB_L1_DESC_L2PTR_MASK;
+		u32 span = FIELD_GET(STRTAB_L1_DESC_SPAN, l2ptr);
+
+		if (!span || !l2_dma)
+			continue;
+
+		if (span != STRTAB_SPLIT + 1) {
+			dev_err(smmu->dev,
+				"kdump: L1[%u] unsupported span %u (vs %u)\n",
+				i, span, STRTAB_SPLIT + 1);
+			return -EINVAL;
+		}
+
+		base = dma_to_phys(smmu->dev, l2_dma);
+		size = (1UL << (span - 1)) * sizeof(struct arm_smmu_ste);
+		if (arm_smmu_kdump_phys_is_corrupted(base, size)) {
+			dev_err(smmu->dev,
+				"kdump: l2 stream table is corrupted\n");
+			return -EINVAL;
+		}
+
+		cfg->l2.l2ptrs[i] =
+			devm_memremap(smmu->dev, base, size, MEMREMAP_WB);
+		if (IS_ERR(cfg->l2.l2ptrs[i]))
+			return PTR_ERR(cfg->l2.l2ptrs[i]);
+	}
+
+	return 0;
+}
+
+static int arm_smmu_adopt_strtab_linear(struct arm_smmu_device *smmu,
+					u32 cfg_reg, dma_addr_t dma)
+{
+	u32 log2size = FIELD_GET(STRTAB_BASE_CFG_LOG2SIZE, cfg_reg);
+	struct arm_smmu_strtab_cfg *cfg = &smmu->strtab_cfg;
+	unsigned int max_log2size;
+	phys_addr_t base;
+	size_t size;
+
+	/*
+	 * Only a coherent SMMU is supported at this moment. For a non-coherent
+	 * SMMU that wants to support ARM_SMMU_OPT_KDUMP_ADOPT, try MEMREMAP_WC.
+	 */
+	if (WARN_ON(!(smmu->features & ARM_SMMU_FEAT_COHERENCY)))
+		return -EOPNOTSUPP;
+
+	/* cfg->linear.num_ents is unsigned int, so cap log2size at 31 */
+	max_log2size = min(smmu->sid_bits, 31U);
+	if (log2size > max_log2size) {
+		dev_err(smmu->dev, "kdump: unsupported log2size %u (> %u)\n",
+			log2size, max_log2size);
+		return -EINVAL;
+	}
+
+	cfg->linear.ste_dma = dma;
+	cfg->linear.num_ents = 1U << log2size;
+
+	base = dma_to_phys(smmu->dev, dma);
+	size = cfg->linear.num_ents * sizeof(struct arm_smmu_ste);
+	if (arm_smmu_kdump_phys_is_corrupted(base, size)) {
+		dev_err(smmu->dev, "kdump: stream table is corrupted\n");
+		return -EINVAL;
+	}
+
+	cfg->linear.table = devm_memremap(smmu->dev, base, size, MEMREMAP_WB);
+	if (IS_ERR(cfg->linear.table))
+		return PTR_ERR(cfg->linear.table);
+	return 0;
+}
+
+static int arm_smmu_adopt_strtab(struct arm_smmu_device *smmu)
+{
+	u32 cfg_reg = readl_relaxed(smmu->base + ARM_SMMU_STRTAB_BASE_CFG);
+	u64 base_reg = readq_relaxed(smmu->base + ARM_SMMU_STRTAB_BASE);
+	u32 fmt = FIELD_GET(STRTAB_BASE_CFG_FMT, cfg_reg);
+	dma_addr_t dma = base_reg & STRTAB_BASE_ADDR_MASK;
+	int ret;
+
+	dev_info(smmu->dev, "kdump: adopting crashed kernel's stream table\n");
+
+	if (fmt == STRTAB_BASE_CFG_FMT_2LVL) {
+		/*
+		 * Both kernels run on the same hardware, so it's impossible for
+		 * kdump kernel to see the support for linear stream table only.
+		 */
+		if (WARN_ON(!(smmu->features & ARM_SMMU_FEAT_2_LVL_STRTAB)))
+			return -EINVAL;
+		ret = arm_smmu_adopt_strtab_2lvl(smmu, cfg_reg, dma);
+	} else if (fmt == STRTAB_BASE_CFG_FMT_LINEAR) {
+		/*
+		 * In case that the old kernel for some reason used the linear
+		 * format, enforce the same format to match the adopted table.
+		 */
+		smmu->features &= ~ARM_SMMU_FEAT_2_LVL_STRTAB;
+		ret = arm_smmu_adopt_strtab_linear(smmu, cfg_reg, dma);
+	} else {
+		dev_err(smmu->dev, "kdump: invalid STRTAB format %u\n", fmt);
+		ret = -EINVAL;
+	}
+
+	if (ret) {
+		dev_warn(smmu->dev, "kdump: falling back to full reset\n");
+		smmu->options &= ~ARM_SMMU_OPT_KDUMP_ADOPT;
+		memset(&smmu->strtab_cfg, 0, sizeof(smmu->strtab_cfg));
+	}
+	return ret;
+}
+
 static int arm_smmu_init_strtab(struct arm_smmu_device *smmu)
 {
 	int ret;
+
+	if ((smmu->options & ARM_SMMU_OPT_KDUMP_ADOPT) &&
+	    !arm_smmu_adopt_strtab(smmu))
+		goto out;
 
 	if (smmu->features & ARM_SMMU_FEAT_2_LVL_STRTAB)
 		ret = arm_smmu_init_strtab_2lvl(smmu);
@@ -4567,6 +4753,7 @@ static int arm_smmu_init_strtab(struct arm_smmu_device *smmu)
 	if (ret)
 		return ret;
 
+out:
 	ida_init(&smmu->vmid_map);
 
 	return 0;
