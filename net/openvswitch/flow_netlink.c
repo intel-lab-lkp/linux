@@ -1432,7 +1432,13 @@ static int nsh_key_put_from_nlattr(const struct nlattr *attr,
 
 			has_md2 = true;
 			mdlen = nla_len(a);
-			if (mdlen > NSH_CTX_HDRS_MAX_LEN || mdlen <= 0) {
+			/* The NSH length field stores the total header size
+			 * in 4-byte words in 6 bits. Reject MD2 metadata
+			 * lengths that cannot be encoded exactly or would
+			 * make the length field wrap.
+			 */
+			if (mdlen <= 0 || !IS_ALIGNED(mdlen, 4) ||
+			    NSH_BASE_HDR_LEN + mdlen > (NSH_LEN_MASK << 2)) {
 				OVS_NLERR(
 				    log,
 				    "Invalid MD length %d for MD type %d",
