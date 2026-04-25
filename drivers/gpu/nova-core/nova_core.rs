@@ -49,7 +49,7 @@ struct NovaCoreModule {
     // then `_debugfs_guard` clears `DEBUGFS_ROOT`.
     #[allow(clippy::type_complexity)]
     #[pin]
-    _driver: Registration<pci::Adapter<ForLt!(driver::NovaCore)>>,
+    _driver: Registration<pci::Adapter<ForLt!(driver::NovaCore<'_>)>>,
     _debugfs_guard: DebugfsRootGuard,
 }
 
