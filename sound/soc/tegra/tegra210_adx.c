@@ -672,17 +672,20 @@ static int tegra210_adx_platform_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct tegra210_adx *adx;
-	const struct of_device_id *match;
-	struct tegra210_adx_soc_data *soc_data;
+	const struct tegra210_adx_soc_data *soc_data;
 	void __iomem *regs;
+	size_t alloc_size;
 	int err;
 
-	adx = devm_kzalloc(dev, sizeof(*adx), GFP_KERNEL);
+	soc_data = of_device_get_match_data(&pdev->dev);
+	alloc_size = struct_size(adx, map, soc_data->ram_depth);
+	alloc_size += sizeof(u32) * soc_data->byte_mask_size;
+
+	adx = devm_kzalloc(dev, alloc_size, GFP_KERNEL);
 	if (!adx)
 		return -ENOMEM;
 
-	match = of_match_device(tegra210_adx_of_match, dev);
-	soc_data = (struct tegra210_adx_soc_data *)match->data;
+	adx->byte_mask = adx->map + soc_data->ram_depth;
 	adx->soc_data = soc_data;
 
 	dev_set_drvdata(dev, adx);
@@ -699,17 +702,6 @@ static int tegra210_adx_platform_probe(struct platform_device *pdev)
 	}
 
 	regcache_cache_only(adx->regmap, true);
-
-	adx->map = devm_kzalloc(dev, soc_data->ram_depth * sizeof(*adx->map),
-				GFP_KERNEL);
-	if (!adx->map)
-		return -ENOMEM;
-
-	adx->byte_mask = devm_kzalloc(dev,
-				      soc_data->byte_mask_size * sizeof(*adx->byte_mask),
-				      GFP_KERNEL);
-	if (!adx->byte_mask)
-		return -ENOMEM;
 
 	tegra210_adx_dais[TEGRA_ADX_IN_DAI_ID].playback.channels_max =
 			adx->soc_data->max_ch;
