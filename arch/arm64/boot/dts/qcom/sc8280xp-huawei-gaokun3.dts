@@ -15,6 +15,7 @@
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/input/gpio-keys.h>
 #include <dt-bindings/input/input.h>
+#include <dt-bindings/leds/common.h>
 #include <dt-bindings/regulator/qcom,rpmh-regulator.h>
 #include <dt-bindings/phy/phy.h>
 
@@ -27,6 +28,7 @@
 	compatible = "huawei,gaokun3", "qcom,sc8280xp";
 
 	aliases {
+		i2c2 = &cci2_i2c1;
 		i2c4 = &i2c4;
 		i2c15 = &i2c15;
 		serial1 = &uart2;
@@ -44,6 +46,21 @@
 			height = <2560>;
 			stride = <(1600 * 4)>;
 			format = "a8r8g8b8";
+		};
+	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		pinctrl-0 = <&cam_indicator_en>;
+		pinctrl-names = "default";
+
+		privacy_led: privacy-led {
+			function = LED_FUNCTION_INDICATOR;
+			color = <LED_COLOR_ID_WHITE>;
+			gpios = <&tlmm 34 GPIO_ACTIVE_HIGH>;
+			default-state = "off";
+			panic-indicator;
 		};
 	};
 
@@ -96,6 +113,20 @@
 			debounce-interval = <10>;
 			wakeup-source;
 		};
+	};
+
+	vreg_camf_1p2: regulator-camf-1p2 {
+		compatible = "regulator-fixed";
+
+		regulator-name = "vreg_camf_1p2";
+		regulator-min-microvolt = <1200000>;
+		regulator-max-microvolt = <1200000>;
+
+		gpio = <&tlmm 44 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+
+		pinctrl-0 = <&camf_1p2_reg_en>;
+		pinctrl-names = "default";
 	};
 
 	vreg_misc_3p3: regulator-misc-3p3 {
@@ -462,6 +493,13 @@
 						   RPMH_REGULATOR_MODE_HPM>;
 		};
 
+		vreg_l11c: ldo11 {
+			regulator-name = "vreg_l11c";
+			regulator-min-microvolt = <2800000>;
+			regulator-max-microvolt = <2800000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
 		vreg_l12c: ldo12 {
 			regulator-name = "vreg_l12c";
 			regulator-min-microvolt = <1800000>;
@@ -575,6 +613,66 @@
 						   RPMH_REGULATOR_MODE_HPM>;
 		};
 	};
+};
+
+&camss {
+	vdda-phy-supply = <&vreg_l6b>;
+	vdda-pll-supply = <&vreg_l3b>;
+
+	status = "okay";
+
+	ports {
+		port@3 {
+			csiphy3_ep: endpoint@0 {
+				reg = <0>;
+
+				clock-lanes = <7>;
+				data-lanes = <0 1 2 3>;
+				remote-endpoint = <&hi846_ep>;
+			};
+		};
+	};
+};
+
+&cci2 {
+	status = "okay";
+};
+
+&cci2_i2c1 {
+	/* On Goakun3(2.69GHz), S5K4H7@2d, image quality is better than hi846 */
+	camera_front: camera@20 {
+		compatible = "hynix,hi846";
+		reg = <0x20>;
+
+		pinctrl-0 = <&camf_rgb_default>;
+		pinctrl-names = "default";
+
+		clocks = <&camcc CAMCC_MCLK3_CLK>;
+
+		assigned-clocks = <&camcc CAMCC_MCLK3_CLK>;
+		assigned-clock-rates = <24000000>;
+
+		reset-gpios = <&tlmm 15 GPIO_ACTIVE_LOW>;
+		vddio-supply = <&vreg_l2c>;
+		vdda-supply = <&vreg_l11c>;
+		vddd-supply = <&vreg_camf_1p2>;
+
+		leds = <&privacy_led>;
+		led-names = "privacy";
+
+		orientation = <0>;	/* Front facing */
+		rotation = <0>;
+
+		port {
+			hi846_ep: endpoint {
+				data-lanes = <1 2 3 4>;
+				link-frequencies = /bits/ 64 <80000000 144000000 200000000 288000000>;
+				remote-endpoint = <&csiphy3_ep>;
+			};
+		};
+	};
+
+	/* actuator???@58, Goakun3(2.69GHz) only, eeprom@50 */
 };
 
 &dispcc0 {
@@ -1315,6 +1413,36 @@
 			pins = "gpio132";
 			function = "gpio";
 			bias-pull-down;
+		};
+	};
+
+	cam_indicator_en: cam-indicator-en-state {
+		pins = "gpio34";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+
+	camf_1p2_reg_en: camf-1p2-reg-en-state {
+		pins = "gpio44";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+
+	camf_rgb_default: camf-rgb-default-state {
+		mclk-pins {
+			pins = "gpio17";
+			function = "cam_mclk";
+			drive-strength = <6>;
+			bias-disable;
+		};
+
+		sc-rgb-xshut-n-pins {
+			pins = "gpio15";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-disable;
 		};
 	};
 
