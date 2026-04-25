@@ -250,6 +250,9 @@ struct spi_device {
 	u8			rx_lane_map[SPI_DEVICE_DATA_LANE_CNT_MAX];
 	u8			num_rx_lanes;
 
+	/* Entry on controller's userspace_clients list */
+	struct list_head	userspace_node;
+
 	/*
 	 * Likely need more hooks for more protocol options affecting how
 	 * the controller talks to each chip, like:
@@ -554,6 +557,9 @@ extern struct spi_device *devm_spi_new_ancillary_device(struct spi_device *spi, 
  * @defer_optimize_message: set to true if controller cannot pre-optimize messages
  *	and needs to defer the optimization step until the message is actually
  *	being transferred
+ * @userspace_clients: list of SPI devices instantiated from userspace via
+ *	the sysfs new_device interface
+ * @userspace_clients_lock: mutex protecting @userspace_clients
  *
  * Each SPI controller can communicate with one or more @spi_device
  * children.  These make a small bus, sharing MOSI, MISO and SCK signals
@@ -809,6 +815,10 @@ struct spi_controller {
 	bool			queue_empty;
 	bool			must_async;
 	bool			defer_optimize_message;
+
+	/* List of SPI devices created via sysfs new_device interface */
+	struct list_head	userspace_clients;
+	struct mutex		userspace_clients_lock;
 };
 
 static inline void *spi_controller_get_devdata(struct spi_controller *ctlr)
