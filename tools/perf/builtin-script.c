@@ -2621,9 +2621,7 @@ static void process_stat_interval(u64 tstamp)
 
 static void setup_scripting(void)
 {
-#ifdef HAVE_LIBTRACEEVENT
-	setup_perl_scripting();
-#endif
+
 	setup_python_scripting();
 }
 
