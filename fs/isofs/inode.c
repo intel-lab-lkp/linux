@@ -1427,6 +1427,7 @@ static int isofs_read_inode(struct inode *inode, int relocated)
 
 	/* Install the inode operations vector */
 	if (S_ISREG(inode->i_mode)) {
+		inode->i_op = &isofs_file_inode_operations;
 		inode->i_fop = &generic_ro_fops;
 		switch (ei->i_file_format) {
 #ifdef CONFIG_ZISOFS
@@ -1442,7 +1443,7 @@ static int isofs_read_inode(struct inode *inode, int relocated)
 		inode->i_op = &isofs_dir_inode_operations;
 		inode->i_fop = &isofs_dir_operations;
 	} else if (S_ISLNK(inode->i_mode)) {
-		inode->i_op = &page_symlink_inode_operations;
+		inode->i_op = &isofs_symlink_inode_operations;
 		inode_nohighmem(inode);
 		inode->i_data.a_ops = &isofs_symlink_aops;
 	} else if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode) ||
