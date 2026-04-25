@@ -126,8 +126,10 @@ static int check_ev_match(int dir_fd, const char *scriptname, struct perf_sessio
 			len = strcspn(p, " \t");
 			if (!len)
 				break;
+			if ((size_t)len >= sizeof(evname))
+				len = sizeof(evname) - 1;
 
-			snprintf(evname, len + 1, "%s", p);
+			snprintf(evname, sizeof(evname), "%s", p);
 
 			match = 0;
 			evlist__for_each_entry(session->evlist, pos) {
@@ -200,14 +202,13 @@ static int find_scripts(char **scripts_array, char **scripts_path_array, int num
 		if (!strcmp(lang_dirent->d_name, ".") || !strcmp(lang_dirent->d_name, ".."))
 			continue;
 
-#ifndef HAVE_LIBPERL_SUPPORT
-		if (strstr(lang_dirent->d_name, "perl"))
-			continue;
-#endif
+
 #ifndef HAVE_LIBPYTHON_SUPPORT
 		if (strstr(lang_dirent->d_name, "python"))
 			continue;
 #endif
+		if (strstr(lang_dirent->d_name, "perl"))
+			continue;
 
 		lang_dir_fd = openat(scripts_dir_fd, lang_dirent->d_name, O_DIRECTORY);
 		if (lang_dir_fd == -1)
@@ -218,6 +219,8 @@ static int find_scripts(char **scripts_array, char **scripts_path_array, int num
 			continue;
 		}
 		while ((script_dirent = readdir(lang_dir)) != NULL) {
+			int script_len;
+
 			if (script_dirent->d_type == DT_DIR)
 				continue;
 			if (script_dirent->d_type == DT_UNKNOWN &&
@@ -233,9 +236,11 @@ static int find_scripts(char **scripts_array, char **scripts_path_array, int num
 				lang_dirent->d_name,
 				script_dirent->d_name);
 			temp = strchr(script_dirent->d_name, '.');
-			snprintf(scripts_array[i],
-				(temp - script_dirent->d_name) + 1,
-				"%s", script_dirent->d_name);
+			script_len = temp ? (temp - script_dirent->d_name) : (int)strlen(script_dirent->d_name);
+
+			if (script_len >= SCRIPT_NAMELEN)
+				script_len = SCRIPT_NAMELEN - 1;
+			snprintf(scripts_array[i], script_len + 1, "%s", script_dirent->d_name);
 
 			if (check_ev_match(lang_dir_fd, scripts_array[i], session))
 				continue;
