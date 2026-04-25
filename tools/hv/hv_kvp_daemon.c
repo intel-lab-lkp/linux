@@ -1162,10 +1162,11 @@ static int is_ipv4(char *addr)
 }
 
 static int parse_ip_val_buffer(char *in_buf, int *offset,
-				char *out_buf, int out_len)
+				char *out_buf, size_t out_len)
 {
 	char *x;
 	char *start;
+	size_t copy_len;
 
 	/*
 	 * in_buf has sequence of characters that are separated by
@@ -1188,8 +1189,10 @@ static int parse_ip_val_buffer(char *in_buf, int *offset,
 		while (start[i] == ' ')
 			i++;
 
-		if ((x - start) <= out_len) {
-			strcpy(out_buf, (start + i));
+		copy_len = x - (start + i);
+		if (copy_len < out_len) {
+			memcpy(out_buf, start + i, copy_len);
+			out_buf[copy_len] = '\0';
 			*offset += (x - start) + 1;
 			return 1;
 		}
@@ -1223,7 +1226,7 @@ static int process_ip_string(FILE *f, char *ip_string, int type)
 	memset(addr, 0, sizeof(addr));
 
 	while (parse_ip_val_buffer(ip_string, &offset, addr,
-					(MAX_IP_ADDR_SIZE * 2))) {
+					sizeof(addr))) {
 
 		sub_str[0] = 0;
 		if (is_ipv4(addr)) {
@@ -1348,7 +1351,7 @@ static int process_dns_gateway_nm(FILE *f, char *ip_string, int type,
 		memset(addr, 0, sizeof(addr));
 
 		if (!parse_ip_val_buffer(ip_string, &ip_offset, addr,
-					 (MAX_IP_ADDR_SIZE * 2)))
+					 sizeof(addr)))
 			break;
 
 		ip_ver = ip_version_check(addr);
@@ -1400,12 +1403,11 @@ static int process_ip_string_nm(FILE *f, char *ip_string, char *subnet,
 	memset(subnet_addr, 0, sizeof(subnet_addr));
 
 	while (parse_ip_val_buffer(ip_string, &ip_offset, addr,
-				   (MAX_IP_ADDR_SIZE * 2)) &&
+				   sizeof(addr)) &&
 				   parse_ip_val_buffer(subnet,
-						       &subnet_offset,
-						       subnet_addr,
-						       (MAX_IP_ADDR_SIZE *
-							2))) {
+					       &subnet_offset,
+					       subnet_addr,
+					       sizeof(subnet_addr))) {
 		ip_ver = ip_version_check(addr);
 		if (ip_ver < 0)
 			continue;
