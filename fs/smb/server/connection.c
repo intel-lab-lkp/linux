@@ -79,6 +79,62 @@ static int create_proc_clients(void) { return 0; }
 static void delete_proc_clients(void) {}
 #endif
 
+static struct workqueue_struct *ksmbd_conn_wq;
+
+int ksmbd_conn_wq_init(void)
+{
+	ksmbd_conn_wq = alloc_workqueue("ksmbd-conn-release",
+					WQ_UNBOUND | WQ_MEM_RECLAIM, 0);
+	if (!ksmbd_conn_wq)
+		return -ENOMEM;
+	return 0;
+}
+
+void ksmbd_conn_wq_destroy(void)
+{
+	if (ksmbd_conn_wq) {
+		destroy_workqueue(ksmbd_conn_wq);
+		ksmbd_conn_wq = NULL;
+	}
+}
+
+/*
+ * __ksmbd_conn_release_work() - perform the final, once-per-struct cleanup
+ * of a ksmbd_conn whose refcount has just dropped to zero.
+ *
+ * This is the common release path used by ksmbd_conn_put() for the embedded
+ * state that outlives the connection thread: async_ida and the attached
+ * transport (which owns the socket and iov for TCP).  Called from a workqueue
+ * so that sleep-allowed teardown (sock_release -> tcp_close ->
+ * lock_sock_nested) never runs from an RCU softirq callback (free_opinfo_rcu)
+ * or any other non-sleeping putter context.
+ */
+static void __ksmbd_conn_release_work(struct work_struct *work)
+{
+	struct ksmbd_conn *conn =
+		container_of(work, struct ksmbd_conn, release_work);
+
+	ida_destroy(&conn->async_ida);
+	conn->transport->ops->free_transport(conn->transport);
+	kfree(conn);
+}
+
+/**
+ * ksmbd_conn_put() - drop a reference and, if it was the last, queue the
+ * release onto ksmbd_conn_wq so it runs from process context.
+ *
+ * Callable from any context including RCU softirq callbacks and non-sleeping
+ * locks; the actual release is deferred to the workqueue.
+ */
+void ksmbd_conn_put(struct ksmbd_conn *conn)
+{
+	if (!conn)
+		return;
+
+	if (atomic_dec_and_test(&conn->refcnt))
+		queue_work(ksmbd_conn_wq, &conn->release_work);
+}
+
 /**
  * ksmbd_conn_free() - free resources of the connection instance
  *
@@ -97,19 +153,7 @@ void ksmbd_conn_free(struct ksmbd_conn *conn)
 	kvfree(conn->request_buf);
 	kfree(conn->preauth_info);
 	kfree(conn->mechToken);
-	if (atomic_dec_and_test(&conn->refcnt)) {
-		/*
-		 * async_ida is embedded in struct ksmbd_conn, so pair
-		 * ida_destroy() with the final kfree() rather than with
-		 * the unconditional field teardown above.  This keeps
-		 * the IDA valid for the entire lifetime of the struct,
-		 * even while other refcount holders (oplock / vfs
-		 * durable handles) still reference the connection.
-		 */
-		ida_destroy(&conn->async_ida);
-		conn->transport->ops->free_transport(conn->transport);
-		kfree(conn);
-	}
+	ksmbd_conn_put(conn);
 }
 
 /**
@@ -136,6 +180,7 @@ struct ksmbd_conn *ksmbd_conn_alloc(void)
 		conn->um = ERR_PTR(-EOPNOTSUPP);
 	if (IS_ERR(conn->um))
 		conn->um = NULL;
+	INIT_WORK(&conn->release_work, __ksmbd_conn_release_work);
 	atomic_set(&conn->req_running, 0);
 	atomic_set(&conn->r_count, 0);
 	atomic_set(&conn->refcnt, 1);
@@ -512,8 +557,7 @@ void ksmbd_conn_r_count_dec(struct ksmbd_conn *conn)
 	if (!atomic_dec_return(&conn->r_count) && waitqueue_active(&conn->r_count_q))
 		wake_up(&conn->r_count_q);
 
-	if (atomic_dec_and_test(&conn->refcnt))
-		kfree(conn);
+	ksmbd_conn_put(conn);
 }
 
 int ksmbd_conn_transport_init(void)
