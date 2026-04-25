@@ -155,6 +155,10 @@ static struct quirk_entry quirk_asus_z13 = {
 	.tablet_switch_mode = asus_wmi_kbd_dock_devid,
 };
 
+static struct quirk_entry quirk_ally = {
+	.lps0_begin_delay = 500,
+};
+
 static int dmi_matched(const struct dmi_system_id *dmi)
 {
 	pr_info("Identified laptop model '%s'\n", dmi->ident);
@@ -552,6 +556,42 @@ static const struct dmi_system_id asus_quirks[] = {
 			DMI_MATCH(DMI_PRODUCT_NAME, "ROG Flow Z13"),
 		},
 		.driver_data = &quirk_asus_z13,
+	},
+	{
+		.callback = dmi_matched,
+		.ident = "ASUS ROG Ally",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "ASUSTeK COMPUTER INC."),
+			DMI_MATCH(DMI_BOARD_NAME, "RC71L"),
+		},
+		.driver_data = (void *)&quirk_ally,
+	},
+	{
+		.callback = dmi_matched,
+		.ident = "ASUS ROG Ally X",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "ASUSTeK COMPUTER INC."),
+			DMI_MATCH(DMI_BOARD_NAME, "RC72L"),
+		},
+		.driver_data = (void *)&quirk_ally,
+	},
+	{
+		.callback = dmi_matched,
+		.ident = "ASUS ROG Xbox Ally",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "ASUSTeK COMPUTER INC."),
+			DMI_MATCH(DMI_BOARD_NAME, "RC73Y"),
+		},
+		.driver_data = (void *)&quirk_ally,
+	},
+	{
+		.callback = dmi_matched,
+		.ident = "ASUS ROG Xbox Ally X",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "ASUSTeK COMPUTER INC."),
+			DMI_MATCH(DMI_BOARD_NAME, "RC73X"),
+		},
+		.driver_data = (void *)&quirk_ally,
 	},
 	{},
 };

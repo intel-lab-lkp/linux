@@ -52,6 +52,20 @@ struct quirk_entry {
 	 */
 	int no_display_toggle;
 	u32 xusb2pr;
+	/*
+	 * Ally devices uninitialize after the display off DSM of modern
+	 * stanby, after a predetermined fade animation on their RGB.
+	 * If the USB subsystem puts the controller into D3 before that,
+	 * it loses its state and (i) for original allies, it leaves the
+	 * xpad device connected, causing spurious wake-ups and higher
+	 * power draw, (ii) for newer allies using the adaptive protocol
+	 * causes the controller to reboot on resume if mcu_powersave is
+	 * false. Therefore, allow adding a delay for the affected devices.
+	 * (if MCU powersave is true the controller always reboots, but
+	 * this also causes an unwelcome 5-7s delay on resume, this issue
+	 * is present on all firmwares)
+	 */
+	int lps0_begin_delay;
 };
 
 struct asus_wmi_driver {
