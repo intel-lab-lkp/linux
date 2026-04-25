@@ -848,7 +848,7 @@ static int test__parsing_callback(const struct pmu_metric *pm,
 		return -ENOMEM;
 	}
 
-	perf_evlist__set_maps(&evlist->core, cpus, NULL);
+	perf_evlist__set_maps(evlist__core(evlist), cpus, NULL);
 
 	err = metricgroup__parse_groups_test(evlist, table, pm->metric_name);
 	if (err) {
@@ -875,7 +875,8 @@ static int test__parsing_callback(const struct pmu_metric *pm,
 		k++;
 	}
 	evlist__for_each_entry(evlist, evsel) {
-		struct metric_event *me = metricgroup__lookup(&evlist->metric_events, evsel, false);
+		struct metric_event *me = metricgroup__lookup(evlist__metric_events(evlist),
+							      evsel, false);
 
 		if (me != NULL) {
 			struct metric_expr *mexp;
