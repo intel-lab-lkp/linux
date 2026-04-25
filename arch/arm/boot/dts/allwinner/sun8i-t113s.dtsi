@@ -34,6 +34,12 @@
 		};
 	};
 
+	soc {
+		wdt {
+			status = "okay";
+		};
+	};
+
 	gic: interrupt-controller@1c81000 {
 		compatible = "arm,gic-400";
 		reg = <0x03021000 0x1000>,
