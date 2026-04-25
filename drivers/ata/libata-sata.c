@@ -667,8 +667,18 @@ int sata_link_hardreset(struct ata_link *link, const unsigned int *timing,
 	if (rc)
 		goto out;
 	/* if link is offline nothing more to do */
-	if (ata_phys_link_offline(link))
+	if (ata_phys_link_offline(link)) {
+		u32 sstatus;
+
+		if (sata_scr_read(link, SCR_STATUS, &sstatus) == 0 &&
+		    (sstatus & 0xf) == 0x1) {
+			ata_link_warn(link, "device detected but PHY not ready (SStatus %X), retrying\n",
+				      sstatus);
+			rc = -EAGAIN;
+		}
+
 		goto out;
+	}
 
 	/* Link is online.  From this point, -ENODEV too is an error. */
 	if (online)
