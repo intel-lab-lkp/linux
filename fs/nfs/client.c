@@ -933,15 +933,27 @@ static int nfs_probe_fsinfo(struct nfs_server *server, struct nfs_fh *mntfh, str
 
 	nfs_server_set_fsinfo(server, &fsinfo);
 
-	/* Get some general file system info */
-	if (server->namelen == 0) {
-		struct nfs_pathconf pathinfo;
+	{
+		struct nfs_pathconf pathinfo = { };
 
 		pathinfo.fattr = fattr;
 		nfs_fattr_init(fattr);
 
-		if (clp->rpc_ops->pathconf(server, mntfh, &pathinfo) >= 0)
-			server->namelen = pathinfo.max_namelen;
+		if (clp->rpc_ops->pathconf(server, mntfh, &pathinfo) >= 0) {
+			if (server->namelen == 0)
+				server->namelen = pathinfo.max_namelen;
+			/*
+			 * NFSv4 PATHCONF does not carry the case-sensitivity
+			 * fields; those caps are set from FATTR4_CASE_*
+			 * attributes during the set_capabilities probe.
+			 */
+			if (clp->rpc_ops->version < 4) {
+				if (pathinfo.case_insensitive)
+					server->caps |= NFS_CAP_CASE_INSENSITIVE;
+				if (!pathinfo.case_preserving)
+					server->caps |= NFS_CAP_CASE_NONPRESERVING;
+			}
+		}
 	}
 
 	if (clp->rpc_ops->discover_trunking != NULL &&
