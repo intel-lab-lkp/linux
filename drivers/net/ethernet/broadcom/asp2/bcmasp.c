@@ -1333,10 +1333,10 @@ static int bcmasp_probe(struct platform_device *pdev)
 	i = 0;
 	for_each_available_child_of_node_scoped(ports_node, intf_node) {
 		intf = bcmasp_interface_create(priv, intf_node, i);
-		if (!intf) {
+		if (IS_ERR(intf)) {
 			dev_err(dev, "Cannot create eth interface %d\n", i);
 			of_node_put(ports_node);
-			ret = -EINVAL;
+			ret = PTR_ERR(intf);
 			goto err_cleanup;
 		}
 		list_add_tail(&intf->list, &priv->intfs);
