@@ -1,0 +1,78 @@
+What:		/sys/class/hint/*/name
+Date:		June 2026
+KernelVersion:	7.2
+Description:	Name of the class device given by the driver.
+
+		RO
+
+What:		/sys/class/hint/*/idle_choices
+Date:		June 2026
+KernelVersion:	7.2
+Description:	If the device supports idle states, this file contains
+		space-separated list of idle states supported for this device.
+		These states can be used to modify the runtime appearance of the
+		device (e.g., turn off the fan for snooze, turn off the keyboard
+		backlight for inactive) in response to user activity and host
+		state. Userspace can keep track of the idle state of the host
+		and inform devices with idle hint support of the current state.
+
+		The following idle states are supported:
+
+		==========	========================================
+		active		The user is actively interacting with the host.
+				The device appearance is unchanged and normal.
+		inactive	The user has stopped interacting with the
+				host and triggered an inactivity timer (e.g.,
+				lockscreen timeout) and the host displays
+				(if any) are off. The device may choose to
+				change its appearance (e.g. turn off its
+				backlight) or suspend if it is user facing
+				(e.g., handheld controller).
+		snooze	  The host enters a "dark resume" state where the
+				host should look like it is suspended. In
+				response, platform devices may turn off the
+				device fan, pulse the power light, or lower
+				the thermal envelope of the device.
+		resume	  While in the snooze state, userspace has decided
+				to prepare for user interaction while remaining
+				in snooze (e.g., user pressed a keyboard
+				button). If the device lowered its thermal
+				envelope for the snooze state, it can use this
+				hint to restore the normal thermal envelope and
+				lower the time to interaction.
+		==========	========================================
+
+		Reference the following diagram for userspace implementations:
+
+		<Suspend> <-> <Snooze> <-> <Inactive> <-> <Active>
+			       ->  <Resume>  /\
+
+		Where Suspend is the normal suspend path (e.g., s2idle). Devices
+		may support a subset of these idle states (e.g., only active and
+		inactive). In this case, userspace should report the closest
+		supported idle state that's higher than the target one.
+
+		Examples:
+			1) Device supports inactive and active:
+			   If the desired state is snooze, choose inactive
+			2) Device supports snooze and active:
+			   If the desired state is inactive, choose active
+			3) Device does not support resume:
+			   If the desired state is resume, stay in snooze
+
+		RO
+
+What:		/sys/class/hint/*/idle
+Date:		June 2026
+KernelVersion:	7.2
+Description:	Reading this file gives the current selected idle hint for
+		this device. Writing this file with one of the strings from
+		idle_choices changes the idle state to the new value.
+
+		Depending on the device, certain transition combinations may
+		be disallowed. Specifically, devices can choose to reject
+		entering resume from a state other than snooze and re-entering
+		snooze from resume. In this case, the device rejects the change
+		with -EINVAL.
+
+		RW
