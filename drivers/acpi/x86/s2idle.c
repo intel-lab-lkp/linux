@@ -19,6 +19,7 @@
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/dmi.h>
+#include <linux/hint.h>
 #include <linux/suspend.h>
 
 #include "../sleep.h"
@@ -66,6 +67,9 @@ static int lps0_dsm_func_mask;
 static guid_t lps0_dsm_guid_microsoft;
 static int lps0_dsm_func_mask_microsoft;
 static int lps0_dsm_state;
+
+static enum hint_idle_option current_idle = HINT_IDLE_ACTIVE;
+static enum hint_idle_option presuspend_idle = HINT_IDLE_ACTIVE;
 
 /* Device constraint entry structure */
 struct lpi_device_info {
@@ -439,9 +443,171 @@ static const struct acpi_device_id amd_hid_ids[] = {
 	{}
 };
 
+static int acpi_s2idle_idle_probe(void *drvdata, unsigned long *choices)
+{
+	if (!lps0_device_handle || sleep_no_lps0)
+		return 0;
+
+	if (lps0_dsm_func_mask_microsoft > 0) {
+		*choices |= BIT(HINT_IDLE_ACTIVE);
+		if (lps0_dsm_func_mask_microsoft &
+		    (1 << ACPI_LPS0_DISPLAY_OFF | 1 << ACPI_LPS0_DISPLAY_ON))
+			*choices |= BIT(HINT_IDLE_INACTIVE);
+		if (lps0_dsm_func_mask_microsoft &
+		    (1 << ACPI_LPS0_SLEEP_ENTRY | 1 << ACPI_LPS0_SLEEP_EXIT))
+			*choices |= BIT(HINT_IDLE_SNOOZE);
+		if (lps0_dsm_func_mask_microsoft &
+		    (1 << ACPI_LPS0_TURN_ON_DISPLAY))
+			*choices |= BIT(HINT_IDLE_RESUME);
+	}
+
+	if (lps0_dsm_func_mask > 0) {
+		*choices |= BIT(HINT_IDLE_ACTIVE);
+		if (acpi_s2idle_vendor_amd()) {
+			if (lps0_dsm_func_mask &
+			    (1 << ACPI_LPS0_DISPLAY_OFF_AMD |
+			     1 << ACPI_LPS0_DISPLAY_ON_AMD))
+				*choices |= BIT(HINT_IDLE_INACTIVE);
+		} else {
+			if (lps0_dsm_func_mask & (1 << ACPI_LPS0_DISPLAY_OFF |
+						  1 << ACPI_LPS0_DISPLAY_ON))
+				*choices |= BIT(HINT_IDLE_INACTIVE);
+		}
+	}
+
+	return 0;
+}
+
+static int acpi_s2idle_idle_get(struct device *dev, enum hint_idle_option *idle)
+{
+	*idle = current_idle;
+	return 0;
+}
+
+static int acpi_s2idle_idle_set(struct device *dev, enum hint_idle_option idle)
+{
+	if (idle >= HINT_IDLE_LAST)
+		return -EINVAL;
+
+	if (idle == current_idle)
+		return 0;
+
+	acpi_handle_debug(lps0_device_handle,
+			  "Idle state transition from %d to %d\n",
+			  current_idle, idle);
+
+	/* Resume can only be entered if we are on the snooze state. */
+	if (idle == HINT_IDLE_RESUME) {
+		if (current_idle != HINT_IDLE_SNOOZE)
+			return -EINVAL;
+
+		if (lps0_dsm_func_mask_microsoft > 0)
+			acpi_sleep_run_lps0_dsm(ACPI_LPS0_TURN_ON_DISPLAY,
+						lps0_dsm_func_mask_microsoft,
+						lps0_dsm_guid_microsoft);
+
+		current_idle = HINT_IDLE_RESUME;
+		return 0;
+	}
+
+	/*
+	 * The system should not be able to re-enter snooze from resume as it
+	 * is undefined behavior. As part of setting the idle to "Resume",
+	 * userspace promised a transition to "Inactive" or "Active".
+	 */
+	if (current_idle == HINT_IDLE_RESUME &&
+	    idle == HINT_IDLE_SNOOZE)
+		return -EINVAL;
+
+	/*
+	 * When leaving snooze, always fire the resume notification first if
+	 * the device supports it. This is to counteract buggy firmware
+	 * (e.g., Lenovo) that expects the resume notification to fire always.
+	 */
+	if (current_idle == HINT_IDLE_SNOOZE && idle < current_idle &&
+	    lps0_dsm_func_mask_microsoft > 0) {
+		acpi_sleep_run_lps0_dsm(ACPI_LPS0_TURN_ON_DISPLAY,
+					lps0_dsm_func_mask_microsoft,
+					lps0_dsm_guid_microsoft);
+	}
+
+	/* Resume is the Snooze state logic-wise. */
+	if (current_idle == HINT_IDLE_RESUME)
+		current_idle = HINT_IDLE_SNOOZE;
+
+	if (current_idle < idle) {
+		for (; current_idle < idle; current_idle++) {
+			switch (current_idle + 1) {
+			case HINT_IDLE_INACTIVE:
+				if (lps0_dsm_func_mask > 0)
+					acpi_sleep_run_lps0_dsm(
+						acpi_s2idle_vendor_amd() ?
+							ACPI_LPS0_DISPLAY_OFF_AMD :
+							ACPI_LPS0_DISPLAY_OFF,
+						lps0_dsm_func_mask,
+						lps0_dsm_guid);
+
+				if (lps0_dsm_func_mask_microsoft > 0)
+					acpi_sleep_run_lps0_dsm(
+						ACPI_LPS0_DISPLAY_OFF,
+						lps0_dsm_func_mask_microsoft,
+						lps0_dsm_guid_microsoft);
+				break;
+			case HINT_IDLE_SNOOZE:
+				if (lps0_dsm_func_mask_microsoft > 0)
+					acpi_sleep_run_lps0_dsm(
+						ACPI_LPS0_SLEEP_ENTRY,
+						lps0_dsm_func_mask_microsoft,
+						lps0_dsm_guid_microsoft);
+				break;
+			default:
+				break;
+			}
+		}
+	} else if (current_idle > idle) {
+		for (; current_idle > idle; current_idle--) {
+			switch (current_idle) {
+			case HINT_IDLE_INACTIVE:
+				if (lps0_dsm_func_mask > 0)
+					acpi_sleep_run_lps0_dsm(
+						acpi_s2idle_vendor_amd() ?
+							ACPI_LPS0_DISPLAY_ON_AMD :
+							ACPI_LPS0_DISPLAY_ON,
+						lps0_dsm_func_mask,
+						lps0_dsm_guid);
+				if (lps0_dsm_func_mask_microsoft > 0)
+					acpi_sleep_run_lps0_dsm(
+						ACPI_LPS0_DISPLAY_ON,
+						lps0_dsm_func_mask_microsoft,
+						lps0_dsm_guid_microsoft);
+				break;
+			case HINT_IDLE_SNOOZE:
+				if (lps0_dsm_func_mask_microsoft > 0)
+					acpi_sleep_run_lps0_dsm(
+						ACPI_LPS0_SLEEP_EXIT,
+						lps0_dsm_func_mask_microsoft,
+						lps0_dsm_guid_microsoft);
+				break;
+			default:
+				break;
+			}
+		}
+	}
+
+	return 0;
+}
+
+static struct hint_ops acpi_s2idle_hint_ops = {
+	.idle_probe = acpi_s2idle_idle_probe,
+	.idle_get = acpi_s2idle_idle_get,
+	.idle_set = acpi_s2idle_idle_set,
+};
+
 static int lps0_device_attach(struct acpi_device *adev,
 			      const struct acpi_device_id *not_used)
 {
+	struct device *hdev;
+
 	if (lps0_device_handle)
 		return 0;
 
@@ -508,6 +674,15 @@ static int lps0_device_attach(struct acpi_device *adev,
 	 */
 	acpi_ec_mark_gpe_for_wake();
 
+	/*
+	 * Add idle hint handler to lps0_device_handle.
+	 */
+	hdev = devm_hint_register(&adev->dev, "s2idle", NULL,
+				  &acpi_s2idle_hint_ops);
+	if (IS_ERR(hdev))
+		acpi_handle_err(adev->handle,
+				"Failed to register idle hint device\n");
+
 	return 0;
 }
 
@@ -538,23 +713,14 @@ static int acpi_s2idle_begin_lps0(void)
 			lpi_constraints_table = ERR_PTR(-ENODATA);
 	}
 
-	/* Display off */
-	if (lps0_dsm_func_mask > 0)
-		acpi_sleep_run_lps0_dsm(acpi_s2idle_vendor_amd() ?
-					ACPI_LPS0_DISPLAY_OFF_AMD :
-					ACPI_LPS0_DISPLAY_OFF,
-					lps0_dsm_func_mask, lps0_dsm_guid);
-
-	if (lps0_dsm_func_mask_microsoft > 0)
-		acpi_sleep_run_lps0_dsm(ACPI_LPS0_DISPLAY_OFF,
-					lps0_dsm_func_mask_microsoft,
-					lps0_dsm_guid_microsoft);
-
-	/* Modern Standby entry */
-	if (lps0_dsm_func_mask_microsoft > 0)
-		acpi_sleep_run_lps0_dsm(ACPI_LPS0_SLEEP_ENTRY,
-					lps0_dsm_func_mask_microsoft,
-					lps0_dsm_guid_microsoft);
+	presuspend_idle = current_idle;
+	if (current_idle == HINT_IDLE_RESUME) {
+		acpi_handle_err(
+			lps0_device_handle,
+			"Unexpected idle state: Resume. Transitioning to active and back.\n");
+		acpi_s2idle_idle_set(NULL, HINT_IDLE_ACTIVE);
+	}
+	acpi_s2idle_idle_set(NULL, HINT_IDLE_SNOOZE);
 
 	list_for_each_entry(handler, &lps0_s2idle_devops_head, list_node) {
 		if (handler->begin_delay && handler->begin_delay > delay)
@@ -636,30 +802,8 @@ static void acpi_s2idle_end_lps0(void)
 {
 	acpi_s2idle_end();
 
-	if (!lps0_device_handle || sleep_no_lps0)
-		return;
-
-	if (lps0_dsm_func_mask_microsoft > 0) {
-		/* Intent to turn on display */
-		acpi_sleep_run_lps0_dsm(ACPI_LPS0_TURN_ON_DISPLAY,
-					lps0_dsm_func_mask_microsoft,
-					lps0_dsm_guid_microsoft);
-		/* Modern Standby exit */
-		acpi_sleep_run_lps0_dsm(ACPI_LPS0_SLEEP_EXIT,
-					lps0_dsm_func_mask_microsoft,
-					lps0_dsm_guid_microsoft);
-	}
-
-	/* Display on */
-	if (lps0_dsm_func_mask_microsoft > 0)
-		acpi_sleep_run_lps0_dsm(ACPI_LPS0_DISPLAY_ON,
-					lps0_dsm_func_mask_microsoft,
-					lps0_dsm_guid_microsoft);
-	if (lps0_dsm_func_mask > 0)
-		acpi_sleep_run_lps0_dsm(acpi_s2idle_vendor_amd() ?
-					ACPI_LPS0_DISPLAY_ON_AMD :
-					ACPI_LPS0_DISPLAY_ON,
-					lps0_dsm_func_mask, lps0_dsm_guid);
+	if (lps0_device_handle && !sleep_no_lps0)
+		acpi_s2idle_idle_set(NULL, presuspend_idle);
 }
 
 static const struct platform_s2idle_ops acpi_s2idle_ops_lps0 = {

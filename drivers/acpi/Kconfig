@@ -14,6 +14,7 @@ menuconfig ACPI
 	select NLS
 	select CRC32
 	select FIRMWARE_TABLE
+	select HINT if X86 && SUSPEND # s2idle idle hint
 	default y if X86
 	help
 	  Advanced Configuration and Power Interface (ACPI) support for 
