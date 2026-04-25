@@ -16,6 +16,7 @@
  */
 
 #include <linux/acpi.h>
+#include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/dmi.h>
 #include <linux/suspend.h>
@@ -517,6 +518,9 @@ static struct acpi_scan_handler lps0_handler = {
 
 static int acpi_s2idle_begin_lps0(void)
 {
+	struct acpi_s2idle_dev_ops *handler;
+	int delay = 0;
+
 	if (!lps0_device_handle || sleep_no_lps0)
 		return acpi_s2idle_begin();
 
@@ -551,6 +555,13 @@ static int acpi_s2idle_begin_lps0(void)
 		acpi_sleep_run_lps0_dsm(ACPI_LPS0_SLEEP_ENTRY,
 					lps0_dsm_func_mask_microsoft,
 					lps0_dsm_guid_microsoft);
+
+	list_for_each_entry(handler, &lps0_s2idle_devops_head, list_node) {
+		if (handler->begin_delay && handler->begin_delay > delay)
+			delay = handler->begin_delay;
+	}
+	if (delay > 0)
+		msleep(delay);
 
 	return acpi_s2idle_begin();
 }

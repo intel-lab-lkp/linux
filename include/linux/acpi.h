@@ -1154,6 +1154,7 @@ struct acpi_s2idle_dev_ops {
 	void (*prepare)(void);
 	void (*check)(void);
 	void (*restore)(void);
+	int begin_delay;
 };
 #if defined(CONFIG_SUSPEND) && defined(CONFIG_X86)
 int acpi_register_lps0_dev(struct acpi_s2idle_dev_ops *arg);
