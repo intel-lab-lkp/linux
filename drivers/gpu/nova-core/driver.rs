@@ -21,6 +21,7 @@ use kernel::{
         },
         Arc,
     },
+    types::ForLt,
 };
 
 use crate::gpu::Gpu;
@@ -32,7 +33,8 @@ static AUXILIARY_ID_COUNTER: Atomic<u32> = Atomic::new(0);
 pub(crate) struct NovaCore {
     #[pin]
     pub(crate) gpu: Gpu,
-    _reg: Devres<auxiliary::Registration<()>>,
+    #[allow(clippy::type_complexity)]
+    _reg: Devres<auxiliary::Registration<ForLt!(())>>,
 }
 
 const BAR0_SIZE: usize = SZ_16M;
