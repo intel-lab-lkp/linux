@@ -13,7 +13,7 @@
 struct hdac_widget_tree {
 	struct kobject *root;
 	struct kobject *afg;
-	struct kobject **nodes;
+	struct kobject *nodes[];
 };
 
 #define CODEC_ATTR(type)					\
@@ -325,11 +325,8 @@ static void widget_tree_free(struct hdac_device *codec)
 	if (!tree)
 		return;
 	free_widget_node(tree->afg, &widget_afg_group);
-	if (tree->nodes) {
-		for (p = tree->nodes; *p; p++)
-			free_widget_node(*p, &widget_node_group);
-		kfree(tree->nodes);
-	}
+	for (p = tree->nodes; *p; p++)
+		free_widget_node(*p, &widget_node_group);
 	kobject_put(tree->root);
 	kfree(tree);
 	codec->widgets = NULL;
@@ -366,16 +363,12 @@ static int widget_tree_create(struct hdac_device *codec)
 	int i, err;
 	hda_nid_t nid;
 
-	tree = codec->widgets = kzalloc_obj(*tree);
+	tree = codec->widgets = kzalloc_flex(*tree, nodes, codec->num_nodes + 1);
 	if (!tree)
 		return -ENOMEM;
 
 	tree->root = kobject_create_and_add("widgets", &codec->dev.kobj);
 	if (!tree->root)
-		return -ENOMEM;
-
-	tree->nodes = kzalloc_objs(*tree->nodes, codec->num_nodes + 1);
-	if (!tree->nodes)
 		return -ENOMEM;
 
 	for (i = 0, nid = codec->start_nid; i < codec->num_nodes; i++, nid++) {
@@ -435,12 +428,6 @@ int hda_widget_sysfs_reinit(struct hdac_device *codec,
 	if (!tree)
 		return -ENOMEM;
 
-	tree->nodes = kzalloc_objs(*tree->nodes, num_nodes + 1);
-	if (!tree->nodes) {
-		kfree(tree);
-		return -ENOMEM;
-	}
-
 	/* prune non-existing nodes */
 	for (i = 0, nid = codec->start_nid; i < codec->num_nodes; i++, nid++) {
 		if (nid < start_nid || nid >= end_nid)
@@ -459,7 +446,6 @@ int hda_widget_sysfs_reinit(struct hdac_device *codec,
 	}
 
 	/* replace with the new tree */
-	kfree(codec->widgets->nodes);
 	kfree(codec->widgets);
 	codec->widgets = tree;
 
