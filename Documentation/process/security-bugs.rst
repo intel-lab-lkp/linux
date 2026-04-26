@@ -70,11 +70,10 @@ Identifying contacts
 --------------------
 
 The most effective way to report a security bug is to send it directly to the
-affected subsystem's maintainers and Cc: the Linux kernel security team.  Do
-not send it to a public list at this stage, unless you have good reasons to
-consider the issue as being public or trivial to discover (e.g. result of a
-widely available automated vulnerability scanning tool that can be repeated by
-anyone).
+affected subsystem's maintainers.  Do not send it to a public list at this
+stage, unless you have good reasons to consider the issue as being public or
+trivial to discover (e.g. result of a widely available automated vulnerability
+scanning tool that can be repeated by anyone).
 
 If you're sending a report for issues affecting multiple parts in the kernel,
 even if they're fairly similar issues, please send individual messages (think
@@ -148,12 +147,17 @@ run additional tests.  Reports where the reporter does not respond promptly
 or cannot effectively discuss their findings may be abandoned if the
 communication does not quickly improve.
 
-The report must be sent to maintainers, with the security team in ``Cc:``.
-The Linux kernel security team can be contacted by email at
-<security@kernel.org>.  This is a private list of security officers
-who will help verify the bug report and assist developers working on a fix.
-It is possible that the security team will bring in extra help from area
-maintainers to understand and fix the security vulnerability.
+The report must be sent to maintainers.  If there are two or fewer recipients
+in your message, and only in this case, you can also Cc: the Linux kernel
+security team who will ensure the message is delivered to the proper people,
+and will be able to assist small maintainers teams with a process they are not
+necessarily familiar with.  For larger teams, please do not Cc: the Linux
+kernel security team, unless you're seeking specific help (e.g. when resending
+a message which got no response within a week).  The Linux kernel security team
+can be contacted by email at <security@kernel.org>.  This is a private list of
+security officers who will help verify the bug report and assist developers
+working on a fix.  It is possible that the security team will bring in extra
+help from area maintainers to understand and fix the security vulnerability.
 
 Please send **plain text** emails without attachments where possible.
 It is much harder to have a context-quoted discussion about a complex
