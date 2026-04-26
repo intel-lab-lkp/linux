@@ -89,7 +89,7 @@ W:	http://www.lsi.com
 F:	drivers/scsi/3w-*
 
 53C700 AND 53C700-66 SCSI DRIVER
-M:	"James E.J. Bottomley" <James.Bottomley@HansenPartnership.com>
+M:	James E.J. Bottomley <James.Bottomley@HansenPartnership.com>
 L:	linux-scsi@vger.kernel.org
 S:	Maintained
 F:	drivers/scsi/53c700*
@@ -264,13 +264,13 @@ W:	http://piie.net/?section=acerhdf
 F:	drivers/platform/x86/acerhdf.c
 
 ACER WMI LAPTOP EXTRAS
-M:	"Lee, Chun-Yi" <jlee@suse.com>
+M:	Lee, Chun-Yi <jlee@suse.com>
 L:	platform-driver-x86@vger.kernel.org
 S:	Maintained
 F:	drivers/platform/x86/acer-wmi.c
 
 ACPI
-M:	"Rafael J. Wysocki" <rafael@kernel.org>
+M:	Rafael J. Wysocki <rafael@kernel.org>
 R:	Len Brown <lenb@kernel.org>
 L:	linux-acpi@vger.kernel.org
 S:	Supported
@@ -295,7 +295,7 @@ F:	rust/kernel/acpi.rs
 F:	tools/power/acpi/
 
 ACPI APEI
-M:	"Rafael J. Wysocki" <rafael@kernel.org>
+M:	Rafael J. Wysocki <rafael@kernel.org>
 R:	Tony Luck <tony.luck@intel.com>
 R:	Borislav Petkov <bp@alien8.de>
 R:	Hanjun Guo <guohanjun@huawei.com>
@@ -306,7 +306,7 @@ F:	drivers/acpi/apei/
 F:	drivers/firmware/efi/cper*
 
 ACPI COMPONENT ARCHITECTURE (ACPICA)
-M:	"Rafael J. Wysocki" <rafael@kernel.org>
+M:	Rafael J. Wysocki <rafael@kernel.org>
 M:	Saket Dumbre <saket.dumbre@intel.com>
 L:	linux-acpi@vger.kernel.org
 L:	acpica-devel@lists.linux.dev
@@ -348,7 +348,7 @@ S:	Supported
 F:	drivers/mailbox/pcc.c
 
 ACPI PMIC DRIVERS
-M:	"Rafael J. Wysocki" <rafael@kernel.org>
+M:	Rafael J. Wysocki <rafael@kernel.org>
 M:	Len Brown <lenb@kernel.org>
 R:	Andy Shevchenko <andy@kernel.org>
 R:	Mika Westerberg <westeri@kernel.org>
@@ -717,7 +717,7 @@ F:	include/linux/agp*
 F:	include/uapi/linux/agp*
 
 AHA152X SCSI DRIVER
-M:	"Juergen E. Fischer" <fischer@norbit.de>
+M:	Juergen E. Fischer <fischer@norbit.de>
 L:	linux-scsi@vger.kernel.org
 S:	Maintained
 F:	drivers/scsi/aha152x*
@@ -4086,7 +4086,7 @@ F:	Documentation/devicetree/bindings/eeprom/at24.yaml
 F:	drivers/misc/eeprom/at24.c
 
 ATA OVER ETHERNET (AOE) DRIVER
-M:	"Justin Sanders" <justin@coraid.com>
+M:	Justin Sanders <justin@coraid.com>
 S:	Supported
 W:	http://www.openaoe.org/
 F:	Documentation/admin-guide/aoe/
@@ -4252,7 +4252,7 @@ F:	scripts/Makefile.autofdo
 
 AUXILIARY BUS DRIVER
 M:	Greg Kroah-Hartman <gregkh@linuxfoundation.org>
-M:	"Rafael J. Wysocki" <rafael@kernel.org>
+M:	Rafael J. Wysocki <rafael@kernel.org>
 M:	Danilo Krummrich <dakr@kernel.org>
 R:	Dave Ertman <david.m.ertman@intel.com>
 R:	Ira Weiny <ira.weiny@intel.com>
@@ -4485,7 +4485,7 @@ F:	Documentation/block/bfq-iosched.rst
 F:	block/bfq-*
 
 BFS FILE SYSTEM
-M:	"Tigran A. Aivazian" <aivazian.tigran@gmail.com>
+M:	Tigran A. Aivazian <aivazian.tigran@gmail.com>
 S:	Maintained
 F:	Documentation/filesystems/bfs.rst
 F:	fs/bfs/
@@ -6491,7 +6491,7 @@ F:	scripts/container
 
 CONTEXT TRACKING
 M:	Frederic Weisbecker <frederic@kernel.org>
-M:	"Paul E. McKenney" <paulmck@kernel.org>
+M:	Paul E. McKenney <paulmck@kernel.org>
 S:	Maintained
 F:	include/linux/context_tracking*
 F:	kernel/context_tracking.c
@@ -6615,7 +6615,7 @@ S:	Maintained
 F:	drivers/i2c/busses/i2c-cp2615.c
 
 CPU FREQUENCY DRIVERS - CPPC CPUFREQ
-M:	"Rafael J. Wysocki" <rafael@kernel.org>
+M:	Rafael J. Wysocki <rafael@kernel.org>
 M:	Viresh Kumar <viresh.kumar@linaro.org>
 R:	Jie Zhan <zhanjie9@hisilicon.com>
 R:	Lifeng Zheng <zhenglifeng1@huawei.com>
@@ -6640,7 +6640,7 @@ S:	Maintained
 F:	drivers/cpufreq/virtual-cpufreq.c
 
 CPU FREQUENCY SCALING FRAMEWORK
-M:	"Rafael J. Wysocki" <rafael@kernel.org>
+M:	Rafael J. Wysocki <rafael@kernel.org>
 M:	Viresh Kumar <viresh.kumar@linaro.org>
 L:	linux-pm@vger.kernel.org
 S:	Maintained
@@ -6674,7 +6674,7 @@ F:	rust/helpers/cpu.c
 F:	rust/kernel/cpu.rs
 
 CPU IDLE TIME MANAGEMENT FRAMEWORK
-M:	"Rafael J. Wysocki" <rafael@kernel.org>
+M:	Rafael J. Wysocki <rafael@kernel.org>
 M:	Daniel Lezcano <daniel.lezcano@kernel.org>
 R:	Christian Loehle <christian.loehle@arm.com>
 L:	linux-pm@vger.kernel.org
@@ -6698,7 +6698,7 @@ S:	Maintained
 F:	tools/power/cpupower/
 
 CPUID/MSR DRIVER
-M:	"H. Peter Anvin" <hpa@zytor.com>
+M:	H. Peter Anvin <hpa@zytor.com>
 S:	Maintained
 F:	arch/x86/kernel/cpuid.c
 F:	arch/x86/kernel/msr.c
@@ -6806,7 +6806,7 @@ F:	drivers/hwmon/pmbus/crps.c
 
 CRYPTO API
 M:	Herbert Xu <herbert@gondor.apana.org.au>
-M:	"David S. Miller" <davem@davemloft.net>
+M:	David S. Miller <davem@davemloft.net>
 L:	linux-crypto@vger.kernel.org
 S:	Maintained
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/herbert/cryptodev-2.6.git
@@ -7078,7 +7078,7 @@ F:	include/linux/debugobjects.h
 F:	lib/debugobjects.c
 
 DECSTATION PLATFORM SUPPORT
-M:	"Maciej W. Rozycki" <macro@orcam.me.uk>
+M:	Maciej W. Rozycki <macro@orcam.me.uk>
 L:	linux-mips@vger.kernel.org
 S:	Maintained
 F:	arch/mips/dec/
@@ -7086,12 +7086,12 @@ F:	arch/mips/include/asm/dec/
 F:	arch/mips/include/asm/mach-dec/
 
 DEFXX FDDI NETWORK DRIVER
-M:	"Maciej W. Rozycki" <macro@orcam.me.uk>
+M:	Maciej W. Rozycki <macro@orcam.me.uk>
 S:	Maintained
 F:	drivers/net/fddi/defxx.*
 
 DEFZA FDDI NETWORK DRIVER
-M:	"Maciej W. Rozycki" <macro@orcam.me.uk>
+M:	Maciej W. Rozycki <macro@orcam.me.uk>
 S:	Maintained
 F:	drivers/net/fddi/defza.*
 
@@ -7722,7 +7722,7 @@ F:	Documentation/devicetree/bindings/media/i2c/dongwoon,dw9807-vcm.yaml
 F:	drivers/media/i2c/dw9807-vcm.c
 
 DOUBLETALK DRIVER
-M:	"James R. Van Zandt" <jrv@vanzandt.mv.com>
+M:	James R. Van Zandt <jrv@vanzandt.mv.com>
 L:	blinux-list@redhat.com
 S:	Maintained
 F:	drivers/char/dtlk.c
@@ -7791,7 +7791,7 @@ F:	include/linux/component.h
 
 DRIVER CORE, KOBJECTS, DEBUGFS AND SYSFS
 M:	Greg Kroah-Hartman <gregkh@linuxfoundation.org>
-M:	"Rafael J. Wysocki" <rafael@kernel.org>
+M:	Rafael J. Wysocki <rafael@kernel.org>
 M:	Danilo Krummrich <dakr@kernel.org>
 L:	driver-core@lists.linux.dev
 S:	Supported
@@ -9091,7 +9091,7 @@ F:	drivers/powercap/dtpm*
 F:	include/linux/dtpm.h
 
 DZ DECSTATION DZ11 SERIAL DRIVER
-M:	"Maciej W. Rozycki" <macro@orcam.me.uk>
+M:	Maciej W. Rozycki <macro@orcam.me.uk>
 S:	Maintained
 F:	drivers/tty/serial/dz.*
 
@@ -9280,7 +9280,7 @@ S:	Maintained
 F:	drivers/edac/i7core_edac.c
 
 EDAC-I82975X
-M:	"Arvind R." <arvino55@gmail.com>
+M:	Arvind R. <arvino55@gmail.com>
 L:	linux-edac@vger.kernel.org
 S:	Maintained
 F:	drivers/edac/i82975x_edac.c
@@ -9472,7 +9472,7 @@ F:	drivers/media/rc/ene_ir.*
 
 ENERGY MODEL
 M:	Lukasz Luba <lukasz.luba@arm.com>
-M:	"Rafael J. Wysocki" <rafael@kernel.org>
+M:	Rafael J. Wysocki <rafael@kernel.org>
 L:	linux-pm@vger.kernel.org
 S:	Maintained
 F:	Documentation/netlink/specs/dev-energymodel.yaml
@@ -9665,7 +9665,7 @@ F:	fs/ext2/
 F:	include/linux/ext2*
 
 EXT4 FILE SYSTEM
-M:	"Theodore Ts'o" <tytso@mit.edu>
+M:	Theodore Ts'o <tytso@mit.edu>
 R:	Andreas Dilger <adilger.kernel@dilger.ca>
 R:	Baokun Li <libaokun@linux.alibaba.com>
 R:	Jan Kara <jack@suse.cz>
@@ -10463,7 +10463,7 @@ W:	ftp://ftp.openlinux.org/pub/people/hch/vxfs
 F:	fs/freevxfs/
 
 FREEZER
-M:	"Rafael J. Wysocki" <rafael@kernel.org>
+M:	Rafael J. Wysocki <rafael@kernel.org>
 R:	Pavel Machek <pavel@kernel.org>
 L:	linux-pm@vger.kernel.org
 S:	Supported
@@ -10844,7 +10844,7 @@ F:	lib/tests/string_kunit.c
 F:	scripts/coccinelle/api/string_choices.cocci
 
 GENERIC UIO DRIVER FOR PCI DEVICES
-M:	"Michael S. Tsirkin" <mst@redhat.com>
+M:	Michael S. Tsirkin <mst@redhat.com>
 L:	kvm@vger.kernel.org
 S:	Supported
 F:	drivers/uio/uio_pci_generic.c
@@ -11381,7 +11381,7 @@ W:	http://drama.obuda.kando.hu/~fero/cgi-bin/hgafb.shtml
 F:	drivers/video/fbdev/hgafb.c
 
 HIBERNATION (aka Software Suspend, aka swsusp)
-M:	"Rafael J. Wysocki" <rafael@kernel.org>
+M:	Rafael J. Wysocki <rafael@kernel.org>
 R:	Pavel Machek <pavel@kernel.org>
 L:	linux-pm@vger.kernel.org
 S:	Supported
@@ -11953,7 +11953,7 @@ S:	Maintained
 F:	drivers/media/i2c/hi847.c
 
 Hyper-V/Azure CORE AND DRIVERS
-M:	"K. Y. Srinivasan" <kys@microsoft.com>
+M:	K. Y. Srinivasan <kys@microsoft.com>
 M:	Haiyang Zhang <haiyangz@microsoft.com>
 M:	Wei Liu <wei.liu@kernel.org>
 M:	Dexuan Cui <decui@microsoft.com>
@@ -13274,7 +13274,7 @@ F:	include/linux/firmware/intel/stratix10-svc-client.h
 
 INTEL TELEMETRY DRIVER
 M:	Rajneesh Bhardwaj <irenic.rajneesh@gmail.com>
-M:	"David E. Box" <david.e.box@linux.intel.com>
+M:	David E. Box <david.e.box@linux.intel.com>
 L:	platform-driver-x86@vger.kernel.org
 S:	Maintained
 F:	arch/x86/include/asm/intel_telemetry.h
@@ -13363,7 +13363,7 @@ F:	drivers/net/wwan/iosm/
 
 INTEL(R) FLEXIBLE RETURN AND EVENT DELIVERY
 M:	Xin Li <xin@zytor.com>
-M:	"H. Peter Anvin" <hpa@zytor.com>
+M:	H. Peter Anvin <hpa@zytor.com>
 S:	Supported
 F:	Documentation/arch/x86/x86_64/fred.rst
 F:	arch/x86/entry/entry_64_fred.S
@@ -13760,7 +13760,7 @@ F:	fs/jffs2/
 F:	include/uapi/linux/jffs2.h
 
 JOURNALLING LAYER FOR BLOCK DEVICES (JBD2)
-M:	"Theodore Ts'o" <tytso@mit.edu>
+M:	Theodore Ts'o <tytso@mit.edu>
 M:	Jan Kara <jack@suse.com>
 L:	linux-ext4@vger.kernel.org
 S:	Maintained
@@ -14350,7 +14350,7 @@ F:	scripts/Makefile.kmsan
 
 KPROBES
 M:	Naveen N Rao <naveen@kernel.org>
-M:	"David S. Miller" <davem@davemloft.net>
+M:	David S. Miller <davem@davemloft.net>
 M:	Masami Hiramatsu <mhiramat@kernel.org>
 L:	linux-kernel@vger.kernel.org
 L:	linux-trace-kernel@vger.kernel.org
@@ -14493,7 +14493,7 @@ F:	Documentation/hwmon/lattepanda-sigma-ec.rst
 F:	drivers/hwmon/lattepanda-sigma-ec.c
 
 LASI 53c700 driver for PARISC
-M:	"James E.J. Bottomley" <James.Bottomley@HansenPartnership.com>
+M:	James E.J. Bottomley <James.Bottomley@HansenPartnership.com>
 L:	linux-scsi@vger.kernel.org
 S:	Maintained
 F:	Documentation/scsi/53c700.rst
@@ -14817,7 +14817,7 @@ M:	Nicholas Piggin <npiggin@gmail.com>
 M:	David Howells <dhowells@redhat.com>
 M:	Jade Alglave <j.alglave@ucl.ac.uk>
 M:	Luc Maranget <luc.maranget@inria.fr>
-M:	"Paul E. McKenney" <paulmck@kernel.org>
+M:	Paul E. McKenney <paulmck@kernel.org>
 R:	Akira Yokosawa <akiyks@gmail.com>
 R:	Daniel Lustig <dlustig@nvidia.com>
 R:	Joel Fernandes <joelagnelf@nvidia.com>
@@ -15004,7 +15004,7 @@ F:	rust/kernel/sync/locked_by.rs
 X:	kernel/locking/locktorture.c
 
 LOGICAL DISK MANAGER SUPPORT (LDM, Windows 2000/XP/Vista Dynamic Disks)
-M:	"Richard Russon (FlatCap)" <ldm@flatcap.org>
+M:	Richard Russon (FlatCap) <ldm@flatcap.org>
 L:	linux-ntfs-dev@lists.sourceforge.net
 S:	Maintained
 W:	http://www.linux-ntfs.org/content/view/19/37/
@@ -16665,7 +16665,7 @@ F:	drivers/leds/leds-mlxreg.c
 
 MEMBARRIER SUPPORT
 M:	Mathieu Desnoyers <mathieu.desnoyers@efficios.com>
-M:	"Paul E. McKenney" <paulmck@kernel.org>
+M:	Paul E. McKenney <paulmck@kernel.org>
 L:	linux-kernel@vger.kernel.org
 S:	Supported
 F:	Documentation/scheduler/membarrier.rst
@@ -17909,7 +17909,7 @@ F:	drivers/phy/marvell/phy-pxa-usb.c
 
 MMU GATHER AND TLB INVALIDATION
 M:	Will Deacon <will@kernel.org>
-M:	"Aneesh Kumar K.V" <aneesh.kumar@kernel.org>
+M:	Aneesh Kumar K.V <aneesh.kumar@kernel.org>
 M:	Andrew Morton <akpm@linux-foundation.org>
 M:	Nick Piggin <npiggin@gmail.com>
 M:	Peter Zijlstra <peterz@infradead.org>
@@ -18120,7 +18120,7 @@ W:	https://github.com/BeardOverflow/msi-ec
 F:	drivers/platform/x86/msi-ec.*
 
 MSI LAPTOP SUPPORT
-M:	"Lee, Chun-Yi" <jlee@suse.com>
+M:	Lee, Chun-Yi <jlee@suse.com>
 L:	platform-driver-x86@vger.kernel.org
 S:	Maintained
 F:	drivers/platform/x86/msi-laptop.c
@@ -18446,7 +18446,7 @@ F:	net/core/drop_monitor.c
 
 NETWORKING DRIVERS
 M:	Andrew Lunn <andrew+netdev@lunn.ch>
-M:	"David S. Miller" <davem@davemloft.net>
+M:	David S. Miller <davem@davemloft.net>
 M:	Eric Dumazet <edumazet@google.com>
 M:	Jakub Kicinski <kuba@kernel.org>
 M:	Paolo Abeni <pabeni@redhat.com>
@@ -18564,7 +18564,7 @@ F:	include/linux/phy_port.h
 K:	struct\s+phy_port|phy_port_
 
 NETWORKING [GENERAL]
-M:	"David S. Miller" <davem@davemloft.net>
+M:	David S. Miller <davem@davemloft.net>
 M:	Eric Dumazet <edumazet@google.com>
 M:	Jakub Kicinski <kuba@kernel.org>
 M:	Paolo Abeni <pabeni@redhat.com>
@@ -18649,7 +18649,7 @@ F:	tools/testing/selftests/net/ioam6*
 NETWORKING [IPSEC]
 M:	Steffen Klassert <steffen.klassert@secunet.com>
 M:	Herbert Xu <herbert@gondor.apana.org.au>
-M:	"David S. Miller" <davem@davemloft.net>
+M:	David S. Miller <davem@davemloft.net>
 L:	netdev@vger.kernel.org
 S:	Maintained
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/klassert/ipsec.git
@@ -18672,7 +18672,7 @@ F:	net/xfrm/
 F:	tools/testing/selftests/net/ipsec.c
 
 NETWORKING [IPv4/IPv6]
-M:	"David S. Miller" <davem@davemloft.net>
+M:	David S. Miller <davem@davemloft.net>
 M:	David Ahern <dsahern@kernel.org>
 L:	netdev@vger.kernel.org
 S:	Maintained
@@ -20064,7 +20064,7 @@ F:	Documentation/filesystems/orangefs.rst
 F:	fs/orangefs/
 
 OV2659 OMNIVISION SENSOR DRIVER
-M:	"Lad, Prabhakar" <prabhakar.csengg@gmail.com>
+M:	Lad, Prabhakar <prabhakar.csengg@gmail.com>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 W:	https://linuxtv.org
@@ -20201,7 +20201,7 @@ F:	arch/*/kernel/paravirt*
 F:	include/linux/hypervisor.h
 
 PARISC ARCHITECTURE
-M:	"James E.J. Bottomley" <James.Bottomley@HansenPartnership.com>
+M:	James E.J. Bottomley <James.Bottomley@HansenPartnership.com>
 M:	Helge Deller <deller@gmx.de>
 L:	linux-parisc@vger.kernel.org
 S:	Maintained
@@ -21122,7 +21122,7 @@ S:	Maintained
 F:	drivers/dma/plx_dma.c
 
 PM-GRAPH UTILITY
-M:	"Todd E Brandt" <todd.e.brandt@linux.intel.com>
+M:	Todd E Brandt <todd.e.brandt@linux.intel.com>
 L:	linux-pm@vger.kernel.org
 S:	Supported
 W:	https://01.org/pm-graph
@@ -21157,7 +21157,7 @@ F:	Documentation/devicetree/bindings/iio/magnetometer/pni,rm3100.yaml
 F:	drivers/iio/magnetometer/rm3100*
 
 PNP SUPPORT
-M:	"Rafael J. Wysocki" <rafael@kernel.org>
+M:	Rafael J. Wysocki <rafael@kernel.org>
 L:	linux-acpi@vger.kernel.org
 S:	Maintained
 F:	drivers/pnp/
@@ -21195,7 +21195,7 @@ F:	kernel/time/namespace.c
 F:	kernel/time/namespace_vdso.c
 
 POWER MANAGEMENT CORE
-M:	"Rafael J. Wysocki" <rafael@kernel.org>
+M:	Rafael J. Wysocki <rafael@kernel.org>
 L:	linux-pm@vger.kernel.org
 S:	Supported
 B:	https://bugzilla.kernel.org
@@ -21614,7 +21614,7 @@ F:	drivers/net/ipa/
 
 QEMU MACHINE EMULATOR AND VIRTUALIZER SUPPORT
 M:	Gabriel Somlo <somlo@cmu.edu>
-M:	"Michael S. Tsirkin" <mst@redhat.com>
+M:	Michael S. Tsirkin <mst@redhat.com>
 L:	qemu-devel@nongnu.org
 S:	Maintained
 F:	drivers/firmware/qemu_fw_cfg.c
@@ -22195,7 +22195,7 @@ F:	arch/mips/configs/generic/board-ranchu.config
 F:	arch/mips/generic/board-ranchu.c
 
 RANDOM NUMBER DRIVER
-M:	"Theodore Ts'o" <tytso@mit.edu>
+M:	Theodore Ts'o <tytso@mit.edu>
 M:	Jason A. Donenfeld <Jason@zx2c4.com>
 S:	Maintained
 T:	git https://git.kernel.org/pub/scm/linux/kernel/git/crng/random.git
@@ -22271,7 +22271,7 @@ S:	Maintained
 F:	drivers/media/rc/ir-rcmm-decoder.c
 
 RCUTORTURE TEST FRAMEWORK
-M:	"Paul E. McKenney" <paulmck@kernel.org>
+M:	Paul E. McKenney <paulmck@kernel.org>
 M:	Josh Triplett <josh@joshtriplett.org>
 R:	Steven Rostedt <rostedt@goodmis.org>
 R:	Mathieu Desnoyers <mathieu.desnoyers@efficios.com>
@@ -22350,7 +22350,7 @@ F:	include/linux/resctrl*.h
 F:	tools/testing/selftests/resctrl/
 
 READ-COPY UPDATE (RCU)
-M:	"Paul E. McKenney" <paulmck@kernel.org>
+M:	Paul E. McKenney <paulmck@kernel.org>
 M:	Frederic Weisbecker <frederic@kernel.org> (kernel/rcu/tree_nocb.h)
 M:	Neeraj Upadhyay <neeraj.upadhyay@kernel.org> (kernel/rcu/tasks.h)
 M:	Joel Fernandes <joelagnelf@nvidia.com>
@@ -22815,7 +22815,7 @@ K:	\b(?:devm_|of_)?reset_control(?:ler_[a-z]+|_[a-z_]+)?\b
 RESTARTABLE SEQUENCES SUPPORT
 M:	Mathieu Desnoyers <mathieu.desnoyers@efficios.com>
 M:	Peter Zijlstra <peterz@infradead.org>
-M:	"Paul E. McKenney" <paulmck@kernel.org>
+M:	Paul E. McKenney <paulmck@kernel.org>
 M:	Boqun Feng <boqun@kernel.org>
 L:	linux-kernel@vger.kernel.org
 S:	Supported
@@ -23944,8 +23944,8 @@ F:	drivers/scsi/sg.c
 F:	include/scsi/sg.h
 
 SCSI SUBSYSTEM
-M:	"James E.J. Bottomley" <James.Bottomley@HansenPartnership.com>
-M:	"Martin K. Petersen" <martin.petersen@oracle.com>
+M:	James E.J. Bottomley <James.Bottomley@HansenPartnership.com>
+M:	Martin K. Petersen <martin.petersen@oracle.com>
 L:	linux-scsi@vger.kernel.org
 S:	Maintained
 Q:	https://patchwork.kernel.org/project/linux-scsi/list/
@@ -23976,7 +23976,7 @@ F:	drivers/target/target_core_user.c
 F:	include/uapi/linux/target_core_user.h
 
 SCSI TARGET SUBSYSTEM
-M:	"Martin K. Petersen" <martin.petersen@oracle.com>
+M:	Martin K. Petersen <martin.petersen@oracle.com>
 L:	linux-scsi@vger.kernel.org
 L:	target-devel@vger.kernel.org
 S:	Supported
@@ -24133,7 +24133,7 @@ F:	Documentation/process/security-bugs.rst
 SECURITY SUBSYSTEM
 M:	Paul Moore <paul@paul-moore.com>
 M:	James Morris <jmorris@namei.org>
-M:	"Serge E. Hallyn" <serge@hallyn.com>
+M:	Serge E. Hallyn <serge@hallyn.com>
 L:	linux-security-module@vger.kernel.org
 S:	Supported
 Q:	https://patchwork.kernel.org/project/linux-security-module/list
@@ -24583,7 +24583,7 @@ F:	drivers/net/can/slcan/
 
 SLEEPABLE READ-COPY UPDATE (SRCU)
 M:	Lai Jiangshan <jiangshanlai@gmail.com>
-M:	"Paul E. McKenney" <paulmck@kernel.org>
+M:	Paul E. McKenney <paulmck@kernel.org>
 M:	Josh Triplett <josh@joshtriplett.org>
 R:	Steven Rostedt <rostedt@goodmis.org>
 R:	Mathieu Desnoyers <mathieu.desnoyers@efficios.com>
@@ -25075,7 +25075,7 @@ S:	Maintained
 F:	Documentation/translations/sp_SP/
 
 SPARC + UltraSPARC (sparc/sparc64)
-M:	"David S. Miller" <davem@davemloft.net>
+M:	David S. Miller <davem@davemloft.net>
 M:	Andreas Larsson <andreas@gaisler.com>
 L:	sparclinux@vger.kernel.org
 S:	Maintained
@@ -25086,7 +25086,7 @@ F:	arch/sparc/
 F:	drivers/sbus/
 
 SPARC SERIAL DRIVERS
-M:	"David S. Miller" <davem@davemloft.net>
+M:	David S. Miller <davem@davemloft.net>
 L:	sparclinux@vger.kernel.org
 S:	Maintained
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/davem/sparc.git
@@ -25720,7 +25720,7 @@ F:	arch/sh/
 F:	drivers/sh/
 
 SUSPEND TO RAM
-M:	"Rafael J. Wysocki" <rafael@kernel.org>
+M:	Rafael J. Wysocki <rafael@kernel.org>
 R:	Len Brown <lenb@kernel.org>
 R:	Pavel Machek <pavel@kernel.org>
 L:	linux-pm@vger.kernel.org
@@ -26014,8 +26014,8 @@ S:	Odd Fixes
 F:	drivers/media/dvb-frontends/tc90522*
 
 TCP LOW PRIORITY MODULE
-M:	"Wong Hoi Sing, Edison" <hswong3i@gmail.com>
-M:	"Hung Hing Lun, Mike" <hlhung3i@gmail.com>
+M:	Wong Hoi Sing, Edison <hswong3i@gmail.com>
+M:	Hung Hing Lun, Mike <hlhung3i@gmail.com>
 S:	Maintained
 W:	http://tcp-lp-mod.sourceforge.net/
 F:	net/ipv4/tcp_lp.c
@@ -26140,7 +26140,7 @@ F:	include/uapi/linux/if_team.h
 F:	tools/testing/selftests/drivers/net/team/
 
 TECHNICAL ADVISORY BOARD PROCESS DOCS
-M:	"Theodore Ts'o" <tytso@mit.edu>
+M:	Theodore Ts'o <tytso@mit.edu>
 M:	Greg Kroah-Hartman <gregkh@linuxfoundation.org>
 L:	tech-board-discuss@lists.linux.dev
 S:	Maintained
@@ -26148,7 +26148,7 @@ F:	Documentation/process/contribution-maturity-model.rst
 F:	Documentation/process/researcher-guidelines.rst
 
 TECHNOLOGIC SYSTEMS TS-5500 PLATFORM SUPPORT
-M:	"Savoir-faire Linux Inc." <kernel@savoirfairelinux.com>
+M:	Savoir-faire Linux Inc. <kernel@savoirfairelinux.com>
 S:	Maintained
 F:	arch/x86/platform/ts5500/
 
@@ -26592,7 +26592,7 @@ F:	Documentation/devicetree/bindings/iio/adc/ti,ads7924.yaml
 F:	drivers/iio/adc/ti-ads7924.c
 
 TI AM437X VPFE DRIVER
-M:	"Lad, Prabhakar" <prabhakar.csengg@gmail.com>
+M:	Lad, Prabhakar <prabhakar.csengg@gmail.com>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 W:	https://linuxtv.org
@@ -26657,7 +26657,7 @@ F:	Documentation/devicetree/bindings/gpio/gpio-davinci.yaml
 F:	drivers/gpio/gpio-davinci.c
 
 TI DAVINCI SERIES MEDIA DRIVER
-M:	"Lad, Prabhakar" <prabhakar.csengg@gmail.com>
+M:	Lad, Prabhakar <prabhakar.csengg@gmail.com>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 W:	https://linuxtv.org
@@ -26932,7 +26932,7 @@ F:	drivers/power/reset/tdx-ec-poweroff.c
 
 TORTURE-TEST MODULES
 M:	Davidlohr Bueso <dave@stgolabs.net>
-M:	"Paul E. McKenney" <paulmck@kernel.org>
+M:	Paul E. McKenney <paulmck@kernel.org>
 M:	Josh Triplett <josh@joshtriplett.org>
 L:	linux-kernel@vger.kernel.org
 S:	Supported
@@ -27171,7 +27171,7 @@ F:	drivers/net/tap.c
 F:	drivers/net/tun*
 
 TURBOCHANNEL SUBSYSTEM
-M:	"Maciej W. Rozycki" <macro@orcam.me.uk>
+M:	Maciej W. Rozycki <macro@orcam.me.uk>
 L:	linux-mips@vger.kernel.org
 S:	Maintained
 Q:	https://patchwork.kernel.org/project/linux-mips/list/
@@ -27179,7 +27179,7 @@ F:	drivers/tc/
 F:	include/linux/tc.h
 
 TURBOSTAT UTILITY
-M:	"Len Brown" <lenb@kernel.org>
+M:	Len Brown <lenb@kernel.org>
 L:	linux-pm@vger.kernel.org
 S:	Supported
 Q:	https://patchwork.kernel.org/project/linux-pm/list/
@@ -28131,7 +28131,7 @@ F:	net/vmw_vsock/virtio_transport.c
 F:	net/vmw_vsock/virtio_transport_common.c
 
 VIRTIO BALLOON
-M:	"Michael S. Tsirkin" <mst@redhat.com>
+M:	Michael S. Tsirkin <mst@redhat.com>
 M:	David Hildenbrand <david@kernel.org>
 L:	virtualization@lists.linux.dev
 S:	Maintained
@@ -28139,7 +28139,7 @@ F:	drivers/virtio/virtio_balloon.c
 F:	include/uapi/linux/virtio_balloon.h
 
 VIRTIO BLOCK AND SCSI DRIVERS
-M:	"Michael S. Tsirkin" <mst@redhat.com>
+M:	Michael S. Tsirkin <mst@redhat.com>
 M:	Jason Wang <jasowang@redhat.com>
 R:	Paolo Bonzini <pbonzini@redhat.com>
 R:	Stefan Hajnoczi <stefanha@redhat.com>
@@ -28159,7 +28159,7 @@ F:	drivers/char/virtio_console.c
 F:	include/uapi/linux/virtio_console.h
 
 VIRTIO CORE
-M:	"Michael S. Tsirkin" <mst@redhat.com>
+M:	Michael S. Tsirkin <mst@redhat.com>
 M:	Jason Wang <jasowang@redhat.com>
 R:	Xuan Zhuo <xuanzhuo@linux.alibaba.com>
 R:	Eugenio Pérez <eperezma@redhat.com>
@@ -28237,7 +28237,7 @@ F:	drivers/gpu/drm/virtio/
 F:	include/uapi/linux/virtio_gpu.h
 
 VIRTIO HOST (VHOST)
-M:	"Michael S. Tsirkin" <mst@redhat.com>
+M:	Michael S. Tsirkin <mst@redhat.com>
 M:	Jason Wang <jasowang@redhat.com>
 R:	Eugenio Pérez <eperezma@redhat.com>
 L:	kvm@vger.kernel.org
@@ -28252,7 +28252,7 @@ F:	include/uapi/linux/vhost.h
 F:	kernel/vhost_task.c
 
 VIRTIO HOST (VHOST-SCSI)
-M:	"Michael S. Tsirkin" <mst@redhat.com>
+M:	Michael S. Tsirkin <mst@redhat.com>
 M:	Jason Wang <jasowang@redhat.com>
 M:	Mike Christie <michael.christie@oracle.com>
 R:	Paolo Bonzini <pbonzini@redhat.com>
@@ -28263,7 +28263,7 @@ F:	drivers/vhost/scsi.c
 
 VIRTIO I2C DRIVER
 M:	Viresh Kumar <viresh.kumar@linaro.org>
-R:	"Chen, Jian Jun" <jian.jun.chen@intel.com>
+R:	Chen, Jian Jun <jian.jun.chen@intel.com>
 L:	linux-i2c@vger.kernel.org
 L:	virtualization@lists.linux.dev
 S:	Maintained
@@ -28292,7 +28292,7 @@ F:	drivers/virtio/virtio_mem.c
 F:	include/uapi/linux/virtio_mem.h
 
 VIRTIO NET DRIVER
-M:	"Michael S. Tsirkin" <mst@redhat.com>
+M:	Michael S. Tsirkin <mst@redhat.com>
 M:	Jason Wang <jasowang@redhat.com>
 R:	Xuan Zhuo <xuanzhuo@linux.alibaba.com>
 R:	Eugenio Pérez <eperezma@redhat.com>
@@ -28320,7 +28320,7 @@ F:	include/uapi/linux/virtio_rtc.h
 
 VIRTIO SOUND DRIVER
 M:	Anton Yakovlev <anton.yakovlev@opensynergy.com>
-M:	"Michael S. Tsirkin" <mst@redhat.com>
+M:	Michael S. Tsirkin <mst@redhat.com>
 L:	virtualization@lists.linux.dev
 L:	linux-sound@vger.kernel.org
 S:	Maintained
@@ -28807,7 +28807,7 @@ M:	Ingo Molnar <mingo@redhat.com>
 M:	Borislav Petkov <bp@alien8.de>
 M:	Dave Hansen <dave.hansen@linux.intel.com>
 M:	x86@kernel.org
-R:	"H. Peter Anvin" <hpa@zytor.com>
+R:	H. Peter Anvin <hpa@zytor.com>
 L:	linux-kernel@vger.kernel.org
 S:	Maintained
 P:	Documentation/process/maintainer-tip.rst
@@ -29395,7 +29395,7 @@ F:	Documentation/admin-guide/blockdev/zram.rst
 F:	drivers/block/zram/
 
 ZS DECSTATION Z85C30 SERIAL DRIVER
-M:	"Maciej W. Rozycki" <macro@orcam.me.uk>
+M:	Maciej W. Rozycki <macro@orcam.me.uk>
 S:	Maintained
 F:	drivers/tty/serial/zs.*
 
