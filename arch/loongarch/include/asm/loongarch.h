@@ -1248,8 +1248,6 @@
 
 #ifndef __ASSEMBLER__
 
-#ifdef CONFIG_32BIT
-
 static __always_inline u32 rdtime_h(void)
 {
 	u32 val = 0;
@@ -1274,8 +1272,6 @@ static __always_inline u32 rdtime_l(void)
 	return val;
 }
 
-#else
-
 static __always_inline u64 rdtime_d(void)
 {
 	u64 val = 0;
@@ -1287,8 +1283,6 @@ static __always_inline u64 rdtime_d(void)
 		);
 	return val;
 }
-
-#endif
 
 static inline unsigned int get_csr_cpuid(void)
 {
