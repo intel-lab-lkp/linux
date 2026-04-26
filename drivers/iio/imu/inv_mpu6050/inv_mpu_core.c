@@ -1862,6 +1862,7 @@ static int inv_mpu_core_disable_regulator_vddio(struct inv_mpu6050_state *st)
 static void inv_mpu_core_disable_regulator_action(void *_data)
 {
 	struct inv_mpu6050_state *st = _data;
+	struct device *dev = regmap_get_device(st->map);
 	int result;
 
 	result = regulator_disable(st->vdd_supply);
@@ -1869,7 +1870,8 @@ static void inv_mpu_core_disable_regulator_action(void *_data)
 		dev_err(regmap_get_device(st->map),
 			"Failed to disable vdd regulator: %d\n", result);
 
-	inv_mpu_core_disable_regulator_vddio(st);
+	if (!pm_runtime_status_suspended(dev))
+		inv_mpu_core_disable_regulator_vddio(st);
 }
 
 static void inv_mpu_pm_disable(void *data)
@@ -1976,23 +1978,15 @@ int inv_mpu_core_probe(struct regmap *regmap, int irq, const char *name,
 		return result;
 	}
 
-	result = devm_add_action_or_reset(dev, inv_mpu_core_disable_regulator_action,
-				 st);
-	if (result) {
-		dev_err(dev, "Failed to setup regulator cleanup action %d\n",
-			result);
-		return result;
-	}
-
 	/* fill magnetometer orientation */
 	result = inv_mpu_magn_set_orient(st);
 	if (result)
-		return result;
+		goto error_vddio_off;
 
 	/* power is turned on inside check chip type*/
 	result = inv_check_and_setup_chip(st);
 	if (result)
-		return result;
+		goto error_vddio_off;
 
 	result = inv_mpu6050_init_config(indio_dev);
 	if (result) {
@@ -2018,6 +2012,12 @@ int inv_mpu_core_probe(struct regmap *regmap, int irq, const char *name,
 	result = pm_runtime_set_active(dev);
 	if (result)
 		goto error_power_off;
+
+	result = devm_add_action_or_reset(dev, inv_mpu_core_disable_regulator_action,
+					  st);
+	if (result)
+		return dev_err_probe(dev, result,
+				     "Failed to setup regulator cleanup action\n");
 	pm_runtime_get_noresume(dev);
 	pm_runtime_enable(dev);
 	pm_runtime_set_autosuspend_delay(dev, INV_MPU6050_SUSPEND_DELAY_MS);
@@ -2114,6 +2114,9 @@ int inv_mpu_core_probe(struct regmap *regmap, int irq, const char *name,
 
 error_power_off:
 	inv_mpu6050_set_power_itg(st, false);
+error_vddio_off:
+	inv_mpu_core_disable_regulator_vddio(st);
+	regulator_disable(st->vdd_supply);
 	return result;
 }
 EXPORT_SYMBOL_NS_GPL(inv_mpu_core_probe, "IIO_MPU6050");
