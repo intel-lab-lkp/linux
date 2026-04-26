@@ -5298,8 +5298,9 @@ struct folio *__folio_alloc_noprof(gfp_t gfp, unsigned int order, int preferred_
 EXPORT_SYMBOL(__folio_alloc_noprof);
 
 #ifdef CONFIG_NUMA
-struct folio *vma_alloc_folio_noprof(gfp_t gfp, int order,
-		struct vm_area_struct *vma, unsigned long addr)
+struct folio *vma_alloc_folio_user_addr_noprof(gfp_t gfp, int order,
+		struct vm_area_struct *vma, unsigned long addr,
+		unsigned long user_addr)
 {
 	struct mempolicy *pol;
 	pgoff_t ilx;
@@ -5314,8 +5315,9 @@ struct folio *vma_alloc_folio_noprof(gfp_t gfp, int order,
 	return folio;
 }
 #else
-struct folio *vma_alloc_folio_noprof(gfp_t gfp, int order,
-		struct vm_area_struct *vma, unsigned long addr)
+struct folio *vma_alloc_folio_user_addr_noprof(gfp_t gfp, int order,
+		struct vm_area_struct *vma, unsigned long addr,
+		unsigned long user_addr)
 {
 	if (vma->vm_flags & VM_DROPPABLE)
 		gfp |= __GFP_NOWARN;
@@ -5323,6 +5325,13 @@ struct folio *vma_alloc_folio_noprof(gfp_t gfp, int order,
 	return folio_alloc_noprof(gfp, order);
 }
 #endif
+EXPORT_SYMBOL(vma_alloc_folio_user_addr_noprof);
+
+struct folio *vma_alloc_folio_noprof(gfp_t gfp, int order,
+		struct vm_area_struct *vma, unsigned long addr)
+{
+	return vma_alloc_folio_user_addr_noprof(gfp, order, vma, addr, addr);
+}
 EXPORT_SYMBOL(vma_alloc_folio_noprof);
 
 /*

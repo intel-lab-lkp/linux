@@ -320,6 +320,9 @@ static inline struct page *alloc_pages_node_noprof(int nid, gfp_t gfp_mask,
 
 struct folio *vma_alloc_folio_noprof(gfp_t gfp, int order,
 		struct vm_area_struct *vma, unsigned long addr);
+struct folio *vma_alloc_folio_user_addr_noprof(gfp_t gfp, int order,
+		struct vm_area_struct *vma, unsigned long addr,
+		unsigned long user_addr);
 #ifdef CONFIG_NUMA
 struct page *alloc_pages_noprof(gfp_t gfp, unsigned int order);
 struct folio *folio_alloc_noprof(gfp_t gfp, unsigned int order);
@@ -345,6 +348,7 @@ static inline struct folio *folio_alloc_mpol_noprof(gfp_t gfp, unsigned int orde
 #define folio_alloc(...)			alloc_hooks(folio_alloc_noprof(__VA_ARGS__))
 #define folio_alloc_mpol(...)			alloc_hooks(folio_alloc_mpol_noprof(__VA_ARGS__))
 #define vma_alloc_folio(...)			alloc_hooks(vma_alloc_folio_noprof(__VA_ARGS__))
+#define vma_alloc_folio_user_addr(...)		alloc_hooks(vma_alloc_folio_user_addr_noprof(__VA_ARGS__))
 
 #define alloc_page(gfp_mask) alloc_pages(gfp_mask, 0)
 
