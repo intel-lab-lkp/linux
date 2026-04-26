@@ -1863,12 +1863,6 @@ static void inv_mpu_core_disable_regulator_action(void *_data)
 {
 	struct inv_mpu6050_state *st = _data;
 	struct device *dev = regmap_get_device(st->map);
-	int result;
-
-	result = regulator_disable(st->vdd_supply);
-	if (result)
-		dev_err(regmap_get_device(st->map),
-			"Failed to disable vdd regulator: %d\n", result);
 
 	if (!pm_runtime_status_suspended(dev))
 		inv_mpu_core_disable_regulator_vddio(st);
@@ -1948,28 +1942,19 @@ int inv_mpu_core_probe(struct regmap *regmap, int irq, const char *name,
 
 	device_set_wakeup_capable(dev, true);
 
-	st->vdd_supply = devm_regulator_get(dev, "vdd");
-	if (IS_ERR(st->vdd_supply))
-		return dev_err_probe(dev, PTR_ERR(st->vdd_supply),
-				     "Failed to get vdd regulator\n");
-
 	st->vddio_supply = devm_regulator_get(dev, "vddio");
 	if (IS_ERR(st->vddio_supply))
 		return dev_err_probe(dev, PTR_ERR(st->vddio_supply),
 				     "Failed to get vddio regulator\n");
 
-	result = regulator_enable(st->vdd_supply);
-	if (result) {
-		dev_err(dev, "Failed to enable vdd regulator: %d\n", result);
-		return result;
-	}
+	result = devm_regulator_get_enable(dev, "vdd");
+	if (result)
+		return dev_err_probe(dev, result, "Failed to enable vdd regulator\n");
 	msleep(INV_MPU6050_POWER_UP_TIME);
 
 	result = inv_mpu_core_enable_regulator_vddio(st);
-	if (result) {
-		regulator_disable(st->vdd_supply);
+	if (result)
 		return result;
-	}
 
 	/* fill magnetometer orientation */
 	result = inv_mpu_magn_set_orient(st);
@@ -2108,7 +2093,6 @@ error_power_off:
 	inv_mpu6050_set_power_itg(st, false);
 error_vddio_off:
 	inv_mpu_core_disable_regulator_vddio(st);
-	regulator_disable(st->vdd_supply);
 	return result;
 }
 EXPORT_SYMBOL_NS_GPL(inv_mpu_core_probe, "IIO_MPU6050");
