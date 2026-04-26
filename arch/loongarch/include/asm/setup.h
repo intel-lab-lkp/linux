@@ -42,7 +42,7 @@ extern long __relr_dyn_begin;
 extern long __relr_dyn_end;
 #endif
 
-extern unsigned long __init relocate_kernel(void);
+extern void __init relocate_kernel(void);
 
 #endif
 

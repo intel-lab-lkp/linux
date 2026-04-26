@@ -18,7 +18,6 @@
 #include <asm/setup.h>
 
 #define RELOCATED(x) ((void *)((long)x + reloc_offset))
-#define RELOCATED_KASLR(x) ((void *)((long)x + random_offset))
 
 static unsigned long reloc_offset;
 
@@ -58,13 +57,13 @@ static inline void __init relocate_relative(void)
 #endif
 }
 
-static inline void __init relocate_absolute(long random_offset)
+static inline void __init relocate_absolute(void)
 {
 	void *begin, *end;
 	struct rela_la_abs *p;
 
-	begin = RELOCATED_KASLR(&__la_abs_begin);
-	end   = RELOCATED_KASLR(&__la_abs_end);
+	begin = &__la_abs_begin;
+	end   = &__la_abs_end;
 
 	for (p = begin; (void *)p < end; p++) {
 		long v = p->symvalue;
@@ -90,190 +89,19 @@ static inline void __init relocate_absolute(long random_offset)
 	}
 }
 
-#ifdef CONFIG_RANDOMIZE_BASE
-static inline __init unsigned long rotate_xor(unsigned long hash,
-					      const void *area, size_t size)
+void __init relocate_kernel(void)
 {
-	size_t i, diff;
-	const typeof(hash) *ptr = PTR_ALIGN(area, sizeof(hash));
-
-	diff = (void *)ptr - area;
-	if (size < diff + sizeof(hash))
-		return hash;
-
-	size = ALIGN_DOWN(size - diff, sizeof(hash));
-
-	for (i = 0; i < size / sizeof(hash); i++) {
-		/* Rotate by odd number of bits and XOR. */
-		hash = (hash << ((sizeof(hash) * 8) - 7)) | (hash >> 7);
-		hash ^= ptr[i];
-	}
-
-	return hash;
-}
-
-static inline __init unsigned long get_random_boot(void)
-{
-	unsigned long hash = 0;
-	unsigned long entropy = random_get_entropy();
-
-	/* Attempt to create a simple but unpredictable starting entropy. */
-	hash = rotate_xor(hash, linux_banner, strlen(linux_banner));
-
-	/* Add in any runtime entropy we can get */
-	hash = rotate_xor(hash, &entropy, sizeof(entropy));
-
-	return hash;
-}
-
-static int __init nokaslr(char *p)
-{
-	return 0; /* Just silence the boot warning */
-}
-early_param("nokaslr", nokaslr);
-
-#define KASLR_DISABLED_MESSAGE "KASLR is disabled by %s in %s cmdline.\n"
-
-static inline __init bool kaslr_disabled(void)
-{
-	char *str;
-	const char *builtin_cmdline = CONFIG_CMDLINE;
-
-	str = strstr(builtin_cmdline, "nokaslr");
-	if (str == builtin_cmdline || (str > builtin_cmdline && *(str - 1) == ' ')) {
-		pr_info(KASLR_DISABLED_MESSAGE, "\'nokaslr\'", "built-in");
-		return true;
-	}
-
-	str = strstr(boot_command_line, "nokaslr");
-	if (str == boot_command_line || (str > boot_command_line && *(str - 1) == ' ')) {
-		pr_info(KASLR_DISABLED_MESSAGE, "\'nokaslr\'", "bootloader");
-		return true;
-	}
-
-#ifdef CONFIG_HIBERNATION
-	str = strstr(builtin_cmdline, "nohibernate");
-	if (str == builtin_cmdline || (str > builtin_cmdline && *(str - 1) == ' '))
-		return false;
-
-	str = strstr(boot_command_line, "nohibernate");
-	if (str == boot_command_line || (str > boot_command_line && *(str - 1) == ' '))
-		return false;
-
-	str = strstr(builtin_cmdline, "noresume");
-	if (str == builtin_cmdline || (str > builtin_cmdline && *(str - 1) == ' '))
-		return false;
-
-	str = strstr(boot_command_line, "noresume");
-	if (str == boot_command_line || (str > boot_command_line && *(str - 1) == ' '))
-		return false;
-
-	str = strstr(builtin_cmdline, "resume=");
-	if (str == builtin_cmdline || (str > builtin_cmdline && *(str - 1) == ' ')) {
-		pr_info(KASLR_DISABLED_MESSAGE, "\'resume=\'", "built-in");
-		return true;
-	}
-
-	str = strstr(boot_command_line, "resume=");
-	if (str == boot_command_line || (str > boot_command_line && *(str - 1) == ' ')) {
-		pr_info(KASLR_DISABLED_MESSAGE, "\'resume=\'", "bootloader");
-		return true;
-	}
-#endif
-
-	str = strstr(boot_command_line, "kexec_file");
-	if (str == boot_command_line || (str > boot_command_line && *(str - 1) == ' ')) {
-		pr_info(KASLR_DISABLED_MESSAGE, "\'kexec_file\'", "bootloader");
-		return true;
-	}
-
-	return false;
-}
-
-/* Choose a new address for the kernel */
-static inline void __init *determine_relocation_address(void)
-{
-	unsigned long kernel_length;
-	unsigned long random_offset;
-	void *destination = _text;
-
-	if (kaslr_disabled())
-		return destination;
-
-	kernel_length = (unsigned long)_end - (unsigned long)_text;
-
-	random_offset = get_random_boot() << 16;
-	random_offset &= (CONFIG_RANDOMIZE_BASE_MAX_OFFSET - 1);
-	if (random_offset < kernel_length)
-		random_offset += ALIGN(kernel_length, 0xffff);
-
-	return RELOCATED_KASLR(destination);
-}
-
-static inline int __init relocation_addr_valid(void *location_new)
-{
-	if ((unsigned long)location_new & 0x00000ffff)
-		return 0; /* Inappropriately aligned new location */
-
-	if ((unsigned long)location_new < (unsigned long)_end)
-		return 0; /* New location overlaps original kernel */
-
-	return 1;
-}
-#endif
-
-static inline void __init update_reloc_offset(unsigned long *addr, long random_offset)
-{
-	unsigned long *new_addr = (unsigned long *)RELOCATED_KASLR(addr);
-
-	*new_addr = (unsigned long)reloc_offset;
-}
-
-unsigned long __init relocate_kernel(void)
-{
-	unsigned long kernel_length;
-	unsigned long random_offset = 0;
-	void *location_new = _text; /* Default to original kernel start */
 	char *cmdline = early_memremap_ro(fw_arg1, COMMAND_LINE_SIZE); /* Boot command line is passed in fw_arg1 */
 
 	strscpy(boot_command_line, cmdline, COMMAND_LINE_SIZE);
 
-#ifdef CONFIG_RANDOMIZE_BASE
-	location_new = determine_relocation_address();
-
-	/* Sanity check relocation address */
-	if (relocation_addr_valid(location_new))
-		random_offset = (unsigned long)location_new - (unsigned long)(_text);
-#endif
 	reloc_offset = (unsigned long)_text - VMLINUX_LOAD_ADDRESS;
 	early_memunmap(cmdline, COMMAND_LINE_SIZE);
-
-	if (random_offset) {
-		kernel_length = (unsigned long)(_end) - (unsigned long)(_text);
-
-		/* Copy the kernel to it's new location */
-		memcpy(location_new, _text, kernel_length);
-
-		/* Sync the caches ready for execution of new kernel */
-		__asm__ __volatile__ (
-			"ibar 0 \t\n"
-			"dbar 0 \t\n"
-			::: "memory");
-
-		reloc_offset += random_offset;
-
-		/* The current thread is now within the relocated kernel */
-		__current_thread_info = RELOCATED_KASLR(__current_thread_info);
-
-		update_reloc_offset(&reloc_offset, random_offset);
-	}
 
 	if (reloc_offset)
 		relocate_relative();
 
-	relocate_absolute(random_offset);
-
-	return random_offset;
+	relocate_absolute();
 }
 
 /*

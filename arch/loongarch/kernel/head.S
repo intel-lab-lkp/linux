@@ -84,18 +84,6 @@ SYM_CODE_START(kernel_entry)			# kernel entry point
 
 	bl		relocate_kernel
 
-#ifdef CONFIG_RANDOMIZE_BASE
-	/* Repoint the sp into the new kernel */
-	PTR_LI		sp, (_THREAD_SIZE - PT_SIZE)
-	PTR_ADD		sp, sp, tp
-	set_saved_sp	sp, t0, t1
-
-	/* Jump to the new kernel: new_pc = current_pc + random_offset */
-	pcaddi		t0, 0
-	PTR_ADD		t0, t0, a0
-	jirl		zero, t0, 0xc
-#endif /* CONFIG_RANDOMIZE_BASE */
-
 #endif /* CONFIG_RELOCATABLE */
 
 #ifdef CONFIG_KASAN
