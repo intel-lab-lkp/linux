@@ -99,6 +99,20 @@ struct litex_mmc_host {
 	bool app_cmd;
 };
 
+static void litex_mmc_setclk(struct litex_mmc_host *host, unsigned int freq)
+{
+	struct device *dev = mmc_dev(host->mmc);
+	u32 div;
+
+	div = freq ? host->ref_clk / freq : 256U;
+	div = roundup_pow_of_two(div);
+	div = clamp(div, 2U, 256U);
+	dev_dbg(dev, "sd_clk_freq=%d: set to %d via div=%d\n",
+		freq, host->ref_clk / div, div);
+	litex_write16(host->sdphy + LITEX_PHY_CLOCKERDIV, div);
+	host->sd_clk = freq;
+}
+
 static int litex_mmc_sdcard_wait_done(void __iomem *reg, struct device *dev)
 {
 	u8 evt;
@@ -429,20 +443,6 @@ static void litex_mmc_request(struct mmc_host *mmc, struct mmc_request *mrq)
 	}
 
 	mmc_request_done(mmc, mrq);
-}
-
-static void litex_mmc_setclk(struct litex_mmc_host *host, unsigned int freq)
-{
-	struct device *dev = mmc_dev(host->mmc);
-	u32 div;
-
-	div = freq ? host->ref_clk / freq : 256U;
-	div = roundup_pow_of_two(div);
-	div = clamp(div, 2U, 256U);
-	dev_dbg(dev, "sd_clk_freq=%d: set to %d via div=%d\n",
-		freq, host->ref_clk / div, div);
-	litex_write16(host->sdphy + LITEX_PHY_CLOCKERDIV, div);
-	host->sd_clk = freq;
 }
 
 static void litex_mmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
