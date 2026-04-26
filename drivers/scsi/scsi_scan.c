@@ -1070,6 +1070,9 @@ static int scsi_add_lun(struct scsi_device *sdev, unsigned char *inq_result,
 
 	sdev->sdev_bflags = *bflags;
 
+	if (*bflags & BLIST_NO_LUN_1F)
+		sdev->sdev_target->pdt_1f_for_no_lun = 1;
+
 	if (scsi_device_is_pseudo_dev(sdev))
 		return SCSI_SCAN_LUN_PRESENT;
 
