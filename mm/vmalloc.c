@@ -4254,6 +4254,99 @@ void *vzalloc_node_noprof(unsigned long size, int node)
 }
 EXPORT_SYMBOL(vzalloc_node_noprof);
 
+static bool vrealloc_should_shrink_vm_area(struct vm_struct *vm,
+					   unsigned long old_mapped,
+					   unsigned long new_mapped)
+{
+	if (!(vm->flags & VM_ALLOC))
+		return false;
+
+	if (vm->flags & (VM_IOREMAP | VM_MAP | VM_USERMAP | VM_DMA_COHERENT |
+			 VM_NO_GUARD | VM_FLUSH_RESET_PERMS | VM_MAP_PUT_PAGES |
+			 VM_SPARSE))
+		return false;
+
+	if (vm_area_page_order(vm))
+		return false;
+
+	if (old_mapped <= new_mapped)
+		return false;
+
+	return old_mapped - new_mapped >= PMD_SIZE;
+}
+
+static bool vrealloc_shrink_vm_area(struct vm_struct *vm, size_t new_size,
+				    unsigned long old_mapped)
+{
+	struct vmap_area *va, *tail_va;
+	struct vmap_node *vn;
+	unsigned long addr = (unsigned long)vm->addr;
+	unsigned long old_total = vm->size;
+	unsigned long new_mapped = PAGE_ALIGN(new_size);
+	unsigned long new_total = new_mapped + PAGE_SIZE;
+	unsigned long freed_start = addr + new_mapped;
+	unsigned long freed_end = addr + old_mapped;
+	unsigned long tail_start = addr + new_total;
+	unsigned int old_nr_pages = vm->nr_pages;
+	unsigned int new_nr_pages = new_mapped >> PAGE_SHIFT;
+	int index;
+
+	if (!vrealloc_should_shrink_vm_area(vm, old_mapped, new_mapped))
+		return false;
+
+	if (WARN_ON_ONCE(old_total < new_total))
+		return false;
+
+	if (WARN_ON_ONCE(old_nr_pages != old_mapped >> PAGE_SHIFT))
+		return false;
+
+	tail_va = kmem_cache_zalloc(vmap_area_cachep, GFP_KERNEL);
+	if (!tail_va)
+		return false;
+
+	INIT_LIST_HEAD(&tail_va->list);
+	RB_CLEAR_NODE(&tail_va->rb_node);
+
+	vn = addr_to_node(addr);
+
+	spin_lock(&vn->busy.lock);
+	va = __find_vmap_area(addr, &vn->busy.root);
+	if (!va || va->vm != vm || va->va_start != addr ||
+	    va->va_end != addr + old_total) {
+		spin_unlock(&vn->busy.lock);
+		kmem_cache_free(vmap_area_cachep, tail_va);
+		return false;
+	}
+
+	va->va_end = tail_start;
+	vm->size = new_total;
+	vm->nr_pages = new_nr_pages;
+
+	tail_va->va_start = tail_start;
+	tail_va->va_end = addr + old_total;
+	tail_va->flags = va->flags;
+	spin_unlock(&vn->busy.lock);
+
+	debug_check_no_locks_freed((void *)freed_start, freed_end - freed_start);
+	debug_check_no_obj_freed((void *)freed_start, freed_end - freed_start);
+	kmemleak_free_part((void *)freed_start, freed_end - freed_start);
+
+	vunmap_range(freed_start, freed_end);
+
+	for (index = new_nr_pages; index < old_nr_pages; index++) {
+		struct page *page = vm->pages[index];
+
+		BUG_ON(!page);
+		mod_lruvec_page_state(page, NR_VMALLOC, -1);
+		__free_page(page);
+		vm->pages[index] = NULL;
+		cond_resched();
+	}
+
+	free_vmap_area_noflush(tail_va);
+	return true;
+}
+
 /**
  * vrealloc_node_align - reallocate virtually contiguous memory; contents
  * remain unchanged
@@ -4293,6 +4386,7 @@ void *vrealloc_node_align_noprof(const void *p, size_t size, unsigned long align
 	struct vm_struct *vm = NULL;
 	size_t alloced_size = 0;
 	size_t old_size = 0;
+	bool shrunk = false;
 	void *n;
 
 	if (!size) {
@@ -4320,16 +4414,17 @@ void *vrealloc_node_align_noprof(const void *p, size_t size, unsigned long align
 			goto need_realloc;
 	}
 
-	/*
-	 * TODO: Shrink the vm_area, i.e. unmap and free unused pages. What
-	 * would be a good heuristic for when to shrink the vm_area?
-	 */
 	if (size <= old_size) {
 		/* Zero out "freed" memory, potentially for future realloc. */
 		if (want_init_on_free() || want_init_on_alloc(flags))
 			memset((void *)p + size, 0, old_size - size);
-		vm->requested_size = size;
+
 		kasan_vrealloc(p, old_size, size);
+		if (size < old_size)
+			shrunk = vrealloc_shrink_vm_area(vm, size, alloced_size);
+		vm->requested_size = size;
+		if (shrunk)
+			alloced_size = PAGE_ALIGN(size);
 		return (void *)p;
 	}
 
