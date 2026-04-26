@@ -530,8 +530,22 @@ pmd_t pmdp_invalidate_ad(struct vm_area_struct *vma, unsigned long address,
 }
 #endif
 
-#if defined(CONFIG_TRANSPARENT_HUGEPAGE) && \
-	defined(CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD)
+#if (defined(CONFIG_TRANSPARENT_HUGEPAGE) && \
+	defined(CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD)) || \
+	defined CONFIG_HUGETLB_PAGE
+
+pud_t pudp_invalidate_ad(struct vm_area_struct *vma, unsigned long address,
+			 pud_t *pudp)
+{
+	VM_WARN_ON_ONCE(!pud_present(*pudp));
+
+	/*
+	 * No flush is necessary. Once an invalid PUD is established, the PUD's
+	 * access and dirty bits cannot be updated.
+	 */
+	return pudp_establish(vma, address, pudp, pud_mkinvalid(*pudp));
+}
+
 pud_t pudp_invalidate(struct vm_area_struct *vma, unsigned long address,
 		     pud_t *pudp)
 {
