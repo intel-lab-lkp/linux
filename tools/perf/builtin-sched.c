@@ -2197,11 +2197,6 @@ static void timehist_print_sample(struct perf_sched *sched,
 		printf(" ");
 	}
 
-	if (!thread__comm_set(thread)) {
-                const char *prev_comm = evsel__strval(evsel, sample, "prev_comm");
-                thread__set_comm(thread, prev_comm, sample->time);
-        }
-
 	printf(" %-*s ", comm_width, timehist_get_commstr(thread));
 
 	if (sched->show_prio)
@@ -2888,6 +2883,15 @@ static int timehist_sched_change_event(const struct perf_tool *tool,
 				callchain_append(&itr->callchain, &itr->cursor, t - tprev);
 
 			itr->last_thread = NULL;
+		}
+
+		/*
+		 * If the process name is not set for the thread, use "prev_comm"
+		 * to set it. Otherwise the sched summary will have just pid information
+		 */
+		if (!thread__comm_set(thread)) {
+			const char *prev_comm = evsel__strval(evsel, sample, "prev_comm");
+			thread__set_comm(thread, prev_comm, sample->time);
 		}
 
 		if (!sched->summary_only)
