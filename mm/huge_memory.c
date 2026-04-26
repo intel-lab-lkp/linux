@@ -1254,13 +1254,13 @@ unsigned long thp_get_unmapped_area(struct file *filp, unsigned long addr,
 EXPORT_SYMBOL_GPL(thp_get_unmapped_area);
 
 static struct folio *vma_alloc_anon_folio_pmd(struct vm_area_struct *vma,
-		unsigned long addr)
+		unsigned long haddr, unsigned long user_addr)
 {
-	gfp_t gfp = vma_thp_gfp_mask(vma);
+	gfp_t gfp = vma_thp_gfp_mask(vma) | __GFP_ZERO;
 	const int order = HPAGE_PMD_ORDER;
 	struct folio *folio;
 
-	folio = vma_alloc_folio(gfp, order, vma, addr & HPAGE_PMD_MASK);
+	folio = vma_alloc_folio_user_addr(gfp, order, vma, haddr, user_addr);
 
 	if (unlikely(!folio)) {
 		count_vm_event(THP_FAULT_FALLBACK);
@@ -1279,14 +1279,6 @@ static struct folio *vma_alloc_anon_folio_pmd(struct vm_area_struct *vma,
 	}
 	folio_throttle_swaprate(folio, gfp);
 
-       /*
-	* When a folio is not zeroed during allocation (__GFP_ZERO not used)
-	* or user folios require special handling, folio_zero_user() is used to
-	* make sure that the page corresponding to the faulting address will be
-	* hot in the cache after zeroing.
-	*/
-	if (user_alloc_needs_zeroing())
-		folio_zero_user(folio, addr);
 	/*
 	 * The memory barrier inside __folio_mark_uptodate makes sure that
 	 * folio_zero_user writes become visible before the set_pmd_at()
@@ -1328,7 +1320,7 @@ static vm_fault_t __do_huge_pmd_anonymous_page(struct vm_fault *vmf)
 	pgtable_t pgtable;
 	vm_fault_t ret = 0;
 
-	folio = vma_alloc_anon_folio_pmd(vma, vmf->address);
+	folio = vma_alloc_anon_folio_pmd(vma, haddr, vmf->address);
 	if (unlikely(!folio))
 		return VM_FAULT_FALLBACK;
 
@@ -2033,7 +2025,7 @@ static vm_fault_t do_huge_zero_wp_pmd(struct vm_fault *vmf)
 	struct folio *folio;
 	vm_fault_t ret = 0;
 
-	folio = vma_alloc_anon_folio_pmd(vma, vmf->address);
+	folio = vma_alloc_anon_folio_pmd(vma, haddr, vmf->address);
 	if (unlikely(!folio))
 		return VM_FAULT_FALLBACK;
 
