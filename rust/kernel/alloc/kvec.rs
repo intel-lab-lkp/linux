@@ -792,6 +792,18 @@ impl<T: Clone, A: Allocator> Vec<T, A> {
     }
 
     /// Create a new `Vec<T, A>` and extend it by `n` clones of `value`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let v = KVec::from_elem(1, 5, GFP_KERNEL)?;
+    /// assert_eq!(&v, &[1, 1, 1, 1, 1]);
+    ///
+    /// let v = KVec::from_elem(1, 0, GFP_KERNEL)?;
+    /// assert!(v.is_empty());
+    ///
+    /// # Ok::<(), Error>(())
+    /// ```
     pub fn from_elem(value: T, n: usize, flags: Flags) -> Result<Self, AllocError> {
         let mut v = Self::with_capacity(n, flags)?;
 
