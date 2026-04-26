@@ -89,7 +89,7 @@ static void ssp_sync_available_sensors(struct ssp_data *data)
 			"SSP_MSG2SSP_AP_MCU_SET_DUMPMODE failed\n");
 }
 
-static void ssp_enable_mcu(struct ssp_data *data, bool enable)
+static void ssp_set_mcu(struct ssp_data *data, bool enable)
 {
 	dev_info(&data->spi->dev, "current shutdown = %d, old = %d\n", enable,
 		 data->shut_down);
@@ -106,6 +106,16 @@ static void ssp_enable_mcu(struct ssp_data *data, bool enable)
 		dev_warn(&data->spi->dev, "current shutdown = %d, old = %d\n",
 			 enable, data->shut_down);
 	}
+}
+
+static inline void ssp_enable_mcu(struct ssp_data *data)
+{
+	ssp_set_mcu(data, true);
+}
+
+static inline void ssp_disable_mcu(struct ssp_data *data)
+{
+	ssp_set_mcu(data, false);
 }
 
 /*
@@ -146,10 +156,10 @@ static int ssp_check_fwbl(struct ssp_data *data)
 
 static void ssp_reset_mcu(struct ssp_data *data)
 {
-	ssp_enable_mcu(data, false);
+	ssp_disable_mcu(data);
 	ssp_clean_pending_list(data);
 	ssp_toggle_mcu_reset_gpio(data);
-	ssp_enable_mcu(data, true);
+	ssp_enable_mcu(data);
 }
 
 static void ssp_wdt_work_func(struct work_struct *work)
@@ -584,7 +594,7 @@ static void ssp_remove(struct spi_device *spi)
 		dev_err(&data->spi->dev,
 			"SSP_MSG2SSP_AP_STATUS_SHUTDOWN failed\n");
 
-	ssp_enable_mcu(data, false);
+	ssp_disable_mcu(data);
 	ssp_disable_wdt_timer(data);
 
 	ssp_clean_pending_list(data);
