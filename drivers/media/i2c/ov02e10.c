@@ -655,6 +655,30 @@ static int ov02e10_get_format(struct v4l2_subdev *sd,
 	return 0;
 }
 
+static int ov02e10_get_selection(struct v4l2_subdev *sd,
+				 struct v4l2_subdev_state *sd_state,
+				 struct v4l2_subdev_selection *sel)
+{
+	struct ov02e10 *ov02e10 = to_ov02e10(sd);
+
+	if (sel->pad != 0)
+		return -EINVAL;
+
+	switch (sel->target) {
+	case V4L2_SEL_TGT_CROP:
+	case V4L2_SEL_TGT_CROP_DEFAULT:
+	case V4L2_SEL_TGT_CROP_BOUNDS:
+	case V4L2_SEL_TGT_NATIVE_SIZE:
+		sel->r.left = 0;
+		sel->r.top = 0;
+		sel->r.width = ov02e10->cur_mode->width;
+		sel->r.height = ov02e10->cur_mode->height;
+		return 0;
+	default:
+		return -EINVAL;
+	}
+}
+
 static int ov02e10_enum_mbus_code(struct v4l2_subdev *sd,
 				  struct v4l2_subdev_state *sd_state,
 				  struct v4l2_subdev_mbus_code_enum *code)
@@ -703,6 +727,7 @@ static const struct v4l2_subdev_pad_ops ov02e10_pad_ops = {
 	.get_fmt = ov02e10_get_format,
 	.enum_mbus_code = ov02e10_enum_mbus_code,
 	.enum_frame_size = ov02e10_enum_frame_size,
+	.get_selection = ov02e10_get_selection,
 	.enable_streams = ov02e10_enable_streams,
 	.disable_streams = ov02e10_disable_streams,
 };
