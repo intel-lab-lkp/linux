@@ -1874,13 +1874,6 @@ static void inv_mpu_core_disable_regulator_action(void *_data)
 		inv_mpu_core_disable_regulator_vddio(st);
 }
 
-static void inv_mpu_pm_disable(void *data)
-{
-	struct device *dev = data;
-
-	pm_runtime_disable(dev);
-}
-
 int inv_mpu_core_probe(struct regmap *regmap, int irq, const char *name,
 		int (*inv_mpu_bus_setup)(struct iio_dev *), int chip_type)
 {
@@ -2019,13 +2012,12 @@ int inv_mpu_core_probe(struct regmap *regmap, int irq, const char *name,
 		return dev_err_probe(dev, result,
 				     "Failed to setup regulator cleanup action\n");
 	pm_runtime_get_noresume(dev);
-	pm_runtime_enable(dev);
+	result = devm_pm_runtime_enable(dev);
+	if (result)
+		return result;
 	pm_runtime_set_autosuspend_delay(dev, INV_MPU6050_SUSPEND_DELAY_MS);
 	pm_runtime_use_autosuspend(dev);
 	pm_runtime_put(dev);
-	result = devm_add_action_or_reset(dev, inv_mpu_pm_disable, dev);
-	if (result)
-		return result;
 
 	switch (chip_type) {
 	case INV_MPU6000:
