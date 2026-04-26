@@ -613,12 +613,12 @@ static int choose_first_rdev(struct r1conf *conf, struct r1bio *r1_bio,
 			     int *max_sectors)
 {
 	sector_t this_sector = r1_bio->sector;
-	int len = r1_bio->sectors;
 	int disk;
 
 	for (disk = 0 ; disk < conf->raid_disks * 2 ; disk++) {
 		struct md_rdev *rdev;
 		int read_len;
+		int len = r1_bio->sectors;
 
 		if (r1_bio->bios[disk] == IO_BLOCKED)
 			continue;
