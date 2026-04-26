@@ -800,7 +800,7 @@ static int ep93xx_eth_probe(struct platform_device *pdev)
 	dev = alloc_etherdev(sizeof(struct ep93xx_priv));
 	if (dev == NULL) {
 		err = -ENOMEM;
-		goto err_out;
+		goto err_iounmap;
 	}
 
 	memcpy_fromio(addr, base_addr + 0x50, ETH_ALEN);
@@ -814,14 +814,12 @@ static int ep93xx_eth_probe(struct platform_device *pdev)
 	SET_NETDEV_DEV(dev, &pdev->dev);
 	netif_napi_add(dev, &ep->napi, ep93xx_poll);
 
-	platform_set_drvdata(pdev, dev);
-
 	ep->res = request_mem_region(mem->start, resource_size(mem),
 				     dev_name(&pdev->dev));
 	if (ep->res == NULL) {
 		dev_err(&pdev->dev, "Could not reserve memory region\n");
 		err = -ENOMEM;
-		goto err_out;
+		goto err_free_netdev;
 	}
 
 	ep->base_addr = base_addr;
@@ -841,16 +839,22 @@ static int ep93xx_eth_probe(struct platform_device *pdev)
 	err = register_netdev(dev);
 	if (err) {
 		dev_err(&pdev->dev, "Failed to register netdev\n");
-		goto err_out;
+		goto err_release_mem;
 	}
+
+	platform_set_drvdata(pdev, dev);
 
 	printk(KERN_INFO "%s: ep93xx on-chip ethernet, IRQ %d, %pM\n",
 			dev->name, ep->irq, dev->dev_addr);
 
 	return 0;
 
-err_out:
-	ep93xx_eth_remove(pdev);
+err_release_mem:
+	release_mem_region(mem->start, resource_size(mem));
+err_free_netdev:
+	free_netdev(dev);
+err_iounmap:
+	iounmap(base_addr);
 	return err;
 }
 
