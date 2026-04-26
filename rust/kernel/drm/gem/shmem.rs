@@ -19,8 +19,8 @@ use crate::{
     },
     error::to_result,
     prelude::*,
+    sync::aref::ARef,
     types::{
-        ARef,
         Opaque, //
     }, //
 };
