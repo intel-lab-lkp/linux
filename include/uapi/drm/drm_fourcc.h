@@ -38,6 +38,45 @@ extern "C" {
  * fourcc code, a Format Modifier may optionally be provided, in order to
  * further describe the buffer's format - for example tiling or compression.
  *
+ * Formats
+ * -------
+ *
+ * Formats describe how a buffer is interpreted to decode pixel color and alpha
+ * values. Formats are uniquely identified by a four character code (fourcc).
+ * Memory layout is always described in little-endian order.
+ *
+ * The following channels are defined:
+ *
+ * - "R", red
+ * - "G", green
+ * - "B", blue
+ * - "A", alpha
+ * - "C", color index (for paletted formats)
+ * - "D", darkness (inverse relationship between channel value and brightness)
+ * - "Y", luma/brightness
+ * - "U", blue-difference chroma (Cb)
+ * - "V", red-difference chroma (Cr)
+ * - "X", a placeholder for undefined/unused contents
+ *
+ * Formats using the RGB color model have names made up of a list of channels
+ * followed by the number of bits used by each channel, respectively. Any
+ * padding is explicitly indicated by the special "X" channel. Channels use
+ * unsigned integers, except when suffixed by "F" to indicate IEEE 754 floats.
+ * An underscore "_" can be used to delimit planes.
+ *
+ * Multi-planar YUV formats use the following naming scheme for the most part:
+ *
+ * - The first letter indicates the number of planes, channel alignment and
+ *   ordering. It is should not be a letter already used to denote a channel.
+ * - The first digit indicates chroma sub-sampling: 0 for 2x2, 2 for 2x1, 4 for
+ *   none.
+ * - The two other digits indicate bits for the Y channel. If the Cb channel
+ *   comes before Cr, the digits are reversed.
+ *
+ * Fourccs are allocated on a first-come, first-served basis. New format names
+ * and fourccs should try to use the same naming scheme as existing, similar
+ * formats.
+ *
  * Format Modifiers
  * ----------------
  *
