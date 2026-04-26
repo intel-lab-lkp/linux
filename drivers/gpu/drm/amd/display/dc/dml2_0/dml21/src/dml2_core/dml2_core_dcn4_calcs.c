@@ -2845,8 +2845,14 @@ static void calculate_avg_bandwidth_required(
 		dram_overhead_factor_p0 = dcc_dram_bw_nom_overhead_factor_p0[k] * mall_prefetch_dram_overhead_factor[k];
 		dram_overhead_factor_p1 = dcc_dram_bw_nom_overhead_factor_p1[k] * mall_prefetch_dram_overhead_factor[k];
 
-		// FIXME_DCN4, was missing cursor_bw in here, but do I actually need that and tdlut bw for average bandwidth calculation?
-		// active avg bw not include phantom, but svp_prefetch avg bw should include phantom pipes
+		/*
+		 * cursor_bw is included in the average bandwidth calculation below.
+		 * tdlut bandwidth is intentionally excluded: tdlut data is fetched
+		 * only during prefetch/blanking intervals and does not contribute
+		 * to active average bandwidth.
+		 * Phantom pipe contributions are excluded from sys_active but
+		 * included in svp_prefetch average bandwidth.
+		 */
 		if (!dml_is_phantom_pipe(&display_cfg->plane_descriptors[k])) {
 			avg_bandwidth_required[dml2_core_internal_soc_state_sys_active][dml2_core_internal_bw_sdp] += sdp_overhead_factor * (ReadBandwidthLuma[k] + ReadBandwidthChroma[k]) + cursor_bw[k];
 			avg_bandwidth_required[dml2_core_internal_soc_state_sys_active][dml2_core_internal_bw_dram] += dram_overhead_factor_p0 * ReadBandwidthLuma[k] + dram_overhead_factor_p1 * ReadBandwidthChroma[k] + cursor_bw[k];
