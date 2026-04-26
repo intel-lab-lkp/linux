@@ -2041,9 +2041,16 @@ int __block_write_begin_int(struct folio *folio, loff_t pos, unsigned len,
 			if (buffer_new(bh)) {
 				clean_bdev_bh_alias(bh);
 				if (folio_test_uptodate(folio)) {
+					/*
+					 * See block_commit_write() for why we
+					 * must hold BH_Lock around set_uptodate
+					 * + mark_dirty.
+					 */
+					lock_buffer(bh);
 					clear_buffer_new(bh);
 					set_buffer_uptodate(bh);
 					mark_buffer_dirty(bh);
+					unlock_buffer(bh);
 					continue;
 				}
 				if (block_end > to || block_start < from)
@@ -2104,8 +2111,20 @@ void block_commit_write(struct folio *folio, size_t from, size_t to)
 			if (!buffer_uptodate(bh))
 				partial = true;
 		} else {
+			/*
+			 * Per the contract documented at set_buffer_uptodate()
+			 * (include/linux/buffer_head.h), callers must hold
+			 * BH_Lock to serialize against concurrent clears of
+			 * BH_Uptodate.  Holding only the folio lock is not
+			 * sufficient: a concurrent end_buffer_async_read() on
+			 * a previously failed read can clear BH_Uptodate
+			 * between set_buffer_uptodate() and mark_buffer_dirty(),
+			 * tripping the WARN_ON_ONCE in mark_buffer_dirty().
+			 */
+			lock_buffer(bh);
 			set_buffer_uptodate(bh);
 			mark_buffer_dirty(bh);
+			unlock_buffer(bh);
 		}
 		if (buffer_new(bh))
 			clear_buffer_new(bh);
