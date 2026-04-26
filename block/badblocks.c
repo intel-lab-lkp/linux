@@ -1098,6 +1098,10 @@ re_clear:
 	if (prev < 0) {
 		if (overlap_behind(bb, &bad, 0)) {
 			len = BB_OFFSET(p[0]) - s;
+			if (len == 0) {
+				pr_warn_once("badblocks_clear: zero-length at start\n");
+				len = 1;
+			}
 			hint = 0;
 		} else {
 			len = sectors;
@@ -1151,6 +1155,10 @@ re_clear:
 	/* Not front overlap, but behind overlap */
 	if ((prev + 1) < bb->count && overlap_behind(bb, &bad, prev + 1)) {
 		len = BB_OFFSET(p[prev + 1]) - bad.start;
+		if (len == 0) {
+			pr_warn_once("badblocks_clear: zero-length segment detected\n");
+			len = 1;
+		}
 		hint = prev + 1;
 		/* Clear non-bad range should be treated as successful */
 		cleared++;
@@ -1234,6 +1242,10 @@ re_check:
 	/* Not front overlap, but behind overlap */
 	if ((prev + 1) < bb->count && overlap_behind(bb, &bad, prev + 1)) {
 		len = BB_OFFSET(p[prev + 1]) - bad.start;
+		if (len == 0) {
+			pr_warn_once("badblocks_check: zero-length segment detected\n");
+			len = 1;
+		}
 		hint = prev + 1;
 		goto update_sectors;
 	}
