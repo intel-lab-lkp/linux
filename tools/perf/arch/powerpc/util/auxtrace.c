@@ -71,6 +71,19 @@ struct auxtrace_record *auxtrace_record__init(struct evlist *evlist,
 	struct evsel *pos;
 	int found = 0;
 
+	/*
+	 * Assign err value to zero here. Any fail later
+	 * will set appropriate return code to err.
+	 * Even if we haven't found any event for auxtrace, perf
+	 * record should continue for other events. NULL return
+	 * will indicate that there is no auxtrace record initialized.
+	 *
+	 * Not having "err" set here will affect monitoring
+	 * of other events also because perf record will fail seeing
+	 * random value in err.
+	 */
+	*err = 0;
+
 	evlist__for_each_entry(evlist, pos) {
 		if (strstarts(pos->name, "vpa_dtl")) {
 			found = 1;
