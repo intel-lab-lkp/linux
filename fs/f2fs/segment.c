@@ -455,6 +455,15 @@ void f2fs_balance_fs(struct f2fs_sb_info *sbi, bool need)
 		io_schedule();
 		finish_wait(&sbi->gc_thread->fggc_wq, &wait);
 	} else {
+
+		/*
+		 * Submit all cached OPU/IPU DATA bios before triggering
+		 * foreground GC to avoid potential deadlocks.
+		 */
+
+		f2fs_submit_merged_write(sbi, DATA);
+		f2fs_submit_all_merged_ipu_writes(sbi);
+
 		struct f2fs_gc_control gc_control = {
 			.victim_segno = NULL_SEGNO,
 			.init_gc_type = f2fs_sb_has_blkzoned(sbi) ?
