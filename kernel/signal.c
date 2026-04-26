@@ -665,6 +665,8 @@ again:
 }
 EXPORT_SYMBOL_GPL(dequeue_signal);
 
+static_assert(ilog2(SYNCHRONOUS_MASK) + 1 < SIGRTMIN);
+
 static int dequeue_synchronous_signal(kernel_siginfo_t *info)
 {
 	struct task_struct *tsk = current;
@@ -676,7 +678,6 @@ static int dequeue_synchronous_signal(kernel_siginfo_t *info)
 	 */
 	if (!((pending->signal.sig[0] & ~tsk->blocked.sig[0]) & SYNCHRONOUS_MASK))
 		return 0;
-
 	/*
 	 * Return the first synchronous signal in the queue.
 	 */
@@ -685,22 +686,14 @@ static int dequeue_synchronous_signal(kernel_siginfo_t *info)
 		if (SI_FROMKERNEL(&q->info) &&
 		    (sigmask(q->info.si_signo) & SYNCHRONOUS_MASK)) {
 			sync = q;
-			goto next;
+			break;
 		}
 	}
-	return 0;
-next:
-	/*
-	 * Check if there is another siginfo for the same signal.
-	 */
-	list_for_each_entry_continue(q, &pending->list, list) {
-		if (q->info.si_signo == sync->info.si_signo)
-			goto still_pending;
-	}
+	if (!sync)
+		return 0;
 
 	sigdelset(&pending->signal, sync->info.si_signo);
 	recalc_sigpending();
-still_pending:
 	list_del_init(&sync->list);
 	copy_siginfo(info, &sync->info);
 	__sigqueue_free(sync);
