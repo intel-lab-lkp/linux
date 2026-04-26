@@ -141,7 +141,7 @@ static irqreturn_t psp_irq_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
-static unsigned int psp_get_capability(struct psp_device *psp)
+static int psp_get_capability(struct psp_device *psp)
 {
 	unsigned int val = ioread32(psp->io_regs + psp->vdata->feature_reg);
 
