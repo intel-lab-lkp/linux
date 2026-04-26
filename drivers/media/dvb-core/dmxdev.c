@@ -937,6 +937,7 @@ static int dvb_dmxdev_filter_set(struct dmxdev *dmxdev,
 		__func__, params->pid, params->flags, params->timeout);
 
 	dvb_dmxdev_filter_stop(dmxdevfilter);
+	dvb_dmxdev_filter_reset(dmxdevfilter);
 
 	dmxdevfilter->type = DMXDEV_TYPE_SEC;
 	memcpy(&dmxdevfilter->params.sec,
