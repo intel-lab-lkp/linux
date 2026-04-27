@@ -845,8 +845,13 @@ static int __register_trace_fprobe(struct trace_fprobe *tf)
 /* Internal unregister function - just handle fprobe and flags */
 static void __unregister_trace_fprobe(struct trace_fprobe *tf)
 {
-	if (trace_fprobe_is_registered(tf))
-		unregister_fprobe(&tf->fp);
+	/*
+	 * Here, @tf must NOT be busy, so it MUST be unregistered already.
+	 * But if it is unexpectedly registered, unregister it synchronously.
+	 */
+	if (WARN_ON_ONCE(trace_fprobe_is_registered(tf)))
+		unregister_fprobe_sync(&tf->fp);
+
 	if (tf->tuser) {
 		tracepoint_user_put(tf->tuser);
 		tf->tuser = NULL;

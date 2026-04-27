@@ -142,7 +142,7 @@ out:
 
 static void __exit fprobe_exit(void)
 {
-	unregister_fprobe(&sample_probe);
+	unregister_fprobe_sync(&sample_probe);
 
 	pr_info("fprobe at %s unregistered. %ld times hit, %ld times missed\n",
 		symbol, nhit, sample_probe.nmissed);

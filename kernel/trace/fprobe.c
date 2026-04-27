@@ -916,6 +916,9 @@ bool fprobe_is_registered(struct fprobe *fp)
  * @fp: A fprobe data structure to be unregistered.
  *
  * Unregister fprobe (and remove ftrace hooks from the function entries).
+ * Note: This function does not wait for RCU grace period, since user
+ * may use several fprobes (and then unregister them one by one). In that
+ * case, it is recommended to use unregister_fprobe_sync() for the last fprobe.
  *
  * Return 0 if @fp is unregistered successfully, -errno if not.
  */
@@ -961,6 +964,33 @@ out:
 	return ret;
 }
 EXPORT_SYMBOL_GPL(unregister_fprobe);
+
+/**
+ * unregister_fprobe_sync() - Unregister fprobe synchronously with RCU grace period.
+ * @fp: A fprobe data structure to be unregistered.
+ *
+ * Unregister fprobe (and remove ftrace hooks from the function entries) and
+ * wait for the RCU grace period to finish. This is useful for preventing
+ * the fprobe from being used after it is unregistered.
+ *
+ * Return 0 if @fp is unregistered successfully, -errno if not.
+ */
+int unregister_fprobe_sync(struct fprobe *fp)
+{
+	int ret;
+
+	guard(mutex)(&fprobe_mutex);
+	if (!fp || !fprobe_registered(fp))
+		return -EINVAL;
+
+	ret = unregister_fprobe_nolock(fp);
+	if (ret)
+		return ret;
+
+	synchronize_rcu();
+	return 0;
+}
+EXPORT_SYMBOL_GPL(unregister_fprobe_sync);
 
 static int __init fprobe_initcall(void)
 {

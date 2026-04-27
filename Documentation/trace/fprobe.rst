@@ -65,6 +65,12 @@ To disable (remove from functions) this fprobe, call::
 
   unregister_fprobe(&fp);
 
+Or if you need to wait for the RCU grace period to ensure no handlers
+are running on any CPU (e.g., before freeing the `fprobe` structure),
+use::
+
+  unregister_fprobe_sync(&fp);
+
 You can temporally (soft) disable the fprobe by::
 
   disable_fprobe(&fp);
@@ -81,9 +87,12 @@ Same as ftrace, the registered callbacks will start being called some time
 after the register_fprobe() is called and before it returns. See
 Documentation/trace/ftrace.rst.
 
-Also, the unregister_fprobe() will guarantee that both enter and exit
-handlers are no longer being called by functions after unregister_fprobe()
-returns as same as unregister_ftrace_function().
+Also, the `unregister_fprobe_sync()` will guarantee that both enter and exit
+handlers are no longer being called by functions after it returns.
+On the other hand, `unregister_fprobe()` does not wait for the RCU grace period,
+so handlers might still be running on other CPUs for a short time after it returns.
+This is useful when you unregister multiple fprobes in a batch to avoid
+waiting for the RCU grace period for each one.
 
 The fprobe entry/exit handler
 =============================
