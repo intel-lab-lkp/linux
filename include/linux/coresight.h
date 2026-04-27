@@ -692,9 +692,10 @@ coresight_find_output_type(struct coresight_platform_data *pdata,
 			   union coresight_dev_subtype subtype);
 
 #define coresight_init_driver(drv, amba_drv, pdev_drv) \
-	__coresight_init_driver(drv, amba_drv, pdev_drv, THIS_MODULE)
+	__coresight_init_driver(drv, amba_drv, pdev_drv, THIS_MODULE, KBUILD_MODNAME)
 int __coresight_init_driver(const char *drv, struct amba_driver *amba_drv,
-			  struct platform_driver *pdev_drv, struct module *owner);
+			  struct platform_driver *pdev_drv, struct module *owner,
+			  const char *mod_name);
 
 void coresight_remove_driver(struct amba_driver *amba_drv,
 			     struct platform_driver *pdev_drv);

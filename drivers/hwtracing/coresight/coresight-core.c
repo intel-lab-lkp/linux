@@ -1695,7 +1695,8 @@ module_init(coresight_init);
 module_exit(coresight_exit);
 
 int __coresight_init_driver(const char *drv, struct amba_driver *amba_drv,
-			  struct platform_driver *pdev_drv, struct module *owner)
+			  struct platform_driver *pdev_drv, struct module *owner,
+			  const char *mod_name)
 {
 	int ret;
 
@@ -1705,7 +1706,7 @@ int __coresight_init_driver(const char *drv, struct amba_driver *amba_drv,
 		return ret;
 	}
 
-	ret = __platform_driver_register(pdev_drv, owner);
+	ret = __platform_driver_register(pdev_drv, owner, mod_name);
 	if (!ret)
 		return 0;
 
