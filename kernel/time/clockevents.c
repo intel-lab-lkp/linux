@@ -354,8 +354,10 @@ int clockevents_program_event(struct clock_event_device *dev, ktime_t expires, b
 	if (unlikely(dev->features & CLOCK_EVT_FEAT_HRTIMER))
 		return dev->set_next_ktime(expires, dev);
 
-	if (likely(clockevent_set_next_coupled(dev, expires)))
+	if (likely(clockevent_set_next_coupled(dev, expires))) {
+		dev->next_event_forced = 0;
 		return 0;
+	}
 
 	delta = ktime_to_ns(ktime_sub(expires, ktime_get()));
 
