@@ -1049,7 +1049,7 @@ void __init mark_linear_text_alias_ro(void)
 	 */
 	update_mapping_prot(__pa_symbol(_text), (unsigned long)lm_alias(_text),
 			    (unsigned long)__init_begin - (unsigned long)_text,
-			    PAGE_KERNEL_RO);
+			    pgprot_tagged(PAGE_KERNEL_RO));
 }
 
 #ifdef CONFIG_KFENCE
