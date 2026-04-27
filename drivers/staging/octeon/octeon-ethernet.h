@@ -11,6 +11,7 @@
 #ifndef OCTEON_ETHERNET_H
 #define OCTEON_ETHERNET_H
 
+#include <linux/netdevice.h>
 #include <linux/of.h>
 #include <linux/phy.h>
 
@@ -70,8 +71,21 @@ struct octeon_ethernet {
 	u64 link_info;
 	/* Called periodically to check link status */
 	void (*poll)(struct net_device *dev);
-	struct delayed_work	port_periodic_work;
-	struct device_node	*of_node;
+	struct delayed_work port_periodic_work;
+	struct device_node *of_node;
+};
+
+struct oct_rx_group {
+	int irq;
+	int group;
+	struct napi_struct napi;
+	struct platform_device *pdev;
+};
+
+struct octeon_ethernet_platform {
+	struct platform_device *pdev;
+	struct delayed_work rx_refill_work;
+	struct oct_rx_group rx_group[16];
 };
 
 int cvm_oct_free_work(void *work_queue_entry);
