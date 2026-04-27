@@ -17,6 +17,8 @@ struct blk_mq_debugfs_attr {
 	const struct seq_operations *seq_ops;
 };
 
+void blk_mq_debugfs_inc_wait_tags(struct blk_mq_hw_ctx *hctx,
+				  bool is_sched);
 int __blk_mq_debugfs_rq_show(struct seq_file *m, struct request *rq);
 int blk_mq_debugfs_rq_show(struct seq_file *m, void *v);
 
@@ -26,6 +28,9 @@ void blk_mq_debugfs_register_hctx(struct request_queue *q,
 void blk_mq_debugfs_unregister_hctx(struct blk_mq_hw_ctx *hctx);
 void blk_mq_debugfs_register_hctxs(struct request_queue *q);
 void blk_mq_debugfs_unregister_hctxs(struct request_queue *q);
+void blk_mq_debugfs_alloc_hctx_stats(struct blk_mq_hw_ctx *hctx,
+				     gfp_t gfp);
+void blk_mq_debugfs_free_hctx_stats(struct blk_mq_hw_ctx *hctx);
 
 void blk_mq_debugfs_register_sched(struct request_queue *q);
 void blk_mq_debugfs_unregister_sched(struct request_queue *q);
@@ -35,6 +40,11 @@ void blk_mq_debugfs_unregister_sched_hctx(struct blk_mq_hw_ctx *hctx);
 
 void blk_mq_debugfs_register_rq_qos(struct request_queue *q);
 #else
+static inline void blk_mq_debugfs_inc_wait_tags(struct blk_mq_hw_ctx *hctx,
+						bool is_sched)
+{
+}
+
 static inline void blk_mq_debugfs_register(struct request_queue *q)
 {
 }
@@ -53,6 +63,15 @@ static inline void blk_mq_debugfs_register_hctxs(struct request_queue *q)
 }
 
 static inline void blk_mq_debugfs_unregister_hctxs(struct request_queue *q)
+{
+}
+
+static inline void blk_mq_debugfs_alloc_hctx_stats(struct blk_mq_hw_ctx *hctx,
+						   gfp_t gfp)
+{
+}
+
+static inline void blk_mq_debugfs_free_hctx_stats(struct blk_mq_hw_ctx *hctx)
 {
 }
 

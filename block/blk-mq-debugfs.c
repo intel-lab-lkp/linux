@@ -7,6 +7,7 @@
 #include <linux/blkdev.h>
 #include <linux/build_bug.h>
 #include <linux/debugfs.h>
+#include <linux/percpu.h>
 
 #include "blk.h"
 #include "blk-mq.h"
@@ -484,6 +485,54 @@ static int hctx_dispatch_busy_show(void *data, struct seq_file *m)
 	return 0;
 }
 
+/**
+ * hctx_wait_on_hw_tag_show - display hardware tag starvation count
+ * @data: generic pointer to the associated hardware context (hctx)
+ * @m: seq_file pointer for debugfs output formatting
+ *
+ * Prints the cumulative number of times a submitting context was forced
+ * to block due to the exhaustion of physical hardware driver tags.
+ *
+ * Return: 0 on success.
+ */
+static int hctx_wait_on_hw_tag_show(void *data, struct seq_file *m)
+{
+	struct blk_mq_hw_ctx *hctx = data;
+	unsigned long count = 0;
+	int cpu;
+
+	if (hctx->wait_on_hw_tag) {
+		for_each_possible_cpu(cpu)
+			count += *per_cpu_ptr(hctx->wait_on_hw_tag, cpu);
+	}
+	seq_printf(m, "%lu\n", count);
+	return 0;
+}
+
+/**
+ * hctx_wait_on_sched_tag_show - display scheduler tag starvation count
+ * @data: generic pointer to the associated hardware context (hctx)
+ * @m: seq_file pointer for debugfs output formatting
+ *
+ * Prints the cumulative number of times a submitting context was forced
+ * to block due to the exhaustion of software scheduler tags.
+ *
+ * Return: 0 on success.
+ */
+static int hctx_wait_on_sched_tag_show(void *data, struct seq_file *m)
+{
+	struct blk_mq_hw_ctx *hctx = data;
+	unsigned long count = 0;
+	int cpu;
+
+	if (hctx->wait_on_sched_tag) {
+		for_each_possible_cpu(cpu)
+			count += *per_cpu_ptr(hctx->wait_on_sched_tag, cpu);
+	}
+	seq_printf(m, "%lu\n", count);
+	return 0;
+}
+
 #define CTX_RQ_SEQ_OPS(name, type)					\
 static void *ctx_##name##_rq_list_start(struct seq_file *m, loff_t *pos) \
 	__acquires(&ctx->lock)						\
@@ -599,6 +648,8 @@ static const struct blk_mq_debugfs_attr blk_mq_debugfs_hctx_attrs[] = {
 	{"active", 0400, hctx_active_show},
 	{"dispatch_busy", 0400, hctx_dispatch_busy_show},
 	{"type", 0400, hctx_type_show},
+	{"wait_on_hw_tag", 0400, hctx_wait_on_hw_tag_show},
+	{"wait_on_sched_tag", 0400, hctx_wait_on_sched_tag_show},
 	{},
 };
 
@@ -814,4 +865,62 @@ void blk_mq_debugfs_unregister_sched_hctx(struct blk_mq_hw_ctx *hctx)
 		return;
 	debugfs_remove_recursive(hctx->sched_debugfs_dir);
 	hctx->sched_debugfs_dir = NULL;
+}
+
+/**
+ * blk_mq_debugfs_alloc_hctx_stats - Allocate per-cpu starvation statistics
+ * @hctx: hardware context associated with the tag allocation
+ * @gfp: memory allocation flags
+ *
+ * Allocates the per-cpu memory for tracking hardware and scheduler tag
+ * starvation.
+ */
+void blk_mq_debugfs_alloc_hctx_stats(struct blk_mq_hw_ctx *hctx, gfp_t gfp)
+{
+	if (!hctx->wait_on_hw_tag)
+		hctx->wait_on_hw_tag = alloc_percpu_gfp(unsigned long,
+							gfp);
+	if (!hctx->wait_on_sched_tag)
+		hctx->wait_on_sched_tag = alloc_percpu_gfp(unsigned long,
+							   gfp);
+}
+
+/**
+ * blk_mq_debugfs_free_hctx_stats - Free per-cpu starvation statistics
+ * @hctx: hardware context associated with the tag allocation
+ *
+ * Frees the per-cpu memory used for tracking hardware and scheduler tag
+ * starvation. This must only be called during hardware queue teardown when
+ * the queue is safely frozen and no active I/O submissions can race to
+ * increment the statistics.
+ */
+void blk_mq_debugfs_free_hctx_stats(struct blk_mq_hw_ctx *hctx)
+{
+	free_percpu(hctx->wait_on_hw_tag);
+	hctx->wait_on_hw_tag = NULL;
+	free_percpu(hctx->wait_on_sched_tag);
+	hctx->wait_on_sched_tag = NULL;
+}
+
+/**
+ * blk_mq_debugfs_inc_wait_tags - increment the tag starvation counters
+ * @hctx: hardware context associated with the tag allocation
+ * @is_sched: true if the starved pool is the software scheduler
+ *
+ * Evaluates the exhausted tag pool and safely increments the appropriate
+ * per-cpu debugfs starvation counter.
+ *
+ * Note: The per-cpu pointers are explicitly checked to prevent a NULL
+ * pointer dereference in the event that the system was under heavy memory
+ * pressure and the initial per-cpu allocation failed.
+ */
+void blk_mq_debugfs_inc_wait_tags(struct blk_mq_hw_ctx *hctx,
+				  bool is_sched)
+{
+	unsigned long __percpu *tags = is_sched ?
+			READ_ONCE(hctx->wait_on_sched_tag) :
+			READ_ONCE(hctx->wait_on_hw_tag);
+
+	if (likely(tags))
+		this_cpu_inc(*tags);
 }

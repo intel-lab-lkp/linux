@@ -3991,6 +3991,8 @@ static void blk_mq_exit_hctx(struct request_queue *q,
 			blk_free_flush_queue_callback);
 	hctx->fq = NULL;
 
+	blk_mq_debugfs_free_hctx_stats(hctx);
+
 	spin_lock(&q->unused_hctx_lock);
 	list_add(&hctx->hctx_list, &q->unused_hctx_list);
 	spin_unlock(&q->unused_hctx_lock);
@@ -4015,6 +4017,8 @@ static int blk_mq_init_hctx(struct request_queue *q,
 		struct blk_mq_hw_ctx *hctx, unsigned hctx_idx)
 {
 	gfp_t gfp = GFP_NOIO | __GFP_NOWARN | __GFP_NORETRY;
+
+	blk_mq_debugfs_alloc_hctx_stats(hctx, gfp);
 
 	hctx->fq = blk_alloc_flush_queue(hctx->numa_node, set->cmd_size, gfp);
 	if (!hctx->fq)
@@ -4041,6 +4045,7 @@ static int blk_mq_init_hctx(struct request_queue *q,
 	blk_free_flush_queue(hctx->fq);
 	hctx->fq = NULL;
  fail:
+	blk_mq_debugfs_free_hctx_stats(hctx);
 	return -1;
 }
 
