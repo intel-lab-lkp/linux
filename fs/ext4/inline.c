@@ -1718,7 +1718,8 @@ ext4_get_inline_entry(struct inode *inode,
 {
 	void *inline_pos;
 
-	BUG_ON(offset > ext4_get_inline_size(inode));
+	if (offset > ext4_get_inline_size(inode))
+		return NULL;
 
 	if (offset < EXT4_MIN_INLINE_DATA_SIZE) {
 		inline_pos = (void *)ext4_raw_inode(iloc)->i_block;
@@ -1773,6 +1774,12 @@ bool empty_inline_dir(struct inode *dir, int *has_inline_data)
 	while (offset < inline_len) {
 		de = ext4_get_inline_entry(dir, &iloc, offset,
 					   &inline_pos, &inline_size);
+		if (!de) {
+			ext4_warning(dir->i_sb,
+				     "bad inline directory (dir #%llu) - invalid offset",
+				     dir->i_ino);
+			goto out;
+		}
 		if (ext4_check_dir_entry(dir, NULL, de,
 					 iloc.bh, inline_pos,
 					 inline_size, offset)) {
