@@ -94,7 +94,6 @@ void sifive_errata_patch_func(struct alt_entry *begin, struct alt_entry *end,
 		if (alt->vendor_id != SIFIVE_VENDOR_ID)
 			continue;
 		if (alt->patch_id >= ERRATA_SIFIVE_NUMBER) {
-			WARN(1, "This errata id:%d is not in kernel errata list", alt->patch_id);
 			continue;
 		}
 
