@@ -4614,6 +4614,10 @@ static inline void guc_default_irqs(struct intel_engine_cs *engine)
 	intel_engine_set_irq_handler(engine, cs_irq_handler);
 }
 
+static void guc_submission_tasklet_nop(struct tasklet_struct *t)
+{
+}
+
 static void guc_sched_engine_destroy(struct kref *kref)
 {
 	struct i915_sched_engine *sched_engine =
@@ -4621,7 +4625,20 @@ static void guc_sched_engine_destroy(struct kref *kref)
 	struct intel_guc *guc = sched_engine->private_data;
 
 	guc->sched_engine = NULL;
-	tasklet_kill(&sched_engine->tasklet); /* flush the callback */
+
+	/*
+	 * The tasklet may have been left disabled (with TASKLET_STATE_SCHED
+	 * still set) if the GT was wedged; intel_guc_submission_reset_finish
+	 * skips enable_submission() in that case. tasklet_kill() waits for
+	 * SCHED to clear, but softirq only clears it when the tasklet is
+	 * enabled (count == 0) and can actually run.
+	 * Force-enable and install a safe no-op callback so tasklet_kill()
+	 * can make progress.
+	 */
+	sched_engine->tasklet.callback = guc_submission_tasklet_nop;
+	while (!__tasklet_is_enabled(&sched_engine->tasklet))
+		tasklet_enable(&sched_engine->tasklet);
+	tasklet_kill(&sched_engine->tasklet);
 	kfree(sched_engine);
 }
 
