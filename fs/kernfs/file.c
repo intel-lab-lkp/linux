@@ -293,7 +293,16 @@ static ssize_t kernfs_file_read_iter(struct kiocb *iocb, struct iov_iter *iter)
 
 static ssize_t kernfs_fop_read_iter(struct kiocb *iocb, struct iov_iter *iter)
 {
-	if (kernfs_of(iocb->ki_filp)->kn->flags & KERNFS_HAS_SEQ_SHOW)
+	struct kernfs_open_file *of = kernfs_of(iocb->ki_filp);
+	bool has_seq;
+
+	if (!kernfs_get_active_of(of))
+		return -ENODEV;
+
+	has_seq = of->kn->flags & KERNFS_HAS_SEQ_SHOW;
+	kernfs_put_active_of(of);
+
+	if (has_seq)
 		return seq_read_iter(iocb, iter);
 	return kernfs_file_read_iter(iocb, iter);
 }
@@ -458,6 +467,7 @@ static int kernfs_fop_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	struct kernfs_open_file *of = kernfs_of(file);
 	const struct kernfs_ops *ops;
+	bool has_mmap;
 	int rc;
 
 	/*
@@ -467,7 +477,13 @@ static int kernfs_fop_mmap(struct file *file, struct vm_area_struct *vma)
 	 * without grabbing @of->mutex by testing HAS_MMAP flag.  See the
 	 * comment in kernfs_fop_open() for more details.
 	 */
-	if (!(of->kn->flags & KERNFS_HAS_MMAP))
+	if (!kernfs_get_active_of(of))
+		return -ENODEV;
+
+	has_mmap = of->kn->flags & KERNFS_HAS_MMAP;
+	kernfs_put_active_of(of);
+
+	if (!has_mmap)
 		return -ENODEV;
 
 	mutex_lock(&of->mutex);
