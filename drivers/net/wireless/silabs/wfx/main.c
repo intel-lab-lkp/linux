@@ -445,6 +445,8 @@ int wfx_probe(struct wfx_dev *wdev)
 	for (i = 0; i < ARRAY_SIZE(wdev->addresses); i++) {
 		eth_zero_addr(wdev->addresses[i].addr);
 		err = of_get_mac_address(wdev->dev->of_node, wdev->addresses[i].addr);
+		if (err == -EPROBE_DEFER)
+			goto irq_unsubscribe;
 		if (!err)
 			wdev->addresses[i].addr[ETH_ALEN - 1] += i;
 		else
