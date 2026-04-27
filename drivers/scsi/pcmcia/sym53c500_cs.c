@@ -800,12 +800,12 @@ err_free_irq:
 err_free_scsi:
 	scsi_host_put(host);
 err_release:
-	release_region(port_base, 0x10);
+	pcmcia_disable_device(link);
 	printk(KERN_INFO "sym53c500_cs: no SCSI devices found\n");
 	return -ENODEV;
 
 failed:
-	SYM53C500_release(link);
+	pcmcia_disable_device(link);
 	return -ENODEV;
 } /* SYM53C500_config */
 
@@ -845,6 +845,7 @@ static int
 SYM53C500_probe(struct pcmcia_device *link)
 {
 	struct scsi_info_t *info;
+	int ret;
 
 	dev_dbg(&link->dev, "SYM53C500_attach()\n");
 
@@ -856,7 +857,13 @@ SYM53C500_probe(struct pcmcia_device *link)
 	link->priv = info;
 	link->config_flags |= CONF_ENABLE_IRQ | CONF_AUTO_SET_IO;
 
-	return SYM53C500_config(link);
+	ret = SYM53C500_config(link);
+	if (ret) {
+		kfree(info);
+		link->priv = NULL;
+	}
+
+	return ret;
 } /* SYM53C500_attach */
 
 MODULE_AUTHOR("Bob Tracy <rct@frus.com>");
