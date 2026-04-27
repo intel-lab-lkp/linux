@@ -43,11 +43,6 @@ properties:
   vin-supply:
     description: Supply for the vin pin
 
-  vsel-gpios:
-    description: Voltage Select. When this pin is LOW, VOUT is set by the
-      VSEL0 register. When this pin is HIGH, VOUT is set by the VSEL1 register.
-    maxItems: 1
-
 required:
   - compatible
   - reg
