@@ -116,22 +116,32 @@ static const struct seq_operations misc_seq_ops = {
 };
 #endif
 
+static struct miscdevice *misc_find(int minor)
+{
+	struct miscdevice *iter;
+
+	lockdep_assert_held(&misc_mtx);
+
+	list_for_each_entry(iter, &misc_list, list) {
+		if (iter->minor == minor)
+			return iter;
+	}
+
+	return NULL;
+}
+
 static int misc_open(struct inode *inode, struct file *file)
 {
 	int minor = iminor(inode);
-	struct miscdevice *c = NULL, *iter;
+	struct miscdevice *c = NULL;
 	int err = -ENODEV;
 	const struct file_operations *new_fops = NULL;
 
 	mutex_lock(&misc_mtx);
 
-	list_for_each_entry(iter, &misc_list, list) {
-		if (iter->minor != minor)
-			continue;
-		c = iter;
-		new_fops = fops_get(iter->fops);
-		break;
-	}
+	c = misc_find(minor);
+	if (c)
+		new_fops = fops_get(c->fops);
 
 	/* Only request module for fixed minor code */
 	if (!new_fops && minor < MISC_DYNAMIC_MINOR) {
@@ -139,13 +149,9 @@ static int misc_open(struct inode *inode, struct file *file)
 		request_module("char-major-%d-%d", MISC_MAJOR, minor);
 		mutex_lock(&misc_mtx);
 
-		list_for_each_entry(iter, &misc_list, list) {
-			if (iter->minor != minor)
-				continue;
-			c = iter;
-			new_fops = fops_get(iter->fops);
-			break;
-		}
+		c = misc_find(minor);
+		if (c)
+			new_fops = fops_get(c->fops);
 	}
 
 	if (!new_fops)
@@ -229,13 +235,10 @@ int misc_register(struct miscdevice *misc)
 			return -EBUSY;
 		misc->minor = i;
 	} else {
-		struct miscdevice *c;
 		int i;
 
-		list_for_each_entry(c, &misc_list, list) {
-			if (c->minor == misc->minor)
-				return -EBUSY;
-		}
+		if (misc_find(misc->minor))
+			return -EBUSY;
 
 		i = misc_minor_alloc(misc->minor);
 		if (i < 0)
