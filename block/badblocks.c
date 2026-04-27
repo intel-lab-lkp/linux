@@ -855,12 +855,20 @@ static bool _badblocks_set(struct badblocks *bb, sector_t s, sector_t sectors,
 
 	if (bb->shift) {
 		/* round the start down, and the end up */
+		if (s > ULLONG_MAX - sectors)
+			return false;
 		sector_t next = s + sectors;
 
-		rounddown(s, 1 << bb->shift);
-		roundup(next, 1 << bb->shift);
-		sectors = next - s;
+		s = rounddown(s, 1 << bb->shift);
+		next = roundup(next, 1 << bb->shift);
+		if (next < s)
+			sectors = 0;
+		else
+			sectors = next - s;
 	}
+
+	if (sectors == 0)
+		return false;
 
 	write_seqlock_irqsave(&bb->lock, flags);
 
@@ -1070,11 +1078,19 @@ static bool _badblocks_clear(struct badblocks *bb, sector_t s, sector_t sectors)
 		 * However it is better the think a block is bad when it
 		 * isn't than to think a block is not bad when it is.
 		 */
+		if (s > ULLONG_MAX - sectors)
+			return false;
 		target = s + sectors;
-		roundup(s, 1 << bb->shift);
-		rounddown(target, 1 << bb->shift);
-		sectors = target - s;
+		s = roundup(s, 1 << bb->shift);
+		target = rounddown(target, 1 << bb->shift);
+		if (target < s)
+			sectors = 0;
+		else
+			sectors = target - s;
 	}
+
+	if (sectors == 0)
+		return false;
 
 	write_seqlock_irq(&bb->lock);
 
@@ -1305,11 +1321,20 @@ int badblocks_check(struct badblocks *bb, sector_t s, sector_t sectors,
 
 	if (bb->shift > 0) {
 		/* round the start down, and the end up */
+		if (s > ULLONG_MAX - sectors) {
+			return -EINVAL;
+		}
 		sector_t target = s + sectors;
 
-		rounddown(s, 1 << bb->shift);
-		roundup(target, 1 << bb->shift);
-		sectors = target - s;
+		s = rounddown(s, 1 << bb->shift);
+		target = roundup(target, 1 << bb->shift);
+		if (target < s)
+			sectors = 0;
+		else
+			sectors = target - s;
+
+		if (sectors == 0)
+			return 0;
 	}
 
 retry:
