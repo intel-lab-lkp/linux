@@ -797,6 +797,7 @@ config HX711
 	select IIO_TRIGGERED_BUFFER
 	help
 	  If you say Y here you get support for the following AVIA ADCs:
+	    - HX710B
 	    - HX711
 	  which are used for bridge sensors such as weigh cells.
 
