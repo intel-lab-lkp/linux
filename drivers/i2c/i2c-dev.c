@@ -487,7 +487,7 @@ static long i2cdev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		client->adapter->retries = arg;
 		break;
 	case I2C_TIMEOUT:
-		if (arg > INT_MAX)
+		if (arg > INT_MAX / 10)
 			return -EINVAL;
 
 		/* For historical reasons, user-space sets the timeout
