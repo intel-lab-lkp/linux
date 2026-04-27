@@ -1190,7 +1190,9 @@ static int cx_probe(struct hda_codec *codec, const struct hda_device_id *id)
 	case 0x14f11f86:
 	case 0x14f11f87:
 		spec->is_cx11880_sn6140 = true;
-		snd_hda_jack_detect_enable_callback(codec, 0x19, cx_update_headset_mic_vref);
+		err = snd_hda_jack_detect_enable_callback(codec, 0x19, cx_update_headset_mic_vref);
+		if (err < 0)
+			goto error;
 		break;
 	}
 
