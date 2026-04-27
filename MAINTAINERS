@@ -1037,6 +1037,13 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/w1/amd,axi-1wire-host.yaml
 F:	drivers/w1/masters/amd_axi_w1.c
 
+AMD BRAM REMOTEPROC DRIVER
+M:	Ben Levinsky <ben.levinsky@amd.com>
+L:	linux-remoteproc@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/remoteproc/amd,bram-rproc.yaml
+F:	drivers/remoteproc/amd_bram_rproc.c
+
 AMD CDX BUS DRIVER
 M:	Nipun Gupta <nipun.gupta@amd.com>
 M:	Nikhil Agarwal <nikhil.agarwal@amd.com>
