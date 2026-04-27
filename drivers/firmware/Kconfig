@@ -178,6 +178,15 @@ config MTK_ADSP_IPC
 	  ADSP exists on some mtk processors.
 	  Client might use shared memory to exchange information with ADSP.
 
+config MTK_VCP_IPC
+	tristate "MTK VCP IPC Protocol driver"
+	depends on MTK_VCP_MBOX
+	help
+	  Say yes here to add support for the MediaTek VCP IPC
+	  between host AP (Linux) and the firmware running on VCP.
+	  VCP exists on some mtk processors.
+	  Client might use shared memory to exchange information with VCP.
+
 config SYSFB
 	bool
 	select BOOT_VESA_SUPPORT
