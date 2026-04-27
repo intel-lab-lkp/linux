@@ -20,6 +20,9 @@
 
 #define SE_INT_ALL			0xffffffff
 #define SE_INT_CONTROLLER		BIT(0)
+#define SE_INT_OTHER_NODE		BIT(31)
+
+#define SE_MAX_NODES			8
 
 #define SE_ENGINE_MAX			16
 #define SE_ENGINE_RNG			1

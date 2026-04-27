@@ -37,6 +37,9 @@ struct loongson_se_controller_cmd {
 	u32 info[7];
 };
 
+static DECLARE_COMPLETION(node0);
+static struct loongson_se *se_node[SE_MAX_NODES];
+
 static int loongson_se_poll(struct loongson_se *se, u32 int_bit)
 {
 	u32 status;
@@ -133,8 +136,8 @@ EXPORT_SYMBOL_GPL(loongson_se_init_engine);
 static irqreturn_t se_irq_handler(int irq, void *dev_id)
 {
 	struct loongson_se *se = dev_id;
-	u32 int_status;
-	int id;
+	u32 int_status, node_irq = 0;
+	int id, node;
 
 	spin_lock(&se->dev_lock);
 
@@ -147,6 +150,11 @@ static irqreturn_t se_irq_handler(int irq, void *dev_id)
 		writel(SE_INT_CONTROLLER, se->base + SE_S2LINT_CL);
 	}
 
+	if (int_status & SE_INT_OTHER_NODE) {
+		int_status &= ~SE_INT_OTHER_NODE;
+		node_irq = 1;
+	}
+
 	/* For engines */
 	while (int_status) {
 		id = __ffs(int_status);
@@ -156,6 +164,14 @@ static irqreturn_t se_irq_handler(int irq, void *dev_id)
 	}
 
 	spin_unlock(&se->dev_lock);
+
+	if (node_irq) {
+		writel(SE_INT_OTHER_NODE, se->base + SE_S2LINT_CL);
+		for (node = 1; node < SE_MAX_NODES; node++) {
+			if (se_node[node])
+				se_irq_handler(irq, se_node[node]);
+		}
+	}
 
 	return IRQ_HANDLED;
 }
@@ -189,6 +205,7 @@ static int loongson_se_probe(struct platform_device *pdev)
 	struct loongson_se *se;
 	int nr_irq, irq, err, i;
 	dma_addr_t paddr;
+	int node = dev_to_node(dev);
 
 	se = devm_kmalloc(dev, sizeof(*se), GFP_KERNEL);
 	if (!se)
@@ -213,9 +230,16 @@ static int loongson_se_probe(struct platform_device *pdev)
 
 	writel(SE_INT_ALL, se->base + SE_S2LINT_EN);
 
-	nr_irq = platform_irq_count(pdev);
-	if (nr_irq <= 0)
-		return -ENODEV;
+	if (node == 0 || node == NUMA_NO_NODE) {
+		nr_irq = platform_irq_count(pdev);
+		if (nr_irq <= 0)
+			return -ENODEV;
+	} else {
+		/* Only the device on node 0 can trigger interrupts */
+		nr_irq = 0;
+		wait_for_completion_interruptible(&node0);
+		se_node[node] = se;
+	}
 
 	for (i = 0; i < nr_irq; i++) {
 		irq = platform_get_irq(pdev, i);
@@ -228,7 +252,9 @@ static int loongson_se_probe(struct platform_device *pdev)
 	if (err)
 		return err;
 
-	return devm_mfd_add_devices(dev, PLATFORM_DEVID_NONE, engines,
+	complete_all(&node0);
+
+	return devm_mfd_add_devices(dev, PLATFORM_DEVID_AUTO, engines,
 				    ARRAY_SIZE(engines), NULL, 0, NULL);
 }
 
