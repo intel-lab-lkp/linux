@@ -1290,6 +1290,11 @@ const char * const vmstat_text[] = {
 	[I(PGSCAN_ANON)]			= "pgscan_anon",
 	[I(PGSCAN_FILE)]			= "pgscan_file",
 	[I(PGREFILL)]				= "pgrefill",
+#ifdef CONFIG_NUMA
+	[I(NUMA_MPOL_HIT)]			= "numa_mpol_hit",
+	[I(NUMA_MPOL_MISS)]			= "numa_mpol_miss",
+	[I(NUMA_MPOL_FOREIGN)]			= "numa_mpol_foreign",
+#endif
 #ifdef CONFIG_HUGETLB_PAGE
 	[I(NR_HUGETLB)]				= "nr_hugetlb",
 #endif
