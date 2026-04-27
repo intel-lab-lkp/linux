@@ -357,6 +357,15 @@ static inline bool can_reclaim_anon_pages(struct mem_cgroup *memcg,
 	}
 
 	/*
+	 * Even with no free swap slots, anon folios already in the swap cache
+	 * carry a pre-allocated slot and can be written back and freed from RAM
+	 * without consuming a new one.  Do not suppress anon scanning when such
+	 * folios are present on this node.
+	 */
+	if (node_page_state(NODE_DATA(nid), NR_SWAPCACHE) > 0)
+		return true;
+
+	/*
 	 * The page can not be swapped.
 	 *
 	 * Can it be reclaimed from this node via demotion?
@@ -2704,8 +2713,16 @@ static int get_swappiness(struct lruvec *lruvec, struct scan_control *sc)
 		return 0;
 
 	if (!can_demote(pgdat->node_id, sc, memcg) &&
-	    mem_cgroup_get_nr_swap_pages(memcg) < MIN_LRU_BATCH)
-		return 0;
+	    mem_cgroup_get_nr_swap_pages(memcg) < MIN_LRU_BATCH) {
+		/*
+		 * Even with few free swap slots, folios already in the swap
+		 * cache carry a pre-allocated slot and can be written back and
+		 * freed from RAM without consuming a new one.  Keep anon
+		 * scanning enabled while such folios remain in this lruvec.
+		 */
+		if (!lruvec_page_state(lruvec, NR_SWAPCACHE))
+			return 0;
+	}
 
 	return sc_swappiness(sc, memcg);
 }
