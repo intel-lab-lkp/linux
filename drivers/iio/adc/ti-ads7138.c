@@ -102,21 +102,20 @@ static const int ads7138_oversampling_ratios[] = {
 static int ads7138_i2c_write_block(const struct i2c_client *client, u8 reg,
 				   u8 *values, u8 length)
 {
+	u8 buf[4];
 	int ret;
-	int len = length + 2; /* "+ 2" for OPCODE and reg */
 
-	u8 *buf __free(kfree) = kmalloc(len, GFP_KERNEL);
-	if (!buf)
-		return -ENOMEM;
+	if (length != 2)
+		return -EINVAL;
 
 	buf[0] = ADS7138_OPCODE_BLOCK_WRITE;
 	buf[1] = reg;
 	memcpy(&buf[2], values, length);
 
-	ret = i2c_master_send(client, buf, len);
+	ret = i2c_master_send(client, buf, ARRAY_SIZE(buf));
 	if (ret < 0)
 		return ret;
-	if (ret != len)
+	if (ret != ARRAY_SIZE(buf))
 		return -EIO;
 
 	return 0;
