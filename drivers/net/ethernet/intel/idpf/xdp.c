@@ -488,11 +488,13 @@ static int idpf_xdp_setup_prog(struct idpf_vport *vport,
 				   "Could not reopen the vport after XDP setup");
 
 		cfg->user_config.xdp_prog = old;
-		old = prog;
-	}
+		vport->xdp_prog = old;
 
-	if (old)
+		/* Restore previous queue config */
+		idpf_vport_adjust_qs(vport, &vport->dflt_qv_rsrc);
+	} else if (old) {
 		bpf_prog_put(old);
+	}
 
 	libeth_xdp_set_redirect(vport->netdev, vport->xdp_prog);
 
