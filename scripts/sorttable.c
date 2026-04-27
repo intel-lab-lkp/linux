@@ -751,7 +751,7 @@ static int do_sort(Elf_Ehdr *ehdr,
 	sym_end = sym_start + shdr_size(symtab_sec);
 	symentsize = shdr_entsize(symtab_sec);
 
-	for (sym = sym_start; (void *)sym + symentsize < sym_end;
+	for (sym = sym_start; (void *)sym < sym_end;
 	     sym = (void *)sym + symentsize) {
 		if (sym_type(sym) != STT_OBJECT)
 			continue;
