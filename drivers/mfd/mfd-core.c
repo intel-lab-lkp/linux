@@ -10,6 +10,7 @@
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
 #include <linux/acpi.h>
+#include <linux/fwnode.h>
 #include <linux/list.h>
 #include <linux/property.h>
 #include <linux/mfd/core.h>
@@ -223,6 +224,15 @@ match:
 	}
 
 	mfd_acpi_add_device(cell, pdev);
+
+	/* Use explicit cell fwnode only when no firmware node has been assigned. */
+	if (!pdev->dev.fwnode && cell->fwnode) {
+		/* Get a refcount if fwnode is a device-tree node. */
+		if (is_of_node(cell->fwnode))
+			of_node_get(to_of_node(cell->fwnode));
+
+		device_set_node(&pdev->dev, cell->fwnode);
+	}
 
 	if (cell->pdata_size) {
 		ret = platform_device_add_data(pdev,

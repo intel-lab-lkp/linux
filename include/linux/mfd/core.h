@@ -50,6 +50,7 @@
 #define MFD_DEP_LEVEL_HIGH 1
 
 struct irq_domain;
+struct fwnode_handle;
 struct software_node;
 
 /* Matches ACPI PNP id, either _HID or _CID, or ACPI _ADR */
@@ -80,6 +81,11 @@ struct mfd_cell {
 
 	/* Software node for the device. */
 	const struct software_node *swnode;
+	/*
+	 * Firmware node for the device.
+	 * Caller owns the pointer; mfd-core takes an OF node reference.
+	 */
+	struct fwnode_handle *fwnode;
 
 	/*
 	 * Device Tree compatible string
