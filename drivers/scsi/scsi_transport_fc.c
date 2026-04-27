@@ -3982,8 +3982,7 @@ delete_vport:
 	scsi_host_put(shost);			/* for fc_host->vport list */
 	fc_host->npiv_vports_inuse--;
 	spin_unlock_irqrestore(shost->host_lock, flags);
-	put_device(dev->parent);
-	kfree(vport);
+	put_device(dev);
 
 	return error;
 }
