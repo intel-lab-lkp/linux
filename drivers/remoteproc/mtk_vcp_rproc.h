@@ -19,10 +19,19 @@
  * @core_nums: total core numbers get from dtb
  * @hart_count: number of hardware threads (harts) per core
  * @sram_offset: core sram memory layout
+ * @msg_vcp_ready0: core0 ready ipi msg data
+ * @msg_vcp_ready1: core1 ready ipi msg data
+ * @slp_ipi_ack_data: sleep ipi msg data
+ * @feature_enable: feature status count data
+ * @vcp_ready: vcp core status flag
  * @share_mem_iova: shared memory iova base
  * @share_mem_size: shared memory size
+ * @vcp_feature_mutex: vcp feature register mutex structure
+ * @vcp_ready_mutex: vcp core ready mutex structure
  * @vcp_ipidev: struct mtk_ipi_device
+ * @vcp_workqueue: ready workqueue_struct
  * @vcp_memory_tb: vcp memory allocated table
+ * @vcp_ready_notify_wk: vcp_work_struct structure
  */
 struct mtk_vcp_of_cluster {
 	void __iomem *sram_base;
@@ -33,10 +42,19 @@ struct mtk_vcp_of_cluster {
 	u32 core_nums;
 	u32 hart_count[VCP_CORE_TOTAL];
 	u32 sram_offset[VCP_CORE_TOTAL];
+	u32 msg_vcp_ready0;
+	u32 msg_vcp_ready1;
+	u32 slp_ipi_ack_data;
+	bool feature_enable[NUM_FEATURE_ID];
+	bool vcp_ready[VCP_CORE_TOTAL];
 	dma_addr_t share_mem_iova;
 	size_t share_mem_size;
+	struct mutex vcp_feature_mutex;
+	struct mutex vcp_ready_mutex;
 	struct mtk_ipi_device vcp_ipidev;
+	struct workqueue_struct *vcp_workqueue;
 	struct vcp_reserve_mblock vcp_memory_tb[NUMS_MEM_ID];
+	struct vcp_work_struct vcp_ready_notify_wk[VCP_CORE_TOTAL];
 };
 
 /**

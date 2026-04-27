@@ -24,6 +24,9 @@
 #include "mtk_vcp_common.h"
 #include "mtk_vcp_rproc.h"
 
+static BLOCKING_NOTIFIER_HEAD(vcp_notifier_list);
+static BLOCKING_NOTIFIER_HEAD(mmup_notifier_list);
+
 phys_addr_t vcp_get_reserve_mem_phys(struct mtk_vcp_device *vcp,
 				     enum vcp_reserve_mem_id id)
 {
@@ -168,6 +171,42 @@ unmap_iommu:
 	return ret;
 }
 
+static bool vcp_is_core_ready(struct mtk_vcp_device *vcp,
+			      enum vcp_core_id core_id)
+{
+	switch (core_id) {
+	case VCP_ID:
+		return vcp->vcp_cluster->vcp_ready[VCP_ID];
+	case MMUP_ID:
+		return vcp->vcp_cluster->vcp_ready[MMUP_ID];
+	case VCP_CORE_TOTAL:
+	default:
+		return vcp->vcp_cluster->vcp_ready[VCP_ID] &
+		       vcp->vcp_cluster->vcp_ready[MMUP_ID];
+	}
+}
+
+static enum vcp_core_id get_core_by_feature(struct mtk_vcp_device *vcp,
+					    enum vcp_feature_id id)
+{
+	u32 f_id;
+
+	for (f_id = 0; f_id < NUM_FEATURE_ID; f_id++) {
+		if (vcp->platdata->feature_tb[f_id].feature_id == id)
+			return vcp->platdata->feature_tb[f_id].core_id;
+	}
+
+	return 0;
+}
+
+bool is_vcp_ready(struct mtk_vcp_device *vcp,
+		  enum vcp_feature_id id)
+{
+	enum vcp_core_id core_id = get_core_by_feature(vcp, id);
+
+	return vcp_is_core_ready(vcp, core_id);
+}
+
 int wait_core_hart_shutdown(struct mtk_vcp_device *vcp,
 			    enum vcp_core_id core_id)
 {
@@ -230,9 +269,119 @@ int wait_core_hart_shutdown(struct mtk_vcp_device *vcp,
 	return 0;
 }
 
+void vcp_register_notify(struct mtk_vcp_device *vcp,
+			 enum vcp_feature_id id,
+			 struct notifier_block *nb)
+{
+	enum vcp_core_id core_id = get_core_by_feature(vcp, id);
+
+	switch (core_id) {
+	case VCP_ID:
+		blocking_notifier_chain_register(&vcp_notifier_list, nb);
+		if (vcp_is_core_ready(vcp, VCP_ID))
+			nb->notifier_call(nb, VCP_EVENT_READY, NULL);
+		break;
+	case MMUP_ID:
+		blocking_notifier_chain_register(&mmup_notifier_list, nb);
+		if (vcp_is_core_ready(vcp, MMUP_ID))
+			nb->notifier_call(nb, VCP_EVENT_READY, NULL);
+		break;
+	default:
+		dev_err(vcp->dev, "%s, Unsupported core id\n", __func__);
+		break;
+	}
+}
+
+void vcp_unregister_notify(struct mtk_vcp_device *vcp,
+			   enum vcp_feature_id id,
+			   struct notifier_block *nb)
+{
+	enum vcp_core_id core_id = get_core_by_feature(vcp, id);
+
+	switch (core_id) {
+	case VCP_ID:
+		blocking_notifier_chain_unregister(&vcp_notifier_list, nb);
+		break;
+	case MMUP_ID:
+		blocking_notifier_chain_unregister(&mmup_notifier_list, nb);
+		break;
+	default:
+		dev_err(vcp->dev, "%s, Unsupported core id\n", __func__);
+		break;
+	}
+}
+
+void vcp_extern_notify(enum vcp_core_id core_id,
+		       enum vcp_notify_event notify_status)
+{
+	switch (core_id) {
+	case VCP_ID:
+		blocking_notifier_call_chain(&vcp_notifier_list, notify_status, NULL);
+		break;
+	case MMUP_ID:
+		blocking_notifier_call_chain(&mmup_notifier_list, notify_status, NULL);
+		break;
+	default:
+		break;
+	}
+}
+
+static void vcp_notify_ws(struct work_struct *ws)
+{
+	struct vcp_work_struct *sws =
+		container_of(ws, struct vcp_work_struct, work);
+	struct mtk_vcp_device *vcp = platform_get_drvdata(to_platform_device(sws->dev));
+	enum vcp_core_id core_id = sws->flags;
+
+	if (core_id < VCP_CORE_TOTAL) {
+		mutex_lock(&vcp->vcp_cluster->vcp_ready_mutex);
+		vcp->vcp_cluster->vcp_ready[core_id] = true;
+		mutex_unlock(&vcp->vcp_cluster->vcp_ready_mutex);
+
+		vcp_extern_notify(core_id, VCP_EVENT_READY);
+
+		dev_info(sws->dev, "%s, VCP core %u ready\n", __func__, core_id);
+	} else {
+		dev_err(sws->dev, "%s, Invalid core id %u\n", __func__, core_id);
+	}
+}
+
+static void vcp_set_ready(struct mtk_vcp_device *vcp,
+			  enum vcp_core_id core_id)
+{
+	if (core_id < VCP_CORE_TOTAL) {
+		vcp->vcp_cluster->vcp_ready_notify_wk[core_id].flags = core_id;
+		queue_work(vcp->vcp_cluster->vcp_workqueue,
+			   &vcp->vcp_cluster->vcp_ready_notify_wk[core_id].work);
+	}
+}
+
+int vcp_ready_ipi_handler(u32 id, void *prdata, void *data, u32 len)
+{
+	struct mtk_vcp_device *vcp = prdata;
+
+	switch (id) {
+	case IPI_IN_VCP_READY_0:
+		if (!vcp_is_core_ready(vcp, VCP_ID))
+			vcp_set_ready(vcp, VCP_ID);
+		break;
+	case IPI_IN_VCP_READY_1:
+		if (!vcp_is_core_ready(vcp, MMUP_ID))
+			vcp_set_ready(vcp, MMUP_ID);
+		break;
+	default:
+		dev_err(vcp->dev, "%s, Unsupported IPI id\n", __func__);
+		break;
+	}
+
+	return 0;
+}
+
 int reset_vcp(struct mtk_vcp_device *vcp)
 {
 	struct arm_smccc_res res;
+	bool mmup_status, vcp_status;
+	int ret;
 
 	if (vcp->vcp_cluster->core_nums > MMUP_ID) {
 		writel((u32)VCP_PACK_IOVA(vcp->vcp_cluster->share_mem_iova),
@@ -247,6 +396,16 @@ int reset_vcp(struct mtk_vcp_device *vcp)
 			dev_err(vcp->dev, "MMUP reset release SMC failed: %ld\n", res.a0);
 			return -EIO;
 		}
+
+		ret = read_poll_timeout(vcp_is_core_ready,
+					mmup_status, mmup_status,
+					USEC_PER_MSEC,
+					VCP_READY_TIMEOUT_MS * USEC_PER_MSEC,
+					false, vcp, MMUP_ID);
+		if (ret) {
+			dev_err(vcp->dev, "MMUP bootup timeout\n");
+			return ret;
+		}
 	}
 
 	writel((u32)VCP_PACK_IOVA(vcp->vcp_cluster->share_mem_iova),
@@ -260,6 +419,124 @@ int reset_vcp(struct mtk_vcp_device *vcp)
 	if (res.a0 != 1) {
 		dev_err(vcp->dev, "VCP reset release SMC failed: %ld\n", res.a0);
 		return -EIO;
+	}
+
+	ret = read_poll_timeout(vcp_is_core_ready,
+				vcp_status, vcp_status,
+				USEC_PER_MSEC,
+				VCP_READY_TIMEOUT_MS * USEC_PER_MSEC,
+				false, vcp, VCP_ID);
+	if (ret)
+		dev_err(vcp->dev, "VCP bootup timeout\n");
+
+	return ret;
+}
+
+static int vcp_enable_pm_clk(struct mtk_vcp_device *vcp, enum vcp_feature_id id)
+{
+	struct vcp_slp_ctrl slp_data;
+	bool suspend_status;
+	int ret;
+
+	if (vcp->vcp_cluster->feature_enable[id]) {
+		dev_err(vcp->dev, "%s feature(id=%d) already enabled\n",
+			__func__, id);
+		return -EINVAL;
+	}
+
+	if (id != RTOS_FEATURE_ID) {
+		slp_data.cmd = SLP_WAKE_LOCK;
+		slp_data.feature = id;
+		ret = vcp->ipi_ops->ipi_send_compl(vcp->ipi_dev, IPI_OUT_C_SLEEP_0,
+					     &slp_data, PIN_OUT_C_SIZE_SLEEP_0, 500);
+		if (ret < 0) {
+			dev_err(vcp->dev, "%s ipc_send_compl failed. ret %d\n",
+				__func__, ret);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
+static int vcp_disable_pm_clk(struct mtk_vcp_device *vcp, enum vcp_feature_id id)
+{
+	struct vcp_slp_ctrl slp_data;
+	bool suspend_status;
+	int ret;
+
+	if (!vcp->vcp_cluster->feature_enable[id]) {
+		dev_err(vcp->dev, "%s feature(id=%d) already disabled\n",
+			__func__, id);
+		return -EINVAL;
+	}
+
+	if (id != RTOS_FEATURE_ID) {
+		slp_data.cmd = SLP_WAKE_UNLOCK;
+		slp_data.feature = id;
+		ret = vcp->ipi_ops->ipi_send_compl(vcp->ipi_dev, IPI_OUT_C_SLEEP_0,
+					 &slp_data, PIN_OUT_C_SIZE_SLEEP_0, 500);
+		if (ret < 0) {
+			dev_err(vcp->dev, "%s ipc_send_compl failed. ret %d\n",
+				__func__, ret);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
+int vcp_register_feature(struct mtk_vcp_device *vcp, enum vcp_feature_id id)
+{
+	int ret;
+
+	if (id >= NUM_FEATURE_ID) {
+		dev_err(vcp->dev, "%s, Unsupported feature id %d\n", __func__, id);
+		return -EINVAL;
+	}
+
+	mutex_lock(&vcp->vcp_cluster->vcp_feature_mutex);
+	ret = vcp_enable_pm_clk(vcp, id);
+	if (ret)
+		dev_err(vcp->dev, "%s, Feature %d register failed\n", __func__, id);
+	else
+		vcp->vcp_cluster->feature_enable[id] = true;
+	mutex_unlock(&vcp->vcp_cluster->vcp_feature_mutex);
+
+	return ret;
+}
+
+int vcp_deregister_feature(struct mtk_vcp_device *vcp, enum vcp_feature_id id)
+{
+	int ret;
+
+	if (id >= NUM_FEATURE_ID) {
+		dev_err(vcp->dev, "%s, Unsupported feature id %d\n", __func__, id);
+		return -EINVAL;
+	}
+
+	mutex_lock(&vcp->vcp_cluster->vcp_feature_mutex);
+	ret = vcp_disable_pm_clk(vcp, id);
+	if (ret)
+		dev_err(vcp->dev, "%s, Feature %d deregister failed\n", __func__, id);
+	else
+		vcp->vcp_cluster->feature_enable[id] = false;
+	mutex_unlock(&vcp->vcp_cluster->vcp_feature_mutex);
+
+	return ret;
+}
+
+int vcp_notify_work_init(struct mtk_vcp_device *vcp)
+{
+	u32 c_id;
+
+	vcp->vcp_cluster->vcp_workqueue = create_singlethread_workqueue("VCP_WQ");
+	if (!vcp->vcp_cluster->vcp_workqueue)
+		return dev_err_probe(vcp->dev, -ENOMEM, "Failed to create workqueue\n");
+
+	for (c_id = 0; c_id < VCP_CORE_TOTAL; c_id++) {
+		vcp->vcp_cluster->vcp_ready_notify_wk[c_id].dev = vcp->dev;
+		INIT_WORK(&vcp->vcp_cluster->vcp_ready_notify_wk[c_id].work, vcp_notify_ws);
 	}
 
 	return 0;

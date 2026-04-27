@@ -100,6 +100,19 @@ struct mtk_vcp_ipi_ops {
 };
 
 struct mtk_vcp_ops {
+	bool (*vcp_is_suspending)(struct mtk_vcp_device *vcp);
+	bool (*vcp_is_ready)(struct mtk_vcp_device *vcp,
+			     enum vcp_feature_id id);
+	int (*register_feature)(struct mtk_vcp_device *vcp,
+				enum vcp_feature_id id);
+	int (*deregister_feature)(struct mtk_vcp_device *vcp,
+				  enum vcp_feature_id id);
+	void (*register_notify)(struct mtk_vcp_device *vcp,
+				enum vcp_feature_id id,
+				struct notifier_block *nb);
+	void (*unregister_notify)(struct mtk_vcp_device *vcp,
+				  enum vcp_feature_id id,
+				  struct notifier_block *nb);
 	phys_addr_t (*get_mem_phys)(struct mtk_vcp_device *vcp,
 				    enum vcp_reserve_mem_id id);
 	dma_addr_t (*get_mem_iova)(struct mtk_vcp_device *vcp,

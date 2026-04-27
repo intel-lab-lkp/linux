@@ -13,10 +13,13 @@
 #include <linux/remoteproc/mtk_vcp_public.h>
 
 /* VCP timeout definition */
+#define VCP_READY_TIMEOUT_MS 3000
+#define VCP_IPI_DEV_READY_TIMEOUT 1000
 #define CORE_HART_SHUTDOWN_TIMEOUT_MS 10
 
 /* VCP platform definition */
 #define DMA_MAX_MASK_BIT 33
+#define PIN_OUT_C_SIZE_SLEEP_0 2
 
 /* VCP load image definition */
 #define VCM_IMAGE_MAGIC             (0x58881688)
@@ -90,6 +93,14 @@ enum vcp_core_id {
 	VCP_CORE_TOTAL,
 };
 
+enum vcp_slp_cmd {
+	SLP_WAKE_LOCK = 0,
+	SLP_WAKE_UNLOCK,
+	SLP_STATUS_DBG,
+	SLP_SUSPEND,
+	SLP_RESUME,
+};
+
 enum mtk_tinysys_vcp_kernel_op {
 	MTK_TINYSYS_VCP_KERNEL_OP_RESET_SET = 0,
 	MTK_TINYSYS_VCP_KERNEL_OP_RESET_RELEASE,
@@ -155,6 +166,32 @@ struct vcp_reserve_mblock {
 };
 
 /**
+ * struct vcp_slp_ctrl - sleep ctrl data sync with AP and VCP
+ *
+ * @feature: Feature id
+ * @cmd: sleep cmd flag.
+ */
+struct vcp_slp_ctrl {
+	u32 feature;
+	u32 cmd;
+};
+
+/**
+ * struct vcp_work_struct - vcp notify work structure.
+ *
+ * @work: struct work_struct member
+ * @dev: struct device member
+ * @u32 flags: vcp notify work flag
+ * @id: vcp core id
+ */
+struct vcp_work_struct {
+	struct work_struct work;
+	struct device *dev;
+	u32 flags;
+	u32 id;
+};
+
+/**
  * struct vcp_region_info_st - config vcp image info sync to vcp bootloader.
  *
  * @ap_loader_start: config vcp bootloader to copy loader start addr
@@ -203,6 +240,19 @@ struct vcp_region_info_st {
 	u32 coredump_dram_offset;
 } __packed;
 
+int vcp_ready_ipi_handler(u32 id, void *prdata,
+			  void *data, u32 len);
+bool is_vcp_ready(struct mtk_vcp_device *vcp,
+		  enum vcp_feature_id id);
+int vcp_notify_work_init(struct mtk_vcp_device *vcp);
+void vcp_extern_notify(enum vcp_core_id core_id,
+		       enum vcp_notify_event notify_status);
+void vcp_register_notify(struct mtk_vcp_device *vcp,
+			 enum vcp_feature_id id,
+			 struct notifier_block *nb);
+void vcp_unregister_notify(struct mtk_vcp_device *vcp,
+			   enum vcp_feature_id id,
+			   struct notifier_block *nb);
 
 int vcp_reserve_memory_init(struct mtk_vcp_device *vcp);
 phys_addr_t vcp_get_reserve_mem_phys(struct mtk_vcp_device *vcp, enum vcp_reserve_mem_id id);
@@ -215,6 +265,11 @@ int reset_vcp(struct mtk_vcp_device *vcp);
 int mtk_vcp_load(struct rproc *rproc, const struct firmware *fw);
 
 int vcp_wdt_irq_init(struct mtk_vcp_device *vcp);
+
+int vcp_register_feature(struct mtk_vcp_device *vcp,
+			 enum vcp_feature_id id);
+int vcp_deregister_feature(struct mtk_vcp_device *vcp,
+			   enum vcp_feature_id id);
 
 int wait_core_hart_shutdown(struct mtk_vcp_device *vcp, enum vcp_core_id core_id);
 #endif

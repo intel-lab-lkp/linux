@@ -75,6 +75,30 @@ static int mtk_vcp_start(struct rproc *rproc)
 {
 	struct mtk_vcp_device *vcp = rproc->priv;
 	struct arm_smccc_res res;
+	int ret;
+
+	ret = vcp->ipi_ops->ipi_register(vcp->ipi_dev, IPI_OUT_C_SLEEP_0,
+					 NULL, NULL, &vcp->vcp_cluster->slp_ipi_ack_data);
+	if (ret) {
+		dev_err(vcp->dev, "Failed to register IPI_OUT_C_SLEEP_0\n");
+		return ret;
+	}
+
+	ret = vcp->ipi_ops->ipi_register(vcp->ipi_dev, IPI_IN_VCP_READY_0,
+					 (void *)vcp_ready_ipi_handler,
+					 vcp, &vcp->vcp_cluster->msg_vcp_ready0);
+	if (ret) {
+		dev_err(vcp->dev, "Failed to register IPI_IN_VCP_READY_0\n");
+		goto vcp0_ready_ipi_unregister;
+	}
+
+	ret = vcp->ipi_ops->ipi_register(vcp->ipi_dev, IPI_IN_VCP_READY_1,
+					 (void *)vcp_ready_ipi_handler,
+					 vcp, &vcp->vcp_cluster->msg_vcp_ready1);
+	if (ret) {
+		dev_err(vcp->dev, "Failed to register IPI_IN_VCP_READY_1\n");
+		goto vcp1_ready_ipi_unregister;
+	}
 
 	/* core 0 */
 	arm_smccc_smc(MTK_SIP_TINYSYS_VCP_CONTROL,
@@ -103,16 +127,37 @@ static int mtk_vcp_start(struct rproc *rproc)
 	}
 
 	dev_info(vcp->dev, "VCP bootup successfully\n");
+	ret = vcp_register_feature(vcp, RTOS_FEATURE_ID);
+	if (ret) {
+		dev_err(vcp->dev, "Failed to register RTOS feature\n");
+		goto reset_failed;
+	}
 
 	return 0;
 
 reset_failed:
+	vcp->ipi_ops->ipi_unregister(vcp->ipi_dev, IPI_IN_VCP_READY_1);
+vcp1_ready_ipi_unregister:
+	vcp->ipi_ops->ipi_unregister(vcp->ipi_dev, IPI_IN_VCP_READY_0);
+vcp0_ready_ipi_unregister:
+	vcp->ipi_ops->ipi_unregister(vcp->ipi_dev, IPI_OUT_C_SLEEP_0);
 
 	return ret;
 }
 
 static int mtk_vcp_stop(struct rproc *rproc)
 {
+	struct mtk_vcp_device *vcp = rproc->priv;
+
+	vcp_deregister_feature(vcp, RTOS_FEATURE_ID);
+
+	vcp_extern_notify(VCP_ID, VCP_EVENT_STOP);
+	vcp_extern_notify(MMUP_ID, VCP_EVENT_STOP);
+
+	vcp->ipi_ops->ipi_unregister(vcp->ipi_dev, IPI_IN_VCP_READY_1);
+	vcp->ipi_ops->ipi_unregister(vcp->ipi_dev, IPI_IN_VCP_READY_0);
+	vcp->ipi_ops->ipi_unregister(vcp->ipi_dev, IPI_OUT_C_SLEEP_0);
+
 	return 0;
 }
 
@@ -204,6 +249,8 @@ static struct mtk_vcp_device *vcp_rproc_init(struct platform_device *pdev,
 
 	rproc->auto_boot = vcp_of_data->platdata.auto_boot;
 	rproc->sysfs_read_only = vcp_of_data->platdata.sysfs_read_only;
+	mutex_init(&vcp->vcp_cluster->vcp_feature_mutex);
+	mutex_init(&vcp->vcp_cluster->vcp_ready_mutex);
 	platform_set_drvdata(pdev, vcp);
 
 	ret = vcp_reserve_memory_init(vcp);
@@ -236,6 +283,10 @@ static struct mtk_vcp_device *vcp_rproc_init(struct platform_device *pdev,
 	ret = vcp_ipi_mbox_init(vcp);
 	if (ret)
 		return ERR_PTR(dev_err_probe(dev, ret, "vcp_ipi_mbox_init failed\n"));
+
+	ret = vcp_notify_work_init(vcp);
+	if (ret)
+		return ERR_PTR(dev_err_probe(dev, ret, "vcp_notify_work_init failed\n"));
 
 	ret = pm_runtime_get_sync(dev);
 	if (ret < 0) {
@@ -313,6 +364,8 @@ static void vcp_device_remove(struct platform_device *pdev)
 {
 	struct mtk_vcp_device *vcp = platform_get_drvdata(pdev);
 
+	flush_workqueue(vcp->vcp_cluster->vcp_workqueue);
+	destroy_workqueue(vcp->vcp_cluster->vcp_workqueue);
 	pm_runtime_disable(&pdev->dev);
 
 	rproc_del(vcp->rproc);
@@ -322,6 +375,12 @@ static void vcp_device_shutdown(struct platform_device *pdev)
 {
 	struct mtk_vcp_device *vcp = platform_get_drvdata(pdev);
 	int ret;
+
+	vcp->vcp_cluster->vcp_ready[VCP_ID] = false;
+	vcp->vcp_cluster->vcp_ready[MMUP_ID] = false;
+
+	vcp_extern_notify(VCP_ID, VCP_EVENT_STOP);
+	vcp_extern_notify(MMUP_ID, VCP_EVENT_STOP);
 
 	writel(GIPC_VCP_HART0_SHUT, vcp->vcp_cluster->cfg_core + R_GIPC_IN_SET);
 	ret = wait_core_hart_shutdown(vcp, VCP_ID);
@@ -408,6 +467,12 @@ static struct mtk_vcp_ipi_ops mt8196_vcp_ipi_ops = {
 
 static const struct mtk_vcp_of_data mt8196_of_data = {
 	.ops = {
+		.vcp_is_ready = is_vcp_ready,
+		.vcp_is_suspending = is_vcp_suspending,
+		.register_feature = vcp_register_feature,
+		.deregister_feature = vcp_deregister_feature,
+		.register_notify = vcp_register_notify,
+		.unregister_notify = vcp_unregister_notify,
 		.get_mem_phys = vcp_get_reserve_mem_phys,
 		.get_mem_iova = vcp_get_reserve_mem_iova,
 		.get_mem_virt = vcp_get_reserve_mem_virt,
