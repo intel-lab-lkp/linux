@@ -462,11 +462,6 @@
 	status = "okay";
 };
 
-&remoteproc_mpss {
-	firmware-name = "qcom/qcm2290/modem.mbn";
-	status = "okay";
-};
-
 &rpm_requests {
 	regulators {
 		compatible = "qcom,rpm-pm2250-regulators";
