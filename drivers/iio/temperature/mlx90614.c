@@ -489,6 +489,7 @@ static int mlx90614_sleep(struct mlx90614_data *data)
 static int mlx90614_wakeup(struct mlx90614_data *data)
 {
 	const struct mlx_chip_info *chip_info = data->chip_info;
+	int ret;
 
 	if (!data->wakeup_gpio) {
 		dev_dbg(&data->client->dev, "Wake-up disabled");
@@ -498,9 +499,17 @@ static int mlx90614_wakeup(struct mlx90614_data *data)
 	dev_dbg(&data->client->dev, "Requesting wake-up");
 
 	i2c_lock_bus(data->client->adapter, I2C_LOCK_ROOT_ADAPTER);
-	gpiod_direction_output(data->wakeup_gpio, 0);
+
+	ret = gpiod_direction_output(data->wakeup_gpio, 0);
+	if (ret)
+		goto out_unlock;
+
 	msleep(chip_info->wakeup_delay_ms);
-	gpiod_direction_input(data->wakeup_gpio);
+
+	ret = gpiod_direction_input(data->wakeup_gpio);
+	if (ret)
+		goto out_unlock;
+
 	i2c_unlock_bus(data->client->adapter, I2C_LOCK_ROOT_ADAPTER);
 
 	data->ready_timestamp = jiffies +
@@ -515,6 +524,10 @@ static int mlx90614_wakeup(struct mlx90614_data *data)
 	i2c_smbus_read_word_data(data->client, chip_info->op_eeprom_config1);
 
 	return 0;
+
+out_unlock:
+	i2c_unlock_bus(data->client->adapter, I2C_LOCK_ROOT_ADAPTER);
+	return ret;
 }
 
 /* Return wake-up GPIO or NULL if sleep functionality should be disabled. */
