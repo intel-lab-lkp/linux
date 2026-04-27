@@ -182,6 +182,7 @@ show_cppc_data(cppc_get_perf_caps, cppc_perf_caps, lowest_nonlinear_perf);
 show_cppc_data(cppc_get_perf_caps, cppc_perf_caps, guaranteed_perf);
 show_cppc_data(cppc_get_perf_caps, cppc_perf_caps, lowest_freq);
 show_cppc_data(cppc_get_perf_caps, cppc_perf_caps, nominal_freq);
+show_cppc_data(cppc_get_perf_caps, cppc_perf_caps, highest_freq);
 
 show_cppc_data(cppc_get_perf_ctrs, cppc_perf_fb_ctrs, wraparound_time);
 
@@ -222,6 +223,7 @@ static struct attribute *cppc_attrs[] = {
 	&nominal_perf.attr,
 	&nominal_freq.attr,
 	&lowest_freq.attr,
+	&highest_freq.attr,
 	NULL
 };
 ATTRIBUTE_GROUPS(cppc);
@@ -751,19 +753,20 @@ int acpi_cppc_processor_probe(struct acpi_processor *pr)
 	/*
 	 * Disregard _CPC if the number of entries in the return package is not
 	 * as expected, but support future revisions being proper supersets of
-	 * the v3 and only causing more entries to be returned by _CPC.
+	 * the v4 and only causing more entries to be returned by _CPC.
 	 */
 	if ((cpc_rev == CPPC_V2_REV && num_ent != CPPC_V2_NUM_ENT) ||
 	    (cpc_rev == CPPC_V3_REV && num_ent != CPPC_V3_NUM_ENT) ||
 	    (cpc_rev == CPPC_V4_REV && num_ent != CPPC_V4_NUM_ENT) ||
-	    (cpc_rev > CPPC_V4_REV && num_ent <= CPPC_V4_NUM_ENT)) {
+	    (cpc_rev == CPPC_V5_REV && num_ent != CPPC_V5_NUM_ENT) ||
+	    (cpc_rev > CPPC_V5_REV && num_ent <= CPPC_V5_NUM_ENT)) {
 		pr_debug("Unexpected number of _CPC return package entries (%d) for CPU:%d\n",
 			 num_ent, pr->id);
 		goto out_free;
 	}
-	if (cpc_rev > CPPC_V4_REV) {
-		num_ent = CPPC_V4_NUM_ENT;
-		cpc_rev = CPPC_V4_REV;
+	if (cpc_rev > CPPC_V5_REV) {
+		num_ent = CPPC_V5_NUM_ENT;
+		cpc_rev = CPPC_V5_REV;
 	}
 
 	cpc_ptr->num_entries = num_ent;
@@ -1361,9 +1364,10 @@ int cppc_get_perf_caps(int cpunum, struct cppc_perf_caps *perf_caps)
 	struct cpc_desc *cpc_desc = per_cpu(cpc_desc_ptr, cpunum);
 	struct cpc_register_resource *highest_reg, *lowest_reg,
 		*lowest_non_linear_reg, *nominal_reg, *reference_reg,
-		*guaranteed_reg, *low_freq_reg = NULL, *nom_freq_reg = NULL;
+		*guaranteed_reg, *low_freq_reg = NULL, *nom_freq_reg = NULL,
+		*highest_freq_reg = NULL;
 	u64 high, low, guaranteed, nom, ref, min_nonlinear,
-	    low_f = 0, nom_f = 0;
+	    low_f = 0, nom_f = 0, high_f = 0;
 	int pcc_ss_id = per_cpu(cpu_pcc_subspace_idx, cpunum);
 	struct cppc_pcc_data *pcc_ss_data = NULL;
 	int ret = 0, regs_in_pcc = 0;
@@ -1380,6 +1384,7 @@ int cppc_get_perf_caps(int cpunum, struct cppc_perf_caps *perf_caps)
 	reference_reg = &cpc_desc->cpc_regs[REFERENCE_PERF];
 	low_freq_reg = &cpc_desc->cpc_regs[LOWEST_FREQ];
 	nom_freq_reg = &cpc_desc->cpc_regs[NOMINAL_FREQ];
+	highest_freq_reg = &cpc_desc->cpc_regs[HIGHEST_FREQ];
 	guaranteed_reg = &cpc_desc->cpc_regs[GUARANTEED_PERF];
 
 	/* Are any of the regs PCC ?*/
@@ -1387,7 +1392,7 @@ int cppc_get_perf_caps(int cpunum, struct cppc_perf_caps *perf_caps)
 		CPC_IN_PCC(lowest_non_linear_reg) || CPC_IN_PCC(nominal_reg) ||
 		(CPC_SUPPORTED(reference_reg) && CPC_IN_PCC(reference_reg)) ||
 		CPC_IN_PCC(low_freq_reg) || CPC_IN_PCC(nom_freq_reg) ||
-		CPC_IN_PCC(guaranteed_reg)) {
+		CPC_IN_PCC(guaranteed_reg) || CPC_IN_PCC(highest_freq_reg)) {
 		if (pcc_ss_id < 0) {
 			pr_debug("Invalid pcc_ss_id\n");
 			return -ENODEV;
@@ -1450,7 +1455,7 @@ int cppc_get_perf_caps(int cpunum, struct cppc_perf_caps *perf_caps)
 		goto out_err;
 	}
 
-	/* Read optional lowest and nominal frequencies if present */
+	/* Read optional lowest, highest and nominal frequencies if present */
 	if (CPC_SUPPORTED(low_freq_reg)) {
 		ret = cpc_read(cpunum, low_freq_reg, &low_f);
 		if (ret)
@@ -1463,9 +1468,15 @@ int cppc_get_perf_caps(int cpunum, struct cppc_perf_caps *perf_caps)
 			goto out_err;
 	}
 
+	if (CPC_SUPPORTED(highest_freq_reg)) {
+		ret = cpc_read(cpunum, highest_freq_reg, &high_f);
+		if (ret)
+			goto out_err;
+	}
+
 	perf_caps->lowest_freq = low_f;
 	perf_caps->nominal_freq = nom_f;
-
+	perf_caps->highest_freq = high_f;
 
 out_err:
 	if (regs_in_pcc)

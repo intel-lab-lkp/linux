@@ -21,14 +21,16 @@
 #define CPPC_V2_REV	2
 #define CPPC_V3_REV	3
 #define CPPC_V4_REV	4
+#define CPPC_V5_REV	5
 #define CPPC_V2_NUM_ENT	21
 #define CPPC_V3_NUM_ENT	23
 #define CPPC_V4_NUM_ENT	25
+#define CPPC_V5_NUM_ENT	27
 
 #define PCC_CMD_COMPLETE_MASK	(1 << 0)
 #define PCC_ERROR_MASK		(1 << 2)
 
-#define MAX_CPC_REG_ENT 23
+#define MAX_CPC_REG_ENT 25
 
 /* CPPC specific PCC commands. */
 #define	CMD_READ 0
@@ -114,6 +116,8 @@ enum cppc_regs {
 	NOMINAL_FREQ,
 	OSPM_NOMINAL_PERF,
 	RESOURCE_PRIO,
+	HIGHEST_FREQ,
+	CURRENT_FREQ,
 };
 
 /*
@@ -131,6 +135,7 @@ struct cppc_perf_caps {
 	u32 lowest_nonlinear_perf;
 	u32 lowest_freq;
 	u32 nominal_freq;
+	u32 highest_freq;
 };
 
 struct cppc_perf_ctrls {
