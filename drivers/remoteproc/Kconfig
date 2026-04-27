@@ -66,6 +66,16 @@ config MTK_SCP
 
 	  It's safe to say N here.
 
+config MTK_VCP_RPROC
+	tristate "MediaTek VCP support"
+	depends on ARCH_MEDIATEK || COMPILE_TEST
+	depends on ARCH_DMA_ADDR_T_64BIT
+	help
+	  Say y here to support MediaTek's Video Companion Processor (VCP) via
+	  the remote processor framework.
+
+	  It's safe to say N here.
+
 config OMAP_REMOTEPROC
 	tristate "OMAP remoteproc support"
 	depends on ARCH_OMAP4 || SOC_OMAP5 || SOC_DRA7XX
