@@ -523,7 +523,7 @@ static int aw88395_i2c_probe(struct i2c_client *i2c)
 
 	aw88395->reset_gpio = devm_gpiod_get_optional(&i2c->dev, "reset", GPIOD_OUT_LOW);
 	if (IS_ERR(aw88395->reset_gpio))
-		dev_info(&i2c->dev, "reset gpio not defined\n");
+		return PTR_ERR(aw88395->reset_gpio);
 
 	/* hardware reset */
 	aw88395_hw_reset(aw88395);
