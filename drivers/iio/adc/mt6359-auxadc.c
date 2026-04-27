@@ -489,7 +489,7 @@ static int mt6358_read_imp(struct mt6359_auxadc *adc_dev,
 	const struct mtk_pmic_auxadc_info *cinfo = adc_dev->chip_info;
 	struct regmap *regmap = adc_dev->regmap;
 	u16 reg_adc0 = cinfo->regs[PMIC_AUXADC_ADC0];
-	u32 val_v;
+	u32 val_v = 0;
 	int ret;
 
 	ret = mt6358_start_imp_conv(adc_dev, chan);
