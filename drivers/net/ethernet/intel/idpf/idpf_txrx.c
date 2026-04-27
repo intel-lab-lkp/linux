@@ -1569,12 +1569,10 @@ void idpf_vport_calc_num_q_desc(struct idpf_vport *vport,
  * @vport_idx: vport idx to retrieve vport pointer
  * @vport_msg: message to fill with data
  * @max_q: vport max queue info
- *
- * Return: 0 on success, error value on failure.
  */
-int idpf_vport_calc_total_qs(struct idpf_adapter *adapter, u16 vport_idx,
-			     struct virtchnl2_create_vport *vport_msg,
-			     struct idpf_vport_max_q *max_q)
+void idpf_vport_calc_total_qs(struct idpf_adapter *adapter, u16 vport_idx,
+			      struct virtchnl2_create_vport *vport_msg,
+			      struct idpf_vport_max_q *max_q)
 {
 	int dflt_splitq_txq_grps = 0, dflt_singleq_txqs = 0;
 	int dflt_splitq_rxq_grps = 0, dflt_singleq_rxqs = 0;
@@ -1625,7 +1623,7 @@ int idpf_vport_calc_total_qs(struct idpf_adapter *adapter, u16 vport_idx,
 	}
 
 	if (!vport_config)
-		return 0;
+		return;
 
 	user = &vport_config->user_config;
 	user->num_req_rx_qs = le16_to_cpu(vport_msg->num_rx_q);
@@ -1641,8 +1639,6 @@ int idpf_vport_calc_total_qs(struct idpf_adapter *adapter, u16 vport_idx,
 	vport_msg->num_tx_q = cpu_to_le16(user->num_req_tx_qs + num_xdpsq);
 	if (idpf_is_queue_model_split(le16_to_cpu(vport_msg->txq_model)))
 		vport_msg->num_tx_complq = vport_msg->num_tx_q;
-
-	return 0;
 }
 
 /**

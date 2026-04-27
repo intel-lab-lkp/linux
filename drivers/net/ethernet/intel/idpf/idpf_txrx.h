@@ -1080,9 +1080,9 @@ void idpf_vport_init_num_qs(struct idpf_vport *vport,
 			    struct idpf_q_vec_rsrc *rsrc);
 void idpf_vport_calc_num_q_desc(struct idpf_vport *vport,
 				struct idpf_q_vec_rsrc *rsrc);
-int idpf_vport_calc_total_qs(struct idpf_adapter *adapter, u16 vport_index,
-			     struct virtchnl2_create_vport *vport_msg,
-			     struct idpf_vport_max_q *max_q);
+void idpf_vport_calc_total_qs(struct idpf_adapter *adapter, u16 vport_index,
+			      struct virtchnl2_create_vport *vport_msg,
+			      struct idpf_vport_max_q *max_q);
 void idpf_vport_calc_num_q_groups(struct idpf_q_vec_rsrc *rsrc);
 int idpf_vport_queues_alloc(struct idpf_vport *vport,
 			    struct idpf_q_vec_rsrc *rsrc);
