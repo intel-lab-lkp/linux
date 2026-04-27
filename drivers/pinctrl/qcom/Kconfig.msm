@@ -229,6 +229,13 @@ config PINCTRL_MSM8998
 	  This is the pinctrl, pinmux, pinconf and gpiolib driver for the
 	  Qualcomm TLMM block found in the Qualcomm MSM8998 platform.
 
+config PINCTRL_NORD
+	tristate "Qualcomm Technologies Inc NORD (SA8797p) pin controller driver"
+	depends on ARM64 || COMPILE_TEST
+	help
+	  This is the pinctrl, pinmux and pinconf driver for the Qualcomm
+	  TLMM block found on the Qualcomm NORD platforms.
+
 config PINCTRL_QCM2290
 	tristate "Qualcomm QCM2290 pin controller driver"
 	depends on ARM64 || COMPILE_TEST
