@@ -250,6 +250,12 @@ static umode_t hsmp_is_sock_attr_visible(struct kobject *kobj,
 	return 0;
 }
 
+static size_t hsmp_metric_tbl_bin_size(struct kobject *kobj,
+				       const struct bin_attribute *battr, int id)
+{
+	return hsmp_pdev->hsmp_table_size;
+}
+
 static umode_t hsmp_is_sock_dev_attr_visible(struct kobject *kobj,
 					     struct attribute *attr, int id)
 {
@@ -563,6 +569,7 @@ static const struct attribute_group hsmp_attr_grp = {
 	.attrs = hsmp_dev_attr_list,
 	.is_bin_visible = hsmp_is_sock_attr_visible,
 	.is_visible = hsmp_is_sock_dev_attr_visible,
+	.bin_size = hsmp_metric_tbl_bin_size,
 };
 
 static const struct attribute_group *hsmp_groups[] = {

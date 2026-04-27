@@ -62,6 +62,12 @@ static ssize_t hsmp_metric_tbl_plat_read(struct file *filp, struct kobject *kobj
 	return hsmp_metric_tbl_read(sock, buf, count);
 }
 
+static size_t hsmp_metric_tbl_bin_size(struct kobject *kobj,
+				       const struct bin_attribute *battr, int id)
+{
+	return hsmp_pdev->hsmp_table_size;
+}
+
 static umode_t hsmp_is_sock_attr_visible(struct kobject *kobj,
 					 const struct bin_attribute *battr, int id)
 {
@@ -114,6 +120,7 @@ HSMP_BIN_ATTR(7, *sock7_attr_list);
 static const struct attribute_group sock##index##_attr_grp = {	\
 	.bin_attrs = _list,					\
 	.is_bin_visible = hsmp_is_sock_attr_visible,		\
+	.bin_size = hsmp_metric_tbl_bin_size,			\
 	.name = #_name,						\
 }
 
