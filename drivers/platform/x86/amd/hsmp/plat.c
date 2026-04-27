@@ -97,10 +97,12 @@ static_assert(MAX_AMD_NUM_NODES == 8);
 
 #define HSMP_BIN_ATTR(index, _list)					\
 static const struct bin_attribute attr##index = {			\
-	.attr = { .name = HSMP_METRICS_TABLE_NAME, .mode = 0444},	\
+	.attr = {							\
+		.name = HSMP_METRICS_TABLE_NAME,			\
+		.mode = SYSFS_HUGE_BIN_FILE | 0444,				\
+	},								\
 	.private = (void *)index,					\
 	.read = hsmp_metric_tbl_plat_read,				\
-	.size = sizeof(struct hsmp_metric_table),			\
 };									\
 static const struct bin_attribute _list[] = {				\
 	&attr##index,							\
