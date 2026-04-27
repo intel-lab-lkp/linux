@@ -3155,11 +3155,24 @@ int __ceph_get_caps(struct inode *inode, struct ceph_file_info *fi, int need,
 			flags |= NON_BLOCKING;
 			while (!(ret = try_get_cap_refs(inode, need, want,
 							endoff, flags, &_got))) {
+				static const unsigned long wait_timeout = 5 * HZ;
+
 				if (signal_pending(current)) {
 					ret = -ERESTARTSYS;
 					break;
 				}
-				wait_woken(&wait, TASK_INTERRUPTIBLE, MAX_SCHEDULE_TIMEOUT);
+
+				/*
+				 * If a cap update is lost after
+				 * mds_wanted was raised, waiting
+				 * forever will never make progress.
+				 * Retry the renew path periodically
+				 * so we can resend synchronously.
+				 */
+				if (!wait_woken(&wait, TASK_INTERRUPTIBLE, wait_timeout)) {
+					ret = -EUCLEAN;
+					break;
+				}
 			}
 
 			remove_wait_queue(&ci->i_cap_wq, &wait);
@@ -3193,8 +3206,9 @@ int __ceph_get_caps(struct inode *inode, struct ceph_file_info *fi, int need,
 				continue;
 			}
 			if (ret == -EUCLEAN) {
-				/* session was killed, try renew caps */
-				ret = ceph_renew_caps(inode, flags);
+				/* session was killed or a waited cap
+				 * request needs a retry */
+				ret = ceph_renew_caps(inode, flags & CEPH_FILE_MODE_MASK);
 				if (ret == 0)
 					continue;
 			}
