@@ -84,6 +84,8 @@ struct pci_epc_map {
  * @start: ops to start the PCI link
  * @stop: ops to stop the PCI link
  * @get_features: ops to get the features supported by the EPC
+ * @find_ext_capability: ops to find extended capability offset for a function
+ *			 in endpoint controller
  * @owner: the module owner containing the ops
  */
 struct pci_epc_ops {
@@ -115,6 +117,8 @@ struct pci_epc_ops {
 	void	(*stop)(struct pci_epc *epc);
 	const struct pci_epc_features* (*get_features)(struct pci_epc *epc,
 						       u8 func_no, u8 vfunc_no);
+	u16	(*find_ext_capability)(struct pci_epc *epc, u8 func_no,
+				       u8 vfunc_no, u16 start, u8 cap);
 	struct module *owner;
 };
 
@@ -270,6 +274,7 @@ struct pci_epc_bar_desc {
  * @msi_capable: indicate if the endpoint function has MSI capability
  * @msix_capable: indicate if the endpoint function has MSI-X capability
  * @intx_capable: indicate if the endpoint can raise INTx interrupts
+ * @doe_capable: indicate if the endpoint function has DOE capability
  * @bar: array specifying the hardware description for each BAR
  * @align: alignment size required for BAR buffer allocation
  */
@@ -280,6 +285,7 @@ struct pci_epc_features {
 	unsigned int	msi_capable : 1;
 	unsigned int	msix_capable : 1;
 	unsigned int	intx_capable : 1;
+	unsigned int	doe_capable : 1;
 	struct	pci_epc_bar_desc bar[PCI_STD_NUM_BARS];
 	size_t	align;
 };
@@ -367,6 +373,21 @@ int pci_epc_mem_map(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 		    u64 pci_addr, size_t pci_size, struct pci_epc_map *map);
 void pci_epc_mem_unmap(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 		       struct pci_epc_map *map);
+
+#ifdef CONFIG_PCI_ENDPOINT_DOE
+int pci_epc_doe_setup(struct pci_epc *epc);
+int pci_epc_doe_destroy(struct pci_epc *epc);
+#else
+static inline int pci_epc_doe_setup(struct pci_epc *epc)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int pci_epc_doe_destroy(struct pci_epc *epc)
+{
+	return -EOPNOTSUPP;
+}
+#endif
 
 #else
 static inline void pci_epc_init_notify(struct pci_epc *epc)
