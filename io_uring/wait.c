@@ -48,7 +48,13 @@ static bool current_pending_io(void)
 
 	if (!tctx)
 		return false;
-	return percpu_counter_read_positive(&tctx->inflight);
+	/*
+	 * tctx->inflight also includes the reservations for task references
+	 * from io_task_refs_refill(), not just in-flight requests. Thus,
+	 * pending requests are present if the inflight count is larger than the
+	 * number of cached references.
+	 */
+	return percpu_counter_read_positive(&tctx->inflight) > tctx->cached_refs;
 }
 
 static enum hrtimer_restart io_cqring_timer_wakeup(struct hrtimer *timer)
