@@ -5,6 +5,7 @@
 
 #include <linux/device.h>
 #include <linux/module.h>
+#include <linux/iopoll.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/of_platform.h>
@@ -57,6 +58,19 @@ void vcp_put(struct mtk_vcp_device *vcp)
 }
 EXPORT_SYMBOL_GPL(vcp_put);
 
+/**
+ * vcp_get_ipidev() - get a vcp ipi device struct to reference vcp ipi.
+ *
+ * @vcp: mtk_vcp_device structure from vcp_get().
+ *
+ * Return: Pointer to mtk_ipi_device structure.
+ */
+struct mtk_ipi_device *vcp_get_ipidev(struct mtk_vcp_device *vcp)
+{
+	return vcp->ipi_dev;
+}
+EXPORT_SYMBOL_GPL(vcp_get_ipidev);
+
 static int mtk_vcp_start(struct rproc *rproc)
 {
 	struct mtk_vcp_device *vcp = rproc->priv;
@@ -108,6 +122,34 @@ static const struct rproc_ops mtk_vcp_ops = {
 	.stop		= mtk_vcp_stop,
 };
 
+static int vcp_ipi_mbox_init(struct mtk_vcp_device *vcp)
+{
+	struct mtk_vcp_ipc *vcp_ipc;
+	struct platform_device *pdev;
+	int ret;
+
+	pdev = platform_device_register_data(vcp->dev, "mtk-vcp-ipc",
+					     PLATFORM_DEVID_NONE,
+					     vcp->platdata->ipc_data,
+					     sizeof(struct mtk_mbox_table));
+	if (IS_ERR(pdev))
+		return dev_err_probe(vcp->dev, PTR_ERR(pdev), "ipc_data register failed\n");
+
+	ret = read_poll_timeout_atomic(dev_get_drvdata,
+				       vcp_ipc, vcp_ipc,
+				       USEC_PER_MSEC,
+				       VCP_IPI_DEV_READY_TIMEOUT * USEC_PER_MSEC,
+				       false, &pdev->dev);
+	if (ret)
+		return dev_err_probe(vcp->dev, -EPROBE_DEFER, "get vcp_ipc drvdata failed\n");
+
+	ret = mtk_vcp_ipc_device_register(vcp->ipi_dev, VCP_IPI_COUNT, vcp_ipc);
+	if (ret)
+		dev_err_probe(vcp->dev, ret, "ipi_dev register failed, ret %d\n", ret);
+
+	return ret;
+}
+
 static int vcp_multi_core_init(struct platform_device *pdev,
 			       struct mtk_vcp_of_cluster *vcp_cluster,
 			       enum vcp_core_id core_id)
@@ -156,7 +198,9 @@ static struct mtk_vcp_device *vcp_rproc_init(struct platform_device *pdev,
 	vcp->dev = dev;
 	vcp->ops = &vcp_of_data->ops;
 	vcp->platdata = &vcp_of_data->platdata;
+	vcp->ipi_ops = vcp_of_data->platdata.ipi_ops;
 	vcp->vcp_cluster = vcp_cluster;
+	vcp->ipi_dev = &vcp_cluster->vcp_ipidev;
 
 	rproc->auto_boot = vcp_of_data->platdata.auto_boot;
 	rproc->sysfs_read_only = vcp_of_data->platdata.sysfs_read_only;
@@ -188,6 +232,10 @@ static struct mtk_vcp_device *vcp_rproc_init(struct platform_device *pdev,
 	ret = vcp_wdt_irq_init(vcp);
 	if (ret)
 		return ERR_PTR(dev_err_probe(dev, ret, "vcp_wdt_irq_init failed\n"));
+
+	ret = vcp_ipi_mbox_init(vcp);
+	if (ret)
+		return ERR_PTR(dev_err_probe(dev, ret, "vcp_ipi_mbox_init failed\n"));
 
 	ret = pm_runtime_get_sync(dev);
 	if (ret < 0) {
@@ -309,6 +357,55 @@ static struct mtk_vcp_reserved_mem_table mt8196_memory_tb[NUMS_MEM_ID] = {
 	{ .memory_id = MMQOS_MEM_ID,        .size = 0x1000 },
 };
 
+static struct mtk_mbox_table mt8196_ipc_tb = {
+	.send_table = {
+		{ .msg_size = 18, .ipi_id =  0, .mbox_id = 0 },
+
+		{ .msg_size =  8, .ipi_id = 15, .mbox_id = 1 },
+		{ .msg_size = 18, .ipi_id = 16, .mbox_id = 1 },
+		{ .msg_size =  2, .ipi_id =  9, .mbox_id = 1 },
+
+		{ .msg_size = 18, .ipi_id = 11, .mbox_id = 2 },
+		{ .msg_size =  2, .ipi_id =  2, .mbox_id = 2 },
+		{ .msg_size =  3, .ipi_id =  3, .mbox_id = 2 },
+		{ .msg_size =  2, .ipi_id = 32, .mbox_id = 2 },
+
+		{ .msg_size =  2, .ipi_id = 33, .mbox_id = 3 },
+		{ .msg_size =  2, .ipi_id = 13, .mbox_id = 3 },
+		{ .msg_size =  2, .ipi_id = 35, .mbox_id = 3 },
+
+		{ .msg_size =  2, .ipi_id = 20, .mbox_id = 4 },
+		{ .msg_size =  3, .ipi_id = 21, .mbox_id = 4 },
+		{ .msg_size =  2, .ipi_id = 23, .mbox_id = 4 }
+	},
+	.recv_table = {
+		{ .recv_opt = 0, .msg_size = 18, .ipi_id =  1, .mbox_id = 0 },
+
+		{ .recv_opt = 1, .msg_size =  8, .ipi_id = 15, .mbox_id = 1 },
+		{ .recv_opt = 0, .msg_size = 18, .ipi_id = 17, .mbox_id = 1 },
+		{ .recv_opt = 0, .msg_size =  2, .ipi_id = 10, .mbox_id = 1 },
+
+		{ .recv_opt = 0, .msg_size = 18, .ipi_id = 12, .mbox_id = 2 },
+		{ .recv_opt = 0, .msg_size =  1, .ipi_id =  5, .mbox_id = 2 },
+		{ .recv_opt = 1, .msg_size =  1, .ipi_id =  2, .mbox_id = 2 },
+
+		{ .recv_opt = 0, .msg_size =  2, .ipi_id = 34, .mbox_id = 3 },
+		{ .recv_opt = 0, .msg_size =  2, .ipi_id = 14, .mbox_id = 3 },
+
+		{ .recv_opt = 0, .msg_size =  1, .ipi_id = 26, .mbox_id = 4 },
+		{ .recv_opt = 1, .msg_size =  1, .ipi_id = 20, .mbox_id = 4 }
+	},
+	.recv_count = 11,
+	.send_count = 14,
+};
+
+static struct mtk_vcp_ipi_ops mt8196_vcp_ipi_ops = {
+	.ipi_send = mtk_vcp_ipc_send,
+	.ipi_send_compl = mtk_vcp_ipc_send_compl,
+	.ipi_register = mtk_vcp_mbox_ipc_register,
+	.ipi_unregister = mtk_vcp_mbox_ipc_unregister,
+};
+
 static const struct mtk_vcp_of_data mt8196_of_data = {
 	.ops = {
 		.get_mem_phys = vcp_get_reserve_mem_phys,
@@ -321,6 +418,8 @@ static const struct mtk_vcp_of_data mt8196_of_data = {
 		.auto_boot = true,
 		.sysfs_read_only = true,
 		.rtos_static_iova = 0x180600000,
+		.ipc_data = &mt8196_ipc_tb,
+		.ipi_ops = &mt8196_vcp_ipi_ops,
 		.feature_tb = mt8196_feature_tb,
 		.memory_tb = mt8196_memory_tb,
 		.fw_name = "mediatek/mt8196/vcp.img",

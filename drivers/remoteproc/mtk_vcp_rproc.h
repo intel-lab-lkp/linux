@@ -21,6 +21,7 @@
  * @sram_offset: core sram memory layout
  * @share_mem_iova: shared memory iova base
  * @share_mem_size: shared memory size
+ * @vcp_ipidev: struct mtk_ipi_device
  * @vcp_memory_tb: vcp memory allocated table
  */
 struct mtk_vcp_of_cluster {
@@ -34,6 +35,7 @@ struct mtk_vcp_of_cluster {
 	u32 sram_offset[VCP_CORE_TOTAL];
 	dma_addr_t share_mem_iova;
 	size_t share_mem_size;
+	struct mtk_ipi_device vcp_ipidev;
 	struct vcp_reserve_mblock vcp_memory_tb[NUMS_MEM_ID];
 };
 
@@ -43,6 +45,8 @@ struct mtk_vcp_of_cluster {
  * @auto_boot: rproc auto_boot flag
  * @sysfs_read_only: rproc sysfs_read_only flag
  * @rtos_static_iova: vcp dram binary static map iova
+ * @mtk_mbox_table: mtk_mbox_table structure
+ * @mtk_vcp_ipi_ops: vcp ipi api ops structure
  * @feature_tb: vcp feature table structure
  * @memory_tb: vcp memory table structure
  * @fw_name: vcp image name and path
@@ -51,6 +55,8 @@ struct mtk_vcp_platdata {
 	bool auto_boot;
 	bool sysfs_read_only;
 	dma_addr_t rtos_static_iova;
+	struct mtk_mbox_table *ipc_data;
+	struct mtk_vcp_ipi_ops *ipi_ops;
 	struct mtk_vcp_feature_table *feature_tb;
 	struct mtk_vcp_reserved_mem_table *memory_tb;
 	char *fw_name;

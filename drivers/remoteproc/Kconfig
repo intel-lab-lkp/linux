@@ -70,6 +70,8 @@ config MTK_VCP_RPROC
 	tristate "MediaTek VCP support"
 	depends on ARCH_MEDIATEK || COMPILE_TEST
 	depends on ARCH_DMA_ADDR_T_64BIT
+	select MTK_VCP_IPC
+	select MTK_VCP_MBOX
 	help
 	  Say y here to support MediaTek's Video Companion Processor (VCP) via
 	  the remote processor framework.
