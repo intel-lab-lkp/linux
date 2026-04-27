@@ -550,13 +550,12 @@ FOLIO_MATCH(compound_info, _head_3);
  * struct ptdesc -    Memory descriptor for page tables.
  * @pt_flags: enum pt_flags plus zone/node/section.
  * @pt_rcu_head:      For freeing page table pages.
- * @pt_list:          List of used page tables. Used for s390 gmap shadow pages
- *                    (which are not linked into the user page tables) and x86
- *                    pgds.
+ * @pt_list:          List of used page tables. Used by m68k pointer tables
+ *                    and x86 pgds.
  * @_pt_pad_1:        Padding that aliases with page's compound head.
  * @pmd_huge_pte:     Protected by ptdesc->ptl, used for THPs.
  * @__page_mapping:   Aliases with page->mapping. Unused for page tables.
- * @pt_index:         Used for s390 gmap.
+ * @pt_markbits:      Used for m68k pointer tables.
  * @pt_mm:            Used for x86 pgds.
  * @pt_frag_refcount: For fragmented page table tracking. Powerpc only.
  * @pt_share_count:   Used for HugeTLB PMD page table share count.
@@ -583,7 +582,7 @@ struct ptdesc {
 	unsigned long __page_mapping;
 
 	union {
-		pgoff_t pt_index;
+		unsigned int pt_markbits;
 		struct mm_struct *pt_mm;
 		atomic_t pt_frag_refcount;
 #ifdef CONFIG_HUGETLB_PMD_PAGE_TABLE_SHARING
@@ -612,7 +611,7 @@ TABLE_MATCH(flags, pt_flags);
 TABLE_MATCH(compound_info, pt_list);
 TABLE_MATCH(compound_info, _pt_pad_1);
 TABLE_MATCH(mapping, __page_mapping);
-TABLE_MATCH(__folio_index, pt_index);
+TABLE_MATCH(__folio_index, pt_markbits);
 TABLE_MATCH(rcu_head, pt_rcu_head);
 TABLE_MATCH(page_type, __page_type);
 TABLE_MATCH(_refcount, __page_refcount);
