@@ -1,0 +1,166 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/remoteproc/mediatek,mt8196-vcp.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MediaTek Video Companion Processor (VCP)
+
+maintainers:
+  - Xiangzhi Tang <xiangzhi.tang@mediatek.com>
+
+description:
+  This binding provides support for the MediaTek Video Companion Processor
+  (VCP), a Risc-V coprocessor found on some MediaTek SoCs.
+
+properties:
+  compatible:
+    enum:
+      - mediatek,mt8196-vcp
+
+  reg:
+    items:
+      - description: sram base
+      - description: cfg group IO
+      - description: cfg core group IO
+      - description: cfg sec group IO
+
+  reg-names:
+    items:
+      - const: sram
+      - const: cfg
+      - const: cfg-core
+      - const: cfg-sec
+
+  interrupts:
+    maxItems: 1
+
+  mboxes:
+    maxItems: 5
+
+  mbox-names:
+    items:
+      - const: mbox0
+      - const: mbox1
+      - const: mbox2
+      - const: mbox3
+      - const: mbox4
+
+  power-domains:
+    maxItems: 1
+
+  iommus:
+    description:
+      Using MediaTek IOMMU to apply larb ports for Multimedia Memory
+      Management Unit and address translation.
+    maxItems: 1
+
+  memory-region:
+    maxItems: 1
+
+patternProperties:
+  "^vcp@[a-f0-9]+$":
+    type: object
+    description:
+      The MediaTek VCP integrated to SoC might be a multi-core version.
+      The other cores are represented as child nodes of the boot core.
+      There are some integration differences for the IP like the usage of
+      address translator for translating SoC bus addresses into address
+      space for the processor.
+
+      The SRAM is shared by all cores, each VCP core only using a piece of
+      SRAM memory. The power of SRAM should be enabled before booting VCP cores.
+      The size of SRAM varies on different SoCs.
+
+      The VCP cores have differences on different SoCs for Hart support.
+
+    properties:
+      compatible:
+        enum:
+          - mediatek,vcp-core
+
+      reg:
+        description: The base address and size of SRAM.
+        maxItems: 1
+
+      reg-names:
+        const: sram
+
+      mediatek,vcp-core-harts:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        description: Number of harts in this VCP core.
+        enum: [1, 2]
+
+      mediatek,vcp-core-sram-offset:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        description:
+          Offset of the allocated SRAM memory for this VCP core.
+
+    required:
+      - compatible
+      - reg
+      - reg-names
+      - mediatek,vcp-core-harts
+      - mediatek,vcp-core-sram-offset
+
+    additionalProperties: false
+
+required:
+  - compatible
+  - reg
+  - reg-names
+  - interrupts
+  - mboxes
+  - mbox-names
+  - power-domains
+  - iommus
+  - memory-region
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+    #include <dt-bindings/power/mt8196-power.h>
+
+    vcp: vcp@31800000 {
+        compatible = "mediatek,mt8196-vcp";
+        reg = <0x31800000 0x60000>,
+              <0x31a04000 0xa000>,
+              <0x31bd0000 0x1000>,
+              <0x31a70020 0x100>;
+        reg-names = "sram",
+                    "cfg",
+                    "cfg-core",
+                    "cfg-sec";
+
+        interrupts = <GIC_SPI 787 IRQ_TYPE_LEVEL_HIGH 0>;
+
+        mboxes = <&vcp_mailbox0>,
+                 <&vcp_mailbox1>,
+                 <&vcp_mailbox2>,
+                 <&vcp_mailbox3>,
+                 <&vcp_mailbox4>;
+        mbox-names = "mbox0", "mbox1", "mbox2", "mbox3", "mbox4";
+
+        power-domains = <&scpsys MT8196_POWER_DOMAIN_MM_PROC_DORMANT>;
+        iommus = <&mm_smmu 160>;
+        memory-region = <&vcp_resv_mem>;
+
+        vcp@0 {
+            compatible = "mediatek,vcp-core";
+            reg = <0x0 0x31000>;
+            reg-names = "sram";
+            mediatek,vcp-core-harts = <2>;
+            mediatek,vcp-core-sram-offset = <0x0>;
+        };
+
+        vcp@31000 {
+            compatible = "mediatek,vcp-core";
+            reg = <0x31000 0x60000>;
+            reg-names = "sram";
+            mediatek,vcp-core-harts = <1>;
+            mediatek,vcp-core-sram-offset = <0x31000>;
+        };
+    };
