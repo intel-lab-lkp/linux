@@ -50,6 +50,20 @@ static inline bool is_gsi(struct acpi_resource_extended_irq *ext_irq)
 }
 #endif
 
+/*
+ * List of Dell systems requiring memory resource quirks due to BIOS
+ * reservations overlapping with Intel PMC register space.
+ */
+static const struct dmi_system_id dell_memory_quirks[] = {
+	{
+		.ident = "Dell Inc.",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
+		},
+	},
+	{ }
+};
+
 static bool acpi_dev_resource_len_valid(u64 start, u64 end, u64 len, bool io)
 {
 	u64 reslen = end - start + 1;
@@ -109,6 +123,24 @@ bool acpi_dev_resource_memory(struct acpi_resource *ares, struct resource *res)
 	struct acpi_resource_memory24 *memory24;
 	struct acpi_resource_memory32 *memory32;
 	struct acpi_resource_fixed_memory32 *fixed_memory32;
+
+	/*
+	 * Quirk for Dell systems: ignore BIOS memory reservations that overlap
+	 * with Intel PMC resources. Restricted via DMI to avoid impact on
+	 * other manufacturers.
+	 */
+	if (dmi_check_system(dell_memory_quirks)) {
+		u32 addr = 0;
+
+		if (ares->type == ACPI_RESOURCE_TYPE_FIXED_MEMORY32)
+			addr = ares->data.fixed_memory32.address;
+		else if (ares->type == ACPI_RESOURCE_TYPE_MEMORY32)
+			addr = ares->data.memory32.minimum;
+
+		if (addr == 0xfdb00000 ||
+		    (addr >= 0xfe000000 && addr <= 0xfe000fff))
+			return false;
+	}
 
 	switch (ares->type) {
 	case ACPI_RESOURCE_TYPE_MEMORY24:
