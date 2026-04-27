@@ -53,9 +53,19 @@ enum hsmp_message_ids {
 	HSMP_SET_XGMI_PSTATE_RANGE,	/* 26h Set xGMI P-state range */
 	HSMP_CPU_RAIL_ISO_FREQ_POLICY,	/* 27h Get/Set Cpu Iso frequency policy */
 	HSMP_DFC_ENABLE_CTRL,		/* 28h Enable/Disable DF C-state */
+	HSMP_PC6_ENABLE,		/* 29h Get/Set PC6 enable/disable status */
+	HSMP_CC6_ENABLE,		/* 2Ah Get/Set CC6 enable/disable status */
 	HSMP_GET_RAPL_UNITS = 0x30,	/* 30h Get scaling factor for energy */
 	HSMP_GET_RAPL_CORE_COUNTER,	/* 31h Get core energy counter value */
 	HSMP_GET_RAPL_PACKAGE_COUNTER,	/* 32h Get package energy counter value */
+	HSMP_DIMM_SB_RD,                /* 33h Get data from a specified device on the DIMM */
+	HSMP_READ_CCD_POWER,		/* 34h Get the average power consumed by CCD */
+	HSMP_READ_TDELTA,		/* 35h Get thermal solution behaviour */
+	HSMP_GET_SVI3_VR_CTRL_TEMP,	/* 36h Get temperature of SVI3 VR controller rails */
+	HSMP_GET_ENABLED_HSMP_CMDS,	/* 37h Get/Set supported HSMP commands */
+	HSMP_SET_GET_FLOOR_LIMIT,       /* 38h Get/Set supported Floor limit commands */
+	HSMP_DIMM_SB_WR,                /* 39h Set data to a specified device on the DIMM */
+	HSMP_SDPS_LIMIT,                /* 3Ah Get/Set SDPS limit */
 	HSMP_MSG_ID_MAX,
 };
 
@@ -170,16 +180,18 @@ static const struct hsmp_msg_desc hsmp_msg_desc_table[]
 	{0, 1, HSMP_GET},
 
 	/*
-	 * HSMP_SET_XGMI_LINK_WIDTH, num_args = 1, response_sz = 0
-	 * input: args[0] = min link width[15:8] + max link width[7:0]
+	 * HSMP_SET_XGMI_LINK_WIDTH, num_args = 1, response_sz = 0/1
+	 * input: args[0] = set/get XGMI Link width[31] + min link width[15:8] + max link width[7:0]
+	 * output: args[0] = current min link width[15:8] + current max link width[7:0]
 	 */
-	{1, 0, HSMP_SET},
+	{1, 1, HSMP_SET_GET},
 
 	/*
-	 * HSMP_SET_DF_PSTATE, num_args = 1, response_sz = 0
-	 * input: args[0] = df pstate[7:0]
+	 * HSMP_SET_DF_PSTATE, num_args = 1, response_sz = 0/1
+	 * input: args[0] = set/get df pstate[31] + df pstate[7:0]
+	 * output: args[0] = APB enabled/disabled[8] + current df pstate[7:0]
 	 */
-	{1, 0, HSMP_SET},
+	{1, 1, HSMP_SET_GET},
 
 	/* HSMP_SET_AUTO_DF_PSTATE, num_args = 0, response_sz = 0 */
 	{0, 0, HSMP_SET},
@@ -305,16 +317,18 @@ static const struct hsmp_msg_desc hsmp_msg_desc_table[]
 	{1, 1, HSMP_SET},
 
 	/*
-	 * HSMP_SET_POWER_MODE, num_args = 1, response_sz = 0
-	 * input: args[0] = power efficiency mode[2:0]
+	 * HSMP_SET_POWER_MODE, num_args = 1, response_sz = 0/1
+	 * input: args[0] = set/get power mode[31] + power efficiency mode[2:0]
+	 * output: args[0] = current power efficiency mode[2:0]
 	 */
 	{1, 1, HSMP_SET_GET},
 
 	/*
-	 * HSMP_SET_PSTATE_MAX_MIN, num_args = 1, response_sz = 0
-	 * input: args[0] = min df pstate[15:8] + max df pstate[7:0]
+	 * HSMP_SET_PSTATE_MAX_MIN, num_args = 1, response_sz = 0/1
+	 * input: args[0] = set/get DF P-state range[31] + min df pstate[15:8] + max df pstate[7:0]
+	 * output: args[0] = min df pstate[15:8] + max df pstate[7:0]
 	 */
-	{1, 0, HSMP_SET},
+	{1, 1, HSMP_SET_GET},
 
 	/*
 	 * HSMP_GET_METRIC_TABLE_VER, num_args = 0, response_sz = 1
@@ -335,10 +349,12 @@ static const struct hsmp_msg_desc hsmp_msg_desc_table[]
 	{0, 2, HSMP_GET},
 
 	/*
-	 * HSMP_SET_XGMI_PSTATE_RANGE, num_args = 1, response_sz = 0
-	 * input: args[0] = min xGMI p-state[15:8] + max xGMI p-state[7:0]
+	 * HSMP_SET_XGMI_PSTATE_RANGE, num_args = 1, response_sz = 0/1
+	 * input: args[0] = set/get XGMI pstate range[31] + min xGMI p-state[15:8] +
+	 *                  max xGMI p-state[7:0]
+	 * output: args[0] = min xGMI p-state[15:8] + max xGMI p-state[7:0]
 	 */
-	{1, 0, HSMP_SET},
+	{1, 1, HSMP_SET_GET},
 
 	/*
 	 * HSMP_CPU_RAIL_ISO_FREQ_POLICY, num_args = 1, response_sz = 1
@@ -355,9 +371,21 @@ static const struct hsmp_msg_desc hsmp_msg_desc_table[]
 	 */
 	{1, 1, HSMP_SET_GET},
 
-	/* RESERVED(0x29-0x2f) */
-	{0, 0, HSMP_RSVD},
-	{0, 0, HSMP_RSVD},
+	/*
+	 * HSMP_PC6_ENABLE, num_args = 1, response_sz = 0/1
+	 * input: args[0] = set/get PC6 control[31] + disable/enable PC6[0]
+	 * output: args[0] = current PC6 control status[0]
+	 */
+	{1, 1, HSMP_SET_GET},
+
+	/*
+	 * HSMP_CC6_ENABLE, num_args = 1, response_sz = 0/1
+	 * input: args[0] = set/get CC6 control[31] + disable/enable CC6[0]
+	 * output: args[0] = current CC6 control status[0]
+	 */
+	{1, 1, HSMP_SET_GET},
+
+	/* RESERVED(0x2B-0x2F) */
 	{0, 0, HSMP_RSVD},
 	{0, 0, HSMP_RSVD},
 	{0, 0, HSMP_RSVD},
@@ -384,6 +412,86 @@ static const struct hsmp_msg_desc hsmp_msg_desc_table[]
 	 * output: args[1] = upper 32 bits of energy
 	 */
 	{0, 2, HSMP_GET},
+
+	/*
+	 * HSMP_DIMM_SB_RD, num_args = 1, response_sz = 1
+	 * input: args[0] =
+	 *	Register space[23]
+	 *	Register offset in given reg space[22:12]
+	 *	LID of device[11:8]
+	 *	DIMM address[7:0]
+	 * output: args[0] = [3:0] Read data byte
+	 */
+	{1, 1, HSMP_GET},
+
+	/*
+	 * HSMP_READ_CCD_POWER, num_args = 1, response_sz = 1
+	 * input: args[0]  = apic id of core[15:0]
+	 * output: args[0] = CCD power(mWatts)[31:0]
+	 */
+	{1, 1, HSMP_GET},
+
+	/*
+	 * HSMP_READ_TDELTA, num_args = 0, response_sz = 1
+	 * input: None
+	 * output: args[0] = thermal behaviour[31:0]
+	 */
+	{0, 1, HSMP_GET},
+
+	/*
+	 * HSMP_GET_SVI3_VR_CTRL_TEMP, num_args = 1, response_sz = 1
+	 * input: args[0] = SVI3 rail index[3:1] + Read SVI3 temperature data[0]
+	 * output: args[0] = SVI3 rail index[30:28] + SVI3 rail temperature(degree C)[27:0]
+	 */
+	{1, 1, HSMP_GET},
+
+	/*
+	 * HSMP_GET_ENABLED_HSMP_CMDS, num_args = 1, response_sz = 3
+	 * input: args[0] = HSMP command mask[0]
+	 * output: status of HSMP command = args[0], args[1], args[2]
+	 */
+	{1, 3, HSMP_GET},
+
+	/*
+	 * HSMP_SET_GET_FLOOR_LIMIT, num_args = 1, response_sz = 1
+	 * input: args[0] =
+	 *	Set or Get[31:30]
+	 *		Set the Floor frequency per core = 00
+	 *		Set the Floor frequency for all cores = 01
+	 *		Get the Floor frequency of a core = 10
+	 *		Get the Effective Floor frequency per core = 11
+	 *	Reserved[29:28]
+	 *	Apic id / Reserved[27:16]
+	 *		args[27:16] is reserved if args[31:30] = 01
+	 *	Floor frequency limit / Reserved[15:0]
+	 *		if args[31] = 0, Floor frequency limit, else reserved
+	 *
+	 * output: args[0] =
+	 *	Effective Floor frequency limit(MHz) / None / Floor frequency limit[15:0]
+	 *		Effective Floor frequency if input args[31:30] = 11
+	 *		None if input args[31] = 0
+	 *		Floor frequency limit (MHz)[15:0] if args[31:30] = 10
+	 */
+	{1, 1, HSMP_SET_GET},
+
+	/*
+	 * HSMP_DIMM_SB_WR, num_args = 1, response_sz = 0
+	 * input: args[0] =
+	 *	Write Data[31:24]
+	 *	Register space[23]
+	 *	Register offset in given reg space[22:12]
+	 *	LID of device[11:8]
+	 *	DIMM address[7:0]
+	 * output: None
+	 */
+	{1, 0, HSMP_SET},
+
+	/*
+	 * HSMP_SDPS_LIMIT, num_args = 1, response_sz = 1
+	 * input: args[0] = Set/Get[31] + SDPS Limit[30:0]
+	 * output: args[0] = SDPS Limit[30:0]
+	 */
+	{1, 1, HSMP_SET_GET},
 
 };
 
