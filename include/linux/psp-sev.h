@@ -848,11 +848,13 @@ struct sev_data_snp_shutdown_ex {
  *  unless psp_init_on_probe module param is set
  * @max_snp_asid: When non-zero, enable ciphertext hiding and specify the
  *  maximum ASID that can be used for an SEV-SNP guest.
+ * @rapl_disable: Whether or not to set the RAPL_DIS bit during SNP_INIT_EX.
  */
 struct sev_platform_init_args {
 	int error;
 	bool probe;
 	unsigned int max_snp_asid;
+	bool rapl_disable;
 };
 
 /**

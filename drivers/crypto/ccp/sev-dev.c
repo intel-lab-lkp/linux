@@ -1365,8 +1365,11 @@ static int __sev_snp_init_locked(struct sev_platform_init_args *args)
 
 	sev = psp->sev_data;
 
-	if (sev->snp_initialized)
+	if (sev->snp_initialized) {
+		if (args->rapl_disable && !sev->snp_plat_status.rapl_dis)
+			args->rapl_disable = false;
 		return 0;
+	}
 
 	if (!sev_version_greater_or_equal(SNP_MIN_API_MAJOR, SNP_MIN_API_MINOR)) {
 		dev_dbg(sev->dev, "SEV-SNP support requires firmware version >= %d:%d\n",
@@ -1375,6 +1378,12 @@ static int __sev_snp_init_locked(struct sev_platform_init_args *args)
 	}
 
 	snp_prepare();
+
+	if (args->rapl_disable && !(sev->snp_feat_info_0.ecx & SNP_RAPL_DISABLE_SUPPORTED)) {
+		dev_info(sev->dev,
+			"SEV: RAPL_DIS requested, but not supported\n");
+		args->rapl_disable = false;
+	}
 
 	/*
 	 * Starting in SNP firmware v1.52, the SNP_INIT_EX command takes a list
@@ -1425,6 +1434,9 @@ static int __sev_snp_init_locked(struct sev_platform_init_args *args)
 			data.ciphertext_hiding_en = 1;
 			data.max_snp_asid = args->max_snp_asid;
 		}
+
+		if (args->rapl_disable)
+			data.rapl_dis = 1;
 
 		data.init_rmp = 1;
 		data.list_paddr_en = 1;
