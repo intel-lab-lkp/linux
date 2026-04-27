@@ -215,6 +215,11 @@ static ssize_t new_id_store(struct device_driver *driver, const char *buf,
 		pdev->subsystem_device = subdevice;
 		pdev->class = class;
 
+		/*
+		 * Initialize the embedded struct device driver_override lock to
+		 * avoid the lockdep errors.
+		 */
+		spin_lock_init(&pdev->dev.driver_override.lock);
 		if (pci_match_device(pdrv, pdev))
 			retval = -EEXIST;
 
