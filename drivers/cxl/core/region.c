@@ -39,6 +39,7 @@
 static nodemask_t nodemask_region_seen = NODE_MASK_NONE;
 
 static struct cxl_region *to_cxl_region(struct device *dev);
+static void remove_devm_actions_work(struct work_struct *work);
 
 #define __ACCESS_ATTR_RO(_level, _name) {				\
 	.attr	= { .name = __stringify(_name), .mode = 0444 },		\
@@ -2589,6 +2590,8 @@ static struct cxl_region *cxl_region_alloc(struct cxl_root_decoder *cxlrd, int i
 	dev->type = &cxl_region_type;
 	cxl_region_setup_flags(cxlr, &cxlrd->cxlsd.cxld);
 
+	INIT_WORK(&cxlr->remove_work, remove_devm_actions_work);
+
 	return cxlr;
 }
 
@@ -2829,6 +2832,30 @@ cxl_find_region_by_name(struct cxl_root_decoder *cxlrd, const char *name)
 		return ERR_PTR(-ENODEV);
 
 	return to_cxl_region(region_dev);
+}
+
+static bool remove_devm_actions(struct cxl_region *cxlr)
+{
+	return schedule_cxl_region_remove_devm_actions(cxlr);
+}
+
+static void remove_devm_actions_work(struct work_struct *work)
+{
+	struct cxl_region *cxlr = container_of(work, typeof(*cxlr), remove_work);
+	struct cxl_root_decoder *cxlrd = cxlr->cxlrd;
+	struct cxl_port *port = to_cxl_port(cxlrd->cxlsd.cxld.dev.parent);
+
+	if (test_and_set_bit(CXL_REGION_F_DEVM_REMOVE, &cxlr->flags)) {
+		put_device(&cxlr->dev);
+		return;
+	}
+
+	scoped_guard(device, port->uport_dev) {
+		if (port->uport_dev->driver)
+			devm_remove_action(port->uport_dev, unregister_region, cxlr);
+	}
+
+	put_device(&cxlr->dev);
 }
 
 static ssize_t delete_region_store(struct device *dev,
