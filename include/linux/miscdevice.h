@@ -81,6 +81,14 @@
  */
 #define MISC_DYNAMIC_MINOR	255
 
+struct miscdevice_sync_ctx {
+	int minor;
+	struct kref kref;
+	const struct file_operations *orig_fops;
+	struct list_head list;
+	struct file_operations fops;
+};
+
 struct miscdevice {
 	int minor;
 	const char *name;
@@ -91,10 +99,12 @@ struct miscdevice {
 	const struct attribute_group **groups;
 	const char *nodename;
 	umode_t mode;
+	struct miscdevice_sync_ctx *sync_ctx;
 };
 
 extern int misc_register(struct miscdevice *misc);
 extern void misc_deregister(struct miscdevice *misc);
+extern int misc_sync_register(struct miscdevice *misc);
 
 /*
  * Helper macro for drivers that don't do anything special in the initcall.
