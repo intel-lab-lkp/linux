@@ -60,6 +60,7 @@ struct table_instance {
 };
 
 struct flow_table {
+	struct rcu_head rcu;
 	struct table_instance __rcu *ti;
 	struct table_instance __rcu *ufid_ti;
 	struct mask_cache __rcu *mask_cache;
@@ -77,9 +78,9 @@ void ovs_flow_exit(void);
 struct sw_flow *ovs_flow_alloc(void);
 void ovs_flow_free(struct sw_flow *, bool deferred);
 
-int ovs_flow_tbl_init(struct flow_table *);
+struct flow_table *ovs_flow_tbl_alloc(void);
+void ovs_flow_tbl_destroy_rcu(struct rcu_head *table);
 int ovs_flow_tbl_count(const struct flow_table *table);
-void ovs_flow_tbl_destroy(struct flow_table *table);
 int ovs_flow_tbl_flush(struct flow_table *flow_table);
 
 int ovs_flow_tbl_insert(struct flow_table *table, struct sw_flow *flow,
