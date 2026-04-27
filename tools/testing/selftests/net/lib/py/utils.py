@@ -111,10 +111,14 @@ class cmd:
 
         stdout, stderr = self._process_terminate(terminate=terminate,
                                                  timeout=timeout)
-        if self.proc.returncode != 0 and fail:
+
+        if (self.proc.returncode != 0 and fail and
+            (self.proc.returncode < 0 or fail != 'verify_failed')):
             if len(stderr) > 0 and stderr[-1] == "\n":
                 stderr = stderr[:-1]
             raise CmdExitFailure("Command failed", self)
+        elif self.proc.returncode == 0 and fail == 'verify_failed':
+            raise CmdExitFailure("Command succeeded while should fail", self)
 
     def __repr__(self):
         def str_fmt(name, s):
