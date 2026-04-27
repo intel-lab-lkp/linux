@@ -3960,7 +3960,7 @@ sub process {
 # at the beginning of a line any tabs must come first and anything
 # more than $tabsize must use tabs.
 		if ($rawline =~ /^\+\s* \t\s*\S/ ||
-		    $rawline =~ /^\+\s*        \s*/) {
+		    $rawline =~ /^\+\s* {$tabsize}\s*/) {
 			my $herevet = "$here\n" . cat_vet($rawline) . "\n";
 			$rpt_cleaners = 1;
 			if (ERROR("CODE_INDENT",
