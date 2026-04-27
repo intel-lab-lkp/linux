@@ -198,15 +198,25 @@ static int visionox_rm69299_disable(struct drm_panel *panel)
 	return dsi_ctx.accum_err;
 }
 
-static int visionox_rm69299_power_on(struct visionox_rm69299 *ctx)
+static int visionox_rm69299_unprepare(struct drm_panel *panel)
+{
+	struct visionox_rm69299 *ctx = panel_to_ctx(panel);
+
+	gpiod_set_value(ctx->reset_gpio, 0);
+
+	return regulator_bulk_disable(ARRAY_SIZE(visionox_rm69299_supplies),
+				      ctx->supplies);
+}
+
+static int visionox_rm69299_prepare(struct drm_panel *panel)
 {
 	int ret;
+	struct visionox_rm69299 *ctx = panel_to_ctx(panel);
 
 	ret = regulator_bulk_enable(ARRAY_SIZE(visionox_rm69299_supplies),
 				    ctx->supplies);
 	if (ret < 0)
 		return ret;
-
 	/*
 	 * Reset sequence of visionox panel requires the panel to be
 	 * out of reset for 10ms, followed by being held in reset
@@ -220,28 +230,6 @@ static int visionox_rm69299_power_on(struct visionox_rm69299 *ctx)
 	usleep_range(10000, 20000);
 
 	return 0;
-}
-
-static int visionox_rm69299_power_off(struct visionox_rm69299 *ctx)
-{
-	gpiod_set_value(ctx->reset_gpio, 0);
-
-	return regulator_bulk_disable(ARRAY_SIZE(visionox_rm69299_supplies),
-				      ctx->supplies);
-}
-
-static int visionox_rm69299_unprepare(struct drm_panel *panel)
-{
-	struct visionox_rm69299 *ctx = panel_to_ctx(panel);
-
-	return visionox_rm69299_power_off(ctx);
-}
-
-static int visionox_rm69299_prepare(struct drm_panel *panel)
-{
-	struct visionox_rm69299 *ctx = panel_to_ctx(panel);
-
-	return visionox_rm69299_power_on(ctx);
 }
 
 static const struct drm_display_mode visionox_rm69299_1080x2248_60hz = {
