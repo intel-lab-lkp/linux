@@ -248,7 +248,8 @@ static void tcp_measure_rcv_mss(struct sock *sk, const struct sk_buff *skb)
 			do_div(val, skb->truesize);
 			tcp_sk(sk)->scaling_ratio = val ? val : 1;
 
-			if (old_ratio != tcp_sk(sk)->scaling_ratio) {
+			if (old_ratio != tcp_sk(sk)->scaling_ratio &&
+			    !(sk->sk_userlocks & SOCK_RCVBUF_LOCK)) {
 				struct tcp_sock *tp = tcp_sk(sk);
 
 				val = tcp_win_from_space(sk, sk->sk_rcvbuf);
