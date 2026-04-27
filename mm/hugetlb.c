@@ -3026,12 +3026,14 @@ out_uncharge_cgroup_reservation:
 						    h_cg);
 out_subpool_put:
 	/*
-	 * put page to subpool iff the quota of subpool's rsv_hpages is used
-	 * during hugepage_subpool_get_pages.
+	 * map_chg means hugepage_subpool_get_pages() succeeded above.
+	 * Always undo the subpool quota charge; only drop global reservation
+	 * accounting if the subpool consumed a reservation.
 	 */
-	if (map_chg && !gbl_chg) {
+	if (map_chg) {
 		gbl_reserve = hugepage_subpool_put_pages(spool, 1);
-		hugetlb_acct_memory(h, -gbl_reserve);
+		if (!gbl_chg)
+			hugetlb_acct_memory(h, -gbl_reserve);
 	}
 
 
