@@ -1417,7 +1417,10 @@ static void tbnet_remove(struct tb_service *svc)
 
 static void tbnet_shutdown(struct tb_service *svc)
 {
-	tbnet_tear_down(tb_service_get_drvdata(svc), true);
+	struct tbnet *net = tb_service_get_drvdata(svc);
+
+	if (netif_running(net->dev))
+		tbnet_stop(net->dev);
 }
 
 static int tbnet_suspend(struct device *dev)
