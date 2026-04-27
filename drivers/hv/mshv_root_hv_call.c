@@ -264,8 +264,10 @@ static int hv_do_map_gpa_hcall(u64 partition_id, u64 gfn, u64 page_struct_count,
 	if (ret && done) {
 		u32 unmap_flags = 0;
 
-		if (flags & HV_MAP_GPA_LARGE_PAGE)
+		if (flags & HV_MAP_GPA_LARGE_PAGE) {
 			unmap_flags |= HV_UNMAP_GPA_LARGE_PAGE;
+			done <<= large_shift;
+		}
 		hv_call_unmap_gpa_pages(partition_id, gfn, done, unmap_flags);
 	}
 
