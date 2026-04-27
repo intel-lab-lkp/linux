@@ -197,7 +197,7 @@ err:
 
 static void gsc_unmap_and_free_vma(struct intel_gsc_uc *gsc)
 {
-	struct i915_vma *vma = fetch_and_zero(&gsc->local);
+	struct i915_vma *vma = xchg(&gsc->local, NULL);
 
 	if (!vma)
 		return;
@@ -264,7 +264,7 @@ void intel_gsc_uc_fini(struct intel_gsc_uc *gsc)
 	intel_gsc_proxy_fini(gsc);
 
 	if (gsc->ce)
-		intel_engine_destroy_pinned_context(fetch_and_zero(&gsc->ce));
+		intel_engine_destroy_pinned_context(xchg(&gsc->ce, NULL));
 
 	gsc_unmap_and_free_vma(gsc);
 

@@ -1787,7 +1787,7 @@ static int init_service_thread(struct intel_gvt *gvt)
  */
 static void intel_gvt_clean_device(struct drm_i915_private *i915)
 {
-	struct intel_gvt *gvt = fetch_and_zero(&i915->gvt);
+	struct intel_gvt *gvt = xchg(&i915->gvt, NULL);
 
 	if (drm_WARN_ON(&i915->drm, !gvt))
 		return;

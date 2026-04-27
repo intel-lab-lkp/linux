@@ -733,7 +733,7 @@ void intel_rc6_fini(struct intel_rc6 *rc6)
 	if (IS_METEORLAKE(rc6_to_i915(rc6)) && rc6->bios_state_captured)
 		intel_uncore_write_fw(uncore, GEN6_RC_STATE, rc6->bios_rc_state);
 
-	pctx = fetch_and_zero(&rc6->pctx);
+	pctx = xchg(&rc6->pctx, NULL);
 	if (pctx)
 		i915_gem_object_put(pctx);
 

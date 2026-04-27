@@ -45,11 +45,6 @@ struct drm_i915_private;
 	drm_err(&(i915)->drm, fmt, ##__VA_ARGS__); \
 })
 
-#define fetch_and_zero(ptr) ({						\
-	typeof(*ptr) __T = *(ptr);					\
-	*(ptr) = (typeof(*ptr))0;					\
-	__T;								\
-})
 
 /*
  * check_user_mbz: Check that a user value exists and is zero

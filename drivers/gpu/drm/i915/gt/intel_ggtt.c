@@ -1048,7 +1048,7 @@ static void fini_aliasing_ppgtt(struct i915_ggtt *ggtt)
 {
 	struct i915_ppgtt *ppgtt;
 
-	ppgtt = fetch_and_zero(&ggtt->alias);
+	ppgtt = xchg(&ggtt->alias, NULL);
 	if (!ppgtt)
 		return;
 
@@ -1648,7 +1648,7 @@ bool i915_ggtt_resume_vm(struct i915_address_space *vm, bool all_evicted)
 				   was_bound);
 
 		if (obj) { /* only used during resume => exclusive access */
-			write_domain_objs |= fetch_and_zero(&obj->write_domain);
+			write_domain_objs |= xchg(&obj->write_domain, 0);
 			obj->read_domains |= I915_GEM_DOMAIN_GTT;
 		}
 	}

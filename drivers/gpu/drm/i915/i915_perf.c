@@ -1617,7 +1617,7 @@ static void oa_put_render_ctx_id(struct i915_perf_stream *stream)
 {
 	struct intel_context *ce;
 
-	ce = fetch_and_zero(&stream->pinned_ctx);
+	ce = xchg(&stream->pinned_ctx, NULL);
 	if (ce) {
 		ce->tag = 0; /* recomputed on next submission after parking */
 		intel_context_unpin(ce);

@@ -79,7 +79,7 @@ void intel_display_reset_finish(struct intel_display *display, bool test_only)
 	struct drm_atomic_state *state;
 	int ret;
 
-	state = fetch_and_zero(&display->restore.modeset_state);
+	state = xchg(&display->restore.modeset_state, NULL);
 	if (!state)
 		goto unlock;
 

@@ -12,11 +12,6 @@ struct intel_display;
 #define MISSING_CASE(x) WARN(1, "Missing case (%s == %ld)\n", \
 			     __stringify(x), (long)(x))
 
-#define fetch_and_zero(ptr) ({						\
-	typeof(*ptr) __T = *(ptr);					\
-	*(ptr) = (typeof(*ptr))0;					\
-	__T;								\
-})
 
 #define KHz(x) (1000 * (x))
 #define MHz(x) KHz(1000 * (x))

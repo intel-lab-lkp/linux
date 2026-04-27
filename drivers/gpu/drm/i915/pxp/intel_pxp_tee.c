@@ -278,7 +278,7 @@ out_put:
 
 static void free_streaming_command(struct intel_pxp *pxp)
 {
-	struct drm_i915_gem_object *obj = fetch_and_zero(&pxp->stream_cmd.obj);
+	struct drm_i915_gem_object *obj = xchg(&pxp->stream_cmd.obj, NULL);
 
 	if (!obj)
 		return;

@@ -1004,7 +1004,7 @@ main_link_aux_power_domain_put(struct intel_digital_port *dig_port,
 		intel_ddi_main_link_aux_domain(dig_port, crtc_state);
 	struct ref_tracker *wf;
 
-	wf = fetch_and_zero(&dig_port->aux_wakeref);
+	wf = xchg(&dig_port->aux_wakeref, NULL);
 	if (!wf)
 		return;
 
@@ -3174,7 +3174,7 @@ static void intel_ddi_post_disable_dp(struct intel_atomic_state *state,
 	intel_pps_vdd_on(intel_dp);
 	intel_pps_off(intel_dp);
 
-	wakeref = fetch_and_zero(&dig_port->ddi_io_wakeref);
+	wakeref = xchg(&dig_port->ddi_io_wakeref, NULL);
 
 	if (wakeref)
 		intel_display_power_put(display,
@@ -3210,7 +3210,7 @@ static void intel_ddi_post_disable_hdmi(struct intel_atomic_state *state,
 	if (DISPLAY_VER(display) >= 12)
 		intel_ddi_disable_transcoder_clock(old_crtc_state);
 
-	wakeref = fetch_and_zero(&dig_port->ddi_io_wakeref);
+	wakeref = xchg(&dig_port->ddi_io_wakeref, NULL);
 	if (wakeref)
 		intel_display_power_put(display,
 					dig_port->ddi_io_power_domain,

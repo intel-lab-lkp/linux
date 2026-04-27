@@ -671,7 +671,7 @@ void i915_vma_unpin_and_release(struct i915_vma **p_vma, unsigned int flags)
 	struct i915_vma *vma;
 	struct drm_i915_gem_object *obj;
 
-	vma = fetch_and_zero(p_vma);
+	vma = xchg(p_vma, NULL);
 	if (!vma)
 		return;
 

@@ -118,7 +118,7 @@ static void i915_fence_release(struct dma_fence *fence)
 	GEM_BUG_ON(rq->guc_prio != GUC_PRIO_INIT &&
 		   rq->guc_prio != GUC_PRIO_FINI);
 
-	i915_request_free_capture_list(fetch_and_zero(&rq->capture_list));
+	i915_request_free_capture_list(xchg(&rq->capture_list, NULL));
 	if (rq->batch_res) {
 		i915_vma_resource_put(rq->batch_res);
 		rq->batch_res = NULL;
@@ -1956,7 +1956,7 @@ static void request_wait_wake(struct dma_fence *fence, struct dma_fence_cb *cb)
 {
 	struct request_wait *wait = container_of(cb, typeof(*wait), cb);
 
-	wake_up_process(fetch_and_zero(&wait->tsk));
+	wake_up_process(xchg(&wait->tsk, NULL));
 }
 
 /**

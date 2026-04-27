@@ -706,7 +706,7 @@ static void
 i915_gem_object_release_stolen(struct drm_i915_gem_object *obj)
 {
 	struct drm_i915_private *i915 = to_i915(obj->base.dev);
-	struct drm_mm_node *stolen = fetch_and_zero(&obj->stolen);
+	struct drm_mm_node *stolen = xchg(&obj->stolen, NULL);
 
 	GEM_BUG_ON(!stolen);
 	__i915_gem_stolen_remove_node(i915, stolen);

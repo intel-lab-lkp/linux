@@ -1152,7 +1152,7 @@ void intel_migrate_fini(struct intel_migrate *m)
 {
 	struct intel_context *ce;
 
-	ce = fetch_and_zero(&m->context);
+	ce = xchg(&m->context, NULL);
 	if (!ce)
 		return;
 

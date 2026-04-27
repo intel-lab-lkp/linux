@@ -444,7 +444,7 @@ int i915_ttm_purge(struct drm_i915_gem_object *obj)
 		 */
 		shmem_truncate_range(file_inode(i915_tt->filp),
 				     0, (loff_t)-1);
-		fput(fetch_and_zero(&i915_tt->filp));
+		fput(xchg(&i915_tt->filp, NULL));
 	}
 
 	obj->write_domain = 0;
@@ -916,7 +916,7 @@ static void i915_ttm_put_pages(struct drm_i915_gem_object *obj,
 	 */
 
 	if (obj->mm.rsgt)
-		i915_refct_sgt_put(fetch_and_zero(&obj->mm.rsgt));
+		i915_refct_sgt_put(xchg(&obj->mm.rsgt, NULL));
 }
 
 /**

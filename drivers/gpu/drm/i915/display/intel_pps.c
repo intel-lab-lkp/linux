@@ -863,7 +863,7 @@ static void intel_pps_vdd_off_sync_unlocked(struct intel_dp *intel_dp)
 
 	intel_display_power_put(display,
 				intel_aux_power_domain(dig_port),
-				fetch_and_zero(&intel_dp->pps.vdd_wakeref));
+				xchg(&intel_dp->pps.vdd_wakeref, NULL));
 }
 
 void intel_pps_vdd_off_sync(struct intel_dp *intel_dp)
@@ -1065,7 +1065,7 @@ void intel_pps_off_unlocked(struct intel_dp *intel_dp)
 	/* We got a reference when we enabled the VDD. */
 	intel_display_power_put(display,
 				intel_aux_power_domain(dig_port),
-				fetch_and_zero(&intel_dp->pps.vdd_wakeref));
+				xchg(&intel_dp->pps.vdd_wakeref, NULL));
 }
 
 void intel_pps_off(struct intel_dp *intel_dp)

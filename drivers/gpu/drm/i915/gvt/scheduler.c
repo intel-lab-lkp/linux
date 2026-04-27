@@ -836,7 +836,7 @@ out:
 		/* We might still need to add request with
 		 * clean ctx to retire it properly..
 		 */
-		rq = fetch_and_zero(&workload->req);
+		rq = xchg(&workload->req, NULL);
 		i915_request_put(rq);
 	}
 
@@ -1114,7 +1114,7 @@ static void complete_current_workload(struct intel_gvt *gvt, int ring_id)
 				intel_vgpu_trigger_virtual_event(vgpu, event);
 		}
 
-		i915_request_put(fetch_and_zero(&workload->req));
+		i915_request_put(xchg(&workload->req, NULL));
 	}
 
 	gvt_dbg_sched("ring id %d complete workload %p status %d\n",

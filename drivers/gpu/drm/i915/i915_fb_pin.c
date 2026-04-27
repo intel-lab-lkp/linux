@@ -336,17 +336,17 @@ void intel_plane_unpin_fb(struct intel_plane_state *old_plane_state)
 	struct i915_vma *vma;
 
 	if (!intel_fb_uses_dpt(&fb->base)) {
-		vma = fetch_and_zero(&old_plane_state->ggtt_vma);
+		vma = xchg(&old_plane_state->ggtt_vma, NULL);
 		if (vma) {
 			intel_fb_unpin_vma(vma, old_plane_state->fence_id);
 			old_plane_state->fence_id = -1;
 		}
 	} else {
-		vma = fetch_and_zero(&old_plane_state->dpt_vma);
+		vma = xchg(&old_plane_state->dpt_vma, NULL);
 		if (vma)
 			intel_fb_unpin_vma(vma, -1);
 
-		vma = fetch_and_zero(&old_plane_state->ggtt_vma);
+		vma = xchg(&old_plane_state->ggtt_vma, NULL);
 		if (vma)
 			i915_dpt_unpin_from_ggtt(fb->dpt);
 	}

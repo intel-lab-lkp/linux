@@ -194,7 +194,7 @@ void i915_drm_client_add_object(struct i915_drm_client *client,
 
 void i915_drm_client_remove_object(struct drm_i915_gem_object *obj)
 {
-	struct i915_drm_client *client = fetch_and_zero(&obj->client);
+	struct i915_drm_client *client = xchg(&obj->client, NULL);
 	unsigned long flags;
 
 	/* Object may not be associated with a client. */

@@ -139,7 +139,7 @@ void intel_pxp_terminate(struct intel_pxp *pxp, bool post_invalidation_needs_res
 static void pxp_terminate_complete(struct intel_pxp *pxp)
 {
 	/* Re-create the arb session after teardown handle complete */
-	if (fetch_and_zero(&pxp->hw_state_invalidated)) {
+	if (xchg(&pxp->hw_state_invalidated, false)) {
 		drm_dbg(&pxp->ctrl_gt->i915->drm, "PXP: creating arb_session after invalidation");
 		pxp_create_arb_session(pxp);
 	}
@@ -155,7 +155,7 @@ static void pxp_session_work(struct work_struct *work)
 	u32 events = 0;
 
 	spin_lock_irq(gt->irq_lock);
-	events = fetch_and_zero(&pxp->session_events);
+	events = xchg(&pxp->session_events, 0);
 	spin_unlock_irq(gt->irq_lock);
 
 	if (!events)

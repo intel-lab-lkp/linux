@@ -406,7 +406,7 @@ static int query_perf_config_list(struct drm_i915_private *i915,
 		if (!ids)
 			return -ENOMEM;
 
-		alloc = fetch_and_zero(&n_configs);
+		alloc = xchg(&n_configs, 0);
 
 		ids[n_configs++] = 1ull; /* reserved for test_config */
 		rcu_read_lock();

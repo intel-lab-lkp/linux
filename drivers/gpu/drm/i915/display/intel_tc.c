@@ -717,7 +717,7 @@ static bool icl_tc_phy_connect(struct intel_tc_port *tc,
 out_release_phy:
 	icl_tc_phy_take_ownership(tc, false);
 out_unblock_tc_cold:
-	tc_cold_unblock(tc, fetch_and_zero(&tc->lock_wakeref));
+	tc_cold_unblock(tc, xchg(&tc->lock_wakeref, NULL));
 
 	return false;
 }
@@ -734,7 +734,7 @@ static void icl_tc_phy_disconnect(struct intel_tc_port *tc)
 		icl_tc_phy_take_ownership(tc, false);
 		fallthrough;
 	case TC_PORT_TBT_ALT:
-		tc_cold_unblock(tc, fetch_and_zero(&tc->lock_wakeref));
+		tc_cold_unblock(tc, xchg(&tc->lock_wakeref, NULL));
 		break;
 	default:
 		MISSING_CASE(tc->mode);
@@ -948,7 +948,7 @@ static bool adlp_tc_phy_connect(struct intel_tc_port *tc, int required_lanes)
 	return true;
 
 out_unblock_tc_cold:
-	tc_cold_unblock(tc, fetch_and_zero(&tc->lock_wakeref));
+	tc_cold_unblock(tc, xchg(&tc->lock_wakeref, NULL));
 out_release_phy:
 	adlp_tc_phy_take_ownership(tc, false);
 out_put_port_power:
@@ -966,7 +966,7 @@ static void adlp_tc_phy_disconnect(struct intel_tc_port *tc)
 
 	port_wakeref = intel_display_power_get(display, port_power_domain);
 
-	tc_cold_unblock(tc, fetch_and_zero(&tc->lock_wakeref));
+	tc_cold_unblock(tc, xchg(&tc->lock_wakeref, NULL));
 
 	switch (tc->mode) {
 	case TC_PORT_LEGACY:
@@ -1220,7 +1220,7 @@ out_release_phy:
 	xelpdp_tc_phy_wait_for_tcss_power(tc, false);
 
 out_unblock_tccold:
-	tc_cold_unblock(tc, fetch_and_zero(&tc->lock_wakeref));
+	tc_cold_unblock(tc, xchg(&tc->lock_wakeref, NULL));
 
 	return false;
 }
@@ -1234,7 +1234,7 @@ static void xelpdp_tc_phy_disconnect(struct intel_tc_port *tc)
 		xelpdp_tc_phy_enable_tcss_power(tc, false);
 		fallthrough;
 	case TC_PORT_TBT_ALT:
-		tc_cold_unblock(tc, fetch_and_zero(&tc->lock_wakeref));
+		tc_cold_unblock(tc, xchg(&tc->lock_wakeref, NULL));
 		break;
 	default:
 		MISSING_CASE(tc->mode);

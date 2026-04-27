@@ -660,7 +660,7 @@ void intel_uncore_resume_early(struct intel_uncore *uncore)
 	if (!intel_uncore_has_forcewake(uncore))
 		return;
 
-	restore_forcewake = fetch_and_zero(&uncore->fw_domains_saved);
+	restore_forcewake = xchg(&uncore->fw_domains_saved, 0);
 	forcewake_early_sanitize(uncore, restore_forcewake);
 
 	iosf_mbi_register_pmic_bus_access_notifier(&uncore->pmic_bus_access_nb);
@@ -2138,7 +2138,7 @@ static void fw_domain_fini(struct intel_uncore *uncore,
 
 	GEM_BUG_ON(domain_id >= FW_DOMAIN_ID_COUNT);
 
-	d = fetch_and_zero(&uncore->fw_domain[domain_id]);
+	d = xchg(&uncore->fw_domain[domain_id], NULL);
 	if (!d)
 		return;
 

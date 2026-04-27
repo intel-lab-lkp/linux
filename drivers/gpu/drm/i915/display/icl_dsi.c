@@ -1419,7 +1419,7 @@ static void gen11_dsi_disable_io_power(struct intel_encoder *encoder)
 	for_each_dsi_port(port, intel_dsi->ports) {
 		struct ref_tracker *wakeref;
 
-		wakeref = fetch_and_zero(&intel_dsi->io_wakeref[port]);
+		wakeref = xchg(&intel_dsi->io_wakeref[port], NULL);
 		intel_display_power_put(display,
 					port == PORT_A ?
 					POWER_DOMAIN_PORT_DDI_IO_A :

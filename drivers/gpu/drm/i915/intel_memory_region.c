@@ -417,7 +417,7 @@ void intel_memory_regions_driver_release(struct drm_i915_private *i915)
 
 	for (i = 0; i < ARRAY_SIZE(i915->mm.regions); i++) {
 		struct intel_memory_region *region =
-			fetch_and_zero(&i915->mm.regions[i]);
+			xchg(&i915->mm.regions[i], NULL);
 
 		if (region)
 			intel_memory_region_destroy(region);

@@ -217,7 +217,7 @@ __i915_gem_object_unset_pages(struct drm_i915_gem_object *obj)
 
 	assert_object_held_shared(obj);
 
-	pages = fetch_and_zero(&obj->mm.pages);
+	pages = xchg(&obj->mm.pages, NULL);
 	if (IS_ERR_OR_NULL(pages))
 		return pages;
 
@@ -636,7 +636,7 @@ void __i915_gem_object_release_map(struct drm_i915_gem_object *obj)
 	 * Furthermore, since this is an unsafe operation reserved only
 	 * for construction time manipulation, we ignore locking prudence.
 	 */
-	unmap_object(obj, page_mask_bits(fetch_and_zero(&obj->mm.mapping)));
+	unmap_object(obj, page_mask_bits(xchg(&obj->mm.mapping, NULL)));
 
 	i915_gem_object_unpin_map(obj);
 }

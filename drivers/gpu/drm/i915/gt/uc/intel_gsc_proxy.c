@@ -388,7 +388,7 @@ void intel_gsc_proxy_fini(struct intel_gsc_uc *gsc)
 	struct intel_gt *gt = gsc_uc_to_gt(gsc);
 	struct drm_i915_private *i915 = gt->i915;
 
-	if (fetch_and_zero(&gsc->proxy.component_added))
+	if (xchg(&gsc->proxy.component_added, false))
 		component_del(i915->drm.dev, &i915_gsc_proxy_component_ops);
 
 	proxy_channel_free(gsc);

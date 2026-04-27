@@ -625,7 +625,7 @@ static void throttle_release(struct i915_request **q, int count)
 		if (IS_ERR_OR_NULL(q[i]))
 			continue;
 
-		i915_request_put(fetch_and_zero(&q[i]));
+		i915_request_put(xchg(&q[i], NULL));
 	}
 }
 
@@ -1083,7 +1083,7 @@ err_end:
 err_fini:
 	igt_spinner_fini(*spin);
 err_free:
-	kfree(fetch_and_zero(spin));
+	kfree(xchg(spin, NULL));
 	return ret;
 }
 

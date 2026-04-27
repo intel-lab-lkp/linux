@@ -201,7 +201,7 @@ static void i915_overlay_release_old_vma(struct i915_overlay *overlay)
 	struct intel_display *display = i915->display;
 	struct i915_vma *vma;
 
-	vma = fetch_and_zero(&overlay->old_vma);
+	vma = xchg(&overlay->old_vma, NULL);
 	if (drm_WARN_ON(&i915->drm, !vma))
 		return;
 

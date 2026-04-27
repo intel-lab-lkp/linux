@@ -115,7 +115,7 @@ static int create_vcs_context(struct intel_pxp *pxp)
 static void destroy_vcs_context(struct intel_pxp *pxp)
 {
 	if (pxp->ce)
-		intel_engine_destroy_pinned_context(fetch_and_zero(&pxp->ce));
+		intel_engine_destroy_pinned_context(xchg(&pxp->ce, NULL));
 }
 
 static void pxp_init_full(struct intel_pxp *pxp)
