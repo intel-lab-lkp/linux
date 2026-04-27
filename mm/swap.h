@@ -301,6 +301,7 @@ struct folio *swap_cluster_readahead(swp_entry_t entry, gfp_t flag,
 struct folio *swapin_readahead(swp_entry_t entry, gfp_t flag,
 		struct vm_fault *vmf);
 struct folio *swapin_folio(swp_entry_t entry, struct folio *folio);
+struct folio *swapin_alloc_pmd_folio(swp_entry_t entry, struct mm_struct *mm);
 void swap_update_readahead(struct folio *folio, struct vm_area_struct *vma,
 			   unsigned long addr);
 
@@ -434,6 +435,12 @@ static inline struct folio *swapin_readahead(swp_entry_t swp, gfp_t gfp_mask,
 }
 
 static inline struct folio *swapin_folio(swp_entry_t entry, struct folio *folio)
+{
+	return NULL;
+}
+
+static inline struct folio *swapin_alloc_pmd_folio(swp_entry_t entry,
+			struct mm_struct *mm)
 {
 	return NULL;
 }

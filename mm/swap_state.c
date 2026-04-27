@@ -584,6 +584,41 @@ struct folio *swapin_folio(swp_entry_t entry, struct folio *folio)
 	return swapcache;
 }
 
+#ifdef CONFIG_THP_SWAP
+/**
+ * swapin_alloc_pmd_folio - allocate, charge, and read a PMD-sized swap folio.
+ * @entry: starting swap entry to swap in
+ * @mm: mm to charge for the swap-in
+ *
+ * Allocate a HPAGE_PMD_ORDER folio, charge it to @mm's memcg for @entry, and
+ * issue the swap-in via swapin_folio(). Used by callers that need to map a
+ * PMD swap entry as a whole THP (PMD swapoff).
+ *
+ * Return: the swapped-in folio, or NULL on alloc/charge/swapin failure (in
+ * which case the caller should fall back to splitting the PMD).
+ */
+struct folio *swapin_alloc_pmd_folio(swp_entry_t entry, struct mm_struct *mm)
+{
+	struct folio *folio;
+
+	folio = folio_alloc(GFP_HIGHUSER_MOVABLE, HPAGE_PMD_ORDER);
+	if (!folio)
+		return NULL;
+
+	if (mem_cgroup_swapin_charge_folio(folio, mm, GFP_KERNEL, entry)) {
+		folio_put(folio);
+		return NULL;
+	}
+
+	if (!swapin_folio(entry, folio)) {
+		folio_put(folio);
+		return NULL;
+	}
+
+	return folio;
+}
+#endif /* CONFIG_THP_SWAP */
+
 /*
  * Locate a page of swap in physical memory, reserving swap cache space
  * and reading the disk if it is not already cached.
