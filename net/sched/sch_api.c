@@ -1874,6 +1874,7 @@ out:
 static int tc_dump_qdisc(struct sk_buff *skb, struct netlink_callback *cb)
 {
 	const struct nlmsghdr *nlh = cb->nlh;
+	const struct tcmsg *tcm = nlmsg_data(nlh);
 	struct net *net = sock_net(skb->sk);
 	struct nlattr *tca[TCA_MAX + 1];
 	struct {
@@ -1892,6 +1893,9 @@ static int tc_dump_qdisc(struct sk_buff *skb, struct netlink_callback *cb)
 	if (err < 0)
 		return err;
 
+	if (!ctx->ifindex)
+		ctx->ifindex = tcm->tcm_ifindex;
+
 	s_ifindex = ctx->ifindex;
 	s_q_idx = ctx->q_idx;
 
@@ -1899,8 +1903,13 @@ static int tc_dump_qdisc(struct sk_buff *skb, struct netlink_callback *cb)
 		struct netdev_queue *dev_queue;
 		struct Qdisc *q;
 
-		if (ctx->ifindex > s_ifindex)
+		if (ctx->ifindex > s_ifindex) {
+			if (tcm->tcm_ifindex) {
+				ctx->ifindex = ULONG_MAX;
+				break;
+			}
 			s_q_idx = 0;
+		}
 		q_idx = 0;
 
 		netdev_lock_ops(dev);
