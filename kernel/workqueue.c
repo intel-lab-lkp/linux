@@ -5932,18 +5932,26 @@ static void devm_workqueue_release(void *res)
 }
 
 __printf(2, 5) struct workqueue_struct *
-devm_alloc_workqueue(struct device *dev, const char *fmt, unsigned int flags,
-		     int max_active, ...)
+devm_alloc_workqueue_noprof(struct device *dev, const char *fmt,
+			    unsigned int flags, int max_active, ...)
 {
 	struct workqueue_struct *wq;
 	va_list args;
 	int ret;
 
 	va_start(args, max_active);
-	wq = alloc_workqueue(fmt, flags, max_active, args);
+	wq = __alloc_workqueue(fmt, flags, max_active, args);
 	va_end(args);
 	if (!wq)
 		return NULL;
+
+	/*
+	 * __alloc_workqueue() doesn't initialize wq->lockdep_map; only its
+	 * sibling alloc_workqueue_noprof() does. Mirror that here, otherwise
+	 * __flush_workqueue()'s COMPLETION_INITIALIZER_ONSTACK_MAP would
+	 * dereference a NULL wq->lockdep_map.
+	 */
+	wq_init_lockdep(wq);
 
 	ret = devm_add_action_or_reset(dev, devm_workqueue_release, wq);
 	if (ret)
@@ -5951,7 +5959,7 @@ devm_alloc_workqueue(struct device *dev, const char *fmt, unsigned int flags,
 
 	return wq;
 }
-EXPORT_SYMBOL_GPL(devm_alloc_workqueue);
+EXPORT_SYMBOL_GPL(devm_alloc_workqueue_noprof);
 
 #ifdef CONFIG_LOCKDEP
 __printf(1, 5)
