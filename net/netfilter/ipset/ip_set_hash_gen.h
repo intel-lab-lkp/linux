@@ -508,6 +508,8 @@ mtype_gc_do(struct ip_set *set, struct htype *h, struct htable *t, u32 r)
 			data = ahash_data(n, j, dsize);
 			if (!ip_set_timeout_expired(ext_timeout(data, set)))
 				continue;
+			if (atomic_read(&t->ref))
+				goto resize_in_progress;
 			pr_debug("expired %u/%u\n", i, j);
 			clear_bit(j, n->used);
 			smp_mb__after_atomic();
@@ -552,6 +554,7 @@ mtype_gc_do(struct ip_set *set, struct htype *h, struct htable *t, u32 r)
 			kfree_rcu(n, rcu);
 		}
 	}
+resize_in_progress:
 	spin_unlock_bh(&t->hregion[r].lock);
 }
 
@@ -663,7 +666,10 @@ retry:
 		spin_lock_init(&t->hregion[i].lock);
 
 	/* There can't be another parallel resizing,
-	 * but dumping, gc, kernel side add/del are possible
+	 * but dumping, kernel side add/del are possible.
+	 * gc must detect ongoing resize when comments are in use
+	 * in order not to free the comment extension area shared
+	 * between the original and resized sets.
 	 */
 	orig = ipset_dereference_bh_nfnl(h->table);
 	atomic_set(&orig->ref, 1);
