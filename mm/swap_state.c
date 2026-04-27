@@ -592,7 +592,7 @@ struct folio *swapin_folio(swp_entry_t entry, struct folio *folio)
  *
  * Allocate a HPAGE_PMD_ORDER folio, charge it to @mm's memcg for @entry, and
  * issue the swap-in via swapin_folio(). Used by callers that need to map a
- * PMD swap entry as a whole THP (PMD swapoff).
+ * PMD swap entry as a whole THP (PMD swap-in fault and swapoff).
  *
  * Return: the swapped-in folio, or NULL on alloc/charge/swapin failure (in
  * which case the caller should fall back to splitting the PMD).
