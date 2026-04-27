@@ -11,6 +11,7 @@
 #include <linux/fs.h>
 #include <linux/cdev.h>
 #include <linux/slab.h>
+#include <linux/string.h>
 #include <linux/list.h>
 #include <linux/mutex.h>
 
@@ -65,7 +66,7 @@ int xillybus_init_chrdev(struct device *dev,
 	mutex_lock(&unit_mutex);
 
 	if (!enumerate)
-		snprintf(unit->name, UNITNAMELEN, "%s", prefix);
+		strscpy(unit->name, prefix);
 
 	for (i = 0; enumerate; i++) {
 		snprintf(unit->name, UNITNAMELEN, "%s_%02d",
