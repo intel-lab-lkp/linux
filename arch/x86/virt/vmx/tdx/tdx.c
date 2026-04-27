@@ -287,7 +287,7 @@ err:
 	return ret;
 }
 
-static __init int read_sys_metadata_field(u64 field_id, u64 *data)
+static int read_sys_metadata_field(u64 field_id, u64 *data)
 {
 	struct tdx_module_args args = {};
 	int ret;
@@ -1232,6 +1232,23 @@ static __init int tdx_enable(void)
 	return 0;
 }
 subsys_initcall(tdx_enable);
+
+int tdx_module_shutdown(void)
+{
+	struct tdx_sys_info_handoff handoff = {};
+	struct tdx_module_args args = {};
+	int ret;
+
+	ret = get_tdx_sys_info_handoff(&handoff);
+	WARN_ON_ONCE(ret);
+
+	/*
+	 * Use the module's handoff version as it is the highest the
+	 * module can produce and most likely supported by newer modules.
+	 */
+	args.rcx = handoff.module_hv;
+	return seamcall_prerr(TDH_SYS_SHUTDOWN, &args);
+}
 
 static bool is_pamt_page(unsigned long phys)
 {

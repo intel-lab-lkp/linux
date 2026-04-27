@@ -15,6 +15,7 @@
 #include <asm/seamldr.h>
 
 #include "seamcall_internal.h"
+#include "tdx.h"
 
 /* P-SEAMLDR SEAMCALL leaf function */
 #define P_SEAMLDR_INFO			0x8000000000000000
@@ -200,6 +201,7 @@ static struct seamldr_params *init_seamldr_params(const u8 *data, u32 size)
  */
 enum module_update_state {
 	MODULE_UPDATE_START,
+	MODULE_UPDATE_SHUTDOWN,
 	MODULE_UPDATE_DONE,
 };
 
@@ -238,7 +240,11 @@ static void ack_state(void)
 static int do_seamldr_install_module(void *seamldr_params)
 {
 	enum module_update_state newstate, curstate = MODULE_UPDATE_START;
+	int cpu = smp_processor_id();
+	bool primary;
 	int ret = 0;
+
+	primary = cpumask_first(cpu_online_mask) == cpu;
 
 	do {
 		/* Chill out and re-read update_data. */
@@ -248,7 +254,10 @@ static int do_seamldr_install_module(void *seamldr_params)
 		if (newstate != curstate) {
 			curstate = newstate;
 			switch (curstate) {
-			/* TODO: add the update steps. */
+			case MODULE_UPDATE_SHUTDOWN:
+				if (primary)
+					ret = tdx_module_shutdown();
+				break;
 			default:
 				break;
 			}
