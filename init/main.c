@@ -1486,6 +1486,7 @@ static void __init do_basic_setup(void)
 	ksysfs_init();
 	driver_init();
 	init_irq_proc();
+	param_sysfs_init();
 	do_ctors();
 	do_initcalls();
 }

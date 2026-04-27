@@ -886,6 +886,10 @@ static inline void module_for_each_mod(int(*func)(struct module *mod, void *data
 #ifdef CONFIG_SYSFS
 extern struct kset *module_kset;
 extern const struct kobj_type module_ktype;
+
+void param_sysfs_init(void);
+#else
+static inline void param_sysfs_init(void) {}
 #endif /* CONFIG_SYSFS */
 
 #define symbol_request(x) try_then_request_module(symbol_get(x), "symbol:" #x)

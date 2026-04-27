@@ -942,22 +942,19 @@ const struct kobj_type module_ktype = {
 /*
  * param_sysfs_init - create "module" kset
  *
- * This must be done before the initramfs is unpacked and
- * request_module() thus becomes possible, because otherwise the
- * module load would fail in mod_sysfs_init.
+ * Must run before:
+ * - do_initcalls(): some drivers register during initcalls and rely on
+ *   module_kset existing for their sysfs module symlink.
+ * - rootfs_initcall (initramfs unpack): request_module() becomes possible.
+ *   But if module_kset is null, module load would fail in mod_sysfs_init(),
+ *   causing request_module() to fail.
  */
-static int __init param_sysfs_init(void)
+void __init param_sysfs_init(void)
 {
 	module_kset = kset_create_and_add("module", &module_uevent_ops, NULL);
-	if (!module_kset) {
-		printk(KERN_WARNING "%s (%d): error creating kset\n",
-			__FILE__, __LINE__);
-		return -ENOMEM;
-	}
-
-	return 0;
+	if (!module_kset)
+		pr_warn("Error creating module kset\n");
 }
-subsys_initcall(param_sysfs_init);
 
 /*
  * param_sysfs_builtin_init - add sysfs version and parameter
