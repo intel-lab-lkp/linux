@@ -3059,6 +3059,20 @@ N:	mtk
 N:	mt[2678]
 K:	mediatek
 
+ARM/MEDIATEK VCP REMOTEPROC DRIVER
+M:	Xiangzhi Tang <xiangzhi.tang@mediatek.com>
+M:	Matthias Brugger <matthias.bgg@gmail.com>
+M:	AngeloGioacchino Del Regno <angelogioacchino.delregno@collabora.com>
+L:	linux-remoteproc@vger.kernel.org
+L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
+L:	linux-mediatek@lists.infradead.org (moderated for non-subscribers)
+S:	Maintained
+F:	Documentation/devicetree/bindings/remoteproc/mediatek,mt8196-vcp.yaml
+F:	drivers/firmware/mtk-vcp-ipc.c
+F:	drivers/remoteproc/mtk_vcp*
+F:	include/linux/firmware/mediatek/mtk-vcp-ipc.h
+F:	include/linux/remoteproc/mtk_vcp_public.h
+
 ARM/Mediatek USB3 PHY DRIVER
 M:	Chunfeng Yun <chunfeng.yun@mediatek.com>
 L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
