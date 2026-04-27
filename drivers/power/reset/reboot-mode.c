@@ -20,12 +20,6 @@
 
 #define PREFIX "mode-"
 
-struct mode_info {
-	const char *mode;
-	u64 magic;
-	struct list_head list;
-};
-
 struct reboot_mode_sysfs_data {
 	struct device *reboot_mode_device;
 	struct list_head head;
@@ -116,6 +110,33 @@ static int reboot_mode_notify(struct notifier_block *this,
 	return NOTIFY_DONE;
 }
 
+static int reboot_mode_add_mode(struct reboot_mode_driver *reboot,
+				const char *mode, u64 magic,
+				const char *name)
+{
+	struct mode_info *info;
+
+	if (!mode || mode[0] == '\0') {
+		pr_err("invalid mode name(%s): too short!\n", name);
+		return -EINVAL;
+	}
+
+	info = kzalloc_obj(*info, GFP_KERNEL);
+	if (!info)
+		return -ENOMEM;
+
+	info->mode = kstrdup_const(mode, GFP_KERNEL);
+	if (!info->mode) {
+		kfree(info);
+		return -ENOMEM;
+	}
+
+	info->magic = magic;
+	list_add_tail(&info->list, &reboot->head);
+
+	return 0;
+}
+
 static int reboot_mode_create_device(struct reboot_mode_driver *reboot)
 {
 	struct reboot_mode_sysfs_data *priv;
@@ -180,9 +201,11 @@ int reboot_mode_register(struct reboot_mode_driver *reboot)
 
 	INIT_LIST_HEAD(&reboot->head);
 
+	if (!np)
+		goto predefined_modes;
+
 	for_each_property_of_node(np, prop) {
 		memset(magic, 0, sizeof(magic));
-
 		if (strncmp(prop->name, PREFIX, len))
 			continue;
 
@@ -194,26 +217,20 @@ int reboot_mode_register(struct reboot_mode_driver *reboot)
 			continue;
 		}
 
-		info = kzalloc(sizeof(*info), GFP_KERNEL);
-		if (!info) {
-			ret = -ENOMEM;
+		ret = reboot_mode_add_mode(reboot, prop->name + len,
+					   REBOOT_MODE_MAGIC(magic[0], magic[1]),
+					   prop->name);
+		if (ret)
 			goto error;
-		}
+	}
 
-		info->magic = REBOOT_MODE_MAGIC(magic[0], magic[1]);
-		info->mode = kstrdup_const(prop->name + len, GFP_KERNEL);
-		if (!info->mode) {
-			ret =  -ENOMEM;
+predefined_modes:
+	list_for_each_entry(info, &reboot->predefined_modes, list) {
+		ret = reboot_mode_add_mode(reboot, info->mode,
+					   info->magic,
+					   info->mode);
+		if (ret)
 			goto error;
-		} else if (info->mode[0] == '\0') {
-			kfree_const(info->mode);
-			ret = -EINVAL;
-			pr_err("invalid mode name(%s): too short!\n", prop->name);
-			goto error;
-		}
-
-		list_add_tail(&info->list, &reboot->head);
-		info = NULL;
 	}
 
 	reboot->reboot_notifier.notifier_call = reboot_mode_notify;
@@ -226,7 +243,6 @@ int reboot_mode_register(struct reboot_mode_driver *reboot)
 	return 0;
 
 error:
-	kfree(info);
 	reboot_mode_unregister(reboot);
 	return ret;
 }
