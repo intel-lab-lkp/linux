@@ -1640,12 +1640,14 @@ dma_addr_t swiotlb_map(struct device *dev, phys_addr_t paddr, size_t size,
 	/*
 	 * Use the allocated io_tlb_mem encryption type to determine dma addr.
 	 */
-	if (dev->dma_io_tlb_mem->decrypted)
+	if (dev->dma_io_tlb_mem->decrypted) {
 		dma_addr = phys_to_dma_unencrypted(dev, swiotlb_addr);
-	else
+		attrs |= DMA_ATTR_CC_SHARED;
+	} else {
 		dma_addr = phys_to_dma_encrypted(dev, swiotlb_addr);
+	}
 
-	if (unlikely(!dma_capable(dev, dma_addr, size, true))) {
+	if (unlikely(!dma_capable(dev, dma_addr, size, true, attrs))) {
 		__swiotlb_tbl_unmap_single(dev, swiotlb_addr, size, dir,
 			attrs | DMA_ATTR_SKIP_CPU_SYNC,
 			swiotlb_find_pool(dev, swiotlb_addr));
