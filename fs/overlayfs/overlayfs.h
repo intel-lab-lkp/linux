@@ -71,6 +71,8 @@ enum ovl_entry_flag {
 	OVL_E_CONNECTED,
 	/* Lower stack may contain xwhiteout entries */
 	OVL_E_XWHITEOUTS,
+	/* dentry was found in-lookup during readdir */
+	OVL_E_RACED_READDIR,
 };
 
 enum {

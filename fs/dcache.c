@@ -2749,7 +2749,8 @@ enum alloc_para {
 static inline
 struct dentry *__d_alloc_parallel(struct dentry *parent,
 				  const struct qstr *name,
-				  enum alloc_para how)
+				  enum alloc_para how,
+				  struct dentry **dentryp)
 {
 	unsigned int hash = name->hash;
 	struct hlist_bl_head *b = in_lookup_hash(parent, hash);
@@ -2836,7 +2837,10 @@ retry:
 			case ALLOC_PARA_FAIL:
 				spin_unlock(&dentry->d_lock);
 				dput(new);
-				dput(dentry);
+				if (dentryp)
+					*dentryp = dentry;
+				else
+					dput(dentry);
 				return ERR_PTR(-EWOULDBLOCK);
 			case ALLOC_PARA_WAIT:
 				wait_var_event_spinlock(&dentry->d_flags,
@@ -2899,7 +2903,7 @@ mismatch:
 struct dentry *d_alloc_parallel(struct dentry *parent,
 				const struct qstr *name)
 {
-	return __d_alloc_parallel(parent, name, ALLOC_PARA_WAIT);
+	return __d_alloc_parallel(parent, name, ALLOC_PARA_WAIT, NULL);
 }
 EXPORT_SYMBOL(d_alloc_parallel);
 
@@ -2931,10 +2935,48 @@ struct dentry *d_alloc_noblock(struct dentry *parent,
 
 	de = try_lookup_noperm(name, parent);
 	if (!de)
-		de = __d_alloc_parallel(parent, name, ALLOC_PARA_FAIL);
+		de = __d_alloc_parallel(parent, name, ALLOC_PARA_FAIL, NULL);
 	return de;
 }
 EXPORT_SYMBOL(d_alloc_noblock);
+
+/**
+ * d_alloc_noblock_return() - find or allocate a new dentry
+ * @parent - dentry of the parent
+ * @name   - name of the dentry within that parent.
+ * @dentryp - place to store the blocking dentry
+ *
+ * A new dentry is allocated and, providing it is unique, added to the
+ * relevant index.
+ * If an existing dentry is found with the same parent/name that is
+ * not d_in_lookup() then that is returned instead.
+ * If the existing dentry is d_in_lookup(), d_alloc_noblock()
+ * returns with error %-EWOULDBLOCK and the blocking dentry is passed
+ * in @dentryp.  The dentry must be dput() by the caller.
+ *
+ * Thus if the returned dentry is d_in_lookup() then the caller has
+ * exclusive access until it completes the lookup.
+ * If the returned dentry is not d_in_lookup() then a lookup has
+ * already completed.
+ *
+ * The @name need not already have ->hash set.
+ *
+ * Returns: the dentry, whether found or allocated, or an error
+ *    %-ENOMEM, %-EWOULDBLOCK, and anything returned by ->d_hash().
+ */
+struct dentry *d_alloc_noblock_return(struct dentry *parent,
+				      struct qstr *name,
+				      struct dentry **dentryp)
+{
+	struct dentry *de;
+
+	de = try_lookup_noperm(name, parent);
+	if (!de)
+		de = __d_alloc_parallel(parent, name, ALLOC_PARA_FAIL,
+					dentryp);
+	return de;
+}
+EXPORT_SYMBOL(d_alloc_noblock_return);
 
 /*
  * - Unhash the dentry

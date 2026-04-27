@@ -553,7 +553,7 @@ static int ovl_cache_update(const struct path *path, struct ovl_cache_entry *p, 
 {
 	struct dentry *dir = path->dentry;
 	struct ovl_fs *ofs = OVL_FS(dir->d_sb);
-	struct dentry *this = NULL;
+	struct dentry *this = NULL, *in_lookup;
 	enum ovl_path_type type;
 	u64 ino = p->real_ino;
 	int xinobits = ovl_xino_bits(ofs);
@@ -574,7 +574,8 @@ static int ovl_cache_update(const struct path *path, struct ovl_cache_entry *p, 
 		}
 	}
 	/* This checks also for xwhiteouts */
-	this = d_alloc_noblock(dir, &QSTR_LEN(p->name, p->len));
+	this = d_alloc_noblock_return(dir, &QSTR_LEN(p->name, p->len),
+				      &in_lookup);
 	if (this == ERR_PTR(-EWOULDBLOCK)) {
 		/*
 		 * Some other thead is looking up this name and will
@@ -583,6 +584,8 @@ static int ovl_cache_update(const struct path *path, struct ovl_cache_entry *p, 
 		 * lookup gets a turn it will find and return this
 		 * dentry.
 		 */
+		ovl_dentry_set_flag(OVL_E_RACED_READDIR, in_lookup);
+		dput(in_lookup);
 		this = d_alloc_name(dir, p->name);
 	}
 	if (!IS_ERR(this) && !d_unhashed(this)) {
