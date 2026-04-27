@@ -822,8 +822,10 @@ extern void set_rodata_pte(pte_t *ptep, pte_t pte);
 
 static inline bool in_pgdir_rodata(void *addr)
 {
-	return addr >= (void *)__pgdir_rodata_start &&
-	       addr < (void *)__pgdir_rodata_end;
+	phys_addr_t pa = __pa_nodebug(addr);
+
+	return pa >= __pa_symbol_nodebug(__pgdir_rodata_start) &&
+	       pa < __pa_symbol_nodebug(__pgdir_rodata_end);
 }
 
 static inline void set_pmd(pmd_t *pmdp, pmd_t pmd)

@@ -1076,6 +1076,11 @@ void __init mark_linear_text_alias_ro(void)
 			    (unsigned long)__init_begin - (unsigned long)_text,
 			    pgprot_tagged(PAGE_KERNEL_RO));
 
+	/* Map the fixmap PTE table at __fixmap_pgdir_start R/O in linear map too */
+	update_mapping_prot(__pa_symbol(__fixmap_pgdir_start),
+			    (unsigned long)lm_alias(__fixmap_pgdir_start),
+			    PAGE_SIZE, pgprot_tagged(PAGE_KERNEL_RO));
+
 	remap_linear_data_alias(true);
 
 	if (IS_ENABLED(CONFIG_HIBERNATION)) {

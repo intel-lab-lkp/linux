@@ -247,6 +247,7 @@ SECTIONS
 		__pgdir_rodata_start = .;
 		swapper_pg_dir = .;
 		. += PAGE_SIZE;
+		*(.fixmap_rodata)
 		__pgdir_rodata_end = .;
 	}
 

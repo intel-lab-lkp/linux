@@ -32,9 +32,10 @@ static_assert(NR_BM_PMD_TABLES == 1);
 #define BM_PTE_TABLE_IDX(addr)	__BM_TABLE_IDX(addr, PMD_SHIFT)
 
 #define __fixmap_bss	__section(".fixmap_bss") __aligned(PAGE_SIZE)
+#define __fixmap_rodata	__section(".fixmap_rodata") __aligned(PAGE_SIZE)
 static pte_t bm_pte[NR_BM_PTE_TABLES][PTRS_PER_PTE] __fixmap_bss;
-static pmd_t bm_pmd[PTRS_PER_PMD] __fixmap_bss __maybe_unused;
-static pud_t bm_pud[PTRS_PER_PUD] __fixmap_bss __maybe_unused;
+static pmd_t bm_pmd[PTRS_PER_PMD] __fixmap_rodata __maybe_unused;
+static pud_t bm_pud[PTRS_PER_PUD] __fixmap_rodata __maybe_unused;
 
 static inline pte_t *fixmap_pte(unsigned long addr)
 {
