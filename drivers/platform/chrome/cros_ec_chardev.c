@@ -430,7 +430,7 @@ static int cros_ec_chardev_probe(struct platform_device *pdev)
 	pdata->misc.name = ec_platform->ec_name;
 	pdata->misc.parent = pdev->dev.parent;
 
-	ret = misc_register(&pdata->misc);
+	ret = misc_sync_register(&pdata->misc);
 	if (ret) {
 		dev_err(&pdev->dev, "failed to register misc device\n");
 		goto err_unregister_notifier;
