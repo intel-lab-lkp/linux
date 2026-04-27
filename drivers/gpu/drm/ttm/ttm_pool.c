@@ -1335,15 +1335,22 @@ static int ttm_pool_debugfs_shrink_show(struct seq_file *m, void *data)
 		.gfp_mask = GFP_NOFS,
 		.nr_to_scan = TTM_SHRINKER_BATCH,
 	};
-	unsigned long count;
+	unsigned long count, scanned;
 	int nid;
 
 	fs_reclaim_acquire(GFP_KERNEL);
 	for_each_node(nid) {
 		sc.nid = nid;
 		count = ttm_pool_shrinker_count(mm_shrinker, &sc);
-		seq_printf(m, "%d: %lu/%lu\n", nid, count,
-			   ttm_pool_shrinker_scan(mm_shrinker, &sc));
+		scanned = ttm_pool_shrinker_scan(mm_shrinker, &sc);
+
+		/* Convert shrinker API sentinel values to 0 for debugfs output */
+		if (count == SHRINK_EMPTY)
+			count = 0;
+		if (scanned == SHRINK_STOP)
+			scanned = 0;
+
+		seq_printf(m, "%d: %lu/%lu\n", nid, count, scanned);
 	}
 	fs_reclaim_release(GFP_KERNEL);
 
