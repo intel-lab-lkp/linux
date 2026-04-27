@@ -28,6 +28,7 @@ enum sev_guest_state {
 #define SNP_POLICY_SMT		(1ULL << 16)
 #define SNP_POLICY_RSVD_MBO	(1ULL << 17)
 #define SNP_POLICY_DBG		(1ULL << 19)
+#define SNP_POLICY_RAPL_DIS	(1ULL << 23)
 
 #define GHCB_MSR_TERM_REQ	0x100
 

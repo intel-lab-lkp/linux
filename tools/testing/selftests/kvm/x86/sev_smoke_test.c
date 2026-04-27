@@ -243,6 +243,18 @@ static void test_sev_smoke(void *guest, u32 type, u64 policy)
 	}
 }
 
+static u64 supported_policy_mask(void)
+{
+	int kvm_fd = open_kvm_dev_path_or_exit();
+	u64 policy_mask = 0;
+
+	kvm_device_attr_get(kvm_fd, KVM_X86_GRP_SEV,
+			    KVM_X86_SNP_POLICY_BITS,
+			    &policy_mask);
+	close(kvm_fd);
+	return policy_mask;
+}
+
 int main(int argc, char *argv[])
 {
 	TEST_REQUIRE(kvm_cpu_has(X86_FEATURE_SEV));
@@ -252,8 +264,18 @@ int main(int argc, char *argv[])
 	if (kvm_cpu_has(X86_FEATURE_SEV_ES))
 		test_sev_smoke(guest_sev_es_code, KVM_X86_SEV_ES_VM, SEV_POLICY_ES);
 
-	if (kvm_cpu_has(X86_FEATURE_SEV_SNP))
+	if (kvm_cpu_has(X86_FEATURE_SEV_SNP)) {
+		u64 supported_policy = supported_policy_mask();
+
 		test_sev_smoke(guest_snp_code, KVM_X86_SNP_VM, snp_default_policy());
+
+		if (supported_policy & SNP_POLICY_RAPL_DIS &&
+		    kvm_get_module_param_bool("kvm_amd", "rapl_disable")) {
+			u64 policy = snp_default_policy() | SNP_POLICY_RAPL_DIS;
+
+			test_sev_smoke(guest_snp_code, KVM_X86_SNP_VM, policy);
+		}
+	}
 
 	return 0;
 }
