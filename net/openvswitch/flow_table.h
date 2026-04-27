@@ -59,7 +59,31 @@ struct table_instance {
 	u32 hash_seed;
 };
 
+/* Locking:
+ *
+ * flow_table is _not_ protected by ovs_lock (see comment above ovs_mutex
+ * in datapath.c).
+ *
+ * All writes to flow_table are protected by the embedded "lock".
+ * In order to ensure datapath destruction does not trigger the destruction
+ * of the flow_table, "refcnt" is used. Therefore, writers must:
+ * 1 - Enter rcu read-protected section
+ * 2 - Increase "table->refcnt"
+ * 3 - Leave rcu read-protected section (to avoid using mutexes inside rcu)
+ * 4 - Lock "table->lock"
+ * 5 - Perform modifications
+ * 6 - Release "table->lock"
+ * 7 - Decrease "table->refcnt"
+ *
+ * Reads are protected by RCU.
+ *
+ * Note with this schema, it's possible that a flow operation is performed on a
+ * flow_table that is about to be freed.
+ */
 struct flow_table {
+	/* Locks flow table writes. */
+	struct mutex lock;
+	refcount_t refcnt;
 	struct rcu_head rcu;
 	struct table_instance __rcu *ti;
 	struct table_instance __rcu *ufid_ti;
@@ -72,6 +96,26 @@ struct flow_table {
 
 extern struct kmem_cache *flow_stats_cache;
 
+#ifdef CONFIG_LOCKDEP
+int lockdep_ovs_tbl_is_held(const struct flow_table *table);
+#else
+static inline int lockdep_ovs_tbl_is_held(const struct flow_table *table
+					  __always_unused)
+{
+	return 1;
+}
+#endif
+
+#define ASSERT_OVS_TBL(tbl)   WARN_ON(!lockdep_ovs_tbl_is_held(tbl))
+
+/* Lock-protected update-allowed dereferences.*/
+#define ovs_tbl_dereference(p, tbl)	\
+	rcu_dereference_protected(p, lockdep_ovs_tbl_is_held(tbl))
+
+/* Read dereferences can be protected by either RCU, table lock. */
+#define rcu_dereference_ovs_tbl(p, tbl) \
+	rcu_dereference_check(p, lockdep_ovs_tbl_is_held(tbl))
+
 int ovs_flow_init(void);
 void ovs_flow_exit(void);
 
@@ -79,7 +123,11 @@ struct sw_flow *ovs_flow_alloc(void);
 void ovs_flow_free(struct sw_flow *, bool deferred);
 
 struct flow_table *ovs_flow_tbl_alloc(void);
-void ovs_flow_tbl_destroy_rcu(struct rcu_head *table);
+void ovs_flow_tbl_put(struct flow_table *table);
+static inline bool ovs_flow_tbl_get(struct flow_table *table)
+{
+	return refcount_inc_not_zero(&table->refcnt);
+}
 int ovs_flow_tbl_count(const struct flow_table *table);
 int ovs_flow_tbl_flush(struct flow_table *flow_table);
 
@@ -109,8 +157,5 @@ void ovs_flow_mask_key(struct sw_flow_key *dst, const struct sw_flow_key *src,
 		       bool full, const struct sw_flow_mask *mask);
 
 void ovs_flow_masks_rebalance(struct flow_table *table);
-void table_instance_flow_flush(struct flow_table *table,
-			       struct table_instance *ti,
-			       struct table_instance *ufid_ti);
 
 #endif /* flow_table.h */
