@@ -3761,6 +3761,7 @@ static vm_fault_t filemap_map_folio_range(struct vm_fault *vmf,
 	unsigned int count = 0;
 	pte_t *old_ptep = vmf->pte;
 	unsigned long addr0;
+	bool fault_mapped = false;
 
 	/*
 	 * Map the large folio fully where possible:
@@ -3785,16 +3786,6 @@ static vm_fault_t filemap_map_folio_range(struct vm_fault *vmf,
 			goto skip;
 
 		/*
-		 * If there are too many folios that are recently evicted
-		 * in a file, they will probably continue to be evicted.
-		 * In such situation, read-ahead is only a waste of IO.
-		 * Don't decrease mmap_miss in this scenario to make sure
-		 * we can stop read-ahead.
-		 */
-		if (!folio_test_workingset(folio))
-			(*mmap_miss)++;
-
-		/*
 		 * NOTE: If there're PTE markers, we'll leave them to be
 		 * handled in the specific fault path, and it'll prohibit the
 		 * fault-around logic.
@@ -3810,8 +3801,10 @@ skip:
 			*rss += count;
 			folio_ref_add(folio, count - ref_from_caller);
 			ref_from_caller = 0;
-			if (in_range(vmf->address, addr, count * PAGE_SIZE))
+			if (in_range(vmf->address, addr, count * PAGE_SIZE)) {
 				ret = VM_FAULT_NOPAGE;
+				fault_mapped = true;
+			}
 		}
 
 		count++;
@@ -3826,14 +3819,20 @@ skip:
 		*rss += count;
 		folio_ref_add(folio, count - ref_from_caller);
 		ref_from_caller = 0;
-		if (in_range(vmf->address, addr, count * PAGE_SIZE))
+		if (in_range(vmf->address, addr, count * PAGE_SIZE)) {
 			ret = VM_FAULT_NOPAGE;
+			fault_mapped = true;
+		}
 	}
 
 	vmf->pte = old_ptep;
 	if (ref_from_caller)
 		/* Locked folios cannot get truncated. */
 		folio_ref_dec(folio);
+
+	if (fault_mapped && !(vmf->flags & FAULT_FLAG_TRIED) &&
+	    !folio_test_workingset(folio))
+		(*mmap_miss)++;
 
 	return ret;
 }
@@ -3848,10 +3847,6 @@ static vm_fault_t filemap_map_order0_folio(struct vm_fault *vmf,
 	if (PageHWPoison(page))
 		goto out;
 
-	/* See comment of filemap_map_folio_range() */
-	if (!folio_test_workingset(folio))
-		(*mmap_miss)++;
-
 	/*
 	 * NOTE: If there're PTE markers, we'll leave them to be
 	 * handled in the specific fault path, and it'll prohibit
@@ -3860,8 +3855,12 @@ static vm_fault_t filemap_map_order0_folio(struct vm_fault *vmf,
 	if (!pte_none(ptep_get(vmf->pte)))
 		goto out;
 
-	if (vmf->address == addr)
+	if (vmf->address == addr) {
 		ret = VM_FAULT_NOPAGE;
+		if (!(vmf->flags & FAULT_FLAG_TRIED) &&
+		    !folio_test_workingset(folio))
+			(*mmap_miss)++;
+	}
 
 	set_pte_range(vmf, folio, page, 1, addr);
 	(*rss)++;
