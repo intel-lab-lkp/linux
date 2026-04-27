@@ -1765,8 +1765,10 @@ static int qedf_lport_setup(struct qedf_ctx *qedf)
 	fc_exch_mgr_alloc(lport, FC_CLASS_3, FCOE_PARAMS_NUM_TASKS,
 			  0xfffe, NULL);
 
-	if (fc_lport_init_stats(lport))
+	if (fc_lport_init_stats(lport)) {
+		fc_exch_mgr_free(lport);
 		return -ENOMEM;
+	}
 
 	/* Finish lport config */
 	fc_lport_config(lport);
@@ -3306,6 +3308,7 @@ static int __qedf_probe(struct pci_dev *pdev, int mode)
 	struct qed_slowpath_params slowpath_params;
 	struct qed_probe_params qed_params;
 	u16 retry_cnt = 10;
+	bool lport_setup = false;
 
 	/*
 	 * When doing error recovery we didn't reap the lport so don't try
@@ -3625,6 +3628,7 @@ retry_probe:
 			    "qedf_lport_setup failed.\n");
 			goto err7;
 		}
+		lport_setup = true;
 	}
 
 	qedf->timer_work_queue = alloc_workqueue("qedf_%u_timer",
@@ -3705,6 +3709,10 @@ err7:
 		destroy_workqueue(qedf->ll2_recv_wq);
 	fc_remove_host(qedf->lport->host);
 	scsi_remove_host(qedf->lport->host);
+	if (lport_setup) {
+		fc_exch_mgr_free(qedf->lport);
+		fc_lport_free_stats(qedf->lport);
+	}
 #ifdef CONFIG_DEBUG_FS
 	qedf_dbg_host_exit(&(qedf->dbg_ctx));
 #endif
