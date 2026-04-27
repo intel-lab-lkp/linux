@@ -24,6 +24,7 @@
 #include <linux/skbuff.h>
 #include <linux/delay.h>
 #include <linux/spi/spi.h>
+#include <linux/of_net.h>
 
 #include "enc28j60_hw.h"
 
@@ -1554,7 +1555,10 @@ static int enc28j60_probe(struct spi_device *spi)
 		goto error_irq;
 	}
 
-	if (device_get_ethdev_address(&spi->dev, dev))
+	ret = of_get_ethdev_address(spi->dev.of_node, dev);
+	if (ret == -EPROBE_DEFER)
+		return ret;
+	if (ret)
 		eth_hw_addr_random(dev);
 	enc28j60_set_hw_macaddr(dev);
 
