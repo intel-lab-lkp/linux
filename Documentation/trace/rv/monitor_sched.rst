@@ -365,4 +365,4 @@ constraints when processing the events::
 References
 ----------
 
-[1] - https://bristot.me/linux-task-model
+[1] - Daniel Bristot de Oliveira et al.: A thread synchronization model for the PREEMPT_RT Linux kernel, J. Syst. Archit., 2020.
