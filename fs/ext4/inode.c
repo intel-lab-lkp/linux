@@ -4857,6 +4857,7 @@ static int __ext4_get_inode_loc(struct super_block *sb, unsigned long ino,
 	ext4_fsblk_t		block;
 	struct blk_plug		plug;
 	int			inodes_per_block, inode_offset;
+	gfp_t			gfp;
 
 	iloc->bh = NULL;
 	if (ino < EXT4_ROOT_INO ||
@@ -4885,7 +4886,14 @@ static int __ext4_get_inode_loc(struct super_block *sb, unsigned long ino,
 	}
 	block += (inode_offset / inodes_per_block);
 
-	bh = sb_getblk(sb, block);
+	/*
+	 * No __GFP_NOFAIL: this can run from reclaim context (kswapd
+	 * shrinker -> iput -> ext4_orphan_del path) where NOFAIL trips
+	 * WARN_ON_ONCE in __alloc_pages_slowpath().
+	 */
+	gfp = mapping_gfp_constraint(sb->s_bdev->bd_mapping, ~__GFP_FS) |
+		__GFP_MOVABLE;
+	bh = sb_getblk_gfp(sb, block, gfp);
 	if (unlikely(!bh))
 		return -ENOMEM;
 	if (ext4_buffer_uptodate(bh))
@@ -4910,7 +4918,7 @@ static int __ext4_get_inode_loc(struct super_block *sb, unsigned long ino,
 		start = inode_offset & ~(inodes_per_block - 1);
 
 		/* Is the inode bitmap in cache? */
-		bitmap_bh = sb_getblk(sb, ext4_inode_bitmap(sb, gdp));
+		bitmap_bh = sb_getblk_gfp(sb, ext4_inode_bitmap(sb, gdp), gfp);
 		if (unlikely(!bitmap_bh))
 			goto make_io;
 
