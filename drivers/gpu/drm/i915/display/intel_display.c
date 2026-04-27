@@ -4638,7 +4638,6 @@ intel_crtc_prepare_cleared_state(struct intel_atomic_state *state,
 
 	saved_state->uapi = crtc_state->uapi;
 	saved_state->inherited = crtc_state->inherited;
-	saved_state->scaler_state = crtc_state->scaler_state;
 	saved_state->intel_dpll = crtc_state->intel_dpll;
 	saved_state->dpll_hw_state = crtc_state->dpll_hw_state;
 	memcpy(saved_state->icl_port_dplls, crtc_state->icl_port_dplls,
