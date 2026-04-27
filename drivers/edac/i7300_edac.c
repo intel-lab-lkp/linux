@@ -570,6 +570,27 @@ static void i7300_enable_error_reporting(struct mem_ctl_info *mci)
 			       EMASK_FBD, fbd_error_mask);
 }
 
+/**
+ * i7300_disable_error_reporting() - Disable the memory reporting logic at the
+ *				     hardware
+ * @mci: struct mem_ctl_info pointer
+ */
+static void i7300_disable_error_reporting(struct mem_ctl_info *mci)
+{
+	struct i7300_pvt *pvt = mci->pvt_info;
+	u32 fbd_error_mask;
+
+	/* Read the FBD Error Mask Register */
+	pci_read_config_dword(pvt->pci_dev_16_1_fsb_addr_map,
+			      EMASK_FBD, &fbd_error_mask);
+
+	/* Disable by writing '1' */
+	fbd_error_mask |= EMASK_FBD_ERR_MASK;
+
+	pci_write_config_dword(pvt->pci_dev_16_1_fsb_addr_map,
+			       EMASK_FBD, fbd_error_mask);
+}
+
 /************************************************
  * i7300 Functions related to memory enumberation
  ************************************************/
@@ -1025,6 +1046,7 @@ static int i7300_init_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	struct edac_mc_layer layers[3];
 	struct i7300_pvt *pvt;
 	int rc;
+	bool enabled_error_reporting;
 
 	/* wake up device */
 	rc = pci_enable_device(pdev);
@@ -1084,20 +1106,22 @@ static int i7300_init_one(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	/* initialize the MC control structure 'csrows' table
 	 * with the mapping and control information */
+	enabled_error_reporting = false;
 	if (i7300_get_mc_regs(mci)) {
 		edac_dbg(0, "MC: Setting mci->edac_cap to EDAC_FLAG_NONE because i7300_init_csrows() returned nonzero value\n");
 		mci->edac_cap = EDAC_FLAG_NONE;	/* no csrows found */
 	} else {
 		edac_dbg(1, "MC: Enable error reporting now\n");
 		i7300_enable_error_reporting(mci);
+		enabled_error_reporting = true;
 	}
 
 	/* add this new MC control structure to EDAC's list of MCs */
 	if (edac_mc_add_mc(mci)) {
 		edac_dbg(0, "MC: failed edac_mc_add_mc()\n");
-		/* FIXME: perhaps some code should go here that disables error
-		 * reporting if we just enabled it
-		 */
+		/* Disable error reporting if we just enabled it */
+		if (enabled_error_reporting)
+			i7300_disable_error_reporting(mci);
 		goto fail1;
 	}
 
