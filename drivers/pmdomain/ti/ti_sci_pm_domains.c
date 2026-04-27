@@ -132,6 +132,23 @@ static int ti_sci_pd_power_on(struct generic_pm_domain *domain)
 		return ti_sci->ops.dev_ops.get_device(ti_sci, pd->idx);
 }
 
+static bool ti_sci_pm_pd_is_on(struct ti_sci_genpd_provider *pd_provider,
+			       int pd_idx)
+{
+	bool is_on;
+	int ret;
+
+	if (!pd_provider->ti_sci->ops.dev_ops.is_on)
+		return false;
+
+	ret = pd_provider->ti_sci->ops.dev_ops.is_on(pd_provider->ti_sci,
+						     pd_idx, NULL, &is_on);
+	if (ret)
+		return false;
+
+	return is_on;
+}
+
 #ifdef CONFIG_PM_SLEEP
 static int ti_sci_pd_suspend(struct device *dev)
 {
@@ -150,8 +167,37 @@ static int ti_sci_pd_suspend(struct device *dev)
 
 	return 0;
 }
+
+static int ti_sci_pd_resume(struct device *dev)
+{
+	struct generic_pm_domain *genpd = pd_to_genpd(dev->pm_domain);
+	struct ti_sci_pm_domain *pd = genpd_to_ti_sci_pd(genpd);
+	const struct ti_sci_handle *ti_sci = pd->parent->ti_sci;
+	int ret;
+
+	/*
+	 * If genpd's domain state is ON but TIFS powered it OFF during
+	 * suspend, re-sync by issuing get_device before the driver resumes.
+	 */
+	if (genpd->status == GENPD_STATE_ON &&
+	    !ti_sci_pm_pd_is_on(pd->parent, pd->idx)) {
+		dev_dbg(dev, "ti_sci_pd: ID:%d genpd/TIFS out of sync on resume, re-syncing\n",
+			pd->idx);
+		if (pd->exclusive)
+			ret = ti_sci->ops.dev_ops.get_device_exclusive(ti_sci,
+								       pd->idx);
+		else
+			ret = ti_sci->ops.dev_ops.get_device(ti_sci, pd->idx);
+		if (ret)
+			return ret;
+	}
+
+	return pm_generic_resume(dev);
+}
+
 #else
 #define ti_sci_pd_suspend		NULL
+#define ti_sci_pd_resume		NULL
 #endif
 
 /*
@@ -199,23 +245,6 @@ static bool ti_sci_pm_idx_exists(struct ti_sci_genpd_provider *pd_provider, u32 
 	}
 
 	return false;
-}
-
-static bool ti_sci_pm_pd_is_on(struct ti_sci_genpd_provider *pd_provider,
-			       int pd_idx)
-{
-	bool is_on;
-	int ret;
-
-	if (!pd_provider->ti_sci->ops.dev_ops.is_on)
-		return false;
-
-	ret = pd_provider->ti_sci->ops.dev_ops.is_on(pd_provider->ti_sci,
-						     pd_idx, NULL, &is_on);
-	if (ret)
-		return false;
-
-	return is_on;
 }
 
 static int ti_sci_pm_domain_probe(struct platform_device *pdev)
@@ -283,6 +312,9 @@ static int ti_sci_pm_domain_probe(struct platform_device *pdev)
 				if (pd_provider->ti_sci->ops.pm_ops.set_device_constraint &&
 				    pd_provider->ti_sci->ops.pm_ops.set_latency_constraint)
 					pd->pd.domain.ops.suspend = ti_sci_pd_suspend;
+
+				if (pd_provider->ti_sci->ops.dev_ops.is_on)
+					pd->pd.domain.ops.resume = ti_sci_pd_resume;
 
 				is_on = ti_sci_pm_pd_is_on(pd_provider,
 							   pd->idx);
