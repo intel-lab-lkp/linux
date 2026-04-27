@@ -18,6 +18,7 @@ import shutil
 this_dir = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.join(this_dir, "../"))
 from lib.py.utils import ip
+from lib.py.ksft import ksft_pr
 
 libc = ctypes.cdll.LoadLibrary('libc.so.6')
 setns = libc.setns
@@ -57,7 +58,7 @@ def netns_socket(netns, *sock_args):
         # send resulting socket to parent
         socket.send_fds(u0, [], [sock.fileno()])
 
-        sys.exit(0)
+        os._exit(0)
 
     # receive socket from child
     _, fds, _, _ = socket.recv_fds(u1, 0, 1)
@@ -67,7 +68,7 @@ def netns_socket(netns, *sock_args):
     return socket.fromfd(fds[0], *sock_args)
 
 def collect_pcaps():
-    print("Stopping network packet captures")
+    ksft_pr("Stopping network packet captures")
     for p, pcap_tmp, pcap, fd in tcpdump_procs:
         p.terminate()
         p.wait()
@@ -78,8 +79,9 @@ def signal_handler(_sig, _frame):
     """
     Test timed out signal handler
     """
-    print('Test timed out')
+    ksft_pr("Test timed out")
     collect_pcaps()
+    print("not ok 1 rds selftest")
     sys.exit(1)
 
 #Parse out command line arguments.  We take an optional
@@ -140,7 +142,8 @@ for net in [NET0, NET1]:
     fd, pcap_tmp = tempfile.mkstemp(suffix=".pcap", prefix=f"{net}-", dir="/tmp")
     p = subprocess.Popen(
         ['ip', 'netns', 'exec', net,
-         '/usr/sbin/tcpdump', '-i', 'any', '-w', pcap_tmp])
+         '/usr/sbin/tcpdump', '-i', 'any', '-w', pcap_tmp],
+         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     tcpdump_procs.append((p, pcap_tmp, pcap, fd))
 
 # simulate packet loss, duplication and corruption
@@ -148,6 +151,9 @@ for net, iface in [(NET0, VETH0), (NET1, VETH1)]:
     ip(f"netns exec {net} /usr/sbin/tc qdisc add dev {iface} root netem  \
          corrupt {PACKET_CORRUPTION} loss {PACKET_LOSS} duplicate  \
          {PACKET_DUPLICATE}")
+
+print("TAP version 13")
+print("1..1")
 
 # add a timeout
 if args.timeout > 0:
@@ -187,7 +193,7 @@ nr_recv = 0
 
 while nr_send < NUM_PACKETS:
     # Send as much as we can without blocking
-    print("sending...", nr_send, nr_recv)
+    ksft_pr("sending...", nr_send, nr_recv)
     while nr_send < NUM_PACKETS:
         send_data = hashlib.sha256(
             f'packet {nr_send}'.encode('utf-8')).hexdigest().encode('utf-8')
@@ -209,7 +215,7 @@ while nr_send < NUM_PACKETS:
             raise
 
     # Receive as much as we can without blocking
-    print("receiving...", nr_send, nr_recv)
+    ksft_pr("receiving...", nr_send, nr_recv)
     while nr_recv < nr_send:
         for fileno, eventmask in ep.poll():
             receiver = fileno_to_socket[fileno]
@@ -231,7 +237,7 @@ while nr_send < NUM_PACKETS:
         ip(f"netns exec {net} /usr/sbin/sysctl net.rds.tcp.rds_tcp_rcvbuf=10000")
         ip(f"netns exec {net} /usr/sbin/sysctl net.rds.tcp.rds_tcp_sndbuf=10000")
 
-print("done", nr_send, nr_recv)
+ksft_pr("done", nr_send, nr_recv)
 
 # the Python socket module doesn't know these
 RDS_INFO_FIRST = 10000
@@ -254,25 +260,34 @@ for s in sockets:
                 # ignore
                 pass
 
-print(f"getsockopt(): {nr_success}/{nr_error}")
+ksft_pr(f"getsockopt(): {nr_success}/{nr_error}")
 collect_pcaps()
 
 # We're done sending and receiving stuff, now let's check if what
 # we received is what we sent.
+ret = 0
 for (sender, receiver), send_hash in send_hashes.items():
     recv_hash = recv_hashes.get((sender, receiver))
 
     if recv_hash is None:
-        print("FAIL: No data received")
-        sys.exit(1)
+        ksft_pr("FAIL: No data received")
+        ret = 1
+        break
 
     if send_hash.hexdigest() != recv_hash.hexdigest():
-        print("FAIL: Send/recv mismatch")
-        print("hash expected:", send_hash.hexdigest())
-        print("hash received:", recv_hash.hexdigest())
-        sys.exit(1)
+        ksft_pr("FAIL: Send/recv mismatch")
+        ksft_pr("hash expected:", send_hash.hexdigest())
+        ksft_pr("hash received:", recv_hash.hexdigest())
+        ret = 1
+        break
 
-    print(f"{sender}/{receiver}: ok")
+    ksft_pr(f"{sender}/{receiver}: ok")
 
-print("Success")
-sys.exit(0)
+if ret == 0:
+    ksft_pr("Success")
+    print("ok 1 rds selftest")
+else:
+    print("not ok 1 rds selftest")
+
+ksft_pr(f"Totals: pass:{1-ret} fail:{ret} skip:0")
+sys.exit(ret)
