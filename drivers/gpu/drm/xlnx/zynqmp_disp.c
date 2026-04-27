@@ -99,9 +99,14 @@ struct zynqmp_disp_format {
  */
 struct zynqmp_disp_layer_dma {
 	struct dma_chan *chan;
-	struct dma_interleaved_template xt;
-	struct data_chunk sgl;
+
+	/* Must be last as it ends in a flexible-array member. */
+	TRAILING_OVERLAP(struct dma_interleaved_template, xt, sgl,
+		struct data_chunk sgl;
+	);
 };
+static_assert(offsetof(struct zynqmp_disp_layer_dma, xt.sgl) ==
+	      offsetof(struct zynqmp_disp_layer_dma, sgl));
 
 /**
  * struct zynqmp_disp_layer_info - Static layer information
