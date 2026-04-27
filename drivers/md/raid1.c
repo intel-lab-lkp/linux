@@ -629,7 +629,7 @@ static int choose_first_rdev(struct r1conf *conf, struct r1bio *r1_bio,
 
 		/* choose the first disk even if it has some bad blocks. */
 		read_len = raid1_check_read_range(rdev, this_sector, &len);
-		if (read_len > 0) {
+		if (read_len > 0 && (!*max_sectors || read_len == r1_bio->sectors)) {
 			update_read_sectors(conf, disk, this_sector, read_len);
 			*max_sectors = read_len;
 			return disk;
@@ -726,8 +726,13 @@ static int choose_slow_rdev(struct r1conf *conf, struct r1bio *r1_bio,
 	}
 
 	if (bb_disk != -1) {
-		*max_sectors = bb_read_len;
-		update_read_sectors(conf, bb_disk, this_sector, bb_read_len);
+		if (!*max_sectors || bb_read_len == r1_bio->sectors) {
+			*max_sectors = bb_read_len;
+			update_read_sectors(conf, bb_disk, this_sector,
+					    bb_read_len);
+		} else {
+			bb_disk = -1;
+		}
 	}
 
 	return bb_disk;
@@ -874,8 +879,9 @@ static int choose_best_rdev(struct r1conf *conf, struct r1bio *r1_bio)
  * disks and disks with bad blocks for now. Only pay attention to key disk
  * choice.
  *
- * 3) If we've made it this far, now look for disks with bad blocks and choose
- * the one with most number of sectors.
+ * 3) If we've made it this far and *max_sectors is 0 (i.e., we are tolerant
+ * of bad blocks), look for disks with bad blocks and choose the one with
+ * the most sectors.
  *
  * 4) If we are all the way at the end, we have no choice but to use a disk even
  * if it is write mostly.
@@ -904,11 +910,13 @@ static int read_balance(struct r1conf *conf, struct r1bio *r1_bio,
 	/*
 	 * If we are here it means we didn't find a perfectly good disk so
 	 * now spend a bit more time trying to find one with the most good
-	 * sectors.
+	 * sectors. but only if we are tolerant of bad blocks.
 	 */
-	disk = choose_bb_rdev(conf, r1_bio, max_sectors);
-	if (disk >= 0)
-		return disk;
+	if (!*max_sectors) {
+		disk = choose_bb_rdev(conf, r1_bio, max_sectors);
+		if (disk >= 0)
+			return disk;
+	}
 
 	return choose_slow_rdev(conf, r1_bio, max_sectors);
 }
@@ -1368,7 +1376,14 @@ static void raid1_read_request(struct mddev *mddev, struct bio *bio,
 	/*
 	 * make_request() can abort the operation when read-ahead is being
 	 * used and no empty request is available.
+	 *
+	 * If we allow splitting the bio while executing in the raid1 thread,
+	 * we may end up recursing (current->bio_list is NULL), and we might
+	 * also deadlock if we try to suspend the array, since we are
+	 * resubmitting an md_cloned_bio. Therefore, we must be read either
+	 * all the sectors or none.
 	 */
+	max_sectors = r1bio_existed;
 	rdisk = read_balance(conf, r1_bio, &max_sectors);
 	if (rdisk < 0) {
 		/* couldn't find anywhere to read from */
