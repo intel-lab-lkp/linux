@@ -623,7 +623,9 @@ static struct page *swiotlb_alloc_tlb(struct device *dev, size_t bytes,
 		if (!IS_ENABLED(CONFIG_DMA_COHERENT_POOL))
 			return NULL;
 
+		/* considered decrypted by default */
 		return dma_alloc_from_pool(dev, bytes, &vaddr, gfp,
+					   DMA_ATTR_CC_SHARED,
 					   dma_coherent_ok);
 	}
 
