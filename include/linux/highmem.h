@@ -439,6 +439,23 @@ static inline void copy_highpage(struct page *to, struct page *from)
 
 #endif
 
+static inline void copy_highpages(struct page *to, struct page *from,
+		unsigned long nr_pages)
+{
+	unsigned long i;
+
+#ifndef __HAVE_ARCH_COPY_HIGHPAGE
+	if (!IS_ENABLED(CONFIG_HIGHMEM)) {
+		memcpy(page_address(to), page_address(from), nr_pages << PAGE_SHIFT);
+		for (i = 0; i < nr_pages; i++)
+			kmsan_copy_page_meta(to + i, from + i);
+		return;
+	}
+#endif
+	for (i = 0; i < nr_pages; i++)
+		copy_highpage(to + i, from + i);
+}
+
 #ifdef copy_mc_to_kernel
 /*
  * If architecture supports machine check exception handling, define the
@@ -484,6 +501,40 @@ static inline int copy_mc_highpage(struct page *to, struct page *from)
 
 	return ret;
 }
+
+static inline int copy_mc_highpages(struct page *to, struct page *from,
+		unsigned long nr_pages)
+{
+	unsigned long i;
+
+#ifndef __HAVE_ARCH_COPY_HIGHPAGE
+	if (!IS_ENABLED(CONFIG_HIGHMEM)) {
+		unsigned long len = nr_pages << PAGE_SHIFT;
+		unsigned long ret;
+
+		ret = copy_mc_to_kernel(page_address(to),
+					page_address(from), len);
+		if (!ret) {
+			for (i = 0; i < nr_pages; i++)
+				kmsan_copy_page_meta(to + i, from + i);
+			return 0;
+		}
+		/*
+		 * copy_mc_to_kernel() returns the number bytes that were not copied,
+		 * counted from the end. The first failing page is therefore at
+		 * offset (len - ret) >> PAGE_SHIFT within the range.
+		 */
+		memory_failure_queue(page_to_pfn(from) +
+				     ((len - ret) >> PAGE_SHIFT), 0);
+		return -EHWPOISON;
+	}
+#endif
+
+	for (i = 0; i < nr_pages; i++)
+		if (copy_mc_highpage(to + i, from + i))
+			return -EHWPOISON;
+	return 0;
+}
 #else
 static inline int copy_mc_user_highpage(struct page *to, struct page *from,
 					unsigned long vaddr, struct vm_area_struct *vma)
@@ -495,6 +546,13 @@ static inline int copy_mc_user_highpage(struct page *to, struct page *from,
 static inline int copy_mc_highpage(struct page *to, struct page *from)
 {
 	copy_highpage(to, from);
+	return 0;
+}
+
+static inline int copy_mc_highpages(struct page *to, struct page *from,
+		unsigned long nr_pages)
+{
+	copy_highpages(to, from, nr_pages);
 	return 0;
 }
 #endif

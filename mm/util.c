@@ -749,32 +749,15 @@ EXPORT_SYMBOL(folio_mapping);
  */
 void folio_copy(struct folio *dst, struct folio *src)
 {
-	long i = 0;
-	long nr = folio_nr_pages(src);
-
-	for (;;) {
-		copy_highpage(folio_page(dst, i), folio_page(src, i));
-		if (++i == nr)
-			break;
-		cond_resched();
-	}
+	copy_highpages(folio_page(dst, 0), folio_page(src, 0),
+		       folio_nr_pages(src));
 }
 EXPORT_SYMBOL(folio_copy);
 
 int folio_mc_copy(struct folio *dst, struct folio *src)
 {
-	long nr = folio_nr_pages(src);
-	long i = 0;
-
-	for (;;) {
-		if (copy_mc_highpage(folio_page(dst, i), folio_page(src, i)))
-			return -EHWPOISON;
-		if (++i == nr)
-			break;
-		cond_resched();
-	}
-
-	return 0;
+	return copy_mc_highpages(folio_page(dst, 0), folio_page(src, 0),
+				 folio_nr_pages(src));
 }
 EXPORT_SYMBOL(folio_mc_copy);
 
