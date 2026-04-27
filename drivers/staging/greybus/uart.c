@@ -495,7 +495,24 @@ static void gb_tty_set_termios(struct tty_struct *tty,
 
 	newline.data_bits = tty_get_char_size(termios->c_cflag);
 
-	/* FIXME: needs to clear unsupported bits in the termios */
+	/*
+	 * The Greybus UART driver only interprets a subset of termios
+	 * c_cflag bits when configuring line settings:
+	 *
+	 *   - CSIZE via tty_get_char_size() for data bits
+	 *   - CSTOPB for stop-bit format
+	 *   - PARENB, PARODD, CMSPAR for parity encoding
+	 *   - CRTSCTS for hardware flow control
+	 *   - CLOCAL for modem control handling
+	 *   - CBAUD via C_BAUD() for baud rate and B0 semantics
+	 *
+	 * Mask unsupported c_cflag bits.
+	 */
+	termios->c_cflag &= (CSIZE | CSTOPB |
+			     PARENB | PARODD | CMSPAR |
+			     CLOCAL | CRTSCTS |
+			     CBAUD);
+
 	gb_tty->clocal = ((termios->c_cflag & CLOCAL) != 0);
 
 	if (C_BAUD(tty) == B0) {
