@@ -61,7 +61,7 @@ static int sysinit_ret;
 /* All TDX-usable memory regions.  Protected by mem_hotplug_lock. */
 static LIST_HEAD(tdx_memlist);
 
-static struct tdx_sys_info tdx_sysinfo __ro_after_init;
+static struct tdx_sys_info tdx_sysinfo;
 static bool tdx_module_initialized;
 
 /*
@@ -1276,6 +1276,25 @@ int tdx_module_run_update(void)
 		return ret;
 
 	tdx_module_initialized = true;
+	return 0;
+}
+
+int tdx_module_refresh_version(void)
+{
+	struct tdx_sys_info_version *old, new;
+	int ret;
+
+	/* Shouldn't fail as the update has succeeded. */
+	ret = get_tdx_sys_info_version(&new);
+	WARN_ON_ONCE(ret);
+
+	old = &tdx_sysinfo.version;
+	pr_info("version " TDX_VERSION_FMT " -> " TDX_VERSION_FMT "\n",
+		old->major_version, old->minor_version, old->update_version,
+		new.major_version, new.minor_version, new.update_version);
+
+	/* Major/minor versions should not change across updates. */
+	tdx_sysinfo.version.update_version	= new.update_version;
 	return 0;
 }
 

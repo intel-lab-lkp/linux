@@ -114,5 +114,6 @@ struct tdmr_info_list {
 
 int tdx_module_shutdown(void);
 int tdx_module_run_update(void);
+int tdx_module_refresh_version(void);
 
 #endif
