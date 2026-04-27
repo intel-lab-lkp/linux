@@ -8302,6 +8302,7 @@ void cfg80211_auth_timeout(struct net_device *dev, const u8 *addr);
  *	as the AC bitmap in the QoS info field
  * @req_ies: information elements from the (Re)Association Request frame
  * @req_ies_len: length of req_ies data
+ * @assoc_encrypted: indicate if the (re)association exchange is encrypted.
  * @ap_mld_addr: AP MLD address (in case of MLO)
  * @links: per-link information indexed by link ID, use links[0] for
  *	non-MLO connections
@@ -8316,6 +8317,7 @@ struct cfg80211_rx_assoc_resp_data {
 	const u8 *req_ies;
 	size_t req_ies_len;
 	int uapsd_queues;
+	bool assoc_encrypted;
 	const u8 *ap_mld_addr;
 	struct {
 		u8 addr[ETH_ALEN] __aligned(2);
