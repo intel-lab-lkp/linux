@@ -1351,7 +1351,7 @@ static int snp_filter_reserved_mem_regions(struct resource *rs, void *arg)
 	return 0;
 }
 
-static int __sev_snp_init_locked(int *error, unsigned int max_snp_asid)
+static int __sev_snp_init_locked(struct sev_platform_init_args *args)
 {
 	struct sev_data_range_list *snp_range_list __free(kfree) = NULL;
 	struct psp_device *psp = psp_master;
@@ -1421,9 +1421,9 @@ static int __sev_snp_init_locked(int *error, unsigned int max_snp_asid)
 
 		memset(&data, 0, sizeof(data));
 
-		if (max_snp_asid) {
+		if (args->max_snp_asid) {
 			data.ciphertext_hiding_en = 1;
-			data.max_snp_asid = max_snp_asid;
+			data.max_snp_asid = args->max_snp_asid;
 		}
 
 		data.init_rmp = 1;
@@ -1458,20 +1458,20 @@ static int __sev_snp_init_locked(int *error, unsigned int max_snp_asid)
 	 */
 	wbinvd_on_all_cpus();
 
-	rc = __sev_do_cmd_locked(cmd, arg, error);
+	rc = __sev_do_cmd_locked(cmd, arg, &args->error);
 	if (rc) {
 		dev_err(sev->dev, "SEV-SNP: %s failed rc %d, error %#x\n",
 			cmd == SEV_CMD_SNP_INIT_EX ? "SNP_INIT_EX" : "SNP_INIT",
-			rc, *error);
+			rc, args->error);
 		return rc;
 	}
 
 	/* Prepare for first SNP guest launch after INIT. */
 	wbinvd_on_all_cpus();
-	rc = __sev_do_cmd_locked(SEV_CMD_SNP_DF_FLUSH, NULL, error);
+	rc = __sev_do_cmd_locked(SEV_CMD_SNP_DF_FLUSH, NULL, &args->error);
 	if (rc) {
 		dev_err(sev->dev, "SEV-SNP: SNP_DF_FLUSH failed rc %d, error %#x\n",
-			rc, *error);
+			rc, args->error);
 		return rc;
 	}
 
@@ -1651,7 +1651,7 @@ static int _sev_platform_init_locked(struct sev_platform_init_args *args)
 	if (sev->sev_plat_status.state == SEV_STATE_INIT)
 		return 0;
 
-	rc = __sev_snp_init_locked(&args->error, args->max_snp_asid);
+	rc = __sev_snp_init_locked(args);
 	if (rc && rc != -ENODEV)
 		return rc;
 
@@ -1732,9 +1732,10 @@ static int sev_move_to_init_state(struct sev_issue_cmd *argp, bool *shutdown_req
 
 static int snp_move_to_init_state(struct sev_issue_cmd *argp, bool *shutdown_required)
 {
-	int error, rc;
+	struct sev_platform_init_args args = {};
+	int rc;
 
-	rc = __sev_snp_init_locked(&error, 0);
+	rc = __sev_snp_init_locked(&args);
 	if (rc) {
 		argp->error = SEV_RET_INVALID_PLATFORM_STATE;
 		return rc;
