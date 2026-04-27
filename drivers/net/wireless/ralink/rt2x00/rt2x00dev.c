@@ -996,7 +996,7 @@ int rt2x00lib_set_mac_address(struct rt2x00_dev *rt2x00dev, u8 *eeprom_mac_addr)
 	if (ret == -EPROBE_DEFER)
 		return ret;
 
-	if (!is_valid_ether_addr(eeprom_mac_addr)) {
+	if (ret) {
 		eth_random_addr(eeprom_mac_addr);
 		rt2x00_eeprom_dbg(rt2x00dev, "MAC: %pM\n", eeprom_mac_addr);
 	}
