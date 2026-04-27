@@ -8,6 +8,7 @@
 
 #include <linux/exportfs.h>
 #include <linux/iversion.h>
+#include <linux/namei.h> // for LOOKUP_SHARED
 
 #include "ntfs.h"
 #include "time.h"
@@ -310,7 +311,8 @@ handle_name:
 		}
 		nls_name.hash = full_name_hash(dent, nls_name.name, nls_name.len);
 
-		dent = d_add_ci(dent, dent_inode, &nls_name);
+		dent = d_add_ci(dent, dent_inode, &nls_name,
+				!!(flags & LOOKUP_SHARED));
 		kfree(nls_name.name);
 		return dent;
 
