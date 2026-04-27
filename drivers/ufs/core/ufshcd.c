@@ -621,7 +621,8 @@ static void ufshcd_print_tr(struct ufs_hba *hba, struct scsi_cmnd *cmd,
 	ufshcd_hex_dump("UPIU REQ: ", lrbp->ucd_req_ptr,
 			sizeof(struct utp_upiu_req));
 	dev_err(hba->dev, "UPIU[%d] - Response UPIU phys@0x%llx\n", tag,
-		(u64)lrbp->ucd_rsp_dma_addr);
+		(u64)(lrbp->ucd_req_dma_addr +
+		offsetof(struct utp_transfer_cmd_desc, response_upiu)));
 	ufshcd_hex_dump("UPIU RSP: ", lrbp->ucd_rsp_ptr,
 			sizeof(struct utp_upiu_rsp));
 
@@ -633,7 +634,8 @@ static void ufshcd_print_tr(struct ufs_hba *hba, struct scsi_cmnd *cmd,
 	dev_err(hba->dev,
 		"UPIU[%d] - PRDT - %d entries  phys@0x%llx\n",
 		tag, prdt_length,
-		(u64)lrbp->ucd_prdt_dma_addr);
+		(u64)(lrbp->ucd_req_dma_addr +
+		offsetof(struct utp_transfer_cmd_desc, prd_table)));
 
 	if (pr_prdt)
 		ufshcd_hex_dump("UPIU PRDT: ", lrbp->ucd_prdt_ptr,
@@ -2971,8 +2973,6 @@ static void ufshcd_init_lrb(struct ufs_hba *hba, struct scsi_cmnd *cmd)
 	struct utp_transfer_req_desc *utrdlp = hba->utrdl_base_addr;
 	dma_addr_t cmd_desc_element_addr =
 		hba->ucdl_dma_addr + i * ufshcd_get_ucd_size(hba);
-	u16 response_offset = le16_to_cpu(utrdlp[i].response_upiu_offset);
-	u16 prdt_offset = le16_to_cpu(utrdlp[i].prd_table_offset);
 	struct ufshcd_lrb *lrb = scsi_cmd_priv(cmd);
 
 	lrb->utr_descriptor_ptr = utrdlp + i;
@@ -2981,9 +2981,7 @@ static void ufshcd_init_lrb(struct ufs_hba *hba, struct scsi_cmnd *cmd)
 	lrb->ucd_req_ptr = (struct utp_upiu_req *)cmd_descp->command_upiu;
 	lrb->ucd_req_dma_addr = cmd_desc_element_addr;
 	lrb->ucd_rsp_ptr = (struct utp_upiu_rsp *)cmd_descp->response_upiu;
-	lrb->ucd_rsp_dma_addr = cmd_desc_element_addr + response_offset;
 	lrb->ucd_prdt_ptr = (struct ufshcd_sg_entry *)cmd_descp->prd_table;
-	lrb->ucd_prdt_dma_addr = cmd_desc_element_addr + prdt_offset;
 }
 
 static void __ufshcd_setup_cmd(struct ufs_hba *hba, struct scsi_cmnd *cmd,

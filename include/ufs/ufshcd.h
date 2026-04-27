@@ -158,8 +158,6 @@ struct ufs_pm_lvl_states {
  * @ucd_rsp_ptr: Response UPIU address for this command
  * @ucd_prdt_ptr: PRDT address of the command
  * @utrd_dma_addr: UTRD dma address for debug
- * @ucd_prdt_dma_addr: PRDT dma address for debug
- * @ucd_rsp_dma_addr: UPIU response dma address for debug
  * @ucd_req_dma_addr: UPIU request dma address for debug
  * @scsi_status: SCSI status of the command
  * @command_type: SCSI, UFS, Query.
@@ -182,8 +180,6 @@ struct ufshcd_lrb {
 
 	dma_addr_t utrd_dma_addr;
 	dma_addr_t ucd_req_dma_addr;
-	dma_addr_t ucd_rsp_dma_addr;
-	dma_addr_t ucd_prdt_dma_addr;
 
 	int scsi_status;
 
