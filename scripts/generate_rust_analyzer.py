@@ -10,15 +10,15 @@ import os
 import pathlib
 import subprocess
 import sys
-from typing import Dict, Iterable, List, Literal, Optional, TypedDict
+import typing as t
 
-def invoke_rustc(args: List[str]) -> str:
+def invoke_rustc(args: t.List[str]) -> str:
     return subprocess.check_output(
         [os.environ["RUSTC"]] + args,
         stdin=subprocess.DEVNULL,
     ).decode('utf-8').strip()
 
-def args_crates_cfgs(cfgs: List[str]) -> Dict[str, List[str]]:
+def args_crates_cfgs(cfgs: t.List[str]) -> t.Dict[str, t.List[str]]:
     crates_cfgs = {}
     for cfg in cfgs:
         crate, vals = cfg.split("=", 1)
@@ -26,28 +26,28 @@ def args_crates_cfgs(cfgs: List[str]) -> Dict[str, List[str]]:
 
     return crates_cfgs
 
-class Dependency(TypedDict):
+class Dependency(t.TypedDict):
     crate: int
     name: str
 
 
-class Source(TypedDict):
-    include_dirs: List[str]
-    exclude_dirs: List[str]
+class Source(t.TypedDict):
+    include_dirs: t.List[str]
+    exclude_dirs: t.List[str]
 
 
-class Crate(TypedDict):
+class Crate(t.TypedDict):
     display_name: str
     root_module: str
     is_workspace_member: bool
-    deps: List[Dependency]
-    cfg: List[str]
+    deps: t.List[Dependency]
+    cfg: t.List[str]
     edition: str
-    env: Dict[str, str]
+    env: t.Dict[str, str]
 
 
 class ProcMacroCrate(Crate):
-    is_proc_macro: Literal[True]
+    is_proc_macro: t.Literal[True]
     proc_macro_dylib_path: str  # `pathlib.Path` is not JSON serializable.
 
 
@@ -59,10 +59,10 @@ def generate_crates(
     srctree: pathlib.Path,
     objtree: pathlib.Path,
     sysroot_src: pathlib.Path,
-    external_src: Optional[pathlib.Path],
-    cfgs: List[str],
+    external_src: t.Optional[pathlib.Path],
+    cfgs: t.List[str],
     core_edition: str,
-) -> List[Crate]:
+) -> t.List[Crate]:
     # Generate the configuration list.
     generated_cfg = []
     with open(objtree / "include" / "generated" / "rustc_cfg") as fd:
@@ -72,7 +72,7 @@ def generate_crates(
             generated_cfg.append(line)
 
     # Now fill the crates list.
-    crates: List[Crate] = []
+    crates: t.List[Crate] = []
     crates_cfgs = args_crates_cfgs(cfgs)
 
     def get_crate_name(path: pathlib.Path) -> str:
@@ -81,11 +81,11 @@ def generate_crates(
     def build_crate(
         display_name: str,
         root_module: pathlib.Path,
-        deps: List[Dependency],
+        deps: t.List[Dependency],
         *,
-        cfg: Optional[List[str]],
-        is_workspace_member: Optional[bool],
-        edition: Optional[str],
+        cfg: t.Optional[t.List[str]],
+        is_workspace_member: t.Optional[bool],
+        edition: t.Optional[str],
     ) -> Crate:
         cfg = cfg if cfg is not None else crates_cfgs.get(display_name, [])
         is_workspace_member = (
@@ -107,11 +107,11 @@ def generate_crates(
     def append_proc_macro_crate(
         display_name: str,
         root_module: pathlib.Path,
-        deps: List[Dependency],
+        deps: t.List[Dependency],
         *,
-        cfg: Optional[List[str]] = None,
-        is_workspace_member: Optional[bool] = None,
-        edition: Optional[str] = None,
+        cfg: t.Optional[t.List[str]] = None,
+        is_workspace_member: t.Optional[bool] = None,
+        edition: t.Optional[str] = None,
     ) -> Dependency:
         crate = build_crate(
             display_name,
@@ -145,11 +145,11 @@ def generate_crates(
     def append_crate(
         display_name: str,
         root_module: pathlib.Path,
-        deps: List[Dependency],
+        deps: t.List[Dependency],
         *,
-        cfg: Optional[List[str]] = None,
-        is_workspace_member: Optional[bool] = None,
-        edition: Optional[str] = None,
+        cfg: t.Optional[t.List[str]] = None,
+        is_workspace_member: t.Optional[bool] = None,
+        edition: t.Optional[str] = None,
     ) -> Dependency:
         return register_crate(
             build_crate(
@@ -164,9 +164,9 @@ def generate_crates(
 
     def append_sysroot_crate(
         display_name: str,
-        deps: List[Dependency],
+        deps: t.List[Dependency],
         *,
-        cfg: Optional[List[str]] = None,
+        cfg: t.Optional[t.List[str]] = None,
     ) -> Dependency:
         return append_crate(
             display_name,
@@ -266,7 +266,7 @@ def generate_crates(
 
     def append_crate_with_generated(
         display_name: str,
-        deps: List[Dependency],
+        deps: t.List[Dependency],
     ) -> Dependency:
         crate = build_crate(
             display_name,
@@ -317,7 +317,7 @@ def generate_crates(
     # Then, the rest outside of `rust/`.
     #
     # We explicitly mention the top-level folders we want to cover.
-    extra_dirs: Iterable[pathlib.Path] = (
+    extra_dirs: t.Iterable[pathlib.Path] = (
         srctree / dir for dir in ("samples", "drivers")
     )
     if external_src is not None:
@@ -356,12 +356,12 @@ def main() -> None:
 
     class Args(argparse.Namespace):
         verbose: bool
-        cfgs: List[str]
+        cfgs: t.List[str]
         srctree: pathlib.Path
         objtree: pathlib.Path
         sysroot: pathlib.Path
         sysroot_src: pathlib.Path
-        exttree: Optional[pathlib.Path]
+        exttree: t.Optional[pathlib.Path]
         core_edition: str
 
     args = parser.parse_args(namespace=Args())
