@@ -304,6 +304,12 @@ properties:
 
       - items:
           - enum:
+              - qcom,sa8797p-ride
+          - const: qcom,sa8797p
+          - const: qcom,nord
+
+      - items:
+          - enum:
               - 8dev,jalapeno
               - alfa-network,ap120c-ac
           - const: qcom,ipq4018
