@@ -816,23 +816,22 @@ extern pgd_t swapper_pg_dir[];
 extern pgd_t idmap_pg_dir[];
 extern pgd_t tramp_pg_dir[];
 extern pgd_t reserved_pg_dir[];
+extern pgd_t __pgdir_rodata_start[], __pgdir_rodata_end[];
 
-extern void set_swapper_pgd(pgd_t *pgdp, pgd_t pgd);
+extern void set_rodata_pte(pte_t *ptep, pte_t pte);
 
-static inline bool in_swapper_pgdir(void *addr)
+static inline bool in_pgdir_rodata(void *addr)
 {
-	return ((unsigned long)addr & PAGE_MASK) ==
-	        ((unsigned long)swapper_pg_dir & PAGE_MASK);
+	return addr >= (void *)__pgdir_rodata_start &&
+	       addr < (void *)__pgdir_rodata_end;
 }
 
 static inline void set_pmd(pmd_t *pmdp, pmd_t pmd)
 {
-#ifdef __PAGETABLE_PMD_FOLDED
-	if (in_swapper_pgdir(pmdp)) {
-		set_swapper_pgd((pgd_t *)pmdp, __pgd(pmd_val(pmd)));
+	if (in_pgdir_rodata(pmdp)) {
+		set_rodata_pte((pte_t *)pmdp, __pte(pmd_val(pmd)));
 		return;
 	}
-#endif /* __PAGETABLE_PMD_FOLDED */
 
 	WRITE_ONCE(*pmdp, pmd);
 
@@ -893,8 +892,8 @@ static inline bool pgtable_l4_enabled(void);
 
 static inline void set_pud(pud_t *pudp, pud_t pud)
 {
-	if (!pgtable_l4_enabled() && in_swapper_pgdir(pudp)) {
-		set_swapper_pgd((pgd_t *)pudp, __pgd(pud_val(pud)));
+	if (in_pgdir_rodata(pudp)) {
+		set_rodata_pte((pte_t *)pudp, __pte(pud_val(pud)));
 		return;
 	}
 
@@ -974,8 +973,8 @@ static inline bool mm_pud_folded(const struct mm_struct *mm)
 
 static inline void set_p4d(p4d_t *p4dp, p4d_t p4d)
 {
-	if (in_swapper_pgdir(p4dp)) {
-		set_swapper_pgd((pgd_t *)p4dp, __pgd(p4d_val(p4d)));
+	if (in_pgdir_rodata(p4dp)) {
+		set_rodata_pte((pte_t *)p4dp, __pte(p4d_val(p4d)));
 		return;
 	}
 
@@ -1102,8 +1101,8 @@ static inline bool mm_p4d_folded(const struct mm_struct *mm)
 
 static inline void set_pgd(pgd_t *pgdp, pgd_t pgd)
 {
-	if (in_swapper_pgdir(pgdp)) {
-		set_swapper_pgd(pgdp, __pgd(pgd_val(pgd)));
+	if (in_pgdir_rodata(pgdp)) {
+		set_rodata_pte((pte_t *)pgdp, __pte(pgd_val(pgd)));
 		return;
 	}
 

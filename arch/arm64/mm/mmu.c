@@ -65,34 +65,34 @@ static bool rodata_is_rw __ro_after_init = true;
  */
 long __section(".mmuoff.data.write") __early_cpu_boot_status;
 
-static DEFINE_SPINLOCK(swapper_pgdir_lock);
+static DEFINE_SPINLOCK(rodata_pgdir_lock);
 static DEFINE_MUTEX(fixmap_lock);
 
-void noinstr set_swapper_pgd(pgd_t *pgdp, pgd_t pgd)
+void noinstr set_rodata_pte(pte_t *ptep, pte_t pte)
 {
-	pgd_t *fixmap_pgdp;
+	pte_t *fixmap_ptep;
 
 	/*
-	 * Don't bother with the fixmap if swapper_pg_dir is still mapped
-	 * writable in the kernel mapping.
+	 * Don't bother with the fixmap if rodata is still mapped
+	 * writable in the kernel and linear mappings.
 	 */
 	if (rodata_is_rw) {
-		WRITE_ONCE(*pgdp, pgd);
+		WRITE_ONCE(*ptep, pte);
 		dsb(ishst);
 		isb();
 		return;
 	}
 
-	spin_lock(&swapper_pgdir_lock);
-	fixmap_pgdp = pgd_set_fixmap(__pa_symbol(pgdp));
-	WRITE_ONCE(*fixmap_pgdp, pgd);
+	spin_lock(&rodata_pgdir_lock);
+	fixmap_ptep = pte_set_fixmap(__pa_nodebug(ptep));
+	WRITE_ONCE(*fixmap_ptep, pte);
 	/*
 	 * We need dsb(ishst) here to ensure the page-table-walker sees
 	 * our new entry before set_p?d() returns. The fixmap's
 	 * flush_tlb_kernel_range() via clear_fixmap() does this for us.
 	 */
-	pgd_clear_fixmap();
-	spin_unlock(&swapper_pgdir_lock);
+	pte_clear_fixmap();
+	spin_unlock(&rodata_pgdir_lock);
 }
 
 pgprot_t phys_mem_access_prot(struct file *file, unsigned long pfn,
@@ -1071,6 +1071,7 @@ void __init mark_linear_text_alias_ro(void)
 	/*
 	 * Remove the write permissions from the linear alias of .text/.rodata
 	 */
+	WRITE_ONCE(rodata_is_rw, false);
 	update_mapping_prot(__pa_symbol(_text), (unsigned long)lm_alias(_text),
 			    (unsigned long)__init_begin - (unsigned long)_text,
 			    pgprot_tagged(PAGE_KERNEL_RO));
@@ -1221,7 +1222,6 @@ void mark_rodata_ro(void)
 	 * to cover NOTES and EXCEPTION_TABLE.
 	 */
 	section_size = (unsigned long)__init_begin - (unsigned long)__start_rodata;
-	WRITE_ONCE(rodata_is_rw, false);
 	update_mapping_prot(__pa_symbol(__start_rodata), (unsigned long)__start_rodata,
 			    section_size, PAGE_KERNEL_RO);
 	/* mark the range between _text and _stext as read only. */
