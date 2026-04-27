@@ -17,16 +17,18 @@
 #include <acpi/pcc.h>
 #include <acpi/processor.h>
 
-/* CPPCv2 and CPPCv3 support */
+/* CPPC support */
 #define CPPC_V2_REV	2
 #define CPPC_V3_REV	3
+#define CPPC_V4_REV	4
 #define CPPC_V2_NUM_ENT	21
 #define CPPC_V3_NUM_ENT	23
+#define CPPC_V4_NUM_ENT	25
 
 #define PCC_CMD_COMPLETE_MASK	(1 << 0)
 #define PCC_ERROR_MASK		(1 << 2)
 
-#define MAX_CPC_REG_ENT 21
+#define MAX_CPC_REG_ENT 23
 
 /* CPPC specific PCC commands. */
 #define	CMD_READ 0
@@ -60,8 +62,8 @@ struct cpc_reg {
 
 /*
  * Each entry in the CPC table is either
- * of type ACPI_TYPE_BUFFER or
- * ACPI_TYPE_INTEGER.
+ * of type ACPI_TYPE_BUFFER, ACPI_TYPE_INTEGER,
+ * or ACPI_TYPE_PACKAGE (for CPPC v4 ResourcePriorityRegisters).
  */
 struct cpc_register_resource {
 	acpi_object_type type;
@@ -69,6 +71,7 @@ struct cpc_register_resource {
 	union {
 		struct cpc_reg reg;
 		u64 int_value;
+		void *pkg_data;
 	} cpc_entry;
 };
 
@@ -109,6 +112,8 @@ enum cppc_regs {
 	REFERENCE_PERF,
 	LOWEST_FREQ,
 	NOMINAL_FREQ,
+	OSPM_NOMINAL_PERF,
+	RESOURCE_PRIO,
 };
 
 /*
