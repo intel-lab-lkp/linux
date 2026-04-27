@@ -36,6 +36,7 @@
 
 #include <linux/module.h>
 
+#include <linux/cleanup.h>
 #include <linux/fs.h>
 #include <linux/errno.h>
 #include <linux/miscdevice.h>
@@ -209,7 +210,6 @@ static const struct file_operations misc_fops = {
 int misc_register(struct miscdevice *misc)
 {
 	dev_t dev;
-	int err = 0;
 	bool is_dynamic = (misc->minor == MISC_DYNAMIC_MINOR);
 
 	if (misc->minor > MISC_DYNAMIC_MINOR) {
@@ -220,32 +220,26 @@ int misc_register(struct miscdevice *misc)
 
 	INIT_LIST_HEAD(&misc->list);
 
-	mutex_lock(&misc_mtx);
+	guard(mutex)(&misc_mtx);
 
 	if (is_dynamic) {
 		int i = misc_minor_alloc(misc->minor);
 
-		if (i < 0) {
-			err = -EBUSY;
-			goto out;
-		}
+		if (i < 0)
+			return -EBUSY;
 		misc->minor = i;
 	} else {
 		struct miscdevice *c;
 		int i;
 
 		list_for_each_entry(c, &misc_list, list) {
-			if (c->minor == misc->minor) {
-				err = -EBUSY;
-				goto out;
-			}
+			if (c->minor == misc->minor)
+				return -EBUSY;
 		}
 
 		i = misc_minor_alloc(misc->minor);
-		if (i < 0) {
-			err = -EBUSY;
-			goto out;
-		}
+		if (i < 0)
+			return -EBUSY;
 	}
 
 	dev = MKDEV(MISC_MAJOR, misc->minor);
@@ -258,8 +252,7 @@ int misc_register(struct miscdevice *misc)
 		if (is_dynamic) {
 			misc->minor = MISC_DYNAMIC_MINOR;
 		}
-		err = PTR_ERR(misc->this_device);
-		goto out;
+		return PTR_ERR(misc->this_device);
 	}
 
 	/*
@@ -267,9 +260,7 @@ int misc_register(struct miscdevice *misc)
 	 * earlier defaults
 	 */
 	list_add(&misc->list, &misc_list);
- out:
-	mutex_unlock(&misc_mtx);
-	return err;
+	return 0;
 }
 EXPORT_SYMBOL(misc_register);
 
@@ -283,13 +274,12 @@ EXPORT_SYMBOL(misc_register);
 
 void misc_deregister(struct miscdevice *misc)
 {
-	mutex_lock(&misc_mtx);
+	guard(mutex)(&misc_mtx);
 	list_del_init(&misc->list);
 	device_destroy(&misc_class, MKDEV(MISC_MAJOR, misc->minor));
 	misc_minor_free(misc->minor);
 	if (misc->minor > MISC_DYNAMIC_MINOR)
 		misc->minor = MISC_DYNAMIC_MINOR;
-	mutex_unlock(&misc_mtx);
 }
 EXPORT_SYMBOL(misc_deregister);
 
