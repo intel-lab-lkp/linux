@@ -75,30 +75,47 @@ contention on the lruvec->lru_lock.
 =============================
 ::
 
-  mm_page_alloc_zone_locked	page=%p pfn=%lu order=%u migratetype=%d cpu=%d percpu_refill=%d
-  mm_page_pcpu_drain		page=%p pfn=%lu order=%d cpu=%d migratetype=%d
+  mm_page_alloc_zone_locked	page=%p pfn=0x%lx order=%u migratetype=%d percpu_refill=%d
+  mm_page_pcpu_refill		page=%p pfn=0x%lx order=%d migratetype=%d
+  mm_page_pcpu_drain		page=%p pfn=0x%lx order=%d migratetype=%d
+  mm_page_pcpu_refill_zone_locked nid=%d zid=%d nr_pages=%lu
+  mm_page_pcpu_drain_zone_locked  nid=%d zid=%d nr_pages=%lu
 
-In front of the page allocator is a per-cpu page allocator. It exists only
-for order-0 pages, reduces contention on the zone->lock and reduces the
-amount of writing on struct page.
+In front of the buddy allocator are per-cpu page lists. They reduce
+contention on the zone->lock and reduce the amount of writing on struct
+page.
 
-When a per-CPU list is empty or pages of the wrong type are allocated,
-the zone->lock will be taken once and the per-CPU list refilled. The event
-triggered is mm_page_alloc_zone_locked for each page allocated with the
-event indicating whether it is for a percpu_refill or not.
+When an allocation finds the target per-CPU list empty, the zone->lock may
+be taken once and the per-CPU list refilled from the buddy allocator. The
+mm_page_pcpu_refill_zone_locked event is emitted once after the refill path
+successfully acquires the zone lock. The mm_page_pcpu_refill event is
+emitted for each page block added to the per-CPU list.
 
-When the per-CPU list is too full, a number of pages are freed, each one
-which triggers a mm_page_pcpu_drain event.
+When per-CPU pages are drained back to the buddy allocator, for example
+because a per-CPU list is above its high mark, PCP high is decayed, or an
+explicit drain is requested, the drain path takes the zone lock. The
+mm_page_pcpu_drain_zone_locked event is emitted once after the drain path
+successfully acquires the zone lock. The mm_page_pcpu_drain event is emitted
+for each page block drained from the per-CPU list.
 
-The individual nature of the events is so that pages can be tracked
-between allocation and freeing. A number of drain or refill pages that occur
-consecutively imply the zone->lock being taken once. Large amounts of per-CPU
-refills and drains could imply an imbalance between CPUs where too much work
-is being concentrated in one place. It could also indicate that the per-CPU
-lists should be a larger size. Finally, large amounts of refills on one CPU
-and drains on another could be a factor in causing large amounts of cache
-line bounces due to writes between CPUs and worth investigating if pages
-can be allocated and freed on the same CPU through some algorithm change.
+The individual refill and drain events allow pages to be tracked between
+allocation and freeing. The zone_locked events allow the bulk operations to
+be counted directly. A single zone_locked event may be followed by multiple
+refill or drain events, depending on how many page blocks are moved while
+holding the zone lock. The nr_pages field in the zone_locked events is the
+target number of base pages for the bulk operation when the zone lock is
+acquired. The individual refill or drain events describe the page blocks
+actually moved.
+
+Large amounts of per-CPU refills and drains could imply an imbalance between
+CPUs where too much work is being concentrated in one place. Frequent
+zone_locked events can indicate that the per-CPU lists are under pressure
+and are not avoiding the zone lock as effectively as expected. It could also
+indicate that the per-CPU lists should be a larger size. Finally, large
+amounts of refills on one CPU and drains on another could be a factor in
+causing large amounts of cache line bounces due to writes between CPUs and
+worth investigating if pages can be allocated and freed on the same CPU
+through some algorithm change.
 
 5. External Fragmentation
 =========================

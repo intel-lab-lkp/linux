@@ -1473,6 +1473,8 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 	pindex = pindex - 1;
 
 	spin_lock_irqsave(&zone->lock, flags);
+	trace_mm_page_pcpu_drain_zone_locked(zone_to_nid(zone), zone_idx(zone),
+					     count);
 
 	while (count > 0) {
 		struct list_head *list;
@@ -2530,6 +2532,8 @@ static int rmqueue_bulk(struct zone *zone, unsigned int order,
 	} else {
 		spin_lock_irqsave(&zone->lock, flags);
 	}
+	trace_mm_page_pcpu_refill_zone_locked(zone_to_nid(zone), zone_idx(zone),
+					      count << order);
 	for (i = 0; i < count; ++i) {
 		struct page *page = __rmqueue(zone, order, migratetype,
 					      alloc_flags, &rmqm);
@@ -2547,6 +2551,7 @@ static int rmqueue_bulk(struct zone *zone, unsigned int order,
 		 * pages are ordered properly.
 		 */
 		list_add_tail(&page->pcp_list, list);
+		trace_mm_page_pcpu_refill(page, order, migratetype);
 	}
 	spin_unlock_irqrestore(&zone->lock, flags);
 

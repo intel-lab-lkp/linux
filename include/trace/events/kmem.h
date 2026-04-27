@@ -243,16 +243,52 @@ DEFINE_EVENT(mm_page, mm_page_alloc_zone_locked,
 	TP_ARGS(page, order, migratetype, percpu_refill)
 );
 
-TRACE_EVENT(mm_page_pcpu_drain,
+DECLARE_EVENT_CLASS(mm_page_pcpu_zone_locked,
+
+	TP_PROTO(int nid, int zid, unsigned long nr_pages),
+
+	TP_ARGS(nid, zid, nr_pages),
+
+	TP_STRUCT__entry(
+		__field(int, nid)
+		__field(int, zid)
+		__field(unsigned long, nr_pages)
+	),
+
+	TP_fast_assign(
+		__entry->nid		= nid;
+		__entry->zid		= zid;
+		__entry->nr_pages	= nr_pages;
+	),
+
+	TP_printk("nid=%d zid=%d nr_pages=%lu",
+		__entry->nid, __entry->zid, __entry->nr_pages)
+);
+
+DEFINE_EVENT(mm_page_pcpu_zone_locked, mm_page_pcpu_refill_zone_locked,
+
+	TP_PROTO(int nid, int zid, unsigned long nr_pages),
+
+	TP_ARGS(nid, zid, nr_pages)
+);
+
+DEFINE_EVENT(mm_page_pcpu_zone_locked, mm_page_pcpu_drain_zone_locked,
+
+	TP_PROTO(int nid, int zid, unsigned long nr_pages),
+
+	TP_ARGS(nid, zid, nr_pages)
+);
+
+DECLARE_EVENT_CLASS(mm_page_pcpu,
 
 	TP_PROTO(struct page *page, unsigned int order, int migratetype),
 
 	TP_ARGS(page, order, migratetype),
 
 	TP_STRUCT__entry(
-		__field(	unsigned long,	pfn		)
-		__field(	unsigned int,	order		)
-		__field(	int,		migratetype	)
+		__field(unsigned long, pfn)
+		__field(unsigned int, order)
+		__field(int, migratetype)
 	),
 
 	TP_fast_assign(
@@ -264,6 +300,20 @@ TRACE_EVENT(mm_page_pcpu_drain,
 	TP_printk("page=%p pfn=0x%lx order=%d migratetype=%d",
 		pfn_to_page(__entry->pfn), __entry->pfn,
 		__entry->order, __entry->migratetype)
+);
+
+DEFINE_EVENT(mm_page_pcpu, mm_page_pcpu_refill,
+
+	TP_PROTO(struct page *page, unsigned int order, int migratetype),
+
+	TP_ARGS(page, order, migratetype)
+);
+
+DEFINE_EVENT(mm_page_pcpu, mm_page_pcpu_drain,
+
+	TP_PROTO(struct page *page, unsigned int order, int migratetype),
+
+	TP_ARGS(page, order, migratetype)
 );
 
 TRACE_EVENT(mm_page_alloc_extfrag,
