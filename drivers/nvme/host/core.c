@@ -1039,8 +1039,12 @@ static inline blk_status_t nvme_setup_rw(struct nvme_ns *ns,
 		 * namespace capacity to zero to prevent any I/O.
 		 */
 		if (!blk_integrity_rq(req)) {
-			if (WARN_ON_ONCE(!nvme_ns_has_pi(ns->head)))
+			if (!nvme_ns_has_pi(ns->head)) {
+				pr_debug_ratelimited("nvme: %s: metadata (ms=%u) without PI or integrity request, returning NOTSUPP\n",
+						     ns->disk->disk_name,
+						     ns->head->ms);
 				return BLK_STS_NOTSUPP;
+			}
 			control |= NVME_RW_PRINFO_PRACT;
 			nvme_set_ref_tag(ns, cmnd, req);
 		}
