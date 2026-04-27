@@ -2503,6 +2503,10 @@ int kprobe_add_ksym_blacklist(unsigned long entry)
 	    !kallsyms_lookup_size_offset(entry, &size, &offset))
 		return -EINVAL;
 
+	/* Not on a symbol boundary -- skip to the next symbol */
+	if (offset)
+		return (int)(size - offset);
+
 	ent = kmalloc_obj(*ent);
 	if (!ent)
 		return -ENOMEM;
