@@ -8414,6 +8414,12 @@ T:	git https://gitlab.freedesktop.org/drm/misc/kernel.git
 F:	Documentation/devicetree/bindings/display/panel/tpo,tpg110.yaml
 F:	drivers/gpu/drm/panel/panel-tpo-tpg110.c
 
+DRM DRIVER FOR TSD TST070WSBE-196C PANEL
+M:	William Bright <william.bright@imd-tec.com>
+S:	Maintained
+F:	Documentation/devicetree/bindings/display/panel/tsd,tst070wsbe-196c.yaml
+F:	drivers/gpu/drm/panel/panel-tsd-tst070wsbe-196c.c
+
 DRM DRIVER FOR USB DISPLAYLINK VIDEO ADAPTERS
 M:	Dave Airlie <airlied@redhat.com>
 R:	Sean Paul <sean@poorly.run>
