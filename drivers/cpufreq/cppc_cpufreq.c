@@ -715,6 +715,16 @@ static int cppc_cpufreq_cpu_init(struct cpufreq_policy *policy)
 		goto out;
 	}
 
+	/*
+	 * Initialize OSPM Nominal Performance to inform firmware of
+	 * OSPM's nominal level. Performance above this value = boost;
+	 * below = throttle. Uses platform nominal by default.
+	 */
+	ret = cppc_set_ospm_nominal_perf(cpu, caps->nominal_perf);
+	if (ret && ret != -EOPNOTSUPP)
+		pr_debug("Failed to set ospm_nominal_perf for CPU%d: %d\n",
+			 cpu, ret);
+
 	cppc_cpufreq_cpu_fie_init(policy);
 	return 0;
 
