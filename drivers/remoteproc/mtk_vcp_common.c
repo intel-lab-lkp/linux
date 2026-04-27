@@ -207,6 +207,11 @@ bool is_vcp_ready(struct mtk_vcp_device *vcp,
 	return vcp_is_core_ready(vcp, core_id);
 }
 
+bool is_vcp_suspending(struct mtk_vcp_device *vcp)
+{
+	return vcp->vcp_cluster->is_suspending;
+}
+
 int wait_core_hart_shutdown(struct mtk_vcp_device *vcp,
 			    enum vcp_core_id core_id)
 {
@@ -267,6 +272,92 @@ int wait_core_hart_shutdown(struct mtk_vcp_device *vcp,
 	}
 
 	return 0;
+}
+
+void vcp_wait_core_stop(struct mtk_vcp_device *vcp, enum vcp_core_id core_id)
+{
+	u32 status;
+	u32 stop_ctrl;
+	u32 num_harts;
+	int ret;
+
+	if (core_id >= VCP_CORE_TOTAL) {
+		dev_err(vcp->dev, "%s, Invalid core id %d\n", __func__, core_id);
+		return;
+	}
+
+	num_harts = vcp->vcp_cluster->hart_count[core_id];
+
+	/* Build stop control mask based on number of harts */
+	stop_ctrl = B_CORE_GATED | B_HART0_HALT | B_CORE_AXIS_BUSY;
+	if (num_harts > 1)
+		stop_ctrl |= B_HART1_HALT;
+
+	if (core_id == VCP_ID) {
+		ret = readl_poll_timeout(vcp->vcp_cluster->cfg + R_CORE0_STATUS,
+					 status,
+					 (status & stop_ctrl) == (stop_ctrl & ~B_CORE_AXIS_BUSY),
+					 USEC_PER_MSEC,
+					 CORE_HART_SHUTDOWN_TIMEOUT_MS * USEC_PER_MSEC);
+		if (ret)
+			dev_err(vcp->dev, "VCP core stop timeout, status 0x%x\n", status);
+	} else if (core_id == MMUP_ID) {
+		ret = readl_poll_timeout(vcp->vcp_cluster->cfg + R_CORE1_STATUS,
+					 status,
+					 (status & stop_ctrl) == (stop_ctrl & ~B_CORE_AXIS_BUSY),
+					 USEC_PER_MSEC,
+					 CORE_HART_SHUTDOWN_TIMEOUT_MS * USEC_PER_MSEC);
+		if (ret)
+			dev_err(vcp->dev, "MMUP core stop timeout, status 0x%x\n", status);
+	}
+}
+
+static bool vcp_get_suspend_resume_status(struct mtk_vcp_device *vcp)
+{
+	if (vcp->vcp_cluster->core_nums > MMUP_ID)
+		return !!(readl(vcp->vcp_cluster->cfg_sec + R_GPR3_SEC) & VCP_AP_SUSPEND) &&
+		       !!(readl(vcp->vcp_cluster->cfg_sec + R_GPR2_SEC) & MMUP_AP_SUSPEND);
+
+	return !!(readl(vcp->vcp_cluster->cfg_sec + R_GPR3_SEC) & VCP_AP_SUSPEND);
+}
+
+void vcp_wait_suspend_resume(struct mtk_vcp_device *vcp, bool suspend)
+{
+	bool status;
+	int ret;
+
+	if (suspend) {
+		writel(B_CORE0_SUSPEND, vcp->vcp_cluster->cfg_core + AP_R_GPR2);
+		writel(SUSPEND_MAGIC, vcp->vcp_cluster->cfg + VCP_C0_GPR0_SUSPEND_RESUME);
+		if (vcp->vcp_cluster->core_nums > MMUP_ID) {
+			writel(B_CORE1_SUSPEND, vcp->vcp_cluster->cfg_core + AP_R_GPR3);
+			writel(SUSPEND_MAGIC, vcp->vcp_cluster->cfg + VCP_C1_GPR0_SUSPEND_RESUME);
+		}
+	} else {
+		writel(B_CORE0_RESUME, vcp->vcp_cluster->cfg_core + AP_R_GPR2);
+		writel(RESUME_MAGIC, vcp->vcp_cluster->cfg + VCP_C0_GPR0_SUSPEND_RESUME);
+		if (vcp->vcp_cluster->core_nums > MMUP_ID) {
+			writel(B_CORE1_RESUME, vcp->vcp_cluster->cfg_core + AP_R_GPR3);
+			writel(RESUME_MAGIC, vcp->vcp_cluster->cfg + VCP_C1_GPR0_SUSPEND_RESUME);
+		}
+	}
+
+	writel(B_GIPC4_SETCLR_3, vcp->vcp_cluster->cfg_core + R_GIPC_IN_SET);
+
+	ret = read_poll_timeout(vcp_get_suspend_resume_status,
+				status, (status == suspend),
+				USEC_PER_MSEC,
+				SUSPEND_WAIT_TIMEOUT_MS * USEC_PER_MSEC,
+				false, vcp);
+	if (ret)
+		dev_err(vcp->dev, "vcp %s timeout GPIC 0x%x 0x%x 0x%x 0x%x flag 0x%x 0x%x\n",
+			suspend ? "suspend" : "resume",
+			readl(vcp->vcp_cluster->cfg_core + R_GIPC_IN_SET),
+			readl(vcp->vcp_cluster->cfg_core + R_GIPC_IN_CLR),
+			readl(vcp->vcp_cluster->cfg_core + AP_R_GPR2),
+			readl(vcp->vcp_cluster->cfg_core + AP_R_GPR3),
+			readl(vcp->vcp_cluster->cfg_sec + R_GPR2_SEC),
+			readl(vcp->vcp_cluster->cfg_sec + R_GPR3_SEC));
 }
 
 void vcp_register_notify(struct mtk_vcp_device *vcp,
@@ -438,6 +529,16 @@ static int vcp_enable_pm_clk(struct mtk_vcp_device *vcp, enum vcp_feature_id id)
 	bool suspend_status;
 	int ret;
 
+	ret = read_poll_timeout(is_vcp_suspending,
+				suspend_status, !suspend_status,
+				USEC_PER_MSEC,
+				SUSPEND_WAIT_TIMEOUT_MS * USEC_PER_MSEC,
+				false, vcp);
+	if (ret) {
+		dev_err(vcp->dev, "%s blocked by vcp suspend\n", __func__);
+		return ret;
+	}
+
 	if (vcp->vcp_cluster->feature_enable[id]) {
 		dev_err(vcp->dev, "%s feature(id=%d) already enabled\n",
 			__func__, id);
@@ -464,6 +565,16 @@ static int vcp_disable_pm_clk(struct mtk_vcp_device *vcp, enum vcp_feature_id id
 	struct vcp_slp_ctrl slp_data;
 	bool suspend_status;
 	int ret;
+
+	ret = read_poll_timeout(is_vcp_suspending,
+				suspend_status, !suspend_status,
+				USEC_PER_MSEC,
+				SUSPEND_WAIT_TIMEOUT_MS * USEC_PER_MSEC,
+				false, vcp);
+	if (ret) {
+		dev_err(vcp->dev, "%s blocked by vcp suspend\n", __func__);
+		return ret;
+	}
 
 	if (!vcp->vcp_cluster->feature_enable[id]) {
 		dev_err(vcp->dev, "%s feature(id=%d) already disabled\n",

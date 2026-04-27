@@ -23,6 +23,7 @@
  * @msg_vcp_ready1: core1 ready ipi msg data
  * @slp_ipi_ack_data: sleep ipi msg data
  * @feature_enable: feature status count data
+ * @is_suspending: suspend status flag
  * @vcp_ready: vcp core status flag
  * @share_mem_iova: shared memory iova base
  * @share_mem_size: shared memory size
@@ -46,6 +47,7 @@ struct mtk_vcp_of_cluster {
 	u32 msg_vcp_ready1;
 	u32 slp_ipi_ack_data;
 	bool feature_enable[NUM_FEATURE_ID];
+	bool is_suspending;
 	bool vcp_ready[VCP_CORE_TOTAL];
 	dma_addr_t share_mem_iova;
 	size_t share_mem_size;

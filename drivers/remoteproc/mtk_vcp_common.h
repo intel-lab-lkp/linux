@@ -16,9 +16,12 @@
 #define VCP_READY_TIMEOUT_MS 3000
 #define VCP_IPI_DEV_READY_TIMEOUT 1000
 #define CORE_HART_SHUTDOWN_TIMEOUT_MS 10
+#define SUSPEND_WAIT_TIMEOUT_MS 100
 
 /* VCP platform definition */
 #define DMA_MAX_MASK_BIT 33
+#define RESUME_MAGIC 0x12345678
+#define SUSPEND_MAGIC 0x87654321
 #define PIN_OUT_C_SIZE_SLEEP_0 2
 
 /* VCP load image definition */
@@ -271,5 +274,8 @@ int vcp_register_feature(struct mtk_vcp_device *vcp,
 int vcp_deregister_feature(struct mtk_vcp_device *vcp,
 			   enum vcp_feature_id id);
 
+bool is_vcp_suspending(struct mtk_vcp_device *vcp);
 int wait_core_hart_shutdown(struct mtk_vcp_device *vcp, enum vcp_core_id core_id);
+void vcp_wait_core_stop(struct mtk_vcp_device *vcp, enum vcp_core_id core_id);
+void vcp_wait_suspend_resume(struct mtk_vcp_device *vcp, bool suspend);
 #endif
