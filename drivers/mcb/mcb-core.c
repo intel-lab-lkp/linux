@@ -308,13 +308,21 @@ EXPORT_SYMBOL_NS_GPL(mcb_alloc_bus, "MCB");
 
 static int __mcb_devices_unregister(struct device *dev, void *data)
 {
+	struct mcb_device *mdev = to_mcb_device(dev);
+	int bus_nr = *(int *)data;
+
+	if (mdev->bus->bus_nr != bus_nr)
+		return 0;
+
 	device_unregister(dev);
 	return 0;
 }
 
 static void mcb_devices_unregister(struct mcb_bus *bus)
 {
-	bus_for_each_dev(bus->dev.bus, NULL, NULL, __mcb_devices_unregister);
+	int bus_nr = bus->bus_nr;
+
+	bus_for_each_dev(bus->dev.bus, NULL, &bus_nr, __mcb_devices_unregister);
 }
 /**
  * mcb_release_bus() - Free a @mcb_bus
@@ -325,6 +333,7 @@ static void mcb_devices_unregister(struct mcb_bus *bus)
 void mcb_release_bus(struct mcb_bus *bus)
 {
 	mcb_devices_unregister(bus);
+	device_unregister(&bus->dev);
 }
 EXPORT_SYMBOL_NS_GPL(mcb_release_bus, "MCB");
 
@@ -390,7 +399,12 @@ EXPORT_SYMBOL_NS_GPL(mcb_free_dev, "MCB");
 
 static int __mcb_bus_add_devices(struct device *dev, void *data)
 {
+	struct mcb_device *mdev = to_mcb_device(dev);
+	int bus_nr = *(int *)data;
 	int retval;
+
+	if (mdev->bus->bus_nr != bus_nr)
+		return 0;
 
 	retval = device_attach(dev);
 	if (retval < 0) {
@@ -409,7 +423,9 @@ static int __mcb_bus_add_devices(struct device *dev, void *data)
  */
 void mcb_bus_add_devices(const struct mcb_bus *bus)
 {
-	bus_for_each_dev(bus->dev.bus, NULL, NULL, __mcb_bus_add_devices);
+	int bus_nr = bus->bus_nr;
+
+	bus_for_each_dev(bus->dev.bus, NULL, &bus_nr, __mcb_bus_add_devices);
 }
 EXPORT_SYMBOL_NS_GPL(mcb_bus_add_devices, "MCB");
 
