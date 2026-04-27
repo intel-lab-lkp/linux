@@ -35,6 +35,7 @@ static struct oct_rx_group {
 	int irq;
 	int group;
 	struct napi_struct napi;
+	struct device *dev;
 } oct_rx_group[16];
 
 /**
@@ -397,7 +398,7 @@ static int cvm_oct_poll(struct oct_rx_group *rx_group, int budget)
 		/* Restore the scratch area */
 		cvmx_scratch_write64(CVMX_SCR_SCRATCH, old_scratch);
 	}
-	cvm_oct_rx_refill_pool(0);
+	cvm_oct_rx_refill_pool(rx_group->dev, 0);
 
 	return rx_count;
 }
@@ -448,7 +449,7 @@ void cvm_oct_poll_controller(struct net_device *dev)
 }
 #endif
 
-void cvm_oct_rx_initialize(void)
+void cvm_oct_rx_initialize(struct device *dev)
 {
 	int i;
 	struct net_device *dev_for_napi = NULL;
@@ -475,6 +476,7 @@ void cvm_oct_rx_initialize(void)
 
 		oct_rx_group[i].irq = OCTEON_IRQ_WORKQ0 + i;
 		oct_rx_group[i].group = i;
+		oct_rx_group[i].dev = dev;
 
 		/* Register an IRQ handler to receive POW interrupts */
 		ret = request_irq(oct_rx_group[i].irq, cvm_oct_do_interrupt, 0,
