@@ -39,6 +39,45 @@ static const struct sysfs_ops *sysfs_file_ops(struct kernfs_node *kn)
 }
 
 /*
+ * Reads on huge sysfs bin files are handled through seq_file, which
+ * takes care of hairy details like buffering and seeking.  The
+ * following function pipes the bin_attribute ->read() result through
+ * seq_file so that reads larger than PAGE_SIZE work in one shot.
+ */
+static int sysfs_kf_huge_file_seq_show(struct seq_file *sf, void *v)
+{
+	struct kernfs_open_file *of = sf->private;
+	const struct bin_attribute *battr = of->kn->priv;
+	struct kobject *kobj = sysfs_file_kobj(of->kn);
+	loff_t size = file_inode(of->file)->i_size;
+	ssize_t count;
+	char *buf;
+
+	if (!battr->read)
+		return -EIO;
+
+	if (!size)
+		return -EIO;
+
+	/* acquire buffer and ensure that it's >= size */
+	count = seq_get_buf(sf, &buf);
+	if (count < size) {
+		seq_commit(sf, -1);
+		return 0;
+	}
+
+	memset(buf, 0, size);
+
+	count = battr->read(of->file, kobj, battr, buf, 0, size);
+	if (count < 0)
+		return count;
+
+	WARN_ON(count > size);
+	seq_commit(sf, min_t(ssize_t, count, size));
+	return 0;
+}
+
+/*
  * Reads on sysfs are handled through seq_file, which takes care of hairy
  * details like buffering and seeking.  The following function pipes
  * sysfs_ops->show() result through seq_file.
@@ -249,6 +288,10 @@ static const struct kernfs_ops sysfs_prealloc_kfops_rw = {
 	.prealloc	= true,
 };
 
+static const struct kernfs_ops sysfs_bin_kfops_huge_file_ro = {
+	.seq_show	= sysfs_kf_huge_file_seq_show,
+};
+
 static const struct kernfs_ops sysfs_bin_kfops_ro = {
 	.read		= sysfs_kf_bin_read,
 };
@@ -333,6 +376,8 @@ int sysfs_add_bin_file_mode_ns(struct kernfs_node *parent,
 		ops = &sysfs_bin_kfops_mmap;
 	else if (battr->read && battr->write)
 		ops = &sysfs_bin_kfops_rw;
+	else if (battr->read && (mode & SYSFS_HUGE_BIN_FILE))
+		ops = &sysfs_bin_kfops_huge_file_ro;
 	else if (battr->read)
 		ops = &sysfs_bin_kfops_ro;
 	else if (battr->write)

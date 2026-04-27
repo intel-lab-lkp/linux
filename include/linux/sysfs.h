@@ -124,6 +124,7 @@ struct attribute_group {
 
 #define SYSFS_PREALLOC		010000
 #define SYSFS_GROUP_INVISIBLE	020000
+#define SYSFS_HUGE_BIN_FILE		040000
 
 /*
  * DEFINE_SYSFS_GROUP_VISIBLE(name):
