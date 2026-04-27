@@ -52,6 +52,8 @@ struct intel_qgv_point {
 
 #define DEPROGBWPCLIMIT		60
 
+#define XE3_PEAK_BW_THRESHOLD	20000
+
 struct intel_psf_gv_point {
 	u8 clk; /* clock in multiples of 16.6666 MHz */
 };
@@ -1045,6 +1047,7 @@ static int mtl_find_qgv_points(struct intel_display *display,
 	unsigned int best_rate = UINT_MAX;
 	unsigned int num_qgv_points = display->bw.max[0].num_qgv_points;
 	unsigned int qgv_peak_bw  = 0;
+	int qgv_point = num_qgv_points;
 	int i;
 	int ret;
 
@@ -1083,6 +1086,7 @@ static int mtl_find_qgv_points(struct intel_display *display,
 		if (max_data_rate - data_rate < best_rate) {
 			best_rate = max_data_rate - data_rate;
 			qgv_peak_bw = display->bw.max[bw_index].peakbw[i];
+			qgv_point = i;
 		}
 
 		drm_dbg_kms(display->drm, "QGV point %d: max bw %d required %d qgv_peak_bw: %d\n",
@@ -1100,6 +1104,18 @@ static int mtl_find_qgv_points(struct intel_display *display,
 		drm_dbg_kms(display->drm, "No QGV points for bw %d for display configuration(%d active planes).\n",
 			    data_rate, num_active_planes);
 		return -EINVAL;
+	}
+
+	/*
+	 * For xe3+, if display's required memory bw <= 20GB/s and the selected
+	 * peak bw of QGV[0] is >= 20 GB/s, we can reduce the peak bw for the
+	 * pm demand QCLK GV to 20GB/s
+	 */
+	if (DISPLAY_VER(display) >= 30 && data_rate <= XE3_PEAK_BW_THRESHOLD &&
+	    qgv_point == 0 && qgv_peak_bw >= XE3_PEAK_BW_THRESHOLD) {
+		qgv_peak_bw = XE3_PEAK_BW_THRESHOLD;
+		drm_dbg_kms(display->drm, "Low display data-rate. Reduce PM demand bw for QGV: %d",
+			    qgv_peak_bw);
 	}
 
 	/* MTL PM DEMAND expects QGV BW parameter in multiples of 100 mbps */
