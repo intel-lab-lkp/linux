@@ -3207,6 +3207,11 @@ Kernel parameters
 			max_snp_asid == min_sev_asid-1, will effectively make
 			SEV-ES unusable.
 
+	kvm-amd.rapl_disable=	[KVM,AMD] Whether to disable RAPL
+			(Running Average Power Limit) when initializing the SNP
+			firmware. This disables the counters for the entire system until an
+			SNP shutdown command is issued.
+
 	kvm-arm.mode=
 			[KVM,ARM,EARLY] Select one of KVM/arm64's modes of
 			operation.

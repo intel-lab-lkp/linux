@@ -66,6 +66,10 @@ module_param_named(sev_snp, sev_snp_enabled, bool, 0444);
 static unsigned int __ro_after_init nr_ciphertext_hiding_asids;
 module_param_named(ciphertext_hiding_asids, nr_ciphertext_hiding_asids, uint, 0444);
 
+static bool rapl_disable;
+module_param(rapl_disable, bool, 0444);
+MODULE_PARM_DESC(rapl_disable, " if true, disable RAPL during SNP Initialization");
+
 #define AP_RESET_HOLD_NONE		0
 #define AP_RESET_HOLD_NAE_EVENT		1
 #define AP_RESET_HOLD_MSR_PROTO		2
@@ -3163,6 +3167,7 @@ void __init sev_hardware_setup(void)
 out:
 	if (sev_enabled) {
 		init_args.probe = true;
+		init_args.rapl_disable = rapl_disable;
 
 		if (sev_is_snp_ciphertext_hiding_supported())
 			init_args.max_snp_asid = min(nr_ciphertext_hiding_asids,
@@ -3174,6 +3179,9 @@ out:
 			sev_snp_supported = is_sev_snp_initialized();
 
 		if (sev_snp_supported) {
+			if (!init_args.rapl_disable)
+				rapl_disable = false;
+
 			snp_supported_policy_bits = sev_get_snp_policy_bits() &
 						    KVM_SNP_POLICY_MASK_VALID;
 			nr_ciphertext_hiding_asids = init_args.max_snp_asid;
