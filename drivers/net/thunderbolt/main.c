@@ -372,48 +372,47 @@ static void tbnet_free_buffers(struct tbnet_ring *ring)
 
 static void tbnet_tear_down(struct tbnet *net, bool send_logout)
 {
+	int ret, retries = TBNET_LOGOUT_RETRIES;
+
 	netif_carrier_off(net->dev);
 	netif_stop_queue(net->dev);
 
 	stop_login(net);
 
 	mutex_lock(&net->connection_lock);
-
-	if (net->login_sent && net->login_received) {
-		int ret, retries = TBNET_LOGOUT_RETRIES;
-
-		while (send_logout && retries-- > 0) {
-			netdev_dbg(net->dev, "sending logout request %u\n",
-				   retries);
-			ret = tbnet_logout_request(net);
-			if (ret != -ETIMEDOUT)
-				break;
-		}
-
-		tb_ring_stop(net->rx_ring.ring);
-		tb_ring_stop(net->tx_ring.ring);
-		tbnet_free_buffers(&net->rx_ring);
-		tbnet_free_buffers(&net->tx_ring);
-
-		ret = tb_xdomain_disable_paths(net->xd,
-					       net->local_transmit_path,
-					       net->tx_ring.ring->hop,
-					       net->remote_transmit_path,
-					       net->rx_ring.ring->hop);
-		if (ret)
-			netdev_warn(net->dev, "failed to disable DMA paths\n");
-
-		tb_xdomain_release_in_hopid(net->xd, net->remote_transmit_path);
-		net->remote_transmit_path = 0;
+	if (!net->login_sent || !net->login_received) {
+		mutex_unlock(&net->connection_lock);
+		return;
 	}
-
-	net->login_retries = 0;
 	net->login_sent = false;
 	net->login_received = false;
+	mutex_unlock(&net->connection_lock);
+
+	while (send_logout && retries-- > 0) {
+		netdev_dbg(net->dev, "sending logout request %u\n",
+			   retries);
+		ret = tbnet_logout_request(net);
+		if (ret != -ETIMEDOUT)
+			break;
+	}
+
+	tb_ring_stop(net->rx_ring.ring);
+	tb_ring_stop(net->tx_ring.ring);
+	tbnet_free_buffers(&net->rx_ring);
+	tbnet_free_buffers(&net->tx_ring);
+
+	ret = tb_xdomain_disable_paths(net->xd,
+				       net->local_transmit_path,
+				       net->tx_ring.ring->hop,
+				       net->remote_transmit_path,
+				       net->rx_ring.ring->hop);
+	if (ret)
+		netdev_warn(net->dev, "failed to disable DMA paths\n");
+
+	tb_xdomain_release_in_hopid(net->xd, net->remote_transmit_path);
+	net->remote_transmit_path = 0;
 
 	netdev_dbg(net->dev, "network traffic stopped\n");
-
-	mutex_unlock(&net->connection_lock);
 }
 
 static int tbnet_handle_packet(const void *buf, size_t size, void *data)
