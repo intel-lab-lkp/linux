@@ -122,17 +122,21 @@ struct vbt {
 	struct bdb_data_header general_features_header;
 	struct bdb_general_features general_features;
 
-	struct bdb_data_header general_definitions_header;
-	struct bdb_general_definitions general_definitions;
-
-	struct efp_child_device_config child0;
-	struct efp_child_device_config child1;
-	struct efp_child_device_config child2;
-	struct efp_child_device_config child3;
-
 	struct bdb_data_header driver_features_header;
 	struct bdb_driver_features driver_features;
+
+	struct bdb_data_header general_definitions_header;
+
+	/* Must be last as it ends in a flexible-array member. */
+	TRAILING_OVERLAP(struct bdb_general_definitions, general_definitions, devices,
+		struct efp_child_device_config child0;
+		struct efp_child_device_config child1;
+		struct efp_child_device_config child2;
+		struct efp_child_device_config child3;
+	);
 };
+static_assert(offsetof(struct vbt, general_definitions.devices) ==
+	      offsetof(struct vbt, child0));
 
 static void virt_vbt_generation(struct vbt *v)
 {
