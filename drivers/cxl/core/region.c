@@ -2544,6 +2544,9 @@ static void unregister_region(void *_cxlr)
 	struct cxl_region_params *p = &cxlr->params;
 	int i;
 
+	if (test_and_set_bit(CXL_REGION_F_UNREGISTER, &cxlr->flags))
+		return;
+
 	device_del(&cxlr->dev);
 
 	/*
@@ -2863,15 +2866,18 @@ static ssize_t delete_region_store(struct device *dev,
 				   const char *buf, size_t len)
 {
 	struct cxl_root_decoder *cxlrd = to_cxl_root_decoder(dev);
-	struct cxl_port *port = to_cxl_port(dev->parent);
 	struct cxl_region *cxlr;
 
+	/* remove_devm_actions_work() will put cxlr->dev. */
 	cxlr = cxl_find_region_by_name(cxlrd, buf);
 	if (IS_ERR(cxlr))
 		return PTR_ERR(cxlr);
 
-	devm_release_action(port->uport_dev, unregister_region, cxlr);
-	put_device(&cxlr->dev);
+	unregister_region(cxlr);
+	if (!remove_devm_actions(cxlr)) {
+		put_device(&cxlr->dev);
+		return -EBUSY;
+	}
 
 	return len;
 }
@@ -3734,7 +3740,6 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 {
 	struct cxl_endpoint_decoder *cxled = ctx->cxled;
 	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
-	struct cxl_port *port = cxlrd_to_port(cxlrd);
 	struct cxl_dev_state *cxlds = cxlmd->cxlds;
 	int rc, part = READ_ONCE(cxled->part);
 	struct cxl_region *cxlr;
@@ -3755,7 +3760,12 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 
 	rc = __construct_region(cxlr, ctx);
 	if (rc) {
-		devm_release_action(port->uport_dev, unregister_region, cxlr);
+		/* remove_devm_actions_work() will put the device */
+		get_device(&cxlr->dev);
+		unregister_region(cxlr);
+		if (!remove_devm_actions(cxlr))
+			put_device(&cxlr->dev);
+
 		return ERR_PTR(rc);
 	}
 
