@@ -11,6 +11,7 @@
 #include <linux/completion.h>
 #include <linux/build_bug.h>
 #include <linux/list.h>
+#include <linux/rbtree.h>
 #include <linux/netfs.h>
 
 struct cifs_search_info;
@@ -139,7 +140,9 @@ struct cached_dirents {
 };
 
 struct cached_fid {
-	struct list_head entry;
+	struct rb_node node;
+	struct hlist_node dentry_node;
+	struct list_head dying_entry;
 	struct cached_fids *cfids;
 	const char *path;
 	bool has_lease;
@@ -181,7 +184,8 @@ struct cached_fids {
 	 */
 	spinlock_t cfid_list_lock;
 	int num_entries;
-	struct list_head entries;
+	struct rb_root entries;
+	struct hlist_head *dentry_ht;
 	struct list_head dying;
 	struct delayed_work laundromat_work;
 	/* aggregate accounting for all cached dirents under this tcon */
