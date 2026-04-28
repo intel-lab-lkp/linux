@@ -792,7 +792,7 @@ void ice_reset_all_vfs(struct ice_pf *pf)
 		mutex_lock(&vf->cfg_lock);
 
 		ice_eswitch_detach_vf(pf, vf);
-		vf->driver_caps = 0;
+		bitmap_zero(vf->driver_caps, VIRTCHNL_VF_CAPS_MAX);
 		ice_vc_set_default_allowlist(vf);
 
 		ice_vf_fdir_exit(vf);
@@ -965,7 +965,7 @@ int ice_reset_vf(struct ice_vf *vf, u32 flags)
 	if (!rsd)
 		dev_warn(dev, "VF reset check timeout on VF %d\n", vf->vf_id);
 
-	vf->driver_caps = 0;
+	bitmap_zero(vf->driver_caps, VIRTCHNL_VF_CAPS_MAX);
 	ice_vc_set_default_allowlist(vf);
 
 	/* disable promiscuous modes in case they were enabled
