@@ -197,6 +197,13 @@ COVR_DIR="${LOG_DIR}/coverage/"
 mkdir -p  "$LOG_DIR"
 mkdir -p "$COVR_DIR"
 
+# tcpdump saves pcaps to /tmp because it requires chown to save the
+# pcap but chown is not supported by 9p.  Mount tmpfs on /tmp if it is
+# not already a separate filesystem
+if ! mountpoint -q /tmp 2>/dev/null; then
+	mount -t tmpfs tmpfs /tmp
+fi
+
 set +e
 echo running RDS tests...
 echo Traces will be logged to "$TRACE_FILE"
@@ -210,6 +217,12 @@ dmesg > "${LOG_DIR}/dmesg.out"
 
 if [ "$GENERATE_GCOV_REPORT" -eq 1 ]; then
        echo saving coverage data...
+
+       # Ensure debugfs is mounted
+       if ! test -d /sys/kernel/debug/gcov; then
+               mount -t debugfs debugfs /sys/kernel/debug 2>/dev/null || true
+       fi
+
        (set +x; cd /sys/kernel/debug/gcov; find ./* -name '*.gcda' | \
        while read -r f
        do
@@ -218,7 +231,7 @@ if [ "$GENERATE_GCOV_REPORT" -eq 1 ]; then
 
        echo running gcovr...
        gcovr -s --html-details --gcov-executable "$GCOV_CMD" --gcov-ignore-parse-errors \
-             -o "${COVR_DIR}/gcovr" "${ksrc_dir}/net/rds/"
+             --root "${ksrc_dir}" -o "${COVR_DIR}/gcovr" "${ksrc_dir}/net/rds/"
 else
        echo "Coverage report will be skipped"
 fi
