@@ -86,7 +86,7 @@ mlx5_core-$(CONFIG_MLX5_BRIDGE)    += esw/bridge.o esw/bridge_mcast.o esw/bridge
 
 mlx5_core-$(CONFIG_HWMON)          += hwmon.o
 mlx5_core-$(CONFIG_MLX5_MPFS)      += lib/mpfs.o
-ifneq ($(CONFIG_VXLAN),)
+ifneq ($(CONFIG_MLX5_VXLAN),)
 	mlx5_core-y		   += lib/vxlan.o
 endif
 mlx5_core-$(CONFIG_PTP_1588_CLOCK) += lib/clock.o

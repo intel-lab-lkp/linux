@@ -218,3 +218,14 @@ config MLX5_EN_PSP
 	  interfaces to PSP Stack which supports PSP crypto offload.
 
 	  If unsure, say Y.
+
+config MLX5_VXLAN
+	bool "Mellanox Technologies vxlan offloading"
+	depends on VXLAN
+	depends on MLX5_CORE_EN
+	default y
+	help
+	  mlx5 device offload support for vxlan. Makes the mlx5 driver always
+	  attempt to initialize device handling of vxlan packets.
+
+	  If unsure, say Y.
