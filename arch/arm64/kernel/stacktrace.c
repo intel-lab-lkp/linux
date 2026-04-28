@@ -4,12 +4,14 @@
  *
  * Copyright (C) 2012 ARM Ltd.
  */
+#include <linux/bitfield.h>
 #include <linux/kernel.h>
 #include <linux/efi.h>
 #include <linux/export.h>
 #include <linux/filter.h>
 #include <linux/ftrace.h>
 #include <linux/kprobes.h>
+#include <linux/pgtable.h>
 #include <linux/sched.h>
 #include <linux/sched/debug.h>
 #include <linux/sched/task_stack.h>
@@ -17,8 +19,98 @@
 
 #include <asm/efi.h>
 #include <asm/irq.h>
+#include <asm/memory.h>
 #include <asm/stack_pointer.h>
 #include <asm/stacktrace.h>
+
+/*
+ * addr_is_device_mem - check if a userspace address maps device memory
+ *
+ * Walks the current task's page tables without taking the mmap lock,
+ * using the same lockless pattern as perf_get_pgtable_size() in
+ * kernel/events/core.c.  Inspects the MAIR attribute index in the
+ * leaf PTE to detect device memory types.
+ *
+ * Returns true for device memory (MT_DEVICE_nGnRnE, MT_DEVICE_nGnRE)
+ * or if the mapping cannot be determined.  Safe to call from IRQ/NMI
+ * context.
+ */
+static bool addr_is_device_mem(unsigned long addr)
+{
+#ifdef CONFIG_HAVE_GUP_FAST
+	struct mm_struct *mm = current->mm;
+	pgd_t *pgdp, pgd;
+	p4d_t *p4dp, p4d;
+	pud_t *pudp, pud;
+	pmd_t *pmdp, pmd;
+	pte_t *ptep, pte;
+	unsigned long flags;
+	unsigned int idx;
+	bool is_dev;
+
+	if (!mm)
+		return true;
+
+	local_irq_save(flags);
+
+	pgdp = pgd_offset(mm, addr);
+	pgd = pgdp_get(pgdp);
+	if (pgd_none(pgd))
+		goto err;
+
+	p4dp = p4d_offset_lockless(pgdp, pgd, addr);
+	p4d = p4dp_get(p4dp);
+	if (!p4d_present(p4d))
+		goto err;
+
+	pudp = pud_offset_lockless(p4dp, p4d, addr);
+	pud = pudp_get(pudp);
+	if (!pud_present(pud))
+		goto err;
+
+	if (pud_leaf(pud)) {
+		pte = pud_pte(pud);
+		goto check;
+	}
+
+	pmdp = pmd_offset_lockless(pudp, pud, addr);
+again:
+	pmd = pmdp_get_lockless(pmdp);
+	if (!pmd_present(pmd))
+		goto err;
+
+	if (pmd_leaf(pmd)) {
+		pte = pmd_pte(pmd);
+		goto check;
+	}
+
+	ptep = pte_offset_map(&pmd, addr);
+	if (!ptep)
+		goto again;
+
+	pte = ptep_get_lockless(ptep);
+	pte_unmap(ptep);
+
+	if (!pte_present(pte))
+		goto err;
+check:
+	idx = FIELD_GET(PTE_ATTRINDX_MASK, pte_val(pte));
+	is_dev = idx == MT_DEVICE_nGnRnE || idx == MT_DEVICE_nGnRE;
+	local_irq_restore(flags);
+	return is_dev;
+err:
+	local_irq_restore(flags);
+	return true;
+#else
+	/*
+	 * Without GUP-fast lockless page table helpers we cannot
+	 * inspect the PTE.  Preserve the existing behavior (no
+	 * device memory check) rather than unconditionally blocking
+	 * all unwinding.
+	 */
+	return false;
+#endif
+}
 
 enum kunwind_source {
 	KUNWIND_SOURCE_UNKNOWN,
@@ -524,6 +616,9 @@ unwind_user_frame(struct frame_tail __user *tail, void *cookie,
 	if (!access_ok(tail, sizeof(buftail)))
 		return NULL;
 
+	if (addr_is_device_mem((unsigned long)tail))
+		return NULL;
+
 	pagefault_disable();
 	err = __copy_from_user_inatomic(&buftail, tail, sizeof(buftail));
 	pagefault_enable();
@@ -570,6 +665,9 @@ unwind_compat_user_frame(struct compat_frame_tail __user *tail, void *cookie,
 
 	/* Also check accessibility of one struct frame_tail beyond */
 	if (!access_ok(tail, sizeof(buftail)))
+		return NULL;
+
+	if (addr_is_device_mem((unsigned long)tail))
 		return NULL;
 
 	pagefault_disable();
