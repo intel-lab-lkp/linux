@@ -476,27 +476,27 @@ static void prepare_msrs(void *info)
 	struct mce m = *(struct mce *)info;
 	u8 b = m.bank;
 
-	wrmsrq(MSR_IA32_MCG_STATUS, m.mcgstatus);
+	wrmsr(MSR_IA32_MCG_STATUS, m.mcgstatus);
 
 	if (boot_cpu_has(X86_FEATURE_SMCA)) {
 		if (m.inject_flags == DFR_INT_INJ) {
-			wrmsrq(MSR_AMD64_SMCA_MCx_DESTAT(b), m.status);
-			wrmsrq(MSR_AMD64_SMCA_MCx_DEADDR(b), m.addr);
+			wrmsr(MSR_AMD64_SMCA_MCx_DESTAT(b), m.status);
+			wrmsr(MSR_AMD64_SMCA_MCx_DEADDR(b), m.addr);
 		} else {
-			wrmsrq(MSR_AMD64_SMCA_MCx_STATUS(b), m.status);
-			wrmsrq(MSR_AMD64_SMCA_MCx_ADDR(b), m.addr);
+			wrmsr(MSR_AMD64_SMCA_MCx_STATUS(b), m.status);
+			wrmsr(MSR_AMD64_SMCA_MCx_ADDR(b), m.addr);
 		}
 
-		wrmsrq(MSR_AMD64_SMCA_MCx_SYND(b), m.synd);
+		wrmsr(MSR_AMD64_SMCA_MCx_SYND(b), m.synd);
 
 		if (m.misc)
-			wrmsrq(MSR_AMD64_SMCA_MCx_MISC(b), m.misc);
+			wrmsr(MSR_AMD64_SMCA_MCx_MISC(b), m.misc);
 	} else {
-		wrmsrq(MSR_IA32_MCx_STATUS(b), m.status);
-		wrmsrq(MSR_IA32_MCx_ADDR(b), m.addr);
+		wrmsr(MSR_IA32_MCx_STATUS(b), m.status);
+		wrmsr(MSR_IA32_MCx_ADDR(b), m.addr);
 
 		if (m.misc)
-			wrmsrq(MSR_IA32_MCx_MISC(b), m.misc);
+			wrmsr(MSR_IA32_MCx_MISC(b), m.misc);
 	}
 }
 
@@ -742,15 +742,15 @@ static void check_hw_inj_possible(void)
 		u64 status = MCI_STATUS_VAL, ipid;
 
 		/* Check whether bank is populated */
-		rdmsrq(MSR_AMD64_SMCA_MCx_IPID(bank), ipid);
+		ipid = rdmsr(MSR_AMD64_SMCA_MCx_IPID(bank));
 		if (!ipid)
 			continue;
 
 		toggle_hw_mce_inject(cpu, true);
 
-		wrmsrq_safe(mca_msr_reg(bank, MCA_STATUS), status);
-		rdmsrq_safe(mca_msr_reg(bank, MCA_STATUS), &status);
-		wrmsrq_safe(mca_msr_reg(bank, MCA_STATUS), 0);
+		wrmsr_safe(mca_msr_reg(bank, MCA_STATUS), status);
+		rdmsr_safe(mca_msr_reg(bank, MCA_STATUS), &status);
+		wrmsr_safe(mca_msr_reg(bank, MCA_STATUS), 0);
 
 		if (!status) {
 			hw_injection_possible = false;

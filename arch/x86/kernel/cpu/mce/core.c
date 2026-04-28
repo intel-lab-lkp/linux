@@ -1871,7 +1871,7 @@ static void __mcheck_cpu_cap_init(void)
 	u64 cap;
 	u8 b;
 
-	rdmsrq(MSR_IA32_MCG_CAP, cap);
+	cap = rdmsr(MSR_IA32_MCG_CAP);
 
 	b = cap & MCG_BANKCNT_MASK;
 
@@ -1890,9 +1890,9 @@ static void __mcheck_cpu_init_generic(void)
 {
 	u64 cap;
 
-	rdmsrq(MSR_IA32_MCG_CAP, cap);
+	cap = rdmsr(MSR_IA32_MCG_CAP);
 	if (cap & MCG_CTL_P)
-		wrmsr(MSR_IA32_MCG_CTL, 0xffffffff, 0xffffffff);
+		wrmsr(MSR_IA32_MCG_CTL, ~0ULL);
 }
 
 static void __mcheck_cpu_init_prepare_banks(void)
@@ -1919,10 +1919,10 @@ static void __mcheck_cpu_init_prepare_banks(void)
 		if (!b->init)
 			continue;
 
-		wrmsrq(mca_msr_reg(i, MCA_CTL), b->ctl);
-		wrmsrq(mca_msr_reg(i, MCA_STATUS), 0);
+		wrmsr(mca_msr_reg(i, MCA_CTL), b->ctl);
+		wrmsr(mca_msr_reg(i, MCA_STATUS), 0);
 
-		rdmsrq(mca_msr_reg(i, MCA_CTL), msrval);
+		msrval = rdmsr(mca_msr_reg(i, MCA_CTL));
 		b->init = !!msrval;
 	}
 }
@@ -2240,7 +2240,7 @@ void mca_bsp_init(struct cpuinfo_x86 *c)
 	if (mce_flags.smca)
 		smca_bsp_init();
 
-	rdmsrq(MSR_IA32_MCG_CAP, cap);
+	cap = rdmsr(MSR_IA32_MCG_CAP);
 
 	/* Use accurate RIP reporting if available. */
 	if ((cap & MCG_EXT_P) && MCG_EXT_CNT(cap) >= 9)
@@ -2420,7 +2420,7 @@ static void mce_disable_error_reporting(void)
 		struct mce_bank *b = &mce_banks[i];
 
 		if (b->init)
-			wrmsrq(mca_msr_reg(i, MCA_CTL), 0);
+			wrmsr(mca_msr_reg(i, MCA_CTL), 0);
 	}
 	return;
 }
@@ -2776,7 +2776,7 @@ static void mce_reenable_cpu(void)
 		struct mce_bank *b = &mce_banks[i];
 
 		if (b->init)
-			wrmsrq(mca_msr_reg(i, MCA_CTL), b->ctl);
+			wrmsr(mca_msr_reg(i, MCA_CTL), b->ctl);
 	}
 }
 

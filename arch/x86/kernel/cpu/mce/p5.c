@@ -23,16 +23,16 @@ int mce_p5_enabled __read_mostly;
 /* Machine check handler for Pentium class Intel CPUs: */
 noinstr void pentium_machine_check(struct pt_regs *regs)
 {
-	u32 loaddr, hi, lotype;
+	struct msr addr, type;
 
 	instrumentation_begin();
-	rdmsr(MSR_IA32_P5_MC_ADDR, loaddr, hi);
-	rdmsr(MSR_IA32_P5_MC_TYPE, lotype, hi);
+	addr.q = rdmsr(MSR_IA32_P5_MC_ADDR);
+	type.q = rdmsr(MSR_IA32_P5_MC_TYPE);
 
 	pr_emerg("CPU#%d: Machine Check Exception:  0x%8X (type 0x%8X).\n",
-		 smp_processor_id(), loaddr, lotype);
+		 smp_processor_id(), addr.l, type.l);
 
-	if (lotype & (1<<5)) {
+	if (type.l & (1<<5)) {
 		pr_emerg("CPU#%d: Possible thermal failure (CPU on fire ?).\n",
 			 smp_processor_id());
 	}
@@ -44,7 +44,7 @@ noinstr void pentium_machine_check(struct pt_regs *regs)
 /* Set up machine check reporting for processors with Intel style MCE: */
 void intel_p5_mcheck_init(struct cpuinfo_x86 *c)
 {
-	u32 l, h;
+	u64 val;
 
 	/* Default P5 to off as its often misconnected: */
 	if (!mce_p5_enabled)
@@ -55,8 +55,8 @@ void intel_p5_mcheck_init(struct cpuinfo_x86 *c)
 		return;
 
 	/* Read registers before enabling: */
-	rdmsr(MSR_IA32_P5_MC_ADDR, l, h);
-	rdmsr(MSR_IA32_P5_MC_TYPE, l, h);
+	val = rdmsr(MSR_IA32_P5_MC_ADDR);
+	val = rdmsr(MSR_IA32_P5_MC_TYPE);
 	pr_info("Intel old style machine check architecture supported.\n");
 
 	/* Enable MCE: */
