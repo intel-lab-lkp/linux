@@ -1034,8 +1034,8 @@ static inline int e100_phy_supports_mii(struct nic *nic)
 
 static void e100_get_defaults(struct nic *nic)
 {
-	struct param_range rfds = { .min = 16, .max = 256, .count = 256 };
-	struct param_range cbs  = { .min = 64, .max = 256, .count = 128 };
+	static const struct param_range rfds = { .min = 16, .max = 256, .count = 256 };
+	static const struct param_range cbs  = { .min = 64, .max = 256, .count = 128 };
 
 	/* MAC type is encoded as rev ID; exception: ICH is treated as 82559 */
 	nic->mac = (nic->flags & ich) ? mac_82559_D101M : nic->pdev->revision;
