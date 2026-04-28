@@ -31,7 +31,7 @@
 #define TBNET_LOGIN_TIMEOUT	500
 #define TBNET_LOGOUT_TIMEOUT	1000
 
-#define TBNET_RING_SIZE		256
+#define TBNET_RING_SIZE		2048
 #define TBNET_LOGIN_RETRIES	60
 #define TBNET_LOGOUT_RETRIES	10
 #define TBNET_E2E		BIT(0)
@@ -1383,7 +1383,7 @@ static int tbnet_probe(struct tb_service *svc, const struct tb_service_id *id)
 	dev->features = dev->hw_features | NETIF_F_HIGHDMA;
 	dev->hard_header_len += sizeof(struct thunderbolt_ip_frame_header);
 
-	netif_napi_add(dev, &net->napi, tbnet_poll);
+	netif_napi_add_weight(dev, &net->napi, tbnet_poll, 256);
 
 	/* MTU range: 68 - 65522 */
 	dev->min_mtu = ETH_MIN_MTU;
