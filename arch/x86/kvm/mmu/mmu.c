@@ -4599,6 +4599,13 @@ static int kvm_mmu_faultin_pfn_gmem(struct kvm_vcpu *vcpu,
 		return -EFAULT;
 	}
 
+	/* Cannot fault from guest_memfd before CoCo VM is finalized. */
+	if (KVM_BUG_ON(vcpu->kvm->arch.has_protected_state &&
+			       !vcpu->kvm->arch.pre_fault_allowed,
+		       vcpu->kvm)) {
+		return -EFAULT;
+	}
+
 	r = kvm_gmem_get_pfn(vcpu->kvm, fault->slot, fault->gfn, &fault->pfn,
 			     &fault->refcounted_page, &max_order);
 	if (r) {
