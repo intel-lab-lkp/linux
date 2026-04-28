@@ -125,25 +125,27 @@ extern void lockdep_unregister_key(struct lock_class_key *key);
  * to lockdep:
  */
 
-extern void lockdep_init_map_type(struct lockdep_map *lock, const char *name,
-	struct lock_class_key *key, int subclass, u8 inner, u8 outer, u8 lock_type);
+void lockdep_init_map_type(struct lockdep_map *lock, const char *name,
+			   const struct lock_class_key *key, int subclass,
+			   u8 inner, u8 outer, u8 lock_type);
 
 static inline void
 lockdep_init_map_waits(struct lockdep_map *lock, const char *name,
-		       struct lock_class_key *key, int subclass, u8 inner, u8 outer)
+		       const struct lock_class_key *key, int subclass,
+		       u8 inner, u8 outer)
 {
 	lockdep_init_map_type(lock, name, key, subclass, inner, outer, LD_LOCK_NORMAL);
 }
 
 static inline void
 lockdep_init_map_wait(struct lockdep_map *lock, const char *name,
-		      struct lock_class_key *key, int subclass, u8 inner)
+		      const struct lock_class_key *key, int subclass, u8 inner)
 {
 	lockdep_init_map_waits(lock, name, key, subclass, inner, LD_WAIT_INV);
 }
 
 static inline void lockdep_init_map(struct lockdep_map *lock, const char *name,
-			     struct lock_class_key *key, int subclass)
+				    const struct lock_class_key *key, int subclass)
 {
 	lockdep_init_map_wait(lock, name, key, subclass, LD_WAIT_INV);
 }
@@ -252,9 +254,9 @@ static inline int lock_is_held(const struct lockdep_map *lock)
 #define lockdep_is_held(lock)		lock_is_held(&(lock)->dep_map)
 #define lockdep_is_held_type(lock, r)	lock_is_held_type(&(lock)->dep_map, (r))
 
-extern void lock_set_class(struct lockdep_map *lock, const char *name,
-			   struct lock_class_key *key, unsigned int subclass,
-			   unsigned long ip);
+void lock_set_class(struct lockdep_map *lock, const char *name,
+		    const struct lock_class_key *key, unsigned int subclass,
+		    unsigned long ip);
 
 #define lock_set_novalidate_class(l, n, i) \
 	lock_set_class(l, n, &__lockdep_no_validate__, 0, i)

@@ -886,7 +886,7 @@ static int count_matching_names(struct lock_class *new_class)
 static noinstr struct lock_class *
 look_up_lock_class(const struct lockdep_map *lock, unsigned int subclass)
 {
-	struct lockdep_subclass_key *key;
+	const struct lockdep_subclass_key *key;
 	struct hlist_head *hash_head;
 	struct lock_class *class;
 
@@ -1284,7 +1284,7 @@ static bool is_dynamic_key(const struct lock_class_key *key)
 static struct lock_class *
 register_lock_class(struct lockdep_map *lock, unsigned int subclass, int force)
 {
-	struct lockdep_subclass_key *key;
+	const struct lockdep_subclass_key *key;
 	struct hlist_head *hash_head;
 	struct lock_class *class;
 	int idx;
@@ -4935,8 +4935,8 @@ static inline int check_wait_context(struct task_struct *curr,
  * Initialize a lock instance's lock-class mapping info:
  */
 void lockdep_init_map_type(struct lockdep_map *lock, const char *name,
-			    struct lock_class_key *key, int subclass,
-			    u8 inner, u8 outer, u8 lock_type)
+			   const struct lock_class_key *key, int subclass,
+			   u8 inner, u8 outer, u8 lock_type)
 {
 	int i;
 
@@ -5406,7 +5406,7 @@ static int reacquire_held_locks(struct task_struct *curr, unsigned int depth,
 
 static int
 __lock_set_class(struct lockdep_map *lock, const char *name,
-		 struct lock_class_key *key, unsigned int subclass,
+		 const struct lock_class_key *key, unsigned int subclass,
 		 unsigned long ip)
 {
 	struct task_struct *curr = current;
@@ -5731,7 +5731,7 @@ static noinstr void check_flags(unsigned long flags)
 }
 
 void lock_set_class(struct lockdep_map *lock, const char *name,
-		    struct lock_class_key *key, unsigned int subclass,
+		    const struct lock_class_key *key, unsigned int subclass,
 		    unsigned long ip)
 {
 	unsigned long flags;

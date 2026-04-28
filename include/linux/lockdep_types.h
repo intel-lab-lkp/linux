@@ -184,7 +184,7 @@ void clear_lock_stats(struct lock_class *class);
  * This is embedded into specific lock instances:
  */
 struct lockdep_map {
-	struct lock_class_key		*key;
+	const struct lock_class_key		*key;
 	struct lock_class		*class_cache[NR_LOCKDEP_CACHING_CLASSES];
 	const char			*name;
 	u8				wait_type_outer; /* can be taken in this context */
