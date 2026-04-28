@@ -1254,7 +1254,7 @@ struct bcmasp_intf *bcmasp_interface_create(struct bcmasp_priv *priv,
 	struct device *dev = &priv->pdev->dev;
 	struct bcmasp_intf *intf;
 	struct net_device *ndev;
-	int ch, port, ret;
+	int ch, port, ret = -EINVAL;
 
 	if (of_property_read_u32(ndev_dn, "reg", &port)) {
 		dev_warn(dev, "%s: invalid port number\n", ndev_dn->name);
@@ -1314,6 +1314,8 @@ struct bcmasp_intf *bcmasp_interface_create(struct bcmasp_priv *priv,
 	}
 
 	ret = of_get_ethdev_address(ndev_dn, ndev);
+	if (ret == -EPROBE_DEFER)
+		return ERR_PTR(-EPROBE_DEFER);
 	if (ret) {
 		netdev_warn(ndev, "using random Ethernet MAC\n");
 		eth_hw_addr_random(ndev);
@@ -1340,7 +1342,7 @@ err_deregister_fixed_link:
 err_free_netdev:
 	free_netdev(ndev);
 err:
-	return NULL;
+	return ERR_PTR(ret);
 }
 
 void bcmasp_interface_destroy(struct bcmasp_intf *intf)
