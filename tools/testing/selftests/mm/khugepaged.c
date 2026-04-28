@@ -369,7 +369,9 @@ static void *file_setup_area(int nr_hpages)
 	int fd;
 	void *p;
 	unsigned long size;
-
+	size_t remaining;
+	ssize_t ret;
+	char *buf;
 	unlink(finfo.path);  /* Cleanup from previous failed tests */
 	printf("Creating %s for collapse%s...", finfo.path,
 	       finfo.type == VMA_SHMEM ? " (tmpfs)" : "");
@@ -383,7 +385,19 @@ static void *file_setup_area(int nr_hpages)
 	size = nr_hpages * hpage_pmd_size;
 	p = alloc_mapping(nr_hpages);
 	fill_memory(p, 0, size);
-	write(fd, p, size);
+	remaining = size;
+	buf = p;
+
+	while (remaining > 0) {
+		ret = write(fd, buf, remaining);
+		if (ret <= 0) {
+			close(fd);
+			munmap(p, size);
+			ksft_exit_fail_msg("write() failed while preparing test file\n");
+		}
+		buf += ret;
+		remaining -= ret;
+	}
 	close(fd);
 	munmap(p, size);
 	success("OK");
