@@ -12,6 +12,7 @@
 #include <uapi/asm/msr.h>
 #include <asm/shared/msr.h>
 
+#include <linux/args.h>
 #include <linux/types.h>
 #include <linux/percpu.h>
 
@@ -179,14 +180,14 @@ static inline u64 native_read_pmc(int counter)
  * pointer indirection), this allows gcc to optimize better
  */
 
-#define rdmsr(msr, low, high)					\
+#define __rdmsr_3(msr, low, high)				\
 do {								\
 	u64 __val = native_read_msr((msr));			\
 	(void)((low) = (u32)__val);				\
 	(void)((high) = (u32)(__val >> 32));			\
 } while (0)
 
-static inline void wrmsr(u32 msr, u32 low, u32 high)
+static inline void __wrmsr_3(u32 msr, u32 low, u32 high)
 {
 	native_write_msr(msr, (u64)high << 32 | low);
 }
@@ -206,7 +207,7 @@ static inline int wrmsrq_safe(u32 msr, u64 val)
 }
 
 /* rdmsr with exception handling */
-#define rdmsr_safe(msr, low, high)				\
+#define __rdmsr_safe_3(msr, low, high)				\
 ({								\
 	u64 __val;						\
 	int __err = native_read_msr_safe((msr), &__val);	\
@@ -243,12 +244,47 @@ static __always_inline void wrmsrns(u32 msr, u64 val)
 }
 
 /*
- * Dual u32 version of wrmsrq_safe():
+ * Dual u32 versions of wrmsr_safe():
  */
-static inline int wrmsr_safe(u32 msr, u32 low, u32 high)
+static __always_inline int __wrmsr_safe_3(u32 msr, u32 low, u32 high)
 {
 	return wrmsrq_safe(msr, (u64)high << 32 | low);
 }
+
+/*
+ * u64 versions of rdmsr/wrmsr[_safe]():
+ */
+static __always_inline u64 __rdmsr_1(u32 msr)
+{
+	u64 val;
+
+	rdmsrq(msr, val);
+
+	return val;
+}
+
+static __always_inline void __wrmsr_2(u32 msr, u64 val)
+{
+	wrmsrq(msr, val);
+}
+
+static __always_inline int __rdmsr_safe_2(u32 msr, u64 *p)
+{
+	return rdmsrq_safe(msr, p);
+}
+
+static __always_inline int __wrmsr_safe_2(u32 msr, u64 val)
+{
+	return wrmsrq_safe(msr, val);
+}
+
+/*
+ * Macros for selecting u64 or dual u32 versions of rdmsr/wrmsr[_safe]():
+ */
+#define rdmsr(...) CONCATENATE(__rdmsr_, COUNT_ARGS(__VA_ARGS__))(__VA_ARGS__)
+#define wrmsr(...) CONCATENATE(__wrmsr_, COUNT_ARGS(__VA_ARGS__))(__VA_ARGS__)
+#define rdmsr_safe(...) CONCATENATE(__rdmsr_safe_, COUNT_ARGS(__VA_ARGS__))(__VA_ARGS__)
+#define wrmsr_safe(...) CONCATENATE(__wrmsr_safe_, COUNT_ARGS(__VA_ARGS__))(__VA_ARGS__)
 
 struct msr __percpu *msrs_alloc(void);
 void msrs_free(struct msr __percpu *msrs);

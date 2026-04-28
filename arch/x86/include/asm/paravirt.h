@@ -150,14 +150,14 @@ static inline int paravirt_write_msr_safe(u32 msr, u64 val)
 	return PVOP_CALL2(int, pv_ops, cpu.write_msr_safe, msr, val);
 }
 
-#define rdmsr(msr, val1, val2)			\
+#define __rdmsr_3(msr, val1, val2)		\
 do {						\
 	u64 _l = paravirt_read_msr(msr);	\
 	val1 = (u32)_l;				\
 	val2 = _l >> 32;			\
 } while (0)
 
-static __always_inline void wrmsr(u32 msr, u32 low, u32 high)
+static __always_inline void __wrmsr_3(u32 msr, u32 low, u32 high)
 {
 	paravirt_write_msr(msr, (u64)high << 32 | low);
 }
@@ -178,7 +178,7 @@ static inline int wrmsrq_safe(u32 msr, u64 val)
 }
 
 /* rdmsr with exception handling */
-#define rdmsr_safe(msr, a, b)				\
+#define __rdmsr_safe_3(msr, a, b)				\
 ({							\
 	u64 _l;						\
 	int _err = paravirt_read_msr_safe((msr), &_l);	\
