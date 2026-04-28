@@ -1766,17 +1766,23 @@ static void pci_set_removable(struct pci_dev *dev)
 	if (!parent)
 		return;
 	/*
-	 * We (only) consider everything tunneled below an external_facing
-	 * device to be removable by the user. We're mainly concerned with
-	 * consumer platforms with user accessible thunderbolt ports that are
-	 * vulnerable to DMA attacks, and we expect those ports to be marked by
-	 * the firmware as external_facing. Devices in traditional hotplug
-	 * slots can technically be removed, but the expectation is that unless
-	 * the port is marked with external_facing, such devices are less
+	 * We consider everything tunneled below an external_facing device to
+	 * be removable by the user. We're mainly concerned with consumer
+	 * platforms with user accessible thunderbolt ports that are vulnerable
+	 * to DMA attacks, and we expect those ports to be marked by the
+	 * firmware as external_facing. Devices in traditional hotplug slots
+	 * can technically be removed, but the expectation is that unless the
+	 * port is marked with external_facing, such devices are less
 	 * accessible to user / may not be removed by end user, and thus not
 	 * exposed as "removable" to userspace.
+	 *
+	 * Some firmware does not set the ExternalFacingPort property on
+	 * Thunderbolt root ports.  In that case, fall back to checking
+	 * whether the device sits below a Thunderbolt controller, which
+	 * is itself inherently user-removable.
 	 */
-	if (dev_is_removable(&parent->dev)) {
+	if (dev_is_removable(&parent->dev) ||
+	    pci_is_thunderbolt_attached(dev)) {
 		dev_set_removable(&dev->dev, DEVICE_REMOVABLE);
 		return;
 	}
