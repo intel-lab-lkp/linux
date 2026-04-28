@@ -1454,8 +1454,10 @@ static void tlmi_release_attr(void)
 	kset_unregister(tlmi_priv.attribute_kset);
 
 	/* Free up any saved signatures */
-	kfree(tlmi_priv.pwd_admin->signature);
-	kfree(tlmi_priv.pwd_admin->save_signature);
+	if (tlmi_priv.pwd_admin) {
+		kfree(tlmi_priv.pwd_admin->signature);
+		kfree(tlmi_priv.pwd_admin->save_signature);
+	}
 
 	/* Authentication structures */
 	list_for_each_entry_safe(pos, n, &tlmi_priv.authentication_kset->list, entry)
@@ -1526,8 +1528,11 @@ static int tlmi_sysfs_init(void)
 		tlmi_priv.setting[i]->kobj.kset = tlmi_priv.attribute_kset;
 		ret = kobject_init_and_add(&tlmi_priv.setting[i]->kobj, &tlmi_attr_setting_ktype,
 					   NULL, "%s", tlmi_priv.setting[i]->display_name);
-		if (ret)
+		if (ret) {
+			kobject_put(&tlmi_priv.setting[i]->kobj);
+			tlmi_priv.setting[i] = NULL;
 			goto fail_create_attr;
+		}
 	}
 
 	ret = sysfs_create_file(&tlmi_priv.attribute_kset->kobj, &pending_reboot.attr);
@@ -1548,33 +1553,52 @@ static int tlmi_sysfs_init(void)
 	tlmi_priv.pwd_admin->kobj.kset = tlmi_priv.authentication_kset;
 	ret = kobject_init_and_add(&tlmi_priv.pwd_admin->kobj, &tlmi_pwd_setting_ktype,
 				   NULL, "%s", "Admin");
-	if (ret)
+	if (ret) {
+		kfree(tlmi_priv.pwd_admin->signature);
+		kfree(tlmi_priv.pwd_admin->save_signature);
+		tlmi_priv.pwd_admin->signature = NULL;
+		tlmi_priv.pwd_admin->save_signature = NULL;
+		kobject_put(&tlmi_priv.pwd_admin->kobj);
+		tlmi_priv.pwd_admin = NULL;
 		goto fail_create_attr;
+	}
 
 	tlmi_priv.pwd_power->kobj.kset = tlmi_priv.authentication_kset;
 	ret = kobject_init_and_add(&tlmi_priv.pwd_power->kobj, &tlmi_pwd_setting_ktype,
 				   NULL, "%s", "Power-on");
-	if (ret)
+	if (ret) {
+		kobject_put(&tlmi_priv.pwd_power->kobj);
+		tlmi_priv.pwd_power = NULL;
 		goto fail_create_attr;
+	}
 
 	if (tlmi_priv.opcode_support) {
 		tlmi_priv.pwd_system->kobj.kset = tlmi_priv.authentication_kset;
 		ret = kobject_init_and_add(&tlmi_priv.pwd_system->kobj, &tlmi_pwd_setting_ktype,
 					   NULL, "%s", "System");
-		if (ret)
+		if (ret) {
+			kobject_put(&tlmi_priv.pwd_system->kobj);
+			tlmi_priv.pwd_system = NULL;
 			goto fail_create_attr;
+		}
 
 		tlmi_priv.pwd_hdd->kobj.kset = tlmi_priv.authentication_kset;
 		ret = kobject_init_and_add(&tlmi_priv.pwd_hdd->kobj, &tlmi_pwd_setting_ktype,
 					   NULL, "%s", "HDD");
-		if (ret)
+		if (ret) {
+			kobject_put(&tlmi_priv.pwd_hdd->kobj);
+			tlmi_priv.pwd_hdd = NULL;
 			goto fail_create_attr;
+		}
 
 		tlmi_priv.pwd_nvme->kobj.kset = tlmi_priv.authentication_kset;
 		ret = kobject_init_and_add(&tlmi_priv.pwd_nvme->kobj, &tlmi_pwd_setting_ktype,
 					   NULL, "%s", "NVMe");
-		if (ret)
+		if (ret) {
+			kobject_put(&tlmi_priv.pwd_nvme->kobj);
+			tlmi_priv.pwd_nvme = NULL;
 			goto fail_create_attr;
+		}
 	}
 
 	return ret;
