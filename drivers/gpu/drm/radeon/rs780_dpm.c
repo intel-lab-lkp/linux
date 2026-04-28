@@ -65,6 +65,8 @@ static void rs780_get_pm_mode_parameters(struct radeon_device *rdev)
 			pi->crtc_id = radeon_crtc->crtc_id;
 			if (crtc->mode.htotal && crtc->mode.vtotal)
 				pi->refresh_rate = drm_mode_vrefresh(&crtc->mode);
+				if (pi->refresh_rate == 0)
+					pi->refresh_rate = 60;
 			break;
 		}
 	}
@@ -362,6 +364,8 @@ static void rs780_set_engine_clock_ssc(struct radeon_device *rdev)
 static void rs780_program_at(struct radeon_device *rdev)
 {
 	struct igp_power_info *pi = rs780_get_pi(rdev);
+
+	WARN_ON(pi->refresh_rate == 0);
 
 	WREG32(FVTHROT_TARGET_REG, 30000000 / pi->refresh_rate);
 	WREG32(FVTHROT_CB1, 1000000 * 5 / pi->refresh_rate);
