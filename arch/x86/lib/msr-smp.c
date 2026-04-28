@@ -186,16 +186,6 @@ int wrmsrq_safe_on_cpu(unsigned int cpu, u32 msr_no, u64 q)
 }
 EXPORT_SYMBOL(wrmsrq_safe_on_cpu);
 
-int rdmsrq_safe_on_cpu(unsigned int cpu, u32 msr_no, u64 *q)
-{
-	int err;
-
-	err = rdmsr_safe_on_cpu(cpu, msr_no, q);
-
-	return err;
-}
-EXPORT_SYMBOL(rdmsrq_safe_on_cpu);
-
 /*
  * These variants are significantly slower, but allows control over
  * the entire 32-bit GPR set.

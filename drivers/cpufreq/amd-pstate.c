@@ -471,8 +471,7 @@ static int msr_init_perf(struct amd_cpudata *cpudata)
 	u64 cap1, numerator, cppc_req;
 	u8 min_perf;
 
-	int ret = rdmsrq_safe_on_cpu(cpudata->cpu, MSR_AMD_CPPC_CAP1,
-				     &cap1);
+	int ret = rdmsr_safe_on_cpu(cpudata->cpu, MSR_AMD_CPPC_CAP1, &cap1);
 	if (ret)
 		return ret;
 

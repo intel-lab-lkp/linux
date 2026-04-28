@@ -405,7 +405,7 @@ static bool uncore_discovery_msr(struct uncore_discovery_domain *domain)
 		if (__test_and_set_bit(die, die_mask))
 			continue;
 
-		if (rdmsrq_safe_on_cpu(cpu, domain->discovery_base, &base))
+		if (rdmsr_safe_on_cpu(cpu, domain->discovery_base, &base))
 			continue;
 
 		if (!base)
