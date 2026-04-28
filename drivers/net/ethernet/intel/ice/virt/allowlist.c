@@ -90,6 +90,11 @@ static const u32 ptp_allowlist_opcodes[] = {
 	VIRTCHNL_OP_1588_PTP_GET_TIME,
 };
 
+/* VIRTCHNL_VF_CAPS2 */
+static const u32 caps2_allowlist_opcodes[] = {
+	VIRTCHNL_OP_GET_VF_CAPS2,
+};
+
 static const u32 tc_allowlist_opcodes[] = {
 	VIRTCHNL_OP_GET_QOS_CAPS, VIRTCHNL_OP_CONFIG_QUEUE_BW,
 	VIRTCHNL_OP_CONFIG_QUANTA,
@@ -117,6 +122,7 @@ static const struct allowlist_opcode_info allowlist_opcodes[] = {
 	ALLOW_ITEM(VIRTCHNL_VF_OFFLOAD_VLAN_V2, vlan_v2_allowlist_opcodes),
 	ALLOW_ITEM(VIRTCHNL_VF_OFFLOAD_QOS, tc_allowlist_opcodes),
 	ALLOW_ITEM(VIRTCHNL_VF_CAP_PTP, ptp_allowlist_opcodes),
+	ALLOW_ITEM(VIRTCHNL_VF_CAPS2, caps2_allowlist_opcodes),
 };
 
 /**
