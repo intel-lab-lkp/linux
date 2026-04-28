@@ -354,13 +354,23 @@ typedef unsigned long __seg_return_t;
 /*
  * Save a segment register away:
  */
-#define SAVE_SEGMENT(seg)				\
+#define SAVE_SEGMENT_VAR(seg)				\
 static inline unsigned long __savesegment_##seg(void)	\
 {							\
 	__seg_return_t v;				\
 	asm volatile("movl %%" #seg ",%k0" : "=r" (v));	\
 	return v;					\
 }
+
+#define SAVE_SEGMENT_PTR(seg)				\
+static inline void __savesegment_##seg##_ptr(u16 *p)	\
+{							\
+	asm volatile("movw %%" #seg ",%0" : "=m" (*p));	\
+}
+
+#define SAVE_SEGMENT(seg)				\
+	SAVE_SEGMENT_VAR(seg)				\
+	SAVE_SEGMENT_PTR(seg)
 
 SAVE_SEGMENT(cs)
 SAVE_SEGMENT(ss)
@@ -369,9 +379,28 @@ SAVE_SEGMENT(es)
 SAVE_SEGMENT(fs)
 SAVE_SEGMENT(gs)
 
+#undef SAVE_SEGMENT_VAR
+#undef SAVE_SEGMENT_PTR
 #undef SAVE_SEGMENT
 
+/*
+ * savesegment(seg, var) - Read a segment register into an unsigned long.
+ *
+ * Reads the segment selector via a general-purpose register into an
+ * unsigned long. Preferred when the value is needed in a register for
+ * subsequent arithmetic or comparison.
+ */
 #define savesegment(seg, var) ((var) = __savesegment_##seg())
+
+/*
+ * savesegment_mem16(seg, loc) - Store a segment register directly
+ *                               to u16 (or compatible) location.
+ *
+ * Writes the 16-bit segment selector directly to memory, bypassing any
+ * intermediate general-purpose register. Preferred over savesegment()
+ * for simply saving a segment register to a u16 (or compatible) location.
+ */
+#define savesegment_mem16(seg, loc) __savesegment_##seg##_ptr(&(loc))
 
 #endif /* !__ASSEMBLER__ */
 #endif /* __KERNEL__ */
