@@ -891,6 +891,7 @@ static int vruntime_eligible(struct cfs_rq *cfs_rq, u64 vruntime)
 	struct sched_entity *curr = cfs_rq->curr;
 	s64 avg = cfs_rq->sum_w_vruntime;
 	long load = cfs_rq->sum_weight;
+	s64 key, rhs;
 
 	if (curr && curr->on_rq) {
 		unsigned long weight = avg_vruntime_weight(cfs_rq, curr->load.weight);
@@ -899,7 +900,21 @@ static int vruntime_eligible(struct cfs_rq *cfs_rq, u64 vruntime)
 		load += weight;
 	}
 
-	return avg >= vruntime_op(vruntime, "-", cfs_rq->zero_vruntime) * load;
+	key = vruntime_op(vruntime, "-", cfs_rq->zero_vruntime);
+
+	/*
+	 * The multiplication key * load can overflow s64 when a heavy entity
+	 * enqueue shifts zero_vruntime far from lighter entities (see the
+	 * weight > load condition in place_entity()).
+	 *
+	 * On overflow, the sign of key tells us the correct answer: a large
+	 * positive key means vruntime >> V, so not eligible; a large negative
+	 * key means vruntime << V, so eligible.
+	 */
+	if (check_mul_overflow(key, (s64)load, &rhs))
+		return key <= 0;
+
+	return avg >= rhs;
 }
 
 int entity_eligible(struct cfs_rq *cfs_rq, struct sched_entity *se)
