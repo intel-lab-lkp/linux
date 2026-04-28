@@ -248,8 +248,17 @@ static inline int riscvpt_iommu_set_prot(struct pt_common *common,
 	u64 pte;
 
 	pte = RISCVPT_A | RISCVPT_U;
-	if (iommu_prot & IOMMU_WRITE)
-		pte |= RISCVPT_W | RISCVPT_R | RISCVPT_D;
+	if (iommu_prot & IOMMU_WRITE) {
+		pte |= RISCVPT_W | RISCVPT_R;
+		/*
+		 * When hardware dirty tracking is active (GADE set), the IOMMU
+		 * sets the D bit autonomously on the first write access.
+		 *
+		 */
+		if (!(common->features &
+		      BIT(PT_FEAT_RISCV_DIRTY_TRACKING_ACTIVE)))
+			pte |= RISCVPT_D;
+	}
 	if (iommu_prot & IOMMU_READ)
 		pte |= RISCVPT_R;
 	if (!(iommu_prot & IOMMU_NOEXEC))

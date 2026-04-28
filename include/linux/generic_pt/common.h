@@ -193,6 +193,14 @@ enum {
 	 * Support the 64k contiguous page size following the Svnapot extension.
 	 */
 	PT_FEAT_RISCV_SVNAPOT_64K = PT_FEAT_FMT_START,
+	/*
+	 * Hardware dirty tracking is currently active: DC.tc.GADE is set and
+	 * the IOMMU will set the D bit in PTEs autonomously on write access.
+	 * When this flag is set, new mappings must not pre-set the D bit so
+	 * that every write is correctly captured by hardware.
+	 * Only meaningful for second-stage (iohgatp) page tables.
+	 */
+	PT_FEAT_RISCV_DIRTY_TRACKING_ACTIVE,
 
 };
 
