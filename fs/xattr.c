@@ -492,9 +492,12 @@ vfs_listxattr(struct dentry *dentry, char *list, size_t size)
 	if (inode->i_op->listxattr) {
 		error = inode->i_op->listxattr(dentry, list, size);
 	} else {
-		error = security_inode_listsecurity(inode, list, size);
-		if (size && error > size)
-			error = -ERANGE;
+		ssize_t remaining = size;
+
+		error = security_inode_listsecurity(inode, &list, &remaining);
+		if (error)
+			return error;
+		error = size - remaining;
 	}
 	return error;
 }
@@ -1452,7 +1455,7 @@ ssize_t simple_xattr_list(struct inode *inode, struct simple_xattrs *xattrs,
 	if (err)
 		return err;
 
-	err = security_inode_listsecurity(inode, buffer, remaining_size);
+	err = security_inode_listsecurity(inode, &buffer, &remaining_size);
 	if (err < 0)
 		return err;
 
