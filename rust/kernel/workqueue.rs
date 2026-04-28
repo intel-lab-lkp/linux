@@ -442,21 +442,48 @@ pub unsafe trait RawDelayedWorkItem<const ID: u64>: RawWorkItem<ID> {}
 ///
 /// # Safety
 ///
-/// Implementers must ensure that [`__enqueue`] uses a `work_struct` initialized with the [`run`]
-/// method of this trait as the function pointer.
-///
-/// [`__enqueue`]: RawWorkItem::__enqueue
-/// [`run`]: WorkItemPointer::run
-pub unsafe trait WorkItemPointer<const ID: u64>: RawWorkItem<ID> {
+/// Implementers must ensure that [`WorkItemPointer::from_raw_work`] rebuilds the exact ownership
+/// transferred by a successful [`RawWorkItem::__enqueue`] call.
+pub unsafe trait WorkItemPointer<const ID: u64>: RawWorkItem<ID> + Sized {
+    /// The work item type containing the embedded `work_struct`.
+    type Item: WorkItem<ID, Pointer = Self> + ?Sized;
+
+    /// Rebuild this work item's pointer from its embedded `work_struct`.
+    ///
+    /// # Safety
+    ///
+    /// The provided `work_struct` pointer must originate from a previous call to
+    /// [`RawWorkItem::__enqueue`] where the `queue_work_on` closure returned true
+    /// and the pointer must still be valid.
+    unsafe fn from_raw_work(ptr: *mut bindings::work_struct) -> Self;
+
     /// Run this work item.
     ///
     /// # Safety
     ///
-    /// The provided `work_struct` pointer must originate from a previous call to [`__enqueue`]
-    /// where the `queue_work_on` closure returned true, and the pointer must still be valid.
+    /// The provided `work_struct` pointer must satisfy the same requirements as
+    /// [`WorkItemPointer::from_raw_work`].
+    #[inline]
+    unsafe extern "C" fn run(ptr: *mut bindings::work_struct) {
+        <Self::Item as WorkItem<ID>>::run(
+            // SAFETY: The requirements for `run` are exactly those of `from_raw_work`.
+            unsafe { Self::from_raw_work(ptr) },
+        );
+    }
+
+    /// Reclaim a previously enqueued work item that will no longer run.
     ///
-    /// [`__enqueue`]: RawWorkItem::__enqueue
-    unsafe extern "C" fn run(ptr: *mut bindings::work_struct);
+    /// # Safety
+    ///
+    /// The provided `work_struct` pointer must satisfy the same requirements as
+    /// [`WorkItemPointer::from_raw_work`].
+    #[inline]
+    unsafe fn cancel(ptr: *mut bindings::work_struct) {
+        drop(
+            // SAFETY: The requirements for `cancel` are exactly those of `from_raw_work`.
+            unsafe { Self::from_raw_work(ptr) },
+        );
+    }
 }
 
 /// Defines the method that should be called when this work item is executed.
@@ -536,6 +563,29 @@ impl<T: ?Sized, const ID: u64> Work<T, ID> {
         // A pointer cast would also be ok due to `#[repr(transparent)]`. We use `addr_of!` so that
         // the compiler does not complain that the `work` field is unused.
         unsafe { Opaque::cast_into(core::ptr::addr_of!((*ptr).work)) }
+    }
+
+    /// Disables this work item and waits for queued/running executions to finish.
+    ///
+    /// # Note
+    ///
+    /// Should be called from a sleepable context if the work was last queued on a non-BH
+    /// workqueue.
+    #[inline]
+    pub fn disable_sync(&self)
+    where
+        T: WorkItem<ID>,
+    {
+        let ptr: *const Self = self;
+        // SAFETY: `self` points to a valid initialized work.
+        let raw_work = unsafe { Self::raw_get(ptr) };
+        // SAFETY: `raw_work` is a valid embedded `work_struct`.
+        if unsafe { bindings::disable_work_sync(raw_work) } {
+            // SAFETY: A `true` return means the work was pending and got canceled, so the queued
+            // ownership transfer performed by `__enqueue` must be reclaimed here and the work
+            // item will not subsequently run.
+            unsafe { T::Pointer::cancel(raw_work) };
+        }
     }
 }
 
@@ -817,22 +867,22 @@ pub use impl_has_delayed_work;
 //   - `Work::new` makes sure that `T::Pointer::run` is passed to `init_work_with_key`.
 //   - Finally `Work` and `RawWorkItem` guarantee that the correct `Work` field
 //     will be used because of the ID const generic bound. This makes sure that `T::raw_get_work`
-//     uses the correct offset for the `Work` field, and `Work::new` picks the correct
-//     implementation of `WorkItemPointer` for `Arc<T>`.
+//     uses the correct offset for the `Work` field, and `T::Pointer::from_raw_work` rebuilds the
+//     correct pointer type for `Arc<T>`.
 unsafe impl<T, const ID: u64> WorkItemPointer<ID> for Arc<T>
 where
     T: WorkItem<ID, Pointer = Self>,
     T: HasWork<T, ID>,
 {
-    unsafe extern "C" fn run(ptr: *mut bindings::work_struct) {
+    type Item = T;
+
+    unsafe fn from_raw_work(ptr: *mut bindings::work_struct) -> Self {
         // The `__enqueue` method always uses a `work_struct` stored in a `Work<T, ID>`.
         let ptr = ptr.cast::<Work<T, ID>>();
         // SAFETY: This computes the pointer that `__enqueue` got from `Arc::into_raw`.
         let ptr = unsafe { T::work_container_of(ptr) };
         // SAFETY: This pointer comes from `Arc::into_raw` and we've been given back ownership.
-        let arc = unsafe { Arc::from_raw(ptr) };
-
-        T::run(arc)
+        unsafe { Arc::from_raw(ptr) }
     }
 }
 
@@ -887,7 +937,9 @@ where
     T: WorkItem<ID, Pointer = Self>,
     T: HasWork<T, ID>,
 {
-    unsafe extern "C" fn run(ptr: *mut bindings::work_struct) {
+    type Item = T;
+
+    unsafe fn from_raw_work(ptr: *mut bindings::work_struct) -> Self {
         // The `__enqueue` method always uses a `work_struct` stored in a `Work<T, ID>`.
         let ptr = ptr.cast::<Work<T, ID>>();
         // SAFETY: This computes the pointer that `__enqueue` got from `Arc::into_raw`.
@@ -895,9 +947,7 @@ where
         // SAFETY: This pointer comes from `Arc::into_raw` and we've been given back ownership.
         let boxed = unsafe { KBox::from_raw(ptr) };
         // SAFETY: The box was already pinned when it was enqueued.
-        let pinned = unsafe { Pin::new_unchecked(boxed) };
-
-        T::run(pinned)
+        unsafe { Pin::new_unchecked(boxed) }
     }
 }
 
@@ -950,15 +1000,17 @@ where
 //   - `Work::new` makes sure that `T::Pointer::run` is passed to `init_work_with_key`.
 //   - Finally `Work` and `RawWorkItem` guarantee that the correct `Work` field
 //     will be used because of the ID const generic bound. This makes sure that `T::raw_get_work`
-//     uses the correct offset for the `Work` field, and `Work::new` picks the correct
-//     implementation of `WorkItemPointer` for `ARef<T>`.
+//     uses the correct offset for the `Work` field, and `T::Pointer::from_raw_work` rebuilds the
+//     correct pointer type for `ARef<T>`.
 unsafe impl<T, const ID: u64> WorkItemPointer<ID> for ARef<T>
 where
     T: AlwaysRefCounted,
     T: WorkItem<ID, Pointer = Self>,
     T: HasWork<T, ID>,
 {
-    unsafe extern "C" fn run(ptr: *mut bindings::work_struct) {
+    type Item = T;
+
+    unsafe fn from_raw_work(ptr: *mut bindings::work_struct) -> Self {
         // The `__enqueue` method always uses a `work_struct` stored in a `Work<T, ID>`.
         let ptr = ptr.cast::<Work<T, ID>>();
 
@@ -972,9 +1024,7 @@ where
 
         // SAFETY: This pointer comes from `ARef::into_raw` and we've been given
         // back ownership.
-        let aref = unsafe { ARef::from_raw(ptr) };
-
-        T::run(aref)
+        unsafe { ARef::from_raw(ptr) }
     }
 }
 
