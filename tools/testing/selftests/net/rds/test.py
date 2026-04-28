@@ -70,11 +70,21 @@ def netns_socket(netns, *sock_args):
     u1.close()
     return socket.fromfd(fds[0], *sock_args)
 
+def collect_pcaps():
+    """Stop tcpdump processes and move their pcaps into the log dir."""
+    print("Stopping network packet captures")
+    for proc, tmp_path, dest_path, fno in tcpdump_procs:
+        proc.terminate()
+        proc.wait()
+        os.close(fno)
+        shutil.move(tmp_path, dest_path)
+
 def signal_handler(_sig, _frame):
     """
     Test timed out signal handler
     """
     print('Test timed out')
+    collect_pcaps()
     sys.exit(1)
 
 #Parse out command line arguments.  We take an optional
@@ -251,13 +261,7 @@ for s in sockets:
                 pass
 
 print(f"getsockopt(): {nr_success}/{nr_error}")
-
-print("Stopping network packet captures")
-for p, pcap_tmp, pcap, fd in tcpdump_procs:
-    p.terminate()
-    p.wait()
-    os.close(fd)
-    shutil.move(pcap_tmp, pcap)
+collect_pcaps()
 
 # We're done sending and receiving stuff, now let's check if what
 # we received is what we sent.
