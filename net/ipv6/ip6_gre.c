@@ -2262,7 +2262,8 @@ static int ip6erspan_changelink(struct net_device *dev, struct nlattr *tb[],
 				struct nlattr *data[],
 				struct netlink_ext_ack *extack)
 {
-	struct ip6gre_net *ign = net_generic(dev_net(dev), ip6gre_net_id);
+	struct ip6_tnl *nt = netdev_priv(dev);
+	struct ip6gre_net *ign = net_generic(nt->net, ip6gre_net_id);
 	struct __ip6_tnl_parm p;
 	struct ip6_tnl *t;
 
