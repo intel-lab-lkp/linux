@@ -78,6 +78,8 @@ struct ice_virtchnl_ops {
 	int (*get_ptp_cap)(struct ice_vf *vf,
 			   const struct virtchnl_ptp_caps *msg);
 	int (*get_phc_time)(struct ice_vf *vf);
+	int (*get_vf_caps2)(struct ice_vf *vf,
+			    const struct virtchnl_vf_caps2 *msg);
 };
 
 #ifdef CONFIG_PCI_IOV
