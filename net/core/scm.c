@@ -347,10 +347,11 @@ static int scm_max_fds(struct msghdr *msg)
 	return (msg->msg_controllen - sizeof(struct cmsghdr)) / sizeof(int);
 }
 
-void scm_detach_fds(struct msghdr *msg, struct scm_cookie *scm)
+void scm_detach_fds(struct msghdr *msg, struct scm_cookie *scm, int recv_flags)
 {
 	struct cmsghdr __user *cm =
 		(__force struct cmsghdr __user *)msg->msg_control_user;
+	bool filter_rights = recv_flags & MSG_RIGHTS_FILTER;
 	unsigned int o_flags = (msg->msg_flags & MSG_CMSG_CLOEXEC) ? O_CLOEXEC : 0;
 	int fdmax = min_t(int, scm_max_fds(msg), scm->fp->count);
 	int __user *cmsg_data = CMSG_USER_DATA(cm);
@@ -361,13 +362,13 @@ void scm_detach_fds(struct msghdr *msg, struct scm_cookie *scm)
 		return;
 
 	if (msg->msg_flags & MSG_CMSG_COMPAT) {
-		scm_detach_fds_compat(msg, scm);
+		scm_detach_fds_compat(msg, scm, recv_flags);
 		return;
 	}
 
 	for (i = 0; i < fdmax; i++) {
-		err = scm_recv_one_fd(scm->fp->fp[i], cmsg_data + i, o_flags);
-		if (err < 0)
+		err = scm_recv_one_fd(scm->fp->fp[i], cmsg_data + i, o_flags, &msg->msg_flags);
+		if (err < 0 && !filter_rights)
 			break;
 	}
 
@@ -520,7 +521,7 @@ static bool __scm_recv_common(struct sock *sk, struct msghdr *msg,
 	scm_passec(sk, msg, scm);
 
 	if (scm->fp)
-		scm_detach_fds(msg, scm);
+		scm_detach_fds(msg, scm, flags);
 
 	return true;
 }

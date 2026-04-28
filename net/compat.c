@@ -287,18 +287,19 @@ static int scm_max_fds_compat(struct msghdr *msg)
 	return (msg->msg_controllen - sizeof(struct compat_cmsghdr)) / sizeof(int);
 }
 
-void scm_detach_fds_compat(struct msghdr *msg, struct scm_cookie *scm)
+void scm_detach_fds_compat(struct msghdr *msg, struct scm_cookie *scm, int recv_flags)
 {
 	struct compat_cmsghdr __user *cm =
 		(struct compat_cmsghdr __user *)msg->msg_control_user;
 	unsigned int o_flags = (msg->msg_flags & MSG_CMSG_CLOEXEC) ? O_CLOEXEC : 0;
+	bool filter_rights = recv_flags & MSG_RIGHTS_FILTER;
 	int fdmax = min_t(int, scm_max_fds_compat(msg), scm->fp->count);
 	int __user *cmsg_data = CMSG_COMPAT_DATA(cm);
 	int err = 0, i;
 
 	for (i = 0; i < fdmax; i++) {
-		err = scm_recv_one_fd(scm->fp->fp[i], cmsg_data + i, o_flags);
-		if (err < 0)
+		err = scm_recv_one_fd(scm->fp->fp[i], cmsg_data + i, o_flags, &msg->msg_flags);
+		if (err < 0 && !filter_rights)
 			break;
 	}
 

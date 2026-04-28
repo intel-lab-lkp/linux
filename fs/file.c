@@ -1370,10 +1370,11 @@ out_unlock:
 }
 
 /**
- * receive_fd() - Install received file into file descriptor table
+ * receive_fd_msg() - Install received file into file descriptor table
  * @file: struct file that was received from another process
  * @ufd: __user pointer to write new fd number to
  * @o_flags: the O_* flags to apply to the new fd entry
+ * @msg_flags: the MSG_* flags to set for recvmsg(2)
  *
  * Installs a received file into the file descriptor table, with appropriate
  * checks and count updates. Optionally writes the fd number to userspace, if
@@ -1384,13 +1385,21 @@ out_unlock:
  *
  * Returns newly install fd or -ve on error.
  */
-int receive_fd(struct file *file, int __user *ufd, unsigned int o_flags)
+int receive_fd_msg(struct file *file, int __user *ufd, unsigned int o_flags,
+	       unsigned int *msg_flags)
 {
 	int error;
 
 	error = security_file_receive(file);
-	if (error)
+	if (error) {
+		if (msg_flags)
+			*msg_flags |= MSG_RIGHTS_DENIAL;
+
+		if (ufd)
+			put_user(-EPERM, ufd);
+
 		return error;
+	}
 
 	FD_PREPARE(fdf, o_flags, file);
 	if (fdf.err)
@@ -1405,6 +1414,12 @@ int receive_fd(struct file *file, int __user *ufd, unsigned int o_flags)
 
 	__receive_sock(fd_prepare_file(fdf));
 	return fd_publish(fdf);
+}
+EXPORT_SYMBOL_GPL(receive_fd_msg);
+
+int receive_fd(struct file *file, unsigned int o_flags)
+{
+	return receive_fd_msg(file, NULL, o_flags, NULL);
 }
 EXPORT_SYMBOL_GPL(receive_fd);
 

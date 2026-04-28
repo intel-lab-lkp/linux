@@ -308,7 +308,7 @@ int io_install_fixed_fd(struct io_kiocb *req, unsigned int issue_flags)
 	int ret;
 
 	ifi = io_kiocb_to_cmd(req, struct io_fixed_install);
-	ret = receive_fd(req->file, NULL, ifi->o_flags);
+	ret = receive_fd(req->file, ifi->o_flags);
 	if (ret < 0)
 		req_set_fail(req);
 	io_req_set_res(req, ret, 0);
