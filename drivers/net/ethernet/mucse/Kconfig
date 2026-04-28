@@ -16,12 +16,14 @@ config NET_VENDOR_MUCSE
 
 if NET_VENDOR_MUCSE
 
+# This driver is marked as broken because it is incomplete; this avoids users
+# enabling it and expecting it to work.
 config MGBE
 	tristate "Mucse(R) 1GbE PCI Express adapters support"
-	depends on PCI
+	depends on PCI && BROKEN
 	help
 	  This driver supports Mucse(R) 1GbE PCI Express family of
-	  adapters.
+	  adapters. It is incomplete and currently has no useful functionality.
 
 	  More specific information on configuring the driver is in
 	  <file:Documentation/networking/device_drivers/ethernet/mucse/rnpgbe.rst>.
