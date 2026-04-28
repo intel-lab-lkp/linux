@@ -162,6 +162,8 @@ enum virtchnl_ops {
 	/* opcode 68 through 111 are reserved */
 	VIRTCHNL_OP_CONFIG_QUEUE_BW = 112,
 	VIRTCHNL_OP_CONFIG_QUANTA = 113,
+	/* opcode 114 through 135 are reserved */
+	VIRTCHNL_OP_GET_VF_CAPS2 = 136,
 	VIRTCHNL_OP_MAX,
 };
 
@@ -244,13 +246,14 @@ struct virtchnl_vsi_resource {
 
 VIRTCHNL_CHECK_STRUCT_LEN(16, virtchnl_vsi_resource);
 
-/* VF capability flags */
+/* Base (first 32) + extended VF capability flags */
 enum virtchnl_vf_caps_bitnr {
 	/* Inclusive of base mode L2 offloads including TX/RX Checksum
 	 * offloading and TSO for non-tunnelled packets.
 	 */
 	VIRTCHNL_VF_OFFLOAD_L2 = 0,
 	VIRTCHNL_VF_OFFLOAD_RDMA = 1,
+	VIRTCHNL_VF_CAPS2 = 2,
 	VIRTCHNL_VF_OFFLOAD_RSS_AQ = 3,
 	VIRTCHNL_VF_OFFLOAD_RSS_REG = 4,
 	VIRTCHNL_VF_OFFLOAD_WB_ON_ITR = 5,
@@ -275,6 +278,8 @@ enum virtchnl_vf_caps_bitnr {
 	VIRTCHNL_VF_OFFLOAD_QOS = 29,
 	VIRTCHNL_VF_CAP_PTP = 31,
 
+	/* Flags greater than 31 are only available via virtchnl_vf_caps2 */
+
 	VIRTCHNL_VF_CAPS_MAX /* must be last */
 };
 
@@ -284,7 +289,14 @@ struct virtchnl_vf_resource {
 	u16 max_vectors;
 	u16 max_mtu;
 
+	/* If both sides support VIRTCHNL_VF_CAPS2, extended flags, along with
+	 * flags from this structure will be sent in VIRTCHNL_OP_GET_VF_CAPS2.
+	 * Drivers should store capabilities negotiated this way in a bitmap,
+	 * instead of directly reading flags from this structure, in order to
+	 * have a unified interface for checking capabilities.
+	 */
 	u32 vf_cap_flags;
+
 	u32 rss_key_size;
 	u32 rss_lut_size;
 
@@ -1573,6 +1585,32 @@ struct virtchnl_ptp_caps {
 VIRTCHNL_CHECK_STRUCT_LEN(48, virtchnl_ptp_caps);
 
 /**
+ * virtchnl_vf_caps2 - generic extended capability flags
+ *
+ * VF sends this message to negotiate an extended set of capability flags if
+ * VIRTCHNL_VF_CAPS2 is set in virtchnl_vf_resource::vf_cap_flags.
+ *
+ * On send, VF sets what capabilities it requests. On reply, PF indicates what
+ * has been enabled for this VF. The PF shall not set bits which were not
+ * requested by the VF.
+ *
+ * Defines capabilities available to the VF, including the 32 original ones from
+ * vf_cap_flags on the same positions, plus the ones that didn't fit there.
+ * Drivers should construct a bitmap from this message, instead of checking the
+ * first 32 bits sent in VIRTCHNL_OP_GET_VF_RESOURCES, for consistency.
+ *
+ * The VF sends VIRTCHNL_OP_GET_VF_CAPS2 and fills the vf_cap_flags bitmap,
+ * indicating what capabilities it is requesting. The PF responds with the same
+ * message, indicating what is enabled for the VF.
+ */
+struct virtchnl_vf_caps2 {
+	u32 flags_len;
+	u32 vf_cap_flags[] __counted_by(flags_len);
+};
+
+VIRTCHNL_CHECK_STRUCT_LEN(4, virtchnl_vf_caps2);
+
+/**
  * struct virtchnl_phc_time - Contains the 64bits of PHC clock time in ns.
  * @time: PHC time in nanoseconds
  * @rsvd: Reserved for future extension
@@ -1928,6 +1966,21 @@ virtchnl_vc_validate_vf_msg(struct virtchnl_version_info *ver, u32 v_opcode,
 		break;
 	case VIRTCHNL_OP_1588_PTP_GET_TIME:
 		valid_len = sizeof(struct virtchnl_phc_time);
+		break;
+	case VIRTCHNL_OP_GET_VF_CAPS2: {
+		struct virtchnl_vf_caps2 *caps2 =
+			(struct virtchnl_vf_caps2 *)msg;
+
+		/* Require at least 1 element */
+		if (msglen < struct_size(caps2, vf_cap_flags, 1) ||
+		    msglen != struct_size(caps2, vf_cap_flags,
+					  caps2->flags_len)) {
+			err_msg_format = true;
+			break;
+		}
+
+		valid_len = struct_size(caps2, vf_cap_flags, caps2->flags_len);
+		}
 		break;
 	/* These are always errors coming from the VF. */
 	case VIRTCHNL_OP_EVENT:

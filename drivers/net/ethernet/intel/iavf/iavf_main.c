@@ -2079,6 +2079,8 @@ static int iavf_process_aq_command(struct iavf_adapter *adapter)
 		return iavf_send_vf_supported_rxdids_msg(adapter);
 	if (adapter->aq_required & IAVF_FLAG_AQ_GET_PTP_CAPS)
 		return iavf_send_vf_ptp_caps_msg(adapter);
+	if (adapter->aq_required & IAVF_FLAG_AQ_GET_VF_CAP_CAPS2)
+		return iavf_send_vf_caps2_msg(adapter);
 	if (adapter->aq_required & IAVF_FLAG_AQ_DISABLE_QUEUES) {
 		iavf_disable_queues(adapter);
 		return 0;
@@ -2717,6 +2719,55 @@ err:
 }
 
 /**
+ * iavf_init_send_flags2_caps - part of negotiating CAPS2 capabilities
+ * @adapter: board private structure
+ *
+ * Send VIRTCHNL_OP_GET_VF_CAPS2 message to the PF. Clear
+ * IAVF_EXTENDED_CAP_RECV_CAPS2 if the message is not sent, e.g. due to PF not
+ * negotiating VIRTCHNL_VF_CAPS2.
+ */
+static void iavf_init_send_flags2_caps(struct iavf_adapter *adapter)
+{
+	WARN_ON(!(adapter->extended_caps & IAVF_EXTENDED_CAP_SEND_CAPS2));
+
+	if (iavf_send_vf_caps2_msg(adapter) == -EOPNOTSUPP) {
+		/* PF does not support VIRTCHNL_VF_CAPS2. In this case, we
+		 * did not send the capability exchange message and do not
+		 * expect a response.
+		 */
+		adapter->extended_caps &= ~IAVF_EXTENDED_CAP_RECV_CAPS2;
+	}
+
+	/* We sent the message, so move on to the next step */
+	adapter->extended_caps &= ~IAVF_EXTENDED_CAP_SEND_CAPS2;
+}
+
+/**
+ * iavf_init_recv_flags2_caps - part of negotiating CAPS2 capabilities
+ * @adapter: board private structure
+ *
+ * Process receipt of VIRTCHNL_VF_CAPS2 message from PF.
+ */
+static void iavf_init_recv_flags2_caps(struct iavf_adapter *adapter)
+{
+	WARN_ON(!(adapter->extended_caps & IAVF_EXTENDED_CAP_RECV_CAPS2));
+
+	if (iavf_get_vf_caps2(adapter))
+		goto err;
+
+	/* We've processed the PF response to VIRTCHNL_OP_GET_VF_CAPS2 */
+	adapter->extended_caps &= ~IAVF_EXTENDED_CAP_RECV_CAPS2;
+	return;
+
+err:
+	/* We didn't receive a reply. Make sure we try sending again when
+	 * __IAVF_INIT_FAILED attempts to recover.
+	 */
+	adapter->extended_caps |= IAVF_EXTENDED_CAP_SEND_CAPS2;
+	iavf_change_state(adapter, __IAVF_INIT_FAILED);
+}
+
+/**
  * iavf_init_process_extended_caps - Part of driver startup
  * @adapter: board private structure
  *
@@ -2755,6 +2806,15 @@ static void iavf_init_process_extended_caps(struct iavf_adapter *adapter)
 		return;
 	} else if (adapter->extended_caps & IAVF_EXTENDED_CAP_RECV_PTP) {
 		iavf_init_recv_ptp_caps(adapter);
+		return;
+	}
+
+	/* Process capability exchange for CAPS2 */
+	if (adapter->extended_caps & IAVF_EXTENDED_CAP_SEND_CAPS2) {
+		iavf_init_send_flags2_caps(adapter);
+		return;
+	} else if (adapter->extended_caps & IAVF_EXTENDED_CAP_RECV_CAPS2) {
+		iavf_init_recv_flags2_caps(adapter);
 		return;
 	}
 
