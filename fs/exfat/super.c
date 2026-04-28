@@ -149,6 +149,9 @@ static int exfat_show_options(struct seq_file *m, struct dentry *root)
 		seq_printf(m, ",time_offset=%d", opts->time_offset);
 	if (opts->zero_size_dir)
 		seq_puts(m, ",zero_size_dir");
+	if (sbi->vol_utbl_own == NULL)
+		seq_puts(m, ",default_upcase");
+
 	return 0;
 }
 
