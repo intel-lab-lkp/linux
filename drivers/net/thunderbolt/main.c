@@ -218,6 +218,10 @@ static bool tbnet_e2e = true;
 module_param_named(e2e, tbnet_e2e, bool, 0444);
 MODULE_PARM_DESC(e2e, "USB4NET full end-to-end flow control (default: true)");
 
+static unsigned int tbnet_throttling = 128000;
+module_param_named(throttling, tbnet_throttling, uint, 0444);
+MODULE_PARM_DESC(throttling, "Interrupt throttling rate in ns (default: 128000)");
+
 static void tbnet_fill_header(struct thunderbolt_ip_header *hdr, u64 route,
 	u8 sequence, const uuid_t *initiator_uuid, const uuid_t *target_uuid,
 	enum thunderbolt_ip_type type, size_t size, u32 command_id)
@@ -955,6 +959,9 @@ static int tbnet_open(struct net_device *dev)
 		return -ENOMEM;
 	}
 	net->rx_ring.ring = ring;
+
+	tb_ring_throttling(net->tx_ring.ring, tbnet_throttling);
+	tb_ring_throttling(net->rx_ring.ring, tbnet_throttling);
 
 	napi_enable(&net->napi);
 	start_login(net);
