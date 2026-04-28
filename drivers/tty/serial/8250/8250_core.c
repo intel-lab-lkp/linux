@@ -694,6 +694,7 @@ int serial8250_register_8250_port(const struct uart_8250_port *up)
 {
 	struct uart_8250_port *uart;
 	int ret;
+	bool was_removed = false;
 
 	if (up->port.uartclk == 0)
 		return -EINVAL;
@@ -716,8 +717,10 @@ int serial8250_register_8250_port(const struct uart_8250_port *up)
 	if (uart->port.type == PORT_8250_CIR)
 		return -ENODEV;
 
-	if (uart->port.dev)
+	if (uart->port.dev) {
 		uart_remove_one_port(&serial8250_reg, &uart->port);
+		was_removed = true;
+	}
 
 	uart->port.ctrl_id	= up->port.ctrl_id;
 	uart->port.port_id	= up->port.port_id;
@@ -819,6 +822,10 @@ int serial8250_register_8250_port(const struct uart_8250_port *up)
 					&uart->capabilities);
 
 		serial8250_apply_quirks(uart);
+
+		if (was_removed && uart_console(&uart->port))
+			uart->port.cons->flags &= ~CON_PRINTBUFFER;
+
 		ret = uart_add_one_port(&serial8250_reg,
 					&uart->port);
 		if (ret)
