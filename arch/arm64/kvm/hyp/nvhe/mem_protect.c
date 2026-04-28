@@ -1458,9 +1458,33 @@ int __pkvm_host_share_guest(u64 pfn, u64 gfn, u64 nr_pages, struct pkvm_hyp_vcpu
 		page->host_share_guest_count++;
 	}
 
-	WARN_ON(kvm_pgtable_stage2_map(&vm->pgt, ipa, size, phys,
-				       pkvm_mkstate(prot, PKVM_PAGE_SHARED_BORROWED),
-				       &vcpu->vcpu.arch.pkvm_memcache, 0));
+	ret = kvm_pgtable_stage2_map(&vm->pgt, ipa, size, phys,
+				     pkvm_mkstate(prot, PKVM_PAGE_SHARED_BORROWED),
+				     &vcpu->vcpu.arch.pkvm_memcache, 0);
+	if (ret) {
+		/*
+		 * Stage-2 map can fail mid-walk (e.g. -ENOMEM from the
+		 * memcache), leaving partial leaf entries installed in the
+		 * guest stage-2. Tear them down before rolling back host
+		 * bookkeeping; otherwise the guest would retain access to
+		 * pages the host is about to reclaim as PKVM_PAGE_OWNED.
+		 */
+		kvm_pgtable_stage2_unmap(&vm->pgt, ipa, size);
+
+		/*
+		 * Roll back the host vmemmap mutations applied above. A page
+		 * whose host_share_guest_count is now 1 was PKVM_PAGE_OWNED
+		 * before this call (count 0->1, state OWNED->SHARED_OWNED);
+		 * undo both. A page with count > 1 was already
+		 * PKVM_PAGE_SHARED_OWNED with other sharers; only the count
+		 * needs to be decremented.
+		 */
+		for_each_hyp_page(page, phys, size) {
+			page->host_share_guest_count--;
+			if (!page->host_share_guest_count)
+				set_host_state(page, PKVM_PAGE_OWNED);
+		}
+	}
 
 unlock:
 	guest_unlock_component(vm);
