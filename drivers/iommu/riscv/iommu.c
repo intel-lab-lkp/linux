@@ -1247,6 +1247,84 @@ static int riscv_iommu_attach_paging_domain(struct iommu_domain *iommu_domain,
 	return 0;
 }
 
+/*
+ * Enable or disable hardware A/D bit updates (GADE) in the device context for
+ * all devices attached to a second-stage domain. When dirty tracking is
+ * enabled the IOMMU hardware will set the dirty bit in PTEs on write access,
+ * making them visible to read_and_clear_dirty().
+ */
+static int riscv_iommu_set_dirty_tracking(struct iommu_domain *iommu_domain,
+					  bool enable)
+{
+	struct riscv_iommu_domain *domain = iommu_domain_to_riscv(iommu_domain);
+	struct riscv_iommu_bond *bond;
+	struct riscv_iommu_device *iommu, *prev;
+	struct riscv_iommu_dc *dc;
+	struct iommu_fwspec *fwspec;
+	struct riscv_iommu_command cmd;
+	u64 tc;
+	int i;
+
+	rcu_read_lock();
+
+	list_for_each_entry_rcu(bond, &domain->bonds, list) {
+		iommu = dev_to_iommu(bond->dev);
+		fwspec = dev_iommu_fwspec_get(bond->dev);
+
+		for (i = 0; i < fwspec->num_ids; i++) {
+			dc = riscv_iommu_get_dc(iommu, fwspec->ids[i]);
+			tc = READ_ONCE(dc->tc);
+			if (!(tc & RISCV_IOMMU_DC_TC_V))
+				continue;
+
+			if (enable)
+				tc |= RISCV_IOMMU_DC_TC_GADE;
+			else
+				tc &= ~RISCV_IOMMU_DC_TC_GADE;
+			WRITE_ONCE(dc->tc, tc);
+
+			/* Invalidate cached device context entry */
+			riscv_iommu_cmd_iodir_inval_ddt(&cmd);
+			riscv_iommu_cmd_iodir_set_did(&cmd, fwspec->ids[i]);
+			riscv_iommu_cmd_send(iommu, &cmd);
+			riscv_iommu_iodir_iotinval(iommu, false, dc->iohgatp, dc, NULL);
+		}
+	}
+
+	prev = NULL;
+	list_for_each_entry_rcu(bond, &domain->bonds, list) {
+		iommu = dev_to_iommu(bond->dev);
+		if (iommu == prev)
+			continue;
+
+		riscv_iommu_cmd_sync(iommu, RISCV_IOMMU_IOTINVAL_TIMEOUT);
+		prev = iommu;
+	}
+
+	rcu_read_unlock();
+
+	/*
+	 * Reflect the active dirty-tracking state in the page table feature
+	 * flags.  When active, riscvpt_iommu_set_prot() will leave D=0 in
+	 * new mappings so that the hardware can set it on the first write,
+	 * providing accurate per-page dirty information.  When inactive,
+	 * new mappings get D=1 to avoid write faults on a D=0 PTE.
+	 */
+	if (enable)
+		domain->riscvpt.riscv_64pt.common.features |=
+			BIT(PT_FEAT_RISCV_DIRTY_TRACKING_ACTIVE);
+	else
+		domain->riscvpt.riscv_64pt.common.features &=
+			~BIT(PT_FEAT_RISCV_DIRTY_TRACKING_ACTIVE);
+
+	return 0;
+}
+
+static const struct iommu_dirty_ops riscv_iommu_dirty_ops = {
+	IOMMU_PT_DIRTY_OPS(riscv_64),
+	.set_dirty_tracking = riscv_iommu_set_dirty_tracking,
+};
+
 static const struct iommu_domain_ops riscv_iommu_paging_domain_ops = {
 	IOMMU_PT_DOMAIN_OPS(riscv_64),
 	.attach_dev = riscv_iommu_attach_paging_domain,
@@ -1325,6 +1403,8 @@ static struct iommu_domain *riscv_iommu_domain_alloc_paging_flags(
 			riscv_iommu_free_paging_domain(&domain->domain);
 			return ERR_PTR(-ENOMEM);
 		}
+		if (iommu->caps & RISCV_IOMMU_CAPABILITIES_AMO_HWAD)
+			domain->domain.dirty_ops = &riscv_iommu_dirty_ops;
 	} else {
 		domain->pscid = ida_alloc_range(&riscv_iommu_pscids, 1,
 						RISCV_IOMMU_MAX_PSCID, GFP_KERNEL);
@@ -1401,10 +1481,14 @@ static struct iommu_group *riscv_iommu_device_group(struct device *dev)
 
 static bool riscv_iommu_capable(struct device *dev, enum iommu_cap cap)
 {
+	struct riscv_iommu_device *iommu = dev_to_iommu(dev);
+
 	switch (cap) {
 	case IOMMU_CAP_CACHE_COHERENCY:
 	case IOMMU_CAP_DEFERRED_FLUSH:
 		return true;
+	case IOMMU_CAP_DIRTY_TRACKING:
+		return !!(iommu->caps & RISCV_IOMMU_CAPABILITIES_AMO_HWAD);
 	default:
 		return false;
 	}
