@@ -2508,10 +2508,10 @@ uart_report_port(struct uart_driver *drv, struct uart_port *port)
 	}
 
 	pr_info("%s%s%s at %s (irq = %u, base_baud = %u) is a %s\n",
-	       port->dev ? dev_name(port->dev) : "",
-	       port->dev ? ": " : "",
-	       port->name,
-	       address, port->irq, port->uartclk / 16, uart_type(port));
+		port->dev ? dev_name(port->dev) : "",
+		port->dev ? ": " : "",
+		port->name,
+		address, port->irq, port->uartclk / 16, uart_type(port));
 
 	/* The magic multiplier feature is a bit obscure, so report it too.  */
 	if (port->flags & UPF_MAGIC_MULTIPLIER)
