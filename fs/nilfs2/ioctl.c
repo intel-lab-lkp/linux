@@ -846,6 +846,7 @@ static int nilfs_ioctl_clean_segments(struct inode *inode, struct file *filp,
 	struct the_nilfs *nilfs;
 	size_t len, nsegs;
 	int n, ret;
+	size_t i;
 
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
@@ -875,6 +876,21 @@ static int nilfs_ioctl_clean_segments(struct inode *inode, struct file *filp,
 		goto out;
 	}
 	nilfs = inode->i_sb->s_fs_info;
+
+	/*
+	 * Validate segment numbers against the filesystem's segment count
+	 * before entering nilfs_clean_segments(), which acquires
+	 * ns_segctor_sem for write.  Catching invalid segnums here avoids
+	 * holding that lock while emitting per-element diagnostics under
+	 * the segment constructor.
+	 */
+	for (i = 0; i < nsegs; i++) {
+		if (((__u64 *)kbufs[4])[i] >= nilfs->ns_nsegments) {
+			ret = -EINVAL;
+			kfree(kbufs[4]);
+			goto out;
+		}
+	}
 
 	for (n = 0; n < 4; n++) {
 		ret = -EINVAL;
