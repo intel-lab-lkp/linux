@@ -117,12 +117,6 @@ static void loongson_gpu_fixup_dma_hang(struct pci_dev *pdev, bool on)
 	base = pdev->bus->ops->map_bus(pdev->bus, pdev->devfn + 1, 0);
 	device = readw(base + PCI_DEVICE_ID);
 
-	regbase = ioremap(readq(base + PCI_BASE_ADDRESS_0) & ~0xffull, SZ_64K);
-	if (!regbase) {
-		pci_err(pdev, "Failed to ioremap()\n");
-		return;
-	}
-
 	switch (device) {
 	case PCI_DEVICE_ID_LOONGSON_DC2:
 		crtc_reg = regbase + 0x1240;
@@ -132,6 +126,14 @@ static void loongson_gpu_fixup_dma_hang(struct pci_dev *pdev, bool on)
 		crtc_reg = regbase;
 		crtc_offset = 0x400;
 		break;
+	default:
+		return;
+	}
+
+	regbase = ioremap(readq(base + PCI_BASE_ADDRESS_0) & ~0xffull, SZ_64K);
+	if (!regbase) {
+		pci_err(pdev, "Failed to ioremap()\n");
+		return;
 	}
 
 	for (i = 0; i < CRTC_NUM_MAX; i++, crtc_reg += crtc_offset) {
