@@ -52,9 +52,9 @@ static unsigned int amd_powersave_bias_target(struct cpufreq_policy *policy,
 		return freq_next;
 
 	rdmsr_on_cpu(policy->cpu, MSR_AMD64_FREQ_SENSITIVITY_ACTUAL,
-		&actual.l, &actual.h);
+		&actual.q);
 	rdmsr_on_cpu(policy->cpu, MSR_AMD64_FREQ_SENSITIVITY_REFERENCE,
-		&reference.l, &reference.h);
+		&reference.q);
 	actual.h &= 0x00ffffff;
 	reference.h &= 0x00ffffff;
 
