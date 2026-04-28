@@ -12,9 +12,32 @@
 #include <asm/idle.h>
 #include <asm/processor.h>
 #include <asm/time.h>
+#include <asm/cpufeature.h>
+
+#define KERNEL_HWCAP(x)  const_ilog2(HWCAP_LOONGARCH_ ## x)
+static const char *const hwcap_str[] = {
+	[KERNEL_HWCAP(CPUCFG)]		= "cpucfg",
+	[KERNEL_HWCAP(LAM)]		= "lam",
+	[KERNEL_HWCAP(LAM_BH)]		= "lam_bh",
+	[KERNEL_HWCAP(UAL)]		= "ual",
+	[KERNEL_HWCAP(FPU)]		= "fpu",
+	[KERNEL_HWCAP(LSX)]		= "lsx",
+	[KERNEL_HWCAP(LASX)]		= "lasx",
+	[KERNEL_HWCAP(CRC32)]		= "crc32",
+	[KERNEL_HWCAP(COMPLEX)]		= "complex",
+	[KERNEL_HWCAP(CRYPTO)]		= "crypto",
+	[KERNEL_HWCAP(LVZ)]		= "lvz",
+	[KERNEL_HWCAP(LBT_X86)]		= "lbt_x86",
+	[KERNEL_HWCAP(LBT_ARM)]		= "lbt_arm",
+	[KERNEL_HWCAP(LBT_MIPS)]	= "lbt_mips",
+	[KERNEL_HWCAP(PTW)]		= "ptw",
+	[KERNEL_HWCAP(LSPW)]		= "lspw",
+	[KERNEL_HWCAP(SCQ)]		= "scq",
+};
 
 static int show_cpuinfo(struct seq_file *m, void *v)
 {
+	unsigned int i;
 	unsigned long n = (unsigned long) v - 1;
 	unsigned int isa = cpu_data[n].isa_level;
 	unsigned int prid = cpu_data[n].processor_id;
@@ -60,40 +83,9 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 	seq_puts(m, "\n");
 
 	seq_puts(m, "Features\t\t:");
-	if (cpu_has_cpucfg)
-		seq_puts(m, " cpucfg");
-	if (cpu_has_lam)
-		seq_puts(m, " lam");
-	if (cpu_has_lam_bh)
-		seq_puts(m, " lam_bh");
-	if (cpu_has_scq)
-		seq_puts(m, " scq");
-	if (cpu_has_ual)
-		seq_puts(m, " ual");
-	if (cpu_has_fpu)
-		seq_puts(m, " fpu");
-	if (cpu_has_lsx)
-		seq_puts(m, " lsx");
-	if (cpu_has_lasx)
-		seq_puts(m, " lasx");
-	if (cpu_has_crc32)
-		seq_puts(m, " crc32");
-	if (cpu_has_complex)
-		seq_puts(m, " complex");
-	if (cpu_has_crypto)
-		seq_puts(m, " crypto");
-	if (cpu_has_ptw)
-		seq_puts(m, " ptw");
-	if (cpu_has_lspw)
-		seq_puts(m, " lspw");
-	if (cpu_has_lvz)
-		seq_puts(m, " lvz");
-	if (cpu_has_lbt_x86)
-		seq_puts(m, " lbt_x86");
-	if (cpu_has_lbt_arm)
-		seq_puts(m, " lbt_arm");
-	if (cpu_has_lbt_mips)
-		seq_puts(m, " lbt_mips");
+	for (i = 0; i < ARRAY_SIZE(hwcap_str); i++)
+		if (elf_hwcap & (1 << i))
+			seq_printf(m, " %s", hwcap_str[i]);
 	seq_puts(m, "\n");
 
 	seq_printf(m, "Hardware Watchpoint\t: %s", str_yes_no(cpu_has_watch));
