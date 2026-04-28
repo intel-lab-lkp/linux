@@ -12,6 +12,7 @@
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/suspend.h>
 #include <linux/usb.h>
 #include <linux/usb/hcd.h>
 #include <linux/videodev2.h>
@@ -2133,6 +2134,15 @@ int uvc_video_suspend(struct uvc_streaming *stream)
 int uvc_video_resume(struct uvc_streaming *stream, int reset)
 {
 	int ret;
+
+	/*
+	 * After taking the hibernation memory snapshot, the kernel briefly resumes
+	 * devices with PMSG_THAW to write the image to storage before powerdown.
+	 * The UVC device is not involved in storage I/O, so skip reinitializing
+	 * it to avoid unnecessary USB traffic during this transient phase.
+	 */
+	if (pm_hibernation_storing_image())
+		return 0;
 
 	/*
 	 * If the bus has been reset on resume, set the alternate setting to 0.
