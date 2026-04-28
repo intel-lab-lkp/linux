@@ -26,6 +26,7 @@
 #define YAMA_SCOPE_NO_ATTACH	3
 
 static int ptrace_scope = YAMA_SCOPE_RELATIONAL;
+static int max_scope = YAMA_SCOPE_NO_ATTACH;
 
 /* describe a ptrace relationship for potential exception */
 struct ptrace_relation {
@@ -119,7 +120,7 @@ static void yama_relation_cleanup(struct work_struct *work)
 	spin_lock(&ptracer_relations_lock);
 	rcu_read_lock();
 	list_for_each_entry_rcu(relation, &ptracer_relations, node) {
-		if (relation->invalid) {
+		if (relation->invalid || ptrace_scope == max_scope) {
 			list_del_rcu(&relation->node);
 			kfree_rcu(relation, rcu);
 		}
@@ -204,7 +205,8 @@ static void yama_ptracer_del(struct task_struct *tracer,
  */
 static void yama_task_free(struct task_struct *task)
 {
-	yama_ptracer_del(task, task);
+	if (ptrace_scope <= max_scope)
+		yama_ptracer_del(task, task);
 }
 
 /**
@@ -223,6 +225,9 @@ static int yama_task_prctl(int option, unsigned long arg2, unsigned long arg3,
 {
 	int rc = -ENOSYS;
 	struct task_struct *myself;
+
+	if (ptrace_scope == max_scope)
+		return -EPERM;
 
 	switch (option) {
 	case PR_SET_PTRACER:
@@ -432,6 +437,7 @@ static struct security_hook_list yama_hooks[] __ro_after_init = {
 static int yama_dointvec_minmax(const struct ctl_table *table, int write,
 				void *buffer, size_t *lenp, loff_t *ppos)
 {
+	int ret;
 	struct ctl_table table_copy;
 
 	if (write && !capable(CAP_SYS_PTRACE))
@@ -442,10 +448,17 @@ static int yama_dointvec_minmax(const struct ctl_table *table, int write,
 	if (*(int *)table_copy.data == *(int *)table_copy.extra2)
 		table_copy.extra1 = table_copy.extra2;
 
-	return proc_dointvec_minmax(&table_copy, write, buffer, lenp, ppos);
-}
+	ret = proc_dointvec_minmax(&table_copy, write, buffer, lenp, ppos);
+	if (ret < 0)
+		return ret;
 
-static int max_scope = YAMA_SCOPE_NO_ATTACH;
+	/* If max_scope was just activated in this call */
+	if (*(int *)table_copy.data == *(int *)table_copy.extra2 &&
+	    table_copy.extra1 != table_copy.extra2)
+		schedule_work(&yama_relation_work);
+
+	return 0;
+}
 
 static const struct ctl_table yama_sysctl_table[] = {
 	{
