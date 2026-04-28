@@ -164,8 +164,19 @@ static ssize_t security_sanitize_store(struct device *dev,
 				       const char *buf, size_t len)
 {
 	struct cxl_memdev *cxlmd = to_cxl_memdev(dev);
+	u64 dpa_start, dpa_length;
 	bool sanitize;
 	ssize_t rc;
+
+	/* start with ranged sanitize */
+	if (sscanf(buf, "%llx %llu", &dpa_start, &dpa_length) == 2) {
+		rc = cxl_mem_media_op(cxlmd, CXL_MEDIA_OP_CLASS_SANITIZE,
+				      CXL_MEDIA_OP_SANITIZE_SANITIZE,
+				      dpa_start, dpa_length);
+		if (rc)
+			return rc;
+		return len;
+	}
 
 	if (kstrtobool(buf, &sanitize) || !sanitize)
 		return -EINVAL;
@@ -198,6 +209,40 @@ static ssize_t security_erase_store(struct device *dev,
 }
 static struct device_attribute dev_attr_security_erase =
 	__ATTR(erase, 0200, NULL, security_erase_store);
+
+static ssize_t security_zero_store(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *buf, size_t len)
+{
+	struct cxl_memdev *cxlmd = to_cxl_memdev(dev);
+	u64 dpa_start, dpa_length;
+	ssize_t rc;
+
+	if (sscanf(buf, "%llx %llu", &dpa_start, &dpa_length) != 2)
+		return -EINVAL;
+
+	rc = cxl_mem_media_op(cxlmd, CXL_MEDIA_OP_CLASS_SANITIZE,
+			      CXL_MEDIA_OP_SANITIZE_ZERO,
+			      dpa_start, dpa_length);
+	if (rc)
+		return rc;
+
+	return len;
+}
+static struct device_attribute dev_attr_security_zero =
+	__ATTR(zero, 0200, NULL, security_zero_store);
+
+static ssize_t security_range_limit_show(struct device *dev,
+					 struct device_attribute *attr,
+					 char *buf)
+{
+	struct cxl_memdev *cxlmd = to_cxl_memdev(dev);
+	struct cxl_memdev_state *mds = to_cxl_memdev_state(cxlmd->cxlds);
+
+	return sysfs_emit(buf, "%llu\n", mds->media_op.range_limit);
+}
+static struct device_attribute dev_attr_security_range_limit =
+	__ATTR(range_limit, 0444, security_range_limit_show, NULL);
 
 bool cxl_memdev_has_poison_cmd(struct cxl_memdev *cxlmd,
 			       enum poison_cmd_enabled_bits cmd)
@@ -479,6 +524,8 @@ static struct attribute *cxl_memdev_security_attributes[] = {
 	&dev_attr_security_state.attr,
 	&dev_attr_security_sanitize.attr,
 	&dev_attr_security_erase.attr,
+	&dev_attr_security_zero.attr,
+	&dev_attr_security_range_limit.attr,
 	NULL,
 };
 
@@ -540,12 +587,29 @@ static umode_t cxl_memdev_security_visible(struct kobject *kobj,
 	struct cxl_memdev *cxlmd = to_cxl_memdev(dev);
 	struct cxl_memdev_state *mds = to_cxl_memdev_state(cxlmd->cxlds);
 
+	/* sanitize attr serves both whole-device sanitize and ranged media op */
 	if (a == &dev_attr_security_sanitize.attr &&
-	    !test_bit(CXL_SEC_ENABLED_SANITIZE, mds->security.enabled_cmds))
+	    !test_bit(CXL_SEC_ENABLED_SANITIZE, mds->security.enabled_cmds) &&
+	    !(test_bit(CXL_SEC_ENABLED_MEDIA_OPERATIONS,
+		       mds->security.enabled_cmds) &&
+	      mds->media_op.sanitize_supported))
 		return 0;
 
 	if (a == &dev_attr_security_erase.attr &&
 	    !test_bit(CXL_SEC_ENABLED_SECURE_ERASE, mds->security.enabled_cmds))
+		return 0;
+
+	if (a == &dev_attr_security_zero.attr &&
+	    (!test_bit(CXL_SEC_ENABLED_MEDIA_OPERATIONS,
+		       mds->security.enabled_cmds) ||
+	     !mds->media_op.zero_supported))
+		return 0;
+
+	if (a == &dev_attr_security_range_limit.attr &&
+	    (!test_bit(CXL_SEC_ENABLED_MEDIA_OPERATIONS,
+		       mds->security.enabled_cmds) ||
+	     (!mds->media_op.sanitize_supported &&
+	      !mds->media_op.zero_supported)))
 		return 0;
 
 	return a->mode;
