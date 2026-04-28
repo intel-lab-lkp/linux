@@ -4929,10 +4929,17 @@ static int nfs4_proc_remove(struct inode *dir, struct dentry *dentry)
 	int err;
 
 	if (inode) {
-		if (inode->i_nlink == 1)
-			nfs4_inode_return_delegation(inode);
-		else
+		/*
+		 * nlink > 1 or server supports NFS_INO_PRESERVE_UNLINKED
+		 * the inode is not going away. we're promised to keep the
+		 * inode alive past REMOVE for as long as any client reference
+		 * remains. So we can keep the delegation around.
+		 */
+		if (inode->i_nlink > 1 ||
+		    test_bit(NFS_INO_PRESERVE_UNLINKED, &NFS_I(inode)->flags))
 			nfs4_inode_make_writeable(inode);
+		else
+			nfs4_inode_return_delegation(inode);
 	}
 	do {
 		err = _nfs4_proc_remove(dir, &dentry->d_name, NF4REG);
