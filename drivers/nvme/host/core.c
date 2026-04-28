@@ -4876,8 +4876,13 @@ int nvme_alloc_admin_tag_set(struct nvme_ctrl *ctrl, struct blk_mq_tag_set *set,
 	memset(set, 0, sizeof(*set));
 	set->ops = ops;
 	set->queue_depth = NVME_AQ_MQ_TAG_DEPTH;
+	/*
+	 * Reserve one tag for keep-alive, which is allocated with
+	 * BLK_MQ_REQ_RESERVED and can be enabled on any transport via the
+	 * KATO feature.  Fabrics needs a second reserved tag for connect.
+	 */
+	set->reserved_tags = 1;
 	if (ctrl->ops->flags & NVME_F_FABRICS)
-		/* Reserved for fabric connect and keep alive */
 		set->reserved_tags = 2;
 	set->numa_node = ctrl->numa_node;
 	if (ctrl->ops->flags & NVME_F_BLOCKING)
