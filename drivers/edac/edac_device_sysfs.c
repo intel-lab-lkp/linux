@@ -229,6 +229,7 @@ int edac_device_register_sysfs_main_kobj(struct edac_device_ctl_info *edac_dev)
 	struct device *dev_root;
 	const struct bus_type *edac_subsys;
 	int err = -ENODEV;
+	bool kobj_initialized = false;
 
 	edac_dbg(1, "\n");
 
@@ -254,6 +255,7 @@ int edac_device_register_sysfs_main_kobj(struct edac_device_ctl_info *edac_dev)
 	if (dev_root) {
 		err = kobject_init_and_add(&edac_dev->kobj, &ktype_device_ctrl,
 					   &dev_root->kobj, "%s", edac_dev->name);
+		kobj_initialized = true;
 		put_device(dev_root);
 	}
 	if (err) {
@@ -273,8 +275,10 @@ int edac_device_register_sysfs_main_kobj(struct edac_device_ctl_info *edac_dev)
 
 	/* Error exit stack */
 err_kobj_reg:
-	kobject_put(&edac_dev->kobj);
-	module_put(edac_dev->owner);
+	if (kobj_initialized)
+		kobject_put(&edac_dev->kobj);
+	else
+		module_put(edac_dev->owner);
 
 err_out:
 	return err;
