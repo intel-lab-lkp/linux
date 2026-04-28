@@ -80,7 +80,9 @@ struct i40e_vf {
 	/* all VF vsis connect to the same parent */
 	enum i40e_switch_element_types parent_type;
 	struct virtchnl_version_info vf_ver;
-	u32 driver_caps; /* reported by VF driver */
+
+	/* reported by VF driver */
+	DECLARE_BITMAP(driver_caps, VIRTCHNL_VF_CAPS_MAX);
 
 	/* VF Port Extender (PE) stag if used */
 	u16 stag;
