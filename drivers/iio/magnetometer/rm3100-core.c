@@ -204,27 +204,23 @@ static int rm3100_read_mag(struct rm3100_data *data, int idx, int *val)
 	u8 buffer[3];
 	int ret;
 
-	mutex_lock(&data->lock);
-	ret = regmap_write(regmap, RM3100_REG_POLL, BIT(4 + idx));
-	if (ret < 0)
-		goto unlock_return;
+	scoped_guard(mutex, &data->lock) {
+		ret = regmap_write(regmap, RM3100_REG_POLL, BIT(4 + idx));
+		if (ret < 0)
+			return ret;
 
-	ret = rm3100_wait_measurement(data);
-	if (ret < 0)
-		goto unlock_return;
+		ret = rm3100_wait_measurement(data);
+		if (ret < 0)
+			return ret;
 
-	ret = regmap_bulk_read(regmap, RM3100_REG_MX2 + 3 * idx, buffer, 3);
-	if (ret < 0)
-		goto unlock_return;
-	mutex_unlock(&data->lock);
+		ret = regmap_bulk_read(regmap, RM3100_REG_MX2 + 3 * idx, buffer, 3);
+		if (ret < 0)
+			return ret;
+	}
 
 	*val = sign_extend32(get_unaligned_be24(&buffer[0]), 23);
 
 	return IIO_VAL_INT;
-
-unlock_return:
-	mutex_unlock(&data->lock);
-	return ret;
 }
 
 #define RM3100_CHANNEL(axis, idx)					\
