@@ -949,15 +949,17 @@ static void amdgpu_xcp_cfg_sysfs_init(struct amdgpu_device *adev)
 					 &xcp_cfg_res_sysfs_ktype,
 					 &xcp_cfg->kobj, "%s",
 					 xcp_res_names[rid]);
-		if (r)
+		if (r) {
+			kobject_put(&xcp_res->kobj);
 			goto err;
+		}
 	}
 
 	adev->xcp_mgr->xcp_cfg = xcp_cfg;
 	return;
 err:
 	for (j = 0; j < i; j++) {
-		xcp_res = &xcp_cfg->xcp_res[i];
+		xcp_res = &xcp_cfg->xcp_res[j];
 		kobject_put(&xcp_res->kobj);
 	}
 
