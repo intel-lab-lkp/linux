@@ -1137,13 +1137,13 @@ static int
 __cifs_readv_discard(struct TCP_Server_Info *server, struct mid_q_entry *mid,
 		     bool malformed)
 {
-	int length;
-
-	length = cifs_discard_remaining_data(server);
+	cifs_discard_remaining_data(server);
 	dequeue_mid(server, mid, malformed);
 	mid->resp_buf = server->smallbuf;
 	server->smallbuf = NULL;
-	return length;
+
+	/* Once the mid is dequeued, the callback must run to terminate the subreq. */
+	return 0;
 }
 
 static int
@@ -1158,13 +1158,13 @@ static int
 cifs_query_dir_discard(struct TCP_Server_Info *server, struct mid_q_entry *mid,
 		      bool malformed)
 {
-	int length;
-
-	length = cifs_discard_remaining_data(server);
+	cifs_discard_remaining_data(server);
 	dequeue_mid(server, mid, malformed);
 	mid->resp_buf = server->smallbuf;
 	server->smallbuf = NULL;
-	return length;
+
+	/* Once the mid is dequeued, the callback must run to complete qd_io->done. */
+	return 0;
 }
 
 /*
