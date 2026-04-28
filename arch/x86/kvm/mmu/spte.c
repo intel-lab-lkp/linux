@@ -497,7 +497,7 @@ void kvm_mmu_set_me_spte_mask(u64 me_value, u64 me_mask)
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_mmu_set_me_spte_mask);
 
-void kvm_mmu_set_ept_masks(bool has_ad_bits)
+void kvm_mmu_set_ept_masks(bool has_ad_bits, bool has_mbec)
 {
 	kvm_ad_enabled		= has_ad_bits;
 
@@ -506,10 +506,10 @@ void kvm_mmu_set_ept_masks(bool has_ad_bits)
 	shadow_dirty_mask	= VMX_EPT_DIRTY_BIT;
 	shadow_nx_mask		= 0ull;
 	shadow_xs_mask		= VMX_EPT_EXECUTABLE_MASK;
-	shadow_xu_mask		= VMX_EPT_EXECUTABLE_MASK;
+	shadow_xu_mask		= has_mbec ? VMX_EPT_USER_EXECUTABLE_MASK : VMX_EPT_EXECUTABLE_MASK;
 	shadow_present_mask	= VMX_EPT_SUPPRESS_VE_BIT;
 
-	shadow_acc_track_mask	= VMX_EPT_RWX_MASK;
+	shadow_acc_track_mask	= VMX_EPT_RWX_MASK | shadow_xu_mask;
 	shadow_host_writable_mask = EPT_SPTE_HOST_WRITABLE;
 	shadow_mmu_writable_mask  = EPT_SPTE_MMU_WRITABLE;
 
