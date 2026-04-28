@@ -742,7 +742,8 @@ static inline u64 kvm_gmem_get_supported_flags(struct kvm *kvm)
 	return flags;
 }
 
-u64 kvm_arch_gmem_supported_content_modes(struct kvm *kvm, bool to_private);
+u64 kvm_arch_gmem_supported_content_modes(struct kvm *kvm, bool to_private,
+					  bool for_cap);
 int kvm_gmem_apply_content_mode_zero(struct inode *inode, pgoff_t start,
 				     pgoff_t end);
 int kvm_arch_gmem_apply_content_mode_zero(struct kvm *kvm, struct inode *inode,
@@ -2549,6 +2550,14 @@ static inline u64 kvm_supported_mem_attributes(struct kvm *kvm)
 #endif
 
 	return 0;
+}
+
+static inline u64 kvm_supported_set_mem_attributes2_flags(struct kvm *kvm)
+{
+	if (!IS_ENABLED(CONFIG_KVM_GUEST_MEMFD))
+		return 0;
+
+	return kvm_arch_gmem_supported_content_modes(kvm, false, true);
 }
 
 typedef unsigned long (kvm_get_memory_attributes_t)(struct kvm *kvm, gfn_t gfn);

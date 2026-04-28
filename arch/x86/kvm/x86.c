@@ -14195,7 +14195,8 @@ void kvm_arch_gmem_invalidate(kvm_pfn_t start, kvm_pfn_t end)
 }
 #endif
 
-u64 kvm_arch_gmem_supported_content_modes(struct kvm *kvm, bool to_private)
+u64 kvm_arch_gmem_supported_content_modes(struct kvm *kvm, bool to_private,
+					  bool for_cap)
 {
 	if (!kvm) {
 		return KVM_SET_MEMORY_ATTRIBUTES2_ZERO |
@@ -14227,7 +14228,7 @@ u64 kvm_arch_gmem_supported_content_modes(struct kvm *kvm, bool to_private)
 		 * shared, memory contents for pages that had already
 		 * been faulted could be zeroed.
 		 */
-		if (to_private && !kvm->arch.pre_fault_allowed)
+		if (for_cap || (to_private && !kvm->arch.pre_fault_allowed))
 			supported |= KVM_SET_MEMORY_ATTRIBUTES2_PRESERVE;
 
 		return supported;

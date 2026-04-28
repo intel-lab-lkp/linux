@@ -693,7 +693,8 @@ static void kvm_gmem_invalidate(struct inode *inode, pgoff_t start, pgoff_t end)
 static void kvm_gmem_invalidate(struct inode *inode, pgoff_t start, pgoff_t end) {}
 #endif
 
-u64 __weak kvm_arch_gmem_supported_content_modes(struct kvm *kvm, bool to_private)
+u64 __weak kvm_arch_gmem_supported_content_modes(struct kvm *kvm,
+						 bool to_private, bool for_cap)
 {
 	/* Architectures must override with supported modes. */
 	return 0;
@@ -709,7 +710,8 @@ static bool kvm_gmem_content_mode_is_supported(struct kvm *kvm,
 	if (content_mode == KVM_SET_MEMORY_ATTRIBUTES2_ZERO && to_private)
 		return false;
 
-	return kvm_arch_gmem_supported_content_modes(kvm, to_private) & content_mode;
+	return kvm_arch_gmem_supported_content_modes(kvm, to_private, false) &
+	       content_mode;
 }
 
 int kvm_gmem_apply_content_mode_zero(struct inode *inode, pgoff_t start,
