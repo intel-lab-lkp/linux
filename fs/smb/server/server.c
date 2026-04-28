@@ -535,11 +535,11 @@ static int ksmbd_server_shutdown(void)
 {
 	WRITE_ONCE(server_conf.state, SERVER_STATE_SHUTTING_DOWN);
 
-	ksmbd_proc_cleanup();
 	class_unregister(&ksmbd_control_class);
+	ksmbd_conn_transport_destroy();
+	ksmbd_proc_cleanup();
 	ksmbd_workqueue_destroy();
 	ksmbd_ipc_release();
-	ksmbd_conn_transport_destroy();
 	ksmbd_crypto_destroy();
 	ksmbd_free_global_file_table();
 	destroy_lease_table(NULL);
