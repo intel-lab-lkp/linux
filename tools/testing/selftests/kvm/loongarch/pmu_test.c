@@ -167,8 +167,8 @@ int main(int argc, char *argv[])
 	vm_install_exception_handler(vm, EXCCODE_INT, guest_irq_handler);
 	sync_global_to_guest(vm, pmu_irq_count);
 
-	attr.group = KVM_LOONGARCH_VM_FEAT_CTRL,
-	attr.attr = KVM_LOONGARCH_VM_FEAT_PMU,
+	attr.group = KVM_LOONGARCH_VM_FEAT_CTRL;
+	attr.attr = KVM_LOONGARCH_VM_FEAT_PMU;
 
 	ret = ioctl(vm->fd, KVM_HAS_DEVICE_ATTR, &attr);
 
