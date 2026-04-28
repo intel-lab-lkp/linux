@@ -2149,6 +2149,11 @@ static int i40e_vc_get_vf_resources_msg(struct i40e_vf *vf, u8 *msg)
 
 	bitmap_zero(vf->driver_caps, VIRTCHNL_VF_CAPS_MAX);
 	if (VF_IS_V11(&vf->vf_ver)) {
+		/* VIRTCHNL_OP_GET_VF_RESOURCES only sends the first 32 flags.
+		 * If VIRTCHNL_VF_CAPS2 (bit 2) is set, then there are more
+		 * flags. A complete set (including the first 32) is then sent
+		 * via VIRTCHNL_OP_GET_VF_CAPS2.
+		 */
 		bitmap_from_arr32(vf->driver_caps, (u32 *)msg,
 				  BITS_PER_TYPE(u32));
 	} else {
@@ -2217,6 +2222,10 @@ static int i40e_vc_get_vf_resources_msg(struct i40e_vf *vf, u8 *msg)
 
 	if (test_bit(VIRTCHNL_VF_OFFLOAD_ADQ, vf->driver_caps))
 		vfres->vf_cap_flags |= BIT(VIRTCHNL_VF_OFFLOAD_ADQ);
+
+	/* Indicate that VF can send more flags in VIRTCHNL_OP_GET_VF_CAPS2 */
+	if (test_bit(VIRTCHNL_VF_CAPS2, vf->driver_caps))
+		vfres->vf_cap_flags |= BIT(VIRTCHNL_VF_CAPS2);
 
 	vfres->num_vsis = num_vsis;
 	vfres->num_queue_pairs = vf->num_queue_pairs;
@@ -4193,6 +4202,78 @@ err:
 }
 
 /**
+ * i40e_vc_get_vf_caps2 - parse extended capability flags
+ * @vf: pointer to the VF info
+ * @msg: pointer to the msg buffer
+ *
+ * Called from the VF to negotiate extended capability flag set if
+ * VIRTCHNL_VF_CAPS2 was set in vf_cap_flags. The PF responds with the
+ * intersection of its supported flags and the VF's requested flags.
+ *
+ * Return: 0 on success, negative on failure
+ **/
+static int i40e_vc_get_vf_caps2(struct i40e_vf *vf, u8 *msg)
+{
+	struct virtchnl_vf_caps2 *vf_msg = (struct virtchnl_vf_caps2 *)msg;
+	DECLARE_BITMAP(msg_caps, VIRTCHNL_VF_CAPS_MAX);
+	struct virtchnl_vf_caps2 *caps2;
+	unsigned int nbits;
+	int aq_ret = 0;
+	int err;
+
+	caps2 = kzalloc_flex(*caps2, vf_cap_flags,
+			     BITS_TO_U32(VIRTCHNL_VF_CAPS_MAX));
+	if (!caps2)
+		return -ENOMEM;
+
+	if (!test_bit(I40E_VF_STATE_ACTIVE, &vf->vf_states)) {
+		aq_ret = -EINVAL;
+		goto send_msg;
+	}
+
+	if (!test_bit(VIRTCHNL_VF_CAPS2, vf->driver_caps)) {
+		aq_ret = -EINVAL;
+		goto send_msg;
+	}
+
+	caps2->flags_len = BITS_TO_U32(VIRTCHNL_VF_CAPS_MAX);
+
+	/* Set extended feature flags. The first 32 bits should be already set
+	 * in VIRTCHNL_OP_GET_VF_RESOURCES
+	 */
+
+	/* Make sure to not read after msg bitmap or local bitmap. The remaining
+	 * bits (if any) should be unset, since one side doesn't know about
+	 * them, therefore cannot support these capabilities.
+	 */
+	nbits = min_t(unsigned int, VIRTCHNL_VF_CAPS_MAX,
+		      BITS_PER_TYPE(u32) * vf_msg->flags_len);
+	bitmap_zero(msg_caps, VIRTCHNL_VF_CAPS_MAX);
+	bitmap_from_arr32(msg_caps, vf_msg->vf_cap_flags, nbits);
+
+	/* Note that msg->vf_cap_flags cannot be directly used, because then
+	 * we'd need to limit the operation range to nbits. If the local caps
+	 * is larger and has some flags set after nbits, then they would be
+	 * incorrectly left set.
+	 */
+	bitmap_and(vf->driver_caps, vf->driver_caps, msg_caps,
+		   VIRTCHNL_VF_CAPS_MAX);
+
+	bitmap_to_arr32(caps2->vf_cap_flags, vf->driver_caps,
+			VIRTCHNL_VF_CAPS_MAX);
+
+send_msg:
+	err = i40e_vc_send_msg_to_vf(vf, VIRTCHNL_OP_GET_VF_CAPS2, aq_ret,
+				     (u8 *)caps2,
+				     struct_size(caps2, vf_cap_flags,
+						 caps2->flags_len));
+
+	kfree(caps2);
+
+	return err;
+}
+
+/**
  * i40e_vc_process_vf_msg
  * @pf: pointer to the PF structure
  * @vf_id: source VF id
@@ -4315,6 +4396,9 @@ int i40e_vc_process_vf_msg(struct i40e_pf *pf, s16 vf_id, u32 v_opcode,
 		break;
 	case VIRTCHNL_OP_DEL_CLOUD_FILTER:
 		ret = i40e_vc_del_cloud_filter(vf, msg);
+		break;
+	case VIRTCHNL_OP_GET_VF_CAPS2:
+		ret = i40e_vc_get_vf_caps2(vf, msg);
 		break;
 	case VIRTCHNL_OP_UNKNOWN:
 	default:
