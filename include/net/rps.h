@@ -12,6 +12,7 @@
 
 extern struct static_key_false rps_needed;
 extern struct static_key_false rfs_needed;
+extern struct static_key_false rps_feat_llc_affinity;
 
 /*
  * This structure holds an RPS map which can be of variable length.  The
@@ -55,22 +56,7 @@ struct rps_sock_flow_table {
 
 #define RPS_NO_CPU 0xffff
 
-static inline void rps_record_sock_flow(rps_tag_ptr tag_ptr, u32 hash)
-{
-	unsigned int index = hash & rps_tag_to_mask(tag_ptr);
-	u32 val = hash & ~net_hotdata.rps_cpu_mask;
-	struct rps_sock_flow_table *table;
-
-	/* We only give a hint, preemption can change CPU under us */
-	val |= raw_smp_processor_id();
-
-	table = rps_tag_to_table(tag_ptr);
-	/* The following WRITE_ONCE() is paired with the READ_ONCE()
-	 * here, and another one in get_rps_cpu().
-	 */
-	if (READ_ONCE(table[index].ent) != val)
-		WRITE_ONCE(table[index].ent, val);
-}
+void rps_record_sock_flow(rps_tag_ptr tag_ptr, u32 hash);
 
 static inline void _sock_rps_record_flow_hash(__u32 hash)
 {
