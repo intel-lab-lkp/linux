@@ -907,6 +907,13 @@ int kvm_xen_vcpu_set_attr(struct kvm_vcpu *vcpu, struct kvm_xen_vcpu_attr *data)
 {
 	int idx, r = -ENOENT;
 
+	/*
+	 * kvm_xen_write_hypercall_page() manages its own locking.
+	 * Handle it before taking xen_lock to avoid a deadlock.
+	 */
+	if (data->type == KVM_XEN_VCPU_ATTR_TYPE_WRITE_HYPERCALL_PAGE)
+		return kvm_xen_write_hypercall_page(vcpu, data->u.gpa) ? -EIO : 0;
+
 	mutex_lock(&vcpu->kvm->arch.xen.xen_lock);
 	idx = srcu_read_lock(&vcpu->kvm->srcu);
 
