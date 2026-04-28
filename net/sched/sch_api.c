@@ -1885,6 +1885,7 @@ static int tc_dump_qdisc(struct sk_buff *skb, struct netlink_callback *cb)
 		int q_idx;
 	} *ctx = (void *)cb->ctx;
 	unsigned long s_ifindex;
+	const struct tcmsg *tcm;
 	struct net_device *dev;
 	int s_q_idx, q_idx;
 	int err;
@@ -1895,6 +1896,9 @@ static int tc_dump_qdisc(struct sk_buff *skb, struct netlink_callback *cb)
 				     rtm_tca_policy, cb->extack);
 	if (err < 0)
 		return err;
+	tcm = nlmsg_data(nlh);
+	if (tcm->tcm_ifindex && !ctx->ifindex)
+		ctx->ifindex = tcm->tcm_ifindex;
 
 	s_ifindex = ctx->ifindex;
 	s_q_idx = ctx->q_idx;
@@ -1902,6 +1906,9 @@ static int tc_dump_qdisc(struct sk_buff *skb, struct netlink_callback *cb)
 	for_each_netdev_dump(net, dev, ctx->ifindex) {
 		struct netdev_queue *dev_queue;
 		struct Qdisc *q;
+
+		if (tcm->tcm_ifindex && ctx->ifindex != tcm->tcm_ifindex)
+			break;
 
 		q_idx = 0;
 
