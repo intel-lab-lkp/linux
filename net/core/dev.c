@@ -6862,26 +6862,6 @@ static void skb_defer_free_flush(void)
 
 #if defined(CONFIG_NET_RX_BUSY_POLL)
 
-static void __busy_poll_stop(struct napi_struct *napi, unsigned long timeout)
-{
-	unsigned long flags;
-
-	if (!timeout) {
-		gro_normal_list(&napi->gro);
-		__napi_schedule(napi);
-		return;
-	}
-
-	/* Flush too old packets. If HZ < 1000, flush all packets */
-	gro_flush_normal(&napi->gro, HZ >= 1000);
-
-	local_irq_save(flags);
-	hrtimer_start(&napi->timer, ns_to_ktime(timeout),
-		      HRTIMER_MODE_REL_PINNED);
-	clear_bit(NAPI_STATE_SCHED, &napi->state);
-	local_irq_restore(flags);
-}
-
 enum {
 	NAPI_F_PREFER_BUSY_POLL	= 1,
 	NAPI_F_END_ON_RESCHED	= 2,
@@ -6891,14 +6871,14 @@ static void busy_poll_stop(struct napi_struct *napi, void *have_poll_lock,
 			   unsigned flags, u16 budget)
 {
 	struct bpf_net_context __bpf_net_ctx, *bpf_net_ctx;
-	unsigned long timeout = 0;
+	unsigned long timeout;
 	int rc;
 
 	/* Busy polling means there is a high chance device driver hard irq
 	 * could not grab NAPI_STATE_SCHED, and that NAPI_STATE_MISSED was
 	 * set in napi_schedule_prep().
-	 * Since we are about to call napi->poll() once more, we can safely
-	 * clear NAPI_STATE_MISSED.
+	 * Since we either call napi->poll() once more or start the timer,
+	 * we can safely clear NAPI_STATE_MISSED.
 	 *
 	 * Note: x86 could use a single "lock and ..." instruction
 	 * to perform these two clear_bit()
@@ -6911,13 +6891,28 @@ static void busy_poll_stop(struct napi_struct *napi, void *have_poll_lock,
 
 	if (flags & NAPI_F_PREFER_BUSY_POLL) {
 		napi->defer_hard_irqs_count = napi_get_defer_hard_irqs(napi);
-		if (napi->defer_hard_irqs_count) {
-			/* Timer will be scheduled after napi poll to avoid
-			 * firing during a slow poll which could cause the
-			 * queue to get stuck with interrupts disabled and no
-			 * scheduled timer.
+		timeout = napi_get_gro_flush_timeout(napi);
+		if (napi->defer_hard_irqs_count && timeout) {
+			unsigned long flags;
+
+			/* Drop prefer-busy state as in napi_complete_done(). */
+			clear_bit(NAPI_STATE_PREFER_BUSY_POLL, &napi->state);
+			netpoll_poll_unlock(have_poll_lock);
+
+			/* Flush too old packets. If HZ < 1000, flush all
+			 * packets.
 			 */
-			timeout = napi_get_gro_flush_timeout(napi);
+			gro_flush_normal(&napi->gro, HZ >= 1000);
+			local_irq_save(flags);
+			hrtimer_start(&napi->timer, ns_to_ktime(timeout),
+				      HRTIMER_MODE_REL_PINNED);
+			clear_bit(NAPI_STATE_SCHED, &napi->state);
+			local_irq_restore(flags);
+
+			/* Timer started, so need for another call to
+			 * napi->poll().
+			 */
+			goto out;
 		}
 	}
 
@@ -6931,8 +6926,12 @@ static void busy_poll_stop(struct napi_struct *napi, void *have_poll_lock,
 	 */
 	trace_napi_poll(napi, rc, budget);
 	netpoll_poll_unlock(have_poll_lock);
-	if (rc == budget)
-		__busy_poll_stop(napi, timeout);
+	if (rc == budget) {
+		gro_normal_list(&napi->gro);
+		__napi_schedule(napi);
+	}
+
+out:
 	bpf_net_ctx_clear(bpf_net_ctx);
 	local_bh_enable();
 }
