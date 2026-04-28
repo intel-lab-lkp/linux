@@ -224,7 +224,7 @@ intel_dvo_mode_valid(struct drm_connector *_connector,
 	struct intel_connector *connector = to_intel_connector(_connector);
 	struct intel_dvo *intel_dvo = intel_attached_dvo(connector);
 	const struct drm_display_mode *fixed_mode =
-		intel_panel_fixed_mode(connector, mode);
+		intel_panel_fixed_mode(connector, mode, NULL);
 	int max_dotclk = display->cdclk.max_dotclk_freq;
 	int target_clock = mode->clock;
 	enum drm_mode_status status;
@@ -259,7 +259,7 @@ static int intel_dvo_compute_config(struct intel_encoder *encoder,
 	struct intel_connector *connector = to_intel_connector(conn_state->connector);
 	struct drm_display_mode *adjusted_mode = &pipe_config->hw.adjusted_mode;
 	const struct drm_display_mode *fixed_mode =
-		intel_panel_fixed_mode(intel_dvo->attached_connector, adjusted_mode);
+		intel_panel_fixed_mode(intel_dvo->attached_connector, adjusted_mode, conn_state);
 
 	/*
 	 * If we have timings from the BIOS for the panel, put them in
@@ -270,7 +270,7 @@ static int intel_dvo_compute_config(struct intel_encoder *encoder,
 	if (fixed_mode) {
 		int ret;
 
-		ret = intel_panel_compute_config(connector, adjusted_mode);
+		ret = intel_panel_compute_config(connector, adjusted_mode, conn_state);
 		if (ret)
 			return ret;
 	}

@@ -797,7 +797,7 @@ intel_sdvo_create_preferred_input_timing(struct intel_sdvo *intel_sdvo,
 
 	if (IS_LVDS(intel_sdvo_connector)) {
 		const struct drm_display_mode *fixed_mode =
-			intel_panel_fixed_mode(&intel_sdvo_connector->base, mode);
+			intel_panel_fixed_mode(&intel_sdvo_connector->base, mode, NULL);
 
 		if (fixed_mode->hdisplay != args.width ||
 		    fixed_mode->vdisplay != args.height)
@@ -1396,11 +1396,11 @@ static int intel_sdvo_compute_config(struct intel_encoder *encoder,
 		pipe_config->sdvo_tv_clock = true;
 	} else if (IS_LVDS(intel_sdvo_connector)) {
 		const struct drm_display_mode *fixed_mode =
-			intel_panel_fixed_mode(&intel_sdvo_connector->base, mode);
+			intel_panel_fixed_mode(&intel_sdvo_connector->base, mode, conn_state);
 		int ret;
 
 		ret = intel_panel_compute_config(&intel_sdvo_connector->base,
-						 adjusted_mode);
+						 adjusted_mode, conn_state);
 		if (ret)
 			return ret;
 
@@ -1562,7 +1562,7 @@ static void intel_sdvo_pre_enable(struct intel_atomic_state *state,
 	/* lvds has a special fixed output timing. */
 	if (IS_LVDS(intel_sdvo_connector)) {
 		const struct drm_display_mode *fixed_mode =
-			intel_panel_fixed_mode(&intel_sdvo_connector->base, mode);
+			intel_panel_fixed_mode(&intel_sdvo_connector->base, mode, conn_state);
 
 		intel_sdvo_get_dtd_from_mode(&output_dtd, fixed_mode);
 	} else {

@@ -32,7 +32,8 @@ const struct drm_display_mode *
 intel_panel_preferred_fixed_mode(struct intel_connector *connector);
 const struct drm_display_mode *
 intel_panel_fixed_mode(struct intel_connector *connector,
-		       const struct drm_display_mode *mode);
+		       const struct drm_display_mode *mode,
+		       const struct drm_connector_state *conn_state);
 const struct drm_display_mode *
 intel_panel_downclock_mode(struct intel_connector *connector,
 			   const struct drm_display_mode *adjusted_mode);
@@ -47,7 +48,8 @@ enum drm_mode_status
 intel_panel_mode_valid(struct intel_connector *connector,
 		       const struct drm_display_mode *mode);
 int intel_panel_compute_config(struct intel_connector *connector,
-			       struct drm_display_mode *adjusted_mode);
+			       struct drm_display_mode *adjusted_mode,
+			       const struct drm_connector_state *conn_state);
 void intel_panel_add_edid_fixed_modes(struct intel_connector *connector,
 				      bool use_alt_fixed_modes);
 void intel_panel_add_vbt_lfp_fixed_mode(struct intel_connector *connector);

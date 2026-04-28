@@ -396,7 +396,7 @@ intel_lvds_mode_valid(struct drm_connector *_connector,
 	struct intel_display *display = to_intel_display(_connector->dev);
 	struct intel_connector *connector = to_intel_connector(_connector);
 	const struct drm_display_mode *fixed_mode =
-		intel_panel_fixed_mode(connector, mode);
+		intel_panel_fixed_mode(connector, mode, NULL);
 	int max_pixclk = display->cdclk.max_dotclk_freq;
 	enum drm_mode_status status;
 
@@ -460,7 +460,7 @@ static int intel_lvds_compute_config(struct intel_encoder *encoder,
 	 * with the panel scaling set up to source from the H/VDisplay
 	 * of the original mode.
 	 */
-	ret = intel_panel_compute_config(connector, adjusted_mode);
+	ret = intel_panel_compute_config(connector, adjusted_mode, conn_state);
 	if (ret)
 		return ret;
 

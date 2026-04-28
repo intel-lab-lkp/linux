@@ -1588,7 +1588,7 @@ intel_dp_mode_valid(struct drm_connector *_connector,
 	if (intel_dp_hdisplay_bad(display, mode->hdisplay))
 		return MODE_H_ILLEGAL;
 
-	fixed_mode = intel_panel_fixed_mode(connector, mode);
+	fixed_mode = intel_panel_fixed_mode(connector, mode, NULL);
 	if (intel_dp_is_edp(intel_dp) && fixed_mode) {
 		status = intel_panel_mode_valid(connector, mode);
 		if (status != MODE_OK)
@@ -3597,9 +3597,9 @@ intel_dp_compute_config(struct intel_encoder *encoder,
 	struct intel_connector *connector = intel_dp->attached_connector;
 	int ret = 0, link_bpp_x16;
 
-	fixed_mode = intel_panel_fixed_mode(connector, adjusted_mode);
+	fixed_mode = intel_panel_fixed_mode(connector, adjusted_mode, conn_state);
 	if (intel_dp_is_edp(intel_dp) && fixed_mode) {
-		ret = intel_panel_compute_config(connector, adjusted_mode);
+		ret = intel_panel_compute_config(connector, adjusted_mode, conn_state);
 		if (ret)
 			return ret;
 	}

@@ -59,23 +59,12 @@ intel_panel_preferred_fixed_mode(struct intel_connector *connector)
 					struct drm_display_mode, head);
 }
 
-static bool is_best_fixed_mode(struct intel_connector *connector,
-			       int vrefresh, int fixed_mode_vrefresh,
+static bool is_best_fixed_mode(int vrefresh, int fixed_mode_vrefresh,
 			       const struct drm_display_mode *best_mode)
 {
 	/* we want to always return something */
 	if (!best_mode)
 		return true;
-
-	/*
-	 * With VRR always pick a mode with equal/higher than requested
-	 * vrefresh, which we can then reduce to match the requested
-	 * vrefresh by extending the vblank length.
-	 */
-	if (intel_vrr_is_in_range(connector, vrefresh) &&
-	    intel_vrr_is_in_range(connector, fixed_mode_vrefresh) &&
-	    fixed_mode_vrefresh < vrefresh)
-		return false;
 
 	/* pick the fixed_mode that is closest in terms of vrefresh */
 	return abs(fixed_mode_vrefresh - vrefresh) <
@@ -84,15 +73,26 @@ static bool is_best_fixed_mode(struct intel_connector *connector,
 
 const struct drm_display_mode *
 intel_panel_fixed_mode(struct intel_connector *connector,
-		       const struct drm_display_mode *mode)
+		       const struct drm_display_mode *mode,
+		       const struct drm_connector_state *conn_state)
 {
 	const struct drm_display_mode *fixed_mode, *best_mode = NULL;
 	int vrefresh = drm_mode_vrefresh(mode);
 
+	/*
+	 * With VRR always pick the highest refresh rate mode,
+	 * which we can then reduce to match the requested
+	 * vrefresh by extending the vblank length.
+	 */
+	if (conn_state && !conn_state->state->allow_modeset &&
+	    intel_vrr_is_capable(connector) &&
+	    intel_vrr_is_in_range(connector, vrefresh))
+		return intel_panel_highest_vrefresh_mode(connector);
+
 	list_for_each_entry(fixed_mode, &connector->panel.fixed_modes, head) {
 		int fixed_mode_vrefresh = drm_mode_vrefresh(fixed_mode);
 
-		if (is_best_fixed_mode(connector, vrefresh,
+		if (is_best_fixed_mode(vrefresh,
 				       fixed_mode_vrefresh, best_mode))
 			best_mode = fixed_mode;
 	}
@@ -213,10 +213,11 @@ enum drrs_type intel_panel_drrs_type(struct intel_connector *connector)
 }
 
 int intel_panel_compute_config(struct intel_connector *connector,
-			       struct drm_display_mode *adjusted_mode)
+			       struct drm_display_mode *adjusted_mode,
+			       const struct drm_connector_state *conn_state)
 {
 	const struct drm_display_mode *fixed_mode =
-		intel_panel_fixed_mode(connector, adjusted_mode);
+		intel_panel_fixed_mode(connector, adjusted_mode, conn_state);
 	int vrefresh, fixed_mode_vrefresh;
 	bool is_vrr;
 
@@ -414,7 +415,7 @@ intel_panel_mode_valid(struct intel_connector *connector,
 		       const struct drm_display_mode *mode)
 {
 	const struct drm_display_mode *fixed_mode =
-		intel_panel_fixed_mode(connector, mode);
+		intel_panel_fixed_mode(connector, mode, NULL);
 
 	if (!fixed_mode)
 		return MODE_OK;
