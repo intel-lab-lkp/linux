@@ -2599,8 +2599,7 @@ Cpuset Interface Files
 
   cpuset.cpus.partition
 	A read-write single value file which exists on non-root
-	cpuset-enabled cgroups.  This flag is owned by the parent cgroup
-	and is not delegatable.
+	cpuset-enabled cgroups.
 
 	It accepts only the following input values when written to.
 
@@ -2707,6 +2706,15 @@ Cpuset Interface Files
 	partitions. These inactivated partitions could be recovered if
 	their parent is switched back to a partition root with a proper
 	value in "cpuset.cpus" or "cpuset.cpus.exclusive".
+
+	This file is owned by the parent cgroup and is not delegatable.
+	The delegator can delegate an exclusive set of CPUs to the
+	delegatee by making the root of a delegated sub-hierarchy a
+	partition root. The delegatee is then allowed to create a local
+	sub-partition underneath it if needed. The delegator should
+	not set "cpuset.cpus.exclusive" at the root without making it
+	a partition root as the creation of remote partition is not
+	allowed without privilege.
 
 	Poll and inotify events are triggered whenever the state of
 	"cpuset.cpus.partition" changes.  That includes changes caused
