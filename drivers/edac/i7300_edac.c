@@ -550,11 +550,12 @@ static void i7300_clear_error(struct mem_ctl_info *mci)
 }
 
 /**
- * i7300_enable_error_reporting() - Enable the memory reporting logic at the
+ * i7300_set_error_reporting() - Enable or disable the memory reporting logic at the
  *				    hardware
  * @mci: struct mem_ctl_info pointer
+ * @enable: enables if 'true', disables if 'false'
  */
-static void i7300_enable_error_reporting(struct mem_ctl_info *mci)
+static void i7300_set_error_reporting(struct mem_ctl_info *mci, bool enable)
 {
 	struct i7300_pvt *pvt = mci->pvt_info;
 	u32 fbd_error_mask;
@@ -563,8 +564,11 @@ static void i7300_enable_error_reporting(struct mem_ctl_info *mci)
 	pci_read_config_dword(pvt->pci_dev_16_1_fsb_addr_map,
 			      EMASK_FBD, &fbd_error_mask);
 
-	/* Enable with a '0' */
-	fbd_error_mask &= ~(EMASK_FBD_ERR_MASK);
+	/* Enable with 0, disable with 1 */
+	if (enable)
+		fbd_error_mask &= ~(EMASK_FBD_ERR_MASK);
+	else
+		fbd_error_mask |= EMASK_FBD_ERR_MASK;
 
 	pci_write_config_dword(pvt->pci_dev_16_1_fsb_addr_map,
 			       EMASK_FBD, fbd_error_mask);
@@ -1025,6 +1029,7 @@ static int i7300_init_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	struct edac_mc_layer layers[3];
 	struct i7300_pvt *pvt;
 	int rc;
+	bool enabled_error_reporting;
 
 	/* wake up device */
 	rc = pci_enable_device(pdev);
@@ -1087,17 +1092,19 @@ static int i7300_init_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (i7300_get_mc_regs(mci)) {
 		edac_dbg(0, "MC: Setting mci->edac_cap to EDAC_FLAG_NONE because i7300_init_csrows() returned nonzero value\n");
 		mci->edac_cap = EDAC_FLAG_NONE;	/* no csrows found */
+		enabled_error_reporting = false;
 	} else {
 		edac_dbg(1, "MC: Enable error reporting now\n");
-		i7300_enable_error_reporting(mci);
+		i7300_set_error_reporting(mci, true);
+		enabled_error_reporting = true;
 	}
 
 	/* add this new MC control structure to EDAC's list of MCs */
 	if (edac_mc_add_mc(mci)) {
 		edac_dbg(0, "MC: failed edac_mc_add_mc()\n");
-		/* FIXME: perhaps some code should go here that disables error
-		 * reporting if we just enabled it
-		 */
+		/* Disable error reporting if we just enabled it */
+		if (enabled_error_reporting)
+			i7300_set_error_reporting(mci, false);
 		goto fail1;
 	}
 
@@ -1147,6 +1154,8 @@ static void i7300_remove_one(struct pci_dev *pdev)
 
 	tmp = ((struct i7300_pvt *)mci->pvt_info)->tmp_prt_buffer;
 
+	/* Disable error reporting before unregistering device */
+	i7300_set_error_reporting(mci, false);
 	/* retrieve references to resources, and free those resources */
 	i7300_put_devices(mci);
 
