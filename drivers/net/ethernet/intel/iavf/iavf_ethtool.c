@@ -1726,7 +1726,7 @@ static int iavf_set_channels(struct net_device *netdev,
 	struct iavf_adapter *adapter = netdev_priv(netdev);
 	u32 num_req = ch->combined_count;
 
-	if ((adapter->vf_res->vf_cap_flags & VIRTCHNL_VF_OFFLOAD_ADQ) &&
+	if (test_bit(VIRTCHNL_VF_OFFLOAD_ADQ, adapter->vf_cap_flags) &&
 	    adapter->num_tc) {
 		dev_info(&adapter->pdev->dev, "Cannot set channels since ADq is enabled.\n");
 		return -EINVAL;
