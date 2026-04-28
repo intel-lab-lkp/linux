@@ -220,6 +220,8 @@ static int ip_finish_output2(struct net *net, struct sock *sk, struct sk_buff *s
 			return -ENOMEM;
 	}
 
+	skb_metadata_clear(skb);
+
 	if (lwtunnel_xmit_redirect(dst->lwtstate)) {
 		int res = lwtunnel_xmit(skb);
 
