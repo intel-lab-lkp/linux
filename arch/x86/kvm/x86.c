@@ -14206,6 +14206,32 @@ u64 kvm_arch_gmem_supported_content_modes(struct kvm *kvm, bool to_private)
 	case KVM_X86_SW_PROTECTED_VM:
 		return KVM_SET_MEMORY_ATTRIBUTES2_ZERO |
 		       KVM_SET_MEMORY_ATTRIBUTES2_PRESERVE;
+	case KVM_X86_SNP_VM:
+	case KVM_X86_TDX_VM: {
+		u64 supported = KVM_SET_MEMORY_ATTRIBUTES2_ZERO;
+
+		/*
+		 * Preservation is only supported for VMs with
+		 * protected state up until the guest is launched and
+		 * vCPUs become capable of generating KVM MMU faults,
+		 * since those faults can be destructive to the
+		 * initial memory contents from the guest point of
+		 * view, i.e. plaintext data will become random data,
+		 * or zeroed, after a shared->private conversion.
+		 *
+		 * Use pre_fault_allowed to guard PRESERVE support,
+		 * since that is set to true when VMs are finalized.
+		 *
+		 * Along the same lines, only support PRESERVE for
+		 * to_private conversions, since when converting to
+		 * shared, memory contents for pages that had already
+		 * been faulted could be zeroed.
+		 */
+		if (to_private && !kvm->arch.pre_fault_allowed)
+			supported |= KVM_SET_MEMORY_ATTRIBUTES2_PRESERVE;
+
+		return supported;
+	}
 	default:
 		return 0;
 	}
@@ -14216,6 +14242,16 @@ int kvm_arch_gmem_apply_content_mode_zero(struct kvm *kvm, struct inode *inode,
 {
 	switch (kvm->arch.vm_type) {
 	case KVM_X86_SW_PROTECTED_VM:
+	case KVM_X86_SNP_VM:
+	case KVM_X86_TDX_VM:
+		/*
+		 * TDX firmware will zero on unmapping from the
+		 * Secure-EPTs, but suppose a shared page with
+		 * contents was converted to private, and then
+		 * converted back without ever being mapped into
+		 * Secure-EPTs: guest_memfd can't rely on TDX firmware
+		 * for zeroing then.
+		 */
 		return kvm_gmem_apply_content_mode_zero(inode, start, end);
 	default:
 		return 0;
@@ -14228,6 +14264,8 @@ int kvm_arch_gmem_apply_content_mode_preserve(struct kvm *kvm,
 {
 	switch (kvm->arch.vm_type) {
 	case KVM_X86_SW_PROTECTED_VM:
+	case KVM_X86_SNP_VM:
+	case KVM_X86_TDX_VM:
 		/* Do nothing to preserve content. */
 		return 0;
 	default:

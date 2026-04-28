@@ -6659,6 +6659,9 @@ The content modes available are as follows:
   converts the memory to shared, the host (and guest) will read
   ``0xbeef`` (if the memory is accessible).
 
+  For TDX and SNP, content preservation is only supported before the
+  VM is finalized, and only on conversion to private.
+
 Note: These content modes apply to the entire requested range, not
 just the parts of the range that underwent conversion. For example, if
 this was the initial state:
