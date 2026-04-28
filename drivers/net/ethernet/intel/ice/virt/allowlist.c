@@ -102,7 +102,7 @@ struct allowlist_opcode_info {
 
 #define BIT_INDEX(caps) (HWEIGHT((caps) - 1))
 #define ALLOW_ITEM(caps, list) \
-	[BIT_INDEX(caps)] = { \
+	[caps] = { \
 		.opcodes = list, \
 		.size = ARRAY_SIZE(list) \
 	}
@@ -190,10 +190,9 @@ void ice_vc_set_working_allowlist(struct ice_vf *vf)
  */
 void ice_vc_set_caps_allowlist(struct ice_vf *vf)
 {
-	unsigned long caps = vf->driver_caps;
 	unsigned int i;
 
-	for_each_set_bit(i, &caps, ARRAY_SIZE(allowlist_opcodes))
+	for_each_set_bit(i, vf->driver_caps, ARRAY_SIZE(allowlist_opcodes))
 		ice_vc_allowlist_opcodes(vf, allowlist_opcodes[i].opcodes,
 					 allowlist_opcodes[i].size);
 }

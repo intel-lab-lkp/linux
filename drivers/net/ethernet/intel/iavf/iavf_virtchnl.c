@@ -153,27 +153,27 @@ int iavf_send_vf_config_msg(struct iavf_adapter *adapter)
 {
 	u32 caps;
 
-	caps = VIRTCHNL_VF_OFFLOAD_L2 |
-	       VIRTCHNL_VF_OFFLOAD_RSS_PF |
-	       VIRTCHNL_VF_OFFLOAD_RSS_AQ |
-	       VIRTCHNL_VF_OFFLOAD_RSS_REG |
-	       VIRTCHNL_VF_OFFLOAD_VLAN |
-	       VIRTCHNL_VF_OFFLOAD_WB_ON_ITR |
-	       VIRTCHNL_VF_OFFLOAD_RSS_PCTYPE_V2 |
-	       VIRTCHNL_VF_OFFLOAD_ENCAP |
-	       VIRTCHNL_VF_OFFLOAD_TC_U32 |
-	       VIRTCHNL_VF_OFFLOAD_VLAN_V2 |
-	       VIRTCHNL_VF_OFFLOAD_RX_FLEX_DESC |
-	       VIRTCHNL_VF_OFFLOAD_CRC |
-	       VIRTCHNL_VF_OFFLOAD_ENCAP_CSUM |
-	       VIRTCHNL_VF_OFFLOAD_REQ_QUEUES |
-	       VIRTCHNL_VF_CAP_PTP |
-	       VIRTCHNL_VF_OFFLOAD_ADQ |
-	       VIRTCHNL_VF_OFFLOAD_USO |
-	       VIRTCHNL_VF_OFFLOAD_FDIR_PF |
-	       VIRTCHNL_VF_OFFLOAD_ADV_RSS_PF |
-	       VIRTCHNL_VF_CAP_ADV_LINK_SPEED |
-	       VIRTCHNL_VF_OFFLOAD_QOS;
+	caps = BIT(VIRTCHNL_VF_OFFLOAD_L2) |
+	       BIT(VIRTCHNL_VF_OFFLOAD_RSS_PF) |
+	       BIT(VIRTCHNL_VF_OFFLOAD_RSS_AQ) |
+	       BIT(VIRTCHNL_VF_OFFLOAD_RSS_REG) |
+	       BIT(VIRTCHNL_VF_OFFLOAD_VLAN) |
+	       BIT(VIRTCHNL_VF_OFFLOAD_WB_ON_ITR) |
+	       BIT(VIRTCHNL_VF_OFFLOAD_RSS_PCTYPE_V2) |
+	       BIT(VIRTCHNL_VF_OFFLOAD_ENCAP) |
+	       BIT(VIRTCHNL_VF_OFFLOAD_TC_U32) |
+	       BIT(VIRTCHNL_VF_OFFLOAD_VLAN_V2) |
+	       BIT(VIRTCHNL_VF_OFFLOAD_RX_FLEX_DESC) |
+	       BIT(VIRTCHNL_VF_OFFLOAD_CRC) |
+	       BIT(VIRTCHNL_VF_OFFLOAD_ENCAP_CSUM) |
+	       BIT(VIRTCHNL_VF_OFFLOAD_REQ_QUEUES) |
+	       BIT(VIRTCHNL_VF_CAP_PTP) |
+	       BIT(VIRTCHNL_VF_OFFLOAD_ADQ) |
+	       BIT(VIRTCHNL_VF_OFFLOAD_USO) |
+	       BIT(VIRTCHNL_VF_OFFLOAD_FDIR_PF) |
+	       BIT(VIRTCHNL_VF_OFFLOAD_ADV_RSS_PF) |
+	       BIT(VIRTCHNL_VF_CAP_ADV_LINK_SPEED) |
+	       BIT(VIRTCHNL_VF_OFFLOAD_QOS);
 
 	adapter->current_op = VIRTCHNL_OP_GET_VF_RESOURCES;
 	adapter->aq_required &= ~IAVF_FLAG_AQ_GET_CONFIG;
@@ -313,12 +313,16 @@ int iavf_get_vf_config(struct iavf_adapter *adapter)
 	err = iavf_poll_virtchnl_msg(hw, &event, VIRTCHNL_OP_GET_VF_RESOURCES);
 	memcpy(adapter->vf_res, event.msg_buf, min(event.msg_len, len));
 
+	/* mirror to the extended bitmap */
+	bitmap_from_arr32(adapter->vf_cap_flags, &adapter->vf_res->vf_cap_flags,
+			  BITS_PER_TYPE(u32));
+
 	/* some PFs send more queues than we should have so validate that
 	 * we aren't getting too many queues
 	 */
 	if (!err)
 		iavf_validate_num_queues(adapter, min(event.msg_len, len));
-	iavf_vf_parse_hw_config(hw, adapter->vf_res);
+	iavf_vf_parse_hw_config(hw, adapter->vf_res, adapter->vf_cap_flags);
 
 	kfree(event.msg_buf);
 
@@ -2613,7 +2617,8 @@ void iavf_virtchnl_completion(struct iavf_adapter *adapter,
 
 		memcpy(adapter->vf_res, msg, min(msglen, len));
 		iavf_validate_num_queues(adapter, min(msglen, len));
-		iavf_vf_parse_hw_config(&adapter->hw, adapter->vf_res);
+		iavf_vf_parse_hw_config(&adapter->hw, adapter->vf_res,
+					adapter->vf_cap_flags);
 		if (is_zero_ether_addr(adapter->hw.mac.addr)) {
 			/* restore current mac address */
 			ether_addr_copy(adapter->hw.mac.addr, netdev->dev_addr);
