@@ -182,19 +182,16 @@ static unsigned long *pt_regs_access(struct pt_regs *regs, unsigned long regno)
 
 static u16 get_segment_reg(struct task_struct *task, unsigned long offset)
 {
-	/*
-	 * Returning the value truncates it to 16 bits.
-	 */
-	unsigned int retval;
-	if (offset != offsetof(struct user_regs_struct, gs))
-		retval = *pt_regs_access(task_pt_regs(task), offset);
-	else {
-		if (task == current)
+	unsigned short retval;
+
+	if (offset == offsetof(struct user_regs_struct, gs)) {
+		if (task == current) {
 			savesegment(gs, retval);
-		else
-			retval = task->thread.gs;
+			return retval;
+		}
+		return task->thread.gs;
 	}
-	return retval;
+	return *pt_regs_access(task_pt_regs(task), offset);
 }
 
 static int set_segment_reg(struct task_struct *task,
@@ -248,10 +245,7 @@ static unsigned long *pt_regs_access(struct pt_regs *regs, unsigned long offset)
 
 static u16 get_segment_reg(struct task_struct *task, unsigned long offset)
 {
-	/*
-	 * Returning the value truncates it to 16 bits.
-	 */
-	unsigned int retval;
+	unsigned short retval;
 
 	switch (offset) {
 	case offsetof(struct user_regs_struct, fs):
