@@ -5513,7 +5513,7 @@ static u32 calculate_ovt_min_htotal(const struct cta_rid *rid,
 
 	min_htotal = rid->hactive + max(OVT_MIN_HBLANK_444, *min_hblank);
 
-	min_pixel_clock_rate = max_vrate * min_htotal * min_vtotal;
+	min_pixel_clock_rate = min_line_rate * min_htotal;
 
 	htotal_granularity_chunk =
 		roundup_pow_of_two(DIV64_U64_ROUND_UP(min_pixel_clock_rate,
