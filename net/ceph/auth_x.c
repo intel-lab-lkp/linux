@@ -109,12 +109,14 @@ static int __ceph_x_decrypt(const struct ceph_crypto_key *key, int usage_slot,
 	struct ceph_x_encrypt_header *hdr;
 	int plaintext_len;
 	int ret;
+	void *end = p + ciphertext_len;
 
 	ret = ceph_crypt(key, usage_slot, false, p, ciphertext_len,
 			 ciphertext_len, &plaintext_len);
 	if (ret)
 		return ret;
 
+	ceph_decode_need(&p, end, ceph_crypt_data_offset(key) + sizeof(*hdr), bad);
 	hdr = p + ceph_crypt_data_offset(key);
 	if (le64_to_cpu(hdr->magic) != CEPHX_ENC_MAGIC) {
 		pr_err("%s bad magic\n", __func__);
@@ -122,6 +124,9 @@ static int __ceph_x_decrypt(const struct ceph_crypto_key *key, int usage_slot,
 	}
 
 	return plaintext_len - sizeof(*hdr);
+
+bad:
+	return -EINVAL;
 }
 
 static int ceph_x_decrypt(const struct ceph_crypto_key *key, int usage_slot,
