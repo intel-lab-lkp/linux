@@ -208,7 +208,7 @@ static u8 msr_get_epp(struct amd_cpudata *cpudata)
 	u64 value;
 	int ret;
 
-	ret = rdmsrq_on_cpu(cpudata->cpu, MSR_AMD_CPPC_REQ, &value);
+	ret = rdmsr_on_cpu(cpudata->cpu, MSR_AMD_CPPC_REQ, &value);
 	if (ret < 0) {
 		pr_debug("Could not retrieve energy perf value (%d)\n", ret);
 		return ret;
@@ -382,7 +382,7 @@ static int amd_pstate_init_floor_perf(struct cpufreq_policy *policy)
 	if (!cpu_feature_enabled(X86_FEATURE_CPPC_PERF_PRIO))
 		return 0;
 
-	ret = rdmsrq_on_cpu(cpudata->cpu, MSR_AMD_CPPC_REQ2, &value);
+	ret = rdmsr_on_cpu(cpudata->cpu, MSR_AMD_CPPC_REQ2, &value);
 	if (ret) {
 		pr_err("failed to read CPPC REQ2 value. Error (%d)\n", ret);
 		return ret;
@@ -480,7 +480,7 @@ static int msr_init_perf(struct amd_cpudata *cpudata)
 	if (ret)
 		return ret;
 
-	ret = rdmsrl_on_cpu(cpudata->cpu, MSR_AMD_CPPC_REQ, &cppc_req);
+	ret = rdmsr_on_cpu(cpudata->cpu, MSR_AMD_CPPC_REQ, &cppc_req);
 	if (ret)
 		return ret;
 
@@ -881,7 +881,7 @@ static int amd_pstate_init_boost_support(struct amd_cpudata *cpudata)
 		goto exit_err;
 	}
 
-	ret = rdmsrq_on_cpu(cpudata->cpu, MSR_K7_HWCR, &boost_val);
+	ret = rdmsr_on_cpu(cpudata->cpu, MSR_K7_HWCR, &boost_val);
 	if (ret) {
 		pr_err_once("failed to read initial CPU boost state!\n");
 		ret = -EIO;

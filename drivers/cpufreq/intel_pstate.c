@@ -632,8 +632,8 @@ static s16 intel_pstate_get_epp(struct cpudata *cpu_data, u64 hwp_req_data)
 		 * MSR_HWP_REQUEST, so need to read and get EPP.
 		 */
 		if (!hwp_req_data) {
-			epp = rdmsrq_on_cpu(cpu_data->cpu, MSR_HWP_REQUEST,
-					    &hwp_req_data);
+			epp = rdmsr_on_cpu(cpu_data->cpu, MSR_HWP_REQUEST,
+					   &hwp_req_data);
 			if (epp)
 				return epp;
 		}
@@ -886,7 +886,7 @@ static ssize_t show_base_frequency(struct cpufreq_policy *policy, char *buf)
 	if (ratio <= 0) {
 		u64 cap;
 
-		rdmsrq_on_cpu(policy->cpu, MSR_HWP_CAPABILITIES, &cap);
+		rdmsr_on_cpu(policy->cpu, MSR_HWP_CAPABILITIES, &cap);
 		ratio = HWP_GUARANTEED_PERF(cap);
 	}
 
@@ -1187,7 +1187,7 @@ static void __intel_pstate_get_hwp_cap(struct cpudata *cpu)
 {
 	u64 cap;
 
-	rdmsrq_on_cpu(cpu->cpu, MSR_HWP_CAPABILITIES, &cap);
+	rdmsr_on_cpu(cpu->cpu, MSR_HWP_CAPABILITIES, &cap);
 	WRITE_ONCE(cpu->hwp_cap_cached, cap);
 	cpu->pstate.max_pstate = HWP_GUARANTEED_PERF(cap);
 	cpu->pstate.turbo_pstate = HWP_HIGHEST_PERF(cap);
@@ -1269,7 +1269,7 @@ static void intel_pstate_hwp_set(unsigned int cpu)
 	if (cpu_data->policy == CPUFREQ_POLICY_PERFORMANCE)
 		min = max;
 
-	rdmsrq_on_cpu(cpu, MSR_HWP_REQUEST, &value);
+	rdmsr_on_cpu(cpu, MSR_HWP_REQUEST, &value);
 
 	value &= ~HWP_MIN_PERF(~0L);
 	value |= HWP_MIN_PERF(min);
@@ -2156,7 +2156,7 @@ static int core_get_min_pstate(int cpu)
 {
 	u64 value;
 
-	rdmsrq_on_cpu(cpu, MSR_PLATFORM_INFO, &value);
+	rdmsr_on_cpu(cpu, MSR_PLATFORM_INFO, &value);
 	return (value >> 40) & 0xFF;
 }
 
@@ -2164,7 +2164,7 @@ static int core_get_max_pstate_physical(int cpu)
 {
 	u64 value;
 
-	rdmsrq_on_cpu(cpu, MSR_PLATFORM_INFO, &value);
+	rdmsr_on_cpu(cpu, MSR_PLATFORM_INFO, &value);
 	return (value >> 8) & 0xFF;
 }
 
@@ -2209,7 +2209,7 @@ static int core_get_max_pstate(int cpu)
 	int tdp_ratio;
 	int err;
 
-	rdmsrq_on_cpu(cpu, MSR_PLATFORM_INFO, &plat_info);
+	rdmsr_on_cpu(cpu, MSR_PLATFORM_INFO, &plat_info);
 	max_pstate = (plat_info >> 8) & 0xFF;
 
 	tdp_ratio = core_get_tdp_ratio(cpu, plat_info);
@@ -2241,7 +2241,7 @@ static int core_get_turbo_pstate(int cpu)
 	u64 value;
 	int nont, ret;
 
-	rdmsrq_on_cpu(cpu, MSR_TURBO_RATIO_LIMIT, &value);
+	rdmsr_on_cpu(cpu, MSR_TURBO_RATIO_LIMIT, &value);
 	nont = core_get_max_pstate(cpu);
 	ret = (value) & 255;
 	if (ret <= nont)
@@ -2264,7 +2264,7 @@ static int knl_get_turbo_pstate(int cpu)
 	u64 value;
 	int nont, ret;
 
-	rdmsrq_on_cpu(cpu, MSR_TURBO_RATIO_LIMIT, &value);
+	rdmsr_on_cpu(cpu, MSR_TURBO_RATIO_LIMIT, &value);
 	nont = core_get_max_pstate(cpu);
 	ret = (((value) >> 8) & 0xFF);
 	if (ret <= nont)
@@ -3318,7 +3318,7 @@ static int intel_cpufreq_cpu_init(struct cpufreq_policy *policy)
 
 		intel_pstate_get_hwp_cap(cpu);
 
-		rdmsrq_on_cpu(cpu->cpu, MSR_HWP_REQUEST, &value);
+		rdmsr_on_cpu(cpu->cpu, MSR_HWP_REQUEST, &value);
 		WRITE_ONCE(cpu->hwp_req_cached, value);
 
 		cpu->epp_cached = intel_pstate_get_epp(cpu, value);

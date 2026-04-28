@@ -52,7 +52,7 @@ static int uncore_read_control_freq(struct uncore_data *data, unsigned int *valu
 	if (data->control_cpu < 0)
 		return -ENXIO;
 
-	ret = rdmsrq_on_cpu(data->control_cpu, MSR_UNCORE_RATIO_LIMIT, &cap);
+	ret = rdmsr_on_cpu(data->control_cpu, MSR_UNCORE_RATIO_LIMIT, &cap);
 	if (ret)
 		return ret;
 
@@ -77,7 +77,7 @@ static int uncore_write_control_freq(struct uncore_data *data, unsigned int inpu
 	if (data->control_cpu < 0)
 		return -ENXIO;
 
-	ret = rdmsrq_on_cpu(data->control_cpu, MSR_UNCORE_RATIO_LIMIT, &cap);
+	ret = rdmsr_on_cpu(data->control_cpu, MSR_UNCORE_RATIO_LIMIT, &cap);
 	if (ret)
 		return ret;
 
@@ -106,7 +106,7 @@ static int uncore_read_freq(struct uncore_data *data, unsigned int *freq)
 	if (data->control_cpu < 0)
 		return -ENXIO;
 
-	ret = rdmsrq_on_cpu(data->control_cpu, MSR_UNCORE_PERF_STATUS, &ratio);
+	ret = rdmsr_on_cpu(data->control_cpu, MSR_UNCORE_PERF_STATUS, &ratio);
 	if (ret)
 		return ret;
 
