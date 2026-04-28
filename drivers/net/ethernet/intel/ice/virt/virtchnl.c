@@ -267,6 +267,11 @@ static int ice_vc_get_vf_res_msg(struct ice_vf *vf, u8 *msg)
 
 	bitmap_zero(vf->driver_caps, VIRTCHNL_VF_CAPS_MAX);
 	if (VF_IS_V11(&vf->vf_ver)) {
+		/* VIRTCHNL_OP_GET_VF_RESOURCES only sends the first 32 flags.
+		 * If VIRTCHNL_VF_CAPS2 (bit 2) is set, then there are more
+		 * flags. A complete set (including the first 32) is then sent
+		 * via VIRTCHNL_OP_GET_VF_CAPS2.
+		 */
 		bitmap_from_arr32(vf->driver_caps, (u32 *)msg,
 				  BITS_PER_TYPE(u32));
 	} else {
@@ -332,6 +337,10 @@ static int ice_vc_get_vf_res_msg(struct ice_vf *vf, u8 *msg)
 
 	if (test_bit(VIRTCHNL_VF_CAP_PTP, vf->driver_caps))
 		vfres->vf_cap_flags |= BIT(VIRTCHNL_VF_CAP_PTP);
+
+	/* Indicate that VF can send more flags in VIRTCHNL_OP_GET_VF_CAPS2 */
+	if (test_bit(VIRTCHNL_VF_CAPS2, vf->driver_caps))
+		vfres->vf_cap_flags |= BIT(VIRTCHNL_VF_CAPS2);
 
 	vfres->num_vsis = 1;
 	/* Tx and Rx queue are equal for VF */
@@ -2453,6 +2462,78 @@ out:
 				     v_ret, NULL, 0);
 }
 
+/**
+ * ice_vc_get_vf_caps2 - handle VIRTCHNL_OP_GET_VF_CAPS2
+ * @vf: pointer to VF
+ * @msg: pointer to the message buffer
+ *
+ * Called from the VF to negotiate extended capability flag set if
+ * VIRTCHNL_VF_CAPS2 was set in vf_cap_flags. The PF responds with the
+ * intersection of its supported flags and the VF's requested flags.
+ *
+ * Return: 0 on success, negative on failure
+ */
+static int ice_vc_get_vf_caps2(struct ice_vf *vf,
+			       const struct virtchnl_vf_caps2 *msg)
+{
+	enum virtchnl_status_code v_ret = VIRTCHNL_STATUS_SUCCESS;
+	DECLARE_BITMAP(msg_caps, VIRTCHNL_VF_CAPS_MAX);
+	struct virtchnl_vf_caps2 *caps2;
+	unsigned int nbits;
+	int err;
+
+	caps2 = kzalloc_flex(*caps2, vf_cap_flags,
+			     BITS_TO_U32(VIRTCHNL_VF_CAPS_MAX));
+	if (!caps2)
+		return -ENOMEM;
+
+	if (!test_bit(ICE_VF_STATE_ACTIVE, vf->vf_states)) {
+		v_ret = VIRTCHNL_STATUS_ERR_PARAM;
+		goto send_msg;
+	}
+
+	if (!test_bit(VIRTCHNL_VF_CAPS2, vf->driver_caps)) {
+		v_ret = VIRTCHNL_STATUS_ERR_PARAM;
+		goto send_msg;
+	}
+
+	caps2->flags_len = BITS_TO_U32(VIRTCHNL_VF_CAPS_MAX);
+
+	/* Set extended feature flags. The first 32 bits should be already set
+	 * in VIRTCHNL_OP_GET_VF_RESOURCES
+	 */
+
+	/* Make sure to not read after msg bitmap or local bitmap. The remaining
+	 * bits (if any) should be unset, since one side doesn't know about
+	 * them, therefore cannot support these capabilities.
+	 */
+	nbits = min_t(unsigned int, VIRTCHNL_VF_CAPS_MAX,
+		      BITS_PER_TYPE(u32) * msg->flags_len);
+	bitmap_zero(msg_caps, VIRTCHNL_VF_CAPS_MAX);
+	bitmap_from_arr32(msg_caps, msg->vf_cap_flags, nbits);
+
+	/* Note that msg->vf_cap_flags cannot be directly used, because then
+	 * we'd need to limit the operation range to nbits. If the local caps
+	 * is larger and has some flags set after nbits, then they would be
+	 * incorrectly left set.
+	 */
+	bitmap_and(vf->driver_caps, vf->driver_caps, msg_caps,
+		   VIRTCHNL_VF_CAPS_MAX);
+
+	bitmap_to_arr32(caps2->vf_cap_flags, vf->driver_caps,
+			VIRTCHNL_VF_CAPS_MAX);
+
+send_msg:
+	err = ice_vc_send_msg_to_vf(vf, VIRTCHNL_OP_GET_VF_CAPS2, v_ret,
+				    (u8 *)caps2,
+				    struct_size(caps2, vf_cap_flags,
+						caps2->flags_len));
+
+	kfree(caps2);
+
+	return err;
+}
+
 static int ice_vc_get_ptp_cap(struct ice_vf *vf,
 			      const struct virtchnl_ptp_caps *msg)
 {
@@ -2544,6 +2625,7 @@ static const struct ice_virtchnl_ops ice_virtchnl_dflt_ops = {
 	.cfg_q_quanta = ice_vc_cfg_q_quanta,
 	.get_ptp_cap = ice_vc_get_ptp_cap,
 	.get_phc_time = ice_vc_get_phc_time,
+	.get_vf_caps2 = ice_vc_get_vf_caps2,
 	/* If you add a new op here please make sure to add it to
 	 * ice_virtchnl_repr_ops as well.
 	 */
@@ -2681,6 +2763,7 @@ static const struct ice_virtchnl_ops ice_virtchnl_repr_ops = {
 	.cfg_q_quanta = ice_vc_cfg_q_quanta,
 	.get_ptp_cap = ice_vc_get_ptp_cap,
 	.get_phc_time = ice_vc_get_phc_time,
+	.get_vf_caps2 = ice_vc_get_vf_caps2,
 };
 
 /**
@@ -2923,6 +3006,9 @@ error_handler:
 		break;
 	case VIRTCHNL_OP_1588_PTP_GET_TIME:
 		err = ops->get_phc_time(vf);
+		break;
+	case VIRTCHNL_OP_GET_VF_CAPS2:
+		err = ops->get_vf_caps2(vf, (const void *)msg);
 		break;
 	case VIRTCHNL_OP_UNKNOWN:
 	default:
