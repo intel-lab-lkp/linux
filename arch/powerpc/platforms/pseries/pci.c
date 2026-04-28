@@ -291,3 +291,24 @@ int pseries_root_bridge_prepare(struct pci_host_bridge *bridge)
 	bus->cur_bus_speed = prop_to_pci_speed(pcie_link_speed_stats[1]);
 	return 0;
 }
+
+/*
+ * Workaround for sluggish PCIe device firmware.
+ *
+ * The device violates the PCIe spec recovery timing when transitioning
+ * from D3hot to D0. On standard architectures this is often ignored, but
+ * the strict PowerPC pseries PHB catches the Unsupported Request during
+ * the subsequent config read and triggers an EEH.
+ *
+ * We inject a longer delay to ensure the device is ready before the PCI
+ * core attempts to access configuration space.
+ */
+static void quirk_pseries_d0_wake_delay(struct pci_dev *dev)
+{
+	dev->d3hot_delay = 200;
+	pci_info(dev, "pseries  Quirk:D3hot->D0 delay %d ms to prevent EEH\n",
+		 dev->d3hot_delay);
+}
+/* Blanket application to ALL Broadcom PCI devices */
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_BROADCOM,
+			PCI_ANY_ID, quirk_pseries_d0_wake_delay);
