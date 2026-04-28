@@ -167,7 +167,6 @@ int amdgpu_amdkfd_drm_client_create(struct amdgpu_device *adev)
 
 void amdgpu_amdkfd_device_init(struct amdgpu_device *adev)
 {
-	int i;
 	int last_valid_bit;
 
 	amdgpu_amdkfd_gpuvm_init_mem_limits();
@@ -194,14 +193,11 @@ void amdgpu_amdkfd_device_init(struct amdgpu_device *adev)
 				  adev->gfx.mec_bitmap[0].queue_bitmap,
 				  AMDGPU_MAX_QUEUES);
 
-		/* According to linux/bitmap.h we shouldn't use bitmap_clear if
-		 * nbits is not compile time constant
-		 */
 		last_valid_bit = 1 /* only first MEC can have compute queues */
 				* adev->gfx.mec.num_pipe_per_mec
 				* adev->gfx.mec.num_queue_per_pipe;
-		for (i = last_valid_bit; i < AMDGPU_MAX_QUEUES; ++i)
-			clear_bit(i, gpu_resources.cp_queue_bitmap);
+		bitmap_clear(gpu_resources.cp_queue_bitmap, last_valid_bit,
+					AMDGPU_MAX_QUEUES - last_valid_bit);
 
 		amdgpu_doorbell_get_kfd_info(adev,
 				&gpu_resources.doorbell_physical_address,
