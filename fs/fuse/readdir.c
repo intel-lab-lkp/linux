@@ -345,7 +345,10 @@ static int fuse_readdir_uncached(struct file *file, struct dir_context *ctx)
 	struct fuse_io_args ia = {};
 	struct fuse_args *args = &ia.ap.args;
 	void *buf;
-	size_t bufsize = clamp((unsigned int) ctx->count, PAGE_SIZE, fc->max_pages << PAGE_SHIFT);
+	unsigned int count = (unsigned int)ctx->count;
+	size_t bufsize = (count && count != (unsigned int)INT_MAX) ?
+		clamp(count, (unsigned int)PAGE_SIZE, fc->max_pages << PAGE_SHIFT) :
+		PAGE_SIZE;
 	u64 attr_version = 0, evict_ctr = 0;
 	bool locked;
 
