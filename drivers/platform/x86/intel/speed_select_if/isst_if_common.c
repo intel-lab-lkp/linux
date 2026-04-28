@@ -192,8 +192,8 @@ void isst_resume_common(void)
 			if (cb->registered)
 				isst_mbox_resume_command(cb, sst_cmd);
 		} else {
-			wrmsrq_safe_on_cpu(sst_cmd->cpu, sst_cmd->cmd,
-					   sst_cmd->data);
+			wrmsr_safe_on_cpu(sst_cmd->cpu, sst_cmd->cmd,
+					  sst_cmd->data);
 		}
 	}
 }
@@ -500,9 +500,8 @@ static long isst_if_msr_cmd_req(u8 *cmd_ptr, int *write_only, int resume)
 		if (!capable(CAP_SYS_ADMIN))
 			return -EPERM;
 
-		ret = wrmsrq_safe_on_cpu(msr_cmd->logical_cpu,
-					 msr_cmd->msr,
-					 msr_cmd->data);
+		ret = wrmsr_safe_on_cpu(msr_cmd->logical_cpu,
+					msr_cmd->msr, msr_cmd->data);
 		*write_only = 1;
 		if (!ret && !resume)
 			ret = isst_store_cmd(0, msr_cmd->msr,
