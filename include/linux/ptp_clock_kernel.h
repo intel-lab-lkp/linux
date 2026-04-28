@@ -122,10 +122,33 @@ struct ptp_system_timestamp {
  *               reading the lowest bits of the PHC timestamp and the second
  *               reading immediately follows that.
  *
+ * @gettimexattrs64:  Reads the current time from the hardware clock and
+ *                    optionally also the system clock with additional clock
+ *                    attributes.
+ *                    parameter ts: Holds the PHC timestamp.
+ *                    parameter sts: If not NULL, it holds a pair of
+ *                    timestamps from the system clock. The first reading is
+ *                    made right before reading the lowest bits of the PHC
+ *                    timestamp and the second reading immediately follows that.
+ *                    parameter att: If not NULL, it holds the maximum error
+ *                    bound for the returned PHC timestamp in nanoseconds,
+ *                    the timescale for the returned PHC timestamp and the
+ *                    clock's qualitative synchronization status.
+ *
  * @getcrosststamp:  Reads the current time from the hardware clock and
  *                   system clock simultaneously.
  *                   parameter cts: Contains timestamp (device,system) pair,
  *                   where system time is realtime and monotonic.
+ *
+ * @getcrosststampattrs:  Reads the current time from the hardware clock and
+ *                        system clock simultaneously with additional data on
+ *                        hardware clock accuracy and reliability.
+ *                        parameter cts: Contains timestamp (device,system)
+ *                        pair, where system time is realtime and monotonic.
+ *                        parameter att: If not NULL, it holds the maximum error
+ *                        bound for the returned PHC timestamp in nanoseconds,
+ *                        the timescale for the returned PHC timestamp and the
+ *                        clock's qualitative synchronization status.
  *
  * @settime64:  Set the current time on the hardware clock.
  *              parameter ts: Time value to set.
@@ -208,8 +231,15 @@ struct ptp_clock_info {
 	int (*gettime64)(struct ptp_clock_info *ptp, struct timespec64 *ts);
 	int (*gettimex64)(struct ptp_clock_info *ptp, struct timespec64 *ts,
 			  struct ptp_system_timestamp *sts);
+	int (*gettimexattrs64)(struct ptp_clock_info *ptp,
+			       struct timespec64 *ts,
+			       struct ptp_system_timestamp *sts,
+			       struct ptp_clock_attributes *att);
 	int (*getcrosststamp)(struct ptp_clock_info *ptp,
 			      struct system_device_crosststamp *cts);
+	int (*getcrosststampattrs)(struct ptp_clock_info *ptp,
+				   struct system_device_crosststamp *cts,
+				   struct ptp_clock_attributes *att);
 	int (*settime64)(struct ptp_clock_info *p, const struct timespec64 *ts);
 	int (*getcycles64)(struct ptp_clock_info *ptp, struct timespec64 *ts);
 	int (*getcyclesx64)(struct ptp_clock_info *ptp, struct timespec64 *ts,
