@@ -157,7 +157,10 @@ struct ice_vf {
 	u64 rss_hashcfg;		/* RSS hash configuration */
 	struct ice_sw *vf_sw_id;	/* switch ID the VF VSIs connect to */
 	struct virtchnl_version_info vf_ver;
-	u32 driver_caps;		/* reported by VF driver */
+
+	/* reported by VF driver */
+	DECLARE_BITMAP(driver_caps, VIRTCHNL_VF_CAPS_MAX);
+
 	u8 dev_lan_addr[ETH_ALEN];
 	u8 hw_lan_addr[ETH_ALEN];
 	struct ice_time_mac legacy_last_added_umac;
