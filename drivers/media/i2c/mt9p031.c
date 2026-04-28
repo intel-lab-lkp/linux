@@ -795,7 +795,7 @@ static int mt9p031_s_ctrl(struct v4l2_ctrl *ctrl)
 			ctrl->val &= ~1;
 			data = (1 << 6) | (ctrl->val >> 1);
 		} else {
-			ctrl->val &= ~7;
+			ctrl->val -= ctrl->val % 8;
 			data = ((ctrl->val - 64) << 5) | (1 << 6) | 32;
 		}
 
