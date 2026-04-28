@@ -6,6 +6,8 @@
 
 #include <linux/bitfield.h>
 #include <linux/bits.h>
+#include <linux/build_bug.h>
+#include <linux/align.h>
 #include <linux/io.h>
 #include <linux/types.h>
 
@@ -70,6 +72,11 @@
 
 /* Helper for FIFO size calculation */
 #define DW_UART_CPR_FIFO_SIZE(a)	(FIELD_GET(DW_UART_CPR_FIFO_MODE, (a)) * 16)
+#define DW_UART_CPR_FIFO_MODE_MAX	0x80
+#define DW_UART_CPR_FIFO_MODE_FROM_SIZE(size)				\
+	(BUILD_BUG_ON_ZERO(!IS_ALIGNED((size), 16)) +			\
+	 BUILD_BUG_ON_ZERO(((size) / 16) > DW_UART_CPR_FIFO_MODE_MAX) +	\
+	 ((size) / 16))
 
 struct dw8250_port_data {
 	/* Port properties */
