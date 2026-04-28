@@ -11,6 +11,7 @@
 #include <linux/hrtimer.h>
 #include <linux/ktime.h>
 #include <linux/input.h>
+#include <linux/types.h>
 #include "rmi_bus.h"
 
 #define SYNAPTICS_INPUT_DEVICE_NAME "Synaptics RMI4 Touch Sensor"
@@ -52,10 +53,9 @@ struct pdt_entry {
 /* describes a single packet register */
 struct rmi_register_desc_item {
 	u16 reg;
-	unsigned long reg_size;
-	u8 num_subpackets;
-	unsigned long subpacket_map[BITS_TO_LONGS(
-				RMI_REG_DESC_SUBPACKET_BITS)];
+	u16 num_subpackets;
+	u32 reg_size;
+	DECLARE_BITMAP(subpacket_map, RMI_REG_DESC_SUBPACKET_BITS);
 };
 
 /*

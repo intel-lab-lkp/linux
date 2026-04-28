@@ -88,7 +88,7 @@ static int rmi_f12_read_sensor_tuning(struct f12_data *f12)
 
 	if (item->reg_size > sizeof(buf)) {
 		dev_err(&fn->dev,
-			"F12 control8 should be no bigger than %zd bytes, not: %ld\n",
+			"F12 control8 should be no bigger than %zd bytes, not: %d\n",
 			sizeof(buf), item->reg_size);
 		return -ENODEV;
 	}
