@@ -364,28 +364,54 @@ extern unsigned int homa_net_id;
 void     homa_ack_pkt(struct sk_buff *skb, struct homa_sock *hsk,
 		      struct homa_rpc *rpc);
 void     homa_add_packet(struct homa_rpc *rpc, struct sk_buff *skb);
+int      homa_bind(struct socket *sk, struct sockaddr_unsized *addr,
+		   int addr_len);
+void     homa_close(struct sock *sock, long timeout);
 void     homa_consume_rx_skb(struct sk_buff *skb);
 int      homa_copy_to_user(struct homa_rpc *rpc);
 void     homa_data_pkt(struct sk_buff *skb, struct homa_rpc *rpc);
 void     homa_destroy(struct homa *homa);
 void     homa_dispatch_pkts(struct sk_buff *skb);
+int      homa_err_handler_v4(struct sk_buff *skb, u32 info);
+int      homa_err_handler_v6(struct sk_buff *skb,
+			     struct inet6_skb_parm *opt, u8 type,  u8 code,
+			     int offset, __be32 info);
 int      homa_fill_data_interleaved(struct homa_rpc *rpc,
 				    struct sk_buff *skb, struct iov_iter *iter);
 struct homa_gap *homa_gap_alloc(struct list_head *next, int start, int end);
+int      homa_getsockopt(struct sock *sk, int level, int optname,
+			 char __user *optval, int __user *optlen);
+int      homa_hash(struct sock *sk);
+enum hrtimer_restart homa_hrtimer(struct hrtimer *timer);
 int      homa_init(struct homa *homa);
+int      homa_ioc_info(struct socket *sock, unsigned long arg);
+int      homa_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg);
+int      homa_load(void);
 int      homa_message_out_fill(struct homa_rpc *rpc,
 			       struct iov_iter *iter, int xmit);
 void     homa_message_out_init(struct homa_rpc *rpc, int length);
 void     homa_need_ack_pkt(struct sk_buff *skb, struct homa_sock *hsk,
 			   struct homa_rpc *rpc);
 void     homa_net_destroy(struct homa_net *hnet);
+void     homa_net_exit(struct net *net);
 int      homa_net_init(struct homa_net *hnet, struct net *net,
 		       struct homa *homa);
+int      homa_net_start(struct net *net);
+__poll_t homa_poll(struct file *file, struct socket *sock,
+		   struct poll_table_struct *wait);
+int      homa_recvmsg(struct sock *sk, struct msghdr *msg, size_t len,
+		      int flags);
 void     homa_request_retrans(struct homa_rpc *rpc);
 void     homa_resend_pkt(struct sk_buff *skb, struct homa_rpc *rpc,
 			 struct homa_sock *hsk);
 void     homa_rpc_handoff(struct homa_rpc *rpc);
 int      homa_rpc_tx_end(struct homa_rpc *rpc);
+int      homa_sendmsg(struct sock *sk, struct msghdr *msg, size_t len);
+int      homa_setsockopt(struct sock *sk, int level, int optname,
+			 sockptr_t optval, unsigned int optlen);
+int      homa_shutdown(struct socket *sock, int how);
+int      homa_socket(struct sock *sk);
+int      homa_softirq(struct sk_buff *skb);
 void     homa_spin(int ns);
 void     homa_timer(struct homa *homa);
 void     homa_timer_check_rpc(struct homa_rpc *rpc);
@@ -393,7 +419,9 @@ int      homa_timer_main(void *transport);
 struct sk_buff *homa_tx_data_pkt_alloc(struct homa_rpc *rpc,
 				       struct iov_iter *iter, int offset,
 				       int length, int max_seg_data);
+void     homa_unhash(struct sock *sk);
 void     homa_rpc_unknown_pkt(struct sk_buff *skb, struct homa_rpc *rpc);
+void     homa_unload(void);
 int      homa_wait_private(struct homa_rpc *rpc, int nonblocking);
 struct homa_rpc *homa_wait_shared(struct homa_sock *hsk, int nonblocking);
 int      homa_xmit_control(enum homa_packet_type type, void *contents,
