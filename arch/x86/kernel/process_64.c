@@ -275,8 +275,8 @@ static __always_inline void save_base_legacy(struct task_struct *prev_p,
 
 static __always_inline void save_fsgs(struct task_struct *task)
 {
-	savesegment(fs, task->thread.fsindex);
-	savesegment(gs, task->thread.gsindex);
+	savesegment_mem16(fs, task->thread.fsindex);
+	savesegment_mem16(gs, task->thread.gsindex);
 	if (static_cpu_has(X86_FEATURE_FSGSBASE)) {
 		/*
 		 * If FSGSBASE is enabled, we can't make any useful guesses
