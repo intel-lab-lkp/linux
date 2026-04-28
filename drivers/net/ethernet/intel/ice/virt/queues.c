@@ -802,7 +802,7 @@ int ice_vc_cfg_qs_msg(struct ice_vf *vf, u8 *msg)
 		if (!qci->qpair[i].rxq.crc_disable)
 			continue;
 
-		if (!(vf->driver_caps & VIRTCHNL_VF_OFFLOAD_CRC) ||
+		if (!test_bit(VIRTCHNL_VF_OFFLOAD_CRC, vf->driver_caps) ||
 		    vf->vlan_strip_ena)
 			goto error_param;
 	}
@@ -889,8 +889,8 @@ int ice_vc_cfg_qs_msg(struct ice_vf *vf, u8 *msg)
 			 * format. Legacy 16byte descriptor is not supported.
 			 * If this RXDID is selected, return error.
 			 */
-			if (vf->driver_caps &
-			    VIRTCHNL_VF_OFFLOAD_RX_FLEX_DESC) {
+			if (test_bit(VIRTCHNL_VF_OFFLOAD_RX_FLEX_DESC,
+				     vf->driver_caps)) {
 				rxdid = qpi->rxq.rxdid;
 				if (!(BIT(rxdid) & pf->supported_rxdids))
 					goto error_param;
@@ -898,9 +898,10 @@ int ice_vc_cfg_qs_msg(struct ice_vf *vf, u8 *msg)
 				rxdid = ICE_RXDID_LEGACY_1;
 			}
 
-			ena_ts = ((vf->driver_caps &
-				  VIRTCHNL_VF_OFFLOAD_RX_FLEX_DESC) &&
-				  (vf->driver_caps & VIRTCHNL_VF_CAP_PTP) &&
+			ena_ts = (test_bit(VIRTCHNL_VF_OFFLOAD_RX_FLEX_DESC,
+					   vf->driver_caps) &&
+				  test_bit(VIRTCHNL_VF_CAP_PTP,
+					   vf->driver_caps) &&
 				  (qpi->rxq.flags & VIRTCHNL_PTP_RX_TSTAMP));
 
 			ice_write_qrxflxp_cntxt(&vsi->back->hw,

@@ -43,7 +43,8 @@ enum iavf_status iavf_aq_set_rss_key(struct iavf_hw *hw, u16 seid,
 				     struct iavf_aqc_get_set_rss_key_data *key);
 
 void iavf_vf_parse_hw_config(struct iavf_hw *hw,
-			     struct virtchnl_vf_resource *msg);
+			     struct virtchnl_vf_resource *msg,
+			     const unsigned long *vf_cap_flags);
 enum iavf_status iavf_aq_send_msg_to_pf(struct iavf_hw *hw,
 					enum virtchnl_ops v_opcode,
 					enum iavf_status v_retval,
