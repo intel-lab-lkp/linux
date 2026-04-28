@@ -114,6 +114,25 @@ bool hibernation_available(void)
 }
 
 /**
+ * pm_hibernation_storing_image - check if system is writing the hibernation image
+ *
+ * After create_image() saves a memory snapshot, the kernel briefly resumes
+ * devices with PMSG_THAW to write the image to storage before final powerdown.
+ * Drivers for hardware not involved in storage I/O may call this helper from
+ * their resume callbacks to skip unnecessary hardware initialization during
+ * that transient phase.
+ *
+ * Context: May be called from device PM callbacks.
+ * Return: %true if a hibernation snapshot has been taken and the system is
+ *         in the process of writing the image to persistent storage.
+ */
+bool pm_hibernation_storing_image(void)
+{
+	return !!in_suspend;
+}
+EXPORT_SYMBOL_GPL(pm_hibernation_storing_image);
+
+/**
  * hibernation_set_ops - Set the global hibernate operations.
  * @ops: Hibernation operations to use in subsequent hibernation transitions.
  */
