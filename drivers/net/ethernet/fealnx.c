@@ -91,7 +91,7 @@ static int full_duplex[MAX_UNITS] = { -1, -1, -1, -1, -1, -1, -1, -1 };
 
 /* This driver was written to use PCI memory space, however some x86 systems
    work only with I/O space accesses. */
-#ifndef __alpha__
+#ifdef CONFIG_X86
 #define USE_IO_OPS
 #endif
 
