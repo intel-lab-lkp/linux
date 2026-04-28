@@ -730,7 +730,7 @@ config RANDOMIZE_BASE
 config RANDOMIZE_BASE_MAX_OFFSET
 	hex "Maximum KASLR offset" if EXPERT
 	depends on RANDOMIZE_BASE
-	range 0x0 0x10000000
+	range 0x20000 0x10000000
 	default "0x01000000"
 	help
 	  When KASLR is active, this provides the maximum offset that will
