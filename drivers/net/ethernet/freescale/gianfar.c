@@ -669,7 +669,7 @@ static int gfar_of_init(struct platform_device *ofdev, struct net_device **pdev)
 		return -EINVAL;
 	}
 
-	*pdev = alloc_etherdev_mq(sizeof(*priv), num_tx_qs);
+	*pdev = alloc_etherdev_mqs(sizeof(*priv), num_tx_qs, num_rx_qs);
 	dev = *pdev;
 	if (NULL == dev)
 		return -ENOMEM;
@@ -678,10 +678,6 @@ static int gfar_of_init(struct platform_device *ofdev, struct net_device **pdev)
 	priv->ndev = dev;
 
 	priv->mode = mode;
-
-	priv->num_tx_queues = num_tx_qs;
-	netif_set_real_num_rx_queues(dev, num_rx_qs);
-	priv->num_rx_queues = num_rx_qs;
 
 	err = gfar_alloc_tx_queues(priv);
 	if (err)
