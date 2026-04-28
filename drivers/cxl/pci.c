@@ -134,10 +134,11 @@ static irqreturn_t cxl_pci_mbox_irq(int irq, void *id)
 	reg = readq(cxlds->regs.mbox + CXLDEV_MBOX_BG_CMD_STATUS_OFFSET);
 	opcode = FIELD_GET(CXLDEV_MBOX_BG_CMD_COMMAND_OPCODE_MASK, reg);
 	if (opcode == CXL_MBOX_OP_SANITIZE) {
-		mutex_lock(&cxl_mbox->mbox_mutex);
-		if (mds->security.sanitize_node)
-			mod_delayed_work(system_percpu_wq, &mds->security.poll_dwork, 0);
-		mutex_unlock(&cxl_mbox->mbox_mutex);
+		scoped_guard(mutex, &cxl_mbox->mbox_mutex) {
+			if (mds->security.sanitize_node)
+				mod_delayed_work(system_percpu_wq,
+						 &mds->security.poll_dwork, 0);
+		}
 	} else {
 		/* short-circuit the wait in __cxl_pci_mbox_send_cmd() */
 		rcuwait_wake_up(&cxl_mbox->mbox_wait);
@@ -156,7 +157,7 @@ static void cxl_mbox_sanitize_work(struct work_struct *work)
 	struct cxl_dev_state *cxlds = &mds->cxlds;
 	struct cxl_mailbox *cxl_mbox = &cxlds->cxl_mbox;
 
-	mutex_lock(&cxl_mbox->mbox_mutex);
+	guard(mutex)(&cxl_mbox->mbox_mutex);
 	if (cxl_mbox_background_complete(cxlds)) {
 		mds->security.poll_tmo_secs = 0;
 		if (mds->security.sanitize_node)
@@ -170,7 +171,6 @@ static void cxl_mbox_sanitize_work(struct work_struct *work)
 		mds->security.poll_tmo_secs = min(15 * 60, timeout);
 		schedule_delayed_work(&mds->security.poll_dwork, timeout * HZ);
 	}
-	mutex_unlock(&cxl_mbox->mbox_mutex);
 }
 
 /**
@@ -377,13 +377,8 @@ success:
 static int cxl_pci_mbox_send(struct cxl_mailbox *cxl_mbox,
 			     struct cxl_mbox_cmd *cmd)
 {
-	int rc;
-
-	mutex_lock(&cxl_mbox->mbox_mutex);
-	rc = __cxl_pci_mbox_send_cmd(cxl_mbox, cmd);
-	mutex_unlock(&cxl_mbox->mbox_mutex);
-
-	return rc;
+	guard(mutex)(&cxl_mbox->mbox_mutex);
+	return __cxl_pci_mbox_send_cmd(cxl_mbox, cmd);
 }
 
 static int cxl_pci_setup_mailbox(struct cxl_memdev_state *mds, bool irq_avail)

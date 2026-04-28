@@ -138,10 +138,10 @@ static ssize_t security_state_show(struct device *dev,
 	int rc = 0;
 
 	/* sync with latest submission state */
-	mutex_lock(&cxl_mbox->mbox_mutex);
-	if (mds->security.sanitize_active)
-		rc = sysfs_emit(buf, "sanitize\n");
-	mutex_unlock(&cxl_mbox->mbox_mutex);
+	scoped_guard(mutex, &cxl_mbox->mbox_mutex) {
+		if (mds->security.sanitize_active)
+			rc = sysfs_emit(buf, "sanitize\n");
+	}
 	if (rc)
 		return rc;
 
@@ -1183,10 +1183,10 @@ static void sanitize_teardown_notifier(void *data)
 	 * Prevent new irq triggered invocations of the workqueue and
 	 * flush inflight invocations.
 	 */
-	mutex_lock(&cxl_mbox->mbox_mutex);
-	state = mds->security.sanitize_node;
-	mds->security.sanitize_node = NULL;
-	mutex_unlock(&cxl_mbox->mbox_mutex);
+	scoped_guard(mutex, &cxl_mbox->mbox_mutex) {
+		state = mds->security.sanitize_node;
+		mds->security.sanitize_node = NULL;
+	}
 
 	cancel_delayed_work_sync(&mds->security.poll_dwork);
 	sysfs_put(state);
