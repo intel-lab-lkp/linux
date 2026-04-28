@@ -181,6 +181,11 @@ struct pt_riscv_32 {
 
 struct pt_riscv_64 {
 	struct pt_common common;
+	/*
+	 * True when this table is used for second-stage / iohgatp
+	 * address translation.
+	 */
+	bool second_stage;
 };
 
 enum {
