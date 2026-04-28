@@ -680,9 +680,9 @@ static bool ice_vc_parse_rss_cfg(struct ice_hw *hw,
  * Return true if VIRTCHNL_VF_OFFLOAD_ADV_RSS_PF capability is set,
  * else return false
  */
-static bool ice_vf_adv_rss_offload_ena(u32 caps)
+static bool ice_vf_adv_rss_offload_ena(const unsigned long *caps)
 {
-	return !!(caps & VIRTCHNL_VF_OFFLOAD_ADV_RSS_PF);
+	return test_bit(VIRTCHNL_VF_OFFLOAD_ADV_RSS_PF, caps);
 }
 
 /**
