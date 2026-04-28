@@ -75,19 +75,12 @@ static void __init earlycon_print_info(struct earlycon_device *device)
 {
 	struct console *earlycon = device->con;
 	struct uart_port *port = &device->port;
-	char address[64] = "";
+	char ioinfos[64];
 
-	if (uart_iotype_mmio(port->iotype))
-		scnprintf(address, sizeof(address), " at MMIO%s %pa",
-			  (port->iotype == UPIO_MEM) ? "" :
-			  (port->iotype == UPIO_MEM16) ? "16" :
-			  (port->iotype == UPIO_MEM32) ? "32" : "32be",
-			  &port->mapbase);
-	else if (uart_iotype_legacy_io(port->iotype))
-		scnprintf(address, sizeof(address), " at I/O port 0x%lx", port->iobase);
+	uart_get_ioinfos(port, ioinfos, sizeof(ioinfos));
 
 	pr_info("%s%d%s (options '%s')\n", earlycon->name, earlycon->index,
-		address, device->options);
+		ioinfos, device->options);
 }
 
 static int __init parse_options(struct earlycon_device *device, char *options)

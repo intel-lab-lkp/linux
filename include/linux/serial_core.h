@@ -1308,6 +1308,7 @@ static inline int uart_handle_break(struct uart_port *port)
 
 int uart_get_rs485_mode(struct uart_port *port);
 
+void uart_get_ioinfos(struct uart_port *port, char *buf, size_t size);
 bool uart_iotype_mmio(enum uart_iotype iotype);
 bool uart_iotype_legacy_io(enum uart_iotype iotype);
 

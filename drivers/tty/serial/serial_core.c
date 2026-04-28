@@ -2002,6 +2002,7 @@ static void uart_line_info(struct seq_file *m, struct uart_state *state)
 	struct tty_port *port = &state->port;
 	enum uart_pm_state pm_state;
 	struct uart_port *uport;
+	char ioinfos[64];
 	char stat_buf[32];
 	unsigned int status;
 
@@ -2013,10 +2014,8 @@ static void uart_line_info(struct seq_file *m, struct uart_state *state)
 
 	seq_printf(m, "%u: uart:%s", uport->line, uart_type(uport));
 
-	if (uart_iotype_mmio(uport->iotype))
-		seq_printf(m, " mmio:%pa", &uport->mapbase);
-	else if (uart_iotype_legacy_io(uport->iotype))
-		seq_printf(m, " port:%08lX", uport->iobase);
+	uart_get_ioinfos(uport, ioinfos, sizeof(ioinfos));
+	seq_printf(m, "%s", ioinfos);
 
 	seq_printf(m, " irq:%u", uport->irq);
 
@@ -2480,26 +2479,47 @@ int uart_resume_port(struct uart_driver *drv, struct uart_port *uport)
 }
 EXPORT_SYMBOL(uart_resume_port);
 
+static const char *uart_get_mmio_width(struct uart_port *port)
+{
+	switch (port->iotype) {
+	case UPIO_MEM16:
+		return "16";
+	case UPIO_MEM32:
+	case UPIO_MEM32BE:
+		return "32be";
+	case UPIO_AU:
+	case UPIO_MEM:
+	default:
+		return "";
+	}
+}
+
+void uart_get_ioinfos(struct uart_port *port, char *buf, size_t size)
+{
+	buf[0] = '\0';
+
+	if (uart_iotype_mmio(port->iotype)) {
+		scnprintf(buf, size, " MMIO%s:%pa", uart_get_mmio_width(port), &port->mapbase);
+	} else if (uart_iotype_legacy_io(port->iotype)) {
+		if (port->iotype == UPIO_PORT)
+			scnprintf(buf, size, " I/O:0x%lx", port->iobase);
+		else if (port->iotype == UPIO_HUB6)
+			scnprintf(buf, size, " I/O:0x%lx, offset 0x%x", port->iobase, port->hub6);
+	}
+}
+EXPORT_SYMBOL(uart_get_ioinfos);
+
 static inline void
 uart_report_port(struct uart_driver *drv, struct uart_port *port)
 {
-	char address[64] = "";
+	char ioinfos[64];
 
-	if (uart_iotype_mmio(port->iotype))
-		scnprintf(address, sizeof(address), " at MMIO %pa", &port->mapbase);
-	else if (uart_iotype_legacy_io(port->iotype)) {
-		if (port->iotype == UPIO_PORT)
-			scnprintf(address, sizeof(address), " at I/O 0x%lx", port->iobase);
-		else if (port->iotype == UPIO_HUB6)
-			scnprintf(address, sizeof(address), " at I/O 0x%lx offset 0x%x",
-				  port->iobase, port->hub6);
-	}
+	uart_get_ioinfos(port, ioinfos, sizeof(ioinfos));
 
 	pr_info("%s%s%s%s (irq = %u, base_baud = %u) is a %s\n",
 		port->dev ? dev_name(port->dev) : "",
 		port->dev ? ": " : "",
-		port->name,
-		address, port->irq, port->uartclk / 16, uart_type(port));
+		port->name, ioinfos, port->irq, port->uartclk / 16, uart_type(port));
 
 	/* The magic multiplier feature is a bit obscure, so report it too.  */
 	if (port->flags & UPF_MAGIC_MULTIPLIER)
