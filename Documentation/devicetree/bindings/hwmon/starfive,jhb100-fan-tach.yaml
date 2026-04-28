@@ -1,0 +1,98 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/hwmon/starfive,jhb100-fan-tach.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: StarFive JHB100 Fan-Tach controller
+
+maintainers:
+  - Changhuang Liang <changhuang.liang@starfivetech.com>
+
+description:
+  The StarFive Fan-Tach controller can support up to 16 fan tach input.
+
+properties:
+  compatible:
+    enum:
+      - starfive,jhb100-fan-tach
+
+  reg:
+    maxItems: 1
+
+  clocks:
+    maxItems: 1
+
+  resets:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 0
+
+patternProperties:
+  "^fan@[0-9]+$":
+    $ref: fan-common.yaml#
+    unevaluatedProperties: false
+    required:
+      - reg
+      - tach-ch
+
+required:
+  - compatible
+  - reg
+  - clocks
+  - resets
+  - interrupts
+
+additionalProperties: false
+
+examples:
+  - |
+    fan-tach-controller@11be0000 {
+        compatible = "starfive,jhb100-fan-tach";
+        reg = <0x11be0000 0x400>;
+        interrupts = <128>;
+        clocks = <&per2crg 33>;
+        resets = <&per2crg 5>;
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        fan@0 {
+            reg = <0>;
+            tach-ch = /bits/ 8 <0x0>, <0x8>;
+        };
+        fan@1 {
+            reg = <1>;
+            tach-ch = /bits/ 8 <0x1>, <0x9>;
+        };
+        fan@2 {
+            reg = <2>;
+            tach-ch = /bits/ 8 <0x2>, <0xa>;
+        };
+        fan@3 {
+            reg = <3>;
+            tach-ch = /bits/ 8 <0x3>, <0xb>;
+        };
+        fan@4 {
+            reg = <4>;
+            tach-ch = /bits/ 8 <0x4>, <0xc>;
+        };
+        fan@5 {
+            reg = <5>;
+            tach-ch = /bits/ 8 <0x5>, <0xd>;
+        };
+        fan@6 {
+            reg = <6>;
+            tach-ch = /bits/ 8 <0x6>, <0xe>;
+        };
+        fan@7 {
+            reg = <7>;
+            tach-ch = /bits/ 8 <0x7>, <0xf>;
+        };
+    };
