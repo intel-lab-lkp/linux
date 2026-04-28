@@ -2293,6 +2293,60 @@ void pci_assign_unassigned_bridge_resources(struct pci_dev *bridge)
 EXPORT_SYMBOL_GPL(pci_assign_unassigned_bridge_resources);
 
 /*
+ * pci_bus_release_empty_bridge_resources - Bottom-up release of bridge
+ * window resources in empty subtrees.
+ * @bus: PCI bus whose child bridges to process
+ * @b_win: Ancestor bridge window; only children of this resource are released
+ * @saved: List to save released resources for rollback
+ *
+ * Recurses depth-first into subordinate buses, then releases bridge windows
+ * on the way back up.  Each resource is individually saved before release so
+ * the entire operation can be rolled back.
+ */
+static void pci_bus_release_empty_bridge_resources(struct pci_bus *bus,
+						   struct resource *b_win,
+						   struct list_head *saved)
+{
+	struct pci_dev *dev;
+
+	list_for_each_entry(dev, &bus->devices, bus_list) {
+		struct resource *r;
+		unsigned int i;
+
+		if (!dev->subordinate)
+			continue;
+
+		/* Recurse first — release deepest resources before parents */
+		pci_bus_release_empty_bridge_resources(dev->subordinate,
+						      b_win, saved);
+
+		pci_dev_for_each_resource(dev, r, i) {
+			if (!pci_resource_is_bridge_win(i))
+				continue;
+
+			if (!resource_assigned(r))
+				continue;
+
+			if (r->parent != b_win)
+				continue;
+
+			if (r->child) {
+				const char *res_name = pci_resource_name(dev, i);
+
+				pci_info(dev, "%s %pR: not released, children still present\n",
+					 res_name, r);
+				continue;
+			}
+
+			if (pci_dev_res_add_to_list(saved, dev, r, 0, 0))
+				continue;
+
+			pci_release_resource(dev, i);
+		}
+	}
+}
+
+/*
  * Walk to the root bus, find the bridge window relevant for @res and
  * release it when possible. If the bridge window contains assigned
  * resources, it cannot be released.
@@ -2316,7 +2370,12 @@ static int pbus_reassign_bridge_resources(struct pci_bus *bus, struct resource *
 
 		i = pci_resource_num(bridge, res);
 
-		/* Ignore BARs which are still in use */
+		/* Release empty sibling bridge windows bottom-up */
+		if (bridge->subordinate)
+			pci_bus_release_empty_bridge_resources(
+				bridge->subordinate, res, saved);
+
+		/* Ignore bridge windows which are still in use */
 		if (!res->child) {
 			ret = pci_dev_res_add_to_list(saved, bridge, res, 0, 0);
 			if (ret)
@@ -2327,7 +2386,7 @@ static int pbus_reassign_bridge_resources(struct pci_bus *bus, struct resource *
 			const char *res_name = pci_resource_name(bridge, i);
 
 			pci_warn(bridge,
-				 "%s %pR: was not released (still contains assigned resources)\n",
+				 "%s %pR: not released, active children present\n",
 				 res_name, res);
 		}
 
