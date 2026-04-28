@@ -11,6 +11,8 @@
 #include "exfat_raw.h"
 #include "exfat_fs.h"
 
+static struct exfat_upcase_ptable default_upcase_table;
+
 static int exfat_convert_char_to_ucs2(struct nls_table *nls,
 		const unsigned char *ch, int ch_len, unsigned short *ucs2,
 		int *lossy)
@@ -61,8 +63,11 @@ static int exfat_convert_ucs2_to_char(struct nls_table *nls,
 unsigned short exfat_toupper(struct super_block *sb, unsigned short a)
 {
 	struct exfat_sb_info *sbi = EXFAT_SB(sb);
+	unsigned short ret;
 
-	return sbi->vol_utbl[a] ? sbi->vol_utbl[a] : a;
+	ret = exfat_lookup_upcase_ptable(sbi->vol_utbl, a);
+
+	return ret ? ret : a;
 }
 
 static const unsigned short *exfat_wstrchr(const unsigned short *str,
@@ -263,14 +268,18 @@ static int exfat_load_upcase_table(struct super_block *sb,
 	unsigned int i, index = 0;
 	u32 chksum = 0;
 	unsigned char skip = false;
-	unsigned short *upcase_table;
+	struct exfat_upcase_ptable *upcase_table;
+	unsigned short def_upcase;
+	bool is_default;
+	unsigned int entries = 0;
+	int ret = -EINVAL;
 
-	upcase_table = kvcalloc(EXFAT_UTBL_COUNT, sizeof(unsigned short), GFP_KERNEL);
+	upcase_table = kvcalloc(1, sizeof(struct exfat_upcase_ptable), GFP_KERNEL);
 	if (!upcase_table)
 		return -ENOMEM;
 
-	sbi->vol_utbl = upcase_table;
 	num_sectors += sector;
+	is_default = sector < num_sectors;
 
 	while (sector < num_sectors) {
 		struct buffer_head *bh;
@@ -279,7 +288,8 @@ static int exfat_load_upcase_table(struct super_block *sb,
 		if (!bh) {
 			exfat_err(sb, "failed to read sector(0x%llx)",
 				  (unsigned long long)sector);
-			return -EIO;
+			ret = -EIO;
+			goto err;
 		}
 		sector++;
 		for (i = 0; i < sect_size && index <= 0xFFFF; i += 2) {
@@ -293,7 +303,17 @@ static int exfat_load_upcase_table(struct super_block *sb,
 			} else if (uni == 0xFFFF) {
 				skip = true;
 			} else { /* uni != index , uni != 0xFFFF */
-				upcase_table[index] = uni;
+				ret = exfat_set_upcase_ptable(upcase_table, index, uni);
+				if (ret) {
+					brelse(bh);
+					goto err;
+				}
+
+				def_upcase = exfat_lookup_upcase_ptable(&default_upcase_table,
+									index);
+				is_default &= def_upcase == uni;
+
+				entries++;
 				index++;
 			}
 		}
@@ -301,53 +321,36 @@ static int exfat_load_upcase_table(struct super_block *sb,
 		brelse(bh);
 	}
 
-	if (index >= 0xFFFF && utbl_checksum == chksum)
+	if (index >= 0xFFFF && utbl_checksum == chksum) {
+		/*
+		 * is_default being set does not necessarily mean the contents are exact same as the
+		 * upcase table loaded from the volume may be missing some entries. The checksum
+		 * matching should be enough to cover that case.
+		 */
+		if (is_default && utbl_checksum == EXFAT_DEF_UTBL_CHKSUM) {
+			exfat_free_upcase_ptable(upcase_table);
+			kvfree(upcase_table);
+		} else {
+			sbi->vol_utbl = sbi->vol_utbl_own = upcase_table;
+			exfat_info(sb, "using non-default upcase table (chksum: 0x%08x, entries: %u, memsize: %zu+)",
+				   chksum, entries, upcase_table->cnt * EXFAT_UPTBL_PAGESIZE);
+		}
+
 		return 0;
+	}
 
 	exfat_err(sb, "failed to load upcase table (idx : 0x%08x, chksum : 0x%08x, utbl_chksum : 0x%08x)",
 		  index, chksum, utbl_checksum);
-	return -EINVAL;
-}
 
-static int exfat_load_default_upcase_table(struct super_block *sb)
-{
-	int i;
-	struct exfat_sb_info *sbi = EXFAT_SB(sb);
-	unsigned char skip = false;
-	unsigned short uni = 0, *upcase_table;
-	unsigned int index = 0;
+err:
+	exfat_free_upcase_ptable(upcase_table);
+	kvfree(upcase_table);
 
-	upcase_table = kvcalloc(EXFAT_UTBL_COUNT, sizeof(unsigned short), GFP_KERNEL);
-	if (!upcase_table)
-		return -ENOMEM;
-
-	sbi->vol_utbl = upcase_table;
-
-	for (i = 0; index <= 0xFFFF && i < EXFAT_NUM_UPCASE; i++) {
-		uni = exfat_uni_def_upcase[i];
-		if (skip) {
-			index += uni;
-			skip = false;
-		} else if (uni == index) {
-			index++;
-		} else if (uni == 0xFFFF) {
-			skip = true;
-		} else {
-			upcase_table[index] = uni;
-			index++;
-		}
-	}
-
-	if (index >= 0xFFFF)
-		return 0;
-
-	/* FATAL error: default upcase table has error */
-	return -EIO;
+	return ret;
 }
 
 int exfat_create_upcase_table(struct super_block *sb)
 {
-	int i, ret;
 	unsigned int tbl_clu, type;
 	sector_t sector;
 	unsigned long long tbl_size, num_sectors;
@@ -357,11 +360,16 @@ int exfat_create_upcase_table(struct super_block *sb)
 	struct exfat_sb_info *sbi = EXFAT_SB(sb);
 	struct buffer_head *bh;
 
+	/* fallback to the default table on error */
+	sbi->vol_utbl = &default_upcase_table;
+
 	clu.dir = sbi->root_dir;
 	clu.flags = ALLOC_FAT_CHAIN;
 
 	while (clu.dir != EXFAT_EOF_CLUSTER) {
-		for (i = 0; i < sbi->dentries_per_clu; i++) {
+		for (unsigned int i = 0; i < sbi->dentries_per_clu; i++) {
+			int ret = 0;
+
 			ep = exfat_get_dentry(sb, &clu, i, &bh);
 			if (!ep)
 				return -EIO;
@@ -384,20 +392,13 @@ int exfat_create_upcase_table(struct super_block *sb)
 				num_sectors = ((tbl_size - 1) >> blksize_bits) + 1;
 				ret = exfat_load_upcase_table(sb, sector, num_sectors,
 					le32_to_cpu(ep->dentry.upcase.checksum));
-			} else {
+			} else
 				exfat_fs_error(sb,
 					       "bad upcase table size (0 bytes). Please run fsck");
-				ret = -EINVAL;
-			}
+
 			brelse(bh);
-
-			if (ret && ret != -EIO) {
-				/* free memory from exfat_load_upcase_table call */
-				exfat_free_upcase_table(sbi);
-				goto load_default;
-			}
-
-			/* load successfully */
+			if (ret && ret != -EIO)
+				ret = 0;
 			return ret;
 		}
 
@@ -407,13 +408,32 @@ int exfat_create_upcase_table(struct super_block *sb)
 
 	exfat_fs_error(sb, "no upcase table entry. Please run fsck");
 
-load_default:
-	/* load default upcase table */
-	return exfat_load_default_upcase_table(sb);
+	return 0;
 }
 
 void exfat_free_upcase_table(struct exfat_sb_info *sbi)
 {
-	kvfree(sbi->vol_utbl);
-	sbi->vol_utbl = NULL;
+	exfat_free_upcase_ptable(sbi->vol_utbl_own);
+	kvfree(sbi->vol_utbl_own);
+	sbi->vol_utbl = sbi->vol_utbl_own = NULL;
+}
+
+int exfat_init_default_upcase_ptable(void)
+{
+	int err;
+
+	err = exfat_populate_upcase_ptable(&default_upcase_table,
+					   exfat_def_utbl_ri,
+					   EXFAT_DEF_UTBL_RI_COUNT);
+	if (err) {
+		exfat_free_upcase_ptable(&default_upcase_table);
+		return err;
+	}
+
+	return 0;
+}
+
+void exfat_free_default_upcase_ptable(void)
+{
+	exfat_free_upcase_ptable(&default_upcase_table);
 }

@@ -896,6 +896,12 @@ static int __init init_exfat_fs(void)
 {
 	int err;
 
+	err = exfat_init_default_upcase_ptable();
+	if (err) {
+		WARN_ON(err == -EINVAL);
+		return err;
+	}
+
 	err = exfat_cache_init();
 	if (err)
 		return err;
@@ -932,6 +938,7 @@ static void __exit exit_exfat_fs(void)
 	kmem_cache_destroy(exfat_inode_cachep);
 	unregister_filesystem(&exfat_fs_type);
 	exfat_cache_shutdown();
+	exfat_free_default_upcase_ptable();
 }
 
 module_init(init_exfat_fs);
