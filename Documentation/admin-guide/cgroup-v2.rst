@@ -2599,8 +2599,10 @@ Cpuset Interface Files
 
   cpuset.cpus.partition
 	A read-write single value file which exists on non-root
-	cpuset-enabled cgroups.  This flag is owned by the parent cgroup
-	and is not delegatable.
+	cpuset-enabled cgroups. This file is owned by the parent cgroup
+	and is not delegatable. Any partition operations that take CPUs
+	away from other cpusets outside of a partition is not allowed
+	without privilege.
 
 	It accepts only the following input values when written to.
 

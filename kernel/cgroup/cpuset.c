@@ -57,7 +57,7 @@ static const char * const perr_strings[] = {
 	[PERR_HOTPLUG]   = "No cpu available due to hotplug",
 	[PERR_CPUSEMPTY] = "cpuset.cpus and cpuset.cpus.exclusive are empty",
 	[PERR_HKEEPING]  = "partition config conflicts with housekeeping setup",
-	[PERR_ACCESS]    = "Enable partition not permitted",
+	[PERR_ACCESS]    = "Partition operation not permitted",
 	[PERR_REMOTE]    = "Have remote partition underneath",
 };
 
@@ -1740,6 +1740,8 @@ static int update_parent_effective_cpumask(struct cpuset *cs, int cmd,
 	nocpu = tasks_nocpu_error(parent, cs, xcpus);
 
 	if ((cmd == partcmd_enable) || (cmd == partcmd_enablei)) {
+		if (!capable(CAP_SYS_ADMIN))
+			return PERR_ACCESS;
 		/*
 		 * Need to call compute_excpus() in case
 		 * exclusive_cpus not set. Sibling conflict should only happen
@@ -1834,11 +1836,17 @@ static int update_parent_effective_cpumask(struct cpuset *cs, int cmd,
 		}
 
 		/*
+		 * Taking CPUs away from parent is not allowed without privilege
+		 */
+		if (deleting && !capable(CAP_SYS_ADMIN))
+			part_error = PERR_ACCESS;
+
+		/*
 		 * TBD: Invalidate a currently valid child root partition may
 		 * still break isolated_cpus_can_update() rule if parent is an
 		 * isolated partition.
 		 */
-		if (is_partition_valid(cs) && (old_prs != parent_prs)) {
+		else if (is_partition_valid(cs) && (old_prs != parent_prs)) {
 			if ((parent_prs == PRS_ROOT) &&
 			    /* Adding to parent means removing isolated CPUs */
 			    !isolated_cpus_can_update(tmp->delmask, tmp->addmask))
@@ -1919,8 +1927,10 @@ static int update_parent_effective_cpumask(struct cpuset *cs, int cmd,
 	}
 
 write_error:
-	if (part_error)
+	if (part_error) {
 		WRITE_ONCE(cs->prs_err, part_error);
+		adding = deleting = false;
+	}
 
 	if (cmd == partcmd_update) {
 		/*
