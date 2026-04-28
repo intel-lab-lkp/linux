@@ -1625,7 +1625,7 @@ done:
 struct section *elf_create_rela_section(struct elf *elf, struct section *sec,
 					unsigned int nr_relocs)
 {
-	struct section *rsec;
+	struct section *rsec, *symtab;
 	char *rsec_name;
 
 	rsec_name = malloc(strlen(sec->name) + strlen(".rela") + 1);
@@ -1654,7 +1654,13 @@ struct section *elf_create_rela_section(struct elf *elf, struct section *sec,
 		}
 	}
 
-	rsec->sh.sh_link = find_section_by_name(elf, ".symtab")->idx;
+	symtab = find_section_by_name(elf, ".symtab");
+	if (!symtab) {
+		ERROR("can't find .symtab");
+		return NULL;
+	}
+
+	rsec->sh.sh_link = symtab->idx;
 	rsec->sh.sh_info = sec->idx;
 
 	sec->rsec = rsec;
