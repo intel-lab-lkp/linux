@@ -270,9 +270,34 @@ static int instance_root_release(struct powercap_zone *pz)
 	return 0;
 }
 
-static int instance_root_get_power_uw(struct powercap_zone *pz, u64 *v)
+static int instance_root_get_power_uw(struct powercap_zone *pz, u64 *power_uw)
 {
-	*v = 0;
+	struct scmi_powercap_zone *root = to_scmi_powercap_zone(pz);
+	struct scmi_powercap_zone *child;
+	struct scmi_powercap_root *pr;
+	u64 acc = 0;
+	u64 p;
+	int ret;
+
+	if (!pz || !power_uw)
+		return -EINVAL;
+
+	pr = container_of(root, struct scmi_powercap_root, instance_root);
+	if (!pr)
+		return -ENODEV;
+
+	list_for_each_entry(child, &pr->registered_zones[0], node) {
+		if (child == &pr->instance_root)
+			continue;
+
+		ret = scmi_powercap_get_power_uw(&child->zone, &p);
+		if (!ret)
+			acc += p;
+		else
+			dev_dbg(child->dev, "Failed to read child power: %u\n", ret);
+	}
+
+	*power_uw = acc;
 	return 0;
 }
 
