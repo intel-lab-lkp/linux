@@ -3722,5 +3722,6 @@ target_check_wce(struct se_device *dev)
 bool
 target_check_fua(struct se_device *dev)
 {
-	return target_check_wce(dev) && dev->dev_attrib.emulate_fua_write > 0;
+	/* Allow FUA if there's no write cache */
+	return target_check_wce(dev) ? dev->dev_attrib.emulate_fua_write > 0 : 1;
 }
