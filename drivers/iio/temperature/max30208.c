@@ -163,7 +163,8 @@ static int max30208_read(struct iio_dev *indio_dev,
 
 	case IIO_CHAN_INFO_SCALE:
 		*val = 5;
-		return IIO_VAL_INT;
+		*val2 = 1000;
+		return IIO_VAL_FRACTIONAL;
 
 	default:
 		return -EINVAL;
