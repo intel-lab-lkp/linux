@@ -3142,6 +3142,9 @@ enum nl80211_commands {
  *	association response etc., since it's abridged in the beacon. Used
  *	for START_AP etc.
  *
+ * @NL80211_ATTR_NPCA_PRIMARY_FREQ: NPCA primary channel (u32)
+ * @NL80211_ATTR_NPCA_PUNCT_BITMAP: NPCA puncturing bitmap (u32)
+ *
  * @NUM_NL80211_ATTR: total number of nl80211_attrs available
  * @NL80211_ATTR_MAX: highest attribute number currently defined
  * @__NL80211_ATTR_AFTER_LAST: internal use
@@ -3734,6 +3737,9 @@ enum nl80211_attrs {
 	NL80211_ATTR_NAN_SEQ_ID,
 	NL80211_ATTR_NAN_MAX_CHAN_SWITCH_TIME,
 	NL80211_ATTR_NAN_PEER_MAPS,
+
+	NL80211_ATTR_NPCA_PRIMARY_FREQ,
+	NL80211_ATTR_NPCA_PUNCT_BITMAP,
 
 	/* add attributes here, update the policy in nl80211.c */
 
