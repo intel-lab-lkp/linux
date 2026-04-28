@@ -732,13 +732,31 @@ static int max3100_probe(struct spi_device *spi)
 	device_property_read_u32(dev, "clock-frequency", &max3100s[i]->port.uartclk);
 
 	retval = uart_add_one_port(&max3100_uart_driver, &max3100s[i]->port);
-	if (retval < 0)
+	if (retval < 0) {
 		dev_err_probe(dev, retval, "uart_add_one_port failed for line %d\n", i);
+		goto err_free_port;
+	}
 
 	/* set shutdown mode to save power. Will be woken-up on open */
 	max3100_sr(max3100s[i], MAX3100_WC | MAX3100_SHDN, &rx);
 	mutex_unlock(&max3100s_lock);
 	return 0;
+
+err_free_port:
+	kfree(max3100s[i]);
+	max3100s[i] = NULL;
+
+	for (i = 0; i < MAX_MAX3100; i++)
+		if (max3100s[i])
+			break;
+
+	if (i == MAX_MAX3100) {
+		uart_unregister_driver(&max3100_uart_driver);
+		uart_driver_registered = 0;
+	}
+
+	mutex_unlock(&max3100s_lock);
+	return retval;
 }
 
 static void max3100_remove(struct spi_device *spi)
