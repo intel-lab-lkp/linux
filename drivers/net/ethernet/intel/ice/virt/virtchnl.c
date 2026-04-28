@@ -58,7 +58,7 @@ static void
 ice_set_pfe_link(struct ice_vf *vf, struct virtchnl_pf_event *pfe,
 		 int ice_link_speed, bool link_up)
 {
-	if (vf->driver_caps & VIRTCHNL_VF_CAP_ADV_LINK_SPEED) {
+	if (test_bit(VIRTCHNL_VF_CAP_ADV_LINK_SPEED, vf->driver_caps)) {
 		pfe->event_data.link_event_adv.link_status = link_up;
 		/* Speed in Mbps */
 		pfe->event_data.link_event_adv.link_speed =
@@ -188,26 +188,26 @@ static int ice_vc_get_ver_msg(struct ice_vf *vf, u8 *msg)
 }
 
 /**
- * ice_vc_get_vlan_caps
+ * ice_vc_get_vlan_caps - get VF capability flags based on driver caps
  * @hw: pointer to the hw
  * @vf: pointer to the VF info
  * @vsi: pointer to the VSI
  * @driver_caps: current driver caps
  *
- * Return 0 if there is no VLAN caps supported, or VLAN caps value
+ * Return: 0 if there is no VLAN caps supported, or VLAN caps value
  */
 static u32
 ice_vc_get_vlan_caps(struct ice_hw *hw, struct ice_vf *vf, struct ice_vsi *vsi,
-		     u32 driver_caps)
+		     const unsigned long *driver_caps)
 {
 	if (ice_is_eswitch_mode_switchdev(vf->pf))
 		/* In switchdev setting VLAN from VF isn't supported */
 		return 0;
 
-	if (driver_caps & VIRTCHNL_VF_OFFLOAD_VLAN_V2) {
+	if (test_bit(VIRTCHNL_VF_OFFLOAD_VLAN_V2, driver_caps)) {
 		/* VLAN offloads based on current device configuration */
-		return VIRTCHNL_VF_OFFLOAD_VLAN_V2;
-	} else if (driver_caps & VIRTCHNL_VF_OFFLOAD_VLAN) {
+		return BIT(VIRTCHNL_VF_OFFLOAD_VLAN_V2);
+	} else if (test_bit(VIRTCHNL_VF_OFFLOAD_VLAN, driver_caps)) {
 		/* allow VF to negotiate VIRTCHNL_VF_OFFLOAD explicitly for
 		 * these two conditions, which amounts to guest VLAN filtering
 		 * and offloads being based on the inner VLAN or the
@@ -215,7 +215,7 @@ ice_vc_get_vlan_caps(struct ice_hw *hw, struct ice_vf *vf, struct ice_vsi *vsi,
 		 * negotiate VIRTCHNL_VF_OFFLOAD in any other cases
 		 */
 		if (ice_is_dvm_ena(hw) && ice_vf_is_port_vlan_ena(vf)) {
-			return VIRTCHNL_VF_OFFLOAD_VLAN;
+			return BIT(VIRTCHNL_VF_OFFLOAD_VLAN);
 		} else if (!ice_is_dvm_ena(hw) &&
 			   !ice_vf_is_port_vlan_ena(vf)) {
 			/* configure backward compatible support for VFs that
@@ -223,7 +223,7 @@ ice_vc_get_vlan_caps(struct ice_hw *hw, struct ice_vf *vf, struct ice_vsi *vsi,
 			 * configured in SVM, and no port VLAN is configured
 			 */
 			ice_vf_vsi_cfg_svm_legacy_vlan_mode(vsi);
-			return VIRTCHNL_VF_OFFLOAD_VLAN;
+			return BIT(VIRTCHNL_VF_OFFLOAD_VLAN);
 		} else if (ice_is_dvm_ena(hw)) {
 			/* configure software offloaded VLAN support when DVM
 			 * is enabled, but no port VLAN is enabled
@@ -264,13 +264,17 @@ static int ice_vc_get_vf_res_msg(struct ice_vf *vf, u8 *msg)
 		len = 0;
 		goto err;
 	}
-	if (VF_IS_V11(&vf->vf_ver))
-		vf->driver_caps = *(u32 *)msg;
-	else
-		vf->driver_caps = VIRTCHNL_VF_OFFLOAD_L2 |
-				  VIRTCHNL_VF_OFFLOAD_VLAN;
 
-	vfres->vf_cap_flags = VIRTCHNL_VF_OFFLOAD_L2;
+	bitmap_zero(vf->driver_caps, VIRTCHNL_VF_CAPS_MAX);
+	if (VF_IS_V11(&vf->vf_ver)) {
+		bitmap_from_arr32(vf->driver_caps, (u32 *)msg,
+				  BITS_PER_TYPE(u32));
+	} else {
+		__set_bit(VIRTCHNL_VF_OFFLOAD_L2, vf->driver_caps);
+		__set_bit(VIRTCHNL_VF_OFFLOAD_VLAN, vf->driver_caps);
+	}
+
+	vfres->vf_cap_flags = BIT(VIRTCHNL_VF_OFFLOAD_L2);
 	vsi = ice_get_vf_vsi(vf);
 	if (!vsi) {
 		v_ret = VIRTCHNL_STATUS_ERR_PARAM;
@@ -280,54 +284,54 @@ static int ice_vc_get_vf_res_msg(struct ice_vf *vf, u8 *msg)
 	vfres->vf_cap_flags |= ice_vc_get_vlan_caps(hw, vf, vsi,
 						    vf->driver_caps);
 
-	if (vf->driver_caps & VIRTCHNL_VF_OFFLOAD_RSS_PF)
-		vfres->vf_cap_flags |= VIRTCHNL_VF_OFFLOAD_RSS_PF;
+	if (test_bit(VIRTCHNL_VF_OFFLOAD_RSS_PF, vf->driver_caps))
+		vfres->vf_cap_flags |= BIT(VIRTCHNL_VF_OFFLOAD_RSS_PF);
 
-	if (vf->driver_caps & VIRTCHNL_VF_OFFLOAD_RX_FLEX_DESC)
-		vfres->vf_cap_flags |= VIRTCHNL_VF_OFFLOAD_RX_FLEX_DESC;
+	if (test_bit(VIRTCHNL_VF_OFFLOAD_RX_FLEX_DESC, vf->driver_caps))
+		vfres->vf_cap_flags |= BIT(VIRTCHNL_VF_OFFLOAD_RX_FLEX_DESC);
 
-	if (vf->driver_caps & VIRTCHNL_VF_OFFLOAD_FDIR_PF)
-		vfres->vf_cap_flags |= VIRTCHNL_VF_OFFLOAD_FDIR_PF;
+	if (test_bit(VIRTCHNL_VF_OFFLOAD_FDIR_PF, vf->driver_caps))
+		vfres->vf_cap_flags |= BIT(VIRTCHNL_VF_OFFLOAD_FDIR_PF);
 
-	if (vf->driver_caps & VIRTCHNL_VF_OFFLOAD_TC_U32 &&
-	    vfres->vf_cap_flags & VIRTCHNL_VF_OFFLOAD_FDIR_PF)
-		vfres->vf_cap_flags |= VIRTCHNL_VF_OFFLOAD_TC_U32;
+	if (test_bit(VIRTCHNL_VF_OFFLOAD_TC_U32, vf->driver_caps) &&
+	    (vfres->vf_cap_flags & BIT(VIRTCHNL_VF_OFFLOAD_FDIR_PF)))
+		vfres->vf_cap_flags |= BIT(VIRTCHNL_VF_OFFLOAD_TC_U32);
 
-	if (vf->driver_caps & VIRTCHNL_VF_OFFLOAD_RSS_PCTYPE_V2)
-		vfres->vf_cap_flags |= VIRTCHNL_VF_OFFLOAD_RSS_PCTYPE_V2;
+	if (test_bit(VIRTCHNL_VF_OFFLOAD_RSS_PCTYPE_V2, vf->driver_caps))
+		vfres->vf_cap_flags |= BIT(VIRTCHNL_VF_OFFLOAD_RSS_PCTYPE_V2);
 
-	if (vf->driver_caps & VIRTCHNL_VF_OFFLOAD_ENCAP)
-		vfres->vf_cap_flags |= VIRTCHNL_VF_OFFLOAD_ENCAP;
+	if (test_bit(VIRTCHNL_VF_OFFLOAD_ENCAP, vf->driver_caps))
+		vfres->vf_cap_flags |= BIT(VIRTCHNL_VF_OFFLOAD_ENCAP);
 
-	if (vf->driver_caps & VIRTCHNL_VF_OFFLOAD_ENCAP_CSUM)
-		vfres->vf_cap_flags |= VIRTCHNL_VF_OFFLOAD_ENCAP_CSUM;
+	if (test_bit(VIRTCHNL_VF_OFFLOAD_ENCAP_CSUM, vf->driver_caps))
+		vfres->vf_cap_flags |= BIT(VIRTCHNL_VF_OFFLOAD_ENCAP_CSUM);
 
-	if (vf->driver_caps & VIRTCHNL_VF_OFFLOAD_RX_POLLING)
-		vfres->vf_cap_flags |= VIRTCHNL_VF_OFFLOAD_RX_POLLING;
+	if (test_bit(VIRTCHNL_VF_OFFLOAD_RX_POLLING, vf->driver_caps))
+		vfres->vf_cap_flags |= BIT(VIRTCHNL_VF_OFFLOAD_RX_POLLING);
 
-	if (vf->driver_caps & VIRTCHNL_VF_OFFLOAD_WB_ON_ITR)
-		vfres->vf_cap_flags |= VIRTCHNL_VF_OFFLOAD_WB_ON_ITR;
+	if (test_bit(VIRTCHNL_VF_OFFLOAD_WB_ON_ITR, vf->driver_caps))
+		vfres->vf_cap_flags |= BIT(VIRTCHNL_VF_OFFLOAD_WB_ON_ITR);
 
-	if (vf->driver_caps & VIRTCHNL_VF_OFFLOAD_REQ_QUEUES)
-		vfres->vf_cap_flags |= VIRTCHNL_VF_OFFLOAD_REQ_QUEUES;
+	if (test_bit(VIRTCHNL_VF_OFFLOAD_REQ_QUEUES, vf->driver_caps))
+		vfres->vf_cap_flags |= BIT(VIRTCHNL_VF_OFFLOAD_REQ_QUEUES);
 
-	if (vf->driver_caps & VIRTCHNL_VF_OFFLOAD_CRC)
-		vfres->vf_cap_flags |= VIRTCHNL_VF_OFFLOAD_CRC;
+	if (test_bit(VIRTCHNL_VF_OFFLOAD_CRC, vf->driver_caps))
+		vfres->vf_cap_flags |= BIT(VIRTCHNL_VF_OFFLOAD_CRC);
 
-	if (vf->driver_caps & VIRTCHNL_VF_CAP_ADV_LINK_SPEED)
-		vfres->vf_cap_flags |= VIRTCHNL_VF_CAP_ADV_LINK_SPEED;
+	if (test_bit(VIRTCHNL_VF_CAP_ADV_LINK_SPEED, vf->driver_caps))
+		vfres->vf_cap_flags |= BIT(VIRTCHNL_VF_CAP_ADV_LINK_SPEED);
 
-	if (vf->driver_caps & VIRTCHNL_VF_OFFLOAD_ADV_RSS_PF)
-		vfres->vf_cap_flags |= VIRTCHNL_VF_OFFLOAD_ADV_RSS_PF;
+	if (test_bit(VIRTCHNL_VF_OFFLOAD_ADV_RSS_PF, vf->driver_caps))
+		vfres->vf_cap_flags |= BIT(VIRTCHNL_VF_OFFLOAD_ADV_RSS_PF);
 
-	if (vf->driver_caps & VIRTCHNL_VF_OFFLOAD_USO)
-		vfres->vf_cap_flags |= VIRTCHNL_VF_OFFLOAD_USO;
+	if (test_bit(VIRTCHNL_VF_OFFLOAD_USO, vf->driver_caps))
+		vfres->vf_cap_flags |= BIT(VIRTCHNL_VF_OFFLOAD_USO);
 
-	if (vf->driver_caps & VIRTCHNL_VF_OFFLOAD_QOS)
-		vfres->vf_cap_flags |= VIRTCHNL_VF_OFFLOAD_QOS;
+	if (test_bit(VIRTCHNL_VF_OFFLOAD_QOS, vf->driver_caps))
+		vfres->vf_cap_flags |= BIT(VIRTCHNL_VF_OFFLOAD_QOS);
 
-	if (vf->driver_caps & VIRTCHNL_VF_CAP_PTP)
-		vfres->vf_cap_flags |= VIRTCHNL_VF_CAP_PTP;
+	if (test_bit(VIRTCHNL_VF_CAP_PTP, vf->driver_caps))
+		vfres->vf_cap_flags |= BIT(VIRTCHNL_VF_CAP_PTP);
 
 	vfres->num_vsis = 1;
 	/* Tx and Rx queue are equal for VF */
@@ -344,7 +348,8 @@ static int ice_vc_get_vf_res_msg(struct ice_vf *vf, u8 *msg)
 			vf->hw_lan_addr);
 
 	/* match guest capabilities */
-	vf->driver_caps = vfres->vf_cap_flags;
+	bitmap_from_arr32(vf->driver_caps, &vfres->vf_cap_flags,
+			  BITS_PER_TYPE(u32));
 
 	ice_vc_set_caps_allowlist(vf);
 	ice_vc_set_working_allowlist(vf);
@@ -1027,9 +1032,9 @@ static int ice_vc_del_mac_addr_msg(struct ice_vf *vf, u8 *msg)
  *
  * Return true if VIRTCHNL_VF_OFFLOAD_VLAN capability is set, else return false
  */
-static bool ice_vf_vlan_offload_ena(u32 caps)
+static bool ice_vf_vlan_offload_ena(const unsigned long *caps)
 {
-	return !!(caps & VIRTCHNL_VF_OFFLOAD_VLAN);
+	return test_bit(VIRTCHNL_VF_OFFLOAD_VLAN, caps);
 }
 
 /**
@@ -1431,7 +1436,7 @@ static int ice_vc_query_rxdid(struct ice_vf *vf)
 		goto err;
 	}
 
-	if (!(vf->driver_caps & VIRTCHNL_VF_OFFLOAD_RX_FLEX_DESC)) {
+	if (!test_bit(VIRTCHNL_VF_OFFLOAD_RX_FLEX_DESC, vf->driver_caps)) {
 		v_ret = VIRTCHNL_STATUS_ERR_PARAM;
 		goto err;
 	}
