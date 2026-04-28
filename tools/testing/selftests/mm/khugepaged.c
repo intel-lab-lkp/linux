@@ -394,6 +394,7 @@ static void *file_setup_area(int nr_hpages)
 		exit(EXIT_FAILURE);
 	}
 	fill_memory(p, 0, size);
+	msync(p, size, MS_SYNC);
 	close(fd);
 	munmap(p, size);
 	success("OK");
