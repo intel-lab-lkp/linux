@@ -54,6 +54,11 @@ const char *cma_get_name(const struct cma *cma)
 }
 EXPORT_SYMBOL_GPL(cma_get_name);
 
+extern int cma_get_nid(const struct cma *cma)
+{
+	return cma->nid;
+}
+
 static unsigned long cma_bitmap_aligned_mask(const struct cma *cma,
 					     unsigned int align_order)
 {
@@ -511,7 +516,11 @@ static int __init __cma_declare_contiguous_nid(phys_addr_t *basep,
 		return ret;
 	}
 
-	(*res_cma)->nid = nid;
+	if (IS_ENABLED(CONFIG_NUMA) && nid == NUMA_NO_NODE)
+		(*res_cma)->nid = early_pfn_to_nid((*res_cma)->ranges[0].base_pfn);
+	else
+		(*res_cma)->nid = nid;
+
 	*basep = base;
 
 	return 0;
