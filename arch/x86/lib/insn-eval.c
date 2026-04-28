@@ -340,18 +340,18 @@ static int resolve_seg_reg(struct insn *insn, struct pt_regs *regs, int regoff)
  *
  * -EINVAL on error.
  */
-static short get_segment_selector(struct pt_regs *regs, int seg_reg_idx)
+static int get_segment_selector(struct pt_regs *regs, int seg_reg_idx)
 {
-	unsigned short sel;
+	unsigned int sel;
 
 #ifdef CONFIG_X86_64
 	switch (seg_reg_idx) {
 	case INAT_SEG_REG_IGNORE:
 		return 0;
 	case INAT_SEG_REG_CS:
-		return (unsigned short)(regs->cs & 0xffff);
+		return regs->cs;
 	case INAT_SEG_REG_SS:
-		return (unsigned short)(regs->ss & 0xffff);
+		return regs->ss;
 	case INAT_SEG_REG_DS:
 		savesegment(ds, sel);
 		return sel;
@@ -373,9 +373,9 @@ static short get_segment_selector(struct pt_regs *regs, int seg_reg_idx)
 	if (v8086_mode(regs)) {
 		switch (seg_reg_idx) {
 		case INAT_SEG_REG_CS:
-			return (unsigned short)(regs->cs & 0xffff);
+			return regs->cs;
 		case INAT_SEG_REG_SS:
-			return (unsigned short)(regs->ss & 0xffff);
+			return regs->ss;
 		case INAT_SEG_REG_DS:
 			return vm86regs->ds;
 		case INAT_SEG_REG_ES:
@@ -392,15 +392,15 @@ static short get_segment_selector(struct pt_regs *regs, int seg_reg_idx)
 
 	switch (seg_reg_idx) {
 	case INAT_SEG_REG_CS:
-		return (unsigned short)(regs->cs & 0xffff);
+		return regs->cs;
 	case INAT_SEG_REG_SS:
-		return (unsigned short)(regs->ss & 0xffff);
+		return regs->ss;
 	case INAT_SEG_REG_DS:
-		return (unsigned short)(regs->ds & 0xffff);
+		return regs->ds;
 	case INAT_SEG_REG_ES:
-		return (unsigned short)(regs->es & 0xffff);
+		return regs->es;
 	case INAT_SEG_REG_FS:
-		return (unsigned short)(regs->fs & 0xffff);
+		return regs->fs;
 	case INAT_SEG_REG_GS:
 		savesegment(gs, sel);
 		return sel;
@@ -688,7 +688,7 @@ static bool get_desc(struct desc_struct *out, unsigned short sel)
 unsigned long insn_get_seg_base(struct pt_regs *regs, int seg_reg_idx)
 {
 	struct desc_struct desc;
-	short sel;
+	int sel;
 
 	sel = get_segment_selector(regs, seg_reg_idx);
 	if (sel < 0)
@@ -756,7 +756,7 @@ static unsigned long get_seg_limit(struct pt_regs *regs, int seg_reg_idx)
 {
 	struct desc_struct desc;
 	unsigned long limit;
-	short sel;
+	int sel;
 
 	sel = get_segment_selector(regs, seg_reg_idx);
 	if (sel < 0)
@@ -803,7 +803,7 @@ static unsigned long get_seg_limit(struct pt_regs *regs, int seg_reg_idx)
 int insn_get_code_seg_params(struct pt_regs *regs)
 {
 	struct desc_struct desc;
-	short sel;
+	int sel;
 
 	if (v8086_mode(regs))
 		/* Address and operand size are both 16-bit. */
