@@ -1048,6 +1048,15 @@ All cgroup core files are prefixed with "cgroup."
 	it's possible to delete a frozen (and empty) cgroup, as well as
 	create new sub-cgroups.
 
+	A write to cgroup.freeze affects every process currently in the
+	cgroup or its descendants regardless of the writer's signal
+	authority over those processes. The file therefore acts as a
+	delegated stop knob: chowning it, or passing an open file
+	descriptor to it, grants the recipient unconditional freeze
+	authority over whatever lands in the subtree. Runtime authors
+	should not delegate cgroup.freeze outside of the trust boundary
+	of the cgroup itself.
+
   cgroup.kill
 	A write-only single value file which exists in non-root cgroups.
 	The only allowed value is "1".
@@ -1062,6 +1071,15 @@ All cgroup core files are prefixed with "cgroup."
 	In a threaded cgroup, writing this file fails with EOPNOTSUPP as
 	killing cgroups is a process directed operation, i.e. it affects
 	the whole thread-group.
+
+	A write to cgroup.kill sends SIGKILL to every process currently
+	in the cgroup or its descendants regardless of the writer's
+	signal authority over those processes. The file therefore acts
+	as a delegated kill knob: chowning it, or passing an open file
+	descriptor to it, grants the recipient unconditional kill
+	authority over whatever lands in the subtree. Runtime authors
+	should not delegate cgroup.kill outside of the trust boundary
+	of the cgroup itself.
 
   cgroup.pressure
 	A read-write single value file that allowed values are "0" and "1".
