@@ -1366,20 +1366,30 @@ static void etm4_fixup_wrong_ccitmin(struct etmv4_drvdata *drvdata)
 	}
 }
 
+/*
+ * Take the global pm_save_enable module argument and setup the CPU PM save
+ * setting for this device.
+ */
 static int etm4_init_pm_save(struct device *dev, struct etmv4_drvdata *drvdata)
 {
 	if (etm4x_is_ete(drvdata)) {
+		if (pm_save_enable)
+			dev_warn_once(dev, "pm_save_enable module option is only for ETM4\n");
+
 		/*
 		 * Always do PM save for ETE. It always uses system registers
 		 * which will be lost on CPU power down.
 		 */
-		pm_save_enable = PARAM_PM_SAVE_SELF_HOSTED;
+		drvdata->pm_save = true;
 	} else if (pm_save_enable == PARAM_PM_SAVE_FIRMWARE) {
-		pm_save_enable = coresight_loses_context_with_cpu(dev) ?
-			PARAM_PM_SAVE_SELF_HOSTED : PARAM_PM_SAVE_NEVER;
+		drvdata->pm_save = coresight_loses_context_with_cpu(dev);
+	} else if (pm_save_enable == PARAM_PM_SAVE_SELF_HOSTED) {
+		drvdata->pm_save = true;
+	} else {
+		drvdata->pm_save = false;
 	}
 
-	if (pm_save_enable != PARAM_PM_SAVE_NEVER) {
+	if (drvdata->pm_save) {
 		drvdata->save_state = devm_kmalloc(dev,
 						   sizeof(struct etmv4_save_state),
 						   GFP_KERNEL);
@@ -2037,7 +2047,7 @@ static int etm4_cpu_save(struct etmv4_drvdata *drvdata)
 {
 	int ret = 0;
 
-	if (pm_save_enable != PARAM_PM_SAVE_SELF_HOSTED)
+	if (!drvdata->pm_save)
 		return 0;
 
 	/*
@@ -2152,7 +2162,7 @@ static void __etm4_cpu_restore(struct etmv4_drvdata *drvdata)
 
 static void etm4_cpu_restore(struct etmv4_drvdata *drvdata)
 {
-	if (pm_save_enable != PARAM_PM_SAVE_SELF_HOSTED)
+	if (!drvdata->pm_save)
 		return;
 
 	if (coresight_get_mode(drvdata->csdev))

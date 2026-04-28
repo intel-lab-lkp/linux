@@ -1078,6 +1078,7 @@ struct etmv4_drvdata {
 	bool				lpoverride : 1;
 	bool				skip_power_up : 1;
 	bool				paused : 1;
+	bool				pm_save : 1;
 	u64				trfcr;
 	struct etmv4_config		config;
 	struct etmv4_save_state		*save_state;
