@@ -3026,12 +3026,23 @@ out_uncharge_cgroup_reservation:
 						    h_cg);
 out_subpool_put:
 	/*
-	 * put page to subpool iff the quota of subpool's rsv_hpages is used
-	 * during hugepage_subpool_get_pages.
+	 * map_chg means hugepage_subpool_get_pages() succeeded above.
+	 * If max_hpages accounting was touched, undo it.  If racing frees
+	 * moved the subpool below min_hpages, the put path may restore a
+	 * subpool reservation.  Restore the matching global reservation too.
 	 */
-	if (map_chg && !gbl_chg) {
-		gbl_reserve = hugepage_subpool_put_pages(spool, 1);
-		hugetlb_acct_memory(h, -gbl_reserve);
+	if (map_chg) {
+		if (!gbl_chg) {
+			gbl_reserve = hugepage_subpool_put_pages(spool, 1);
+			hugetlb_acct_memory(h, -gbl_reserve);
+		} else if (spool && spool->max_hpages != -1) {
+			gbl_reserve = hugepage_subpool_put_pages(spool, 1);
+			if (!gbl_reserve) {
+				spin_lock_irq(&hugetlb_lock);
+				h->resv_huge_pages++;
+				spin_unlock_irq(&hugetlb_lock);
+			}
+		}
 	}
 
 
