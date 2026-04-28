@@ -105,6 +105,17 @@ static void __deactivate_traps(struct kvm_vcpu *vcpu)
 	__deactivate_traps_common(vcpu);
 
 	write_sysreg_hcr(this_cpu_ptr(&kvm_init_params)->hcr_el2);
+	/*
+	 * MSR HCR_EL2 is not self-synchronising. Per ARM ARM K1.2.4 p.K1-16823
+	 * and B2.6.1 p.B2-297, a Context Synchronisation Event is required
+	 * between an HCR_EL2 write and any subsequent direct register access at
+	 * the same EL that depends on the new value being in effect.
+	 * The activate_traps path falls through to ERET (a CSE), but the
+	 * deactivate path still executes further EL2 sysreg work (CPTR/VBAR
+	 * writes below) before any natural CSE, so make the synchronisation
+	 * explicit.
+	 */
+	isb();
 
 	__deactivate_cptr_traps(vcpu);
 	write_sysreg(__kvm_hyp_host_vector, vbar_el2);
