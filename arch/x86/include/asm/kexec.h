@@ -106,11 +106,11 @@ static inline void crash_setup_regs(struct pt_regs *newregs,
 		asm volatile("mov %%r14,%0" : "=m"(newregs->r14));
 		asm volatile("mov %%r15,%0" : "=m"(newregs->r15));
 #endif
-		asm volatile("mov %%ss,%k0" : "=a"(newregs->ss));
-		asm volatile("mov %%cs,%k0" : "=a"(newregs->cs));
+		asm volatile("mov %%ss,%0" : "=m"(newregs->ss));
+		asm volatile("mov %%cs,%0" : "=m"(newregs->cs));
 #ifdef CONFIG_X86_32
-		asm volatile("mov %%ds,%k0" : "=a"(newregs->ds));
-		asm volatile("mov %%es,%k0" : "=a"(newregs->es));
+		asm volatile("mov %%ds,%0" : "=m"(newregs->ds));
+		asm volatile("mov %%es,%0" : "=m"(newregs->es));
 #endif
 		asm volatile("pushf\n\t"
 			     "pop %0" : "=m"(newregs->flags));
