@@ -58,7 +58,6 @@
 #define cpu_has_extioi		cpu_opt(LOONGARCH_CPU_EXTIOI)
 #define cpu_has_prefetch	cpu_opt(LOONGARCH_CPU_PREFETCH)
 #define cpu_has_pmp		cpu_opt(LOONGARCH_CPU_PMP)
-#define cpu_has_perf		cpu_opt(LOONGARCH_CPU_PMP)
 #define cpu_has_scalefreq	cpu_opt(LOONGARCH_CPU_SCALEFREQ)
 #define cpu_has_flatmode	cpu_opt(LOONGARCH_CPU_FLATMODE)
 #define cpu_has_eiodecode	cpu_opt(LOONGARCH_CPU_EIODECODE)
