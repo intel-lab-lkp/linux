@@ -8444,6 +8444,12 @@ static void r8156_init(struct r8152 *tp)
 	else
 		r8153_u2p3en(tp, false);
 
+	if (tp->version >= RTL_VER_16) {
+		/* Disable Interrupt Mitigation */
+		ocp_byte_clr_bits(tp, MCU_TYPE_USB, 0xcf04,
+				  BIT(0) | BIT(1) | BIT(2) | BIT(7));
+	}
+
 	/* MSC timer = 0xfff * 8ms = 32760 ms */
 	ocp_write_word(tp, MCU_TYPE_USB, USB_MSC_TIMER, 0x0fff);
 
