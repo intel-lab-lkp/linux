@@ -3150,27 +3150,6 @@ void sta_set_sinfo(struct sta_info *sta, struct station_info *sinfo,
 		}
 	}
 
-	/* for the average - if pcpu_rx_stats isn't set - rxstats must point to
-	 * the sta->rx_stats struct, so the check here is fine with and without
-	 * pcpu statistics
-	 */
-	if (last_rxstats->chains &&
-	    !(sinfo->filled & (BIT_ULL(NL80211_STA_INFO_CHAIN_SIGNAL) |
-			       BIT_ULL(NL80211_STA_INFO_CHAIN_SIGNAL_AVG)))) {
-		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_CHAIN_SIGNAL);
-		if (!sta->deflink.pcpu_rx_stats)
-			sinfo->filled |= BIT_ULL(NL80211_STA_INFO_CHAIN_SIGNAL_AVG);
-
-		sinfo->chains = last_rxstats->chains;
-
-		for (i = 0; i < ARRAY_SIZE(sinfo->chain_signal); i++) {
-			sinfo->chain_signal[i] =
-				last_rxstats->chain_signal_last[i];
-			sinfo->chain_signal_avg[i] =
-				-ewma_signal_read(&sta->deflink.rx_stats_avg.chain_signal[i]);
-		}
-	}
-
 	if (!(sinfo->filled & BIT_ULL(NL80211_STA_INFO_TX_BITRATE)) &&
 	    !sta->sta.valid_links &&
 	    ieee80211_rate_valid(&sta->deflink.tx_stats.last_rate)) {
@@ -3277,6 +3256,34 @@ void sta_set_sinfo(struct sta_info *sta, struct station_info *sinfo,
 
 			sta_set_link_sinfo(sta, link_sinfo, link, tidstats);
 			sinfo->links[link_id] = link_sinfo;
+		}
+	} else {
+		/*
+		 * Set non-MLO applicable fields.
+		 * For the average: if pcpu_rx_stats isn't set, rxstats must
+		 * point to the sta->rx_stats struct, so the check here is fine
+		 * with and without per-CPU statistics.
+		 */
+		if (last_rxstats->chains &&
+		    !(sinfo->filled &
+		      (BIT_ULL(NL80211_STA_INFO_CHAIN_SIGNAL) |
+		       BIT_ULL(NL80211_STA_INFO_CHAIN_SIGNAL_AVG)))) {
+			sinfo->filled |=
+				BIT_ULL(NL80211_STA_INFO_CHAIN_SIGNAL);
+			if (!sta->deflink.pcpu_rx_stats)
+				sinfo->filled |=
+					BIT_ULL(NL80211_STA_INFO_CHAIN_SIGNAL_AVG);
+
+			sinfo->chains = last_rxstats->chains;
+
+			for (i = 0; i < ARRAY_SIZE(sinfo->chain_signal); i++) {
+				struct ewma_signal chain_signal =
+					sta->deflink.rx_stats_avg.chain_signal[i];
+				sinfo->chain_signal[i] =
+					last_rxstats->chain_signal_last[i];
+				sinfo->chain_signal_avg[i] =
+					-ewma_signal_read(&chain_signal);
+			}
 		}
 	}
 }
