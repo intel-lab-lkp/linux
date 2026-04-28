@@ -2307,6 +2307,27 @@ out_rcu:
 	return !!pchb;
 }
 
+/* Queue up and deliver a received skb to userspace.
+ * Must be called in softirq.
+ */
+static void ppp_file_queue_rx_skb(struct ppp_file *pf, struct sk_buff *skb)
+{
+	spin_lock(&pf->rq.lock);
+	__skb_queue_tail(&pf->rq, skb);
+	/* limit queue length by dropping old frames */
+	if (unlikely(skb_queue_len(&pf->rq) > PPP_MAX_RQLEN)) {
+		struct sk_buff *old = __skb_peek(&pf->rq);
+
+		__skb_unlink(old, &pf->rq);
+		spin_unlock(&pf->rq.lock);
+		kfree_skb(old);
+	} else {
+		spin_unlock(&pf->rq.lock);
+	}
+	/* wake up any process polling or blocking on read */
+	wake_up_interruptible(&pf->rwait);
+}
+
 void
 ppp_input(struct ppp_channel *chan, struct sk_buff *skb)
 {
@@ -2337,12 +2358,7 @@ ppp_input(struct ppp_channel *chan, struct sk_buff *skb)
 	proto = PPP_PROTO(skb);
 	if (!ppp || proto >= 0xc000 || proto == PPP_CCPFRAG) {
 		/* put it on the channel queue */
-		skb_queue_tail(&pch->file.rq, skb);
-		/* drop old frames if queue too long */
-		while (pch->file.rq.qlen > PPP_MAX_RQLEN &&
-		       (skb = skb_dequeue(&pch->file.rq)))
-			kfree_skb(skb);
-		wake_up_interruptible(&pch->file.rwait);
+		ppp_file_queue_rx_skb(&pch->file, skb);
 	} else {
 		ppp_do_recv(ppp, skb, pch);
 	}
@@ -2480,14 +2496,7 @@ ppp_receive_nonmp_frame(struct ppp *ppp, struct sk_buff *skb)
 	npi = proto_to_npindex(proto);
 	if (npi < 0) {
 		/* control or unknown frame - pass it to pppd */
-		skb_queue_tail(&ppp->file.rq, skb);
-		/* limit queue length by dropping old frames */
-		while (ppp->file.rq.qlen > PPP_MAX_RQLEN &&
-		       (skb = skb_dequeue(&ppp->file.rq)))
-			kfree_skb(skb);
-		/* wake up any process polling or blocking on read */
-		wake_up_interruptible(&ppp->file.rwait);
-
+		ppp_file_queue_rx_skb(&ppp->file, skb);
 	} else {
 		/* network protocol frame - give it to the kernel */
 
