@@ -318,6 +318,20 @@ static const struct v4l2_async_notifier_operations rvin_group_notify_ops = {
 	.complete = rvin_group_notify_complete,
 };
 
+static void rvin_group_notifier_cleanup(struct rvin_group *group)
+{
+	v4l2_async_nf_cleanup(&group->notifier);
+
+	guard(mutex)(&group->lock);
+
+	for (unsigned int i = 0; i < RCAR_VIN_NUM; i++)
+		if (group->vin[i])
+			group->vin[i]->parallel.asc = NULL;
+
+	for (unsigned int i = 0; i < ARRAY_SIZE(group->remotes); i++)
+		group->remotes[i].asc = NULL;
+}
+
 static int rvin_group_parse_of(struct rvin_dev *vin, unsigned int port,
 			       unsigned int id)
 {
@@ -440,7 +454,7 @@ static int rvin_group_notifier_init(struct rvin_dev *vin, unsigned int port,
 		/* Parse local subdevice. */
 		ret = rvin_parallel_parse_of(vin->group->vin[i]);
 		if (ret)
-			return ret;
+			goto err_cleanup;
 
 		/* Parse shared subdevices. */
 		for (id = 0; id < max_id; id++) {
@@ -449,7 +463,7 @@ static int rvin_group_notifier_init(struct rvin_dev *vin, unsigned int port,
 
 			ret = rvin_group_parse_of(vin->group->vin[i], port, id);
 			if (ret)
-				return ret;
+				goto err_cleanup;
 		}
 	}
 
@@ -460,11 +474,14 @@ static int rvin_group_notifier_init(struct rvin_dev *vin, unsigned int port,
 	ret = v4l2_async_nf_register(&vin->group->notifier);
 	if (ret < 0) {
 		vin_err(vin, "Notifier registration failed\n");
-		v4l2_async_nf_cleanup(&vin->group->notifier);
-		return ret;
+		goto err_cleanup;
 	}
 
 	return 0;
+
+err_cleanup:
+	rvin_group_notifier_cleanup(vin->group);
+	return ret;
 }
 
 /* -----------------------------------------------------------------------------
@@ -1228,8 +1245,11 @@ static int rcar_vin_probe(struct platform_device *pdev)
 		break;
 	default:
 		ret = rvin_group_get(vin, rvin_parallel_setup_links, NULL);
-		if (!ret)
+		if (!ret) {
 			ret = rvin_group_notifier_init(vin, 0, 0);
+			if (ret)
+				rvin_group_put(vin);
+		}
 
 		if (vin->info->scaler)
 			vin->scaler = vin->info->scaler;
@@ -1264,7 +1284,7 @@ static void rcar_vin_remove(struct platform_device *pdev)
 
 	if (&vin->v4l2_dev == vin->group->notifier.v4l2_dev) {
 		v4l2_async_nf_unregister(&vin->group->notifier);
-		v4l2_async_nf_cleanup(&vin->group->notifier);
+		rvin_group_notifier_cleanup(vin->group);
 	}
 
 	rvin_group_put(vin);
