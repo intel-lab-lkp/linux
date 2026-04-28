@@ -200,16 +200,23 @@ static int mlx5_sriov_enable(struct pci_dev *pdev, int num_vfs)
 	return err;
 }
 
-void mlx5_sriov_disable(struct pci_dev *pdev, bool num_vf_change)
+int mlx5_sriov_disable(struct pci_dev *pdev, bool num_vf_change)
 {
 	struct mlx5_core_dev *dev  = pci_get_drvdata(pdev);
 	struct devlink *devlink = priv_to_devlink(dev);
 	int num_vfs = pci_num_vf(dev->pdev);
 
+	if (pci_vfs_assigned(dev->pdev)) {
+		mlx5_core_warn(dev, "can't disable sriov, VFs are assigned\n");
+		return -EPERM;
+	}
+
 	pci_disable_sriov(pdev);
 	devl_lock(devlink);
 	mlx5_device_disable_sriov(dev, num_vfs, true, num_vf_change);
 	devl_unlock(devlink);
+
+	return 0;
 }
 
 int mlx5_core_sriov_configure(struct pci_dev *pdev, int num_vfs)
@@ -223,7 +230,7 @@ int mlx5_core_sriov_configure(struct pci_dev *pdev, int num_vfs)
 	if (num_vfs)
 		err = mlx5_sriov_enable(pdev, num_vfs);
 	else
-		mlx5_sriov_disable(pdev, true);
+		err = mlx5_sriov_disable(pdev, true);
 
 	if (!err)
 		sriov->num_vfs = num_vfs;
