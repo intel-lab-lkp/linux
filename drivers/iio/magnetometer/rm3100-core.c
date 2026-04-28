@@ -457,48 +457,42 @@ static irqreturn_t rm3100_trigger_handler(int irq, void *p)
 	struct regmap *regmap = data->regmap;
 	int ret, i, bit;
 
-	mutex_lock(&data->lock);
-	switch (scan_mask) {
-	case BIT(0) | BIT(1) | BIT(2):
-		ret = regmap_bulk_read(regmap, RM3100_REG_MX2, data->buffer, 9);
-		mutex_unlock(&data->lock);
-		if (ret < 0)
-			goto done;
-		/* Convert XXXYYYZZZxxx to XXXxYYYxZZZx. x for paddings. */
-		for (i = 2; i > 0; i--)
-			memmove(data->buffer + i * 4, data->buffer + i * 3, 3);
-		break;
-	case BIT(0) | BIT(1):
-		ret = regmap_bulk_read(regmap, RM3100_REG_MX2, data->buffer, 6);
-		mutex_unlock(&data->lock);
-		if (ret < 0)
-			goto done;
-		memmove(data->buffer + 4, data->buffer + 3, 3);
-		break;
-	case BIT(1) | BIT(2):
-		ret = regmap_bulk_read(regmap, RM3100_REG_MY2, data->buffer, 6);
-		mutex_unlock(&data->lock);
-		if (ret < 0)
-			goto done;
-		memmove(data->buffer + 4, data->buffer + 3, 3);
-		break;
-	case BIT(0) | BIT(2):
-		ret = regmap_bulk_read(regmap, RM3100_REG_MX2, data->buffer, 9);
-		mutex_unlock(&data->lock);
-		if (ret < 0)
-			goto done;
-		memmove(data->buffer + 4, data->buffer + 6, 3);
-		break;
-	default:
-		for_each_set_bit(bit, &scan_mask, mask_len) {
-			ret = regmap_bulk_read(regmap, RM3100_REG_MX2 + 3 * bit,
-					       data->buffer, 3);
-			if (ret < 0) {
-				mutex_unlock(&data->lock);
+	scoped_guard(mutex, &data->lock) {
+		switch (scan_mask) {
+		case BIT(0) | BIT(1) | BIT(2):
+			ret = regmap_bulk_read(regmap, RM3100_REG_MX2, data->buffer, 9);
+			if (ret < 0)
 				goto done;
+			/* Convert XXXYYYZZZxxx to XXXxYYYxZZZx. x for paddings. */
+			for (i = 2; i > 0; i--)
+				memmove(data->buffer + i * 4, data->buffer + i * 3, 3);
+			break;
+		case BIT(0) | BIT(1):
+			ret = regmap_bulk_read(regmap, RM3100_REG_MX2, data->buffer, 6);
+			if (ret < 0)
+				goto done;
+			memmove(data->buffer + 4, data->buffer + 3, 3);
+			break;
+		case BIT(1) | BIT(2):
+			ret = regmap_bulk_read(regmap, RM3100_REG_MY2, data->buffer, 6);
+			if (ret < 0)
+				goto done;
+			memmove(data->buffer + 4, data->buffer + 3, 3);
+			break;
+		case BIT(0) | BIT(2):
+			ret = regmap_bulk_read(regmap, RM3100_REG_MX2, data->buffer, 9);
+			if (ret < 0)
+				goto done;
+			memmove(data->buffer + 4, data->buffer + 6, 3);
+			break;
+		default:
+			for_each_set_bit(bit, &scan_mask, mask_len) {
+				ret = regmap_bulk_read(regmap, RM3100_REG_MX2 + 3 * bit,
+						       data->buffer, 3);
+				if (ret < 0)
+					goto done;
 			}
 		}
-		mutex_unlock(&data->lock);
 	}
 	/*
 	 * Always using the same buffer so that we wouldn't need to set the
