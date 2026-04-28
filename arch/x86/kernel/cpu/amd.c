@@ -808,22 +808,16 @@ static int __init rdrand_cmdline(char *str)
 }
 early_param("rdrand", rdrand_cmdline);
 
-static void clear_rdrand_cpuid_bit(struct cpuinfo_x86 *c)
+int amd_try_clear_rdrand_cpuid(struct cpuinfo_x86 *c)
 {
 	/*
 	 * Saving of the MSR used to hide the RDRAND support during
-	 * suspend/resume is done by arch/x86/power/cpu.c, which is
-	 * dependent on CONFIG_PM_SLEEP.
-	 */
-	if (!IS_ENABLED(CONFIG_PM_SLEEP))
-		return;
-
-	/*
+	 * suspend/resume is done by arch/x86/power/cpu.c
 	 * The self-test can clear X86_FEATURE_RDRAND, so check for
 	 * RDRAND support using the CPUID function directly.
 	 */
 	if (!(cpuid_ecx(1) & BIT(30)) || rdrand_force)
-		return;
+		return -1;
 
 	msr_clear_bit(MSR_AMD64_CPUID_FN_1, 62);
 
@@ -833,11 +827,17 @@ static void clear_rdrand_cpuid_bit(struct cpuinfo_x86 *c)
 	 */
 	if (cpuid_ecx(1) & BIT(30)) {
 		pr_info_once("BIOS may not properly restore RDRAND after suspend, but hypervisor does not support hiding RDRAND via CPUID.\n");
-		return;
+		return -1;
 	}
 
-	clear_cpu_cap(c, X86_FEATURE_RDRAND);
 	pr_info_once("BIOS may not properly restore RDRAND after suspend, hiding RDRAND via CPUID. Use rdrand=force to reenable.\n");
+	return 0;
+}
+
+static void clear_rdrand_cpuid(struct cpuinfo_x86 *c)
+{
+	if (!amd_try_clear_rdrand_cpuid(c))
+		clear_cpu_cap(c, X86_FEATURE_RDRAND);
 }
 
 static void init_amd_jg(struct cpuinfo_x86 *c)
@@ -847,7 +847,8 @@ static void init_amd_jg(struct cpuinfo_x86 *c)
 	 * across suspend and resume. Check on whether to hide the RDRAND
 	 * instruction support via CPUID.
 	 */
-	clear_rdrand_cpuid_bit(c);
+	if (IS_ENABLED(CONFIG_PM_SLEEP))
+		clear_rdrand_cpuid(c);
 }
 
 static void init_amd_bd(struct cpuinfo_x86 *c)
@@ -870,7 +871,8 @@ static void init_amd_bd(struct cpuinfo_x86 *c)
 	 * across suspend and resume. Check on whether to hide the RDRAND
 	 * instruction support via CPUID.
 	 */
-	clear_rdrand_cpuid_bit(c);
+	if (IS_ENABLED(CONFIG_PM_SLEEP))
+		clear_rdrand_cpuid(c);
 }
 
 static const struct x86_cpu_id erratum_1386_microcode[] = {

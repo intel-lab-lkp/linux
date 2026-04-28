@@ -43,6 +43,7 @@ void x86_init_rdrand(struct cpuinfo_x86 *c)
 		failure = true;
 
 	if (failure) {
+		amd_try_clear_rdrand_cpuid(c);
 		clear_cpu_cap(c, X86_FEATURE_RDRAND);
 		clear_cpu_cap(c, X86_FEATURE_RDSEED);
 		pr_emerg("RDRAND is not reliable on this platform; disabling.\n");

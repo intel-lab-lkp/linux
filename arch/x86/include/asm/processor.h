@@ -716,9 +716,14 @@ static __always_inline void amd_clear_divider(void)
 }
 
 extern void amd_check_microcode(void);
+extern int amd_try_clear_rdrand_cpuid(struct cpuinfo_x86 *c);
 #else
 static inline void amd_clear_divider(void)		{ }
 static inline void amd_check_microcode(void)		{ }
+static inline int amd_try_clear_rdrand_cpuid(struct cpuinfo_x86 *c)
+{
+	return 0;
+}
 #endif
 
 extern unsigned long arch_align_stack(unsigned long sp);
