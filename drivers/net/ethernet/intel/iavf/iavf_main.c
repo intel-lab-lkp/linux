@@ -1537,7 +1537,7 @@ static int iavf_alloc_queues(struct iavf_adapter *adapter)
 	 */
 	if (adapter->num_req_queues)
 		num_active_queues = adapter->num_req_queues;
-	else if ((adapter->vf_res->vf_cap_flags & VIRTCHNL_VF_OFFLOAD_ADQ) &&
+	else if (test_bit(VIRTCHNL_VF_OFFLOAD_ADQ, adapter->vf_cap_flags) &&
 		 adapter->num_tc)
 		num_active_queues = adapter->ch_config.total_qps;
 	else
@@ -1740,8 +1740,8 @@ static int iavf_init_rss(struct iavf_adapter *adapter)
 
 	if (!RSS_PF(adapter)) {
 		/* Enable PCTYPES for RSS, TCP/UDP with IPv4/IPv6 */
-		if (adapter->vf_res->vf_cap_flags &
-		    VIRTCHNL_VF_OFFLOAD_RSS_PCTYPE_V2)
+		if (test_bit(VIRTCHNL_VF_OFFLOAD_RSS_PCTYPE_V2,
+			     adapter->vf_cap_flags))
 			adapter->rss_hashcfg =
 				IAVF_DEFAULT_RSS_HASHCFG_EXPANDED;
 		else
@@ -1865,7 +1865,7 @@ static int iavf_init_interrupt_scheme(struct iavf_adapter *adapter)
 	 * resources have been allocated in the reset path.
 	 * Now we can truly claim that ADq is enabled.
 	 */
-	if ((adapter->vf_res->vf_cap_flags & VIRTCHNL_VF_OFFLOAD_ADQ) &&
+	if (test_bit(VIRTCHNL_VF_OFFLOAD_ADQ, adapter->vf_cap_flags) &&
 	    adapter->num_tc)
 		dev_info(&adapter->pdev->dev, "ADq Enabled, %u TCs created",
 			 adapter->num_tc);
@@ -2440,7 +2440,7 @@ int iavf_parse_vf_resource_msg(struct iavf_adapter *adapter)
 	adapter->vsi.base_vector = 1;
 	vsi->netdev = adapter->netdev;
 	vsi->qs_handle = adapter->vsi_res->qset_handle;
-	if (adapter->vf_res->vf_cap_flags & VIRTCHNL_VF_OFFLOAD_RSS_PF) {
+	if (test_bit(VIRTCHNL_VF_OFFLOAD_RSS_PF, adapter->vf_cap_flags)) {
 		adapter->rss_key_size = adapter->vf_res->rss_key_size;
 		adapter->rss_lut_size = adapter->vf_res->rss_lut_size;
 	} else {
@@ -2787,8 +2787,7 @@ static void iavf_init_config_adapter(struct iavf_adapter *adapter)
 	if (err)
 		goto err_sw_init;
 	iavf_map_rings_to_vectors(adapter);
-	if (adapter->vf_res->vf_cap_flags &
-		VIRTCHNL_VF_OFFLOAD_WB_ON_ITR)
+	if (test_bit(VIRTCHNL_VF_OFFLOAD_WB_ON_ITR, adapter->vf_cap_flags))
 		adapter->flags |= IAVF_FLAG_WB_ON_ITR_CAPABLE;
 
 	err = iavf_request_misc_irq(adapter);
@@ -3084,7 +3083,6 @@ static void iavf_reconfig_qs_bw(struct iavf_adapter *adapter)
  */
 void iavf_reset_step(struct iavf_adapter *adapter)
 {
-	struct virtchnl_vf_resource *vfres = adapter->vf_res;
 	struct net_device *netdev = adapter->netdev;
 	struct iavf_hw *hw = &adapter->hw;
 	struct iavf_mac_filter *f, *ftmp;
@@ -3238,7 +3236,7 @@ continue_reset:
 
 	/* check if TCs are running and re-add all cloud filters */
 	spin_lock_bh(&adapter->cloud_filter_list_lock);
-	if ((vfres->vf_cap_flags & VIRTCHNL_VF_OFFLOAD_ADQ) &&
+	if (test_bit(VIRTCHNL_VF_OFFLOAD_ADQ, adapter->vf_cap_flags) &&
 	    adapter->num_tc) {
 		list_for_each_entry(cf, &adapter->cloud_filter_list, list) {
 			cf->add = true;
@@ -3679,7 +3677,6 @@ static int __iavf_setup_tc(struct net_device *netdev, void *type_data)
 {
 	struct tc_mqprio_qopt_offload *mqprio_qopt = type_data;
 	struct iavf_adapter *adapter = netdev_priv(netdev);
-	struct virtchnl_vf_resource *vfres = adapter->vf_res;
 	u8 num_tc = 0, total_qps = 0;
 	int ret = 0, netdev_tc = 0;
 	u64 max_tx_rate;
@@ -3708,7 +3705,7 @@ static int __iavf_setup_tc(struct net_device *netdev, void *type_data)
 
 	/* add queue channel */
 	if (mode == TC_MQPRIO_MODE_CHANNEL) {
-		if (!(vfres->vf_cap_flags & VIRTCHNL_VF_OFFLOAD_ADQ)) {
+		if (!test_bit(VIRTCHNL_VF_OFFLOAD_ADQ, adapter->vf_cap_flags)) {
 			dev_err(&adapter->pdev->dev, "ADq not supported\n");
 			return -EOPNOTSUPP;
 		}
@@ -4748,7 +4745,7 @@ iavf_get_netdev_vlan_hw_features(struct iavf_adapter *adapter)
 {
 	netdev_features_t hw_features = 0;
 
-	if (!adapter->vf_res || !adapter->vf_res->vf_cap_flags)
+	if (bitmap_empty(adapter->vf_cap_flags, VIRTCHNL_VF_CAPS_MAX))
 		return hw_features;
 
 	/* Enable VLAN features if supported */
@@ -4813,7 +4810,7 @@ iavf_get_netdev_vlan_features(struct iavf_adapter *adapter)
 {
 	netdev_features_t features = 0;
 
-	if (!adapter->vf_res || !adapter->vf_res->vf_cap_flags)
+	if (bitmap_empty(adapter->vf_cap_flags, VIRTCHNL_VF_CAPS_MAX))
 		return features;
 
 	if (VLAN_ALLOWED(adapter)) {
@@ -5190,7 +5187,6 @@ static int iavf_check_reset_complete(struct iavf_hw *hw)
  **/
 int iavf_process_config(struct iavf_adapter *adapter)
 {
-	struct virtchnl_vf_resource *vfres = adapter->vf_res;
 	netdev_features_t hw_vlan_features, vlan_features;
 	struct net_device *netdev = adapter->netdev;
 	netdev_features_t hw_enc_features;
@@ -5212,7 +5208,7 @@ int iavf_process_config(struct iavf_adapter *adapter)
 	/* advertise to stack only if offloads for encapsulated packets is
 	 * supported
 	 */
-	if (vfres->vf_cap_flags & VIRTCHNL_VF_OFFLOAD_ENCAP) {
+	if (test_bit(VIRTCHNL_VF_OFFLOAD_ENCAP, adapter->vf_cap_flags)) {
 		hw_enc_features |= NETIF_F_GSO_UDP_TUNNEL	|
 				   NETIF_F_GSO_GRE		|
 				   NETIF_F_GSO_GRE_CSUM		|
@@ -5222,8 +5218,8 @@ int iavf_process_config(struct iavf_adapter *adapter)
 				   NETIF_F_GSO_PARTIAL		|
 				   0;
 
-		if (!(vfres->vf_cap_flags &
-		      VIRTCHNL_VF_OFFLOAD_ENCAP_CSUM))
+		if (!test_bit(VIRTCHNL_VF_OFFLOAD_ENCAP_CSUM,
+			      adapter->vf_cap_flags))
 			netdev->gso_partial_features |=
 				NETIF_F_GSO_UDP_TUNNEL_CSUM;
 
@@ -5243,11 +5239,11 @@ int iavf_process_config(struct iavf_adapter *adapter)
 	hw_vlan_features = iavf_get_netdev_vlan_hw_features(adapter);
 
 	/* Enable HW TC offload if ADQ or tc U32 is supported */
-	if (vfres->vf_cap_flags & VIRTCHNL_VF_OFFLOAD_ADQ ||
+	if (test_bit(VIRTCHNL_VF_OFFLOAD_ADQ, adapter->vf_cap_flags) ||
 	    TC_U32_SUPPORT(adapter))
 		hw_features |= NETIF_F_HW_TC;
 
-	if (vfres->vf_cap_flags & VIRTCHNL_VF_OFFLOAD_USO)
+	if (test_bit(VIRTCHNL_VF_OFFLOAD_USO, adapter->vf_cap_flags))
 		hw_features |= NETIF_F_GSO_UDP_L4;
 
 	netdev->hw_features |= hw_features | hw_vlan_features;
@@ -5255,7 +5251,7 @@ int iavf_process_config(struct iavf_adapter *adapter)
 
 	netdev->features |= hw_features | vlan_features;
 
-	if (vfres->vf_cap_flags & VIRTCHNL_VF_OFFLOAD_VLAN)
+	if (test_bit(VIRTCHNL_VF_OFFLOAD_VLAN, adapter->vf_cap_flags))
 		netdev->features |= NETIF_F_HW_VLAN_CTAG_FILTER;
 
 	if (FDIR_FLTR_SUPPORT(adapter)) {
