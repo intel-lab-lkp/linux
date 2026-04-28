@@ -270,6 +270,85 @@ static int instance_root_release(struct powercap_zone *pz)
 	return 0;
 }
 
+static int instance_root_set_enable_state(struct powercap_zone *pz, bool enable)
+{
+	struct scmi_powercap_zone *root;
+	struct scmi_powercap_root *pr;
+	struct scmi_powercap_zone *child;
+	int ret, first_err = 0;
+
+	if (!pz)
+		return -EINVAL;
+
+	root = to_scmi_powercap_zone(pz);
+	pr = container_of(root, struct scmi_powercap_root, instance_root);
+
+	list_for_each_entry(child, &pr->registered_zones[0], node) {
+		if (child == &pr->instance_root)
+			continue;
+
+		if (child->info->parent_id != SCMI_POWERCAP_ROOT_ZONE_ID)
+			continue;
+
+		if (!child->info->cpli[0].cap_config)
+			continue;
+
+		ret = powercap_ops->cap_enable_set(child->ph, child->info->id, enable);
+
+		if (ret && !first_err) {
+			first_err = ret;
+			dev_err(child->dev, "failed to %s zone %s: %d\n",
+				enable ? "enable" : "disable",
+				child->info->name, ret);
+		}
+	}
+
+	return first_err;
+}
+
+static int instance_root_set_enable(struct powercap_zone *pz, bool mode)
+{
+	return instance_root_set_enable_state(pz, mode);
+}
+
+static int instance_root_get_enable(struct powercap_zone *pz, bool *mode)
+{
+	struct scmi_powercap_zone *root;
+	struct scmi_powercap_root *pr;
+	struct scmi_powercap_zone *child;
+	bool enabled;
+	int ret;
+
+	if (!pz || !mode)
+		return -EINVAL;
+
+	root = to_scmi_powercap_zone(pz);
+	pr = container_of(root, struct scmi_powercap_root, instance_root);
+
+	*mode = true;
+
+	list_for_each_entry(child, &pr->registered_zones[0], node) {
+		if (child == &pr->instance_root)
+			continue;
+		if (child->info->parent_id != SCMI_POWERCAP_ROOT_ZONE_ID)
+			continue;
+		if (!child->info->cpli[0].cap_config)
+			continue;
+
+		ret = powercap_ops->cap_enable_get(child->ph, child->info->id, &enabled);
+
+		if (ret)
+			return ret;
+
+		if (!enabled) {
+			*mode = false;
+			return 0;
+		}
+	}
+
+	return 0;
+}
+
 static int instance_root_get_power_uw(struct powercap_zone *pz, u64 *power_uw)
 {
 	struct scmi_powercap_zone *root = to_scmi_powercap_zone(pz);
@@ -315,6 +394,8 @@ static const struct powercap_zone_ops instance_root_ops = {
 	.get_max_power_range_uw = scmi_powercap_get_max_power_range_uw,
 	.get_power_uw = instance_root_get_power_uw,
 	.release = instance_root_release,
+	.set_enable = instance_root_set_enable,
+	.get_enable = instance_root_get_enable,
 };
 
 static const struct powercap_zone_constraint_ops instance_root_const_ops = {
