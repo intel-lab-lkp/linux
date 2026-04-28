@@ -878,6 +878,10 @@ static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (rc)
 		dev_dbg(&pdev->dev, "No CXL Features discovered\n");
 
+	rc = cxl_media_op_discover(mds);
+	if (rc)
+		dev_dbg(&pdev->dev, "No Media Operation discovered\n");
+
 	cxlmd = devm_cxl_add_memdev(cxlds, NULL);
 	if (IS_ERR(cxlmd))
 		return PTR_ERR(cxlmd);

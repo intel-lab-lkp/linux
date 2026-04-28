@@ -160,6 +160,10 @@ static void cxl_set_security_cmd_enabled(struct cxl_security_state *security,
 		set_bit(CXL_SEC_ENABLED_PASSPHRASE_SECURE_ERASE,
 			security->enabled_cmds);
 		break;
+	case CXL_MBOX_OP_MEDIA_OPERATION:
+		set_bit(CXL_SEC_ENABLED_MEDIA_OPERATIONS,
+			security->enabled_cmds);
+		break;
 	default:
 		break;
 	}
@@ -893,6 +897,103 @@ out:
 }
 EXPORT_SYMBOL_NS_GPL(cxl_enumerate_cmds, "CXL");
 
+#define CXL_MEDIA_OP_MAX_OPS 2
+
+/**
+ * cxl_media_op_discover() - Discover supported media operation
+ * @mds: The device data for the operation
+ *
+ * Discover any available Media Operations.
+ *
+ * Return: 0 on success or if Media Operation is not supported,
+ * negative error code on failure.
+ */
+int cxl_media_op_discover(struct cxl_memdev_state *mds)
+{
+	int rc, i;
+	u16 num_returned;
+	u64 granularity;
+	struct cxl_mailbox *cxl_mbox = &mds->cxlds.cxl_mbox;
+	struct cxl_mbox_media_op_discovery_out *disc_out __free(kfree) = NULL;
+	struct cxl_mbox_media_op_discovery_in *disc_in __free(kfree) = NULL;
+
+	if (!test_bit(CXL_SEC_ENABLED_MEDIA_OPERATIONS,
+		      mds->security.enabled_cmds))
+		return 0;
+
+	disc_in = kzalloc_obj(*disc_in);
+	if (!disc_in)
+		return -ENOMEM;
+
+	disc_in->class = CXL_MEDIA_OP_CLASS_GENERAL;
+	disc_in->subclass = CXL_MEDIA_OP_GENERAL_DISCOVERY;
+	disc_in->dpa_range_count = 0;
+	disc_in->start_index = 0;
+	disc_in->num_ops = cpu_to_le16(CXL_MEDIA_OP_MAX_OPS);
+
+	disc_out = kzalloc_flex(*disc_out, ops, CXL_MEDIA_OP_MAX_OPS);
+	if (!disc_out)
+		return -ENOMEM;
+
+	struct cxl_mbox_cmd mbox_cmd = (struct cxl_mbox_cmd) {
+		.opcode = CXL_MBOX_OP_MEDIA_OPERATION,
+		.payload_in = disc_in,
+		.size_in = sizeof(*disc_in),
+		.payload_out = disc_out,
+		.size_out = struct_size(disc_out, ops, CXL_MEDIA_OP_MAX_OPS),
+		.min_out = sizeof(*disc_out),
+		.poll_count = 1,
+		.poll_interval_ms = 1000,
+	};
+
+	rc = cxl_internal_send_cmd(cxl_mbox, &mbox_cmd);
+	if (rc < 0) {
+		dev_dbg(cxl_mbox->host,
+			"Media Operation Discovery failed: %d\n", rc);
+		return rc;
+	}
+
+	num_returned = le16_to_cpu(disc_out->num_returned);
+	if (num_returned > CXL_MEDIA_OP_MAX_OPS) {
+		dev_dbg(cxl_mbox->host,
+			"Discovery returned %u ops, expected max %u\n",
+			num_returned, CXL_MEDIA_OP_MAX_OPS);
+		return -EINVAL;
+	}
+
+	granularity = le64_to_cpu(disc_out->granularity);
+	/* spec requires granularity to be a power of 2 and a multiple of 0x40 */
+	if (!is_power_of_2(granularity) || !IS_ALIGNED(granularity, SZ_64)) {
+		dev_dbg(cxl_mbox->host,
+			"Discovery returned invalid granularity: %llu\n",
+			granularity);
+		return -EINVAL;
+	}
+	mds->media_op.granularity = granularity;
+	mds->media_op.range_limit = rounddown(SZ_1G, granularity);
+
+	for (i = 0; i < num_returned; i++) {
+		u8 cls = disc_out->ops[i].class;
+		u8 sub = disc_out->ops[i].subclass;
+
+		if (cls == CXL_MEDIA_OP_CLASS_SANITIZE &&
+		    sub == CXL_MEDIA_OP_SANITIZE_SANITIZE)
+			mds->media_op.sanitize_supported = true;
+		if (cls == CXL_MEDIA_OP_CLASS_SANITIZE &&
+		    sub == CXL_MEDIA_OP_SANITIZE_ZERO)
+			mds->media_op.zero_supported = true;
+	}
+
+	dev_dbg(cxl_mbox->host,
+		"Media Operation: granularity=%llu sanitize=%d zero=%d\n",
+		mds->media_op.granularity,
+		mds->media_op.sanitize_supported,
+		mds->media_op.zero_supported);
+
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_media_op_discover, "CXL");
+
 void cxl_event_trace_record(struct cxl_memdev *cxlmd,
 			    enum cxl_event_log_type type,
 			    enum cxl_event_type event_type,
@@ -1307,6 +1408,145 @@ int cxl_mem_sanitize(struct cxl_memdev *cxlmd, u16 cmd)
 
 	return -EBUSY;
 }
+
+static int __cxl_mem_media_op(struct cxl_memdev_state *mds, u8 class,
+			      u8 subclass, u64 dpa_start, u64 dpa_length)
+{
+	struct cxl_mailbox *cxl_mbox = &mds->cxlds.cxl_mbox;
+	struct cxl_mbox_media_op_input *payload __free(kfree) = NULL;
+	int rc;
+
+	payload = kzalloc_flex(*payload, dpa_range_list, 1);
+	if (!payload)
+		return -ENOMEM;
+
+	payload->class = class;
+	payload->subclass = subclass;
+	payload->dpa_range_count = cpu_to_le32(1);
+	payload->dpa_range_list[0].starting_dpa = cpu_to_le64(dpa_start);
+	payload->dpa_range_list[0].length = cpu_to_le64(dpa_length);
+
+	struct cxl_mbox_cmd mbox_cmd = (struct cxl_mbox_cmd) {
+		.opcode = CXL_MBOX_OP_MEDIA_OPERATION,
+		.payload_in = payload,
+		.size_in = struct_size(payload, dpa_range_list, 1),
+		.poll_count = 60,
+		.poll_interval_ms = 1000,
+	};
+
+	rc = cxl_internal_send_cmd(cxl_mbox, &mbox_cmd);
+	if (rc < 0) {
+		dev_dbg(cxl_mbox->host,
+			"Media Operation (class=%u sub=%u) failed: %d\n",
+			class, subclass, rc);
+		return rc;
+	}
+
+	return 0;
+}
+
+static int __cxl_dpa_overlap_committed(struct device *dev, void *arg)
+{
+	const struct resource *range = arg;
+	struct cxl_endpoint_decoder *cxled;
+
+	if (!is_endpoint_decoder(dev))
+		return 0;
+
+	cxled = to_cxl_endpoint_decoder(dev);
+	if (!(cxled->cxld.flags & CXL_DECODER_F_ENABLE))
+		return 0;
+	if (!cxled->dpa_res || !resource_size(cxled->dpa_res))
+		return 0;
+
+	return resource_overlaps(cxled->dpa_res, range);
+}
+
+static bool cxl_media_op_dpa_overlap(struct cxl_memdev *cxlmd,
+				     u64 dpa_start, u64 dpa_length)
+{
+	struct cxl_port *endpoint = cxlmd->endpoint;
+	struct resource range = DEFINE_RES_MEM(dpa_start, dpa_length);
+
+	if (!cxlmd->dev.driver || !is_cxl_endpoint(endpoint) ||
+	    cxl_num_decoders_committed(endpoint) == 0)
+		return false;
+
+	return device_for_each_child(&endpoint->dev, &range,
+				     __cxl_dpa_overlap_committed);
+}
+
+/**
+ * cxl_mem_media_op() - Send a Media Operation command to the device.
+ * @cxlmd: The device for the operation
+ * @class: Media operation class
+ * @subclass: Media operation subclass
+ * @dpa_start: Starting DPA in bytes
+ * @dpa_length: Length of the DPA range in bytes
+ *
+ * Send a Media Operation command with a single DPA range.
+ *
+ * Requires corresponding decoder containing the range be offline to
+ * prevent corrupting any actively mapped memory.
+ *
+ * Return: 0 on success, negative error code on failure.
+ */
+int cxl_mem_media_op(struct cxl_memdev *cxlmd, u8 class, u8 subclass,
+		     u64 dpa_start, u64 dpa_length)
+{
+	struct cxl_memdev_state *mds = to_cxl_memdev_state(cxlmd->cxlds);
+	struct cxl_mailbox *cxl_mbox = &mds->cxlds.cxl_mbox;
+	u64 granularity;
+
+	if (!test_bit(CXL_SEC_ENABLED_MEDIA_OPERATIONS,
+		      mds->security.enabled_cmds))
+		return -EOPNOTSUPP;
+
+	/* ensure the specific operation was reported by Discovery */
+	if (class == CXL_MEDIA_OP_CLASS_SANITIZE) {
+		switch (subclass) {
+		case CXL_MEDIA_OP_SANITIZE_SANITIZE:
+			if (!mds->media_op.sanitize_supported)
+				return -EOPNOTSUPP;
+			break;
+		case CXL_MEDIA_OP_SANITIZE_ZERO:
+			if (!mds->media_op.zero_supported)
+				return -EOPNOTSUPP;
+			break;
+		}
+	}
+
+	granularity = mds->media_op.granularity;
+	if (!granularity)
+		return -EINVAL;
+
+	if (dpa_length == 0 ||
+	    !IS_ALIGNED(dpa_start, granularity) ||
+	    !IS_ALIGNED(dpa_length, granularity)) {
+		dev_dbg(cxl_mbox->host,
+			"DPA range not aligned to %llu-byte granularity\n",
+			granularity);
+		return -EINVAL;
+	}
+
+	if (dpa_length > mds->media_op.range_limit) {
+		dev_dbg(cxl_mbox->host,
+			"DPA range length %llu exceeds limit %llu\n",
+			dpa_length, mds->media_op.range_limit);
+		return -EINVAL;
+	}
+
+	guard(device)(&cxlmd->dev);
+	guard(rwsem_read)(&cxl_rwsem.region);
+	guard(rwsem_read)(&cxl_rwsem.dpa);
+
+	/* reject if the DPA range overlaps a committed decoder range */
+	if (cxl_media_op_dpa_overlap(cxlmd, dpa_start, dpa_length))
+		return -EBUSY;
+
+	return __cxl_mem_media_op(mds, class, subclass, dpa_start, dpa_length);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_mem_media_op, "CXL");
 
 static void add_part(struct cxl_dpa_info *info, u64 start, u64 size, enum cxl_partition_mode mode)
 {
