@@ -406,6 +406,7 @@ static enum {
 
 static int experimental;
 static u32 dbg_level;
+static bool hwdd_raw_enable;
 
 static struct workqueue_struct *tpacpi_wq;
 
@@ -11217,18 +11218,44 @@ static ssize_t hwdd_status_show(struct device *dev,
 
 	return sysfs_emit(buf, "0\n");
 }
+
+/* sysfs type-c damage detection raw data */
+static ssize_t hwdd_raw_show(struct device *dev,
+			     struct device_attribute *attr,
+			     char *buf)
+{
+	unsigned int damage_status;
+	int err;
+
+	if (!ucdd_supported)
+		return -ENODEV;
+
+	/* Get USB TYPE-C damage status */
+	err = hwdd_command(HWDD_GET_DMG_USBC, &damage_status);
+	if (err)
+		return err;
+
+	return sysfs_emit(buf, "0x%x\n", damage_status);
+}
+
+static DEVICE_ATTR_RO(hwdd_raw);
 static DEVICE_ATTR_RO(hwdd_status);
 static DEVICE_ATTR_RO(hwdd_detail);
 
 static struct attribute *hwdd_attributes[] = {
 	&dev_attr_hwdd_status.attr,
 	&dev_attr_hwdd_detail.attr,
+	&dev_attr_hwdd_raw.attr,
 	NULL
 };
 
 static umode_t hwdd_attr_is_visible(struct kobject *kobj,
 				struct attribute *attr, int n)
 {
+	/* Only display hwdd_raw if debug option has been set */
+	if (attr == &dev_attr_hwdd_raw.attr && !hwdd_raw_enable)
+		return 0;
+
 	return hwdd_support_available ? attr->mode : 0;
 }
 
@@ -11955,6 +11982,10 @@ static int __init set_ibm_param(const char *val, const struct kernel_param *kp)
 
 	return -EINVAL;
 }
+
+module_param(hwdd_raw_enable, bool, 0444);
+MODULE_PARM_DESC(hwdd_raw_enable,
+		 "Enables hwdd raw output sysfs interface");
 
 module_param(experimental, int, 0444);
 MODULE_PARM_DESC(experimental,
