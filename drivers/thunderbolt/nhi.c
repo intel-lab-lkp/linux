@@ -389,10 +389,24 @@ static void __ring_interrupt_mask(struct tb_ring *ring, bool mask)
 	u32 val;
 
 	val = ioread32(ring->nhi->iobase + reg);
-	if (mask)
+	if (mask) {
 		val &= ~BIT(bit);
-	else
+	} else {
+		if (!(ring->nhi->quirks & QUIRK_AUTO_CLEAR_INT)) {
+			int cbit = ring_interrupt_index(ring) & 31;
+
+			if (ring->is_tx)
+				iowrite32(BIT(cbit),
+					  ring->nhi->iobase +
+					  REG_RING_INT_CLEAR);
+			else
+				iowrite32(BIT(cbit),
+					  ring->nhi->iobase +
+					  REG_RING_INT_CLEAR +
+					  4 * (ring->nhi->hop_count / 32));
+		}
 		val |= BIT(bit);
+	}
 	iowrite32(val, ring->nhi->iobase + reg);
 }
 
@@ -423,8 +437,10 @@ void tb_ring_poll_complete(struct tb_ring *ring)
 
 	spin_lock_irqsave(&ring->nhi->lock, flags);
 	spin_lock(&ring->lock);
-	if (ring->start_poll)
+	if (ring->running) {
 		__ring_interrupt_mask(ring, false);
+		(void)ioread32(ring->nhi->iobase + REG_RING_INTERRUPT_BASE);
+	}
 	spin_unlock(&ring->lock);
 	spin_unlock_irqrestore(&ring->nhi->lock, flags);
 }
