@@ -34,6 +34,7 @@ static struct devlink_shd *devlink_shd_lookup(const char *id)
 static struct devlink_shd *devlink_shd_create(const char *id,
 					      const struct devlink_ops *ops,
 					      size_t priv_size,
+					      void *init_param,
 					      const struct device_driver *driver)
 {
 	struct devlink_shd *shd;
@@ -49,15 +50,29 @@ static struct devlink_shd *devlink_shd_create(const char *id,
 	if (!shd->id)
 		goto err_devlink_free;
 	shd->priv_size = priv_size;
-	refcount_set(&shd->refcount, 1);
 
 	devl_lock(devlink);
 	devl_register(devlink);
+
+	if (ops->shd_init) {
+		int err;
+
+		err = ops->shd_init(shd->priv, init_param);
+		if (err)
+			goto err_unregister;
+	}
+
 	devl_unlock(devlink);
 
+	refcount_set(&shd->refcount, 1);
 	list_add_tail(&shd->list, &shd_list);
 
 	return shd;
+
+err_unregister:
+	devl_unregister(devlink);
+	devl_unlock(devlink);
+	kfree(shd->id);
 
 err_devlink_free:
 	devlink_free(devlink);
@@ -69,7 +84,12 @@ static void devlink_shd_destroy(struct devlink_shd *shd)
 	struct devlink *devlink = priv_to_devlink(shd);
 
 	list_del(&shd->list);
+
 	devl_lock(devlink);
+
+	if (devlink->ops->shd_fini)
+		devlink->ops->shd_fini(shd->priv);
+
 	devl_unregister(devlink);
 	devl_unlock(devlink);
 	kfree(shd->id);
@@ -81,6 +101,7 @@ static void devlink_shd_destroy(struct devlink_shd *shd)
  * @id: Identifier string (e.g., serial number) for the shared instance
  * @ops: Devlink operations structure
  * @priv_size: Size of private data structure
+ * @init_param: Passed to .shd_init() callback alongside driver's priv
  * @driver: Driver associated with the shared devlink instance
  *
  * Get an existing shared devlink instance identified by @id, or create
@@ -96,6 +117,7 @@ static void devlink_shd_destroy(struct devlink_shd *shd)
 struct devlink *devlink_shd_get(const char *id,
 				const struct devlink_ops *ops,
 				size_t priv_size,
+				void *init_param,
 				const struct device_driver *driver)
 {
 	struct devlink *devlink;
@@ -105,7 +127,7 @@ struct devlink *devlink_shd_get(const char *id,
 
 	shd = devlink_shd_lookup(id);
 	if (!shd) {
-		shd = devlink_shd_create(id, ops, priv_size, driver);
+		shd = devlink_shd_create(id, ops, priv_size, init_param, driver);
 		goto unlock;
 	}
 
@@ -159,3 +181,16 @@ void *devlink_shd_get_priv(struct devlink *devlink)
 	return shd->priv;
 }
 EXPORT_SYMBOL_GPL(devlink_shd_get_priv);
+
+/** shd_priv_to_devlink - Get devlink instance from shd_devlink's priv
+ * @priv: Driver's priv data
+ *
+ * Return: pointer to shared devlink instance the @priv belongs to.
+ */
+struct devlink *shd_priv_to_devlink(void *priv)
+{
+	struct devlink_shd *shd = container_of(priv, struct devlink_shd, priv);
+
+	return priv_to_devlink(shd);
+}
+EXPORT_SYMBOL_GPL(shd_priv_to_devlink);

@@ -1586,6 +1586,30 @@ struct devlink_ops {
 				    struct devlink_rate *parent,
 				    void *priv_child, void *priv_parent,
 				    struct netlink_ext_ack *extack);
+
+	/**
+	 * shd_init: Shared devlink instance initializer
+	 * @priv: shd_devlink' priv
+	 * @init_param: additional param to pass to driver callback
+	 *
+	 * Called once when the shared instance is first created (by the first
+	 * devlink_shd_get() call).
+	 * Should initialize the driver's private data embedded in the shared
+	 * devlink. May be NULL.
+	 *
+	 * Return: 0 on success, negative to prevent shared instance usage.
+	 */
+	int (*shd_init)(void *priv, void *init_param);
+	/**
+	 * shd_fini: Shared devlink instance finalizer
+	 * @priv: shd_devlink' priv
+	 *
+	 * Called once when the last reference is dropped and the shared
+	 * instance is destroyed. Should clean up the driver's private data.
+	 * May be NULL.
+	 */
+	void (*shd_fini)(void *priv);
+
 	/**
 	 * selftests_check() - queries if selftest is supported
 	 * @devlink: devlink instance
@@ -1651,9 +1675,11 @@ void devlink_free(struct devlink *devlink);
 struct devlink *devlink_shd_get(const char *id,
 				const struct devlink_ops *ops,
 				size_t priv_size,
+				void *init_param,
 				const struct device_driver *driver);
 void devlink_shd_put(struct devlink *devlink);
 void *devlink_shd_get_priv(struct devlink *devlink);
+struct devlink *shd_priv_to_devlink(void *priv);
 
 /**
  * struct devlink_port_ops - Port operations
