@@ -105,7 +105,7 @@ ice_vc_fdir_param_check(struct ice_vf *vf, u16 vsi_id)
 	if (!test_bit(ICE_VF_STATE_ACTIVE, vf->vf_states))
 		return -EINVAL;
 
-	if (!(vf->driver_caps & VIRTCHNL_VF_OFFLOAD_FDIR_PF))
+	if (!test_bit(VIRTCHNL_VF_OFFLOAD_FDIR_PF, vf->driver_caps))
 		return -EINVAL;
 
 	if (!ice_vc_isvalid_vsi_id(vf, vsi_id))
