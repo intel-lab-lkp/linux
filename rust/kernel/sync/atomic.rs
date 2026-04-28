@@ -127,10 +127,14 @@ pub unsafe trait AtomicType: Sized + Copy {
 ///
 /// # Safety
 ///
-// TODO: Properly defines `wrapping_add` in the following comment.
-/// `wrapping_add` any value of type `Self::Repr::Delta` obtained by [`Self::rhs_into_delta()`] to
-/// any value of type `Self::Repr` obtained through transmuting a value of type `Self` to must
-/// yield a value with a bit pattern also valid for `Self`.
+/// `Self::Repr::Delta` is the type of value being added in the underlying
+/// C atomic operation, and may differ from `Self::Repr` (e.g., `i32` for 32-bit
+/// integer atomics or `isize` rather than the pointer value `*const c_void` for pointer atomics,
+/// where the C function expects a byte offset rather than the pointer itself).
+/// Thus, for any `Self::Repr` obtained by transmuting a valid `Self`,
+/// adding any `Self::Repr::Delta` value produced by `Self::rhs_into_delta()` using
+/// `wrapping_add`, where `wrapping_add` denotes addition that wraps on overflow
+/// rather than causing undefined behavior, must yield a bit pattern that is valid for `Self`.
 pub unsafe trait AtomicAdd<Rhs = Self>: AtomicType {
     /// Converts `Rhs` into the `Delta` type of the atomic implementation.
     fn rhs_into_delta(rhs: Rhs) -> <Self::Repr as AtomicImpl>::Delta;
