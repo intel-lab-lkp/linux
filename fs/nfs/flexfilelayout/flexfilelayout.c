@@ -1536,6 +1536,7 @@ static void ff_layout_io_track_ds_error(struct pnfs_layout_segment *lseg,
 				       mirror, dss_id, offset, length, status, opnum,
 				       nfs_io_gfp_mask());
 
+	(void)err;
 	switch (status) {
 	case NFS4ERR_DELAY:
 	case NFS4ERR_GRACE:
