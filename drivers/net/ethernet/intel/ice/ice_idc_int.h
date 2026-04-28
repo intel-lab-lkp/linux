@@ -4,8 +4,8 @@
 #ifndef _ICE_IDC_INT_H_
 #define _ICE_IDC_INT_H_
 
-#include <linux/net/intel/iidc_rdma.h>
-#include <linux/net/intel/iidc_rdma_ice.h>
+#include <linux/intel/iidc_rdma.h>
+#include <linux/intel/iidc_rdma_ice.h>
 
 struct ice_pf;
 
