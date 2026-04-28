@@ -28,6 +28,14 @@ source "drivers/net/dsa/hirschmann/Kconfig"
 
 source "drivers/net/dsa/lantiq/Kconfig"
 
+config NET_DSA_MT7628
+	tristate "MediaTek MT7628 Embedded Ethernet switch support"
+	select NET_DSA_TAG_MT7628
+	select MEDIATEK_FE_SOC_PHY
+	help
+	  This enables support for the built-in Ethernet switch found
+	  in the MT7628 SoC.
+
 config NET_DSA_MT7530
 	tristate "MediaTek MT7530 and MT7531 Ethernet switch support"
 	select NET_DSA_TAG_MTK
