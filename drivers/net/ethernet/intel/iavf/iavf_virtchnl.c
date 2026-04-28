@@ -173,7 +173,8 @@ int iavf_send_vf_config_msg(struct iavf_adapter *adapter)
 	       BIT(VIRTCHNL_VF_OFFLOAD_FDIR_PF) |
 	       BIT(VIRTCHNL_VF_OFFLOAD_ADV_RSS_PF) |
 	       BIT(VIRTCHNL_VF_CAP_ADV_LINK_SPEED) |
-	       BIT(VIRTCHNL_VF_OFFLOAD_QOS);
+	       BIT(VIRTCHNL_VF_OFFLOAD_QOS) |
+	       BIT(VIRTCHNL_VF_CAPS2);
 
 	adapter->current_op = VIRTCHNL_OP_GET_VF_RESOURCES;
 	adapter->aq_required &= ~IAVF_FLAG_AQ_GET_CONFIG;
@@ -247,6 +248,52 @@ int iavf_send_vf_ptp_caps_msg(struct iavf_adapter *adapter)
 }
 
 /**
+ * iavf_send_vf_caps2_msg - send request for second capability flags set
+ * @adapter: adapter structure
+ *
+ * Send VIRTCHNL_OP_GET_VF_CAPS2 to the PF with the VF's desired flags2
+ * bitmap. The PF responds with the intersection of the flags it supports.
+ *
+ * Return: 0 on success, -EOPNOTSUPP if CAPS2 was not negotiated, other error
+ * code on failure
+ */
+int iavf_send_vf_caps2_msg(struct iavf_adapter *adapter)
+{
+	DECLARE_BITMAP(msg_caps, VIRTCHNL_VF_CAPS_MAX);
+	struct virtchnl_vf_caps2 *caps2;
+	int err;
+
+	adapter->aq_required &= ~IAVF_FLAG_AQ_GET_VF_CAP_CAPS2;
+
+	if (!IAVF_CAPS2_ALLOWED(adapter))
+		return -EOPNOTSUPP;
+
+	caps2 = kzalloc_flex(*caps2, vf_cap_flags,
+			     BITS_TO_U32(VIRTCHNL_VF_CAPS_MAX));
+	if (!caps2)
+		return -ENOMEM;
+
+	caps2->flags_len = BITS_TO_U32(VIRTCHNL_VF_CAPS_MAX);
+
+	/* Copy from the local bitmap (should have only first 32 bits set) and
+	 * set extended feature flags to send.
+	 */
+	bitmap_copy(msg_caps, adapter->vf_cap_flags, VIRTCHNL_VF_CAPS_MAX);
+
+	bitmap_to_arr32(caps2->vf_cap_flags, msg_caps, VIRTCHNL_VF_CAPS_MAX);
+
+	adapter->current_op = VIRTCHNL_OP_GET_VF_CAPS2;
+
+	err = iavf_send_pf_msg(adapter, VIRTCHNL_OP_GET_VF_CAPS2, (u8 *)caps2,
+			       struct_size(caps2, vf_cap_flags,
+					   caps2->flags_len));
+
+	kfree(caps2);
+
+	return err;
+}
+
+/**
  * iavf_validate_num_queues
  * @adapter: adapter structure
  *
@@ -297,7 +344,7 @@ int iavf_get_vf_config(struct iavf_adapter *adapter)
 	err = iavf_poll_virtchnl_msg(hw, &event, VIRTCHNL_OP_GET_VF_RESOURCES);
 	memcpy(adapter->vf_res, event.msg_buf, min(event.msg_len, len));
 
-	/* mirror to the extended bitmap */
+	/* mirror the first 32 bits to the extended bitmap */
 	bitmap_from_arr32(adapter->vf_cap_flags, &adapter->vf_res->vf_cap_flags,
 			  BITS_PER_TYPE(u32));
 
@@ -366,6 +413,78 @@ int iavf_get_vf_ptp_caps(struct iavf_adapter *adapter)
 				     VIRTCHNL_OP_1588_PTP_GET_CAPS);
 	if (!err)
 		adapter->ptp.hw_caps = caps;
+
+	return err;
+}
+
+/**
+ * iavf_process_caps2 - store received extended caps in adapter
+ * @adapter: adapter structure
+ * @caps2: received extended capabilities message
+ *
+ * Return: 0 on success, negative on failure
+ */
+static int iavf_process_caps2(struct iavf_adapter *adapter,
+			      struct virtchnl_vf_caps2 *caps2)
+{
+	unsigned int nbits;
+
+	if (caps2->flags_len == 0)
+		return -EINVAL;
+
+	/* Make sure to not read after msg bitmap or local bitmap. The remaining
+	 * bits (if any) should be unset, since one side doesn't know about
+	 * them, therefore cannot support these capabilities.
+	 */
+	nbits = min_t(unsigned int, VIRTCHNL_VF_CAPS_MAX,
+		      BITS_PER_TYPE(u32) * caps2->flags_len);
+
+	bitmap_zero(adapter->vf_cap_flags, VIRTCHNL_VF_CAPS_MAX);
+	bitmap_from_arr32(adapter->vf_cap_flags, caps2->vf_cap_flags, nbits);
+	/* Assume the first 32 bits were already written to
+	 * adapter->vf_res->vf_cap_flags in VIRTCHNL_OP_GET_VF_RESOURCES. Driver
+	 * should not use these anyway.
+	 */
+
+	return 0;
+}
+
+/**
+ * iavf_get_vf_caps2 - receive second capability flags from PF
+ * @adapter: adapter structure
+ *
+ * Poll the admin queue for a response to VIRTCHNL_OP_GET_VF_CAPS2 and process
+ * the negotiated flags.
+ *
+ * Return: 0 on success, negative on failure
+ */
+int iavf_get_vf_caps2(struct iavf_adapter *adapter)
+{
+	struct iavf_arq_event_info event;
+	struct virtchnl_vf_caps2 *caps2;
+	int err;
+
+	/* Actual length might be larger if PF knows more flags, but we don't
+	 * care about them since they should be unset after the negotiation.
+	 * Even if they were somehow not, VF has no way to store them.
+	 */
+	event.buf_len = struct_size(caps2, vf_cap_flags, VIRTCHNL_VF_CAPS_MAX);
+
+	event.msg_buf = kzalloc(event.buf_len, GFP_KERNEL);
+	if (!event.msg_buf)
+		return -ENOMEM;
+
+	err = iavf_poll_virtchnl_msg(&adapter->hw, &event,
+				     VIRTCHNL_OP_GET_VF_CAPS2);
+	if (err)
+		goto free_msg_buf;
+
+	caps2 = (struct virtchnl_vf_caps2 *)event.msg_buf;
+
+	err = iavf_process_caps2(adapter, caps2);
+
+free_msg_buf:
+	kfree(event.msg_buf);
 
 	return err;
 }
@@ -2716,6 +2835,21 @@ void iavf_virtchnl_completion(struct iavf_adapter *adapter,
 		break;
 	case VIRTCHNL_OP_1588_PTP_GET_TIME:
 		iavf_virtchnl_ptp_get_time(adapter, msg, msglen);
+		break;
+	case VIRTCHNL_OP_GET_VF_CAPS2: {
+		struct virtchnl_vf_caps2 *caps2 =
+			(struct virtchnl_vf_caps2 *)msg;
+
+		/* Require at least 1 element */
+		if (msglen < struct_size(caps2, vf_cap_flags, 1) ||
+		    msglen != struct_size(caps2, vf_cap_flags,
+					  caps2->flags_len))
+			return;
+
+		if (iavf_process_caps2(adapter, caps2))
+			dev_warn(&adapter->pdev->dev,
+				 "Invalid extended flags received from PF\n");
+		}
 		break;
 	case VIRTCHNL_OP_ENABLE_QUEUES:
 		/* enable transmits */
