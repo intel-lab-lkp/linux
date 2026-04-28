@@ -878,6 +878,7 @@ intel_legacy_cursor_update(struct drm_plane *_plane,
 	struct intel_vblank_evade_ctx evade;
 	struct intel_plane_state *old_pipe_states[4] = {};
 	struct intel_plane_state *new_pipe_states[4] = {};
+	struct intel_crtc_state *pipe_crtc_states[4] = {};
 	struct intel_plane *pipe_planes[4] = {};
 	struct intel_crtc *pipe_crtcs[4] = {};
 	struct intel_crtc *pipe_crtc;
@@ -1013,6 +1014,7 @@ intel_legacy_cursor_update(struct drm_plane *_plane,
 
 		pipe_planes[num_pipes] = pipe_plane;
 		pipe_crtcs[num_pipes] = pipe_crtc;
+		pipe_crtc_states[num_pipes] = pipe_crtc_state;
 		old_pipe_states[num_pipes] = old_pipe_plane_state;
 		new_pipe_states[num_pipes] = new_pipe_plane_state;
 		num_pipes++;
@@ -1026,20 +1028,29 @@ intel_legacy_cursor_update(struct drm_plane *_plane,
 					to_intel_frontbuffer(new_pipe_states[i]->hw.fb),
 					pipe_planes[i]->frontbuffer_bit);
 
-	/* Swap plane state */
-	plane->base.state = &new_plane_state->uapi;
+       /*
+        * We cannot swap crtc_state as it may be in use by an atomic commit or
+        * page flip that's running simultaneously. If we swap crtc_state and
+        * destroy the old state, we will cause a use-after-free there.
+        *
+        * Only update active_planes, which is needed for our internal
+        * bookkeeping. Either value will do the right thing when updating
+        * planes atomically. If the cursor was part of the atomic update then
+        * we would have taken the slowpath.
+        */
+	for (int i = 0; i < num_pipes; i++) {
+		struct intel_crtc_state *pipe_crtc_state =
+				pipe_crtc_states[i];
 
-	/*
-	 * We cannot swap crtc_state as it may be in use by an atomic commit or
-	 * page flip that's running simultaneously. If we swap crtc_state and
-	 * destroy the old state, we will cause a use-after-free there.
-	 *
-	 * Only update active_planes, which is needed for our internal
-	 * bookkeeping. Either value will do the right thing when updating
-	 * planes atomically. If the cursor was part of the atomic update then
-	 * we would have taken the slowpath.
-	 */
-	crtc_state->active_planes = new_crtc_state->active_planes;
+		pipe_planes[i]->base.state = &new_pipe_states[i]->uapi;
+
+		if (pipe_crtcs[i] == crtc)
+			pipe_crtc_state->active_planes = new_crtc_state->active_planes;
+		else if (new_pipe_states[i]->uapi.visible)
+			pipe_crtc_state->active_planes |= BIT(PLANE_CURSOR);
+		else
+			pipe_crtc_state->active_planes &= ~BIT(PLANE_CURSOR);
+	}
 
 	intel_vblank_evade_init(crtc_state, crtc_state, &evade);
 
