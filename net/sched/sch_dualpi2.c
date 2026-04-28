@@ -588,7 +588,7 @@ static struct sk_buff *dualpi2_qdisc_dequeue(struct Qdisc *sch)
 
 	now = ktime_get_ns();
 
-	while ((skb = dequeue_packet(sch, q, &credit_change, now))) {
+	while ((skb = dequeue_packet(sch, q, &credit_change, now)) && skb) {
 		if (!q->drop_early && must_drop(sch, q, skb)) {
 			drop_and_retry(q, skb, sch, QDISC_DROP_CONGESTED);
 			continue;
