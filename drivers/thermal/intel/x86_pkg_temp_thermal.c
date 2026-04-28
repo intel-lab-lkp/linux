@@ -169,7 +169,7 @@ sys_set_trip_temp(struct thermal_zone_device *tzd,
 	}
 
 	return wrmsr_on_cpu(zonedev->cpu, MSR_IA32_PACKAGE_THERM_INTERRUPT,
-			    v.l, v.h);
+			    v.q);
 }
 
 /* Thermal zone callback registry */
