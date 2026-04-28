@@ -114,4 +114,7 @@ static inline void devm_cxl_port_ras_setup(struct cxl_port *port)
 
 int cxl_pci_setup_regs(struct pci_dev *pdev, enum cxl_regloc_type type,
 		       struct cxl_register_map *map);
+
+bool cxl_port_pm_init_is_complete(struct pci_dev *pdev);
+
 #endif /* __CXL_PCI_H__ */

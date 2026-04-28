@@ -1825,6 +1825,28 @@ retry:
 		if (is_cxl_host_bridge(dport_dev))
 			return 0;
 
+		/*
+		 * Check the downstream port's PM init status, and if it has
+		 * failed retry PM init according to CXL Spec. 4.0 Sect. 8.1.5.1
+		 * - Implementation Note
+		 */
+		if (dev_is_pci(dport_dev) && dev_is_pci(iter->parent)) {
+			struct pci_dev *dport_pdev = to_pci_dev(dport_dev);
+
+			if (!cxl_port_pm_init_is_complete(dport_pdev)) {
+				dev_dbg(&cxlmd->dev,
+					"PM init failed for %s, retrying PM init\n",
+					dev_name(dport_dev));
+
+				cxl_reset_bus_function(to_pci_dev(iter->parent), false);
+
+				if (!cxl_port_pm_init_is_complete(dport_pdev))
+					dev_dbg(&cxlmd->dev,
+						"PM init failed retry for %s\n",
+						dev_name(dport_dev));
+			}
+		}
+
 		uport_dev = dport_dev->parent;
 		if (!uport_dev) {
 			dev_warn(dev, "at %s no parent for dport: %s\n",

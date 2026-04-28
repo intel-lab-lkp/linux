@@ -926,3 +926,33 @@ int cxl_port_get_possible_dports(struct cxl_port *port)
 
 	return ctx.count;
 }
+
+/**
+ * cxl_port_pm_init_is_complete - check the downstream port's PM Init Complete
+ * @pdev: downstream port
+ *
+ * Read the Port Power Management Initialization Complete bit in the
+ * Downstream Port's CXL DVSEC Port Extended Status register.
+ *
+ * Return: false only when the bit is observably clear. Return true when PM
+ * init is complete, when @pdev is not a CXL port (no Port DVSEC), or when
+ * the status register cannot be read.
+ */
+bool cxl_port_pm_init_is_complete(struct pci_dev *pdev)
+{
+	u16 status;
+	u16 dvsec;
+	int rc;
+
+	dvsec = pci_find_dvsec_capability(pdev, PCI_VENDOR_ID_CXL,
+					  PCI_DVSEC_CXL_PORT);
+	if (!dvsec)
+		return true;
+
+	rc = pci_read_config_word(pdev, dvsec + PCI_DVSEC_CXL_PORT_EXT_STATUS,
+				  &status);
+	if (rc || PCI_POSSIBLE_ERROR(status))
+		return true;
+
+	return !!FIELD_GET(PCI_DVSEC_CXL_PORT_EXT_STATUS_PM_INIT_COMP, status);
+}

@@ -4964,7 +4964,7 @@ static void cxl_restore_acs_sv_bme(struct pci_dev *bridge, u16 saved_cmd,
  * Return: 0 on success, -ENOTTY if the reset cannot be issued, or an
  * errno from the reset path.
  */
-static int cxl_reset_bus_function(struct pci_dev *dev, bool probe)
+int cxl_reset_bus_function(struct pci_dev *dev, bool probe)
 {
 	struct pci_dev *bridge;
 	u16 dvsec, reg, val;
@@ -5013,6 +5013,7 @@ static int cxl_reset_bus_function(struct pci_dev *dev, bool probe)
 	pci_dev_reset_iommu_done(dev);
 	return rc;
 }
+EXPORT_SYMBOL_NS_GPL(cxl_reset_bus_function, "CXL");
 
 void pci_dev_lock(struct pci_dev *dev)
 {
