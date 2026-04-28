@@ -342,6 +342,7 @@ struct iavf_adapter {
 #define IAVF_FLAG_AQ_GET_SUPPORTED_RXDIDS		BIT_ULL(42)
 #define IAVF_FLAG_AQ_GET_PTP_CAPS			BIT_ULL(43)
 #define IAVF_FLAG_AQ_SEND_PTP_CMD			BIT_ULL(44)
+#define IAVF_FLAG_AQ_GET_VF_CAP_CAPS2			BIT_ULL(45)
 
 	/* AQ messages that must be sent after IAVF_FLAG_AQ_GET_CONFIG, in
 	 * order to negotiated extended capabilities.
@@ -349,7 +350,9 @@ struct iavf_adapter {
 #define IAVF_FLAG_AQ_EXTENDED_CAPS			\
 	(IAVF_FLAG_AQ_GET_OFFLOAD_VLAN_V2_CAPS |	\
 	 IAVF_FLAG_AQ_GET_SUPPORTED_RXDIDS |		\
-	 IAVF_FLAG_AQ_GET_PTP_CAPS)
+	 IAVF_FLAG_AQ_GET_PTP_CAPS |			\
+	 IAVF_FLAG_AQ_GET_VF_CAP_CAPS2 |		\
+	 0)
 
 	/* flags for processing extended capability messages during
 	 * __IAVF_INIT_EXTENDED_CAPS. Each capability exchange requires
@@ -365,6 +368,8 @@ struct iavf_adapter {
 #define IAVF_EXTENDED_CAP_RECV_RXDID			BIT_ULL(3)
 #define IAVF_EXTENDED_CAP_SEND_PTP			BIT_ULL(4)
 #define IAVF_EXTENDED_CAP_RECV_PTP			BIT_ULL(5)
+#define IAVF_EXTENDED_CAP_SEND_CAPS2			BIT_ULL(6)
+#define IAVF_EXTENDED_CAP_RECV_CAPS2			BIT_ULL(7)
 
 #define IAVF_EXTENDED_CAPS				\
 	(IAVF_EXTENDED_CAP_SEND_VLAN_V2 |		\
@@ -372,7 +377,10 @@ struct iavf_adapter {
 	 IAVF_EXTENDED_CAP_SEND_RXDID |			\
 	 IAVF_EXTENDED_CAP_RECV_RXDID |			\
 	 IAVF_EXTENDED_CAP_SEND_PTP |			\
-	 IAVF_EXTENDED_CAP_RECV_PTP)
+	 IAVF_EXTENDED_CAP_RECV_PTP |			\
+	 IAVF_EXTENDED_CAP_SEND_CAPS2 |			\
+	 IAVF_EXTENDED_CAP_RECV_CAPS2 |			\
+	 0)
 
 	/* Lock to prevent possible clobbering of
 	 * current_netdev_promisc_flags
@@ -429,6 +437,7 @@ struct iavf_adapter {
 #define IAVF_RXDID_ALLOWED(a)						\
 	test_bit(VIRTCHNL_VF_OFFLOAD_RX_FLEX_DESC, (a)->vf_cap_flags)
 #define IAVF_PTP_ALLOWED(a) test_bit(VIRTCHNL_VF_CAP_PTP, (a)->vf_cap_flags)
+#define IAVF_CAPS2_ALLOWED(a) test_bit(VIRTCHNL_VF_CAPS2, (a)->vf_cap_flags)
 	struct virtchnl_vf_resource *vf_res; /* incl. all VSIs */
 	struct virtchnl_vsi_resource *vsi_res; /* our LAN VSI */
 	struct virtchnl_version_info pf_version;
@@ -438,7 +447,9 @@ struct iavf_adapter {
 	u64 supp_rxdids;
 	struct iavf_ptp ptp;
 
-	/* Mirrors vf_res->vf_cap_flags */
+	/* Negotiated via VIRTCHNL_OP_GET_VF_CAPS2. First 32 bits mirror
+	 * vf_res->vf_cap_flags.
+	 */
 	DECLARE_BITMAP(vf_cap_flags, VIRTCHNL_VF_CAPS_MAX);
 
 	u16 msg_enable;
@@ -577,6 +588,8 @@ int iavf_send_vf_supported_rxdids_msg(struct iavf_adapter *adapter);
 int iavf_get_vf_supported_rxdids(struct iavf_adapter *adapter);
 int iavf_send_vf_ptp_caps_msg(struct iavf_adapter *adapter);
 int iavf_get_vf_ptp_caps(struct iavf_adapter *adapter);
+int iavf_send_vf_caps2_msg(struct iavf_adapter *adapter);
+int iavf_get_vf_caps2(struct iavf_adapter *adapter);
 void iavf_set_queue_vlan_tag_loc(struct iavf_adapter *adapter);
 u16 iavf_get_num_vlans_added(struct iavf_adapter *adapter);
 void iavf_irq_enable(struct iavf_adapter *adapter, bool flush);
