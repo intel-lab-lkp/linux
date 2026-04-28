@@ -923,7 +923,7 @@ static void bcmasp_phy_hw_unprepare(struct bcmasp_intf *intf)
 		bcmasp_rgmii_mode_en_set(intf, false);
 }
 
-static void bcmasp_netif_deinit(struct net_device *dev)
+static void bcmasp_netif_deinit(struct net_device *dev, bool stop_phy)
 {
 	struct bcmasp_intf *intf = netdev_priv(dev);
 	u32 reg, timeout = 1000;
@@ -946,7 +946,8 @@ static void bcmasp_netif_deinit(struct net_device *dev)
 
 	umac_enable_set(intf, UMC_CMD_TX_EN, 0);
 
-	phy_stop(dev->phydev);
+	if (stop_phy)
+		phy_stop(dev->phydev);
 
 	umac_enable_set(intf, UMC_CMD_RX_EN, 0);
 
@@ -974,7 +975,7 @@ static int bcmasp_stop(struct net_device *dev)
 	/* Stop tx from updating HW */
 	netif_tx_disable(dev);
 
-	bcmasp_netif_deinit(dev);
+	bcmasp_netif_deinit(dev, true);
 
 	bcmasp_reclaim_free_buffers(intf);
 
@@ -1383,15 +1384,20 @@ int bcmasp_interface_suspend(struct bcmasp_intf *intf)
 {
 	struct device *kdev = &intf->parent->pdev->dev;
 	struct net_device *dev = intf->ndev;
+	bool wake;
 
 	if (!netif_running(dev))
 		return 0;
 
 	netif_device_detach(dev);
 
-	bcmasp_netif_deinit(dev);
+	wake = device_may_wakeup(kdev) && intf->wolopts;
 
-	if (!intf->wolopts) {
+	bcmasp_netif_deinit(dev, !wake);
+
+	if (wake) {
+		bcmasp_suspend_to_wol(intf);
+	} else {
 		bcmasp_phy_hw_unprepare(intf);
 
 		/* If Wake-on-LAN is disabled, we can safely
@@ -1399,9 +1405,6 @@ int bcmasp_interface_suspend(struct bcmasp_intf *intf)
 		 */
 		bcmasp_core_clock_set_intf(intf, false);
 	}
-
-	if (device_may_wakeup(kdev) && intf->wolopts)
-		bcmasp_suspend_to_wol(intf);
 
 	clk_disable_unprepare(intf->parent->clk);
 
@@ -1426,8 +1429,11 @@ static void bcmasp_resume_from_wol(struct bcmasp_intf *intf)
 
 int bcmasp_interface_resume(struct bcmasp_intf *intf)
 {
+	struct device *kdev = &intf->parent->pdev->dev;
 	struct net_device *dev = intf->ndev;
+	bool wake;
 	int ret;
+	u32 reg;
 
 	if (!netif_running(dev))
 		return 0;
@@ -1436,17 +1442,31 @@ int bcmasp_interface_resume(struct bcmasp_intf *intf)
 	if (ret)
 		return ret;
 
+	wake = device_may_wakeup(kdev) && intf->wolopts;
+
 	bcmasp_core_clock_set_intf(intf, true);
 
-	bcmasp_resume_from_wol(intf);
-
-	bcmasp_phy_hw_prepare(intf);
-
-	umac_reset_and_init(intf, dev->dev_addr);
+	/* The interface might be HW reset in some suspend modes, so we may
+	 * need to restore the UNIMAC/PHY if that is the case.
+	 */
+	reg = umac_rl(intf, UMC_CMD);
+	if (wake && (reg & UMC_CMD_RX_EN)) {
+		umac_enable_set(intf, UMC_CMD_TX_EN, 1);
+		bcmasp_resume_from_wol(intf);
+	} else {
+		bcmasp_phy_hw_prepare(intf);
+		umac_reset_and_init(intf, dev->dev_addr);
+	}
 
 	bcmasp_netif_init(dev);
 
-	phy_start(dev->phydev);
+	/* If HW was reset, we need to force a link re-negotiation */
+	if (wake && !(reg & UMC_CMD_RX_EN)) {
+		phy_restart_aneg(dev->phydev);
+		phy_trigger_machine(dev->phydev);
+	} else if (!wake) {
+		phy_start(dev->phydev);
+	}
 
 	netif_device_attach(dev);
 
