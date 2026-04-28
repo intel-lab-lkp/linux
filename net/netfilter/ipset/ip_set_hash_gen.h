@@ -681,8 +681,8 @@ retry:
 	 * between the original and resized sets.
 	 */
 	orig = ipset_dereference_bh_nfnl(h->table);
-	atomic_set(&orig->ref, 1);
 	atomic_inc(&orig->uref);
+	atomic_set(&orig->ref, 1);
 	pr_debug("attempt to resize set %s from %u to %u, t %p\n",
 		 set->name, orig->htable_bits, htable_bits, orig);
 	for (r = 0; r < ahash_numof_locks(orig->htable_bits); r++) {
