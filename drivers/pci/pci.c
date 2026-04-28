@@ -4920,10 +4920,55 @@ done:
 	return rc;
 }
 
+static void cxl_disable_acs_sv_bme(struct pci_dev *bridge, u16 *saved_cmd,
+				   u16 *saved_acs_ctrl)
+{
+	if (!bridge->acs_cap)
+		return;
+
+	pci_read_config_word(bridge, bridge->acs_cap + PCI_ACS_CTRL,
+			     saved_acs_ctrl);
+	if (!(*saved_acs_ctrl & PCI_ACS_SV))
+		return;
+
+	pci_read_config_word(bridge, PCI_COMMAND, saved_cmd);
+	if (*saved_cmd & PCI_COMMAND_MASTER)
+		pci_clear_master(bridge);
+
+	pci_write_config_word(bridge, bridge->acs_cap + PCI_ACS_CTRL,
+			      *saved_acs_ctrl & ~PCI_ACS_SV);
+}
+
+static void cxl_restore_acs_sv_bme(struct pci_dev *bridge, u16 saved_cmd,
+				   u16 saved_acs_ctrl)
+{
+	if (!bridge->acs_cap || !(saved_acs_ctrl & PCI_ACS_SV))
+		return;
+
+	pci_write_config_word(bridge, bridge->acs_cap + PCI_ACS_CTRL,
+			      saved_acs_ctrl);
+	if (saved_cmd & PCI_COMMAND_MASTER)
+		pci_set_master(bridge);
+}
+
+/**
+ * cxl_reset_bus_function - SBR for a child of a CXL downstream port
+ * @dev: child device whose upstream bridge is a CXL downstream port
+ * @probe: if true, only check whether the reset is supported
+ *
+ * Issues an SBR on @dev's parent bus. Temporarily sets the CXL Port
+ * DVSEC Unmask SBR bit across the reset. When ACS Source Validation
+ * is enabled on the bridge, also temporarily clears Bus Master Enable
+ * and ACS Source Validation, per CXL r4.0 sec 8.1.5.1.
+ *
+ * Return: 0 on success, -ENOTTY if the reset cannot be issued, or an
+ * errno from the reset path.
+ */
 static int cxl_reset_bus_function(struct pci_dev *dev, bool probe)
 {
 	struct pci_dev *bridge;
 	u16 dvsec, reg, val;
+	u16 saved_cmd = 0, saved_acs_ctrl = 0;
 	int rc;
 
 	bridge = pci_upstream_bridge(dev);
@@ -4947,6 +4992,8 @@ static int cxl_reset_bus_function(struct pci_dev *dev, bool probe)
 		return rc;
 	}
 
+	cxl_disable_acs_sv_bme(bridge, &saved_cmd, &saved_acs_ctrl);
+
 	if (reg & PCI_DVSEC_CXL_PORT_CTL_UNMASK_SBR) {
 		val = reg;
 	} else {
@@ -4960,6 +5007,8 @@ static int cxl_reset_bus_function(struct pci_dev *dev, bool probe)
 	if (reg != val)
 		pci_write_config_word(bridge, dvsec + PCI_DVSEC_CXL_PORT_CTL,
 				      reg);
+
+	cxl_restore_acs_sv_bme(bridge, saved_cmd, saved_acs_ctrl);
 
 	pci_dev_reset_iommu_done(dev);
 	return rc;
