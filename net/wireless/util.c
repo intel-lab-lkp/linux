@@ -2738,6 +2738,27 @@ int cfg80211_link_sinfo_alloc_tid_stats(struct link_station_info *link_sinfo,
 }
 EXPORT_SYMBOL(cfg80211_link_sinfo_alloc_tid_stats);
 
+int cfg80211_alloc_link_sinfo_stats(struct link_station_info **link_sinfo,
+				    bool tidstats, gfp_t gfp)
+{
+	int ret;
+
+	*link_sinfo = kzalloc_obj(**link_sinfo, gfp);
+	if (!*link_sinfo)
+		return -ENOMEM;
+
+	if (tidstats) {
+		ret = cfg80211_link_sinfo_alloc_tid_stats(*link_sinfo, gfp);
+		if (ret) {
+			kfree(*link_sinfo);
+			*link_sinfo = NULL;
+			return ret;
+		}
+	}
+	return 0;
+}
+EXPORT_SYMBOL(cfg80211_alloc_link_sinfo_stats);
+
 int cfg80211_sinfo_alloc_tid_stats(struct station_info *sinfo, gfp_t gfp)
 {
 	sinfo->pertid = kzalloc_objs(*(sinfo->pertid), IEEE80211_NUM_TIDS + 1,

@@ -8199,7 +8199,7 @@ static int nl80211_dump_station(struct sk_buff *skb,
 	u8 mac_addr[ETH_ALEN];
 	int sta_idx = cb->args[2];
 	bool sinfo_alloc = false;
-	int err, i;
+	int err;
 
 	err = nl80211_prepare_wdev_dump(cb, &rdev, &wdev, NULL);
 	if (err)
@@ -8220,20 +8220,13 @@ static int nl80211_dump_station(struct sk_buff *skb,
 	while (1) {
 		memset(&sinfo, 0, sizeof(sinfo));
 
-		for (i = 0; i < IEEE80211_MLD_MAX_NUM_LINKS; i++) {
-			sinfo.links[i] =
-				kzalloc_obj(*sinfo.links[0]);
-			if (!sinfo.links[i]) {
-				err = -ENOMEM;
-				goto out_err;
-			}
-			sinfo_alloc = true;
-		}
-
 		err = rdev_dump_station(rdev, wdev, sta_idx,
 					mac_addr, &sinfo);
 		if (err == -ENOENT)
 			break;
+
+		sinfo_alloc = true;
+
 		if (err)
 			goto out_err;
 
@@ -8273,7 +8266,7 @@ static int nl80211_get_station(struct sk_buff *skb, struct genl_info *info)
 	struct station_info sinfo;
 	struct sk_buff *msg;
 	u8 *mac_addr = NULL;
-	int err, i;
+	int err;
 
 	memset(&sinfo, 0, sizeof(sinfo));
 
@@ -8288,19 +8281,9 @@ static int nl80211_get_station(struct sk_buff *skb, struct genl_info *info)
 	if (!rdev->ops->get_station)
 		return -EOPNOTSUPP;
 
-	for (i = 0; i < IEEE80211_MLD_MAX_NUM_LINKS; i++) {
-		sinfo.links[i] = kzalloc_obj(*sinfo.links[0]);
-		if (!sinfo.links[i]) {
-			cfg80211_sinfo_release_content(&sinfo);
-			return -ENOMEM;
-		}
-	}
-
 	err = rdev_get_station(rdev, wdev, mac_addr, &sinfo);
-	if (err) {
-		cfg80211_sinfo_release_content(&sinfo);
+	if (err)
 		return err;
-	}
 
 	msg = nlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
 	if (!msg) {

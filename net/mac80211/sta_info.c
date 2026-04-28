@@ -2963,8 +2963,7 @@ static void sta_set_link_sinfo(struct sta_info *sta,
 				BIT_ULL(NL80211_STA_INFO_RX_BITRATE);
 	}
 
-	if (tidstats && !cfg80211_link_sinfo_alloc_tid_stats(link_sinfo,
-							     GFP_KERNEL)) {
+	if (tidstats) {
 		for (i = 0; i < IEEE80211_NUM_TIDS + 1; i++)
 			sta_set_tidstats(sta, &link_sinfo->pertid[i], i,
 					 link_id);
@@ -3252,6 +3251,7 @@ void sta_set_sinfo(struct sta_info *sta, struct station_info *sinfo,
 	}
 
 	if (sta->sta.valid_links) {
+		struct link_station_info *link_sinfo;
 		struct ieee80211_link_data *link;
 		struct link_sta_info *link_sta;
 		int link_id;
@@ -3267,12 +3267,16 @@ void sta_set_sinfo(struct sta_info *sta, struct station_info *sinfo,
 			link = wiphy_dereference(sdata->local->hw.wiphy,
 						 sdata->link[link_id]);
 
-			if (!link_sta || !sinfo->links[link_id] || !link) {
+			if (!link_sta || !link ||
+			    cfg80211_alloc_link_sinfo_stats(&link_sinfo,
+							    tidstats,
+							    GFP_KERNEL)) {
 				sinfo->valid_links &= ~BIT(link_id);
 				continue;
 			}
-			sta_set_link_sinfo(sta, sinfo->links[link_id],
-					   link, tidstats);
+
+			sta_set_link_sinfo(sta, link_sinfo, link, tidstats);
+			sinfo->links[link_id] = link_sinfo;
 		}
 	}
 }

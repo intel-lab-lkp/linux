@@ -136,6 +136,8 @@ static void ieee80211_get_stats(struct net_device *dev,
 		if (sinfo.filled & BIT_ULL(NL80211_STA_INFO_SIGNAL_AVG))
 			data[i] = (u8)sinfo.signal_avg;
 		i++;
+		if (sinfo.valid_links)
+			cfg80211_sinfo_release_content(&sinfo);
 	} else {
 		list_for_each_entry(sta, &local->sta_list, list) {
 			/* Make sure this station belongs to the proper dev */
@@ -147,6 +149,8 @@ static void ieee80211_get_stats(struct net_device *dev,
 			i = 0;
 			ADD_STA_STATS(&sta->deflink);
 			data[i++] = sdata->tx_handlers_drop;
+			if (sinfo.valid_links)
+				cfg80211_sinfo_release_content(&sinfo);
 		}
 	}
 
