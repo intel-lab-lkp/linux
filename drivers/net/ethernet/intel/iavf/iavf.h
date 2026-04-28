@@ -394,7 +394,7 @@ struct iavf_adapter {
 	bool link_up;
 	enum virtchnl_link_speed link_speed;
 	/* This is only populated if the VIRTCHNL_VF_CAP_ADV_LINK_SPEED is set
-	 * in vf_res->vf_cap_flags. Use ADV_LINK_SUPPORT macro to determine if
+	 * in vf_cap_flags. Use ADV_LINK_SUPPORT macro to determine if
 	 * this field is valid. This field should be used going forward and the
 	 * enum virtchnl_link_speed above should be considered the legacy way of
 	 * storing/communicating link speeds.
@@ -403,39 +403,32 @@ struct iavf_adapter {
 
 	enum virtchnl_ops current_op;
 /* RSS by the PF should be preferred over RSS via other methods. */
-#define RSS_PF(_a) ((_a)->vf_res->vf_cap_flags & \
-		    VIRTCHNL_VF_OFFLOAD_RSS_PF)
-#define RSS_AQ(_a) ((_a)->vf_res->vf_cap_flags & \
-		    VIRTCHNL_VF_OFFLOAD_RSS_AQ)
-#define RSS_REG(_a) (!((_a)->vf_res->vf_cap_flags & \
-		       (VIRTCHNL_VF_OFFLOAD_RSS_AQ | \
-			VIRTCHNL_VF_OFFLOAD_RSS_PF)))
-#define VLAN_ALLOWED(_a) ((_a)->vf_res->vf_cap_flags & \
-			  VIRTCHNL_VF_OFFLOAD_VLAN)
-#define VLAN_V2_ALLOWED(_a) ((_a)->vf_res->vf_cap_flags & \
-			     VIRTCHNL_VF_OFFLOAD_VLAN_V2)
-#define CRC_OFFLOAD_ALLOWED(_a) ((_a)->vf_res->vf_cap_flags & \
-				 VIRTCHNL_VF_OFFLOAD_CRC)
-#define TC_U32_SUPPORT(_a) ((_a)->vf_res->vf_cap_flags & \
-			    VIRTCHNL_VF_OFFLOAD_TC_U32)
+#define RSS_PF(_a) test_bit(VIRTCHNL_VF_OFFLOAD_RSS_PF, (_a)->vf_cap_flags)
+#define RSS_AQ(_a) test_bit(VIRTCHNL_VF_OFFLOAD_RSS_AQ, (_a)->vf_cap_flags)
+#define RSS_REG(_a) (!(RSS_PF(_a) || RSS_AQ(_a)))
+#define VLAN_ALLOWED(_a) test_bit(VIRTCHNL_VF_OFFLOAD_VLAN, (_a)->vf_cap_flags)
+#define VLAN_V2_ALLOWED(_a)						\
+	test_bit(VIRTCHNL_VF_OFFLOAD_VLAN_V2, (_a)->vf_cap_flags)
+#define CRC_OFFLOAD_ALLOWED(_a)						\
+	test_bit(VIRTCHNL_VF_OFFLOAD_CRC, (_a)->vf_cap_flags)
+#define TC_U32_SUPPORT(_a)						\
+	test_bit(VIRTCHNL_VF_OFFLOAD_TC_U32, (_a)->vf_cap_flags)
 #define VLAN_V2_FILTERING_ALLOWED(_a) \
 	(VLAN_V2_ALLOWED((_a)) && \
 	 ((_a)->vlan_v2_caps.filtering.filtering_support.outer || \
 	  (_a)->vlan_v2_caps.filtering.filtering_support.inner))
 #define VLAN_FILTERING_ALLOWED(_a) \
 	(VLAN_ALLOWED((_a)) || VLAN_V2_FILTERING_ALLOWED((_a)))
-#define ADV_LINK_SUPPORT(_a) ((_a)->vf_res->vf_cap_flags & \
-			      VIRTCHNL_VF_CAP_ADV_LINK_SPEED)
-#define FDIR_FLTR_SUPPORT(_a) ((_a)->vf_res->vf_cap_flags & \
-			       VIRTCHNL_VF_OFFLOAD_FDIR_PF)
-#define ADV_RSS_SUPPORT(_a) ((_a)->vf_res->vf_cap_flags & \
-			     VIRTCHNL_VF_OFFLOAD_ADV_RSS_PF)
-#define QOS_ALLOWED(_a) ((_a)->vf_res->vf_cap_flags & \
-			 VIRTCHNL_VF_OFFLOAD_QOS)
+#define ADV_LINK_SUPPORT(_a)						\
+	test_bit(VIRTCHNL_VF_CAP_ADV_LINK_SPEED, (_a)->vf_cap_flags)
+#define FDIR_FLTR_SUPPORT(_a)						\
+	test_bit(VIRTCHNL_VF_OFFLOAD_FDIR_PF, (_a)->vf_cap_flags)
+#define ADV_RSS_SUPPORT(_a)						\
+	test_bit(VIRTCHNL_VF_OFFLOAD_ADV_RSS_PF, (_a)->vf_cap_flags)
+#define QOS_ALLOWED(_a) test_bit(VIRTCHNL_VF_OFFLOAD_QOS, (_a)->vf_cap_flags)
 #define IAVF_RXDID_ALLOWED(a)						\
-	((a)->vf_res->vf_cap_flags & VIRTCHNL_VF_OFFLOAD_RX_FLEX_DESC)
-#define IAVF_PTP_ALLOWED(a)						\
-	((a)->vf_res->vf_cap_flags & VIRTCHNL_VF_CAP_PTP)
+	test_bit(VIRTCHNL_VF_OFFLOAD_RX_FLEX_DESC, (a)->vf_cap_flags)
+#define IAVF_PTP_ALLOWED(a) test_bit(VIRTCHNL_VF_CAP_PTP, (a)->vf_cap_flags)
 	struct virtchnl_vf_resource *vf_res; /* incl. all VSIs */
 	struct virtchnl_vsi_resource *vsi_res; /* our LAN VSI */
 	struct virtchnl_version_info pf_version;
@@ -444,6 +437,10 @@ struct iavf_adapter {
 	struct virtchnl_vlan_caps vlan_v2_caps;
 	u64 supp_rxdids;
 	struct iavf_ptp ptp;
+
+	/* Mirrors vf_res->vf_cap_flags */
+	DECLARE_BITMAP(vf_cap_flags, VIRTCHNL_VF_CAPS_MAX);
+
 	u16 msg_enable;
 	struct iavf_eth_stats current_stats;
 	struct virtchnl_qos_cap_list *qos_caps;
