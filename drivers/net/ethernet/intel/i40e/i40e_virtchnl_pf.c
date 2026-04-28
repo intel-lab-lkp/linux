@@ -90,7 +90,7 @@ static void i40e_set_vf_link_state(struct i40e_vf *vf,
 	if (vf->link_forced)
 		link_status = vf->link_up;
 
-	if (vf->driver_caps & VIRTCHNL_VF_CAP_ADV_LINK_SPEED) {
+	if (test_bit(VIRTCHNL_VF_CAP_ADV_LINK_SPEED, vf->driver_caps)) {
 		pfe->event_data.link_event_adv.link_speed = link_status ?
 			i40e_vc_link_speed2mbps(ls->link_speed) : 0;
 		pfe->event_data.link_event_adv.link_status = link_status;
@@ -455,8 +455,8 @@ static void i40e_config_irq_link_list(struct i40e_vf *vf, u16 vsi_id,
 	/* if the vf is running in polling mode and using interrupt zero,
 	 * need to disable auto-mask on enabling zero interrupt for VFs.
 	 */
-	if ((vf->driver_caps & VIRTCHNL_VF_OFFLOAD_RX_POLLING) &&
-	    (vector_id == 0)) {
+	if (test_bit(VIRTCHNL_VF_OFFLOAD_RX_POLLING, vf->driver_caps) &&
+	    vector_id == 0) {
 		reg = rd32(hw, I40E_GLINT_CTL);
 		if (!(reg & I40E_GLINT_CTL_DIS_AUTOMASK_VF0_MASK)) {
 			reg |= I40E_GLINT_CTL_DIS_AUTOMASK_VF0_MASK;
@@ -2146,51 +2146,56 @@ static int i40e_vc_get_vf_resources_msg(struct i40e_vf *vf, u8 *msg)
 		len = 0;
 		goto err;
 	}
-	if (VF_IS_V11(&vf->vf_ver))
-		vf->driver_caps = *(u32 *)msg;
-	else
-		vf->driver_caps = VIRTCHNL_VF_OFFLOAD_L2 |
-				  VIRTCHNL_VF_OFFLOAD_RSS_REG |
-				  VIRTCHNL_VF_OFFLOAD_VLAN;
 
-	vfres->vf_cap_flags = VIRTCHNL_VF_OFFLOAD_L2;
-	vfres->vf_cap_flags |= VIRTCHNL_VF_CAP_ADV_LINK_SPEED;
+	bitmap_zero(vf->driver_caps, VIRTCHNL_VF_CAPS_MAX);
+	if (VF_IS_V11(&vf->vf_ver)) {
+		bitmap_from_arr32(vf->driver_caps, (u32 *)msg,
+				  BITS_PER_TYPE(u32));
+	} else {
+		__set_bit(VIRTCHNL_VF_OFFLOAD_L2, vf->driver_caps);
+		__set_bit(VIRTCHNL_VF_OFFLOAD_RSS_REG, vf->driver_caps);
+		__set_bit(VIRTCHNL_VF_OFFLOAD_VLAN, vf->driver_caps);
+	}
+
+	vfres->vf_cap_flags = BIT(VIRTCHNL_VF_OFFLOAD_L2);
+	vfres->vf_cap_flags |= BIT(VIRTCHNL_VF_CAP_ADV_LINK_SPEED);
 	vsi = pf->vsi[vf->lan_vsi_idx];
 	if (!vsi->info.pvid)
-		vfres->vf_cap_flags |= VIRTCHNL_VF_OFFLOAD_VLAN;
+		vfres->vf_cap_flags |= BIT(VIRTCHNL_VF_OFFLOAD_VLAN);
 
 	if (i40e_vf_client_capable(pf, vf->vf_id) &&
-	    (vf->driver_caps & VIRTCHNL_VF_OFFLOAD_RDMA)) {
-		vfres->vf_cap_flags |= VIRTCHNL_VF_OFFLOAD_RDMA;
+	    test_bit(VIRTCHNL_VF_OFFLOAD_RDMA, vf->driver_caps)) {
+		vfres->vf_cap_flags |= BIT(VIRTCHNL_VF_OFFLOAD_RDMA);
 		set_bit(I40E_VF_STATE_RDMAENA, &vf->vf_states);
 	} else {
 		clear_bit(I40E_VF_STATE_RDMAENA, &vf->vf_states);
 	}
 
-	if (vf->driver_caps & VIRTCHNL_VF_OFFLOAD_RSS_PF) {
-		vfres->vf_cap_flags |= VIRTCHNL_VF_OFFLOAD_RSS_PF;
+	if (test_bit(VIRTCHNL_VF_OFFLOAD_RSS_PF, vf->driver_caps)) {
+		vfres->vf_cap_flags |= BIT(VIRTCHNL_VF_OFFLOAD_RSS_PF);
 	} else {
 		if (test_bit(I40E_HW_CAP_RSS_AQ, pf->hw.caps) &&
-		    (vf->driver_caps & VIRTCHNL_VF_OFFLOAD_RSS_AQ))
-			vfres->vf_cap_flags |= VIRTCHNL_VF_OFFLOAD_RSS_AQ;
+		    test_bit(VIRTCHNL_VF_OFFLOAD_RSS_AQ, vf->driver_caps))
+			vfres->vf_cap_flags |= BIT(VIRTCHNL_VF_OFFLOAD_RSS_AQ);
 		else
-			vfres->vf_cap_flags |= VIRTCHNL_VF_OFFLOAD_RSS_REG;
+			vfres->vf_cap_flags |= BIT(VIRTCHNL_VF_OFFLOAD_RSS_REG);
 	}
 
 	if (test_bit(I40E_HW_CAP_MULTI_TCP_UDP_RSS_PCTYPE, pf->hw.caps)) {
-		if (vf->driver_caps & VIRTCHNL_VF_OFFLOAD_RSS_PCTYPE_V2)
+		if (test_bit(VIRTCHNL_VF_OFFLOAD_RSS_PCTYPE_V2,
+			     vf->driver_caps))
 			vfres->vf_cap_flags |=
-				VIRTCHNL_VF_OFFLOAD_RSS_PCTYPE_V2;
+				BIT(VIRTCHNL_VF_OFFLOAD_RSS_PCTYPE_V2);
 	}
 
-	if (vf->driver_caps & VIRTCHNL_VF_OFFLOAD_ENCAP)
-		vfres->vf_cap_flags |= VIRTCHNL_VF_OFFLOAD_ENCAP;
+	if (test_bit(VIRTCHNL_VF_OFFLOAD_ENCAP, vf->driver_caps))
+		vfres->vf_cap_flags |= BIT(VIRTCHNL_VF_OFFLOAD_ENCAP);
 
 	if (test_bit(I40E_HW_CAP_OUTER_UDP_CSUM, pf->hw.caps) &&
-	    (vf->driver_caps & VIRTCHNL_VF_OFFLOAD_ENCAP_CSUM))
-		vfres->vf_cap_flags |= VIRTCHNL_VF_OFFLOAD_ENCAP_CSUM;
+	    test_bit(VIRTCHNL_VF_OFFLOAD_ENCAP_CSUM, vf->driver_caps))
+		vfres->vf_cap_flags |= BIT(VIRTCHNL_VF_OFFLOAD_ENCAP_CSUM);
 
-	if (vf->driver_caps & VIRTCHNL_VF_OFFLOAD_RX_POLLING) {
+	if (test_bit(VIRTCHNL_VF_OFFLOAD_RX_POLLING, vf->driver_caps)) {
 		if (test_bit(I40E_FLAG_MFP_ENA, pf->flags)) {
 			dev_err(&pf->pdev->dev,
 				"VF %d requested polling mode: this feature is supported only when the device is running in single function per port (SFP) mode\n",
@@ -2198,20 +2203,20 @@ static int i40e_vc_get_vf_resources_msg(struct i40e_vf *vf, u8 *msg)
 			aq_ret = -EINVAL;
 			goto err;
 		}
-		vfres->vf_cap_flags |= VIRTCHNL_VF_OFFLOAD_RX_POLLING;
+		vfres->vf_cap_flags |= BIT(VIRTCHNL_VF_OFFLOAD_RX_POLLING);
 	}
 
 	if (test_bit(I40E_HW_CAP_WB_ON_ITR, pf->hw.caps)) {
-		if (vf->driver_caps & VIRTCHNL_VF_OFFLOAD_WB_ON_ITR)
+		if (test_bit(VIRTCHNL_VF_OFFLOAD_WB_ON_ITR, vf->driver_caps))
 			vfres->vf_cap_flags |=
-					VIRTCHNL_VF_OFFLOAD_WB_ON_ITR;
+					BIT(VIRTCHNL_VF_OFFLOAD_WB_ON_ITR);
 	}
 
-	if (vf->driver_caps & VIRTCHNL_VF_OFFLOAD_REQ_QUEUES)
-		vfres->vf_cap_flags |= VIRTCHNL_VF_OFFLOAD_REQ_QUEUES;
+	if (test_bit(VIRTCHNL_VF_OFFLOAD_REQ_QUEUES, vf->driver_caps))
+		vfres->vf_cap_flags |= BIT(VIRTCHNL_VF_OFFLOAD_REQ_QUEUES);
 
-	if (vf->driver_caps & VIRTCHNL_VF_OFFLOAD_ADQ)
-		vfres->vf_cap_flags |= VIRTCHNL_VF_OFFLOAD_ADQ;
+	if (test_bit(VIRTCHNL_VF_OFFLOAD_ADQ, vf->driver_caps))
+		vfres->vf_cap_flags |= BIT(VIRTCHNL_VF_OFFLOAD_ADQ);
 
 	vfres->num_vsis = num_vsis;
 	vfres->num_queue_pairs = vf->num_queue_pairs;
@@ -2227,7 +2232,8 @@ static int i40e_vc_get_vf_resources_msg(struct i40e_vf *vf, u8 *msg)
 		/* VFs only use TC 0 */
 		vfres->vsi_res[0].qset_handle
 					  = le16_to_cpu(vsi->info.qs_handle[0]);
-		if (!(vf->driver_caps & VIRTCHNL_VF_OFFLOAD_USO) && !vf->pf_set_mac) {
+		if (!test_bit(VIRTCHNL_VF_OFFLOAD_USO, vf->driver_caps) &&
+		    !vf->pf_set_mac) {
 			spin_lock_bh(&vsi->mac_filter_hash_lock);
 			i40e_del_mac_filter(vsi, vf->default_lan_addr.addr);
 			eth_zero_addr(vf->default_lan_addr.addr);
@@ -4059,7 +4065,7 @@ static int i40e_vc_add_qch_msg(struct i40e_vf *vf, u8 *msg)
 		goto err;
 	}
 
-	if (!(vf->driver_caps & VIRTCHNL_VF_OFFLOAD_ADQ)) {
+	if (!test_bit(VIRTCHNL_VF_OFFLOAD_ADQ, vf->driver_caps)) {
 		dev_err(&pf->pdev->dev,
 			"VF %d attempting to enable ADq, but hasn't properly negotiated that capability\n",
 			vf->vf_id);
