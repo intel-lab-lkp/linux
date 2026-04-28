@@ -2004,7 +2004,6 @@ static void uart_line_info(struct seq_file *m, struct uart_state *state)
 	struct uart_port *uport;
 	char stat_buf[32];
 	unsigned int status;
-	int mmio;
 
 	guard(mutex)(&port->mutex);
 
@@ -2012,13 +2011,14 @@ static void uart_line_info(struct seq_file *m, struct uart_state *state)
 	if (!uport)
 		return;
 
-	mmio = uport->iotype >= UPIO_MEM;
-	seq_printf(m, "%u: uart:%s %s%08llX irq:%u",
-			uport->line, uart_type(uport),
-			mmio ? "mmio:0x" : "port:",
-			mmio ? (unsigned long long)uport->mapbase
-			     : (unsigned long long)uport->iobase,
-			uport->irq);
+	seq_printf(m, "%u: uart:%s", uport->line, uart_type(uport));
+
+	if (uart_iotype_mmio(uport->iotype))
+		seq_printf(m, " mmio:%pa", &uport->mapbase);
+	else if (uart_iotype_legacy_io(uport->iotype))
+		seq_printf(m, " port:%08lX", uport->iobase);
+
+	seq_printf(m, " irq:%u", uport->irq);
 
 	if (uport->type == PORT_UNKNOWN) {
 		seq_putc(m, '\n');
