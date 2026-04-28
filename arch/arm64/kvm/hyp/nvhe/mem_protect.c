@@ -984,14 +984,10 @@ int __pkvm_guest_share_host(struct pkvm_hyp_vcpu *vcpu, u64 gfn)
 				     &vcpu->vcpu.arch.pkvm_memcache, 0);
 	if (ret) {
 		/*
-		 * Stage-2 map can fail mid-walk (e.g. -ENOMEM from the
-		 * memcache), leaving partial leaf entries in the guest
-		 * stage-2 transitioned to PKVM_PAGE_SHARED_OWNED. Tear
-		 * them down so the host does not see a partially-shared
-		 * mapping it has not yet acknowledged via the host
-		 * stage-2 update below. No host bookkeeping needs
-		 * unwinding here: the only mutation prior to the failed
-		 * map is the (now-discarded) guest stage-2 update itself.
+		 * Defensive: get_valid_guest_pte() guarantees a last-level
+		 * leaf PTE already exists, so stage-2 map() cannot currently
+		 * fail here. The unmap() restores the IPA to a clean state as
+		 * a guard should the precondition ever change.
 		 */
 		kvm_pgtable_stage2_unmap(&vm->pgt, ipa, PAGE_SIZE);
 		goto unlock;
@@ -1024,13 +1020,30 @@ int __pkvm_guest_unshare_host(struct pkvm_hyp_vcpu *vcpu, u64 gfn)
 	if (__host_check_page_state_range(phys, PAGE_SIZE, PKVM_PAGE_SHARED_BORROWED))
 		goto unlock;
 
-	ret = 0;
 	meta = host_stage2_encode_gfn_meta(vm, gfn);
 	WARN_ON(host_stage2_set_owner_metadata_locked(phys, PAGE_SIZE,
 						      PKVM_ID_GUEST, meta));
-	WARN_ON(kvm_pgtable_stage2_map(&vm->pgt, ipa, PAGE_SIZE, phys,
-				       pkvm_mkstate(KVM_PGTABLE_PROT_RWX, PKVM_PAGE_OWNED),
-				       &vcpu->vcpu.arch.pkvm_memcache, 0));
+	ret = kvm_pgtable_stage2_map(&vm->pgt, ipa, PAGE_SIZE, phys,
+				     pkvm_mkstate(KVM_PGTABLE_PROT_RWX, PKVM_PAGE_OWNED),
+				     &vcpu->vcpu.arch.pkvm_memcache, 0);
+	if (ret) {
+		/*
+		 * Defensive: get_valid_guest_pte() guarantees a last-level
+		 * leaf PTE already exists, so stage-2 map() cannot currently
+		 * fail here. The unmap() and host-side rollback below are
+		 * kept as guards should the precondition ever change.
+		 */
+		kvm_pgtable_stage2_unmap(&vm->pgt, ipa, PAGE_SIZE);
+
+		/*
+		 * Roll back the host stage-2 mutation above: the host leaf
+		 * PTE was just written by host_stage2_set_owner_metadata_locked(),
+		 * so __host_set_page_state_range() rewrites it in-place
+		 * without needing fresh page-table pages from host_s2_pool.
+		 */
+		WARN_ON(__host_set_page_state_range(phys, PAGE_SIZE,
+						    PKVM_PAGE_SHARED_BORROWED));
+	}
 unlock:
 	guest_unlock_component(vm);
 	host_unlock_component();
