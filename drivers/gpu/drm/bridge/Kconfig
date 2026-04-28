@@ -132,6 +132,19 @@ config DRM_ITE_IT6505
 	help
 	  ITE IT6505 DisplayPort bridge chip driver.
 
+config DRM_LONTIUM_LT7911EXC
+	tristate "Lontium eDP/MIPI bridge"
+	depends on OF
+	select CRC32
+	select FW_LOADER
+	select DRM_PANEL
+	select DRM_KMS_HELPER
+	help
+	  DRM driver for the Lontium LT7911EXC bridge chip.
+	  The LT7911EXC converts eDP input to single/dual port
+	  MIPI DSI output.
+	  Please say Y if you have such hardware.
+
 config DRM_LONTIUM_LT8912B
 	tristate "Lontium LT8912B DSI/HDMI bridge"
 	depends on OF
