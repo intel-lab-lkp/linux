@@ -368,7 +368,6 @@ static int tls_strp_copyin(read_descriptor_t *desc, struct sk_buff *in_skb,
 		desc->count = 0;
 
 		WRITE_ONCE(strp->msg_ready, 1);
-		tls_rx_msg_ready(strp);
 	}
 
 	return ret;
@@ -539,18 +538,32 @@ static int tls_strp_read_sock(struct tls_strparser *strp)
 		return tls_strp_read_copy(strp, false);
 
 	WRITE_ONCE(strp->msg_ready, 1);
-	tls_rx_msg_ready(strp);
 
 	return 0;
 }
 
-void tls_strp_check_rcv(struct tls_strparser *strp)
+/**
+ * tls_strp_check_rcv - parse queued data and optionally notify
+ * @strp: TLS stream parser instance
+ * @wake: if true, fire consumer notification when a message is ready
+ *
+ * When @wake is false, queued data is parsed without consumer
+ * notification. A subsequent call with @wake set to true is
+ * required before the socket lock is released; otherwise queued
+ * data stalls until the next tls_strp_data_ready() event.
+ */
+void tls_strp_check_rcv(struct tls_strparser *strp, bool wake)
 {
-	if (unlikely(strp->stopped) || strp->msg_ready)
+	if (unlikely(strp->stopped))
 		return;
 
-	if (tls_strp_read_sock(strp) == -ENOMEM)
-		queue_work(tls_strp_wq, &strp->work);
+	if (!strp->msg_ready) {
+		if (tls_strp_read_sock(strp) == -ENOMEM)
+			queue_work(tls_strp_wq, &strp->work);
+	}
+
+	if (wake && strp->msg_ready)
+		tls_rx_msg_ready(strp);
 }
 
 /* Lower sock lock held */
@@ -568,7 +581,7 @@ void tls_strp_data_ready(struct tls_strparser *strp)
 		return;
 	}
 
-	tls_strp_check_rcv(strp);
+	tls_strp_check_rcv(strp, true);
 }
 
 static void tls_strp_work(struct work_struct *w)
@@ -577,7 +590,7 @@ static void tls_strp_work(struct work_struct *w)
 		container_of(w, struct tls_strparser, work);
 
 	lock_sock(strp->sk);
-	tls_strp_check_rcv(strp);
+	tls_strp_check_rcv(strp, true);
 	release_sock(strp->sk);
 }
 
@@ -601,12 +614,6 @@ void tls_strp_msg_release(struct tls_strparser *strp)
 
 	WRITE_ONCE(strp->msg_ready, 0);
 	memset(&strp->stm, 0, sizeof(strp->stm));
-}
-
-void tls_strp_msg_done(struct tls_strparser *strp)
-{
-	tls_strp_msg_release(strp);
-	tls_strp_check_rcv(strp);
 }
 
 void tls_strp_stop(struct tls_strparser *strp)
