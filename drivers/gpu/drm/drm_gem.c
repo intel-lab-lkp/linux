@@ -1041,10 +1041,14 @@ int drm_gem_change_handle_ioctl(struct drm_device *dev, void *data,
 
 	mutex_lock(&file_priv->prime.lock);
 
+	idr_preload(GFP_KERNEL);
 	spin_lock(&file_priv->table_lock);
+
 	ret = idr_alloc(&file_priv->object_idr, obj, handle, handle + 1,
 			GFP_NOWAIT);
+
 	spin_unlock(&file_priv->table_lock);
+	idr_preload_end();
 
 	if (ret < 0)
 		goto out_unlock;
