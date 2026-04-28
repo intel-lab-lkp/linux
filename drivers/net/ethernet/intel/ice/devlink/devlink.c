@@ -1748,7 +1748,10 @@ struct ice_sf_priv *ice_allocate_sf(struct device *dev, struct ice_pf *pf)
 void ice_devlink_register(struct ice_pf *pf)
 {
 	struct devlink *devlink = priv_to_devlink(pf);
+	struct ice_adapter *adapter = pf->adapter;
 
+	if (adapter)
+		devl_nested_devlink_set(adapter->devlink, devlink);
 	devl_register(devlink);
 }
 
