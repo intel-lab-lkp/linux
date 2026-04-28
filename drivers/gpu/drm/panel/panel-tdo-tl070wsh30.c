@@ -169,9 +169,7 @@ static int tdo_tl070wsh30_panel_add(struct tdo_tl070wsh30_panel *tdo_tl070wsh30)
 	if (err)
 		return err;
 
-	drm_panel_add(&tdo_tl070wsh30->base);
-
-	return 0;
+	return devm_drm_panel_add(dev, &tdo_tl070wsh30->base);
 }
 
 static int tdo_tl070wsh30_panel_probe(struct mipi_dsi_device *dsi)
@@ -207,7 +205,6 @@ static void tdo_tl070wsh30_panel_remove(struct mipi_dsi_device *dsi)
 	if (err < 0)
 		dev_err(&dsi->dev, "failed to detach from DSI host: %d\n", err);
 
-	drm_panel_remove(&tdo_tl070wsh30->base);
 }
 
 static struct mipi_dsi_driver tdo_tl070wsh30_panel_driver = {
