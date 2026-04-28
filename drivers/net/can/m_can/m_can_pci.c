@@ -183,9 +183,9 @@ static SIMPLE_DEV_PM_OPS(m_can_pci_pm_ops,
 			 m_can_pci_suspend, m_can_pci_resume);
 
 static const struct pci_device_id m_can_pci_id_table[] = {
-	{ PCI_VDEVICE(INTEL, 0x4bc1), M_CAN_CLOCK_FREQ_EHL, },
-	{ PCI_VDEVICE(INTEL, 0x4bc2), M_CAN_CLOCK_FREQ_EHL, },
-	{  }	/* Terminating Entry */
+	{ PCI_VDEVICE(INTEL, 0x4bc1), .driver_data = M_CAN_CLOCK_FREQ_EHL, },
+	{ PCI_VDEVICE(INTEL, 0x4bc2), .driver_data = M_CAN_CLOCK_FREQ_EHL, },
+	{ }	/* terminating entry */
 };
 MODULE_DEVICE_TABLE(pci, m_can_pci_id_table);
 
