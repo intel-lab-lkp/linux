@@ -384,6 +384,13 @@ static void collect_percpu_times(struct psi_group *group,
 
 		get_recent_times(group, cpu, aggregator, times,
 				&cpu_changed_states);
+		/*
+		 * If this CPU's PSI_NONIDLE delta is zero, it contributes
+		 * nothing to nonidle_total or to any deltas[] entry below,
+		 * so skip it early.
+		 */
+		if (!(cpu_changed_states & (1 << PSI_NONIDLE)))
+			continue;
 		changed_states |= cpu_changed_states;
 
 		nonidle = nsecs_to_jiffies(times[PSI_NONIDLE]);
