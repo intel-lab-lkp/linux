@@ -2664,6 +2664,7 @@ static int kprobes_module_callback(struct notifier_block *nb,
 				   unsigned long val, void *data)
 {
 	struct module *mod = data;
+	struct hlist_node *tmp;
 	struct hlist_head *head;
 	struct kprobe *p;
 	unsigned int i;
@@ -2685,7 +2686,7 @@ static int kprobes_module_callback(struct notifier_block *nb,
 	 */
 	for (i = 0; i < KPROBE_TABLE_SIZE; i++) {
 		head = &kprobe_table[i];
-		hlist_for_each_entry(p, head, hlist)
+		hlist_for_each_entry_safe(p, tmp, head, hlist) {
 			if (within_module_init((unsigned long)p->addr, mod) ||
 			    (checkcore &&
 			     within_module_core((unsigned long)p->addr, mod))) {
@@ -2702,6 +2703,26 @@ static int kprobes_module_callback(struct notifier_block *nb,
 				 */
 				kill_kprobe(p);
 			}
+
+			/*
+			 * Child probes are not on the kprobe hash list, so
+			 * the above loop can not find them. If a child probe
+			 * is allocated in the module's memory, it will become
+			 * a dangling pointer after the module is freed.
+			 */
+			if (kprobe_aggrprobe(p)) {
+				struct kprobe *kp, *kptmp;
+
+				list_for_each_entry_safe(kp, kptmp, &p->list, list) {
+					if (within_module_init((unsigned long)kp, mod) ||
+					    (checkcore &&
+					     within_module_core((unsigned long)kp, mod))) {
+						kp->flags |= KPROBE_FLAG_GONE;
+						list_del_rcu(&kp->list);
+					}
+				}
+			}
+		}
 	}
 	if (val == MODULE_STATE_GOING)
 		remove_module_kprobe_blacklist(mod);
