@@ -133,10 +133,15 @@ static struct tplg_tmpl_001 tplg_tmpl_empty = {
 
 struct tplg_tmpl_002 {
 	struct snd_soc_tplg_hdr header;
-	struct snd_soc_tplg_manifest manifest;
-	struct snd_soc_tplg_hdr pcm_header;
-	struct snd_soc_tplg_pcm pcm;
+
+	/* Must be last as it ends in a flexible-array member. */
+	__TRAILING_OVERLAP(struct snd_soc_tplg_manifest, manifest, priv.data, __packed,
+		struct snd_soc_tplg_hdr pcm_header;
+		struct snd_soc_tplg_pcm pcm;
+	);
 } __packed;
+static_assert(offsetof(struct tplg_tmpl_002, manifest.priv.data) ==
+	      offsetof(struct tplg_tmpl_002, pcm_header));
 
 static struct tplg_tmpl_002 tplg_tmpl_with_pcm = {
 	.header = {
