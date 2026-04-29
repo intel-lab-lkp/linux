@@ -599,7 +599,7 @@ static int ov2722_s_power(struct v4l2_subdev *sd, int on)
 	return ret;
 }
 
-/* TODO: remove it. */
+/* Initialize OV2722 sensor */
 static int ov2722_startup(struct v4l2_subdev *sd)
 {
 	struct ov2722_device *dev = to_ov2722_sensor(sd);
@@ -619,7 +619,7 @@ static int ov2722_startup(struct v4l2_subdev *sd)
 		return ret;
 	}
 
-	return ret;
+	return 0;
 }
 
 static int ov2722_set_fmt(struct v4l2_subdev *sd,
