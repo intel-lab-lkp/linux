@@ -646,6 +646,22 @@ static void dwc3_config_soc_bus(struct dwc3 *dwc)
 		reg |= DWC3_GSBUSCFG0_REQINFO(dwc->gsbuscfg0_reqinfo);
 		dwc3_writel(dwc, DWC3_GSBUSCFG0, reg);
 	}
+
+	/*
+	 * The csr_tx_deemph setting is common across the controller and
+	 * is configured per port using DWC3_LCSR_TX_DEEMPH(port).
+	 */
+	if (dwc->csr_tx_deemph_field_1 != DWC3_LCSR_TX_DEEMPH_UNSPECIFIED) {
+		unsigned int port;
+		u32 reg;
+
+		for (port = 0; port < dwc->num_usb3_ports; port++) {
+			reg = dwc3_readl(dwc, DWC3_LCSR_TX_DEEMPH(port));
+			reg &= ~DWC3_LCSR_TX_DEEMPH_MASK(~0);
+			reg |= DWC3_LCSR_TX_DEEMPH_MASK(dwc->csr_tx_deemph_field_1);
+			dwc3_writel(dwc, DWC3_LCSR_TX_DEEMPH(port), reg);
+		}
+	}
 }
 
 static int dwc3_core_ulpi_init(struct dwc3 *dwc)
@@ -1691,6 +1707,7 @@ static void dwc3_core_exit_mode(struct dwc3 *dwc)
 static void dwc3_get_software_properties(struct dwc3 *dwc,
 					 const struct dwc3_properties *properties)
 {
+	u32 csr_tx_deemph_field_1;
 	struct device *tmpdev;
 	u16 gsbuscfg0_reqinfo;
 	int ret;
@@ -1699,6 +1716,7 @@ static void dwc3_get_software_properties(struct dwc3 *dwc,
 		dwc->needs_full_reinit = true;
 
 	dwc->gsbuscfg0_reqinfo = DWC3_GSBUSCFG0_REQINFO_UNSPECIFIED;
+	dwc->csr_tx_deemph_field_1 = DWC3_LCSR_TX_DEEMPH_UNSPECIFIED;
 
 	if (properties->gsbuscfg0_reqinfo !=
 	    DWC3_GSBUSCFG0_REQINFO_UNSPECIFIED) {
@@ -1716,6 +1734,12 @@ static void dwc3_get_software_properties(struct dwc3 *dwc,
 					       &gsbuscfg0_reqinfo);
 		if (!ret)
 			dwc->gsbuscfg0_reqinfo = gsbuscfg0_reqinfo;
+
+		ret = device_property_read_u32(tmpdev,
+					       "snps,lcsr-tx-deemph",
+					       &csr_tx_deemph_field_1);
+		if (!ret)
+			dwc->csr_tx_deemph_field_1 = csr_tx_deemph_field_1;
 	}
 }
 

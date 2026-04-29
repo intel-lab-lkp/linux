@@ -181,6 +181,12 @@
 
 #define DWC3_LLUCTL(n)		(0xd024 + ((n) * 0x80))
 
+/*
+ * LCSR TX deemphasis register for USB3 port @n.
+ * Offset stride matches DWC3_LLUCTL.
+ */
+#define DWC3_LCSR_TX_DEEMPH(n)		(0xd060 + ((n) * 0x80))
+
 /* Bit fields */
 
 /* Global SoC Bus Configuration INCRx Register 0 */
@@ -197,6 +203,10 @@
 /* Global SoC Bus Configuration Register: AHB-prot/AXI-cache/OCP-ReqInfo */
 #define DWC3_GSBUSCFG0_REQINFO(n)	(((n) & 0xffff) << 16)
 #define DWC3_GSBUSCFG0_REQINFO_UNSPECIFIED	0xffffffff
+
+/* LCSR_TX_DEEMPH Register: setting TX deemphasis used in normal operation in gen2 */
+#define DWC3_LCSR_TX_DEEMPH_MASK(n)		((n) & 0x3ffff)
+#define DWC3_LCSR_TX_DEEMPH_UNSPECIFIED		0xffffffff
 
 /* Global Debug LSP MUX Select */
 #define DWC3_GDBGLSPMUX_ENDBC		BIT(15)	/* Host only */
@@ -1185,6 +1195,9 @@ struct dwc3_glue_ops {
  * @wakeup_pending_funcs: Indicates whether any interface has requested for
  *			 function wakeup in bitmap format where bit position
  *			 represents interface_id.
+ * @csr_tx_deemph_field_1: stores TX deemphasis used in Gen2 operation.
+ *                         The csr_tx_deemph setting is applied to each
+ *			   USB3 port.
  */
 struct dwc3 {
 	struct work_struct	drd_work;
@@ -1424,6 +1437,7 @@ struct dwc3 {
 	struct dentry		*debug_root;
 	u32			gsbuscfg0_reqinfo;
 	u32			wakeup_pending_funcs;
+	u32			csr_tx_deemph_field_1;
 };
 
 #define INCRX_BURST_MODE 0
