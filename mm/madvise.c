@@ -32,6 +32,7 @@
 #include <linux/leafops.h>
 #include <linux/shmem_fs.h>
 #include <linux/mmu_notifier.h>
+#include <linux/uprobes.h>
 
 #include <asm/tlb.h>
 
@@ -862,6 +863,30 @@ static long madvise_dontneed_single_vma(struct madvise_behavior *madv_behavior)
 	return 0;
 }
 
+static long madvise_dontneed_free_range(struct madvise_behavior *madv_behavior,
+					unsigned long start, unsigned long end)
+{
+	struct madvise_behavior_range *range = &madv_behavior->range;
+	unsigned long saved_start = range->start;
+	unsigned long saved_end = range->end;
+	int behavior = madv_behavior->behavior;
+	long ret;
+
+	range->start = start;
+	range->end = end;
+
+	if (behavior == MADV_DONTNEED || behavior == MADV_DONTNEED_LOCKED)
+		ret = madvise_dontneed_single_vma(madv_behavior);
+	else if (behavior == MADV_FREE)
+		ret = madvise_free_single_vma(madv_behavior);
+	else
+		ret = -EINVAL;
+
+	range->start = saved_start;
+	range->end = saved_end;
+	return ret;
+}
+
 static
 bool madvise_dontneed_free_valid_vma(struct madvise_behavior *madv_behavior)
 {
@@ -898,7 +923,7 @@ static long madvise_dontneed_free(struct madvise_behavior *madv_behavior)
 {
 	struct mm_struct *mm = madv_behavior->mm;
 	struct madvise_behavior_range *range = &madv_behavior->range;
-	int behavior = madv_behavior->behavior;
+	unsigned long cur, end, uprobe_addr;
 
 	if (!madvise_dontneed_free_valid_vma(madv_behavior))
 		return -EINVAL;
@@ -947,12 +972,46 @@ static long madvise_dontneed_free(struct madvise_behavior *madv_behavior)
 		VM_WARN_ON(range->start > range->end);
 	}
 
-	if (behavior == MADV_DONTNEED || behavior == MADV_DONTNEED_LOCKED)
-		return madvise_dontneed_single_vma(madv_behavior);
-	else if (behavior == MADV_FREE)
-		return madvise_free_single_vma(madv_behavior);
-	else
-		return -EINVAL;
+	/*
+	 * Preserve uprobes: if any uprobes are active in this VMA range,
+	 * avoid discarding pages that contain active breakpoints.
+	 *
+	 * Fast path: if no uprobes are registered system-wide, or the VMA
+	 * is not file-backed (uprobes only instrument file-backed mappings,
+	 * so anonymous VMAs can never contain breakpoints), or no uprobes
+	 * are present in this VMA range, proceed with the full operation.
+	 */
+	if (likely(!any_uprobes_registered()) ||
+	    !madv_behavior->vma->vm_file ||
+	    !vma_has_uprobes(madv_behavior->vma, range->start, range->end))
+		return madvise_dontneed_free_range(madv_behavior,
+						   range->start, range->end);
+
+	/*
+	 * Slow path: jump from uprobe to uprobe via rbtree lookup, zapping
+	 * the clean range before each uprobe page. This is O(M * log N)
+	 * where M is the number of uprobes in the range and N is the total
+	 * uprobe count, versus O(pages) for a page-by-page scan. 'cur'
+	 * tracks the beginning of the current clean range.
+	 */
+	cur = range->start;
+	end = range->end;
+	while (cur < end) {
+		uprobe_addr = vma_first_uprobe_addr(madv_behavior->vma,
+						    cur, end);
+		if (!uprobe_addr) {
+			/* No more uprobes - zap the rest */
+			madvise_dontneed_free_range(madv_behavior, cur, end);
+			break;
+		}
+		/* Zap the clean range before the uprobe page */
+		if (cur < uprobe_addr)
+			madvise_dontneed_free_range(madv_behavior, cur,
+						    uprobe_addr);
+		/* Skip past the uprobe page */
+		cur = uprobe_addr + PAGE_SIZE;
+	}
+	return 0;
 }
 
 static long madvise_populate(struct madvise_behavior *madv_behavior)

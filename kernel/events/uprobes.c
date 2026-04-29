@@ -153,6 +153,19 @@ static loff_t vaddr_to_offset(struct vm_area_struct *vma, unsigned long vaddr)
 }
 
 /**
+ * any_uprobes_registered - check if any uprobes are currently registered
+ *
+ * Check whether the global uprobe rbtree has any entries, indicating
+ * that at least one uprobe is currently active in the system.
+ *
+ * Return: true if one or more uprobes are registered, false otherwise.
+ */
+bool any_uprobes_registered(void)
+{
+	return !no_uprobe_events();
+}
+
+/**
  * is_swbp_insn - check if instruction is breakpoint instruction.
  * @insn: instruction to be checked.
  * Default implementation of is_swbp_insn
@@ -1635,8 +1648,16 @@ int uprobe_mmap(struct vm_area_struct *vma)
 	return 0;
 }
 
-static bool
-vma_has_uprobes(struct vm_area_struct *vma, unsigned long start, unsigned long end)
+/**
+ * vma_has_uprobes - check whether a vma range contains any uprobes.
+ * @vma: the vma to search.
+ * @start: start address of the range (inclusive).
+ * @end: end address of the range (exclusive).
+ *
+ * Return: true if at least one uprobe is registered in [@start, @end),
+ * false otherwise.
+ */
+bool vma_has_uprobes(struct vm_area_struct *vma, unsigned long start, unsigned long end)
 {
 	loff_t min, max;
 	struct inode *inode;
@@ -1652,6 +1673,60 @@ vma_has_uprobes(struct vm_area_struct *vma, unsigned long start, unsigned long e
 	read_unlock(&uprobes_treelock);
 
 	return !!n;
+}
+
+/**
+ * vma_first_uprobe_addr - find first uprobe in a vma range.
+ * @vma: the vma to search.
+ * @start: start address of the range (inclusive).
+ * @end: end address of the range (exclusive).
+ *
+ * Used by madvise to skip directly to uprobe pages.
+ *
+ * Return: the page-aligned virtual address of the first uprobe in
+ * [@start, @end), or 0 if none exists.
+ */
+unsigned long vma_first_uprobe_addr(struct vm_area_struct *vma,
+				    unsigned long start, unsigned long end)
+{
+	loff_t min, max, first_offset;
+	struct inode *inode;
+	struct rb_node *n, *t;
+	struct uprobe *u;
+
+	/* No uprobes possible on anonymous mappings */
+	if (!vma->vm_file)
+		return 0;
+
+	/* Empty range -- nothing to search */
+	if (start >= end)
+		return 0;
+
+	inode = file_inode(vma->vm_file);
+
+	min = vaddr_to_offset(vma, start);
+	max = min + (end - start) - 1;
+
+	read_lock(&uprobes_treelock);
+	n = find_node_in_range(inode, min, max);
+	if (!n) {
+		read_unlock(&uprobes_treelock);
+		return 0;
+	}
+
+	/* Walk left to find the lowest offset in range */
+	u = rb_entry(n, struct uprobe, rb_node);
+	first_offset = u->offset;
+	for (t = rb_prev(n); t; t = rb_prev(t)) {
+		u = rb_entry(t, struct uprobe, rb_node);
+		if (u->inode != inode || u->offset < min)
+			break;
+		first_offset = u->offset;
+	}
+	read_unlock(&uprobes_treelock);
+
+	/* Return page-aligned vaddr containing this uprobe */
+	return PAGE_ALIGN_DOWN(offset_to_vaddr(vma, first_offset));
 }
 
 /*

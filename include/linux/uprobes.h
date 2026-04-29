@@ -212,6 +212,11 @@ extern void uprobe_unregister_nosync(struct uprobe *uprobe, struct uprobe_consum
 extern void uprobe_unregister_sync(void);
 extern int uprobe_mmap(struct vm_area_struct *vma);
 extern void uprobe_munmap(struct vm_area_struct *vma, unsigned long start, unsigned long end);
+extern bool vma_has_uprobes(struct vm_area_struct *vma, unsigned long start, unsigned long end);
+extern unsigned long vma_first_uprobe_addr(struct vm_area_struct *vma,
+					   unsigned long start,
+					   unsigned long end);
+extern bool any_uprobes_registered(void);
 extern void uprobe_start_dup_mmap(void);
 extern void uprobe_end_dup_mmap(void);
 extern void uprobe_dup_mmap(struct mm_struct *oldmm, struct mm_struct *newmm);
@@ -277,6 +282,22 @@ static inline int uprobe_mmap(struct vm_area_struct *vma)
 static inline void
 uprobe_munmap(struct vm_area_struct *vma, unsigned long start, unsigned long end)
 {
+}
+static inline bool
+vma_has_uprobes(struct vm_area_struct *vma, unsigned long start,
+		unsigned long end)
+{
+	return false;
+}
+static inline unsigned long
+vma_first_uprobe_addr(struct vm_area_struct *vma, unsigned long start,
+		      unsigned long end)
+{
+	return 0;
+}
+static inline bool any_uprobes_registered(void)
+{
+	return false;
 }
 static inline void uprobe_start_dup_mmap(void)
 {
