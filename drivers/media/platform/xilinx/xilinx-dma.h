@@ -96,9 +96,14 @@ struct xvip_dma {
 
 	struct dma_chan *dma;
 	unsigned int align;
-	struct dma_interleaved_template xt;
-	struct data_chunk sgl;
+
+	/* Must be last as it ends in a flexible-array member. */
+	TRAILING_OVERLAP(struct dma_interleaved_template, xt, sgl,
+		struct data_chunk sgl;
+	);
 };
+static_assert(offsetof(struct xvip_dma, xt.sgl) ==
+	      offsetof(struct xvip_dma, sgl));
 
 #define to_xvip_dma(vdev)	container_of(vdev, struct xvip_dma, video)
 
