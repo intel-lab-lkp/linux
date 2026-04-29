@@ -3002,9 +3002,6 @@ static const struct snd_ac97_build_ops patch_cm9738_ops = {
 static int patch_cm9738(struct snd_ac97 * ac97)
 {
 	ac97->build_ops = &patch_cm9738_ops;
-	/* FIXME: can anyone confirm below? */
-	/* CM9738 has no PCM volume although the register reacts */
-	ac97->flags |= AC97_HAS_NO_PCM_VOL;
 	snd_ac97_write_cache(ac97, AC97_PCM, 0x8000);
 
 	return 0;
