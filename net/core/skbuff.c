@@ -5729,6 +5729,33 @@ void skb_tstamp_tx(struct sk_buff *orig_skb,
 }
 EXPORT_SYMBOL_GPL(skb_tstamp_tx);
 
+ktime_t skb_get_hwtstamp(struct sk_buff *skb, bool cycles, int *if_index)
+{
+	struct skb_shared_hwtstamps *shhwtstamps = skb_hwtstamps(skb);
+	struct net_device *orig_dev;
+	ktime_t hwtstamp;
+
+	if (if_index)
+		*if_index = 0;
+
+	if (!(skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP_NETDEV))
+		return shhwtstamps->hwtstamp;
+
+	rcu_read_lock();
+	orig_dev = dev_get_by_napi_id(skb_napi_id(skb));
+	if (orig_dev) {
+		if (if_index)
+			*if_index = orig_dev->ifindex;
+		hwtstamp = netdev_get_tstamp(orig_dev, shhwtstamps, cycles);
+	} else {
+		hwtstamp = shhwtstamps->hwtstamp;
+	}
+	rcu_read_unlock();
+
+	return hwtstamp;
+}
+EXPORT_SYMBOL_GPL(skb_get_hwtstamp);
+
 #ifdef CONFIG_WIRELESS
 void skb_complete_wifi_ack(struct sk_buff *skb, bool acked)
 {

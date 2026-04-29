@@ -4732,6 +4732,17 @@ void skb_tstamp_tx(struct sk_buff *orig_skb,
 		   struct skb_shared_hwtstamps *hwtstamps);
 
 /**
+ * skb_get_hwtstamp - resolve a hardware timestamp from an skb
+ * @skb:	skb carrying the timestamp
+ * @cycles:	true to request the free-running cycle-based timestamp
+ * @if_index:	optional return pointer for the originating netdev ifindex
+ *
+ * Return: resolved hardware timestamp, or the stored skb hwtstamp when no
+ * device-specific late timestamp resolution is needed.
+ */
+ktime_t skb_get_hwtstamp(struct sk_buff *skb, bool cycles, int *if_index);
+
+/**
  * skb_tx_timestamp() - Driver hook for transmit timestamping
  *
  * Ethernet MAC Drivers should call this function in their hard_xmit()

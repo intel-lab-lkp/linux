@@ -876,21 +876,7 @@ static bool skb_is_swtx_tstamp(const struct sk_buff *skb, int false_tstamp)
 static ktime_t get_timestamp(struct sock *sk, struct sk_buff *skb, int *if_index)
 {
 	bool cycles = READ_ONCE(sk->sk_tsflags) & SOF_TIMESTAMPING_BIND_PHC;
-	struct skb_shared_hwtstamps *shhwtstamps = skb_hwtstamps(skb);
-	struct net_device *orig_dev;
-	ktime_t hwtstamp;
-
-	rcu_read_lock();
-	orig_dev = dev_get_by_napi_id(skb_napi_id(skb));
-	if (orig_dev) {
-		*if_index = orig_dev->ifindex;
-		hwtstamp = netdev_get_tstamp(orig_dev, shhwtstamps, cycles);
-	} else {
-		hwtstamp = shhwtstamps->hwtstamp;
-	}
-	rcu_read_unlock();
-
-	return hwtstamp;
+	return skb_get_hwtstamp(skb, cycles, if_index);
 }
 
 static void put_ts_pktinfo(struct msghdr *msg, struct sk_buff *skb,
@@ -940,7 +926,6 @@ int skb_get_tx_timestamp(struct sk_buff *skb, struct sock *sk,
 {
 	u32 tsflags = READ_ONCE(sk->sk_tsflags);
 	ktime_t hwtstamp;
-	int if_index = 0;
 
 	if ((tsflags & SOF_TIMESTAMPING_SOFTWARE) &&
 	    ktime_to_timespec64_cond(skb->tstamp, ts))
@@ -950,10 +935,7 @@ int skb_get_tx_timestamp(struct sk_buff *skb, struct sock *sk,
 	    skb_is_swtx_tstamp(skb, false))
 		return -ENOENT;
 
-	if (skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP_NETDEV)
-		hwtstamp = get_timestamp(sk, skb, &if_index);
-	else
-		hwtstamp = skb_hwtstamps(skb)->hwtstamp;
+	hwtstamp = get_timestamp(sk, skb, NULL);
 
 	if (tsflags & SOF_TIMESTAMPING_BIND_PHC)
 		hwtstamp = ptp_convert_timestamp(&hwtstamp,
@@ -1033,10 +1015,7 @@ void __sock_recv_timestamp(struct msghdr *msg, struct sock *sk,
 	      !(tsflags & SOF_TIMESTAMPING_OPT_RX_FILTER))) &&
 	    !skb_is_swtx_tstamp(skb, false_tstamp)) {
 		if_index = 0;
-		if (skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP_NETDEV)
-			hwtstamp = get_timestamp(sk, skb, &if_index);
-		else
-			hwtstamp = shhwtstamps->hwtstamp;
+		hwtstamp = get_timestamp(sk, skb, &if_index);
 
 		if (tsflags & SOF_TIMESTAMPING_BIND_PHC)
 			hwtstamp = ptp_convert_timestamp(&hwtstamp,
