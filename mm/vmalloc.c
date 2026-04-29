@@ -4841,8 +4841,14 @@ pvm_find_va_enclose_addr(unsigned long addr)
 static unsigned long
 pvm_determine_end_from_reverse(struct vmap_area **va, unsigned long align)
 {
-	unsigned long vmalloc_end = VMALLOC_END & ~(align - 1);
+	unsigned long vmalloc_end;
 	unsigned long addr;
+
+#ifdef CONFIG_HAVE_LOCAL_PER_CPU_MAP
+	vmalloc_end = PERCPU_END & ~(align - 1);
+#else
+	vmalloc_end = VMALLOC_END & ~(align - 1);
+#endif
 
 	if (likely(*va)) {
 		list_for_each_entry_from_reverse((*va),
@@ -4884,13 +4890,21 @@ struct vm_struct **pcpu_get_vm_areas(const unsigned long *offsets,
 				     const size_t *sizes, int nr_vms,
 				     size_t align)
 {
-	const unsigned long vmalloc_start = ALIGN(VMALLOC_START, align);
-	const unsigned long vmalloc_end = VMALLOC_END & ~(align - 1);
+	unsigned long vmalloc_start;
+	unsigned long vmalloc_end;
 	struct vmap_area **vas, *va;
 	struct vm_struct **vms;
 	int area, area2, last_area, term_area;
 	unsigned long base, start, size, end, last_end, orig_start, orig_end;
 	bool purged = false;
+
+#ifdef CONFIG_HAVE_LOCAL_PER_CPU_MAP
+	vmalloc_start = ALIGN(PERCPU_START, align);
+	vmalloc_end = PERCPU_END & ~(align - 1);
+#else
+	vmalloc_start = ALIGN(VMALLOC_START, align);
+	vmalloc_end = VMALLOC_END & ~(align - 1);
+#endif
 
 	/* verify parameters and allocate data structures */
 	BUG_ON(offset_in_page(align) || !is_power_of_2(align));
