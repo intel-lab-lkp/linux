@@ -228,19 +228,50 @@ static netdev_tx_t hsr_dev_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	rcu_read_lock();
 	master = hsr_port_get_hsr(hsr, HSR_PT_MASTER);
-	if (master) {
-		skb->dev = master->dev;
-		skb_reset_mac_header(skb);
-		skb_reset_mac_len(skb);
-		spin_lock_bh(&hsr->seqnr_lock);
-		hsr_forward_skb(skb, master);
-		spin_unlock_bh(&hsr->seqnr_lock);
-	} else {
-		dev_core_stats_tx_dropped_inc(dev);
-		dev_kfree_skb_any(skb);
+	if (!master)
+		goto drop;
+
+	skb->dev = master->dev;
+	if (skb->len > ETH_HLEN * 2) {
+		struct hsr_inline_header *hsr_opt;
+
+		BUILD_BUG_ON(sizeof(struct hsr_inline_header) != sizeof(struct ethhdr));
+		hsr_opt = (struct hsr_inline_header *)skb_mac_header(skb);
+		if (hsr_opt->eth_type == htons(ETH_P_1588) &&
+		    hsr_opt->magic == htonl(HSR_INLINE_HDR)) {
+			enum hsr_port_type tx_port;
+			bool has_header;
+
+			has_header = hsr_opt->hsr_hdr;
+			tx_port = hsr_opt->tx_port;
+			if (tx_port != HSR_PT_SLAVE_A && tx_port != HSR_PT_SLAVE_B)
+				goto drop;
+
+			if (!hsr_skb_add_header_port(skb, has_header, tx_port))
+				goto drop;
+
+			skb_pull(skb, ETH_HLEN);
+			if (has_header)
+				skb_set_network_header(skb, ETH_HLEN + HSR_HLEN);
+			else
+				skb_set_network_header(skb, ETH_HLEN);
+		}
 	}
+
+	skb_reset_mac_header(skb);
+	skb_reset_mac_len(skb);
+	spin_lock_bh(&hsr->seqnr_lock);
+	hsr_forward_skb(skb, master);
+	spin_unlock_bh(&hsr->seqnr_lock);
+
 	rcu_read_unlock();
 
+	return NETDEV_TX_OK;
+
+drop:
+	dev_core_stats_tx_dropped_inc(dev);
+	dev_kfree_skb_any(skb);
+	rcu_read_unlock();
 	return NETDEV_TX_OK;
 }
 
