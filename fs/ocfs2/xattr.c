@@ -237,6 +237,29 @@ static int namevalue_size_xe(struct ocfs2_xattr_entry *xe)
 	return namevalue_size(xe->xe_name_len, value_len);
 }
 
+static int ocfs2_validate_local_xe(struct inode *inode,
+				   struct ocfs2_xattr_entry *xe,
+				   void *base,
+				   void *end)
+{
+	char *nameval = base + le16_to_cpu(xe->xe_name_offset);
+	size_t name_len = OCFS2_XATTR_SIZE(xe->xe_name_len);
+	u64 value_size = le64_to_cpu(xe->xe_value_size);
+
+	if (value_size > OCFS2_XATTR_INLINE_SIZE)
+		return ocfs2_error(inode->i_sb,
+				   "Inode %llu has invalid local xattr value size %llu\n",
+				   (unsigned long long)OCFS2_I(inode)->ip_blkno,
+				   (unsigned long long)value_size);
+
+	if (nameval + name_len + value_size > (char *)end)
+		return ocfs2_error(inode->i_sb,
+				   "Inode %llu has corrupt local xattr value bounds\n",
+				   (unsigned long long)OCFS2_I(inode)->ip_blkno);
+
+	return 0;
+}
+
 
 static int ocfs2_xattr_bucket_get_name_value(struct super_block *sb,
 					     struct ocfs2_xattr_header *xh,
@@ -1098,7 +1121,7 @@ static int ocfs2_xattr_find_entry(struct inode *inode, int name_index,
 {
 	struct ocfs2_xattr_entry *entry;
 	size_t name_len;
-	int i, name_offset, cmp = 1;
+	int i, name_offset, cmp = 1, ret;
 
 	if (name == NULL)
 		return -EINVAL;
@@ -1121,6 +1144,11 @@ static int ocfs2_xattr_find_entry(struct inode *inode, int name_index,
 				return -EFSCORRUPTED;
 			}
 			cmp = memcmp(name, (xs->base + name_offset), name_len);
+			if (!cmp && ocfs2_xattr_is_local(entry)) {
+				ret = ocfs2_validate_local_xe(inode, entry, xs->base, xs->end);
+				if (ret)
+					return ret;
+			}
 		}
 		if (cmp == 0)
 			break;
@@ -3790,6 +3818,8 @@ static int ocfs2_find_xe_in_bucket(struct inode *inode,
 	struct ocfs2_xattr_header *xh = bucket_xh(bucket);
 	size_t name_len = strlen(name);
 	struct ocfs2_xattr_entry *xe = NULL;
+	char *block;
+	char *block_end;
 	char *xe_name;
 
 	/*
@@ -3821,8 +3851,15 @@ static int ocfs2_find_xe_in_bucket(struct inode *inode,
 		}
 
 
-		xe_name = bucket_block(bucket, block_off) + new_offset;
+		block = bucket_block(bucket, block_off);
+		block_end = block + inode->i_sb->s_blocksize;
+		xe_name = block + new_offset;
 		if (!memcmp(name, xe_name, name_len)) {
+			if (ocfs2_xattr_is_local(xe)) {
+				ret = ocfs2_validate_local_xe(inode, xe, block, block_end);
+				if (ret)
+					break;
+			}
 			*xe_index = i;
 			*found = 1;
 			ret = 0;
