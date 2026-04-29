@@ -46,8 +46,6 @@
 		regulator-max-microvolt = <2000000>;
 		vin-supply = <&vcc_sys>;
 	};
-
-
 };
 
 &cpu_l0 {
@@ -431,6 +429,17 @@
 	};
 };
 
+&i2c2 {
+	status = "okay";
+
+	hym8563: hym8563@51 {
+		compatible = "haoyu,hym8563";
+		reg = <0x51>;
+		#clock-cells = <0>;
+		clock-output-names = "hym8563";
+		wakeup-source;
+	};
+};
 
 &sdhci {
 	bus-width = <8>;
