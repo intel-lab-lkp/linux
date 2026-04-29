@@ -118,6 +118,34 @@ bool acpi_psci_use_hvc(void)
 	return acpi_gbl_FADT.arm_boot_flags & ACPI_FADT_PSCI_USE_HVC;
 }
 
+static int __init __acpi_fadt_sanity_check(struct acpi_table_fadt *fadt)
+{
+	struct acpi_table_header *table = (struct acpi_table_header *)fadt;
+
+	/*
+	 * Revision in table header is the FADT Major revision, and there
+	 * is a minor revision of FADT which was introduced by ACPI 5.1,
+	 * we only deal with ACPI 5.1 or newer revision to get GIC and SMP
+	 * boot protocol configuration data.
+	 */
+	if (table->revision < 5 ||
+	   (table->revision == 5 && fadt->minor_revision < 1)) {
+		pr_err(FW_BUG "Unsupported FADT revision %d.%d, should be 5.1+\n",
+		       table->revision, fadt->minor_revision);
+
+		if (!fadt->arm_boot_flags) {
+			return -EINVAL;
+		}
+		pr_err("FADT has ARM boot flags set, assuming 5.1\n");
+	}
+
+	if (!(fadt->flags & ACPI_FADT_HW_REDUCED)) {
+		pr_err("FADT not ACPI hardware reduced compliant\n");
+		return -EINVAL;
+	}
+	return 0;
+}
+
 /*
  * acpi_fadt_sanity_check() - Check FADT presence and carry out sanity
  *			      checks on it
@@ -127,7 +155,6 @@ bool acpi_psci_use_hvc(void)
 static int __init acpi_fadt_sanity_check(void)
 {
 	struct acpi_table_header *table;
-	struct acpi_table_fadt *fadt;
 	acpi_status status;
 	int ret = 0;
 
@@ -143,32 +170,8 @@ static int __init acpi_fadt_sanity_check(void)
 		return -ENODEV;
 	}
 
-	fadt = (struct acpi_table_fadt *)table;
+	ret = __acpi_fadt_sanity_check((struct acpi_table_fadt *)table);
 
-	/*
-	 * Revision in table header is the FADT Major revision, and there
-	 * is a minor revision of FADT which was introduced by ACPI 5.1,
-	 * we only deal with ACPI 5.1 or newer revision to get GIC and SMP
-	 * boot protocol configuration data.
-	 */
-	if (table->revision < 5 ||
-	   (table->revision == 5 && fadt->minor_revision < 1)) {
-		pr_err(FW_BUG "Unsupported FADT revision %d.%d, should be 5.1+\n",
-		       table->revision, fadt->minor_revision);
-
-		if (!fadt->arm_boot_flags) {
-			ret = -EINVAL;
-			goto out;
-		}
-		pr_err("FADT has ARM boot flags set, assuming 5.1\n");
-	}
-
-	if (!(fadt->flags & ACPI_FADT_HW_REDUCED)) {
-		pr_err("FADT not ACPI hardware reduced compliant\n");
-		ret = -EINVAL;
-	}
-
-out:
 	/*
 	 * acpi_get_table() creates FADT table mapping that
 	 * should be released after parsing and before resuming boot
