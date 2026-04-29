@@ -294,6 +294,18 @@ static inline int modeset_lock(struct drm_modeset_lock *lock,
 		bool interruptible, bool slow)
 {
 	int ret;
+	/*
+	 * Defensive fallback: this helper is expected to be called with a
+	 * valid acquire context, but if a NULL ctx slips through, preserve
+	 * the lock wait semantics and avoid NULL dereference.
+	 */
+	if (unlikely(!ctx)) {
+		if (interruptible)
+			return ww_mutex_lock_interruptible(&lock->mutex, NULL);
+
+		ww_mutex_lock(&lock->mutex, NULL);
+		return 0;
+	}
 
 	if (ctx && WARN_ON(ctx->contended))
 		__drm_stack_depot_print(ctx->stack_depot);
