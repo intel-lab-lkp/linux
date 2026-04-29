@@ -28,11 +28,14 @@
 
 #include "kselftest.h"
 
-static volatile uint8_t var[96] __attribute__((__aligned__(32)));
+/* Force watchpoint access to actually occur */
+#define WRITE_ONCE(x, val) (*(volatile typeof(x) *)&(x) = (val))
+
+static uint8_t var[96] __attribute__((__aligned__(32)));
 
 static void child(int size, int wr)
 {
-	volatile uint8_t *addr = &var[32 + wr];
+	uint8_t *addr = &var[32 + wr];
 
 	if (ptrace(PTRACE_TRACEME, 0, NULL, NULL) != 0) {
 		ksft_print_msg(
@@ -56,16 +59,16 @@ static void child(int size, int wr)
 
 	switch (size) {
 	case 1:
-		*addr = 47;
+		WRITE_ONCE(*addr, 47);
 		break;
 	case 2:
-		*(uint16_t *)addr = 47;
+		WRITE_ONCE(*(uint16_t *)addr, 47);
 		break;
 	case 4:
-		*(uint32_t *)addr = 47;
+		WRITE_ONCE(*(uint32_t *)addr, 47);
 		break;
 	case 8:
-		*(uint64_t *)addr = 47;
+		WRITE_ONCE(*(uint64_t *)addr, 47);
 		break;
 	case 16:
 		__asm__ volatile ("stp x29, x30, %0" : "=m" (addr[0]));
@@ -80,7 +83,7 @@ static void child(int size, int wr)
 
 static bool set_watchpoint(pid_t pid, int size, int wp)
 {
-	const volatile uint8_t *addr = &var[32 + wp];
+	const uint8_t *addr = &var[32 + wp];
 	const int offset = (uintptr_t)addr % 8;
 	const unsigned int byte_mask = ((1 << size) - 1) << offset;
 	const unsigned int type = 2; /* Write */
@@ -194,11 +197,11 @@ static bool run_test(int wr_size, int wp_size, int wr, int wp)
 
 static void sigalrm(int sig)
 {
+	(void)sig;
 }
 
-int main(int argc, char **argv)
+int main(void)
 {
-	int opt;
 	bool succeeded = true;
 	struct sigaction act;
 	int wr, wp, size;

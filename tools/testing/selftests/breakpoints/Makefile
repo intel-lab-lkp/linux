@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
 # Taken from perf makefile
+CFLAGS += -O2 -fno-strict-aliasing -Wall -Wextra
 ARCH ?= $(shell uname -m 2>/dev/null || echo not)
 override ARCH := $(shell echo $(ARCH) | sed -e s/i.86/x86/ -e s/x86_64/x86/)
 
@@ -13,4 +14,3 @@ TEST_GEN_PROGS += breakpoint_test_arm64
 endif
 
 include ../lib.mk
-

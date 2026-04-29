@@ -23,6 +23,10 @@
 #define COUNT_ISN_BPS	4
 #define COUNT_WPS	4
 
+/* Force watchpoint access to actually occur */
+#define READ_ONCE(x)       (*(volatile typeof(x) *)&(x))
+#define WRITE_ONCE(x, val) (*(volatile typeof(x) *)&(x) = (val))
+
 /* Breakpoint access modes */
 enum {
 	BP_X = 1,
@@ -41,10 +45,8 @@ static int nr_tests;
 
 static void set_breakpoint_addr(void *addr, int n)
 {
-	int ret;
-
-	ret = ptrace(PTRACE_POKEUSER, child_pid,
-		     offsetof(struct user, u_debugreg[n]), addr);
+	int ret = ptrace(PTRACE_POKEUSER, child_pid,
+			 offsetof(struct user, u_debugreg[n]), addr);
 	if (ret)
 		ksft_exit_fail_msg("Can't set breakpoint addr: %s\n",
 			strerror(errno));
@@ -55,7 +57,7 @@ static void toggle_breakpoint(int n, int type, int len,
 {
 	int ret;
 
-	int xtype, xlen;
+	int xtype = 0, xlen = 0;
 	unsigned long vdr7, dr7;
 
 	switch (type) {
@@ -137,35 +139,30 @@ static void check_trapped(void)
 	 * If we haven't trapped, wake up the parent
 	 * so that it notices the failure.
 	 */
-	if (!trapped)
+	if (!READ_ONCE(trapped))
 		kill(getpid(), SIGUSR1);
-	trapped = 0;
+	WRITE_ONCE(trapped, 0);
 
 	nr_tests++;
 }
 
 static void write_var(int len)
 {
-	char *pcval; short *psval; int *pival; long long *plval;
 	int i;
 
 	for (i = 0; i < 4; i++) {
 		switch (len) {
 		case 1:
-			pcval = (char *)&dummy_var[i];
-			*pcval = 0xff;
+			WRITE_ONCE(*(char *)&dummy_var[i], 0xff);
 			break;
 		case 2:
-			psval = (short *)&dummy_var[i];
-			*psval = 0xffff;
+			WRITE_ONCE(*(short *)&dummy_var[i], 0xffff);
 			break;
 		case 4:
-			pival = (int *)&dummy_var[i];
-			*pival = 0xffffffff;
+			WRITE_ONCE(*(int *)&dummy_var[i], 0xffffffff);
 			break;
 		case 8:
-			plval = (long long *)&dummy_var[i];
-			*plval = 0xffffffffffffffffLL;
+			WRITE_ONCE(*(long long *)&dummy_var[i], 0xffffffffffffffffLL);
 			break;
 		}
 		check_trapped();
@@ -174,22 +171,21 @@ static void write_var(int len)
 
 static void read_var(int len)
 {
-	char cval; short sval; int ival; long long lval;
 	int i;
 
 	for (i = 0; i < 4; i++) {
 		switch (len) {
 		case 1:
-			cval = *(char *)&dummy_var[i];
+			(void)READ_ONCE(*(char *)&dummy_var[i]);
 			break;
 		case 2:
-			sval = *(short *)&dummy_var[i];
+			(void)READ_ONCE(*(short *)&dummy_var[i]);
 			break;
 		case 4:
-			ival = *(int *)&dummy_var[i];
+			(void)READ_ONCE(*(int *)&dummy_var[i]);
 			break;
 		case 8:
-			lval = *(long long *)&dummy_var[i];
+			(void)READ_ONCE(*(long long *)&dummy_var[i]);
 			break;
 		}
 		check_trapped();
@@ -202,11 +198,8 @@ static void read_var(int len)
  */
 static void trigger_tests(void)
 {
-	int len, local, global, i;
-	char val;
-	int ret;
-
-	ret = ptrace(PTRACE_TRACEME, 0, NULL, 0);
+	size_t len, local, global, i;
+	int ret = ptrace(PTRACE_TRACEME, 0, NULL, 0);
 	if (ret) {
 		ksft_print_msg("Can't be traced? %s\n", strerror(errno));
 		return;
@@ -251,11 +244,11 @@ static void trigger_tests(void)
 	}
 
 	/* Icebp trap */
-	asm(".byte 0xf1\n");
+	__asm__ __volatile__ (".byte 0xf1\n");
 	check_trapped();
 
 	/* Int 3 trap */
-	asm("int $3\n");
+	__asm__ __volatile__ ("int $3\n");
 	check_trapped();
 
 	kill(getpid(), SIGUSR1);
@@ -263,18 +256,15 @@ static void trigger_tests(void)
 
 static void check_success(const char *msg)
 {
-	int child_nr_tests;
 	int status;
-	int ret;
+	int ret = 0;
 
 	/* Wait for the child to SIGTRAP */
 	wait(&status);
 
-	ret = 0;
-
 	if (WSTOPSIG(status) == SIGTRAP) {
-		child_nr_tests = ptrace(PTRACE_PEEKDATA, child_pid,
-					&nr_tests, 0);
+		int child_nr_tests = ptrace(PTRACE_PEEKDATA, child_pid,
+					    &nr_tests, 0);
 		if (child_nr_tests == nr_tests)
 			ret = 1;
 		if (ptrace(PTRACE_POKEDATA, child_pid, &trapped, 1))
@@ -332,7 +322,7 @@ static void launch_tests(void)
 {
 	char buf[1024];
 	unsigned int tests = 0;
-	int len, local, global, i;
+	size_t len, local, global;
 
 	tests += 3 * COUNT_ISN_BPS;
 	tests += sizeof(long) / 2 * 3 * COUNT_WPS;
@@ -384,10 +374,9 @@ static void launch_tests(void)
 	ptrace(PTRACE_CONT, child_pid, NULL, 0);
 }
 
-int main(int argc, char **argv)
+int main(void)
 {
 	pid_t pid;
-	int ret;
 
 	ksft_print_header();
 
