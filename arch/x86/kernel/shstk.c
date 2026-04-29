@@ -326,8 +326,9 @@ static int shstk_push_sigframe(unsigned long *ssp)
 
 static int shstk_pop_sigframe(unsigned long *ssp)
 {
+	struct vm_area_struct *vma;
 	unsigned long token_addr;
-	unsigned int seq;
+	int err;
 
 	/*
 	 * It is possible for the SSP to be off the end of a shadow stack by 4
@@ -338,35 +339,21 @@ static int shstk_pop_sigframe(unsigned long *ssp)
 	if (!IS_ALIGNED(*ssp, 8))
 		return -EINVAL;
 
-	do {
-		struct vm_area_struct *vma;
-		bool valid_vma;
-		int err;
+	vma = lock_vma_under_rcu_wait(current->mm, *ssp);
+	if (!vma)
+		return -EINVAL;
 
-		if (mmap_read_lock_killable(current->mm))
-			return -EINTR;
+	if (!(vma->vm_flags & VM_SHADOW_STACK)) {
+		vma_end_read(vma);
+		return -EINVAL;
+	}
 
-		vma = find_vma(current->mm, *ssp);
-		valid_vma = vma && (vma->vm_flags & VM_SHADOW_STACK);
+	err = get_shstk_data(&token_addr, (unsigned long __user *)*ssp);
 
-		/*
-		 * VMAs can change between get_shstk_data() and find_vma().
-		 * Watch for changes and ensure that 'token_addr' comes from
-		 * 'vma' by recording a seqcount.
-		 *
-		 * Ignore the return value of mmap_lock_speculate_try_begin()
-		 * because the mmap lock excludes the possibility of writers.
-		 */
-		mmap_lock_speculate_try_begin(current->mm, &seq);
-		mmap_read_unlock(current->mm);
+	vma_end_read(vma);
 
-		if (!valid_vma)
-			return -EINVAL;
-
-		err = get_shstk_data(&token_addr, (unsigned long __user *)*ssp);
-		if (err)
-			return err;
-	} while (mmap_lock_speculate_retry(current->mm, seq));
+	if (err)
+		return err;
 
 	/* Restore SSP aligned? */
 	if (unlikely(!IS_ALIGNED(token_addr, 8)))
