@@ -679,6 +679,22 @@ static int flow_offload_decap_tunnel(const struct flow_offload *flow,
 	return 0;
 }
 
+static void nf_flow_rule_ct_meta_mark(const struct flow_offload *flow,
+				      struct nf_flow_rule *flow_rule)
+{
+#if IS_ENABLED(CONFIG_NF_CONNTRACK_MARK)
+	u32 mark = flow->ct ? READ_ONCE(flow->ct->mark) : 0;
+
+	if (mark) {
+		struct flow_action_entry *entry;
+
+		entry = flow_action_entry_next(flow_rule);
+		entry->id = FLOW_ACTION_CT_METADATA;
+		entry->ct_metadata.mark = mark;
+	}
+#endif /* IS_ENABLED(CONFIG_NF_CONNTRACK_MARK) */
+}
+
 static int
 nf_flow_rule_route_common(struct net *net, const struct flow_offload *flow,
 			  enum flow_offload_tuple_dir dir,
@@ -747,6 +763,8 @@ int nf_flow_rule_route_ipv4(struct net *net, struct flow_offload *flow,
 	if (nf_flow_rule_route_common(net, flow, dir, flow_rule) < 0)
 		return -1;
 
+	nf_flow_rule_ct_meta_mark(flow, flow_rule);
+
 	if (test_bit(NF_FLOW_SNAT, &flow->flags)) {
 		if (flow_offload_ipv4_snat(net, flow, dir, flow_rule) < 0 ||
 		    flow_offload_port_snat(net, flow, dir, flow_rule) < 0)
@@ -775,6 +793,8 @@ int nf_flow_rule_route_ipv6(struct net *net, struct flow_offload *flow,
 {
 	if (nf_flow_rule_route_common(net, flow, dir, flow_rule) < 0)
 		return -1;
+
+	nf_flow_rule_ct_meta_mark(flow, flow_rule);
 
 	if (test_bit(NF_FLOW_SNAT, &flow->flags)) {
 		if (flow_offload_ipv6_snat(net, flow, dir, flow_rule) < 0 ||
