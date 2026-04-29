@@ -267,6 +267,8 @@ static int aspm_policy = POLICY_POWER_SUPERSAVE;
 #else
 static int aspm_policy;
 #endif
+static int aspm_default_policy = POLICY_POWER_SUPERSAVE;
+static bool aspm_user_policy;
 
 static const char *policy_str[] = {
 	[POLICY_DEFAULT] = "default",
@@ -1609,6 +1611,7 @@ static int pcie_aspm_set_policy(const char *val,
 	down_read(&pci_bus_sem);
 	mutex_lock(&aspm_lock);
 	aspm_policy = i;
+	aspm_user_policy = true;
 	list_for_each_entry(link, &link_list, sibling) {
 		pcie_config_aspm_link(link, policy_to_aspm_state(link));
 		pcie_set_clkpm(link, policy_to_clkpm_state(link));
@@ -1809,6 +1812,20 @@ static int __init pcie_aspm_disable(char *str)
 }
 
 __setup("pcie_aspm=", pcie_aspm_disable);
+
+
+
+void __init pcie_aspm_policy_config_init(void)
+{
+	/*
+	 * Set ASPM policy here, enabling all power-saving states
+	 * unless ASPM has been disabled or the user has already
+	 * requested a policy or the systems BIOS release date
+	 * is before the year 2025. Otherwise use BIOS defaults.
+	 */
+	if (!aspm_disabled && !aspm_user_policy && dmi_get_bios_year() >= 2025)
+		aspm_policy = aspm_default_policy;
+}
 
 void pcie_no_aspm(void)
 {
