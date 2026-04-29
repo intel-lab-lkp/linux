@@ -14,10 +14,12 @@
 #include <linux/container_of.h>
 
 struct rzg2l_du_device;
+struct rzg2l_du_device_info;
 
 struct rzg2l_du_encoder {
 	struct drm_encoder base;
 	enum rzg2l_du_output output;
+	const struct rzg2l_du_device_info *info;
 };
 
 static inline struct rzg2l_du_encoder *to_rzg2l_encoder(struct drm_encoder *e)
