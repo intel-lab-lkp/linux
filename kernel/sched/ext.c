@@ -3853,9 +3853,21 @@ void sched_ext_dead(struct task_struct *p)
 		struct rq_flags rf;
 		struct rq *rq;
 
-		rq = task_rq_lock(p, &rf);
-		scx_disable_and_exit_task(scx_task_sched(p), p);
-		task_rq_unlock(rq, p, &rf);
+		/*
+		 * scx_root_enable_workfn() may be concurrently initializing @p.
+		 * scx_init_task() sets state=INIT before scx_set_task_sched()
+		 * sets p->scx.sched.  If we race that window, p->scx.sched is
+		 * still NULL; skip scx_disable_and_exit_task() and reset state
+		 * to NONE so @p leaves SCX cleanly.
+		 */
+		if (scx_get_task_state(p) == SCX_TASK_INIT &&
+		    !rcu_access_pointer(p->scx.sched)) {
+			scx_set_task_state(p, SCX_TASK_NONE);
+		} else {
+			rq = task_rq_lock(p, &rf);
+			scx_disable_and_exit_task(scx_task_sched(p), p);
+			task_rq_unlock(rq, p, &rf);
+		}
 	}
 }
 
@@ -6872,6 +6884,17 @@ static void scx_root_enable_workfn(struct kthread_work *work)
 			scx_error(sch, "ops.init_task() failed (%d) for %s[%d]",
 				  ret, p->comm, p->pid);
 			goto err_disable_unlock_all;
+		}
+
+		/*
+		 * sched_ext_dead() may have already cleaned up @p while locks
+		 * were dropped in scx_task_iter_unlock(); skip it.
+		 */
+		scoped_guard(raw_spinlock_irq, &scx_tasks_lock) {
+			if (list_empty(&p->scx.tasks_node)) {
+				put_task_struct(p);
+				continue;
+			}
 		}
 
 		scx_set_task_sched(p, sch);
