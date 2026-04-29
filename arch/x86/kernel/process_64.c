@@ -797,7 +797,8 @@ static long prctl_map_vdso(const struct vdso_image *image, unsigned long addr)
 
 #ifdef CONFIG_ADDRESS_MASKING
 
-#define LAM_U57_BITS 6
+#define LAM_TAG_BITS		4
+#define LAM_UNTAG_MASK		~GENMASK(60, 57)
 
 static void enable_lam_func(void *__mm)
 {
@@ -850,7 +851,7 @@ static int prctl_enable_tagged_addr(struct mm_struct *mm, unsigned long nr_bits)
 		return -EBUSY;
 	}
 
-	if (!nr_bits || nr_bits > LAM_U57_BITS) {
+	if (!nr_bits || nr_bits > LAM_TAG_BITS) {
 		mmap_write_unlock(mm);
 		return -EINVAL;
 	}
@@ -952,8 +953,9 @@ long do_arch_prctl_64(struct task_struct *task, int option, unsigned long arg2)
 #endif
 #ifdef CONFIG_ADDRESS_MASKING
 	case ARCH_GET_UNTAG_MASK:
-		return put_user(task->mm->context.untag_mask,
-				(unsigned long __user *)arg2);
+		if (task->mm->context.lam_cr3_mask)
+			return put_user(LAM_UNTAG_MASK, (unsigned long __user *)arg2);
+		return put_user(task->mm->context.untag_mask, (unsigned long __user *)arg2);
 	case ARCH_ENABLE_TAGGED_ADDR:
 		return prctl_enable_tagged_addr(task->mm, arg2);
 	case ARCH_FORCE_TAGGED_SVA:
@@ -965,7 +967,7 @@ long do_arch_prctl_64(struct task_struct *task, int option, unsigned long arg2)
 		if (!cpu_feature_enabled(X86_FEATURE_LAM))
 			return put_user(0, (unsigned long __user *)arg2);
 		else
-			return put_user(LAM_U57_BITS, (unsigned long __user *)arg2);
+			return put_user(LAM_TAG_BITS, (unsigned long __user *)arg2);
 #endif
 	case ARCH_SHSTK_ENABLE:
 	case ARCH_SHSTK_DISABLE:
