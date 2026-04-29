@@ -401,8 +401,14 @@ static int si1133_command(struct si1133_data *data, u8 cmd)
 
 	expected_seq = (data->rsp_seq + 1) & SI1133_MAX_CMD_CTR;
 
-	if (cmd == SI1133_CMD_FORCE)
+	if (cmd == SI1133_CMD_FORCE) {
+		/* Flush pending IRQs from a previous timeout. */
+		regmap_read(data->regmap, SI1133_REG_IRQ_STATUS, &resp);
+		regmap_write(data->regmap, SI1133_REG_IRQ_ENABLE,
+			     SI1133_IRQ_CHANNEL_ENABLE);
+
 		reinit_completion(&data->completion);
+	}
 
 	err = regmap_write(data->regmap, SI1133_REG_COMMAND, cmd);
 	if (err) {
@@ -413,8 +419,13 @@ static int si1133_command(struct si1133_data *data, u8 cmd)
 
 	if (cmd == SI1133_CMD_FORCE) {
 		/* wait for irq */
-		if (!wait_for_completion_timeout(&data->completion, timeout))
+		if (!wait_for_completion_timeout(&data->completion, timeout)) {
+			/* Mask the IRQ to prevent delayed interrupt waking up
+			 * any subsequent command.
+			 */
+			regmap_write(data->regmap, SI1133_REG_IRQ_ENABLE, 0);
 			return -ETIMEDOUT;
+		}
 		err = regmap_read(data->regmap, SI1133_REG_RESPONSE0, &resp);
 		if (err)
 			return err;
@@ -431,8 +442,8 @@ static int si1133_command(struct si1133_data *data, u8 cmd)
 				 "Failed to read command 0x%02x, ret=%d\n",
 				 cmd, err);
 			/*
-			 * reset counter on err to prevent sofware and hardware
-			 * counters being out of sync
+			 * Reset counter on err to prevent sofware and hardware
+			 * counters being out of sync.
 			 */
 			si1133_cmd_reset_counter(data);
 
