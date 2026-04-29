@@ -7,7 +7,7 @@
 
 #include <linux/bitfield.h>
 #include <linux/bitmap.h>
-#include <linux/bits.h>
+#include <linux/bitops.h>
 #include <linux/cleanup.h>
 #include <linux/container_of.h>
 #include <linux/delay.h>
@@ -207,7 +207,7 @@ static void acpm_get_saved_rx(struct acpm_chan *achan,
 
 	if (rx_seqnum == tx_seqnum) {
 		memcpy(xfer->rxd, rx_data->cmd, xfer->rxcnt * sizeof(*xfer->rxd));
-		clear_bit(rx_seqnum - 1, achan->bitmap_seqnum);
+		clear_bit_unlock(rx_seqnum - 1, achan->bitmap_seqnum);
 	}
 }
 
@@ -268,7 +268,7 @@ static int acpm_get_rx(struct acpm_chan *achan, const struct acpm_xfer *xfer)
 			if (rx_seqnum == tx_seqnum) {
 				__ioread32_copy(xfer->rxd, addr, xfer->rxcnt);
 				rx_set = true;
-				clear_bit(seqnum, achan->bitmap_seqnum);
+				clear_bit_unlock(seqnum, achan->bitmap_seqnum);
 			} else {
 				/*
 				 * The RX data corresponds to another request.
@@ -280,7 +280,7 @@ static int acpm_get_rx(struct acpm_chan *achan, const struct acpm_xfer *xfer)
 						rx_data->rxcnt);
 			}
 		} else {
-			clear_bit(seqnum, achan->bitmap_seqnum);
+			clear_bit_unlock(seqnum, achan->bitmap_seqnum);
 		}
 
 		i = (i + 1) % achan->qlen;
@@ -322,7 +322,14 @@ static int acpm_dequeue_by_polling(struct acpm_chan *achan,
 		if (ret)
 			return ret;
 
-		if (!test_bit(seqnum - 1, achan->bitmap_seqnum))
+		/*
+		 * For zero-length messages (rxcnt == 0), the bit can be
+		 * cleared by a concurrent thread draining the queue. Use
+		 * test_bit_acquire() to prevent the CPU from speculatively
+		 * executing the caller's subsequent instructions before the
+		 * hardware transaction is fully synchronized.
+		 */
+		if (!test_bit_acquire(seqnum - 1, achan->bitmap_seqnum))
 			return 0;
 
 		/* Determined experimentally. */
@@ -392,13 +399,24 @@ static int acpm_prepare_xfer(struct acpm_chan *achan,
 		}
 	}
 
-	/* Flag the index based on seqnum. (seqnum: 1~63, bitmap: 0~62) */
+	/*
+	 * Flag the index based on seqnum. (seqnum: 1~63, bitmap: 0~62). We do
+	 * not need an explicit acquire barrier here because visibility to the
+	 * next TX thread is safely protected by the tx_lock boundaries
+	 * (mutex_unlock provides Release semantics). The RX thread only
+	 * blind-clears bits and doesn't care about this.
+	 */
 	achan->seqnum = bit + 1;
 	set_bit(bit, achan->bitmap_seqnum);
 
 	txd[0] |= FIELD_PREP(ACPM_PROTOCOL_SEQNUM, achan->seqnum);
 
-	/* Clear data for upcoming responses */
+	/*
+	 * Clear data for upcoming responses. Speculative execution of memset()
+	 * is prevented by the strict Address Dependency (implicit barrier) on
+	 * 'bit'. The CPU mathematically cannot calculate the destination
+	 * pointer until find_next/first_zero_bit() returns.
+	 */
 	rx_data = &achan->rx_data[bit];
 	memset(rx_data->cmd, 0, sizeof(*rx_data->cmd) * rx_data->n_cmd);
 	/* zero means no response expected */
