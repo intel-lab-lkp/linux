@@ -938,6 +938,11 @@ again:
 }
 EXPORT_SYMBOL_GPL(evict_inodes);
 
+struct inodes_to_prune {
+	struct list_head freeable;
+	struct list_head deferred;
+};
+
 /*
  * Isolate the inode from the LRU in preparation for freeing it.
  *
@@ -952,7 +957,7 @@ EXPORT_SYMBOL_GPL(evict_inodes);
 static enum lru_status inode_lru_isolate(struct list_head *item,
 		struct list_lru_one *lru, void *arg)
 {
-	struct list_head *freeable = arg;
+	struct inodes_to_prune *lists = arg;
 	struct inode	*inode = container_of(item, struct inode, i_lru);
 
 	/*
@@ -969,7 +974,7 @@ static enum lru_status inode_lru_isolate(struct list_head *item,
 	 * sync, or the last page cache deletion will requeue them.
 	 */
 	if (icount_read(inode) ||
-	    (inode_state_read(inode) & ~I_REFERENCED) ||
+	    inode_state_read(inode) & ~(I_REFERENCED | I_DEFER_RECLAIM) ||
 	    !mapping_shrinkable(&inode->i_data)) {
 		list_lru_isolate(lru, &inode->i_lru);
 		spin_unlock(&inode->i_lock);
@@ -1007,7 +1012,11 @@ static enum lru_status inode_lru_isolate(struct list_head *item,
 
 	WARN_ON(inode_state_read(inode) & I_NEW);
 	inode_state_set(inode, I_FREEING);
-	list_lru_isolate_move(lru, &inode->i_lru, freeable);
+	/* Inode will take long time to cleanup. Offload that to worker. */
+	if (inode_state_read(inode) & I_DEFER_RECLAIM)
+		list_lru_isolate_move(lru, &inode->i_lru, &lists->deferred);
+	else
+		list_lru_isolate_move(lru, &inode->i_lru, &lists->freeable);
 	spin_unlock(&inode->i_lock);
 
 	this_cpu_dec(nr_unused);
@@ -1022,14 +1031,82 @@ static enum lru_status inode_lru_isolate(struct list_head *item,
  */
 long prune_icache_sb(struct super_block *sb, struct shrink_control *sc)
 {
-	LIST_HEAD(freeable);
+	struct inodes_to_prune lists = {
+		.freeable = LIST_HEAD_INIT(lists.freeable),
+		.deferred = LIST_HEAD_INIT(lists.deferred),
+	};
 	long freed;
 
 	freed = list_lru_shrink_walk(&sb->s_inode_lru, sc,
-				     inode_lru_isolate, &freeable);
-	dispose_list(&freeable);
+				     inode_lru_isolate, &lists);
+	dispose_list(&lists.freeable);
+	if (!list_empty(&lists.deferred)) {
+		struct inode_deferred_reclaim *reclaim =
+						READ_ONCE(sb->s_inode_reclaim);
+
+		if (WARN_ON_ONCE(!reclaim)) {
+			dispose_list(&lists.deferred);
+			return freed;
+		}
+		spin_lock(&reclaim->lock);
+		if (list_empty(&reclaim->list))
+			queue_work(system_dfl_wq, &reclaim->work);
+		list_splice_tail(&lists.deferred, &reclaim->list);
+		spin_unlock(&reclaim->lock);
+	}
 	return freed;
 }
+
+static void inode_reclaim_deferred(struct work_struct *work)
+{
+	struct inode_deferred_reclaim *reclaim =
+		container_of(work, struct inode_deferred_reclaim, work);
+	struct inode *inode;
+
+	spin_lock(&reclaim->lock);
+	while (!list_empty(&reclaim->list)) {
+		inode = list_first_entry(&reclaim->list, struct inode, i_lru);
+		list_del_init(&inode->i_lru);
+		spin_unlock(&reclaim->lock);
+		evict(inode);
+		cond_resched();
+		spin_lock(&reclaim->lock);
+	}
+	spin_unlock(&reclaim->lock);
+}
+
+static struct inode_deferred_reclaim *inode_deferred_reclaim_alloc(
+							struct super_block *sb)
+{
+	struct inode_deferred_reclaim *reclaim;
+
+	reclaim = kzalloc_obj(*reclaim, GFP_KERNEL | __GFP_NOFAIL);
+	INIT_LIST_HEAD(&reclaim->list);
+	INIT_WORK(&reclaim->work, inode_reclaim_deferred);
+	spin_lock_init(&reclaim->lock);
+	/* Someone installed new struct before us? */
+	if (cmpxchg(&sb->s_inode_reclaim, NULL, reclaim))
+		kfree(reclaim);
+
+	return sb->s_inode_reclaim;
+}
+
+void mark_inode_reclaim_deferred(struct inode *inode)
+{
+	struct inode_deferred_reclaim *reclaim;
+
+	if (inode_state_read_once(inode) & I_DEFER_RECLAIM)
+		return;
+
+	reclaim = READ_ONCE(inode->i_sb->s_inode_reclaim);
+	if (!reclaim)
+		reclaim = inode_deferred_reclaim_alloc(inode->i_sb);
+
+	spin_lock(&inode->i_lock);
+	inode_state_set(inode, I_DEFER_RECLAIM);
+	spin_unlock(&inode->i_lock);
+}
+EXPORT_SYMBOL_GPL(mark_inode_reclaim_deferred);
 
 static void __wait_on_freeing_inode(struct inode *inode, bool hash_locked, bool rcu_locked);
 

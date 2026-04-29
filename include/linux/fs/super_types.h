@@ -129,6 +129,12 @@ struct super_operations {
 	void (*report_error)(const struct fserror_event *event);
 };
 
+struct inode_deferred_reclaim {
+	struct list_head	list;
+	struct work_struct	work;
+	spinlock_t		lock;
+};
+
 struct super_block {
 	struct list_head			s_list;		/* Keep this first */
 	dev_t					s_dev;		/* search index; _not_ kdev_t */
@@ -254,6 +260,7 @@ struct super_block {
 	 */
 	struct list_lru				s_dentry_lru;
 	struct list_lru				s_inode_lru;
+	struct inode_deferred_reclaim		*s_inode_reclaim;
 	struct rcu_head				rcu;
 	struct work_struct			destroy_work;
 

@@ -645,6 +645,11 @@ void generic_shutdown_super(struct super_block *sb)
 		if (sop->put_super)
 			sop->put_super(sb);
 
+		if (sb->s_inode_reclaim) {
+			cancel_work_sync(&sb->s_inode_reclaim->work);
+			kfree(sb->s_inode_reclaim);
+		}
+
 		/*
 		 * Now that all potentially-encrypted inodes have been evicted,
 		 * the fscrypt keyring can be destroyed.
