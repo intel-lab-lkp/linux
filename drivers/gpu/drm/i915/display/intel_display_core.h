@@ -535,7 +535,8 @@ struct intel_display {
 
 	struct {
 		struct i915_power_domains domains;
-
+		/* DC3CO eligibility state */
+		struct intel_dc3co_state dc3co;
 		/* Shadow for DISPLAY_PHY_CONTROL which can't be safely read */
 		u32 chv_phy_control;
 

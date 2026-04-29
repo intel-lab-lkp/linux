@@ -5870,6 +5870,69 @@ static bool intel_pipes_need_modeset(struct intel_atomic_state *state,
 	return false;
 }
 
+static bool intel_dc3co_port_pipe_compatible(struct intel_dp *intel_dp,
+					     const struct intel_crtc_state *crtc_state)
+{
+	struct intel_digital_port *dig_port = dp_to_dig_port(intel_dp);
+	enum pipe pipe = to_intel_crtc(crtc_state->uapi.crtc)->pipe;
+	enum port port = dig_port->base.port;
+	int num_pipes = intel_crtc_num_joined_pipes(crtc_state);
+
+	return num_pipes == 1 && pipe <= PIPE_B && port <= PORT_B;
+}
+
+static void intel_dc3co_compute_state(struct intel_atomic_state *state)
+{
+	struct intel_display *display = to_intel_display(state);
+	struct intel_crtc *crtc;
+	struct intel_crtc_state *crtc_state;
+	struct intel_encoder *encoder;
+	struct intel_dp *intel_dp;
+	int active_pipes = 0;
+	u32 trigger = DC3CO_TRIGGER_NONE;
+
+	if (!HAS_DC3CO(display))
+		return;
+
+	for_each_intel_crtc(display->drm, crtc) {
+		crtc_state = intel_atomic_get_new_crtc_state(state, crtc);
+		if (!crtc_state)
+			crtc_state = intel_atomic_get_old_crtc_state(state, crtc);
+
+		if (!crtc_state || !crtc_state->hw.active)
+			continue;
+
+		trigger = DC3CO_TRIGGER_NONE;
+		active_pipes++;
+
+		if (active_pipes > 1)
+			goto done;
+
+		for_each_intel_encoder_mask(display->drm, encoder,
+					    crtc_state->uapi.encoder_mask) {
+			if (encoder->type != INTEL_OUTPUT_EDP)
+				goto done;
+
+			intel_dp = enc_to_intel_dp(encoder);
+
+			if (!intel_dc3co_port_pipe_compatible(intel_dp, crtc_state))
+				goto done;
+		}
+
+		if (crtc_state->has_lobf)
+			trigger |= DC3CO_TRIGGER_LOBF;
+		if (crtc_state->has_panel_replay)
+			trigger |= DC3CO_TRIGGER_PANEL_REPLAY;
+		if (crtc_state->has_sel_update)
+			trigger |= DC3CO_TRIGGER_PSR2;
+	}
+
+done:
+	intel_display_power_dc3co_update(display, !!trigger, trigger);
+	drm_dbg_kms(display->drm, "DC3CO allowed=%d trigger=0x%x\n",
+		    !!trigger, trigger);
+}
+
 static int intel_atomic_check_joiner(struct intel_atomic_state *state,
 				     struct intel_crtc *primary_crtc)
 {
@@ -6544,6 +6607,7 @@ int intel_atomic_check(struct drm_device *dev,
 	if (ret)
 		goto fail;
 
+	intel_dc3co_compute_state(state);
 	for_each_oldnew_intel_crtc_in_state(state, crtc, old_crtc_state,
 					    new_crtc_state, i) {
 		intel_color_assert_luts(new_crtc_state);
@@ -7415,6 +7479,7 @@ static void intel_atomic_commit_tail(struct intel_atomic_state *state)
 	struct intel_power_domain_mask put_domains[I915_MAX_PIPES] = {};
 	struct ref_tracker *wakeref = NULL;
 	int i;
+	int power_async_delay;
 
 	for_each_new_intel_crtc_in_state(state, crtc, new_crtc_state, i)
 		intel_atomic_dsb_prepare(state, crtc);
@@ -7621,11 +7686,28 @@ static void intel_atomic_commit_tail(struct intel_atomic_state *state)
 		 */
 		intel_uncore_arm_unclaimed_mmio_detection(uncore);
 	}
-	/*
-	 * Delay re-enabling DC states by 17 ms to avoid the off->on->off
-	 * toggling overhead at and above 60 FPS.
-	 */
-	intel_display_power_put_async_delay(display, POWER_DOMAIN_DC_OFF, wakeref, 17);
+
+	if (intel_display_power_dc3co_allowed(display) &&
+	    intel_display_power_dc3co_supported(display)) {
+		intel_display_power_set_target_dc_state(display, DC_STATE_EN_UPTO_DC3CO);
+		/*
+		 * Use minimal re-enable delay to allow DC3CO entry on
+		 * the next idle frame, unlike the 17ms guard needed to
+		 * prevent DC5/DC6 toggling overhead at 60+ FPS.
+		 */
+		power_async_delay = 1;
+	} else {
+		/*
+		 * Delay re-enabling DC states by 17 ms to avoid the off->on->off
+		 * toggling overhead at and above 60 FPS.
+		 */
+		intel_display_power_set_target_dc_state(display, DC_STATE_EN_UPTO_DC6);
+		power_async_delay = 17;
+	}
+
+	intel_display_power_put_async_delay(display,
+					    POWER_DOMAIN_DC_OFF, wakeref, power_async_delay);
+
 	intel_display_rpm_put(display, state->wakeref);
 
 	/*
