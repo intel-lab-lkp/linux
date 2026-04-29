@@ -1993,7 +1993,8 @@ enum skb_drop_reason tcp_add_backlog(struct sock *sk, struct sk_buff *skb)
 		if (TCP_SKB_CB(skb)->has_rxtstamp) {
 			TCP_SKB_CB(tail)->has_rxtstamp = true;
 			tail->tstamp = skb->tstamp;
-			skb_hwtstamps(tail)->hwtstamp = skb_hwtstamps(skb)->hwtstamp;
+			skb_hwtstamps(tail)->hwtstamp = skb_get_hwtstamp(skb, false, NULL);
+			skb_shinfo(tail)->tx_flags &= ~SKBTX_HW_TSTAMP_NETDEV;
 		}
 
 		/* Not as strict as GRO. We only need to carry mss max value */
@@ -2062,7 +2063,8 @@ static void tcp_v4_fill_cb(struct sk_buff *skb, const struct iphdr *iph,
 	TCP_SKB_CB(skb)->ip_dsfield = ipv4_get_dsfield(iph);
 	TCP_SKB_CB(skb)->sacked	 = 0;
 	TCP_SKB_CB(skb)->has_rxtstamp =
-			skb->tstamp || skb_hwtstamps(skb)->hwtstamp;
+			skb->tstamp || skb_hwtstamps(skb)->hwtstamp ||
+			(skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP_NETDEV);
 }
 
 /*

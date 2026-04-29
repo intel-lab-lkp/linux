@@ -524,7 +524,7 @@ tcp_update_recv_tstamps(struct sk_buff *skb,
 			struct scm_timestamping_internal *tss)
 {
 	tss->ts[0] = skb->tstamp;
-	tss->ts[2] = skb_hwtstamps(skb)->hwtstamp;
+	tss->ts[2] = skb_get_hwtstamp(skb, false, NULL);
 }
 
 void tcp_recv_timestamp(struct msghdr *msg, const struct sock *sk,
