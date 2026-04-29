@@ -788,11 +788,6 @@
 	status = "okay";
 };
 
-&mdss_dp_out {
-	data-lanes = <0 1>;
-	remote-endpoint = <&usb_dp_qmpphy_dp_in>;
-};
-
 &mdss_dsi {
 	vdda-supply = <&vreg_l6b_1p2>;
 	status = "okay";
@@ -1391,8 +1386,6 @@
 	vdda-phy-supply = <&vreg_l6b_1p2>;
 	vdda-pll-supply = <&vreg_l1b_0p912>;
 
-	orientation-switch;
-
 	status = "okay";
 };
 
@@ -1402,10 +1395,6 @@
 
 &usb_dp_qmpphy_usb_ss_in {
 	remote-endpoint = <&usb_1_dwc3_ss>;
-};
-
-&usb_dp_qmpphy_dp_in {
-	remote-endpoint = <&mdss_dp_out>;
 };
 
 &ufs_mem_hc {

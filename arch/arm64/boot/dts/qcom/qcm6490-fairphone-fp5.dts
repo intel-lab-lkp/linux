@@ -932,10 +932,6 @@
 	status = "okay";
 };
 
-&mdss_dp_out {
-	data-lanes = <0 1>;
-};
-
 &mdss_dsi {
 	vdda-supply = <&vreg_l6b>;
 	status = "okay";

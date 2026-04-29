@@ -540,10 +540,6 @@
 	status = "okay";
 };
 
-&mdss_dp_out {
-	data-lanes = <0 1>;
-};
-
 &pcie0 {
 	perst-gpios = <&tlmm 87 GPIO_ACTIVE_LOW>;
 	wake-gpios = <&tlmm 89 GPIO_ACTIVE_HIGH>;
