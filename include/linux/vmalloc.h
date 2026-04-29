@@ -314,6 +314,9 @@ struct vm_struct **pcpu_get_vm_areas(const unsigned long *offsets,
 				     size_t align);
 
 void pcpu_free_vm_areas(struct vm_struct **vms, int nr_vms);
+struct vm_struct *pcpu_get_local_vm_area(unsigned long hint,
+				     int unit_size, size_t align);
+
 # else
 static inline struct vm_struct **
 pcpu_get_vm_areas(const unsigned long *offsets,

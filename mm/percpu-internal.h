@@ -71,6 +71,7 @@ struct pcpu_chunk {
 	struct pcpu_block_md	*md_blocks;	/* metadata blocks */
 
 	void			*data;		/* chunk data */
+	void			*local_data;	/* chunk local vm */
 	bool			immutable;	/* no [de]population allowed */
 	bool			isolated;	/* isolated from active chunk
 						   slots */
