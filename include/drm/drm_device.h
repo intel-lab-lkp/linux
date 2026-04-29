@@ -67,6 +67,25 @@ enum switch_power_state {
 };
 
 /**
+ * struct drm_memory_region_info - Memory name and stats for a region
+ * @name: Name of the memory region
+ * @total_mb: Total available memory in mebibytes
+ * @used_mb: Used memory in mebibytes
+ */
+struct drm_memory_region_info {
+	char	name[24];
+
+	u32	total_mb;
+	u32	used_mb;
+};
+
+struct drm_memory_info {
+	unsigned int num_regions;
+
+	struct drm_memory_region_info region[];
+};
+
+/**
  * struct drm_device - DRM device structure
  *
  * This structure represent a complete card that

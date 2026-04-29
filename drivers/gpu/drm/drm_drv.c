@@ -54,6 +54,7 @@
 #include <drm/drm_print.h>
 #include <drm/drm_privacy_screen_machine.h>
 #include <drm/drm_ras_genl_family.h>
+#include <drm/drm_sysfs.h>
 
 #include "drm_crtc_internal.h"
 #include "drm_internal.h"
@@ -196,16 +197,24 @@ static int drm_minor_register(struct drm_device *dev, enum drm_minor_type type)
 	if (ret)
 		goto err_debugfs;
 
+	ret = drm_sysfs_register_memstat(minor);
+	if (ret)
+		goto err_kdev;
+
 	/* replace NULL with @minor so lookups will succeed from now on */
 	entry = xa_store(drm_minor_get_xa(type), minor->index, minor, GFP_KERNEL);
 	if (xa_is_err(entry)) {
 		ret = xa_err(entry);
+		drm_sysfs_unregister_memstat(minor);
 		goto err_debugfs;
 	}
 	WARN_ON(entry);
 
 	DRM_DEBUG("new minor registered %d\n", minor->index);
 	return 0;
+
+err_kdev:
+	device_del(minor->kdev);
 
 err_debugfs:
 	drm_debugfs_unregister(minor);
@@ -223,6 +232,7 @@ static void drm_minor_unregister(struct drm_device *dev, enum drm_minor_type typ
 	/* replace @minor with NULL so lookups will fail from now on */
 	xa_store(drm_minor_get_xa(type), minor->index, NULL, GFP_KERNEL);
 
+	drm_sysfs_unregister_memstat(minor);
 	device_del(minor->kdev);
 	dev_set_drvdata(minor->kdev, NULL); /* safety belt */
 	drm_debugfs_unregister(minor);

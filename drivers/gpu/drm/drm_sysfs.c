@@ -25,6 +25,7 @@
 #include <drm/drm_accel.h>
 #include <drm/drm_connector.h>
 #include <drm/drm_device.h>
+#include <drm/drm_drv.h>
 #include <drm/drm_file.h>
 #include <drm/drm_modes.h>
 #include <drm/drm_print.h>
@@ -621,3 +622,125 @@ void drm_class_device_unregister(struct device *dev)
 	return device_unregister(dev);
 }
 EXPORT_SYMBOL_GPL(drm_class_device_unregister);
+
+static ssize_t total_mb_show(struct kobject *kobj, struct kobj_attribute *attr,
+			     char *buf)
+{
+	struct drm_memstat_attr *mattr = container_of(kobj, typeof(*mattr), kobj);
+	struct drm_device *drm = mattr->drm;
+	const struct drm_memory_info *info;
+
+	if (drm->driver->get_memory_info) {
+		info = drm->driver->get_memory_info(drm);
+		if (info)
+			return sysfs_emit(buf, "%u\n",
+					  info->region[mattr->region].total_mb);
+	}
+
+	return 0;
+}
+
+static ssize_t used_mb_show(struct kobject *kobj, struct kobj_attribute *attr,
+			    char *buf)
+{
+	struct drm_memstat_attr *mattr = container_of(kobj, typeof(*mattr), kobj);
+	struct drm_device *drm = mattr->drm;
+	const struct drm_memory_info *info;
+
+	if (drm->driver->get_memory_info) {
+		info = drm->driver->get_memory_info(drm);
+		if (info)
+			return sysfs_emit(buf, "%u\n",
+					  info->region[mattr->region].used_mb);
+	}
+
+	return 0;
+}
+
+static struct kobj_attribute total_attr = __ATTR_RO(total_mb);
+static struct kobj_attribute used_attr = __ATTR_RO(used_mb);
+
+static struct attribute *memstat_attrs[] = {
+	&total_attr.attr,
+	&used_attr.attr,
+	NULL,
+};
+
+ATTRIBUTE_GROUPS(memstat);
+
+static void kobj_memstat_release(struct kobject *kobj)
+{
+}
+
+static const struct kobj_type memstat_ktype = {
+	.release = kobj_memstat_release,
+	.sysfs_ops = &kobj_sysfs_ops,
+	.default_groups = memstat_groups,
+};
+
+int drm_sysfs_register_memstat(struct drm_minor *minor)
+{
+	const struct drm_memory_info *info = NULL;
+	struct drm_device *drm = minor->dev;
+	struct drm_memstat_attr *regions;
+	struct kobject *root;
+	int i, ret = -ENOMEM;
+
+	if (drm->driver->get_memory_info)
+		info = drm->driver->get_memory_info(drm);
+
+	if (!info || !info->num_regions)
+		return 0;
+
+	regions = kmalloc_objs(*regions, info->num_regions + 1);
+	if (!regions)
+		return -ENOMEM;
+
+	root = kobject_create_and_add("memstat", &minor->kdev->kobj);
+	if (!root)
+		goto err_root;
+
+	for (i = 0; i < info->num_regions; i++) {
+		regions[i].region = i;
+		regions[i].drm = drm;
+		ret = kobject_init_and_add(&regions[i].kobj, &memstat_ktype,
+					   root, "%s", info->region[i].name);
+		if (ret)
+			goto err_regions;
+	}
+
+	minor->sysfs_memstat = root;
+	minor->sysfs_memstat_regions = regions;
+
+	return 0;
+
+err_regions:
+	while (i-- > 0) {
+		kobject_del(&regions[i].kobj);
+		kobject_put(&regions[i].kobj);
+	}
+
+	kobject_del(root);
+	kobject_put(root);
+
+err_root:
+	kfree(regions);
+
+	return ret;
+}
+
+void drm_sysfs_unregister_memstat(struct drm_minor *minor)
+{
+	struct drm_memstat_attr *region = minor->sysfs_memstat_regions;
+
+	while (region && region->kobj.state_initialized) {
+		kobject_del(&region->kobj);
+		kobject_put(&region->kobj);
+		region++;
+	}
+
+	kfree(minor->sysfs_memstat_regions);
+
+	kobject_del(minor->sysfs_memstat);
+	kobject_put(minor->sysfs_memstat);
+}

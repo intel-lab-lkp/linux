@@ -44,6 +44,7 @@ struct drm_minor;
 struct dma_buf;
 struct dma_buf_attachment;
 struct drm_display_mode;
+struct drm_device_memory_info;
 struct drm_mode_create_dumb;
 struct drm_printer;
 struct sg_table;
@@ -391,6 +392,13 @@ struct drm_driver {
 	 * Print device specific fdinfo.  See Documentation/gpu/drm-usage-stats.rst.
 	 */
 	void (*show_fdinfo)(struct drm_printer *p, struct drm_file *f);
+
+	/**
+	 * @get_memory_info:
+	 *
+	 * Get device specific memory info.  See Documentation/gpu/drm-memory-info.rst.
+	 */
+	const struct drm_memory_info * (*get_memory_info)(struct drm_device *dev);
 
 	/** @major: driver major number */
 	int major;
