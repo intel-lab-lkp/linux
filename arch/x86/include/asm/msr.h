@@ -173,6 +173,13 @@ static inline u64 native_read_pmc(int counter)
 #include <asm/paravirt.h>
 #else
 #include <linux/errno.h>
+
+/* Short-circuit the paravirt MSR infrastructure when it is disabled: */
+#define paravirt_read_msr	native_read_msr
+#define paravirt_read_msr_safe	native_read_msr_safe
+#define paravirt_write_msr	native_write_msr
+#define paravirt_write_msr_safe	native_write_msr_safe
+
 /*
  * Access to machine-specific registers (available on 586 and better only)
  * Note: the rd* operations modify the parameters directly (without using
@@ -181,35 +188,35 @@ static inline u64 native_read_pmc(int counter)
 
 #define rdmsr(msr, low, high)					\
 do {								\
-	u64 __val = native_read_msr((msr));			\
+	u64 __val = paravirt_read_msr((msr));			\
 	(void)((low) = (u32)__val);				\
 	(void)((high) = (u32)(__val >> 32));			\
 } while (0)
 
 static inline void wrmsr(u32 msr, u32 low, u32 high)
 {
-	native_write_msr(msr, (u64)high << 32 | low);
+	paravirt_write_msr(msr, (u64)high << 32 | low);
 }
 
 #define rdmsrq(msr, val)			\
-	((val) = native_read_msr((msr)))
+	((val) = paravirt_read_msr((msr)))
 
 static inline void wrmsrq(u32 msr, u64 val)
 {
-	native_write_msr(msr, val);
+	paravirt_write_msr(msr, val);
 }
 
 /* wrmsr with exception handling */
 static inline int wrmsrq_safe(u32 msr, u64 val)
 {
-	return native_write_msr_safe(msr, val);
+	return paravirt_write_msr_safe(msr, val);
 }
 
 /* rdmsr with exception handling */
 #define rdmsr_safe(msr, low, high)				\
 ({								\
 	u64 __val;						\
-	int __err = native_read_msr_safe((msr), &__val);	\
+	int __err = paravirt_read_msr_safe((msr), &__val);		\
 	(*low) = (u32)__val;					\
 	(*high) = (u32)(__val >> 32);				\
 	__err;							\
@@ -217,7 +224,7 @@ static inline int wrmsrq_safe(u32 msr, u64 val)
 
 static inline int rdmsrq_safe(u32 msr, u64 *p)
 {
-	return native_read_msr_safe(msr, p);
+	return paravirt_read_msr_safe(msr, p);
 }
 
 static __always_inline u64 rdpmc(int counter)
