@@ -26,6 +26,9 @@
 #include <linux/freezer.h>
 #include <linux/kthread.h>
 
+#include <linux/dma-fence.h>
+#include <linux/dma-resv.h>
+#include <linux/dma-buf.h>
 #include <media/videobuf2-core.h>
 #include <media/v4l2-mc.h>
 
@@ -1173,6 +1176,86 @@ void *vb2_plane_cookie(struct vb2_buffer *vb, unsigned int plane_no)
 }
 EXPORT_SYMBOL_GPL(vb2_plane_cookie);
 
+/*
+ * dma_resv release-fence integration.
+ *
+ * V4L2 producers historically don't propagate buffer-state-done into
+ * the dmabuf's dma_resv exclusive fence. Userspace consumers that
+ * wait on that fence (e.g. wayland compositors via poll(POLLIN) or
+ * DMA_BUF_IOCTL_EXPORT_SYNC_FILE) currently see either no fences or
+ * a stub fence from dma_fence_get_stub(). The opt-in API below lets
+ * a driver attach a real producer fence at QBUF time and have it
+ * signalled by vb2_buffer_done().
+ */
+
+static const char *vb2_dma_resv_get_driver_name(struct dma_fence *fence)
+{
+	return "videobuf2";
+}
+
+static const char *vb2_dma_resv_get_timeline_name(struct dma_fence *fence)
+{
+	return "vb2-release-fence";
+}
+
+static const struct dma_fence_ops vb2_dma_resv_fence_ops = {
+	.get_driver_name = vb2_dma_resv_get_driver_name,
+	.get_timeline_name = vb2_dma_resv_get_timeline_name,
+};
+
+int vb2_buffer_attach_release_fence(struct vb2_buffer *vb)
+{
+	struct vb2_queue *q = vb->vb2_queue;
+	struct dma_fence *fence;
+	unsigned int plane;
+
+	if (WARN_ON(vb->release_fence))
+		return -EINVAL;
+
+	fence = kzalloc(sizeof(*fence), GFP_KERNEL);
+	if (!fence)
+		return -ENOMEM;
+
+	dma_fence_init(fence, &vb2_dma_resv_fence_ops, &q->dma_resv_fence_lock,
+		       q->dma_resv_fence_context,
+		       atomic64_inc_return(&q->dma_resv_fence_seqno));
+
+	for (plane = 0; plane < vb->num_planes; plane++) {
+		struct dma_buf *dbuf = vb->planes[plane].dbuf;
+
+		if (!dbuf)
+			continue;
+
+		dma_resv_lock(dbuf->resv, NULL);
+		dma_resv_add_fence(dbuf->resv, fence, DMA_RESV_USAGE_WRITE);
+		dma_resv_unlock(dbuf->resv);
+	}
+
+	/* One reference for the eventual signal in vb2_buffer_done. */
+	vb->release_fence = dma_fence_get(fence);
+
+	/* The dma_resv held its own reference per plane. Drop ours. */
+	dma_fence_put(fence);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(vb2_buffer_attach_release_fence);
+
+static void vb2_buffer_signal_release_fence(struct vb2_buffer *vb,
+					    enum vb2_buffer_state state)
+{
+	struct dma_fence *fence = vb->release_fence;
+
+	if (!fence)
+		return;
+
+	if (state == VB2_BUF_STATE_ERROR)
+		dma_fence_set_error(fence, -EIO);
+	dma_fence_signal(fence);
+	dma_fence_put(fence);
+	vb->release_fence = NULL;
+}
+
 void vb2_buffer_done(struct vb2_buffer *vb, enum vb2_buffer_state state)
 {
 	struct vb2_queue *q = vb->vb2_queue;
@@ -1198,6 +1281,9 @@ void vb2_buffer_done(struct vb2_buffer *vb, enum vb2_buffer_state state)
 
 	if (state != VB2_BUF_STATE_QUEUED)
 		__vb2_buf_mem_finish(vb);
+
+	if (state != VB2_BUF_STATE_QUEUED)
+		vb2_buffer_signal_release_fence(vb, state);
 
 	spin_lock_irqsave(&q->done_lock, flags);
 	if (state == VB2_BUF_STATE_QUEUED) {
@@ -2650,6 +2736,15 @@ int vb2_core_queue_init(struct vb2_queue *q)
 	spin_lock_init(&q->done_lock);
 	mutex_init(&q->mmap_lock);
 	init_waitqueue_head(&q->done_wq);
+
+	/*
+	 * Per-queue dma_resv release-fence context. Drivers opt-in via
+	 * vb2_buffer_attach_release_fence(); other drivers pay only the
+	 * cost of the unused fields.
+	 */
+	q->dma_resv_fence_context = dma_fence_context_alloc(1);
+	atomic64_set(&q->dma_resv_fence_seqno, 0);
+	spin_lock_init(&q->dma_resv_fence_lock);
 
 	q->memory = VB2_MEMORY_UNKNOWN;
 

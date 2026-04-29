@@ -288,6 +288,12 @@ struct vb2_buffer {
 	unsigned int		skip_cache_sync_on_finish:1;
 
 	struct vb2_plane	planes[VB2_MAX_PLANES];
+	/*
+	 * dma_resv release fence — set by vb2_buffer_attach_release_fence()
+	 * (driver opt-in from buf_queue), signalled and put by
+	 * vb2_buffer_done(). NULL for drivers that don't opt in.
+	 */
+	struct dma_fence	*release_fence;
 	struct list_head	queued_entry;
 	struct list_head	done_entry;
 #ifdef CONFIG_VIDEO_ADV_DEBUG
@@ -648,6 +654,15 @@ struct vb2_queue {
 	spinlock_t			done_lock;
 	wait_queue_head_t		done_wq;
 
+	/*
+	 * Per-queue dma_resv release-fence context. Drivers that opt
+	 * into vb2_buffer_attach_release_fence() use these to allocate
+	 * fences on a single per-queue timeline.
+	 */
+	u64				dma_resv_fence_context;
+	atomic64_t			dma_resv_fence_seqno;
+	spinlock_t			dma_resv_fence_lock;
+
 	unsigned int			streaming:1;
 	unsigned int			start_streaming_called:1;
 	unsigned int			error:1;
@@ -734,6 +749,20 @@ void *vb2_plane_cookie(struct vb2_buffer *vb, unsigned int plane_no);
  * returned with state QUEUED to put them back into the queue.
  */
 void vb2_buffer_done(struct vb2_buffer *vb, enum vb2_buffer_state state);
+
+/**
+ * vb2_buffer_attach_release_fence() - opt-in dma_resv release fence.
+ * @vb: the buffer being queued to the producer.
+ *
+ * Drivers call this from their buf_queue callback to attach an
+ * exclusive write fence to each plane's dmabuf->resv. The fence
+ * is signalled and put by vb2_buffer_done() when the buffer
+ * transitions to VB2_BUF_STATE_DONE / _ERROR. Skips planes whose
+ * dbuf is NULL.
+ *
+ * Returns 0 on success, negative errno on allocation failure.
+ */
+int vb2_buffer_attach_release_fence(struct vb2_buffer *vb);
 
 /**
  * vb2_discard_done() - discard all buffers marked as DONE.
