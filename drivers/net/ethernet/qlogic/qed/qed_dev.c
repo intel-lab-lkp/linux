@@ -5105,6 +5105,13 @@ static int qed_init_wfq_param(struct qed_hwfn *p_hwfn,
 
 	total_left_rate	= min_pf_rate - total_req_min_rate;
 
+	if (non_requested_count == 0) {
+		DP_VERBOSE(p_hwfn, NETIF_MSG_LINK,
+			   "All %d vports are already configured for WFQ, no unconfigured vports to distribute remaining bandwidth\n",
+			   num_vports);
+		return -EINVAL;
+	}
+
 	left_rate_per_vp = total_left_rate / non_requested_count;
 	if (left_rate_per_vp <  min_pf_rate / QED_WFQ_UNIT) {
 		DP_VERBOSE(p_hwfn, NETIF_MSG_LINK,
