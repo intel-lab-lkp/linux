@@ -28,6 +28,7 @@
 #include <linux/workqueue.h>
 
 #include "mpam_internal.h"
+#include "mpam_fb.h"
 
 /* Values for the T241 errata workaround */
 #define T241_CHIPS_MAX			4
@@ -175,6 +176,13 @@ static u32 __mpam_read_reg(struct mpam_msc *msc, u16 reg)
 {
 	WARN_ON_ONCE(!cpumask_test_cpu(smp_processor_id(), &msc->accessibility));
 
+	if (msc->iface == MPAM_IFACE_PCC) {
+		u32 ret;
+
+		mpam_fb_send_read_request(msc, reg, &ret);
+		return ret;
+	}
+
 	return readl_relaxed(msc->mapped_hwpage + reg);
 }
 
@@ -188,10 +196,14 @@ static inline u32 _mpam_read_partsel_reg(struct mpam_msc *msc, u16 reg)
 
 static void __mpam_write_reg(struct mpam_msc *msc, u16 reg, u32 val)
 {
-	WARN_ON_ONCE(reg + sizeof(u32) > msc->mapped_hwpage_sz);
 	WARN_ON_ONCE(!cpumask_test_cpu(smp_processor_id(), &msc->accessibility));
 
-	writel_relaxed(val, msc->mapped_hwpage + reg);
+	if (msc->iface == MPAM_IFACE_PCC) {
+		mpam_fb_send_write_request(msc, reg, val);
+	} else {
+		WARN_ON_ONCE(reg + sizeof(u32) > msc->mapped_hwpage_sz);
+		writel_relaxed(val, msc->mapped_hwpage + reg);
+	}
 }
 
 static inline void _mpam_write_partsel_reg(struct mpam_msc *msc, u16 reg, u32 val)
