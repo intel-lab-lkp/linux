@@ -236,9 +236,11 @@ int smb3_update_ses_channels(struct cifs_ses *ses, struct TCP_Server_Info *serve
 	if (disable_mchan)
 		rc = cifs_chan_skip_or_disable(ses, server, from_reconnect, disable_mchan);
 	else {
-		if (ses->chan_count < ses->chan_max)
+		if (ses->chan_count < ses->chan_max) {
 			rc = cifs_try_adding_channels(ses);
-		else if (ses->chan_count > ses->chan_max)
+			if (rc > 0)
+				rc = 0;
+		} else if (ses->chan_count > ses->chan_max)
 			rc = cifs_chan_skip_or_disable(ses, server, from_reconnect, disable_mchan);
 	}
 
