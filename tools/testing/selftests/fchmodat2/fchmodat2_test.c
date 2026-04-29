@@ -188,7 +188,7 @@ err:
 
 #define NUM_TESTS 2
 
-int main(int argc, char **argv)
+int main()
 {
 	ksft_print_header();
 	ksft_set_plan(NUM_TESTS);
