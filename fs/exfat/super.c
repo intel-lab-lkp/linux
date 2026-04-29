@@ -431,6 +431,7 @@ static int exfat_read_boot_sector(struct super_block *sb)
 {
 	struct boot_sector *p_boot;
 	struct exfat_sb_info *sbi = EXFAT_SB(sb);
+	unsigned int nb_clusters;
 
 	/* set block size to read super block */
 	if (!sb_min_blocksize(sb, 512)) {
@@ -501,8 +502,17 @@ static int exfat_read_boot_sector(struct super_block *sb)
 	sbi->data_start_sector = le32_to_cpu(p_boot->clu_offset);
 	sbi->num_sectors = le64_to_cpu(p_boot->vol_length);
 	/* because the cluster index starts with 2 */
-	sbi->num_clusters = le32_to_cpu(p_boot->clu_count) +
-		EXFAT_RESERVED_CLUSTERS;
+	nb_clusters = le32_to_cpu(p_boot->clu_count);
+	/*
+	 * The inclusive comparison in the following check seems a bit off(quite
+	 * literally), but the exFAT format section 3.1.9 says
+	 * "lesser of the following". Aye, aye, captain.
+	 */
+	if (nb_clusters >= EXFAT_MAX_NUM_CLUSTER) {
+		exfat_err(sb, "bogus number of clusters : %u", nb_clusters);
+		return -EINVAL;
+	}
+	sbi->num_clusters = nb_clusters + EXFAT_RESERVED_CLUSTERS;
 
 	sbi->root_dir = le32_to_cpu(p_boot->root_cluster);
 	sbi->dentries_per_clu = 1 <<
@@ -591,6 +601,33 @@ static int exfat_verify_boot_region(struct super_block *sb)
 	return 0;
 }
 
+static int exfat_check_volume_sizes(struct super_block *sb)
+{
+	struct exfat_sb_info *sbi = EXFAT_SB(sb);
+	/* sector to start of last cluster */
+	const sector_t lc_start = exfat_cluster_to_sector(sbi, sbi->num_clusters - 1);
+	const sector_t lc_end = lc_start + sbi->sect_per_clus;
+	const sector_t last_sector = lc_end - 1;
+	struct buffer_head *bh;
+
+	/* Volume length(metadata in boot sector) bounds */
+	if (sbi->num_sectors < (unsigned long long)lc_end) {
+		exfat_err(sb, "number of cluster out of volume length bounds : %llu < %lld",
+			  sbi->num_sectors, lc_end);
+		return -EINVAL;
+	}
+
+	/* Actually try reading the last sector to see if it's within the blockdev bounds */
+	bh = sb_bread(sb, last_sector);
+	if (bh == NULL) {
+		exfat_err(sb, "last sector read failed : %lld", last_sector);
+		return -EIO;
+	}
+	brelse(bh);
+
+	return 0;
+}
+
 /* mount the file system volume */
 static int __exfat_fill_super(struct super_block *sb,
 		struct exfat_chain *root_clu)
@@ -607,6 +644,12 @@ static int __exfat_fill_super(struct super_block *sb,
 	ret = exfat_verify_boot_region(sb);
 	if (ret) {
 		exfat_err(sb, "invalid boot region");
+		goto free_bh;
+	}
+
+	ret = exfat_check_volume_sizes(sb);
+	if (ret) {
+		exfat_warn(sb, "volume bounds check failed. Please run fsck");
 		goto free_bh;
 	}
 
