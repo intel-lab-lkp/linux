@@ -3118,7 +3118,6 @@ static void *epoll59_thread(void *ctx_)
 TEST(epoll59)
 {
 	pthread_t emitter;
-	struct pollfd pfd;
 	struct epoll_event e;
 	struct epoll_mtcontext ctx = { 0 };
 	int i, ret;
