@@ -20,7 +20,7 @@ struct sock_reuseport {
 	/* The last synq overflow event timestamp of this
 	 * reuse->socks[] group.
 	 */
-	unsigned int		synq_overflow_ts;
+	unsigned long		synq_overflow_ts;
 	/* ID stays the same even after the size of socks[] grows. */
 	unsigned int		reuseport_id;
 	unsigned int		bind_inany:1;

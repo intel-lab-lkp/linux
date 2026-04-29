@@ -634,56 +634,38 @@ struct bpf_tcp_req_attrs {
  */
 static inline void tcp_synq_overflow(const struct sock *sk)
 {
-	unsigned int last_overflow;
-	unsigned int now = jiffies;
+	unsigned long last_overflow, now = jiffies;
+	struct sock_reuseport *reuse;
+	unsigned long *ptr;
 
-	if (sk->sk_reuseport) {
-		struct sock_reuseport *reuse;
+	reuse = sk->sk_reuseport ? rcu_dereference(sk->sk_reuseport_cb) : NULL;
+	ptr = reuse ? &reuse->synq_overflow_ts : &((struct sock *)sk)->sk_synq_overflow_ts;
+	last_overflow = READ_ONCE(*ptr);
 
-		reuse = rcu_dereference(sk->sk_reuseport_cb);
-		if (likely(reuse)) {
-			last_overflow = READ_ONCE(reuse->synq_overflow_ts);
-			if (!time_between32(now, last_overflow,
-					    last_overflow + HZ))
-				WRITE_ONCE(reuse->synq_overflow_ts, now);
-			return;
-		}
-	}
-
-	last_overflow = READ_ONCE(tcp_sk(sk)->rx_opt.ts_recent_stamp);
-	if (!time_between32(now, last_overflow, last_overflow + HZ))
-		WRITE_ONCE(tcp_sk_rw(sk)->rx_opt.ts_recent_stamp, now);
+	if (time_after(now, last_overflow + HZ))
+		WRITE_ONCE(*ptr, now);
 }
 
 /* syncookies: no recent synqueue overflow on this listening socket? */
 static inline bool tcp_synq_no_recent_overflow(const struct sock *sk)
 {
-	unsigned int last_overflow;
-	unsigned int now = jiffies;
+	unsigned long last_overflow, now = jiffies;
+	const struct sock_reuseport *reuse;
+	const unsigned long *ptr;
 
-	if (sk->sk_reuseport) {
-		struct sock_reuseport *reuse;
-
-		reuse = rcu_dereference(sk->sk_reuseport_cb);
-		if (likely(reuse)) {
-			last_overflow = READ_ONCE(reuse->synq_overflow_ts);
-			return !time_between32(now, last_overflow - HZ,
-					       last_overflow +
-					       TCP_SYNCOOKIE_VALID);
-		}
-	}
-
-	last_overflow = READ_ONCE(tcp_sk(sk)->rx_opt.ts_recent_stamp);
+	reuse = sk->sk_reuseport ? rcu_dereference(sk->sk_reuseport_cb) : NULL;
+	ptr = reuse ? &reuse->synq_overflow_ts : &sk->sk_synq_overflow_ts;
+	last_overflow = READ_ONCE(*ptr);
 
 	/* If last_overflow <= jiffies <= last_overflow + TCP_SYNCOOKIE_VALID,
 	 * then we're under synflood. However, we have to use
 	 * 'last_overflow - HZ' as lower bound. That's because a concurrent
-	 * tcp_synq_overflow() could update .ts_recent_stamp after we read
-	 * jiffies but before we store .ts_recent_stamp into last_overflow,
+	 * tcp_synq_overflow() could update synq_overflow_ts after we read
+	 * jiffies but before we store synq_overflow_ts into last_overflow,
 	 * which could lead to rejecting a valid syncookie.
 	 */
-	return !time_between32(now, last_overflow - HZ,
-			       last_overflow + TCP_SYNCOOKIE_VALID);
+	return !time_in_range(now, last_overflow - HZ,
+			      last_overflow + TCP_SYNCOOKIE_VALID);
 }
 
 static inline u32 tcp_cookie_time(void)

@@ -548,7 +548,10 @@ struct sock {
 	struct pid		*sk_peer_pid;
 	const struct cred	*sk_peer_cred;
 
-	ktime_t			sk_stamp;
+	union {
+		ktime_t		sk_stamp;
+		unsigned long	sk_synq_overflow_ts; /* tcp_synq_overflow */
+	};
 #if BITS_PER_LONG==32
 	seqlock_t		sk_stamp_seq;
 #endif
