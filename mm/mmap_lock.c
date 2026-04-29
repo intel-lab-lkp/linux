@@ -340,6 +340,49 @@ inval:
 	return NULL;
 }
 
+/*
+ * Find the VMA covering 'address' and lock it for reading. Waits for writers to
+ * finish if the VMA is being modified. Returns NULL if there is no VMA covering
+ * 'address'.
+ *
+ * The fast path does not take mmap lock.
+ */
+struct vm_area_struct *lock_vma_under_rcu_wait(struct mm_struct *mm,
+					       unsigned long address)
+{
+	struct vm_area_struct *vma;
+
+retry:
+	vma = lock_vma_under_rcu(mm, address);
+	/* Fast path: return stable VMA covering 'address': */
+	if (vma)
+		return vma;
+
+	/*
+	 * Slow path: the VMA covering 'address' is being modified.
+	 * or there is no VMA covering 'address'. Rule out the
+	 * possibility that the VMA is being modified:
+	 */
+	mmap_read_lock(mm);
+	vma = vma_lookup(mm, address);
+	mmap_read_unlock(mm);
+
+	/* There was for sure no VMA covering 'address': */
+	if (!vma)
+		return NULL;
+
+	/*
+	 * VMA was likely being modified during RCU lookup. Try again.
+	 * mmap_read_lock() waited for the writer to complete and the
+	 * writer is now done.
+	 *
+	 * There is no guarantee that any single retry will succeed,
+	 * and it is possible but highly unlikely this will loop
+	 * forever.
+	 */
+	goto retry;
+}
+
 static struct vm_area_struct *lock_next_vma_under_mmap_lock(struct mm_struct *mm,
 							    struct vma_iterator *vmi,
 							    unsigned long from_addr)

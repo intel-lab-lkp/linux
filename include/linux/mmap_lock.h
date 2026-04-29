@@ -470,6 +470,8 @@ static inline void vma_mark_detached(struct vm_area_struct *vma)
 
 struct vm_area_struct *lock_vma_under_rcu(struct mm_struct *mm,
 					  unsigned long address);
+struct vm_area_struct *lock_vma_under_rcu_wait(struct mm_struct *mm,
+					  unsigned long address);
 
 /*
  * Locks next vma pointed by the iterator. Confirms the locked vma has not
