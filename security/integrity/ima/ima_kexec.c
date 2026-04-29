@@ -107,7 +107,8 @@ static int ima_dump_measurement_list(unsigned long *buffer_size, void **buffer,
 	memset(&khdr, 0, sizeof(khdr));
 	khdr.version = 1;
 	/*
-	 * It can race with ima_queue_stage() and ima_queue_staged_delete_all().
+	 * It can race with ima_queue_stage(), ima_queue_staged_delete_all()
+	 * and ima_queue_delete_partial().
 	 */
 	mutex_lock(&ima_extend_list_mutex);
 

@@ -371,6 +371,49 @@ int ima_queue_staged_delete_all(void)
 	return 0;
 }
 
+int ima_queue_delete_partial(unsigned long req_value)
+{
+	unsigned long req_value_copy = req_value;
+	unsigned long size_to_remove = 0, num_to_remove = 0;
+	LIST_HEAD(ima_measurements_trim);
+	struct ima_queue_entry *qe;
+	int ret = 0;
+
+	/*
+	 * Safe to walk without rcu_read_lock(): single-writer
+	 * exclusion in ima_fs.c prevents any concurrent modification
+	 * to ima_measurements during this walk.
+	 */
+	list_for_each_entry_rcu(qe, &ima_measurements, later, true) {
+		size_to_remove += get_binary_runtime_size(qe->entry);
+		num_to_remove++;
+
+		if (--req_value_copy == 0)
+			break;
+	}
+
+	/* Not enough entries to delete. */
+	if (req_value_copy > 0)
+		return -ENOENT;
+
+	mutex_lock(&ima_extend_list_mutex);
+	/*
+	 * qe remains valid because ima_fs.c enforces single-writer exclusion.
+	 */
+	__list_cut_position(&ima_measurements_trim, &ima_measurements,
+			    &qe->later);
+
+	atomic_long_sub(num_to_remove, &ima_num_entries[BINARY]);
+
+	if (IS_ENABLED(CONFIG_IMA_KEXEC))
+		binary_runtime_size[BINARY] -= size_to_remove;
+
+	mutex_unlock(&ima_extend_list_mutex);
+
+	ima_queue_delete(&ima_measurements_trim, false);
+	return ret;
+}
+
 static void ima_queue_delete(struct list_head *head, bool flush_htable)
 {
 	struct ima_queue_entry *qe, *qe_tmp;

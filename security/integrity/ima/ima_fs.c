@@ -28,6 +28,7 @@
  * Requests:
  * 'A\n': stage the entire measurements list
  * 'D\n': delete all staged measurements
+ * '[1, ULONG_MAX]\n' delete N measurements entries
  */
 #define STAGED_REQ_LENGTH 21
 
@@ -312,6 +313,7 @@ static ssize_t _ima_measurements_write(struct file *file,
 				       loff_t *ppos, bool staged_interface)
 {
 	char req[STAGED_REQ_LENGTH];
+	unsigned long req_value;
 	int ret;
 
 	if (*ppos > 0 || datalen < 2 || datalen > STAGED_REQ_LENGTH)
@@ -339,7 +341,24 @@ static ssize_t _ima_measurements_write(struct file *file,
 		ret = ima_queue_staged_delete_all();
 		break;
 	default:
-		ret = -EINVAL;
+		if (staged_interface)
+			return -EINVAL;
+
+		if (ima_flush_htable) {
+			pr_debug("Deleting staged N measurements not supported when flushing the hash table is requested\n");
+			return -EINVAL;
+		}
+
+		ret = kstrtoul(req, 10, &req_value);
+		if (ret < 0)
+			return ret;
+
+		if (req_value == 0) {
+			pr_debug("Must delete at least one entry\n");
+			return -EINVAL;
+		}
+
+		ret = ima_queue_delete_partial(req_value);
 	}
 
 	if (ret < 0)
