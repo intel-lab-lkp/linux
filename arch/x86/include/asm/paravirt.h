@@ -166,11 +166,6 @@ static __always_inline void wrmsr(u32 msr, u32 low, u32 high)
 	paravirt_write_msr(msr, (u64)high << 32 | low);
 }
 
-#define rdmsrq(msr, val)			\
-do {						\
-	val = paravirt_read_msr(msr);		\
-} while (0)
-
 static inline void wrmsrq(u32 msr, u64 val)
 {
 	paravirt_write_msr(msr, val);

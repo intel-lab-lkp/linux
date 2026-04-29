@@ -191,9 +191,6 @@ static inline void wrmsr(u32 msr, u32 low, u32 high)
 	paravirt_write_msr(msr, (u64)high << 32 | low);
 }
 
-#define rdmsrq(msr, val)			\
-	((val) = paravirt_read_msr((msr)))
-
 static inline void wrmsrq(u32 msr, u64 val)
 {
 	paravirt_write_msr(msr, val);
@@ -236,6 +233,9 @@ do {								\
 	(*high) = (u32)(__val >> 32);				\
 	__err;							\
 })
+
+#define rdmsrq(msr, val)			\
+	((val) = paravirt_read_msr((msr)))
 
 /* Instruction opcode for WRMSRNS supported in binutils >= 2.40 */
 #define ASM_WRMSRNS _ASM_BYTES(0x0f,0x01,0xc6)
