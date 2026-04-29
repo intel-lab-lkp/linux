@@ -278,6 +278,71 @@ u64 cpu_logical_map(unsigned int cpu)
 	return __cpu_logical_map[cpu];
 }
 
+static enum arm_smccc_conduit early_dt_probe_psci_conduit(void)
+{
+	int len;
+	int psci_node;
+	const char *method;
+	enum arm_smccc_conduit conduit = SMCCC_CONDUIT_NONE;
+	unsigned long dt_root;
+
+	/* DT hasn't been unflattened yet, we have to work with the flat blob */
+	dt_root = of_get_flat_dt_root();
+	psci_node = of_get_flat_dt_subnode_by_name(dt_root, "psci");
+	if (psci_node <= 0)
+		return conduit;
+
+	method = of_get_flat_dt_prop(psci_node, "method", &len);
+	if (!method)
+		return conduit;
+
+	if (strncmp(method, "smc", len) == 0) {
+		conduit = SMCCC_CONDUIT_SMC;
+	} else if (strncmp(method, "hvc", len) == 0) {
+		conduit = SMCCC_CONDUIT_HVC;
+	}
+	return conduit;
+}
+
+/*
+ * Detect the PSCI conduit from both ACPI and DT, and probe the PSCI/SMCCC
+ * early if we can.
+ *
+ * Given both ACPI and DT could have valid configurations, we go forward with
+ * the early detection only if there is a valid conduit and both of them match.
+ */
+static void __init early_psci_init(void)
+{
+	enum arm_smccc_conduit dt_conduit = SMCCC_CONDUIT_NONE;
+	enum arm_smccc_conduit acpi_conduit = SMCCC_CONDUIT_NONE;
+	enum arm_smccc_conduit conduit = SMCCC_CONDUIT_NONE;
+
+	dt_conduit = early_dt_probe_psci_conduit();
+
+#ifdef CONFIG_ACPI
+	if (efi_enabled(EFI_BOOT))
+		acpi_conduit = acpi_early_psci_conduit();
+#endif
+	if (dt_conduit == SMCCC_CONDUIT_NONE &&
+	    acpi_conduit == SMCCC_CONDUIT_NONE) {
+		pr_crit("PSCI: Early probe: no conduit found\n");
+		return;
+	}
+
+	if (acpi_conduit == SMCCC_CONDUIT_NONE) {
+		conduit = dt_conduit;
+	} else if (dt_conduit == SMCCC_CONDUIT_NONE) {
+		conduit = acpi_conduit;
+	} else if (dt_conduit == acpi_conduit) {
+		conduit = acpi_conduit;
+	} else {
+		WARN(1, "PSCI: Early probe: Mismatched PSCI conduit, skipping\n");
+		return;
+	}
+
+	psci_early_init_conduit(conduit);
+}
+
 void __init __no_sanitize_address setup_arch(char **cmdline_p)
 {
 	setup_initial_init_mm(_text, _etext, _edata, _end);
@@ -321,6 +386,9 @@ void __init __no_sanitize_address setup_arch(char **cmdline_p)
 
 	xen_early_init();
 	efi_init();
+
+	/* Probe the PSCI early after the efi_init() */
+	early_psci_init();
 
 	if (!efi_enabled(EFI_BOOT)) {
 		if ((u64)_text % MIN_KIMG_ALIGN)

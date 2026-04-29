@@ -181,6 +181,87 @@ static int __init acpi_fadt_sanity_check(void)
 }
 
 /*
+ * Find the PSCI conduit from ACPI FADT table. We only proceed with the parsing
+ * if acpi *may be* used. i.e, acpi=force or acpi=on or DT is stub.
+ *
+ * FADT table is located as below:
+ *
+ *  RSDP -> XSDT ptr -> array of pointers to different Tables
+ *
+ * Note: Arm64 requires ACPI v5.1+, thus we always use XSDT (not RSDT, for < 2.0)
+ *	 from RSDP.
+ *
+ * Returns : Conduit if system is PSCI compliant.
+ *	     Otherwise returns SMCCC_CONDUIT_NONE.
+ */
+enum arm_smccc_conduit __init acpi_early_psci_conduit(void)
+{
+	enum arm_smccc_conduit c = SMCCC_CONDUIT_NONE;
+	struct acpi_table_rsdp *rsdp;
+	struct acpi_table_xsdt *xsdt;
+	u64 *ptr, *end;
+	u64 xsdt_pa, xsdt_len;
+	bool found = false;
+
+	if (param_acpi_off ||
+	    (!param_acpi_on && !param_acpi_force && !dt_is_stub()))
+		return SMCCC_CONDUIT_NONE;
+
+	if (efi.acpi20 == EFI_INVALID_TABLE_ADDR)
+		return SMCCC_CONDUIT_NONE;
+
+	rsdp = early_memremap(efi.acpi20, sizeof(*rsdp));
+	if (!rsdp)
+		return SMCCC_CONDUIT_NONE;
+
+	if (!ACPI_VALIDATE_RSDP_SIG(rsdp->signature) || rsdp->revision < 2 ||
+	    rsdp->xsdt_physical_address == 0) {
+		early_memunmap(rsdp, sizeof(*rsdp));
+		return SMCCC_CONDUIT_NONE;
+	}
+
+	xsdt_pa = rsdp->xsdt_physical_address;
+
+	/* Now that XSDT is found, unmap the RSDP */
+	early_memunmap(rsdp, sizeof(*rsdp));
+
+	/*
+	 * XSDT is mainly an array of table pointers, with standard header.
+	 * So we map upto a PAGE_SIZE (and more with alignment) and only
+	 * look there, with a WARNING.
+	 */
+	xsdt = early_memremap(xsdt_pa, PAGE_SIZE);
+	if (!xsdt)
+		return SMCCC_CONDUIT_NONE;
+
+	xsdt_len = ((struct acpi_table_header*)xsdt)->length;
+	if (xsdt_len > (ALIGN(xsdt_pa + PAGE_SIZE, PAGE_SIZE) - xsdt_pa)) {
+		pr_warn("XSDT table is larger than a page\n");
+	}
+
+	/* Find FADT table from the XSDT */
+	ptr = &xsdt->table_offset_entry[0];
+	end = (u64*)((void *)xsdt + xsdt_len);
+	for (; ptr < end && !found; ptr++) {
+		struct acpi_table_fadt *fadt = early_memremap(*ptr, sizeof(*fadt));
+
+		if (ACPI_COMPARE_NAMESEG(&fadt->header.signature, ACPI_SIG_FADT) &&
+		    __acpi_fadt_sanity_check(fadt) == 0) {
+			u16 arm_boot_flags = fadt->arm_boot_flags;
+
+			if (arm_boot_flags & ACPI_FADT_PSCI_COMPLIANT) {
+				c = arm_boot_flags & ACPI_FADT_PSCI_USE_HVC ?
+					SMCCC_CONDUIT_HVC : SMCCC_CONDUIT_SMC;
+			}
+			found = true;
+		}
+		early_memunmap(fadt, sizeof(*fadt));
+	}
+	early_memunmap(xsdt, PAGE_SIZE);
+	return c;
+}
+
+/*
  * acpi_boot_table_init() called from setup_arch(), always.
  *	1. find RSDP and get its address, and then find XSDT
  *	2. extract all tables and checksums them all

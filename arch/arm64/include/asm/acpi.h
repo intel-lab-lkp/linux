@@ -188,4 +188,5 @@ static inline void acpi_map_cpus_to_nodes(void) { }
 
 #define ACPI_TABLE_UPGRADE_MAX_PHYS MEMBLOCK_ALLOC_ACCESSIBLE
 
+enum arm_smccc_conduit __init acpi_early_psci_conduit(void);
 #endif /*_ASM_ACPI_H*/
