@@ -74,6 +74,59 @@ EXPORT_SYMBOL(empty_zero_page);
 static DEFINE_SPINLOCK(swapper_pgdir_lock);
 static DEFINE_MUTEX(fixmap_lock);
 
+pgd_t *percpu_pgd[NR_CPUS] __ro_after_init;
+bool percpu_pgd_setup_done __ro_after_init = false;
+
+void __init setup_percpu_pgd(void)
+{
+	int cpu;
+
+	for_each_possible_cpu(cpu) {
+		void *addr;
+
+		if (cpu == 0) {
+			percpu_pgd[cpu] = swapper_pg_dir;
+			continue;
+		}
+
+		addr = memblock_alloc(PAGE_SIZE, PAGE_SIZE);
+		if (!addr)
+			panic("Can't alloc percpu pgd\n");
+
+		memcpy(addr, (void *)swapper_pg_dir, PAGE_SIZE);
+		percpu_pgd[cpu] = (pgd_t *)addr;
+	}
+
+	dsb(ishst);
+
+	percpu_pgd_setup_done = true;
+}
+
+void arch_sync_kernel_mappings(unsigned long start, unsigned long end)
+{
+	unsigned long addr, next;
+	int cpu;
+	pgd_t *pgdp = pgd_offset_k(start);
+	pgd_t pgd;
+	unsigned int index = pgd_index(start);
+
+	BUG_ON(start > end);
+
+	if (!percpu_pgd_setup_done)
+		return;
+
+	addr = start;
+	do {
+		pgd = READ_ONCE(*pgdp);
+		next = pgd_addr_end(addr, end);
+		for_each_possible_cpu(cpu) {
+			if (cpu == 0)
+				continue;
+			set_pgd(percpu_pgd[cpu] + index, pgd);
+		}
+	} while (pgdp++, index++, addr = next, addr != end);
+}
+
 void noinstr set_swapper_pgd(pgd_t *pgdp, pgd_t pgd)
 {
 	pgd_t *fixmap_pgdp;
