@@ -81,18 +81,18 @@ static int skb_to_mamac(const struct sk_buff *skb, struct mbo *mbo)
 	unsigned int mdp_len = payload_len + MDP_HDR_LEN;
 
 	if (mdp_len < skb->len) {
-		pr_err("drop: too large packet! (%u)\n", skb->len);
+		netdev_err(skb->dev, "drop: too large packet! (%u)\n", skb->len);
 		return -EINVAL;
 	}
 
 	if (mbo->buffer_length < mdp_len) {
-		pr_err("drop: too small buffer! (%d for %d)\n",
-		       mbo->buffer_length, mdp_len);
+		netdev_err(skb->dev, "drop: too small buffer! (%d for %d)\n",
+			   mbo->buffer_length, mdp_len);
 		return -EINVAL;
 	}
 
 	if (skb->len < ETH_HLEN) {
-		pr_err("drop: too small packet! (%d)\n", skb->len);
+		netdev_err(skb->dev, "drop: too small packet! (%d)\n", skb->len);
 		return -EINVAL;
 	}
 
