@@ -1032,6 +1032,11 @@ static void complete_signal(int sig, struct task_struct *p, enum pid_type type)
 	return;
 }
 
+static inline bool sa_immutable(struct sighand_struct *sighand, int sig)
+{
+	return sighand->action[sig - 1].sa.sa_flags & SA_IMMUTABLE;
+}
+
 static inline bool legacy_queue(struct sigpending *signals, int sig)
 {
 	return (sig < SIGRTMIN) && sigismember(&signals->signal, sig);
@@ -1040,6 +1045,7 @@ static inline bool legacy_queue(struct sigpending *signals, int sig)
 static int __send_signal_locked(int sig, struct kernel_siginfo *info,
 				struct task_struct *t, enum pid_type type, bool force)
 {
+	bool immutable = sa_immutable(t->sighand, sig);
 	struct sigpending *pending;
 	struct sigqueue *q;
 	int override_rlimit;
@@ -1053,12 +1059,12 @@ static int __send_signal_locked(int sig, struct kernel_siginfo *info,
 
 	pending = (type != PIDTYPE_PID) ? &t->signal->shared_pending : &t->pending;
 	/*
-	 * Short-circuit ignored signals and support queuing
-	 * exactly one non-rt signal, so that we can get more
-	 * detailed information about the cause of the signal.
+	 * Queue exactly one non-rt signal so that we can get more
+	 * detailed information about the cause. But we must never
+	 * lose the siginfo for an SA_IMMUTABLE signal.
 	 */
 	result = TRACE_SIGNAL_ALREADY_PENDING;
-	if (legacy_queue(pending, sig))
+	if (legacy_queue(pending, sig) && !immutable)
 		goto ret;
 
 	result = TRACE_SIGNAL_DELIVERED;
@@ -1085,7 +1091,12 @@ static int __send_signal_locked(int sig, struct kernel_siginfo *info,
 	q = sigqueue_alloc(sig, t, GFP_ATOMIC, override_rlimit);
 
 	if (q) {
-		list_add_tail(&q->list, &pending->list);
+		/* Ensure dequeue_synchronous_signal() sees SA_IMMUTABLE first */
+		if (immutable)
+			list_add(&q->list, &pending->list);
+		else
+			list_add_tail(&q->list, &pending->list);
+
 		switch ((unsigned long) info) {
 		case (unsigned long) SEND_SIG_NOINFO:
 			clear_siginfo(&q->info);
@@ -1128,6 +1139,9 @@ static int __send_signal_locked(int sig, struct kernel_siginfo *info,
 		 * send the signal, but the *info bits are lost.
 		 */
 		result = TRACE_SIGNAL_LOSE_INFO;
+		/* The task must not escape SA_IMMUTABLE; escalate to SIGKILL */
+		if (immutable)
+			sig = SIGKILL;
 	}
 
 out_set:
