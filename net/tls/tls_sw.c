@@ -1157,6 +1157,13 @@ alloc_encrypted:
 				else if (ret == -ENOMEM)
 					goto wait_for_memory;
 				else if (ctx->open_rec && ret == -ENOSPC) {
+					/* bpf_exec_tx_verdict() may have
+					 * called tls_split_open_record(),
+					 * freeing the old record. Re-fetch.
+					 */
+					rec = ctx->open_rec;
+					msg_pl = &rec->msg_plaintext;
+					msg_en = &rec->msg_encrypted;
 					if (msg_pl->cork_bytes) {
 						ret = 0;
 						goto send_end;
