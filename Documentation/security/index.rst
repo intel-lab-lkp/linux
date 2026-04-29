@@ -8,6 +8,7 @@ Security Documentation
    credentials
    snp-tdx-threat-model
    IMA-templates
+   IMA-staging
    keys/index
    lsm
    lsm-development
