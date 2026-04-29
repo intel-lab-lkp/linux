@@ -44,7 +44,6 @@ EXPORT_SYMBOL(__mmap_lock_do_trace_released);
 #endif /* CONFIG_TRACING */
 
 #ifdef CONFIG_MMU
-#ifdef CONFIG_PER_VMA_LOCK
 
 /* State shared across __vma_[start, end]_exclude_readers. */
 struct vma_exclude_readers_state {
@@ -431,7 +430,6 @@ fallback:
 
 	return vma;
 }
-#endif /* CONFIG_PER_VMA_LOCK */
 
 #ifdef CONFIG_LOCK_MM_AND_FIND_VMA
 #include <linux/extable.h>
