@@ -163,6 +163,16 @@ static void rga_buf_queue(struct vb2_buffer *vb)
 	struct rga_ctx *ctx = vb2_get_drv_priv(vb->vb2_queue);
 
 	v4l2_m2m_buf_queue(ctx->fh.m2m_ctx, vbuf);
+
+	/*
+	 * Opt in to vb2's dma_resv release-fence path so userspace
+	 * consumers of RGA-produced dmabufs get a real producer fence
+	 * to wait on instead of the dma_buf core's stub fence. See
+	 * the leading patch in this series for rationale. Best-effort:
+	 * fence-allocation failure means we lose implicit-sync
+	 * precision but the m2m operation itself proceeds normally.
+	 */
+	(void)vb2_buffer_attach_release_fence(vb);
 }
 
 static void rga_buf_cleanup(struct vb2_buffer *vb)
