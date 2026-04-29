@@ -2449,6 +2449,8 @@ static int do_ebt_get_ctl(struct sock *sk, int cmd, void __user *user, int *len)
 	struct ebt_table *t;
 	int ret;
 
+	if (!xt_compat_check())
+		return -EPERM;
 	if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
 		return -EPERM;
 
@@ -2514,6 +2516,8 @@ static int do_ebt_set_ctl(struct sock *sk, int cmd, sockptr_t arg,
 	struct net *net = sock_net(sk);
 	int ret;
 
+	if (!xt_compat_check())
+		return -EPERM;
 	if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
 		return -EPERM;
 

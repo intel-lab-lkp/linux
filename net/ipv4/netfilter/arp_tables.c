@@ -1416,6 +1416,8 @@ static int do_arpt_set_ctl(struct sock *sk, int cmd, sockptr_t arg,
 {
 	int ret;
 
+	if (!xt_compat_check())
+		return -EPERM;
 	if (!ns_capable(sock_net(sk)->user_ns, CAP_NET_ADMIN))
 		return -EPERM;
 
@@ -1444,6 +1446,8 @@ static int do_arpt_get_ctl(struct sock *sk, int cmd, void __user *user, int *len
 {
 	int ret;
 
+	if (!xt_compat_check())
+		return -EPERM;
 	if (!ns_capable(sock_net(sk)->user_ns, CAP_NET_ADMIN))
 		return -EPERM;
 
