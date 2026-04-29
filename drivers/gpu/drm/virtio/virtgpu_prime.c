@@ -218,7 +218,7 @@ static void virtgpu_dma_buf_free_obj(struct drm_gem_object *obj)
 
 	if (bo->created) {
 		virtio_gpu_remove_from_restore_list(bo);
-		virtio_gpu_cmd_unref_resource(vgdev, bo);
+		virtio_gpu_cmd_unref_resource(vgdev, bo, false);
 		virtio_gpu_notify(vgdev);
 		return;
 	}
