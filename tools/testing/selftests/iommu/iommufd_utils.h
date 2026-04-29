@@ -5,6 +5,7 @@
 
 #include <unistd.h>
 #include <stddef.h>
+#include <string.h>
 #include <sys/fcntl.h>
 #include <sys/ioctl.h>
 #include <stdint.h>
@@ -826,7 +827,6 @@ static int _test_cmd_get_hw_info(int fd, __u32 device_id, __u32 data_type,
 				 void *data, size_t data_len,
 				 uint32_t *capabilities, uint8_t *max_pasid)
 {
-	struct iommu_test_hw_info *info = (struct iommu_test_hw_info *)data;
 	struct iommu_hw_info cmd = {
 		.size = sizeof(cmd),
 		.dev_id = device_id,
@@ -866,11 +866,13 @@ static int _test_cmd_get_hw_info(int fd, __u32 device_id, __u32 data_type,
 		}
 	}
 
-	if (info) {
+	if (data) {
+		struct iommu_test_hw_info info = {0};
+		memcpy(&info, data, data_len);
 		if (data_len >= offsetofend(struct iommu_test_hw_info, test_reg))
-			assert(info->test_reg == IOMMU_HW_INFO_SELFTEST_REGVAL);
+			assert(info.test_reg == IOMMU_HW_INFO_SELFTEST_REGVAL);
 		if (data_len >= offsetofend(struct iommu_test_hw_info, flags))
-			assert(!info->flags);
+			assert(!info.flags);
 	}
 
 	if (max_pasid)
