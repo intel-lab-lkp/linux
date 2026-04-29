@@ -12,6 +12,7 @@
 
 #define pr_fmt(fmt)	KBUILD_MODNAME ": " fmt
 
+#include <linux/cleanup.h>
 #include <linux/cpu.h>
 #include <linux/debugfs.h>
 #include <linux/fs.h>
@@ -1238,12 +1239,20 @@ static ssize_t max_threshold_occ_write(struct kernfs_open_file *of,
 	unsigned int bytes;
 	int ret;
 
-	ret = kstrtouint(buf, 0, &bytes);
-	if (ret)
-		return ret;
+	guard(mutex)(&rdtgroup_mutex);
+	rdt_last_cmd_clear();
 
-	if (bytes > resctrl_rmid_realloc_limit)
+	ret = kstrtouint(buf, 0, &bytes);
+	if (ret) {
+		rdt_last_cmd_puts("Invalid input\n");
+		return ret;
+	}
+
+	if (bytes > resctrl_rmid_realloc_limit) {
+		rdt_last_cmd_printf("Exceeds limit (before adjustment) of %u bytes\n",
+				    resctrl_rmid_realloc_limit);
 		return -EINVAL;
+	}
 
 	resctrl_rmid_realloc_threshold = resctrl_arch_round_mon_val(bytes);
 
