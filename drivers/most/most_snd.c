@@ -16,6 +16,7 @@
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
 #include <linux/sched.h>
+#include <linux/string.h>
 #include <linux/kthread.h>
 #include <linux/most.h>
 
@@ -554,10 +555,8 @@ static int audio_probe_channel(struct most_interface *iface, int channel_id,
 			   sizeof(*channel), &adpt->card);
 	if (ret < 0)
 		goto err_free_adpt;
-	snprintf(adpt->card->driver, sizeof(adpt->card->driver),
-		 "%s", DRIVER_NAME);
-	snprintf(adpt->card->shortname, sizeof(adpt->card->shortname),
-		 "Microchip INIC");
+	strscpy(adpt->card->driver, DRIVER_NAME);
+	strscpy(adpt->card->shortname, "Microchip INIC");
 	snprintf(adpt->card->longname, sizeof(adpt->card->longname),
 		 "%s at %s", adpt->card->shortname, iface->description);
 skip_adpt_alloc:
