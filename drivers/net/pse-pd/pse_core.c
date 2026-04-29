@@ -8,6 +8,7 @@
 #include <linux/device.h>
 #include <linux/ethtool.h>
 #include <linux/ethtool_netlink.h>
+#include <linux/leds.h>
 #include <linux/of.h>
 #include <linux/phy.h>
 #include <linux/pse-pd/pse.h>
@@ -669,6 +670,168 @@ static int _pse_pi_delivery_power_sw_pw_ctrl(struct pse_controller_dev *pcdev,
 	return 0;
 }
 
+#if IS_ENABLED(CONFIG_LEDS_TRIGGERS)
+/**
+ * pse_pi_get_states - Fetch current delivering/enabled state for a PI
+ * @pcdev: PSE controller device
+ * @id: PI index
+ * @delivering: out, set to true if PI is currently delivering power
+ * @enabled: out, set to true if PI is administratively enabled
+ *
+ * Queries hardware via the controller ops. Caller must hold pcdev->lock.
+ *
+ * Return: 0 on success, negative errno on failure.
+ */
+static int pse_pi_get_states(struct pse_controller_dev *pcdev, int id,
+			     bool *delivering, bool *enabled)
+{
+	struct pse_pw_status pw_status = {};
+	struct pse_admin_state admin_state = {};
+	int ret;
+
+	ret = pcdev->ops->pi_get_pw_status(pcdev, id, &pw_status);
+	if (ret)
+		return ret;
+	ret = pcdev->ops->pi_get_admin_state(pcdev, id, &admin_state);
+	if (ret)
+		return ret;
+
+	*delivering = pw_status.c33_pw_status ==
+		ETHTOOL_C33_PSE_PW_D_STATUS_DELIVERING ||
+		pw_status.podl_pw_status ==
+		ETHTOOL_PODL_PSE_PW_D_STATUS_DELIVERING;
+	*enabled = admin_state.c33_admin_state ==
+		ETHTOOL_C33_PSE_ADMIN_STATE_ENABLED ||
+		admin_state.podl_admin_state ==
+		ETHTOOL_PODL_PSE_ADMIN_STATE_ENABLED;
+
+	return 0;
+}
+
+/**
+ * pse_led_update - Update LED triggers for a PI based on current state
+ * @pcdev: PSE controller device
+ * @id: PI index
+ *
+ * Queries the current power status and admin state of the PI and
+ * fires LED trigger events on state changes. Called from the
+ * notification path and the regulator enable/disable paths.
+ *
+ * Must be called with pcdev->lock held.
+ */
+static void pse_led_update(struct pse_controller_dev *pcdev, int id)
+{
+	struct pse_pi_led_triggers *trigs;
+	bool delivering, enabled;
+
+	if (!pcdev->pi_led_trigs)
+		return;
+
+	trigs = &pcdev->pi_led_trigs[id];
+	if (!trigs->delivering.name)
+		return;
+
+	if (pse_pi_get_states(pcdev, id, &delivering, &enabled))
+		return;
+
+	if (trigs->last_delivering != delivering) {
+		trigs->last_delivering = delivering;
+		led_trigger_event(&trigs->delivering,
+				  delivering ? LED_FULL : LED_OFF);
+	}
+
+	if (trigs->last_enabled != enabled) {
+		trigs->last_enabled = enabled;
+		led_trigger_event(&trigs->enabled,
+				  enabled ? LED_FULL : LED_OFF);
+	}
+}
+
+/* Sync a freshly-bound LED to the cached trigger state. Without these
+ * .activate callbacks, an LED bound to the trigger after
+ * pse_controller_register() (e.g. via sysfs) would stay dark until the
+ * next hardware event toggles state.
+ */
+static int pse_led_delivering_activate(struct led_classdev *led_cdev)
+{
+	struct pse_pi_led_triggers *trigs =
+		container_of(led_cdev->trigger, struct pse_pi_led_triggers,
+			     delivering);
+
+	led_set_brightness(led_cdev,
+			   trigs->last_delivering ? LED_FULL : LED_OFF);
+	return 0;
+}
+
+static int pse_led_enabled_activate(struct led_classdev *led_cdev)
+{
+	struct pse_pi_led_triggers *trigs =
+		container_of(led_cdev->trigger, struct pse_pi_led_triggers,
+			     enabled);
+
+	led_set_brightness(led_cdev,
+			   trigs->last_enabled ? LED_FULL : LED_OFF);
+	return 0;
+}
+
+static int pse_led_triggers_register(struct pse_controller_dev *pcdev)
+{
+	struct device *dev = pcdev->dev;
+	const char *dev_id;
+	int i, ret;
+
+	dev_id = dev_name(dev);
+
+	pcdev->pi_led_trigs = devm_kcalloc(dev, pcdev->nr_lines,
+					   sizeof(*pcdev->pi_led_trigs),
+					   GFP_KERNEL);
+	if (!pcdev->pi_led_trigs)
+		return -ENOMEM;
+
+	for (i = 0; i < pcdev->nr_lines; i++) {
+		struct pse_pi_led_triggers *trigs = &pcdev->pi_led_trigs[i];
+
+		/* Skip PIs not described in device tree */
+		if (!pcdev->no_of_pse_pi && !pcdev->pi[i].np)
+			continue;
+
+		trigs->delivering.name = devm_kasprintf(dev, GFP_KERNEL,
+							"pse-%s:port%d:delivering",
+							dev_id, i);
+		if (!trigs->delivering.name)
+			return -ENOMEM;
+		trigs->delivering.activate = pse_led_delivering_activate;
+
+		ret = devm_led_trigger_register(dev, &trigs->delivering);
+		if (ret) {
+			trigs->delivering.name = NULL;
+			return ret;
+		}
+
+		trigs->enabled.name = devm_kasprintf(dev, GFP_KERNEL,
+						     "pse-%s:port%d:enabled",
+						     dev_id, i);
+		if (!trigs->enabled.name)
+			return -ENOMEM;
+		trigs->enabled.activate = pse_led_enabled_activate;
+
+		ret = devm_led_trigger_register(dev, &trigs->enabled);
+		if (ret) {
+			trigs->enabled.name = NULL;
+			return ret;
+		}
+	}
+
+	return 0;
+}
+#else
+static inline void pse_led_update(struct pse_controller_dev *pcdev, int id) {}
+static int pse_led_triggers_register(struct pse_controller_dev *pcdev)
+{
+	return 0;
+}
+#endif /* CONFIG_LEDS_TRIGGERS */
+
 static int pse_pi_enable(struct regulator_dev *rdev)
 {
 	struct pse_controller_dev *pcdev = rdev_get_drvdata(rdev);
@@ -694,6 +857,7 @@ static int pse_pi_enable(struct regulator_dev *rdev)
 			pcdev->pi[id].admin_state_enabled = 1;
 			ret = 0;
 		}
+		pse_led_update(pcdev, id);
 		mutex_unlock(&pcdev->lock);
 		return ret;
 	}
@@ -701,6 +865,7 @@ static int pse_pi_enable(struct regulator_dev *rdev)
 	ret = ops->pi_enable(pcdev, id);
 	if (!ret)
 		pcdev->pi[id].admin_state_enabled = 1;
+	pse_led_update(pcdev, id);
 	mutex_unlock(&pcdev->lock);
 
 	return ret;
@@ -718,6 +883,7 @@ static int pse_pi_disable(struct regulator_dev *rdev)
 	ret = _pse_pi_disable(pcdev, id);
 	if (!ret)
 		pi->admin_state_enabled = 0;
+	pse_led_update(pcdev, id);
 
 	mutex_unlock(&pcdev->lock);
 	return 0;
@@ -1107,6 +1273,31 @@ int pse_controller_register(struct pse_controller_dev *pcdev)
 	if (ret)
 		return ret;
 
+	ret = pse_led_triggers_register(pcdev);
+	if (ret) {
+		/* LED triggers are non-essential for power delivery; warn
+		 * and continue. NULL out the array so pse_led_update()'s
+		 * early-return guard short-circuits any later calls onto
+		 * partially-registered triggers.
+		 */
+		dev_warn(pcdev->dev, "Failed to register LED triggers: %d\n",
+			 ret);
+		pcdev->pi_led_trigs = NULL;
+	}
+
+	/* Query initial LED state for all PIs so already-active ports
+	 * are reflected immediately without waiting for a hardware event.
+	 * Hold pcdev->lock: regulators are already exposed and a
+	 * concurrent regulator_enable() would race on the hw callbacks
+	 * and on last_delivering / last_enabled.
+	 */
+	mutex_lock(&pcdev->lock);
+	for (i = 0; i < pcdev->nr_lines; i++) {
+		if (pcdev->no_of_pse_pi || pcdev->pi[i].np)
+			pse_led_update(pcdev, i);
+	}
+	mutex_unlock(&pcdev->lock);
+
 	mutex_lock(&pse_list_mutex);
 	list_add(&pcdev->list, &pse_controller_list);
 	mutex_unlock(&pse_list_mutex);
@@ -1267,7 +1458,14 @@ static void pse_handle_events(struct pse_controller_dev *pcdev,
 		struct pse_ntf ntf = {};
 		int ret;
 
-		/* Do nothing PI not described */
+		/* Update LEDs for described PIs regardless of consumer state.
+		 * LED triggers are registered at controller init, before any
+		 * PHY claims a PSE control, so rdev may still be NULL here.
+		 */
+		if (pcdev->no_of_pse_pi || pcdev->pi[i].np)
+			pse_led_update(pcdev, i);
+
+		/* Skip regulator/netlink path for PIs without consumers */
 		if (!pcdev->pi[i].rdev)
 			continue;
 
