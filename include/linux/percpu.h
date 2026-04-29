@@ -74,6 +74,8 @@
 
 extern void *pcpu_base_addr;
 extern const unsigned long *pcpu_unit_offsets;
+/* percpu local mapping base */
+extern void *pcpu_local_base;
 
 struct pcpu_group_info {
 	int			nr_units;	/* aligned # of units */

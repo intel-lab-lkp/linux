@@ -825,6 +825,9 @@ extern int cpu_to_node_map[NR_CPUS];
 
 unsigned long __per_cpu_offset[NR_CPUS] __read_mostly;
 EXPORT_SYMBOL(__per_cpu_offset);
+/* Used to calculate pcpu local address, the offset is same for all CPUs */
+unsigned long __per_cpu_local_off __read_mostly;
+EXPORT_SYMBOL(__per_cpu_local_off);
 
 int early_cpu_to_node(int cpu)
 {
@@ -847,6 +850,7 @@ void __init setup_per_cpu_areas(void)
 	delta = (unsigned long)pcpu_base_addr - (unsigned long)__per_cpu_start;
 	for_each_possible_cpu(cpu)
 		__per_cpu_offset[cpu] = delta + pcpu_unit_offsets[cpu];
+	__per_cpu_local_off = (unsigned long)pcpu_local_base - (unsigned long)__per_cpu_start;
 }
 
 static const char *ipi_types[MAX_IPI] __tracepoint_string = {
