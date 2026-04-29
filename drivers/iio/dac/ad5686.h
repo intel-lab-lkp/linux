@@ -47,6 +47,7 @@
 #define AD5683_REF_BIT_MSK			BIT(12)
 #define AD5686_REF_BIT_MSK			BIT(0)
 
+#define AD5686_PD_MSK				GENMASK(1, 0)
 
 enum ad5686_regmap_type {
 	AD5310_REGMAP,
