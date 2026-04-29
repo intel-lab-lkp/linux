@@ -603,7 +603,11 @@ int ionic_setup(struct ionic *ionic)
 	err = ionic_dev_setup(ionic);
 	if (err)
 		return err;
-	ionic_reset(ionic);
+
+	err = ionic_reset(ionic);
+	/* firmware may not be ready to respond yet */
+	if (err == -EAGAIN || err == -ETIMEDOUT)
+		return -EPROBE_DEFER;
 
 	return 0;
 }
@@ -687,7 +691,7 @@ int ionic_reset(struct ionic *ionic)
 
 	mutex_lock(&ionic->dev_cmd_lock);
 	ionic_dev_cmd_reset(idev);
-	err = ionic_dev_cmd_wait(ionic, DEVCMD_TIMEOUT);
+	err = ionic_dev_cmd_wait_nomsg(ionic, DEVCMD_TIMEOUT);
 	mutex_unlock(&ionic->dev_cmd_lock);
 
 	return err;
