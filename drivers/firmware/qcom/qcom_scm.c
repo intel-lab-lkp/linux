@@ -986,7 +986,7 @@ EXPORT_SYMBOL_GPL(qcom_scm_pas_auth_and_reset);
  * qcom_scm_pas_prepare_and_auth_reset() - Prepare, authenticate, and reset the
  *					   remote processor
  *
- * @ctx:	Context saved during call to qcom_scm_pas_context_init()
+ * @ctx:	Context saved during call to devm_qcom_scm_pas_context_alloc()
  *
  * This function performs the necessary steps to prepare a PAS subsystem,
  * authenticate it using the provided metadata, and initiate a reset sequence.
