@@ -2917,3 +2917,40 @@ void amdgpu_ttm_debugfs_init(struct amdgpu_device *adev)
 
 #endif
 }
+
+const struct drm_memory_info *amdgpu_drm_memory_info(struct drm_device *drm)
+{
+	struct amdgpu_device *adev = drm_to_adev(drm);
+	struct drm_memory_info *info = &adev->memory_info;
+	static const unsigned int regions[] = {
+		TTM_PL_VRAM,
+		TTM_PL_TT,
+	};
+	struct drm_memory_region_info *region;
+	struct ttm_resource_manager *man;
+	unsigned int i;
+
+	if (WARN_ON_ONCE(ARRAY_SIZE(adev->__memory_region_info) !=
+			 ARRAY_SIZE(regions)))
+		return NULL;
+
+	if (!info->num_regions) {
+		for (i = 0; i < ARRAY_SIZE(regions); i++) {
+			region = &info->region[i];
+			strscpy(region->name,
+				amdgpu_ttm_pl_to_name(regions[i]),
+				sizeof(region->name));
+			man = ttm_manager_type(&adev->mman.bdev, regions[i]);
+			region->total_mb = man->size >> 20;
+			info->num_regions++;
+		}
+	}
+
+	for (i = 0; i < ARRAY_SIZE(regions); i++) {
+		region = &info->region[i];
+		man = ttm_manager_type(&adev->mman.bdev, regions[i]);
+		region->used_mb = ttm_resource_manager_usage(man) >> 20;
+	}
+
+	return &adev->memory_info;
+}

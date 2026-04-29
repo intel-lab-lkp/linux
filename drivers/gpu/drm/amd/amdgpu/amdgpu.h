@@ -1195,6 +1195,9 @@ struct amdgpu_device {
 
 	struct amdgpu_uma_carveout_info uma_info;
 
+	struct drm_memory_info		memory_info;
+	struct drm_memory_region_info	__memory_region_info[2]; /* Storage for memory_info */
+
 	/* KFD
 	 * Must be last --ends in a flexible-array member.
 	 */
@@ -1665,4 +1668,7 @@ void amdgpu_device_set_uid(struct amdgpu_uid *uid_info,
 			   uint64_t uid);
 uint64_t amdgpu_device_get_uid(struct amdgpu_uid *uid_info,
 			       enum amdgpu_uid_type type, uint8_t inst);
+
+const struct drm_memory_info *amdgpu_drm_memory_info(struct drm_device *drm);
+
 #endif

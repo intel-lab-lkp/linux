@@ -3085,7 +3085,7 @@ static const struct drm_driver amdgpu_kms_driver = {
 #ifdef CONFIG_PROC_FS
 	.show_fdinfo = amdgpu_show_fdinfo,
 #endif
-
+	.get_memory_info = amdgpu_drm_memory_info,
 	.gem_prime_import = amdgpu_gem_prime_import,
 
 	.name = DRIVER_NAME,
