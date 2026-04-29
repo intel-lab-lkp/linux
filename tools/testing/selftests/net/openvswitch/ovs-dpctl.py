@@ -2069,7 +2069,7 @@ class OvsVport(GenericNetlinkSocket):
         elif vport_type == "internal":
             return OvsVport.OVS_VPORT_TYPE_INTERNAL
         elif vport_type == "gre":
-            return OvsVport.OVS_VPORT_TYPE_INTERNAL
+            return OvsVport.OVS_VPORT_TYPE_GRE
         elif vport_type == "vxlan":
             return OvsVport.OVS_VPORT_TYPE_VXLAN
         elif vport_type == "geneve":
@@ -2131,7 +2131,7 @@ class OvsVport(GenericNetlinkSocket):
                 if not lwt:
                     vportopt = OvsVport.ovs_vport_msg.vportopts()
                     vportopt["attrs"].append(
-                        ["OVS_TUNNEL_ATTR_DST_PORT", socket.htons(dport)]
+                        ["OVS_TUNNEL_ATTR_DST_PORT", dport]
                     )
                     msg["attrs"].append(
                         ["OVS_VPORT_ATTR_OPTIONS", vportopt]
@@ -2563,7 +2563,7 @@ def print_ovsdp_full(dp_lookup_rep, ifindex, ndb=NDB(), vpl=OvsVport()):
             if vpo:
                 dpo = vpo.get_attr("OVS_TUNNEL_ATTR_DST_PORT")
                 if dpo:
-                    opts += " tnl-dport:%s" % socket.ntohs(dpo)
+                    opts += " tnl-dport:%s" % dpo
             print(
                 "  port %d: %s (%s%s)"
                 % (
@@ -2632,7 +2632,7 @@ def main(argv):
         "--ptype",
         type=str,
         default="netdev",
-        choices=["netdev", "internal", "geneve", "vxlan"],
+        choices=["netdev", "internal", "gre", "geneve", "vxlan"],
         help="Interface type (default netdev)",
     )
     addifcmd.add_argument(
@@ -2645,7 +2645,7 @@ def main(argv):
     addifcmd.add_argument(
         "-l",
         "--lwt",
-        type=bool,
+        action=argparse.BooleanOptionalAction,
         default=True,
         help="Use LWT infrastructure instead of vport (default true)."
     )
