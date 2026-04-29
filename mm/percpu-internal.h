@@ -64,6 +64,8 @@ struct pcpu_chunk {
 	 * chunk_md.
 	 */
 	void			*base_addr ____cacheline_aligned_in_smp;
+	/* percpu local base address of the chunk */
+	void                    *local_base;
 
 	unsigned long		*alloc_map;	/* allocation map */
 	struct pcpu_block_md	*md_blocks;	/* metadata blocks */

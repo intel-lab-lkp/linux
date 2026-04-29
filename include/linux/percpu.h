@@ -113,7 +113,7 @@ extern struct pcpu_alloc_info * __init pcpu_alloc_alloc_info(int nr_groups,
 extern void __init pcpu_free_alloc_info(struct pcpu_alloc_info *ai);
 
 extern void __init pcpu_setup_first_chunk(const struct pcpu_alloc_info *ai,
-					 void *base_addr);
+					 void *base_addr, void *local_base);
 
 extern int __init pcpu_embed_first_chunk(size_t reserved_size, size_t dyn_size,
 				size_t atom_size,
