@@ -941,6 +941,7 @@ EXPORT_SYMBOL_GPL(evict_inodes);
 struct inodes_to_prune {
 	struct list_head freeable;
 	struct list_head deferred;
+	int deferred_count;
 };
 
 /*
@@ -1013,9 +1014,10 @@ static enum lru_status inode_lru_isolate(struct list_head *item,
 	WARN_ON(inode_state_read(inode) & I_NEW);
 	inode_state_set(inode, I_FREEING);
 	/* Inode will take long time to cleanup. Offload that to worker. */
-	if (inode_state_read(inode) & I_DEFER_RECLAIM)
+	if (inode_state_read(inode) & I_DEFER_RECLAIM) {
 		list_lru_isolate_move(lru, &inode->i_lru, &lists->deferred);
-	else
+		lists->deferred_count++;
+	} else
 		list_lru_isolate_move(lru, &inode->i_lru, &lists->freeable);
 	spin_unlock(&inode->i_lock);
 
@@ -1052,27 +1054,58 @@ long prune_icache_sb(struct super_block *sb, struct shrink_control *sc)
 		if (list_empty(&reclaim->list))
 			queue_work(system_dfl_wq, &reclaim->work);
 		list_splice_tail(&lists.deferred, &reclaim->list);
+		reclaim->len += lists.deferred_count;
 		spin_unlock(&reclaim->lock);
 	}
 	return freed;
+}
+
+static void inode_reclaim_update_stat(struct inode_deferred_reclaim *reclaim,
+				      struct super_block *sb, unsigned int n,
+				      u64 start)
+{
+	u64 end = ktime_get_ns();
+	u32 delay;
+
+	delay = div_u64(end - start, n);
+	/* Smooth delay updates with exponential moving average */
+	reclaim->delay = (63 * (u64)reclaim->delay + delay) / 64;
+
+	trace_inode_reclaim_update_stat(sb, n, delay, reclaim->delay);
 }
 
 static void inode_reclaim_deferred(struct work_struct *work)
 {
 	struct inode_deferred_reclaim *reclaim =
 		container_of(work, struct inode_deferred_reclaim, work);
+	struct super_block *sb = NULL;
 	struct inode *inode;
+	u64 start;
+	unsigned int batch = 0;
 
 	spin_lock(&reclaim->lock);
 	while (!list_empty(&reclaim->list)) {
 		inode = list_first_entry(&reclaim->list, struct inode, i_lru);
 		list_del_init(&inode->i_lru);
+		reclaim->len--;
 		spin_unlock(&reclaim->lock);
+		if (!sb)
+			sb = inode->i_sb;
+		if (!batch)
+			start = ktime_get_ns();
 		evict(inode);
+		batch++;
+		/* Batch stat updates to avoid excessive computations */
+		if (batch >= 64 || need_resched()) {
+			inode_reclaim_update_stat(reclaim, sb, batch, start);
+			batch = 0;
+		}
 		cond_resched();
 		spin_lock(&reclaim->lock);
 	}
 	spin_unlock(&reclaim->lock);
+	if (batch)
+		inode_reclaim_update_stat(reclaim, sb, batch, start);
 }
 
 static struct inode_deferred_reclaim *inode_deferred_reclaim_alloc(
@@ -1091,20 +1124,65 @@ static struct inode_deferred_reclaim *inode_deferred_reclaim_alloc(
 	return sb->s_inode_reclaim;
 }
 
+/*
+ * Size of deferred reclaim list from which we start throttling tasks creating
+ * inodes marked for deferred reclaim.
+ */
+#define INODE_DEFERRED_RECLAIM_LIMIT 8192
+
+static void throttle_inode_deferred_reclaim(struct inode *inode)
+{
+	unsigned int len;
+	struct inode_deferred_reclaim *reclaim =
+				READ_ONCE(inode->i_sb->s_inode_reclaim);
+
+	if (!reclaim)
+		reclaim = inode_deferred_reclaim_alloc(inode->i_sb);
+
+	/*
+	 * If inodes with deferred reclaim are accumulating too much, slow down
+	 * tasks creating them. This doesn't provide any kind of guarantee on
+	 * the length of the deferred list since lots of inodes with
+	 * I_DEFER_RECLAIM can be already present in the inode cache and we
+	 * have no control when they reach the deferred list. But if the
+	 * pressure on the deferred list is sustained, the balance should
+	 * eventually be established.
+	 */
+	len = READ_ONCE(reclaim->len);
+	if (len > INODE_DEFERRED_RECLAIM_LIMIT) {
+		u64 delay = READ_ONCE(reclaim->delay);
+
+		if (!delay)
+			return;
+		/*
+		 * Scale the delay based on how much we exceed the limit. Wait
+		 * at most 4x as long as estimated time to reclaim the inode.
+		 */
+		len = min(len, 5 * INODE_DEFERRED_RECLAIM_LIMIT);
+		delay = div_u64(delay * (len - INODE_DEFERRED_RECLAIM_LIMIT),
+				INODE_DEFERRED_RECLAIM_LIMIT);
+		trace_mark_inode_reclaim_deferred_throttle(inode, len, delay);
+
+		schedule_timeout_killable(nsecs_to_jiffies(delay));
+	}
+}
+
 void mark_inode_reclaim_deferred(struct inode *inode)
 {
-	struct inode_deferred_reclaim *reclaim;
+	bool throttle = false;
 
 	if (inode_state_read_once(inode) & I_DEFER_RECLAIM)
 		return;
 
-	reclaim = READ_ONCE(inode->i_sb->s_inode_reclaim);
-	if (!reclaim)
-		reclaim = inode_deferred_reclaim_alloc(inode->i_sb);
-
 	spin_lock(&inode->i_lock);
-	inode_state_set(inode, I_DEFER_RECLAIM);
+	if (!(inode_state_read(inode) & I_DEFER_RECLAIM)) {
+		inode_state_set(inode, I_DEFER_RECLAIM);
+		throttle = true;
+	}
 	spin_unlock(&inode->i_lock);
+
+	if (throttle)
+		throttle_inode_deferred_reclaim(inode);
 }
 EXPORT_SYMBOL_GPL(mark_inode_reclaim_deferred);
 

@@ -133,6 +133,8 @@ struct inode_deferred_reclaim {
 	struct list_head	list;
 	struct work_struct	work;
 	spinlock_t		lock;
+	unsigned int		len;
+	u32			delay;
 };
 
 struct super_block {
