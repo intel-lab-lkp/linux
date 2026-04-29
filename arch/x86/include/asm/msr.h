@@ -179,17 +179,13 @@ static inline u64 native_read_pmc(int counter)
 #define paravirt_read_msr_safe	native_read_msr_safe
 #define paravirt_write_msr	native_write_msr
 #define paravirt_write_msr_safe	native_write_msr_safe
+#define paravirt_read_pmc		native_read_pmc
 
 /*
  * Access to machine-specific registers (available on 586 and better only)
  * Note: the rd* operations modify the parameters directly (without using
  * pointer indirection), this allows gcc to optimize better
  */
-
-static __always_inline u64 rdpmc(int counter)
-{
-	return native_read_pmc(counter);
-}
 
 #endif	/* !CONFIG_PARAVIRT_XXL */
 
@@ -235,6 +231,11 @@ static inline void wrmsr(u32 msr, u32 low, u32 high)
 static inline void wrmsrq(u32 msr, u64 val)
 {
 	paravirt_write_msr(msr, val);
+}
+
+static __always_inline u64 rdpmc(int counter)
+{
+	return paravirt_read_pmc(counter);
 }
 
 /* Instruction opcode for WRMSRNS supported in binutils >= 2.40 */
