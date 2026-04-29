@@ -471,12 +471,10 @@ attribute-sets:
         name: fractional-frequency-offset-ppt
         type: sint
         doc: |
-          The FFO (Fractional Frequency Offset) of the pin with respect to
-          the nominal frequency.
-          Value = (frequency_measured - frequency_nominal) / frequency_nominal
+          The FFO (Fractional Frequency Offset) between a pin and its
+          parent DPLL device, similar to phase-offset but in frequency
+          domain.
           Value is in PPT (parts per trillion, 10^-12).
-          Note: This attribute provides higher resolution than the standard
-          fractional-frequency-offset (which is in PPM).
       -
         name: measured-frequency
         type: u64
@@ -503,6 +501,8 @@ attribute-sets:
         name: state
       -
         name: phase-offset
+      -
+        name: fractional-frequency-offset-ppt
   -
     name: pin-parent-pin
     subset-of: pin
@@ -672,7 +672,6 @@ operations:
             - phase-adjust-max
             - phase-adjust
             - fractional-frequency-offset
-            - fractional-frequency-offset-ppt
             - esync-frequency
             - esync-frequency-supported
             - esync-pulse
