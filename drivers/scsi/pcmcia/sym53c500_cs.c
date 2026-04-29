@@ -711,14 +711,14 @@ SYM53C500_config(struct pcmcia_device *link)
 
 	ret = pcmcia_loop_config(link, SYM53C500_config_check, NULL);
 	if (ret)
-		goto failed;
+		goto err_disable;
 
 	if (!link->irq)
-		goto failed;
+		goto err_disable;
 
 	ret = pcmcia_enable_device(link);
 	if (ret)
-		goto failed;
+		goto err_disable;
 
 	/*
 	*  That's the trouble with copying liberally from another driver.
@@ -755,7 +755,7 @@ SYM53C500_config(struct pcmcia_device *link)
 	host = scsi_host_alloc(tpnt, sizeof(struct sym53c500_data));
 	if (!host) {
 		printk("SYM53C500: Unable to register host, giving up.\n");
-		goto err_release;
+		goto err_no_devices;
 	}
 
 	data = (struct sym53c500_data *)host->hostdata;
@@ -799,13 +799,10 @@ err_free_irq:
 	free_irq(irq_level, host);
 err_free_scsi:
 	scsi_host_put(host);
-err_release:
-	release_region(port_base, 0x10);
+err_no_devices:
 	printk(KERN_INFO "sym53c500_cs: no SCSI devices found\n");
-	return -ENODEV;
-
-failed:
-	SYM53C500_release(link);
+err_disable:
+	pcmcia_disable_device(link);
 	return -ENODEV;
 } /* SYM53C500_config */
 
@@ -845,6 +842,7 @@ static int
 SYM53C500_probe(struct pcmcia_device *link)
 {
 	struct scsi_info_t *info;
+	int ret;
 
 	dev_dbg(&link->dev, "SYM53C500_attach()\n");
 
@@ -856,7 +854,13 @@ SYM53C500_probe(struct pcmcia_device *link)
 	link->priv = info;
 	link->config_flags |= CONF_ENABLE_IRQ | CONF_AUTO_SET_IO;
 
-	return SYM53C500_config(link);
+	ret = SYM53C500_config(link);
+	if (ret) {
+		kfree(info);
+		link->priv = NULL;
+	}
+
+	return ret;
 } /* SYM53C500_attach */
 
 MODULE_AUTHOR("Bob Tracy <rct@frus.com>");
