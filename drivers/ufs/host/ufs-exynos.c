@@ -1698,14 +1698,16 @@ static int exynos_ufs_pwr_change_notify(struct ufs_hba *hba,
 
 static void exynos_ufs_hibern8_notify(struct ufs_hba *hba,
 				     enum uic_cmd_dme cmd,
-				     enum ufs_notify_change_status notify)
+				     enum ufs_notify_change_status notify,
+				     int cmd_ret)
 {
 	switch ((u8)notify) {
 	case PRE_CHANGE:
 		exynos_ufs_pre_hibern8(hba, cmd);
 		break;
 	case POST_CHANGE:
-		exynos_ufs_post_hibern8(hba, cmd);
+		if (!cmd_ret)
+			exynos_ufs_post_hibern8(hba, cmd);
 		break;
 	}
 }

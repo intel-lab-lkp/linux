@@ -349,7 +349,8 @@ out:
 
 static void sprd_ufs_n6_h8_notify(struct ufs_hba *hba,
 				  enum uic_cmd_dme cmd,
-				  enum ufs_notify_change_status status)
+				  enum ufs_notify_change_status status,
+				  int cmd_ret)
 {
 	struct ufs_sprd_priv *priv = ufs_sprd_get_priv_data(hba);
 
@@ -369,7 +370,7 @@ static void sprd_ufs_n6_h8_notify(struct ufs_hba *hba,
 		}
 	}
 
-	if (status == POST_CHANGE) {
+	if (status == POST_CHANGE && !cmd_ret) {
 		if (cmd == UIC_CMD_DME_HIBER_EXIT)
 			ufs_sprd_ctrl_uic_compl(hba, true);
 

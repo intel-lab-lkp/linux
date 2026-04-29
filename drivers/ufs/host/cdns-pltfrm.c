@@ -164,11 +164,11 @@ static int cdns_ufs_hce_enable_notify(struct ufs_hba *hba,
  * @status: notify stage (pre, post change)
  */
 static void cdns_ufs_hibern8_notify(struct ufs_hba *hba, enum uic_cmd_dme cmd,
-				    enum ufs_notify_change_status status)
+				    enum ufs_notify_change_status status, int cmd_ret)
 {
 	if (status == PRE_CHANGE && cmd == UIC_CMD_DME_HIBER_ENTER)
 		cdns_ufs_get_l4_attr(hba);
-	if (status == POST_CHANGE && cmd == UIC_CMD_DME_HIBER_EXIT)
+	if (status == POST_CHANGE && cmd == UIC_CMD_DME_HIBER_EXIT && !cmd_ret)
 		cdns_ufs_set_l4_attr(hba);
 }
 
