@@ -295,7 +295,7 @@ static inline int modeset_lock(struct drm_modeset_lock *lock,
 {
 	int ret;
 
-	if (WARN_ON(ctx->contended))
+	if (ctx && WARN_ON(ctx->contended))
 		__drm_stack_depot_print(ctx->stack_depot);
 
 	if (ctx->trylock_only) {
