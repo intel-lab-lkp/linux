@@ -553,6 +553,7 @@ static void dma_chan_free_chan_resources(struct dma_chan *dchan)
 
 	axi_chan_disable(chan);
 	axi_chan_irq_disable(chan, DWAXIDMAC_IRQ_ALL);
+	vchan_synchronize(&chan->vc);
 
 	vchan_free_chan_resources(&chan->vc);
 
@@ -1049,9 +1050,13 @@ static void axi_chan_dump_lli(struct axi_dma_chan *chan,
 static void axi_chan_list_dump_lli(struct axi_dma_chan *chan,
 				   struct axi_dma_desc *desc_head)
 {
-	int count = atomic_read(&chan->descs_allocated);
+	int count;
 	int i;
 
+	if (!desc_head || !desc_head->hw_desc)
+		return;
+
+	count = desc_head->nr_hw_descs;
 	for (i = 0; i < count; i++)
 		axi_chan_dump_lli(chan, &desc_head->hw_desc[i]);
 }
@@ -1206,6 +1211,7 @@ static int dma_chan_terminate_all(struct dma_chan *dchan)
 	spin_unlock_irqrestore(&chan->vc.lock, flags);
 
 	vchan_dma_desc_free_list(&chan->vc, &head);
+	vchan_synchronize(&chan->vc);
 
 	dev_vdbg(dchan2dev(dchan), "terminated: %s\n", axi_chan_name(chan));
 
