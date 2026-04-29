@@ -88,7 +88,6 @@ int getchar(void)
 	struct biosregs ireg, oreg;
 
 	initregs(&ireg);
-	/* ireg.ah = 0x00; */
 	intcall(0x16, &ireg, &oreg);
 
 	return oreg.al;
