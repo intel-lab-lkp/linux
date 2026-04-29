@@ -33,7 +33,10 @@ static unsigned long binary_runtime_size = ULONG_MAX;
 #endif
 
 /* num of stored measurements in the list */
-atomic_long_t ima_num_entries = ATOMIC_LONG_INIT(0);
+atomic_long_t ima_num_entries[BINARY__LAST] = {
+	[0 ... BINARY__LAST - 1] = ATOMIC_LONG_INIT(0)
+};
+
 /* num of violations in the list */
 atomic_long_t ima_num_violations = ATOMIC_LONG_INIT(0);
 
@@ -154,7 +157,7 @@ static int ima_add_digest_entry(struct ima_template_entry *entry,
 	htable = rcu_dereference_protected(ima_htable,
 				lockdep_is_held(&ima_extend_list_mutex));
 
-	atomic_long_inc(&ima_num_entries);
+	atomic_long_inc(&ima_num_entries[BINARY]);
 	if (update_htable) {
 		key = ima_hash_key(entry->digests[ima_hash_algo_idx].digest);
 		hlist_add_head_rcu(&qe->hnext, &htable[key]);
