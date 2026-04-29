@@ -151,8 +151,13 @@ static struct bio *bio_submit_split(struct bio *bio, int split_sectors)
 	if (split_sectors) {
 		bio = bio_submit_split_bioset(bio, split_sectors,
 				&bio->bi_bdev->bd_disk->bio_split);
-		if (bio)
+		if (bio) {
 			bio->bi_opf |= REQ_NOMERGE;
+			/* Fix the issue where the inflight statistics
+			 * of the chained bio in the QoS are incorrect.
+			 */
+			bio_set_flag(split, BIO_QOS_CHAIN_CHILD);
+		}
 	}
 
 	return bio;
