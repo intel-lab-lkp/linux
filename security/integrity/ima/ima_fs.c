@@ -25,6 +25,8 @@
 #include "ima.h"
 
 static DEFINE_MUTEX(ima_write_mutex);
+static DEFINE_MUTEX(ima_measure_mutex);
+static long ima_measure_users;
 
 bool ima_canonical_fmt;
 static int __init default_canonical_fmt_setup(char *str)
@@ -209,16 +211,76 @@ static const struct seq_operations ima_measurments_seqops = {
 	.show = ima_measurements_show
 };
 
+static int ima_measure_lock(bool write)
+{
+	mutex_lock(&ima_measure_mutex);
+	if ((write && ima_measure_users != 0) ||
+	    (!write && ima_measure_users < 0)) {
+		mutex_unlock(&ima_measure_mutex);
+		return -EBUSY;
+	}
+
+	if (write)
+		ima_measure_users--;
+	else
+		ima_measure_users++;
+	mutex_unlock(&ima_measure_mutex);
+	return 0;
+}
+
+static void ima_measure_unlock(bool write)
+{
+	mutex_lock(&ima_measure_mutex);
+	if (write)
+		ima_measure_users++;
+	else
+		ima_measure_users--;
+	mutex_unlock(&ima_measure_mutex);
+}
+
+static int _ima_measurements_open(struct inode *inode, struct file *file,
+				  const struct seq_operations *seq_ops)
+{
+	bool write = (file->f_mode & FMODE_WRITE);
+	int ret;
+
+	if (write && !capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	ret = ima_measure_lock(write);
+	if (ret < 0)
+		return ret;
+
+	ret = seq_open(file, seq_ops);
+	if (ret < 0)
+		ima_measure_unlock(write);
+
+	return ret;
+}
+
 static int ima_measurements_open(struct inode *inode, struct file *file)
 {
-	return seq_open(file, &ima_measurments_seqops);
+	return _ima_measurements_open(inode, file, &ima_measurments_seqops);
+}
+
+static int ima_measurements_release(struct inode *inode, struct file *file)
+{
+	bool write = (file->f_mode & FMODE_WRITE);
+	int ret;
+
+	/* seq_release() always returns zero. */
+	ret = seq_release(inode, file);
+
+	ima_measure_unlock(write);
+
+	return ret;
 }
 
 static const struct file_operations ima_measurements_ops = {
 	.open = ima_measurements_open,
 	.read = seq_read,
 	.llseek = seq_lseek,
-	.release = seq_release,
+	.release = ima_measurements_release,
 };
 
 void ima_print_digest(struct seq_file *m, u8 *digest, u32 size)
@@ -283,14 +345,15 @@ static const struct seq_operations ima_ascii_measurements_seqops = {
 
 static int ima_ascii_measurements_open(struct inode *inode, struct file *file)
 {
-	return seq_open(file, &ima_ascii_measurements_seqops);
+	return _ima_measurements_open(inode, file,
+				      &ima_ascii_measurements_seqops);
 }
 
 static const struct file_operations ima_ascii_measurements_ops = {
 	.open = ima_ascii_measurements_open,
 	.read = seq_read,
 	.llseek = seq_lseek,
-	.release = seq_release,
+	.release = ima_measurements_release,
 };
 
 static ssize_t ima_read_policy(char *path)
