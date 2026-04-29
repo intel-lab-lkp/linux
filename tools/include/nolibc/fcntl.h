@@ -20,7 +20,7 @@
 ({											\
 	mode_t _mode = 0;								\
 											\
-	if ((_flags) & O_CREAT) {							\
+	if (((_flags) & O_CREAT) || (((_flags) & O_TMPFILE) == O_TMPFILE)) {		\
 		va_list args;								\
 											\
 		va_start(args, (_flags));						\
