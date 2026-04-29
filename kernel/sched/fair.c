@@ -9147,7 +9147,7 @@ pick:
 	 * Because p is enqueued, nse being null can only mean that we
 	 * dequeued a delayed task.
 	 */
-	if (!nse)
+	if (!nse && (wake_flags & WF_TTWU))
 		goto pick;
 
 	if (sched_feat(RUN_TO_PARITY))
