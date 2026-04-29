@@ -190,6 +190,32 @@ static const char *ionic_opcode_to_str(enum ionic_cmd_opcode opcode)
 	}
 }
 
+static void ionic_adminq_cancel(struct ionic_lif *lif,
+				struct ionic_admin_ctx *ctx)
+{
+	struct ionic_admin_desc_info *desc_info;
+	unsigned long irqflags;
+	struct ionic_queue *q;
+	int i;
+
+	spin_lock_irqsave(&lif->adminq_lock, irqflags);
+	if (!lif->adminqcq) {
+		spin_unlock_irqrestore(&lif->adminq_lock, irqflags);
+		return;
+	}
+
+	q = &lif->adminqcq->q;
+
+	for (i = 0; i < q->num_descs; i++) {
+		desc_info = &q->admin_info[i];
+		if (desc_info->ctx == ctx) {
+			desc_info->ctx = NULL;
+			break;
+		}
+	}
+	spin_unlock_irqrestore(&lif->adminq_lock, irqflags);
+}
+
 static void ionic_adminq_flush(struct ionic_lif *lif)
 {
 	struct ionic_admin_desc_info *desc_info;
@@ -448,6 +474,7 @@ int ionic_adminq_wait(struct ionic_lif *lif, struct ionic_admin_ctx *ctx,
 			if (do_msg)
 				netdev_warn(netdev, "%s (%d) interrupted, FW in reset\n",
 					    name, ctx->cmd.cmd.opcode);
+			ionic_adminq_cancel(lif, ctx);
 			ctx->comp.comp.status = IONIC_RC_ERROR;
 			return -ENXIO;
 		}
@@ -457,6 +484,9 @@ int ionic_adminq_wait(struct ionic_lif *lif, struct ionic_admin_ctx *ctx,
 
 	dev_dbg(lif->ionic->dev, "%s: elapsed %d msecs\n",
 		__func__, jiffies_to_msecs(time_done - time_start));
+
+	if (time_after_eq(time_done, time_limit))
+		ionic_adminq_cancel(lif, ctx);
 
 	return ionic_adminq_check_err(lif, ctx,
 				      time_after_eq(time_done, time_limit),
