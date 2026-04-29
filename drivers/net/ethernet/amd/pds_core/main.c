@@ -340,7 +340,9 @@ static int pdsc_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	is_pf = !pdev->is_virtfn;
 	ops = is_pf ? &pdsc_dl_ops : &pdsc_dl_vf_ops;
-	dl = devlink_alloc(ops, sizeof(struct pdsc), dev);
+	dl = devlink_alloc(ops, sizeof(struct pdsc) +
+			   PDS_CORE_FW_COMPONENT_LIST_LEN *
+			   sizeof(struct pds_core_fw_component_info), dev);
 	if (!dl)
 		return -ENOMEM;
 	pdsc = devlink_priv(dl);
