@@ -287,10 +287,10 @@ static void create_phantom_plane_from_main_plane(struct dml2_plane_parameters *p
 	phantom->stream_index = phantom_stream_index;
 	phantom->overrides.refresh_from_mall = dml2_refresh_from_mall_mode_override_force_disable;
 	phantom->overrides.legacy_svp_config = dml2_svp_mode_override_phantom_pipe_no_data_return;
-	phantom->composition.viewport.plane0.height = (long int unsigned) math_min2(math_ceil2(
+	phantom->composition.viewport.plane0.height = (unsigned long) math_min2(math_ceil2(
 		(double)main->composition.scaler_info.plane0.v_ratio * (double)phantom_stream->timing.v_active, 16.0),
 		(double)main->composition.viewport.plane0.height);
-	phantom->composition.viewport.plane1.height = (long int unsigned) math_min2(math_ceil2(
+	phantom->composition.viewport.plane1.height = (unsigned long) math_min2(math_ceil2(
 		(double)main->composition.scaler_info.plane1.v_ratio * (double)phantom_stream->timing.v_active, 16.0),
 		(double)main->composition.viewport.plane1.height);
 	phantom->immediate_flip = false;
@@ -527,7 +527,7 @@ bool core_dcn4_mode_support(struct dml2_core_mode_support_in_out *in_out)
 
 	bool result;
 	unsigned int i, stream_index, stream_bitmask;
-	int unsigned odm_count, num_odm_output_segments, dpp_count;
+	unsigned int odm_count, num_odm_output_segments, dpp_count;
 
 	expand_implict_subvp(in_out->display_cfg, &l->svp_expanded_display_cfg, &core->scratch);
 

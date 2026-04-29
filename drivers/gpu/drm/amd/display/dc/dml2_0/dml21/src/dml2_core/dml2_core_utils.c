@@ -384,7 +384,9 @@ unsigned int dml2_core_utils_round_to_multiple(unsigned int num, unsigned int mu
 		return (num - remainder);
 }
 
-unsigned int dml2_core_util_get_num_active_pipes(int unsigned num_planes, const struct core_display_cfg_support_info *cfg_support_info)
+unsigned int
+dml2_core_util_get_num_active_pipes(unsigned int num_planes,
+				    const struct core_display_cfg_support_info *cfg_support_info)
 {
 	unsigned int num_active_pipes = 0;
 
@@ -480,9 +482,9 @@ bool dml2_core_utils_is_vertical_rotation(enum dml2_rotation_angle Scan)
 	return is_vert;
 }
 
-int unsigned dml2_core_utils_get_gfx_version(enum dml2_swizzle_mode sw_mode)
+unsigned int dml2_core_utils_get_gfx_version(enum dml2_swizzle_mode sw_mode)
 {
-	int unsigned version = 0;
+	unsigned int version = 0;
 
 	if (sw_mode == dml2_sw_linear ||
 		sw_mode == dml2_sw_256b_2d ||
@@ -594,10 +596,10 @@ static void create_phantom_plane_from_main_plane(struct dml2_plane_parameters *p
 	phantom->stream_index = phantom_stream_index;
 	phantom->overrides.refresh_from_mall = dml2_refresh_from_mall_mode_override_force_disable;
 	phantom->overrides.legacy_svp_config = dml2_svp_mode_override_phantom_pipe_no_data_return;
-	phantom->composition.viewport.plane0.height = (long int unsigned) math_min2(math_ceil2(
+	phantom->composition.viewport.plane0.height = (unsigned long) math_min2(math_ceil2(
 		(double)main->composition.scaler_info.plane0.v_ratio * (double)phantom_stream->timing.v_active, 16.0),
 		(double)main->composition.viewport.plane0.height);
-	phantom->composition.viewport.plane1.height = (long int unsigned) math_min2(math_ceil2(
+	phantom->composition.viewport.plane1.height = (unsigned long) math_min2(math_ceil2(
 		(double)main->composition.scaler_info.plane1.v_ratio * (double)phantom_stream->timing.v_active, 16.0),
 		(double)main->composition.viewport.plane1.height);
 	phantom->immediate_flip = false;
