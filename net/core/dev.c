@@ -5099,6 +5099,8 @@ set_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 	return rflow;
 }
 
+static struct netdev_rx_queue *netif_get_rxqueue(struct sk_buff *skb);
+
 /*
  * get_rps_cpu is called from netif_receive_skb and returns the target
  * CPU from the RPS map of the receiving queue for a given skb.
@@ -5107,25 +5109,16 @@ set_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 		       struct rps_dev_flow **rflowp)
 {
-	struct netdev_rx_queue *rxqueue = dev->_rx;
+	struct netdev_rx_queue *rxqueue;
 	rps_tag_ptr global_tag_ptr, q_tag_ptr;
 	struct rps_map *map;
 	int cpu = -1;
 	u32 tcpu;
 	u32 hash;
 
-	if (skb_rx_queue_recorded(skb)) {
-		u16 index = skb_get_rx_queue(skb);
-
-		if (unlikely(index >= dev->real_num_rx_queues)) {
-			WARN_ONCE(dev->real_num_rx_queues > 1,
-				  "%s received packet on queue %u, but number "
-				  "of RX queues is %u\n",
-				  dev->name, index, dev->real_num_rx_queues);
-			goto done;
-		}
-		rxqueue += index;
-	}
+	rxqueue = netif_get_rxqueue(skb);
+	if (!rxqueue)
+		goto done;
 
 	/* Avoid computing hash if RFS/RPS is not active for this rxqueue */
 
@@ -5437,8 +5430,7 @@ static struct netdev_rx_queue *netif_get_rxqueue(struct sk_buff *skb)
 				  "%s received packet on queue %u, but number "
 				  "of RX queues is %u\n",
 				  dev->name, index, dev->real_num_rx_queues);
-
-			return rxqueue; /* Return first rxqueue */
+			return NULL;
 		}
 		rxqueue += index;
 	}
@@ -5468,6 +5460,8 @@ u32 bpf_prog_run_generic_xdp(struct sk_buff *skb, struct xdp_buff *xdp,
 	frame_sz += SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
 
 	rxqueue = netif_get_rxqueue(skb);
+	if (!rxqueue)
+		rxqueue = skb->dev->_rx;
 	xdp_init_buff(xdp, frame_sz, &rxqueue->xdp_rxq);
 	xdp_prepare_buff(xdp, hard_start, skb_headroom(skb) - mac_len,
 			 skb_headlen(skb) + mac_len, true);
