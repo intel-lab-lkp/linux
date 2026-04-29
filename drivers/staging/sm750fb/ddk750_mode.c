@@ -82,7 +82,7 @@ static void program_mode_registers(struct mode_parameter *mode_param,
 	unsigned int tmp, reg;
 
 	if (pll->clock_type == SECONDARY_PLL) {
-		/* programe secondary pixel clock */
+		/* program secondary pixel clock */
 		poke32(CRT_PLL_CTRL, sm750_format_pll_reg(pll));
 
 		tmp = ((mode_param->horizontal_total - 1) <<
