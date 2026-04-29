@@ -412,6 +412,44 @@ a standard securityfs policy tree::
 
 The policy is stored in the ``->i_private`` data of the MyPolicy inode.
 
+BPF/Hornet Integration
+~~~~~~~~~~~~~~~~~~~~~~
+
+IPE integrates with the Hornet LSM to enforce integrity policies on BPF
+program loading. Hornet performs cryptographic verification of BPF program
+signatures (PKCS#7 with authenticated attributes containing map hashes) and
+provides an integrity verdict to IPE via the
+``security_bpf_prog_load_post_integrity`` hook.
+
+The hook flow is:
+
+  1. User space invokes ``BPF_PROG_LOAD`` via the ``bpf()`` syscall.
+  2. Hornet's ``bpf_prog_load_integrity`` hook calls ``hornet_check_program()``
+     to verify the program's signature and map hashes.
+  3. Hornet calls ``security_bpf_prog_load_post_integrity()`` with the
+     resulting ``lsm_integrity_verdict``.
+  4. IPE evaluates the verdict against the active policy's ``BPF_PROG_LOAD``
+     rules and returns ``-EACCES`` if denied.
+
+Three properties are available for BPF policy rules:
+
+  - ``bpf_signature``: Matches against the integrity verdict (OK, UNSIGNED,
+    BADSIG, etc.)
+  - ``bpf_keyring``: Matches against the keyring specified in ``bpf_attr``
+    (BUILTIN, SECONDARY, PLATFORM)
+  - ``bpf_kernel``: Matches whether the load originated from kernel space
+    (TRUE/FALSE). This is important because the BPF light skeleton
+    infrastructure performs a secondary kernel-originated program load that
+    does not carry a signature.
+
+All three properties are gated on ``CONFIG_IPE_PROP_BPF_SIGNATURE`` which
+depends on ``CONFIG_SECURITY_HORNET``.
+
+The evaluation context (``struct ipe_eval_ctx``) carries three BPF-specific
+fields: ``bpf_verdict`` (the integrity verdict enum), ``bpf_keyring_id``
+(the ``s32`` keyring ID from ``bpf_attr``), and ``bpf_kernel`` (bool
+indicating kernel origin).
+
 Tests
 -----
 
@@ -439,6 +477,7 @@ IPE has KUnit Tests for the policy parser. Recommended kunitconfig::
   CONFIG_IPE_PROP_DM_VERITY_SIGNATURE=y
   CONFIG_IPE_PROP_FS_VERITY=y
   CONFIG_IPE_PROP_FS_VERITY_BUILTIN_SIG=y
+  CONFIG_IPE_PROP_BPF_SIGNATURE=y
   CONFIG_SECURITY_IPE_KUNIT_TEST=y
 
 In addition, IPE has a python based integration
