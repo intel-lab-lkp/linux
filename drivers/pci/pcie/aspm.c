@@ -24,6 +24,7 @@
 #include <linux/printk.h>
 #include <linux/slab.h>
 #include <linux/time.h>
+#include <linux/dmi.h>
 
 #include "../pci.h"
 
@@ -1057,6 +1058,23 @@ static void free_link_state(struct pcie_link_state *link)
 	kfree(link);
 }
 
+static int pcie_aspm_legacy_config_check(void)
+{
+	static bool legacy_aspm_config;
+	static bool checked;
+
+	if (checked)
+		return legacy_aspm_config;
+	if (dmi_get_bios_year() < 2025)
+		legacy_aspm_config = true;
+
+	pr_info("ASPM configuration is determined at %s time\n",
+		 legacy_aspm_config ? "build" : "boot");
+	checked = true;
+
+	return legacy_aspm_config;
+}
+
 static int pcie_aspm_sanity_check(struct pci_dev *pdev)
 {
 	struct pci_dev *child;
@@ -1196,8 +1214,9 @@ void pcie_aspm_init_link_state(struct pci_dev *pdev)
 	 * the BIOS's expectation, we'll do so once pci_enable_device() is
 	 * called.
 	 */
-	if (aspm_policy != POLICY_POWERSAVE &&
-	    aspm_policy != POLICY_POWER_SUPERSAVE) {
+	if (!pcie_aspm_legacy_config_check() ||
+	    (aspm_policy != POLICY_POWERSAVE &&
+	     aspm_policy != POLICY_POWER_SUPERSAVE)) {
 		pcie_config_aspm_path(link);
 		pcie_set_clkpm(link, policy_to_clkpm_state(link));
 	}
@@ -1379,8 +1398,9 @@ void pcie_aspm_powersave_config_link(struct pci_dev *pdev)
 	if (aspm_disabled || !link)
 		return;
 
-	if (aspm_policy != POLICY_POWERSAVE &&
-	    aspm_policy != POLICY_POWER_SUPERSAVE)
+	if (!pcie_aspm_legacy_config_check() ||
+	    (aspm_policy != POLICY_POWERSAVE &&
+	     aspm_policy != POLICY_POWER_SUPERSAVE))
 		return;
 
 	down_read(&pci_bus_sem);
