@@ -70,6 +70,11 @@
 #include <uapi/linux/virtio_mmio.h>
 #include <linux/virtio_ring.h>
 
+#ifdef CONFIG_VIRTIO_MMIO_XENBUS
+#include <xen/xen.h>
+#include <xen/xenbus.h>
+#include <xen/events.h>
+#endif
 
 
 /* The alignment to use between consumer and producer parts of vring.
@@ -810,13 +815,183 @@ static struct platform_driver virtio_mmio_driver = {
 	},
 };
 
+#ifdef CONFIG_VIRTIO_MMIO_XENBUS
+struct virtio_mmio_xen_info {
+	struct resource resources[2];
+	unsigned int evtchn;
+	struct platform_device *pdev;
+};
+
+static int virtio_mmio_xen_probe(struct xenbus_device *dev,
+			const struct xenbus_device_id *id)
+{
+	int err;
+	long long base, size;
+	char *mem;
+	struct virtio_mmio_xen_info *info;
+	struct xenbus_transaction xbt;
+
+	/* TODO: allocate an unused address here and pass it to the host instead */
+	err = xenbus_scanf(XBT_NIL, dev->otherend, "base", "0x%llx",
+			   &base);
+	if (err < 0) {
+		xenbus_dev_fatal(dev, err, "reading base");
+		return -EINVAL;
+	}
+
+	mem = xenbus_read(XBT_NIL, dev->otherend, "size", NULL);
+	if (XENBUS_IS_ERR_READ(mem))
+		return PTR_ERR(mem);
+	size = memparse(mem, NULL);
+	kfree(mem);
+
+	info = kzalloc_obj(*info);
+	if (!info) {
+		xenbus_dev_fatal(dev, -ENOMEM, "allocating info structure");
+		return -ENOMEM;
+	}
+
+	info->resources[0].flags = IORESOURCE_MEM;
+	info->resources[0].start = base;
+	info->resources[0].end = base + size - 1;
+
+	err = xenbus_alloc_evtchn(dev, &info->evtchn);
+	if (err) {
+		xenbus_dev_fatal(dev, err, "xenbus_alloc_evtchn");
+		goto error_info;
+	}
+
+	err = bind_evtchn_to_irq(info->evtchn);
+	if (err <= 0) {
+		xenbus_dev_fatal(dev, err, "bind_evtchn_to_irq");
+		goto error_evtchan;
+	}
+
+	info->resources[1].flags = IORESOURCE_IRQ;
+	info->resources[1].start = info->resources[1].end = err;
+
+again:
+	err = xenbus_transaction_start(&xbt);
+	if (err) {
+		xenbus_dev_fatal(dev, err, "starting transaction");
+		goto error_irq;
+	}
+
+	err = xenbus_printf(xbt, dev->nodename, "event-channel", "%u",
+			    info->evtchn);
+	if (err) {
+		xenbus_transaction_end(xbt, 1);
+		xenbus_dev_fatal(dev, err, "%s", "writing event-channel");
+		goto error_irq;
+	}
+
+	err = xenbus_transaction_end(xbt, 0);
+	if (err) {
+		if (err == -EAGAIN)
+			goto again;
+		xenbus_dev_fatal(dev, err, "completing transaction");
+		goto error_irq;
+	}
+
+	dev_set_drvdata(&dev->dev, info);
+	xenbus_switch_state(dev, XenbusStateInitialised);
+	return 0;
+
+error_irq:
+	unbind_from_irqhandler(info->resources[1].start, info);
+error_evtchan:
+	xenbus_free_evtchn(dev, info->evtchn);
+error_info:
+	kfree(info);
+
+	return err;
+}
+
+static void virtio_mmio_xen_backend_changed(struct xenbus_device *dev,
+				   enum xenbus_state backend_state)
+{
+	struct virtio_mmio_xen_info *info = dev_get_drvdata(&dev->dev);
+
+	switch (backend_state) {
+	case XenbusStateInitialising:
+	case XenbusStateInitWait:
+	case XenbusStateInitialised:
+	case XenbusStateReconfiguring:
+	case XenbusStateReconfigured:
+	case XenbusStateUnknown:
+		break;
+
+	case XenbusStateConnected:
+		if (dev->state != XenbusStateInitialised) {
+			dev_warn(&dev->dev, "state %d on connect", dev->state);
+			break;
+		}
+		info->pdev = platform_device_register_resndata(&dev->dev,
+				"virtio-mmio", PLATFORM_DEVID_AUTO,
+				info->resources, ARRAY_SIZE(info->resources), NULL, 0);
+		xenbus_switch_state(dev, XenbusStateConnected);
+		break;
+
+	case XenbusStateClosed:
+		if (dev->state == XenbusStateClosed)
+			break;
+		fallthrough;	/* Missed the backend's Closing state. */
+	case XenbusStateClosing:
+		platform_device_unregister(info->pdev);
+		xenbus_switch_state(dev, XenbusStateClosed);
+		break;
+
+	default:
+		xenbus_dev_fatal(dev, -EINVAL, "saw state %d at frontend",
+				 backend_state);
+		break;
+	}
+}
+
+static void virtio_mmio_xen_remove(struct xenbus_device *dev)
+{
+	struct virtio_mmio_xen_info *info = dev_get_drvdata(&dev->dev);
+
+	kfree(info);
+	dev_set_drvdata(&dev->dev, NULL);
+}
+
+static const struct xenbus_device_id virtio_mmio_xen_ids[] = {
+	{ "virtio" },
+	{ "" },
+};
+
+static struct xenbus_driver virtio_mmio_xen_driver = {
+	.ids			= virtio_mmio_xen_ids,
+	.probe			= virtio_mmio_xen_probe,
+	.otherend_changed	= virtio_mmio_xen_backend_changed,
+	.remove			= virtio_mmio_xen_remove,
+};
+#endif
+
 static int __init virtio_mmio_init(void)
 {
-	return platform_driver_register(&virtio_mmio_driver);
+	int ret;
+
+	ret = platform_driver_register(&virtio_mmio_driver);
+	if (ret)
+		return ret;
+
+#ifdef CONFIG_VIRTIO_MMIO_XENBUS
+	if (xen_domain())
+		ret = xenbus_register_frontend(&virtio_mmio_xen_driver);
+#endif
+
+	return ret;
 }
 
 static void __exit virtio_mmio_exit(void)
 {
+#ifdef CONFIG_VIRTIO_MMIO_XENBUS
+	if (xen_domain())
+		xenbus_unregister_driver(&virtio_mmio_xen_driver);
+#endif
+
 	platform_driver_unregister(&virtio_mmio_driver);
 	vm_unregister_cmdline_devices();
 }

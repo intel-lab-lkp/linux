@@ -171,6 +171,13 @@ config VIRTIO_MMIO_CMDLINE_DEVICES
 
 	 If unsure, say 'N'.
 
+config VIRTIO_MMIO_XENBUS
+	bool "Memory mapped virtio devices parameter parsing"
+	depends on VIRTIO_MMIO && XEN
+	select XEN_XENBUS_FRONTEND
+	help
+	 Allow virtio-mmio devices instantiation for Xen guests via xenbus.
+
 config VIRTIO_DMA_SHARED_BUFFER
 	tristate
 	depends on DMA_SHARED_BUFFER
