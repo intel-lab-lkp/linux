@@ -620,7 +620,7 @@ When monitoring is enabled all MON groups will also contain:
 	each instance of an L3 cache. Each directory contains files for the enabled
 	L3 events (e.g. "llc_occupancy", "mbm_total_bytes", and "mbm_local_bytes").
 
-	If telemetry monitoring is enabled, there will be a "mon_PERF_PKG_YY"
+	If telemetry monitoring is enabled [#]_, there will be a "mon_PERF_PKG_YY"
 	directory for each physical processor package. Each directory contains
 	files for the enabled telemetry events (e.g. "core_energy". "activity",
 	"uops_retired", etc.)
@@ -658,6 +658,11 @@ When monitoring is enabled all MON groups will also contain:
 	counter is assigned to it. For CTRL_MON groups, 'Unassigned' is
 	returned if the MBM event does not have an assigned counter in the
 	CTRL_MON group nor in any of its associated MON groups.
+
+.. [#] Telemetry features are enumerated asynchronously by the PMT driver. If
+   resctrl is automatically mounted from ``/etc/fstab`` at boot, the telemetry
+   features may not yet be available at mount time and will therefore not be
+   enabled.
 
 "mon_hw_id":
 	Available only with debug option. The identifier used by hardware
