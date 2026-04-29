@@ -119,6 +119,9 @@ static int ima_dump_measurement_list(unsigned long *buffer_size, void **buffer,
 			break;
 	}
 
+	if (!list_empty(&ima_measurements_staged))
+		ima_copied_flags |= IMA_MEASUREMENTS_STAGED_COPIED;
+
 	list_for_each_entry_rcu(qe, &ima_measurements, later,
 				lockdep_is_held(&ima_extend_list_mutex)) {
 		if (!ret)
@@ -126,6 +129,9 @@ static int ima_dump_measurement_list(unsigned long *buffer_size, void **buffer,
 		if (ret < 0)
 			break;
 	}
+
+	if (!list_empty(&ima_measurements))
+		ima_copied_flags |= IMA_MEASUREMENTS_COPIED;
 
 	mutex_unlock(&ima_extend_list_mutex);
 

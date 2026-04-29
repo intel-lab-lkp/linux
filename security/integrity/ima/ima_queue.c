@@ -72,6 +72,13 @@ DEFINE_MUTEX(ima_extend_list_mutex);
  */
 static bool ima_measurements_suspended;
 
+/*
+ * Used to determine if staged or active list measurements were copied during
+ * kexec, so that an error can be sent to user space during deletion, and they
+ * don't store those measurements twice.
+ */
+u8 ima_copied_flags;
+
 /* Callers must call synchronize_rcu() and free the hash table. */
 static struct hlist_head *ima_alloc_replace_htable(void)
 {
@@ -344,6 +351,11 @@ int ima_queue_staged_delete_all(void)
 		return -ENOENT;
 	}
 
+	if (ima_copied_flags & IMA_MEASUREMENTS_STAGED_COPIED) {
+		mutex_unlock(&ima_extend_list_mutex);
+		return -ESTALE;
+	}
+
 	list_replace(&ima_measurements_staged, &ima_measurements_trim);
 	INIT_LIST_HEAD(&ima_measurements_staged);
 
@@ -397,6 +409,11 @@ int ima_queue_delete_partial(unsigned long req_value)
 		return -ENOENT;
 
 	mutex_lock(&ima_extend_list_mutex);
+	if (ima_copied_flags & IMA_MEASUREMENTS_COPIED) {
+		mutex_unlock(&ima_extend_list_mutex);
+		return -ESTALE;
+	}
+
 	/*
 	 * qe remains valid because ima_fs.c enforces single-writer exclusion.
 	 */

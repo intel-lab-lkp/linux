@@ -344,6 +344,11 @@ extern struct hlist_head __rcu *ima_htable;
 extern struct mutex ima_extend_list_mutex;
 extern bool ima_flush_htable;
 
+#define IMA_MEASUREMENTS_STAGED_COPIED 1
+#define IMA_MEASUREMENTS_COPIED 2
+
+extern u8 ima_copied_flags;
+
 static inline unsigned int ima_hash_key(u8 *digest)
 {
 	/* there is no point in taking a hash of part of a digest */
