@@ -58,9 +58,8 @@ int check_name(void)
 	char path[MAX_PATH_LEN] = {};
 	char name[TASK_COMM_LEN] = {};
 	char output[TASK_COMM_LEN] = {};
-	int j;
 
-	j = snprintf(path, MAX_PATH_LEN, "/proc/self/task/%d/comm", pid);
+	snprintf(path, MAX_PATH_LEN, "/proc/self/task/%d/comm", pid);
 	fptr = fopen(path, "r");
 	if (!fptr)
 		return -EIO;
