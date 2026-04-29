@@ -190,8 +190,8 @@ static const char *ionic_opcode_to_str(enum ionic_cmd_opcode opcode)
 	}
 }
 
-static void ionic_adminq_cancel(struct ionic_lif *lif,
-				struct ionic_admin_ctx *ctx)
+static bool ionic_adminq_service_or_cancel(struct ionic_lif *lif,
+					   struct ionic_admin_ctx *ctx)
 {
 	struct ionic_admin_desc_info *desc_info;
 	unsigned long irqflags;
@@ -201,9 +201,29 @@ static void ionic_adminq_cancel(struct ionic_lif *lif,
 	spin_lock_irqsave(&lif->adminq_lock, irqflags);
 	if (!lif->adminqcq) {
 		spin_unlock_irqrestore(&lif->adminq_lock, irqflags);
-		return;
+		return true;
 	}
 
+	/* Service the CQ to pick up any completions that the FW has
+	 * sent but NAPI hasn't processed yet.  This will call
+	 * complete_all() on any matching contexts, including ours.
+	 */
+	ionic_cq_service(&lif->adminqcq->cq, lif->adminqcq->cq.num_descs,
+			 ionic_adminq_service, NULL, NULL);
+
+	/* If the completion was serviced above, the ctx will have been
+	 * completed and its desc_info->ctx cleared by
+	 * ionic_adminq_service().  Check and return not-cancelled.
+	 */
+	if (completion_done(&ctx->work)) {
+		spin_unlock_irqrestore(&lif->adminq_lock, irqflags);
+		return false;
+	}
+
+	/* The command is still pending, cancel it by clearing
+	 * desc_info->ctx so ionic_adminq_service() won't touch
+	 * the caller's ctx after we return.
+	 */
 	q = &lif->adminqcq->q;
 
 	for (i = 0; i < q->num_descs; i++) {
@@ -214,6 +234,8 @@ static void ionic_adminq_cancel(struct ionic_lif *lif,
 		}
 	}
 	spin_unlock_irqrestore(&lif->adminq_lock, irqflags);
+
+	return true;
 }
 
 static void ionic_adminq_flush(struct ionic_lif *lif)
@@ -444,6 +466,7 @@ int ionic_adminq_wait(struct ionic_lif *lif, struct ionic_admin_ctx *ctx,
 	unsigned long time_start;
 	unsigned long time_done;
 	unsigned long remaining;
+	bool timed_out = false;
 	const char *name;
 
 	name = ionic_opcode_to_str(ctx->cmd.cmd.opcode);
@@ -474,7 +497,7 @@ int ionic_adminq_wait(struct ionic_lif *lif, struct ionic_admin_ctx *ctx,
 			if (do_msg)
 				netdev_warn(netdev, "%s (%d) interrupted, FW in reset\n",
 					    name, ctx->cmd.cmd.opcode);
-			ionic_adminq_cancel(lif, ctx);
+			ionic_adminq_service_or_cancel(lif, ctx);
 			ctx->comp.comp.status = IONIC_RC_ERROR;
 			return -ENXIO;
 		}
@@ -485,12 +508,15 @@ int ionic_adminq_wait(struct ionic_lif *lif, struct ionic_admin_ctx *ctx,
 	dev_dbg(lif->ionic->dev, "%s: elapsed %d msecs\n",
 		__func__, jiffies_to_msecs(time_done - time_start));
 
+	/* If the wait timed out, attempt to service the CQ and cancel
+	 * the ctx.  If ionic_adminq_service() completed the ctx between
+	 * timeout detection and taking the lock, cancel returns false
+	 * and we avoid a false timeout.
+	 */
 	if (time_after_eq(time_done, time_limit))
-		ionic_adminq_cancel(lif, ctx);
+		timed_out = ionic_adminq_service_or_cancel(lif, ctx);
 
-	return ionic_adminq_check_err(lif, ctx,
-				      time_after_eq(time_done, time_limit),
-				      do_msg);
+	return ionic_adminq_check_err(lif, ctx, timed_out, do_msg);
 }
 
 static int __ionic_adminq_post_wait(struct ionic_lif *lif,
