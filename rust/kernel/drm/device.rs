@@ -72,7 +72,7 @@ macro_rules! drm_legacy_fields {
 ///
 /// # Invariants
 ///
-/// `self.dev` is a valid instance of a `struct device`.
+/// `self.dev` is a valid instance of a `struct drm_device`.
 #[repr(C)]
 pub struct Device<T: drm::Driver> {
     dev: Opaque<bindings::drm_device>,
@@ -160,7 +160,7 @@ impl<T: drm::Driver> Device<T> {
 
     /// # Safety
     ///
-    /// `ptr` must be a valid pointer to a `struct device` embedded in `Self`.
+    /// `ptr` must be a valid pointer to a `struct drm_device` embedded in `Self`.
     unsafe fn from_drm_device(ptr: *const bindings::drm_device) -> *mut Self {
         // SAFETY: By the safety requirements of this function `ptr` is a valid pointer to a
         // `struct drm_device` embedded in `Self`.
@@ -184,7 +184,7 @@ impl<T: drm::Driver> Device<T> {
     /// to can't drop to zero, for the duration of this function call and the entire duration when
     /// the returned reference exists.
     ///
-    /// Additionally, callers must ensure that the `struct device`, `ptr` is pointing to, is
+    /// Additionally, callers must ensure that the `struct drm_device`, `ptr` is pointing to, is
     /// embedded in `Self`.
     #[doc(hidden)]
     pub unsafe fn from_raw<'a>(ptr: *const bindings::drm_device) -> &'a Self {
