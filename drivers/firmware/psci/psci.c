@@ -80,6 +80,11 @@ static u32 psci_cpu_suspend_feature;
 static bool psci_system_reset2_supported;
 static bool psci_system_off2_hibernate_supported;
 
+static inline bool psci_probed(void)
+{
+	return psci_ops.get_version != NULL;
+}
+
 static inline bool psci_has_ext_power_state(void)
 {
 	return psci_cpu_suspend_feature &
@@ -270,6 +275,15 @@ static unsigned long psci_migrate_info_up_cpu(void)
 
 static void set_conduit(enum arm_smccc_conduit conduit)
 {
+	/*
+	 * If we have set the conduit already, make sure
+	 * it is the same as we have found.
+	 */
+	if (psci_conduit != SMCCC_CONDUIT_NONE) {
+		WARN_ON(conduit != psci_conduit);
+		return;
+	}
+
 	switch (conduit) {
 	case SMCCC_CONDUIT_HVC:
 		invoke_psci_fn = __invoke_psci_fn_hvc;
@@ -679,7 +693,16 @@ static void __init psci_0_2_set_functions(void)
  */
 static int __init psci_probe(void)
 {
-	u32 ver = psci_0_2_get_version();
+	u32 ver;
+
+	/* Make sure we have a set CONDUIT */
+	if (WARN_ON(psci_conduit == SMCCC_CONDUIT_NONE))
+		return -ENODEV;
+
+	if (WARN_ON(psci_probed()))
+		return 0;
+
+	ver = psci_0_2_get_version();
 
 	pr_info("PSCIv%d.%d detected in firmware.\n",
 			PSCI_VERSION_MAJOR(ver),
@@ -717,10 +740,12 @@ static int __init psci_0_2_init(const struct device_node *np)
 {
 	int err;
 
+	if (psci_probed())
+		return 0;
+
 	err = get_set_conduit_method(np);
 	if (err)
 		return err;
-
 	/*
 	 * Starting with v0.2, the PSCI specification introduced a call
 	 * (PSCI_VERSION) that allows probing the firmware version, so
@@ -738,6 +763,9 @@ static int __init psci_0_1_init(const struct device_node *np)
 {
 	u32 id;
 	int err;
+
+	if (psci_probed())
+		return 0;
 
 	err = get_set_conduit_method(np);
 	if (err)
@@ -816,6 +844,20 @@ int __init psci_dt_init(void)
 	return ret;
 }
 
+int __init psci_early_init_conduit(enum arm_smccc_conduit conduit)
+{
+	switch (conduit) {
+	case SMCCC_CONDUIT_HVC:
+	case SMCCC_CONDUIT_SMC:
+		set_conduit(conduit);
+		break;
+	default:
+		WARN_ON(1);
+		return -EINVAL;
+	}
+	return psci_probe();
+}
+
 #ifdef CONFIG_ACPI
 /*
  * We use PSCI 0.2+ when ACPI is deployed on ARM64 and it's
@@ -823,6 +865,9 @@ int __init psci_dt_init(void)
  */
 int __init psci_acpi_init(void)
 {
+	if (psci_probed())
+		return 0;
+
 	if (!acpi_psci_present()) {
 		pr_info("is not implemented in ACPI.\n");
 		return -EOPNOTSUPP;

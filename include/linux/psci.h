@@ -59,4 +59,6 @@ static inline bool acpi_psci_present(void) { return false; }
 static inline bool acpi_psci_use_hvc(void) {return false; }
 #endif
 
+int __init psci_early_init_conduit(enum arm_smccc_conduit);
+
 #endif /* __LINUX_PSCI_H */
