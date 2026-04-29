@@ -116,6 +116,7 @@ struct driver_type {
  * @device: pointer back to the struct device that this structure is
  *	    associated with.
  * @driver_type: The type of the bound Rust driver.
+ * @complete: completion for device shutdown ordering
  * @dead: This device is currently either in the process of or has been
  *	  removed from the system. Any asynchronous events scheduled for this
  *	  device should exit without taking any action.
@@ -135,6 +136,7 @@ struct device_private {
 #ifdef CONFIG_RUST
 	struct driver_type driver_type;
 #endif
+	struct completion complete;
 	u8 dead:1;
 };
 #define to_device_private_parent(obj)	\

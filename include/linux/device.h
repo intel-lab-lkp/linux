@@ -615,6 +615,8 @@ enum struct_device_flags {
  * @dma_skip_sync: DMA sync operations can be skipped for coherent buffers.
  * @dma_iommu: Device is using default IOMMU implementation for DMA and
  *		doesn't rely on dma_ops structure.
+ * @async_shutdown: Device shutdown may be run asynchronously and in parallel
+ *		to the shutdown of unrelated devices
  * @flags:	DEV_FLAG_XXX flags. Use atomic bitfield operations to modify.
  *
  * At the lowest level, every device in a Linux system is represented by an
@@ -738,7 +740,7 @@ struct device {
 #ifdef CONFIG_IOMMU_DMA
 	bool			dma_iommu:1;
 #endif
-
+	bool			async_shutdown:1;
 	DECLARE_BITMAP(flags, DEV_FLAG_COUNT);
 };
 
@@ -967,6 +969,16 @@ static inline void device_disable_async_suspend(struct device *dev)
 static inline bool device_async_suspend_enabled(struct device *dev)
 {
 	return !!dev->power.async_suspend;
+}
+
+static inline void device_enable_async_shutdown(struct device *dev)
+{
+	dev->async_shutdown = true;
+}
+
+static inline bool device_async_shutdown_enabled(struct device *dev)
+{
+	return dev->async_shutdown;
 }
 
 static inline bool device_pm_not_required(struct device *dev)
