@@ -3473,7 +3473,9 @@ static void ionic_lif_handle_fw_up(struct ionic_lif *lif)
 	 * just need to reanimate it.
 	 */
 	ionic_init_devinfo(ionic);
-	ionic_reset(ionic);
+	err = ionic_reset(ionic);
+	if (err)
+		goto err_out;
 	err = ionic_identify(ionic);
 	if (err)
 		goto err_out;
