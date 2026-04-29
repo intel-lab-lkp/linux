@@ -207,6 +207,72 @@ static void amdgpu_devcoredump_fw_info(struct amdgpu_device *adev,
 	}
 }
 
+struct amdgpu_devcoredump_ib_ref {
+	struct amdgpu_bo	*bo;
+	u64			offset;
+};
+
+/*
+ * Walk the VM's mapping tree under the root PD's reservation to obtain the BO
+ * that backs each IB and pin it with a refcount. The root PD reservation is
+ * dropped before this function returns; the caller can then reserve each IB
+ * BO individually without nesting ww_mutex acquires on
+ * reservation_ww_class_mutex.
+ *
+ * Returns an array of num_ibs entries (each ib_refs[i].bo may be NULL if its
+ * mapping was not found), or NULL on allocation failure / VM lookup failure.
+ * The caller must release the BO refs and free the array.
+ */
+static struct amdgpu_devcoredump_ib_ref *
+amdgpu_devcoredump_collect_ib_refs(struct amdgpu_device *adev,
+				   struct amdgpu_coredump_info *coredump)
+{
+	struct amdgpu_devcoredump_ib_ref *ib_refs;
+	struct amdgpu_bo_va_mapping *mapping;
+	struct amdgpu_bo *root;
+	struct amdgpu_vm *vm;
+	u64 va_start;
+
+	ib_refs = kcalloc(coredump->num_ibs, sizeof(*ib_refs), GFP_KERNEL);
+	if (!ib_refs)
+		return NULL;
+
+	vm = amdgpu_vm_lock_by_pasid(adev, &root, coredump->pasid);
+	if (!vm) {
+		kfree(ib_refs);
+		return NULL;
+	}
+
+	for (int i = 0; i < coredump->num_ibs; i++) {
+		va_start = coredump->ibs[i].gpu_addr & AMDGPU_GMC_HOLE_MASK;
+		mapping = amdgpu_vm_bo_lookup_mapping(vm, va_start / AMDGPU_GPU_PAGE_SIZE);
+		if (!mapping)
+			continue;
+
+		ib_refs[i].bo = amdgpu_bo_ref(mapping->bo_va->base.bo);
+		ib_refs[i].offset = va_start -
+				    mapping->start * AMDGPU_GPU_PAGE_SIZE;
+	}
+
+	amdgpu_bo_unreserve(root);
+	amdgpu_bo_unref(&root);
+
+	return ib_refs;
+}
+
+static void
+amdgpu_devcoredump_release_ib_refs(struct amdgpu_devcoredump_ib_ref *ib_refs,
+				   int num_ibs)
+{
+	if (!ib_refs)
+		return;
+
+	for (int i = 0; i < num_ibs; i++)
+		if (ib_refs[i].bo)
+			amdgpu_bo_unref(&ib_refs[i].bo);
+	kfree(ib_refs);
+}
+
 static ssize_t
 amdgpu_devcoredump_format(char *buffer, size_t count, struct amdgpu_coredump_info *coredump)
 {
@@ -214,13 +280,11 @@ amdgpu_devcoredump_format(char *buffer, size_t count, struct amdgpu_coredump_inf
 	struct drm_printer p;
 	struct drm_print_iterator iter;
 	struct amdgpu_vm_fault_info *fault_info;
-	struct amdgpu_bo_va_mapping *mapping;
 	struct amdgpu_ip_block *ip_block;
 	struct amdgpu_res_cursor cursor;
-	struct amdgpu_bo *abo, *root;
-	uint64_t va_start, offset;
+	struct amdgpu_bo *abo;
+	uint64_t offset;
 	struct amdgpu_ring *ring;
-	struct amdgpu_vm *vm;
 	u32 *ib_content;
 	uint8_t *kptr;
 	int ver, i, j, r;
@@ -343,43 +407,52 @@ amdgpu_devcoredump_format(char *buffer, size_t count, struct amdgpu_coredump_inf
 		drm_printf(&p, "VRAM is lost due to GPU reset!\n");
 
 	if (coredump->num_ibs) {
-		/* Don't try to lookup the VM or map the BOs when calculating the
-		 * size required to store the devcoredump.
-		 */
-		if (sizing_pass)
-			vm = NULL;
-		else
-			vm = amdgpu_vm_lock_by_pasid(adev, &root, coredump->pasid);
+		struct amdgpu_devcoredump_ib_ref *ib_refs = NULL;
 
-		for (int i = 0; i < coredump->num_ibs && (sizing_pass || vm); i++) {
+		/*
+		 * Snapshot per-IB BO references under the root PD's reservation,
+		 * then release the root before reserving each IB BO individually
+		 * to copy its contents.
+		 *
+		 * Reserving an IB BO while the root PD is still reserved would
+		 * be a nested ww_mutex acquire on reservation_ww_class_mutex
+		 * without a ww_acquire_ctx, which trips lockdep's recursive-
+		 * locking check and self-deadlocks for IB BOs that share their
+		 * dma_resv with the root PD (always-valid BOs).
+		 *
+		 * Skip lookup/reservation entirely on the sizing pass: it does
+		 * not write IB content, and the size estimate doesn't depend on
+		 * whether the BOs are reachable.
+		 */
+		if (!sizing_pass)
+			ib_refs = amdgpu_devcoredump_collect_ib_refs(adev, coredump);
+
+		for (int i = 0; i < coredump->num_ibs; i++) {
 			ib_content = kvmalloc_array(coredump->ibs[i].ib_size_dw, 4,
 						    GFP_KERNEL);
 			if (!ib_content)
 				continue;
 
-			/* vm=NULL can only happen when 'sizing_pass' is true. Skip to the
-			 * drm_printf() calls (ib_content doesn't need to be initialized
-			 * as its content won't be written anywhere).
-			 */
-			if (!vm)
+			if (sizing_pass)
 				goto output_ib_content;
 
-			va_start = coredump->ibs[i].gpu_addr & AMDGPU_GMC_HOLE_MASK;
-			mapping = amdgpu_vm_bo_lookup_mapping(vm, va_start / AMDGPU_GPU_PAGE_SIZE);
-			if (!mapping)
-				goto free_ib_content;
+			if (!ib_refs || !ib_refs[i].bo)
+				goto output_ib_content;
 
-			offset = va_start - (mapping->start * AMDGPU_GPU_PAGE_SIZE);
-			abo = amdgpu_bo_ref(mapping->bo_va->base.bo);
+			abo = ib_refs[i].bo;
+			offset = ib_refs[i].offset;
+
 			r = amdgpu_bo_reserve(abo, false);
 			if (r)
-				goto free_ib_content;
+				goto output_ib_content;
 
 			if (abo->flags & AMDGPU_GEM_CREATE_NO_CPU_ACCESS) {
 				off = 0;
 
-				if (abo->tbo.resource->mem_type != TTM_PL_VRAM)
-					goto unreserve_abo;
+				if (abo->tbo.resource->mem_type != TTM_PL_VRAM) {
+					amdgpu_bo_unreserve(abo);
+					goto output_ib_content;
+				}
 
 				amdgpu_res_first(abo->tbo.resource, offset,
 						 coredump->ibs[i].ib_size_dw * 4,
@@ -395,8 +468,10 @@ amdgpu_devcoredump_format(char *buffer, size_t count, struct amdgpu_coredump_inf
 				r = ttm_bo_kmap(&abo->tbo, 0,
 						PFN_UP(abo->tbo.base.size),
 						&abo->kmap);
-				if (r)
-					goto unreserve_abo;
+				if (r) {
+					amdgpu_bo_unreserve(abo);
+					goto output_ib_content;
+				}
 
 				kptr = amdgpu_bo_kptr(abo);
 				kptr += offset;
@@ -406,21 +481,19 @@ amdgpu_devcoredump_format(char *buffer, size_t count, struct amdgpu_coredump_inf
 				amdgpu_bo_kunmap(abo);
 			}
 
+			amdgpu_bo_unreserve(abo);
+
 output_ib_content:
 			drm_printf(&p, "\nIB #%d 0x%llx %d dw\n",
 				   i, coredump->ibs[i].gpu_addr, coredump->ibs[i].ib_size_dw);
-			for (int j = 0; j < coredump->ibs[i].ib_size_dw; j++)
-				drm_printf(&p, "0x%08x\n", ib_content[j]);
-unreserve_abo:
-			if (vm)
-				amdgpu_bo_unreserve(abo);
-free_ib_content:
+			if (!sizing_pass && ib_refs && ib_refs[i].bo) {
+				for (int j = 0; j < coredump->ibs[i].ib_size_dw; j++)
+					drm_printf(&p, "0x%08x\n", ib_content[j]);
+			}
 			kvfree(ib_content);
 		}
-		if (vm) {
-			amdgpu_bo_unreserve(root);
-			amdgpu_bo_unref(&root);
-		}
+
+		amdgpu_devcoredump_release_ib_refs(ib_refs, coredump->num_ibs);
 	}
 
 	return count - iter.remain;
