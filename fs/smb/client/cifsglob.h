@@ -1817,7 +1817,7 @@ struct cifs_mount_ctx {
 };
 
 struct mchan_mount {
-	struct work_struct work;
+	struct delayed_work dwork;
 	struct cifs_ses *ses;
 };
 

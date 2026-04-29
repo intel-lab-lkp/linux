@@ -627,7 +627,6 @@ out_free_xid:
 	return rc;
 }
 
-
 int decode_ntlmssp_challenge(char *bcc_ptr, int blob_len,
 				    struct cifs_ses *ses)
 {

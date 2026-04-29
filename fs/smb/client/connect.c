@@ -3813,7 +3813,7 @@ mchan_mount_alloc(struct cifs_ses *ses)
 	if (!mchan_mount)
 		return ERR_PTR(-ENOMEM);
 
-	INIT_WORK(&mchan_mount->work, mchan_mount_work_fn);
+	INIT_DELAYED_WORK(&mchan_mount->dwork, mchan_mount_work_fn);
 
 	spin_lock(&cifs_tcp_ses_lock);
 	cifs_smb_ses_inc_refcount(ses);
@@ -3833,12 +3833,31 @@ mchan_mount_free(struct mchan_mount *mchan_mount)
 static void
 mchan_mount_work_fn(struct work_struct *work)
 {
-	struct mchan_mount *mchan_mount = container_of(work, struct mchan_mount, work);
+	struct mchan_mount *mchan_mount = container_of(work, struct mchan_mount, dwork.work);
+	struct cifs_ses *ses = mchan_mount->ses;
 
-	smb3_update_ses_channels(mchan_mount->ses,
-				 mchan_mount->ses->server,
+	/*
+	 * mchan_mount_work_fn could race with smb3_update_ses_channel called
+	 * for the same session on remount, other mounts or
+	 * smb3_update_ses_channel
+	 */
+	spin_lock(&ses->ses_lock);
+	if (ses->flags & CIFS_SES_FLAG_SCALE_CHANNELS) {
+		spin_unlock(&ses->ses_lock);
+		queue_delayed_work(cifsiod_wq, &mchan_mount->dwork, 2 * HZ);
+		return;
+	}
+	ses->flags |= CIFS_SES_FLAG_SCALE_CHANNELS;
+	spin_unlock(&ses->ses_lock);
+
+	smb3_update_ses_channels(ses,
+				 ses->server,
 				 false /* from_reconnect */,
 				 false /* disable_mchan */);
+
+	spin_lock(&ses->ses_lock);
+	ses->flags &= ~CIFS_SES_FLAG_SCALE_CHANNELS;
+	spin_unlock(&ses->ses_lock);
 
 	mchan_mount_free(mchan_mount);
 }
@@ -3885,7 +3904,7 @@ out:
 		goto error;
 
 	if (ctx->multichannel)
-		queue_work(cifsiod_wq, &mchan_mount->work);
+		queue_work(cifsiod_wq, &mchan_mount->dwork.work);
 
 	free_xid(mnt_ctx.xid);
 	return rc;
@@ -3942,8 +3961,7 @@ int cifs_mount(struct cifs_sb_info *cifs_sb, struct smb3_fs_context *ctx)
 		goto error;
 
 	if (ctx->multichannel)
-		queue_work(cifsiod_wq, &mchan_mount->work);
-
+		queue_work(cifsiod_wq, &mchan_mount->dwork.work);
 	free_xid(mnt_ctx.xid);
 	return rc;
 
