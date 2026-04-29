@@ -178,11 +178,21 @@ bool __init_memblock memblock_has_mirror(void)
 	return system_has_some_mirror;
 }
 
-static enum memblock_flags __init_memblock choose_memblock_flags(void)
+static enum memblock_flags __init_memblock choose_memblock_flags(bool user)
 {
 	/* skip non-scratch memory for kho early boot allocations */
-	if (kho_scratch_only)
-		return MEMBLOCK_KHO_SCRATCH | MEMBLOCK_KHO_SCRATCH_EXT;
+	if (kho_scratch_only) {
+		enum memblock_flags flags = MEMBLOCK_KHO_SCRATCH_EXT;
+
+		/*
+		 * Scratch can only be used for kernel memory, since user memory
+		 * might be preserved and thus can not be in scratch.
+		 */
+		if (!user)
+			flags |= MEMBLOCK_KHO_SCRATCH;
+
+		return flags;
+	}
 
 	return system_has_some_mirror ? MEMBLOCK_MIRROR : MEMBLOCK_NONE;
 }
@@ -346,7 +356,7 @@ static phys_addr_t __init_memblock memblock_find_in_range(phys_addr_t start,
 					phys_addr_t align)
 {
 	phys_addr_t ret;
-	enum memblock_flags flags = choose_memblock_flags();
+	enum memblock_flags flags = choose_memblock_flags(false);
 
 again:
 	ret = memblock_find_in_range_node(size, align, start, end,
@@ -1174,6 +1184,20 @@ int __init_memblock memblock_reserved_mark_kern(phys_addr_t base, phys_addr_t si
 }
 
 /**
+ * memblock_reserved_clear_kern - Clear MEMBLOCK_RSRV_KERN flag for region
+ *
+ * @base: the base phys addr of the region
+ * @size: the size of the region
+ *
+ * Return: 0 on success, -errno on failure.
+ */
+int __init_memblock memblock_reserved_clear_kern(phys_addr_t base, phys_addr_t size)
+{
+	return memblock_setclr_flag(&memblock.reserved, base, size, 0,
+				    MEMBLOCK_RSRV_KERN);
+}
+
+/**
  * memblock_mark_kho_scratch - Mark a memory region as MEMBLOCK_KHO_SCRATCH.
  * @base: the base phys addr of the region
  * @size: the size of the region
@@ -1532,37 +1556,11 @@ int __init_memblock memblock_set_node(phys_addr_t base, phys_addr_t size,
 	return 0;
 }
 
-/**
- * memblock_alloc_range_nid - allocate boot memory block
- * @size: size of memory block to be allocated in bytes
- * @align: alignment of the region and block's size
- * @start: the lower bound of the memory region to allocate (phys address)
- * @end: the upper bound of the memory region to allocate (phys address)
- * @nid: nid of the free area to find, %NUMA_NO_NODE for any node
- * @exact_nid: control the allocation fall back to other nodes
- *
- * The allocation is performed from memory region limited by
- * memblock.current_limit if @end == %MEMBLOCK_ALLOC_ACCESSIBLE.
- *
- * If the specified node can not hold the requested memory and @exact_nid
- * is false, the allocation falls back to any node in the system.
- *
- * For systems with memory mirroring, the allocation is attempted first
- * from the regions with mirroring enabled and then retried from any
- * memory region.
- *
- * In addition, function using kmemleak_alloc_phys for allocated boot
- * memory block, it is never reported as leaks.
- *
- * Return:
- * Physical address of allocated memory block on success, %0 on failure.
- */
-phys_addr_t __init memblock_alloc_range_nid(phys_addr_t size,
+static phys_addr_t __init __memblock_alloc_range_nid(phys_addr_t size,
 					phys_addr_t align, phys_addr_t start,
 					phys_addr_t end, int nid,
-					bool exact_nid)
+					bool exact_nid, enum memblock_flags flags)
 {
-	enum memblock_flags flags = choose_memblock_flags();
 	phys_addr_t found;
 
 	/*
@@ -1629,6 +1627,41 @@ done:
 	accept_memory(found, size);
 
 	return found;
+}
+
+/**
+ * memblock_alloc_range_nid - allocate boot memory block
+ * @size: size of memory block to be allocated in bytes
+ * @align: alignment of the region and block's size
+ * @start: the lower bound of the memory region to allocate (phys address)
+ * @end: the upper bound of the memory region to allocate (phys address)
+ * @nid: nid of the free area to find, %NUMA_NO_NODE for any node
+ * @exact_nid: control the allocation fall back to other nodes
+ *
+ * The allocation is performed from memory region limited by
+ * memblock.current_limit if @end == %MEMBLOCK_ALLOC_ACCESSIBLE.
+ *
+ * If the specified node can not hold the requested memory and @exact_nid
+ * is false, the allocation falls back to any node in the system.
+ *
+ * For systems with memory mirroring, the allocation is attempted first
+ * from the regions with mirroring enabled and then retried from any
+ * memory region.
+ *
+ * In addition, function using kmemleak_alloc_phys for allocated boot
+ * memory block, it is never reported as leaks.
+ *
+ * Return:
+ * Physical address of allocated memory block on success, %0 on failure.
+ */
+phys_addr_t __init memblock_alloc_range_nid(phys_addr_t size,
+					phys_addr_t align, phys_addr_t start,
+					phys_addr_t end, int nid,
+					bool exact_nid)
+{
+	enum memblock_flags flags = choose_memblock_flags(false);
+
+	return __memblock_alloc_range_nid(size, align, start, end, nid, exact_nid, flags);
 }
 
 /**
@@ -1780,6 +1813,47 @@ void * __init memblock_alloc_try_nid_raw(
 
 	return memblock_alloc_internal(size, align, min_addr, max_addr, nid,
 				       false);
+}
+
+/**
+ * memblock_alloc_nid_user - allocate boot memory for use by userspace
+ * @size: size of the memory block to be allocated in bytes
+ * @align: alignment of the region and block's size
+ * @exact_nid: control the allocation fall back to other nodes
+ *
+ * Public function, provides additional debug information (including caller
+ * info), if enabled. Does not zero allocated memory, does not panic if request
+ * cannot be satisfied.
+ *
+ * If the specified node can not hold the requested memory and @exact_nid is
+ * false, the allocation falls back to any node in the system. The allocated
+ * memory has no restrictions on minimum or maximum address, and does not count
+ * towards %MEMBLOCK_RSRV_KERN.
+ *
+ * Return:
+ * Virtual address of allocated memory block on success, %NULL on failure.
+ */
+void * __init memblock_alloc_nid_user(phys_addr_t size, phys_addr_t align,
+				      int nid, bool exact_nid)
+{
+	enum memblock_flags flags = choose_memblock_flags(true);
+	phys_addr_t alloc;
+
+	memblock_dbg("%s: %llu bytes align=0x%llx nid=%d %pS\n",
+		     __func__, (u64)size, (u64)align, nid, (void *)_RET_IP_);
+
+	alloc = __memblock_alloc_range_nid(size, align, 0, MEMBLOCK_ALLOC_ACCESSIBLE,
+					   nid, exact_nid, flags);
+	if (!alloc)
+		return NULL;
+
+	/* User memory should not be marked with RSRV_KERN. */
+	if (memblock_reserved_clear_kern(alloc, size)) {
+		memblock_phys_free(alloc, size);
+		return NULL;
+	}
+
+	return phys_to_virt(alloc);
 }
 
 /**
