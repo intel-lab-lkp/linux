@@ -341,6 +341,7 @@ u64 hv_get_current_partid(void);
 bool hv_pcidev_is_attached_dev(struct pci_dev *pdev);
 bool hv_pcidev_is_pthru_dev(struct pci_dev *pdev);
 u64 hv_build_devid_oftype(struct pci_dev *pdev, enum hv_device_type type);
+u64 hv_devid_from_pdev(struct pci_dev *pdev);
 
 #else /* Remove following after arm64 implementation is done */
 
@@ -352,6 +353,9 @@ static inline bool hv_pcidev_is_pthru_dev(struct pci_dev *pdev)
 
 static inline u64 hv_build_devid_oftype(struct pci_dev *pdev,
 					enum hv_device_type type)
+{ return 0; }
+
+static inline u64 hv_devid_from_pdev(struct pci_dev *pdev)
 { return 0; }
 
 static inline u64 hv_get_current_partid(void)
