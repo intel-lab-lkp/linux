@@ -1456,17 +1456,15 @@ int gfs2_quota_init(struct gfs2_sbd *sdp)
 			qd->qd_slot = slot;
 			qd->qd_slot_ref = 1;
 
-			spin_lock(&qd_lock);
-			spin_lock_bucket(hash);
+			rcu_read_lock();
 			old_qd = gfs2_qd_search_bucket(hash, sdp, qc_id);
+			rcu_read_unlock();
 			if (old_qd) {
 				fs_err(sdp, "Corruption found in quota_change%u"
 					    "file: duplicate identifier in "
 					    "slot %u\n",
 					    sdp->sd_jdesc->jd_jid, slot);
 
-				spin_unlock_bucket(hash);
-				spin_unlock(&qd_lock);
 				qd_put(old_qd);
 
 				gfs2_glock_put(qd->qd_gl);
@@ -1480,6 +1478,8 @@ int gfs2_quota_init(struct gfs2_sbd *sdp)
 
 				continue;
 			}
+			spin_lock(&qd_lock);
+			spin_lock_bucket(hash);
 			BUG_ON(test_and_set_bit(slot, sdp->sd_quota_bitmap));
 			list_add(&qd->qd_list, &sdp->sd_quota_list);
 			atomic_inc(&sdp->sd_quota_count);
