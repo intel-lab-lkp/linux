@@ -25,6 +25,8 @@
 #include <linux/uaccess.h>
 #include <linux/xarray.h>
 
+#include <asm/resctrl.h>
+
 #include "class.h"
 
 #define TELEM_SIZE_OFFSET	0x0
@@ -284,6 +286,9 @@ struct pmt_feature_group *intel_pmt_get_regions_by_feature(enum pmt_feature_id i
 		region++;
 	}
 
+	if (!try_module_get(THIS_MODULE))
+		return ERR_PTR(-EINVAL);
+
 	kref_init(&feature_group->kref);
 
 	return no_free_ptr(feature_group);
@@ -293,6 +298,7 @@ EXPORT_SYMBOL(intel_pmt_get_regions_by_feature);
 void intel_pmt_put_feature_group(struct pmt_feature_group *feature_group)
 {
 	kref_put(&feature_group->kref, pmt_feature_group_release);
+	module_put(THIS_MODULE);
 }
 EXPORT_SYMBOL(intel_pmt_put_feature_group);
 
@@ -425,7 +431,15 @@ static struct auxiliary_driver pmt_telem_aux_driver = {
 
 static int __init pmt_telem_init(void)
 {
-	return auxiliary_driver_register(&pmt_telem_aux_driver);
+	int ret;
+
+	ret = auxiliary_driver_register(&pmt_telem_aux_driver);
+	if (ret)
+		return ret;
+
+	intel_aet_register_enumeration(intel_pmt_get_regions_by_feature,
+				       intel_pmt_put_feature_group);
+	return 0;
 }
 module_init(pmt_telem_init);
 
@@ -433,6 +447,7 @@ static void __exit pmt_telem_exit(void)
 {
 	auxiliary_driver_unregister(&pmt_telem_aux_driver);
 	xa_destroy(&telem_array);
+	intel_aet_unregister_enumeration();
 }
 module_exit(pmt_telem_exit);
 
