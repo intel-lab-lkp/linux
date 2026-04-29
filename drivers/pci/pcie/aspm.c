@@ -372,6 +372,9 @@ static void pcie_set_clkpm(struct pcie_link_state *link, int enable)
 	/* Need nothing if the specified equals to current state */
 	if (link->clkpm_enabled == enable)
 		return;
+
+	pci_dbg(link->pdev, "%s Clock PM\n",
+		enable ? "Enabling" : "Disabling");
 	pcie_set_clkpm_nocheck(link, enable);
 }
 
@@ -961,11 +964,14 @@ static void pcie_config_aspm_link(struct pcie_link_state *link, u32 state)
 	state &= (link->aspm_capable & ~link->aspm_disable);
 
 	/* Can't enable any substates if L1 is not enabled */
-	if (!(state & PCIE_LINK_STATE_L1))
+	if (!(state & PCIE_LINK_STATE_L1)) {
+		pci_dbg(parent, "ASPM: L1 not enabled, disabling L1 substates\n");
 		state &= ~PCIE_LINK_STATE_L1SS;
+	}
 
 	/* Spec says both ports must be in D0 before enabling PCI PM substates*/
 	if (parent->current_state != PCI_D0 || child->current_state != PCI_D0) {
+		pci_dbg(parent, "ASPM: Both ports are not in D0, disable PCI PM L1 substates unless explicitly enabled\n");
 		state &= ~PCIE_LINK_STATE_L1_SS_PCIPM;
 		state |= (link->aspm_enabled & PCIE_LINK_STATE_L1_SS_PCIPM);
 	}
@@ -973,6 +979,8 @@ static void pcie_config_aspm_link(struct pcie_link_state *link, u32 state)
 	/* Nothing to do if the link is already in the requested state */
 	if (link->aspm_enabled == state)
 		return;
+	pci_dbg(parent, "Updating ASPM state\n");
+
 	/* Convert ASPM state to upstream/downstream ASPM register state */
 	if (state & PCIE_LINK_STATE_L0S_UP)
 		dwstream |= PCI_EXP_LNKCTL_ASPM_L0S;
@@ -997,16 +1005,34 @@ static void pcie_config_aspm_link(struct pcie_link_state *link, u32 state)
 	 * Sec 7.5.3.7 also recommends programming the same ASPM Control
 	 * value for all functions of a multi-function device.
 	 */
-	list_for_each_entry(child, &linkbus->devices, bus_list)
+	list_for_each_entry(child, &linkbus->devices, bus_list) {
+		pci_dbg(child, "ASPM: Disabling ASPM on this device before disabling parent\n");
 		pcie_config_aspm_dev(child, 0);
+	}
+	pci_dbg(parent, "ASPM: Disabling ASPM before applying configuration\n");
 	pcie_config_aspm_dev(parent, 0);
 
-	if (link->aspm_capable & PCIE_LINK_STATE_L1SS)
+	if (link->aspm_capable & PCIE_LINK_STATE_L1SS) {
+		pci_dbg(parent, "ASPM: Configure L1 substates\n");
 		pcie_config_aspm_l1ss(link, state);
+	}
 
+	pci_dbg(parent, "ASPM: Configure ASPM state on upstream device\n");
 	pcie_config_aspm_dev(parent, upstream);
-	list_for_each_entry(child, &linkbus->devices, bus_list)
+	list_for_each_entry(child, &linkbus->devices, bus_list) {
+		pci_dbg(child, "ASPM: Configure ASPM state on downstream device\n");
 		pcie_config_aspm_dev(child, dwstream);
+	}
+
+	pci_dbg(parent, "ASPM: enabled states:%s%s%s%s%s%s%s%s\n",
+		FLAG(state, L0S_UP, " L0s-Upstream"),
+		FLAG(state, L0S_DW, " L0s-Downstream"),
+		FLAG(state, L1, " L1"),
+		FLAG(state, L1_1, " ASPM-L1.1"),
+		FLAG(state, L1_2, " ASPM-L1.2"),
+		FLAG(state, L1_1_PCIPM, " PCI-PM-L1.1"),
+		FLAG(state, L1_2_PCIPM, " PCI-PM-L1.2"),
+		FLAG(state, CLKPM, " ClockPM"));
 
 	link->aspm_enabled = state;
 
