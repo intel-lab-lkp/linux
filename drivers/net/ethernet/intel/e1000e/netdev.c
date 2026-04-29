@@ -675,6 +675,8 @@ static void e1000_alloc_rx_buffers(struct e1000_ring *rx_ring,
 		skb = buffer_info->skb;
 		if (skb) {
 			skb_trim(skb, 0);
+			if (likely(buffer_info->dma))
+				goto write_desc;
 			goto map_skb;
 		}
 
@@ -692,10 +694,12 @@ map_skb:
 						  DMA_FROM_DEVICE);
 		if (dma_mapping_error(&pdev->dev, buffer_info->dma)) {
 			dev_err(&pdev->dev, "Rx DMA map failed\n");
+			buffer_info->dma = 0;
 			adapter->rx_dma_failed++;
 			break;
 		}
 
+write_desc:
 		rx_desc = E1000_RX_DESC_EXT(*rx_ring, i);
 		rx_desc->read.buffer_addr = cpu_to_le64(buffer_info->dma);
 
@@ -953,7 +957,6 @@ static bool e1000_clean_rx_irq(struct e1000_ring *rx_ring, int *work_done,
 		dma_rmb();	/* read descriptor and rx_buffer_info after status DD */
 
 		skb = buffer_info->skb;
-		buffer_info->skb = NULL;
 
 		prefetch(skb->data - NET_IP_ALIGN);
 
@@ -967,9 +970,6 @@ static bool e1000_clean_rx_irq(struct e1000_ring *rx_ring, int *work_done,
 
 		cleaned = true;
 		cleaned_count++;
-		dma_unmap_single(&pdev->dev, buffer_info->dma,
-				 adapter->rx_buffer_len, DMA_FROM_DEVICE);
-		buffer_info->dma = 0;
 
 		length = le16_to_cpu(rx_desc->wb.upper.length);
 
@@ -985,8 +985,6 @@ static bool e1000_clean_rx_irq(struct e1000_ring *rx_ring, int *work_done,
 		if (adapter->flags2 & FLAG2_IS_DISCARDING) {
 			/* All receives must fit into a single buffer */
 			e_dbg("Receive packet consumed multiple buffers\n");
-			/* recycle */
-			buffer_info->skb = skb;
 			if (staterr & E1000_RXD_STAT_EOP)
 				adapter->flags2 &= ~FLAG2_IS_DISCARDING;
 			goto next_desc;
@@ -994,8 +992,6 @@ static bool e1000_clean_rx_irq(struct e1000_ring *rx_ring, int *work_done,
 
 		if (unlikely((staterr & E1000_RXDEXT_ERR_FRAME_ERR_MASK) &&
 			     !(netdev->features & NETIF_F_RXALL))) {
-			/* recycle */
-			buffer_info->skb = skb;
 			goto next_desc;
 		}
 
@@ -1022,19 +1018,33 @@ static bool e1000_clean_rx_irq(struct e1000_ring *rx_ring, int *work_done,
 			struct sk_buff *new_skb =
 				napi_alloc_skb(&adapter->napi, length);
 			if (new_skb) {
+				dma_sync_single_for_cpu(&pdev->dev,
+							buffer_info->dma,
+							adapter->rx_buffer_len,
+							DMA_FROM_DEVICE);
 				skb_copy_to_linear_data_offset(new_skb,
 							       -NET_IP_ALIGN,
 							       (skb->data -
 								NET_IP_ALIGN),
 							       (length +
 								NET_IP_ALIGN));
-				/* save the skb in buffer_info as good */
-				buffer_info->skb = skb;
+				dma_sync_single_for_device(&pdev->dev,
+							   buffer_info->dma,
+							   adapter->rx_buffer_len,
+							   DMA_FROM_DEVICE);
 				skb = new_skb;
+				goto copybreak_done;
 			}
 			/* else just continue with the old one */
 		}
-		/* end copybreak code */
+
+		buffer_info->skb = NULL;
+		dma_unmap_single(&pdev->dev, buffer_info->dma,
+				 adapter->rx_buffer_len,
+				 DMA_FROM_DEVICE);
+		buffer_info->dma = 0;
+
+copybreak_done:
 		skb_put(skb, length);
 
 		/* Receive Checksum Offload */
