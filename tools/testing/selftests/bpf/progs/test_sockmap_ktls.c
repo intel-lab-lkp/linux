@@ -38,3 +38,11 @@ int prog_sk_policy_redir(struct sk_msg_md *msg)
 	bpf_msg_apply_bytes(msg, apply_bytes);
 	return bpf_msg_redirect_map(msg, &sock_map, two, 0);
 }
+
+SEC("sk_msg")
+int prog_sk_policy_drop(struct sk_msg_md *msg)
+{
+	if (apply_bytes > 0)
+		bpf_msg_apply_bytes(msg, apply_bytes);
+	return SK_DROP;
+}

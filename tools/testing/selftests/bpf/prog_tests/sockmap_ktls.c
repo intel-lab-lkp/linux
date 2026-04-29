@@ -4,6 +4,7 @@
  * Tests for sockmap/sockhash holding kTLS sockets.
  */
 #include <error.h>
+#include <fcntl.h>
 #include <netinet/tcp.h>
 #include <linux/tls.h>
 #include "test_progs.h"
@@ -403,6 +404,86 @@ out:
 	test_sockmap_ktls__destroy(skel);
 }
 
+static void test_sockmap_ktls_tx_wrapped_chain(int family, int sotype)
+{
+	int c = -1, p = -1, one = 1, prog_fd, map_fd;
+	int pipefd[2] = { -1, -1 };
+	struct test_sockmap_ktls *skel;
+	char byte;
+	ssize_t n;
+	int err, i;
+
+	skel = test_sockmap_ktls__open_and_load();
+	if (!ASSERT_TRUE(skel, "open ktls skel"))
+		return;
+
+	err = create_pair(family, sotype, &c, &p);
+	if (!ASSERT_OK(err, "create_pair()"))
+		goto out;
+
+	prog_fd = bpf_program__fd(skel->progs.prog_sk_policy_drop);
+	map_fd = bpf_map__fd(skel->maps.sock_map);
+
+	err = bpf_prog_attach(prog_fd, map_fd, BPF_SK_MSG_VERDICT, 0);
+	if (!ASSERT_OK(err, "bpf_prog_attach sk msg"))
+		goto out;
+
+	err = bpf_map_update_elem(map_fd, &one, &c, BPF_NOEXIST);
+	if (!ASSERT_OK(err, "bpf_map_update_elem(c)"))
+		goto out;
+
+	err = init_ktls_pairs(c, p);
+	if (!ASSERT_OK(err, "init_ktls_pairs(c, p)"))
+		goto out;
+
+	/* packetized pipe so each splice frag becomes its own sg entry */
+	err = pipe2(pipefd, O_DIRECT);
+	if (!ASSERT_OK(err, "pipe2"))
+		goto out;
+	err = fcntl(pipefd[0], F_SETPIPE_SZ, 17 * 4096);
+	if (!ASSERT_GE(err, 17 * 4096, "F_SETPIPE_SZ"))
+		goto out;
+
+	for (i = 0; i < 17; i++) {
+		byte = 'A' + i;
+		if (!ASSERT_EQ(write(pipefd[1], &byte, 1), 1, "write to pipe"))
+			goto out;
+	}
+
+	/* drop the first 16 bytes so sg.start advances to 16 */
+	skel->bss->apply_bytes = 16;
+
+	n = splice(pipefd[0], NULL, c, NULL, 17, 0);
+	if (n < 0)
+		ASSERT_EQ(errno, EACCES, "splice errno");
+
+	err = bpf_map_delete_elem(map_fd, &one);
+	if (!ASSERT_OK(err, "bpf_map_delete_elem"))
+		goto out;
+	usleep(50000);
+
+	while (recv(p, &byte, 1, MSG_DONTWAIT) > 0)
+		;
+
+	/* this send wraps sg.end to 0 and trips the wrap branch */
+	byte = 'X';
+	n = send(c, &byte, 1, MSG_DONTWAIT);
+	if (n < 0)
+		ASSERT_TRUE(errno == EAGAIN || errno == EACCES || errno == EPIPE,
+			    "send errno");
+
+out:
+	if (pipefd[0] != -1)
+		close(pipefd[0]);
+	if (pipefd[1] != -1)
+		close(pipefd[1]);
+	if (c != -1)
+		close(c);
+	if (p != -1)
+		close(p);
+	test_sockmap_ktls__destroy(skel);
+}
+
 static void run_tests(int family, enum bpf_map_type map_type)
 {
 	int map;
@@ -429,6 +510,8 @@ static void run_ktls_test(int family, int sotype)
 		test_sockmap_ktls_tx_no_buf(family, sotype, true);
 	if (test__start_subtest("tls tx with pop"))
 		test_sockmap_ktls_tx_pop(family, sotype);
+	if (test__start_subtest("tls tx wrapped sg chain"))
+		test_sockmap_ktls_tx_wrapped_chain(family, sotype);
 }
 
 void test_sockmap_ktls(void)
