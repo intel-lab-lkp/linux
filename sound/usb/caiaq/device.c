@@ -442,7 +442,8 @@ static int init_card(struct snd_usb_caiaqdev *cdev)
 
 	if (usb_set_interface(usb_dev, 0, 1) != 0) {
 		dev_err(dev, "can't set alt interface.\n");
-		return -EIO;
+		err = -EIO;
+		goto dev_err_put;
 	}
 
 	usb_init_urb(&cdev->ep1_in_urb);
@@ -462,14 +463,18 @@ static int init_card(struct snd_usb_caiaqdev *cdev)
 	if (usb_urb_ep_type_check(&cdev->ep1_in_urb) ||
 	    usb_urb_ep_type_check(&cdev->midi_out_urb)) {
 		dev_err(dev, "invalid EPs\n");
-		return -EINVAL;
+		err = -EINVAL;
+		goto dev_err_put;
 	}
 
 	init_waitqueue_head(&cdev->ep1_wait_queue);
 	init_waitqueue_head(&cdev->prepare_wait_queue);
 
-	if (usb_submit_urb(&cdev->ep1_in_urb, GFP_KERNEL) != 0)
-		return -EIO;
+	if (usb_submit_urb(&cdev->ep1_in_urb, GFP_KERNEL) != 0) {
+		err = -EIO;
+		goto dev_err_put;
+	}
+
 
 	err = snd_usb_caiaq_send_command(cdev, EP1_CMD_GET_DEVICE_INFO, NULL, 0);
 	if (err)
@@ -520,6 +525,14 @@ static int init_card(struct snd_usb_caiaqdev *cdev)
 
  err_kill_urb:
 	usb_kill_urb(&cdev->ep1_in_urb);
+
+	/*
+ 	 * private_free has not been set.
+	 * Undoing the usb_get_dev() from
+	 * create_card()
+	 */
+ err_dev_put:
+	usb_put_dev(usb_dev);
 	return err;
 }
 
