@@ -33,7 +33,6 @@ void *test_membarrier_thread(void *arg)
 
 static int test_mt_membarrier(void)
 {
-	int i;
 	pthread_t test_thread;
 
 	pthread_create(&test_thread, NULL,
