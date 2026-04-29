@@ -68,7 +68,6 @@ int main(int argc, char *argv[])
 	};
 	int s1, s2, status;
 	time_t end, now;
-	socklen_t plen;
 	char buf[LEN];
 	bool child;
 
