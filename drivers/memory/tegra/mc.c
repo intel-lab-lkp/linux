@@ -13,6 +13,7 @@
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
+#include <linux/pm.h>
 #include <linux/slab.h>
 #include <linux/sort.h>
 #include <linux/tegra-icc.h>
@@ -910,6 +911,19 @@ static void tegra_mc_num_channel_enabled(struct tegra_mc *mc)
 	}
 }
 
+static void tegra_mc_setup_intmask(struct tegra_mc *mc)
+{
+	unsigned int i;
+
+	for (i = 0; i < mc->soc->num_intmasks; i++) {
+		if (mc->soc->num_channels)
+			mc_ch_writel(mc, MC_BROADCAST_CHANNEL, mc->soc->intmasks[i].mask,
+				     mc->soc->intmasks[i].reg);
+		else
+			mc_writel(mc, mc->soc->intmasks[i].mask, mc->soc->intmasks[i].reg);
+	}
+}
+
 static int tegra_mc_probe(struct platform_device *pdev)
 {
 	struct tegra_mc *mc;
@@ -970,13 +984,7 @@ static int tegra_mc_probe(struct platform_device *pdev)
 			}
 		}
 
-		for (i = 0; i < mc->soc->num_intmasks; i++) {
-			if (mc->soc->num_channels)
-				mc_ch_writel(mc, MC_BROADCAST_CHANNEL, mc->soc->intmasks[i].mask,
-					     mc->soc->intmasks[i].reg);
-			else
-				mc_writel(mc, mc->soc->intmasks[i].mask, mc->soc->intmasks[i].reg);
-		}
+		tegra_mc_setup_intmask(mc);
 	}
 
 	if (mc->soc->reset_ops) {
@@ -1010,10 +1018,34 @@ static void tegra_mc_sync_state(struct device *dev)
 		icc_sync_state(dev);
 }
 
+static int tegra_mc_resume(struct device *dev)
+{
+	struct tegra_mc *mc = dev_get_drvdata(dev);
+	int err;
+
+	if (mc->soc->ops && mc->soc->ops->resume) {
+		err = mc->soc->ops->resume(mc);
+		if (err)
+			return err;
+	}
+
+	tegra_mc_setup_intmask(mc);
+
+	return 0;
+}
+
+/*
+ * No suspend callback is needed because the resume path reinitializes all
+ * necessary MC register state (SID overrides, interrupt masks) from static
+ * SoC data tables rather than from saved runtime state.
+ */
+static DEFINE_SIMPLE_DEV_PM_OPS(tegra_mc_pm_ops, NULL, tegra_mc_resume);
+
 static struct platform_driver tegra_mc_driver = {
 	.driver = {
 		.name = "tegra-mc",
 		.of_match_table = tegra_mc_of_match,
+		.pm = pm_sleep_ptr(&tegra_mc_pm_ops),
 		.suppress_bind_attrs = true,
 		.sync_state = tegra_mc_sync_state,
 	},
