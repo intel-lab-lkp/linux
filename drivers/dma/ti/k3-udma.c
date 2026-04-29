@@ -28,6 +28,7 @@
 #include <linux/soc/ti/ti_sci_inta_msi.h>
 #include <linux/dma/k3-event-router.h>
 #include <linux/dma/ti-cppi5.h>
+#include <linux/pm_runtime.h>
 
 #include "../virt-dma.h"
 #include "k3-udma.h"
@@ -2189,6 +2190,10 @@ static int udma_alloc_chan_resources(struct dma_chan *chan)
 	u32 irq_udma_idx;
 	int ret;
 
+	ret = pm_runtime_resume_and_get(ud->dev);
+	if (ret)
+		return ret;
+
 	uc->dma_dev = ud->dev;
 
 	if (uc->config.pkt_mode || uc->config.dir == DMA_MEM_TO_MEM) {
@@ -2382,6 +2387,7 @@ err_cleanup:
 		uc->use_dma_pool = false;
 	}
 
+	pm_runtime_put(ud->dev);
 	return ret;
 }
 
@@ -2392,6 +2398,10 @@ static int bcdma_alloc_chan_resources(struct dma_chan *chan)
 	const struct udma_oes_offsets *oes = &ud->soc_data->oes;
 	u32 irq_udma_idx, irq_ring_idx;
 	int ret;
+
+	ret = pm_runtime_resume_and_get(ud->dev);
+	if (ret)
+		return ret;
 
 	/* Only TR mode is supported */
 	uc->config.pkt_mode = false;
@@ -2412,7 +2422,7 @@ static int bcdma_alloc_chan_resources(struct dma_chan *chan)
 
 		ret = bcdma_alloc_bchan_resources(uc);
 		if (ret)
-			return ret;
+			goto err_res_free;
 
 		irq_ring_idx = uc->bchan->id + oes->bcdma_bchan_ring;
 		irq_udma_idx = uc->bchan->id + oes->bcdma_bchan_data;
@@ -2427,7 +2437,7 @@ static int bcdma_alloc_chan_resources(struct dma_chan *chan)
 		ret = udma_alloc_tx_resources(uc);
 		if (ret) {
 			uc->config.remote_thread_id = -1;
-			return ret;
+			goto err_res_free;
 		}
 
 		uc->config.src_thread = ud->psil_base + uc->tchan->id;
@@ -2447,7 +2457,7 @@ static int bcdma_alloc_chan_resources(struct dma_chan *chan)
 		ret = udma_alloc_rx_resources(uc);
 		if (ret) {
 			uc->config.remote_thread_id = -1;
-			return ret;
+			goto err_res_free;
 		}
 
 		uc->config.src_thread = uc->config.remote_thread_id;
@@ -2463,7 +2473,8 @@ static int bcdma_alloc_chan_resources(struct dma_chan *chan)
 		/* Can not happen */
 		dev_err(uc->ud->dev, "%s: chan%d invalid direction (%u)\n",
 			__func__, uc->id, uc->config.dir);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err_res_free;
 	}
 
 	/* check if the channel configuration was successful */
@@ -2576,6 +2587,7 @@ err_res_free:
 		uc->use_dma_pool = false;
 	}
 
+	pm_runtime_put(ud->dev);
 	return ret;
 }
 
@@ -2605,6 +2617,10 @@ static int pktdma_alloc_chan_resources(struct dma_chan *chan)
 	u32 irq_ring_idx;
 	int ret;
 
+	ret = pm_runtime_resume_and_get(ud->dev);
+	if (ret)
+		return ret;
+
 	/*
 	 * Make sure that the completion is in a known state:
 	 * No teardown, the channel is idle
@@ -2622,7 +2638,7 @@ static int pktdma_alloc_chan_resources(struct dma_chan *chan)
 		ret = udma_alloc_tx_resources(uc);
 		if (ret) {
 			uc->config.remote_thread_id = -1;
-			return ret;
+			goto err_res_free;
 		}
 
 		uc->config.src_thread = ud->psil_base + uc->tchan->id;
@@ -2641,7 +2657,7 @@ static int pktdma_alloc_chan_resources(struct dma_chan *chan)
 		ret = udma_alloc_rx_resources(uc);
 		if (ret) {
 			uc->config.remote_thread_id = -1;
-			return ret;
+			goto err_res_free;
 		}
 
 		uc->config.src_thread = uc->config.remote_thread_id;
@@ -2656,7 +2672,8 @@ static int pktdma_alloc_chan_resources(struct dma_chan *chan)
 		/* Can not happen */
 		dev_err(uc->ud->dev, "%s: chan%d invalid direction (%u)\n",
 			__func__, uc->id, uc->config.dir);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err_res_free;
 	}
 
 	/* check if the channel configuration was successful */
@@ -2745,6 +2762,7 @@ err_res_free:
 	dma_pool_destroy(uc->hdesc_pool);
 	uc->use_dma_pool = false;
 
+	pm_runtime_put(ud->dev);
 	return ret;
 }
 
@@ -4123,6 +4141,8 @@ static void udma_free_chan_resources(struct dma_chan *chan)
 		dma_pool_destroy(uc->hdesc_pool);
 		uc->use_dma_pool = false;
 	}
+
+	pm_runtime_put(ud->dev);
 }
 
 static struct platform_driver udma_driver;
@@ -5644,6 +5664,11 @@ static int udma_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, ud);
 
+	/* Enable runtime PM */
+	ret = devm_pm_runtime_enable(dev);
+	if (ret)
+		return ret;
+
 	ret = of_dma_controller_register(dev->of_node, udma_of_xlate, ud);
 	if (ret) {
 		dev_err(dev, "failed to register of_dma controller\n");
@@ -5653,7 +5678,7 @@ static int udma_probe(struct platform_device *pdev)
 	return ret;
 }
 
-static int __maybe_unused udma_pm_suspend(struct device *dev)
+static int udma_runtime_suspend(struct device *dev)
 {
 	struct udma_dev *ud = dev_get_drvdata(dev);
 	struct dma_device *dma_dev = &ud->ddev;
@@ -5675,7 +5700,7 @@ static int __maybe_unused udma_pm_suspend(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused udma_pm_resume(struct device *dev)
+static int udma_runtime_resume(struct device *dev)
 {
 	struct udma_dev *ud = dev_get_drvdata(dev);
 	struct dma_device *dma_dev = &ud->ddev;
@@ -5701,7 +5726,8 @@ static int __maybe_unused udma_pm_resume(struct device *dev)
 }
 
 static const struct dev_pm_ops udma_pm_ops = {
-	SET_LATE_SYSTEM_SLEEP_PM_OPS(udma_pm_suspend, udma_pm_resume)
+	SET_LATE_SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend, pm_runtime_force_resume)
+	SET_RUNTIME_PM_OPS(udma_runtime_suspend, udma_runtime_resume, NULL)
 };
 
 static struct platform_driver udma_driver = {
