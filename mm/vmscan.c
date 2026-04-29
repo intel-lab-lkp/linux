@@ -4680,7 +4680,8 @@ static bool isolate_folio(struct lruvec *lruvec, struct folio *folio, struct sca
 
 static int scan_folios(unsigned long nr_to_scan, struct lruvec *lruvec,
 		       struct scan_control *sc, int type, int tier,
-		       struct list_head *list)
+		       struct list_head *list,
+		       unsigned long *file_taken)
 {
 	int i;
 	int gen;
@@ -4749,7 +4750,7 @@ static int scan_folios(unsigned long nr_to_scan, struct lruvec *lruvec,
 				scanned, skipped, isolated,
 				type ? LRU_INACTIVE_FILE : LRU_INACTIVE_ANON);
 	if (type == LRU_GEN_FILE)
-		sc->nr.file_taken += isolated;
+		*file_taken += isolated;
 	/*
 	 * There might not be eligible folios due to reclaim_idx. Check the
 	 * remaining to prevent livelock if it's not making progress.
@@ -4798,7 +4799,8 @@ static int get_type_to_scan(struct lruvec *lruvec, int swappiness)
 
 static int isolate_folios(unsigned long nr_to_scan, struct lruvec *lruvec,
 			  struct scan_control *sc, int swappiness,
-			  int *type_scanned, struct list_head *list)
+			  int *type_scanned, struct list_head *list,
+			  unsigned long *file_taken)
 {
 	int i;
 	int type = get_type_to_scan(lruvec, swappiness);
@@ -4809,7 +4811,8 @@ static int isolate_folios(unsigned long nr_to_scan, struct lruvec *lruvec,
 
 		*type_scanned = type;
 
-		scanned = scan_folios(nr_to_scan, lruvec, sc, type, tier, list);
+		scanned = scan_folios(nr_to_scan, lruvec, sc, type, tier,
+				      list, file_taken);
 		if (scanned)
 			return scanned;
 
@@ -4825,6 +4828,7 @@ static int evict_folios(unsigned long nr_to_scan, struct lruvec *lruvec,
 	int type;
 	int scanned;
 	int reclaimed;
+	unsigned long file_taken = 0;
 	LIST_HEAD(list);
 	LIST_HEAD(clean);
 	struct folio *folio;
@@ -4839,8 +4843,8 @@ static int evict_folios(unsigned long nr_to_scan, struct lruvec *lruvec,
 
 	lruvec_lock_irq(lruvec);
 
-	scanned = isolate_folios(nr_to_scan, lruvec, sc, swappiness, &type, &list);
-
+	scanned = isolate_folios(nr_to_scan, lruvec, sc, swappiness,
+				 &type, &list, &file_taken);
 	scanned += try_to_inc_min_seq(lruvec, swappiness);
 
 	if (evictable_min_seq(lrugen->min_seq, swappiness) + MIN_NR_GENS > lrugen->max_seq)
@@ -4852,6 +4856,14 @@ static int evict_folios(unsigned long nr_to_scan, struct lruvec *lruvec,
 		return scanned;
 retry:
 	reclaimed = shrink_folio_list(&list, pgdat, sc, &stat, false, memcg);
+
+	if (stat.nr_unqueued_dirty && stat.nr_unqueued_dirty == file_taken) {
+		wakeup_flusher_threads(WB_REASON_VMSCAN);
+
+		if (!writeback_throttling_sane(sc))
+			reclaim_throttle(pgdat, VMSCAN_THROTTLE_WRITEBACK);
+	}
+	sc->nr.file_taken += file_taken;
 	sc->nr.unqueued_dirty += stat.nr_unqueued_dirty;
 	sc->nr_reclaimed += reclaimed;
 	trace_mm_vmscan_lru_shrink_inactive(pgdat->node_id,
@@ -5021,27 +5033,9 @@ static bool try_to_shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 	}
 
 	/*
-	 * If too many file cache in the coldest generation can't be evicted
-	 * due to being dirty, wake up the flusher.
+	 * Flusher wakeup and writeback throttling are handled in
+	 * evict_folios() based on per-batch reclaim results.
 	 */
-	if (sc->nr.unqueued_dirty && sc->nr.unqueued_dirty == sc->nr.file_taken) {
-		struct pglist_data *pgdat = lruvec_pgdat(lruvec);
-
-		wakeup_flusher_threads(WB_REASON_VMSCAN);
-
-		/*
-		 * For cgroupv1 dirty throttling is achieved by waking up
-		 * the kernel flusher here and later waiting on folios
-		 * which are in writeback to finish (see shrink_folio_list()).
-		 *
-		 * Flusher may not be able to issue writeback quickly
-		 * enough for cgroupv1 writeback throttling to work
-		 * on a large system.
-		 */
-		if (!writeback_throttling_sane(sc))
-			reclaim_throttle(pgdat, VMSCAN_THROTTLE_WRITEBACK);
-	}
-
 	/* whether this lruvec should be rotated */
 	return nr_to_scan < 0;
 }
