@@ -124,9 +124,14 @@ static int amd64_fetch_size(void)
 	int i;
 	u32 temp;
 	struct aper_size_info_32 *values;
+	struct amd_northbridge *nb;
 
-	dev = node_to_amd_nb(0)->misc;
-	if (dev==NULL)
+	nb = node_to_amd_nb(0);
+	if (!nb)
+		return 0;
+
+	dev = nb->misc;
+	if (!dev)
 		return 0;
 
 	pci_read_config_dword(dev, AMD64_GARTAPERTURECTL, &temp);
