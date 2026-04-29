@@ -194,7 +194,7 @@ on_error:
 
 int trigger_uevent(unsigned int times)
 {
-	int fd, ret;
+	int fd, ret = 0;
 	unsigned int i;
 
 	fd = open(__DEV_FULL, O_RDWR | O_CLOEXEC);
