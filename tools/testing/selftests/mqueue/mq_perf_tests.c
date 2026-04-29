@@ -42,7 +42,7 @@
 
 #include "kselftest.h"
 
-static char *usage =
+static char __attribute__((unused)) *usage =
 "Usage:\n"
 "  %s [-c #[,#..] -f] path\n"
 "\n"
@@ -430,12 +430,10 @@ void *perf_test_thread(void *arg)
 	unsigned int prio_in;
 	int i;
 	clockid_t clock;
-	pthread_t *t;
 	struct timespec res, start, middle, end, send_total, recv_total;
 	unsigned long long nsec;
 	struct test *cur_test;
 
-	t = &cpu_threads[0];
 	printf("\n\tStarted mqueue performance test thread on CPU %d\n",
 	       cpus_to_pin[0]);
 	mq_prio_max = sysconf(_SC_MQ_PRIO_MAX);
