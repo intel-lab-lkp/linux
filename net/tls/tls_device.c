@@ -508,6 +508,8 @@ handle_error:
 			copy = rc;
 
 			if (WARN_ON_ONCE(!sendpage_ok(zc_pfrag.page))) {
+				if (iov_iter_extract_will_pin(iter))
+					unpin_user_page(zc_pfrag.page);
 				iov_iter_revert(iter, copy);
 				rc = -EIO;
 				goto handle_error;

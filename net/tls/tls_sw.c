@@ -1018,6 +1018,8 @@ static int tls_sw_sendmsg_splice(struct sock *sk, struct msghdr *msg,
 			return part ?: -EIO;
 
 		if (WARN_ON_ONCE(!sendpage_ok(page))) {
+			if (iov_iter_extract_will_pin(&msg->msg_iter))
+				unpin_user_page(page);
 			iov_iter_revert(&msg->msg_iter, part);
 			return -EIO;
 		}
