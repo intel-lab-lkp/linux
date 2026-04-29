@@ -324,12 +324,9 @@ int ima_lsm_policy_change(struct notifier_block *nb, unsigned long event,
  */
 extern spinlock_t ima_queue_lock;
 
-struct ima_h_table {
-	atomic_long_t len;	/* number of stored measurements in the list */
-	atomic_long_t violations;
-	struct hlist_head queue[IMA_MEASURE_HTABLE_SIZE];
-};
-extern struct ima_h_table ima_htable;
+extern atomic_long_t ima_num_entries;
+extern atomic_long_t ima_num_violations;
+extern struct hlist_head ima_htable[IMA_MEASURE_HTABLE_SIZE];
 
 static inline unsigned int ima_hash_key(u8 *digest)
 {
