@@ -876,6 +876,20 @@ static int nilfs_ioctl_clean_segments(struct inode *inode, struct file *filp,
 	}
 	nilfs = inode->i_sb->s_fs_info;
 
+	/*
+	 * Validate segment numbers against the filesystem's segment count
+	 * before entering nilfs_clean_segments(), which acquires
+	 * ns_segctor_sem for write.  Catching invalid segnums here avoids
+	 * holding that lock while emitting per-element diagnostics under
+	 * the segment constructor.
+	 */
+	for (n = 0; n < nsegs; n++) {
+		if (((__u64 *)kbufs[4])[n] >= nilfs->ns_nsegments) {
+			ret = -EINVAL;
+			goto out_free_segnums;
+		}
+	}
+
 	for (n = 0; n < 4; n++) {
 		ret = -EINVAL;
 		if (argv[n].v_size != argsz[n])
@@ -928,6 +942,7 @@ static int nilfs_ioctl_clean_segments(struct inode *inode, struct file *filp,
 out_free:
 	while (--n >= 0)
 		kvfree(kbufs[n]);
+out_free_segnums:
 	kfree(kbufs[4]);
 out:
 	mnt_drop_write_file(filp);
