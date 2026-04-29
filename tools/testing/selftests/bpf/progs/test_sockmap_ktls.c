@@ -20,6 +20,8 @@ struct {
 SEC("sk_msg")
 int prog_sk_policy(struct sk_msg_md *msg)
 {
+	if (apply_bytes > 0)
+		bpf_msg_apply_bytes(msg, apply_bytes);
 	if (cork_byte > 0)
 		bpf_msg_cork_bytes(msg, cork_byte);
 	if (push_start > 0 && push_end > 0)

@@ -404,6 +404,60 @@ out:
 	test_sockmap_ktls__destroy(skel);
 }
 
+static void test_sockmap_ktls_tx_apply_cork_uaf(int family, int sotype)
+{
+	int c = -1, p = -1, one = 1, prog_fd, map_fd;
+	struct test_sockmap_ktls *skel;
+	char buf[1500];
+	ssize_t n;
+	int err;
+
+	skel = test_sockmap_ktls__open_and_load();
+	if (!ASSERT_TRUE(skel, "open ktls skel"))
+		return;
+
+	err = create_pair(family, sotype, &c, &p);
+	if (!ASSERT_OK(err, "create_pair()"))
+		goto out;
+
+	prog_fd = bpf_program__fd(skel->progs.prog_sk_policy);
+	map_fd = bpf_map__fd(skel->maps.sock_map);
+
+	err = bpf_prog_attach(prog_fd, map_fd, BPF_SK_MSG_VERDICT, 0);
+	if (!ASSERT_OK(err, "bpf_prog_attach sk msg"))
+		goto out;
+
+	err = bpf_map_update_elem(map_fd, &one, &c, BPF_NOEXIST);
+	if (!ASSERT_OK(err, "bpf_map_update_elem(c)"))
+		goto out;
+
+	/* apply_bytes < send drives tls_split_open_record(); cork_bytes >
+	 * remaining returns -ENOSPC after the split frees the old rec
+	 */
+	skel->bss->apply_bytes = 1000;
+	skel->bss->cork_byte = 800;
+
+	err = init_ktls_pairs(c, p);
+	if (!ASSERT_OK(err, "init_ktls_pairs(c, p)"))
+		goto out;
+
+	memset(buf, 'A', sizeof(buf));
+	n = send(c, buf, sizeof(buf), MSG_DONTWAIT);
+	if (n < 0)
+		ASSERT_TRUE(errno == ENOSPC || errno == EAGAIN, "send errno");
+
+	n = send(c, buf, sizeof(buf), MSG_DONTWAIT);
+	if (n < 0)
+		ASSERT_TRUE(errno == ENOSPC || errno == EAGAIN, "send errno");
+
+out:
+	if (c != -1)
+		close(c);
+	if (p != -1)
+		close(p);
+	test_sockmap_ktls__destroy(skel);
+}
+
 static void test_sockmap_ktls_tx_wrapped_chain(int family, int sotype)
 {
 	int c = -1, p = -1, one = 1, prog_fd, map_fd;
@@ -512,6 +566,8 @@ static void run_ktls_test(int family, int sotype)
 		test_sockmap_ktls_tx_pop(family, sotype);
 	if (test__start_subtest("tls tx wrapped sg chain"))
 		test_sockmap_ktls_tx_wrapped_chain(family, sotype);
+	if (test__start_subtest("tls tx apply cork uaf"))
+		test_sockmap_ktls_tx_apply_cork_uaf(family, sotype);
 }
 
 void test_sockmap_ktls(void)
