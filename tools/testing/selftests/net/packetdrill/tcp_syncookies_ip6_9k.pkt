@@ -1,0 +1,30 @@
+// SPDX-License-Identifier: GPL-2.0
+//
+// Check syncookies.
+//
+// Check we are able to rebuild client sack, wscale and mss options.
+// IPv6 msstab[4] = { 1280 - 60, 1480 - 60, 1500 - 60, 9000 - 60 }
+
+--ip_version=ipv6
+
+`./defaults.sh
+sysctl -q net.ipv4.tcp_syncookies=2
+ip link set dev tun0 mtu 9000
+`
+
+    0 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+   +0 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+   +0 bind(3, ..., ...) = 0
+   +0 listen(3, 10) = 0
+
+   +0 < S 0:0(0) win 32792 <mss 8940,sackOK,TS val 100 ecr 0,nop,wscale 10>
+   +0 > S. 0:0(0) ack 1 <mss 8940,sackOK,TS val 4000 ecr 100,nop,wscale 8>
+ +.01 < . 1:1(0) ack 1 win 1024 <nop,nop,TS val 110 ecr 4000>
+
+   +0 accept(3, ..., ...) = 4
+
+// Check we properly infer from the final packet the other peer wanted 8940 mss, wscale 10 and sackOK
+   +0 %{ assert tcpi_snd_mss == 8928, tcpi_snd_mss }%
+   +0 %{ assert tcpi_snd_wscale = 10, tcpi_snd_wscale }%
+   +0 %{ assert (tcpi_options & TCPI_OPT_WSCALE) != 0, tcpi_options }%
+
