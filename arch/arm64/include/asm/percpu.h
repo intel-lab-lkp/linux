@@ -12,6 +12,7 @@
 #include <asm/stack_pointer.h>
 #include <asm/sysreg.h>
 
+extern unsigned long __per_cpu_local_off;
 static inline void set_my_cpu_offset(unsigned long off)
 {
 	asm volatile(ALTERNATIVE("msr tpidr_el1, %0",
@@ -153,19 +154,21 @@ PERCPU_RET_OP(add, add, ldadd)
  * disabled.
  */
 
+#define local_cpu_ptr(ptr)						\
+({									\
+	__verify_pcpu_ptr(ptr);						\
+	SHIFT_PERCPU_PTR(ptr, __per_cpu_local_off);			\
+})
+
 #define _pcp_protect(op, pcp, ...)					\
 ({									\
-	preempt_disable_notrace();					\
-	op(raw_cpu_ptr(&(pcp)), __VA_ARGS__);				\
-	preempt_enable_notrace();					\
+	op(local_cpu_ptr(&(pcp)), __VA_ARGS__);				\
 })
 
 #define _pcp_protect_return(op, pcp, args...)				\
 ({									\
 	typeof(pcp) __retval;						\
-	preempt_disable_notrace();					\
-	__retval = (typeof(pcp))op(raw_cpu_ptr(&(pcp)), ##args);	\
-	preempt_enable_notrace();					\
+	__retval = (typeof(pcp))op(local_cpu_ptr(&(pcp)), ##args);	\
 	__retval;							\
 })
 
@@ -251,7 +254,7 @@ PERCPU_RET_OP(add, add, ldadd)
 	old__ = o;							\
 	new__ = n;							\
 	preempt_disable_notrace();					\
-	ptr__ = raw_cpu_ptr(&(pcp));					\
+	ptr__ = local_cpu_ptr(&(pcp));					\
 	ret__ = cmpxchg128_local((void *)ptr__, old__, new__);		\
 	preempt_enable_notrace();					\
 	ret__;								\
