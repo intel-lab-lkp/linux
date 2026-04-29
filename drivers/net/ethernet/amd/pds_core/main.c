@@ -437,6 +437,7 @@ static void pdsc_remove(struct pci_dev *pdev)
 		pdsc_auxbus_dev_del(pdsc, pdsc, &pdsc->padev);
 
 		timer_shutdown_sync(&pdsc->wdtimer);
+		pdsc_host_mem_del(pdsc);
 		if (pdsc->wq)
 			destroy_workqueue(pdsc->wq);
 
