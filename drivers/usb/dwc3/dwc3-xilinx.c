@@ -46,6 +46,7 @@ struct dwc3_xlnx;
 
 struct dwc3_xlnx_config {
 	int				(*pltfm_init)(struct dwc3_xlnx *data);
+	bool				no_mem_map;
 };
 
 struct dwc3_xlnx {
@@ -91,6 +92,35 @@ static void dwc3_xlnx_set_coherency(struct dwc3_xlnx *priv_data, u32 coherency_o
 		reg |= XLNX_USB_TRAFFIC_ROUTE_FPD;
 		writel(reg, priv_data->regs + coherency_offset);
 	}
+}
+
+static int dwc3_xlnx_init_versal2(struct dwc3_xlnx *priv_data)
+{
+	struct device		*dev = priv_data->dev;
+	struct reset_control	*crst;
+	int			ret;
+
+	crst = devm_reset_control_get_optional_exclusive(dev, NULL);
+	if (IS_ERR(crst))
+		return dev_err_probe(dev, PTR_ERR(crst),
+				     "failed to get reset signal\n");
+
+	/* assert and deassert reset */
+	ret = reset_control_assert(crst);
+	if (ret < 0)
+		return dev_err_probe(dev, ret, "failed to assert reset\n");
+
+	/*
+	 * PHY databook requires >= 10 ns warm reset assert time; 1 us provides
+	 * safe margin for bus latency variations.
+	 */
+	udelay(1);
+
+	ret = reset_control_deassert(crst);
+	if (ret < 0)
+		return dev_err_probe(dev, ret, "failed to deassert reset\n");
+
+	return 0;
 }
 
 static int dwc3_xlnx_init_versal(struct dwc3_xlnx *priv_data)
@@ -256,6 +286,11 @@ static const struct dwc3_xlnx_config versal_config = {
 	.pltfm_init = dwc3_xlnx_init_versal,
 };
 
+static const struct dwc3_xlnx_config versal2_config = {
+	.pltfm_init = dwc3_xlnx_init_versal2,
+	.no_mem_map = true,
+};
+
 static const struct of_device_id dwc3_xlnx_of_match[] = {
 	{
 		.compatible = "xlnx,zynqmp-dwc3",
@@ -264,6 +299,10 @@ static const struct of_device_id dwc3_xlnx_of_match[] = {
 	{
 		.compatible = "xlnx,versal-dwc3",
 		.data = &versal_config,
+	},
+	{
+		.compatible = "xlnx,versal2-mmi-dwc3",
+		.data = &versal2_config,
 	},
 	{ /* Sentinel */ }
 };
@@ -299,22 +338,27 @@ static int dwc3_xlnx_probe(struct platform_device *pdev)
 	struct dwc3_xlnx		*priv_data;
 	struct device			*dev = &pdev->dev;
 	struct device_node		*np = dev->of_node;
-	void __iomem			*regs;
 	int				ret;
 
 	priv_data = devm_kzalloc(dev, sizeof(*priv_data), GFP_KERNEL);
 	if (!priv_data)
 		return -ENOMEM;
 
-	regs = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(regs))
-		return dev_err_probe(dev, PTR_ERR(regs), "failed to map registers\n");
-
 	priv_data->dwc3_config = device_get_match_data(dev);
 	if (!priv_data->dwc3_config)
 		return dev_err_probe(dev, -ENODEV,
 				     "missing dwc3 platform configuration\n");
-	priv_data->regs = regs;
+
+	if (!priv_data->dwc3_config->no_mem_map) {
+		void __iomem *regs;
+
+		regs = devm_platform_ioremap_resource(pdev, 0);
+		if (IS_ERR(regs))
+			return dev_err_probe(dev, PTR_ERR(regs),
+					     "failed to map registers\n");
+		priv_data->regs = regs;
+	}
+
 	priv_data->dev = dev;
 
 	platform_set_drvdata(pdev, priv_data);
