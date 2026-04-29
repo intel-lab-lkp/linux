@@ -26,6 +26,7 @@
 static struct tpm_digest *digests;
 
 LIST_HEAD(ima_measurements);	/* list of all measurements */
+LIST_HEAD(ima_measurements_staged); /* list of staged measurements */
 #ifdef CONFIG_IMA_KEXEC
 static unsigned long binary_runtime_size[BINARY__LAST];
 #else
@@ -45,11 +46,11 @@ atomic_long_t ima_num_violations = ATOMIC_LONG_INIT(0);
 /* key: inode (before secure-hashing a file) */
 struct hlist_head __rcu *ima_htable;
 
-/* mutex protects atomicity of extending measurement list
+/* mutex protects atomicity of extending and staging measurement list
  * and extending the TPM PCR aggregate. Since tpm_extend can take
  * long (and the tpm driver uses a mutex), we can't use the spinlock.
  */
-static DEFINE_MUTEX(ima_extend_list_mutex);
+DEFINE_MUTEX(ima_extend_list_mutex);
 
 /*
  * Used internally by the kernel to suspend measurements.
@@ -174,12 +175,16 @@ static int ima_add_digest_entry(struct ima_template_entry *entry,
 				lockdep_is_held(&ima_extend_list_mutex));
 
 	atomic_long_inc(&ima_num_entries[BINARY]);
+	atomic_long_inc(&ima_num_entries[BINARY_FULL]);
+
 	if (update_htable) {
 		key = ima_hash_key(entry->digests[ima_hash_algo_idx].digest);
 		hlist_add_head_rcu(&qe->hnext, &htable[key]);
 	}
 
 	ima_update_binary_runtime_size(entry, BINARY);
+	ima_update_binary_runtime_size(entry, BINARY_FULL);
+
 	return 0;
 }
 
@@ -278,6 +283,94 @@ out:
 	integrity_audit_msg(AUDIT_INTEGRITY_PCR, inode, filename,
 			    op, audit_cause, result, audit_info);
 	return result;
+}
+
+int ima_queue_stage(void)
+{
+	int ret = 0;
+
+	mutex_lock(&ima_extend_list_mutex);
+	if (!list_empty(&ima_measurements_staged)) {
+		ret = -EEXIST;
+		goto out_unlock;
+	}
+
+	if (list_empty(&ima_measurements)) {
+		ret = -ENOENT;
+		goto out_unlock;
+	}
+
+	list_replace(&ima_measurements, &ima_measurements_staged);
+	INIT_LIST_HEAD(&ima_measurements);
+
+	atomic_long_set(&ima_num_entries[BINARY_STAGED],
+			atomic_long_read(&ima_num_entries[BINARY]));
+	atomic_long_set(&ima_num_entries[BINARY], 0);
+
+	if (IS_ENABLED(CONFIG_IMA_KEXEC)) {
+		binary_runtime_size[BINARY_STAGED] =
+					binary_runtime_size[BINARY];
+		binary_runtime_size[BINARY] = 0;
+	}
+out_unlock:
+	mutex_unlock(&ima_extend_list_mutex);
+	return ret;
+}
+
+static void ima_queue_delete(struct list_head *head);
+
+int ima_queue_staged_delete_all(void)
+{
+	LIST_HEAD(ima_measurements_trim);
+
+	mutex_lock(&ima_extend_list_mutex);
+	if (list_empty(&ima_measurements_staged)) {
+		mutex_unlock(&ima_extend_list_mutex);
+		return -ENOENT;
+	}
+
+	list_replace(&ima_measurements_staged, &ima_measurements_trim);
+	INIT_LIST_HEAD(&ima_measurements_staged);
+
+	atomic_long_set(&ima_num_entries[BINARY_STAGED], 0);
+
+	if (IS_ENABLED(CONFIG_IMA_KEXEC))
+		binary_runtime_size[BINARY_STAGED] = 0;
+
+	mutex_unlock(&ima_extend_list_mutex);
+
+	ima_queue_delete(&ima_measurements_trim);
+	return 0;
+}
+
+static void ima_queue_delete(struct list_head *head)
+{
+	struct ima_queue_entry *qe, *qe_tmp;
+	unsigned int i;
+
+	list_for_each_entry_safe(qe, qe_tmp, head, later) {
+		/*
+		 * Safe to free template_data here without synchronize_rcu()
+		 * because the only htable reader, ima_lookup_digest_entry(),
+		 * accesses only entry->digests, not template_data. If new
+		 * htable readers are added that access template_data, a
+		 * synchronize_rcu() is required here.
+		 */
+		for (i = 0; i < qe->entry->template_desc->num_fields; i++) {
+			kfree(qe->entry->template_data[i].data);
+			qe->entry->template_data[i].data = NULL;
+			qe->entry->template_data[i].len = 0;
+		}
+
+		list_del(&qe->later);
+
+		/* No leak if condition is false, referenced by ima_htable. */
+		if (IS_ENABLED(CONFIG_IMA_DISABLE_HTABLE)) {
+			kfree(qe->entry->digests);
+			kfree(qe->entry);
+			kfree(qe);
+		}
+	}
 }
 
 int ima_restore_measurement_entry(struct ima_template_entry *entry)
