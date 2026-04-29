@@ -5744,6 +5744,13 @@ static bool exclusive_event_installable(struct perf_event *event,
 
 static void perf_free_addr_filters(struct perf_event *event);
 
+static void perf_put_task_ctxp(struct perf_event *event)
+{
+	if (event->perf_task_ctxp &&
+	    refcount_dec_and_test(&event->perf_task_ctxp->refcount))
+		kfree(event->perf_task_ctxp);
+}
+
 /* vs perf_event_alloc() error */
 static void __free_event(struct perf_event *event)
 {
@@ -5764,6 +5771,9 @@ static void __free_event(struct perf_event *event)
 
 	if (event->attach_state & PERF_ATTACH_TASK_DATA)
 		detach_perf_ctx_data(event);
+
+	if (event->perf_task_ctxp)
+		perf_put_task_ctxp(event);
 
 	if (event->destroy)
 		event->destroy(event);
@@ -11058,8 +11068,13 @@ static void perf_swevent_read(struct perf_event *event)
 static int perf_swevent_add(struct perf_event *event, int flags)
 {
 	struct swevent_htable *swhash = this_cpu_ptr(&swevent_htable);
+	struct perf_task_context *ctxp = event->perf_task_ctxp;
 	struct hw_perf_event *hwc = &event->hw;
 	struct hlist_head *head;
+
+	if (ctxp)
+		local64_set(&hwc->period_left,
+			    local64_read(&ctxp->period_left));
 
 	if (is_sampling_event(event)) {
 		hwc->last_period = hwc->sample_period;
@@ -11080,7 +11095,13 @@ static int perf_swevent_add(struct perf_event *event, int flags)
 
 static void perf_swevent_del(struct perf_event *event, int flags)
 {
+	struct perf_task_context *ctxp = event->perf_task_ctxp;
+
 	hlist_del_rcu(&event->hlist_entry);
+
+	if (ctxp)
+		local64_set(&ctxp->period_left,
+			    local64_read(&event->hw.period_left));
 }
 
 static void perf_swevent_start(struct perf_event *event, int flags)
@@ -12207,11 +12228,16 @@ static enum hrtimer_restart perf_swevent_hrtimer(struct hrtimer *hrtimer)
 
 static void perf_swevent_start_hrtimer(struct perf_event *event)
 {
+	struct perf_task_context *ctxp = event->perf_task_ctxp;
 	struct hw_perf_event *hwc = &event->hw;
 	s64 period;
 
 	if (!is_sampling_event(event))
 		return;
+
+	if (ctxp)
+		local64_set(&hwc->period_left,
+			    local64_read(&ctxp->period_left));
 
 	period = local64_read(&hwc->period_left);
 	if (period) {
@@ -12228,6 +12254,7 @@ static void perf_swevent_start_hrtimer(struct perf_event *event)
 
 static void perf_swevent_cancel_hrtimer(struct perf_event *event)
 {
+	struct perf_task_context *ctxp = event->perf_task_ctxp;
 	struct hw_perf_event *hwc = &event->hw;
 
 	/*
@@ -12242,7 +12269,12 @@ static void perf_swevent_cancel_hrtimer(struct perf_event *event)
 	 */
 	if (is_sampling_event(event) && (hwc->interrupts != MAX_INTERRUPTS)) {
 		ktime_t remaining = hrtimer_get_remaining(&hwc->hrtimer);
+
 		local64_set(&hwc->period_left, ktime_to_ns(remaining));
+
+		if (ctxp)
+			local64_set(&ctxp->period_left,
+				    ktime_to_ns(remaining));
 
 		hrtimer_try_to_cancel(&hwc->hrtimer);
 	}
@@ -13263,6 +13295,41 @@ enabled:
 	account_pmu_sb_event(event);
 }
 
+static struct perf_task_context *
+perf_get_task_ctxp(struct perf_event *event, struct task_struct *task,
+		   bool inherit)
+{
+	struct perf_task_context *ctxp = NULL;
+	struct perf_event_context *ctx;
+	struct perf_event *iter;
+	unsigned long flags;
+
+	ctx = perf_lock_task_context(task, &flags);
+	if (ctx) {
+		list_for_each_entry(iter, &ctx->event_list, event_entry) {
+			if (iter->perf_task_ctxp &&
+			    (iter->owner == current ||
+			     (inherit && !iter->owner)) &&
+			    perf_event_equal_task_ctx(&iter->attr,
+						     &event->attr)) {
+				ctxp = iter->perf_task_ctxp;
+				refcount_inc(&ctxp->refcount);
+				break;
+			}
+		}
+		raw_spin_unlock_irqrestore(&ctx->lock, flags);
+	}
+
+	if (!ctxp) {
+		ctxp = kzalloc_obj(struct perf_task_context);
+		if (!ctxp)
+			return NULL;
+		refcount_set(&ctxp->refcount, 1);
+	}
+
+	return ctxp;
+}
+
 /*
  * Allocate and initialize an event structure
  */
@@ -13348,6 +13415,16 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 		 * pmu before we get a ctx.
 		 */
 		event->hw.target = get_task_struct(task);
+
+		if (attr->sample_period &&
+		    attr->config < PERF_COUNT_SW_MAX &&
+		    (attr->type == PERF_TYPE_SOFTWARE ||
+		     (parent_event && parent_event->perf_task_ctxp))) {
+			event->perf_task_ctxp = perf_get_task_ctxp(event, task,
+							!!parent_event);
+			if (!event->perf_task_ctxp)
+				return ERR_PTR(-ENOMEM);
+		}
 	}
 
 	event->clock = &local_clock;

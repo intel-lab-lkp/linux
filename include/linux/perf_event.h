@@ -829,6 +829,9 @@ struct perf_event {
 	u16				read_size;
 	struct hw_perf_event		hw;
 
+	/* Per-task sampling state for sw events, survives CPU migration */
+	struct perf_task_context	*perf_task_ctxp;
+
 	struct perf_event_context	*ctx;
 	/*
 	 * event->pmu_ctx points to perf_event_pmu_context in which the event
@@ -1206,6 +1209,21 @@ perf_cgroup_from_task(struct task_struct *task, struct perf_event_context *ctx)
 #endif /* CONFIG_CGROUP_PERF */
 
 #ifdef CONFIG_PERF_EVENTS
+
+#define perf_event_equal_task_ctx(a1, a2)	\
+	((a1)->config == (a2)->config &&	\
+	 (a1)->sample_period == (a2)->sample_period)
+
+/**
+ * struct perf_task_context - per-task software event context
+ *
+ * Shared across per-CPU perf_event instances of the same task to
+ * preserve period_left across CPU migrations.
+ */
+struct perf_task_context {
+	refcount_t			refcount;
+	local64_t			period_left;
+};
 
 extern struct perf_event_context *perf_cpu_task_ctx(void);
 
