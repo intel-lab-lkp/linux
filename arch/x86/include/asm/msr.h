@@ -172,7 +172,6 @@ static inline u64 native_read_pmc(int counter)
 #ifdef CONFIG_PARAVIRT_XXL
 #include <asm/paravirt.h>
 #else
-#include <linux/errno.h>
 
 /* Short-circuit the paravirt MSR infrastructure when it is disabled: */
 #define paravirt_read_msr	native_read_msr
