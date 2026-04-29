@@ -347,7 +347,7 @@ static u16 rtw_select_queue(struct net_device *dev, struct sk_buff *skb,
 	if (pmlmepriv->acm_mask != 0)
 		skb->priority = qos_acm(pmlmepriv->acm_mask, skb->priority);
 
-	return rtw_1d_to_queue[skb->priority];
+	return rtw_1d_to_queue[array_index_nospec(skb->priority, ARRAY_SIZE(rtw_1d_to_queue))];
 }
 
 u16 rtw_recv_select_queue(struct sk_buff *skb)
@@ -374,7 +374,7 @@ u16 rtw_recv_select_queue(struct sk_buff *skb)
 		priority = 0;
 	}
 
-	return rtw_1d_to_queue[priority];
+	return rtw_1d_to_queue[array_index_nospec(priority, ARRAY_SIZE(rtw_1d_to_queue))];
 }
 
 static int rtw_ndev_init(struct net_device *dev)
