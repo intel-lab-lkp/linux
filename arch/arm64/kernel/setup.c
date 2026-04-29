@@ -340,7 +340,8 @@ static void __init early_psci_init(void)
 		return;
 	}
 
-	psci_early_init_conduit(conduit);
+	if (!psci_early_init_conduit(conduit))
+		arm64_early_rsi_init();
 }
 
 void __init __no_sanitize_address setup_arch(char **cmdline_p)

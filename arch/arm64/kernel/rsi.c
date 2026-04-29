@@ -138,10 +138,14 @@ static int realm_ioremap_hook(phys_addr_t phys, size_t size, pgprot_t *prot)
 	return 0;
 }
 
-void __init arm64_rsi_init(void)
+static bool rsi_probed = 0;
+
+static void __init rsi_probe(void)
 {
 	if (arm_smccc_1_1_get_conduit() != SMCCC_CONDUIT_SMC)
 		return;
+
+	rsi_probed = true;
 	if (!rsi_version_matches())
 		return;
 	if (WARN_ON(rsi_get_realm_config(&config)))
@@ -157,6 +161,23 @@ void __init arm64_rsi_init(void)
 	arm64_rsi_setup_memory();
 
 	static_branch_enable(&rsi_present);
+}
+
+void __init arm64_early_rsi_init(void)
+{
+	rsi_probe();
+}
+
+void __init arm64_rsi_init(void)
+{
+	if (rsi_probed)
+		return;
+
+	rsi_probe();
+	/*
+	 * TODO: Warn if we don't have BBML2_NOABORT and page mapping is
+	 * not used.
+	 */
 }
 
 static struct platform_device rsi_dev = {
