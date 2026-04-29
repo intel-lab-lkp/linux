@@ -2,6 +2,7 @@
 #ifndef _LINUX_TRACE_PRINTK_H
 #define _LINUX_TRACE_PRINTK_H
 
+#include <linux/compiler.h>
 #include <linux/compiler_attributes.h>
 #include <linux/instruction_pointer.h>
 #include <linux/stddef.h>
@@ -84,14 +85,17 @@ do {									\
  * let gcc optimize the rest.
  */
 
-#define trace_printk(fmt, ...)				\
+#define ___trace_printk(fmt, str, ...)				\
 do {							\
-	char _______STR[] = __stringify((__VA_ARGS__));	\
-	if (sizeof(_______STR) > 3)			\
+	char str[] = __stringify((__VA_ARGS__));	\
+	if (sizeof(str) > 3)			\
 		do_trace_printk(fmt, ##__VA_ARGS__);	\
 	else						\
 		trace_puts(fmt);			\
 } while (0)
+
+#define trace_printk(fmt, ...) \
+	___trace_printk(fmt, __UNIQUE_ID(str), ##__VA_ARGS__)
 
 #define do_trace_printk(fmt, args...)					\
 do {									\
