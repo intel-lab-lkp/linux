@@ -409,6 +409,8 @@ static int exfat_calibrate_blocksize(struct super_block *sb, int logical_sect)
 	}
 
 	if (logical_sect > sb->s_blocksize) {
+		const unsigned long saved_bs = sb->s_blocksize;
+
 		brelse(sbi->boot_bh);
 		sbi->boot_bh = NULL;
 
@@ -423,6 +425,11 @@ static int exfat_calibrate_blocksize(struct super_block *sb, int logical_sect)
 				  sb->s_blocksize);
 			return -EIO;
 		}
+
+		exfat_warn(sb, "blocksize calibrated from device logical block size(%lu) to "
+			   "volume format logical sector size(%d)!\n"
+			   "Other implementations may not be able to handle this volume.",
+			   saved_bs, logical_sect);
 	}
 	return 0;
 }
