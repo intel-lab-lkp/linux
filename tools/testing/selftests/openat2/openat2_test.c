@@ -86,11 +86,11 @@ void test_openat2_struct(void)
 	BUILD_BUG_ON(ARRAY_LEN(misalignments) != NUM_OPENAT2_STRUCT_VARIATIONS);
 	BUILD_BUG_ON(ARRAY_LEN(tests) != NUM_OPENAT2_STRUCT_TESTS);
 
-	for (int i = 0; i < ARRAY_LEN(tests); i++) {
+	for (size_t i = 0; i < ARRAY_LEN(tests); i++) {
 		struct struct_test *test = &tests[i];
 		struct open_how_ext how_ext = test->arg;
 
-		for (int j = 0; j < ARRAY_LEN(misalignments); j++) {
+		for (size_t j = 0; j < ARRAY_LEN(misalignments); j++) {
 			int fd, misalign = misalignments[j];
 			char *fdpath = NULL;
 			bool failed;
@@ -243,7 +243,7 @@ void test_openat2_flags(void)
 
 	BUILD_BUG_ON(ARRAY_LEN(tests) != NUM_OPENAT2_FLAG_TESTS);
 
-	for (int i = 0; i < ARRAY_LEN(tests); i++) {
+	for (size_t i = 0; i < ARRAY_LEN(tests); i++) {
 		int fd, fdflags = -1;
 		char *path, *fdpath = NULL;
 		bool failed = false;
@@ -293,7 +293,7 @@ void test_openat2_flags(void)
 				fdflags |= O_CREAT;
 			if (!(test->how.flags & O_LARGEFILE))
 				fdflags &= ~O_LARGEFILE;
-			failed |= (fdflags != test->how.flags);
+			failed |= (fdflags != (int)test->how.flags);
 		}
 
 		if (failed) {
@@ -323,7 +323,7 @@ next:
 #define NUM_TESTS (NUM_OPENAT2_STRUCT_VARIATIONS * NUM_OPENAT2_STRUCT_TESTS + \
 		   NUM_OPENAT2_FLAG_TESTS)
 
-int main(int argc, char **argv)
+int main()
 {
 	ksft_print_header();
 	ksft_set_plan(NUM_TESTS);
