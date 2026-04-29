@@ -26,7 +26,7 @@ static int ad5686_i2c_read(struct ad5686_state *st, u8 addr)
 			.addr = i2c->addr,
 			.flags = i2c->flags | I2C_M_RD,
 			.len = 2,
-			.buf = (char *)&st->data[0].d16,
+			.buf = (char *)&st->data[1].d16,
 		},
 	};
 	int ret;
@@ -39,7 +39,7 @@ static int ad5686_i2c_read(struct ad5686_state *st, u8 addr)
 	if (ret < 0)
 		return ret;
 
-	return be16_to_cpu(st->data[0].d16);
+	return be16_to_cpu(st->data[1].d16);
 }
 
 static int ad5686_i2c_write(struct ad5686_state *st,
