@@ -73,6 +73,8 @@ extern void *fixmap_remap_fdt(phys_addr_t dt_phys, int *size, pgprot_t prot);
 extern void mark_linear_text_alias_ro(void);
 extern int split_kernel_leaf_mapping(unsigned long start, unsigned long end);
 extern void linear_map_maybe_split_to_ptes(void);
+extern void map_local_percpu_first_chunk(pgd_t *pgdir, unsigned long virt,
+				struct page **pages, unsigned int nr);
 
 /*
  * This check is triggered during the early boot before the cpufeature
