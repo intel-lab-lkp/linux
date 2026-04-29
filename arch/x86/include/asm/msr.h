@@ -181,12 +181,6 @@ static inline u64 native_read_pmc(int counter)
 #define paravirt_write_msr_safe	native_write_msr_safe
 #define paravirt_read_pmc		native_read_pmc
 
-/*
- * Access to machine-specific registers (available on 586 and better only)
- * Note: the rd* operations modify the parameters directly (without using
- * pointer indirection), this allows gcc to optimize better
- */
-
 #endif	/* !CONFIG_PARAVIRT_XXL */
 
 /*
