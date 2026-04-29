@@ -299,8 +299,12 @@ zl3073x_dpll_input_pin_ffo_get(const struct dpll_pin *dpll_pin, void *pin_priv,
 {
 	struct zl3073x_dpll_pin *pin = pin_priv;
 
-	/* Only rx vs tx symbol rate FFO is supported */
-	if (dpll)
+	/* Only nested FFO (pin vs parent DPLL) is supported */
+	if (!dpll)
+		return -ENODATA;
+
+	/* Report FFO only for the active pin */
+	if (pin->operstate != DPLL_PIN_OPERSTATE_ACTIVE)
 		return -ENODATA;
 
 	*ffo = pin->freq_offset;
@@ -1699,37 +1703,27 @@ zl3073x_dpll_pin_phase_offset_check(struct zl3073x_dpll_pin *pin)
 }
 
 /**
- * zl3073x_dpll_pin_ffo_check - check for pin fractional frequency offset change
+ * zl3073x_dpll_pin_ffo_check - check for FFO change on active pin
  * @pin: pin to check
  *
- * Check for the given pin's fractional frequency change.
- *
- * Return: true on fractional frequency offset change, false otherwise
+ * Return: true on change, false otherwise
  */
 static bool
 zl3073x_dpll_pin_ffo_check(struct zl3073x_dpll_pin *pin)
 {
 	struct zl3073x_dpll *zldpll = pin->dpll;
-	struct zl3073x_dev *zldev = zldpll->dev;
-	const struct zl3073x_ref *ref;
-	u8 ref_id;
+	const struct zl3073x_chan *chan;
 	s64 ffo;
 
-	/* Get reference monitor status */
-	ref_id = zl3073x_input_pin_ref_get(pin->id);
-	ref = zl3073x_ref_state_get(zldev, ref_id);
-
-	/* Do not report ffo changes if the reference monitor report errors */
-	if (!zl3073x_ref_is_status_ok(ref))
+	if (pin->operstate != DPLL_PIN_OPERSTATE_ACTIVE)
 		return false;
 
-	/* Compare with previous value */
-	ffo = zl3073x_ref_ffo_get(ref);
-	if (pin->freq_offset != ffo) {
-		dev_dbg(zldev->dev, "%s freq offset changed: %lld -> %lld\n",
-			pin->label, pin->freq_offset, ffo);
-		pin->freq_offset = ffo;
+	chan = zl3073x_chan_state_get(zldpll->dev, zldpll->id);
+	ffo = mul_s64_u64_shr(zl3073x_chan_df_offset_get(chan),
+			      244140625, 36);
 
+	if (pin->freq_offset != ffo) {
+		pin->freq_offset = ffo;
 		return true;
 	}
 
