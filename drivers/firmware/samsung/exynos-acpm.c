@@ -230,6 +230,13 @@ static int acpm_get_rx(struct acpm_chan *achan, const struct acpm_xfer *xfer)
 	rx_front = readl(achan->rx.front);
 	i = readl(achan->rx.rear);
 
+	if (rx_front >= achan->qlen || i >= achan->qlen) {
+		dev_err(achan->acpm->dev,
+			"Invalid RX queue pointers from firmware: front=%u rear=%u qlen=%u\n",
+			rx_front, i, achan->qlen);
+		return -EIO;
+	}
+
 	tx_seqnum = FIELD_GET(ACPM_PROTOCOL_SEQNUM, xfer->txd[0]);
 
 	if (i == rx_front) {
@@ -439,6 +446,14 @@ int acpm_do_xfer(struct acpm_handle *handle, const struct acpm_xfer *xfer)
 
 	scoped_guard(mutex, &achan->tx_lock) {
 		tx_front = readl(achan->tx.front);
+
+		if (tx_front >= achan->qlen) {
+			dev_err(achan->acpm->dev,
+				"Invalid TX front pointer from firmware: %u (qlen: %u)\n",
+				tx_front, achan->qlen);
+			return -EIO;
+		}
+
 		idx = (tx_front + 1) % achan->qlen;
 
 		ret = acpm_wait_for_queue_slots(achan, idx);
@@ -573,6 +588,12 @@ static int acpm_channels_init(struct acpm_info *acpm)
 		achan->acpm = acpm;
 
 		acpm_chan_shmem_get_params(achan, chan_shmem);
+
+		if (!achan->qlen) {
+			dev_err(dev, "Invalid shared memory parameters for channel %d: qlen=%u\n",
+				i, achan->qlen);
+			return -EIO;
+		}
 
 		ret = acpm_achan_alloc_cmds(achan);
 		if (ret)
