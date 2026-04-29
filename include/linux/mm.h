@@ -3412,7 +3412,7 @@ static inline pte_t pte_mkspecial(pte_t pte)
 #ifndef CONFIG_ARCH_SUPPORTS_PMD_PFNMAP
 static inline bool pmd_special(pmd_t pmd)
 {
-	return false;
+	return is_huge_zero_pmd(pmd);
 }
 
 static inline pmd_t pmd_mkspecial(pmd_t pmd)
