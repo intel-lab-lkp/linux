@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/position/ams,as5600.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: ams AS5600 Magnetic Rotary Position Sensor
+
+maintainers:
+  - Muchamad Coirul Anwar <muchamadcoirulanwar@gmail.com>
+
+description: |
+  The ams AS5600 is a 12-bit programmable contactless
+  magnetic rotary position sensor communicating over I2C.
+  The device address is fixed at 0x36.
+
+properties:
+  compatible:
+    const: ams,as5600
+
+  reg:
+    const: 0x36
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        position-sensor@36 {
+            compatible = "ams,as5600";
+            reg = <0x36>;
+        };
+    };
