@@ -3421,6 +3421,9 @@ static const struct pid_entry tgid_base_stuff[] = {
 	ONE("ksm_merging_pages",  S_IRUSR, proc_pid_ksm_merging_pages),
 	ONE("ksm_stat",  S_IRUSR, proc_pid_ksm_stat),
 #endif
+#ifdef CONFIG_PROC_ADDRESS_MASKING
+	ONE("address_mask", S_IRUSR, proc_address_mask),
+#endif
 };
 
 static int proc_tgid_base_readdir(struct file *file, struct dir_context *ctx)
@@ -3754,6 +3757,9 @@ static const struct pid_entry tid_base_stuff[] = {
 #ifdef CONFIG_KSM
 	ONE("ksm_merging_pages",  S_IRUSR, proc_pid_ksm_merging_pages),
 	ONE("ksm_stat",  S_IRUSR, proc_pid_ksm_stat),
+#endif
+#ifdef CONFIG_PROC_ADDRESS_MASKING
+	ONE("address_mask", S_IRUSR, proc_address_mask),
 #endif
 };
 

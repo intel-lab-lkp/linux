@@ -874,4 +874,9 @@ void __noreturn usercopy_abort(const char *name, const char *detail,
 			       unsigned long len);
 #endif
 
+#ifdef CONFIG_PROC_ADDRESS_MASKING
+int proc_address_mask(struct seq_file *s, struct pid_namespace *ns,
+		      struct pid *pid, struct task_struct *tsk);
+#endif
+
 #endif		/* __LINUX_UACCESS_H__ */

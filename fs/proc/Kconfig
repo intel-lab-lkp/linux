@@ -127,3 +127,7 @@ config PROC_PID_ARCH_STATUS
 config PROC_CPU_RESCTRL
 	def_bool n
 	depends on PROC_FS
+
+config PROC_ADDRESS_MASKING
+	def_bool n
+	depends on PROC_FS

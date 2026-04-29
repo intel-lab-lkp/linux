@@ -800,6 +800,24 @@ static long prctl_map_vdso(const struct vdso_image *image, unsigned long addr)
 #define LAM_TAG_BITS		4
 #define LAM_UNTAG_MASK		~GENMASK(60, 57)
 
+#ifdef CONFIG_PROC_ADDRESS_MASKING
+
+int proc_address_mask(struct seq_file *s, struct pid_namespace *ns,
+		      struct pid *pid, struct task_struct *tsk)
+{
+	struct mm_struct *mm;
+
+	mm = get_task_mm(tsk);
+	if (mm) {
+		seq_printf(s, "0x%llx\n", mm->context.untag_mask);
+		mmput(mm);
+	}
+
+	return 0;
+}
+
+#endif
+
 static void enable_lam_func(void *__mm)
 {
 	struct mm_struct *mm = __mm;
