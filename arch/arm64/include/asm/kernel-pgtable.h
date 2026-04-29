@@ -64,8 +64,8 @@
 #define INIT_IDMAP_FDT_PAGES	(EARLY_PAGES(INIT_IDMAP_PGTABLE_LEVELS, 0UL, UL(MAX_FDT_SIZE), 1) - 1)
 #define INIT_IDMAP_FDT_SIZE	((INIT_IDMAP_FDT_PAGES + EARLY_IDMAP_EXTRA_FDT_PAGES) * PAGE_SIZE)
 
-/* The number of segments in the kernel image (text, rodata, inittext, initdata, data+bss) */
-#define KERNEL_SEGMENT_COUNT	5
+/* The number of segments in the kernel image (text, stext, rodata, inittext, initdata, data+bss) */
+#define KERNEL_SEGMENT_COUNT	6
 
 #if SWAPPER_BLOCK_SIZE > SEGMENT_ALIGN
 #define EARLY_SEGMENT_EXTRA_PAGES (KERNEL_SEGMENT_COUNT + 1)
