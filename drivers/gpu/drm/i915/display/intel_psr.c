@@ -2266,6 +2266,7 @@ static void intel_psr_disable_locked(struct intel_dp *intel_dp)
 	intel_dp->psr.psr2_sel_fetch_cff_enabled = false;
 	intel_dp->psr.active_non_psr_pipes = 0;
 	intel_dp->psr.pkg_c_latency_used = 0;
+	intel_dp->psr.dc3co_eligible = false;
 }
 
 /**
@@ -3097,6 +3098,9 @@ void intel_psr_post_plane_update(struct intel_atomic_state *state,
 		 * invalidate -> flip -> flush sequence.
 		 */
 		intel_dp->psr.busy_frontbuffer_bits = 0;
+
+		intel_dp->psr.dc3co_eligible = intel_display_power_dc3co_allowed(display) &&
+			intel_display_power_dc3co_supported(display);
 
 		mutex_unlock(&psr->lock);
 	}
