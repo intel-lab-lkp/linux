@@ -1533,6 +1533,7 @@ config NUMA
 	select OF_NUMA
 	select HAVE_SETUP_PER_CPU_AREA
 	select NEED_PER_CPU_PAGE_FIRST_CHUNK
+	select HAVE_LOCAL_PER_CPU_MAP
 	select USE_PERCPU_NUMA_NODE_ID
 	help
 	  Enable NUMA (Non-Uniform Memory Access) support.
