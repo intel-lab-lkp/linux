@@ -18,14 +18,29 @@
  * VMALLOC range.
  *
  * VMALLOC_START: beginning of the kernel vmalloc space
- * VMALLOC_END: extends to the available space below vmemmap
+ * VMALLOC_END: extends to the space below global percpu area
  */
 #define VMALLOC_START		(MODULES_END)
+#define VMALLOC_END		(PERCPU_START - SZ_8M)
+
+/*
+ * PERCPU range
+ *
+ * PERCPU_START: beginning of global percpu area
+ * PERCPU_END: end of global percpu area
+ * LOCAL_PERCPU_START: beginning of local percpu area
+ * LOCAL_PERCPU_END: end of local percpu area, extend to the available
+ *                   space below vmemap
+ */
+#define PERCPU_SIZE		(2 * PGDIR_SIZE)
+#define PERCPU_START		(PERCPU_END - PERCPU_SIZE)
+#define PERCPU_END		(LOCAL_PERCPU_START)
+#define LOCAL_PERCPU_START	(LOCAL_PERCPU_END - PERCPU_SIZE)
 #if VA_BITS == VA_BITS_MIN
-#define VMALLOC_END		(VMEMMAP_START - SZ_8M)
+#define LOCAL_PERCPU_END	(ALIGN_DOWN(VMEMMAP_START, PGDIR_SIZE))
 #else
 #define VMEMMAP_UNUSED_NPAGES	((_PAGE_OFFSET(vabits_actual) - PAGE_OFFSET) >> PAGE_SHIFT)
-#define VMALLOC_END		(VMEMMAP_START + VMEMMAP_UNUSED_NPAGES * sizeof(struct page) - SZ_8M)
+#define LOCAL_PERCPU_END	(ALIGN_DOWN((VMEMMAP_START + VMEMMAP_UNUSED_NPAGES * sizeof(struct page)), PGDIR_SIZE))
 #endif
 
 #define vmemmap			((struct page *)VMEMMAP_START - (memstart_addr >> PAGE_SHIFT))

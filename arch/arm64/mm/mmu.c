@@ -115,6 +115,10 @@ void arch_sync_kernel_mappings(unsigned long start, unsigned long end)
 	if (!percpu_pgd_setup_done)
 		return;
 
+	/* Don't sync local percpu area page table */
+	if (start >= LOCAL_PERCPU_START && end < LOCAL_PERCPU_END)
+		return;
+
 	addr = start;
 	do {
 		pgd = READ_ONCE(*pgdp);
