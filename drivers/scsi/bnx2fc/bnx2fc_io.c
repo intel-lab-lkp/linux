@@ -242,7 +242,7 @@ struct bnx2fc_cmd_mgr *bnx2fc_cmd_mgr_alloc(struct bnx2fc_hba *hba)
 	}
 
 	cmgr->hba = hba;
-	cmgr->io_bdt_pool = (struct io_bdt **)(cmgr->cmds + num_ios);
+	cmgr->io_bdt_pool = (struct io_bdt *)(cmgr->cmds + num_ios);
 	cmgr->free_list = (struct list_head *)(cmgr->io_bdt_pool + num_ios);
 	cmgr->free_list_lock = (spinlock_t *)(cmgr->free_list + arr_sz);
 
@@ -280,19 +280,10 @@ struct bnx2fc_cmd_mgr *bnx2fc_cmd_mgr_alloc(struct bnx2fc_hba *hba)
 		io_req++;
 	}
 
-	for (i = 0; i < num_ios; i++) {
-		cmgr->io_bdt_pool[i] = kmalloc_obj(struct io_bdt);
-		if (!cmgr->io_bdt_pool[i]) {
-			printk(KERN_ERR PFX "failed to alloc "
-				"io_bdt_pool[%d]\n", i);
-			goto mem_err;
-		}
-	}
-
 	/* Allocate an map fcoe_bdt_ctx structures */
 	bd_tbl_sz = BNX2FC_MAX_BDS_PER_CMD * sizeof(struct fcoe_bd_ctx);
 	for (i = 0; i < num_ios; i++) {
-		bdt_info = cmgr->io_bdt_pool[i];
+		bdt_info = &cmgr->io_bdt_pool[i];
 		bdt_info->bd_tbl = dma_alloc_coherent(&hba->pcidev->dev,
 						      bd_tbl_sz,
 						      &bdt_info->bd_tbl_dma,
@@ -325,19 +316,13 @@ void bnx2fc_cmd_mgr_free(struct bnx2fc_cmd_mgr *cmgr)
 
 	bd_tbl_sz = BNX2FC_MAX_BDS_PER_CMD * sizeof(struct fcoe_bd_ctx);
 	for (i = 0; i < num_ios; i++) {
-		bdt_info = cmgr->io_bdt_pool[i];
+		bdt_info = &cmgr->io_bdt_pool[i];
 		if (bdt_info->bd_tbl) {
 			dma_free_coherent(&hba->pcidev->dev, bd_tbl_sz,
 					    bdt_info->bd_tbl,
 					    bdt_info->bd_tbl_dma);
 			bdt_info->bd_tbl = NULL;
 		}
-	}
-
-	/* Destroy io_bdt pool */
-	for (i = 0; i < num_ios; i++) {
-		kfree(cmgr->io_bdt_pool[i]);
-		cmgr->io_bdt_pool[i] = NULL;
 	}
 
 	for (i = 0; i < num_possible_cpus() + 1; i++)  {
@@ -415,7 +400,7 @@ struct bnx2fc_cmd *bnx2fc_elstm_alloc(struct bnx2fc_rport *tgt, int type)
 
 	/* Bind io_bdt for this io_req */
 	/* Have a static link between io_req and io_bdt_pool */
-	bd_tbl = io_req->bd_tbl = cmd_mgr->io_bdt_pool[xid];
+	bd_tbl = io_req->bd_tbl = &cmd_mgr->io_bdt_pool[xid];
 	bd_tbl->io_req = io_req;
 
 	/* Hold the io_req  against deletion */
@@ -468,7 +453,7 @@ struct bnx2fc_cmd *bnx2fc_cmd_alloc(struct bnx2fc_rport *tgt)
 
 	/* Bind io_bdt for this io_req */
 	/* Have a static link between io_req and io_bdt_pool */
-	bd_tbl = io_req->bd_tbl = cmd_mgr->io_bdt_pool[xid];
+	bd_tbl = io_req->bd_tbl = &cmd_mgr->io_bdt_pool[xid];
 	bd_tbl->io_req = io_req;
 
 	/* Hold the io_req  against deletion */
