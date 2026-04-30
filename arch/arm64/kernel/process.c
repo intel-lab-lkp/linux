@@ -235,12 +235,22 @@ void __show_regs(struct pt_regs *regs)
 	i = top_reg;
 
 	while (i >= 0) {
-		printk("x%-2d: %016llx", i, regs->regs[i]);
+		/*
+		 * Buffer is big enough to hold the output for 3 register
+		 * plus some extra.
+		 */
+		char buf[80];
+		int len;
+
+		len = scnprintf(buf, sizeof(buf), "x%-2d: %016llx",
+				i, regs->regs[i]);
 
 		while (i-- % 3)
-			pr_cont(" x%-2d: %016llx", i, regs->regs[i]);
+			len += scnprintf(buf + len, sizeof(buf) - len,
+					 " x%-2d: %016llx",
+					 i, regs->regs[i]);
 
-		pr_cont("\n");
+		printk("%s\n", buf);
 	}
 }
 
