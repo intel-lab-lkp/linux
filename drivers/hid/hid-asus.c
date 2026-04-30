@@ -143,6 +143,7 @@ struct asus_drvdata {
 	unsigned long battery_next_query;
 	struct work_struct fn_lock_sync_work;
 	bool fn_lock;
+	struct asus_hid_listener fn_lock_listener;
 };
 
 static int asus_report_battery(struct asus_drvdata *, u8 *, int);
@@ -582,6 +583,15 @@ static void asus_sync_fn_lock(struct work_struct *work)
 	container_of(work, struct asus_drvdata, fn_lock_sync_work);
 
 	asus_kbd_set_fn_lock(drvdata->hdev, drvdata->fn_lock);
+}
+
+static void asus_hid_fnlock_set(struct asus_hid_listener *listener, bool enabled)
+{
+	struct asus_drvdata *drvdata =
+		container_of(listener, struct asus_drvdata, fn_lock_listener);
+
+	drvdata->fn_lock = enabled;
+	schedule_work(&drvdata->fn_lock_sync_work);
 }
 
 static void asus_schedule_work(struct asus_kbd_leds *led)
@@ -1313,8 +1323,16 @@ static int asus_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	 * For ROG keyboards, skip rename for consistency and ->input check as
 	 * some devices do not have inputs.
 	 */
-	if (drvdata->quirks & QUIRK_ROG_NKEY_KEYBOARD)
+	if (drvdata->quirks & QUIRK_ROG_NKEY_KEYBOARD) {
+		if (drvdata->quirks & QUIRK_HID_FN_LOCK) {
+			drvdata->fn_lock = true;
+			INIT_WORK(&drvdata->fn_lock_sync_work, asus_sync_fn_lock);
+			asus_kbd_set_fn_lock(hdev, true);
+			drvdata->fn_lock_listener.fnlock_set = asus_hid_fnlock_set;
+			asus_hid_register_listener(&drvdata->fn_lock_listener);
+		}
 		return 0;
+	}
 
 	/*
 	 * Check that input registration succeeded. Checking that
@@ -1356,8 +1374,10 @@ static void asus_remove(struct hid_device *hdev)
 		cancel_work_sync(&drvdata->kbd_backlight->work);
 	}
 
-	if (drvdata->quirks & QUIRK_HID_FN_LOCK)
+	if (drvdata->quirks & QUIRK_HID_FN_LOCK) {
+		asus_hid_unregister_listener(&drvdata->fn_lock_listener);
 		cancel_work_sync(&drvdata->fn_lock_sync_work);
+	}
 
 	hid_hw_stop(hdev);
 }

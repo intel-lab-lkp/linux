@@ -173,10 +173,11 @@ enum asus_ally_mcu_hack {
 	ASUS_WMI_ALLY_MCU_HACK_DISABLED,
 };
 
-/* Used to notify hid-asus when asus-wmi changes keyboard backlight */
+/* Used to notify hid-asus when asus-wmi changes keyboard backlight or fn-lock */
 struct asus_hid_listener {
 	struct list_head list;
 	void (*brightness_set)(struct asus_hid_listener *listener, int brightness);
+	void (*fnlock_set)(struct asus_hid_listener *listener, bool enabled);
 };
 
 enum asus_hid_event {
@@ -196,6 +197,7 @@ int asus_wmi_evaluate_method(u32 method_id, u32 arg0, u32 arg1, u32 *retval);
 int asus_hid_register_listener(struct asus_hid_listener *cdev);
 void asus_hid_unregister_listener(struct asus_hid_listener *cdev);
 int asus_hid_event(enum asus_hid_event event);
+void asus_hid_set_fnlock(bool enabled);
 #else
 static inline void set_ally_mcu_hack(enum asus_ally_mcu_hack status)
 {
@@ -226,6 +228,9 @@ static inline void asus_hid_unregister_listener(struct asus_hid_listener *bdev)
 static inline int asus_hid_event(enum asus_hid_event event)
 {
 	return -ENODEV;
+}
+static inline void asus_hid_set_fnlock(bool enabled)
+{
 }
 #endif
 

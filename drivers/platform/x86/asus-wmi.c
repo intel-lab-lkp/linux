@@ -1758,6 +1758,24 @@ int asus_hid_event(enum asus_hid_event event)
 EXPORT_SYMBOL_GPL(asus_hid_event);
 
 /*
+ * Called by asus-wmi to propagate an fn-lock state change to all registered
+ * hid-asus listeners. Used on platforms where the WMI DEVS path for fn-lock
+ * (0x00100023) is a no-operation and the HID feature report path must be used
+ * instead (e.g. ASUS ProArt P16, USB keyboard product ID 0x19B6).
+ */
+void asus_hid_set_fnlock(bool enabled)
+{
+	struct asus_hid_listener *listener;
+
+	guard(spinlock_irqsave)(&asus_ref.lock);
+	list_for_each_entry(listener, &asus_ref.listeners, list) {
+		if (listener->fnlock_set)
+			listener->fnlock_set(listener, enabled);
+	}
+}
+EXPORT_SYMBOL_GPL(asus_hid_set_fnlock);
+
+/*
  * These functions actually update the LED's, and are called from a
  * workqueue. By doing this as separate work rather than when the LED
  * subsystem asks, we avoid messing with the Asus ACPI stuff during a
@@ -1850,7 +1868,8 @@ static void do_kbd_led_set(struct led_classdev *led_cdev, int value)
 
 	scoped_guard(spinlock_irqsave, &asus_ref.lock) {
 		list_for_each_entry(listener, &asus_ref.listeners, list)
-			listener->brightness_set(listener, asus->kbd_led_wk);
+			if (listener->brightness_set)
+				listener->brightness_set(listener, asus->kbd_led_wk);
 	}
 }
 
@@ -4504,21 +4523,64 @@ static void asus_screenpad_exit(struct asus_wmi *asus)
 
 /* Fn-lock ********************************************************************/
 
+static bool asus_hid_has_fnlock_listener(void)
+{
+	struct asus_hid_listener *listener;
+
+	guard(spinlock_irqsave)(&asus_ref.lock);
+	list_for_each_entry(listener, &asus_ref.listeners, list) {
+		if (listener->fnlock_set)
+			return true;
+	}
+	return false;
+}
+
 static bool asus_wmi_has_fnlock_key(struct asus_wmi *asus)
 {
 	u32 result;
 
+	/* Some platforms have a non-functional WMI path — use HID directly */
+	if (asus->driver->quirks->fnlock_use_hid)
+		return asus_hid_has_fnlock_listener();
+
 	asus_wmi_get_devstate(asus, ASUS_WMI_DEVID_FNLOCK, &result);
 
-	return (result & ASUS_WMI_DSTS_PRESENCE_BIT) &&
-		!(result & ASUS_WMI_FNLOCK_BIOS_DISABLED);
+	if ((result & ASUS_WMI_DSTS_PRESENCE_BIT) &&
+	    !(result & ASUS_WMI_FNLOCK_BIOS_DISABLED))
+		return true;
+
+	/*
+	 * Some platforms (e.g. ASUS ProArt P16) have a non-functional WMI
+	 * DEVS path for fn-lock (DEVS returns One unconditionally with no
+	 * side effects). On these platforms fn-lock is controlled via a HID
+	 * feature report sent directly to the N-Key keyboard. Return true if
+	 * a hid-asus listener with fnlock support has registered, so that
+	 * asus-wmi can manage the fn-lock state and expose the sysfs knob.
+	 */
+	return asus_hid_has_fnlock_listener();
 }
 
 static void asus_wmi_fnlock_update(struct asus_wmi *asus)
 {
 	int mode = asus->fnlock_locked;
+	u32 result;
 
-	asus_wmi_set_devstate(ASUS_WMI_DEVID_FNLOCK, mode, NULL);
+	/* Platform has non-functional WMI DEVS for fn-lock — use HID directly */
+	if (asus->driver->quirks->fnlock_use_hid) {
+		asus_hid_set_fnlock(mode);
+		return;
+	}
+
+	asus_wmi_get_devstate(asus, ASUS_WMI_DEVID_FNLOCK, &result);
+
+	if ((result & ASUS_WMI_DSTS_PRESENCE_BIT) &&
+	    !(result & ASUS_WMI_FNLOCK_BIOS_DISABLED)) {
+		asus_wmi_set_devstate(ASUS_WMI_DEVID_FNLOCK, mode, NULL);
+		return;
+	}
+
+	/* WMI path absent or non-functional — delegate to hid-asus */
+	asus_hid_set_fnlock(mode);
 }
 
 /* WMI events *****************************************************************/
@@ -4699,6 +4761,34 @@ static ssize_t cpufv_store(struct device *dev, struct device_attribute *attr,
 
 static DEVICE_ATTR_WO(cpufv);
 
+static ssize_t fnlock_status_show(struct device *dev,
+				  struct device_attribute *attr, char *buf)
+{
+	struct asus_wmi *asus = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%d\n", asus->fnlock_locked);
+}
+
+static ssize_t fnlock_status_store(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *buf, size_t count)
+{
+	struct asus_wmi *asus = dev_get_drvdata(dev);
+	bool enable;
+	int err;
+
+	err = kstrtobool(buf, &enable);
+	if (err)
+		return err;
+
+	asus->fnlock_locked = enable;
+	asus_wmi_fnlock_update(asus);
+
+	return count;
+}
+
+static DEVICE_ATTR_RW(fnlock_status);
+
 static struct attribute *platform_attributes[] = {
 	&dev_attr_cpufv.attr,
 	&dev_attr_camera.attr,
@@ -4707,6 +4797,7 @@ static struct attribute *platform_attributes[] = {
 	&dev_attr_lid_resume.attr,
 	&dev_attr_als_enable.attr,
 	&dev_attr_fan_boost_mode.attr,
+	&dev_attr_fnlock_status.attr,
 #if IS_ENABLED(CONFIG_ASUS_WMI_DEPRECATED_ATTRS)
 		&dev_attr_charge_mode.attr,
 		&dev_attr_egpu_enable.attr,
@@ -4750,6 +4841,8 @@ static umode_t asus_sysfs_is_visible(struct kobject *kobj,
 		devid = ASUS_WMI_DEVID_ALS_ENABLE;
 	else if (attr == &dev_attr_fan_boost_mode.attr)
 		ok = asus->fan_boost_mode_available;
+	else if (attr == &dev_attr_fnlock_status.attr)
+		ok = asus_wmi_has_fnlock_key(asus);
 
 #if IS_ENABLED(CONFIG_ASUS_WMI_DEPRECATED_ATTRS)
 	if (attr == &dev_attr_charge_mode.attr)
