@@ -12214,6 +12214,12 @@ S:	Supported
 F:	Documentation/devicetree/bindings/i3c/renesas,i3c.yaml
 F:	drivers/i3c/master/renesas-i3c.c
 
+I3C HUB DRIVER FOR REALTEK RTS490X
+M:	zain_zhou <zain_zhou@realsil.com.cn>
+S:	Maintained
+F:	Documentation/devicetree/bindings/i3c/realtek,rts490x-i3c-hub.yaml
+F:	drivers/staging/rts490x/
+
 I3C DRIVER FOR SYNOPSYS DESIGNWARE
 S:	Orphan
 F:	Documentation/devicetree/bindings/i3c/snps,dw-i3c-master.yaml
