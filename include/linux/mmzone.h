@@ -1139,6 +1139,22 @@ struct zone {
 	unsigned int		compact_considered;
 	unsigned int		compact_defer_shift;
 	int			compact_order_failed;
+
+	/*
+	 * Atomic-context SPB evacuation deferral state.
+	 *
+	 * spb_evac_in_flight: bitmap indexed by
+	 *   migratetype * NR_PAGE_ORDERS + order, set on enqueue and
+	 *   cleared by the worker after spb_evacuate_for_order returns.
+	 *   Provides single-flight gating per (migratetype, order).
+	 *
+	 * spb_evac_last: jiffies of the last enqueue per migratetype,
+	 *   used as a 10ms throttle to prevent wakeup storms from
+	 *   concurrent atomic allocations.
+	 */
+	DECLARE_BITMAP(spb_evac_in_flight,
+		       MIGRATE_PCPTYPES * NR_PAGE_ORDERS);
+	unsigned long		spb_evac_last[MIGRATE_PCPTYPES];
 #endif
 
 #if defined CONFIG_COMPACTION || defined CONFIG_CMA
@@ -1552,6 +1568,8 @@ typedef struct pglist_data {
 	struct task_struct *kcompactd;
 	bool proactive_compact_trigger;
 	struct workqueue_struct *evacuate_wq;
+	struct llist_head spb_evac_pending;
+	struct irq_work spb_evac_irq_work;
 #endif
 	/*
 	 * This is a per-node reserve of pages that are not available

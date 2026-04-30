@@ -778,6 +778,8 @@ static struct page *spb_try_alloc_contig(struct zone *zone,
 					gfp_t gfp_mask);
 static bool spb_evacuate_for_order(struct zone *zone, unsigned int order,
 				  int migratetype);
+static void queue_spb_evacuate(struct zone *zone, unsigned int order,
+			       int migratetype);
 #else
 static inline void spb_maybe_start_defrag(struct superpageblock *sb) {}
 static inline bool spb_needs_defrag(struct superpageblock *sb) { return false; }
@@ -792,6 +794,8 @@ static inline bool spb_evacuate_for_order(struct zone *zone, unsigned int order,
 {
 	return false;
 }
+static inline void queue_spb_evacuate(struct zone *zone, unsigned int order,
+				      int migratetype) {}
 #endif
 
 static void spb_update_list(struct superpageblock *sb)
@@ -3773,6 +3777,18 @@ __rmqueue_claim(struct zone *zone, int order, int start_migratetype,
 						&fallback_mt, cat_search[c]);
 			if (!page)
 				continue;
+
+			/*
+			 * About to claim from an empty or clean superpageblock
+			 * for a non-movable allocation -- this taints a fresh
+			 * SPB.  Defer an evacuation pass over the tainted pool
+			 * so subsequent allocations can reclaim freed
+			 * pageblocks instead of repeating this fallback.
+			 */
+			if (cat_search[c] != SB_SEARCH_PREFERRED &&
+			    start_migratetype != MIGRATE_MOVABLE)
+				queue_spb_evacuate(zone, order,
+						   start_migratetype);
 
 			page = try_to_claim_block(zone, page, current_order,
 						  order, start_migratetype,
@@ -8683,6 +8699,168 @@ static void evacuate_pageblock(struct zone *zone, unsigned long start_pfn,
 }
 
 /*
+ * Atomic-context SPB evacuation deferral.
+ *
+ * When an atomic allocation in __rmqueue_claim is about to taint a
+ * clean superpageblock because the tainted pool has no free page at
+ * the requested (order, migratetype), schedule a deferred call to
+ * spb_evacuate_for_order. That frees pageblocks inside tainted SPBs so
+ * subsequent allocations can claim them instead of tainting more clean
+ * SPBs.
+ *
+ * Two-step deferral mirrors the pageblock-evacuate path: irq_work to
+ * leave allocator lock context, then queue_work to reach process
+ * context where spb_evacuate_for_order can sleep in migrate_pages.
+ */
+
+struct spb_evac_request {
+	struct work_struct	work;
+	struct zone		*zone;
+	unsigned int		order;
+	int			migratetype;
+	struct llist_node	free_node;
+};
+
+#define NR_SPB_EVAC_REQUESTS	64
+static struct spb_evac_request spb_evac_pool[NR_SPB_EVAC_REQUESTS];
+static struct llist_head spb_evac_freelist;
+
+static struct spb_evac_request *spb_evac_request_alloc(void)
+{
+	struct llist_node *node;
+
+	node = llist_del_first(&spb_evac_freelist);
+	if (!node)
+		return NULL;
+	return container_of(node, struct spb_evac_request, free_node);
+}
+
+static void spb_evac_request_free(struct spb_evac_request *req)
+{
+	llist_add(&req->free_node, &spb_evac_freelist);
+}
+
+static void spb_evac_work_fn(struct work_struct *work)
+{
+	struct spb_evac_request *req = container_of(work,
+						    struct spb_evac_request,
+						    work);
+	struct zone *zone = req->zone;
+	unsigned int order = req->order;
+	int mt = req->migratetype;
+
+	spb_evacuate_for_order(zone, order, mt);
+
+	/*
+	 * Clearing the in-flight bit lets a future caller hitting the
+	 * same (mt, order) re-enqueue evacuation.  Ordering between this
+	 * worker's SPB state changes and the future caller's
+	 * tainted_pool_has_free walk is provided by zone->lock taken
+	 * inside spb_evacuate_for_order and by the future caller.
+	 */
+	clear_bit(mt * NR_PAGE_ORDERS + order, zone->spb_evac_in_flight);
+	spb_evac_request_free(req);
+}
+
+static void spb_evac_irq_work_fn(struct irq_work *work)
+{
+	pg_data_t *pgdat = container_of(work, pg_data_t,
+					spb_evac_irq_work);
+	struct llist_node *pending;
+	struct spb_evac_request *req, *next;
+
+	if (!pgdat->evacuate_wq)
+		return;
+
+	pending = llist_del_all(&pgdat->spb_evac_pending);
+	llist_for_each_entry_safe(req, next, pending, free_node) {
+		INIT_WORK(&req->work, spb_evac_work_fn);
+		queue_work(pgdat->evacuate_wq, &req->work);
+	}
+}
+
+/*
+ * Walk tainted SPBs to check whether any has a free page at the given
+ * order and migratetype.  When this returns true, a clean-SPB claim is
+ * not pool depletion but a try_to_claim_block over-rejection: skip the
+ * deferred evacuation since it cannot help.
+ */
+static bool tainted_pool_has_free(struct zone *zone, unsigned int order,
+				  int migratetype)
+{
+	struct superpageblock *sb;
+	int full;
+
+	lockdep_assert_held(&zone->lock);
+
+	for (full = 0; full < __NR_SB_FULLNESS; full++) {
+		list_for_each_entry(sb, &zone->spb_lists[SB_TAINTED][full],
+				    list) {
+			struct free_area *fa = &sb->free_area[order];
+
+			if (fa->nr_free &&
+			    !list_empty(&fa->free_list[migratetype]))
+				return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * queue_spb_evacuate - schedule deferred SPB evacuation from atomic context
+ * @zone: zone that just failed to find a free page in the tainted pool
+ * @order: requested allocation order
+ * @migratetype: requested migratetype (UNMOVABLE or RECLAIMABLE only)
+ *
+ * Caller must hold zone->lock; the tainted-pool walk asserts it.
+ *
+ * Single-flight gated per (zone, migratetype, order) and throttled to
+ * one enqueue per 10ms per (zone, migratetype).  Pool exhaustion
+ * silently drops the request; the next caller hitting the same trigger
+ * will retry.
+ */
+static void queue_spb_evacuate(struct zone *zone, unsigned int order,
+			       int migratetype)
+{
+	pg_data_t *pgdat = zone->zone_pgdat;
+	struct spb_evac_request *req;
+	unsigned int bit;
+
+	lockdep_assert_held(&zone->lock);
+
+	if (!pgdat->spb_evac_irq_work.func)
+		return;
+	if (order >= NR_PAGE_ORDERS || migratetype >= MIGRATE_PCPTYPES)
+		return;
+
+	if (time_before(jiffies,
+			zone->spb_evac_last[migratetype] + HZ / 100))
+		return;
+
+	bit = migratetype * NR_PAGE_ORDERS + order;
+	if (test_and_set_bit(bit, zone->spb_evac_in_flight))
+		return;
+
+	if (tainted_pool_has_free(zone, order, migratetype)) {
+		clear_bit(bit, zone->spb_evac_in_flight);
+		return;
+	}
+
+	req = spb_evac_request_alloc();
+	if (!req) {
+		clear_bit(bit, zone->spb_evac_in_flight);
+		return;
+	}
+
+	zone->spb_evac_last[migratetype] = jiffies;
+	req->zone = zone;
+	req->order = order;
+	req->migratetype = migratetype;
+	llist_add(&req->free_node, &pgdat->spb_evac_pending);
+	irq_work_queue(&pgdat->spb_evac_irq_work);
+}
+
+/*
  * Background superpageblock defragmentation.
  *
  * Evacuate movable pageblocks from tainted superpageblocks to consolidate
@@ -9156,7 +9334,12 @@ static void spb_maybe_start_defrag(struct superpageblock *sb)
 
 static int __init pageblock_evacuate_init(void)
 {
-	int nid;
+	int nid, i;
+
+	/* Initialize the global freelist of SPB evacuate requests */
+	init_llist_head(&spb_evac_freelist);
+	for (i = 0; i < NR_SPB_EVAC_REQUESTS; i++)
+		llist_add(&spb_evac_pool[i].free_node, &spb_evac_freelist);
 
 	/* Create a per-pgdat workqueue */
 	for_each_online_node(nid) {
@@ -9170,6 +9353,10 @@ static int __init pageblock_evacuate_init(void)
 			pr_warn("Failed to create evacuate workqueue for node %d\n", nid);
 			continue;
 		}
+
+		init_llist_head(&pgdat->spb_evac_pending);
+		init_irq_work(&pgdat->spb_evac_irq_work,
+			      spb_evac_irq_work_fn);
 
 		/* Initialize per-superpageblock defrag work structs */
 		for (z = 0; z < MAX_NR_ZONES; z++) {
