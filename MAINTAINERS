@@ -20881,6 +20881,7 @@ F:	include/uapi/linux/perf_event.h
 F:	kernel/events/*
 F:	tools/lib/perf/
 F:	tools/perf/
+F:	tools/testing/selftests/perf_events/
 
 PERFORMANCE EVENTS TOOLING ARM64
 R:	John Garry <john.g.garry@oracle.com>
