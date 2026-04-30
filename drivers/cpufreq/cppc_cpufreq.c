@@ -982,8 +982,44 @@ store_energy_performance_preference_val(struct cpufreq_policy *policy,
 	return count;
 }
 
-CPPC_CPUFREQ_ATTR_RW_U64(perf_limited, cppc_get_perf_limited,
-			 cppc_set_perf_limited)
+static ssize_t show_perf_limited(struct cpufreq_policy *policy, char *buf)
+{
+	bool auto_sel_enabled = false;
+	u64 perf_limited;
+	int ret;
+
+	/* Get Autonomous Selection status */
+	ret = cppc_get_auto_sel(policy->cpu, &auto_sel_enabled);
+	if (ret) {
+		if (ret == -EOPNOTSUPP)
+			auto_sel_enabled = false;
+		else
+			return ret;
+	}
+
+	/* Read the Performance Limited register */
+	ret = cppc_get_perf_limited(policy->cpu, &perf_limited);
+	if (ret)
+		return ret;
+
+	/*
+	 * Desired_Excursion is architecturally ignored when Autonomous
+	 * Selection is enabled. Mask it to avoid exposing undefined
+	 * semantics to userspace.
+	 */
+	if (auto_sel_enabled)
+		perf_limited &= ~CPPC_PERF_LIMITED_DESIRED_EXCURSION;
+
+	return sysfs_emit(buf, "%llu\n", perf_limited);
+
+}
+
+static ssize_t store_perf_limited(struct cpufreq_policy *policy,
+				 const char *buf, size_t count)
+{
+	return cppc_cpufreq_sysfs_store_u64(policy->cpu,
+					cppc_set_perf_limited, buf, count);
+}
 
 cpufreq_freq_attr_ro(freqdomain_cpus);
 cpufreq_freq_attr_rw(auto_select);
