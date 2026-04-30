@@ -2220,6 +2220,31 @@ static SVGA3dSurfaceFormat vmw_format_bpp_to_svga(struct vmw_private *vmw,
 	}
 }
 
+static void vmw_dumb_srf_refcount_release(struct ttm_base_object **p_base)
+{
+	struct ttm_base_object *base = *p_base;
+	struct ttm_prime_object *prime;
+	struct vmw_user_surface *user_srf;
+	struct vmw_surface *srf;
+	struct vmw_bo *vbo;
+
+	*p_base = NULL;
+	prime = container_of(base, struct ttm_prime_object, base);
+	WARN_ON_ONCE(prime->dma_buf != NULL);
+	mutex_destroy(&prime->mutex);
+
+	user_srf = container_of(base, struct vmw_user_surface, prime.base);
+	srf = &user_srf->srf;
+
+	vbo = srf->res.guest_memory_bo;
+	if (!vbo)
+		return;
+
+	BUG_ON(!vbo->is_dumb);
+
+	drm_gem_object_put(&vbo->tbo.base);
+}
+
 /**
  * vmw_dumb_create - Create a dumb kms buffer
  *
@@ -2327,12 +2352,12 @@ int vmw_dumb_create(struct drm_file *file_priv,
 	 */
 	struct vmw_user_surface *usurf = container_of(vbo->dumb_surface,
 						struct vmw_user_surface, srf);
-	usurf->prime.base.refcount_release = NULL;
+	usurf->prime.base.refcount_release = vmw_dumb_srf_refcount_release;
 err:
 	if (res)
 		vmw_resource_unreference(&res);
-
-	ttm_ref_object_base_unref(tfile, arg.rep.handle);
+	if (ret)
+		ttm_ref_object_base_unref(tfile, arg.rep.handle);
 
 	return ret;
 }
