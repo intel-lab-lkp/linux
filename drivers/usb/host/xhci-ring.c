@@ -3188,7 +3188,7 @@ static irqreturn_t xhci_irq_handler(struct xhci_interrupter *ir)
 		goto out;
 	}
 
-	if (!(status & STS_EINT)) {
+	if (ir->intr_num == 0 && !(status & STS_EINT)) {
 		ret = IRQ_NONE;
 		goto out;
 	}
@@ -3209,8 +3209,10 @@ static irqreturn_t xhci_irq_handler(struct xhci_interrupter *ir)
 	 * Clear the op reg interrupt status first,
 	 * so we can receive interrupts from other MSI-X interrupters.
 	 * USBSTS bits are write 1 to clear.
+	 * USBSTS.EINT is controller-wide, so only interrupter 0 clears it.
 	 */
-	writel(STS_EINT, &xhci->op_regs->status);
+	if (ir->intr_num == 0)
+		writel(STS_EINT, &xhci->op_regs->status);
 
 	xhci_handle_events(xhci, ir, false);
 out:
