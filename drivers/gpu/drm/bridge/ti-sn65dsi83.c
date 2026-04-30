@@ -525,7 +525,6 @@ static void sn65dsi83_atomic_pre_enable(struct drm_bridge *bridge,
 	struct drm_crtc *crtc;
 	bool lvds_format_24bpp;
 	bool lvds_format_jeida;
-	unsigned int pval;
 	__le16 le16val;
 	u16 val;
 	int ret;
@@ -670,26 +669,6 @@ static void sn65dsi83_atomic_pre_enable(struct drm_bridge *bridge,
 		     mode->vsync_start - mode->vdisplay);
 	regmap_write(ctx->regmap, REG_VID_CHA_TEST_PATTERN, 0x00);
 
-	/* Enable PLL */
-	regmap_write(ctx->regmap, REG_RC_PLL_EN, REG_RC_PLL_EN_PLL_EN);
-	usleep_range(3000, 4000);
-	ret = regmap_read_poll_timeout(ctx->regmap, REG_RC_LVDS_PLL, pval,
-				       pval & REG_RC_LVDS_PLL_PLL_EN_STAT,
-				       1000, 100000);
-	if (ret) {
-		dev_err(ctx->dev, "failed to lock PLL, ret=%i\n", ret);
-		/* On failure, disable PLL again and exit. */
-		regmap_write(ctx->regmap, REG_RC_PLL_EN, 0x00);
-		goto err_add_action;
-	}
-
-	/* Trigger reset after CSR register update. */
-	regmap_write(ctx->regmap, REG_RC_RESET, REG_RC_RESET_SOFT_RESET);
-
-	/* Wait for 10ms after soft reset as specified in datasheet */
-	usleep_range(10000, 12000);
-
-err_add_action:
 	devm_add_action(ctx->dev, sn65dsi83_release_resources, ctx);
 err_exit:
 	drm_bridge_exit(idx);
@@ -700,10 +679,29 @@ static void sn65dsi83_atomic_enable(struct drm_bridge *bridge,
 {
 	struct sn65dsi83 *ctx = bridge_to_sn65dsi83(bridge);
 	unsigned int pval;
-	int idx;
+	int idx, ret;
 
 	if (!drm_bridge_enter(bridge, &idx))
 		return;
+
+	/* Enable PLL */
+	regmap_write(ctx->regmap, REG_RC_PLL_EN, REG_RC_PLL_EN_PLL_EN);
+	usleep_range(3000, 4000);
+	ret = regmap_read_poll_timeout(ctx->regmap, REG_RC_LVDS_PLL, pval,
+				       pval & REG_RC_LVDS_PLL_PLL_EN_STAT,
+				       1000, 100000);
+	if (ret) {
+		dev_err(ctx->dev, "failed to lock PLL, ret=%i\n", ret);
+		/* On failure, disable PLL again and exit. */
+		regmap_write(ctx->regmap, REG_RC_PLL_EN, 0x00);
+		goto out;
+	}
+
+	/* Trigger reset after CSR register update. */
+	regmap_write(ctx->regmap, REG_RC_RESET, REG_RC_RESET_SOFT_RESET);
+
+	/* Wait for 10ms after soft reset as specified in datasheet */
+	usleep_range(10000, 12000);
 
 	/* Clear all errors that got asserted during initialization. */
 	regmap_read(ctx->regmap, REG_IRQ_STAT, &pval);
@@ -724,6 +722,7 @@ static void sn65dsi83_atomic_enable(struct drm_bridge *bridge,
 		sn65dsi83_monitor_start(ctx);
 	}
 
+out:
 	drm_bridge_exit(idx);
 }
 
