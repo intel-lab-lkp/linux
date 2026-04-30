@@ -131,3 +131,38 @@ int resctrl_arch_io_alloc_enable(struct rdt_resource *r, bool enable)
 
 	return 0;
 }
+
+/*
+ * SMP call-function callback: each CPU writes its own MSR_IA32_PQR_PLZA_ASSOC
+ * (AMD PLZA).  Invoked via on_each_cpu_mask() with wait=1 so the on-stack
+ * union pointed at by @arg is safe.
+ */
+static void resctrl_kmode_set_one_amd(void *arg)
+{
+	union msr_pqr_plza_assoc *plza = arg;
+
+	wrmsrl(MSR_IA32_PQR_PLZA_ASSOC, plza->full);
+}
+
+/**
+ * resctrl_arch_configure_kmode() - x86/AMD: program PLZA MSR on a CPU subset
+ * @cpu_mask:	CPUs to receive the update (see on_each_cpu_mask() for online subset).
+ * @closid:	CLOSID field written into the MSR with CLOSID_EN set.
+ * @rmid:	RMID field written into the MSR with RMID_EN set.
+ * @enable:	Value for the PLZA_EN split field.
+ *
+ * Context: Do not call with IRQs off or from IRQ context except as allowed for
+ * on_each_cpu_mask(); see kernel/smp.c.
+ */
+void resctrl_arch_configure_kmode(cpumask_var_t cpu_mask, u32 closid, u32 rmid, bool enable)
+{
+	union msr_pqr_plza_assoc plza = { 0 };
+
+	plza.split.rmid = rmid;
+	plza.split.rmid_en = 1;
+	plza.split.closid = closid;
+	plza.split.closid_en = 1;
+	plza.split.plza_en = enable;
+
+	on_each_cpu_mask(cpu_mask, resctrl_kmode_set_one_amd, &plza, 1);
+}

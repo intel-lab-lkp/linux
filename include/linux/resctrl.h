@@ -712,6 +712,16 @@ bool resctrl_arch_get_io_alloc_enabled(struct rdt_resource *r);
  */
 void resctrl_arch_get_kmode_support(struct resctrl_kmode_cfg *kcfg);
 
+/**
+ * resctrl_arch_configure_kmode() - Program MSR_IA32_PQR_PLZA_ASSOC on CPUs in @cpu_mask
+ * @cpu_mask:	Target CPUs; on_each_cpu_mask() applies the callback on the online subset.
+ * @closid:	CLOSID written to the MSR with CLOSID_EN set.
+ * @rmid:	RMID written to the MSR with RMID_EN set.
+ * @enable:	PLZA_EN field value for this update.
+ */
+void resctrl_arch_configure_kmode(cpumask_var_t cpu_mask, u32 closid, u32 rmid,
+				  bool enable);
+
 extern unsigned int resctrl_rmid_realloc_threshold;
 extern unsigned int resctrl_rmid_realloc_limit;
 
