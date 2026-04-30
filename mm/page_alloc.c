@@ -4123,6 +4123,7 @@ static bool rmqueue_bulk(struct zone *zone, unsigned int order,
 				&zone->spb_lists[SB_TAINTED][full], list) {
 				struct page *page;
 				int found_order = -1;
+				bool claim_pb;
 
 				if (sb->nr_free_pages < pageblock_nr_pages / 4)
 					continue;
@@ -4146,33 +4147,39 @@ static bool rmqueue_bulk(struct zone *zone, unsigned int order,
 					continue;
 
 				/*
-				 * Check that this pageblock isn't already
-				 * owned by another CPU. If it is, two CPUs
-				 * would have PCPBuddy pages from the same
-				 * pageblock, and the PCP merge pass could
-				 * corrupt the other CPU's PCP list.
+				 * Found a free fragment in a tainted SPB. Take
+				 * it from the buddy.
+				 *
+				 * If the source pageblock is unowned, claim it:
+				 * mark our pages PagePCPBuddy and register the
+				 * block on owned_blocks so Pass 0 can recover
+				 * remaining fragments on future refills.
+				 *
+				 * If the source pageblock is already owned by
+				 * some CPU (us or another), take the page as a
+				 * plain non-PCPBuddy fragment — the same way
+				 * Phase 3 / __rmqueue_smallest would. Setting
+				 * PagePCPBuddy here would let two CPUs hold
+				 * PCPBuddy pages from the same pageblock, and
+				 * the PCP merge pass could then corrupt the
+				 * other CPU's PCP list.
+				 *
+				 * Set PB_has_<migratetype> either way (bypasses
+				 * page_del_and_expand which normally does the
+				 * PB_has tracking); idempotent if already set.
 				 */
 				pbd = pfn_to_pageblock(page,
 						       page_to_pfn(page));
-				if (pbd->cpu != 0)
-					continue;
+				claim_pb = (pbd->cpu == 0);
 
-				/*
-				 * Found a free chunk in an unowned pageblock.
-				 * Take it from buddy, claim ownership, and
-				 * set PCPBuddy. Pass 0 will grab remaining
-				 * buddy entries on future refills.
-				 *
-				 * Set PB_has_<migratetype> since we bypass
-				 * page_del_and_expand (which normally does
-				 * PB_has tracking).
-				 */
 				del_page_from_free_list(page, zone,
 							found_order,
 							migratetype);
 				__spb_set_has_type(page, migratetype);
-				set_pcpblock_owner(page, cpu);
-				__SetPagePCPBuddy(page);
+				if (claim_pb) {
+					set_pcpblock_owner(page, cpu);
+					__SetPagePCPBuddy(page);
+				}
 				pcp_enqueue_tail(pcp, page, migratetype,
 						 found_order);
 				refilled += 1 << found_order;
@@ -4180,9 +4187,10 @@ static bool rmqueue_bulk(struct zone *zone, unsigned int order,
 				/*
 				 * Register for Phase 0 recovery so future
 				 * drains from this pageblock can be swept
-				 * back efficiently.
+				 * back efficiently. Only meaningful when we
+				 * actually claimed ownership above.
 				 */
-				if (list_empty(&pbd->cpu_node))
+				if (claim_pb && list_empty(&pbd->cpu_node))
 					list_add(&pbd->cpu_node,
 						 &pcp->owned_blocks);
 
