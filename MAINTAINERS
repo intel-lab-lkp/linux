@@ -1353,23 +1353,6 @@ W:	https://ez.analog.com/linux-software-drivers
 F:	Documentation/devicetree/bindings/iio/adc/adi,ad7292.yaml
 F:	drivers/iio/adc/ad7292.c
 
-ANALOG DEVICES INC AD74115 DRIVER
-M:	Cosmin Tanislav <cosmin.tanislav@analog.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/devicetree/bindings/iio/addac/adi,ad74115.yaml
-F:	drivers/iio/addac/ad74115.c
-
-ANALOG DEVICES INC AD74413R DRIVER
-M:	Cosmin Tanislav <cosmin.tanislav@analog.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/devicetree/bindings/iio/addac/adi,ad74413r.yaml
-F:	drivers/iio/addac/ad74413r.c
-F:	include/dt-bindings/iio/addac/adi,ad74413r.h
-
 ANALOG DEVICES INC AD7625 DRIVER
 M:	Michael Hennerich <Michael.Hennerich@analog.com>
 M:	Nuno Sá <nuno.sa@analog.com>
@@ -1390,15 +1373,6 @@ W:	https://ez.analog.com/linux-software-drivers
 F:	Documentation/devicetree/bindings/iio/adc/adi,ad7780.yaml
 F:	drivers/iio/adc/ad7780.c
 
-ANALOG DEVICES INC AD8366 DRIVER
-M:	Michael Hennerich <Michael.Hennerich@analog.com>
-M:	Rodrigo Alencar <rodrigo.alencar@analog.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/devicetree/bindings/iio/amplifiers/adi,ad8366.yaml
-F:	drivers/iio/amplifiers/ad8366.c
-
 ANALOG DEVICES INC MAX22007 DRIVER
 M:	Janani Sunil <janani.sunil@analog.com>
 L:	linux-iio@vger.kernel.org
@@ -1406,14 +1380,6 @@ S:	Supported
 W:	https://ez.analog.com/linux-software-drivers
 F:	Documentation/devicetree/bindings/iio/dac/adi,max22007.yaml
 F:	drivers/iio/dac/max22007.c
-
-ANALOG DEVICES INC ADA4250 DRIVER
-M:	Antoniu Miclaus <antoniu.miclaus@analog.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/devicetree/bindings/iio/amplifiers/adi,ada4250.yaml
-F:	drivers/iio/amplifiers/ada4250.c
 
 ANALOG DEVICES INC ADGS1408 DRIVER
 M:	Mircea Caprioru <mircea.caprioru@analog.com>
@@ -1429,49 +1395,6 @@ W:	https://ez.analog.com/linux-software-drivers
 F:	Documentation/devicetree/bindings/net/adi,adin.yaml
 F:	drivers/net/phy/adin.c
 
-ANALOG DEVICES INC ADIS DRIVER LIBRARY
-M:	Nuno Sa <nuno.sa@analog.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-F:	drivers/iio/imu/adis.c
-F:	drivers/iio/imu/adis_buffer.c
-F:	drivers/iio/imu/adis_trigger.c
-F:	include/linux/iio/imu/adis.h
-
-ANALOG DEVICES INC ADIS16460 DRIVER
-M:	Dragos Bogdan <dragos.bogdan@analog.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/devicetree/bindings/iio/imu/adi,adis16460.yaml
-F:	drivers/iio/imu/adis16460.c
-
-ANALOG DEVICES INC ADIS16475 DRIVER
-M:	Nuno Sa <nuno.sa@analog.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/devicetree/bindings/iio/imu/adi,adis16475.yaml
-F:	drivers/iio/imu/adis16475.c
-
-ANALOG DEVICES INC ADIS16550 DRIVER
-M:	Nuno Sa <nuno.sa@analog.com>
-M:	Ramona Gradinariu <ramona.gradinariu@analog.com>
-M:	Antoniu Miclaus <antoniu.miclaus@analog.com>
-M:	Robert Budai <robert.budai@analog.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/devicetree/bindings/iio/imu/adi,adis16550.yaml
-
-ANALOG DEVICES INC ADL8113 DRIVER
-M:	Antoniu Miclaus <antoniu.miclaus@analog.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/devicetree/bindings/iio/amplifiers/adi,adl8113.yaml
-F:	drivers/iio/amplifiers/adl8113.c
-
 ANALOG DEVICES INC ADM1177 DRIVER
 M:	Michael Hennerich <Michael.Hennerich@analog.com>
 L:	linux-hwmon@vger.kernel.org
@@ -1479,14 +1402,6 @@ S:	Supported
 W:	https://ez.analog.com/linux-software-drivers
 F:	Documentation/devicetree/bindings/hwmon/adi,adm1177.yaml
 F:	drivers/hwmon/adm1177.c
-
-ANALOG DEVICES INC ADMV8818 DRIVER
-M:	Antoniu Miclaus <antoniu.miclaus@analog.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/devicetree/bindings/iio/filter/adi,admv8818.yaml
-F:	drivers/iio/filter/admv8818.c
 
 ANALOG DEVICES INC ADP5055 DRIVER
 M:	Alexis Czezar Torreno <alexisczezar.torreno@analog.com>
