@@ -3252,13 +3252,15 @@ static void __free_frozen_pages(struct page *page, unsigned int order,
 		cache_cpu = raw_smp_processor_id();
 
 	pcp = per_cpu_ptr(zone->per_cpu_pageset, cache_cpu);
-	if (unlikely(fpi_flags & FPI_TRYLOCK) || !in_task()) {
-		if (!spin_trylock_irqsave(&pcp->lock, UP_flags)) {
-			free_one_page(zone, page, pfn, order, fpi_flags);
-			return;
-		}
-	} else {
-		spin_lock_irqsave(&pcp->lock, UP_flags);
+	/*
+	 * Always use trylock: callers may hold locks (e.g. xa_lock via
+	 * slab/stack_depot) that are also taken in hardirq context, and
+	 * pcp->lock is acquired with IRQs enabled on the allocation side.
+	 * A blocking lock here would create an ABBA deadlock potential.
+	 */
+	if (!spin_trylock_irqsave(&pcp->lock, UP_flags)) {
+		free_one_page(zone, page, pfn, order, fpi_flags);
+		return;
 	}
 
 	if (unlikely(pcp->flags & PCPF_CPU_DEAD)) {
