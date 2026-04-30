@@ -77,6 +77,13 @@ static void rdtgroup_destroy_root(void);
 struct dentry *debugfs_resctrl;
 
 /*
+ * Global kernel-mode resctrl policy: hardware-supported and effective modes
+ * (see struct resctrl_kmode_cfg) and the rdtgroup backing global-assign modes.
+ * Initialized from resctrl_kmode_init() during resctrl_init().
+ */
+static struct resctrl_kmode_cfg resctrl_kcfg;
+
+/*
  * Memory bandwidth monitoring event to use for the default CTRL_MON group
  * and each new CTRL_MON group created by the user.  Only relevant when
  * the filesystem is mounted with the "mba_MBps" option so it does not
@@ -2202,6 +2209,23 @@ static void io_alloc_init(void)
 		resctrl_file_fflags_init("io_alloc_cbm",
 					 RFTYPE_CTRL_INFO | RFTYPE_RES_CACHE);
 	}
+}
+
+/*
+ * Baseline the global kernel-mode resctrl configuration at boot.
+ *
+ * Initialise both the supported (kmode) and effective (kmode_cur) policy
+ * with BIT(INHERIT_CTRL_AND_MON), point k_rdtgrp at the default resource
+ * group, and let the arch hook OR in any additional modes the platform
+ * advertises (e.g. on x86, AMD PLZA adds the two global-assign modes).
+ */
+static void resctrl_kmode_init(void)
+{
+	resctrl_kcfg.kmode = BIT(INHERIT_CTRL_AND_MON);
+	resctrl_kcfg.kmode_cur = BIT(INHERIT_CTRL_AND_MON);
+	resctrl_kcfg.k_rdtgrp = &rdtgroup_default;
+
+	resctrl_arch_get_kmode_support(&resctrl_kcfg);
 }
 
 void resctrl_file_fflags_init(const char *config, unsigned long fflags)
@@ -4553,6 +4577,8 @@ int resctrl_init(void)
 	thread_throttle_mode_init();
 
 	io_alloc_init();
+
+	resctrl_kmode_init();
 
 	ret = resctrl_l3_mon_resource_init();
 	if (ret)
