@@ -24,6 +24,7 @@
 #include <linux/psp-sev.h>
 #include <linux/miscdevice.h>
 #include <linux/capability.h>
+#include <linux/firmware.h>
 
 #define SEV_CMDRESP_CMD			GENMASK(26, 16)
 #define SEV_CMD_COMPLETE		BIT(1)
@@ -66,6 +67,8 @@ struct sev_device {
 
 	struct tsm_dev *tsmdev;
 	struct sev_tio_status *tio_status;
+
+	struct fw_upload *fwl;
 };
 
 int sev_dev_init(struct psp_device *psp);
