@@ -5885,9 +5885,20 @@ try_this_zone:
 	 * first: allow steal/claim from tainted SPBs only. This avoids
 	 * tainting clean SPBs while still finding pages in tainted ones.
 	 * Only drop NOFRAGMENT entirely if that also fails.
+	 *
+	 * Exception: callers that explicitly opted into failure with
+	 * __GFP_NORETRY have a fallback path of their own (a smaller
+	 * order, a different cache, returning NULL from a best-effort
+	 * cache refill, etc.). Tainting a clean superpageblock is a
+	 * lasting cost that outlives this allocation; it is not justified
+	 * to absorb it just to satisfy a caller that already has a
+	 * cheaper escape hatch. Return NULL and let the caller's fallback
+	 * run instead.
 	 */
 	if (no_fallback && !defrag_mode &&
 	    !(gfp_mask & __GFP_DIRECT_RECLAIM)) {
+		if (gfp_mask & __GFP_NORETRY)
+			return NULL;
 		if (!(alloc_flags & ALLOC_NOFRAG_TAINTED_OK)) {
 			alloc_flags |= ALLOC_NOFRAG_TAINTED_OK;
 			goto retry;
