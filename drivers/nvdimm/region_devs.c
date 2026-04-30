@@ -905,11 +905,10 @@ void nd_region_advance_seeds(struct nd_region *nd_region, struct device *dev)
  * @nd_region: region id and number of lanes possible
  *
  * A lane correlates to a BLK-data-window and/or a log slot in the BTT.
- * We optimize for the common case where there are 256 lanes, one
- * per-cpu.  For larger systems we need to lock to share lanes.  For now
- * this implementation assumes the cost of maintaining an allocator for
- * free lanes is on the order of the lock hold time, so it implements a
- * static lane = cpu % num_lanes mapping.
+ * Lanes are shared across CPUs using a static lane = cpu % num_lanes
+ * mapping, with a per-lane spinlock to serialize access when multiple
+ * tasks share a lane (including when preemption causes multiple tasks
+ * to run on the same CPU).
  *
  * In the case of a BTT instance on top of a BLK namespace a lane may be
  * acquired recursively.  We lock on the first instance.
@@ -920,19 +919,26 @@ void nd_region_advance_seeds(struct nd_region *nd_region, struct device *dev)
 unsigned int nd_region_acquire_lane(struct nd_region *nd_region)
 {
 	unsigned int cpu, lane;
+	struct nd_percpu_lane *ndl;
 
 	migrate_disable();
 	cpu = smp_processor_id();
-	if (nd_region->num_lanes < nr_cpu_ids) {
-		struct nd_percpu_lane *ndl_lock, *ndl_count;
-
+	if (nd_region->num_lanes < nr_cpu_ids)
 		lane = cpu % nd_region->num_lanes;
-		ndl_count = per_cpu_ptr(nd_region->lane, cpu);
-		ndl_lock = per_cpu_ptr(nd_region->lane, lane);
-		if (ndl_count->count++ == 0)
-			spin_lock(&ndl_lock->lock);
-	} else
+	else
 		lane = cpu;
+
+	/*
+	 * migrate_disable() keeps the lane stable, but does not prevent
+	 * preemption. Only the owning task may recurse without taking the
+	 * lock.
+	 */
+	ndl = per_cpu_ptr(nd_region->lane, lane);
+	if (READ_ONCE(ndl->owner) != current) {
+		spin_lock_bh(&ndl->lock);
+		WRITE_ONCE(ndl->owner, current);
+	}
+	ndl->count++;
 
 	return lane;
 }
@@ -940,15 +946,17 @@ EXPORT_SYMBOL(nd_region_acquire_lane);
 
 void nd_region_release_lane(struct nd_region *nd_region, unsigned int lane)
 {
-	if (nd_region->num_lanes < nr_cpu_ids) {
-		unsigned int cpu = smp_processor_id();
-		struct nd_percpu_lane *ndl_lock, *ndl_count;
+	struct nd_percpu_lane *ndl = per_cpu_ptr(nd_region->lane, lane);
 
-		ndl_count = per_cpu_ptr(nd_region->lane, cpu);
-		ndl_lock = per_cpu_ptr(nd_region->lane, lane);
-		if (--ndl_count->count == 0)
-			spin_unlock(&ndl_lock->lock);
+	if (WARN_ON_ONCE(READ_ONCE(ndl->owner) != current))
+		goto out;
+
+	if (--ndl->count == 0) {
+		WRITE_ONCE(ndl->owner, NULL);
+		spin_unlock_bh(&ndl->lock);
 	}
+
+out:
 	migrate_enable();
 }
 EXPORT_SYMBOL(nd_region_release_lane);
