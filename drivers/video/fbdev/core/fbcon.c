@@ -2602,8 +2602,9 @@ void fbcon_suspended(struct fb_info *info)
 		return;
 	vc = vc_cons[par->currcon].d;
 
-	/* Clear cursor, restore saved data */
-	fbcon_cursor(vc, false);
+	/* Don't need to clear cursor and restore saved data in graphic mode */
+	if (vc->vc_mode != KD_GRAPHICS)
+		fbcon_cursor(vc, false);
 }
 
 void fbcon_resumed(struct fb_info *info)
@@ -2615,7 +2616,9 @@ void fbcon_resumed(struct fb_info *info)
 		return;
 	vc = vc_cons[par->currcon].d;
 
-	update_screen(vc);
+	/* Graphics mode is managed by userspace */
+	if (vc->vc_mode != KD_GRAPHICS)
+		update_screen(vc);
 }
 
 static void fbcon_modechanged(struct fb_info *info)
