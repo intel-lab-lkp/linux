@@ -1337,7 +1337,6 @@ static void bnx2fc_hba_destroy(struct bnx2fc_hba *hba)
 		bnx2fc_cmd_mgr_free(hba->cmd_mgr);
 		hba->cmd_mgr = NULL;
 	}
-	kfree(hba->tgt_ofld_list);
 	bnx2fc_unbind_pcidev(hba);
 	kfree(hba);
 }
@@ -1356,7 +1355,7 @@ static struct bnx2fc_hba *bnx2fc_hba_create(struct cnic_dev *cnic)
 	struct fcoe_capabilities *fcoe_cap;
 	int rc;
 
-	hba = kzalloc_obj(*hba);
+	hba = kzalloc_flex(*hba, tgt_ofld_list, BNX2FC_NUM_MAX_SESS);
 	if (!hba) {
 		printk(KERN_ERR PFX "Unable to allocate hba structure\n");
 		return NULL;
@@ -1380,19 +1379,12 @@ static struct bnx2fc_hba *bnx2fc_hba_create(struct cnic_dev *cnic)
 	hba->phys_dev = cnic->netdev;
 	hba->next_conn_id = 0;
 
-	hba->tgt_ofld_list =
-		kzalloc_objs(struct bnx2fc_rport *, BNX2FC_NUM_MAX_SESS);
-	if (!hba->tgt_ofld_list) {
-		printk(KERN_ERR PFX "Unable to allocate tgt offload list\n");
-		goto tgtofld_err;
-	}
-
 	hba->num_ofld_sess = 0;
 
 	hba->cmd_mgr = bnx2fc_cmd_mgr_alloc(hba);
 	if (!hba->cmd_mgr) {
 		printk(KERN_ERR PFX "em_config:bnx2fc_cmd_mgr_alloc failed\n");
-		goto cmgr_err;
+		goto tgtofld_err;
 	}
 	fcoe_cap = &hba->fcoe_cap;
 
@@ -1416,8 +1408,6 @@ static struct bnx2fc_hba *bnx2fc_hba_create(struct cnic_dev *cnic)
 
 	return hba;
 
-cmgr_err:
-	kfree(hba->tgt_ofld_list);
 tgtofld_err:
 	bnx2fc_unbind_pcidev(hba);
 bind_err:

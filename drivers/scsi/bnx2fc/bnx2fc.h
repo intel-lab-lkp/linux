@@ -224,9 +224,6 @@ struct bnx2fc_hba {
 	char *dummy_buffer;
 	dma_addr_t dummy_buf_dma;
 
-	/* Active list of offloaded sessions */
-	struct bnx2fc_rport **tgt_ofld_list;
-
 	/* statistics */
 	struct bnx2fc_fw_stats bfw_stats;
 	struct fcoe_statistics_params prev_stats;
@@ -246,6 +243,9 @@ struct bnx2fc_hba {
 	struct list_head vports;
 
 	char chip_num[BCM_CHIP_LEN];
+
+	/* Active list of offloaded sessions */
+	struct bnx2fc_rport *tgt_ofld_list[];
 };
 
 struct bnx2fc_interface {
