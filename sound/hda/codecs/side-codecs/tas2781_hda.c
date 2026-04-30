@@ -241,6 +241,45 @@ int tas2781_save_calibration(struct tas2781_hda *hda)
 }
 EXPORT_SYMBOL_NS_GPL(tas2781_save_calibration, "SND_HDA_SCODEC_TAS2781");
 
+void tas2781_hda_fw_request_init(struct tas2781_hda *tas_hda)
+{
+	WRITE_ONCE(tas_hda->fw_cancel, false);
+	init_completion(&tas_hda->fw_done);
+	complete_all(&tas_hda->fw_done);
+}
+EXPORT_SYMBOL_NS_GPL(tas2781_hda_fw_request_init,
+		     "SND_HDA_SCODEC_TAS2781");
+
+void tas2781_hda_fw_request_start(struct tas2781_hda *tas_hda)
+{
+	WRITE_ONCE(tas_hda->fw_cancel, false);
+	reinit_completion(&tas_hda->fw_done);
+}
+EXPORT_SYMBOL_NS_GPL(tas2781_hda_fw_request_start,
+		     "SND_HDA_SCODEC_TAS2781");
+
+void tas2781_hda_fw_request_done(struct tas2781_hda *tas_hda)
+{
+	complete_all(&tas_hda->fw_done);
+}
+EXPORT_SYMBOL_NS_GPL(tas2781_hda_fw_request_done,
+		     "SND_HDA_SCODEC_TAS2781");
+
+void tas2781_hda_fw_request_cancel(struct tas2781_hda *tas_hda)
+{
+	WRITE_ONCE(tas_hda->fw_cancel, true);
+	wait_for_completion(&tas_hda->fw_done);
+}
+EXPORT_SYMBOL_NS_GPL(tas2781_hda_fw_request_cancel,
+		     "SND_HDA_SCODEC_TAS2781");
+
+bool tas2781_hda_fw_request_cancelled(struct tas2781_hda *tas_hda)
+{
+	return READ_ONCE(tas_hda->fw_cancel);
+}
+EXPORT_SYMBOL_NS_GPL(tas2781_hda_fw_request_cancelled,
+		     "SND_HDA_SCODEC_TAS2781");
+
 void tas2781_hda_remove(struct device *dev,
 	const struct component_ops *ops)
 {

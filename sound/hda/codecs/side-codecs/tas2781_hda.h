@@ -7,6 +7,7 @@
 #ifndef __TAS2781_HDA_H__
 #define __TAS2781_HDA_H__
 
+#include <linux/completion.h>
 #include <sound/asound.h>
 
 /* Flag of calibration registers address. */
@@ -59,13 +60,20 @@ struct tas2781_hda {
 	struct snd_kcontrol *dsp_prog_ctl;
 	struct snd_kcontrol *dsp_conf_ctl;
 	struct snd_kcontrol *prof_ctl;
+	struct completion fw_done;
 	enum device_catlog_id catlog_id;
 	void *hda_priv;
+	bool fw_cancel;
 };
 
 extern const efi_guid_t tasdev_fct_efi_guid[];
 
 int tas2781_save_calibration(struct tas2781_hda *p);
+void tas2781_hda_fw_request_init(struct tas2781_hda *tas_hda);
+void tas2781_hda_fw_request_start(struct tas2781_hda *tas_hda);
+void tas2781_hda_fw_request_done(struct tas2781_hda *tas_hda);
+void tas2781_hda_fw_request_cancel(struct tas2781_hda *tas_hda);
+bool tas2781_hda_fw_request_cancelled(struct tas2781_hda *tas_hda);
 void tas2781_hda_remove(struct device *dev,
 	const struct component_ops *ops);
 int tasdevice_info_profile(struct snd_kcontrol *kctl,

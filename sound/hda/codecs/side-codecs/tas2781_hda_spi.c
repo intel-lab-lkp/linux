@@ -538,13 +538,18 @@ static void tas2781_hda_remove_controls(struct tas2781_hda *tas_hda)
 	struct tas2781_hda_spi_priv *h_priv = tas_hda->hda_priv;
 
 	snd_ctl_remove(codec->card, tas_hda->dsp_prog_ctl);
+	tas_hda->dsp_prog_ctl = NULL;
 
 	snd_ctl_remove(codec->card, tas_hda->dsp_conf_ctl);
+	tas_hda->dsp_conf_ctl = NULL;
 
-	for (int i = ARRAY_SIZE(h_priv->snd_ctls) - 1; i >= 0; i--)
+	for (int i = ARRAY_SIZE(h_priv->snd_ctls) - 1; i >= 0; i--) {
 		snd_ctl_remove(codec->card, h_priv->snd_ctls[i]);
+		h_priv->snd_ctls[i] = NULL;
+	}
 
 	snd_ctl_remove(codec->card, tas_hda->prof_ctl);
+	tas_hda->prof_ctl = NULL;
 }
 
 static int tas2781_hda_spi_prf_ctl(struct tas2781_hda *h)
@@ -558,9 +563,11 @@ static int tas2781_hda_spi_prf_ctl(struct tas2781_hda *h)
 	tas2781_prof_ctl.name = name;
 	h->prof_ctl = snd_ctl_new1(&tas2781_prof_ctl, p);
 	rc = snd_ctl_add(c->card, h->prof_ctl);
-	if (rc)
+	if (rc) {
 		dev_err(p->dev, "Failed to add KControl: %s, rc = %d\n",
 			tas2781_prof_ctl.name, rc);
+		h->prof_ctl = NULL;
+	}
 	return rc;
 }
 
@@ -580,6 +587,7 @@ static int tas2781_hda_spi_snd_ctls(struct tas2781_hda *h)
 	if (rc) {
 		dev_err(p->dev, "Failed to add KControl: %s, rc = %d\n",
 			tas2781_snd_ctls[i].name, rc);
+		h_priv->snd_ctls[i] = NULL;
 		return rc;
 	}
 	i++;
@@ -590,6 +598,7 @@ static int tas2781_hda_spi_snd_ctls(struct tas2781_hda *h)
 	if (rc) {
 		dev_err(p->dev, "Failed to add KControl: %s, rc = %d\n",
 			tas2781_snd_ctls[i].name, rc);
+		h_priv->snd_ctls[i] = NULL;
 		return rc;
 	}
 	i++;
@@ -600,6 +609,7 @@ static int tas2781_hda_spi_snd_ctls(struct tas2781_hda *h)
 	if (rc) {
 		dev_err(p->dev, "Failed to add KControl: %s, rc = %d\n",
 			tas2781_snd_ctls[i].name, rc);
+		h_priv->snd_ctls[i] = NULL;
 	}
 	return rc;
 }
@@ -619,6 +629,7 @@ static int tas2781_hda_spi_dsp_ctls(struct tas2781_hda *h)
 	if (rc) {
 		dev_err(p->dev, "Failed to add KControl: %s, rc = %d\n",
 			tas2781_dsp_ctls[i].name, rc);
+		h->dsp_prog_ctl = NULL;
 		return rc;
 	}
 	i++;
@@ -629,6 +640,7 @@ static int tas2781_hda_spi_dsp_ctls(struct tas2781_hda *h)
 	if (rc) {
 		dev_err(p->dev, "Failed to add KControl: %s, rc = %d\n",
 			tas2781_dsp_ctls[i].name, rc);
+		h->dsp_conf_ctl = NULL;
 	}
 
 	return rc;
@@ -643,6 +655,9 @@ static void tasdev_fw_ready(const struct firmware *fmw, void *context)
 
 	guard(pm_runtime_active_auto)(tas_priv->dev);
 	guard(mutex)(&tas_priv->codec_lock);
+
+	if (tas2781_hda_fw_request_cancelled(tas_hda))
+		goto out;
 
 	ret = tasdevice_rca_parser(tas_priv, fmw);
 	if (ret)
@@ -698,6 +713,7 @@ static void tasdev_fw_ready(const struct firmware *fmw, void *context)
 	tas2781_save_calibration(tas_hda);
 out:
 	release_firmware(fmw);
+	tas2781_hda_fw_request_done(tas_hda);
 }
 
 static int tas2781_hda_bind(struct device *dev, struct device *master,
@@ -724,10 +740,13 @@ static int tas2781_hda_bind(struct device *dev, struct device *master,
 
 	strscpy(comp->name, dev_name(dev), sizeof(comp->name));
 
+	tas2781_hda_fw_request_start(tas_hda);
 	ret = tascodec_spi_init(tas_hda->priv, codec, THIS_MODULE,
 		tasdev_fw_ready);
 	if (!ret)
 		comp->playback_hook = tas2781_hda_playback_hook;
+	else
+		tas2781_hda_fw_request_done(tas_hda);
 
 	/* Only HP Laptop support SPI-based TAS2781 */
 	tas_hda->catlog_id = HP;
@@ -749,6 +768,8 @@ static void tas2781_hda_unbind(struct device *dev, struct device *master,
 		memset(comp->name, 0, sizeof(comp->name));
 		comp->playback_hook = NULL;
 	}
+
+	tas2781_hda_fw_request_cancel(tas_hda);
 
 	tas2781_hda_remove_controls(tas_hda);
 
@@ -780,6 +801,7 @@ static int tas2781_hda_spi_probe(struct spi_device *spi)
 		return -ENOMEM;
 
 	tas_hda->hda_priv = hda_priv;
+	tas2781_hda_fw_request_init(tas_hda);
 	spi->max_speed_hz = TAS2781_SPI_MAX_FREQ;
 
 	tas_priv = devm_kzalloc(&spi->dev, sizeof(*tas_priv), GFP_KERNEL);

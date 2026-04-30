@@ -401,12 +401,17 @@ static void tas2781_hda_remove_controls(struct tas2781_hda *tas_hda)
 	struct hda_codec *codec = tas_hda->priv->codec;
 
 	snd_ctl_remove(codec->card, tas_hda->dsp_prog_ctl);
+	tas_hda->dsp_prog_ctl = NULL;
 	snd_ctl_remove(codec->card, tas_hda->dsp_conf_ctl);
+	tas_hda->dsp_conf_ctl = NULL;
 
-	for (int i = ARRAY_SIZE(hda_priv->snd_ctls) - 1; i >= 0; i--)
+	for (int i = ARRAY_SIZE(hda_priv->snd_ctls) - 1; i >= 0; i--) {
 		snd_ctl_remove(codec->card, hda_priv->snd_ctls[i]);
+		hda_priv->snd_ctls[i] = NULL;
+	}
 
 	snd_ctl_remove(codec->card, tas_hda->prof_ctl);
+	tas_hda->prof_ctl = NULL;
 }
 
 static void tasdev_add_kcontrols(struct tasdevice_priv *tas_priv,
@@ -423,6 +428,7 @@ static void tasdev_add_kcontrols(struct tasdevice_priv *tas_priv,
 			dev_err(tas_priv->dev,
 				"Failed to add KControl %s = %d\n",
 				tas_snd_ctrls[i].name, ret);
+			ctls[i] = NULL;
 			break;
 		}
 	}
@@ -492,6 +498,9 @@ static void tasdev_fw_ready(const struct firmware *fmw, void *context)
 	guard(pm_runtime_active_auto)(tas_priv->dev);
 	guard(mutex)(&tas_priv->codec_lock);
 
+	if (tas2781_hda_fw_request_cancelled(tas_hda))
+		goto out;
+
 	ret = tasdevice_rca_parser(tas_priv, fmw);
 	if (ret)
 		goto out;
@@ -527,6 +536,7 @@ static void tasdev_fw_ready(const struct firmware *fmw, void *context)
 
 out:
 	release_firmware(fmw);
+	tas2781_hda_fw_request_done(tas_hda);
 }
 
 static int tas2781_hda_bind(struct device *dev, struct device *master,
@@ -567,9 +577,12 @@ static int tas2781_hda_bind(struct device *dev, struct device *master,
 
 	strscpy(comp->name, dev_name(dev), sizeof(comp->name));
 
+	tas2781_hda_fw_request_start(tas_hda);
 	ret = tascodec_init(tas_hda->priv, codec, THIS_MODULE, tasdev_fw_ready);
 	if (!ret)
 		comp->playback_hook = tas2781_hda_playback_hook;
+	else
+		tas2781_hda_fw_request_done(tas_hda);
 
 	return ret;
 }
@@ -587,6 +600,8 @@ static void tas2781_hda_unbind(struct device *dev,
 		memset(comp->name, 0, sizeof(comp->name));
 		comp->playback_hook = NULL;
 	}
+
+	tas2781_hda_fw_request_cancel(tas_hda);
 
 	tas2781_hda_remove_controls(tas_hda);
 
@@ -617,6 +632,7 @@ static int tas2781_hda_i2c_probe(struct i2c_client *clt)
 		return -ENOMEM;
 
 	tas_hda->hda_priv = hda_priv;
+	tas2781_hda_fw_request_init(tas_hda);
 
 	dev_set_drvdata(&clt->dev, tas_hda);
 	tas_hda->dev = &clt->dev;
