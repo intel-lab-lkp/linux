@@ -27,6 +27,7 @@
 #include <linux/wwan.h>
 #include <asm/byteorder.h>
 #include <linux/unaligned.h>
+#include <linux/kfifo.h>
 #include <linux/usb/cdc-wdm.h>
 
 #define DRIVER_AUTHOR "Oliver Neukum"
@@ -77,7 +78,8 @@ struct wdm_device {
 	u8			*inbuf; /* buffer for response */
 	u8			*outbuf; /* buffer for command */
 	u8			*sbuf; /* buffer for status */
-	u8			*ubuf; /* buffer for copy to user space */
+
+	struct kfifo		ubuf; /* payload */
 
 	struct urb		*command;
 	struct urb		*response;
@@ -92,7 +94,6 @@ struct wdm_device {
 	u16			wMaxCommand;
 	u16			wMaxPacketSize;
 	__le16			inum;
-	int			length;
 	int			read;
 	int			count;
 	dma_addr_t		shandle;
@@ -170,6 +171,7 @@ static void wdm_in_callback(struct urb *urb)
 	struct wdm_device *desc = urb->context;
 	int status = urb->status;
 	int length = urb->actual_length;
+	int processed;
 
 	spin_lock_irqsave(&desc->iuspin, flags);
 	clear_bit(WDM_RESPONDING, &desc->flags);
@@ -218,17 +220,13 @@ static void wdm_in_callback(struct urb *urb)
 		goto skip_zlp;
 	}
 
-	if (length + desc->length > desc->wMaxCommand) {
-		/* The buffer would overflow */
-		set_bit(WDM_OVERFLOW, &desc->flags);
-	} else {
-		/* we may already be in overflow */
-		if (!test_bit(WDM_OVERFLOW, &desc->flags)) {
-			memmove(desc->ubuf + desc->length, desc->inbuf, length);
-			smp_wmb(); /* against wdm_read() */
-			WRITE_ONCE(desc->length, desc->length + length);
-		}
+	processed = kfifo_in(&desc->ubuf, desc->inbuf, length);
+	if (processed < length) {
+		 set_bit(WDM_OVERFLOW, &desc->flags);
+		 /* WDM_OVERFLOW must not be set after WDM_READ */
+		 smp_wmb(); /* against wdm_read() */
 	}
+
 skip_error:
 
 	if (desc->rerr) {
@@ -372,8 +370,8 @@ static void cleanup(struct wdm_device *desc)
 	kfree(desc->inbuf);
 	kfree(desc->orq);
 	kfree(desc->irq);
-	kfree(desc->ubuf);
 	free_urbs(desc);
+	kfifo_free(&desc->ubuf);
 	kfree(desc);
 }
 
@@ -524,7 +522,7 @@ out:
 static ssize_t wdm_read
 (struct file *file, char __user *buffer, size_t count, loff_t *ppos)
 {
-	int rv, cntr;
+	int rv, cntr, done;
 	int i = 0;
 	struct wdm_device *desc = file->private_data;
 
@@ -533,8 +531,7 @@ static ssize_t wdm_read
 	if (rv < 0)
 		return -ERESTARTSYS;
 
-	cntr = READ_ONCE(desc->length);
-	smp_rmb(); /* against wdm_in_callback() */
+	cntr = kfifo_len(&desc->ubuf);
 	if (cntr == 0) {
 		desc->read = 0;
 retry:
@@ -568,6 +565,13 @@ retry:
 			rv = -EIO;
 			goto err;
 		}
+		smp_rmb(); /* against wdm_in_callback() */
+		if (test_bit(WDM_OVERFLOW, &desc->flags)) {
+			clear_bit(WDM_OVERFLOW, &desc->flags);
+			rv = -ENOBUFS;
+			goto err;
+		}
+
 		usb_mark_last_busy(interface_to_usbdev(desc->intf));
 		if (rv < 0) {
 			rv = -ERESTARTSYS;
@@ -591,31 +595,27 @@ retry:
 			goto retry;
 		}
 
-		cntr = desc->length;
+		cntr = kfifo_len(&desc->ubuf);
 		spin_unlock_irq(&desc->iuspin);
 	}
 
 	if (cntr > count)
 		cntr = count;
-	rv = copy_to_user(buffer, desc->ubuf, cntr);
-	if (rv > 0) {
+	rv = kfifo_to_user(&desc->ubuf, buffer, cntr, &done);
+	if (rv < 0) {
 		rv = -EFAULT;
 		goto err;
 	}
 
 	spin_lock_irq(&desc->iuspin);
 
-	for (i = 0; i < desc->length - cntr; i++)
-		desc->ubuf[i] = desc->ubuf[i + cntr];
-
-	desc->length -= cntr;
 	/* in case we had outstanding data */
-	if (!desc->length) {
+	if (kfifo_is_empty(&desc->ubuf)) {
 		clear_bit(WDM_READ, &desc->flags);
 		service_outstanding_interrupt(desc);
 	}
 	spin_unlock_irq(&desc->iuspin);
-	rv = cntr;
+	rv = done;
 
 err:
 	mutex_unlock(&desc->rlock);
@@ -1013,7 +1013,7 @@ static void service_interrupt_work(struct work_struct *work)
 
 	spin_lock_irq(&desc->iuspin);
 	service_outstanding_interrupt(desc);
-	if (!desc->resp_count && (desc->length || desc->rerr)) {
+	if (!desc->resp_count && (!kfifo_is_empty(&desc->ubuf) || desc->rerr)) {
 		set_bit(WDM_READ, &desc->flags);
 		wake_up(&desc->wait);
 	}
@@ -1071,16 +1071,16 @@ static int wdm_create(struct usb_interface *intf, struct usb_endpoint_descriptor
 	if (!desc->command)
 		goto err;
 
-	desc->ubuf = kmalloc(desc->wMaxCommand, GFP_KERNEL);
-	if (!desc->ubuf)
-		goto err;
-
 	desc->sbuf = kmalloc(desc->wMaxPacketSize, GFP_KERNEL);
 	if (!desc->sbuf)
 		goto err;
 
 	desc->inbuf = kmalloc(desc->wMaxCommand, GFP_KERNEL);
 	if (!desc->inbuf)
+		goto err;
+
+	rv = kfifo_alloc(&desc->ubuf, roundup_pow_of_two(desc->wMaxCommand), GFP_KERNEL);
+	if (rv < 0)
 		goto err;
 
 	usb_fill_int_urb(
