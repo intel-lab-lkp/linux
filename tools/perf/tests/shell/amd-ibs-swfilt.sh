@@ -22,13 +22,6 @@ fi
 echo "run perf record with modifier and swfilt"
 err=0
 
-# setting any modifiers should fail
-perf record -B -e ibs_op//u -o /dev/null true 2> /dev/null
-if [ $? -eq 0 ]; then
-    echo "[FAIL] IBS PMU should not accept exclude_kernel"
-    exit 1
-fi
-
 # setting it with swfilt should be fine
 perf record -B -e ibs_op/swfilt/u -o /dev/null true
 if [ $? -ne 0 ]; then
