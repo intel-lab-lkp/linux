@@ -665,8 +665,11 @@ static int w8001_connect(struct serio *serio, struct serio_driver *drv)
 	return 0;
 
 fail4:
-	if (w8001->pen_dev)
+	if (w8001->pen_dev) {
 		input_unregister_device(w8001->pen_dev);
+		input_dev_pen = NULL;
+		w8001->pen_dev = NULL;
+	}
 fail3:
 	serio_close(serio);
 fail2:
