@@ -1576,6 +1576,7 @@ static void __init setup_superpageblocks(struct zone *zone)
 
 	/* Fullness lists steer allocations to preferred superpageblocks */
 	INIT_LIST_HEAD(&zone->spb_empty);
+	INIT_LIST_HEAD(&zone->spb_isolated);
 	for (cat = 0; cat < __NR_SB_CATEGORIES; cat++)
 		for (full = 0; full < __NR_SB_FULLNESS; full++)
 			INIT_LIST_HEAD(&zone->spb_lists[cat][full]);
