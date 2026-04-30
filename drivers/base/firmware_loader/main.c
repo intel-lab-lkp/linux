@@ -1140,6 +1140,30 @@ struct firmware_work {
 	u32 opt_flags;
 };
 
+static void firmware_work_free(struct firmware_work *fw_work)
+{
+	put_device(fw_work->device); /* taken in request_firmware_nowait() */
+	module_put(fw_work->module);
+	kfree_const(fw_work->name);
+}
+
+static int firmware_work_match(struct device *dev, void *res, void *data)
+{
+	return res == data;
+}
+
+static void firmware_work_release(struct device *dev, void *res)
+{
+	struct firmware_work *fw_work = res;
+
+	/*
+	 * Devres release can run before the async work has completed, so
+	 * synchronize it before dropping the references used by the worker.
+	 */
+	cancel_work_sync(&fw_work->work);
+	firmware_work_free(fw_work);
+}
+
 static void request_firmware_work_func(struct work_struct *work)
 {
 	struct firmware_work *fw_work;
@@ -1150,11 +1174,16 @@ static void request_firmware_work_func(struct work_struct *work)
 	_request_firmware(&fw, fw_work->name, fw_work->device, NULL, 0, 0,
 			  fw_work->opt_flags);
 	fw_work->cont(fw, fw_work->context);
-	put_device(fw_work->device); /* taken in request_firmware_nowait() */
 
-	module_put(fw_work->module);
-	kfree_const(fw_work->name);
-	kfree(fw_work);
+	/*
+	 * If teardown already removed the devres entry, it owns the final
+	 * cleanup after cancel_work_sync() waits for this worker.
+	 */
+	if (devres_remove(fw_work->device, firmware_work_release,
+			  firmware_work_match, fw_work)) {
+		firmware_work_free(fw_work);
+		devres_free(fw_work);
+	}
 }
 
 
@@ -1165,14 +1194,14 @@ static int _request_firmware_nowait(
 {
 	struct firmware_work *fw_work;
 
-	fw_work = kzalloc_obj(struct firmware_work, gfp);
+	fw_work = devres_alloc(firmware_work_release, sizeof(*fw_work), gfp);
 	if (!fw_work)
 		return -ENOMEM;
 
 	fw_work->module = module;
 	fw_work->name = kstrdup_const(name, gfp);
 	if (!fw_work->name) {
-		kfree(fw_work);
+		devres_free(fw_work);
 		return -ENOMEM;
 	}
 	fw_work->device = device;
@@ -1184,18 +1213,19 @@ static int _request_firmware_nowait(
 
 	if (!uevent && fw_cache_is_setup(device, name)) {
 		kfree_const(fw_work->name);
-		kfree(fw_work);
+		devres_free(fw_work);
 		return -EOPNOTSUPP;
 	}
 
 	if (!try_module_get(module)) {
 		kfree_const(fw_work->name);
-		kfree(fw_work);
+		devres_free(fw_work);
 		return -EFAULT;
 	}
 
 	get_device(fw_work->device);
 	INIT_WORK(&fw_work->work, request_firmware_work_func);
+	devres_add(device, fw_work);
 	schedule_work(&fw_work->work);
 	return 0;
 }
@@ -1258,6 +1288,42 @@ int firmware_request_nowait_nowarn(
 					gfp, context, cont, true);
 }
 EXPORT_SYMBOL_GPL(firmware_request_nowait_nowarn);
+
+static int firmware_work_cont_match(struct device *dev, void *res, void *data)
+{
+	struct firmware_work *fw_work = res;
+
+	return fw_work->cont == data;
+}
+
+/**
+ * request_firmware_nowait_cancel() - cancel an async firmware request
+ * @device: device for which the firmware is being loaded
+ * @cont: callback passed to request_firmware_nowait()
+ *
+ * Cancel a pending request_firmware_nowait() request for @device and @cont.
+ * If the associated work has already started, this function waits until the
+ * callback has returned. If the callback has already completed, this function
+ * does nothing.
+ *
+ * This function may sleep.
+ */
+void request_firmware_nowait_cancel(struct device *device,
+				    void (*cont)(const struct firmware *fw,
+						 void *context))
+{
+	struct firmware_work *fw_work;
+
+	fw_work = devres_remove(device, firmware_work_release,
+				firmware_work_cont_match, cont);
+	if (!fw_work)
+		return;
+
+	cancel_work_sync(&fw_work->work);
+	firmware_work_free(fw_work);
+	devres_free(fw_work);
+}
+EXPORT_SYMBOL_GPL(request_firmware_nowait_cancel);
 
 #ifdef CONFIG_FW_CACHE
 static ASYNC_DOMAIN_EXCLUSIVE(fw_cache_domain);
