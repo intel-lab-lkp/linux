@@ -270,6 +270,7 @@ struct ufs_clk_info {
 enum ufs_notify_change_status {
 	PRE_CHANGE,
 	POST_CHANGE,
+	ROLLBACK_CHANGE,
 };
 
 struct ufs_pa_layer_attr {
