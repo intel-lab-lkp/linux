@@ -556,18 +556,39 @@ static void __spb_set_has_type(struct page *page, int migratetype)
 		return;
 
 	if (!get_pfnblock_bit(page, pfn, bit)) {
+		bool first = false;
+
 		set_pfnblock_bit(page, pfn, bit);
 		switch (bit) {
 		case PB_has_unmovable:
 			sb->nr_unmovable++;
+			first = (sb->nr_unmovable == 1);
+			if (first)
+				trace_printk("SB first unmovable: zone=%s sb=%lu pfn=%lu mt=%d rsv=%u mov=%u recl=%u free=%u\n",
+					     sb->zone->name,
+					     (unsigned long)(sb - sb->zone->superpageblocks),
+					     pfn, migratetype,
+					     sb->nr_reserved, sb->nr_movable,
+					     sb->nr_reclaimable, sb->nr_free);
 			break;
 		case PB_has_reclaimable:
 			sb->nr_reclaimable++;
+			first = (sb->nr_reclaimable == 1);
+			if (first)
+				trace_printk("SB first reclaimable: zone=%s sb=%lu pfn=%lu mt=%d rsv=%u mov=%u unmov=%u free=%u\n",
+					     sb->zone->name,
+					     (unsigned long)(sb - sb->zone->superpageblocks),
+					     pfn, migratetype,
+					     sb->nr_reserved, sb->nr_movable,
+					     sb->nr_unmovable, sb->nr_free);
 			break;
 		case PB_has_movable:
 			sb->nr_movable++;
+			first = (sb->nr_movable == 1);
 			break;
 		}
+		trace_spb_pb_taint(page, migratetype,
+				   SPB_PB_TAINT_ACTION_SET, first);
 		spb_debug_check(sb, "__spb_set_has_type");
 	}
 }
@@ -591,21 +612,28 @@ static void __spb_clear_has_type(struct page *page, int migratetype)
 		return;
 
 	if (get_pfnblock_bit(page, pfn, bit)) {
+		bool last = false;
+
 		clear_pfnblock_bit(page, pfn, bit);
 		switch (bit) {
 		case PB_has_unmovable:
 			if (sb->nr_unmovable)
 				sb->nr_unmovable--;
+			last = (sb->nr_unmovable == 0);
 			break;
 		case PB_has_reclaimable:
 			if (sb->nr_reclaimable)
 				sb->nr_reclaimable--;
+			last = (sb->nr_reclaimable == 0);
 			break;
 		case PB_has_movable:
 			if (sb->nr_movable)
 				sb->nr_movable--;
+			last = (sb->nr_movable == 0);
 			break;
 		}
+		trace_spb_pb_taint(page, migratetype,
+				   SPB_PB_TAINT_ACTION_CLEAR, last);
 		spb_debug_check(sb, "__spb_clear_has_type");
 	}
 }
@@ -2944,6 +2972,17 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 	struct superpageblock *sb;
 	int opposite_mt;
 	/*
+	 * Diagnostic counter for the spb_alloc_walk tracepoint. Counts how
+	 * many SPBs were visited (across all Passes) before this allocation
+	 * succeeded or fell through. Used to characterize the cost of the
+	 * linear spb_lists walk and identify pathological cases.
+	 */
+	unsigned int n_spbs_visited = 0;
+
+#define SPB_WALK_DONE(_outcome) \
+	trace_spb_alloc_walk(zone, order, migratetype, alloc_flags, \
+			     (_outcome), n_spbs_visited)
+	/*
 	 * Category search order: 2 passes.
 	 * Movable: clean first, then tainted (pack into clean SBs).
 	 * Others: tainted first, then clean (concentrate in tainted SBs).
@@ -2988,6 +3027,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 				    migratetype,
 				    pcp_allowed_order(order) &&
 				    migratetype < MIGRATE_PCPTYPES);
+				SPB_WALK_DONE(SPB_ALLOC_OUTCOME_PASS_1);
 				return page;
 			}
 		}
@@ -3003,6 +3043,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 				    migratetype,
 				    pcp_allowed_order(order) &&
 				    migratetype < MIGRATE_PCPTYPES);
+				SPB_WALK_DONE(SPB_ALLOC_OUTCOME_PASS_1);
 				return page;
 			}
 		}
@@ -3039,6 +3080,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 
 		list_for_each_entry(sb,
 			&zone->spb_lists[cat][full], list) {
+			n_spbs_visited++;
 			/*
 			 * Snapshot tainted-SPB capacity before the
 			 * nr_free_pages skip: an SPB with a free pageblock
@@ -3073,6 +3115,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 					page, order, migratetype,
 					pcp_allowed_order(order) &&
 					migratetype < MIGRATE_PCPTYPES);
+				SPB_WALK_DONE(SPB_ALLOC_OUTCOME_PASS_1);
 				if (migratetype < MIGRATE_PCPTYPES) {
 					struct spb_warm_hint_slot *slot;
 
@@ -3103,6 +3146,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 						page, order, migratetype,
 						pcp_allowed_order(order) &&
 						migratetype < MIGRATE_PCPTYPES);
+					SPB_WALK_DONE(SPB_ALLOC_OUTCOME_PASS_1);
 					if (migratetype < MIGRATE_PCPTYPES) {
 						struct spb_warm_hint_slot *slot;
 
@@ -3134,6 +3178,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 		for (full = SB_FULL; full < __NR_SB_FULLNESS; full++) {
 			list_for_each_entry(sb,
 				&zone->spb_lists[SB_TAINTED][full], list) {
+				n_spbs_visited++;
 				if (!sb->nr_free)
 					continue;
 				for (current_order = max_t(unsigned int,
@@ -3158,6 +3203,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 						page, order, migratetype,
 						pcp_allowed_order(order) &&
 						migratetype < MIGRATE_PCPTYPES);
+					SPB_WALK_DONE(SPB_ALLOC_OUTCOME_PASS_2);
 					return page;
 				}
 			}
@@ -3168,6 +3214,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 				&zone->spb_lists[SB_TAINTED][full], list) {
 				int co;
 
+				n_spbs_visited++;
 				if (!sb->nr_free_pages)
 					continue;
 				for (co = min_t(int, pageblock_order - 1,
@@ -3196,6 +3243,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 						page, order, migratetype,
 						pcp_allowed_order(order) &&
 						migratetype < MIGRATE_PCPTYPES);
+					SPB_WALK_DONE(SPB_ALLOC_OUTCOME_PASS_2B);
 					return page;
 				}
 			}
@@ -3253,6 +3301,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 					&zone->spb_lists[SB_TAINTED][full], list) {
 					int co;
 
+					n_spbs_visited++;
 					if (!sb->nr_free_pages)
 						continue;
 					for (co = min_t(int, pageblock_order - 1,
@@ -3280,6 +3329,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 							page, order, migratetype,
 							pcp_allowed_order(order) &&
 							migratetype < MIGRATE_PCPTYPES);
+						SPB_WALK_DONE(SPB_ALLOC_OUTCOME_PASS_2C);
 						return page;
 					}
 				}
@@ -3325,6 +3375,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 					&zone->spb_lists[SB_TAINTED][full], list) {
 					int co;
 
+					n_spbs_visited++;
 					if (!sb->nr_free_pages)
 						continue;
 					for (co = min_t(int, pageblock_order - 1,
@@ -3352,6 +3403,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 							page, order, migratetype,
 							pcp_allowed_order(order) &&
 							migratetype < MIGRATE_PCPTYPES);
+						SPB_WALK_DONE(SPB_ALLOC_OUTCOME_PASS_2D);
 						return page;
 					}
 				}
@@ -3394,8 +3446,40 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 		}
 	}
 
+	/*
+	 * Diagnostic: capture per-fall-through state so we can answer
+	 * "why didn't an existing tainted SPB absorb this allocation?".
+	 * The count loop walks the tainted-SPB lists looking for any SPB
+	 * with a free buddy at the requested (order, migratetype). >0
+	 * means buddies were available — Pass 1 missed them. 0 means
+	 * the tainted pool genuinely had nothing usable. Loop is bounded
+	 * by the number of tainted SPBs and runs only on the slow path
+	 * (this is the fall-through to Pass 3/Pass 4). Skipped if the
+	 * tracepoint is not active so there is zero cost in production.
+	 */
+	if (walk && trace_spb_alloc_fall_through_enabled()) {
+		unsigned int n_tainted = 0, n_with_buddy = 0;
+
+		for (full = SB_FULL; full < __NR_SB_FULLNESS; full++) {
+			list_for_each_entry(sb,
+				&zone->spb_lists[SB_TAINTED][full], list) {
+				n_tainted++;
+				if (!list_empty(
+				    &sb->free_area[order].free_list[migratetype]))
+					n_with_buddy++;
+			}
+		}
+		trace_spb_alloc_fall_through(zone, order, migratetype,
+					     alloc_flags,
+					     n_tainted, n_with_buddy,
+					     walk->saw_free_pages,
+					     walk->saw_free_pb,
+					     walk->saw_below_reserve);
+	}
+
 	/* Pass 3: whole pageblock from empty superpageblocks */
 	list_for_each_entry(sb, &zone->spb_empty, list) {
+		n_spbs_visited++;
 		if (!sb->nr_free_pages)
 			continue;
 		for (current_order = max(order, pageblock_order);
@@ -3411,6 +3495,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 				migratetype,
 				pcp_allowed_order(order) &&
 				migratetype < MIGRATE_PCPTYPES);
+			SPB_WALK_DONE(SPB_ALLOC_OUTCOME_PASS_3);
 			return page;
 		}
 	}
@@ -3429,6 +3514,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 
 			list_for_each_entry(sb,
 				&zone->spb_lists[cat][full], list) {
+				n_spbs_visited++;
 				if (!sb->nr_free_pages)
 					continue;
 				/*
@@ -3453,6 +3539,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 						page, order, migratetype,
 						pcp_allowed_order(order) &&
 						migratetype < MIGRATE_PCPTYPES);
+					SPB_WALK_DONE(SPB_ALLOC_OUTCOME_PASS_4);
 					return page;
 				}
 			}
@@ -3477,10 +3564,13 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 		trace_mm_page_alloc_zone_locked(page, order, migratetype,
 				pcp_allowed_order(order) &&
 				migratetype < MIGRATE_PCPTYPES);
+		SPB_WALK_DONE(SPB_ALLOC_OUTCOME_ZONE_FALLBACK);
 		return page;
 	}
 
+	SPB_WALK_DONE(SPB_ALLOC_OUTCOME_NO_PAGE);
 	return NULL;
+#undef SPB_WALK_DONE
 }
 
 
@@ -3899,8 +3989,11 @@ try_to_claim_block(struct zone *zone, struct page *page,
 	 * Don't steal from pageblocks that are isolated for
 	 * evacuation — that would undo the work in progress.
 	 */
-	if (get_pageblock_isolate(page))
+	if (get_pageblock_isolate(page)) {
+		trace_spb_claim_block_refused(page, start_type, block_type,
+					      SPB_CLAIM_REFUSED_ISOLATE);
 		return NULL;
+	}
 
 	/*
 	 * Never steal from CMA pageblocks.  CMA pages freed through
@@ -3909,8 +4002,11 @@ try_to_claim_block(struct zone *zone, struct page *page,
 	 * fallback search.  Stealing would corrupt CMA by changing
 	 * the pageblock type away from MIGRATE_CMA.
 	 */
-	if (is_migrate_cma(get_pageblock_migratetype(page)))
+	if (is_migrate_cma(get_pageblock_migratetype(page))) {
+		trace_spb_claim_block_refused(page, start_type, block_type,
+					      SPB_CLAIM_REFUSED_CMA);
 		return NULL;
+	}
 
 	/* Take ownership for orders >= pageblock_order */
 	if (current_order >= pageblock_order)
@@ -3919,8 +4015,11 @@ try_to_claim_block(struct zone *zone, struct page *page,
 
 	/* moving whole block can fail due to zone boundary conditions */
 	if (!prep_move_freepages_block(zone, page, &start_pfn, &free_pages,
-				       &movable_pages))
+				       &movable_pages)) {
+		trace_spb_claim_block_refused(page, start_type, block_type,
+					      SPB_CLAIM_REFUSED_ZONE_BOUNDARY);
 		return NULL;
+	}
 
 	/*
 	 * Determine how many pages are compatible with our allocation.
@@ -3959,11 +4058,17 @@ try_to_claim_block(struct zone *zone, struct page *page,
 	 * the SPB is tainted.
 	 */
 	if (noncompatible_cross_type(start_type, block_type)) {
-		if (free_pages != pageblock_nr_pages)
+		if (free_pages != pageblock_nr_pages) {
+			trace_spb_claim_block_refused(page, start_type,
+				block_type,
+				SPB_CLAIM_REFUSED_CROSS_TYPE_NOT_FREE);
 			return NULL;
+		}
 	} else if (!from_tainted_spb &&
 		   free_pages + alike_pages < (1 << (pageblock_order-1)) &&
 		   !page_group_by_mobility_disabled) {
+		trace_spb_claim_block_refused(page, start_type, block_type,
+			SPB_CLAIM_REFUSED_INSUFFICIENT_COMPAT);
 		return NULL;
 	}
 
@@ -6186,12 +6291,24 @@ try_this_zone:
 	 */
 	if (no_fallback && !defrag_mode &&
 	    !(gfp_mask & __GFP_DIRECT_RECLAIM)) {
-		if (gfp_mask & __GFP_NORETRY)
+		struct zone *pref = zonelist_zone(ac->preferred_zoneref);
+
+		if (gfp_mask & __GFP_NORETRY) {
+			trace_spb_alloc_atomic_relax(pref, order,
+				ac->migratetype, gfp_mask,
+				SPB_ATOMIC_RELAX_NORETRY_SKIP);
 			return NULL;
+		}
 		if (!(alloc_flags & ALLOC_NOFRAG_TAINTED_OK)) {
+			trace_spb_alloc_atomic_relax(pref, order,
+				ac->migratetype, gfp_mask,
+				SPB_ATOMIC_RELAX_ADD_TAINTED_OK);
 			alloc_flags |= ALLOC_NOFRAG_TAINTED_OK;
 			goto retry;
 		}
+		trace_spb_alloc_atomic_relax(pref, order,
+			ac->migratetype, gfp_mask,
+			SPB_ATOMIC_RELAX_DROP_NOFRAGMENT);
 		alloc_flags &= ~(ALLOC_NOFRAGMENT | ALLOC_NOFRAG_TAINTED_OK);
 		goto retry;
 	}
@@ -10710,6 +10827,7 @@ static bool spb_evacuate_for_order(struct zone *zone, unsigned int order,
 	unsigned long sb_pfns[SPB_CONTIG_MAX_CANDIDATES];
 	unsigned long flags;
 	int nr_sbs, i;
+	unsigned int phase1_attempts = 0, phase2_attempts = 0;
 	bool did_evacuate = false;
 
 	/* Phase 1: coalesce within existing non-movable pageblocks */
@@ -10721,14 +10839,20 @@ static bool spb_evacuate_for_order(struct zone *zone, unsigned int order,
 
 	for (i = 0; i < nr_sbs; i++) {
 		unsigned long end_pfn = sb_pfns[i] + SUPERPAGEBLOCK_NR_PAGES;
+		int n;
 
-		if (evacuate_pb_range(zone, sb_pfns[i], end_pfn,
-				      migratetype, 3))
+		n = evacuate_pb_range(zone, sb_pfns[i], end_pfn,
+				      migratetype, 3);
+		phase1_attempts += n;
+		if (n)
 			did_evacuate = true;
 	}
 
-	if (did_evacuate)
+	if (did_evacuate) {
+		trace_spb_evacuate_for_order_done(zone, order, migratetype,
+				phase1_attempts, phase2_attempts, true);
 		return true;
+	}
 
 	/* Phase 2: evacuate MOVABLE pageblocks to create free whole pageblocks */
 	spin_lock_irqsave(&zone->lock, flags);
@@ -10739,9 +10863,12 @@ static bool spb_evacuate_for_order(struct zone *zone, unsigned int order,
 
 	for (i = 0; i < nr_sbs; i++) {
 		unsigned long end_pfn = sb_pfns[i] + SUPERPAGEBLOCK_NR_PAGES;
+		int n;
 
-		if (evacuate_pb_range(zone, sb_pfns[i], end_pfn,
-				      MIGRATE_MOVABLE, 3))
+		n = evacuate_pb_range(zone, sb_pfns[i], end_pfn,
+				      MIGRATE_MOVABLE, 3);
+		phase2_attempts += n;
+		if (n)
 			did_evacuate = true;
 	}
 
@@ -10755,6 +10882,8 @@ static bool spb_evacuate_for_order(struct zone *zone, unsigned int order,
 	 */
 	queue_spb_slab_shrink(zone);
 
+	trace_spb_evacuate_for_order_done(zone, order, migratetype,
+			phase1_attempts, phase2_attempts, did_evacuate);
 	return did_evacuate;
 }
 #endif /* CONFIG_COMPACTION */
