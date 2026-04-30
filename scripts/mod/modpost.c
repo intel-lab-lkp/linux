@@ -1674,7 +1674,7 @@ static void read_symbols_from_files(const char *filename)
 	fclose(in);
 }
 
-#define SZ 500
+#define SZ 1024
 
 /* We first write the generated file into memory using the
  * following helper, then compare to the file on disk and
