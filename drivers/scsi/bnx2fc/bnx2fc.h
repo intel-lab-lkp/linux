@@ -281,7 +281,7 @@ struct bnx2fc_cmd_mgr {
 	struct list_head *free_list;
 	spinlock_t *free_list_lock;
 	struct io_bdt **io_bdt_pool;
-	struct bnx2fc_cmd **cmds;
+	struct bnx2fc_cmd *cmds[];
 };
 
 struct bnx2fc_rport {
