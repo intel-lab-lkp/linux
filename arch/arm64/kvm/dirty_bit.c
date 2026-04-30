@@ -263,6 +263,72 @@ out_err:
 	return ret;
 }
 
+int __kvm_arch_dirty_ring_clear(struct kvm *kvm, struct kvm_dirty_ring *ring,
+				int *nr_entries_reset)
+{
+	u64 *hw_entries;
+	u64 slot_offset = 0;
+	u64 ttwl;
+	int i, ret;
+	u32 slot = -1;
+
+	if (signal_pending(current))
+		return -EINTR;
+
+	ttwl = hdbss_get_ttwl(kvm->arch.mmu.split_page_chunk_size);
+
+	hw_entries = kmalloc(max(ring->size * sizeof(u64), PAGE_SIZE), GFP_KERNEL);
+	if (!hw_entries)
+		return -ENOMEM;
+
+	for (i = 0; i < ring->size; i++) {
+		struct kvm_dirty_gfn *entry;
+		gfn_t gfn;
+
+		entry = &ring->dirty_gfns[(ring->reset_index + i) &
+					  (ring->size - 1)];
+
+		if (!kvm_dirty_gfn_harvested(entry))
+			break;
+
+		if (entry->slot != slot) {
+			struct kvm_memory_slot *memslot;
+
+			memslot = kvm_dirty_ring_get_memslot(kvm, entry->slot);
+			slot = entry->slot;
+			slot_offset = memslot->base_gfn;
+		}
+
+		gfn = slot_offset + entry->offset;
+
+		hw_entries[i] = (gfn_to_gpa(gfn) & HDBSS_ENTRY_IPA) |
+				ttwl | HDBSS_ENTRY_VALID;
+	}
+
+	ret = dirty_bit_clear(kvm, hw_entries, i);
+
+	/* Set as invalid all successfully cleaned entries */
+	for (int j = 0; j < ret; j++) {
+		struct kvm_dirty_gfn *entry;
+
+		entry = &ring->dirty_gfns[(ring->reset_index + j) &
+					  (ring->size - 1)];
+
+		kvm_dirty_gfn_set_invalid(entry);
+	}
+
+	/* In case of error, try software cleaning from the faulting entry */
+	ring->reset_index += ret;
+	*nr_entries_reset += ret;
+
+	kfree(hw_entries);
+
+	if (ret < i)
+		return -EFAULT;
+
+	return ret;
+}
+
 static irqreturn_t hacdbsirq_handler(int irq, void *pcpu)
 {
 	u64 cons = read_sysreg_s(SYS_HACDBSCONS_EL2);
