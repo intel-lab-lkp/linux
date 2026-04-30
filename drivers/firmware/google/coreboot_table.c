@@ -150,8 +150,9 @@ static int coreboot_table_populate(struct device *dev, void *ptr)
 
 		ret = device_register(&device->dev);
 		if (ret) {
+			dev_warn(dev, "failed to register coreboot device: %d\n", ret);
 			put_device(&device->dev);
-			return ret;
+			continue;
 		}
 
 		ptr_entry += entry->size;
