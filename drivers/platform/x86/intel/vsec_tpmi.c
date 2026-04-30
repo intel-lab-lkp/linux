@@ -112,13 +112,13 @@ struct intel_tpmi_pm_feature {
  * Stores the information for all TPMI devices enumerated from a single PCI device.
  */
 struct intel_tpmi_info {
-	struct intel_tpmi_pm_feature *tpmi_features;
 	struct intel_vsec_device *vsec_dev;
 	int feature_count;
 	u64 pfs_start;
 	struct oobmsm_plat_info plat_info;
 	void __iomem *tpmi_control_mem;
 	struct dentry *dbgfs_dir;
+	struct intel_tpmi_pm_feature tpmi_features[] __counted_by(feature_count);
 };
 
 /**
@@ -747,19 +747,15 @@ static int intel_vsec_tpmi_init(struct auxiliary_device *auxdev)
 	u64 pfs_start = 0;
 	int ret, i;
 
-	tpmi_info = devm_kzalloc(&auxdev->dev, sizeof(*tpmi_info), GFP_KERNEL);
+	tpmi_info = devm_kzalloc(&auxdev->dev,
+				 struct_size(tpmi_info, tpmi_features, vsec_dev->num_resources),
+				 GFP_KERNEL);
 	if (!tpmi_info)
 		return -ENOMEM;
 
-	tpmi_info->vsec_dev = vsec_dev;
 	tpmi_info->feature_count = vsec_dev->num_resources;
+	tpmi_info->vsec_dev = vsec_dev;
 	tpmi_info->plat_info.bus_number = pci_dev->bus->number;
-
-	tpmi_info->tpmi_features = devm_kcalloc(&auxdev->dev, vsec_dev->num_resources,
-						sizeof(*tpmi_info->tpmi_features),
-						GFP_KERNEL);
-	if (!tpmi_info->tpmi_features)
-		return -ENOMEM;
 
 	for (i = 0; i < vsec_dev->num_resources; i++) {
 		struct intel_tpmi_pm_feature *pfs;
