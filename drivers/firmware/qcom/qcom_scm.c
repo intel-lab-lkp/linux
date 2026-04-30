@@ -651,7 +651,7 @@ static int qcom_scm_pas_prep_and_init_image(struct qcom_scm_pas_context *ctx,
 	mdata_phys = qcom_tzmem_to_phys(mdata_buf);
 
 	ret = __qcom_scm_pas_init_image(ctx->pas_id, mdata_phys, &res);
-	if (ret < 0)
+	if (ret < 0 || !ctx->keep_mdt_buf)
 		qcom_tzmem_free(mdata_buf);
 	else
 		ctx->ptr = mdata_buf;
@@ -707,9 +707,24 @@ int qcom_scm_pas_init_image(u32 pas_id, const void *metadata, size_t size,
 	memcpy(mdata_buf, metadata, size);
 
 	ret = __qcom_scm_pas_init_image(pas_id, mdata_phys, &res);
-	if (ret < 0 || !ctx) {
+
+	/*
+	 * Some clients still pass the PAS context as NULL. Until all clients
+	 * switch to qcom_mdt_pas_load() and provide a valid PAS context, check
+	 * for NULL before dereferencing it.
+	 *
+	 * When a valid context is provided, metadata handling differs across
+	 * clients. For example, modem clients pass metadata to TrustZone that
+	 * must not be freed until the authentication and reset SMCs are
+	 * invoked, as the buffers remain locked until then.
+	 *
+	 * Other clients free their metadata immediately after the PAS_INIT
+	 * SMC call. Therefore, keep_mdt_buf should be set to true for modem
+	 * clients and false for others.
+	 */
+	if (ret < 0 || !ctx || !ctx->keep_mdt_buf) {
 		dma_free_coherent(__scm->dev, size, mdata_buf, mdata_phys);
-	} else if (ctx) {
+	} else {
 		ctx->ptr = mdata_buf;
 		ctx->phys = mdata_phys;
 		ctx->size = size;

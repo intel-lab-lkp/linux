@@ -669,6 +669,7 @@ static int qcom_pas_alloc_memory_region(struct qcom_pas *pas)
 		return PTR_ERR(pas->pas_ctx);
 
 	pas->pas_ctx->use_tzmem = rproc->has_iommu;
+	pas->pas_ctx->keep_mdt_buf = true;
 	if (!pas->dtb_pas_id)
 		return 0;
 
@@ -688,6 +689,7 @@ static int qcom_pas_alloc_memory_region(struct qcom_pas *pas)
 		return PTR_ERR(pas->dtb_pas_ctx);
 
 	pas->dtb_pas_ctx->use_tzmem = rproc->has_iommu;
+	pas->dtb_pas_ctx->keep_mdt_buf = true;
 
 	return 0;
 }
