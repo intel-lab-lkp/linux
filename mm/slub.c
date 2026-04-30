@@ -6703,13 +6703,24 @@ static gfp_t kmalloc_gfp_adjust(gfp_t flags, size_t size)
 	 * However make sure that larger requests are not too disruptive - i.e.
 	 * do not direct reclaim unless physically continuous memory is preferred
 	 * (__GFP_RETRY_MAYFAIL mode). We still kick in kswapd/kcompactd to
-	 * start working in the background
+	 * start working in the background.
+	 *
+	 * Also signal __GFP_NORETRY: the vmalloc fallback IS our retry path,
+	 * so the page allocator should not go to extreme lengths (e.g.
+	 * tainting a previously-clean superpageblock from the page-superblock
+	 * series) just to satisfy the kmalloc attempt. The atomic-allocation
+	 * relaxation logic in get_page_from_freelist treats __GFP_NORETRY as
+	 * "caller has a fallback" and returns NULL early instead of dropping
+	 * ALLOC_NOFRAGMENT. kvmalloc's documented contract already disallows
+	 * callers passing __GFP_NORETRY directly, so adding it here is safe.
 	 */
 	if (size > PAGE_SIZE) {
 		flags |= __GFP_NOWARN;
 
-		if (!(flags & __GFP_RETRY_MAYFAIL))
+		if (!(flags & __GFP_RETRY_MAYFAIL)) {
 			flags &= ~__GFP_DIRECT_RECLAIM;
+			flags |= __GFP_NORETRY;
+		}
 
 		/* nofail semantic is implemented by the vmalloc fallback */
 		flags &= ~__GFP_NOFAIL;
