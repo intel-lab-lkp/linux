@@ -158,6 +158,29 @@ TEST(test_result_skip) {
 	ksft_test_result_skip("");
 }
 
+FIXTURE(xfail_ctor_ordering) {
+};
+
+FIXTURE_SETUP(xfail_ctor_ordering) {
+}
+
+FIXTURE_TEARDOWN(xfail_ctor_ordering) {
+}
+
+FIXTURE_VARIANT(xfail_ctor_ordering) {
+	int dummy;
+};
+
+FIXTURE_VARIANT_ADD(xfail_ctor_ordering, only) {
+	.dummy = 0,
+};
+
+TEST_F(xfail_ctor_ordering, expected_fail) {
+	ASSERT_EQ(1, 0);
+}
+
+XFAIL_ADD(xfail_ctor_ordering, only, expected_fail);
+
 int main(int argc, char **argv)
 {
 	/*

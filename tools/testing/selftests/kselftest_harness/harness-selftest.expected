@@ -1,6 +1,6 @@
 TAP version 13
-1..19
-# Starting 19 tests from 4 test cases.
+1..20
+# Starting 20 tests from 5 test cases.
 #  RUN           global.standalone_pass ...
 # harness-selftest.c:19:standalone_pass:before
 # harness-selftest.c:23:standalone_pass:after
@@ -93,6 +93,11 @@ ok 18 fixture_parent.pass
 # pass: Test terminated by assertion
 #          FAIL  fixture_setup_failure.pass
 not ok 19 fixture_setup_failure.pass
-# FAILED: 12 / 19 tests passed.
+#  RUN           xfail_ctor_ordering.only.expected_fail ...
+# harness-selftest.c:179:expected_fail:Expected 1 (1) == 0 (0)
+# expected_fail: Test terminated by assertion
+#          FAIL  xfail_ctor_ordering.only.expected_fail
+ok 20 xfail_ctor_ordering.only.expected_fail # XFAIL unknown
+# FAILED: 13 / 20 tests passed.
 # 1 skipped test(s) detected. Consider enabling relevant config options to improve coverage.
-# Totals: pass:9 fail:7 xfail:1 xpass:1 skip:1 error:0
+# Totals: pass:9 fail:7 xfail:2 xpass:1 skip:1 error:0
