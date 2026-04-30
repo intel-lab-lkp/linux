@@ -699,6 +699,19 @@ int resctrl_arch_io_alloc_enable(struct rdt_resource *r, bool enable);
  */
 bool resctrl_arch_get_io_alloc_enabled(struct rdt_resource *r);
 
+/**
+ * resctrl_arch_get_kmode_support() - Advertise kernel-mode capabilities
+ * @kcfg:	Architecture ORs BIT() flags into @kcfg->kmode for each supported
+ *		&enum resctrl_kernel_modes value (see &struct resctrl_kmode_cfg).
+ *
+ * Used for optional features (for example PLZA on x86) that can assign CLOSID
+ * and/or RMID to kernel work separately from user tasks.  Generic code compares
+ * @kcfg->kmode with the effective @kcfg->kmode_cur; when a global-assign mode is
+ * active, @kcfg->k_rdtgrp identifies the active &struct rdtgroup. The default mode
+ * is INHERIT_CTRL_AND_MON and group is default group.
+ */
+void resctrl_arch_get_kmode_support(struct resctrl_kmode_cfg *kcfg);
+
 extern unsigned int resctrl_rmid_realloc_threshold;
 extern unsigned int resctrl_rmid_realloc_limit;
 
