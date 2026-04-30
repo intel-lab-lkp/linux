@@ -17,6 +17,7 @@
 #include <linux/hw_random.h>
 #include <linux/kernel.h>
 #include <linux/kthread.h>
+#include <linux/minmax.h>
 #include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/random.h>
@@ -30,7 +31,7 @@
 
 #define RNG_MODULE_NAME		"hw_random"
 
-#define RNG_BUFFER_SIZE (SMP_CACHE_BYTES < 32 ? 32 : SMP_CACHE_BYTES)
+#define RNG_BUFFER_SIZE		MAX(32, SMP_CACHE_BYTES)
 
 static struct hwrng __rcu *current_rng;
 /* the current rng has been explicitly chosen by user via sysfs */
