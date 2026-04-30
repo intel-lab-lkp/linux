@@ -1643,6 +1643,7 @@ void __meminit resize_zone_superpageblocks(struct zone *zone)
 	size_t alloc_size;
 	unsigned long i;
 	int nid = zone_to_nid(zone);
+	unsigned long flags;
 
 	if (!zone->spanned_pages)
 		return;
@@ -1665,6 +1666,37 @@ void __meminit resize_zone_superpageblocks(struct zone *zone)
 		return;
 	}
 
+	/* Initialize new superpageblocks (not from old array) first, outside lock */
+	if (zone->superpageblocks) {
+		old_offset = (zone->superpageblock_base_pfn - new_sb_base) >>
+			     SUPERPAGEBLOCK_ORDER;
+	} else {
+		old_offset = 0;
+	}
+
+	for (i = 0; i < new_nr_sbs; i++) {
+		struct superpageblock *sb = &new_sbs[i];
+		bool is_old = false;
+
+		if (zone->superpageblocks &&
+		    i >= old_offset &&
+		    i < old_offset + zone->nr_superpageblocks)
+			is_old = true;
+
+		if (is_old)
+			continue;
+
+		init_one_superpageblock(sb, zone,
+					new_sb_base + (i << SUPERPAGEBLOCK_ORDER),
+					zone_start, zone_end);
+	}
+
+	/*
+	 * Take zone->lock for the copy+fixup+swap to prevent concurrent
+	 * allocations from traversing free lists while we relocate them.
+	 */
+	spin_lock_irqsave(&zone->lock, flags);
+
 	/*
 	 * Copy existing superpageblocks to their new position.
 	 * The old array covers [old_base, old_base + old_nr * SB_SIZE).
@@ -1678,39 +1710,42 @@ void __meminit resize_zone_superpageblocks(struct zone *zone)
 		       zone->nr_superpageblocks * sizeof(struct superpageblock));
 
 		/*
-		 * Fix up list_head pointers that were self-referencing
-		 * (empty lists) or pointing into the old array.
+		 * Fix up all list_head pointers: both the SPB category list
+		 * and every free_area[order].free_list[migratetype]. Pages on
+		 * buddy free lists have buddy_list.prev/next pointing at the
+		 * old array's list heads — those must be updated to point at
+		 * the new array.
 		 */
 		for (i = old_offset; i < old_offset + zone->nr_superpageblocks; i++) {
 			struct superpageblock *sb = &new_sbs[i];
+			struct superpageblock *old_sb =
+				&zone->superpageblocks[i - old_offset];
+			int order, mt;
 
-			if (list_empty(&sb->list))
+			/* Fix up sb->list (zone category/fullness list) */
+			if (list_empty(&old_sb->list))
 				INIT_LIST_HEAD(&sb->list);
 			else
-				list_replace(&zone->superpageblocks[i - old_offset].list,
-					     &sb->list);
+				list_replace(&old_sb->list, &sb->list);
+
+			/* Fix up all free_area list heads */
+			for (order = 0; order < NR_PAGE_ORDERS; order++) {
+				for (mt = 0; mt < MIGRATE_TYPES; mt++) {
+					struct list_head *old_list =
+						&old_sb->free_area[order].free_list[mt];
+					struct list_head *new_list =
+						&sb->free_area[order].free_list[mt];
+
+					if (list_empty(old_list))
+						INIT_LIST_HEAD(new_list);
+					else
+						list_replace(old_list, new_list);
+				}
+			}
+
+			/* Reinitialize defrag work structs (contain stale pointers) */
+			init_superpageblock_defrag(sb);
 		}
-	}
-
-	/* Initialize new superpageblocks (slots not covered by old array) */
-	for (i = 0; i < new_nr_sbs; i++) {
-		struct superpageblock *sb = &new_sbs[i];
-		bool is_old = false;
-
-		if (zone->superpageblocks) {
-			old_offset = (zone->superpageblock_base_pfn - new_sb_base) >>
-				     SUPERPAGEBLOCK_ORDER;
-			if (i >= old_offset &&
-			    i < old_offset + zone->nr_superpageblocks)
-				is_old = true;
-		}
-
-		if (is_old)
-			continue;
-
-		init_one_superpageblock(sb, zone,
-					new_sb_base + (i << SUPERPAGEBLOCK_ORDER),
-					zone_start, zone_end);
 	}
 
 	/*
@@ -1748,6 +1783,8 @@ void __meminit resize_zone_superpageblocks(struct zone *zone)
 	zone->nr_superpageblocks = new_nr_sbs;
 	zone->superpageblock_base_pfn = new_sb_base;
 	zone->spb_kvmalloced = true;
+
+	spin_unlock_irqrestore(&zone->lock, flags);
 
 	/*
 	 * The boot-time array was allocated with memblock_alloc, which

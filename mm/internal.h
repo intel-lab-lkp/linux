@@ -1026,9 +1026,11 @@ void init_cma_reserved_pageblock(struct page *page);
 #endif /* CONFIG_COMPACTION || CONFIG_CMA */
 
 #ifdef CONFIG_COMPACTION
+void init_superpageblock_defrag(struct superpageblock *sb);
 void superpageblock_clear_has_movable(struct zone *zone, struct page *page);
 void superpageblock_set_has_movable(struct zone *zone, struct page *page);
 #else
+static inline void init_superpageblock_defrag(struct superpageblock *sb) {}
 static inline void superpageblock_clear_has_movable(struct zone *zone,
 						    struct page *page) {}
 static inline void superpageblock_set_has_movable(struct zone *zone,
