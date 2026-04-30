@@ -262,6 +262,8 @@ bool ttm_bo_shrink_suitable(struct ttm_buffer_object *bo, struct ttm_operation_c
 
 bool ttm_bo_shrink_avoid_wait(void);
 
+bool ttm_bo_shrink_kswap_maybe_fragmented(int nid, s8 order);
+
 /**
  * ttm_bo_reserve:
  *

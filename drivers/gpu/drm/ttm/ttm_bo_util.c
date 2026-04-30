@@ -1169,3 +1169,41 @@ bool ttm_bo_shrink_avoid_wait(void)
 	return !current_is_kswapd();
 }
 EXPORT_SYMBOL(ttm_bo_shrink_avoid_wait);
+
+/**
+ * ttm_bo_shrink_kswap_maybe_fragmented() - Whether in kswap and memory might be
+ * fragmented
+ * @nid: current node being shrunk
+ * @order: order of shrinker invocation
+ *
+ * Return: true if in kswap and memory appears fragmented, false is not.
+ */
+bool ttm_bo_shrink_kswap_maybe_fragmented(int nid, s8 order)
+{
+	enum zone_type zone_type;
+
+	if (!order)
+		return false;
+
+	if (!current_is_kswapd())
+		return false;
+
+	if (!numa_valid_node(nid))
+		return false;
+
+#if IS_ENABLED(CONFIG_ZONE_DMA32)
+	zone_type = ZONE_DMA32;
+#else
+	zone_type = ZONE_NORMAL;
+#endif
+
+	for (; zone_type <= ZONE_NORMAL; ++zone_type) {
+		struct zone *zone = &NODE_DATA(nid)->node_zones[zone_type];
+
+		if (zone_maybe_fragmented_in_shrinker(zone))
+			return true;
+	}
+
+	return false;
+}
+EXPORT_SYMBOL(ttm_bo_shrink_kswap_maybe_fragmented);
