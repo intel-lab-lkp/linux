@@ -1270,17 +1270,32 @@ static void mark_free_pages(struct zone *zone)
 	}
 
 	for_each_migratetype_order(order, t) {
-		list_for_each_entry(page,
-				&zone->free_area[order].free_list[t], buddy_list) {
-			unsigned long i;
+		unsigned long sb_idx;
+		unsigned long nr_lists = zone->nr_superpageblocks ? : 1;
 
-			pfn = page_to_pfn(page);
-			for (i = 0; i < (1UL << order); i++) {
-				if (!--page_count) {
-					touch_nmi_watchdog();
-					page_count = WD_PAGE_COUNT;
+		/*
+		 * After the SPB rework, free pages live on per-superpageblock
+		 * free lists. Walk every SPB's list for this (order, mt) cell.
+		 * If the zone has no SPBs (unpopulated zone), fall back to the
+		 * zone-level list head so that any pre-SPB pages are still
+		 * marked.
+		 */
+		for (sb_idx = 0; sb_idx < nr_lists; sb_idx++) {
+			struct list_head *list = zone->nr_superpageblocks ?
+				&zone->superpageblocks[sb_idx].free_area[order].free_list[t] :
+				&zone->free_area[order].free_list[t];
+
+			list_for_each_entry(page, list, buddy_list) {
+				unsigned long i;
+
+				pfn = page_to_pfn(page);
+				for (i = 0; i < (1UL << order); i++) {
+					if (!--page_count) {
+						touch_nmi_watchdog();
+						page_count = WD_PAGE_COUNT;
+					}
+					swsusp_set_page_free(pfn_to_page(pfn + i));
 				}
-				swsusp_set_page_free(pfn_to_page(pfn + i));
 			}
 		}
 	}
