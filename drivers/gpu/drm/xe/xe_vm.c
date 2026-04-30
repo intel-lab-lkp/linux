@@ -3054,6 +3054,9 @@ static int vma_lock_and_validate(struct drm_exec *exec, struct xe_vma *vma,
 
 		if (flags.request_decompress)
 			err = xe_bo_decompress(bo);
+
+		if (xe_pat_index_get_comp_en(vm->xe, vma->attr.pat_index))
+			bo->ccs_used = true;
 	}
 
 	return err;

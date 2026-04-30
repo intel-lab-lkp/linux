@@ -88,6 +88,9 @@ struct xe_bo {
 	/** @ccs_cleared: true means that CCS region of BO is already cleared */
 	bool ccs_cleared;
 
+	/** @ccs_used: true means that CCS region of BO is used */
+	bool ccs_used;
+
 	/** @bb_ccs: BB instructions of CCS read/write. Valid only for VF */
 	struct xe_mem_pool_node *bb_ccs[XE_SRIOV_VF_CCS_CTX_COUNT];
 
