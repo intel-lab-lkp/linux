@@ -26,6 +26,15 @@
 #define TB_BW_ALLOC_RETRIES	3
 
 /*
+ * Number of retries for DP tunnel DPRX negotiation if it fails during
+ * boot. This commonly happens on USB4 v2 routers where Host Router
+ * Reset (HRR) destroys BIOS-established tunnels and the Thunderbolt
+ * driver re-creates them before the graphics driver is ready.
+ */
+#define TB_DP_ACTIVATE_RETRIES	3
+#define TB_DP_ACTIVATE_DELAY	5000	/* ms */
+
+/*
  * Minimum bandwidth (in Mb/s) that is needed in the single transmitter/receiver
  * direction. This is 40G - 10% guard band bandwidth.
  */
@@ -59,6 +68,8 @@ MODULE_PARM_DESC(asym_threshold,
  *		    after cfg has been paused.
  * @remove_work: Work used to remove any unplugged routers after
  *		 runtime resume
+ * @dp_retry_work: Work used to retry DP tunnel setup after DPRX failure
+ * @dp_retries: Number of remaining DP tunnel activation retries
  * @groups: Bandwidth groups used in this domain.
  */
 struct tb_cm {
@@ -66,6 +77,8 @@ struct tb_cm {
 	struct list_head dp_resources;
 	bool hotplug_active;
 	struct delayed_work remove_work;
+	struct delayed_work dp_retry_work;
+	int dp_retries;
 	struct tb_bandwidth_group groups[MAX_GROUPS];
 };
 
@@ -1903,17 +1916,33 @@ static struct tb_port *tb_find_dp_out(struct tb *tb, struct tb_port *in)
 	return NULL;
 }
 
+static void tb_tunnel_dp(struct tb *tb);
+
+static void tb_dp_retry_work_fn(struct work_struct *work)
+{
+	struct tb_cm *tcm = container_of(work, struct tb_cm,
+					 dp_retry_work.work);
+	struct tb *tb = tcm_to_tb(tcm);
+
+	mutex_lock(&tb->lock);
+	tb_tunnel_dp(tb);
+	mutex_unlock(&tb->lock);
+}
+
 static void tb_dp_tunnel_active(struct tb_tunnel *tunnel, void *data)
 {
 	struct tb_port *in = tunnel->src_port;
 	struct tb_port *out = tunnel->dst_port;
 	struct tb *tb = data;
+	struct tb_cm *tcm = tb_priv(tb);
 
 	mutex_lock(&tb->lock);
 	if (tb_tunnel_is_active(tunnel)) {
 		int consumed_up, consumed_down, ret;
 
 		tb_tunnel_dbg(tunnel, "DPRX capabilities read completed\n");
+
+		tcm->dp_retries = 0;
 
 		/* If fail reading tunnel's consumed bandwidth, tear it down */
 		ret = tb_tunnel_consumed_bandwidth(tunnel, &consumed_up,
@@ -1943,8 +1972,6 @@ static void tb_dp_tunnel_active(struct tb_tunnel *tunnel, void *data)
 			tb_increase_tmu_accuracy(tunnel);
 		}
 	} else {
-		struct tb_port *in = tunnel->src_port;
-
 		/*
 		 * This tunnel failed to establish. This means DPRX
 		 * negotiation most likely did not complete which
@@ -1952,16 +1979,26 @@ static void tb_dp_tunnel_active(struct tb_tunnel *tunnel, void *data)
 		 * loaded or not all DP cables where connected to the
 		 * discrete router.
 		 *
-		 * In both cases we remove the DP IN adapter from the
-		 * available resources as it is not usable. This will
-		 * also tear down the tunnel and try to re-use the
-		 * released DP OUT.
-		 *
-		 * It will be added back only if there is hotplug for
-		 * the DP IN again.
+		 * On USB4 v2 routers Host Router Reset (HRR) at boot
+		 * destroys BIOS-established tunnels and the driver
+		 * re-creates them before the graphics driver is ready.
+		 * Retry a few times to allow the graphics driver to
+		 * come up.
 		 */
-		tb_tunnel_warn(tunnel, "not active, tearing down\n");
-		tb_dp_resource_unavailable(tb, in, "DPRX negotiation failed");
+		if (tcm->dp_retries < TB_DP_ACTIVATE_RETRIES) {
+			tcm->dp_retries++;
+			tb_tunnel_warn(tunnel,
+				       "not active, retrying in %d ms (attempt %d/%d)\n",
+				       TB_DP_ACTIVATE_DELAY, tcm->dp_retries,
+				       TB_DP_ACTIVATE_RETRIES);
+			tb_deactivate_and_free_tunnel(tunnel);
+			queue_delayed_work(tb->wq, &tcm->dp_retry_work,
+					   msecs_to_jiffies(TB_DP_ACTIVATE_DELAY));
+		} else {
+			tb_tunnel_warn(tunnel, "not active, tearing down\n");
+			tb_dp_resource_unavailable(tb, in,
+						   "DPRX negotiation failed");
+		}
 	}
 	mutex_unlock(&tb->lock);
 
@@ -2937,6 +2974,7 @@ static void tb_stop(struct tb *tb)
 	struct tb_tunnel *n;
 
 	cancel_delayed_work(&tcm->remove_work);
+	cancel_delayed_work(&tcm->dp_retry_work);
 	/* tunnels are only present after everything has been initialized */
 	list_for_each_entry_safe(tunnel, n, &tcm->tunnel_list, list) {
 		/*
@@ -3073,6 +3111,8 @@ static int tb_suspend_noirq(struct tb *tb)
 	tb_switch_exit_redrive(tb->root_switch);
 	tb_switch_suspend(tb->root_switch, false);
 	tcm->hotplug_active = false; /* signal tb_handle_hotplug to quit */
+	cancel_delayed_work(&tcm->dp_retry_work);
+	tcm->dp_retries = 0;
 	tb_dbg(tb, "suspend finished\n");
 
 	return 0;
@@ -3383,6 +3423,7 @@ struct tb *tb_probe(struct tb_nhi *nhi)
 	INIT_LIST_HEAD(&tcm->tunnel_list);
 	INIT_LIST_HEAD(&tcm->dp_resources);
 	INIT_DELAYED_WORK(&tcm->remove_work, tb_remove_work);
+	INIT_DELAYED_WORK(&tcm->dp_retry_work, tb_dp_retry_work_fn);
 	tb_init_bandwidth_groups(tcm);
 
 	tb_dbg(tb, "using software connection manager\n");
