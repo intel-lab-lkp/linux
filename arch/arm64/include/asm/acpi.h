@@ -45,6 +45,9 @@
 
 #define ACPI_MADT_GICC_TRBE  (offsetof(struct acpi_madt_generic_interrupt, \
 	trbe_interrupt) + sizeof(u16))
+
+#define ACPI_MADT_GICC_HACDBSIRQ  (offsetof(struct acpi_madt_generic_interrupt, \
+	hacdbsirq_gsi) + sizeof(u32))
 /*
  * Arm® Functional Fixed Hardware Specification Version 1.2.
  * Table 2: Arm Architecture context loss flags

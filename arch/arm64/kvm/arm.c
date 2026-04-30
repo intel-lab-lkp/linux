@@ -41,6 +41,7 @@
 #include <asm/kvm_nested.h>
 #include <asm/kvm_pkvm.h>
 #include <asm/kvm_ptrauth.h>
+#include <asm/kvm_dirty_bit.h>
 #include <asm/sections.h>
 #include <asm/stacktrace/nvhe.h>
 
@@ -2285,6 +2286,7 @@ int kvm_arch_enable_virtualization_cpu(void)
 
 	kvm_vgic_cpu_up();
 	kvm_timer_cpu_up();
+	kvm_hacdbs_cpu_up();
 
 	preempt_enable();
 
@@ -2293,6 +2295,7 @@ int kvm_arch_enable_virtualization_cpu(void)
 
 void kvm_arch_disable_virtualization_cpu(void)
 {
+	kvm_hacdbs_cpu_down();
 	kvm_timer_cpu_down();
 	kvm_vgic_cpu_down();
 
@@ -2456,6 +2459,8 @@ static int __init init_subsystems(void)
 	err = kvm_timer_hyp_init(vgic_present);
 	if (err)
 		goto out;
+
+	kvm_hacdbs_init();
 
 	kvm_register_perf_callbacks();
 
