@@ -2796,6 +2796,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 	struct page *page;
 	int full;
 	struct superpageblock *sb;
+	int opposite_mt;
 	/*
 	 * Category search order: 2 passes.
 	 * Movable: clean first, then tainted (pack into clean SBs).
@@ -2972,6 +2973,90 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 						pcp_allowed_order(order) &&
 						migratetype < MIGRATE_PCPTYPES);
 					return page;
+				}
+			}
+		}
+
+		/*
+		 * Pass 2c: cross-non-movable borrow within tainted SPBs.
+		 *
+		 * If we're a non-movable alloc and Pass 1/2/2b couldn't find a
+		 * buddy on our migratetype's free list anywhere, but tainted
+		 * SPBs have free buddies on the *opposite* non-movable type's
+		 * free list, take one of those.
+		 *
+		 * Why this happens: when pages are freed, __free_one_page puts
+		 * them on the free_list determined by their pageblock's tag,
+		 * not the original allocation's migratetype. Slab caches tend
+		 * to be dense (RECL pageblocks fill up; few sub-PB fragments),
+		 * while UNMOV pageblocks accumulate sparse free space from
+		 * vmalloc/raw alloc churn. Net effect: tainted SPBs frequently
+		 * have tens of thousands of free pages all on the UNMOV list,
+		 * invisible to RECL allocs (or vice versa). Without this pass,
+		 * the alloc falls through to Pass 3 and taints a fresh clean
+		 * SPB even though the existing tainted ones have plenty of
+		 * unused space.
+		 *
+		 * We do NOT relabel the source pageblock. The buddy is taken
+		 * from @opposite_mt's free list and the splits go back on
+		 * @opposite_mt's list (page_del_and_expand uses the same mt
+		 * for delete and expand). The pageblock tag is unchanged, so
+		 * the page returns to @opposite_mt's list when freed via
+		 * __free_one_page. Effectively a borrow: the alloc takes a
+		 * physical page from a UNMOV-tagged pageblock for a RECL
+		 * use, and the page cycles back to UNMOV's list on free.
+		 *
+		 * We do set PB_has_<migratetype> via __spb_set_has_type so
+		 * spb_defrag accounting reflects that this pageblock now hosts
+		 * our migratetype's content too. PB_has_<opposite_mt> stays
+		 * set since other buddies of that type remain.
+		 *
+		 * Restricted to UNMOV ↔ RECL. Movable allocations don't
+		 * participate (they have their own Pass 4 fallback path).
+		 *
+		 * Restricted to SB_TAINTED to avoid spreading mixing into
+		 * clean SPBs.
+		 */
+		opposite_mt = -1;
+		if (migratetype == MIGRATE_UNMOVABLE)
+			opposite_mt = MIGRATE_RECLAIMABLE;
+		else if (migratetype == MIGRATE_RECLAIMABLE)
+			opposite_mt = MIGRATE_UNMOVABLE;
+
+		if (opposite_mt >= 0) {
+			for (full = SB_FULL; full < __NR_SB_FULLNESS; full++) {
+				list_for_each_entry(sb,
+					&zone->spb_lists[SB_TAINTED][full], list) {
+					int co;
+
+					if (!sb->nr_free_pages)
+						continue;
+					for (co = min_t(int, pageblock_order - 1,
+							NR_PAGE_ORDERS - 1);
+					     co >= (int)order;
+					     --co) {
+						current_order = co;
+						area = &sb->free_area[current_order];
+						page = get_page_from_free_area(
+							area, opposite_mt);
+						if (!page)
+							continue;
+						if (get_pageblock_isolate(page))
+							continue;
+						if (is_migrate_cma(
+						    get_pageblock_migratetype(page)))
+							continue;
+						page_del_and_expand(zone, page,
+							order, current_order,
+							opposite_mt);
+						__spb_set_has_type(page,
+							migratetype);
+						trace_mm_page_alloc_zone_locked(
+							page, order, migratetype,
+							pcp_allowed_order(order) &&
+							migratetype < MIGRATE_PCPTYPES);
+						return page;
+					}
 				}
 			}
 		}
