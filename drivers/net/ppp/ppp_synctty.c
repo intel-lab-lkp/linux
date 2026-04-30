@@ -71,7 +71,7 @@ struct syncppp {
 
 	refcount_t	refcnt;
 	struct completion dead_cmp;
-	struct ppp_channel chan;	/* interface to generic ppp layer */
+	struct ppp_channel *chan;	/* interface to generic ppp layer */
 };
 
 /* Bit numbers in xmit_flags */
@@ -87,8 +87,8 @@ struct syncppp {
  * Prototypes.
  */
 static struct sk_buff* ppp_sync_txmunge(struct syncppp *ap, struct sk_buff *);
-static int ppp_sync_send(struct ppp_channel *chan, struct sk_buff *skb);
-static int ppp_sync_ioctl(struct ppp_channel *chan, unsigned int cmd,
+static int ppp_sync_send(void *private, struct sk_buff *skb);
+static int ppp_sync_ioctl(void *private, unsigned int cmd,
 			  unsigned long arg);
 static void ppp_sync_process(struct tasklet_struct *t);
 static int ppp_sync_push(struct syncppp *ap);
@@ -155,9 +155,10 @@ static void sp_put(struct syncppp *ap)
 static int
 ppp_sync_open(struct tty_struct *tty)
 {
+	struct ppp_channel_conf conf = {};
+	struct ppp_channel *chan;
 	struct syncppp *ap;
 	int err;
-	int speed;
 
 	if (tty->ops->write == NULL)
 		return -EOPNOTSUPP;
@@ -182,15 +183,19 @@ ppp_sync_open(struct tty_struct *tty)
 	refcount_set(&ap->refcnt, 1);
 	init_completion(&ap->dead_cmp);
 
-	ap->chan.private = ap;
-	ap->chan.ops = &sync_ops;
-	ap->chan.mtu = PPP_MRU;
-	ap->chan.hdrlen = 2;	/* for A/C bytes */
-	speed = tty_get_baud_rate(tty);
-	ap->chan.speed = speed;
-	err = ppp_register_channel(&ap->chan);
-	if (err)
+	conf.private = ap;
+	conf.ops = &sync_ops;
+	conf.hdrlen = 2;	/* for A/C bytes */
+#ifdef CONFIG_PPP_MULTILINK
+	conf.mtu = PPP_MRU;
+	conf.speed = tty_get_baud_rate(tty);
+#endif
+	chan = ppp_register_channel(&conf);
+	if (!chan) {
+		err = -ENOMEM;
 		goto out_free;
+	}
+	ap->chan = chan;
 
 	tty->disc_data = ap;
 	tty->receive_room = 65536;
@@ -233,7 +238,7 @@ ppp_sync_close(struct tty_struct *tty)
 		wait_for_completion(&ap->dead_cmp);
 	tasklet_kill(&ap->tsk);
 
-	ppp_unregister_channel(&ap->chan);
+	ppp_unregister_channel(ap->chan);
 	skb_queue_purge(&ap->rqueue);
 	kfree_skb(ap->tpkt);
 	kfree(ap);
@@ -285,14 +290,14 @@ ppp_synctty_ioctl(struct tty_struct *tty, unsigned int cmd, unsigned long arg)
 	switch (cmd) {
 	case PPPIOCGCHAN:
 		err = -EFAULT;
-		if (put_user(ppp_channel_index(&ap->chan), p))
+		if (put_user(ppp_channel_index(ap->chan), p))
 			break;
 		err = 0;
 		break;
 
 	case PPPIOCGUNIT:
 		err = -EFAULT;
-		if (put_user(ppp_unit_number(&ap->chan), p))
+		if (put_user(ppp_unit_number(ap->chan), p))
 			break;
 		err = 0;
 		break;
@@ -383,9 +388,9 @@ ppp_sync_init(void)
  * The following routines provide the PPP channel interface.
  */
 static int
-ppp_sync_ioctl(struct ppp_channel *chan, unsigned int cmd, unsigned long arg)
+ppp_sync_ioctl(void *private, unsigned int cmd, unsigned long arg)
 {
-	struct syncppp *ap = chan->private;
+	struct syncppp *ap = private;
 	int err, val;
 	u32 accm[8];
 	void __user *argp = (void __user *)arg;
@@ -483,16 +488,16 @@ static void ppp_sync_process(struct tasklet_struct *t)
 	while ((skb = skb_dequeue(&ap->rqueue)) != NULL) {
 		if (skb->len == 0) {
 			/* zero length buffers indicate error */
-			ppp_input_error(&ap->chan);
+			ppp_input_error(ap->chan);
 			kfree_skb(skb);
 		}
 		else
-			ppp_input(&ap->chan, skb);
+			ppp_input(ap->chan, skb);
 	}
 
 	/* try to push more stuff out */
 	if (test_bit(XMIT_WAKEUP, &ap->xmit_flags) && ppp_sync_push(ap))
-		ppp_output_wakeup(&ap->chan);
+		ppp_output_wakeup(ap->chan);
 }
 
 /*
@@ -562,9 +567,9 @@ ppp_sync_txmunge(struct syncppp *ap, struct sk_buff *skb)
  * at some later time.
  */
 static int
-ppp_sync_send(struct ppp_channel *chan, struct sk_buff *skb)
+ppp_sync_send(void *private, struct sk_buff *skb)
 {
-	struct syncppp *ap = chan->private;
+	struct syncppp *ap = private;
 
 	ppp_sync_push(ap);
 
@@ -649,7 +654,7 @@ ppp_sync_flush_output(struct syncppp *ap)
 	}
 	spin_unlock_bh(&ap->xmit_lock);
 	if (done)
-		ppp_output_wakeup(&ap->chan);
+		ppp_output_wakeup(ap->chan);
 }
 
 /*

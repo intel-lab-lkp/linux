@@ -88,10 +88,10 @@ static void notify_packet_sent(void *callback_data, unsigned int packet_length)
 /*
  * Called by the ppp system when it has a packet to send to the hardware.
  */
-static int ipwireless_ppp_start_xmit(struct ppp_channel *ppp_channel,
+static int ipwireless_ppp_start_xmit(void *private,
 				     struct sk_buff *skb)
 {
-	struct ipw_network *network = ppp_channel->private;
+	struct ipw_network *network = private;
 	unsigned long flags;
 
 	spin_lock_irqsave(&network->lock, flags);
@@ -153,10 +153,10 @@ static int ipwireless_ppp_start_xmit(struct ppp_channel *ppp_channel,
 }
 
 /* Handle an ioctl call that has come in via ppp. (copy of ppp_async_ioctl() */
-static int ipwireless_ppp_ioctl(struct ppp_channel *ppp_channel,
+static int ipwireless_ppp_ioctl(void *private,
 				unsigned int cmd, unsigned long arg)
 {
-	struct ipw_network *network = ppp_channel->private;
+	struct ipw_network *network = private;
 	int err, val;
 	u32 accm[8];
 	int __user *user_arg = (int __user *) arg;
@@ -254,19 +254,17 @@ static void do_go_online(struct work_struct *work_go_online)
 
 	spin_lock_irqsave(&network->lock, flags);
 	if (!network->ppp_channel) {
+		struct ppp_channel_conf conf = {};
 		struct ppp_channel *channel;
 
 		spin_unlock_irqrestore(&network->lock, flags);
-		channel = kzalloc_obj(struct ppp_channel);
-		if (!channel) {
-			printk(KERN_ERR IPWIRELESS_PCCARD_NAME
-					": unable to allocate PPP channel\n");
-			return;
-		}
-		channel->private = network;
-		channel->mtu = 16384;	/* Wild guess */
-		channel->hdrlen = 2;
-		channel->ops = &ipwireless_ppp_channel_ops;
+
+		conf.private = network;
+		conf.hdrlen = 2;
+		conf.ops = &ipwireless_ppp_channel_ops;
+#ifdef CONFIG_PPP_MULTILINK
+		conf.mtu = 16384;	/* Wild guess */
+#endif
 
 		network->flags = 0;
 		network->rbits = 0;
@@ -275,10 +273,10 @@ static void do_go_online(struct work_struct *work_go_online)
 		network->xaccm[0] = ~0U;
 		network->xaccm[3] = 0x60000000U;
 		network->raccm = ~0U;
-		if (ppp_register_channel(channel) < 0) {
+		channel = ppp_register_channel(&conf);
+		if (!channel) {
 			printk(KERN_ERR IPWIRELESS_PCCARD_NAME
 					": unable to register PPP channel\n");
-			kfree(channel);
 			return;
 		}
 		spin_lock_irqsave(&network->lock, flags);

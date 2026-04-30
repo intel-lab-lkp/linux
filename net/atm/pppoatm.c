@@ -64,7 +64,7 @@ struct pppoatm_vcc {
 	atomic_t inflight;
 	unsigned long blocked;
 	int flags;			/* SC_COMP_PROT - compress protocol */
-	struct ppp_channel chan;	/* interface to generic ppp layer */
+	struct ppp_channel *chan;	/* interface to generic ppp layer */
 	struct tasklet_struct wakeup_tasklet;
 };
 
@@ -91,11 +91,6 @@ static inline struct pppoatm_vcc *atmvcc_to_pvcc(const struct atm_vcc *atmvcc)
 	return (struct pppoatm_vcc *) (atmvcc->user_back);
 }
 
-static inline struct pppoatm_vcc *chan_to_pvcc(const struct ppp_channel *chan)
-{
-	return (struct pppoatm_vcc *) (chan->private);
-}
-
 /*
  * We can't do this directly from our _pop handler, since the ppp code
  * doesn't want to be called in interrupt context, so we do it from
@@ -105,7 +100,7 @@ static void pppoatm_wakeup_sender(struct tasklet_struct *t)
 {
 	struct pppoatm_vcc *pvcc = from_tasklet(pvcc, t, wakeup_tasklet);
 
-	ppp_output_wakeup(&pvcc->chan);
+	ppp_output_wakeup(pvcc->chan);
 }
 
 static void pppoatm_release_cb(struct atm_vcc *atmvcc)
@@ -172,7 +167,7 @@ static void pppoatm_unassign_vcc(struct atm_vcc *atmvcc)
 	atmvcc->pop = pvcc->old_pop;
 	atmvcc->release_cb = pvcc->old_release_cb;
 	tasklet_kill(&pvcc->wakeup_tasklet);
-	ppp_unregister_channel(&pvcc->chan);
+	ppp_unregister_channel(pvcc->chan);
 	atmvcc->user_back = NULL;
 	kfree(pvcc);
 }
@@ -201,7 +196,7 @@ static void pppoatm_push(struct atm_vcc *atmvcc, struct sk_buff *skb)
 		skb_pull(skb, LLC_LEN);
 		break;
 	case e_autodetect:
-		if (pvcc->chan.ppp == NULL) {	/* Not bound yet! */
+		if (!pvcc->chan) {	/* Not bound yet! */
 			kfree_skb(skb);
 			return;
 		}
@@ -215,7 +210,8 @@ static void pppoatm_push(struct atm_vcc *atmvcc, struct sk_buff *skb)
 		    !memcmp(skb->data, &pppllc[LLC_LEN],
 		    sizeof(pppllc) - LLC_LEN)) {
 			pvcc->encaps = e_vc;
-			pvcc->chan.mtu += LLC_LEN;
+			ppp_channel_update_mtu(pvcc->chan,
+					       atmvcc->qos.txtp.max_sdu - PPP_HDRLEN);
 			break;
 		}
 		pr_debug("Couldn't autodetect yet (skb: %6ph)\n", skb->data);
@@ -223,12 +219,12 @@ static void pppoatm_push(struct atm_vcc *atmvcc, struct sk_buff *skb)
 	case e_vc:
 		break;
 	}
-	ppp_input(&pvcc->chan, skb);
+	ppp_input(pvcc->chan, skb);
 	return;
 
 error:
 	kfree_skb(skb);
-	ppp_input_error(&pvcc->chan);
+	ppp_input_error(pvcc->chan);
 }
 
 static int pppoatm_may_send(struct pppoatm_vcc *pvcc, int size)
@@ -286,9 +282,9 @@ static int pppoatm_may_send(struct pppoatm_vcc *pvcc, int size)
  * as success, just to be clear what we're really doing.
  */
 #define DROP_PACKET 1
-static int pppoatm_send(struct ppp_channel *chan, struct sk_buff *skb)
+static int pppoatm_send(void *private, struct sk_buff *skb)
 {
-	struct pppoatm_vcc *pvcc = chan_to_pvcc(chan);
+	struct pppoatm_vcc *pvcc = private;
 	struct atm_vcc *vcc;
 	int ret;
 
@@ -367,16 +363,15 @@ nospace:
 }
 
 /* This handles ioctls sent to the /dev/ppp interface */
-static int pppoatm_devppp_ioctl(struct ppp_channel *chan, unsigned int cmd,
-	unsigned long arg)
+static int pppoatm_devppp_ioctl(void *private, unsigned int cmd,
+				unsigned long arg)
 {
+	struct pppoatm_vcc *pvcc = private;
 	switch (cmd) {
 	case PPPIOCGFLAGS:
-		return put_user(chan_to_pvcc(chan)->flags, (int __user *) arg)
-		    ? -EFAULT : 0;
+		return put_user(pvcc->flags, (int __user *)arg) ? -EFAULT : 0;
 	case PPPIOCSFLAGS:
-		return get_user(chan_to_pvcc(chan)->flags, (int __user *) arg)
-		    ? -EFAULT : 0;
+		return get_user(pvcc->flags, (int __user *)arg) ? -EFAULT : 0;
 	}
 	return -ENOTTY;
 }
@@ -388,9 +383,10 @@ static const struct ppp_channel_ops pppoatm_ops = {
 
 static int pppoatm_assign_vcc(struct atm_vcc *atmvcc, void __user *arg)
 {
+	struct ppp_channel_conf conf = {};
 	struct atm_backend_ppp be;
 	struct pppoatm_vcc *pvcc;
-	int err;
+	struct ppp_channel *chan;
 
 	if (copy_from_user(&be, arg, sizeof be))
 		return -EFAULT;
@@ -409,16 +405,19 @@ static int pppoatm_assign_vcc(struct atm_vcc *atmvcc, void __user *arg)
 	pvcc->old_owner = atmvcc->owner;
 	pvcc->old_release_cb = atmvcc->release_cb;
 	pvcc->encaps = (enum pppoatm_encaps) be.encaps;
-	pvcc->chan.private = pvcc;
-	pvcc->chan.ops = &pppoatm_ops;
-	pvcc->chan.mtu = atmvcc->qos.txtp.max_sdu - PPP_HDRLEN -
+	conf.private = pvcc;
+	conf.ops = &pppoatm_ops;
+#ifdef CONFIG_PPP_MULTILINK
+	conf.mtu = atmvcc->qos.txtp.max_sdu - PPP_HDRLEN -
 	    (be.encaps == e_vc ? 0 : LLC_LEN);
+#endif
 	tasklet_setup(&pvcc->wakeup_tasklet, pppoatm_wakeup_sender);
-	err = ppp_register_channel(&pvcc->chan);
-	if (err != 0) {
+	chan = ppp_register_channel(&conf);
+	if (!chan) {
 		kfree(pvcc);
-		return err;
+		return -ENOMEM;
 	}
+	pvcc->chan = chan;
 	atmvcc->user_back = pvcc;
 	atmvcc->push = pppoatm_push;
 	atmvcc->pop = pppoatm_pop;
@@ -458,11 +457,11 @@ static int pppoatm_ioctl(struct socket *sock, unsigned int cmd,
 		return pppoatm_assign_vcc(atmvcc, argp);
 		}
 	case PPPIOCGCHAN:
-		return put_user(ppp_channel_index(&atmvcc_to_pvcc(atmvcc)->
-		    chan), (int __user *) argp) ? -EFAULT : 0;
+		return put_user(ppp_channel_index(atmvcc_to_pvcc(atmvcc)->chan),
+		    (int __user *)argp) ? -EFAULT : 0;
 	case PPPIOCGUNIT:
-		return put_user(ppp_unit_number(&atmvcc_to_pvcc(atmvcc)->
-		    chan), (int __user *) argp) ? -EFAULT : 0;
+		return put_user(ppp_unit_number(atmvcc_to_pvcc(atmvcc)->chan),
+		    (int __user *)argp) ? -EFAULT : 0;
 	}
 	return -ENOIOCTLCMD;
 }

@@ -27,55 +27,64 @@ struct ppp_channel;
 struct ppp_channel_ops {
 	/* Send a packet (or multilink fragment) on this channel.
 	   Returns 1 if it was accepted, 0 if not. */
-	int	(*start_xmit)(struct ppp_channel *, struct sk_buff *);
+	int	(*start_xmit)(void *private, struct sk_buff *skb);
 	/* Handle an ioctl call that has come in via /dev/ppp. */
-	int	(*ioctl)(struct ppp_channel *, unsigned int, unsigned long);
-	int	(*fill_forward_path)(struct net_device_path_ctx *,
-				     struct net_device_path *,
-				     const struct ppp_channel *);
+	int	(*ioctl)(void *private, unsigned int cmd, unsigned long arg);
+	int	(*fill_forward_path)(struct net_device_path_ctx *ctx,
+				     struct net_device_path *path,
+				     void *private);
 };
 
-struct ppp_channel {
+struct ppp_channel_conf {
 	void		*private;	/* channel private data */
 	const struct ppp_channel_ops *ops; /* operations for this channel */
-	int		mtu;		/* max transmit packet size */
 	int		hdrlen;		/* amount of headroom channel needs */
-	void		*ppp;		/* opaque to channel */
-	int		speed;		/* transfer rate (bytes/second) */
 	bool		direct_xmit;	/* no qdisc, xmit directly */
+#ifdef CONFIG_PPP_MULTILINK
+	int		speed;		/* transfer rate (bytes/second) */
+	int		mtu;		/* max transmit packet size */
+#endif
 };
 
 #ifdef __KERNEL__
 /* Called by the channel when it can send some more data. */
-extern void ppp_output_wakeup(struct ppp_channel *);
+void ppp_output_wakeup(struct ppp_channel *pch);
 
 /* Called by the channel to process a received PPP packet.
    The packet should have just the 2-byte PPP protocol header. */
-extern void ppp_input(struct ppp_channel *, struct sk_buff *);
+void ppp_input(struct ppp_channel *pch, struct sk_buff *skb);
 
 /* Called by the channel when an input error occurs, indicating
    that we may have missed a packet. */
-extern void ppp_input_error(struct ppp_channel *);
+void ppp_input_error(struct ppp_channel *pch);
 
-/* Attach a channel to a given PPP unit in specified net. */
-extern int ppp_register_net_channel(struct net *, struct ppp_channel *);
+/* Create a new, unattached ppp channel for specified net. */
+struct ppp_channel *ppp_register_net_channel(struct net *net,
+					     const struct ppp_channel_conf *chan);
 
-/* Attach a channel to a given PPP unit. */
-extern int ppp_register_channel(struct ppp_channel *);
+/* Create a new, unattached ppp channel. */
+struct ppp_channel *ppp_register_channel(const struct ppp_channel_conf *chan);
 
 /* Detach a channel from its PPP unit (e.g. on hangup). */
-extern void ppp_unregister_channel(struct ppp_channel *);
+void ppp_unregister_channel(struct ppp_channel *pch);
 
 /* Get the channel number for a channel */
-extern int ppp_channel_index(struct ppp_channel *);
+int ppp_channel_index(struct ppp_channel *pch);
 
 /* Get the unit number associated with a channel, or -1 if none */
-extern int ppp_unit_number(struct ppp_channel *);
+int ppp_unit_number(struct ppp_channel *pch);
 
 /* Get the device name associated with a channel, or NULL if none.
  * Caller must hold RCU read lock.
  */
-extern char *ppp_dev_name(struct ppp_channel *);
+char *ppp_dev_name(struct ppp_channel *pch);
+
+/* Update the MTU of a multilink channel */
+#ifdef CONFIG_PPP_MULTILINK
+void ppp_channel_update_mtu(struct ppp_channel *pch, int mtu);
+#else
+static inline void ppp_channel_update_mtu(struct ppp_channel *pch, int mtu) {}
+#endif
 
 /*
  * SMP locking notes:

@@ -357,7 +357,7 @@ static int pppoe_rcv_core(struct sock *sk, struct sk_buff *skb)
 	 */
 
 	if (sk->sk_state & PPPOX_BOUND) {
-		ppp_input(&po->chan, skb);
+		ppp_input(po->chan, skb);
 	} else {
 		if (sock_queue_rcv_skb(sk, skb))
 			goto abort_kfree;
@@ -631,7 +631,7 @@ static int pppoe_connect(struct socket *sock, struct sockaddr_unsized *uservaddr
 
 		po->pppoe_ifindex = 0;
 		memset(&po->pppoe_pa, 0, sizeof(po->pppoe_pa));
-		memset(&po->chan, 0, sizeof(po->chan));
+		po->chan = NULL;
 		po->next = NULL;
 		po->num = 0;
 
@@ -640,6 +640,9 @@ static int pppoe_connect(struct socket *sock, struct sockaddr_unsized *uservaddr
 
 	/* Re-bind in session stage only */
 	if (stage_session(sp->sa_addr.pppoe.sid)) {
+		struct ppp_channel_conf conf = {};
+		struct ppp_channel *chan;
+
 		error = -ENODEV;
 		net = sock_net(sk);
 		dev = dev_get_by_name(net, sp->sa_addr.pppoe.dev);
@@ -663,20 +666,23 @@ static int pppoe_connect(struct socket *sock, struct sockaddr_unsized *uservaddr
 		if (error < 0)
 			goto err_put;
 
-		po->chan.hdrlen = (sizeof(struct pppoe_hdr) +
+		conf.hdrlen = (sizeof(struct pppoe_hdr) +
 				   dev->hard_header_len);
+#ifdef CONFIG_PPP_MULTILINK
+		conf.mtu = dev->mtu - sizeof(struct pppoe_hdr) - 2;
+#endif
+		conf.private = sk;
+		conf.ops = &pppoe_chan_ops;
+		conf.direct_xmit = true;
 
-		po->chan.mtu = dev->mtu - sizeof(struct pppoe_hdr) - 2;
-		po->chan.private = sk;
-		po->chan.ops = &pppoe_chan_ops;
-		po->chan.direct_xmit = true;
-
-		error = ppp_register_net_channel(dev_net(dev), &po->chan);
-		if (error) {
+		chan = ppp_register_net_channel(dev_net(dev), &conf);
+		if (!chan) {
+			error = -ENOMEM;
 			delete_item(pn, po->pppoe_pa.sid,
 				    po->pppoe_pa.remote, po->pppoe_ifindex);
 			goto err_put;
 		}
+		po->chan = chan;
 
 		sk->sk_state = PPPOX_CONNECTED;
 	}
@@ -897,17 +903,17 @@ abort:
  * sends PPP frame over PPPoE socket
  *
  ***********************************************************************/
-static int pppoe_xmit(struct ppp_channel *chan, struct sk_buff *skb)
+static int pppoe_xmit(void *private, struct sk_buff *skb)
 {
-	struct sock *sk = chan->private;
+	struct sock *sk = private;
 	return __pppoe_xmit(sk, skb);
 }
 
 static int pppoe_fill_forward_path(struct net_device_path_ctx *ctx,
 				   struct net_device_path *path,
-				   const struct ppp_channel *chan)
+				   void *private)
 {
-	struct sock *sk = chan->private;
+	struct sock *sk = private;
 	struct pppox_sock *po = pppox_sk(sk);
 	struct net_device *dev = po->pppoe_dev;
 

@@ -67,7 +67,7 @@ struct asyncppp {
 
 	refcount_t	refcnt;
 	struct completion dead;
-	struct ppp_channel chan;	/* interface to generic ppp layer */
+	struct ppp_channel *chan;	/* interface to generic ppp layer */
 	unsigned char	obuf[OBUFSIZE];
 };
 
@@ -95,12 +95,12 @@ MODULE_ALIAS_LDISC(N_PPP);
  * Prototypes.
  */
 static int ppp_async_encode(struct asyncppp *ap);
-static int ppp_async_send(struct ppp_channel *chan, struct sk_buff *skb);
+static int ppp_async_send(void *private, struct sk_buff *skb);
 static int ppp_async_push(struct asyncppp *ap);
 static void ppp_async_flush_output(struct asyncppp *ap);
 static void ppp_async_input(struct asyncppp *ap, const unsigned char *buf,
 			    const u8 *flags, int count);
-static int ppp_async_ioctl(struct ppp_channel *chan, unsigned int cmd,
+static int ppp_async_ioctl(void *private, unsigned int cmd,
 			   unsigned long arg);
 static void ppp_async_process(struct tasklet_struct *t);
 
@@ -155,9 +155,10 @@ static void ap_put(struct asyncppp *ap)
 static int
 ppp_asynctty_open(struct tty_struct *tty)
 {
+	struct ppp_channel_conf conf = {};
+	struct ppp_channel *chan;
 	struct asyncppp *ap;
 	int err;
-	int speed;
 
 	if (tty->ops->write == NULL)
 		return -EOPNOTSUPP;
@@ -185,14 +186,18 @@ ppp_asynctty_open(struct tty_struct *tty)
 	refcount_set(&ap->refcnt, 1);
 	init_completion(&ap->dead);
 
-	ap->chan.private = ap;
-	ap->chan.ops = &async_ops;
-	ap->chan.mtu = PPP_MRU;
-	speed = tty_get_baud_rate(tty);
-	ap->chan.speed = speed;
-	err = ppp_register_channel(&ap->chan);
-	if (err)
+	conf.private = ap;
+	conf.ops = &async_ops;
+#ifdef CONFIG_PPP_MULTILINK
+	conf.mtu = PPP_MRU;
+	conf.speed = tty_get_baud_rate(tty);
+#endif
+	chan = ppp_register_channel(&conf);
+	if (!chan) {
+		err = -ENOMEM;
 		goto out_free;
+	}
+	ap->chan = chan;
 
 	tty->disc_data = ap;
 	tty->receive_room = 65536;
@@ -235,7 +240,7 @@ ppp_asynctty_close(struct tty_struct *tty)
 		wait_for_completion(&ap->dead);
 	tasklet_kill(&ap->tsk);
 
-	ppp_unregister_channel(&ap->chan);
+	ppp_unregister_channel(ap->chan);
 	kfree_skb(ap->rpkt);
 	skb_queue_purge(&ap->rqueue);
 	kfree_skb(ap->tpkt);
@@ -293,14 +298,14 @@ ppp_asynctty_ioctl(struct tty_struct *tty, unsigned int cmd, unsigned long arg)
 	switch (cmd) {
 	case PPPIOCGCHAN:
 		err = -EFAULT;
-		if (put_user(ppp_channel_index(&ap->chan), p))
+		if (put_user(ppp_channel_index(ap->chan), p))
 			break;
 		err = 0;
 		break;
 
 	case PPPIOCGUNIT:
 		err = -EFAULT;
-		if (put_user(ppp_unit_number(&ap->chan), p))
+		if (put_user(ppp_unit_number(ap->chan), p))
 			break;
 		err = 0;
 		break;
@@ -391,9 +396,9 @@ ppp_async_init(void)
  * The following routines provide the PPP channel interface.
  */
 static int
-ppp_async_ioctl(struct ppp_channel *chan, unsigned int cmd, unsigned long arg)
+ppp_async_ioctl(void *private, unsigned int cmd, unsigned long arg)
 {
-	struct asyncppp *ap = chan->private;
+	struct asyncppp *ap = private;
 	void __user *argp = (void __user *)arg;
 	int __user *p = argp;
 	int err, val;
@@ -491,13 +496,13 @@ static void ppp_async_process(struct tasklet_struct *t)
 	/* process received packets */
 	while ((skb = skb_dequeue(&ap->rqueue)) != NULL) {
 		if (skb->cb[0])
-			ppp_input_error(&ap->chan);
-		ppp_input(&ap->chan, skb);
+			ppp_input_error(ap->chan);
+		ppp_input(ap->chan, skb);
 	}
 
 	/* try to push more stuff out */
 	if (test_bit(XMIT_WAKEUP, &ap->xmit_flags) && ppp_async_push(ap))
-		ppp_output_wakeup(&ap->chan);
+		ppp_output_wakeup(ap->chan);
 }
 
 /*
@@ -620,9 +625,9 @@ ppp_async_encode(struct asyncppp *ap)
  * at some later time.
  */
 static int
-ppp_async_send(struct ppp_channel *chan, struct sk_buff *skb)
+ppp_async_send(void *private, struct sk_buff *skb)
 {
-	struct asyncppp *ap = chan->private;
+	struct asyncppp *ap = private;
 
 	ppp_async_push(ap);
 
@@ -733,7 +738,7 @@ ppp_async_flush_output(struct asyncppp *ap)
 	}
 	spin_unlock_bh(&ap->xmit_lock);
 	if (done)
-		ppp_output_wakeup(&ap->chan);
+		ppp_output_wakeup(ap->chan);
 }
 
 /*
@@ -992,7 +997,7 @@ static void async_lcp_peek(struct asyncppp *ap, unsigned char *data,
 			if (inbound)
 				ap->mru = val;
 			else
-				ap->chan.mtu = val;
+				ppp_channel_update_mtu(ap->chan, val);
 			break;
 		case LCP_ASYNCMAP:
 			val = get_unaligned_be32(data + 2);
