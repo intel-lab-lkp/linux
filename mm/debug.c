@@ -73,6 +73,7 @@ static void __dump_folio(const struct folio *folio, const struct page *page,
 {
 	struct address_space *mapping = folio_mapping(folio);
 	int mapcount = atomic_read(&page->_mapcount) + 1;
+	bool cma = false;
 	char *type = "";
 
 	if (page_mapcount_is_type(mapcount))
@@ -112,9 +113,24 @@ static void __dump_folio(const struct folio *folio, const struct page *page,
 	 * "isolate" again in the meantime, but since we are just dumping the
 	 * state for debugging, it should be fine to accept a bit of
 	 * inaccuracy here due to racing.
+	 *
+	 * Guard the is_migrate_cma_folio() call with pfn_valid() and
+	 * zone_spans_pfn(). The macro calls get_pfnblock_migratetype()
+	 * which calls get_pfnblock_flags_word() which has a VM_BUG_ON_PAGE
+	 * for !zone_spans_pfn(). If that fires, dump_page() recurses
+	 * infinitely. Call page_zone() only after pfn_valid() to avoid
+	 * dereferencing uninitialized zone data during early boot.
 	 */
+#ifdef CONFIG_CMA
+	if (pfn_valid(pfn)) {
+		struct zone *zone = page_zone(page);
+
+		if (zone_spans_pfn(zone, pfn))
+			cma = is_migrate_cma_folio(folio, pfn);
+	}
+#endif
 	pr_warn("%sflags: %pGp%s\n", type, &folio->flags,
-		is_migrate_cma_folio(folio, pfn) ? " CMA" : "");
+		cma ? " CMA" : "");
 	if (page_has_type(&folio->page))
 		pr_warn("page_type: %x(%s)\n", folio->page.page_type >> 24,
 				page_type_name(folio->page.page_type));
