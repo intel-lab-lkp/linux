@@ -134,7 +134,7 @@ static void xhci_cleanup_msix(struct xhci_hcd *xhci)
 	if (hcd->irq > 0)
 		return;
 
-	free_irq(pci_irq_vector(pdev, 0), xhci_to_hcd(xhci));
+	free_irq(pci_irq_vector(pdev, 0), &xhci->interrupters[0]);
 	pci_free_irq_vectors(pdev);
 	hcd->msix_enabled = 0;
 }
@@ -175,7 +175,7 @@ static int xhci_try_enable_msi(struct usb_hcd *hcd)
 	}
 
 	ret = request_irq(pci_irq_vector(pdev, 0), xhci_msi_irq, 0, "xhci_hcd",
-			  xhci_to_hcd(xhci));
+			  &xhci->interrupters[0]);
 	if (ret)
 		goto free_irq_vectors;
 
@@ -225,10 +225,10 @@ static void xhci_pci_stop(struct usb_hcd *hcd)
 {
 	struct xhci_hcd *xhci = hcd_to_xhci(hcd);
 
-	xhci_stop(hcd);
-
 	if (usb_hcd_is_primary_hcd(hcd))
 		xhci_cleanup_msix(xhci);
+
+	xhci_stop(hcd);
 }
 
 /* called after powerup, by probe or system-pm "wakeup" */
