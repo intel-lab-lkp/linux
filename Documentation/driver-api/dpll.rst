@@ -258,6 +258,22 @@ in the ``DPLL_A_PIN_PHASE_OFFSET`` attribute.
   ``DPLL_A_PHASE_OFFSET_MONITOR`` attr state of a feature
   =============================== ========================
 
+Fractional frequency offset
+===========================
+
+The fractional frequency offset (FFO) represents the frequency difference
+between a pin and its parent DPLL device. It is reported in the
+``DPLL_A_PIN_FRACTIONAL_FREQUENCY_OFFSET_PPT`` attribute nested under
+the parent device, in parts per trillion (PPT, 10^-12).
+
+This is analogous to ``DPLL_A_PIN_PHASE_OFFSET`` but in the frequency
+domain. It is typically reported only for the currently active input pin.
+
+The top-level ``DPLL_A_PIN_FRACTIONAL_FREQUENCY_OFFSET`` attribute (in PPM)
+represents the RX vs TX symbol rate offset on the media associated with
+the pin (e.g. for SyncE ethernet ports) and is independent of the
+per-parent FFO PPT attribute.
+
 Frequency monitor
 =================
 

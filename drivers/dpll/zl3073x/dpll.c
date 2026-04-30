@@ -299,6 +299,10 @@ zl3073x_dpll_input_pin_ffo_get(const struct dpll_pin *dpll_pin, void *pin_priv,
 {
 	struct zl3073x_dpll_pin *pin = pin_priv;
 
+	/* Only rx vs tx symbol rate FFO is supported */
+	if (dpll)
+		return -ENODATA;
+
 	*ffo = pin->freq_offset;
 
 	return 0;
