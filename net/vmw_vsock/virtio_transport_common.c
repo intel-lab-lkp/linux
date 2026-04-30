@@ -152,7 +152,7 @@ static void virtio_transport_copy_nonlinear_skb(const struct sk_buff *skb,
 	iov_iter.nr_segs = 1;
 
 	to_copy = min_t(size_t, len, skb->len);
-
+	iov_iter.count = to_copy;
 	skb_copy_datagram_iter(skb, VIRTIO_VSOCK_SKB_CB(skb)->offset,
 			       &iov_iter, to_copy);
 }
