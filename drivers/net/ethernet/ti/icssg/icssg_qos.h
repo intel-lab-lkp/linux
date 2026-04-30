@@ -65,4 +65,42 @@ void icssg_qos_link_state_update(struct net_device *ndev);
 int icssg_qos_ndo_setup_tc(struct net_device *ndev, enum tc_setup_type type,
 			   void *type_data);
 void icssg_config_ietfpe(struct prueth_emac *emac, bool enable);
+static inline int icssg_qos_validate_tx_min_frag_size(u32 min_frag_size,
+						      struct netlink_ext_ack *extack)
+{
+	/* Firmware takes min_frag_size including FCS length */
+	min_frag_size += ETH_FCS_LEN;
+
+	/* The minimum size of the non-final mPacket supported
+	 * by the firmware is 64B and multiples of 64B.
+	 */
+	if (min_frag_size < 64) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "tx_min_frag_size must be at least 64 bytes");
+		return -EINVAL;
+	}
+
+	if (min_frag_size % (ETH_ZLEN + ETH_FCS_LEN)) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "tx_min_frag_size must be a multiple of 64 bytes");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static inline int icssg_qos_validate_verify_time(u32 verify_time_ms,
+						 struct netlink_ext_ack *extack)
+{
+	/* 802.3-2018 clause 30.14.1.6: aMACMergeVerifyTime must be
+	 * between 1 and 128 ms inclusive
+	 */
+	if (verify_time_ms < 1 || verify_time_ms > 128) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "verify_time must be between 1 and 128 ms");
+		return -EINVAL;
+	}
+
+	return 0;
+}
 #endif /* __NET_TI_ICSSG_QOS_H */
