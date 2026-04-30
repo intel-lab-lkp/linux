@@ -10557,6 +10557,27 @@ static bool zone_spans_last_pfn(const struct zone *zone,
  */
 #define SPB_CONTIG_MAX_CANDIDATES 4
 
+/*
+ * Maximum tainted superpageblock candidates per spb_evacuate_for_order call.
+ * Collected under zone->lock, then evacuated without it. Larger than the
+ * contig-allocation candidate cap because evacuation runs from the slowpath
+ * after reclaim/compaction failed: we need a meaningful chance of freeing a
+ * non-MOV-claimable pageblock before the slowpath escalates to dropping
+ * ALLOC_NOFRAGMENT (which lets __rmqueue_claim taint clean SPBs). Sized to
+ * scan a meaningful fraction of a typical tainted-pool population.
+ */
+#define SPB_EVACUATE_MAX_CANDIDATES 16
+
+/*
+ * Maximum pageblocks to evacuate per candidate SPB inside
+ * spb_evacuate_for_order. Each evacuation triggers page migration which is
+ * O(pages_per_pageblock) wall-clock cost, so this caps per-call latency.
+ * Bumped from 3 to 8 to free more capacity per slowpath escalation pass.
+ * Combined cap: SPB_EVACUATE_MAX_CANDIDATES * SPB_EVACUATE_MAX_PB_PER_SB
+ * pageblocks per call (16 * 8 = 128 = 256 MiB on x86 max migration budget).
+ */
+#define SPB_EVACUATE_MAX_PB_PER_SB 8
+
 #ifdef CONFIG_COMPACTION
 /**
  * sb_collect_contig_candidates - Find superpageblock ranges for contiguous alloc
@@ -10732,7 +10753,7 @@ static struct page *spb_try_alloc_contig(struct zone *zone,
  *
  * Returns number of candidate superpageblock PFNs found.
  */
-static int sb_collect_evacuate_candidates(struct zone *zone, int migratetype,
+static int sb_collect_evacuate_candidates(struct zone *zone,
 					  unsigned long *sb_pfns, int max)
 {
 	struct superpageblock *sb;
@@ -10746,20 +10767,6 @@ static int sb_collect_evacuate_candidates(struct zone *zone, int migratetype,
 			if (!sb->nr_movable)
 				continue;
 
-			if (migratetype >= 0) {
-				bool has_matching;
-
-				if (migratetype == MIGRATE_UNMOVABLE)
-					has_matching = sb->nr_unmovable > 0;
-				else if (migratetype == MIGRATE_RECLAIMABLE)
-					has_matching = sb->nr_reclaimable > 0;
-				else
-					continue;
-
-				if (!has_matching)
-					continue;
-			}
-
 			sb_pfns[n++] = sb->start_pfn;
 			if (n >= max)
 				return n;
@@ -10769,17 +10776,38 @@ static int sb_collect_evacuate_candidates(struct zone *zone, int migratetype,
 }
 
 /*
- * Evacuate pageblocks of the given migratetype within a range.
+ * Evacuate MOV content out of any pageblock in the given range that has it.
+ *
+ * The previous version filtered on the source pageblock's migratetype tag,
+ * which made evacuation blind to MOV stragglers living in PBs whose tag did
+ * not match the current allocation's requesting type:
+ *
+ *   - PASS_2C / PASS_2D borrows set PB_has_<requesting_mt> on a MOV-tagged
+ *     PB without changing the tag. The borrowed pages return to the MOV
+ *     free list when freed, so a MOV-tagged PB can host non-MOV PB_has bits
+ *     and MOV content simultaneously.
+ *
+ *   - When __spb_set_has_type adds a non-MOV bit on a PB, the PB tag is not
+ *     re-evaluated. PBs accumulate has-bits over time without their tag
+ *     necessarily reflecting current content.
+ *
+ * Drop the migratetype tag filter and accept any PB with PB_has_movable set.
+ * Skip only the cases whose semantics forbid touching them here:
+ *   - MIGRATE_ISOLATE     under quarantine
+ *   - CMA                 own allocator
+ *   - MIGRATE_HIGHATOMIC  reserve, evac would race the reservation logic
+ *
  * Returns number of pageblocks evacuated.
  */
 static int evacuate_pb_range(struct zone *zone, unsigned long start_pfn,
-			     unsigned long end_pfn, int migratetype, int max)
+			     unsigned long end_pfn, int max)
 {
 	unsigned long pfn;
 	int nr_evacuated = 0;
 
 	for (pfn = start_pfn; pfn < end_pfn; pfn += pageblock_nr_pages) {
 		struct page *page;
+		int pb_mt;
 
 		if (!pfn_valid(pfn))
 			continue;
@@ -10789,10 +10817,13 @@ static int evacuate_pb_range(struct zone *zone, unsigned long start_pfn,
 
 		page = pfn_to_page(pfn);
 
-		if (get_pfnblock_migratetype(page, pfn) != migratetype)
+		if (!get_pfnblock_bit(page, pfn, PB_has_movable))
 			continue;
 
-		if (!get_pfnblock_bit(page, pfn, PB_has_movable))
+		pb_mt = get_pfnblock_migratetype(page, pfn);
+		if (pb_mt == MIGRATE_ISOLATE ||
+		    is_migrate_cma(pb_mt) ||
+		    pb_mt == MIGRATE_HIGHATOMIC)
 			continue;
 
 		evacuate_pageblock(zone, pfn, true);
@@ -10824,17 +10855,33 @@ static int evacuate_pb_range(struct zone *zone, unsigned long start_pfn,
 static bool spb_evacuate_for_order(struct zone *zone, unsigned int order,
 				  int migratetype)
 {
-	unsigned long sb_pfns[SPB_CONTIG_MAX_CANDIDATES];
+	unsigned long sb_pfns[SPB_EVACUATE_MAX_CANDIDATES];
 	unsigned long flags;
 	int nr_sbs, i;
-	unsigned int phase1_attempts = 0, phase2_attempts = 0;
+	unsigned int attempts = 0;
 	bool did_evacuate = false;
 
-	/* Phase 1: coalesce within existing non-movable pageblocks */
+	/*
+	 * Single-pass evacuation: collect candidate tainted SPBs (anything
+	 * with MOV content), then walk each one's pageblocks evacuating MOV
+	 * content from any non-special PB. evacuate_pb_range filters by
+	 * PB_has_movable, so this is a no-op on PBs that have no MOV content.
+	 *
+	 * Two effects accumulate:
+	 *   - PBs that are pure MOV become empty -> free MOV pageblock,
+	 *     claimable by Pass 2 / claim_whole_block on the retry.
+	 *   - PBs that are mixed (e.g., UNMOV + MOV stragglers) lose the MOV
+	 *     stragglers, so future allocations of the dominant type can use
+	 *     the PB without competing with the MOV residue.
+	 *
+	 * The previous two-phase design tried to do these separately and
+	 * filtered evacuation by source PB tag. That left MOV content
+	 * stranded in PBs whose tag did not match either phase, and gave up
+	 * after one phase even though the other phase could have helped.
+	 */
 	spin_lock_irqsave(&zone->lock, flags);
-	nr_sbs = sb_collect_evacuate_candidates(zone, migratetype,
-						sb_pfns,
-						SPB_CONTIG_MAX_CANDIDATES);
+	nr_sbs = sb_collect_evacuate_candidates(zone, sb_pfns,
+						SPB_EVACUATE_MAX_CANDIDATES);
 	spin_unlock_irqrestore(&zone->lock, flags);
 
 	for (i = 0; i < nr_sbs; i++) {
@@ -10842,48 +10889,28 @@ static bool spb_evacuate_for_order(struct zone *zone, unsigned int order,
 		int n;
 
 		n = evacuate_pb_range(zone, sb_pfns[i], end_pfn,
-				      migratetype, 3);
-		phase1_attempts += n;
-		if (n)
-			did_evacuate = true;
-	}
-
-	if (did_evacuate) {
-		trace_spb_evacuate_for_order_done(zone, order, migratetype,
-				phase1_attempts, phase2_attempts, true);
-		return true;
-	}
-
-	/* Phase 2: evacuate MOVABLE pageblocks to create free whole pageblocks */
-	spin_lock_irqsave(&zone->lock, flags);
-	nr_sbs = sb_collect_evacuate_candidates(zone, -1,
-						sb_pfns,
-						SPB_CONTIG_MAX_CANDIDATES);
-	spin_unlock_irqrestore(&zone->lock, flags);
-
-	for (i = 0; i < nr_sbs; i++) {
-		unsigned long end_pfn = sb_pfns[i] + SUPERPAGEBLOCK_NR_PAGES;
-		int n;
-
-		n = evacuate_pb_range(zone, sb_pfns[i], end_pfn,
-				      MIGRATE_MOVABLE, 3);
-		phase2_attempts += n;
+				      SPB_EVACUATE_MAX_PB_PER_SB);
+		attempts += n;
 		if (n)
 			did_evacuate = true;
 	}
 
 	/*
 	 * Always kick a slab shrink after an evacuation pass — even when
-	 * movable evacuation succeeded. Slab content stranded inside
-	 * tainted SPBs can only be freed by shrinking the cache; doing
-	 * it now keeps headroom available for the next burst, when the
-	 * movable supply may have run out and movable evac alone would
-	 * have nothing to do.
+	 * MOV evacuation succeeded. Slab content stranded inside tainted
+	 * SPBs can only be freed by shrinking the cache; doing it now keeps
+	 * headroom available for the next burst, when the MOV supply may
+	 * have run out and evac alone would have nothing to do.
 	 */
 	queue_spb_slab_shrink(zone);
 
+	/*
+	 * The tracepoint signature retains phase1_attempts / phase2_attempts
+	 * for ABI continuity with existing observers; report the merged total
+	 * in phase1_attempts and 0 in phase2_attempts.
+	 */
 	trace_spb_evacuate_for_order_done(zone, order, migratetype,
-			phase1_attempts, phase2_attempts, did_evacuate);
+			attempts, 0, did_evacuate);
 	return did_evacuate;
 }
 #endif /* CONFIG_COMPACTION */
