@@ -901,7 +901,14 @@ where
     }
 }
 
-// SAFETY: TODO.
+// SAFETY: The `work_struct` raw pointer is guaranteed to be valid for the duration of the call to
+// the closure because it comes from a `KBox<T>` which guarantees a valid heap allocation,
+// and we don't drop the allocation ourselves. It is further guaranteed to be valid until
+// a call to the function pointer in `work_struct` because we leak the memory it points to.
+// Since `Pin<KBox<T>>` requires exclusive ownership, the work item cannot already be queued,
+// so `queue_work_on` always returns true, and we only reclaim the pointer in
+// `WorkItemPointer::run`, which is what the function pointer in the `work_struct` must be
+// pointing to, according to the safety requirements of `WorkItemPointer`.
 unsafe impl<T, const ID: u64> RawWorkItem<ID> for Pin<KBox<T>>
 where
     T: WorkItem<ID, Pointer = Self>,
