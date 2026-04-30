@@ -101,7 +101,7 @@ void unregister_rt_sched_group(struct task_group *tg)
 			continue;
 
 		if (tg->dl_se[i]->dl_runtime)
-			dl_init_tg(tg->dl_se[i], 0, tg->dl_se[i]->dl_period);
+			dl_init_tg(tg, i, 0, tg->dl_se[i]->dl_period);
 	}
 }
 
@@ -129,7 +129,7 @@ void free_rt_sched_group(struct task_group *tg)
 		 * to 0 immediately before freeing it.
 		 */
 		if (tg->dl_se[i]->dl_runtime)
-			dl_init_tg(tg->dl_se[i], 0, tg->dl_se[i]->dl_period);
+			dl_init_tg(tg, i, 0, tg->dl_se[i]->dl_period);
 
 		raw_spin_rq_lock_irqsave(cpu_rq(i), flags);
 		hrtimer_cancel(&tg->dl_se[i]->dl_timer);
@@ -2155,6 +2155,14 @@ static int tg_set_rt_bandwidth(struct task_group *tg,
 	int i, err = 0;
 
 	/*
+	 * Do not allow to set a RT runtime > 0 if the parent has RT tasks
+	 * (and is not the root group)
+	 */
+	if (rt_runtime && tg != &root_task_group &&
+		tg->parent != &root_task_group && tg_has_rt_tasks(tg->parent))
+		return -EINVAL;
+
+	/*
 	 * Bound quota to defend quota against overflow during bandwidth shift.
 	 */
 	if (rt_runtime != RUNTIME_INF && rt_runtime > max_rt_runtime)
@@ -2173,7 +2181,7 @@ static int tg_set_rt_bandwidth(struct task_group *tg,
 		return 0;
 
 	for_each_possible_cpu(i) {
-		dl_init_tg(tg->dl_se[i], rt_runtime, rt_period);
+		dl_init_tg(tg, i, rt_runtime, rt_period);
 	}
 
 	return 0;
@@ -2244,7 +2252,8 @@ int sched_rt_can_attach(struct task_group *tg)
 	if (rt_group_sched_enabled() && tg->dl_bandwidth.dl_runtime == 0)
 		return 0;
 
-	return 1;
+	/* tasks can be attached only if the taskgroup has no live children. */
+	return (int)is_live_sched_group(tg);
 }
 
 #else /* !CONFIG_RT_GROUP_SCHED */
