@@ -2352,6 +2352,9 @@ do_set_cpus_allowed(struct task_struct *p, struct affinity_context *ctx);
 
 static void migrate_disable_switch(struct rq *rq, struct task_struct *p)
 {
+	struct rq_flags rf;
+	struct balance_callback *head;
+
 	struct affinity_context ac = {
 		.new_mask  = cpumask_of(rq->cpu),
 		.flags     = SCA_MIGRATE_DISABLE,
@@ -2363,8 +2366,13 @@ static void migrate_disable_switch(struct rq *rq, struct task_struct *p)
 	if (p->cpus_ptr != &p->cpus_mask)
 		return;
 
-	scoped_guard (task_rq_lock, p)
-		do_set_cpus_allowed(p, &ac);
+	rq = task_rq_lock(p, &rf);
+
+	do_set_cpus_allowed(p, &ac);
+
+	head = splice_balance_callbacks(rq);
+	task_rq_unlock(rq, p, &rf);
+	balance_callbacks(rq, head);
 }
 
 void ___migrate_enable(void)
