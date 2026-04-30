@@ -2879,6 +2879,7 @@ static int blogic_hostreset(struct scsi_cmnd *SCpnt)
 */
 
 static enum scsi_qc_status blogic_qcmd_lck(struct scsi_cmnd *command)
+	__must_hold(command->device->host->host_lock)
 {
 	void (*comp_cb)(struct scsi_cmnd *) = scsi_done;
 	struct blogic_adapter *adapter =
@@ -3183,6 +3184,7 @@ static int blogic_abort(struct scsi_cmnd *command)
 */
 
 static int blogic_resetadapter(struct blogic_adapter *adapter, bool hard_reset)
+	__must_hold(adapter->scsi_host->host_lock)
 {
 	struct blogic_ccb *ccb;
 	int tgt_id;
