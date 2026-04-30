@@ -725,9 +725,9 @@ static inline void arch_tlbbatch_add_pending(struct arch_tlbflush_unmap_batch *b
 	sme_dvmsync_add_pending(batch, mm);
 }
 
-static inline bool __pte_flags_need_flush(ptdesc_t oldval, ptdesc_t newval)
+static inline bool __pte_flags_need_flush(pxxval_t oldval, pxxval_t newval)
 {
-	ptdesc_t diff = oldval ^ newval;
+	pxxval_t diff = oldval ^ newval;
 
 	/* invalid to valid transition requires no flush */
 	if (!(oldval & PTE_VALID))
