@@ -881,7 +881,12 @@ where
 {
 }
 
-// SAFETY: TODO.
+// SAFETY: The `work_struct` pointer passed to `run` originates from `__enqueue`,
+// which strips the `Pin` wrapper via `Pin::into_inner_unchecked()` and leaks the box
+// via `KBox::into_raw()`, producing a `*mut T`. `work_container_of` then safely reverses
+// the `raw_get_work` offset to recover that exact `*mut T`. The workqueue itself guarantees
+// that `run` is called exactly once, so `KBox::from_raw()` correctly reclaims ownership
+// of the leaked box.
 unsafe impl<T, const ID: u64> WorkItemPointer<ID> for Pin<KBox<T>>
 where
     T: WorkItem<ID, Pointer = Self>,
