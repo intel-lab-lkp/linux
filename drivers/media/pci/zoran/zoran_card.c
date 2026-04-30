@@ -863,10 +863,12 @@ int zoran_check_jpg_settings(struct zoran *zr,
 
 static int zoran_init_video_device(struct zoran *zr, struct video_device *video_dev, int dir)
 {
+	void (*release)(struct video_device *vdev);
 	int err;
 
 	/* Now add the template and register the device unit. */
 	*video_dev = zoran_template;
+	release = video_dev->release;
 	video_dev->v4l2_dev = &zr->v4l2_dev;
 	video_dev->lock = &zr->lock;
 	video_dev->device_caps = V4L2_CAP_STREAMING | dir;
@@ -875,17 +877,36 @@ static int zoran_init_video_device(struct zoran *zr, struct video_device *video_
 	video_dev->vfl_dir = VFL_DIR_RX;
 	zoran_queue_init(zr, &zr->vq, V4L2_BUF_TYPE_VIDEO_CAPTURE);
 
+	/*
+	 * zr->video_dev is allocated by zoran_init_video_devices() and the
+	 * caller frees it again if registration fails. If device_register()
+	 * fails inside video_register_device(), the V4L2 core may still run
+	 * vdev->release() from its put_device() cleanup path. Use an empty
+	 * release callback while registering, so that this failure path cannot
+	 * free zr->video_dev before control returns to the caller.
+	 *
+	 * Restore zoran_vdev_release() after successful registration, since
+	 * the V4L2 core owns the video_device lifetime from that point on.
+	 */
+	video_dev->release = video_device_release_empty;
+
 	err = video_register_device(video_dev, VFL_TYPE_VIDEO, video_nr[zr->id]);
-	if (err < 0)
+	if (err < 0) {
+		video_dev->release = release;
 		return err;
+	}
+
+	video_dev->release = release;
 	video_set_drvdata(video_dev, zr);
 	return 0;
 }
 
 static void zoran_exit_video_devices(struct zoran *zr)
 {
+	if (!zr->video_dev)
+		return;
 	video_unregister_device(zr->video_dev);
-	kfree(zr->video_dev);
+	zr->video_dev = NULL;
 }
 
 static int zoran_init_video_devices(struct zoran *zr)
@@ -897,8 +918,10 @@ static int zoran_init_video_devices(struct zoran *zr)
 		return -ENOMEM;
 
 	err = zoran_init_video_device(zr, zr->video_dev, V4L2_CAP_VIDEO_CAPTURE);
-	if (err)
+	if (err) {
 		kfree(zr->video_dev);
+		zr->video_dev = NULL;
+	}
 	return err;
 }
 
