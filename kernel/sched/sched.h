@@ -1327,6 +1327,16 @@ struct rq {
 	struct list_head	cfsb_csd_list;
 #endif
 
+#ifdef CONFIG_RT_GROUP_SCHED
+	/*
+	 * Balance callbacks operate only on global runqueues.
+	 * These pointers allow referencing cgroup specific runqueues
+	 * for balancing operations.
+	 */
+	struct rq		*rq_to_push_from;
+	struct rq		*rq_to_pull_to;
+#endif
+
 	atomic_t		nr_iowait;
 } __no_randomize_layout;
 
