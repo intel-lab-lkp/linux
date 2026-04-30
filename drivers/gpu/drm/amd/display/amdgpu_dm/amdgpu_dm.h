@@ -347,6 +347,7 @@ struct hpd_rx_irq_offload_work {
  * @dmub_aux_transfer_done: struct completion used to indicate when DMUB
  * 			    transfers are done
  * @delayed_hpd_wq: work queue used to delay DMUB HPD work
+ * @boot_time_crc_info: Stores CRC information collected during boot
  */
 struct amdgpu_display_manager {
 
