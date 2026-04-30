@@ -372,15 +372,59 @@ static int hfsplus_statfs(struct dentry *dentry, struct kstatfs *buf)
 	return 0;
 }
 
+static int hfsplus_create_hidden_dir(struct super_block *sb)
+{
+	struct hfsplus_sb_info *sbi = HFSPLUS_SB(sb);
+	struct inode *root = d_inode(sb->s_root);
+	struct qstr str;
+	int err;
+
+	str.len = sizeof(HFSP_HIDDENDIR_NAME) - 1;
+	str.name = HFSP_HIDDENDIR_NAME;
+
+	mutex_lock(&sbi->vh_mutex);
+	sbi->hidden_dir = hfsplus_new_inode(sb, root, S_IFDIR);
+	if (!sbi->hidden_dir) {
+		mutex_unlock(&sbi->vh_mutex);
+		return -ENOMEM;
+	}
+
+	err = hfsplus_create_cat(sbi->hidden_dir->i_ino, root,
+				 &str, sbi->hidden_dir);
+	if (err) {
+		mutex_unlock(&sbi->vh_mutex);
+		goto out_put_hidden_dir;
+	}
+
+	err = hfsplus_init_security(sbi->hidden_dir, root, &str);
+	if (err == -EOPNOTSUPP)
+		err = 0;
+	else if (err) {
+		hfsplus_delete_cat(sbi->hidden_dir->i_ino, root, &str);
+		mutex_unlock(&sbi->vh_mutex);
+		goto out_put_hidden_dir;
+	}
+
+	mutex_unlock(&sbi->vh_mutex);
+	hfsplus_mark_inode_dirty(sbi->hidden_dir,
+				 HFSPLUS_I_CAT_DIRTY);
+	return 0;
+
+out_put_hidden_dir:
+	iput(sbi->hidden_dir);
+	sbi->hidden_dir = NULL;
+	return err;
+}
+
 static int hfsplus_reconfigure(struct fs_context *fc)
 {
 	struct super_block *sb = fc->root->d_sb;
+	struct hfsplus_sb_info *sbi = HFSPLUS_SB(sb);
 
 	sync_filesystem(sb);
 	if ((bool)(fc->sb_flags & SB_RDONLY) == sb_rdonly(sb))
 		return 0;
 	if (!(fc->sb_flags & SB_RDONLY)) {
-		struct hfsplus_sb_info *sbi = HFSPLUS_SB(sb);
 		struct hfsplus_vh *vhdr = sbi->s_vhdr;
 
 		if (!(vhdr->attributes & cpu_to_be32(HFSPLUS_VOL_UNMNT))) {
@@ -401,6 +445,12 @@ static int hfsplus_reconfigure(struct fs_context *fc)
 			fc->sb_flags |= SB_RDONLY;
 		}
 	}
+	/*
+	 * Create hidden dir if remounting read-write and it does
+	 * not exist - required for link/unlink/rename operations.
+	 */
+	if (!sb_rdonly(sb) && !sbi->hidden_dir)
+		return hfsplus_create_hidden_dir(sb);
 	return 0;
 }
 
@@ -595,38 +645,9 @@ static int hfsplus_fill_super(struct super_block *sb, struct fs_context *fc)
 		hfsplus_sync_fs(sb, 1);
 
 		if (!sbi->hidden_dir) {
-			mutex_lock(&sbi->vh_mutex);
-			sbi->hidden_dir = hfsplus_new_inode(sb, root, S_IFDIR);
-			if (!sbi->hidden_dir) {
-				mutex_unlock(&sbi->vh_mutex);
-				err = -ENOMEM;
+			err = hfsplus_create_hidden_dir(sb);
+			if (err)
 				goto out_put_root;
-			}
-			err = hfsplus_create_cat(sbi->hidden_dir->i_ino, root,
-						 &str, sbi->hidden_dir);
-			if (err) {
-				mutex_unlock(&sbi->vh_mutex);
-				goto out_put_hidden_dir;
-			}
-
-			err = hfsplus_init_security(sbi->hidden_dir,
-							root, &str);
-			if (err == -EOPNOTSUPP)
-				err = 0; /* Operation is not supported. */
-			else if (err) {
-				/*
-				 * Try to delete anyway without
-				 * error analysis.
-				 */
-				hfsplus_delete_cat(sbi->hidden_dir->i_ino,
-							root, &str);
-				mutex_unlock(&sbi->vh_mutex);
-				goto out_put_hidden_dir;
-			}
-
-			mutex_unlock(&sbi->vh_mutex);
-			hfsplus_mark_inode_dirty(sbi->hidden_dir,
-						 HFSPLUS_I_CAT_DIRTY);
 		}
 	}
 
@@ -634,9 +655,6 @@ static int hfsplus_fill_super(struct super_block *sb, struct fs_context *fc)
 	sbi->nls = nls;
 	return 0;
 
-out_put_hidden_dir:
-	cancel_delayed_work_sync(&sbi->sync_work);
-	iput(sbi->hidden_dir);
 out_put_root:
 	dput(sb->s_root);
 	sb->s_root = NULL;
