@@ -1512,15 +1512,26 @@ static void __meminit init_one_superpageblock(struct superpageblock *sb,
 	unsigned long sb_end = start_pfn + SUPERPAGEBLOCK_NR_PAGES;
 	unsigned long pb_start = max(start_pfn, zone_start);
 	unsigned long pb_end = min(sb_end, zone_end);
+	int order, t;
 	u16 actual_pbs;
 
 	sb->nr_unmovable = 0;
 	sb->nr_reclaimable = 0;
 	sb->nr_movable = 0;
 	sb->nr_free = 0;
+	sb->nr_free_pages = 0;
 	INIT_LIST_HEAD(&sb->list);
 	sb->start_pfn = start_pfn;
 	sb->zone = zone;
+
+	/* Initialize per-superpageblock free areas */
+	for (order = 0; order < NR_PAGE_ORDERS; order++) {
+		struct free_area *area = &sb->free_area[order];
+
+		for (t = 0; t < MIGRATE_TYPES; t++)
+			INIT_LIST_HEAD(&area->free_list[t]);
+		area->nr_free = 0;
+	}
 
 	/*
 	 * Start with all pageblock slots as reserved.
@@ -1568,6 +1579,15 @@ static void __init setup_superpageblocks(struct zone *zone)
 	for (cat = 0; cat < __NR_SB_CATEGORIES; cat++)
 		for (full = 0; full < __NR_SB_FULLNESS; full++)
 			INIT_LIST_HEAD(&zone->spb_lists[cat][full]);
+
+	/*
+	 * Warn if pages have already been freed into this zone's
+	 * free_area before superpageblocks are set up — those pages
+	 * would become stranded because __rmqueue_smallest only
+	 * searches per-superpageblock free lists.
+	 */
+	for (i = 0; i < NR_PAGE_ORDERS; i++)
+		WARN_ON_ONCE(zone->free_area[i].nr_free);
 
 	if (!zone->spanned_pages)
 		return;

@@ -924,8 +924,18 @@ struct superpageblock {
 	u16			nr_reserved;	/* holes, firmware, etc. */
 	u16			total_pageblocks; /* zone-clipped total */
 
+	/* Total free pages across all per-superpageblock free lists */
+	unsigned long		nr_free_pages;
+
 	/* For organizing superpageblocks by fullness category */
 	struct list_head	list;
+
+	/*
+	 * Per-superpageblock free lists for all buddy orders.
+	 * All pages belonging to this superpageblock are tracked here,
+	 * keeping allocation steering effective at every order.
+	 */
+	struct free_area	free_area[NR_PAGE_ORDERS];
 
 	/* Identity */
 	unsigned long		start_pfn;
