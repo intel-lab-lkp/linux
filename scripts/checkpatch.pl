@@ -641,8 +641,17 @@ our $signature_tags = qr{(?xi:
 	Reviewed-by:|
 	Reported-by:|
 	Suggested-by:|
+	Assisted-by:|
 	To:|
 	Cc:
+)};
+
+# Trailers that do not carry an RFC 5322 email address.
+# Documentation/process/coding-assistants.rst defines Assisted-by: as
+# carrying "AGENT_NAME:MODEL_VERSION [TOOL1] [TOOL2]" rather than an
+# email address; skip the email-format checks for these tags.
+our $no_email_signature_tags = qr{(?xi:
+	Assisted-by:
 )};
 
 our @link_tags = qw(Link Closes);
@@ -737,7 +746,7 @@ sub find_standard_signature {
 	my ($sign_off) = @_;
 	my @standard_signature_tags = (
 		'Signed-off-by:', 'Co-developed-by:', 'Acked-by:', 'Tested-by:',
-		'Reviewed-by:', 'Reported-by:', 'Suggested-by:'
+		'Reviewed-by:', 'Reported-by:', 'Suggested-by:', 'Assisted-by:'
 	);
 	foreach my $signature (@standard_signature_tags) {
 		return $signature if (get_edit_distance($sign_off, $signature) <= 2);
@@ -3105,6 +3114,9 @@ sub process {
 				}
 			}
 
+			# Skip email-format checks for trailers that, by spec, do
+			# not carry an email address (e.g. Assisted-by:).
+			if ($sign_off !~ /$no_email_signature_tags/) {
 			my ($email_name, $name_comment, $email_address, $comment) = parse_email($email);
 			my $suggested_email = format_email(($email_name, $name_comment, $email_address, $comment));
 			if ($suggested_email eq "") {
@@ -3188,6 +3200,7 @@ sub process {
 						$fixed[$fixlinenr] =~ s/\Q$email\E/$new_email/;
 					}
 				}
+			}
 			}
 
 # Check for duplicate signatures
