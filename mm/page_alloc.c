@@ -2703,6 +2703,9 @@ static struct page *__rmqueue_from_sb(struct zone *zone, unsigned int order,
  */
 static struct page *claim_whole_block(struct zone *zone, struct page *page,
 		  int current_order, int order, int new_type, int old_type);
+static struct page *try_to_claim_block(struct zone *zone, struct page *page,
+		  int current_order, int order, int start_type,
+		  int block_type, unsigned int alloc_flags);
 
 static __always_inline
 struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
@@ -2772,6 +2775,11 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 	 * free list (reset by mark_pageblock_free), so the search above
 	 * misses them. Claim them inline to keep non-movable allocations
 	 * concentrated in already-tainted superpageblocks.
+	 *
+	 * Try whole pageblock orders first (preferred for PCP buddy optimization),
+	 * then fall back to sub-pageblock orders. Sub-pageblock claiming uses
+	 * try_to_claim_block which checks whether the pageblock has enough
+	 * compatible pages to justify claiming it.
 	 */
 	if (!movable && !is_migrate_cma(migratetype)) {
 		for (full = SB_FULL; full < __NR_SB_FULLNESS; full++) {
@@ -2796,6 +2804,43 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 					page = claim_whole_block(zone, page,
 						current_order, order,
 						migratetype, MIGRATE_MOVABLE);
+					trace_mm_page_alloc_zone_locked(
+						page, order, migratetype,
+						pcp_allowed_order(order) &&
+						migratetype < MIGRATE_PCPTYPES);
+					return page;
+				}
+			}
+		}
+		/* Pass 2b: sub-pageblock orders in tainted SPBs */
+		for (full = SB_FULL; full < __NR_SB_FULLNESS; full++) {
+			list_for_each_entry(sb,
+				&zone->spb_lists[SB_TAINTED][full], list) {
+				int co;
+
+				if (!sb->nr_free_pages)
+					continue;
+				for (co = min_t(int, pageblock_order - 1,
+						NR_PAGE_ORDERS - 1);
+				     co >= (int)order;
+				     --co) {
+					current_order = co;
+					area = &sb->free_area[current_order];
+					page = get_page_from_free_area(
+						area, MIGRATE_MOVABLE);
+					if (!page)
+						continue;
+					if (get_pageblock_isolate(page))
+						continue;
+					if (is_migrate_cma(
+					    get_pageblock_migratetype(page)))
+						continue;
+					page = try_to_claim_block(zone, page,
+						current_order, order,
+						migratetype, MIGRATE_MOVABLE,
+						0);
+					if (!page)
+						continue;
 					trace_mm_page_alloc_zone_locked(
 						page, order, migratetype,
 						pcp_allowed_order(order) &&
@@ -3556,12 +3601,23 @@ __rmqueue_claim(struct zone *zone, int order, int start_migratetype,
  * the block as its current migratetype, potentially causing fragmentation.
  */
 static __always_inline struct page *
-__rmqueue_steal(struct zone *zone, int order, int start_migratetype)
+__rmqueue_steal(struct zone *zone, int order, int start_migratetype,
+		unsigned int alloc_flags)
 {
 	struct superpageblock *sb;
 	int current_order;
 	struct page *page;
 	int fallback_mt;
+	unsigned int search_cats;
+
+	/*
+	 * When ALLOC_NOFRAG_TAINTED_OK is set, only steal from tainted
+	 * SPBs to avoid tainting clean ones. Otherwise search all categories.
+	 */
+	if (alloc_flags & ALLOC_NOFRAG_TAINTED_OK)
+		search_cats = SB_SEARCH_PREFERRED;
+	else
+		search_cats = SB_SEARCH_PREFERRED | SB_SEARCH_FALLBACK;
 
 	/*
 	 * Search per-superpageblock free lists for fallback migratetypes.
@@ -3571,7 +3627,7 @@ __rmqueue_steal(struct zone *zone, int order, int start_migratetype)
 		page = __rmqueue_sb_find_fallback(zone, current_order,
 					start_migratetype,
 					&fallback_mt,
-					SB_SEARCH_PREFERRED | SB_SEARCH_FALLBACK);
+					search_cats);
 
 		if (!page)
 			continue;
@@ -3671,8 +3727,10 @@ __rmqueue(struct zone *zone, unsigned int order, int migratetype,
 		}
 		fallthrough;
 	case RMQUEUE_STEAL:
-		if (!(alloc_flags & ALLOC_NOFRAGMENT)) {
-			page = __rmqueue_steal(zone, order, migratetype);
+		if (!(alloc_flags & ALLOC_NOFRAGMENT) ||
+		    (alloc_flags & ALLOC_NOFRAG_TAINTED_OK)) {
+			page = __rmqueue_steal(zone, order, migratetype,
+					       alloc_flags);
 			if (page) {
 				*mode = RMQUEUE_STEAL;
 				return page;
@@ -5291,9 +5349,24 @@ try_this_zone:
 	/*
 	 * It's possible on a UMA machine to get through all zones that are
 	 * fragmented. If avoiding fragmentation, reset and try again.
+	 *
+	 * For allocations that can do direct reclaim, keep NOFRAGMENT set
+	 * and let the slowpath try reclaim and compaction to free pages in
+	 * already-tainted superpageblocks before allowing clean SPBs to be
+	 * tainted.
+	 *
+	 * Atomic allocations cannot reclaim, but try an intermediate step
+	 * first: allow steal/claim from tainted SPBs only. This avoids
+	 * tainting clean SPBs while still finding pages in tainted ones.
+	 * Only drop NOFRAGMENT entirely if that also fails.
 	 */
-	if (no_fallback && !defrag_mode) {
-		alloc_flags &= ~ALLOC_NOFRAGMENT;
+	if (no_fallback && !defrag_mode &&
+	    !(gfp_mask & __GFP_DIRECT_RECLAIM)) {
+		if (!(alloc_flags & ALLOC_NOFRAG_TAINTED_OK)) {
+			alloc_flags |= ALLOC_NOFRAG_TAINTED_OK;
+			goto retry;
+		}
+		alloc_flags &= ~(ALLOC_NOFRAGMENT | ALLOC_NOFRAG_TAINTED_OK);
 		goto retry;
 	}
 
