@@ -606,6 +606,10 @@ static int snd_rawmidi_release(struct inode *inode, struct file *file)
 	struct module *module;
 
 	rfile = file->private_data;
+	if (!rfile)
+		return 0;
+
+	file->private_data = NULL;
 	rmidi = rfile->rmidi;
 	rawmidi_release_priv(rfile);
 	kfree(rfile);
@@ -1665,6 +1669,11 @@ static __poll_t snd_rawmidi_poll(struct file *file, poll_table *wait)
 	__poll_t mask;
 
 	rfile = file->private_data;
+
+	/* Prevent UAF from async io_uring poll after release */
+	if (!rfile)
+		return EPOLLERR | EPOLLHUP;
+
 	if (rfile->input != NULL) {
 		runtime = rfile->input->runtime;
 		snd_rawmidi_input_trigger(rfile->input, 1);
