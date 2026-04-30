@@ -83,7 +83,7 @@ void vm_enable_npt(struct kvm_vm *vm)
 	tdp_mmu_init(vm, vm->mmu.pgtable_levels, &pte_masks);
 }
 
-void generic_svm_setup(struct svm_test_data *svm, void *guest_rip, void *guest_rsp)
+void generic_svm_setup(struct svm_test_data *svm, void *guest_rip)
 {
 	struct vmcb *vmcb = svm->vmcb;
 	u64 vmcb_gpa = svm->vmcb_gpa;

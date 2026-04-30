@@ -60,7 +60,7 @@ static inline void vmmcall(void)
 		)
 
 struct svm_test_data *vcpu_alloc_svm(struct kvm_vm *vm, gva_t *p_svm_gva);
-void generic_svm_setup(struct svm_test_data *svm, void *guest_rip, void *guest_rsp);
+void generic_svm_setup(struct svm_test_data *svm, void *guest_rip);
 void run_guest(struct vmcb *vmcb, u64 vmcb_gpa);
 
 static inline bool kvm_cpu_has_npt(void)
