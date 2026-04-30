@@ -210,6 +210,10 @@ static const struct dmi_system_id victus_s_thermal_profile_boards[] __initconst 
 		.driver_data = (void *)&omen_v1_thermal_params,
 	},
 	{
+		.matches = {DMI_MATCH(DMI_BOARD_NAME, "8BC2")},
+		.driver_data = (void *)&omen_v1_thermal_params,
+	},
+	{
 		.matches = { DMI_MATCH(DMI_BOARD_NAME, "8BCD") },
 		.driver_data = (void *)&omen_v1_thermal_params,
 	},
