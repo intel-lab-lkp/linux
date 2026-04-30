@@ -2419,12 +2419,47 @@ static void ata_eh_link_autopsy(struct ata_link *link)
 		      ata_dev_enabled(link->device))))
 	    dev = link->device;
 
+	/*
+	 * Track repeated media errors. If the same device hits media errors
+	 * too many times within a configurable time window, disable it to
+	 * prevent infinite EH loops that block other devices sharing the
+	 * same Scsi_Host (particularly relevant for SATA devices behind
+	 * SAS HBAs using libsas).
+	 *
+	 * media_err_limit == 0 means this feature is disabled.
+	 */
+	if (dev && (all_err_mask & AC_ERR_MEDIA) && dev->media_err_limit) {
+		unsigned long now = jiffies;
+		unsigned long window = (unsigned long)dev->media_err_window * HZ;
+
+		if (!dev->media_err_count ||
+		    time_after(now, dev->media_err_first_jiffies + window)) {
+			dev->media_err_count = 1;
+			dev->media_err_first_jiffies = now;
+		} else {
+			dev->media_err_count++;
+		}
+
+		if (dev->media_err_count >= dev->media_err_limit) {
+			ata_dev_err(dev,
+				"too many media errors (%u in %u seconds), disabling device\n",
+				dev->media_err_count,
+				jiffies_to_msecs(now - dev->media_err_first_jiffies) / 1000);
+			ata_dev_disable(dev);
+			dev->media_err_count = 0;
+			/* skip speed_down for disabled device */
+			goto out_autopsy;
+		}
+	}
+
 	if (dev) {
 		if (dev->flags & ATA_DFLAG_DUBIOUS_XFER)
 			eflags |= ATA_EFLAG_DUBIOUS_XFER;
 		ehc->i.action |= ata_eh_speed_down(dev, eflags, all_err_mask);
 		trace_ata_eh_link_autopsy(dev, ehc->i.action, all_err_mask);
 	}
+out_autopsy:
+	return;
 }
 
 /**

@@ -419,6 +419,11 @@ enum {
 	ATA_EH_PMP_TRIES	= 5,
 	ATA_EH_PMP_LINK_TRIES	= 3,
 
+	/* default: disable device after this many media errors in time window */
+	ATA_EH_MEDIA_ERR_LIMIT	= 10,
+	/* default: time window in seconds */
+	ATA_EH_MEDIA_ERR_WINDOW	= 60,
+
 	SATA_PMP_RW_TIMEOUT	= 3000,		/* PMP read/write timeout */
 
 	/* This should match the actual table size of
@@ -786,6 +791,13 @@ struct ata_device {
 
 	/* error history */
 	int			spdn_cnt;
+
+	/* media error tracking for repeated EH */
+	unsigned int		media_err_count;
+	unsigned long		media_err_first_jiffies;
+	unsigned int		media_err_limit;
+	unsigned int		media_err_window;
+
 	/* ering is CLEAR_END, read comment above CLEAR_END */
 	struct ata_ering	ering;
 

@@ -477,6 +477,79 @@ show_ata_dev_trim(struct device *dev,
 
 static DEVICE_ATTR(trim, S_IRUGO, show_ata_dev_trim, NULL);
 
+static ssize_t
+media_err_limit_show(struct device *dev,
+		     struct device_attribute *attr, char *buf)
+{
+	struct ata_device *ata_dev = transport_class_to_dev(dev);
+
+	return sysfs_emit(buf, "%u\n", ata_dev->media_err_limit);
+}
+
+static ssize_t
+media_err_limit_store(struct device *dev,
+		      struct device_attribute *attr,
+		      const char *buf, size_t count)
+{
+	struct ata_device *ata_dev = transport_class_to_dev(dev);
+	unsigned int val;
+	int rc;
+
+	rc = kstrtouint(buf, 0, &val);
+	if (rc)
+		return rc;
+
+	ata_dev->media_err_limit = val;
+	ata_dev->media_err_count = 0;
+	return count;
+}
+
+static DEVICE_ATTR_RW(media_err_limit);
+
+static ssize_t
+media_err_window_show(struct device *dev,
+		      struct device_attribute *attr, char *buf)
+{
+	struct ata_device *ata_dev = transport_class_to_dev(dev);
+
+	return sysfs_emit(buf, "%u\n", ata_dev->media_err_window);
+}
+
+static ssize_t
+media_err_window_store(struct device *dev,
+		       struct device_attribute *attr,
+		       const char *buf, size_t count)
+{
+	struct ata_device *ata_dev = transport_class_to_dev(dev);
+	unsigned int val;
+	int rc;
+
+	rc = kstrtouint(buf, 0, &val);
+	if (rc)
+		return rc;
+
+	/* window=0 would prevent the counter from ever accumulating */
+	if (!val)
+		return -EINVAL;
+
+	ata_dev->media_err_window = val;
+	ata_dev->media_err_count = 0;
+	return count;
+}
+
+static DEVICE_ATTR_RW(media_err_window);
+
+static ssize_t
+media_err_count_show(struct device *dev,
+		     struct device_attribute *attr, char *buf)
+{
+	struct ata_device *ata_dev = transport_class_to_dev(dev);
+
+	return sysfs_emit(buf, "%u\n", ata_dev->media_err_count);
+}
+
+static DEVICE_ATTR_RO(media_err_count);
+
 static const struct attribute *const ata_device_attr_attrs[] = {
 	&dev_attr_class.attr,
 	&dev_attr_pio_mode.attr,
@@ -487,6 +560,9 @@ static const struct attribute *const ata_device_attr_attrs[] = {
 	&dev_attr_id.attr,
 	&dev_attr_gscr.attr,
 	&dev_attr_trim.attr,
+	&dev_attr_media_err_limit.attr,
+	&dev_attr_media_err_window.attr,
+	&dev_attr_media_err_count.attr,
 	NULL
 };
 

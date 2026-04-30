@@ -5559,6 +5559,8 @@ void ata_dev_init(struct ata_device *dev)
 	dev->pio_mask = UINT_MAX;
 	dev->mwdma_mask = UINT_MAX;
 	dev->udma_mask = UINT_MAX;
+	dev->media_err_limit = ATA_EH_MEDIA_ERR_LIMIT;
+	dev->media_err_window = ATA_EH_MEDIA_ERR_WINDOW;
 }
 
 /**
