@@ -717,8 +717,7 @@ static int cxl_set_ecs_count_mode(struct device *dev, u8 *log_cap, u16 *config,
 		return -EINVAL;
 	}
 
-	*config &= ~CXL_ECS_COUNT_MODE_MASK;
-	*config |= FIELD_PREP(CXL_ECS_COUNT_MODE_MASK, val);
+	FIELD_MODIFY(CXL_ECS_COUNT_MODE_MASK, config, val);
 
 	return 0;
 }
@@ -729,8 +728,7 @@ static int cxl_set_ecs_reset_counter(struct device *dev, u8 *log_cap,
 	if (val != CXL_ECS_RESET_COUNTER)
 		return -EINVAL;
 
-	*config &= ~CXL_ECS_RESET_COUNTER_MASK;
-	*config |= FIELD_PREP(CXL_ECS_RESET_COUNTER_MASK, val);
+	FIELD_MODIFY(CXL_ECS_RESET_COUNTER_MASK, config, val);
 
 	return 0;
 }
