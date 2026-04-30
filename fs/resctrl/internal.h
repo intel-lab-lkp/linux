@@ -216,6 +216,10 @@ struct mongroup {
  * @mon:			mongroup related data
  * @mode:			mode of resource group
  * @mba_mbps_event:		input monitoring event id when mba_sc is enabled
+ * @kmode:			true if this group is currently bound as the kernel-mode
+ *				CLOSID/RMID owner (resctrl_kcfg.k_rdtgrp)
+ * @kmode_cpu_mask:		CPUs scoped for this group's kernel-mode binding;
+ *				when empty, all online CPUs are used
  * @plr:			pseudo-locked region
  */
 struct rdtgroup {
@@ -229,6 +233,8 @@ struct rdtgroup {
 	struct mongroup			mon;
 	enum rdtgrp_mode		mode;
 	enum resctrl_event_id		mba_mbps_event;
+	bool				kmode;
+	struct cpumask			kmode_cpu_mask;
 	struct pseudo_lock_region	*plr;
 };
 

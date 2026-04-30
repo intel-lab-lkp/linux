@@ -514,6 +514,57 @@ conveyed in the error returns from file operations. E.g.
 	# cat info/last_cmd_status
 	mask f7 has non-consecutive 1-bits
 
+"kernel_mode":
+	In the top level of the "info" directory, "kernel_mode" controls how
+	resource allocation and monitoring work in kernel mode. This is used on
+	some platforms to assign a dedicated CLOSID and/or RMID to kernel threads.
+
+	Reading the file lists supported kernel modes, one per line.  Each line
+	carries a ":group=<spec>" suffix that identifies the resctrl group that
+	owns the kernel CLOSID/RMID for that mode.  The currently active mode is
+	wrapped in square brackets and reports the bound group as
+	"<ctrl>/<mon>/", with empty components when they do not apply (a control
+	group emits "<ctrl>//", a monitor group under the default control group
+	emits "/<mon>/").  Other supported modes are shown without brackets and
+	report "none" because no group is bound to them.  Example::
+
+	  # cat info/kernel_mode
+	  [inherit_ctrl_and_mon:group=//]
+	  global_assign_ctrl_inherit_mon_per_cpu:group=none
+	  global_assign_ctrl_assign_mon_per_cpu:group=none
+
+	Writing one line (terminated by a newline) selects the active mode and
+	binds it to a resctrl group.  The line uses the same format that the
+	read path emits, "<mode>[:group=<ctrl>/<mon>/]", and a surrounding
+	"[...]" pair (as printed for the active line) is accepted and stripped.
+	The ":group=<spec>" suffix is optional; when omitted the default group
+	is used.  The mode must match one of the supported names exactly,
+	and modes not advertised by the platform cannot be set.  The display-only
+	"group=none" form is rejected.  Errors are reported in
+	"info/last_cmd_status".  Example::
+
+	  # echo "global_assign_ctrl_assign_mon_per_cpu:group=ctrl/mon1/" \
+	         > info/kernel_mode
+	  # cat info/kernel_mode
+	  inherit_ctrl_and_mon:group=none
+	  global_assign_ctrl_inherit_mon_per_cpu:group=none
+	  [global_assign_ctrl_assign_mon_per_cpu:group=ctrl1/mon1/]
+
+	  # echo "inherit_ctrl_and_mon" > info/kernel_mode
+	  # cat info/kernel_mode
+	  [inherit_ctrl_and_mon:group=//]
+	  global_assign_ctrl_inherit_mon_per_cpu:group=none
+	  global_assign_ctrl_assign_mon_per_cpu:group=none
+
+	Modes:
+
+	- "inherit_ctrl_and_mon": Kernel uses the same CLOSID and RMID as the
+	  current user-space task (default).
+	- "global_assign_ctrl_inherit_mon_per_cpu": One CLOSID is assigned for all
+	  kernel work; RMID is still inherited from user space.
+	- "global_assign_ctrl_assign_mon_per_cpu": One resource group (CLOSID and RMID)
+	  is assigned for all kernel work.
+
 Resource alloc and monitor groups
 =================================
 
