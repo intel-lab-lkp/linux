@@ -444,6 +444,7 @@ static void nf_flow_encap_pop(struct nf_flowtable_ctx *ctx,
 		}
 		switch (skb->protocol) {
 		case htons(ETH_P_8021Q):
+			skb_postpull_rcsum(skb, skb->data, VLAN_HLEN);
 			vlan_hdr = (struct vlan_hdr *)skb->data;
 			__skb_pull(skb, VLAN_HLEN);
 			vlan_set_encap_proto(skb, vlan_hdr);
