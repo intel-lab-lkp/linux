@@ -208,8 +208,7 @@ static phys_addr_t qcom_tbu_trigger_atos(struct arm_smmu_domain *smmu_domain,
 
 	/* Set address and stream-id */
 	val = readq_relaxed(tbu->base + DEBUG_SID_HALT_REG);
-	val &= ~DEBUG_SID_HALT_SID;
-	val |= FIELD_PREP(DEBUG_SID_HALT_SID, sid);
+	FIELD_MODIFY(DEBUG_SID_HALT_SID, &val, sid);
 	writeq_relaxed(val, tbu->base + DEBUG_SID_HALT_REG);
 	writeq_relaxed(iova, tbu->base + DEBUG_VA_ADDR_REG);
 	val = FIELD_PREP(DEBUG_AXUSER_CDMID, DEBUG_AXUSER_CDMID_VAL);
