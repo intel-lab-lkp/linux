@@ -394,11 +394,6 @@ General
   to the distance between two watermarks. The distance itself is calculated
   taking ``vm.watermark_scale_factor`` sysctl into account.
 
-``watermark_boost``
-  The number of pages which are used to boost watermarks to increase reclaim
-  pressure to reduce the likelihood of future fallbacks and wake kswapd now
-  as the node may be balanced overall and kswapd will not wake naturally.
-
 ``nr_reserved_highatomic``
   The number of pages which are reserved for high-order atomic allocations.
 
@@ -527,11 +522,9 @@ General
   Defined only when ``CONFIG_UNACCEPTED_MEMORY`` is enabled.
 
 ``flags``
-  The zone flags. The least three bits are used and defined by
-  ``enum zone_flags``. ``ZONE_BOOSTED_WATERMARK`` (bit 0): zone recently boosted
-  watermarks. Cleared when kswapd is woken. ``ZONE_RECLAIM_ACTIVE`` (bit 1):
-  kswapd may be scanning the zone. ``ZONE_BELOW_HIGH`` (bit 2): zone is below
-  high watermark.
+  The zone flags. The bits are defined by ``enum zone_flags``.
+  ``ZONE_RECLAIM_ACTIVE`` (bit 0): kswapd may be scanning the zone.
+  ``ZONE_BELOW_HIGH`` (bit 1): zone is below high watermark.
 
 ``lock``
   The main lock that protects the internal data structures of the page allocator

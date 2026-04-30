@@ -76,7 +76,6 @@ Currently, these files are in /proc/sys/vm:
 - user_reserve_kbytes
 - vfs_cache_pressure
 - vfs_cache_pressure_denom
-- watermark_boost_factor
 - watermark_scale_factor
 - zone_reclaim_mode
 
@@ -1072,26 +1071,6 @@ vfs_cache_pressure_denom
 
 Defaults to 100 (minimum allowed value). Requires corresponding
 vfs_cache_pressure setting to take effect.
-
-watermark_boost_factor
-======================
-
-This factor controls the level of reclaim when memory is being fragmented.
-It defines the percentage of the high watermark of a zone that will be
-reclaimed if pages of different mobility are being mixed within pageblocks.
-The intent is that compaction has less work to do in the future and to
-increase the success rate of future high-order allocations such as SLUB
-allocations, THP and hugetlbfs pages.
-
-To make it sensible with respect to the watermark_scale_factor
-parameter, the unit is in fractions of 10,000. The default value of
-15,000 means that up to 150% of the high watermark will be reclaimed in the
-event of a pageblock being mixed due to fragmentation. The level of reclaim
-is determined by the number of fragmentation events that occurred in the
-recent past. If this value is smaller than a pageblock then a pageblocks
-worth of pages will be reclaimed (e.g.  2MB on 64-bit x86). A boost factor
-of 0 will disable the feature.
-
 
 watermark_scale_factor
 ======================
