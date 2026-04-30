@@ -27,6 +27,7 @@
 #include <linux/module.h>
 #include <linux/dma-mapping.h>
 #include <linux/string_choices.h>
+#include <linux/timekeeping.h>
 #include "../tty/hvc/hvc_console.h"
 
 #define is_rproc_enabled IS_ENABLED(CONFIG_REMOTEPROC)
@@ -601,6 +602,7 @@ static ssize_t __send_to_port(struct port *port, struct scatterlist *sg,
 	int err;
 	unsigned long flags;
 	unsigned int len;
+	u64 deadline;
 
 	out_vq = port->out_vq;
 
@@ -632,10 +634,18 @@ static ssize_t __send_to_port(struct port *port, struct scatterlist *sg,
 	 * buffer and relax the spinning requirement.  The downside is
 	 * we need to kmalloc a GFP_ATOMIC buffer each time the
 	 * console driver writes something out.
+	 *
+	 * To avoid spinning forever if the host stops processing the
+	 * TX virtqueue (e.g. during VM shutdown), a 200ms deadline is
+	 * used to break out of the loop as a fallback.
 	 */
-	while (!virtqueue_get_buf(out_vq, &len)
-		&& !virtqueue_is_broken(out_vq))
+	deadline = ktime_get_mono_fast_ns() + 200ULL * NSEC_PER_MSEC;
+	while (!virtqueue_get_buf(out_vq, &len) &&
+	       !virtqueue_is_broken(out_vq)) {
+		if (ktime_get_mono_fast_ns() >= deadline)
+			break;
 		cpu_relax();
+	}
 done:
 	spin_unlock_irqrestore(&port->outvq_lock, flags);
 
@@ -1097,31 +1107,71 @@ static const struct file_operations port_fops = {
 };
 
 /*
- * The put_chars() callback is pretty straightforward.
+ * The put_chars() callback writes characters to the virtio console port.
  *
- * We turn the characters into a scatter-gather list, add it to the
- * output queue and then kick the Host.  Then we sit here waiting for
- * it to finish: inefficient in theory, but in practice
- * implementations will do it immediately.
+ * We allocate a struct port_buffer (with GFP_ATOMIC) to wrap the data so
+ * that reclaim_consumed_buffers() can safely call free_buf() on the token
+ * returned by virtqueue_get_buf(), even if __send_to_port() timed out
+ * before observing the used-ring update.
+ *
+ * On success, ownership of the buffer is transferred to the virtqueue as
+ * the descriptor token; it will be reclaimed by reclaim_consumed_buffers().
+ * On failure (virtqueue_add_outbuf() error), the buffer was never submitted
+ * and must be freed explicitly here.
  */
 static ssize_t put_chars(u32 vtermno, const u8 *buf, size_t count)
 {
 	struct port *port;
 	struct scatterlist sg[1];
-	void *data;
-	int ret;
+	struct port_buffer *pbuf;
+	ssize_t ret;
+
+	if (!count)
+		return 0;
 
 	port = find_port_by_vtermno(vtermno);
 	if (!port)
 		return -EPIPE;
 
-	data = kmemdup(buf, count, GFP_ATOMIC);
-	if (!data)
+	/*
+	 * Allocate a struct port_buffer with GFP_ATOMIC so that
+	 * reclaim_consumed_buffers() can safely call free_buf() on the token
+	 * returned by virtqueue_get_buf(), whether or not __send_to_port()
+	 * timed out.  alloc_buf() uses GFP_KERNEL internally, so we open-code
+	 * the allocation here.
+	 */
+	pbuf = kmalloc(struct_size(pbuf, sg, 0), GFP_ATOMIC);
+	if (!pbuf)
 		return -ENOMEM;
 
-	sg_init_one(sg, data, count);
-	ret = __send_to_port(port, sg, 1, count, data, false);
-	kfree(data);
+	pbuf->buf = kmalloc(count, GFP_ATOMIC);
+	if (!pbuf->buf) {
+		kfree(pbuf);
+		return -ENOMEM;
+	}
+	pbuf->dev = NULL;
+	pbuf->sgpages = 0;
+	pbuf->len = count;
+	pbuf->offset = 0;
+	pbuf->size = count;
+	memcpy(pbuf->buf, buf, count);
+
+	sg_init_one(sg, pbuf->buf, count);
+	ret = __send_to_port(port, sg, 1, count, pbuf, false);
+
+	/*
+	 * If virtqueue_add_outbuf() failed inside __send_to_port() (ret <= 0),
+	 * the token was never submitted to the virtqueue, so reclaim_consumed_
+	 * buffers() will never see it.  Free pbuf explicitly in that case.
+	 *
+	 * On success (ret > 0), ownership of pbuf has been transferred to the
+	 * virtqueue as the descriptor token.  It will be reclaimed and freed
+	 * by reclaim_consumed_buffers() -> free_buf() when the host marks the
+	 * descriptor as used, even if __send_to_port() timed out before
+	 * observing the used-ring update.  Do NOT free pbuf here in that case.
+	 */
+	if (ret <= 0)
+		free_buf(pbuf, false);
 	return ret;
 }
 
