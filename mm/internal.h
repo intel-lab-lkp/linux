@@ -1025,6 +1025,10 @@ void init_cma_reserved_pageblock(struct page *page);
 
 #endif /* CONFIG_COMPACTION || CONFIG_CMA */
 
+#ifdef CONFIG_MEMORY_HOTPLUG
+void resize_zone_superpageblocks(struct zone *zone);
+#endif
+
 struct cma;
 
 #ifdef CONFIG_CMA

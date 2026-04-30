@@ -1581,6 +1581,144 @@ static void __init setup_superpageblocks(struct zone *zone)
 					zone_start, zone_end);
 }
 
+#ifdef CONFIG_MEMORY_HOTPLUG
+/**
+ * resize_zone_superpageblocks - grow superpageblock array for memory hotplug
+ * @zone: zone whose span has been extended by hotplug
+ *
+ * Called from move_pfn_range_to_zone() after resize_zone_range() has
+ * updated the zone's span.  Allocates a new superpageblock array covering
+ * the full zone span, copies existing superpageblocks (fixing up list heads),
+ * and initializes new superpageblocks for the added range.
+ *
+ * Must be called under mem_hotplug_lock (write).  No concurrent
+ * allocations can occur since the hotplugged pages are not yet online.
+ */
+void __meminit resize_zone_superpageblocks(struct zone *zone)
+{
+	unsigned long zone_start = zone->zone_start_pfn;
+	unsigned long zone_end = zone_start + zone->spanned_pages;
+	unsigned long new_sb_base, new_nr_sbs;
+	unsigned long old_offset;
+	struct superpageblock *old_sbs;
+	struct superpageblock *new_sbs;
+	bool old_kvmalloced;
+	size_t alloc_size;
+	unsigned long i;
+	int nid = zone_to_nid(zone);
+
+	if (!zone->spanned_pages)
+		return;
+
+	new_sb_base = ALIGN_DOWN(zone_start, SUPERPAGEBLOCK_NR_PAGES);
+	new_nr_sbs = (ALIGN(zone_end, SUPERPAGEBLOCK_NR_PAGES) - new_sb_base) >>
+		     SUPERPAGEBLOCK_ORDER;
+
+	/* Already covered? */
+	if (zone->superpageblocks &&
+	    new_sb_base == zone->superpageblock_base_pfn &&
+	    new_nr_sbs == zone->nr_superpageblocks)
+		return;
+
+	alloc_size = new_nr_sbs * sizeof(struct superpageblock);
+	new_sbs = kvmalloc_node(alloc_size, GFP_KERNEL | __GFP_ZERO, nid);
+	if (!new_sbs) {
+		pr_warn("Failed to allocate %zu bytes for zone %s superpageblocks\n",
+			alloc_size, zone->name);
+		return;
+	}
+
+	/*
+	 * Copy existing superpageblocks to their new position.
+	 * The old array covers [old_base, old_base + old_nr * SB_SIZE).
+	 * The new array covers [new_base, new_base + new_nr * SB_SIZE).
+	 * old_base >= new_base always (zone can only grow).
+	 */
+	if (zone->superpageblocks) {
+		old_offset = (zone->superpageblock_base_pfn - new_sb_base) >>
+			     SUPERPAGEBLOCK_ORDER;
+		memcpy(&new_sbs[old_offset], zone->superpageblocks,
+		       zone->nr_superpageblocks * sizeof(struct superpageblock));
+
+		/*
+		 * Fix up list_head pointers that were self-referencing
+		 * (empty lists) or pointing into the old array.
+		 */
+		for (i = old_offset; i < old_offset + zone->nr_superpageblocks; i++) {
+			struct superpageblock *sb = &new_sbs[i];
+
+			if (list_empty(&sb->list))
+				INIT_LIST_HEAD(&sb->list);
+			else
+				list_replace(&zone->superpageblocks[i - old_offset].list,
+					     &sb->list);
+		}
+	}
+
+	/* Initialize new superpageblocks (slots not covered by old array) */
+	for (i = 0; i < new_nr_sbs; i++) {
+		struct superpageblock *sb = &new_sbs[i];
+		bool is_old = false;
+
+		if (zone->superpageblocks) {
+			old_offset = (zone->superpageblock_base_pfn - new_sb_base) >>
+				     SUPERPAGEBLOCK_ORDER;
+			if (i >= old_offset &&
+			    i < old_offset + zone->nr_superpageblocks)
+				is_old = true;
+		}
+
+		if (is_old)
+			continue;
+
+		init_one_superpageblock(sb, zone,
+					new_sb_base + (i << SUPERPAGEBLOCK_ORDER),
+					zone_start, zone_end);
+	}
+
+	/*
+	 * Update existing superpageblocks whose nr_reserved may have
+	 * increased due to the zone span growing into them.
+	 */
+	if (zone->superpageblocks) {
+		old_offset = (zone->superpageblock_base_pfn - new_sb_base) >>
+			     SUPERPAGEBLOCK_ORDER;
+		for (i = old_offset; i < old_offset + zone->nr_superpageblocks; i++) {
+			struct superpageblock *sb = &new_sbs[i];
+			unsigned long sb_start = sb->start_pfn;
+			unsigned long sb_end = sb_start + SUPERPAGEBLOCK_NR_PAGES;
+			unsigned long pb_start = max(sb_start, zone_start);
+			unsigned long pb_end = min(sb_end, zone_end);
+			u16 new_pbs = (pb_end > pb_start) ?
+				((pb_end - pb_start + pageblock_nr_pages - 1) >>
+				 pageblock_order) : 0;
+			u16 old_pbs = sb->nr_free + sb->nr_unmovable +
+				sb->nr_reclaimable + sb->nr_movable +
+				sb->nr_reserved;
+
+			if (new_pbs > old_pbs)
+				sb->nr_reserved += new_pbs - old_pbs;
+		}
+	}
+
+	/* Swap in the new array */
+	old_sbs = zone->superpageblocks;
+	old_kvmalloced = zone->spb_kvmalloced;
+	zone->superpageblocks = new_sbs;
+	zone->nr_superpageblocks = new_nr_sbs;
+	zone->superpageblock_base_pfn = new_sb_base;
+	zone->spb_kvmalloced = true;
+
+	/*
+	 * The boot-time array was allocated with memblock_alloc, which
+	 * is not individually freeable after boot.  Only kvfree arrays
+	 * from previous hotplug resizes.
+	 */
+	if (old_sbs && old_kvmalloced)
+		kvfree(old_sbs);
+}
+#endif /* CONFIG_MEMORY_HOTPLUG */
+
 #ifdef CONFIG_HUGETLB_PAGE_SIZE_VARIABLE
 
 /* Initialise the number of pages represented by NR_PAGEBLOCK_BITS */
