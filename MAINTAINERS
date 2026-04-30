@@ -432,18 +432,6 @@ W:	http://wiki.analog.com/AD5398
 W:	https://ez.analog.com/linux-software-drivers
 F:	drivers/regulator/ad5398.c
 
-AD5446	ANALOG DEVICES INC AD5446 DAC DRIVER
-M:	Michael Hennerich <michael.hennerich@analog.com>
-M:	Nuno Sá <nuno.sa@analog.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/devicetree/bindings/iio/dac/adi,ad5446.yaml
-F:	drivers/iio/dac/ad5446-i2c.c
-F:	drivers/iio/dac/ad5446-spi.c
-F:	drivers/iio/dac/ad5446.c
-F:	drivers/iio/dac/ad5446.h
-
 AD714X CAPACITANCE TOUCH SENSOR DRIVER (AD7142/3/7/8/7A)
 M:	Michael Hennerich <michael.hennerich@analog.com>
 S:	Supported
@@ -1377,23 +1365,6 @@ T:	git git://git.kernel.org/pub/scm/linux/kernel/git/netdev/net.git
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/netdev/net-next.git
 F:	drivers/net/amt.c
 
-ANALOG DEVICES INC AD3530R DRIVER
-M:	Kim Seer Paller <kimseer.paller@analog.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/devicetree/bindings/iio/dac/adi,ad3530r.yaml
-F:	drivers/iio/dac/ad3530r.c
-
-ANALOG DEVICES INC AD3552R DRIVER
-M:	Nuno Sá <nuno.sa@analog.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/devicetree/bindings/iio/dac/adi,ad3552r.yaml
-F:	Documentation/iio/ad3552r.rst
-F:	drivers/iio/dac/ad3552r.c
-
 AD4030 ADC DRIVER (AD4030-24/AD4630-16/AD4630-24/AD4632-16/AD4632-24)
 M:	Michael Hennerich <michael.hennerich@analog.com>
 M:	Nuno Sá <nuno.sa@analog.com>
@@ -1405,14 +1376,6 @@ F:	Documentation/devicetree/bindings/iio/adc/adi,ad4030.yaml
 F:	Documentation/iio/ad4030.rst
 F:	drivers/iio/adc/ad4030.c
 
-ANALOG DEVICES INC AD5706R DRIVER
-M:	Alexis Czezar Torreno <alexisczezar.torreno@analog.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/devicetree/bindings/iio/dac/adi,ad5706r.yaml
-F:	drivers/iio/dac/ad5706r.c
-
 ANALOG DEVICES INC AD7292 DRIVER
 M:	Marcelo Schmitt <marcelo.schmitt1@gmail.com>
 L:	linux-iio@vger.kernel.org
@@ -1420,14 +1383,6 @@ S:	Supported
 W:	https://ez.analog.com/linux-software-drivers
 F:	Documentation/devicetree/bindings/iio/adc/adi,ad7292.yaml
 F:	drivers/iio/adc/ad7292.c
-
-ANALOG DEVICES INC AD7293 DRIVER
-M:	Antoniu Miclaus <antoniu.miclaus@analog.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/devicetree/bindings/iio/dac/adi,ad7293.yaml
-F:	drivers/iio/dac/ad7293.c
 
 ANALOG DEVICES INC AD74115 DRIVER
 M:	Cosmin Tanislav <cosmin.tanislav@analog.com>
@@ -1474,23 +1429,6 @@ S:	Supported
 W:	https://ez.analog.com/linux-software-drivers
 F:	Documentation/devicetree/bindings/iio/amplifiers/adi,ad8366.yaml
 F:	drivers/iio/amplifiers/ad8366.c
-
-ANALOG DEVICES INC AD8460 DRIVER
-M:	Mariel Tinaco <Mariel.Tinaco@analog.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/devicetree/bindings/iio/dac/adi,ad8460.yaml
-F:	drivers/iio/dac/ad8460.c
-
-ANALOG DEVICES INC AD9739a DRIVER
-M:	Nuno Sa <nuno.sa@analog.com>
-M:	Dragos Bogdan <dragos.bogdan@analog.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/devicetree/bindings/iio/dac/adi,ad9739a.yaml
-F:	drivers/iio/dac/ad9739a.c
 
 ANALOG DEVICES INC MAX22007 DRIVER
 M:	Janani Sunil <janani.sunil@analog.com>
@@ -1691,14 +1629,6 @@ F:	sound/soc/codecs/adau*
 F:	sound/soc/codecs/adav*
 F:	sound/soc/codecs/sigmadsp.*
 F:	sound/soc/codecs/ssm*
-
-ANALOG DEVICES INC AXI DAC DRIVER
-M:	Nuno Sa <nuno.sa@analog.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/devicetree/bindings/iio/dac/adi,axi-dac.yaml
-F:	drivers/iio/dac/adi-axi-dac.c
 
 ANALOG DEVICES INC DMA DRIVERS
 M:	Lars-Peter Clausen <lars@metafoo.de>
