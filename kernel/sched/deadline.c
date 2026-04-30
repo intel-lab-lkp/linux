@@ -75,10 +75,12 @@ static inline struct rq *rq_of_dl_rq(struct dl_rq *dl_rq)
 
 static inline struct rq *rq_of_dl_se(struct sched_dl_entity *dl_se)
 {
-	struct rq *rq = dl_se->rq;
+	struct rq *rq;
 
 	if (!dl_server(dl_se))
 		rq = task_rq(dl_task_of(dl_se));
+	else
+		rq = container_of_const(dl_se->dl_rq, struct rq, dl);
 
 	return rq;
 }
@@ -1833,10 +1835,12 @@ void dl_server_stop(struct sched_dl_entity *dl_se)
 	dl_se->dl_server_active = 0;
 }
 
-void dl_server_init(struct sched_dl_entity *dl_se, struct rq *rq,
+void dl_server_init(struct sched_dl_entity *dl_se, struct dl_rq *dl_rq,
+		    struct rq *served_rq,
 		    dl_server_pick_f pick_task)
 {
-	dl_se->rq = rq;
+	dl_se->dl_rq = dl_rq;
+	dl_se->my_q  = served_rq;
 	dl_se->server_pick_task = pick_task;
 }
 
