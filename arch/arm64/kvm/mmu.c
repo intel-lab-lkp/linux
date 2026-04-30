@@ -117,8 +117,8 @@ static bool need_split_memcache_topup_or_resched(struct kvm *kvm)
 	return kvm_mmu_memory_cache_nr_free_objects(cache) < min;
 }
 
-static int kvm_mmu_split_huge_pages(struct kvm *kvm, phys_addr_t addr,
-				    phys_addr_t end)
+int kvm_mmu_split_huge_pages(struct kvm *kvm, phys_addr_t addr,
+			     phys_addr_t end)
 {
 	struct kvm_mmu_memory_cache *cache;
 	struct kvm_pgtable *pgt;

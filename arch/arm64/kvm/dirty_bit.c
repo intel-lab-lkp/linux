@@ -117,6 +117,152 @@ static int dirty_bit_clear(struct kvm *kvm, u64 *hw_entries, int size)
 	return ret;
 }
 
+static inline void hdbss_to_bitmap(u64 *hdbss_array, int start, int end,
+				   unsigned long *dirty_bitmap,
+				   unsigned long long offset)
+{
+	u64 w = (gpa_to_gfn(hdbss_array[start]) - offset) / BITS_PER_LONG;
+	u64 mask = 0;
+	int idx = start;
+
+	do {
+		u64 entry = (gpa_to_gfn(hdbss_array[idx]) - offset);
+
+		if (entry / BITS_PER_LONG == w) {
+			mask |= BIT(entry % BITS_PER_LONG);
+		} else {
+			atomic_long_or(mask, (atomic_long_t *)&dirty_bitmap[w]);
+			w = entry / BITS_PER_LONG;
+			mask = BIT(entry % BITS_PER_LONG);
+		}
+	} while (++idx < end);
+	atomic_long_or(mask, (atomic_long_t *)&dirty_bitmap[w]);
+}
+
+static inline int mask_to_hdbss(unsigned long *mask, u64 *hw_entries, const gfn_t offset,
+				u64 ttwl, int idx, int entries_sz)
+{
+	while (idx < entries_sz) {
+		int j = __ffs(*mask);
+		u64 a = gfn_to_gpa(offset + j);
+
+		hw_entries[idx++] = (a & HDBSS_ENTRY_IPA) |
+				    ttwl |
+				    HDBSS_ENTRY_VALID;
+
+		*mask &= ~BIT(j);
+		if (!*mask)
+			break;
+	}
+
+	return idx;
+}
+
+int __kvm_arch_dirty_log_clear(struct kvm *kvm,
+			       struct kvm_memory_slot *memslot,
+			       struct kvm_clear_dirty_log *log,
+			       unsigned long *bitmap,
+			       bool *flush)
+{
+	int ret = 0;
+	int idx = 0;
+	unsigned long *dirty_bitmap = memslot->dirty_bitmap;
+	u64 *hw_entries;
+	const int entries_sz = PAGE_SIZE / sizeof(*hw_entries);
+	u64 ttwl;
+	u64 start, end;
+	gfn_t base_gfn;
+
+	hw_entries = kmalloc_objs(u64, entries_sz, GFP_KERNEL);
+	if (!hw_entries)
+		return -ENOMEM;
+
+	ttwl = hdbss_get_ttwl(kvm->arch.mmu.split_page_chunk_size);
+
+	if (log) {
+		start = log->first_page / BITS_PER_LONG;
+		end = start + DIV_ROUND_UP(log->num_pages, BITS_PER_LONG);
+		base_gfn = memslot->base_gfn + log->first_page % BITS_PER_LONG;
+	} else {
+		start = 0;
+		end = kvm_dirty_bitmap_bytes(memslot) / sizeof(long);
+		base_gfn = memslot->base_gfn;
+	}
+
+	write_lock(&kvm->mmu_lock);
+
+	for (unsigned long i = start; i < end; i++) {
+		unsigned long mask;
+		gfn_t offset;
+		atomic_long_t *p;
+
+		if (log) { /* Clean only what is in the input bitmap */
+			mask = bitmap[i];
+			if (!mask)
+				continue;
+
+			p = (atomic_long_t *)&dirty_bitmap[i];
+			mask &= atomic_long_fetch_andnot(mask, p);
+		} else { /* Clean everything */
+			if (!dirty_bitmap[i])
+				continue;
+
+			mask = xchg(&dirty_bitmap[i], 0);
+			bitmap[i] = mask;
+		}
+
+		if (!mask)
+			continue;
+
+		offset = base_gfn + i * BITS_PER_LONG;
+
+		if (kvm_dirty_log_manual_protect_and_init_set(kvm))
+			kvm_mmu_split_huge_pages(kvm,
+						 gfn_to_gpa(offset + __ffs(mask)),
+						 gfn_to_gpa(offset + __fls(mask) + 1));
+
+		do {
+			idx = mask_to_hdbss(&mask, hw_entries, offset, ttwl, idx, entries_sz);
+			if (idx >= entries_sz) {
+				ret = dirty_bit_clear(kvm, hw_entries, idx);
+				*flush = *flush || ret > 0;
+				if (ret != idx) {
+					/* Save bits not converted back to bitmap */
+					atomic_long_or(mask, (atomic_long_t *)&dirty_bitmap[i]);
+					goto out_err;
+				}
+				idx = 0;
+			}
+		} while (mask);
+	}
+
+	if (idx != 0) {
+		ret = dirty_bit_clear(kvm, hw_entries, idx);
+		*flush = *flush || ret > 0;
+	}
+out_err:
+	if (unlikely(ret != idx)) {
+		/*
+		 * In case there is an error and not all entries in HACDBS get
+		 * cleaned, we have to mark the dirty bits back in the bitmap,
+		 * as that will be used by the software routine.
+		 *
+		 * Entries should be in order, since they were extraxed from
+		 * the dirty-bitmap, so batching the atomic writes is efficient.
+		 */
+
+		if (ret < idx)
+			hdbss_to_bitmap(hw_entries, ret, idx, dirty_bitmap, memslot->base_gfn);
+
+		ret = -EAGAIN;
+	}
+
+	write_unlock(&kvm->mmu_lock);
+	kfree(hw_entries);
+
+	return ret;
+}
+
 static irqreturn_t hacdbsirq_handler(int irq, void *pcpu)
 {
 	u64 cons = read_sysreg_s(SYS_HACDBSCONS_EL2);
