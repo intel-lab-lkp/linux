@@ -149,11 +149,9 @@ static int otto_wdt_determine_timeouts(struct watchdog_device *wdev, unsigned in
 		|| phase2_ticks > OTTO_WDT_PHASE_TICKS_MAX);
 
 	v = ioread32(ctrl->base + OTTO_WDT_REG_CTRL);
-
-	v &= ~(OTTO_WDT_CTRL_PRESCALE | OTTO_WDT_CTRL_PHASE1 | OTTO_WDT_CTRL_PHASE2);
-	v |= FIELD_PREP(OTTO_WDT_CTRL_PHASE1, phase1_ticks - 1);
-	v |= FIELD_PREP(OTTO_WDT_CTRL_PHASE2, phase2_ticks - 1);
-	v |= FIELD_PREP(OTTO_WDT_CTRL_PRESCALE, prescale);
+	FIELD_MODIFY(OTTO_WDT_CTRL_PHASE1, &v, phase1_ticks - 1);
+	FIELD_MODIFY(OTTO_WDT_CTRL_PHASE2, &v, phase2_ticks - 1);
+	FIELD_MODIFY(OTTO_WDT_CTRL_PRESCALE, &v, prescale);
 
 	iowrite32(v, ctrl->base + OTTO_WDT_REG_CTRL);
 
@@ -279,8 +277,7 @@ static int otto_wdt_probe_reset_mode(struct otto_wdt_ctrl *ctrl)
 		return -EINVAL;
 
 	v = ioread32(ctrl->base + OTTO_WDT_REG_CTRL);
-	v &= ~OTTO_WDT_CTRL_RST_MODE;
-	v |= FIELD_PREP(OTTO_WDT_CTRL_RST_MODE, mode);
+	FIELD_MODIFY(OTTO_WDT_CTRL_RST_MODE, &v, mode);
 	iowrite32(v, ctrl->base + OTTO_WDT_REG_CTRL);
 
 	return 0;
