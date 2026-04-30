@@ -975,7 +975,58 @@ static int balance_rt(struct rq *rq, struct task_struct *p, struct rq_flags *rf)
 static void wakeup_preempt_rt(struct rq *rq, struct task_struct *p, int flags)
 {
 	struct task_struct *donor = rq->donor;
+	struct sched_dl_entity *woken_dl_se = NULL;
+	struct sched_dl_entity *donor_dl_se = NULL;
 
+	if (!rt_group_sched_enabled())
+		goto no_group_sched;
+
+	/*
+	 * Preemption checks are different if the waking task and the current task
+	 * are running on the global runqueue or in a cgroup. The following rules
+	 * apply:
+	 *   - dl-tasks (and equally dl_servers) always preempt FIFO/RR tasks.
+	 *     - if curr is a FIFO/RR task inside a cgroup (i.e. run by a
+	 *       dl_server), or curr is a DEADLINE task and waking is a FIFO/RR task
+	 *       on the root cgroup, do nothing.
+	 *     - if waking is inside a cgroup but curr is a FIFO/RR task in the root
+	 *       cgroup, always reschedule.
+	 *   - if they are both on the global runqueue, run the standard code.
+	 *   - if they are both in the same cgroup, check for tasks priorities.
+	 *   - if they are both in a cgroup, but not the same one, check whether the
+	 *     woken task's dl_server preempts the current's dl_server.
+	 *   - if curr is a DEADLINE task and waking is in a cgroup, check whether
+	 *     the woken task's server preempts curr.
+	 */
+	if (is_dl_group(rt_rq_of_se(&p->rt)))
+		woken_dl_se = dl_group_of(rt_rq_of_se(&p->rt));
+	if (is_dl_group(rt_rq_of_se(&donor->rt)))
+		donor_dl_se = dl_group_of(rt_rq_of_se(&donor->rt));
+	else if (task_has_dl_policy(donor))
+		donor_dl_se = &donor->dl;
+
+	if (woken_dl_se != NULL && donor_dl_se != NULL) {
+		if (woken_dl_se == donor_dl_se) {
+			if (p->prio < donor->prio)
+				resched_curr(rq);
+
+			return;
+		}
+
+		if (dl_entity_preempt(woken_dl_se, donor_dl_se))
+			resched_curr(rq);
+
+		return;
+
+	} else if (woken_dl_se != NULL) {
+		resched_curr(rq);
+		return;
+
+	} else if (donor_dl_se != NULL) {
+		return;
+	}
+
+no_group_sched:
 	/*
 	 * XXX If we're preempted by DL, queue a push?
 	 */
@@ -1026,7 +1077,8 @@ static inline void set_next_task_rt(struct rq *rq, struct task_struct *p, bool f
 	if (rq->donor->sched_class != &rt_sched_class)
 		update_rt_rq_load_avg(rq_clock_pelt(rq), rq, 0);
 
-	rt_queue_push_tasks(rt_rq);
+	if (!IS_ENABLED(CONFIG_RT_GROUP_SCHED) || !is_dl_group(rt_rq))
+		rt_queue_push_tasks(rt_rq);
 }
 
 static struct sched_rt_entity *pick_next_rt_entity(struct rt_rq *rt_rq)
@@ -1736,6 +1788,8 @@ static void rq_offline_rt(struct rq *rq)
  */
 static void switched_from_rt(struct rq *rq, struct task_struct *p)
 {
+	struct rt_rq *rt_rq = rt_rq_of_se(&p->rt);
+
 	/*
 	 * If there are other RT tasks then we will reschedule
 	 * and the scheduling of the other RT tasks will handle
@@ -1743,10 +1797,11 @@ static void switched_from_rt(struct rq *rq, struct task_struct *p)
 	 * we may need to handle the pulling of RT tasks
 	 * now.
 	 */
-	if (!task_on_rq_queued(p) || rq->rt.rt_nr_running)
+	if (!task_on_rq_queued(p) || rt_rq->rt_nr_running)
 		return;
 
-	rt_queue_pull_task(rt_rq_of_se(&p->rt));
+	if (!IS_ENABLED(CONFIG_RT_GROUP_SCHED) || !is_dl_group(rt_rq))
+		rt_queue_pull_task(rt_rq);
 }
 
 void __init init_sched_rt_class(void)
@@ -1766,6 +1821,8 @@ void __init init_sched_rt_class(void)
  */
 static void switched_to_rt(struct rq *rq, struct task_struct *p)
 {
+	struct rt_rq *rt_rq = rt_rq_of_se(&p->rt);
+
 	/*
 	 * If we are running, update the avg_rt tracking, as the running time
 	 * will now on be accounted into the latter.
@@ -1781,8 +1838,14 @@ static void switched_to_rt(struct rq *rq, struct task_struct *p)
 	 * then see if we can move to another run queue.
 	 */
 	if (task_on_rq_queued(p)) {
-		if (p->nr_cpus_allowed > 1 && rq->rt.overloaded)
-			rt_queue_push_tasks(rt_rq_of_se(&p->rt));
+		if (IS_ENABLED(CONFIG_RT_GROUP_SCHED) && is_dl_group(rt_rq)) {
+			if (p->prio < rq->donor->prio)
+				resched_curr(rq);
+		} else {
+			if (p->nr_cpus_allowed > 1 && rq->rt.overloaded)
+				rt_queue_push_tasks(rt_rq_of_se(&p->rt));
+		}
+
 		if (p->prio < rq->donor->prio && cpu_online(cpu_of(rq)))
 			resched_curr(rq);
 	}
@@ -1795,6 +1858,8 @@ static void switched_to_rt(struct rq *rq, struct task_struct *p)
 static void
 prio_changed_rt(struct rq *rq, struct task_struct *p, u64 oldprio)
 {
+	struct rt_rq *rt_rq = rt_rq_of_se(&p->rt);
+
 	if (!task_on_rq_queued(p))
 		return;
 
@@ -1807,15 +1872,25 @@ prio_changed_rt(struct rq *rq, struct task_struct *p, u64 oldprio)
 		 * may need to pull tasks to this runqueue.
 		 */
 		if (oldprio < p->prio)
-			rt_queue_pull_task(rt_rq_of_se(&p->rt));
+			if (!IS_ENABLED(CONFIG_RT_GROUP_SCHED) || !is_dl_group(rt_rq))
+				rt_queue_pull_task(rt_rq);
 
 		/*
 		 * If there's a higher priority task waiting to run
 		 * then reschedule.
 		 */
-		if (p->prio > rq->rt.highest_prio.curr)
+		if (p->prio > rt_rq->highest_prio.curr)
 			resched_curr(rq);
 	} else {
+		/*
+		 * This task is not running, thus we check against the currently
+		 * running task for preemption. We can preempt only if both tasks are
+		 * in the same cgroup or on the global runqueue.
+		 */
+		if (IS_ENABLED(CONFIG_RT_GROUP_SCHED) &&
+		    rt_rq_of_se(&p->rt)->tg != rt_rq_of_se(&rq->curr->rt)->tg)
+			return;
+
 		/*
 		 * This task is not running, but if it is
 		 * greater than the current running task
@@ -1908,7 +1983,16 @@ static unsigned int get_rr_interval_rt(struct rq *rq, struct task_struct *task)
 #ifdef CONFIG_SCHED_CORE
 static int task_is_throttled_rt(struct task_struct *p, int cpu)
 {
+#ifdef CONFIG_RT_GROUP_SCHED
+	struct rt_rq *rt_rq;
+
+	rt_rq = task_group(p)->rt_rq[cpu];
+	WARN_ON(!rt_group_sched_enabled() && rt_rq->tg != &root_task_group);
+
+	return dl_group_of(rt_rq)->dl_throttled;
+#else
 	return 0;
+#endif
 }
 #endif /* CONFIG_SCHED_CORE */
 
@@ -2159,16 +2243,16 @@ static int sched_rt_global_constraints(void)
 }
 #endif /* CONFIG_SYSCTL */
 
-int sched_rt_can_attach(struct task_group *tg, struct task_struct *tsk)
+int sched_rt_can_attach(struct task_group *tg)
 {
 	/* Don't accept real-time tasks when there is no way for them to run */
-	if (rt_group_sched_enabled() && rt_task(tsk) && tg->rt_bandwidth.rt_runtime == 0)
+	if (rt_group_sched_enabled() && tg->dl_bandwidth.dl_runtime == 0)
 		return 0;
 
 	return 1;
 }
 
-#else /* !CONFIG_RT_GROUP_SCHED: */
+#else /* !CONFIG_RT_GROUP_SCHED */
 
 #ifdef CONFIG_SYSCTL
 static int sched_rt_global_constraints(void)
@@ -2176,7 +2260,7 @@ static int sched_rt_global_constraints(void)
 	return 0;
 }
 #endif /* CONFIG_SYSCTL */
-#endif /* !CONFIG_RT_GROUP_SCHED */
+#endif /* CONFIG_RT_GROUP_SCHED */
 
 #ifdef CONFIG_SYSCTL
 static int sched_rt_global_validate(void)
