@@ -963,6 +963,30 @@ static void change_pageblock_range(struct page *pageblock_page,
 }
 
 /*
+ * mark_pageblock_free - handle a pageblock becoming fully free
+ * @page: page at the start of the pageblock
+ * @pfn: page frame number
+ *
+ * Clear stale PCP ownership and actual-contents tracking flags when
+ * buddy merging reconstructs a full pageblock or a whole pageblock is
+ * freed directly. No PCP can still hold pages from this block (otherwise
+ * the buddy merge couldn't have completed), so the ownership entry would
+ * just cause misrouted frees.
+ */
+static void mark_pageblock_free(struct page *page, unsigned long pfn)
+{
+	clear_pcpblock_owner(page);
+
+	/*
+	 * The entire block is now free — clear actual-contents tracking
+	 * flags since no allocated pages remain.
+	 */
+	clear_pfnblock_bit(page, pfn, PB_has_unmovable);
+	clear_pfnblock_bit(page, pfn, PB_has_reclaimable);
+	clear_pfnblock_bit(page, pfn, PB_has_movable);
+}
+
+/*
  * Freeing function for a buddy system allocator.
  *
  * The concept of a buddy system is to maintain direct-mapped table
@@ -1007,19 +1031,14 @@ static inline void __free_one_page(struct page *page,
 	account_freepages(zone, 1 << order, migratetype);
 
 	/*
-	 * For whole blocks, ownership returns to the zone. There are
-	 * no more outstanding frees to route through that CPU's PCP,
-	 * and we don't want to confuse any future users of the pages
-	 * in this block. E.g. rmqueue_buddy().
-	 *
-	 * Check here if a whole block came in directly: pre-merged in
-	 * the PCP, or PCP contended and bypassed.
-	 *
-	 * There is another check in the loop below if a block merges
-	 * up with pages already on the zone buddy.
+	 * When freeing a whole pageblock, clear stale PCP ownership
+	 * and actual-contents tracking flags up front.  The in-loop
+	 * check only fires when sub-pageblock pages merge *up to*
+	 * pageblock_order, not when entering at pageblock_order
+	 * directly.
 	 */
 	if (order == pageblock_order)
-		clear_pcpblock_owner(page);
+		mark_pageblock_free(page, pfn);
 
 	while (order < MAX_PAGE_ORDER) {
 		int buddy_mt = migratetype;
@@ -1071,9 +1090,13 @@ static inline void __free_one_page(struct page *page,
 		pfn = combined_pfn;
 		order++;
 
-		/* Clear owner also when we merge up. See above */
+		/*
+		 * If merging has reconstructed a full pageblock,
+		 * clear any stale PCP ownership and actual-contents
+		 * tracking flags.
+		 */
 		if (order == pageblock_order)
-			clear_pcpblock_owner(page);
+			mark_pageblock_free(page, pfn);
 	}
 
 done_merging:
@@ -2459,15 +2482,32 @@ try_to_claim_block(struct zone *zone, struct page *page,
 		set_pageblock_migratetype(pfn_to_page(start_pfn), start_type);
 #ifdef CONFIG_COMPACTION
 		/*
-		 * A movable pageblock was just claimed for unmovable or
-		 * reclaimable use. Queue async evacuation of the remaining
-		 * movable pages so future unmovable/reclaimable allocations
-		 * can stay concentrated in fewer pageblocks.
+		 * Track actual page contents in pageblock flags.
+		 * Mark the pageblock with the type being allocated, and
+		 * if unmovable/reclaimable pages are being placed into a
+		 * pageblock that already has movable pages, queue async
+		 * evacuation of the movable pages.
 		 */
-		if (block_type == MIGRATE_MOVABLE &&
-		    (start_type == MIGRATE_UNMOVABLE ||
-		     start_type == MIGRATE_RECLAIMABLE))
-			queue_pageblock_evacuate(zone, start_pfn);
+		{
+			struct page *start_page = pfn_to_page(start_pfn);
+
+			if (start_type == MIGRATE_UNMOVABLE) {
+				set_pfnblock_bit(start_page, start_pfn,
+						 PB_has_unmovable);
+				if (get_pfnblock_bit(start_page, start_pfn,
+						     PB_has_movable))
+					queue_pageblock_evacuate(zone, start_pfn);
+			} else if (start_type == MIGRATE_RECLAIMABLE) {
+				set_pfnblock_bit(start_page, start_pfn,
+						 PB_has_reclaimable);
+				if (get_pfnblock_bit(start_page, start_pfn,
+						     PB_has_movable))
+					queue_pageblock_evacuate(zone, start_pfn);
+			} else if (start_type == MIGRATE_MOVABLE) {
+				set_pfnblock_bit(start_page, start_pfn,
+						 PB_has_movable);
+			}
+		}
 #endif
 		return __rmqueue_smallest(zone, order, start_type);
 	}
@@ -7164,6 +7204,17 @@ static void evacuate_pageblock(struct zone *zone, unsigned long start_pfn)
 		cond_resched();
 	}
 
+	if (!list_empty(&cc.migratepages))
+		putback_movable_pages(&cc.migratepages);
+
+	/*
+	 * Re-scan to let isolate_migratepages_block clear PB_has_movable
+	 * if no movable pages remain after evacuation.
+	 */
+	cc.migrate_pfn = start_pfn;
+	cc.nr_migratepages = 0;
+	INIT_LIST_HEAD(&cc.migratepages);
+	isolate_migratepages_range(&cc, start_pfn, end_pfn);
 	if (!list_empty(&cc.migratepages))
 		putback_movable_pages(&cc.migratepages);
 }
