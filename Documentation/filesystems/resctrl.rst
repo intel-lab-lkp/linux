@@ -628,6 +628,39 @@ All groups contain the following files:
 "cpus_list":
 	Just like "cpus", only using ranges of CPUs instead of bitmasks.
 
+"kmode_cpus":
+	Visible only on the rdtgroup currently bound to the active kernel
+	mode (see "info/kernel_mode"); hidden on every other rdtgroup,
+	including the default group while INHERIT_CTRL_AND_MON is active.
+
+	Bitmask of the logical CPUs scoped for this group's kernel-mode
+	binding (PLZA on x86).  An empty mask is reported as a bare newline
+	and is interpreted by the bind path as "every online CPU".
+
+	Writing a mask reprograms the binding incrementally: it enables on
+	the CPUs newly added by the write and disables on the CPUs dropped
+	from the previous mask.  The mask must be non-empty and contain only
+	online CPUs; empty masks and masks naming offline CPUs are rejected
+	with -EINVAL.  To reset the binding to "every online CPU", use
+	info/kernel_mode to unbind and rebind the group rather than writing
+	here.  Writes to a group that is not the active kernel-mode binding
+	are rejected with -EBUSY.  Reading returns -ENODEV for a
+	pseudo-locked group and -ENOENT for a deleted group; writes to
+	pseudo-locked or pseudo-lock-setup groups are rejected with
+	-EINVAL.  Errors are reported in "info/last_cmd_status".  Example::
+
+	  # mkdir ctrl1
+	  # echo "global_assign_ctrl_inherit_mon_per_cpu:group=ctrl1//" \
+	        > info/kernel_mode
+	  # echo 0-3 > ctrl1/kmode_cpus_list
+	  # cat ctrl1/kmode_cpus
+	  f
+	  # cat ctrl1/kmode_cpus_list
+	  0-3
+
+"kmode_cpus_list":
+	Just like "kmode_cpus", only using ranges of CPUs instead of bitmasks.
+
 
 When control is enabled all CTRL_MON groups will also contain:
 
