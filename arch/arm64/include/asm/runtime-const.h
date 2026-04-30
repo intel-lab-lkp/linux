@@ -36,6 +36,18 @@
 		:"r" (0u+(val)));				\
 	__ret; })
 
+#define runtime_const_mask_32(val, sym) ({			\
+	unsigned long __ret;					\
+	asm_inline("1:\t"					\
+		"movz %w0, #0xcdef\n\t"				\
+		"movk %w0, #0x89ab, lsl #16\n\t"		\
+		".pushsection runtime_mask_" #sym ",\"a\"\n\t"	\
+		".long 1b - .\n\t"				\
+		".popsection"					\
+		:"=r" (__ret));					\
+	__ret &= val; /* Allow compiler to optimize & op. */	\
+	__ret; })
+
 #define runtime_const_init(type, sym) do {		\
 	extern s32 __start_runtime_##type##_##sym[];	\
 	extern s32 __stop_runtime_##type##_##sym[];	\
@@ -71,6 +83,13 @@ static inline void __runtime_fixup_shift(void *where, unsigned long val)
 	insn &= 0xffc0ffff;
 	insn |= (val & 63) << 16;
 	aarch64_insn_patch_text_nosync(p, insn);
+}
+
+static inline void __runtime_fixup_mask(void *where, unsigned long val)
+{
+	__le32 *p = where;
+	__runtime_fixup_16(p, val);
+	__runtime_fixup_16(p+1, val >> 16);
 }
 
 static inline void runtime_const_fixup(void (*fn)(void *, unsigned long),
