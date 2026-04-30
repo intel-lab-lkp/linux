@@ -155,6 +155,10 @@ static DEFINE_PER_CPU(struct cpc_desc *, cpc_desc_ptr);
 static struct kobj_attribute _name =		\
 __ATTR(_name, 0444, show_##_name, NULL)
 
+#define define_one_cppc_rw(_name)		\
+static struct kobj_attribute _name =		\
+__ATTR(_name, 0644, show_##_name, store_##_name)
+
 #define to_cpc_desc(a) container_of(a, struct cpc_desc, kobj)
 
 #define show_cppc_data(access_fn, struct_name, member_name)		\
@@ -211,6 +215,38 @@ static ssize_t show_feedback_ctrs(struct kobject *kobj,
 }
 define_one_cppc_ro(feedback_ctrs);
 
+static ssize_t show_ospm_nominal_perf(struct kobject *kobj,
+				      struct kobj_attribute *attr, char *buf)
+{
+	struct cpc_desc *cpc_ptr = to_cpc_desc(kobj);
+	u64 val = READ_ONCE(cpc_ptr->ospm_nominal_perf);
+
+	if (!val)
+		return -ENODATA;
+
+	return sysfs_emit(buf, "%llu\n", val);
+}
+
+static ssize_t store_ospm_nominal_perf(struct kobject *kobj,
+				       struct kobj_attribute *attr,
+				       const char *buf, size_t count)
+{
+	struct cpc_desc *cpc_ptr = to_cpc_desc(kobj);
+	u64 val;
+	int ret;
+
+	ret = kstrtou64(buf, 0, &val);
+	if (ret)
+		return ret;
+
+	ret = cppc_set_ospm_nominal_perf(cpc_ptr->cpu_id, val);
+	if (ret)
+		return ret;
+
+	return count;
+}
+define_one_cppc_rw(ospm_nominal_perf);
+
 static struct attribute *cppc_attrs[] = {
 	&feedback_ctrs.attr,
 	&reference_perf.attr,
@@ -222,6 +258,7 @@ static struct attribute *cppc_attrs[] = {
 	&nominal_perf.attr,
 	&nominal_freq.attr,
 	&lowest_freq.attr,
+	&ospm_nominal_perf.attr,
 	NULL
 };
 ATTRIBUTE_GROUPS(cppc);
@@ -1682,6 +1719,38 @@ int cppc_set_epp(int cpu, u64 epp_val)
 	return cppc_set_reg_val(cpu, ENERGY_PERF, epp_val);
 }
 EXPORT_SYMBOL_GPL(cppc_set_epp);
+
+/**
+ * cppc_set_ospm_nominal_perf() - Write OSPM Nominal Performance register.
+ * @cpu: CPU on which to write register.
+ * @ospm_nominal_perf: Value to write to the OSPM Nominal Performance register.
+ *
+ * OSPM Nominal Performance allows OSPM to inform the platform of the nominal
+ * performance level it intends to maintain.
+ *
+ * Return: 0 for success, -EINVAL on invalid input, -EOPNOTSUPP if not
+ * supported, -EIO otherwise.
+ */
+int cppc_set_ospm_nominal_perf(int cpu, u64 ospm_nominal_perf)
+{
+	struct cpc_desc *cpc_desc = per_cpu(cpc_desc_ptr, cpu);
+	int ret;
+
+	if (!ospm_nominal_perf || ospm_nominal_perf > U32_MAX)
+		return -EINVAL;
+
+	if (cpc_desc &&
+	    READ_ONCE(cpc_desc->ospm_nominal_perf) == ospm_nominal_perf)
+		return 0;
+
+	ret = cppc_set_reg_val(cpu, OSPM_NOMINAL_PERF, ospm_nominal_perf);
+	if (ret)
+		return ret;
+
+	WRITE_ONCE(cpc_desc->ospm_nominal_perf, ospm_nominal_perf);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(cppc_set_ospm_nominal_perf);
 
 /**
  * cppc_get_auto_act_window() - Read autonomous activity window register.
