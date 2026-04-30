@@ -1195,6 +1195,40 @@ out_clear:
 }
 
 /**
+ * rdtgroup_config_kmode_delete() - Drop @rdtgrp's kernel-mode binding
+ * @rdtgrp:	Resctrl group whose kernel-mode binding is being removed (e.g.
+ *		because the group is about to be rmdir'd or the filesystem is
+ *		being torn down).  No-op when %NULL or when @rdtgrp never
+ *		carried a kernel-mode binding.
+ *
+ * Wraps rdtgroup_config_kmode_clear() to disable the hardware programming
+ * and reset the per-group bookkeeping.  When @rdtgrp is the group currently
+ * bound in @resctrl_kcfg, the snapshot is also reset to
+ * (&rdtgroup_default, BIT(INHERIT_CTRL_AND_MON)) so subsequent show/write
+ * paths do not dereference @rdtgrp after the caller frees it.
+ *
+ * If the underlying tear-down fails (cpumask allocation), the snapshot is
+ * still reset because @rdtgrp is about to disappear; stale enable bits on
+ * those CPUs are reported via pr_warn() and will be cleared by the next
+ * non-INHERIT reprogram.
+ *
+ * Context: Caller must hold rdtgroup_mutex.
+ */
+static void rdtgroup_config_kmode_delete(struct rdtgroup *rdtgrp)
+{
+	if (!rdtgrp || !rdtgrp->kmode)
+		return;
+
+	if (rdtgroup_config_kmode_clear(rdtgrp, resctrl_kcfg.kmode_cur))
+		pr_warn("resctrl: kernel-mode disable failed; stale enable bits may persist\n");
+
+	if (resctrl_kcfg.k_rdtgrp == rdtgrp) {
+		resctrl_kcfg.k_rdtgrp = &rdtgroup_default;
+		resctrl_kcfg.kmode_cur = BIT(INHERIT_CTRL_AND_MON);
+	}
+}
+
+/**
  * rdtgroup_by_kmode_path() - Resolve a "<ctrl>/<mon>/" path to an rdtgroup
  * @ctrl_name:	Control-group name, or "" for the default control group.
  * @mon_name:	Monitor-group name, or "" to select the control group itself.
@@ -3631,6 +3665,7 @@ static void resctrl_fs_teardown(void)
 	mon_put_kn_priv();
 	rdt_pseudo_lock_release();
 	rdtgroup_default.mode = RDT_MODE_SHAREABLE;
+	rdtgroup_config_kmode_delete(&rdtgroup_default);
 	closid_exit();
 	schemata_list_destroy();
 	rdtgroup_destroy_root();
@@ -4426,6 +4461,8 @@ static int rdtgroup_rmdir_mon(struct rdtgroup *rdtgrp, cpumask_var_t tmpmask)
 	u32 closid, rmid;
 	int cpu;
 
+	rdtgroup_config_kmode_delete(rdtgrp);
+
 	/* Give any tasks back to the parent group */
 	rdt_move_group_tasks(rdtgrp, prdtgrp, tmpmask);
 
@@ -4475,6 +4512,8 @@ static int rdtgroup_rmdir_ctrl(struct rdtgroup *rdtgrp, cpumask_var_t tmpmask)
 {
 	u32 closid, rmid;
 	int cpu;
+
+	rdtgroup_config_kmode_delete(rdtgrp);
 
 	/* Give any tasks back to the default group */
 	rdt_move_group_tasks(rdtgrp, &rdtgroup_default, tmpmask);
