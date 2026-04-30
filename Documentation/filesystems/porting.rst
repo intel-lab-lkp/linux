@@ -1391,3 +1391,10 @@ either form of manual loop.
 **mandatory**
 
 d_alloc_parallel() no longer requires a waitqueue_head.
+
+---
+
+**mandatory**
+
+d_add_ci() must now be passed the flags arguemnt that was given to ->lookup
+
