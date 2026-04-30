@@ -94,6 +94,11 @@ enum vm_event_item { PGPGIN, PGPGOUT, PSWPIN, PSWPOUT,
 					 * a clean SPB clean when a tainted SPB
 					 * still has free pageblocks
 					 */
+		SPB_SLAB_SHRINK_QUEUED,	/*
+					 * queued a deferred slab shrink to
+					 * reclaim space inside tainted SPBs
+					 */
+		SPB_SLAB_SHRINK_RAN,	/* slab shrink worker ran a pass */
 		UNEVICTABLE_PGCULLED,	/* culled to noreclaim list */
 		UNEVICTABLE_PGSCANNED,	/* scanned for reclaimability */
 		UNEVICTABLE_PGRESCUED,	/* rescued from noreclaim list */

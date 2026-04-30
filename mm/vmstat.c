@@ -1386,6 +1386,8 @@ const char * const vmstat_text[] = {
 	[I(CMA_ALLOC_FAIL)]			= "cma_alloc_fail",
 #endif
 	[I(SPB_HIGHORDER_REFUSED)]		= "spb_highorder_refused",
+	[I(SPB_SLAB_SHRINK_QUEUED)]		= "spb_slab_shrink_queued",
+	[I(SPB_SLAB_SHRINK_RAN)]		= "spb_slab_shrink_ran",
 	[I(UNEVICTABLE_PGCULLED)]		= "unevictable_pgs_culled",
 	[I(UNEVICTABLE_PGSCANNED)]		= "unevictable_pgs_scanned",
 	[I(UNEVICTABLE_PGRESCUED)]		= "unevictable_pgs_rescued",
