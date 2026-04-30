@@ -861,6 +861,11 @@ static inline bool system_supports_hdbss(void)
 	return cpus_have_final_cap(ARM64_HAS_HDBSS);
 }
 
+static inline bool system_supports_hacdbs(void)
+{
+	return cpus_have_final_cap(ARM64_HACDBS);
+}
+
 static __always_inline bool system_supports_mpam(void)
 {
 	return alternative_has_cap_unlikely(ARM64_MPAM);
