@@ -27,8 +27,8 @@
 #include "pinctrl-cv18xx.h"
 
 struct cv1800_priv {
-	u32					*power_cfg;
 	void __iomem				*regs[2];
+	u32					power_cfg[];
 };
 
 static unsigned int cv1800_dt_get_pin_mux(u32 value)
@@ -417,13 +417,9 @@ static int cv1800_pinctrl_init(struct platform_device *pdev,
 	const struct sophgo_pinctrl_data *pctrl_data = pctrl->data;
 	struct cv1800_priv *priv;
 
-	priv = devm_kzalloc(&pdev->dev, sizeof(struct cv1800_priv), GFP_KERNEL);
+	priv = devm_kzalloc(&pdev->dev, struct_size(priv, power_cfg, pctrl_data->npds),
+			GFP_KERNEL);
 	if (!priv)
-		return -ENOMEM;
-
-	priv->power_cfg = devm_kcalloc(&pdev->dev, pctrl_data->npds,
-				       sizeof(u32), GFP_KERNEL);
-	if (!priv->power_cfg)
 		return -ENOMEM;
 
 	priv->regs[0] = devm_platform_ioremap_resource_byname(pdev, "sys");
