@@ -330,8 +330,7 @@ static int arm_vsmmu_convert_user_cmd(struct arm_vsmmu *vsmmu,
 	case CMDQ_OP_TLBI_NH_VAA:
 	case CMDQ_OP_TLBI_NH_ALL:
 	case CMDQ_OP_TLBI_NH_ASID:
-		cmd->cmd[0] &= ~CMDQ_TLBI_0_VMID;
-		cmd->cmd[0] |= FIELD_PREP(CMDQ_TLBI_0_VMID, vsmmu->vmid);
+		FIELD_MODIFY(CMDQ_TLBI_0_VMID, &cmd->cmd[0], vsmmu->vmid);
 		break;
 	case CMDQ_OP_ATC_INV:
 	case CMDQ_OP_CFGI_CD:
@@ -340,8 +339,7 @@ static int arm_vsmmu_convert_user_cmd(struct arm_vsmmu *vsmmu,
 
 		if (arm_vsmmu_vsid_to_sid(vsmmu, vsid, &sid))
 			return -EIO;
-		cmd->cmd[0] &= ~CMDQ_CFGI_0_SID;
-		cmd->cmd[0] |= FIELD_PREP(CMDQ_CFGI_0_SID, sid);
+		FIELD_MODIFY(CMDQ_CFGI_0_SID, &cmd->cmd[0], sid);
 		break;
 	}
 	default:
