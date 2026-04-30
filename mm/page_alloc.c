@@ -2766,7 +2766,8 @@ static struct page *claim_whole_block(struct zone *zone, struct page *page,
 		  int current_order, int order, int new_type, int old_type);
 static struct page *try_to_claim_block(struct zone *zone, struct page *page,
 		  int current_order, int order, int start_type,
-		  int block_type, unsigned int alloc_flags);
+		  int block_type, unsigned int alloc_flags,
+		  bool from_tainted_spb);
 
 static __always_inline
 struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
@@ -2931,7 +2932,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 					page = try_to_claim_block(zone, page,
 						current_order, order,
 						migratetype, MIGRATE_MOVABLE,
-						0);
+						0, true);
 					if (!page)
 						continue;
 					trace_mm_page_alloc_zone_locked(
@@ -3410,11 +3411,17 @@ claim_whole_block(struct zone *zone, struct page *page,
  * not, we check the pageblock for constituent pages; if at least half of the
  * pages are free or compatible, we can still claim the whole block, so pages
  * freed in the future will be put on the correct free list.
+ *
+ * @from_tainted_spb: caller has already verified the block lives in a tainted
+ * superpageblock, where SPB-level fragmentation has already been accepted.
+ * Skip the per-pageblock compatibility threshold so we can absorb non-movable
+ * demand into the existing tainted SPB instead of tainting a fresh clean one.
  */
 static struct page *
 try_to_claim_block(struct zone *zone, struct page *page,
 		   int current_order, int order, int start_type,
-		   int block_type, unsigned int alloc_flags)
+		   int block_type, unsigned int alloc_flags,
+		   bool from_tainted_spb)
 {
 	int free_pages, movable_pages, alike_pages;
 	unsigned long start_pfn;
@@ -3470,8 +3477,14 @@ try_to_claim_block(struct zone *zone, struct page *page,
 	/*
 	 * If a sufficient number of pages in the block are either free or of
 	 * compatible migratability as our allocation, claim the whole block.
+	 * The compatibility threshold protects clean MOVABLE pageblocks from
+	 * being relabeled when most of their pages are still in-use movable
+	 * allocations. Inside a tainted SPB the protection is unnecessary:
+	 * fragmentation has already been accepted at the SPB level, and
+	 * relabeling is much cheaper than tainting a fresh clean SPB.
 	 */
-	if (free_pages + alike_pages >= (1 << (pageblock_order-1)) ||
+	if (from_tainted_spb ||
+	    free_pages + alike_pages >= (1 << (pageblock_order-1)) ||
 			page_group_by_mobility_disabled) {
 		__move_freepages_block(zone, start_pfn, block_type, start_type);
 		set_pageblock_migratetype(pfn_to_page(start_pfn), start_type);
@@ -3711,7 +3724,8 @@ __rmqueue_claim(struct zone *zone, int order, int start_migratetype,
 
 			page = try_to_claim_block(zone, page, current_order,
 						  order, start_migratetype,
-						  fallback_mt, alloc_flags);
+						  fallback_mt, alloc_flags,
+						  false);
 			if (page) {
 				trace_mm_page_alloc_extfrag(page, order,
 					current_order, start_migratetype,
