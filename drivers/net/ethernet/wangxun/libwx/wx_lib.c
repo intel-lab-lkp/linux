@@ -2462,6 +2462,7 @@ void wx_free_isb_resources(struct wx *wx)
 	dma_free_coherent(&pdev->dev, sizeof(u32) * 4,
 			  wx->isb_mem, wx->isb_dma);
 	wx->isb_mem = NULL;
+	wx->isb_dma = 0;
 }
 EXPORT_SYMBOL(wx_free_isb_resources);
 
@@ -2678,6 +2679,7 @@ static void wx_free_rx_resources(struct wx_ring *rx_ring)
 			  rx_ring->desc, rx_ring->dma);
 
 	rx_ring->desc = NULL;
+	rx_ring->dma = 0;
 
 	if (rx_ring->page_pool) {
 		page_pool_destroy(rx_ring->page_pool);
@@ -2782,6 +2784,7 @@ static void wx_free_headwb_resources(struct wx_ring *tx_ring)
 	dma_free_coherent(tx_ring->dev, sizeof(u32),
 			  tx_ring->headwb_mem, tx_ring->headwb_dma);
 	tx_ring->headwb_mem = NULL;
+	tx_ring->headwb_dma = 0;
 }
 
 /**
@@ -2803,6 +2806,7 @@ static void wx_free_tx_resources(struct wx_ring *tx_ring)
 	dma_free_coherent(tx_ring->dev, tx_ring->size,
 			  tx_ring->desc, tx_ring->dma);
 	tx_ring->desc = NULL;
+	tx_ring->dma = 0;
 
 	wx_free_headwb_resources(tx_ring);
 }
@@ -2906,6 +2910,7 @@ static int wx_setup_rx_resources(struct wx_ring *rx_ring)
 
 err_desc:
 	dma_free_coherent(dev, rx_ring->size, rx_ring->desc, rx_ring->dma);
+	rx_ring->dma = 0;
 err:
 	kvfree(rx_ring->rx_buffer_info);
 	rx_ring->rx_buffer_info = NULL;
