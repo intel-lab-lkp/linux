@@ -407,6 +407,8 @@ int cfg80211_validate_key_settings(struct cfg80211_registered_device *rdev,
 		 * or not the driver supports this algorithm,
 		 * of course.
 		 */
+		if (params->key_len < 0)
+			return -EINVAL;
 		break;
 	}
 
