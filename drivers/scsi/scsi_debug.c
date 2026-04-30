@@ -4014,6 +4014,7 @@ static inline struct sdeb_store_info *devip2sip(struct sdebug_dev_info *devip,
 
 static inline void
 sdeb_read_lock(rwlock_t *lock)
+	__context_unsafe(conditional locking)
 {
 	if (sdebug_no_rwlock)
 		__acquire(lock);
@@ -4023,6 +4024,7 @@ sdeb_read_lock(rwlock_t *lock)
 
 static inline void
 sdeb_read_unlock(rwlock_t *lock)
+	__context_unsafe(conditional locking)
 {
 	if (sdebug_no_rwlock)
 		__release(lock);
@@ -4032,6 +4034,7 @@ sdeb_read_unlock(rwlock_t *lock)
 
 static inline void
 sdeb_write_lock(rwlock_t *lock)
+	__context_unsafe(conditional locking)
 {
 	if (sdebug_no_rwlock)
 		__acquire(lock);
@@ -4041,6 +4044,7 @@ sdeb_write_lock(rwlock_t *lock)
 
 static inline void
 sdeb_write_unlock(rwlock_t *lock)
+	__context_unsafe(conditional locking)
 {
 	if (sdebug_no_rwlock)
 		__release(lock);
@@ -4050,6 +4054,7 @@ sdeb_write_unlock(rwlock_t *lock)
 
 static inline void
 sdeb_data_read_lock(struct sdeb_store_info *sip)
+	__context_unsafe(conditional locking)
 {
 	BUG_ON(!sip);
 
@@ -4058,6 +4063,7 @@ sdeb_data_read_lock(struct sdeb_store_info *sip)
 
 static inline void
 sdeb_data_read_unlock(struct sdeb_store_info *sip)
+	__context_unsafe(conditional locking)
 {
 	BUG_ON(!sip);
 
@@ -4066,6 +4072,7 @@ sdeb_data_read_unlock(struct sdeb_store_info *sip)
 
 static inline void
 sdeb_data_write_lock(struct sdeb_store_info *sip)
+	__context_unsafe(conditional locking)
 {
 	BUG_ON(!sip);
 
@@ -4074,6 +4081,7 @@ sdeb_data_write_lock(struct sdeb_store_info *sip)
 
 static inline void
 sdeb_data_write_unlock(struct sdeb_store_info *sip)
+	__context_unsafe(conditional locking)
 {
 	BUG_ON(!sip);
 
@@ -4082,6 +4090,7 @@ sdeb_data_write_unlock(struct sdeb_store_info *sip)
 
 static inline void
 sdeb_data_sector_read_lock(struct sdeb_store_info *sip)
+	__context_unsafe(conditional locking)
 {
 	BUG_ON(!sip);
 
@@ -4090,6 +4099,7 @@ sdeb_data_sector_read_lock(struct sdeb_store_info *sip)
 
 static inline void
 sdeb_data_sector_read_unlock(struct sdeb_store_info *sip)
+	__context_unsafe(conditional locking)
 {
 	BUG_ON(!sip);
 
@@ -4098,6 +4108,7 @@ sdeb_data_sector_read_unlock(struct sdeb_store_info *sip)
 
 static inline void
 sdeb_data_sector_write_lock(struct sdeb_store_info *sip)
+	__context_unsafe(conditional locking)
 {
 	BUG_ON(!sip);
 
@@ -4106,6 +4117,7 @@ sdeb_data_sector_write_lock(struct sdeb_store_info *sip)
 
 static inline void
 sdeb_data_sector_write_unlock(struct sdeb_store_info *sip)
+	__context_unsafe(conditional locking)
 {
 	BUG_ON(!sip);
 
@@ -4164,6 +4176,7 @@ sdeb_data_sector_unlock(struct sdeb_store_info *sip, bool do_write)
 
 static inline void
 sdeb_meta_read_lock(struct sdeb_store_info *sip)
+	__context_unsafe(conditional locking)
 {
 	if (sdebug_no_rwlock) {
 		if (sip)
@@ -4180,6 +4193,7 @@ sdeb_meta_read_lock(struct sdeb_store_info *sip)
 
 static inline void
 sdeb_meta_read_unlock(struct sdeb_store_info *sip)
+	__context_unsafe(conditional locking)
 {
 	if (sdebug_no_rwlock) {
 		if (sip)
@@ -4196,6 +4210,7 @@ sdeb_meta_read_unlock(struct sdeb_store_info *sip)
 
 static inline void
 sdeb_meta_write_lock(struct sdeb_store_info *sip)
+	__context_unsafe(conditional locking)
 {
 	if (sdebug_no_rwlock) {
 		if (sip)
@@ -4212,6 +4227,7 @@ sdeb_meta_write_lock(struct sdeb_store_info *sip)
 
 static inline void
 sdeb_meta_write_unlock(struct sdeb_store_info *sip)
+	__context_unsafe(conditional locking)
 {
 	if (sdebug_no_rwlock) {
 		if (sip)
