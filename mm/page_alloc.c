@@ -3270,6 +3270,79 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 				}
 			}
 		}
+
+		/*
+		 * Pass 2d: cross-MOV borrow within tainted SPBs.
+		 *
+		 * If Pass 1/2/2b/2c all failed, the next step is Pass 3
+		 * which would taint a fresh clean SPB. Before that, try
+		 * to borrow an individual buddy from a tainted SPB's
+		 * MIGRATE_MOVABLE free list.
+		 *
+		 * Tainted SPBs accumulate large amounts of free space on
+		 * the MOV free list (e.g. reclaimed page-cache pages
+		 * whose pageblock tag is MOVABLE). Pass 1 cannot see
+		 * those for non-movable allocs, Pass 2/2b cannot claim a
+		 * whole pageblock when sb->nr_free == 0, and Pass 2c is
+		 * restricted to UNMOV<->RECL. The result is a tainted
+		 * SPB with tens to hundreds of thousands of free pages
+		 * all unreachable from non-movable demand.
+		 *
+		 * Borrow semantics mirror Pass 2c: take a buddy from the
+		 * MOVABLE free list without relabeling the source
+		 * pageblock. The page is used for the requesting non-
+		 * movable mt for the lifetime of the allocation, then on
+		 * free returns to the MOVABLE list.
+		 *
+		 * Cost: the borrowed UNMOV/RECL content blocks
+		 * compaction of its source pageblock until freed.
+		 * Restricted to SB_TAINTED so the contamination is
+		 * bounded to an already-tainted SPB; the alternative
+		 * (Pass 3) taints a fresh clean SPB and removes a 1 GiB
+		 * region from the clean pool, which is strictly worse.
+		 *
+		 * Skipped for movable allocs (they have Pass 4) and for
+		 * CMA allocs.
+		 */
+		if (!movable && !is_migrate_cma(migratetype)) {
+			for (full = SB_FULL; full < __NR_SB_FULLNESS; full++) {
+				list_for_each_entry(sb,
+					&zone->spb_lists[SB_TAINTED][full], list) {
+					int co;
+
+					if (!sb->nr_free_pages)
+						continue;
+					for (co = min_t(int, pageblock_order - 1,
+							NR_PAGE_ORDERS - 1);
+					     co >= (int)order;
+					     --co) {
+						current_order = co;
+						area = &sb->free_area[current_order];
+						page = get_page_from_free_area(
+							area, MIGRATE_MOVABLE);
+						if (!page)
+							continue;
+						if (get_pageblock_isolate(page))
+							continue;
+						if (is_migrate_cma(
+						    get_pageblock_migratetype(page)))
+							continue;
+						page_del_and_expand(zone, page,
+							order, current_order,
+							MIGRATE_MOVABLE);
+						__spb_set_has_type(page,
+							migratetype);
+						if (spb_below_shrink_high_water(sb))
+							queue_spb_slab_shrink(zone);
+						trace_mm_page_alloc_zone_locked(
+							page, order, migratetype,
+							pcp_allowed_order(order) &&
+							migratetype < MIGRATE_PCPTYPES);
+						return page;
+					}
+				}
+			}
+		}
 	}
 
 	/*
