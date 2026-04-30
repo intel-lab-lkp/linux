@@ -2722,6 +2722,57 @@ int find_suitable_fallback(struct free_area *area, unsigned int order,
 }
 
 /*
+ * claim_whole_block - claim a free block (>= pageblock_order) for a new type
+ * @zone: zone containing the page
+ * @page: free page to claim
+ * @current_order: order of the free page
+ * @order: requested allocation order
+ * @new_type: migratetype to assign
+ * @old_type: current migratetype of the block (for free list removal)
+ *
+ * Handle the PB_all_free → used transition, change the pageblock
+ * migratetype, split the block down to @order, and return the page.
+ */
+static struct page *
+claim_whole_block(struct zone *zone, struct page *page,
+		  int current_order, int order, int new_type, int old_type)
+{
+	struct superpageblock *sb;
+	unsigned int nr_added;
+	unsigned long pb_pfn;
+
+	VM_WARN_ON_ONCE(current_order < order);
+
+	/*
+	 * Clear PB_all_free for pageblocks being claimed.
+	 * This path bypasses page_del_and_expand(), so we
+	 * must handle the free→used transition here.
+	 */
+	for (pb_pfn = page_to_pfn(page);
+	     pb_pfn < page_to_pfn(page) + (1 << current_order);
+	     pb_pfn += pageblock_nr_pages) {
+		struct page *pb_page = pfn_to_page(pb_pfn);
+
+		if (get_pfnblock_bit(pb_page, pb_pfn, PB_all_free)) {
+			clear_pfnblock_bit(pb_page, pb_pfn, PB_all_free);
+			superpageblock_pb_now_used(pb_page);
+		}
+		__spb_set_has_type(pb_page, new_type);
+	}
+
+	del_page_from_free_list(page, zone, current_order, old_type);
+	change_pageblock_range(page, current_order, new_type);
+	nr_added = expand(zone, page, order, current_order, new_type);
+	account_freepages(zone, nr_added, new_type);
+
+	/* Single list update after all pageblocks processed */
+	sb = pfn_to_superpageblock(zone, page_to_pfn(page));
+	if (sb)
+		spb_update_list(sb);
+	return page;
+}
+
+/*
  * This function implements actual block claiming behaviour. If order is large
  * enough, we can claim the whole pageblock for the requested migratetype. If
  * not, we check the pageblock for constituent pages; if at least half of the
@@ -2744,42 +2795,9 @@ try_to_claim_block(struct zone *zone, struct page *page,
 		return NULL;
 
 	/* Take ownership for orders >= pageblock_order */
-	if (current_order >= pageblock_order) {
-		unsigned int nr_added;
-		unsigned long pb_pfn;
-
-		/*
-		 * Clear PB_all_free for pageblocks being claimed.
-		 * This path bypasses page_del_and_expand(), so we
-		 * must handle the free→used transition here.
-		 * Use block_type (the original migratetype) because
-		 * that's what was decremented when PB_all_free was set.
-		 */
-		for (pb_pfn = page_to_pfn(page);
-		     pb_pfn < page_to_pfn(page) + (1 << current_order);
-		     pb_pfn += pageblock_nr_pages) {
-			struct page *pb_page = pfn_to_page(pb_pfn);
-
-			if (get_pfnblock_bit(pb_page, pb_pfn, PB_all_free)) {
-				clear_pfnblock_bit(pb_page, pb_pfn, PB_all_free);
-				superpageblock_pb_now_used(pb_page);
-			}
-			__spb_set_has_type(pb_page, start_type);
-		}
-		/* Single list update after all pageblocks processed */
-		{
-			struct superpageblock *sb =
-				pfn_to_superpageblock(zone, page_to_pfn(page));
-			if (sb)
-				spb_update_list(sb);
-		}
-
-		del_page_from_free_list(page, zone, current_order, block_type);
-		change_pageblock_range(page, current_order, start_type);
-		nr_added = expand(zone, page, order, current_order, start_type);
-		account_freepages(zone, nr_added, start_type);
-		return page;
-	}
+	if (current_order >= pageblock_order)
+		return claim_whole_block(zone, page, current_order, order,
+					start_type, block_type);
 
 	/* moving whole block can fail due to zone boundary conditions */
 	if (!prep_move_freepages_block(zone, page, &start_pfn, &free_pages,
