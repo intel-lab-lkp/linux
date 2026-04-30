@@ -20,7 +20,9 @@
 #include <linux/if_ether.h>
 #include <linux/netdevice.h>
 #include <linux/random.h>
+#ifdef CONFIG_CRC32
 #include <linux/crc32.h>
+#endif
 #include <linux/unaligned.h>
 #include <asm/bitsperlong.h>
 
@@ -281,6 +283,7 @@ static inline void eth_hw_addr_random(struct net_device *dev)
 	dev->addr_assign_type = NET_ADDR_RANDOM;
 }
 
+#ifdef CONFIG_CRC32
 /**
  * eth_hw_addr_crc - Calculate CRC from netdev_hw_addr
  * @ha: pointer to hardware address
@@ -291,6 +294,7 @@ static inline u32 eth_hw_addr_crc(struct netdev_hw_addr *ha)
 {
 	return ether_crc(ETH_ALEN, ha->addr);
 }
+#endif
 
 /**
  * ether_addr_copy - Copy an Ethernet address
