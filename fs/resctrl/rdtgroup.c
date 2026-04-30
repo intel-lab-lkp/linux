@@ -1094,6 +1094,38 @@ static int resctrl_kernel_mode_show(struct kernfs_open_file *of,
 }
 
 /**
+ * resctrl_kmode_files_set_visible() - Toggle visibility of the per-group
+ * kernel-mode CPU files under @rdtgrp.
+ * @rdtgrp:	Resctrl group whose "kmode_cpus" / "kmode_cpus_list" files
+ *		should be hidden or shown.
+ * @visible:	%true to expose the files, %false to hide them via
+ *		kernfs_show().
+ *
+ * Each file is looked up independently as a sibling under @rdtgrp->kn.
+ * kernfs_find_and_get() failures are intentionally ignored: this helper
+ * is invoked early on rdtgroup_default before its rftype files have been
+ * populated, and is robust against any future rdtgroup variant whose
+ * kernfs tree does not include these files.
+ *
+ * Context: Caller must hold rdtgroup_mutex.
+ */
+static void resctrl_kmode_files_set_visible(struct rdtgroup *rdtgrp, bool visible)
+{
+	/* Keep in sync with res_common_files[] entries for these files. */
+	static const char * const files[] = { "kmode_cpus", "kmode_cpus_list" };
+	struct kernfs_node *kn;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(files); i++) {
+		kn = kernfs_find_and_get(rdtgrp->kn, files[i]);
+		if (!kn)
+			continue;
+		kernfs_show(kn, visible);
+		kernfs_put(kn);
+	}
+}
+
+/**
  * rdtgroup_config_kmode() - Push @rdtgrp's kernel CLOSID/RMID to hardware
  * @rdtgrp:	Resctrl group whose CLOSID/RMID should be programmed.
  *
@@ -1161,6 +1193,7 @@ static int rdtgroup_config_kmode(struct rdtgroup *rdtgrp)
 		resctrl_arch_configure_kmode(disable_mask, closid, rmid, false);
 
 	rdtgrp->kmode = true;
+	resctrl_kmode_files_set_visible(rdtgrp, true);
 
 	free_cpumask_var(enable_mask);
 	if (need_disable)
@@ -1228,6 +1261,7 @@ static int rdtgroup_config_kmode_clear(struct rdtgroup *rdtgrp, int kmode)
 
 out_clear:
 	cpumask_clear(&rdtgrp->kmode_cpu_mask);
+	resctrl_kmode_files_set_visible(rdtgrp, false);
 	rdtgrp->kmode = false;
 	return 0;
 }
@@ -3385,6 +3419,8 @@ static int rdt_get_tree(struct fs_context *fc)
 	if (ret)
 		goto out_closid_exit;
 
+	/* Hide before activate; the kernfs hidden flag survives kernfs_activate(). */
+	resctrl_kmode_files_set_visible(&rdtgroup_default, false);
 	kernfs_activate(rdtgroup_default.kn);
 
 	ret = rdtgroup_create_info_dir(rdtgroup_default.kn);
@@ -4405,6 +4441,8 @@ static int rdtgroup_mkdir_mon(struct kernfs_node *parent_kn,
 		goto out_unlock;
 	}
 
+	/* Hide before activate; the kernfs hidden flag survives kernfs_activate(). */
+	resctrl_kmode_files_set_visible(rdtgrp, false);
 	kernfs_activate(rdtgrp->kn);
 
 	/*
@@ -4449,6 +4487,8 @@ static int rdtgroup_mkdir_ctrl_mon(struct kernfs_node *parent_kn,
 	if (ret)
 		goto out_closid_free;
 
+	/* Hide before activate; the kernfs hidden flag survives kernfs_activate(). */
+	resctrl_kmode_files_set_visible(rdtgrp, false);
 	kernfs_activate(rdtgrp->kn);
 
 	ret = rdtgroup_init_alloc(rdtgrp);
