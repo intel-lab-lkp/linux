@@ -58,31 +58,25 @@ edac_device_alloc_ctl_info(unsigned pvt_sz, char *dev_name, unsigned nr_instance
 			   char *blk_name, unsigned nr_blocks, unsigned off_val,
 			   int device_index)
 {
-	struct edac_device_block *dev_blk, *blk_p, *blk;
+	struct edac_device_block *blk_p, *blk;
 	struct edac_device_instance *dev_inst, *inst;
 	struct edac_device_ctl_info *dev_ctl;
 	unsigned instance, block;
+	size_t alloc_size;
 	void *pvt;
 	int err;
 
 	edac_dbg(4, "instances=%d blocks=%d\n", nr_instances, nr_blocks);
 
-	dev_ctl = kzalloc_obj(struct edac_device_ctl_info);
+	alloc_size = struct_size(dev_ctl, instances, nr_instances);
+	alloc_size += sizeof(*dev_ctl->blocks) * nr_instances * nr_blocks;
+	dev_ctl = kzalloc(alloc_size, GFP_KERNEL);
 	if (!dev_ctl)
 		return NULL;
 
-	dev_inst = kzalloc_objs(struct edac_device_instance, nr_instances);
-	if (!dev_inst)
-		goto free;
+	dev_ctl->nr_instances = nr_instances;
 
-	dev_ctl->instances = dev_inst;
-
-	dev_blk = kzalloc_objs(struct edac_device_block,
-			       nr_instances * nr_blocks);
-	if (!dev_blk)
-		goto free;
-
-	dev_ctl->blocks = dev_blk;
+	dev_ctl->blocks = (struct edac_device_block *)(dev_ctl->instances + nr_instances);
 
 	if (pvt_sz) {
 		pvt = kzalloc(pvt_sz, GFP_KERNEL);
@@ -93,7 +87,6 @@ edac_device_alloc_ctl_info(unsigned pvt_sz, char *dev_name, unsigned nr_instance
 	}
 
 	dev_ctl->dev_idx	= device_index;
-	dev_ctl->nr_instances	= nr_instances;
 
 	/* Default logging of CEs and UEs */
 	dev_ctl->log_ce = 1;
@@ -107,7 +100,7 @@ edac_device_alloc_ctl_info(unsigned pvt_sz, char *dev_name, unsigned nr_instance
 		inst = &dev_inst[instance];
 		inst->ctl = dev_ctl;
 		inst->nr_blocks = nr_blocks;
-		blk_p = &dev_blk[instance * nr_blocks];
+		blk_p = &dev_ctl->blocks[instance * nr_blocks];
 		inst->blocks = blk_p;
 
 		/* name of this instance */
