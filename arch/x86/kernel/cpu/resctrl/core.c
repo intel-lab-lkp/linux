@@ -894,6 +894,21 @@ bool resctrl_arch_is_evt_configurable(enum resctrl_event_id evt)
 	}
 }
 
+/**
+ * resctrl_arch_get_kmode_support() - x86: record which kernel-mode policies hardware supports
+ * @kcfg:	Cumulative snapshot; OR bits into @kcfg->kmode (see &struct resctrl_kmode_cfg).
+ *
+ * When PLZA is present (CPUID X86_FEATURE_PLZA), the kernel may assign a CLOSID
+ * for kernel work alone or assign CLOSID and RMID together.  Advertise both
+ * assign-style modes in @kcfg->kmode using &enum resctrl_kernel_modes indices.
+ */
+void resctrl_arch_get_kmode_support(struct resctrl_kmode_cfg *kcfg)
+{
+	if (rdt_cpu_has(X86_FEATURE_PLZA))
+		kcfg->kmode |= BIT(GLOBAL_ASSIGN_CTRL_INHERIT_MON_PER_CPU) |
+				BIT(GLOBAL_ASSIGN_CTRL_ASSIGN_MON_PER_CPU);
+}
+
 static __init bool get_mem_config(void)
 {
 	struct rdt_hw_resource *hw_res = &rdt_resources_all[RDT_RESOURCE_MBA];
