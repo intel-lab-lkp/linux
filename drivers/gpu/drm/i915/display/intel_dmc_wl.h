@@ -29,6 +29,7 @@ struct intel_dmc_wl {
 	struct delayed_work work;
 };
 
+bool intel_dmc_wl_supported(struct intel_display *display);
 void intel_dmc_wl_init(struct intel_display *display);
 void intel_dmc_wl_enable(struct intel_display *display, u32 dc_state);
 void intel_dmc_wl_disable(struct intel_display *display);

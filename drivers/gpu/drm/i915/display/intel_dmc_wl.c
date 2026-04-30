@@ -277,7 +277,7 @@ static bool intel_dmc_wl_check_range(struct intel_display *display,
 	return false;
 }
 
-static bool __intel_dmc_wl_supported(struct intel_display *display)
+bool intel_dmc_wl_supported(struct intel_display *display)
 {
 	return display->params.enable_dmc_wl;
 }
@@ -344,7 +344,7 @@ void intel_dmc_wl_enable(struct intel_display *display, u32 dc_state)
 	struct intel_dmc_wl *wl = &display->wl;
 	unsigned long flags;
 
-	if (!__intel_dmc_wl_supported(display))
+	if (!intel_dmc_wl_supported(display))
 		return;
 
 	spin_lock_irqsave(&wl->lock, flags);
@@ -390,7 +390,7 @@ void intel_dmc_wl_disable(struct intel_display *display)
 	struct intel_dmc_wl *wl = &display->wl;
 	unsigned long flags;
 
-	if (!__intel_dmc_wl_supported(display))
+	if (!intel_dmc_wl_supported(display))
 		return;
 
 	intel_dmc_wl_flush_release_work(display);
@@ -425,7 +425,7 @@ void intel_dmc_wl_flush_release_work(struct intel_display *display)
 {
 	struct intel_dmc_wl *wl = &display->wl;
 
-	if (!__intel_dmc_wl_supported(display))
+	if (!intel_dmc_wl_supported(display))
 		return;
 
 	flush_delayed_work(&wl->work);
@@ -436,7 +436,7 @@ void intel_dmc_wl_get(struct intel_display *display, i915_reg_t reg)
 	struct intel_dmc_wl *wl = &display->wl;
 	unsigned long flags;
 
-	if (!__intel_dmc_wl_supported(display))
+	if (!intel_dmc_wl_supported(display))
 		return;
 
 	spin_lock_irqsave(&wl->lock, flags);
@@ -469,7 +469,7 @@ void intel_dmc_wl_put(struct intel_display *display, i915_reg_t reg)
 	struct intel_dmc_wl *wl = &display->wl;
 	unsigned long flags;
 
-	if (!__intel_dmc_wl_supported(display))
+	if (!intel_dmc_wl_supported(display))
 		return;
 
 	spin_lock_irqsave(&wl->lock, flags);
