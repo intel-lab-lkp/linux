@@ -28,6 +28,9 @@ struct svm_test_data {
 	void *msr_hva;
 	u64 msr_gpa;
 
+	/* Stack */
+	void *stack; /* gva */
+
 	/* NPT */
 	u64 ncr3_gpa;
 };
