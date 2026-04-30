@@ -1326,7 +1326,9 @@ static int ionic_create_qp_cmd(struct ionic_ibdev *dev,
 			       struct ionic_qp *qp,
 			       struct ionic_tbl_buf *sq_buf,
 			       struct ionic_tbl_buf *rq_buf,
-			       struct ib_qp_init_attr *attr)
+			       struct ib_qp_init_attr *attr,
+			       u32 ionic_flags,
+			       enum ionic_qp_transport_mode transport_mode)
 {
 	const u16 dbid = ionic_obj_dbid(dev, pd->ibpd.uobject);
 	const u32 flags = to_ionic_qp_flags(0, 0,
@@ -1342,8 +1344,9 @@ static int ionic_create_qp_cmd(struct ionic_ibdev *dev,
 			.len = cpu_to_le16(IONIC_ADMIN_CREATE_QP_IN_V1_LEN),
 			.cmd.create_qp = {
 				.pd_id = cpu_to_le32(pd->pdid),
-				.priv_flags = cpu_to_be32(flags),
-				.type_state = to_ionic_qp_type(attr->qp_type),
+				.priv_flags = cpu_to_be32(flags |
+						(ionic_flags & IONIC_QP_USER_FLAGS_MASK)),
+				.type_state = to_ionic_qp_type(attr->qp_type, transport_mode),
 				.dbid_flags = cpu_to_le16(dbid),
 				.id_ver = cpu_to_le32(qp->qpid),
 			}
@@ -1412,6 +1415,7 @@ static int ionic_modify_qp_cmd(struct ionic_ibdev *dev,
 					  (attr->rnr_retry << 4)),
 				.rnr_timer = attr->min_rnr_timer,
 				.retry_timeout = attr->timeout,
+				.mrc_num_paths = qp->num_rcq_paths,
 				.type_state = state,
 				.id_ver = cpu_to_le32(qp->qpid),
 			}
@@ -2156,7 +2160,7 @@ int ionic_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *attr,
 	int rc;
 
 	if (udata) {
-		rc = ib_copy_validate_udata_in(udata, req, rsvd);
+		rc = ib_copy_validate_udata_in(udata, req, ionic_flags);
 		if (rc)
 			return rc;
 	} else {
@@ -2203,6 +2207,7 @@ int ionic_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *attr,
 
 	qp->sig_all = attr->sq_sig_type == IB_SIGNAL_ALL_WR;
 	qp->has_ah = attr->qp_type == IB_QPT_RC;
+	qp->num_rcq_paths = req.num_rcq_paths;
 
 	if (qp->has_ah) {
 		qp->hdr = kzalloc_obj(*qp->hdr);
@@ -2239,7 +2244,8 @@ int ionic_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *attr,
 	rc = ionic_create_qp_cmd(dev, pd,
 				 to_ionic_vcq_cq(attr->send_cq, qp->udma_idx),
 				 to_ionic_vcq_cq(attr->recv_cq, qp->udma_idx),
-				 qp, &sq_buf, &rq_buf, attr);
+				 qp, &sq_buf, &rq_buf, attr, req.ionic_flags,
+				 req.transport_mode);
 	if (rc)
 		goto err_cmd;
 

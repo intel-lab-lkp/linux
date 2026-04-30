@@ -105,6 +105,8 @@ enum ionic_qp_flags {
 	IONIC_QPF_SQ_CMB		= BIT(13),
 	IONIC_QPF_RQ_CMB		= BIT(14),
 	IONIC_QPF_PRIVILEGED		= BIT(15),
+
+	IONIC_QP_USER_FLAGS_MASK	= GENMASK(31, 16),
 };
 
 static inline int from_ionic_qp_flags(int flags)
@@ -218,6 +220,11 @@ static inline int ionic_to_ib_status(int sts)
 	}
 }
 
+enum ionic_qp_transport_mode {
+	IONIC_QPT_TRANSPORT_ROCE_V2 = BIT(0),
+	IONIC_QPT_TRANSPORT_MRC = BIT(1),
+};
+
 /* admin queue qp type */
 enum ionic_qp_type {
 	IONIC_QPT_RC,
@@ -228,16 +235,21 @@ enum ionic_qp_type {
 	IONIC_QPT_XRC_INI,
 	IONIC_QPT_XRC_TGT,
 	IONIC_QPT_XRC_SRQ,
+	IONIC_QPT_MRC,
 };
 
-static inline int to_ionic_qp_type(enum ib_qp_type type)
+static inline int to_ionic_qp_type(enum ib_qp_type type,
+				   enum ionic_qp_transport_mode tm)
 {
 	switch (type) {
 	case IB_QPT_GSI:
 	case IB_QPT_UD:
 		return IONIC_QPT_UD;
 	case IB_QPT_RC:
-		return IONIC_QPT_RC;
+		if (tm == IONIC_QPT_TRANSPORT_MRC)
+			return IONIC_QPT_MRC;
+		else
+			return IONIC_QPT_RC;
 	case IB_QPT_UC:
 		return IONIC_QPT_UC;
 	case IB_QPT_XRC_INI:
@@ -808,7 +820,7 @@ struct ionic_admin_mod_qp {
 	__le32		ah_id_len;
 	__u8		en_pcp;
 	__u8		ip_dscp;
-	__u8		rsvd2;
+	__u8		mrc_num_paths;
 	__u8		type_state;
 	union {
 		struct {

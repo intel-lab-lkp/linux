@@ -253,6 +253,7 @@ struct ionic_qp {
 	u8			has_sq:1;
 	u8			has_rq:1;
 	u8			sig_all:1;
+	u8			num_rcq_paths;
 
 	struct list_head	qp_list_counter;
 

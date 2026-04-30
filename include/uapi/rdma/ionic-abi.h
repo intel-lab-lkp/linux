@@ -85,7 +85,10 @@ struct ionic_qp_req {
 	__u8 sq_cmb;
 	__u8 rq_cmb;
 	__u8 udma_mask;
-	__u8 rsvd[3];
+	__u8 num_rcq_paths;
+	__u8 transport_mode;
+	__u8 rsvd;
+	__u32 ionic_flags;
 };
 
 struct ionic_qp_resp {
