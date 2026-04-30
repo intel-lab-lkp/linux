@@ -251,12 +251,11 @@ EXPORT_SYMBOL(strncat);
 #ifndef __HAVE_ARCH_STRLCAT
 size_t strlcat(char *dest, const char *src, size_t count)
 {
-	size_t dsize = strlen(dest);
+	size_t dsize = strnlen(dest, count);
 	size_t len = strlen(src);
 	size_t res = dsize + len;
 
-	/* This would be a bug */
-	BUG_ON(dsize >= count);
+	BUG_ON(dsize == count);
 
 	dest += dsize;
 	count -= dsize;
