@@ -11,6 +11,7 @@
 #include <linux/filter.h>
 #include <linux/ftrace.h>
 #include <linux/kprobes.h>
+#include <linux/moduleparam.h>
 #include <linux/pgtable.h>
 #include <linux/sched.h>
 #include <linux/sched/debug.h>
@@ -122,6 +123,10 @@ static bool range_is_device_mem(unsigned long start, unsigned long size)
 		return addr_is_device_mem(end);
 	return false;
 }
+
+static bool skip_vmio = true;
+module_param_unsafe(skip_vmio, bool, 0600);
+MODULE_PARM_DESC(skip_vmio, "Skip device memory during user callchain unwinding");
 
 enum kunwind_source {
 	KUNWIND_SOURCE_UNKNOWN,
@@ -627,7 +632,8 @@ unwind_user_frame(struct frame_tail __user *tail, void *cookie,
 	if (!access_ok(tail, sizeof(buftail)))
 		return NULL;
 
-	if (range_is_device_mem((unsigned long)tail, sizeof(buftail)))
+	if (READ_ONCE(skip_vmio) &&
+	    range_is_device_mem((unsigned long)tail, sizeof(buftail)))
 		return NULL;
 
 	pagefault_disable();
@@ -678,7 +684,8 @@ unwind_compat_user_frame(struct compat_frame_tail __user *tail, void *cookie,
 	if (!access_ok(tail, sizeof(buftail)))
 		return NULL;
 
-	if (range_is_device_mem((unsigned long)tail, sizeof(buftail)))
+	if (READ_ONCE(skip_vmio) &&
+	    range_is_device_mem((unsigned long)tail, sizeof(buftail)))
 		return NULL;
 
 	pagefault_disable();
