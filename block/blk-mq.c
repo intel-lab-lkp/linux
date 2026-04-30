@@ -4738,6 +4738,7 @@ static int blk_mq_realloc_tag_set_tags(struct blk_mq_tag_set *set,
 				       int new_nr_hw_queues)
 {
 	struct blk_mq_tags **new_tags;
+	struct blk_mq_tags **old_tags;
 	int i;
 
 	if (set->nr_hw_queues >= new_nr_hw_queues)
@@ -4751,8 +4752,10 @@ static int blk_mq_realloc_tag_set_tags(struct blk_mq_tag_set *set,
 	if (set->tags)
 		memcpy(new_tags, set->tags, set->nr_hw_queues *
 		       sizeof(*set->tags));
-	kfree(set->tags);
+	old_tags = set->tags;
 	set->tags = new_tags;
+	synchronize_srcu(&set->tags_srcu);
+	kfree(old_tags);
 
 	for (i = set->nr_hw_queues; i < new_nr_hw_queues; i++) {
 		if (!__blk_mq_alloc_map_and_rqs(set, i)) {
