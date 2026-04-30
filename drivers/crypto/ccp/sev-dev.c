@@ -948,6 +948,38 @@ int __sev_do_cmd_locked(int cmd, void *data, int *psp_ret)
 
 	/* wait for command completion */
 	ret = sev_wait_cmd_ioc(sev, &reg, psp_timeout);
+
+	/*
+	 * Copy potential output from the PSP back to data.  Do this even on
+	 * failure in case the caller wants to glean something from the error,
+	 * unless the operation timed out, in which case there is nothing to
+	 * copy back.
+	 */
+	if (data) {
+		int ret_reclaim;
+		/*
+		 * Restore the page state after the command completes.
+		 */
+		ret_reclaim = snp_reclaim_cmd_buf(cmd, cmd_buf);
+		if (ret_reclaim) {
+			dev_err(sev->dev,
+				"SEV: failed to reclaim buffer for legacy command %#x. Error: %d\n",
+				cmd, ret_reclaim);
+			return ret_reclaim;
+		}
+
+		if (ret != -ETIMEDOUT)
+			memcpy(data, cmd_buf, buf_len);
+
+		if (sev->cmd_buf_backup_active)
+			sev->cmd_buf_backup_active = false;
+		else
+			sev->cmd_buf_active = false;
+
+		if (snp_unmap_cmd_buf_desc_list(desc_list))
+			return -EFAULT;
+	}
+
 	if (ret) {
 		if (psp_ret)
 			*psp_ret = 0;
@@ -982,34 +1014,6 @@ int __sev_do_cmd_locked(int cmd, void *data, int *psp_ret)
 		ret = -EIO;
 	} else {
 		ret = sev_write_init_ex_file_if_required(cmd);
-	}
-
-	/*
-	 * Copy potential output from the PSP back to data.  Do this even on
-	 * failure in case the caller wants to glean something from the error.
-	 */
-	if (data) {
-		int ret_reclaim;
-		/*
-		 * Restore the page state after the command completes.
-		 */
-		ret_reclaim = snp_reclaim_cmd_buf(cmd, cmd_buf);
-		if (ret_reclaim) {
-			dev_err(sev->dev,
-				"SEV: failed to reclaim buffer for legacy command %#x. Error: %d\n",
-				cmd, ret_reclaim);
-			return ret_reclaim;
-		}
-
-		memcpy(data, cmd_buf, buf_len);
-
-		if (sev->cmd_buf_backup_active)
-			sev->cmd_buf_backup_active = false;
-		else
-			sev->cmd_buf_active = false;
-
-		if (snp_unmap_cmd_buf_desc_list(desc_list))
-			return -EFAULT;
 	}
 
 	print_hex_dump_debug("(out): ", DUMP_PREFIX_OFFSET, 16, 2, data,
