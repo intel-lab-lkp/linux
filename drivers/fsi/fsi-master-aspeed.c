@@ -462,7 +462,7 @@ static ssize_t cfam_reset_store(struct device *dev, struct device_attribute *att
 	return count;
 }
 
-static DEVICE_ATTR(cfam_reset, 0200, NULL, cfam_reset_store);
+static DEVICE_ATTR_WO(cfam_reset);
 
 static int setup_cfam_reset(struct fsi_master_aspeed *aspeed)
 {
