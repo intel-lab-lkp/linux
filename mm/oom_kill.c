@@ -1061,6 +1061,7 @@ static void check_panic_on_oom(struct oom_control *oc)
 {
 	if (likely(!sysctl_panic_on_oom))
 		return;
+
 	if (sysctl_panic_on_oom != 2) {
 		/*
 		 * panic_on_oom == 1 only affects CONSTRAINT_NONE, the kernel
@@ -1070,9 +1071,11 @@ static void check_panic_on_oom(struct oom_control *oc)
 		if (oc->constraint != CONSTRAINT_NONE)
 			return;
 	}
+
 	/* Do not panic for oom kills triggered by sysrq */
 	if (is_sysrq_oom(oc))
 		return;
+
 	dump_header(oc);
 	panic("Out of memory: %s panic_on_oom is enabled\n",
 		sysctl_panic_on_oom == 2 ? "compulsory" : "system-wide");
