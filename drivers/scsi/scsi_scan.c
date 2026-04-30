@@ -1182,6 +1182,7 @@ static int scsi_probe_and_add_lun(struct scsi_target *starget,
 				  struct scsi_device **sdevp,
 				  enum scsi_scan_mode rescan,
 				  void *hostdata)
+	__must_hold(&dev_to_shost(starget->dev.parent)->scan_mutex)
 {
 	struct scsi_device *sdev;
 	unsigned char *result;
@@ -1338,6 +1339,7 @@ static int scsi_probe_and_add_lun(struct scsi_target *starget,
 static void scsi_sequential_lun_scan(struct scsi_target *starget,
 				     blist_flags_t bflags, int scsi_level,
 				     enum scsi_scan_mode rescan)
+	__must_hold(&dev_to_shost(starget->dev.parent)->scan_mutex)
 {
 	uint max_dev_lun;
 	u64 sparse_lun, lun;
@@ -1429,6 +1431,7 @@ static void scsi_sequential_lun_scan(struct scsi_target *starget,
  **/
 static int scsi_report_lun_scan(struct scsi_target *starget, blist_flags_t bflags,
 				enum scsi_scan_mode rescan)
+	__must_hold(&dev_to_shost(starget->dev.parent)->scan_mutex)
 {
 	unsigned char scsi_cmd[MAX_COMMAND_SIZE];
 	unsigned int length;
@@ -1626,6 +1629,8 @@ struct scsi_device *__scsi_add_device(struct Scsi_Host *shost, uint channel,
 	scsi_autopm_get_target(starget);
 
 	mutex_lock(&shost->scan_mutex);
+	/* Tell the compiler that dev_to_shost(...) == shost. */
+	__assume_ctx_lock(&dev_to_shost(starget->dev.parent)->scan_mutex);
 	if (!shost->async_scan)
 		scsi_complete_async_scans();
 
@@ -1754,6 +1759,7 @@ EXPORT_SYMBOL(scsi_rescan_device);
 
 static void __scsi_scan_target(struct device *parent, unsigned int channel,
 		unsigned int id, u64 lun, enum scsi_scan_mode rescan)
+	__must_hold(&dev_to_shost(parent)->scan_mutex)
 {
 	struct Scsi_Host *shost = dev_to_shost(parent);
 	blist_flags_t bflags = 0;
@@ -1769,6 +1775,8 @@ static void __scsi_scan_target(struct device *parent, unsigned int channel,
 	starget = scsi_alloc_target(parent, channel, id);
 	if (!starget)
 		return;
+	/* Tell the compiler that dev_to_shost(...) == shost. */
+	__assume_ctx_lock(&dev_to_shost(starget->dev.parent)->scan_mutex);
 	scsi_autopm_get_target(starget);
 
 	if (lun != SCAN_WILD_CARD) {
@@ -1850,8 +1858,12 @@ EXPORT_SYMBOL(scsi_scan_target);
 static void scsi_scan_channel(struct Scsi_Host *shost, unsigned int channel,
 			      unsigned int id, u64 lun,
 			      enum scsi_scan_mode rescan)
+	__must_hold(&shost->scan_mutex)
 {
 	uint order_id;
+
+	/* Tell the compiler that dev_to_shost(...) == shost. */
+	__assume_ctx_lock(&dev_to_shost(&shost->shost_gendev)->scan_mutex);
 
 	if (id == SCAN_WILD_CARD)
 		for (id = 0; id < shost->max_id; ++id) {
