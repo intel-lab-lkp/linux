@@ -2806,7 +2806,8 @@ struct spb_tainted_walk {
 
 static __always_inline
 struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
-				int migratetype, struct spb_tainted_walk *walk)
+				int migratetype, unsigned int alloc_flags,
+				struct spb_tainted_walk *walk)
 {
 	unsigned int current_order;
 	struct free_area *area;
@@ -3230,7 +3231,7 @@ static inline bool noncompatible_cross_type(int start_type, int fallback_type)
 static __always_inline struct page *__rmqueue_cma_fallback(struct zone *zone,
 					unsigned int order)
 {
-	return __rmqueue_smallest(zone, order, MIGRATE_CMA, NULL);
+	return __rmqueue_smallest(zone, order, MIGRATE_CMA, 0, NULL);
 }
 #else
 static inline struct page *__rmqueue_cma_fallback(struct zone *zone,
@@ -3705,7 +3706,7 @@ try_to_claim_block(struct zone *zone, struct page *page,
 	if (sb)
 		spb_update_list(sb);
 #endif
-	return __rmqueue_smallest(zone, order, start_type, NULL);
+	return __rmqueue_smallest(zone, order, start_type, 0, NULL);
 }
 
 /*
@@ -4106,7 +4107,8 @@ __rmqueue(struct zone *zone, unsigned int order, int migratetype,
 	 */
 	switch (*mode) {
 	case RMQUEUE_NORMAL:
-		page = __rmqueue_smallest(zone, order, migratetype, walkp);
+		page = __rmqueue_smallest(zone, order, migratetype,
+					  alloc_flags, walkp);
 		if (page)
 			return page;
 		/*
@@ -5161,7 +5163,8 @@ struct page *rmqueue_buddy(struct zone *preferred_zone, struct zone *zone,
 		}
 		if (alloc_flags & ALLOC_HIGHATOMIC)
 			page = __rmqueue_smallest(zone, order,
-						  MIGRATE_HIGHATOMIC, NULL);
+						  MIGRATE_HIGHATOMIC,
+						  alloc_flags, NULL);
 		if (!page) {
 			enum rmqueue_mode rmqm = RMQUEUE_NORMAL;
 
@@ -5176,7 +5179,7 @@ struct page *rmqueue_buddy(struct zone *preferred_zone, struct zone *zone,
 			if (!page && (alloc_flags & (ALLOC_OOM|ALLOC_NON_BLOCK)))
 				page = __rmqueue_smallest(zone, order,
 							  MIGRATE_HIGHATOMIC,
-							  NULL);
+							  alloc_flags, NULL);
 
 			if (!page) {
 				spin_unlock_irqrestore(&zone->lock, flags);
