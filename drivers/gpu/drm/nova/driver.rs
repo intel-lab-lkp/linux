@@ -15,6 +15,8 @@ use kernel::{
 use crate::file::File;
 use crate::gem::NovaObject;
 
+use nova_core::driver::NovaCore;
+
 pub(crate) struct NovaDriver {
     #[expect(unused)]
     drm: ARef<drm::Device<Self>>,
@@ -54,6 +56,10 @@ impl auxiliary::Driver for NovaDriver {
     const ID_TABLE: auxiliary::IdTable<Self::IdInfo> = &AUX_TABLE;
 
     fn probe(adev: &auxiliary::Device<Core>, _info: &Self::IdInfo) -> impl PinInit<Self, Error> {
+        let chipset = NovaCore::chipset(adev)?;
+
+        pr_info!("Chipset from nova-core: {}\n", chipset);
+
         let data = try_pin_init!(NovaData { adev: adev.into() });
 
         let drm = drm::Device::<Self>::new(adev.as_ref(), data)?;

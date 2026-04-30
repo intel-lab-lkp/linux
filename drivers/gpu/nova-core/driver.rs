@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 
+//! Main driver module.
+
 use kernel::{
     auxiliary,
     device::Core,
@@ -23,13 +25,17 @@ use kernel::{
     },
 };
 
-use crate::gpu::Gpu;
+use crate::gpu::{
+    self,
+    Gpu, //
+};
 
 /// Counter for generating unique auxiliary device IDs.
 static AUXILIARY_ID_COUNTER: Atomic<u32> = Atomic::new(0);
 
+/// Driver-associated data.
 #[pin_data]
-pub(crate) struct NovaCore {
+pub struct NovaCore {
     #[pin]
     pub(crate) gpu: Gpu,
     #[pin]
@@ -110,5 +116,15 @@ impl pci::Driver for NovaCore {
 
     fn unbind(pdev: &pci::Device<Core>, this: Pin<&Self>) {
         this.gpu.unbind(pdev.as_ref());
+    }
+}
+
+impl NovaCore {
+    /// Returns the chipset of this GPU.
+    pub fn chipset(adev: &auxiliary::Device<Core>) -> Result<gpu::Chipset> {
+        let dev = adev.parent();
+        let drvdata = dev.drvdata::<Self>()?;
+
+        Ok(drvdata.gpu.spec.chipset)
     }
 }

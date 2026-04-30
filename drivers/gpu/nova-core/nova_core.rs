@@ -13,11 +13,11 @@ use kernel::{
 #[macro_use]
 mod bitfield;
 
-mod driver;
+pub mod driver;
 mod falcon;
 mod fb;
 mod firmware;
-mod gpu;
+pub mod gpu;
 mod gsp;
 #[macro_use]
 mod num;
