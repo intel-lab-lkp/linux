@@ -1016,6 +1016,7 @@ static void ipr_init_ioadl(struct ipr_cmnd *ipr_cmd, dma_addr_t dma_addr,
 static void ipr_send_blocking_cmd(struct ipr_cmnd *ipr_cmd,
 				  void (*timeout_func) (struct timer_list *),
 				  u32 timeout)
+	__must_hold(ipr_cmd->ioa_cfg->host->host_lock)
 {
 	struct ipr_ioa_cfg *ioa_cfg = ipr_cmd->ioa_cfg;
 
@@ -5012,6 +5013,7 @@ static int ipr_eh_host_reset(struct scsi_cmnd *cmd)
  **/
 static int ipr_device_reset(struct ipr_ioa_cfg *ioa_cfg,
 			    struct ipr_resource_entry *res)
+	__must_hold(ioa_cfg->host->host_lock)
 {
 	struct ipr_cmnd *ipr_cmd;
 	struct ipr_ioarcb *ioarcb;
@@ -5020,6 +5022,8 @@ static int ipr_device_reset(struct ipr_ioa_cfg *ioa_cfg,
 
 	ENTER;
 	ipr_cmd = ipr_get_free_ipr_cmnd(ioa_cfg);
+	/* Tell the compiler that ipr_cmd->ioa_cfg == ioa_cfg. */
+	__assume_ctx_lock(ipr_cmd->ioa_cfg->host->host_lock);
 	ioarcb = &ipr_cmd->ioarcb;
 	cmd_pkt = &ioarcb->cmd_pkt;
 
@@ -5050,6 +5054,7 @@ static int ipr_device_reset(struct ipr_ioa_cfg *ioa_cfg,
  *	SUCCESS / FAILED
  **/
 static int __ipr_eh_dev_reset(struct scsi_cmnd *scsi_cmd)
+	__must_hold(scsi_cmd->device->host->host_lock)
 {
 	struct ipr_ioa_cfg *ioa_cfg;
 	struct ipr_resource_entry *res;
@@ -5068,6 +5073,9 @@ static int __ipr_eh_dev_reset(struct scsi_cmnd *scsi_cmd)
 		return FAILED;
 	if (ioa_cfg->hrrq[IPR_INIT_HRRQ].ioa_is_dead)
 		return FAILED;
+
+	/* Tell the compiler that ioa_cfg->host == scsi_cmd->device->host. */
+	__assume_ctx_lock(ioa_cfg->host->host_lock);
 
 	res->resetting_device = 1;
 	scmd_printk(KERN_ERR, scsi_cmd, "Resetting device\n");
@@ -5189,6 +5197,7 @@ static void ipr_abort_timeout(struct timer_list *t)
  *	SUCCESS / FAILED
  **/
 static int ipr_cancel_op(struct scsi_cmnd *scsi_cmd)
+	__must_hold(scsi_cmd->device->host->host_lock)
 {
 	struct ipr_cmnd *ipr_cmd;
 	struct ipr_ioa_cfg *ioa_cfg;
@@ -5239,6 +5248,8 @@ static int ipr_cancel_op(struct scsi_cmnd *scsi_cmd)
 		return SUCCESS;
 
 	ipr_cmd = ipr_get_free_ipr_cmnd(ioa_cfg);
+	/* Tell the compiler that ipr_cmd->ioa_cfg == ioa_cfg. */
+	__assume_ctx_lock(ipr_cmd->ioa_cfg->host->host_lock);
 	ipr_cmd->ioarcb.res_handle = res->res_handle;
 	cmd_pkt = &ipr_cmd->ioarcb.cmd_pkt;
 	cmd_pkt->request_type = IPR_RQTYPE_IOACMD;
