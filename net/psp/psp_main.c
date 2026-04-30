@@ -312,12 +312,20 @@ int psp_dev_rcv(struct sk_buff *skb, u16 dev_id, u8 generation, bool strip_icv)
 	if (unlikely(uh->dest != htons(PSP_DEFAULT_UDP_PORT)))
 		return -EINVAL;
 
+	psph = (struct psphdr *)(skb->data + l2_hlen + l3_hlen +
+				 sizeof(struct udphdr));
+
+	/* Fixed-length decap; reject optional fields rather than mis-decapsulate. */
+
+	if (unlikely(psph->hdrlen != PSP_HDRLEN_NOOPT ||
+		     psph->crypt_offset ||
+		     (psph->verfl & PSPHDR_VERFL_VIRT)))
+		return -EINVAL;
+
 	pse = skb_ext_add(skb, SKB_EXT_PSP);
 	if (!pse)
 		return -EINVAL;
 
-	psph = (struct psphdr *)(skb->data + l2_hlen + l3_hlen +
-				 sizeof(struct udphdr));
 	pse->spi = psph->spi;
 	pse->dev_id = dev_id;
 	pse->generation = generation;
