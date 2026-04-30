@@ -881,7 +881,15 @@ where
 {
 }
 
-// SAFETY: TODO.
+// SAFETY: The `__enqueue` implementation in `RawWorkItem` uses a `work_struct` initialized with
+// the `run` method of this trait as the function pointer because:
+//   - `__enqueue` gets the `work_struct` from the `Work<T, ID>` field embedded in `T`,
+//     using `T::raw_get_work` on the pointer obtained from `KBox::into_raw`.
+//   - The only safe way to create a `Work` object is through `Work::new`.
+//   - `Work::new` makes sure that `T::Pointer::run` is passed to `init_work_with_key`.
+//   - Finally, `Work` and `RawWorkItem` guarantee the correct `Work` field is used
+//     because of the `ID` const generic bound, and `Work::new` picks the correct
+//     implementation of `WorkItemPointer` for `Pin<KBox<T>>`.
 unsafe impl<T, const ID: u64> WorkItemPointer<ID> for Pin<KBox<T>>
 where
     T: WorkItem<ID, Pointer = Self>,
