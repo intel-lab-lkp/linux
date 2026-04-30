@@ -451,17 +451,6 @@ W:	http://wiki.analog.com/AD7142
 W:	https://ez.analog.com/linux-software-drivers
 F:	drivers/input/misc/ad714x.c
 
-AD738X ADC DRIVER (AD7380/1/2/4)
-M:	Michael Hennerich <michael.hennerich@analog.com>
-M:	Nuno Sá <nuno.sa@analog.com>
-R:	David Lechner <dlechner@baylibre.com>
-S:	Supported
-W:	https://wiki.analog.com/resources/tools-software/linux-drivers/iio-adc/ad738x
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/devicetree/bindings/iio/adc/adi,ad7380.yaml
-F:	Documentation/iio/ad7380.rst
-F:	drivers/iio/adc/ad7380.c
-
 AD7476 ADC DRIVER FOR VARIOUS SIMPLE 1-CHANNEL SPI ADCs
 M:	Matti Vaittinen <mazziesaccount@gmail.com>
 S:	Maintained
@@ -480,16 +469,6 @@ S:	Supported
 W:	http://wiki.analog.com/AD7879
 W:	https://ez.analog.com/linux-software-drivers
 F:	drivers/input/touchscreen/ad7879.c
-
-AD7944 ADC DRIVER (AD7944/AD7985/AD7986)
-M:	Michael Hennerich <michael.hennerich@analog.com>
-M:	Nuno Sá <nuno.sa@analog.com>
-R:	David Lechner <dlechner@baylibre.com>
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/devicetree/bindings/iio/adc/adi,ad7944.yaml
-F:	Documentation/iio/ad7944.rst
-F:	drivers/iio/adc/ad7944.c
 
 ADAFRUIT MINI I2C GAMEPAD
 M:	Anshul Dalal <anshulusr@gmail.com>
@@ -1415,15 +1394,6 @@ F:	Documentation/devicetree/bindings/iio/dac/adi,ad3552r.yaml
 F:	Documentation/iio/ad3552r.rst
 F:	drivers/iio/dac/ad3552r.c
 
-ANALOG DEVICES INC AD4000 DRIVER
-M:	Marcelo Schmitt <marcelo.schmitt@analog.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/devicetree/bindings/iio/adc/adi,ad4000.yaml
-F:	Documentation/iio/ad4000.rst
-F:	drivers/iio/adc/ad4000.c
-
 AD4030 ADC DRIVER (AD4030-24/AD4630-16/AD4630-24/AD4632-16/AD4632-24)
 M:	Michael Hennerich <michael.hennerich@analog.com>
 M:	Nuno Sá <nuno.sa@analog.com>
@@ -1435,78 +1405,6 @@ F:	Documentation/devicetree/bindings/iio/adc/adi,ad4030.yaml
 F:	Documentation/iio/ad4030.rst
 F:	drivers/iio/adc/ad4030.c
 
-ANALOG DEVICES INC AD4062 DRIVER
-M:	Jorge Marques <jorge.marques@analog.com>
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/devicetree/bindings/iio/adc/adi,ad4062.yaml
-F:	Documentation/iio/ad4062.rst
-F:	drivers/iio/adc/ad4062.c
-
-ANALOG DEVICES INC AD4080 DRIVER
-M:	Antoniu Miclaus <antoniu.miclaus@analog.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/devicetree/bindings/iio/adc/adi,ad4080.yaml
-F:	drivers/iio/adc/ad4080.c
-
-ANALOG DEVICES INC AD4130 DRIVER
-M:	Cosmin Tanislav <cosmin.tanislav@analog.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/ABI/testing/sysfs-bus-iio-adc-ad4130
-F:	Documentation/devicetree/bindings/iio/adc/adi,ad4130.yaml
-F:	drivers/iio/adc/ad4130.c
-
-ANALOG DEVICES INC AD4134 DRIVER
-M:	Marcelo Schmitt <marcelo.schmitt@analog.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/devicetree/bindings/iio/adc/adi,ad4134.yaml
-F:	drivers/iio/adc/ad4134.c
-
-ANALOG DEVICES INC AD4170-4 DRIVER
-M:	Marcelo Schmitt <marcelo.schmitt@analog.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/devicetree/bindings/iio/adc/adi,ad4170-4.yaml
-F:	drivers/iio/adc/ad4170-4.c
-
-ANALOG DEVICES INC AD4691 DRIVER
-M:	Radu Sabau <radu.sabau@analog.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/devicetree/bindings/iio/adc/adi,ad4691.yaml
-F:	drivers/iio/adc/ad4691.c
-F:	drivers/iio/adc/ad4691.rst
-
-ANALOG DEVICES INC AD4695 DRIVER
-M:	Michael Hennerich <michael.hennerich@analog.com>
-M:	Nuno Sá <nuno.sa@analog.com>
-R:	David Lechner <dlechner@baylibre.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/devicetree/bindings/iio/adc/adi,ad4695.yaml
-F:	Documentation/iio/ad4695.rst
-F:	drivers/iio/adc/ad4695.c
-F:	include/dt-bindings/iio/adc/adi,ad4695.h
-
-ANALOG DEVICES INC AD4851 DRIVER
-M:	Sergiu Cuciurean <sergiu.cuciurean@analog.com>
-M:	Dragos Bogdan <dragos.bogdan@analog.com>
-R:	Antoniu Miclaus <antoniu.miclaus@analog.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/devicetree/bindings/iio/adc/adi,ad4851.yaml
-F:	drivers/iio/adc/ad4851.c
-
 ANALOG DEVICES INC AD5706R DRIVER
 M:	Alexis Czezar Torreno <alexisczezar.torreno@analog.com>
 L:	linux-iio@vger.kernel.org
@@ -1514,31 +1412,6 @@ S:	Supported
 W:	https://ez.analog.com/linux-software-drivers
 F:	Documentation/devicetree/bindings/iio/dac/adi,ad5706r.yaml
 F:	drivers/iio/dac/ad5706r.c
-
-ANALOG DEVICES INC AD7091R DRIVER
-M:	Marcelo Schmitt <marcelo.schmitt@analog.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-W:	http://ez.analog.com/community/linux-device-drivers
-F:	Documentation/devicetree/bindings/iio/adc/adi,ad7091r*
-F:	drivers/iio/adc/ad7091r*
-
-ANALOG DEVICES INC AD7191 DRIVER
-M:	Alisa-Dariana Roman <alisa.roman@analog.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/devicetree/bindings/iio/adc/adi,ad7191.yaml
-F:	Documentation/iio/ad7191.rst
-F:	drivers/iio/adc/ad7191.c
-
-ANALOG DEVICES INC AD7192 DRIVER
-M:	Alisa-Dariana Roman <alisa.roman@analog.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/devicetree/bindings/iio/adc/adi,ad7192.yaml
-F:	drivers/iio/adc/ad7192.c
 
 ANALOG DEVICES INC AD7292 DRIVER
 M:	Marcelo Schmitt <marcelo.schmitt1@gmail.com>
@@ -1584,15 +1457,6 @@ F:	Documentation/devicetree/bindings/iio/adc/adi,ad7625.yaml
 F:	Documentation/iio/ad7625.rst
 F:	drivers/iio/adc/ad7625.c
 
-ANALOG DEVICES INC AD7768-1 DRIVER
-M:	Michael Hennerich <Michael.Hennerich@analog.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/devicetree/bindings/iio/adc/adi,ad7768-1.yaml
-F:	drivers/iio/adc/ad7768-1.c
-F:	include/dt-bindings/iio/adc/adi,ad7768-1.h
-
 ANALOG DEVICES INC AD7780 DRIVER
 M:	Michael Hennerich <Michael.Hennerich@analog.com>
 M:	Renato Lui Geh <renatogeh@gmail.com>
@@ -1610,16 +1474,6 @@ S:	Supported
 W:	https://ez.analog.com/linux-software-drivers
 F:	Documentation/devicetree/bindings/iio/amplifiers/adi,ad8366.yaml
 F:	drivers/iio/amplifiers/ad8366.c
-
-ANALOG DEVICES INC AD9467 DRIVER
-M:	Michael Hennerich <Michael.Hennerich@analog.com>
-M:	Nuno Sa <nuno.sa@analog.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/ABI/testing/debugfs-iio-ad9467
-F:	Documentation/devicetree/bindings/iio/adc/adi,ad9467.yaml
-F:	drivers/iio/adc/ad9467.c
 
 ANALOG DEVICES INC AD8460 DRIVER
 M:	Mariel Tinaco <Mariel.Tinaco@analog.com>
@@ -1653,14 +1507,6 @@ S:	Supported
 W:	https://ez.analog.com/linux-software-drivers
 F:	Documentation/devicetree/bindings/iio/amplifiers/adi,ada4250.yaml
 F:	drivers/iio/amplifiers/ada4250.c
-
-ANALOG DEVICES INC ADE9000 DRIVER
-M:	Antoniu Miclaus <antoniu.miclaus@analog.com>
-L:	linux-iio@vger.kernel.org
-S:	Supported
-W:	https://ez.analog.com/linux-software-drivers
-F:	Documentation/devicetree/bindings/iio/adc/adi,ade9000.yaml
-F:	drivers/iio/adc/ade9000.c
 
 ANALOG DEVICES INC ADF4377 DRIVER
 M:	Antoniu Miclaus <antoniu.miclaus@analog.com>
@@ -1866,12 +1712,14 @@ L:	linux@analog.com
 S:	Supported
 W:	http://wiki.analog.com/
 W:	https://ez.analog.com/linux-software-drivers
+F:	Documentation/ABI/testing/debugfs-iio-ad9467
+F:	Documentation/ABI/testing/sysfs-bus-iio-adc-ad4130
 F:	Documentation/ABI/testing/sysfs-bus-iio-frequency-ad9523
 F:	Documentation/ABI/testing/sysfs-bus-iio-frequency-adf4350
 F:	Documentation/devicetree/bindings/iio/*/adi,*
 F:	Documentation/devicetree/bindings/iio/adc/lltc,ltc2496.yaml
 F:	Documentation/devicetree/bindings/iio/adc/lltc,ltc2497.yaml
-F:	Documentation/iio/ad7606.rst
+F:	Documentation/iio/ad*.rst
 F:	drivers/iio/*/ad*
 F:	drivers/iio/adc/ltc249*
 F:	drivers/iio/amplifiers/hmc425a.c
