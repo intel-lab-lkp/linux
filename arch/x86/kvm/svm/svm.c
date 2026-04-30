@@ -261,6 +261,7 @@ int svm_set_efer(struct kvm_vcpu *vcpu, u64 efer)
 				set_exception_intercept(svm, GP_VECTOR);
 		}
 
+		svm_pmu_handle_nested_transition(svm);
 		kvm_make_request(KVM_REQ_RECALC_INTERCEPTS, vcpu);
 	}
 
@@ -1214,6 +1215,7 @@ static void init_vmcb(struct kvm_vcpu *vcpu, bool init_event)
 
 	svm->nested.vmcb12_gpa = INVALID_GPA;
 	svm->nested.last_vmcb12_gpa = INVALID_GPA;
+	bitmap_zero(svm->nested.reprogram_pmcs_on_nested_transitions, X86_PMC_IDX_MAX);
 
 	if (!kvm_pause_in_guest(vcpu->kvm)) {
 		control->pause_filter_count = pause_filter_count;

@@ -24,6 +24,7 @@
 
 #include "cpuid.h"
 #include "kvm_cache_regs.h"
+#include "pmu.h"
 
 /*
  * Helpers to convert to/from physical addresses for pages whose address is
@@ -238,6 +239,13 @@ struct svm_nested_state {
 	 * on its side.
 	 */
 	bool force_msr_bitmap_recalc;
+
+	/*
+	 * PMU counters where Host-Only or Guest-Only bits are used need to be
+	 * reprogrammed on nested transitions and EFER.SVME changes to correctly
+	 * enable/disable the counters based on the vCPU state.
+	 */
+	DECLARE_BITMAP(reprogram_pmcs_on_nested_transitions, X86_PMC_IDX_MAX);
 };
 
 struct vcpu_sev_es_state {
@@ -876,6 +884,31 @@ void nested_copy_vmcb_save_to_cache(struct vcpu_svm *svm,
 void nested_sync_control_from_vmcb02(struct vcpu_svm *svm);
 void nested_vmcb02_compute_g_pat(struct vcpu_svm *svm);
 void svm_switch_vmcb(struct vcpu_svm *svm, struct kvm_vmcb_info *target_vmcb);
+
+
+static inline void __svm_pmu_handle_nested_transition(struct vcpu_svm *svm, bool defer)
+{
+	u64 counters = *(u64 *)svm->nested.reprogram_pmcs_on_nested_transitions;
+
+	if (!counters)
+		return;
+
+	/* Reprogramming sets the bit again for PMCs that still need tracking */
+	bitmap_zero(svm->nested.reprogram_pmcs_on_nested_transitions, X86_PMC_IDX_MAX);
+	__kvm_pmu_reprogram_counters(vcpu_to_pmu(&svm->vcpu), counters, defer);
+}
+
+static inline void svm_pmu_handle_nested_transition(struct vcpu_svm *svm)
+{
+	/*
+	 * Do NOT defer reprogramming the counters by default.  Instructions
+	 * causing a state change are counted based on the _new_ CPU state
+	 * (e.g. a successful VMRUN is counted in guest mode). Hence, the
+	 * counters should be reprogrammed with the new state _before_ the
+	 * instruction is potentially counted upon emulation completion.
+	 */
+	__svm_pmu_handle_nested_transition(svm, false);
+}
 
 extern struct kvm_x86_nested_ops svm_nested_ops;
 

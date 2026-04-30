@@ -263,20 +263,26 @@ static void amd_mediated_pmu_put(struct kvm_vcpu *vcpu)
 static void amd_mediated_pmu_handle_host_guest_bits(struct kvm_vcpu *vcpu,
 						    struct kvm_pmc *pmc)
 {
+	struct vcpu_svm *svm = to_svm(vcpu);
 	u64 host_guest_bits;
 
 	if (!(pmc->eventsel & ARCH_PERFMON_EVENTSEL_ENABLE))
 		return;
 
-	/* Count all events if both bits are cleared */
+	/*
+	 * If both bits are cleared, always keep the counter enabled. Otherwise,
+	 * counter enablement needs to be re-evaluated on every nested
+	 * transition (and EFER.SVME change).
+	 */
 	host_guest_bits = pmc->eventsel & AMD64_EVENTSEL_HOST_GUEST_MASK;
 	if (!host_guest_bits)
 		return;
+	__set_bit(pmc->idx, svm->nested.reprogram_pmcs_on_nested_transitions);
 
 	/*
-	 * If EFER.SVME is set, the counter is disabledd if only one of the bits
+	 * If EFER.SVME is set, the counter is disabled if only one of the bits
 	 * is set and it doesn't match the vCPU context. If EFER.SVME is
-	 * cleared, the counter is disable if any of the bits is set.
+	 * cleared, the counter is disabled if any of the bits is set.
 	 */
 	if (vcpu->arch.efer & EFER_SVME) {
 		if (host_guest_bits == AMD64_EVENTSEL_HOST_GUEST_MASK)
