@@ -49,15 +49,11 @@ void drm_buddy_print(struct gpu_buddy *mm, struct drm_printer *p)
 		struct gpu_buddy_block *block, *tmp;
 		struct rb_root *root;
 		u64 count = 0, free;
-		unsigned int tree;
 
-		for_each_free_tree(tree) {
-			root = &mm->free_trees[tree][order];
-
-			rbtree_postorder_for_each_entry_safe(block, tmp, root, rb) {
-				BUG_ON(!gpu_buddy_block_is_free(block));
-				count++;
-			}
+		root = &mm->dirty_tree[order];
+		rbtree_postorder_for_each_entry_safe(block, tmp, root, rb) {
+			BUG_ON(!gpu_buddy_block_is_free(block));
+			count++;
 		}
 
 		drm_printf(p, "order-%2d ", order);
