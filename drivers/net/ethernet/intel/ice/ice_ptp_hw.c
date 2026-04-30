@@ -2918,22 +2918,13 @@ static int ice_ptp_set_vernier_wl(struct ice_hw *hw)
 }
 
 /**
- * ice_ptp_init_phc_e82x - Perform E822 specific PHC initialization
+ * ice_ptp_init_phc_e82x - Perform E82X specific PHC initialization
  * @hw: pointer to HW struct
  *
- * Perform PHC initialization steps specific to E822 devices.
+ * Perform PHC initialization steps specific to E82X devices.
  */
 static int ice_ptp_init_phc_e82x(struct ice_hw *hw)
 {
-	u32 val;
-
-	/* Enable reading switch and PHY registers over the sideband queue */
-#define PF_SB_REM_DEV_CTL_SWITCH_READ BIT(1)
-#define PF_SB_REM_DEV_CTL_PHY0 BIT(2)
-	val = rd32(hw, PF_SB_REM_DEV_CTL);
-	val |= (PF_SB_REM_DEV_CTL_SWITCH_READ | PF_SB_REM_DEV_CTL_PHY0);
-	wr32(hw, PF_SB_REM_DEV_CTL, val);
-
 	/* Set window length for all the ports */
 	return ice_ptp_set_vernier_wl(hw);
 }
