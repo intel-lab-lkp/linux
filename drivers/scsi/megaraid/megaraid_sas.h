@@ -2696,15 +2696,18 @@ __le16 get_updated_dev_handle(struct megasas_instance *instance,
 			      struct MR_DRV_RAID_MAP_ALL *drv_map);
 void mr_update_load_balance_params(struct MR_DRV_RAID_MAP_ALL *map,
 	struct LD_LOAD_BALANCE_INFO *lbInfo);
-int megasas_get_ctrl_info(struct megasas_instance *instance);
+int megasas_get_ctrl_info(struct megasas_instance *instance)
+	__must_hold(&instance->reset_mutex);
 /* PD sequence */
 int
 megasas_sync_pd_seq_num(struct megasas_instance *instance, bool pend);
 void megasas_set_dynamic_target_properties(struct scsi_device *sdev,
 		struct queue_limits *lim, bool is_target_prop);
 int megasas_get_target_prop(struct megasas_instance *instance,
-			    struct scsi_device *sdev);
-void megasas_get_snapdump_properties(struct megasas_instance *instance);
+			    struct scsi_device *sdev)
+	__must_hold(&instance->reset_mutex);
+void megasas_get_snapdump_properties(struct megasas_instance *instance)
+	__must_hold(&instance->reset_mutex);
 
 int megasas_set_crash_dump_params(struct megasas_instance *instance,
 	u8 crash_buf_state);

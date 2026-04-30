@@ -1792,6 +1792,7 @@ static inline void megasas_free_ioc_init_cmd(struct megasas_instance *instance)
  */
 static u32
 megasas_init_adapter_fusion(struct megasas_instance *instance)
+	__must_hold(&instance->reset_mutex)
 {
 	struct fusion_context *fusion;
 	u32 scratch_pad_1;
@@ -4530,6 +4531,7 @@ static int
 megasas_issue_tm(struct megasas_instance *instance, u16 device_handle,
 	uint channel, uint id, u16 smid_task, u8 type,
 	struct MR_PRIV_DEVICE *mr_device_priv_data)
+	__must_hold(&instance->reset_mutex)
 {
 	struct MR_TASK_MANAGE_REQUEST *mr_request;
 	struct MPI2_SCSI_TASK_MANAGE_REQUEST *mpi_request;
