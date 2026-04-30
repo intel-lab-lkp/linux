@@ -57,9 +57,9 @@ struct tpmi_plr_die {
 
 struct tpmi_plr {
 	struct dentry *dbgfs_dir;
-	struct tpmi_plr_die *die_info;
 	int num_dies;
 	struct auxiliary_device *auxdev;
+	struct tpmi_plr_die die_info[] __counted_by(num_dies);
 };
 
 static const char * const plr_coarse_reasons[] = {
@@ -278,13 +278,8 @@ static int intel_plr_probe(struct auxiliary_device *auxdev, const struct auxilia
 	if (!num_resources)
 		return -EINVAL;
 
-	plr = devm_kzalloc(&auxdev->dev, sizeof(*plr), GFP_KERNEL);
+	plr = devm_kzalloc(&auxdev->dev, struct_size(plr, die_info, num_resources), GFP_KERNEL);
 	if (!plr)
-		return -ENOMEM;
-
-	plr->die_info = devm_kcalloc(&auxdev->dev, num_resources, sizeof(*plr->die_info),
-				     GFP_KERNEL);
-	if (!plr->die_info)
 		return -ENOMEM;
 
 	plr->num_dies = num_resources;
