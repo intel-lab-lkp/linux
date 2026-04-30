@@ -2423,6 +2423,9 @@ static void zap_huge_pmd_folio(struct mm_struct *mm, struct vm_area_struct *vma,
 {
 	const bool is_device_private = folio_is_device_private(folio);
 
+	if (is_huge_zero_pmd(pmdval))
+		return;
+
 	/* Present and device private folios are rmappable. */
 	if (is_present || is_device_private)
 		folio_remove_rmap_pmd(folio, &folio->page, vma);
