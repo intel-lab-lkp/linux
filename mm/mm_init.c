@@ -1537,7 +1537,17 @@ static void __meminit init_one_superpageblock(struct superpageblock *sb,
 	actual_pbs = (pb_end > pb_start) ?
 		     ((pb_end - pb_start + pageblock_nr_pages - 1) >>
 		      pageblock_order) : 0;
+	sb->total_pageblocks = actual_pbs;
 	sb->nr_reserved = actual_pbs;
+	if (actual_pbs) {
+		/*
+		 * All superpageblocks start as reserved (tainted+full).
+		 * They move to the correct category when the pages
+		 * inside are freed during boot.
+		 */
+		list_add_tail(&sb->list,
+			      &zone->spb_lists[SB_TAINTED][SB_FULL]);
+	}
 }
 
 static void __init setup_superpageblocks(struct zone *zone)
@@ -1547,10 +1557,17 @@ static void __init setup_superpageblocks(struct zone *zone)
 	unsigned long sb_base, nr_superpageblocks;
 	size_t alloc_size;
 	unsigned long i;
+	int cat, full;
 
 	zone->superpageblocks = NULL;
 	zone->nr_superpageblocks = 0;
 	zone->superpageblock_base_pfn = 0;
+
+	/* Fullness lists steer allocations to preferred superpageblocks */
+	INIT_LIST_HEAD(&zone->spb_empty);
+	for (cat = 0; cat < __NR_SB_CATEGORIES; cat++)
+		for (full = 0; full < __NR_SB_FULLNESS; full++)
+			INIT_LIST_HEAD(&zone->spb_lists[cat][full]);
 
 	if (!zone->spanned_pages)
 		return;
@@ -1677,8 +1694,9 @@ void __meminit resize_zone_superpageblocks(struct zone *zone)
 	}
 
 	/*
-	 * Update existing superpageblocks whose nr_reserved may have
-	 * increased due to the zone span growing into them.
+	 * Update existing superpageblocks whose nr_reserved and
+	 * total_pageblocks may have increased due to the zone
+	 * span growing into them.
 	 */
 	if (zone->superpageblocks) {
 		old_offset = (zone->superpageblock_base_pfn - new_sb_base) >>
@@ -1696,8 +1714,10 @@ void __meminit resize_zone_superpageblocks(struct zone *zone)
 				sb->nr_reclaimable + sb->nr_movable +
 				sb->nr_reserved;
 
-			if (new_pbs > old_pbs)
+			if (new_pbs > old_pbs) {
 				sb->nr_reserved += new_pbs - old_pbs;
+				sb->total_pageblocks = new_pbs;
+			}
 		}
 	}
 

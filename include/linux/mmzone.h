@@ -898,6 +898,23 @@ enum zone_type {
  */
 #define SUPERPAGEBLOCK_NR_PAGEBLOCKS (1UL << (SUPERPAGEBLOCK_ORDER - pageblock_order))
 
+/* Superpageblock fullness buckets (by % of pageblocks in use) */
+enum sb_fullness {
+	SB_FULL,		/* 100% full, 0 free pageblocks */
+	SB_FULL_75,		/* 75-99% full */
+	SB_FULL_50,		/* 50-74% full */
+	SB_FULL_25,		/* 25-49% full */
+	SB_ALMOST_EMPTY,	/* 1-24% full */
+	__NR_SB_FULLNESS,
+};
+
+/* Superpageblock taint categories */
+enum sb_category {
+	SB_CLEAN,		/* only free + movable pageblocks */
+	SB_TAINTED,		/* has unmovable/reclaimable/reserved */
+	__NR_SB_CATEGORIES,
+};
+
 struct superpageblock {
 	/* Pageblock counts by current migratetype */
 	u16			nr_free;
@@ -905,6 +922,7 @@ struct superpageblock {
 	u16			nr_reclaimable;
 	u16			nr_movable;
 	u16			nr_reserved;	/* holes, firmware, etc. */
+	u16			total_pageblocks; /* zone-clipped total */
 
 	/* For organizing superpageblocks by fullness category */
 	struct list_head	list;
@@ -961,6 +979,10 @@ struct zone {
 	unsigned long		nr_superpageblocks;
 	unsigned long		superpageblock_base_pfn; /* 1GB-aligned base */
 	bool			spb_kvmalloced; /* true if from kvmalloc (hotplug) */
+
+	/* Superpageblock fullness lists for allocation steering */
+	struct list_head	spb_empty;	/* completely free superpageblocks */
+	struct list_head	spb_lists[__NR_SB_CATEGORIES][__NR_SB_FULLNESS];
 
 	/* zone_start_pfn == zone_start_paddr >> PAGE_SHIFT */
 	unsigned long		zone_start_pfn;
