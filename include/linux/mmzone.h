@@ -1014,6 +1014,17 @@ struct zone {
 	struct list_head	spb_isolated;	/* fully isolated (1GB contig alloc) */
 	struct list_head	spb_lists[__NR_SB_CATEGORIES][__NR_SB_FULLNESS];
 
+	/*
+	 * Stage 5 PASS_1 fast-path hint: most-recent SPB that satisfied a
+	 * (order, mt) PASS_1 allocation. Stale hints are harmless — the hint
+	 * try-alloc just falls through to the standard list walk on miss.
+	 * Sized for [0..NR_PAGE_ORDERS) x PCPTYPES; HIGHATOMIC/CMA/ISOLATE
+	 * skip the hint (already cheap or rare). Invalidated by
+	 * spb_invalidate_warm_hints() when the SPB array is resized
+	 * (memory hotplug add).
+	 */
+	struct superpageblock	*sb_hint[NR_PAGE_ORDERS][MIGRATE_PCPTYPES];
+
 	/* zone_start_pfn == zone_start_paddr >> PAGE_SHIFT */
 	unsigned long		zone_start_pfn;
 

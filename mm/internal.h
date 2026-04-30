@@ -1041,6 +1041,8 @@ static inline void superpageblock_set_has_movable(struct zone *zone,
 void resize_zone_superpageblocks(struct zone *zone);
 #endif
 
+void spb_invalidate_warm_hints(struct zone *zone);
+
 struct cma;
 
 #ifdef CONFIG_CMA

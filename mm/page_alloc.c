@@ -2804,6 +2804,110 @@ struct spb_tainted_walk {
 	bool saw_below_reserve;	/* tainted SPB has nr_free <= spb_tainted_reserve */
 };
 
+/*
+ * Stage 5 PASS_1 fast-path hint: most-recent SPB this CPU successfully
+ * allocated from for a given (zone, order, migratetype). Combined with
+ * the per-zone zone->sb_hint[][], this lets PASS_1 skip the linear walk
+ * of spb_lists[cat][full] in the common case (~78 SPBs visited per
+ * order-0 MOVABLE alloc on the build-403 baseline). Stale hints are
+ * harmless — the try-alloc just falls through to the standard list walk
+ * on miss.
+ *
+ * The slot stores both the zone pointer and the SPB pointer because
+ * zone_idx(zone) is per-pgdat (not globally unique on NUMA), so two
+ * nodes' ZONE_NORMAL share the same array index. The zone-pointer check
+ * on read prevents a cross-node SPB from being handed back to the wrong
+ * zone (which would corrupt per-zone NR_FREE_PAGES accounting).
+ */
+struct spb_warm_hint_slot {
+	struct zone		*zone;
+	struct superpageblock	*sb;
+};
+struct spb_warm_hints {
+	struct spb_warm_hint_slot slot[MAX_NR_ZONES][NR_PAGE_ORDERS][MIGRATE_PCPTYPES];
+};
+static DEFINE_PER_CPU(struct spb_warm_hints, spb_warm_hints);
+
+/**
+ * spb_invalidate_warm_hints - drop all cached hints into @zone
+ * @zone: zone whose SPB array is about to change
+ *
+ * Called from memory hotplug paths that resize zone->superpageblocks
+ * (and therefore invalidate every SPB pointer for @zone). Must be
+ * called with zone->lock held; the lock serializes against any CPU
+ * doing a hint read inside __rmqueue_smallest (also under zone->lock),
+ * so callers see either pre-invalidation state (old SPB pointers,
+ * still-valid old array) or post-invalidation state (NULL slots) —
+ * never a half-state with stale pointers into a freed array.
+ */
+void spb_invalidate_warm_hints(struct zone *zone)
+{
+	enum zone_type zidx = zone_idx(zone);
+	int cpu, order, mt;
+
+	lockdep_assert_held(&zone->lock);
+
+	memset(zone->sb_hint, 0, sizeof(zone->sb_hint));
+
+	for_each_possible_cpu(cpu) {
+		struct spb_warm_hints *h = per_cpu_ptr(&spb_warm_hints, cpu);
+
+		for (order = 0; order < NR_PAGE_ORDERS; order++) {
+			for (mt = 0; mt < MIGRATE_PCPTYPES; mt++) {
+				if (h->slot[zidx][order][mt].zone != zone)
+					continue;
+				h->slot[zidx][order][mt].zone = NULL;
+				h->slot[zidx][order][mt].sb = NULL;
+			}
+		}
+	}
+}
+
+/*
+ * Try to allocate from a single SPB using PASS_1 semantics:
+ * whole pageblock first (PCP-buddy friendly), then sub-pageblock.
+ * Returns the page on success, NULL on miss. Caller is responsible
+ * for tracepoints, hint updates, and shrinker queueing.
+ */
+static struct page *try_alloc_from_sb_pass1(struct zone *zone,
+					    struct superpageblock *sb,
+					    unsigned int order,
+					    int migratetype)
+{
+	unsigned int current_order;
+	struct free_area *area;
+	struct page *page;
+
+	if (!sb->nr_free_pages)
+		return NULL;
+
+	for (current_order = max(order, pageblock_order);
+	     current_order < NR_PAGE_ORDERS;
+	     ++current_order) {
+		area = &sb->free_area[current_order];
+		page = get_page_from_free_area(area, migratetype);
+		if (!page)
+			continue;
+		page_del_and_expand(zone, page, order,
+				    current_order, migratetype);
+		return page;
+	}
+	if (order < pageblock_order) {
+		for (current_order = order;
+		     current_order < pageblock_order;
+		     ++current_order) {
+			area = &sb->free_area[current_order];
+			page = get_page_from_free_area(area, migratetype);
+			if (!page)
+				continue;
+			page_del_and_expand(zone, page, order,
+					    current_order, migratetype);
+			return page;
+		}
+	}
+	return NULL;
+}
+
 static __always_inline
 struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 				int migratetype, unsigned int alloc_flags,
@@ -2825,6 +2929,64 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 		[1] = { SB_CLEAN, SB_TAINTED },  /* movable */
 	};
 	int movable = (migratetype == MIGRATE_MOVABLE) ? 1 : 0;
+
+	/*
+	 * Stage 5 PASS_1 fast-path: try per-CPU then per-zone hint SPB
+	 * before the linear list walk. The hint stores the SPB that last
+	 * satisfied a PASS_1 alloc for this (zone, order, migratetype).
+	 * On hit, we skip the entire spb_lists walk (n_spbs_visited stays
+	 * 0, which shows up as the [0,5) bucket in the spb_alloc_walk
+	 * tracepoint histogram). Skip for HIGHATOMIC/CMA/ISOLATE — those
+	 * paths are already cheap (atomic-NORETRY skip) or rare.
+	 */
+	if (migratetype < MIGRATE_PCPTYPES) {
+		enum zone_type zidx = zone_idx(zone);
+		struct superpageblock *cpu_hint = NULL, *zone_hint;
+		struct spb_warm_hint_slot *slot;
+
+		slot = this_cpu_ptr(
+			&spb_warm_hints.slot[zidx][order][migratetype]);
+		/*
+		 * Validate slot->zone == zone: zone_idx is per-pgdat, so
+		 * on NUMA the same slot index is shared by every node's
+		 * zone of this type. Without this check, a hint written
+		 * from one node would be returned to allocations on
+		 * another node and corrupt the wrong zone's accounting.
+		 */
+		if (slot->zone == zone)
+			cpu_hint = slot->sb;
+		if (cpu_hint) {
+			page = try_alloc_from_sb_pass1(zone, cpu_hint,
+						       order, migratetype);
+			if (page) {
+				if (spb_get_category(cpu_hint) == SB_TAINTED &&
+				    spb_below_shrink_high_water(cpu_hint))
+					queue_spb_slab_shrink(zone);
+				trace_mm_page_alloc_zone_locked(page, order,
+				    migratetype,
+				    pcp_allowed_order(order) &&
+				    migratetype < MIGRATE_PCPTYPES);
+				return page;
+			}
+		}
+		zone_hint = zone->sb_hint[order][migratetype];
+		if (zone_hint && zone_hint != cpu_hint) {
+			page = try_alloc_from_sb_pass1(zone, zone_hint,
+						       order, migratetype);
+			if (page) {
+				if (spb_get_category(zone_hint) == SB_TAINTED &&
+				    spb_below_shrink_high_water(zone_hint))
+					queue_spb_slab_shrink(zone);
+				slot->zone = zone;
+				slot->sb = zone_hint;
+				trace_mm_page_alloc_zone_locked(page, order,
+				    migratetype,
+				    pcp_allowed_order(order) &&
+				    migratetype < MIGRATE_PCPTYPES);
+				return page;
+			}
+		}
+	}
 
 	/*
 	 * Search per-superpageblock free lists for pages of the requested
@@ -2892,6 +3054,15 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 					page, order, migratetype,
 					pcp_allowed_order(order) &&
 					migratetype < MIGRATE_PCPTYPES);
+				if (migratetype < MIGRATE_PCPTYPES) {
+					struct spb_warm_hint_slot *slot;
+
+					zone->sb_hint[order][migratetype] = sb;
+					slot = this_cpu_ptr(&spb_warm_hints.slot
+					    [zone_idx(zone)][order][migratetype]);
+					slot->zone = zone;
+					slot->sb = sb;
+				}
 				return page;
 			}
 			/* Then try sub-pageblock (no PCP buddy) */
@@ -2914,6 +3085,15 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 						page, order, migratetype,
 						pcp_allowed_order(order) &&
 						migratetype < MIGRATE_PCPTYPES);
+					if (migratetype < MIGRATE_PCPTYPES) {
+						struct spb_warm_hint_slot *slot;
+
+						zone->sb_hint[order][migratetype] = sb;
+						slot = this_cpu_ptr(&spb_warm_hints.slot
+						    [zone_idx(zone)][order][migratetype]);
+						slot->zone = zone;
+						slot->sb = sb;
+					}
 					return page;
 				}
 			}
