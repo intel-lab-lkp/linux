@@ -988,6 +988,73 @@ static int rdt_last_cmd_status_show(struct kernfs_open_file *of,
 	return 0;
 }
 
+/* Sysfs lines for info/kernel_mode; indexed by &enum resctrl_kernel_modes */
+static const char * const resctrl_mode_str[] = {
+	[INHERIT_CTRL_AND_MON]			= "inherit_ctrl_and_mon",
+	[GLOBAL_ASSIGN_CTRL_INHERIT_MON_PER_CPU] = "global_assign_ctrl_inherit_mon_per_cpu",
+	[GLOBAL_ASSIGN_CTRL_ASSIGN_MON_PER_CPU]	= "global_assign_ctrl_assign_mon_per_cpu",
+};
+
+static_assert(ARRAY_SIZE(resctrl_mode_str) == RESCTRL_NUM_KERNEL_MODES);
+
+/**
+ * resctrl_kernel_mode_show() - Enumerate supported and effective kernel-mode policies
+ * @of: kernfs open file
+ * @seq: output seq_file
+ * @v: unused
+ *
+ * Emits one line per mode advertised in resctrl_kcfg.kmode (each mode is one
+ * BIT(index) per &enum resctrl_kernel_modes).  Every line carries a
+ * ":group=<name>" suffix:
+ *
+ *   - The effective policy (whose BIT matches resctrl_kcfg.kmode_cur) is
+ *     wrapped in square brackets and <name> is the resctrl group that
+ *     currently owns the kernel CLOSID/RMID (resctrl_kcfg.k_rdtgrp),
+ *     formatted as "<ctrl>/<mon>/".  A component is left empty when it
+ *     does not apply: an RDTCTRL_GROUP emits "<ctrl>//", an RDTMON_GROUP
+ *     under the default control group emits "/<mon>/", and an RDTMON_GROUP
+ *     under a named control group emits "<ctrl>/<mon>/".
+ *
+ *   - Other supported but inactive modes are emitted without brackets and
+ *     <name> is reported as "none".
+ *
+ * Context: Called under rdtgroup_mutex like other resctrl sysfs show paths.
+ */
+static int resctrl_kernel_mode_show(struct kernfs_open_file *of,
+				    struct seq_file *seq, void *v)
+{
+	struct rdtgroup *rdtgrp;
+	const char *ctrl, *mon;
+	int i;
+
+	mutex_lock(&rdtgroup_mutex);
+	for (i = 0; i < RESCTRL_NUM_KERNEL_MODES; i++) {
+		if (!(resctrl_kcfg.kmode & BIT(i)))
+			continue;
+
+		if (resctrl_kcfg.kmode_cur != BIT(i)) {
+			seq_printf(seq, "%s:group=none\n",
+				   resctrl_mode_str[i]);
+			continue;
+		}
+
+		rdtgrp = resctrl_kcfg.k_rdtgrp;
+		ctrl = "";
+		mon = "";
+		if (rdtgrp->type == RDTMON_GROUP) {
+			if (rdtgrp->mon.parent != &rdtgroup_default)
+				ctrl = rdtgrp->mon.parent->kn->name;
+			mon = rdtgrp->kn->name;
+		} else {
+			ctrl = rdtgrp->kn->name;
+		}
+		seq_printf(seq, "[%s:group=%s/%s/]\n",
+			   resctrl_mode_str[i], ctrl, mon);
+	}
+	mutex_unlock(&rdtgroup_mutex);
+	return 0;
+}
+
 void *rdt_kn_parent_priv(struct kernfs_node *kn)
 {
 	/*
@@ -1887,6 +1954,13 @@ static struct rftype res_common_files[] = {
 		.mode		= 0444,
 		.kf_ops		= &rdtgroup_kf_single_ops,
 		.seq_show	= rdt_last_cmd_status_show,
+		.fflags		= RFTYPE_TOP_INFO,
+	},
+	{
+		.name		= "kernel_mode",
+		.mode		= 0444,
+		.kf_ops		= &rdtgroup_kf_single_ops,
+		.seq_show	= resctrl_kernel_mode_show,
 		.fflags		= RFTYPE_TOP_INFO,
 	},
 	{
