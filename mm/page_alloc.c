@@ -2700,6 +2700,30 @@ static inline bool spb_below_shrink_high_water(const struct superpageblock *sb)
 }
 
 /*
+ * spb_react_to_tainted_alloc - kick reclaim machinery on a tainted-SPB alloc.
+ *
+ * Called from each PASS_1/2/2B/2C/2D success path after a successful
+ * allocation against a tainted SPB. If the SPB is below its shrink
+ * high-water mark, queue the SPB-driven slab shrink and try to start
+ * the per-SPB defrag worker. Both have their own cooldown gates inside,
+ * so this is cheap to call on every such allocation.
+ *
+ * Skips quickly when the SPB is not tainted (e.g. movable allocation
+ * landing on a clean SPB) or when the high-water mark hasn't been
+ * crossed.
+ */
+static inline void spb_react_to_tainted_alloc(struct superpageblock *sb,
+					      struct zone *zone)
+{
+	if (spb_get_category(sb) != SB_TAINTED)
+		return;
+	if (!spb_below_shrink_high_water(sb))
+		return;
+	queue_spb_slab_shrink(zone);
+	spb_maybe_start_defrag(sb);
+}
+
+/*
  * On systems with many superpageblocks, we can afford to "write off"
  * tainted superpageblocks by aggressively packing unmovable/reclaimable
  * allocations into them — even sub-pageblock fragments — to keep clean
@@ -2959,9 +2983,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 			page = try_alloc_from_sb_pass1(zone, cpu_hint,
 						       order, migratetype);
 			if (page) {
-				if (spb_get_category(cpu_hint) == SB_TAINTED &&
-				    spb_below_shrink_high_water(cpu_hint))
-					queue_spb_slab_shrink(zone);
+				spb_react_to_tainted_alloc(cpu_hint, zone);
 				trace_mm_page_alloc_zone_locked(page, order,
 				    migratetype,
 				    pcp_allowed_order(order) &&
@@ -2974,9 +2996,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 			page = try_alloc_from_sb_pass1(zone, zone_hint,
 						       order, migratetype);
 			if (page) {
-				if (spb_get_category(zone_hint) == SB_TAINTED &&
-				    spb_below_shrink_high_water(zone_hint))
-					queue_spb_slab_shrink(zone);
+				spb_react_to_tainted_alloc(zone_hint, zone);
 				slot->zone = zone;
 				slot->sb = zone_hint;
 				trace_mm_page_alloc_zone_locked(page, order,
@@ -3047,9 +3067,8 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 				page_del_and_expand(zone, page,
 					order, current_order,
 					migratetype);
-				if (cat == SB_TAINTED &&
-				    spb_below_shrink_high_water(sb))
-					queue_spb_slab_shrink(zone);
+				if (cat == SB_TAINTED)
+					spb_react_to_tainted_alloc(sb, zone);
 				trace_mm_page_alloc_zone_locked(
 					page, order, migratetype,
 					pcp_allowed_order(order) &&
@@ -3078,9 +3097,8 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 					page_del_and_expand(zone, page,
 						order, current_order,
 						migratetype);
-					if (cat == SB_TAINTED &&
-					    spb_below_shrink_high_water(sb))
-						queue_spb_slab_shrink(zone);
+					if (cat == SB_TAINTED)
+						spb_react_to_tainted_alloc(sb, zone);
 					trace_mm_page_alloc_zone_locked(
 						page, order, migratetype,
 						pcp_allowed_order(order) &&
@@ -3135,8 +3153,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 					page = claim_whole_block(zone, page,
 						current_order, order,
 						migratetype, MIGRATE_MOVABLE);
-					if (spb_below_shrink_high_water(sb))
-						queue_spb_slab_shrink(zone);
+					spb_react_to_tainted_alloc(sb, zone);
 					trace_mm_page_alloc_zone_locked(
 						page, order, migratetype,
 						pcp_allowed_order(order) &&
@@ -3174,8 +3191,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 						0, true);
 					if (!page)
 						continue;
-					if (spb_below_shrink_high_water(sb))
-						queue_spb_slab_shrink(zone);
+					spb_react_to_tainted_alloc(sb, zone);
 					trace_mm_page_alloc_zone_locked(
 						page, order, migratetype,
 						pcp_allowed_order(order) &&
@@ -3259,8 +3275,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 							opposite_mt);
 						__spb_set_has_type(page,
 							migratetype);
-						if (spb_below_shrink_high_water(sb))
-							queue_spb_slab_shrink(zone);
+						spb_react_to_tainted_alloc(sb, zone);
 						trace_mm_page_alloc_zone_locked(
 							page, order, migratetype,
 							pcp_allowed_order(order) &&
@@ -3332,8 +3347,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 							MIGRATE_MOVABLE);
 						__spb_set_has_type(page,
 							migratetype);
-						if (spb_below_shrink_high_water(sb))
-							queue_spb_slab_shrink(zone);
+						spb_react_to_tainted_alloc(sb, zone);
 						trace_mm_page_alloc_zone_locked(
 							page, order, migratetype,
 							pcp_allowed_order(order) &&
@@ -3359,6 +3373,25 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 	if (walk && walk->saw_below_reserve) {
 		queue_spb_evacuate(zone, order, migratetype);
 		queue_spb_slab_shrink(zone);
+	}
+
+	/*
+	 * Last-chance defrag trigger before tainting a fresh clean SPB.
+	 * Walk the tainted-SPB list and try to wake the per-SPB defrag
+	 * worker on each. Catches SPBs that are stuck in expired-cooldown
+	 * state because no allocator activity has touched them recently
+	 * (the routine event-driven trigger from spb_update_list only
+	 * fires on bucket transitions, not on every alloc). Once the
+	 * cooldown has expired, spb_maybe_start_defrag() will requeue
+	 * work; otherwise the gate inside spb_needs_defrag() no-ops
+	 * cheaply. Bounded by nr_tainted_spbs and only runs when we are
+	 * already on the slow path of fragmenting the clean pool.
+	 */
+	for (full = SB_FULL; full < __NR_SB_FULLNESS; full++) {
+		list_for_each_entry(sb,
+			&zone->spb_lists[SB_TAINTED][full], list) {
+			spb_maybe_start_defrag(sb);
+		}
 	}
 
 	/* Pass 3: whole pageblock from empty superpageblocks */
