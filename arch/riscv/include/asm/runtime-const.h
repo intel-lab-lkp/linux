@@ -159,6 +159,23 @@
 	__ret;							\
 })
 
+#define runtime_const_mask_32(val, sym)					\
+({									\
+	u32 __ret;							\
+	asm_inline(".option push\n\t"					\
+		".option norvc\n\t"					\
+		"1:\t"							\
+		"lui	%[__ret], %%hi(" RUNTIME_MAGIC ")\n\t"		\
+		"addi	%[__ret],%[__ret], %%lo(" RUNTIME_MAGIC ")\n\t"	\
+		".option pop\n\t"					\
+		".pushsection runtime_mask_" #sym ",\"a\"\n\t"		\
+		".long 1b - .\n\t"					\
+		".popsection"						\
+		: [__ret] "=r" (__ret));				\
+	__ret &= val; /* Allow compiler to optimize & operation. */	\
+	__ret;								\
+})
+
 #define runtime_const_init(type, sym) do {			\
 	extern s32 __start_runtime_##type##_##sym[];		\
 	extern s32 __stop_runtime_##type##_##sym[];		\
@@ -260,6 +277,12 @@ static inline void __runtime_fixup_shift(void *where, unsigned long val)
 	mutex_lock(&text_mutex);
 	patch_text_nosync(where, &res, sizeof(insn));
 	mutex_unlock(&text_mutex);
+}
+
+static inline void __runtime_fixup_mask(void *where, unsigned long val)
+{
+	__runtime_fixup_32(where, where + 4, val);
+	__runtime_fixup_caches(where, 2);
 }
 
 static inline void runtime_const_fixup(void (*fn)(void *, unsigned long),
