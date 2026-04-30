@@ -4219,7 +4219,7 @@ int xhci_alloc_dev(struct usb_hcd *hcd, struct usb_device *udev)
 	struct xhci_hcd *xhci = hcd_to_xhci(hcd);
 	struct xhci_virt_device *vdev;
 	struct xhci_slot_ctx *slot_ctx;
-	unsigned long flags;
+	unsigned long flags, tflags;
 	int ret, slot_id;
 	struct xhci_command *command;
 
@@ -4238,9 +4238,14 @@ int xhci_alloc_dev(struct usb_hcd *hcd, struct usb_device *udev)
 	xhci_ring_cmd_db(xhci);
 	spin_unlock_irqrestore(&xhci->lock, flags);
 
-	wait_for_completion(command->completion);
-	slot_id = command->slot_id;
+	if (!wait_for_completion_timeout(command->completion,
+					 msecs_to_jiffies(2 * command->timeout_ms))) {
+		spin_lock_irqsave(&xhci->lock, tflags);
+		xhci_hc_died(xhci);
+		spin_unlock_irqrestore(&xhci->lock, tflags);
+	}
 
+	slot_id = command->slot_id;
 	if (!slot_id || command->status != COMP_SUCCESS) {
 		xhci_err(xhci, "Error while assigning device slot ID: %s\n",
 			 xhci_trb_comp_code_string(command->status));
