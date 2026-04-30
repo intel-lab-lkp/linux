@@ -1492,6 +1492,95 @@ static void __ref setup_usemap(struct zone *zone)
 static inline void setup_usemap(struct zone *zone) {}
 #endif /* CONFIG_SPARSEMEM */
 
+/**
+ * init_one_superpageblock - initialize a single superpageblock
+ * @sb: superpageblock to initialize
+ * @zone: owning zone
+ * @start_pfn: start PFN for this superpageblock
+ * @zone_start: zone start PFN (for clipping)
+ * @zone_end: zone end PFN (for clipping)
+ *
+ * Zero counters, compute the zone-clipped pageblock count.
+ * Used by both boot-time setup and memory hotplug resize.
+ */
+static void __meminit init_one_superpageblock(struct superpageblock *sb,
+					      struct zone *zone,
+					      unsigned long start_pfn,
+					      unsigned long zone_start,
+					      unsigned long zone_end)
+{
+	unsigned long sb_end = start_pfn + SUPERPAGEBLOCK_NR_PAGES;
+	unsigned long pb_start = max(start_pfn, zone_start);
+	unsigned long pb_end = min(sb_end, zone_end);
+	u16 actual_pbs;
+
+	sb->nr_unmovable = 0;
+	sb->nr_reclaimable = 0;
+	sb->nr_movable = 0;
+	sb->nr_free = 0;
+	INIT_LIST_HEAD(&sb->list);
+	sb->start_pfn = start_pfn;
+	sb->zone = zone;
+
+	/*
+	 * Start with all pageblock slots as reserved.
+	 * init_pageblock_migratetype() will decrement nr_reserved and
+	 * increment the appropriate counter for each real pageblock.
+	 * Holes and firmware-reserved regions stay counted as reserved.
+	 *
+	 * Only count pageblocks that fall within the zone's span.
+	 * The first and last superpageblocks may extend beyond the
+	 * zone boundaries.  Use round-up division because a partial
+	 * pageblock at the zone boundary still gets initialized by
+	 * init_pageblock_migratetype().
+	 */
+	actual_pbs = (pb_end > pb_start) ?
+		     ((pb_end - pb_start + pageblock_nr_pages - 1) >>
+		      pageblock_order) : 0;
+	sb->nr_reserved = actual_pbs;
+}
+
+static void __init setup_superpageblocks(struct zone *zone)
+{
+	unsigned long zone_start = zone->zone_start_pfn;
+	unsigned long zone_end = zone_start + zone->spanned_pages;
+	unsigned long sb_base, nr_superpageblocks;
+	size_t alloc_size;
+	unsigned long i;
+
+	zone->superpageblocks = NULL;
+	zone->nr_superpageblocks = 0;
+	zone->superpageblock_base_pfn = 0;
+
+	if (!zone->spanned_pages)
+		return;
+
+	/*
+	 * Superpageblocks must be 1GB (PUD) aligned. Align the base down
+	 * and the end up to cover all 1GB regions the zone spans.
+	 */
+	sb_base = ALIGN_DOWN(zone_start, SUPERPAGEBLOCK_NR_PAGES);
+	nr_superpageblocks = (ALIGN(zone_end, SUPERPAGEBLOCK_NR_PAGES) - sb_base) >>
+			 SUPERPAGEBLOCK_ORDER;
+
+	alloc_size = nr_superpageblocks * sizeof(struct superpageblock);
+	zone->superpageblocks = memblock_alloc_node(alloc_size, SMP_CACHE_BYTES,
+						zone_to_nid(zone));
+	if (!zone->superpageblocks) {
+		pr_warn("Failed to allocate %zu bytes for zone %s superpageblocks\n",
+			alloc_size, zone->name);
+		return;
+	}
+
+	zone->nr_superpageblocks = nr_superpageblocks;
+	zone->superpageblock_base_pfn = sb_base;
+
+	for (i = 0; i < nr_superpageblocks; i++)
+		init_one_superpageblock(&zone->superpageblocks[i], zone,
+					sb_base + (i << SUPERPAGEBLOCK_ORDER),
+					zone_start, zone_end);
+}
+
 #ifdef CONFIG_HUGETLB_PAGE_SIZE_VARIABLE
 
 /* Initialise the number of pages represented by NR_PAGEBLOCK_BITS */
@@ -1600,6 +1689,7 @@ static void __init free_area_init_core(struct pglist_data *pgdat)
 			continue;
 
 		setup_usemap(zone);
+		setup_superpageblocks(zone);
 		init_currently_empty_zone(zone, zone->zone_start_pfn, size);
 	}
 }
