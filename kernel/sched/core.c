@@ -6535,8 +6535,13 @@ static bool try_to_block_task(struct rq *rq, struct task_struct *p,
 	 * blocked on a mutex, and we want to keep it on the runqueue
 	 * to be selectable for proxy-execution.
 	 */
-	if (!should_block)
-		return false;
+	if (!should_block) {
+		guard(raw_spinlock)(&p->blocked_lock);
+		if (p->blocked_on) {
+			__set_task_blocked_on_latched(p);
+			return false;
+		}
+	}
 
 	p->sched_contributes_to_load =
 		(task_state & TASK_UNINTERRUPTIBLE) &&
@@ -6769,7 +6774,7 @@ find_proxy_task(struct rq *rq, struct task_struct *donor, struct rq_flags *rf)
 	int owner_cpu;
 
 	/* Follow blocked_on chain. */
-	for (p = donor; (mutex = p->blocked_on); p = owner) {
+	for (p = donor; (mutex = __get_task_latched_blocked_on(p)); p = owner) {
 		/* if its PROXY_WAKING, do return migration or run if current */
 		if (mutex == PROXY_WAKING) {
 			if (task_current(rq, p)) {
@@ -6787,7 +6792,7 @@ find_proxy_task(struct rq *rq, struct task_struct *donor, struct rq_flags *rf)
 		guard(raw_spinlock)(&p->blocked_lock);
 
 		/* Check again that p is blocked with blocked_lock held */
-		if (mutex != __get_task_blocked_on(p)) {
+		if (mutex != __get_task_latched_blocked_on(p)) {
 			/*
 			 * Something changed in the blocked_on chain and
 			 * we don't know if only at this level. So, let's
@@ -7044,7 +7049,7 @@ pick_again:
 		struct task_struct *prev_donor = rq->donor;
 
 		rq_set_donor(rq, next);
-		if (unlikely(next->blocked_on)) {
+		if (unlikely(task_is_blocked_on(next))) {
 			next = find_proxy_task(rq, next, &rf);
 			if (!next) {
 				zap_balance_callbacks(rq);

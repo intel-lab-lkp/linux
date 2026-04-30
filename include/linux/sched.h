@@ -2182,18 +2182,56 @@ extern int __cond_resched_rwlock_write(rwlock_t *lock) __must_hold(lock);
 #ifndef CONFIG_PREEMPT_RT
 
 /*
- * With proxy exec, if a task has been proxy-migrated, it may be a donor
- * on a cpu that it can't actually run on. Thus we need a special state
- * to denote that the task is being woken, but that it needs to be
- * evaluated for return-migration before it is run. So if the task is
- * blocked_on PROXY_WAKING, return migrate it before running it.
+ * The proxy exec blocked_on pointer value uses the low bit as a latch
+ * value which clarifies if the blocked_on value is used for proxying or
+ * not.
+ *
+ * The state machine looks something like
+ *   NULL -> ptr:unlatched -> ptr:latched -> PROXY_WAKING -> NULL
+ *
+ * With some additional transitions:
+ *   ptr:unlatched -> NULL (done on current, or via set_task_blocked_on_waking())
+ *   ptr:latched -> NULL (done only on current)
+ *
+ * 1) NULL and ptr:unlatched are effectively equivalent, no proxying will occur
+ * 2) ptr:latched is the state when proxying will occur
+ * 3) PROXY_WAKING is used when the task is being woken to  ensure we
+ *    return-migrate proxy-migrated tasks before running them (note it has
+ *    the latch bit set).
  */
-#define PROXY_WAKING ((struct mutex *)(-1L))
+#define PROXY_BLOCKED_LATCH (1UL)
+#define PROXY_BLOCKED_ON_MASK(x) ((struct mutex *)((unsigned long)(x) & ~PROXY_BLOCKED_LATCH))
+#define PROXY_WAKING ((struct mutex *)(-1L)) /* PROXY_WAKING has LATCH bit set */
+
+static inline struct mutex *task_is_blocked_on(struct task_struct *p)
+{
+	if (!sched_proxy_exec())
+		return false;
+	return (struct mutex *)((unsigned long)p->blocked_on & PROXY_BLOCKED_LATCH);
+}
+
+static inline void __set_task_blocked_on_latched(struct task_struct *p)
+{
+	lockdep_assert_held_once(&p->blocked_lock);
+	WARN_ON_ONCE(!p->blocked_on);
+	p->blocked_on = (struct mutex *)((unsigned long)p->blocked_on | PROXY_BLOCKED_LATCH);
+}
+
+static inline struct mutex *__get_task_latched_blocked_on(struct task_struct *p)
+{
+	if (!task_is_blocked_on(p))
+		return NULL;
+	if (p->blocked_on == PROXY_WAKING)
+		return PROXY_WAKING;
+	return PROXY_BLOCKED_ON_MASK(p->blocked_on);
+}
 
 static inline struct mutex *__get_task_blocked_on(struct task_struct *p)
 {
 	lockdep_assert_held_once(&p->blocked_lock);
-	return p->blocked_on == PROXY_WAKING ? NULL : p->blocked_on;
+	if (p->blocked_on == PROXY_WAKING)
+		return NULL;
+	return PROXY_BLOCKED_ON_MASK(p->blocked_on);
 }
 
 static inline void __set_task_blocked_on(struct task_struct *p, struct mutex *m)
@@ -2214,6 +2252,8 @@ static inline void __set_task_blocked_on(struct task_struct *p, struct mutex *m)
 
 static inline void __clear_task_blocked_on(struct task_struct *p, struct mutex *m)
 {
+	struct mutex *bo = p->blocked_on;
+
 	/* Currently we serialize blocked_on under the task::blocked_lock */
 	lockdep_assert_held_once(&p->blocked_lock);
 	/*
@@ -2221,7 +2261,7 @@ static inline void __clear_task_blocked_on(struct task_struct *p, struct mutex *
 	 * blocked_on relationships, but make sure we are not
 	 * clearing the relationship with a different lock.
 	 */
-	WARN_ON_ONCE(m && p->blocked_on && p->blocked_on != m && p->blocked_on != PROXY_WAKING);
+	WARN_ON_ONCE(m && bo && __get_task_blocked_on(p) != m && bo != PROXY_WAKING);
 	p->blocked_on = NULL;
 }
 
@@ -2241,15 +2281,17 @@ static inline void __set_task_blocked_on_waking(struct task_struct *p, struct mu
 		return;
 	}
 
-	/* Don't set PROXY_WAKING if blocked_on was already cleared */
-	if (!p->blocked_on)
+	/* Don't set PROXY_WAKING if we are not really blocked_on  */
+	if (!task_is_blocked_on(p)) {
+		p->blocked_on = NULL;  /* clear if unlatched */
 		return;
+	}
 	/*
 	 * There may be cases where we set PROXY_WAKING on tasks that were
 	 * already set to waking, but make sure we are not changing
 	 * the relationship with a different lock.
 	 */
-	WARN_ON_ONCE(m && p->blocked_on != m && p->blocked_on != PROXY_WAKING);
+	WARN_ON_ONCE(m && __get_task_blocked_on(p) != m && p->blocked_on != PROXY_WAKING);
 	p->blocked_on = PROXY_WAKING;
 }
 
