@@ -3690,6 +3690,15 @@ static void *alloc_single_from_new_slab(struct kmem_cache *s, struct slab *slab,
 	needs_add_partial = (slab->objects > 1);
 	build_slab_freelist(s, slab, &iter);
 
+	/*
+	 * alloc_debug_processing() still checks @object as a free object
+	 * before returning it to the caller. Since @object was emitted
+	 * directly from a fresh slab and skipped by build_slab_freelist(), give
+	 * it the same next pointer it would have had in the old prebuilt
+	 * freelist path.
+	 */
+	set_freepointer(s, object, slab->freelist);
+
 	if (!alloc_debug_processing(s, slab, object, orig_size)) {
 		/*
 		 * It's not really expected that this would fail on a
