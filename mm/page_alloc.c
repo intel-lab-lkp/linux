@@ -349,52 +349,18 @@ static inline bool _deferred_grow_zone(struct zone *zone, unsigned int order)
 }
 #endif /* CONFIG_DEFERRED_STRUCT_PAGE_INIT */
 
-/* Return a pointer to the bitmap storing bits affecting a block of pages */
-static inline unsigned long *get_pageblock_bitmap(const struct page *page,
-							unsigned long pfn)
-{
-#ifdef CONFIG_SPARSEMEM
-	return section_to_usemap(__pfn_to_section(pfn));
-#else
-	return page_zone(page)->pageblock_flags;
-#endif /* CONFIG_SPARSEMEM */
-}
-
-static inline int pfn_to_bitidx(const struct page *page, unsigned long pfn)
-{
-#ifdef CONFIG_SPARSEMEM
-	pfn &= (PAGES_PER_SECTION-1);
-#else
-	pfn = pfn - pageblock_start_pfn(page_zone(page)->zone_start_pfn);
-#endif /* CONFIG_SPARSEMEM */
-	return (pfn >> pageblock_order) * NR_PAGEBLOCK_BITS;
-}
-
 static __always_inline bool is_standalone_pb_bit(enum pageblock_bits pb_bit)
 {
 	return pb_bit >= PB_compact_skip && pb_bit < __NR_PAGEBLOCK_BITS;
 }
 
-static __always_inline void
-get_pfnblock_bitmap_bitidx(const struct page *page, unsigned long pfn,
-			   unsigned long **bitmap_word, unsigned long *bitidx)
+static __always_inline unsigned long *
+get_pfnblock_flags_word(const struct page *page, unsigned long pfn)
 {
-	unsigned long *bitmap;
-	unsigned long word_bitidx;
-
-#ifdef CONFIG_MEMORY_ISOLATION
-	BUILD_BUG_ON(NR_PAGEBLOCK_BITS != 8);
-#else
-	BUILD_BUG_ON(NR_PAGEBLOCK_BITS != 4);
-#endif
 	BUILD_BUG_ON(__MIGRATE_TYPE_END > MIGRATETYPE_MASK);
 	VM_BUG_ON_PAGE(!zone_spans_pfn(page_zone(page), pfn), page);
 
-	bitmap = get_pageblock_bitmap(page, pfn);
-	*bitidx = pfn_to_bitidx(page, pfn);
-	word_bitidx = *bitidx / BITS_PER_LONG;
-	*bitidx &= (BITS_PER_LONG - 1);
-	*bitmap_word = &bitmap[word_bitidx];
+	return &pfn_to_pageblock(page, pfn)->flags;
 }
 
 
@@ -411,18 +377,14 @@ static unsigned long __get_pfnblock_flags_mask(const struct page *page,
 					       unsigned long pfn,
 					       unsigned long mask)
 {
-	unsigned long *bitmap_word;
-	unsigned long bitidx;
-	unsigned long word;
+	unsigned long *flags_word = get_pfnblock_flags_word(page, pfn);
 
-	get_pfnblock_bitmap_bitidx(page, pfn, &bitmap_word, &bitidx);
 	/*
 	 * This races, without locks, with set_pfnblock_migratetype(). Ensure
 	 * a consistent read of the memory array, so that results, even though
 	 * racy, are not corrupted.
 	 */
-	word = READ_ONCE(*bitmap_word);
-	return (word >> bitidx) & mask;
+	return READ_ONCE(*flags_word) & mask;
 }
 
 /**
@@ -436,15 +398,10 @@ static unsigned long __get_pfnblock_flags_mask(const struct page *page,
 bool get_pfnblock_bit(const struct page *page, unsigned long pfn,
 		      enum pageblock_bits pb_bit)
 {
-	unsigned long *bitmap_word;
-	unsigned long bitidx;
-
 	if (WARN_ON_ONCE(!is_standalone_pb_bit(pb_bit)))
 		return false;
 
-	get_pfnblock_bitmap_bitidx(page, pfn, &bitmap_word, &bitidx);
-
-	return test_bit(bitidx + pb_bit, bitmap_word);
+	return test_bit(pb_bit, get_pfnblock_flags_word(page, pfn));
 }
 
 /**
@@ -483,18 +440,13 @@ get_pfnblock_migratetype(const struct page *page, unsigned long pfn)
 static void __set_pfnblock_flags_mask(struct page *page, unsigned long pfn,
 				      unsigned long flags, unsigned long mask)
 {
-	unsigned long *bitmap_word;
-	unsigned long bitidx;
-	unsigned long word;
+	unsigned long *flags_word = get_pfnblock_flags_word(page, pfn);
+	unsigned long word, new_word;
 
-	get_pfnblock_bitmap_bitidx(page, pfn, &bitmap_word, &bitidx);
-
-	mask <<= bitidx;
-	flags <<= bitidx;
-
-	word = READ_ONCE(*bitmap_word);
+	word = READ_ONCE(*flags_word);
 	do {
-	} while (!try_cmpxchg(bitmap_word, &word, (word & ~mask) | flags));
+		new_word = (word & ~mask) | flags;
+	} while (!try_cmpxchg(flags_word, &word, new_word));
 }
 
 /**
@@ -506,15 +458,10 @@ static void __set_pfnblock_flags_mask(struct page *page, unsigned long pfn,
 void set_pfnblock_bit(const struct page *page, unsigned long pfn,
 		      enum pageblock_bits pb_bit)
 {
-	unsigned long *bitmap_word;
-	unsigned long bitidx;
-
 	if (WARN_ON_ONCE(!is_standalone_pb_bit(pb_bit)))
 		return;
 
-	get_pfnblock_bitmap_bitidx(page, pfn, &bitmap_word, &bitidx);
-
-	set_bit(bitidx + pb_bit, bitmap_word);
+	set_bit(pb_bit, get_pfnblock_flags_word(page, pfn));
 }
 
 /**
@@ -526,15 +473,10 @@ void set_pfnblock_bit(const struct page *page, unsigned long pfn,
 void clear_pfnblock_bit(const struct page *page, unsigned long pfn,
 			enum pageblock_bits pb_bit)
 {
-	unsigned long *bitmap_word;
-	unsigned long bitidx;
-
 	if (WARN_ON_ONCE(!is_standalone_pb_bit(pb_bit)))
 		return;
 
-	get_pfnblock_bitmap_bitidx(page, pfn, &bitmap_word, &bitidx);
-
-	clear_bit(bitidx + pb_bit, bitmap_word);
+	clear_bit(pb_bit, get_pfnblock_flags_word(page, pfn));
 }
 
 /**
