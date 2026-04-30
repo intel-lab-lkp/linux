@@ -9147,6 +9147,28 @@ int cfg80211_link_sinfo_alloc_tid_stats(struct link_station_info *link_sinfo,
 					gfp_t gfp);
 
 /**
+ * cfg80211_alloc_link_sinfo_stats - allocate link_station_info
+ * @tidstats: indicate if per-tid stats are required
+ * @gfp: allocation flags
+ *
+ * Return: pointer on success, ERR_PTR() on  failure.
+ */
+struct link_station_info *
+cfg80211_alloc_link_sinfo_stats(bool tidstats, gfp_t gfp);
+
+/**
+ * cfg80211_free_link_sinfo - free the content and memory allocated for
+ *	link_sinfo
+ * @link_sinfo: the link_station information
+ */
+static inline void
+cfg80211_free_link_sinfo(struct link_station_info *link_sinfo)
+{
+	kfree(link_sinfo->pertid);
+	kfree(link_sinfo);
+}
+
+/**
  * cfg80211_sinfo_release_content - release contents of station info
  * @sinfo: the station information
  *
@@ -9159,10 +9181,8 @@ static inline void cfg80211_sinfo_release_content(struct station_info *sinfo)
 	kfree(sinfo->pertid);
 
 	for (int link_id = 0; link_id < ARRAY_SIZE(sinfo->links); link_id++) {
-		if (sinfo->links[link_id]) {
-			kfree(sinfo->links[link_id]->pertid);
-			kfree(sinfo->links[link_id]);
-		}
+		if (sinfo->links[link_id])
+			cfg80211_free_link_sinfo(sinfo->links[link_id]);
 	}
 }
 
