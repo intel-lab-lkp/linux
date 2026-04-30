@@ -260,6 +260,48 @@ static void amd_mediated_pmu_put(struct kvm_vcpu *vcpu)
 		wrmsrq(MSR_AMD64_PERF_CNTR_GLOBAL_STATUS_CLR, pmu->global_status);
 }
 
+static void amd_mediated_pmu_handle_host_guest_bits(struct kvm_vcpu *vcpu,
+						    struct kvm_pmc *pmc)
+{
+	u64 host_guest_bits;
+
+	if (!(pmc->eventsel & ARCH_PERFMON_EVENTSEL_ENABLE))
+		return;
+
+	/* Count all events if both bits are cleared */
+	host_guest_bits = pmc->eventsel & AMD64_EVENTSEL_HOST_GUEST_MASK;
+	if (!host_guest_bits)
+		return;
+
+	/*
+	 * If EFER.SVME is set, the counter is disabledd if only one of the bits
+	 * is set and it doesn't match the vCPU context. If EFER.SVME is
+	 * cleared, the counter is disable if any of the bits is set.
+	 */
+	if (vcpu->arch.efer & EFER_SVME) {
+		if (host_guest_bits == AMD64_EVENTSEL_HOST_GUEST_MASK)
+			return;
+
+		if (!!(host_guest_bits & AMD64_EVENTSEL_GUESTONLY) == is_guest_mode(vcpu))
+			return;
+	}
+
+	pmc->eventsel_hw &= ~ARCH_PERFMON_EVENTSEL_ENABLE;
+}
+
+static void amd_pmu_reprogram_counters(struct kvm_vcpu *vcpu, u64 counters)
+{
+	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
+	struct kvm_pmc *pmc;
+	int bit;
+
+	if (!kvm_vcpu_has_mediated_pmu(vcpu))
+		return;
+
+	kvm_for_each_pmc(pmu, pmc, bit, (unsigned long *)&counters)
+		amd_mediated_pmu_handle_host_guest_bits(vcpu, pmc);
+}
+
 struct kvm_pmu_ops amd_pmu_ops __initdata = {
 	.rdpmc_ecx_to_pmc = amd_rdpmc_ecx_to_pmc,
 	.msr_idx_to_pmc = amd_msr_idx_to_pmc,
@@ -269,6 +311,7 @@ struct kvm_pmu_ops amd_pmu_ops __initdata = {
 	.set_msr = amd_pmu_set_msr,
 	.refresh = amd_pmu_refresh,
 	.init = amd_pmu_init,
+	.reprogram_counters = amd_pmu_reprogram_counters,
 
 	.is_mediated_pmu_supported = amd_pmu_is_mediated_pmu_supported,
 	.mediated_load = amd_mediated_pmu_load,

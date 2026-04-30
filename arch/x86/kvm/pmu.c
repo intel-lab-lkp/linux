@@ -646,9 +646,11 @@ void kvm_pmu_handle_event(struct kvm_vcpu *vcpu)
 	DECLARE_BITMAP(bitmap, X86_PMC_IDX_MAX);
 	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
 	struct kvm_pmc *pmc;
+	u64 counters;
 	int bit;
 
 	bitmap_copy(bitmap, pmu->reprogram_pmi, X86_PMC_IDX_MAX);
+	counters = *(u64 *)bitmap;
 
 	/*
 	 * The reprogramming bitmap can be written asynchronously by something
@@ -656,7 +658,7 @@ void kvm_pmu_handle_event(struct kvm_vcpu *vcpu)
 	 * the bits that will actually processed.
 	 */
 	BUILD_BUG_ON(sizeof(bitmap) != sizeof(atomic64_t));
-	atomic64_andnot(*(s64 *)bitmap, &pmu->__reprogram_pmi);
+	atomic64_andnot(counters, &pmu->__reprogram_pmi);
 
 	kvm_for_each_pmc(pmu, pmc, bit, bitmap) {
 		/*
@@ -668,6 +670,8 @@ void kvm_pmu_handle_event(struct kvm_vcpu *vcpu)
 		if (reprogram_counter(pmc))
 			set_bit(pmc->idx, pmu->reprogram_pmi);
 	}
+
+	kvm_pmu_call(reprogram_counters)(vcpu, counters);
 
 	/*
 	 * Release unused perf_events if the corresponding guest MSRs weren't
