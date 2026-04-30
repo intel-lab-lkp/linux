@@ -1285,9 +1285,16 @@
 /* - AMD: */
 #define MSR_IA32_MBA_BW_BASE		0xc0000200
 #define MSR_IA32_SMBA_BW_BASE		0xc0000280
+#define MSR_IA32_PQR_PLZA_ASSOC		0xc00003fc
 #define MSR_IA32_L3_QOS_ABMC_CFG	0xc00003fd
 #define MSR_IA32_L3_QOS_EXT_CFG		0xc00003ff
 #define MSR_IA32_EVT_CFG_BASE		0xc0000400
+
+/* Lower 32 bits of MSR_IA32_PQR_PLZA_ASSOC */
+#define RMID_EN				BIT(31)
+/* Upper 32 bits of MSR_IA32_PQR_PLZA_ASSOC */
+#define CLOSID_EN			BIT(15)
+#define PLZA_EN				BIT(31)
 
 /* AMD-V MSRs */
 #define MSR_VM_CR                       0xc0010114
