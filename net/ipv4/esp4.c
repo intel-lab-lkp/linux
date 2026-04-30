@@ -868,17 +868,10 @@ static int esp_input(struct xfrm_state *x, struct sk_buff *skb)
 		assoclen += seqhilen;
 	}
 
-	if (!skb_cloned(skb)) {
-		if (!skb_is_nonlinear(skb)) {
-			nfrags = 1;
+	if (!skb_cloned(skb) && !skb_is_nonlinear(skb)) {
+		nfrags = 1;
 
-			goto skip_cow;
-		} else if (!skb_has_frag_list(skb)) {
-			nfrags = skb_shinfo(skb)->nr_frags;
-			nfrags++;
-
-			goto skip_cow;
-		}
+		goto skip_cow;
 	}
 
 	err = skb_cow_data(skb, 0, &trailer);
