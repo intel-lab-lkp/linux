@@ -1573,12 +1573,11 @@ typedef struct pglist_data {
 
 	/*
 	 * SPB-driven slab reclaim: single work item per pgdat (shrink_slab
-	 * is node-scoped, so one work in-flight per node is the max), with
-	 * a 100ms throttle. queue_work() gives us single-flight semantics
-	 * for free.
+	 * is node-scoped, so one work in-flight per node is the max).
+	 * queue_work() gives us single-flight semantics for free — fresh
+	 * triggers no-op while a pass is in progress.
 	 */
 	struct work_struct spb_slab_shrink_work;
-	unsigned long spb_slab_shrink_last;
 #endif
 	/*
 	 * This is a per-node reserve of pages that are not available

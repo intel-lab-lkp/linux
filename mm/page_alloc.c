@@ -2683,6 +2683,23 @@ static inline u16 spb_tainted_reserve(const struct superpageblock *sb)
 }
 
 /*
+ * High-water threshold for proactively kicking the slab shrinker. When a
+ * non-movable allocation consumes from a tainted SPB whose total free
+ * pages have fallen below spb_tainted_reserve worth of pages, queue a
+ * shrink so we start freeing slab memory before the SPB is exhausted.
+ *
+ * Compared against nr_free_pages rather than nr_free (whole pageblocks):
+ * sub-pageblock allocations and fragmented free space don't move the
+ * pageblock count, but they do consume the SPB's freeable capacity, and
+ * we can't assume slab reclaim will produce whole pageblocks either.
+ */
+static inline bool spb_below_shrink_high_water(const struct superpageblock *sb)
+{
+	return sb->nr_free_pages <
+		(unsigned long)spb_tainted_reserve(sb) * pageblock_nr_pages;
+}
+
+/*
  * On systems with many superpageblocks, we can afford to "write off"
  * tainted superpageblocks by aggressively packing unmovable/reclaimable
  * allocations into them — even sub-pageblock fragments — to keep clean
@@ -2867,6 +2884,9 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 				page_del_and_expand(zone, page,
 					order, current_order,
 					migratetype);
+				if (cat == SB_TAINTED &&
+				    spb_below_shrink_high_water(sb))
+					queue_spb_slab_shrink(zone);
 				trace_mm_page_alloc_zone_locked(
 					page, order, migratetype,
 					pcp_allowed_order(order) &&
@@ -2886,6 +2906,9 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 					page_del_and_expand(zone, page,
 						order, current_order,
 						migratetype);
+					if (cat == SB_TAINTED &&
+					    spb_below_shrink_high_water(sb))
+						queue_spb_slab_shrink(zone);
 					trace_mm_page_alloc_zone_locked(
 						page, order, migratetype,
 						pcp_allowed_order(order) &&
@@ -2931,6 +2954,8 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 					page = claim_whole_block(zone, page,
 						current_order, order,
 						migratetype, MIGRATE_MOVABLE);
+					if (spb_below_shrink_high_water(sb))
+						queue_spb_slab_shrink(zone);
 					trace_mm_page_alloc_zone_locked(
 						page, order, migratetype,
 						pcp_allowed_order(order) &&
@@ -2968,6 +2993,8 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 						0, true);
 					if (!page)
 						continue;
+					if (spb_below_shrink_high_water(sb))
+						queue_spb_slab_shrink(zone);
 					trace_mm_page_alloc_zone_locked(
 						page, order, migratetype,
 						pcp_allowed_order(order) &&
@@ -3051,6 +3078,8 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 							opposite_mt);
 						__spb_set_has_type(page,
 							migratetype);
+						if (spb_below_shrink_high_water(sb))
+							queue_spb_slab_shrink(zone);
 						trace_mm_page_alloc_zone_locked(
 							page, order, migratetype,
 							pcp_allowed_order(order) &&
@@ -9080,9 +9109,9 @@ static void queue_spb_evacuate(struct zone *zone, unsigned int order,
  * tainted SPB is to shrink the slab caches whose pages live there.
  *
  * shrink_slab() is node-scoped, so one work item per pgdat is enough:
- * a single embedded work_struct, gated by a 100ms throttle.
- * queue_work() returns false if the work is already queued/running, so
- * we get single-flight for free.
+ * a single embedded work_struct. queue_work() returns false if the work
+ * is already queued/running, so we get single-flight for free — fresh
+ * triggers no-op until the in-flight pass completes.
  *
  * shrink_slab() itself is location-agnostic — it walks all registered
  * shrinkers and frees objects whose backing pages may live in any
@@ -9143,10 +9172,11 @@ static void spb_slab_shrink_work_fn(struct work_struct *work)
  * queue_spb_slab_shrink - schedule deferred slab shrink for SPB pressure
  * @zone: zone whose tainted-SPB pool is running low
  *
- * Throttled to one enqueue per 100ms per pgdat. queue_work() handles
- * single-flight: if the work is already queued or running, it returns
- * false and the throttle stamp still gets bumped (next call will be
- * no-op until the throttle elapses).
+ * Single-flight via queue_work(): if the work is already queued or
+ * running, it returns false and we no-op. There is no time-based
+ * throttle — the rate at which fresh shrink runs can fire is bounded
+ * by how fast the worker completes (one full pass freeing up to
+ * SPB_SLAB_SHRINK_TARGET_OBJS objects).
  *
  * Callable from any context: page allocator paths hold zone->lock,
  * the SPB evacuate worker does not. queue_work() takes only the
@@ -9166,10 +9196,6 @@ static void queue_spb_slab_shrink(struct zone *zone)
 	if (!pgdat->evacuate_wq)
 		return;
 
-	if (time_before(jiffies, pgdat->spb_slab_shrink_last + HZ / 10))
-		return;
-
-	pgdat->spb_slab_shrink_last = jiffies;
 	if (queue_work(pgdat->evacuate_wq, &pgdat->spb_slab_shrink_work))
 		count_vm_event(SPB_SLAB_SHRINK_QUEUED);
 }
