@@ -2574,6 +2574,14 @@ static int snd_pcm_oss_release(struct inode *inode, struct file *file)
 	struct snd_pcm_oss_file *pcm_oss_file;
 
 	pcm_oss_file = file->private_data;
+
+	/* Prevent double-release and NULL dereference */
+	if (!pcm_oss_file)
+		return 0;
+
+	/* Clear private data to avoid UAF from async poll */
+	file->private_data = NULL;
+
 	substream = pcm_oss_file->streams[SNDRV_PCM_STREAM_PLAYBACK];
 	if (substream == NULL)
 		substream = pcm_oss_file->streams[SNDRV_PCM_STREAM_CAPTURE];
@@ -2839,6 +2847,10 @@ static __poll_t snd_pcm_oss_poll(struct file *file, poll_table * wait)
 	struct snd_pcm_substream *psubstream = NULL, *csubstream = NULL;
 	
 	pcm_oss_file = file->private_data;
+
+	/* Check for already released file to avoid UAF */
+	if (!pcm_oss_file)
+		return EPOLLERR | EPOLLHUP;
 
 	psubstream = pcm_oss_file->streams[SNDRV_PCM_STREAM_PLAYBACK];
 	csubstream = pcm_oss_file->streams[SNDRV_PCM_STREAM_CAPTURE];
