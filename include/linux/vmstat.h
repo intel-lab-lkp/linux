@@ -483,6 +483,18 @@ static inline const char *zone_stat_name(enum zone_stat_item item)
 	return vmstat_text[item];
 }
 
+static inline bool zone_maybe_fragmented_in_shrinker(struct zone *zone)
+{
+	/*
+	 * Simple heuristic: if the number of free pages is more than twice the
+	 * high watermark, this may suggest that the zone is heavily fragmented.
+	 * When called from a shrinker, aggressively evicting memory in this case
+	 * may do more harm to overall system performance than good.
+	 */
+	return zone_page_state(zone, NR_FREE_PAGES) >
+		high_wmark_pages(zone) * 2;
+}
+
 #ifdef CONFIG_NUMA
 static inline const char *numa_stat_name(enum numa_stat_item item)
 {
