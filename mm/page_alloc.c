@@ -2754,11 +2754,23 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 	 * concentrate non-movable allocations into fewer superpageblocks.
 	 * For movable, prefer clean superpageblocks to keep them homogeneous.
 	 *
-	 * Search empty superpageblocks between the preferred and fallback
-	 * category passes to avoid movable allocations consuming free
-	 * pageblocks in tainted superpageblocks (which unmovable needs for
-	 * future CLAIMs), and vice versa.
+	 * Prefer whole pageblock allocations (>= pageblock_order) over
+	 * sub-pageblock allocations because whole pageblocks enable the
+	 * PCP buddy optimization for fast subsequent allocations.
+	 *
+	 * Search order:
+	 * 1. Preferred SPBs: whole pageblock first, then sub-pageblock
+	 * 2. Whole pageblock inline claim from tainted SPBs (non-movable only)
+	 * 3. Whole pageblock from empty SPBs
+	 * 4. Fallback to non-preferred SPBs
+	 *
+	 * Pass 1 tries whole pageblock first for PCP buddy optimization,
+	 * then falls back to sub-pageblock within the same preferred SPBs.
+	 * This ensures we never taint empty/clean SPBs while preferred
+	 * SPBs still have free pages at any order.
 	 */
+
+	/* Pass 1: preferred SPBs — whole pageblock first, then sub-pageblock */
 	for (full = SB_FULL; full < __NR_SB_FULLNESS; full++) {
 		enum sb_category cat = cat_order[movable][0];
 
@@ -2766,7 +2778,8 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 			&zone->spb_lists[cat][full], list) {
 			if (!sb->nr_free_pages)
 				continue;
-			for (current_order = order;
+			/* Try whole pageblock (or larger) first for PCP buddy */
+			for (current_order = max(order, pageblock_order);
 			     current_order < NR_PAGE_ORDERS;
 			     ++current_order) {
 				area = &sb->free_area[current_order];
@@ -2783,15 +2796,34 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 					migratetype < MIGRATE_PCPTYPES);
 				return page;
 			}
+			/* Then try sub-pageblock (no PCP buddy) */
+			if (order < pageblock_order) {
+				for (current_order = order;
+				     current_order < pageblock_order;
+				     ++current_order) {
+					area = &sb->free_area[current_order];
+					page = get_page_from_free_area(
+						area, migratetype);
+					if (!page)
+						continue;
+					page_del_and_expand(zone, page,
+						order, current_order,
+						migratetype);
+					trace_mm_page_alloc_zone_locked(
+						page, order, migratetype,
+						pcp_allowed_order(order) &&
+						migratetype < MIGRATE_PCPTYPES);
+					return page;
+				}
+			}
 		}
 	}
 
 	/*
-	 * For non-movable allocations, try to reclaim free pageblocks
-	 * from tainted superpageblocks before looking at empty or clean
-	 * ones. Free pageblocks in tainted SBs have pages on the MOVABLE
-	 * free list (reset by mark_pageblock_free), so the search above
-	 * misses them. Claim them inline to keep non-movable allocations
+	 * Pass 2: for non-movable allocations, try to claim free pageblocks
+	 * from tainted superpageblocks. Free pageblocks in tainted SBs have
+	 * pages on the MOVABLE free list (reset by mark_pageblock_free), so
+	 * pass 1 misses them. Claim them inline to keep non-movable allocations
 	 * concentrated in already-tainted superpageblocks.
 	 *
 	 * Try whole pageblock orders first (preferred for PCP buddy optimization),
@@ -2869,7 +2901,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 		}
 	}
 
-	/* Empty superpageblocks: try before falling back to non-preferred category */
+	/* Pass 3: whole pageblock from empty superpageblocks */
 	list_for_each_entry(sb, &zone->spb_empty, list) {
 		if (!sb->nr_free_pages)
 			continue;
@@ -6272,6 +6304,17 @@ restart:
 		goto nopage;
 
 	/*
+	 * Preserve ALLOC_NOFRAGMENT through the slowpath so that reclaim
+	 * and compaction are tried before allowing clean superpageblocks
+	 * to be tainted. The fast path sets this via alloc_flags_nofragment()
+	 * but gfp_to_alloc_flags() only sets it for defrag_mode. Re-add it
+	 * here so the slowpath retries with NOFRAGMENT still protecting
+	 * clean SPBs until the last-resort drop below.
+	 */
+	alloc_flags |= alloc_flags_nofragment(
+				zonelist_zone(ac->preferred_zoneref), gfp_mask);
+
+	/*
 	 * Check for insane configurations where the cpuset doesn't contain
 	 * any suitable zone to satisfy the request - e.g. non-movable
 	 * GFP_HIGHUSER allocations from MOVABLE nodes only.
@@ -6410,8 +6453,13 @@ retry:
 				&compaction_retries))
 		goto retry;
 
-	/* Reclaim/compaction failed to prevent the fallback */
-	if (defrag_mode && (alloc_flags & ALLOC_NOFRAGMENT)) {
+	/*
+	 * Reclaim and compaction have been tried but could not free enough
+	 * pages in already-tainted superpageblocks. Drop NOFRAGMENT as a
+	 * last resort to allow claiming from clean/empty SPBs and stealing
+	 * across migratetype boundaries. This is better than OOM-killing.
+	 */
+	if (alloc_flags & ALLOC_NOFRAGMENT) {
 		alloc_flags &= ~ALLOC_NOFRAGMENT;
 		goto retry;
 	}
