@@ -2319,6 +2319,18 @@ static unsigned int damos_get_in_active_mem_bp(bool active_ratio)
 	return mult_frac(inactive, 10000, total);
 }
 
+/*
+ * Returns anon hugepage memory to total anon memory use ratio.
+ */
+static unsigned int damos_get_used_hugepage_mem_bp(void)
+{
+	unsigned long used_hugepages, total_used;
+ 
+	used_hugepages = global_node_page_state(NR_ANON_THPS);
+	total_used = global_node_page_state(NR_ANON_MAPPED);
+	return mult_frac(used_hugepages, 10000, total_used);
+}
+ 
 static void damos_set_quota_goal_current_value(struct damos_quota_goal *goal)
 {
 	u64 now_psi_total;
@@ -2344,6 +2356,9 @@ static void damos_set_quota_goal_current_value(struct damos_quota_goal *goal)
 	case DAMOS_QUOTA_INACTIVE_MEM_BP:
 		goal->current_value = damos_get_in_active_mem_bp(
 				goal->metric == DAMOS_QUOTA_ACTIVE_MEM_BP);
+		break;
+	case DAMOS_QUOTA_HUGEPAGE:
+		goal->current_value = damos_get_used_hugepage_mem_bp();
 		break;
 	default:
 		break;
