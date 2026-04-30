@@ -19,6 +19,9 @@ struct vfio_pci_dma_buf {
 	u32 nr_ranges;
 	struct kref kref;
 	struct completion comp;
+	u16 steering_tag;
+	u8 ph;
+	u8 tph_present : 1;
 	u8 revoked : 1;
 };
 
@@ -69,6 +72,22 @@ vfio_pci_dma_buf_map(struct dma_buf_attachment *attachment,
 	return ret;
 }
 
+static int vfio_pci_dma_buf_get_tph(struct dma_buf *dmabuf, u16 *steering_tag,
+				    u8 *ph, u8 st_width)
+{
+	struct vfio_pci_dma_buf *priv = dmabuf->priv;
+
+	if (!priv->tph_present)
+		return -EOPNOTSUPP;
+
+	if (st_width < 16 && priv->steering_tag > ((1U << st_width) - 1))
+		return -EINVAL;
+
+	*steering_tag = priv->steering_tag;
+	*ph = priv->ph;
+	return 0;
+}
+
 static void vfio_pci_dma_buf_unmap(struct dma_buf_attachment *attachment,
 				   struct sg_table *sgt,
 				   enum dma_data_direction dir)
@@ -101,6 +120,7 @@ static void vfio_pci_dma_buf_release(struct dma_buf *dmabuf)
 
 static const struct dma_buf_ops vfio_pci_dmabuf_ops = {
 	.attach = vfio_pci_dma_buf_attach,
+	.get_tph = vfio_pci_dma_buf_get_tph,
 	.map_dma_buf = vfio_pci_dma_buf_map,
 	.unmap_dma_buf = vfio_pci_dma_buf_unmap,
 	.release = vfio_pci_dma_buf_release,
@@ -328,6 +348,55 @@ err_free_priv:
 	kfree(priv);
 err_free_ranges:
 	kfree(dma_ranges);
+	return ret;
+}
+
+int vfio_pci_core_feature_dma_buf_tph(struct vfio_pci_core_device *vdev,
+				      u32 flags,
+				      struct vfio_device_feature_dma_buf_tph __user *arg,
+				      size_t argsz)
+{
+	struct vfio_device_feature_dma_buf_tph set_tph;
+	struct vfio_pci_dma_buf *priv;
+	struct dma_buf *dmabuf;
+	int ret;
+
+	ret = vfio_check_feature(flags, argsz, VFIO_DEVICE_FEATURE_SET,
+				 sizeof(set_tph));
+	if (ret != 1)
+		return ret;
+
+	if (copy_from_user(&set_tph, arg, sizeof(set_tph)))
+		return -EFAULT;
+
+	if (set_tph.reserved)
+		return -EINVAL;
+
+	dmabuf = dma_buf_get(set_tph.dmabuf_fd);
+	if (IS_ERR(dmabuf))
+		return PTR_ERR(dmabuf);
+
+	if (dmabuf->ops != &vfio_pci_dmabuf_ops) {
+		ret = -EINVAL;
+		goto out_put;
+	}
+
+	priv = dmabuf->priv;
+	down_write(&vdev->memory_lock);
+	if (priv->vdev != vdev) {
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
+	priv->steering_tag = set_tph.steering_tag;
+	priv->ph = set_tph.ph;
+	priv->tph_present = 1;
+	ret = 0;
+
+out_unlock:
+	up_write(&vdev->memory_lock);
+out_put:
+	dma_buf_put(dmabuf);
 	return ret;
 }
 

@@ -1534,6 +1534,28 @@ struct vfio_device_feature_dma_buf {
  */
 #define VFIO_DEVICE_FEATURE_MIG_PRECOPY_INFOv2  12
 
+/**
+ * Upon VFIO_DEVICE_FEATURE_SET associate TPH (TLP Processing Hints) metadata
+ * with a vfio-exported dma-buf. The dma-buf must have been created by
+ * VFIO_DEVICE_FEATURE_DMA_BUF on this device.
+ *
+ * dmabuf_fd is the file descriptor returned by VFIO_DEVICE_FEATURE_DMA_BUF.
+ * steering_tag and ph are the raw TPH values that importing drivers should use
+ * when accessing the buffer.
+ *
+ * The user must set TPH on the dma-buf before the importer consumes it.
+ *
+ * Return: 0 on success, -errno on failure.
+ */
+#define VFIO_DEVICE_FEATURE_DMA_BUF_TPH 13
+
+struct vfio_device_feature_dma_buf_tph {
+	__s32	dmabuf_fd;
+	__u16	steering_tag;
+	__u8	ph;
+	__u8	reserved;
+};
+
 /* -------- API for Type1 VFIO IOMMU -------- */
 
 /**
