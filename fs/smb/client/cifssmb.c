@@ -4090,9 +4090,9 @@ QFileInfoRetry:
 				      get_bcc(&pSMBr->hdr), 40);
 		else if (pFindData) {
 			__u16 data_offset = le16_to_cpu(pSMBr->t2.DataOffset);
-			memcpy((char *) pFindData,
-			       (char *) &pSMBr->hdr.Protocol +
-			       data_offset, sizeof(FILE_ALL_INFO));
+			memcpy(pFindData,
+			       (char *)pSMBr + struct_offset(pSMBr, hdr.Protocol) + data_offset,
+			       sizeof(FILE_ALL_INFO));
 		} else
 		    rc = -ENOMEM;
 	}
@@ -4264,9 +4264,8 @@ UnixQFileInfoRetry:
 				      get_bcc(&pSMBr->hdr), sizeof(FILE_UNIX_BASIC_INFO));
 		} else {
 			__u16 data_offset = le16_to_cpu(pSMBr->t2.DataOffset);
-			memcpy((char *) pFindData,
-			       (char *) &pSMBr->hdr.Protocol +
-			       data_offset,
+			memcpy(pFindData,
+			       (char *)pSMBr + struct_offset(pSMBr, hdr.Protocol) + data_offset,
 			       sizeof(FILE_UNIX_BASIC_INFO));
 		}
 	}
@@ -4349,9 +4348,8 @@ UnixQPathInfoRetry:
 				      get_bcc(&pSMBr->hdr), sizeof(FILE_UNIX_BASIC_INFO));
 		} else {
 			__u16 data_offset = le16_to_cpu(pSMBr->t2.DataOffset);
-			memcpy((char *) pFindData,
-			       (char *) &pSMBr->hdr.Protocol +
-			       data_offset,
+			memcpy(pFindData,
+			       (char *)pSMBr + struct_offset(pSMBr, hdr.Protocol) + data_offset,
 			       sizeof(FILE_UNIX_BASIC_INFO));
 		}
 	}
@@ -5079,7 +5077,6 @@ CIFSSMBQFSAttributeInfo(const unsigned int xid, struct cifs_tcon *tcon)
 /* level 0x105  SMB_QUERY_FILE_SYSTEM_INFO */
 	TRANSACTION2_QFSI_REQ *pSMB = NULL;
 	TRANSACTION2_QFSI_RSP *pSMBr = NULL;
-	FILE_SYSTEM_ATTRIBUTE_INFO *response_data;
 	unsigned int in_len;
 	int rc = 0;
 	int bytes_returned = 0;
@@ -5130,11 +5127,8 @@ QFSAttributeRetry:
 				      get_bcc(&pSMBr->hdr), 13);
 		} else {
 			__u16 data_offset = le16_to_cpu(pSMBr->t2.DataOffset);
-			response_data =
-			    (FILE_SYSTEM_ATTRIBUTE_INFO
-			     *) (((char *) &pSMBr->hdr.Protocol) +
-				 data_offset);
-			memcpy(&tcon->fsAttrInfo, response_data,
+			memcpy(&tcon->fsAttrInfo,
+			       (char *)pSMBr + struct_offset(pSMBr, hdr.Protocol) + data_offset,
 			       sizeof(FILE_SYSTEM_ATTRIBUTE_INFO));
 		}
 	}
@@ -5152,7 +5146,6 @@ CIFSSMBQFSDeviceInfo(const unsigned int xid, struct cifs_tcon *tcon)
 /* level 0x104 SMB_QUERY_FILE_SYSTEM_INFO */
 	TRANSACTION2_QFSI_REQ *pSMB = NULL;
 	TRANSACTION2_QFSI_RSP *pSMBr = NULL;
-	FILE_SYSTEM_DEVICE_INFO *response_data;
 	unsigned int in_len;
 	int rc = 0;
 	int bytes_returned = 0;
@@ -5205,11 +5198,8 @@ QFSDeviceRetry:
 				      sizeof(FILE_SYSTEM_DEVICE_INFO));
 		else {
 			__u16 data_offset = le16_to_cpu(pSMBr->t2.DataOffset);
-			response_data =
-			    (FILE_SYSTEM_DEVICE_INFO *)
-				(((char *) &pSMBr->hdr.Protocol) +
-				 data_offset);
-			memcpy(&tcon->fsDevInfo, response_data,
+			memcpy(&tcon->fsDevInfo,
+			       (char *)pSMBr + struct_offset(pSMBr, hdr.Protocol) + data_offset,
 			       sizeof(FILE_SYSTEM_DEVICE_INFO));
 		}
 	}
@@ -5227,7 +5217,6 @@ CIFSSMBQFSUnixInfo(const unsigned int xid, struct cifs_tcon *tcon)
 /* level 0x200  SMB_QUERY_CIFS_UNIX_INFO */
 	TRANSACTION2_QFSI_REQ *pSMB = NULL;
 	TRANSACTION2_QFSI_RSP *pSMBr = NULL;
-	FILE_SYSTEM_UNIX_INFO *response_data;
 	unsigned int in_len;
 	int rc = 0;
 	int bytes_returned = 0;
@@ -5277,11 +5266,8 @@ QFSUnixRetry:
 				      get_bcc(&pSMBr->hdr), 13);
 		} else {
 			__u16 data_offset = le16_to_cpu(pSMBr->t2.DataOffset);
-			response_data =
-			    (FILE_SYSTEM_UNIX_INFO
-			     *) (((char *) &pSMBr->hdr.Protocol) +
-				 data_offset);
-			memcpy(&tcon->fsUnixInfo, response_data,
+			memcpy(&tcon->fsUnixInfo,
+			       (char *)pSMBr + struct_offset(pSMBr, hdr.Protocol) + data_offset,
 			       sizeof(FILE_SYSTEM_UNIX_INFO));
 		}
 	}
