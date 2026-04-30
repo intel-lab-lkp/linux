@@ -1381,7 +1381,11 @@ core_initcall(map_entry_trampoline);
  */
 static void __init declare_kernel_vmas(void)
 {
-	static struct vm_struct vmlinux_seg[KERNEL_SEGMENT_COUNT];
+	/*
+	 * [_text, _stext) is mapped in init_pg_dir seperatly while they got
+	 * merged into one here
+	 */
+	static struct vm_struct vmlinux_seg[KERNEL_SEGMENT_COUNT - 1];
 
 	declare_vma(&vmlinux_seg[0], _text, _etext, VM_NO_GUARD);
 	declare_vma(&vmlinux_seg[1], __start_rodata, __inittext_begin, VM_NO_GUARD);
