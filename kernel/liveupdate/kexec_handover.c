@@ -10,6 +10,7 @@
 
 #define pr_fmt(fmt) "KHO: " fmt
 
+#include <linux/bits.h>
 #include <linux/cleanup.h>
 #include <linux/cma.h>
 #include <linux/kmemleak.h>
@@ -427,6 +428,40 @@ static struct page *kho_restore_page(phys_addr_t phys, bool is_folio)
 
 	adjust_managed_page_count(page, nr_pages);
 	return page;
+}
+
+/**
+ * kho_is_preserved - Verify that a physical page range belongs to KHO.
+ * @phys: physical address of the first page in the range.
+ * @nr_pages: number of pages that the caller expects to access.
+ *
+ * Use this before phys_to_virt() when a physical address comes from restored
+ * metadata. It checks that @phys starts a KHO-preserved allocation large
+ * enough to cover @nr_pages.
+ *
+ * This only checks the KHO marker. It does not restore, free, or take
+ * ownership of the pages.
+ *
+ * Return: true if @phys starts a preserved KHO allocation large enough to cover
+ * @nr_pages, false otherwise.
+ */
+bool kho_is_preserved(phys_addr_t phys, unsigned long nr_pages)
+{
+	struct page *page;
+	union kho_page_info info;
+
+	if (!nr_pages || !IS_ALIGNED(phys, PAGE_SIZE))
+		return false;
+
+	page = pfn_to_online_page(PHYS_PFN(phys));
+	if (!page)
+		return false;
+
+	info.page_private = page->private;
+	if (info.magic != KHO_PAGE_MAGIC || info.order >= BITS_PER_LONG)
+		return false;
+
+	return nr_pages <= BIT(info.order);
 }
 
 /**

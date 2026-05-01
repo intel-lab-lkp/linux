@@ -19,6 +19,7 @@ struct page;
 #ifdef CONFIG_KEXEC_HANDOVER
 bool kho_is_enabled(void);
 bool is_kho_boot(void);
+bool kho_is_preserved(phys_addr_t phys, unsigned long nr_pages);
 
 int kho_preserve_folio(struct folio *folio);
 void kho_unpreserve_folio(struct folio *folio);
@@ -47,6 +48,11 @@ static inline bool kho_is_enabled(void)
 }
 
 static inline bool is_kho_boot(void)
+{
+	return false;
+}
+
+static inline bool kho_is_preserved(phys_addr_t phys, unsigned long nr_pages)
 {
 	return false;
 }
