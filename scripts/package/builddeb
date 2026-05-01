@@ -98,7 +98,12 @@ install_maint_scripts () {
 			hookdirs="\$hookdirs \$dir/${script}.d"
 		done
 		hookdirs="\${hookdirs# }"
-		test -n "\$hookdirs" && run-parts --arg="${KERNELRELEASE}" --arg="/${installed_image_path}" \$hookdirs
+		if [ -n "\$hookdirs" ]; then
+			if ! run-parts --arg="${KERNELRELEASE}" --arg="/${installed_image_path}" \$hookdirs; then
+				echo "E: Post-install hooks failed." >&2
+				exit 1
+			fi
+		fi
 		exit 0
 		EOF
 		chmod 755 "${pdir}/DEBIAN/${script}"
