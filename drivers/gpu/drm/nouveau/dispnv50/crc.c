@@ -10,6 +10,7 @@
 #include <nvif/class.h>
 #include <nvif/cl0002.h>
 #include <nvif/timer.h>
+#include <nvif/if900b.h>
 
 #include <nvhw/class/cl907d.h>
 
@@ -499,15 +500,23 @@ nv50_crc_raster_type(enum nv50_crc_source source)
  * notifier needs it's own handle
  */
 static inline int
-nv50_crc_ctx_init(struct nv50_head *head, struct nvif_mmu *mmu,
+nv50_crc_ctx_init(struct drm_device *dev, struct nv50_head *head, struct nvif_mmu *mmu,
 		  struct nv50_crc_notifier_ctx *ctx, size_t len, int idx)
 {
-	struct nv50_core *core = nv50_disp(head->base.base.dev)->core;
+	struct nv50_core *core = nv50_disp(dev)->core;
 	int ret;
 
-	ret = nvif_mem_ctor_map(mmu, "kmsCrcNtfy", NVIF_MEM_VRAM, len, &ctx->mem);
+	/* The display engine requires a contiguous region of memory for the CRC notifier context */
+	ret = nvif_mem_ctor(mmu, "kmsCrcNtfy", mmu->mem, NVIF_MEM_VRAM | NVIF_MEM_MAPPABLE, 0, len,
+			    &(struct gf100_mem_v0) {
+				.contig = true,
+			    }, sizeof(struct gf100_mem_v0), &ctx->mem);
 	if (ret)
 		return ret;
+
+	ret = nvif_object_map(&ctx->mem.object, NULL, 0);
+	if (ret)
+		goto fail_fini;
 
 	/* No CTXDMAs on Blackwell. */
 	if (core->chan.base.user.oclass >= GB202_DISP_CORE_CHANNEL_DMA)
@@ -576,7 +585,7 @@ int nv50_crc_set_source(struct drm_crtc *crtc, const char *source_str)
 
 	if (source) {
 		for (i = 0; i < ARRAY_SIZE(head->crc.ctx); i++) {
-			ret = nv50_crc_ctx_init(head, mmu, &crc->ctx[i],
+			ret = nv50_crc_ctx_init(dev, head, mmu, &crc->ctx[i],
 						func->notifier_len, i);
 			if (ret)
 				goto out_ctx_fini;
