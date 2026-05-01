@@ -167,3 +167,80 @@ void vfio_pci_zdev_close_device(struct vfio_pci_core_device *vdev)
 	if (zpci_kvm_hook.kvm_unregister)
 		zpci_kvm_hook.kvm_unregister(zdev);
 }
+
+int vfio_pci_zdev_feature_fmb(struct vfio_pci_core_device *vdev, u32 flags,
+			      void __user *arg, size_t argsz)
+{
+	struct zpci_dev *zdev;
+	struct vfio_device_feature_zpci_fmb fmb = {0};
+	u32 ops = VFIO_DEVICE_FEATURE_GET | VFIO_DEVICE_FEATURE_SET;
+	int ret;
+
+	ret = vfio_check_feature(flags, argsz, ops, sizeof(fmb));
+	if (ret != 1)
+		return ret;
+
+	zdev = to_zpci(vdev->pdev);
+	if (!zdev)
+		return -ENODEV;
+
+	mutex_lock(&zdev->fmb_lock);
+	if (flags & VFIO_DEVICE_FEATURE_SET) {
+		if (copy_from_user(&fmb, arg, sizeof(fmb))) {
+			ret = -EFAULT;
+			goto release_lock;
+		}
+
+		if (fmb.flags & VFIO_DEVICE_FEATURE_ZPCI_FMB_FLAGS_ENABLED)
+			ret = zpci_fmb_reenable_device(zdev);
+		else
+			ret = zpci_fmb_disable_device(zdev);
+		goto release_lock;
+	}
+
+	ret = 0;
+	if (zdev->fmb) {
+		fmb.flags |= VFIO_DEVICE_FEATURE_ZPCI_FMB_FLAGS_ENABLED;
+	} else {
+		fmb.flags &= ~VFIO_DEVICE_FEATURE_ZPCI_FMB_FLAGS_ENABLED;
+		goto release_lock;
+	}
+
+	fmb.format = zdev->fmb->format;
+	fmb.fmt_ind = zdev->fmb->fmt_ind;
+	fmb.samples = zdev->fmb->samples;
+	fmb.last_update = zdev->fmb->last_update;
+	fmb.ld_ops = zdev->fmb->ld_ops;
+	fmb.st_ops = zdev->fmb->st_ops;
+	fmb.stb_ops = zdev->fmb->stb_ops;
+	fmb.rpcit_ops = zdev->fmb->rpcit_ops;
+
+	switch (zdev->fmb->format) {
+	case 0:
+		if (zdev->fmb->fmt_ind & ZPCI_FMB_DMA_COUNTER_VALID) {
+			fmb.fmt0.dma_rbytes = zdev->fmb->fmt0.dma_rbytes;
+			fmb.fmt0.dma_wbytes = zdev->fmb->fmt0.dma_wbytes;
+		}
+		break;
+	case 1:
+		fmb.fmt1.rx_bytes = zdev->fmb->fmt1.rx_bytes;
+		fmb.fmt1.rx_packets = zdev->fmb->fmt1.rx_packets;
+		fmb.fmt1.tx_bytes = zdev->fmb->fmt1.tx_bytes;
+		fmb.fmt1.tx_packets = zdev->fmb->fmt1.tx_packets;
+		break;
+	case 2:
+		fmb.fmt2.consumed_work_units = zdev->fmb->fmt2.consumed_work_units;
+		fmb.fmt2.max_work_units = zdev->fmb->fmt2.max_work_units;
+		break;
+	case 3:
+		fmb.fmt3.tx_bytes = zdev->fmb->fmt3.tx_bytes;
+		break;
+	}
+
+	if (copy_to_user(arg, &fmb, sizeof(fmb)))
+		ret = -EFAULT;
+
+release_lock:
+	mutex_unlock(&zdev->fmb_lock);
+	return ret;
+}
