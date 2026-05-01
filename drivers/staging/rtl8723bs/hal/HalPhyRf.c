@@ -18,7 +18,7 @@ void ConfigureTxpowerTrack(struct dm_odm_t *pDM_Odm, struct txpwrtrack_cfg *pCon
 /*  Otherwise the previous compensation is gone, because we record the */
 /*  delta of temperature between two TxPowerTracking watch dogs. */
 /*  */
-/*  NOTE: If Tx BB swing or Tx scaling is varified during run-time, still */
+/*  NOTE: If Tx BB swing or Tx scaling is verified during run-time, still */
 /*        need to call this function. */
 /*  */
 void ODM_ClearTxPowerTrackingState(struct dm_odm_t *pDM_Odm)

@@ -1859,9 +1859,11 @@ void rtl8723b_update_txdesc(struct xmit_frame *pxmitframe, u8 *pbuf)
 }
 
 /*  */
-/*  Description: In normal chip, we should send some packet to Hw which will be used by Fw */
-/* 			in FW LPS mode. The function is to fill the Tx descriptor of this packets, then */
-/* 			Fw can tell Hw to send these packet derectly. */
+/*  Description: In normal chip, we should send some packet to Hw which will be used by Fw
+ *		 in FW LPS mode. The function is to fill the
+ *		 Tx descriptor of this packets, then
+ *		 Fw can tell Hw to send these packet directly.
+ */
 /*  Added by tynli. 2009.10.15. */
 /*  */
 /* type1:pspoll, type2:null */
@@ -2582,7 +2584,9 @@ void SetHwReg8723B(struct adapter *padapter, u8 variable, u8 *val)
 		{
 			u8 psmode = *val;
 
-			/*  Forece leave RF low power mode for 1T1R to prevent conficting setting in Fw power */
+			/*  Force leave RF low power mode for 1T1R to
+			 *  prevent conflicting setting in Fw power
+			 */
 			/*  saving sequence. 2010.06.07. Added by tynli. Suggested by SD3 yschang. */
 			if (psmode != PS_MODE_ACTIVE) {
 				ODM_RF_Saving(&pHalData->odmpriv, true);

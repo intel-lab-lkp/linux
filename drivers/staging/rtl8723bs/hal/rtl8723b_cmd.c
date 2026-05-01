@@ -832,7 +832,7 @@ static void SetFwRsvdPagePkt_BTCoex(struct adapter *padapter)
 
 	BufIndex += (CurtPktPageNum*PageSize);
 
-	/*  Jump to lastest page */
+	/*  Jump to last page */
 	if (BufIndex < (MaxRsvdPageBufSize - PageSize)) {
 		BufIndex = TxDescOffset + (MaxRsvdPageBufSize - PageSize);
 		TotalPageNum = BCNQ_PAGE_NUM_8723B - 1;

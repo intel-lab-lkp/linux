@@ -1478,7 +1478,8 @@ unsigned int OnDeAuth(struct adapter *padapter, union recv_frame *precv_frame)
 	/* Commented by Albert 20130604
 	 * Before sending the auth frame to start the STA/GC mode connection with AP/GO,
 	 * we will send the deauth first.
-	 * However, the Win8.1 with BRCM Wi-Fi will send the deauth with reason code 6 to us after receieving our deauth.
+	 * However, the Win8.1 with BRCM Wi-Fi will send the deauth with
+	 * reason code 6 to us after receiving our deauth.
 	 * Added the following code to avoid this case.
 	 */
 	if ((pmlmeinfo->state & WIFI_FW_AUTH_STATE) ||

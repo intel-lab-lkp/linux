@@ -119,7 +119,7 @@ static int phy_RF6052_Config_ParaFile(struct adapter *Adapter)
 		PHY_SetBBReg(Adapter, pPhyReg->rfHSSIPara2, b3WireDataLength, 0x0);	/*  Set 0 to 12  bits for 8255 */
 		udelay(1);/* PlatformStallExecution(1); */
 
-		/*----Initialize RF fom connfiguration file----*/
+		/*----Initialize RF from configuration file----*/
 		switch (eRFPath) {
 		case RF_PATH_A:
 		case RF_PATH_B:

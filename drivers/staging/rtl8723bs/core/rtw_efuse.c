@@ -28,7 +28,7 @@ rtw_efuse_calculate_word_counts(u8 word_en)
 /*-----------------------------------------------------------------------------
  * Function:	rtw_efuse_read_1_byte
  *
- * Overview:	Copy from WMAC fot EFUSE read 1 byte.
+ * Overview:	Copy from WMAC for EFUSE read 1 byte.
  *
  * Input:       NONE
  *

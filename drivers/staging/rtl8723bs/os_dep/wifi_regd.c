@@ -27,7 +27,7 @@
  * by case basis by regulatory domain
  */
 
-/* 2G chan 12 - chan 13, PASSIV SCAN */
+/* 2G chan 12 - chan 13, PASSIVE SCAN */
 #define RTW_2GHZ_CH12_13	\
 	REG_RULE(2467 - 10, 2472 + 10, 40, 0, 20,	\
 	NL80211_RRF_PASSIVE_SCAN)

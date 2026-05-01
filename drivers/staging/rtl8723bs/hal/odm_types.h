@@ -9,7 +9,7 @@
 
 #include <drv_types.h>
 
-/*  Deifne HW endian support */
+/*  Define HW endian support */
 #define	ODM_ENDIAN_BIG	0
 #define	ODM_ENDIAN_LITTLE	1
 
