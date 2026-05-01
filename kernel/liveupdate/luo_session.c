@@ -501,7 +501,18 @@ int __init luo_session_setup_incoming(void *fdt_in)
 	}
 
 	header_ser_pa = get_unaligned((u64 *)ptr);
+	if (!kho_is_preserved(header_ser_pa, LUO_SESSION_PGCNT)) {
+		pr_err("Session header is not KHO preserved: %#llx\n",
+		       (unsigned long long)header_ser_pa);
+		return -EINVAL;
+	}
+
 	header_ser = phys_to_virt(header_ser_pa);
+	if (header_ser->count > LUO_SESSION_MAX) {
+		pr_err("Invalid session count: %llu\n",
+		       (unsigned long long)header_ser->count);
+		return -EINVAL;
+	}
 
 	luo_session_global.incoming.header_ser = header_ser;
 	luo_session_global.incoming.ser = (void *)(header_ser + 1);
@@ -515,6 +526,7 @@ int luo_session_deserialize(void)
 	struct luo_session_header *sh = &luo_session_global.incoming;
 	static bool is_deserialized;
 	static int err;
+	u64 count;
 
 	/* If has been deserialized, always return the same error code */
 	if (is_deserialized)
@@ -523,6 +535,13 @@ int luo_session_deserialize(void)
 	is_deserialized = true;
 	if (!sh->active)
 		return 0;
+
+	count = sh->header_ser->count;
+	if (count > LUO_SESSION_MAX) {
+		pr_err("Invalid session count: %llu\n",
+		       (unsigned long long)count);
+		return -EINVAL;
+	}
 
 	/*
 	 * Note on error handling:
@@ -539,7 +558,7 @@ int luo_session_deserialize(void)
 	 * userspace to detect the failure and trigger a reboot, which will
 	 * reliably reset devices and reclaim memory.
 	 */
-	for (int i = 0; i < sh->header_ser->count; i++) {
+	for (u64 i = 0; i < count; i++) {
 		struct luo_session *session;
 
 		session = luo_session_alloc(sh->ser[i].name);
@@ -606,4 +625,3 @@ err_undo:
 
 	return err;
 }
-
