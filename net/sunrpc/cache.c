@@ -1037,6 +1037,7 @@ static int cache_open(struct inode *inode, struct file *filp,
 	if (filp->f_mode & FMODE_WRITE)
 		atomic_inc(&cd->writers);
 	filp->private_data = rp;
+	get_net(cd->net);
 	return 0;
 }
 
@@ -1044,6 +1045,8 @@ static int cache_release(struct inode *inode, struct file *filp,
 			 struct cache_detail *cd)
 {
 	struct cache_reader *rp = filp->private_data;
+	struct module *owner;
+	struct net *net;
 
 	if (rp) {
 		struct cache_request *rq = NULL;
@@ -1080,7 +1083,10 @@ static int cache_release(struct inode *inode, struct file *filp,
 		atomic_dec(&cd->writers);
 		cd->last_close = seconds_since_boot();
 	}
-	module_put(cd->owner);
+	owner = cd->owner;
+	net = cd->net;
+	put_net(net);
+	module_put(owner);
 	return 0;
 }
 
@@ -1466,14 +1472,19 @@ static int content_open(struct inode *inode, struct file *file,
 
 	seq = file->private_data;
 	seq->private = cd;
+	get_net(cd->net);
 	return 0;
 }
 
 static int content_release(struct inode *inode, struct file *file,
 		struct cache_detail *cd)
 {
+	struct module *owner = cd->owner;
+	struct net *net = cd->net;
 	int ret = seq_release(inode, file);
-	module_put(cd->owner);
+
+	put_net(net);
+	module_put(owner);
 	return ret;
 }
 
@@ -1482,13 +1493,18 @@ static int open_flush(struct inode *inode, struct file *file,
 {
 	if (!cd || !try_module_get(cd->owner))
 		return -EACCES;
+	get_net(cd->net);
 	return nonseekable_open(inode, file);
 }
 
 static int release_flush(struct inode *inode, struct file *file,
 			struct cache_detail *cd)
 {
-	module_put(cd->owner);
+	struct module *owner = cd->owner;
+	struct net *net = cd->net;
+
+	put_net(net);
+	module_put(owner);
 	return 0;
 }
 
