@@ -1144,6 +1144,11 @@ int arm_smmu_cmdq_issue_cmdlist(struct arm_smmu_device *smmu,
 				bool sync);
 int arm_smmu_cmdq_build_cmd(u64 *cmd, struct arm_smmu_cmdq_ent *ent);
 
+u32 smmu_idr0_features(u32 reg);
+u32 smmu_idr3_features(u32 reg);
+u32 smmu_idr5_to_oas(u32 reg);
+unsigned long smmu_idr5_to_pgsize(u32 reg);
+
 /* Queue functions shared between kernel and hyp. */
 static inline bool queue_has_space(struct arm_smmu_ll_queue *q, u32 n)
 {
