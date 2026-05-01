@@ -213,6 +213,10 @@ static void check_steal_time_uapi(void)
 
 	vm = vm_create_with_one_vcpu(&vcpu, NULL);
 
+	/* ST_GPA_BASE needs a valid memslot for gfn_to_hva() to succeed */
+	vm_userspace_mem_region_add(vm, VM_MEM_SRC_ANONYMOUS, ST_GPA_BASE,
+				    1, 1, 0);
+
 	struct kvm_device_attr dev = {
 		.group = KVM_ARM_VCPU_PVTIME_CTRL,
 		.attr = KVM_ARM_VCPU_PVTIME_IPA,
