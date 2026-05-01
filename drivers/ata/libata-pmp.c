@@ -113,11 +113,14 @@ int sata_pmp_qc_defer_cmd_switch(struct ata_queued_cmd *qc)
 
 	if (ap->excl_link == NULL || ap->excl_link == link) {
 		if (ap->nr_active_links == 0 || ata_link_active(link)) {
-			qc->flags |= ATA_QCFLAG_CLEAR_EXCL;
-			return ata_std_qc_defer(qc);
-		}
+			int ret;
 
-		ap->excl_link = link;
+			qc->flags |= ATA_QCFLAG_CLEAR_EXCL;
+			ret = ata_std_qc_defer(qc);
+			if (!ret)
+				ap->excl_link = link;
+			return ret;
+		}
 	}
 
 	return ATA_DEFER_PORT;
