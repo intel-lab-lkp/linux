@@ -40,6 +40,7 @@
 #include <linux/pgalloc.h>
 #include <linux/pgalloc_tag.h>
 #include <linux/pagewalk.h>
+#include <linux/delayacct.h>
 
 #include <asm/tlb.h>
 #include "internal.h"
@@ -2196,6 +2197,94 @@ unlock:
 	return ret;
 }
 
+static vm_fault_t wp_huge_pmd_page_copy(struct vm_fault *vmf, struct folio *old_folio)
+{
+	struct vm_area_struct *vma = vmf->vma;
+	struct mm_struct *mm = vma->vm_mm;
+	struct folio *new_folio = NULL;
+	struct page *new_page, *old_page;
+	unsigned long pmd_address = vmf->address & HPAGE_PMD_MASK;
+	struct mmu_notifier_range range;
+	vm_fault_t ret = 0;
+	int i;
+
+	delayacct_wpcopy_start();
+
+	old_page = folio_page(old_folio, 0);
+	ret = vmf_anon_prepare(vmf);
+	if (unlikely(ret)) {
+		if (ret != VM_FAULT_RETRY)
+			ret = VM_FAULT_FALLBACK;
+		goto out;
+	}
+
+	new_folio = vma_alloc_anon_folio_pmd(vma, vmf->address);
+	if (unlikely(!new_folio)) {
+		ret = VM_FAULT_FALLBACK;
+		goto out;
+	}
+
+	if (copy_user_large_folio(new_folio, old_folio,
+		pmd_address, vma)) {
+		ret = VM_FAULT_HWPOISON;
+		goto out;
+	}
+
+	new_page = folio_page(new_folio, 0);
+	for (i = 0; i < HPAGE_PMD_NR; i++)
+		kmsan_copy_page_meta(new_page + i, old_page + i);
+
+	__folio_mark_uptodate(new_folio);
+	mmu_notifier_range_init(&range, MMU_NOTIFY_CLEAR, 0, mm,
+				pmd_address, pmd_address + HPAGE_PMD_SIZE);
+	mmu_notifier_invalidate_range_start(&range);
+
+	spin_lock(vmf->ptl);
+	if (unlikely(!pmd_same(pmdp_get(vmf->pmd), vmf->orig_pmd))) {
+		update_mmu_cache_pmd(vma, pmd_address, vmf->pmd);
+		ret = 0;
+		goto out_unlock;
+	}
+
+	flush_cache_range(vma, pmd_address, pmd_address + HPAGE_PMD_SIZE);
+	/*
+	 * Clear the pmd entry and flush it first, before updating the
+	 * pmd with the new entry, to keep TLBs on different CPUs in
+	 * sync.
+	 */
+	(void)pmdp_huge_clear_flush(vma, pmd_address, vmf->pmd);
+	/*
+	 * We just temporarily decrement the mm_counter here, and it will be added back in
+	 * map_anon_folio_pmd_pf below.
+	 */
+	add_mm_counter(mm, MM_ANONPAGES, -HPAGE_PMD_NR);
+	map_anon_folio_pmd_pf(new_folio, vmf, true);
+	folio_remove_rmap_pmd(old_folio, old_page, vma);
+
+	spin_unlock(vmf->ptl);
+
+	mmu_notifier_invalidate_range_end(&range);
+	/* This put is for the folio_get() in the caller */
+	folio_put(old_folio);
+	free_swap_cache(old_folio);
+
+	/* This put is for decrementing refcount after we switch page table mapping */
+	folio_put(old_folio);
+
+	delayacct_wpcopy_end();
+	return 0;
+out_unlock:
+	spin_unlock(vmf->ptl);
+	mmu_notifier_invalidate_range_end(&range);
+out:
+	folio_put(old_folio);
+	if (new_folio)
+		folio_put(new_folio);
+
+	delayacct_wpcopy_end();
+	return ret;
+}
+
 vm_fault_t do_huge_pmd_wp_page(struct vm_fault *vmf)
 {
 	const bool unshare = vmf->flags & FAULT_FLAG_UNSHARE;
@@ -2204,12 +2293,13 @@ vm_fault_t do_huge_pmd_wp_page(struct vm_fault *vmf)
 	struct page *page;
 	unsigned long haddr = vmf->address & HPAGE_PMD_MASK;
 	pmd_t orig_pmd = vmf->orig_pmd;
+	vm_fault_t ret;
 
 	vmf->ptl = pmd_lockptr(vma->vm_mm, vmf->pmd);
 	VM_BUG_ON_VMA(!vma->anon_vma, vma);
 
 	if (is_huge_zero_pmd(orig_pmd)) {
-		vm_fault_t ret = do_huge_zero_wp_pmd(vmf);
+		ret = do_huge_zero_wp_pmd(vmf);
 
 		if (!(ret & VM_FAULT_FALLBACK))
 			return ret;
@@ -2253,14 +2343,6 @@ vm_fault_t do_huge_pmd_wp_page(struct vm_fault *vmf)
 		goto reuse;
 	}
 
-	/*
-	 * See do_wp_page(): we can only reuse the folio exclusively if
-	 * there are no additional references. Note that we always drain
-	 * the LRU cache immediately after adding a THP.
-	 */
-	if (folio_ref_count(folio) >
-			1 + folio_test_swapcache(folio) * folio_nr_pages(folio))
-		goto unlock_fallback;
 	if (folio_test_swapcache(folio))
 		folio_free_swap(folio);
 	if (folio_ref_count(folio) == 1) {
@@ -2281,6 +2363,31 @@ reuse:
 		spin_unlock(vmf->ptl);
 		return 0;
 	}
+
+	/*
+	 * Only do hugepage copy on write if the parameter setup supports it.
+	 */
+	if (!hugepage_cow_enabled(vma))
+		goto unlock_fallback;
+
+	/*
+	 * For vma without a vm_ops(anonymous vma), there should not be VM_SHARED or
+	 * VM_MAYSHARE types.
+	 */
+	VM_WARN_ON_ONCE_VMA(vma->vm_flags & (VM_SHARED | VM_MAYSHARE), vma);
+
+	folio_unlock(folio);
+	/*
+	 * Copy on write branch here.
+	 * We are about to unlock the ptl here, so we need to get folio before that
+	 * in case the folio gets freed in the meantime.
+	 */
+	folio_get(folio);
+	spin_unlock(vmf->ptl);
+	ret = wp_huge_pmd_page_copy(vmf, folio);
+	if (ret & VM_FAULT_FALLBACK)
+		goto fallback;
+	return ret;
 
 unlock_fallback:
 	folio_unlock(folio);
