@@ -3984,12 +3984,12 @@ int mlx5_fs_core_alloc(struct mlx5_core_dev *dev)
 
 	err = mlx5_ft_pool_init(dev);
 	if (err)
-		goto err;
+		goto err_fc_stats;
 
 	steering = kzalloc_obj(*steering);
 	if (!steering) {
 		err = -ENOMEM;
-		goto err;
+		goto err_ft_pool;
 	}
 
 	steering->dev = dev;
@@ -4011,13 +4011,19 @@ int mlx5_fs_core_alloc(struct mlx5_core_dev *dev)
 						 0, NULL);
 	if (!steering->ftes_cache || !steering->fgs_cache) {
 		err = -ENOMEM;
-		goto err;
+		goto err_fs_core;
 	}
 
 	return 0;
 
-err:
-	mlx5_fs_core_free(dev);
+err_fs_core:
+	kmem_cache_destroy(steering->ftes_cache);
+	kmem_cache_destroy(steering->fgs_cache);
+	kfree(steering);
+err_ft_pool:
+	mlx5_ft_pool_destroy(dev);
+err_fc_stats:
+	mlx5_cleanup_fc_stats(dev);
 	return err;
 }
 
