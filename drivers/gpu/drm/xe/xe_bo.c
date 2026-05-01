@@ -1111,6 +1111,9 @@ static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
 			flags |= XE_MIGRATE_CLEAR_FLAG_CCS_DATA;
 
 		fence = xe_migrate_clear(migrate, bo, new_mem, flags);
+	} else if (handle_system_ccs && new_mem->mem_type == XE_PL_SYSTEM &&
+		   !xe_bo_is_ccs_used(bo)) {
+		fence = dma_fence_get_stub();
 	} else {
 		fence = xe_migrate_copy(migrate, bo, bo, old_mem, new_mem,
 					handle_system_ccs);

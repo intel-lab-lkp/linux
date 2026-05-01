@@ -149,6 +149,8 @@ static void ccs_test_run_tile(struct xe_device *xe, struct xe_tile *tile,
 
 	xe_bo_lock(bo, false);
 
+	xe_bo_set_ccs_used(bo);
+
 	kunit_info(test, "Verifying that CCS data is cleared on creation.\n");
 	ret = ccs_test_migrate(tile, bo, false, 0ULL, 0xdeadbeefdeadbeefULL,
 			       test, exec);

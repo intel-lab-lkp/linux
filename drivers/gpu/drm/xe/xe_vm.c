@@ -743,10 +743,15 @@ static int xe_vm_ops_add_rebind(struct xe_vma_ops *vops, struct xe_vma *vma,
 				u8 tile_mask)
 {
 	struct xe_vma_op *op;
+	struct xe_bo *bo = xe_vma_bo(vma);
 
 	op = kzalloc_obj(*op);
 	if (!op)
 		return -ENOMEM;
+
+	if (bo && xe_pat_index_get_comp_en(xe_vma_vm(vma)->xe,
+					   vma->attr.pat_index))
+		xe_bo_set_ccs_used(bo);
 
 	xe_vm_populate_rebind(op, vma, tile_mask);
 	list_add_tail(&op->link, &vops->list);
@@ -3085,6 +3090,9 @@ static int vma_lock_and_validate(struct drm_exec *exec, struct xe_vma *vma,
 
 		if (flags.request_decompress)
 			err = xe_bo_decompress(bo);
+
+		if (xe_pat_index_get_comp_en(vm->xe, vma->attr.pat_index))
+			xe_bo_set_ccs_used(bo);
 	}
 
 	return err;

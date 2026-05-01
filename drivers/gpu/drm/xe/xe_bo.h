@@ -598,4 +598,39 @@ static inline bool xe_bo_is_mem_type(struct xe_bo *bo, u32 mem_type)
 	xe_bo_assert_held(bo);
 	return bo->ttm.resource->mem_type == mem_type;
 }
+
+/**
+ * xe_bo_set_ccs_used() - Mark the CCS region of a BO as used
+ * @bo: The &xe_bo whose CCS region is being marked as used
+ *
+ * Mark the CCS (Compression Control Surface) metadata region of @bo as in use.
+ * This is set when the BO is mapped with a PAT index that has compression
+ * enabled, indicating that the CCS region holds valid compression state and
+ * must be handled appropriately during migration (e.g. copied or cleared rather
+ * than skipped).
+ *
+ * Caller must hold the BO reservation lock.
+ */
+static inline void xe_bo_set_ccs_used(struct xe_bo *bo)
+{
+	xe_bo_assert_held(bo);
+	bo->ccs_used = true;
+}
+
+/**
+ * xe_bo_is_ccs_used() - Check whether the CCS region of a BO is in use
+ * @bo: The &xe_bo to check
+ *
+ * Return: true if the CCS (Compression Control Surface) metadata region of
+ * @bo has been marked as used (i.e. the BO was mapped with compression
+ * enabled), false otherwise.
+ *
+ * Caller must hold the BO reservation lock.
+ */
+static inline bool xe_bo_is_ccs_used(struct xe_bo *bo)
+{
+	xe_bo_assert_held(bo);
+	return bo->ccs_used;
+}
+
 #endif
