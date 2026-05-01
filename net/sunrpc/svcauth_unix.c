@@ -420,7 +420,7 @@ struct unix_gid {
 	struct cache_head	h;
 	kuid_t			uid;
 	struct group_info	*gi;
-	struct rcu_head		rcu;
+	struct rcu_work		rwork;
 };
 
 static int unix_gid_hash(kuid_t uid)
@@ -428,23 +428,23 @@ static int unix_gid_hash(kuid_t uid)
 	return hash_long(from_kuid(&init_user_ns, uid), GID_HASHBITS);
 }
 
-static void unix_gid_free(struct rcu_head *rcu)
+static void unix_gid_release(struct work_struct *work)
 {
-	struct unix_gid *ug = container_of(rcu, struct unix_gid, rcu);
-	struct cache_head *item = &ug->h;
+	struct unix_gid *ug = container_of(to_rcu_work(work),
+					   struct unix_gid, rwork);
 
-	if (test_bit(CACHE_VALID, &item->flags) &&
-	    !test_bit(CACHE_NEGATIVE, &item->flags))
+	if (test_bit(CACHE_VALID, &ug->h.flags) &&
+	    !test_bit(CACHE_NEGATIVE, &ug->h.flags))
 		put_group_info(ug->gi);
 	kfree(ug);
 }
 
 static void unix_gid_put(struct kref *kref)
 {
-	struct cache_head *item = container_of(kref, struct cache_head, ref);
-	struct unix_gid *ug = container_of(item, struct unix_gid, h);
+	struct unix_gid *ug = container_of(kref, struct unix_gid, h.ref);
 
-	call_rcu(&ug->rcu, unix_gid_free);
+	INIT_RCU_WORK(&ug->rwork, unix_gid_release);
+	sunrpc_cache_queue_release(&ug->rwork);
 }
 
 static int unix_gid_match(struct cache_head *corig, struct cache_head *cnew)
@@ -899,8 +899,7 @@ void unix_gid_cache_destroy(struct net *net)
 
 	sn->unix_gid_cache = NULL;
 	cache_purge(cd);
-	cache_unregister_net(cd, net);
-	cache_destroy_net(cd, net);
+	sunrpc_cache_destroy_net(cd, net);
 }
 
 static struct unix_gid *unix_gid_lookup(struct cache_detail *cd, kuid_t uid)
