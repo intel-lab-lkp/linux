@@ -389,6 +389,8 @@ struct inv_icm42607_sensor_state {
 
 typedef int (*inv_icm42607_bus_setup)(struct inv_icm42607_state *);
 
+extern const struct regmap_config inv_icm42607_regmap_config;
+
 u32 inv_icm42607_odr_to_period(enum inv_icm42607_odr odr);
 
 int inv_icm42607_debugfs_reg(struct iio_dev *indio_dev, unsigned int reg,
