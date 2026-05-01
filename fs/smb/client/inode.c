@@ -28,19 +28,18 @@
 #include "cached_dir.h"
 #include "reparse.h"
 
-static void cifs_invalidate_cached_dir(struct cifs_tcon *tcon,
-				       struct dentry *parent)
+static void cifs_invalidate_cached_dirent(struct cifs_tcon *tcon,
+						 struct dentry *parent,
+						 const char *name,
+						 unsigned int namelen)
 {
 	struct cached_fid *parent_cfid = NULL;
 
-	if (!tcon || !parent)
+	if (!tcon || !parent || !name || !namelen)
 		return;
 
 	if (!open_cached_dir_by_dentry(tcon, parent, &parent_cfid)) {
-		mutex_lock(&parent_cfid->dirents.de_mutex);
-		parent_cfid->dirents.is_valid = false;
-		parent_cfid->dirents.is_failed = true;
-		mutex_unlock(&parent_cfid->dirents.de_mutex);
+		invalidate_dirent_in_cached_dir(parent_cfid, name, namelen);
 		close_cached_dir(parent_cfid);
 	}
 }
@@ -175,6 +174,28 @@ cifs_nlink_fattr_to_inode(struct inode *inode, struct cifs_fattr *fattr)
 
 	/* we trust the server, so update it */
 	set_nlink(inode, fattr->cf_nlink);
+}
+
+void cifs_inode_to_fattr(struct inode *inode, struct cifs_fattr *fattr)
+{
+	struct cifsInodeInfo *cifs_i = CIFS_I(inode);
+
+	memset(fattr, 0, sizeof(*fattr));
+	fattr->cf_cifsattrs = cifs_i->cifsAttrs;
+	fattr->cf_uniqueid = cifs_i->uniqueid;
+	fattr->cf_eof = cifs_i->netfs.remote_i_size;
+	fattr->cf_bytes = (u64)inode->i_blocks << 9;
+	fattr->cf_createtime = cifs_i->createtime;
+	fattr->cf_uid = inode->i_uid;
+	fattr->cf_gid = inode->i_gid;
+	fattr->cf_mode = inode->i_mode;
+	fattr->cf_rdev = inode->i_rdev;
+	fattr->cf_nlink = inode->i_nlink;
+	fattr->cf_dtype = S_DT(inode->i_mode);
+	fattr->cf_atime = inode_get_atime(inode);
+	fattr->cf_mtime = inode_get_mtime(inode);
+	fattr->cf_ctime = inode_get_ctime(inode);
+	fattr->cf_cifstag = cifs_i->reparse_tag;
 }
 
 /* populate an inode with info from a cifs_fattr struct */
@@ -1169,6 +1190,24 @@ static inline bool is_inode_cache_good(struct inode *ino)
 	return ino && CIFS_CACHE_READ(CIFS_I(ino)) && CIFS_I(ino)->time != 0;
 }
 
+static bool cifs_inode_has_writable_handle(struct inode *inode)
+{
+	struct cifsInodeInfo *cifs_inode = CIFS_I(inode);
+	struct cifsFileInfo *open_file;
+	bool writable = false;
+
+	spin_lock(&cifs_inode->open_file_lock);
+	list_for_each_entry(open_file, &cifs_inode->openFileList, flist) {
+		if (OPEN_FMODE(open_file->f_flags) & FMODE_WRITE) {
+			writable = true;
+			break;
+		}
+	}
+	spin_unlock(&cifs_inode->open_file_lock);
+
+	return writable;
+}
+
 static int reparse_info_to_fattr(struct cifs_open_info_data *data,
 				 struct super_block *sb,
 				 const unsigned int xid,
@@ -2085,7 +2124,9 @@ psx_del_no_retry:
 
 out_reval:
 	if (!rc && dentry->d_parent)
-		cifs_invalidate_cached_dir(tcon, dentry->d_parent);
+		cifs_invalidate_cached_dirent(tcon, dentry->d_parent,
+							    dentry->d_name.name,
+							    dentry->d_name.len);
 
 	if (inode) {
 		cifs_inode = CIFS_I(inode);
@@ -2276,6 +2317,7 @@ struct dentry *cifs_mkdir(struct mnt_idmap *idmap, struct inode *inode,
 	int rc = 0;
 	unsigned int xid;
 	struct cifs_sb_info *cifs_sb;
+	struct cached_fid *parent_cfid = NULL;
 	struct tcon_link *tlink;
 	struct cifs_tcon *tcon;
 	struct TCP_Server_Info *server;
@@ -2337,12 +2379,26 @@ struct dentry *cifs_mkdir(struct mnt_idmap *idmap, struct inode *inode,
 	/* TODO: skip this for smb2/smb3 */
 	rc = cifs_mkdir_qinfo(inode, direntry, mode, full_path, cifs_sb, tcon,
 			      xid);
+	if (!rc && d_inode(direntry) && direntry->d_parent &&
+	    server->dialect >= SMB30_PROT_ID &&
+	    !open_cached_dir_by_dentry(tcon, direntry->d_parent, &parent_cfid)) {
+		struct cifs_fattr fattr;
+
+		cifs_inode_to_fattr(d_inode(direntry), &fattr);
+		if (!update_dirent_in_cached_dir(parent_cfid,
+						  direntry->d_name.name,
+						  direntry->d_name.len,
+						  &fattr))
+			invalidate_cached_dir_contents(parent_cfid);
+	}
 mkdir_out:
 	/*
 	 * Force revalidate to get parent dir info when needed since cached
 	 * attributes are invalid now.
 	 */
 	CIFS_I(inode)->time = 0;
+	if (parent_cfid)
+		close_cached_dir(parent_cfid);
 	free_dentry_path(page);
 	free_xid(xid);
 	cifs_put_tlink(tlink);
@@ -2408,7 +2464,9 @@ int cifs_rmdir(struct inode *inode, struct dentry *direntry)
 		clear_nlink(d_inode(direntry));
 		spin_unlock(&d_inode(direntry)->i_lock);
 		if (direntry->d_parent)
-			cifs_invalidate_cached_dir(tcon, direntry->d_parent);
+			cifs_invalidate_cached_dirent(tcon, direntry->d_parent,
+							    direntry->d_name.name,
+							    direntry->d_name.len);
 	}
 
 	/* force revalidate to go get info when needed */
@@ -2518,15 +2576,18 @@ cifs_rename2(struct mnt_idmap *idmap, struct inode *source_dir,
 	     struct dentry *target_dentry, unsigned int flags)
 {
 	const char *from_name, *to_name;
+	const char *source_name, *target_name;
 	struct TCP_Server_Info *server;
 	void *page1, *page2;
 	struct cifs_sb_info *cifs_sb;
 	struct tcon_link *tlink;
 	struct cifs_tcon *tcon;
+	struct inode *source_inode;
 	bool rehash = false;
 	unsigned int xid;
 	int rc, tmprc;
 	int retry_count = 0;
+	unsigned int source_namelen, target_namelen;
 	FILE_UNIX_BASIC_INFO *info_buf_source = NULL;
 #ifdef CONFIG_CIFS_ALLOW_INSECURE_LEGACY
 	FILE_UNIX_BASIC_INFO *info_buf_target;
@@ -2554,6 +2615,11 @@ cifs_rename2(struct mnt_idmap *idmap, struct inode *source_dir,
 	if (IS_ERR(tlink))
 		return PTR_ERR(tlink);
 	tcon = tlink_tcon(tlink);
+	source_inode = d_inode(source_dentry);
+	source_name = source_dentry->d_name.name;
+	source_namelen = source_dentry->d_name.len;
+	target_name = target_dentry->d_name.name;
+	target_namelen = target_dentry->d_name.len;
 	server = tcon->ses->server;
 
 	page1 = alloc_dentry_path();
@@ -2594,6 +2660,33 @@ cifs_rename2(struct mnt_idmap *idmap, struct inode *source_dir,
 
 	if (!rc)
 		rehash = false;
+
+	/* Update cached dirents after successful rename (before exit checks) */
+	if (!rc) {
+		struct cifs_fattr fattr;
+		struct cached_fid *target_cfid = NULL;
+
+		/* Invalidate source entry (no longer exists at old name) */
+		cifs_invalidate_cached_dirent(tcon, source_dentry->d_parent,
+					      source_name,
+					      source_namelen);
+
+		/* Upsert target entry with the renamed inode's attributes */
+		if (source_inode) {
+			cifs_inode_to_fattr(source_inode, &fattr);
+			if (!open_cached_dir_by_dentry(tcon,
+						       target_dentry->d_parent,
+						       &target_cfid)) {
+				if (!update_dirent_in_cached_dir(target_cfid,
+								  target_name,
+								  target_namelen,
+								  &fattr))
+					invalidate_cached_dir_contents(target_cfid);
+				close_cached_dir(target_cfid);
+			}
+		}
+	}
+
 	/*
 	 * No-replace is the natural behavior for CIFS, so skip unlink hacks.
 	 */
@@ -2689,13 +2782,6 @@ unlink_target:
 		}
 	}
 
-	/* force revalidate to go get info when needed */
-	if (!rc) {
-		cifs_invalidate_cached_dir(tcon, source_dentry->d_parent);
-		if (target_dentry->d_parent != source_dentry->d_parent)
-			cifs_invalidate_cached_dir(tcon, target_dentry->d_parent);
-	}
-
 	CIFS_I(source_dir)->time = CIFS_I(target_dir)->time = 0;
 
 cifs_rename_exit:
@@ -2715,13 +2801,14 @@ cifs_dentry_needs_reval(struct dentry *dentry)
 	struct inode *inode = d_inode(dentry);
 	struct cifsInodeInfo *cifs_i = CIFS_I(inode);
 	struct cifs_sb_info *cifs_sb = CIFS_SB(inode);
-	struct cifs_tcon *tcon = cifs_sb_master_tcon(cifs_sb);
+	struct tcon_link *tlink;
+	struct cifs_tcon *tcon;
 	struct cached_fid *cfid = NULL;
+	bool retried_pending = false;
+	bool force_reval = cifs_i->time == 0;
 
 	if (test_bit(CIFS_INO_DELETE_PENDING, &cifs_i->flags))
 		return false;
-	if (cifs_i->time == 0)
-		return true;
 
 	if (CIFS_CACHE_READ(cifs_i))
 		return false;
@@ -2729,36 +2816,110 @@ cifs_dentry_needs_reval(struct dentry *dentry)
 	if (!lookupCacheEnabled)
 		return true;
 
+	tlink = cifs_sb_tlink(cifs_sb);
+	if (IS_ERR(tlink))
+		return true;
+	tcon = tlink_tcon(tlink);
+
 	if (!open_cached_dir_by_dentry(tcon, dentry->d_parent, &cfid)) {
 		if (cifs_i->time > cfid->time) {
 			close_cached_dir(cfid);
+			cifs_put_tlink(tlink);
 			return false;
 		}
 		close_cached_dir(cfid);
 	}
+
+	if (dentry->d_parent) {
+		struct cached_dirent_lookup_result lookup = {};
+		int rc;
+		int rc_wait;
+
+	retry_lookup:
+		cfid = NULL;
+		if (!open_cached_dir_by_dentry(tcon, dentry->d_parent, &cfid)) {
+			rc = lookup_cached_dir(cfid, dentry->d_name.name,
+							  dentry->d_name.len,
+							  &lookup);
+			if (rc == -ENOENT && !retried_pending) {
+				rc_wait = cifs_wait_for_pending_dcache(cfid,
+							     dentry->d_name.name,
+							     dentry->d_name.len);
+				if (rc_wait == -ETIMEDOUT)
+					cifs_dbg(FYI,
+						 "Timed out waiting for async dcache population of %pd\n",
+						 dentry);
+				else if (!rc_wait) {
+					close_cached_dir(cfid);
+					retried_pending = true;
+					goto retry_lookup;
+				}
+			}
+			close_cached_dir(cfid);
+			if (!rc && lookup.found && lookup.under_active_lease) {
+				if (cifs_inode_has_writable_handle(inode)) {
+					cifs_set_time(dentry, jiffies);
+					cifs_put_tlink(tlink);
+					return false;
+				}
+				rc = cifs_fattr_to_inode(inode, &lookup.fattr, false);
+				if (!rc) {
+					cifs_set_time(dentry, jiffies);
+					cifs_put_tlink(tlink);
+					return false;
+				}
+				if (rc != -ESTALE) {
+					cifs_put_tlink(tlink);
+					return true;
+				}
+			}
+		}
+	}
+
+	/*
+	 * Even when metadata is marked stale (time == 0), attempt the
+	 * cached-dir fast path above first; only force wire revalidation if
+	 * cache lookup/update did not satisfy this dentry.
+	 */
+	if (force_reval) {
+		cifs_put_tlink(tlink);
+		return true;
+	}
+
 	/*
 	 * depending on inode type, check if attribute caching disabled for
 	 * files or directories
 	 */
 	if (S_ISDIR(inode->i_mode)) {
-		if (!cifs_sb->ctx->acdirmax)
+		if (!cifs_sb->ctx->acdirmax) {
+			cifs_put_tlink(tlink);
 			return true;
+		}
 		if (!time_in_range(jiffies, cifs_i->time,
-				   cifs_i->time + cifs_sb->ctx->acdirmax))
+				   cifs_i->time + cifs_sb->ctx->acdirmax)) {
+			cifs_put_tlink(tlink);
 			return true;
+		}
 	} else { /* file */
-		if (!cifs_sb->ctx->acregmax)
+		if (!cifs_sb->ctx->acregmax) {
+			cifs_put_tlink(tlink);
 			return true;
+		}
 		if (!time_in_range(jiffies, cifs_i->time,
-				   cifs_i->time + cifs_sb->ctx->acregmax))
+				   cifs_i->time + cifs_sb->ctx->acregmax)) {
+			cifs_put_tlink(tlink);
 			return true;
+		}
 	}
 
 	/* hardlinked files w/ noserverino get "special" treatment */
 	if (!(cifs_sb_flags(cifs_sb) & CIFS_MOUNT_SERVER_INUM) &&
-	    S_ISREG(inode->i_mode) && inode->i_nlink != 1)
+	    S_ISREG(inode->i_mode) && inode->i_nlink != 1) {
+		cifs_put_tlink(tlink);
 		return true;
+	}
 
+	cifs_put_tlink(tlink);
 	return false;
 }
 
