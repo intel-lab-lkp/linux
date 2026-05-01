@@ -1737,18 +1737,15 @@ void sunrpc_cache_queue_release(struct rcu_work *rwork)
 }
 EXPORT_SYMBOL_GPL(sunrpc_cache_queue_release);
 
-/**
- * sunrpc_cache_drain - drain pending cache release work
- *
+/*
  * Wait for outstanding RCU callbacks to enqueue their release
  * work, then flush that work to completion.
  */
-void sunrpc_cache_drain(void)
+static void sunrpc_cache_drain(void)
 {
 	rcu_barrier();
 	flush_workqueue(sunrpc_cache_wq);
 }
-EXPORT_SYMBOL_GPL(sunrpc_cache_drain);
 
 /**
  * sunrpc_cache_destroy_net - quiesce and tear down a per-net cache

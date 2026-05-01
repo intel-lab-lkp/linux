@@ -2250,12 +2250,8 @@ nfsd_export_shutdown(struct net *net)
 
 	dprintk("nfsd: shutting down export module (net: %x).\n", net->ns.inum);
 
-	cache_unregister_net(nn->svc_expkey_cache, net);
-	cache_unregister_net(nn->svc_export_cache, net);
-	/* One drain covers both caches' deferred release work. */
-	sunrpc_cache_drain();
-	cache_destroy_net(nn->svc_expkey_cache, net);
-	cache_destroy_net(nn->svc_export_cache, net);
+	sunrpc_cache_destroy_net(nn->svc_expkey_cache, net);
+	sunrpc_cache_destroy_net(nn->svc_export_cache, net);
 	svcauth_unix_purge(net);
 
 	dprintk("nfsd: export shutdown complete (net: %x).\n", net->ns.inum);
