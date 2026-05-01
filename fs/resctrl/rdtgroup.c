@@ -2782,6 +2782,9 @@ static void schemata_list_destroy(void)
 	}
 }
 
+/* Protected by the serialized mount path (rdtgroup_mutex + resctrl_mounted). */
+static bool rdt_kill_sb_locked;
+
 static int rdt_get_tree(struct fs_context *fc)
 {
 	struct rdt_fs_context *ctx = rdt_fc2context(fc);
@@ -2855,7 +2858,9 @@ static int rdt_get_tree(struct fs_context *fc)
 	if (ret)
 		goto out_mondata;
 
+	rdt_kill_sb_locked = true;
 	ret = kernfs_get_tree(fc);
+	rdt_kill_sb_locked = false;
 	if (ret < 0)
 		goto out_psl;
 
@@ -3173,8 +3178,10 @@ static void rdt_kill_sb(struct super_block *sb)
 {
 	struct rdt_resource *r;
 
-	cpus_read_lock();
-	mutex_lock(&rdtgroup_mutex);
+	if (!rdt_kill_sb_locked) {
+		cpus_read_lock();
+		mutex_lock(&rdtgroup_mutex);
+	}
 
 	rdt_disable_ctx();
 
@@ -3189,8 +3196,10 @@ static void rdt_kill_sb(struct super_block *sb)
 		resctrl_arch_disable_mon();
 	resctrl_mounted = false;
 	kernfs_kill_sb(sb);
-	mutex_unlock(&rdtgroup_mutex);
-	cpus_read_unlock();
+	if (!rdt_kill_sb_locked) {
+		mutex_unlock(&rdtgroup_mutex);
+		cpus_read_unlock();
+	}
 }
 
 static struct file_system_type rdt_fs_type = {
