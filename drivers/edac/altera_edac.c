@@ -1526,15 +1526,18 @@ static int altr_portb_setup(struct altr_edac_device_dev *device)
 		edac_printk(KERN_ERR, EDAC_DEVICE,
 			    "%s: Unable to allocate PortB EDAC device\n",
 			    ecc_name);
-		return -ENOMEM;
+		rc = -ENOMEM;
+		goto out_put_node;
 	}
 
 	/* Initialize the PortB EDAC device structure from PortA structure */
 	altdev = dci->pvt_info;
 	*altdev = *device;
 
-	if (!devres_open_group(&altdev->ddev, altr_portb_setup, GFP_KERNEL))
-		return -ENOMEM;
+	if (!devres_open_group(&altdev->ddev, altr_portb_setup, GFP_KERNEL)) {
+		rc = -ENOMEM;
+		goto out_put_node;
+	}
 
 	/* Update PortB specific values */
 	altdev->edac_dev_name = ecc_name;
@@ -1607,13 +1610,16 @@ static int altr_portb_setup(struct altr_edac_device_dev *device)
 
 	devres_remove_group(&altdev->ddev, altr_portb_setup);
 
-	return 0;
+	rc = 0;
+	goto out_put_node;
 
 err_release_group_1:
 	edac_device_free_ctl_info(dci);
 	devres_release_group(&altdev->ddev, altr_portb_setup);
 	edac_printk(KERN_ERR, EDAC_DEVICE,
 		    "%s:Error setting up EDAC device: %d\n", ecc_name, rc);
+out_put_node:
+	of_node_put(np);
 	return rc;
 }
 
