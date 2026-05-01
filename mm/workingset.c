@@ -369,8 +369,10 @@ static void lru_gen_refault(struct folio *folio, void *shadow)
  * to the in-memory dimensions. This function allows reclaim and LRU
  * operations to drive the non-resident aging along in parallel.
  */
-static void workingset_age_nonresident(struct lruvec *lruvec, unsigned long nr_pages)
+static long workingset_age_nonresident(struct lruvec *lruvec, unsigned long nr_pages)
 {
+	unsigned long eviction;
+
 	/*
 	 * Reclaiming a cgroup means reclaiming all its children in a
 	 * round-robin fashion. That means that each cgroup has an LRU
@@ -382,9 +384,10 @@ static void workingset_age_nonresident(struct lruvec *lruvec, unsigned long nr_p
 	 * the virtual inactive lists of all its parents, including
 	 * the root cgroup's, age as well.
 	 */
-	do {
+	eviction = atomic_long_fetch_add_relaxed(nr_pages, &lruvec->evictions);
+	while ((lruvec = parent_lruvec(lruvec)))
 		atomic_long_add(nr_pages, &lruvec->evictions);
-	} while ((lruvec = parent_lruvec(lruvec)));
+	return eviction;
 }
 
 /**
@@ -414,9 +417,8 @@ void *workingset_eviction(struct folio *folio, struct mem_cgroup *target_memcg)
 	lruvec = mem_cgroup_lruvec(target_memcg, pgdat);
 	/* XXX: target_memcg can be NULL, go through lruvec */
 	memcgid = mem_cgroup_private_id(lruvec_memcg(lruvec));
-	eviction = atomic_long_read(&lruvec->evictions);
+	eviction = workingset_age_nonresident(lruvec, folio_nr_pages(folio));
 	eviction >>= bucket_order[file];
-	workingset_age_nonresident(lruvec, folio_nr_pages(folio));
 	return pack_shadow(memcgid, pgdat, eviction,
 			   folio_is_workingset(folio), file);
 }
