@@ -82,6 +82,7 @@ early_param("liveupdate", early_liveupdate_param);
 
 static int __init luo_early_startup(void)
 {
+	size_t fdt_size;
 	phys_addr_t fdt_phys;
 	int err, ln_size;
 	const void *ptr;
@@ -94,7 +95,8 @@ static int __init luo_early_startup(void)
 	}
 
 	/* Retrieve LUO subtree, and verify its format. */
-	err = kho_retrieve_subtree(LUO_FDT_KHO_ENTRY_NAME, &fdt_phys, NULL);
+	err = kho_retrieve_subtree(LUO_FDT_KHO_ENTRY_NAME, &fdt_phys,
+				   &fdt_size);
 	if (err) {
 		if (err != -ENOENT) {
 			pr_err("failed to retrieve FDT '%s' from KHO: %pe\n",
@@ -103,6 +105,12 @@ static int __init luo_early_startup(void)
 		}
 
 		return 0;
+	}
+
+	if (!fdt_size || fdt_size > LUO_FDT_SIZE ||
+	    !kho_is_preserved(fdt_phys, DIV_ROUND_UP(fdt_size, PAGE_SIZE))) {
+		pr_err("Invalid LUO FDT from KHO\n");
+		return -EINVAL;
 	}
 
 	luo_global.fdt_in = phys_to_virt(fdt_phys);
