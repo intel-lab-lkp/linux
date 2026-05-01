@@ -353,6 +353,38 @@ int __pkvm_prot_finalize(void)
 	return 0;
 }
 
+/* Unmap MMIO region while skipping donated PTEs. */
+static int host_stage2_unmap_mmio_region(u64 start, u64 size)
+{
+	struct kvm_pgtable *pgt = &host_mmu.pgt;
+	u64 unmap_start = start;
+	u64 addr = start;
+	kvm_pte_t pte;
+	int ret = 0;
+	u8 level;
+
+	while (addr < start + size) {
+		ret = kvm_pgtable_get_leaf(pgt, addr, &pte, &level);
+		if (ret)
+			return ret;
+		if (!kvm_pte_valid(pte) && pte != 0) {
+			if (addr > unmap_start) {
+				ret = kvm_pgtable_stage2_unmap(pgt, unmap_start,
+							       addr - unmap_start);
+				if (ret)
+					return ret;
+			}
+			addr += kvm_granule_size(level);
+			unmap_start = addr;
+		} else {
+			addr += kvm_granule_size(level);
+		}
+	}
+	if (addr > unmap_start)
+		ret = kvm_pgtable_stage2_unmap(pgt, unmap_start, addr - unmap_start);
+	return ret;
+}
+
 static int host_stage2_unmap_dev_all(void)
 {
 	struct kvm_pgtable *pgt = &host_mmu.pgt;
@@ -363,11 +395,11 @@ static int host_stage2_unmap_dev_all(void)
 	/* Unmap all non-memory regions to recycle the pages */
 	for (i = 0; i < hyp_memblock_nr; i++, addr = reg->base + reg->size) {
 		reg = &hyp_memory[i];
-		ret = kvm_pgtable_stage2_unmap(pgt, addr, reg->base - addr);
+		ret = host_stage2_unmap_mmio_region(addr, reg->base - addr);
 		if (ret)
 			return ret;
 	}
-	return kvm_pgtable_stage2_unmap(pgt, addr, BIT(pgt->ia_bits) - addr);
+	return host_stage2_unmap_mmio_region(addr, BIT(pgt->ia_bits) - addr);
 }
 
 /*
@@ -1084,6 +1116,89 @@ unlock:
 	hyp_unlock_component();
 	host_unlock_component();
 
+	return ret;
+}
+
+int __pkvm_host_donate_hyp_mmio(phys_addr_t addr, size_t size, unsigned long *haddr)
+{
+	kvm_pte_t pte;
+	u64 offset;
+	int ret;
+
+	/* Only before de-privilege. */
+	if (static_branch_unlikely(&kvm_protected_mode_initialized))
+		return -EPERM;
+
+	if (!PAGE_ALIGNED(addr | size))
+		return -EINVAL;
+
+	ret = __pkvm_create_private_mapping(addr, size, PAGE_HYP_DEVICE, haddr);
+	if (ret)
+		return ret;
+
+	host_lock_component();
+	for (offset = 0; offset < size; offset += PAGE_SIZE) {
+		if (addr_is_memory(addr + offset)) {
+			ret = -EINVAL;
+			goto unlock;
+		}
+		ret = kvm_pgtable_get_leaf(&host_mmu.pgt, addr + offset, &pte, NULL);
+		if (ret)
+			goto unlock;
+		if (pte && !kvm_pte_valid(pte)) {
+			ret = -EPERM;
+			goto unlock;
+		}
+	}
+	/*
+	 * We set HYP as the owner of the MMIO pages in the host stage-2, for:
+	 * - host aborts: host_stage2_adjust_range() would fail for invalid non zero PTEs.
+	 * - recycle under memory pressure: host_stage2_unmap_dev_all() would call
+	 *   kvm_pgtable_stage2_unmap() which will not clear non zero invalid ptes (counted).
+	 * - other MMIO donation: Would fail as we check that the PTE is valid or empty.
+	 */
+	ret = host_stage2_try(kvm_pgtable_stage2_annotate, &host_mmu.pgt,
+			      addr, size, &host_s2_pool,
+			      KVM_HOST_INVALID_PTE_TYPE_DONATION,
+			      FIELD_PREP(KVM_HOST_DONATION_PTE_OWNER_MASK, PKVM_ID_HYP));
+unlock:
+	host_unlock_component();
+	return ret;
+}
+
+int __pkvm_hyp_donate_host_mmio(phys_addr_t addr, size_t size)
+{
+	kvm_pte_t pte;
+	u64 offset;
+	int ret = 0;
+
+	if (static_branch_unlikely(&kvm_protected_mode_initialized))
+		return -EPERM;
+
+	if (!PAGE_ALIGNED(addr | size))
+		return -EINVAL;
+
+	host_lock_component();
+	for (offset = 0; offset < size; offset += PAGE_SIZE) {
+		if (addr_is_memory(addr + offset)) {
+			ret = -EINVAL;
+			goto unlock;
+		}
+		ret = kvm_pgtable_get_leaf(&host_mmu.pgt, addr + offset, &pte, NULL);
+		if (ret)
+			goto unlock;
+		if (!pte || kvm_pte_valid(pte)) {
+			ret = -EINVAL;
+			goto unlock;
+		}
+		if (FIELD_GET(KVM_HOST_DONATION_PTE_OWNER_MASK, pte) != PKVM_ID_HYP) {
+			ret = -EPERM;
+			goto unlock;
+		}
+	}
+	WARN_ON(host_stage2_idmap_locked(addr, size, PKVM_HOST_MMIO_PROT));
+unlock:
+	host_unlock_component();
 	return ret;
 }
 
