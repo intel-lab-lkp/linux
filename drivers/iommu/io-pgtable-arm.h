@@ -27,4 +27,10 @@
 #define ARM_LPAE_TCR_PS_48_BIT		0x5ULL
 #define ARM_LPAE_TCR_PS_52_BIT		0x6ULL
 
+#ifdef __KVM_NVHE_HYPERVISOR__
+struct io_pgtable_ops *kvm_alloc_io_pgtable_ops(enum io_pgtable_fmt fmt,
+						struct io_pgtable_cfg *cfg,
+						void *cookie);
+#endif
+
 #endif /* IO_PGTABLE_ARM_H_ */

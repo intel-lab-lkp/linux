@@ -10,6 +10,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/iommu.h>
 
+#ifndef __KVM_NVHE_HYPERVISOR__
 /**
  * struct ioptdesc - Memory descriptor for IOMMU page tables
  * @iopt_freelist_elm: List element for a struct iommu_pages_list
@@ -180,5 +181,67 @@ static inline void iommu_pages_dma_unmap(struct device *dev, dma_addr_t dma, siz
 {
 	dma_unmap_single(dev, dma, size, DMA_TO_DEVICE);
 }
+
+#else /* __KVM_NVHE_HYPERVISOR__ */
+
+#include <nvhe/memory.h>
+#include <nvhe/iommu.h>
+
+static inline void *iommu_alloc_pages_node_sz(int nid, gfp_t gfp, size_t size)
+{
+	return kvm_iommu_donate_pages(get_order(size));
+}
+
+static inline void iommu_free_pages(void *virt)
+{
+	kvm_iommu_reclaim_pages(virt);
+}
+
+static inline void *iommu_alloc_data(size_t size, gfp_t gfp)
+{
+	return kvm_iommu_donate_pages(get_order(size));
+}
+
+static inline void iommu_free_data(void *p)
+{
+	kvm_iommu_reclaim_pages(p);
+}
+
+#undef WARN_ONCE
+#define WARN_ONCE(condition, format...) WARN_ON(condition)
+
+static inline phys_addr_t iommu_virt_to_phys(void *virt)
+{
+	return hyp_virt_to_phys(virt);
+}
+
+static inline void *iommu_phys_to_virt(phys_addr_t phys)
+{
+	return hyp_phys_to_virt(phys);
+}
+
+static inline void iommu_pages_flush_incoherent(struct device *dma_dev,
+						void *virt, size_t offset,
+						size_t len)
+{
+	kvm_flush_dcache_to_poc(virt + offset, len);
+}
+
+static inline dma_addr_t iommu_pages_dma_map(struct device *dev, void *virt, size_t size)
+{
+	kvm_flush_dcache_to_poc(virt, size);
+	return (dma_addr_t)hyp_virt_to_phys(virt);
+}
+
+static inline int iommu_pages_dma_mapping_error(struct device *dev, dma_addr_t dma)
+{
+	return 0;
+}
+
+static inline void iommu_pages_dma_unmap(struct device *dev, dma_addr_t dma, size_t size)
+{
+}
+
+#endif /* __KVM_NVHE_HYPERVISOR__ */
 
 #endif /* __IOMMU_PAGES_H */

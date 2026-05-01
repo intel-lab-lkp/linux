@@ -252,9 +252,13 @@ static void *__arm_lpae_alloc_pages(size_t size, gfp_t gfp,
 				    void *cookie)
 {
 	struct device *dev = cfg->iommu_dev;
+	int nid = NUMA_NO_NODE;
 	size_t alloc_size;
 	dma_addr_t dma;
 	void *pages;
+
+	if (dev)
+		nid = dev_to_node(dev);
 
 	/*
 	 * For very small starting-level translation tables the HW requires a
@@ -264,8 +268,7 @@ static void *__arm_lpae_alloc_pages(size_t size, gfp_t gfp,
 	if (cfg->alloc)
 		pages = cfg->alloc(cookie, alloc_size, gfp);
 	else
-		pages = iommu_alloc_pages_node_sz(dev_to_node(dev), gfp,
-						  alloc_size);
+		pages = iommu_alloc_pages_node_sz(nid, gfp, alloc_size);
 
 	if (!pages)
 		return NULL;
@@ -1262,3 +1265,27 @@ struct io_pgtable_init_fns io_pgtable_arm_mali_lpae_init_fns = {
 	.alloc	= arm_mali_lpae_alloc_pgtable,
 	.free	= arm_lpae_free_pgtable,
 };
+
+#ifdef __KVM_NVHE_HYPERVISOR__
+#include <nvhe/iommu.h>
+
+struct io_pgtable_ops *kvm_alloc_io_pgtable_ops(enum io_pgtable_fmt fmt,
+						struct io_pgtable_cfg *cfg,
+						void *cookie)
+{
+	struct io_pgtable *iop;
+
+	if (fmt != ARM_64_LPAE_S2)
+		return NULL;
+
+	iop = arm_64_lpae_alloc_pgtable_s2(cfg, cookie);
+	if (!iop)
+		return NULL;
+
+	iop->fmt        = fmt;
+	iop->cookie     = cookie;
+	iop->cfg        = *cfg;
+
+	return &iop->ops;
+}
+#endif
