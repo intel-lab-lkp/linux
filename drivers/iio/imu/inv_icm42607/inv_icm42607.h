@@ -410,6 +410,9 @@ int inv_icm42607_set_accel_conf(struct inv_icm42607_state *st,
 int inv_icm42607_set_temp_conf(struct inv_icm42607_state *st, bool enable,
 			       unsigned int *sleep_ms);
 
+int inv_icm42607_enable_wom(struct inv_icm42607_state *st);
+int inv_icm42607_disable_wom(struct inv_icm42607_state *st);
+
 int inv_icm42607_debugfs_reg(struct iio_dev *indio_dev, unsigned int reg,
 			     unsigned int writeval, unsigned int *readval);
 

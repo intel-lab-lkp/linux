@@ -238,6 +238,39 @@ int inv_icm42607_set_temp_conf(struct inv_icm42607_state *st, bool enable,
 					  sleep_ms);
 }
 
+int inv_icm42607_enable_wom(struct inv_icm42607_state *st)
+{
+	int ret;
+
+	/* enable WoM hardware */
+	ret = regmap_write(st->map, INV_ICM42607_REG_WOM_CONFIG,
+			   FIELD_PREP(INV_ICM42607_WOM_CONFIG_INT_DUR_MASK, 1) |
+			   INV_ICM42607_WOM_CONFIG_MODE |
+			   INV_ICM42607_WOM_CONFIG_EN);
+	if (ret)
+		return ret;
+
+	/* enable WoM interrupt */
+	return regmap_set_bits(st->map, INV_ICM42607_REG_INT_SOURCE1,
+			       INV_ICM42607_INT_SOURCE1_WOM_INT1_EN);
+}
+
+int inv_icm42607_disable_wom(struct inv_icm42607_state *st)
+{
+	int ret;
+
+	/* disable WoM interrupt */
+	ret = regmap_clear_bits(st->map, INV_ICM42607_REG_INT_SOURCE1,
+				INV_ICM42607_INT_SOURCE1_WOM_INT1_EN);
+	if (ret)
+		return ret;
+
+	/* disable WoM hardware */
+	return regmap_clear_bits(st->map, INV_ICM42607_REG_WOM_CONFIG,
+				 INV_ICM42607_WOM_CONFIG_EN);
+}
+
+
 int inv_icm42607_debugfs_reg(struct iio_dev *indio_dev, unsigned int reg,
 			     unsigned int writeval, unsigned int *readval)
 {
@@ -361,6 +394,109 @@ static int inv_icm42607_setup(struct inv_icm42607_state *st,
 	return inv_icm42607_set_conf(st, hw->conf);
 }
 
+static irqreturn_t inv_icm42607_irq_timestamp(int irq, void *_data)
+{
+	struct inv_icm42607_state *st = _data;
+
+	st->timestamp.gyro = iio_get_time_ns(st->indio_gyro);
+	st->timestamp.accel = iio_get_time_ns(st->indio_accel);
+
+	return IRQ_WAKE_THREAD;
+}
+
+static irqreturn_t inv_icm42607_irq_handler(int irq, void *_data)
+{
+	struct inv_icm42607_state *st = _data;
+	struct device *dev = regmap_get_device(st->map);
+	unsigned int status;
+	int ret;
+
+	mutex_lock(&st->lock);
+
+	if (st->apex.on) {
+		unsigned int status2, status3;
+
+		/* read INT_STATUS2 and INT_STATUS3 in 1 operation */
+		ret = regmap_bulk_read(st->map, INV_ICM42607_REG_INT_STATUS2, st->buffer, 2);
+		if (ret)
+			goto out_unlock;
+		status2 = st->buffer[0];
+		status3 = st->buffer[1];
+		inv_icm42607_accel_handle_events(st->indio_accel, status2, status3,
+						 st->timestamp.accel);
+	}
+
+	ret = regmap_read(st->map, INV_ICM42607_REG_INT_STATUS, &status);
+	if (ret)
+		goto out_unlock;
+
+	if (status & INV_ICM42607_INT_STATUS_FIFO_FULL)
+		dev_warn(dev, "FIFO full data lost!\n");
+
+	if (status & INV_ICM42607_INT_STATUS_FIFO_THS) {
+		ret = inv_icm42607_buffer_fifo_read(st, 0);
+		if (ret) {
+			dev_err(dev, "FIFO read error %d\n", ret);
+			goto out_unlock;
+		}
+		ret = inv_icm42607_buffer_fifo_parse(st);
+		if (ret)
+			dev_err(dev, "FIFO parsing error %d\n", ret);
+	}
+
+out_unlock:
+	mutex_unlock(&st->lock);
+	return IRQ_HANDLED;
+}
+
+/**
+ * inv_icm42607_irq_init() - initialize int pin and interrupt handler
+ * @st:		driver internal state
+ * @irq:	irq number
+ * @irq_type:	irq trigger type
+ * @open_drain:	true if irq is open drain, false for push-pull
+ *
+ * Returns 0 on success, a negative error code otherwise.
+ */
+static int inv_icm42607_irq_init(struct inv_icm42607_state *st, int irq,
+				int irq_type, bool open_drain)
+{
+	struct device *dev = regmap_get_device(st->map);
+	unsigned int val = 0;
+	int ret;
+
+	switch (irq_type) {
+	case IRQF_TRIGGER_RISING:
+	case IRQF_TRIGGER_HIGH:
+		val = INV_ICM42607_INT_CONFIG_INT1_ACTIVE_HIGH;
+		break;
+	default:
+		val = INV_ICM42607_INT_CONFIG_INT1_ACTIVE_LOW;
+		break;
+	}
+
+	switch (irq_type) {
+	case IRQF_TRIGGER_LOW:
+	case IRQF_TRIGGER_HIGH:
+		val |= INV_ICM42607_INT_CONFIG_INT1_LATCHED;
+		break;
+	default:
+		break;
+	}
+
+	if (!open_drain)
+		val |= INV_ICM42607_INT_CONFIG_INT1_PUSH_PULL;
+
+	ret = regmap_write(st->map, INV_ICM42607_REG_INT_CONFIG, val);
+	if (ret)
+		return ret;
+
+	irq_type |= IRQF_ONESHOT;
+	return devm_request_threaded_irq(dev, irq, inv_icm42607_irq_timestamp,
+					 inv_icm42607_irq_handler, irq_type,
+					 st->name, st);
+}
+
 static int inv_icm42607_enable_vddio_reg(struct inv_icm42607_state *st)
 {
 	int ret;
@@ -387,7 +523,7 @@ int inv_icm42607_core_probe(struct regmap *regmap, int chip,
 	struct device *dev = regmap_get_device(regmap);
 	struct fwnode_handle *fwnode = dev_fwnode(dev);
 	struct inv_icm42607_state *st;
-	int irq;
+	int irq, irq_type;
 	bool open_drain;
 	int ret;
 
@@ -402,6 +538,9 @@ int inv_icm42607_core_probe(struct regmap *regmap, int chip,
 	if (irq < 0)
 		return dev_err_probe(dev, irq, "error missing INT1 interrupt\n");
 
+	irq_type = irq_get_trigger_type(irq);
+	if (!irq_type)
+		irq_type = IRQF_TRIGGER_FALLING;
 	open_drain = device_property_read_bool(dev, "drive-open-drain");
 
 	st = devm_kzalloc(dev, sizeof(*st), GFP_KERNEL);
@@ -455,6 +594,11 @@ int inv_icm42607_core_probe(struct regmap *regmap, int chip,
 	if (IS_ERR(st->indio_accel))
 		return PTR_ERR(st->indio_accel);
 
+	/* Initialize interrupt handling */
+	ret = inv_icm42607_irq_init(st, irq, irq_type, open_drain);
+	if (ret)
+		return ret;
+
 	ret = devm_pm_runtime_set_active_enabled(dev);
 	if (ret)
 		return ret;
@@ -502,6 +646,12 @@ static int inv_icm42607_suspend(struct device *dev)
 		enable_irq_wake(st->irq);
 		disable_irq(st->irq);
 	} else {
+		/* disable APEX features and accel if wakeup disabled */
+		if (st->apex.wom.enable) {
+			ret = inv_icm42607_disable_wom(st);
+			if (ret)
+				return ret;
+		}
 		accel_conf = INV_ICM42607_SENSOR_MODE_OFF;
 	}
 
@@ -554,6 +704,13 @@ static int inv_icm42607_resume(struct device *dev)
 					 st->suspended.temp, NULL);
 	if (ret)
 		return ret;
+
+	/* restore APEX features if disabled */
+	if (!wakeup && st->apex.wom.enable) {
+		ret = inv_icm42607_enable_wom(st);
+		if (ret)
+			return ret;
+	}
 
 	if (st->fifo.on) {
 		inv_sensors_timestamp_reset(&gyro_st->ts);
