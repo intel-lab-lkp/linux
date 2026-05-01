@@ -10,6 +10,7 @@
 #include <asm/kvm_pgtable.h>
 #include <asm/kvm_pkvm.h>
 
+#include <nvhe/clock.h>
 #include <nvhe/early_alloc.h>
 #include <nvhe/ffa.h>
 #include <nvhe/gfp.h>
@@ -311,6 +312,10 @@ void __noreturn __pkvm_init_finalise(void)
 		.page_count = hyp_page_count,
 	};
 	pkvm_pgtable.mm_ops = &pkvm_pgtable_mm_ops;
+
+	ret = hyp_clock_init();
+	if (ret)
+		goto out;
 
 	ret = fix_host_ownership();
 	if (ret)
