@@ -184,13 +184,35 @@
  * refault distance will immediately activate the refaulting page.
  */
 
-#define WORKINGSET_SHIFT 1
-#define EVICTION_SHIFT	((BITS_PER_LONG - BITS_PER_XA_VALUE) +	\
-			 WORKINGSET_SHIFT + NODES_SHIFT + \
-			 MEM_CGROUP_ID_SHIFT)
-#define EVICTION_SHIFT_ANON	(EVICTION_SHIFT + SWAP_COUNT_SHIFT)
-#define EVICTION_MASK	(~0UL >> EVICTION_SHIFT)
-#define EVICTION_MASK_ANON	(~0UL >> EVICTION_SHIFT_ANON)
+/*
+ * Active/Inactive LRU, MGLRU have different info embedded in the shadow.
+ * Shadow format:
+ *                   /     LRU Eviction Info    \ / LRU Pack Info \
+ *                  +----------------------------+----------------+-+
+ * non-MGLRU:       |SC|   eviction timestamp    | NID | MCID | W |1|
+ * MGLRU:           |SC|     seq number   | refs | NID | MCID | W |1|
+ *                   ^                              ^      ^    ^  ^
+ *    Swap Count (anon only)  NUMA ID (NODES_SHIFT)-+      |    | XA_VALUE
+ *          Memory Cgroup ID (MEM_CGROUP_ID_SHIFT) --------+    | mark
+ *                    Workingset Bit (WORKINGSET_SHIFT) --------+
+ *
+ * Shadow is a XA_VALUE, 63 / 31 bits are usable.
+ *
+ * The LRU pack info part is used to identify which lruvec a folio was
+ * evicted from. This part is always accurate so we never lose the
+ * basic track of faults on each lruvec.
+ *
+ * Eviction info is either a snapshot of the `evictions` counter of an
+ * lruvec when the folio was evicted (lru timestamp, for active/inactive
+ * LRU), or the min_seq number when the folio was evicted (MGLRU). This
+ * part may have shrunk, so we may get inaccurate info, which is usually
+ * fine and could be tolerated.
+ */
+#define WORKINGSET_SHIFT	1
+#define LRU_PACK_BITS		(NODES_SHIFT + MEM_CGROUP_ID_SHIFT + \
+				 WORKINGSET_SHIFT)
+#define LRU_EVICT_BITS		(BITS_PER_XA_VALUE - LRU_PACK_BITS)
+#define LRU_EVICT_BITS_ANON	(LRU_EVICT_BITS - SWAP_COUNT_SHIFT)
 
 /*
  * LRU refs uses LRU_REFS_WIDTH + 2 bits, the 2 bits are PG_workingset and
@@ -212,7 +234,9 @@ static unsigned int bucket_order[ANON_AND_FILE] __read_mostly;
 static void *pack_shadow(int memcgid, pg_data_t *pgdat, unsigned long eviction,
 			 bool workingset, bool file)
 {
-	eviction &= file ? EVICTION_MASK : EVICTION_MASK_ANON;
+	BUILD_BUG_ON(LRU_EVICT_BITS_ANON <= SWAP_COUNT_SHIFT);
+
+	eviction &= BIT(file ? LRU_EVICT_BITS : LRU_EVICT_BITS_ANON) - 1;
 	eviction = (eviction << MEM_CGROUP_ID_SHIFT) | memcgid;
 	eviction = (eviction << NODES_SHIFT) | pgdat->node_id;
 	eviction = (eviction << WORKINGSET_SHIFT) | workingset;
@@ -257,8 +281,7 @@ static void *lru_gen_eviction(struct folio *folio)
 	struct pglist_data *pgdat = folio_pgdat(folio);
 	unsigned short memcg_id;
 
-	BUILD_BUG_ON(LRU_GEN_WIDTH + LRU_REFS_BITS >
-		     BITS_PER_LONG - max(EVICTION_SHIFT, EVICTION_SHIFT_ANON));
+	BUILD_BUG_ON(LRU_GEN_WIDTH + LRU_REFS_BITS > LRU_EVICT_BITS_ANON);
 
 	rcu_read_lock();
 	memcg = folio_memcg(folio);
@@ -284,7 +307,7 @@ static bool lru_gen_test_recent(struct lruvec *lruvec,
 	unsigned long max_seq;
 
 	max_seq = READ_ONCE((lruvec)->lrugen.max_seq);
-	max_seq &= (file ? EVICTION_MASK : EVICTION_MASK_ANON) >> LRU_REFS_BITS;
+	max_seq &= BIT((file ? LRU_EVICT_BITS : LRU_EVICT_BITS_ANON) - LRU_REFS_BITS) - 1;
 
 	return abs_diff(max_seq, token >> LRU_REFS_BITS) < MAX_NR_GENS;
 }
@@ -512,7 +535,7 @@ bool workingset_test_recent(void *shadow, bool file, bool *workingset,
 	 */
 	eviction <<= bucket_order[file];
 	distance = ((refault - eviction) &
-		    (file ? EVICTION_MASK : EVICTION_MASK_ANON));
+		    (BIT(file ? LRU_EVICT_BITS : LRU_EVICT_BITS_ANON) - 1));
 
 	/*
 	 * Compare the distance to the existing workingset size. We
@@ -781,12 +804,10 @@ static struct lock_class_key shadow_nodes_key;
 
 static int __init workingset_init(void)
 {
-	unsigned int timestamp_bits, timestamp_bits_anon;
 	struct shrinker *workingset_shadow_shrinker;
 	unsigned int max_order;
 	int ret = -ENOMEM;
 
-	BUILD_BUG_ON(BITS_PER_LONG < EVICTION_SHIFT);
 	/*
 	 * Calculate the eviction bucket size to cover the longest
 	 * actionable refault distance, which is currently half of
@@ -794,15 +815,13 @@ static int __init workingset_init(void)
 	 * some more pages at runtime, so keep working with up to
 	 * double the initial memory by using totalram_pages as-is.
 	 */
-	timestamp_bits = BITS_PER_LONG - EVICTION_SHIFT;
-	timestamp_bits_anon = BITS_PER_LONG - EVICTION_SHIFT_ANON;
 	max_order = fls_long(totalram_pages() - 1);
-	if (max_order > (BITS_PER_LONG - EVICTION_SHIFT))
-		bucket_order[WORKINGSET_FILE] = max_order - timestamp_bits;
-	if (max_order > timestamp_bits_anon)
-		bucket_order[WORKINGSET_ANON] = max_order - timestamp_bits_anon;
+	if (max_order > LRU_EVICT_BITS)
+		bucket_order[WORKINGSET_FILE] = max_order - LRU_EVICT_BITS;
+	if (max_order > LRU_EVICT_BITS_ANON)
+		bucket_order[WORKINGSET_ANON] = max_order - LRU_EVICT_BITS_ANON;
 	pr_info("workingset: timestamp_bits=%d (anon: %d) max_order=%d bucket_order=%u (anon: %d)\n",
-		timestamp_bits, timestamp_bits_anon, max_order,
+		LRU_EVICT_BITS, LRU_EVICT_BITS_ANON, max_order,
 		bucket_order[WORKINGSET_FILE], bucket_order[WORKINGSET_ANON]);
 
 	workingset_shadow_shrinker = shrinker_alloc(SHRINKER_NUMA_AWARE |
