@@ -1819,15 +1819,20 @@ static int goku_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	retval = usb_add_gadget_udc_release(&pdev->dev, &dev->gadget,
 			gadget_release);
-	if (retval)
+	if (retval) {
+		/*
+		 * usb_add_gadget_udc_release() calls the gadget release
+		 * function on failure, and gadget_release() frees dev.
+		 */
+		dev = NULL;
 		goto err;
+	}
 
 	return 0;
 
 err:
 	if (dev)
 		goku_remove (pdev);
-	/* gadget_release is not registered yet, kfree explicitly */
 	kfree(dev);
 	return retval;
 }
