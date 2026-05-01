@@ -840,21 +840,30 @@ enum folio_references {
  * with PG_active set. In contrast, the aging (page table walk) path uses
  * folio_update_gen().
  */
-static bool lru_gen_set_refs(struct folio *folio)
+static bool folio_promote_lru_refs(struct folio *folio)
 {
-	/* see the comment on LRU_REFS_FLAGS */
-	if (!folio_lru_refs(folio) && !folio_test_workingset(folio)) {
-		folio_set_lru_refs(folio, 1);
-		return false;
-	}
+	unsigned long new_flags, old_flags = READ_ONCE(*folio_flags(folio, 0));
+	int refs;
 
-	folio_set_lru_refs(folio, 0);
-	folio_set_workingset(folio);
+	do {
+		new_flags = old_flags;
+		refs = lru_refs_from_flags(old_flags);
+		/*
+		 * Bump refs by one up to LRU_REFS_MAX.  Once we are at
+		 * LRU_REFS_MAX, leave the flags alone: the caller treats a
+		 * return of true (refs >= LRU_REFS_WORKINGSET) as a cue to
+		 * activate the folio, which resets refs to
+		 * LRU_REFS_WORKINGSET in lru_activate().
+		 */
+		if (refs == LRU_REFS_MAX)
+			break;
+		lru_refs_set_flags(&new_flags, ++refs);
+	} while (!try_cmpxchg(folio_flags(folio, 0), &old_flags, new_flags));
 
-	return true;
+	return refs >= LRU_REFS_WORKINGSET;
 }
 #else
-static bool lru_gen_set_refs(struct folio *folio)
+static bool folio_promote_lru_refs(struct folio *folio)
 {
 	return false;
 }
@@ -889,7 +898,7 @@ static enum folio_references folio_check_references(struct folio *folio,
 		if (!referenced_ptes)
 			return FOLIOREF_RECLAIM;
 
-		return lru_gen_set_refs(folio) ? FOLIOREF_ACTIVATE : FOLIOREF_KEEP;
+		return folio_promote_lru_refs(folio) ? FOLIOREF_ACTIVATE : FOLIOREF_KEEP;
 	}
 
 	referenced_folio = folio_test_clear_referenced(folio);
@@ -3196,39 +3205,39 @@ static bool positive_ctrl_err(struct ctrl_pos *sp, struct ctrl_pos *pv)
 static int folio_update_gen(struct folio *folio, int new_gen)
 {
 	unsigned long new_flags, old_flags = READ_ONCE(*folio_flags(folio, 0));
-	int old_gen;
+	int refs, gen, ret;
 
 	/* see the comment on LRU_REFS_FLAGS */
-	if (!lru_refs_from_flags(old_flags) && !folio_test_workingset(folio)) {
-		folio_set_lru_refs(folio, 1);
-		return -1;
-	}
-
 	do {
-		old_gen = lru_gen_from_flags(old_flags);
+		gen = lru_gen_from_flags(old_flags);
+		refs = lru_refs_from_flags(old_flags);
 		new_flags = old_flags;
 
-		/* lru_gen_del_folio() has isolated this page? */
-		if (old_gen < 0)
-			break;
-
-		lru_gen_set_flags(&new_flags, new_gen);
-		lru_refs_set_flags(&new_flags, 0);
-		new_flags |= BIT(PG_workingset);
+		if (gen >= 0 && gen != new_gen && refs) {
+			ret = gen;
+			lru_gen_set_flags(&new_flags, new_gen);
+			lru_refs_set_flags(&new_flags, LRU_REFS_WORKINGSET);
+		} else {
+			ret = -1;
+			lru_refs_set_flags(&new_flags, min(++refs, LRU_REFS_MAX));
+		}
 	} while (!try_cmpxchg(folio_flags(folio, 0), &old_flags, new_flags));
 
-	return old_gen;
+	return ret;
 }
 
 /* protect pages accessed multiple times through file descriptors */
 static int folio_inc_gen(struct lruvec *lruvec, struct folio *folio)
 {
+	int refs;
 	int type = folio_is_file_lru(folio);
 	struct lru_gen_folio *lrugen = &lruvec->lrugen;
 	int old_gen, new_gen, min_gen = lru_gen_from_seq(lrugen->min_seq[type]);
 	unsigned long new_flags, old_flags = READ_ONCE(*folio_flags(folio, 0));
 
 	do {
+		new_flags = old_flags;
+		refs = lru_refs_from_flags(old_flags);
 		old_gen = lru_gen_from_flags(old_flags);
 		VM_WARN_ON_ONCE_FOLIO(old_gen < 0, folio);
 
@@ -3236,12 +3245,10 @@ static int folio_inc_gen(struct lruvec *lruvec, struct folio *folio)
 		if (old_gen >= 0 && old_gen != min_gen)
 			return old_gen;
 
-		new_flags = old_flags;
 		new_gen = (old_gen + 1) % MAX_NR_GENS;
-
-		new_flags = old_flags & ~(LRU_GEN_MASK | LRU_REFS_FLAGS);
-		new_flags |= (new_gen + 1UL) << LRU_GEN_PGOFF;
-	} while (!try_cmpxchg(&folio->flags.f, &old_flags, new_flags));
+		lru_gen_set_flags(&new_flags, new_gen);
+		lru_refs_set_flags(&new_flags, min(refs, LRU_REFS_WORKINGSET));
+	} while (!try_cmpxchg(folio_flags(folio, 0), &old_flags, new_flags));
 
 	lru_gen_update_size(lruvec, folio, old_gen, new_gen);
 
@@ -3451,7 +3458,7 @@ static void walk_update_folio(struct lru_gen_mm_walk *walk, struct folio *folio,
 		old_gen = folio_update_gen(folio, new_gen);
 		if (old_gen >= 0 && old_gen != new_gen)
 			update_batch_size(walk, folio, old_gen, new_gen);
-	} else if (lru_gen_set_refs(folio)) {
+	} else if (folio_promote_lru_refs(folio)) {
 		old_gen = folio_lru_gen(folio);
 		if (old_gen >= 0 && old_gen != new_gen)
 			folio_activate(folio);
@@ -3846,7 +3853,8 @@ static bool inc_min_seq(struct lruvec *lruvec, int type, int swappiness)
 		while (!list_empty(head)) {
 			struct folio *folio = lru_to_folio(head);
 			int refs = folio_lru_refs(folio);
-			bool workingset = folio_test_workingset(folio);
+			int delta = folio_nr_pages(folio);
+			int tier = lru_tier_from_refs(refs);
 
 			VM_WARN_ON_ONCE_FOLIO(folio_test_unevictable(folio), folio);
 			VM_WARN_ON_ONCE_FOLIO(folio_test_active(folio), folio);
@@ -3856,14 +3864,8 @@ static bool inc_min_seq(struct lruvec *lruvec, int type, int swappiness)
 			new_gen = folio_inc_gen(lruvec, folio);
 			list_move_tail(&folio->lru, &lrugen->folios[new_gen][type][zone]);
 
-			/* don't count the workingset being lazily promoted */
-			if (refs + workingset != BIT(LRU_REFS_WIDTH) + 1) {
-				int tier = lru_tier_from_refs(refs, workingset);
-				int delta = folio_nr_pages(folio);
-
-				WRITE_ONCE(lrugen->protected[hist][type][tier],
-					   lrugen->protected[hist][type][tier] + delta);
-			}
+			WRITE_ONCE(lrugen->protected[hist][type][tier],
+				   lrugen->protected[hist][type][tier] + delta);
 
 			if (!--remaining)
 				return false;
@@ -4580,8 +4582,7 @@ static bool sort_folio(struct lruvec *lruvec, struct folio *folio, struct scan_c
 	int zone = folio_zonenum(folio);
 	int delta = folio_nr_pages(folio);
 	int refs = folio_lru_refs(folio);
-	bool workingset = folio_test_workingset(folio);
-	int tier = lru_tier_from_refs(refs, workingset);
+	int tier = lru_tier_from_refs(refs);
 	struct lru_gen_folio *lrugen = &lruvec->lrugen;
 
 	VM_WARN_ON_ONCE_FOLIO(gen >= MAX_NR_GENS, folio);
@@ -4603,17 +4604,15 @@ static bool sort_folio(struct lruvec *lruvec, struct folio *folio, struct scan_c
 	}
 
 	/* protected */
-	if (tier > tier_idx || refs + workingset == BIT(LRU_REFS_WIDTH) + 1) {
+	if (tier > tier_idx) {
+		int hist = lru_hist_from_seq(lrugen->min_seq[type]);
+
 		gen = folio_inc_gen(lruvec, folio);
-		list_move(&folio->lru, &lrugen->folios[gen][type][zone]);
+		list_move_tail(&folio->lru, &lrugen->folios[gen][type][zone]);
 
-		/* don't count the workingset being lazily promoted */
-		if (refs + workingset != BIT(LRU_REFS_WIDTH) + 1) {
-			int hist = lru_hist_from_seq(lrugen->min_seq[type]);
+		WRITE_ONCE(lrugen->protected[hist][type][tier],
+			   lrugen->protected[hist][type][tier] + delta);
 
-			WRITE_ONCE(lrugen->protected[hist][type][tier],
-				   lrugen->protected[hist][type][tier] + delta);
-		}
 		return true;
 	}
 
@@ -4640,10 +4639,6 @@ static bool isolate_folio(struct lruvec *lruvec, struct folio *folio, struct sca
 		folio_put(folio);
 		return false;
 	}
-
-	/* see the comment on LRU_REFS_FLAGS */
-	if (!folio_test_referenced(folio))
-		folio_set_lru_refs(folio, 0);
 
 	success = lru_gen_del_folio(lruvec, folio, true);
 	VM_WARN_ON_ONCE_FOLIO(!success, folio);
@@ -4732,13 +4727,13 @@ static int get_tier_idx(struct lruvec *lruvec, int type)
 	struct ctrl_pos sp, pv = {};
 
 	/*
-	 * To leave a margin for fluctuations, use a larger gain factor (2:3).
+	 * To leave a margin for fluctuations, use a larger gain factor (1:2).
 	 * This value is chosen because any other tier would have at least twice
 	 * as many refaults as the first tier.
 	 */
-	read_ctrl_pos(lruvec, type, 0, 2, &sp);
+	read_ctrl_pos(lruvec, type, 0, 1, &sp);
 	for (tier = 1; tier < MAX_NR_TIERS; tier++) {
-		read_ctrl_pos(lruvec, type, tier, 3, &pv);
+		read_ctrl_pos(lruvec, type, tier, 2, &pv);
 		if (!positive_ctrl_err(&sp, &pv))
 			break;
 	}
@@ -4858,10 +4853,8 @@ retry:
 		}
 
 		/* don't add rejected folios to the oldest generation */
-		if (lru_gen_folio_seq(lruvec, folio, false) == min_seq[type]) {
-			folio_set_lru_refs(folio, 0);
+		if (lru_gen_folio_seq(lruvec, folio, false) == min_seq[type])
 			folio_set_active(folio);
-		}
 	}
 
 	move_folios_to_lru(&list);

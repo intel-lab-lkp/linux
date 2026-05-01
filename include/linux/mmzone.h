@@ -470,55 +470,87 @@ enum lruvec_flags {
 
 /*
  * Each generation is divided into multiple tiers. A folio accessed N times
- * through file descriptors is in tier order_base_2(N). A folio in the first
- * tier (N=0,1) is marked by PG_referenced unless it was faulted in through page
- * tables or read ahead. A folio in the last tier (MAX_NR_TIERS-1) is marked by
- * PG_workingset. A folio in any other tier (1<N<5) between the first and last
- * is marked by additional bits of LRU_REFS_WIDTH in folio->flags.
+ * through file descriptors will be categorized as higher tier as shown below:
  *
- * In contrast to moving across generations which requires the LRU lock, moving
- * across tiers only involves atomic operations on folio->flags and therefore
- * has a negligible cost in the buffered access path. In the eviction path,
- * comparisons of refaulted/(evicted+protected) from the first tier and the rest
- * infer whether folios accessed multiple times through file descriptors are
- * statistically hot and thus worth protecting.
+ * MGLRU (Workingset Protection)
+ * Access   Tier   |
+ *    0      0     | - Should be mostly cold folio, or readahead & reclaiming. [1]
+ *    1      0     | - Folios that are used for at least once. [2]
+ * --WORKINGSET--<-\ - Considered workingset and future access may increase its gen. [3]
+ *    2      1     | - Reclaimable workingset. [4]
+ *    3      2     | - PID protected workingset. [5]
+ *    4*     2     | - Extended tiers [6]
+ *    5*     3     |
+ *    6*     3     |
+ *    7*     3     | - Promotion candidate workingset. [7]
+ * --PROMOTION--->-/
+ *
+ * 1. The tier is fls(N-1) for N > 1, 0 otherwise. Ideally each tier
+ * represents folios of similar access patterns, lower tiers are folios that
+ * are less important and should be evicted faster. Readahead (PG_readahead)
+ * or reclaiming (PG_reclaim) folios are force put in tier 0.
+ *
+ * 2. Folios accessed at least once are still on tier 0:
+ * (folio_lru_refs(folio) == LRU_REFS_REFERENCED == 1).
+ * One time usage doesn't make the folio qualified to be protected in anyway.
+ * If a workingset folio is accessed and in the oldest gen, it will be moved
+ * to second oldest gen. Gen moving is lazily done without involving
+ * LRU lock so it's cheap. It won't be promoted further if it's not on
+ * oldest gen to avoid over-promoting of caches.
+ *
+ * 3. Folios that are accessed more than once are considered workingset:
+ * (folio_lru_refs(folio) == LRU_REFS_WORKINGSET == 2).
+ *
+ * 4. A folio qualified as workingset is still on tier 1 unless it
+ * is accessed again. That makes the workingset still easily reclaimable, since
+ * the initial move in (1) and the promotion in (6) already protects recent
+ * workingset proactively, and we want to reclaim caches fast when under
+ * pressure: pinning a folio in high tier combined with the PID protect in
+ * (4) will cause the eviction of old caches delayed by a lot.
+ *
+ * 5. Starting from tier 1, PID protection will take effect. Lower tier
+ * will be sacrificed to protect higher tier when the higher tier have a
+ * higher refault rate (see PID protection part on vmscan.c).
+ *
+ * 6. Tier > 2 is only available when LRU_REFS_WIDTH >= 1. Ideally we will
+ * always have it but in some extreme configs, page flags is just not enough.
+ * This will be improved in the future. Without Tiers > 2, things still work,
+ * but we will promote file caches more aggressively, and maybe unexpectedly.
+ *
+ * 7. If the referenced count == LRU_REFS_MAX, a future access will increase
+ * the gen of the folio by one and reset its referenced count to
+ * LRU_REFS_PROTECTED. It still considered workingset but moved to a higher
+ * gen representing a higher hotness and reclaim bias.
+ *
+ * Tiering uses PG_workingset and PG_referenced and the lower two bits,
+ * LRU_REFS_MASK as the higher bits.
+ *
+ * A folio's referenced count never goes backwards except upon gen increase
+ * in (7) or a promotion. Passive protect by PID will reset a folio with higher
+ * referenced count to LRU_REFS_WORKINGSET. Refault of a reclaimed folio may
+ * restore its referenced count by lru_gen_refault.
+ *
+ * In the eviction path, comparisons of refaulted/(evicted+protected) from
+ * the first tier and the rest infer whether folios accessed multiple times
+ * through file descriptors are statistically hot and thus worth protecting.
  *
  * MAX_NR_TIERS is set to 4 so that the multi-gen LRU can support twice the
  * number of categories of the active/inactive LRU when keeping track of
- * accesses through file descriptors. This uses MAX_NR_TIERS-2 spare bits in
+ * accesses through file descriptors. This uses MAX_NR_TIERS-3 spare bits in
  * folio->flags, masked by LRU_REFS_MASK.
  */
 #define MAX_NR_TIERS		4U
+#define LRU_REFS_REFERENCED	0x1
+#define LRU_REFS_WORKINGSET	0x2
+#define LRU_REFS_PROTECTED	0x3
 
 #ifndef __GENERATING_BOUNDS_H
 
 #define LRU_GEN_MASK		((BIT(LRU_GEN_WIDTH) - 1) << LRU_GEN_PGOFF)
 #define LRU_GEN_MAX		(BIT(LRU_GEN_WIDTH - 1) - 1)
 #define LRU_REFS_MASK		((BIT(LRU_REFS_WIDTH) - 1) << LRU_REFS_PGOFF)
-#define LRU_REFS_MAX		(BIT(LRU_REFS_WIDTH) - 1)
-
-/*
- * For folios accessed multiple times through file descriptors,
- * lru_gen_inc_refs() sets additional bits of LRU_REFS_WIDTH in folio->flags
- * after PG_referenced, then PG_workingset after LRU_REFS_WIDTH. After all its
- * bits are set, i.e., LRU_REFS_FLAGS|BIT(PG_workingset), a folio is lazily
- * promoted into the second oldest generation in the eviction path. And when
- * folio_inc_gen() does that, it clears LRU_REFS_FLAGS so that
- * lru_gen_inc_refs() can start over. Note that for this case, LRU_REFS_MASK is
- * only valid when PG_referenced is set.
- *
- * For folios accessed multiple times through page tables, folio_update_gen()
- * from a page table walk or lru_gen_set_refs() from a rmap walk sets
- * PG_referenced after the accessed bit is cleared for the first time.
- * Thereafter, those two paths set PG_workingset and promote folios to the
- * youngest generation. Like folio_inc_gen(), folio_update_gen() also clears
- * PG_referenced. Note that for this case, LRU_REFS_MASK is not used.
- *
- * For both cases above, after PG_workingset is set on a folio, it remains until
- * this folio is either reclaimed, or "deactivated" by lru_gen_clear_refs(). It
- * can be set again if lru_gen_test_recent() returns true upon a refault.
- */
-#define LRU_REFS_FLAGS		(LRU_REFS_MASK | BIT(PG_referenced))
+#define LRU_REFS_FLAGS		(LRU_REFS_MASK | BIT(PG_referenced) | BIT(PG_workingset))
+#define LRU_REFS_MAX		(BIT(LRU_REFS_WIDTH + 2) - 1)
 
 struct lruvec;
 struct page_vma_mapped_walk;
