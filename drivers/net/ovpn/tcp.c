@@ -6,6 +6,7 @@
  *  Author:	Antonio Quartulli <antonio@openvpn.net>
  */
 
+#include <linux/interrupt.h>
 #include <linux/skbuff.h>
 #include <net/hotdata.h>
 #include <net/inet_common.h>
@@ -312,6 +313,40 @@ out:
 	peer->tcp.tx_in_progress = false;
 }
 
+/* Caller must hold sk->sk_lock.slock. */
+static bool ovpn_tcp_queue_skb(struct ovpn_peer *peer, struct sk_buff *skb)
+{
+	if (skb_queue_len(&peer->tcp.out_queue) >=
+	    READ_ONCE(net_hotdata.max_backlog)) {
+		dev_dstats_tx_dropped(peer->ovpn->dev);
+		kfree_skb(skb);
+		return false;
+	}
+
+	__skb_queue_tail(&peer->tcp.out_queue, skb);
+	return true;
+}
+
+/* Caller must hold sk->sk_lock.slock and own the socket. */
+static void ovpn_tcp_tx_flush(struct ovpn_peer *peer, struct sock *sk)
+{
+	struct sk_buff *skb;
+
+	if (peer->tcp.out_msg.skb)
+		ovpn_tcp_send_sock(peer, sk);
+
+	while (!peer->tcp.out_msg.skb) {
+		skb = __skb_dequeue(&peer->tcp.out_queue);
+		if (!skb)
+			break;
+
+		peer->tcp.out_msg.skb = skb;
+		peer->tcp.out_msg.len = skb->len;
+		peer->tcp.out_msg.offset = 0;
+		ovpn_tcp_send_sock(peer, sk);
+	}
+}
+
 void ovpn_tcp_tx_work(struct work_struct *work)
 {
 	struct ovpn_socket *sock;
@@ -320,7 +355,7 @@ void ovpn_tcp_tx_work(struct work_struct *work)
 
 	lock_sock(sock->sk);
 	if (sock->peer)
-		ovpn_tcp_send_sock(sock->peer, sock->sk);
+		ovpn_tcp_tx_flush(sock->peer, sock->sk);
 	release_sock(sock->sk);
 }
 
@@ -345,32 +380,38 @@ static void ovpn_tcp_send_sock_skb(struct ovpn_peer *peer, struct sock *sk,
 void ovpn_tcp_send_skb(struct ovpn_peer *peer, struct sock *sk,
 		       struct sk_buff *skb)
 {
+	struct ovpn_socket *sock;
 	u16 len = skb->len;
+	bool queued;
 
 	*(__be16 *)__skb_push(skb, sizeof(u16)) = htons(len);
 
-	spin_lock_nested(&sk->sk_lock.slock, OVPN_TCP_DEPTH_NESTING);
-	if (sock_owned_by_user(sk)) {
-		if (skb_queue_len(&peer->tcp.out_queue) >=
-		    READ_ONCE(net_hotdata.max_backlog)) {
-			dev_dstats_tx_dropped(peer->ovpn->dev);
-			kfree_skb(skb);
-			goto unlock;
-		}
-		__skb_queue_tail(&peer->tcp.out_queue, skb);
-	} else {
-		ovpn_tcp_send_sock_skb(peer, sk, skb);
+	if (unlikely(in_interrupt())) {
+		spin_lock_nested(&sk->sk_lock.slock, OVPN_TCP_DEPTH_NESTING);
+		queued = ovpn_tcp_queue_skb(peer, skb);
+		spin_unlock(&sk->sk_lock.slock);
+		if (!queued)
+			return;
+
+		rcu_read_lock();
+		sock = rcu_dereference_sk_user_data(sk);
+		if (sock)
+			schedule_work(&sock->tcp_tx_work);
+		rcu_read_unlock();
+		return;
 	}
-unlock:
-	spin_unlock(&sk->sk_lock.slock);
+
+	lock_sock_nested(sk, OVPN_TCP_DEPTH_NESTING);
+	queued = ovpn_tcp_queue_skb(peer, skb);
+	if (queued)
+		ovpn_tcp_tx_flush(peer, sk);
+	release_sock(sk);
 }
 
 static void ovpn_tcp_release(struct sock *sk)
 {
-	struct sk_buff_head queue;
 	struct ovpn_socket *sock;
 	struct ovpn_peer *peer;
-	struct sk_buff *skb;
 
 	rcu_read_lock();
 	sock = rcu_dereference_sk_user_data(sk);
@@ -390,11 +431,7 @@ static void ovpn_tcp_release(struct sock *sk)
 	}
 	rcu_read_unlock();
 
-	__skb_queue_head_init(&queue);
-	skb_queue_splice_init(&peer->tcp.out_queue, &queue);
-
-	while ((skb = __skb_dequeue(&queue)))
-		ovpn_tcp_send_sock_skb(peer, sk, skb);
+	ovpn_tcp_tx_flush(peer, sk);
 
 	peer->tcp.sk_cb.prot->release_cb(sk);
 	ovpn_peer_put(peer);
@@ -653,3 +690,4 @@ void __init ovpn_tcp_init(void)
 			      &inet6_stream_ops);
 #endif
 }
+
