@@ -538,8 +538,10 @@ static int cci_probe(void)
 	struct resource res;
 
 	np = of_find_matching_node(NULL, arm_cci_matches);
-	if (!of_device_is_available(np))
-		return -ENODEV;
+	if (!of_device_is_available(np)) {
+		ret = -ENODEV;
+		goto out_put_node;
+	}
 
 	ret = of_address_to_resource(np, 0, &res);
 	if (!ret) {
@@ -548,10 +550,15 @@ static int cci_probe(void)
 	}
 	if (ret || !cci_ctrl_base) {
 		WARN(1, "unable to ioremap CCI ctrl\n");
-		return -ENXIO;
+		ret = -ENXIO;
+		goto out_put_node;
 	}
 
-	return cci_probe_ports(np);
+	ret = cci_probe_ports(np);
+
+out_put_node:
+	of_node_put(np);
+	return ret;
 }
 
 static int cci_init_status = -EAGAIN;
