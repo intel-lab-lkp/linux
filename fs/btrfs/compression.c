@@ -21,6 +21,7 @@
 #include <linux/sched/mm.h>
 #include <linux/log2.h>
 #include <linux/shrinker.h>
+#include <linux/mm_inline.h>
 #include "misc.h"
 #include "ctree.h"
 #include "fs.h"
@@ -461,7 +462,7 @@ static noinline int add_ra_bio_pages(struct inode *inode,
 			continue;
 		}
 
-		if (!*memstall && folio_test_workingset(folio)) {
+		if (!*memstall && folio_is_workingset(folio)) {
 			psi_memstall_enter(pflags);
 			*memstall = 1;
 		}

@@ -1254,7 +1254,7 @@ static inline int folio_wait_bit_common(struct folio *folio, int bit_nr,
 	bool in_thrashing;
 
 	if (bit_nr == PG_locked &&
-	    !folio_test_uptodate(folio) && folio_test_workingset(folio)) {
+	    !folio_test_uptodate(folio) && folio_is_workingset(folio)) {
 		delayacct_thrashing_start(&in_thrashing);
 		psi_memstall_enter(&pflags);
 		thrashing = true;
@@ -1409,7 +1409,7 @@ void softleaf_entry_wait_on_locked(softleaf_t entry, spinlock_t *ptl)
 	struct folio *folio = softleaf_to_folio(entry);
 
 	q = folio_waitqueue(folio);
-	if (!folio_test_uptodate(folio) && folio_test_workingset(folio)) {
+	if (!folio_test_uptodate(folio) && folio_is_workingset(folio)) {
 		delayacct_thrashing_start(&in_thrashing);
 		psi_memstall_enter(&pflags);
 		thrashing = true;
@@ -2492,7 +2492,7 @@ retry:
 static int filemap_read_folio(struct file *file, filler_t filler,
 		struct folio *folio)
 {
-	bool workingset = folio_test_workingset(folio);
+	bool workingset = folio_is_workingset(folio);
 	unsigned long pflags;
 	int error;
 
@@ -3787,7 +3787,7 @@ static vm_fault_t filemap_map_folio_range(struct vm_fault *vmf,
 		 * Don't decrease mmap_miss in this scenario to make sure
 		 * we can stop read-ahead.
 		 */
-		if (!folio_test_workingset(folio))
+		if (!folio_is_workingset(folio))
 			(*mmap_miss)++;
 
 		/*
@@ -3845,7 +3845,7 @@ static vm_fault_t filemap_map_order0_folio(struct vm_fault *vmf,
 		goto out;
 
 	/* See comment of filemap_map_folio_range() */
-	if (!folio_test_workingset(folio))
+	if (!folio_is_workingset(folio))
 		(*mmap_miss)++;
 
 	/*
