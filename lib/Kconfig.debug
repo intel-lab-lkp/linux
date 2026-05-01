@@ -3608,6 +3608,18 @@ config RUST_KERNEL_DOCTESTS
 
 	  If unsure, say N.
 
+config RUST_KERNEL_BITFIELD_KUNIT_TEST
+	bool "KUnit tests for the Rust `bitfield!` macro" if !KUNIT_ALL_TESTS
+	depends on RUST && KUNIT=y
+	default KUNIT_ALL_TESTS
+	help
+	  This builds the KUnit tests for the Rust `bitfield!` macro.
+
+	  For more information on KUnit and unit tests in general please refer
+	  to the KUnit documentation in Documentation/dev-tools/kunit/.
+
+	  If unsure, say N.
+
 config RUST_INLINE_HELPERS
 	bool "Inline C helpers into Rust code (EXPERIMENTAL)"
 	depends on RUST && RUSTC_CLANG_LLVM_COMPATIBLE
