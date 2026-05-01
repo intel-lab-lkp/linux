@@ -97,7 +97,7 @@ void hfs_bnode_read(struct hfs_bnode *node, void *buf, u32 off, u32 len)
 
 u16 hfs_bnode_read_u16(struct hfs_bnode *node, u32 off)
 {
-	__be16 data;
+	__be16 data = 0;
 	// optimize later...
 	hfs_bnode_read(node, &data, off, 2);
 	return be16_to_cpu(data);
@@ -105,7 +105,7 @@ u16 hfs_bnode_read_u16(struct hfs_bnode *node, u32 off)
 
 u8 hfs_bnode_read_u8(struct hfs_bnode *node, u32 off)
 {
-	u8 data;
+	u8 data = 0;
 	// optimize later...
 	hfs_bnode_read(node, &data, off, 1);
 	return data;
