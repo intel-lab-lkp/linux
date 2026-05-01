@@ -1641,10 +1641,6 @@ unsigned int reclaim_clean_pages_from_list(struct zone *zone,
 	return nr_reclaimed;
 }
 
-/*
- * Update LRU sizes after isolating pages. The LRU size updates must
- * be complete before mem_cgroup_update_lru_size due to a sanity check.
- */
 static __always_inline void update_lru_sizes(struct lruvec *lruvec,
 			enum lru_list lru, unsigned long *nr_zone_taken)
 {
@@ -1656,7 +1652,6 @@ static __always_inline void update_lru_sizes(struct lruvec *lruvec,
 
 		update_lru_size(lruvec, lru, zid, -nr_zone_taken[zid]);
 	}
-
 }
 
 /*
