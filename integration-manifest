@@ -1,0 +1,36 @@
+drm drm-fixes f0997a06e3e32898bcae667d6807fc46ebfd0eec
+	Merge tag 'drm-xe-fixes-2026-04-30' of https://gitlab.freedesktop.org/drm/xe/kernel into drm-fixes
+drm-misc drm-misc-fixes 01eb80b767430ae868c48ad106c60eb61a508c85
+	accel/qaic: fix incorrect counter check in RAS message decode
+drm-rust drm-rust-fixes 2e42a17b8f6bc3c0cd69d7556b588011d3ec2394
+	rust: drm: gem: clean up GEM state in init failure case
+drm-intel drm-intel-fixes 254f49634ee16a731174d2ae34bc50bd5f45e731
+	Linux 7.1-rc1
+drm-xe drm-xe-fixes 662f9ddc8077792129440d05cbef2f944a07777a
+	drm/xe/uapi: Reject coh_none PAT index for CPU_ADDR_MIRROR
+drm drm-next 254f49634ee16a731174d2ae34bc50bd5f45e731
+	Linux 7.1-rc1
+drm-misc drm-misc-next-fixes f6c73e7156b54d8b9ddf1a27f4e93d3a1e49a73e
+	drm: rcar-du: Fix crash when no CMM is available
+drm-intel drm-intel-next-fixes 314f6179e370988ac00dadf373a4f6166eb3db15
+	drm/i915/psr: Init variable to avoid early exit from et alignment loop
+drm-xe drm-xe-next-fixes 6de23f81a5e08be8fbf5e8d7e9febc72a5b5f27f
+	Linux 7.0-rc1
+drm-misc drm-misc-next 29d6da40d0b8bf3bbc3dcd1d2198434a0e1f71b0
+	drm/panthor: Use a local iomem base for MMU AS registers
+drm-rust drm-rust-next 610e892bdb57043c7769982c2bff0260b6007b75
+	drm/tyr: add shmem backing for GEM objects
+drm-intel drm-intel-next 5e79af5db00b2a5f4667aaf16cfe4ecb7759383b
+	drm/i915/psr: Disable PSR2 on Xiaomi Book Pro 14 2026 as a quirk
+drm-intel drm-intel-gt-next f6d4afc9ec6a0bc326151b35a7a3369369180079
+	drm/i915/gem: Drop check for changed VM in EXECBUF
+drm-xe drm-xe-next 7d9c39cfb31ff389490ca1308767c2807a9829a6
+	drm/xe/pf: Fix MMIO access using PF view instead of VF view during migration
+drm-intel topic/core-for-CI 3d15d7e81d498d56ca6ba3af63f2fa1106da87ad
+	ACPI: PM: s2idle: Add module parameter for LPS0 constraints checking
+drm-xe topic/xe-for-CI bd9ef8d19f9e9ff47518ce48fb2002d58bfeeaaa
+	drm/xe/nvlp: Define GuC firmware for NVL-P
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
+drm-intel topic/pipe-reorder 2c683e9b419328da3433a49f7c467da71aaf0469
+	drm/i915/display: change pipe allocation order for discrete platforms
