@@ -163,6 +163,13 @@ bounded_enum! {
     }
 }
 
+impl Architecture {
+    /// Returns `true` for GPU architectures that predate Hopper.
+    pub(crate) fn is_pre_hopper(self) -> bool {
+        matches!(self, Self::Turing | Self::Ampere | Self::Ada)
+    }
+}
+
 #[derive(Clone, Copy)]
 pub(crate) struct Revision {
     major: Bounded<u8, 4>,
