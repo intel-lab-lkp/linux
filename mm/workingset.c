@@ -66,12 +66,12 @@
  * thrashing on the inactive list, after which refaulting pages can be
  * activated optimistically to compete with the existing active pages.
  *
- * For such approximation, introduce a counter `nonresident_age` (NA)
- * per lruvec. NA is incremented once for every evicted page, and each
- * evicted page's shadow entry records the NA value at eviction time as
+ * For such approximation, introduce a counter `evictions` (E)
+ * per lruvec. E is incremented once for every evicted page, and each
+ * evicted page's shadow entry records the E value at eviction time as
  * a timestamp. So when an evicted page is faulted in again, we have:
  *
- *   Let SP = ((NA's reading @ current) - (NA's reading @ eviction))
+ *   Let SP = ((E's reading @ current) - (E's reading @ eviction))
  *
  *                            +-memory available to cache-+
  *                            |                           |
@@ -143,13 +143,6 @@
  *    the benefit extends across a broader range of S/M as a smooth
  *    transition rather than a cliff.
  *
- * A secondary effect: NA over-counts pages that are refaulted and
- * then re-evicted (they contribute to NA twice over their lifetime),
- * which inflates SP for older shadows under heavy refault churn. The
- * feasibility bound SP <= NR_ACTIVE would over-activate in that
- * regime; tightening to (A+I)/2 dampens this without a separate
- * correction.
- *
  *		Refaulting inactive pages
  *
  * All that is known about the active list is that the pages have been
@@ -180,7 +173,7 @@
  *
  *		Implementation
  *
- * For each lruvec, a non-resident age counter (lruvec->nonresident_age)
+ * For each lruvec, a non-resident age counter (lruvec->evictions)
  * is maintained. It is incremented once per evicted page.
  *
  * On eviction, a snapshot of this counter (along with some bits to
@@ -390,7 +383,7 @@ static void workingset_age_nonresident(struct lruvec *lruvec, unsigned long nr_p
 	 * the root cgroup's, age as well.
 	 */
 	do {
-		atomic_long_add(nr_pages, &lruvec->nonresident_age);
+		atomic_long_add(nr_pages, &lruvec->evictions);
 	} while ((lruvec = parent_lruvec(lruvec)));
 }
 
@@ -421,7 +414,7 @@ void *workingset_eviction(struct folio *folio, struct mem_cgroup *target_memcg)
 	lruvec = mem_cgroup_lruvec(target_memcg, pgdat);
 	/* XXX: target_memcg can be NULL, go through lruvec */
 	memcgid = mem_cgroup_private_id(lruvec_memcg(lruvec));
-	eviction = atomic_long_read(&lruvec->nonresident_age);
+	eviction = atomic_long_read(&lruvec->evictions);
 	eviction >>= bucket_order[file];
 	workingset_age_nonresident(lruvec, folio_nr_pages(folio));
 	return pack_shadow(memcgid, pgdat, eviction,
@@ -501,17 +494,17 @@ bool workingset_test_recent(void *shadow, bool file, bool *workingset,
 		mem_cgroup_flush_stats_ratelimited(eviction_memcg);
 
 	eviction_lruvec = mem_cgroup_lruvec(eviction_memcg, pgdat);
-	refault = atomic_long_read(&eviction_lruvec->nonresident_age);
+	refault = atomic_long_read(&eviction_lruvec->evictions);
 
 	/*
 	 * Calculate the refault distance
 	 *
 	 * The unsigned subtraction here gives an accurate distance
-	 * across nonresident_age overflows in most cases. There is a
+	 * across evictions overflows in most cases. There is a
 	 * special case: usually, shadow entries have a short lifetime
 	 * and are either refaulted or reclaimed along with the inode
 	 * before they get too old.  But it is not impossible for the
-	 * nonresident_age to lap a shadow entry in the field, which
+	 * evictions to lap a shadow entry in the field, which
 	 * can then result in a false small refault distance, leading
 	 * to a false activation should this old entry actually
 	 * refault again.  However, earlier kernels used to deactivate
