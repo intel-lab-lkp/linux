@@ -2595,7 +2595,7 @@ alloced:
 	}
 
 	if (sgp == SGP_WRITE)
-		folio_set_referenced(folio);
+		folio_mark_referenced(folio);
 	/*
 	 * Let SGP_FALLOC use the SGP_WRITE optimization on a new folio.
 	 */
