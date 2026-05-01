@@ -8,6 +8,8 @@
  * Author : Lan Tianyu <Tianyu.Lan@microsoft.com>
  */
 
+#ifdef CONFIG_IRQ_REMAP
+
 #include <linux/types.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
@@ -23,8 +25,6 @@
 #include <asm/mshyperv.h>
 
 #include "irq_remapping.h"
-
-#ifdef CONFIG_IRQ_REMAP
 
 /*
  * According 82093AA IO-APIC spec , IO APIC has a 24-entry Interrupt
@@ -331,4 +331,4 @@ static const struct irq_domain_ops hyperv_root_ir_domain_ops = {
 	.free = hyperv_root_irq_remapping_free,
 };
 
-#endif
+#endif  /* CONFIG_IRQ_REMAP */
