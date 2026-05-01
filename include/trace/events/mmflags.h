@@ -142,7 +142,6 @@ TRACE_DEFINE_ENUM(___GFP_LAST_BIT);
 #define __def_pageflag_names						\
 	DEF_PAGEFLAG_NAME(locked),					\
 	DEF_PAGEFLAG_NAME(waiters),					\
-	DEF_PAGEFLAG_NAME(referenced),					\
 	DEF_PAGEFLAG_NAME(uptodate),					\
 	DEF_PAGEFLAG_NAME(dirty),					\
 	DEF_PAGEFLAG_NAME(lru),						\

@@ -522,8 +522,7 @@ enum lruvec_flags {
  * LRU_REFS_PROTECTED. It still considered workingset but moved to a higher
  * gen representing a higher hotness and reclaim bias.
  *
- * Tiering uses PG_referenced as the lowest bit and LRU_REFS_MASK as the
- * higher bits.
+ * Tiering uses LRU_REFS_WIDTH bits in folio->flags, masked by LRU_REFS_MASK.
  *
  * A folio's referenced count never goes backwards except upon gen increase
  * in (7) or a promotion. Passive protect by PID will reset a folio with higher
@@ -536,7 +535,7 @@ enum lruvec_flags {
  *
  * MAX_NR_TIERS is set to 4 so that the multi-gen LRU can support twice the
  * number of categories of the active/inactive LRU when keeping track of
- * accesses through file descriptors. This uses MAX_NR_TIERS-2 spare bits in
+ * accesses through file descriptors. This uses MAX_NR_TIERS-1 bits in
  * folio->flags, masked by LRU_REFS_MASK.
  */
 #define MAX_NR_TIERS		4U
@@ -549,8 +548,8 @@ enum lruvec_flags {
 #define LRU_GEN_MASK		((BIT(LRU_GEN_WIDTH) - 1) << LRU_GEN_PGOFF)
 #define LRU_GEN_MAX		(BIT(LRU_GEN_WIDTH - 1) - 1)
 #define LRU_REFS_MASK		((BIT(LRU_REFS_WIDTH) - 1) << LRU_REFS_PGOFF)
-#define LRU_REFS_FLAGS		(LRU_REFS_MASK | BIT(PG_referenced))
-#define LRU_REFS_MAX		(BIT(LRU_REFS_WIDTH + 1) - 1)
+#define LRU_REFS_FLAGS		LRU_REFS_MASK
+#define LRU_REFS_MAX		(BIT(LRU_REFS_WIDTH) - 1)
 
 struct lruvec;
 struct page_vma_mapped_walk;

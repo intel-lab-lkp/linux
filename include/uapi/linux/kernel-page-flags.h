@@ -8,7 +8,6 @@
 
 #define KPF_LOCKED		0
 #define KPF_ERROR		1	/* Now unused */
-#define KPF_REFERENCED		2
 #define KPF_UPTODATE		3
 #define KPF_DIRTY		4
 #define KPF_LRU			5

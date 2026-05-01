@@ -3570,7 +3570,7 @@ static inline pmd_t *pmd_alloc(struct mm_struct *mm, pud_t *pud, unsigned long a
 #endif /* CONFIG_MMU */
 
 enum pt_flags {
-	PT_kernel = PG_referenced,
+	PT_kernel = PG_owner_priv_1,
 	PT_reserved = PG_reserved,
 	/* High bits are used for zone/node/section */
 };

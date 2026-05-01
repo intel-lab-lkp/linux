@@ -963,7 +963,6 @@ static int fuse_check_folio(struct folio *folio)
 	    folio->mapping != NULL ||
 	    (folio->flags.f & PAGE_FLAGS_CHECK_AT_PREP &
 	     ~(1 << PG_locked |
-	       1 << PG_referenced |
 	       1 << PG_lru |
 	       1 << PG_active |
 	       1 << PG_reclaim |

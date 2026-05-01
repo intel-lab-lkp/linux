@@ -215,11 +215,11 @@
 #define LRU_EVICT_BITS_ANON	(LRU_EVICT_BITS - SWAP_COUNT_SHIFT)
 
 /*
- * LRU refs uses LRU_REFS_WIDTH + 1 bit in folio->flags, the extra 1 bit
- * is PG_referenced. But here we record the low bit of refs separately
- * (to reuse pack_shadow).
+ * LRU refs uses LRU_REFS_WIDTH bits in folio->flags. Its low bit is stored
+ * separately as the "workingset" bit in the shadow (to reuse pack_shadow);
+ * the remaining high bits are packed into the token.
  */
-#define LRU_REFS_BITS		((LRU_REFS_WIDTH + 1) - 1)
+#define LRU_REFS_BITS		(LRU_REFS_WIDTH - 1)
 #define LRU_GEN_EVICT_BITS	(LRU_EVICT_BITS - LRU_REFS_BITS)
 #define LRU_GEN_EVICT_BITS_ANON	(LRU_EVICT_BITS_ANON - LRU_REFS_BITS)
 

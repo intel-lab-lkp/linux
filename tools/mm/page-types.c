@@ -101,7 +101,6 @@
 static const char * const page_flag_names[] = {
 	[KPF_LOCKED]		= "L:locked",
 	[KPF_ERROR]		= "E:error",
-	[KPF_REFERENCED]	= "R:referenced",
 	[KPF_UPTODATE]		= "U:uptodate",
 	[KPF_DIRTY]		= "D:dirty",
 	[KPF_LRU]		= "l:lru",

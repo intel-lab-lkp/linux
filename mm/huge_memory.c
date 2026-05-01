@@ -3637,8 +3637,7 @@ static void __split_folio_to_order(struct folio *folio, int old_order,
 		 */
 		new_folio->flags.f &= ~PAGE_FLAGS_CHECK_AT_PREP;
 		new_folio->flags.f |= (folio->flags.f &
-				((1L << PG_referenced) |
-				 (1L << PG_swapbacked) |
+				((1L << PG_swapbacked) |
 				 (1L << PG_swapcache) |
 				 (1L << PG_mlocked) |
 				 (1L << PG_uptodate) |

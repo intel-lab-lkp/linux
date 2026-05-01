@@ -100,15 +100,11 @@ static __always_inline enum lru_list folio_lru_list(const struct folio *folio)
  */
 static inline int lru_refs_from_flags(unsigned long flags)
 {
-	int refs;
-
 	/*
 	 * Return the total number of accesses. Also see the comment on
 	 * LRU_REFS_FLAGS.
 	 */
-	refs = (flags & BIT(PG_referenced)) ? BIT(0) : 0;
-	refs += ((flags & LRU_REFS_MASK) >> LRU_REFS_PGOFF) << 1;
-	return refs;
+	return (flags & LRU_REFS_MASK) >> LRU_REFS_PGOFF;
 }
 
 /**
@@ -121,9 +117,7 @@ static inline void lru_refs_set_flags(unsigned long *flags, unsigned int refs)
 	VM_WARN_ON_ONCE(refs > LRU_REFS_MAX);
 
 	*flags &= ~LRU_REFS_FLAGS;
-	if (refs & BIT(0))
-		*flags |= BIT(PG_referenced);
-	*flags |= (((unsigned long)refs) >> 1) << LRU_REFS_PGOFF;
+	*flags |= ((unsigned long)refs) << LRU_REFS_PGOFF;
 }
 
 static inline int folio_lru_refs(const struct folio *folio)
@@ -199,7 +193,7 @@ static inline void __folio_init_referenced(struct folio *folio)
  */
 static inline void folio_mark_referenced_by_bit(struct folio *folio)
 {
-	set_mask_bits(folio_flags(folio, 0), BIT(PG_referenced), BIT(PG_referenced));
+	set_mask_bits(folio_flags(folio, 0), BIT(LRU_REFS_PGOFF), BIT(LRU_REFS_PGOFF));
 }
 
 /**
@@ -208,7 +202,7 @@ static inline void folio_mark_referenced_by_bit(struct folio *folio)
  */
 static inline void folio_clear_referenced_by_bit(struct folio *folio)
 {
-	set_mask_bits(folio_flags(folio, 0), BIT(PG_referenced), 0);
+	set_mask_bits(folio_flags(folio, 0), BIT(LRU_REFS_PGOFF), 0);
 }
 
 /**
@@ -217,7 +211,7 @@ static inline void folio_clear_referenced_by_bit(struct folio *folio)
  */
 static inline bool folio_test_clear_referenced_bit(struct folio *folio)
 {
-	return test_and_clear_bit(PG_referenced, folio_flags(folio, 0));
+	return test_and_clear_bit(LRU_REFS_PGOFF, folio_flags(folio, 0));
 }
 
 /**
@@ -226,7 +220,7 @@ static inline bool folio_test_clear_referenced_bit(struct folio *folio)
  */
 static inline bool folio_is_referenced_by_bit(const struct folio *folio)
 {
-	return test_bit(PG_referenced, const_folio_flags(folio, 0));
+	return test_bit(LRU_REFS_PGOFF, const_folio_flags(folio, 0));
 }
 
 /**
