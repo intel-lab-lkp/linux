@@ -783,10 +783,20 @@ int luo_file_deserialize(struct luo_file_set *file_set,
 	struct luo_file_ser *file_ser;
 	u64 i;
 
-	if (!file_set_ser->files) {
-		WARN_ON(file_set_ser->count);
+	if (!file_set_ser->count) {
+		if (file_set_ser->files)
+			return -EINVAL;
 		return 0;
 	}
+
+	if (file_set_ser->count > LUO_FILE_MAX)
+		return -EINVAL;
+
+	if (!file_set_ser->files)
+		return -EINVAL;
+
+	if (!kho_is_preserved(file_set_ser->files, LUO_FILE_PGCNT))
+		return -EINVAL;
 
 	file_set->count = file_set_ser->count;
 	file_set->files = phys_to_virt(file_set_ser->files);
