@@ -1202,11 +1202,10 @@ static int ctucan_open(struct net_device *ndev)
 	struct ctucan_priv *priv = netdev_priv(ndev);
 	int ret;
 
-	ret = pm_runtime_get_sync(priv->dev);
+	ret = pm_runtime_resume_and_get(priv->dev);
 	if (ret < 0) {
-		netdev_err(ndev, "%s: pm_runtime_get failed(%d)\n",
+		netdev_err(ndev, "%s: pm_runtime_resume_and_get failed(%d)\n",
 			   __func__, ret);
-		pm_runtime_put_noidle(priv->dev);
 		return ret;
 	}
 
@@ -1284,10 +1283,9 @@ static int ctucan_get_berr_counter(const struct net_device *ndev, struct can_ber
 	struct ctucan_priv *priv = netdev_priv(ndev);
 	int ret;
 
-	ret = pm_runtime_get_sync(priv->dev);
+	ret = pm_runtime_resume_and_get(priv->dev);
 	if (ret < 0) {
-		netdev_err(ndev, "%s: pm_runtime_get failed(%d)\n", __func__, ret);
-		pm_runtime_put_noidle(priv->dev);
+		netdev_err(ndev, "%s: pm_runtime_resume_and_get failed(%d)\n", __func__, ret);
 		return ret;
 	}
 
@@ -1401,11 +1399,10 @@ int ctucan_probe_common(struct device *dev, void __iomem *addr, int irq, unsigne
 
 	if (pm_enable_call)
 		pm_runtime_enable(dev);
-	ret = pm_runtime_get_sync(dev);
+	ret = pm_runtime_resume_and_get(dev);
 	if (ret < 0) {
-		netdev_err(ndev, "%s: pm_runtime_get failed(%d)\n",
+		netdev_err(ndev, "%s: pm_runtime_resume_and_get failed(%d)\n",
 			   __func__, ret);
-		pm_runtime_put_noidle(priv->dev);
 		goto err_pmdisable;
 	}
 
