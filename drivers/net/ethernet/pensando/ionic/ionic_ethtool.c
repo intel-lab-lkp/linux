@@ -418,6 +418,56 @@ static int ionic_get_fecparam(struct net_device *netdev,
 	return 0;
 }
 
+static const struct ethtool_fec_hist_range ionic_fec_ranges[] = {
+	{ 0, 0},
+	{ 1, 1},
+	{ 2, 2},
+	{ 3, 3},
+	{ 4, 4},
+	{ 5, 5},
+	{ 6, 6},
+	{ 7, 7},
+	{ 8, 8},
+	{ 9, 9},
+	{ 10, 10},
+	{ 11, 11},
+	{ 12, 12},
+	{ 13, 13},
+	{ 14, 14},
+	{ 15, 15},
+	{ 0, 0},
+};
+
+static void
+ionic_fill_fec_hist(const struct ionic_port_extra_stats *extra_stats,
+		    struct ethtool_fec_hist *hist)
+{
+	int i;
+
+	hist->ranges = ionic_fec_ranges;
+	for (i = 0; i < ETHTOOL_FEC_HIST_MAX - 1; i++)
+		hist->values[i].sum = extra_stats->fec_codeword_error_bin[i];
+}
+
+static void ionic_get_fec_stats(struct net_device *netdev,
+				struct ethtool_fec_stats *fec_stats,
+				struct ethtool_fec_hist *hist)
+{
+	struct ionic_port_extra_stats *extra_stats;
+	struct ionic_lif *lif = netdev_priv(netdev);
+
+	extra_stats = &lif->ionic->idev.port_info->extra_stats;
+
+	fec_stats->corrected_blocks.total =
+		le64_to_cpu(extra_stats->rsfec_correctable_blocks);
+	fec_stats->uncorrectable_blocks.total =
+		le64_to_cpu(extra_stats->rsfec_uncorrectable_blocks);
+	fec_stats->corrected_bits.total =
+		le64_to_cpu(extra_stats->fec_corrected_bits_total);
+
+	ionic_fill_fec_hist(extra_stats, hist);
+}
+
 static int ionic_set_fecparam(struct net_device *netdev,
 			      struct ethtool_fecparam *fec)
 {
@@ -1154,6 +1204,7 @@ static const struct ethtool_ops ionic_ethtool_ops = {
 	.get_module_eeprom_by_page	= ionic_get_module_eeprom_by_page,
 	.get_pauseparam		= ionic_get_pauseparam,
 	.set_pauseparam		= ionic_set_pauseparam,
+	.get_fec_stats		= ionic_get_fec_stats,
 	.get_fecparam		= ionic_get_fecparam,
 	.set_fecparam		= ionic_set_fecparam,
 	.get_ts_info		= ionic_get_ts_info,
