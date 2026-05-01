@@ -15,6 +15,7 @@
 #include <hyp/fault.h>
 
 #include <nvhe/gfp.h>
+#include <nvhe/iommu.h>
 #include <nvhe/memory.h>
 #include <nvhe/mem_protect.h>
 #include <nvhe/mm.h>
@@ -481,6 +482,14 @@ static int check_range_allowed_memory(u64 start, u64 end)
 	return 0;
 }
 
+u64 find_mem_range_from(u64 start, bool *is_memory)
+{
+	struct kvm_mem_range r;
+
+	*is_memory = !!find_mem_range(start, &r);
+	return r.end;
+}
+
 static bool range_is_memory(u64 start, u64 end)
 {
 	struct kvm_mem_range r;
@@ -577,8 +586,34 @@ int host_stage2_idmap_locked(phys_addr_t addr, u64 size,
 
 static void __host_update_page_state(phys_addr_t addr, u64 size, enum pkvm_page_state state)
 {
+	enum pkvm_page_state old = get_host_state(hyp_phys_to_page(addr));
+	enum kvm_pgtable_prot prot = 0;
+
 	for_each_hyp_page(page, addr, size)
 		set_host_state(page, state);
+
+	/*
+	 * Any transition to PKVM_NOPAGE, unmaps the page from the host
+	 * Any transition to PKVM_PAGE_SHARED_BORROWED, maps the page in the host
+	 * Any transition to PKVM_PAGE_SHARED_OWNED is ignored as page is already mapped.
+	 * Transitions to PKVM_PAGE_OWNED from anything but PKVM_NOPAGE are ignored.
+	 * Transitions to PKVM_PAGE_OWNED from PKVM_NOPAGE will map the page.
+	 */
+	if ((state == PKVM_PAGE_SHARED_OWNED) ||
+		((state == PKVM_PAGE_OWNED) && (old != PKVM_NOPAGE)))
+		return;
+
+	if ((state == PKVM_PAGE_SHARED_BORROWED) ||
+		(state == PKVM_PAGE_OWNED))
+		prot = PKVM_HOST_MEM_PROT;
+
+	/*
+	 * Only update the IOMMU from here, as MMIO can't transition after
+	 * de-privilege, that will need to change when device assignment
+	 * is supported.
+	 * And WARN on failure as we can't unroll at this point.
+	 */
+	WARN_ON(kvm_iommu_host_stage2_idmap(addr, addr + size, prot));
 }
 
 #define KVM_HOST_DONATION_PTE_OWNER_MASK	GENMASK(3, 1)
