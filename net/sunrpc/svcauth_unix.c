@@ -103,18 +103,26 @@ struct ip_map {
 	char			m_class[8]; /* e.g. "nfsd" */
 	struct in6_addr		m_addr;
 	struct unix_domain	*m_client;
-	struct rcu_head		m_rcu;
+	struct rcu_work		m_rwork;
 };
+
+static void ip_map_release(struct work_struct *work)
+{
+	struct ip_map *im = container_of(to_rcu_work(work),
+					 struct ip_map, m_rwork);
+
+	if (test_bit(CACHE_VALID, &im->h.flags) &&
+	    !test_bit(CACHE_NEGATIVE, &im->h.flags))
+		auth_domain_put(&im->m_client->h);
+	kfree(im);
+}
 
 static void ip_map_put(struct kref *kref)
 {
-	struct cache_head *item = container_of(kref, struct cache_head, ref);
-	struct ip_map *im = container_of(item, struct ip_map,h);
+	struct ip_map *im = container_of(kref, struct ip_map, h.ref);
 
-	if (test_bit(CACHE_VALID, &item->flags) &&
-	    !test_bit(CACHE_NEGATIVE, &item->flags))
-		auth_domain_put(&im->m_client->h);
-	kfree_rcu(im, m_rcu);
+	INIT_RCU_WORK(&im->m_rwork, ip_map_release);
+	sunrpc_cache_queue_release(&im->m_rwork);
 }
 
 static inline int hash_ip6(const struct in6_addr *ip)
@@ -1569,6 +1577,5 @@ void ip_map_cache_destroy(struct net *net)
 
 	sn->ip_map_cache = NULL;
 	cache_purge(cd);
-	cache_unregister_net(cd, net);
-	cache_destroy_net(cd, net);
+	sunrpc_cache_destroy_net(cd, net);
 }
