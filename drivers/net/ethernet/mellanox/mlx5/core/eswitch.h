@@ -1049,6 +1049,12 @@ mlx5_esw_lag_demux_rule_create(struct mlx5_eswitch *esw, u16 vport_num,
 	return ERR_PTR(-EOPNOTSUPP);
 }
 
+static inline int
+mlx5_devlink_eswitch_mode_set(struct devlink *devlink, u16 mode,
+			      struct netlink_ext_ack *extack)
+{
+	return -EOPNOTSUPP;
+}
 #endif /* CONFIG_MLX5_ESWITCH */
 
 #endif /* __MLX5_ESWITCH_H__ */

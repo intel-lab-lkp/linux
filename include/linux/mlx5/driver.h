@@ -705,6 +705,8 @@ struct mlx5_st;
 
 enum {
 	MLX5_PROF_MASK_QP_SIZE		= (u64)1 << 0,
+	MLX5_PROF_MASK_MR_CACHE		= (u64)1 << 1,
+	MLX5_PROF_MASK_DEF_SWITCHDEV    = (u64)1 << 2,
 };
 
 struct mlx5_profile {

@@ -86,7 +86,7 @@ MODULE_PARM_DESC(debug_mask, "debug mask: 1 = dump cmd data, 2 = dump cmd exec t
 
 static unsigned int prof_sel = MLX5_DEFAULT_PROF;
 module_param_named(prof_sel, prof_sel, uint, 0444);
-MODULE_PARM_DESC(prof_sel, "profile selector. Valid range 0 - 2");
+MODULE_PARM_DESC(prof_sel, "profile selector. Valid range 0 - 3 and 8");
 
 static u32 sw_owner_id[4];
 #define MAX_SW_VHCA_ID (BIT(__mlx5_bit_sz(cmd_hca_cap_2, sw_vhca_id)) - 1)
@@ -99,6 +99,8 @@ enum {
 
 #define LOG_MAX_SUPPORTED_QPS 0xff
 
+#define MLX5_PROF_SEL_LAST_NIC 3
+#define MLX5_PROF_SEL_FIRST_ESW 8
 static struct mlx5_profile profile[] = {
 	[0] = {
 		.mask           = 0,
@@ -119,6 +121,11 @@ static struct mlx5_profile profile[] = {
 		.mask		= MLX5_PROF_MASK_QP_SIZE,
 		.log_max_qp	= LOG_MAX_SUPPORTED_QPS,
 		.num_cmd_caches = 0,
+	},
+	[8] = {
+		.mask = MLX5_PROF_MASK_DEF_SWITCHDEV | MLX5_PROF_MASK_QP_SIZE,
+		.log_max_qp = LOG_MAX_SUPPORTED_QPS,
+		.num_cmd_caches = MLX5_NUM_COMMAND_CACHES,
 	},
 };
 
@@ -1385,6 +1392,22 @@ static void mlx5_unload(struct mlx5_core_dev *dev)
 	mlx5_free_bfreg(dev, &dev->priv.bfreg);
 }
 
+static void mlx5_set_default_switchdev(struct mlx5_core_dev *dev)
+{
+	int err;
+
+	/* Default switchdev is best-effort; keep the device usable on
+	 * failure.
+	 */
+	err = mlx5_devlink_eswitch_mode_set(priv_to_devlink(dev),
+					    DEVLINK_ESWITCH_MODE_SWITCHDEV,
+					    NULL);
+	if (err && err != -EOPNOTSUPP)
+		mlx5_core_warn(dev,
+			       "Failed to set switchdev as default, continuing in current mode, err(%d)\n",
+			       err);
+}
+
 int mlx5_init_one_devl_locked(struct mlx5_core_dev *dev)
 {
 	bool light_probe = mlx5_dev_is_lightweight(dev);
@@ -1431,6 +1454,10 @@ int mlx5_init_one_devl_locked(struct mlx5_core_dev *dev)
 		mlx5_core_err(dev, "mlx5_hwmon_dev_register failed with error code %d\n", err);
 
 	mutex_unlock(&dev->intf_state_mutex);
+
+	if (dev->profile.mask & MLX5_PROF_MASK_DEF_SWITCHDEV)
+		mlx5_set_default_switchdev(dev);
+
 	return 0;
 
 err_register:
@@ -1532,6 +1559,10 @@ int mlx5_load_one_devl_locked(struct mlx5_core_dev *dev, bool recovery)
 		goto err_attach;
 
 	mutex_unlock(&dev->intf_state_mutex);
+
+	if (dev->profile.mask & MLX5_PROF_MASK_DEF_SWITCHDEV)
+		mlx5_set_default_switchdev(dev);
+
 	return 0;
 
 err_attach:
@@ -2311,6 +2342,16 @@ static void mlx5_core_verify_params(void)
 		pr_warn("mlx5_core: WARNING: Invalid module parameter prof_sel %d, valid range 0-%zu, changing back to default(%d)\n",
 			prof_sel,
 			ARRAY_SIZE(profile) - 1,
+			MLX5_DEFAULT_PROF);
+		prof_sel = MLX5_DEFAULT_PROF;
+	}
+
+	if (prof_sel > MLX5_PROF_SEL_LAST_NIC &&
+	    prof_sel < MLX5_PROF_SEL_FIRST_ESW) {
+		pr_warn("mlx5_core: WARNING: Invalid module parameter prof_sel %d invalid range %d - %d, changing back to default (%d)\n",
+			prof_sel,
+			MLX5_PROF_SEL_LAST_NIC + 1,
+			MLX5_PROF_SEL_FIRST_ESW - 1,
 			MLX5_DEFAULT_PROF);
 		prof_sel = MLX5_DEFAULT_PROF;
 	}
