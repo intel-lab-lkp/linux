@@ -59,6 +59,7 @@ static long tscm_hwdep_read_queue(struct snd_tscm *tscm, char __user *buf,
 		unsigned int head_pos;
 		unsigned int tail_pos;
 		unsigned int length;
+		unsigned int entries_copied;
 
 		if (tscm->pull_pos == tscm->push_pos)
 			break;
@@ -73,6 +74,7 @@ static long tscm_hwdep_read_queue(struct snd_tscm *tscm, char __user *buf,
 			length = rounddown(remained, sizeof(*entries));
 		if (length == 0)
 			break;
+		entries_copied = length / sizeof(*entries);
 
 		spin_unlock_irq(&tscm->lock);
 		if (copy_to_user(pos, &entries[head_pos], length))
@@ -80,7 +82,7 @@ static long tscm_hwdep_read_queue(struct snd_tscm *tscm, char __user *buf,
 
 		spin_lock_irq(&tscm->lock);
 
-		tscm->pull_pos = tail_pos % SND_TSCM_QUEUE_COUNT;
+		tscm->pull_pos = (head_pos + entries_copied) % SND_TSCM_QUEUE_COUNT;
 
 		count += length;
 		remained -= length;
