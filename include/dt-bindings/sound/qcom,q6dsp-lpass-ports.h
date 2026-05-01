@@ -152,6 +152,20 @@
 #define LPI_MI2S_TX_4		146
 #define SENARY_MI2S_RX		147
 #define SENARY_MI2S_TX		148
+#define INT0_MI2S_RX		149
+#define INT0_MI2S_TX		150
+#define INT1_MI2S_RX		151
+#define INT1_MI2S_TX		152
+#define INT2_MI2S_RX		153
+#define INT2_MI2S_TX		154
+#define INT3_MI2S_RX		155
+#define INT3_MI2S_TX		156
+#define INT4_MI2S_RX		157
+#define INT4_MI2S_TX		158
+#define INT5_MI2S_RX		159
+#define INT5_MI2S_TX		160
+#define INT6_MI2S_RX		161
+#define INT6_MI2S_TX		162
 
 #define LPASS_CLK_ID_PRI_MI2S_IBIT	1
 #define LPASS_CLK_ID_PRI_MI2S_EBIT	2
