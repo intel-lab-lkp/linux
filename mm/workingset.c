@@ -261,6 +261,60 @@ static void unpack_shadow(void *shadow, int *memcgidp, pg_data_t **pgdat,
 	*workingsetp = workingset;
 }
 
+static struct lruvec *try_unpack_get_lruvec(void *shadow,
+					    unsigned long *eviction,
+					    bool *workingset, bool flush)
+{
+	int memcgid;
+	struct mem_cgroup *memcg;
+	struct pglist_data *pgdat;
+
+	unpack_shadow(shadow, &memcgid, &pgdat, eviction, workingset);
+
+	/*
+	 * Look up the memcg associated with the stored ID. It might
+	 * have been deleted since the folio's eviction.
+	 *
+	 * Note that in rare events the ID could have been recycled
+	 * for a new cgroup that refaults a shared folio. This is
+	 * impossible to tell from the available data. However, this
+	 * should be a rare and limited disturbance, and activations
+	 * are always speculative anyway. Ultimately, it's the aging
+	 * algorithm's job to shake out the minimum access frequency
+	 * for the active cache.
+	 *
+	 * XXX: On !CONFIG_MEMCG, this will always return NULL; it
+	 * would be better if the root_mem_cgroup existed in all
+	 * configurations instead.
+	 */
+	rcu_read_lock();
+	memcg = mem_cgroup_from_private_id(memcgid);
+	if (!mem_cgroup_tryget(memcg))
+		memcg = NULL;
+	rcu_read_unlock();
+
+	if (!mem_cgroup_disabled() && !memcg)
+		return NULL;
+
+	/*
+	 * Flush stats (and potentially sleep) outside the RCU read section.
+	 * XXX: With per-memcg flushing and thresholding, is ratelimiting
+	 * still needed here?
+	 */
+	if (memcg && flush)
+		mem_cgroup_flush_stats_ratelimited(memcg);
+
+	return mem_cgroup_lruvec(memcg, pgdat);
+}
+
+static void put_lruvec(struct lruvec *lruvec)
+{
+	if (mem_cgroup_disabled())
+		return;
+
+	mem_cgroup_put(lruvec_memcg(lruvec));
+}
+
 /**
  * lru_eviction - notifies eviction of an folio on an lruvec
  * @lruvec: the lruvec the folio belongs to
@@ -383,30 +437,25 @@ static bool lru_gen_test_recent(struct lruvec *lruvec,
 static void lru_gen_refault(struct folio *folio, void *shadow)
 {
 	bool recent;
-	int memcg_id;
 	int hist, tier, refs;
 	bool workingset;
 	unsigned long token;
 	struct lruvec *lruvec;
-	struct mem_cgroup *memcg;
-	struct pglist_data *pgdat;
 	struct lru_gen_folio *lrugen;
 	int type = folio_is_file_lru(folio);
 	int delta = folio_nr_pages(folio);
 
-	unpack_shadow(shadow, &memcg_id, &pgdat, &token, &workingset);
-
-	rcu_read_lock();
-	memcg = mem_cgroup_from_private_id(memcg_id);
-	lruvec = mem_cgroup_lruvec(memcg, pgdat);
+	lruvec = try_unpack_get_lruvec(shadow, &token, &workingset, false);
+	if (!lruvec)
+		return;
 	if (lruvec != folio_lruvec(folio))
-		goto unlock;
+		goto out_put;
 
 	recent = lru_gen_test_recent(lruvec, token, type);
 	mod_lruvec_state(lruvec, WORKINGSET_REFAULT_BASE + type, delta);
 
 	if (!recent)
-		goto unlock;
+		goto out_put;
 
 	lrugen = &lruvec->lrugen;
 
@@ -424,8 +473,8 @@ static void lru_gen_refault(struct folio *folio, void *shadow)
 		folio_set_lru_refs(folio, refs);
 		mod_lruvec_state(lruvec, WORKINGSET_RESTORE_BASE + type, delta);
 	}
-unlock:
-	rcu_read_unlock();
+out_put:
+	put_lruvec(lruvec);
 }
 
 #else /* !CONFIG_LRU_GEN */
@@ -494,91 +543,49 @@ void *workingset_eviction(struct folio *folio, struct mem_cgroup *target_memcg)
  * Return: true if the shadow is for a recently evicted folio; false otherwise.
  */
 bool workingset_test_recent(void *shadow, bool file, bool *workingset,
-				bool flush)
+			    bool flush)
 {
-	unsigned long distance, active, inactive;
-	struct mem_cgroup *eviction_memcg;
-	struct lruvec *eviction_lruvec;
-	struct pglist_data *pgdat;
+	struct lruvec *lruvec;
 	unsigned long eviction;
-	int memcgid;
-
-	rcu_read_lock();
-	unpack_shadow(shadow, &memcgid, &pgdat, &eviction, workingset);
-
-	/*
-	 * Look up the memcg associated with the stored ID. It might
-	 * have been deleted since the folio's eviction.
-	 *
-	 * Note that in rare events the ID could have been recycled
-	 * for a new cgroup that refaults a shared folio. This is
-	 * impossible to tell from the available data. However, this
-	 * should be a rare and limited disturbance, and activations
-	 * are always speculative anyway. Ultimately, it's the aging
-	 * algorithm's job to shake out the minimum access frequency
-	 * for the active cache.
-	 *
-	 * XXX: On !CONFIG_MEMCG, this will always return NULL; it
-	 * would be better if the root_mem_cgroup existed in all
-	 * configurations instead.
-	 */
-	eviction_memcg = mem_cgroup_from_private_id(memcgid);
-	if (!mem_cgroup_tryget(eviction_memcg))
-		eviction_memcg = NULL;
-	rcu_read_unlock();
-
-	if (!mem_cgroup_disabled() && !eviction_memcg)
-		return false;
-
-	eviction_lruvec = mem_cgroup_lruvec(eviction_memcg, pgdat);
+	unsigned long active, inactive;
+	unsigned long distance;
+	bool recent;
 
 	if (lru_gen_enabled()) {
-		bool recent;
-
-		recent = lru_gen_test_recent(eviction_lruvec, eviction, file);
-		mem_cgroup_put(eviction_memcg);
-		return recent;
+		lruvec = try_unpack_get_lruvec(shadow, &eviction, workingset, false);
+		if (!lruvec)
+			return false;
+		recent = lru_gen_test_recent(lruvec, eviction, file);
+	} else {
+		lruvec = try_unpack_get_lruvec(shadow, &eviction, workingset, flush);
+		if (!lruvec)
+			return false;
+		distance = lru_distance(lruvec, eviction,
+					file ? LRU_EVICT_BITS : LRU_EVICT_BITS_ANON,
+					bucket_order[file]);
+		/*
+		 * Compare the distance to the existing workingset size. We
+		 * don't activate pages that couldn't stay resident even if
+		 * all the memory was available to the workingset. Whether
+		 * workingset competition needs to consider anon or not depends
+		 * on having free swap space.
+		 */
+		active = lruvec_page_state(lruvec, NR_ACTIVE_FILE);
+		inactive = lruvec_page_state(lruvec, NR_INACTIVE_FILE);
+		if (mem_cgroup_get_nr_swap_pages(lruvec_memcg(lruvec)) > 0) {
+			active += lruvec_page_state(lruvec, NR_ACTIVE_ANON);
+			inactive += lruvec_page_state(lruvec, NR_INACTIVE_ANON);
+		}
+		/*
+		 * Be cautious about challenging the existing active working
+		 * set; sacrificing the inactive part of the opposite type
+		 * should be safe.
+		 */
+		recent = distance <= (active + inactive) / 2;
 	}
 
-	/*
-	 * Flush stats (and potentially sleep) outside the RCU read section.
-	 *
-	 * Note that workingset_test_recent() itself might be called in RCU read
-	 * section (for e.g, in cachestat) - these callers need to skip flushing
-	 * stats (via the flush argument).
-	 *
-	 * XXX: With per-memcg flushing and thresholding, is ratelimiting
-	 * still needed here?
-	 */
-	if (flush)
-		mem_cgroup_flush_stats_ratelimited(eviction_memcg);
-
-	distance = lru_distance(eviction_lruvec, eviction,
-				file ? LRU_EVICT_BITS : LRU_EVICT_BITS_ANON,
-				bucket_order[file]);
-
-	/*
-	 * Compare the distance to the existing workingset size. We
-	 * don't activate pages that couldn't stay resident even if
-	 * all the memory was available to the workingset. Whether
-	 * workingset competition needs to consider anon or not depends
-	 * on having free swap space.
-	 */
-	active = lruvec_page_state(eviction_lruvec, NR_ACTIVE_FILE);
-	inactive = lruvec_page_state(eviction_lruvec, NR_INACTIVE_FILE);
-
-	if (mem_cgroup_get_nr_swap_pages(eviction_memcg) > 0) {
-		active += lruvec_page_state(eviction_lruvec, NR_ACTIVE_ANON);
-		inactive += lruvec_page_state(eviction_lruvec, NR_INACTIVE_ANON);
-	}
-
-	mem_cgroup_put(eviction_memcg);
-
-	/*
-	 * Be cautious about challenging the existing active working set;
-	 * sacrificing the inactive part of the opposite type should be safe.
-	 */
-	return distance <= (active + inactive) / 2;
+	put_lruvec(lruvec);
+	return recent;
 }
 
 /**
