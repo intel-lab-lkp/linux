@@ -2015,7 +2015,7 @@ no_page:
 
 			/* Init accessed so avoid atomic mark_page_accessed later */
 			if (fgp_flags & FGP_ACCESSED)
-				__folio_set_referenced(folio);
+				__folio_init_referenced(folio);
 			if (fgp_flags & FGP_DONTCACHE)
 				__folio_set_dropbehind(folio);
 
