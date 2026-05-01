@@ -33,6 +33,7 @@
 #include <drm/drm_atomic.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/amdgpu_drm.h>
+#include <drm/drm_drv.h>
 #include <drm/drm_edid.h>
 #include <drm/drm_fixed.h>
 
@@ -1165,8 +1166,15 @@ void dm_set_dcn_clocks(struct dc_context *ctx, struct dc_clocks *clks)
 
 void dm_helpers_dmu_timeout(struct dc_context *ctx)
 {
-	// TODO:
-	//amdgpu_device_gpu_recover(dc_context->driver-context, NULL);
+	struct amdgpu_device *adev = ctx->driver_context;
+
+	lockdep_assert_held(&adev->dm.dc_lock);
+
+	drm_info(adev_to_drm(adev), "attempting firmware reset\n");
+	if (amdgpu_dm_dmub_hw_init(adev))
+		drm_dev_wedged_event(adev_to_drm(adev),
+				     DRM_WEDGE_RECOVERY_REBIND |
+				     DRM_WEDGE_RECOVERY_BUS_RESET, NULL);
 }
 
 void dm_helpers_smu_timeout(struct dc_context *ctx, unsigned int msg_id, unsigned int param, unsigned int timeout_us)

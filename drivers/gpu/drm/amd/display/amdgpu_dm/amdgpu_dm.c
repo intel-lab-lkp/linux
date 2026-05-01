@@ -1246,7 +1246,7 @@ static  void amdgpu_dm_audio_eld_notify(struct amdgpu_device *adev, int pin)
 	}
 }
 
-static int dm_dmub_hw_init(struct amdgpu_device *adev)
+int amdgpu_dm_dmub_hw_init(struct amdgpu_device *adev)
 {
 	const struct dmcub_firmware_header_v1_0 *hdr;
 	struct dmub_srv *dmub_srv = adev->dm.dmub_srv;
@@ -1315,7 +1315,7 @@ static int dm_dmub_hw_init(struct amdgpu_device *adev)
 	/* if adev->firmware.load_type == AMDGPU_FW_LOAD_PSP,
 	 * amdgpu_ucode_init_single_fw will load dmub firmware
 	 * fw_inst_const part to cw0; otherwise, the firmware back door load
-	 * will be done by dm_dmub_hw_init
+	 * will be done by amdgpu_dm_dmub_hw_init().
 	 */
 	if (adev->firmware.load_type != AMDGPU_FW_LOAD_PSP) {
 		memcpy(fb_info->fb[DMUB_WINDOW_0_INST_CONST].cpu_addr, fw_inst_const,
@@ -1457,7 +1457,7 @@ static void dm_dmub_hw_resume(struct amdgpu_device *adev)
 			drm_warn(adev_to_drm(adev), "Wait for DMUB auto-load failed: %d\n", status);
 	} else {
 		/* Perform the full hardware initialization. */
-		r = dm_dmub_hw_init(adev);
+		r = amdgpu_dm_dmub_hw_init(adev);
 		if (r)
 			drm_err(adev_to_drm(adev), "DMUB interface failed to initialize: status=%d\n", r);
 	}
@@ -2041,6 +2041,9 @@ static int amdgpu_dm_init(struct amdgpu_device *adev)
 		goto error;
 	}
 
+	adev->dm.dc->debug.enable_dmu_recovery =
+		amdgpu_device_should_recover_gpu(adev);
+
 	if (amdgpu_dc_debug_mask & DC_DISABLE_PIPE_SPLIT) {
 		adev->dm.dc->debug.force_single_disp_pipe_split = false;
 		adev->dm.dc->debug.pipe_split_policy = MPC_SPLIT_AVOID;
@@ -2090,7 +2093,7 @@ static int amdgpu_dm_init(struct amdgpu_device *adev)
 	if (adev->dm.dc->caps.dp_hdmi21_pcon_support)
 		drm_info(adev_to_drm(adev), "DP-HDMI FRL PCON supported\n");
 
-	r = dm_dmub_hw_init(adev);
+	r = amdgpu_dm_dmub_hw_init(adev);
 	if (r) {
 		drm_err(adev_to_drm(adev), "DMUB interface failed to initialize: status=%d\n", r);
 		goto error;
@@ -3604,7 +3607,7 @@ static int dm_resume(struct amdgpu_ip_block *ip_block)
 		 */
 		link_enc_cfg_copy(adev->dm.dc->current_state, dc_state);
 
-		r = dm_dmub_hw_init(adev);
+		r = amdgpu_dm_dmub_hw_init(adev);
 		if (r) {
 			drm_err(adev_to_drm(adev), "DMUB interface failed to initialize: status=%d\n", r);
 			return r;
@@ -9623,7 +9626,15 @@ static void prepare_flip_isr(struct amdgpu_crtc *acrtc)
 {
 
 	assert_spin_locked(&acrtc->base.dev->event_lock);
-	WARN_ON(acrtc->event);
+
+	/*
+	 * Compositors will refuse to make forward progress unless we send
+	 * the previous flip's completion event.
+	 */
+	if (WARN_ON(acrtc->event)) {
+		drm_crtc_send_vblank_event(&acrtc->base, acrtc->event);
+		drm_crtc_vblank_put(&acrtc->base);
+	}
 
 	acrtc->event = acrtc->base.state->event;
 
