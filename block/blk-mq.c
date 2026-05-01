@@ -3096,22 +3096,27 @@ static struct request *blk_mq_peek_cached_request(struct blk_plug *plug,
 	return rq;
 }
 
-static void blk_mq_use_cached_rq(struct request *rq, struct blk_plug *plug,
+static bool blk_mq_use_cached_rq(struct request *rq, struct blk_plug *plug,
 		struct bio *bio)
 {
-	if (rq_list_pop(&plug->cached_rqs) != rq)
-		WARN_ON_ONCE(1);
-
 	/*
-	 * If any qos ->throttle() end up blocking, we will have flushed the
-	 * plug and hence killed the cached_rq list as well. Pop this entry
-	 * before we throttle.
+	 * We will have flushed the plug and hence killed the cached_rq list as
+	 * well if anything had scheduled. Pop this entry before we throttle if
+	 * the entry is still valid.
 	 */
+	struct request *popped = rq_list_pop(&plug->cached_rqs);
+
+	if (popped != rq) {
+		WARN_ON_ONCE(popped);
+		return false;
+	}
+
 	rq_qos_throttle(rq->q, bio);
 
 	blk_mq_rq_time_init(rq, blk_time_get_ns());
 	rq->cmd_flags = bio->bi_opf;
 	INIT_LIST_HEAD(&rq->queuelist);
+	return true;
 }
 
 static bool bio_unaligned(const struct bio *bio, struct request_queue *q)
@@ -3154,6 +3159,7 @@ void blk_mq_submit_bio(struct bio *bio)
 	 */
 	rq = blk_mq_peek_cached_request(plug, q, bio->bi_opf);
 
+retry:
 	/*
 	 * A BIO that was released from a zone write plug has already been
 	 * through the preparation in this function, already holds a reference
@@ -3211,7 +3217,14 @@ void blk_mq_submit_bio(struct bio *bio)
 
 new_request:
 	if (rq) {
-		blk_mq_use_cached_rq(rq, plug, bio);
+		if (!blk_mq_use_cached_rq(rq, plug, bio)) {
+			struct bio_integrity_payload *bip = bio_integrity(bio);
+
+			if (bip && (bip->bip_flags & BIP_BLOCK_INTEGRITY))
+				bio_integrity_free(bio);
+			rq = NULL;
+			goto retry;
+		}
 	} else {
 		rq = blk_mq_get_new_requests(q, plug, bio);
 		if (unlikely(!rq)) {
