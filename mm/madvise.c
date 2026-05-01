@@ -1331,6 +1331,25 @@ static bool can_madvise_modify(struct madvise_behavior *madv_behavior)
 }
 #endif
 
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+static vm_flags_t madvise_thp_setup(struct madvise_behavior *madv_behavior)
+{
+	int thp_behavior = madv_behavior->behavior - MADV_THP_SETUP_BASE;
+	struct vm_area_struct *vma = madv_behavior->vma;
+	vm_flags_t new_flags = vma->vm_flags;
+
+	if (madv_thp_cow(thp_behavior))
+		new_flags |= VM_THP_COW;
+
+	return new_flags;
+}
+#else
+static vm_flags_t madvise_thp_setup(struct madvise_behavior *madv_behavior)
+{
+	return madv_behavior->vma->vm_flags;
+}
+#endif
+
 /*
  * Apply an madvise behavior to a region of a vma.  madvise_update_vma
  * will handle splitting a vm area into separate areas, each area with its own
@@ -1426,6 +1445,10 @@ static int madvise_vma_behavior(struct madvise_behavior *madv_behavior)
 			return -EBADF;
 		break;
 	}
+
+	/* Handle THP behaviors */
+	if (madv_thp_behavior(behavior))
+		new_flags = madvise_thp_setup(madv_behavior);
 
 	/* This is a write operation.*/
 	VM_WARN_ON_ONCE(madv_behavior->lock_mode != MADVISE_MMAP_WRITE_LOCK);
@@ -1555,6 +1578,8 @@ madvise_behavior_valid(int behavior)
 		return true;
 
 	default:
+		if (madv_thp_behavior(behavior))
+			return true;
 		return false;
 	}
 }

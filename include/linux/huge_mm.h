@@ -6,6 +6,7 @@
 
 #include <linux/fs.h> /* only for vma_is_dax() */
 #include <linux/kobject.h>
+#include <uapi/asm-generic/mman-common.h>
 
 vm_fault_t do_huge_pmd_anonymous_page(struct vm_fault *vmf);
 int copy_huge_pmd(struct mm_struct *dst_mm, struct mm_struct *src_mm,
@@ -361,6 +362,11 @@ static inline bool thp_disabled_by_hw(void)
 {
 	/* If the hardware/firmware marked hugepage support disabled. */
 	return transparent_hugepage_flags & (1 << TRANSPARENT_HUGEPAGE_UNSUPPORTED);
+}
+
+static inline bool madv_thp_cow(int behavior)
+{
+	return behavior & MADV_THP_COW;
 }
 
 unsigned long thp_get_unmapped_area(struct file *filp, unsigned long addr,

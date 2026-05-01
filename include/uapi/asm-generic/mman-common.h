@@ -82,6 +82,15 @@
 #define MADV_GUARD_INSTALL 102		/* fatal signal on access to range */
 #define MADV_GUARD_REMOVE 103		/* unguard range */
 
+/* for THP setup */
+#define MADV_THP_SETUP_BASE 256
+enum {
+	MADV_THP_COW_BIT,
+	MADV_THP_SETUP_MAX_BIT,
+};
+#define MADV_THP_COW        (MADV_THP_SETUP_BASE + (1 << MADV_THP_COW_BIT))
+#define MADV_THP_SETUP_END	(MADV_THP_SETUP_BASE + (1 << MADV_THP_SETUP_MAX_BIT))
+
 /* compatibility flags */
 #define MAP_FILE	0
 

@@ -391,6 +391,10 @@ enum {
 #else
 	DECLARE_VMA_BIT_ALIAS(STACK, GROWSDOWN),
 #endif
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+	DECLARE_VMA_BIT(THP_SETUP_1, 43),
+	DECLARE_VMA_BIT_ALIAS(THP_COW, THP_SETUP_1),
+#endif
 };
 #undef DECLARE_VMA_BIT
 #undef DECLARE_VMA_BIT_ALIAS
@@ -509,6 +513,9 @@ enum {
 #else
 #define VM_DROPPABLE		VM_NONE
 #define VMA_DROPPABLE		EMPTY_VMA_FLAGS
+#endif
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+#define VM_THP_COW	INIT_VM_FLAG(THP_COW)
 #endif
 
 /* Bits set in the VMA until the stack is in its final location */
@@ -4127,6 +4134,18 @@ int do_vmi_align_munmap(struct vma_iterator *vmi, struct vm_area_struct *vma,
 extern int do_munmap(struct mm_struct *, unsigned long, size_t,
 		     struct list_head *uf);
 extern int do_madvise(struct mm_struct *mm, unsigned long start, size_t len_in, int behavior);
+
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+static inline bool madv_thp_behavior(int behavior)
+{
+	return behavior >= MADV_THP_SETUP_BASE && behavior < MADV_THP_SETUP_END;
+}
+#else
+static inline bool madv_thp_behavior(int behavior)
+{
+	return false;
+}
+#endif
 
 #ifdef CONFIG_MMU
 extern int __mm_populate(unsigned long addr, unsigned long len,
