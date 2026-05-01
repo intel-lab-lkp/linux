@@ -19,7 +19,7 @@ mod fb;
 mod firmware;
 mod gpu;
 mod gsp;
-#[expect(dead_code)]
+#[cfg_attr(not(CONFIG_NOVA_CORE_IRQ_SELFTEST), expect(dead_code))]
 mod irq;
 #[macro_use]
 mod num;

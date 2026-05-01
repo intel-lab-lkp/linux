@@ -305,6 +305,14 @@ impl Gpu {
             // Allocate a PCI interrupt vector.
             _: {
                 let _irq_vector = irq::alloc_vector(pdev)?;
+
+                #[cfg(CONFIG_NOVA_CORE_IRQ_SELFTEST)]
+                irq::doorbell_test::run_selftest(
+                    pdev,
+                    &devres_bar,
+                    spec.chipset,
+                    _irq_vector,
+                )?;
             },
 
             bar: devres_bar,
