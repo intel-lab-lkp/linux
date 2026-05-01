@@ -11,6 +11,8 @@ use kernel::{
     sync::Arc, //
 };
 
+use crate::irq;
+
 use crate::{
     bounded_enum,
     driver::Bar0,
@@ -292,6 +294,11 @@ impl Gpu {
             gsp <- Gsp::new(pdev),
 
             _: { gsp.boot(pdev, bar, spec.chipset, gsp_falcon, sec2_falcon)? },
+
+            // Allocate a PCI interrupt vector.
+            _: {
+                let _irq_vector = irq::alloc_vector(pdev)?;
+            },
 
             bar: devres_bar,
         })
