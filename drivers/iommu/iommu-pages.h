@@ -7,6 +7,7 @@
 #ifndef __IOMMU_PAGES_H
 #define __IOMMU_PAGES_H
 
+#include <linux/dma-mapping.h>
 #include <linux/iommu.h>
 
 /**
@@ -144,5 +145,40 @@ void iommu_pages_stop_incoherent_list(struct iommu_pages_list *list,
 				      struct device *dma_dev);
 void iommu_pages_free_incoherent(void *virt, struct device *dma_dev);
 #endif
+
+static inline void *iommu_alloc_data(size_t size, gfp_t gfp)
+{
+	return kmalloc(size, gfp);
+}
+
+static inline void iommu_free_data(void *p)
+{
+	kfree(p);
+}
+
+static inline phys_addr_t iommu_virt_to_phys(void *virt)
+{
+	return virt_to_phys(virt);
+}
+
+static inline void *iommu_phys_to_virt(phys_addr_t phys)
+{
+	return phys_to_virt(phys);
+}
+
+static inline dma_addr_t iommu_pages_dma_map(struct device *dev, void *virt, size_t size)
+{
+	return dma_map_single(dev, virt, size, DMA_TO_DEVICE);
+}
+
+static inline int iommu_pages_dma_mapping_error(struct device *dev, dma_addr_t dma)
+{
+	return dma_mapping_error(dev, dma);
+}
+
+static inline void iommu_pages_dma_unmap(struct device *dev, dma_addr_t dma, size_t size)
+{
+	dma_unmap_single(dev, dma, size, DMA_TO_DEVICE);
+}
 
 #endif /* __IOMMU_PAGES_H */
