@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
- * OPAL asynchronus Memory error handling support in PowerNV.
+ * OPAL asynchronous Memory error handling support in PowerNV.
  *
  * Copyright 2013 IBM Corporation
  * Author: Mahesh Salgaonkar <mahesh@linux.vnet.ibm.com>

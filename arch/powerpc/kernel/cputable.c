@@ -124,7 +124,7 @@ struct cpu_spec * __init identify_cpu(unsigned long offset, unsigned int pvr)
 
 /*
  * Used by cpufeatures to get the name for CPUs with a PVR table.
- * If they don't hae a PVR table, cpufeatures gets the name from
+ * If they don't have a PVR table, cpufeatures gets the name from
  * cpu device-tree node.
  */
 void __init identify_cpu_name(unsigned int pvr)

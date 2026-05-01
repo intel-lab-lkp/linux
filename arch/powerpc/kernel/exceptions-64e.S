@@ -874,7 +874,7 @@ kernel_dbg_exc:
 	bl	unknown_exception
 	b	interrupt_return
 
-/* Embedded Hypervisor priviledged  */
+/* Embedded Hypervisor privileged  */
 	START_EXCEPTION(ehpriv);
 	NORMAL_EXCEPTION_PROLOG(0x320, BOOKE_INTERRUPT_HV_PRIV,
 			        PROLOG_ADDITION_NONE)
@@ -1292,7 +1292,7 @@ have_hes:
 	 */
 _GLOBAL(a2_tlbinit_code_start)
 
-	ori	r11,r3,MAS0_WQ_ALLWAYS
+	ori	r11,r3,MAS0_WQ_ALWAYS
 	oris	r11,r11,MAS0_ESEL(3)@h /* Use way 3: workaround A2 erratum 376 */
 	mtspr	SPRN_MAS0,r11
 	lis	r3,(MAS1_VALID | MAS1_IPROT)@h

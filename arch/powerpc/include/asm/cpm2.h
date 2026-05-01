@@ -576,7 +576,7 @@ typedef struct fcc_enet {
 	ushort	fen_maxd2;	/* Max DMA2 length (1520) */
 	ushort	fen_maxd;	/* internal max DMA count */
 	ushort	fen_dmacnt;	/* internal DMA counter */
-	uint	fen_octc;	/* Total octect counter */
+	uint	fen_octc;	/* Total octet counter */
 	uint	fen_colc;	/* Total collision counter */
 	uint	fen_broc;	/* Total broadcast packet counter */
 	uint	fen_mulc;	/* Total multicast packet count */

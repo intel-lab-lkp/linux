@@ -39,7 +39,7 @@ void __iomem *ioremap_prot(phys_addr_t addr, size_t size, pgprot_t prot)
 	pte_t pte = __pte(pgprot_val(prot));
 	void *caller = __builtin_return_address(0);
 
-	/* writeable implies dirty for kernel addresses */
+	/* writable implies dirty for kernel addresses */
 	if (pte_write(pte))
 		pte = pte_mkdirty(pte);
 

@@ -267,7 +267,7 @@ int nvram_read_partition(struct nvram_os_partition *part, char *buff,
  * OS partitions and try again.
  * 4.) Will first try getting a chunk that will satisfy the requested size.
  * 5.) If a chunk of the requested size cannot be allocated, then try finding
- * a chunk that will satisfy the minum needed.
+ * a chunk that will satisfy the minimum needed.
  *
  * Returns 0 on success, else -1.
  */

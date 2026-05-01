@@ -327,7 +327,7 @@ const struct powerpc_operand powerpc_operands[] =
     PPC_OPERAND_PARENS | PPC_OPERAND_SIGNED | PPC_OPERAND_DS },
 
   /* The DUIS or BHRBE fields in a XFX form instruction, 10 bits
-     unsigned imediate */
+     unsigned immediate */
 #define DUIS DS + 1
 #define BHRBE DUIS
   { 0x3ff, 11, NULL, NULL, 0 },
@@ -697,7 +697,7 @@ const struct powerpc_operand powerpc_operands[] =
 #define TBR SV + 1
   { 0x3ff, 11, insert_tbr, extract_tbr,
     PPC_OPERAND_OPTIONAL | PPC_OPERAND_OPTIONAL_VALUE},
-  /* If the TBR operand is ommitted, use the value 268.  */
+  /* If the TBR operand is omitted, use the value 268.  */
   { -1, 268, NULL, NULL, 0},
 
   /* The TO field in a D or X form instruction.  */
@@ -837,7 +837,7 @@ const struct powerpc_operand powerpc_operands[] =
   /* The S field in a XL form instruction.  */
 #define SXL S + 1
   { 0x1, 11, NULL, NULL, PPC_OPERAND_OPTIONAL | PPC_OPERAND_OPTIONAL_VALUE},
-  /* If the SXL operand is ommitted, use the value 1.  */
+  /* If the SXL operand is omitted, use the value 1.  */
   { -1, 1, NULL, NULL, 0},
 
   /* SH field starting at bit position 16.  */

@@ -80,7 +80,7 @@
 #define IRQ_TSI108_TIMER3	TSI108_IRQ(35)	/* Global Timer 3 */
 
 /*
- * PCI bus INTA# - INTD# lines demultiplexor
+ * PCI bus INTA# - INTD# lines demultiplexer
  */
 #define IRQ_PCI_INTAD_BASE	TSI108_IRQ(36)
 #define IRQ_PCI_INTA		(IRQ_PCI_INTAD_BASE + 0)

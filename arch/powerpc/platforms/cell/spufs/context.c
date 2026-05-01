@@ -137,8 +137,8 @@ void spu_unmap_mappings(struct spu_context *ctx)
 }
 
 /**
- * spu_acquire_saved - lock spu contex and make sure it is in saved state
- * @ctx:	spu contex to lock
+ * spu_acquire_saved - lock spu context and make sure it is in saved state
+ * @ctx:	spu context to lock
  */
 int spu_acquire_saved(struct spu_context *ctx)
 {

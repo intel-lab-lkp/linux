@@ -254,7 +254,7 @@ void eeh_pe_dev_traverse(struct eeh_pe *root,
  * __eeh_pe_get - Check the PE address
  *
  * For one particular PE, it can be identified by PE address
- * or tranditional BDF address. BDF address is composed of
+ * or traditional BDF address. BDF address is composed of
  * Bus/Device/Function number. The extra data referred by flag
  * indicates which type of address should be used.
  */

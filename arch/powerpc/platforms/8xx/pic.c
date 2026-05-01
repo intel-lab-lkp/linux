@@ -13,7 +13,7 @@
 #include "pic.h"
 
 
-#define PIC_VEC_SPURRIOUS      15
+#define PIC_VEC_SPURIOUS      15
 
 static struct irq_domain *mpc8xx_pic_host;
 static unsigned long mpc8xx_cached_irq_mask;
@@ -77,7 +77,7 @@ unsigned int mpc8xx_get_irq(void)
 	 */
 	irq = in_be32(&siu_reg->sc_sivec) >> 26;
 
-	if (irq == PIC_VEC_SPURRIOUS)
+	if (irq == PIC_VEC_SPURIOUS)
 		return 0;
 
         return irq_find_mapping(mpc8xx_pic_host, irq);

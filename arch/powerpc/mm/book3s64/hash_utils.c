@@ -543,7 +543,7 @@ static void hash_linear_map_add_slot(phys_addr_t paddr, int slot) {}
 /*
  * 'R' and 'C' update notes:
  *  - Under pHyp or KVM, the updatepp path will not set C, thus it *will*
- *     create writeable HPTEs without C set, because the hcall H_PROTECT
+ *     create writable HPTEs without C set, because the hcall H_PROTECT
  *     that we use in that case will not update C
  *  - The above is however not a problem, because we also don't do that
  *     fancy "no flush" variant of eviction and we use H_REMOVE which will
@@ -551,7 +551,7 @@ static void hash_linear_map_add_slot(phys_addr_t paddr, int slot) {}
  *
  *    - Under bare metal,  we do have the race, so we need R and C set
  *    - We make sure R is always set and never lost
- *    - C is _PAGE_DIRTY, and *should* always be set for a writeable mapping
+ *    - C is _PAGE_DIRTY, and *should* always be set for a writable mapping
  */
 unsigned long htab_convert_pte_flags(unsigned long pteflags, unsigned long flags)
 {
@@ -565,7 +565,7 @@ unsigned long htab_convert_pte_flags(unsigned long pteflags, unsigned long flags
 	 * Linux uses slb key 0 for kernel and 1 for user.
 	 * kernel RW areas are mapped with PPP=0b000
 	 * User area is mapped with PPP=0b010 for read/write
-	 * or PPP=0b011 for read-only (including writeable but clean pages).
+	 * or PPP=0b011 for read-only (including writable but clean pages).
 	 */
 	if (pteflags & _PAGE_PRIVILEGED) {
 		/*
@@ -718,7 +718,7 @@ int htab_remove_mapping(unsigned long vstart, unsigned long vend,
 	if (!mmu_hash_ops.hpte_removebolted)
 		return -ENODEV;
 
-	/* Unmap the full range specificied */
+	/* Unmap the full range specified */
 	vaddr = ALIGN_DOWN(vstart, step);
 	time_limit = jiffies + HZ;
 

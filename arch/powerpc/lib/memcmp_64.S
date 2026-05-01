@@ -163,7 +163,7 @@ _GLOBAL_TOC(memcmp)
 
 	/* Try to compare the first double word which is not 8 bytes aligned:
 	 * load the first double word at (src & ~7UL) and shift left appropriate
-	 * bits before comparision.
+	 * bits before comparison.
 	 */
 	rlwinm  r6,r3,3,26,28
 	beq     .Lsameoffset_8bytes_aligned

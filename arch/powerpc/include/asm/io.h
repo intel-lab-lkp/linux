@@ -56,7 +56,7 @@ extern unsigned long pci_dram_offset;
 
 extern resource_size_t isa_mem_base;
 
-/* Boolean set by platform if PIO accesses are suppored while _IO_BASE
+/* Boolean set by platform if PIO accesses are supported while _IO_BASE
  * is not set or addresses cannot be translated to MMIO. This is typically
  * set when the platform supports "special" PIO accesses via a non memory
  * mapped mechanism, and allows things like the early udbg UART code to
@@ -427,7 +427,7 @@ __do_out_asm(_rec_outl, "stwbrx")
  * They are themselves used by the macros that define the actual accessors
  * and can be used by the hooks if any.
  *
- * Note that PIO operations are always defined in terms of their corresonding
+ * Note that PIO operations are always defined in terms of their corresponding
  * MMIO operations. That allows platforms like iSeries who want to modify the
  * behaviour of both to only hook on the MMIO version and get both. It's also
  * possible to hook directly at the toplevel PIO operation if they have to

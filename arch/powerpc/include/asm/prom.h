@@ -31,7 +31,7 @@ struct property;
 /*
  * This is what gets passed to the kernel by prom_init or kexec
  *
- * The dt struct contains the device tree structure, full pathes and
+ * The dt struct contains the device tree structure, full paths and
  * property contents. The dt strings contain a separate block with just
  * the strings for the property names, and is fully page aligned and
  * self contained in a page, so that it can be kept around by the kernel,
@@ -59,7 +59,7 @@ struct boot_param_header {
 };
 
 /*
- * OF address retreival & translation
+ * OF address retrieval & translation
  */
 
 /* Parse the ibm,dma-window property of an OF node into the busno, phys and

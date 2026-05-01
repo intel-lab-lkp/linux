@@ -337,7 +337,7 @@ static ssize_t affinity_domain_via_virtual_processor_show(struct device *dev,
 
 	/*
 	 * Pass the counter request 0xA0 corresponds to request
-	 * type 'Affinity_domain_information_by_virutal_processor',
+	 * type 'Affinity_domain_information_by_virtual_processor',
 	 * to retrieve the system affinity domain information.
 	 * starting_index value refers to the starting hardware
 	 * processor index.

@@ -17,7 +17,7 @@
  * Overview of Virtual Accelerator Switchboard (VAS).
  *
  * VAS is a hardware "switchboard" that allows senders and receivers to
- * exchange messages with _minimal_ kernel involvment. The receivers are
+ * exchange messages with _minimal_ kernel involvement. The receivers are
  * typically NX coprocessor engines that perform compression or encryption
  * in hardware, but receivers can also be other software threads.
  *
@@ -298,7 +298,7 @@ enum vas_notify_after_count {
  * to process all of them. So read all valid CRB entries until find the
  * invalid one. So use pswid which is pasted by NX and ccw[0] (reserved
  * bit in BE) to check valid CRB. CCW[0] will not be touched by user
- * space. Application gets CRB formt error if it updates this bit.
+ * space. Application gets CRB format error if it updates this bit.
  *
  * Invalidate FIFO during allocation and process all entries from last
  * successful read until finds invalid pswid and ccw[0] values.

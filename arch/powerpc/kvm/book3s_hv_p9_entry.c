@@ -656,7 +656,7 @@ int kvmhv_vcpu_entry_p9(struct kvm_vcpu *vcpu, u64 time_limit, unsigned long lpc
 	 * entry.
 	 *
 	 * The "radix prefetch bug" test can be used to test for this bug, as
-	 * it also exists fo DD2.1 and below.
+	 * it also exists for DD2.1 and below.
 	 */
 	if (cpu_has_feature(CPU_FTR_P9_RADIX_PREFETCH_BUG))
 		mtspr(SPRN_HDSISR, HDSISR_CANARY);

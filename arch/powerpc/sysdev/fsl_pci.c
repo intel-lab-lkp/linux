@@ -597,7 +597,7 @@ static int fsl_add_bridge(struct platform_device *pdev, int is_primary)
 	/* check PCI express link status */
 	if (early_find_capability(hose, 0, 0, PCI_CAP_ID_EXP)) {
 		hose->indirect_type |= PPC_INDIRECT_TYPE_EXT_REG |
-			PPC_INDIRECT_TYPE_SURPRESS_PRIMARY_BUS;
+			PPC_INDIRECT_TYPE_SUPPRESS_PRIMARY_BUS;
 		if (fsl_pcie_check_link(hose))
 			hose->indirect_type |= PPC_INDIRECT_TYPE_NO_PCIE_LINK;
 		/* Fix Class Code to PCI_CLASS_BRIDGE_PCI_NORMAL for pre-3.0 controller */
@@ -747,7 +747,7 @@ static int mpc83xx_pcie_write_config(struct pci_bus *bus, unsigned int devfn,
 {
 	struct pci_controller *hose = pci_bus_to_host(bus);
 
-	/* PPC_INDIRECT_TYPE_SURPRESS_PRIMARY_BUS */
+	/* PPC_INDIRECT_TYPE_SUPPRESS_PRIMARY_BUS */
 	if (offset == PCI_PRIMARY_BUS && bus->number == hose->first_busno)
 		val &= 0xffffff00;
 

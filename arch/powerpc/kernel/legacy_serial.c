@@ -601,7 +601,7 @@ device_initcall(serial_dev_init);
 #ifdef CONFIG_SERIAL_8250_CONSOLE
 /*
  * This is called very early, as part of console_init() (typically just after
- * time_init()). This function is respondible for trying to find a good
+ * time_init()). This function is responsible for trying to find a good
  * default console on serial ports. It tries to match the open firmware
  * default output with one of the available serial console drivers that have
  * been probed earlier by find_legacy_serial_ports()

@@ -315,7 +315,7 @@ static int msi_quota_for_device(struct pci_dev *dev, int request)
 	 * use the remainder as spare MSIs for anyone that wants them. */
 	counts.spare += total % counts.num_devices;
 
-	/* Divide any spare by the number of over-quota requestors */
+	/* Divide any spare by the number of over-quota requesters */
 	if (counts.over_quota)
 		counts.quota += counts.spare / counts.over_quota;
 

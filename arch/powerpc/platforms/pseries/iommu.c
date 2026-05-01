@@ -1117,7 +1117,7 @@ static void find_existing_ddw_windows_named(const char *name)
 		/* If at the time of system initialization, there are DDWs in OF,
 		 * it means this is during kexec. DDW could be direct or dynamic.
 		 * We will just mark DDWs as "dynamic" since this is kdump path,
-		 * no need to worry about perforance. ddw_list_new_entry() will
+		 * no need to worry about performance. ddw_list_new_entry() will
 		 * set window->direct = false.
 		 */
 		window = ddw_list_new_entry(pdn, dma64);
@@ -2085,7 +2085,7 @@ static long spapr_tce_create_table(struct iommu_table_group *table_group, int nu
 	ret = -ENODEV;
 
 	pdn = pci_dma_find_parent_node(pdev, table_group);
-	if (!pdn || !PCI_DN(pdn)) { /* Niether of 32s|64-bit exist! */
+	if (!pdn || !PCI_DN(pdn)) { /* Neither of 32s|64-bit exist! */
 		dev_warn(&pdev->dev, "No dma-windows exist for the node %pOF\n", pdn);
 		goto out_failed;
 	}
@@ -2291,7 +2291,7 @@ static long spapr_tce_unset_window(struct iommu_table_group *table_group, int nu
 		win_name = DMA64_PROPNAME;
 
 	pdn = pci_dma_find(dn, NULL);
-	if (!pdn || !PCI_DN(pdn)) { /* Niether of 32s|64-bit exist! */
+	if (!pdn || !PCI_DN(pdn)) { /* Neither of 32s|64-bit exist! */
 		dev_warn(&pdev->dev, "No dma-windows exist for the node %pOF\n", pdn);
 		goto out_failed;
 	}
@@ -2350,7 +2350,7 @@ static long spapr_tce_take_ownership(struct iommu_table_group *table_group, stru
 	mutex_lock(&dma_win_init_mutex);
 
 	pdn = pci_dma_find(dn, NULL);
-	if (!pdn || !PCI_DN(pdn)) { /* Niether of 32s|64-bit exist! */
+	if (!pdn || !PCI_DN(pdn)) { /* Neither of 32s|64-bit exist! */
 		dev_warn(&pdev->dev, "No dma-windows exist for the node %pOF\n", pdn);
 		mutex_unlock(&dma_win_init_mutex);
 		return -1;

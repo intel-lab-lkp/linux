@@ -41,7 +41,7 @@
 
 /*
  * 64k aligned address free up few of the lower bits of RPN for us
- * We steal that here. For more deatils look at pte_pfn/pfn_pte()
+ * We steal that here. For more details look at pte_pfn/pfn_pte()
  */
 #define H_PAGE_COMBO	_RPAGE_RPN0 /* this is a combo 4k page */
 #define H_PAGE_4K_PFN	_RPAGE_RPN1 /* PFN is for a single 4k page */
@@ -109,7 +109,7 @@ static inline real_pte_t __real_pte(pte_t pte, pte_t *ptep, int offset)
 }
 
 /*
- * shift the hidx representation by one-modulo-0xf; i.e hidx 0 is respresented
+ * shift the hidx representation by one-modulo-0xf; i.e hidx 0 is represented
  * as 1, 1 as 2,... , and 0xf as 0.  This convention lets us represent a
  * invalid hidx 0xf with a 0x0 bit value. PTEs are anyway zero'd when
  * allocated. We dont have to zero them gain; thus save on the initialization.
@@ -252,7 +252,7 @@ static inline void mark_hpte_slot_valid(unsigned char *hpte_slot_array,
  * CONFIG_TRANSPARENT_HUGEPAGE=n to optimize away code blocks at build
  * time in such case.
  *
- * For ppc64 we need to differntiate from explicit hugepages from THP, because
+ * For ppc64 we need to differentiate from explicit hugepages from THP, because
  * for THP we also track the subpage details at the pmd level. We don't do
  * that for explicit huge pages.
  *

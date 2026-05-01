@@ -163,7 +163,7 @@ static DEFINE_SPINLOCK(kvmppc_uvmem_bitmap_lock);
  *  All its GFNs are moved to Normal-GFNs.
  *
  *  UV_TERMINATE transitions the secure-VM back to normal-VM. All
- *  the secure-GFN and shared-GFNs are tranistioned to normal-GFN
+ *  the secure-GFN and shared-GFNs are transitioned to normal-GFN
  *  Note: The contents of the normal-GFN is undefined at this point.
  *
  * GFN state implementation:
@@ -1010,7 +1010,7 @@ static vm_fault_t kvmppc_uvmem_migrate_to_ram(struct vm_fault *vmf)
 /*
  * Release the device PFN back to the pool
  *
- * Gets called when secure GFN tranistions from a secure-PFN
+ * Gets called when secure GFN transitions from a secure-PFN
  * to a normal PFN during H_SVM_PAGE_OUT.
  * Gets called with kvm->arch.uvmem_lock held.
  */

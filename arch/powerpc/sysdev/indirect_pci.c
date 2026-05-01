@@ -120,7 +120,7 @@ int indirect_write_config(struct pci_bus *bus, unsigned int devfn,
 			 (devfn << 8) | reg | cfg_type));
 
 	/* suppress setting of PCI_PRIMARY_BUS */
-	if (hose->indirect_type & PPC_INDIRECT_TYPE_SURPRESS_PRIMARY_BUS)
+	if (hose->indirect_type & PPC_INDIRECT_TYPE_SUPPRESS_PRIMARY_BUS)
 		if ((offset == PCI_PRIMARY_BUS) &&
 			(bus->number == hose->first_busno))
 		val &= 0xffffff00;

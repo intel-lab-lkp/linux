@@ -312,7 +312,7 @@ mpc52xx_pci_setup(struct pci_controller *hose,
 
 	tmp = in_be32(&pci_regs->gscr);
 #if 0
-	/* Reset the exteral bus ( internal PCI controller is NOT reset ) */
+	/* Reset the external bus ( internal PCI controller is NOT reset ) */
 	/* Not necessary and can be a bad thing if for example the bootloader
 	   is displaying a splash screen or ... Just left here for
 	   documentation purpose if anyone need it */
@@ -400,7 +400,7 @@ mpc52xx_add_bridge(struct device_node *node)
 	pci_process_bridge_OF_ranges(hose, node, 1);
 
 	/* Finish setting up PCI using values obtained by
-	 * pci_proces_bridge_OF_ranges */
+	 * pci_process_bridge_OF_ranges */
 	mpc52xx_pci_setup(hose, pci_regs, rsrc.start);
 
 	return 0;

@@ -527,7 +527,7 @@ void __init bootx_init(unsigned long r3, unsigned long r4)
 #endif
 
 	/* New BootX enters kernel with MMU off, i/os are not allowed
-	 * here. This hack will have been done by the boostrap anyway.
+	 * here. This hack will have been done by the bootstrap anyway.
 	 */
 	if (bi->version < 4) {
 		/*

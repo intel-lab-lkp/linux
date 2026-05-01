@@ -15,7 +15,7 @@
 #include <asm/switch_to.h>
 #include "timing.h"
 
-/* interrupt priortity ordering */
+/* interrupt priority ordering */
 #define BOOKE_IRQPRIO_DATA_STORAGE 0
 #define BOOKE_IRQPRIO_INST_STORAGE 1
 #define BOOKE_IRQPRIO_ALIGNMENT 2

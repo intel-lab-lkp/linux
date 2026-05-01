@@ -127,7 +127,7 @@ void __ref rtas_work_area_free(struct rtas_work_area *area)
  * Initialization of the work area allocator happens in two parts. To
  * reliably reserve an arena that satisfies RTAS addressing
  * requirements, we must perform a memblock allocation early,
- * immmediately after RTAS instantiation. Then we have to wait until
+ * immediately after RTAS instantiation. Then we have to wait until
  * the slab allocator is up before setting up the descriptor mempool
  * and adding the arena to a gen_pool.
  */

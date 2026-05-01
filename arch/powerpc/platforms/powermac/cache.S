@@ -112,7 +112,7 @@ END_FTR_SECTION_IFSET(CPU_FTR_ALTIVEC)
 	b	1b
 1:	/* disp-flush L2. The interesting thing here is that the L2 can be
 	 * up to 2Mb ... so using the ROM, we'll end up wrapping back to memory
-	 * but that is probbaly fine. We disp-flush over 4Mb to be safe
+	 * but that is probably fine. We disp-flush over 4Mb to be safe
 	 */
 	lis	r4,2
 	mtctr	r4

@@ -48,7 +48,7 @@ static inline void clear_page(void *addr)
 	iterations = ppc64_caches.l1d.blocks_per_page / 8;
 
 	/*
-	 * Some verisions of gcc use multiply instructions to
+	 * Some versions of gcc use multiply instructions to
 	 * calculate the offsets so lets give it a hand to
 	 * do better.
 	 */

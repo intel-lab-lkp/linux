@@ -672,7 +672,7 @@ static int pseries_eeh_configure_bridge(struct eeh_pe *pe)
  * @size: size to read
  * @val: return value
  *
- * Read config space from the speicifed device
+ * Read config space from the specified device
  */
 static int pseries_eeh_read_config(struct eeh_dev *edev, int where, int size, u32 *val)
 {

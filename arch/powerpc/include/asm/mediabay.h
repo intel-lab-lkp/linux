@@ -23,7 +23,7 @@ struct macio_dev;
 #ifdef CONFIG_PMAC_MEDIABAY
 
 /* Check the content type of the bay, returns MB_NO if the bay is still
- * transitionning
+ * transitioning
  */
 extern int check_media_bay(struct macio_dev *bay);
 

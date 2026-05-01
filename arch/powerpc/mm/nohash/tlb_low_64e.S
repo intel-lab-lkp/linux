@@ -99,8 +99,8 @@ END_BTB_FLUSH_SECTION
 	 * ESR_ST   is 0x00800000
 	 * _PAGE_BAP_SW is 0x00000010
 	 * So the shift is >> 19. This tests for supervisor writeability.
-	 * If the page happens to be supervisor writeable and not user
-	 * writeable, we will take a new fault later, but that should be
+	 * If the page happens to be supervisor writable and not user
+	 * writable, we will take a new fault later, but that should be
 	 * a rare enough case.
 	 *
 	 * We also move ESR_ST in _PAGE_DIRTY position

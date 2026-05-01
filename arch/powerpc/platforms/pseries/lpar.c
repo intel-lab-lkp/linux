@@ -1157,7 +1157,7 @@ static void hugepage_block_invalidate(unsigned long *slot, unsigned long *vpn,
 	for (i = 0; i < count; i++) {
 		/*
 		 * Shifting 3 bits more on the right to get a
-		 * 8 pages aligned virtual addresse.
+		 * 8 pages aligned virtual address.
 		 */
 		vpgb = (vpn[i] >> (shift - VPN_SHIFT + 3));
 		if (!pix || vpgb != current_vpgb) {
@@ -1365,7 +1365,7 @@ static void do_block_remove(unsigned long number, struct ppc64_tlb_batch *batch,
 		pte_iterate_hashed_subpages(pte, psize, vpn, index, shift) {
 			/*
 			 * Shifting 3 bits more on the right to get a
-			 * 8 pages aligned virtual addresse.
+			 * 8 pages aligned virtual address.
 			 */
 			vpgb = (vpn >> (shift - VPN_SHIFT + 3));
 			if (!pix || vpgb != current_vpgb) {

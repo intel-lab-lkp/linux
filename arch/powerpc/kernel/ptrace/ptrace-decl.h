@@ -12,7 +12,7 @@
 #endif
 
 /*
- * Max register writeable via put_reg
+ * Max register writable via put_reg
  */
 #ifdef CONFIG_PPC32
 #define PT_MAX_PUT_REG	PT_MQ

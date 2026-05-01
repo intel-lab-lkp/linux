@@ -51,7 +51,7 @@
 #define PMAC_TYPE_PSURGE		0x10	/* PowerSurge */
 #define PMAC_TYPE_ANS			0x11	/* Apple Network Server */
 
-/* Here is the infamous serie of OHare based machines
+/* Here is the infamous series of OHare based machines
  */
 #define PMAC_TYPE_COMET			0x20	/* Believed to be PowerBook 2400 */
 #define PMAC_TYPE_HOOPER		0x21	/* Believed to be PowerBook 3400 */
@@ -61,7 +61,7 @@
 #define PMAC_TYPE_UNKNOWN_OHARE		0x2f	/* Unknown, but OHare based */
 
 /* Here are the Heathrow based machines
- * FIXME: Differenciate wallstreet,mainstreet,wallstreetII
+ * FIXME: Differentiate wallstreet,mainstreet,wallstreetII
  */
 #define PMAC_TYPE_GOSSAMER		0x30	/* Gossamer motherboard */
 #define PMAC_TYPE_SILK			0x31	/* Desktop PowerMac G3 */

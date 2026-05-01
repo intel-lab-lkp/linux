@@ -37,7 +37,7 @@ extern struct mpic_msgr *mpic_msgr_get(unsigned int reg_num);
  * @msgr:	the message register to return
  *
  * Disables the given message register and marks it as free.
- * After this call has completed successully the message
+ * After this call has completed successfully the message
  * register is available to be acquired by a call to
  * mpic_msgr_get.
  */

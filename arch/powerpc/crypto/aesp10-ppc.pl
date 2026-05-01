@@ -276,7 +276,7 @@ L192:
 	vsububm		$mask,$mask,$key	# adjust the mask
 
 Loop192:
-	vperm		$key,$in1,$in1,$mask	# roate-n-splat
+	vperm		$key,$in1,$in1,$mask	# rotate-n-splat
 	vsldoi		$tmp,$zero,$in0,12	# >>32
 	vcipherlast	$key,$key,$rcon
 

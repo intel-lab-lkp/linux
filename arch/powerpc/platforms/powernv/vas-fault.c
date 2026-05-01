@@ -46,7 +46,7 @@ static void dump_fifo(struct vas_instance *vinst, void *entry)
 /*
  * Process valid CRBs in fault FIFO.
  * NX process user space requests, return credit and update the status
- * in CRB. If it encounters transalation error when accessing CRB or
+ * in CRB. If it encounters translation error when accessing CRB or
  * request buffers, raises interrupt on the CPU to handle the fault.
  * It takes credit on fault window, updates nx_fault_stamp in CRB with
  * the following information and pastes CRB in fault FIFO.

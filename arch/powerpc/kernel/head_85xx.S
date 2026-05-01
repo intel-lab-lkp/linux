@@ -174,7 +174,7 @@ set_ivor:
 	SET_IVOR(6,  Program);
 	SET_IVOR(7,  FloatingPointUnavailable);
 	SET_IVOR(8,  SystemCall);
-	SET_IVOR(9,  AuxillaryProcessorUnavailable);
+	SET_IVOR(9,  AuxiliaryProcessorUnavailable);
 	SET_IVOR(10, Decrementer);
 	SET_IVOR(11, FixedIntervalTimer);
 	SET_IVOR(12, WatchdogTimer);
@@ -394,7 +394,7 @@ interrupt_base:
 	SYSCALL_ENTRY   0xc00 BOOKE_INTERRUPT_SYSCALL SPRN_SRR1
 
 	/* Auxiliary Processor Unavailable Interrupt */
-	EXCEPTION(0x2900, AP_UNAVAIL, AuxillaryProcessorUnavailable, unknown_exception)
+	EXCEPTION(0x2900, AP_UNAVAIL, AuxiliaryProcessorUnavailable, unknown_exception)
 
 	/* Decrementer Interrupt */
 	DECREMENTER_EXCEPTION
@@ -822,7 +822,7 @@ SYM_FUNC_END(KernelSPE)
 #endif /* CONFIG_SPE */
 
 /*
- * Translate the effec addr in r3 to phys addr. The phys addr will be put
+ * Translate the effect addr in r3 to phys addr. The phys addr will be put
  * into r3(higher 32bit) and r4(lower 32bit)
  */
 SYM_FUNC_START_LOCAL(get_phys_addr)

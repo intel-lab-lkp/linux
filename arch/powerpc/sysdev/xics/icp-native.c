@@ -243,7 +243,7 @@ static int __init icp_native_init_one_node(struct device_node *np,
 	int num_reg;
 	int num_servers = 0;
 
-	/* This code does the theorically broken assumption that the interrupt
+	/* This code does the theoretically broken assumption that the interrupt
 	 * server numbers are the same as the hard CPU numbers.
 	 * This happens to be the case so far but we are playing with fire...
 	 * should be fixed one of these days. -BenH.

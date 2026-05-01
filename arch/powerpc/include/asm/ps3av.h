@@ -676,7 +676,7 @@ extern u8 ps3av_mode_cs_info[];
 #define PS3AV_STATUS_INVALID_COMMAND		0x0003	/* obsolete invalid CID */
 #define PS3AV_STATUS_INVALID_PORT		0x0004	/* invalid port number */
 #define PS3AV_STATUS_INVALID_VID		0x0005	/* invalid video format */
-#define PS3AV_STATUS_INVALID_COLOR_SPACE	0x0006	/* invalid video colose space */
+#define PS3AV_STATUS_INVALID_COLOR_SPACE	0x0006	/* invalid video color space */
 #define PS3AV_STATUS_INVALID_FS			0x0007	/* invalid audio sampling freq */
 #define PS3AV_STATUS_INVALID_AUDIO_CH		0x0008	/* invalid audio channel number */
 #define PS3AV_STATUS_UNSUPPORTED_VERSION	0x0009	/* version mismatch  */

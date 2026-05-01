@@ -199,7 +199,7 @@ int hw_breakpoint_arch_parse(struct perf_event *bp,
 	if (attr->bp_type & HW_BREAKPOINT_W)
 		hw->type |= HW_BRK_TYPE_WRITE;
 	if (hw->type == HW_BRK_TYPE_TRANSLATE)
-		/* must set alteast read or write */
+		/* must set atleast read or write */
 		return ret;
 	if (!attr->exclude_user)
 		hw->type |= HW_BRK_TYPE_USER;

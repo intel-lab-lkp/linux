@@ -144,7 +144,7 @@ static u32 xive_read_eq(struct xive_q *q, bool just_peek)
  * Note2: This will also "flush" "the pending_count" of a queue
  * into the "count" when that queue is observed to be empty.
  * This is used to keep track of the amount of interrupts
- * targetting a queue. When an interrupt is moved away from
+ * targeting a queue. When an interrupt is moved away from
  * a queue, we only decrement that queue count once the queue
  * has been observed empty to avoid races.
  */
@@ -521,7 +521,7 @@ static bool xive_try_pick_target(int cpu)
  * in the queue.
  *
  * Instead increment a separate counter "pending_count" which
- * will be substracted from "count" later when that CPU observes
+ * will be subtracted from "count" later when that CPU observes
  * the queue to be empty.
  */
 static void xive_dec_target_count(int cpu)
@@ -840,7 +840,7 @@ static int xive_irq_set_vcpu_affinity(struct irq_data *d, void *state)
 		/* No target ? nothing to do */
 		if (xd->target == XIVE_INVALID_TARGET) {
 			/*
-			 * An untargetted interrupt should have been
+			 * An untargeted interrupt should have been
 			 * also masked at the source
 			 */
 			WARN_ON(xd->saved_p);

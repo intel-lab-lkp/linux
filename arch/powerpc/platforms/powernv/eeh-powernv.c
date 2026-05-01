@@ -669,7 +669,7 @@ static int pnv_eeh_get_pe_state(struct eeh_pe *pe)
  * @pe: EEH PE
  * @delay: delay while PE state is temporarily unavailable
  *
- * Retrieve the state of the specified PE. For IODA-compitable
+ * Retrieve the state of the specified PE. For IODA-compatible
  * platform, it should be retrieved from IODA table. Therefore,
  * we prefer passing down to hardware implementation to handle
  * it.

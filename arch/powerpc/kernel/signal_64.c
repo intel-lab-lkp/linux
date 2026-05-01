@@ -214,7 +214,7 @@ static long setup_tm_sigcontexts(struct sigcontext __user *sc,
 	 * the context). This is very important because we must ensure we
 	 * don't lose the VRSAVE content that may have been set prior to
 	 * the process doing its first vector operation
-	 * Userland shall check AT_HWCAP to know wether it can rely on the
+	 * Userland shall check AT_HWCAP to know whether it can rely on the
 	 * v_regs pointer or not.
 	 */
 #ifdef CONFIG_ALTIVEC

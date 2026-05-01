@@ -220,7 +220,7 @@ static void oops_end(unsigned long flags, struct pt_regs *regs,
 	raw_local_irq_restore(flags);
 
 	/*
-	 * system_reset_excption handles debugger, crash dump, panic, for 0x100
+	 * system_reset_exception handles debugger, crash dump, panic, for 0x100
 	 */
 	if (TRAP(regs) == INTERRUPT_SYSTEM_RESET)
 		return;
@@ -287,7 +287,7 @@ void die(const char *str, struct pt_regs *regs, long err)
 	unsigned long flags;
 
 	/*
-	 * system_reset_excption handles debugger, crash dump, panic, for 0x100
+	 * system_reset_exception handles debugger, crash dump, panic, for 0x100
 	 */
 	if (TRAP(regs) != INTERRUPT_SYSTEM_RESET) {
 		if (debugger(regs))

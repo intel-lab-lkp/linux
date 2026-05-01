@@ -44,7 +44,7 @@ struct papr_scm_perf_stats {
 	__be32 stats_version;
 	/* Number of stats following */
 	__be32 num_statistics;
-	/* zero or more performance matrics */
+	/* zero or more performance metrics */
 	struct papr_scm_perf_stat scm_statistic[];
 } __packed;
 

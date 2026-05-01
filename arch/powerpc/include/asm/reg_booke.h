@@ -494,7 +494,7 @@
 /* Bit definitions for L2CSR0. */
 #define L2CSR0_L2E	0x80000000	/* L2 Cache Enable */
 #define L2CSR0_L2PE	0x40000000	/* L2 Cache Parity/ECC Enable */
-#define L2CSR0_L2WP	0x1c000000	/* L2 I/D Way Partioning */
+#define L2CSR0_L2WP	0x1c000000	/* L2 I/D Way Partitioning */
 #define L2CSR0_L2CM	0x03000000	/* L2 Cache Coherency Mode */
 #define L2CSR0_L2FI	0x00200000	/* L2 Cache Flash Invalidate */
 #define L2CSR0_L2IO	0x00100000	/* L2 Cache Instruction Only */

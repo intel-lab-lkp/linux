@@ -600,7 +600,7 @@ END_FTR_SECTION_NESTED(CPU_FTR_CELL_TB_BUG, CPU_FTR_CELL_TB_BUG, 96)
  *
  * The lower case r0-r31 should be used in preference to the upper
  * case R0-R31 as they provide more error checking in the assembler.
- * Use R0-31 only when really nessesary.
+ * Use R0-31 only when really necessary.
  */
 
 #define	r0	%r0

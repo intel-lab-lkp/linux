@@ -174,7 +174,7 @@ skpinv:	addi	r6,r6,1				/* Increment */
 
 #elif defined(ENTRY_MAPPING_KEXEC_SETUP)
 /*
- * 6. Setup a 1:1 mapping in TLB1. Esel 0 is unsued, 1 or 2 contains the tmp
+ * 6. Setup a 1:1 mapping in TLB1. Esel 0 is unused, 1 or 2 contains the tmp
  * mapping so we start at 3. We setup 8 mappings, each 256MiB in size. This
  * will cover the first 2GiB of memory.
  */

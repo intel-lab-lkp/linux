@@ -323,7 +323,7 @@ err3;	std	r0,0(r3)
 
 4:	sub	r5,r5,r6
 
-	/* Get the desination 128B aligned */
+	/* Get the destination 128B aligned */
 	neg	r6,r3
 	srdi	r7,r6,4
 	mtocrf	0x01,r7
@@ -497,7 +497,7 @@ err3;	stw	r7,4(r3)
 
 4:	sub	r5,r5,r6
 
-	/* Get the desination 128B aligned */
+	/* Get the destination 128B aligned */
 	neg	r6,r3
 	srdi	r7,r6,4
 	mtocrf	0x01,r7

@@ -773,7 +773,7 @@ static void core_imc_counters_release(struct perf_event *event)
 	 */
 	core_id = event->cpu / threads_per_core;
 
-	/* Take the lock and decrement the refernce count for this core */
+	/* Take the lock and decrement the reference count for this core */
 	ref = &core_imc_refc[core_id];
 	if (!ref)
 		return;
@@ -1442,7 +1442,7 @@ static int trace_imc_event_init(struct perf_event *event)
 	if (!perfmon_capable())
 		return -EACCES;
 
-	/* Return if this is a couting event */
+	/* Return if this is a counting event */
 	if (event->attr.sample_period == 0)
 		return -ENOENT;
 

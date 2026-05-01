@@ -164,7 +164,7 @@ static inline bool vcpu_is_preempted(int cpu)
 		 * The result of vcpu_is_preempted() is used in a
 		 * speculative way, and is always subject to invalidation
 		 * by events internal and external to Linux. While we can
-		 * be called in preemptable context (in the Linux sense),
+		 * be called in preemptible context (in the Linux sense),
 		 * we're not accessing per-cpu resources in a way that can
 		 * race destructively with Linux scheduler preemption and
 		 * migration, and callers can tolerate the potential for

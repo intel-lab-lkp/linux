@@ -902,7 +902,7 @@ void secondary_cpu_time_init(void)
 	 */
 	start_cpu_decrementer();
 
-	/* FIME: Should make unrelated change to move snapshot_timebase
+	/* FIXME: Should make unrelated change to move snapshot_timebase
 	 * call here ! */
 	register_decrementer_clockevent(smp_processor_id());
 }

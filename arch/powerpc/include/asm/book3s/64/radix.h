@@ -222,7 +222,7 @@ static inline void radix__set_pte_at(struct mm_struct *mm, unsigned long addr,
 	 *
 	 * This is not necessary for correctness, because a spurious fault
 	 * is tolerated by the page fault handler, and this store will
-	 * eventually be seen. In testing, there was no noticable increase
+	 * eventually be seen. In testing, there was no noticeable increase
 	 * in user faults on POWER9. Avoiding ptesync here is a significant
 	 * win for things like fork. If a future microarchitecture benefits
 	 * from ptesync, it should probably go into update_mmu_cache, rather

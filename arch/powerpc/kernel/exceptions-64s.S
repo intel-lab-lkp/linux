@@ -1608,7 +1608,7 @@ ALT_MMU_FTR_SECTION_END_IFCLR(MMU_FTR_TYPE_RADIX)
  *
  * When running in HV mode, Linux sets up the LPCR[LPES] bit such that
  * interrupts are delivered with HSRR registers, guests use SRRs, which
- * reqiures IHSRR_IF_HVMODE.
+ * requires IHSRR_IF_HVMODE.
  *
  * On bare metal POWER9 and later, Linux sets the LPCR[HVICE] bit such that
  * external interrupts are delivered as Hypervisor Virtualization Interrupts
@@ -2042,7 +2042,7 @@ END_FTR_SECTION_IFSET(CPU_FTR_HAS_PPR)
 
 #ifdef CONFIG_RELOCATABLE
 	/*
-	 * Requires __LOAD_FAR_HANDLER beause kvmppc_hcall lives
+	 * Requires __LOAD_FAR_HANDLER because kvmppc_hcall lives
 	 * outside the head section.
 	 */
 	__LOAD_FAR_HANDLER(r10, kvmppc_hcall, real_trampolines)
@@ -2980,7 +2980,7 @@ TRAMP_REAL_BEGIN(rfscv_flush_fallback)
 	sync
 
 	/*
-	 * The load adresses are at staggered offsets within cachelines,
+	 * The load addresses are at staggered offsets within cachelines,
 	 * which suits some pipelines better (on others it should not
 	 * hurt).
 	 */

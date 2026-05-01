@@ -178,7 +178,7 @@ static void eeh_enable_irq(struct eeh_dev *edev)
 		 * their own code, not by abusing the core information
 		 * to avoid it.
 		 *
-		 * I so wish that the assymetry would be the other way
+		 * I so wish that the asymmetry would be the other way
 		 * round and a few more irq_disable calls render that
 		 * shit unusable forever.
 		 *
@@ -646,7 +646,7 @@ static int eeh_reset_device(struct eeh_pe *pe, struct pci_bus *bus,
 
 	/*
 	 * We don't remove the corresponding PE instances because
-	 * we need the information afterwords. The attached EEH
+	 * we need the information afterwards. The attached EEH
 	 * devices are expected to be attached soon when calling
 	 * into pci_hp_add_devices().
 	 */
@@ -724,7 +724,7 @@ static int eeh_reset_device(struct eeh_pe *pe, struct pci_bus *bus,
  *
  * NB: This needs to be recursive to ensure the leaf PEs get removed
  * before their parents do. Although this is possible to do recursively
- * we don't since this is easier to read and we need to garantee
+ * we don't since this is easier to read and we need to guarantee
  * the leaf nodes will be handled first.
  */
 static void eeh_pe_cleanup(struct eeh_pe *pe)
@@ -977,7 +977,7 @@ void eeh_handle_normal_event(struct eeh_pe *pe)
 
 	/* If all device drivers were EEH-unaware, then shut
 	 * down all of the device drivers, and hope they
-	 * go down willingly, without panicing the system.
+	 * go down willingly, without panicking the system.
 	 */
 	if (result == PCI_ERS_RESULT_NONE) {
 		pr_info("EEH: Reset with hotplug activity\n");

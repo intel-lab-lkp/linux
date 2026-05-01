@@ -912,7 +912,7 @@ static void __init smu_i2c_probe(void)
 
 	printk(KERN_INFO "SMU i2c %pOF\n", controller);
 
-	/* Look for childs, note that they might not be of the right
+	/* Look for children, note that they might not be of the right
 	 * type as older device trees mix i2c busses and other things
 	 * at the same level
 	 */

@@ -452,7 +452,7 @@ extern struct ps3_prealloc ps3flash_bounce_buffer;
 /* logical performance monitor */
 
 /**
- * enum ps3_lpm_rights - Rigths granted by the system policy module.
+ * enum ps3_lpm_rights - Rights granted by the system policy module.
  *
  * @PS3_LPM_RIGHTS_USE_LPM: The right to use the lpm.
  * @PS3_LPM_RIGHTS_USE_TB: The right to use the internal trace buffer.

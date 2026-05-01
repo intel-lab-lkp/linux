@@ -326,7 +326,7 @@ __More_1x:
 	xxlor	32+28, 7, 7
 	xxlor	32+29, 8, 8
 	lwz	23, 240(6)	# n rounds
-	addi	22, 23, -9	# remaing AES rounds
+	addi	22, 23, -9	# remaining AES rounds
 
 	cmpdi	12, 0
 	bgt	__Loop_1x
@@ -700,7 +700,7 @@ __Process_encrypt:
 # Process 8x AES/GCM blocks
 #
 __Process_8x_enc:
-	# 8x blcoks
+	# 8x blocks
 	li	10, 128
 	divdu	12, 5, 10	# n 128 bytes-blocks
 
@@ -978,7 +978,7 @@ __Process_decrypt:
 # Process 8x AES/GCM blocks
 #
 __Process_8x_dec:
-	# 8x blcoks
+	# 8x blocks
 	li	10, 128
 	divdu	12, 5, 10	# n 128 bytes-blocks
 

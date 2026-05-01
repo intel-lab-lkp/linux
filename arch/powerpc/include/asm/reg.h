@@ -1246,7 +1246,7 @@
 /* Processor Version Register (PVR) field extraction */
 
 #define PVR_VER(pvr)	(((pvr) >>  16) & 0xFFFF)	/* Version field */
-#define PVR_REV(pvr)	(((pvr) >>   0) & 0xFFFF)	/* Revison field */
+#define PVR_REV(pvr)	(((pvr) >>   0) & 0xFFFF)	/* Revision field */
 
 #define pvr_version_is(pvr)	(PVR_VER(mfspr(SPRN_PVR)) == (pvr))
 

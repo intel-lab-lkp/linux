@@ -3,7 +3,7 @@
  * heap points to. Normal heap implementations use the memory they manage
  * to place their list. We cannot do that because the memory we manage may
  * have special properties, for example it is uncachable or of different
- * endianess.
+ * endianness.
  *
  * Author: Pantelis Antoniou <panto@intracom.gr>
  *
@@ -366,7 +366,7 @@ int rh_attach_region(rh_info_t * info, unsigned long start, int size)
 }
 EXPORT_SYMBOL_GPL(rh_attach_region);
 
-/* Detatch given address range, splits free block if needed. */
+/* Detach given address range, splits free block if needed. */
 unsigned long rh_detach_region(rh_info_t * info, unsigned long start, int size)
 {
 	struct list_head *l;

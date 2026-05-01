@@ -485,7 +485,7 @@ int kvmppc_core_vcpu_translate(struct kvm_vcpu *vcpu,
 	}
 
 	tr->physical_address = kvmppc_mmu_xlate(vcpu, index, eaddr);
-	/* XXX what does "writeable" and "usermode" even mean? */
+	/* XXX what does "writable" and "usermode" even mean? */
 	tr->valid = 1;
 
 	return 0;

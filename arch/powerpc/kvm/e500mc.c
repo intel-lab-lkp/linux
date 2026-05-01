@@ -403,7 +403,7 @@ static int __init kvmppc_e500mc_init(void)
 
 	/*
 	 * Use two lpids per VM on dual threaded processors like e6500
-	 * to workarround the lack of tlb write conditional instruction.
+	 * to workaround the lack of tlb write conditional instruction.
 	 * Expose half the number of available hardware lpids to the lpid
 	 * allocator.
 	 */

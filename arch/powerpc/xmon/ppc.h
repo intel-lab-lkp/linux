@@ -402,7 +402,7 @@ extern const unsigned int num_powerpc_operands;
 
 /* This flag is only used with PPC_OPERAND_OPTIONAL.  If this operand
    is omitted, then the value it should use for the operand is stored
-   in the SHIFT field of the immediatly following operand field.  */
+   in the SHIFT field of the immediately following operand field.  */
 #define PPC_OPERAND_OPTIONAL_VALUE (0x400000)
 
 /* This flag is only used with PPC_OPERAND_OPTIONAL.  The operand is

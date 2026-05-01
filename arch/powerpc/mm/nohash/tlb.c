@@ -2,7 +2,7 @@
 /*
  * This file contains the routines for TLB flushing.
  * On machines where the MMU does not use a hash table to store virtual to
- * physical translations (ie, SW loaded TLBs or Book3E compilant processors,
+ * physical translations (ie, SW loaded TLBs or Book3E compliant processors,
  * this does -not- include 603 however which shares the implementation with
  * hash based processors)
  *

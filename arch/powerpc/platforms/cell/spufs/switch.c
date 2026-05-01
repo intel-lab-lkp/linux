@@ -9,11 +9,11 @@
  * Host-side part of SPU context switch sequence outlined in
  * Synergistic Processor Element, Book IV.
  *
- * A fully premptive switch of an SPE is very expensive in terms
+ * A fully preemptive switch of an SPE is very expensive in terms
  * of time and system resources.  SPE Book IV indicates that SPE
  * allocation should follow a "serially reusable device" model,
  * in which the SPE is assigned a task until it completes.  When
- * this is not possible, this sequence may be used to premptively
+ * this is not possible, this sequence may be used to preemptively
  * save, and then later (optionally) restore the context of a
  * program executing on an SPE.
  */
@@ -574,7 +574,7 @@ static inline void save_mfc_rag(struct spu_state *csa, struct spu *spu)
 {
 	/* Save, Step 38:
 	 *     Save RA_GROUP_ID register and the
-	 *     RA_ENABLE reigster in the CSA.
+	 *     RA_ENABLE register in the CSA.
 	 */
 	csa->priv1.resource_allocation_groupID_RW =
 		spu_resource_allocation_groupID_get(spu);
@@ -1227,7 +1227,7 @@ static inline void restore_mfc_rag(struct spu_state *csa, struct spu *spu)
 {
 	/* Restore, Step 29:
 	 *     Restore RA_GROUP_ID register and the
-	 *     RA_ENABLE reigster from the CSA.
+	 *     RA_ENABLE register from the CSA.
 	 */
 	spu_resource_allocation_groupID_set(spu,
 			csa->priv1.resource_allocation_groupID_RW);

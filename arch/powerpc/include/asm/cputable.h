@@ -236,7 +236,7 @@ static inline void cpu_feature_keys_init(void) { }
 #define PPC_FEATURE_HAS_EFP_DOUBLE_COMP 0
 #endif
 
-/* We only set the TM feature if the kernel was compiled with TM supprt */
+/* We only set the TM feature if the kernel was compiled with TM support */
 #ifdef CONFIG_PPC_TRANSACTIONAL_MEM
 #define CPU_FTR_TM_COMP			CPU_FTR_TM
 #define PPC_FEATURE2_HTM_COMP		PPC_FEATURE2_HTM

@@ -107,7 +107,7 @@ int __hash_page_huge(unsigned long ea, unsigned long access, unsigned long vsid,
 
 		pa = pte_pfn(__pte(old_pte)) << PAGE_SHIFT;
 
-		/* clear HPTE slot informations in new PTE */
+		/* clear HPTE slot information in new PTE */
 		new_pte = (new_pte & ~_PAGE_HPTEFLAGS) | H_PAGE_HASHPTE;
 
 		slot = hpte_insert_repeating(hash, vpn, pa, rflags, 0,

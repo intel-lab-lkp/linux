@@ -628,7 +628,7 @@ static void __init setup_u3_agp(struct pci_controller* hose)
 	 * to reassign bus numbers for HT. If we ever have P2P bridges
 	 * on AGP, we'll have to move pci_assign_all_busses to the
 	 * pci_controller structure so we enable it for AGP and not for
-	 * HT childs.
+	 * HT children.
 	 * We hard code the address because of the different size of
 	 * the reg address cell, we shall fix that by killing struct
 	 * reg_property and using some accessor functions instead

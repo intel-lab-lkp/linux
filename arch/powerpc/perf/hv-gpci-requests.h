@@ -25,7 +25,7 @@
  *   partition_id
  *   sibling_part_id,
  *   phys_processor_idx:
- *   0xffffffffffffffff: or -1, which means it is irrelavant for the event
+ *   0xffffffffffffffff: or -1, which means it is irrelevant for the event
  *
  * __count(offset, bytes, name):
  *	a counter that should be exposed via perf

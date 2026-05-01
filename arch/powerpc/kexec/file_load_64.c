@@ -453,7 +453,7 @@ out:
 }
 
 /**
- * load_crashdump_segments_ppc64 - Initialize the additional segements needed
+ * load_crashdump_segments_ppc64 - Initialize the additional segments needed
  *                                 to load kdump kernel.
  * @image:                         Kexec image.
  * @kbuf:                          Buffer contents and memory parameters.
@@ -717,7 +717,7 @@ static int update_pci_dma_nodes(void *fdt, const char *dmapropname)
 }
 
 /**
- * setup_new_fdt_ppc64 - Update the flattend device-tree of the kernel
+ * setup_new_fdt_ppc64 - Update the flattened device-tree of the kernel
  *                       being loaded.
  * @image:               kexec image being loaded.
  * @fdt:                 Flattened device tree for the next kernel.
