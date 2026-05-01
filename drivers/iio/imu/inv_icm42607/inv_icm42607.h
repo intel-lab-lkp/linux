@@ -397,7 +397,15 @@ typedef int (*inv_icm42607_bus_setup)(struct inv_icm42607_state *);
 extern const struct regmap_config inv_icm42607_regmap_config;
 extern const struct dev_pm_ops inv_icm42607_pm_ops;
 
+const struct iio_mount_matrix *
+inv_icm42607_get_mount_matrix(struct iio_dev *indio_dev,
+			      const struct iio_chan_spec *chan);
+
 u32 inv_icm42607_odr_to_period(enum inv_icm42607_odr odr);
+
+int inv_icm42607_set_accel_conf(struct inv_icm42607_state *st,
+				struct inv_icm42607_sensor_conf *conf,
+				unsigned int *sleep_ms);
 
 int inv_icm42607_set_temp_conf(struct inv_icm42607_state *st, bool enable,
 			       unsigned int *sleep_ms);
@@ -407,5 +415,13 @@ int inv_icm42607_debugfs_reg(struct iio_dev *indio_dev, unsigned int reg,
 
 int inv_icm42607_core_probe(struct regmap *regmap, int chip,
 			    inv_icm42607_bus_setup bus_setup);
+
+struct iio_dev *inv_icm42607_accel_init(struct inv_icm42607_state *st);
+
+int inv_icm42607_accel_parse_fifo(struct iio_dev *indio_dev);
+
+void inv_icm42607_accel_handle_events(struct iio_dev *indio_dev,
+				      unsigned int status2, unsigned int status3,
+				      s64 timestamp);
 
 #endif
