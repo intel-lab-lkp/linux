@@ -107,8 +107,7 @@ static inline int lru_refs_from_flags(unsigned long flags)
 	 * LRU_REFS_FLAGS.
 	 */
 	refs = (flags & BIT(PG_referenced)) ? BIT(0) : 0;
-	refs += (flags & BIT(PG_workingset)) ? BIT(1) : 0;
-	refs += ((flags & LRU_REFS_MASK) >> LRU_REFS_PGOFF) << 2;
+	refs += ((flags & LRU_REFS_MASK) >> LRU_REFS_PGOFF) << 1;
 	return refs;
 }
 
@@ -124,9 +123,7 @@ static inline void lru_refs_set_flags(unsigned long *flags, unsigned int refs)
 	*flags &= ~LRU_REFS_FLAGS;
 	if (refs & BIT(0))
 		*flags |= BIT(PG_referenced);
-	if (refs & BIT(1))
-		*flags |= BIT(PG_workingset);
-	*flags |= (((unsigned long)refs) >> 2) << LRU_REFS_PGOFF;
+	*flags |= (((unsigned long)refs) >> 1) << LRU_REFS_PGOFF;
 }
 
 static inline int folio_lru_refs(const struct folio *folio)
@@ -253,7 +250,8 @@ static inline bool folio_is_workingset(const struct folio *folio)
  */
 static inline void folio_mark_workingset_by_bit(struct folio *folio)
 {
-	set_mask_bits(folio_flags(folio, 0), BIT(PG_workingset), BIT(PG_workingset));
+	BUILD_BUG_ON(LRU_REFS_WIDTH < 2);
+	set_mask_bits(folio_flags(folio, 0), BIT(LRU_REFS_PGOFF + 1), BIT(LRU_REFS_PGOFF + 1));
 }
 
 static inline void folio_migrate_refs(struct folio *new, const struct folio *old)

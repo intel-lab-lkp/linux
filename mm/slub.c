@@ -191,7 +191,7 @@
  */
 enum slab_flags {
 	SL_locked = PG_locked,
-	SL_partial = PG_workingset,	/* Historical reasons for this bit */
+	SL_partial = PG_owner_priv_1,	/* Use a flag that is never set for slab folio */
 	SL_pfmemalloc = PG_active,	/* Historical reasons for this bit */
 };
 

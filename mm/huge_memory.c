@@ -3643,7 +3643,6 @@ static void __split_folio_to_order(struct folio *folio, int old_order,
 				 (1L << PG_mlocked) |
 				 (1L << PG_uptodate) |
 				 (1L << PG_active) |
-				 (1L << PG_workingset) |
 				 (1L << PG_locked) |
 				 (1L << PG_unevictable) |
 #ifdef CONFIG_ARCH_USES_PG_ARCH_2
