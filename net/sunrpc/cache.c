@@ -39,6 +39,7 @@
 #include "netns.h"
 #include "netlink.h"
 #include "fail.h"
+#include "sunrpc.h"
 
 #define	 RPCDBG_FACILITY RPCDBG_CACHE
 
