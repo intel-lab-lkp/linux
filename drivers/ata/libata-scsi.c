@@ -1785,18 +1785,6 @@ static int ata_scsi_qc_issue(struct ata_port *ap, struct ata_queued_cmd *qc)
 	case 0:
 		break;
 	case ATA_DEFER_LINK:
-		ret = SCSI_MLQUEUE_DEVICE_BUSY;
-		break;
-	case ATA_DEFER_PORT:
-		ret = SCSI_MLQUEUE_HOST_BUSY;
-		break;
-	default:
-		WARN_ON_ONCE(1);
-		ret = SCSI_MLQUEUE_HOST_BUSY;
-		break;
-	}
-
-	if (ret) {
 		/*
 		 * We must defer this qc: if this is not an NCQ command, keep
 		 * this qc as a deferred one and report to the SCSI layer that
@@ -1811,7 +1799,20 @@ static int ata_scsi_qc_issue(struct ata_port *ap, struct ata_queued_cmd *qc)
 
 		/* Force a requeue of the command to defer its execution. */
 		ata_qc_free(qc);
-		return ret;
+		return SCSI_MLQUEUE_DEVICE_BUSY;
+	case ATA_DEFER_PORT:
+		/*
+		 * ATA_DEFER_PORT is returned when the host is busy, e.g. when
+		 * using a PMP with CBS and trying to issue a qc to a link that
+		 * is not the currently active link. In this case, simply
+		 * propagate the error back to the SCSI layer.
+		 */
+		ata_qc_free(qc);
+		return SCSI_MLQUEUE_HOST_BUSY;
+	default:
+		WARN_ON_ONCE(1);
+		ata_qc_free(qc);
+		return SCSI_MLQUEUE_HOST_BUSY;
 	}
 
 issue:
