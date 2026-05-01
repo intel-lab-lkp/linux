@@ -16,6 +16,7 @@
 #include <linux/slab.h>
 
 #include "inv_icm42607.h"
+#include "inv_icm42607_buffer.h"
 
 static const struct regmap_range_cfg inv_icm42607_regmap_ranges[] = {
 	{
@@ -162,6 +163,7 @@ static int inv_icm42607_set_pwr_mgmt0(struct inv_icm42607_state *st,
 
 	return 0;
 }
+
 
 int inv_icm42607_debugfs_reg(struct iio_dev *indio_dev, unsigned int reg,
 			     unsigned int writeval, unsigned int *readval)
@@ -370,6 +372,11 @@ int inv_icm42607_core_probe(struct regmap *regmap, int chip,
 	if (ret)
 		return ret;
 
+	/* Initialize buffer/FIFO handling */
+	ret = inv_icm42607_buffer_init(st);
+	if (ret)
+		return ret;
+
 	ret = devm_pm_runtime_set_active_enabled(dev);
 	if (ret)
 		return ret;
@@ -400,6 +407,13 @@ static int inv_icm42607_suspend(struct device *dev)
 	st->suspended.temp = st->conf.temp_en;
 	if (pm_runtime_suspended(dev))
 		return 0;
+
+	if (st->fifo.on) {
+		ret = regmap_write(st->map, INV_ICM42607_REG_FIFO_CONFIG1,
+				   INV_ICM42607_FIFO_CONFIG1_BYPASS);
+		if (ret)
+			return ret;
+	}
 
 	/* keep chip on and wake-up capable if APEX and wakeup on */
 	accel_dev = &st->indio_accel->dev;
@@ -432,6 +446,8 @@ static int inv_icm42607_suspend(struct device *dev)
 static int inv_icm42607_resume(struct device *dev)
 {
 	struct inv_icm42607_state *st = dev_get_drvdata(dev);
+	struct inv_icm42607_sensor_state *gyro_st = iio_priv(st->indio_gyro);
+	struct inv_icm42607_sensor_state *accel_st = iio_priv(st->indio_accel);
 	struct device *accel_dev;
 	bool wakeup;
 	int ret;
@@ -458,6 +474,16 @@ static int inv_icm42607_resume(struct device *dev)
 	ret = inv_icm42607_set_pwr_mgmt0(st, st->suspended.gyro,
 					 st->suspended.accel,
 					 st->suspended.temp, NULL);
+	if (ret)
+		return ret;
+
+	if (st->fifo.on) {
+		inv_sensors_timestamp_reset(&gyro_st->ts);
+		inv_sensors_timestamp_reset(&accel_st->ts);
+		ret = regmap_write(st->map, INV_ICM42607_REG_FIFO_CONFIG1,
+				   INV_ICM42607_FIFO_CONFIG1_MODE);
+	}
+
 	return ret;
 }
 

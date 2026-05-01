@@ -15,6 +15,8 @@
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
 
+#include "inv_icm42607_buffer.h"
+
 enum inv_icm42607_chip {
 	INV_CHIP_INVALID,
 	INV_CHIP_ICM42607P,
@@ -140,6 +142,7 @@ struct inv_icm42607_apex {
  *  @indio_accel:	accelerometer IIO device.
  *  @timestamp:         interrupt timestamps.
  *  @apex:		APEX (Advanced Pedometer and Event detection) management
+ *  @fifo:		FIFO management structure.
  *  @buffer:		data transfer buffer aligned for DMA.
  */
 struct inv_icm42607_state {
@@ -159,6 +162,7 @@ struct inv_icm42607_state {
 		s64 accel;
 	} timestamp;
 	struct inv_icm42607_apex apex;
+	struct inv_icm42607_fifo fifo;
 	__be16 buffer[3] __aligned(IIO_DMA_MINALIGN);
 };
 
