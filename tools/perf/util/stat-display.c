@@ -945,6 +945,27 @@ static bool should_skip_zero_counter(struct perf_stat_config *config,
 		if (aggr_cpu_id__equal(id, &own_id))
 			return false;
 	}
+
+	/*
+	 * If the counter is a leader in alias merging, check if the aggr id
+	 * matches any of its aliases.
+	 */
+	if (config->aggr_mode != AGGR_NONE && counter->first_wildcard_match == NULL) {
+		struct evsel *alias;
+
+		evlist__for_each_entry(counter->evlist, alias) {
+			if (alias->first_wildcard_match == counter) {
+				perf_cpu_map__for_each_cpu(cpu, idx, alias->core.cpus) {
+					struct aggr_cpu_id own_id =
+						config->aggr_get_id(config, cpu);
+
+					if (aggr_cpu_id__equal(id, &own_id))
+						return false;
+				}
+			}
+		}
+	}
+
 	return true;
 }
 
