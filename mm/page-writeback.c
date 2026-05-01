@@ -124,14 +124,17 @@ struct wb_domain global_wb_domain;
 
 #define GDTC_INIT(__wb)		.wb = (__wb),				\
 				.dom = &global_wb_domain,		\
-				.wb_completions = &(__wb)->completions
+				.wb_completions = &(__wb)->completions,	\
+				.cg_dirty_cap = PAGE_COUNTER_MAX
 
-#define GDTC_INIT_NO_WB		.dom = &global_wb_domain
+#define GDTC_INIT_NO_WB		.dom = &global_wb_domain,		\
+				.cg_dirty_cap = PAGE_COUNTER_MAX
 
 #define MDTC_INIT(__wb, __gdtc)	.wb = (__wb),				\
 				.dom = mem_cgroup_wb_domain(__wb),	\
 				.wb_completions = &(__wb)->memcg_completions, \
-				.gdtc = __gdtc
+				.gdtc = __gdtc,				\
+				.cg_dirty_cap = PAGE_COUNTER_MAX
 
 static bool mdtc_valid(struct dirty_throttle_control *dtc)
 {
@@ -183,8 +186,9 @@ static void wb_min_max_ratio(struct bdi_writeback *wb,
 #else	/* CONFIG_CGROUP_WRITEBACK */
 
 #define GDTC_INIT(__wb)		.wb = (__wb),                           \
-				.wb_completions = &(__wb)->completions
-#define GDTC_INIT_NO_WB
+				.wb_completions = &(__wb)->completions,	\
+				.cg_dirty_cap = PAGE_COUNTER_MAX
+#define GDTC_INIT_NO_WB		.cg_dirty_cap = PAGE_COUNTER_MAX
 #define MDTC_INIT(__wb, __gdtc)
 
 static bool mdtc_valid(struct dirty_throttle_control *dtc)
@@ -392,6 +396,58 @@ static void domain_dirty_limits(struct dirty_throttle_control *dtc)
 		bg_thresh += bg_thresh / 4 + global_wb_domain.dirty_limit / 32;
 		thresh += thresh / 4 + global_wb_domain.dirty_limit / 32;
 	}
+
+	/*
+	 * Apply the per-memcg dirty_ratio clamp on mdtc (gdtc != NULL
+	 * iff @dtc is a memcg dtc).  dirty_ratio is scaled against
+	 * the memcg's own dirtyable memory (@available_memory), matching
+	 * the semantics of vm_dirty_ratio so the two knobs share a base
+	 * and compose via a plain min() on thresh.  The clamp is keyed
+	 * on wb->memcg_css (the inode-owner's memcg) rather than on
+	 * current's memcg, so balance_dirty_pages(), wb_over_bg_thresh()
+	 * (flusher kworker context), and cgwb_calc_thresh() all see the
+	 * same clamped value.
+	 *
+	 * Published on dtc->cg_dirty_cap as well so hard_dirty_limit()
+	 * callers in balance_dirty_pages() can ignore the slower
+	 * dom->dirty_limit smoothing when deriving setpoint/
+	 * rate-limit from the clamped ceiling.
+	 *
+	 * Clamp is applied after the rt/dl boost: dirty_ratio is a
+	 * strict override, not widened by priority.  bg_thresh is
+	 * scaled by the same factor we apply to thresh so the
+	 * user-configured bg/thresh ratio survives clamping instead
+	 * of snapping to thresh/2 via the bg_thresh >= thresh guard
+	 * below.  mult_frac() preserves precision for small memcgs
+	 * where a plain "(avail / 100) * ratio" would collapse to 0.
+	 */
+	if (gdtc) {
+		struct mem_cgroup *memcg =
+			mem_cgroup_from_css(dtc->wb->memcg_css);
+		unsigned int cg_ratio = memcg ?
+			READ_ONCE(memcg->dirty_ratio) : 0;
+
+		/*
+		 * dtc is reused across balance_dirty_pages() iterations,
+		 * so reset the published clamp every call -- an admin
+		 * clearing memory.dirty_ratio mid-flight must take effect
+		 * on the next pass.
+		 */
+		dtc->cg_dirty_cap = PAGE_COUNTER_MAX;
+
+		if (cg_ratio) {
+			unsigned long cg_thresh = mult_frac(available_memory,
+							    cg_ratio, 100);
+
+			if (cg_thresh < thresh) {
+				bg_thresh = mult_frac(bg_thresh, cg_thresh,
+						      thresh);
+				thresh = cg_thresh;
+				dtc->cg_dirty_cap = cg_thresh;
+			}
+		}
+	}
+
 	/*
 	 * Dirty throttling logic assumes the limits in page units fit into
 	 * 32-bits. This gives 16TB dirty limits max which is hopefully enough.
@@ -1065,7 +1121,9 @@ static void wb_position_ratio(struct dirty_throttle_control *dtc)
 	struct bdi_writeback *wb = dtc->wb;
 	unsigned long write_bw = READ_ONCE(wb->avg_write_bandwidth);
 	unsigned long freerun = dirty_freerun_ceiling(dtc->thresh, dtc->bg_thresh);
-	unsigned long limit = dtc->limit = hard_dirty_limit(dtc_dom(dtc), dtc->thresh);
+	unsigned long limit = dtc->limit = min(hard_dirty_limit(dtc_dom(dtc),
+							       dtc->thresh),
+					       dtc->cg_dirty_cap);
 	unsigned long wb_thresh = dtc->wb_thresh;
 	unsigned long x_intercept;
 	unsigned long setpoint;		/* dirty pages' target balance point */
@@ -1334,7 +1392,8 @@ static void wb_update_dirty_ratelimit(struct dirty_throttle_control *dtc,
 	struct bdi_writeback *wb = dtc->wb;
 	unsigned long dirty = dtc->dirty;
 	unsigned long freerun = dirty_freerun_ceiling(dtc->thresh, dtc->bg_thresh);
-	unsigned long limit = hard_dirty_limit(dtc_dom(dtc), dtc->thresh);
+	unsigned long limit = min(hard_dirty_limit(dtc_dom(dtc), dtc->thresh),
+				  dtc->cg_dirty_cap);
 	unsigned long setpoint = (freerun + limit) / 2;
 	unsigned long write_bw = wb->avg_write_bandwidth;
 	unsigned long dirty_ratelimit = wb->dirty_ratelimit;
@@ -1822,21 +1881,121 @@ static int balance_dirty_pages(struct bdi_writeback *wb,
 	int ret = 0;
 
 	for (;;) {
+		unsigned long cg_dirty_min = 0;
+		unsigned long cg_dirty_pages = 0;
 		unsigned long now = jiffies;
 
 		nr_dirty = global_node_page_state(NR_FILE_DIRTY);
 
 		balance_domain_limits(gdtc, strictlimit);
+
+		/*
+		 * Under RCU, snapshot the current memcg's memory.dirty_min
+		 * reservation.  When it is non-zero, also snapshot the
+		 * memcg-wide dirty backlog.  These feed the per-writer
+		 * dirty_min bypass below; the dirty_ratio clamp itself
+		 * is applied inside domain_dirty_limits() keyed on
+		 * wb->memcg_css so balance_dirty_pages(),
+		 * wb_over_bg_thresh() (flusher kworker context), and
+		 * cgwb_calc_thresh() all see a consistent clamped
+		 * threshold.
+		 *
+		 * rcu_read_lock() is held only for the __rcu dereference
+		 * of current->cgroups; the memcg pointer does not escape
+		 * the critical section.  The counter read matches
+		 * domain_dirty_avail(mdtc, true) so the bypass compares
+		 * the same dirty+in-flight backlog the global path uses.
+		 */
+		rcu_read_lock();
+		{
+			struct mem_cgroup *memcg =
+				mem_cgroup_from_task(current);
+
+			if (memcg) {
+				cg_dirty_min = READ_ONCE(memcg->dirty_min);
+				if (cg_dirty_min)
+					cg_dirty_pages =
+						memcg_page_state(memcg,
+								 NR_FILE_DIRTY) +
+						memcg_page_state(memcg,
+								 NR_WRITEBACK);
+			}
+		}
+		rcu_read_unlock();
+
 		if (mdtc) {
 			/*
-			 * If @wb belongs to !root memcg, repeat the same
-			 * basic calculations for the memcg domain.
+			 * For !root memcg, repeat the same three-step
+			 * sequence as balance_domain_limits(gdtc):
+			 * avail -> limits -> freerun.  We inline it here
+			 * so we can insert the mdtc->dirty override
+			 * between step 2 (domain_dirty_limits, which
+			 * publishes the per-memcg dirty_ratio clamp on
+			 * cg_dirty_cap) and step 3 (domain_dirty_freerun,
+			 * which consumes mdtc->dirty along with
+			 * thresh/bg_thresh).
 			 */
-			balance_domain_limits(mdtc, strictlimit);
+			domain_dirty_avail(mdtc, true);
+			domain_dirty_limits(mdtc);
+
+			/*
+			 * When the dirty_ratio clamp engaged, replace the
+			 * per-wb dirty count from mem_cgroup_wb_stats()
+			 * with the memcg-wide NR_FILE_DIRTY + NR_WRITEBACK
+			 * sum so freerun, the setpoint, and the rate-limit
+			 * smoothing see the true memcg backlog instead of
+			 * the subset that has migrated to this cgwb (cgwb
+			 * migration is lazy and can lag by many seconds),
+			 * and so a burst of buffered writes cannot silently
+			 * bypass the clamp by shifting pages from
+			 * NR_FILE_DIRTY into NR_WRITEBACK.
+			 *
+			 * Keyed on wb->memcg_css to match the clamp itself.
+			 * The cgwb holds a css reference, so the memcg
+			 * pointer is stable without additional locking.
+			 *
+			 * Caveat: memcg_page_state() aggregates across ALL
+			 * backing devices owned by this memcg, while mdtc
+			 * is scoped to one wb.  A writer to a fast BDI may
+			 * observe backlog accumulated on slow BDIs in the
+			 * same memcg and throttle more than strictly needed.
+			 * Accepted for v1; the alternative (summing per-wb
+			 * dirty across the memcg's cgwbs) walks the cgwb
+			 * list under RCU on a hot path.
+			 */
+			if (mdtc->cg_dirty_cap != PAGE_COUNTER_MAX) {
+				struct mem_cgroup *wb_memcg =
+					mem_cgroup_from_css(mdtc->wb->memcg_css);
+
+				if (wb_memcg)
+					mdtc->dirty =
+						memcg_page_state(wb_memcg,
+								 NR_FILE_DIRTY) +
+						memcg_page_state(wb_memcg,
+								 NR_WRITEBACK);
+			}
+
+			domain_dirty_freerun(mdtc, strictlimit);
 		}
 
 		if (nr_dirty > gdtc->bg_thresh && !writeback_in_progress(wb))
 			wb_start_background_writeback(wb);
+
+		/*
+		 * dirty_min bypass: when the current memcg's dirty+in-flight
+		 * backlog is below its memory.dirty_min reservation, let the
+		 * writer proceed without throttling.  This check must live
+		 * outside the if (mdtc) block because a writer's file may not
+		 * yet have been migrated to a cgwb; without cgwb, mdtc is NULL
+		 * and the per-memcg block above is skipped entirely.
+		 *
+		 * cg_dirty_min and cg_dirty_pages come from the per-iteration
+		 * snapshot taken above under rcu_read_lock; both are stored
+		 * in pages (page_counter_memparse converts bytes -> pages for
+		 * dirty_min), so no unit conversion is needed.
+		 */
+		if (cg_dirty_min && cg_dirty_pages < cg_dirty_min)
+			goto free_running;
 
 		/*
 		 * If memcg domain is in effect, @dirty should be under

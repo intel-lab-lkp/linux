@@ -672,6 +672,7 @@ TRACE_EVENT(balance_dirty_pages,
 		__array(	 char,	bdi, 32)
 		__field(u64,		cgroup_ino)
 		__field(unsigned long,	limit)
+		__field(unsigned long,	cg_dirty_cap)
 		__field(unsigned long,	setpoint)
 		__field(unsigned long,	dirty)
 		__field(unsigned long,	wb_setpoint)
@@ -691,6 +692,7 @@ TRACE_EVENT(balance_dirty_pages,
 		strscpy_pad(__entry->bdi, bdi_dev_name(wb->bdi), 32);
 
 		__entry->limit		= dtc->limit;
+		__entry->cg_dirty_cap	= dtc->cg_dirty_cap;
 		__entry->setpoint	= (dtc->limit + freerun) / 2;
 		__entry->dirty		= dtc->dirty;
 		__entry->wb_setpoint	= __entry->setpoint *
@@ -710,13 +712,14 @@ TRACE_EVENT(balance_dirty_pages,
 
 
 	TP_printk("bdi %s: "
-		  "limit=%lu setpoint=%lu dirty=%lu "
+		  "limit=%lu cg_dirty_cap=%lu setpoint=%lu dirty=%lu "
 		  "wb_setpoint=%lu wb_dirty=%lu "
 		  "dirty_ratelimit=%lu task_ratelimit=%lu "
 		  "dirtied=%u dirtied_pause=%u "
 		  "paused=%lu pause=%ld period=%lu think=%ld cgroup_ino=%llu",
 		  __entry->bdi,
 		  __entry->limit,
+		  __entry->cg_dirty_cap,
 		  __entry->setpoint,
 		  __entry->dirty,
 		  __entry->wb_setpoint,

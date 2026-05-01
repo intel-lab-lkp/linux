@@ -323,6 +323,16 @@ struct mem_cgroup {
 	spinlock_t event_list_lock;
 #endif /* CONFIG_MEMCG_V1 */
 
+	/* Per-memcg dirty-page controls (memory.dirty_ratio, memory.dirty_min) */
+	/*
+	 * dirty_ratio: [0, 100] percent of dirtyable memory (mdtc->avail),
+	 *   matching the global vm_dirty_ratio base; 0 inherits the global
+	 *   threshold.
+	 * dirty_min:   dirty-page reservation, in pages; 0 disables the bypass.
+	 */
+	unsigned int dirty_ratio;
+	unsigned long dirty_min;
+
 	struct mem_cgroup_per_node *nodeinfo[];
 };
 

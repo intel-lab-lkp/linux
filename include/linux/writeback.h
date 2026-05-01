@@ -318,6 +318,10 @@ struct dirty_throttle_control {
 	unsigned long		thresh;		/* dirty threshold */
 	unsigned long		bg_thresh;	/* dirty background threshold */
 	unsigned long		limit;		/* hard dirty limit */
+	unsigned long		cg_dirty_cap;	/* per-memcg dirty_ratio clamp for
+						 * this pass, or PAGE_COUNTER_MAX
+						 * when no memcg clamp applies
+						 */
 
 	unsigned long		wb_dirty;	/* per-wb counterparts */
 	unsigned long		wb_thresh;

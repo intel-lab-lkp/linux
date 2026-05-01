@@ -4748,6 +4748,56 @@ out:
 	return nbytes;
 }
 
+static int memory_dirty_ratio_show(struct seq_file *m, void *v)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_seq(m);
+
+	seq_printf(m, "%u\n", READ_ONCE(memcg->dirty_ratio));
+	return 0;
+}
+
+static ssize_t memory_dirty_ratio_write(struct kernfs_open_file *of,
+					char *buf, size_t nbytes, loff_t off)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+	unsigned int ratio;
+	int err;
+
+	err = kstrtouint(strstrip(buf), 0, &ratio);
+	if (err)
+		return err;
+
+	if (ratio > 100)
+		return -EINVAL;
+
+	WRITE_ONCE(memcg->dirty_ratio, ratio);
+	return nbytes;
+}
+
+static int memory_dirty_min_show(struct seq_file *m, void *v)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_seq(m);
+
+	/* seq_puts_memcg_tunable automatically multiplies by PAGE_SIZE for the user */
+	return seq_puts_memcg_tunable(m, READ_ONCE(memcg->dirty_min));
+}
+
+static ssize_t memory_dirty_min_write(struct kernfs_open_file *of,
+				      char *buf, size_t nbytes, loff_t off)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+	unsigned long dirty_min;
+	int err;
+
+	/* page_counter_memparse converts strings like "512M" into a page count */
+	err = page_counter_memparse(strstrip(buf), "max", &dirty_min);
+	if (err)
+		return err;
+
+	WRITE_ONCE(memcg->dirty_min, dirty_min);
+	return nbytes;
+}
+
 /*
  * Note: don't forget to update the 'samples/cgroup/memcg_event_listener'
  * if any new events become available.
@@ -4949,6 +4999,18 @@ static struct cftype memory_files[] = {
 		.name = "reclaim",
 		.flags = CFTYPE_NS_DELEGATABLE,
 		.write = memory_reclaim,
+	},
+	{
+		.name = "dirty_ratio",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = memory_dirty_ratio_show,
+		.write = memory_dirty_ratio_write,
+	},
+	{
+		.name = "dirty_min",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = memory_dirty_min_show,
+		.write = memory_dirty_min_write,
 	},
 	{ }	/* terminate */
 };
