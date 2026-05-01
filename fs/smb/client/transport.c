@@ -1143,6 +1143,11 @@ __cifs_discard_and_dequeue(struct TCP_Server_Info *server, struct mid_q_entry *m
 	dequeue_mid(server, mid, malformed);
 	mid->resp_buf = server->smallbuf;
 	server->smallbuf = NULL;
+
+	/* Once the mid is dequeued, the callback must run to terminate the subreq */
+	if (length < 0)
+		mid_execute_callback(server, mid);
+
 	return length;
 }
 
