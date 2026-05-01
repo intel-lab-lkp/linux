@@ -89,6 +89,11 @@ static bool disable_workarounds;
 module_param(disable_workarounds, bool, 0644);
 MODULE_PARM_DESC(disable_workarounds, "Disable workarounds for platform bugs");
 
+static int delay_suspend = -1;
+module_param(delay_suspend, int, 0644);
+MODULE_PARM_DESC(delay_suspend,
+		 "Delays s2idle by 2.5 seconds to work around buggy ECs, often causing keyboard issues after suspend. 0: don't delay, 1: do delay, -1 (default): let amd_pmc decide. If you need this please report this to: platform-driver-x86@vger.kernel.org");
+
 static struct amd_pmc_dev pmc;
 
 static inline u32 amd_pmc_reg_read(struct amd_pmc_dev *dev, int reg_offset)
@@ -634,11 +639,19 @@ static void amd_pmc_s2idle_check(void)
 	struct amd_pmc_dev *pdev = &pmc;
 	struct smu_metrics table;
 	int rc;
-	bool ec_needs_sleep = !disable_workarounds && amd_pmc_quirk_need_suspend_delay(pdev);
+	bool ec_needs_sleep;
+
+	if (delay_suspend < 0)
+		ec_needs_sleep = !disable_workarounds && amd_pmc_quirk_need_suspend_delay(pdev);
+	else
+		ec_needs_sleep = delay_suspend != 0;
 
 	/* Avoid triggering OVP */
 	if (ec_needs_sleep || (!get_metrics_table(pdev, &table) && table.s0i3_last_entry_status)) {
-		dev_info(pdev->dev, "Delaying suspend by 2.5s to avoid platform bug\n");
+		if (delay_suspend > 0)
+			dev_info(pdev->dev, "Delaying suspend by 2.5s because delay_suspend=1\n");
+		else
+			dev_info(pdev->dev, "Delaying suspend by 2.5s to avoid platform bug\n");
 		msleep(2500);
 	}
 
