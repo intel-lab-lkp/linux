@@ -1705,9 +1705,77 @@ out_nomem:
 	return -ENOMEM;
 }
 
-void __init cache_initialize(void)
+static struct workqueue_struct *sunrpc_cache_wq;
+
+/**
+ * sunrpc_cache_queue_release - schedule deferred cache release work
+ * @rwork: caller-initialized rcu_work to queue
+ *
+ * Run @rwork in process context after the next RCU grace period.
+ * Use this for cache .put callbacks whose cleanup may sleep
+ * (path_put(), auth_domain_put()).
+ */
+void sunrpc_cache_queue_release(struct rcu_work *rwork)
 {
+	queue_rcu_work(sunrpc_cache_wq, rwork);
+}
+EXPORT_SYMBOL_GPL(sunrpc_cache_queue_release);
+
+/**
+ * sunrpc_cache_drain - drain pending cache release work
+ *
+ * Wait for outstanding RCU callbacks to enqueue their release
+ * work, then flush that work to completion.
+ */
+void sunrpc_cache_drain(void)
+{
+	rcu_barrier();
+	flush_workqueue(sunrpc_cache_wq);
+}
+EXPORT_SYMBOL_GPL(sunrpc_cache_drain);
+
+/**
+ * sunrpc_cache_destroy_net - quiesce and tear down a per-net cache
+ * @cd: the cache_detail to release
+ * @net: the network namespace owning @cd
+ *
+ * Canonical teardown for caches whose .put callbacks use
+ * sunrpc_cache_queue_release(). Unregister @cd to stop new
+ * lookups, drain in-flight RCU callbacks and queued release
+ * work, then free @cd and its hash table. The drain ensures
+ * release workers complete while the cache_detail is still
+ * valid.
+ */
+void sunrpc_cache_destroy_net(struct cache_detail *cd, struct net *net)
+{
+	cache_unregister_net(cd, net);
+	sunrpc_cache_drain();
+	cache_destroy_net(cd, net);
+}
+EXPORT_SYMBOL_GPL(sunrpc_cache_destroy_net);
+
+/**
+ * cache_initialize - allocate sunrpc cache subsystem resources
+ */
+int __init cache_initialize(void)
+{
+	sunrpc_cache_wq = alloc_workqueue("sunrpc_cache",
+					  WQ_UNBOUND | WQ_MEM_RECLAIM, 0);
+	if (!sunrpc_cache_wq)
+		return -ENOMEM;
 	INIT_DEFERRABLE_WORK(&cache_cleaner, do_cache_clean);
+	return 0;
+}
+
+/**
+ * cache_destroy - release sunrpc cache subsystem resources
+ *
+ * Caller must ensure no further sunrpc_cache_queue_release()
+ * calls can be scheduled before invoking this.
+ */
+void cache_destroy(void)
+{
+	destroy_workqueue(sunrpc_cache_wq);
 }
 
 int cache_register_net(struct cache_detail *cd, struct net *net)

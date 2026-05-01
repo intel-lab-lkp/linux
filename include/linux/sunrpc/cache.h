@@ -237,11 +237,14 @@ extern int cache_check(struct cache_detail *detail,
 extern void cache_flush(void);
 extern void cache_purge(struct cache_detail *detail);
 #define NEVER (0x7FFFFFFF)
+extern void sunrpc_cache_queue_release(struct rcu_work *rwork);
+extern void sunrpc_cache_drain(void);
 extern int cache_register_net(struct cache_detail *cd, struct net *net);
 extern void cache_unregister_net(struct cache_detail *cd, struct net *net);
 
 extern struct cache_detail *cache_create_net(const struct cache_detail *tmpl, struct net *net);
 extern void cache_destroy_net(struct cache_detail *cd, struct net *net);
+extern void sunrpc_cache_destroy_net(struct cache_detail *cd, struct net *net);
 
 extern void sunrpc_init_cache_detail(struct cache_detail *cd);
 extern void sunrpc_destroy_cache_detail(struct cache_detail *cd);
