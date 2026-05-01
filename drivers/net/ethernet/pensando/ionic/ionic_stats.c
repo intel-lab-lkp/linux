@@ -167,7 +167,7 @@ static const struct ionic_stat_desc ionic_rx_stats_desc[] = {
 #define IONIC_NUM_PORT_STATS ARRAY_SIZE(ionic_port_stats_desc)
 #define IONIC_NUM_TX_STATS ARRAY_SIZE(ionic_tx_stats_desc)
 #define IONIC_NUM_RX_STATS ARRAY_SIZE(ionic_rx_stats_desc)
-#define IONIC_NUM_EXTRA_PORT_STATS	1
+#define IONIC_NUM_EXTRA_PORT_STATS	2
 
 #define MAX_Q(lif)   ((lif)->netdev->real_num_tx_queues)
 
@@ -281,7 +281,9 @@ static void ionic_sw_stats_get_strings(struct ionic_lif *lif, u8 **buf)
 
 	for (i = 0; i < IONIC_NUM_PORT_STATS; i++)
 		ethtool_puts(buf, ionic_port_stats_desc[i].name);
+	/* extra port stats */
 	ethtool_puts(buf, "link_down_events_phy");
+	ethtool_puts(buf, "rx_bits_phy");
 
 	for (q_num = 0; q_num < MAX_Q(lif); q_num++)
 		ionic_sw_stats_get_tx_strings(lif, buf, q_num);
@@ -324,6 +326,17 @@ static void ionic_sw_stats_get_rxq_values(struct ionic_lif *lif, u64 **buf,
 	}
 }
 
+static void ionic_extra_port_stats_get_values(struct ionic_lif *lif, u64 **buf)
+{
+	struct ionic_port_info *port_info = lif->ionic->idev.port_info;
+
+	/* The # of stats added here == IONIC_NUM_EXTRA_PORT_STATS */
+	**buf = le16_to_cpu(port_info->status.link_down_count);
+	(*buf)++;
+	**buf = le64_to_cpu(port_info->extra_stats.rx_bits_phy);
+	(*buf)++;
+}
+
 static void ionic_sw_stats_get_values(struct ionic_lif *lif, u64 **buf)
 {
 	struct ionic_port_stats *port_stats;
@@ -343,8 +356,7 @@ static void ionic_sw_stats_get_values(struct ionic_lif *lif, u64 **buf)
 					     &ionic_port_stats_desc[i]);
 		(*buf)++;
 	}
-	**buf = le16_to_cpu(lif->ionic->idev.port_info->status.link_down_count);
-	(*buf)++;
+	ionic_extra_port_stats_get_values(lif, buf);
 
 	for (q_num = 0; q_num < MAX_Q(lif); q_num++)
 		ionic_sw_stats_get_txq_values(lif, buf, q_num);
