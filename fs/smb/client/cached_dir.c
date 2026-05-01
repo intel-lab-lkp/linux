@@ -1256,7 +1256,7 @@ static struct cached_fid *find_or_create_cached_dir(struct cached_fids *cfids,
 	if (lookup_only) {
 		return NULL;
 	}
-	if (cfids->num_entries >= max_cached_dirs) {
+	if (max_cached_dirs && cfids->num_entries >= max_cached_dirs) {
 		return NULL;
 	}
 	cfid = init_cached_dir(path);
