@@ -226,6 +226,33 @@ to "always" or "madvise"), and it'll be automatically shutdown when
 all THP sizes are disabled (when both the per-size anon control and the
 top-level control are "never")
 
+Some workloads may want to do copy on write on the pmd size to acquire the
+tlb benifit when it tries to write on a shared anonymous pmd sized entry.
+They can do so by setting up the thp_cow control. The control is only enabled
+when the global THP controls are set to "always" or "madvise" for the
+specific memory region::
+
+::
+
+	echo always >/sys/kernel/mm/transparent_hugepage/thp_cow
+	echo madvise >/sys/kernel/mm/transparent_hugepage/thp_cow
+	echo never >/sys/kernel/mm/transparent_hugepage/thp_cow
+
+always
+	means that the writing process will always do copy on write on
+	the pmd size. If there is no pmd sized folio available, it will
+	fallback to the pte size.
+
+madvise
+	will do things like ``always`` but only for regions that have
+	used madvise(MADV_THP_COW).
+
+never
+	will not do copy on write on the pmd size no matter what setup
+	is done using madvise. When a process writes on a shared anonymous
+	pmd sized entry, it will just allocate a pte sized page and do copy
+	on write on the pte size.
+
 process THP controls
 --------------------
 

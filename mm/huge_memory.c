@@ -531,6 +531,44 @@ static ssize_t split_underused_thp_store(struct kobject *kobj,
 static struct kobj_attribute split_underused_thp_attr = __ATTR(
 	shrink_underused, 0644, split_underused_thp_show, split_underused_thp_store);
 
+static ssize_t thp_cow_show(struct kobject *kobj,
+			    struct kobj_attribute *attr, char *buf)
+{
+	const char *output;
+
+	if (test_bit(TRANSPARENT_HUGEPAGE_COW_FLAG, &transparent_hugepage_flags))
+		output = "[always] madvise never";
+	else if (test_bit(TRANSPARENT_HUGEPAGE_REQ_MADV_COW_FLAG,
+			  &transparent_hugepage_flags))
+		output = "always [madvise] never";
+	else
+		output = "always madvise [never]";
+
+	return sysfs_emit(buf, "%s\n", output);
+}
+
+static ssize_t thp_cow_store(struct kobject *kobj,
+			     struct kobj_attribute *attr,
+			     const char *buf, size_t count)
+{
+	ssize_t ret = count;
+
+	if (sysfs_streq(buf, "always")) {
+		clear_bit(TRANSPARENT_HUGEPAGE_REQ_MADV_COW_FLAG, &transparent_hugepage_flags);
+		set_bit(TRANSPARENT_HUGEPAGE_COW_FLAG, &transparent_hugepage_flags);
+	} else if (sysfs_streq(buf, "madvise")) {
+		clear_bit(TRANSPARENT_HUGEPAGE_COW_FLAG, &transparent_hugepage_flags);
+		set_bit(TRANSPARENT_HUGEPAGE_REQ_MADV_COW_FLAG, &transparent_hugepage_flags);
+	} else if (sysfs_streq(buf, "never")) {
+		clear_bit(TRANSPARENT_HUGEPAGE_COW_FLAG, &transparent_hugepage_flags);
+		clear_bit(TRANSPARENT_HUGEPAGE_REQ_MADV_COW_FLAG, &transparent_hugepage_flags);
+	} else
+		ret = -EINVAL;
+
+	return ret;
+}
+static struct kobj_attribute thp_cow_attr = __ATTR_RW(thp_cow);
+
 static struct attribute *hugepage_attr[] = {
 	&enabled_attr.attr,
 	&defrag_attr.attr,
@@ -540,6 +578,7 @@ static struct attribute *hugepage_attr[] = {
 	&shmem_enabled_attr.attr,
 #endif
 	&split_underused_thp_attr.attr,
+	&thp_cow_attr.attr,
 	NULL,
 };
 

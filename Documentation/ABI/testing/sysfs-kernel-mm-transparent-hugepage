@@ -11,6 +11,7 @@ Description:
 			- khugepaged
 			- shmem_enabled
 			- use_zero_page
+			- thp_cow
 			- subdirectories of the form hugepages-<size>kB, where <size>
 			  is the page size of the hugepages supported by the kernel/CPU
 			  combination.
