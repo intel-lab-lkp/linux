@@ -162,6 +162,7 @@ static int luo_flb_retrieve_one(struct liveupdate_flb *flb)
 	struct luo_flb_header *fh = &luo_flb_global.incoming;
 	struct liveupdate_flb_op_args args = {0};
 	bool found = false;
+	u64 count;
 	int err;
 
 	guard(mutex)(&private->incoming.lock);
@@ -175,7 +176,14 @@ static int luo_flb_retrieve_one(struct liveupdate_flb *flb)
 	if (!fh->active)
 		return -ENODATA;
 
-	for (int i = 0; i < fh->header_ser->count; i++) {
+	count = fh->header_ser->count;
+	if (count > LUO_FLB_MAX) {
+		pr_err("Invalid FLB count: %llu\n",
+		       (unsigned long long)count);
+		return -EINVAL;
+	}
+
+	for (u64 i = 0; i < count; i++) {
 		if (!strcmp(fh->ser[i].name, flb->compatible)) {
 			private->incoming.data = fh->ser[i].data;
 			private->incoming.count = fh->ser[i].count;
@@ -620,7 +628,20 @@ int __init luo_flb_setup_incoming(void *fdt_in)
 	}
 
 	header_ser_pa = get_unaligned((u64 *)ptr);
+	if (!kho_is_preserved(header_ser_pa, LUO_FLB_PGCNT)) {
+		pr_err("FLB header is not KHO preserved: %#llx\n",
+		       (unsigned long long)header_ser_pa);
+		return -EINVAL;
+	}
+
 	header_ser = phys_to_virt(header_ser_pa);
+	if (header_ser->pgcnt != LUO_FLB_PGCNT ||
+	    header_ser->count > LUO_FLB_MAX) {
+		pr_err("Invalid FLB header: pgcnt %llu count %llu\n",
+		       (unsigned long long)header_ser->pgcnt,
+		       (unsigned long long)header_ser->count);
+		return -EINVAL;
+	}
 
 	luo_flb_global.incoming.header_ser = header_ser;
 	luo_flb_global.incoming.ser = (void *)(header_ser + 1);
