@@ -792,10 +792,13 @@ void cqm_handle_limbo(struct work_struct *work)
 	unsigned long delay = msecs_to_jiffies(CQM_LIMBOCHECK_INTERVAL);
 	struct rdt_l3_mon_domain *d;
 
-	cpus_read_lock();
 	mutex_lock(&rdtgroup_mutex);
 
 	d = container_of(work, struct rdt_l3_mon_domain, cqm_limbo.work);
+
+	/*  If this domain is being deleted this work no longer needs to run. */
+	if (d->offlining)
+		goto out_unlock;
 
 	__check_limbo(d, false);
 
@@ -806,8 +809,8 @@ void cqm_handle_limbo(struct work_struct *work)
 					 delay);
 	}
 
+out_unlock:
 	mutex_unlock(&rdtgroup_mutex);
-	cpus_read_unlock();
 }
 
 /**
@@ -839,18 +842,18 @@ void mbm_handle_overflow(struct work_struct *work)
 	struct list_head *head;
 	struct rdt_resource *r;
 
-	cpus_read_lock();
 	mutex_lock(&rdtgroup_mutex);
 
+	d = container_of(work, struct rdt_l3_mon_domain, mbm_over.work);
+
 	/*
-	 * If the filesystem has been unmounted this work no longer needs to
-	 * run.
+	 * If this domain is being deleted, or the filesystem has been
+	 * unmounted this work no longer needs to run.
 	 */
-	if (!resctrl_mounted || !resctrl_arch_mon_capable())
+	if (d->offlining || !resctrl_mounted || !resctrl_arch_mon_capable())
 		goto out_unlock;
 
 	r = resctrl_arch_get_resource(RDT_RESOURCE_L3);
-	d = container_of(work, struct rdt_l3_mon_domain, mbm_over.work);
 
 	list_for_each_entry(prgrp, &rdt_all_groups, rdtgroup_list) {
 		mbm_update(r, d, prgrp);
@@ -873,7 +876,6 @@ void mbm_handle_overflow(struct work_struct *work)
 
 out_unlock:
 	mutex_unlock(&rdtgroup_mutex);
-	cpus_read_unlock();
 }
 
 /**

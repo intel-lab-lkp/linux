@@ -203,6 +203,7 @@ struct rdt_l3_mon_domain {
 	int				mbm_work_cpu;
 	int				cqm_work_cpu;
 	struct mbm_cntr_cfg		*cntr_cfg;
+	bool				offlining;
 };
 
 /**

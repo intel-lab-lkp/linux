@@ -4308,7 +4308,7 @@ void resctrl_offline_ctrl_domain(struct rdt_resource *r, struct rdt_ctrl_domain 
 
 void resctrl_offline_mon_domain(struct rdt_resource *r, struct rdt_domain_hdr *hdr)
 {
-	struct rdt_l3_mon_domain *d;
+	struct rdt_l3_mon_domain *d = NULL;
 
 	mutex_lock(&rdtgroup_mutex);
 
@@ -4326,8 +4326,39 @@ void resctrl_offline_mon_domain(struct rdt_resource *r, struct rdt_domain_hdr *h
 		goto out_unlock;
 
 	d = container_of(hdr, struct rdt_l3_mon_domain, hdr);
+
+	/*
+	 * Tell mbm_handle_overflow() and cqm_handle_limbo() that this
+	 * domain is going away.
+	 */
+	d->offlining = true;
+
+out_unlock:
+	mutex_unlock(&rdtgroup_mutex);
+
+	if (!d)
+		return;
+
+	/*
+	 * Drain any pending or in-flight overflow / limbo handlers before
+	 * freeing per-domain monitor state (and before the caller frees the
+	 * domain itself). cancel_delayed_work_sync() must be called with
+	 * rdtgroup_mutex released because the handlers acquire it; the
+	 * handlers no longer take cpus_read_lock(), so this is safe to call
+	 * from a CPU hotplug callback that holds the hotplug write lock.
+	 *
+	 * Without the synchronous cancel, a handler that was already running
+	 * and blocked on rdtgroup_mutex when this function was entered could
+	 * wake after the mutex is dropped and dereference d->rmid_busy_llc,
+	 * d->mbm_states[] or the domain itself after they have been freed.
+	 */
 	if (resctrl_is_mbm_enabled())
-		cancel_delayed_work(&d->mbm_over);
+		cancel_delayed_work_sync(&d->mbm_over);
+	if (resctrl_is_mon_event_enabled(QOS_L3_OCCUP_EVENT_ID))
+		cancel_delayed_work_sync(&d->cqm_limbo);
+
+	mutex_lock(&rdtgroup_mutex);
+
 	if (resctrl_is_mon_event_enabled(QOS_L3_OCCUP_EVENT_ID) && has_busy_rmid(d)) {
 		/*
 		 * When a package is going down, forcefully
@@ -4338,11 +4369,10 @@ void resctrl_offline_mon_domain(struct rdt_resource *r, struct rdt_domain_hdr *h
 		 * package never comes back.
 		 */
 		__check_limbo(d, true);
-		cancel_delayed_work(&d->cqm_limbo);
 	}
 
 	domain_destroy_l3_mon_state(d);
-out_unlock:
+
 	mutex_unlock(&rdtgroup_mutex);
 }
 
