@@ -1,0 +1,20 @@
+What:		/sys/firmware/vulnerabilities
+		/sys/firmware/vulnerabilities/supported_mitigations
+		/sys/firmware/vulnerabilities/verified_mitigations
+		/sys/firmware/vulnerabilities/failed_status
+Date:		May 2026
+Contact:	linux-crypto@vger.kernel.org
+Description:	Information about SEV-SNP firmware vulnerabilities
+
+		supported_mitigations: Read only interface that reports the
+				       vector of mitigations supported by the
+				       firmware
+		verified_mitigations: Read/write interface that allows applying
+				      a firmware mitigation and reports
+				      already verified mitigations.
+		failed_status: Read only interface that reports the status of
+			       the verification operation.
+
+		The list of supported mitigations, their applications are both
+		platform and bug specific posted as part of the AMD Security
+		Bulletin.

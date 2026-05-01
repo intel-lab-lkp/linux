@@ -245,6 +245,7 @@ static int sev_cmd_buffer_len(int cmd)
 	case SEV_CMD_SNP_LAUNCH_FINISH:		return sizeof(struct sev_data_snp_launch_finish);
 	case SEV_CMD_SNP_DBG_DECRYPT:		return sizeof(struct sev_data_snp_dbg);
 	case SEV_CMD_SNP_DBG_ENCRYPT:		return sizeof(struct sev_data_snp_dbg);
+	case SEV_CMD_SNP_VERIFY_MITIGATION:	return sizeof(struct sev_data_snp_verify_mitigation);
 	case SEV_CMD_SNP_PAGE_UNSMASH:		return sizeof(struct sev_data_snp_page_unsmash);
 	case SEV_CMD_SNP_PLATFORM_STATUS:	return sizeof(struct sev_data_snp_addr);
 	case SEV_CMD_SNP_GUEST_REQUEST:		return sizeof(struct sev_data_snp_guest_request);
@@ -1350,6 +1351,144 @@ static int snp_filter_reserved_mem_regions(struct resource *rs, void *arg)
 	return 0;
 }
 
+static int snp_verify_mitigation(u16 command, u64 vector,
+				 struct sev_data_snp_verify_mitigation_dst *dst)
+{
+	struct sev_data_snp_verify_mitigation_dst *mit_dst = NULL;
+	struct sev_data_snp_verify_mitigation data = {0};
+	int ret, error = 0;
+
+	mit_dst = snp_alloc_firmware_page(GFP_KERNEL | __GFP_ZERO);
+	if (!mit_dst)
+		return -ENOMEM;
+
+	data.length = sizeof(data);
+	data.subcommand = command;
+	data.vector = vector;
+	data.dst_paddr = __psp_pa(mit_dst);
+	data.dst_paddr_en = true;
+
+	ret = sev_do_cmd(SEV_CMD_SNP_VERIFY_MITIGATION, &data, &error);
+	if (!ret)
+		memcpy(dst, mit_dst, sizeof(*mit_dst));
+
+	snp_free_firmware_page(mit_dst);
+
+	return ret;
+}
+
+#ifdef CONFIG_SYSFS
+static ssize_t supported_mitigations_show(struct kobject *kobj,
+					  struct kobj_attribute *attr, char *buf)
+{
+	struct sev_data_snp_verify_mitigation_dst dst;
+	int ret;
+
+	ret = snp_verify_mitigation(SNP_MIT_SUBCMD_REQ_STATUS, 0, &dst);
+	if (ret)
+		return ret;
+
+	return sysfs_emit(buf, "0x%llx\n", dst.mit_supported_vector);
+}
+
+static struct kobj_attribute supported_attr = __ATTR_RO(supported_mitigations);
+
+static ssize_t verified_mitigations_show(struct kobject *kobj,
+					 struct kobj_attribute *attr, char *buf)
+{
+	struct sev_data_snp_verify_mitigation_dst dst;
+	int ret;
+
+	ret = snp_verify_mitigation(SNP_MIT_SUBCMD_REQ_STATUS, 0, &dst);
+	if (ret)
+		return ret;
+
+	return sysfs_emit(buf, "0x%llx\n", dst.mit_verified_vector);
+}
+
+static ssize_t verified_mitigations_store(struct kobject *kobj,
+					  struct kobj_attribute *attr,
+					  const char *buf, size_t count)
+{
+	struct sev_data_snp_verify_mitigation_dst dst;
+	u64 vector;
+	int ret;
+
+	ret = kstrtoull(buf, 0, &vector);
+	if (ret)
+		return ret;
+
+	ret = snp_verify_mitigation(SNP_MIT_SUBCMD_REQ_VERIFY, vector, &dst);
+	if (ret)
+		return ret;
+
+	if (dst.mit_failure_status)
+		return -EIO;
+
+	return count;
+}
+
+static struct kobj_attribute verified_attr = __ATTR_RW(verified_mitigations);
+
+static ssize_t failed_status_show(struct kobject *kobj,
+				  struct kobj_attribute *attr, char *buf)
+{
+	struct sev_data_snp_verify_mitigation_dst dst;
+	int ret;
+
+	ret = snp_verify_mitigation(SNP_MIT_SUBCMD_REQ_STATUS, 0, &dst);
+	if (ret)
+		return ret;
+
+	return sysfs_emit(buf, "0x%x\n", dst.mit_failure_status);
+}
+
+static struct kobj_attribute failed_attr = __ATTR_RO(failed_status);
+
+static struct attribute *mitigation_attrs[] = {
+	&supported_attr.attr,
+	&verified_attr.attr,
+	&failed_attr.attr,
+	NULL
+};
+
+static const struct attribute_group mit_attr_group = {
+	.attrs = mitigation_attrs,
+};
+
+static void sev_snp_register_verify_mitigation(struct sev_device *sev)
+{
+	int rc;
+
+	if (!sev->snp_initialized || sev->verify_mit || !sev->snp_plat_status.feature_info ||
+	    !(sev->snp_feat_info_0.ecx & SNP_VERIFY_MITIGATION_SUPPORTED))
+		return;
+
+	sev->verify_mit = kobject_create_and_add("vulnerabilities", firmware_kobj);
+	if (!sev->verify_mit)
+		return;
+
+	rc = sysfs_create_group(sev->verify_mit, &mit_attr_group);
+	if (rc) {
+		kobject_put(sev->verify_mit);
+		sev->verify_mit = NULL;
+	}
+}
+
+static void sev_snp_unregister_verify_mitigation(struct sev_device *sev)
+{
+	if (!sev->verify_mit)
+		return;
+
+	sysfs_remove_group(sev->verify_mit, &mit_attr_group);
+	kobject_put(sev->verify_mit);
+	sev->verify_mit = NULL;
+}
+#else
+static void sev_snp_register_verify_mitigation(struct sev_device *sev) { }
+static void sev_snp_unregister_verify_mitigation(struct sev_device *sev) { }
+#endif
+
 static int __sev_snp_init_locked(int *error, unsigned int max_snp_asid)
 {
 	struct sev_data_range_list *snp_range_list __free(kfree) = NULL;
@@ -1669,6 +1808,13 @@ int sev_platform_init(struct sev_platform_init_args *args)
 	mutex_lock(&sev_cmd_mutex);
 	rc = _sev_platform_init_locked(args);
 	mutex_unlock(&sev_cmd_mutex);
+
+	/*
+	 * Register SNP mitigation sysfs attributes after the mutex is dropped
+	 * so that concurrent sysfs reads/writes do not deadlock init.
+	 */
+	if (!rc)
+		sev_snp_register_verify_mitigation(psp_master->sev_data);
 
 	return rc;
 }
@@ -2774,6 +2920,12 @@ static void sev_firmware_shutdown(struct sev_device *sev)
 	 */
 	if (sev->tio_status)
 		sev_tsm_uninit(sev);
+
+	/*
+	 * Concurrent access to the sysfs entry will call sev_do_cmd() for
+	 * SNP_VERIFY_MITIGATION which locks the mutex and can cause a deadlock.
+	 */
+	sev_snp_unregister_verify_mitigation(sev);
 
 	mutex_lock(&sev_cmd_mutex);
 
