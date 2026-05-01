@@ -465,7 +465,7 @@ static int drm_atomic_helper_crtc_normalize_zpos(struct drm_crtc *crtc,
 {
 	struct drm_atomic_state *state = crtc_state->state;
 	struct drm_device *dev = crtc->dev;
-	int total_planes = dev->mode_config.num_total_plane;
+	int total_planes = hweight32(crtc_state->plane_mask);
 	struct drm_plane_state **states;
 	struct drm_plane *plane;
 	int i, n = 0;
