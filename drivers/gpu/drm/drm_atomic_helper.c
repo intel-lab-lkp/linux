@@ -1926,6 +1926,45 @@ drm_atomic_helper_wait_for_vblanks(struct drm_device *dev,
 }
 EXPORT_SYMBOL(drm_atomic_helper_wait_for_vblanks);
 
+static int force_full_modeset(struct drm_crtc *crtc)
+{
+	struct drm_modeset_acquire_ctx ctx;
+	struct drm_crtc_state *crtc_state;
+	struct drm_atomic_state *state;
+	int ret;
+	int err;
+
+	if (drm_atomic_crtc_needs_modeset(crtc->state))
+		return -EBUSY;
+
+	DRM_MODESET_LOCK_ALL_BEGIN(crtc->dev, ctx, 0, err);
+	state = drm_atomic_state_alloc(crtc->dev);
+	if (!state)
+		return -ENOMEM;
+
+	state->acquire_ctx = &ctx;
+
+	crtc_state = drm_atomic_get_crtc_state(state, crtc);
+	if (IS_ERR(crtc_state)) {
+		ret = PTR_ERR(crtc_state);
+		goto out;
+	}
+
+	crtc_state->connectors_changed = true;
+	crtc_state->mode_changed = true;
+	crtc_state->active_changed = true;
+
+	drm_info(crtc->dev,
+		 "[CRTC:%d:%s] Attempting force full modeset...\n",
+		 crtc->base.id, crtc->name);
+
+	ret = drm_atomic_commit(state);
+out:
+	drm_atomic_state_put(state);
+	DRM_MODESET_LOCK_ALL_END(crtc->dev, ctx, err);
+	return ret;
+}
+
 /**
  * drm_atomic_helper_wait_for_flip_done - wait for all page flips to be done
  * @dev: DRM device
@@ -1949,17 +1988,23 @@ void drm_atomic_helper_wait_for_flip_done(struct drm_device *dev,
 
 	for (i = 0; i < dev->mode_config.num_crtc; i++) {
 		struct drm_crtc_commit *commit = state->crtcs[i].commit;
-		int ret;
 
 		crtc = state->crtcs[i].ptr;
 
 		if (!crtc || !commit)
 			continue;
 
-		ret = wait_for_completion_timeout(&commit->flip_done, 10 * HZ);
-		if (ret == 0)
+		if (!wait_for_completion_timeout(&commit->flip_done, 10 * HZ)) {
+			int ret;
 			drm_err(dev, "[CRTC:%d:%s] flip_done timed out\n",
 				crtc->base.id, crtc->name);
+
+			ret = force_full_modeset(crtc);
+			if (ret)
+				drm_err(dev,
+					"[CRTC:%d:%s] force full modeset failed! ret=%d\n",
+					crtc->base.id, crtc->name, ret);
+		}
 	}
 
 	if (state->fake_commit)
