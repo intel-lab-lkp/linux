@@ -283,9 +283,15 @@ int pdsc_adminq_post(struct pdsc *pdsc,
 		__func__, jiffies_to_msecs(time_done - time_start));
 
 	/* Check the results and clear an un-completed timeout */
-	if (time_after_eq(time_done, time_limit) && !completion_done(wc)) {
-		err = -ETIMEDOUT;
-		complete(wc);
+	if (time_after_eq(time_done, time_limit)) {
+		unsigned long irqflags;
+
+		spin_lock_irqsave(&pdsc->adminq_lock, irqflags);
+		if (!completion_done(wc)) {
+			err = -ETIMEDOUT;
+			complete(wc);
+		}
+		spin_unlock_irqrestore(&pdsc->adminq_lock, irqflags);
 	}
 
 	dev_dbg(pdsc->dev, "read admin queue completion idx %d:\n", index);
