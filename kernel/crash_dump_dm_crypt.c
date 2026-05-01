@@ -358,11 +358,15 @@ static ssize_t config_keys_restore_show(struct config_item *item, char *page)
 static ssize_t config_keys_restore_store(struct config_item *item,
 					  const char *page, size_t count)
 {
-	if (!restore)
-		restore_dm_crypt_keys_to_thread_keyring();
+	bool val;
 
-	if (kstrtobool(page, &restore))
+	if (kstrtobool(page, &val))
 		return -EINVAL;
+
+	if (val && !restore) {
+		if (!restore_dm_crypt_keys_to_thread_keyring())
+			restore = true;
+	}
 
 	return count;
 }
