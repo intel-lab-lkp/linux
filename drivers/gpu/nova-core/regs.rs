@@ -284,6 +284,53 @@ register! {
     }
 }
 
+// INTR_CTRL block.
+// Definition of the PF interrupt tree of the GPU interrupt controller. The PF
+// can also view VF interrupt trees, but that is not supported right now.
+
+register! {
+    /// Per-leaf pending interrupt bitmap. Bit N is set when vector
+    /// `(leaf * 32) + N` is pending. Reading returns the current pending bitmap;
+    /// writing acknowledges set bits (write-1-to-clear). 16 leaves cover the
+    /// Hopper/Blackwell+ maximum of 512 vectors; earlier architectures
+    /// (Turing/Ampere/Ada) only use indices 0..7.
+    pub(crate) NV_VF_INTR_LEAF(u32)[16] @ 0x00b81000 {}
+
+    /// Per-leaf interrupt enable set ("allow"). Writing a 1 to bit N enables
+    /// vector `(leaf * 32) + N` (write-1-to-set; writing 0 has no effect).
+    /// Used to unmask interrupts from a specific source.
+    pub(crate) NV_VF_INTR_LEAF_EN_SET(u32)[16] @ 0x00b81200 {}
+
+    /// Per-leaf interrupt enable clear ("block"). Writing a 1 to bit N disables
+    /// vector `(leaf * 32) + N` (write-1-to-clear; writing 0 has no effect).
+    /// Used to mask interrupts from a specific source.
+    pub(crate) NV_VF_INTR_LEAF_EN_CLEAR(u32)[16] @ 0x00b81400 {}
+
+    /// Top-level pending bitmap. Bit N is set if any enabled vector in subtree
+    /// N is pending. Each subtree covers two consecutive leaves
+    /// (subtree N = leaves 2N and 2N+1). The top bit clears automatically once
+    /// every pending vector in the subtree has been acknowledged via the
+    /// corresponding LEAF register.
+    pub(crate) NV_VF_INTR_TOP(u32) @ 0x00b81600 {}
+
+    /// Top-level enable set ("rearm"). Writing a 1 to bit N enables MSI
+    /// delivery for subtree N (write-1-to-set). The ISR writes the active
+    /// subtree mask here after servicing all pending leaves to resume MSI
+    /// generation.
+    pub(crate) NV_VF_INTR_TOP_EN_SET(u32) @ 0x00b81608 {}
+
+    /// Top-level enable clear ("unarm"). Writing a 1 to bit N disables MSI
+    /// delivery for subtree N (write-1-to-clear). The ISR writes the active
+    /// subtree mask here on entry to mask further MSI writes while servicing
+    /// the pending leaves.
+    pub(crate) NV_VF_INTR_TOP_EN_CLEAR(u32) @ 0x00b81610 {}
+
+    /// Synthetic interrupt trigger. Writing a vector number sets that vector's
+    /// LEAF bit as if the corresponding hardware source had asserted, allowing
+    /// software to inject interrupts. Used by the CPU doorbell self-test.
+    pub(crate) NV_VF_INTR_LEAF_TRIGGER(u32) @ 0x00b81640 {}
+}
+
 // PFALCON
 
 register! {
