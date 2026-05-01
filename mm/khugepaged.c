@@ -1402,7 +1402,13 @@ static enum scan_result collapse_huge_page(struct mm_struct *mm, unsigned long s
 	if (is_pmd_order(order)) { /* PMD collapse */
 		pgtable = pmd_pgtable(_pmd);
 		pgtable_trans_huge_deposit(mm, pmd, pgtable);
-		map_anon_folio_pmd_nopf(folio, pmd, vma, pmd_addr);
+		struct vm_fault vmf = {
+			.vma = vma,
+			.flags = 0,
+			.address = pmd_addr,
+			.orig_pmd = pmdp_get(pmd),
+		};
+		map_anon_folio_pmd_nopf(folio, &vmf, false);
 	} else { /* mTHP collapse */
 		map_anon_folio_pte_nopf(folio, pte, vma, start_addr, /*uffd_wp=*/ false);
 		smp_wmb(); /* make PTEs visible before PMD. See pmd_install() */

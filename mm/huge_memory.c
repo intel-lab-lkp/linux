@@ -1423,13 +1423,26 @@ static struct folio *vma_alloc_anon_folio_pmd(struct vm_area_struct *vma,
 	return folio;
 }
 
-void map_anon_folio_pmd_nopf(struct folio *folio, pmd_t *pmd,
-		struct vm_area_struct *vma, unsigned long haddr)
+void map_anon_folio_pmd_nopf(struct folio *folio, struct vm_fault *vmf,
+		bool cow)
 {
 	pmd_t entry;
+	struct vm_area_struct *vma = vmf->vma;
+	pmd_t *pmd = vmf->pmd;
+	pmd_t orig_pmd = vmf->orig_pmd;
+	unsigned long haddr = vmf->address & HPAGE_PMD_MASK;
+	const bool unshare = vmf->flags & FAULT_FLAG_UNSHARE;
 
 	entry = folio_mk_pmd(folio, vma->vm_page_prot);
-	entry = maybe_pmd_mkwrite(pmd_mkdirty(entry), vma);
+	if (unlikely(cow && unshare)) {
+		VM_WARN_ON(pmd_write(orig_pmd));
+		if (pmd_soft_dirty(orig_pmd))
+			entry = pmd_mksoft_dirty(entry);
+		if (pmd_uffd_wp(orig_pmd))
+			entry = pmd_mkuffd_wp(entry);
+	} else {
+		entry = maybe_pmd_mkwrite(pmd_mkdirty(entry), vma);
+	}
 	folio_add_new_anon_rmap(folio, vma, haddr, RMAP_EXCLUSIVE);
 	folio_add_lru_vma(folio, vma);
 	set_pmd_at(vma->vm_mm, haddr, pmd, entry);
@@ -1437,19 +1450,18 @@ void map_anon_folio_pmd_nopf(struct folio *folio, pmd_t *pmd,
 	deferred_split_folio(folio, false);
 }
 
-static void map_anon_folio_pmd_pf(struct folio *folio, pmd_t *pmd,
-		struct vm_area_struct *vma, unsigned long haddr)
+static void map_anon_folio_pmd_pf(struct folio *folio, struct vm_fault *vmf,
+		bool cow)
 {
-	map_anon_folio_pmd_nopf(folio, pmd, vma, haddr);
-	add_mm_counter(vma->vm_mm, MM_ANONPAGES, HPAGE_PMD_NR);
+	map_anon_folio_pmd_nopf(folio, vmf, cow);
+	add_mm_counter(vmf->vma->vm_mm, MM_ANONPAGES, HPAGE_PMD_NR);
 	count_vm_event(THP_FAULT_ALLOC);
 	count_mthp_stat(HPAGE_PMD_ORDER, MTHP_STAT_ANON_FAULT_ALLOC);
-	count_memcg_event_mm(vma->vm_mm, THP_FAULT_ALLOC);
+	count_memcg_event_mm(vmf->vma->vm_mm, THP_FAULT_ALLOC);
 }
 
 static vm_fault_t __do_huge_pmd_anonymous_page(struct vm_fault *vmf)
 {
-	unsigned long haddr = vmf->address & HPAGE_PMD_MASK;
 	struct vm_area_struct *vma = vmf->vma;
 	struct folio *folio;
 	pgtable_t pgtable;
@@ -1483,7 +1495,7 @@ static vm_fault_t __do_huge_pmd_anonymous_page(struct vm_fault *vmf)
 			return ret;
 		}
 		pgtable_trans_huge_deposit(vma->vm_mm, vmf->pmd, pgtable);
-		map_anon_folio_pmd_pf(folio, vmf->pmd, vma, haddr);
+		map_anon_folio_pmd_pf(folio, vmf, false);
 		mm_inc_nr_ptes(vma->vm_mm);
 		spin_unlock(vmf->ptl);
 	}
@@ -2174,7 +2186,7 @@ static vm_fault_t do_huge_zero_wp_pmd(struct vm_fault *vmf)
 	if (ret)
 		goto release;
 	(void)pmdp_huge_clear_flush(vma, haddr, vmf->pmd);
-	map_anon_folio_pmd_pf(folio, vmf->pmd, vma, haddr);
+	map_anon_folio_pmd_pf(folio, vmf, true);
 	goto unlock;
 release:
 	folio_put(folio);
