@@ -10,6 +10,8 @@ use kernel::{
     prelude::*,
 };
 
+mod intr_ctrl;
+
 pub(crate) fn alloc_vector(pdev: &pci::Device<Bound>) -> Result<pci::IrqVector<'_>> {
     let msi_types = IrqTypes::default().with(IrqType::Msi).with(IrqType::MsiX);
 
