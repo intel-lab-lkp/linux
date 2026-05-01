@@ -525,8 +525,8 @@ void folio_mark_accessed(struct folio *folio)
 		return;
 	}
 
-	if (!folio_test_referenced(folio)) {
-		folio_set_referenced(folio);
+	if (!folio_is_referenced_by_bit(folio)) {
+		folio_mark_referenced_by_bit(folio);
 	} else if (folio_test_unevictable(folio)) {
 		/*
 		 * Unevictable pages are on the "LRU_UNEVICTABLE" list. But,
@@ -544,7 +544,7 @@ void folio_mark_accessed(struct folio *folio)
 			folio_activate(folio);
 		else
 			__lru_cache_activate_folio(folio);
-		folio_clear_referenced(folio);
+		folio_clear_referenced_by_bit(folio);
 		workingset_activation(folio);
 	}
 	if (folio_test_idle(folio))
