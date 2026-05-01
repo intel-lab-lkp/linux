@@ -3275,12 +3275,19 @@ static int __ublk_fetch(struct io_uring_cmd *cmd, struct ublk_device *ub,
 
 	WARN_ON_ONCE(io->flags & UBLK_IO_FLAG_OWNED_BY_SRV);
 
-	ublk_fill_io_cmd(io, cmd);
-
-	if (ublk_dev_support_batch_io(ub))
+	if (ublk_dev_support_batch_io(ub)) {
 		WRITE_ONCE(io->task, NULL);
-	else
+	} else {
+		/*
+		 * FETCH must come from a real userspace task, not a
+		 * kworker is actually io_uring fallback workqueue.
+		 */
+		if (current->flags & (PF_KTHREAD | PF_WQ_WORKER))
+			return -EINVAL;
 		WRITE_ONCE(io->task, get_task_struct(current));
+	}
+
+	ublk_fill_io_cmd(io, cmd);
 
 	return 0;
 }
