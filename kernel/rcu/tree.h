@@ -89,6 +89,17 @@ struct rcu_node {
 				/* Tasks blocked in RCU read-side critical */
 				/*  section.  Tasks are placed at the head */
 				/*  of this list and age towards the tail. */
+				/*  A task on this list will have its */
+				/*  ->rcu_node_entry_dqs equal to 0. */
+	struct list_head dqs_blkd_tasks;
+				/* Tasks that were in ->blkd_tasks that */
+				/*  executed outermost rcu_read_unlock(), */
+				/*  but where preemption (or better) was */
+				/*  disabled.  If these are preempted in */
+				/*  a later rcu_read_lock() segment, then */
+				/*  they are moved back to ->blkd_tasks. */
+				/*  A task on this list will have its */
+				/*  ->rcu_node_entry_dqs equal to 1. */
 	struct list_head *gp_tasks;
 				/* Pointer to the first task blocking the */
 				/*  current grace period, or NULL if there */

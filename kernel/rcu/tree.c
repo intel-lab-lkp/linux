@@ -4738,6 +4738,7 @@ static void __init rcu_init_one(void)
 			}
 			rnp->level = i;
 			INIT_LIST_HEAD(&rnp->blkd_tasks);
+			INIT_LIST_HEAD(&rnp->dqs_blkd_tasks);
 			rcu_init_one_nocb(rnp);
 			init_waitqueue_head(&rnp->exp_wq[0]);
 			init_waitqueue_head(&rnp->exp_wq[1]);
