@@ -577,9 +577,10 @@ with /sys/kernel/config/crash_dm_crypt_keys for setup,
 
 1. Tell the first kernel what logon keys are needed to unlock the disk volumes,
     # Add key #1
-    mkdir /sys/kernel/config/crash_dm_crypt_keys/7d26b7b4-e342-4d2d-b660-7426b0996720
+    VOL1_UUID=7d26b7b4-e342-4d2d-b660-7426b0996720
+    mkdir /sys/kernel/config/crash_dm_crypt_keys/$VOL1_UUID
     # Add key #1's description
-    echo cryptsetup:7d26b7b4-e342-4d2d-b660-7426b0996720 > /sys/kernel/config/crash_dm_crypt_keys/description
+    echo cryptsetup:$VOL1_UUID > /sys/kernel/config/crash_dm_crypt_keys/$VOL1_UUID/description
 
     # how many keys do we have now?
     cat /sys/kernel/config/crash_dm_crypt_keys/count
@@ -593,7 +594,9 @@ with /sys/kernel/config/crash_dm_crypt_keys for setup,
 
     # To support CPU/memory hot-plugging, reuse keys already saved to reserved
     # memory
-    echo true > /sys/kernel/config/crash_dm_crypt_key/reuse
+    # Note if CONFIG_CRASH_HOTPLUG is enabled, this API is totally unnecessary
+    # thus will be disabled.
+    echo true > /sys/kernel/config/crash_dm_crypt_keys/reuse
 
 2. Load the dump-capture kernel
 
