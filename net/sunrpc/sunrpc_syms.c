@@ -97,23 +97,25 @@ init_sunrpc(void)
 	if (err)
 		goto out2;
 
-	cache_initialize();
-
-	err = register_pernet_subsys(&sunrpc_net_ops);
+	err = cache_initialize();
 	if (err)
 		goto out3;
 
-	err = register_rpc_pipefs();
+	err = register_pernet_subsys(&sunrpc_net_ops);
 	if (err)
 		goto out4;
 
-	err = rpc_sysfs_init();
+	err = register_rpc_pipefs();
 	if (err)
 		goto out5;
 
-	err = genl_register_family(&sunrpc_nl_family);
+	err = rpc_sysfs_init();
 	if (err)
 		goto out6;
+
+	err = genl_register_family(&sunrpc_nl_family);
+	if (err)
+		goto out7;
 
 	sunrpc_debugfs_init();
 #if IS_ENABLED(CONFIG_SUNRPC_DEBUG)
@@ -123,12 +125,14 @@ init_sunrpc(void)
 	init_socket_xprt();	/* clnt sock transport */
 	return 0;
 
-out6:
+out7:
 	rpc_sysfs_exit();
-out5:
+out6:
 	unregister_rpc_pipefs();
-out4:
+out5:
 	unregister_pernet_subsys(&sunrpc_net_ops);
+out4:
+	cache_destroy();
 out3:
 	rpcauth_remove_module();
 out2:
@@ -157,6 +161,7 @@ cleanup_sunrpc(void)
 	rpc_unregister_sysctl();
 #endif
 	rcu_barrier(); /* Wait for completion of call_rcu()'s */
+	cache_destroy();
 }
 MODULE_DESCRIPTION("Sun RPC core");
 MODULE_LICENSE("GPL");
