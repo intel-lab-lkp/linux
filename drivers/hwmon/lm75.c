@@ -123,7 +123,9 @@ struct lm75_data {
 
 static const u8 lm75_sample_set_masks[] = { 0 << 5, 1 << 5, 2 << 5, 3 << 5 };
 
-#define LM75_SAMPLE_CLEAR_MASK	(3 << 5)
+#define LM75_ALERT_POLARITY_HIGH_8_BIT	(BIT(2))
+#define LM75_ALERT_POLARITY_HIGH_16_BIT	(BIT(2) << 8)
+#define LM75_SAMPLE_CLEAR_MASK		(3 << 5)
 
 /* The structure below stores the configuration values of the supported devices.
  * In case of being supported multiple configurations, the default one must
@@ -137,7 +139,7 @@ static const struct lm75_params device_params[] = {
 	},
 	[as6200] = {
 		.config_reg_16bits = true,
-		.set_mask = 0x94C0,	/* 8 sample/s, 4 CF, positive polarity */
+		.set_mask = 0x90C0,	/* 8 sample/s, 4 CF */
 		.default_resolution = 12,
 		.default_sample_time = 125,
 		.num_sample_times = 4,
@@ -732,6 +734,7 @@ static int lm75_generic_probe(struct device *dev, const char *name,
 	struct device *hwmon_dev;
 	struct lm75_data *data;
 	int status, err;
+	u16 set_mask;
 
 	data = devm_kzalloc(dev, sizeof(struct lm75_data), GFP_KERNEL);
 	if (!data)
@@ -766,8 +769,15 @@ static int lm75_generic_probe(struct device *dev, const char *name,
 		return err;
 	data->orig_conf = status;
 
-	err = lm75_write_config(data, data->params->set_mask,
-				data->params->clr_mask);
+	set_mask = data->params->set_mask;
+	if (of_property_read_bool(dev->of_node, "lm75,alert-polarity-active-high")) {
+		if (!data->params->config_reg_16bits)
+			set_mask |= LM75_ALERT_POLARITY_HIGH_8_BIT;
+		else
+			set_mask |= LM75_ALERT_POLARITY_HIGH_16_BIT;
+	}
+
+	err = lm75_write_config(data, set_mask, data->params->clr_mask);
 	if (err)
 		return err;
 
