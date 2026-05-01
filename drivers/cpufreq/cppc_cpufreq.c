@@ -814,6 +814,14 @@ static unsigned int cppc_cpufreq_get_rate(unsigned int cpu)
 	if (!delivered_perf)
 		goto out_invalid_counters;
 
+	/*
+	 * Sampling jitter on the CPC counter pair can produce
+	 * delivered_perf > highest_perf, which cppc_perf_to_khz() would
+	 * extrapolate to a frequency above cpuinfo_max_freq. Discard.
+	 */
+	if (delivered_perf > cpu_data->perf_caps.highest_perf)
+		goto out_invalid_counters;
+
 	return cppc_perf_to_khz(&cpu_data->perf_caps, delivered_perf);
 
 out_invalid_counters:
