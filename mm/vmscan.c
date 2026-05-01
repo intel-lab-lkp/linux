@@ -901,7 +901,7 @@ static enum folio_references folio_check_references(struct folio *folio,
 		return folio_promote_lru_refs(folio) ? FOLIOREF_ACTIVATE : FOLIOREF_KEEP;
 	}
 
-	referenced_folio = folio_test_clear_referenced(folio);
+	referenced_folio = folio_test_clear_referenced_bit(folio);
 
 	if (referenced_ptes) {
 		/*
@@ -918,7 +918,7 @@ static enum folio_references folio_check_references(struct folio *folio,
 		 * so that recently deactivated but used folios are
 		 * quickly recovered.
 		 */
-		folio_set_referenced(folio);
+		folio_mark_referenced_by_bit(folio);
 
 		if (referenced_folio || referenced_ptes > 1)
 			return FOLIOREF_ACTIVATE;
