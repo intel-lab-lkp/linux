@@ -931,6 +931,7 @@ struct task_struct {
 	int				rcu_read_lock_nesting;
 	union rcu_special		rcu_read_unlock_special;
 	struct list_head		rcu_node_entry;
+	s8				rcu_node_entry_dqs;
 	struct rcu_node			*rcu_blocked_node;
 #endif /* #ifdef CONFIG_PREEMPT_RCU */
 

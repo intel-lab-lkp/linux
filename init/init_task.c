@@ -185,6 +185,7 @@ struct task_struct init_task __aligned(L1_CACHE_BYTES) = {
 	.rcu_read_lock_nesting = 0,
 	.rcu_read_unlock_special.s = 0,
 	.rcu_node_entry = LIST_HEAD_INIT(init_task.rcu_node_entry),
+	.rcu_node_entry_dqs = -1,
 	.rcu_blocked_node = NULL,
 #endif
 #ifdef CONFIG_TASKS_RCU

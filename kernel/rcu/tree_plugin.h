@@ -194,6 +194,7 @@ static void rcu_preempt_ctxt_queue(struct rcu_node *rnp, struct rcu_data *rdp)
 		 * blocking the already-waiting GPs.
 		 */
 		list_add(&t->rcu_node_entry, &rnp->blkd_tasks);
+		t->rcu_node_entry_dqs = 0;
 		break;
 
 	case                                              RCU_EXP_BLKD:
@@ -212,6 +213,7 @@ static void rcu_preempt_ctxt_queue(struct rcu_node *rnp, struct rcu_data *rdp)
 		 * already queued tasks that are not blocking it.
 		 */
 		list_add_tail(&t->rcu_node_entry, &rnp->blkd_tasks);
+		t->rcu_node_entry_dqs = 0;
 		break;
 
 	case                RCU_EXP_TASKS |               RCU_EXP_BLKD:
@@ -225,6 +227,7 @@ static void rcu_preempt_ctxt_queue(struct rcu_node *rnp, struct rcu_data *rdp)
 		 * the first task blocking the expedited GP.
 		 */
 		list_add(&t->rcu_node_entry, rnp->exp_tasks);
+		t->rcu_node_entry_dqs = 0;
 		break;
 
 	case RCU_GP_TASKS |                 RCU_GP_BLKD:
@@ -236,6 +239,7 @@ static void rcu_preempt_ctxt_queue(struct rcu_node *rnp, struct rcu_data *rdp)
 		 * after the first task blocking the normal GP.
 		 */
 		list_add(&t->rcu_node_entry, rnp->gp_tasks);
+		t->rcu_node_entry_dqs = 0;
 		break;
 
 	default:
@@ -539,6 +543,7 @@ rcu_preempt_deferred_qs_irqrestore(struct task_struct *t, unsigned long flags)
 		empty_exp = sync_rcu_exp_done(rnp);
 		np = rcu_next_node_entry(t, rnp);
 		list_del_init(&t->rcu_node_entry);
+		t->rcu_node_entry_dqs = -1;
 		t->rcu_blocked_node = NULL;
 		trace_rcu_unlock_preempted_task(TPS("rcu_preempt"),
 						rnp->gp_seq, t->pid);
