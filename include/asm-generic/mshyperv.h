@@ -23,6 +23,7 @@
 #include <acpi/acpi_numa.h>
 #include <linux/cpumask.h>
 #include <linux/nmi.h>
+#include <linux/pci.h>
 #include <asm/ptrace.h>
 #include <hyperv/hvhdk.h>
 
@@ -328,6 +329,13 @@ static inline enum hv_isolation_type hv_get_isolation_type(void)
 	return HV_ISOLATION_TYPE_NONE;
 }
 #endif /* CONFIG_HYPERV */
+
+#if IS_ENABLED(CONFIG_PCI_HYPERV)
+u64 hv_pci_vmbus_device_id(struct pci_dev *pdev);
+#else
+static inline u64 hv_pci_vmbus_device_id(struct pci_dev *pdev)
+{ return 0; }
+#endif /* IS_ENABLED(CONFIG_PCI_HYPERV) */
 
 #if IS_ENABLED(CONFIG_MSHV_ROOT)
 static inline bool hv_root_partition(void)
