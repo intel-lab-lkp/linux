@@ -6,22 +6,29 @@
  */
 
 #include <linux/namei.h>
+#include <linux/completion.h>
+#include <linux/kmemleak.h>
+#include <linux/hash.h>
 #include "cifsglob.h"
 #include "cifsproto.h"
 #include "cifs_debug.h"
 #include "smb2proto.h"
 #include "cached_dir.h"
+#include "trace.h"
 
 static struct cached_fid *init_cached_dir(const char *path);
 static void free_cached_dir(struct cached_fid *cfid);
 static void smb2_close_cached_fid(struct kref *ref);
 static void cfids_laundromat_worker(struct work_struct *work);
 
+#define CACHED_DIRENT_HASH_BITS	7
+
 struct cached_dir_dentry {
 	struct list_head entry;
 	struct dentry *dentry;
 };
 
+/* Generic helpers */
 bool cached_dir_is_valid(struct cached_fid *cfid)
 {
 	bool valid;
@@ -53,50 +60,689 @@ bool cached_dir_copy_lease_key(struct cached_fid *cfid,
 	return valid;
 }
 
+/* Cached mapping helpers */
+static inline const char *cached_dirent_name(const struct cifs_cached_dir_mapping *cached_mapping,
+					     const struct cached_dirent *de)
+{
+	if (de->external_name)
+		return de->name;
+
+	return ((const char *)cached_mapping) + de->inline_name_off;
+}
+
+static inline struct cifs_cached_dir_mapping *cached_dir_mapping(struct folio *folio)
+{
+	return folio_address(folio);
+}
+
+static inline size_t cached_dirent_array_bytes(unsigned int entries)
+{
+	return struct_size((struct cifs_cached_dir_mapping *)NULL, entries, entries);
+}
+
+static inline bool cached_dirent_has_space_for_record(const struct cifs_cached_dir_mapping *cached_mapping,
+						      size_t record_bytes)
+{
+	return cached_dirent_array_bytes(cached_mapping->entries_count + 1) + record_bytes <=
+		cached_mapping->name_tail_offset;
+}
+
+/* for short names, try to place them inside the folio */
+static bool cached_dirent_try_inline_name(struct folio *folio,
+					  struct cifs_cached_dir_mapping *cached_mapping,
+					  struct cached_dirent *de,
+					  const char *name,
+					  unsigned int namelen,
+					  const char **stored_name)
+{
+	char *base;
+	u32 tail;
+
+	if (namelen > CIFS_CACHED_INLINE_NAME_LEN)
+		return false;
+
+	/* try to fit cached_dirent+name in the same folio (inline) */
+	if (!cached_dirent_has_space_for_record(cached_mapping, namelen))
+		return false;
+
+	base = folio_address(folio);
+	if (!base)
+		return false;
+
+	tail = cached_mapping->name_tail_offset - namelen;
+	memcpy(base + tail, name, namelen);
+	de->external_name = false;
+	de->inline_name_off = tail;
+	de->name = NULL;
+	cached_mapping->name_tail_offset = tail;
+	*stored_name = base + tail;
+	return true;
+}
+
+static unsigned int cached_dir_folio_count(struct cached_dirents *cde)
+{
+	struct folio_queue *fq;
+	unsigned int count = 0;
+
+	for (fq = cde->folioq; fq; fq = fq->next) {
+		count += folioq_count(fq);
+	}
+
+	return count;
+}
+
+/* insert cursor helpers to aid fast appends to cached_dir */
+static void cached_dir_reset_insert_cursor_locked(struct cached_dirents *cde)
+{
+	cde->insert_cursor_fq = cde->folioq;
+	cde->insert_cursor_slot = 0;
+	cde->insert_cursor_folio_index = 0;
+}
+
+static void cached_dir_set_insert_cursor_locked(struct cached_dirents *cde,
+						struct folio_queue *fq,
+						unsigned int slot,
+						unsigned int folio_index)
+{
+	cde->insert_cursor_fq = fq;
+	cde->insert_cursor_slot = slot;
+	cde->insert_cursor_folio_index = folio_index;
+}
+
+static bool cached_dirents_use_folioq_locked(struct cached_dirents *cde)
+{
+	return cde->folioq != NULL;
+}
+
+static void cached_dir_init_new_folios(struct cached_dirents *cde,
+				       unsigned int old_folio_count)
+{
+	struct folio_queue *fq;
+	unsigned int folio_index = 0;
+
+	for (fq = cde->folioq; fq; fq = fq->next) {
+		for (int s = 0; s < folioq_count(fq); s++, folio_index++) {
+			struct folio *folio = folioq_folio(fq, s);
+			void *base;
+
+			if (folio_index < old_folio_count)
+				continue;
+
+			base = folio_address(folio);
+			if (base) {
+				memset(base, 0, folio_size(folio));
+				cached_dir_mapping(folio)->name_tail_offset = folio_size(folio);
+			}
+		}
+	}
+}
+
+/*
+ * Expand the folioq backing store for a cached directory by one PAGE_SIZE.
+ * Called by add_cached_dirent_folioq_locked() when no free slot is found in
+ * the existing folios, and by convert_cached_dirents_list_to_folioq_locked()
+ * when initializing folioq mode for the first time.
+ *
+ * After growing, newly added folios are zeroed and their name_tail_offset is
+ * set to folio_size so that inline name packing starts from the tail.
+ * The insert cursor must be reset by the caller after this returns.
+ */
+static int grow_cached_dirents_folioq_locked(struct cached_dirents *cde)
+{
+	unsigned int old_folio_count;
+	size_t old_size, target_size;
+	int rc;
+
+	old_folio_count = cached_dir_folio_count(cde);
+	old_size = cde->folioq_size;
+	target_size = old_size + PAGE_SIZE;
+
+	cifs_dbg(FYI,
+		 "cached_dir folioq alloc: old_size=%zu target_size=%zu\n",
+		 old_size, target_size);
+
+	rc = netfs_alloc_folioq_buffer(NULL, &cde->folioq,
+				      &cde->folioq_size,
+				      target_size, GFP_NOFS);
+	if (rc < 0)
+		return rc;
+
+	cached_dir_init_new_folios(cde, old_folio_count);
+
+	return 0;
+}
+
+/* lookup cached_dirent by traversing the list */
+static struct cached_dir_lookup_entry *lookup_cached_dirent_list_locked(struct cached_dirents *cde,
+							 const char *name,
+							 unsigned int namelen)
+{
+	struct cached_dir_lookup_entry *entry;
+	u32 name_hash;
+
+	name_hash = full_name_hash(NULL, name, namelen);
+
+	list_for_each_entry(entry, &cde->entry_list, list_node) {
+		if (entry->name_hash == name_hash &&
+		    entry->dirent &&
+		    entry->dirent->name_len == namelen &&
+		    memcmp(entry->dirent->name, name, namelen) == 0)
+			return entry;
+	}
+
+	return NULL;
+}
+
+/* lookup cached_dirent in folioq by using the hash table */
+static struct cached_dir_lookup_entry *lookup_cached_dirent_locked(struct cached_dirents *cde,
+								   const char *name,
+								   unsigned int namelen)
+{
+	struct cached_dir_lookup_entry *entry;
+	struct hlist_head *bucket;
+	u32 name_hash;
+
+	if (!cde->lookup_ht)
+		return NULL;
+
+	name_hash = full_name_hash(NULL, name, namelen);
+	bucket = &cde->lookup_ht[hash_32(name_hash, CACHED_DIRENT_HASH_BITS)];
+
+	hlist_for_each_entry(entry, bucket, hash_node) {
+		if (entry->name_hash == name_hash &&
+		    entry->dirent &&
+		    entry->dirent->name_len == namelen &&
+		    memcmp(entry->dirent->name, name, namelen) == 0)
+			return entry;
+	}
+
+	return NULL;
+}
+
+/* lookup wrapper to decide if the entry is in list or folioq */
+static struct cached_dir_lookup_entry *lookup_cached_dirent_entry_locked(struct cached_dirents *cde,
+								  const char *name,
+								  unsigned int namelen)
+{
+	if (cached_dirents_use_folioq_locked(cde))
+		return lookup_cached_dirent_locked(cde, name, namelen);
+
+	return lookup_cached_dirent_list_locked(cde, name, namelen);
+}
+
+/* lookup the last cached_dir_mapping in the folioq */
+static struct cifs_cached_dir_mapping *last_cached_dir_mapping_locked(struct cached_dirents *cde)
+{
+	struct folio_queue *fq;
+	unsigned int slot;
+	struct cifs_cached_dir_mapping *last = NULL;
+
+	lockdep_assert_held(&cde->de_mutex);
+
+	if (!cde->folioq)
+		return NULL;
+
+	/* Fast path: the insert cursor tracks the most recent append location. */
+	if (cde->insert_cursor_fq) {
+		slot = cde->insert_cursor_slot;
+		if (slot < folioq_count(cde->insert_cursor_fq)) {
+			last = cached_dir_mapping(folioq_folio(cde->insert_cursor_fq, slot));
+			if (last && last->entries_count)
+				return last;
+		}
+	}
+
+	for (fq = cde->folioq; fq; fq = fq->next) {
+		for (int s = 0; s < folioq_count(fq); s++) {
+			struct cifs_cached_dir_mapping *cached_mapping;
+
+			cached_mapping = cached_dir_mapping(folioq_folio(fq, s));
+			if (cached_mapping && cached_mapping->entries_count)
+				last = cached_mapping;
+		}
+	}
+
+	return last;
+}
+
+/* emit dirents from the cache, starting with the current position of ctx */
 static bool emit_cached_dirents(struct cached_dirents *cde,
 				struct dir_context *ctx)
 {
-	struct cached_dirent *dirent;
+	struct folio_queue *fq;
 	bool rc;
 
 	lockdep_assert_held(&cde->de_mutex);
 
-	list_for_each_entry(dirent, &cde->entries, entry) {
-		/*
-		 * Skip all early entries prior to the current lseek()
-		 * position.
-		 */
-		if (ctx->pos > dirent->pos)
-			continue;
-		/*
-		 * We recorded the current ->pos value for the dirent
-		 * when we stored it in the cache.
-		 * However, this sequence of ->pos values may have holes
-		 * in it, for example dot-dirs returned from the server
-		 * are suppressed.
-		 * Handle this by forcing ctx->pos to be the same as the
-		 * ->pos of the current dirent we emit from the cache.
-		 * This means that when we emit these entries from the cache
-		 * we now emit them with the same ->pos value as in the
-		 * initial scan.
-		 */
-		ctx->pos = dirent->pos;
-		rc = dir_emit(ctx, dirent->name, dirent->namelen,
-			      dirent->fattr.cf_uniqueid,
-			      dirent->fattr.cf_dtype);
-		if (!rc)
-			return rc;
-		ctx->pos++;
+	/* if folioq is empty, this is a small dir; dirents will be found in list */
+	if (!cde->folioq) {
+		struct cached_dir_lookup_entry *entry;
+
+		list_for_each_entry(entry, &cde->entry_list, list_node) {
+			struct cached_dirent *dirent = entry->dirent;
+
+			if (dirent->tombstone)
+				continue;
+			if (ctx->pos > dirent->ctx_pos)
+				continue;
+
+			ctx->pos = dirent->ctx_pos;
+			rc = dir_emit(ctx, dirent->name, dirent->name_len,
+				      dirent->fattr.cf_uniqueid,
+				      dirent->fattr.cf_dtype);
+			if (!rc)
+				return rc;
+			ctx->pos++;
+		}
+
+		return cde->is_valid;
+	}
+
+	/* large dir; emit from folioq */
+	for (fq = cde->folioq; fq; fq = fq->next) {
+		for (int s = 0; s < folioq_count(fq); s++) {
+			struct folio *folio = folioq_folio(fq, s);
+			struct cifs_cached_dir_mapping *cached_mapping;
+
+			cached_mapping = cached_dir_mapping(folio);
+			if (!cached_mapping)
+				return false;
+
+			for (u32 i = 0; i < cached_mapping->entries_count; i++) {
+				struct cached_dirent *dirent = &cached_mapping->entries[i];
+				const char *name;
+
+				if (dirent->tombstone)
+					continue;
+
+				name = cached_dirent_name(cached_mapping, dirent);
+
+				/*
+				 * Skip all early entries prior to the current lseek()
+				 * position.
+				 */
+				if (ctx->pos > dirent->ctx_pos)
+					continue;
+				/*
+				 * We recorded the current ->pos value for the dirent
+				 * when we stored it in the cache.
+				 * However, this sequence of ->pos values may have holes
+				 * in it, for example dot-dirs returned from the server
+				 * are suppressed.
+				 * Handle this by forcing ctx->pos to be the same as the
+				 * ->pos of the current dirent we emit from the cache.
+				 * This means that when we emit these entries from the cache
+				 * we now emit them with the same ->pos value as in the
+				 * initial scan.
+				 */
+				ctx->pos = dirent->ctx_pos;
+				rc = dir_emit(ctx, name, dirent->name_len,
+					      dirent->fattr.cf_uniqueid,
+					      dirent->fattr.cf_dtype);
+				if (!rc)
+					return rc;
+				ctx->pos++;
+			}
+
+			if (cached_mapping->folio_is_eof)
+				return true;
+		}
 	}
 	return true;
 }
 
+/* release the lookup hashtable */
+static void release_lookup_table_locked(struct cached_dirents *cde)
+{
+	int bucket;
+
+	if (!cde->lookup_ht)
+		return;
+
+	for (bucket = 0; bucket < (1 << CACHED_DIRENT_HASH_BITS); bucket++) {
+		struct cached_dir_lookup_entry *entry;
+		struct hlist_node *tmp;
+
+		hlist_for_each_entry_safe(entry, tmp, &cde->lookup_ht[bucket], hash_node) {
+			hlist_del(&entry->hash_node);
+			kfree(entry);
+		}
+	}
+
+	kfree(cde->lookup_ht);
+	cde->lookup_ht = NULL;
+	cde->lookup_bytes = 0;
+}
+
+/* release all cached_dirents in list */
+static void release_cached_dirents_list_locked(struct cached_dirents *cde)
+{
+	struct cached_dir_lookup_entry *entry;
+	struct cached_dir_lookup_entry *tmp;
+
+	list_for_each_entry_safe(entry, tmp, &cde->entry_list, list_node) {
+		list_del(&entry->list_node);
+		if (entry->dirent) {
+			if (entry->dirent->external_name)
+				kfree((void *)entry->dirent->name);
+			kfree(entry->dirent);
+		}
+		kfree(entry);
+	}
+
+	cde->entry_list_count = 0;
+}
+
+/* release all cached_dirents in folioq */
+static void release_cached_dirents_folioq_locked(struct cached_dirents *cde)
+{
+	struct folio_queue *fq;
+
+	lockdep_assert_held(&cde->de_mutex);
+
+	for (fq = cde->folioq; fq; fq = fq->next) {
+		for (int s = 0; s < folioq_count(fq); s++) {
+			struct folio *folio = folioq_folio(fq, s);
+			struct cifs_cached_dir_mapping *cached_mapping;
+
+			cached_mapping = cached_dir_mapping(folio);
+			if (!cached_mapping)
+				continue;
+
+			for (u32 i = 0; i < cached_mapping->entries_count; i++)
+				if (cached_mapping->entries[i].external_name)
+					kfree((void *)cached_mapping->entries[i].name);
+		}
+	}
+
+	if (cde->folioq) {
+		cifs_dbg(FYI, "cached_dir folioq free: old_size=%zu target_size=%d\n",
+			 cde->folioq_size, 0);
+		netfs_free_folioq_buffer(cde->folioq);
+		cde->folioq = NULL;
+	}
+
+	cde->folioq_size = 0;
+}
+
+/* release wrapper for cached_dirents */
+static void release_cached_dirents_locked(struct cached_dirents *cde)
+{
+	lockdep_assert_held(&cde->de_mutex);
+
+	if (cached_dirents_use_folioq_locked(cde))
+		release_cached_dirents_folioq_locked(cde);
+	else
+		release_cached_dirents_list_locked(cde);
+
+	release_lookup_table_locked(cde);
+
+	cde->entries_count = 0;
+	cde->external_name_bytes = 0;
+	cde->lookup_bytes = 0;
+	cde->bytes_used = 0;
+	cde->dir_inode = NULL;
+	cached_dir_reset_insert_cursor_locked(cde);
+}
+
+/* invalidate cached_dirents and release resources, but keep the cache structure for reuse */
+static void fail_cached_dir_locked(struct cached_dirents *cde)
+{
+	cde->is_failed = 1;
+	release_cached_dirents_locked(cde);
+	/*
+	 * Reset the file pointer so the next cifs_readdir from position 0
+	 * can claim this slot and repopulate the cache.
+	 */
+	cde->file = NULL;
+}
+
+/* insert cached_dirent into lookup hashtable */
+static int insert_cached_dir_lookup_locked(struct cached_dirents *cde,
+					   const char *name,
+					   unsigned int namelen,
+					   struct cached_dirent *dirent,
+					   bool pending_dcache)
+{
+	struct cached_dir_lookup_entry *entry;
+	struct hlist_head *bucket;
+
+	entry = kzalloc(sizeof(*entry), GFP_KERNEL);
+	if (!entry)
+		return -ENOMEM;
+
+	entry->name_hash = full_name_hash(NULL, name, namelen);
+	entry->dirent = dirent;
+	entry->pending_dcache = pending_dcache;
+	init_completion(&entry->dcache_complete);
+
+	bucket = &cde->lookup_ht[hash_32(entry->name_hash, CACHED_DIRENT_HASH_BITS)];
+	hlist_add_head(&entry->hash_node, bucket);
+	cde->lookup_bytes += sizeof(*entry);
+	return 0;
+}
+
+/* add cached_dirent to folioq */
+static bool add_cached_dirent_folioq_locked(struct cached_dirents *cde,
+					    loff_t ctx_pos,
+					    const char *name,
+					    unsigned int namelen,
+					    const struct cifs_fattr *fattr,
+					    bool pending_dcache)
+{
+	struct cached_dirent *de;
+	struct cifs_cached_dir_mapping *cached_mapping = NULL;
+	const char *stored_name;
+	struct folio *target_folio = NULL;
+	struct folio_queue *fq;
+	unsigned int cur_folio;
+	unsigned int start_slot;
+	int rc;
+	bool grew = false;
+
+	if (!cde->lookup_ht) {
+		cde->lookup_ht = kcalloc(1 << CACHED_DIRENT_HASH_BITS,
+					 sizeof(*cde->lookup_ht), GFP_KERNEL);
+		if (!cde->lookup_ht) {
+			fail_cached_dir_locked(cde);
+			return false;
+		}
+	}
+
+	/* Grow phase: ensure folioq exists */
+	if (!cde->folioq) {
+		rc = grow_cached_dirents_folioq_locked(cde);
+		if (rc < 0) {
+			fail_cached_dir_locked(cde);
+			return false;
+		}
+		cached_dir_reset_insert_cursor_locked(cde);
+	}
+
+	if (!cde->insert_cursor_fq)
+		cached_dir_reset_insert_cursor_locked(cde);
+
+retry_insert:
+	/* Insertion phase: try to find space in current folios */
+	de = NULL;
+	fq = cde->insert_cursor_fq;
+	start_slot = cde->insert_cursor_slot;
+	cur_folio = cde->insert_cursor_folio_index;
+	if (!fq) {
+		fq = cde->folioq;
+		start_slot = 0;
+		cur_folio = 0;
+	}
+
+	for (; fq && !de; fq = fq->next) {
+		for (int s = start_slot; s < folioq_count(fq) && !de; s++, cur_folio++) {
+			struct folio *folio = folioq_folio(fq, s);
+
+			cached_mapping = cached_dir_mapping(folio);
+			if (!cached_mapping)
+				continue;
+
+			if (cached_mapping->folio_full)
+				continue;
+
+			if (cached_dirent_has_space_for_record(cached_mapping, 0)) {
+				target_folio = folio;
+				de = &cached_mapping->entries[cached_mapping->entries_count];
+				cached_dir_set_insert_cursor_locked(cde, fq, s, cur_folio);
+				break;
+			}
+
+			cached_mapping->folio_full = 1;
+		}
+		start_slot = 0;
+	}
+
+	/* If no space found and haven't grown yet, grow and retry once */
+	if (!de && !grew) {
+		rc = grow_cached_dirents_folioq_locked(cde);
+		if (rc < 0) {
+			fail_cached_dir_locked(cde);
+			return false;
+		}
+
+		cached_dir_reset_insert_cursor_locked(cde);
+		grew = true;
+		goto retry_insert;
+	}
+
+	if (!de) {
+		fail_cached_dir_locked(cde);
+		return false;
+	}
+
+	memset(de, 0, sizeof(*de));
+	de->name_len = namelen;
+	de->ctx_pos = ctx_pos;
+	memcpy(&de->fattr, fattr, sizeof(*fattr));
+	stored_name = NULL;
+	if (!cached_dirent_try_inline_name(target_folio, cached_mapping, de,
+					      name, namelen, &stored_name)) {
+		de->name = kstrndup(name, namelen, GFP_KERNEL);
+		if (!de->name) {
+			fail_cached_dir_locked(cde);
+			return false;
+		}
+		kmemleak_not_leak((void *)de->name);
+		de->external_name = true;
+		cde->external_name_bytes += (size_t)namelen + 1;
+		stored_name = de->name;
+	} else {
+		de->external_name = false;
+	}
+	de->name = stored_name;
+
+	if (insert_cached_dir_lookup_locked(cde, stored_name, namelen,
+				   de,
+				   pending_dcache) < 0) {
+		if (de->external_name)
+			kfree((void *)de->name);
+		memset(de, 0, sizeof(*de));
+		fail_cached_dir_locked(cde);
+		return false;
+	}
+
+	cached_mapping->entries_count++;
+	cde->entries_count++;
+	cde->bytes_used = cde->folioq_size + cde->external_name_bytes +
+				  cde->lookup_bytes;
+	return true;
+}
+
+/* add cached_dirent to list */
+static bool add_cached_dirent_list_locked(struct cached_dirents *cde,
+					  loff_t ctx_pos,
+					  const char *name,
+					  unsigned int namelen,
+					  const struct cifs_fattr *fattr)
+{
+	struct cached_dir_lookup_entry *entry;
+	struct cached_dirent *de;
+
+	entry = kzalloc(sizeof(*entry), GFP_KERNEL);
+	if (!entry)
+		return false;
+
+	de = kzalloc(sizeof(*de), GFP_KERNEL);
+	if (!de) {
+		kfree(entry);
+		return false;
+	}
+
+	de->name = kstrndup(name, namelen, GFP_KERNEL);
+	if (!de->name) {
+		kfree(de);
+		kfree(entry);
+		return false;
+	}
+
+	de->name_len = namelen;
+	de->external_name = true;
+	de->ctx_pos = ctx_pos;
+	memcpy(&de->fattr, fattr, sizeof(*fattr));
+
+	entry->dirent = de;
+	entry->name_hash = full_name_hash(NULL, name, namelen);
+	entry->pending_dcache = false;
+	list_add_tail(&entry->list_node, &cde->entry_list);
+
+	cde->entry_list_count++;
+	cde->entries_count++;
+	cde->external_name_bytes += (size_t)namelen + 1;
+	cde->bytes_used = cde->external_name_bytes +
+			  cde->entry_list_count * (sizeof(*entry) + sizeof(*de));
+	return true;
+}
+
+/* convert cached_dirents from list to folioq format, freeing list entries */
+static int convert_cached_dirents_list_to_folioq_locked(struct cached_dirents *cde)
+{
+	struct cached_dir_lookup_entry *entry;
+	struct cached_dir_lookup_entry *tmp;
+	unsigned long restored_entries = 0;
+
+	if (cde->folioq)
+		return 0;
+
+	release_lookup_table_locked(cde);
+	cde->entries_count = 0;
+	cde->external_name_bytes = 0;
+	cde->lookup_bytes = 0;
+	cde->bytes_used = 0;
+
+	list_for_each_entry_safe(entry, tmp, &cde->entry_list, list_node) {
+		if (!add_cached_dirent_folioq_locked(cde, entry->dirent->ctx_pos,
+						   entry->dirent->name,
+						   entry->dirent->name_len,
+						   &entry->dirent->fattr, false)) {
+			return -ENOMEM;
+		}
+
+		restored_entries++;
+		list_del(&entry->list_node);
+		kfree((void *)entry->dirent->name);
+		kfree(entry->dirent);
+		kfree(entry);
+	}
+
+	cde->entry_list_count = 0;
+	cde->entries_count = restored_entries;
+	cde->bytes_used = cde->folioq_size + cde->external_name_bytes +
+			  cde->lookup_bytes;
+	return 0;
+}
+
+/* add cached_dirent, deciding whether to put it in the list or folioq */
 static bool add_cached_dirent(struct cached_dirents *cde,
 			      struct dir_context *ctx, const char *name,
 			      int namelen, struct cifs_fattr *fattr,
 			      struct file *file)
 {
-	struct cached_dirent *de;
+	int rc;
 
 	lockdep_assert_held(&cde->de_mutex);
 
@@ -105,32 +751,36 @@ static bool add_cached_dirent(struct cached_dirents *cde,
 	if (cde->is_valid || cde->is_failed)
 		return false;
 	if (ctx->pos != cde->pos) {
-		cde->is_failed = 1;
+		fail_cached_dir_locked(cde);
 		return false;
 	}
-	de = kzalloc_obj(*de, GFP_KERNEL);
-	if (de == NULL) {
-		cde->is_failed = 1;
-		return false;
-	}
-	de->namelen = namelen;
-	de->name = kstrndup(name, namelen, GFP_KERNEL);
-	if (de->name == NULL) {
-		kfree(de);
-		cde->is_failed = 1;
-		return false;
-	}
-	de->pos = ctx->pos;
 
-	memcpy(&de->fattr, fattr, sizeof(struct cifs_fattr));
+	if (!cached_dirents_use_folioq_locked(cde)) {
+		if (cde->entry_list_count < CIFS_CACHED_DIRENT_LIST_THRESHOLD)
+			return add_cached_dirent_list_locked(cde, ctx->pos, name,
+						     namelen, fattr);
 
-	list_add_tail(&de->entry, &cde->entries);
-	/* update accounting */
-	cde->entries_count++;
-	cde->bytes_used += sizeof(*de) + (size_t)namelen + 1;
+		rc = convert_cached_dirents_list_to_folioq_locked(cde);
+		if (rc < 0) {
+			fail_cached_dir_locked(cde);
+			return false;
+		}
+	}
+
+	if (!add_cached_dirent_folioq_locked(cde, ctx->pos, name, namelen, fattr,
+					     true)) {
+		fail_cached_dir_locked(cde);
+		return false;
+	}
+
 	return true;
 }
 
+/*
+ * emit cached dirents for the current ctx position if the cache is valid.
+ * If there is no ongoing population for this directory (ctx->pos == 0) then
+ * make the ongoing readdir call responsible for populating the cache
+ */
 bool emit_cached_dir_if_valid(struct cached_fid *cfid,
 			      struct file *file,
 			      struct dir_context *ctx)
@@ -146,7 +796,15 @@ bool emit_cached_dir_if_valid(struct cached_fid *cfid,
 	 */
 	if (ctx->pos == 0 && cfid->dirents.file == NULL) {
 		cfid->dirents.file = file;
+		cfid->dirents.dir_inode = file_inode(file);
 		cfid->dirents.pos = 2;
+		cached_dir_reset_insert_cursor_locked(&cfid->dirents);
+		/*
+		 * A previous population attempt may have failed and left
+		 * is_failed set.  Clear it now so add_cached_dirent() will
+		 * accept new entries from this readdir pass.
+		 */
+		cfid->dirents.is_failed = 0;
 	}
 
 	if (!cfid->dirents.is_valid) {
@@ -161,37 +819,7 @@ bool emit_cached_dir_if_valid(struct cached_fid *cfid,
 	return true;
 }
 
-bool add_to_cached_dir(struct cached_fid *cfid,
-		       struct dir_context *ctx,
-		       const char *name,
-		       int namelen,
-		       struct cifs_fattr *fattr,
-		       struct file *file)
-{
-	size_t delta_bytes;
-	bool added = false;
-
-	if (!cfid)
-		return false;
-
-	/* Cost of this entry */
-	delta_bytes = sizeof(struct cached_dirent) + (size_t)namelen + 1;
-
-	mutex_lock(&cfid->dirents.de_mutex);
-	added = add_cached_dirent(&cfid->dirents, ctx, name, namelen,
-				  fattr, file);
-	mutex_unlock(&cfid->dirents.de_mutex);
-
-	if (added) {
-		/* per-tcon then global for consistency with free path */
-		atomic64_add((long long)delta_bytes, &cfid->cfids->total_dirents_bytes);
-		atomic_long_inc(&cfid->cfids->total_dirents_entries);
-		atomic64_add((long long)delta_bytes, &cifs_dircache_bytes_used);
-	}
-
-	return added;
-}
-
+/* update the cached dir position during a readdir population pass */
 static void update_cached_dirents_count(struct cached_dirents *cde,
 					struct file *file)
 {
@@ -203,10 +831,13 @@ static void update_cached_dirents_count(struct cached_dirents *cde,
 	cde->pos++;
 }
 
+/* mark the cached_dirents as valid if readdir population pass completed successfully */
 static void finished_cached_dirents_count(struct cached_dirents *cde,
 					  struct dir_context *ctx,
 					  struct file *file)
 {
+	struct cifs_cached_dir_mapping *cached_mapping;
+
 	if (cde->file != file)
 		return;
 	if (cde->is_valid || cde->is_failed)
@@ -214,9 +845,178 @@ static void finished_cached_dirents_count(struct cached_dirents *cde,
 	if (ctx->pos != cde->pos)
 		return;
 
+	cached_mapping = last_cached_dir_mapping_locked(cde);
+	if (cached_mapping)
+		cached_mapping->folio_is_eof = 1;
+
 	cde->is_valid = 1;
 }
 
+/* update the cached_dirent for a given name in list */
+static bool update_cached_dirent_list_locked(struct cached_dirents *cde,
+						     const char *name,
+						     unsigned int namelen,
+						     const struct cifs_fattr *fattr)
+{
+	struct cached_dir_lookup_entry *entry;
+	struct cached_dirent *dirent;
+
+	entry = lookup_cached_dirent_list_locked(cde, name, namelen);
+	if (!entry)
+		return false;
+
+	dirent = entry->dirent;
+	if (!dirent)
+		return false;
+
+	memcpy(&dirent->fattr, fattr, sizeof(dirent->fattr));
+	dirent->tombstone = false;
+	return true;
+}
+
+/* update the cached_dirent for a given name in folioq */
+static bool update_cached_dirent_folioq_locked(struct cached_dirents *cde,
+						       const char *name,
+						       unsigned int namelen,
+						       const struct cifs_fattr *fattr)
+{
+	struct cached_dir_lookup_entry *entry;
+	struct cached_dirent *dirent;
+
+	entry = lookup_cached_dirent_locked(cde, name, namelen);
+	if (!entry)
+		return false;
+
+	dirent = entry->dirent;
+	if (!dirent)
+		return false;
+
+	memcpy(&dirent->fattr, fattr, sizeof(dirent->fattr));
+	dirent->tombstone = false;
+	return true;
+}
+
+/* update wrapper to decide if the entry is in list or folioq */
+static bool update_cached_dirent_locked(struct cached_dirents *cde,
+						const char *name,
+						unsigned int namelen,
+						const struct cifs_fattr *fattr)
+{
+	if (cached_dirents_use_folioq_locked(cde))
+		return update_cached_dirent_folioq_locked(cde, name, namelen,
+							  fattr);
+
+	return update_cached_dirent_list_locked(cde, name, namelen,
+							 fattr);
+}
+
+/* invalidate a cached_dirent by name in list */
+static bool invalidate_cached_dirent_list_locked(struct cached_dirents *cde,
+						 const char *name,
+						 unsigned int namelen)
+{
+	struct cached_dir_lookup_entry *entry;
+	struct cached_dirent *dirent;
+
+	entry = lookup_cached_dirent_list_locked(cde, name, namelen);
+	if (!entry)
+		return true;
+
+	dirent = entry->dirent;
+	if (!dirent)
+		return true;
+
+	dirent->tombstone = true;
+	return true;
+}
+
+/* invalidate a cached_dirent by name in folioq */
+static bool invalidate_cached_dirent_folioq_locked(struct cached_dirents *cde,
+						   const char *name,
+						   unsigned int namelen)
+{
+	struct cached_dir_lookup_entry *entry;
+	struct cached_dirent *dirent;
+
+	entry = lookup_cached_dirent_locked(cde, name, namelen);
+	if (!entry)
+		return true;
+
+	dirent = entry->dirent;
+	if (!dirent)
+		return false;
+
+	dirent->tombstone = true;
+	if (entry->pending_dcache) {
+		entry->pending_dcache = false;
+		complete_all(&entry->dcache_complete);
+	}
+
+	return true;
+}
+
+/* invalidate wrapper to decide if the entry is in list or folioq */
+static bool invalidate_cached_dirent_locked(struct cached_dirents *cde,
+						const char *name,
+						unsigned int namelen)
+{
+	if (cached_dirents_use_folioq_locked(cde))
+		return invalidate_cached_dirent_folioq_locked(cde, name,
+							      namelen);
+
+	return invalidate_cached_dirent_list_locked(cde, name, namelen);
+}
+
+/* append a dirent to the cached_dir */
+bool add_to_cached_dir(struct cached_fid *cfid,
+		       struct dir_context *ctx,
+		       const char *name,
+		       int namelen,
+		       struct cifs_fattr *fattr,
+		       struct file *file)
+{
+	unsigned long old_entries;
+	unsigned long new_entries;
+	u64 old_bytes;
+	u64 new_bytes;
+	long entry_diff;
+	long long bytes_diff;
+	bool added = false;
+
+	if (!cfid)
+		return false;
+
+	mutex_lock(&cfid->dirents.de_mutex);
+	old_entries = cfid->dirents.entries_count;
+	old_bytes = cfid->dirents.bytes_used;
+	added = add_cached_dirent(&cfid->dirents, ctx, name, namelen,
+				  fattr, file);
+	new_entries = cfid->dirents.entries_count;
+	new_bytes = cfid->dirents.bytes_used;
+	mutex_unlock(&cfid->dirents.de_mutex);
+
+	entry_diff = (long)new_entries - (long)old_entries;
+	bytes_diff = (long long)new_bytes - (long long)old_bytes;
+
+	if (entry_diff > 0) {
+		atomic_long_add(entry_diff, &cfid->cfids->total_dirents_entries);
+	} else if (entry_diff < 0) {
+		atomic_long_sub(-entry_diff, &cfid->cfids->total_dirents_entries);
+	}
+
+	if (bytes_diff > 0) {
+		atomic64_add(bytes_diff, &cfid->cfids->total_dirents_bytes);
+		atomic64_add(bytes_diff, &cifs_dircache_bytes_used);
+	} else if (bytes_diff < 0) {
+		atomic64_sub(-bytes_diff, &cfid->cfids->total_dirents_bytes);
+		atomic64_sub(-bytes_diff, &cifs_dircache_bytes_used);
+	}
+
+
+	return added;
+}
+
+/* update the cached_dir position during a readdir population pass */
 void update_pos_cached_dir(struct cached_fid *cfid,
 				      struct file *file)
 {
@@ -228,36 +1028,205 @@ void update_pos_cached_dir(struct cached_fid *cfid,
 	mutex_unlock(&cfid->dirents.de_mutex);
 }
 
+/* signal completion of cached_dir population after a readdir pass */
 void complete_cached_dir(struct cached_fid *cfid,
 					struct dir_context *ctx,
 					struct file *file)
+{
+	struct cached_dirents *cde;
+
+	if (!cfid)
+		return;
+
+	cde = &cfid->dirents;
+	mutex_lock(&cfid->dirents.de_mutex);
+	finished_cached_dirents_count(cde, ctx, file);
+	mutex_unlock(&cfid->dirents.de_mutex);
+}
+
+/*
+ * lookup a cached_dirent by name, returning -ENOENT if not found or if the
+ * entry is a tombstone.  The result struct is filled in with the fattr of the
+ * found entry, and flags indicating whether the entry was found, whether the
+ * cache was fully populated at the time of lookup, and whether there was an
+ * active lease on the directory at the time of lookup.
+ */
+int lookup_cached_dir(struct cached_fid *cfid,
+				 const char *name,
+				 unsigned int namelen,
+				 struct cached_dirent_lookup_result *result)
+{
+	struct cached_dir_lookup_entry *entry;
+	struct cached_dirent *dirent;
+	bool lease_active;
+
+	if (!cfid || !name || !namelen || !result)
+		return -EINVAL;
+
+	memset(result, 0, sizeof(*result));
+
+	spin_lock(&cfid->cfid_lock);
+	lease_active = is_valid_cached_dir(cfid);
+	spin_unlock(&cfid->cfid_lock);
+
+	mutex_lock(&cfid->dirents.de_mutex);
+	result->under_active_lease = lease_active;
+	result->fully_populated = cfid->dirents.is_valid;
+
+	entry = lookup_cached_dirent_entry_locked(&cfid->dirents, name, namelen);
+	if (!entry || !entry->dirent) {
+		mutex_unlock(&cfid->dirents.de_mutex);
+		return -ENOENT;
+	}
+
+	dirent = entry->dirent;
+	if (dirent->tombstone) {
+		mutex_unlock(&cfid->dirents.de_mutex);
+		return -ENOENT;
+	}
+
+	result->found = true;
+	memcpy(&result->fattr, &dirent->fattr, sizeof(result->fattr));
+
+	mutex_unlock(&cfid->dirents.de_mutex);
+	return 0;
+}
+
+/*
+ * Invalidate all cached_dirents for a cached_fid. We generally
+ * try to invalidate specific entries by name. This is used as
+ * a last resort when we can't invalidate specific entries
+ */
+void invalidate_cached_dir_contents(struct cached_fid *cfid)
 {
 	if (!cfid)
 		return;
 
 	mutex_lock(&cfid->dirents.de_mutex);
-	finished_cached_dirents_count(&cfid->dirents, ctx, file);
+	fail_cached_dir_locked(&cfid->dirents);
 	mutex_unlock(&cfid->dirents.de_mutex);
 }
 
-struct cached_dirent *lookup_cached_dirent(struct cached_dirents *cde,
-				   const char *name,
-				   unsigned int namelen)
+/*
+ * Update a cached_dirent for a given name.  Returns true if the entry was
+ * found and updated, false if the entry was not found or if the cache is not
+ * valid.
+ */
+bool update_dirent_in_cached_dir(struct cached_fid *cfid,
+				  const char *name,
+				  unsigned int namelen,
+				  const struct cifs_fattr *fattr)
 {
-	struct cached_dirent *entry;
+	bool updated = false;
 
-	if (!cde)
-		return NULL;
+	if (!cfid || !name || !namelen || !fattr)
+		return false;
 
-	lockdep_assert_held(&cde->de_mutex);
+	mutex_lock(&cfid->dirents.de_mutex);
+	updated = update_cached_dirent_locked(&cfid->dirents, name,
+						      namelen, fattr);
+	mutex_unlock(&cfid->dirents.de_mutex);
+	return updated;
+}
 
-	list_for_each_entry(entry, &cde->entries, entry) {
-		if (entry->namelen == namelen &&
-		    memcmp(entry->name, name, namelen) == 0)
-			return entry;
+/*
+ * Invalidate a cached_dirent for a given name.  Returns true if the entry was
+ * found and invalidated, false if the entry was not found or if the cache is
+ * not valid.
+ */
+bool invalidate_dirent_in_cached_dir(struct cached_fid *cfid,
+				      const char *name,
+				      unsigned int namelen)
+{
+	bool invalidated = false;
+
+	if (!cfid || !name || !namelen)
+		return false;
+	if (!cached_dir_is_valid(cfid))
+		return false;
+
+	mutex_lock(&cfid->dirents.de_mutex);
+	if (!cfid->dirents.is_valid || cfid->dirents.is_failed)
+		goto out_unlock;
+
+	invalidated = invalidate_cached_dirent_locked(&cfid->dirents,
+							 name, namelen);
+
+out_unlock:
+	mutex_unlock(&cfid->dirents.de_mutex);
+	return invalidated;
+}
+
+/*
+ * Signal completion of dcache population for a specific dirent.
+ * Called after cifs_prime_dcache returns, on both sync and async paths.
+ * Clears the pending_dcache flag and unblocks any waiting lookups.
+ */
+void cifs_complete_pending_dcache(struct cached_fid *cfid,
+		const char *name, unsigned int namelen)
+{
+	struct cached_dir_lookup_entry *entry;
+	bool uses_folioq;
+	int ret = -ENOENT;
+
+	if (!cfid)
+		return;
+
+	mutex_lock(&cfid->dirents.de_mutex);
+	uses_folioq = cached_dirents_use_folioq_locked(&cfid->dirents);
+	entry = lookup_cached_dirent_entry_locked(&cfid->dirents, name, namelen);
+	if (entry) {
+		if (uses_folioq && entry->pending_dcache) {
+			entry->pending_dcache = false;
+			complete_all(&entry->dcache_complete);
+		}
+		ret = 0;
+	}
+	mutex_unlock(&cfid->dirents.de_mutex);
+	cifs_dbg(FYI, "Dcache population of %.*s. status: %d\n",
+					namelen, name, ret);
+}
+
+/*
+ * Signal completion of dcache population for a specific dirent.
+ * Wait for async dcache population to complete for a specific dirent.
+ * Returns: 0 on completion or entry not pending, -ETIMEDOUT on timeout,
+ *          -ENOENT if entry not found in the cache.
+ */
+int cifs_wait_for_pending_dcache(struct cached_fid *cfid,
+		const char *name, unsigned int namelen)
+{
+	struct cached_dir_lookup_entry *entry;
+	bool uses_folioq;
+	struct completion *comp = NULL;
+	int ret = -ENOENT;
+
+	if (!cfid)
+		return -ENOENT;
+
+	mutex_lock(&cfid->dirents.de_mutex);
+	uses_folioq = cached_dirents_use_folioq_locked(&cfid->dirents);
+	entry = lookup_cached_dirent_entry_locked(&cfid->dirents, name, namelen);
+	if (entry) {
+		ret = 0;
+		if (uses_folioq && entry->pending_dcache)
+			comp = &entry->dcache_complete;
+	}
+	mutex_unlock(&cfid->dirents.de_mutex);
+
+	if (comp) {
+		if (wait_for_completion_timeout(comp, CIFS_DCACHE_WAIT_TIMEOUT) == 0) {
+			cifs_dbg(FYI, "Timeout waiting for dcache population of %.*s\n",
+					namelen, name);
+			ret = -ETIMEDOUT;
+		} else {
+			cifs_dbg(FYI, "Dcache population completed for %.*s\n",
+					namelen, name);
+			ret = 0;
+		}
 	}
 
-	return NULL;
+	return ret;
 }
 
 static struct cached_fid *find_or_create_cached_dir(struct cached_fids *cfids,
@@ -682,7 +1651,9 @@ int open_cached_dir_by_dentry(struct cifs_tcon *tcon,
 			      struct cached_fid **ret_cfid)
 {
 	struct cached_fid *cfid;
+	struct cached_fid *trace_cfid = NULL;
 	struct cached_fids *cfids = tcon->cfids;
+	int rc = -ENOENT;
 
 	if (cfids == NULL)
 		return -EOPNOTSUPP;
@@ -702,13 +1673,15 @@ int open_cached_dir_by_dentry(struct cifs_tcon *tcon,
 			kref_get(&cfid->refcount);
 			*ret_cfid = cfid;
 			cfid->last_access_time = jiffies;
+			rc = 0;
+			trace_cfid = cfid;
 			spin_unlock(&cfid->cfid_lock);
 			spin_unlock(&cfids->cfid_list_lock);
-			return 0;
+			return rc;
 		}
 	}
 	spin_unlock(&cfids->cfid_list_lock);
-	return -ENOENT;
+	return rc;
 }
 
 static void
@@ -853,10 +1826,10 @@ done:
 }
 
 /*
- * Invalidate all cached dirs when a TCON has been reset
- * due to a session loss.
+ * Queue all cached dirs for invalidation on laundromat without waiting.
+ * Safe for callers that hold cifs_tcp_ses_lock.
  */
-void invalidate_all_cached_dirs(struct cifs_tcon *tcon)
+void invalidate_all_cached_dirs_nowait(struct cifs_tcon *tcon)
 {
 	struct cached_fids *cfids = tcon->cfids;
 	struct cached_fid *cfid, *q;
@@ -890,8 +1863,22 @@ void invalidate_all_cached_dirs(struct cifs_tcon *tcon)
 	}
 	spin_unlock(&cfids->cfid_list_lock);
 
-	/* run laundromat unconditionally now as there might have been previously queued work */
+	/* Run laundromat now as there might have been previously queued work. */
 	mod_delayed_work(cfid_put_wq, &cfids->laundromat_work, 0);
+}
+
+/*
+ * Invalidate all cached dirs when a TCON has been reset
+ * due to a session loss.
+ */
+void invalidate_all_cached_dirs(struct cifs_tcon *tcon)
+{
+	struct cached_fids *cfids = tcon->cfids;
+
+	if (!cfids)
+		return;
+
+	invalidate_all_cached_dirs_nowait(tcon);
 	flush_delayed_work(&cfids->laundromat_work);
 }
 
@@ -980,7 +1967,7 @@ static struct cached_fid *init_cached_dir(const char *path)
 	INIT_WORK(&cfid->close_work, cached_dir_offload_close);
 	INIT_WORK(&cfid->put_work, cached_dir_put_work);
 	INIT_LIST_HEAD(&cfid->entry);
-	INIT_LIST_HEAD(&cfid->dirents.entries);
+	INIT_LIST_HEAD(&cfid->dirents.entry_list);
 	mutex_init(&cfid->dirents.de_mutex);
 	mutex_init(&cfid->cfid_open_mutex);
 	spin_lock_init(&cfid->cfid_lock);
@@ -990,38 +1977,34 @@ static struct cached_fid *init_cached_dir(const char *path)
 
 static void free_cached_dir(struct cached_fid *cfid)
 {
-	struct cached_dirent *dirent, *q;
+	unsigned long entries_count = 0;
+	u64 bytes_used = 0;
 
 	WARN_ON(work_pending(&cfid->close_work));
 	WARN_ON(work_pending(&cfid->put_work));
 
+
 	dput(cfid->dentry);
 	cfid->dentry = NULL;
 
-	/*
-	 * Delete all cached dirent names
-	 */
-	list_for_each_entry_safe(dirent, q, &cfid->dirents.entries, entry) {
-		list_del(&dirent->entry);
-		kfree(dirent->name);
-		kfree(dirent);
-	}
+	mutex_lock(&cfid->dirents.de_mutex);
+	entries_count = cfid->dirents.entries_count;
+	bytes_used = cfid->dirents.bytes_used;
+	release_cached_dirents_locked(&cfid->dirents);
+	mutex_unlock(&cfid->dirents.de_mutex);
 
 	/* adjust tcon-level counters and reset per-dir accounting */
 	if (cfid->cfids) {
-		if (cfid->dirents.entries_count)
-			atomic_long_sub((long)cfid->dirents.entries_count,
+		if (entries_count)
+			atomic_long_sub((long)entries_count,
 					&cfid->cfids->total_dirents_entries);
-		if (cfid->dirents.bytes_used) {
-			atomic64_sub((long long)cfid->dirents.bytes_used,
+		if (bytes_used) {
+			atomic64_sub((long long)bytes_used,
 					&cfid->cfids->total_dirents_bytes);
-			atomic64_sub((long long)cfid->dirents.bytes_used,
+			atomic64_sub((long long)bytes_used,
 					&cifs_dircache_bytes_used);
 		}
 	}
-	cfid->dirents.entries_count = 0;
-	cfid->dirents.bytes_used = 0;
-
 	kfree(cfid->path);
 	cfid->path = NULL;
 	kfree(cfid);
@@ -1041,7 +2024,7 @@ static void cfids_laundromat_worker(struct work_struct *work)
 
 	list_for_each_entry_safe(cfid, q, &cfids->entries, entry) {
 		spin_lock(&cfid->cfid_lock);
-		if (cfid->last_access_time &&
+		if (dir_cache_timeout && cfid->last_access_time &&
 		    time_after(jiffies, cfid->last_access_time + HZ * dir_cache_timeout)) {
 			cfid->on_list = false;
 			list_move(&cfid->entry, &entry);
@@ -1083,8 +2066,9 @@ static void cfids_laundromat_worker(struct work_struct *work)
 			 */
 			close_cached_dir(cfid);
 	}
-	queue_delayed_work(cfid_put_wq, &cfids->laundromat_work,
-			   dir_cache_timeout * HZ);
+	if (dir_cache_timeout)
+		queue_delayed_work(cfid_put_wq, &cfids->laundromat_work,
+				   dir_cache_timeout * HZ);
 }
 
 struct cached_fids *init_cached_dirs(void)
@@ -1099,8 +2083,9 @@ struct cached_fids *init_cached_dirs(void)
 	INIT_LIST_HEAD(&cfids->dying);
 
 	INIT_DELAYED_WORK(&cfids->laundromat_work, cfids_laundromat_worker);
-	queue_delayed_work(cfid_put_wq, &cfids->laundromat_work,
-			   dir_cache_timeout * HZ);
+	if (dir_cache_timeout)
+		queue_delayed_work(cfid_put_wq, &cfids->laundromat_work,
+				   dir_cache_timeout * HZ);
 
 	atomic_long_set(&cfids->total_dirents_entries, 0);
 	atomic64_set(&cfids->total_dirents_bytes, 0);
