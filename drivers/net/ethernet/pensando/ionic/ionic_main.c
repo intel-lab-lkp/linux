@@ -554,6 +554,11 @@ try_again:
 
 	if (!done && !time_before(jiffies, max_wait)) {
 		ionic_dev_cmd_clean(ionic);
+
+		/* allow caller to manage EAGAIN from previous attempt */
+		if (err == IONIC_RC_EAGAIN)
+			return -EAGAIN;
+
 		dev_warn(ionic->dev, "DEVCMD %s (%d) timeout after %ld secs\n",
 			 ionic_opcode_to_str(opcode), opcode, max_seconds);
 		return -ETIMEDOUT;
@@ -568,7 +573,7 @@ try_again:
 				ionic_error_to_str(err), err);
 
 			iowrite32(0, &idev->dev_cmd_regs->done);
-			msleep(1000);
+			msleep(50);
 			iowrite32(1, &idev->dev_cmd_regs->doorbell);
 			goto try_again;
 		}
