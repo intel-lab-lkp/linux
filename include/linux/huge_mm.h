@@ -203,6 +203,38 @@ static inline bool hugepage_global_always(void)
 			(1<<TRANSPARENT_HUGEPAGE_FLAG);
 }
 
+static inline bool hugepage_cow_always(void)
+{
+	return transparent_hugepage_flags &
+			(1<<TRANSPARENT_HUGEPAGE_COW_FLAG);
+}
+
+static inline bool hugepage_cow_madvise(void)
+{
+	return transparent_hugepage_flags &
+			(1<<TRANSPARENT_HUGEPAGE_REQ_MADV_COW_FLAG);
+}
+
+static inline bool hugepage_cow_enabled(struct vm_area_struct *vma)
+{
+	vm_flags_t vm_flags = vma->vm_flags;
+
+	/* anonymous THP need to be enabled first */
+	if (!hugepage_global_always() &&
+		(!hugepage_global_enabled() || !(vm_flags & VM_HUGEPAGE)))
+		return false;
+
+	/* always enables all the THP COW */
+	if (hugepage_cow_always())
+		return true;
+
+	/* madvise enables THP cow only when vm_flags says so */
+	if (hugepage_cow_madvise() && (vm_flags & VM_THP_COW))
+		return true;
+
+	return false;
+}
+
 static inline int highest_order(unsigned long orders)
 {
 	return fls_long(orders) - 1;
