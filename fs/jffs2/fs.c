@@ -396,28 +396,28 @@ void jffs2_dirty_inode(struct inode *inode, int flags)
 int jffs2_do_remount_fs(struct super_block *sb, struct fs_context *fc)
 {
 	struct jffs2_sb_info *c = JFFS2_SB_INFO(sb);
+	bool new_ro;
 
 	if (c->flags & JFFS2_SB_FLAG_RO && !sb_rdonly(sb))
 		return -EROFS;
 
-	/* We stop if it was running, then restart if it needs to.
-	   This also catches the case where it was stopped and this
-	   is just a remount to restart it.
-	   Flush the writebuffer, if necessary, else we loose it */
+	new_ro = (fc->sb_flags_mask & SB_RDONLY) ?
+		 (fc->sb_flags & SB_RDONLY) : sb_rdonly(sb);
+
+	jffs2_stop_garbage_collect_thread(c);
+
 	if (!sb_rdonly(sb)) {
-		jffs2_stop_garbage_collect_thread(c);
 		mutex_lock(&c->alloc_sem);
 		jffs2_flush_wbuf_pad(c);
 		mutex_unlock(&c->alloc_sem);
 	}
 
-	if (!(fc->sb_flags & SB_RDONLY))
+	if (!new_ro)
 		jffs2_start_garbage_collect_thread(c);
 
 	fc->sb_flags |= SB_NOATIME;
 	return 0;
 }
-
 /* jffs2_new_inode: allocate a new inode and inocache, add it to the hash,
    fill in the raw_inode while you're at it. */
 struct inode *jffs2_new_inode (struct inode *dir_i, umode_t mode, struct jffs2_raw_inode *ri)
