@@ -149,6 +149,9 @@ static ssize_t pci_perf_seq_write(struct file *file, const char __user *ubuf,
 	if (!zdev)
 		return 0;
 
+	if (zdev->kzdev)
+		return -EPERM;
+
 	rc = kstrtoul_from_user(ubuf, count, 10, &val);
 	if (rc)
 		return rc;
