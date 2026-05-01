@@ -77,6 +77,9 @@ struct symbol {
 void symbol__delete(struct symbol *sym);
 void symbols__delete(struct rb_root_cached *symbols);
 
+void symbol__set_ignore(struct symbol *sym, bool ignore);
+void symbol__set_annotate2(struct symbol *sym, bool annotate2);
+
 /* symbols__for_each_entry - iterate over symbols (rb_root)
  *
  * @symbols: the rb_root of symbols
