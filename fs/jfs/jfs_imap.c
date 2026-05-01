@@ -726,6 +726,11 @@ int diWrite(tid_t tid, struct inode *ip)
 		xp = &dp->di_xtroot;
 		lv = ilinelock->lv;
 		for (n = 0; n < ilinelock->index; n++, lv++) {
+			if (lv->offset + lv->length > XTROOTMAXSLOT) {
+				jfs_err("diWrite: xtree lv out of bounds");
+				release_metapage(mp);
+				return -EIO;
+			}
 			memcpy(&xp->xad[lv->offset], &p->xad[lv->offset],
 			       lv->length << L2XTSLOTSIZE);
 		}
@@ -750,6 +755,11 @@ int diWrite(tid_t tid, struct inode *ip)
 		xp = (dtpage_t *) & dp->di_dtroot;
 		lv = ilinelock->lv;
 		for (n = 0; n < ilinelock->index; n++, lv++) {
+			if (lv->offset + lv->length > DTROOTMAXSLOT) {
+				jfs_err("diWrite: dtree lv out of bounds");
+				release_metapage(mp);
+				return -EIO;
+			}
 			memcpy(&xp->slot[lv->offset], &p->slot[lv->offset],
 			       lv->length << L2DTSLOTSIZE);
 		}
