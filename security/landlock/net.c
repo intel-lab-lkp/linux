@@ -68,16 +68,17 @@ static int current_check_access_socket(struct socket *const sock,
 
 	switch (address->sa_family) {
 	case AF_UNSPEC:
-		if (access_request == LANDLOCK_ACCESS_NET_CONNECT_TCP) {
+		if (access_request == LANDLOCK_ACCESS_NET_CONNECT_TCP ||
+		    access_request == LANDLOCK_ACCESS_NET_CONNECT_SEND_UDP) {
 			/*
 			 * Connecting to an address with AF_UNSPEC dissolves
-			 * the TCP association, which have the same effect as
-			 * closing the connection while retaining the socket
-			 * object (i.e., the file descriptor).  As for dropping
-			 * privileges, closing connections is always allowed.
-			 *
-			 * For a TCP access control system, this request is
-			 * legitimate. Let the network stack handle potential
+			 * the remote association while retaining the socket
+			 * object (i.e., the file descriptor). For TCP, it has
+			 * the same effect as closing the connection. For UDP,
+			 * it removes any preset remote address. As for
+			 * dropping privileges, these actions are always
+			 * allowed.
+			 * Let the network stack handle potential
 			 * inconsistencies and return -EINVAL if needed.
 			 */
 			return 0;
@@ -134,7 +135,8 @@ static int current_check_access_socket(struct socket *const sock,
 		addr4 = (struct sockaddr_in *)address;
 		port = addr4->sin_port;
 
-		if (access_request == LANDLOCK_ACCESS_NET_CONNECT_TCP) {
+		if (access_request == LANDLOCK_ACCESS_NET_CONNECT_TCP ||
+		    access_request == LANDLOCK_ACCESS_NET_CONNECT_SEND_UDP) {
 			audit_net.dport = port;
 			audit_net.v4info.daddr = addr4->sin_addr.s_addr;
 		} else if (access_request == LANDLOCK_ACCESS_NET_BIND_TCP ||
@@ -157,7 +159,8 @@ static int current_check_access_socket(struct socket *const sock,
 		addr6 = (struct sockaddr_in6 *)address;
 		port = addr6->sin6_port;
 
-		if (access_request == LANDLOCK_ACCESS_NET_CONNECT_TCP) {
+		if (access_request == LANDLOCK_ACCESS_NET_CONNECT_TCP ||
+		    access_request == LANDLOCK_ACCESS_NET_CONNECT_SEND_UDP) {
 			audit_net.dport = port;
 			audit_net.v6info.daddr = addr6->sin6_addr;
 		} else if (access_request == LANDLOCK_ACCESS_NET_BIND_TCP ||
@@ -213,6 +216,50 @@ static int current_check_access_socket(struct socket *const sock,
 	return -EACCES;
 }
 
+static int current_check_autobind_udp_socket(struct socket *const sock)
+{
+	struct sockaddr_storage port0 = { 0 };
+
+	/*
+	 * On UDP sockets, if a local port has not already been bound,
+	 * calling connect() or sending a first datagram has the side
+	 * effect of autobinding an ephemeral port: we also have to check
+	 * that the process would have had the right to bind(0) explicitly.
+	 * Note: socket is not locked, so another thread could do an
+	 * explicit bind(!=0) on this socket, changing inet_num to non-zero
+	 * after we read it, but this would only have us enforce an
+	 * additional bind(0) access check and would not bypass policy.
+	 */
+	if (inet_sk(sock->sk)->inet_num != 0)
+		return 0;
+
+	/*
+	 * Construct a struct sockaddr* with port 0 to pretend the
+	 * process tried to bind() on that address.
+	 */
+	port0.ss_family = sock->sk->__sk_common.skc_family;
+	switch (port0.ss_family) {
+	case AF_INET: {
+		((struct sockaddr_in *)&port0)->sin_port = 0;
+		break;
+	}
+
+#if IS_ENABLED(CONFIG_IPV6)
+	case AF_INET6: {
+		((struct sockaddr_in6 *)&port0)->sin6_port = 0;
+		break;
+	}
+#endif /* IS_ENABLED(CONFIG_IPV6) */
+
+	default:
+		return 0;
+	}
+
+	return current_check_access_socket(sock, (struct sockaddr *)&port0,
+					   sizeof(port0),
+					   LANDLOCK_ACCESS_NET_BIND_UDP);
+}
+
 static int hook_socket_bind(struct socket *const sock,
 			    struct sockaddr *const address, const int addrlen)
 {
@@ -234,14 +281,22 @@ static int hook_socket_connect(struct socket *const sock,
 			       const int addrlen)
 {
 	access_mask_t access_request;
+	int ret = 0;
 
 	if (sk_is_tcp(sock->sk))
 		access_request = LANDLOCK_ACCESS_NET_CONNECT_TCP;
+	else if (sk_is_udp(sock->sk))
+		access_request = LANDLOCK_ACCESS_NET_CONNECT_SEND_UDP;
 	else
 		return 0;
 
-	return current_check_access_socket(sock, address, addrlen,
-					   access_request);
+	ret = current_check_access_socket(sock, address, addrlen,
+					  access_request);
+
+	if (ret == 0 && sk_is_udp(sock->sk))
+		ret = current_check_autobind_udp_socket(sock);
+
+	return ret;
 }
 
 static struct security_hook_list landlock_hooks[] __ro_after_init = {
