@@ -1155,7 +1155,8 @@ mshv_partition_ioctl_create_vp(struct mshv_partition *partition,
 
 	/* already exclusive with the partition mutex for all ioctls */
 	partition->pt_vp_count++;
-	partition->pt_vp_array[args.vp_index] = vp;
+	/* Ensure VP is fully initialized before visible to lockless ISR readers */
+	smp_store_release(&partition->pt_vp_array[args.vp_index], vp);
 
 	goto out;
 

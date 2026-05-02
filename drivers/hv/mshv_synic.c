@@ -243,7 +243,7 @@ handle_bitset_message(const struct hv_vp_signal_bitset_scheduler_message *msg)
 				goto unlock_out;
 			}
 
-			vp = partition->pt_vp_array[vp_index];
+			vp = smp_load_acquire(&partition->pt_vp_array[vp_index]);
 			if (unlikely(!vp)) {
 				pr_debug("failed to find VP %u\n", vp_index);
 				goto unlock_out;
@@ -292,7 +292,7 @@ handle_pair_message(const struct hv_vp_signal_pair_scheduler_message *msg)
 			break;
 		}
 
-		vp = partition->pt_vp_array[vp_index];
+		vp = smp_load_acquire(&partition->pt_vp_array[vp_index]);
 		if (!vp) {
 			pr_debug("failed to find VP %u\n", vp_index);
 			break;
@@ -387,7 +387,7 @@ mshv_intercept_isr(struct hv_message *msg)
 		pr_debug("VP index %u out of bounds\n", vp_index);
 		goto unlock_out;
 	}
-	vp = partition->pt_vp_array[vp_index];
+	vp = smp_load_acquire(&partition->pt_vp_array[vp_index]);
 	if (unlikely(!vp)) {
 		pr_debug("failed to find VP %u\n", vp_index);
 		goto unlock_out;
