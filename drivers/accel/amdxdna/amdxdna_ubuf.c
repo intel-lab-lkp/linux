@@ -132,7 +132,7 @@ struct dma_buf *amdxdna_get_ubuf(struct drm_device *dev,
 	unsigned long lock_limit, new_pinned;
 	struct amdxdna_drm_va_entry *va_ent;
 	struct amdxdna_ubuf_priv *ubuf;
-	u32 npages, start = 0;
+	u32 npages, start = 0, pinned_total = 0;
 	struct dma_buf *dbuf;
 	int i, ret;
 	DEFINE_DMA_BUF_EXPORT_INFO(exp_info);
@@ -176,13 +176,6 @@ struct dma_buf *amdxdna_get_ubuf(struct drm_device *dev,
 
 	ubuf->nr_pages = exp_info.size >> PAGE_SHIFT;
 	lock_limit = rlimit(RLIMIT_MEMLOCK) >> PAGE_SHIFT;
-	new_pinned = atomic64_add_return(ubuf->nr_pages, &ubuf->mm->pinned_vm);
-	if (new_pinned > lock_limit && !capable(CAP_IPC_LOCK)) {
-		XDNA_DBG(xdna, "New pin %ld, limit %ld, cap %d",
-			 new_pinned, lock_limit, capable(CAP_IPC_LOCK));
-		ret = -ENOMEM;
-		goto sub_pin_cnt;
-	}
 
 	ubuf->pages = kvmalloc_objs(*ubuf->pages, ubuf->nr_pages);
 	if (!ubuf->pages) {
@@ -203,6 +196,16 @@ struct dma_buf *amdxdna_get_ubuf(struct drm_device *dev,
 		}
 
 		start += ret;
+		pinned_total += ret;
+	}
+
+	new_pinned = atomic64_add_return(pinned_total,
+				&ubuf->mm->pinned_vm);
+
+	if (new_pinned > lock_limit && !capable(CAP_IPC_LOCK)) {
+		atomic64_sub(pinned_total, &ubuf->mm->pinned_vm);
+		ret = -ENOMEM;
+		goto destroy_pages;
 	}
 
 	exp_info.ops = &amdxdna_ubuf_dmabuf_ops;
