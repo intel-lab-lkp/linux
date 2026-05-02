@@ -1315,7 +1315,7 @@ force_sig_info_to_task(struct kernel_siginfo *info, struct task_struct *t,
 	if (action->sa.sa_handler == SIG_DFL &&
 	    (!t->ptrace || (handler == HANDLER_EXIT)))
 		t->signal->flags &= ~SIGNAL_UNKILLABLE;
-	ret = send_signal_locked(sig, info, t, PIDTYPE_PID);
+	ret = __send_signal_locked(sig, info, t, PIDTYPE_PID, false);
 	/* This can happen if the signal was already pending and blocked */
 	if (!task_sigpending(t))
 		signal_wake_up(t, 0);
