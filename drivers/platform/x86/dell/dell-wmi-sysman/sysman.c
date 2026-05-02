@@ -234,18 +234,20 @@ static const struct kobj_type attr_name_ktype = {
  * @dest: Where to copy the string to
  * @src: Where to copy the string from
  */
-void strlcpy_attr(char *dest, char *src)
+void strlcpy_attr(char *dest, const char *src)
 {
-	size_t len = strlen(src) + 1;
+	size_t len = strnlen(src, MAX_BUFF);
 
-	if (len > 1 && len <= MAX_BUFF)
-		strscpy(dest, src, len);
-
-	/*len can be zero because any property not-applicable to attribute can
-	 * be empty so check only for too long buffers and log error
-	 */
-	if (len > MAX_BUFF)
+	if (len == MAX_BUFF) {
 		pr_err("Source string returned from BIOS is out of bound!\n");
+		return;
+	}
+
+	/* Empty string means "not applicable" and is skipped intentionally. */
+	if (len == 0)
+		return;
+
+	strscpy(dest, src, len + 1);
 }
 
 /**
