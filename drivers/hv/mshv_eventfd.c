@@ -151,10 +151,10 @@ static int mshv_vp_irq_set_vector(struct mshv_vp *vp, u32 vector)
  * Try to raise irq for guest via shared vector array. hyp does the actual
  * inject of the interrupt.
  */
-static int mshv_try_assert_irq_fast(struct mshv_irqfd *irqfd)
+static int mshv_try_assert_irq_fast(struct mshv_irqfd *irqfd,
+				    const struct mshv_lapic_irq *irq)
 {
 	struct mshv_partition *partition = irqfd->irqfd_partn;
-	struct mshv_lapic_irq *irq = &irqfd->irqfd_lapic_irq;
 	struct mshv_vp *vp;
 
 	if (!(ms_hyperv.ext_features &
@@ -191,7 +191,8 @@ static int mshv_try_assert_irq_fast(struct mshv_irqfd *irqfd)
 	return 0;
 }
 #else /* CONFIG_X86_64 */
-static int mshv_try_assert_irq_fast(struct mshv_irqfd *irqfd)
+static int mshv_try_assert_irq_fast(struct mshv_irqfd *irqfd,
+				    const struct mshv_lapic_irq *irq)
 {
 	return -EOPNOTSUPP;
 }
@@ -200,30 +201,32 @@ static int mshv_try_assert_irq_fast(struct mshv_irqfd *irqfd)
 static void mshv_assert_irq_slow(struct mshv_irqfd *irqfd)
 {
 	struct mshv_partition *partition = irqfd->irqfd_partn;
-	struct mshv_lapic_irq *irq = &irqfd->irqfd_lapic_irq;
+	struct mshv_guest_irq_ent girq_ent;
+	struct mshv_lapic_irq irq;
 	unsigned int seq;
 	int idx;
 
-#if IS_ENABLED(CONFIG_X86)
-	WARN_ON(irqfd->irqfd_resampler &&
-		!irq->lapic_control.level_triggered);
-#endif
-
 	idx = srcu_read_lock(&partition->pt_irq_srcu);
-	if (irqfd->irqfd_girq_ent.guest_irq_num) {
-		if (!irqfd->irqfd_girq_ent.girq_entry_valid) {
-			srcu_read_unlock(&partition->pt_irq_srcu, idx);
-			return;
-		}
 
-		do {
-			seq = read_seqcount_begin(&irqfd->irqfd_irqe_sc);
-		} while (read_seqcount_retry(&irqfd->irqfd_irqe_sc, seq));
+	do {
+		seq = read_seqcount_begin(&irqfd->irqfd_irqe_sc);
+		girq_ent = irqfd->irqfd_girq_ent;
+		irq = irqfd->irqfd_lapic_irq;
+	} while (read_seqcount_retry(&irqfd->irqfd_irqe_sc, seq));
+
+	if (girq_ent.guest_irq_num && !girq_ent.girq_entry_valid) {
+		srcu_read_unlock(&partition->pt_irq_srcu, idx);
+		return;
 	}
 
-	hv_call_assert_virtual_interrupt(irqfd->irqfd_partn->pt_id,
-					 irq->lapic_vector, irq->lapic_apic_id,
-					 irq->lapic_control);
+#if IS_ENABLED(CONFIG_X86)
+	WARN_ON(irqfd->irqfd_resampler &&
+		!irq.lapic_control.level_triggered);
+#endif
+
+	hv_call_assert_virtual_interrupt(partition->pt_id,
+					 irq.lapic_vector, irq.lapic_apic_id,
+					 irq.lapic_control);
 	srcu_read_unlock(&partition->pt_irq_srcu, idx);
 }
 
@@ -313,16 +316,18 @@ static int mshv_irqfd_wakeup(wait_queue_entry_t *wait, unsigned int mode,
 	int ret = 0;
 
 	if (flags & EPOLLIN) {
+		struct mshv_lapic_irq irq;
 		u64 cnt;
 
 		eventfd_ctx_do_read(irqfd->irqfd_eventfd_ctx, &cnt);
 		idx = srcu_read_lock(&pt->pt_irq_srcu);
 		do {
 			seq = read_seqcount_begin(&irqfd->irqfd_irqe_sc);
+			irq = irqfd->irqfd_lapic_irq;
 		} while (read_seqcount_retry(&irqfd->irqfd_irqe_sc, seq));
 
 		/* An event has been signaled, raise an interrupt */
-		ret = mshv_try_assert_irq_fast(irqfd);
+		ret = mshv_try_assert_irq_fast(irqfd, &irq);
 		if (ret)
 			mshv_assert_irq_slow(irqfd);
 
