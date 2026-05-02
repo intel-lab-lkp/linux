@@ -396,6 +396,10 @@ struct landlock_net_port_attr {
  *   - or grant %LANDLOCK_ACCESS_NET_BIND_UDP on a specific port, and
  *     call :manpage:`bind(2)` on that port before trying to
  *     :manpage:`connect(2)` or send datagrams.
+ *
+ * .. note:: Sending datagrams to an ``AF_UNSPEC`` destination address
+ *   family is not supported for IPv6 UDP sockets: you will need to use a
+ *   ``NULL`` address instead.
  */
 /* clang-format off */
 #define LANDLOCK_ACCESS_NET_BIND_TCP			(1ULL << 0)

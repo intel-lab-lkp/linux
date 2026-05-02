@@ -44,7 +44,8 @@ int landlock_append_net_rule(struct landlock_ruleset *const ruleset,
 static int current_check_access_socket(struct socket *const sock,
 				       struct sockaddr *const address,
 				       const int addrlen,
-				       access_mask_t access_request)
+				       access_mask_t access_request,
+				       bool connecting)
 {
 	__be16 port;
 	struct layer_access_masks layer_masks = {};
@@ -69,7 +70,8 @@ static int current_check_access_socket(struct socket *const sock,
 	switch (address->sa_family) {
 	case AF_UNSPEC:
 		if (access_request == LANDLOCK_ACCESS_NET_CONNECT_TCP ||
-		    access_request == LANDLOCK_ACCESS_NET_CONNECT_SEND_UDP) {
+		    (access_request == LANDLOCK_ACCESS_NET_CONNECT_SEND_UDP &&
+		     connecting)) {
 			/*
 			 * Connecting to an address with AF_UNSPEC dissolves
 			 * the remote association while retaining the socket
@@ -82,6 +84,35 @@ static int current_check_access_socket(struct socket *const sock,
 			 * inconsistencies and return -EINVAL if needed.
 			 */
 			return 0;
+		} else if (access_request ==
+			   LANDLOCK_ACCESS_NET_CONNECT_SEND_UDP) {
+			if (sock->sk->__sk_common.skc_family == AF_INET6) {
+				/*
+				 * We cannot allow sending UDP datagrams to an
+				 * explicit AF_UNSPEC address on IPv6 sockets,
+				 * even if AF_UNSPEC is treated as "no address"
+				 * on such sockets (so it should always be allowed).
+				 * That's because the socket's family can change under
+				 * our feet (if another thread calls setsockopt(IPV6_ADDRFORM))
+				 * to IPv4, which would then treat AF_UNSPEC as
+				 * AF_INET.
+				 */
+				audit_net.family = AF_UNSPEC;
+				landlock_init_layer_masks(
+					subject->domain, access_request,
+					&layer_masks, LANDLOCK_KEY_NET_PORT);
+				landlock_log_denial(
+					subject,
+					&(struct landlock_request){
+						.type = LANDLOCK_REQUEST_NET_ACCESS,
+						.audit.type =
+							LSM_AUDIT_DATA_NET,
+						.audit.u.net = &audit_net,
+						.access = access_request,
+						.layer_masks = &layer_masks,
+					});
+				return -EACCES;
+			}
 		} else if (access_request == LANDLOCK_ACCESS_NET_BIND_TCP ||
 			   access_request == LANDLOCK_ACCESS_NET_BIND_UDP) {
 			/*
@@ -124,7 +155,10 @@ static int current_check_access_socket(struct socket *const sock,
 		} else {
 			WARN_ON_ONCE(1);
 		}
-		/* Only for bind(AF_UNSPEC+INADDR_ANY) on IPv4 socket. */
+		/*
+		 * For bind(AF_UNSPEC+INADDR_ANY) on IPv4 socket and
+		 * for sending to AF_UNSPEC addresses on IPv4 socket.
+		 */
 		fallthrough;
 	case AF_INET: {
 		const struct sockaddr_in *addr4;
@@ -257,7 +291,7 @@ static int current_check_autobind_udp_socket(struct socket *const sock)
 
 	return current_check_access_socket(sock, (struct sockaddr *)&port0,
 					   sizeof(port0),
-					   LANDLOCK_ACCESS_NET_BIND_UDP);
+					   LANDLOCK_ACCESS_NET_BIND_UDP, false);
 }
 
 static int hook_socket_bind(struct socket *const sock,
@@ -273,7 +307,7 @@ static int hook_socket_bind(struct socket *const sock,
 		return 0;
 
 	return current_check_access_socket(sock, address, addrlen,
-					   access_request);
+					   access_request, false);
 }
 
 static int hook_socket_connect(struct socket *const sock,
@@ -291,9 +325,32 @@ static int hook_socket_connect(struct socket *const sock,
 		return 0;
 
 	ret = current_check_access_socket(sock, address, addrlen,
-					  access_request);
+					  access_request, true);
 
 	if (ret == 0 && sk_is_udp(sock->sk))
+		ret = current_check_autobind_udp_socket(sock);
+
+	return ret;
+}
+
+static int hook_socket_sendmsg(struct socket *const sock,
+			       struct msghdr *const msg, const int size)
+{
+	struct sockaddr *const address = msg->msg_name;
+	const int addrlen = msg->msg_namelen;
+	access_mask_t access_request;
+	int ret = 0;
+
+	if (sk_is_udp(sock->sk))
+		access_request = LANDLOCK_ACCESS_NET_CONNECT_SEND_UDP;
+	else
+		return 0;
+
+	if (address != NULL)
+		ret = current_check_access_socket(sock, address, addrlen,
+						  access_request, false);
+
+	if (ret == 0)
 		ret = current_check_autobind_udp_socket(sock);
 
 	return ret;
@@ -302,6 +359,7 @@ static int hook_socket_connect(struct socket *const sock,
 static struct security_hook_list landlock_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(socket_bind, hook_socket_bind),
 	LSM_HOOK_INIT(socket_connect, hook_socket_connect),
+	LSM_HOOK_INIT(socket_sendmsg, hook_socket_sendmsg),
 };
 
 __init void landlock_add_net_hooks(void)
