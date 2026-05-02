@@ -76,25 +76,11 @@ struct tc358762 {
 	struct gpio_desc *reset_gpio;
 	struct drm_display_mode mode;
 	bool pre_enabled;
-	int error;
 };
 
-static int tc358762_clear_error(struct tc358762 *ctx)
+static void tc358762_write(struct mipi_dsi_multi_context *dsi_ctx, u16 addr, u32 val)
 {
-	int ret = ctx->error;
-
-	ctx->error = 0;
-	return ret;
-}
-
-static void tc358762_write(struct tc358762 *ctx, u16 addr, u32 val)
-{
-	struct mipi_dsi_device *dsi = to_mipi_dsi_device(ctx->dev);
-	ssize_t ret;
 	u8 data[6];
-
-	if (ctx->error)
-		return;
 
 	data[0] = addr;
 	data[1] = addr >> 8;
@@ -103,9 +89,7 @@ static void tc358762_write(struct tc358762 *ctx, u16 addr, u32 val)
 	data[4] = val >> 16;
 	data[5] = val >> 24;
 
-	ret = mipi_dsi_generic_write(dsi, data, sizeof(data));
-	if (ret < 0)
-		ctx->error = ret;
+	mipi_dsi_generic_write_multi(dsi_ctx, data, sizeof(data));
 }
 
 static inline struct tc358762 *bridge_to_tc358762(struct drm_bridge *bridge)
@@ -115,17 +99,19 @@ static inline struct tc358762 *bridge_to_tc358762(struct drm_bridge *bridge)
 
 static int tc358762_init(struct tc358762 *ctx)
 {
+	struct mipi_dsi_device *dsi = to_mipi_dsi_device(ctx->dev);
+	struct mipi_dsi_multi_context dsi_ctx = { .dsi = dsi };
 	u32 lcdctrl;
 
-	tc358762_write(ctx, DSI_LANEENABLE,
+	tc358762_write(&dsi_ctx, DSI_LANEENABLE,
 		       LANEENABLE_L0EN | LANEENABLE_CLEN);
-	tc358762_write(ctx, PPI_D0S_CLRSIPOCOUNT, 5);
-	tc358762_write(ctx, PPI_D1S_CLRSIPOCOUNT, 5);
-	tc358762_write(ctx, PPI_D0S_ATMR, 0);
-	tc358762_write(ctx, PPI_D1S_ATMR, 0);
-	tc358762_write(ctx, PPI_LPTXTIMECNT, LPX_PERIOD);
+	tc358762_write(&dsi_ctx, PPI_D0S_CLRSIPOCOUNT, 5);
+	tc358762_write(&dsi_ctx, PPI_D1S_CLRSIPOCOUNT, 5);
+	tc358762_write(&dsi_ctx, PPI_D0S_ATMR, 0);
+	tc358762_write(&dsi_ctx, PPI_D1S_ATMR, 0);
+	tc358762_write(&dsi_ctx, PPI_LPTXTIMECNT, LPX_PERIOD);
 
-	tc358762_write(ctx, SPICMR, 0x00);
+	tc358762_write(&dsi_ctx, SPICMR, 0x00);
 
 	lcdctrl = LCDCTRL_VSDELAY(1) | LCDCTRL_RGB888 |
 		  LCDCTRL_UNK6 | LCDCTRL_VTGEN;
@@ -136,17 +122,16 @@ static int tc358762_init(struct tc358762 *ctx)
 	if (ctx->mode.flags & DRM_MODE_FLAG_NVSYNC)
 		lcdctrl |= LCDCTRL_VSPOL;
 
-	tc358762_write(ctx, LCDCTRL, lcdctrl);
+	tc358762_write(&dsi_ctx, LCDCTRL, lcdctrl);
 
-	tc358762_write(ctx, SYSCTRL, 0x040f);
+	tc358762_write(&dsi_ctx, SYSCTRL, 0x040f);
 	msleep(100);
 
-	tc358762_write(ctx, PPI_STARTPPI, PPI_START_FUNCTION);
-	tc358762_write(ctx, DSI_STARTDSI, DSI_RX_START);
+	tc358762_write(&dsi_ctx, PPI_STARTPPI, PPI_START_FUNCTION);
+	tc358762_write(&dsi_ctx, DSI_STARTDSI, DSI_RX_START);
 
 	msleep(100);
-
-	return tc358762_clear_error(ctx);
+	return dsi_ctx.accum_err;
 }
 
 static void tc358762_post_disable(struct drm_bridge *bridge,
