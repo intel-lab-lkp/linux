@@ -1040,8 +1040,12 @@ enum tc_tbf_command {
 };
 
 struct tc_tbf_qopt_offload_replace_params {
+	u32		limit;
+	u32		max_size;
+	s64		buffer;
+	s64		mtu;
 	struct psched_ratecfg rate;
-	u32 max_size;
+	struct psched_ratecfg peak;
 	struct gnet_stats_queue *qstats;
 };
 
