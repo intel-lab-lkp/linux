@@ -379,21 +379,28 @@ static int write_osrelease(struct feat_fd *ff,
 	return do_write_string(ff, uts.release);
 }
 
-static int write_arch(struct feat_fd *ff,
-		      struct evlist *evlist __maybe_unused)
+static int write_arch(struct feat_fd *ff, struct evlist *evlist)
 {
 	struct utsname uts;
-	int ret;
+	const char *arch = NULL;
 
-	ret = uname(&uts);
-	if (ret < 0)
-		return -1;
+	if (evlist->session) {
+		/* Force the computation in the perf_env of the e_machine of the threads. */
+		perf_session__e_machine(evlist->session, /*e_flags=*/NULL);
+		arch = perf_env__arch(perf_session__env(evlist->session));
+	}
 
-	return do_write_string(ff, uts.machine);
+	if (!arch) {
+		int ret = uname(&uts);
+
+		if (ret < 0)
+			return -1;
+		arch = uts.machine;
+	}
+	return do_write_string(ff, arch);
 }
 
-static int write_e_machine(struct feat_fd *ff,
-			   struct evlist *evlist __maybe_unused)
+static int write_e_machine(struct feat_fd *ff, struct evlist *evlist)
 {
 	/* e_machine expanded from 16 to 32-bits for alignment. */
 	uint32_t e_flags;
@@ -2684,9 +2691,29 @@ static int process_##__feat(struct feat_fd *ff, void *data __maybe_unused) \
 FEAT_PROCESS_STR_FUN(hostname, hostname);
 FEAT_PROCESS_STR_FUN(osrelease, os_release);
 FEAT_PROCESS_STR_FUN(version, version);
-FEAT_PROCESS_STR_FUN(arch, arch);
 FEAT_PROCESS_STR_FUN(cpudesc, cpu_desc);
 FEAT_PROCESS_STR_FUN(cpuid, cpuid);
+
+static int process_arch(struct feat_fd *ff, void *data __maybe_unused)
+{
+	uint16_t saved_e_machine = ff->ph->env.e_machine;
+
+	free(ff->ph->env.arch);
+	ff->ph->env.arch = do_read_string(ff);
+	if (!ff->ph->env.arch)
+		return -ENOMEM;
+	/*
+	 * Make the arch string canonical by computing the e_machine from it,
+	 * then turning the e_machine back into an arch string.
+	 */
+	ff->ph->env.e_machine = EM_NONE;
+	if (perf_env__e_machine(&ff->ph->env, /*e_flags=*/NULL) != EM_NONE) {
+		zfree(&ff->ph->env.arch);
+		perf_env__arch(&ff->ph->env);
+	}
+	ff->ph->env.e_machine = saved_e_machine;
+	return 0;
+}
 
 static int process_e_machine(struct feat_fd *ff, void *data __maybe_unused)
 {
