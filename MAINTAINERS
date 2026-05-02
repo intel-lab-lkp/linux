@@ -1848,6 +1848,7 @@ M:	Ciprian Regus <ciprian.regus@analog.com>
 L:	netdev@vger.kernel.org
 S:	Maintained
 W:	https://ez.analog.com/linux-software-drivers
+F:	Documentation/devicetree/bindings/net/adi,adin1140.yaml
 F:	drivers/net/ethernet/adi/adin1140.c
 
 ANALOG DEVICES INC ETHERNET PHY DRIVERS
