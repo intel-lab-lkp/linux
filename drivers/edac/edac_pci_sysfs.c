@@ -176,7 +176,7 @@ static int edac_pci_create_instance_kobj(struct edac_pci_ctl_info *pci, int idx)
 				   edac_pci_top_main_kobj, "pci%d", idx);
 	if (err != 0) {
 		edac_dbg(2, "failed to register instance pci%d\n", idx);
-		kobject_put(edac_pci_top_main_kobj);
+		kobject_put(&pci->kobj);
 		goto error_out;
 	}
 
@@ -340,6 +340,7 @@ static int edac_pci_main_kobj_setup(void)
 	int err = -ENODEV;
 	const struct bus_type *edac_subsys;
 	struct device *dev_root;
+	bool kobj_initialized = false;
 
 	edac_dbg(0, "\n");
 
@@ -374,6 +375,7 @@ static int edac_pci_main_kobj_setup(void)
 		err = kobject_init_and_add(edac_pci_top_main_kobj,
 					   &ktype_edac_pci_main_kobj,
 					   &dev_root->kobj, "pci");
+		kobj_initialized = true;
 		put_device(dev_root);
 	}
 	if (err) {
@@ -392,7 +394,12 @@ static int edac_pci_main_kobj_setup(void)
 
 	/* Error unwind statck */
 kobject_init_and_add_fail:
-	kobject_put(edac_pci_top_main_kobj);
+	if (kobj_initialized) {
+		kobject_put(edac_pci_top_main_kobj);
+		goto decrement_count_fail;
+	}
+
+	kfree(edac_pci_top_main_kobj);
 
 kzalloc_fail:
 	module_put(THIS_MODULE);
