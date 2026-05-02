@@ -756,7 +756,7 @@ static void lan966x_cleanup_ports(struct lan966x *lan966x)
 			unregister_netdev(port->dev);
 
 		lan966x_xdp_port_deinit(port);
-		if (lan966x->fdma && lan966x->fdma_ndev == port->dev)
+		if (lan966x->fdma && port->dev && lan966x->fdma_ndev == port->dev)
 			lan966x_fdma_netdev_deinit(lan966x, port->dev);
 
 		if (port->phylink) {
@@ -873,6 +873,9 @@ static int lan966x_probe_port(struct lan966x *lan966x, u32 p,
 	err = register_netdev(dev);
 	if (err) {
 		dev_err(lan966x->dev, "register_netdev failed\n");
+		phylink_destroy(phylink);
+		port->phylink = NULL;
+		port->dev = NULL;
 		return err;
 	}
 
