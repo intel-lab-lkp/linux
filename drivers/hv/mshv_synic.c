@@ -381,8 +381,12 @@ mshv_intercept_isr(struct hv_message *msg)
 	 * (because the vp is only deleted when the partition is), no additional
 	 * locking is needed here
 	 */
-	vp_index =
-	       ((struct hv_opaque_intercept_message *)msg->u.payload)->vp_index;
+	vp_index = READ_ONCE(
+	       ((struct hv_opaque_intercept_message *)msg->u.payload)->vp_index);
+	if (unlikely(vp_index >= MSHV_MAX_VPS)) {
+		pr_debug("VP index %u out of bounds\n", vp_index);
+		goto unlock_out;
+	}
 	vp = partition->pt_vp_array[vp_index];
 	if (unlikely(!vp)) {
 		pr_debug("failed to find VP %u\n", vp_index);
