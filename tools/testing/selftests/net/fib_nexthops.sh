@@ -128,6 +128,47 @@ run_cmd()
 	return $rc
 }
 
+# Helpers used by the *_torture subtests below. The torture loops drive
+# concurrent nexthop updates and packet flood, but until now they only
+# checked "did the kernel crash". A KASAN/UBSAN report without
+# panic_on_warn=1 lands in dmesg and is silently ignored. These helpers
+# place a marker into /dev/kmsg before the load starts and grep for
+# splat lines after it stops. If /dev/kmsg is not writable the check
+# is skipped and the previous pass behaviour is kept.
+torture_dmesg_marker=""
+
+torture_dmesg_baseline()
+{
+	torture_dmesg_marker=""
+	[ -w /dev/kmsg ] || return 0
+
+	torture_dmesg_marker="fib_nexthops-torture-$$-$RANDOM"
+	echo "$torture_dmesg_marker" >/dev/kmsg
+}
+
+torture_dmesg_check()
+{
+	local since
+	local found
+
+	[ -z "$torture_dmesg_marker" ] && return 0
+
+	since=$(dmesg 2>/dev/null | \
+		awk -v m="$torture_dmesg_marker" '
+			$0 ~ m { f = 1; next }
+			f { print }
+		')
+
+	found=$(echo "$since" | grep -E \
+		'KASAN:|UBSAN:|KCSAN:|KFENCE:|Oops:|kernel BUG at|general protection fault')
+
+	[ -z "$found" ] && return 0
+
+	echo "    Kernel splat detected during torture run:"
+	echo "$found" | sed 's/^/    /'
+	return 1
+}
+
 get_linklocal()
 {
 	local dev=$1
@@ -1333,6 +1374,8 @@ ipv6_torture()
 	run_cmd "$IP route add 2001:db8:101::1 nhid 102"
 	run_cmd "$IP route add 2001:db8:101::2 nhid 102"
 
+	torture_dmesg_baseline
+
 	ipv6_del_add_loop1 &
 	pid1=$!
 	ipv6_grp_replace_loop &
@@ -1348,8 +1391,9 @@ ipv6_torture()
 	kill -9 $pid1 $pid2 $pid3 $pid4 $pid5
 	wait $pid1 $pid2 $pid3 $pid4 $pid5 2>/dev/null
 
-	# if we did not crash, success
-	log_test 0 0 "IPv6 torture test"
+	# Pass only if we did not crash AND no kernel splat appeared.
+	torture_dmesg_check
+	log_test $? 0 "IPv6 torture test"
 }
 
 ipv6_res_grp_replace_loop()
@@ -1387,6 +1431,8 @@ ipv6_res_torture()
 	run_cmd "$IP route add 2001:db8:101::1 nhid 102"
 	run_cmd "$IP route add 2001:db8:101::2 nhid 102"
 
+	torture_dmesg_baseline
+
 	ipv6_del_add_loop1 &
 	pid1=$!
 	ipv6_res_grp_replace_loop &
@@ -1404,8 +1450,9 @@ ipv6_res_torture()
 	kill -9 $pid1 $pid2 $pid3 $pid4 $pid5
 	wait $pid1 $pid2 $pid3 $pid4 $pid5 2>/dev/null
 
-	# if we did not crash, success
-	log_test 0 0 "IPv6 resilient nexthop group torture test"
+	# Pass only if we did not crash AND no kernel splat appeared.
+	torture_dmesg_check
+	log_test $? 0 "IPv6 resilient nexthop group torture test"
 }
 
 ipv4_fcnal()
@@ -2123,6 +2170,8 @@ ipv4_torture()
 	run_cmd "$IP route add 172.16.101.1 nhid 102"
 	run_cmd "$IP route add 172.16.101.2 nhid 102"
 
+	torture_dmesg_baseline
+
 	ipv4_del_add_loop1 &
 	pid1=$!
 	ipv4_grp_replace_loop &
@@ -2138,8 +2187,9 @@ ipv4_torture()
 	kill -9 $pid1 $pid2 $pid3 $pid4 $pid5
 	wait $pid1 $pid2 $pid3 $pid4 $pid5 2>/dev/null
 
-	# if we did not crash, success
-	log_test 0 0 "IPv4 torture test"
+	# Pass only if we did not crash AND no kernel splat appeared.
+	torture_dmesg_check
+	log_test $? 0 "IPv4 torture test"
 }
 
 ipv4_res_grp_replace_loop()
@@ -2177,6 +2227,8 @@ ipv4_res_torture()
 	run_cmd "$IP route add 172.16.101.1 nhid 102"
 	run_cmd "$IP route add 172.16.101.2 nhid 102"
 
+	torture_dmesg_baseline
+
 	ipv4_del_add_loop1 &
 	pid1=$!
 	ipv4_res_grp_replace_loop &
@@ -2194,8 +2246,9 @@ ipv4_res_torture()
 	kill -9 $pid1 $pid2 $pid3 $pid4 $pid5
 	wait $pid1 $pid2 $pid3 $pid4 $pid5 2>/dev/null
 
-	# if we did not crash, success
-	log_test 0 0 "IPv4 resilient nexthop group torture test"
+	# Pass only if we did not crash AND no kernel splat appeared.
+	torture_dmesg_check
+	log_test $? 0 "IPv4 resilient nexthop group torture test"
 }
 
 basic()
