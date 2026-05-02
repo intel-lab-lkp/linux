@@ -1032,6 +1032,19 @@ static void complete_signal(int sig, struct task_struct *p, enum pid_type type)
 	return;
 }
 
+static inline void mark_si_immutable(struct kernel_siginfo *info)
+{
+	info->si_signo |= INT_MIN; /* sets MSB */
+}
+
+static inline bool unmark_si_immutable(struct kernel_siginfo *info)
+{
+	bool ret = !is_si_special(info) && (info->si_signo & INT_MIN);
+	if (ret)
+		info->si_signo &= ~INT_MIN;
+	return ret;
+}
+
 static inline bool legacy_queue(struct sigpending *signals, int sig)
 {
 	return (sig < SIGRTMIN) && sigismember(&signals->signal, sig);
@@ -1040,6 +1053,7 @@ static inline bool legacy_queue(struct sigpending *signals, int sig)
 static int __send_signal_locked(int sig, struct kernel_siginfo *info,
 				struct task_struct *t, enum pid_type type, bool force)
 {
+	bool immutable = unmark_si_immutable(info);
 	struct sigpending *pending;
 	struct sigqueue *q;
 	int override_rlimit;
@@ -1053,12 +1067,12 @@ static int __send_signal_locked(int sig, struct kernel_siginfo *info,
 
 	pending = (type != PIDTYPE_PID) ? &t->signal->shared_pending : &t->pending;
 	/*
-	 * Short-circuit ignored signals and support queuing
-	 * exactly one non-rt signal, so that we can get more
-	 * detailed information about the cause of the signal.
+	 * Queue exactly one non-rt signal so that we can get more
+	 * detailed information about the cause. But we must never
+	 * lose the siginfo for an SA_IMMUTABLE signal.
 	 */
 	result = TRACE_SIGNAL_ALREADY_PENDING;
-	if (legacy_queue(pending, sig))
+	if (legacy_queue(pending, sig) && !immutable)
 		goto ret;
 
 	result = TRACE_SIGNAL_DELIVERED;
@@ -1085,7 +1099,12 @@ static int __send_signal_locked(int sig, struct kernel_siginfo *info,
 	q = sigqueue_alloc(sig, t, GFP_ATOMIC, override_rlimit);
 
 	if (q) {
-		list_add_tail(&q->list, &pending->list);
+		/* Ensure dequeue_synchronous_signal() sees SA_IMMUTABLE first */
+		if (immutable)
+			list_add(&q->list, &pending->list);
+		else
+			list_add_tail(&q->list, &pending->list);
+
 		switch ((unsigned long) info) {
 		case (unsigned long) SEND_SIG_NOINFO:
 			clear_siginfo(&q->info);
@@ -1128,6 +1147,9 @@ static int __send_signal_locked(int sig, struct kernel_siginfo *info,
 		 * send the signal, but the *info bits are lost.
 		 */
 		result = TRACE_SIGNAL_LOSE_INFO;
+		/* The task must not escape SA_IMMUTABLE; escalate to SIGKILL */
+		if (immutable)
+			sig = SIGKILL;
 	}
 
 out_set:
@@ -1315,6 +1337,9 @@ force_sig_info_to_task(struct kernel_siginfo *info, struct task_struct *t,
 	if (action->sa.sa_handler == SIG_DFL &&
 	    (!t->ptrace || (handler == HANDLER_EXIT)))
 		t->signal->flags &= ~SIGNAL_UNKILLABLE;
+
+	if (handler == HANDLER_EXIT)
+		mark_si_immutable(info);
 	ret = __send_signal_locked(sig, info, t, PIDTYPE_PID, false);
 	/* This can happen if the signal was already pending and blocked */
 	if (!task_sigpending(t))
