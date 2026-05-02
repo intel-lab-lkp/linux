@@ -40,6 +40,12 @@ properties:
   interrupts:
     maxItems: 1
 
+  "#clock-cells":
+    const: 0
+
+  clock-output-names:
+    maxItems: 1
+
   clocks:
     description: |
       The clocks are optional. The RTC is disabled, if no clocks are
