@@ -156,22 +156,25 @@ static int __die_find_inline_cb(Dwarf_Die *die_mem, void *data);
 int cu_walk_functions_at(Dwarf_Die *cu_die, Dwarf_Addr addr,
 		    int (*callback)(Dwarf_Die *, void *), void *data)
 {
-	Dwarf_Die die_mem;
+	Dwarf_Die die_mem, next_die;
 	Dwarf_Die *sc_die;
 	int ret = -ENOENT;
 
 	/* Inlined function could be recursive. Trace it until fail */
-	for (sc_die = die_find_realfunc(cu_die, addr, &die_mem);
-	     sc_die != NULL;
-	     sc_die = die_find_child(sc_die, __die_find_inline_cb, &addr,
-				     &die_mem)) {
+	sc_die = die_find_realfunc(cu_die, addr, &die_mem);
+	while (sc_die != NULL) {
 		ret = callback(sc_die, data);
 		if (ret)
 			break;
+
+		sc_die = die_find_child(sc_die, __die_find_inline_cb, &addr, &next_die);
+		if (sc_die) {
+			memcpy(&die_mem, &next_die, sizeof(Dwarf_Die));
+			sc_die = &die_mem;
+		}
 	}
 
 	return ret;
-
 }
 
 /**
@@ -561,7 +564,7 @@ Dwarf_Die *die_find_child(Dwarf_Die *rt_die,
 			  int (*callback)(Dwarf_Die *, void *),
 			  void *data, Dwarf_Die *die_mem)
 {
-	Dwarf_Die child_die;
+	Dwarf_Die child_die, sibling_die;
 	int ret;
 
 	ret = dwarf_child(rt_die, die_mem);
@@ -579,7 +582,8 @@ Dwarf_Die *die_find_child(Dwarf_Die *rt_die,
 			return die_mem;
 		}
 	} while ((ret & DIE_FIND_CB_SIBLING) &&
-		 dwarf_siblingof(die_mem, die_mem) == 0);
+		 dwarf_siblingof(die_mem, &sibling_die) == 0 &&
+		 (memcpy(die_mem, &sibling_die, sizeof(Dwarf_Die)), 1));
 
 	return NULL;
 }
@@ -622,9 +626,13 @@ Dwarf_Die *die_find_tailfunc(Dwarf_Die *cu_die, Dwarf_Addr addr,
 	/* dwarf_getscopes can't find subprogram. */
 	if (!dwarf_getfuncs(cu_die, __die_search_func_tail_cb, &ad, 0))
 		return NULL;
-	else
-		return die_mem;
+
+	if (dwarf_offdie(dwarf_cu_getdwarf(cu_die->cu), dwarf_dieoffset(die_mem), die_mem) == NULL)
+		return NULL;
+
+	return die_mem;
 }
+
 
 /* die_find callback for non-inlined function search */
 static int __die_search_func_cb(Dwarf_Die *fn_die, void *data)
@@ -647,6 +655,7 @@ static int __die_search_func_cb(Dwarf_Die *fn_die, void *data)
  * die_find_realfunc - Search a non-inlined function at given address
  * @cu_die: a CU DIE which including @addr
  * @addr: target address
+ * @dbg: Dwarf session
  * @die_mem: a buffer for result DIE
  *
  * Search a non-inlined function DIE which includes @addr. Stores the
@@ -661,8 +670,11 @@ Dwarf_Die *die_find_realfunc(Dwarf_Die *cu_die, Dwarf_Addr addr,
 	/* dwarf_getscopes can't find subprogram. */
 	if (!dwarf_getfuncs(cu_die, __die_search_func_cb, &ad, 0))
 		return NULL;
-	else
-		return die_mem;
+
+	if (dwarf_offdie(dwarf_cu_getdwarf(cu_die->cu), dwarf_dieoffset(die_mem), die_mem) == NULL)
+		return NULL;
+
+	return die_mem;
 }
 
 /* die_find callback for inline function search */
@@ -710,15 +722,15 @@ Dwarf_Die *die_find_inlinefunc(Dwarf_Die *sp_die, Dwarf_Addr addr,
 {
 	Dwarf_Die tmp_die;
 
-	sp_die = die_find_child(sp_die, __die_find_inline_cb, &addr, &tmp_die);
+	sp_die = die_find_child(sp_die, __die_find_inline_cb, &addr, die_mem);
 	if (!sp_die)
 		return NULL;
 
 	/* Inlined function could be recursive. Trace it until fail */
 	while (sp_die) {
-		memcpy(die_mem, sp_die, sizeof(Dwarf_Die));
-		sp_die = die_find_child(sp_die, __die_find_inline_cb, &addr,
-					&tmp_die);
+		sp_die = die_find_child(die_mem, __die_find_inline_cb, &addr, &tmp_die);
+		if (sp_die)
+			memcpy(die_mem, &tmp_die, sizeof(Dwarf_Die));
 	}
 
 	return die_mem;
