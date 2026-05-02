@@ -249,7 +249,7 @@ e di molti altri rami per specifici sottosistemi. Questi rami sono:
 I sorgenti kernel 4.x
 ~~~~~~~~~~~~~~~~~~~~~
 
-I kernel 4.x sono amministrati da Linus Torvald, e possono essere trovati
+I kernel 4.x sono amministrati da Linus Torvalds, e possono essere trovati
 su https://kernel.org nella cartella pub/linux/kernel/v4.x/. Il processo
 di sviluppo è il seguente:
 

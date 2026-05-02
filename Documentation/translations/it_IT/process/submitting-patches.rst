@@ -280,7 +280,7 @@ https://subspace.kernel.org. Tuttavia, ci sono altre liste di discussione
 ospitate altrove.
 
 L'ultimo giudizio sull'integrazione delle modifiche accettate spetta a
-Linux Torvalds.  Il suo indirizzo e-mail è <torvalds@linux-foundation.org>.
+Linus Torvalds.  Il suo indirizzo e-mail è <torvalds@linux-foundation.org>.
 Riceve moltissime e-mail, e, a questo punto, solo poche patch passano
 direttamente attraverso il suo giudizio; quindi, dovreste fare del vostro
 meglio per -evitare di- inviargli e-mail.

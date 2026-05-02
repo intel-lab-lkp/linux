@@ -53,7 +53,7 @@ raccolti e, verificati in anticipo.  Il funzionamento di tale procedimento
 verrà descritto dettagliatamente più avanti).
 
 La finestra di inclusione resta attiva approssimativamente per due settimane.
-Al termine di questo periodo, Linus Torvald dichiarerà che la finestra è
+Al termine di questo periodo, Linus Torvalds dichiarerà che la finestra è
 chiusa e rilascerà il primo degli "rc" del kernel.
 Per il kernel che è destinato ad essere 5.6, per esempio, il rilascio
 che emerge al termine della finestra d'inclusione si chiamerà 5.6-rc1.

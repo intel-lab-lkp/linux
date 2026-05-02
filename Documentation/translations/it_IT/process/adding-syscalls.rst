@@ -603,7 +603,7 @@ Riferimenti e fonti
  - Requisiti specifici alle architetture sono discussi nella pagina man
    :manpage:`syscall(2)` :
    http://man7.org/linux/man-pages/man2/syscall.2.html#NOTES
- - Collezione di email di Linux Torvalds sui problemi relativi a ``ioctl()``:
+ - Collezione di email di Linus Torvalds sui problemi relativi a ``ioctl()``:
    http://yarchive.net/comp/linux/ioctl.html
  - "Come non inventare interfacce del kernel", Arnd Bergmann,
    http://www.ukuug.org/events/linux2007/2007/papers/Bergmann.pdf
