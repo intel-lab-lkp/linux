@@ -135,7 +135,7 @@ int riscv_of_parent_hartid(struct device_node *node, unsigned long *hartid)
 		}
 	}
 
-	return -1;
+	return -ENODEV;
 }
 
 unsigned long __init riscv_get_marchid(void)
@@ -348,12 +348,13 @@ static int c_show(struct seq_file *m, void *v)
 
 	if (acpi_disabled) {
 		node = of_get_cpu_node(cpu_id, NULL);
+		if (node) {
+			if (!of_property_read_string(node, "compatible", &compat) &&
+				strcmp(compat, "riscv"))
+				seq_printf(m, "uarch\t\t: %s\n", compat);
 
-		if (!of_property_read_string(node, "compatible", &compat) &&
-		    strcmp(compat, "riscv"))
-			seq_printf(m, "uarch\t\t: %s\n", compat);
-
-		of_node_put(node);
+			of_node_put(node);
+		}
 	}
 
 	seq_printf(m, "mvendorid\t: 0x%lx\n", ci->mvendorid);
