@@ -175,6 +175,7 @@ static ssize_t rfc8009_encrypt(const struct krb5_enctype *krb5,
 			       size_t data_offset, size_t data_len,
 			       bool preconfounded)
 {
+	DECLARE_CRYPTO_WAIT(wait);
 	struct aead_request *req;
 	struct scatterlist bsg[2];
 	ssize_t ret, done;
@@ -227,10 +228,11 @@ static ssize_t rfc8009_encrypt(const struct krb5_enctype *krb5,
 
 	/* Hash and encrypt the message. */
 	aead_request_set_tfm(req, aead);
-	aead_request_set_callback(req, 0, NULL, NULL);
+	aead_request_set_callback(req, CRYPTO_TFM_REQ_MAY_BACKLOG,
+				  crypto_req_done, &wait);
 	aead_request_set_ad(req, krb5_aead_ivsize(aead));
 	aead_request_set_crypt(req, bsg, bsg, secure_len, iv);
-	ret = crypto_aead_encrypt(req);
+	ret = crypto_wait_req(crypto_aead_encrypt(req), &wait);
 	if (ret < 0)
 		goto error;
 
@@ -253,6 +255,7 @@ static int rfc8009_decrypt(const struct krb5_enctype *krb5,
 			   struct scatterlist *sg, unsigned int nr_sg,
 			   size_t *_offset, size_t *_len)
 {
+	DECLARE_CRYPTO_WAIT(wait);
 	struct aead_request *req;
 	struct scatterlist bsg[2];
 	size_t bsize;
@@ -283,10 +286,11 @@ static int rfc8009_decrypt(const struct krb5_enctype *krb5,
 
 	/* Decrypt the message and verify its checksum. */
 	aead_request_set_tfm(req, aead);
-	aead_request_set_callback(req, 0, NULL, NULL);
+	aead_request_set_callback(req, CRYPTO_TFM_REQ_MAY_BACKLOG,
+				  crypto_req_done, &wait);
 	aead_request_set_ad(req, krb5_aead_ivsize(aead));
 	aead_request_set_crypt(req, bsg, bsg, *_len, iv);
-	ret = crypto_aead_decrypt(req);
+	ret = crypto_wait_req(crypto_aead_decrypt(req), &wait);
 	if (ret < 0)
 		goto error;
 

@@ -543,6 +543,7 @@ ssize_t krb5_aead_encrypt(const struct krb5_enctype *krb5,
 			  size_t data_offset, size_t data_len,
 			  bool preconfounded)
 {
+	DECLARE_CRYPTO_WAIT(wait);
 	struct aead_request *req;
 	ssize_t ret, done;
 	size_t bsize, base_len, secure_offset, secure_len, pad_len, cksum_offset;
@@ -588,9 +589,10 @@ ssize_t krb5_aead_encrypt(const struct krb5_enctype *krb5,
 	iv = buffer + krb5_aead_size(aead);
 
 	aead_request_set_tfm(req, aead);
-	aead_request_set_callback(req, 0, NULL, NULL);
+	aead_request_set_callback(req, CRYPTO_TFM_REQ_MAY_BACKLOG,
+				  crypto_req_done, &wait);
 	aead_request_set_crypt(req, sg, sg, secure_len, iv);
-	ret = crypto_aead_encrypt(req);
+	ret = crypto_wait_req(crypto_aead_encrypt(req), &wait);
 	if (ret < 0)
 		goto error;
 
@@ -610,6 +612,7 @@ int krb5_aead_decrypt(const struct krb5_enctype *krb5,
 		      struct scatterlist *sg, unsigned int nr_sg,
 		      size_t *_offset, size_t *_len)
 {
+	DECLARE_CRYPTO_WAIT(wait);
 	struct aead_request *req;
 	size_t bsize;
 	void *buffer;
@@ -633,9 +636,10 @@ int krb5_aead_decrypt(const struct krb5_enctype *krb5,
 	iv = buffer + krb5_aead_size(aead);
 
 	aead_request_set_tfm(req, aead);
-	aead_request_set_callback(req, 0, NULL, NULL);
+	aead_request_set_callback(req, CRYPTO_TFM_REQ_MAY_BACKLOG,
+				  crypto_req_done, &wait);
 	aead_request_set_crypt(req, sg, sg, *_len, iv);
-	ret = crypto_aead_decrypt(req);
+	ret = crypto_wait_req(crypto_aead_decrypt(req), &wait);
 	if (ret < 0)
 		goto error;
 
