@@ -1296,7 +1296,13 @@ static int mshv_prepare_pinned_region(struct mshv_mem_region *region)
 	}
 
 	ret = mshv_region_map(region);
-	if (ret && mshv_partition_encrypted(partition)) {
+	if (ret)
+		goto share_region;
+
+	return 0;
+
+share_region:
+	if (mshv_partition_encrypted(partition)) {
 		int shrc;
 
 		shrc = mshv_region_share(region);
@@ -1312,9 +1318,6 @@ static int mshv_prepare_pinned_region(struct mshv_mem_region *region)
 		 */
 		goto err_out;
 	}
-
-	return 0;
-
 invalidate_region:
 	mshv_region_invalidate(region);
 err_out:
