@@ -31,6 +31,7 @@
 #include "map.h"
 #include "symbol.h"
 #include "map_symbol.h"
+#include "mutex.h"
 #include "mem-events.h"
 #include "mem-info.h"
 #include "symsrc.h"
@@ -51,6 +52,8 @@
 static int dso__load_kernel_sym(struct dso *dso, struct map *map);
 static int dso__load_guest_kernel_sym(struct dso *dso, struct map *map);
 static bool symbol__is_idle(const char *name);
+
+static struct mutex symbol_bits_lock;
 
 int vmlinux_path__nr_entries;
 char **vmlinux_path;
@@ -343,6 +346,20 @@ void symbol__delete(struct symbol *sym)
 		}
 	}
 	free(((void *)sym) - symbol_conf.priv_size);
+}
+
+void symbol__set_ignore(struct symbol *sym, bool ignore)
+{
+	mutex_lock(&symbol_bits_lock);
+	sym->ignore = ignore;
+	mutex_unlock(&symbol_bits_lock);
+}
+
+void symbol__set_annotate2(struct symbol *sym, bool annotate2)
+{
+	mutex_lock(&symbol_bits_lock);
+	sym->annotate2 = annotate2;
+	mutex_unlock(&symbol_bits_lock);
 }
 
 void symbols__delete(struct rb_root_cached *symbols)
@@ -2415,6 +2432,8 @@ int symbol__init(struct perf_env *env)
 	if (symbol_conf.initialized)
 		return 0;
 
+	mutex_init(&symbol_bits_lock);
+
 	symbol_conf.priv_size = PERF_ALIGN(symbol_conf.priv_size, sizeof(u64));
 
 	symbol__elf_init();
@@ -2493,6 +2512,9 @@ void symbol__exit(void)
 {
 	if (!symbol_conf.initialized)
 		return;
+
+	mutex_destroy(&symbol_bits_lock);
+
 	strlist__delete(symbol_conf.bt_stop_list);
 	strlist__delete(symbol_conf.sym_list);
 	strlist__delete(symbol_conf.dso_list);
