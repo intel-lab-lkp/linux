@@ -23,6 +23,7 @@
 #include <linux/platform_device.h>
 #include <linux/of.h>
 #include <linux/irqdomain.h>
+#include <linux/cleanup.h>
 
 #include <linux/mfd/twl.h>
 
@@ -209,7 +210,7 @@ static int twl_request(struct gpio_chip *chip, unsigned offset)
 	struct gpio_twl4030_priv *priv = gpiochip_get_data(chip);
 	int status = 0;
 
-	mutex_lock(&priv->mutex);
+	guard(mutex)(&priv->mutex);
 
 	/* Support the two LED outputs as output-only GPIOs. */
 	if (offset >= TWL4030_GPIO_MAX) {
@@ -227,30 +228,29 @@ static int twl_request(struct gpio_chip *chip, unsigned offset)
 		/* Configure PWM OFF register first */
 		status = twl_i2c_write_u8(TWL4030_MODULE_LED, 0x7f, reg + 1);
 		if (status < 0)
-			goto done;
+			return status;
 
 		/* Followed by PWM ON register */
 		status = twl_i2c_write_u8(TWL4030_MODULE_LED, 0x7f, reg);
 		if (status < 0)
-			goto done;
+			return status;
 
 		/* init LED to not-driven (high) */
 		status = twl_i2c_read_u8(TWL4030_MODULE_LED, &cached_leden,
 					 TWL4030_LED_LEDEN_REG);
 		if (status < 0)
-			goto done;
+			return status;
 		cached_leden &= ~ledclr_mask;
 		status = twl_i2c_write_u8(TWL4030_MODULE_LED, cached_leden,
 					  TWL4030_LED_LEDEN_REG);
 		if (status < 0)
-			goto done;
+			return status;
 
 		status = 0;
-		goto done;
 	}
 
 	/* on first use, turn GPIO module "on" */
-	if (!priv->usage_count) {
+	else if (!priv->usage_count) {
 		struct twl4030_gpio_platform_data *pdata;
 		u8 value = MASK_GPIO_CTRL_GPIO_ON;
 
@@ -264,11 +264,9 @@ static int twl_request(struct gpio_chip *chip, unsigned offset)
 		status = gpio_twl4030_write(REG_GPIO_CTRL, value);
 	}
 
-done:
 	if (!status)
 		priv->usage_count |= BIT(offset);
 
-	mutex_unlock(&priv->mutex);
 	return status;
 }
 
@@ -276,10 +274,10 @@ static void twl_free(struct gpio_chip *chip, unsigned offset)
 {
 	struct gpio_twl4030_priv *priv = gpiochip_get_data(chip);
 
-	mutex_lock(&priv->mutex);
+	guard(mutex)(&priv->mutex);
 	if (offset >= TWL4030_GPIO_MAX) {
 		WARN_ON_ONCE(twl4030_led_set_value(offset - TWL4030_GPIO_MAX, 1));
-		goto out;
+		return;
 	}
 
 	priv->usage_count &= ~BIT(offset);
@@ -287,9 +285,6 @@ static void twl_free(struct gpio_chip *chip, unsigned offset)
 	/* on last use, switch off GPIO module */
 	if (!priv->usage_count)
 		gpio_twl4030_write(REG_GPIO_CTRL, 0x0);
-
-out:
-	mutex_unlock(&priv->mutex);
 }
 
 static int twl_direction_in(struct gpio_chip *chip, unsigned offset)
@@ -297,16 +292,14 @@ static int twl_direction_in(struct gpio_chip *chip, unsigned offset)
 	struct gpio_twl4030_priv *priv = gpiochip_get_data(chip);
 	int ret;
 
-	mutex_lock(&priv->mutex);
+	guard(mutex)(&priv->mutex);
 	if (offset < TWL4030_GPIO_MAX)
 		ret = twl4030_set_gpio_direction(offset, 1);
 	else
-		ret = -EINVAL;	/* LED outputs can't be set as input */
+		return -EINVAL;	/* LED outputs can't be set as input */
 
 	if (!ret)
 		priv->direction &= ~BIT(offset);
-
-	mutex_unlock(&priv->mutex);
 
 	return ret;
 }
@@ -317,10 +310,9 @@ static int twl_get(struct gpio_chip *chip, unsigned offset)
 	int ret;
 	int status = 0;
 
-	mutex_lock(&priv->mutex);
+	guard(mutex)(&priv->mutex);
 	if (!(priv->usage_count & BIT(offset))) {
-		ret = -EPERM;
-		goto out;
+		return -EPERM;
 	}
 
 	if (priv->direction & BIT(offset))
@@ -328,10 +320,7 @@ static int twl_get(struct gpio_chip *chip, unsigned offset)
 	else
 		status = twl4030_get_gpio_datain(offset);
 
-	ret = (status < 0) ? status : !!status;
-out:
-	mutex_unlock(&priv->mutex);
-	return ret;
+	return (status < 0) ? status : !!status;
 }
 
 static int twl_set(struct gpio_chip *chip, unsigned int offset, int value)
@@ -339,7 +328,7 @@ static int twl_set(struct gpio_chip *chip, unsigned int offset, int value)
 	struct gpio_twl4030_priv *priv = gpiochip_get_data(chip);
 	int ret;
 
-	mutex_lock(&priv->mutex);
+	guard(mutex)(&priv->mutex);
 	if (offset < TWL4030_GPIO_MAX)
 		ret = twl4030_set_gpio_dataout(offset, value);
 	else
@@ -350,8 +339,6 @@ static int twl_set(struct gpio_chip *chip, unsigned int offset, int value)
 	else
 		priv->out_state &= ~BIT(offset);
 
-	mutex_unlock(&priv->mutex);
-
 	return ret;
 }
 
@@ -360,21 +347,19 @@ static int twl_direction_out(struct gpio_chip *chip, unsigned offset, int value)
 	struct gpio_twl4030_priv *priv = gpiochip_get_data(chip);
 	int ret = 0;
 
-	mutex_lock(&priv->mutex);
-	if (offset < TWL4030_GPIO_MAX) {
-		ret = twl4030_set_gpio_direction(offset, 0);
-		if (ret) {
-			mutex_unlock(&priv->mutex);
-			return ret;
+	scoped_guard(mutex, &priv->mutex) {
+		if (offset < TWL4030_GPIO_MAX) {
+			ret = twl4030_set_gpio_direction(offset, 0);
+			if (ret)
+				return ret;
 		}
+
+		/*
+		 *  LED gpios i.e. offset >= TWL4030_GPIO_MAX are always output
+		 */
+
+		priv->direction |= BIT(offset);
 	}
-
-	/*
-	 *  LED gpios i.e. offset >= TWL4030_GPIO_MAX are always output
-	 */
-
-	priv->direction |= BIT(offset);
-	mutex_unlock(&priv->mutex);
 
 	return twl_set(chip, offset, value);
 }
@@ -388,15 +373,13 @@ static int twl_get_direction(struct gpio_chip *chip, unsigned offset)
 	 */
 	int ret = GPIO_LINE_DIRECTION_OUT;
 
-	mutex_lock(&priv->mutex);
+	guard(mutex)(&priv->mutex);
 	if (offset < TWL4030_GPIO_MAX) {
 		ret = twl4030_get_gpio_direction(offset);
 		if (ret) {
-			mutex_unlock(&priv->mutex);
 			return ret;
 		}
 	}
-	mutex_unlock(&priv->mutex);
 
 	return ret;
 }
