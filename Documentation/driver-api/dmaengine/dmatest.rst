@@ -108,7 +108,7 @@ Example::
     % cat /sys/module/dmatest/parameters/wait
     % modprobe -r dmatest
 
-Part 3 - When built-in in the kernel
+Part 3 - When built into the kernel
 ====================================
 
 The module parameters that is supplied to the kernel command line will be used
