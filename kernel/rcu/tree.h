@@ -123,6 +123,10 @@ struct rcu_node {
 				/*  side effect, not as a lock. */
 	unsigned long boost_time;
 				/* When to start boosting (jiffies). */
+	struct irq_work rcu_deboost_iw;
+				/* Delegate deboosting to a safe environment */
+				/*  if interrupts are disabled at the time of */
+				/*  the call to rcu_read_unlock_special(). */
 	struct mutex kthread_mutex;
 				/* Exclusion for thread spawning and affinity */
 				/*  manipulation. */
