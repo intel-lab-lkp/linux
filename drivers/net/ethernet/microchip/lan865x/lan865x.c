@@ -332,6 +332,7 @@ static const struct net_device_ops lan865x_netdev_ops = {
 
 static int lan865x_probe(struct spi_device *spi)
 {
+	struct oa_tc6_config tc6_config = {};
 	struct net_device *netdev;
 	struct lan865x_priv *priv;
 	int ret;
@@ -346,7 +347,10 @@ static int lan865x_probe(struct spi_device *spi)
 	spi_set_drvdata(spi, priv);
 	INIT_WORK(&priv->multicast_work, lan865x_multicast_work_handler);
 
-	priv->tc6 = oa_tc6_init(spi, netdev);
+	tc6_config.spi = spi;
+	tc6_config.netdev = netdev;
+
+	priv->tc6 = oa_tc6_init(&tc6_config);
 	if (!priv->tc6) {
 		ret = -ENODEV;
 		goto free_netdev;

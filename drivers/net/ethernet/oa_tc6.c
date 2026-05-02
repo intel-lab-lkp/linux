@@ -139,6 +139,7 @@ struct oa_tc6 {
 	bool rx_buf_overflow;
 	bool int_flag;
 	bool prot_ctrl;
+	bool own_mdiobus;
 };
 
 enum oa_tc6_header_type {
@@ -538,32 +539,37 @@ static int oa_tc6_mdiobus_register(struct oa_tc6 *tc6)
 {
 	int ret;
 
-	tc6->mdiobus = mdiobus_alloc();
 	if (!tc6->mdiobus) {
-		netdev_err(tc6->netdev, "MDIO bus alloc failed\n");
-		return -ENOMEM;
+		tc6->mdiobus = mdiobus_alloc();
+		if (!tc6->mdiobus) {
+			netdev_err(tc6->netdev, "MDIO bus alloc failed\n");
+			return -ENOMEM;
+		}
+
+		tc6->mdiobus->read = oa_tc6_mdiobus_read;
+		tc6->mdiobus->write = oa_tc6_mdiobus_write;
+		/* OPEN Alliance 10BASE-T1x compliance MAC-PHYs will have both C22 and
+		 * C45 registers space. If the PHY is discovered via C22 bus protocol it
+		 * assumes it uses C22 protocol and always uses C22 registers indirect
+		 * access to access C45 registers. This is because, we don't have a
+		 * clean separation between C22/C45 register space and C22/C45 MDIO bus
+		 * protocols. Resulting, PHY C45 registers direct access can't be used
+		 * which can save multiple SPI bus access. To support this feature, PHY
+		 * drivers can set .read_mmd/.write_mmd in the PHY driver to call
+		 * .read_c45/.write_c45. Ex: drivers/net/phy/microchip_t1s.c
+		 */
+		tc6->mdiobus->read_c45 = oa_tc6_mdiobus_read_c45;
+		tc6->mdiobus->write_c45 = oa_tc6_mdiobus_write_c45;
+
+		tc6->own_mdiobus = true;
 	}
 
 	tc6->mdiobus->priv = tc6;
-	tc6->mdiobus->read = oa_tc6_mdiobus_read;
-	tc6->mdiobus->write = oa_tc6_mdiobus_write;
-	/* OPEN Alliance 10BASE-T1x compliance MAC-PHYs will have both C22 and
-	 * C45 registers space. If the PHY is discovered via C22 bus protocol it
-	 * assumes it uses C22 protocol and always uses C22 registers indirect
-	 * access to access C45 registers. This is because, we don't have a
-	 * clean separation between C22/C45 register space and C22/C45 MDIO bus
-	 * protocols. Resulting, PHY C45 registers direct access can't be used
-	 * which can save multiple SPI bus access. To support this feature, PHY
-	 * drivers can set .read_mmd/.write_mmd in the PHY driver to call
-	 * .read_c45/.write_c45. Ex: drivers/net/phy/microchip_t1s.c
-	 */
-	tc6->mdiobus->read_c45 = oa_tc6_mdiobus_read_c45;
-	tc6->mdiobus->write_c45 = oa_tc6_mdiobus_write_c45;
-	tc6->mdiobus->name = "oa-tc6-mdiobus";
 	tc6->mdiobus->parent = tc6->dev;
+	tc6->mdiobus->name = "oa-tc6-mdiobus";
 
 	snprintf(tc6->mdiobus->id, ARRAY_SIZE(tc6->mdiobus->id), "%s",
-		 dev_name(&tc6->spi->dev));
+			 dev_name(&tc6->spi->dev));
 
 	ret = mdiobus_register(tc6->mdiobus);
 	if (ret) {
@@ -577,19 +583,30 @@ static int oa_tc6_mdiobus_register(struct oa_tc6 *tc6)
 
 static void oa_tc6_mdiobus_unregister(struct oa_tc6 *tc6)
 {
+	if (!tc6->mdiobus)
+		return;
+
 	mdiobus_unregister(tc6->mdiobus);
-	mdiobus_free(tc6->mdiobus);
+
+	if (tc6->own_mdiobus)
+		mdiobus_free(tc6->mdiobus);
 }
 
 static int oa_tc6_phy_init(struct oa_tc6 *tc6)
 {
 	int ret;
 
-	ret = oa_tc6_check_phy_reg_direct_access_capability(tc6);
-	if (ret) {
-		netdev_err(tc6->netdev,
-			   "Direct PHY register access is not supported by the MAC-PHY\n");
-		return ret;
+	/* If the driver provided a mii_bus, it is also responsible for
+	 * implementing the bus access methods, so we don't have to worry
+	 * about checking the PHY access mode.
+	 */
+	if (!tc6->mdiobus) {
+		ret = oa_tc6_check_phy_reg_direct_access_capability(tc6);
+		if (ret) {
+			netdev_err(tc6->netdev,
+				"Direct PHY register access is not supported by the MAC-PHY\n");
+			return ret;
+		}
 	}
 
 	ret = oa_tc6_mdiobus_register(tc6);
@@ -621,7 +638,9 @@ static int oa_tc6_phy_init(struct oa_tc6 *tc6)
 
 static void oa_tc6_phy_exit(struct oa_tc6 *tc6)
 {
-	phy_disconnect(tc6->phydev);
+	if (tc6->phydev)
+		phy_disconnect(tc6->phydev);
+
 	oa_tc6_mdiobus_unregister(tc6);
 }
 
@@ -1282,24 +1301,28 @@ static int oa_tc6_check_ctrl_protection(struct oa_tc6 *tc6)
 
 /**
  * oa_tc6_init - allocates and initializes oa_tc6 structure.
- * @spi: device with which data will be exchanged.
- * @netdev: network device interface structure.
+ * @config: pointer to a caller-filled structure describing the MACPHY
+ *          (SPI device, net_device, and config flags).
  *
  * Return: pointer reference to the oa_tc6 structure if the MAC-PHY
  * initialization is successful otherwise NULL.
  */
-struct oa_tc6 *oa_tc6_init(struct spi_device *spi, struct net_device *netdev)
+struct oa_tc6 *oa_tc6_init(struct oa_tc6_config *config)
 {
 	struct oa_tc6 *tc6;
 	int ret;
 
-	tc6 = devm_kzalloc(&spi->dev, sizeof(*tc6), GFP_KERNEL);
+	if (!config)
+		return NULL;
+
+	tc6 = devm_kzalloc(&config->spi->dev, sizeof(*tc6), GFP_KERNEL);
 	if (!tc6)
 		return NULL;
 
-	tc6->spi = spi;
-	tc6->netdev = netdev;
-	SET_NETDEV_DEV(netdev, &spi->dev);
+	tc6->spi = config->spi;
+	tc6->netdev = config->netdev;
+	tc6->mdiobus = config->mii_bus;
+	SET_NETDEV_DEV(tc6->netdev, &tc6->spi->dev);
 	mutex_init(&tc6->spi_ctrl_lock);
 	spin_lock_init(&tc6->tx_skb_lock);
 
