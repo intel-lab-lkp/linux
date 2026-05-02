@@ -79,8 +79,8 @@ LA64中每个寄存器为64位宽。 ``$r0`` 的内容总是固定为0，而其�
 
 LoongArch现有两种向量扩展：
 
-- 128位向量扩展LSX（全称Loongson SIMD eXtention），
-- 256位向量扩展LASX（全称Loongson Advanced SIMD eXtention）。
+- 128位向量扩展LSX（全称Loongson SIMD Extension），
+- 256位向量扩展LASX（全称Loongson Advanced SIMD Extension）。
 
 LSX使用 ``$v0`` ~ ``$v31`` 向量寄存器，而LASX则使用 ``$x0`` ~ ``$x31`` 。
 
