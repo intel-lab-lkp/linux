@@ -36,7 +36,9 @@
 
 /* Firmware files */
 #define MXT_FW_NAME		"maxtouch.fw"
-#define MXT_CFG_NAME		"maxtouch.cfg"
+#define MXT_CFG_FOLDER		"atmel"
+#define MXT_CFG_NAME		"maxtouch"
+#define MXT_CFG_EXTENSION	".cfg"
 #define MXT_CFG_MAGIC		"OBP_RAW V1"
 
 /* Registers */
@@ -2224,6 +2226,60 @@ static void mxt_config_cb(const struct firmware *cfg, void *ctx)
 	release_firmware(cfg);
 }
 
+static void mxt_board_config_cb(const struct firmware *cfg, void *ctx)
+{
+	if (cfg) {
+		mxt_config_cb(cfg, ctx);
+	} else {
+		struct mxt_data *data = ctx;
+		char *fw_name;
+
+		fw_name = kasprintf(GFP_KERNEL, "%s%s", MXT_CFG_NAME, MXT_CFG_EXTENSION);
+		if (!fw_name)
+			return;
+
+		request_firmware_nowait(THIS_MODULE, true, fw_name, &data->client->dev, GFP_KERNEL,
+					data, mxt_config_cb);
+	}
+}
+
+static int mxt_invoke_config_loader(struct mxt_data *data)
+{
+	struct device_node *root;
+	char *board_type = NULL;
+	char *fw_name;
+	void (*cb)(const struct firmware *fw, void *context);
+
+	root = of_find_node_by_path("/");
+	if (root) {
+		const char *tmp;
+
+		if (!of_property_read_string_index(root, "compatible", 0, &tmp)) {
+			board_type = kstrdup(tmp, GFP_KERNEL);
+
+			/* get rid of '/' in the compatible string to be able to find the FW */
+			if (board_type)
+				strreplace(board_type, '/', '-');
+		}
+		of_node_put(root);
+	}
+
+	if (board_type) {
+		fw_name = kasprintf(GFP_KERNEL, "%s/%s.%s%s", MXT_CFG_FOLDER, MXT_CFG_NAME,
+				    board_type, MXT_CFG_EXTENSION);
+		cb = mxt_board_config_cb;
+		kfree(board_type);
+	} else {
+		fw_name = kasprintf(GFP_KERNEL, "%s%s", MXT_CFG_NAME, MXT_CFG_EXTENSION);
+		cb = mxt_config_cb;
+	}
+	if (!fw_name)
+		return -ENOMEM;
+
+	return request_firmware_nowait(THIS_MODULE, true, fw_name, &data->client->dev, GFP_KERNEL,
+				       data, cb);
+}
+
 static int mxt_initialize(struct mxt_data *data)
 {
 	struct i2c_client *client = data->client;
@@ -2270,11 +2326,9 @@ static int mxt_initialize(struct mxt_data *data)
 	if (error)
 		return error;
 
-	error = request_firmware_nowait(THIS_MODULE, true, MXT_CFG_NAME,
-					&client->dev, GFP_KERNEL, data,
-					mxt_config_cb);
+	error = mxt_invoke_config_loader(data);
 	if (error) {
-		dev_err(&client->dev, "Failed to invoke firmware loader: %d\n",
+		dev_err(&client->dev, "Failed to invoke config loader: %d\n",
 			error);
 		return error;
 	}
