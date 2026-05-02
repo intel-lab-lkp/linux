@@ -27,6 +27,24 @@
 #define RAA215300_INT_MASK_6	0x68
 
 #define RAA215300_REG_BLOCK_EN	0x6c
+#define RAA215300_REG_MPIO2_POWER_OFF			0x77
+#define RAA215300_MPIO2_POWER_OFF_DELAY			GENMASK(6, 0)
+#define RAA215300_REG_MPIO2_CONFIG			0x8c
+#define RAA215300_MPIO2_CONFIG_POLARITY_ACTIVE_HIGH	BIT(5)
+#define RAA215300_MPIO2_CONFIG_TYPE			GENMASK(4, 3)
+#define RAA215300_MPIO2_CONFIG_TYPE_HIGH_IMPEDANCE	(0 << 3)
+#define RAA215300_MPIO2_CONFIG_TYPE_OPEN_DRAIN		(1 << 1)
+#define RAA215300_MPIO2_CONFIG_TYPE_OPEN_SOURCE		(2 << 2)
+#define RAA215300_MPIO2_CONFIG_TYPE_CMOS		(3 << 3)
+#define RAA215300_MPIO2_CONFIG_FUNCTION			GENMASK(2, 0)
+#define RAA215300_MPIO2_CONFIG_FUNCTION_NONE		0
+#define RAA215300_MPIO2_CONFIG_FUNCTION_CLKOUT		1
+#define RAA215300_MPIO2_CONFIG_FUNCTION_EXT_VR_PGOOD	2
+#define RAA215300_MPIO2_CONFIG_FUNCTION_GPI		3
+#define RAA215300_MPIO2_CONFIG_FUNCTION_GPI_PGOOD	4
+#define RAA215300_MPIO2_CONFIG_FUNCTION_RESETOUT	5
+#define RAA215300_MPIO2_CONFIG_FUNCTION_EXT_VR_EN	6
+#define RAA215300_MPIO2_CONFIG_FUNCTION_GPO		7
 #define RAA215300_HW_REV	0xf8
 
 #define RAA215300_INT_MASK_1_ALL	GENMASK(5, 0)
@@ -47,6 +65,117 @@ static const struct regmap_config raa215300_regmap_config = {
 static void raa215300_rtc_unregister_device(void *data)
 {
 	i2c_unregister_device(data);
+}
+
+struct raa215300_clk {
+	struct clk_hw hw;
+	struct regmap *regmap;
+};
+
+#define to_raa215300_clk(_hw) container_of(_hw, struct raa215300_clk, hw)
+
+static int raa215300_clk_prepare(struct clk_hw *hw)
+{
+	struct raa215300_clk *clk = to_raa215300_clk(hw);
+	/* clkout function must configure mpio2 as full cmos output */
+	const u8 ena_val = RAA215300_MPIO2_CONFIG_TYPE_CMOS |
+			   RAA215300_MPIO2_CONFIG_FUNCTION_CLKOUT;
+
+	return regmap_write(clk->regmap, RAA215300_REG_MPIO2_CONFIG, ena_val);
+}
+
+static void raa215300_clk_unprepare(struct clk_hw *hw)
+{
+	struct raa215300_clk *clk = to_raa215300_clk(hw);
+	const u8 dis_val = RAA215300_MPIO2_CONFIG_TYPE_HIGH_IMPEDANCE |
+			   RAA215300_MPIO2_CONFIG_FUNCTION_NONE;
+
+	regmap_write(clk->regmap, RAA215300_REG_MPIO2_CONFIG, dis_val);
+}
+
+static unsigned long raa215300_clk_recalc_rate(struct clk_hw *hw, unsigned long parent_rate)
+{
+	struct raa215300_clk *clk = to_raa215300_clk(hw);
+	unsigned int val;
+
+	regmap_read(clk->regmap, RAA215300_REG_MPIO2_POWER_OFF, &val);
+	val &= RAA215300_MPIO2_POWER_OFF_DELAY;
+
+	return 32768 >> val;
+}
+
+static int raa215300_clk_determine_rate(struct clk_hw *hw, struct clk_rate_request *req)
+{
+	unsigned long r = 32768;
+
+	while (r > req->rate)
+		r >>= 1;
+
+	/* clamp at minimum rate 256Hz */
+	if (r < 256)
+		r = 256;
+
+	req->rate = r;
+	return 0;
+}
+
+static int raa215300_clk_set_rate(struct clk_hw *hw, unsigned long rate, unsigned long parent_rate)
+{
+	struct raa215300_clk *clk = to_raa215300_clk(hw);
+	unsigned int val = 0;
+	unsigned long r = 32768;
+
+	while (r > rate) {
+		r >>= 1;
+		val++;
+	}
+
+	/* clamp at minimum rate 256Hz */
+	if (r < 256) {
+		r = 256;
+		val = 7;
+	}
+
+	return regmap_update_bits(clk->regmap, RAA215300_REG_MPIO2_POWER_OFF,
+				  RAA215300_MPIO2_POWER_OFF_DELAY, val);
+}
+
+static const struct clk_ops raa215300_clk_ops = {
+	.prepare = raa215300_clk_prepare,
+	.unprepare = raa215300_clk_unprepare,
+	.recalc_rate = raa215300_clk_recalc_rate,
+	.determine_rate = raa215300_clk_determine_rate,
+	.set_rate = raa215300_clk_set_rate,
+};
+
+static int raa215300_register_clk(struct device *dev, struct regmap *regmap)
+{
+	struct raa215300_clk *clk;
+	struct clk_init_data init;
+	int ret;
+
+	clk = devm_kzalloc(dev, sizeof(*clk), GFP_KERNEL);
+	if (!clk)
+		return -ENOMEM;
+
+	clk->hw.init = &init;
+	clk->regmap = regmap;
+
+	init.name = "raa215300-clkout";
+	init.ops = &raa215300_clk_ops;
+	init.flags = 0;
+	init.parent_names = NULL;
+	init.num_parents = 0;
+
+	/* optional override of the clockname */
+	of_property_read_string(dev->of_node, "clock-output-names", &init.name);
+
+	/* register the clock */
+	ret = devm_clk_hw_register(dev, &clk->hw);
+	if (ret)
+		return ret;
+
+	return devm_of_clk_add_hw_provider(dev, of_clk_hw_simple_get, &clk->hw);
 }
 
 static int raa215300_clk_present(struct i2c_client *client, const char *name)
@@ -166,6 +295,9 @@ static int raa215300_i2c_probe(struct i2c_client *client)
 					       rtc_client);
 		if (ret < 0)
 			return ret;
+
+		/* register mpio2 32k clkout in common clk framework */
+		raa215300_register_clk(dev, regmap);
 	}
 
 	return 0;
