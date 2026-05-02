@@ -90,7 +90,15 @@ static void mshv_irqfd_resampler_ack(struct mshv_irq_ack_notifier *mian)
 	hlist_for_each_entry_srcu(irqfd, &resampler->rsmplr_irqfd_list,
 				 irqfd_resampler_hnode,
 				 srcu_read_lock_held(&partition->pt_irq_srcu)) {
-		if (hv_should_clear_interrupt(irqfd->irqfd_lapic_irq.lapic_control.interrupt_type))
+		struct mshv_lapic_irq irq;
+		unsigned int seq;
+
+		do {
+			seq = read_seqcount_begin(&irqfd->irqfd_irqe_sc);
+			irq = irqfd->irqfd_lapic_irq;
+		} while (read_seqcount_retry(&irqfd->irqfd_irqe_sc, seq));
+
+		if (hv_should_clear_interrupt(irq.lapic_control.interrupt_type))
 			hv_call_clear_virtual_interrupt(partition->pt_id);
 
 		eventfd_signal(irqfd->irqfd_resamplefd);
@@ -198,36 +206,19 @@ static int mshv_try_assert_irq_fast(struct mshv_irqfd *irqfd,
 }
 #endif
 
-static void mshv_assert_irq_slow(struct mshv_irqfd *irqfd)
+static void mshv_assert_irq_slow(struct mshv_irqfd *irqfd,
+				 const struct mshv_lapic_irq *irq)
 {
 	struct mshv_partition *partition = irqfd->irqfd_partn;
-	struct mshv_guest_irq_ent girq_ent;
-	struct mshv_lapic_irq irq;
-	unsigned int seq;
-	int idx;
-
-	idx = srcu_read_lock(&partition->pt_irq_srcu);
-
-	do {
-		seq = read_seqcount_begin(&irqfd->irqfd_irqe_sc);
-		girq_ent = irqfd->irqfd_girq_ent;
-		irq = irqfd->irqfd_lapic_irq;
-	} while (read_seqcount_retry(&irqfd->irqfd_irqe_sc, seq));
-
-	if (girq_ent.guest_irq_num && !girq_ent.girq_entry_valid) {
-		srcu_read_unlock(&partition->pt_irq_srcu, idx);
-		return;
-	}
 
 #if IS_ENABLED(CONFIG_X86)
 	WARN_ON(irqfd->irqfd_resampler &&
-		!irq.lapic_control.level_triggered);
+		!irq->lapic_control.level_triggered);
 #endif
 
 	hv_call_assert_virtual_interrupt(partition->pt_id,
-					 irq.lapic_vector, irq.lapic_apic_id,
-					 irq.lapic_control);
-	srcu_read_unlock(&partition->pt_irq_srcu, idx);
+					 irq->lapic_vector, irq->lapic_apic_id,
+					 irq->lapic_control);
 }
 
 static void mshv_irqfd_resampler_shutdown(struct mshv_irqfd *irqfd)
@@ -316,6 +307,7 @@ static int mshv_irqfd_wakeup(wait_queue_entry_t *wait, unsigned int mode,
 	int ret = 0;
 
 	if (flags & EPOLLIN) {
+		struct mshv_guest_irq_ent girq_ent;
 		struct mshv_lapic_irq irq;
 		u64 cnt;
 
@@ -323,14 +315,18 @@ static int mshv_irqfd_wakeup(wait_queue_entry_t *wait, unsigned int mode,
 		idx = srcu_read_lock(&pt->pt_irq_srcu);
 		do {
 			seq = read_seqcount_begin(&irqfd->irqfd_irqe_sc);
+			girq_ent = irqfd->irqfd_girq_ent;
 			irq = irqfd->irqfd_lapic_irq;
 		} while (read_seqcount_retry(&irqfd->irqfd_irqe_sc, seq));
 
-		/* An event has been signaled, raise an interrupt */
-		ret = mshv_try_assert_irq_fast(irqfd, &irq);
-		if (ret)
-			mshv_assert_irq_slow(irqfd);
+		if (!girq_ent.girq_entry_valid)
+			goto out_unlock;
 
+		/* An event has been signaled, raise an interrupt */
+		if (mshv_try_assert_irq_fast(irqfd, &irq))
+			mshv_assert_irq_slow(irqfd, &irq);
+
+out_unlock:
 		srcu_read_unlock(&pt->pt_irq_srcu, idx);
 
 		ret = 1;
@@ -520,8 +516,18 @@ static int mshv_irqfd_assign(struct mshv_partition *pt,
 	 */
 	events = vfs_poll(fd_file(f), &irqfd->irqfd_polltbl);
 
-	if (events & EPOLLIN)
-		mshv_assert_irq_slow(irqfd);
+	if (events & EPOLLIN) {
+		struct mshv_lapic_irq irq;
+		unsigned int seq;
+
+		do {
+			seq = read_seqcount_begin(&irqfd->irqfd_irqe_sc);
+			irq = irqfd->irqfd_lapic_irq;
+		} while (read_seqcount_retry(&irqfd->irqfd_irqe_sc, seq));
+
+		if (irqfd->irqfd_girq_ent.girq_entry_valid)
+			mshv_assert_irq_slow(irqfd, &irq);
+	}
 
 	srcu_read_unlock(&pt->pt_irq_srcu, idx);
 	return 0;
