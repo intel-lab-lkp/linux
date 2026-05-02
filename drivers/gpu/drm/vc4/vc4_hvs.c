@@ -1753,9 +1753,15 @@ static void vc4_hvs_unbind(struct device *dev, struct device *master,
 			   void *data)
 {
 	struct drm_device *drm = dev_get_drvdata(master);
-	struct vc4_dev *vc4 = to_vc4_dev(drm);
-	struct vc4_hvs *hvs = vc4->hvs;
+	struct vc4_dev *vc4;
+	struct vc4_hvs *hvs;
 	struct drm_mm_node *node, *next;
+
+	if (!drm)
+		return;
+
+	vc4 = to_vc4_dev(drm);
+	hvs = vc4->hvs;
 
 	if (drm_mm_node_allocated(&vc4->hvs->mitchell_netravali_filter))
 		drm_mm_remove_node(&vc4->hvs->mitchell_netravali_filter);
