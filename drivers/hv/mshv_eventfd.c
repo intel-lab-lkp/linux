@@ -169,7 +169,12 @@ static int mshv_try_assert_irq_fast(struct mshv_irqfd *irqfd)
 		return -EOPNOTSUPP;
 #endif
 
+	if (irq->lapic_apic_id >= MSHV_MAX_VPS)
+		return -EINVAL;
+
 	vp = partition->pt_vp_array[irq->lapic_apic_id];
+	if (!vp)
+		return -EINVAL;
 
 	if (!vp->vp_register_page)
 		return -EOPNOTSUPP;
