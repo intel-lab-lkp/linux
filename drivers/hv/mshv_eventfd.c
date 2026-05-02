@@ -248,7 +248,11 @@ static void mshv_irqfd_shutdown(struct work_struct *work)
 {
 	struct mshv_irqfd *irqfd =
 			container_of(work, struct mshv_irqfd, irqfd_shutdown);
+	struct mshv_partition *pt = irqfd->irqfd_partn;
 	u64 cnt;
+
+	/* Make sure irqfd has been initialized in assign path. */
+	synchronize_srcu_expedited(&pt->pt_irq_srcu);
 
 	/*
 	 * Synchronize with the wait-queue and unhook ourselves to prevent
