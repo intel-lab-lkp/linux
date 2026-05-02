@@ -48,7 +48,7 @@ which is optional.
 Watchdog can be started during a probe, in this case it will be
 pinged by watchdog core before watchdog device will be opened by
 user space application.
-Watchdog can be initialised in nowayout way, i.e. oncse started
+Watchdog can be initialised in nowayout way, i.e. once started
 it can't be stopped.
 
 This mlx-wdt driver supports both HW watchdog implementations.
