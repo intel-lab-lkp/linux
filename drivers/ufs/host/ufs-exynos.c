@@ -1641,6 +1641,8 @@ static int exynos_ufs_hce_enable_notify(struct ufs_hba *hba,
 			ret = ufs->drv_data->post_hce_enable(ufs);
 
 		break;
+	default:
+		break;
 	}
 
 	return ret;
@@ -1657,6 +1659,8 @@ static int exynos_ufs_link_startup_notify(struct ufs_hba *hba,
 		break;
 	case POST_CHANGE:
 		ret = exynos_ufs_post_link(hba);
+		break;
+	default:
 		break;
 	}
 
@@ -1690,6 +1694,8 @@ static int exynos_ufs_pwr_change_notify(struct ufs_hba *hba,
 		break;
 	case POST_CHANGE:
 		ret = exynos_ufs_post_pwr_mode(hba, dev_req_params);
+		break;
+	default:
 		break;
 	}
 
