@@ -72,4 +72,4 @@ appropriately. The generic error codes are described at the
 :ref:`Generic Error Codes <gen-errors>` chapter.
 
 EOPNOTSUPP
-    The  the requested I/O method is not supported.
+    The requested I/O method is not supported.
