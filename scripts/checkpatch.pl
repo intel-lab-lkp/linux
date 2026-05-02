@@ -2937,7 +2937,7 @@ sub process {
 				if (($last_binding_patch != -1) &&
 				    ($last_binding_patch ^ $is_binding_patch)) {
 					WARN("DT_SPLIT_BINDING_PATCH",
-					     "DT binding docs and includes should be a separate patch. See: Documentation/devicetree/bindings/submitting-patches.rst\n");
+					     "DT binding docs and includes should be a single patch, but separate from this patch. See: Documentation/devicetree/bindings/submitting-patches.rst\n");
 				}
 			}
 
