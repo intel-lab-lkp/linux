@@ -415,8 +415,8 @@ static void parse_line(char *line)
 
 		bdesc->end = bit_end;
 		bdesc->start = bit_start;
-		strcpy(bdesc->simp, strtok(tokens[4], " \t"));
-		strcpy(bdesc->detail, tokens[5]);
+		strncpy(bdesc->simp, strtok(tokens[4], " \t"), sizeof(bdesc->simp) - 1);
+		strncpy(bdesc->detail, tokens[5], sizeof(bdesc->detail) - 1);
 	}
 	return;
 
