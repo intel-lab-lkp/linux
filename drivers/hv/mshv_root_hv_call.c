@@ -1015,7 +1015,7 @@ int hv_call_modify_spa_host_access(u64 partition_id, struct page **pages,
 {
 	struct hv_input_modify_sparse_spa_page_host_access *input_page;
 	u64 status;
-	int done = 0;
+	u64 done = 0;
 	unsigned long irq_flags, large_shift = 0;
 	u64 page_count = page_struct_count;
 	u16 code = acquire ? HVCALL_ACQUIRE_SPARSE_SPA_PAGE_HOST_ACCESS :
@@ -1032,9 +1032,9 @@ int hv_call_modify_spa_host_access(u64 partition_id, struct page **pages,
 	}
 
 	while (done < page_count) {
-		ulong i, completed, remain = page_count - done;
-		int rep_count = min(remain,
-				    HV_MODIFY_SPARSE_SPA_PAGE_HOST_ACCESS_MAX_PAGE_COUNT);
+		u64 i, completed, remain = page_count - done;
+		u64 rep_count = min_t(u64, remain,
+				      HV_MODIFY_SPARSE_SPA_PAGE_HOST_ACCESS_MAX_PAGE_COUNT);
 
 		local_irq_save(irq_flags);
 		input_page = *this_cpu_ptr(hyperv_pcpu_input_arg);
@@ -1048,15 +1048,9 @@ int hv_call_modify_spa_host_access(u64 partition_id, struct page **pages,
 		input_page->flags = flags;
 		input_page->host_access = host_access;
 
-		for (i = 0; i < rep_count; i++) {
-			u64 index = (done + i) << large_shift;
-
-			if (index >= page_struct_count)
-				return -EINVAL;
-
+		for (i = 0; i < rep_count; i++)
 			input_page->spa_page_list[i] =
-						page_to_pfn(pages[index]);
-		}
+				page_to_pfn(pages[(done + i) << large_shift]);
 
 		status = hv_do_rep_hypercall(code, rep_count, 0, input_page,
 					     NULL);
