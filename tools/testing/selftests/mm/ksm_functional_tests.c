@@ -498,6 +498,7 @@ static void test_prctl_fork(void)
 static int start_ksmd_and_set_frequency(char *pages_to_scan, char *sleep_ms)
 {
 	int ksm_fd;
+	ssize_t ret;
 
 	ksm_fd = open("/sys/kernel/mm/ksm/run", O_RDWR);
 	if (ksm_fd < 0)
@@ -506,10 +507,12 @@ static int start_ksmd_and_set_frequency(char *pages_to_scan, char *sleep_ms)
 	if (write(ksm_fd, "1", 1) != 1)
 		return -errno;
 
-	if (write(pages_to_scan_fd, pages_to_scan, strlen(pages_to_scan)) <= 0)
+	ret = write(pages_to_scan_fd, pages_to_scan, strlen(pages_to_scan));
+	if (ret < 0 || ret != strlen(pages_to_scan))
 		return -errno;
 
-	if (write(sleep_millisecs_fd, sleep_ms, strlen(sleep_ms)) <= 0)
+	ret = write(sleep_millisecs_fd, sleep_ms, strlen(sleep_ms));
+	if (ret < 0 || ret != strlen(sleep_ms))
 		return -errno;
 
 	return 0;
@@ -518,6 +521,7 @@ static int start_ksmd_and_set_frequency(char *pages_to_scan, char *sleep_ms)
 static int stop_ksmd_and_restore_frequency(void)
 {
 	int ksm_fd;
+	ssize_t ret;
 
 	ksm_fd = open("/sys/kernel/mm/ksm/run", O_RDWR);
 	if (ksm_fd < 0)
@@ -526,10 +530,12 @@ static int stop_ksmd_and_restore_frequency(void)
 	if (write(ksm_fd, "2", 1) != 1)
 		return -errno;
 
-	if (write(pages_to_scan_fd, "100", 3) <= 0)
+	ret = write(pages_to_scan_fd, "100", 3);
+	if (ret < 0 || ret != 3)
 		return -errno;
 
-	if (write(sleep_millisecs_fd, "20", 2) <= 0)
+	ret = write(sleep_millisecs_fd, "20", 2);
+	if (ret < 0 || ret != 2)
 		return -errno;
 
 	return 0;
