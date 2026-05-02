@@ -3487,6 +3487,9 @@ move_data:
 
 		e = Add2Ptr(attr, le16_to_cpu(lrh->attr_off));
 
+		if (ntfs3_bad_de_range(e, dlen))
+			goto dirty_vol;
+
 		memmove(Add2Ptr(e, le16_to_cpu(e->view.data_off)), data, dlen);
 
 		mi->dirty = true;
@@ -3678,6 +3681,9 @@ move_data:
 		    !check_if_alloc_index(hdr, aoff)) {
 			goto dirty_vol;
 		}
+
+		if (ntfs3_bad_de_range(e, dlen))
+			goto dirty_vol;
 
 		memmove(Add2Ptr(e, le16_to_cpu(e->view.data_off)), data, dlen);
 
