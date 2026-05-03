@@ -245,14 +245,13 @@ static inline int is_x86_32_kernel_text(unsigned long addr)
  * of max_low_pfn pages, by creating page tables starting from address
  * PAGE_OFFSET:
  */
-unsigned long __init
+void __init
 kernel_physical_mapping_init(unsigned long start,
 			     unsigned long end,
 			     unsigned long page_size_mask,
 			     pgprot_t prot)
 {
 	int use_pse = page_size_mask == (1<<PG_LEVEL_2M);
-	unsigned long last_map_addr = end;
 	unsigned long start_pfn, end_pfn;
 	pgd_t *pgd_base = swapper_pg_dir;
 	int pgd_idx, pmd_idx, pte_ofs;
@@ -356,7 +355,6 @@ repeat:
 				pages_4k++;
 				if (mapping_iter == 1) {
 					set_pte(pte, pfn_pte(pfn, init_prot));
-					last_map_addr = (pfn << PAGE_SHIFT) + PAGE_SIZE;
 				} else
 					set_pte(pte, pfn_pte(pfn, prot));
 			}
@@ -382,7 +380,6 @@ repeat:
 		mapping_iter = 2;
 		goto repeat;
 	}
-	return last_map_addr;
 }
 
 #ifdef CONFIG_HIGHMEM
