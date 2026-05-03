@@ -100,8 +100,7 @@ struct netem_sched_data {
 	s64			latency;
 	s64			jitter;
 	u64			rate;
-	u32			gap;
-	u32			loss;
+	u64			delayed;
 
 	/* Cacheline 1: zero-check scalars and correlation states. */
 	u32			duplicate;
@@ -112,7 +111,8 @@ struct netem_sched_data {
 		u32 last;
 		u32 rho;
 	} delay_cor, loss_cor, dup_cor, reorder_cor, corrupt_cor;
-	u8			loss_model;
+	u32			gap;
+	u32			loss;
 
 	/* Cacheline 2: PRNG, distribution tables, slot dequeue state etc. */
 	struct prng {
@@ -125,21 +125,27 @@ struct netem_sched_data {
 		s32 packets_left;
 		s32 bytes_left;
 	} slot;
-	struct disttable	*slot_dist;
 	struct Qdisc		*qdisc;
+	u8			loss_model;
 
 	/*
-	 * Warm: rate-shaping parameters (only read when rate != 0) and
-	 * configuration-only fields.  The fast path reads sch->limit, not
-	 * q->limit.
+	 * Rare-write impairment counters (read together by netem_dump) and
+	 * rate-shaping parameters (only consulted when rate != 0).  The
+	 * fast path reads sch->limit, not q->limit.
 	 */
+	u64			dropped;
+	u64			corrupted;
+	u64			duplicated;
+	u64			ecn_marked;
+	u64			reordered;
 	s32			packet_overhead;
 	u32			cell_size;
 	struct reciprocal_value	cell_size_reciprocal;
 	s32			cell_overhead;
 	u32			limit;
 
-	/* Correlated Loss Generation models */
+	/* Cold tail: slot reschedule config and the watchdog timer. */
+	struct disttable	*slot_dist;
 	struct clgstate {
 		/* 4-states and Gilbert-Elliot models */
 		u32 a1;	/* p13 for 4-states or p for GE */
@@ -152,7 +158,6 @@ struct netem_sched_data {
 		u8  state;
 	} clg;
 
-	/* Cold tail: slot reschedule config and the watchdog timer. */
 	struct tc_netem_slot	slot_config;
 	struct qdisc_watchdog	watchdog;
 };
@@ -462,17 +467,23 @@ static int netem_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 	skb->prev = NULL;
 
 	/* Random duplication */
-	if (q->duplicate && q->duplicate >= get_crandom(&q->dup_cor, &q->prng))
+	if (q->duplicate && q->duplicate >= get_crandom(&q->dup_cor, &q->prng)) {
 		++count;
+		WRITE_ONCE(q->duplicated, q->duplicated + 1);
+	}
 
 	/* Drop packet? */
 	if (loss_event(q)) {
-		if (q->ecn && INET_ECN_set_ce(skb))
+		if (q->ecn && INET_ECN_set_ce(skb)) {
 			qdisc_qstats_drop(sch); /* mark packet */
-		else
+			WRITE_ONCE(q->ecn_marked, q->ecn_marked + 1);
+		} else {
 			--count;
+		}
 	}
+
 	if (count == 0) {
+		WRITE_ONCE(q->dropped, q->dropped + 1);
 		qdisc_qstats_drop(sch);
 		__qdisc_drop(skb, to_free);
 		return NET_XMIT_SUCCESS | __NET_XMIT_BYPASS;
@@ -498,6 +509,7 @@ static int netem_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 	 * do it now in software before we mangle it.
 	 */
 	if (q->corrupt && q->corrupt >= get_crandom(&q->corrupt_cor, &q->prng)) {
+		WRITE_ONCE(q->corrupted, q->corrupted + 1);
 		if (skb_is_gso(skb)) {
 			skb = netem_segment(skb, sch, to_free);
 			if (!skb)
@@ -603,12 +615,15 @@ static int netem_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 
 		cb->time_to_send = now + delay;
 		++q->counter;
+		WRITE_ONCE(q->delayed, q->delayed + 1);
+
 		tfifo_enqueue(skb, sch);
 	} else {
 		/*
 		 * Do re-ordering by putting one out of N packets at the front
 		 * of the queue.
 		 */
+		WRITE_ONCE(q->reordered, q->reordered + 1);
 		cb->time_to_send = ktime_get_ns();
 		q->counter = 0;
 
@@ -1348,6 +1363,21 @@ nla_put_failure:
 	return -1;
 }
 
+static int netem_dump_stats(struct Qdisc *sch, struct gnet_dump *d)
+{
+	struct netem_sched_data *q = qdisc_priv(sch);
+	struct tc_netem_xstats st = {
+		.delayed    = READ_ONCE(q->delayed),
+		.dropped    = READ_ONCE(q->dropped),
+		.corrupted  = READ_ONCE(q->corrupted),
+		.duplicated = READ_ONCE(q->duplicated),
+		.reordered  = READ_ONCE(q->reordered),
+		.ecn_marked = READ_ONCE(q->ecn_marked),
+	};
+
+	return gnet_stats_copy_app(d, &st, sizeof(st));
+}
+
 static int netem_dump_class(struct Qdisc *sch, unsigned long cl,
 			  struct sk_buff *skb, struct tcmsg *tcm)
 {
@@ -1410,6 +1440,7 @@ static struct Qdisc_ops netem_qdisc_ops __read_mostly = {
 	.destroy	=	netem_destroy,
 	.change		=	netem_change,
 	.dump		=	netem_dump,
+	.dump_stats	=	netem_dump_stats,
 	.owner		=	THIS_MODULE,
 };
 MODULE_ALIAS_NET_SCH("netem");
