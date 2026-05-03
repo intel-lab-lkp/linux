@@ -27,6 +27,7 @@ tests="
 	upcall_interfaces			ovs: test the upcall interfaces
 	tunnel_metadata				ovs: test extraction of tunnel metadata
 	drop_reason				drop: test drop reasons are emitted
+	pop_vlan					vlan-pop: POP_VLAN action strips 802.1Q tag
 	psample					psample: Sampling packets with psample"
 
 info() {
@@ -826,6 +827,197 @@ test_tunnel_metadata() {
 		ovs_sbx "${sbxname}" grep -qE "MISS upcall.*${tnl_md}.*${arp_hdr}" \
 			${ovs_dir}/ovs-vxlan0.out || return 1
 	done <<< "${configs}"
+
+	return 0
+}
+
+# Start tcpdump capture with deterministic readiness wait.
+# Usage: start_capture <netns> <iface> <pcap_path> <out_pid_var> <out_log_var>
+# $4 and $5 are variable NAMES — start_capture writes the tcpdump PID
+# and log path into those caller variables via nameref (bash 4.3+).
+# Contract: caller MUST call stop_capture with the returned PID and log
+#           before returning from the function.
+start_capture() {
+	local ns="$1" iface="$2" pcap="$3"
+	local -n _out_pid="$4"
+	local -n _out_log="$5"
+	local log pid
+
+	command -v tcpdump >/dev/null 2>&1 || {
+		info "tcpdump missing"
+		return $ksft_skip
+	}
+
+	log=$(mktemp)
+	ip netns exec "$ns" tcpdump -nei "$iface" \
+		-w "$pcap" -U 2>"$log" &
+	pid=$!
+	ovs_wait grep -q "listening on" "$log" || {
+		kill $pid 2>/dev/null
+		wait $pid 2>/dev/null
+		rm -f "$log"
+		info "FAIL: tcpdump failed to start on $iface"
+		return 1
+	}
+	kill -0 $pid 2>/dev/null || {
+		wait $pid 2>/dev/null
+		rm -f "$log"
+		info "FAIL: tcpdump died after start on $iface"
+		return 1
+	}
+	# $pid/$log expand now (intentional — captures concrete values)
+	on_exit "kill $pid 2>/dev/null; rm -f $log"
+	_out_pid=$pid
+	_out_log=$log
+}
+
+# Stop capture and cleanup temp files.
+# Usage: stop_capture <pid> <log_path>
+stop_capture() {
+	kill "$1" 2>/dev/null
+	wait "$1" 2>/dev/null
+	rm -f "$2"
+}
+
+test_pop_vlan() {
+	modprobe -q openvswitch 2>/dev/null || true
+	[ -d /sys/module/openvswitch ] || return $ksft_skip
+	local ns_err
+	ns_err=$(mktemp)
+	if ! ip netns add __test_pop_vlan_netns__ 2>"$ns_err"; then
+		if grep -q "File exists" "$ns_err"; then
+			ip netns del __test_pop_vlan_netns__ 2>/dev/null
+		else
+			info "CONFIG_NET_NS missing or unavailable"
+			rm -f "$ns_err"
+			return $ksft_skip
+		fi
+	fi
+	ip netns del __test_pop_vlan_netns__ 2>/dev/null
+	rm -f "$ns_err"
+	modprobe -q 8021q 2>/dev/null || true
+	[ -d /sys/module/8021q ] || \
+		{ info "CONFIG_VLAN_8021Q missing"; return $ksft_skip; }
+
+	local sbx="test_pop_vlan"
+	sbx_add "$sbx" || return $?
+	ovs_add_dp "$sbx" vlandp || return 1
+
+	# Validate basic connectivity before testing pop_vlan.
+	# --- baseline: untagged forwarding ---
+	ovs_add_netns_and_veths "$sbx" vlandp \
+		ns1 veth1 ns1veth 192.0.2.1/24 || return 1
+	ovs_add_netns_and_veths "$sbx" vlandp \
+		ns2 veth2 ns2veth 192.0.2.2/24 || return 1
+
+	# ARP + IPv4 bidirectional (all untagged)
+	ovs_add_flow "$sbx" vlandp \
+		'in_port(1),eth(),eth_type(0x0806),arp()' '2' || return 1
+	ovs_add_flow "$sbx" vlandp \
+		'in_port(2),eth(),eth_type(0x0806),arp()' '1' || return 1
+	ovs_add_flow "$sbx" vlandp \
+		'in_port(1),eth(),eth_type(0x0800),ipv4()' '2' || return 1
+	ovs_add_flow "$sbx" vlandp \
+		'in_port(2),eth(),eth_type(0x0800),ipv4()' '1' || return 1
+	ip netns exec ns1 ping -c 3 -W 2 192.0.2.2 || return 1
+
+	# --- POP_VLAN test ---
+	# ns1: VLAN sub-interface generates tagged frames
+	ip -n ns1 link add link ns1veth name ns1veth.10 \
+		type vlan id 10 || return 1
+	on_exit "ip -n ns1 link del ns1veth.10 2>/dev/null || true"
+	ip -n ns1 addr add 198.51.100.1/24 dev ns1veth.10 || return 1
+	ip -n ns1 link set ns1veth.10 up || return 1
+
+	# ns2: no VLAN sub-interface. POP delivers untagged frames to ns2veth
+	ip -n ns2 addr add 198.51.100.2/24 dev ns2veth || return 1
+	on_exit "ip -n ns2 addr del 198.51.100.2/24 dev ns2veth 2>/dev/null || true"
+
+	# veth disable VLAN offload + GRO (ensure kernel software tag processing)
+	if command -v ethtool >/dev/null 2>&1; then
+		ip netns exec ns1 ethtool -k ns1veth 2>/dev/null | grep -q vlan-offload && \
+			ip netns exec ns1 ethtool -K ns1veth rx-vlan-offload off \
+				tx-vlan-offload off gro off 2>/dev/null || true
+		ip netns exec ns2 ethtool -k ns2veth 2>/dev/null | grep -q vlan-offload && \
+			ip netns exec ns2 ethtool -K ns2veth rx-vlan-offload off \
+				tx-vlan-offload off gro off 2>/dev/null || true
+	fi
+
+	ovs_del_flows "$sbx" vlandp
+
+	# Static ARP avoids VLAN-tagged ARP complexity (ns2 has no VLAN
+	# sub-interface, so tagged ARP would be invisible to ns2).
+	local ns1veth10mac ns2mac
+	ns1veth10mac=$(ip -n ns1 link show ns1veth.10 | \
+		awk '/link\/ether/ {print $2}')
+	ns2mac=$(ip -n ns2 link show ns2veth | \
+		awk '/link\/ether/ {print $2}')
+	[ -n "$ns1veth10mac" ] && echo "$ns1veth10mac" | \
+		grep -qE "^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$" || return 1
+	[ -n "$ns2mac" ] && echo "$ns2mac" | \
+		grep -qE "^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$" || return 1
+	ip -n ns1 neigh replace 198.51.100.2 lladdr "$ns2mac" \
+		dev ns1veth.10 nud permanent || return 1
+	ip -n ns2 neigh replace 198.51.100.1 lladdr "$ns1veth10mac" \
+		dev ns2veth nud permanent || return 1
+
+	# --- Negative check: fwd without pop_vlan, VLAN tag stays ---
+	local vlan_match='in_port(1),eth(),eth_type(0x8100),'
+	vlan_match+='vlan(vid=10),'
+	vlan_match+='encap(eth_type(0x0800),'
+	vlan_match+='ipv4(src=198.51.100.1,proto=1),icmp())'
+	ovs_add_flow "$sbx" vlandp "$vlan_match" '2' || return 1
+
+	local pcap_no_pop
+	pcap_no_pop=$(mktemp --suffix=.pcap)
+	on_exit "rm -f $pcap_no_pop"
+	local tpid tlog
+	start_capture ns2 ns2veth "$pcap_no_pop" tpid tlog || return $?
+
+	ip netns exec ns1 ping -I ns1veth.10 -c 3 -W 1 198.51.100.2 \
+		>/dev/null 2>&1 || true
+	stop_capture "$tpid" "$tlog"
+
+	# assert: VLAN tag still present (no pop_vlan in action)
+	tcpdump -nr "$pcap_no_pop" 'vlan' 2>/dev/null | grep -q . || {
+		info "FAIL: negative check: no VLAN tag (expected tag present)"
+		return 1
+	}
+
+	ovs_del_flows "$sbx" vlandp
+
+	# --- Positive: pop_vlan strips tag ---
+	ovs_add_flow "$sbx" vlandp "$vlan_match" 'pop_vlan,2' || return 1
+	ovs_add_flow "$sbx" vlandp \
+		'in_port(2),eth(),eth_type(0x0800),ipv4()' '1' || return 1
+
+	local pcap
+	pcap=$(mktemp --suffix=.pcap)
+	on_exit "rm -f $pcap"
+	local tpid2 tlog2
+	start_capture ns2 ns2veth "$pcap" tpid2 tlog2 || return $?
+
+	# ns1veth.10 only accepts tagged frames;
+	# ns2 sends untagged reply → dropped by ns1
+	local ping_rc=0
+	ip netns exec ns1 ping -I ns1veth.10 -c 3 -W 1 198.51.100.2 \
+		>/dev/null 2>&1 || ping_rc=$?
+	stop_capture "$tpid2" "$tlog2"
+
+	# ping failure is expected (reply path asymmetric)
+	[ "$ping_rc" -ne 0 ] || {
+		info "FAIL: ping succeeded unexpectedly"
+		return 1
+	}
+
+	# assert: no VLAN tag (POP succeeded), untagged ICMP echo request arrived
+	tcpdump -nr "$pcap" 'vlan' 2>/dev/null | grep -q . && {
+		info "FAIL: POP_VLAN: VLAN tag still present"; return 1
+	}
+	tcpdump -nr "$pcap" 'icmp and icmp[icmptype]=8' \
+		2>/dev/null | grep -q . || {
+		info "FAIL: POP_VLAN: no untagged ICMP echo request"; return 1
+	}
 
 	return 0
 }
