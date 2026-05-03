@@ -499,6 +499,45 @@ void nf_nat_helper_unregister(struct nf_conntrack_nat_helper *nat)
 }
 EXPORT_SYMBOL_GPL(nf_nat_helper_unregister);
 
+int nf_ct_helper_parse_uint(const char *cp, unsigned int len,
+			    unsigned long max, unsigned long *val, char **endp)
+{
+	unsigned long result = 0;
+
+	if (!len || *cp < '0' || *cp > '9')
+		return -1;
+
+	while (len > 0 && *cp >= '0' && *cp <= '9') {
+		result = result * 10 + (*cp - '0');
+		if (result > max)
+			return -1;
+		cp++;
+		len--;
+	}
+
+	*val = result;
+	if (endp)
+		*endp = (char *)cp;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(nf_ct_helper_parse_uint);
+
+int nf_ct_helper_parse_port(const char *cp, unsigned int len,
+			    u16 *port, char **endp)
+{
+	unsigned long val;
+
+	if (nf_ct_helper_parse_uint(cp, len, 65535, &val, endp))
+		return -1;
+	if (val == 0)
+		return -1;
+
+	*port = val;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(nf_ct_helper_parse_port);
+
 int nf_conntrack_helper_init(void)
 {
 	nf_ct_helper_hsize = 1; /* gets rounded up to use one page */
