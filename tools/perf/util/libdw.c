@@ -4,6 +4,7 @@
 #include "srcline.h"
 #include "symbol.h"
 #include "dwarf-aux.h"
+#include "callchain.h"
 #include <fcntl.h>
 #include <unistd.h>
 #include <elfutils/libdwfl.h>
@@ -60,7 +61,11 @@ struct Dwfl *dso__libdw_dwfl(struct dso *dso)
 		return NULL;
 	}
 
-	dwfl_report_end(dwfl, /*removed=*/NULL, /*arg=*/NULL);
+	if (dwfl_report_end(dwfl, NULL, NULL) != 0) {
+		dwfl_end(dwfl);
+		return NULL;
+	}
+
 	dso__set_libdw(dso, dwfl);
 
 	return dwfl;
@@ -72,41 +77,70 @@ struct libdw_a2l_cb_args {
 	struct inline_node *node;
 	char *leaf_srcline;
 	bool leaf_srcline_used;
+	int err;
 };
 
 static int libdw_a2l_cb(Dwarf_Die *die, void *_args)
 {
 	struct libdw_a2l_cb_args *args  = _args;
-	struct symbol *inline_sym = new_inline_sym(args->dso, args->sym, dwarf_diename(die));
+	const char *name = dwarf_diename(die);
+	struct symbol *inline_sym = new_inline_sym(args->dso, args->sym, name ?: "unknown");
 	const char *call_fname = die_get_call_file(die);
+	int call_lineno = die_get_call_lineno(die);
 	char *call_srcline = srcline__unknown;
-	struct inline_list *ilist;
 
-	if (!inline_sym)
-		return -ENOMEM;
+	if (!inline_sym) {
+		args->err = -ENOMEM;
+		return DWARF_CB_ABORT;
+	}
 
 	/* Assign caller information to the parent. */
-	if (call_fname)
-		call_srcline = srcline_from_fileline(call_fname, die_get_call_lineno(die));
+	if (call_fname && call_lineno >= 0)
+		call_srcline = srcline_from_fileline(call_fname, call_lineno);
 
-	list_for_each_entry(ilist, &args->node->val, list) {
-		if (args->leaf_srcline == ilist->srcline)
+	if (!list_empty(&args->node->val)) {
+		struct inline_list *parent;
+
+		if (callchain_param.order == ORDER_CALLEE)
+			parent = list_first_entry(&args->node->val, struct inline_list, list);
+		else
+			parent = list_last_entry(&args->node->val, struct inline_list, list);
+
+		if (args->leaf_srcline == parent->srcline)
 			args->leaf_srcline_used = false;
-		else if (ilist->srcline != srcline__unknown)
-			free(ilist->srcline);
-		ilist->srcline =  call_srcline;
+		else if (parent->srcline != srcline__unknown)
+			free(parent->srcline);
+		parent->srcline = call_srcline;
 		call_srcline = NULL;
-		break;
 	}
 	if (call_srcline && call_srcline != srcline__unknown)
 		free(call_srcline);
 
 	/* Add this symbol to the chain as the leaf. */
 	if (!args->leaf_srcline_used) {
-		inline_list__append_tail(inline_sym, args->leaf_srcline, args->node);
+		if (inline_list__append_tail(inline_sym, args->leaf_srcline, args->node) != 0) {
+			args->err = -ENOMEM;
+			if (inline_sym->inlined)
+				symbol__delete(inline_sym);
+			return DWARF_CB_ABORT;
+		}
 		args->leaf_srcline_used = true;
 	} else {
-		inline_list__append_tail(inline_sym, strdup(args->leaf_srcline), args->node);
+		char *srcline = strdup(args->leaf_srcline);
+
+		if (!srcline) {
+			args->err = -ENOMEM;
+			if (inline_sym->inlined)
+				symbol__delete(inline_sym);
+			return DWARF_CB_ABORT;
+		}
+		if (inline_list__append_tail(inline_sym, srcline, args->node) != 0) {
+			free(srcline);
+			args->err = -ENOMEM;
+			if (inline_sym->inlined)
+				symbol__delete(inline_sym);
+			return DWARF_CB_ABORT;
+		}
 	}
 	return 0;
 }
@@ -162,11 +196,29 @@ int libdw__addr2line(u64 addr, char **file, unsigned int *line_nr,
 			.leaf_srcline = srcline_from_fileline(src ?: "<unknown>", lineno),
 		};
 
+		if (!args.leaf_srcline) {
+			if (file && *file) {
+				free(*file);
+				*file = NULL;
+			}
+			return 0;
+		}
+
 		/* Walk from the parent down to the leaf. */
-		cu_walk_functions_at(cudie, addr, libdw_a2l_cb, &args);
+		if (cudie)
+			cu_walk_functions_at(cudie, addr, libdw_a2l_cb, &args);
 
 		if (!args.leaf_srcline_used)
 			free(args.leaf_srcline);
+
+		if (args.err) {
+			if (file && *file) {
+				free(*file);
+				*file = NULL;
+			}
+			inline_node__clear_frames(node);
+			return 0;
+		}
 	}
 	return 1;
 }
