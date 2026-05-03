@@ -65,11 +65,15 @@ int gpiotools_request_line(const char *device_name, unsigned int *lines,
 	int i;
 	int ret;
 
+	if (!device_name || !lines || !config || !consumer ||
+	    num_lines == 0 || num_lines > GPIO_V2_LINES_MAX)
+		return -EINVAL;
+
 	ret = asprintf(&chrdev_name, "/dev/%s", device_name);
 	if (ret < 0)
 		return -ENOMEM;
 
-	fd = open(chrdev_name, 0);
+	fd = open(chrdev_name, O_RDONLY);
 	if (fd == -1) {
 		ret = -errno;
 		fprintf(stderr, "Failed to open %s, %s\n",
@@ -78,27 +82,29 @@ int gpiotools_request_line(const char *device_name, unsigned int *lines,
 	}
 
 	memset(&req, 0, sizeof(req));
+
 	for (i = 0; i < num_lines; i++)
 		req.offsets[i] = lines[i];
 
 	req.config = *config;
-	strcpy(req.consumer, consumer);
+	strncpy(req.consumer, consumer, sizeof(req.consumer) - 1);
+	req.consumer[sizeof(req.consumer) - 1] = '\0';
 	req.num_lines = num_lines;
 
 	ret = ioctl(fd, GPIO_V2_GET_LINE_IOCTL, &req);
 	if (ret == -1) {
 		ret = -errno;
 		fprintf(stderr, "Failed to issue %s (%d), %s\n",
-			"GPIO_GET_LINE_IOCTL", ret, strerror(errno));
+			"GPIO_V2_GET_LINE_IOCTL", ret, strerror(errno));
 	}
 
 	if (close(fd) == -1)
 		perror("Failed to close GPIO character device file");
+
 exit_free_name:
 	free(chrdev_name);
 	return ret < 0 ? ret : req.fd;
 }
-
 /**
  * gpiotools_set_values() - Set the value of gpio(s)
  * @fd:			The fd returned by
