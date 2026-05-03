@@ -576,13 +576,6 @@ struct bio *bio_alloc_bioset(struct block_device *bdev, unsigned short nr_vecs,
 	}
 
 	if (unlikely(!bio)) {
-		/*
-		 * Give up if we are not allow to sleep as non-blocking mempool
-		 * allocations just go back to the slab allocation.
-		 */
-		if (!(saved_gfp & __GFP_DIRECT_RECLAIM))
-			return NULL;
-
 		punt_bios_to_rescuer(bs);
 
 		/*
