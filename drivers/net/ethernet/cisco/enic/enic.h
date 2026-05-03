@@ -258,6 +258,8 @@ struct enic {
 	u32 tx_coalesce_usecs;
 	u16 num_vfs;
 	enum enic_vf_type vf_type;
+	bool vf_registered;
+	u32 pf_cap_version;
 	unsigned int enable_count;
 	spinlock_t enic_api_lock;
 	bool enic_api_busy;
@@ -305,9 +307,22 @@ struct enic {
 	void (*admin_rq_handler)(struct enic *enic, void *buf,
 				 unsigned int len);
 
-	/* MBOX protocol state */
+	/* MBOX protocol state -- single-flight: on the VF, all callers
+	 * that wait on mbox_comp run under RTNL or during probe/remove,
+	 * so only one completion is outstanding at a time. mbox_lock
+	 * protects the shared admin WQ from concurrent senders.
+	 */
 	struct mutex mbox_lock;
 	u64 mbox_msg_num;
+	struct completion mbox_comp;
+	/* Type of reply the current waiter on mbox_comp expects.  Set
+	 * under mbox_lock before reinit_completion(); cleared after
+	 * wait_reply returns.  Reply handlers compare against the
+	 * incoming reply type and drop stale replies from previously
+	 * timed-out requests instead of waking the unrelated current
+	 * waiter.
+	 */
+	u8 mbox_expected_reply;
 
 	/* PF: per-VF MBOX state, allocated when SRIOV V2 is enabled */
 	struct enic_vf_state {
