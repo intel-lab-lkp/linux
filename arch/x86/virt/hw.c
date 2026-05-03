@@ -49,7 +49,13 @@ static void x86_virt_invoke_kvm_emergency_callback(void)
 {
 	cpu_emergency_virt_cb *kvm_callback;
 
-	kvm_callback = rcu_dereference(kvm_emergency_callback);
+	/*
+	 * Callers invoke this with IRQs disabled (see
+	 * x86_virt_emergency_disable_virtualization_cpu()), which is a valid
+	 * RCU read-side critical section. Tell lockdep so it doesn't complain
+	 * during panic/reboot paths.
+	 */
+	kvm_callback = rcu_dereference_check(kvm_emergency_callback, irqs_disabled());
 	if (kvm_callback)
 		kvm_callback();
 }
