@@ -1510,6 +1510,10 @@ static int mt_input_mapping(struct hid_device *hdev, struct hid_input *hi,
 		case 0x35: mt_map_key_clear(KEY_DISPLAY_OFF);		break;
 		case 0x6b: mt_map_key_clear(KEY_F21);			break;
 		case 0x6c: mt_map_key_clear(KEY_SLEEP);			break;
+		case 0x7c: mt_map_key_clear(KEY_MICMUTE);		break;
+		case 0x4e: mt_map_key_clear(KEY_FN_ESC);		break;
+
+		case 0x86: mt_map_key_clear(KEY_PROG1);		break; /* MyASUS key */
 		default:
 			return -1;
 		}
@@ -2144,6 +2148,12 @@ static const struct hid_device_id mt_devices[] = {
 		HID_DEVICE(BUS_USB, HID_GROUP_MULTITOUCH_WIN_8,
 			USB_VENDOR_ID_ASUSTEK,
 			USB_DEVICE_ID_ASUSTEK_T304_KEYBOARD) },
+
+	/* Asus T3304 */
+	{ .driver_data = MT_CLS_ASUS,
+		HID_DEVICE(BUS_USB, HID_GROUP_MULTITOUCH_WIN_8,
+			USB_VENDOR_ID_ASUSTEK,
+			USB_DEVICE_ID_ASUSTEK_T3304_KEYBOARD) },
 
 	/* Atmel panels */
 	{ .driver_data = MT_CLS_SERIAL,
