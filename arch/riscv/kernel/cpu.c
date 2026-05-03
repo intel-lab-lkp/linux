@@ -135,7 +135,7 @@ int riscv_of_parent_hartid(struct device_node *node, unsigned long *hartid)
 		}
 	}
 
-	return -1;
+	return -ENODEV;
 }
 
 unsigned long __init riscv_get_marchid(void)
