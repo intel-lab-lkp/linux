@@ -75,11 +75,13 @@
 #include <linux/userfaultfd_k.h>
 #include <linux/mm_inline.h>
 #include <linux/oom.h>
+#include <linux/sched/clock.h>
 
 #include <asm/tlb.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/migrate.h>
+#include <trace/events/rmap.h>
 
 #include "internal.h"
 #include "swap.h"
@@ -3098,23 +3100,35 @@ static void rmap_walk_file(struct folio *folio,
 
 void rmap_walk(struct folio *folio, struct rmap_walk_control *rwc)
 {
+	u64 ts_start, delta_ns;
+	ts_start = local_clock();
+
 	if (unlikely(folio_test_ksm(folio)))
 		rmap_walk_ksm(folio, rwc);
 	else if (folio_test_anon(folio))
 		rmap_walk_anon(folio, rwc, false);
 	else
 		rmap_walk_file(folio, rwc, false);
+
+	delta_ns = local_clock() - ts_start;
+	trace_rmap_walk(folio, rwc, delta_ns, false);
 }
 
 /* Like rmap_walk, but caller holds relevant rmap lock */
 void rmap_walk_locked(struct folio *folio, struct rmap_walk_control *rwc)
 {
+	u64 ts_start, delta_ns;
+	ts_start = local_clock();
+
 	/* no ksm support for now */
 	VM_BUG_ON_FOLIO(folio_test_ksm(folio), folio);
 	if (folio_test_anon(folio))
 		rmap_walk_anon(folio, rwc, true);
 	else
 		rmap_walk_file(folio, rwc, true);
+
+	delta_ns = local_clock() - ts_start;
+	trace_rmap_walk(folio, rwc, delta_ns, true);
 }
 
 #ifdef CONFIG_HUGETLB_PAGE
