@@ -544,10 +544,11 @@ void __ref init_memory_mapping(unsigned long start,
 	memset(mr, 0, sizeof(mr));
 	nr_range = split_mem_range(mr, 0, start, end);
 
-	for (i = 0; i < nr_range; i++)
-		paddr_last = kernel_physical_mapping_init(mr[i].start, mr[i].end,
-							  mr[i].page_size_mask,
-							  prot);
+	for (i = 0; i < nr_range; i++) {
+		kernel_physical_mapping_init(mr[i].start, mr[i].end,
+					     mr[i].page_size_mask, prot);
+		paddr_last = mr[i].end;
+	}
 
 	add_pfn_range_mapped(start >> PAGE_SHIFT, paddr_last >> PAGE_SHIFT);
 }
