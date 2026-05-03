@@ -100,6 +100,7 @@ MODULE_DESCRIPTION("Asus HID Keyboard and TouchPad");
 #define QUIRK_ROG_ALLY_XPAD		BIT(13)
 #define QUIRK_HID_FN_LOCK		BIT(14)
 #define QUIRK_T3304_KEYBOARD		BIT(15)
+#define QUIRK_HID_MICMUTE		BIT(16)
 
 #define I2C_KEYBOARD_QUIRKS			(QUIRK_FIX_NOTEBOOK_REPORT | \
 						 QUIRK_NO_INIT_REPORTS | \
@@ -144,6 +145,7 @@ struct asus_drvdata {
 	unsigned long battery_next_query;
 	struct work_struct fn_lock_sync_work;
 	bool fn_lock;
+	struct led_classdev led_micmute;
 };
 
 static int asus_report_battery(struct asus_drvdata *, u8 *, int);
@@ -578,6 +580,26 @@ static int asus_kbd_disable_oobe(struct hid_device *hdev)
 	return 0;
 }
 
+static int asus_kbd_set_micmute_led(struct hid_device *hdev, bool enabled)
+{
+	u8 buf[] = { FEATURE_KBD_REPORT_ID, 0xd0, 0x7c, enabled };
+
+	return asus_kbd_set_report(hdev, buf, sizeof(buf));
+}
+
+static int asus_led_brightness_set(struct led_classdev *led_cdev,
+		enum led_brightness value)
+{
+	struct device *dev = led_cdev->dev->parent;
+	struct hid_device *hdev = to_hid_device(dev);
+	struct asus_drvdata *drvdata = hid_get_drvdata(hdev);
+
+	if (led_cdev == &drvdata->led_micmute)
+		return asus_kbd_set_micmute_led(hdev, !!value);
+
+	return -ENODEV;
+}
+
 static int asus_kbd_set_fn_lock(struct hid_device *hdev, bool enabled)
 {
 	u8 buf[] = { FEATURE_KBD_REPORT_ID, 0xd0, 0x4e, !!enabled };
@@ -752,9 +774,31 @@ static int asus_kbd_register_leds(struct hid_device *hdev)
 	if (ret < 0)
 		return ret;
 
+	if (drvdata->quirks & QUIRK_HID_MICMUTE) {
+		char *name_micmute;
+		size_t name_sz = strlen(dev_name(&hdev->dev)) + 16;
+
+		name_micmute = devm_kzalloc(&hdev->dev, name_sz, GFP_KERNEL);
+		if (name_micmute == NULL)
+			return -ENOMEM;
+
+		snprintf(name_micmute, name_sz, "%s::micmute", dev_name(&hdev->dev));
+		drvdata->led_micmute.name = name_micmute;
+		drvdata->led_micmute.default_trigger = "audio-micmute";
+		drvdata->led_micmute.brightness_set_blocking = asus_led_brightness_set;
+		drvdata->led_micmute.max_brightness = 1;
+		drvdata->led_micmute.flags = LED_CORE_SUSPENDRESUME | LED_HW_PLUGGABLE;
+		drvdata->led_micmute.dev = &hdev->dev;
+		ret = devm_led_classdev_register(&hdev->dev, &drvdata->led_micmute);
+		if (ret < 0) {
+			hid_err(hdev, "Failed to register LED: %d.\n", ret);
+			return ret;
+		}
+	}
+
 	/* Check for backlight support */
 	if (!(kbd_func & SUPPORT_KBD_BACKLIGHT))
-		return -ENODEV;
+		return 0;
 
 	if (dmi_match(DMI_PRODUCT_FAMILY, "ProArt P16")) {
 		ret = asus_kbd_disable_oobe(hdev);
@@ -1315,7 +1359,8 @@ static int asus_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	}
 
 	/* Laptops keyboard backlight is always at 0x5a */
-	if (is_vendor && (drvdata->quirks & QUIRK_USE_KBD_BACKLIGHT) &&
+	if (is_vendor &&
+	    (drvdata->quirks & (QUIRK_USE_KBD_BACKLIGHT | QUIRK_HID_MICMUTE)) &&
 	    (asus_has_report_id(hdev, FEATURE_KBD_REPORT_ID)) &&
 		(asus_kbd_register_leds(hdev)))
 		hid_warn(hdev, "Failed to initialize backlight.\n");
@@ -1587,7 +1632,7 @@ static const struct hid_device_id asus_devices[] = {
 		USB_VENDOR_ID_ASUSTEK, USB_DEVICE_ID_ASUSTEK_T101HA_KEYBOARD) },
 	{ HID_DEVICE(BUS_USB, HID_GROUP_GENERIC,
 		USB_VENDOR_ID_ASUSTEK, USB_DEVICE_ID_ASUSTEK_T3304_KEYBOARD),
-	  QUIRK_T3304_KEYBOARD },
+	  QUIRK_T3304_KEYBOARD | QUIRK_HID_MICMUTE },
 	{ }
 };
 MODULE_DEVICE_TABLE(hid, asus_devices);
