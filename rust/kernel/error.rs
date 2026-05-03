@@ -216,6 +216,31 @@ impl fmt::Debug for Error {
     }
 }
 
+impl fmt::Display for Error {
+    /// Displays the error name if available, otherwise the numeric error code.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use kernel::prelude::*;
+    /// # use kernel::str::CString;
+    /// let err = EPERM;
+    /// let s = CString::try_from_fmt(fmt!("{err}"))?;
+    /// assert_eq!(s.to_bytes(), "EPERM".as_bytes());
+    /// # Ok::<(), Error>(())
+    /// ```
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.name() {
+            // Print out the numeric error code if no name can be found.
+            None => write!(f, "Unknown error {}", -self.0.get()),
+            // SAFETY: These strings are ASCII-only.
+            Some(name) => f.pad(unsafe {
+                core::str::from_utf8_unchecked(name.to_bytes())
+            }),
+        }
+    }
+}
+
 impl From<AllocError> for Error {
     #[inline]
     fn from(_: AllocError) -> Error {
