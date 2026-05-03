@@ -3405,7 +3405,13 @@ static int nvme_init_non_mdts_limits(struct nvme_ctrl *ctrl)
 	else
 		ctrl->max_zeroes_sectors = 0;
 
+	/*
+	 * I/O Command Set specific Identify Controller (CNS 06h) is only
+	 * defined in NVMe 2.0 and later. Sending it to pre-2.0 controllers
+	 * results in an Invalid Field error from the device.
+	 */
 	if (!nvme_is_io_ctrl(ctrl) ||
+	    ctrl->vs < NVME_VS(2, 0, 0) ||
 	    !nvme_id_cns_ok(ctrl, NVME_ID_CNS_CS_CTRL) ||
 	    test_bit(NVME_CTRL_SKIP_ID_CNS_CS, &ctrl->flags))
 		return 0;
