@@ -27,6 +27,10 @@
 #include "hda_beep.h"
 #include "generic.h"
 
+/* Forward declaration */
+static void call_mic_autoswitch(struct hda_codec *codec,
+				struct hda_jack_callback *jack);
+
 
 /**
  * snd_hda_gen_spec_init - initialize hda_gen_spec struct
@@ -3238,6 +3242,19 @@ static int check_dyn_adc_switch(struct hda_codec *codec)
 	if (!spec->dyn_adc_switch && spec->multi_cap_vol)
 		spec->num_adc_nids = 1;
 
+	/* Enable mic autoswitch for dyn_adc_switch mode when auto_mic is not available */
+	if (!spec->auto_mic && imux->num_items > 1) {
+		int i;
+		for (i = 0; i < imux->num_items; i++) {
+			hda_nid_t pin = spec->imux_pins[i];
+			if (!is_jack_detectable(codec, pin))
+				continue;
+			snd_hda_jack_detect_enable_callback(codec, pin,
+							    call_mic_autoswitch);
+		}
+		codec_dbg(codec, "Enable mic autoswitch for input sources\n");
+	}
+
 	return 0;
 }
 
@@ -4107,9 +4124,38 @@ static int mux_select(struct hda_codec *codec, unsigned int adc_idx,
 	path = get_input_path(codec, adc_idx, idx);
 	if (!path)
 		return 0;
-	if (path->active)
-		return 0;
-	snd_hda_activate_path(codec, path, true, false);
+	if (path->active) {
+		codec_err(codec, "[MUX] mux_select: path already active, skip activate but still notify\n");
+	} else {
+		snd_hda_activate_path(codec, path, true, false);
+	}
+
+	/* Notify Input Source / Capture Source controls that the path has changed */
+	if (!spec->auto_mic && spec->input_mux.num_items > 1) {
+		struct snd_card *card = codec->card;
+		struct snd_kcontrol *kctl;
+		struct snd_ctl_elem_id id;
+		int notified = 0;
+
+		codec_err(codec, "[MUX] mux_select: notifying controls, num_items=%d\n", spec->input_mux.num_items);
+
+		if (card) {
+			list_for_each_entry(kctl, &card->controls, list) {
+				if (kctl->id.iface != SNDRV_CTL_ELEM_IFACE_MIXER)
+					continue;
+				codec_err(codec, "[MUX] mux_select: found control '%s'\n", kctl->id.name);
+				if (strncmp(kctl->id.name, "Capture Source", 14) == 0) {
+					id = kctl->id;
+					snd_ctl_notify(card, SNDRV_CTL_EVENT_MASK_VALUE, &id);
+					codec_err(codec, "[MUX] mux_select: notified '%s'\n", kctl->id.name);
+					notified = 1;
+				}
+			}
+		}
+		if (!notified)
+			codec_err(codec, "[MUX] mux_select: no Input/Capture Source control found!\n");
+	}
+
 	if (spec->cap_sync_hook)
 		spec->cap_sync_hook(codec, NULL, NULL);
 	path_power_down_sync(codec, old_path);
@@ -4602,6 +4648,36 @@ static void call_mic_autoswitch(struct hda_codec *codec,
 				struct hda_jack_callback *jack)
 {
 	struct hda_gen_spec *spec = codec->spec;
+	const struct hda_input_mux *imux;
+	int i;
+
+	/* Handle dyn_adc_switch mode - use imux_pins[] */
+	if (!spec->auto_mic && spec->dyn_adc_switch) {
+		imux = &spec->input_mux;
+		if (imux->num_items <= 1)
+			goto fallback;
+
+		codec_err(codec, "[AUTO_MIC] call_mic_autoswitch: dyn_adc_switch mode, checking %d inputs\n", imux->num_items);
+
+		/* Search from back to front (last inserted wins) */
+		for (i = imux->num_items - 1; i >= 0; i--) {
+			hda_nid_t pin = spec->imux_pins[i];
+			int det = is_jack_detectable(codec, pin);
+			int state = snd_hda_jack_detect_state(codec, pin);
+			codec_err(codec, "[AUTO_MIC] call_mic_autoswitch:   imux[%d] pin=0x%02x, det=%d, state=%s\n",
+				  i, pin, det, state == HDA_JACK_PRESENT ? "PRESENT" : "ABSENT");
+			if (det && state == HDA_JACK_PRESENT) {
+				codec_err(codec, "[AUTO_MIC] call_mic_autoswitch: switching to imux %d\n", i);
+				mux_select(codec, 0, i);
+				return;
+			}
+		}
+		/* No jack present, keep current selection (don't switch to imux 0) */
+		codec_err(codec, "[AUTO_MIC] call_mic_autoswitch: no jack present, keeping current\n");
+		return;
+	}
+
+fallback:
 	if (spec->mic_autoswitch_hook)
 		spec->mic_autoswitch_hook(codec, jack);
 	else
