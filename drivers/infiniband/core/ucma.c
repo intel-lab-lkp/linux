@@ -270,10 +270,12 @@ static struct ucma_event *ucma_create_uevent(struct ucma_context *ctx,
 	switch (event->event) {
 	case RDMA_CM_EVENT_MULTICAST_JOIN:
 	case RDMA_CM_EVENT_MULTICAST_ERROR:
-		uevent->mc = (struct ucma_multicast *)
-			     event->param.ud.private_data;
-		uevent->resp.uid = uevent->mc->uid;
-		uevent->resp.id = uevent->mc->id;
+		/*
+		 * event->param.ud.private_data may point to a ucma_multicast
+		 * that has already been freed, so use ctx instead.
+		 */
+		uevent->resp.uid = ctx->uid;
+		uevent->resp.id = ctx->id;
 		break;
 	default:
 		uevent->resp.uid = ctx->uid;
