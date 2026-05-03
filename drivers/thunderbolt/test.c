@@ -2852,7 +2852,139 @@ static void tb_test_property_copy(struct kunit *test)
 	tb_property_free_dir(src);
 }
 
+/*
+ * Reproducers for three memory-safety defects in
+ * drivers/thunderbolt/property.c reached from a crafted XDomain
+ * PROPERTIES_RESPONSE payload.  Without the fix these trip KASAN or
+ * smash the kernel stack; with the fix each returns NULL cleanly.
+ *
+ * The on-wire entry layout mirrors struct tb_property_entry in
+ * property.c (private to that translation unit).
+ */
+struct tb_test_property_entry {
+	u32 key_hi, key_lo;
+	u16 length;
+	u8 reserved;
+	u8 type;
+	u32 value;
+};
+
+static void tb_test_property_parse_u32_wrap(struct kunit *test)
+{
+	u32 *block = kunit_kzalloc(test, 500 * sizeof(u32), GFP_KERNEL);
+	struct tb_property_dir *dir;
+	struct tb_test_property_entry *e;
+
+	/*
+	 * Root header: magic + length=6 (single entry body of 4 dwords +
+	 * 2 slack, keeps walk within block[]).
+	 */
+	block[0] = 0x55584401;
+	block[1] = 6;
+
+	/*
+	 * Crafted DATA entry at block[2..5]: value = 0xffffff00 and
+	 * length = 0x100 are u32/u16 such that the u32 sum 0x100000000
+	 * wraps to 0, passing the sum <= block_len guard even though
+	 * the real offset is block + 0xffffff00 * 4 (~16 GiB past the
+	 * block).  The subsequent parse_dwdata() copies entry->length*4
+	 * = 1024 bytes from that wild address into a fresh kcalloc
+	 * buffer.
+	 */
+	e = (void *)&block[2];
+	e->key_hi = 0x61616161;
+	e->key_lo = 0x61616161;
+	e->length = 0x100;
+	e->type   = TB_PROPERTY_TYPE_DATA;
+	e->value  = 0xffffff00;
+
+	dir = tb_property_parse_dir(block, 500);
+	KUNIT_EXPECT_NULL(test, dir);
+	tb_property_free_dir(dir);
+}
+
+static void tb_test_property_parse_recursion(struct kunit *test)
+{
+	u32 *block = kunit_kzalloc(test, 500 * sizeof(u32), GFP_KERNEL);
+	struct tb_property_dir *dir;
+	struct tb_test_property_entry *e, *child_e;
+
+	block[0] = 0x55584401;
+	block[1] = 4;		/* rootdir length = one entry */
+
+	/*
+	 * DIRECTORY entry pointing at dir_offset=2 with length=16.
+	 * When parsed as non-root: content_offset = 6, content_len = 12,
+	 * nentries = 3.  The child's first entry at block[6] is also
+	 * DIRECTORY pointing at 2, so the recursion oscillates between
+	 * two dir_offsets until the kernel stack is exhausted.
+	 */
+	e = (void *)&block[2];
+	e->key_hi = 0x61616161;
+	e->key_lo = 0x61616161;
+	e->length = 16;
+	e->type   = TB_PROPERTY_TYPE_DIRECTORY;
+	e->value  = 2;
+
+	child_e = (void *)&block[6];
+	child_e->key_hi = 0x62626262;
+	child_e->key_lo = 0x62626262;
+	child_e->length = 16;
+	child_e->type   = TB_PROPERTY_TYPE_DIRECTORY;
+	child_e->value  = 2;
+
+	dir = tb_property_parse_dir(block, 500);
+	KUNIT_EXPECT_NULL(test, dir);
+	tb_property_free_dir(dir);
+}
+
+static void tb_test_property_parse_dir_len_underflow(struct kunit *test)
+{
+	/*
+	 * Request 28 bytes (7 dwords) so KASAN-Generic tags the
+	 * 4 trailing bytes of the underlying kmalloc-32 chunk as a
+	 * slab redzone.  With block_len=7, dir_offset=4, dir_len=3,
+	 * the non-root UUID kmemdup reads 16 bytes from byte 16, so
+	 * bytes 28..31 fall in the redzone and trip a KASAN
+	 * slab-out-of-bounds report on the pre-fix kernel.  Sizing
+	 * the buffer at a power of two (32, 64, ... bytes) puts the
+	 * over-read into the slab cache tail where KASAN's generic
+	 * shadow does not flag it, and the test reduces to a
+	 * tautology because the downstream content_len = dir_len - 4
+	 * underflow also returns NULL.
+	 */
+	u32 *block = kunit_kzalloc(test, 7 * sizeof(u32), GFP_KERNEL);
+	struct tb_property_dir *dir;
+	struct tb_test_property_entry *e;
+
+	block[0] = 0x55584401;
+	block[1] = 4;		/* rootdir length = one entry */
+
+	/*
+	 * DIRECTORY entry with length=3 pointing at dir_offset=4.
+	 * tb_property_entry_valid() permits value+length=7 <=
+	 * block_len=7.  Non-root parse begins with a kmemdup of 4
+	 * dwords from dir_offset for the UUID; with the v2 ordering
+	 * that kmemdup runs before the dir_len < 4 reject and reads
+	 * past the buffer.  With the v3 ordering the reject sits
+	 * before the kmemdup and the read never happens.
+	 */
+	e = (void *)&block[2];
+	e->key_hi = 0x61616161;
+	e->key_lo = 0x61616161;
+	e->length = 3;
+	e->type   = TB_PROPERTY_TYPE_DIRECTORY;
+	e->value  = 4;
+
+	dir = tb_property_parse_dir(block, 7);
+	KUNIT_EXPECT_NULL(test, dir);
+	tb_property_free_dir(dir);
+}
+
 static struct kunit_case tb_test_cases[] = {
+	KUNIT_CASE(tb_test_property_parse_u32_wrap),
+	KUNIT_CASE(tb_test_property_parse_recursion),
+	KUNIT_CASE(tb_test_property_parse_dir_len_underflow),
 	KUNIT_CASE(tb_test_path_basic),
 	KUNIT_CASE(tb_test_path_not_connected_walk),
 	KUNIT_CASE(tb_test_path_single_hop_walk),
