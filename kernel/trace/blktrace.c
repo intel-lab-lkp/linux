@@ -773,7 +773,7 @@ int blk_trace_setup(struct request_queue *q, char *name, dev_t dev,
 	if (ret)
 		return -EFAULT;
 
-	if (!buts.buf_size || !buts.buf_nr)
+	if (buts.buf_size < sizeof(struct blk_io_trace2) || !buts.buf_nr)
 		return -EINVAL;
 
 	buts2 = (struct blk_user_trace_setup2) {
