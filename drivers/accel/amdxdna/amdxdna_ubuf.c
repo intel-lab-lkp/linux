@@ -129,7 +129,7 @@ struct dma_buf *amdxdna_get_ubuf(struct drm_device *dev,
 				 u32 num_entries, void __user *va_entries)
 {
 	struct amdxdna_dev *xdna = to_xdna_dev(dev);
-	unsigned long lock_limit, new_pinned;
+	unsigned long lock_limit;
 	struct amdxdna_drm_va_entry *va_ent;
 	struct amdxdna_ubuf_priv *ubuf;
 	u32 npages, start = 0;
@@ -176,18 +176,17 @@ struct dma_buf *amdxdna_get_ubuf(struct drm_device *dev,
 
 	ubuf->nr_pages = exp_info.size >> PAGE_SHIFT;
 	lock_limit = rlimit(RLIMIT_MEMLOCK) >> PAGE_SHIFT;
-	new_pinned = atomic64_add_return(ubuf->nr_pages, &ubuf->mm->pinned_vm);
-	if (new_pinned > lock_limit && !capable(CAP_IPC_LOCK)) {
-		XDNA_DBG(xdna, "New pin %ld, limit %ld, cap %d",
-			 new_pinned, lock_limit, capable(CAP_IPC_LOCK));
+
+	if (ubuf->nr_pages + atomic64_read(&ubuf->mm->pinned_vm) > lock_limit &&
+		!capable(CAP_IPC_LOCK)) {
 		ret = -ENOMEM;
-		goto sub_pin_cnt;
+		goto free_ent;
 	}
 
 	ubuf->pages = kvmalloc_objs(*ubuf->pages, ubuf->nr_pages);
 	if (!ubuf->pages) {
 		ret = -ENOMEM;
-		goto sub_pin_cnt;
+		goto free_ent;
 	}
 
 	for (i = 0; i < num_entries; i++) {
@@ -196,14 +195,16 @@ struct dma_buf *amdxdna_get_ubuf(struct drm_device *dev,
 		ret = pin_user_pages_fast(va_ent[i].vaddr, npages,
 					  FOLL_WRITE | FOLL_LONGTERM,
 					  &ubuf->pages[start]);
-		if (ret < 0 || ret != npages) {
+		if (ret < 0)
+			goto destroy_pages;
+		start += ret;
+		if (ret != npages) {
 			ret = -ENOMEM;
-			XDNA_ERR(xdna, "Failed to pin pages ret %d", ret);
 			goto destroy_pages;
 		}
-
-		start += ret;
 	}
+
+	atomic64_add(ubuf->nr_pages, &ubuf->mm->pinned_vm);
 
 	exp_info.ops = &amdxdna_ubuf_dmabuf_ops;
 	exp_info.priv = ubuf;
@@ -212,6 +213,7 @@ struct dma_buf *amdxdna_get_ubuf(struct drm_device *dev,
 	dbuf = dma_buf_export(&exp_info);
 	if (IS_ERR(dbuf)) {
 		ret = PTR_ERR(dbuf);
+		atomic64_sub(ubuf->nr_pages, &ubuf->mm->pinned_vm);
 		goto destroy_pages;
 	}
 	kvfree(va_ent);
@@ -222,8 +224,6 @@ destroy_pages:
 	if (start)
 		unpin_user_pages(ubuf->pages, start);
 	kvfree(ubuf->pages);
-sub_pin_cnt:
-	atomic64_sub(ubuf->nr_pages, &ubuf->mm->pinned_vm);
 free_ent:
 	kvfree(va_ent);
 free_ubuf:
