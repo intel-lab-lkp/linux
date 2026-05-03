@@ -129,7 +129,7 @@ After these preparations you'll now enter the main part:
    situations; during the merge window that actually might be even the best
    approach, but in that development phase it can be an even better idea to
    suspend your efforts for a few days anyway. Whatever version you choose,
-   ideally use a 'vanilla' build. Ignoring these advices will dramatically
+   ideally use a 'vanilla' build. Ignoring this advice will dramatically
    increase the risk your report will be rejected or ignored.
 
  * Ensure the kernel you just installed does not 'taint' itself when
@@ -302,7 +302,7 @@ Make sure you're using the upstream Linux kernel
 
 Like most programmers, Linux kernel developers don't like to spend time dealing
 with reports for issues that don't even happen with their current code. It's
-just a waste everybody's time, especially yours. Unfortunately such situations
+just a waste of everybody's time, especially yours. Unfortunately such situations
 easily happen when it comes to the kernel and often leads to frustration on both
 sides. That's because almost all Linux-based kernels pre-installed on devices
 (Computers, Laptops, Smartphones, Routers, …) and most shipped by Linux
@@ -402,7 +402,7 @@ Issue of high priority?
 
 Linus Torvalds and the leading Linux kernel developers want to see some issues
 fixed as soon as possible, hence there are 'issues of high priority' that get
-handled slightly differently in the reporting process. Three type of cases
+handled slightly differently in the reporting process. Three types of cases
 qualify: regressions, security issues, and really severe problems.
 
 You deal with a regression if some application or practical use case running
@@ -422,7 +422,7 @@ happens. That's for example the case when a Linux kernel corrupts the data it's
 handling or damages hardware it's running on. You're also dealing with a severe
 issue when the kernel suddenly stops working with an error message ('kernel
 panic') or without any farewell note at all. Note: do not confuse a 'panic' (a
-fatal error where the kernel stop itself) with a 'Oops' (a recoverable error),
+fatal error where the kernel stops itself) with an 'Oops' (a recoverable error),
 as the kernel remains running after the latter.
 
 
@@ -457,7 +457,7 @@ should minimize it:
    caused by other software that was updated at the same time. It can also
    happen that a hardware component coincidentally just broke when you rebooted
    into a new kernel for the first time. Updating the systems BIOS or changing
-   something in the BIOS Setup can also lead to problems that on look a lot
+   something in the BIOS Setup can also lead to problems that look a lot
    like a kernel regression.
 
 
@@ -491,7 +491,7 @@ before proceeding.
 Note, you might not be aware that your system is using one of these solutions:
 they often get set up silently when you install Nvidia's proprietary graphics
 driver, VirtualBox, or other software that requires a some support from a
-module not part of the Linux kernel. That why your might need to uninstall the
+module not part of the Linux kernel. That's why you might need to uninstall the
 packages with such software to get rid of any 3rd party kernel module.
 
 
@@ -602,7 +602,7 @@ Linux developers want to fix badly, as such issues are even more unwanted than
 regression in the main development branch, as they can quickly affect a lot of
 people. The developers thus want to learn about such issues as quickly as
 possible, hence there is a streamlined process to report them. Note,
-regressions with newer kernel version line (say something broke when switching
+regressions with a newer kernel version line (say something broke when switching
 from 5.9.15 to 5.10.5) do not qualify.
 
 
@@ -669,7 +669,7 @@ guessed poorly.
 Once you know the driver or subsystem, you want to search for it in the
 MAINTAINERS file. In the case of 'ath10k_pci' you won't find anything, as the
 name is too specific. Sometimes you will need to search on the net for help;
-but before doing so, try a somewhat shorted or modified name when searching the
+but before doing so, try a somewhat shorter or modified name when searching the
 MAINTAINERS file, as then you might find something like this::
 
        QUALCOMM ATHEROS ATH10K WIRELESS DRIVER
@@ -718,7 +718,7 @@ For people that have the Linux sources at hand there is a second option to find
 the proper place to report: the script 'scripts/get_maintainer.pl' which tries
 to find all people to contact. It queries the MAINTAINERS file and needs to be
 called with a path to the source code in question. For drivers compiled as
-module if often can be found with a command like this::
+module it often can be found with a command like this::
 
        $ modinfo ath10k_pci | grep filename | sed 's!/lib/modules/.*/kernel/!!; s!filename:!!; s!\.ko\(\|\.xz\)!!'
        drivers/net/wireless/ath/ath10k/ath10k_pci.ko
@@ -733,7 +733,7 @@ Pass parts of this to the script::
        netdev@vger.kernel.org (open list:NETWORKING DRIVERS)
        linux-kernel@vger.kernel.org (open list)
 
-Don't sent your report to all of them. Send it to the maintainers, which the
+Don't send your report to all of them. Send it to the maintainers, which the
 script calls "supporter:"; additionally CC the most specific mailing list for
 the code as well as the Linux Kernel Mailing List (LKML). In this case you thus
 would need to send the report to 'Some Human <shuman@example.com>' with
@@ -762,7 +762,7 @@ as the reporter. That's why you should search for existing report again, now
 that you know where they need to be reported to. If it's mailing list, you will
 often find its archives on `lore.kernel.org <https://lore.kernel.org/>`_.
 
-But some list are hosted in different places. That for example is the case for
+But some lists are hosted in different places. That for example is the case for
 the ath10k WiFi driver used as example in the previous step. But you'll often
 find the archives for these lists easily on the net. Searching for 'archive
 ath10k@lists.infradead.org' for example will lead you to the `Info page for the
@@ -795,13 +795,13 @@ Install a fresh kernel for testing
     situations; during the merge window that actually might be even the best
     approach, but in that development phase it can be an even better idea to
     suspend your efforts for a few days anyway. Whatever version you choose,
-    ideally use a 'vanilla' built. Ignoring these advices will dramatically
+    ideally use a 'vanilla' build. Ignoring this advice will dramatically
     increase the risk your report will be rejected or ignored.*
 
 As mentioned in the detailed explanation for the first step already: Like most
 programmers, Linux kernel developers don't like to spend time dealing with
 reports for issues that don't even happen with the current code. It's just a
-waste everybody's time, especially yours. That's why it's in everybody's
+waste of everybody's time, especially yours. That's why it's in everybody's
 interest that you confirm the issue still exists with the latest upstream code
 before reporting it. You are free to ignore this advice, but as outlined
 earlier: doing so dramatically increases the risk that your issue report might
@@ -814,7 +814,7 @@ In the scope of the kernel "latest upstream" normally means:
    kernels') are unsuitable at this point of the process. The next subsection
    explains all of this in more detail.
 
- * The over next subsection describes way to obtain and install such a kernel.
+ * The subsection after that describes a way to obtain and install such a kernel.
    It also outlines that using a pre-compiled kernel are fine, but better are
    vanilla, which means: it was built using Linux sources taken straight `from
    kernel.org <https://kernel.org/>`_ and not modified or enhanced in any way.
@@ -848,7 +848,7 @@ That's why it might make sense to wait till the merge window is over. But don't
 to that if you're dealing with something that shouldn't wait. In that case
 consider obtaining the latest mainline kernel via git (see below) or use the
 latest stable version offered on kernel.org. Using that is also acceptable in
-case mainline for some reason does currently not work for you. An in general:
+case mainline for some reason does currently not work for you. And in general:
 using it for reproducing the issue is also better than not reporting it issue
 at all.
 
@@ -861,7 +861,7 @@ hard or risky for backporting; reporting the issue again hence is unlikely to
 change anything.
 
 These aspects are also why longterm kernels (sometimes called "LTS kernels")
-are unsuitable for this part of the reporting process: they are to distant from
+are unsuitable for this part of the reporting process: they are too distant from
 the current code. Hence go and test mainline first and follow the process
 further: if the issue doesn't occur with mainline it will guide you how to get
 it fixed in older version lines, if that's in the cards for the fix in question.
@@ -870,8 +870,8 @@ How to obtain a fresh Linux kernel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 **Using a pre-compiled kernel**: This is often the quickest, easiest, and safest
-way for testing — especially is you are unfamiliar with the Linux kernel. The
-problem: most of those shipped by distributors or add-on repositories are build
+way for testing — especially if you are unfamiliar with the Linux kernel. The
+problem: most of those shipped by distributors or add-on repositories are built
 from modified Linux sources. They are thus not vanilla and therefore often
 unsuitable for testing and issue reporting: the changes might cause the issue
 you face or influence it somehow.
@@ -935,7 +935,7 @@ Check 'taint' flag
 As outlined above in more detail already: the kernel sets a 'taint' flag when
 something happens that can lead to follow-up errors that look totally
 unrelated. That's why you need to check if the kernel you just installed does
-not set this flag. And if it does, you in almost all the cases needs to
+not set this flag. And if it does, you in almost all cases need to
 eliminate the reason for it before you reporting issues that occur with it. See
 the section above for details how to do that.
 
@@ -973,7 +973,7 @@ the same time try to keep it as short as possible.
 
 In this in the previous steps you likely have learned a thing or two about the
 issue you face. Use this knowledge and search again for existing reports
-instead you can join.
+that you can join instead.
 
 
 Decode failure messages
@@ -1070,7 +1070,7 @@ interpret, which might render your testing useless. Once you found the major
 version which introduced the regression, feel free to move on in the reporting
 process. But keep in mind: it depends on the issue at hand if the developers
 will be able to help without knowing the culprit. Sometimes they might
-recognize from the report want went wrong and can fix it; other times they will
+recognize from the report what went wrong and can fix it; other times they will
 be unable to help unless you perform a bisection.
 
 When dealing with regressions make sure the issue you face is really caused by
@@ -1182,7 +1182,7 @@ few suggestions what often is good to provide:
 
  * If the issue might be related to your computer hardware, mention what kind
    of system you use. If you for example have problems with your graphics card,
-   mention its manufacturer, the card's model, and what chip is uses. If it's a
+   mention its manufacturer, the card's model, and what chip it uses. If it's a
    laptop mention its name, but try to make sure it's meaningful. 'Dell XPS 13'
    for example is not, because it might be the one from 2012; that one looks
    not that different from the one sold today, but apart from that the two have
@@ -1210,7 +1210,7 @@ few suggestions what often is good to provide:
    information. One such tool is ``alsa-info.sh`` `which the audio/sound
    subsystem developers provide <https://www.alsa-project.org/wiki/AlsaInfo>`_.
 
-Those examples should give your some ideas of what data might be wise to
+Those examples should give you some ideas of what data might be wise to
 attach, but you have to think yourself what will be helpful for others to know.
 Don't worry too much about forgetting something, as developers will ask for
 additional details they need. But making everything important available from
@@ -1247,7 +1247,7 @@ Special handling for high priority issues
 Reports for high priority issues need special handling.
 
 **Severe issues**: make sure the subject or ticket title as well as the first
-paragraph makes the severeness obvious.
+paragraph makes the severity obvious.
 
 **Regressions**: make the report's subject start with '[REGRESSION]'.
 
@@ -1386,7 +1386,7 @@ writing something anyway.
 With all these general things off the table let's get into the details of how
 to help to get issues resolved once they were reported.
 
-Inquires and testing request
+Inquiries and testing requests
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Here are your duties in case you got replies to your report:
@@ -1429,7 +1429,7 @@ your report arrived or had something more important to take care of. When
 writing the reminder, kindly ask if anything else from your side is needed to
 get the ball running somehow. If the report got out by mail, do that in the
 first lines of a mail that is a reply to your initial mail (see above) which
-includes a full quote of the original report below: that's on of those few
+includes a full quote of the original report below: that's one of those few
 situations where such a 'TOFU' (Text Over, Fullquote Under) is the right
 approach, as then all the recipients will have the details at hand immediately
 in the proper order.
@@ -1474,7 +1474,7 @@ not get solved: the Linux kernel is FLOSS and thus you can still help yourself.
 You for example could try to find others that are affected and team up with
 them to get the issue resolved. Such a team could prepare a fresh report
 together that mentions how many you are and why this is something that in your
-option should get fixed. Maybe together you can also narrow down the root cause
+opinion should get fixed. Maybe together you can also narrow down the root cause
 or the change that introduced a regression, which often makes developing a fix
 easier. And with a bit of luck there might be someone in the team that knows a
 bit about programming and might be able to write a fix.
@@ -1621,7 +1621,7 @@ guide. Those steps will let you:
  * Check if the kernel developers still maintain the Linux kernel version line
    you care about.
 
- * Search the Linux stable mailing list for exiting reports.
+ * Search the Linux stable mailing list for existing reports.
 
  * Check with the latest release.
 
@@ -1640,7 +1640,7 @@ Check code history and search for existing discussions
 In a lot of cases the issue you deal with will have happened with mainline, but
 got fixed there. The commit that fixed it would need to get backported as well
 to get the issue solved. That's why you want to search for it or any
-discussions abound it.
+discussions about it.
 
  * First try to find the fix in the Git repository that holds the Linux kernel
    sources. You can do this with the web interfaces `on kernel.org
@@ -1712,10 +1712,10 @@ nature of kernels, Linux' development model, and how the world uses the kernel:
 * *Bugs often only occur in a special environment.* That is because Linux is
   mostly drivers and can be used in a multitude of ways. Developers often do not
   have a matching setup at hand -- and therefore frequently must rely on bug
-  reporters for isolating a problems's cause and testing proposed fixes.
+  reporters for isolating a problem's cause and testing proposed fixes.
 
 * *The kernel has hundreds of maintainers, but all-rounders are very rare.* That
-  again is and effect caused by the multitude of features and drivers, due to
+  again is an effect caused by the multitude of features and drivers, due to
   which many kernel developers know little about lower or higher layers related
   to their code and even less about other areas.
 
