@@ -449,7 +449,7 @@ void thread__find_cpumode_addr_location(struct thread *thread, u64 addr,
 	}
 }
 
-static uint16_t read_proc_e_machine_for_pid(pid_t pid, uint32_t *e_flags)
+static uint16_t read_proc_e_machine_for_pid(pid_t pid, uint32_t *e_flags, bool *is_big_endian)
 {
 	char path[6 /* "/proc/" */ + 11 /* max length of pid */ + 5 /* "/exe\0" */];
 	int fd;
@@ -458,7 +458,8 @@ static uint16_t read_proc_e_machine_for_pid(pid_t pid, uint32_t *e_flags)
 	snprintf(path, sizeof(path), "/proc/%d/exe", pid);
 	fd = open(path, O_RDONLY);
 	if (fd >= 0) {
-		e_machine = dso__read_e_machine(/*optional_dso=*/NULL, fd, e_flags);
+		e_machine = dso__read_e_machine_endian(/*optional_dso=*/NULL, fd, e_flags,
+						       is_big_endian);
 		close(fd);
 	}
 	return e_machine;
@@ -468,6 +469,7 @@ struct thread__e_machine_callback_args {
 	struct machine *machine;
 	uint32_t e_flags;
 	uint16_t e_machine;
+	bool is_big_endian;
 };
 
 static int thread__e_machine_callback(struct map *map, void *_args)
@@ -478,11 +480,13 @@ static int thread__e_machine_callback(struct map *map, void *_args)
 	if (!dso)
 		return 0; // No dso, continue search.
 
-	args->e_machine = dso__e_machine(dso, args->machine, &args->e_flags);
+	args->e_machine =
+		dso__e_machine_endian(dso, args->machine, &args->e_flags, &args->is_big_endian);
 	return args->e_machine != EM_NONE ? 1 /* stop search */ : 0 /* continue search */;
 }
 
-uint16_t thread__e_machine(struct thread *thread, struct machine *machine, uint32_t *e_flags)
+uint16_t thread__e_machine_endian(struct thread *thread, struct machine *machine, uint32_t *e_flags,
+				  bool *is_big_endian)
 {
 	pid_t tid, pid;
 	uint16_t e_machine = RC_CHK_ACCESS(thread)->e_machine;
@@ -491,6 +495,7 @@ uint16_t thread__e_machine(struct thread *thread, struct machine *machine, uint3
 		.machine = machine,
 		.e_flags = 0,
 		.e_machine = EM_NONE,
+		.is_big_endian = false,
 	};
 
 	if (e_machine != EM_NONE) {
@@ -510,7 +515,8 @@ uint16_t thread__e_machine(struct thread *thread, struct machine *machine, uint3
 		struct thread *parent = machine__findnew_thread(machine, pid, pid);
 
 		if (parent) {
-			e_machine = thread__e_machine(parent, machine, &local_e_flags);
+			e_machine = thread__e_machine_endian(parent, machine, &local_e_flags,
+							     is_big_endian);
 			thread__put(parent);
 			goto out;
 		}
@@ -522,6 +528,8 @@ uint16_t thread__e_machine(struct thread *thread, struct machine *machine, uint3
 	if (args.e_machine != EM_NONE) {
 		e_machine = args.e_machine;
 		local_e_flags = args.e_flags;
+		if (is_big_endian)
+			*is_big_endian = args.is_big_endian;
 	} else {
 		/* Maps failed, perhaps we're live with map events disabled. */
 		bool is_live = machine->machines == NULL;
@@ -536,7 +544,7 @@ uint16_t thread__e_machine(struct thread *thread, struct machine *machine, uint3
 		}
 		/* Read from /proc/pid/exe if live. */
 		if (is_live)
-			e_machine = read_proc_e_machine_for_pid(pid, &local_e_flags);
+			e_machine = read_proc_e_machine_for_pid(pid, &local_e_flags, is_big_endian);
 	}
 out:
 	if (e_machine != EM_NONE) {
@@ -545,6 +553,8 @@ out:
 	} else {
 		e_machine = EM_HOST;
 		local_e_flags = EF_HOST;
+		if (is_big_endian)
+			*is_big_endian = (__BYTE_ORDER__ == __ORDER_BIG_ENDIAN__);
 	}
 	if (e_flags)
 		*e_flags = local_e_flags;

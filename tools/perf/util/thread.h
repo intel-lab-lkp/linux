@@ -311,7 +311,13 @@ static inline void thread__set_filter_entry_depth(struct thread *thread, int dep
 	RC_CHK_ACCESS(thread)->filter_entry_depth = depth;
 }
 
-uint16_t thread__e_machine(struct thread *thread, struct machine *machine, uint32_t *e_flags);
+uint16_t thread__e_machine_endian(struct thread *thread, struct machine *machine, uint32_t *e_flags,
+				  bool *is_big_endian);
+static inline uint16_t thread__e_machine(struct thread *thread, struct machine *machine,
+					 uint32_t *e_flags)
+{
+	return thread__e_machine_endian(thread, machine, e_flags, NULL);
+}
 
 static inline void thread__set_e_machine(struct thread *thread, uint16_t e_machine)
 {
