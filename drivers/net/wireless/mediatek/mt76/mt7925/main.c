@@ -1265,6 +1265,16 @@ mt7925_mac_sta_remove_links(struct mt792x_dev *dev, struct ieee80211_vif *vif,
 		if (vif->type == NL80211_IFTYPE_AP)
 			break;
 
+		/* TDLS peers on a STATION vif share the AP's bss_conf. The
+		 * link_conf retrieved below would be the AP's, and calling
+		 * mcu_add_bss_info(..., false) for a TDLS peer teardown
+		 * would disable the AP's BSS in firmware, wiping its
+		 * rate-control context. mt7925_mac_link_sta_remove() has
+		 * the symmetric guard for its own bss-info call.
+		 */
+		if (vif->type == NL80211_IFTYPE_STATION && sta->tdls)
+			continue;
+
 		link_sta = mt792x_sta_to_link_sta(vif, sta, link_id);
 		if (!link_sta)
 			continue;
