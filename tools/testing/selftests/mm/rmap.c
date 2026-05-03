@@ -430,4 +430,83 @@ TEST_F(migrate, ksm)
 	propagate_children(_metadata, data);
 }
 
+static void prepare_two_pages(struct global_data *data)
+{
+	/* Allocate exactly 2 pages for the test */
+	data->mapsize = 2 * getpagesize();
+	data->region = mmap(NULL, data->mapsize, PROT_READ | PROT_WRITE,
+			    MAP_PRIVATE | MAP_ANON, -1, 0);
+	if (data->region == MAP_FAILED)
+		ksft_exit_fail_perror("mmap failed");
+
+	/* Fill both pages with identical content to encourage KSM merging */
+	memset(data->region, 0x77, data->mapsize);
+}
+
+static int mremap_merge_and_migrate(struct global_data *data)
+{
+	int ret, pagemap_fd;
+	void *old_region = data->region;
+	unsigned long page_sz = getpagesize();
+
+	/*
+	 * Mremap the second page to the first page's location (FIXED).
+	 * This effectively overwrites the first page, leaving the second page
+	 * unmapped. The physical page originally at the second page is now
+	 * mapped at the first page's virtual address.
+	 */
+	data->region = mremap(old_region + page_sz, page_sz, page_sz,
+			      MREMAP_MAYMOVE | MREMAP_FIXED, old_region);
+	if (data->region == MAP_FAILED) {
+		ksft_print_msg("mremap failed: %s\n", strerror(errno));
+		return FAIL_ON_CHECK;
+	}
+
+	/* Ensure KSM is active and wait for merging */
+	if (ksm_start() < 0) {
+		ksft_print_msg("KSM start failed\n");
+		return FAIL_ON_CHECK;
+	}
+
+	/* Attempt to migrate the merged KSM page */
+	ret = try_to_move_page(data->region);
+	if (ret != 0) {
+		ksft_print_msg("migration of KSM page after mremap failed\n");
+		return FAIL_ON_CHECK;
+	}
+
+	pagemap_fd = open("/proc/self/pagemap", O_RDONLY);
+	if (pagemap_fd == -1)
+		return FAIL_ON_WORK;
+	*data->expected_pfn = pagemap_get_pfn(pagemap_fd, data->region);
+
+	return 0;
+}
+
+TEST_F(migrate, ksm_and_mremap)
+{
+	struct global_data *data = &self->data;
+	int ret;
+
+	/* Skip if KSM is not available */
+	if (ksm_stop() < 0)
+		SKIP(return, "accessing \"/sys/kernel/mm/ksm/run\" failed");
+	if (ksm_get_full_scans() < 0)
+		SKIP(return, "accessing \"/sys/kernel/mm/ksm/full_scan\" failed");
+
+	ret = prctl(PR_SET_MEMORY_MERGE, 1, 0, 0, 0);
+	if (ret < 0 && errno == EINVAL)
+		SKIP(return, "PR_SET_MEMORY_MERGE not supported");
+	else if (ret)
+		ksft_exit_fail_perror("PR_SET_MEMORY_MERGE=1 failed");
+
+	/* Assign the three callbacks required by propagate_children */
+	data->do_prepare = prepare_two_pages;
+	data->do_work = mremap_merge_and_migrate;
+	data->do_check = has_same_pfn;
+
+	/* Run the test in a process tree to stress rmap locking */
+	propagate_children(_metadata, data);
+}
+
 TEST_HARNESS_MAIN
