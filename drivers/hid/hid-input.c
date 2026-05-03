@@ -2408,6 +2408,7 @@ EXPORT_SYMBOL_GPL(hidinput_connect);
 void hidinput_disconnect(struct hid_device *hid)
 {
 	struct hid_input *hidinput, *next;
+	struct hid_battery *bat, *bat_next;
 
 	list_for_each_entry_safe(hidinput, next, &hid->inputs, list) {
 		list_del(&hidinput->list);
@@ -2417,6 +2418,10 @@ void hidinput_disconnect(struct hid_device *hid)
 			input_free_device(hidinput->input);
 		kfree(hidinput->name);
 		kfree(hidinput);
+	}
+
+	list_for_each_entry_safe(bat, bat_next, &hid->batteries, list) {
+		list_del(&bat->list);
 	}
 
 	/* led_work is spawned by input_dev callbacks, but doesn't access the
