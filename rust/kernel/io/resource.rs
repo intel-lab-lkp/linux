@@ -58,7 +58,7 @@ impl Drop for Region {
         };
 
         // SAFETY: Safe as per the invariant of `Region`.
-        unsafe { release_fn(start, size) };
+        unsafe { release_fn(start.into_raw(), size) };
     }
 }
 
@@ -113,7 +113,7 @@ impl Resource {
         let region = unsafe {
             bindings::__request_region(
                 self.0.get(),
-                start,
+                start.into_raw(),
                 size,
                 name.as_char_ptr(),
                 flags.0 as c_int,
@@ -137,7 +137,7 @@ impl Resource {
     pub fn start(&self) -> PhysAddr {
         let inner = self.0.get();
         // SAFETY: Safe as per the invariants of `Resource`.
-        unsafe { (*inner).start }
+        PhysAddr::from_raw(unsafe { (*inner).start })
     }
 
     /// Returns the name of the resource.
