@@ -2547,8 +2547,10 @@ static void __link_shadow_page(struct kvm *kvm,
 		parent_sp = sptep_to_sp(sptep);
 		WARN_ON_ONCE(parent_sp->role.level == PG_LEVEL_4K);
 
-		mmu_page_zap_pte(kvm, parent_sp, sptep, &invalid_list);
-		kvm_mmu_remote_flush_or_zap(kvm, &invalid_list, true);
+		if (mmu_page_zap_pte(kvm, parent_sp, sptep, &invalid_list))
+			kvm_mmu_commit_zap_page(kvm, &invalid_list);
+		else if (flush)
+			kvm_flush_remote_tlbs_sptep(kvm, sptep);
 	}
 
 	spte = make_nonleaf_spte(sp->spt, sp_ad_disabled(sp));
