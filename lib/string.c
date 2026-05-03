@@ -77,7 +77,7 @@ EXPORT_SYMBOL(strcasecmp);
 #endif
 
 #ifndef __HAVE_ARCH_STRCPY
-char *strcpy(char *dest, const char *src)
+char *strcpy(char *__restrict__ dest, const char *__restrict__ src)
 {
 	char *tmp = dest;
 
@@ -89,7 +89,7 @@ EXPORT_SYMBOL(strcpy);
 #endif
 
 #ifndef __HAVE_ARCH_STRNCPY
-char *strncpy(char *dest, const char *src, size_t count)
+char *strncpy(char *__restrict__ dest, const char *__restrict__ src, size_t count)
 {
 	char *tmp = dest;
 
@@ -110,7 +110,7 @@ EXPORT_SYMBOL(strncpy);
 # define ALLBUTLAST_BYTE_MASK (~0ul >> 8)
 #endif
 
-ssize_t sized_strscpy(char *dest, const char *src, size_t count)
+ssize_t sized_strscpy(char *__restrict__ dest, const char *__restrict__ src, size_t count)
 {
 	const struct word_at_a_time constants = WORD_AT_A_TIME_CONSTANTS;
 	size_t max = count;
@@ -215,7 +215,7 @@ char *stpcpy(char *__restrict__ dest, const char *__restrict__ src)
 EXPORT_SYMBOL(stpcpy);
 
 #ifndef __HAVE_ARCH_STRCAT
-char *strcat(char *dest, const char *src)
+char *strcat(char *__restrict__ dest, const char *__restrict__ src)
 {
 	char *tmp = dest;
 
@@ -229,7 +229,7 @@ EXPORT_SYMBOL(strcat);
 #endif
 
 #ifndef __HAVE_ARCH_STRNCAT
-char *strncat(char *dest, const char *src, size_t count)
+char *strncat(char *__restrict__ dest, const char *__restrict__ src, size_t count)
 {
 	char *tmp = dest;
 
@@ -618,7 +618,7 @@ EXPORT_SYMBOL(memset64);
  * You should not use this function to access IO space, use memcpy_toio()
  * or memcpy_fromio() instead.
  */
-void *memcpy(void *dest, const void *src, size_t count)
+void *memcpy(void *__restrict__ dest, const void *__restrict__ src, size_t count)
 {
 	char *tmp = dest;
 	const char *s = src;

@@ -65,12 +65,12 @@ void *vmemdup_array_user(const void __user *src, size_t n, size_t size)
 #include <asm/string.h>
 
 #ifndef __HAVE_ARCH_STRCPY
-extern char * strcpy(char *,const char *);
+extern char * strcpy(char *__restrict__, const char *__restrict__);
 #endif
 #ifndef __HAVE_ARCH_STRNCPY
-extern char * strncpy(char *,const char *, __kernel_size_t);
+extern char * strncpy(char *__restrict__, const char *__restrict__, __kernel_size_t);
 #endif
-ssize_t sized_strscpy(char *, const char *, size_t);
+ssize_t sized_strscpy(char *__restrict__, const char *__restrict__, size_t);
 
 /*
  * The 2 argument style can only be used when dst is an array with a
@@ -149,10 +149,10 @@ ssize_t sized_strscpy(char *, const char *, size_t);
 	CONCATENATE(__strscpy_pad, COUNT_ARGS(__VA_ARGS__))(dst, src, __VA_ARGS__)
 
 #ifndef __HAVE_ARCH_STRCAT
-extern char * strcat(char *, const char *);
+extern char * strcat(char *__restrict__, const char *__restrict__);
 #endif
 #ifndef __HAVE_ARCH_STRNCAT
-extern char * strncat(char *, const char *, __kernel_size_t);
+extern char * strncat(char *__restrict__, const char *__restrict__, __kernel_size_t);
 #endif
 #ifndef __HAVE_ARCH_STRLCAT
 extern size_t strlcat(char *, const char *, __kernel_size_t);
@@ -257,7 +257,7 @@ extern void **__memcat_p(void **a, void **b);
 })
 
 #ifndef __HAVE_ARCH_MEMCPY
-extern void * memcpy(void *,const void *,__kernel_size_t);
+extern void * memcpy(void *__restrict__, const void *__restrict__, __kernel_size_t);
 #endif
 #ifndef __HAVE_ARCH_MEMMOVE
 extern void * memmove(void *,const void *,__kernel_size_t);
