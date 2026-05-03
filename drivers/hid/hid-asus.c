@@ -99,6 +99,7 @@ MODULE_DESCRIPTION("Asus HID Keyboard and TouchPad");
 #define QUIRK_ROG_CLAYMORE_II_KEYBOARD	BIT(12)
 #define QUIRK_ROG_ALLY_XPAD		BIT(13)
 #define QUIRK_HID_FN_LOCK		BIT(14)
+#define QUIRK_T3304_KEYBOARD		BIT(15)
 
 #define I2C_KEYBOARD_QUIRKS			(QUIRK_FIX_NOTEBOOK_REPORT | \
 						 QUIRK_NO_INIT_REPORTS | \
@@ -493,6 +494,14 @@ static int asus_kbd_init(struct hid_device *hdev, u8 report_id)
 			report_id, ret);
 		return ret;
 	}
+
+	struct asus_drvdata *drvdata = hid_get_drvdata(hdev);
+
+	/* T3304 keyboard always replies with 16 0xff bytes. Don't check for
+	 * acknowledgment.
+	 */
+	if (drvdata->quirks & QUIRK_T3304_KEYBOARD)
+		return 0;
 
 	u8 *readbuf __free(kfree) = kzalloc(FEATURE_KBD_REPORT_SIZE, GFP_KERNEL);
 	if (!readbuf)
@@ -1312,10 +1321,12 @@ static int asus_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		hid_warn(hdev, "Failed to initialize backlight.\n");
 
 	/*
-	 * For ROG keyboards, skip rename for consistency and ->input check as
-	 * some devices do not have inputs.
+	 * For ROG and T3304 keyboards, skip rename for consistency.
+	 * For ROG keyboards, skip ->input check as some devices do not have
+	 * inputs.
 	 */
-	if (drvdata->quirks & QUIRK_ROG_NKEY_KEYBOARD)
+	if (drvdata->quirks & QUIRK_ROG_NKEY_KEYBOARD ||
+	    drvdata->quirks & QUIRK_T3304_KEYBOARD)
 		return 0;
 
 	/*
@@ -1367,6 +1378,22 @@ static void asus_remove(struct hid_device *hdev)
 static const __u8 asus_g752_fixed_rdesc[] = {
         0x19, 0x00,			/*   Usage Minimum (0x00)       */
         0x2A, 0xFF, 0x00,		/*   Usage Maximum (0xFF)       */
+};
+
+static const __u8 asus_t3304_fixed_rdesc[] = {
+	0x06, 0x31, 0xff,              // Usage Page (Vendor Usage Page 0xff31)
+	0x09, 0x76,                    // Usage (Vendor Usage 0x76)
+	0xa1, 0x01,                    // Collection (Application)
+	0x05, 0xff,                    //  Usage Page (Vendor Usage Page 0xff)
+	0x85, 0x5a,                    //  Report ID (90)
+	0x19, 0x00,                    //  Usage Minimum (0)
+	0x2a, 0xff, 0x00,              //  Usage Maximum (255)
+	0x15, 0x00,                    //  Logical Minimum (0)
+	0x26, 0xff, 0x00,              //  Logical Maximum (255)
+	0x75, 0x08,                    //  Report Size (8)
+	0x95, 0x0f,                    //  Report Count (15)
+	0xb1, 0x02,                    //  Feature (Data,Var,Abs)
+	0xc0,                          // End Collection
 };
 
 static const __u8 *asus_report_fixup(struct hid_device *hdev, __u8 *rdesc,
@@ -1473,6 +1500,28 @@ static const __u8 *asus_report_fixup(struct hid_device *hdev, __u8 *rdesc,
 		}
 	}
 
+	/* T3304 keyboard's vendor descriptors are on the touchpad interface,
+	 * not the keyboard. But we need hid-multitouch to handle the touchpad,
+	 * Add a descriptor with only the config report so that this driver can
+	 * perform initialization.
+	 */
+	if (drvdata->quirks & QUIRK_T3304_KEYBOARD) {
+		__u8 *new_rdesc;
+		size_t new_size = *rsize + sizeof(asus_t3304_fixed_rdesc);
+
+		new_rdesc = devm_kzalloc(&hdev->dev, new_size, GFP_KERNEL);
+		if (new_rdesc == NULL)
+			return rdesc;
+
+		hid_info(hdev, "Fixing up Asus T3304 keyboard report descriptor\n");
+		memcpy(new_rdesc, rdesc, *rsize);
+		memcpy(new_rdesc + *rsize, asus_t3304_fixed_rdesc,
+		       sizeof(asus_t3304_fixed_rdesc));
+
+		*rsize = new_size;
+		rdesc = new_rdesc;
+	}
+
 	return rdesc;
 }
 
@@ -1536,6 +1585,9 @@ static const struct hid_device_id asus_devices[] = {
 	  QUIRK_USE_KBD_BACKLIGHT | QUIRK_ROG_NKEY_KEYBOARD },
 	{ HID_DEVICE(BUS_USB, HID_GROUP_GENERIC,
 		USB_VENDOR_ID_ASUSTEK, USB_DEVICE_ID_ASUSTEK_T101HA_KEYBOARD) },
+	{ HID_DEVICE(BUS_USB, HID_GROUP_GENERIC,
+		USB_VENDOR_ID_ASUSTEK, USB_DEVICE_ID_ASUSTEK_T3304_KEYBOARD),
+	  QUIRK_T3304_KEYBOARD },
 	{ }
 };
 MODULE_DEVICE_TABLE(hid, asus_devices);
