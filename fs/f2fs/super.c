@@ -5400,6 +5400,15 @@ reset_checkpoint:
 
 	f2fs_tuning_parameters(sbi);
 
+	/*
+	 * After POR and mount-time recovery, we can run the discard thread. It
+	 * reads node-manager memory thresholds and the superblock read-only
+	 * state, so keep it out of the fill_super() initialization window.
+	 */
+	err = f2fs_start_discard_thread(sbi);
+	if (err)
+		goto leave_shrinker;
+
 	f2fs_notice(sbi, "Mounted with checkpoint version = %llx",
 		    cur_cp_version(F2FS_CKPT(sbi)));
 	f2fs_update_time(sbi, CP_TIME);
@@ -5409,6 +5418,9 @@ reset_checkpoint:
 	sbi->umount_lock_holder = NULL;
 	return 0;
 
+leave_shrinker:
+	f2fs_leave_shrinker(sbi);
+	f2fs_stop_gc_thread(sbi);
 sync_free_meta:
 	/* safe to flush all the data */
 	sync_filesystem(sbi->sb);
