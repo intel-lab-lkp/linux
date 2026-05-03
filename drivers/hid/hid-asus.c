@@ -1282,10 +1282,12 @@ static int asus_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	}
 
 	/* Check for vendor for RGB init and handle generic devices properly. */
-	rep_enum = &hdev->report_enum[HID_INPUT_REPORT];
-	list_for_each_entry(rep, &rep_enum->report_list, list) {
-		if ((rep->application & HID_USAGE_PAGE) == HID_UP_ASUSVENDOR)
-			is_vendor = true;
+	for (int t = HID_INPUT_REPORT; t <= HID_FEATURE_REPORT; t++) {
+		rep_enum = &hdev->report_enum[t];
+		list_for_each_entry(rep, &rep_enum->report_list, list) {
+			if ((rep->application & HID_USAGE_PAGE) == HID_UP_ASUSVENDOR)
+				is_vendor = true;
+		}
 	}
 
 	ret = hid_hw_start(hdev, HID_CONNECT_DEFAULT);
