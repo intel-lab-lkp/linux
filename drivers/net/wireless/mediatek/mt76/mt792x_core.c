@@ -681,8 +681,14 @@ int mt792x_init_wiphy(struct ieee80211_hw *hw)
 
 	ieee80211_hw_set(hw, SINGLE_SCAN_ON_ALL_BANDS);
 	ieee80211_hw_set(hw, HAS_RATE_CONTROL);
-	ieee80211_hw_set(hw, SUPPORTS_TX_ENCAP_OFFLOAD);
-	ieee80211_hw_set(hw, SUPPORTS_RX_DECAP_OFFLOAD);
+	/* HW TX/RX 802.11 encap offload is intentionally NOT advertised:
+	 * the firmware HW_80211_ENCAP path silently drops QoS Data frames
+	 * whose destination WCID is a TDLS direct-link peer, breaking TDLS
+	 * data flow. The mac80211 software encap path submits already-formed
+	 * 802.11 frames, which the firmware handles correctly for all WCIDs.
+	 * Re-add SUPPORTS_TX_ENCAP_OFFLOAD / SUPPORTS_RX_DECAP_OFFLOAD here
+	 * once the firmware HW_ENCAP path is fixed.
+	 */
 	ieee80211_hw_set(hw, WANT_MONITOR_VIF);
 	ieee80211_hw_set(hw, SUPPORTS_PS);
 	ieee80211_hw_set(hw, SUPPORTS_DYNAMIC_PS);
