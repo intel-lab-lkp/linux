@@ -991,7 +991,7 @@ static void init_rog_tunables(void)
 	/* Match the system against the power_limits table */
 	dmi_id = dmi_first_match(power_limits);
 	if (!dmi_id) {
-		pr_warn("No matching power limits found for this system\n");
+		pr_debug("No matching power limits found for this system\n");
 		return;
 	}
 
