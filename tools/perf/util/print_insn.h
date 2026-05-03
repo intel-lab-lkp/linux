@@ -5,6 +5,9 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#include <linux/types.h>
+
+struct addr_location;
 struct perf_sample;
 struct thread;
 struct machine;
