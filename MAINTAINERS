@@ -12,7 +12,7 @@ Descriptions of section entries and preferred order
 	   Supported:	Someone is actually paid to look after this.
 	   Maintained:	Someone actually looks after it.
 	   Odd Fixes:	It has a maintainer but they don't have time to do
-			much other than throw the odd patch in. See below..
+			much other than throw the odd patch in. See below.
 	   Orphan:	No current maintainer [but maybe you could take the
 			role as you write your new code].
 	   Obsolete:	Old code. Something tagged obsolete generally means
@@ -1913,7 +1913,7 @@ F:	drivers/iio/addac/stx104.c
 
 APM DRIVER
 M:	Jiri Kosina <jikos@kernel.org>
-S:	Odd fixes
+S:	Odd Fixes
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/jikos/apm.git
 F:	arch/x86/kernel/apm_32.c
 F:	drivers/char/apm-emulation.c
@@ -1936,7 +1936,7 @@ F:	security/apparmor/
 APPLE BCM5974 MULTITOUCH DRIVER
 M:	Henrik Rydberg <rydberg@bitmath.org>
 L:	linux-input@vger.kernel.org
-S:	Odd fixes
+S:	Odd Fixes
 F:	drivers/input/mouse/bcm5974.c
 
 APPLE PCIE CONTROLLER DRIVER
@@ -1948,12 +1948,12 @@ F:	drivers/pci/controller/pcie-apple.c
 APPLE SMC DRIVER
 M:	Henrik Rydberg <rydberg@bitmath.org>
 L:	linux-hwmon@vger.kernel.org
-S:	Odd fixes
+S:	Odd Fixes
 F:	drivers/hwmon/applesmc.c
 
 APPLETALK NETWORK LAYER
 L:	netdev@vger.kernel.org
-S:	Odd fixes
+S:	Odd Fixes
 F:	include/linux/atalk.h
 F:	include/uapi/linux/atalk.h
 F:	net/appletalk/
@@ -4059,7 +4059,7 @@ ASYMMETRIC KEYS - GOST
 M:	Lukas Wunner <lukas@wunner.de>
 M:	Ignat Korchagin <ignat@linux.win>
 L:	linux-crypto@vger.kernel.org
-S:	Odd fixes
+S:	Odd Fixes
 F:	crypto/ecrdsa*
 
 ASYMMETRIC KEYS - RSA
@@ -4071,7 +4071,7 @@ F:	crypto/rsa*
 
 ASYNCHRONOUS TRANSFERS/TRANSFORMS (IOAT) API
 R:	Dan Williams <djbw@kernel.org>
-S:	Odd fixes
+S:	Odd Fixes
 W:	http://sourceforge.net/projects/xscaleiop
 F:	Documentation/crypto/async-tx-api.rst
 F:	crypto/async_tx/
@@ -5550,7 +5550,7 @@ F:	include/uapi/linux/btrfs*
 BTTV VIDEO4LINUX DRIVER
 M:	Mauro Carvalho Chehab <mchehab@kernel.org>
 L:	linux-media@vger.kernel.org
-S:	Odd fixes
+S:	Odd Fixes
 W:	https://linuxtv.org
 T:	git git://linuxtv.org/media.git
 F:	Documentation/driver-api/media/drivers/bttv*
@@ -6898,7 +6898,7 @@ F:	drivers/media/dvb-frontends/cx24120*
 CX88 VIDEO4LINUX DRIVER
 M:	Mauro Carvalho Chehab <mchehab@kernel.org>
 L:	linux-media@vger.kernel.org
-S:	Odd fixes
+S:	Odd Fixes
 W:	https://linuxtv.org
 T:	git git://linuxtv.org/media.git
 F:	Documentation/driver-api/media/drivers/cx88*
@@ -9822,7 +9822,7 @@ FBTFT Framebuffer drivers
 M:	Andy Shevchenko <andy@kernel.org>
 L:	dri-devel@lists.freedesktop.org
 L:	linux-fbdev@vger.kernel.org
-S:	Odd fixes
+S:	Odd Fixes
 F:	drivers/staging/fbtft/
 
 FC0011 TUNER DRIVER
@@ -11289,7 +11289,7 @@ HARDWARE RANDOM NUMBER GENERATOR CORE
 M:	Olivia Mackall <olivia@selenic.com>
 M:	Herbert Xu <herbert@gondor.apana.org.au>
 L:	linux-crypto@vger.kernel.org
-S:	Odd fixes
+S:	Odd Fixes
 F:	Documentation/admin-guide/hw_random.rst
 F:	Documentation/devicetree/bindings/rng/
 F:	drivers/char/hw_random/
@@ -12714,7 +12714,7 @@ F:	include/uapi/linux/uinput.h
 INPUT MULTITOUCH (MT) PROTOCOL
 M:	Henrik Rydberg <rydberg@bitmath.org>
 L:	linux-input@vger.kernel.org
-S:	Odd fixes
+S:	Odd Fixes
 F:	Documentation/input/multi-touch-protocol.rst
 F:	drivers/input/input-mt.c
 K:	\b(ABS|SYN)_MT_
@@ -14099,7 +14099,7 @@ R:	Nicholas Piggin <npiggin@gmail.com>
 L:	linuxppc-dev@lists.ozlabs.org
 L:	kvm@vger.kernel.org
 S:	Maintained (Book3S 64-bit HV)
-S:	Odd fixes (Book3S 64-bit PR)
+S:	Odd Fixes (Book3S 64-bit PR)
 S:	Orphan (Book3E and 32-bit)
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/powerpc/linux.git topic/ppc-kvm
 F:	arch/powerpc/include/asm/kvm*
@@ -14788,7 +14788,7 @@ F:	arch/powerpc/platforms/44x/
 LINUX FOR POWERPC EMBEDDED PPC85XX
 M:	Scott Wood <oss@buserror.net>
 L:	linuxppc-dev@lists.ozlabs.org
-S:	Odd fixes
+S:	Odd Fixes
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/scottwood/linux.git
 F:	Documentation/devicetree/bindings/cache/freescale-l2cache.txt
 F:	Documentation/devicetree/bindings/powerpc/fsl/
@@ -14909,7 +14909,7 @@ F:	tools/testing/selftests/liveupdate/
 
 LLC (802.2)
 L:	netdev@vger.kernel.org
-S:	Odd fixes
+S:	Odd Fixes
 F:	include/linux/llc.h
 F:	include/net/llc*
 F:	include/uapi/linux/llc.h
@@ -19804,7 +19804,7 @@ F:	drivers/media/i2c/ov7670.c
 OMNIVISION OV772x SENSOR DRIVER
 M:	Jacopo Mondi <jacopo@jmondi.org>
 L:	linux-media@vger.kernel.org
-S:	Odd fixes
+S:	Odd Fixes
 T:	git git://linuxtv.org/media.git
 F:	Documentation/devicetree/bindings/media/i2c/ovti,ov772x.yaml
 F:	drivers/media/i2c/ov772x.c
@@ -23601,7 +23601,7 @@ F:	drivers/media/i2c/saa6588*
 SAA7134 VIDEO4LINUX DRIVER
 M:	Mauro Carvalho Chehab <mchehab@kernel.org>
 L:	linux-media@vger.kernel.org
-S:	Odd fixes
+S:	Odd Fixes
 W:	https://linuxtv.org
 T:	git git://linuxtv.org/media.git
 F:	Documentation/driver-api/media/drivers/saa7134*
@@ -24306,7 +24306,7 @@ F:	drivers/iio/light/gp2ap002.c
 SHARP RJ54N1CB0C SENSOR DRIVER
 M:	Jacopo Mondi <jacopo@jmondi.org>
 L:	linux-media@vger.kernel.org
-S:	Odd fixes
+S:	Odd Fixes
 T:	git git://linuxtv.org/media.git
 F:	drivers/media/i2c/rj54n1cb0c.c
 F:	include/media/i2c/rj54n1cb0c.h
@@ -24400,7 +24400,7 @@ F:	drivers/media/radio/si4713/radio-usb-si4713.c
 SIANO DVB DRIVER
 M:	Mauro Carvalho Chehab <mchehab@kernel.org>
 L:	linux-media@vger.kernel.org
-S:	Odd fixes
+S:	Odd Fixes
 W:	https://linuxtv.org
 T:	git git://linuxtv.org/media.git
 F:	drivers/media/common/siano/
@@ -26100,7 +26100,7 @@ F:	drivers/media/i2c/tda9840*
 TEA5761 TUNER DRIVER
 M:	Mauro Carvalho Chehab <mchehab@kernel.org>
 L:	linux-media@vger.kernel.org
-S:	Odd fixes
+S:	Odd Fixes
 W:	https://linuxtv.org
 T:	git git://linuxtv.org/media.git
 F:	drivers/media/tuners/tea5761.*
