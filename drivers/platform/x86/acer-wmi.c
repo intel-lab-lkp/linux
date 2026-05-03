@@ -36,6 +36,7 @@
 #include <linux/unaligned.h>
 #include <linux/bitfield.h>
 #include <linux/bitmap.h>
+#include <linux/led-class-multicolor.h>
 
 MODULE_AUTHOR("Carlos Corbacho");
 MODULE_DESCRIPTION("Acer Laptop WMI Extras Driver");
@@ -76,9 +77,15 @@ MODULE_LICENSE("GPL");
 #define ACER_WMID_GET_GAMING_FAN_SPEED_METHODID 17
 #define ACER_WMID_SET_GAMING_MISC_SETTING_METHODID 22
 #define ACER_WMID_GET_GAMING_MISC_SETTING_METHODID 23
+#define ACER_WMID_SET_GAMING_STATIC_LED_METHODID 6
+
+#define ACER_GAMING_KBL_ZONES 4
 
 #define ACER_GAMING_FAN_BEHAVIOR_CPU BIT(0)
 #define ACER_GAMING_FAN_BEHAVIOR_GPU BIT(3)
+
+/* Bit 3 enables keyboard backlight update */
+#define ACER_GAMING_KBL_SET_ON BIT(3)
 
 #define ACER_GAMING_FAN_BEHAVIOR_STATUS_MASK GENMASK_ULL(7, 0)
 #define ACER_GAMING_FAN_BEHAVIOR_ID_MASK GENMASK_ULL(15, 0)
@@ -90,6 +97,9 @@ MODULE_LICENSE("GPL");
 #define ACER_GAMING_FAN_SPEED_STATUS_MASK GENMASK_ULL(7, 0)
 #define ACER_GAMING_FAN_SPEED_ID_MASK GENMASK_ULL(7, 0)
 #define ACER_GAMING_FAN_SPEED_VALUE_MASK GENMASK_ULL(15, 8)
+
+/* Bits [43:40] selects target zones, setting all bits targets all zones*/
+#define ACER_GAMING_KBL_SET_ALL_ZONES GENMASK(43, 40)
 
 #define ACER_GAMING_MISC_SETTING_STATUS_MASK GENMASK_ULL(7, 0)
 #define ACER_GAMING_MISC_SETTING_INDEX_MASK GENMASK_ULL(7, 0)
@@ -310,6 +320,7 @@ struct hotkey_function_type_aa {
 #define ACER_CAP_PLATFORM_PROFILE	BIT(10)
 #define ACER_CAP_HWMON			BIT(11)
 #define ACER_CAP_PWM			BIT(12)
+#define ACER_CAP_KBL_FOUR_ZONE_RGB	BIT(13)
 
 /*
  * Interface type flags
@@ -405,6 +416,7 @@ struct quirk_entry {
 	u8 gpu_fans;
 	u8 predator_v4;
 	u8 pwm;
+	u8 kbl_four_zone_rgb;
 };
 
 static struct quirk_entry *quirks;
@@ -427,6 +439,9 @@ static void __init set_quirks(void)
 
 	if (quirks->pwm)
 		interface->capability |= ACER_CAP_PWM;
+
+	if (quirks->kbl_four_zone_rgb)
+		interface->capability |= ACER_CAP_KBL_FOUR_ZONE_RGB;
 }
 
 static int __init dmi_matched(const struct dmi_system_id *dmi)
@@ -458,6 +473,7 @@ static struct quirk_entry quirk_acer_travelmate_2490 = {
 static struct quirk_entry quirk_acer_nitro_an515_58 = {
 	.predator_v4 = 1,
 	.pwm = 1,
+	.kbl_four_zone_rgb = 1,
 };
 
 static struct quirk_entry quirk_acer_predator_ph315_53 = {
@@ -2762,6 +2778,118 @@ static u32 get_wmid_devices(void)
 
 static int acer_wmi_hwmon_init(void);
 
+#if IS_REACHABLE(CONFIG_LEDS_CLASS_MULTICOLOR)
+
+static int acer_wmi_poll_and_enable_zones(void)
+{
+	acpi_status status;
+
+	status = WMI_gaming_execute_u64(ACER_WMID_GET_GAMING_SYS_INFO_METHODID,
+		0, NULL);
+	if (ACPI_FAILURE(status))
+		return -EIO;
+	status = WMI_gaming_execute_u64(ACER_WMID_GET_GAMING_LED_METHODID,
+		ACER_GAMING_KBL_SET_ON |
+		ACER_GAMING_KBL_SET_ALL_ZONES,
+		NULL);
+	if (ACPI_FAILURE(status))
+		return -EIO;
+
+	return 0;
+}
+
+struct acer_wmi_led_zone {
+	struct led_classdev_mc mc_cdev;
+	struct mc_subled subled_info[3];
+	u8 zone_id;
+};
+
+struct led_four_zone_set_param {
+	u8 zone;
+	u8 red;
+	u8 green;
+	u8 blue;
+} __packed;
+
+static struct acer_wmi_led_zone kbl_zones[ACER_GAMING_KBL_ZONES];
+
+static int acer_wmi_mc_brightness_set(struct led_classdev *led_cdev,
+	enum led_brightness brightness)
+{
+	int err;
+	struct led_classdev_mc *mc_cdev = lcdev_to_mccdev(led_cdev);
+	struct acer_wmi_led_zone *zone = container_of(mc_cdev,
+		struct acer_wmi_led_zone, mc_cdev);
+	struct led_four_zone_set_param params;
+	struct acpi_buffer input;
+	acpi_status status;
+
+	err = led_mc_calc_color_components(mc_cdev, brightness);
+	if (err)
+		return err;
+
+	led_cdev->brightness = brightness;
+
+	params.zone = zone->zone_id;
+	params.red = mc_cdev->subled_info[0].brightness;
+	params.green = mc_cdev->subled_info[1].brightness;
+	params.blue = mc_cdev->subled_info[2].brightness;
+
+	input.length = sizeof(params);
+	input.pointer = &params;
+
+	status = wmi_evaluate_method(WMID_GUID4, 0,
+		ACER_WMID_SET_GAMING_STATIC_LED_METHODID, &input, NULL);
+	if (ACPI_FAILURE(status))
+		return -EIO;
+
+	return 0;
+}
+
+static enum led_brightness
+acer_wmi_mc_brightness_get(struct led_classdev *led_cdev)
+{
+	return led_cdev->brightness;
+}
+
+static int acer_wmi_register_four_zone_leds(struct device *dev)
+{
+	int i, ret;
+
+	for (i = 0; i < ACER_GAMING_KBL_ZONES; i++) {
+		struct acer_wmi_led_zone *zone = &kbl_zones[i];
+
+		memset(zone, 0, sizeof(*zone));
+
+		zone->subled_info[0].color_index = LED_COLOR_ID_RED;
+		zone->subled_info[1].color_index = LED_COLOR_ID_GREEN;
+		zone->subled_info[2].color_index = LED_COLOR_ID_BLUE;
+
+		zone->mc_cdev.subled_info = zone->subled_info;
+		zone->mc_cdev.num_colors = 3;
+
+		/* WMI uses a bitmask as for zones. BIT(i) selects zone i */
+		zone->zone_id = BIT(i);
+
+		zone->mc_cdev.led_cdev.name = devm_kasprintf(dev, GFP_KERNEL,
+			"acer-wmi::kbd_backlight_%d", i + 1);
+		zone->mc_cdev.led_cdev.dev = dev;
+		zone->mc_cdev.led_cdev.brightness_set_blocking =
+			acer_wmi_mc_brightness_set;
+		zone->mc_cdev.led_cdev.brightness_get =
+			acer_wmi_mc_brightness_get;
+		zone->mc_cdev.led_cdev.max_brightness = 255;
+
+		ret = devm_led_classdev_multicolor_register(dev,
+			&zone->mc_cdev);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+
+#endif /* IS_REACHABLE(CONFIG_LEDS_CLASS_MULTICOLOR) */
+
 /*
  * Platform device
  */
@@ -2797,8 +2925,21 @@ static int acer_platform_probe(struct platform_device *device)
 			goto error_hwmon;
 	}
 
+	if (has_cap(ACER_CAP_KBL_FOUR_ZONE_RGB)) {
+#if IS_REACHABLE(CONFIG_LEDS_CLASS_MULTICOLOR)
+		err = acer_wmi_poll_and_enable_zones();
+		if (err)
+			goto error_kbl_four_zone_rgb;
+
+		err = acer_wmi_register_four_zone_leds(&device->dev);
+		if (err)
+			goto error_kbl_four_zone_rgb;
+#endif /* IS_REACHABLE(CONFIG_LEDS_CLASS_MULTICOLOR) */
+	}
+
 	return 0;
 
+error_kbl_four_zone_rgb:
 error_hwmon:
 error_platform_profile:
 	acer_rfkill_exit();
