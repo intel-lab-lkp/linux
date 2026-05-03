@@ -17,11 +17,9 @@ struct atomisp_video_pipe;
 
 extern const struct atomisp_format_bridge atomisp_output_fmts[];
 
-const struct
-atomisp_format_bridge *atomisp_get_format_bridge(unsigned int pixelformat);
+const struct atomisp_format_bridge *atomisp_get_format_bridge(unsigned int pixelformat);
 
-const struct
-atomisp_format_bridge *atomisp_get_format_bridge_from_mbus(u32 mbus_code);
+const struct atomisp_format_bridge *atomisp_get_format_bridge_from_mbus(u32 mbus_code);
 
 int atomisp_pipe_check(struct atomisp_video_pipe *pipe, bool streaming_ok);
 
