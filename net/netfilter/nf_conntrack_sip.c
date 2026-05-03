@@ -241,7 +241,7 @@ int ct_sip_parse_request(const struct nf_conn *ct,
 {
 	const char *start = dptr, *limit = dptr + datalen, *end;
 	unsigned int mlen;
-	unsigned int p;
+	u16 p;
 	int shift = 0;
 
 	/* Skip method and following whitespace */
@@ -269,8 +269,9 @@ int ct_sip_parse_request(const struct nf_conn *ct,
 		return -1;
 	if (end < limit && *end == ':') {
 		end++;
-		p = simple_strtoul(end, (char **)&end, 10);
-		if (p < 1024 || p > 65535)
+		if (nf_ct_helper_parse_port(end, limit - end, &p, (char **)&end))
+			return -1;
+		if (p < 1024)
 			return -1;
 		*port = htons(p);
 	} else
@@ -509,7 +510,7 @@ int ct_sip_parse_header_uri(const struct nf_conn *ct, const char *dptr,
 			    union nf_inet_addr *addr, __be16 *port)
 {
 	const char *c, *limit = dptr + datalen;
-	unsigned int p;
+	u16 p;
 	int ret;
 
 	ret = ct_sip_walk_headers(ct, dptr, dataoff ? *dataoff : 0, datalen,
@@ -522,8 +523,9 @@ int ct_sip_parse_header_uri(const struct nf_conn *ct, const char *dptr,
 		return -1;
 	if (*c == ':') {
 		c++;
-		p = simple_strtoul(c, (char **)&c, 10);
-		if (p < 1024 || p > 65535)
+		if (nf_ct_helper_parse_port(c, limit - c, &p, (char **)&c))
+			return -1;
+		if (p < 1024)
 			return -1;
 		*port = htons(p);
 	} else
