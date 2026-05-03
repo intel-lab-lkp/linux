@@ -26,14 +26,14 @@ EXPORT_SYMBOL_GPL(bar_max_size);
 
 int cdns_pcie_host_training_complete(struct cdns_pcie *pcie)
 {
-	u32 pcie_cap_off = CDNS_PCIE_RP_CAP_OFFSET;
 	unsigned long end_jiffies;
 	u16 lnk_stat;
+	u8 cap = cdns_pcie_find_capability(pcie, PCI_CAP_ID_EXP);
 
 	/* Wait for link training to complete. Exit after timeout. */
 	end_jiffies = jiffies + LINK_RETRAIN_TIMEOUT;
 	do {
-		lnk_stat = cdns_pcie_rp_readw(pcie, pcie_cap_off + PCI_EXP_LNKSTA);
+		lnk_stat = cdns_pcie_rp_readw(pcie, cap + PCI_EXP_LNKSTA);
 		if (!(lnk_stat & PCI_EXP_LNKSTA_LT))
 			break;
 		usleep_range(0, 1000);
@@ -68,27 +68,26 @@ EXPORT_SYMBOL_GPL(cdns_pcie_host_wait_for_link);
 int cdns_pcie_retrain(struct cdns_pcie *pcie,
 		      cdns_pcie_linkup_func pcie_link_up)
 {
-	u32 lnk_cap_sls, pcie_cap_off = CDNS_PCIE_RP_CAP_OFFSET;
+	u32 lnk_cap_sls;
 	u16 lnk_stat, lnk_ctl;
 	int ret = 0;
+	u8 cap = cdns_pcie_find_capability(pcie, PCI_CAP_ID_EXP);
 
 	/*
 	 * Set retrain bit if current speed is 2.5 GB/s,
 	 * but the PCIe root port support is > 2.5 GB/s.
 	 */
 
-	lnk_cap_sls = cdns_pcie_readl(pcie, (CDNS_PCIE_RP_BASE + pcie_cap_off +
+	lnk_cap_sls = cdns_pcie_readl(pcie, (CDNS_PCIE_RP_BASE + cap +
 					     PCI_EXP_LNKCAP));
 	if ((lnk_cap_sls & PCI_EXP_LNKCAP_SLS) <= PCI_EXP_LNKCAP_SLS_2_5GB)
 		return ret;
 
-	lnk_stat = cdns_pcie_rp_readw(pcie, pcie_cap_off + PCI_EXP_LNKSTA);
+	lnk_stat = cdns_pcie_rp_readw(pcie, cap + PCI_EXP_LNKSTA);
 	if ((lnk_stat & PCI_EXP_LNKSTA_CLS) == PCI_EXP_LNKSTA_CLS_2_5GB) {
-		lnk_ctl = cdns_pcie_rp_readw(pcie,
-					     pcie_cap_off + PCI_EXP_LNKCTL);
+		lnk_ctl = cdns_pcie_rp_readw(pcie, cap + PCI_EXP_LNKCTL);
 		lnk_ctl |= PCI_EXP_LNKCTL_RL;
-		cdns_pcie_rp_writew(pcie, pcie_cap_off + PCI_EXP_LNKCTL,
-				    lnk_ctl);
+		cdns_pcie_rp_writew(pcie, cap + PCI_EXP_LNKCTL, lnk_ctl);
 
 		ret = cdns_pcie_host_training_complete(pcie);
 		if (ret)

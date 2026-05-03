@@ -115,6 +115,7 @@ static int cdns_pcie_host_init_root_port(struct cdns_pcie_rc *rc)
 	struct cdns_pcie *pcie = &rc->pcie;
 	u32 value, ctrl;
 	u32 id;
+	u8 cap = cdns_pcie_find_capability(pcie, PCI_CAP_ID_EXP);
 
 	/*
 	 * Set the root complex BAR configuration register:
@@ -147,12 +148,12 @@ static int cdns_pcie_host_init_root_port(struct cdns_pcie_rc *rc)
 	cdns_pcie_rp_writeb(pcie, PCI_CLASS_PROG, 0);
 	cdns_pcie_rp_writew(pcie, PCI_CLASS_DEVICE, PCI_CLASS_BRIDGE_PCI);
 
-	value = cdns_pcie_rp_readl(pcie, CDNS_PCIE_RP_CAP_OFFSET + PCI_EXP_LNKCAP);
+	value = cdns_pcie_rp_readl(pcie, cap + PCI_EXP_LNKCAP);
 	if (rc->quirk_broken_aspm_l0s)
 		value &= ~PCI_EXP_LNKCAP_ASPM_L0S;
 	if (rc->quirk_broken_aspm_l1)
 		value &= ~PCI_EXP_LNKCAP_ASPM_L1;
-	cdns_pcie_rp_writel(pcie, CDNS_PCIE_RP_CAP_OFFSET + PCI_EXP_LNKCAP, value);
+	cdns_pcie_rp_writel(pcie, cap + PCI_EXP_LNKCAP, value);
 
 	return 0;
 }

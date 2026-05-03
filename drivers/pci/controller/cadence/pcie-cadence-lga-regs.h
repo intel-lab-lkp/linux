@@ -133,7 +133,6 @@
 
 /* Root Port Registers (PCI configuration space for the root port function) */
 #define CDNS_PCIE_RP_BASE	0x00200000
-#define CDNS_PCIE_RP_CAP_OFFSET 0xC0
 
 /* Address Translation Registers */
 #define CDNS_PCIE_AT_BASE	0x00400000
