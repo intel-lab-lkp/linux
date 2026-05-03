@@ -377,6 +377,7 @@ xs_sock_process_cmsg(struct socket *sock, struct msghdr *msg,
 		tls_alert_recv(sock->sk, msg, &level, &description);
 		ret = (level == TLS_ALERT_LEVEL_FATAL) ?
 			-EACCES : -EAGAIN;
+		pr_debug("@ %s: TLS alert %d, level %d\n", __func__, ret, level);
 		break;
 	default:
 		/* discard this record type */
@@ -1297,6 +1298,7 @@ static void xs_reset_transport(struct sock_xprt *transport)
 	transport->inet = NULL;
 	transport->sock = NULL;
 	transport->file = NULL;
+	pr_debug("@ %s: Null transport->sock for xprt %p\n", __func__, xprt);
 
 	sk->sk_user_data = NULL;
 	sk->sk_sndtimeo = 0;
@@ -1589,6 +1591,7 @@ static void xs_tcp_state_change(struct sock *sk)
 		 */
 		if (xprt->reestablish_timeout < XS_TCP_INIT_REEST_TO)
 			xprt->reestablish_timeout = XS_TCP_INIT_REEST_TO;
+		pr_debug("@ %s: sk_state=%d\n", __func__, sk->sk_state);
 		break;
 	case TCP_LAST_ACK:
 		set_bit(XPRT_CLOSING, &xprt->state);
@@ -2688,6 +2691,7 @@ static void xs_tcp_tls_setup_socket(struct work_struct *work)
 	struct sock_xprt *upper_transport =
 		container_of(work, struct sock_xprt, connect_worker.work);
 	struct rpc_clnt *upper_clnt = upper_transport->clnt;
+	pr_debug("@ %s: Using clnt %p\n", __func__, upper_clnt);
 	struct rpc_xprt *upper_xprt = &upper_transport->xprt;
 	struct rpc_create_args args = {
 		.net		= upper_xprt->xprt_net,
@@ -2759,6 +2763,7 @@ out_unlock:
 	current_restore_flags(pflags, PF_MEMALLOC);
 	upper_transport->clnt = NULL;
 	xprt_unlock_connect(upper_xprt, upper_transport);
+	pr_debug("@ %s: Done with clnt %p. status=%d\n", __func__, upper_clnt, status);
 	return;
 
 out_close:
@@ -2806,6 +2811,7 @@ static void xs_connect(struct rpc_xprt *xprt, struct rpc_task *task)
 		dprintk("RPC:       xs_connect scheduled xprt %p\n", xprt);
 
 	transport->clnt = task->tk_client;
+	pr_debug("@ %s: Queue connect work in %lu for clnt %p\n", __func__, delay, transport->clnt);
 	queue_delayed_work(xprtiod_workqueue,
 			&transport->connect_worker,
 			delay);
@@ -2846,6 +2852,8 @@ static void xs_error_handle(struct work_struct *work)
 {
 	struct sock_xprt *transport = container_of(work,
 			struct sock_xprt, error_worker);
+
+	msleep(100); // Improves reproducibility
 
 	xs_wake_disconnect(transport);
 	xs_wake_write(transport);

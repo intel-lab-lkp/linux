@@ -429,6 +429,7 @@ static struct rpc_clnt * rpc_new_client(const struct rpc_create_args *args,
 		refcount_inc(&parent->cl_count);
 
 	trace_rpc_clnt_new(clnt, xprt, args);
+	pr_debug("@ %s: New: %p, parent: %p\n", __func__, clnt, parent);
 	return clnt;
 
 out_no_path:
@@ -949,6 +950,7 @@ void rpc_shutdown_client(struct rpc_clnt *clnt)
 	might_sleep();
 
 	trace_rpc_clnt_shutdown(clnt);
+	pr_debug("@ %s: %p\n", __func__, clnt);
 
 	clnt->cl_shutdown = 1;
 	while (!list_empty(&clnt->cl_tasks)) {
@@ -983,6 +985,7 @@ static void rpc_free_client_work(struct work_struct *work)
 	rpc_free_clid(clnt);
 	rpc_clnt_remove_pipedir(clnt);
 	xprt_put(rcu_dereference_raw(clnt->cl_xprt));
+	pr_debug("@ %s: xprt_put done for %p\n", __func__, clnt);
 
 	kfree(clnt);
 	rpciod_down();
@@ -1000,6 +1003,7 @@ rpc_free_client(struct rpc_clnt *clnt)
 	clnt->cl_metrics = NULL;
 	xprt_iter_destroy(&clnt->cl_xpi);
 	put_cred(clnt->cl_cred);
+	pr_debug("@ %s: put_cred %p\n", __func__, clnt);
 
 	INIT_WORK(&clnt->cl_work, rpc_free_client_work);
 	schedule_work(&clnt->cl_work);
