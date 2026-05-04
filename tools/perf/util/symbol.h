@@ -29,6 +29,18 @@ struct option;
 struct build_id;
 
 /*
+ * Ignore mapping symbols, matching kernel is_mapping_symbol() logic.
+ */
+static inline bool is_mapping_symbol(const char *str)
+{
+	if (str[0] == '.' && str[1] == 'L')
+		return true;
+	if (str[0] == 'L' && str[1] == '0')
+		return true;
+	return str[0] == '$';
+}
+
+/*
  * libelf 0.8.x and earlier do not support ELF_C_READ_MMAP;
  * for newer versions we can use mmap to reduce memory usage:
  */

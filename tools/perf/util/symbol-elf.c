@@ -1592,20 +1592,9 @@ dso__load_sym_internal(struct dso *dso, struct map *map, struct symsrc *syms_ss,
 		if (!is_label && !elf_sym__filter(&sym))
 			continue;
 
-		/* Reject ARM ELF "mapping symbols": these aren't unique and
-		 * don't identify functions, so will confuse the profile
-		 * output: */
-		if (ehdr.e_machine == EM_ARM || ehdr.e_machine == EM_AARCH64) {
-			if (elf_name[0] == '$' && strchr("adtx", elf_name[1])
-			    && (elf_name[2] == '\0' || elf_name[2] == '.'))
-				continue;
-		}
-
-		/* Reject RISCV ELF "mapping symbols" */
-		if (ehdr.e_machine == EM_RISCV) {
-			if (elf_name[0] == '$' && strchr("dx", elf_name[1]))
-				continue;
-		}
+		/* Ignore mapping symbols in ELF files */
+		if (is_mapping_symbol(elf_name))
+			continue;
 
 		if (runtime_ss->opdsec && sym.st_shndx == runtime_ss->opdidx) {
 			u32 offset = sym.st_value - syms_ss->opdshdr.sh_addr;

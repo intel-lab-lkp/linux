@@ -770,8 +770,8 @@ static int map__process_kallsym_symbol(void *arg, const char *name,
 	if (!symbol_type__filter(type))
 		return 0;
 
-	/* Ignore local symbols for ARM modules */
-	if (name[0] == '$')
+	/* Ignore mapping symbols */
+	if (is_mapping_symbol(name))
 		return 0;
 
 	/*
@@ -1564,6 +1564,10 @@ static int dso__load_perf_map(const char *map_path, struct dso *dso)
 
 		len++;
 		if (len + 2 >= line_len)
+			continue;
+
+		/* Ignore mapping symbols in perf map */
+		if (is_mapping_symbol(line + len))
 			continue;
 
 		sym = symbol__new(start, size, STB_GLOBAL, STT_FUNC, line + len);

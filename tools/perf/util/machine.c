@@ -769,6 +769,12 @@ static int machine__process_ksymbol_register(struct machine *machine,
 		dso = dso__get(map__dso(map));
 	}
 
+	/* Ignore mapping symbols in ksymbol events */
+	if (is_mapping_symbol(event->ksymbol.name)) {
+		err = 0;
+		goto out;
+	}
+
 	sym = symbol__new(map__map_ip(map, map__start(map)),
 			  event->ksymbol.len,
 			  0, 0, event->ksymbol.name);

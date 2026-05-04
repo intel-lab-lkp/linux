@@ -383,6 +383,10 @@ int dso__load_bfd_symbols(struct dso *dso, const char *debugfile)
 		if (bfd2elf_binding(sym) < 0)
 			continue;
 
+		/* Ignore mapping symbols in BFD symbols */
+		if (is_mapping_symbol(bfd_asymbol_name(sym)))
+			continue;
+
 		while (i + 1 < symbols_count &&
 		       bfd_asymbol_section(symbols[i + 1]) == section &&
 		       bfd2elf_binding(symbols[i + 1]) < 0)
