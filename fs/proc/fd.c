@@ -86,12 +86,35 @@ static int proc_fdinfo_permission(struct mnt_idmap *idmap, struct inode *inode,
 				  int mask)
 {
 	bool allowed = false;
-	struct task_struct *task = get_proc_task(inode);
+	struct task_struct *task;
 
+	task = get_proc_task(inode);
 	if (!task)
 		return -ESRCH;
 
 	allowed = ptrace_may_access(task, PTRACE_MODE_READ_FSCREDS);
+
+	if (!allowed && capable(CAP_PERFMON)) {
+		struct files_struct *files;
+
+		if (S_ISDIR(inode->i_mode)) {
+			allowed = true;
+		} else {
+			task_lock(task);
+			files = task->files;
+			if (files) {
+				struct file *file;
+
+				spin_lock(&files->file_lock);
+				file = files_lookup_fd_locked(files, proc_fd(inode));
+				allowed = file && file->f_op->fop_flags &
+						  FOP_PERFMON_FDINFO;
+				spin_unlock(&files->file_lock);
+			}
+			task_unlock(task);
+		}
+	}
+
 	put_task_struct(task);
 
 	if (!allowed)
@@ -337,6 +360,9 @@ int proc_fd_permission(struct mnt_idmap *idmap,
 	rv = generic_permission(&nop_mnt_idmap, inode, mask);
 	if (rv == 0)
 		return rv;
+
+	if (capable(CAP_PERFMON))
+		return 0;
 
 	rcu_read_lock();
 	p = pid_task(proc_pid(inode), PIDTYPE_PID);

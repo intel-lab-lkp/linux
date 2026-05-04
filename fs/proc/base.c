@@ -86,6 +86,7 @@
 #include <linux/user_namespace.h>
 #include <linux/fs_parser.h>
 #include <linux/fs_struct.h>
+#include <linux/fdtable.h>
 #include <linux/slab.h>
 #include <linux/sched/autogroup.h>
 #include <linux/sched/mm.h>
@@ -716,6 +717,23 @@ static bool proc_fd_access_allowed(struct inode *inode)
 	task = get_proc_task(inode);
 	if (task) {
 		allowed = ptrace_may_access(task, PTRACE_MODE_READ_FSCREDS);
+		if (!allowed && capable(CAP_PERFMON)) {
+			struct files_struct *files;
+
+			task_lock(task);
+			files = task->files;
+			if (files) {
+				struct file *file;
+
+				spin_lock(&files->file_lock);
+				file = files_lookup_fd_locked(files,
+							      proc_fd(inode));
+				allowed = file && file->f_op->fop_flags &
+						  FOP_PERFMON_FDINFO;
+				spin_unlock(&files->file_lock);
+			}
+			task_unlock(task);
+		}
 		put_task_struct(task);
 	}
 	return allowed;
