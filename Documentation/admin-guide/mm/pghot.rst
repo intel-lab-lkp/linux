@@ -37,7 +37,7 @@ Path: /sys/kernel/debug/pghot/
 
 3. **freq_threshold**
    - Minimum access frequency before a page is marked ready for promotion.
-   - Range: 1 to 3
+   - Range: 1 to 3 in default mode, 1 to 7 in precision mode.
    - Default: 2
    - Example:
      # echo 3 > /sys/kernel/debug/pghot/freq_threshold
@@ -59,7 +59,7 @@ Path: /proc/sys/vm/pghot_promote_freq_window_ms
 - Controls the time window (in ms) for counting access frequency. A page is
   considered hot only when **freq_threshold** number of accesses occur with
   this time period.
-- Default: 3000 (3 seconds)
+- Default: 3000 (3 seconds) in default mode and 5000 (5s) in precision mode.
 - Example:
   # sysctl vm.pghot_promote_freq_window_ms=3000
 

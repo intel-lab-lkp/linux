@@ -1483,6 +1483,17 @@ config PGHOT
 	  This adds 1 byte of metadata overhead per page in lower-tier
 	  memory nodes.
 
+config PGHOT_PRECISE
+	bool "Hot page tracking precision mode"
+	default n
+	depends on PGHOT
+	help
+	  Enables precision mode for tracking hot pages with pghot sub-system.
+	  Adds fine-grained access time tracking and explicit toptier target
+	  NID tracking. Precise hot page tracking comes at the cost of using
+	  4 bytes per page against the default one byte per page. Preferable
+	  to enable this on systems with multiple nodes in toptier.
+
 source "mm/damon/Kconfig"
 
 endmenu

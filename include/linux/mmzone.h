@@ -2027,7 +2027,7 @@ struct mem_section {
 #ifdef CONFIG_PGHOT
 	/*
 	 * Per-PFN hotness data for this section.
-	 * Array of phi_t (u8 in default mode).
+	 * Array of phi_t (u8 in default mode, u32 in precision mode).
 	 * LSB is used as PGHOT_SECTION_HOT_BIT flag.
 	 */
 	void *hot_map;
