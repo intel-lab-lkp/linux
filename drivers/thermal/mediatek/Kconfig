@@ -34,4 +34,13 @@ config MTK_LVTS_THERMAL_DEBUGFS
        help
          Enable this option to debug the internals of the device driver.
 
+config MTK_PMIC_THERMAL
+	tristate "AUXADC temperature sensor driver for MediaTek PMICs"
+	depends on MFD_MT6397
+	help
+	  Enable this option if you want to get PMIC temperature
+	  information for MediaTek platforms.
+	  This driver configures thermal controllers to collect
+	  temperature via AUXADC interface.
+
 endif
