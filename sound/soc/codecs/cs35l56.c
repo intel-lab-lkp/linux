@@ -1627,6 +1627,14 @@ static int cs35l56_control_add_nop(struct wm_adsp *dsp, struct cs_dsp_coeff_ctl 
 	return 0;
 }
 
+static void cs35l56_dsp_workqueue_destroy(void *data)
+{
+	struct workqueue_struct *wq = data;
+
+	flush_workqueue(wq);
+	destroy_workqueue(wq);
+}
+
 static int cs35l56_dsp_init(struct cs35l56_private *cs35l56)
 {
 	struct wm_adsp *dsp;
@@ -1635,6 +1643,12 @@ static int cs35l56_dsp_init(struct cs35l56_private *cs35l56)
 	cs35l56->dsp_wq = create_singlethread_workqueue("cs35l56-dsp");
 	if (!cs35l56->dsp_wq)
 		return -ENOMEM;
+
+	ret = devm_add_action_or_reset(cs35l56->base.dev,
+				       cs35l56_dsp_workqueue_destroy,
+				       cs35l56->dsp_wq);
+	if (ret)
+		return ret;
 
 	INIT_WORK(&cs35l56->dsp_work, cs35l56_dsp_work);
 
@@ -2065,8 +2079,6 @@ void cs35l56_remove(struct cs35l56_private *cs35l56)
 	 */
 	if (cs35l56->base.irq)
 		devm_free_irq(cs35l56->base.dev, cs35l56->base.irq, &cs35l56->base);
-
-	destroy_workqueue(cs35l56->dsp_wq);
 
 	pm_runtime_dont_use_autosuspend(cs35l56->base.dev);
 	pm_runtime_suspend(cs35l56->base.dev);
