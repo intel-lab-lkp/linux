@@ -17,6 +17,7 @@
 #include <linux/hashtable.h>
 #include <linux/list.h>
 #include <linux/module.h>
+#include <linux/property.h>
 #include <linux/refcount.h>
 #include <linux/scmi_protocol.h>
 #include <linux/spinlock.h>
@@ -463,6 +464,28 @@ struct scmi_transport_core_operations {
 };
 
 /**
+ * struct scmi_transport_handle  - Transport instance handle
+ * @supplier_get: A helper to retrieve the device descriptor, identifying the
+ *		  transport driver serving this SCMI instance, which will be
+ *		  used as a supplier for the core SCMI driver: returning an
+ *		  error here causes the probe sequence to be interrupted and
+ *		  return that same error code, so that each transport can decide
+ *		  which policy to implement by choosing an appropriate error.
+ * @supplier_put: A helper to signal that the specified transport supplier is
+ *		  no more being used and it is made available again.
+ *
+ * Note that these helpers are needed and provided only by those transports
+ * whose initialization relies on some other subsystem and whose relations to
+ * the core SCMI driver is not tracked by firmware descriptions.
+ */
+struct scmi_transport_handle {
+	struct device __must_check *(*supplier_get)
+		(const struct scmi_transport_handle *th);
+	void (*supplier_put)(const struct scmi_transport_handle *th,
+			     struct device *dev);
+};
+
+/**
  * struct scmi_transport  - A structure representing a configured transport
  *
  * @supplier: Device representing the transport and acting as a supplier for
@@ -480,25 +503,47 @@ struct scmi_transport {
 #define DEFINE_SCMI_TRANSPORT_DRIVER(__tag, __drv, __desc, __match, __core_ops)\
 static void __tag##_dev_free(void *data)				       \
 {									       \
+	const struct scmi_transport_handle *th;				       \
 	struct platform_device *spdev = data;				       \
+	struct device *dev = &spdev->dev;				       \
+									       \
+	th = device_get_match_data(dev);				       \
+	if (th)	{							       \
+		struct scmi_transport *strans;				       \
+									       \
+		strans = dev_get_platdata(dev);				       \
+		if (strans)						       \
+			th->supplier_put(th, strans->supplier);		       \
+	}								       \
 									       \
 	platform_device_unregister(spdev);				       \
 }									       \
 									       \
 static int __tag##_probe(struct platform_device *pdev)			       \
 {									       \
-	struct device *dev = &pdev->dev;				       \
-	struct platform_device *spdev;					       \
+	struct device *dev = &pdev->dev, *supplier;			       \
+	const struct scmi_transport_handle *th;				       \
 	struct scmi_transport strans;					       \
+	struct platform_device *spdev;					       \
 	int ret;							       \
 									       \
+	supplier = dev;							       \
+	th = device_get_match_data(dev);				       \
+	if (th) {							       \
+		supplier = th->supplier_get(th);			       \
+		if (IS_ERR(supplier))					       \
+			return PTR_ERR(supplier);			       \
+	}								       \
+									       \
 	spdev = platform_device_alloc("arm-scmi", PLATFORM_DEVID_AUTO);	       \
-	if (!spdev)							       \
-		return -ENOMEM;						       \
+	if (!spdev) {							       \
+		ret = -ENOMEM;						       \
+		goto err_mem;						       \
+	}								       \
 									       \
 	device_set_of_node_from_dev(&spdev->dev, dev);			       \
 									       \
-	strans.supplier = dev;						       \
+	strans.supplier = supplier;					       \
 	memcpy(&strans.desc, &(__desc), sizeof(strans.desc));		       \
 	strans.core_ops = &(__core_ops);				       \
 									       \
@@ -515,6 +560,10 @@ static int __tag##_probe(struct platform_device *pdev)			       \
 									       \
 err:									       \
 	platform_device_put(spdev);					       \
+err_mem:								       \
+	if (th)								       \
+		th->supplier_put(th, supplier);				       \
+									       \
 	return ret;							       \
 }									       \
 									       \
