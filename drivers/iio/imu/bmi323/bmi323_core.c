@@ -1673,6 +1673,7 @@ static int bmi323_read_avail(struct iio_dev *indio_dev,
 			     long mask)
 {
 	enum bmi323_sensor_type sensor;
+	int ret;
 
 	switch (mask) {
 	case IIO_CHAN_INFO_SAMP_FREQ:
@@ -1681,7 +1682,10 @@ static int bmi323_read_avail(struct iio_dev *indio_dev,
 		*length = ARRAY_SIZE(bmi323_acc_gyro_odr) * 2;
 		return IIO_AVAIL_LIST;
 	case IIO_CHAN_INFO_SCALE:
-		sensor = bmi323_iio_to_sensor(chan->type);
+		ret = bmi323_iio_to_sensor(chan->type);
+		if (ret < 0)
+			return ret;
+		sensor = ret;
 		*type = IIO_VAL_INT_PLUS_MICRO;
 		*vals = (const int *)bmi323_hw[sensor].scale_table;
 		*length = bmi323_hw[sensor].scale_table_len * 2;
@@ -1705,24 +1709,33 @@ static int bmi323_write_raw(struct iio_dev *indio_dev,
 
 	switch (mask) {
 	case IIO_CHAN_INFO_SAMP_FREQ:
+		ret = bmi323_iio_to_sensor(chan->type);
+		if (ret < 0)
+			return ret;
+
 		if (!iio_device_claim_direct(indio_dev))
 			return -EBUSY;
-		ret = bmi323_set_odr(data, bmi323_iio_to_sensor(chan->type),
-				     val, val2);
+		ret = bmi323_set_odr(data, ret, val, val2);
 		iio_device_release_direct(indio_dev);
 		return ret;
 	case IIO_CHAN_INFO_SCALE:
+		ret = bmi323_iio_to_sensor(chan->type);
+		if (ret < 0)
+			return ret;
+
 		if (!iio_device_claim_direct(indio_dev))
 			return -EBUSY;
-		ret = bmi323_set_scale(data, bmi323_iio_to_sensor(chan->type),
-				       val, val2);
+		ret = bmi323_set_scale(data, ret, val, val2);
 		iio_device_release_direct(indio_dev);
 		return ret;
 	case IIO_CHAN_INFO_OVERSAMPLING_RATIO:
+		ret = bmi323_iio_to_sensor(chan->type);
+		if (ret < 0)
+			return ret;
+
 		if (!iio_device_claim_direct(indio_dev))
 			return -EBUSY;
-		ret = bmi323_set_average(data, bmi323_iio_to_sensor(chan->type),
-					 val);
+		ret = bmi323_set_average(data, ret, val);
 		iio_device_release_direct(indio_dev);
 		return ret;
 	case IIO_CHAN_INFO_ENABLE:
@@ -1770,8 +1783,11 @@ static int bmi323_read_raw(struct iio_dev *indio_dev,
 			return -EINVAL;
 		}
 	case IIO_CHAN_INFO_SAMP_FREQ:
-		return bmi323_get_odr(data, bmi323_iio_to_sensor(chan->type),
-				      val, val2);
+		ret = bmi323_iio_to_sensor(chan->type);
+		if (ret < 0)
+			return ret;
+
+		return bmi323_get_odr(data, ret, val, val2);
 	case IIO_CHAN_INFO_SCALE:
 		switch (chan->type) {
 		case IIO_ACCEL:
@@ -1788,9 +1804,11 @@ static int bmi323_read_raw(struct iio_dev *indio_dev,
 			return -EINVAL;
 		}
 	case IIO_CHAN_INFO_OVERSAMPLING_RATIO:
-		return bmi323_get_average(data,
-					  bmi323_iio_to_sensor(chan->type),
-					  val);
+		ret = bmi323_iio_to_sensor(chan->type);
+		if (ret < 0)
+			return ret;
+
+		return bmi323_get_average(data, ret, val);
 	case IIO_CHAN_INFO_OFFSET:
 		switch (chan->type) {
 		case IIO_TEMP:
