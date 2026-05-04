@@ -949,7 +949,7 @@ static void announce_cpu(int cpu, int apicid)
 
 		if (node != current_node) {
 			if (current_node > (-1))
-				pr_cont("\n");
+				pr_cont(KERN_INFO "\n");
 			current_node = node;
 
 			printk(KERN_INFO ".... node %*s#%d, CPUs:  ",
@@ -958,10 +958,10 @@ static void announce_cpu(int cpu, int apicid)
 
 		/* Add padding for the BSP */
 		if (first)
-			pr_cont("%*s", width + 1, " ");
+			pr_cont(KERN_INFO "%*s", width + 1, " ");
 		first = 0;
 
-		pr_cont("%*s#%d", width - num_digits(cpu), " ", cpu);
+		pr_cont(KERN_INFO "%*s#%d", width - num_digits(cpu), " ", cpu);
 	} else
 		pr_info("Booting Node %d Processor %d APIC 0x%x\n",
 			node, cpu, apicid);
