@@ -12,16 +12,16 @@
  * kind, whether express or implied.
  */
 
-#include <linux/acpi.h>
 #include <linux/clk.h>
 #include <linux/fwnode_mdio.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/mdio.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
-#include <linux/of.h>
 #include <linux/phy.h>
 #include <linux/platform_device.h>
+#include <linux/property.h>
 #include <linux/slab.h>
 
 /* Number of microseconds to wait for a register to respond */
@@ -407,12 +407,12 @@ static int xgmac_mdio_probe(struct platform_device *pdev)
 	/* For both ACPI and DT cases, endianness of MDIO controller
 	 * needs to be specified using "little-endian" property.
 	 */
-	priv->is_little_endian = device_property_read_bool(&pdev->dev,
+	priv->is_little_endian = fwnode_property_read_bool(fwnode,
 							   "little-endian");
 
-	priv->has_a009885 = device_property_read_bool(&pdev->dev,
+	priv->has_a009885 = fwnode_property_read_bool(fwnode,
 						      "fsl,erratum-a009885");
-	priv->has_a011043 = device_property_read_bool(&pdev->dev,
+	priv->has_a011043 = fwnode_property_read_bool(fwnode,
 						      "fsl,erratum-a011043");
 
 	xgmac_mdio_set_suppress_preamble(bus);
