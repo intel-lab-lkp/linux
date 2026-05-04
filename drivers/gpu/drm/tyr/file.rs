@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0 or MIT
 
 use kernel::{
+    device,
     drm,
+    platform,
     prelude::*,
     uaccess::UserSlice,
     uapi, //
@@ -29,6 +31,7 @@ impl drm::file::DriverFile for TyrDrmFileData {
 impl TyrDrmFileData {
     pub(crate) fn dev_query(
         ddev: &TyrDrmDevice,
+        _pdev: &platform::Device<device::Bound>,
         devquery: &mut uapi::drm_panthor_dev_query,
         _file: &TyrDrmFile,
     ) -> Result<u32> {
