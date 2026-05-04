@@ -7,9 +7,11 @@
  */
 
 #include <linux/acpi.h>
+#include <linux/acpi_mdio.h>
 #include <linux/dev_printk.h>
 #include <linux/fwnode_mdio.h>
 #include <linux/of.h>
+#include <linux/of_mdio.h>
 #include <linux/phy.h>
 #include <linux/pse-pd/pse.h>
 
@@ -187,3 +189,16 @@ clean_mii_ts:
 	return rc;
 }
 EXPORT_SYMBOL(fwnode_mdiobus_register_phy);
+
+int __fwnode_mdiobus_register(struct mii_bus *mdio, struct fwnode_handle *fwnode,
+			      struct module *owner)
+{
+	if (is_of_node(fwnode))
+		return __of_mdiobus_register(mdio, to_of_node(fwnode), owner);
+
+	if (is_acpi_node(fwnode))
+		return __acpi_mdiobus_register(mdio, fwnode, owner);
+
+	return mdiobus_register(mdio);
+}
+EXPORT_SYMBOL(__fwnode_mdiobus_register);
