@@ -2115,7 +2115,7 @@ static u32 rk3568_vop2_read_layer_cfg(struct vop2 *vop2)
 	return vop2_readl(vop2, RK3568_OVL_LAYER_SEL);
 }
 
-static void rk3568_vop2_wait_for_layer_cfg_done(struct vop2 *vop2, u32 cfg)
+static void rk3568_vop2_wait_for_layer_cfg_done(struct vop2 *vop2)
 {
 	u32 atv_layer_cfg;
 	int ret;
@@ -2124,10 +2124,10 @@ static void rk3568_vop2_wait_for_layer_cfg_done(struct vop2 *vop2, u32 cfg)
 	 * Spin until the previous layer configuration is done.
 	 */
 	ret = readx_poll_timeout_atomic(rk3568_vop2_read_layer_cfg, vop2, atv_layer_cfg,
-					atv_layer_cfg == cfg, 10, 50 * 1000);
+					atv_layer_cfg == vop2->old_layer_sel, 10, 50 * 1000);
 	if (ret)
 		drm_err_ratelimited(vop2->drm, "wait layer cfg done timeout: 0x%x--0x%x\n",
-				    atv_layer_cfg, cfg);
+				    atv_layer_cfg, vop2->old_layer_sel);
 }
 
 static void rk3568_vop2_setup_layer_mixer(struct vop2_video_port *vp)
@@ -2292,7 +2292,7 @@ static void rk3568_vop2_setup_layer_mixer(struct vop2_video_port *vp)
 		 * Changes of other VPs' overlays have not taken effect
 		 */
 		if (cfg_done)
-			rk3568_vop2_wait_for_layer_cfg_done(vop2, vop2->old_layer_sel);
+			rk3568_vop2_wait_for_layer_cfg_done(vop2);
 	}
 
 	if (layer_sel != vop2->old_layer_sel || port_sel != vop2->old_port_sel)
