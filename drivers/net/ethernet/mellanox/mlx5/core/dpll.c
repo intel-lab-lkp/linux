@@ -306,6 +306,10 @@ static int mlx5_dpll_ffo_get(const struct dpll_pin *pin, void *pin_priv,
 	struct mlx5_dpll *mdpll = pin_priv;
 	int err;
 
+	/* Only rx vs tx symbol rate FFO is supported */
+	if (dpll)
+		return -ENODATA;
+
 	err = mlx5_dpll_synce_status_get(mdpll->mdev, &synce_status);
 	if (err)
 		return err;
