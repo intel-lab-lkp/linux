@@ -217,7 +217,10 @@ static const struct wiphy_iftype_ext_capab rtw89_iftypes_ext_capa[] = {
 		.extended_capabilities_mask = rtw89_ext_capa_sta,
 		.extended_capabilities_len = sizeof(rtw89_ext_capa_sta),
 		/* relevant only if EHT is supported */
-		.eml_capabilities = 0,
+		.eml_capabilities =
+			IEEE80211_EML_CAP_EMLSR_SUPP |
+			(IEEE80211_EML_CAP_EML_PADDING_DELAY_256US << 1) |
+			(IEEE80211_EML_CAP_EMLSR_TRANSITION_DELAY_32US << 4),
 		.mld_capa_and_ops = 0,
 	},
 };
@@ -5557,7 +5560,8 @@ static void rtw89_init_eht_cap(struct rtw89_dev *rtwdev,
 
 	eht_cap_elem->mac_cap_info[0] =
 		u8_encode_bits(chip->max_eht_mpdu_cap,
-			       IEEE80211_EHT_MAC_CAP0_MAX_MPDU_LEN_MASK);
+			       IEEE80211_EHT_MAC_CAP0_MAX_MPDU_LEN_MASK) |
+		IEEE80211_EHT_MAC_CAP0_RESTRICTED_TWT;
 	eht_cap_elem->mac_cap_info[1] = 0;
 
 	eht_cap_elem->phy_cap_info[0] =
