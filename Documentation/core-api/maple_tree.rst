@@ -30,9 +30,9 @@ Tree reserves values with the bottom two bits set to '10' which are below 4096
 (ie 2, 6, 10 .. 4094) for internal use.  If the entries may use reserved
 entries then the users can convert the entries using xa_mk_value() and convert
 them back by calling xa_to_value().  Note that xa_{mk, to}_value() bit shifts
-the given data, so the top bit will be lost.  If the user needs to use a
-reserved value, then the user can convert the value when using the
-:ref:`maple-tree-advanced-api`, but are blocked by the normal API.
+the given data, so the top bit will be lost.  Usage of reserved values is
+blocked by the normal API, and will cause undefined behavior if used with the
+:ref:`maple-tree-advanced-api`.
 
 The Maple Tree can also be configured to support searching for a gap of a given
 size (or larger).
