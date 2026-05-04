@@ -23,6 +23,7 @@ use crate::{
         AlwaysRefCounted, //
     },
     types::{
+        ForLt,
         NotThreadSafe,
         Opaque, //
     },
@@ -35,6 +36,7 @@ use crate::{
 };
 use core::{
     alloc::Layout,
+    cell::UnsafeCell,
     marker::PhantomData,
     mem,
     ops::Deref,
@@ -259,6 +261,9 @@ impl<T: drm::Driver> UnregisteredDevice<T> {
         // SAFETY: `drm_dev` is still private to this function.
         unsafe { (*drm_dev).driver = const { &Self::VTABLE } };
 
+        // SAFETY: `raw_drm` is valid; no concurrent access before registration.
+        unsafe { (*raw_drm.as_ptr()).registration_data = UnsafeCell::new(NonNull::dangling()) };
+
         // SAFETY: The reference count is one, and now we take ownership of that reference as a
         // `drm::Device`.
         // INVARIANT: We just created the device above, but have yet to call `drm_dev_register`.
@@ -290,12 +295,34 @@ impl<T: drm::Driver> UnregisteredDevice<T> {
 pub struct Device<T: drm::Driver, C: DeviceContext = Registered> {
     dev: Opaque<bindings::drm_device>,
     data: T::Data,
+    pub(super) registration_data: UnsafeCell<NonNull<<T::RegistrationData as ForLt>::Of<'static>>>,
     _ctx: PhantomData<C>,
 }
 
 impl<T: drm::Driver, C: DeviceContext> Device<T, C> {
     pub(crate) fn as_raw(&self) -> *mut bindings::drm_device {
         self.dev.get()
+    }
+
+    /// Returns a reference to the registration data with lifetime shortened from `'static`.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that:
+    ///
+    /// - The parent bus device is bound (e.g. by holding an active `drm_dev_enter()` critical
+    ///   section via [`UnbindGuard`]).
+    /// - The returned reference is not exposed to code that can choose a concrete lifetime for
+    ///   it, as that would be unsound for types that are invariant over their lifetime parameter
+    ///   (e.g. it must be passed through an HRTB-bounded closure).
+    unsafe fn registration_data_unchecked(&self) -> &<T::RegistrationData as ForLt>::Of<'_> {
+        // SAFETY: Caller guarantees the parent bus device is bound, hence
+        // the pointer is valid.
+        let static_ref = unsafe { (*self.registration_data.get()).as_ref() };
+
+        // SAFETY: Caller guarantees the reference is only used behind an HRTB, making the
+        // round-trip from `'static` sound regardless of variance.
+        unsafe { T::RegistrationData::cast_ref_unchecked(static_ref) }
     }
 
     /// # Safety
@@ -410,6 +437,28 @@ impl<T: drm::Driver> Device<T, Registered> {
 pub struct UnbindGuard<'a, T: drm::Driver> {
     dev: &'a Device<T, Registered>,
     idx: i32,
+}
+
+impl<T: drm::Driver> UnbindGuard<'_, T> {
+    /// Access the parent device and registration data through a closure, with both lifetimes
+    /// tied to the closure scope.
+    ///
+    /// The data is owned by [`Registration`](drm::Registration) and is guaranteed to remain valid
+    /// for the duration of this guard, since [`Registration`](drm::Registration)'s `drop` calls
+    /// `drm_dev_unplug()` which waits for all `drm_dev_enter()` critical sections to complete.
+    pub fn registration_data_with<R, F>(&self, f: F) -> R
+    where
+        F: for<'a> FnOnce(
+            &'a T::ParentDevice<device::Bound>,
+            &'a <T::RegistrationData as ForLt>::Of<'a>,
+        ) -> R,
+    {
+        // SAFETY: We hold an active `drm_dev_enter()` critical section, so the parent bus
+        // device is guaranteed to be bound. The closure's HRTB `for<'a>` prevents the caller
+        // from smuggling in references with a concrete short lifetime, satisfying the lifetime
+        // requirement of `registration_data_unchecked`.
+        f(&**self, unsafe { self.dev.registration_data_unchecked() })
+    }
 }
 
 impl<T: drm::Driver> Deref for UnbindGuard<'_, T> {
