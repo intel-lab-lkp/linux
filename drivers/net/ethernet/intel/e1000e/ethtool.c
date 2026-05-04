@@ -2353,6 +2353,31 @@ static int e1000e_set_priv_flags(struct net_device *netdev, u32 priv_flags)
 	return 0;
 }
 
+/**
+ * e1000e_get_channels - Report number of network channels
+ * @netdev: network interface device structure
+ * @ch: ethtool channels structure
+ *
+ * e1000e hardware supports a single RX/TX queue pair. When MSI-X is
+ * in use, an additional vector is dedicated to link/status ("other")
+ * events.
+ **/
+static void e1000e_get_channels(struct net_device *netdev,
+				struct ethtool_channels *ch)
+{
+	struct e1000_adapter *adapter = netdev_priv(netdev);
+
+	/* single combined RX/TX channel */
+	ch->max_combined = 1;
+	ch->combined_count = 1;
+
+	/* report "other" vector when MSI-X is in use */
+	if (adapter->msix_entries) {
+		ch->max_other = 1;
+		ch->other_count = 1;
+	}
+}
+
 static const struct ethtool_ops e1000_ethtool_ops = {
 	.supported_coalesce_params = ETHTOOL_COALESCE_RX_USECS,
 	.get_drvinfo		= e1000_get_drvinfo,
@@ -2386,6 +2411,7 @@ static const struct ethtool_ops e1000_ethtool_ops = {
 	.set_link_ksettings	= e1000_set_link_ksettings,
 	.get_priv_flags		= e1000e_get_priv_flags,
 	.set_priv_flags		= e1000e_set_priv_flags,
+	.get_channels		= e1000e_get_channels,
 };
 
 void e1000e_set_ethtool_ops(struct net_device *netdev)
