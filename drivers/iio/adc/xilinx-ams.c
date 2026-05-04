@@ -10,6 +10,7 @@
 
 #include <linux/bits.h>
 #include <linux/bitfield.h>
+#include <linux/cleanup.h>
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/devm-helpers.h>
@@ -414,18 +415,15 @@ static void ams_unmask(struct ams *ams)
 
 static void ams_update_alarm(struct ams *ams, unsigned long alarm_mask)
 {
-	unsigned long flags;
-
 	if (ams->ps_base)
 		ams_update_ps_alarm(ams, alarm_mask);
 
 	if (ams->pl_base)
 		ams_update_pl_alarm(ams, alarm_mask);
 
-	spin_lock_irqsave(&ams->intr_lock, flags);
+	guard(spinlock_irqsave)(&ams->intr_lock);
 	ams_update_intrmask(ams, AMS_ISR0_ALARM_MASK, ~alarm_mask);
 	ams_unmask(ams);
-	spin_unlock_irqrestore(&ams->intr_lock, flags);
 }
 
 static void ams_enable_channel_sequence(struct iio_dev *indio_dev)
@@ -1060,9 +1058,8 @@ static void ams_unmask_worker(struct work_struct *work)
 {
 	struct ams *ams = container_of(work, struct ams, ams_unmask_work.work);
 
-	spin_lock_irq(&ams->intr_lock);
+	guard(spinlock_irq)(&ams->intr_lock);
 	ams_unmask(ams);
-	spin_unlock_irq(&ams->intr_lock);
 
 	/* If still pending some alarm re-trigger the timer */
 	if (ams->current_masked_alarm)
@@ -1076,16 +1073,14 @@ static irqreturn_t ams_irq(int irq, void *data)
 	struct ams *ams = iio_priv(indio_dev);
 	u32 isr0;
 
-	spin_lock(&ams->intr_lock);
+	guard(spinlock)(&ams->intr_lock);
 
 	isr0 = readl(ams->base + AMS_ISR_0);
 
 	/* Only process alarms that are not masked */
 	isr0 &= ~((ams->intr_mask & AMS_ISR0_ALARM_MASK) | ams->current_masked_alarm);
-	if (!isr0) {
-		spin_unlock(&ams->intr_lock);
+	if (!isr0)
 		return IRQ_NONE;
-	}
 
 	/* Clear interrupt */
 	writel(isr0, ams->base + AMS_ISR_0);
@@ -1098,8 +1093,6 @@ static irqreturn_t ams_irq(int irq, void *data)
 
 	schedule_delayed_work(&ams->ams_unmask_work,
 			      msecs_to_jiffies(AMS_UNMASK_TIMEOUT_MS));
-
-	spin_unlock(&ams->intr_lock);
 
 	return IRQ_HANDLED;
 }
