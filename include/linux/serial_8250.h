@@ -194,7 +194,6 @@ void serial8250_do_pm(struct uart_port *port, unsigned int state,
 void serial8250_do_set_mctrl(struct uart_port *port, unsigned int mctrl);
 void serial8250_do_set_divisor(struct uart_port *port, unsigned int baud,
 			       unsigned int quot);
-int fsl8250_handle_irq(struct uart_port *port);
 void serial8250_handle_irq_locked(struct uart_port *port, unsigned int iir);
 int serial8250_handle_irq(struct uart_port *port, unsigned int iir);
 u16 serial8250_rx_chars(struct uart_8250_port *up, u16 lsr);
@@ -215,6 +214,10 @@ void serial8250_set_isa_configurator(void (*v)(int port, struct uart_port *up,
 extern int hp300_setup_serial_console(void) __init;
 #else
 static inline int hp300_setup_serial_console(void) { return 0; }
+#endif
+
+#if IS_REACHABLE(CONFIG_SERIAL_8250_FSL)
+int fsl8250_handle_irq(struct uart_port *port);
 #endif
 
 #ifdef CONFIG_SERIAL_8250_RT288X
