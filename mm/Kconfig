@@ -1494,6 +1494,15 @@ config PGHOT_PRECISE
 	  4 bytes per page against the default one byte per page. Preferable
 	  to enable this on systems with multiple nodes in toptier.
 
+config HWMEM_PROFILER
+	bool
+	depends on PGHOT
+	help
+	  Umbrella symbol enabled by any in-kernel driver that forwards
+	  hardware-observed memory accesses to the pghot subsystem (for
+	  example AMD_IBS_MEMPROF on x86_64). Drivers select this; users
+	  do not enable it directly.
+
 source "mm/damon/Kconfig"
 
 endmenu

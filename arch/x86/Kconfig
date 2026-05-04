@@ -1514,6 +1514,22 @@ config AMD_MEM_ENCRYPT
 	  This requires an AMD processor that supports Secure Memory
 	  Encryption (SME).
 
+config AMD_IBS_MEMPROF
+	bool "AMD IBS Memory Profiler"
+	depends on X86_64 && CPU_SUP_AMD
+	depends on PGHOT
+	select HWMEM_PROFILER
+	help
+	  Use the AMD Instruction Based Sampling (IBS) Memory Profiler
+	  facility (present on Zen6 and later AMD CPUs) to feed
+	  hardware-observed memory accesses into the pghot subsystem
+	  for hot-page detection and promotion.
+
+	  When disabled, no IBS Memory Profiler MSRs are programmed and
+	  the corresponding NMI handler is not installed.
+
+	  If unsure, say N.
+
 # Common NUMA Features
 config NUMA
 	bool "NUMA Memory Allocation and Scheduler Support"

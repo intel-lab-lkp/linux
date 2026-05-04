@@ -1493,6 +1493,12 @@ const char * const vmstat_text[] = {
 	[I(PGHOT_RECORDED_ACCESSES)]		= "pghot_recorded_accesses",
 	[I(PGHOT_RECORDED_HINTFAULTS)]		= "pghot_recorded_hintfaults",
 	[I(PGHOT_RECORDED_HWHINTS)]		= "pghot_recorded_hwhints",
+#ifdef CONFIG_HWMEM_PROFILER
+	[I(HWHINT_TOTAL_EVENTS)]		= "hwhint_total_events",
+	[I(HWHINT_DRAM_ACCESSES)]		= "hwhint_dram_accesses",
+	[I(HWHINT_EXTMEM_ACCESSES)]		= "hwhint_extmem_accesses",
+	[I(HWHINT_USEFUL_EVENTS)]		= "hwhint_useful_events",
+#endif /* CONFIG_HWMEM_PROFILER */
 #endif /* CONFIG_PGHOT */
 #undef I
 #endif /* CONFIG_VM_EVENT_COUNTERS */
