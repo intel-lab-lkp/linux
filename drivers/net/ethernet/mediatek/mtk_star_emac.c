@@ -1640,7 +1640,9 @@ static int mtk_star_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	ret = platform_get_ethdev_address(dev, ndev);
+	ret = of_get_ethdev_address(of_node, ndev);
+	if (ret == -EPROBE_DEFER)
+		return ret;
 	if (ret || !is_valid_ether_addr(ndev->dev_addr))
 		eth_hw_addr_random(ndev);
 
