@@ -2855,10 +2855,6 @@ static int rdt_get_tree(struct fs_context *fc)
 	if (ret)
 		goto out_mondata;
 
-	ret = kernfs_get_tree(fc);
-	if (ret < 0)
-		goto out_psl;
-
 	if (resctrl_arch_alloc_capable())
 		resctrl_arch_enable_alloc();
 	if (resctrl_arch_mon_capable())
@@ -2874,10 +2870,26 @@ static int rdt_get_tree(struct fs_context *fc)
 						   RESCTRL_PICK_ANY_CPU);
 	}
 
-	goto out;
+	/* Release locks because kernfs_get_tree() may call rdt_kill_sb() */
+	mutex_unlock(&rdtgroup_mutex);
+	cpus_read_unlock();
+	ret = kernfs_get_tree(fc);
+	if (!ret || ctx->kfc.new_sb_created) {
+		/* mount succeeded, or failed and already cleaned up */
+		return ret;
+	}
+	cpus_read_lock();
+	mutex_lock(&rdtgroup_mutex);
 
-out_psl:
+	if (resctrl_arch_alloc_capable())
+		resctrl_arch_disable_alloc();
+	if (resctrl_arch_mon_capable())
+		resctrl_arch_disable_mon();
+
+	resctrl_mounted = false;
+
 	rdt_pseudo_lock_release();
+
 out_mondata:
 	if (resctrl_arch_mon_capable())
 		kernfs_remove(kn_mondata);
