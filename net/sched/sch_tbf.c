@@ -153,8 +153,12 @@ static void tbf_offload_change(struct Qdisc *sch,
 	qopt.command = TC_TBF_REPLACE;
 	qopt.handle = sch->handle;
 	qopt.parent = sch->parent;
-	qopt.replace_params.rate = q->rate;
+	qopt.replace_params.limit = q->limit;
 	qopt.replace_params.max_size = q->max_size;
+	qopt.replace_params.buffer = q->buffer;
+	qopt.replace_params.mtu = q->mtu;
+	qopt.replace_params.rate = q->rate;
+	qopt.replace_params.peak = q->peak;
 	qopt.replace_params.qstats = &sch->qstats;
 
 	dev->netdev_ops->ndo_setup_tc(dev, TC_SETUP_QDISC_TBF, &qopt);
