@@ -360,7 +360,7 @@ static netdev_tx_t ucc_hdlc_tx(struct sk_buff *skb, struct net_device *dev)
 			dev->stats.tx_dropped++;
 			dev_kfree_skb(skb);
 			netdev_err(dev, "No enough space for hdlc head\n");
-			return -ENOMEM;
+			return NETDEV_TX_OK;
 		}
 
 		skb_push(skb, HDLC_HEAD_LEN);
@@ -377,7 +377,7 @@ static netdev_tx_t ucc_hdlc_tx(struct sk_buff *skb, struct net_device *dev)
 			dev->stats.tx_dropped++;
 			dev_kfree_skb(skb);
 			netdev_err(dev, "Wrong ppp header\n");
-			return -ENOMEM;
+			return NETDEV_TX_OK;
 		}
 
 		dev->stats.tx_bytes += skb->len;
@@ -390,7 +390,7 @@ static netdev_tx_t ucc_hdlc_tx(struct sk_buff *skb, struct net_device *dev)
 	default:
 		dev->stats.tx_dropped++;
 		dev_kfree_skb(skb);
-		return -ENOMEM;
+		return NETDEV_TX_OK;
 	}
 	netdev_sent_queue(dev, skb->len);
 	spin_lock_irqsave(&priv->lock, flags);
