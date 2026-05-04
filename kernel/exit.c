@@ -917,6 +917,7 @@ void __noreturn do_exit(long code)
 	exit_signals(tsk);  /* sets PF_EXITING */
 
 	seccomp_filter_release(tsk);
+	seccomp_clear_pinned_args(tsk);
 
 	acct_update_integrals(tsk);
 	group_dead = atomic_dec_and_test(&tsk->signal->live);

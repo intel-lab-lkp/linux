@@ -38,6 +38,7 @@
 #include <linux/sched/signal.h>
 #include <linux/sched/numa_balancing.h>
 #include <linux/sched/task.h>
+#include <linux/seccomp.h>
 #include <linux/pagemap.h>
 #include <linux/perf_event.h>
 #include <linux/highmem.h>
@@ -445,6 +446,63 @@ static int bprm_stack_limits(struct linux_binprm *bprm)
  * processes's memory to the new process's stack.  The call to get_user_pages()
  * ensures the destination page is created and not swapped out.
  */
+/*
+ * If a seccomp PIN_ARGS snapshot covers this argv/envp pointer table,
+ * push each pinned string onto the bprm stack directly via
+ * copy_string_kernel(), bypassing the per-string strnlen_user() and
+ * copy_from_user() that would otherwise re-read mutated user memory.
+ *
+ * Returns 0 on success, a negative errno on failure, or +1 if no pin
+ * applied and the caller should run the normal user-memory walk.
+ */
+static int copy_strings_from_pin(struct user_arg_ptr argv,
+				 struct linux_binprm *bprm)
+{
+	const struct seccomp_pinned_arg *pin;
+	const u32 *header;
+	const char *strings;
+	u32 count, i;
+	u64 user_argv;
+
+#ifdef CONFIG_COMPAT
+	user_argv = (u64)(uintptr_t)(argv.is_compat ?
+		(const void __user *)argv.ptr.compat :
+		(const void __user *)argv.ptr.native);
+#else
+	user_argv = (u64)(uintptr_t)argv.ptr.native;
+#endif
+	if (!user_argv)
+		return 1;
+
+	pin = seccomp_pin_lookup_current(user_argv);
+	if (!pin || pin->kind != SECCOMP_PIN_CSTRING_ARRAY)
+		return 1;
+
+	header = pin->data;
+	count = header[0];
+	strings = (const char *)pin->data;
+
+	/*
+	 * copy_strings() processes argv backwards (highest index first)
+	 * because it grows the bprm stack downward. Match that ordering
+	 * so the resulting stack layout is identical.
+	 */
+	for (i = count; i-- > 0; ) {
+		u32 off = header[1 + i];
+		int ret;
+
+		if (off >= pin->size)
+			return -EINVAL;
+		ret = copy_string_kernel(strings + off, bprm);
+		if (ret < 0)
+			return ret;
+		if (fatal_signal_pending(current))
+			return -ERESTARTNOHAND;
+		cond_resched();
+	}
+	return 0;
+}
+
 static int copy_strings(int argc, struct user_arg_ptr argv,
 			struct linux_binprm *bprm)
 {
@@ -452,6 +510,11 @@ static int copy_strings(int argc, struct user_arg_ptr argv,
 	char *kaddr = NULL;
 	unsigned long kpos = 0;
 	int ret;
+
+	ret = copy_strings_from_pin(argv, bprm);
+	if (ret <= 0)
+		return ret;
+	/* No pin matched; continue with the normal user-memory walk. */
 
 	while (argc-- > 0) {
 		const char __user *str;

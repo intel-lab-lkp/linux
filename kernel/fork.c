@@ -1764,6 +1764,11 @@ static void copy_seccomp(struct task_struct *p)
 	/* Ref-count the new filter user, and assign it. */
 	get_seccomp_filter(current);
 	p->seccomp = current->seccomp;
+	/*
+	 * pinned_args is a per-trapped-task transient that belongs to the
+	 * outstanding notification on the parent (if any). Don't inherit it.
+	 */
+	p->seccomp.pinned_args = NULL;
 
 	/*
 	 * Explicitly enable no_new_privs here in case it got set

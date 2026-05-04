@@ -75,6 +75,35 @@ static inline int seccomp_mode(struct seccomp *s)
 #ifdef CONFIG_SECCOMP_FILTER
 extern void seccomp_filter_release(struct task_struct *tsk);
 extern void get_seccomp_filter(struct task_struct *tsk);
+extern void seccomp_clear_pinned_args(struct task_struct *tsk);
+
+/**
+ * seccomp_pin_lookup_current - find a live PIN_ARGS snapshot for current().
+ * @user_addr:	the userspace address the syscall body is about to read.
+ *
+ * Called from syscall fetch points (getname_flags, copy_strings,
+ * move_addr_to_kernel, import_ubuf). Returns a pinned-arg entry whose
+ * @data / @size the caller may consume in place of re-reading user
+ * memory, or NULL if there is no live snapshot, the current syscall
+ * does not match the one captured at pin time, or no entry matches
+ * @user_addr.
+ *
+ * Safe to call lockless: current owns its seccomp.pinned_args field
+ * once the PIN_ARGS orchestrator has installed it via WRITE_ONCE.
+ */
+const struct seccomp_pinned_arg *seccomp_pin_lookup_current(u64 user_addr);
+
+/**
+ * seccomp_pin_kvec_for - return a stable kvec for the given pin entry.
+ * @pin:	a pin returned by seccomp_pin_lookup_current(); must belong
+ *		to the current task.
+ *
+ * The returned pointer references kvec storage that outlives the pin
+ * (freed at syscall exit), suitable for iov_iter_kvec() callers whose
+ * iov_iter consumes after the wrapping function returns.
+ */
+struct kvec;
+const struct kvec *seccomp_pin_kvec_for(const struct seccomp_pinned_arg *pin);
 #else  /* CONFIG_SECCOMP_FILTER */
 static inline void seccomp_filter_release(struct task_struct *tsk)
 {
@@ -84,6 +113,12 @@ static inline void get_seccomp_filter(struct task_struct *tsk)
 {
 	return;
 }
+static inline void seccomp_clear_pinned_args(struct task_struct *tsk) { }
+static inline const struct seccomp_pinned_arg *
+seccomp_pin_lookup_current(u64 user_addr) { return NULL; }
+struct kvec;
+static inline const struct kvec *
+seccomp_pin_kvec_for(const struct seccomp_pinned_arg *pin) { return NULL; }
 #endif /* CONFIG_SECCOMP_FILTER */
 
 #if defined(CONFIG_SECCOMP_FILTER) && defined(CONFIG_CHECKPOINT_RESTORE)

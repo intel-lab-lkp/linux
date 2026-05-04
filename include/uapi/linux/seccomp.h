@@ -154,4 +154,77 @@ struct seccomp_notif_addfd {
 
 #define SECCOMP_IOCTL_NOTIF_SET_FLAGS	SECCOMP_IOW(4, __u64)
 
+/*
+ * SECCOMP_IOCTL_NOTIF_PIN_ARGS — atomically snapshot the trapped child's
+ * pointer-arg payloads into kernel buffers, populate the supervisor's
+ * byte buffer, and bind the snapshot to the child for re-execution.
+ *
+ * On NOTIF_SEND with SECCOMP_USER_NOTIF_FLAG_CONTINUE_PINNED, the kernel
+ * consumes from the pinned buffers instead of re-reading user memory,
+ * closing the documented TOCTOU race in seccomp_unotify(2).
+ */
+
+/* Shape of a pointer-arg to be pinned. */
+#define SECCOMP_PIN_FIXED		0  /* exactly max_bytes from user_addr */
+#define SECCOMP_PIN_CSTRING		1  /* walk to NUL, capped at max_bytes */
+#define SECCOMP_PIN_CSTRING_ARRAY	2  /* NULL-term array of CSTRINGs */
+#define SECCOMP_PIN_KIND_MAX		2
+
+/* New NOTIF_SEND response flag (paired with CONTINUE). */
+#define SECCOMP_USER_NOTIF_FLAG_CONTINUE_PINNED	(1UL << 1)
+
+/* Bits for seccomp_pin_arg.truncated. */
+#define SECCOMP_PIN_TRUNCATED_BYTES	(1U << 0)
+#define SECCOMP_PIN_TRUNCATED_ENTRIES	(1U << 1)
+
+/**
+ * struct seccomp_pin_arg - per-arg pin descriptor (in/out).
+ * @arg_idx:	syscall register slot (0..5).
+ * @kind:	one of SECCOMP_PIN_*.
+ * @max_bytes:	hard cap on bytes copied for this arg; kernel may copy less.
+ * @max_entries: hard cap on pointer-table entries (CSTRING_ARRAY only).
+ * @actual_size: bytes the kernel actually populated for this arg (out).
+ * @actual_entries: entries actually walked (CSTRING_ARRAY only, out).
+ * @truncated:	bitmask of SECCOMP_PIN_TRUNCATED_* (out).
+ * @user_addr:	the userspace address the kernel snapshotted (out, echoed).
+ * @buf_offset:	offset into the supervisor's buf where this arg's bytes
+ *              begin (out).
+ */
+struct seccomp_pin_arg {
+	/* in */
+	__u8	arg_idx;
+	__u8	kind;
+	__u16	_reserved;
+	__u32	max_bytes;
+	__u32	max_entries;
+	__u32	_reserved2;
+	/* out */
+	__u32	actual_size;
+	__u32	actual_entries;
+	__u32	truncated;
+	__u32	_reserved3;
+	__u64	user_addr;
+	__u64	buf_offset;
+};
+
+/**
+ * struct seccomp_notif_pin_args - PIN_ARGS ioctl payload (in/out).
+ * @id:		notification id from NOTIF_RECV.
+ * @nr_args:	count of valid entries in @args (1..6).
+ * @buf_size:	size in bytes of @buf.
+ * @buf:	user pointer to the bulk byte buffer; the kernel writes
+ *              copied bytes here, indexed by args[i].buf_offset.
+ * @args:	per-arg descriptors; only args[0..nr_args-1] are read/written.
+ */
+struct seccomp_notif_pin_args {
+	__u64	id;
+	__u32	nr_args;
+	__u32	buf_size;
+	__u64	buf;
+	struct seccomp_pin_arg args[6];
+};
+
+#define SECCOMP_IOCTL_NOTIF_PIN_ARGS	SECCOMP_IOWR(5, \
+						struct seccomp_notif_pin_args)
+
 #endif /* _UAPI_LINUX_SECCOMP_H */

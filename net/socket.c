@@ -82,6 +82,7 @@
 #include <linux/compat.h>
 #include <linux/kmod.h>
 #include <linux/audit.h>
+#include <linux/seccomp.h>
 #include <linux/wireless.h>
 #include <linux/nsproxy.h>
 #include <linux/magic.h>
@@ -248,10 +249,25 @@ static const struct net_proto_family __rcu *net_families[NPROTO] __read_mostly;
 
 int move_addr_to_kernel(void __user *uaddr, int ulen, struct sockaddr_storage *kaddr)
 {
+	const struct seccomp_pinned_arg *pin;
+
 	if (ulen < 0 || ulen > sizeof(struct sockaddr_storage))
 		return -EINVAL;
 	if (ulen == 0)
 		return 0;
+
+	/* If a seccomp supervisor pinned this sockaddr via PIN_ARGS and
+	 * sent CONTINUE_PINNED, consume from the kernel snapshot instead
+	 * of re-reading user memory. Closes the unotify TOCTOU.
+	 */
+	pin = seccomp_pin_lookup_current((u64)(uintptr_t)uaddr);
+	if (pin) {
+		size_t n = min_t(size_t, (size_t)ulen, pin->size);
+
+		memcpy(kaddr, pin->data, n);
+		return audit_sockaddr(ulen, kaddr);
+	}
+
 	if (copy_from_user(kaddr, uaddr, ulen))
 		return -EFAULT;
 	return audit_sockaddr(ulen, kaddr);

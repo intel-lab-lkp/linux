@@ -9,6 +9,7 @@
 #include <linux/vmalloc.h>
 #include <linux/splice.h>
 #include <linux/compat.h>
+#include <linux/seccomp.h>
 #include <linux/scatterlist.h>
 #include <linux/instrumented.h>
 #include <linux/iov_iter.h>
@@ -1444,8 +1445,29 @@ EXPORT_SYMBOL(import_iovec);
 
 int import_ubuf(int rw, void __user *buf, size_t len, struct iov_iter *i)
 {
+	const struct seccomp_pinned_arg *pin;
+	const struct kvec *kvec;
+
 	if (len > MAX_RW_COUNT)
 		len = MAX_RW_COUNT;
+
+	/*
+	 * Pinned by a seccomp PIN_ARGS supervisor on this task? Build the
+	 * iov_iter over the kernel snapshot rather than re-reading user
+	 * memory. The kvec storage is owned by current->seccomp.pinned_args
+	 * and lives until syscall exit, so it outlasts @i's consumption.
+	 */
+	pin = seccomp_pin_lookup_current((u64)(uintptr_t)buf);
+	if (pin && pin->kind == SECCOMP_PIN_FIXED) {
+		kvec = seccomp_pin_kvec_for(pin);
+		if (kvec) {
+			size_t n = min_t(size_t, len, pin->size);
+
+			iov_iter_kvec(i, rw, kvec, 1, n);
+			return 0;
+		}
+	}
+
 	if (unlikely(!access_ok(buf, len)))
 		return -EFAULT;
 

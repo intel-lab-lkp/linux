@@ -24055,6 +24055,8 @@ F:	Documentation/userspace-api/seccomp_filter.rst
 F:	include/linux/seccomp.h
 F:	include/uapi/linux/seccomp.h
 F:	kernel/seccomp.c
+F:	kernel/seccomp_pin.c
+F:	kernel/seccomp_pin.h
 F:	tools/testing/selftests/kselftest_harness.h
 F:	tools/testing/selftests/kselftest_harness/
 F:	tools/testing/selftests/seccomp/*

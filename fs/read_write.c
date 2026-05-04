@@ -488,7 +488,9 @@ static ssize_t new_sync_read(struct file *filp, char __user *buf, size_t len, lo
 
 	init_sync_kiocb(&kiocb, filp);
 	kiocb.ki_pos = (ppos ? *ppos : 0);
-	iov_iter_ubuf(&iter, ITER_DEST, buf, len);
+	ret = import_ubuf(ITER_DEST, buf, len, &iter);
+	if (unlikely(ret))
+		return ret;
 
 	ret = filp->f_op->read_iter(&kiocb, &iter);
 	BUG_ON(ret == -EIOCBQUEUED);
@@ -590,7 +592,9 @@ static ssize_t new_sync_write(struct file *filp, const char __user *buf, size_t 
 
 	init_sync_kiocb(&kiocb, filp);
 	kiocb.ki_pos = (ppos ? *ppos : 0);
-	iov_iter_ubuf(&iter, ITER_SOURCE, (void __user *)buf, len);
+	ret = import_ubuf(ITER_SOURCE, (void __user *)buf, len, &iter);
+	if (unlikely(ret))
+		return ret;
 
 	ret = filp->f_op->write_iter(&kiocb, &iter);
 	BUG_ON(ret == -EIOCBQUEUED);

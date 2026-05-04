@@ -44,6 +44,8 @@
 #include <linux/anon_inodes.h>
 #include <linux/lockdep.h>
 
+#include "seccomp_pin.h"
+
 /*
  * When SECCOMP_IOCTL_NOTIF_ID_VALID was first introduced, it had the
  * wrong direction flag in the ioctl number. This is the broken one,
@@ -97,6 +99,13 @@ struct seccomp_knotif {
 
 	/* outstanding addfd requests */
 	struct list_head addfd;
+
+	/*
+	 * A SECCOMP_IOCTL_NOTIF_PIN_ARGS for this notification is mid-walk
+	 * (i.e. inside Phase B's lockless mm scan). Concurrent PIN_ARGS
+	 * ioctls for the same id bail with -EBUSY rather than racing.
+	 */
+	bool pin_in_progress;
 };
 
 /**
@@ -1476,6 +1485,13 @@ static void seccomp_notify_detach(struct seccomp_filter *filter)
 		knotif->val = 0;
 
 		/*
+		 * Drop any PIN_ARGS snapshot held on the trapped task; the
+		 * supervisor that owned this notif fd is gone, so the pin
+		 * can never be consumed via CONTINUE_PINNED.
+		 */
+		seccomp_clear_pinned_args(knotif->task);
+
+		/*
 		 * We do not need to wake up any pending addfd messages, as
 		 * the notifier will do that for us, as this just looks
 		 * like a standard reply.
@@ -1498,7 +1514,7 @@ static int seccomp_notify_release(struct inode *inode, struct file *file)
 
 /* must be called with notif_lock held */
 static inline struct seccomp_knotif *
-find_notification(struct seccomp_filter *filter, u64 id)
+seccomp_find_notification(struct seccomp_filter *filter, u64 id)
 {
 	struct seccomp_knotif *cur;
 
@@ -1607,7 +1623,7 @@ out:
 		 * sure it's still around.
 		 */
 		mutex_lock(&filter->notify_lock);
-		knotif = find_notification(filter, unotif.id);
+		knotif = seccomp_find_notification(filter, unotif.id);
 		if (knotif) {
 			/* Reset the process to make sure it's not stuck */
 			if (should_sleep_killable(filter, knotif))
@@ -1632,18 +1648,27 @@ static long seccomp_notify_send(struct seccomp_filter *filter,
 	if (copy_from_user(&resp, buf, sizeof(resp)))
 		return -EFAULT;
 
-	if (resp.flags & ~SECCOMP_USER_NOTIF_FLAG_CONTINUE)
+	if (resp.flags & ~(SECCOMP_USER_NOTIF_FLAG_CONTINUE |
+			   SECCOMP_USER_NOTIF_FLAG_CONTINUE_PINNED))
 		return -EINVAL;
 
 	if ((resp.flags & SECCOMP_USER_NOTIF_FLAG_CONTINUE) &&
 	    (resp.error || resp.val))
 		return -EINVAL;
 
+	/*
+	 * CONTINUE_PINNED is only valid alongside CONTINUE, and is a no-op
+	 * until the consumption-side hooks land in subsequent patches.
+	 */
+	if ((resp.flags & SECCOMP_USER_NOTIF_FLAG_CONTINUE_PINNED) &&
+	    !(resp.flags & SECCOMP_USER_NOTIF_FLAG_CONTINUE))
+		return -EINVAL;
+
 	ret = mutex_lock_interruptible(&filter->notify_lock);
 	if (ret < 0)
 		return ret;
 
-	knotif = find_notification(filter, resp.id);
+	knotif = seccomp_find_notification(filter, resp.id);
 	if (!knotif) {
 		ret = -ENOENT;
 		goto out;
@@ -1660,6 +1685,37 @@ static long seccomp_notify_send(struct seccomp_filter *filter,
 	knotif->error = resp.error;
 	knotif->val = resp.val;
 	knotif->flags = resp.flags;
+
+	/*
+	 * If CONTINUE_PINNED was set, arm the snapshot so that the
+	 * syscall-body fetch points consume from kernel buffers instead of
+	 * re-reading user memory. If CONTINUE was set without PINNED, the
+	 * supervisor explicitly opted out of the snapshot and we discard
+	 * it (re-read from user memory as today).
+	 */
+	if (resp.flags & SECCOMP_USER_NOTIF_FLAG_CONTINUE) {
+		struct seccomp_pinned_args *kpa =
+			READ_ONCE(knotif->task->seccomp.pinned_args);
+
+		if (kpa && (resp.flags & SECCOMP_USER_NOTIF_FLAG_CONTINUE_PINNED)) {
+			WRITE_ONCE(kpa->live, true);
+			/*
+			 * Schedule a one-shot clear that fires when the
+			 * trapped task next returns to user mode (after the
+			 * resumed syscall body completes). Failure here
+			 * means the task is exiting; cleanup happens via
+			 * seccomp_filter_release / do_exit instead.
+			 */
+			seccomp_pin_queue_clear(knotif->task);
+		} else if (kpa) {
+			seccomp_clear_pinned_args(knotif->task);
+		}
+	} else if (resp.flags & SECCOMP_USER_NOTIF_FLAG_CONTINUE_PINNED) {
+		/* Already rejected at the top of this function, but be defensive. */
+		ret = -EINVAL;
+		goto out;
+	}
+
 	if (filter->notif->flags & SECCOMP_USER_NOTIF_FD_SYNC_WAKE_UP)
 		complete_on_current_cpu(&knotif->ready);
 	else
@@ -1683,7 +1739,7 @@ static long seccomp_notify_id_valid(struct seccomp_filter *filter,
 	if (ret < 0)
 		return ret;
 
-	knotif = find_notification(filter, id);
+	knotif = seccomp_find_notification(filter, id);
 	if (knotif && knotif->state == SECCOMP_NOTIFY_SENT)
 		ret = 0;
 	else
@@ -1751,7 +1807,7 @@ static long seccomp_notify_addfd(struct seccomp_filter *filter,
 	if (ret < 0)
 		goto out;
 
-	knotif = find_notification(filter, addfd.id);
+	knotif = seccomp_find_notification(filter, addfd.id);
 	if (!knotif) {
 		ret = -ENOENT;
 		goto out_unlock;
@@ -1823,6 +1879,125 @@ out:
 	return ret;
 }
 
+static long seccomp_notif_pin_args(struct seccomp_filter *filter,
+				   struct seccomp_notif_pin_args __user *uargs)
+{
+	struct seccomp_notif_pin_args kargs;
+	struct seccomp_pinned_args *kpa = NULL;
+	struct seccomp_knotif *knotif;
+	struct task_struct *task = NULL;
+	void __user *user_buf;
+	u64 args[6];
+	int syscall_nr = 0;
+	int i;
+	long ret;
+
+	if (copy_from_user(&kargs, uargs, sizeof(kargs)))
+		return -EFAULT;
+	if (kargs.nr_args == 0 || kargs.nr_args > SECCOMP_PIN_MAX_ARGS)
+		return -EINVAL;
+	if (kargs.buf_size > SECCOMP_PIN_MAX_TOTAL_BYTES)
+		return -E2BIG;
+
+	/* Validate descriptor inputs before any allocation. */
+	for (i = 0; i < kargs.nr_args; i++) {
+		struct seccomp_pin_arg *d = &kargs.args[i];
+
+		if (d->arg_idx >= 6)
+			return -EINVAL;
+		if (d->kind > SECCOMP_PIN_KIND_MAX)
+			return -EINVAL;
+		if (d->max_bytes == 0)
+			return -EINVAL;
+		if (d->max_bytes > SECCOMP_PIN_MAX_TOTAL_BYTES)
+			return -E2BIG;
+	}
+
+	user_buf = (void __user *)(uintptr_t)kargs.buf;
+	if (kargs.buf_size && !user_buf)
+		return -EINVAL;
+
+	/*
+	 * Phase A: validate notif state, snapshot the args we need under
+	 * the lock, take task ref, mark pin_in_progress so a concurrent
+	 * PIN_ARGS for the same id bails with -EBUSY.
+	 */
+	mutex_lock(&filter->notify_lock);
+	knotif = seccomp_find_notification(filter, kargs.id);
+	if (!knotif) {
+		ret = -ENOENT;
+		goto unlock_a;
+	}
+	if (knotif->state != SECCOMP_NOTIFY_SENT) {
+		ret = -EINPROGRESS;
+		goto unlock_a;
+	}
+	if (knotif->task->seccomp.pinned_args) {
+		ret = -EEXIST;
+		goto unlock_a;
+	}
+	if (knotif->pin_in_progress) {
+		ret = -EBUSY;
+		goto unlock_a;
+	}
+	knotif->pin_in_progress = true;
+	memcpy(args, knotif->data->args, sizeof(args));
+	syscall_nr = knotif->data->nr;
+	task = get_task_struct(knotif->task);
+	mutex_unlock(&filter->notify_lock);
+
+	/* Phase B: lockless mm walk + supervisor copy. */
+	ret = seccomp_pin_args_walk(task, &kargs, args, syscall_nr,
+				    user_buf, kargs.buf_size, &kpa);
+	if (ret)
+		goto cleanup;
+
+	if (copy_to_user(uargs, &kargs, sizeof(kargs))) {
+		ret = -EFAULT;
+		goto cleanup;
+	}
+
+	/*
+	 * Phase C: re-validate (the notif may have been replied to or the
+	 * supervisor may have released the listener) and attach the
+	 * snapshot.
+	 */
+	mutex_lock(&filter->notify_lock);
+	knotif = seccomp_find_notification(filter, kargs.id);
+	if (!knotif || knotif->state != SECCOMP_NOTIFY_SENT) {
+		mutex_unlock(&filter->notify_lock);
+		ret = -ENOENT;
+		goto cleanup;
+	}
+	WRITE_ONCE(task->seccomp.pinned_args, kpa);
+	knotif->pin_in_progress = false;
+	kpa = NULL; /* ownership transferred to task */
+	mutex_unlock(&filter->notify_lock);
+	put_task_struct(task);
+	return 0;
+
+cleanup:
+	/*
+	 * Best-effort: clear pin_in_progress so a subsequent PIN_ARGS can
+	 * proceed. The notif may already be gone, in which case there is
+	 * nothing to clear.
+	 */
+	mutex_lock(&filter->notify_lock);
+	knotif = seccomp_find_notification(filter, kargs.id);
+	if (knotif)
+		knotif->pin_in_progress = false;
+	mutex_unlock(&filter->notify_lock);
+
+	seccomp_free_pinned_args(kpa);
+	if (task)
+		put_task_struct(task);
+	return ret;
+
+unlock_a:
+	mutex_unlock(&filter->notify_lock);
+	return ret;
+}
+
 static long seccomp_notify_ioctl(struct file *file, unsigned int cmd,
 				 unsigned long arg)
 {
@@ -1840,6 +2015,8 @@ static long seccomp_notify_ioctl(struct file *file, unsigned int cmd,
 		return seccomp_notify_id_valid(filter, buf);
 	case SECCOMP_IOCTL_NOTIF_SET_FLAGS:
 		return seccomp_notify_set_flags(filter, arg);
+	case SECCOMP_IOCTL_NOTIF_PIN_ARGS:
+		return seccomp_notif_pin_args(filter, buf);
 	}
 
 	/* Extensible Argument ioctls */

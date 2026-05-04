@@ -30,6 +30,7 @@
 #include <linux/syscalls.h>
 #include <linux/mount.h>
 #include <linux/audit.h>
+#include <linux/seccomp.h>
 #include <linux/capability.h>
 #include <linux/file.h>
 #include <linux/fcntl.h>
@@ -222,6 +223,24 @@ do_getname(const char __user *filename, int flags, bool incomplete)
 struct filename *
 getname_flags(const char __user *filename, int flags)
 {
+	const struct seccomp_pinned_arg *pin;
+
+	/*
+	 * If a seccomp supervisor pinned this path via PIN_ARGS and sent
+	 * CONTINUE_PINNED, build the struct filename from the kernel-side
+	 * snapshot instead of re-reading user memory. The pinned buffer
+	 * is NUL-terminated by copy_remote_vm_str() in the walker, so
+	 * getname_kernel() can consume it directly.
+	 *
+	 * The empty-path-with-LOOKUP_EMPTY policy is handled here because
+	 * getname_kernel() does not reject empty strings.
+	 */
+	pin = seccomp_pin_lookup_current((u64)(uintptr_t)filename);
+	if (pin && pin->kind == SECCOMP_PIN_CSTRING) {
+		if (pin->size <= 1 && !(flags & LOOKUP_EMPTY))
+			return ERR_PTR(-ENOENT);
+		return getname_kernel(pin->data);
+	}
 	return do_getname(filename, flags, false);
 }
 

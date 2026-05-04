@@ -7187,7 +7187,7 @@ int access_process_vm(struct task_struct *tsk, unsigned long addr,
 }
 EXPORT_SYMBOL_GPL(access_process_vm);
 
-#ifdef CONFIG_BPF_SYSCALL
+#if defined(CONFIG_BPF_SYSCALL) || defined(CONFIG_SECCOMP_FILTER)
 /*
  * Copy a string from another process's address space as given in mm.
  * If there is any error return -EFAULT.
@@ -7305,7 +7305,7 @@ int copy_remote_vm_str(struct task_struct *tsk, unsigned long addr,
 	return ret;
 }
 EXPORT_SYMBOL_GPL(copy_remote_vm_str);
-#endif /* CONFIG_BPF_SYSCALL */
+#endif /* CONFIG_BPF_SYSCALL || CONFIG_SECCOMP_FILTER */
 
 /*
  * Print the name of a VMA.
