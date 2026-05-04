@@ -2713,8 +2713,9 @@ static bool arm_smmu_ats_supported(struct arm_smmu_master *master)
 	return dev_is_pci(dev) && pci_ats_supported(to_pci_dev(dev));
 }
 
-static void arm_smmu_enable_ats(struct arm_smmu_master *master)
+static int arm_smmu_enable_ats(struct arm_smmu_master *master)
 {
+	int ret = 0;
 	size_t stu;
 	struct pci_dev *pdev;
 	struct arm_smmu_device *smmu = master->smmu;
@@ -2727,8 +2728,11 @@ static void arm_smmu_enable_ats(struct arm_smmu_master *master)
 	 * ATC invalidation of PASID 0 causes the entire ATC to be flushed.
 	 */
 	arm_smmu_atc_inv_master(master, IOMMU_NO_PASID);
-	if (pci_enable_ats(pdev, stu))
+	ret = pci_enable_ats(pdev, stu);
+	if (ret)
 		dev_err(master->dev, "Failed to enable ATS (STU %zu)\n", stu);
+
+	return ret;
 }
 
 static int arm_smmu_enable_pasid(struct arm_smmu_master *master)
@@ -3045,7 +3049,8 @@ void arm_smmu_attach_commit(struct arm_smmu_attach_state *state)
 	arm_smmu_attach_commit_vmaster(state);
 
 	if (state->ats_enabled && !master->ats_enabled) {
-		arm_smmu_enable_ats(master);
+		if (arm_smmu_enable_ats(master))
+			state->ats_enabled = false;
 	} else if (state->ats_enabled && master->ats_enabled) {
 		/*
 		 * The translation has changed, flush the ATC. At this point the
