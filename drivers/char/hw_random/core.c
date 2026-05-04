@@ -418,21 +418,21 @@ static ssize_t rng_available_show(struct device *dev,
 				  struct device_attribute *attr,
 				  char *buf)
 {
+	int len = 0;
 	int err;
 	struct hwrng *rng;
 
 	err = mutex_lock_interruptible(&rng_mutex);
 	if (err)
 		return -ERESTARTSYS;
-	buf[0] = '\0';
-	list_for_each_entry(rng, &rng_list, list) {
-		strlcat(buf, rng->name, PAGE_SIZE);
-		strlcat(buf, " ", PAGE_SIZE);
-	}
-	strlcat(buf, "none\n", PAGE_SIZE);
+
+	list_for_each_entry(rng, &rng_list, list)
+		len += sysfs_emit_at(buf, len, "%s ", rng->name);
+	len += sysfs_emit_at(buf, len, "none\n");
+
 	mutex_unlock(&rng_mutex);
 
-	return strlen(buf);
+	return len;
 }
 
 static ssize_t rng_selected_show(struct device *dev,
