@@ -8,6 +8,7 @@
  */
 #include "builtin.h"
 
+#include "util/aslr.h"
 #include "util/color.h"
 #include "util/dso.h"
 #include "util/vdso.h"
@@ -123,6 +124,7 @@ struct perf_inject {
 	bool			in_place_update_dry_run;
 	bool			copy_kcore_dir;
 	bool			convert_callchain;
+	bool			aslr;
 	const char		*input_name;
 	struct perf_data	output;
 	u64			bytes_written;
@@ -302,6 +304,29 @@ static int perf_event__repipe(const struct perf_tool *tool,
 			      struct machine *machine __maybe_unused)
 {
 	return perf_event__repipe_synth(tool, event);
+}
+
+/**
+ * perf_event__aslr_repipe - Wrapper to scrub synthesized pipe attributes.
+ * @tool: The original &inject.tool pointer.
+ * @event: The synthesized perf_event record.
+ *
+ * Synthesized attributes for pipes bypass the main event stream tool hooks.
+ * This wrapper intercepts them during pipe header generation to clear unprivileged
+ * breakpoint addresses (bp_addr). It forwards execution using the original tool
+ * context pointer to ensure container_of(&inject.tool) evaluation inside the
+ * downstream repipe stubs remains valid and does not cause structure corruptions.
+ */
+static int perf_event__aslr_repipe(const struct perf_tool *tool,
+				   union perf_event *event,
+				   struct perf_sample *sample,
+				   struct machine *machine)
+{
+	if (event->header.type == PERF_RECORD_HEADER_ATTR &&
+	    event->attr.attr.type == PERF_TYPE_BREAKPOINT) {
+		event->attr.attr.bp_addr = 0;
+	}
+	return perf_event__repipe(tool, event, sample, machine);
 }
 
 static int perf_event__drop(const struct perf_tool *tool __maybe_unused,
@@ -2458,6 +2483,15 @@ static int __cmd_inject(struct perf_inject *inject)
 			}
 		}
 
+		if (inject->aslr) {
+			struct evsel *evsel;
+
+			evlist__for_each_entry(session->evlist, evsel) {
+				if (evsel->core.attr.type == PERF_TYPE_BREAKPOINT)
+					evsel->core.attr.bp_addr = 0;
+			}
+		}
+
 		session->header.data_offset = output_data_offset;
 		session->header.data_size = inject->bytes_written;
 		perf_session__inject_header(session, session->evlist, fd, &inj_fc.fc,
@@ -2564,6 +2598,8 @@ int cmd_inject(int argc, const char **argv)
 			   " instance has a subdir"),
 		OPT_BOOLEAN(0, "convert-callchain", &inject.convert_callchain,
 			    "Generate callchains using DWARF and drop register/stack data"),
+		OPT_BOOLEAN(0, "aslr", &inject.aslr,
+			    "Remap virtual memory addresses similar to ASLR"),
 		OPT_END()
 	};
 	const char * const inject_usage[] = {
@@ -2571,6 +2607,7 @@ int cmd_inject(int argc, const char **argv)
 		NULL
 	};
 	bool ordered_events;
+	struct perf_tool *tool = &inject.tool;
 
 	if (!inject.itrace_synth_opts.set) {
 		/* Disable eager loading of kernel symbols that adds overhead to perf inject. */
@@ -2684,12 +2721,21 @@ int cmd_inject(int argc, const char **argv)
 	inject.tool.schedstat_domain	= perf_event__repipe_op2_synth;
 	inject.tool.dont_split_sample_group = true;
 	inject.tool.merge_deferred_callchains = false;
-	inject.session = __perf_session__new(&data, &inject.tool,
+	if (inject.aslr) {
+		tool = aslr_tool__new(&inject.tool);
+		if (!tool) {
+			ret = -ENOMEM;
+			goto out_close_output;
+		}
+	}
+	inject.session = __perf_session__new(&data, tool,
 					     /*trace_event_repipe=*/inject.output.is_pipe,
 					     /*host_env=*/NULL);
 
 	if (IS_ERR(inject.session)) {
 		ret = PTR_ERR(inject.session);
+		if (inject.aslr)
+			aslr_tool__delete(tool);
 		goto out_close_output;
 	}
 
@@ -2717,6 +2763,8 @@ int cmd_inject(int argc, const char **argv)
 			ret = perf_event__synthesize_for_pipe(&inject.tool,
 							      inject.session,
 							      &inject.output,
+							      inject.aslr ?
+							      perf_event__aslr_repipe :
 							      perf_event__repipe);
 			if (ret < 0)
 				goto out_delete;
@@ -2789,6 +2837,8 @@ out_delete:
 	strlist__delete(inject.known_build_ids);
 	zstd_fini(&(inject.session->zstd_data));
 	perf_session__delete(inject.session);
+	if (inject.aslr)
+		aslr_tool__delete(tool);
 out_close_output:
 	if (!inject.in_place_update)
 		perf_data__close(&inject.output);
