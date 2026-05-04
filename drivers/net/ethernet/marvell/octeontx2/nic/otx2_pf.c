@@ -1651,6 +1651,9 @@ int otx2_init_hw_resources(struct otx2_nic *pf)
 	if (!is_otx2_lbkvf(pf->pdev))
 		otx2_nix_config_bp(pf, true);
 
+	if (is_cn20k(pf->pdev))
+		cn20k_npa_alloc_dpc(pf);
+
 	/* Init Auras and pools used by NIX RQ, for free buffer ptrs */
 	err = otx2_rq_aura_pool_init(pf);
 	if (err) {
@@ -1726,6 +1729,8 @@ err_free_rq_ptrs:
 	otx2_ctx_disable(mbox, NPA_AQ_CTYPE_AURA, true);
 	otx2_aura_pool_free(pf);
 err_free_nix_lf:
+	if (pf->npa_dpc_valid)
+		cn20k_npa_free_dpc(pf);
 	mutex_lock(&mbox->lock);
 	free_req = otx2_mbox_alloc_msg_nix_lf_free(mbox);
 	if (free_req) {
@@ -1789,6 +1794,9 @@ void otx2_free_hw_resources(struct otx2_nic *pf)
 	otx2_free_pending_sqe(pf);
 
 	otx2_free_sq_res(pf);
+
+	if (is_cn20k(pf->pdev))
+		cn20k_npa_free_dpc(pf);
 
 	/* Free RQ buffer pointers*/
 	otx2_free_aura_ptr(pf, AURA_NIX_RQ);
