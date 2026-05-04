@@ -53,15 +53,13 @@ static ssize_t proc_bus_pci_read(struct file *file, char __user *buf,
 		nbytes = size - pos;
 	cnt = nbytes;
 
-	if (!access_ok(buf, cnt))
-		return -EINVAL;
-
 	pci_config_pm_runtime_get(dev);
 
 	if ((pos & 1) && cnt) {
 		unsigned char val;
 		pci_user_read_config_byte(dev, pos, &val);
-		__put_user(val, buf);
+		if (put_user(val, buf))
+			goto err;
 		buf++;
 		pos++;
 		cnt--;
@@ -70,7 +68,8 @@ static ssize_t proc_bus_pci_read(struct file *file, char __user *buf,
 	if ((pos & 3) && cnt > 2) {
 		unsigned short val;
 		pci_user_read_config_word(dev, pos, &val);
-		__put_user(cpu_to_le16(val), (__le16 __user *) buf);
+		if (put_user(cpu_to_le16(val), (__le16 __user *) buf))
+			goto err;
 		buf += 2;
 		pos += 2;
 		cnt -= 2;
@@ -79,7 +78,8 @@ static ssize_t proc_bus_pci_read(struct file *file, char __user *buf,
 	while (cnt >= 4) {
 		unsigned int val;
 		pci_user_read_config_dword(dev, pos, &val);
-		__put_user(cpu_to_le32(val), (__le32 __user *) buf);
+		if (put_user(cpu_to_le32(val), (__le32 __user *) buf))
+			goto err;
 		buf += 4;
 		pos += 4;
 		cnt -= 4;
@@ -89,7 +89,8 @@ static ssize_t proc_bus_pci_read(struct file *file, char __user *buf,
 	if (cnt >= 2) {
 		unsigned short val;
 		pci_user_read_config_word(dev, pos, &val);
-		__put_user(cpu_to_le16(val), (__le16 __user *) buf);
+		if (put_user(cpu_to_le16(val), (__le16 __user *) buf))
+			goto err;
 		buf += 2;
 		pos += 2;
 		cnt -= 2;
@@ -98,7 +99,8 @@ static ssize_t proc_bus_pci_read(struct file *file, char __user *buf,
 	if (cnt) {
 		unsigned char val;
 		pci_user_read_config_byte(dev, pos, &val);
-		__put_user(val, buf);
+		if (put_user(val, buf))
+			goto err;
 		pos++;
 	}
 
@@ -106,6 +108,10 @@ static ssize_t proc_bus_pci_read(struct file *file, char __user *buf,
 
 	*ppos = pos;
 	return nbytes;
+
+err:
+	pci_config_pm_runtime_put(dev);
+	return -EFAULT;
 }
 
 static ssize_t proc_bus_pci_write(struct file *file, const char __user *buf,
@@ -129,14 +135,12 @@ static ssize_t proc_bus_pci_write(struct file *file, const char __user *buf,
 		nbytes = size - pos;
 	cnt = nbytes;
 
-	if (!access_ok(buf, cnt))
-		return -EINVAL;
-
 	pci_config_pm_runtime_get(dev);
 
 	if ((pos & 1) && cnt) {
 		unsigned char val;
-		__get_user(val, buf);
+		if (get_user(val, buf))
+			goto err;
 		pci_user_write_config_byte(dev, pos, val);
 		buf++;
 		pos++;
@@ -145,7 +149,8 @@ static ssize_t proc_bus_pci_write(struct file *file, const char __user *buf,
 
 	if ((pos & 3) && cnt > 2) {
 		__le16 val;
-		__get_user(val, (__le16 __user *) buf);
+		if (get_user(val, (__le16 __user *) buf))
+			goto err;
 		pci_user_write_config_word(dev, pos, le16_to_cpu(val));
 		buf += 2;
 		pos += 2;
@@ -154,7 +159,8 @@ static ssize_t proc_bus_pci_write(struct file *file, const char __user *buf,
 
 	while (cnt >= 4) {
 		__le32 val;
-		__get_user(val, (__le32 __user *) buf);
+		if (get_user(val, (__le32 __user *) buf))
+			goto err;
 		pci_user_write_config_dword(dev, pos, le32_to_cpu(val));
 		buf += 4;
 		pos += 4;
@@ -163,7 +169,8 @@ static ssize_t proc_bus_pci_write(struct file *file, const char __user *buf,
 
 	if (cnt >= 2) {
 		__le16 val;
-		__get_user(val, (__le16 __user *) buf);
+		if (get_user(val, (__le16 __user *) buf))
+			goto err;
 		pci_user_write_config_word(dev, pos, le16_to_cpu(val));
 		buf += 2;
 		pos += 2;
@@ -172,7 +179,8 @@ static ssize_t proc_bus_pci_write(struct file *file, const char __user *buf,
 
 	if (cnt) {
 		unsigned char val;
-		__get_user(val, buf);
+		if (get_user(val, buf))
+			goto err;
 		pci_user_write_config_byte(dev, pos, val);
 		pos++;
 	}
@@ -182,6 +190,10 @@ static ssize_t proc_bus_pci_write(struct file *file, const char __user *buf,
 	*ppos = pos;
 	i_size_write(ino, dev->cfg_size);
 	return nbytes;
+
+err:
+	pci_config_pm_runtime_put(dev);
+	return -EFAULT;
 }
 
 #ifdef HAVE_PCI_MMAP
