@@ -4,6 +4,8 @@
 //!
 //! C header: [`include/asm-generic/io.h`](srctree/include/asm-generic/io.h)
 
+use core::num::TryFromIntError;
+
 use crate::{
     bindings,
     prelude::*, //
@@ -21,9 +23,48 @@ use register::LocatedRegister;
 
 /// Physical address type.
 ///
-/// This is a type alias to either `u32` or `u64` depending on the config option
+/// This is a transparent wrapper around either `u32` or `u64` depending on the config option
 /// `CONFIG_PHYS_ADDR_T_64BIT`, and it can be a u64 even on 32-bit architectures.
-pub type PhysAddr = bindings::phys_addr_t;
+///
+/// # Examples
+///
+/// ```
+/// use kernel::{bindings, io::PhysAddr};
+///
+/// let raw: bindings::phys_addr_t = 0x1000;
+/// let paddr = PhysAddr::from(raw);
+/// let raw2: bindings::phys_addr_t = paddr.into();
+/// assert_eq!(raw, raw2);
+///
+/// let size = usize::try_from(paddr).unwrap();
+/// assert_eq!(size, 0x1000);
+/// ```
+#[repr(transparent)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub struct PhysAddr(bindings::phys_addr_t);
+
+impl From<bindings::phys_addr_t> for PhysAddr {
+    #[inline]
+    fn from(value: bindings::phys_addr_t) -> Self {
+        Self(value)
+    }
+}
+
+impl From<PhysAddr> for bindings::phys_addr_t {
+    #[inline]
+    fn from(value: PhysAddr) -> Self {
+        value.0
+    }
+}
+
+impl TryFrom<PhysAddr> for usize {
+    type Error = TryFromIntError;
+
+    #[inline]
+    fn try_from(value: PhysAddr) -> Result<Self, Self::Error> {
+        usize::try_from(value.0)
+    }
+}
 
 /// Resource Size type.
 ///
@@ -101,10 +142,10 @@ impl<const SIZE: usize> MmioRaw<SIZE> {
 ///     ///
 ///     /// [`paddr`, `paddr` + `SIZE`) must be a valid MMIO region that is mappable into the CPUs
 ///     /// virtual address space.
-///     unsafe fn new(paddr: usize) -> Result<Self>{
+///     unsafe fn new(paddr: PhysAddr) -> Result<Self>{
 ///         // SAFETY: By the safety requirements of this function [`paddr`, `paddr` + `SIZE`) is
 ///         // valid for `ioremap`.
-///         let addr = unsafe { bindings::ioremap(paddr as PhysAddr, SIZE) };
+///         let addr = unsafe { bindings::ioremap(paddr.into(), SIZE) };
 ///         if addr.is_null() {
 ///             return Err(ENOMEM);
 ///         }
@@ -131,7 +172,8 @@ impl<const SIZE: usize> MmioRaw<SIZE> {
 ///
 ///# fn no_run() -> Result<(), Error> {
 /// // SAFETY: Invalid usage for example purposes.
-/// let iomem = unsafe { IoMem::<{ core::mem::size_of::<u32>() }>::new(0xBAAAAAAD)? };
+/// let addr = PhysAddr::from(0xBAAAAAAD as bindings::phys_addr_t);
+/// let iomem = unsafe { IoMem::<{ core::mem::size_of::<u32>() }>::new(addr)? };
 /// iomem.write32(0x42, 0x0);
 /// assert!(iomem.try_write32(0x42, 0x0).is_ok());
 /// assert!(iomem.try_write32(0x42, 0x4).is_err());
