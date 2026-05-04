@@ -7,12 +7,13 @@
  */
 
 #include <linux/acpi.h>
-#include <linux/acpi_mdio.h>
 #include <linux/bits.h>
 #include <linux/dev_printk.h>
 #include <linux/fwnode_mdio.h>
 #include <linux/module.h>
 #include <linux/types.h>
+
+#include "mdio.h"
 
 MODULE_AUTHOR("Calvin Johnson <calvin.johnson@oss.nxp.com>");
 MODULE_LICENSE("GPL");
