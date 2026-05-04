@@ -38,6 +38,7 @@
 #include <linux/unaligned.h>
 #include <net/gso.h>
 #include <net/gtp.h>
+#include <net/icmp.h>
 
 #define SEG6_F_ATTR(i)		BIT(i)
 
@@ -52,6 +53,11 @@ struct seg6_local_lwtunnel_ops {
 
 struct seg6_action_desc {
 	int action;
+	/* Address family of the FIB hook the route is installed on.
+	 * Defaults to AF_INET6 when 0; entries that run on IPv4 routes
+	 * (currently only H.M.GTP4.D) set this to AF_INET explicitly.
+	 */
+	int input_family;
 	unsigned long attrs;
 
 	/* The optattrs field is used for specifying all the optional
@@ -2788,6 +2794,342 @@ drop:
 	return -EINVAL;
 }
 
+/* Overlay @v4 into @addr right after a @v6_src_prefix_len-bit prefix
+ * (default /64), per RFC 9433 Section 6.6 Figure 10.
+ */
+static void seg6_mobile_overlay_v4(struct in6_addr *addr, u8 v4_mask_len,
+				   u8 v6_src_prefix_len, __be32 v4)
+{
+	u8 p_bits = v6_src_prefix_len ? : SEG6_MOBILE_V6_SRC_PREFIX_LEN_DEFAULT;
+	u8 sa_bits = min_t(u8, v4_mask_len, 32);
+	u64 v4_left;
+
+	if (!sa_bits || (unsigned int)p_bits + sa_bits > 128)
+		return;
+
+	v4_left = (u64)ntohl(v4) << 32;
+	seg6_mobile_addr_set_bits(addr->s6_addr, p_bits, sa_bits, v4_left);
+}
+
+/* Encode the IPv4 DA and Args.Mob.Session into @sid right after a
+ * @prefix_bits-bit locator, per RFC 9433 Section 6.7 Figure 11.
+ */
+static int seg6_mobile_fill_egress_sid(struct in6_addr *sid,
+				       unsigned int prefix_bits,
+				       u8 v4_mask_len, __be32 v4, u64 args)
+{
+	u8 sa_bits = min_t(u8, v4_mask_len, 32);
+	u64 v4_left;
+
+	if (prefix_bits + sa_bits + SEG6_MOBILE_ARGS_MOB_LEN > 128)
+		return -EINVAL;
+
+	if (sa_bits) {
+		v4_left = (u64)ntohl(v4) << 32;
+		seg6_mobile_addr_set_bits(sid->s6_addr, prefix_bits, sa_bits,
+					  v4_left);
+	}
+
+	seg6_mobile_addr_set_bits(sid->s6_addr, prefix_bits + sa_bits,
+				  SEG6_MOBILE_ARGS_MOB_LEN, args);
+	return 0;
+}
+
+/* Per-skb context preserved across the NF_INET_PRE_ROUTING hook on
+ * the inner T-PDU exposed by H.M.GTP4.D.  The inbound IPv4 outer is
+ * gone by the time the finish half runs, but the new SRv6 outer
+ * still needs the constructed End.M.GTP4.E SID and the source IPv6
+ * address (both derived from the IPv4 outer, the SID, and TEID/QFI).
+ */
+struct seg6_mobile_h_gtp4_d_cb {
+	struct in6_addr	new_da;
+	struct in6_addr	new_sa;
+	u8		outer_tclass;
+};
+
+#define SEG6_MOBILE_H_GTP4_D_CB(skb)	\
+	((struct seg6_mobile_h_gtp4_d_cb *)((skb)->cb))
+
+static int input_action_h_m_gtp4_d_finish(struct net *net,
+					  struct sock *sk,
+					  struct sk_buff *skb)
+{
+	struct seg6_mobile_h_gtp4_d_cb cb = *SEG6_MOBILE_H_GTP4_D_CB(skb);
+	struct dst_entry *orig_dst = skb_dst(skb);
+	enum skb_drop_reason reason = SKB_DROP_REASON_SEG6_MOBILE_NOMEM;
+	struct seg6_local_lwt *slwt;
+	struct ipv6_sr_hdr *new_srh;
+	struct ipv6hdr *new_ip6h;
+	int inner_proto;
+	int err;
+
+	slwt = seg6_local_lwtunnel(orig_dst->lwtstate);
+
+	inner_proto = (skb->protocol == htons(ETH_P_IP)) ? IPPROTO_IPIP
+							 : IPPROTO_IPV6;
+
+	if (slwt->srh) {
+		struct ipv6hdr *outer_ip6h;
+
+		/* Multi-segment SR Policy: prepend ipv6 + SRH and
+		 * overwrite the last segment with the constructed
+		 * End.M.GTP4.E SID.
+		 */
+		err = seg6_do_srh_encap(skb, slwt->srh, inner_proto);
+		if (err) {
+			if (err != -ENOMEM)
+				reason = SKB_DROP_REASON_SEG6_MOBILE_BAD_INNER;
+			goto drop;
+		}
+
+		skb->protocol = htons(ETH_P_IPV6);
+
+		new_srh = (struct ipv6_sr_hdr *)(skb_network_header(skb) +
+						 sizeof(struct ipv6hdr));
+		new_srh->segments[0] = cb.new_da;
+
+		/* seg6_do_srh_encap() zeroes the outer Traffic Class for
+		 * IPv4 inners.  Overwrite it with the RFC 6040 normal-mode
+		 * value computed at the input half so the SR domain sees
+		 * the inner DSCP/ECN.
+		 */
+		outer_ip6h = ipv6_hdr(skb);
+		ipv6_change_dsfield(outer_ip6h, 0, cb.outer_tclass);
+
+		/* seg6_do_srh_encap() sets the outer daddr from
+		 * segments[first_segment].  When first_segment == 0 the
+		 * write above replaced that slot's content, so the outer
+		 * daddr would still point at the user-provided segment
+		 * value rather than the constructed End.M.GTP4.E SID.
+		 * Re-read from segments[first_segment] after the write
+		 * for correctness in that case (no-op when
+		 * first_segment > 0).
+		 */
+		ipv6_hdr(skb)->daddr =
+			new_srh->segments[new_srh->first_segment];
+		ipv6_hdr(skb)->saddr = cb.new_sa;
+
+		skb_set_transport_header(skb, sizeof(struct ipv6hdr));
+	} else {
+		/* Single-segment encap (no SRH): RFC 8754 Section 4.1
+		 * allows omitting the SRH when there is exactly one
+		 * segment.
+		 */
+		if (skb_cow_head(skb, sizeof(*new_ip6h)))
+			goto drop;
+
+		new_ip6h = skb_push(skb, sizeof(*new_ip6h));
+		skb_reset_network_header(skb);
+		memset(new_ip6h, 0, sizeof(*new_ip6h));
+		/* RFC 6040 normal-mode propagation of inner DSCP/ECN. */
+		ip6_flow_hdr(new_ip6h, cb.outer_tclass, 0);
+		new_ip6h->payload_len = htons(skb->len - sizeof(*new_ip6h));
+		new_ip6h->nexthdr = inner_proto;
+		new_ip6h->hop_limit = IPV6_DEFAULT_HOPLIMIT;
+		new_ip6h->saddr = cb.new_sa;
+		new_ip6h->daddr = cb.new_da;
+		skb->protocol = htons(ETH_P_IPV6);
+		skb_set_transport_header(skb, sizeof(*new_ip6h));
+	}
+
+	nf_reset_ct(skb);
+	skb_dst_drop(skb);
+
+	seg6_lookup_any_nexthop(skb, NULL, 0, false, slwt->oif);
+	return dst_input(skb);
+
+drop:
+	kfree_skb_reason(skb, reason);
+	return -EINVAL;
+}
+
+static int input_action_h_m_gtp4_d(struct sk_buff *skb,
+				   struct seg6_local_lwt *slwt)
+{
+	unsigned int outer_len, inner_off;
+	struct in6_addr new_da, new_sa;
+	struct seg6_mobile_h_gtp4_d_cb *cb;
+	int gtp_hdrlen;
+	__be32 v4_da, v4_sa;
+	struct iphdr *ip4h;
+	__be16 frag_off;
+	struct udphdr *uh;
+	int inner_nfproto;
+	u8 inner_first;
+	u8 inner_dsfield;
+	u8 inner_proto;
+	u64 args_mob;
+	u32 teid;
+	int ihl;
+	u8 qfi;
+	const struct seg6_mobile_info *minfo = &slwt->mobile_info;
+	enum skb_drop_reason reason = SKB_DROP_REASON_SEG6_MOBILE_BAD_GTPU;
+
+	BUILD_BUG_ON(sizeof(struct seg6_mobile_h_gtp4_d_cb) >
+		     sizeof_field(struct sk_buff, cb));
+
+	if (!pskb_may_pull(skb, sizeof(*ip4h))) {
+		reason = SKB_DROP_REASON_SEG6_MOBILE_BAD_INNER;
+		goto drop;
+	}
+
+	ip4h = ip_hdr(skb);
+	if (ip4h->protocol != IPPROTO_UDP) {
+		reason = SKB_DROP_REASON_SEG6_MOBILE_BAD_INNER;
+		goto drop;
+	}
+
+	/* ip_rcv_core() rejects ihl < 5, but enforce it here too so the
+	 * lwtunnel is self-contained against future callers that bypass
+	 * the IPv4 receive entry path.
+	 */
+	if (ip4h->ihl < 5) {
+		reason = SKB_DROP_REASON_SEG6_MOBILE_BAD_INNER;
+		goto drop;
+	}
+
+	ihl = ip4h->ihl * 4;
+	if (!pskb_may_pull(skb, ihl + sizeof(*uh))) {
+		reason = SKB_DROP_REASON_SEG6_MOBILE_BAD_GTPU;
+		goto drop;
+	}
+
+	ip4h = ip_hdr(skb);
+	uh = (struct udphdr *)((u8 *)ip4h + ihl);
+	if (uh->dest != htons(GTP1U_PORT))
+		goto drop;
+
+	/* Snapshot the outer IPv4 fields before seg6_mobile_parse_gtpu(),
+	 * whose internal pskb_may_pull() calls may reallocate skb->head
+	 * and invalidate ip4h.
+	 */
+	v4_da = ip4h->daddr;
+	v4_sa = ip4h->saddr;
+	frag_off = ip4h->frag_off;
+	inner_dsfield = ipv4_get_dsfield(ip4h);
+
+	gtp_hdrlen = seg6_mobile_parse_gtpu(skb, ihl + sizeof(*uh),
+					    &teid, &qfi);
+	if (gtp_hdrlen == -EOPNOTSUPP)
+		return seg6_mobile_passthrough_non_tpdu(skb);
+	if (gtp_hdrlen < 0)
+		goto drop;
+
+	args_mob = seg6_mobile_args_from_teid_qfi(teid, qfi);
+
+	new_da = slwt->nh6;
+	if (seg6_mobile_fill_egress_sid(&new_da, minfo->sr_prefix_len,
+					minfo->v4_mask_len, v4_da, args_mob)) {
+		reason = SKB_DROP_REASON_SEG6_MOBILE_BAD_SID;
+		goto drop;
+	}
+
+	new_sa = minfo->src_addr;
+	seg6_mobile_overlay_v4(&new_sa, minfo->v4_mask_len, minfo->v6_src_prefix_len,
+			       v4_sa);
+
+	outer_len = ihl + sizeof(*uh) + gtp_hdrlen;
+	if (!pskb_may_pull(skb, outer_len + 1)) {
+		reason = SKB_DROP_REASON_SEG6_MOBILE_BAD_INNER;
+		goto drop;
+	}
+
+	inner_off = outer_len;
+	inner_first = *((u8 *)skb->data + inner_off);
+	switch (inner_first >> 4) {
+	case 4:
+		inner_proto = IPPROTO_IPIP;
+		inner_nfproto = NFPROTO_IPV4;
+		break;
+	case 6:
+		inner_proto = IPPROTO_IPV6;
+		inner_nfproto = NFPROTO_IPV6;
+		break;
+	default:
+		reason = SKB_DROP_REASON_SEG6_MOBILE_BAD_INNER;
+		goto drop;
+	}
+
+	/* PMTU: H.M.GTP4.D strips IPv4/UDP/GTP-U (>=36 B) and prepends
+	 * IPv6 + (optional) SRH (40 B base + segments).  Net delta can
+	 * be positive (encap grows) when the SR Policy has multiple
+	 * segments or when GTP-U was a short header.  Reject and
+	 * inform the source via ICMP_DEST_UNREACH/FRAG_NEEDED if the
+	 * result would not fit.
+	 */
+	{
+		unsigned int srh_len = slwt->srh ?
+			((slwt->srh->hdrlen + 1) << 3) : 0;
+		unsigned int new_outer = sizeof(struct ipv6hdr) + srh_len;
+		unsigned int post_encap = skb->len - outer_len + new_outer;
+		unsigned int mtu = dst_mtu(skb_dst(skb));
+		/* Compute the upstream-equivalent MTU as a signed delta:
+		 * IPv4 options can make outer_len > new_outer, in which
+		 * case unsigned subtraction would wrap.  All values fit
+		 * comfortably in int (mtu <= 64K, outer_len <= ~84,
+		 * new_outer <= ~2 KiB).
+		 */
+		int upstream_mtu = (int)mtu + (int)outer_len - (int)new_outer;
+
+		if (mtu && post_encap > mtu) {
+			if (frag_off & htons(IP_DF)) {
+				icmp_ndo_send(skb, ICMP_DEST_UNREACH,
+					      ICMP_FRAG_NEEDED,
+					      htonl(upstream_mtu > 0 ?
+						    upstream_mtu : 0));
+			}
+			reason = SKB_DROP_REASON_SEG6_MOBILE_MTU_EXCEEDED;
+			goto drop;
+		}
+
+		if (skb_is_gso(skb) && mtu &&
+		    (upstream_mtu <= 0 ||
+		     !skb_gso_validate_network_len(skb, upstream_mtu))) {
+			reason = SKB_DROP_REASON_SEG6_MOBILE_MTU_EXCEEDED;
+			goto drop;
+		}
+	}
+
+	if (!pskb_may_pull(skb, outer_len +
+			   ((inner_proto == IPPROTO_IPIP) ?
+			    sizeof(struct iphdr) : sizeof(struct ipv6hdr)))) {
+		reason = SKB_DROP_REASON_SEG6_MOBILE_BAD_INNER;
+		goto drop;
+	}
+
+	skb_pull_rcsum(skb, outer_len);
+	skb_reset_network_header(skb);
+
+	skb->protocol = (inner_proto == IPPROTO_IPIP) ? htons(ETH_P_IP)
+						      : htons(ETH_P_IPV6);
+
+	skb_set_transport_header(skb,
+				 (inner_proto == IPPROTO_IPIP) ?
+				 sizeof(struct iphdr) :
+				 sizeof(struct ipv6hdr));
+	nf_reset_ct(skb);
+
+	cb = SEG6_MOBILE_H_GTP4_D_CB(skb);
+	cb->new_da = new_da;
+	cb->new_sa = new_sa;
+	/* RFC 6040 normal-mode propagation: copy the outer IPv4 (incoming
+	 * GTP-U envelope) DSCP+ECN verbatim into the new outer IPv6
+	 * Traffic Class.
+	 */
+	cb->outer_tclass = inner_dsfield;
+
+	if (static_branch_unlikely(&nf_hooks_lwtunnel_enabled))
+		return NF_HOOK(inner_nfproto, NF_INET_PRE_ROUTING,
+			       dev_net(skb->dev), NULL, skb, skb->dev,
+			       NULL, input_action_h_m_gtp4_d_finish);
+
+	return input_action_h_m_gtp4_d_finish(dev_net(skb->dev), NULL, skb);
+
+drop:
+	kfree_skb_reason(skb, reason);
+	return -EINVAL;
+}
+
 /* RFC 9433 Section 6.5 -- End.M.GTP6.E
  * Receives an SRv6 packet whose current SID is an End.M.GTP6.E SID
  * (Segments Left == 1) and re-encapsulates the inner payload in
@@ -3136,6 +3478,22 @@ static struct seg6_action_desc seg6_action_table[] = {
 		},
 	},
 	{
+		.action		= SEG6_LOCAL_ACTION_H_M_GTP4_D,
+		.input_family	= AF_INET,
+		.attrs		= SEG6_F_ATTR(SEG6_LOCAL_NH6)		     |
+				  SEG6_F_ATTR(SEG6_LOCAL_MOBILE_SRC_ADDR)    |
+				  SEG6_F_ATTR(SEG6_LOCAL_MOBILE_V4_MASK_LEN) |
+				  SEG6_F_ATTR(SEG6_LOCAL_MOBILE_SR_PREFIX_LEN),
+		.optattrs	= SEG6_F_LOCAL_COUNTERS |
+				  SEG6_F_ATTR(SEG6_LOCAL_SRH) |
+				  SEG6_F_ATTR(SEG6_LOCAL_MOBILE_V6_SRC_PREFIX_LEN) |
+				  SEG6_F_ATTR(SEG6_LOCAL_OIF),
+		.input		= input_action_h_m_gtp4_d,
+		.slwt_ops	= {
+			.build_state = seg6_mobile_v4_validate,
+		},
+	},
+	{
 		.action		= SEG6_LOCAL_ACTION_END_MAP,
 		.attrs		= SEG6_F_ATTR(SEG6_LOCAL_NH6),
 		.optattrs	= SEG6_F_LOCAL_COUNTERS,
@@ -3206,13 +3564,22 @@ static int seg6_local_input_core(struct net *net, struct sock *sk,
 
 static int seg6_local_input(struct sk_buff *skb)
 {
-	if (skb->protocol != htons(ETH_P_IPV6)) {
+	int nfproto;
+
+	switch (skb->protocol) {
+	case htons(ETH_P_IPV6):
+		nfproto = NFPROTO_IPV6;
+		break;
+	case htons(ETH_P_IP):
+		nfproto = NFPROTO_IPV4;
+		break;
+	default:
 		kfree_skb(skb);
 		return -EINVAL;
 	}
 
 	if (static_branch_unlikely(&nf_hooks_lwtunnel_enabled))
-		return NF_HOOK(NFPROTO_IPV6, NF_INET_LOCAL_IN,
+		return NF_HOOK(nfproto, NF_INET_LOCAL_IN,
 			       dev_net(skb->dev), NULL, skb, skb->dev, NULL,
 			       seg6_local_input_core);
 
@@ -3625,6 +3992,44 @@ static int seg6_mobile_v4_validate(struct seg6_local_lwt *slwt,
 				   "SRv6 Mobile v6_src_prefix_len must leave room for the 32-bit IPv4 source template (prefix_len <= 96)");
 		return -EINVAL;
 	}
+
+	/* H.M.GTP4.D constructs an End.M.GTP4.E SID at egress time whose
+	 * layout (RFC 9433 Section 6.7 / 6.6 Figure 9) is
+	 *   locator (sr_prefix_len) | IPv4 DA (v4_mask_len) | Args.Mob.Session (40)
+	 * so the three lengths together must fit in 128 bits.  End.M.GTP4.E
+	 * leaves sr_prefix_len at 0 (the attribute is not in its action_table
+	 * entry), so this check is a no-op for End.M.GTP4.E.
+	 */
+	if (minfo->sr_prefix_len &&
+	    (unsigned int)minfo->sr_prefix_len + (unsigned int)minfo->v4_mask_len +
+	    SEG6_MOBILE_ARGS_MOB_LEN > 128) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "SRv6 Mobile sr_prefix_len + v4_mask_len + 40 (Args.Mob.Session) must not exceed 128");
+		return -EINVAL;
+	}
+
+	/* End.M.GTP4.E SID layout (RFC 9433 Section 6.6 Figure 10):
+	 *   locator (route prefix) | IPv4 DA (v4_mask_len) | Args.Mob.Session (40) | pad
+	 *
+	 * The locator length comes from the IPv6 route's destination prefix
+	 * length, not from sr_prefix_len.  Only End.M.GTP4.E (AF_INET6 route)
+	 * needs this check; H.M.GTP4.D requires sr_prefix_len so this branch
+	 * is unreachable for it.  Gate on input_family so the @cfg cast to
+	 * struct fib6_config * is type-correct.
+	 */
+	if (!minfo->sr_prefix_len &&
+	    (slwt->desc->input_family ? : AF_INET6) == AF_INET6) {
+		const struct fib6_config *fib6_cfg = cfg;
+
+		if ((unsigned int)fib6_cfg->fc_dst_len +
+		    (unsigned int)minfo->v4_mask_len +
+		    SEG6_MOBILE_ARGS_MOB_LEN > 128) {
+			NL_SET_ERR_MSG_MOD(extack,
+					   "End.M.GTP4.E route prefix length + v4_mask_len + 40 (Args.Mob.Session) must not exceed 128");
+			return -EINVAL;
+		}
+	}
+
 	return 0;
 }
 
@@ -4323,7 +4728,7 @@ static int seg6_local_build_state(struct net *net, struct nlattr *nla,
 	struct seg6_local_lwt *slwt;
 	int err;
 
-	if (family != AF_INET6)
+	if (family != AF_INET6 && family != AF_INET)
 		return -EINVAL;
 
 	err = nla_parse_nested_deprecated(tb, SEG6_LOCAL_MAX, nla,
@@ -4345,6 +4750,17 @@ static int seg6_local_build_state(struct net *net, struct nlattr *nla,
 	err = parse_nla_action(tb, slwt, extack);
 	if (err < 0)
 		goto out_free;
+
+	/* Reject behaviors that are not registered for the route family
+	 * the lwtunnel is being installed on.  input_family defaults to
+	 * AF_INET6; H.M.GTP4.D is the only AF_INET behavior.
+	 */
+	if ((slwt->desc->input_family ? : AF_INET6) != family) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "seg6local action does not support this address family");
+		err = -EINVAL;
+		goto out_destroy_attrs;
+	}
 
 	err = seg6_local_lwtunnel_build_state(slwt, cfg, extack);
 	if (err < 0)
