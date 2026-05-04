@@ -850,9 +850,8 @@
 				#size-cells = <1>;
 				reg = <0x020e4000 0x4000>;
 
-				lvds_bridge: bridge@18 {
+				lvds_bridge: bridge {
 					compatible = "fsl,imx6sx-ldb";
-					reg = <0x18 0x4>;
 					clocks = <&clks IMX6SX_CLK_LDB_DI0>;
 					clock-names = "ldb";
 					status = "disabled";
