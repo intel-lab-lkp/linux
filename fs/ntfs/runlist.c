@@ -2058,8 +2058,12 @@ struct runlist_element *ntfs_rl_collapse_range(struct runlist_element *dst_rl, i
 	merge_cnt = 0;
 	i = new_1st_cnt == 0 ? 1 : new_1st_cnt;
 	if (ntfs_rle_lcn_contiguous(&new_rl[i - 1], &new_rl[i])) {
-		/* Merge right and left */
-		s_rl =  &new_rl[new_1st_cnt - 1];
+		/* Merge right and left.
+		 *
+		 * Use the clamped @i; new_1st_cnt - 1 would index
+		 * new_rl[-1] when @new_1st_cnt == 0.
+		 */
+		s_rl = &new_rl[i - 1];
 		s_rl->length += s_rl[1].length;
 		merge_cnt = 1;
 	}
