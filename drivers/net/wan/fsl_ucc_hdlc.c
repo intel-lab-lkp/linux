@@ -765,7 +765,7 @@ static void uhdlc_memclean(struct ucc_hdlc_private *priv)
 		qe_muram_free(priv->ucc_pram_offset);
 		priv->ucc_pram = NULL;
 		priv->ucc_pram_offset = 0;
-	 }
+	}
 
 	kfree(priv->rx_skbuff);
 	priv->rx_skbuff = NULL;
