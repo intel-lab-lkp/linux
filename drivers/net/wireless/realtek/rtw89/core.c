@@ -5598,7 +5598,8 @@ static void rtw89_init_eht_cap(struct rtw89_dev *rtwdev,
 
 	eht_cap_elem->phy_cap_info[5] =
 		u8_encode_bits(IEEE80211_EHT_PHY_CAP5_COMMON_NOMINAL_PKT_PAD_20US,
-			       IEEE80211_EHT_PHY_CAP5_COMMON_NOMINAL_PKT_PAD_MASK);
+			       IEEE80211_EHT_PHY_CAP5_COMMON_NOMINAL_PKT_PAD_MASK) |
+		IEEE80211_EHT_PHY_CAP5_RX_LESS_242_TONE_RU_SUPP;
 
 	eht_cap_elem->phy_cap_info[6] = 0;
 	eht_cap_elem->phy_cap_info[7] = 0;
