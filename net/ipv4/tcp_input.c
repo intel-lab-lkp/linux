@@ -240,8 +240,14 @@ static void tcp_measure_rcv_mss(struct sock *sk, const struct sk_buff *skb)
 		/* Note: divides are still a bit expensive.
 		 * For the moment, only adjust scaling_ratio
 		 * when we update icsk_ack.rcv_mss.
+		 *
+		 * Protect locked SO_RCVBUF from Silly Window Syndrome
+		 * due to truesize penalties on small packets. Allow
+		 * penalty if aggregate payload (e.g., GRO) exceeds MSS.
 		 */
-		if (unlikely(len != icsk->icsk_ack.rcv_mss)) {
+		if (unlikely(len != icsk->icsk_ack.rcv_mss &&
+			     (!(sk->sk_userlocks & SOCK_RCVBUF_LOCK) ||
+			      skb->len > tcp_sk(sk)->advmss))) {
 			u64 val = (u64)skb->len << TCP_RMEM_TO_WIN_SCALE;
 			u8 old_ratio = tcp_sk(sk)->scaling_ratio;
 
