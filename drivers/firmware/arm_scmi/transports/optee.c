@@ -154,6 +154,79 @@ static struct scmi_transport_core_operations *core;
 /* There can be only 1 SCMI service in OP-TEE we connect to */
 static struct scmi_optee_agent *scmi_optee_private;
 
+/**
+ * struct scmi_optee_suppliers  - Transport descriptor
+ * @mtx: A mutex to protect @available
+ * @available: A reference to an initialized transport device ready to use
+ *	       which  will cycle through the following 3 states:
+ *	       1. PTR_ERR(-EPROBE_DEFER) at start before transport is ready
+ *	       2. <supplier_dev> when transport is initialized, ready for use,
+ *	          but still unused
+ *	       3. PTR_ERR(-EBUSY) when transport supplier device is in use
+ * @th: An embedded transport handle object that embeds the helpers
+ *	implementing the above mentioned logic
+ *
+ * Note that this transport driver enforces single instance probing.
+ */
+struct scmi_optee_suppliers {
+	/* Protect @available */
+	struct mutex mtx;
+	struct device *available;
+	const struct scmi_transport_handle th;
+};
+
+#define to_osup(t)	container_of(t, struct scmi_optee_suppliers, th)
+
+static int scmi_optee_supplier_init(const struct scmi_transport_handle *th,
+				    struct device *dev)
+{
+	struct scmi_optee_suppliers *osup = to_osup(th);
+
+	guard(mutex)(&osup->mtx);
+	/* Was any transport already registered ? */
+	if (!IS_ERR(osup->available))
+		return -EBUSY;
+
+	osup->available = dev;
+
+	return 0;
+}
+
+static struct device *
+scmi_optee_supplier_get(const struct scmi_transport_handle *th)
+{
+	struct scmi_optee_suppliers *osup = to_osup(th);
+	struct device *supplier;
+
+	guard(mutex)(&osup->mtx);
+	supplier = osup->available;
+	if (!IS_ERR(supplier))
+		osup->available = ERR_PTR(-EBUSY);
+
+	return supplier;
+}
+
+static void scmi_optee_supplier_put(const struct scmi_transport_handle *th,
+				    struct device *supplier)
+{
+	struct scmi_optee_suppliers *osup = to_osup(th);
+
+	guard(mutex)(&osup->mtx);
+	osup->available = supplier;
+}
+
+static void scmi_optee_supplier_cleanup(const struct scmi_transport_handle *th)
+{
+	scmi_optee_supplier_put(th, ERR_PTR(-EPROBE_DEFER));
+}
+
+static struct scmi_optee_suppliers scmi_transport_suppliers = {
+	.mtx = __MUTEX_INITIALIZER(mutexname),
+	.available = INIT_ERR_PTR(-EPROBE_DEFER),
+	.th.supplier_get = scmi_optee_supplier_get,
+	.th.supplier_put = scmi_optee_supplier_put,
+};
+
 /* Open a session toward SCMI OP-TEE service with REE_KERNEL identity */
 static int open_session(struct scmi_optee_agent *agent, u32 *tee_session)
 {
@@ -522,7 +595,7 @@ static struct scmi_desc scmi_optee_desc = {
 };
 
 static const struct of_device_id scmi_of_match[] = {
-	{ .compatible = "linaro,scmi-optee" },
+	{ .compatible = "linaro,scmi-optee", .data = &scmi_transport_suppliers.th},
 	{ /* Sentinel */ },
 };
 
@@ -561,15 +634,12 @@ static int scmi_optee_service_probe(struct tee_client_device *scmi_pta)
 	if (ret)
 		goto err;
 
-	/* Ensure agent resources are all visible before scmi_optee_private is */
-	smp_mb();
-	scmi_optee_private = agent;
-
-	ret = platform_driver_register(&scmi_optee_driver);
-	if (ret) {
-		scmi_optee_private = NULL;
+	ret = scmi_optee_supplier_init(&scmi_transport_suppliers.th, agent->dev);
+	if (ret)
 		goto err;
-	}
+
+	/* Ensure initialized scmi_optee_private is visible */
+	smp_store_mb(scmi_optee_private, agent);
 
 	return 0;
 
@@ -586,13 +656,12 @@ static void scmi_optee_service_remove(struct tee_client_device *scmi_pta)
 	if (!scmi_optee_private)
 		return;
 
-	platform_driver_unregister(&scmi_optee_driver);
-
 	if (!list_empty(&scmi_optee_private->channel_list))
 		return;
 
-	/* Ensure cleared reference is visible before resources are released */
+	/* Ensure scmi_optee_private is visible as NULL */
 	smp_store_mb(scmi_optee_private, NULL);
+	scmi_optee_supplier_cleanup(&scmi_transport_suppliers.th);
 
 	tee_client_close_context(agent->tee_ctx);
 }
@@ -616,7 +685,30 @@ static struct tee_client_driver scmi_optee_service_driver = {
 	},
 };
 
-module_tee_client_driver(scmi_optee_service_driver);
+static int __init scmi_transport_optee_init(void)
+{
+	int ret;
+
+	ret = tee_client_driver_register(&scmi_optee_service_driver);
+	if (ret)
+		return ret;
+
+	ret = platform_driver_register(&scmi_optee_driver);
+	if (ret) {
+		tee_client_driver_unregister(&scmi_optee_service_driver);
+		return ret;
+	}
+
+	return ret;
+}
+module_init(scmi_transport_optee_init);
+
+static void __exit scmi_transport_optee_exit(void)
+{
+	platform_driver_unregister(&scmi_optee_driver);
+	tee_client_driver_unregister(&scmi_optee_service_driver);
+}
+module_exit(scmi_transport_optee_exit);
 
 MODULE_AUTHOR("Etienne Carriere <etienne.carriere@foss.st.com>");
 MODULE_DESCRIPTION("SCMI OPTEE Transport driver");
