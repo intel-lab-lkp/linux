@@ -2962,13 +2962,17 @@ void drbd_md_write(struct drbd_device *device, void *b)
 {
 	struct meta_data_on_disk *buffer = b;
 	sector_t sector;
+	unsigned long flags;
 	int i;
 
 	memset(buffer, 0, sizeof(*buffer));
 
 	buffer->la_size_sect = cpu_to_be64(get_capacity(device->vdisk));
+	/* Serialize the UUID tuple as one coherent snapshot. */
+	spin_lock_irqsave(&device->ldev->md.uuid_lock, flags);
 	for (i = UI_CURRENT; i < UI_SIZE; i++)
 		buffer->uuid[i] = cpu_to_be64(device->ldev->md.uuid[i]);
+	spin_unlock_irqrestore(&device->ldev->md.uuid_lock, flags);
 	buffer->flags = cpu_to_be32(device->ldev->md.flags);
 	buffer->magic = cpu_to_be32(DRBD_MD_MAGIC_84_UNCLEAN);
 
