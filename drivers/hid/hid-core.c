@@ -2050,8 +2050,8 @@ int hid_report_raw_event(struct hid_device *hid, enum hid_report_type type, u8 *
 		return 0;
 
 	if (unlikely(bsize < csize)) {
-		hid_warn_ratelimited(hid, "Event data for report %d is incorrect (%d vs %ld)\n",
-				     report->id, csize, bsize);
+		hid_warn_ratelimited(hid, "Event data for report %d is incorrect (%d vs %d)\n",
+				     report->id, csize, (unsigned int)bsize);
 		return -EINVAL;
 	}
 
