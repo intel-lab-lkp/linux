@@ -966,9 +966,8 @@ static void zram_writeback_endio(struct bio *bio)
 
 	spin_lock_irqsave(&wb_ctl->done_lock, flags);
 	list_add(&req->entry, &wb_ctl->done_reqs);
-	spin_unlock_irqrestore(&wb_ctl->done_lock, flags);
-
 	wake_up(&wb_ctl->done_wait);
+	spin_unlock_irqrestore(&wb_ctl->done_lock, flags);
 }
 
 static void zram_submit_wb_request(struct zram *zram,
