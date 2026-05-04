@@ -16,6 +16,7 @@
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
 #include <linux/iopoll.h>
+#include <linux/jiffies.h>
 #include <linux/minmax.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
@@ -132,13 +133,6 @@
 #define AK09912_REG_ASAZ		0x62
 
 #define AK09912_MAX_REGS		AK09912_REG_ASAZ
-
-/*
- * Miscellaneous values.
- */
-#define AK8975_MAX_CONVERSION_TIMEOUT	500
-#define AK8975_CONVERSION_DONE_POLL_TIME 10
-#define AK8975_DATA_READY_TIMEOUT	((100*HZ)/1000)
 
 /*
  * Precalculate scale factor (in Gauss units) for each axis and
@@ -650,7 +644,8 @@ static int ak8975_setup(struct i2c_client *client)
 	return 0;
 }
 
-static int wait_conversion_complete_gpio(struct ak8975_data *data)
+static int wait_conversion_complete_gpio(struct ak8975_data *data, int poll_ms,
+					 int timeout_ms)
 {
 	struct i2c_client *client = data->client;
 	int ret;
@@ -658,8 +653,8 @@ static int wait_conversion_complete_gpio(struct ak8975_data *data)
 
 	/* Wait for the conversion to complete. */
 	ret = readx_poll_timeout(gpiod_get_value, data->eoc_gpiod, val, val != 0,
-				 AK8975_CONVERSION_DONE_POLL_TIME * USEC_PER_MSEC,
-				 AK8975_MAX_CONVERSION_TIMEOUT * USEC_PER_MSEC);
+				 poll_ms * USEC_PER_MSEC,
+				 timeout_ms * USEC_PER_MSEC);
 	if (ret)
 		return ret;
 
@@ -670,7 +665,8 @@ static int wait_conversion_complete_gpio(struct ak8975_data *data)
 	return ret;
 }
 
-static int wait_conversion_complete_polled(struct ak8975_data *data)
+static int wait_conversion_complete_polled(struct ak8975_data *data, int poll_ms,
+					   int timeout_ms)
 {
 	struct i2c_client *client = data->client;
 	int ret;
@@ -678,8 +674,8 @@ static int wait_conversion_complete_polled(struct ak8975_data *data)
 
 	/* Wait for the conversion to complete. */
 	ret = read_poll_timeout(i2c_smbus_read_byte_data, val, val != 0,
-				AK8975_CONVERSION_DONE_POLL_TIME * USEC_PER_MSEC,
-				AK8975_MAX_CONVERSION_TIMEOUT * USEC_PER_MSEC,
+				poll_ms * USEC_PER_MSEC,
+				timeout_ms * USEC_PER_MSEC,
 				true,
 				client, data->def->ctrl_regs[ST1]);
 	if (ret)
@@ -693,13 +689,14 @@ static int wait_conversion_complete_polled(struct ak8975_data *data)
 }
 
 /* Returns 0 if the end of conversion interrupt occurred or -ETIMEDOUT otherwise */
-static int wait_conversion_complete_interrupt(struct ak8975_data *data)
+static int wait_conversion_complete_interrupt(struct ak8975_data *data,
+					      int timeout_ms)
 {
 	int ret;
 
 	ret = wait_event_timeout(data->data_ready_queue,
 				 test_bit(0, &data->flags),
-				 AK8975_DATA_READY_TIMEOUT);
+				 msecs_to_jiffies(timeout_ms));
 	clear_bit(0, &data->flags);
 
 	return ret > 0 ? 0 : -ETIMEDOUT;
@@ -708,6 +705,11 @@ static int wait_conversion_complete_interrupt(struct ak8975_data *data)
 static int ak8975_start_read_axis(struct ak8975_data *data,
 				  const struct i2c_client *client)
 {
+	int irq_timeout_ms = 100;
+	int timeout_ms = 500;
+	int poll_ms = 10;
+	int ret;
+
 	/* Set up the device for taking a sample. */
 	int ret = ak8975_set_mode(data, MODE_ONCE);
 
@@ -718,11 +720,11 @@ static int ak8975_start_read_axis(struct ak8975_data *data,
 
 	/* Wait for the conversion to complete. */
 	if (data->eoc_irq)
-		ret = wait_conversion_complete_interrupt(data);
+		ret = wait_conversion_complete_interrupt(data, irq_timeout_ms);
 	else if (data->eoc_gpiod)
-		ret = wait_conversion_complete_gpio(data);
+		ret = wait_conversion_complete_gpio(data, poll_ms, timeout_ms);
 	else
-		ret = wait_conversion_complete_polled(data);
+		ret = wait_conversion_complete_polled(data, poll_ms, timeout_ms);
 	if (ret < 0)
 		return ret;
 
