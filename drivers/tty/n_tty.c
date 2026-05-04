@@ -213,9 +213,17 @@ static void n_tty_kick_worker(const struct tty_struct *tty)
 static ssize_t chars_in_buffer(const struct tty_struct *tty)
 {
 	const struct n_tty_data *ldata = tty->disc_data;
-	size_t head = ldata->icanon ? ldata->canon_head : ldata->commit_head;
+	bool icanon = data_race((int)ldata->icanon); /* lockless snapshot */
+	size_t head;
+	size_t tail;
 
-	return head - ldata->read_tail;
+	if (icanon)
+		head = smp_load_acquire(&ldata->canon_head); /* producer publish */
+	else
+		head = smp_load_acquire(&ldata->commit_head); /* producer publish */
+	tail = smp_load_acquire(&ldata->read_tail); /* consumer publish */
+
+	return head - tail;
 }
 
 /**
@@ -1779,14 +1787,14 @@ static void n_tty_set_termios(struct tty_struct *tty, const struct ktermios *old
 		bitmap_zero(ldata->read_flags, N_TTY_BUF_SIZE);
 		ldata->line_start = ldata->read_tail;
 		if (!L_ICANON(tty) || !read_cnt(ldata)) {
-			ldata->canon_head = ldata->read_tail;
+			smp_store_release(&ldata->canon_head, ldata->read_tail); /* publish */
 			ldata->push = 0;
 		} else {
 			set_bit(MASK(ldata->read_head - 1), ldata->read_flags);
-			ldata->canon_head = ldata->read_head;
+			smp_store_release(&ldata->canon_head, ldata->read_head); /* publish */
 			ldata->push = 1;
 		}
-		ldata->commit_head = ldata->read_head;
+		smp_store_release(&ldata->commit_head, ldata->read_head); /* publish */
 		ldata->erasing = 0;
 		ldata->lnext = 0;
 	}
@@ -1908,11 +1916,17 @@ static inline int input_available_p(const struct tty_struct *tty, int poll)
 {
 	const struct n_tty_data *ldata = tty->disc_data;
 	int amt = poll && !TIME_CHAR(tty) && MIN_CHAR(tty) ? MIN_CHAR(tty) : 1;
+	bool icanon = data_race((int)ldata->icanon); /* lockless snapshot */
+	size_t tail = smp_load_acquire(&ldata->read_tail); /* consumer publish */
+	size_t head;
 
-	if (ldata->icanon && !L_EXTPROC(tty))
-		return ldata->canon_head != ldata->read_tail;
-	else
-		return ldata->commit_head - ldata->read_tail >= amt;
+	if (icanon && !L_EXTPROC(tty)) {
+		head = smp_load_acquire(&ldata->canon_head); /* producer publish */
+		return head != tail;
+	}
+
+	head = smp_load_acquire(&ldata->commit_head); /* producer publish */
+	return head - tail >= amt;
 }
 
 /**
