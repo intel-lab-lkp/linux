@@ -82,7 +82,7 @@ int gpiotools_request_line(const char *device_name, unsigned int *lines,
 		req.offsets[i] = lines[i];
 
 	req.config = *config;
-	strcpy(req.consumer, consumer);
+	strscpy(req.consumer, consumer);
 	req.num_lines = num_lines;
 
 	ret = ioctl(fd, GPIO_V2_GET_LINE_IOCTL, &req);
