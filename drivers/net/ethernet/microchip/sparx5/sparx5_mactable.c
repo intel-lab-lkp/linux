@@ -50,7 +50,7 @@ static int sparx5_mact_wait_for_completion(struct sparx5 *sparx5)
 {
 	u32 val;
 
-	return readx_poll_timeout(sparx5_mact_get_status,
+	return readx_poll_timeout_atomic(sparx5_mact_get_status,
 		sparx5, val,
 		LRN_COMMON_ACCESS_CTRL_MAC_TABLE_ACCESS_SHOT_GET(val) == 0,
 		TABLE_UPDATE_SLEEP_US, TABLE_UPDATE_TIMEOUT_US);
@@ -92,7 +92,7 @@ int sparx5_mact_learn(struct sparx5 *sparx5, int pgid,
 		addr = pgid - consts->n_ports;
 	}
 
-	mutex_lock(&sparx5->lock);
+	spin_lock_bh(&sparx5->lock);
 
 	sparx5_mact_select(sparx5, mac, vid);
 
@@ -111,7 +111,7 @@ int sparx5_mact_learn(struct sparx5 *sparx5, int pgid,
 
 	ret = sparx5_mact_wait_for_completion(sparx5);
 
-	mutex_unlock(&sparx5->lock);
+	spin_unlock_bh(&sparx5->lock);
 
 	return ret;
 }
@@ -164,7 +164,7 @@ bool sparx5_mact_getnext(struct sparx5 *sparx5,
 	u32 cfg2;
 	int ret;
 
-	mutex_lock(&sparx5->lock);
+	spin_lock_bh(&sparx5->lock);
 
 	sparx5_mact_select(sparx5, mac, *vid);
 
@@ -183,7 +183,7 @@ bool sparx5_mact_getnext(struct sparx5 *sparx5,
 			*pcfg2 = cfg2;
 	}
 
-	mutex_unlock(&sparx5->lock);
+	spin_unlock_bh(&sparx5->lock);
 
 	return ret == 0;
 }
@@ -194,7 +194,7 @@ int sparx5_mact_find(struct sparx5 *sparx5,
 	int ret;
 	u32 cfg2;
 
-	mutex_lock(&sparx5->lock);
+	spin_lock_bh(&sparx5->lock);
 
 	sparx5_mact_select(sparx5, mac, vid);
 
@@ -212,7 +212,7 @@ int sparx5_mact_find(struct sparx5 *sparx5,
 			ret = -ENOENT;
 	}
 
-	mutex_unlock(&sparx5->lock);
+	spin_unlock_bh(&sparx5->lock);
 
 	return ret;
 }
@@ -222,7 +222,7 @@ int sparx5_mact_forget(struct sparx5 *sparx5,
 {
 	int ret;
 
-	mutex_lock(&sparx5->lock);
+	spin_lock_bh(&sparx5->lock);
 
 	sparx5_mact_select(sparx5, mac, vid);
 
@@ -233,7 +233,7 @@ int sparx5_mact_forget(struct sparx5 *sparx5,
 
 	ret = sparx5_mact_wait_for_completion(sparx5);
 
-	mutex_unlock(&sparx5->lock);
+	spin_unlock_bh(&sparx5->lock);
 
 	return ret;
 }
@@ -440,7 +440,7 @@ static void sparx5_mact_pull_work(struct work_struct *work)
 	vid = 0;
 	memset(mac, 0, sizeof(mac));
 	do {
-		mutex_lock(&sparx5->lock);
+		spin_lock_bh(&sparx5->lock);
 		sparx5_mact_select(sparx5, mac, vid);
 		spx5_wr(LRN_SCAN_NEXT_CFG_SCAN_NEXT_UNTIL_FOUND_ENA_SET(1),
 			sparx5, LRN_SCAN_NEXT_CFG);
@@ -451,7 +451,7 @@ static void sparx5_mact_pull_work(struct work_struct *work)
 		ret = sparx5_mact_wait_for_completion(sparx5);
 		if (ret == 0)
 			ret = sparx5_mact_get(sparx5, mac, &vid, &cfg2);
-		mutex_unlock(&sparx5->lock);
+		spin_unlock_bh(&sparx5->lock);
 		if (ret == 0)
 			sparx5_mact_handle_entry(sparx5, mac, vid, cfg2);
 	} while (ret == 0);
@@ -493,7 +493,7 @@ int sparx5_mact_init(struct sparx5 *sparx5)
 {
 	char queue_name[32];
 
-	mutex_init(&sparx5->lock);
+	spin_lock_init(&sparx5->lock);
 
 	/*  Flush MAC table */
 	spx5_wr(LRN_COMMON_ACCESS_CTRL_CPU_ACCESS_CMD_SET(MAC_CMD_CLEAR_ALL) |
