@@ -1027,6 +1027,19 @@ config NUMA_BALANCING_DEFAULT_ENABLED
 	  If set, automatic NUMA balancing will be enabled if running on a NUMA
 	  machine.
 
+config NUMA_BALANCING_TIERING
+	bool "NUMA balancing memory tiering promotion"
+	depends on NUMA_BALANCING && PGHOT
+	help
+	  Enable NUMA balancing mode 2 (memory tiering). This allows
+	  automatic promotion of hot pages from slower memory tiers to
+	  faster tiers using the pghot subsystem.
+
+	  This requires CONFIG_PGHOT for the hot page tracking engine.
+	  This option is required for kernel.numa_balancing=2.
+
+	  If unsure, say N.
+
 config SLAB_OBJ_EXT
 	bool
 

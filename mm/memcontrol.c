@@ -400,7 +400,7 @@ static const unsigned int memcg_node_stat_items[] = {
 #ifdef CONFIG_SWAP
 	NR_SWAPCACHE,
 #endif
-#ifdef CONFIG_NUMA_BALANCING
+#ifdef CONFIG_PGHOT
 	PGPROMOTE_SUCCESS,
 #endif
 	PGDEMOTE_KSWAPD,
@@ -1594,7 +1594,7 @@ static const struct memory_stat memory_stats[] = {
 	{ "pgscan_khugepaged",		PGSCAN_KHUGEPAGED	},
 	{ "pgscan_proactive",		PGSCAN_PROACTIVE	},
 	{ "pgrefill",			PGREFILL		},
-#ifdef CONFIG_NUMA_BALANCING
+#ifdef CONFIG_PGHOT
 	{ "pgpromote_success",		PGPROMOTE_SUCCESS	},
 #endif
 };
@@ -1646,7 +1646,7 @@ static int memcg_page_state_output_unit(int item)
 	case PGSCAN_KHUGEPAGED:
 	case PGSCAN_PROACTIVE:
 	case PGREFILL:
-#ifdef CONFIG_NUMA_BALANCING
+#ifdef CONFIG_PGHOT
 	case PGPROMOTE_SUCCESS:
 #endif
 		return 1;

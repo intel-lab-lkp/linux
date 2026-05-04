@@ -40,6 +40,7 @@
 #include <linux/pgalloc.h>
 #include <linux/pgalloc_tag.h>
 #include <linux/pagewalk.h>
+#include <linux/pghot.h>
 
 #include <asm/tlb.h>
 #include "internal.h"
@@ -2267,7 +2268,7 @@ vm_fault_t do_huge_pmd_numa_page(struct vm_fault *vmf)
 	int nid = NUMA_NO_NODE;
 	int target_nid, last_cpupid;
 	pmd_t pmd, old_pmd;
-	bool writable = false;
+	bool writable = false, needs_promotion = false;
 	int flags = 0;
 
 	vmf->ptl = pmd_lock(vma->vm_mm, vmf->pmd);
@@ -2294,11 +2295,23 @@ vm_fault_t do_huge_pmd_numa_page(struct vm_fault *vmf)
 		goto out_map;
 
 	nid = folio_nid(folio);
+	needs_promotion = folio_is_promo_candidate(folio);
 
 	target_nid = numa_migrate_check(folio, vmf, haddr, &flags, writable,
 					&last_cpupid);
 	if (target_nid == NUMA_NO_NODE)
 		goto out_map;
+
+	if (needs_promotion) {
+		/*
+		 * Hot page promotion, mode=NUMA_BALANCING_MEMORY_TIERING.
+		 * Isolation and migration are handled by pghot.
+		 */
+		nid = target_nid;
+		goto out_map;
+	}
+
+	/* Balancing b/n toptier nodes, mode=NUMA_BALANCING_NORMAL */
 	if (migrate_misplaced_folio_prepare(folio, vma, target_nid)) {
 		flags |= TNF_MIGRATE_FAIL;
 		goto out_map;
@@ -2330,8 +2343,13 @@ out_map:
 	update_mmu_cache_pmd(vma, vmf->address, vmf->pmd);
 	spin_unlock(vmf->ptl);
 
-	if (nid != NUMA_NO_NODE)
-		task_numa_fault(last_cpupid, nid, HPAGE_PMD_NR, flags);
+	if (nid != NUMA_NO_NODE) {
+		if (needs_promotion)
+			pghot_record_access(folio_pfn(folio), nid,
+					    PGHOT_HINTFAULTS, jiffies);
+		else
+			task_numa_fault(last_cpupid, nid, HPAGE_PMD_NR, flags);
+	}
 	return 0;
 }
 

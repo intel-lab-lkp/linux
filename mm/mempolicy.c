@@ -872,9 +872,6 @@ bool folio_can_map_prot_numa(struct folio *folio, struct vm_area_struct *vma,
 	    node_is_toptier(nid))
 		return false;
 
-	if (folio_use_access_time(folio))
-		folio_xchg_access_time(folio, jiffies_to_msecs(jiffies));
-
 	return true;
 }
 

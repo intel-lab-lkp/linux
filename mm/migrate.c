@@ -2709,8 +2709,18 @@ int migrate_misplaced_folio_prepare(struct folio *folio,
 	if (!migrate_balanced_pgdat(pgdat, nr_pages)) {
 		int z;
 
-		if (!(sysctl_numa_balancing_mode & NUMA_BALANCING_MEMORY_TIERING))
+		/*
+		 * Kswapd wakeup for creating headroom in toptier is done only
+		 * for hot page promotion case and not for misplaced migrations
+		 * between toptier nodes.
+		 *
+		 * In the uncommon case of using NUMA_BALANCING_NORMAL mode
+		 * to balance between lower and higher tier nodes, we end up
+		 * waking the kswapd.
+		 */
+		if (node_is_toptier(folio_nid(folio)))
 			return -EAGAIN;
+
 		for (z = pgdat->nr_zones - 1; z >= 0; z--) {
 			if (managed_zone(pgdat->node_zones + z))
 				break;
@@ -2760,6 +2770,8 @@ int migrate_misplaced_folio(struct folio *folio, int node)
 #ifdef CONFIG_NUMA_BALANCING
 		count_vm_numa_events(NUMA_PAGE_MIGRATE, nr_succeeded);
 		count_memcg_events(memcg, NUMA_PAGE_MIGRATE, nr_succeeded);
+#endif
+#ifdef CONFIG_PGHOT
 		if ((sysctl_numa_balancing_mode & NUMA_BALANCING_MEMORY_TIERING)
 		    && !node_is_toptier(folio_nid(folio))
 		    && node_is_toptier(node)) {
@@ -2824,6 +2836,8 @@ int promote_misplaced_memcg_folios(struct list_head *folio_list, int node)
 #ifdef CONFIG_NUMA_BALANCING
 		count_vm_numa_events(NUMA_PAGE_MIGRATE, nr_succeeded);
 		count_memcg_events(memcg, NUMA_PAGE_MIGRATE, nr_succeeded);
+#endif
+#ifdef CONFIG_PGHOT
 		mod_lruvec_state(mem_cgroup_lruvec(memcg, NODE_DATA(node)),
 				 PGPROMOTE_SUCCESS, nr_succeeded);
 #endif
