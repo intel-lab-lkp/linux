@@ -5564,7 +5564,8 @@ static void rtw89_init_eht_cap(struct rtw89_dev *rtwdev,
 	eht_cap_elem->mac_cap_info[0] =
 		u8_encode_bits(chip->max_eht_mpdu_cap,
 			       IEEE80211_EHT_MAC_CAP0_MAX_MPDU_LEN_MASK) |
-		IEEE80211_EHT_MAC_CAP0_RESTRICTED_TWT;
+		IEEE80211_EHT_MAC_CAP0_RESTRICTED_TWT |
+		IEEE80211_EHT_MAC_CAP0_OM_CONTROL;
 	eht_cap_elem->mac_cap_info[1] = 0;
 
 	eht_cap_elem->phy_cap_info[0] =
