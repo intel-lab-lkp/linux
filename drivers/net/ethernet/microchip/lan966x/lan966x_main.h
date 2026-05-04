@@ -17,6 +17,9 @@
 #include <net/xdp.h>
 
 #include <fdma_api.h>
+#if IS_ENABLED(CONFIG_MCHP_LAN966X_PCI)
+#include <fdma_pci.h>
+#endif
 #include <vcap_api.h>
 #include <vcap_api_client.h>
 
@@ -287,6 +290,10 @@ struct lan966x {
 	struct lan966x_port **ports;
 
 	void __iomem *regs[NUM_TARGETS];
+
+#if IS_ENABLED(CONFIG_MCHP_LAN966X_PCI)
+	struct fdma_pci_atu atu;
+#endif
 
 	int shared_queue_sz;
 
@@ -585,6 +592,10 @@ void lan966x_fdma_tx_disable(struct lan966x_tx *tx);
 void lan966x_fdma_wakeup_netdev(struct lan966x *lan966x);
 int lan966x_fdma_get_max_frame(struct lan966x *lan966x);
 int lan966x_qsys_sw_status(struct lan966x *lan966x);
+
+#if IS_ENABLED(CONFIG_MCHP_LAN966X_PCI)
+extern const struct lan966x_fdma_ops lan966x_fdma_pci_ops;
+#endif
 
 int lan966x_lag_port_join(struct lan966x_port *port,
 			  struct net_device *brport_dev,
