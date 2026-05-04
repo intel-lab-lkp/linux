@@ -121,14 +121,16 @@ static struct aper_size_info_32 amd64_aperture_sizes[7] =
 static int amd64_fetch_size(void)
 {
 	struct pci_dev *dev;
+	struct amd_northbridge *nb;
 	int i;
 	u32 temp;
 	struct aper_size_info_32 *values;
 
-	dev = node_to_amd_nb(0)->misc;
-	if (dev==NULL)
+	nb = node_to_amd_nb(0);
+	if (!nb || !nb->misc)
 		return 0;
 
+	dev = nb->misc;
 	pci_read_config_dword(dev, AMD64_GARTAPERTURECTL, &temp);
 	temp = (temp & 0xe);
 	values = A_SIZE_32(amd64_aperture_sizes);
@@ -187,8 +189,12 @@ static int amd_8151_configure(void)
 
 	/* Configure AGP regs in each x86-64 host bridge. */
 	for (i = 0; i < amd_nb_num(); i++) {
-		agp_bridge->gart_bus_addr =
-			amd64_configure(node_to_amd_nb(i)->misc, gatt_bus);
+		struct amd_northbridge *nb = node_to_amd_nb(i);
+
+		if (!nb || !nb->misc)
+			continue;
+
+		agp_bridge->gart_bus_addr = amd64_configure(nb->misc, gatt_bus);
 	}
 	amd_flush_garts();
 	return 0;
@@ -204,7 +210,13 @@ static void amd64_cleanup(void)
 		return;
 
 	for (i = 0; i < amd_nb_num(); i++) {
-		struct pci_dev *dev = node_to_amd_nb(i)->misc;
+		struct amd_northbridge *nb = node_to_amd_nb(i);
+		struct pci_dev *dev;
+
+		if (!nb || !nb->misc)
+			continue;
+
+		dev = nb->misc;
 		/* disable gart translation */
 		pci_read_config_dword(dev, AMD64_GARTAPERTURECTL, &tmp);
 		tmp &= ~GARTEN;
@@ -335,7 +347,13 @@ static int cache_nbs(struct pci_dev *pdev, u32 cap_ptr)
 
 	i = 0;
 	for (i = 0; i < amd_nb_num(); i++) {
-		struct pci_dev *dev = node_to_amd_nb(i)->misc;
+		struct amd_northbridge *nb = node_to_amd_nb(i);
+		struct pci_dev *dev;
+
+		if (!nb || !nb->misc)
+			continue;
+
+		dev = nb->misc;
 		if (fix_northbridge(dev, pdev, cap_ptr) < 0) {
 			dev_err(&dev->dev, "no usable aperture found\n");
 #ifdef __x86_64__
@@ -391,6 +409,7 @@ static int uli_agp_init(struct pci_dev *pdev)
 {
 	u32 httfea,baseaddr,enuscr;
 	struct pci_dev *dev1;
+	struct amd_northbridge *nb;
 	int i, ret;
 	unsigned size = amd64_fetch_size();
 
@@ -411,9 +430,14 @@ static int uli_agp_init(struct pci_dev *pdev)
 		goto put;
 	}
 
+	nb = node_to_amd_nb(0);
+	if (!nb || !nb->misc) {
+		ret = -ENODEV;
+		goto put;
+	}
+
 	/* shadow x86-64 registers into ULi registers */
-	pci_read_config_dword (node_to_amd_nb(0)->misc, AMD64_GARTAPERTUREBASE,
-			       &httfea);
+	pci_read_config_dword(nb->misc, AMD64_GARTAPERTUREBASE, &httfea);
 
 	/* if x86-64 aperture base is beyond 4G, exit here */
 	if ((httfea & 0x7fff) >> (32 - 25)) {
@@ -453,6 +477,7 @@ static int nforce3_agp_init(struct pci_dev *pdev)
 {
 	u32 tmp, apbase, apbar, aplimit;
 	struct pci_dev *dev1;
+	struct amd_northbridge *nb;
 	int i, ret;
 	unsigned size = amd64_fetch_size();
 
@@ -479,9 +504,14 @@ static int nforce3_agp_init(struct pci_dev *pdev)
 	tmp |= nforce3_sizes[i].size_value;
 	pci_write_config_dword(dev1, NVIDIA_X86_64_1_APSIZE, tmp);
 
+	nb = node_to_amd_nb(0);
+	if (!nb || !nb->misc) {
+		ret = -ENODEV;
+		goto put;
+	}
+
 	/* shadow x86-64 registers into NVIDIA registers */
-	pci_read_config_dword (node_to_amd_nb(0)->misc, AMD64_GARTAPERTUREBASE,
-			       &apbase);
+	pci_read_config_dword(nb->misc, AMD64_GARTAPERTUREBASE, &apbase);
 
 	/* if x86-64 aperture base is beyond 4G, exit here */
 	if ( (apbase & 0x7fff) >> (32 - 25) ) {
