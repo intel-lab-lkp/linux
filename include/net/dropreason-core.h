@@ -129,6 +129,10 @@
 	FN(RECURSION_LIMIT)		\
 	FN(SEG6_MOBILE_INVALID_SRH_SL)	\
 	FN(SEG6_MOBILE_NOMEM)		\
+	FN(SEG6_MOBILE_BAD_SID)		\
+	FN(SEG6_MOBILE_BAD_GTPU)	\
+	FN(SEG6_MOBILE_BAD_INNER)	\
+	FN(SEG6_MOBILE_MTU_EXCEEDED)	\
 	FNe(MAX)
 
 /**
@@ -612,6 +616,30 @@ enum skb_drop_reason {
 	 * helper allocation failed on an SRv6 Mobile path.
 	 */
 	SKB_DROP_REASON_SEG6_MOBILE_NOMEM,
+	/**
+	 * @SKB_DROP_REASON_SEG6_MOBILE_BAD_SID: SRv6 Mobile (RFC 9433) SID
+	 * layout violated (e.g. v4mask out of range, locator + IPv4 DA +
+	 * Args.Mob.Session does not fit in the IPv6 destination).
+	 */
+	SKB_DROP_REASON_SEG6_MOBILE_BAD_SID,
+	/**
+	 * @SKB_DROP_REASON_SEG6_MOBILE_BAD_GTPU: malformed GTP-U header or
+	 * GTP-U extension header on an SRv6 Mobile ingress / decap path.
+	 */
+	SKB_DROP_REASON_SEG6_MOBILE_BAD_GTPU,
+	/**
+	 * @SKB_DROP_REASON_SEG6_MOBILE_BAD_INNER: malformed inner IP packet
+	 * on an SRv6 Mobile encap / decap path (failed pskb_may_pull,
+	 * ipv6_skip_exthdr, unknown inner IP version, etc.).
+	 */
+	SKB_DROP_REASON_SEG6_MOBILE_BAD_INNER,
+	/**
+	 * @SKB_DROP_REASON_SEG6_MOBILE_MTU_EXCEEDED: GSO packet would not
+	 * fit the egress route MTU after adding the SRv6 Mobile outer
+	 * headers, or the post-encap length exceeds MTU on a non-GSO IPv4
+	 * input that carries DF.
+	 */
+	SKB_DROP_REASON_SEG6_MOBILE_MTU_EXCEEDED,
 	/**
 	 * @SKB_DROP_REASON_MAX: the maximum of core drop reasons, which
 	 * shouldn't be used as a real 'reason' - only for tracing code gen

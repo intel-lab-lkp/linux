@@ -32,6 +32,10 @@
 #include <linux/etherdevice.h>
 #include <linux/bpf.h>
 #include <linux/netfilter.h>
+#include <linux/udp.h>
+#include <linux/unaligned.h>
+#include <net/gso.h>
+#include <net/gtp.h>
 
 #define SEG6_F_ATTR(i)		BIT(i)
 
@@ -184,6 +188,17 @@ struct seg6_local_counters {
 
 #define SEG6_F_LOCAL_COUNTERS	SEG6_F_ATTR(SEG6_LOCAL_COUNTERS)
 
+/* Per-route configuration for SRv6 Mobile (RFC 9433) behaviors. */
+struct seg6_mobile_info {
+	struct in6_addr		src_addr;		/* outer IPv6 SA template */
+	u8			v4_mask_len;		/* IPv4 portion length (bits) */
+	u8			pdu_type;		/* PDU Type (0=downlink, 1=uplink) */
+	bool			pdu_type_set;		/* PDU Session Container enabled */
+	u8			v6_src_prefix_len;	/* Source UPF Prefix length (bits) */
+};
+
+#define SEG6_MOBILE_V6_SRC_PREFIX_LEN_DEFAULT	64
+
 struct seg6_local_lwt {
 	int action;
 	struct ipv6_sr_hdr *srh;
@@ -197,6 +212,7 @@ struct seg6_local_lwt {
 	struct seg6_end_dt_info dt_info;
 #endif
 	struct seg6_flavors_info flv_info;
+	struct seg6_mobile_info mobile_info;
 
 	struct pcpu_seg6_local_counters __percpu *pcpu_counters;
 
@@ -1494,6 +1510,493 @@ static struct ipv6_sr_hdr *seg6_mobile_get_validated_srh(struct sk_buff *skb,
 	return srh;
 }
 
+/* Args.Mob.Session is a 40-bit field (RFC 9433 Section 6.1 Figure 8). */
+#define SEG6_MOBILE_ARGS_MOB_LEN	40
+
+/* Read @nbits from a 16-byte big-endian @addr at bit offset @bit_off,
+ * returned left-justified in 64 bits.  Caller ensures bit_off + nbits
+ * <= 128 and 1 <= nbits <= 64.
+ */
+static u64 seg6_mobile_addr_get_bits(const u8 *addr, unsigned int bit_off,
+				     unsigned int nbits)
+{
+	u64 hi = get_unaligned_be64(addr);
+	u64 lo = get_unaligned_be64(addr + 8);
+	u64 v;
+
+	if (bit_off == 0)
+		v = hi;
+	else if (bit_off < 64)
+		v = (hi << bit_off) | (lo >> (64 - bit_off));
+	else
+		v = lo << (bit_off - 64);
+
+	return v & GENMASK_ULL(63, 64 - nbits);
+}
+
+static bool seg6_mobile_v4_mask_valid(u8 v4_mask_len)
+{
+	return v4_mask_len > 0 && v4_mask_len <= 32;
+}
+
+/* Extract the IPv4 DA and Args.Mob.Session from an End.M.GTP4.E SID,
+ * where the SR Gateway locator occupies the leading @locator_bits
+ * bits of the IPv6 destination, the IPv4 DA the next @v4_mask_len
+ * bits, and Args.Mob.Session the 40 bits that follow it (RFC 9433
+ * Section 6.6 Figure 9).
+ */
+static bool seg6_mobile_parse_gtp4_sid(const struct in6_addr *daddr,
+				       unsigned int locator_bits,
+				       u8 v4_mask_len,
+				       __be32 *v4_da, u64 *args_mob)
+{
+	u64 da_field;
+
+	if (!seg6_mobile_v4_mask_valid(v4_mask_len))
+		return false;
+	if (locator_bits + v4_mask_len + SEG6_MOBILE_ARGS_MOB_LEN > 128)
+		return false;
+
+	da_field = seg6_mobile_addr_get_bits(daddr->s6_addr, locator_bits,
+					     v4_mask_len);
+	*v4_da = htonl((u32)(da_field >> 32));
+
+	*args_mob = seg6_mobile_addr_get_bits(daddr->s6_addr,
+					      locator_bits + v4_mask_len,
+					      SEG6_MOBILE_ARGS_MOB_LEN);
+	return true;
+}
+
+/* Compose the IPv4 source address per RFC 9433 Section 6.6 Figure 10:
+ * the @v4_mask_len high bits are recovered from the inbound IPv6 SA at
+ * bit offset @v6_src_prefix_len (or /64 when 0); the remaining low bits
+ * come from @src_template at the same offset.
+ */
+static __be32 seg6_mobile_v4_sa(const struct in6_addr *ip6_sa,
+				const struct in6_addr *src_template,
+				u8 v4_mask_len, u8 v6_src_prefix_len)
+{
+	u8 p_bits = v6_src_prefix_len ? : SEG6_MOBILE_V6_SRC_PREFIX_LEN_DEFAULT;
+	u8 sa_bits = min_t(u8, v4_mask_len, 32);
+	u64 template_field, sa_field, mask;
+
+	if ((unsigned int)p_bits + 32 > 128)
+		return 0;
+
+	template_field = seg6_mobile_addr_get_bits(src_template->s6_addr,
+						   p_bits, 32);
+
+	if (sa_bits) {
+		sa_field = seg6_mobile_addr_get_bits(ip6_sa->s6_addr,
+						     p_bits, sa_bits);
+		mask = (sa_bits >= 64) ? ~0ULL : ((~0ULL) << (64 - sa_bits));
+		template_field = (template_field & ~mask) | (sa_field & mask);
+	}
+
+	return htonl((u32)(template_field >> 32));
+}
+
+/* Return the bit length of the routing prefix that delivered @skb to
+ * the current End.* handler (i.e. the prefix length of the matched FIB
+ * entry).  This is the locator length used to position v4DA /
+ * Args.Mob.Session inside the SID per RFC 9433 Section 6.6.
+ */
+static unsigned int seg6_mobile_skb_prefix_bits(const struct sk_buff *skb)
+{
+	struct dst_entry *dst = skb_dst(skb);
+	struct rt6_info *rt;
+	struct fib6_info *fib6;
+	u8 plen = 128;
+
+	/* container_of() below requires an IPv6 dst. */
+	if (!dst || dst->ops->family != AF_INET6)
+		return 128;
+
+	rt = container_of(dst, struct rt6_info, dst);
+	rcu_read_lock();
+	fib6 = rcu_dereference(rt->from);
+	if (fib6)
+		plen = fib6->fib6_dst.plen;
+	rcu_read_unlock();
+
+	return plen;
+}
+
+/* GTP-U PDU Session extension header (3GPP TS 38.415).
+ * 4-byte minimum unit: ext_len=1, PDU Type in high 4 bits of @pdu_type_spare,
+ * QFI in low 6 bits of @spare_qfi, next_ext=0.
+ */
+struct seg6_mobile_pdu_session_ext {
+	__u8	ext_len;
+	__u8	pdu_type_spare;
+	__u8	spare_qfi;
+	__u8	next_ext;
+};
+
+#define SEG6_MOBILE_PDU_SESSION_NH		0x85	/* PDU Session extension header type */
+#define SEG6_MOBILE_PDU_SESSION_QFI_MASK	0x3f
+
+/* GTPv1-U mandatory header flags: Version=1 (bits 7..5 = 001) +
+ * Protocol Type=1 (bit 4); E/S/PN bits clear by default (3GPP TS
+ * 29.060 Figure 2 / Table 5).  ORed with GTP1_F_EXTHDR / GTP1_F_SEQ
+ * / GTP1_F_NPDU when those optional fields are present.
+ */
+#define SEG6_MOBILE_GTP1U_FLAGS_BASE	0x30
+
+/* Bit shifts within the left-justified 64-bit Args.Mob.Session
+ * (RFC 9433 Section 6.1 Figure 8): QFI(6) | R(1) | U(1) | TEID(32).
+ */
+#define SEG6_MOBILE_ARGS_QFI_SHIFT	58
+#define SEG6_MOBILE_ARGS_TEID_SHIFT	24
+
+static u8 seg6_mobile_qfi_from_args(u64 args_mob)
+{
+	return (args_mob >> SEG6_MOBILE_ARGS_QFI_SHIFT) &
+	       SEG6_MOBILE_PDU_SESSION_QFI_MASK;
+}
+
+static u32 seg6_mobile_teid_from_args(u64 args_mob)
+{
+	return lower_32_bits(args_mob >> SEG6_MOBILE_ARGS_TEID_SHIFT);
+}
+
+/* Push a GTP-U header on top of @skb.  When @pdu_type_set is true the
+ * GTPv1 long header (with the EH bit set) is followed by a 4-byte
+ * PDU Session extension header (3GPP TS 38.415); @pdu_type selects
+ * the PDU Type field (0 for downlink, 1 for uplink, 2..15 reserved).
+ * When @pdu_type_set is false the GTPv1 short header is emitted with
+ * no PDU Session Container, regardless of @qfi.
+ */
+static int seg6_mobile_push_gtpu(struct sk_buff *skb, u32 teid, u8 qfi,
+				 u8 pdu_type, bool pdu_type_set)
+{
+	struct gtp1_header_long *gtphl;
+	struct gtp1_header *gtph;
+	struct seg6_mobile_pdu_session_ext *pdu_session;
+
+	if (!pdu_type_set) {
+		if (skb_cow_head(skb, sizeof(*gtph)))
+			return -ENOMEM;
+
+		gtph = (struct gtp1_header *)skb_push(skb, sizeof(*gtph));
+		gtph->flags = SEG6_MOBILE_GTP1U_FLAGS_BASE;
+		gtph->type = GTP_TPDU;
+		gtph->length = htons(skb->len - sizeof(*gtph));
+		gtph->tid = htonl(teid);
+		return 0;
+	}
+
+	if (skb_cow_head(skb, sizeof(*gtphl) + sizeof(*pdu_session)))
+		return -ENOMEM;
+
+	pdu_session = skb_push(skb, sizeof(*pdu_session));
+	pdu_session->ext_len = 1;
+	pdu_session->pdu_type_spare = (pdu_type & 0xf) << 4;
+	pdu_session->spare_qfi = qfi & SEG6_MOBILE_PDU_SESSION_QFI_MASK;
+	pdu_session->next_ext = 0;
+
+	gtphl = (struct gtp1_header_long *)skb_push(skb, sizeof(*gtphl));
+	gtphl->flags = SEG6_MOBILE_GTP1U_FLAGS_BASE | GTP1_F_EXTHDR;
+	gtphl->type = GTP_TPDU;
+	gtphl->length = htons(skb->len - sizeof(struct gtp1_header));
+	gtphl->tid = htonl(teid);
+	gtphl->seq = 0;
+	gtphl->npdu = 0;
+	gtphl->next = SEG6_MOBILE_PDU_SESSION_NH;
+
+	return 0;
+}
+
+/* Per-skb context preserved across the NF_INET_PRE_ROUTING hook on
+ * the inner T-PDU exposed by End.M.GTP4.E.  After the outer SRv6 has
+ * been popped the inner IP is briefly visible to netfilter; the
+ * finish half then needs the synthesised IPv4 outer fields and the
+ * GTP-U identifiers to rebuild the packet.
+ */
+struct seg6_mobile_gtp4_e_cb {
+	__be32	v4_da;
+	__be32	v4_sa;
+	u32	teid;
+	u8	qfi;
+	u8	outer_tclass;
+	u8	outer_hoplimit;
+	u8	pdu_type;
+	bool	pdu_type_set;
+};
+
+#define SEG6_MOBILE_GTP4_E_CB(skb)	\
+	((struct seg6_mobile_gtp4_e_cb *)((skb)->cb))
+
+static int input_action_end_m_gtp4_e_finish(struct net *net,
+					    struct sock *sk,
+					    struct sk_buff *skb)
+{
+	struct seg6_mobile_gtp4_e_cb cb = *SEG6_MOBILE_GTP4_E_CB(skb);
+	struct dst_entry *orig_dst = skb_dst(skb);
+	enum skb_drop_reason reason = SKB_DROP_REASON_SEG6_MOBILE_NOMEM;
+	struct seg6_local_lwt *slwt;
+	struct iphdr *iph;
+	struct udphdr *uh;
+
+	slwt = seg6_local_lwtunnel(orig_dst->lwtstate);
+
+	/* Reject GSO packets that would not fit the egress IPv4 path after
+	 * adding our outer headers; the GSO segmenter cannot fix this up
+	 * once we have changed the network protocol from IPv6 to IPv4.
+	 * The MTU check uses the inbound IPv6 dst as a conservative bound
+	 * (the outbound IPv4 route is not known until ip_route_output_key()
+	 * below); skip the check entirely when no MTU is known on the
+	 * current dst.
+	 */
+	if (skb_is_gso(skb)) {
+		unsigned int ovhd = sizeof(*iph) + sizeof(*uh) +
+				    sizeof(struct gtp1_header_long) +
+				    sizeof(struct seg6_mobile_pdu_session_ext);
+		unsigned int mtu = dst_mtu(skb_dst(skb));
+
+		if (mtu && (mtu <= ovhd ||
+			    !skb_gso_validate_network_len(skb, mtu - ovhd))) {
+			reason = SKB_DROP_REASON_SEG6_MOBILE_MTU_EXCEEDED;
+			goto drop;
+		}
+	}
+
+	/* Reserve worst-case headroom for the entire outer chain we are about
+	 * to push: IPv4 + UDP + GTP-U long header + PDU Session extension.
+	 * Subsequent skb_cow_head() calls inside seg6_mobile_push_gtpu() then
+	 * become no-ops.
+	 */
+	if (skb_cow_head(skb,
+			 sizeof(*iph) + sizeof(*uh) +
+			 sizeof(struct gtp1_header_long) +
+			 sizeof(struct seg6_mobile_pdu_session_ext)))
+		goto drop;
+
+	if (seg6_mobile_push_gtpu(skb, cb.teid, cb.qfi, cb.pdu_type,
+				  cb.pdu_type_set))
+		goto drop;
+
+	uh = skb_push(skb, sizeof(*uh));
+	skb_reset_transport_header(skb);
+	uh->source = htons(GTP1U_PORT);
+	uh->dest = htons(GTP1U_PORT);
+	uh->len = htons(skb->len);
+	uh->check = 0; /* IPv4 UDP checksum optional; offload may set later */
+
+	iph = skb_push(skb, sizeof(*iph));
+	skb_reset_network_header(skb);
+	iph->version = 4;
+	iph->ihl = sizeof(*iph) >> 2;
+	iph->tos = cb.outer_tclass;
+	iph->tot_len = htons(skb->len);
+	iph->frag_off = htons(IP_DF);
+	iph->ttl = cb.outer_hoplimit;
+	iph->protocol = IPPROTO_UDP;
+	iph->saddr = cb.v4_sa;
+	iph->daddr = cb.v4_da;
+	__ip_select_ident(net, iph, 1);
+	iph->check = 0;
+	iph->check = ip_fast_csum((unsigned char *)iph, iph->ihl);
+
+	skb->protocol = htons(ETH_P_IP);
+	nf_reset_ct(skb);
+	skb_dst_drop(skb);
+
+	/* The IPv4 outer is constructed locally from the SRv6 SID and the
+	 * inbound IPv6 outer (RFC 9433 Section 6.6 Figure 9 / 10).  The
+	 * IPv4 source address is synthesised, so it is not guaranteed to
+	 * have a reverse route; ip_route_input() + dst_input() with
+	 * rp_filter enabled would drop the packet.  Use an output route
+	 * lookup with FLOWI_FLAG_ANYSRC and emit via dst_output(): the
+	 * packet is locally originated from the IPv4 stack's perspective
+	 * and traverses NF_INET_LOCAL_OUT.
+	 */
+	{
+		struct rtable *rt;
+		struct flowi4 fl4 = {
+			.daddr = cb.v4_da,
+			.saddr = cb.v4_sa,
+			.flowi4_proto = IPPROTO_UDP,
+			.flowi4_flags = FLOWI_FLAG_ANYSRC,
+			.flowi4_oif = slwt->oif,
+		};
+
+		rt = ip_route_output_key(net, &fl4);
+		if (IS_ERR(rt)) {
+			reason = SKB_DROP_REASON_IP_OUTNOROUTES;
+			goto drop;
+		}
+		skb_dst_set(skb, &rt->dst);
+		return dst_output(net, NULL, skb);
+	}
+
+drop:
+	kfree_skb_reason(skb, reason);
+	return -EINVAL;
+}
+
+/* RFC 9433 Section 6.6 -- End.M.GTP4.E
+ * Receives an SRv6 packet and re-encapsulates the inner payload in
+ * IPv4/UDP/GTP-U (with an optional PDU Session extension header)
+ * toward a legacy IPv4 gNB.
+ *
+ * When net.netfilter.nf_hooks_lwtunnel=1 the inner T-PDU is exposed
+ * to NF_INET_PRE_ROUTING after the outer IPv6/SRH is popped and
+ * before the GTP-U header is pushed.  This lets nftables / conntrack
+ * apply policy on the inner 5-tuple at the SR Gateway.
+ */
+static int input_action_end_m_gtp4_e(struct sk_buff *skb,
+				     struct seg6_local_lwt *slwt)
+{
+	u8 qfi, outer_tclass, outer_hoplimit;
+	unsigned int outer_len;
+	struct ipv6_sr_hdr *srh;
+	struct in6_addr ip6_sa;
+	struct seg6_mobile_gtp4_e_cb *cb;
+	bool no_srh = false;
+	int inner_nfproto;
+	__be16 frag_off;
+	__be32 v4_da, v4_sa;
+	struct ipv6hdr *ip6h;
+	u64 args_mob;
+	u32 teid;
+	u8 nh;
+	int off;
+	const struct seg6_mobile_info *minfo = &slwt->mobile_info;
+	enum skb_drop_reason reason = SKB_DROP_REASON_SEG6_MOBILE_BAD_SID;
+
+	BUILD_BUG_ON(sizeof(struct seg6_mobile_gtp4_e_cb) >
+		     sizeof_field(struct sk_buff, cb));
+
+	if (!pskb_may_pull(skb, sizeof(*ip6h))) {
+		reason = SKB_DROP_REASON_SEG6_MOBILE_BAD_INNER;
+		goto drop;
+	}
+
+	ip6h = ipv6_hdr(skb);
+	ip6_sa = ip6h->saddr;
+
+	/* Snapshot fields read from the IPv6 outer before any pskb_may_pull()
+	 * call below: seg6_mobile_get_validated_srh() invokes pskb_may_pull()
+	 * internally and may reallocate skb->head, invalidating @ip6h.  RFC
+	 * 6040 outer-to-outer propagation: DSCP+ECN to TOS, HopLimit to TTL.
+	 */
+	outer_tclass = ipv6_get_dsfield(ip6h);
+	outer_hoplimit = ip6h->hop_limit;
+
+	if (!seg6_mobile_parse_gtp4_sid(&ip6h->daddr,
+					seg6_mobile_skb_prefix_bits(skb),
+					minfo->v4_mask_len,
+					&v4_da, &args_mob))
+		goto drop;
+
+	/* Validate SRH (if present) per RFC 9433 Section 6.6 S01-S04: SL
+	 * must be 0.  HMAC is enforced when the SRH is present and the
+	 * kernel was built with CONFIG_IPV6_SEG6_HMAC.
+	 */
+	srh = seg6_mobile_get_validated_srh(skb, &no_srh);
+	if (!srh && !no_srh) {
+		reason = SKB_DROP_REASON_SEG6_MOBILE_INVALID_SRH_SL;
+		goto drop;
+	}
+	if (srh && srh->segments_left != 0) {
+		reason = SKB_DROP_REASON_SEG6_MOBILE_INVALID_SRH_SL;
+		goto drop;
+	}
+
+	/* @ip6h may have been invalidated by pskb_may_pull() inside
+	 * seg6_mobile_get_validated_srh(); re-evaluate before any further
+	 * dereference.
+	 */
+	ip6h = ipv6_hdr(skb);
+
+	teid = seg6_mobile_teid_from_args(args_mob);
+	qfi = seg6_mobile_qfi_from_args(args_mob);
+
+	v4_sa = seg6_mobile_v4_sa(&ip6_sa, &minfo->src_addr, minfo->v4_mask_len,
+				  minfo->v6_src_prefix_len);
+
+	/* RFC 9433 Section 6.6 upper-layer S02 mandates "Pop the IPv6
+	 * header and all its extension headers".  Use ipv6_skip_exthdr()
+	 * so HBH / Routing / Dest-Opts / Fragment headers are accounted
+	 * for in addition to the SRH.  The terminal next-header value
+	 * also selects NFPROTO_IPV4 / NFPROTO_IPV6 for the
+	 * NF_INET_PRE_ROUTING hook below.
+	 */
+	nh = ip6h->nexthdr;
+	off = ipv6_skip_exthdr(skb, sizeof(*ip6h), &nh, &frag_off);
+	if (off < 0) {
+		reason = SKB_DROP_REASON_SEG6_MOBILE_BAD_INNER;
+		goto drop;
+	}
+	outer_len = off;
+
+	switch (nh) {
+	case IPPROTO_IPIP:
+		inner_nfproto = NFPROTO_IPV4;
+		break;
+	case IPPROTO_IPV6:
+		inner_nfproto = NFPROTO_IPV6;
+		break;
+	default:
+		inner_nfproto = -1;
+		break;
+	}
+
+	/* For inner IP traffic that may traverse NF_INET_PRE_ROUTING below,
+	 * pull the full inner IP header into the linear area so a netfilter
+	 * hook reading skb_transport_header() does not access stale data.
+	 * Non-IP inner is forwarded as-is via the GTP-U T-PDU payload.
+	 */
+	if (!pskb_may_pull(skb, outer_len + ((inner_nfproto == NFPROTO_IPV4) ?
+					     sizeof(struct iphdr) :
+					     (inner_nfproto == NFPROTO_IPV6) ?
+					     sizeof(struct ipv6hdr) : 0))) {
+		reason = SKB_DROP_REASON_SEG6_MOBILE_BAD_INNER;
+		goto drop;
+	}
+
+	skb_pull_rcsum(skb, outer_len);
+	skb_reset_network_header(skb);
+	skb_reset_transport_header(skb);
+
+	cb = SEG6_MOBILE_GTP4_E_CB(skb);
+	cb->v4_da = v4_da;
+	cb->v4_sa = v4_sa;
+	cb->teid = teid;
+	cb->qfi = qfi;
+	cb->outer_tclass = outer_tclass;
+	cb->outer_hoplimit = outer_hoplimit;
+	cb->pdu_type = minfo->pdu_type;
+	cb->pdu_type_set = minfo->pdu_type_set;
+
+	if (inner_nfproto >= 0 &&
+	    static_branch_unlikely(&nf_hooks_lwtunnel_enabled)) {
+		/* Set skb->protocol and the transport offset to match the
+		 * inner header so the hook chain sees a coherent IPv4 /
+		 * IPv6 packet.  The finish half overwrites skb->protocol
+		 * to ETH_P_IP after the IPv4 outer is pushed.
+		 */
+		skb->protocol = (inner_nfproto == NFPROTO_IPV4) ?
+				htons(ETH_P_IP) : htons(ETH_P_IPV6);
+		skb_set_transport_header(skb,
+					 (inner_nfproto == NFPROTO_IPV4) ?
+					 sizeof(struct iphdr) :
+					 sizeof(struct ipv6hdr));
+		nf_reset_ct(skb);
+
+		return NF_HOOK(inner_nfproto, NF_INET_PRE_ROUTING,
+			       dev_net(skb->dev), NULL, skb, skb->dev,
+			       NULL, input_action_end_m_gtp4_e_finish);
+	}
+
+	return input_action_end_m_gtp4_e_finish(dev_net(skb->dev), NULL, skb);
+
+drop:
+	kfree_skb_reason(skb, reason);
+	return -EINVAL;
+}
+
 /* RFC 9433 Section 6.2 -- End.MAP
  * Replace the outer IPv6 destination address with the configured next
  * SID, decrement the Hop Limit, and forward via IPv6 routing.  The
@@ -1534,6 +2037,11 @@ drop:
 	kfree_skb_reason(skb, reason);
 	return -EINVAL;
 }
+
+/* Forward declarations; defined next to the parse_nla_mobile_* helpers below. */
+static int seg6_mobile_v4_validate(struct seg6_local_lwt *slwt,
+				   const void *cfg,
+				   struct netlink_ext_ack *extack);
 
 static struct seg6_action_desc seg6_action_table[] = {
 	{
@@ -1633,6 +2141,19 @@ static struct seg6_action_desc seg6_action_table[] = {
 		.input		= input_action_end_bpf,
 	},
 	{
+		.action		= SEG6_LOCAL_ACTION_END_M_GTP4_E,
+		.attrs		= SEG6_F_ATTR(SEG6_LOCAL_MOBILE_SRC_ADDR) |
+				  SEG6_F_ATTR(SEG6_LOCAL_MOBILE_V4_MASK_LEN),
+		.optattrs	= SEG6_F_LOCAL_COUNTERS |
+				  SEG6_F_ATTR(SEG6_LOCAL_MOBILE_PDU_TYPE) |
+				  SEG6_F_ATTR(SEG6_LOCAL_MOBILE_V6_SRC_PREFIX_LEN) |
+				  SEG6_F_ATTR(SEG6_LOCAL_OIF),
+		.input		= input_action_end_m_gtp4_e,
+		.slwt_ops	= {
+			.build_state = seg6_mobile_v4_validate,
+		},
+	},
+	{
 		.action		= SEG6_LOCAL_ACTION_END_MAP,
 		.attrs		= SEG6_F_ATTR(SEG6_LOCAL_NH6),
 		.optattrs	= SEG6_F_LOCAL_COUNTERS,
@@ -1728,6 +2249,11 @@ static const struct nla_policy seg6_local_policy[SEG6_LOCAL_MAX + 1] = {
 	[SEG6_LOCAL_BPF]	= { .type = NLA_NESTED },
 	[SEG6_LOCAL_COUNTERS]	= { .type = NLA_NESTED },
 	[SEG6_LOCAL_FLAVORS]	= { .type = NLA_NESTED },
+	[SEG6_LOCAL_MOBILE_SRC_ADDR] =
+		NLA_POLICY_EXACT_LEN(sizeof(struct in6_addr)),
+	[SEG6_LOCAL_MOBILE_V4_MASK_LEN] = { .type = NLA_U8 },
+	[SEG6_LOCAL_MOBILE_PDU_TYPE] = { .type = NLA_U8 },
+	[SEG6_LOCAL_MOBILE_V6_SRC_PREFIX_LEN] = { .type = NLA_U8 },
 };
 
 static int parse_nla_srh(struct nlattr **attrs, struct seg6_local_lwt *slwt,
@@ -1959,6 +2485,163 @@ static int cmp_nla_oif(struct seg6_local_lwt *a, struct seg6_local_lwt *b)
 	if (a->oif != b->oif)
 		return 1;
 
+	return 0;
+}
+
+static int parse_nla_mobile_src_addr(struct nlattr **attrs,
+				     struct seg6_local_lwt *slwt,
+				     struct netlink_ext_ack *extack)
+{
+	memcpy(&slwt->mobile_info.src_addr,
+	       nla_data(attrs[SEG6_LOCAL_MOBILE_SRC_ADDR]),
+	       sizeof(struct in6_addr));
+	return 0;
+}
+
+static int put_nla_mobile_src_addr(struct sk_buff *skb,
+				   struct seg6_local_lwt *slwt)
+{
+	if (nla_put(skb, SEG6_LOCAL_MOBILE_SRC_ADDR,
+		    sizeof(struct in6_addr), &slwt->mobile_info.src_addr))
+		return -EMSGSIZE;
+	return 0;
+}
+
+static int cmp_nla_mobile_src_addr(struct seg6_local_lwt *a,
+				   struct seg6_local_lwt *b)
+{
+	return memcmp(&a->mobile_info.src_addr, &b->mobile_info.src_addr,
+		      sizeof(struct in6_addr));
+}
+
+static int parse_nla_mobile_v4_mask_len(struct nlattr **attrs,
+					struct seg6_local_lwt *slwt,
+					struct netlink_ext_ack *extack)
+{
+	u8 len = nla_get_u8(attrs[SEG6_LOCAL_MOBILE_V4_MASK_LEN]);
+
+	if (!seg6_mobile_v4_mask_valid(len)) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "SRv6 Mobile IPv4 mask length must be in 1..32 and leave room for the 40-bit Args.Mob.Session");
+		return -EINVAL;
+	}
+	slwt->mobile_info.v4_mask_len = len;
+	return 0;
+}
+
+static int put_nla_mobile_v4_mask_len(struct sk_buff *skb,
+				      struct seg6_local_lwt *slwt)
+{
+	if (nla_put_u8(skb, SEG6_LOCAL_MOBILE_V4_MASK_LEN,
+		       slwt->mobile_info.v4_mask_len))
+		return -EMSGSIZE;
+	return 0;
+}
+
+static int cmp_nla_mobile_v4_mask_len(struct seg6_local_lwt *a,
+				      struct seg6_local_lwt *b)
+{
+	return a->mobile_info.v4_mask_len != b->mobile_info.v4_mask_len;
+}
+
+static int parse_nla_mobile_pdu_type(struct nlattr **attrs,
+				     struct seg6_local_lwt *slwt,
+				     struct netlink_ext_ack *extack)
+{
+	u8 t = nla_get_u8(attrs[SEG6_LOCAL_MOBILE_PDU_TYPE]);
+
+	/* 3GPP TS 38.415: PDU Type is a 4-bit field. */
+	if (t > 0xf) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "SRv6 Mobile PDU Type must fit in 4 bits (0..15)");
+		return -EINVAL;
+	}
+	slwt->mobile_info.pdu_type = t;
+	slwt->mobile_info.pdu_type_set = true;
+	return 0;
+}
+
+static int put_nla_mobile_pdu_type(struct sk_buff *skb,
+				   struct seg6_local_lwt *slwt)
+{
+	if (!slwt->mobile_info.pdu_type_set)
+		return 0;
+	if (nla_put_u8(skb, SEG6_LOCAL_MOBILE_PDU_TYPE,
+		       slwt->mobile_info.pdu_type))
+		return -EMSGSIZE;
+	return 0;
+}
+
+static int cmp_nla_mobile_pdu_type(struct seg6_local_lwt *a,
+				   struct seg6_local_lwt *b)
+{
+	if (a->mobile_info.pdu_type_set != b->mobile_info.pdu_type_set)
+		return 1;
+	if (!a->mobile_info.pdu_type_set)
+		return 0;
+	return a->mobile_info.pdu_type != b->mobile_info.pdu_type;
+}
+
+static int parse_nla_mobile_v6_src_prefix_len(struct nlattr **attrs,
+					      struct seg6_local_lwt *slwt,
+					      struct netlink_ext_ack *extack)
+{
+	u8 len = nla_get_u8(attrs[SEG6_LOCAL_MOBILE_V6_SRC_PREFIX_LEN]);
+
+	/* RFC 9433 Section 6.6 Figure 10: P + IPv4 SA (a bits) + padding =
+	 * 128.  P must be non-zero and leave room for the IPv4 SA (a >= 1)
+	 * within the IPv6 source address; the cross-attribute upper bound
+	 * (P + a <= 128) is enforced in the action's build_state callback.
+	 */
+	if (len == 0 || len > 127) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "SRv6 Mobile v6_src_prefix_len must be in 1..127");
+		return -EINVAL;
+	}
+	slwt->mobile_info.v6_src_prefix_len = len;
+	return 0;
+}
+
+static int put_nla_mobile_v6_src_prefix_len(struct sk_buff *skb,
+					    struct seg6_local_lwt *slwt)
+{
+	if (nla_put_u8(skb, SEG6_LOCAL_MOBILE_V6_SRC_PREFIX_LEN,
+		       slwt->mobile_info.v6_src_prefix_len))
+		return -EMSGSIZE;
+	return 0;
+}
+
+static int cmp_nla_mobile_v6_src_prefix_len(struct seg6_local_lwt *a,
+					    struct seg6_local_lwt *b)
+{
+	return a->mobile_info.v6_src_prefix_len !=
+	       b->mobile_info.v6_src_prefix_len;
+}
+
+/* build_state callback shared between End.M.GTP4.E and H.M.GTP4.D
+ * that performs the RFC 9433 Section 6.6 Figure 10 cross-attribute
+ * sanity check (Source UPF Prefix length P + IPv4 portion length a
+ * <= 128) using the effective P (= the configured v6_src_prefix_len
+ * or the SEG6_MOBILE_V6_SRC_PREFIX_LEN_DEFAULT when unset).
+ */
+static int seg6_mobile_v4_validate(struct seg6_local_lwt *slwt,
+				   const void *cfg,
+				   struct netlink_ext_ack *extack)
+{
+	const struct seg6_mobile_info *minfo = &slwt->mobile_info;
+	u8 p_bits = minfo->v6_src_prefix_len ? :
+		    SEG6_MOBILE_V6_SRC_PREFIX_LEN_DEFAULT;
+
+	/* seg6_mobile_v4_sa() reads a 32-bit IPv4 template at @p_bits from
+	 * the IPv6 SA template, so the prefix must leave room for those
+	 * 32 bits.  v4_mask_len is bounded to 32 separately, so this also
+	 * implies p_bits + v4_mask_len <= 128.
+	 */
+	if ((unsigned int)p_bits + 32 > 128) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "SRv6 Mobile v6_src_prefix_len must leave room for the 32-bit IPv4 source template (prefix_len <= 96)");
+		return -EINVAL;
+	}
 	return 0;
 }
 
@@ -2391,6 +3074,22 @@ static struct seg6_action_param seg6_action_params[SEG6_LOCAL_MAX + 1] = {
 	[SEG6_LOCAL_FLAVORS]	= { .parse = parse_nla_flavors,
 				    .put = put_nla_flavors,
 				    .cmp = cmp_nla_flavors },
+
+	[SEG6_LOCAL_MOBILE_SRC_ADDR] = { .parse = parse_nla_mobile_src_addr,
+					 .put = put_nla_mobile_src_addr,
+					 .cmp = cmp_nla_mobile_src_addr },
+
+	[SEG6_LOCAL_MOBILE_V4_MASK_LEN] = { .parse = parse_nla_mobile_v4_mask_len,
+					    .put = put_nla_mobile_v4_mask_len,
+					    .cmp = cmp_nla_mobile_v4_mask_len },
+
+	[SEG6_LOCAL_MOBILE_PDU_TYPE] = { .parse = parse_nla_mobile_pdu_type,
+					 .put = put_nla_mobile_pdu_type,
+					 .cmp = cmp_nla_mobile_pdu_type },
+
+	[SEG6_LOCAL_MOBILE_V6_SRC_PREFIX_LEN] = { .parse = parse_nla_mobile_v6_src_prefix_len,
+						  .put = put_nla_mobile_v6_src_prefix_len,
+						  .cmp = cmp_nla_mobile_v6_src_prefix_len },
 };
 
 /* call the destroy() callback (if available) for each set attribute in
@@ -2706,6 +3405,18 @@ static int seg6_local_get_encap_size(struct lwtunnel_state *lwt)
 
 	if (attrs & SEG6_F_ATTR(SEG6_LOCAL_FLAVORS))
 		nlsize += encap_size_flavors(slwt);
+
+	if (attrs & SEG6_F_ATTR(SEG6_LOCAL_MOBILE_SRC_ADDR))
+		nlsize += nla_total_size(16);
+
+	if (attrs & SEG6_F_ATTR(SEG6_LOCAL_MOBILE_V4_MASK_LEN))
+		nlsize += nla_total_size(1);
+
+	if (attrs & SEG6_F_ATTR(SEG6_LOCAL_MOBILE_PDU_TYPE))
+		nlsize += nla_total_size(1);
+
+	if (attrs & SEG6_F_ATTR(SEG6_LOCAL_MOBILE_V6_SRC_PREFIX_LEN))
+		nlsize += nla_total_size(1);
 
 	return nlsize;
 }
