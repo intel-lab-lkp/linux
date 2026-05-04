@@ -3466,7 +3466,7 @@ ctnetlink_change_expect(struct nf_conntrack_expect *x,
 			return -ETIME;
 
 		x->timeout.expires = jiffies +
-			ntohl(nla_get_be32(cda[CTA_EXPECT_TIMEOUT])) * HZ;
+			(u64)ntohl(nla_get_be32(cda[CTA_EXPECT_TIMEOUT])) * HZ;
 		add_timer(&x->timeout);
 	}
 	return 0;
