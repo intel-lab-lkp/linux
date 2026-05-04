@@ -95,6 +95,7 @@ void kvm_vcpu_pmu_resync_el0(void);
 	(vcpu_has_feature(vcpu, KVM_ARM_VCPU_PMU_V3))
 
 bool kvm_pmu_is_partitioned(struct arm_pmu *pmu);
+void kvm_pmu_handle_guest_irq(struct arm_pmu *pmu, u64 pmovsr);
 
 u8 kvm_pmu_guest_num_counters(struct kvm_vcpu *vcpu);
 u8 kvm_pmu_hpmn(struct kvm_vcpu *vcpu);
@@ -289,6 +290,8 @@ static inline u64 kvm_pmu_guest_counter_mask(void *kvm)
 {
 	return 0;
 }
+
+static inline void kvm_pmu_handle_guest_irq(struct arm_pmu *pmu, u64 pmovsr) {}
 
 #endif
 
