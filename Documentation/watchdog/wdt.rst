@@ -1,6 +1,8 @@
-============================================================
-WDT Watchdog Timer Interfaces For The Linux Operating System
-============================================================
+.. SPDX-License-Identifier: GPL-2.0-or-later
+
+================================================================
+ICS WDT Watchdog Timer Interfaces For The Linux Operating System
+================================================================
 
 Last Reviewed: 10/05/2007
 
