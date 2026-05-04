@@ -221,7 +221,10 @@ static const struct wiphy_iftype_ext_capab rtw89_iftypes_ext_capa[] = {
 			IEEE80211_EML_CAP_EMLSR_SUPP |
 			(IEEE80211_EML_CAP_EML_PADDING_DELAY_256US << 1) |
 			(IEEE80211_EML_CAP_EMLSR_TRANSITION_DELAY_32US << 4),
-		.mld_capa_and_ops = 0,
+		.mld_capa_and_ops =
+			FIELD_PREP_CONST(IEEE80211_MLD_CAP_OP_TID_TO_LINK_MAP_NEG_SUPP,
+					 IEEE80211_MLD_CAP_OP_TID_TO_LINK_MAP_NEG_SUPP_SAME) |
+			IEEE80211_MLD_CAP_OP_LINK_RECONF_SUPPORT,
 	},
 };
 
