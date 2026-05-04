@@ -1442,9 +1442,27 @@ j1939_xtp_rx_cts_one(struct j1939_session *session, struct sk_buff *skb)
 
 	netdev_dbg(session->priv->ndev, "%s: 0x%p\n", __func__, session);
 
-	if (session->last_cmd == dat[0]) {
-		err = J1939_XTP_ABORT_DUP_SEQ;
-		goto out_session_cancel;
+	session->last_cmd = dat[0];
+
+	/* TODO
+	 *according to the standard it is illegal to send a CTS while data transfer is ongoing.
+	 * If a CTS is sent while data transfer is ongoing an abort with code 4 should be sent.
+	 * The previous check I removed was simply (session->last_cmd == dat[0]).
+	 * This did not check for a invalid CTS after some data frames had already been
+	 * sent but before all of them were sent.
+	 * So CTS(0), CTS(5) was illegal. CTS(5), DAT, CTS(5) was legal,
+	 * even though only one data frame has been sent instead of 5.
+	 * Should a check for this also be added?
+	 */
+	if (!dat[1]) {
+		/* CTS(0) */
+		if (session->transmission) {
+			/* TODO notify error queue about hold messages? */
+			j1939_session_txtimer_cancel(session);
+		}
+		j1939_tp_set_rxtimeout(session, 1050);
+		netdev_dbg(session->priv->ndev, "%s: 0x%p received CTS hold\n", __func__, session);
+		return;
 	}
 
 	if (session->skcb.addr.type == J1939_ETP)
@@ -1457,7 +1475,11 @@ j1939_xtp_rx_cts_one(struct j1939_session *session, struct sk_buff *skb)
 	else if (dat[1] > session->pkt.block /* 0xff for etp */)
 		goto out_session_cancel;
 
-	/* set packet counters only when not CTS(0) */
+	if (session->pkt.tx_acked >= pkt) {
+		err = J1939_XTP_ABORT_DUP_SEQ;
+		goto out_session_cancel;
+	}
+
 	session->pkt.tx_acked = pkt - 1;
 	j1939_session_skb_drop_old(session);
 	session->pkt.last = session->pkt.tx_acked + dat[1];
@@ -1467,19 +1489,13 @@ j1939_xtp_rx_cts_one(struct j1939_session *session, struct sk_buff *skb)
 	/* TODO: do not set tx here, do it in txtimer */
 	session->pkt.tx = session->pkt.tx_acked;
 
-	session->last_cmd = dat[0];
-	if (dat[1]) {
-		j1939_tp_set_rxtimeout(session, 1250);
-		if (session->transmission) {
-			if (session->pkt.tx_acked)
-				j1939_sk_errqueue(session,
-						  J1939_ERRQUEUE_TX_SCHED);
-			j1939_session_txtimer_cancel(session);
-			j1939_tp_schedule_txtimer(session, 0);
-		}
-	} else {
-		/* CTS(0) */
-		j1939_tp_set_rxtimeout(session, 550);
+	j1939_tp_set_rxtimeout(session, 1250);
+	if (session->transmission) {
+		if (session->pkt.tx_acked)
+			j1939_sk_errqueue(session,
+						J1939_ERRQUEUE_TX_SCHED);
+		j1939_session_txtimer_cancel(session);
+		j1939_tp_schedule_txtimer(session, 0);
 	}
 	return;
 
