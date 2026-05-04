@@ -4,7 +4,7 @@
  * (SCMI).
  *
  * Copyright (C) 2020-2022 OpenSynergy.
- * Copyright (C) 2021-2024 ARM Ltd.
+ * Copyright (C) 2021-2026 ARM Ltd.
  */
 
 /**
@@ -17,6 +17,7 @@
  * virtqueue. Access to each virtqueue is protected by spinlocks.
  */
 
+#include <linux/cleanup.h>
 #include <linux/completion.h>
 #include <linux/errno.h>
 #include <linux/platform_device.h>
@@ -115,6 +116,79 @@ static struct scmi_transport_core_operations *core;
 
 /* Only one SCMI VirtIO device can possibly exist */
 static struct virtio_device *scmi_vdev;
+
+/**
+ * struct scmi_virtio_suppliers  - Transport descriptor
+ * @mtx: A mutex to protect @available
+ * @available: A reference to an initialized transport device ready to use
+ *	       which  will cycle through the following 3 states:
+ *	       1. PTR_ERR(-EPROBE_DEFER) at start before transport is ready
+ *	       2. <supplier_dev> when transport is initialized, ready for use,
+ *	          but still unused
+ *	       3. PTR_ERR(-EBUSY) when transport supplier device is in use
+ * @th: An embedded transport handle object that embeds the helpers
+ *	implementing the above mentioned logic
+ *
+ * Note that this transport driver enforces single instance probing.
+ */
+struct scmi_virtio_suppliers {
+	/* Protect @available */
+	struct mutex mtx;
+	struct device *available;
+	const struct scmi_transport_handle th;
+};
+
+#define to_vsup(t)	container_of(t, struct scmi_virtio_suppliers, th)
+
+static int scmi_virtio_supplier_init(const struct scmi_transport_handle *th,
+				     struct device *dev)
+{
+	struct scmi_virtio_suppliers *vsup = to_vsup(th);
+
+	guard(mutex)(&vsup->mtx);
+	/* Was any transport already registered ? */
+	if (!IS_ERR(vsup->available))
+		return -EBUSY;
+
+	vsup->available = dev;
+
+	return 0;
+}
+
+static struct device *
+scmi_virtio_supplier_get(const struct scmi_transport_handle *th)
+{
+	struct scmi_virtio_suppliers *vsup = to_vsup(th);
+	struct device *supplier;
+
+	guard(mutex)(&vsup->mtx);
+	supplier = vsup->available;
+	if (!IS_ERR(supplier))
+		vsup->available = ERR_PTR(-EBUSY);
+
+	return supplier;
+}
+
+static void scmi_virtio_supplier_put(const struct scmi_transport_handle *th,
+				     struct device *supplier)
+{
+	struct scmi_virtio_suppliers *vsup = to_vsup(th);
+
+	guard(mutex)(&vsup->mtx);
+	vsup->available = supplier;
+}
+
+static void scmi_virtio_supplier_cleanup(const struct scmi_transport_handle *th)
+{
+	scmi_virtio_supplier_put(th, ERR_PTR(-EPROBE_DEFER));
+}
+
+static struct scmi_virtio_suppliers scmi_transport_suppliers = {
+	.mtx = __MUTEX_INITIALIZER(mutexname),
+	.available = INIT_ERR_PTR(-EPROBE_DEFER),
+	.th.supplier_get = scmi_virtio_supplier_get,
+	.th.supplier_put = scmi_virtio_supplier_put,
+};
 
 static void scmi_vio_channel_ready(struct scmi_vio_channel *vioch,
 				   struct scmi_chan_info *cinfo)
@@ -377,7 +451,7 @@ static bool virtio_chan_available(struct device_node *of_node, int idx)
 {
 	struct scmi_vio_channel *channels, *vioch = NULL;
 
-	if (WARN_ON_ONCE(!scmi_vdev))
+	if (!scmi_vdev)
 		return false;
 
 	channels = (struct scmi_vio_channel *)scmi_vdev->priv;
@@ -393,6 +467,10 @@ static bool virtio_chan_available(struct device_node *of_node, int idx)
 	default:
 		return false;
 	}
+
+	dev_dbg(&scmi_vdev->dev, "%s Channel %sAVAILABLE on SCMI Virtio device.\n",
+		idx == VIRTIO_SCMI_VQ_TX ? "TX" : "RX",
+		(vioch && !vioch->cinfo) ? "" : "NOT ");
 
 	return vioch && !vioch->cinfo;
 }
@@ -410,7 +488,7 @@ static int virtio_chan_setup(struct scmi_chan_info *cinfo, struct device *dev,
 	int i;
 
 	if (!scmi_vdev)
-		return -EPROBE_DEFER;
+		return -EINVAL;
 
 	vioch = &((struct scmi_vio_channel *)scmi_vdev->priv)[index];
 
@@ -459,6 +537,9 @@ static int virtio_chan_setup(struct scmi_chan_info *cinfo, struct device *dev,
 	}
 
 	scmi_vio_channel_ready(vioch, cinfo);
+
+	dev_dbg(&scmi_vdev->dev, "%s Channel SETUP on SCMI Virtio device.\n",
+		tx ? "TX" : "RX");
 
 	return 0;
 }
@@ -801,7 +882,7 @@ static struct scmi_desc scmi_virtio_desc = {
 };
 
 static const struct of_device_id scmi_of_match[] = {
-	{ .compatible = "arm,scmi-virtio" },
+	{ .compatible = "arm,scmi-virtio", .data = &scmi_transport_suppliers.th},
 	{ /* Sentinel */ },
 };
 
@@ -864,33 +945,30 @@ static int scmi_vio_probe(struct virtio_device *vdev)
 			sz = MSG_TOKEN_MAX;
 		}
 		channels[i].max_msg = sz;
+		dev_dbg(dev, "VQ%d initialized with max_msg: %d\n", i, sz);
 	}
 
 	vdev->priv = channels;
-
-	/* Ensure initialized scmi_vdev is visible */
-	smp_store_mb(scmi_vdev, vdev);
-
-	/* Set device ready */
-	virtio_device_ready(vdev);
-
-	ret = platform_driver_register(&scmi_virtio_driver);
+	ret = scmi_virtio_supplier_init(&scmi_transport_suppliers.th,
+					&vdev->dev);
 	if (ret) {
 		vdev->priv = NULL;
 		vdev->config->del_vqs(vdev);
-		/* Ensure NULLified scmi_vdev is visible */
-		smp_store_mb(scmi_vdev, NULL);
-
 		return ret;
 	}
+
+	/* Ensure initialized scmi_vdev is visible */
+	smp_store_mb(scmi_vdev, vdev);
+	/* Set device ready */
+	virtio_device_ready(vdev);
+
+	dev_dbg(dev, "Probed and initialized SCMI Virtio device.\n");
 
 	return 0;
 }
 
 static void scmi_vio_remove(struct virtio_device *vdev)
 {
-	platform_driver_unregister(&scmi_virtio_driver);
-
 	/*
 	 * Once we get here, virtio_chan_free() will have already been called by
 	 * the SCMI core for any existing channel and, as a consequence, all the
@@ -900,8 +978,10 @@ static void scmi_vio_remove(struct virtio_device *vdev)
 	 */
 	virtio_reset_device(vdev);
 	vdev->config->del_vqs(vdev);
+
 	/* Ensure scmi_vdev is visible as NULL */
 	smp_store_mb(scmi_vdev, NULL);
+	scmi_virtio_supplier_cleanup(&scmi_transport_suppliers.th);
 }
 
 static int scmi_vio_validate(struct virtio_device *vdev)
@@ -936,7 +1016,30 @@ static struct virtio_driver virtio_scmi_driver = {
 	.validate = scmi_vio_validate,
 };
 
-module_virtio_driver(virtio_scmi_driver);
+static int __init scmi_transport_virtio_init(void)
+{
+	int ret;
+
+	ret = register_virtio_driver(&virtio_scmi_driver);
+	if (ret)
+		return ret;
+
+	ret = platform_driver_register(&scmi_virtio_driver);
+	if (ret) {
+		unregister_virtio_driver(&virtio_scmi_driver);
+		return ret;
+	}
+
+	return ret;
+}
+module_init(scmi_transport_virtio_init);
+
+static void __exit scmi_transport_virtio_exit(void)
+{
+	platform_driver_unregister(&scmi_virtio_driver);
+	unregister_virtio_driver(&virtio_scmi_driver);
+}
+module_exit(scmi_transport_virtio_exit);
 
 MODULE_AUTHOR("Igor Skalkin <igor.skalkin@opensynergy.com>");
 MODULE_AUTHOR("Peter Hilber <peter.hilber@opensynergy.com>");
