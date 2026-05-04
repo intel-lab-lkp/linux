@@ -4308,13 +4308,23 @@ int xhci_queue_isoc_tx_prepare(struct xhci_hcd *xhci, gfp_t mem_flags,
 	 */
 	check_interval(urb, ep_ctx);
 
-	/* Calculate the start frame and put it in urb->start_frame. */
-	if ((xhci->hcc_params & HCC_CFC) && !list_empty(&ep_ring->td_list)) {
-		if (GET_EP_CTX_STATE(ep_ctx) ==	EP_STATE_RUNNING) {
-			urb->start_frame = xep->next_frame_id;
-			goto skip_start_over;
-		}
+	/*
+	 * Calculate the start frame and put it in urb->start_frame.
+	 * On CFC-capable controllers, use sequential scheduling from
+	 * next_frame_id whenever the stream is running or a completion
+	 * is in progress (ring transiently empty due to drain race).
+	 * Skip this for explicit URB_ISO_ASAP requests.
+	 */
+	if ((xhci->hcc_params & HCC_CFC) &&
+	    !(urb->transfer_flags & URB_ISO_ASAP) &&
+	    (!list_empty(&ep_ring->td_list) ||
+	     hcd_periodic_completion_in_progress(xhci_to_hcd(xhci), urb->ep))) {
+		urb->start_frame = xep->next_frame_id;
+		goto skip_start_over;
 	}
+
+	xhci_dbg(xhci, "isoc: CFC sequential skipped for slot %u ep %u (ring_empty=%d), using ASAP\n",
+		 slot_id, ep_index, list_empty(&ep_ring->td_list));
 
 	start_frame = readl(&xhci->run_regs->microframe_index);
 	start_frame &= 0x3fff;
