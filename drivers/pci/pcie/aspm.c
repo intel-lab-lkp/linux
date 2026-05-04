@@ -804,8 +804,15 @@ static void pcie_aspm_override_default_link_state(struct pcie_link_state *link)
 	struct pci_dev *pdev = link->downstream;
 	u32 override;
 
-	/* For devicetree platforms, enable L0s and L1 by default */
-	if (of_have_populated_dt()) {
+	/*
+	 * For devicetree platforms, enable L0s and L1 by default.
+	 *
+	 * For removable devices (e.g., Thunderbolt/USB4), enable L0s and L1
+	 * by default if BIOS didn't configure any ASPM states. This handles
+	 * hotplugged devices where firmware may not have configured ASPM.
+	 */
+	if (of_have_populated_dt() ||
+	    (dev_is_removable(&pdev->dev) && !link->aspm_enabled)) {
 		if (link->aspm_support & PCIE_LINK_STATE_L0S)
 			link->aspm_default |= PCIE_LINK_STATE_L0S;
 		if (link->aspm_support & PCIE_LINK_STATE_L1)
