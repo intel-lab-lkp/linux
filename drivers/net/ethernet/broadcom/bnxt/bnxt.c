@@ -488,6 +488,7 @@ static netdev_tx_t bnxt_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct bnxt_sw_tx_bd *tx_buf;
 	__le32 lflags = 0;
 	skb_frag_t *frag;
+	u32 kid = 0;
 
 	i = skb_get_queue_mapping(skb);
 	if (unlikely(i >= bp->tx_nr_rings)) {
@@ -526,6 +527,10 @@ static netdev_tx_t bnxt_start_xmit(struct sk_buff *skb, struct net_device *dev)
 					bp->tx_wake_thresh))
 			return NETDEV_TX_BUSY;
 	}
+
+	skb = bnxt_ktls_xmit(bp, txr, skb, &lflags, &kid);
+	if (unlikely(!skb))
+		return NETDEV_TX_OK;
 
 	length = skb->len;
 	len = skb_headlen(skb);
@@ -675,7 +680,7 @@ normal_tx:
 
 	prod = NEXT_TX(prod);
 	txbd1 = bnxt_init_ext_bd(bp, txr, prod, lflags, vlan_tag_flags,
-				 cfa_action);
+				 cfa_action, kid);
 
 	if (skb_is_gso(skb)) {
 		bool udp_gso = !!(skb_shinfo(skb)->gso_type & SKB_GSO_UDP_L4);
@@ -698,7 +703,8 @@ normal_tx:
 					TX_BD_FLAGS_T_IPID |
 					(hdr_len << (TX_BD_HSIZE_SHIFT - 1)));
 		length = skb_shinfo(skb)->gso_size;
-		txbd1->tx_bd_mss = cpu_to_le32(length);
+		txbd1->tx_bd_kid_mss = cpu_to_le32(BNXT_TX_KID_HI(kid) |
+						   length);
 		length += hdr_len;
 	} else if (skb->ip_summed == CHECKSUM_PARTIAL) {
 		txbd1->tx_bd_hsize_lflags |=
