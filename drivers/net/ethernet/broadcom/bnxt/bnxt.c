@@ -17219,6 +17219,9 @@ static int bnxt_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	rc = bnxt_dl_register(bp);
 	if (rc)
 		goto init_err_dl;
+	rc = bnxt_crypto_init(bp);
+	if (rc)
+		bnxt_free_crypto_info(bp);
 
 	INIT_LIST_HEAD(&bp->usr_fltr_list);
 
