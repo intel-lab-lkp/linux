@@ -2910,8 +2910,9 @@ int idpf_send_get_set_rss_lut_msg(struct idpf_adapter *adapter,
 	if (reply_sz < sizeof(struct virtchnl2_rss_lut))
 		return -EIO;
 
-	lut_buf_size = le16_to_cpu(recv_rl->lut_entries) * sizeof(u32);
-	if (reply_sz < lut_buf_size)
+	lut_buf_size = flex_array_size(recv_rl, lut,
+				       le16_to_cpu(recv_rl->lut_entries));
+	if (reply_sz < lut_buf_size + sizeof(struct virtchnl2_rss_lut))
 		return -EIO;
 
 	/* size didn't change, we can reuse existing lut buf */
@@ -2928,7 +2929,7 @@ int idpf_send_get_set_rss_lut_msg(struct idpf_adapter *adapter,
 	}
 
 do_memcpy:
-	memcpy(rss_data->rss_lut, recv_rl->lut, rss_data->rss_lut_size);
+	memcpy(rss_data->rss_lut, recv_rl->lut, lut_buf_size);
 
 	return 0;
 }
