@@ -4030,15 +4030,21 @@ static int xhci_get_isoc_frame_id(struct xhci_hcd *xhci,
 			ret = -EINVAL;
 	}
 
+	/*
+	 * If the first TRB's start frame is out of the scheduling window or
+	 * lands exactly on its boundary, fall back to SIA (Schedule Immediately
+	 * After) rather than forcing start_frame_id+1. A forced +1 creates an
+	 * explicit one-frame hole that audio devices with strict continuity
+	 * requirements cannot recover from. The caller handles -EINVAL by
+	 * leaving sia_frame_id as TRB_SIA.
+	 */
 	if (index == 0) {
 		if (ret == -EINVAL || start_frame == start_frame_id) {
-			start_frame = start_frame_id + 1;
-			if (urb->dev->speed == USB_SPEED_LOW ||
-					urb->dev->speed == USB_SPEED_FULL)
-				urb->start_frame = start_frame;
-			else
-				urb->start_frame = start_frame << 3;
-			ret = 0;
+			xhci_dbg(xhci, "isoc: start frame %d %s window [%d, %d], using SIA\n",
+				 start_frame,
+				 ret == -EINVAL ? "behind" : "at boundary of",
+				 start_frame_id, end_frame_id);
+			return -EINVAL;
 		}
 	}
 
