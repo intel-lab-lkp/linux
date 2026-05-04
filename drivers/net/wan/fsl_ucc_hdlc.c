@@ -523,12 +523,12 @@ static int hdlc_rx_done(struct ucc_hdlc_private *priv, int rx_work_limit)
 	u16 length, howmany = 0;
 	u8 *bdbuffer;
 
-	dma_rmb();
 	bd = priv->currx_bd;
 	bd_status = be16_to_cpu(bd->status);
 
 	/* while there are received buffers and BD is full (~R_E) */
 	while (!((bd_status & (R_E_S)) || (--rx_work_limit < 0))) {
+		dma_rmb();
 		if (bd_status & (RX_BD_ERRORS)) {
 			dev->stats.rx_errors++;
 
@@ -610,7 +610,6 @@ recycle:
 
 		bd_status = be16_to_cpu(bd->status);
 	}
-	dma_rmb();
 
 	priv->currx_bd = bd;
 	return howmany;
