@@ -258,7 +258,7 @@ static int stk3310_read_event(struct iio_dev *indio_dev,
 		return -EINVAL;
 
 	mutex_lock(&data->lock);
-	ret = regmap_bulk_read(data->regmap, reg, &buf, 2);
+	ret = regmap_bulk_read(data->regmap, reg, &buf, sizeof(buf));
 	mutex_unlock(&data->lock);
 	if (ret < 0) {
 		dev_err(&data->client->dev, "register read failed\n");
@@ -298,7 +298,7 @@ static int stk3310_write_event(struct iio_dev *indio_dev,
 		return -EINVAL;
 
 	buf = cpu_to_be16(val);
-	ret = regmap_bulk_write(data->regmap, reg, &buf, 2);
+	ret = regmap_bulk_write(data->regmap, reg, &buf, sizeof(buf));
 	if (ret < 0) {
 		dev_err(&client->dev, "failed to set PS threshold!\n");
 		return ret;
@@ -376,7 +376,7 @@ static int stk3310_read_raw(struct iio_dev *indio_dev,
 			reg = STK3310_REG_PS_DATA_MSB;
 
 		mutex_lock(&data->lock);
-		ret = regmap_bulk_read(data->regmap, reg, &buf, 2);
+		ret = regmap_bulk_read(data->regmap, reg, &buf, sizeof(buf));
 		if (ret < 0) {
 			dev_err(&client->dev, "register read failed\n");
 			mutex_unlock(&data->lock);
@@ -726,7 +726,7 @@ static int stk3310_resume(struct device *dev)
 
 	if (data->ps_thdl != 0x0) {
 		buf = cpu_to_be16(data->ps_thdl);
-		ret = regmap_bulk_write(data->regmap, STK3310_REG_THDL_PS, &buf, 2);
+		ret = regmap_bulk_write(data->regmap, STK3310_REG_THDL_PS, &buf, sizeof(buf));
 		if (ret < 0) {
 			dev_err(dev, "failed to set reg THDL_PS at resume.\n");
 			return ret;
@@ -735,7 +735,7 @@ static int stk3310_resume(struct device *dev)
 
 	if (data->ps_thdh != STK3310_PS_MAX_VAL) {
 		buf = cpu_to_be16(data->ps_thdh);
-		ret = regmap_bulk_write(data->regmap, STK3310_REG_THDH_PS, &buf, 2);
+		ret = regmap_bulk_write(data->regmap, STK3310_REG_THDH_PS, &buf, sizeof(buf));
 		if (ret < 0) {
 			dev_err(dev, "failed to set reg THDH_PS at resume.\n");
 			return ret;
