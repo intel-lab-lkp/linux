@@ -1035,6 +1035,7 @@ static bool pmu_access_event_counter_el0_disabled(struct kvm_vcpu *vcpu)
 static void pmu_write_pmcr(struct kvm_vcpu *vcpu, u64 val)
 {
 	if (kvm_vcpu_pmu_is_partitioned(vcpu)) {
+		kvm_pmu_set_guest_owned(vcpu);
 		write_sysreg(val, pmcr_el0);
 		return;
 	}
@@ -1086,6 +1087,7 @@ static bool access_pmcr(struct kvm_vcpu *vcpu, struct sys_reg_params *p,
 static void pmu_write_pmselr(struct kvm_vcpu *vcpu, u64 val)
 {
 	if (kvm_vcpu_pmu_is_partitioned(vcpu)) {
+		kvm_pmu_set_guest_owned(vcpu);
 		write_sysreg(val, pmselr_el0);
 		return;
 	}
@@ -1193,6 +1195,8 @@ static void pmu_write_evcntr(struct kvm_vcpu *vcpu, u64 val, u64 idx)
 		return;
 	}
 
+	kvm_pmu_set_guest_owned(vcpu);
+
 	if (idx == ARMV8_PMU_CYCLE_IDX) {
 		write_sysreg(val, pmccntr_el0);
 		return;
@@ -1281,6 +1285,7 @@ static void pmu_write_evtyper(struct kvm_vcpu *vcpu, u64 val, u64 idx)
 	u64 mask;
 
 	if (kvm_vcpu_pmu_is_partitioned(vcpu)) {
+		kvm_pmu_set_guest_owned(vcpu);
 		mask = kvm_pmu_evtyper_mask(vcpu->kvm);
 		__vcpu_assign_sys_reg(vcpu, PMEVTYPER0_EL0 + idx, val & mask);
 		return;
@@ -1350,6 +1355,8 @@ static int get_pmreg(struct kvm_vcpu *vcpu, const struct sys_reg_desc *r, u64 *v
 static void pmu_write_pmcnten(struct kvm_vcpu *vcpu, u64 val, bool set)
 {
 	if (kvm_vcpu_pmu_is_partitioned(vcpu)) {
+		kvm_pmu_set_guest_owned(vcpu);
+
 		if (set)
 			write_sysreg(val, pmcntenset_el0);
 		else
@@ -1398,6 +1405,8 @@ static bool access_pmcnten(struct kvm_vcpu *vcpu, struct sys_reg_params *p,
 static void pmu_write_pminten(struct kvm_vcpu *vcpu, u64 val, bool set)
 {
 	if (kvm_vcpu_pmu_is_partitioned(vcpu)) {
+		kvm_pmu_set_guest_owned(vcpu);
+
 		if (set)
 			write_sysreg(val, pmintenset_el1);
 		else
@@ -1453,6 +1462,8 @@ static bool access_pmovs(struct kvm_vcpu *vcpu, struct sys_reg_params *p,
 		return false;
 
 	if (p->is_write) {
+		kvm_pmu_set_guest_owned(vcpu);
+
 		if (r->CRm & 0x2)
 			/* accessing PMOVSSET_EL0 */
 			__vcpu_rmw_sys_reg(vcpu, PMOVSSET_EL0, |=, (p->regval & mask));
