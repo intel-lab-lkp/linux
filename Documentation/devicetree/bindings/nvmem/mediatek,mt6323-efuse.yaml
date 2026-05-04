@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/nvmem/mediatek,mt6323-efuse.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MediaTek MT6323 PMIC EFUSE
+
+description: |
+  MT6323 efuse is used for storing calibration data, such as thermal sensor
+  calibration.
+
+maintainers:
+  - Roman Vivchar <rva333@protonmail.com>
+
+allOf:
+  - $ref: nvmem.yaml#
+
+properties:
+  compatible:
+    const: mediatek,mt6323-efuse
+
+required:
+  - compatible
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    mt6323_efuse: efuse {
+      compatible = "mediatek,mt6323-efuse";
+
+      nvmem-layout {
+        compatible = "fixed-layout";
+        #address-cells = <1>;
+        #size-cells = <1>;
+
+        mt6323_thermal_calibration_data: thermal-data@14 {
+          reg = <0x14 0x4>;
+        };
+      };
+    };
