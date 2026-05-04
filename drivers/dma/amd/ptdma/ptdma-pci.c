@@ -223,9 +223,9 @@ static const struct pt_dev_vdata dev_vdata[] = {
 };
 
 static const struct pci_device_id pt_pci_table[] = {
-	{ PCI_VDEVICE(AMD, 0x1498), (kernel_ulong_t)&dev_vdata[0] },
+	{ PCI_VDEVICE(AMD, 0x1498), .driver_data = (kernel_ulong_t)&dev_vdata[0] },
 	/* Last entry must be zero */
-	{ 0, }
+	{ }
 };
 MODULE_DEVICE_TABLE(pci, pt_pci_table);
 
