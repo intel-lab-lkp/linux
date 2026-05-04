@@ -140,8 +140,7 @@ ssize_t orangefs_inode_getxattr(struct inode *inode, const char *name,
 				ret = -ERANGE;
 				goto out_unlock;
 			}
-			memcpy(buffer, cx->val, cx->length);
-			memset(buffer + cx->length, 0, size - cx->length);
+			memcpy_and_pad(buffer, size, cx->val, cx->length, 0);
 			ret = cx->length;
 			goto out_unlock;
 		}
@@ -209,8 +208,7 @@ ssize_t orangefs_inode_getxattr(struct inode *inode, const char *name,
 		goto out_release_op;
 	}
 
-	memcpy(buffer, new_op->downcall.resp.getxattr.val, length);
-	memset(buffer + length, 0, size - length);
+	memcpy_and_pad(buffer, size, new_op->downcall.resp.getxattr.val, length, 0);
 	gossip_debug(GOSSIP_XATTR_DEBUG,
 	     "orangefs_inode_getxattr: inode %pU "
 	     "key %s key_sz %d, val_len %d\n",
