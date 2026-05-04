@@ -950,6 +950,7 @@ static int mlx5_fs_fte_get_hws_actions(struct mlx5_flow_root_namespace *ns,
 			struct mlx5_flow_destination *attr = &dst->dest_attr;
 			bool type_uplink =
 				attr->type == MLX5_FLOW_DESTINATION_TYPE_UPLINK;
+			bool record_fs_action = false;
 
 			if (num_fs_actions == MLX5_FLOW_CONTEXT_ACTION_MAX ||
 			    num_dest_actions == MLX5_FLOW_CONTEXT_ACTION_MAX) {
@@ -973,11 +974,11 @@ static int mlx5_fs_fte_get_hws_actions(struct mlx5_flow_root_namespace *ns,
 					break;
 				dest_action = mlx5_fs_create_dest_action_table_num(fs_ctx,
 										   dst);
-				fs_actions[num_fs_actions++].action = dest_action;
+				record_fs_action = true;
 				break;
 			case MLX5_FLOW_DESTINATION_TYPE_RANGE:
 				dest_action = mlx5_fs_create_dest_action_range(ctx, dst);
-				fs_actions[num_fs_actions++].action = dest_action;
+				record_fs_action = true;
 				break;
 			case MLX5_FLOW_DESTINATION_TYPE_UPLINK:
 			case MLX5_FLOW_DESTINATION_TYPE_VPORT:
@@ -988,9 +989,7 @@ static int mlx5_fs_fte_get_hws_actions(struct mlx5_flow_root_namespace *ns,
 				dest_action =
 					mlx5_fs_get_dest_action_sampler(fs_ctx,
 									dst);
-				fs_actions[num_fs_actions].action = dest_action;
-				fs_actions[num_fs_actions++].sampler_id =
-							dst->dest_attr.sampler_id;
+				record_fs_action = true;
 				break;
 			default:
 				err = -EOPNOTSUPP;
@@ -999,6 +998,13 @@ static int mlx5_fs_fte_get_hws_actions(struct mlx5_flow_root_namespace *ns,
 			if (!dest_action) {
 				err = -ENOMEM;
 				goto free_actions;
+			}
+			if (record_fs_action) {
+				fs_actions[num_fs_actions].action = dest_action;
+				if (attr->type == MLX5_FLOW_DESTINATION_TYPE_FLOW_SAMPLER)
+					fs_actions[num_fs_actions].sampler_id =
+								dst->dest_attr.sampler_id;
+				num_fs_actions++;
 			}
 			dest_actions[num_dest_actions++].dest = dest_action;
 		}
