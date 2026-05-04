@@ -489,12 +489,14 @@ static int mlx5e_ptp_open_txqsq(struct mlx5e_ptp *c, u32 tisn,
 
 	err = mlx5e_ptp_alloc_traffic_db(ptpsq, dev_to_node(mlx5_core_dma_dev(c->mdev)));
 	if (err)
-		goto err_free_txqsq;
+		goto err_destroy_sq;
 
 	INIT_WORK(&ptpsq->report_unhealthy_work, mlx5e_ptpsq_unhealthy_work);
 
 	return 0;
 
+err_destroy_sq:
+	mlx5e_ptp_destroy_sq(c->mdev, txqsq->sqn);
 err_free_txqsq:
 	mlx5e_free_txqsq(txqsq);
 
