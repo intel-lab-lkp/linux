@@ -289,6 +289,82 @@ above in this document: all arguments being read from the tracee's memory
 should be read into the tracer's memory before any policy decisions are made.
 This allows for an atomic decision on syscall arguments.
 
+Pinned arguments
+----------------
+
+For unprivileged supervisors, ``ptrace()``/``/proc/pid/mem`` are not
+available, and reading the tracee's memory via ``process_vm_readv()``
+remains racy: a sibling thread or ``CLONE_VM`` peer can mutate the
+buffer between supervisor read and the kernel's re-read on
+``SECCOMP_USER_NOTIF_FLAG_CONTINUE``. ``SECCOMP_IOCTL_NOTIF_PIN_ARGS``
+closes that race by atomically copying designated pointer-arg payloads
+from the tracee's address space into kernel-owned buffers, and binding
+those buffers to the tracee's next-syscall execution.
+
+The supervisor receives a notification as today, then issues
+``ioctl(SECCOMP_IOCTL_NOTIF_PIN_ARGS, &payload)`` with a
+``struct seccomp_notif_pin_args`` describing which pointer-args to
+snapshot. Each per-arg descriptor names a syscall register slot
+(``arg_idx``, 0..5), one of three shapes (``SECCOMP_PIN_FIXED``,
+``SECCOMP_PIN_CSTRING``, ``SECCOMP_PIN_CSTRING_ARRAY``), and a
+``max_bytes`` cap. The kernel walks the trapped task's mm, copies
+the bytes into kernel buffers, and writes them back to a supervisor-
+provided byte buffer (``buf`` / ``buf_size``) plus per-arg metadata
+(``actual_size``, ``buf_offset``, ``truncated``).
+
+To consume the snapshot on syscall re-execution, the supervisor sends
+``ioctl(SECCOMP_IOCTL_NOTIF_SEND)`` with both
+``SECCOMP_USER_NOTIF_FLAG_CONTINUE`` and
+``SECCOMP_USER_NOTIF_FLAG_CONTINUE_PINNED`` set. The kernel's syscall
+fetch points (``getname_flags``, ``copy_strings``,
+``move_addr_to_kernel``, ``import_ubuf``) check
+``current->seccomp.pinned_args`` and consume from the kernel buffer
+instead of re-reading user memory; mutations to the original buffer
+after ``PIN_ARGS`` returns have no effect.
+
+The pin is single-shot: it is cleared automatically when the trapped
+task next returns to user mode after the resumed syscall body
+completes, when the task exits, when the listener fd is closed, or
+when the supervisor sends ``CONTINUE`` without ``CONTINUE_PINNED``
+(an explicit "I changed my mind" path). Subsequent traps require a
+fresh ``PIN_ARGS`` for the new notification id.
+
+Per-shape semantics:
+
+* ``SECCOMP_PIN_FIXED`` copies exactly ``max_bytes`` from
+  ``args[arg_idx]``. Suitable for ``struct sockaddr`` (``bind``,
+  ``connect``, ``sendto``) and for ``write(fd, buf, count)`` (the
+  supervisor sets ``max_bytes = count`` from
+  ``seccomp_data.args[2]``).
+
+* ``SECCOMP_PIN_CSTRING`` walks to the trailing NUL, capped at
+  ``max_bytes``. The pinned buffer is always NUL-terminated; if the
+  cap was hit before the source NUL, ``truncated`` carries
+  ``SECCOMP_PIN_TRUNCATED_BYTES``. Suitable for paths
+  (``open``/``openat``/``execve`` filename, etc.).
+
+* ``SECCOMP_PIN_CSTRING_ARRAY`` walks a NULL-terminated pointer table
+  at ``args[arg_idx]`` and copies each non-NULL string. Suitable for
+  ``execve``'s argv and envp. Bounded by both ``max_bytes`` and
+  ``max_entries``. Result is packed as
+  ``[u32 count][u32 offsets[count]][u8 strings[]]``.
+
+The total cumulative ``max_bytes`` across all per-arg descriptors and
+the supervisor-provided ``buf_size`` are each bounded at 1 MiB; this
+is a hard-coded defensive ceiling, not a tunable.
+
+The kernel records the syscall number at pin time and verifies a
+match at consumption: a signal handler running on the trapped task
+during ``-ERESTART*`` resolution that issues an unrelated syscall
+will not consume the pin.
+
+Cumulative scope of v1: ``SECCOMP_PIN_FIXED`` covers sockaddr and
+single-buffer write content; ``SECCOMP_PIN_CSTRING`` covers paths;
+``SECCOMP_PIN_CSTRING_ARRAY`` covers argv and envp. Vector I/O
+(``readv``/``writev``) and nested-pointer payloads
+(``sendmsg``/``recvmsg`` ``msghdr``, ``futex_waitv``) are not covered
+in v1.
+
 Sysctls
 =======
 
