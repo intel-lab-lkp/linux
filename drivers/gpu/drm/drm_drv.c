@@ -1059,8 +1059,13 @@ int drm_dev_register(struct drm_device *dev, unsigned long flags)
 	const struct drm_driver *driver = dev->driver;
 	int ret;
 
-	if (!driver->load)
+	if (!driver->load) {
 		drm_mode_config_validate(dev);
+
+		ret = drm_mode_config_enforce(dev);
+		if (ret)
+			return ret;
+	}
 
 	WARN_ON(!dev->managed.final_kfree);
 

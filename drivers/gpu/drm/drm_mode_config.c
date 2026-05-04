@@ -738,3 +738,45 @@ void drm_mode_config_validate(struct drm_device *dev)
 	     "Must have as many primary planes as there are CRTCs, but have %u primary planes and %u CRTCs",
 	     num_primary, dev->mode_config.num_crtc);
 }
+
+static int plane_require_blend_mode_for_alpha(struct drm_plane *plane)
+{
+	struct drm_device *dev = plane->dev;
+	const struct drm_format_info *fmt;
+	u32 i;
+
+	/* blend mode property supported, no need to check anything */
+	if (plane->blend_mode_property)
+		return 0;
+
+	if (plane->alpha_property) {
+		drm_err(dev, "[PLANE:%d:%s] alpha property exposed but blend mode not setup",
+			plane->base.id, plane->name);
+		return -EINVAL;
+	}
+
+	for (i = 0; i < plane->format_count; i++) {
+		fmt = drm_format_info(plane->format_types[i]);
+		if (fmt->has_alpha) {
+			drm_err(dev, "[PLANE:%d:%s] pixel format with alpha exposed but blend mode not setup",
+			        plane->base.id, plane->name);
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+}
+
+int drm_mode_config_enforce(struct drm_device *dev)
+{
+	struct drm_plane *plane;
+	int ret;
+
+	drm_for_each_plane(plane, dev) {
+		ret = plane_require_blend_mode_for_alpha(plane);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
