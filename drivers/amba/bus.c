@@ -109,7 +109,7 @@ static ssize_t driver_override_store(struct device *_dev,
 }
 static DEVICE_ATTR_RW(driver_override);
 
-#define amba_attr_func(name,fmt,arg...)					\
+#define amba_attr_func(name, fmt, arg...)					\
 static ssize_t name##_show(struct device *_dev,				\
 			   struct device_attribute *attr, char *buf)	\
 {									\
