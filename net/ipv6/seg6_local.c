@@ -13,6 +13,7 @@
 #include <linux/net.h>
 #include <linux/module.h>
 #include <net/ip.h>
+#include <net/ipv6.h>
 #include <net/lwtunnel.h>
 #include <net/netevent.h>
 #include <net/netns/generic.h>
@@ -195,7 +196,9 @@ struct seg6_mobile_info {
 	u8			v4_mask_len;		/* IPv4 portion length (bits) */
 	u8			pdu_type;		/* PDU Type (0=downlink, 1=uplink) */
 	bool			pdu_type_set;		/* PDU Session Container enabled */
+	u8			sr_prefix_len;		/* egress SR prefix length (bits) */
 	u8			v6_src_prefix_len;	/* Source UPF Prefix length (bits) */
+	struct ipv6_sr_hdr	*aug_srh;		/* augmented SRH for End.M.GTP6.D{,.Di} */
 };
 
 #define SEG6_MOBILE_V6_SRC_PREFIX_LEN_DEFAULT	64
@@ -1638,6 +1641,53 @@ static bool seg6_mobile_extract_args_mob(const struct in6_addr *daddr,
 	return true;
 }
 
+/* Write @nbits of @val (top bits) into a 16-byte big-endian @addr at
+ * bit offset @bit_off, preserving surrounding bits.  Caller ensures
+ * bit_off + nbits <= 128 and 1 <= nbits <= 64.
+ */
+static void seg6_mobile_addr_set_bits(u8 *addr, unsigned int bit_off,
+				      unsigned int nbits, u64 val)
+{
+	u64 hi = get_unaligned_be64(addr);
+	u64 lo = get_unaligned_be64(addr + 8);
+	u64 mask_hi, mask_lo;
+
+	val &= GENMASK_ULL(63, 64 - nbits);
+
+	if (bit_off >= 64) {
+		mask_lo = GENMASK_ULL(63, 64 - nbits) >> (bit_off - 64);
+		lo = (lo & ~mask_lo) | (val >> (bit_off - 64));
+	} else if (bit_off + nbits <= 64) {
+		mask_hi = GENMASK_ULL(63, 64 - nbits) >> bit_off;
+		hi = (hi & ~mask_hi) | (val >> bit_off);
+	} else {
+		unsigned int hi_bits = 64 - bit_off;
+
+		mask_hi = GENMASK_ULL(hi_bits - 1, 0);
+		mask_lo = GENMASK_ULL(63, 64 - (nbits - hi_bits));
+		hi = (hi & ~mask_hi) | (val >> bit_off);
+		lo = (lo & ~mask_lo) | ((val << hi_bits) & mask_lo);
+	}
+
+	put_unaligned_be64(hi, addr);
+	put_unaligned_be64(lo, addr + 8);
+}
+
+/* @prefix_bits is bounded to [1, 88] by parse_nla_mobile_sr_prefix_len()
+ * before this function is reached, so the guard below is unreachable
+ * today.  Defense-in-depth against a future regression.
+ */
+static int seg6_mobile_write_args_mob(struct in6_addr *addr,
+				      unsigned int prefix_bits, u64 args_mob)
+{
+	if (prefix_bits + SEG6_MOBILE_ARGS_MOB_LEN > 128)
+		return -EINVAL;
+
+	seg6_mobile_addr_set_bits(addr->s6_addr, prefix_bits,
+				  SEG6_MOBILE_ARGS_MOB_LEN, args_mob);
+	return 0;
+}
+
 /* GTP-U PDU Session extension header (3GPP TS 38.415).
  * 4-byte minimum unit: ext_len=1, PDU Type in high 4 bits of @pdu_type_spare,
  * QFI in low 6 bits of @spare_qfi, next_ext=0.
@@ -1664,6 +1714,16 @@ struct seg6_mobile_pdu_session_ext {
  */
 #define SEG6_MOBILE_ARGS_QFI_SHIFT	58
 #define SEG6_MOBILE_ARGS_TEID_SHIFT	24
+
+/* Combine TEID and QFI into a left-justified Args.Mob.Session value
+ * (RFC 9433 Section 6.1 Figure 8); R/U are emitted as zero.
+ */
+static u64 seg6_mobile_args_from_teid_qfi(u32 teid, u8 qfi)
+{
+	return ((u64)(qfi & SEG6_MOBILE_PDU_SESSION_QFI_MASK) <<
+		 SEG6_MOBILE_ARGS_QFI_SHIFT) |
+	       ((u64)teid << SEG6_MOBILE_ARGS_TEID_SHIFT);
+}
 
 static u8 seg6_mobile_qfi_from_args(u64 args_mob)
 {
@@ -1721,6 +1781,121 @@ static int seg6_mobile_push_gtpu(struct sk_buff *skb, u32 teid, u8 qfi,
 	gtphl->next = SEG6_MOBILE_PDU_SESSION_NH;
 
 	return 0;
+}
+
+/* Parse the GTP-U header at @skb offset @gtp_off.  Pulls each
+ * additional region (long header, extension chain) into the linear
+ * area as it walks; on success returns the total header length to
+ * consume (mandatory + optional + extension headers), or a negative
+ * errno on failure.
+ *
+ * Returns -EOPNOTSUPP if the packet is a well-formed GTPv1-U header
+ * that this code path does not consume itself (any non-T-PDU message
+ * such as Echo Request / Error Indication).  Callers pass such packets
+ * through to the configured forwarding path via
+ * seg6_mobile_passthrough_non_tpdu().
+ *
+ * Returns -EINVAL when the GTP-U header is structurally malformed
+ * (truncated extension chain, ext_units == 0, etc.).  Callers should
+ * drop those.
+ *
+ * On success, *@teid is set to the GTP-U TEID and *@qfi is set to the
+ * QFI found in a PDU Session extension header, or 0 if none is present.
+ *
+ * Callers must re-derive any pointers into @skb->data after this
+ * function returns: pskb_may_pull() may have reallocated skb->head.
+ */
+static int seg6_mobile_parse_gtpu(struct sk_buff *skb, unsigned int gtp_off,
+				  u32 *teid, u8 *qfi)
+{
+	const struct gtp1_header *gtph;
+	const struct gtp1_header_long *gtphl;
+	const u8 *gtp;
+	unsigned int hdrlen;
+	u8 flags, next;
+
+	if (!pskb_may_pull(skb, gtp_off + sizeof(*gtph)))
+		return -EINVAL;
+	gtp = skb->data + gtp_off;
+	gtph = (const struct gtp1_header *)gtp;
+	flags = gtph->flags;
+
+	/* Accept only GTPv1-U T-PDU (3GPP TS 29.281 Section 5.1).  Other
+	 * GTPv1-U message types (Echo Request/Response, Error Indication,
+	 * ...) are dispatched separately by the caller.
+	 */
+	if ((flags & ~GTP1_F_MASK) != SEG6_MOBILE_GTP1U_FLAGS_BASE)
+		return -EOPNOTSUPP;
+	if (gtph->type != GTP_TPDU)
+		return -EOPNOTSUPP;
+
+	*teid = ntohl(gtph->tid);
+	*qfi = 0;
+
+	if (!(flags & (GTP1_F_EXTHDR | GTP1_F_SEQ | GTP1_F_NPDU)))
+		return sizeof(*gtph);
+
+	if (!pskb_may_pull(skb, gtp_off + sizeof(*gtphl)))
+		return -EINVAL;
+	gtp = skb->data + gtp_off;
+	gtphl = (const struct gtp1_header_long *)gtp;
+	hdrlen = sizeof(*gtphl);
+
+	if (!(flags & GTP1_F_EXTHDR))
+		return hdrlen;
+
+	next = gtphl->next;
+	while (next != 0) {
+		unsigned int ext_units, ext_bytes;
+		const u8 *ext;
+
+		if (!pskb_may_pull(skb, gtp_off + hdrlen + 1))
+			return -EINVAL;
+		ext = skb->data + gtp_off + hdrlen;
+		ext_units = ext[0];
+		if (ext_units == 0)
+			return -EINVAL;
+
+		ext_bytes = ext_units * 4;
+		if (!pskb_may_pull(skb, gtp_off + hdrlen + ext_bytes))
+			return -EINVAL;
+		ext = skb->data + gtp_off + hdrlen;
+
+		if (next == SEG6_MOBILE_PDU_SESSION_NH) {
+			/* 3GPP TS 38.415: the PDU Session extension header
+			 * is exactly 4 bytes long.
+			 */
+			if (ext_bytes != 4)
+				return -EINVAL;
+			*qfi = ext[2] & SEG6_MOBILE_PDU_SESSION_QFI_MASK;
+		}
+
+		next = ext[ext_bytes - 1];
+		hdrlen += ext_bytes;
+	}
+
+	return hdrlen;
+}
+
+/* Pass a non-T-PDU GTP-U message (Echo, Error Indication, ...) through
+ * the configured forwarding path so that a downstream UPF (which owns
+ * the GTP-U control plane) can process it.  The packet is delivered via
+ * the lwtunnel's saved orig_input -- ip6_forward for an IPv6 SID route
+ * or ip_forward for an IPv4 route -- which forwards using the existing
+ * skb_dst, reaching the UPF that lives in the L3 network behind the
+ * SRGW.
+ *
+ * @skb is consumed.
+ */
+static int seg6_mobile_passthrough_non_tpdu(struct sk_buff *skb)
+{
+	struct dst_entry *dst = skb_dst(skb);
+
+	if (dst && dst->lwtstate && dst->lwtstate->orig_input)
+		return dst->lwtstate->orig_input(skb);
+
+	kfree_skb_reason(skb, SKB_DROP_REASON_SEG6_MOBILE_BAD_GTPU);
+	return -EINVAL;
 }
 
 /* Per-skb context preserved across the NF_INET_PRE_ROUTING hook on
@@ -2120,6 +2295,289 @@ drop:
 	return -EINVAL;
 }
 
+/* Per-skb context preserved across the NF_INET_PRE_ROUTING hook on
+ * the inner T-PDU exposed by End.M.GTP6.D / End.M.GTP6.D.Di.  The
+ * outer IPv6/UDP/GTP-U is gone by the time the finish callback runs,
+ * but the SRH built in finish still needs the original outer DA and
+ * the Args.Mob.Session derived from TEID/QFI.
+ */
+struct seg6_mobile_gtp6_d_cb {
+	u64		args_mob;
+	struct in6_addr	orig_dst;
+};
+
+#define SEG6_MOBILE_GTP6_D_CB(skb)	\
+	((struct seg6_mobile_gtp6_d_cb *)((skb)->cb))
+
+static int input_action_end_m_gtp6_d_finish(struct net *net,
+					    struct sock *sk,
+					    struct sk_buff *skb)
+{
+	struct seg6_mobile_gtp6_d_cb cb = *SEG6_MOBILE_GTP6_D_CB(skb);
+	struct dst_entry *orig_dst = skb_dst(skb);
+	enum skb_drop_reason reason;
+	const struct seg6_mobile_info *minfo;
+	struct seg6_local_lwt *slwt;
+	struct ipv6_sr_hdr *new_srh;
+	int inner_proto;
+	int err;
+
+	slwt = seg6_local_lwtunnel(orig_dst->lwtstate);
+	minfo = &slwt->mobile_info;
+
+	inner_proto = (skb->protocol == htons(ETH_P_IP)) ? IPPROTO_IPIP
+							 : IPPROTO_IPV6;
+
+	err = seg6_do_srh_encap(skb, minfo->aug_srh, inner_proto);
+	if (err) {
+		reason = (err == -ENOMEM) ? SKB_DROP_REASON_SEG6_MOBILE_NOMEM
+					  : SKB_DROP_REASON_SEG6_MOBILE_BAD_INNER;
+		goto drop;
+	}
+
+	skb->protocol = htons(ETH_P_IPV6);
+
+	new_srh = (struct ipv6_sr_hdr *)(skb_network_header(skb) +
+					 sizeof(struct ipv6hdr));
+	new_srh->segments[0] = cb.orig_dst;
+	if (seg6_mobile_write_args_mob(&new_srh->segments[1],
+				       minfo->sr_prefix_len, cb.args_mob)) {
+		reason = SKB_DROP_REASON_SEG6_MOBILE_BAD_SID;
+		goto drop;
+	}
+
+	ipv6_hdr(skb)->saddr = minfo->src_addr;
+
+	/* seg6_do_srh_encap() copied segments[first_segment] to the outer
+	 * DA before Args.Mob.Session was stamped; refresh it.
+	 */
+	ipv6_hdr(skb)->daddr = new_srh->segments[new_srh->first_segment];
+
+	skb_set_transport_header(skb, sizeof(struct ipv6hdr));
+	nf_reset_ct(skb);
+	skb_dst_drop(skb);
+
+	seg6_lookup_any_nexthop(skb, NULL, 0, false, slwt->oif);
+	return dst_input(skb);
+
+drop:
+	kfree_skb_reason(skb, reason);
+	return -EINVAL;
+}
+
+/* RFC 9433 Section 6.3 -- End.M.GTP6.D
+ * Receives an IPv6/UDP/GTP-U packet matching a locally instantiated
+ * End.M.GTP6.D SID and re-encapsulates the inner T-PDU in SRv6 using
+ * the configured SR Policy.  TEID and QFI are folded into
+ * Args.Mob.Session.  Per RFC 9433 Section 6.5 ("End.M.GTP6.E SID MUST
+ * always be the penultimate SID"), Args.Mob.Session is encoded into
+ * segments[1] of the new SRH (the penultimate SID at the egress UPF)
+ * while segments[0] holds the original outer DA so that the egress
+ * has a real GTP-U destination after End.M.GTP6.E decap.
+ *
+ * When net.netfilter.nf_hooks_lwtunnel=1 the inner T-PDU is exposed
+ * to NF_INET_PRE_ROUTING after the GTP-U strip and before the SRv6
+ * push, mirroring End.DX4 / End.DX6.  This lets nftables / conntrack
+ * apply policy on the inner 5-tuple at the SR Gateway.
+ */
+static int input_action_end_m_gtp6_d(struct sk_buff *skb,
+				     struct seg6_local_lwt *slwt)
+{
+	unsigned int outer_len, inner_off;
+	int gtp_hdrlen, inner_proto, inner_nfproto;
+	struct in6_addr orig_dst;
+	u8 inner_first, qfi;
+	struct ipv6_sr_hdr *srh;
+	struct ipv6hdr *ip6h;
+	struct udphdr *uh;
+	u64 args_mob;
+	u32 teid;
+	enum skb_drop_reason reason = SKB_DROP_REASON_SEG6_MOBILE_BAD_GTPU;
+
+	BUILD_BUG_ON(sizeof(struct seg6_mobile_gtp6_d_cb) >
+		     sizeof_field(struct sk_buff, cb));
+
+	/* RFC 9433 Section 6.3 SRH-S01: drop if outer SRH carries
+	 * SegmentsLeft != 0
+	 */
+	srh = seg6_get_srh(skb, 0);
+	if (srh && srh->segments_left != 0) {
+		reason = SKB_DROP_REASON_SEG6_MOBILE_INVALID_SRH_SL;
+		goto drop;
+	}
+
+	if (!pskb_may_pull(skb, sizeof(struct ipv6hdr))) {
+		reason = SKB_DROP_REASON_SEG6_MOBILE_BAD_INNER;
+		goto drop;
+	}
+
+	ip6h = ipv6_hdr(skb);
+	orig_dst = ip6h->daddr;
+
+	/* RFC 9433 Section 6.3 upper-layer S01-S11: dispatch on
+	 * (NH == UDP && UDP dport == GTP-U); otherwise delegate to the
+	 * regular End behaviour (S10-S11).
+	 */
+	{
+		__be16 frag_off;
+		u8 nh = ip6h->nexthdr;
+		int upper_off;
+
+		upper_off = ipv6_skip_exthdr(skb, sizeof(*ip6h), &nh,
+					     &frag_off);
+		if (upper_off < 0) {
+			/* Outer IPv6 ext-header walk failed; the GTP-U
+			 * envelope below it is unreachable.
+			 */
+			reason = SKB_DROP_REASON_SEG6_MOBILE_BAD_GTPU;
+			goto drop;
+		}
+
+		if (nh != IPPROTO_UDP)
+			return input_action_end(skb, slwt);
+
+		if (!pskb_may_pull(skb, upper_off + sizeof(*uh))) {
+			reason = SKB_DROP_REASON_SEG6_MOBILE_BAD_GTPU;
+			goto drop;
+		}
+
+		ip6h = ipv6_hdr(skb);
+		uh = (struct udphdr *)((u8 *)ip6h + upper_off);
+		if (uh->dest != htons(GTP1U_PORT))
+			return input_action_end(skb, slwt);
+
+		gtp_hdrlen = seg6_mobile_parse_gtpu(skb,
+						    upper_off + sizeof(*uh),
+						    &teid, &qfi);
+		if (gtp_hdrlen == -EOPNOTSUPP)
+			return seg6_mobile_passthrough_non_tpdu(skb);
+		if (gtp_hdrlen < 0) {
+			reason = SKB_DROP_REASON_SEG6_MOBILE_BAD_GTPU;
+			goto drop;
+		}
+
+		outer_len = upper_off + sizeof(*uh) + gtp_hdrlen;
+	}
+
+	args_mob = seg6_mobile_args_from_teid_qfi(teid, qfi);
+
+	if (!pskb_may_pull(skb, outer_len + 1)) {
+		reason = SKB_DROP_REASON_SEG6_MOBILE_BAD_INNER;
+		goto drop;
+	}
+
+	inner_off = outer_len;
+	inner_first = *((u8 *)skb->data + inner_off);
+	switch (inner_first >> 4) {
+	case 4:
+		inner_proto = IPPROTO_IPIP;
+		inner_nfproto = NFPROTO_IPV4;
+		break;
+	case 6:
+		inner_proto = IPPROTO_IPV6;
+		inner_nfproto = NFPROTO_IPV6;
+		break;
+	default:
+		reason = SKB_DROP_REASON_SEG6_MOBILE_BAD_INNER;
+		goto drop;
+	}
+
+	if (!pskb_may_pull(skb, outer_len +
+			   ((inner_proto == IPPROTO_IPIP) ?
+			    sizeof(struct iphdr) : sizeof(struct ipv6hdr)))) {
+		reason = SKB_DROP_REASON_SEG6_MOBILE_BAD_INNER;
+		goto drop;
+	}
+
+	skb_pull_rcsum(skb, outer_len);
+	skb_reset_network_header(skb);
+
+	/* Set skb->protocol to match the inner header so that the
+	 * NF_INET_PRE_ROUTING hook (and seg6_do_srh_encap() inside
+	 * the finish half) see a coherent IPv4/IPv6 packet.
+	 */
+	skb->protocol = (inner_proto == IPPROTO_IPIP) ? htons(ETH_P_IP)
+						      : htons(ETH_P_IPV6);
+
+	skb_set_transport_header(skb,
+				 (inner_proto == IPPROTO_IPIP) ?
+				 sizeof(struct iphdr) :
+				 sizeof(struct ipv6hdr));
+	nf_reset_ct(skb);
+
+	SEG6_MOBILE_GTP6_D_CB(skb)->args_mob = args_mob;
+	SEG6_MOBILE_GTP6_D_CB(skb)->orig_dst = orig_dst;
+
+	if (static_branch_unlikely(&nf_hooks_lwtunnel_enabled))
+		return NF_HOOK(inner_nfproto, NF_INET_PRE_ROUTING,
+			       dev_net(skb->dev), NULL, skb, skb->dev,
+			       NULL, input_action_end_m_gtp6_d_finish);
+
+	return input_action_end_m_gtp6_d_finish(dev_net(skb->dev), NULL, skb);
+
+drop:
+	kfree_skb_reason(skb, reason);
+	return -EINVAL;
+}
+
+/* Shared between End.M.GTP6.D and End.M.GTP6.D.Di -- both
+ * prepend a single leading slot to the user-configured SRH to leave
+ * room for the original outer DA at SRH[0].  End.M.GTP6.D writes
+ * Args.Mob.Session into segments[1] at runtime; End.M.GTP6.D.Di
+ * leaves segments[1+] as the user provided them.
+ */
+static int seg6_end_m_gtp6_d_aug_build(struct seg6_local_lwt *slwt,
+				       const void *cfg,
+				       struct netlink_ext_ack *extack)
+{
+	struct ipv6_sr_hdr *aug;
+	int orig_len, aug_len;
+
+	if (!slwt->srh) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "End.M.GTP6.D{,.Di} requires srh segs");
+		return -EINVAL;
+	}
+
+	/* The augmented SRH adds one extra leading slot, so its hdrlen
+	 * field (u8) must still fit the +2-segment-equivalent encoding.
+	 * Reject pathological srh inputs at setup time so that no
+	 * silent overflow can produce an undersized aug->hdrlen and a
+	 * subsequent OOB read in seg6_do_srh_encap().
+	 */
+	if (slwt->srh->hdrlen > 253) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "End.M.GTP6.D{,.Di} srh too large to augment (max 126 segments)");
+		return -EINVAL;
+	}
+
+	orig_len = (slwt->srh->hdrlen + 1) << 3;
+	aug_len = orig_len + sizeof(struct in6_addr);
+
+	aug = kzalloc(aug_len, GFP_KERNEL);
+	if (!aug)
+		return -ENOMEM;
+
+	memcpy(aug, slwt->srh, sizeof(*aug));
+	aug->hdrlen = (aug_len >> 3) - 1;
+	aug->segments_left = slwt->srh->segments_left + 1;
+	aug->first_segment = slwt->srh->first_segment + 1;
+	/* segments[0] left zero; data path stamps the original outer
+	 * DA into the in-skb copy after seg6_do_srh_encap().
+	 */
+	memcpy(&aug->segments[1], &slwt->srh->segments[0],
+	       orig_len - sizeof(*aug));
+
+	slwt->mobile_info.aug_srh = aug;
+	return 0;
+}
+
+static void seg6_end_m_gtp6_d_aug_destroy(struct seg6_local_lwt *slwt)
+{
+	kfree(slwt->mobile_info.aug_srh);
+	slwt->mobile_info.aug_srh = NULL;
+}
+
 /* RFC 9433 Section 6.5 -- End.M.GTP6.E
  * Receives an SRv6 packet whose current SID is an End.M.GTP6.E SID
  * (Segments Left == 1) and re-encapsulates the inner payload in
@@ -2443,6 +2901,19 @@ static struct seg6_action_desc seg6_action_table[] = {
 		},
 	},
 	{
+		.action		= SEG6_LOCAL_ACTION_END_M_GTP6_D,
+		.attrs		= SEG6_F_ATTR(SEG6_LOCAL_SRH)		     |
+				  SEG6_F_ATTR(SEG6_LOCAL_MOBILE_SRC_ADDR)    |
+				  SEG6_F_ATTR(SEG6_LOCAL_MOBILE_SR_PREFIX_LEN),
+		.optattrs	= SEG6_F_LOCAL_COUNTERS |
+				  SEG6_F_ATTR(SEG6_LOCAL_OIF),
+		.input		= input_action_end_m_gtp6_d,
+		.slwt_ops	= {
+			.build_state = seg6_end_m_gtp6_d_aug_build,
+			.destroy_state = seg6_end_m_gtp6_d_aug_destroy,
+		},
+	},
+	{
 		.action		= SEG6_LOCAL_ACTION_END_MAP,
 		.attrs		= SEG6_F_ATTR(SEG6_LOCAL_NH6),
 		.optattrs	= SEG6_F_LOCAL_COUNTERS,
@@ -2542,6 +3013,7 @@ static const struct nla_policy seg6_local_policy[SEG6_LOCAL_MAX + 1] = {
 		NLA_POLICY_EXACT_LEN(sizeof(struct in6_addr)),
 	[SEG6_LOCAL_MOBILE_V4_MASK_LEN] = { .type = NLA_U8 },
 	[SEG6_LOCAL_MOBILE_PDU_TYPE] = { .type = NLA_U8 },
+	[SEG6_LOCAL_MOBILE_SR_PREFIX_LEN] = { .type = NLA_U8 },
 	[SEG6_LOCAL_MOBILE_V6_SRC_PREFIX_LEN] = { .type = NLA_U8 },
 };
 
@@ -2955,6 +3427,39 @@ static int seg6_mobile_gtp6_e_validate(struct seg6_local_lwt *slwt,
 		return -EINVAL;
 	}
 	return 0;
+}
+
+static int parse_nla_mobile_sr_prefix_len(struct nlattr **attrs,
+					  struct seg6_local_lwt *slwt,
+					  struct netlink_ext_ack *extack)
+{
+	u8 len = nla_get_u8(attrs[SEG6_LOCAL_MOBILE_SR_PREFIX_LEN]);
+
+	/* The SR locator must be non-zero and leave room for the 40-bit
+	 * Args.Mob.Session that follows it (RFC 9433 Section 6.5/6.7).
+	 */
+	if (len == 0 || len + SEG6_MOBILE_ARGS_MOB_LEN > 128) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "SRv6 Mobile SR prefix length must be in 1..88 (leaving room for the 40-bit Args.Mob.Session)");
+		return -EINVAL;
+	}
+	slwt->mobile_info.sr_prefix_len = len;
+	return 0;
+}
+
+static int put_nla_mobile_sr_prefix_len(struct sk_buff *skb,
+					struct seg6_local_lwt *slwt)
+{
+	if (nla_put_u8(skb, SEG6_LOCAL_MOBILE_SR_PREFIX_LEN,
+		       slwt->mobile_info.sr_prefix_len))
+		return -EMSGSIZE;
+	return 0;
+}
+
+static int cmp_nla_mobile_sr_prefix_len(struct seg6_local_lwt *a,
+					struct seg6_local_lwt *b)
+{
+	return a->mobile_info.sr_prefix_len != b->mobile_info.sr_prefix_len;
 }
 
 #define MAX_PROG_NAME 256
@@ -3399,6 +3904,10 @@ static struct seg6_action_param seg6_action_params[SEG6_LOCAL_MAX + 1] = {
 					 .put = put_nla_mobile_pdu_type,
 					 .cmp = cmp_nla_mobile_pdu_type },
 
+	[SEG6_LOCAL_MOBILE_SR_PREFIX_LEN] = { .parse = parse_nla_mobile_sr_prefix_len,
+					      .put = put_nla_mobile_sr_prefix_len,
+					      .cmp = cmp_nla_mobile_sr_prefix_len },
+
 	[SEG6_LOCAL_MOBILE_V6_SRC_PREFIX_LEN] = { .parse = parse_nla_mobile_v6_src_prefix_len,
 						  .put = put_nla_mobile_v6_src_prefix_len,
 						  .cmp = cmp_nla_mobile_v6_src_prefix_len },
@@ -3725,6 +4234,9 @@ static int seg6_local_get_encap_size(struct lwtunnel_state *lwt)
 		nlsize += nla_total_size(1);
 
 	if (attrs & SEG6_F_ATTR(SEG6_LOCAL_MOBILE_PDU_TYPE))
+		nlsize += nla_total_size(1);
+
+	if (attrs & SEG6_F_ATTR(SEG6_LOCAL_MOBILE_SR_PREFIX_LEN))
 		nlsize += nla_total_size(1);
 
 	if (attrs & SEG6_F_ATTR(SEG6_LOCAL_MOBILE_V6_SRC_PREFIX_LEN))
