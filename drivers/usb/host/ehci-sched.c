@@ -1429,6 +1429,8 @@ sitd_slot_ok(
 		uf = uframe;
 		max_used = ehci->uframe_periodic_max - stream->ps.usecs;
 		for (tmp = stream->ps.cs_mask & 0xff; tmp; tmp >>= 1, uf++) {
+			if (uf >= EHCI_BANDWIDTH_SIZE)
+				return 0;
 			if (ehci->bandwidth[uf] > max_used)
 				return 0;
 		}
