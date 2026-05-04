@@ -182,7 +182,7 @@ impl<F: IoPageTableFmt> IoPageTable<F> {
             (map_pages)(
                 self.raw_ops(),
                 iova,
-                paddr,
+                paddr.into_raw(),
                 pgsize,
                 pgcount,
                 prot as i32,

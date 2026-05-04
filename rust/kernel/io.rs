@@ -21,9 +21,24 @@ use register::LocatedRegister;
 
 /// Physical address type.
 ///
-/// This is a type alias to either `u32` or `u64` depending on the config option
-/// `CONFIG_PHYS_ADDR_T_64BIT`, and it can be a u64 even on 32-bit architectures.
-pub type PhysAddr = bindings::phys_addr_t;
+/// This wraps either `u32` or `u64` depending on the config option
+/// `CONFIG_PHYS_ADDR_T_64BIT`, and it can be a `u64` even on 32-bit architectures.
+#[repr(transparent)]
+pub struct PhysAddr(bindings::phys_addr_t);
+
+impl PhysAddr {
+    /// Creates a physical address from the raw C type.
+    #[inline]
+    pub const fn from_raw(value: bindings::phys_addr_t) -> Self {
+        Self(value)
+    }
+
+    /// Turns this physical address into the raw C type.
+    #[inline]
+    pub const fn into_raw(self) -> bindings::phys_addr_t {
+        self.0
+    }
+}
 
 /// Resource Size type.
 ///
@@ -101,10 +116,10 @@ impl<const SIZE: usize> MmioRaw<SIZE> {
 ///     ///
 ///     /// [`paddr`, `paddr` + `SIZE`) must be a valid MMIO region that is mappable into the CPUs
 ///     /// virtual address space.
-///     unsafe fn new(paddr: usize) -> Result<Self>{
+///     unsafe fn new(paddr: PhysAddr) -> Result<Self>{
 ///         // SAFETY: By the safety requirements of this function [`paddr`, `paddr` + `SIZE`) is
 ///         // valid for `ioremap`.
-///         let addr = unsafe { bindings::ioremap(paddr as PhysAddr, SIZE) };
+///         let addr = unsafe { bindings::ioremap(paddr.into_raw(), SIZE) };
 ///         if addr.is_null() {
 ///             return Err(ENOMEM);
 ///         }
@@ -131,7 +146,9 @@ impl<const SIZE: usize> MmioRaw<SIZE> {
 ///
 ///# fn no_run() -> Result<(), Error> {
 /// // SAFETY: Invalid usage for example purposes.
-/// let iomem = unsafe { IoMem::<{ core::mem::size_of::<u32>() }>::new(0xBAAAAAAD)? };
+/// let iomem = unsafe {
+///     IoMem::<{ core::mem::size_of::<u32>() }>::new(PhysAddr::from_raw(0xBAAAAAAD))?
+/// };
 /// iomem.write32(0x42, 0x0);
 /// assert!(iomem.try_write32(0x42, 0x0).is_ok());
 /// assert!(iomem.try_write32(0x42, 0x4).is_err());
