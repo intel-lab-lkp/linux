@@ -28,6 +28,18 @@ enum {
 
 static bool isa_ext_cant_disable[KVM_RISCV_ISA_EXT_MAX];
 
+bool check_supported_reg(struct kvm_vcpu *vcpu, __u64 reg)
+{
+	int ret;
+	u64 data;
+
+	ret = __vcpu_get_reg(vcpu, reg, &data);
+	if (ret < 0)
+		return false;
+
+	return true;
+}
+
 bool filter_reg(__u64 reg)
 {
 	switch (reg & ~REG_MASK) {
