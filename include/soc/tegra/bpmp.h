@@ -79,7 +79,7 @@ struct tegra_bpmp {
 		struct mbox_chan *channel;
 	} mbox;
 
-	spinlock_t atomic_tx_lock;
+	raw_spinlock_t atomic_tx_lock;
 	struct tegra_bpmp_channel *tx_channel, *rx_channel, *threaded_channels;
 
 	struct {

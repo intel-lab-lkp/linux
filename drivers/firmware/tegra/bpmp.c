@@ -365,16 +365,16 @@ int tegra_bpmp_transfer_atomic(struct tegra_bpmp *bpmp,
 
 	channel = bpmp->tx_channel;
 
-	spin_lock(&bpmp->atomic_tx_lock);
+	raw_spin_lock(&bpmp->atomic_tx_lock);
 
 	err = tegra_bpmp_channel_write(channel, msg->mrq, MSG_ACK,
 				       msg->tx.data, msg->tx.size);
 	if (err < 0) {
-		spin_unlock(&bpmp->atomic_tx_lock);
+		raw_spin_unlock(&bpmp->atomic_tx_lock);
 		return err;
 	}
 
-	spin_unlock(&bpmp->atomic_tx_lock);
+	raw_spin_unlock(&bpmp->atomic_tx_lock);
 
 	err = tegra_bpmp_ring_doorbell(bpmp);
 	if (err < 0)
@@ -763,7 +763,7 @@ static int tegra_bpmp_probe(struct platform_device *pdev)
 	if (!bpmp->threaded.busy)
 		return -ENOMEM;
 
-	spin_lock_init(&bpmp->atomic_tx_lock);
+	raw_spin_lock_init(&bpmp->atomic_tx_lock);
 	bpmp->tx_channel = devm_kzalloc(&pdev->dev, sizeof(*bpmp->tx_channel),
 					GFP_KERNEL);
 	if (!bpmp->tx_channel)
