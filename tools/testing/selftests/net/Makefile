@@ -26,6 +26,8 @@ TEST_PROGS := \
 	cmsg_time.sh \
 	double_udp_encap.sh \
 	drop_monitor_tests.sh \
+	eh_limits.py \
+	eh_limits.sh \
 	ext_hdr.py \
 	fcnal-ipv4.sh \
 	fcnal-ipv6.sh \
