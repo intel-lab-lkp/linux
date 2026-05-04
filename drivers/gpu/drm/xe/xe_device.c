@@ -49,6 +49,7 @@
 #include "xe_i2c.h"
 #include "xe_irq.h"
 #include "xe_late_bind_fw.h"
+#include "xe_mctp_mailbox.h"
 #include "xe_mmio.h"
 #include "xe_module.h"
 #include "xe_nvm.h"
@@ -1064,6 +1065,8 @@ int xe_device_probe(struct xe_device *xe)
 
 	for_each_gt(gt, xe, id)
 		xe_gt_sanitize_freq(gt);
+
+	xe_mctp_mailbox_init(xe);
 
 	xe_vsec_init(xe);
 

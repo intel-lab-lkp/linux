@@ -38,6 +38,7 @@
 struct drm_pagemap_shrinker;
 struct intel_display;
 struct intel_dg_nvm_dev;
+struct xe_mctp_mailbox;
 struct xe_ggtt;
 struct xe_i2c;
 struct xe_pat_ops;
@@ -502,6 +503,9 @@ struct xe_device {
 		/** @bo_device.async_list: List of BOs to be freed */
 		struct llist_head async_list;
 	} bo_device;
+
+	/** @mctp_mailbox: mctp mailbox */
+	struct xe_mctp_mailbox *mctp_mailbox;
 
 	/** @pmu: performance monitoring unit */
 	struct xe_pmu pmu;
