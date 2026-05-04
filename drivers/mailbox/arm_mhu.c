@@ -26,7 +26,7 @@
 #define MHU_CHANS	3
 
 struct mhu_link {
-	unsigned irq;
+	unsigned int irq;
 	void __iomem *tx_reg;
 	void __iomem *rx_reg;
 };
