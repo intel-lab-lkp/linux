@@ -14,7 +14,8 @@ sparx5-switch-y  := sparx5_main.o sparx5_packet.o \
  sparx5_psfp.o sparx5_mirror.o sparx5_regs.o
 
 sparx5-switch-$(CONFIG_SPARX5_DCB) += sparx5_dcb.o
-sparx5-switch-$(CONFIG_DEBUG_FS) += sparx5_vcap_debugfs.o
+sparx5-switch-$(CONFIG_DEBUG_FS) += sparx5_vcap_debugfs.o \
+				    sparx5_debugfs.o
 
 sparx5-switch-$(CONFIG_LAN969X_SWITCH) += lan969x/lan969x_regs.o \
 					  lan969x/lan969x.o \
