@@ -22,6 +22,7 @@
 #include <linux/seg6.h>
 #include <linux/seg6_local.h>
 #include <net/addrconf.h>
+#include <net/ip6_checksum.h>
 #include <net/ip6_route.h>
 #include <net/dst_cache.h>
 #include <net/ip_tunnels.h>
@@ -1622,6 +1623,21 @@ static unsigned int seg6_mobile_skb_prefix_bits(const struct sk_buff *skb)
 	return plen;
 }
 
+/* Read Args.Mob.Session from @daddr right after a @prefix_bits-bit
+ * locator (RFC 9433 Section 6.5).  Returns false if it would overflow.
+ */
+static bool seg6_mobile_extract_args_mob(const struct in6_addr *daddr,
+					 unsigned int prefix_bits,
+					 u64 *args_out)
+{
+	if (prefix_bits + SEG6_MOBILE_ARGS_MOB_LEN > 128)
+		return false;
+
+	*args_out = seg6_mobile_addr_get_bits(daddr->s6_addr, prefix_bits,
+					      SEG6_MOBILE_ARGS_MOB_LEN);
+	return true;
+}
+
 /* GTP-U PDU Session extension header (3GPP TS 38.415).
  * 4-byte minimum unit: ext_len=1, PDU Type in high 4 bits of @pdu_type_spare,
  * QFI in low 6 bits of @spare_qfi, next_ext=0.
@@ -1997,6 +2013,265 @@ drop:
 	return -EINVAL;
 }
 
+/* Per-skb context preserved across the NF_INET_PRE_ROUTING hook on
+ * the inner T-PDU exposed by End.M.GTP6.E.  After the outer SRv6 is
+ * popped the inner IP is briefly visible to netfilter; the finish
+ * half then builds the new IPv6/UDP/GTP-U outer using these fields.
+ */
+struct seg6_mobile_gtp6_e_cb {
+	struct in6_addr	next_sid;
+	__be32		flowlabel;
+	u32		teid;
+	u8		qfi;
+	u8		tclass;
+	u8		hop_limit;
+	u8		pdu_type;
+	bool		pdu_type_set;
+};
+
+#define SEG6_MOBILE_GTP6_E_CB(skb)	\
+	((struct seg6_mobile_gtp6_e_cb *)((skb)->cb))
+
+static int input_action_end_m_gtp6_e_finish(struct net *net,
+					    struct sock *sk,
+					    struct sk_buff *skb)
+{
+	enum skb_drop_reason reason = SKB_DROP_REASON_SEG6_MOBILE_NOMEM;
+	struct seg6_mobile_gtp6_e_cb cb = *SEG6_MOBILE_GTP6_E_CB(skb);
+	struct dst_entry *orig_dst = skb_dst(skb);
+	const struct seg6_mobile_info *minfo;
+	struct seg6_local_lwt *slwt;
+	struct ipv6hdr *new_ip6h;
+	struct udphdr *uh;
+
+	slwt = seg6_local_lwtunnel(orig_dst->lwtstate);
+	minfo = &slwt->mobile_info;
+
+	/* Reject GSO packets that would not fit the egress IPv6/UDP/GTP-U
+	 * path after our outer headers are added; the GSO segmenter cannot
+	 * adjust mss across SRv6 -> GTP-U conversion.  Skip the check
+	 * entirely when no MTU is known on the current dst.
+	 */
+	if (skb_is_gso(skb)) {
+		unsigned int ovhd = sizeof(*new_ip6h) + sizeof(*uh) +
+				    sizeof(struct gtp1_header_long) +
+				    sizeof(struct seg6_mobile_pdu_session_ext);
+		unsigned int mtu = dst_mtu(skb_dst(skb));
+
+		if (mtu && (mtu <= ovhd ||
+			    !skb_gso_validate_network_len(skb, mtu - ovhd))) {
+			reason = SKB_DROP_REASON_SEG6_MOBILE_MTU_EXCEEDED;
+			goto drop;
+		}
+	}
+
+	/* Reserve worst-case headroom for the entire outer chain we are about
+	 * to push: IPv6 + UDP + GTP-U long header + PDU Session extension.
+	 * Subsequent skb_cow_head() calls inside seg6_mobile_push_gtpu() then
+	 * become no-ops.
+	 */
+	if (skb_cow_head(skb,
+			 sizeof(*new_ip6h) + sizeof(*uh) +
+			 sizeof(struct gtp1_header_long) +
+			 sizeof(struct seg6_mobile_pdu_session_ext)))
+		goto drop;
+
+	if (seg6_mobile_push_gtpu(skb, cb.teid, cb.qfi, cb.pdu_type,
+				  cb.pdu_type_set))
+		goto drop;
+
+	uh = skb_push(skb, sizeof(*uh));
+	skb_reset_transport_header(skb);
+	uh->source = htons(GTP1U_PORT);
+	uh->dest = htons(GTP1U_PORT);
+	uh->len = htons(skb->len);
+
+	new_ip6h = skb_push(skb, sizeof(*new_ip6h));
+	skb_reset_network_header(skb);
+	memset(new_ip6h, 0, sizeof(*new_ip6h));
+	ip6_flow_hdr(new_ip6h, cb.tclass, cb.flowlabel);
+	new_ip6h->payload_len = htons(skb->len - sizeof(*new_ip6h));
+	new_ip6h->nexthdr = IPPROTO_UDP;
+	new_ip6h->hop_limit = cb.hop_limit;
+	new_ip6h->saddr = minfo->src_addr;
+	new_ip6h->daddr = cb.next_sid;
+
+	/* RFC 8200 requires UDP/IPv6 checksums.  Initialise the
+	 * pseudo-header sum and let the stack/NIC complete it via
+	 * CHECKSUM_PARTIAL so we do not pay a per-packet linear sum and
+	 * we cooperate with offload.
+	 */
+	skb->ip_summed = CHECKSUM_PARTIAL;
+	skb->csum_start = (unsigned char *)uh - skb->head;
+	skb->csum_offset = offsetof(struct udphdr, check);
+	uh->check = ~csum_ipv6_magic(&new_ip6h->saddr, &new_ip6h->daddr,
+				     skb->len - sizeof(*new_ip6h),
+				     IPPROTO_UDP, 0);
+
+	skb->protocol = htons(ETH_P_IPV6);
+	nf_reset_ct(skb);
+	skb_dst_drop(skb);
+
+	seg6_lookup_any_nexthop(skb, &cb.next_sid, 0, false, slwt->oif);
+	return dst_input(skb);
+
+drop:
+	kfree_skb_reason(skb, reason);
+	return -EINVAL;
+}
+
+/* RFC 9433 Section 6.5 -- End.M.GTP6.E
+ * Receives an SRv6 packet whose current SID is an End.M.GTP6.E SID
+ * (Segments Left == 1) and re-encapsulates the inner payload in
+ * IPv6/UDP/GTP-U (with an optional PDU Session extension header
+ * carrying the QFI) toward the next segment held in SRH[0].
+ *
+ * When net.netfilter.nf_hooks_lwtunnel=1 and the inner is a valid
+ * IPv4 / IPv6 packet, NF_INET_PRE_ROUTING fires on the bare inner
+ * T-PDU between the SRv6 strip and the GTP-U push.
+ */
+static int input_action_end_m_gtp6_e(struct sk_buff *skb,
+				     struct seg6_local_lwt *slwt)
+{
+	enum skb_drop_reason reason = SKB_DROP_REASON_SEG6_MOBILE_BAD_SID;
+	const struct seg6_mobile_info *minfo = &slwt->mobile_info;
+	struct seg6_mobile_gtp6_e_cb *cb;
+	struct in6_addr next_sid;
+	struct ipv6_sr_hdr *srh;
+	u8 hop_limit, tclass, qfi;
+	unsigned int outer_len;
+	struct ipv6hdr *ip6h;
+	int inner_nfproto;
+	__be32 flowlabel;
+	__be16 frag_off;
+	u64 args_mob;
+	u32 teid;
+	int off;
+	u8 nh;
+
+	BUILD_BUG_ON(sizeof(struct seg6_mobile_gtp6_e_cb) >
+		     sizeof_field(struct sk_buff, cb));
+
+	/* End.M.GTP6.E SRH-S02 (RFC 9433 Section 6.5) mandates the SRH be
+	 * present with segments_left == 1.  Use the legacy seg6 helper
+	 * that enforces "SRH present" + HMAC; seg6_mobile_get_validated_srh()
+	 * tolerates SRH-less packets via its @missing out-parameter, which
+	 * is the wrong semantic here.
+	 */
+	srh = get_and_validate_srh(skb);
+	if (!srh) {
+		reason = SKB_DROP_REASON_SEG6_MOBILE_INVALID_SRH_SL;
+		goto drop;
+	}
+
+	/* RFC 9433 Section 6.5 SRH-S02: Segments Left MUST be 1 */
+	if (srh->segments_left != 1) {
+		reason = SKB_DROP_REASON_SEG6_MOBILE_INVALID_SRH_SL;
+		goto drop;
+	}
+
+	/* @ip6h is fresh: get_and_validate_srh() already pulled at least
+	 * sizeof(struct ipv6hdr) via pskb_may_pull(), so ipv6_hdr(skb) here
+	 * is valid even though pskb_may_pull() may have reallocated
+	 * skb->head inside that call.
+	 */
+	ip6h = ipv6_hdr(skb);
+
+	if (!seg6_mobile_extract_args_mob(&ip6h->daddr,
+					  seg6_mobile_skb_prefix_bits(skb),
+					  &args_mob))
+		goto drop;
+	teid = seg6_mobile_teid_from_args(args_mob);
+	qfi = seg6_mobile_qfi_from_args(args_mob);
+
+	/* SRH[0] is the next segment for the new GTP-U tunnel */
+	next_sid = srh->segments[0];
+
+	/* RFC 6040 outer-to-outer propagation: copy DSCP+ECN (tclass) and
+	 * the flow label from the SRv6 outer to the new IPv6 outer.  Use
+	 * ip6_flowlabel() (not ip6_flowinfo()) so the tclass byte is
+	 * supplied exactly once via the @tclass argument of ip6_flow_hdr().
+	 */
+	flowlabel = ip6_flowlabel(ip6h);
+	tclass = ipv6_get_dsfield(ip6h);
+	hop_limit = ip6h->hop_limit;
+
+	/* RFC 9433 Section 6.5 upper-layer S02 mandates "Pop the IPv6
+	 * header and all its extension headers".  ipv6_skip_exthdr()
+	 * walks every extension header (HBH/Routing/Dest-Opts/Fragment)
+	 * so HBH-before-SRH and DOpts-after-SRH are handled too.  The
+	 * terminal next-header value also selects NFPROTO_IPV4 /
+	 * NFPROTO_IPV6 for the NF_INET_PRE_ROUTING hook below.
+	 */
+	nh = ip6h->nexthdr;
+	off = ipv6_skip_exthdr(skb, sizeof(*ip6h), &nh, &frag_off);
+	if (off < 0) {
+		reason = SKB_DROP_REASON_SEG6_MOBILE_BAD_INNER;
+		goto drop;
+	}
+	outer_len = off;
+
+	switch (nh) {
+	case IPPROTO_IPIP:
+		inner_nfproto = NFPROTO_IPV4;
+		break;
+	case IPPROTO_IPV6:
+		inner_nfproto = NFPROTO_IPV6;
+		break;
+	default:
+		inner_nfproto = -1;
+		break;
+	}
+
+	/* For inner IP traffic that may traverse NF_INET_PRE_ROUTING below,
+	 * pull the full inner IP header into the linear area so a netfilter
+	 * hook reading skb_transport_header() does not access stale data.
+	 * Non-IP inner is forwarded as-is via the GTP-U T-PDU payload.
+	 */
+	if (!pskb_may_pull(skb, outer_len + ((inner_nfproto == NFPROTO_IPV4) ?
+					     sizeof(struct iphdr) :
+					     (inner_nfproto == NFPROTO_IPV6) ?
+					     sizeof(struct ipv6hdr) : 0))) {
+		reason = SKB_DROP_REASON_SEG6_MOBILE_BAD_INNER;
+		goto drop;
+	}
+
+	skb_pull_rcsum(skb, outer_len);
+	skb_reset_network_header(skb);
+	skb_reset_transport_header(skb);
+
+	cb = SEG6_MOBILE_GTP6_E_CB(skb);
+	cb->next_sid = next_sid;
+	cb->flowlabel = flowlabel;
+	cb->teid = teid;
+	cb->qfi = qfi;
+	cb->tclass = tclass;
+	cb->hop_limit = hop_limit;
+	cb->pdu_type = minfo->pdu_type;
+	cb->pdu_type_set = minfo->pdu_type_set;
+
+	if (inner_nfproto >= 0 &&
+	    static_branch_unlikely(&nf_hooks_lwtunnel_enabled)) {
+		skb->protocol = (inner_nfproto == NFPROTO_IPV4) ?
+				htons(ETH_P_IP) : htons(ETH_P_IPV6);
+		skb_set_transport_header(skb,
+					 (inner_nfproto == NFPROTO_IPV4) ?
+					 sizeof(struct iphdr) :
+					 sizeof(struct ipv6hdr));
+		nf_reset_ct(skb);
+
+		return NF_HOOK(inner_nfproto, NF_INET_PRE_ROUTING,
+			       dev_net(skb->dev), NULL, skb, skb->dev,
+			       NULL, input_action_end_m_gtp6_e_finish);
+	}
+
+	return input_action_end_m_gtp6_e_finish(dev_net(skb->dev), NULL, skb);
+
+drop:
+	kfree_skb_reason(skb, reason);
+	return -EINVAL;
+}
+
 /* RFC 9433 Section 6.2 -- End.MAP
  * Replace the outer IPv6 destination address with the configured next
  * SID, decrement the Hop Limit, and forward via IPv6 routing.  The
@@ -2042,6 +2317,9 @@ drop:
 static int seg6_mobile_v4_validate(struct seg6_local_lwt *slwt,
 				   const void *cfg,
 				   struct netlink_ext_ack *extack);
+static int seg6_mobile_gtp6_e_validate(struct seg6_local_lwt *slwt,
+				       const void *cfg,
+				       struct netlink_ext_ack *extack);
 
 static struct seg6_action_desc seg6_action_table[] = {
 	{
@@ -2151,6 +2429,17 @@ static struct seg6_action_desc seg6_action_table[] = {
 		.input		= input_action_end_m_gtp4_e,
 		.slwt_ops	= {
 			.build_state = seg6_mobile_v4_validate,
+		},
+	},
+	{
+		.action		= SEG6_LOCAL_ACTION_END_M_GTP6_E,
+		.attrs		= SEG6_F_ATTR(SEG6_LOCAL_MOBILE_SRC_ADDR),
+		.optattrs	= SEG6_F_LOCAL_COUNTERS |
+				  SEG6_F_ATTR(SEG6_LOCAL_MOBILE_PDU_TYPE) |
+				  SEG6_F_ATTR(SEG6_LOCAL_OIF),
+		.input		= input_action_end_m_gtp6_e,
+		.slwt_ops	= {
+			.build_state = seg6_mobile_gtp6_e_validate,
 		},
 	},
 	{
@@ -2640,6 +2929,29 @@ static int seg6_mobile_v4_validate(struct seg6_local_lwt *slwt,
 	if ((unsigned int)p_bits + 32 > 128) {
 		NL_SET_ERR_MSG_MOD(extack,
 				   "SRv6 Mobile v6_src_prefix_len must leave room for the 32-bit IPv4 source template (prefix_len <= 96)");
+		return -EINVAL;
+	}
+	return 0;
+}
+
+/* End.M.GTP6.E SID layout (RFC 9433 Section 6.5):
+ *
+ *   | locator (route prefix)  | Args.Mob.Session (40) | pad |
+ *
+ * The locator length is the route's IPv6 destination prefix length.
+ * Reject route additions whose prefix leaves no room for the 40-bit
+ * Args.Mob.Session field at setup time so the operator gets a clear
+ * error from `ip route add` instead of silent per-packet drops.
+ */
+static int seg6_mobile_gtp6_e_validate(struct seg6_local_lwt *slwt,
+				       const void *cfg,
+				       struct netlink_ext_ack *extack)
+{
+	const struct fib6_config *fib6_cfg = cfg;
+
+	if ((unsigned int)fib6_cfg->fc_dst_len + SEG6_MOBILE_ARGS_MOB_LEN > 128) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "End.M.GTP6.E route prefix length must leave room for the 40-bit Args.Mob.Session (prefix_len <= 88)");
 		return -EINVAL;
 	}
 	return 0;
