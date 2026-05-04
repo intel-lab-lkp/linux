@@ -339,7 +339,8 @@ static const u8 ss_rh_config_descriptor[] = {
 		     /* Companion */
 	0x00,        /* __u8 ss_bMaxBurst; allows 1 TX between ACKs */
 	0x00,        /* __u8 ss_bmAttributes; 1 packet per service interval */
-	0x02, 0x00   /* __le16 ss_wBytesPerInterval; 15 bits for max 15 ports */
+		     /* __le16 ss_wBytesPerInterval; same as wMaxPacketSize */
+	(USB_MAXCHILDREN + 1 + 7) / 8, 0x00,
 };
 
 /* authorized_default behaviour:
