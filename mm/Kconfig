@@ -1469,6 +1469,20 @@ config LAZY_MMU_MODE_KUNIT_TEST
 
 	  If unsure, say N.
 
+config PGHOT
+	bool "Hot page tracking and promotion"
+	default n
+	depends on NUMA_MIGRATION && SPARSEMEM
+	help
+	  A sub-system to track page accesses in lower tier memory and
+	  maintain hot page information. Promotes hot pages from lower
+	  tiers to top tier by using the memory access information provided
+	  by various sources. Asynchronous promotion is done by per-node
+	  kernel threads.
+
+	  This adds 1 byte of metadata overhead per page in lower-tier
+	  memory nodes.
+
 source "mm/damon/Kconfig"
 
 endmenu

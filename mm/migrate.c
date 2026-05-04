@@ -2625,7 +2625,7 @@ SYSCALL_DEFINE6(move_pages, pid_t, pid, unsigned long, nr_pages,
 }
 #endif /* CONFIG_NUMA_MIGRATION */
 
-#ifdef CONFIG_NUMA_BALANCING
+#if defined(CONFIG_NUMA_BALANCING) || defined(CONFIG_PGHOT)
 /*
  * Returns true if this is a safe migration target node for misplaced NUMA
  * pages. Currently it only checks the watermarks which is crude.
@@ -2745,12 +2745,10 @@ int migrate_misplaced_folio_prepare(struct folio *folio,
  */
 int migrate_misplaced_folio(struct folio *folio, int node)
 {
-	pg_data_t *pgdat = NODE_DATA(node);
 	int nr_remaining;
 	unsigned int nr_succeeded;
 	LIST_HEAD(migratepages);
 	struct mem_cgroup *memcg = get_mem_cgroup_from_folio(folio);
-	struct lruvec *lruvec = mem_cgroup_lruvec(memcg, pgdat);
 
 	list_add(&folio->lru, &migratepages);
 	nr_remaining = migrate_pages(&migratepages, alloc_misplaced_dst_folio,
@@ -2759,12 +2757,18 @@ int migrate_misplaced_folio(struct folio *folio, int node)
 	if (nr_remaining && !list_empty(&migratepages))
 		putback_movable_pages(&migratepages);
 	if (nr_succeeded) {
+#ifdef CONFIG_NUMA_BALANCING
 		count_vm_numa_events(NUMA_PAGE_MIGRATE, nr_succeeded);
 		count_memcg_events(memcg, NUMA_PAGE_MIGRATE, nr_succeeded);
 		if ((sysctl_numa_balancing_mode & NUMA_BALANCING_MEMORY_TIERING)
 		    && !node_is_toptier(folio_nid(folio))
-		    && node_is_toptier(node))
+		    && node_is_toptier(node)) {
+			pg_data_t *pgdat = NODE_DATA(node);
+			struct lruvec *lruvec = mem_cgroup_lruvec(memcg, pgdat);
+
 			mod_lruvec_state(lruvec, PGPROMOTE_SUCCESS, nr_succeeded);
+		}
+#endif
 	}
 	mem_cgroup_put(memcg);
 	BUG_ON(!list_empty(&migratepages));
@@ -2817,14 +2821,16 @@ int promote_misplaced_memcg_folios(struct list_head *folio_list, int node)
 		putback_movable_pages(folio_list);
 
 	if (nr_succeeded) {
+#ifdef CONFIG_NUMA_BALANCING
 		count_vm_numa_events(NUMA_PAGE_MIGRATE, nr_succeeded);
 		count_memcg_events(memcg, NUMA_PAGE_MIGRATE, nr_succeeded);
 		mod_lruvec_state(mem_cgroup_lruvec(memcg, NODE_DATA(node)),
 				 PGPROMOTE_SUCCESS, nr_succeeded);
+#endif
 	}
 
 	mem_cgroup_put(memcg);
 	WARN_ON(!list_empty(folio_list));
 	return nr_remaining ? -EAGAIN : 0;
 }
-#endif /* CONFIG_NUMA_BALANCING */
+#endif /* CONFIG_NUMA_BALANCING || CONFIG_PGHOT */

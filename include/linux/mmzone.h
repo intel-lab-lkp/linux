@@ -1155,6 +1155,7 @@ enum pgdat_flags {
 					 * many pages under writeback
 					 */
 	PGDAT_RECLAIM_LOCKED,		/* prevents concurrent reclaim */
+	PGDAT_KMIGRATED_ACTIVATE,	/* activates kmigrated */
 };
 
 enum zone_flags {
@@ -1609,6 +1610,10 @@ typedef struct pglist_data {
 #ifdef CONFIG_MEMORY_FAILURE
 	struct memory_failure_stats mf_stats;
 #endif
+#ifdef CONFIG_PGHOT
+	struct task_struct *kmigrated;
+	wait_queue_head_t kmigrated_wait;
+#endif
 } pg_data_t;
 
 #define node_present_pages(nid)	(NODE_DATA(nid)->node_present_pages)
@@ -2019,12 +2024,27 @@ struct mem_section {
 	unsigned long section_mem_map;
 
 	struct mem_section_usage *usage;
+#ifdef CONFIG_PGHOT
+	/*
+	 * Per-PFN hotness data for this section.
+	 * Array of phi_t (u8 in default mode).
+	 * LSB is used as PGHOT_SECTION_HOT_BIT flag.
+	 */
+	void *hot_map;
+#endif
 #ifdef CONFIG_PAGE_EXTENSION
 	/*
 	 * If SPARSEMEM, pgdat doesn't have page_ext pointer. We use
 	 * section. (see page_ext.h about this.)
 	 */
 	struct page_ext *page_ext;
+#endif
+	/*
+	 * Padding to maintain consistent mem_section size when exactly
+	 * one of PGHOT or PAGE_EXTENSION is enabled. This ensures
+	 * optimal alignment regardless of configuration.
+	 */
+#if (defined(CONFIG_PGHOT) ^ defined(CONFIG_PAGE_EXTENSION))
 	unsigned long pad;
 #endif
 	/*

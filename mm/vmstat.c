@@ -1489,6 +1489,11 @@ const char * const vmstat_text[] = {
 	[I(KSTACK_REST)]			= "kstack_rest",
 #endif
 #endif
+#ifdef CONFIG_PGHOT
+	[I(PGHOT_RECORDED_ACCESSES)]		= "pghot_recorded_accesses",
+	[I(PGHOT_RECORDED_HINTFAULTS)]		= "pghot_recorded_hintfaults",
+	[I(PGHOT_RECORDED_HWHINTS)]		= "pghot_recorded_hwhints",
+#endif /* CONFIG_PGHOT */
 #undef I
 #endif /* CONFIG_VM_EVENT_COUNTERS */
 };
