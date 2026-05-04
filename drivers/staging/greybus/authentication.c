@@ -109,6 +109,7 @@ static int cap_get_ims_certificate(struct gb_cap *cap, u32 class, u32 id,
 	struct gb_cap_get_ims_certificate_request *request;
 	struct gb_cap_get_ims_certificate_response *response;
 	size_t max_size = gb_operation_get_payload_size_max(connection);
+	size_t cert_size;
 	struct gb_operation *op;
 	int ret;
 
@@ -131,9 +132,21 @@ static int cap_get_ims_certificate(struct gb_cap *cap, u32 class, u32 id,
 	}
 
 	response = op->response->payload;
+
+	if (op->response->payload_size < sizeof(*response)) {
+		ret = -EPROTO;
+		goto done;
+	}
+
+	cert_size = op->response->payload_size - sizeof(*response);
+	if (cert_size > CAP_CERTIFICATE_MAX_SIZE) {
+		ret = -EMSGSIZE;
+		goto done;
+	}
+
 	*result = response->result_code;
-	*size = op->response->payload_size - sizeof(*response);
-	memcpy(certificate, response->certificate, *size);
+	*size = (u32)cert_size;
+	memcpy(certificate, response->certificate, cert_size);
 
 done:
 	gb_operation_put(op);
@@ -148,6 +161,7 @@ static int cap_authenticate(struct gb_cap *cap, u32 auth_type, u8 *uid,
 	struct gb_cap_authenticate_request *request;
 	struct gb_cap_authenticate_response *response;
 	size_t max_size = gb_operation_get_payload_size_max(connection);
+	size_t sig_size;
 	struct gb_operation *op;
 	int ret;
 
@@ -170,10 +184,22 @@ static int cap_authenticate(struct gb_cap *cap, u32 auth_type, u8 *uid,
 	}
 
 	response = op->response->payload;
+
+	if (op->response->payload_size < sizeof(*response)) {
+		ret = -EPROTO;
+		goto done;
+	}
+
+	sig_size = op->response->payload_size - sizeof(*response);
+	if (sig_size > CAP_SIGNATURE_MAX_SIZE) {
+		ret = -EMSGSIZE;
+		goto done;
+	}
+
 	*result = response->result_code;
-	*signature_size = op->response->payload_size - sizeof(*response);
+	*signature_size = (u32)sig_size;
 	memcpy(auth_response, response->response, sizeof(response->response));
-	memcpy(signature, response->signature, *signature_size);
+	memcpy(signature, response->signature, sig_size);
 
 done:
 	gb_operation_put(op);
