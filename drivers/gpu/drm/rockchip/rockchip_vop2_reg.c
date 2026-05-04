@@ -2134,9 +2134,9 @@ static void rk3568_vop2_setup_layer_mixer(struct vop2_video_port *vp)
 {
 	struct vop2 *vop2 = vp->vop2;
 	struct drm_plane *plane;
-	u32 layer_sel = 0;
+	u32 layer_sel;
 	u32 port_sel;
-	u32 atv_layer_sel = 0;
+	u32 atv_layer_sel;
 	u8 layer_id;
 	u8 old_layer_id;
 	u8 layer_sel_id;
