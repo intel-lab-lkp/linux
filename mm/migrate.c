@@ -2770,4 +2770,61 @@ int migrate_misplaced_folio(struct folio *folio, int node)
 	BUG_ON(!list_empty(&migratepages));
 	return nr_remaining ? -EAGAIN : 0;
 }
+
+/**
+ * promote_misplaced_memcg_folios() - Batch variant of migrate_misplaced_folio
+ * Attempts to promote a folio list to the specified destination.
+ * @folio_list: Isolated list of folios to be batch-promoted.
+ * @node: The NUMA node ID to where the folios should be promoted.
+ *
+ * Caller is expected to have isolated the folios by calling
+ * migrate_misplaced_folio_prepare(), which will result in an
+ * elevated reference count on the folios. All the isolated folios
+ * in the list must belong to the same memcg so that NUMA_PAGE_MIGRATE
+ * stat can be attributed correctly to the memcg.
+ *
+ * This function will un-isolate the folios, drop the elevated reference
+ * and remove them from the list before returning. This should be called
+ * only for batched promotion of hot pages from lower tier nodes.
+ *
+ * Return: 0 on success and -EAGAIN on failure or partial promotion.
+ *         On return, @folio_list will be empty regardless of success/failure.
+ */
+int promote_misplaced_memcg_folios(struct list_head *folio_list, int node)
+{
+	struct mem_cgroup *memcg = NULL;
+	unsigned int nr_succeeded = 0;
+	struct folio *first;
+	int nr_remaining;
+
+	if (list_empty(folio_list))
+		return 0;
+
+	first = list_first_entry(folio_list, struct folio, lru);
+#ifdef CONFIG_DEBUG_VM
+	{
+		struct folio *f;
+		list_for_each_entry(f, folio_list, lru)
+		VM_WARN_ON_ONCE(folio_memcg(f) != folio_memcg(first));
+	}
+#endif
+	memcg = get_mem_cgroup_from_folio(first);
+
+	nr_remaining = migrate_pages(folio_list, alloc_misplaced_dst_folio,
+				     NULL, node, MIGRATE_ASYNC,
+				     MR_NUMA_MISPLACED, &nr_succeeded);
+	if (nr_remaining)
+		putback_movable_pages(folio_list);
+
+	if (nr_succeeded) {
+		count_vm_numa_events(NUMA_PAGE_MIGRATE, nr_succeeded);
+		count_memcg_events(memcg, NUMA_PAGE_MIGRATE, nr_succeeded);
+		mod_lruvec_state(mem_cgroup_lruvec(memcg, NODE_DATA(node)),
+				 PGPROMOTE_SUCCESS, nr_succeeded);
+	}
+
+	mem_cgroup_put(memcg);
+	WARN_ON(!list_empty(folio_list));
+	return nr_remaining ? -EAGAIN : 0;
+}
 #endif /* CONFIG_NUMA_BALANCING */
