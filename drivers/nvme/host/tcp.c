@@ -8,6 +8,7 @@
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/err.h>
+#include <linux/string_choices.h>
 #include <linux/crc32.h>
 #include <linux/nvme-tcp.h>
 #include <linux/nvme-keyring.h>
@@ -1564,8 +1565,8 @@ static int nvme_tcp_init_connection(struct nvme_tcp_queue *queue)
 	    (!queue->data_digest && ctrl_ddgst)) {
 		pr_err("queue %d: data digest mismatch host: %s ctrl: %s\n",
 			nvme_tcp_queue_id(queue),
-			queue->data_digest ? "enabled" : "disabled",
-			ctrl_ddgst ? "enabled" : "disabled");
+			str_enabled_disabled(queue->data_digest),
+			str_enabled_disabled(ctrl_ddgst));
 		goto free_icresp;
 	}
 
@@ -1574,8 +1575,8 @@ static int nvme_tcp_init_connection(struct nvme_tcp_queue *queue)
 	    (!queue->hdr_digest && ctrl_hdgst)) {
 		pr_err("queue %d: header digest mismatch host: %s ctrl: %s\n",
 			nvme_tcp_queue_id(queue),
-			queue->hdr_digest ? "enabled" : "disabled",
-			ctrl_hdgst ? "enabled" : "disabled");
+			str_enabled_disabled(queue->hdr_digest),
+			str_enabled_disabled(ctrl_hdgst);
 		goto free_icresp;
 	}
 
