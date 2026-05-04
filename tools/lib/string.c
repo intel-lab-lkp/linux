@@ -37,6 +37,43 @@ void *memdup(const void *src, size_t len)
 }
 
 /**
+ * strscpy - Copy a C-string into a sized buffer
+ * @dest: Where to copy the string to
+ * @src: Where to copy the string from
+ * @count: Size of destination buffer
+ *
+ * Copy the source string to the destination buffer. The result is
+ * always a valid NUL-terminated string that fits in the buffer.
+ *
+ * Return:
+ * * The number of characters copied (not including the trailing NUL)
+ * * -E2BIG if count is 0 or @src was truncated.
+ */
+ssize_t strscpy(char *dest, const char *src, size_t count)
+{
+	size_t res = 0;
+
+	if (count == 0)
+		return -E2BIG;
+
+	while (count) {
+		char c = src[res];
+
+		dest[res] = c;
+		if (!c)
+			return res;
+		res++;
+		count--;
+	}
+
+	/* Hit buffer length without finding a NUL; force NUL-termination. */
+	if (res)
+		dest[res-1] = '\0';
+
+	return -E2BIG;
+}
+
+/**
  * strtobool - convert common user inputs into boolean values
  * @s: input string
  * @res: result
