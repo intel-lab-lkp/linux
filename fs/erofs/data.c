@@ -40,9 +40,11 @@ void *erofs_bread(struct erofs_buf *buf, erofs_off_t offset, bool need_kmap)
 	 */
 	if (buf->file) {
 		fpos = (loff_t)index << PAGE_SHIFT;
-		err = rw_verify_area(READ, buf->file, &fpos, PAGE_SIZE);
-		if (err < 0)
-			return ERR_PTR(err);
+		scoped_with_creds(buf->file->f_cred) {
+			err = rw_verify_area(READ, buf->file, &fpos, PAGE_SIZE);
+			if (err < 0)
+				return ERR_PTR(err);
+		}
 	}
 
 	if (buf->page) {
