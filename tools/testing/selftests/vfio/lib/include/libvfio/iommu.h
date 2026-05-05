@@ -9,6 +9,9 @@
 
 typedef u64 iova_t;
 
+/* Create IOMMU with page tables */
+#define IOMMUFD_IOMMU_INIT_CREATE_PT 1
+
 struct iommu_mode {
 	const char *name;
 	const char *container_path;
@@ -29,10 +32,12 @@ struct iommu {
 	int container_fd;
 	int iommufd;
 	u32 ioas_id;
+	u32 hwpt_id;
 	struct list_head dma_regions;
 };
 
 struct iommu *iommu_init(const char *iommu_mode);
+struct iommu *iommufd_iommu_init(int iommufd, u32 dev_id, u32 flags);
 void iommu_cleanup(struct iommu *iommu);
 
 int __iommu_map(struct iommu *iommu, struct dma_region *region);
