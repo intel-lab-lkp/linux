@@ -304,6 +304,12 @@ static inline void cgraph_call_edge_duplication_hooks(cgraph_edge *cs1, cgraph_e
 	symtab->call_edge_duplication_hooks(cs1, cs2);
 }
 
+
+#if BUILDING_GCC_VERSION >= 16000
+#define CONST_CAST(TYPE, X) (const_cast<TYPE>(X))
+#define CONST_CAST_TREE(X) CONST_CAST(union tree_node *, (X))
+#endif
+
 typedef gimple *gimple_ptr;
 typedef const gimple *const_gimple_ptr;
 #define gimple gimple_ptr
