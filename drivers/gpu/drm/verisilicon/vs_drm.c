@@ -4,7 +4,7 @@
  */
 
 #include <linux/aperture.h>
-#include <linux/dma-mapping.h>
+#include <linux/of_address.h>
 #include <linux/platform_device.h>
 #include <linux/module.h>
 #include <linux/regmap.h>
@@ -49,6 +49,31 @@ static int vs_gem_dumb_create(struct drm_file *file_priv,
 
 DEFINE_DRM_GEM_FOPS(vs_drm_driver_fops);
 
+static struct drm_gem_object *vs_gem_create_object(struct drm_device *drm,
+						   size_t size)
+{
+	struct drm_gem_dma_object *obj;
+
+	obj = kzalloc_obj(*obj);
+	if (!obj)
+		return ERR_PTR(-ENOMEM);
+
+	obj->map_noncoherent = to_vs_drm_dev(drm)->noncoherent;
+
+	return &obj->base;
+}
+
+static struct drm_framebuffer *
+vs_gem_fb_create(struct drm_device *drm, struct drm_file *file,
+		 const struct drm_format_info *info,
+		 const struct drm_mode_fb_cmd2 *mode_cmd)
+{
+	if (to_vs_drm_dev(drm)->noncoherent)
+		return drm_gem_fb_create_with_dirty(drm, file, info, mode_cmd);
+
+	return drm_gem_fb_create(drm, file, info, mode_cmd);
+}
+
 static const struct drm_driver vs_drm_driver = {
 	.driver_features	= DRIVER_MODESET | DRIVER_GEM | DRIVER_ATOMIC,
 	.fops			= &vs_drm_driver_fops,
@@ -58,12 +83,13 @@ static const struct drm_driver vs_drm_driver = {
 	.minor	= DRIVER_MINOR,
 
 	/* GEM Operations */
+	.gem_create_object	= vs_gem_create_object,
 	DRM_GEM_DMA_DRIVER_OPS_WITH_DUMB_CREATE(vs_gem_dumb_create),
 	DRM_FBDEV_DMA_DRIVER_OPS,
 };
 
 static const struct drm_mode_config_funcs vs_mode_config_funcs = {
-	.fb_create		= drm_gem_fb_create,
+	.fb_create		= vs_gem_fb_create,
 	.atomic_check		= drm_atomic_helper_check,
 	.atomic_commit		= drm_atomic_helper_commit,
 };
@@ -98,6 +124,7 @@ int vs_drm_initialize(struct vs_dc *dc, struct platform_device *pdev)
 
 	drm = &vdrm->base;
 	vdrm->dc = dc;
+	vdrm->noncoherent = !of_dma_is_coherent(dev->of_node);
 	dc->drm_dev = vdrm;
 
 	ret = drmm_mode_config_init(drm);

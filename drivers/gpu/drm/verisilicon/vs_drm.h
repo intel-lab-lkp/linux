@@ -18,7 +18,14 @@ struct vs_drm_dev {
 
 	struct vs_dc *dc;
 	struct vs_crtc *crtcs[VSDC_MAX_OUTPUTS];
+
+	bool noncoherent;
 };
+
+static inline struct vs_drm_dev *to_vs_drm_dev(struct drm_device *drm)
+{
+	return container_of(drm, struct vs_drm_dev, base);
+}
 
 int vs_drm_initialize(struct vs_dc *dc, struct platform_device *pdev);
 void vs_drm_finalize(struct vs_dc *dc);
