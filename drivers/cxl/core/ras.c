@@ -66,17 +66,6 @@ static void cxl_cper_prot_err_work_fn(struct work_struct *work)
 }
 static DECLARE_WORK(cxl_cper_prot_err_work, cxl_cper_prot_err_work_fn);
 
-int cxl_ras_init(void)
-{
-	cxl_cper_register_prot_err_work(&cxl_cper_prot_err_work);
-	return 0;
-}
-
-void cxl_ras_exit(void)
-{
-	cxl_cper_unregister_prot_err_work();
-}
-
 static void cxl_dport_map_ras(struct cxl_dport *dport)
 {
 	struct cxl_register_map *map = &dport->reg_map;
@@ -132,6 +121,67 @@ void devm_cxl_port_ras_setup(struct cxl_port *port)
 		dev_dbg(&port->dev, "Failed to map RAS capability\n");
 }
 EXPORT_SYMBOL_NS_GPL(devm_cxl_port_ras_setup, "CXL");
+
+/**
+ * find_cxl_port_by_dev - Use @dev as hint to do a _by_dport or _by_uport lookup
+ * @dev: generic device that may either be a companion of port or target dport
+ * @dport: output parameter; set to the matched dport for dport-class
+ * lookups (Root Port, Downstream Port), NULL otherwise.
+ *
+ * Return a 'struct cxl_port' with an elevated reference if found. Use
+ * __free(put_cxl_port) to release.
+ */
+static struct cxl_port *find_cxl_port_by_dev(struct device *dev, struct cxl_dport **dport)
+{
+	struct pci_dev *pdev;
+
+	*dport = NULL;
+	if (!dev_is_pci(dev))
+		return NULL;
+
+	pdev = to_pci_dev(dev);
+
+	switch (pci_pcie_type(pdev)) {
+	case PCI_EXP_TYPE_ROOT_PORT:
+	case PCI_EXP_TYPE_DOWNSTREAM:
+		return find_cxl_port_by_dport(dev, dport);
+	case PCI_EXP_TYPE_UPSTREAM:
+	case PCI_EXP_TYPE_ENDPOINT:
+	case PCI_EXP_TYPE_RC_END:
+		return find_cxl_port_by_uport(dev);
+	}
+
+	return NULL;
+}
+
+static void __iomem *to_ras_base(struct cxl_port *port, struct cxl_dport *dport)
+{
+	if (!port)
+		return NULL;
+
+	if (dport)
+		return dport->regs.ras;
+
+	return port->regs.ras;
+}
+
+static void cxl_do_recovery(struct pci_dev *pdev, struct cxl_port *port, struct cxl_dport *dport)
+{
+	struct device *dev = &pdev->dev;
+	bool ue;
+
+	if (pci_dev_is_disconnected(pdev))
+		panic("CXL cachemem error: device disconnected during UE recovery");
+
+	ue = cxl_handle_ras(dev, pci_get_dsn(pdev),
+			    to_ras_base(port, dport));
+	if (ue)
+		panic("CXL cachemem error.");
+
+	pcie_clear_device_status(pdev);
+	pci_aer_clear_nonfatal_status(pdev);
+	pci_aer_clear_fatal_status(pdev);
+}
 
 void cxl_handle_cor_ras(struct device *dev, u64 serial, void __iomem *ras_base)
 {
@@ -275,3 +325,70 @@ pci_ers_result_t cxl_error_detected(struct pci_dev *pdev,
 	return PCI_ERS_RESULT_NEED_RESET;
 }
 EXPORT_SYMBOL_NS_GPL(cxl_error_detected, "CXL");
+
+static void cxl_handle_proto_error(struct pci_dev *pdev, struct cxl_port *port,
+				   struct cxl_dport *dport, int severity)
+{
+	if (severity == AER_CORRECTABLE) {
+		cxl_handle_cor_ras(&pdev->dev, pci_get_dsn(pdev),
+				   to_ras_base(port, dport));
+		pcie_clear_device_status(pdev);
+	} else {
+		cxl_do_recovery(pdev, port, dport);
+	}
+}
+
+static int __cxl_proto_err_work_fn(struct cxl_proto_err_work_data *wd)
+{
+	struct cxl_dport *dport;
+	struct cxl_port *port __free(put_cxl_port) =
+		find_cxl_port_by_dev(&wd->pdev->dev, &dport);
+
+	if (!port) {
+		dev_err_ratelimited(&wd->pdev->dev,
+				    "Failed to find parent port device in CXL topology\n");
+		return 0;
+	}
+
+	/*
+	 * Hold the port device lock and verify a driver is bound before
+	 * handling errors. Protects against NULL deref if an error is
+	 * dispatched before probe completion or after driver removal.
+	 */
+	guard(device)(&port->dev);
+	if (!port->dev.driver) {
+		dev_err_ratelimited(&port->dev,
+				    "Port device is unbound, abort error handling\n");
+		return 0;
+	}
+
+	cxl_handle_proto_error(wd->pdev, port, dport, wd->severity);
+
+	return 0;
+}
+
+static void cxl_proto_err_work_fn(struct work_struct *work)
+{
+	struct cxl_proto_err_work_data wd;
+	int rc;
+
+	rc = for_each_cxl_proto_err(&wd, __cxl_proto_err_work_fn);
+	if (rc)
+		pr_err_ratelimited("Failed to handle the CXL error (%d)\n", rc);
+}
+
+static DECLARE_WORK(cxl_proto_err_work, cxl_proto_err_work_fn);
+
+int cxl_ras_init(void)
+{
+	cxl_cper_register_prot_err_work(&cxl_cper_prot_err_work);
+	cxl_register_proto_err_work(&cxl_proto_err_work);
+
+	return 0;
+}
+
+void cxl_ras_exit(void)
+{
+	cxl_cper_unregister_prot_err_work();
+	cxl_unregister_proto_err_work();
+}

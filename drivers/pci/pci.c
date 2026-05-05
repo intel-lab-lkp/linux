@@ -2245,6 +2245,7 @@ void pcie_clear_device_status(struct pci_dev *dev)
 				   PCI_EXP_DEVSTA_CED | PCI_EXP_DEVSTA_NFED |
 				   PCI_EXP_DEVSTA_FED | PCI_EXP_DEVSTA_URD);
 }
+EXPORT_SYMBOL_FOR_MODULES(pcie_clear_device_status, "cxl_core");
 #endif
 
 /**
