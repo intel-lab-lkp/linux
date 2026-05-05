@@ -2619,6 +2619,8 @@ static irqreturn_t bmp580_trigger_handler(int irq, void *p)
 	} buffer;
 	int ret;
 
+	memset(&buffer, 0, sizeof(buffer));
+
 	guard(mutex)(&data->lock);
 
 	/* Burst read data registers */
