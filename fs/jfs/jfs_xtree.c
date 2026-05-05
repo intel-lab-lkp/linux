@@ -2715,9 +2715,9 @@ s64 xtTruncate(tid_t tid, struct inode *ip, s64 newsize, int flag)
 	/* set size
 	 */
 	if (S_ISDIR(ip->i_mode) && !newsize)
-		ip->i_size = 1;	/* fsck hates zero-length directories */
+		i_size_write(ip, 1);	/* fsck hates zero-length directories */
 	else
-		ip->i_size = newsize;
+		i_size_write(ip, newsize);
 
 	/* update quota allocation to reflect freed blocks */
 	dquot_free_block(ip, nfreed);

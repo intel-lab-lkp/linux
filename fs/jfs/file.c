@@ -45,7 +45,7 @@ static int jfs_open(struct inode *inode, struct file *file)
 {
 	int rc;
 
-	if (S_ISREG(inode->i_mode) && inode->i_size < 0)
+	if (S_ISREG(inode->i_mode) && i_size_read(inode) < 0)
 		return -EIO;
 
 	if ((rc = dquot_file_open(inode, file)))
@@ -61,7 +61,7 @@ static int jfs_open(struct inode *inode, struct file *file)
 	 * file is actually grown.
 	 */
 	if (S_ISREG(inode->i_mode) && file->f_mode & FMODE_WRITE &&
-	    (inode->i_size == 0)) {
+	    i_size_read(inode) == 0) {
 		struct jfs_inode_info *ji = JFS_IP(inode);
 		spin_lock_irq(&ji->ag_lock);
 		if (ji->active_ag == -1) {
