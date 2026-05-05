@@ -240,6 +240,8 @@ class MaintainersParser:
                 if match:
                     entry = match.group(1).strip()
                     self.profile_entries[self.subsystem_name] = entry
+                else:
+                    self.profile_entries[self.subsystem_name] = f"``{details}``"
 
         details = self.linkify(details)
 
@@ -332,6 +334,8 @@ class MaintainersProfile(Include):
 
             if entry.startswith("http"):
                 output += f"- `{profile} <{entry}>`_\n"
+            elif entry.startswith("`"):
+                output += f"- {profile}: {entry}\n"
             else:
                 output += f"- :doc:`{profile} <{entry}>`\n"
 
