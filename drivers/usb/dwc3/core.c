@@ -162,6 +162,18 @@ void dwc3_set_prtcap(struct dwc3 *dwc, u32 mode, bool ignore_susphy)
 }
 EXPORT_SYMBOL_GPL(dwc3_set_prtcap);
 
+enum usb_link_tunnel_mode dwc3_link_tunnel_mode(struct dwc3 *dwc, u8 port)
+{
+	/* Prior versions had no CIO support */
+	if (!DWC3_VER_IS_WITHIN(DWC31, 191A, ANY))
+		return USB_LINK_NATIVE;
+
+	if (dwc3_readl(dwc, DWC3_CIOCTRL(port)) & DWC3_CIOCTRL_CIO_EN)
+		return USB_LINK_TUNNELED;
+
+	return USB_LINK_NATIVE;
+}
+
 static void __dwc3_set_mode(struct work_struct *work)
 {
 	struct dwc3 *dwc = work_to_dwc(work);
