@@ -328,6 +328,23 @@ static void __init paravirt_ops_setup(void)
 #endif
 }
 
+static u64 kvm_steal_clock(int cpu)
+{
+	u64 steal;
+	struct kvm_steal_time *src;
+	int version;
+
+	src = &per_cpu(steal_time, cpu);
+	do {
+		version = src->version;
+		virt_rmb();
+		steal = src->steal;
+		virt_rmb();
+	} while ((version & 1) || (version != src->version));
+
+	return steal;
+}
+
 static void kvm_register_steal_time(void)
 {
 	int cpu = smp_processor_id();
@@ -337,6 +354,12 @@ static void kvm_register_steal_time(void)
 		return;
 
 	wrmsrq(MSR_KVM_STEAL_TIME, (slow_virt_to_phys(st) | KVM_MSR_ENABLED));
+
+	/*
+	 * This CPU is not ready to be scheduled yet.
+	 */
+	sched_steal_time_cpu_init(cpu, kvm_steal_clock(cpu));
+
 	pr_debug("stealtime: cpu %d, msr %llx\n", cpu,
 		(unsigned long long) slow_virt_to_phys(st));
 }
@@ -409,23 +432,6 @@ static void kvm_disable_steal_time(void)
 		return;
 
 	wrmsrq(MSR_KVM_STEAL_TIME, 0);
-}
-
-static u64 kvm_steal_clock(int cpu)
-{
-	u64 steal;
-	struct kvm_steal_time *src;
-	int version;
-
-	src = &per_cpu(steal_time, cpu);
-	do {
-		version = src->version;
-		virt_rmb();
-		steal = src->steal;
-		virt_rmb();
-	} while ((version & 1) || (version != src->version));
-
-	return steal;
 }
 
 static inline __init void __set_percpu_decrypted(void *ptr, unsigned long size)

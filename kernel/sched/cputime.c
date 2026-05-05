@@ -255,6 +255,16 @@ void __account_forceidle_time(struct task_struct *p, u64 delta)
 #ifdef CONFIG_PARAVIRT
 struct static_key paravirt_steal_enabled;
 
+void sched_steal_time_cpu_init(int cpu, u64 steal)
+{
+	struct rq *rq = cpu_rq(cpu);
+
+	rq->prev_steal_time = steal;
+#ifdef CONFIG_PARAVIRT_TIME_ACCOUNTING
+	rq->prev_steal_time_rq = steal;
+#endif
+}
+
 #ifdef CONFIG_HAVE_PV_STEAL_CLOCK_GEN
 static u64 native_steal_clock(int cpu)
 {
