@@ -14,6 +14,7 @@
 #include <linux/suspend.h>
 #include <linux/vmalloc.h>
 #include "internal.h"
+#include "memcontrol-v1.h"
 #include "swap.h"
 #include "swap_table.h"
 
@@ -297,7 +298,7 @@ static bool cluster_is_alloc_candidate(struct vswap_cluster *cluster)
 }
 
 static void __vswap_alloc_from_cluster(struct vswap_cluster *cluster,
-		int start, struct folio *folio)
+		int start, struct folio *folio, unsigned short memcgid)
 {
 	int i, nr = 1 << cluster->order;
 	struct swp_desc *desc;
@@ -307,7 +308,7 @@ static void __vswap_alloc_from_cluster(struct vswap_cluster *cluster,
 		desc->type = VSWAP_FOLIO;
 		desc->swap_cache = folio;
 #ifdef CONFIG_MEMCG
-		desc->memcgid = 0;
+		desc->memcgid = memcgid;
 #endif
 		desc->swap_count = 0;
 		desc->in_swapcache = true;
@@ -316,7 +317,7 @@ static void __vswap_alloc_from_cluster(struct vswap_cluster *cluster,
 }
 
 static unsigned long vswap_alloc_from_cluster(struct vswap_cluster *cluster,
-		struct folio *folio)
+		struct folio *folio, unsigned short memcgid)
 {
 	int nr = 1 << cluster->order;
 	unsigned long i = cluster->id ? 0 : nr;
@@ -335,20 +336,31 @@ static unsigned long vswap_alloc_from_cluster(struct vswap_cluster *cluster,
 	bitmap_set(cluster->bitmap, i, nr);
 
 	refcount_add(nr, &cluster->refcnt);
-	__vswap_alloc_from_cluster(cluster, i, folio);
+	__vswap_alloc_from_cluster(cluster, i, folio, memcgid);
 	return i + (cluster->id << VSWAP_CLUSTER_SHIFT);
 }
 
-/* Allocate a contiguous range of virtual swap slots */
-static swp_entry_t vswap_alloc(struct folio *folio)
+/**
+ * folio_alloc_swap - allocate virtual swap space for a folio.
+ * @folio: the folio.
+ *
+ * Return: 0 on success, -ENOMEM on failure.
+ */
+int folio_alloc_swap(struct folio *folio)
 {
 	struct xa_limit limit = vswap_cluster_map_limit;
 	struct vswap_cluster *local, *cluster;
+	struct mem_cgroup *memcg;
 	int order = folio_order(folio), nr = 1 << order;
+	unsigned short memcgid;
 	bool need_caching = true;
 	u32 cluster_id;
 	swp_entry_t entry;
 
+	VM_BUG_ON_FOLIO(!folio_test_locked(folio), folio);
+	VM_BUG_ON_FOLIO(!folio_test_uptodate(folio), folio);
+
+	memcgid = mem_cgroup_get_swap_memcgid(folio);
 	entry.val = 0;
 
 	/* first, let's try the locally cached cluster */
@@ -357,7 +369,7 @@ static swp_entry_t vswap_alloc(struct folio *folio)
 	cluster = this_cpu_read(percpu_vswap_cluster.clusters[order]);
 	if (cluster) {
 		spin_lock(&cluster->lock);
-		entry.val = vswap_alloc_from_cluster(cluster, folio);
+		entry.val = vswap_alloc_from_cluster(cluster, folio, memcgid);
 		need_caching = !entry.val;
 
 		if (!entry.val || !cluster_is_alloc_candidate(cluster)) {
@@ -384,7 +396,7 @@ static swp_entry_t vswap_alloc(struct folio *folio)
 			if (!spin_trylock(&cluster->lock))
 				continue;
 
-			entry.val = vswap_alloc_from_cluster(cluster, folio);
+			entry.val = vswap_alloc_from_cluster(cluster, folio, memcgid);
 			list_del_init(&cluster->list);
 			cluster->full = !entry.val || !cluster_is_alloc_candidate(cluster);
 			need_caching = !cluster->full;
@@ -424,7 +436,7 @@ static swp_entry_t vswap_alloc(struct folio *folio)
 				if (!cluster_id)
 					entry.val += nr;
 				__vswap_alloc_from_cluster(cluster,
-					(entry.val & VSWAP_CLUSTER_MASK), folio);
+					(entry.val & VSWAP_CLUSTER_MASK), folio, memcgid);
 				/* Mark the allocated range in the bitmap */
 				bitmap_set(cluster->bitmap, (entry.val & VSWAP_CLUSTER_MASK), nr);
 				need_caching = cluster_is_alloc_candidate(cluster);
@@ -476,10 +488,25 @@ static swp_entry_t vswap_alloc(struct folio *folio)
 	if (entry.val) {
 		VM_WARN_ON(entry.val + nr - 1 > MAX_VSWAP);
 		atomic_add(nr, &vswap_used);
-	} else {
-		atomic_add(nr, &vswap_alloc_reject);
+
+		folio_ref_add(folio, nr);
+		folio_set_swapcache(folio);
+		folio->swap = entry;
+
+		node_stat_mod_folio(folio, NR_FILE_PAGES, nr);
+		lruvec_stat_mod_folio(folio, NR_SWAPCACHE, nr);
+		return 0;
 	}
-	return entry;
+
+	atomic_add(nr, &vswap_alloc_reject);
+	if (memcgid) {
+		rcu_read_lock();
+		memcg = mem_cgroup_from_id(memcgid);
+		rcu_read_unlock();
+		if (memcg)
+			mem_cgroup_id_put_many(memcg, nr);
+	}
+	return -ENOMEM;
 }
 
 static void vswap_cluster_free_rcu(struct rcu_head *head)
@@ -570,15 +597,21 @@ static unsigned short swp_desc_memcgid(struct swp_desc *desc);
  *    but the only vswap function called under ci->lock is vswap_rmap_set(),
  *    which uses atomic ops and does not take cluster->lock. So there is no
  *    ABBA deadlock risk.
+ *
+ * 4. Callers must ensure the range belongs to a single memcg, so we can
+ *    read the memcg id once from the first descriptor and use it for all
+ *    uncharge calls.
  */
 static void release_backing(struct vswap_cluster *cluster, swp_entry_t entry,
-		int nr)
+		int nr, struct mem_cgroup *memcg)
 {
 	struct swp_desc *desc;
 	unsigned long flush_nr, phys_swap_start = 0, phys_swap_end = 0;
 	unsigned int phys_swap_type = 0;
 	bool need_flushing_phys_swap = false;
 	swp_slot_t flush_slot;
+	unsigned short batch_memcgid = 0;
+	unsigned int nr_swapfile = 0;
 	int i;
 
 	VM_WARN_ON(!entry.val);
@@ -586,6 +619,9 @@ static void release_backing(struct vswap_cluster *cluster, swp_entry_t entry,
 	for (i = 0; i < nr; i++) {
 		desc = __vswap_iter(cluster, entry.val + i);
 		VM_WARN_ON(!desc);
+
+		if (!i && !memcg)
+			batch_memcgid = swp_desc_memcgid(desc);
 
 		/*
 		 * We batch contiguous physical swap slots for more efficient
@@ -604,6 +640,7 @@ static void release_backing(struct vswap_cluster *cluster, swp_entry_t entry,
 		if (desc->type == VSWAP_ZSWAP && desc->zswap_entry) {
 			zswap_entry_free(desc->zswap_entry);
 		} else if (desc->type == VSWAP_SWAPFILE) {
+			nr_swapfile++;
 			if (!phys_swap_start) {
 				/* start a new contiguous range of phys swap */
 				phys_swap_start = swp_slot_offset(desc->slot);
@@ -629,7 +666,43 @@ static void release_backing(struct vswap_cluster *cluster, swp_entry_t entry,
 		flush_nr = phys_swap_end - phys_swap_start;
 		swap_slot_free_nr(flush_slot, flush_nr);
 	}
+
+	/*
+	 * Release the swap-side cgroup accounting for the freed range.
+	 *
+	 * On cgroup v1 with memsw accounting, memcg1_swapout() carries over a
+	 * memsw charge for every swapped-out entry regardless of backing, so
+	 * every freed entry needs a matching uncharge here (count = nr).
+	 *
+	 * On cgroup v2, memcg->swap is only charged via
+	 * __mem_cgroup_try_charge_swap() when we allocate a swapfile slot.
+	 * Only descs that are currently VSWAP_SWAPFILE need uncharging
+	 * (count = nr_swapfile).
+	 *
+	 * mem_cgroup_uncharge_swap() routes to the right counter and
+	 * adjusts the MEMCG_SWAP stat by the same count.
+	 *
+	 * On v1, desc->memcgid is only non-zero between memcg1_swapout() and
+	 * memcg1_swapin(); all non-free release_backing() callers run outside
+	 * that window, so the uncharge is a no-op for them. Those callers
+	 * pass @memcg == NULL; we resolve it from the recorded id lazily,
+	 * only if an uncharge is actually needed.
+	 */
+	if (!do_memsw_account() && !nr_swapfile)
+		return;
+
+	if (!memcg && batch_memcgid)
+		memcg = mem_cgroup_from_id(batch_memcgid);
+
+	if (do_memsw_account())
+		mem_cgroup_uncharge_swap(memcg, nr);
+	else
+		mem_cgroup_uncharge_swap(memcg, nr_swapfile);
 }
+
+static void __vswap_swap_cgroup_clear(struct vswap_cluster *cluster,
+		swp_entry_t entry, unsigned int nr_ents,
+		struct mem_cgroup *memcg);
 
 /*
  * Entered with the cluster locked. The cluster lock is held throughout.
@@ -650,64 +723,23 @@ static void release_backing(struct vswap_cluster *cluster, swp_entry_t entry,
 static void vswap_free(struct vswap_cluster *cluster, struct swp_desc *desc,
 	swp_entry_t entry)
 {
-	unsigned short memcgid = swp_desc_memcgid(desc);
+	unsigned short id = swp_desc_memcgid(desc);
+	struct mem_cgroup *memcg;
 
-	release_backing(cluster, entry, 1);
+	/*
+	 * The swap_cgroup id reference taken at swapout time pins this
+	 * memcg until swap_cgroup_clear() runs below, so we can resolve
+	 * it once here and pass it down. Caller already holds rcu.
+	 */
+	memcg = id ? mem_cgroup_from_id(id) : NULL;
 
-	mem_cgroup_uncharge_swap_by_id(memcgid, 1);
+	release_backing(cluster, entry, 1, memcg);
+	__vswap_swap_cgroup_clear(cluster, entry, 1, memcg);
 
 	/* erase forward mapping and release the virtual slot for reallocation */
 	release_vswap_slot(cluster, entry.val);
 }
 
-/**
- * folio_alloc_swap - allocate virtual swap space for a folio.
- * @folio: the folio.
- *
- * Return: 0, if the allocation succeeded, -ENOMEM, if the allocation failed.
- */
-int folio_alloc_swap(struct folio *folio)
-{
-	struct vswap_cluster *cluster = NULL;
-	int i, nr = folio_nr_pages(folio);
-	struct swp_desc *desc;
-	swp_entry_t entry;
-
-	VM_BUG_ON_FOLIO(!folio_test_locked(folio), folio);
-	VM_BUG_ON_FOLIO(!folio_test_uptodate(folio), folio);
-
-	entry = vswap_alloc(folio);
-	if (!entry.val)
-		return -ENOMEM;
-
-	/*
-	 * XXX: for now, we charge towards the memory cgroup's swap limit on virtual
-	 * swap slots allocation. This will be changed soon - we will only charge on
-	 * physical swap slots allocation.
-	 */
-	if (mem_cgroup_try_charge_swap(folio, entry)) {
-		rcu_read_lock();
-		for (i = 0; i < nr; i++) {
-			desc = vswap_iter(&cluster, entry.val + i);
-			VM_WARN_ON(!desc);
-			vswap_free(cluster, desc, (swp_entry_t){ entry.val + i });
-		}
-		spin_unlock(&cluster->lock);
-		rcu_read_unlock();
-		atomic_add(nr, &vswap_alloc_reject);
-		entry.val = 0;
-		return -ENOMEM;
-	}
-
-	folio_ref_add(folio, nr);
-	folio_set_swapcache(folio);
-	folio->swap = entry;
-
-	node_stat_mod_folio(folio, NR_FILE_PAGES, nr);
-	lruvec_stat_mod_folio(folio, NR_SWAPCACHE, nr);
-
-	return 0;
-}
 
 /**
  * vswap_alloc_swap_slot - allocate physical swap space for a folio that is
@@ -726,19 +758,32 @@ swp_slot_t vswap_alloc_swap_slot(struct folio *folio)
 	swp_slot_t slot = { .val = 0 };
 	swp_entry_t entry = folio->swap;
 	struct swp_desc *desc;
+	struct mem_cgroup *memcg;
+	unsigned short memcgid;
 	bool fallback = false;
 
 	/*
 	 * Check if the first entry already has a physical swap slot. If so,
 	 * the entire range is contiguous (from a previous allocation).
 	 * Keep the cluster pointer around for reuse below.
+	 *
+	 * Also resolve the swap memcg while we are in the same RCU section:
+	 * the folio's memcg almost always matches the recorded swap memcg, so
+	 * compare ids first and only fall back to the IDR lookup on mismatch.
+	 * The swap memcg is pinned by the swap_cgroup id ref, so we can safely
+	 * use it outside RCU after this point.
 	 */
 	rcu_read_lock();
 	desc = vswap_iter(&cluster, entry.val);
 	VM_WARN_ON(!desc);
 	if (desc->type == VSWAP_SWAPFILE)
 		slot = desc->slot;
+	memcgid = swp_desc_memcgid(desc);
 	spin_unlock(&cluster->lock);
+
+	memcg = folio_memcg(folio);
+	if (!memcg || mem_cgroup_id(memcg) != memcgid)
+		memcg = memcgid ? mem_cgroup_from_id(memcgid) : NULL;
 	rcu_read_unlock();
 
 	if (slot.val)
@@ -749,6 +794,15 @@ swp_slot_t vswap_alloc_swap_slot(struct folio *folio)
 
 	if (!slot.val)
 		return (swp_slot_t){ .val = 0 };
+
+	if (mem_cgroup_try_charge_swap(memcg, nr)) {
+		/*
+		 * We have not updated the backing type of the virtual swap slot.
+		 * Simply free up the physical swap slots here!
+		 */
+		swap_slot_free_nr(slot, nr);
+		return (swp_slot_t){ .val = 0 };
+	}
 
 	vswap_rmap_set(__swap_slot_to_cluster(slot), slot, entry.val, nr);
 
@@ -1181,7 +1235,7 @@ void vswap_store_folio(swp_entry_t entry, struct folio *folio)
 	rcu_read_lock();
 	desc = vswap_iter(&cluster, entry.val);
 	VM_WARN_ON(!desc);
-	release_backing(cluster, entry, nr);
+	release_backing(cluster, entry, nr, NULL);
 
 	for (i = 0; i < nr; i++) {
 		desc = __vswap_iter(cluster, entry.val + i);
@@ -1232,7 +1286,7 @@ void vswap_prepare_writeout(swp_entry_t entry, struct folio *folio)
 	}
 
 	/* Release old backing and store the folio, lock already held */
-	release_backing(cluster, entry, nr);
+	release_backing(cluster, entry, nr, NULL);
 
 	for (i = 0; i < nr; i++) {
 		desc = __vswap_iter(cluster, entry.val + i);
@@ -1263,7 +1317,7 @@ void swap_zeromap_folio_set(struct folio *folio)
 	rcu_read_lock();
 	desc = vswap_iter(&cluster, entry.val);
 	VM_WARN_ON(!desc);
-	release_backing(cluster, entry, nr);
+	release_backing(cluster, entry, nr, NULL);
 
 	for (i = 0; i < nr; i++) {
 		desc = __vswap_iter(cluster, entry.val + i);
@@ -1949,7 +2003,7 @@ void zswap_entry_store(swp_entry_t swpentry, struct zswap_entry *entry)
 	rcu_read_lock();
 	desc = vswap_iter(&cluster, swpentry.val);
 	VM_WARN_ON(!desc);
-	release_backing(cluster, swpentry, 1);
+	release_backing(cluster, swpentry, 1, NULL);
 	desc->zswap_entry = entry;
 	desc->type = VSWAP_ZSWAP;
 	spin_unlock(&cluster->lock);
@@ -2023,6 +2077,23 @@ static unsigned short __vswap_cgroup_record(struct vswap_cluster *cluster,
 	return oldid;
 }
 
+/*
+ * Clear swap cgroup for a range of swap entries.
+ * Entered with the cluster locked. Caller must be under rcu_read_lock().
+ *
+ * @memcg is the mem_cgroup recorded in the descriptors (may be NULL). The
+ * caller is expected to have resolved it once; the swap_cgroup id reference
+ * dropped here.
+ */
+static void __vswap_swap_cgroup_clear(struct vswap_cluster *cluster,
+				      swp_entry_t entry, unsigned int nr_ents,
+				      struct mem_cgroup *memcg)
+{
+	__vswap_cgroup_record(cluster, entry, 0, nr_ents);
+	if (memcg)
+		mem_cgroup_id_put_many(memcg, nr_ents);
+}
+
 static unsigned short vswap_cgroup_record(swp_entry_t entry,
 				unsigned short memcgid, unsigned int nr_ents)
 {
@@ -2041,29 +2112,9 @@ static unsigned short vswap_cgroup_record(swp_entry_t entry,
 }
 
 /**
- * swap_cgroup_record - record mem_cgroup for a set of swap entries.
- * These entries must belong to one single folio, and that folio
- * must be being charged for swap space (swap out), and these
- * entries must not have been charged
- *
- * @folio: the folio that the swap entry belongs to
- * @memcgid: mem_cgroup ID to be recorded
- * @entry: the first swap entry to be recorded
- */
-void swap_cgroup_record(struct folio *folio, unsigned short memcgid,
-			swp_entry_t entry)
-{
-	unsigned short oldid =
-		vswap_cgroup_record(entry, memcgid, folio_nr_pages(folio));
-
-	VM_WARN_ON(oldid);
-}
-
-/**
  * __swap_cgroup_record - record mem_cgroup for a set of swap entries.
  *
- * Same as swap_cgroup_record, but assumes the swap cache (vswap cluster)
- * lock is already held.
+ * Assumes the swap cache (vswap cluster) lock is already held.
  *
  * @folio: the folio that the swap entry belongs to
  * @memcgid: mem_cgroup ID to be recorded
@@ -2170,6 +2221,12 @@ static unsigned short swp_desc_memcgid(struct swp_desc *desc)
 	return desc->memcgid;
 }
 #else /* !CONFIG_MEMCG */
+static void __vswap_swap_cgroup_clear(struct vswap_cluster *cluster,
+				      swp_entry_t entry, unsigned int nr_ents,
+				      struct mem_cgroup *memcg)
+{
+}
+
 static unsigned short swp_desc_memcgid(struct swp_desc *desc)
 {
 	return 0;

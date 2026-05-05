@@ -674,12 +674,25 @@ void memcg1_swapin(swp_entry_t entry, unsigned int nr_pages)
 	 * page to memory here, and uncharge swap when the slot is freed.
 	 */
 	if (do_memsw_account()) {
+		unsigned short id = lookup_swap_cgroup_id(entry);
+		struct mem_cgroup *memcg;
+
+		rcu_read_lock();
+		memcg = id ? mem_cgroup_from_id(id) : NULL;
+		rcu_read_unlock();
+
 		/*
 		 * The swap entry might not get freed for a long time,
 		 * let's not wait for it.  The page already received a
 		 * memory+swap charge, drop the swap entry duplicate.
 		 */
-		mem_cgroup_uncharge_swap(entry, nr_pages);
+		mem_cgroup_uncharge_swap(memcg, nr_pages);
+
+		/*
+		 * Clear the cgroup association now to prevent double memsw
+		 * uncharging when the backends are released later.
+		 */
+		mem_cgroup_clear_swap(memcg, entry, nr_pages);
 	}
 }
 

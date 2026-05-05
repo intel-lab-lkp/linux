@@ -674,49 +674,65 @@ static inline void folio_throttle_swaprate(struct folio *folio, gfp_t gfp)
 #endif
 
 #if defined(CONFIG_MEMCG) && defined(CONFIG_SWAP)
-int __mem_cgroup_try_charge_swap(struct folio *folio, swp_entry_t entry);
-static inline int mem_cgroup_try_charge_swap(struct folio *folio,
-		swp_entry_t entry)
+unsigned short __mem_cgroup_get_swap_memcgid(struct folio *folio);
+static inline unsigned short mem_cgroup_get_swap_memcgid(struct folio *folio)
+{
+	if (!mem_cgroup_disabled())
+		return __mem_cgroup_get_swap_memcgid(folio);
+	return 0;
+}
+
+void __mem_cgroup_clear_swap(struct mem_cgroup *memcg, swp_entry_t entry,
+			     unsigned int nr_pages);
+static inline void mem_cgroup_clear_swap(struct mem_cgroup *memcg,
+		swp_entry_t entry, unsigned int nr_pages)
+{
+	if (!mem_cgroup_disabled())
+		__mem_cgroup_clear_swap(memcg, entry, nr_pages);
+}
+
+int __mem_cgroup_try_charge_swap(struct mem_cgroup *memcg,
+				 unsigned int nr_pages);
+static inline int mem_cgroup_try_charge_swap(struct mem_cgroup *memcg,
+		unsigned int nr_pages)
 {
 	if (mem_cgroup_disabled())
 		return 0;
-	return __mem_cgroup_try_charge_swap(folio, entry);
+	return __mem_cgroup_try_charge_swap(memcg, nr_pages);
 }
 
-extern void __mem_cgroup_uncharge_swap(swp_entry_t entry, unsigned int nr_pages);
-static inline void mem_cgroup_uncharge_swap(swp_entry_t entry, unsigned int nr_pages)
+extern void __mem_cgroup_uncharge_swap(struct mem_cgroup *memcg,
+				       unsigned int nr_pages);
+static inline void mem_cgroup_uncharge_swap(struct mem_cgroup *memcg,
+					    unsigned int nr_pages)
 {
 	if (mem_cgroup_disabled())
 		return;
-	__mem_cgroup_uncharge_swap(entry, nr_pages);
-}
-
-extern void __mem_cgroup_uncharge_swap_by_id(unsigned short id,
-					     unsigned int nr_pages);
-static inline void mem_cgroup_uncharge_swap_by_id(unsigned short id,
-						  unsigned int nr_pages)
-{
-	if (mem_cgroup_disabled())
-		return;
-	__mem_cgroup_uncharge_swap_by_id(id, nr_pages);
+	__mem_cgroup_uncharge_swap(memcg, nr_pages);
 }
 
 extern long mem_cgroup_get_nr_swap_pages(struct mem_cgroup *memcg);
 extern bool mem_cgroup_swap_full(struct folio *folio);
 #else
-static inline int mem_cgroup_try_charge_swap(struct folio *folio,
-					     swp_entry_t entry)
+static inline unsigned short mem_cgroup_get_swap_memcgid(struct folio *folio)
 {
 	return 0;
 }
 
-static inline void mem_cgroup_uncharge_swap(swp_entry_t entry,
-					    unsigned int nr_pages)
+static inline void mem_cgroup_clear_swap(struct mem_cgroup *memcg,
+					 swp_entry_t entry,
+					 unsigned int nr_pages)
 {
 }
 
-static inline void mem_cgroup_uncharge_swap_by_id(unsigned short id,
-						  unsigned int nr_pages)
+static inline int mem_cgroup_try_charge_swap(struct mem_cgroup *memcg,
+					     unsigned int nr_pages)
+{
+	return 0;
+}
+
+static inline void mem_cgroup_uncharge_swap(struct mem_cgroup *memcg,
+					    unsigned int nr_pages)
 {
 }
 

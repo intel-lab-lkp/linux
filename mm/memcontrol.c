@@ -3597,7 +3597,7 @@ void __maybe_unused mem_cgroup_id_get_many(struct mem_cgroup *memcg,
 	refcount_add(n, &memcg->id.ref);
 }
 
-static void mem_cgroup_id_put_many(struct mem_cgroup *memcg, unsigned int n)
+void mem_cgroup_id_put_many(struct mem_cgroup *memcg, unsigned int n)
 {
 	if (refcount_sub_and_test(n, &memcg->id.ref)) {
 		mem_cgroup_id_remove(memcg);
@@ -5173,20 +5173,17 @@ int __init mem_cgroup_init(void)
 
 #ifdef CONFIG_SWAP
 /**
- * __mem_cgroup_try_charge_swap - try charging swap space for a folio
- * @folio: folio being added to swap
- * @entry: swap entry to charge
+ * __mem_cgroup_get_swap_memcgid - get the pinned memcg ID for swap accounting.
+ * @folio: folio being swapped out.
  *
- * Try to charge @folio's memcg for the swap space at @entry.
- *
- * Returns 0 on success, -ENOMEM on failure.
+ * Return: the memcg ID with references pinned, or 0 if not applicable.
  */
-int __mem_cgroup_try_charge_swap(struct folio *folio, swp_entry_t entry)
+unsigned short __mem_cgroup_get_swap_memcgid(struct folio *folio)
 {
 	unsigned int nr_pages = folio_nr_pages(folio);
-	struct page_counter *counter;
 	struct mem_cgroup *memcg;
 
+	/* Recording will be done by memcg1_swapout(). */
 	if (do_memsw_account())
 		return 0;
 
@@ -5196,98 +5193,99 @@ int __mem_cgroup_try_charge_swap(struct folio *folio, swp_entry_t entry)
 	if (!memcg)
 		return 0;
 
-	if (!entry.val) {
-		memcg_memory_event(memcg, MEMCG_SWAP_FAIL);
-		return 0;
-	}
-
 	memcg = mem_cgroup_id_get_online(memcg);
+	if (nr_pages > 1)
+		mem_cgroup_id_get_many(memcg, nr_pages - 1);
+	return mem_cgroup_id(memcg);
+}
+
+/**
+ * __mem_cgroup_clear_swap - clear cgroup information of the swap entries.
+ * @memcg: the mem_cgroup recorded for @entry (may be NULL).
+ * @entry: the first swap entry in the range.
+ * @nr_pages: the number of pages in the range.
+ *
+ * The caller must guarantee that @memcg is still alive; normally this is
+ * because the swap_cgroup id reference taken at swapout time is still held.
+ * The reference is dropped here.
+ */
+void __mem_cgroup_clear_swap(struct mem_cgroup *memcg, swp_entry_t entry,
+			     unsigned int nr_pages)
+{
+	swap_cgroup_clear(entry, nr_pages);
+	if (memcg)
+		mem_cgroup_id_put_many(memcg, nr_pages);
+}
+
+/**
+ * __mem_cgroup_try_charge_swap - try charging swap space for a folio
+ * @memcg: the mem_cgroup to charge (may be NULL)
+ * @nr_pages: number of swap pages to charge
+ *
+ * Try to charge @memcg for @nr_pages of swapfile slots.
+ *
+ * Returns 0 on success, -ENOMEM on failure.
+ */
+int __mem_cgroup_try_charge_swap(struct mem_cgroup *memcg,
+				 unsigned int nr_pages)
+{
+	struct page_counter *counter;
+
+	if (do_memsw_account())
+		return 0;
+	if (!memcg)
+		return 0;
 
 	if (!mem_cgroup_is_root(memcg) &&
 	    !page_counter_try_charge(&memcg->swap, nr_pages, &counter)) {
 		memcg_memory_event(memcg, MEMCG_SWAP_MAX);
 		memcg_memory_event(memcg, MEMCG_SWAP_FAIL);
-		mem_cgroup_id_put(memcg);
 		return -ENOMEM;
 	}
 
-	/* Get references for the tail pages, too */
-	if (nr_pages > 1)
-		mem_cgroup_id_get_many(memcg, nr_pages - 1);
 	mod_memcg_state(memcg, MEMCG_SWAP, nr_pages);
-
-	swap_cgroup_record(folio, mem_cgroup_id(memcg), entry);
-
 	return 0;
 }
 
 /**
  * __mem_cgroup_uncharge_swap - uncharge swap space
- * @entry: swap entry to uncharge
- * @nr_pages: the amount of swap space to uncharge
- */
-void __mem_cgroup_uncharge_swap(swp_entry_t entry, unsigned int nr_pages)
-{
-	struct mem_cgroup *memcg;
-	unsigned short id;
-
-	id = swap_cgroup_clear(entry, nr_pages);
-	rcu_read_lock();
-	memcg = mem_cgroup_from_id(id);
-	if (memcg) {
-		if (!mem_cgroup_is_root(memcg)) {
-			if (do_memsw_account())
-				page_counter_uncharge(&memcg->memsw, nr_pages);
-			else
-				page_counter_uncharge(&memcg->swap, nr_pages);
-		}
-		mod_memcg_state(memcg, MEMCG_SWAP, -nr_pages);
-		mem_cgroup_id_put_many(memcg, nr_pages);
-	}
-	rcu_read_unlock();
-}
-
-/**
- * __mem_cgroup_uncharge_swap_by_id - uncharge swap space using memcg id directly
- * @id: mem_cgroup id to uncharge
+ * @memcg: the mem_cgroup to uncharge (may be NULL)
  * @nr_pages: the amount of swap space to uncharge
  *
- * Same as __mem_cgroup_uncharge_swap() but takes the memcg id directly,
- * skipping the lookup_swap_cgroup_id() call. Use when the caller already
- * knows the memcg id (e.g. from swp_desc->memcgid).
+ * Callers must guarantee @memcg is still alive (swap_cgroup id ref is
+ * normally what pins it).
  */
-void __mem_cgroup_uncharge_swap_by_id(unsigned short id,
-				      unsigned int nr_pages)
+void __mem_cgroup_uncharge_swap(struct mem_cgroup *memcg,
+				unsigned int nr_pages)
 {
-	struct mem_cgroup *memcg;
+	if (!memcg)
+		return;
 
-	rcu_read_lock();
-	memcg = mem_cgroup_from_id(id);
-	if (memcg) {
-		if (!mem_cgroup_is_root(memcg)) {
-			if (do_memsw_account())
-				page_counter_uncharge(&memcg->memsw, nr_pages);
-			else
-				page_counter_uncharge(&memcg->swap, nr_pages);
-		}
-		mod_memcg_state(memcg, MEMCG_SWAP, -nr_pages);
-		mem_cgroup_id_put_many(memcg, nr_pages);
+	if (!mem_cgroup_is_root(memcg)) {
+		if (do_memsw_account())
+			page_counter_uncharge(&memcg->memsw, nr_pages);
+		else
+			page_counter_uncharge(&memcg->swap, nr_pages);
 	}
-	rcu_read_unlock();
+	mod_memcg_state(memcg, MEMCG_SWAP, -nr_pages);
 }
 
 static bool mem_cgroup_may_zswap(struct mem_cgroup *original_memcg);
 
 long mem_cgroup_get_nr_swap_pages(struct mem_cgroup *memcg)
 {
-	long nr_swap_pages, nr_zswap_pages = 0;
+	long nr_swap_pages;
 
 	if (zswap_is_enabled() && (mem_cgroup_disabled() || do_memsw_account() ||
 				mem_cgroup_may_zswap(memcg))) {
-		nr_zswap_pages = PAGE_COUNTER_MAX;
+		/*
+		 * No need to check swap cgroup limits, since zswap is not charged
+		 * towards swap consumption.
+		 */
+		return PAGE_COUNTER_MAX;
 	}
 
-	nr_swap_pages = max_t(long, nr_zswap_pages, get_nr_swap_pages());
+	nr_swap_pages = get_nr_swap_pages();
 	if (mem_cgroup_disabled() || do_memsw_account())
 		return nr_swap_pages;
 	for (; !mem_cgroup_is_root(memcg); memcg = parent_mem_cgroup(memcg))

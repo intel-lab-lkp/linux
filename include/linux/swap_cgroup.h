@@ -6,18 +6,12 @@
 
 #if defined(CONFIG_MEMCG) && defined(CONFIG_SWAP)
 
-extern void swap_cgroup_record(struct folio *folio, unsigned short id, swp_entry_t ent);
 extern void __swap_cgroup_record(struct folio *folio, unsigned short id, swp_entry_t ent);
 extern unsigned short swap_cgroup_clear(swp_entry_t ent, unsigned int nr_ents);
 extern unsigned short lookup_swap_cgroup_id(swp_entry_t ent);
 extern int vswap_cgroup_batch(swp_entry_t entry, int max_nr);
 
 #else
-
-static inline
-void swap_cgroup_record(struct folio *folio, unsigned short id, swp_entry_t ent)
-{
-}
 
 static inline
 void __swap_cgroup_record(struct folio *folio, unsigned short id, swp_entry_t ent)
