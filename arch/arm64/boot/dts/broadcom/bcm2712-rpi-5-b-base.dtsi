@@ -46,7 +46,7 @@
 
 	firmware {
 		firmware: rpi-firmware {
-			compatible = "raspberrypi,bcm2835-firmware", "simple-mfd";
+			compatible = "raspberrypi,bcm2712-firmware", "simple-mfd";
 
 			mboxes = <&mailbox>;
 
