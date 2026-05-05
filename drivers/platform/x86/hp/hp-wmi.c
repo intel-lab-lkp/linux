@@ -35,6 +35,9 @@
 #include <linux/string.h>
 #include <linux/types.h>
 #include <linux/workqueue.h>
+#if IS_REACHABLE(CONFIG_ACPI_BATTERY)
+#include <acpi/battery.h>
+#endif
 
 MODULE_AUTHOR("Matthew Garrett <mjg59@srcf.ucam.org>");
 MODULE_DESCRIPTION("HP laptop WMI driver");
@@ -309,7 +312,9 @@ enum hp_wmi_commandtype {
 	HPWMI_HOTKEY_QUERY		= 0x0c,
 	HPWMI_FEATURE2_QUERY		= 0x0d,
 	HPWMI_WIRELESS2_QUERY		= 0x1b,
+	HPWMI_BATTERY_CHARGE_CONTROL	= 0x1f,
 	HPWMI_POSTCODEERROR_QUERY	= 0x2a,
+	HPWMI_BATTERY_CHARGE_MODE	= 0x2b,
 	HPWMI_SYSTEM_DEVICE_MODE	= 0x40,
 	HPWMI_THERMAL_PROFILE_QUERY	= 0x4c,
 };
@@ -377,6 +382,22 @@ enum hp_wireless2_bits {
 
 #define IS_HWBLOCKED(x) ((x & HPWMI_POWER_FW_OR_HW) != HPWMI_POWER_FW_OR_HW)
 #define IS_SWBLOCKED(x) !(x & HPWMI_POWER_SOFT)
+
+#if IS_REACHABLE(CONFIG_ACPI_BATTERY)
+#define HPWMI_CHARGE_BEHAVIOURS \
+	(BIT(POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO) | \
+	 BIT(POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE) | \
+	 BIT(POWER_SUPPLY_CHARGE_BEHAVIOUR_FORCE_DISCHARGE))
+
+#define HPWMI_CHARGE_MODE_AUTO			0x0000
+#define HPWMI_CHARGE_MODE_FORCE_DISCHARGE	0x0200
+#define HPWMI_CHARGE_MODE_INHIBIT		0x0500
+
+#define HPWMI_CHARGE_MODE_READ_AUTO		0x00
+#define HPWMI_CHARGE_MODE_READ_FORCE_DISCHARGE	0x02
+#define HPWMI_CHARGE_MODE_READ_INHIBIT		0x04
+#define HPWMI_CHARGE_MODE_READ_INHIBIT_EXT	0x06
+#endif
 
 struct bios_rfkill2_device_state {
 	u8 radio_type;
@@ -464,6 +485,18 @@ static const char * const tablet_chassis_types[] = {
 	"31", /* Convertible */
 	"32"  /* Detachable */
 };
+
+#if IS_REACHABLE(CONFIG_ACPI_BATTERY)
+static const struct dmi_system_id hp_wmi_charge_control_quirks[] __initconst = {
+	{
+		.matches = {
+			DMI_MATCH(DMI_BOARD_VENDOR, "HP"),
+			DMI_MATCH(DMI_BOARD_NAME, "85C6"),
+		},
+	},
+	{}
+};
+#endif
 
 #define DEVICE_MODE_TABLET	0x06
 
@@ -693,6 +726,176 @@ static int hp_wmi_read_int(int query)
 
 	return val;
 }
+
+#if IS_REACHABLE(CONFIG_ACPI_BATTERY)
+static DEFINE_MUTEX(hp_wmi_charge_lock);
+static enum power_supply_charge_behaviour hp_wmi_charge_behaviour =
+	POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO;
+
+static enum power_supply_charge_behaviour hp_wmi_charge_mode_to_behaviour(int mode)
+{
+	switch (mode) {
+	case HPWMI_CHARGE_MODE_READ_FORCE_DISCHARGE:
+		return POWER_SUPPLY_CHARGE_BEHAVIOUR_FORCE_DISCHARGE;
+	case HPWMI_CHARGE_MODE_READ_INHIBIT:
+	case HPWMI_CHARGE_MODE_READ_INHIBIT_EXT:
+		return POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE;
+	case HPWMI_CHARGE_MODE_READ_AUTO:
+	default:
+		return POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO;
+	}
+}
+
+static int hp_wmi_charge_mode_read(void)
+{
+	int val = 0, ret;
+
+	ret = hp_wmi_perform_query(HPWMI_BATTERY_CHARGE_MODE, HPWMI_READ,
+				   &val, zero_if_sup(val), sizeof(val));
+	if (ret)
+		return ret < 0 ? ret : -EINVAL;
+
+	return val & 0xff;
+}
+
+static int hp_wmi_charge_write(enum hp_wmi_commandtype query, u32 mode)
+{
+	int ret;
+
+	ret = hp_wmi_perform_query(query, HPWMI_WRITE, &mode, sizeof(mode), 0);
+	return ret <= 0 ? ret : -EINVAL;
+}
+
+static int hp_wmi_charge_set_behaviour(enum power_supply_charge_behaviour behaviour)
+{
+	int ret;
+
+	guard(mutex)(&hp_wmi_charge_lock);
+
+	/*
+	 * HP firmware exposes normal charging through the GBCC/SBCC command
+	 * pair, while explicit charge modes use the GBCO/SBCO command pair.
+	 */
+	switch (behaviour) {
+	case POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO:
+		ret = hp_wmi_charge_write(HPWMI_BATTERY_CHARGE_CONTROL,
+					  HPWMI_CHARGE_MODE_AUTO);
+		break;
+	case POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE:
+		ret = hp_wmi_charge_write(HPWMI_BATTERY_CHARGE_MODE,
+					  HPWMI_CHARGE_MODE_INHIBIT);
+		break;
+	case POWER_SUPPLY_CHARGE_BEHAVIOUR_FORCE_DISCHARGE:
+		ret = hp_wmi_charge_write(HPWMI_BATTERY_CHARGE_MODE,
+					  HPWMI_CHARGE_MODE_FORCE_DISCHARGE);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (ret)
+		return ret;
+
+	/*
+	 * charge_behaviour is the requested policy. The live charging state is
+	 * still reported by the regular battery status property.
+	 */
+	hp_wmi_charge_behaviour = behaviour;
+
+	return 0;
+}
+
+static int hp_wmi_charge_get_property(struct power_supply *psy,
+				      const struct power_supply_ext *ext,
+				      void *data,
+				      enum power_supply_property psp,
+				      union power_supply_propval *val)
+{
+	if (psp != POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR)
+		return -EINVAL;
+
+	guard(mutex)(&hp_wmi_charge_lock);
+	val->intval = hp_wmi_charge_behaviour;
+
+	return 0;
+}
+
+static int hp_wmi_charge_set_property(struct power_supply *psy,
+				      const struct power_supply_ext *ext,
+				      void *data,
+				      enum power_supply_property psp,
+				      const union power_supply_propval *val)
+{
+	if (psp != POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR)
+		return -EINVAL;
+
+	return hp_wmi_charge_set_behaviour(val->intval);
+}
+
+static int hp_wmi_charge_property_is_writeable(struct power_supply *psy,
+					       const struct power_supply_ext *ext,
+					       void *data,
+					       enum power_supply_property psp)
+{
+	return psp == POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR;
+}
+
+static const enum power_supply_property hp_wmi_charge_properties[] = {
+	POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR,
+};
+
+static const struct power_supply_ext hp_wmi_charge_extension = {
+	.name			= "hp-wmi-charge-control",
+	.properties		= hp_wmi_charge_properties,
+	.num_properties		= ARRAY_SIZE(hp_wmi_charge_properties),
+	.charge_behaviours	= HPWMI_CHARGE_BEHAVIOURS,
+	.get_property		= hp_wmi_charge_get_property,
+	.set_property		= hp_wmi_charge_set_property,
+	.property_is_writeable	= hp_wmi_charge_property_is_writeable,
+};
+
+static int hp_wmi_charge_add_battery(struct power_supply *battery,
+				     struct acpi_battery_hook *hook)
+{
+	return power_supply_register_extension(battery, &hp_wmi_charge_extension,
+					       &hp_wmi_platform_dev->dev, NULL);
+}
+
+static int hp_wmi_charge_remove_battery(struct power_supply *battery,
+					struct acpi_battery_hook *hook)
+{
+	power_supply_unregister_extension(battery, &hp_wmi_charge_extension);
+	return 0;
+}
+
+static struct acpi_battery_hook hp_wmi_charge_battery_hook = {
+	.name = "HP WMI charge control",
+	.add_battery = hp_wmi_charge_add_battery,
+	.remove_battery = hp_wmi_charge_remove_battery,
+};
+
+static int __init hp_wmi_charge_control_setup(struct device *dev)
+{
+	int ret;
+
+	if (!dmi_check_system(hp_wmi_charge_control_quirks))
+		return 0;
+
+	ret = hp_wmi_charge_mode_read();
+	if (ret < 0)
+		return 0;
+
+	scoped_guard(mutex, &hp_wmi_charge_lock)
+		hp_wmi_charge_behaviour = hp_wmi_charge_mode_to_behaviour(ret);
+
+	return devm_battery_hook_register(dev, &hp_wmi_charge_battery_hook);
+}
+#else
+static int __init hp_wmi_charge_control_setup(struct device *dev)
+{
+	return 0;
+}
+#endif
 
 static int hp_wmi_get_dock_state(void)
 {
@@ -2282,6 +2485,10 @@ static int __init hp_wmi_bios_setup(struct platform_device *device)
 	err = hp_wmi_hwmon_init();
 
 	if (err < 0)
+		return err;
+
+	err = hp_wmi_charge_control_setup(&device->dev);
+	if (err)
 		return err;
 
 	thermal_profile_setup(device);
