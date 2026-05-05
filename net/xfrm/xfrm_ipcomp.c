@@ -51,11 +51,12 @@ static int ipcomp_post_acomp(struct sk_buff *skb, int err, int hlen)
 	struct scatterlist *dsg;
 	int len, dlen;
 
+	extra = acomp_request_extra(req);
+	dsg = extra->sg;
+
 	if (unlikely(err))
 		goto out_free_req;
 
-	extra = acomp_request_extra(req);
-	dsg = extra->sg;
 	dlen = req->dlen;
 
 	pskb_trim_unique(skb, 0);
@@ -84,10 +85,10 @@ static int ipcomp_post_acomp(struct sk_buff *skb, int err, int hlen)
 		skb_shinfo(skb)->nr_frags++;
 	} while ((dlen -= len));
 
+out_free_req:
 	for (; dsg; dsg = sg_next(dsg))
 		__free_page(sg_page(dsg));
 
-out_free_req:
 	acomp_request_free(req);
 	return err;
 }
