@@ -3025,9 +3025,11 @@ static __init int kvm_arm_init(void)
 	 * FIXME: Do something reasonable if kvm_init() fails after pKVM
 	 * hypervisor protection is finalized.
 	 */
-	err = kvm_init(sizeof(struct kvm_vcpu), 0, THIS_MODULE);
-	if (err)
-		goto out_subs;
+	if (!is_protected_kvm_enabled()) {
+		err = kvm_init(sizeof(struct kvm_vcpu), 0, THIS_MODULE);
+		if (err)
+			goto out_subs;
+	}
 
 	/*
 	 * This should be called after initialization is done and failure isn't

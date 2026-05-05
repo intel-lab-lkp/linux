@@ -17,6 +17,7 @@
 #include "hyp_constants.h"
 
 DEFINE_STATIC_KEY_FALSE(kvm_protected_mode_initialized);
+EXPORT_SYMBOL_GPL(kvm_protected_mode_initialized);
 
 static struct memblock_region *hyp_memory = kvm_nvhe_sym(hyp_memory);
 static unsigned int *hyp_memblock_nr_ptr = &kvm_nvhe_sym(hyp_memblock_nr);
@@ -289,10 +290,22 @@ static int __init finalize_pkvm(void)
 	kmemleak_free_part(__hyp_rodata_start, __hyp_rodata_end - __hyp_rodata_start);
 	kmemleak_free_part_phys(hyp_mem_base, hyp_mem_size);
 
-	ret = pkvm_drop_host_privileges();
+	ret = kvm_init(sizeof(struct kvm_vcpu), 0, THIS_MODULE);
 	if (ret)
-		pr_err("Failed to finalize Hyp protection: %d\n", ret);
+		goto out_err;
 
+	ret = pkvm_drop_host_privileges();
+	if (ret) {
+		pr_err("Failed to finalize Hyp protection: %d\n", ret);
+		kvm_exit();
+		goto out_err;
+	}
+
+	return 0;
+
+out_err:
+	kvm_unregister_perf_callbacks();
+	kvm_arm_vmid_alloc_free();
 	return ret;
 }
 device_initcall_sync(finalize_pkvm);
