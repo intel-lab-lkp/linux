@@ -2027,6 +2027,8 @@ DEFINE_SIMPLE_CID_EVENT(svcrdma_wc_send);
 DEFINE_SEND_FLUSH_EVENT(svcrdma_wc_send_flush);
 DEFINE_SEND_FLUSH_EVENT(svcrdma_wc_send_err);
 
+DEFINE_SIMPLE_CID_EVENT(svcrdma_send_ctxt_capped);
+
 DEFINE_SIMPLE_CID_EVENT(svcrdma_post_recv);
 
 DEFINE_RECEIVE_SUCCESS_EVENT(svcrdma_wc_recv);
