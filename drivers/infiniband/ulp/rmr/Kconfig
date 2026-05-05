@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+
+config INFINIBAND_RMR
+	tristate
+	depends on INFINIBAND_ADDR_TRANS
+
+config INFINIBAND_RMR_CLIENT
+	tristate "RMR client module"
+	depends on INFINIBAND_ADDR_TRANS
+	depends on INFINIBAND_RTRS_CLIENT
+	select INFINIBAND_RMR
+	help
+	  Reliable Multicast over RTRS (RMR) client module.
+
+	  RMR is an RDMA ULP that provides active-active block-level
+	  replication on top of the RTRS transport.  It guarantees
+	  delivery of an I/O to a group of storage nodes and handles
+	  resynchronization of data between storage nodes without
+	  involving the compute client.  This option builds the client
+	  side, intended to be used by an upper-layer initiator such
+	  as BRMR.
+
+	  If unsure, say N.
+
+config INFINIBAND_RMR_SERVER
+	tristate "RMR server module"
+	depends on INFINIBAND_ADDR_TRANS
+	depends on INFINIBAND_RTRS_SERVER
+	select INFINIBAND_RMR
+	help
+	  RMR server module processing connection, IO and replication
+	  requests from RMR clients on top of RTRS.  It will pass IO
+	  requests to its consumer, e.g. BRMR_server.
+
+	  If unsure, say N.
