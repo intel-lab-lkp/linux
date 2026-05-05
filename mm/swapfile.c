@@ -1249,7 +1249,6 @@ static void swap_range_alloc(struct swap_info_struct *si,
 static void swap_range_free(struct swap_info_struct *si, unsigned long offset,
 			    unsigned int nr_entries)
 {
-	unsigned long begin = offset;
 	unsigned long end = offset + nr_entries - 1;
 	void (*swap_slot_free_notify)(struct block_device *, unsigned long);
 	unsigned int i;
@@ -1258,10 +1257,8 @@ static void swap_range_free(struct swap_info_struct *si, unsigned long offset,
 	 * Use atomic clear_bit operations only on zeromap instead of non-atomic
 	 * bitmap_clear to prevent adjacent bits corruption due to simultaneous writes.
 	 */
-	for (i = 0; i < nr_entries; i++) {
+	for (i = 0; i < nr_entries; i++)
 		clear_bit(offset + i, si->zeromap);
-		zswap_invalidate(swp_slot_to_swp_entry(swp_slot(si->type, offset + i)));
-	}
 
 	if (si->flags & SWP_BLKDEV)
 		swap_slot_free_notify =
@@ -1274,7 +1271,6 @@ static void swap_range_free(struct swap_info_struct *si, unsigned long offset,
 			swap_slot_free_notify(si->bdev, offset);
 		offset++;
 	}
-	swap_cache_clear_shadow(swp_entry(si->type, begin), nr_entries);
 
 	/*
 	 * Make sure that try_to_unuse() observes si->inuse_pages reaching 0
@@ -1405,7 +1401,7 @@ start_over:
 	return false;
 }
 
-static int swap_slot_alloc(swp_slot_t *slot, unsigned int order)
+int swap_slot_alloc(swp_slot_t *slot, unsigned int order)
 {
 	unsigned int size = 1 << order;
 
@@ -1438,56 +1434,10 @@ again:
 			goto again;
 	}
 
-	return 0;
-}
-
-/**
- * folio_alloc_swap - allocate swap space for a folio
- * @folio: folio we want to move to swap
- *
- * Allocate swap space for the folio and add the folio to the
- * swap cache.
- *
- * Context: Caller needs to hold the folio lock.
- * Return: Whether the folio was added to the swap cache.
- */
-int folio_alloc_swap(struct folio *folio)
-{
-	unsigned int order = folio_order(folio);
-	swp_slot_t slot = { 0 };
-	swp_entry_t entry = {};
-	int err = 0, ret;
-
-	VM_BUG_ON_FOLIO(!folio_test_locked(folio), folio);
-	VM_BUG_ON_FOLIO(!folio_test_uptodate(folio), folio);
-
-	ret = swap_slot_alloc(&slot, order);
-	if (ret)
-		return ret;
-
-	/* XXX: for now, physical and virtual swap slots are identical */
-	entry.val = slot.val;
-
-	/* Need to call this even if allocation failed, for MEMCG_SWAP_FAIL. */
-	if (mem_cgroup_try_charge_swap(folio, entry)) {
-		err = -ENOMEM;
-		goto out_free;
-	}
-
-	if (!slot.val)
+	if (!slot->val)
 		return -ENOMEM;
 
-	err = swap_cache_add_folio(folio, entry,
-				   __GFP_HIGH | __GFP_NOMEMALLOC | __GFP_NOWARN,
-				   NULL);
-	if (err)
-		goto out_free;
-
 	return 0;
-
-out_free:
-	put_swap_folio(folio, entry);
-	return err;
 }
 
 static struct swap_info_struct *_swap_info_get(swp_slot_t slot)
@@ -1735,6 +1685,13 @@ static void swap_slots_free(struct swap_info_struct *si,
 	unsigned char *map = si->swap_map + offset;
 	unsigned char *map_end = map + nr_pages;
 	swp_entry_t entry = swp_slot_to_swp_entry(slot);
+	int i;
+
+	/* release all the associated (virtual) swap slots */
+	for (i = 0; i < nr_pages; i++) {
+		vswap_free(entry, ci);
+		entry.val++;
+	}
 
 	/* It should never free entries across different clusters */
 	VM_BUG_ON(ci != __swap_offset_to_cluster(si, offset + nr_pages - 1));
@@ -1747,7 +1704,6 @@ static void swap_slots_free(struct swap_info_struct *si,
 		*map = 0;
 	} while (++map < map_end);
 
-	mem_cgroup_uncharge_swap(entry, nr_pages);
 	swap_range_free(si, offset, nr_pages);
 
 	if (!ci->count)
