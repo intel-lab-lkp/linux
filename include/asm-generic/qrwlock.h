@@ -101,11 +101,7 @@ static inline void queued_write_lock(struct qrwlock *lock)
 	queued_write_lock_slowpath(lock);
 }
 
-/**
- * queued_read_unlock - release read lock of a queued rwlock
- * @lock : Pointer to queued rwlock structure
- */
-static inline void queued_read_unlock(struct qrwlock *lock)
+static __always_inline void __queued_read_unlock(struct qrwlock *lock)
 {
 	/*
 	 * Atomically decrement the reader count
@@ -114,12 +110,26 @@ static inline void queued_read_unlock(struct qrwlock *lock)
 }
 
 /**
+ * queued_read_unlock - release read lock of a queued rwlock
+ * @lock : Pointer to queued rwlock structure
+ */
+static inline void queued_read_unlock(struct qrwlock *lock)
+{
+	__queued_read_unlock(lock);
+}
+
+static __always_inline void __queued_write_unlock(struct qrwlock *lock)
+{
+	smp_store_release(&lock->wlocked, 0);
+}
+
+/**
  * queued_write_unlock - release write lock of a queued rwlock
  * @lock : Pointer to queued rwlock structure
  */
 static inline void queued_write_unlock(struct qrwlock *lock)
 {
-	smp_store_release(&lock->wlocked, 0);
+	__queued_write_unlock(lock);
 }
 
 /**
