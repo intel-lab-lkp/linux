@@ -1537,6 +1537,7 @@ unsigned int ata_exec_internal(struct ata_device *dev, struct ata_taskfile *tf,
 			       const u8 *cdb, enum dma_data_direction dma_dir,
 			       void *buf, unsigned int buflen,
 			       unsigned int timeout)
+	__must_hold(&dev->link->ap->host->eh_mutex)
 {
 	struct ata_link *link = dev->link;
 	struct ata_port *ap = link->ap;
@@ -1747,6 +1748,7 @@ static u32 ata_pio_mask_no_iordy(const struct ata_device *adev)
  */
 unsigned int ata_do_dev_read_id(struct ata_device *dev,
 				struct ata_taskfile *tf, __le16 *id)
+	__must_hold(&dev->link->ap->host->eh_mutex)
 {
 	return ata_exec_internal(dev, tf, NULL, DMA_FROM_DEVICE,
 				     id, sizeof(id[0]) * ATA_ID_WORDS, 0);
@@ -1776,6 +1778,7 @@ EXPORT_SYMBOL_GPL(ata_do_dev_read_id);
  */
 int ata_dev_read_id(struct ata_device *dev, unsigned int *p_class,
 		    unsigned int flags, u16 *id)
+	__must_hold(&dev->link->ap->host->eh_mutex)
 {
 	struct ata_port *ap = dev->link->ap;
 	unsigned int class = *p_class;
@@ -1990,6 +1993,7 @@ bool ata_dev_power_init_tf(struct ata_device *dev, struct ata_taskfile *tf,
 }
 
 static bool ata_dev_power_is_active(struct ata_device *dev)
+	__must_hold(&dev->link->ap->host->eh_mutex)
 {
 	struct ata_taskfile tf;
 	unsigned int err_mask;
@@ -2027,6 +2031,7 @@ static bool ata_dev_power_is_active(struct ata_device *dev)
  *	Kernel thread context (may sleep).
  */
 void ata_dev_power_set_standby(struct ata_device *dev)
+	__must_hold(&dev->link->ap->host->eh_mutex)
 {
 	unsigned long ap_flags = dev->link->ap->flags;
 	struct ata_taskfile tf;
@@ -2074,6 +2079,7 @@ void ata_dev_power_set_standby(struct ata_device *dev)
  *	Kernel thread context (may sleep).
  */
 void ata_dev_power_set_active(struct ata_device *dev)
+	__must_hold(&dev->link->ap->host->eh_mutex)
 {
 	struct ata_taskfile tf;
 	unsigned int err_mask;
@@ -2118,6 +2124,7 @@ void ata_dev_power_set_active(struct ata_device *dev)
  */
 unsigned int ata_read_log_page(struct ata_device *dev, u8 log,
 			       u8 page, void *buf, unsigned int sectors)
+	__must_hold(&dev->link->ap->host->eh_mutex)
 {
 	unsigned long ap_flags = dev->link->ap->flags;
 	struct ata_taskfile tf;
@@ -2174,6 +2181,7 @@ static inline void ata_clear_log_directory(struct ata_device *dev)
 }
 
 static int ata_read_log_directory(struct ata_device *dev)
+	__must_hold(&dev->link->ap->host->eh_mutex)
 {
 	u16 version;
 
@@ -2197,6 +2205,7 @@ static int ata_read_log_directory(struct ata_device *dev)
 }
 
 static int ata_log_supported(struct ata_device *dev, u8 log)
+	__must_hold(&dev->link->ap->host->eh_mutex)
 {
 	if (dev->quirks & ATA_QUIRK_NO_LOG_DIR)
 		return 0;
@@ -2208,6 +2217,7 @@ static int ata_log_supported(struct ata_device *dev, u8 log)
 }
 
 static bool ata_identify_page_supported(struct ata_device *dev, u8 page)
+	__must_hold(&dev->link->ap->host->eh_mutex)
 {
 	unsigned int err, i;
 
@@ -2288,6 +2298,7 @@ static inline bool ata_dev_knobble(struct ata_device *dev)
 }
 
 static void ata_dev_config_ncq_send_recv(struct ata_device *dev)
+	__must_hold(&dev->link->ap->host->eh_mutex)
 {
 	unsigned int err_mask;
 
@@ -2312,6 +2323,7 @@ static void ata_dev_config_ncq_send_recv(struct ata_device *dev)
 }
 
 static void ata_dev_config_ncq_non_data(struct ata_device *dev)
+	__must_hold(&dev->link->ap->host->eh_mutex)
 {
 	unsigned int err_mask;
 
@@ -2328,6 +2340,7 @@ static void ata_dev_config_ncq_non_data(struct ata_device *dev)
 }
 
 static void ata_dev_config_ncq_prio(struct ata_device *dev)
+	__must_hold(&dev->link->ap->host->eh_mutex)
 {
 	unsigned int err_mask;
 
@@ -2392,6 +2405,7 @@ bool ata_adapter_is_online(struct ata_port *ap)
 
 static int ata_dev_config_ncq(struct ata_device *dev,
 			       char *desc, size_t desc_sz)
+	__must_hold(&dev->link->ap->host->eh_mutex)
 {
 	struct ata_port *ap = dev->link->ap;
 	int hdepth = 0, ddepth = ata_id_queue_depth(dev->id);
@@ -2474,6 +2488,7 @@ static void ata_dev_config_sense_reporting(struct ata_device *dev)
 }
 
 static void ata_dev_config_zac(struct ata_device *dev)
+	__must_hold(&dev->link->ap->host->eh_mutex)
 {
 	unsigned int err_mask;
 	u8 *identify_buf = dev->sector_buf;
@@ -2516,6 +2531,7 @@ static void ata_dev_config_zac(struct ata_device *dev)
 }
 
 static void ata_dev_config_trusted(struct ata_device *dev)
+	__must_hold(&dev->link->ap->host->eh_mutex)
 {
 	u64 trusted_cap;
 	unsigned int err;
@@ -2552,6 +2568,7 @@ static void ata_dev_cleanup_cdl_resources(struct ata_device *dev)
 }
 
 static int ata_dev_init_cdl_resources(struct ata_device *dev)
+	__must_hold(&dev->link->ap->host->eh_mutex)
 {
 	struct ata_cdl *cdl = dev->cdl;
 	unsigned int err_mask;
@@ -2575,6 +2592,7 @@ static int ata_dev_init_cdl_resources(struct ata_device *dev)
 }
 
 static void ata_dev_config_cdl(struct ata_device *dev)
+	__must_hold(&dev->link->ap->host->eh_mutex)
 {
 	unsigned int err_mask;
 	bool cdl_enabled;
@@ -2691,6 +2709,7 @@ not_supported:
 }
 
 static int ata_dev_config_lba(struct ata_device *dev)
+	__must_hold(&dev->link->ap->host->eh_mutex)
 {
 	const u16 *id = dev->id;
 	const char *lba_desc;
@@ -2770,6 +2789,7 @@ nofua:
 }
 
 static void ata_dev_config_devslp(struct ata_device *dev)
+	__must_hold(&dev->link->ap->host->eh_mutex)
 {
 	u8 *sata_setting = dev->sector_buf;
 	unsigned int err_mask;
@@ -2798,6 +2818,7 @@ static void ata_dev_config_devslp(struct ata_device *dev)
 }
 
 static void ata_dev_config_cpr(struct ata_device *dev)
+	__must_hold(&dev->link->ap->host->eh_mutex)
 {
 	unsigned int err_mask;
 	size_t buf_len;
@@ -2936,6 +2957,7 @@ static void ata_dev_print_features(struct ata_device *dev)
  *	0 on success, -errno otherwise
  */
 int ata_dev_configure(struct ata_device *dev)
+	__must_hold(&dev->link->ap->host->eh_mutex)
 {
 	struct ata_port *ap = dev->link->ap;
 	bool print_info = ata_dev_print_info(dev);
@@ -3896,6 +3918,7 @@ static int ata_dev_same_device(struct ata_device *dev, unsigned int new_class,
  *	0 on success, negative errno otherwise
  */
 int ata_dev_reread_id(struct ata_device *dev, unsigned int readid_flags)
+	__must_hold(&dev->link->ap->host->eh_mutex)
 {
 	unsigned int class = dev->class;
 	u16 *id = (void *)dev->sector_buf;
@@ -3931,6 +3954,7 @@ int ata_dev_reread_id(struct ata_device *dev, unsigned int readid_flags)
  */
 int ata_dev_revalidate(struct ata_device *dev, unsigned int new_class,
 		       unsigned int readid_flags)
+	__must_hold(&dev->link->ap->host->eh_mutex)
 {
 	u64 n_sectors = dev->n_sectors;
 	u64 n_native_sectors = dev->n_native_sectors;
@@ -4631,6 +4655,7 @@ static void ata_dev_xfermask(struct ata_device *dev)
  */
 
 static unsigned int ata_dev_set_xfermode(struct ata_device *dev)
+	__must_hold(&dev->link->ap->host->eh_mutex)
 {
 	struct ata_taskfile tf;
 
@@ -4676,6 +4701,7 @@ static unsigned int ata_dev_set_xfermode(struct ata_device *dev)
  *	0 on success, AC_ERR_* mask otherwise.
  */
 unsigned int ata_dev_set_feature(struct ata_device *dev, u8 subcmd, u8 action)
+	__must_hold(&dev->link->ap->host->eh_mutex)
 {
 	struct ata_taskfile tf;
 	unsigned int timeout = 0;
@@ -4712,6 +4738,7 @@ EXPORT_SYMBOL_GPL(ata_dev_set_feature);
  */
 static unsigned int ata_dev_init_params(struct ata_device *dev,
 					u16 heads, u16 sectors)
+	__must_hold(&dev->link->ap->host->eh_mutex)
 {
 	struct ata_taskfile tf;
 	unsigned int err_mask;
@@ -6817,6 +6844,7 @@ EXPORT_SYMBOL_GPL(ata_ratelimit);
  *	Might sleep.
  */
 void ata_msleep(struct ata_port *ap, unsigned int msecs)
+	__context_unsafe(conditional locking)
 {
 	bool owns_eh = ap && ap->host->eh_owner == current;
 

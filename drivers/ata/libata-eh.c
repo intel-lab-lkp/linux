@@ -2833,6 +2833,7 @@ static bool ata_eh_followup_srst_needed(struct ata_link *link, int rc)
 
 int ata_eh_reset(struct ata_link *link, int classify,
 		 struct ata_reset_operations *reset_ops)
+	__must_hold(&link->ap->host->eh_mutex)
 {
 	struct ata_port *ap = link->ap;
 	struct ata_link *slave = ap->slave_link;
@@ -3816,6 +3817,7 @@ static int ata_eh_handle_dev_fail(struct ata_device *dev, int err)
  */
 int ata_eh_recover(struct ata_port *ap, struct ata_reset_operations *reset_ops,
 		   struct ata_link **r_failed_link)
+	__must_hold(&ap->host->eh_mutex)
 {
 	struct ata_link *link;
 	struct ata_device *dev;
@@ -3878,6 +3880,9 @@ int ata_eh_recover(struct ata_port *ap, struct ata_reset_operations *reset_ops,
 	/* reset */
 	ata_for_each_link(link, ap, EDGE) {
 		struct ata_eh_context *ehc = &link->eh_context;
+
+		/* Tell the compiler that link->ap == ap. */
+		__assume_ctx_lock(&link->ap->host->eh_mutex);
 
 		if (!(ehc->i.action & ATA_EH_RESET))
 			continue;
@@ -4112,6 +4117,7 @@ void ata_eh_finish(struct ata_port *ap)
  *	Kernel thread context (may sleep).
  */
 void ata_std_error_handler(struct ata_port *ap)
+	__must_hold(&ap->host->eh_mutex)
 {
 	struct ata_reset_operations *reset_ops = &ap->ops->reset;
 	struct ata_link *link = &ap->link;
