@@ -3628,6 +3628,10 @@ N: Dipankar Sarma
 E: dipankar@in.ibm.com
 D: RCU
 
+N: Yoshinori Sato
+E: ysato@users.sourceforge.jp
+D: SuperH maintainer
+
 N: Hannu Savolainen
 E: hannu@opensound.com
 D: Maintainer of the sound drivers until 2.1.x days.
