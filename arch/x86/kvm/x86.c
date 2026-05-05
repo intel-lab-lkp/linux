@@ -3752,6 +3752,7 @@ static void record_steal_time(struct kvm_vcpu *vcpu)
 	struct kvm_steal_time __user *st;
 	struct kvm_memslots *slots;
 	gpa_t gpa = vcpu->arch.st.msr_val & KVM_STEAL_VALID_BITS;
+	u64 downtime_steal;
 	u64 steal;
 	u32 version;
 
@@ -3839,6 +3840,11 @@ static void record_steal_time(struct kvm_vcpu *vcpu)
 	steal += current->sched_info.run_delay -
 		vcpu->arch.st.last_steal;
 	vcpu->arch.st.last_steal = current->sched_info.run_delay;
+
+	downtime_steal = atomic64_read(&vcpu->kvm->arch.downtime_steal);
+	steal += downtime_steal - vcpu->arch.st.last_downtime_steal;
+	vcpu->arch.st.last_downtime_steal = downtime_steal;
+
 	unsafe_put_user(steal, &st->steal, out);
 
 	version += 1;
@@ -4186,6 +4192,9 @@ int kvm_set_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 			break;
 
 		vcpu->arch.st.need_reset = true;
+		vcpu->arch.st.last_downtime_steal =
+			atomic64_read(&vcpu->kvm->arch.downtime_steal);
+
 		kvm_make_request(KVM_REQ_STEAL_UPDATE, vcpu);
 
 		break;
@@ -7251,8 +7260,18 @@ static int kvm_vm_ioctl_set_clock(struct kvm *kvm, void __user *argp)
 		/*
 		 * Avoid stepping the kvmclock backwards.
 		 */
-		if (now_real_ns > data.realtime)
-			data.clock += now_real_ns - data.realtime;
+		if (now_real_ns > data.realtime) {
+			u64 downtime_ns = now_real_ns - data.realtime;
+
+			data.clock += downtime_ns;
+
+			if (sched_info_on()) {
+				atomic64_add(downtime_ns,
+					     &kvm->arch.downtime_steal);
+				kvm_make_all_cpus_request(kvm,
+							  KVM_REQ_STEAL_UPDATE);
+			}
+		}
 	}
 
 	if (ka->use_master_clock)
@@ -13374,6 +13393,8 @@ int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 	spin_lock_init(&kvm->arch.hv_root_tdp_lock);
 	kvm->arch.hv_root_tdp = INVALID_PAGE;
 #endif
+
+	atomic64_set(&kvm->arch.downtime_steal, 0);
 
 	kvm_apicv_init(kvm);
 	kvm_hv_init_vm(kvm);

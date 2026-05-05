@@ -974,6 +974,7 @@ struct kvm_vcpu_arch {
 		u8 preempted;
 		u64 msr_val;
 		u64 last_steal;
+		u64 last_downtime_steal;
 		struct gfn_to_hva_cache cache;
 		bool need_reset;
 	} st;
@@ -1520,6 +1521,8 @@ struct kvm_arch {
 	bool use_master_clock;
 	u64 master_kernel_ns;
 	u64 master_cycle_now;
+
+	atomic64_t downtime_steal;
 
 #ifdef CONFIG_KVM_HYPERV
 	struct kvm_hv hyperv;
