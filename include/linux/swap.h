@@ -435,6 +435,7 @@ void free_swap_and_cache_nr(swp_entry_t entry, int nr);
 int __swap_count(swp_entry_t entry);
 bool swap_entry_swapped(struct swap_info_struct *si, swp_entry_t entry);
 int swp_swapcount(swp_entry_t entry);
+bool is_swap_cached(swp_entry_t entry);
 
 /* Swap cache API (mm/swap_state.c) */
 static inline unsigned long total_swapcache_pages(void)
@@ -552,6 +553,11 @@ static inline bool swap_entry_swapped(struct swap_info_struct *si, swp_entry_t e
 static inline int swp_swapcount(swp_entry_t entry)
 {
 	return 0;
+}
+
+static inline bool is_swap_cached(swp_entry_t entry)
+{
+	return false;
 }
 
 static inline int folio_alloc_swap(struct folio *folio)
