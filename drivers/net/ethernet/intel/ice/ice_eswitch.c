@@ -23,10 +23,16 @@ static int ice_eswitch_setup_env(struct ice_pf *pf)
 	struct net_device *netdev = uplink_vsi->netdev;
 	bool if_running = netif_running(netdev);
 	struct ice_vsi_vlan_ops *vlan_ops;
+	int ret;
 
-	if (if_running && !test_and_set_bit(ICE_VSI_DOWN, uplink_vsi->state))
-		if (ice_down(uplink_vsi))
+	if (if_running && !test_and_set_bit(ICE_VSI_DOWN, uplink_vsi->state)) {
+		netdev_lock(netdev);
+		ret = ice_down(uplink_vsi);
+		netdev_unlock(netdev);
+
+		if (ret)
 			return -ENODEV;
+	}
 
 	ice_remove_vsi_fltr(&pf->hw, uplink_vsi->idx);
 	ice_vsi_cfg_sw_lldp(uplink_vsi, true, false);
@@ -53,8 +59,14 @@ static int ice_eswitch_setup_env(struct ice_pf *pf)
 	if (ice_vsi_update_local_lb(uplink_vsi, true))
 		goto err_override_local_lb;
 
-	if (if_running && ice_up(uplink_vsi))
-		goto err_up;
+	if (if_running) {
+		netdev_lock(netdev);
+		ret = ice_up(uplink_vsi);
+		netdev_unlock(netdev);
+
+		if (ret)
+			goto err_up;
+	}
 
 	return 0;
 
@@ -74,8 +86,12 @@ err_vlan_zero:
 	ice_fltr_add_mac_and_broadcast(uplink_vsi,
 				       uplink_vsi->port_info->mac.perm_addr,
 				       ICE_FWD_TO_VSI);
-	if (if_running)
+
+	if (if_running) {
+		netdev_lock(netdev);
 		ice_up(uplink_vsi);
+		netdev_unlock(netdev);
+	}
 
 	return -ENODEV;
 }
