@@ -1861,6 +1861,81 @@ void intel_tc_port_link_cancel_reset_work(struct intel_digital_port *dig_port)
 	cancel_delayed_work(&tc->link_reset_work);
 }
 
+/**
+ * intel_tc_port_aux_recover - Recover AUX channel after external TC mode change
+ * @dig_port: digital port
+ *
+ * When firmware causes a TC port mode change (e.g., dp-alt -> disconnect ->
+ * tbt-alt) during a hotkey-triggered display mode switch, AUX transactions
+ * using the stale power domain and IO flags will fail with timeouts or errors.
+ * This happens because:
+ *
+ *   1. The display driver holds the TC link in dp-alt mode (link_refcount > 0)
+ *   2. Firmware (e.g., via HP WMI hotkey BIOS action) reconfigures the TC port
+ *      mode externally without notifying the display driver
+ *   3. tc->mode stays as TC_PORT_DP_ALT while HW transitions to a different
+ *      mode, invalidating the AUX power domain and IO flags used by
+ *      intel_dp_aux_xfer()
+ *
+ * This function detects the discrepancy between tc->mode and actual HW state,
+ * and re-synchronizes them via a TC PHY reset. After recovery, AUX retries
+ * will use the correct power domain and control flags.
+ *
+ * The link_refcount is temporarily cleared to allow intel_tc_port_reset_mode()
+ * to proceed without the PHY-ownership assertion that fires when link_refcount
+ * is non-zero and firmware has already released PHY ownership.
+ *
+ * Must be called outside the TC port lock (tc->lock).
+ *
+ * Returns: %true if recovery was performed and AUX can be retried,
+ *          %false if recovery was not needed or not possible.
+ */
+bool intel_tc_port_aux_recover(struct intel_digital_port *dig_port)
+{
+	struct intel_tc_port *tc;
+	struct intel_display *display;
+	bool recovered = false;
+
+	if (!intel_encoder_is_tc(&dig_port->base))
+		return false;
+
+	tc = to_tc_port(dig_port);
+	display = to_intel_display(dig_port);
+
+	mutex_lock(&tc->lock);
+
+	/*
+	 * Recovery is only needed when the link is actively held AND the HW
+	 * TC mode has diverged from the driver's cached state.
+	 */
+	if (!tc->link_refcount || !intel_tc_port_needs_reset(tc))
+		goto out;
+
+	drm_dbg_kms(display->drm,
+		    "Port %s: AUX recover: external TC mode change detected (%s -> HW), reconnecting TC PHY\n",
+		    tc->port_name, tc_port_mode_name(tc->mode));
+
+	/*
+	 * Temporarily clear link_refcount so intel_tc_port_reset_mode() can
+	 * run the PHY disconnect/connect cycle without the ownership assertion
+	 * that fires when link_refcount > 0 and firmware has already released
+	 * PHY ownership externally.
+	 */
+	tc->link_refcount = 0;
+	intel_tc_port_reset_mode(tc, 1, false);
+	tc->link_refcount = 1;
+
+	recovered = tc->mode != TC_PORT_DISCONNECTED;
+	if (!recovered)
+		drm_warn(display->drm,
+			 "Port %s: AUX recover: failed to restore TC port mode\n",
+			 tc->port_name);
+
+out:
+	mutex_unlock(&tc->lock);
+	return recovered;
+}
+
 static void __intel_tc_port_lock(struct intel_tc_port *tc,
 				 int required_lanes)
 {

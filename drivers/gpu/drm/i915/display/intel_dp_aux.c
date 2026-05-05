@@ -481,6 +481,39 @@ static u32 intel_dp_aux_xfer_flags(const struct drm_dp_aux_msg *msg)
 	return 0;
 }
 
+/**
+ * intel_dp_aux_xfer_with_recovery - AUX transfer with TC port recovery
+ * @intel_dp: the DP port
+ * @send: buffer of bytes to send
+ * @send_bytes: number of bytes to send
+ * @recv: buffer to store received reply
+ * @recv_size: maximum number of bytes to receive
+ * @aux_send_ctl_flags: extra flags for the AUX send control register
+ *
+ * Wrapper around intel_dp_aux_xfer() that attempts to recover from an
+ * external TC port mode change (e.g., dp-alt -> tbt-alt via hotkey BIOS
+ * action) when the initial AUX transfer fails. On failure, recovery is
+ * attempted once via intel_tc_port_aux_recover() before retrying.
+ *
+ * Returns: number of received bytes on success, negative error code on failure.
+ */
+static int
+intel_dp_aux_xfer_with_recovery(struct intel_dp *intel_dp,
+				const u8 *send, int send_bytes,
+				u8 *recv, int recv_size,
+				u32 aux_send_ctl_flags)
+{
+	struct intel_digital_port *dig_port = dp_to_dig_port(intel_dp);
+	int ret;
+
+	ret = intel_dp_aux_xfer(intel_dp, send, send_bytes, recv, recv_size,
+				aux_send_ctl_flags);
+	if (ret < 0 && intel_tc_port_aux_recover(dig_port))
+		ret = intel_dp_aux_xfer(intel_dp, send, send_bytes, recv,
+					recv_size, aux_send_ctl_flags);
+	return ret;
+}
+
 static ssize_t
 intel_dp_aux_transfer(struct drm_dp_aux *aux, struct drm_dp_aux_msg *msg)
 {
@@ -508,8 +541,8 @@ intel_dp_aux_transfer(struct drm_dp_aux *aux, struct drm_dp_aux_msg *msg)
 		if (msg->buffer)
 			memcpy(txbuf + HEADER_SIZE, msg->buffer, msg->size);
 
-		ret = intel_dp_aux_xfer(intel_dp, txbuf, txsize,
-					rxbuf, rxsize, flags);
+		ret = intel_dp_aux_xfer_with_recovery(intel_dp, txbuf, txsize,
+						       rxbuf, rxsize, flags);
 		if (ret > 0) {
 			msg->reply = rxbuf[0] >> 4;
 
@@ -531,8 +564,8 @@ intel_dp_aux_transfer(struct drm_dp_aux *aux, struct drm_dp_aux_msg *msg)
 		if (drm_WARN_ON(display->drm, rxsize > 20))
 			return -E2BIG;
 
-		ret = intel_dp_aux_xfer(intel_dp, txbuf, txsize,
-					rxbuf, rxsize, flags);
+		ret = intel_dp_aux_xfer_with_recovery(intel_dp, txbuf, txsize,
+						       rxbuf, rxsize, flags);
 		if (ret > 0) {
 			msg->reply = rxbuf[0] >> 4;
 			/*

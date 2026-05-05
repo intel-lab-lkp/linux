@@ -108,6 +108,7 @@ bool intel_tc_port_ref_held(struct intel_digital_port *dig_port);
 bool intel_tc_port_link_needs_reset(struct intel_digital_port *dig_port);
 bool intel_tc_port_link_reset(struct intel_digital_port *dig_port);
 void intel_tc_port_link_cancel_reset_work(struct intel_digital_port *dig_port);
+bool intel_tc_port_aux_recover(struct intel_digital_port *dig_port);
 
 int intel_tc_port_init(struct intel_digital_port *dig_port, bool is_legacy);
 void intel_tc_port_cleanup(struct intel_digital_port *dig_port);
