@@ -734,8 +734,22 @@ static inline bool mod_delayed_work(struct workqueue_struct *wq,
  * @work: job to be done
  *
  * This puts a job on a specific cpu
+ *
+ * Note: this function will be replaced by queue_bound_work_on()
  */
 static inline bool schedule_work_on(int cpu, struct work_struct *work)
+{
+	return queue_work_on(cpu, system_percpu_wq, work);
+}
+
+/**
+ * queue_bound_work_on - put work task on a specific cpu
+ * @cpu: cpu to put the work task on
+ * @work: job to be done
+ *
+ * This puts a job on a specific cpu
+ */
+static inline bool queue_bound_work_on(int cpu, struct work_struct *work)
 {
 	return queue_work_on(cpu, system_percpu_wq, work);
 }
@@ -753,10 +767,51 @@ static inline bool schedule_work_on(int cpu, struct work_struct *work)
  *
  * Shares the same memory-ordering properties of queue_work(), cf. the
  * DocBook header of queue_work().
+ *
+ * Note: this function will be removed in future, use schedule_{bound|unbound}_work()
+ * instead.
  */
 static inline bool schedule_work(struct work_struct *work)
 {
 	return queue_work(system_percpu_wq, work);
+}
+
+/**
+ * queue_bound_work - put work task in per-CPU workqueue
+ * @work: job to be done
+ *
+ * Returns %false if @work was already on the system per-CPU workqueue and
+ * %true otherwise.
+ *
+ * This puts a job in the system per-CPU workqueue if it was not already
+ * queued and leaves it in the same position on the system per-CPU
+ * workqueue otherwise.
+ *
+ * Shares the same memory-ordering properties of queue_work(), cf. the
+ * DocBook header of queue_work().
+ */
+static inline bool queue_bound_work(struct work_struct *work)
+{
+	return queue_work(system_percpu_wq, work);
+}
+
+/**
+ * queue_unbound_work - put work task in unbound workqueue
+ * @work: job to be done
+ *
+ * Returns %false if @work was already on the system unbound workqueue and
+ * %true otherwise.
+ *
+ * This puts a job in the system unbound workqueue if it was not already
+ * queued and leaves it in the same position on the system unbound
+ * workqueue otherwise.
+ *
+ * Shares the same memory-ordering properties of queue_work(), cf. the
+ * DocBook header of queue_work().
+ */
+static inline bool queue_unbound_work(struct work_struct *work)
+{
+	return queue_work(system_dfl_wq, work);
 }
 
 /**
@@ -834,8 +889,26 @@ extern void __warn_flushing_systemwide_wq(void)
  *
  * After waiting for a given time this puts a job in the system per-CPU
  * workqueue on the specified CPU.
+ *
+ * Note: this function will be removed. Please use queue_delayed_bound_work_on()
+ * instead
  */
 static inline bool schedule_delayed_work_on(int cpu, struct delayed_work *dwork,
+					    unsigned long delay)
+{
+	return queue_delayed_work_on(cpu, system_percpu_wq, dwork, delay);
+}
+
+/**
+ * queue_delayed_bound_work_on - queue work in per-CPU workqueue on CPU after delay
+ * @cpu: cpu to use
+ * @dwork: job to be done
+ * @delay: number of jiffies to wait
+ *
+ * After waiting for a given time this puts a job in the system per-CPU
+ * workqueue on the specified CPU.
+ */
+static inline bool queue_delayed_bound_work_on(int cpu, struct delayed_work *dwork,
 					    unsigned long delay)
 {
 	return queue_delayed_work_on(cpu, system_percpu_wq, dwork, delay);
@@ -853,6 +926,34 @@ static inline bool schedule_delayed_work(struct delayed_work *dwork,
 					 unsigned long delay)
 {
 	return queue_delayed_work(system_percpu_wq, dwork, delay);
+}
+
+/**
+ * queue_delayed_bound_work - put work task in per-CPU workqueue after delay
+ * @dwork: job to be done
+ * @delay: number of jiffies to wait or 0 for immediate execution
+ *
+ * After waiting for a given time this puts a job in the system per-CPU
+ * workqueue.
+ */
+static inline bool queue_delayed_bound_work(struct delayed_work *dwork,
+					 unsigned long delay)
+{
+	return queue_delayed_work(system_percpu_wq, dwork, delay);
+}
+
+/**
+ * queue_delayed_unbound_work - put work task in unbound workqueue after delay
+ * @dwork: job to be done
+ * @delay: number of jiffies to wait or 0 for immediate execution
+ *
+ * After waiting for a given time this puts a job in the system unbound
+ * workqueue.
+ */
+static inline bool queue_delayed_unbound_work(struct delayed_work *dwork,
+					 unsigned long delay)
+{
+	return queue_delayed_work(system_dfl_wq, dwork, delay);
 }
 
 #ifndef CONFIG_SMP
