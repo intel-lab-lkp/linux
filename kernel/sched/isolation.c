@@ -189,7 +189,13 @@ void __init housekeeping_init(void)
 		WARN_ON_ONCE(cpumask_empty(omask));
 		cpumask_copy(nmask, omask);
 		RCU_INIT_POINTER(housekeeping.cpumasks[type], nmask);
-		memblock_free(omask, cpumask_size());
+
+		/*
+		 * TODO: Don't free memblock allocated cpumasks until the
+		 * memblock subystem is able to handle the memblock_free()
+		 * properly.
+		 */
+		// memblock_free(omask, cpumask_size());
 	}
 }
 
