@@ -4,7 +4,7 @@
  *
  *  Copyright (C) 1991, 1992, 1993, 1994  Linus Torvalds
  *
- *  Swap reorganised 29.12.95, 
+ *  Swap reorganised 29.12.95,
  *  Asynchronous swapping added 30.12.95. Stephen Tweedie
  *  Removed race in async swapping. 14.4.1996. Bruno Haible
  *  Add swap of shared pages through the page cache. 20.2.1998. Stephen Tweedie
@@ -201,44 +201,6 @@ static bool is_folio_zero_filled(struct folio *folio)
 	return true;
 }
 
-static void swap_zeromap_folio_set(struct folio *folio)
-{
-	struct obj_cgroup *objcg = get_obj_cgroup_from_folio(folio);
-	struct swap_info_struct *sis =
-		__swap_slot_to_info(swp_entry_to_swp_slot(folio->swap));
-	int nr_pages = folio_nr_pages(folio);
-	swp_entry_t entry;
-	swp_slot_t slot;
-	unsigned int i;
-
-	for (i = 0; i < folio_nr_pages(folio); i++) {
-		entry = page_swap_entry(folio_page(folio, i));
-		slot = swp_entry_to_swp_slot(entry);
-		set_bit(swp_slot_offset(slot), sis->zeromap);
-	}
-
-	count_vm_events(SWPOUT_ZERO, nr_pages);
-	if (objcg) {
-		count_objcg_events(objcg, SWPOUT_ZERO, nr_pages);
-		obj_cgroup_put(objcg);
-	}
-}
-
-static void swap_zeromap_folio_clear(struct folio *folio)
-{
-	struct swap_info_struct *sis =
-		__swap_slot_to_info(swp_entry_to_swp_slot(folio->swap));
-	swp_entry_t entry;
-	swp_slot_t slot;
-	unsigned int i;
-
-	for (i = 0; i < folio_nr_pages(folio); i++) {
-		entry = page_swap_entry(folio_page(folio, i));
-		slot = swp_entry_to_swp_slot(entry);
-		clear_bit(swp_slot_offset(slot), sis->zeromap);
-	}
-}
-
 /*
  * We may have stale swap cache pages in memory: notice
  * them here and get rid of the unnecessary final write.
@@ -246,6 +208,7 @@ static void swap_zeromap_folio_clear(struct folio *folio)
 int swap_writeout(struct folio *folio, struct swap_iocb **swap_plug)
 {
 	int ret = 0;
+	swp_slot_t slot;
 
 	if (folio_free_swap(folio))
 		goto out_unlock;
@@ -260,23 +223,19 @@ int swap_writeout(struct folio *folio, struct swap_iocb **swap_plug)
 		goto out_unlock;
 	}
 
-	/*
-	 * Use a bitmap (zeromap) to avoid doing IO for zero-filled pages.
-	 * The bits in zeromap are protected by the locked swapcache folio
-	 * and atomic updates are used to protect against read-modify-write
-	 * corruption due to other zero swap entries seeing concurrent updates.
-	 */
 	if (is_folio_zero_filled(folio)) {
 		swap_zeromap_folio_set(folio);
 		goto out_unlock;
 	}
 
 	/*
-	 * Clear bits this folio occupies in the zeromap to prevent zero data
-	 * being read in from any previous zero writes that occupied the same
-	 * swap entries.
+	 * Release swap backends to make sure we do not have mixed backends.
+	 *
+	 * If the folio is already backed by contiguous physical swap slots
+	 * (e.g. from a previous swapout attempt when zswap is disabled),
+	 * keep that backend to avoid reallocation.
 	 */
-	swap_zeromap_folio_clear(folio);
+	vswap_prepare_writeout(folio->swap, folio);
 
 	if (zswap_store(folio)) {
 		count_mthp_stat(folio_order(folio), MTHP_STAT_ZSWPOUT);
@@ -287,7 +246,15 @@ int swap_writeout(struct folio *folio, struct swap_iocb **swap_plug)
 		return AOP_WRITEPAGE_ACTIVATE;
 	}
 
-	__swap_writepage(folio, swap_plug);
+	/* fall back to physical swap device */
+	slot = vswap_alloc_swap_slot(folio);
+
+	if (!slot.val) {
+		folio_mark_dirty(folio);
+		return AOP_WRITEPAGE_ACTIVATE;
+	}
+
+	__swap_writepage(folio, swap_plug, slot);
 	return 0;
 out_unlock:
 	folio_unlock(folio);
@@ -378,10 +345,10 @@ static void sio_write_complete(struct kiocb *iocb, long ret)
 	mempool_free(sio, sio_pool);
 }
 
-static void swap_writepage_fs(struct folio *folio, struct swap_iocb **swap_plug)
+static void swap_writepage_fs(struct folio *folio, struct swap_iocb **swap_plug,
+			     swp_slot_t slot)
 {
 	struct swap_iocb *sio = swap_plug ? *swap_plug : NULL;
-	swp_slot_t slot = swp_entry_to_swp_slot(folio->swap);
 	struct swap_info_struct *sis = __swap_slot_to_info(slot);
 	struct file *swap_file = sis->swap_file;
 	loff_t pos = swap_slot_dev_pos(slot);
@@ -416,13 +383,13 @@ static void swap_writepage_fs(struct folio *folio, struct swap_iocb **swap_plug)
 }
 
 static void swap_writepage_bdev_sync(struct folio *folio,
-		struct swap_info_struct *sis)
+		struct swap_info_struct *sis, swp_slot_t slot)
 {
 	struct bio_vec bv;
 	struct bio bio;
 
 	bio_init(&bio, sis->bdev, &bv, 1, REQ_OP_WRITE | REQ_SWAP);
-	bio.bi_iter.bi_sector = swap_folio_sector(folio);
+	bio.bi_iter.bi_sector = swap_slot_sector(slot);
 	bio_add_folio_nofail(&bio, folio, folio_size(folio), 0);
 
 	bio_associate_blkg_from_page(&bio, folio);
@@ -436,12 +403,12 @@ static void swap_writepage_bdev_sync(struct folio *folio,
 }
 
 static void swap_writepage_bdev_async(struct folio *folio,
-		struct swap_info_struct *sis)
+		struct swap_info_struct *sis, swp_slot_t slot)
 {
 	struct bio *bio;
 
 	bio = bio_alloc(sis->bdev, 1, REQ_OP_WRITE | REQ_SWAP, GFP_NOIO);
-	bio->bi_iter.bi_sector = swap_folio_sector(folio);
+	bio->bi_iter.bi_sector = swap_slot_sector(slot);
 	bio->bi_end_io = end_swap_bio_write;
 	bio_add_folio_nofail(bio, folio, folio_size(folio), 0);
 
@@ -452,10 +419,10 @@ static void swap_writepage_bdev_async(struct folio *folio,
 	submit_bio(bio);
 }
 
-void __swap_writepage(struct folio *folio, struct swap_iocb **swap_plug)
+void __swap_writepage(struct folio *folio, struct swap_iocb **swap_plug,
+		      swp_slot_t slot)
 {
-	struct swap_info_struct *sis =
-		__swap_slot_to_info(swp_entry_to_swp_slot(folio->swap));
+	struct swap_info_struct *sis = __swap_slot_to_info(slot);
 
 	VM_BUG_ON_FOLIO(!folio_test_swapcache(folio), folio);
 	/*
@@ -464,16 +431,16 @@ void __swap_writepage(struct folio *folio, struct swap_iocb **swap_plug)
 	 * is safe.
 	 */
 	if (data_race(sis->flags & SWP_FS_OPS))
-		swap_writepage_fs(folio, swap_plug);
+		swap_writepage_fs(folio, swap_plug, slot);
 	/*
 	 * ->flags can be updated non-atomicially (scan_swap_map_slots),
 	 * but that will never affect SWP_SYNCHRONOUS_IO, so the data_race
 	 * is safe.
 	 */
 	else if (data_race(sis->flags & SWP_SYNCHRONOUS_IO))
-		swap_writepage_bdev_sync(folio, sis);
+		swap_writepage_bdev_sync(folio, sis, slot);
 	else
-		swap_writepage_bdev_async(folio, sis);
+		swap_writepage_bdev_async(folio, sis, slot);
 }
 
 void swap_write_unplug(struct swap_iocb *sio)
@@ -544,9 +511,9 @@ static bool swap_read_folio_zeromap(struct folio *folio)
 	return true;
 }
 
-static void swap_read_folio_fs(struct folio *folio, struct swap_iocb **plug)
+static void swap_read_folio_fs(struct folio *folio, struct swap_iocb **plug,
+			      swp_slot_t slot)
 {
-	swp_slot_t slot = swp_entry_to_swp_slot(folio->swap);
 	struct swap_info_struct *sis = __swap_slot_to_info(slot);
 	struct swap_iocb *sio = NULL;
 	loff_t pos = swap_slot_dev_pos(slot);
@@ -580,13 +547,13 @@ static void swap_read_folio_fs(struct folio *folio, struct swap_iocb **plug)
 }
 
 static void swap_read_folio_bdev_sync(struct folio *folio,
-		struct swap_info_struct *sis)
+		struct swap_info_struct *sis, swp_slot_t slot)
 {
 	struct bio_vec bv;
 	struct bio bio;
 
 	bio_init(&bio, sis->bdev, &bv, 1, REQ_OP_READ);
-	bio.bi_iter.bi_sector = swap_folio_sector(folio);
+	bio.bi_iter.bi_sector = swap_slot_sector(slot);
 	bio_add_folio_nofail(&bio, folio, folio_size(folio), 0);
 	/*
 	 * Keep this task valid during swap readpage because the oom killer may
@@ -602,12 +569,12 @@ static void swap_read_folio_bdev_sync(struct folio *folio,
 }
 
 static void swap_read_folio_bdev_async(struct folio *folio,
-		struct swap_info_struct *sis)
+		struct swap_info_struct *sis, swp_slot_t slot)
 {
 	struct bio *bio;
 
 	bio = bio_alloc(sis->bdev, 1, REQ_OP_READ, GFP_KERNEL);
-	bio->bi_iter.bi_sector = swap_folio_sector(folio);
+	bio->bi_iter.bi_sector = swap_slot_sector(slot);
 	bio->bi_end_io = end_swap_bio_read;
 	bio_add_folio_nofail(bio, folio, folio_size(folio), 0);
 	count_mthp_stat(folio_order(folio), MTHP_STAT_SWPIN);
@@ -618,14 +585,12 @@ static void swap_read_folio_bdev_async(struct folio *folio,
 
 void swap_read_folio(struct folio *folio, struct swap_iocb **plug)
 {
-	struct swap_info_struct *sis =
-		__swap_slot_to_info(swp_entry_to_swp_slot(folio->swap));
-	bool synchronous = sis->flags & SWP_SYNCHRONOUS_IO;
-	bool workingset = folio_test_workingset(folio);
+	struct swap_info_struct *sis;
+	bool synchronous, workingset = folio_test_workingset(folio);
 	unsigned long pflags;
 	bool in_thrashing;
+	swp_slot_t slot;
 
-	VM_BUG_ON_FOLIO(!folio_test_swapcache(folio) && !synchronous, folio);
 	VM_BUG_ON_FOLIO(!folio_test_locked(folio), folio);
 	VM_BUG_ON_FOLIO(folio_test_uptodate(folio), folio);
 
@@ -651,12 +616,18 @@ void swap_read_folio(struct folio *folio, struct swap_iocb **plug)
 	/* We have to read from slower devices. Increase zswap protection. */
 	zswap_folio_swapin(folio);
 
+	slot = swp_entry_to_swp_slot(folio->swap);
+
+	sis = __swap_slot_to_info(slot);
+	synchronous = sis->flags & SWP_SYNCHRONOUS_IO;
+	VM_BUG_ON_FOLIO(!folio_test_swapcache(folio) && !synchronous, folio);
+
 	if (data_race(sis->flags & SWP_FS_OPS)) {
-		swap_read_folio_fs(folio, plug);
+		swap_read_folio_fs(folio, plug, slot);
 	} else if (synchronous) {
-		swap_read_folio_bdev_sync(folio, sis);
+		swap_read_folio_bdev_sync(folio, sis, slot);
 	} else {
-		swap_read_folio_bdev_async(folio, sis);
+		swap_read_folio_bdev_async(folio, sis, slot);
 	}
 
 finish:

@@ -991,8 +991,10 @@ static int zswap_writeback_entry(struct zswap_entry *entry,
 {
 	struct folio *folio;
 	struct mempolicy *mpol;
-	bool folio_was_allocated;
+	bool folio_was_allocated, phys_swap_alloced = false;
 	struct swap_info_struct *si;
+	struct zswap_entry *new_entry = NULL;
+	swp_slot_t slot;
 	int ret = 0;
 
 	/* try to allocate swap cache folio */
@@ -1027,17 +1029,24 @@ static int zswap_writeback_entry(struct zswap_entry *entry,
 	 * old compressed data. Only when this is successful can the entry
 	 * be dereferenced.
 	 */
-	if (entry != zswap_entry_load(swpentry)) {
+	new_entry = zswap_entry_load(swpentry);
+	if (entry != new_entry) {
 		ret = -ENOMEM;
 		goto out;
 	}
+
+	slot = vswap_alloc_swap_slot(folio);
+
+	if (!slot.val) {
+		ret = -ENOMEM;
+		goto out;
+	}
+	phys_swap_alloced = true;
 
 	if (!zswap_decompress(entry, folio)) {
 		ret = -EIO;
 		goto out;
 	}
-
-	zswap_entry_erase(swpentry);
 
 	count_vm_event(ZSWPWB);
 	if (entry->objcg)
@@ -1052,10 +1061,12 @@ static int zswap_writeback_entry(struct zswap_entry *entry,
 	folio_set_reclaim(folio);
 
 	/* start writeback */
-	__swap_writepage(folio, NULL);
+	__swap_writepage(folio, NULL, slot);
 
 out:
 	if (ret && ret != -EEXIST) {
+		if (phys_swap_alloced)
+			zswap_entry_store(swpentry, new_entry);
 		swap_cache_del_folio(folio);
 		folio_unlock(folio);
 	}
@@ -1401,7 +1412,7 @@ static bool zswap_store_page(struct page *page,
 			     struct zswap_pool *pool)
 {
 	swp_entry_t page_swpentry = page_swap_entry(page);
-	struct zswap_entry *entry, *old;
+	struct zswap_entry *entry;
 
 	/* allocate entry */
 	entry = zswap_entry_cache_alloc(GFP_KERNEL, page_to_nid(page));
@@ -1413,15 +1424,12 @@ static bool zswap_store_page(struct page *page,
 	if (!zswap_compress(page, entry, pool))
 		goto compress_failed;
 
-	old = zswap_entry_store(page_swpentry, entry);
-
 	/*
 	 * We may have had an existing entry that became stale when
 	 * the folio was redirtied and now the new version is being
-	 * swapped out. Get rid of the old.
+	 * swapped out. zswap_entry_store() will get rid of the old.
 	 */
-	if (old)
-		zswap_entry_free(old);
+	zswap_entry_store(page_swpentry, entry);
 
 	/*
 	 * The entry is successfully compressed and stored in vswap, there is
@@ -1473,13 +1481,14 @@ bool zswap_store(struct folio *folio)
 	struct mem_cgroup *memcg = NULL;
 	struct zswap_pool *pool;
 	bool ret = false;
+	bool partial_store = false;
 	long index;
 
 	VM_WARN_ON_ONCE(!folio_test_locked(folio));
 	VM_WARN_ON_ONCE(!folio_test_swapcache(folio));
 
 	if (!zswap_enabled)
-		goto check_old;
+		return false;
 
 	objcg = get_obj_cgroup_from_folio(folio);
 	if (objcg && !obj_cgroup_may_zswap(objcg)) {
@@ -1510,8 +1519,10 @@ bool zswap_store(struct folio *folio)
 	for (index = 0; index < nr_pages; ++index) {
 		struct page *page = folio_page(folio, index);
 
-		if (!zswap_store_page(page, objcg, pool))
+		if (!zswap_store_page(page, objcg, pool)) {
+			partial_store = index > 0;
 			goto put_pool;
+		}
 	}
 
 	if (objcg)
@@ -1527,24 +1538,17 @@ put_objcg:
 	obj_cgroup_put(objcg);
 	if (!ret && zswap_pool_reached_full)
 		queue_work(shrink_wq, &zswap_shrink_work);
-check_old:
 	/*
-	 * If the zswap store fails or zswap is disabled, we must invalidate
-	 * the possibly stale entries which were previously stored at the
-	 * offsets corresponding to each page of the folio. Otherwise,
-	 * writeback could overwrite the new data in the swapfile.
+	 * If a partial store happened, some pages have stale VSWAP_ZSWAP
+	 * entries that must be invalidated. Otherwise, writeback could
+	 * overwrite the new data in the swapfile.
+	 *
+	 * If we never entered the store loop (zswap disabled, cgroup
+	 * limits, no pool, etc.), the backing is untouched — no cleanup
+	 * needed.
 	 */
-	if (!ret) {
-		unsigned type = swp_type(swp);
-		pgoff_t offset = swp_offset(swp);
-		struct zswap_entry *entry;
-
-		for (index = 0; index < nr_pages; ++index) {
-			entry = zswap_entry_erase(swp_entry(type, offset + index));
-			if (entry)
-				zswap_entry_free(entry);
-		}
-	}
+	if (partial_store)
+		vswap_prepare_writeout(swp, folio);
 
 	return ret;
 }
@@ -1619,8 +1623,7 @@ int zswap_load(struct folio *folio)
 	 */
 	if (swapcache) {
 		folio_mark_dirty(folio);
-		zswap_entry_erase(swp);
-		zswap_entry_free(entry);
+		vswap_store_folio(swp, folio);
 	}
 
 	folio_unlock(folio);
