@@ -373,16 +373,20 @@ int __init feroceon_of_init(void)
 	node = of_find_matching_node(NULL, feroceon_ids);
 	if (node && of_device_is_compatible(node, "marvell,kirkwood-cache")) {
 		base = of_iomap(node, 0);
-		if (!base)
+		if (!base) {
+			of_node_put(node);
 			return -ENOMEM;
+		}
 
 		if (l2_wt_override)
 			writel(readl(base) | L2_WRITETHROUGH_KIRKWOOD, base);
 		else
 			writel(readl(base) & ~L2_WRITETHROUGH_KIRKWOOD, base);
+		iounmap(base);
 	}
 
 	feroceon_l2_init(l2_wt_override);
+	of_node_put(node);
 
 	return 0;
 }
