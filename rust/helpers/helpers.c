@@ -62,6 +62,9 @@
 #include "uaccess.c"
 #include "usb.c"
 #include "vmalloc.c"
+#if defined(CONFIG_VIRTIO)
+#include "virtio.c"
+#endif /* defined(CONFIG_VIRTIO) */
 #include "wait.c"
 #include "workqueue.c"
 #include "xarray.c"
