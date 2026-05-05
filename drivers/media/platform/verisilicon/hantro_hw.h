@@ -15,8 +15,8 @@
 #include <media/v4l2-vp9.h>
 #include <media/videobuf2-core.h>
 
-#include "rockchip_av1_entropymode.h"
-#include "rockchip_av1_filmgrain.h"
+#include "hantro_av1_entropymode.h"
+#include "hantro_av1_filmgrain.h"
 
 #define DEC_8190_ALIGN_MASK	0x07U
 
@@ -459,10 +459,7 @@ void hantro_hevc_ref_init(struct hantro_ctx *ctx);
 dma_addr_t hantro_hevc_get_ref_buf(struct hantro_ctx *ctx, s32 poc);
 int hantro_hevc_add_ref_buf(struct hantro_ctx *ctx, int poc, dma_addr_t addr);
 
-int rockchip_vpu981_av1_dec_init(struct hantro_ctx *ctx);
-void rockchip_vpu981_av1_dec_exit(struct hantro_ctx *ctx);
 int rockchip_vpu981_av1_dec_run(struct hantro_ctx *ctx);
-void rockchip_vpu981_av1_dec_done(struct hantro_ctx *ctx);
 
 static inline unsigned short hantro_vp9_num_sbs(unsigned short dimension)
 {

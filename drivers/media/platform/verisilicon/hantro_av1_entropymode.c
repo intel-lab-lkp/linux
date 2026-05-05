@@ -11,7 +11,7 @@
  */
 
 #include "hantro.h"
-#include "rockchip_av1_entropymode.h"
+#include "hantro_av1_entropymode.h"
 
 #define AOM_ICDF ICDF
 #define AOM_CDF2(a0) AOM_ICDF(a0)
@@ -4195,7 +4195,7 @@ static const u16 default_bits_cdf[][10] = {
 	}
 };
 
-static int rockchip_av1_get_q_ctx(int q)
+static int hantro_av1_get_q_ctx(int q)
 {
 	if (q <= 20)
 		return 0;
@@ -4206,10 +4206,10 @@ static int rockchip_av1_get_q_ctx(int q)
 	return 3;
 }
 
-void rockchip_av1_default_coeff_probs(u32 base_qindex, void *ptr)
+void hantro_av1_default_coeff_probs(u32 base_qindex, void *ptr)
 {
 	struct av1cdfs *cdfs = (struct av1cdfs *)ptr;
-	const int index = rockchip_av1_get_q_ctx(base_qindex);
+	const int index = hantro_av1_get_q_ctx(base_qindex);
 
 	memcpy(cdfs->txb_skip_cdf, av1_default_txb_skip_cdfs[index],
 	       sizeof(av1_default_txb_skip_cdfs[0]));
@@ -4240,8 +4240,8 @@ void rockchip_av1_default_coeff_probs(u32 base_qindex, void *ptr)
 	       sizeof(av1_default_eob_multi1024_cdfs[0]));
 }
 
-void rockchip_av1_set_default_cdfs(struct av1cdfs *cdfs,
-				   struct mvcdfs *cdfs_ndvc)
+void hantro_av1_set_default_cdfs(struct av1cdfs *cdfs,
+				 struct mvcdfs *cdfs_ndvc)
 {
 	memcpy(cdfs->partition_cdf, default_partition_cdf,
 	       sizeof(cdfs->partition_cdf));
@@ -4398,7 +4398,7 @@ void rockchip_av1_set_default_cdfs(struct av1cdfs *cdfs,
 	       sizeof(cdfs->compound_idx_cdf));
 }
 
-void rockchip_av1_get_cdfs(struct hantro_ctx *ctx, u32 ref_idx)
+void hantro_av1_get_cdfs(struct hantro_ctx *ctx, u32 ref_idx)
 {
 	struct hantro_av1_dec_hw_ctx *av1_dec = &ctx->av1_dec;
 
@@ -4406,8 +4406,8 @@ void rockchip_av1_get_cdfs(struct hantro_ctx *ctx, u32 ref_idx)
 	av1_dec->cdfs_ndvc = &av1_dec->cdfs_last_ndvc[ref_idx];
 }
 
-void rockchip_av1_store_cdfs(struct hantro_ctx *ctx,
-			     u32 refresh_frame_flags)
+void hantro_av1_store_cdfs(struct hantro_ctx *ctx,
+			   u32 refresh_frame_flags)
 {
 	struct hantro_av1_dec_hw_ctx *av1_dec = &ctx->av1_dec;
 	int i;
