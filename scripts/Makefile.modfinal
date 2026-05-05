@@ -64,7 +64,16 @@ ifdef CONFIG_DEBUG_INFO_BTF_MODULES
 endif
 	+$(call cmd,check_tracepoint)
 
+%.ko.stripped: %.ko $(wildcard include/config/MODULE_INSTALL_STRIP)
+	$(call cmd,install_mod)
+	$(call cmd,strip_mod)
+
+ifneq ($(CONFIG_MODULE_INSTALL_STRIP),)
+modules.order: $(modules:%.o=%.ko.stripped)
+endif
+
 targets += $(modules:%.o=%.ko) $(modules:%.o=%.mod.o) .module-common.o
+targets += $(modules:%.o=%.ko.stripped)
 
 # Update modules.order when a module is (re-)built.
 # Allow using it as target dependency.

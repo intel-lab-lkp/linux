@@ -86,7 +86,7 @@ modules.order: vmlinux.unstripped FORCE
 	$(Q)$(MAKE) -f $(srctree)/Makefile modules
 
 quiet_cmd_modules_merkle_tree = MERKLE  $@
-      cmd_modules_merkle_tree = $< $@ .ko
+      cmd_modules_merkle_tree = $< $@ $(if $(CONFIG_MODULE_INSTALL_STRIP),.ko.stripped,.ko)
 
 targets += .tmp_module_hashes.c
 .tmp_module_hashes.c: $(objtree)/scripts/modules-merkle-tree modules.order FORCE
