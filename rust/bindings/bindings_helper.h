@@ -151,3 +151,8 @@ const vm_flags_t RUST_CONST_HELPER_VM_NOHUGEPAGE = VM_NOHUGEPAGE;
 #include "../../drivers/android/binder/rust_binder_events.h"
 #include "../../drivers/android/binder/page_range_helper.h"
 #endif
+
+#if defined(CONFIG_VIRTIO)
+#include <linux/virtio_config.h>
+#include <uapi/linux/virtio_ids.h>
+#endif /* defined(CONFIG_VIRTIO) */
