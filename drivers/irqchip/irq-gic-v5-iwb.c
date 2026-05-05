@@ -269,6 +269,11 @@ static int gicv5_iwb_device_probe(struct platform_device *pdev)
 	if (IS_ERR(iwb_node))
 		return PTR_ERR(iwb_node);
 
+#ifdef CONFIG_ACPI
+	if (has_acpi_companion(&pdev->dev))
+		acpi_dev_clear_dependencies(ACPI_COMPANION(&pdev->dev));
+#endif
+
 	return 0;
 }
 
