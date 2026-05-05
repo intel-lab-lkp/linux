@@ -2349,7 +2349,7 @@ mlx5_tc_ct_init(struct mlx5e_priv *priv, struct mlx5_fs_chains *chains,
 					   &ct_priv->ct_nat_miss_group,
 					   &ct_priv->ct_nat_miss_rule);
 	if (err)
-		goto err_ct_zone_ht;
+		goto err_ct_nat_miss_rule;
 
 	ct_priv->post_act = post_act;
 	mutex_init(&ct_priv->control_lock);
@@ -2382,6 +2382,9 @@ err_ct_tuples_nat_ht:
 err_ct_tuples_ht:
 	rhashtable_destroy(&ct_priv->zone_ht);
 err_ct_zone_ht:
+	tc_ct_del_ct_table_miss_rule(ct_priv->ct_nat_miss_group,
+				     ct_priv->ct_nat_miss_rule);
+err_ct_nat_miss_rule:
 	mlx5_chains_destroy_global_table(chains, ct_priv->ct_nat);
 err_ct_nat_tbl:
 	mlx5_chains_destroy_global_table(chains, ct_priv->ct);
