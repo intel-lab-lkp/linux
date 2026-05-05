@@ -3,6 +3,7 @@
 #include <asm/platform_early.h>
 #include <linux/mod_devicetable.h>
 #include <linux/pm.h>
+#include <linux/string.h>
 
 static __initdata LIST_HEAD(sh_early_platform_driver_list);
 static __initdata LIST_HEAD(sh_early_platform_device_list);
@@ -74,12 +75,15 @@ int __init sh_early_platform_driver_register(struct sh_early_platform_driver *ep
 		list_add_tail(&epdrv->list, &sh_early_platform_driver_list);
 	}
 
+	if (!buf)
+		return 0;
+
 	/* If the user has specified device then make sure the driver
 	 * gets prioritized. The driver of the last device specified on
 	 * command line will be put first on the list.
 	 */
 	n = strlen(epdrv->pdrv->driver.name);
-	if (buf && !strncmp(buf, epdrv->pdrv->driver.name, n)) {
+	if (!strncmp(buf, epdrv->pdrv->driver.name, n)) {
 		list_move(&epdrv->list, &sh_early_platform_driver_list);
 
 		/* Allow passing parameters after device name */
@@ -99,11 +103,7 @@ int __init sh_early_platform_driver_register(struct sh_early_platform_driver *ep
 		if (buf[n] == ',')
 			n++;
 
-		if (epdrv->bufsize) {
-			memcpy(epdrv->buffer, &buf[n],
-			       min_t(int, epdrv->bufsize, strlen(&buf[n]) + 1));
-			epdrv->buffer[epdrv->bufsize - 1] = '\0';
-		}
+		strscpy(epdrv->buffer, &buf[n], epdrv->bufsize);
 	}
 
 	return 0;
