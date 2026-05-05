@@ -22,7 +22,8 @@
  * - implement get_eeprom/[set_eeprom]
  * - switch PHY on/off on ifup/ifdown (perhaps in usbnet.c, via MII)
  * - mcs7830_get_regs() handling is weird: for rev 2 we return 32 regs,
- *   can access only ~ 24, remaining user buffer is uninitialized garbage
+ *   can access only ~ 24; this is not a security vulnerability because
+ *   ethtool_get_regs allocates a zeroed buffer
  * - anything else?
  */
 
