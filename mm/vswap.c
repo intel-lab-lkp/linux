@@ -529,18 +529,18 @@ static void vswap_cluster_free(struct vswap_cluster *cluster)
 	call_rcu(&cluster->rcu, vswap_cluster_free_rcu);
 }
 
-static inline void release_vswap_slot(struct vswap_cluster *cluster,
-		unsigned long index)
+static inline void release_vswap_slot_nr(struct vswap_cluster *cluster,
+		unsigned long index, int nr)
 {
 	unsigned long slot_index = VSWAP_IDX_WITHIN_CLUSTER_VAL(index);
 
 	lockdep_assert_held(&cluster->lock);
-	cluster->count--;
+	cluster->count -= nr;
 
-	bitmap_clear(cluster->bitmap, slot_index, 1);
+	bitmap_clear(cluster->bitmap, slot_index, nr);
 
 	/* we only free uncached empty clusters */
-	if (refcount_dec_and_test(&cluster->refcnt))
+	if (refcount_sub_and_test(nr, &cluster->refcnt))
 		vswap_cluster_free(cluster);
 	else if (cluster->full && cluster_is_alloc_candidate(cluster)) {
 		cluster->full = false;
@@ -553,7 +553,7 @@ static inline void release_vswap_slot(struct vswap_cluster *cluster,
 		}
 	}
 
-	atomic_dec(&vswap_used);
+	atomic_sub(nr, &vswap_used);
 }
 
 /*
@@ -585,7 +585,7 @@ static unsigned short swp_desc_memcgid(struct swp_desc *desc);
  *
  * 1. Callers ensure no concurrent modification of the swap entry's internal
  *    state can occur. This is guaranteed by one of the following:
- *    - For vswap_free() callers: the swap entry's refcnt (swap count and
+ *    - For vswap_free_nr() callers: the swap entry's refcnt (swap count and
  *      swapcache pin) is down to 0.
  *    - For vswap_store_folio(), swap_zeromap_folio_set(), and zswap_entry_store()
  *      callers: the folio is locked and in the swap cache.
@@ -706,25 +706,16 @@ static void __vswap_swap_cgroup_clear(struct vswap_cluster *cluster,
 
 /*
  * Entered with the cluster locked. The cluster lock is held throughout.
- *
- * This is safe, because:
- *
- * 1. The swap entry to be freed has refcnt (swap count and swapcache pin)
- *    down to 0, so no one can change its internal state.
- *
- * 2. The swap entry to be freed still holds a refcnt to the cluster, keeping
- *    the cluster itself valid.
- *
- * 3. swap_slot_free_nr() takes the physical swap cluster lock (ci->lock),
- *    but the only vswap function called under ci->lock is vswap_rmap_set(),
- *    which uses atomic ops and does not take cluster->lock. So there is no
- *    ABBA deadlock risk.
  */
-static void vswap_free(struct vswap_cluster *cluster, struct swp_desc *desc,
-	swp_entry_t entry)
+static void vswap_free_nr(struct vswap_cluster *cluster, swp_entry_t entry,
+		int nr)
 {
-	unsigned short id = swp_desc_memcgid(desc);
+	struct swp_desc *desc = __vswap_iter(cluster, entry.val);
+	unsigned short id;
 	struct mem_cgroup *memcg;
+
+	VM_WARN_ON(!desc);
+	id = swp_desc_memcgid(desc);
 
 	/*
 	 * The swap_cgroup id reference taken at swapout time pins this
@@ -733,11 +724,11 @@ static void vswap_free(struct vswap_cluster *cluster, struct swp_desc *desc,
 	 */
 	memcg = id ? mem_cgroup_from_id(id) : NULL;
 
-	release_backing(cluster, entry, 1, memcg);
-	__vswap_swap_cgroup_clear(cluster, entry, 1, memcg);
+	release_backing(cluster, entry, nr, memcg);
+	__vswap_swap_cgroup_clear(cluster, entry, nr, memcg);
 
-	/* erase forward mapping and release the virtual slot for reallocation */
-	release_vswap_slot(cluster, entry.val);
+	/* erase forward mapping and release the virtual slots for reallocation */
+	release_vswap_slot_nr(cluster, entry.val, nr);
 }
 
 
@@ -908,10 +899,18 @@ static bool vswap_free_nr_any_cache_only(swp_entry_t entry, int nr)
 	struct vswap_cluster *cluster = NULL;
 	struct swp_desc *desc;
 	bool ret = false;
-	int i;
+	swp_entry_t free_start;
+	unsigned short batch_memcgid = 0;
+	int i, free_nr = 0;
 
+	free_start.val = 0;
 	rcu_read_lock();
 	for (i = 0; i < nr; i++) {
+		/* flush pending free batch at cluster boundary */
+		if (free_nr && !VSWAP_IDX_WITHIN_CLUSTER_VAL(entry.val)) {
+			vswap_free_nr(cluster, free_start, free_nr);
+			free_nr = 0;
+		}
 		desc = vswap_iter(&cluster, entry.val);
 		VM_WARN_ON(!desc);
 		ret |= (desc->swap_count == 1 && desc->in_swapcache);
@@ -919,18 +918,34 @@ static bool vswap_free_nr_any_cache_only(swp_entry_t entry, int nr)
 		if (!desc->swap_count && !desc->in_swapcache) {
 			if (xa_is_value(desc->shadow))
 				desc->shadow = NULL;
-			vswap_free(cluster, desc, entry);
-		} else if (!desc->swap_count && desc->in_swapcache &&
-			   desc->type == VSWAP_SWAPFILE) {
+			/* flush at cgroup boundary */
+			if (free_nr &&
+			    swp_desc_memcgid(desc) != batch_memcgid) {
+				vswap_free_nr(cluster, free_start, free_nr);
+				free_nr = 0;
+			}
+			if (!free_nr)
+				batch_memcgid = swp_desc_memcgid(desc);
+			if (!free_nr++)
+				free_start = entry;
+		} else {
+			if (free_nr) {
+				vswap_free_nr(cluster, free_start, free_nr);
+				free_nr = 0;
+			}
 			/*
 			 * swap_count just dropped to 0, but still in swap
 			 * cache. If backed by a physical swap slot, mark it
 			 * so the physical swap allocator can check cheaply.
 			 */
-			swap_rmap_mark_cache_only(desc->slot);
+			if (!desc->swap_count && desc->in_swapcache &&
+			    desc->type == VSWAP_SWAPFILE)
+				swap_rmap_mark_cache_only(desc->slot);
 		}
 		entry.val++;
 	}
+	if (free_nr)
+		vswap_free_nr(cluster, free_start, free_nr);
 	if (cluster)
 		spin_unlock(&cluster->lock);
 	rcu_read_unlock();
@@ -1032,8 +1047,9 @@ bool folio_free_swap(struct folio *folio)
 		VM_WARN_ON_FOLIO(!desc || desc->swap_cache != folio, folio);
 		desc->swap_cache = NULL;
 		desc->in_swapcache = false;
-		vswap_free(cluster, desc, (swp_entry_t){ entry.val + i });
 	}
+
+	vswap_free_nr(cluster, entry, nr);
 	spin_unlock_irq(&cluster->lock);
 	rcu_read_unlock();
 
@@ -1095,14 +1111,23 @@ static void __swapcache_clear(struct vswap_cluster *cluster,
 			      swp_entry_t entry, int nr)
 {
 	struct swp_desc *desc;
-	int i;
+	swp_entry_t free_start;
+	int i, free_nr = 0;
 
+	free_start = entry;
 	for (i = 0; i < nr; i++) {
 		desc = __vswap_iter(cluster, entry.val + i);
 		desc->in_swapcache = false;
-		if (!desc->swap_count)
-			vswap_free(cluster, desc, (swp_entry_t){ entry.val + i });
+		if (!desc->swap_count) {
+			if (!free_nr++)
+				free_start.val = entry.val + i;
+		} else if (free_nr) {
+			vswap_free_nr(cluster, free_start, free_nr);
+			free_nr = 0;
+		}
 	}
+	if (free_nr)
+		vswap_free_nr(cluster, free_start, free_nr);
 }
 
 void swapcache_clear(swp_entry_t entry, int nr)
