@@ -37,6 +37,14 @@ void set_module_sig_enforced(void)
 	sig_enforce = true;
 }
 
+static __always_inline bool mod_sig_type_valid(enum module_signature_type id_type)
+{
+	if (id_type == MODULE_SIGNATURE_TYPE_PKCS7 && IS_ENABLED(CONFIG_MODULE_SIG))
+		return true;
+
+	return false;
+}
+
 static int mod_verify_sig(const void *mod, struct load_info *info)
 {
 	struct module_signature ms;
@@ -48,8 +56,8 @@ static int mod_verify_sig(const void *mod, struct load_info *info)
 
 	memcpy(&ms, mod + (modlen - sizeof(ms)), sizeof(ms));
 
-	if (ms.id_type != MODULE_SIGNATURE_TYPE_PKCS7) {
-		pr_err("module: not signed with expected PKCS#7 message\n");
+	if (!mod_sig_type_valid(ms.id_type)) {
+		pr_err("module: not signed with expected signature\n");
 		return -ENOPKG;
 	}
 
@@ -61,7 +69,10 @@ static int mod_verify_sig(const void *mod, struct load_info *info)
 	modlen -= sig_len + sizeof(ms);
 	info->len = modlen;
 
-	return module_sig_check(mod, modlen, mod + modlen, sig_len);
+	if (ms.id_type == MODULE_SIGNATURE_TYPE_PKCS7 && IS_ENABLED(CONFIG_MODULE_SIG))
+		return module_sig_check(mod, modlen, mod + modlen, sig_len);
+
+	return 0;
 }
 
 int module_auth_check(struct load_info *info, int flags)
