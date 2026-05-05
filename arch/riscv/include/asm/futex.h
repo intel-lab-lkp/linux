@@ -13,6 +13,8 @@
 #include <asm/asm.h>
 #include <asm/asm-extable.h>
 
+#define FUTEX_MAX_LOOPS 128
+
 /* We don't even really need the extable code, but for now keep it simple */
 #ifndef CONFIG_MMU
 #define __enable_user_access()		do { } while (0)
@@ -79,6 +81,7 @@ futex_atomic_cmpxchg_inatomic(u32 *uval, u32 __user *uaddr,
 	int ret = 0;
 	u32 val;
 	uintptr_t tmp;
+	unsigned int loops = FUTEX_MAX_LOOPS;
 
 	if (!access_ok(uaddr, sizeof(u32)))
 		return -EFAULT;
@@ -88,12 +91,17 @@ futex_atomic_cmpxchg_inatomic(u32 *uval, u32 __user *uaddr,
 	"1:	lr.w %[v],%[u]			        \n"
 	"	bne %[v],%z[ov],3f			\n"
 	"2:	sc.w.aqrl %[t],%z[nv],%[u]		\n"
-	"	bnez %[t],1b				\n"
+	"	beqz %[t],3f				\n"
+	"	addi %[lp],%[lp],-1			\n"
+	"	bnez %[lp],1b				\n"
+	"	li %[r],%[eagain]			\n"
 	"3:						\n"
 		_ASM_EXTABLE_UACCESS_ERR(1b, 3b, %[r])	\
 		_ASM_EXTABLE_UACCESS_ERR(2b, 3b, %[r])	\
-	: [r] "+r" (ret), [v] "=&r" (val), [u] "+m" (*uaddr), [t] "=&r" (tmp)
-	: [ov] "Jr" ((long)(int)oldval), [nv] "Jr" (newval)
+	: [r] "+r" (ret), [v] "=&r" (val), [u] "+m" (*uaddr),
+	  [t] "=&r" (tmp), [lp] "+r" (loops)
+	: [ov] "Jr" ((long)(int)oldval), [nv] "Jr" (newval),
+	  [eagain] "i" (-EAGAIN)
 	: "memory");
 	__disable_user_access();
 
