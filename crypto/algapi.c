@@ -24,8 +24,8 @@ static LIST_HEAD(crypto_template_list);
 
 static inline void crypto_check_module_sig(struct module *mod)
 {
-	if (fips_enabled && mod && !module_sig_ok(mod))
-		panic("Module %s signature verification failed in FIPS mode\n",
+	if (fips_enabled && mod && !module_auth_ok(mod))
+		panic("Module %s authentication failed in FIPS mode\n",
 		      module_name(mod));
 }
 

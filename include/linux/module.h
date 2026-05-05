@@ -437,9 +437,9 @@ struct module {
 	/* GPL-only exported symbols. */
 	bool using_gplonly_symbols;
 
-#ifdef CONFIG_MODULE_SIG
-	/* Signature was verified. */
-	bool sig_ok;
+#ifdef CONFIG_MODULE_AUTH
+	/* Module was authenticated. */
+	bool auth_ok;
 #endif
 
 	bool async_probe_requested;
@@ -918,16 +918,16 @@ static inline bool retpoline_module_ok(bool has_retpoline)
 }
 #endif
 
-#ifdef CONFIG_MODULE_SIG
+#ifdef CONFIG_MODULE_AUTH
 bool is_module_sig_enforced(void);
 
 void set_module_sig_enforced(void);
 
-static inline bool module_sig_ok(struct module *module)
+static inline bool module_auth_ok(struct module *module)
 {
-	return module->sig_ok;
+	return module->auth_ok;
 }
-#else	/* !CONFIG_MODULE_SIG */
+#else	/* !CONFIG_MODULE_AUTH */
 static inline bool is_module_sig_enforced(void)
 {
 	return false;
@@ -937,11 +937,11 @@ static inline void set_module_sig_enforced(void)
 {
 }
 
-static inline bool module_sig_ok(struct module *module)
+static inline bool module_auth_ok(struct module *module)
 {
 	return true;
 }
-#endif	/* CONFIG_MODULE_SIG */
+#endif	/* CONFIG_MODULE_AUTH */
 
 #if defined(CONFIG_MODULES) && defined(CONFIG_KALLSYMS)
 int module_kallsyms_on_each_symbol(const char *modname,
