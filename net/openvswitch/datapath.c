@@ -88,13 +88,17 @@ static void ovs_notify(struct genl_family *family,
  * DOC: Locking:
  *
  * All writes e.g. Writes to device state (add/remove datapath, port, set
- * operations on vports, etc.), Writes to other state (flow table
- * modifications, set miscellaneous datapath parameters, etc.) are protected
- * by ovs_lock.
+ * operations on vports, etc.) and writes to other datapath parameters
+ * are protected by ovs_lock.
+ *
+ * Writes to the flow table are NOT protected by ovs_lock. Instead, a per-table
+ * mutex and reference count are used (see comment above "struct flow_table"
+ * definition). On some few occasions, the per-flow table mutex is nested
+ * inside ovs_mutex.
  *
  * Reads are protected by RCU.
  *
- * There are a few special cases (mostly stats) that have their own
+ * There are a few other special cases (mostly stats) that have their own
  * synchronization but they nest under all of above and don't interact with
  * each other.
  *
@@ -759,16 +763,19 @@ static struct genl_family dp_packet_genl_family __ro_after_init = {
 static void get_dp_stats(const struct datapath *dp, struct ovs_dp_stats *stats,
 			 struct ovs_dp_megaflow_stats *mega_stats)
 {
-	struct flow_table *table = ovsl_dereference(dp->table);
+	struct flow_table *table;
 	int i;
 
 	memset(mega_stats, 0, sizeof(*mega_stats));
 	memset(stats, 0, sizeof(*stats));
 
+	rcu_read_lock();
+	table = rcu_dereference(dp->table);
 	if (table) {
 		stats->n_flows = ovs_flow_tbl_count(table);
 		mega_stats->n_masks = ovs_flow_tbl_num_masks(table);
 	}
+	rcu_read_unlock();
 
 	stats->n_hit = stats->n_missed = stats->n_lost = 0;
 
@@ -840,15 +847,16 @@ static size_t ovs_flow_cmd_msg_size(const struct sw_flow_actions *acts,
 		+ nla_total_size_64bit(8); /* OVS_FLOW_ATTR_USED */
 }
 
-/* Called with ovs_mutex or RCU read lock. */
+/* Called with table->lock or RCU read lock. */
 static int ovs_flow_cmd_fill_stats(const struct sw_flow *flow,
+				   const struct flow_table *table,
 				   struct sk_buff *skb)
 {
 	struct ovs_flow_stats stats;
 	__be16 tcp_flags;
 	unsigned long used;
 
-	ovs_flow_stats_get(flow, &stats, &used, &tcp_flags);
+	ovs_flow_stats_get(flow, table, &stats, &used, &tcp_flags);
 
 	if (used &&
 	    nla_put_u64_64bit(skb, OVS_FLOW_ATTR_USED, ovs_flow_used_time(used),
@@ -868,8 +876,9 @@ static int ovs_flow_cmd_fill_stats(const struct sw_flow *flow,
 	return 0;
 }
 
-/* Called with ovs_mutex or RCU read lock. */
+/* Called with RCU read lock or table->lock held. */
 static int ovs_flow_cmd_fill_actions(const struct sw_flow *flow,
+				     const struct flow_table *table,
 				     struct sk_buff *skb, int skb_orig_len)
 {
 	struct nlattr *start;
@@ -889,7 +898,7 @@ static int ovs_flow_cmd_fill_actions(const struct sw_flow *flow,
 	if (start) {
 		const struct sw_flow_actions *sf_acts;
 
-		sf_acts = rcu_dereference_ovsl(flow->sf_acts);
+		sf_acts = rcu_dereference_ovs_tbl(flow->sf_acts, table);
 		err = ovs_nla_put_actions(sf_acts->actions,
 					  sf_acts->actions_len, skb);
 
@@ -908,8 +917,10 @@ static int ovs_flow_cmd_fill_actions(const struct sw_flow *flow,
 	return 0;
 }
 
-/* Called with ovs_mutex or RCU read lock. */
-static int ovs_flow_cmd_fill_info(const struct sw_flow *flow, int dp_ifindex,
+/* Called with table->lock or RCU read lock. */
+static int ovs_flow_cmd_fill_info(const struct sw_flow *flow,
+				  const struct flow_table *table,
+				  int dp_ifindex,
 				  struct sk_buff *skb, u32 portid,
 				  u32 seq, u32 flags, u8 cmd, u32 ufid_flags)
 {
@@ -940,12 +951,12 @@ static int ovs_flow_cmd_fill_info(const struct sw_flow *flow, int dp_ifindex,
 			goto error;
 	}
 
-	err = ovs_flow_cmd_fill_stats(flow, skb);
+	err = ovs_flow_cmd_fill_stats(flow, table, skb);
 	if (err)
 		goto error;
 
 	if (should_fill_actions(ufid_flags)) {
-		err = ovs_flow_cmd_fill_actions(flow, skb, skb_orig_len);
+		err = ovs_flow_cmd_fill_actions(flow, table, skb, skb_orig_len);
 		if (err)
 			goto error;
 	}
@@ -979,8 +990,9 @@ static struct sk_buff *ovs_flow_cmd_alloc_info(const struct sw_flow_actions *act
 	return skb;
 }
 
-/* Called with ovs_mutex. */
+/* Called with table->lock. */
 static struct sk_buff *ovs_flow_cmd_build_info(const struct sw_flow *flow,
+					       const struct flow_table *table,
 					       int dp_ifindex,
 					       struct genl_info *info, u8 cmd,
 					       bool always, u32 ufid_flags)
@@ -988,12 +1000,12 @@ static struct sk_buff *ovs_flow_cmd_build_info(const struct sw_flow *flow,
 	struct sk_buff *skb;
 	int retval;
 
-	skb = ovs_flow_cmd_alloc_info(ovsl_dereference(flow->sf_acts),
+	skb = ovs_flow_cmd_alloc_info(ovs_tbl_dereference(flow->sf_acts, table),
 				      &flow->id, info, always, ufid_flags);
 	if (IS_ERR_OR_NULL(skb))
 		return skb;
 
-	retval = ovs_flow_cmd_fill_info(flow, dp_ifindex, skb,
+	retval = ovs_flow_cmd_fill_info(flow, table, dp_ifindex, skb,
 					info->snd_portid, info->snd_seq, 0,
 					cmd, ufid_flags);
 	if (WARN_ON_ONCE(retval < 0)) {
@@ -1076,17 +1088,25 @@ static int ovs_flow_cmd_new(struct sk_buff *skb, struct genl_info *info)
 		goto err_kfree_acts;
 	}
 
-	ovs_lock();
+	rcu_read_lock();
 	dp = get_dp(net, ovs_header->dp_ifindex);
 	if (unlikely(!dp)) {
 		error = -ENODEV;
-		goto err_unlock_ovs;
+		rcu_read_unlock();
+		goto err_kfree_reply;
 	}
-	table = ovsl_dereference(dp->table);
-	if (!table) {
+	table = rcu_dereference(dp->table);
+	if (!table || !ovs_flow_tbl_get(table)) {
 		error = -ENODEV;
-		goto err_unlock_ovs;
+		rcu_read_unlock();
+		goto err_kfree_reply;
 	}
+	rcu_read_unlock();
+
+	/* It is safe to dereference "table" after leaving rcu read-protected
+	 * region because it's pinned by refcount.
+	 */
+	mutex_lock(&table->lock);
 
 	/* Check if this is a duplicate flow */
 	if (ovs_identifier_is_ufid(&new_flow->id))
@@ -1100,11 +1120,11 @@ static int ovs_flow_cmd_new(struct sk_buff *skb, struct genl_info *info)
 		error = ovs_flow_tbl_insert(table, new_flow, &mask);
 		if (unlikely(error)) {
 			acts = NULL;
-			goto err_unlock_ovs;
+			goto err_unlock_tbl;
 		}
 
 		if (unlikely(reply)) {
-			error = ovs_flow_cmd_fill_info(new_flow,
+			error = ovs_flow_cmd_fill_info(new_flow, table,
 						       ovs_header->dp_ifindex,
 						       reply, info->snd_portid,
 						       info->snd_seq, 0,
@@ -1112,7 +1132,8 @@ static int ovs_flow_cmd_new(struct sk_buff *skb, struct genl_info *info)
 						       ufid_flags);
 			BUG_ON(error < 0);
 		}
-		ovs_unlock();
+		mutex_unlock(&table->lock);
+		ovs_flow_tbl_put(table);
 	} else {
 		struct sw_flow_actions *old_acts;
 
@@ -1125,7 +1146,7 @@ static int ovs_flow_cmd_new(struct sk_buff *skb, struct genl_info *info)
 		if (unlikely(info->nlhdr->nlmsg_flags & (NLM_F_CREATE
 							 | NLM_F_EXCL))) {
 			error = -EEXIST;
-			goto err_unlock_ovs;
+			goto err_unlock_tbl;
 		}
 		/* The flow identifier has to be the same for flow updates.
 		 * Look for any overlapping flow.
@@ -1138,15 +1159,15 @@ static int ovs_flow_cmd_new(struct sk_buff *skb, struct genl_info *info)
 				flow = NULL;
 			if (!flow) {
 				error = -ENOENT;
-				goto err_unlock_ovs;
+				goto err_unlock_tbl;
 			}
 		}
 		/* Update actions. */
-		old_acts = ovsl_dereference(flow->sf_acts);
+		old_acts = ovs_tbl_dereference(flow->sf_acts, table);
 		rcu_assign_pointer(flow->sf_acts, acts);
 
 		if (unlikely(reply)) {
-			error = ovs_flow_cmd_fill_info(flow,
+			error = ovs_flow_cmd_fill_info(flow, table,
 						       ovs_header->dp_ifindex,
 						       reply, info->snd_portid,
 						       info->snd_seq, 0,
@@ -1154,7 +1175,8 @@ static int ovs_flow_cmd_new(struct sk_buff *skb, struct genl_info *info)
 						       ufid_flags);
 			BUG_ON(error < 0);
 		}
-		ovs_unlock();
+		mutex_unlock(&table->lock);
+		ovs_flow_tbl_put(table);
 
 		ovs_nla_free_flow_actions_rcu(old_acts);
 		ovs_flow_free(new_flow, false);
@@ -1166,8 +1188,10 @@ static int ovs_flow_cmd_new(struct sk_buff *skb, struct genl_info *info)
 	kfree(key);
 	return 0;
 
-err_unlock_ovs:
-	ovs_unlock();
+err_unlock_tbl:
+	mutex_unlock(&table->lock);
+	ovs_flow_tbl_put(table);
+err_kfree_reply:
 	kfree_skb(reply);
 err_kfree_acts:
 	ovs_nla_free_flow_actions(acts);
@@ -1296,17 +1320,26 @@ static int ovs_flow_cmd_set(struct sk_buff *skb, struct genl_info *info)
 		}
 	}
 
-	ovs_lock();
+	rcu_read_lock();
 	dp = get_dp(net, ovs_header->dp_ifindex);
 	if (unlikely(!dp)) {
 		error = -ENODEV;
-		goto err_unlock_ovs;
+		rcu_read_unlock();
+		goto err_free_reply;
 	}
-	table = ovsl_dereference(dp->table);
-	if (!table) {
+	table = rcu_dereference(dp->table);
+	if (!table || !ovs_flow_tbl_get(table)) {
+		rcu_read_unlock();
 		error = -ENODEV;
-		goto err_unlock_ovs;
+		goto err_free_reply;
 	}
+	rcu_read_unlock();
+
+	/* It is safe to dereference "table" after leaving rcu read-protected
+	 * region because it's pinned by refcount.
+	 */
+	mutex_lock(&table->lock);
+
 	/* Check that the flow exists. */
 	if (ufid_present)
 		flow = ovs_flow_tbl_lookup_ufid(table, &sfid);
@@ -1314,16 +1347,16 @@ static int ovs_flow_cmd_set(struct sk_buff *skb, struct genl_info *info)
 		flow = ovs_flow_tbl_lookup_exact(table, &match);
 	if (unlikely(!flow)) {
 		error = -ENOENT;
-		goto err_unlock_ovs;
+		goto err_unlock_tbl;
 	}
 
 	/* Update actions, if present. */
 	if (likely(acts)) {
-		old_acts = ovsl_dereference(flow->sf_acts);
+		old_acts = ovs_tbl_dereference(flow->sf_acts, table);
 		rcu_assign_pointer(flow->sf_acts, acts);
 
 		if (unlikely(reply)) {
-			error = ovs_flow_cmd_fill_info(flow,
+			error = ovs_flow_cmd_fill_info(flow, table,
 						       ovs_header->dp_ifindex,
 						       reply, info->snd_portid,
 						       info->snd_seq, 0,
@@ -1333,20 +1366,22 @@ static int ovs_flow_cmd_set(struct sk_buff *skb, struct genl_info *info)
 		}
 	} else {
 		/* Could not alloc without acts before locking. */
-		reply = ovs_flow_cmd_build_info(flow, ovs_header->dp_ifindex,
+		reply = ovs_flow_cmd_build_info(flow, table,
+						ovs_header->dp_ifindex,
 						info, OVS_FLOW_CMD_SET, false,
 						ufid_flags);
 
 		if (IS_ERR(reply)) {
 			error = PTR_ERR(reply);
-			goto err_unlock_ovs;
+			goto err_unlock_tbl;
 		}
 	}
 
 	/* Clear stats. */
 	if (a[OVS_FLOW_ATTR_CLEAR])
-		ovs_flow_stats_clear(flow);
-	ovs_unlock();
+		ovs_flow_stats_clear(flow, table);
+	mutex_unlock(&table->lock);
+	ovs_flow_tbl_put(table);
 
 	if (reply)
 		ovs_notify(&dp_flow_genl_family, reply, info);
@@ -1355,8 +1390,10 @@ static int ovs_flow_cmd_set(struct sk_buff *skb, struct genl_info *info)
 
 	return 0;
 
-err_unlock_ovs:
-	ovs_unlock();
+err_unlock_tbl:
+	mutex_unlock(&table->lock);
+	ovs_flow_tbl_put(table);
+err_free_reply:
 	kfree_skb(reply);
 err_kfree_acts:
 	ovs_nla_free_flow_actions(acts);
@@ -1394,17 +1431,24 @@ static int ovs_flow_cmd_get(struct sk_buff *skb, struct genl_info *info)
 	if (err)
 		return err;
 
-	ovs_lock();
+	rcu_read_lock();
 	dp = get_dp(sock_net(skb->sk), ovs_header->dp_ifindex);
 	if (!dp) {
-		err = -ENODEV;
-		goto unlock;
+		rcu_read_unlock();
+		return -ENODEV;
 	}
-	table = ovsl_dereference(dp->table);
-	if (!table) {
-		err = -ENODEV;
-		goto unlock;
+	table = rcu_dereference(dp->table);
+	if (!table || !ovs_flow_tbl_get(table)) {
+		rcu_read_unlock();
+		return -ENODEV;
 	}
+	rcu_read_unlock();
+
+	/* It is safe to dereference "table" after leaving rcu read-protected
+	 * region because it's pinned by refcount.
+	 */
+	mutex_lock(&table->lock);
+
 
 	if (ufid_present)
 		flow = ovs_flow_tbl_lookup_ufid(table, &ufid);
@@ -1415,17 +1459,20 @@ static int ovs_flow_cmd_get(struct sk_buff *skb, struct genl_info *info)
 		goto unlock;
 	}
 
-	reply = ovs_flow_cmd_build_info(flow, ovs_header->dp_ifindex, info,
-					OVS_FLOW_CMD_GET, true, ufid_flags);
+	reply = ovs_flow_cmd_build_info(flow, table, ovs_header->dp_ifindex,
+					info, OVS_FLOW_CMD_GET, true,
+					ufid_flags);
 	if (IS_ERR(reply)) {
 		err = PTR_ERR(reply);
 		goto unlock;
 	}
 
-	ovs_unlock();
+	mutex_unlock(&table->lock);
+	ovs_flow_tbl_put(table);
 	return genlmsg_reply(reply, info);
 unlock:
-	ovs_unlock();
+	mutex_unlock(&table->lock);
+	ovs_flow_tbl_put(table);
 	return err;
 }
 
@@ -1455,17 +1502,24 @@ static int ovs_flow_cmd_del(struct sk_buff *skb, struct genl_info *info)
 			return err;
 	}
 
-	ovs_lock();
+	rcu_read_lock();
 	dp = get_dp(sock_net(skb->sk), ovs_header->dp_ifindex);
 	if (unlikely(!dp)) {
-		err = -ENODEV;
-		goto unlock;
+		rcu_read_unlock();
+		return -ENODEV;
 	}
-	table = ovsl_dereference(dp->table);
-	if (!table) {
-		err = -ENODEV;
-		goto unlock;
+	table = rcu_dereference(dp->table);
+	if (!table || !ovs_flow_tbl_get(table)) {
+		rcu_read_unlock();
+		return -ENODEV;
 	}
+	rcu_read_unlock();
+
+	/* It is safe to dereference "table" after leaving rcu read-protected
+	 * region because it's pinned by refcount.
+	 */
+	mutex_lock(&table->lock);
+
 
 	if (unlikely(!a[OVS_FLOW_ATTR_KEY] && !ufid_present)) {
 		err = ovs_flow_tbl_flush(table);
@@ -1482,14 +1536,15 @@ static int ovs_flow_cmd_del(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	ovs_flow_tbl_remove(table, flow);
-	ovs_unlock();
+	mutex_unlock(&table->lock);
 
 	reply = ovs_flow_cmd_alloc_info((const struct sw_flow_actions __force *) flow->sf_acts,
 					&flow->id, info, false, ufid_flags);
 	if (likely(reply)) {
 		if (!IS_ERR(reply)) {
 			rcu_read_lock();	/*To keep RCU checker happy. */
-			err = ovs_flow_cmd_fill_info(flow, ovs_header->dp_ifindex,
+			err = ovs_flow_cmd_fill_info(flow, table,
+						     ovs_header->dp_ifindex,
 						     reply, info->snd_portid,
 						     info->snd_seq, 0,
 						     OVS_FLOW_CMD_DEL,
@@ -1508,10 +1563,12 @@ static int ovs_flow_cmd_del(struct sk_buff *skb, struct genl_info *info)
 	}
 
 out_free:
+	ovs_flow_tbl_put(table);
 	ovs_flow_free(flow, true);
 	return 0;
 unlock:
-	ovs_unlock();
+	mutex_unlock(&table->lock);
+	ovs_flow_tbl_put(table);
 	return err;
 }
 
@@ -1537,7 +1594,7 @@ static int ovs_flow_cmd_dump(struct sk_buff *skb, struct netlink_callback *cb)
 		rcu_read_unlock();
 		return -ENODEV;
 	}
-	table = rcu_dereference_ovsl(dp->table);
+	table = rcu_dereference(dp->table);
 	if (!table) {
 		rcu_read_unlock();
 		return -ENODEV;
@@ -1554,8 +1611,8 @@ static int ovs_flow_cmd_dump(struct sk_buff *skb, struct netlink_callback *cb)
 		if (!flow)
 			break;
 
-		if (ovs_flow_cmd_fill_info(flow, ovs_header->dp_ifindex, skb,
-					   NETLINK_CB(cb->skb).portid,
+		if (ovs_flow_cmd_fill_info(flow, table, ovs_header->dp_ifindex,
+					   skb, NETLINK_CB(cb->skb).portid,
 					   cb->nlh->nlmsg_seq, NLM_F_MULTI,
 					   OVS_FLOW_CMD_GET, ufid_flags) < 0)
 			break;
@@ -1642,10 +1699,6 @@ static int ovs_dp_cmd_fill_info(struct datapath *dp, struct sk_buff *skb,
 	struct flow_table *table;
 	int err, pids_len;
 
-	table = ovsl_dereference(dp->table);
-	if (!table)
-		return -ENODEV;
-
 	ovs_header = genlmsg_put(skb, portid, seq, &dp_datapath_genl_family,
 				 flags, cmd);
 	if (!ovs_header)
@@ -1670,8 +1723,12 @@ static int ovs_dp_cmd_fill_info(struct datapath *dp, struct sk_buff *skb,
 	if (nla_put_u32(skb, OVS_DP_ATTR_USER_FEATURES, dp->user_features))
 		goto nla_put_failure;
 
-	if (nla_put_u32(skb, OVS_DP_ATTR_MASKS_CACHE_SIZE,
-			ovs_flow_tbl_masks_cache_size(table)))
+	rcu_read_lock();
+	table = rcu_dereference(dp->table);
+	err = table ? nla_put_u32(skb, OVS_DP_ATTR_MASKS_CACHE_SIZE,
+				  ovs_flow_tbl_masks_cache_size(table)) : 0;
+	rcu_read_unlock();
+	if (err)
 		goto nla_put_failure;
 
 	if (dp->user_features & OVS_DP_F_DISPATCH_UPCALL_PER_CPU && pids) {
@@ -1809,7 +1866,9 @@ static int ovs_dp_change(struct datapath *dp, struct nlattr *a[])
 			return -ENODEV;
 
 		cache_size = nla_get_u32(a[OVS_DP_ATTR_MASKS_CACHE_SIZE]);
+		mutex_lock(&table->lock);
 		err = ovs_flow_tbl_masks_cache_resize(table, cache_size);
+		mutex_unlock(&table->lock);
 		if (err)
 			return err;
 	}
@@ -1960,7 +2019,7 @@ err_destroy_ports:
 err_destroy_stats:
 	free_percpu(dp->stats_percpu);
 err_destroy_table:
-	call_rcu(&table->rcu, ovs_flow_tbl_destroy_rcu);
+	ovs_flow_tbl_put(table);
 err_destroy_dp:
 	kfree(dp);
 err_destroy_reply:
@@ -1972,7 +2031,8 @@ err:
 /* Called with ovs_mutex. */
 static void __dp_destroy(struct datapath *dp)
 {
-	struct flow_table *table = ovsl_dereference(dp->table);
+	struct flow_table *table = rcu_dereference_protected(dp->table,
+					lockdep_ovsl_is_held());
 	int i;
 
 	if (dp->user_features & OVS_DP_F_TC_RECIRC_SHARING)
@@ -1994,16 +2054,11 @@ static void __dp_destroy(struct datapath *dp)
 	 */
 	ovs_dp_detach_port(ovs_vport_ovsl(dp, OVSP_LOCAL));
 
-	/* Flush sw_flow in the tables. RCU cb only releases resource
-	 * such as dp, ports and tables. That may avoid some issues
-	 * such as RCU usage warning.
-	 */
-	table_instance_flow_flush(table, ovsl_dereference(table->ti),
-				  ovsl_dereference(table->ufid_ti));
+	rcu_assign_pointer(dp->table, NULL);
+	ovs_flow_tbl_put(table);
 
-	/* RCU destroy the ports, meters and flow tables. */
+	/* RCU destroy the ports and meters. */
 	call_rcu(&dp->rcu, destroy_dp_rcu);
-	call_rcu(&table->rcu, ovs_flow_tbl_destroy_rcu);
 }
 
 static int ovs_dp_cmd_del(struct sk_buff *skb, struct genl_info *info)
@@ -2647,9 +2702,12 @@ static void ovs_dp_masks_rebalance(struct work_struct *work)
 	ovs_lock();
 	list_for_each_entry(dp, &ovs_net->dps, list_node) {
 		table = ovsl_dereference(dp->table);
-		if (!table)
+		if (!table || !ovs_flow_tbl_get(table))
 			continue;
+		mutex_lock(&table->lock);
 		ovs_flow_masks_rebalance(table);
+		mutex_unlock(&table->lock);
+		ovs_flow_tbl_put(table);
 	}
 	ovs_unlock();
 
