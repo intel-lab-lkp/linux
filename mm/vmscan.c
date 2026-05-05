@@ -757,10 +757,7 @@ static int __remove_mapping(struct address_space *mapping, struct folio *folio,
 
 		if (reclaimed && !mapping_exiting(mapping))
 			shadow = workingset_eviction(folio, target_memcg);
-		__swap_cache_del_folio(folio, swap, shadow);
-		memcg1_swapout(folio, swap);
-		swap_cache_unlock_irq(swap);
-		put_swap_folio(folio, swap);
+		__vswap_remove_mapping(folio, swap, shadow);
 	} else {
 		void (*free_folio)(struct folio *);
 

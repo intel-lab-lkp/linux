@@ -5247,6 +5247,35 @@ void __mem_cgroup_uncharge_swap(swp_entry_t entry, unsigned int nr_pages)
 	rcu_read_unlock();
 }
 
+/**
+ * __mem_cgroup_uncharge_swap_by_id - uncharge swap space using memcg id directly
+ * @id: mem_cgroup id to uncharge
+ * @nr_pages: the amount of swap space to uncharge
+ *
+ * Same as __mem_cgroup_uncharge_swap() but takes the memcg id directly,
+ * skipping the lookup_swap_cgroup_id() call. Use when the caller already
+ * knows the memcg id (e.g. from swp_desc->memcgid).
+ */
+void __mem_cgroup_uncharge_swap_by_id(unsigned short id,
+				      unsigned int nr_pages)
+{
+	struct mem_cgroup *memcg;
+
+	rcu_read_lock();
+	memcg = mem_cgroup_from_id(id);
+	if (memcg) {
+		if (!mem_cgroup_is_root(memcg)) {
+			if (do_memsw_account())
+				page_counter_uncharge(&memcg->memsw, nr_pages);
+			else
+				page_counter_uncharge(&memcg->swap, nr_pages);
+		}
+		mod_memcg_state(memcg, MEMCG_SWAP, -nr_pages);
+		mem_cgroup_id_put_many(memcg, nr_pages);
+	}
+	rcu_read_unlock();
+}
+
 long mem_cgroup_get_nr_swap_pages(struct mem_cgroup *memcg)
 {
 	long nr_swap_pages = get_nr_swap_pages();

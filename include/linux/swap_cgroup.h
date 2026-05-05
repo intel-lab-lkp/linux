@@ -10,6 +10,7 @@ extern void swap_cgroup_record(struct folio *folio, unsigned short id, swp_entry
 extern void __swap_cgroup_record(struct folio *folio, unsigned short id, swp_entry_t ent);
 extern unsigned short swap_cgroup_clear(swp_entry_t ent, unsigned int nr_ents);
 extern unsigned short lookup_swap_cgroup_id(swp_entry_t ent);
+extern int vswap_cgroup_batch(swp_entry_t entry, int max_nr);
 
 #else
 
@@ -33,6 +34,12 @@ static inline
 unsigned short lookup_swap_cgroup_id(swp_entry_t ent)
 {
 	return 0;
+}
+
+static inline
+int vswap_cgroup_batch(swp_entry_t entry, int max_nr)
+{
+	return max_nr;
 }
 
 #endif
