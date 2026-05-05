@@ -4871,10 +4871,10 @@ static int ath12k_wmi_dma_ring_caps(struct ath12k_base *ab,
 	dir_buff_caps = ab->db_caps;
 	for (i = 0; i < dma_caps_parse->n_dma_ring_caps; i++) {
 		if (le32_to_cpu(dma_caps[i].module_id) >= WMI_DIRECT_BUF_MAX) {
-			ath12k_warn(ab, "Invalid module id %d\n",
-				    le32_to_cpu(dma_caps[i].module_id));
-			ret = -EINVAL;
-			goto free_dir_buff;
+			ath12k_dbg(ab, ATH12K_DBG_WMI,
+				   "Skipping unknown direct buf ring module id %d\n",
+				   le32_to_cpu(dma_caps[i].module_id));
+			continue;
 		}
 
 		dir_buff_caps[i].id = le32_to_cpu(dma_caps[i].module_id);
@@ -4886,10 +4886,6 @@ static int ath12k_wmi_dma_ring_caps(struct ath12k_base *ab,
 	}
 
 	return 0;
-
-free_dir_buff:
-	ath12k_wmi_free_dbring_caps(ab);
-	return ret;
 }
 
 static void
