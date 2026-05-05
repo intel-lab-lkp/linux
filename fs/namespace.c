@@ -2760,6 +2760,17 @@ static void do_lock_mount(const struct path *path,
 			}
 		}
 
+		if (unlikely(!dentry || !dentry->d_inode)) {
+			err = -ENOENT;
+			if (&m->mnt != path->mnt) {
+				if (dentry)
+					dput(dentry);
+				mntput(&m->mnt);
+			}
+			res->parent = ERR_PTR(err);
+			return;
+		}
+
 		inode_lock(dentry->d_inode);
 		namespace_lock();
 
