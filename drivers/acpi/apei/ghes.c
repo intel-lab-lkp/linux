@@ -778,33 +778,34 @@ static void cxl_cper_post_prot_err(struct cxl_cper_sec_prot_err *prot_err,
 #endif
 }
 
-int cxl_cper_register_prot_err_work(struct work_struct *work)
+void cxl_cper_register_prot_err_work(struct work_struct *work)
 {
-	if (cxl_cper_prot_err_work)
-		return -EINVAL;
-
 	guard(spinlock)(&cxl_cper_prot_err_work_lock);
+	WARN_ONCE(cxl_cper_prot_err_work,
+		  "CPER-CXL kfifo consumer already registered\n");
 	cxl_cper_prot_err_work = work;
-	return 0;
 }
-EXPORT_SYMBOL_NS_GPL(cxl_cper_register_prot_err_work, "CXL");
+EXPORT_SYMBOL_FOR_MODULES(cxl_cper_register_prot_err_work, "cxl_core");
 
-int cxl_cper_unregister_prot_err_work(struct work_struct *work)
+void cxl_cper_unregister_prot_err_work(void)
 {
-	if (cxl_cper_prot_err_work != work)
-		return -EINVAL;
+	struct work_struct *work;
 
-	guard(spinlock)(&cxl_cper_prot_err_work_lock);
+	spin_lock(&cxl_cper_prot_err_work_lock);
+	work = cxl_cper_prot_err_work;
 	cxl_cper_prot_err_work = NULL;
-	return 0;
+	spin_unlock(&cxl_cper_prot_err_work_lock);
+
+	if (work)
+		cancel_work_sync(work);
 }
-EXPORT_SYMBOL_NS_GPL(cxl_cper_unregister_prot_err_work, "CXL");
+EXPORT_SYMBOL_FOR_MODULES(cxl_cper_unregister_prot_err_work, "cxl_core");
 
 int cxl_cper_prot_err_kfifo_get(struct cxl_cper_prot_err_work_data *wd)
 {
 	return kfifo_get(&cxl_cper_prot_err_fifo, wd);
 }
-EXPORT_SYMBOL_NS_GPL(cxl_cper_prot_err_kfifo_get, "CXL");
+EXPORT_SYMBOL_FOR_MODULES(cxl_cper_prot_err_kfifo_get, "cxl_core");
 
 /* Room for 8 entries for each of the 4 event log queues */
 #define CXL_CPER_FIFO_DEPTH 32
