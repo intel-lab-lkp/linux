@@ -59,6 +59,13 @@ int jfs_umount(struct super_block *sb)
 		jfs_flush_journal(log, 2);
 
 	/*
+	 * Drain any pending lazy commit entries for this filesystem so
+	 * the jfsCommit thread does not access freed structures.
+	 */
+	if (log)
+		txLazyDrain(sb);
+
+	/*
 	 * Hold log lock so write_special_inodes (lmLogSync) cannot see
 	 * this sbi with a NULL inode pointer while iterating log->sb_list.
 	 */
@@ -142,6 +149,7 @@ int jfs_umount_rw(struct super_block *sb)
 	 * remove file system from log active file system list.
 	 */
 	jfs_flush_journal(log, 2);
+	txLazyDrain(sb);
 
 	/*
 	 * Make sure all metadata makes it to disk

@@ -2791,6 +2791,41 @@ void txLazyUnlock(struct tblock * tblk)
 	LAZY_UNLOCK(flags);
 }
 
+
+/*
+ * txLazyDrain
+ *
+ * Wait for all pending lazy commit entries for this superblock
+ * to be processed by the jfsCommit thread.  Must be called
+ * before freeing per-filesystem structures during unmount.
+ */
+void txLazyDrain(struct super_block *sb)
+{
+	struct jfs_sb_info *sbi = JFS_SBI(sb);
+	struct tblock *tblk;
+	unsigned long flags;
+	bool found;
+
+	do {
+		found = false;
+		LAZY_LOCK(flags);
+		list_for_each_entry(tblk, &TxAnchor.unlock_queue, cqueue) {
+			if (tblk->sb == sb) {
+				found = true;
+				break;
+			}
+		}
+		if (!found && (sbi->commit_state & IN_LAZYCOMMIT))
+			found = true;
+		LAZY_UNLOCK(flags);
+
+		if (found) {
+			wake_up(&jfs_commit_thread_wait);
+			schedule_timeout_uninterruptible(1);
+		}
+	} while (found);
+}
+
 static void LogSyncRelease(struct metapage * mp)
 {
 	struct jfs_log *log = mp->log;
