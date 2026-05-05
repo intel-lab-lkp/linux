@@ -78,18 +78,15 @@ static unsigned char mincore_swap(swp_entry_t entry, bool shmem)
 		return !shmem;
 
 	/*
-	 * Shmem mapping lookup is lockless, so we need to grab the swap
-	 * device. mincore page table walk locks the PTL, and the swap
-	 * device is stable, avoid touching the si for better performance.
+	 * Shmem mapping lookup is lockless, so we need to pin the swap entry.
+	 * mincore page table walk holds the PTL, which keeps the swap entry
+	 * (and thus its vswap cluster) alive, so skip the pin for performance.
 	 */
-	if (shmem) {
-		si = get_swap_device(entry);
-		if (!si)
-			return 0;
-	}
+	if (shmem && !tryget_swap_entry(entry, &si))
+		return 0;
 	folio = swap_cache_get_folio(entry);
 	if (shmem)
-		put_swap_device(si);
+		put_swap_entry(entry, si);
 	/* The swap cache space contains either folio, shadow or NULL */
 	if (folio && !xa_is_value(folio)) {
 		present = folio_test_uptodate(folio);
