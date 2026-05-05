@@ -2384,9 +2384,11 @@ N:	owl
 ARM/AIROHA SOC SUPPORT
 M:	Matthias Brugger <matthias.bgg@gmail.com>
 M:	AngeloGioacchino Del Regno <angelogioacchino.delregno@collabora.com>
+M:	Christian Marangi <ansuelsmth@gmail.com>
+M:	Lorenzo Bianconi <lorenzo@kernel.org>
 L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
 L:	linux-mediatek@lists.infradead.org (moderated for non-subscribers)
-S:	Odd Fixes
+S:	Maintained
 F:	arch/arm/boot/dts/airoha/
 F:	arch/arm64/boot/dts/airoha/
 
