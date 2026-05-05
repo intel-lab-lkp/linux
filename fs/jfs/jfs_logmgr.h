@@ -367,6 +367,8 @@ struct jfs_log {
 
 	struct lbuf *lbuf_free;	/* 4: free lbufs */
 	wait_queue_head_t free_wait;	/* 4: */
+	atomic_t io_count;		/* in-flight log I/O count */
+	wait_queue_head_t io_done_wait;	/* wait for io_count == 0 */
 
 	/* log write */
 	int logtid;		/* 4: log tid */

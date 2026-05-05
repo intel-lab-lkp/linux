@@ -1804,6 +1804,8 @@ static int lbmLogInit(struct jfs_log * log)
 	 * avoid deadlock here.
 	 */
 	init_waitqueue_head(&log->free_wait);
+	atomic_set(&log->io_count, 0);
+	init_waitqueue_head(&log->io_done_wait);
 
 	log->lbuf_free = NULL;
 
@@ -1854,6 +1856,9 @@ static void lbmLogShutdown(struct jfs_log * log)
 	struct lbuf *lbuf;
 
 	jfs_info("lbmLogShutdown: log:0x%p", log);
+
+	/* Wait for all in-flight log I/O to complete */
+	wait_event(log->io_done_wait, !atomic_read(&log->io_count));
 
 	lbuf = log->lbuf_free;
 	while (lbuf) {
@@ -1976,6 +1981,8 @@ static int lbmRead(struct jfs_log * log, int pn, struct lbuf ** bpp)
 
 	bio->bi_end_io = lbmIODone;
 	bio->bi_private = bp;
+
+	atomic_inc(&log->io_count);
 	/*check if journaling to disk has been disabled*/
 	if (log->no_integrity) {
 		bio->bi_iter.bi_size = 0;
@@ -2122,6 +2129,8 @@ static void lbmStartIO(struct lbuf * bp)
 
 	bio->bi_end_io = lbmIODone;
 	bio->bi_private = bp;
+
+	atomic_inc(&log->io_count);
 
 	/* check if journaling to disk has been disabled */
 	if (log->no_integrity) {
@@ -2299,6 +2308,9 @@ static void lbmIODone(struct bio *bio)
 out:
 	bp->l_flag |= lbmDONE;
 	LCACHE_UNLOCK(flags);
+
+	if (atomic_dec_and_test(&bp->l_log->io_count))
+		wake_up(&bp->l_log->io_done_wait);
 }
 
 int jfsIOWait(void *arg)
