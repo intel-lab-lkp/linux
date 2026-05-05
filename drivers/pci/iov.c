@@ -969,6 +969,8 @@ static void sriov_release(struct pci_dev *dev)
 {
 	BUG_ON(dev->sriov->num_VFs);
 
+	sriov_restore_vf_rebar_initial_sizes(dev);
+
 	if (dev != dev->sriov->dev)
 		pci_dev_put(dev->sriov->dev);
 
