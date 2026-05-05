@@ -25,6 +25,7 @@
 #define PCIE_STD_MAX_TLP_HEADERLOG	(PCIE_STD_NUM_TLP_HEADERLOG + 10)
 
 struct pci_dev;
+struct work_struct;
 
 struct pcie_tlp_log {
 	union {
@@ -53,6 +54,18 @@ struct aer_capability_regs {
 	u16 uncor_err_source;
 };
 
+/**
+ * struct cxl_proto_err_work_data - Error information used in CXL error handling
+ * @pdev: PCI device detecting the error
+ * @severity: AER severity
+ */
+struct cxl_proto_err_work_data {
+	struct pci_dev *pdev;
+	int severity;
+};
+
+typedef int (*cxl_proto_err_fn_t)(struct cxl_proto_err_work_data *wd);
+
 #if defined(CONFIG_PCIEAER)
 int pci_aer_clear_nonfatal_status(struct pci_dev *dev);
 int pcie_aer_is_native(struct pci_dev *dev);
@@ -64,6 +77,21 @@ static inline int pci_aer_clear_nonfatal_status(struct pci_dev *dev)
 }
 static inline int pcie_aer_is_native(struct pci_dev *dev) { return 0; }
 static inline void pci_aer_unmask_internal_errors(struct pci_dev *dev) { }
+#endif
+
+#ifdef CONFIG_CXL_RAS
+void cxl_register_proto_err_work(struct work_struct *work);
+int for_each_cxl_proto_err(struct cxl_proto_err_work_data *wd,
+			   cxl_proto_err_fn_t fn);
+void cxl_unregister_proto_err_work(void);
+#else
+static inline void cxl_register_proto_err_work(struct work_struct *work) { }
+static inline int for_each_cxl_proto_err(struct cxl_proto_err_work_data *wd,
+					 cxl_proto_err_fn_t fn)
+{
+	return 0;
+}
+static inline void cxl_unregister_proto_err_work(void) { }
 #endif
 
 void pci_print_aer(struct pci_dev *dev, int aer_severity,
