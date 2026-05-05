@@ -12,9 +12,7 @@
 
 #include "assert_support.h"
 
-void cnd_sp_irq_enable(
-    const sp_ID_t		ID,
-    const bool		cnd)
+void cnd_sp_irq_enable(const sp_ID_t ID, const bool cnd)
 {
 	if (cnd) {
 		sp_ctrl_setbit(ID, SP_IRQ_READY_REG, SP_IRQ_READY_BIT);

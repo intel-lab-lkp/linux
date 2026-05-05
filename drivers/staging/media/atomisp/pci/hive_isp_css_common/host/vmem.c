@@ -38,12 +38,9 @@ inv_subword(hive_uedge w, unsigned int start, unsigned int end)
 #define move_word(target, target_bit, src) move_subword(target, target_bit, src, 0, uedge_bits)
 
 static void
-move_subword(
-    hive_uedge *target,
-    unsigned int target_bit,
-    hive_uedge src,
-    unsigned int src_start,
-    unsigned int src_end)
+move_subword(hive_uedge *target, unsigned int target_bit,
+	     hive_uedge src, unsigned int src_start,
+	     unsigned int src_end)
 {
 	unsigned int start_elem = target_bit / uedge_bits;
 	unsigned int start_bit  = target_bit % uedge_bits;
@@ -68,11 +65,8 @@ move_subword(
 }
 
 static void
-hive_sim_wide_unpack(
-    hive_wide vector,
-    hive_wide elem,
-    hive_uint elem_bits,
-    hive_uint index)
+hive_sim_wide_unpack(hive_wide vector, hive_wide elem,
+		     hive_uint elem_bits, hive_uint index)
 {
 	/* pointers into wide_type: */
 	unsigned int start_elem = (elem_bits * index) / uedge_bits;
@@ -102,11 +96,8 @@ hive_sim_wide_unpack(
 }
 
 static void
-hive_sim_wide_pack(
-    hive_wide vector,
-    hive_wide elem,
-    hive_uint elem_bits,
-    hive_uint index)
+hive_sim_wide_pack(hive_wide vector, hive_wide elem,
+		   hive_uint elem_bits, hive_uint index)
 {
 	/* pointers into wide_type: */
 	unsigned int start_elem = (elem_bits * index) / uedge_bits;
@@ -130,10 +121,8 @@ hive_sim_wide_pack(
 	}
 }
 
-static void load_vector(
-    const isp_ID_t		ID,
-    t_vmem_elem		*to,
-    const t_vmem_elem	*from)
+static void load_vector(const isp_ID_t ID, t_vmem_elem *to,
+			const t_vmem_elem *from)
 {
 	unsigned int i;
 	hive_uedge *data;
@@ -156,10 +145,8 @@ static void load_vector(
 	udelay(1); /* Spend at least 1 cycles per vector */
 }
 
-static void store_vector(
-    const isp_ID_t		ID,
-    t_vmem_elem		*to,
-    const t_vmem_elem	*from)
+static void store_vector(const isp_ID_t ID, t_vmem_elem *to,
+			 const t_vmem_elem *from)
 {
 	unsigned int i;
 	unsigned int size = sizeof(short) * ISP_NWAY;
@@ -181,11 +168,8 @@ static void store_vector(
 	udelay(1); /* Spend at least 1 cycles per vector */
 }
 
-void isp_vmem_load(
-    const isp_ID_t		ID,
-    const t_vmem_elem	*from,
-    t_vmem_elem		*to,
-    unsigned int elems) /* In t_vmem_elem */
+void isp_vmem_load(const isp_ID_t ID, const t_vmem_elem *from,
+		   t_vmem_elem *to, unsigned int elems) /* In t_vmem_elem */
 {
 	unsigned int c;
 	const t_vmem_elem *vp = from;
@@ -199,11 +183,8 @@ void isp_vmem_load(
 	}
 }
 
-void isp_vmem_store(
-    const isp_ID_t		ID,
-    t_vmem_elem		*to,
-    const t_vmem_elem	*from,
-    unsigned int elems) /* In t_vmem_elem */
+void isp_vmem_store(const isp_ID_t ID, t_vmem_elem *to,
+		    const t_vmem_elem *from, unsigned int elems) /* In t_vmem_elem */
 {
 	unsigned int c;
 	t_vmem_elem *vp = to;
@@ -217,15 +198,10 @@ void isp_vmem_store(
 	}
 }
 
-void isp_vmem_2d_load(
-    const isp_ID_t		ID,
-    const t_vmem_elem	*from,
-    t_vmem_elem		*to,
-    unsigned int height,
-    unsigned int width,
-    unsigned int stride_to,  /* In t_vmem_elem */
-
-    unsigned stride_from /* In t_vmem_elem */)
+void isp_vmem_2d_load(const isp_ID_t ID, const t_vmem_elem *from,
+		      t_vmem_elem *to, unsigned int height,
+		      unsigned int width, unsigned int stride_to,  /* In t_vmem_elem */
+		      unsigned stride_from /* In t_vmem_elem */)
 {
 	unsigned int h;
 
@@ -246,15 +222,11 @@ void isp_vmem_2d_load(
 	}
 }
 
-void isp_vmem_2d_store(
-    const isp_ID_t		ID,
-    t_vmem_elem		*to,
-    const t_vmem_elem	*from,
-    unsigned int height,
-    unsigned int width,
-    unsigned int stride_to,  /* In t_vmem_elem */
-
-    unsigned stride_from /* In t_vmem_elem */)
+void isp_vmem_2d_store(const isp_ID_t ID, t_vmem_elem *to,
+		       const t_vmem_elem *from, unsigned int height,
+		       unsigned int width,
+		       unsigned int stride_to,  /* In t_vmem_elem */
+		       unsigned stride_from /* In t_vmem_elem */)
 {
 	unsigned int h;
 

@@ -11,9 +11,8 @@
 #include "gp_device_private.h"
 #endif /* __INLINE_GP_DEVICE__ */
 
-void gp_device_get_state(
-    const gp_device_ID_t		ID,
-    gp_device_state_t			*state)
+void gp_device_get_state(const gp_device_ID_t ID,
+			 gp_device_state_t *state)
 {
 	assert(ID < N_GP_DEVICE_ID);
 	assert(state);

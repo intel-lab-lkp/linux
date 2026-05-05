@@ -47,8 +47,7 @@ static const bool HIVE_IF_BIN_COPY[N_INPUT_FORMATTER_ID] = {
 	false, false, false, true
 };
 
-void input_formatter_rst(
-    const input_formatter_ID_t		ID)
+void input_formatter_rst(const input_formatter_ID_t ID)
 {
 	hrt_address	addr;
 	hrt_data	rst;
@@ -69,17 +68,15 @@ void input_formatter_rst(
 	return;
 }
 
-unsigned int input_formatter_get_alignment(
-    const input_formatter_ID_t		ID)
+unsigned int input_formatter_get_alignment(const input_formatter_ID_t ID)
 {
 	assert(ID < N_INPUT_FORMATTER_ID);
 
 	return input_formatter_alignment[ID];
 }
 
-void input_formatter_set_fifo_blocking_mode(
-    const input_formatter_ID_t		ID,
-    const bool						enable)
+void input_formatter_set_fifo_blocking_mode(const input_formatter_ID_t ID,
+					    const bool enable)
 {
 	assert(ID < N_INPUT_FORMATTER_ID);
 
@@ -91,9 +88,8 @@ void input_formatter_set_fifo_blocking_mode(
 	return;
 }
 
-void input_formatter_get_switch_state(
-    const input_formatter_ID_t		ID,
-    input_formatter_switch_state_t	*state)
+void input_formatter_get_switch_state(const input_formatter_ID_t ID,
+				      input_formatter_switch_state_t *state)
 {
 	assert(ID < N_INPUT_FORMATTER_ID);
 	assert(state);
@@ -125,9 +121,8 @@ void input_formatter_get_switch_state(
 	return;
 }
 
-void input_formatter_get_state(
-    const input_formatter_ID_t		ID,
-    input_formatter_state_t			*state)
+void input_formatter_get_state(const input_formatter_ID_t ID,
+			       input_formatter_state_t *state)
 {
 	assert(ID < N_INPUT_FORMATTER_ID);
 	assert(state);
@@ -206,9 +201,8 @@ void input_formatter_get_state(
 	return;
 }
 
-void input_formatter_bin_get_state(
-    const input_formatter_ID_t		ID,
-    input_formatter_bin_state_t		*state)
+void input_formatter_bin_get_state(const input_formatter_ID_t ID,
+				   input_formatter_bin_state_t *state)
 {
 	assert(ID < N_INPUT_FORMATTER_ID);
 	assert(state);

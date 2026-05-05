@@ -12,11 +12,9 @@
 #endif
 #include "gp_device.h"	/* _REG_GP_IRQ_REQUEST_ADDR */
 
-static inline void irq_wait_for_write_complete(
-    const irq_ID_t		ID);
+static inline void irq_wait_for_write_complete(const irq_ID_t ID);
 
-static inline bool any_irq_channel_enabled(
-    const irq_ID_t				ID);
+static inline bool any_irq_channel_enabled(const irq_ID_t ID);
 
 static inline irq_ID_t virq_get_irq_id(const enum virq_id irq_ID,
 				       unsigned int *channel_ID);
@@ -47,8 +45,7 @@ static enum virq_id IRQ_NESTING_ID[N_IRQ_ID] = {
 	virq_isel
 };
 
-void irq_clear_all(
-    const irq_ID_t				ID)
+void irq_clear_all(const irq_ID_t ID)
 {
 	hrt_data	mask = 0xFFFFFFFF;
 
@@ -67,9 +64,7 @@ void irq_clear_all(
 /*
  * Do we want the user to be able to set the signalling method ?
  */
-void irq_enable_channel(
-    const irq_ID_t				ID,
-    const unsigned int			irq_id)
+void irq_enable_channel(const irq_ID_t ID, const unsigned int irq_id)
 {
 	unsigned int mask = irq_reg_load(ID,
 					 _HRT_IRQ_CONTROLLER_MASK_REG_IDX);
@@ -109,9 +104,7 @@ void irq_enable_channel(
 	return;
 }
 
-void irq_enable_pulse(
-    const irq_ID_t	ID,
-    bool			pulse)
+void irq_enable_pulse(const irq_ID_t ID, bool pulse)
 {
 	unsigned int edge_out = 0x0;
 
@@ -124,9 +117,7 @@ void irq_enable_pulse(
 	return;
 }
 
-void irq_disable_channel(
-    const irq_ID_t				ID,
-    const unsigned int			irq_id)
+void irq_disable_channel(const irq_ID_t ID, const unsigned int irq_id)
 {
 	unsigned int mask = irq_reg_load(ID,
 					 _HRT_IRQ_CONTROLLER_MASK_REG_IDX);
@@ -155,9 +146,7 @@ void irq_disable_channel(
 	return;
 }
 
-enum hrt_isp_css_irq_status irq_get_channel_id(
-    const irq_ID_t				ID,
-    unsigned int				*irq_id)
+enum hrt_isp_css_irq_status irq_get_channel_id(const irq_ID_t ID, unsigned int *irq_id)
 {
 	unsigned int irq_status = irq_reg_load(ID,
 					       _HRT_IRQ_CONTROLLER_STATUS_REG_IDX);
@@ -195,9 +184,7 @@ static const hrt_address IRQ_REQUEST_ADDR[N_IRQ_SW_CHANNEL_ID] = {
 	_REG_GP_IRQ_REQUEST1_ADDR
 };
 
-void irq_raise(
-    const irq_ID_t				ID,
-    const irq_sw_channel_id_t	irq_id)
+void irq_raise(const irq_ID_t ID, const irq_sw_channel_id_t irq_id)
 {
 	hrt_address		addr;
 
@@ -224,9 +211,7 @@ bool any_virq_signal(void)
 	return (irq_status != 0);
 }
 
-void cnd_virq_enable_channel(
-    const enum virq_id				irq_ID,
-    const bool					en)
+void cnd_virq_enable_channel(const enum virq_id irq_ID, const bool en)
 {
 	irq_ID_t		i;
 	unsigned int	channel_ID;
@@ -307,8 +292,7 @@ void virq_clear_info(struct virq_info *irq_info)
 	return;
 }
 
-enum hrt_isp_css_irq_status virq_get_channel_id(
-    enum virq_id					*irq_id)
+enum hrt_isp_css_irq_status virq_get_channel_id(enum virq_id *irq_id)
 {
 	unsigned int irq_status = irq_reg_load(IRQ0_ID,
 					       _HRT_IRQ_CONTROLLER_STATUS_REG_IDX);
@@ -377,8 +361,7 @@ enum hrt_isp_css_irq_status virq_get_channel_id(
 	return status;
 }
 
-static inline void irq_wait_for_write_complete(
-    const irq_ID_t		ID)
+static inline void irq_wait_for_write_complete(const irq_ID_t ID)
 {
 	assert(ID < N_IRQ_ID);
 	assert(IRQ_BASE[ID] != (hrt_address)-1);
@@ -386,8 +369,7 @@ static inline void irq_wait_for_write_complete(
 					_HRT_IRQ_CONTROLLER_ENABLE_REG_IDX * sizeof(hrt_data));
 }
 
-static inline bool any_irq_channel_enabled(
-    const irq_ID_t				ID)
+static inline bool any_irq_channel_enabled(const irq_ID_t ID)
 {
 	hrt_data	en_reg;
 
@@ -399,9 +381,8 @@ static inline bool any_irq_channel_enabled(
 	return (en_reg != 0);
 }
 
-static inline irq_ID_t virq_get_irq_id(
-    const enum virq_id		irq_ID,
-    unsigned int		*channel_ID)
+static inline irq_ID_t virq_get_irq_id(const enum virq_id irq_ID,
+				       unsigned int *channel_ID)
 {
 	irq_ID_t ID;
 

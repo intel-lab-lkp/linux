@@ -12,13 +12,8 @@
 
 #include "assert_support.h"
 
-void timed_ctrl_snd_commnd(
-    const timed_ctrl_ID_t			ID,
-    hrt_data				mask,
-    hrt_data				condition,
-    hrt_data				counter,
-    hrt_address				addr,
-    hrt_data				value)
+void timed_ctrl_snd_commnd(const timed_ctrl_ID_t ID, hrt_data mask, hrt_data condition,
+			   hrt_data counter, hrt_address addr, hrt_data value)
 {
 	OP___assert(ID == TIMED_CTRL0_ID);
 	OP___assert(TIMED_CTRL_BASE[ID] != (hrt_address)-1);
@@ -33,14 +28,9 @@ void timed_ctrl_snd_commnd(
 /* pqiao TODO: make sure the following commands get
 	correct BASE address both for csim and android */
 
-void timed_ctrl_snd_sp_commnd(
-    const timed_ctrl_ID_t			ID,
-    hrt_data				mask,
-    hrt_data				condition,
-    hrt_data				counter,
-    const sp_ID_t				SP_ID,
-    hrt_address				offset,
-    hrt_data				value)
+void timed_ctrl_snd_sp_commnd(const timed_ctrl_ID_t ID, hrt_data mask,
+			      hrt_data condition, hrt_data counter, const sp_ID_t SP_ID,
+			      hrt_address offset, hrt_data value)
 {
 	OP___assert(SP_ID < N_SP_ID);
 	OP___assert(SP_DMEM_BASE[SP_ID] != (hrt_address)-1);
@@ -49,14 +39,9 @@ void timed_ctrl_snd_sp_commnd(
 			      SP_DMEM_BASE[SP_ID] + offset, value);
 }
 
-void timed_ctrl_snd_gpio_commnd(
-    const timed_ctrl_ID_t			ID,
-    hrt_data				mask,
-    hrt_data				condition,
-    hrt_data				counter,
-    const gpio_ID_t				GPIO_ID,
-    hrt_address				offset,
-    hrt_data				value)
+void timed_ctrl_snd_gpio_commnd(const timed_ctrl_ID_t ID, hrt_data mask,
+				hrt_data condition, hrt_data counter, const gpio_ID_t GPIO_ID,
+				hrt_address offset, hrt_data value)
 {
 	OP___assert(GPIO_ID < N_GPIO_ID);
 	OP___assert(GPIO_BASE[GPIO_ID] != (hrt_address)-1);
