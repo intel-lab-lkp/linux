@@ -404,6 +404,7 @@ enum wq_flags {
 	 */
 	WQ_POWER_EFFICIENT	= 1 << 7,
 	WQ_PERCPU		= 1 << 8, /* bound to a specific cpu */
+	WQ_PREFER_PERCPU	= 1 << 9, /* prefer local cpu, but it doesn't require it */
 
 	__WQ_DESTROYING		= 1 << 15, /* internal: workqueue is destroying */
 	__WQ_DRAINING		= 1 << 16, /* internal: workqueue is draining */
@@ -460,6 +461,9 @@ enum wq_consts {
  *
  * system_bh[_highpri]_wq are convenience interface to softirq. BH work items
  * are executed in the queueing CPU's BH context in the queueing order.
+ *
+ * system_prefer_percpu_wq is for work items which prefer to be local but
+ * doesn't require it
  */
 extern struct workqueue_struct *system_wq; /* use system_percpu_wq, this will be removed */
 extern struct workqueue_struct *system_percpu_wq;
@@ -473,6 +477,7 @@ extern struct workqueue_struct *system_freezable_power_efficient_wq;
 extern struct workqueue_struct *system_bh_wq;
 extern struct workqueue_struct *system_bh_highpri_wq;
 extern struct workqueue_struct *system_dfl_long_wq;
+extern struct workqueue_struct *system_prefer_percpu_wq;
 
 void workqueue_softirq_action(bool highpri);
 void workqueue_softirq_dead(unsigned int cpu);
@@ -875,6 +880,8 @@ extern void __warn_flushing_systemwide_wq(void)
 	     _wq == system_freezable_wq) ||				\
 	    (__builtin_constant_p(_wq == system_power_efficient_wq) &&	\
 	     _wq == system_power_efficient_wq) ||			\
+	    (__builtin_constant_p(_wq == system_prefer_percpu_wq) &&	\
+	     _wq == system_prefer_percpu_wq) ||				\
 	    (__builtin_constant_p(_wq == system_freezable_power_efficient_wq) && \
 	     _wq == system_freezable_power_efficient_wq))		\
 		__warn_flushing_systemwide_wq();			\

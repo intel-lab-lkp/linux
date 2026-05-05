@@ -545,6 +545,8 @@ struct workqueue_struct *system_bh_highpri_wq;
 EXPORT_SYMBOL_GPL(system_bh_highpri_wq);
 struct workqueue_struct *system_dfl_long_wq __ro_after_init;
 EXPORT_SYMBOL_GPL(system_dfl_long_wq);
+struct workqueue_struct *system_prefer_percpu_wq __ro_after_init;
+EXPORT_SYMBOL_GPL(system_prefer_percpu_wq);
 
 static int worker_thread(void *__worker);
 static void workqueue_sysfs_unregister(struct workqueue_struct *wq);
@@ -8054,11 +8056,13 @@ void __init workqueue_init_early(void)
 	system_bh_highpri_wq = alloc_workqueue("events_bh_highpri",
 					       WQ_BH | WQ_HIGHPRI | WQ_PERCPU, 0);
 	system_dfl_long_wq = alloc_workqueue("events_dfl_long", WQ_UNBOUND, WQ_MAX_ACTIVE);
+	system_prefer_percpu_wq = alloc_workqueue("events_prefer_percpu", WQ_PREFER_PERCPU, 0);
 	BUG_ON(!system_wq || !system_percpu_wq|| !system_highpri_wq || !system_long_wq ||
 	       !system_unbound_wq || !system_freezable_wq || !system_dfl_wq ||
 	       !system_power_efficient_wq ||
 	       !system_freezable_power_efficient_wq ||
-	       !system_bh_wq || !system_bh_highpri_wq || !system_dfl_long_wq);
+	       !system_bh_wq || !system_bh_highpri_wq || !system_dfl_long_wq ||
+	       !system_prefer_percpu_wq);
 }
 
 static void __init wq_cpu_intensive_thresh_init(void)
