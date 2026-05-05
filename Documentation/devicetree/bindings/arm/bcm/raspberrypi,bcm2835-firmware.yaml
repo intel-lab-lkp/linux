@@ -22,7 +22,9 @@ select:
 properties:
   compatible:
     items:
-      - const: raspberrypi,bcm2835-firmware
+      - enum:
+        - raspberrypi,bcm2712-firmware
+        - raspberrypi,bcm2835-firmware
       - const: simple-mfd
 
   mboxes:
