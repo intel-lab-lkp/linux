@@ -1493,6 +1493,18 @@ int lmLogClose(struct super_block *sb)
 }
 
 
+static bool jfs_log_synclist_empty(struct jfs_log *log)
+{
+	unsigned long flags;
+	bool empty;
+
+	LOGSYNC_LOCK(log, flags);
+	empty = list_empty(&log->synclist);
+	LOGSYNC_UNLOCK(log, flags);
+
+	return empty;
+}
+
 /*
  * NAME:	jfs_flush_journal()
  *
@@ -1573,40 +1585,47 @@ void jfs_flush_journal(struct jfs_log *log, int wait)
 	 * If there was recent activity, we may need to wait
 	 * for the lazycommit thread to catch up
 	 */
-	if ((!list_empty(&log->cqueue)) || !list_empty(&log->synclist)) {
+	if ((!list_empty(&log->cqueue)) || !jfs_log_synclist_empty(log)) {
 		for (i = 0; i < 200; i++) {	/* Too much? */
 			msleep(250);
 			write_special_inodes(log, filemap_fdatawrite);
 			if (list_empty(&log->cqueue) &&
-			    list_empty(&log->synclist))
+			    jfs_log_synclist_empty(log))
 				break;
 		}
 	}
 	assert(list_empty(&log->cqueue));
 
 #ifdef CONFIG_JFS_DEBUG
-	if (!list_empty(&log->synclist)) {
+	{
+		unsigned long flags;
 		struct logsyncblk *lp;
 
-		printk(KERN_ERR "jfs_flush_journal: synclist not empty\n");
-		list_for_each_entry(lp, &log->synclist, synclist) {
-			if (lp->xflag & COMMIT_PAGE) {
-				struct metapage *mp = (struct metapage *)lp;
-				print_hex_dump(KERN_ERR, "metapage: ",
-					       DUMP_PREFIX_ADDRESS, 16, 4,
-					       mp, sizeof(struct metapage), 0);
-				print_hex_dump(KERN_ERR, "page: ",
-					       DUMP_PREFIX_ADDRESS, 16,
-					       sizeof(long), mp->folio,
-					       sizeof(struct page), 0);
-			} else
-				print_hex_dump(KERN_ERR, "tblock:",
-					       DUMP_PREFIX_ADDRESS, 16, 4,
-					       lp, sizeof(struct tblock), 0);
+		LOGSYNC_LOCK(log, flags);
+		if (!list_empty(&log->synclist)) {
+			pr_err("%s: synclist not empty\n", __func__);
+			list_for_each_entry(lp, &log->synclist, synclist) {
+				if (lp->xflag & COMMIT_PAGE) {
+					struct metapage *mp = (struct metapage *)lp;
+
+					print_hex_dump(KERN_ERR, "metapage: ",
+						       DUMP_PREFIX_ADDRESS, 16, 4,
+						       mp, sizeof(struct metapage), 0);
+					print_hex_dump(KERN_ERR, "page: ",
+						       DUMP_PREFIX_ADDRESS, 16,
+						       sizeof(long), mp->folio,
+						       sizeof(struct page), 0);
+				} else {
+					print_hex_dump(KERN_ERR, "tblock:",
+						       DUMP_PREFIX_ADDRESS, 16, 4,
+						       lp, sizeof(struct tblock), 0);
+				}
+			}
 		}
+		LOGSYNC_UNLOCK(log, flags);
 	}
 #else
-	WARN_ON(!list_empty(&log->synclist));
+	WARN_ON(!jfs_log_synclist_empty(log));
 #endif
 	clear_bit(log_FLUSH, &log->flag);
 }
