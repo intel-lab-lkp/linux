@@ -915,6 +915,7 @@ xfs_setattr_size(
 	struct xfs_mount	*mp = ip->i_mount;
 	struct inode		*inode = VFS_I(ip);
 	xfs_off_t		oldsize, newsize;
+	xfs_fsize_t		ondisk_size;
 	struct xfs_trans	*tp;
 	int			error;
 	uint			lock_flags = 0;
@@ -1024,6 +1025,9 @@ xfs_setattr_size(
 	 * guaranteed not to write stale data past the new EOF on truncate down.
 	 */
 	truncate_setsize(inode, newsize);
+	xfs_ilock(ip, XFS_ILOCK_SHARED);
+	ondisk_size = ip->i_disk_size;
+	xfs_iunlock(ip, XFS_ILOCK_SHARED);
 
 	/*
 	 * We are going to log the inode size change in this transaction so
@@ -1034,9 +1038,9 @@ xfs_setattr_size(
 	 * otherwise those blocks may not be zeroed after a crash.
 	 */
 	if (did_zeroing ||
-	    (newsize > ip->i_disk_size && oldsize != ip->i_disk_size)) {
+	    (newsize > ondisk_size && oldsize != ondisk_size)) {
 		error = filemap_write_and_wait_range(VFS_I(ip)->i_mapping,
-						ip->i_disk_size, newsize - 1);
+						ondisk_size, newsize - 1);
 		if (error)
 			return error;
 	}
