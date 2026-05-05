@@ -171,6 +171,16 @@ static __always_inline bool in_softirq_really(void)
 	return in_serving_softirq() && !in_hardirq() && !in_nmi();
 }
 
+static __always_inline bool in_task_really(void)
+{
+	/* Caller won't call this function if in_hardirq() || in_nmi(). */
+#ifdef CONFIG_PREEMPT_RT
+	return !in_serving_softirq();
+#else
+	return in_task();
+#endif
+}
+
 static notrace bool check_kcov_mode(enum kcov_mode needed_mode, struct task_struct *t)
 {
 	unsigned int mode;
@@ -869,9 +879,10 @@ void kcov_remote_start(u64 handle)
 	int sequence;
 	unsigned long flags;
 
-	if (WARN_ON(!kcov_check_handle(handle, true, true, true)))
+	/* Don't use in_task() in order to allow consistent checks in RT kernels. */
+	if (in_hardirq() || in_nmi())
 		return;
-	if (!in_task() && !in_softirq_really())
+	if (WARN_ON(!kcov_check_handle(handle, true, true, true)))
 		return;
 
 	local_lock_irqsave(&kcov_percpu_data.lock, flags);
@@ -903,7 +914,7 @@ void kcov_remote_start(u64 handle)
 		return;
 	}
 	kcov_debug("handle = %llx, context: %s\n", handle,
-			in_task() ? "task" : "softirq");
+		   in_task_really() ? "task" : "softirq");
 	kcov = remote->kcov;
 	/* Put in kcov_remote_stop(). */
 	kcov_get(kcov);
@@ -915,7 +926,7 @@ void kcov_remote_start(u64 handle)
 	 */
 	mode = context_unsafe(kcov->mode);
 	sequence = kcov->sequence;
-	if (in_task()) {
+	if (in_task_really()) {
 		size = kcov->remote_size;
 		area = kcov_remote_area_get(size);
 	} else {
@@ -924,7 +935,7 @@ void kcov_remote_start(u64 handle)
 	}
 	spin_unlock(&kcov_remote_lock);
 
-	/* Can only happen when in_task(). */
+	/* Can only happen when in_task_really(). */
 	if (!area) {
 		local_unlock_irqrestore(&kcov_percpu_data.lock, flags);
 		area = vmalloc(size * sizeof(unsigned long));
@@ -1024,7 +1035,8 @@ void kcov_remote_stop(void)
 	int sequence;
 	unsigned long flags;
 
-	if (!in_task() && !in_softirq_really())
+	/* Don't use in_task() in order to allow consistent checks in RT kernels. */
+	if (in_hardirq() || in_nmi())
 		return;
 
 	local_lock_irqsave(&kcov_percpu_data.lock, flags);
@@ -1069,7 +1081,7 @@ void kcov_remote_stop(void)
 		kcov_move_area(kcov->mode, kcov->area, kcov->size, area);
 	spin_unlock(&kcov->lock);
 
-	if (in_task()) {
+	if (in_task_really()) {
 		spin_lock(&kcov_remote_lock);
 		kcov_remote_area_put(area, size);
 		spin_unlock(&kcov_remote_lock);
