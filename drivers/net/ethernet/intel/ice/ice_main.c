@@ -3503,9 +3503,8 @@ void ice_set_netdev_features(struct net_device *netdev)
 			NETIF_F_RXHASH;
 
 	csumo_features = NETIF_F_RXCSUM	  |
-			 NETIF_F_IP_CSUM  |
 			 NETIF_F_SCTP_CRC |
-			 NETIF_F_IPV6_CSUM;
+			 NETIF_F_HW_CSUM;
 
 	vlano_features = NETIF_F_HW_VLAN_CTAG_FILTER |
 			 NETIF_F_HW_VLAN_CTAG_TX     |
@@ -3566,12 +3565,6 @@ void ice_set_netdev_features(struct net_device *netdev)
 
 	/* Allow core to manage IRQs affinity */
 	netif_set_affinity_auto(netdev);
-
-	/* Mutual exclusivity for TSO and GCS is enforced by the set features
-	 * ndo callback.
-	 */
-	if (ice_is_feature_supported(pf, ICE_F_GCS))
-		netdev->hw_features |= NETIF_F_HW_CSUM;
 
 	netif_set_tso_max_size(netdev, ICE_MAX_TSO_SIZE);
 }
@@ -6490,18 +6483,6 @@ ice_set_features(struct net_device *netdev, netdev_features_t features)
 
 	if (changed & NETIF_F_LOOPBACK)
 		ret = ice_set_loopback(vsi, !!(features & NETIF_F_LOOPBACK));
-
-	/* Due to E830 hardware limitations, TSO (NETIF_F_ALL_TSO) with GCS
-	 * (NETIF_F_HW_CSUM) is not supported.
-	 */
-	if (ice_is_feature_supported(pf, ICE_F_GCS) &&
-	    ((features & NETIF_F_HW_CSUM) && (features & NETIF_F_ALL_TSO))) {
-		if (netdev->features & NETIF_F_HW_CSUM)
-			dev_err(ice_pf_to_dev(pf), "To enable TSO, you must first disable HW checksum.\n");
-		else
-			dev_err(ice_pf_to_dev(pf), "To enable HW checksum, you must first disable TSO.\n");
-		return -EIO;
-	}
 
 	return ret;
 }
