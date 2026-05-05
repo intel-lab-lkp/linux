@@ -122,6 +122,7 @@ struct stmmac_dma_cfg {
 	bool eame;
 	/* multi_msi_en: stmmac core internal */
 	bool multi_msi_en;
+	bool multi_irq_en;
 	/* atds: stmmac core internal */
 	bool atds;
 };
@@ -202,6 +203,7 @@ enum dwmac_core_type {
 #define STMMAC_FLAG_SERDES_UP_AFTER_PHY_LINKUP	BIT(5)
 #define STMMAC_FLAG_VLAN_FAIL_Q_EN		BIT(6)
 #define STMMAC_FLAG_MULTI_MSI_EN		BIT(7)
+#define STMMAC_FLAG_MULTI_IRQ_EN		BIT(17)
 #define STMMAC_FLAG_EXT_SNAPSHOT_EN		BIT(8)
 #define STMMAC_FLAG_INT_SNAPSHOT_EN		BIT(9)
 #define STMMAC_FLAG_EEE_DISABLE			BIT(10)
