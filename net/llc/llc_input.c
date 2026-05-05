@@ -1,8 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * llc_input.c - Minimal input path for LLC
  *
  * Copyright (c) 1997 by Procom Technology, Inc.
- * 		 2001-2003 by Arnaldo Carvalho de Melo <acme@conectiva.com.br>
+ * 2001-2003 by Arnaldo Carvalho de Melo <acme@conectiva.com.br>
  *
  * This program can be redistributed or modified under the terms of the
  * GNU General Public License as published by the Free Software Foundation.
@@ -19,11 +20,6 @@
 #include <net/llc_pdu.h>
 #include <net/llc_sap.h>
 
-#if 0
-#define dprintk(args...) printk(KERN_DEBUG args)
-#else
-#define dprintk(args...)
-#endif
 
 /*
  * Packet handler for the station, registerable because in the minimal
@@ -46,6 +42,7 @@ void llc_add_pack(int type, void (*handler)(struct llc_sap *sap,
 	if (type == LLC_DEST_SAP || type == LLC_DEST_CONN)
 		llc_type_handlers[type - 1] = handler;
 }
+EXPORT_SYMBOL(llc_add_pack);
 
 void llc_remove_pack(int type)
 {
@@ -53,11 +50,17 @@ void llc_remove_pack(int type)
 		llc_type_handlers[type - 1] = NULL;
 	synchronize_net();
 }
+EXPORT_SYMBOL(llc_remove_pack);
 
 void llc_set_station_handler(void (*handler)(struct sk_buff *skb))
 {
 	/* Ensure initialisation is complete before it's called */
 	if (handler)
+    /*
+     * This barrier ensures that any previous memory operations
+     * are visible before the handler is executed.
+     * Pairs with the smp_wmb() in [indiquez ici la fonction ou le fichier].
+     */
 		smp_wmb();
 
 	llc_station_handler = handler;
@@ -65,6 +68,7 @@ void llc_set_station_handler(void (*handler)(struct sk_buff *skb))
 	if (!handler)
 		synchronize_net();
 }
+EXPORT_SYMBOL(llc_set_station_handler);
 
 /**
  *	llc_pdu_type - returns which LLC component must handle for PDU
@@ -72,7 +76,7 @@ void llc_set_station_handler(void (*handler)(struct sk_buff *skb))
  *
  *	This function returns which LLC component must handle this PDU.
  */
-static __inline__ int llc_pdu_type(struct sk_buff *skb)
+static inline int llc_pdu_type(struct sk_buff *skb)
 {
 	int type = LLC_DEST_CONN; /* I-PDU or S-PDU type */
 	struct llc_pdu_sn *pdu = llc_pdu_sn_hdr(skb);
@@ -164,8 +168,8 @@ int llc_rcv(struct sk_buff *skb, struct net_device *dev,
 	struct llc_sap *sap;
 	struct llc_pdu_sn *pdu;
 	int dest;
-	int (*rcv)(struct sk_buff *, struct net_device *,
-		   struct packet_type *, struct net_device *);
+	int (*rcv)(struct sk_buff *skb, struct net_device *dev,
+		   struct packet_type *pt, struct net_device *orig_dev);
 	void (*sta_handler)(struct sk_buff *skb);
 	void (*sap_handler)(struct llc_sap *sap, struct sk_buff *skb);
 
@@ -206,6 +210,7 @@ int llc_rcv(struct sk_buff *skb, struct net_device *dev,
 	} else {
 		if (rcv) {
 			struct sk_buff *cskb = skb_clone(skb, GFP_ATOMIC);
+
 			if (cskb)
 				rcv(cskb, dev, pt, orig_dev);
 		}
@@ -217,6 +222,7 @@ out:
 drop:
 	kfree_skb(skb);
 	goto out;
+
 handle_station:
 	sta_handler = READ_ONCE(llc_station_handler);
 	if (!sta_handler)
@@ -225,6 +231,3 @@ handle_station:
 	goto out;
 }
 
-EXPORT_SYMBOL(llc_add_pack);
-EXPORT_SYMBOL(llc_remove_pack);
-EXPORT_SYMBOL(llc_set_station_handler);
