@@ -28,16 +28,20 @@ static struct test_case test_cases[] = {
 	{ .kvmclock_base = 0, .realtime_offset = 180 * NSEC_PER_SEC },
 };
 
-#define GUEST_SYNC_CLOCK(__stage, __val)			\
-		GUEST_SYNC_ARGS(__stage, __val, 0, 0, 0)
+#define GUEST_SYNC_CLOCK(__stage, __clock, __steal)		\
+		GUEST_SYNC_ARGS(__stage, __clock, __steal, 0, 0)
 
-static void guest_main(gpa_t pvti_pa, struct pvclock_vcpu_time_info *pvti)
+static void guest_main(gpa_t pvti_pa, struct pvclock_vcpu_time_info *pvti,
+			gpa_t st_pa, struct kvm_steal_time *st)
 {
 	int i;
 
 	wrmsr(MSR_KVM_SYSTEM_TIME_NEW, pvti_pa | KVM_MSR_ENABLED);
+	wrmsr(MSR_KVM_STEAL_TIME, st_pa | KVM_MSR_ENABLED);
+
 	for (i = 0; i < ARRAY_SIZE(test_cases); i++)
-		GUEST_SYNC_CLOCK(i, __pvclock_read_cycles(pvti, rdtsc()));
+		GUEST_SYNC_CLOCK(i, __pvclock_read_cycles(pvti, rdtsc()),
+				 READ_ONCE(st->steal));
 }
 
 #define EXPECTED_FLAGS (KVM_CLOCK_REALTIME | KVM_CLOCK_HOST_TSC)
@@ -50,11 +54,13 @@ static inline void assert_flags(struct kvm_clock_data *data)
 }
 
 static void handle_sync(struct ucall *uc, struct kvm_clock_data *start,
-			struct kvm_clock_data *end)
+			struct kvm_clock_data *end,
+			struct test_case *test_case, u64 *last_steal)
 {
-	u64 obs, exp_lo, exp_hi;
+	u64 obs, exp_lo, exp_hi, obs_steal;
 
 	obs = uc->args[2];
+	obs_steal = uc->args[3];
 	exp_lo = start->clock;
 	exp_hi = end->clock;
 
@@ -67,6 +73,18 @@ static void handle_sync(struct ucall *uc, struct kvm_clock_data *start,
 
 	pr_info("kvm-clock value: %"PRIu64" expected range [%"PRIu64", %"PRIu64"]\n",
 		obs, exp_lo, exp_hi);
+
+	if (test_case->realtime_offset < 0) {
+		u64 min_downtime = -test_case->realtime_offset;
+
+		TEST_ASSERT(obs_steal >= *last_steal &&
+			    obs_steal - *last_steal >= min_downtime,
+			    "unexpected steal values: obs=%"PRIu64
+			    " last=%"PRIu64" min_downtime=%"PRIu64,
+			    obs_steal, *last_steal, min_downtime);
+	}
+
+	*last_steal = obs_steal;
 }
 
 static void handle_abort(struct ucall *uc)
@@ -106,6 +124,7 @@ static void enter_guest(struct kvm_vcpu *vcpu)
 {
 	struct kvm_clock_data start, end;
 	struct kvm_vm *vm = vcpu->vm;
+	u64 last_steal = 0;
 	struct ucall uc;
 	int i;
 
@@ -121,7 +140,8 @@ static void enter_guest(struct kvm_vcpu *vcpu)
 
 		switch (get_ucall(vcpu, &uc)) {
 		case UCALL_SYNC:
-			handle_sync(&uc, &start, &end);
+			handle_sync(&uc, &start, &end,
+				    &test_cases[i], &last_steal);
 			break;
 		case UCALL_ABORT:
 			handle_abort(&uc);
@@ -137,6 +157,8 @@ int main(void)
 	struct kvm_vcpu *vcpu;
 	gva_t pvti_gva;
 	gpa_t pvti_gpa;
+	gva_t st_gva;
+	gpa_t st_gpa;
 	struct kvm_vm *vm;
 	int flags;
 
@@ -144,12 +166,16 @@ int main(void)
 	TEST_REQUIRE(flags & KVM_CLOCK_REALTIME);
 
 	TEST_REQUIRE(sys_clocksource_is_based_on_tsc());
+	TEST_REQUIRE(kvm_cpu_has(X86_FEATURE_KVM_STEAL_TIME));
 
 	vm = vm_create_with_one_vcpu(&vcpu, guest_main);
 
 	pvti_gva = vm_alloc(vm, getpagesize(), 0x10000);
 	pvti_gpa = addr_gva2gpa(vm, pvti_gva);
-	vcpu_args_set(vcpu, 2, pvti_gpa, pvti_gva);
+	st_gva = vm_alloc(vm, getpagesize(), 0x20000);
+	st_gpa = addr_gva2gpa(vm, st_gva);
+	memset(addr_gva2hva(vm, st_gva), 0, getpagesize());
+	vcpu_args_set(vcpu, 4, pvti_gpa, pvti_gva, st_gpa, st_gva);
 
 	enter_guest(vcpu);
 	kvm_vm_free(vm);
