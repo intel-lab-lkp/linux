@@ -1,0 +1,146 @@
+#!/usr/bin/env bpftrace
+/*
+ * svcrdma-wq-lag.bt
+ *
+ * Test the "svcrdma_wq is the bottleneck" theory.
+ *
+ * Background
+ * ----------
+ * An earlier commit from Ben Coddington ("svcrdma: cap per-xprt
+ * sc_send_ctxts free list at sc_max_requests") added an atomic depth
+ * counter on the sc_send_ctxts llist and a cap check inside
+ * svc_rdma_send_ctxt_release(). The svcrdma_send_ctxt_capped
+ * tracepoint was supposed to fire whenever the cache was about to
+ * exceed sc_max_requests.
+ *
+ * Customer test on hot workload: tracepoint fires zero times during
+ * the test, then floods the moment the test is Ctrl-C'd. Memory
+ * keeps growing during the test as before.
+ *
+ * Hypothesis
+ * ----------
+ * svcrdma_wq is alloc_workqueue("svcrdma", WQ_UNBOUND, 0). WQ_UNBOUND
+ * has bounded concurrency but UNBOUNDED queue depth. Under load,
+ * svc_rdma_wc_send (Send completion ISR) calls svc_rdma_send_ctxt_put,
+ * which does INIT_WORK + queue_work and returns in microseconds. The
+ * worker, svc_rdma_send_ctxt_put_async -> svc_rdma_send_ctxt_release,
+ * has to do ib_dma_unmap_page per SGE plus release_pages plus
+ * svc_rdma_reply_chunk_release -- a much slower operation.
+ *
+ * If queue rate >> worker rate, work items pile up. Each pinned
+ * sc_work is embedded in its ctxt, so ctxts can't be released. The
+ * llist stays empty (depth ~ 0), and the cap at _release never
+ * fires. _get keeps seeing an empty llist and calling _alloc for new
+ * ctxts. Memory grows.
+ *
+ * After Ctrl-C: completions stop, workqueue drains, all queued
+ * releases run rapid-fire. NOW the llist depth shoots past
+ * sc_max_requests and the cap fires for each subsequent release --
+ * the post-test flood.
+ *
+ * What this script measures
+ * -------------------------
+ * Per 5-second window, three rates:
+ *
+ *   @wc_send_rate    svc_rdma_wc_send invocations
+ *                    -- proxy for svcrdma_wq.queue_work() rate
+ *                    (each completion queues one put)
+ *
+ *   @release_rate    svc_rdma_send_ctxt_put_async invocations
+ *                    -- actual workqueue dispatch rate
+ *
+ *   @get_rate        svc_rdma_send_ctxt_get invocations
+ *                    -- demand pressure on the cache
+ *
+ *   @capped_rate     svcrdma_send_ctxt_capped tracepoint count
+ *                    -- where Ben's cap actually fires
+ *
+ * Reading the result
+ * ------------------
+ *   If @wc_send_rate >> @release_rate during the test, the workqueue
+ *   is backed up -- queue items are accumulating, which means ctxts
+ *   are pinned in workqueue items. Hypothesis confirmed.
+ *
+ *   If those two rates are comparable, the workqueue is keeping up
+ *   and the bottleneck is somewhere else.
+ *
+ *   @capped_rate ~ 0 during the test, then @release_rate >>
+ *   @wc_send_rate after Ctrl-C (workqueue draining), then
+ *   @capped_rate spikes -- exactly the user's observed pattern.
+ *
+ *   @get_rate gives the workload's natural cadence; if @get_rate >>
+ *   @release_rate sustained, allocations are accumulating regardless
+ *   of where in the pipeline they're stuck.
+ *
+ * Probes used
+ * -----------
+ *   kprobe:svc_rdma_wc_send                  function pointer call;
+ *                                            reliably traceable
+ *   kprobe:svc_rdma_send_ctxt_put_async      workqueue function
+ *                                            pointer; reliably
+ *                                            traceable
+ *   kprobe:svc_rdma_send_ctxt_get            external callers force
+ *                                            it out-of-line;
+ *                                            reliably traceable
+ *   tracepoint:rpcrdma:svcrdma_send_ctxt_capped
+ *                                            from Ben's patch
+ *
+ * If the tracepoint fails to attach (rpcrdma module's tracepoint
+ * table not visible to bpftrace at attach time), comment out that
+ * probe -- the rest of the script still answers the main question.
+ *
+ * Usage
+ * -----
+ *   sudo bpftrace svcrdma-wq-lag.bt
+ *   (Ctrl-C to exit; END block prints a final snapshot.)
+ *
+ * Run for 60-120s under the load that previously OOM'd. Watch the
+ * 5-second windows; the gap between @wc_send_rate and @release_rate
+ * is the smoking gun.
+ */
+
+config = {
+	max_map_keys = 4096;
+}
+
+BEGIN {
+	printf("svcrdma_wq lag diagnostic. Per-5s rates.\n");
+	printf("Watch for @wc_send_rate >> @release_rate during the test\n");
+	printf("(workqueue backed up -> ctxts pinned in queue items ->\n");
+	printf(" Ben's cap can't see them).\n");
+	printf("Ctrl-C to exit.\n\n");
+}
+
+kprobe:svc_rdma_wc_send {
+	@wc_send_window += 1;
+}
+
+kprobe:svc_rdma_send_ctxt_put_async {
+	@release_window += 1;
+}
+
+kprobe:svc_rdma_send_ctxt_get {
+	@get_window += 1;
+}
+
+tracepoint:rpcrdma:svcrdma_send_ctxt_capped {
+	@capped_window += 1;
+}
+
+interval:s:5 {
+	time("\n%H:%M:%S  ");
+	printf("wc_send=%-8lld release=%-8lld get=%-8lld capped=%-8lld",
+	       @wc_send_window, @release_window,
+	       @get_window, @capped_window);
+	if (@release_window > 0) {
+		printf("  queue/release ratio=%lld",
+		       @wc_send_window / @release_window);
+	}
+	printf("\n");
+	clear(@wc_send_window);
+	clear(@release_window);
+	clear(@get_window);
+	clear(@capped_window);
+}
+
+END { }
