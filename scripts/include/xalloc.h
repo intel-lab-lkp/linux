@@ -3,6 +3,7 @@
 #ifndef XALLOC_H
 #define XALLOC_H
 
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -49,5 +50,33 @@ static inline char *xstrndup(const char *s, size_t n)
 		exit(1);
 	return p;
 }
+
+static inline void *xreallocarray(void *oldp, size_t n, size_t size)
+{
+	void *p;
+
+	p = reallocarray(oldp, n, size);
+	if (!p)
+		exit(1);
+
+	return p;
+}
+
+#ifdef _GNU_SOURCE
+static inline char *xasprintf(const char *fmt, ...)
+{
+	va_list ap;
+	char *strp;
+	int ret;
+
+	va_start(ap, fmt);
+	ret = vasprintf(&strp, fmt, ap);
+	va_end(ap);
+	if (ret == -1)
+		exit(1);
+
+	return strp;
+}
+#endif /* _GNU_SOURCE */
 
 #endif /* XALLOC_H */

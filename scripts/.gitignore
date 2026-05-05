@@ -5,6 +5,7 @@
 /insert-sys-cert
 /kallsyms
 /module.lds
+/modules-merkle-tree
 /recordmcount
 /rustdoc_test_builder
 /rustdoc_test_gen

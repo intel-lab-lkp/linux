@@ -79,6 +79,12 @@ quiet_cmd_install = INSTALL $@
 # as the options to the strip command.
 ifdef INSTALL_MOD_STRIP
 
+ifdef CONFIG_MODULE_HASHES
+ifeq ($(KBUILD_EXTMOD),)
+$(error CONFIG_MODULE_HASHES and INSTALL_MOD_STRIP are mutually exclusive)
+endif
+endif
+
 ifeq ($(INSTALL_MOD_STRIP),1)
 strip-option := --strip-debug
 else
@@ -114,6 +120,11 @@ ifeq ($(sign-only),)
 ifndef CONFIG_MODULE_SIG_ALL
 quiet_cmd_sign :=
       cmd_sign := :
+endif
+
+ifeq ($(KBUILD_EXTMOD)|$(CONFIG_MODULE_HASHES),|y)
+quiet_cmd_sign = MERKLE [M] $@
+      cmd_sign = cat $(objtree)/$*.merkle >> $@
 endif
 
 # Create necessary directories

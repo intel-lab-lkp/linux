@@ -16,6 +16,7 @@
 
 enum module_signature_type {
 	MODULE_SIGNATURE_TYPE_PKCS7 = 2,	/* Signature in PKCS#7 message */
+	MODULE_SIGNATURE_TYPE_MERKLE = 3,	/* Merkle proof for modules, opaque structure */
 };
 
 /*

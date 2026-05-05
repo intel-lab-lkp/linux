@@ -78,6 +78,33 @@ ifdef CONFIG_BUILDTIME_TABLE_SORT
 vmlinux.unstripped: scripts/sorttable
 endif
 
+ifdef CONFIG_MODULE_HASHES
+targets += .tmp_module_hashes.c
+
+modules.order: vmlinux.unstripped FORCE
+	$(Q)echo "  MAKE    modules"
+	$(Q)$(MAKE) -f $(srctree)/Makefile modules
+
+quiet_cmd_modules_merkle_tree = MERKLE  $@
+      cmd_modules_merkle_tree = $< $@ .ko
+
+targets += .tmp_module_hashes.c
+.tmp_module_hashes.c: $(objtree)/scripts/modules-merkle-tree modules.order FORCE
+	$(call if_changed,modules_merkle_tree)
+
+targets += .tmp_module_hashes.o
+.tmp_module_hashes.o: .tmp_module_hashes.c FORCE
+
+quiet_cmd_modules_merkle_tree_root = GEN     $@
+      cmd_modules_merkle_tree_root = $(OBJCOPY) --dump-section .module_hashes=$@ $<
+
+targets += .tmp_module_hashes.bin
+.tmp_module_hashes.bin: .tmp_module_hashes.o FORCE
+	$(call if_changed,modules_merkle_tree_root)
+
+vmlinux: .tmp_module_hashes.bin
+endif
+
 # vmlinux
 # ---------------------------------------------------------------------------
 
@@ -94,6 +121,11 @@ remove-symbols := -w --strip-unneeded-symbol='__mod_device_table__*'
 quiet_cmd_objcopy_vmlinux = OBJCOPY $@
       cmd_objcopy_vmlinux = $(OBJCOPY) $(patsubst %,--set-section-flags %=noload,$(remove-section-y)) $< $@; \
                             $(OBJCOPY) $(addprefix --remove-section=,$(remove-section-y)) $(remove-symbols) $@
+
+ifdef CONFIG_MODULE_HASHES
+# Patch module hashes root into vmlinux after modules have been built.
+      cmd_objcopy_vmlinux += ; $(OBJCOPY) --update-section .module_hashes=.tmp_module_hashes.bin $@
+endif
 
 targets += vmlinux
 vmlinux: vmlinux.unstripped FORCE

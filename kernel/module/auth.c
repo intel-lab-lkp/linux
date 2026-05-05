@@ -42,6 +42,9 @@ static __always_inline bool mod_sig_type_valid(enum module_signature_type id_typ
 	if (id_type == MODULE_SIGNATURE_TYPE_PKCS7 && IS_ENABLED(CONFIG_MODULE_SIG))
 		return true;
 
+	if (id_type == MODULE_SIGNATURE_TYPE_MERKLE && IS_ENABLED(CONFIG_MODULE_HASHES))
+		return true;
+
 	return false;
 }
 
@@ -71,6 +74,9 @@ static int mod_verify_sig(const void *mod, struct load_info *info)
 
 	if (ms.id_type == MODULE_SIGNATURE_TYPE_PKCS7 && IS_ENABLED(CONFIG_MODULE_SIG))
 		return module_sig_check(mod, modlen, mod + modlen, sig_len);
+
+	if (ms.id_type == MODULE_SIGNATURE_TYPE_MERKLE && IS_ENABLED(CONFIG_MODULE_HASHES))
+		return module_hash_check(mod, modlen, mod + modlen, sig_len);
 
 	return 0;
 }

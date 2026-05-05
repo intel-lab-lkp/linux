@@ -103,7 +103,7 @@ vmlinux_link()
 	${ld} ${ldflags} -o ${output}					\
 		${wl}--whole-archive ${objs} ${wl}--no-whole-archive	\
 		${wl}--start-group ${libs} ${wl}--end-group		\
-		${kallsymso} ${btf_vmlinux_bin_o} ${arch_vmlinux_o} ${ldlibs}
+		${kallsymso} ${btf_vmlinux_bin_o} ${module_hashes_o} ${arch_vmlinux_o} ${ldlibs}
 }
 
 # Create ${2}.o file with all symbols from the ${1} object file
@@ -183,6 +183,7 @@ fi
 btf_vmlinux_bin_o=
 btfids_vmlinux=
 kallsymso=
+module_hashes_o=
 strip_debug=
 generate_map=
 

@@ -508,6 +508,8 @@
 									\
 	PRINTK_INDEX							\
 									\
+	MODULE_HASHES							\
+									\
 	/* Kernel symbol table */					\
 	__ksymtab         : AT(ADDR(__ksymtab) - LOAD_OFFSET) {		\
 		__start___ksymtab = .;					\
@@ -911,6 +913,15 @@
 	}
 #else
 #define PRINTK_INDEX
+#endif
+
+#ifdef CONFIG_MODULE_HASHES
+#define MODULE_HASHES							\
+	.module_hashes : AT(ADDR(.module_hashes) - LOAD_OFFSET) {	\
+		KEEP(*(SORT(.module_hashes)))				\
+	}
+#else
+#define MODULE_HASHES
 #endif
 
 /*

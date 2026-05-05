@@ -84,7 +84,10 @@ generate a different temporary key for each build, resulting in the
 modules being unreproducible.  However, including a signing key with
 your source would presumably defeat the purpose of signing modules.
 
-One approach to this is to divide up the build process so that the
+Instead ``CONFIG_MODULE_HASHES`` can be used to embed a static list
+of valid modules to load.
+
+Another approach to this is to divide up the build process so that the
 unreproducible parts can be treated as sources:
 
 1. Generate a persistent signing key.  Add the certificate for the key

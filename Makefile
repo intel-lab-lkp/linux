@@ -1650,7 +1650,9 @@ ifdef CONFIG_MODULES
 
 # By default, build modules as well
 
+ifndef CONFIG_MODULE_HASHES
 all: modules
+endif
 
 # When we're building modules with modversions, we need to consider
 # the built-in objects during the descend as well, in order to
@@ -1666,7 +1668,9 @@ endif
 # is an exception.
 ifdef CONFIG_DEBUG_INFO_BTF_MODULES
 KBUILD_BUILTIN := y
+ifndef CONFIG_MODULE_HASHES
 modules: vmlinux
+endif
 endif
 
 modules: modules_prepare
@@ -2068,7 +2072,7 @@ modules.order: $(build-dir)
 # KBUILD_MODPOST_NOFINAL can be set to skip the final link of modules.
 # This is solely useful to speed up test compiles.
 modules: modpost
-ifneq ($(KBUILD_MODPOST_NOFINAL),1)
+ifneq ($(CONFIG_MODULE_HASHES)|$(KBUILD_MODPOST_NOFINAL),|1)
 	$(Q)$(MAKE) -f $(srctree)/scripts/Makefile.modfinal
 endif
 
@@ -2162,6 +2166,7 @@ clean: $(clean-dirs)
 		-o -name '*.c.[012]*.*' \
 		-o -name '*.ll' \
 		-o -name '*.gcno' \
+		-o -name '*.merkle' \
 		\) -type f -print \
 		-o -name '.tmp_*' -print \
 		| xargs rm -rf

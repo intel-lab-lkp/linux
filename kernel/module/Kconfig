@@ -272,7 +272,7 @@ config MODULE_SIG
 	  inclusion into an initramfs that wants the module size reduced.
 
 config MODULE_AUTH
-	def_bool MODULE_SIG
+	def_bool MODULE_SIG || MODULE_HASHES
 
 config MODULE_SIG_FORCE
 	bool "Require modules to be validly signed"
@@ -291,7 +291,7 @@ config MODULE_SIG_ALL
 	  modules must be signed manually, using the scripts/sign-file tool.
 
 comment "Do not forget to sign required modules with scripts/sign-file"
-	depends on MODULE_SIG_FORCE && !MODULE_SIG_ALL
+	depends on MODULE_SIG_FORCE && !MODULE_SIG_ALL && !MODULE_HASHES
 
 choice
 	prompt "Hash algorithm to sign modules"
@@ -405,6 +405,23 @@ config MODULE_DECOMPRESS
 	  If unsure, say N.
 
 endif # MODULE_COMPRESS
+
+config MODULE_HASHES
+	bool "Hash-based module authentication"
+	depends on !MODULE_SIG_ALL
+	depends on !IMA_APPRAISE_MODSIG
+	select MODULE_SIG_FORMAT
+	select CRYPTO_LIB_SHA256
+	help
+	  Validate modules by their hashes.
+	  Only modules built together with the main kernel image can be
+	  validated that way.
+
+	  This is a reproducible-build compatible alternative to a build-time
+	  generated module keyring, as enabled by
+	  CONFIG_MODULE_SIG_KEY=certs/signing_key.pem.
+
+	  Also see the warning in MODULE_SIG about stripping modules.
 
 config MODULE_ALLOW_MISSING_NAMESPACE_IMPORTS
 	bool "Allow loading of modules with missing namespace imports"

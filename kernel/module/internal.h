@@ -336,6 +336,7 @@ void module_mark_ro_after_init(const Elf_Ehdr *hdr, Elf_Shdr *sechdrs,
 			       const char *secstrings);
 
 int module_sig_check(const void *mod, size_t mod_len, const void *sig, size_t sig_len);
+int module_hash_check(const void *mod, size_t mod_len, const void *sig, size_t sig_len);
 
 #ifdef CONFIG_MODULE_AUTH
 int module_auth_check(struct load_info *info, int flags);

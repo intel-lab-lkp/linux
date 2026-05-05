@@ -36,6 +36,7 @@
 *.lz4
 *.lzma
 *.lzo
+*.merkle
 *.mod
 *.mod.c
 *.o
