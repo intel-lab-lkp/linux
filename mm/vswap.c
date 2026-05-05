@@ -216,6 +216,62 @@ static DEFINE_PER_CPU(struct percpu_vswap_cluster, percpu_vswap_cluster) = {
 	.lock = INIT_LOCAL_LOCK(),
 };
 
+/*
+ * Per-CPU cache of the most recently used cluster during vswap_iter().
+ * This allows us to skip the xarray lookup if the same cluster is being
+ * iterated over again. We increment a reference to the cluster when it
+ * is cached here to keep the cluster alive.
+ */
+struct percpu_vswap_iter_cache {
+	struct vswap_cluster *cluster;
+	local_lock_t lock;
+};
+
+static DEFINE_PER_CPU(struct percpu_vswap_iter_cache, percpu_vswap_iter_cache) = {
+	.cluster = NULL,
+	.lock = INIT_LOCAL_LOCK(),
+};
+
+static inline struct vswap_cluster *read_cached_vswap_cluster(void)
+{
+	struct vswap_cluster *cached;
+
+	/*
+	 * The returned pointer (if non-NULL) is only protected by RCU. The per-CPU
+	 * cache holds a +1 refcount on its cached cluster, but another context may
+	 * evict the cache between this read and the caller's use of the pointer:
+	 * the refcount can drop to 0, vswap_cluster_free() may queue the cluster
+	 * for kvfree_rcu(), and the per-CPU slot may even be replaced by a
+	 * different cluster. Because the caller holds rcu_read_lock(), the
+	 * kvfree_rcu() grace period cannot complete and the returned pointer
+	 * remains valid memory throughout the RCU critical section. Pointer
+	 * comparisons (e.g. inside try_to_clear_local_vswap_iter_cache()) stay
+	 * meaningful for the same reason.
+	 */
+	RCU_LOCKDEP_WARN(!rcu_read_lock_held(),
+			 "must be called under rcu_read_lock()");
+
+	local_lock(&percpu_vswap_iter_cache.lock);
+	cached = this_cpu_read(percpu_vswap_iter_cache.cluster);
+	local_unlock(&percpu_vswap_iter_cache.lock);
+
+	return cached;
+}
+
+static inline struct vswap_cluster *read_cached_vswap_cluster_irq(void)
+{
+	struct vswap_cluster *cached;
+
+	RCU_LOCKDEP_WARN(!rcu_read_lock_held(),
+			 "must be called under rcu_read_lock()");
+
+	local_lock_irq(&percpu_vswap_iter_cache.lock);
+	cached = this_cpu_read(percpu_vswap_iter_cache.cluster);
+	local_unlock_irq(&percpu_vswap_iter_cache.lock);
+
+	return cached;
+}
+
 static atomic_t vswap_alloc_reject;
 static atomic_t vswap_used;
 
@@ -261,28 +317,74 @@ static struct swp_desc *__vswap_iter(struct vswap_cluster *cluster, unsigned lon
 	return NULL;
 }
 
+static void vswap_cluster_put(struct vswap_cluster *cluster, int nr);
+
+static void try_to_clear_local_vswap_iter_cache(struct vswap_cluster *cluster)
+{
+	lockdep_assert_held(&cluster->lock);
+	local_lock(&percpu_vswap_iter_cache.lock);
+	if (this_cpu_read(percpu_vswap_iter_cache.cluster) == cluster) {
+		this_cpu_write(percpu_vswap_iter_cache.cluster, NULL);
+		vswap_cluster_put(cluster, 1);
+	}
+	local_unlock(&percpu_vswap_iter_cache.lock);
+}
+
+static void try_to_cache_local_vswap_iter_cache(struct vswap_cluster *cluster)
+{
+	lockdep_assert_held(&cluster->lock);
+	local_lock(&percpu_vswap_iter_cache.lock);
+	if (!this_cpu_read(percpu_vswap_iter_cache.cluster)) {
+		this_cpu_write(percpu_vswap_iter_cache.cluster, cluster);
+		refcount_inc(&cluster->refcnt);
+	}
+	local_unlock(&percpu_vswap_iter_cache.lock);
+}
+
 static struct swp_desc *vswap_iter(struct vswap_cluster **clusterp, unsigned long i)
 {
 	unsigned long cluster_id = VSWAP_VAL_CLUSTER_IDX(i);
 	struct vswap_cluster *cluster = *clusterp;
+	struct vswap_cluster *cached = NULL;
 	struct swp_desc *desc = NULL;
 	unsigned long slot_index;
+	bool need_clear_cache = false;
 
 	if (!cluster || cluster_id != cluster->id) {
 		if (cluster)
 			spin_unlock(&cluster->lock);
-		cluster = xa_load(&vswap_cluster_map, cluster_id);
+
+		cached = read_cached_vswap_cluster();
+
+		if (cached && cached->id == cluster_id) {
+			cluster = cached;
+		} else {
+			need_clear_cache = (cached != NULL);
+			cluster = xa_load(&vswap_cluster_map, cluster_id);
+		}
+
+		if (need_clear_cache) {
+			spin_lock(&cached->lock);
+			try_to_clear_local_vswap_iter_cache(cached);
+			spin_unlock(&cached->lock);
+		}
+
 		if (!cluster)
 			goto done;
 		VM_WARN_ON(cluster->id != cluster_id);
 		spin_lock(&cluster->lock);
+	} else {
+		cached = cluster;
 	}
 
 	slot_index = VSWAP_IDX_WITHIN_CLUSTER_VAL(i);
-	if (test_bit(slot_index, cluster->bitmap))
+	if (test_bit(slot_index, cluster->bitmap)) {
 		desc = &cluster->descriptors[slot_index];
-
-	if (!desc) {
+		if (cached != cluster)
+			try_to_cache_local_vswap_iter_cache(cluster);
+	} else {
+		if (!cluster->count)
+			try_to_clear_local_vswap_iter_cache(cluster);
 		spin_unlock(&cluster->lock);
 		cluster = NULL;
 	}
@@ -290,6 +392,17 @@ static struct swp_desc *vswap_iter(struct vswap_cluster **clusterp, unsigned lon
 done:
 	*clusterp = cluster;
 	return desc;
+}
+
+static void vswap_iter_break(struct vswap_cluster *cluster)
+{
+	if (!cluster)
+		return;
+
+	if (!cluster->count)
+		try_to_clear_local_vswap_iter_cache(cluster);
+
+	spin_unlock(&cluster->lock);
 }
 
 static bool cluster_is_alloc_candidate(struct vswap_cluster *cluster)
@@ -412,7 +525,7 @@ int folio_alloc_swap(struct folio *folio)
 		cluster = kmem_cache_zalloc(vswap_cluster_cache, GFP_KERNEL);
 		if (cluster) {
 			cluster->descriptors = vzalloc(array_size(VSWAP_CLUSTER_SIZE,
-						sizeof(struct swp_desc)));
+							sizeof(struct swp_desc)));
 			if (!cluster->descriptors) {
 				kmem_cache_free(vswap_cluster_cache, cluster);
 				cluster = NULL;
@@ -527,6 +640,13 @@ static void vswap_cluster_free(struct vswap_cluster *cluster)
 	xa_unlock(&vswap_cluster_map);
 	rcu_head_init(&cluster->rcu);
 	call_rcu(&cluster->rcu, vswap_cluster_free_rcu);
+}
+
+static void vswap_cluster_put(struct vswap_cluster *cluster, int nr)
+{
+	lockdep_assert_held(&cluster->lock);
+	if (refcount_sub_and_test(nr, &cluster->refcnt))
+		vswap_cluster_free(cluster);
 }
 
 static inline void release_vswap_slot_nr(struct vswap_cluster *cluster,
@@ -819,7 +939,7 @@ swp_slot_t vswap_alloc_swap_slot(struct folio *folio)
 		desc->type = VSWAP_SWAPFILE;
 		desc->slot.val = slot.val + i;
 	}
-	spin_unlock(&cluster->lock);
+	vswap_iter_break(cluster);
 
 	return slot;
 }
@@ -854,7 +974,7 @@ swp_slot_t swp_entry_to_swp_slot(swp_entry_t entry)
 		slot.val = 0;
 	else
 		slot = desc->slot;
-	spin_unlock(&cluster->lock);
+	vswap_iter_break(cluster);
 	rcu_read_unlock();
 
 	return slot;
@@ -946,8 +1066,7 @@ static bool vswap_free_nr_any_cache_only(swp_entry_t entry, int nr)
 	}
 	if (free_nr)
 		vswap_free_nr(cluster, free_start, free_nr);
-	if (cluster)
-		spin_unlock(&cluster->lock);
+	vswap_iter_break(cluster);
 	rcu_read_unlock();
 	return ret;
 }
@@ -979,8 +1098,7 @@ static int swap_duplicate_nr(swp_entry_t entry, int nr)
 		desc->swap_count++;
 	}
 done:
-	if (cluster)
-		spin_unlock(&cluster->lock);
+	vswap_iter_break(cluster);
 	rcu_read_unlock();
 	if (i && i < nr)
 		swap_free_nr(entry, i);
@@ -1008,7 +1126,7 @@ int swap_duplicate(swp_entry_t entry)
  */
 bool folio_free_swap(struct folio *folio)
 {
-	struct vswap_cluster *cluster;
+	struct vswap_cluster *cached, *cluster;
 	swp_entry_t entry = folio->swap;
 	int i, nr = folio_nr_pages(folio);
 	unsigned long cluster_id;
@@ -1028,8 +1146,21 @@ bool folio_free_swap(struct folio *folio)
 	cluster_id = VSWAP_CLUSTER_IDX(entry);
 
 	rcu_read_lock();
-	cluster = xa_load(&vswap_cluster_map, cluster_id);
+
+	cached = read_cached_vswap_cluster_irq();
+
+	if (!cached || cached->id != cluster_id)
+		cluster = xa_load(&vswap_cluster_map, cluster_id);
+	else
+		cluster = cached;
 	VM_WARN_ON(!cluster);
+
+	if (cached && cached != cluster) {
+		spin_lock_irq(&cached->lock);
+		try_to_clear_local_vswap_iter_cache(cached);
+		spin_unlock_irq(&cached->lock);
+	}
+
 	spin_lock_irq(&cluster->lock);
 
 	/* check if any PTE still points to the swap entries */
@@ -1050,6 +1181,8 @@ bool folio_free_swap(struct folio *folio)
 	}
 
 	vswap_free_nr(cluster, entry, nr);
+	if (!cluster->count)
+		try_to_clear_local_vswap_iter_cache(cluster);
 	spin_unlock_irq(&cluster->lock);
 	rcu_read_unlock();
 
@@ -1080,8 +1213,7 @@ int swp_swapcount(swp_entry_t entry)
 	rcu_read_lock();
 	desc = vswap_iter(&cluster, entry.val);
 	ret = desc ? desc->swap_count : 0;
-	if (cluster)
-		spin_unlock(&cluster->lock);
+	vswap_iter_break(cluster);
 	rcu_read_unlock();
 
 	return ret;
@@ -1142,7 +1274,7 @@ void swapcache_clear(swp_entry_t entry, int nr)
 	desc = vswap_iter(&cluster, entry.val);
 	VM_WARN_ON(!desc);
 	__swapcache_clear(cluster, entry, nr);
-	spin_unlock(&cluster->lock);
+	vswap_iter_break(cluster);
 	rcu_read_unlock();
 }
 
@@ -1174,8 +1306,7 @@ int swapcache_prepare(swp_entry_t entry, int nr)
 		desc->in_swapcache = true;
 	}
 done:
-	if (cluster)
-		spin_unlock(&cluster->lock);
+	vswap_iter_break(cluster);
 	rcu_read_unlock();
 	if (i && i < nr)
 		swapcache_clear(entry, i);
@@ -1199,8 +1330,7 @@ bool is_swap_cached(swp_entry_t entry)
 	rcu_read_lock();
 	desc = vswap_iter(&cluster, entry.val);
 	cached = desc ? desc->in_swapcache : false;
-	if (cluster)
-		spin_unlock(&cluster->lock);
+	vswap_iter_break(cluster);
 	rcu_read_unlock();
 
 	return cached;
@@ -1231,8 +1361,7 @@ int non_swapcache_batch(swp_entry_t entry, int max_nr)
 			goto done;
 	}
 done:
-	if (cluster)
-		spin_unlock(&cluster->lock);
+	vswap_iter_break(cluster);
 	rcu_read_unlock();
 	return i;
 }
@@ -1268,7 +1397,7 @@ void vswap_store_folio(swp_entry_t entry, struct folio *folio)
 		desc->type = VSWAP_FOLIO;
 		desc->swap_cache = folio;
 	}
-	spin_unlock(&cluster->lock);
+	vswap_iter_break(cluster);
 	rcu_read_unlock();
 }
 
@@ -1349,7 +1478,7 @@ void swap_zeromap_folio_set(struct folio *folio)
 		VM_WARN_ON(!desc);
 		desc->type = VSWAP_ZERO;
 	}
-	spin_unlock(&cluster->lock);
+	vswap_iter_break(cluster);
 	rcu_read_unlock();
 
 	count_vm_events(SWPOUT_ZERO, nr);
@@ -1419,8 +1548,7 @@ done:
 		/* Caller takes ownership of the lock and rcu_read_lock */
 		*clusterp = cluster;
 	} else {
-		if (cluster)
-			spin_unlock(&cluster->lock);
+		vswap_iter_break(cluster);
 		rcu_read_unlock();
 	}
 	if (type)
@@ -1498,8 +1626,7 @@ int swap_zeromap_batch(swp_entry_t entry, int max_nr, bool *is_zeromap)
 			goto done;
 	}
 done:
-	if (cluster)
-		spin_unlock(&cluster->lock);
+	vswap_iter_break(cluster);
 	rcu_read_unlock();
 	if (i && is_zeromap)
 		*is_zeromap = is_zero;
@@ -1614,9 +1741,9 @@ void put_swap_entry(swp_entry_t entry, struct swap_info_struct *si)
 
 	rcu_read_lock();
 	cluster = xa_load(&vswap_cluster_map, VSWAP_CLUSTER_IDX(entry));
+	VM_WARN_ON(!cluster);
 	spin_lock(&cluster->lock);
-	if (refcount_dec_and_test(&cluster->refcnt))
-		vswap_cluster_free(cluster);
+	vswap_cluster_put(cluster, 1);
 	spin_unlock(&cluster->lock);
 	rcu_read_unlock();
 }
@@ -1637,14 +1764,26 @@ static int vswap_cpu_dead(unsigned int cpu)
 	int order;
 
 	guard(rcu)();
+
+	/*
+	 * No need to take local_lock for the dead CPU's per-CPU caches,
+	 * as no local modifications can happen on a dead CPU.
+	 */
+	cluster = per_cpu(percpu_vswap_iter_cache.cluster, cpu);
+	if (cluster) {
+		spin_lock(&cluster->lock);
+		per_cpu(percpu_vswap_iter_cache.cluster, cpu) = NULL;
+		vswap_cluster_put(cluster, 1);
+		spin_unlock(&cluster->lock);
+	}
+
 	for (order = 0; order < SWAP_NR_ORDERS; order++) {
 		cluster = per_cpu(percpu_vswap_cluster.clusters[order], cpu);
 		if (cluster) {
 			per_cpu(percpu_vswap_cluster.clusters[order], cpu) = NULL;
 			spin_lock(&cluster->lock);
 			cluster->cached = false;
-			if (refcount_dec_and_test(&cluster->refcnt))
-				vswap_cluster_free(cluster);
+			vswap_cluster_put(cluster, 1);
 			spin_unlock(&cluster->lock);
 		}
 	}
@@ -1660,13 +1799,26 @@ static int vswap_cpu_dead(unsigned int cpu)
  */
 void swap_cache_lock(swp_entry_t entry)
 {
-	struct vswap_cluster *cluster;
+	struct vswap_cluster *cached, *cluster;
 	unsigned long cluster_id = VSWAP_CLUSTER_IDX(entry);
 
 	rcu_read_lock();
-	cluster = xa_load(&vswap_cluster_map, cluster_id);
+	cached = read_cached_vswap_cluster();
+
+	if (!cached || cached->id != cluster_id)
+		cluster = xa_load(&vswap_cluster_map, cluster_id);
+	else
+		cluster = cached;
 	VM_WARN_ON(!cluster);
+
+	if (cached && cached != cluster) {
+		spin_lock(&cached->lock);
+		try_to_clear_local_vswap_iter_cache(cached);
+		spin_unlock(&cached->lock);
+	}
+
 	spin_lock(&cluster->lock);
+	try_to_cache_local_vswap_iter_cache(cluster);
 	rcu_read_unlock();
 }
 
@@ -1678,12 +1830,20 @@ void swap_cache_lock(swp_entry_t entry)
  */
 void swap_cache_unlock(swp_entry_t entry)
 {
-	struct vswap_cluster *cluster;
+	struct vswap_cluster *cached, *cluster;
 	unsigned long cluster_id = VSWAP_CLUSTER_IDX(entry);
 
 	rcu_read_lock();
-	cluster = xa_load(&vswap_cluster_map, cluster_id);
+	cached = read_cached_vswap_cluster();
+
+	if (!cached || cached->id != cluster_id)
+		cluster = xa_load(&vswap_cluster_map, cluster_id);
+	else {
+		cluster = cached;
+		try_to_clear_local_vswap_iter_cache(cached);
+	}
 	VM_WARN_ON(!cluster);
+
 	spin_unlock(&cluster->lock);
 	rcu_read_unlock();
 }
@@ -1696,13 +1856,27 @@ void swap_cache_unlock(swp_entry_t entry)
  */
 void swap_cache_lock_irq(swp_entry_t entry)
 {
-	struct vswap_cluster *cluster;
+	struct vswap_cluster *cached, *cluster;
 	unsigned long cluster_id = VSWAP_CLUSTER_IDX(entry);
 
 	rcu_read_lock();
-	cluster = xa_load(&vswap_cluster_map, cluster_id);
+
+	cached = read_cached_vswap_cluster_irq();
+
+	if (!cached || cached->id != cluster_id)
+		cluster = xa_load(&vswap_cluster_map, cluster_id);
+	else
+		cluster = cached;
 	VM_WARN_ON(!cluster);
+
+	if (cached && cached != cluster) {
+		spin_lock_irq(&cached->lock);
+		try_to_clear_local_vswap_iter_cache(cached);
+		spin_unlock_irq(&cached->lock);
+	}
+
 	spin_lock_irq(&cluster->lock);
+	try_to_cache_local_vswap_iter_cache(cluster);
 	rcu_read_unlock();
 }
 
@@ -1714,11 +1888,18 @@ void swap_cache_lock_irq(swp_entry_t entry)
  */
 void swap_cache_unlock_irq(swp_entry_t entry)
 {
-	struct vswap_cluster *cluster;
+	struct vswap_cluster *cached, *cluster;
 	unsigned long cluster_id = VSWAP_CLUSTER_IDX(entry);
 
 	rcu_read_lock();
-	cluster = xa_load(&vswap_cluster_map, cluster_id);
+	cached = read_cached_vswap_cluster();
+
+	if (!cached || cached->id != cluster_id)
+		cluster = xa_load(&vswap_cluster_map, cluster_id);
+	else {
+		cluster = cached;
+		try_to_clear_local_vswap_iter_cache(cluster);
+	}
 	VM_WARN_ON(!cluster);
 	spin_unlock_irq(&cluster->lock);
 	rcu_read_unlock();
@@ -1746,24 +1927,24 @@ static struct folio *vswap_get_swap_cache(swp_entry_t entry, bool swap_cache_onl
 		if (!desc->in_swapcache ||
 		    xa_is_value(desc->shadow) ||
 		    (swap_cache_only && desc->swap_count)) {
-			spin_unlock(&cluster->lock);
+			vswap_iter_break(cluster);
 			rcu_read_unlock();
 			return NULL;
 		}
 
 		folio = desc->swap_cache;
 		if (!folio) {
-			spin_unlock(&cluster->lock);
+			vswap_iter_break(cluster);
 			rcu_read_unlock();
 			return NULL;
 		}
 
 		if (likely(folio_try_get(folio))) {
-			spin_unlock(&cluster->lock);
+			vswap_iter_break(cluster);
 			rcu_read_unlock();
 			return folio;
 		}
-		spin_unlock(&cluster->lock);
+		vswap_iter_break(cluster);
 		cluster = NULL;
 		rcu_read_unlock();
 	}
@@ -1812,7 +1993,7 @@ void *swap_cache_get_shadow(swp_entry_t entry)
 	}
 
 	shadow = desc->shadow;
-	spin_unlock(&cluster->lock);
+	vswap_iter_break(cluster);
 	rcu_read_unlock();
 
 	if (xa_is_value(shadow))
@@ -1834,7 +2015,7 @@ void *swap_cache_get_shadow(swp_entry_t entry)
  */
 void swap_cache_add_folio(struct folio *folio, swp_entry_t entry, void **shadowp)
 {
-	struct vswap_cluster *cluster;
+	struct vswap_cluster *cached, *cluster;
 	unsigned long nr_pages = folio_nr_pages(folio);
 	unsigned long cluster_id = VSWAP_CLUSTER_IDX(entry);
 	unsigned long i;
@@ -1850,9 +2031,23 @@ void swap_cache_add_folio(struct folio *folio, swp_entry_t entry, void **shadowp
 	folio->swap = entry;
 
 	rcu_read_lock();
-	cluster = xa_load(&vswap_cluster_map, cluster_id);
+
+	cached = read_cached_vswap_cluster_irq();
+
+	if (!cached || cached->id != cluster_id)
+		cluster = xa_load(&vswap_cluster_map, cluster_id);
+	else
+		cluster = cached;
 	VM_WARN_ON(!cluster);
+
+	if (cached && cached != cluster) {
+		spin_lock_irq(&cached->lock);
+		try_to_clear_local_vswap_iter_cache(cached);
+		spin_unlock_irq(&cached->lock);
+	}
+
 	spin_lock_irq(&cluster->lock);
+	try_to_cache_local_vswap_iter_cache(cluster);
 
 	for (i = 0; i < nr_pages; i++) {
 		desc = __vswap_iter(cluster, entry.val + i);
@@ -1892,7 +2087,7 @@ void swap_cache_add_folio(struct folio *folio, swp_entry_t entry, void **shadowp
 void __vswap_remove_mapping(struct folio *folio, swp_entry_t entry, void *shadow)
 {
 	long nr_pages = folio_nr_pages(folio);
-	struct vswap_cluster *cluster;
+	struct vswap_cluster *cached, *cluster;
 	unsigned long cluster_id = VSWAP_CLUSTER_IDX(entry);
 	struct swp_desc *desc;
 	int i;
@@ -1902,7 +2097,18 @@ void __vswap_remove_mapping(struct folio *folio, swp_entry_t entry, void *shadow
 	VM_WARN_ON_ONCE_FOLIO(folio_test_writeback(folio), folio);
 
 	rcu_read_lock();
-	cluster = xa_load(&vswap_cluster_map, cluster_id);
+
+	/*
+	 * The caller has already taken the cluster lock via
+	 * swap_cache_lock_irq(), which consults and updates the per-CPU
+	 * cluster cache. Read from the cache to avoid a redundant
+	 * xa_load() on the reclaim hot path.
+	 */
+	cached = read_cached_vswap_cluster();
+	if (cached && cached->id == cluster_id)
+		cluster = cached;
+	else
+		cluster = xa_load(&vswap_cluster_map, cluster_id);
 	VM_WARN_ON(!cluster);
 
 	/* Set shadow on all descriptors */
@@ -1914,6 +2120,8 @@ void __vswap_remove_mapping(struct folio *folio, swp_entry_t entry, void *shadow
 
 	memcg1_swapout(folio, entry);
 	__swapcache_clear(cluster, entry, nr_pages);
+	if (cached == cluster && !cluster->count)
+		try_to_clear_local_vswap_iter_cache(cluster);
 	spin_unlock_irq(&cluster->lock);
 	rcu_read_unlock();
 
@@ -1938,7 +2146,7 @@ void swap_cache_del_folio(struct folio *folio)
 {
 	long nr_pages = folio_nr_pages(folio);
 	swp_entry_t entry = folio->swap;
-	struct vswap_cluster *cluster;
+	struct vswap_cluster *cached, *cluster;
 	unsigned long cluster_id = VSWAP_CLUSTER_IDX(entry);
 	struct swp_desc *desc;
 	int i;
@@ -1948,9 +2156,23 @@ void swap_cache_del_folio(struct folio *folio)
 	VM_WARN_ON_ONCE_FOLIO(folio_test_writeback(folio), folio);
 
 	rcu_read_lock();
-	cluster = xa_load(&vswap_cluster_map, cluster_id);
+
+	cached = read_cached_vswap_cluster_irq();
+
+	if (!cached || cached->id != cluster_id)
+		cluster = xa_load(&vswap_cluster_map, cluster_id);
+	else
+		cluster = cached;
 	VM_WARN_ON(!cluster);
+
+	if (cached && cached != cluster) {
+		spin_lock_irq(&cached->lock);
+		try_to_clear_local_vswap_iter_cache(cached);
+		spin_unlock_irq(&cached->lock);
+	}
+
 	spin_lock_irq(&cluster->lock);
+	try_to_cache_local_vswap_iter_cache(cluster);
 
 	for (i = 0; i < nr_pages; i++) {
 		desc = __vswap_iter(cluster, entry.val + i);
@@ -1958,6 +2180,7 @@ void swap_cache_del_folio(struct folio *folio)
 		desc->shadow = NULL;
 	}
 
+	try_to_clear_local_vswap_iter_cache(cluster);
 	spin_unlock_irq(&cluster->lock);
 	rcu_read_unlock();
 
@@ -1987,7 +2210,7 @@ void __swap_cache_replace_folio(struct folio *old, struct folio *new)
 {
 	swp_entry_t entry = new->swap;
 	unsigned long nr_pages = folio_nr_pages(new);
-	struct vswap_cluster *cluster;
+	struct vswap_cluster *cached, *cluster;
 	struct swp_desc *desc;
 	unsigned long cluster_id = VSWAP_CLUSTER_IDX(entry);
 	void *old_entry;
@@ -1998,7 +2221,13 @@ void __swap_cache_replace_folio(struct folio *old, struct folio *new)
 	VM_WARN_ON_ONCE(!entry.val);
 
 	rcu_read_lock();
-	cluster = xa_load(&vswap_cluster_map, cluster_id);
+
+	cached = read_cached_vswap_cluster();
+
+	if (cached && cached->id == cluster_id)
+		cluster = cached;
+	else
+		cluster = xa_load(&vswap_cluster_map, cluster_id);
 	VM_WARN_ON(!cluster);
 
 	for (i = 0; i < nr_pages; i++) {
@@ -2031,7 +2260,7 @@ void zswap_entry_store(swp_entry_t swpentry, struct zswap_entry *entry)
 	release_backing(cluster, swpentry, 1, NULL);
 	desc->zswap_entry = entry;
 	desc->type = VSWAP_ZSWAP;
-	spin_unlock(&cluster->lock);
+	vswap_iter_break(cluster);
 	rcu_read_unlock();
 }
 
@@ -2059,7 +2288,7 @@ void *zswap_entry_load(swp_entry_t swpentry)
 
 	type = desc->type;
 	zswap_entry = desc->zswap_entry;
-	spin_unlock(&cluster->lock);
+	vswap_iter_break(cluster);
 	rcu_read_unlock();
 
 	if (type != VSWAP_ZSWAP)
@@ -2130,7 +2359,7 @@ static unsigned short vswap_cgroup_record(swp_entry_t entry,
 	desc = vswap_iter(&cluster, entry.val);
 	VM_WARN_ON(!desc);
 	oldid = __vswap_cgroup_record(cluster, entry, memcgid, nr_ents);
-	spin_unlock(&cluster->lock);
+	vswap_iter_break(cluster);
 	rcu_read_unlock();
 
 	return oldid;
@@ -2199,8 +2428,7 @@ unsigned short lookup_swap_cgroup_id(swp_entry_t entry)
 	rcu_read_lock();
 	desc = vswap_iter(&cluster, entry.val);
 	ret = desc ? desc->memcgid : 0;
-	if (cluster)
-		spin_unlock(&cluster->lock);
+	vswap_iter_break(cluster);
 	rcu_read_unlock();
 	return ret;
 }
