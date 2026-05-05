@@ -33,6 +33,7 @@ struct ipcomp_data {
 
 struct ipcomp_req_extra {
 	struct xfrm_state *x;
+	int dpages;
 	struct scatterlist sg[];
 };
 
@@ -44,6 +45,12 @@ static inline struct ipcomp_skb_cb *ipcomp_cb(struct sk_buff *skb)
 	return cb;
 }
 
+static void ipcomp_free_dpages(struct scatterlist *dsg, int dpages)
+{
+	while (dpages--)
+		__free_page(sg_page(dsg++));
+}
+
 static int ipcomp_post_acomp(struct sk_buff *skb, int err, int hlen)
 {
 	struct acomp_req *req = ipcomp_cb(skb)->req;
@@ -51,8 +58,13 @@ static int ipcomp_post_acomp(struct sk_buff *skb, int err, int hlen)
 	struct scatterlist *dsg;
 	int len, dlen;
 
-	if (unlikely(err))
+	if (unlikely(err)) {
+		if (req) {
+			extra = acomp_request_extra(req);
+			ipcomp_free_dpages(extra->sg, extra->dpages);
+		}
 		goto out_free_req;
+	}
 
 	extra = acomp_request_extra(req);
 	dsg = extra->sg;
@@ -167,6 +179,7 @@ static struct acomp_req *ipcomp_setup_req(struct xfrm_state *x,
 
 	extra = acomp_request_extra(req);
 	extra->x = x;
+	extra->dpages = 0;
 
 	dsg = extra->sg;
 	sg = dsg + dnfrags;
@@ -184,6 +197,7 @@ static struct acomp_req *ipcomp_setup_req(struct xfrm_state *x,
 		if (!page)
 			break;
 		sg_set_page(dsg + i, page, PAGE_SIZE, 0);
+		extra->dpages++;
 		total += PAGE_SIZE;
 	}
 	if (!i)
