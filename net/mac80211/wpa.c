@@ -1008,8 +1008,8 @@ ieee80211_crypto_aes_gmac_encrypt(struct ieee80211_tx_data *tx)
 	bip_ipn_swap(nonce + ETH_ALEN, mmie->sequence_number);
 
 	/* MIC = AES-GMAC(IGTK, AAD || Management Frame Body || MMIE, 128) */
-	if (ieee80211_aes_gmac(key->u.aes_gmac.tfm, aad, nonce,
-			       skb->data + 24, skb->len - 24, mmie->mic) < 0)
+	if (ieee80211_aes_gmac(&key->u.aes_gmac.ctx, aad, nonce,
+			       skb->data + 24, skb->len - 24, mmie->mic))
 		return TX_DROP;
 
 	return TX_CONTINUE;
@@ -1022,7 +1022,7 @@ ieee80211_crypto_aes_gmac_decrypt(struct ieee80211_rx_data *rx)
 	struct ieee80211_rx_status *status = IEEE80211_SKB_RXCB(skb);
 	struct ieee80211_key *key = rx->key;
 	struct ieee80211_mmie_16 *mmie;
-	u8 aad[GMAC_AAD_LEN], *mic, ipn[6], nonce[GMAC_NONCE_LEN];
+	u8 aad[GMAC_AAD_LEN], ipn[6], nonce[GMAC_NONCE_LEN];
 	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
 
 	if (!ieee80211_is_mgmt(hdr->frame_control))
@@ -1047,24 +1047,21 @@ ieee80211_crypto_aes_gmac_decrypt(struct ieee80211_rx_data *rx)
 	}
 
 	if (!(status->flag & RX_FLAG_DECRYPTED)) {
+		u8 mic[IEEE80211_GMAC_MIC_LEN];
+
 		/* hardware didn't decrypt/verify MIC */
 		bip_aad(skb, aad);
 
 		memcpy(nonce, hdr->addr2, ETH_ALEN);
 		memcpy(nonce + ETH_ALEN, ipn, 6);
 
-		mic = kmalloc(IEEE80211_GMAC_MIC_LEN, GFP_ATOMIC);
-		if (!mic)
-			return RX_DROP_U_OOM;
-		if (ieee80211_aes_gmac(key->u.aes_gmac.tfm, aad, nonce,
+		if (ieee80211_aes_gmac(&key->u.aes_gmac.ctx, aad, nonce,
 				       skb->data + 24, skb->len - 24,
 				       mic) < 0 ||
 		    crypto_memneq(mic, mmie->mic, sizeof(mmie->mic))) {
 			key->u.aes_gmac.icverrors++;
-			kfree(mic);
 			return RX_DROP_U_MIC_FAIL;
 		}
-		kfree(mic);
 	}
 
 	memcpy(key->u.aes_gmac.rx_pn, ipn, 6);

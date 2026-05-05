@@ -7,88 +7,62 @@
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/err.h>
-#include <crypto/aead.h>
-#include <crypto/aes.h>
+#include <crypto/gf128hash.h>
+#include <crypto/utils.h>
 
 #include <net/mac80211.h>
 #include "key.h"
 #include "aes_gmac.h"
 
-int ieee80211_aes_gmac(struct crypto_aead *tfm, const u8 *aad, u8 *nonce,
+int ieee80211_aes_gmac(struct aesgcm_ctx *ctx, const u8 *aad, u8 *nonce,
 		       const u8 *data, size_t data_len, u8 *mic)
 {
-	struct scatterlist sg[5];
-	u8 *zero, *__aad, iv[AES_BLOCK_SIZE];
-	struct aead_request *aead_req;
-	int reqsize = sizeof(*aead_req) + crypto_aead_reqsize(tfm);
+	static const u8 zero[GHASH_BLOCK_SIZE];
+	struct ghash_ctx ghash;
+	u8 iv[AES_BLOCK_SIZE];
+	size_t total_len = GMAC_AAD_LEN + data_len;
+	__be64 tail[2] = {
+		cpu_to_be64((u64)total_len * 8),
+		0, /* no data since it's just GMAC */
+	};
+	u8 ghash_out[AES_BLOCK_SIZE];
+	u8 enc_ctr[AES_BLOCK_SIZE];
 	const __le16 *fc;
-	int ret;
 
 	if (data_len < IEEE80211_GMAC_MIC_LEN)
 		return -EINVAL;
 
-	aead_req = kzalloc(reqsize + IEEE80211_GMAC_MIC_LEN + GMAC_AAD_LEN,
-			   GFP_ATOMIC);
-	if (!aead_req)
-		return -ENOMEM;
+	ghash_init(&ghash, &ctx->ghash_key);
 
-	zero = (u8 *)aead_req + reqsize;
-	__aad = zero + IEEE80211_GMAC_MIC_LEN;
-	memcpy(__aad, aad, GMAC_AAD_LEN);
+	ghash_update(&ghash, aad, GMAC_AAD_LEN);
 
 	fc = (const __le16 *)aad;
 	if (ieee80211_is_beacon(*fc)) {
 		/* mask Timestamp field to zero */
-		sg_init_table(sg, 5);
-		sg_set_buf(&sg[0], __aad, GMAC_AAD_LEN);
-		sg_set_buf(&sg[1], zero, 8);
-		sg_set_buf(&sg[2], data + 8,
-			   data_len - 8 - IEEE80211_GMAC_MIC_LEN);
-		sg_set_buf(&sg[3], zero, IEEE80211_GMAC_MIC_LEN);
-		sg_set_buf(&sg[4], mic, IEEE80211_GMAC_MIC_LEN);
+		ghash_update(&ghash, zero, 8);
+		ghash_update(&ghash, data + 8, data_len - 8 - IEEE80211_GMAC_MIC_LEN);
 	} else {
-		sg_init_table(sg, 4);
-		sg_set_buf(&sg[0], __aad, GMAC_AAD_LEN);
-		sg_set_buf(&sg[1], data, data_len - IEEE80211_GMAC_MIC_LEN);
-		sg_set_buf(&sg[2], zero, IEEE80211_GMAC_MIC_LEN);
-		sg_set_buf(&sg[3], mic, IEEE80211_GMAC_MIC_LEN);
+		ghash_update(&ghash, data, data_len - IEEE80211_GMAC_MIC_LEN);
 	}
+
+	/* set MIC value to zero */
+	ghash_update(&ghash, zero, IEEE80211_GMAC_MIC_LEN);
+	/* pad */
+	ghash_update(&ghash, zero, -total_len & (GHASH_BLOCK_SIZE - 1));
+
+	ghash_update(&ghash, (const u8 *)&tail, sizeof(tail));
+
+	ghash_final(&ghash, ghash_out);
 
 	memcpy(iv, nonce, GMAC_NONCE_LEN);
 	memset(iv + GMAC_NONCE_LEN, 0, sizeof(iv) - GMAC_NONCE_LEN);
 	iv[AES_BLOCK_SIZE - 1] = 0x01;
 
-	aead_request_set_tfm(aead_req, tfm);
-	aead_request_set_crypt(aead_req, sg, sg, 0, iv);
-	aead_request_set_ad(aead_req, GMAC_AAD_LEN + data_len);
+	aes_encrypt(&ctx->aes_key, enc_ctr, (const u8 *)iv);
+	crypto_xor_cpy(mic, ghash_out, enc_ctr, IEEE80211_GMAC_MIC_LEN);
 
-	ret = crypto_aead_encrypt(aead_req);
-	kfree_sensitive(aead_req);
+	memzero_explicit(ghash_out, sizeof(ghash_out));
+	memzero_explicit(enc_ctr, sizeof(enc_ctr));
 
-	return ret;
-}
-
-struct crypto_aead *ieee80211_aes_gmac_key_setup(const u8 key[],
-						 size_t key_len)
-{
-	struct crypto_aead *tfm;
-	int err;
-
-	tfm = crypto_alloc_aead("gcm(aes)", 0, CRYPTO_ALG_ASYNC);
-	if (IS_ERR(tfm))
-		return tfm;
-
-	err = crypto_aead_setkey(tfm, key, key_len);
-	if (!err)
-		err = crypto_aead_setauthsize(tfm, IEEE80211_GMAC_MIC_LEN);
-	if (!err)
-		return tfm;
-
-	crypto_free_aead(tfm);
-	return ERR_PTR(err);
-}
-
-void ieee80211_aes_gmac_key_free(struct crypto_aead *tfm)
-{
-	crypto_free_aead(tfm);
+	return 0;
 }

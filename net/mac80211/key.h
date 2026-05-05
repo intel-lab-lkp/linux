@@ -101,7 +101,7 @@ struct ieee80211_key {
 		} aes_cmac;
 		struct {
 			u8 rx_pn[IEEE80211_GMAC_PN_LEN];
-			struct crypto_aead *tfm;
+			struct aesgcm_ctx ctx;
 			u32 replays; /* dot11RSNAStatsCMACReplays */
 			u32 icverrors; /* dot11RSNAStatsCMACICVErrors */
 		} aes_gmac;
