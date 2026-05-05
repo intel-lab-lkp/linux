@@ -145,10 +145,10 @@ struct crypto_acomp_ctx {
 };
 
 /*
- * The lock ordering is zswap_tree.lock -> zswap_pool.lru_lock.
- * The only case where lru_lock is not acquired while holding tree.lock is
- * when a zswap_entry is taken off the lru for writeback, in that case it
- * needs to be verified that it's still valid in the tree.
+ * The lock ordering is the vswap cluster lock -> zswap_pool.lru_lock.
+ * The only case where lru_lock is not acquired while holding the vswap
+ * cluster lock is when a zswap_entry is taken off the lru for writeback,
+ * in that case it needs to be verified that it's still valid in vswap.
  */
 struct zswap_pool {
 	struct zs_pool *zs_pool;
@@ -222,37 +222,6 @@ static bool zswap_has_pool;
 /*********************************
 * helpers and fwd declarations
 **********************************/
-
-static DEFINE_XARRAY(zswap_tree);
-
-#define zswap_tree_index(entry)	(entry.val)
-
-static inline void *zswap_entry_store(swp_entry_t swpentry,
-		struct zswap_entry *entry)
-{
-	pgoff_t offset = zswap_tree_index(swpentry);
-
-	return xa_store(&zswap_tree, offset, entry, GFP_KERNEL);
-}
-
-static inline void *zswap_entry_load(swp_entry_t swpentry)
-{
-	pgoff_t offset = zswap_tree_index(swpentry);
-
-	return xa_load(&zswap_tree, offset);
-}
-
-static inline void *zswap_entry_erase(swp_entry_t swpentry)
-{
-	pgoff_t offset = zswap_tree_index(swpentry);
-
-	return xa_erase(&zswap_tree, offset);
-}
-
-static inline bool zswap_empty(swp_entry_t swpentry)
-{
-	return xa_empty(&zswap_tree);
-}
 
 #define zswap_pool_debug(msg, p)			\
 	pr_debug("%s pool %s\n", msg, (p)->tfm_name)
@@ -1168,7 +1137,7 @@ static enum lru_status shrink_memcg_cb(struct list_head *item, struct list_lru_o
 	/*
 	 * Once the lru lock is dropped, the entry might get freed. The
 	 * swpentry is copied to the stack, and entry isn't deref'd again
-	 * until the entry is verified to still be alive in the tree.
+	 * until the entry is verified to still be alive in vswap.
 	 */
 	swpentry = entry->swpentry;
 
@@ -1445,13 +1414,6 @@ static bool zswap_store_page(struct page *page,
 		goto compress_failed;
 
 	old = zswap_entry_store(page_swpentry, entry);
-	if (xa_is_err(old)) {
-		int err = xa_err(old);
-
-		WARN_ONCE(err != -ENOMEM, "unexpected xarray error: %d\n", err);
-		zswap_reject_alloc_fail++;
-		goto store_failed;
-	}
 
 	/*
 	 * We may have had an existing entry that became stale when
@@ -1462,11 +1424,11 @@ static bool zswap_store_page(struct page *page,
 		zswap_entry_free(old);
 
 	/*
-	 * The entry is successfully compressed and stored in the tree, there is
+	 * The entry is successfully compressed and stored in vswap, there is
 	 * no further possibility of failure. Grab refs to the pool and objcg,
 	 * charge zswap memory, and increment zswap_stored_pages.
 	 * The opposite actions will be performed by zswap_entry_free()
-	 * when the entry is removed from the tree.
+	 * when the entry is removed from vswap.
 	 */
 	zswap_pool_get(pool);
 	if (objcg) {
@@ -1478,7 +1440,7 @@ static bool zswap_store_page(struct page *page,
 		atomic_long_inc(&zswap_stored_incompressible_pages);
 
 	/*
-	 * We finish initializing the entry while it's already in xarray.
+	 * We finish initializing the entry while it's already in vswap.
 	 * This is safe because:
 	 *
 	 * 1. Concurrent stores and invalidations are excluded by folio lock.
@@ -1498,8 +1460,6 @@ static bool zswap_store_page(struct page *page,
 
 	return true;
 
-store_failed:
-	zs_free(pool->zs_pool, entry->handle);
 compress_failed:
 	zswap_entry_cache_free(entry);
 	return false;
