@@ -11,9 +11,7 @@
 from collections import deque
 from .dot2c import Dot2c
 from .generator import Monitor
-from .automata import _EventConstraintKey, _StateConstraintKey, AutomataError
-from .automata import ConstraintRule
-
+from .automata import ConstraintRule, AutomataError
 
 class dot2k(Monitor, Dot2c):
     template_dir = "dot2k"
@@ -217,9 +215,6 @@ class ha2k(dot2k):
                 value *= 10**9
         return str(value) + "ull"
 
-    def __parse_single_constraint(self, rule: dict, value: str) -> str:
-        return f"ha_get_env(ha_mon, {rule["env"]}{self.enum_suffix}, time_ns) {rule["op"]} {value}"
-
     def __parse_guard_rule(self, rule) -> str:
         buff = []
         for c, sep in rule.rules:
@@ -234,12 +229,6 @@ class ha2k(dot2k):
         buff[-1] += ';'
         return buff
 
-    def __get_constraint_env(self, constr: str) -> str:
-        """Extract the second argument from an ha_ function"""
-        env = constr.split("(")[1].split()[1].rstrip(")").rstrip(",")
-        assert env.rstrip(f"_{self.name}") in self.envs
-        return env
-
     def __start_to_invariant_check(self, inv: ConstraintRule) -> str:
         # by default assume the timer has ns expiration
         clock_type = "ns"
@@ -247,21 +236,6 @@ class ha2k(dot2k):
             clock_type = "jiffy"
 
         return f"return ha_check_invariant_{clock_type}(ha_mon, {inv.env}_{self.name}, time_ns, {inv.val})"
-
-    def __start_to_conv(self, constr: str) -> str:
-        """
-        Undo the storage conversion done by ha_start_timer_
-        """
-        return "ha_inv_to_guard" + constr[constr.find("("):]
-
-    def __parse_timer_constraint(self, rule: dict, value: str) -> str:
-        # by default assume the timer has ns expiration
-        clock_type = "ns"
-        if self.env_types.get(rule["env"]) == "j":
-            clock_type = "jiffy"
-
-        return (f"ha_start_timer_{clock_type}(ha_mon, {rule["env"]}{self.enum_suffix},"
-                f" {value}, time_ns)")
 
     def __parse_invariant(self, inv):
         # by default assume the timer has ns expiration
