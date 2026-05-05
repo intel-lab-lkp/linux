@@ -11,20 +11,6 @@
 #include "exfat_raw.h"
 #include "exfat_fs.h"
 
-/*
- * Allow full-width illegal characters :
- * "MS windows 7" supports full-width-invalid-name-characters.
- * So we should check half-width-invalid-name-characters(ASCII) only
- * for compatibility.
- *
- * " * / : < > ? \ |
- */
-static unsigned short bad_uni_chars[] = {
-	0x0022,         0x002A, 0x002F, 0x003A,
-	0x003C, 0x003E, 0x003F, 0x005C, 0x007C,
-	0
-};
-
 struct exfat_upcase_ptable exfat_def_upcase_ptable;
 
 static int exfat_convert_char_to_ucs2(struct nls_table *nls,
@@ -80,13 +66,44 @@ unsigned short exfat_toupper(struct super_block *sb, unsigned short a)
 	return exfat_lookup_upcase_ptable(sbi->vol_utbl, a);
 }
 
-static unsigned short *exfat_wstrchr(unsigned short *str, unsigned short wchar)
+/*
+ * Allow full-width illegal characters :
+ * "MS windows 7" supports full-width-invalid-name-characters.
+ * So we should check half-width-invalid-name-characters(ASCII) only
+ * for compatibility.
+ *
+ * " * / : < > ? \ |
+ */
+static inline bool exfat_illegal_chr(const unsigned short wchar)
 {
-	while (*str) {
-		if (*(str++) == wchar)
-			return str;
+	switch (wchar) {
+	/*
+	 * Control characters
+	 *
+	 * This saves some cmp instructions if the compiler does its job correctly
+	 */
+	case 0x0000: case 0x0001: case 0x0002: case 0x0003:
+	case 0x0004: case 0x0005: case 0x0006: case 0x0007:
+	case 0x0008: case 0x0009: case 0x000A: case 0x000B:
+	case 0x000C: case 0x000D: case 0x000E: case 0x000F:
+	case 0x0010: case 0x0011: case 0x0012: case 0x0013:
+	case 0x0014: case 0x0015: case 0x0016: case 0x0017:
+	case 0x0018: case 0x0019: case 0x001A: case 0x001B:
+	case 0x001C: case 0x001D: case 0x001E: case 0x001F:
+
+	case 0x0022: /* QUOTATION MARK:    (") */
+	case 0x002A: /* ASTERISK:          (*) */
+	case 0x002F: /* FORWARD SLASH:     (/) */
+	case 0x003A: /* COLON:             (:) */
+	case 0x003C: /* LESS-THAN SIGN:    (<) */
+	case 0x003E: /* GREATER-THAN SIGN: (>) */
+	case 0x003F: /* QUESTION MARK:     (?) */
+	case 0x005C: /* BACKSLASH:         (\) */
+	case 0x007C: /* PIPE:              (|) */
+		return true;
 	}
-	return NULL;
+
+	return false;
 }
 
 int exfat_uniname_ncmp(struct super_block *sb, unsigned short *a,
@@ -139,8 +156,7 @@ static int exfat_utf8_to_utf16(struct super_block *sb,
 	}
 
 	for (i = 0; i < unilen; i++) {
-		if (*uniname < 0x0020 ||
-		    exfat_wstrchr(bad_uni_chars, *uniname))
+		if (exfat_illegal_chr(*uniname))
 			lossy |= NLS_NAME_LOSSY;
 
 		upname[i] = cpu_to_le16(exfat_toupper(sb, *uniname));
@@ -231,8 +247,7 @@ static int exfat_nls_to_ucs2(struct super_block *sb,
 		i += exfat_convert_char_to_ucs2(nls, p_cstring + i, len - i,
 				uniname, &lossy);
 
-		if (*uniname < 0x0020 ||
-		    exfat_wstrchr(bad_uni_chars, *uniname))
+		if (exfat_illegal_chr(*uniname))
 			lossy |= NLS_NAME_LOSSY;
 
 		upname[unilen] = cpu_to_le16(exfat_toupper(sb, *uniname));
