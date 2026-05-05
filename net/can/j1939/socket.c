@@ -17,6 +17,7 @@
 #include <linux/can/skb.h>
 #include <linux/errqueue.h>
 #include <linux/if_arp.h>
+#include <linux/uio.h>
 #include <net/can.h>
 
 #include "j1939-priv.h"
@@ -767,7 +768,7 @@ static int j1939_sk_setsockopt(struct socket *sock, int level, int optname,
 }
 
 static int j1939_sk_getsockopt(struct socket *sock, int level, int optname,
-			       char __user *optval, int __user *optlen)
+			       sockopt_t *opt)
 {
 	struct sock *sk = sock->sk;
 	struct j1939_sock *jsk = j1939_sk(sk);
@@ -779,8 +780,7 @@ static int j1939_sk_getsockopt(struct socket *sock, int level, int optname,
 
 	if (level != SOL_CAN_J1939)
 		return -EINVAL;
-	if (get_user(ulen, optlen))
-		return -EFAULT;
+	ulen = opt->optlen;
 	if (ulen < 0)
 		return -EINVAL;
 
@@ -804,11 +804,16 @@ static int j1939_sk_getsockopt(struct socket *sock, int level, int optname,
 	 * but most sockopt's are 'int' properties, and have 'len' & 'val'
 	 * left unchanged, but instead modified 'tmp'
 	 */
-	if (len > ulen)
+	if (len > ulen) {
 		ret = -EFAULT;
-	else if (put_user(len, optlen))
-		ret = -EFAULT;
-	else if (copy_to_user(optval, val, len))
+		goto no_copy;
+	}
+
+	opt->optlen = len;
+	/* Even if the copy below fails, we want to update optlen. This is
+	 * a bit confusing, but, it preserves the original behaviour
+	 */
+	if (copy_to_iter(val, len, &opt->iter_out) != len)
 		ret = -EFAULT;
 	else
 		ret = 0;
@@ -1385,7 +1390,7 @@ static const struct proto_ops j1939_ops = {
 	.listen = sock_no_listen,
 	.shutdown = sock_no_shutdown,
 	.setsockopt = j1939_sk_setsockopt,
-	.getsockopt = j1939_sk_getsockopt,
+	.getsockopt_iter = j1939_sk_getsockopt,
 	.sendmsg = j1939_sk_sendmsg,
 	.recvmsg = j1939_sk_recvmsg,
 	.mmap = sock_no_mmap,
