@@ -4754,7 +4754,11 @@ static int xhci_update_device(struct usb_hcd *hcd, struct usb_device *udev)
 	if (hcd->speed >= HCD_USB3 && !udev->parent->parent) {
 		port = xhci->usb3_rhub.ports[udev->portnum - 1];
 
-		udev->tunnel_mode = xhci_port_is_tunneled(xhci, port);
+		if (xhci->tunnel_mode)
+			udev->tunnel_mode = xhci->tunnel_mode(hcd, port->hcd_portnum);
+		else
+			udev->tunnel_mode = xhci_port_tunnel_mode(xhci, port);
+
 		if (udev->tunnel_mode == USB_LINK_UNKNOWN)
 			dev_dbg(&udev->dev, "link tunnel state unknown\n");
 		else if (udev->tunnel_mode == USB_LINK_TUNNELED)
