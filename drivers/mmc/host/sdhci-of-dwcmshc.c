@@ -279,12 +279,10 @@
 #define PHY_DELAY_CODE_SD		0x55
 
 struct rk35xx_priv {
-	struct reset_control *reset;
 	u8 txclk_tapnum;
 };
 
 struct eic7700_priv {
-	struct reset_control *reset;
 	unsigned int drive_impedance;
 };
 
@@ -297,6 +295,8 @@ struct k230_priv  {
 
 struct dwcmshc_priv {
 	struct clk	*bus_clk;
+	struct reset_control *reset;
+	bool needs_reset_on_pm;
 	int vendor_specific_area1; /* P_VENDOR_SPECIFIC_AREA1 reg */
 	int vendor_specific_area2; /* P_VENDOR_SPECIFIC_AREA2 reg */
 
@@ -887,16 +887,15 @@ static void rk35xx_sdhci_reset(struct sdhci_host *host, u8 mask)
 {
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
 	struct dwcmshc_priv *dwc_priv = sdhci_pltfm_priv(pltfm_host);
-	struct rk35xx_priv *priv = dwc_priv->priv;
 	u32 extra = sdhci_readl(host, DECMSHC_EMMC_MISC_CON);
 
 	if ((host->mmc->caps2 & MMC_CAP2_CQE) && (mask & SDHCI_RESET_ALL))
 		cqhci_deactivate(host->mmc);
 
-	if (mask & SDHCI_RESET_ALL && priv->reset) {
-		reset_control_assert(priv->reset);
+	if (mask & SDHCI_RESET_ALL && dwc_priv->reset) {
+		reset_control_assert(dwc_priv->reset);
 		udelay(1);
-		reset_control_deassert(priv->reset);
+		reset_control_deassert(dwc_priv->reset);
 	}
 
 	sdhci_reset(host, mask);
@@ -916,9 +915,9 @@ static int dwcmshc_rk35xx_init(struct device *dev, struct sdhci_host *host,
 	if (!priv)
 		return -ENOMEM;
 
-	priv->reset = devm_reset_control_array_get_optional_exclusive(mmc_dev(host->mmc));
-	if (IS_ERR(priv->reset)) {
-		err = PTR_ERR(priv->reset);
+	dwc_priv->reset = devm_reset_control_array_get_optional_exclusive(mmc_dev(host->mmc));
+	if (IS_ERR(dwc_priv->reset)) {
+		err = PTR_ERR(dwc_priv->reset);
 		dev_err(mmc_dev(host->mmc), "failed to get reset control %d\n", err);
 		return err;
 	}
@@ -1504,24 +1503,24 @@ static void sdhci_eic7700_reset(struct sdhci_host *host, u8 mask)
 		sdhci_eic7700_config_phy(host);
 }
 
-static int sdhci_eic7700_reset_init(struct device *dev, struct eic7700_priv *priv)
+static int sdhci_eic7700_reset_init(struct device *dev, struct dwcmshc_priv *dwc_priv)
 {
 	int ret;
 
-	priv->reset = devm_reset_control_array_get_optional_exclusive(dev);
-	if (IS_ERR(priv->reset)) {
-		ret = PTR_ERR(priv->reset);
+	dwc_priv->reset = devm_reset_control_array_get_optional_exclusive(dev);
+	if (IS_ERR(dwc_priv->reset)) {
+		ret = PTR_ERR(dwc_priv->reset);
 		dev_err(dev, "failed to get reset control %d\n", ret);
 		return ret;
 	}
 
-	ret = reset_control_assert(priv->reset);
+	ret = reset_control_assert(dwc_priv->reset);
 	if (ret) {
 		dev_err(dev, "Failed to assert reset signals: %d\n", ret);
 		return ret;
 	}
 	usleep_range(2000, 2100);
-	ret = reset_control_deassert(priv->reset);
+	ret = reset_control_deassert(dwc_priv->reset);
 	if (ret) {
 		dev_err(dev, "Failed to deassert reset signals: %d\n", ret);
 		return ret;
@@ -1780,7 +1779,7 @@ static int eic7700_init(struct device *dev, struct sdhci_host *host, struct dwcm
 
 	dwc_priv->priv = priv;
 
-	ret = sdhci_eic7700_reset_init(dev, dwc_priv->priv);
+	ret = sdhci_eic7700_reset_init(dev, dwc_priv);
 	if (ret) {
 		dev_err(dev, "failed to reset\n");
 		return ret;
@@ -2563,6 +2562,9 @@ static int dwcmshc_suspend(struct device *dev)
 	if (ret)
 		return ret;
 
+	if (priv->needs_reset_on_pm)
+		reset_control_assert(priv->reset);
+
 	clk_disable_unprepare(pltfm_host->clk);
 	if (!IS_ERR(priv->bus_clk))
 		clk_disable_unprepare(priv->bus_clk);
@@ -2593,18 +2595,27 @@ static int dwcmshc_resume(struct device *dev)
 	if (ret)
 		goto disable_bus_clk;
 
-	ret = sdhci_resume_host(host);
-	if (ret)
-		goto disable_other_clks;
-
-	if (host->mmc->caps2 & MMC_CAP2_CQE) {
-		ret = cqhci_resume(host->mmc);
+	if (priv->needs_reset_on_pm) {
+		ret = reset_control_deassert(priv->reset);
 		if (ret)
 			goto disable_other_clks;
 	}
 
+	ret = sdhci_resume_host(host);
+	if (ret)
+		goto assert_reset;
+
+	if (host->mmc->caps2 & MMC_CAP2_CQE) {
+		ret = cqhci_resume(host->mmc);
+		if (ret)
+			goto assert_reset;
+	}
+
 	return 0;
 
+assert_reset:
+	if (priv->needs_reset_on_pm)
+		reset_control_assert(priv->reset);
 disable_other_clks:
 	clk_bulk_disable_unprepare(priv->num_other_clks, priv->other_clks);
 disable_bus_clk:
