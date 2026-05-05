@@ -3325,7 +3325,7 @@ static void ice_free_irq_msix_misc(struct ice_pf *pf)
 	devm_free_irq(ice_pf_to_dev(pf), misc_irq_num, pf);
 
 	ice_free_irq(pf, pf->oicr_irq);
-	if (pf->hw.dev_caps.ts_dev_info.ts_ll_int_read)
+	if (pf->ll_ts_irq.index >= 0)
 		ice_free_irq_msix_ll_ts(pf);
 }
 
@@ -3409,8 +3409,10 @@ static int ice_req_irq_msix_misc(struct ice_pf *pf)
 	}
 
 	/* reserve one vector in irq_tracker for ll_ts interrupt */
-	if (!pf->hw.dev_caps.ts_dev_info.ts_ll_int_read)
+	if (!pf->hw.dev_caps.ts_dev_info.ts_ll_int_read) {
+		pf->ll_ts_irq.index = -ENOENT;
 		goto skip_req_irq;
+	}
 
 	irq = ice_alloc_irq(pf, false);
 	if (irq.index < 0)
@@ -3423,6 +3425,7 @@ static int ice_req_irq_msix_misc(struct ice_pf *pf)
 		dev_err(dev, "devm_request_irq for %s failed: %d\n",
 			pf->int_name_ll_ts, err);
 		ice_free_irq(pf, pf->ll_ts_irq);
+		pf->ll_ts_irq.index = -ENOENT;
 		return err;
 	}
 
@@ -3432,7 +3435,7 @@ skip_req_irq:
 	ice_ena_ctrlq_interrupts(hw, pf->oicr_irq.index);
 	/* This enables LL TS interrupt */
 	pf_intr_start_offset = rd32(hw, PFINT_ALLOC) & PFINT_ALLOC_FIRST;
-	if (pf->hw.dev_caps.ts_dev_info.ts_ll_int_read)
+	if (pf->ll_ts_irq.index >= 0)
 		wr32(hw, PFINT_SB_CTL,
 		     ((pf->ll_ts_irq.index + pf_intr_start_offset) &
 		      PFINT_SB_CTL_MSIX_INDX_M) | PFINT_SB_CTL_CAUSE_ENA_M);
@@ -4026,6 +4029,7 @@ int ice_init_pf(struct ice_pf *pf)
 	 * the misc functionality and queue processing is combined in
 	 * the same vector and that gets setup at open.
 	 */
+	pf->ll_ts_irq.index = -ENOENT;
 	err = ice_req_irq_msix_misc(pf);
 	if (err) {
 		dev_err(dev, "setup of misc vector failed: %d\n", err);
