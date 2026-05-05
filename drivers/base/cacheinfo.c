@@ -366,11 +366,6 @@ static inline int cache_setup_of_node(unsigned int cpu) { return 0; }
 int init_of_cache_level(unsigned int cpu) { return 0; }
 #endif
 
-int __weak cache_setup_acpi(unsigned int cpu)
-{
-	return -ENOTSUPP;
-}
-
 unsigned int coherency_max_size;
 
 static int cache_setup_properties(unsigned int cpu)
