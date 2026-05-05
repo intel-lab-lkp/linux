@@ -66,6 +66,13 @@ endif
 
 targets += $(modules:%.o=%.ko) $(modules:%.o=%.mod.o) .module-common.o
 
+# Update modules.order when a module is (re-)built.
+# Allow using it as target dependency.
+targets += modules.order
+__modfinal: modules.order
+modules.order: $(modules:%.o=%.ko)
+	@touch $@
+
 # Add FORCE to the prerequisites of a target to force it to be always rebuilt.
 # ---------------------------------------------------------------------------
 
