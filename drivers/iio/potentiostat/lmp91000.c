@@ -330,6 +330,18 @@ static int lmp91000_probe(struct i2c_client *client)
 	if (ret)
 		return ret;
 
+	data->cb_buffer = iio_channel_get_all_cb(dev, &lmp91000_buffer_cb,
+						 indio_dev);
+
+	if (IS_ERR(data->cb_buffer)) {
+		if (PTR_ERR(data->cb_buffer) == -ENODEV)
+			ret = -EPROBE_DEFER;
+		else
+			ret = PTR_ERR(data->cb_buffer);
+
+		goto error_unreg_buffer;
+	}
+
 	ret = iio_trigger_set_immutable(iio_channel_cb_get_iio_dev(data->cb_buffer),
 					data->trig);
 	if (ret) {
@@ -349,18 +361,6 @@ static int lmp91000_probe(struct i2c_client *client)
 	if (ret)
 		goto error_unreg_trigger;
 
-	data->cb_buffer = iio_channel_get_all_cb(dev, &lmp91000_buffer_cb,
-						 indio_dev);
-
-	if (IS_ERR(data->cb_buffer)) {
-		if (PTR_ERR(data->cb_buffer) == -ENODEV)
-			ret = -EPROBE_DEFER;
-		else
-			ret = PTR_ERR(data->cb_buffer);
-
-		goto error_unreg_buffer;
-	}
-
 	data->adc_chan = iio_channel_cb_get_channels(data->cb_buffer);
 
 	ret = iio_device_register(indio_dev);
@@ -372,11 +372,11 @@ static int lmp91000_probe(struct i2c_client *client)
 error_unreg_cb_buffer:
 	iio_channel_release_all_cb(data->cb_buffer);
 
-error_unreg_buffer:
-	iio_triggered_buffer_cleanup(indio_dev);
-
 error_unreg_trigger:
 	iio_trigger_unregister(data->trig);
+
+error_unreg_buffer:
+	iio_triggered_buffer_cleanup(indio_dev);
 
 	return ret;
 }
