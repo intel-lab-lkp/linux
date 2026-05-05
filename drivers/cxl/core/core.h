@@ -190,6 +190,8 @@ void cxl_dport_map_rch_aer(struct cxl_dport *dport);
 void cxl_disable_rch_root_ints(struct cxl_dport *dport);
 void cxl_handle_rdport_errors(struct pci_dev *pdev);
 void devm_cxl_dport_ras_setup(struct cxl_dport *dport);
+void cxl_unmask_proto_interrupts(struct device *dev);
+void cxl_mask_proto_interrupts(struct device *dev);
 #else
 static inline int cxl_ras_init(void)
 {
@@ -207,6 +209,8 @@ static inline void cxl_dport_map_rch_aer(struct cxl_dport *dport) { }
 static inline void cxl_disable_rch_root_ints(struct cxl_dport *dport) { }
 static inline void cxl_handle_rdport_errors(struct pci_dev *pdev) { }
 static inline void devm_cxl_dport_ras_setup(struct cxl_dport *dport) { }
+static inline void cxl_unmask_proto_interrupts(struct device *dev) { }
+static inline void cxl_mask_proto_interrupts(struct device *dev) { }
 #endif /* CONFIG_CXL_RAS */
 
 int cxl_gpf_port_setup(struct cxl_dport *dport);

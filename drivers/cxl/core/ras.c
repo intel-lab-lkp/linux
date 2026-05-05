@@ -66,16 +66,59 @@ static void cxl_cper_prot_err_work_fn(struct work_struct *work)
 }
 static DECLARE_WORK(cxl_cper_prot_err_work, cxl_cper_prot_err_work_fn);
 
+void cxl_unmask_proto_interrupts(struct device *dev)
+{
+	struct pci_dev *pdev;
+
+	if (!dev || !dev_is_pci(dev))
+		return;
+
+	pdev = to_pci_dev(dev);
+	if (!pcie_aer_is_native(pdev))
+		return;
+
+	pci_aer_unmask_internal_errors(pdev);
+}
+
+void cxl_mask_proto_interrupts(struct device *dev)
+{
+	struct pci_dev *pdev;
+
+	if (!dev || !dev_is_pci(dev))
+		return;
+
+	pdev = to_pci_dev(dev);
+	if (!pcie_aer_is_native(pdev))
+		return;
+
+	pci_aer_mask_internal_errors(pdev);
+}
+
+static void cxl_mask_proto_irqs(void *dev)
+{
+	cxl_mask_proto_interrupts(dev);
+}
+
 static void cxl_dport_map_ras(struct cxl_dport *dport)
 {
 	struct cxl_register_map *map = &dport->reg_map;
 	struct device *dev = dport->dport_dev;
 
-	if (!map->component_map.ras.valid)
+	if (!map->component_map.ras.valid) {
 		dev_dbg(dev, "RAS registers not found\n");
-	else if (cxl_map_component_regs(map, &dport->regs.component,
-					BIT(CXL_CM_CAP_CAP_ID_RAS)))
+		return;
+	}
+
+	if (cxl_map_component_regs(map, &dport->regs.component,
+				   BIT(CXL_CM_CAP_CAP_ID_RAS))) {
 		dev_dbg(dev, "Failed to map RAS capability.\n");
+		return;
+	}
+
+	cxl_unmask_proto_interrupts(dev);
+	if (devm_add_action_or_reset(dport_to_host(dport),
+				     cxl_mask_proto_irqs, dev))
+		dev_warn(dev, "failed to register CXL proto-irq mask cleanup\n");
 }
 
 /**
@@ -109,6 +152,7 @@ EXPORT_SYMBOL_NS_GPL(devm_cxl_dport_rch_ras_setup, "CXL");
 void devm_cxl_port_ras_setup(struct cxl_port *port)
 {
 	struct cxl_register_map *map = &port->reg_map;
+	struct device *dev;
 
 	if (!map->component_map.ras.valid) {
 		dev_dbg(&port->dev, "RAS registers not found\n");
@@ -117,8 +161,19 @@ void devm_cxl_port_ras_setup(struct cxl_port *port)
 
 	map->host = &port->dev;
 	if (cxl_map_component_regs(map, &port->regs,
-				   BIT(CXL_CM_CAP_CAP_ID_RAS)))
+				   BIT(CXL_CM_CAP_CAP_ID_RAS))) {
 		dev_dbg(&port->dev, "Failed to map RAS capability\n");
+		return;
+	}
+
+	dev = is_cxl_endpoint(port) ? port->uport_dev->parent : port->uport_dev;
+	if (!dev_is_pci(dev))
+		return;
+
+	cxl_unmask_proto_interrupts(dev);
+	if (devm_add_action_or_reset(&port->dev, cxl_mask_proto_irqs, dev))
+		dev_warn(&port->dev,
+			 "Failed to register CXL proto-irq mask cleanup\n");
 }
 EXPORT_SYMBOL_NS_GPL(devm_cxl_port_ras_setup, "CXL");
 
