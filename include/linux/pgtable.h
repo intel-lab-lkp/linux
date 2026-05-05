@@ -2154,8 +2154,16 @@ static inline int pmd_free_pte_page(pmd_t *pmd, unsigned long addr)
 #endif
 
 struct file;
+#ifdef CONFIG_X86
 int phys_mem_access_prot_allowed(struct file *file, unsigned long pfn,
 			unsigned long size, pgprot_t *vma_prot);
+#else
+static inline
+int phys_mem_access_prot_allowed(struct file *file, unsigned long pfn,
+			unsigned long size, pgprot_t *vma_prot) {
+	return 1;
+}
+#endif
 
 #ifndef CONFIG_X86_ESPFIX64
 static inline void init_espfix_bsp(void) { }
