@@ -47,4 +47,7 @@ void intel_color_plane_program_pipeline(struct intel_dsb *dsb,
 void intel_color_plane_commit_arm(struct intel_dsb *dsb,
 				  const struct intel_plane_state *plane_state);
 bool intel_color_crtc_has_3dlut(struct intel_display *display, enum pipe pipe);
+u32 intel_color_hw_background_color(u64 drm_background_color);
+u64 intel_color_drm_background_color(u32 hw_background_color);
+
 #endif /* __INTEL_COLOR_H__ */
