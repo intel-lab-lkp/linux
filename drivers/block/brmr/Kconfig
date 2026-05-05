@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+
+config BLK_DEV_BRMR
+	bool
+
+config BLK_DEV_BRMR_CLIENT
+	tristate "Block device over RMR (BRMR) client"
+	depends on INFINIBAND_RMR_CLIENT
+	select BLK_DEV_BRMR
+	help
+	  BRMR client is a block device driver that sits on top of the
+	  RMR ULP and exposes a standard Linux block device (/dev/brmrX)
+	  backed by an RMR pool.  Together with RMR it provides a
+	  single-hop replication and resynchronization solution for
+	  RDMA-connected storage clusters.
+
+	  If unsure, say N.
+
+config BLK_DEV_BRMR_SERVER
+	tristate "Block device over RMR (BRMR) server"
+	depends on INFINIBAND_RMR_SERVER
+	select BLK_DEV_BRMR
+	help
+	  BRMR server exports a local block device as the backing store
+	  for an RMR pool, so that BRMR clients can map it remotely
+	  over RDMA.
+
+	  If unsure, say N.

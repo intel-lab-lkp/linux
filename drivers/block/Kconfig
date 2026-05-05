@@ -353,6 +353,8 @@ config BLKDEV_UBLK_LEGACY_OPCODES
 
 source "drivers/block/rnbd/Kconfig"
 
+source "drivers/block/brmr/Kconfig"
+
 config BLK_DEV_ZONED_LOOP
 	tristate "Zoned loopback device support"
 	depends on BLK_DEV_ZONED
