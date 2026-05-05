@@ -166,7 +166,9 @@ else
 fi
 sourcename=${KDEB_SOURCENAME:-linux-upstream}
 
-if [ "$ARCH" = "um" ] ; then
+if [ "${KDEB_PACKAGENAME:+set}" ]; then
+	packagename=$KDEB_PACKAGENAME
+elif [ "$ARCH" = "um" ]; then
 	packagename=user-mode-linux
 else
 	packagename=linux-image
@@ -252,7 +254,7 @@ fi
 if is_enabled CONFIG_DEBUG_INFO; then
 cat <<EOF >> debian/control
 
-Package: linux-image-${KERNELRELEASE}-dbg
+Package: $packagename-${KERNELRELEASE}-dbg
 Section: debug
 Architecture: $debarch
 Build-Profiles: <!pkg.${sourcename}.nokerneldbg>

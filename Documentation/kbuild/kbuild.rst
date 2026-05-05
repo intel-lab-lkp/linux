@@ -177,6 +177,16 @@ the UTS_MACHINE variable, and on some architectures also the kernel config.
 The value of KBUILD_DEBARCH is assumed (not checked) to be a valid Debian
 architecture.
 
+KDEB_SOURCENAME
+----------------
+For the deb-pkg target, allows overriding the default source package name.
+The default package name is "linux-upstream".
+
+KDEB_PACKAGENAME
+----------------
+For the deb-pkg target, allows overriding the default binary package name.
+The default package name is "linux-image".
+
 KDOCFLAGS
 ---------
 Specify extra (warning/error) flags for kernel-doc checks during the build,
