@@ -42,97 +42,88 @@ static void dma_fence_array_clear_pending_error(struct dma_fence_array *array)
 	cmpxchg(&array->base.error, PENDING_ERROR, 0);
 }
 
-static void irq_dma_fence_array_work(struct irq_work *wrk)
-{
-	struct dma_fence_array *array = container_of(wrk, typeof(*array), work);
-
-	dma_fence_array_clear_pending_error(array);
-
-	dma_fence_signal(&array->base);
-	dma_fence_put(&array->base);
-}
-
 static void dma_fence_array_cb_func(struct dma_fence *f,
 				    struct dma_fence_cb *cb)
 {
-	struct dma_fence_array_cb *array_cb =
-		container_of(cb, struct dma_fence_array_cb, cb);
-	struct dma_fence_array *array = array_cb->array;
+	struct dma_fence_array *array =
+		container_of(cb, struct dma_fence_array, callback);
 
-	dma_fence_array_set_pending_error(array, f->error);
+	irq_work_queue(&array->work);
+}
 
-	if (atomic_dec_and_test(&array->num_pending))
-		irq_work_queue(&array->work);
-	else
+static bool dma_fence_array_try_add_cb(struct dma_fence_array *array)
+{
+	while (array->num_pending) {
+		struct dma_fence *f = array->fences[array->num_pending - 1];
+
+		if (!dma_fence_add_callback(f, &array->callback,
+					    dma_fence_array_cb_func))
+			return true;
+
+		dma_fence_array_set_pending_error(array, f->error);
+		--array->num_pending;
+	}
+	return false;
+}
+
+static void dma_fence_array_irq_work(struct irq_work *wrk)
+{
+	struct dma_fence_array *array = container_of(wrk, typeof(*array), work);
+
+	--array->num_pending;
+	if (!dma_fence_array_try_add_cb(array)) {
+		dma_fence_signal(&array->base);
 		dma_fence_put(&array->base);
+	}
 }
 
 static bool dma_fence_array_enable_signaling(struct dma_fence *fence)
 {
 	struct dma_fence_array *array = to_dma_fence_array(fence);
-	struct dma_fence_array_cb *cb = array->callbacks;
-	unsigned i;
 
-	for (i = 0; i < array->num_fences; ++i) {
-		cb[i].array = array;
+	/*
+	 * As we may report that the fence is signaled before all
+	 * callbacks are complete, we need to take an additional
+	 * reference count on the array so that we do not free it too
+	 * early. The core fence handling will only hold the reference
+	 * until we signal the array as complete (but that is now
+	 * insufficient).
+	 */
+	dma_fence_get(&array->base);
+	if (!dma_fence_array_try_add_cb(array)) {
 		/*
-		 * As we may report that the fence is signaled before all
-		 * callbacks are complete, we need to take an additional
-		 * reference count on the array so that we do not free it too
-		 * early. The core fence handling will only hold the reference
-		 * until we signal the array as complete (but that is now
-		 * insufficient).
+		 * When all fences are already signaled we can drop the reference again
+		 * and report to the caller that the array can be signaled as well.
 		 */
-		dma_fence_get(&array->base);
-		if (dma_fence_add_callback(array->fences[i], &cb[i].cb,
-					   dma_fence_array_cb_func)) {
-			int error = array->fences[i]->error;
-
-			dma_fence_array_set_pending_error(array, error);
-			dma_fence_put(&array->base);
-			if (atomic_dec_and_test(&array->num_pending)) {
-				dma_fence_array_clear_pending_error(array);
-				return false;
-			}
-		}
+		dma_fence_put(&array->base);
+		return false;
 	}
-
 	return true;
 }
 
 static bool dma_fence_array_signaled(struct dma_fence *fence)
 {
 	struct dma_fence_array *array = to_dma_fence_array(fence);
-	int num_pending;
+	int num_pending, error = 0;
 	unsigned int i;
 
 	/*
-	 * We need to read num_pending before checking the enable_signal bit
-	 * to avoid racing with the enable_signaling() implementation, which
-	 * might decrement the counter, and cause a partial check.
-	 * atomic_read_acquire() pairs with atomic_dec_and_test() in
-	 * dma_fence_array_enable_signaling()
-	 *
-	 * The !--num_pending check is here to account for the any_signaled case
-	 * if we race with enable_signaling(), that means the !num_pending check
-	 * in the is_signalling_enabled branch might be outdated (num_pending
-	 * might have been decremented), but that's fine. The user will get the
-	 * right value when testing again later.
+	 * Reading num_pending without a memory barrier here is correct since
+	 * that is only for optimization, it is perfectly acceptable to have a
+	 * stale value for it. In all other cases num_pending is accessed by a
+	 * single call chain.
 	 */
-	num_pending = atomic_read_acquire(&array->num_pending);
-	if (test_bit(DMA_FENCE_FLAG_ENABLE_SIGNAL_BIT, &array->base.flags)) {
-		if (num_pending <= 0)
-			goto signal;
-		return false;
-	}
+	num_pending = READ_ONCE(array->num_pending);
+	for (i = 0; i < num_pending; ++i) {
+		struct dma_fence *f = array->fences[i];
 
-	for (i = 0; i < array->num_fences; ++i) {
-		if (dma_fence_is_signaled(array->fences[i]) && !--num_pending)
-			goto signal;
-	}
-	return false;
+		if (!dma_fence_is_signaled(f))
+			return false;
 
-signal:
+		if (!error)
+			error = f->error;
+	}
+	dma_fence_array_set_pending_error(array, error);
 	dma_fence_array_clear_pending_error(array);
 	return true;
 }
@@ -171,15 +162,12 @@ EXPORT_SYMBOL(dma_fence_array_ops);
 
 /**
  * dma_fence_array_alloc - Allocate a custom fence array
- * @num_fences:		[in]	number of fences to add in the array
  *
  * Return dma fence array on success, NULL on failure
  */
-struct dma_fence_array *dma_fence_array_alloc(int num_fences)
+struct dma_fence_array *dma_fence_array_alloc(void)
 {
-	struct dma_fence_array *array;
-
-	return kzalloc_flex(*array, callbacks, num_fences);
+	return kzalloc_obj(struct dma_fence_array);
 }
 EXPORT_SYMBOL(dma_fence_array_alloc);
 
@@ -203,10 +191,13 @@ void dma_fence_array_init(struct dma_fence_array *array,
 	WARN_ON(!num_fences || !fences);
 
 	array->num_fences = num_fences;
+	array->num_pending = num_fences;
+	array->fences = fences;
+	array->base.error = PENDING_ERROR;
 
 	dma_fence_init(&array->base, &dma_fence_array_ops, NULL, context,
 		       seqno);
-	init_irq_work(&array->work, irq_dma_fence_array_work);
+	init_irq_work(&array->work, dma_fence_array_irq_work);
 
 	/*
 	 * dma_fence_array_enable_signaling() is invoked while holding
@@ -219,11 +210,6 @@ void dma_fence_array_init(struct dma_fence_array *array,
 	 * to model this hierarchy correctly.
 	 */
 	lockdep_set_class(&array->base.inline_lock, &dma_fence_array_lock_key);
-
-	atomic_set(&array->num_pending, num_fences);
-	array->fences = fences;
-
-	array->base.error = PENDING_ERROR;
 
 	/*
 	 * dma_fence_array objects should never contain any other fence
@@ -265,7 +251,7 @@ struct dma_fence_array *dma_fence_array_create(int num_fences,
 {
 	struct dma_fence_array *array;
 
-	array = dma_fence_array_alloc(num_fences);
+	array = dma_fence_array_alloc();
 	if (!array)
 		return NULL;
 
