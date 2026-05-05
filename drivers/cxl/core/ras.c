@@ -267,9 +267,6 @@ void cxl_cor_error_detected(struct pci_dev *pdev)
 			return;
 		}
 
-		if (cxlds->rcd)
-			cxl_handle_rdport_errors(cxlds);
-
 		cxl_handle_cor_ras(&cxlds->cxlmd->dev, pci_get_dsn(pdev),
 				   cxlmd->endpoint->regs.ras);
 	}
@@ -292,8 +289,6 @@ pci_ers_result_t cxl_error_detected(struct pci_dev *pdev,
 			return PCI_ERS_RESULT_DISCONNECT;
 		}
 
-		if (cxlds->rcd)
-			cxl_handle_rdport_errors(cxlds);
 		/*
 		 * A frozen channel indicates an impending reset which is fatal to
 		 * CXL.mem operation, and will likely crash the system. On the off
@@ -329,6 +324,15 @@ EXPORT_SYMBOL_NS_GPL(cxl_error_detected, "CXL");
 static void cxl_handle_proto_error(struct pci_dev *pdev, struct cxl_port *port,
 				   struct cxl_dport *dport, int severity)
 {
+	/*
+	 * An RC_END device is an RCD (Restricted CXL Device). Its AER
+	 * interrupt is shared with the RCH Downstream Port, so handle RCH
+	 * Downstream Port protocol errors first before processing the RCD's
+	 * own errors. See CXL spec r3.1 s12.2.
+	 */
+	if (pci_pcie_type(pdev) == PCI_EXP_TYPE_RC_END)
+		cxl_handle_rdport_errors(pdev);
+
 	if (severity == AER_CORRECTABLE) {
 		cxl_handle_cor_ras(&pdev->dev, pci_get_dsn(pdev),
 				   to_ras_base(port, dport));
