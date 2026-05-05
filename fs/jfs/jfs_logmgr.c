@@ -1960,6 +1960,7 @@ static int lbmRead(struct jfs_log * log, int pn, struct lbuf ** bpp)
 {
 	struct bio *bio;
 	struct lbuf *bp;
+	unsigned long flags;
 
 	/*
 	 * allocate a log buffer
@@ -1984,7 +1985,9 @@ static int lbmRead(struct jfs_log * log, int pn, struct lbuf ** bpp)
 		submit_bio(bio);
 	}
 
-	wait_event(bp->l_ioevent, (bp->l_flag != lbmREAD));
+	LCACHE_LOCK(flags);
+	LCACHE_SLEEP_COND(bp->l_ioevent, !(bp->l_flag & lbmREAD), flags);
+	LCACHE_UNLOCK(flags);
 
 	return 0;
 }
