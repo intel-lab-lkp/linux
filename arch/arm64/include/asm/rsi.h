@@ -14,6 +14,7 @@
 
 DECLARE_STATIC_KEY_FALSE(rsi_present);
 
+void __init arm64_early_rsi_init(void);
 void __init arm64_rsi_init(void);
 
 bool arm64_rsi_is_protected(phys_addr_t base, size_t size);
