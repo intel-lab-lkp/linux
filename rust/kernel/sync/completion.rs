@@ -109,4 +109,43 @@ impl Completion {
         // SAFETY: `self.as_raw()` is a pointer to a valid `struct completion`.
         unsafe { bindings::wait_for_completion(self.as_raw()) };
     }
+
+    /// Wait for completion of a task.
+    ///
+    /// This method waits for the completion of a task; it is not interruptible and there is no
+    /// timeout.
+    ///
+    /// See also [`Completion::complete_all`].
+    pub fn wait_for_completion_interruptible(&self) -> Result {
+        // SAFETY: `self.as_raw()` is a pointer to a valid `struct completion`.
+        let err = unsafe { bindings::wait_for_completion_interruptible(self.as_raw()) };
+        if err < 0 {
+            Err(Error::from_errno(err))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Wait for completion of a task.
+    ///
+    /// This method waits for the completion of a task; it is not interruptible and there is no
+    /// timeout.
+    ///
+    /// See also [`Completion::complete_all`].
+    pub fn wait_for_completion_interruptible_timeout(
+        &self,
+        timeout_jiffies: c_ulong,
+    ) -> Result<c_long> {
+        // SAFETY: `self.as_raw()` is a pointer to a valid `struct completion`.
+        let ret: c_long = unsafe {
+            bindings::wait_for_completion_interruptible_timeout(self.as_raw(), timeout_jiffies)
+        };
+        if ret == 0 {
+            Err(ETIMEDOUT)
+        } else if ret < 0 {
+            Err(Error::from_errno(ret as c_int))
+        } else {
+            Ok(ret)
+        }
+    }
 }
