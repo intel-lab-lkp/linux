@@ -727,10 +727,9 @@ ieee80211_key_alloc(u32 cipher, int idx, size_t key_len,
 		/* Initialize AES key state here as an optimization so that
 		 * it does not need to be initialized for every packet.
 		 */
-		key->u.gcmp.tfm = ieee80211_aes_gcm_key_setup_encrypt(key_data,
-								      key_len);
-		if (IS_ERR(key->u.gcmp.tfm)) {
-			err = PTR_ERR(key->u.gcmp.tfm);
+		err = ieee80211_aes_gcm_key_setup_encrypt(&key->u.gcmp.ctx,
+							  key_data, key_len);
+		if (err) {
 			kfree(key);
 			return ERR_PTR(err);
 		}
@@ -752,10 +751,6 @@ static void ieee80211_key_free_common(struct ieee80211_key *key)
 	case WLAN_CIPHER_SUITE_BIP_GMAC_128:
 	case WLAN_CIPHER_SUITE_BIP_GMAC_256:
 		ieee80211_aes_gmac_key_free(key->u.aes_gmac.tfm);
-		break;
-	case WLAN_CIPHER_SUITE_GCMP:
-	case WLAN_CIPHER_SUITE_GCMP_256:
-		ieee80211_aes_gcm_key_free(key->u.gcmp.tfm);
 		break;
 	}
 	kfree_sensitive(key);
