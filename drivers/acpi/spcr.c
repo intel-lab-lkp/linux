@@ -220,6 +220,9 @@ int __init acpi_parse_spcr(bool enable_earlycon, bool enable_console)
 	if (!baud_rate) {
 		snprintf(opts, sizeof(opts), "%s,%s,0x%llx", uart, iotype,
 			 table->serial_port.address);
+	} else if (table->header.revision >= 3 && table->uart_clk_freq) {
+		snprintf(opts, sizeof(opts), "%s,%s,0x%llx,%d,%u", uart, iotype,
+			table->serial_port.address, baud_rate, table->uart_clk_freq);
 	} else {
 		snprintf(opts, sizeof(opts), "%s,%s,0x%llx,%d", uart, iotype,
 			 table->serial_port.address, baud_rate);
