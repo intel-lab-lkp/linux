@@ -57,6 +57,11 @@ int ima_read_modsig(enum ima_hooks func, const void *buf, loff_t buf_len,
 	buf_len -= marker_len;
 	sig = (const struct module_signature *)(p - sizeof(*sig));
 
+	if (sig->id_type != MODULE_SIGNATURE_TYPE_PKCS7) {
+		pr_err("%s: not signed with expected PKCS#7 message\n", func_tokens[func]);
+		return -ENOPKG;
+	}
+
 	rc = mod_check_sig(sig, buf_len, func_tokens[func]);
 	if (rc)
 		return rc;

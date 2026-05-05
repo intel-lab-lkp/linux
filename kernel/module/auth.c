@@ -48,6 +48,11 @@ static int mod_verify_sig(const void *mod, struct load_info *info)
 
 	memcpy(&ms, mod + (modlen - sizeof(ms)), sizeof(ms));
 
+	if (ms.id_type != MODULE_SIGNATURE_TYPE_PKCS7) {
+		pr_err("module: not signed with expected PKCS#7 message\n");
+		return -ENOPKG;
+	}
+
 	ret = mod_check_sig(&ms, modlen, "module");
 	if (ret)
 		return ret;
