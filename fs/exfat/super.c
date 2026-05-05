@@ -657,6 +657,7 @@ free_alloc_bitmap:
 	exfat_free_bitmap(sbi);
 free_bh:
 	brelse(sbi->boot_bh);
+	exfat_free_upcase_table(sbi);
 	return ret;
 }
 
@@ -752,6 +753,7 @@ static int exfat_get_tree(struct fs_context *fc)
 
 static void exfat_free_sbi(struct exfat_sb_info *sbi)
 {
+	exfat_free_upcase_table(sbi);
 	exfat_free_iocharset(sbi);
 	kfree(sbi);
 }
@@ -896,6 +898,12 @@ static int __init init_exfat_fs(void)
 {
 	int err;
 
+	err = exfat_populate_upcase_ptable(&exfat_def_upcase_ptable);
+	if (err) {
+		WARN_ON(err == -EINVAL);
+		return err;
+	}
+
 	err = exfat_cache_init();
 	if (err)
 		return err;
@@ -919,6 +927,7 @@ destroy_cache:
 	kmem_cache_destroy(exfat_inode_cachep);
 shutdown_cache:
 	exfat_cache_shutdown();
+	exfat_free_upcase_ptable(&exfat_def_upcase_ptable);
 	return err;
 }
 
@@ -932,6 +941,7 @@ static void __exit exit_exfat_fs(void)
 	kmem_cache_destroy(exfat_inode_cachep);
 	unregister_filesystem(&exfat_fs_type);
 	exfat_cache_shutdown();
+	exfat_free_upcase_ptable(&exfat_def_upcase_ptable);
 }
 
 module_init(init_exfat_fs);

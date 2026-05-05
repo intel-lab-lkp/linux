@@ -11,6 +11,7 @@
 #include <linux/nls.h>
 #include <linux/blkdev.h>
 #include <linux/backing-dev.h>
+#include <linux/build_bug.h>
 #include <uapi/linux/exfat.h>
 
 #define EXFAT_ROOT_INO		1
@@ -224,6 +225,30 @@ struct exfat_dir_entry {
 };
 
 /*
+ * exfat upcase paged table
+ */
+/* magic values */
+#define EXFAT_UPTBL_PAGESIZE	(512)
+#define EXFAT_UPTBL_SIZE	(1 << 16)
+#define EXFAT_UPTBL_ARRSIZE	(EXFAT_UPTBL_SIZE / EXFAT_UPTBL_PAGESIZE)
+
+struct exfat_upcase_ptable {
+	__u16 *pages[EXFAT_UPTBL_ARRSIZE];
+	size_t cnt;
+};
+
+struct exfat_upcase_range_info {
+	__u16 start;
+	__u16 end;
+	__u16 value;
+	__u16 inc;
+};
+
+/* some safety checks */
+static_assert(EXFAT_UPTBL_SIZE % EXFAT_UPTBL_PAGESIZE == 0);
+static_assert(0xFFFF / EXFAT_UPTBL_PAGESIZE < EXFAT_UPTBL_ARRSIZE);
+
+/*
  * exfat mount in-memory data
  */
 struct exfat_mount_options {
@@ -270,7 +295,8 @@ struct exfat_sb_info {
 	unsigned int map_sectors; /* num of allocation bitmap sectors */
 	struct buffer_head **vol_amap; /* allocation bitmap */
 
-	unsigned short *vol_utbl; /* upcase table */
+	const struct exfat_upcase_ptable *vol_utbl; /* selected upcase ptable */
+	struct exfat_upcase_ptable *vol_utbl_own; /* loaded upcase ptable, if not default */
 
 	unsigned int clu_srch_ptr; /* cluster search pointer */
 	unsigned int used_clusters; /* number of used clusters */
@@ -607,6 +633,27 @@ void __exfat_fs_error(struct super_block *sb, int report, const char *fmt, ...)
 #define exfat_fs_error_ratelimit(sb, fmt, args...) \
 		__exfat_fs_error(sb, __ratelimit(&EXFAT_SB(sb)->ratelimit), \
 		fmt, ## args)
+
+/* exfat/upcase.c */
+int exfat_set_upcase_ptable(struct exfat_upcase_ptable *ptbl,
+		const __u16 index, const __u16 value);
+
+static inline __u16 exfat_lookup_upcase_ptable(const struct exfat_upcase_ptable *ptbl,
+		const __u16 index)
+{
+	const size_t page_idx = index / EXFAT_UPTBL_PAGESIZE;
+	const size_t idx_in_page = index % EXFAT_UPTBL_PAGESIZE;
+	const __u16 ret = ptbl->pages[page_idx] == NULL ? 0 : ptbl->pages[page_idx][idx_in_page];
+
+	return ret == 0 ? index : ret;
+}
+
+void exfat_free_upcase_ptable(struct exfat_upcase_ptable *ptbl);
+int __init exfat_populate_upcase_ptable(struct exfat_upcase_ptable *ptbl);
+
+#define EXFAT_DEF_UTBL_CHKSUM	(0xE619D30D)
+
+extern struct exfat_upcase_ptable exfat_def_upcase_ptable;
 
 /* expand to pr_*() with prefix */
 #define exfat_err(sb, fmt, ...)						\
