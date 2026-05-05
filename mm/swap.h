@@ -94,8 +94,16 @@ static inline struct swap_cluster_info *__swap_entry_to_cluster(swp_entry_t entr
 					swp_offset(entry));
 }
 
-static __always_inline struct swap_cluster_info *__swap_cluster_lock(
-		struct swap_info_struct *si, unsigned long offset, bool irq)
+/**
+ * swap_cluster_lock - Lock and return the swap cluster of given offset.
+ * @si: swap device the cluster belongs to.
+ * @offset: the swap slot offset, pointing to a valid slot.
+ *
+ * Context: The caller must ensure the offset is in the valid range and
+ * protect the swap device with reference count or locks.
+ */
+static inline struct swap_cluster_info *swap_cluster_lock(
+		struct swap_info_struct *si, unsigned long offset)
 {
 	struct swap_cluster_info *ci = __swap_offset_to_cluster(si, offset);
 
@@ -110,77 +118,13 @@ static __always_inline struct swap_cluster_info *__swap_cluster_lock(
 	 */
 	VM_WARN_ON_ONCE(!in_task());
 	VM_WARN_ON_ONCE(percpu_ref_is_zero(&si->users)); /* race with swapoff */
-	if (irq)
-		spin_lock_irq(&ci->lock);
-	else
-		spin_lock(&ci->lock);
+	spin_lock(&ci->lock);
 	return ci;
-}
-
-/**
- * swap_cluster_lock - Lock and return the swap cluster of given offset.
- * @si: swap device the cluster belongs to.
- * @offset: the swap entry offset, pointing to a valid slot.
- *
- * Context: The caller must ensure the offset is in the valid range and
- * protect the swap device with reference count or locks.
- */
-static inline struct swap_cluster_info *swap_cluster_lock(
-		struct swap_info_struct *si, unsigned long offset)
-{
-	return __swap_cluster_lock(si, offset, false);
-}
-
-static inline struct swap_cluster_info *__swap_cluster_get_and_lock(
-		const struct folio *folio, bool irq)
-{
-	VM_WARN_ON_ONCE_FOLIO(!folio_test_locked(folio), folio);
-	VM_WARN_ON_ONCE_FOLIO(!folio_test_swapcache(folio), folio);
-	return __swap_cluster_lock(__swap_entry_to_info(folio->swap),
-				   swp_offset(folio->swap), irq);
-}
-
-/*
- * swap_cluster_get_and_lock - Locks the cluster that holds a folio's entries.
- * @folio: The folio.
- *
- * This locks and returns the swap cluster that contains a folio's swap
- * entries. The swap entries of a folio are always in one single cluster.
- * The folio has to be locked so its swap entries won't change and the
- * cluster won't be freed.
- *
- * Context: Caller must ensure the folio is locked and in the swap cache.
- * Return: Pointer to the swap cluster.
- */
-static inline struct swap_cluster_info *swap_cluster_get_and_lock(
-		const struct folio *folio)
-{
-	return __swap_cluster_get_and_lock(folio, false);
-}
-
-/*
- * swap_cluster_get_and_lock_irq - Locks the cluster that holds a folio's entries.
- * @folio: The folio.
- *
- * Same as swap_cluster_get_and_lock but also disable IRQ.
- *
- * Context: Caller must ensure the folio is locked and in the swap cache.
- * Return: Pointer to the swap cluster.
- */
-static inline struct swap_cluster_info *swap_cluster_get_and_lock_irq(
-		const struct folio *folio)
-{
-	return __swap_cluster_get_and_lock(folio, true);
 }
 
 static inline void swap_cluster_unlock(struct swap_cluster_info *ci)
 {
 	spin_unlock(&ci->lock);
-}
-
-static inline void swap_cluster_unlock_irq(struct swap_cluster_info *ci)
-{
-	spin_unlock_irq(&ci->lock);
 }
 
 /* linux/mm/page_io.c */
@@ -199,6 +143,11 @@ void __swap_writepage(struct folio *folio, struct swap_iocb **swap_plug);
 
 /* linux/mm/swap_state.c */
 extern struct address_space swap_space __read_mostly;
+void swap_cache_lock_irq(void);
+void swap_cache_unlock_irq(void);
+void swap_cache_lock(void);
+void swap_cache_unlock(void);
+
 static inline struct address_space *swap_address_space(swp_entry_t entry)
 {
 	return &swap_space;
@@ -247,14 +196,13 @@ static inline bool folio_matches_swap_entry(const struct folio *folio,
  */
 struct folio *swap_cache_get_folio(swp_entry_t entry);
 void *swap_cache_get_shadow(swp_entry_t entry);
-void swap_cache_add_folio(struct folio *folio, swp_entry_t entry, void **shadow);
+int swap_cache_add_folio(struct folio *folio, swp_entry_t entry,
+			 gfp_t gfp, void **shadow);
 void swap_cache_del_folio(struct folio *folio);
-/* Below helpers require the caller to lock and pass in the swap cluster. */
-void __swap_cache_del_folio(struct swap_cluster_info *ci,
-			    struct folio *folio, swp_entry_t entry, void *shadow);
-void __swap_cache_replace_folio(struct swap_cluster_info *ci,
-				struct folio *old, struct folio *new);
-void __swap_cache_clear_shadow(swp_entry_t entry, int nr_ents);
+/* Below helpers require the caller to lock the swap cache. */
+void __swap_cache_del_folio(struct folio *folio, swp_entry_t entry, void *shadow);
+void __swap_cache_replace_folio(struct folio *old, struct folio *new);
+void swap_cache_clear_shadow(swp_entry_t entry, int nr_ents);
 
 void show_swap_cache_info(void);
 void swapcache_clear(struct swap_info_struct *si, swp_entry_t entry, int nr);
@@ -328,23 +276,7 @@ static inline struct swap_cluster_info *swap_cluster_lock(
 	return NULL;
 }
 
-static inline struct swap_cluster_info *swap_cluster_get_and_lock(
-		struct folio *folio)
-{
-	return NULL;
-}
-
-static inline struct swap_cluster_info *swap_cluster_get_and_lock_irq(
-		struct folio *folio)
-{
-	return NULL;
-}
-
 static inline void swap_cluster_unlock(struct swap_cluster_info *ci)
-{
-}
-
-static inline void swap_cluster_unlock_irq(struct swap_cluster_info *ci)
 {
 }
 
@@ -411,21 +343,37 @@ static inline void *swap_cache_get_shadow(swp_entry_t entry)
 	return NULL;
 }
 
-static inline void swap_cache_add_folio(struct folio *folio, swp_entry_t entry, void **shadow)
+static inline int swap_cache_add_folio(struct folio *folio, swp_entry_t entry,
+				       gfp_t gfp, void **shadow)
 {
+	return 0;
 }
 
 static inline void swap_cache_del_folio(struct folio *folio)
 {
 }
 
-static inline void __swap_cache_del_folio(struct swap_cluster_info *ci,
-		struct folio *folio, swp_entry_t entry, void *shadow)
+static inline void __swap_cache_del_folio(struct folio *folio, swp_entry_t entry, void *shadow)
 {
 }
 
-static inline void __swap_cache_replace_folio(struct swap_cluster_info *ci,
-		struct folio *old, struct folio *new)
+static inline void __swap_cache_replace_folio(struct folio *old, struct folio *new)
+{
+}
+
+static inline void swap_cache_lock_irq(void)
+{
+}
+
+static inline void swap_cache_unlock_irq(void)
+{
+}
+
+static inline void swap_cache_lock(void)
+{
+}
+
+static inline void swap_cache_unlock(void)
 {
 }
 

@@ -571,7 +571,6 @@ static int __folio_migrate_mapping(struct address_space *mapping,
 		struct folio *newfolio, struct folio *folio, int expected_count)
 {
 	XA_STATE(xas, &mapping->i_pages, folio->index);
-	struct swap_cluster_info *ci = NULL;
 	struct zone *oldzone, *newzone;
 	int dirty;
 	long nr = folio_nr_pages(folio);
@@ -601,13 +600,13 @@ static int __folio_migrate_mapping(struct address_space *mapping,
 	newzone = folio_zone(newfolio);
 
 	if (folio_test_swapcache(folio))
-		ci = swap_cluster_get_and_lock_irq(folio);
+		swap_cache_lock_irq();
 	else
 		xas_lock_irq(&xas);
 
 	if (!folio_ref_freeze(folio, expected_count)) {
-		if (ci)
-			swap_cluster_unlock_irq(ci);
+		if (folio_test_swapcache(folio))
+			swap_cache_unlock_irq();
 		else
 			xas_unlock_irq(&xas);
 		return -EAGAIN;
@@ -640,7 +639,7 @@ static int __folio_migrate_mapping(struct address_space *mapping,
 	}
 
 	if (folio_test_swapcache(folio))
-		__swap_cache_replace_folio(ci, folio, newfolio);
+		__swap_cache_replace_folio(folio, newfolio);
 	else
 		xas_store(&xas, newfolio);
 
@@ -652,8 +651,8 @@ static int __folio_migrate_mapping(struct address_space *mapping,
 	folio_ref_unfreeze(folio, expected_count - nr);
 
 	/* Leave irq disabled to prevent preemption while updating stats */
-	if (ci)
-		swap_cluster_unlock(ci);
+	if (folio_test_swapcache(folio))
+		swap_cache_unlock();
 	else
 		xas_unlock(&xas);
 
