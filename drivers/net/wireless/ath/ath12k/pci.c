@@ -303,7 +303,8 @@ static void ath12k_pci_sw_reset(struct ath12k_base *ab, bool power_on)
 
 	ath12k_mhi_clear_vector(ab);
 	ath12k_pci_clear_dbg_registers(ab);
-	ath12k_pci_soc_global_reset(ab);
+	if (!power_on)
+		ath12k_pci_soc_global_reset(ab);
 	ath12k_mhi_set_mhictrl_reset(ab);
 }
 
