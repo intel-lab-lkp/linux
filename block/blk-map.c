@@ -305,6 +305,8 @@ static int bio_map_user_iov(struct request *rq, struct iov_iter *iter,
 					       nr_vecs, extraction_flags, &offs);
 		if (unlikely(bytes <= 0)) {
 			ret = bytes ? bytes : -EFAULT;
+			if (pages != stack_pages)
+				kvfree(pages);
 			goto out_unmap;
 		}
 
