@@ -1125,14 +1125,6 @@ default_console_loglevel default value for console_loglevel
 ======================== =====================================
 
 
-printk_delay
-============
-
-Delay each printk message in ``printk_delay`` milliseconds
-
-Value from 0 - 10000 is allowed.
-
-
 printk_ratelimit
 ================
 

@@ -42,15 +42,6 @@ static const struct ctl_table printk_sysctls[] = {
 		.proc_handler	= proc_dointvec,
 	},
 	{
-		.procname	= "printk_delay",
-		.data		= &printk_delay_msec,
-		.maxlen		= sizeof(int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec_minmax,
-		.extra1		= SYSCTL_ZERO,
-		.extra2		= (void *)&ten_thousand,
-	},
-	{
 		.procname	= "printk_devkmsg",
 		.data		= devkmsg_log_str,
 		.maxlen		= DEVKMSG_STR_MAX_SIZE,
