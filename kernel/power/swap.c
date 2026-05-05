@@ -174,10 +174,10 @@ sector_t alloc_swapdev_block(int swap)
 	 * Allocate a swap page and register that it has been allocated, so that
 	 * it can be freed in case of an error.
 	 */
-	offset = swp_offset(get_swap_page_of_type(swap));
+	offset = swp_slot_offset(swap_slot_alloc_of_type(swap));
 	if (offset) {
 		if (swsusp_extents_insert(offset))
-			swap_free(swp_entry(swap, offset));
+			swap_slot_free_nr(swp_slot(swap, offset), 1);
 		else
 			return swapdev_block(swap, offset);
 	}
@@ -197,7 +197,7 @@ void free_all_swap_pages(int swap)
 
 		ext = rb_entry(node, struct swsusp_extent, node);
 		rb_erase(node, &swsusp_extents);
-		swap_free_nr(swp_entry(swap, ext->start),
+		swap_slot_free_nr(swp_slot(swap, ext->start),
 			     ext->end - ext->start + 1);
 
 		kfree(ext);

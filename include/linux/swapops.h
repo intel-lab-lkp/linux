@@ -360,5 +360,30 @@ static inline pmd_t swp_entry_to_pmd(swp_entry_t entry)
 
 #endif  /* CONFIG_ARCH_ENABLE_THP_MIGRATION */
 
+/* Physical swap slots operations */
+
+/*
+ * Store a swap device type + offset into a swp_slot_t handle.
+ */
+static inline swp_slot_t swp_slot(unsigned long type, pgoff_t offset)
+{
+	swp_slot_t ret;
+
+	ret.val = (type << SWP_TYPE_SHIFT) | (offset & SWP_OFFSET_MASK);
+	return ret;
+}
+
+/* Extract the `type' field from a swp_slot_t. */
+static inline unsigned swp_slot_type(swp_slot_t slot)
+{
+	return (slot.val >> SWP_TYPE_SHIFT);
+}
+
+/* Extract the `offset' field from a swp_slot_t. */
+static inline pgoff_t swp_slot_offset(swp_slot_t slot)
+{
+	return slot.val & SWP_OFFSET_MASK;
+}
+
 #endif /* CONFIG_MMU */
 #endif /* _LINUX_SWAPOPS_H */

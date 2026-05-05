@@ -279,12 +279,28 @@ static __always_inline unsigned long encoded_nr_pages(struct encoded_page *page)
 }
 
 /*
+ * Virtual swap slot.
+ *
+ * This type is used to represent a virtual swap slot, i.e an identifier of
+ * a swap entry. This is stored in PTEs that originally refer to the swapped
+ * out page, and is used to index into various swap architectures (swap cache,
+ * zswap tree, swap cgroup array, etc.).
+ *
  * A swap entry has to fit into a "unsigned long", as the entry is hidden
  * in the "index" field of the swapper address space.
  */
 typedef struct {
 	unsigned long val;
 } swp_entry_t;
+
+/*
+ * Physical swap slot.
+ *
+ * This type is used to represent a PAGE_SIZED slot on a swapfile.
+ */
+typedef struct {
+	unsigned long val;
+} swp_slot_t;
 
 /**
  * typedef softleaf_t - Describes a page table software leaf entry, abstracted

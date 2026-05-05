@@ -65,13 +65,14 @@ void swap_cgroup_record(struct folio *folio, unsigned short id,
 			swp_entry_t ent)
 {
 	unsigned int nr_ents = folio_nr_pages(folio);
+	swp_slot_t slot = swp_entry_to_swp_slot(ent);
 	struct swap_cgroup *map;
 	pgoff_t offset, end;
 	unsigned short old;
 
-	offset = swp_offset(ent);
+	offset = swp_slot_offset(slot);
 	end = offset + nr_ents;
-	map = swap_cgroup_ctrl[swp_type(ent)].map;
+	map = swap_cgroup_ctrl[swp_slot_type(slot)].map;
 
 	do {
 		old = __swap_cgroup_id_xchg(map, offset, id);
@@ -92,13 +93,13 @@ void swap_cgroup_record(struct folio *folio, unsigned short id,
  */
 unsigned short swap_cgroup_clear(swp_entry_t ent, unsigned int nr_ents)
 {
-	pgoff_t offset, end;
+	swp_slot_t slot = swp_entry_to_swp_slot(ent);
+	pgoff_t offset = swp_slot_offset(slot);
+	pgoff_t end = offset + nr_ents;
 	struct swap_cgroup *map;
 	unsigned short old, iter = 0;
 
-	offset = swp_offset(ent);
-	end = offset + nr_ents;
-	map = swap_cgroup_ctrl[swp_type(ent)].map;
+	map = swap_cgroup_ctrl[swp_slot_type(slot)].map;
 
 	do {
 		old = __swap_cgroup_id_xchg(map, offset, 0);
@@ -119,12 +120,13 @@ unsigned short swap_cgroup_clear(swp_entry_t ent, unsigned int nr_ents)
 unsigned short lookup_swap_cgroup_id(swp_entry_t ent)
 {
 	struct swap_cgroup_ctrl *ctrl;
+	swp_slot_t slot = swp_entry_to_swp_slot(ent);
 
 	if (mem_cgroup_disabled())
 		return 0;
 
-	ctrl = &swap_cgroup_ctrl[swp_type(ent)];
-	return __swap_cgroup_id_lookup(ctrl->map, swp_offset(ent));
+	ctrl = &swap_cgroup_ctrl[swp_slot_type(slot)];
+	return __swap_cgroup_id_lookup(ctrl->map, swp_slot_offset(slot));
 }
 
 int swap_cgroup_swapon(int type, unsigned long max_pages)
