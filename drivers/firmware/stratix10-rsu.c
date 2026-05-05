@@ -254,7 +254,13 @@ static void rsu_async_get_spt_table_callback(struct device *dev,
  * is necessary to get RSU boot log or set the address of bitstream to
  * boot after reboot.
  *
- * Returns 0 on success or -ETIMEDOUT on error.
+ * Return:
+ * * 0 on success
+ * * -EAGAIN if the driver mutex could not be acquired
+ * * a negative errno from stratix10_svc_send() on failure to send the request
+ * * -ETIMEDOUT if waiting for the SMC callback times out
+ * * a negative errno from wait_for_completion_interruptible_timeout() if
+ *   interrupted or otherwise signaled while waiting (for example -ERESTARTSYS)
  */
 static int rsu_send_msg(struct stratix10_rsu_priv *priv,
 			enum stratix10_svc_command_code command,
@@ -264,7 +270,8 @@ static int rsu_send_msg(struct stratix10_rsu_priv *priv,
 	struct stratix10_svc_client_msg msg;
 	int ret;
 
-	mutex_lock(&priv->lock);
+	if (!mutex_trylock(&priv->lock))
+		return -EAGAIN;
 	reinit_completion(&priv->completion);
 	priv->client.receive_cb = callback;
 
@@ -597,7 +604,9 @@ static ssize_t reboot_image_store(struct device *dev,
 
 	ret = rsu_send_msg(priv, COMMAND_RSU_UPDATE,
 			   address, rsu_command_callback);
-	if (ret) {
+	if (ret == -EAGAIN) {
+		return 0;
+	} else if (ret) {
 		dev_err(dev, "Error, RSU update returned %i\n", ret);
 		return ret;
 	}
