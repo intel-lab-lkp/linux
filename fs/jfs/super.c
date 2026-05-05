@@ -247,6 +247,13 @@ struct jfs_context {
 	s64	newLVSize;
 };
 
+static void jfs_update_remount_flag(struct jfs_sb_info *sbi, int flag)
+{
+	mutex_lock(&sbi->remount_mutex);
+	sbi->flag = flag;
+	mutex_unlock(&sbi->remount_mutex);
+}
+
 static int jfs_parse_param(struct fs_context *fc, struct fs_parameter *param)
 {
 	struct jfs_context *ctx = fc->fs_private;
@@ -362,6 +369,7 @@ static int jfs_reconfigure(struct fs_context *fc)
 {
 	struct jfs_context *ctx = fc->fs_private;
 	struct super_block *sb = fc->root->d_sb;
+	struct jfs_sb_info *sbi = JFS_SBI(sb);
 	int readonly = fc->sb_flags & SB_RDONLY;
 	int rc = 0;
 	int flag = ctx->flag;
@@ -369,15 +377,17 @@ static int jfs_reconfigure(struct fs_context *fc)
 
 	sync_filesystem(sb);
 
-	/* Transfer results of parsing to the sbi */
-	JFS_SBI(sb)->flag = ctx->flag;
-	JFS_SBI(sb)->uid = ctx->uid;
-	JFS_SBI(sb)->gid = ctx->gid;
-	JFS_SBI(sb)->umask = ctx->umask;
-	JFS_SBI(sb)->minblks_trim = ctx->minblks_trim;
+	/* Transfer results of parsing to the sbi. */
+	mutex_lock(&sbi->remount_mutex);
+	sbi->flag = ctx->flag;
+	sbi->uid = ctx->uid;
+	sbi->gid = ctx->gid;
+	sbi->umask = ctx->umask;
+	sbi->minblks_trim = ctx->minblks_trim;
+	mutex_unlock(&sbi->remount_mutex);
 	if (ctx->nls_map != (void *) -1) {
-		unload_nls(JFS_SBI(sb)->nls_tab);
-		JFS_SBI(sb)->nls_tab = ctx->nls_map;
+		unload_nls(sbi->nls_tab);
+		sbi->nls_tab = ctx->nls_map;
 	}
 	ctx->nls_map = NULL;
 
@@ -403,9 +413,9 @@ static int jfs_reconfigure(struct fs_context *fc)
 		 * Invalidate any previously read metadata.  fsck may have
 		 * changed the on-disk data since we mounted r/o
 		 */
-		truncate_inode_pages(JFS_SBI(sb)->direct_inode->i_mapping, 0);
+		truncate_inode_pages(sbi->direct_inode->i_mapping, 0);
 
-		JFS_SBI(sb)->flag = flag;
+		jfs_update_remount_flag(sbi, flag);
 		ret = jfs_mount_rw(sb, 1);
 
 		/* mark the fs r/w for quota activity */
@@ -419,21 +429,21 @@ static int jfs_reconfigure(struct fs_context *fc)
 		if (rc < 0)
 			return rc;
 		rc = jfs_umount_rw(sb);
-		JFS_SBI(sb)->flag = flag;
+		jfs_update_remount_flag(sbi, flag);
 		return rc;
 	}
-	if ((JFS_SBI(sb)->flag & JFS_NOINTEGRITY) != (flag & JFS_NOINTEGRITY)) {
+	if ((sbi->flag & JFS_NOINTEGRITY) != (flag & JFS_NOINTEGRITY)) {
 		if (!sb_rdonly(sb)) {
 			rc = jfs_umount_rw(sb);
 			if (rc)
 				return rc;
 
-			JFS_SBI(sb)->flag = flag;
+			jfs_update_remount_flag(sbi, flag);
 			ret = jfs_mount_rw(sb, 1);
 			return ret;
 		}
 	}
-	JFS_SBI(sb)->flag = flag;
+	jfs_update_remount_flag(sbi, flag);
 
 	return 0;
 }
@@ -452,6 +462,8 @@ static int jfs_fill_super(struct super_block *sb, struct fs_context *fc)
 	sbi = kzalloc_obj(struct jfs_sb_info);
 	if (!sbi)
 		return -ENOMEM;
+
+	mutex_init(&sbi->remount_mutex);
 
 	sb->s_fs_info = sbi;
 	sb->s_max_links = JFS_LINK_MAX;
@@ -870,14 +882,17 @@ static void jfs_init_options(struct fs_context *fc, struct jfs_context *ctx)
 {
 	if (fc->purpose == FS_CONTEXT_FOR_RECONFIGURE) {
 		struct super_block *sb = fc->root->d_sb;
+		struct jfs_sb_info *sbi = JFS_SBI(sb);
 
 		/* Copy over current option values and mount flags */
-		ctx->uid = JFS_SBI(sb)->uid;
-		ctx->gid = JFS_SBI(sb)->gid;
-		ctx->umask = JFS_SBI(sb)->umask;
+		mutex_lock(&sbi->remount_mutex);
+		ctx->uid = sbi->uid;
+		ctx->gid = sbi->gid;
+		ctx->umask = sbi->umask;
+		ctx->minblks_trim = sbi->minblks_trim;
+		ctx->flag = sbi->flag;
+		mutex_unlock(&sbi->remount_mutex);
 		ctx->nls_map = (void *)-1;
-		ctx->minblks_trim = JFS_SBI(sb)->minblks_trim;
-		ctx->flag = JFS_SBI(sb)->flag;
 
 	} else {
 		/*
