@@ -484,6 +484,38 @@ define sed-offsets
 	s:->::; p;}'
 endef
 
+#
+# Module Installation
+#
+quiet_cmd_install_mod = INSTALL $@
+      cmd_install_mod = cp $< $@
+
+# Module Strip
+# ---------------------------------------------------------------------------
+#
+# INSTALL_MOD_STRIP, if defined, will cause modules to be stripped after they
+# are installed. If INSTALL_MOD_STRIP is '1', then the default option
+# --strip-debug will be used. Otherwise, INSTALL_MOD_STRIP value will be used
+# as the options to the strip command.
+ifeq ($(INSTALL_MOD_STRIP),1)
+mod-strip-option := --strip-debug
+else
+mod-strip-option := $(INSTALL_MOD_STRIP)
+endif
+
+# Strip
+ifdef INSTALL_MOD_STRIP
+
+quiet_cmd_strip_mod = STRIP   $@
+      cmd_strip_mod = $(STRIP) $(mod-strip-option) $@
+
+else
+
+quiet_cmd_strip_mod =
+      cmd_strip_mod = :
+
+endif
+
 # Use filechk to avoid rebuilds when a header changes, but the resulting file
 # does not
 define filechk_offsets
