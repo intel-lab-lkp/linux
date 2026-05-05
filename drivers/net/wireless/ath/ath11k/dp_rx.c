@@ -1825,11 +1825,12 @@ static int ath11k_dp_rx_msdu_coalesce(struct ath11k *ar,
 		skb_pull(skb, hal_rx_desc_sz);
 		skb_copy_from_linear_data(skb, skb_put(first, buf_len),
 					  buf_len);
-		dev_kfree_skb_any(skb);
-
 		rem_len -= buf_len;
-		if (!rxcb->is_continuation)
+		if (!rxcb->is_continuation) {
+			dev_kfree_skb_any(skb);
 			break;
+		}
+		dev_kfree_skb_any(skb);
 	}
 
 	return 0;
