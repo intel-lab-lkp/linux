@@ -72,6 +72,8 @@ static int vprbrd_iio_read_raw(struct iio_dev *iio_dev,
 		if (ret != sizeof(struct vprbrd_adc_msg)) {
 			dev_err(&iio_dev->dev, "usb send error on adc read\n");
 			error = -EREMOTEIO;
+			mutex_unlock(&vb->lock);
+			goto error;
 		}
 
 		ret = usb_control_msg(vb->usb_dev,
