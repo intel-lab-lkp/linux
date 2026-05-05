@@ -3428,8 +3428,8 @@ static int load_module(struct load_info *info, const char __user *uargs,
 	char *after_dashes;
 
 	/*
-	 * Do the signature check (if any) first. All that
-	 * the signature check needs is info->len, it does
+	 * Do the authentication checks (if any) first. All that
+	 * the authentication checks need is info->len, it does
 	 * not need any of the section info. That can be
 	 * set up later. This will minimize the chances
 	 * of a corrupt module causing problems before
@@ -3439,7 +3439,7 @@ static int load_module(struct load_info *info, const char __user *uargs,
 	 * off the sig length at the end of the module, making
 	 * checks against info->len more correct.
 	 */
-	err = module_sig_check(info, flags);
+	err = module_auth_check(info, flags);
 	if (err)
 		goto free_copy;
 
