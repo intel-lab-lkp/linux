@@ -1613,7 +1613,7 @@ static int i2c_register_adapter(struct i2c_adapter *adap)
 
 	res = i2c_setup_smbus_alert(adap);
 	if (res)
-		goto out_reg;
+		goto err_deregister_clients;
 
 	mutex_lock(&core_lock);
 	idr_replace(&i2c_adapter_idr, adap, adap->nr);
@@ -1636,7 +1636,7 @@ static int i2c_register_adapter(struct i2c_adapter *adap)
 
 	return 0;
 
-out_reg:
+err_deregister_clients:
 	i2c_deregister_clients(adap);
 	device_del(&adap->dev);
 err_remove_debugfs:
