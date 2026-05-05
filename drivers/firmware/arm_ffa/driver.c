@@ -1610,6 +1610,9 @@ ffa_bus_notifier(struct notifier_block *nb, unsigned long action, void *data)
 		struct ffa_driver *ffa_drv = to_ffa_driver(dev->driver);
 		const struct ffa_device_id *id_table = ffa_drv->id_table;
 
+		if (is_ffa_root_device(fdev))
+			return NOTIFY_DONE;
+
 		/*
 		 * FF-A v1.1 provides UUID for each partition as part of the
 		 * discovery API, the discovered UUID must be populated in the
@@ -2029,7 +2032,7 @@ cleanup:
 	ffa_notifications_cleanup();
 }
 
-static int __init ffa_init(void)
+int ffa_core_init(void)
 {
 	int ret;
 	u32 buf_sz;
@@ -2106,16 +2109,24 @@ free_drv_info:
 	kfree(drv_info);
 	return ret;
 }
-rootfs_initcall(ffa_init);
+
+static int __init ffa_init(void)
+{
+	return ffa_root_device_driver_register();
+}
+device_initcall(ffa_init);
 
 static void __exit ffa_exit(void)
 {
 	ffa_notifications_cleanup();
 	ffa_partitions_cleanup();
 	ffa_rxtx_unmap();
-	free_pages_exact(drv_info->tx_buffer, drv_info->rxtx_bufsz);
-	free_pages_exact(drv_info->rx_buffer, drv_info->rxtx_bufsz);
-	kfree(drv_info);
+
+	if (drv_info) {
+		free_pages_exact(drv_info->tx_buffer, drv_info->rxtx_bufsz);
+		free_pages_exact(drv_info->rx_buffer, drv_info->rxtx_bufsz);
+		kfree(drv_info);
+	}
 }
 module_exit(ffa_exit);
 

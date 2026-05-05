@@ -13,11 +13,14 @@
 #include <linux/slab.h>
 #include <linux/types.h>
 
+#include <asm/virt.h>
+
 #include "common.h"
 
 #define FFA_UEVENT_MODALIAS_FMT	"arm_ffa:%04x:%pUb"
 
 static DEFINE_IDA(ffa_bus_id);
+static struct ffa_device *ffa_root_dev;
 
 static int ffa_device_match(struct device *dev, const struct device_driver *drv)
 {
@@ -27,7 +30,13 @@ static int ffa_device_match(struct device *dev, const struct device_driver *drv)
 	id_table = to_ffa_driver(drv)->id_table;
 	ffa_dev = to_ffa_dev(dev);
 
-	while (!uuid_is_null(&id_table->uuid)) {
+	if (is_ffa_root_device(ffa_dev)) {
+		if (!id_table)
+			return 1;
+		return 0;
+	}
+
+	while (id_table && !uuid_is_null(&id_table->uuid)) {
 		/*
 		 * FF-A v1.0 doesn't provide discovery of UUIDs, just the
 		 * partition IDs, so match it unconditionally here and handle
@@ -50,7 +59,7 @@ static int ffa_device_probe(struct device *dev)
 	struct ffa_device *ffa_dev = to_ffa_dev(dev);
 
 	/* UUID can be still NULL with FF-A v1.0, so just skip probing them */
-	if (uuid_is_null(&ffa_dev->uuid))
+	if (!is_ffa_root_device(ffa_dev) && uuid_is_null(&ffa_dev->uuid))
 		return -ENODEV;
 
 	return ffa_drv->probe(ffa_dev);
@@ -67,6 +76,9 @@ static void ffa_device_remove(struct device *dev)
 static int ffa_device_uevent(const struct device *dev, struct kobj_uevent_env *env)
 {
 	const struct ffa_device *ffa_dev = to_ffa_dev(dev);
+
+	if (is_ffa_root_device(ffa_dev))
+		return 0;
 
 	return add_uevent_var(env, "MODALIAS=" FFA_UEVENT_MODALIAS_FMT,
 			      ffa_dev->vm_id, &ffa_dev->uuid);
@@ -114,7 +126,6 @@ const struct bus_type ffa_bus_type = {
 	.probe		= ffa_device_probe,
 	.remove		= ffa_device_remove,
 	.uevent		= ffa_device_uevent,
-	.dev_groups	= ffa_device_attributes_groups,
 };
 EXPORT_SYMBOL_GPL(ffa_bus_type);
 
@@ -149,13 +160,18 @@ static void ffa_release_device(struct device *dev)
 {
 	struct ffa_device *ffa_dev = to_ffa_dev(dev);
 
-	ida_free(&ffa_bus_id, ffa_dev->id);
+	if (!is_ffa_root_device(ffa_dev))
+		ida_free(&ffa_bus_id, ffa_dev->id);
 	kfree(ffa_dev);
 }
 
 static int __ffa_devices_unregister(struct device *dev, void *data)
 {
-	device_unregister(dev);
+	struct ffa_device *ffa_dev = to_ffa_dev(dev);
+
+	/* ffa_root_dev will be removed in arm_ffa_bus_exit(). */
+	if (!is_ffa_root_device(ffa_dev))
+		device_unregister(dev);
 
 	return 0;
 }
@@ -195,6 +211,10 @@ ffa_device_register(const struct ffa_partition_info *part_info,
 	int id, ret;
 	struct device *dev;
 	struct ffa_device *ffa_dev;
+	struct device_link *link;
+
+	if (!ffa_root_dev)
+		return NULL;
 
 	if (!part_info)
 		return NULL;
@@ -213,6 +233,8 @@ ffa_device_register(const struct ffa_partition_info *part_info,
 	dev->bus = &ffa_bus_type;
 	dev->release = ffa_release_device;
 	dev->dma_mask = &dev->coherent_dma_mask;
+	dev->parent = &ffa_root_dev->dev;
+	dev->groups = ffa_device_attributes_groups;
 	dev_set_name(&ffa_dev->dev, "arm-ffa-%d", id);
 
 	ffa_dev->id = id;
@@ -221,7 +243,18 @@ ffa_device_register(const struct ffa_partition_info *part_info,
 	ffa_dev->ops = ops;
 	uuid_copy(&ffa_dev->uuid, &part_info->uuid);
 
-	ret = device_register(&ffa_dev->dev);
+	device_initialize(dev);
+
+	link = device_link_add(dev, &ffa_root_dev->dev,
+			       DL_FLAG_PM_RUNTIME | DL_FLAG_AUTOPROBE_CONSUMER);
+	if (!link) {
+		dev_err(dev, "unable to link device %s\n", dev_name(dev));
+		device_link_del(link);
+		put_device(dev);
+		return NULL;
+	}
+
+	ret = device_add(dev);
 	if (ret) {
 		dev_err(dev, "unable to register device %s err=%d\n",
 			dev_name(dev), ret);
@@ -242,15 +275,93 @@ void ffa_device_unregister(struct ffa_device *ffa_dev)
 }
 EXPORT_SYMBOL_GPL(ffa_device_unregister);
 
+static int __init ffa_root_device_register(void)
+{
+	int ret;
+	struct device *dev;
+	struct ffa_device *ffa_dev;
+
+	ffa_dev = kzalloc_obj(*ffa_dev);
+	if (!ffa_dev) {
+		return -ENOMEM;
+	}
+
+	dev = &ffa_dev->dev;
+	dev->bus = &ffa_bus_type;
+	dev->release = ffa_release_device;
+	dev->dma_mask = &dev->coherent_dma_mask;
+	dev_set_name(&ffa_dev->dev, "%s", "arm-ffa");
+
+	ffa_dev->id = FFA_ROOT_DEV_ID;
+
+	ret = device_register(&ffa_dev->dev);
+	if (ret) {
+		dev_err(dev, "unable to register root device. err=%d\n", ret);
+		put_device(dev);
+		return ret;
+	}
+
+	ffa_root_dev = ffa_dev;
+
+	return 0;
+}
+
+static void ffa_root_device_unregister(void)
+{
+	ffa_device_unregister(ffa_root_dev);
+	ffa_root_dev = NULL;
+}
+
+static int ffa_root_device_probe(struct ffa_device *ffa_dev)
+{
+	if (!is_ffa_root_device(ffa_dev))
+		return -EINVAL;
+
+	if (is_protected_kvm_enabled() && !is_pkvm_initialized())
+		return -EPROBE_DEFER;
+
+	return ffa_core_init();
+}
+
+static struct ffa_driver ffa_root_dev_driver = {
+	.name = "arm-ffa",
+	.probe = ffa_root_device_probe,
+	.id_table = NULL,
+};
+
+int ffa_root_device_driver_register(void)
+{
+	return ffa_driver_register(&ffa_root_dev_driver, THIS_MODULE, KBUILD_MODNAME);
+}
+
+static void ffa_root_device_driver_unregister(void)
+{
+	ffa_driver_unregister(&ffa_root_dev_driver);
+}
+
 static int __init arm_ffa_bus_init(void)
 {
-	return bus_register(&ffa_bus_type);
+	int ret;
+
+	ret = bus_register(&ffa_bus_type);
+	if (ret)
+		return ret;
+
+	ret = ffa_root_device_register();
+	if (ret) {
+		bus_unregister(&ffa_bus_type);
+		return ret;
+	}
+
+	return 0;
 }
 subsys_initcall(arm_ffa_bus_init);
 
 static void __exit arm_ffa_bus_exit(void)
 {
 	ffa_devices_unregister();
+	ffa_root_device_unregister();
+	ffa_root_device_driver_unregister();
 	bus_unregister(&ffa_bus_type);
 	ida_destroy(&ffa_bus_id);
 }

@@ -10,17 +10,26 @@
 #include <linux/arm-smccc.h>
 #include <linux/err.h>
 
+#define FFA_ROOT_DEV_ID	(0)
+
 typedef struct arm_smccc_1_2_regs ffa_value_t;
 
 typedef void (ffa_fn)(ffa_value_t, ffa_value_t *);
 
 bool ffa_device_is_valid(struct ffa_device *ffa_dev);
 void ffa_device_match_uuid(struct ffa_device *ffa_dev, const uuid_t *uuid);
+int ffa_root_device_driver_register(void);
+int ffa_core_init(void);
+
+static __always_inline bool is_ffa_root_device(const struct ffa_device *ffa_dev)
+{
+	return ffa_dev->id == FFA_ROOT_DEV_ID;
+}
 
 #ifdef CONFIG_ARM_FFA_SMCCC
-int __init ffa_transport_init(ffa_fn **invoke_ffa_fn);
+int ffa_transport_init(ffa_fn **invoke_ffa_fn);
 #else
-static inline int __init ffa_transport_init(ffa_fn **invoke_ffa_fn)
+static inline int ffa_transport_init(ffa_fn **invoke_ffa_fn)
 {
 	return -EOPNOTSUPP;
 }
