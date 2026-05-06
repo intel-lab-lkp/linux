@@ -10676,12 +10676,59 @@ static const struct pci_device_id pqi_pci_id_table[] = {
 
 MODULE_DEVICE_TABLE(pci, pqi_pci_id_table);
 
+static void pqi_reset_prepare(struct pci_dev *pci_dev)
+{
+	struct pqi_ctrl_info *ctrl_info = pci_get_drvdata(pci_dev);
+
+	if (!ctrl_info)
+		return;
+
+	dev_info(&pci_dev->dev, "PCI reset prepare\n");
+
+	pqi_wait_until_ofa_finished(ctrl_info);
+
+	pqi_ofa_ctrl_quiesce(ctrl_info);
+
+	ctrl_info->controller_online = false;
+	ctrl_info->pqi_mode_enabled = false;
+}
+
+static void pqi_reset_done(struct pci_dev *pci_dev)
+{
+	int rc;
+	struct pqi_ctrl_info *ctrl_info = pci_get_drvdata(pci_dev);
+
+	if (!ctrl_info)
+		return;
+
+	dev_info(&pci_dev->dev, "PCI reset done - reinitializing\n");
+
+	ssleep(PQI_POST_RESET_DELAY_SECS);
+
+	pqi_ofa_ctrl_unquiesce(ctrl_info);
+
+	rc = pqi_ctrl_init_resume(ctrl_info);
+	if (rc) {
+		dev_err(&pci_dev->dev, "reset recovery failed: %d\n", rc);
+		pqi_take_ctrl_offline(ctrl_info, PQI_FIRMWARE_KERNEL_NOT_UP);
+		return;
+	}
+
+	dev_info(&pci_dev->dev, "reset recovery complete\n");
+}
+
+static const struct pci_error_handlers pqi_pci_error_handlers = {
+	.reset_prepare	= pqi_reset_prepare,
+	.reset_done	= pqi_reset_done,
+};
+
 static struct pci_driver pqi_pci_driver = {
 	.name = DRIVER_NAME_SHORT,
 	.id_table = pqi_pci_id_table,
 	.probe = pqi_pci_probe,
 	.remove = pqi_pci_remove,
 	.shutdown = pqi_shutdown,
+	.err_handler = &pqi_pci_error_handlers,
 #if defined(CONFIG_PM)
 	.driver = {
 		.pm = &pqi_pm_ops
