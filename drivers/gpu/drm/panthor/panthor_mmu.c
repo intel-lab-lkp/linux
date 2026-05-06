@@ -3233,6 +3233,31 @@ void panthor_mmu_force_reclaim(struct panthor_file *pfile)
 }
 
 /**
+ * panthor_mmu_force_claim - Swap in all VMs associated with a file
+ * @pfile: pointer to the &struct panthor_file whose memory to swap in
+ *
+ * Attempt to get all GPU memory of @pfile swapped back in.
+ */
+void panthor_mmu_force_claim(struct panthor_file *pfile)
+{
+	struct panthor_vm *vm;
+	unsigned long i;
+	int ret;
+
+	xa_for_each(&pfile->vms->xa, i, vm) {
+		struct dma_resv *resv = drm_gpuvm_resv(&vm->base);
+
+		dma_resv_lock(resv, NULL);
+		ret = drm_gpuvm_validate(&vm->base, NULL);
+		if (ret)
+			drm_dbg(&vm->ptdev->base, "drm_gpuvm_validate failed: %pe\n",
+				ERR_PTR(ret));
+
+		dma_resv_unlock(resv);
+	}
+}
+
+/**
  * panthor_mmu_unplug() - Unplug the MMU logic
  * @ptdev: Device.
  *

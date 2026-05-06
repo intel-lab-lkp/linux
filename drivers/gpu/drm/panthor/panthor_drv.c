@@ -1924,9 +1924,35 @@ static ssize_t mem_reclaim_store(struct device *dev,
 
 static DEVICE_ATTR_WO(mem_reclaim);
 
+static ssize_t mem_claim_store(struct device *dev, struct device_attribute *attr,
+			       const char *buf, size_t len)
+{
+	struct panthor_device *ptdev = dev_get_drvdata(dev);
+	pid_t tgid;
+	int ret;
+
+	ret = kstrtoint(buf, 0, &tgid);
+	if (ret)
+		return ret;
+
+	if (!capable(CAP_SYS_RESOURCE))
+		return -EPERM;
+
+	ret = panthor_run_on_pfiles_of_tgid(ptdev, tgid, panthor_mmu_force_claim);
+	if (ret < 0)
+		return ret;
+	else if (!ret)
+		return -ESRCH;
+
+	return len;
+}
+
+static DEVICE_ATTR_WO(mem_claim);
+
 static struct attribute *panthor_attrs[] = {
 	&dev_attr_profiling.attr,
 	&dev_attr_mem_reclaim.attr,
+	&dev_attr_mem_claim.attr,
 	NULL,
 };
 
