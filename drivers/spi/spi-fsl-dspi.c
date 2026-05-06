@@ -203,6 +203,8 @@ static const struct regmap_config dspi_regmap_config[] = {
 		.volatile_table	= &dspi_volatile_table,
 		.rd_table	= &dspi_access_table,
 		.wr_table	= &dspi_access_table,
+		.reg_format_endian = REGMAP_ENDIAN_NATIVE,
+		.val_format_endian = REGMAP_ENDIAN_NATIVE,
 	},
 	[S32G_DSPI_REGMAP] = {
 		.reg_bits	= 32,

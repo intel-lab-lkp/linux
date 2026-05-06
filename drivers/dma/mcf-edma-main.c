@@ -21,9 +21,9 @@ static irqreturn_t mcf_edma_tx_handler(int irq, void *dev_id)
 	unsigned int ch;
 	u64 intmap;
 
-	intmap = ioread32(regs->inth);
+	intmap = ioread32be(regs->inth);
 	intmap <<= 32;
-	intmap |= ioread32(regs->intl);
+	intmap |= ioread32be(regs->intl);
 	if (!intmap)
 		return IRQ_NONE;
 
@@ -43,7 +43,7 @@ static irqreturn_t mcf_edma_err_handler(int irq, void *dev_id)
 	struct edma_regs *regs = &mcf_edma->regs;
 	unsigned int err, ch;
 
-	err = ioread32(regs->errl);
+	err = ioread32be(regs->errl);
 	if (!err)
 		return IRQ_NONE;
 
@@ -55,7 +55,7 @@ static irqreturn_t mcf_edma_err_handler(int irq, void *dev_id)
 		}
 	}
 
-	err = ioread32(regs->errh);
+	err = ioread32be(regs->errh);
 	if (!err)
 		return IRQ_NONE;
 
@@ -203,8 +203,8 @@ static int mcf_edma_probe(struct platform_device *pdev)
 		edma_write_tcdreg(mcf_chan, cpu_to_le32(0), csr);
 	}
 
-	iowrite32(~0, regs->inth);
-	iowrite32(~0, regs->intl);
+	iowrite32be(~0, regs->inth);
+	iowrite32be(~0, regs->intl);
 
 	ret = mcf_edma->drvdata->setup_irq(pdev, mcf_edma);
 	if (ret)
@@ -248,7 +248,7 @@ static int mcf_edma_probe(struct platform_device *pdev)
 	}
 
 	/* Enable round robin arbitration */
-	iowrite32(EDMA_CR_ERGA | EDMA_CR_ERCA, regs->cr);
+	iowrite32be(EDMA_CR_ERGA | EDMA_CR_ERCA, regs->cr);
 
 	return 0;
 }
