@@ -557,17 +557,17 @@ static int intel_pstate_freq_to_hwp(struct cpudata *cpu, int freq)
 }
 
 /**
- * intel_pstate_hybrid_hwp_adjust - Calibrate HWP performance levels.
+ * intel_pstate_hwp_adjust - Calibrate HWP performance levels.
  * @cpu: Target CPU.
  *
- * On hybrid processors, HWP may expose more performance levels than there are
+ * On some processors, HWP may expose more performance levels than there are
  * P-states accessible through the PERF_CTL interface.  If that happens, the
  * scaling factor between HWP performance levels and CPU frequency will be less
  * than the scaling factor between P-state values and CPU frequency.
  *
  * In that case, adjust the CPU parameters used in computations accordingly.
  */
-static void intel_pstate_hybrid_hwp_adjust(struct cpudata *cpu)
+static void intel_pstate_hwp_adjust(struct cpudata *cpu)
 {
 	int perf_ctl_max_phys = cpu->pstate.max_pstate_physical;
 	int perf_ctl_scaling = cpu->pstate.perf_ctl_scaling;
@@ -585,7 +585,8 @@ static void intel_pstate_hybrid_hwp_adjust(struct cpudata *cpu)
 	if (scaling == perf_ctl_scaling)
 		return;
 
-	hwp_is_hybrid = true;
+	if (cpu_feature_enabled(X86_FEATURE_HYBRID_CPU))
+		hwp_is_hybrid = true;
 
 	cpu->pstate.turbo_freq = rounddown(cpu->pstate.turbo_pstate * scaling,
 					   perf_ctl_scaling);
@@ -1815,6 +1816,7 @@ static const struct attribute_group intel_pstate_attr_group = {
 };
 
 static const struct x86_cpu_id intel_pstate_cpu_ee_disable_ids[];
+static const struct x86_cpu_id intel_cppc_scaling_ids[];
 
 static struct kobject *intel_pstate_kobject;
 
@@ -2285,15 +2287,16 @@ static int hwp_get_cpu_scaling(int cpu)
 		return core_get_scaling();
 	}
 
-	/* Use core scaling on non-hybrid systems. */
-	if (!cpu_feature_enabled(X86_FEATURE_HYBRID_CPU))
+	/*
+	 * Use core scaling on non-hybrid systems, except for those whose
+	 * perf-to-frequency scaling factor differs from the default
+	 * (e.g. Bartlett Lake) and must be computed via CPPC.
+	 */
+	if (!cpu_feature_enabled(X86_FEATURE_HYBRID_CPU) &&
+	    !x86_match_cpu(intel_cppc_scaling_ids))
 		return core_get_scaling();
 
-	/*
-	 * The system is hybrid, but the hybrid scaling factor is not known or
-	 * the CPU type is not one of the above, so use CPPC to compute the
-	 * scaling factor for this CPU.
-	 */
+	/* Compute the scaling factor via CPPC. */
 	return intel_pstate_cppc_get_scaling(cpu);
 }
 
@@ -2328,7 +2331,7 @@ static void intel_pstate_get_cpu_pstates(struct cpudata *cpu)
 
 		if (pstate_funcs.get_cpu_scaling) {
 			cpu->pstate.scaling = pstate_funcs.get_cpu_scaling(cpu->cpu);
-			intel_pstate_hybrid_hwp_adjust(cpu);
+			intel_pstate_hwp_adjust(cpu);
 		} else {
 			cpu->pstate.scaling = perf_ctl_scaling;
 		}
@@ -3736,6 +3739,16 @@ static const struct x86_cpu_id intel_hybrid_scaling_factor[] = {
 	X86_MATCH_VFM(INTEL_RAPTORLAKE_S, HYBRID_SCALING_FACTOR_ADL),
 	X86_MATCH_VFM(INTEL_METEORLAKE_L, HYBRID_SCALING_FACTOR_MTL),
 	X86_MATCH_VFM(INTEL_LUNARLAKE_M, HYBRID_SCALING_FACTOR_LNL),
+	{}
+};
+
+/*
+ * Non-hybrid CPUs whose perf-to-frequency scaling factor differs from
+ * INTEL_PSTATE_CORE_SCALING. For these, compute the scaling factor
+ * dynamically via CPPC.
+ */
+static const struct x86_cpu_id intel_cppc_scaling_ids[] = {
+	X86_MATCH_VFM(INTEL_BARTLETTLAKE, NULL),
 	{}
 };
 
