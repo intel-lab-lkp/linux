@@ -1844,8 +1844,14 @@ static netdev_tx_t team_xmit(struct sk_buff *skb, struct net_device *dev)
 	unsigned int len = skb->len;
 
 	tx_success = team_queue_override_transmit(team, skb);
-	if (!tx_success)
-		tx_success = team->ops.transmit(team, skb);
+	if (!tx_success) {
+		bool (*transmit)(struct team *team, struct sk_buff *skb);
+
+		transmit = READ_ONCE(team->ops.transmit);
+		if (unlikely(!transmit))
+			transmit = team_dummy_transmit;
+		tx_success = transmit(team, skb);
+	}
 	if (tx_success) {
 		struct team_pcpu_stats *pcpu_stats;
 
