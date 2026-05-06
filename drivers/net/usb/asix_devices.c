@@ -756,7 +756,11 @@ static void ax88772_mac_link_down(struct phylink_config *config,
 	struct usbnet *dev = netdev_priv(to_net_dev(config->dev));
 
 	asix_write_medium_mode(dev, 0, 0);
-	usbnet_link_change(dev, false, false);
+
+	/* Phylink will call netif_carrier_off(), but we should explicitly
+	 * stop RX URBs to save USB bandwidth.
+	 */
+	usbnet_unlink_rx_urbs(dev);
 }
 
 static void ax88772_mac_link_up(struct phylink_config *config,
@@ -787,7 +791,11 @@ static void ax88772_mac_link_up(struct phylink_config *config,
 		m |= AX_MEDIUM_RFC;
 
 	asix_write_medium_mode(dev, m, 0);
-	usbnet_link_change(dev, true, false);
+
+	/* Phylink will call netif_carrier_on(), but we need to explicitly
+	 * kick off RX URB submission in usbnet.
+	 */
+	queue_work(system_bh_wq, &dev->bh_work);
 }
 
 static const struct phylink_mac_ops ax88772_phylink_mac_ops = {
