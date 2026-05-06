@@ -10,7 +10,6 @@
 
 #define UNSPECIFIED_COLOR_FORMAT 5
 #define NUM_SYS_INIT_PACKETS 8
-#define NUM_COMV_AV1 18
 
 #define SYS_INIT_PKT_SIZE (sizeof(struct iris_hfi_header) + \
 	NUM_SYS_INIT_PACKETS * (sizeof(struct iris_hfi_packet) + sizeof(u32)))
@@ -1207,18 +1206,11 @@ static u32 iris_hfi_gen2_buf_type_from_driver(u32 domain, enum iris_buffer_type 
 
 static int iris_set_num_comv(struct iris_inst *inst)
 {
-	struct platform_inst_caps *caps;
+	u32 num_comv = inst->buffers[BUF_OUTPUT].min_count;
 	struct iris_core *core = inst->core;
-	u32 num_comv;
 
-	caps = core->iris_platform_data->inst_caps;
-
-	/*
-	 * AV1 needs more comv buffers than other codecs.
-	 * Update accordingly.
-	 */
-	num_comv = (inst->codec == V4L2_PIX_FMT_AV1) ?
-				NUM_COMV_AV1 : caps->num_comv;
+	if (inst->fw_min_count)
+		num_comv = inst->fw_min_count;
 
 	return core->hfi_ops->session_set_property(inst,
 						   HFI_PROP_COMV_BUFFER_COUNT,
