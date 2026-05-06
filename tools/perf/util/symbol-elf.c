@@ -1372,20 +1372,31 @@ static int dso__process_kernel_symbol(struct dso *dso, struct map *map,
 		 */
 		if (*remap_kernel && dso__kernel(dso) && !kmodule) {
 			*remap_kernel = false;
-			map__set_start(map, shdr->sh_addr + ref_reloc(kmap));
-			map__set_end(map, map__start(map) + shdr->sh_size);
-			map__set_pgoff(map, shdr->sh_offset);
-			map__set_mapping_type(map, MAPPING_TYPE__DSO);
-			/* Ensure maps are correctly ordered */
+			/*
+			 * If the map is tracking inside the kmaps cache list array, we
+			 * MUST remove it before mutating its virtual address key fields
+			 * in place. Otherwise, downstream binary search lookups (bsearch)
+			 * will search for mutated keys inside an array sorted under old
+			 * invariants, causing indexing desynchronization faults.
+			 */
 			if (kmaps) {
 				int err;
 				struct map *tmp = map__get(map);
 
 				maps__remove(kmaps, map);
+				map__set_start(map, shdr->sh_addr + ref_reloc(kmap));
+				map__set_end(map, map__start(map) + shdr->sh_size);
+				map__set_pgoff(map, shdr->sh_offset);
+				map__set_mapping_type(map, MAPPING_TYPE__DSO);
 				err = maps__insert(kmaps, map);
 				map__put(tmp);
 				if (err)
 					return err;
+			} else {
+				map__set_start(map, shdr->sh_addr + ref_reloc(kmap));
+				map__set_end(map, map__start(map) + shdr->sh_size);
+				map__set_pgoff(map, shdr->sh_offset);
+				map__set_mapping_type(map, MAPPING_TYPE__DSO);
 			}
 		}
 
