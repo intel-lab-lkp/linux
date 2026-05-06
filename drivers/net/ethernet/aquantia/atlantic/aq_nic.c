@@ -1522,8 +1522,6 @@ u8 aq_nic_reserve_filter(struct aq_nic_s *self, enum aq_rx_filter_type type)
 	case aq_rx_filter_l3l4:
 		fltr_cnt = AQ_RX_LAST_LOC_FL3L4 - AQ_RX_FIRST_LOC_FL3L4;
 		n_bit = fltr_cnt - self->aq_hw_rx_fltrs.fl3l4.reserved_count;
-
-		self->aq_hw_rx_fltrs.fl3l4.active_ipv4 |= BIT(n_bit);
 		self->aq_hw_rx_fltrs.fl3l4.reserved_count++;
 		location = n_bit;
 		break;
@@ -1543,7 +1541,6 @@ void aq_nic_release_filter(struct aq_nic_s *self, enum aq_rx_filter_type type,
 		break;
 	case aq_rx_filter_l3l4:
 		self->aq_hw_rx_fltrs.fl3l4.reserved_count--;
-		self->aq_hw_rx_fltrs.fl3l4.active_ipv4 &= ~BIT(location);
 		break;
 	default:
 		break;
