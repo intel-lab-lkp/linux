@@ -570,6 +570,8 @@ static int mtk_pcie_startup_port(struct mtk_gen3_pcie *pcie)
 		goto err_power_down_device;
 	}
 
+	pcie_wait_after_link_train(pcie->max_link_speed);
+
 	return 0;
 
 err_power_down_device:
