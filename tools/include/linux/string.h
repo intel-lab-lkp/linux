@@ -12,7 +12,7 @@ void argv_free(char **argv);
 
 int strtobool(const char *s, bool *res);
 
-#define strscpy strcpy
+ssize_t strscpy(char *dest, const char *src, size_t count);
 
 /*
  * glibc based builds needs the extern while uClibc doesn't.
