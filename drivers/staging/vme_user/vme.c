@@ -264,12 +264,6 @@ struct vme_resource *vme_slave_request(struct vme_dev *vdev, u32 address,
 
 	/* Loop through slave resources */
 	list_for_each_entry(slave_image, &bridge->slave_resources, list) {
-		if (!slave_image) {
-			dev_err(bridge->parent,
-				"Registered NULL Slave resource\n");
-			continue;
-		}
-
 		/* Find an unlocked and compatible image */
 		mutex_lock(&slave_image->mtx);
 		if (((slave_image->address_attr & address) == address) &&
@@ -458,12 +452,6 @@ struct vme_resource *vme_master_request(struct vme_dev *vdev, u32 address,
 
 	/* Loop through master resources */
 	list_for_each_entry(master_image, &bridge->master_resources, list) {
-		if (!master_image) {
-			dev_warn(bridge->parent,
-				 "Registered NULL master resource\n");
-			continue;
-		}
-
 		/* Find an unlocked and compatible image */
 		spin_lock(&master_image->lock);
 		if (((master_image->address_attr & address) == address) &&
@@ -832,12 +820,6 @@ struct vme_resource *vme_dma_request(struct vme_dev *vdev, u32 route)
 
 	/* Loop through DMA resources */
 	list_for_each_entry(dma_ctrlr, &bridge->dma_resources, list) {
-		if (!dma_ctrlr) {
-			dev_err(bridge->parent,
-				"Registered NULL DMA resource\n");
-			continue;
-		}
-
 		/* Find an unlocked and compatible controller */
 		mutex_lock(&dma_ctrlr->mtx);
 		if (((dma_ctrlr->route_attr & route) == route) &&
@@ -1437,12 +1419,6 @@ struct vme_resource *vme_lm_request(struct vme_dev *vdev)
 
 	/* Loop through LM resources */
 	list_for_each_entry(lm, &bridge->lm_resources, list) {
-		if (!lm) {
-			dev_err(bridge->parent,
-				"Registered NULL Location Monitor resource\n");
-			continue;
-		}
-
 		/* Find an unlocked controller */
 		mutex_lock(&lm->mtx);
 		if (lm->locked == 0) {
