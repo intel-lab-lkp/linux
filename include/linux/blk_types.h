@@ -69,6 +69,9 @@ struct block_device {
 	atomic_t		bd_fsfreeze_count; /* number of freeze requests */
 	struct mutex		bd_fsfreeze_mutex; /* serialize freeze/thaw */
 
+	/* Seconds; 0 disables read fail-fast window for submit_bh(READ). */
+	unsigned long		bd_read_err_retry_sec;
+
 	struct partition_meta_info *bd_meta_info;
 	int			bd_writers;
 #ifdef CONFIG_SECURITY

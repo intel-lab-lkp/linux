@@ -920,6 +920,7 @@ static sector_t folio_init_buffers(struct folio *folio,
 			bh->b_private = NULL;
 			bh->b_bdev = bdev;
 			bh->b_blocknr = block;
+			clear_buffer_read_io_error_state(bh);
 			if (uptodate)
 				set_buffer_uptodate(bh);
 			if (block < end_block)
@@ -1503,6 +1504,7 @@ static void discard_buffer(struct buffer_head * bh)
 	lock_buffer(bh);
 	clear_buffer_dirty(bh);
 	bh->b_bdev = NULL;
+	clear_buffer_read_io_error_state(bh);
 	b_state = READ_ONCE(bh->b_state);
 	do {
 	} while (!try_cmpxchg_relaxed(&bh->b_state, &b_state,
@@ -1997,6 +1999,7 @@ iomap_to_bh(struct inode *inode, sector_t block, struct buffer_head *bh,
 		bh->b_blocknr = (iomap->addr + offset - iomap->offset) >>
 				inode->i_blkbits;
 		set_buffer_mapped(bh);
+		clear_buffer_read_io_error_state(bh);
 		return 0;
 	default:
 		WARN_ON_ONCE(1);
@@ -2663,6 +2666,33 @@ sector_t generic_block_bmap(struct address_space *mapping, sector_t block,
 }
 EXPORT_SYMBOL(generic_block_bmap);
 
+static void bh_update_io_error_state(struct buffer_head *bh, const struct bio *bio)
+{
+	const enum req_op op = bio_op(bio);
+
+	if (op != REQ_OP_READ && op != REQ_OP_WRITE)
+		return;
+
+	/*
+	 * Track non-readahead read failures (timestamped) so submit_bh() can
+	 * fail repeated reads fast. A successful read or rewrite clears the
+	 * state.
+	 */
+	if (!bio->bi_status) {
+		clear_buffer_read_io_error(bh);
+		bh->b_err_timestamp = 0;
+		return;
+	}
+
+	/* Record the first failure; don't extend the window on repeats. */
+	if (op != REQ_OP_READ || (bio->bi_opf & REQ_RAHEAD) ||
+	    buffer_read_io_error(bh))
+		return;
+
+	set_buffer_read_io_error(bh);
+	bh->b_err_timestamp = jiffies;
+}
+
 static void end_bio_bh_io_sync(struct bio *bio)
 {
 	struct buffer_head *bh = bio->bi_private;
@@ -2670,8 +2700,35 @@ static void end_bio_bh_io_sync(struct bio *bio)
 	if (unlikely(bio_flagged(bio, BIO_QUIET)))
 		set_bit(BH_Quiet, &bh->b_state);
 
+	bh_update_io_error_state(bh, bio);
+
 	bh->b_end_io(bh, !bio->bi_status);
 	bio_put(bio);
+}
+
+static bool bh_failfast_read(struct buffer_head *bh)
+{
+	unsigned long retry_sec = READ_ONCE(bh->b_bdev->bd_read_err_retry_sec);
+
+	if (!retry_sec || !buffer_read_io_error(bh))
+		return false;
+
+	/* No timestamp: treat as stale state and re-arm on the next failure. */
+	if (!bh->b_err_timestamp) {
+		clear_buffer_read_io_error(bh);
+		return false;
+	}
+
+	if (time_before(jiffies,
+			bh->b_err_timestamp + secs_to_jiffies(retry_sec))) {
+		test_set_buffer_req(bh);
+		bh->b_end_io(bh, 0);
+		return true;
+	}
+
+	clear_buffer_read_io_error(bh);
+	bh->b_err_timestamp = 0;
+	return false;
 }
 
 static void buffer_set_crypto_ctx(struct bio *bio, const struct buffer_head *bh,
@@ -2701,6 +2758,14 @@ static void submit_bh_wbc(blk_opf_t opf, struct buffer_head *bh,
 	BUG_ON(!bh->b_end_io);
 	BUG_ON(buffer_delay(bh));
 	BUG_ON(buffer_unwritten(bh));
+
+	/*
+	 * Fail fast for repeated non-readahead buffer_head reads after a recent
+	 * I/O error. This avoids serializing many callers on BH_Lock while
+	 * re-submitting the same failing read.
+	 */
+	if (op == REQ_OP_READ && !(opf & REQ_RAHEAD) && bh_failfast_read(bh))
+		return;
 
 	/*
 	 * Only clear out a write error when rewriting

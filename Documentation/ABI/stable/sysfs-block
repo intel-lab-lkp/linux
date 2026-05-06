@@ -185,6 +185,32 @@ Description:
 		unsigned integer, but only "0" and "1" are valid values.
 
 
+What:		/sys/block/<disk>/read_err_retry_sec
+What:		/sys/block/<disk>/<partition>/read_err_retry_sec
+Date:		May 2026
+Contact:	linux-block@vger.kernel.org
+Description:
+		(RW) Configure the fail-fast window, in seconds, for repeated
+		buffer_head reads after read I/O errors.
+
+		The default value is 0, which disables the fail-fast behavior and
+		preserves the existing retry behavior. When this value is non-zero,
+		a buffer_head that has recently seen a non-readahead read I/O error
+		can fail another read immediately within the configured window,
+		instead of submitting another bio for the same buffer_head.
+
+		This only applies to buffer_head reads submitted through submit_bh().
+		It is not a generic block layer read retry policy, and it does not
+		affect direct I/O or non-buffer_head bio submissions.
+
+		Disk and partition attributes are independent. Setting the disk
+		attribute does not change the value for existing or future
+		partition block devices.
+
+		The maximum accepted value is MAX_JIFFY_OFFSET / HZ. Larger values
+		are rejected with -ERANGE.
+
+
 What:		/sys/block/<disk>/<partition>/alignment_offset
 Date:		April 2009
 Contact:	Martin K. Petersen <martin.petersen@oracle.com>

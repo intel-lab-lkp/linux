@@ -29,6 +29,7 @@ enum bh_state_bits {
 	BH_Delay,	/* Buffer is not yet allocated on disk */
 	BH_Boundary,	/* Block is followed by a discontiguity */
 	BH_Write_EIO,	/* I/O error on write */
+	BH_Read_EIO,	/* I/O error on read */
 	BH_Unwritten,	/* Buffer is allocated on disk but not written */
 	BH_Quiet,	/* Buffer Error Prinks to be quiet */
 	BH_Meta,	/* Buffer contains metadata */
@@ -79,6 +80,7 @@ struct buffer_head {
 	spinlock_t b_uptodate_lock;	/* Used by the first bh in a page, to
 					 * serialise IO completion of other
 					 * buffers in the page */
+	unsigned long b_err_timestamp;	/* timestamp of last I/O error */
 };
 
 /*
@@ -132,10 +134,17 @@ BUFFER_FNS(Async_Write, async_write)
 BUFFER_FNS(Delay, delay)
 BUFFER_FNS(Boundary, boundary)
 BUFFER_FNS(Write_EIO, write_io_error)
+BUFFER_FNS(Read_EIO, read_io_error)
 BUFFER_FNS(Unwritten, unwritten)
 BUFFER_FNS(Meta, meta)
 BUFFER_FNS(Prio, prio)
 BUFFER_FNS(Defer_Completion, defer_completion)
+
+static inline void clear_buffer_read_io_error_state(struct buffer_head *bh)
+{
+	clear_buffer_read_io_error(bh);
+	bh->b_err_timestamp = 0;
+}
 
 static __always_inline void set_buffer_uptodate(struct buffer_head *bh)
 {
@@ -411,6 +420,7 @@ map_bh(struct buffer_head *bh, struct super_block *sb, sector_t block)
 	bh->b_bdev = sb->s_bdev;
 	bh->b_blocknr = block;
 	bh->b_size = sb->s_blocksize;
+	clear_buffer_read_io_error_state(bh);
 }
 
 static inline void wait_on_buffer(struct buffer_head *bh)
