@@ -874,6 +874,7 @@ extern bool cgroup_enable_per_threadgroup_rwsem;
 struct cgroup_of_peak {
 	unsigned long		value;
 	struct list_head	list;
+	struct dmem_cgroup_pool_state *pool;
 };
 
 void of_peak_reset(struct cgroup_of_peak *ofp, struct page_counter *pc,

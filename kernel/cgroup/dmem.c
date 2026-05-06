@@ -57,6 +57,9 @@ struct dmemcg_state {
 	struct cgroup_subsys_state css;
 
 	struct list_head pools;
+
+	/** @peaks_lock: Protects access to the pools' peaks lists */
+	spinlock_t peaks_lock;
 };
 
 struct dmem_cgroup_pool_state {
@@ -72,6 +75,10 @@ struct dmem_cgroup_pool_state {
 	struct rcu_head rcu;
 
 	struct page_counter cnt;
+
+	/* Protected by the dmemcg_state peaks_lock */
+	struct list_head peaks;
+
 	struct dmem_cgroup_pool_state *parent;
 
 	refcount_t ref;
@@ -162,24 +169,43 @@ set_resource_max(struct dmem_cgroup_pool_state *pool, u64 val)
 	page_counter_set_max(&pool->cnt, val);
 }
 
-static u64 get_resource_low(struct dmem_cgroup_pool_state *pool)
+static u64 get_resource_low(struct seq_file *sf, struct dmem_cgroup_pool_state *pool)
 {
 	return pool ? READ_ONCE(pool->cnt.low) : 0;
 }
 
-static u64 get_resource_min(struct dmem_cgroup_pool_state *pool)
+static u64 get_resource_min(struct seq_file *sf, struct dmem_cgroup_pool_state *pool)
 {
 	return pool ? READ_ONCE(pool->cnt.min) : 0;
 }
 
-static u64 get_resource_max(struct dmem_cgroup_pool_state *pool)
+static u64 get_resource_max(struct seq_file *sf, struct dmem_cgroup_pool_state *pool)
 {
 	return pool ? READ_ONCE(pool->cnt.max) : PAGE_COUNTER_MAX;
 }
 
-static u64 get_resource_current(struct dmem_cgroup_pool_state *pool)
+static u64 get_resource_current(struct seq_file *sf, struct dmem_cgroup_pool_state *pool)
 {
 	return pool ? page_counter_read(&pool->cnt) : 0;
+}
+
+static u64 get_resource_peak(struct seq_file *sf, struct dmem_cgroup_pool_state *pool)
+{
+	struct cgroup_of_peak *ofp = of_peak(sf->private);
+	u64 fd_peak, peak;
+	struct dmem_cgroup_pool_state *of_pool;
+
+	if (!pool)
+		return 0;
+
+	of_pool = READ_ONCE(ofp->pool);
+
+	fd_peak = READ_ONCE(ofp->value);
+	if (of_pool != pool || fd_peak == OFP_PEAK_UNSET)
+		peak = pool->cnt.watermark;
+	else
+		peak = max(fd_peak, READ_ONCE(pool->cnt.local_watermark));
+	return peak;
 }
 
 static void reset_all_resource_limits(struct dmem_cgroup_pool_state *rpool)
@@ -227,6 +253,7 @@ dmemcs_alloc(struct cgroup_subsys_state *parent_css)
 		return ERR_PTR(-ENOMEM);
 
 	INIT_LIST_HEAD(&dmemcs->pools);
+	spin_lock_init(&dmemcs->peaks_lock);
 	return &dmemcs->css;
 }
 
@@ -377,6 +404,7 @@ alloc_pool_single(struct dmemcg_state *dmemcs, struct dmem_cgroup_region *region
 			  ppool ? &ppool->cnt : NULL, true);
 	reset_all_resource_limits(pool);
 	refcount_set(&pool->ref, 1);
+	INIT_LIST_HEAD(&pool->peaks);
 	kref_get(&region->ref);
 	if (ppool && !pool->parent) {
 		pool->parent = ppool;
@@ -784,7 +812,7 @@ out_put:
 }
 
 static int dmemcg_limit_show(struct seq_file *sf, void *v,
-			    u64 (*fn)(struct dmem_cgroup_pool_state *))
+			    u64 (*fn)(struct seq_file *, struct dmem_cgroup_pool_state *))
 {
 	struct dmemcg_state *dmemcs = css_to_dmemcs(seq_css(sf));
 	struct dmem_cgroup_region *region;
@@ -796,7 +824,7 @@ static int dmemcg_limit_show(struct seq_file *sf, void *v,
 
 		seq_puts(sf, region->name);
 
-		val = fn(pool);
+		val = fn(sf, pool);
 		if (val < PAGE_COUNTER_MAX)
 			seq_printf(sf, " %lld\n", val);
 		else
@@ -805,6 +833,90 @@ static int dmemcg_limit_show(struct seq_file *sf, void *v,
 	rcu_read_unlock();
 
 	return 0;
+}
+
+static int dmem_cgroup_region_peak_open(struct kernfs_open_file *of)
+{
+	struct cgroup_of_peak *ofp = of_peak(of);
+
+	ofp->value = OFP_PEAK_UNSET;
+
+	return 0;
+}
+
+static void dmem_cgroup_region_peak_remove(struct cgroup_of_peak *ofp)
+{
+	struct dmem_cgroup_pool_state *pool;
+	struct dmemcg_state *dmemcs;
+
+	pool = xchg(&ofp->pool, NULL);
+	if (!pool)
+		return;
+
+	dmemcs = pool->cs;
+
+	spin_lock(&dmemcs->peaks_lock);
+	list_del(&ofp->list);
+	spin_unlock(&dmemcs->peaks_lock);
+
+	WRITE_ONCE(ofp->value, OFP_PEAK_UNSET);
+
+	dmemcg_pool_put(pool);
+}
+
+static void dmem_cgroup_region_peak_release(struct kernfs_open_file *of)
+{
+	struct cgroup_of_peak *ofp = of_peak(of);
+
+	if (ofp->value == OFP_PEAK_UNSET) {
+		/* fast path (no writes on this fd) */
+		return;
+	}
+
+	dmem_cgroup_region_peak_remove(ofp);
+}
+
+static ssize_t dmem_cgroup_region_peak_write(struct kernfs_open_file *of,
+					     char *buf, size_t nbytes, loff_t off)
+{
+	struct dmemcg_state *dmemcs = css_to_dmemcs(of_css(of));
+	struct cgroup_of_peak *ofp = of_peak(of);
+	struct dmem_cgroup_pool_state *pool = NULL;
+	struct dmem_cgroup_region *region;
+	int err = 0;
+
+	buf = strstrip(buf);
+	if (!buf[0])
+		return -EINVAL;
+
+	rcu_read_lock();
+	region = dmemcg_get_region_by_name(buf);
+	rcu_read_unlock();
+
+	if (!region)
+		return -EINVAL;
+
+	pool = get_cg_pool_unlocked(dmemcs, region);
+	if (IS_ERR(pool)) {
+		err = PTR_ERR(pool);
+		goto out_put;
+	}
+
+	dmem_cgroup_region_peak_remove(ofp);
+
+	xchg(&ofp->pool, pool);
+	spin_lock(&dmemcs->peaks_lock);
+	of_peak_reset(ofp, &pool->cnt, &pool->peaks);
+	spin_unlock(&dmemcs->peaks_lock);
+
+out_put:
+	kref_put(&region->ref, dmemcg_free_region);
+	return err ?: nbytes;
+}
+
+static int dmem_cgroup_region_peak_show(struct seq_file *sf, void *v)
+{
+	return dmemcg_limit_show(sf, v, get_resource_peak);
 }
 
 static int dmem_cgroup_region_current_show(struct seq_file *sf, void *v)
@@ -854,6 +966,14 @@ static struct cftype files[] = {
 	{
 		.name = "current",
 		.seq_show = dmem_cgroup_region_current_show,
+	},
+	{
+		.name = "peak",
+		.open = dmem_cgroup_region_peak_open,
+		.release = dmem_cgroup_region_peak_release,
+		.write = dmem_cgroup_region_peak_write,
+		.seq_show = dmem_cgroup_region_peak_show,
+		.flags = CFTYPE_NOT_ON_ROOT,
 	},
 	{
 		.name = "min",
