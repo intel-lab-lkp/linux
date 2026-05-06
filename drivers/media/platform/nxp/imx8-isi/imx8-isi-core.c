@@ -485,7 +485,8 @@ static int mxc_isi_probe(struct platform_device *pdev)
 
 	isi->pdata = of_device_get_match_data(dev);
 
-	isi->pipes = kzalloc_objs(isi->pipes[0], isi->pdata->num_channels);
+	isi->pipes = devm_kcalloc(dev, isi->pdata->num_channels,
+				  sizeof(*isi->pipes), GFP_KERNEL);
 	if (!isi->pipes)
 		return -ENOMEM;
 
