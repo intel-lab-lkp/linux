@@ -541,6 +541,10 @@ try_again:
 	}
 	duration = jiffies - start_time;
 
+	/* one final check to prevent unexpected timeout */
+	if (!done)
+		done = ionic_dev_cmd_done(idev);
+
 	dev_dbg(ionic->dev, "DEVCMD %s (%d) done=%d took %ld secs (%ld jiffies)\n",
 		ionic_opcode_to_str(opcode), opcode,
 		done, duration / HZ, duration);
