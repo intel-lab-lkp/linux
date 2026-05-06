@@ -174,13 +174,21 @@ static void macsec_rxsc_put(struct macsec_rx_sc *sc)
 		call_rcu(&sc->rcu_head, free_rx_sc_rcu);
 }
 
-static void free_rxsa(struct rcu_head *head)
+static void free_rxsa_work(struct work_struct *work)
 {
-	struct macsec_rx_sa *sa = container_of(head, struct macsec_rx_sa, rcu);
+	struct macsec_rx_sa *sa = container_of(work, struct macsec_rx_sa,
+					       destroy_work);
 
 	crypto_free_aead(sa->key.tfm);
 	free_percpu(sa->stats);
 	kfree(sa);
+}
+
+static void free_rxsa(struct rcu_head *head)
+{
+	struct macsec_rx_sa *sa = container_of(head, struct macsec_rx_sa, rcu);
+
+	schedule_work(&sa->destroy_work);
 }
 
 static void macsec_rxsa_put(struct macsec_rx_sa *sa)
@@ -1407,6 +1415,7 @@ static int init_rx_sa(struct macsec_rx_sa *rx_sa, char *sak, int key_len,
 	rx_sa->next_pn = 1;
 	refcount_set(&rx_sa->refcnt, 1);
 	spin_lock_init(&rx_sa->lock);
+	INIT_WORK(&rx_sa->destroy_work, free_rxsa_work);
 
 	return 0;
 }
