@@ -1708,6 +1708,7 @@ sd_init(struct sched_domain_topology_level *tl,
 		.newidle_call		= 512,
 		.newidle_success	= 256,
 		.newidle_ratio		= 512,
+		.newidle_window_pos	= 0,
 		.newidle_stamp		= now,
 
 		.max_newidle_lb_cost	= 0,
