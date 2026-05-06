@@ -18,6 +18,7 @@
 #include "xhci.h"
 #include "xhci-trace.h"
 #include "xhci-pci.h"
+#include "xhci-prom21-hwmon.h"
 
 #define SSIC_PORT_NUM		2
 #define SSIC_PORT_CFG2		0x880c
@@ -677,6 +678,10 @@ int xhci_pci_common_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	if (device_property_read_bool(&dev->dev, "ti,pwron-active-high"))
 		pci_clear_and_set_config_dword(dev, 0xE0, 0, 1 << 22);
 
+	if (dev->vendor == PCI_VENDOR_ID_AMD &&
+	    dev->device == PCI_DEVICE_ID_AMD_PROM21_XHCI)
+		xhci_prom21_hwmon_init(xhci, dev);
+
 	return 0;
 
 put_usb3_hcd:
@@ -712,6 +717,10 @@ void xhci_pci_remove(struct pci_dev *dev)
 
 	xhci = hcd_to_xhci(pci_get_drvdata(dev));
 	set_power_d3 = xhci->quirks & XHCI_SPURIOUS_WAKEUP;
+
+	if (dev->vendor == PCI_VENDOR_ID_AMD &&
+	    dev->device == PCI_DEVICE_ID_AMD_PROM21_XHCI)
+		xhci_try_prom21_hwmon_invalidate(dev);
 
 	xhci->xhc_state |= XHCI_STATE_REMOVING;
 

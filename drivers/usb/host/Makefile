@@ -36,6 +36,10 @@ ifneq ($(CONFIG_USB_XHCI_SIDEBAND),)
 	xhci-hcd-y		+= xhci-sideband.o
 endif
 
+ifneq ($(CONFIG_USB_XHCI_PCI_PROM21_HWMON),)
+	xhci-hcd-y += xhci-prom21-hwmon.o
+endif
+
 obj-$(CONFIG_USB_PCI)	+= pci-quirks.o
 
 obj-$(CONFIG_USB_EHCI_HCD)	+= ehci-hcd.o
