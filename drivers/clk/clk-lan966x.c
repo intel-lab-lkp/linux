@@ -253,7 +253,6 @@ static int lan966x_clk_probe(struct platform_device *pdev)
 	struct clk_hw_onecell_data *hw_data;
 	struct device *dev = &pdev->dev;
 	void __iomem *gate_base;
-	struct resource *res;
 	int i, ret;
 
 	data = device_get_match_data(dev);
@@ -283,12 +282,8 @@ static int lan966x_clk_probe(struct platform_device *pdev)
 		}
 	}
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
-	if (res) {
-		gate_base = devm_ioremap_resource(&pdev->dev, res);
-		if (IS_ERR(gate_base))
-			return PTR_ERR(gate_base);
-
+	gate_base = devm_platform_ioremap_resource(pdev, 1);
+	if (!IS_ERR(gate_base)) {
 		hw_data->num = data->num_total_clks;
 
 		ret = lan966x_gate_clk_register(dev, data, hw_data, gate_base);
