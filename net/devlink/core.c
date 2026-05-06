@@ -4,6 +4,11 @@
  * Copyright (c) 2016 Jiri Pirko <jiri@mellanox.com>
  */
 
+#include <linux/ctype.h>
+#include <linux/init.h>
+#include <linux/list.h>
+#include <linux/slab.h>
+#include <linux/string.h>
 #include <net/genetlink.h>
 #define CREATE_TRACE_POINTS
 #include <trace/events/devlink.h>
@@ -15,6 +20,418 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(devlink_hwerr);
 EXPORT_TRACEPOINT_SYMBOL_GPL(devlink_trap_report);
 
 DEFINE_XARRAY_FLAGS(devlinks, XA_FLAGS_ALLOC);
+
+static char *devlink_default;
+static LIST_HEAD(devlink_default_nodes);
+
+struct devlink_default_attr_item {
+	enum devlink_attr attr;
+	union {
+		enum devlink_eswitch_mode eswitch_mode;
+		struct {
+			char *name;
+			char *value;
+		} param;
+	} value;
+};
+
+struct devlink_default_cmd_item {
+	struct list_head list;
+	enum devlink_command cmd;
+	int (*run)(struct devlink *devlink,
+		   const struct devlink_default_attr_item *attr);
+	struct devlink_default_attr_item attr;
+};
+
+struct devlink_default_node {
+	struct list_head list;
+	char *bus_name;
+	char *dev_name;
+	struct list_head cmd_list;
+};
+
+struct devlink_default_cmd_spec {
+	const char *name;
+	enum devlink_command cmd;
+	int (*run)(struct devlink *devlink,
+		   const struct devlink_default_attr_item *attr);
+	int (*attr_parse)(char *str,
+			  struct devlink_default_attr_item *attr_item);
+};
+
+static int __init
+devlink_default_node_add(const char *bus_name, const char *dev_name,
+			 const char *cmd);
+
+static void __init
+devlink_default_attr_free(struct devlink_default_attr_item *attr)
+{
+	if (attr->attr != DEVLINK_ATTR_PARAM)
+		return;
+
+	kfree(attr->value.param.name);
+	kfree(attr->value.param.value);
+}
+
+static const struct devlink_default_cmd_spec *__init
+devlink_default_cmd_spec_find(const char *name)
+{
+	return NULL;
+}
+
+static int __init
+devlink_default_cmd_parse(char *str,
+			  struct devlink_default_cmd_item *cmd_item)
+{
+	const struct devlink_default_cmd_spec *spec;
+	struct devlink_default_attr_item attr_item = {};
+	char *cmd_name;
+	int err;
+
+	cmd_name = strsep(&str, ":");
+	if (!cmd_name || !*cmd_name || !str || !*str)
+		return -EINVAL;
+
+	spec = devlink_default_cmd_spec_find(cmd_name);
+	if (!spec)
+		return -EINVAL;
+
+	err = spec->attr_parse(str, &attr_item);
+	if (err) {
+		devlink_default_attr_free(&attr_item);
+		return err;
+	}
+	if (cmd_item) {
+		cmd_item->cmd = spec->cmd;
+		cmd_item->run = spec->run;
+		cmd_item->attr = attr_item;
+	} else {
+		devlink_default_attr_free(&attr_item);
+	}
+
+	return 0;
+}
+
+static int __init
+devlink_default_cmd_parse_copy(const char *str,
+			       struct devlink_default_cmd_item *cmd_item)
+{
+	char *cmd;
+	int err;
+
+	cmd = kstrdup(str, GFP_KERNEL);
+	if (!cmd)
+		return -ENOMEM;
+
+	err = devlink_default_cmd_parse(cmd, cmd_item);
+	kfree(cmd);
+	return err;
+}
+
+static int __init
+devlink_default_handle_parse(char *handle, char **bus_name, char **dev_name)
+{
+	char *slash;
+	char *p;
+
+	if (!handle || !*handle)
+		return -EINVAL;
+
+	for (p = handle; *p; p++) {
+		if (isspace(*p))
+			return -EINVAL;
+		if (*p == '[' || *p == ']')
+			return -EINVAL;
+	}
+
+	slash = strchr(handle, '/');
+	if (!slash || slash == handle || !slash[1])
+		return -EINVAL;
+	if (strchr(slash + 1, '/'))
+		return -EINVAL;
+
+	*slash = '\0';
+	if (strchr(handle, ':'))
+		return -EINVAL;
+
+	*bus_name = handle;
+	*dev_name = slash + 1;
+	return 0;
+}
+
+static int __init
+devlink_default_entry_parse(char *entry, bool store)
+{
+	char *handles_end;
+	char *handles;
+	char *handle;
+	char *cmd;
+	int err;
+
+	if (!entry || *entry != '[')
+		return -EINVAL;
+
+	handles = entry + 1;
+	handles_end = strchr(handles, ']');
+	if (!handles_end || handles_end[1] != ':' || !handles_end[2])
+		return -EINVAL;
+
+	*handles_end = '\0';
+	cmd = handles_end + 2;
+	if (!*handles)
+		return -EINVAL;
+
+	while ((handle = strsep(&handles, ",")) != NULL) {
+		char *bus_name;
+		char *dev_name;
+
+		err = devlink_default_handle_parse(handle, &bus_name,
+						   &dev_name);
+		if (err)
+			return err;
+
+		if (!store)
+			continue;
+
+		err = devlink_default_node_add(bus_name, dev_name, cmd);
+		if (err)
+			return err;
+	}
+
+	return 0;
+}
+
+static void __init
+devlink_default_cmd_item_free(struct devlink_default_cmd_item *cmd)
+{
+	devlink_default_attr_free(&cmd->attr);
+	kfree(cmd);
+}
+
+static void __init devlink_default_node_free(struct devlink_default_node *node)
+{
+	struct devlink_default_cmd_item *cmd;
+	struct devlink_default_cmd_item *cmd_tmp;
+
+	list_for_each_entry_safe(cmd, cmd_tmp, &node->cmd_list, list) {
+		list_del(&cmd->list);
+		devlink_default_cmd_item_free(cmd);
+	}
+
+	kfree(node->bus_name);
+	kfree(node->dev_name);
+	kfree(node);
+}
+
+static void __init devlink_default_nodes_clear(void)
+{
+	struct devlink_default_node *node;
+	struct devlink_default_node *node_tmp;
+
+	list_for_each_entry_safe(node, node_tmp, &devlink_default_nodes, list) {
+		list_del(&node->list);
+		devlink_default_node_free(node);
+	}
+}
+
+static struct devlink_default_node *__init
+devlink_default_node_find(const char *bus_name, const char *dev_name)
+{
+	struct devlink_default_node *node;
+
+	list_for_each_entry(node, &devlink_default_nodes, list) {
+		if (!strcmp(node->bus_name, bus_name) &&
+		    !strcmp(node->dev_name, dev_name))
+			return node;
+	}
+
+	return NULL;
+}
+
+static bool __init
+devlink_default_cmd_equal(const struct devlink_default_cmd_item *a,
+			  const struct devlink_default_cmd_item *b)
+{
+	if (a->cmd != b->cmd || a->attr.attr != b->attr.attr)
+		return false;
+
+	return true;
+}
+
+static bool __init
+devlink_default_cmd_exists(struct devlink_default_node *node,
+			   const struct devlink_default_cmd_item *cmd)
+{
+	struct devlink_default_cmd_item *cmd_item;
+
+	list_for_each_entry(cmd_item, &node->cmd_list, list) {
+		if (devlink_default_cmd_equal(cmd_item, cmd))
+			return true;
+	}
+
+	return false;
+}
+
+static int __init
+devlink_default_cmd_item_add(struct devlink_default_node *node,
+			     const char *cmd_str)
+{
+	struct devlink_default_cmd_item *cmd;
+	int err;
+
+	cmd = kzalloc_obj(*cmd);
+	if (!cmd)
+		return -ENOMEM;
+
+	INIT_LIST_HEAD(&cmd->list);
+	err = devlink_default_cmd_parse_copy(cmd_str, cmd);
+	if (err) {
+		devlink_default_cmd_item_free(cmd);
+		return err;
+	}
+
+	if (devlink_default_cmd_exists(node, cmd)) {
+		devlink_default_cmd_item_free(cmd);
+		return -EEXIST;
+	}
+
+	list_add_tail(&cmd->list, &node->cmd_list);
+	return 0;
+}
+
+static int __init
+devlink_default_node_add(const char *bus_name, const char *dev_name,
+			 const char *cmd_str)
+{
+	struct devlink_default_node *node;
+	int err;
+
+	node = devlink_default_node_find(bus_name, dev_name);
+	if (node)
+		return devlink_default_cmd_item_add(node, cmd_str);
+
+	node = kzalloc_obj(*node);
+	if (!node)
+		return -ENOMEM;
+
+	INIT_LIST_HEAD(&node->list);
+	INIT_LIST_HEAD(&node->cmd_list);
+	node->bus_name = kstrdup(bus_name, GFP_KERNEL);
+	node->dev_name = kstrdup(dev_name, GFP_KERNEL);
+	if (!node->bus_name || !node->dev_name) {
+		err = -ENOMEM;
+		goto err_free_node;
+	}
+
+	err = devlink_default_cmd_item_add(node, cmd_str);
+	if (err)
+		goto err_free_node;
+
+	list_add_tail(&node->list, &devlink_default_nodes);
+	return 0;
+
+err_free_node:
+	devlink_default_node_free(node);
+	return err;
+}
+
+static int __init devlink_default_parse(char *str, bool store)
+{
+	char *entry = str;
+	int err;
+
+	if (!str || !*str)
+		return -EINVAL;
+
+	while (entry) {
+		char *handles_end;
+		char *cmd_start;
+		char *entry_end;
+
+		if (*entry != '[') {
+			err = -EINVAL;
+			goto err_clear;
+		}
+
+		handles_end = strchr(entry + 1, ']');
+		if (!handles_end || handles_end[1] != ':') {
+			err = -EINVAL;
+			goto err_clear;
+		}
+
+		cmd_start = handles_end + 2;
+		entry_end = strchr(cmd_start, ',');
+		if (entry_end)
+			*entry_end = '\0';
+
+		err = devlink_default_entry_parse(entry, store);
+		if (err)
+			goto err_clear;
+		if (!entry_end)
+			return 0;
+
+		entry = entry_end + 1;
+		if (!*entry) {
+			err = -EINVAL;
+			goto err_clear;
+		}
+	}
+
+	return 0;
+
+err_clear:
+	if (store)
+		devlink_default_nodes_clear();
+	return err;
+}
+
+static int devlink_default_node_apply(struct devlink *devlink,
+				      const struct devlink_default_node *node)
+{
+	const struct devlink_default_cmd_item *cmd;
+	int err;
+
+	list_for_each_entry(cmd, &node->cmd_list, list) {
+		err = cmd->run(devlink, &cmd->attr);
+		if (err)
+			return err;
+	}
+
+	return 0;
+}
+
+/**
+ * devl_apply_defaults - Apply defaults matching the devlink instance
+ * @devlink: devlink
+ *
+ * The caller must hold the devlink instance lock.
+ */
+int devl_apply_defaults(struct devlink *devlink)
+{
+	const char *bus_name = devlink_bus_name(devlink);
+	const char *dev_name = devlink_dev_name(devlink);
+	struct devlink_default_node *node;
+
+	devl_assert_locked(devlink);
+
+	list_for_each_entry(node, &devlink_default_nodes, list) {
+		if (strcmp(node->bus_name, bus_name) ||
+		    strcmp(node->dev_name, dev_name))
+			continue;
+
+		return devlink_default_node_apply(devlink, node);
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(devl_apply_defaults);
+
+static int __init devlink_default_setup(char *str)
+{
+	devlink_default = str;
+	return 1;
+}
+__setup("devlink=", devlink_default_setup);
 
 static struct devlink *devlinks_xa_get(unsigned long index)
 {
@@ -578,6 +995,27 @@ static int __init devlink_init(void)
 {
 	int err;
 
+	if (devlink_default) {
+		char *def;
+
+		def = kstrdup(devlink_default, GFP_KERNEL);
+		if (!def) {
+			err = -ENOMEM;
+			goto out;
+		}
+		err = devlink_default_parse(def, true);
+		kfree(def);
+		if (err == -EEXIST) {
+			devlink_default = NULL;
+			pr_warn("devlink: duplicate defaults ignored\n");
+		} else if (err == -EINVAL) {
+			devlink_default = NULL;
+			pr_warn("devlink: invalid command line parameter ignored\n");
+		} else if (err) {
+			goto out;
+		}
+	}
+
 	err = register_pernet_subsys(&devlink_pernet_ops);
 	if (err)
 		goto out;
@@ -593,7 +1031,10 @@ static int __init devlink_init(void)
 out_unreg_pernet_subsys:
 	unregister_pernet_subsys(&devlink_pernet_ops);
 out:
+	if (err)
+		devlink_default_nodes_clear();
 	WARN_ON(err);
+
 	return err;
 }
 
