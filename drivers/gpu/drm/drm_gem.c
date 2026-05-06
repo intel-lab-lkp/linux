@@ -1108,6 +1108,15 @@ drm_gem_release(struct drm_device *dev, struct drm_file *file_private)
 	idr_destroy(&file_private->object_idr);
 }
 
+static void
+drm_gem_lru_remove_locked(struct drm_gem_object *obj)
+{
+	obj->lru->count -= obj->size >> PAGE_SHIFT;
+	WARN_ON(obj->lru->count < 0);
+	list_del(&obj->lru_node);
+	obj->lru = NULL;
+}
+
 /**
  * drm_gem_object_release - release GEM buffer object resources
  * @obj: GEM buffer object
@@ -1124,7 +1133,15 @@ drm_gem_object_release(struct drm_gem_object *obj)
 	drm_gem_private_object_fini(obj);
 
 	drm_gem_free_mmap_offset(obj);
-	drm_gem_lru_remove(obj);
+
+	/* If the object refcount drops to zero, it means no one can change
+	 * the LRU it's inserted into, so it's safe to dereference
+	 * drm_gem_object::lru without the drm_gem_lru::lock held.
+	 */
+	if (obj->lru) {
+		guard(mutex)(obj->lru->lock);
+		drm_gem_lru_remove_locked(obj);
+	}
 }
 EXPORT_SYMBOL(drm_gem_object_release);
 
@@ -1551,36 +1568,6 @@ drm_gem_lru_init(struct drm_gem_lru *lru, struct mutex *lock)
 	INIT_LIST_HEAD(&lru->list);
 }
 EXPORT_SYMBOL(drm_gem_lru_init);
-
-static void
-drm_gem_lru_remove_locked(struct drm_gem_object *obj)
-{
-	obj->lru->count -= obj->size >> PAGE_SHIFT;
-	WARN_ON(obj->lru->count < 0);
-	list_del(&obj->lru_node);
-	obj->lru = NULL;
-}
-
-/**
- * drm_gem_lru_remove - remove object from whatever LRU it is in
- *
- * If the object is currently in any LRU, remove it.
- *
- * @obj: The GEM object to remove from current LRU
- */
-void
-drm_gem_lru_remove(struct drm_gem_object *obj)
-{
-	struct drm_gem_lru *lru = obj->lru;
-
-	if (!lru)
-		return;
-
-	mutex_lock(lru->lock);
-	drm_gem_lru_remove_locked(obj);
-	mutex_unlock(lru->lock);
-}
-EXPORT_SYMBOL(drm_gem_lru_remove);
 
 /**
  * drm_gem_lru_move_tail_locked - move the object to the tail of the LRU
