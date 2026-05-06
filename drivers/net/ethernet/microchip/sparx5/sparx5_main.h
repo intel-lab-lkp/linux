@@ -565,6 +565,13 @@ void sparx5_get_hwtimestamp(struct sparx5 *sparx5,
 int sparx5_vcap_init(struct sparx5 *sparx5);
 void sparx5_vcap_deinit(struct sparx5 *sparx5);
 
+/* sparx5_debugfs.c */
+#if defined(CONFIG_DEBUG_FS)
+void sparx5_debugfs(struct sparx5 *sparx5);
+#else
+static inline void sparx5_debugfs(struct sparx5 *sparx5) {}
+#endif
+
 /* sparx5_pgid.c */
 enum sparx5_pgid_type {
 	SPX5_PGID_FREE,

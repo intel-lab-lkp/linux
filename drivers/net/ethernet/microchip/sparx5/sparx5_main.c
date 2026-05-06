@@ -820,8 +820,6 @@ static int mchp_sparx5_probe(struct platform_device *pdev)
 	/* Default values, some from DT */
 	sparx5->coreclock = SPX5_CORE_CLOCK_DEFAULT;
 
-	sparx5->debugfs_root = debugfs_create_dir("sparx5", NULL);
-
 	ports = of_get_child_by_name(np, "ethernet-ports");
 	if (!ports) {
 		dev_err(sparx5->dev, "no ethernet-ports child node found\n");
@@ -999,6 +997,8 @@ static int mchp_sparx5_probe(struct platform_device *pdev)
 		dev_err(sparx5->dev, "Failed to register notifier blocks\n");
 		goto cleanup_netdevs;
 	}
+
+	sparx5_debugfs(sparx5);
 
 	goto cleanup_config;
 
