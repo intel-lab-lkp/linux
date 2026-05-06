@@ -8,6 +8,7 @@
 #include <linux/spinlock.h>
 #include <linux/completion.h>
 #include <linux/buffer_head.h>
+#include <linux/overflow.h>
 #include <linux/xattr.h>
 #include <linux/gfs2_ondisk.h>
 #include <linux/posix_acl_xattr.h>
@@ -81,6 +82,31 @@ static bool gfs2_eatype_valid(struct gfs2_sbd *sdp, u8 type)
 	}
 }
 
+static bool ea_rec_len_valid(const struct gfs2_ea_header *ea)
+{
+	size_t size;
+
+	if (!GFS2_EA_REC_LEN(ea))
+		return false;
+
+	size = sizeof(struct gfs2_ea_header) + ea->ea_name_len;
+	if (GFS2_EA_IS_STUFFED(ea)) {
+		if (check_add_overflow(size, (size_t)GFS2_EA_DATA_LEN(ea), &size))
+			return false;
+	} else {
+		size_t ptr_size;
+
+		if (check_mul_overflow(sizeof(__be64), (size_t)ea->ea_num_ptrs,
+				       &ptr_size) ||
+		    check_add_overflow(size, ptr_size, &size))
+			return false;
+	}
+	if (check_add_overflow(size, (size_t)7, &size))
+		return false;
+
+	return GFS2_EA_REC_LEN(ea) >= round_down(size, (size_t)8);
+}
+
 typedef int (*ea_call_t) (struct gfs2_inode *ip, struct buffer_head *bh,
 			  struct gfs2_ea_header *ea,
 			  struct gfs2_ea_header *prev, void *private);
@@ -96,7 +122,7 @@ static int ea_foreach_i(struct gfs2_inode *ip, struct buffer_head *bh,
 		return -EIO;
 
 	for (ea = GFS2_EA_BH2FIRST(bh);; prev = ea, ea = GFS2_EA2NEXT(ea)) {
-		if (!GFS2_EA_REC_LEN(ea)) {
+		if (!ea_rec_len_valid(ea)) {
 			gfs2_consist_inode(ip);
 			return -EIO;
 		}
