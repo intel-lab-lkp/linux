@@ -425,7 +425,7 @@ int ntfs_write_volume_label(struct ntfs_volume *vol, char *label)
 		return uname_len;
 	}
 
-	if (uname_len  > NTFS_MAX_LABEL_LEN) {
+	if (uname_len > NTFS_MAX_LABEL_LEN) {
 		ntfs_error(vol->sb,
 			   "Volume label is too long (max %d characters).",
 			   NTFS_MAX_LABEL_LEN);
@@ -437,7 +437,7 @@ int ntfs_write_volume_label(struct ntfs_volume *vol, char *label)
 	ctx = ntfs_attr_get_search_ctx(vol_ni, NULL);
 	if (!ctx) {
 		ret = -ENOMEM;
-		goto  out;
+		goto out;
 	}
 
 	if (!ntfs_attr_lookup(AT_VOLUME_NAME, NULL, 0, 0, 0, NULL, 0,
@@ -450,11 +450,15 @@ int ntfs_write_volume_label(struct ntfs_volume *vol, char *label)
 out:
 	mutex_unlock(&vol_ni->mrec_lock);
 	kvfree(uname);
-	mark_inode_dirty_sync(vol->vol_ino);
 
 	if (ret >= 0) {
+		char *new_label = kstrdup(label, GFP_KERNEL);
+
+		if (!new_label)
+			return -ENOMEM;
 		kfree(vol->volume_label);
-		vol->volume_label = kstrdup(label, GFP_KERNEL);
+		vol->volume_label = new_label;
+		mark_inode_dirty_sync(vol->vol_ino);
 		ret = 0;
 	}
 	return ret;
