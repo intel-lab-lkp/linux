@@ -372,10 +372,8 @@ static int dpaa2_switch_port_add_vlan(struct ethsw_port_priv *port_priv,
 	struct dpsw_vlan_if_cfg vcfg = {0};
 	int err;
 
-	if (port_priv->vlans[vid]) {
-		netdev_err(netdev, "VLAN %d already configured\n", vid);
-		return -EEXIST;
-	}
+	if (port_priv->vlans[vid])
+		return 0;
 
 	/* If hit, this VLAN rule will lead the packet into the FDB table
 	 * specified in the vlan configuration below
@@ -1993,13 +1991,8 @@ int dpaa2_switch_port_vlans_add(struct net_device *netdev,
 	struct dpsw_attr *attr = &ethsw->sw_attr;
 	int err = 0;
 
-	/* Make sure that the VLAN is not already configured
-	 * on the switch port
-	 */
-	if (port_priv->vlans[vlan->vid] & ETHSW_VLAN_MEMBER) {
-		netdev_err(netdev, "VLAN %d already configured\n", vlan->vid);
-		return -EEXIST;
-	}
+	if (port_priv->vlans[vlan->vid] & ETHSW_VLAN_MEMBER)
+		return 0;
 
 	/* Check if there is space for a new VLAN */
 	err = dpsw_get_attributes(ethsw->mc_io, 0, ethsw->dpsw_handle,
@@ -2115,7 +2108,7 @@ static int dpaa2_switch_port_del_vlan(struct ethsw_port_priv *port_priv, u16 vid
 	int i, err;
 
 	if (!port_priv->vlans[vid])
-		return -ENOENT;
+		return 0;
 
 	if (port_priv->vlans[vid] & ETHSW_VLAN_PVID) {
 		/* If we are deleting the PVID of a port, use VLAN 4095 instead
