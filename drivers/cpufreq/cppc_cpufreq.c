@@ -982,7 +982,34 @@ store_energy_performance_preference_val(struct cpufreq_policy *policy,
 	return count;
 }
 
-CPPC_CPUFREQ_ATTR_RW_U64(perf_limited, cppc_get_perf_limited,
+static int cppc_get_perf_limited_filtered(int cpu, u64 *perf_limited)
+{
+	struct cpufreq_policy *policy;
+	struct cppc_cpudata *cpu_data;
+	bool auto_sel_enabled = false;
+	int ret;
+
+	policy = cpufreq_cpu_get_raw(cpu);
+	if (policy && policy->driver_data) {
+		cpu_data = policy->driver_data;
+		auto_sel_enabled = cpu_data->perf_ctrls.auto_sel;
+	}
+
+	ret = cppc_get_perf_limited(cpu, perf_limited);
+	if (ret)
+		return ret;
+
+	/*
+	 * Desired_Excursion is ignored when Autonomous Selection is enabled.
+	 * Mask it to avoid exposing misleading values to userspace.
+	 */
+	if (auto_sel_enabled)
+		*perf_limited &= ~CPPC_PERF_LIMITED_DESIRED_EXCURSION;
+
+	return 0;
+}
+
+CPPC_CPUFREQ_ATTR_RW_U64(perf_limited, cppc_get_perf_limited_filtered,
 			 cppc_set_perf_limited)
 
 cpufreq_freq_attr_ro(freqdomain_cpus);
