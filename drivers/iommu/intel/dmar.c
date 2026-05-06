@@ -1902,30 +1902,39 @@ static int dmar_fault_do_one(struct intel_iommu *iommu, int type,
 {
 	const char *reason;
 	int fault_type;
+	u8 bus = source_id >> 8;
+	u8 devfn = source_id & 0xFF;
+	struct pci_dev *pdev;
+	char devid[48];
 
 	reason = dmar_get_fault_reason(fault_reason, &fault_type);
 
+	pdev = pci_get_domain_bus_and_slot(iommu->segment, bus, devfn);
+	if (pdev) {
+		snprintf(devid, sizeof(devid), "%04x:%02x:%02x.%d %04x:%04x",
+			 iommu->segment, bus, PCI_SLOT(devfn), PCI_FUNC(devfn),
+			 pdev->vendor, pdev->device);
+		pci_dev_put(pdev);
+	} else {
+		snprintf(devid, sizeof(devid), "%04x:%02x:%02x.%d",
+			 iommu->segment, bus, PCI_SLOT(devfn), PCI_FUNC(devfn));
+	}
+
 	if (fault_type == INTR_REMAP) {
-		pr_err("[INTR-REMAP] Request device [%02x:%02x.%d] fault index 0x%llx [fault reason 0x%02x] %s\n",
-		       source_id >> 8, PCI_SLOT(source_id & 0xFF),
-		       PCI_FUNC(source_id & 0xFF), addr >> 48,
-		       fault_reason, reason);
+		pr_err("[INTR-REMAP] Request device [%s] fault index 0x%llx [fault reason 0x%02x] %s\n",
+		       devid, addr >> 48, fault_reason, reason);
 
 		return 0;
 	}
 
 	if (pasid == IOMMU_PASID_INVALID)
-		pr_err("[%s NO_PASID] Request device [%02x:%02x.%d] fault addr 0x%llx [fault reason 0x%02x] %s\n",
+		pr_err("[%s NO_PASID] Request device [%s] fault addr 0x%llx [fault reason 0x%02x] %s\n",
 		       type ? "DMA Read" : "DMA Write",
-		       source_id >> 8, PCI_SLOT(source_id & 0xFF),
-		       PCI_FUNC(source_id & 0xFF), addr,
-		       fault_reason, reason);
+		       devid, addr, fault_reason, reason);
 	else
-		pr_err("[%s PASID 0x%x] Request device [%02x:%02x.%d] fault addr 0x%llx [fault reason 0x%02x] %s\n",
+		pr_err("[%s PASID 0x%x] Request device [%s] fault addr 0x%llx [fault reason 0x%02x] %s\n",
 		       type ? "DMA Read" : "DMA Write", pasid,
-		       source_id >> 8, PCI_SLOT(source_id & 0xFF),
-		       PCI_FUNC(source_id & 0xFF), addr,
-		       fault_reason, reason);
+		       devid, addr, fault_reason, reason);
 
 	dmar_fault_dump_ptes(iommu, source_id, addr, pasid);
 
