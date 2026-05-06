@@ -1128,21 +1128,22 @@ int nested_svm_vmrun(struct kvm_vcpu *vcpu)
 	}
 
 	ret = nested_svm_copy_vmcb12_to_cache(vcpu, vmcb12_gpa);
-	if (ret) {
-		if (ret == -EFAULT)
-			return kvm_handle_memory_failure(vcpu, X86EMUL_IO_NEEDED, NULL);
-
-		/* Advance RIP past VMRUN as part of the nested #VMEXIT. */
-		return __kvm_skip_emulated_instruction(vcpu);
-	}
+	if (ret == -EFAULT)
+		return kvm_handle_memory_failure(vcpu, X86EMUL_IO_NEEDED, NULL);
 
 	/*
-	 * At this point, VMRUN is guaranteed to not fault; advance RIP.
+	 * At this point, VMRUN is guaranteed to not fault; advance RIP. If
+	 * caching vmcb12 failed for other reasons, return immediately afterward
+	 * as a nested #VMEXIT was already set up.
 	 *
 	 * FIXME: If TF is set on VMRUN should inject a #DB (or handle guest
 	 * debugging) right after #VMEXIT, right now it's just ignored.
 	 */
-	ret = __kvm_skip_emulated_instruction(vcpu);
+	if (!__kvm_skip_emulated_instruction(vcpu))
+		return 0;
+
+	if (ret)
+		return 1;
 
 	/*
 	 * Since vmcb01 is not in use, we can use it to store some of the L1
@@ -1172,7 +1173,7 @@ int nested_svm_vmrun(struct kvm_vcpu *vcpu)
 		nested_svm_vmexit(svm);
 	}
 
-	return ret;
+	return 1;
 }
 
 /* Copy state save area fields which are handled by VMRUN */
