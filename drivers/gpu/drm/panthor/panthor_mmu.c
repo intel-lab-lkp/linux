@@ -3127,12 +3127,17 @@ int panthor_vm_prepare_mapped_bos_resvs(struct drm_exec *exec, struct panthor_vm
 unsigned long
 panthor_mmu_reclaim_priv_bos(struct panthor_device *ptdev,
 			     unsigned int nr_to_scan, unsigned long *remaining,
+			     size_t *freed_sz,
 			     bool (*shrink)(struct drm_gem_object *,
 					    struct ww_acquire_ctx *))
 {
+	unsigned long newly_freed;
 	unsigned long freed = 0;
 	LIST_HEAD(remaining_vms);
 	LIST_HEAD(vms);
+
+	if (freed_sz)
+		*freed_sz = 0;
 
 	mutex_lock(&ptdev->reclaim.lock);
 	list_splice_init(&ptdev->reclaim.vms, &vms);
@@ -3152,8 +3157,11 @@ panthor_mmu_reclaim_priv_bos(struct panthor_device *ptdev,
 
 		mutex_unlock(&ptdev->reclaim.lock);
 
-		freed += drm_gem_lru_scan(&vm->reclaim.lru, nr_to_scan - freed,
-					  remaining, shrink, NULL);
+		newly_freed = drm_gem_lru_scan(&vm->reclaim.lru, nr_to_scan - freed,
+					       remaining, shrink, NULL);
+		if (freed_sz)
+			*freed_sz += panthor_vm_page_size(vm) * newly_freed;
+		freed += newly_freed;
 
 		mutex_lock(&ptdev->reclaim.lock);
 

@@ -1511,7 +1511,8 @@ panthor_gem_shrinker_scan(struct shrinker *shrinker, struct shrink_control *sc)
 		goto out;
 
 	freed += panthor_mmu_reclaim_priv_bos(ptdev, sc->nr_to_scan - freed,
-					      &remaining, panthor_gem_try_evict);
+					      &remaining, NULL,
+					      panthor_gem_try_evict);
 	if (freed >= sc->nr_to_scan)
 		goto out;
 
