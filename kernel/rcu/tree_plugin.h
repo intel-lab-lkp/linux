@@ -543,20 +543,25 @@ rcu_preempt_deferred_qs_irqrestore(struct task_struct *t, unsigned long flags)
 		empty_exp = sync_rcu_exp_done(rnp);
 		np = rcu_next_node_entry(t, rnp);
 		list_del_init(&t->rcu_node_entry);
-		t->rcu_node_entry_dqs = -1;
 		t->rcu_blocked_node = NULL;
 		trace_rcu_unlock_preempted_task(TPS("rcu_preempt"),
 						rnp->gp_seq, t->pid);
-		if (&t->rcu_node_entry == rnp->gp_tasks)
+		if (&t->rcu_node_entry == rnp->gp_tasks) {
+			WARN_ON_ONCE(t->rcu_node_entry_dqs);
 			WRITE_ONCE(rnp->gp_tasks, np);
-		if (&t->rcu_node_entry == rnp->exp_tasks)
+		}
+		if (&t->rcu_node_entry == rnp->exp_tasks) {
+			WARN_ON_ONCE(t->rcu_node_entry_dqs);
 			WRITE_ONCE(rnp->exp_tasks, np);
+		}
 		if (IS_ENABLED(CONFIG_RCU_BOOST)) {
 			/* Snapshot ->boost_mtx ownership w/rnp->lock held. */
 			drop_boost_mutex = rt_mutex_owner(&rnp->boost_mtx.rtmutex) == t;
+			WARN_ON_ONCE(drop_boost_mutex && t->rcu_node_entry_dqs);
 			if (&t->rcu_node_entry == rnp->boost_tasks)
 				WRITE_ONCE(rnp->boost_tasks, np);
 		}
+		t->rcu_node_entry_dqs = -1;
 
 		/*
 		 * If this was the last task on the current list, and if
