@@ -348,6 +348,11 @@ static int pciehp_link_enable(struct controller *ctrl)
 	return __pciehp_link_set(ctrl, true);
 }
 
+static int pciehp_link_disable(struct controller *ctrl)
+{
+	return __pciehp_link_set(ctrl, false);
+}
+
 int pciehp_get_raw_indicator_status(struct hotplug_slot *hotplug_slot,
 				    u8 *status)
 {
@@ -558,6 +563,12 @@ int pciehp_power_on_slot(struct controller *ctrl)
 
 void pciehp_power_off_slot(struct controller *ctrl)
 {
+	int retval;
+
+	retval = pciehp_link_disable(ctrl);
+	if (retval)
+		ctrl_err(ctrl, "%s: Can not disable the link!\n", __func__);
+
 	pcie_write_cmd(ctrl, PCI_EXP_SLTCTL_PWR_OFF, PCI_EXP_SLTCTL_PCC);
 	ctrl_dbg(ctrl, "%s: SLOTCTRL %x write cmd %x\n", __func__,
 		 pci_pcie_cap(ctrl->pcie->port) + PCI_EXP_SLTCTL,
@@ -1096,6 +1107,8 @@ struct controller *pcie_init(struct pcie_device *dev)
 void pciehp_release_ctrl(struct controller *ctrl)
 {
 	cancel_delayed_work_sync(&ctrl->button_work);
+	if (POWER_CTRL(ctrl))
+		pciehp_power_off_slot(ctrl);
 	kfree(ctrl);
 }
 
