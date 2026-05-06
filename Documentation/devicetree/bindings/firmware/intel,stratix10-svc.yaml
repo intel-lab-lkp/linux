@@ -58,6 +58,12 @@ properties:
   iommus:
     maxItems: 1
 
+  rsu-handle:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      Phandle to the QSPI boot partition node (qspi_boot), used by U-Boot
+      during remote system update flow.
+
   fpga-mgr:
     $ref: /schemas/fpga/intel,stratix10-soc-fpga-mgr.yaml
     description: Optional child node for fpga manager to perform fabric configuration.
@@ -94,11 +100,30 @@ examples:
       };
     };
 
+    qspi@0 {
+      compatible = "jedec,spi-nor";
+      reg = <0x0 0x1000>;
+      #address-cells = <1>;
+      #size-cells = <1>;
+
+      partitions {
+        compatible = "fixed-partitions";
+        #address-cells = <1>;
+        #size-cells = <1>;
+
+        qspi_boot: partition@0 {
+          label = "u-boot";
+          reg = <0x0 0x100000>;
+        };
+      };
+    };
+
     firmware {
       svc {
         compatible = "intel,stratix10-svc";
         method = "smc";
         memory-region = <&service_reserved>;
+        rsu-handle = <&qspi_boot>;
 
         fpga-mgr {
           compatible = "intel,stratix10-soc-fpga-mgr";
