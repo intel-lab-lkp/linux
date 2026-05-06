@@ -4,6 +4,8 @@
  * Copyright (c) 2016 Jiri Pirko <jiri@mellanox.com>
  */
 
+#include <linux/kstrtox.h>
+
 #include "devl_internal.h"
 
 static const struct devlink_param devlink_param_generic[] = {
@@ -548,6 +550,74 @@ devlink_param_value_get_from_info(const struct devlink_param *param,
 		value->vbool = nla_get_flag(param_data);
 		break;
 	}
+	return 0;
+}
+
+static int
+devlink_param_value_get_from_str(const struct devlink_param *param,
+				 const char *value_str,
+				 union devlink_param_value *value)
+{
+	switch (param->type) {
+	case DEVLINK_PARAM_TYPE_U8:
+		return kstrtou8(value_str, 0, &value->vu8);
+	case DEVLINK_PARAM_TYPE_U16:
+		return kstrtou16(value_str, 0, &value->vu16);
+	case DEVLINK_PARAM_TYPE_U32:
+		return kstrtou32(value_str, 0, &value->vu32);
+	case DEVLINK_PARAM_TYPE_U64:
+		return kstrtou64(value_str, 0, &value->vu64);
+	case DEVLINK_PARAM_TYPE_STRING:
+		if (strscpy(value->vstr, value_str, sizeof(value->vstr)) < 0)
+			return -EINVAL;
+		return 0;
+	case DEVLINK_PARAM_TYPE_BOOL:
+		return kstrtobool(value_str, &value->vbool);
+	}
+
+	return -EINVAL;
+}
+
+int devlink_param_set_from_string(struct devlink *devlink,
+				  const char *param_name,
+				  const char *value_str)
+{
+	struct devlink_param_gset_ctx ctx;
+	struct devlink_param_item *param_item;
+	const struct devlink_param *param;
+	union devlink_param_value value;
+	int err;
+
+	devl_assert_locked(devlink);
+
+	param_item = devlink_param_find_by_name(&devlink->params, param_name);
+	if (!param_item)
+		return -EINVAL;
+	param = param_item->param;
+
+	if (!devlink_param_cmode_is_supported(param,
+					      DEVLINK_PARAM_CMODE_RUNTIME))
+		return -EOPNOTSUPP;
+	if (!param->set)
+		return -EOPNOTSUPP;
+
+	err = devlink_param_value_get_from_str(param, value_str, &value);
+	if (err)
+		return err;
+
+	if (param->validate) {
+		err = param->validate(devlink, param->id, value, NULL);
+		if (err)
+			return err;
+	}
+
+	ctx.val = value;
+	ctx.cmode = DEVLINK_PARAM_CMODE_RUNTIME;
+	err = devlink_param_set(devlink, param, &ctx, NULL);
+	if (err)
+		return err;
+
+	devlink_param_notify(devlink, 0, param_item, DEVLINK_CMD_PARAM_NEW);
 	return 0;
 }
 

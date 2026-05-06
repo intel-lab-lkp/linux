@@ -212,6 +212,9 @@ static inline int devlink_nl_put_u64(struct sk_buff *msg, int attrtype, u64 val)
 int devlink_nl_put_nested_handle(struct sk_buff *msg, struct net *net,
 				 struct devlink *devlink, int attrtype);
 int devlink_nl_msg_reply_and_new(struct sk_buff **msg, struct genl_info *info);
+int devlink_param_set_from_string(struct devlink *devlink,
+				  const char *param_name,
+				  const char *value_str);
 
 static inline bool devlink_nl_notify_need(struct devlink *devlink)
 {

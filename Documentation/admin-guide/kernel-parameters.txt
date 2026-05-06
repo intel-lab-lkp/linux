@@ -1293,9 +1293,11 @@ Kernel parameters
 
 			Currently supported settings:
 			esw:mode:{ legacy | switchdev | switchdev_inactive }
+			param:<name>:<value>
 
 			Examples:
 			devlink=[pci/0000:08:00.0]:esw:mode:switchdev
+			devlink=[pci/0000:08:00.0]:param:flow_steering_mode:smfs
 			devlink=[pci/0000:08:00.0,pci/0000:08:00.1]:esw:mode:legacy
 			devlink=[pci/0000:08:00.0]:esw:mode:switchdev,[pci/0000:08:00.1]:esw:mode:switchdev_inactive
 

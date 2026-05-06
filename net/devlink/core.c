@@ -50,6 +50,13 @@ struct devlink_default_node {
 	struct list_head cmd_list;
 };
 
+struct devlink_default_attr_spec {
+	const char *name;
+	enum devlink_attr attr;
+	int (*value_parse)(const char *value,
+			   struct devlink_default_attr_item *attr_item);
+};
+
 struct devlink_default_cmd_spec {
 	const char *name;
 	enum devlink_command cmd;
@@ -72,13 +79,6 @@ devlink_default_attr_free(struct devlink_default_attr_item *attr)
 	kfree(attr->value.param.name);
 	kfree(attr->value.param.value);
 }
-
-struct devlink_default_attr_spec {
-	const char *name;
-	enum devlink_attr attr;
-	int (*value_parse)(const char *value,
-			   struct devlink_default_attr_item *attr_item);
-};
 
 static int __init
 devlink_default_attr_parse(char *str,
@@ -153,6 +153,33 @@ devlink_default_esw_attr_parse(char *str,
 					  attr_item);
 }
 
+static int __init
+devlink_default_param_attr_parse(char *str,
+				 struct devlink_default_attr_item *attr_item)
+{
+	char *name;
+	char *value;
+
+	attr_item->attr = DEVLINK_ATTR_PARAM;
+
+	name = strsep(&str, ":");
+	value = strsep(&str, ":");
+	if (!name || !*name || !value || !*value || str)
+		return -EINVAL;
+
+	attr_item->value.param.name = kstrdup(name, GFP_KERNEL);
+	if (!attr_item->value.param.name)
+		return -ENOMEM;
+	attr_item->value.param.value = kstrdup(value, GFP_KERNEL);
+	if (!attr_item->value.param.value) {
+		kfree(attr_item->value.param.name);
+		attr_item->value.param.name = NULL;
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+
 static int
 devlink_default_eswitch_apply(struct devlink *devlink,
 			      const struct devlink_default_attr_item *attr)
@@ -171,6 +198,17 @@ devlink_default_eswitch_apply(struct devlink *devlink,
 	}
 }
 
+static int
+devlink_default_param_apply(struct devlink *devlink,
+			    const struct devlink_default_attr_item *attr)
+{
+	if (attr->attr != DEVLINK_ATTR_PARAM)
+		return -EOPNOTSUPP;
+
+	return devlink_param_set_from_string(devlink, attr->value.param.name,
+					     attr->value.param.value);
+}
+
 static const struct devlink_default_cmd_spec devlink_default_cmds[] __initconst = {
 	{
 		.name = "esw",
@@ -178,52 +216,46 @@ static const struct devlink_default_cmd_spec devlink_default_cmds[] __initconst 
 		.run = devlink_default_eswitch_apply,
 		.attr_parse = devlink_default_esw_attr_parse,
 	},
+	{
+		.name = "param",
+		.cmd = DEVLINK_CMD_PARAM_SET,
+		.run = devlink_default_param_apply,
+		.attr_parse = devlink_default_param_attr_parse,
+	},
 };
-
-static const struct devlink_default_cmd_spec *__init
-devlink_default_cmd_spec_find(const char *name)
-{
-	size_t i;
-
-	for (i = 0; i < ARRAY_SIZE(devlink_default_cmds); i++) {
-		if (!strcmp(name, devlink_default_cmds[i].name))
-			return &devlink_default_cmds[i];
-	}
-
-	return NULL;
-}
 
 static int __init
 devlink_default_cmd_parse(char *str,
 			  struct devlink_default_cmd_item *cmd_item)
 {
-	const struct devlink_default_cmd_spec *spec;
 	struct devlink_default_attr_item attr_item = {};
 	char *cmd_name;
 	int err;
+	size_t i;
 
 	cmd_name = strsep(&str, ":");
 	if (!cmd_name || !*cmd_name || !str || !*str)
 		return -EINVAL;
 
-	spec = devlink_default_cmd_spec_find(cmd_name);
-	if (!spec)
-		return -EINVAL;
-
-	err = spec->attr_parse(str, &attr_item);
-	if (err) {
-		devlink_default_attr_free(&attr_item);
-		return err;
+	for (i = 0; i < ARRAY_SIZE(devlink_default_cmds); i++) {
+		if (!strcmp(cmd_name, devlink_default_cmds[i].name)) {
+			err = devlink_default_cmds[i].attr_parse(str, &attr_item);
+			if (err) {
+				devlink_default_attr_free(&attr_item);
+				return err;
+			}
+			if (cmd_item) {
+				cmd_item->cmd = devlink_default_cmds[i].cmd;
+				cmd_item->run = devlink_default_cmds[i].run;
+				cmd_item->attr = attr_item;
+			} else {
+				devlink_default_attr_free(&attr_item);
+			}
+			return 0;
+		}
 	}
-	if (cmd_item) {
-		cmd_item->cmd = spec->cmd;
-		cmd_item->run = spec->run;
-		cmd_item->attr = attr_item;
-	} else {
-		devlink_default_attr_free(&attr_item);
-	}
 
-	return 0;
+	return -EINVAL;
 }
 
 static int __init
@@ -368,6 +400,10 @@ devlink_default_cmd_equal(const struct devlink_default_cmd_item *a,
 {
 	if (a->cmd != b->cmd || a->attr.attr != b->attr.attr)
 		return false;
+
+	if (a->cmd == DEVLINK_CMD_PARAM_SET)
+		return !strcmp(a->attr.value.param.name,
+			       b->attr.value.param.name);
 
 	return true;
 }

@@ -55,13 +55,16 @@ The following syntax rules apply:
 * Defaults for the same handle are applied in command-line order.
 * The same ``esw`` attribute may be specified only once for a given devlink
   handle.
+* The same ``param`` name may be specified only once for a given devlink
+  handle.
 * Duplicate entries for the same handle are rejected and all devlink defaults
   are ignored.
+* Parameter names and values must not contain ``:`` or ``,``.
 
 Supported defaults
 ==================
 
-The supported command is ``esw``:
+The supported commands are ``esw`` and ``param``:
 
 .. list-table::
    :widths: 10 25 35
@@ -73,11 +76,16 @@ The supported command is ``esw``:
    * - ``esw``
      - ``mode:<mode>``
      - ``legacy``, ``switchdev``, ``switchdev_inactive``
+   * - ``param``
+     - ``<name>:<value>``
+     - ``<value>`` is parsed according to the registered devlink parameter
+       type. Only runtime devlink parameters are supported.
 
 The ``esw:mode`` default corresponds to the userspace command::
 
   devlink dev eswitch set <handle> mode <value>
 
+The ``param`` default applies the named devlink parameter in runtime mode.
 
 Examples
 ========
@@ -90,6 +98,10 @@ Set two PCI devlink instances to legacy mode::
 
   devlink=[pci/0000:08:00.0,pci/0000:08:00.1]:esw:mode:legacy
 
+Set a runtime devlink device parameter::
+
+  devlink=[pci/0000:08:00.0]:param:flow_steering_mode:smfs
+
 Set different modes for different PCI devlink instances::
 
   devlink=[pci/0000:08:00.0]:esw:mode:switchdev,[pci/0000:08:00.1]:esw:mode:switchdev_inactive
@@ -97,3 +109,7 @@ Set different modes for different PCI devlink instances::
 The following is invalid because the same handle receives ``esw:mode`` twice::
 
   devlink=[pci/0000:08:00.0]:esw:mode:legacy,[pci/0000:08:00.0]:esw:mode:switchdev
+
+The following is invalid because the same handle receives ``param:x`` twice::
+
+  devlink=[pci/0]:param:x:1,[pci/0]:param:x:2
