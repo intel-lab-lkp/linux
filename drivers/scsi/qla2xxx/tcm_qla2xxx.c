@@ -450,13 +450,6 @@ static int tcm_qla2xxx_handle_cmd(scsi_qla_host_t *vha, struct qla_tgt_cmd *cmd,
 	struct se_cmd *se_cmd = &cmd->se_cmd;
 	struct se_session *se_sess;
 	struct fc_port *sess;
-#ifdef CONFIG_TCM_QLA2XXX_DEBUG
-	struct se_portal_group *se_tpg;
-	struct tcm_qla2xxx_tpg *tpg;
-#endif
-	int rc, target_flags = TARGET_SCF_ACK_KREF;
-	unsigned long flags;
-
 	if (bidi)
 		target_flags |= TARGET_SCF_BIDI_OP;
 
@@ -475,15 +468,6 @@ static int tcm_qla2xxx_handle_cmd(scsi_qla_host_t *vha, struct qla_tgt_cmd *cmd,
 		return -EINVAL;
 	}
 
-#ifdef CONFIG_TCM_QLA2XXX_DEBUG
-	se_tpg = se_sess->se_tpg;
-	tpg = container_of(se_tpg, struct tcm_qla2xxx_tpg, se_tpg);
-	if (unlikely(tpg->tpg_attrib.jam_host)) {
-		/* return, and dont run target_submit_cmd,discarding command */
-		return 0;
-	}
-#endif
-	cmd->qpair->tgt_counters.qla_core_sbt_cmd++;
 
 	spin_lock_irqsave(&sess->sess_cmd_lock, flags);
 	list_add_tail(&cmd->sess_cmd_list, &sess->sess_cmd_list);
@@ -903,9 +887,6 @@ DEF_QLA_TPG_ATTRIB(cache_dynamic_acls);
 DEF_QLA_TPG_ATTRIB(demo_mode_write_protect);
 DEF_QLA_TPG_ATTRIB(prod_mode_write_protect);
 DEF_QLA_TPG_ATTRIB(demo_mode_login_only);
-#ifdef CONFIG_TCM_QLA2XXX_DEBUG
-DEF_QLA_TPG_ATTRIB(jam_host);
-#endif
 
 static struct configfs_attribute *tcm_qla2xxx_tpg_attrib_attrs[] = {
 	&tcm_qla2xxx_tpg_attrib_attr_generate_node_acls,
@@ -913,9 +894,6 @@ static struct configfs_attribute *tcm_qla2xxx_tpg_attrib_attrs[] = {
 	&tcm_qla2xxx_tpg_attrib_attr_demo_mode_write_protect,
 	&tcm_qla2xxx_tpg_attrib_attr_prod_mode_write_protect,
 	&tcm_qla2xxx_tpg_attrib_attr_demo_mode_login_only,
-#ifdef CONFIG_TCM_QLA2XXX_DEBUG
-	&tcm_qla2xxx_tpg_attrib_attr_jam_host,
-#endif
 	NULL,
 };
 
@@ -1030,7 +1008,6 @@ static struct se_portal_group *tcm_qla2xxx_make_tpg(struct se_wwn *wwn,
 	tpg->tpg_attrib.demo_mode_write_protect = 1;
 	tpg->tpg_attrib.cache_dynamic_acls = 1;
 	tpg->tpg_attrib.demo_mode_login_only = 1;
-	tpg->tpg_attrib.jam_host = 0;
 
 	ret = core_tpg_register(wwn, &tpg->se_tpg, SCSI_PROTOCOL_FCP);
 	if (ret < 0) {
