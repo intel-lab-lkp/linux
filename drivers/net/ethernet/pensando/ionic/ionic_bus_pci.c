@@ -260,7 +260,8 @@ static int ionic_setup_one(struct ionic *ionic)
 	/* Configure the device */
 	err = ionic_setup(ionic);
 	if (err) {
-		dev_err(dev, "Cannot setup device: %d, aborting\n", err);
+		if (err != -EPROBE_DEFER)
+			dev_err(dev, "Cannot setup device: %d, aborting\n", err);
 		goto err_out_clear_pci;
 	}
 	pci_set_master(pdev);
@@ -335,8 +336,11 @@ static int ionic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 #endif
 
 	err = ionic_setup_one(ionic);
-	if (err)
+	if (err) {
+		if (err == -EPROBE_DEFER)
+			dev_info(dev, "Device isn't ready, deferring probe\n");
 		goto err_out;
+	}
 
 	/* Allocate and init the LIF */
 	err = ionic_lif_size(ionic);
