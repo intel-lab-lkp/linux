@@ -373,6 +373,8 @@ static struct nvme_ns *nvme_queue_depth_path(struct nvme_ns_head *head)
 				min_depth_opt = depth;
 				best_opt = ns;
 			}
+			if (min_depth_opt == 0)
+				goto out;
 			break;
 		case NVME_ANA_NONOPTIMIZED:
 			if (depth < min_depth_nonopt) {
@@ -383,11 +385,8 @@ static struct nvme_ns *nvme_queue_depth_path(struct nvme_ns_head *head)
 		default:
 			break;
 		}
-
-		if (min_depth_opt == 0)
-			return best_opt;
 	}
-
+out:
 	return best_opt ? best_opt : best_nonopt;
 }
 
