@@ -136,3 +136,7 @@
 		};
 	};
 };
+
+&svc {
+	rsu-handle = <&qspi_boot>;
+};

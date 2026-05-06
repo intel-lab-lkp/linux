@@ -124,3 +124,7 @@
 &watchdog0 {
 	status = "okay";
 };
+
+&svc {
+	rsu-handle = <&qspi_boot>;
+};

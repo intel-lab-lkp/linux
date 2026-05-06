@@ -80,7 +80,7 @@
 	};
 
 	firmware {
-		svc {
+		svc: svc {
 			compatible = "intel,agilex5-svc";
 			method = "smc";
 			memory-region = <&service_reserved>;
