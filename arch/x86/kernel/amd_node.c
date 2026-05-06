@@ -282,6 +282,18 @@ static int __init amd_smn_init(void)
 		return -ENODEV;
 
 	num_nodes = amd_num_nodes();
+
+	/*
+	 * Xen dom0's synthetic APIC IDs may imply more nodes than host
+	 * bridges visible in PCI config space. Bail out to avoid a
+	 * divide-by-zero when later computing roots_per_node.
+	 */
+	if (num_roots < num_nodes) {
+		pr_debug("AMD root count (%u) < node count (%u); skipping SMN init\n",
+			 num_roots, num_nodes);
+		return -ENODEV;
+	}
+
 	amd_roots = kzalloc_objs(*amd_roots, num_nodes);
 	if (!amd_roots)
 		return -ENOMEM;
