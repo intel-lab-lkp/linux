@@ -29,10 +29,12 @@
 #include <linux/uaccess.h>
 #include <linux/mman.h>
 #include <linux/memory.h>
+#include <linux/workqueue.h>
 #include "kfd_priv.h"
 #include "kfd_events.h"
 #include "kfd_device_queue_manager.h"
 #include <linux/device.h>
+#include <uapi/drm/amdgpu_drm.h>
 
 /*
  * Wrapper around wait_queue_entry_t
@@ -1337,6 +1339,119 @@ void kfd_signal_reset_event(struct kfd_node *dev)
 	srcu_read_unlock(&kfd_processes_srcu, idx);
 }
 
+/*
+ * Per-process opt-in for poison-consumption SIGBUS handling.
+ *
+ * Default: kernel sends SIGBUS to the process immediately when poison is
+ * consumed, in addition to delivering the KFD HW/MEMORY exception events.
+ *
+ * Userspace (ROCr) can opt-in per-process via the
+ * DRM_IOCTL_AMDGPU_USER_OPTIONS / AMDGPU_USER_OPTIONS_OP_KFD_SIGBUS_DELAY
+ * option. This lets the app's registered system-event callback handle the
+ * RAS error first, instead of being killed by SIGBUS.
+ *
+ * Encoded value (set on any of the process' amdgpu render fds):
+ *   0          - default: SIGBUS immediately (no opt-in)
+ *   0xFFFF - opt-in, never escalate to SIGBUS
+ *   N (other)  - opt-in, escalate to SIGBUS after N ms if app does not
+ *                handle the error in time (safety timeout)
+ *
+ * Per-process scope: the option is honored if ANY of the process' amdgpu
+ * fds has been configured. This matches the slide deck's "Per-process,
+ * App set at init" semantics, while keeping the UAPI on amdgpu where ROCr
+ * sets it.
+ */
+struct kfd_sigbus_delayed_work {
+	struct delayed_work work;
+	struct kfd_process *p;
+};
+
+static void kfd_signal_sigbus_delayed_fn(struct work_struct *work)
+{
+	struct kfd_sigbus_delayed_work *dw = container_of(to_delayed_work(work),
+				struct kfd_sigbus_delayed_work, work);
+	struct kfd_process *p = dw->p;
+
+	if (p->lead_thread)
+		send_sig(SIGBUS, p->lead_thread, 0);
+
+	kfd_unref_process(p);
+	kfree(dw);
+}
+
+/*
+ * Resolve the per-process SIGBUS opt-in setting by scanning all of the
+ * process' KFD pdds (each backed by an amdgpu render fd). Returns the
+ * "most lenient" value across all fds, in this priority:
+ *   DISABLED (no SIGBUS)  >  any non-zero timeout  >  0 (immediate)
+ *
+ * Rationale: if the app has explicitly opted in on any GPU it uses, it
+ * wants the chance to handle the error in userspace.
+ */
+static u16 kfd_get_sigbus_delay_ms(struct kfd_process *p)
+{
+	u16 result = 0;
+	int i;
+
+	mutex_lock(&p->mutex);
+	for (i = 0; i < p->n_pdds; i++) {
+		struct kfd_process_device *pdd = p->pdds[i];
+		struct amdgpu_fpriv *drv_priv;
+		u16 v;
+
+		if (!pdd || !pdd->drm_file)
+			continue;
+		if (amdgpu_file_to_fpriv(pdd->drm_file, &drv_priv))
+			continue;
+
+		v = atomic_read(&drv_priv->kfd_sigbus_delay_ms);
+		if (v == AMDGPU_USER_OPTIONS_KFD_SIGBUS_DELAY_DISABLED) {
+			result = v;
+			break;
+		}
+		if (v > result)
+			result = v;
+	}
+	mutex_unlock(&p->mutex);
+
+	return result;
+}
+
+static void kfd_signal_sigbus_with_delay(struct kfd_node *dev,
+					 struct kfd_process *p)
+{
+	u16 delay_ms = kfd_get_sigbus_delay_ms(p);
+	struct kfd_sigbus_delayed_work *dw;
+
+	if (delay_ms == AMDGPU_USER_OPTIONS_KFD_SIGBUS_DELAY_DISABLED) {
+		dev_info(dev->adev->dev,
+			 "SIGBUS suppressed for process %s(pid:%d): app opted in to handle RAS error\n",
+			 p->lead_thread->comm, p->lead_thread->pid);
+		return;
+	}
+
+	if (delay_ms == 0)
+		goto send_now;
+
+	dw = kzalloc(sizeof(*dw), GFP_ATOMIC);
+	if (!dw)
+		goto send_now;
+
+	/* Take an extra reference for the delayed worker. */
+	kref_get(&p->ref);
+	dw->p = p;
+	INIT_DELAYED_WORK(&dw->work, kfd_signal_sigbus_delayed_fn);
+
+	dev_info(dev->adev->dev,
+		 "Deferring SIGBUS to process %s(pid:%d) by %u ms (RAS error opt-in safety timeout)\n",
+		 p->lead_thread->comm, p->lead_thread->pid, delay_ms);
+	schedule_delayed_work(&dw->work, msecs_to_jiffies(delay_ms));
+	return;
+
+send_now:
+	send_sig(SIGBUS, p->lead_thread, 0);
+}
+
 void kfd_signal_poison_consumed_event(struct kfd_node *dev, u32 pasid)
 {
 	struct kfd_process *p = kfd_lookup_process_by_pasid(pasid, NULL);
@@ -1345,7 +1460,6 @@ void kfd_signal_poison_consumed_event(struct kfd_node *dev, u32 pasid)
 	struct kfd_event *ev;
 	uint32_t id = KFD_FIRST_NONSIGNAL_EVENT_ID;
 	int user_gpu_id;
-
 	if (!p) {
 		dev_warn(dev->adev->dev, "Not find process with pasid:%d\n", pasid);
 		return; /* Presumably process exited. */
@@ -1391,7 +1505,7 @@ void kfd_signal_poison_consumed_event(struct kfd_node *dev, u32 pasid)
 	rcu_read_unlock();
 
 	/* user application will handle SIGBUS signal */
-	send_sig(SIGBUS, p->lead_thread, 0);
+	kfd_signal_sigbus_with_delay(dev, p);
 
 	kfd_unref_process(p);
 }
