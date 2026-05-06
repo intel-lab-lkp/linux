@@ -1053,6 +1053,7 @@ int gmap_protect_rmap(struct kvm_s390_mmu_cache *mc, struct gmap *sg, gfn_t p_gf
 	pte.h.p = 1;
 	pgste = _gmap_ptep_xchg(sg->parent, ptep, pte, pgste, p_gfn, false);
 	pgste.vsie_notif = 1;
+	pgste.vsie_gmem |= level == TABLE_TYPE_PAGE_TABLE;
 	pgste_set_unlock(ptep, pgste);
 
 	return 0;
