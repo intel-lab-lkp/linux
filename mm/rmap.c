@@ -1991,7 +1991,8 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 	struct page *subpage;
 	struct mmu_notifier_range range;
 	enum ttu_flags flags = (enum ttu_flags)(long)arg;
-	unsigned long nr_pages = 1, end_addr;
+	unsigned long nr_pages;
+	unsigned long end_addr;
 	unsigned long pfn;
 	unsigned long hsz = 0;
 	int ptes = 0;
@@ -2030,6 +2031,7 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 	mmu_notifier_invalidate_range_start(&range);
 
 	while (page_vma_mapped_walk(&pvmw)) {
+		nr_pages = 1;
 		/*
 		 * If the folio is in an mlock()d vma, we must not swap it out.
 		 */
