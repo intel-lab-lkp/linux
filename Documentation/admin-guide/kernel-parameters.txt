@@ -1278,6 +1278,30 @@ Kernel parameters
 	dell_smm_hwmon.fan_max=
 			[HW] Maximum configurable fan speed.
 
+	devlink=	[NET]
+			Format:
+			<entry>[,<entry>...]
+
+			<entry>:
+			[<handle>[,<handle>...]]:<cmd>:<cmd-options>
+
+			<handle>:
+			<bus-name>/<dev-name>
+
+			Configure default devlink settings for matching
+			devlink instances during device initialization.
+
+			Currently supported settings:
+			esw:mode:{ legacy | switchdev | switchdev_inactive }
+
+			Examples:
+			devlink=[pci/0000:08:00.0]:esw:mode:switchdev
+			devlink=[pci/0000:08:00.0,pci/0000:08:00.1]:esw:mode:legacy
+			devlink=[pci/0000:08:00.0]:esw:mode:switchdev,[pci/0000:08:00.1]:esw:mode:switchdev_inactive
+
+			See Documentation/networking/devlink/devlink-defaults.rst
+			for the full syntax and duplicate handling rules.
+
 	dfltcc=		[HW,S390]
 			Format: { on | off | def_only | inf_only | always }
 			on:       s390 zlib hardware support for compression on

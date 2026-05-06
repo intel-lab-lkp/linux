@@ -73,9 +73,123 @@ devlink_default_attr_free(struct devlink_default_attr_item *attr)
 	kfree(attr->value.param.value);
 }
 
+struct devlink_default_attr_spec {
+	const char *name;
+	enum devlink_attr attr;
+	int (*value_parse)(const char *value,
+			   struct devlink_default_attr_item *attr_item);
+};
+
+static int __init
+devlink_default_attr_parse(char *str,
+			   const struct devlink_default_attr_spec *attrs,
+			   size_t attrs_count,
+			   struct devlink_default_attr_item *attr_item)
+{
+	char *attr_name;
+	char *value;
+	size_t i;
+
+	attr_name = strsep(&str, ":");
+	if (!attr_name || !*attr_name || !str || !*str)
+		return -EINVAL;
+
+	value = str;
+	for (i = 0; i < attrs_count; i++) {
+		if (!strcmp(attr_name, attrs[i].name)) {
+			attr_item->attr = attrs[i].attr;
+			return attrs[i].value_parse(value, attr_item);
+		}
+	}
+
+	return -EINVAL;
+}
+
+static int __init
+devlink_default_esw_mode_to_value(const char *str,
+				  enum devlink_eswitch_mode *mode)
+{
+	if (!strcmp(str, "legacy")) {
+		*mode = DEVLINK_ESWITCH_MODE_LEGACY;
+		return 0;
+	}
+	if (!strcmp(str, "switchdev")) {
+		*mode = DEVLINK_ESWITCH_MODE_SWITCHDEV;
+		return 0;
+	}
+	if (!strcmp(str, "switchdev_inactive")) {
+		*mode = DEVLINK_ESWITCH_MODE_SWITCHDEV_INACTIVE;
+		return 0;
+	}
+
+	return -EINVAL;
+}
+
+static int __init
+devlink_default_esw_mode_parse(const char *str,
+			       struct devlink_default_attr_item *attr_item)
+{
+	enum devlink_eswitch_mode mode;
+	int err;
+
+	err = devlink_default_esw_mode_to_value(str, &mode);
+	if (err)
+		return err;
+
+	attr_item->value.eswitch_mode = mode;
+	return 0;
+}
+
+static const struct devlink_default_attr_spec devlink_default_esw_attrs[] __initconst = {
+	{ "mode", DEVLINK_ATTR_ESWITCH_MODE, devlink_default_esw_mode_parse },
+};
+
+static int __init
+devlink_default_esw_attr_parse(char *str,
+			       struct devlink_default_attr_item *attr_item)
+{
+	return devlink_default_attr_parse(str, devlink_default_esw_attrs,
+					  ARRAY_SIZE(devlink_default_esw_attrs),
+					  attr_item);
+}
+
+static int
+devlink_default_eswitch_apply(struct devlink *devlink,
+			      const struct devlink_default_attr_item *attr)
+{
+	const struct devlink_ops *ops = devlink->ops;
+
+	switch (attr->attr) {
+	case DEVLINK_ATTR_ESWITCH_MODE:
+		if (!ops->eswitch_mode_set)
+			return -EOPNOTSUPP;
+
+		return ops->eswitch_mode_set(devlink, attr->value.eswitch_mode,
+					     NULL);
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
+static const struct devlink_default_cmd_spec devlink_default_cmds[] __initconst = {
+	{
+		.name = "esw",
+		.cmd = DEVLINK_CMD_ESWITCH_SET,
+		.run = devlink_default_eswitch_apply,
+		.attr_parse = devlink_default_esw_attr_parse,
+	},
+};
+
 static const struct devlink_default_cmd_spec *__init
 devlink_default_cmd_spec_find(const char *name)
 {
+	size_t i;
+
+	for (i = 0; i < ARRAY_SIZE(devlink_default_cmds); i++) {
+		if (!strcmp(name, devlink_default_cmds[i].name))
+			return &devlink_default_cmds[i];
+	}
+
 	return NULL;
 }
 
