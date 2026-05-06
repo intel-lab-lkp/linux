@@ -524,6 +524,8 @@ struct vmx_pages {
 	u64 apic_access_gpa;
 	void *apic_access;
 
+	void *stack;
+
 	u64 eptp_gpa;
 };
 
