@@ -96,6 +96,14 @@ struct scan_control {
 	/* Swappiness value for proactive reclaim. Always use sc_swappiness()! */
 	int *proactive_swappiness;
 
+	/*
+	 * Opportunistic compaction hint snapshotted from the pgdat at the
+	 * start of this reclaim pass. Forwarded to shrinkers through
+	 * shrink_control::opportunistic_compaction so they can skip
+	 * non-productive work for failable high-order allocations.
+	 */
+	enum kswapd_opportunistic_compaction_type kswapd_opportunistic_compaction;
+
 	/* Can active folios be deactivated as part of reclaim? */
 #define DEACTIVATE_ANON 1
 #define DEACTIVATE_FILE 2
@@ -412,7 +420,7 @@ static unsigned long drop_slab_node(int nid)
 
 	memcg = mem_cgroup_iter(NULL, NULL, NULL);
 	do {
-		freed += shrink_slab(GFP_KERNEL, nid, 0, memcg, 0);
+		freed += shrink_slab(GFP_KERNEL, nid, 0, memcg, 0, false);
 	} while ((memcg = mem_cgroup_iter(NULL, memcg, NULL)) != NULL);
 
 	return freed;
@@ -5069,7 +5077,8 @@ static int shrink_one(struct lruvec *lruvec, struct scan_control *sc)
 	success = try_to_shrink_lruvec(lruvec, sc);
 
 	shrink_slab(sc->gfp_mask, pgdat->node_id, sc->order, memcg,
-		    sc->priority);
+		    sc->priority, sc->kswapd_opportunistic_compaction ==
+		    KSWAPD_OPPORTUNISTIC_COMPACTION);
 
 	if (!sc->proactive)
 		vmpressure(sc->gfp_mask, memcg, false, sc->nr_scanned - scanned,
@@ -6172,7 +6181,8 @@ static void shrink_node_memcgs(pg_data_t *pgdat, struct scan_control *sc)
 		shrink_lruvec(lruvec, sc);
 
 		shrink_slab(sc->gfp_mask, pgdat->node_id, sc->order, memcg,
-			    sc->priority);
+			    sc->priority, sc->kswapd_opportunistic_compaction ==
+			    KSWAPD_OPPORTUNISTIC_COMPACTION);
 
 		/* Record the group's reclaim efficiency */
 		if (!sc->proactive)
@@ -7105,8 +7115,14 @@ clear_reclaim_active(pg_data_t *pgdat, int highest_zoneidx)
  * found to have free_pages <= high_wmark_pages(zone), any page in that zone
  * or lower is eligible for reclaim until at least one usable zone is
  * balanced.
+ *
+ * @kswapd_opportunistic_compaction is the aggregated hint produced by
+ * wakeup_kswapd() for this run; it is propagated into scan_control so that
+ * shrinkers can skip costly work that is unlikely to help compaction when
+ * all wakers are failable high-order allocations.
  */
-static int balance_pgdat(pg_data_t *pgdat, int order, int highest_zoneidx)
+static int balance_pgdat(pg_data_t *pgdat, int order, int highest_zoneidx,
+			 enum kswapd_opportunistic_compaction_type kswapd_opportunistic_compaction)
 {
 	int i;
 	unsigned long nr_soft_reclaimed;
@@ -7120,6 +7136,7 @@ static int balance_pgdat(pg_data_t *pgdat, int order, int highest_zoneidx)
 		.gfp_mask = GFP_KERNEL,
 		.order = order,
 		.may_unmap = 1,
+		.kswapd_opportunistic_compaction = kswapd_opportunistic_compaction,
 	};
 
 	set_task_reclaim_state(current, &sc.reclaim_state);
@@ -7442,6 +7459,7 @@ static int kswapd(void *p)
 	unsigned int highest_zoneidx = MAX_NR_ZONES - 1;
 	pg_data_t *pgdat = (pg_data_t *)p;
 	struct task_struct *tsk = current;
+	enum kswapd_opportunistic_compaction_type kswapd_opportunistic_compaction;
 
 	/*
 	 * Tell the memory management that we're a "memory allocator",
@@ -7459,6 +7477,7 @@ static int kswapd(void *p)
 	set_freezable();
 
 	WRITE_ONCE(pgdat->kswapd_order, 0);
+	WRITE_ONCE(pgdat->kswapd_opportunistic_compaction, KSWAPD_UNSET_OPPORTUNISTIC_COMPACTION);
 	WRITE_ONCE(pgdat->kswapd_highest_zoneidx, MAX_NR_ZONES);
 	atomic_set(&pgdat->nr_writeback_throttled, 0);
 	for ( ; ; ) {
@@ -7474,10 +7493,13 @@ kswapd_try_sleep:
 
 		/* Read the new order and highest_zoneidx */
 		alloc_order = READ_ONCE(pgdat->kswapd_order);
+		kswapd_opportunistic_compaction = READ_ONCE(pgdat->kswapd_opportunistic_compaction);
 		highest_zoneidx = kswapd_highest_zoneidx(pgdat,
 							highest_zoneidx);
 		WRITE_ONCE(pgdat->kswapd_order, 0);
 		WRITE_ONCE(pgdat->kswapd_highest_zoneidx, MAX_NR_ZONES);
+		WRITE_ONCE(pgdat->kswapd_opportunistic_compaction,
+			   KSWAPD_UNSET_OPPORTUNISTIC_COMPACTION);
 
 		if (kthread_freezable_should_stop(&was_frozen))
 			break;
@@ -7500,7 +7522,8 @@ kswapd_try_sleep:
 		trace_mm_vmscan_kswapd_wake(pgdat->node_id, highest_zoneidx,
 						alloc_order);
 		reclaim_order = balance_pgdat(pgdat, alloc_order,
-						highest_zoneidx);
+						highest_zoneidx,
+						kswapd_opportunistic_compaction);
 		if (reclaim_order < alloc_order)
 			goto kswapd_try_sleep;
 	}
@@ -7508,6 +7531,22 @@ kswapd_try_sleep:
 	tsk->flags &= ~(PF_MEMALLOC | PF_KSWAPD);
 
 	return 0;
+}
+
+/*
+ * Is @gfp_flags a high-order allocation that is eligible for the
+ * "opportunistic compaction" treatment in kswapd / shrinkers?
+ *
+ * The caller must be willing to tolerate failure (__GFP_NORETRY or
+ * __GFP_RETRY_MAYFAIL) and must not have set __GFP_NOFAIL. For such
+ * allocations there is little value in burning working-set pages just to
+ * scrape together a single high-order block: if compaction can't easily
+ * succeed, the caller would rather see the allocation fail.
+ */
+static bool gfp_kswapd_opportunistic_compaction(gfp_t gfp_flags)
+{
+	return (gfp_flags & (__GFP_NORETRY | __GFP_RETRY_MAYFAIL)) &&
+		!(gfp_flags & __GFP_NOFAIL);
 }
 
 /*
@@ -7537,6 +7576,27 @@ void wakeup_kswapd(struct zone *zone, gfp_t gfp_flags, int order,
 
 	if (READ_ONCE(pgdat->kswapd_order) < order)
 		WRITE_ONCE(pgdat->kswapd_order, order);
+
+	/*
+	 * Fold this waker into the per-pgdat opportunistic-compaction hint
+	 * that kswapd will pick up at the start of its next run.
+	 *
+	 * The state is sticky in the "NO" direction: once any waker in this
+	 * batch is order-0 or a non-failable high-order allocation, the hint
+	 * stays cleared until kswapd consumes it. Only when every waker so
+	 * far is a failable high-order allocation do we set
+	 * KSWAPD_OPPORTUNISTIC_COMPACTION, asking shrinkers to skip work
+	 * that won't realistically help compaction.
+	 */
+	if (READ_ONCE(pgdat->kswapd_opportunistic_compaction) !=
+	    KSWAPD_NO_OPPORTUNISTIC_COMPACTION) {
+		if (!order || !gfp_kswapd_opportunistic_compaction(gfp_flags))
+			WRITE_ONCE(pgdat->kswapd_opportunistic_compaction,
+				   KSWAPD_NO_OPPORTUNISTIC_COMPACTION);
+		else if (order && gfp_kswapd_opportunistic_compaction(gfp_flags))
+			WRITE_ONCE(pgdat->kswapd_opportunistic_compaction,
+				   KSWAPD_OPPORTUNISTIC_COMPACTION);
+	}
 
 	if (!waitqueue_active(&pgdat->kswapd_wait))
 		return;
