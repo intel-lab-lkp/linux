@@ -778,11 +778,34 @@ static void dump_command(unsigned long phys_addr)
 		pr_err("CMD[%d]: %08x\n", i, cmd->data[i]);
 }
 
+#define AMD_IOMMU_DEVID_SIZE	48
+
+static void amd_iommu_devid_str(struct amd_iommu *iommu, u16 devid, char *buf,
+				size_t size)
+{
+	struct pci_dev *pdev;
+
+	pdev = pci_get_domain_bus_and_slot(iommu->pci_seg->id,
+					   PCI_BUS_NUM(devid), devid & 0xff);
+	if (pdev) {
+		snprintf(buf, size, "%04x:%02x:%02x.%x %04x:%04x",
+			 iommu->pci_seg->id, PCI_BUS_NUM(devid),
+			 PCI_SLOT(devid), PCI_FUNC(devid),
+			 pdev->vendor, pdev->device);
+		pci_dev_put(pdev);
+	} else {
+		snprintf(buf, size, "%04x:%02x:%02x.%x",
+			 iommu->pci_seg->id, PCI_BUS_NUM(devid),
+			 PCI_SLOT(devid), PCI_FUNC(devid));
+	}
+}
+
 static void amd_iommu_report_rmp_hw_error(struct amd_iommu *iommu, volatile u32 *event)
 {
 	struct iommu_dev_data *dev_data = NULL;
 	int devid, vmg_tag, flags;
 	struct pci_dev *pdev;
+	char devid_str[AMD_IOMMU_DEVID_SIZE];
 	u64 spa;
 
 	devid   = (event[0] >> EVENT_DEVID_SHIFT) & EVENT_DEVID_MASK;
@@ -795,15 +818,16 @@ static void amd_iommu_report_rmp_hw_error(struct amd_iommu *iommu, volatile u32 
 	if (pdev)
 		dev_data = dev_iommu_priv_get(&pdev->dev);
 
+	amd_iommu_devid_str(iommu, devid, devid_str, sizeof(devid_str));
+
 	if (dev_data) {
 		if (__ratelimit(&dev_data->rs)) {
-			pci_err(pdev, "Event logged [RMP_HW_ERROR vmg_tag=0x%04x, spa=0x%llx, flags=0x%04x]\n",
-				vmg_tag, spa, flags);
+			pci_err(pdev, "Event logged [RMP_HW_ERROR device=%s vmg_tag=0x%04x, spa=0x%llx, flags=0x%04x]\n",
+				devid_str, vmg_tag, spa, flags);
 		}
 	} else {
-		pr_err_ratelimited("Event logged [RMP_HW_ERROR device=%04x:%02x:%02x.%x, vmg_tag=0x%04x, spa=0x%llx, flags=0x%04x]\n",
-			iommu->pci_seg->id, PCI_BUS_NUM(devid), PCI_SLOT(devid), PCI_FUNC(devid),
-			vmg_tag, spa, flags);
+		pr_err_ratelimited("Event logged [RMP_HW_ERROR device=%s vmg_tag=0x%04x, spa=0x%llx, flags=0x%04x]\n",
+			devid_str, vmg_tag, spa, flags);
 	}
 
 	if (pdev)
@@ -815,6 +839,7 @@ static void amd_iommu_report_rmp_fault(struct amd_iommu *iommu, volatile u32 *ev
 	struct iommu_dev_data *dev_data = NULL;
 	int devid, flags_rmp, vmg_tag, flags;
 	struct pci_dev *pdev;
+	char devid_str[AMD_IOMMU_DEVID_SIZE];
 	u64 gpa;
 
 	devid     = (event[0] >> EVENT_DEVID_SHIFT) & EVENT_DEVID_MASK;
@@ -830,13 +855,12 @@ static void amd_iommu_report_rmp_fault(struct amd_iommu *iommu, volatile u32 *ev
 
 	if (dev_data) {
 		if (__ratelimit(&dev_data->rs)) {
-			pci_err(pdev, "Event logged [RMP_PAGE_FAULT vmg_tag=0x%04x, gpa=0x%llx, flags_rmp=0x%04x, flags=0x%04x]\n",
-				vmg_tag, gpa, flags_rmp, flags);
+			pci_err(pdev, "Event logged [RMP_PAGE_FAULT device=%s vmg_tag=0x%04x, gpa=0x%llx, flags_rmp=0x%04x, flags=0x%04x]\n",
+				devid_str, vmg_tag, gpa, flags_rmp, flags);
 		}
 	} else {
-		pr_err_ratelimited("Event logged [RMP_PAGE_FAULT device=%04x:%02x:%02x.%x, vmg_tag=0x%04x, gpa=0x%llx, flags_rmp=0x%04x, flags=0x%04x]\n",
-			iommu->pci_seg->id, PCI_BUS_NUM(devid), PCI_SLOT(devid), PCI_FUNC(devid),
-			vmg_tag, gpa, flags_rmp, flags);
+		pr_err_ratelimited("Event logged [RMP_PAGE_FAULT device=%s vmg_tag=0x%04x, gpa=0x%llx, flags_rmp=0x%04x, flags=0x%04x]\n",
+			devid_str, vmg_tag, gpa, flags_rmp, flags);
 	}
 
 	if (pdev)
@@ -855,11 +879,14 @@ static void amd_iommu_report_page_fault(struct amd_iommu *iommu,
 {
 	struct iommu_dev_data *dev_data = NULL;
 	struct pci_dev *pdev;
+	char devid_str[AMD_IOMMU_DEVID_SIZE];
 
 	pdev = pci_get_domain_bus_and_slot(iommu->pci_seg->id, PCI_BUS_NUM(devid),
 					   devid & 0xff);
 	if (pdev)
 		dev_data = dev_iommu_priv_get(&pdev->dev);
+
+	amd_iommu_devid_str(iommu, devid, devid_str, sizeof(devid_str));
 
 	if (dev_data) {
 		/*
@@ -871,9 +898,8 @@ static void amd_iommu_report_page_fault(struct amd_iommu *iommu,
 			/* Device not attached to domain properly */
 			if (dev_data->domain == NULL) {
 				pr_err_ratelimited("Event logged [Device not attached to domain properly]\n");
-				pr_err_ratelimited("  device=%04x:%02x:%02x.%x domain=0x%04x\n",
-						   iommu->pci_seg->id, PCI_BUS_NUM(devid), PCI_SLOT(devid),
-						   PCI_FUNC(devid), domain_id);
+				pr_err_ratelimited("  device=%s domain=0x%04x\n",
+						   devid_str, domain_id);
 				goto out;
 			}
 
@@ -886,13 +912,12 @@ static void amd_iommu_report_page_fault(struct amd_iommu *iommu,
 		}
 
 		if (__ratelimit(&dev_data->rs)) {
-			pci_err(pdev, "Event logged [IO_PAGE_FAULT domain=0x%04x address=0x%llx flags=0x%04x]\n",
-				domain_id, address, flags);
+			pci_err(pdev, "Event logged [IO_PAGE_FAULT device=%s domain=0x%04x address=0x%llx flags=0x%04x]\n",
+				devid_str, domain_id, address, flags);
 		}
 	} else {
-		pr_err_ratelimited("Event logged [IO_PAGE_FAULT device=%04x:%02x:%02x.%x domain=0x%04x address=0x%llx flags=0x%04x]\n",
-			iommu->pci_seg->id, PCI_BUS_NUM(devid), PCI_SLOT(devid), PCI_FUNC(devid),
-			domain_id, address, flags);
+		pr_err_ratelimited("Event logged [IO_PAGE_FAULT device=%s domain=0x%04x address=0x%llx flags=0x%04x]\n",
+			devid_str, domain_id, address, flags);
 	}
 
 out:
@@ -908,6 +933,7 @@ static void iommu_print_event(struct amd_iommu *iommu, void *__evt)
 	int count = 0;
 	u64 address, ctrl;
 	u32 pasid;
+	char devid_str[AMD_IOMMU_DEVID_SIZE];
 
 retry:
 	type    = (event[1] >> EVENT_TYPE_SHIFT)  & EVENT_TYPE_MASK;
@@ -933,24 +959,22 @@ retry:
 		return;
 	}
 
+	amd_iommu_devid_str(iommu, devid, devid_str, sizeof(devid_str));
+
 	switch (type) {
 	case EVENT_TYPE_ILL_DEV:
-		dev_err(dev, "Event logged [ILLEGAL_DEV_TABLE_ENTRY device=%04x:%02x:%02x.%x pasid=0x%05x address=0x%llx flags=0x%04x]\n",
-			iommu->pci_seg->id, PCI_BUS_NUM(devid), PCI_SLOT(devid), PCI_FUNC(devid),
-			pasid, address, flags);
+		dev_err(dev, "Event logged [ILLEGAL_DEV_TABLE_ENTRY device=%s pasid=0x%05x address=0x%llx flags=0x%04x]\n",
+			devid_str, pasid, address, flags);
 		dev_err(dev, "Control Reg : 0x%llx\n", ctrl);
 		dump_dte_entry(iommu, devid);
 		break;
 	case EVENT_TYPE_DEV_TAB_ERR:
-		dev_err(dev, "Event logged [DEV_TAB_HARDWARE_ERROR device=%04x:%02x:%02x.%x "
-			"address=0x%llx flags=0x%04x]\n",
-			iommu->pci_seg->id, PCI_BUS_NUM(devid), PCI_SLOT(devid), PCI_FUNC(devid),
-			address, flags);
+		dev_err(dev, "Event logged [DEV_TAB_HARDWARE_ERROR device=%s address=0x%llx flags=0x%04x]\n",
+			devid_str, address, flags);
 		break;
 	case EVENT_TYPE_PAGE_TAB_ERR:
-		dev_err(dev, "Event logged [PAGE_TAB_HARDWARE_ERROR device=%04x:%02x:%02x.%x pasid=0x%04x address=0x%llx flags=0x%04x]\n",
-			iommu->pci_seg->id, PCI_BUS_NUM(devid), PCI_SLOT(devid), PCI_FUNC(devid),
-			pasid, address, flags);
+		dev_err(dev, "Event logged [PAGE_TAB_HARDWARE_ERROR device=%s pasid=0x%04x address=0x%llx flags=0x%04x]\n",
+			devid_str, pasid, address, flags);
 		break;
 	case EVENT_TYPE_ILL_CMD:
 		dev_err(dev, "Event logged [ILLEGAL_COMMAND_ERROR address=0x%llx]\n", address);
@@ -961,14 +985,12 @@ retry:
 			address, flags);
 		break;
 	case EVENT_TYPE_IOTLB_INV_TO:
-		dev_err(dev, "Event logged [IOTLB_INV_TIMEOUT device=%04x:%02x:%02x.%x address=0x%llx]\n",
-			iommu->pci_seg->id, PCI_BUS_NUM(devid), PCI_SLOT(devid), PCI_FUNC(devid),
-			address);
+		dev_err(dev, "Event logged [IOTLB_INV_TIMEOUT device=%s address=0x%llx]\n",
+			devid_str, address);
 		break;
 	case EVENT_TYPE_INV_DEV_REQ:
-		dev_err(dev, "Event logged [INVALID_DEVICE_REQUEST device=%04x:%02x:%02x.%x pasid=0x%05x address=0x%llx flags=0x%04x]\n",
-			iommu->pci_seg->id, PCI_BUS_NUM(devid), PCI_SLOT(devid), PCI_FUNC(devid),
-			pasid, address, flags);
+		dev_err(dev, "Event logged [INVALID_DEVICE_REQUEST device=%s pasid=0x%05x address=0x%llx flags=0x%04x]\n",
+			devid_str, pasid, address, flags);
 		break;
 	case EVENT_TYPE_RMP_FAULT:
 		amd_iommu_report_rmp_fault(iommu, event);
@@ -979,8 +1001,8 @@ retry:
 	case EVENT_TYPE_INV_PPR_REQ:
 		pasid = PPR_PASID(*((u64 *)__evt));
 		tag = event[1] & 0x03FF;
-		dev_err(dev, "Event logged [INVALID_PPR_REQUEST device=%04x:%02x:%02x.%x pasid=0x%05x address=0x%llx flags=0x%04x tag=0x%03x]\n",
-			iommu->pci_seg->id, PCI_BUS_NUM(devid), PCI_SLOT(devid), PCI_FUNC(devid),
+		dev_err(dev, "Event logged [INVALID_PPR_REQUEST device=%s pasid=0x%05x address=0x%llx flags=0x%04x tag=0x%03x]\n",
+			devid_str,
 			pasid, address, flags, tag);
 		break;
 	default:
