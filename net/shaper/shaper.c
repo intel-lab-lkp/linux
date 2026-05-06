@@ -535,6 +535,13 @@ static int net_shaper_validate_caps(struct net_shaper_binding *binding,
 		return -EOPNOTSUPP;
 	}
 
+	if (shaper->handle.scope == NET_SHAPER_SCOPE_NETDEV &&
+	    shaper->handle.id != 0) {
+		NL_SET_ERR_MSG(info->extack,
+			       "Netdev scope is a singleton, must use ID 0");
+		return -EINVAL;
+	}
+
 	if (shaper->handle.scope == NET_SHAPER_SCOPE_QUEUE &&
 	    binding->type == NET_SHAPER_BINDING_TYPE_NETDEV &&
 	    shaper->handle.id >= binding->netdev->real_num_tx_queues) {
