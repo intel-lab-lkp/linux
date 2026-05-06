@@ -1953,12 +1953,30 @@ static void arm_smmu_dump_raw_event(struct arm_smmu_device *smmu, u64 *raw,
 
 #define ARM_SMMU_EVT_KNOWN(e)	((e)->id < ARRAY_SIZE(event_str) && event_str[(e)->id])
 #define ARM_SMMU_LOG_EVT_STR(e) ARM_SMMU_EVT_KNOWN(e) ? event_str[(e)->id] : "UNKNOWN"
-#define ARM_SMMU_LOG_CLIENT(e)	(e)->dev ? dev_name((e)->dev) : "(unassigned sid)"
+
+/* "SSSS:BB:DD.F [VVVV:DDDD]\0" — 12 + 1 + 11 + 1 = 25; round to power of 2 */
+#define ARM_SMMU_CLIENT_LEN	32
+
+static const char *arm_smmu_fmt_client(struct arm_smmu_event *e, char *buf, size_t sz)
+{
+	struct pci_dev *p;
+
+	if (!e->dev)
+		return "(unassigned sid)";
+	if (!dev_is_pci(e->dev))
+		return dev_name(e->dev);
+
+	p = to_pci_dev(e->dev);
+	snprintf(buf, sz, "%s [%04x:%04x]", dev_name(e->dev), p->vendor, p->device);
+	return buf;
+}
 
 static void arm_smmu_dump_event(struct arm_smmu_device *smmu, u64 *raw,
 				struct arm_smmu_event *evt,
 				struct ratelimit_state *rs)
 {
+	char clientbuf[ARM_SMMU_CLIENT_LEN];
+
 	if (!__ratelimit(rs))
 		return;
 
@@ -1970,7 +1988,8 @@ static void arm_smmu_dump_event(struct arm_smmu_device *smmu, u64 *raw,
 	case EVT_ID_ACCESS_FAULT:
 	case EVT_ID_PERMISSION_FAULT:
 		dev_err(smmu->dev, "event: %s client: %s sid: %#x ssid: %#x iova: %#llx ipa: %#llx",
-			ARM_SMMU_LOG_EVT_STR(evt), ARM_SMMU_LOG_CLIENT(evt),
+			ARM_SMMU_LOG_EVT_STR(evt),
+			arm_smmu_fmt_client(evt, clientbuf, ARM_SMMU_CLIENT_LEN),
 			evt->sid, evt->ssid, evt->iova, evt->ipa);
 
 		dev_err(smmu->dev, "%s %s %s %s \"%s\"%s%s stag: %#x",
@@ -1987,14 +2006,16 @@ static void arm_smmu_dump_event(struct arm_smmu_device *smmu, u64 *raw,
 	case EVT_ID_CD_FETCH_FAULT:
 	case EVT_ID_VMS_FETCH_FAULT:
 		dev_err(smmu->dev, "event: %s client: %s sid: %#x ssid: %#x fetch_addr: %#llx",
-			ARM_SMMU_LOG_EVT_STR(evt), ARM_SMMU_LOG_CLIENT(evt),
+			ARM_SMMU_LOG_EVT_STR(evt),
+			arm_smmu_fmt_client(evt, clientbuf, ARM_SMMU_CLIENT_LEN),
 			evt->sid, evt->ssid, evt->fetch_addr);
 
 		break;
 
 	default:
 		dev_err(smmu->dev, "event: %s client: %s sid: %#x ssid: %#x",
-			ARM_SMMU_LOG_EVT_STR(evt), ARM_SMMU_LOG_CLIENT(evt),
+			ARM_SMMU_LOG_EVT_STR(evt),
+			arm_smmu_fmt_client(evt, clientbuf, ARM_SMMU_CLIENT_LEN),
 			evt->sid, evt->ssid);
 	}
 }
