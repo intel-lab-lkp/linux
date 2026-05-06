@@ -30,6 +30,7 @@
 #include "lapic.h"
 #include "svm.h"
 #include "hyperv.h"
+#include "pmu.h"
 
 #define CC KVM_NESTED_VMENTER_CONSISTENCY_CHECK
 
@@ -1143,7 +1144,7 @@ int nested_svm_vmrun(struct kvm_vcpu *vcpu)
 		return 0;
 
 	if (ret)
-		return 1;
+		goto insn_retired;
 
 	/*
 	 * Since vmcb01 is not in use, we can use it to store some of the L1
@@ -1173,6 +1174,12 @@ int nested_svm_vmrun(struct kvm_vcpu *vcpu)
 		nested_svm_vmexit(svm);
 	}
 
+insn_retired:
+	/*
+	 * A successful VMRUN is counted by the PMU in guest mode, so only
+	 * retire the instruction after potentially entering guest mode.
+	 */
+	kvm_pmu_instruction_retired(vcpu);
 	return 1;
 }
 
