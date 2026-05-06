@@ -406,18 +406,36 @@ static void net_shaper_commit(struct net_shaper_binding *binding,
 	int i;
 
 	for (i = 0; i < nr_shapers; ++i) {
+		struct net_shaper *new;
+
 		index = net_shaper_handle_to_index(&shapers[i].handle);
 
 		cur = xa_load(&hierarchy->shapers, index);
 		if (WARN_ON_ONCE(!cur))
 			continue;
 
-		/* Successful update: drop the tentative mark
-		 * and update the hierarchy container.
+		/* If the shaper is already visible try to allocate a new
+		 * entry so that we don't cause torn reads under RCU.
+		 * This tiny GFP_KERNEL alloc should never fail, really,
+		 * but if it does just override, the torn read is acceptable.
 		 */
-		*cur = shapers[i];
-		smp_wmb();
-		xa_set_mark(&hierarchy->shapers, index, NET_SHAPER_VALID);
+		new = NULL;
+		if (xa_get_mark(&hierarchy->shapers, index, NET_SHAPER_VALID))
+			new = kmalloc_obj(*new);
+
+		if (new) {
+			*new = shapers[i];
+			smp_wmb();
+			/* Replacing an entry, xa_store() can't fail */
+			WARN_ON(xa_err(xa_store(&hierarchy->shapers, index,
+						new, GFP_KERNEL)));
+			kfree_rcu(cur, rcu);
+		} else {
+			*cur = shapers[i];
+			smp_wmb();
+			xa_set_mark(&hierarchy->shapers, index,
+				    NET_SHAPER_VALID);
+		}
 	}
 }
 
