@@ -22,6 +22,7 @@
 #include <linux/workqueue.h>
 #include <linux/bpf-cgroup-defs.h>
 #include <linux/psi_types.h>
+#include <linux/page_counter.h>
 
 #ifdef CONFIG_CGROUPS
 
@@ -868,10 +869,15 @@ struct cgroup_subsys {
 extern struct percpu_rw_semaphore cgroup_threadgroup_rwsem;
 extern bool cgroup_enable_per_threadgroup_rwsem;
 
+#define OFP_PEAK_UNSET (((-1UL)))
+
 struct cgroup_of_peak {
 	unsigned long		value;
 	struct list_head	list;
 };
+
+void of_peak_reset(struct cgroup_of_peak *ofp, struct page_counter *pc,
+		   struct list_head *watchers);
 
 /**
  * cgroup_threadgroup_change_begin - threadgroup exclusion for cgroups

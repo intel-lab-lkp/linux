@@ -4517,8 +4517,6 @@ static u64 memory_current_read(struct cgroup_subsys_state *css,
 	return (u64)page_counter_read(&memcg->memory) * PAGE_SIZE;
 }
 
-#define OFP_PEAK_UNSET (((-1UL)))
-
 static int peak_show(struct seq_file *sf, void *v, struct page_counter *pc)
 {
 	struct cgroup_of_peak *ofp = of_peak(sf->private);
@@ -4563,44 +4561,17 @@ static void peak_release(struct kernfs_open_file *of)
 	spin_unlock(&memcg->peaks_lock);
 }
 
-static ssize_t peak_write(struct kernfs_open_file *of, char *buf, size_t nbytes,
-			  loff_t off, struct page_counter *pc,
-			  struct list_head *watchers)
-{
-	unsigned long usage;
-	struct cgroup_of_peak *peer_ctx;
-	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
-	struct cgroup_of_peak *ofp = of_peak(of);
-
-	spin_lock(&memcg->peaks_lock);
-
-	usage = page_counter_read(pc);
-	WRITE_ONCE(pc->local_watermark, usage);
-
-	list_for_each_entry(peer_ctx, watchers, list)
-		if (usage > peer_ctx->value)
-			WRITE_ONCE(peer_ctx->value, usage);
-
-	/* initial write, register watcher */
-	if (ofp->value == OFP_PEAK_UNSET)
-		list_add(&ofp->list, watchers);
-
-	WRITE_ONCE(ofp->value, usage);
-	spin_unlock(&memcg->peaks_lock);
-
-	return nbytes;
-}
-
 static ssize_t memory_peak_write(struct kernfs_open_file *of, char *buf,
 				 size_t nbytes, loff_t off)
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+	struct cgroup_of_peak *ofp = of_peak(of);
 
-	return peak_write(of, buf, nbytes, off, &memcg->memory,
-			  &memcg->memory_peaks);
+	spin_lock(&memcg->peaks_lock);
+	of_peak_reset(ofp, &memcg->memory, &memcg->memory_peaks);
+	spin_unlock(&memcg->peaks_lock);
+	return nbytes;
 }
-
-#undef OFP_PEAK_UNSET
 
 static int memory_min_show(struct seq_file *m, void *v)
 {
@@ -5611,9 +5582,12 @@ static ssize_t swap_peak_write(struct kernfs_open_file *of, char *buf,
 			       size_t nbytes, loff_t off)
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+	struct cgroup_of_peak *ofp = of_peak(of);
 
-	return peak_write(of, buf, nbytes, off, &memcg->swap,
-			  &memcg->swap_peaks);
+	spin_lock(&memcg->peaks_lock);
+	of_peak_reset(ofp, &memcg->swap, &memcg->swap_peaks);
+	spin_unlock(&memcg->peaks_lock);
+	return nbytes;
 }
 
 static int swap_high_show(struct seq_file *m, void *v)

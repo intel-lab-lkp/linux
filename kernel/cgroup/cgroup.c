@@ -1981,6 +1981,38 @@ struct cgroup_of_peak *of_peak(struct kernfs_open_file *of)
 	return &ctx->peak;
 }
 
+/**
+ * of_peak_reset - reset peak
+ * @ofp: open file context
+ * @pc: counter
+ * @watchers: list of other open file contexts
+ *
+ * This function updates all contexts in @watchers to the new usage of @pc.
+ * If @ofp is not in the list yet, that is, if its value is
+ * %OFP_PEAK_UNSET, it is added to @watchers list.
+ *
+ * A lock must be used to protect @watchers.
+ */
+void of_peak_reset(struct cgroup_of_peak *ofp, struct page_counter *pc,
+		   struct list_head *watchers)
+{
+	unsigned long usage;
+	struct cgroup_of_peak *peer_ctx;
+
+	usage = page_counter_read(pc);
+	WRITE_ONCE(pc->local_watermark, usage);
+
+	list_for_each_entry(peer_ctx, watchers, list)
+		if (usage > peer_ctx->value)
+			WRITE_ONCE(peer_ctx->value, usage);
+
+	/* initial write, register watcher */
+	if (ofp->value == OFP_PEAK_UNSET)
+		list_add(&ofp->list, watchers);
+
+	WRITE_ONCE(ofp->value, usage);
+}
+
 static void apply_cgroup_root_flags(unsigned int root_flags)
 {
 	if (current->nsproxy->cgroup_ns == &init_cgroup_ns) {
