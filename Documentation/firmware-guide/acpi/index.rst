@@ -12,6 +12,7 @@ ACPI Support
    dsd/data-node-references
    dsd/leds
    dsd/phy
+   dsd/motorcomm-yt8xxx-phy
    enumeration
    osi
    method-tracing
