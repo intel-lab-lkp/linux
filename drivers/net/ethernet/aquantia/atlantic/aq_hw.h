@@ -236,6 +236,8 @@ struct aq_hw_ops {
 
 	int (*hw_stop)(struct aq_hw_s *self);
 
+	u32 (*hw_get_version)(struct aq_hw_s *self);
+
 	int (*hw_ring_tx_init)(struct aq_hw_s *self, struct aq_ring_s *aq_ring,
 			       struct aq_ring_param_s *aq_ring_param);
 
