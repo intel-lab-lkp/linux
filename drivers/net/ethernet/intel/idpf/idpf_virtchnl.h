@@ -169,8 +169,8 @@ int idpf_send_destroy_vport_msg(struct idpf_adapter *adapter, u32 vport_id);
 int idpf_send_enable_vport_msg(struct idpf_adapter *adapter, u32 vport_id);
 int idpf_send_disable_vport_msg(struct idpf_adapter *adapter, u32 vport_id);
 
-int idpf_vport_adjust_qs(struct idpf_vport *vport,
-			 struct idpf_q_vec_rsrc *rsrc);
+void idpf_vport_adjust_qs(struct idpf_vport *vport,
+			  struct idpf_q_vec_rsrc *rsrc);
 int idpf_vport_alloc_max_qs(struct idpf_adapter *adapter,
 			    struct idpf_vport_max_q *max_q);
 void idpf_vport_dealloc_max_qs(struct idpf_adapter *adapter,
