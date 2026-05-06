@@ -373,10 +373,8 @@ static int net_shaper_pre_insert(struct net_shaper_binding *binding,
 	/* Mark 'tentative' shaper inside the hierarchy container.
 	 * xa_set_mark is a no-op if the previous store fails.
 	 */
-	xa_lock(&hierarchy->shapers);
-	prev = __xa_store(&hierarchy->shapers, index, cur, GFP_KERNEL);
-	__xa_set_mark(&hierarchy->shapers, index, NET_SHAPER_NOT_VALID);
-	xa_unlock(&hierarchy->shapers);
+	prev = xa_store(&hierarchy->shapers, index, cur, GFP_KERNEL);
+	xa_set_mark(&hierarchy->shapers, index, NET_SHAPER_NOT_VALID);
 	if (xa_err(prev)) {
 		NL_SET_ERR_MSG(extack, "Can't insert shaper into device store");
 		kfree_rcu(cur, rcu);
@@ -402,7 +400,6 @@ static void net_shaper_commit(struct net_shaper_binding *binding,
 	int index;
 	int i;
 
-	xa_lock(&hierarchy->shapers);
 	for (i = 0; i < nr_shapers; ++i) {
 		index = net_shaper_handle_to_index(&shapers[i].handle);
 
@@ -413,11 +410,10 @@ static void net_shaper_commit(struct net_shaper_binding *binding,
 		/* Successful update: drop the tentative mark
 		 * and update the hierarchy container.
 		 */
-		__xa_clear_mark(&hierarchy->shapers, index,
-				NET_SHAPER_NOT_VALID);
+		xa_clear_mark(&hierarchy->shapers, index,
+			      NET_SHAPER_NOT_VALID);
 		*cur = shapers[i];
 	}
-	xa_unlock(&hierarchy->shapers);
 }
 
 /* Rollback all the tentative inserts from the hierarchy. */
@@ -430,13 +426,11 @@ static void net_shaper_rollback(struct net_shaper_binding *binding)
 	if (!hierarchy)
 		return;
 
-	xa_lock(&hierarchy->shapers);
 	xa_for_each_marked(&hierarchy->shapers, index, cur,
 			   NET_SHAPER_NOT_VALID) {
-		__xa_erase(&hierarchy->shapers, index);
+		xa_erase(&hierarchy->shapers, index);
 		kfree(cur);
 	}
-	xa_unlock(&hierarchy->shapers);
 }
 
 static int net_shaper_parse_handle(const struct nlattr *attr,
@@ -1398,12 +1392,10 @@ static void net_shaper_flush(struct net_shaper_binding *binding)
 	if (!hierarchy)
 		return;
 
-	xa_lock(&hierarchy->shapers);
 	xa_for_each(&hierarchy->shapers, index, cur) {
-		__xa_erase(&hierarchy->shapers, index);
+		xa_erase(&hierarchy->shapers, index);
 		kfree(cur);
 	}
-	xa_unlock(&hierarchy->shapers);
 
 	kfree(hierarchy);
 }
