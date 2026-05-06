@@ -153,6 +153,8 @@ int ionic_create_cq_common(struct ionic_vcq *vcq,
 		goto err_xa;
 	}
 
+	ionic_dbg_add_cq(dev, cq);
+
 	return 0;
 
 err_xa:
@@ -176,6 +178,7 @@ void ionic_destroy_cq_common(struct ionic_ibdev *dev, struct ionic_cq *cq)
 	if (!cq->vcq)
 		return;
 
+	ionic_dbg_rm_cq(cq);
 	xa_erase_irq(&dev->cq_tbl, cq->cqid);
 
 	kref_put(&cq->cq_kref, ionic_cq_complete);
@@ -918,6 +921,7 @@ struct ib_mr *ionic_reg_user_mr(struct ib_pd *ibpd, u64 start, u64 length,
 		goto err_cmd;
 
 	ionic_pgtbl_unbuf(dev, &mr->buf);
+	ionic_dbg_add_mr(dev, mr);
 
 	return &mr->ibmr;
 
@@ -988,6 +992,7 @@ struct ib_mr *ionic_reg_user_mr_dmabuf(struct ib_pd *ibpd, u64 offset,
 		goto err_cmd;
 
 	ionic_pgtbl_unbuf(dev, &mr->buf);
+	ionic_dbg_add_mr(dev, mr);
 
 	return &mr->ibmr;
 
@@ -1017,6 +1022,7 @@ int ionic_dereg_mr(struct ib_mr *ibmr, struct ib_udata *udata)
 			return rc;
 	}
 
+	ionic_dbg_rm_mr(mr);
 	ionic_pgtbl_unbuf(dev, &mr->buf);
 
 	if (mr->umem)
@@ -1063,6 +1069,8 @@ struct ib_mr *ionic_alloc_mr(struct ib_pd *ibpd, enum ib_mr_type type,
 	rc = ionic_create_mr_cmd(dev, pd, mr, 0, 0);
 	if (rc)
 		goto err_cmd;
+
+	ionic_dbg_add_mr(dev, mr);
 
 	return &mr->ibmr;
 
@@ -1135,6 +1143,8 @@ int ionic_alloc_mw(struct ib_mw *ibmw, struct ib_udata *udata)
 	if (rc)
 		goto err_cmd;
 
+	ionic_dbg_add_mr(dev, mr);
+
 	return 0;
 
 err_cmd:
@@ -1152,6 +1162,7 @@ int ionic_dealloc_mw(struct ib_mw *ibmw)
 	if (rc)
 		return rc;
 
+	ionic_dbg_rm_mr(mr);
 	ionic_put_mrid(dev, mr->mrid);
 
 	return 0;
@@ -2364,6 +2375,8 @@ int ionic_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *attr,
 		qp->rq_cqid = cq->cqid;
 	}
 
+	ionic_dbg_add_qp(dev, qp);
+
 	return 0;
 
 err_resp:
@@ -2643,6 +2656,7 @@ int ionic_destroy_qp(struct ib_qp *ibqp, struct ib_udata *udata)
 	if (rc)
 		return rc;
 
+	ionic_dbg_rm_qp(qp);
 	xa_erase_irq(&dev->qp_tbl, qp->qpid);
 
 	kref_put(&qp->qp_kref, ionic_qp_complete);

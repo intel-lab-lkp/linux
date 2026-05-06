@@ -115,6 +115,13 @@ struct ionic_ibdev {
 	void			*hw_stats_buf;
 	struct rdma_stat_desc	*hw_stats_hdrs;
 	struct ionic_counter_stats *counter_stats;
+	struct dentry		*debug;
+	struct dentry		*debug_aq;
+	struct dentry		*debug_cq;
+	struct dentry		*debug_eq;
+	struct dentry		*debug_mr;
+	struct dentry		*debug_qp;
+
 	int			hw_stats_count;
 };
 
@@ -133,6 +140,7 @@ struct ionic_eq {
 
 	int			irq;
 	char			name[32];
+	struct dentry		*debug;
 };
 
 struct ionic_admin_wr {
@@ -167,6 +175,9 @@ struct ionic_aq {
 	struct ionic_admin_wr_q	*q_wr;
 	struct list_head	wr_prod;
 	struct list_head	wr_post;
+	struct dentry		*debug;
+	struct ionic_admin_wr	*debug_wr;
+	struct mutex		debug_mutex; /* for debug_wr */
 };
 
 struct ionic_ctx {
@@ -215,6 +226,7 @@ struct ionic_cq {
 
 	/* infrequently accessed, keep at end */
 	struct ib_umem		*umem;
+	struct dentry		*debug;
 };
 
 struct ionic_vcq {
@@ -304,6 +316,7 @@ struct ionic_qp {
 	int			dcqcn_profile;
 
 	struct ib_ud_header	*hdr;
+	struct dentry		*debug;
 };
 
 struct ionic_ah {
@@ -323,6 +336,7 @@ struct ionic_mr {
 	int			flags;
 
 	struct ib_umem		*umem;
+	struct dentry		*debug;
 	struct ionic_tbl_buf	buf;
 	bool			created;
 };
@@ -514,4 +528,19 @@ int ionic_pgtbl_init(struct ionic_ibdev *dev,
 		     int limit,
 		     u64 page_size);
 void ionic_pgtbl_unbuf(struct ionic_ibdev *dev, struct ionic_tbl_buf *buf);
+
+/* ionic_debugfs.c */
+void ionic_dbg_add_dev(struct ionic_ibdev *dev, struct dentry *parent);
+void ionic_dbg_rm_dev(struct ionic_ibdev *dev);
+void ionic_dbg_add_eq(struct ionic_ibdev *dev, struct ionic_eq *eq);
+void ionic_dbg_rm_eq(struct ionic_eq *eq);
+void ionic_dbg_add_cq(struct ionic_ibdev *dev, struct ionic_cq *cq);
+void ionic_dbg_rm_cq(struct ionic_cq *cq);
+void ionic_dbg_add_aq(struct ionic_ibdev *dev, struct ionic_aq *aq);
+void ionic_dbg_rm_aq(struct ionic_aq *aq);
+void ionic_dbg_add_mr(struct ionic_ibdev *dev, struct ionic_mr *mr);
+void ionic_dbg_rm_mr(struct ionic_mr *mr);
+void ionic_dbg_add_qp(struct ionic_ibdev *dev, struct ionic_qp *qp);
+void ionic_dbg_rm_qp(struct ionic_qp *qp);
+
 #endif /* _IONIC_IBDEV_H_ */

@@ -586,6 +586,7 @@ static struct ionic_aq *__ionic_create_rdma_adminq(struct ionic_ibdev *dev,
 
 	INIT_WORK(&aq->work, ionic_admin_work);
 	aq->armed = false;
+	ionic_dbg_add_aq(dev, aq);
 
 	return aq;
 
@@ -600,6 +601,7 @@ err_q:
 static void __ionic_destroy_rdma_adminq(struct ionic_ibdev *dev,
 					struct ionic_aq *aq)
 {
+	ionic_dbg_rm_aq(aq);
 	kfree(aq->q_wr);
 	ionic_queue_destroy(&aq->q, dev->lif_cfg.hwdev);
 	kfree(aq);
@@ -1032,6 +1034,7 @@ static struct ionic_eq *ionic_create_eq(struct ionic_ibdev *dev, int eqid)
 		goto err_cmd;
 
 	ionic_intr_mask(dev->lif_cfg.intr_ctrl, eq->intr, IONIC_INTR_MASK_CLEAR);
+	ionic_dbg_add_eq(dev, eq);
 
 	return eq;
 
@@ -1053,6 +1056,7 @@ static void ionic_destroy_eq(struct ionic_eq *eq)
 {
 	struct ionic_ibdev *dev = eq->dev;
 
+	ionic_dbg_rm_eq(eq);
 	eq->enable = false;
 	free_irq(eq->irq, eq);
 	flush_work(&eq->work);

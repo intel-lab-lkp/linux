@@ -51,6 +51,7 @@ void ionic_fill_lif_cfg(struct ionic_lif *lif, struct ionic_lif_cfg *cfg)
 		cfg->page_size_supported = IONIC_PAGE_SIZE_SUPPORTED;
 
 	cfg->rdma_version = ident->rdma.version;
+	cfg->minor_version = ident->rdma.minor_version;
 	cfg->qp_opcodes = ident->rdma.qp_opcodes;
 	cfg->admin_opcodes = ident->rdma.admin_opcodes;
 
@@ -90,6 +91,8 @@ void ionic_fill_lif_cfg(struct ionic_lif *lif, struct ionic_lif_cfg *cfg)
 	    !!(lif->qtype_info[IONIC_QTYPE_TXQ].features & IONIC_QIDENT_F_EXPDB);
 	cfg->rq_expdb =
 	    !!(lif->qtype_info[IONIC_QTYPE_RXQ].features & IONIC_QIDENT_F_EXPDB);
+
+	cfg->dbg_ctx = lif->dentry;
 }
 
 struct net_device *ionic_lif_netdev(struct ionic_lif *lif)

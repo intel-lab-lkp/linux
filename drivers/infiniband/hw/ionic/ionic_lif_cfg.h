@@ -14,6 +14,7 @@
 struct ionic_lif_cfg {
 	struct device *hwdev;
 	struct ionic_lif *lif;
+	struct dentry *dbg_ctx;
 
 	int lif_index;
 	int lif_hw_index;
@@ -49,6 +50,7 @@ struct ionic_lif_cfg {
 	u8 udma_qgrp_shift;
 
 	u8 rdma_version;
+	u8 minor_version;
 	u8 qp_opcodes;
 	u8 admin_opcodes;
 
