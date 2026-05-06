@@ -55,7 +55,10 @@ properties:
       initializing SCP.
 
   memory-region:
-    maxItems: 1
+    description:
+      Phandle to the reserved memory regions.
+    minItems: 1
+    maxItems: 2
 
   cros-ec-rpmsg:
     $ref: /schemas/embedded-controller/google,cros-ec.yaml
@@ -123,7 +126,10 @@ patternProperties:
           initializing sub cores of multi-core SCP.
 
       memory-region:
-        maxItems: 1
+        description:
+          Phandle to the reserved memory regions.
+        minItems: 1
+        maxItems: 2
 
       cros-ec-rpmsg:
         $ref: /schemas/embedded-controller/google,cros-ec.yaml
