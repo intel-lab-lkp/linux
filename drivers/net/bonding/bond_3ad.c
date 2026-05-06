@@ -1055,6 +1055,8 @@ static void ad_mux_machine(struct port *port, bool *update_slave_arr)
 	aggregator = rcu_dereference(port->aggregator);
 	if (port->sm_vars & AD_PORT_BEGIN) {
 		port->sm_mux_state = AD_MUX_DETACHED;
+	} else if (!port->is_enabled && port->sm_mux_state != AD_MUX_DETACHED) {
+		port->sm_mux_state = AD_MUX_WAITING;
 	} else {
 		switch (port->sm_mux_state) {
 		case AD_MUX_DETACHED:
@@ -1202,6 +1204,11 @@ static void ad_mux_machine(struct port *port, bool *update_slave_arr)
 			break;
 		case AD_MUX_WAITING:
 			port->sm_mux_timer_counter = __ad_timer_to_ticks(AD_WAIT_WHILE_TIMER, 0);
+			port->actor_oper_port_state &= ~LACP_STATE_SYNCHRONIZATION;
+			ad_disable_collecting_distributing(port,
+							   update_slave_arr);
+			port->actor_oper_port_state &= ~LACP_STATE_COLLECTING;
+			port->actor_oper_port_state &= ~LACP_STATE_DISTRIBUTING;
 			break;
 		case AD_MUX_ATTACHED:
 			if (aggregator->is_active)
