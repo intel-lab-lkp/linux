@@ -193,12 +193,38 @@ static void virtio_config_core_enable(struct virtio_device *dev)
 	spin_unlock_irq(&dev->config_lock);
 }
 
+static void virtio_config_core_enable_noirq(struct virtio_device *dev)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&dev->config_lock, flags);
+	dev->config_core_enabled = true;
+	if (dev->config_change_pending)
+		__virtio_config_changed(dev);
+	spin_unlock_irqrestore(&dev->config_lock, flags);
+}
+
 void virtio_add_status(struct virtio_device *dev, unsigned int status)
 {
 	might_sleep();
 	dev->config->set_status(dev, dev->config->get_status(dev) | status);
 }
 EXPORT_SYMBOL_GPL(virtio_add_status);
+
+/*
+ * Same as virtio_add_status() but without the might_sleep() assertion,
+ * so it is safe to call from noirq context.
+ *
+ * Requires the transport to have set config_ops->noirq_safe, which declares
+ * that reset, get_status, and set_status do not wait for a completion
+ * interrupt and are therefore safe during the noirq PM phase.
+ */
+void virtio_add_status_noirq(struct virtio_device *dev, unsigned int status)
+{
+	WARN_ON(!dev->config->noirq_safe);
+	dev->config->set_status(dev, dev->config->get_status(dev) | status);
+}
+EXPORT_SYMBOL_GPL(virtio_add_status_noirq);
 
 /* Do some validation, then set FEATURES_OK */
 static int virtio_features_ok(struct virtio_device *dev)
@@ -225,6 +251,32 @@ static int virtio_features_ok(struct virtio_device *dev)
 		return 0;
 
 	virtio_add_status(dev, VIRTIO_CONFIG_S_FEATURES_OK);
+	status = dev->config->get_status(dev);
+	if (!(status & VIRTIO_CONFIG_S_FEATURES_OK)) {
+		dev_err(&dev->dev, "virtio: device refuses features: %x\n",
+			status);
+		return -ENODEV;
+	}
+	return 0;
+}
+
+/* noirq-safe variant: no might_sleep(), uses virtio_add_status_noirq() */
+static int virtio_features_ok_noirq(struct virtio_device *dev)
+{
+	unsigned int status;
+
+	/*
+	 * Skip virtio_check_mem_acc_cb() here: it may sleep (e.g. Xen's
+	 * xen_virtio_restricted_mem_acc() calls devm_kzalloc with GFP_KERNEL).
+	 * The check was already performed during probe in virtio_features_ok();
+	 * features cannot change across suspend/resume so the constraint is
+	 * still satisfied.
+	 */
+
+	if (!virtio_has_feature(dev, VIRTIO_F_VERSION_1))
+		return 0;
+
+	virtio_add_status_noirq(dev, VIRTIO_CONFIG_S_FEATURES_OK);
 	status = dev->config->get_status(dev);
 	if (!(status & VIRTIO_CONFIG_S_FEATURES_OK)) {
 		dev_err(&dev->dev, "virtio: device refuses features: %x\n",
@@ -266,6 +318,28 @@ void virtio_reset_device(struct virtio_device *dev)
 	dev->config->reset(dev);
 }
 EXPORT_SYMBOL_GPL(virtio_reset_device);
+
+/**
+ * virtio_reset_device_noirq - noirq-safe variant of virtio_reset_device()
+ * @dev: the device to reset
+ *
+ * Requires the transport to have set config_ops->noirq_safe.
+ */
+void virtio_reset_device_noirq(struct virtio_device *dev)
+{
+	WARN_ON(!dev->config->noirq_safe);
+
+#ifdef CONFIG_VIRTIO_HARDEN_NOTIFICATION
+	/*
+	 * The noirq stage runs with device IRQ handlers disabled, so
+	 * virtio_synchronize_cbs() must not be called here.
+	 */
+	virtio_break_device(dev);
+#endif
+
+	dev->config->reset(dev);
+}
+EXPORT_SYMBOL_GPL(virtio_reset_device_noirq);
 
 static int virtio_dev_probe(struct device *_d)
 {
@@ -539,6 +613,7 @@ int register_virtio_device(struct virtio_device *dev)
 	dev->config_driver_disabled = false;
 	dev->config_core_enabled = false;
 	dev->config_change_pending = false;
+	dev->noirq_state = VIRTIO_NOIRQ_NONE;
 
 	INIT_LIST_HEAD(&dev->vqs);
 	spin_lock_init(&dev->vqs_list_lock);
@@ -618,7 +693,63 @@ static int virtio_device_reinit(struct virtio_device *dev)
 	return virtio_features_ok(dev);
 }
 
+/*
+ * noirq-safe variant of virtio_device_reinit().
+ *
+ * Requires the transport to declare config_ops->noirq_safe, which means
+ * reset, get_status, set_status, and finalize_features are safe to call
+ * during the noirq PM phase.
+ */
+static int virtio_device_reinit_noirq(struct virtio_device *dev)
+{
+	struct virtio_driver *drv = drv_to_virtio(dev->dev.driver);
+	int ret;
+
+	/*
+	 * We always start by resetting the device, in case a previous
+	 * driver messed it up.
+	 */
+	virtio_reset_device_noirq(dev);
+
+	/* Acknowledge that we've seen the device. */
+	virtio_add_status_noirq(dev, VIRTIO_CONFIG_S_ACKNOWLEDGE);
+
+	/*
+	 * Maybe driver failed before freeze.
+	 * Restore the failed status, for debugging.
+	 */
+	if (dev->failed)
+		virtio_add_status_noirq(dev, VIRTIO_CONFIG_S_FAILED);
+
+	if (!drv)
+		return 0;
+
+	/* We have a driver! */
+	virtio_add_status_noirq(dev, VIRTIO_CONFIG_S_DRIVER);
+
+	ret = dev->config->finalize_features(dev);
+	if (ret)
+		return ret;
+
+	return virtio_features_ok_noirq(dev);
+}
+
 #ifdef CONFIG_PM_SLEEP
+static inline bool virtio_has_valid_pm_cbs(struct virtio_driver *drv)
+{
+	/* Each callback pair must be fully implemented or fully absent. */
+	bool has_freeze = drv->freeze;
+	bool has_restore = drv->restore;
+	bool has_freeze_noirq = drv->freeze_noirq;
+	bool has_restore_noirq = drv->restore_noirq;
+
+	if (has_freeze != has_restore)
+		return false;
+	if (has_freeze_noirq != has_restore_noirq)
+		return false;
+	return true;
+}
+
 int virtio_device_freeze(struct virtio_device *dev)
 {
 	struct virtio_driver *drv = drv_to_virtio(dev->dev.driver);
@@ -627,6 +758,34 @@ int virtio_device_freeze(struct virtio_device *dev)
 	virtio_config_core_disable(dev);
 
 	dev->failed = dev->config->get_status(dev) & VIRTIO_CONFIG_S_FAILED;
+	dev->noirq_state = VIRTIO_NOIRQ_NONE;
+
+	/*
+	 * freeze_noirq and restore_noirq must be implemented as a pair.
+	 * freeze_noirq performs full device teardown that only
+	 * restore_noirq knows how to undo, and restore_noirq assumes
+	 * freeze_noirq prepared the device for re-initialization.
+	 */
+	if (drv && !virtio_has_valid_pm_cbs(drv)) {
+		dev_warn(&dev->dev,
+			 "freeze/restore and freeze_noirq/restore_noirq must each be paired\n");
+		virtio_config_core_enable(dev);
+		return -EINVAL;
+	}
+
+	/*
+	 * If the driver provides noirq callbacks, verify that the
+	 * transport supports noirq PM. The driver's freeze_noirq or
+	 * restore_noirq may call transport ops (reset, get_status,
+	 * set_status) that could wait for an interrupt that will never
+	 * arrive if the transport is not noirq-safe.
+	 */
+	if (drv && drv->restore_noirq && !dev->config->noirq_safe) {
+		dev_warn(&dev->dev,
+			 "transport does not support noirq PM\n");
+		virtio_config_core_enable(dev);
+		return -EOPNOTSUPP;
+	}
 
 	if (drv && drv->freeze) {
 		ret = drv->freeze(dev);
@@ -645,12 +804,42 @@ int virtio_device_restore(struct virtio_device *dev)
 	struct virtio_driver *drv = drv_to_virtio(dev->dev.driver);
 	int ret;
 
-	ret = virtio_device_reinit(dev);
-	if (ret)
+	/*
+	 * If the driver implements restore_noirq and the noirq phase was
+	 * actually entered (freeze_noirq ran), but restore_noirq did not
+	 * complete successfully, the noirq phase must have failed. PM core
+	 * may continue later resume phases for global recovery, but virtio
+	 * does not use the normal restore path as an implicit same-device
+	 * fallback.
+	 */
+	if (drv && drv->restore_noirq &&
+	    dev->noirq_state == VIRTIO_NOIRQ_ENTERED) {
+		ret = -EIO;
 		goto err;
+	}
 
-	if (!drv)
-		return 0;
+	/*
+	 * Re-initialization is needed only for drivers that do not
+	 * implement restore_noirq. When restore_noirq exists, either:
+	 *  - NOIRQ_NONE: noirq phase was never entered, so no noirq-specific
+	 *    teardown occurred and the device is still live.
+	 *  - NOIRQ_RESTORED: noirq phase already performed reinit.
+	 * (NOIRQ_ENTERED is caught above as -EIO.)
+	 *
+	 * Note: when a driver implements restore_noirq, freeze() must NOT
+	 * perform full device teardown (e.g., must not destroy virtqueues).
+	 * Full teardown is deferred to freeze_noirq(). If suspend is aborted
+	 * before the noirq phase, restore() is called to undo only the
+	 * partial quiesce performed by freeze(), with the device still live
+	 * and in DRIVER_OK state.
+	 */
+	if (!drv || !drv->restore_noirq) {
+		ret = virtio_device_reinit(dev);
+		if (ret)
+			goto err;
+		if (!drv)
+			return 0;
+	}
 
 	if (drv->restore) {
 		ret = drv->restore(dev);
@@ -671,6 +860,114 @@ err:
 	return ret;
 }
 EXPORT_SYMBOL_GPL(virtio_device_restore);
+
+int virtio_device_freeze_noirq(struct virtio_device *dev)
+{
+	struct virtio_driver *drv = drv_to_virtio(dev->dev.driver);
+
+	if (!drv)
+		return 0;
+
+	/*
+	 * Pairing is validated in virtio_device_freeze(); since both
+	 * callbacks must co-exist, checking one implies the other.
+	 *
+	 * Verify the transport supports noirq PM. This should normally
+	 * have been caught at freeze time, but guard here as well.
+	 */
+	if (drv->freeze_noirq && !dev->config->noirq_safe) {
+		dev_warn(&dev->dev,
+			 "transport does not support noirq PM\n");
+		return -EOPNOTSUPP;
+	}
+
+	/*
+	 * If the driver provides noirq callbacks and has active vqs,
+	 * the transport must support reset_vqs to restore them.
+	 * Fail here so the PM core can abort the transition gracefully,
+	 * rather than hitting -EOPNOTSUPP on resume.
+	 */
+	if (drv->freeze_noirq && !list_empty(&dev->vqs) &&
+	    !dev->config->reset_vqs) {
+		dev_warn(&dev->dev,
+			 "transport does not support noirq PM restore with active vqs (missing reset_vqs)\n");
+		return -EOPNOTSUPP;
+	}
+
+	/*
+	 * Invoke the driver's freeze_noirq callback and mark noirq
+	 * phase entered on success. Pairing is enforced in
+	 * virtio_device_freeze(), so restore_noirq also exists.
+	 *
+	 * If freeze_noirq fails, the driver must have rolled back to
+	 * the pre-call state (per kernel PM convention), so
+	 * noirq_state remains NONE to allow restore() to proceed.
+	 */
+	if (drv->freeze_noirq) {
+		int ret = drv->freeze_noirq(dev);
+
+		if (!ret)
+			dev->noirq_state = VIRTIO_NOIRQ_ENTERED;
+
+		return ret;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(virtio_device_freeze_noirq);
+
+int virtio_device_restore_noirq(struct virtio_device *dev)
+{
+	struct virtio_driver *drv = drv_to_virtio(dev->dev.driver);
+	int ret;
+
+	if (!drv || !drv->restore_noirq)
+		return 0;
+
+	/*
+	 * All transport ops called below (reset, get_status, set_status) must
+	 * be noirq-safe. Return early if not - this should normally have
+	 * been caught at freeze_noirq time.
+	 */
+	if (!dev->config->noirq_safe) {
+		dev_warn(&dev->dev,
+			 "transport does not support noirq PM; skipping restore\n");
+		return -EOPNOTSUPP;
+	}
+
+	ret = virtio_device_reinit_noirq(dev);
+	if (ret)
+		goto err;
+
+	if (!list_empty(&dev->vqs)) {
+		if (!dev->config->reset_vqs) {
+			ret = -EOPNOTSUPP;
+			goto err;
+		}
+
+		ret = dev->config->reset_vqs(dev);
+		if (ret)
+			goto err;
+	}
+
+	ret = drv->restore_noirq(dev);
+	if (ret)
+		goto err;
+
+	/* Mark that noirq restore has completed successfully. */
+	dev->noirq_state = VIRTIO_NOIRQ_RESTORED;
+
+	/* If restore_noirq set DRIVER_OK, enable config now. */
+	if (dev->config->get_status(dev) & VIRTIO_CONFIG_S_DRIVER_OK)
+		virtio_config_core_enable_noirq(dev);
+
+	return 0;
+
+err:
+	virtio_add_status_noirq(dev, VIRTIO_CONFIG_S_FAILED);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(virtio_device_restore_noirq);
 #endif
 
 int virtio_device_reset_prepare(struct virtio_device *dev)
