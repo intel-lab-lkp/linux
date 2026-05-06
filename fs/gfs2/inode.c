@@ -2238,9 +2238,10 @@ loff_t gfs2_seek_data(struct file *file, loff_t offset)
 
 	inode_lock_shared(inode);
 	ret = gfs2_glock_nq_init(ip->i_gl, LM_ST_SHARED, 0, &gh);
-	if (!ret)
+	if (!ret) {
 		ret = iomap_seek_data(inode, offset, &gfs2_iomap_ops);
-	gfs2_glock_dq_uninit(&gh);
+		gfs2_glock_dq_uninit(&gh);
+	}
 	inode_unlock_shared(inode);
 
 	if (ret < 0)
@@ -2257,9 +2258,10 @@ loff_t gfs2_seek_hole(struct file *file, loff_t offset)
 
 	inode_lock_shared(inode);
 	ret = gfs2_glock_nq_init(ip->i_gl, LM_ST_SHARED, 0, &gh);
-	if (!ret)
+	if (!ret) {
 		ret = iomap_seek_hole(inode, offset, &gfs2_iomap_ops);
-	gfs2_glock_dq_uninit(&gh);
+		gfs2_glock_dq_uninit(&gh);
+	}
 	inode_unlock_shared(inode);
 
 	if (ret < 0)
