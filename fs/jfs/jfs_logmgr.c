@@ -1567,7 +1567,9 @@ void jfs_flush_journal(struct jfs_log *log, int wait)
 	if (wait < 2)
 		return;
 
+	LOG_LOCK(log);
 	write_special_inodes(log, filemap_fdatawrite);
+	LOG_UNLOCK(log);
 
 	/*
 	 * If there was recent activity, we may need to wait
@@ -1576,7 +1578,9 @@ void jfs_flush_journal(struct jfs_log *log, int wait)
 	if ((!list_empty(&log->cqueue)) || !list_empty(&log->synclist)) {
 		for (i = 0; i < 200; i++) {	/* Too much? */
 			msleep(250);
+			LOG_LOCK(log);
 			write_special_inodes(log, filemap_fdatawrite);
+			LOG_UNLOCK(log);
 			if (list_empty(&log->cqueue) &&
 			    list_empty(&log->synclist))
 				break;
