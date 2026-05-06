@@ -305,6 +305,12 @@ static int ovpn_nl_peer_modify(struct ovpn_peer *peer, struct genl_info *info,
 		dst_cache_reset(&peer->dst_cache);
 	}
 
+	/* In a multipeer-to-multipeer setup we may have asymmetric peer IDs,
+	 * that is peer->id might be different from peer->tx_id.
+	 */
+	if (attrs[OVPN_A_PEER_TX_ID])
+		peer->tx_id = nla_get_u32(attrs[OVPN_A_PEER_TX_ID]);
+
 	if (attrs[OVPN_A_PEER_VPN_IPV4]) {
 		rehash = true;
 		peer->vpn_addrs.ipv4.s_addr =
@@ -326,8 +332,8 @@ static int ovpn_nl_peer_modify(struct ovpn_peer *peer, struct genl_info *info,
 	}
 
 	netdev_dbg(peer->ovpn->dev,
-		   "modify peer id=%u endpoint=%pIScp VPN-IPv4=%pI4 VPN-IPv6=%pI6c\n",
-		   peer->id, &ss,
+		   "modify peer id=%u tx_id=%u endpoint=%pIScp VPN-IPv4=%pI4 VPN-IPv6=%pI6c\n",
+		   peer->id, peer->tx_id, &ss,
 		   &peer->vpn_addrs.ipv4.s_addr, &peer->vpn_addrs.ipv6);
 
 	spin_unlock_bh(&peer->lock);
@@ -352,7 +358,7 @@ int ovpn_nl_peer_new_doit(struct sk_buff *skb, struct genl_info *info)
 		return -EINVAL;
 
 	ret = nla_parse_nested(attrs, OVPN_A_PEER_MAX, info->attrs[OVPN_A_PEER],
-			       ovpn_peer_nl_policy, info->extack);
+			       ovpn_peer_new_input_nl_policy, info->extack);
 	if (ret)
 		return ret;
 
@@ -373,6 +379,7 @@ int ovpn_nl_peer_new_doit(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	peer_id = nla_get_u32(attrs[OVPN_A_PEER_ID]);
+
 	peer = ovpn_peer_new(ovpn, peer_id);
 	if (IS_ERR(peer)) {
 		NL_SET_ERR_MSG_FMT_MOD(info->extack,
@@ -476,7 +483,7 @@ int ovpn_nl_peer_set_doit(struct sk_buff *skb, struct genl_info *info)
 		return -EINVAL;
 
 	ret = nla_parse_nested(attrs, OVPN_A_PEER_MAX, info->attrs[OVPN_A_PEER],
-			       ovpn_peer_nl_policy, info->extack);
+			       ovpn_peer_set_input_nl_policy, info->extack);
 	if (ret)
 		return ret;
 
@@ -572,6 +579,9 @@ static int ovpn_nl_send_peer(struct sk_buff *skb, const struct genl_info *info,
 	if (nla_put_u32(skb, OVPN_A_PEER_ID, peer->id))
 		goto err;
 
+	if (nla_put_u32(skb, OVPN_A_PEER_TX_ID, peer->tx_id))
+		goto err;
+
 	if (peer->vpn_addrs.ipv4.s_addr != htonl(INADDR_ANY))
 		if (nla_put_in_addr(skb, OVPN_A_PEER_VPN_IPV4,
 				    peer->vpn_addrs.ipv4.s_addr))
@@ -654,7 +664,7 @@ int ovpn_nl_peer_get_doit(struct sk_buff *skb, struct genl_info *info)
 	struct ovpn_peer *peer;
 	struct sk_buff *msg;
 	u32 peer_id;
-	int ret;
+	int ret, i;
 
 	if (GENL_REQ_ATTR_CHECK(info, OVPN_A_PEER))
 		return -EINVAL;
@@ -667,6 +677,23 @@ int ovpn_nl_peer_get_doit(struct sk_buff *skb, struct genl_info *info)
 	if (NL_REQ_ATTR_CHECK(info->extack, info->attrs[OVPN_A_PEER], attrs,
 			      OVPN_A_PEER_ID))
 		return -EINVAL;
+
+	/* OVPN_CMD_PEER_GET expects only the PEER_ID, therefore
+	 * ensure that the user hasn't specified any other attribute.
+	 *
+	 * Unfortunately this check cannot be performed via netlink
+	 * spec/policy and must be open-coded.
+	 */
+	for (i = 0; i < OVPN_A_PEER_MAX + 1; i++) {
+		if (i == OVPN_A_PEER_ID)
+			continue;
+
+		if (attrs[i]) {
+			NL_SET_ERR_MSG_FMT_MOD(info->extack,
+					       "unexpected attribute %u", i);
+			return -EINVAL;
+		}
+	}
 
 	peer_id = nla_get_u32(attrs[OVPN_A_PEER_ID]);
 	peer = ovpn_peer_get_by_id(ovpn, peer_id);
@@ -768,7 +795,7 @@ int ovpn_nl_peer_del_doit(struct sk_buff *skb, struct genl_info *info)
 		return -EINVAL;
 
 	ret = nla_parse_nested(attrs, OVPN_A_PEER_MAX, info->attrs[OVPN_A_PEER],
-			       ovpn_peer_nl_policy, info->extack);
+			       ovpn_peer_del_input_nl_policy, info->extack);
 	if (ret)
 		return ret;
 
@@ -969,14 +996,14 @@ int ovpn_nl_key_get_doit(struct sk_buff *skb, struct genl_info *info)
 	struct ovpn_peer *peer;
 	struct sk_buff *msg;
 	u32 peer_id;
-	int ret;
+	int ret, i;
 
 	if (GENL_REQ_ATTR_CHECK(info, OVPN_A_KEYCONF))
 		return -EINVAL;
 
 	ret = nla_parse_nested(attrs, OVPN_A_KEYCONF_MAX,
 			       info->attrs[OVPN_A_KEYCONF],
-			       ovpn_keyconf_nl_policy, info->extack);
+			       ovpn_keyconf_get_nl_policy, info->extack);
 	if (ret)
 		return ret;
 
@@ -987,6 +1014,24 @@ int ovpn_nl_key_get_doit(struct sk_buff *skb, struct genl_info *info)
 	if (NL_REQ_ATTR_CHECK(info->extack, info->attrs[OVPN_A_KEYCONF], attrs,
 			      OVPN_A_KEYCONF_SLOT))
 		return -EINVAL;
+
+	/* OVPN_CMD_KEY_GET expects only the PEER_ID and the SLOT, therefore
+	 * ensure that the user hasn't specified any other attribute.
+	 *
+	 * Unfortunately this check cannot be performed via netlink
+	 * spec/policy and must be open-coded.
+	 */
+	for (i = 0; i < OVPN_A_KEYCONF_MAX + 1; i++) {
+		if (i == OVPN_A_KEYCONF_PEER_ID ||
+		    i == OVPN_A_KEYCONF_SLOT)
+			continue;
+
+		if (attrs[i]) {
+			NL_SET_ERR_MSG_FMT_MOD(info->extack,
+					       "unexpected attribute %u", i);
+			return -EINVAL;
+		}
+	}
 
 	peer_id = nla_get_u32(attrs[OVPN_A_KEYCONF_PEER_ID]);
 	peer = ovpn_peer_get_by_id(ovpn, peer_id);
@@ -1026,8 +1071,8 @@ err:
 
 int ovpn_nl_key_swap_doit(struct sk_buff *skb, struct genl_info *info)
 {
+	struct nlattr *attrs[OVPN_A_KEYCONF_MAX + 1];
 	struct ovpn_priv *ovpn = info->user_ptr[0];
-	struct nlattr *attrs[OVPN_A_PEER_MAX + 1];
 	struct ovpn_peer *peer;
 	u32 peer_id;
 	int ret;
@@ -1037,7 +1082,7 @@ int ovpn_nl_key_swap_doit(struct sk_buff *skb, struct genl_info *info)
 
 	ret = nla_parse_nested(attrs, OVPN_A_KEYCONF_MAX,
 			       info->attrs[OVPN_A_KEYCONF],
-			       ovpn_keyconf_nl_policy, info->extack);
+			       ovpn_keyconf_swap_input_nl_policy, info->extack);
 	if (ret)
 		return ret;
 
@@ -1074,7 +1119,7 @@ int ovpn_nl_key_del_doit(struct sk_buff *skb, struct genl_info *info)
 
 	ret = nla_parse_nested(attrs, OVPN_A_KEYCONF_MAX,
 			       info->attrs[OVPN_A_KEYCONF],
-			       ovpn_keyconf_nl_policy, info->extack);
+			       ovpn_keyconf_del_input_nl_policy, info->extack);
 	if (ret)
 		return ret;
 
@@ -1155,6 +1200,88 @@ int ovpn_nl_peer_del_notify(struct ovpn_peer *peer)
 	}
 	genlmsg_multicast_netns(&ovpn_nl_family, sock_net(sock->sk), msg, 0,
 				OVPN_NLGRP_PEERS, GFP_ATOMIC);
+	rcu_read_unlock();
+
+	return 0;
+
+err_unlock:
+	rcu_read_unlock();
+err_cancel_msg:
+	genlmsg_cancel(msg, hdr);
+err_free_msg:
+	nlmsg_free(msg);
+	return ret;
+}
+
+/**
+ * ovpn_nl_peer_float_notify - notify userspace about peer floating
+ * @peer: the floated peer
+ * @ss: sockaddr representing the new remote endpoint
+ *
+ * Return: 0 on success or a negative error code otherwise
+ */
+int ovpn_nl_peer_float_notify(struct ovpn_peer *peer,
+			      const struct sockaddr_storage *ss)
+{
+	struct ovpn_socket *sock;
+	struct sockaddr_in6 *sa6;
+	struct sockaddr_in *sa;
+	struct sk_buff *msg;
+	struct nlattr *attr;
+	int ret = -EMSGSIZE;
+	void *hdr;
+
+	msg = nlmsg_new(NLMSG_DEFAULT_SIZE, GFP_ATOMIC);
+	if (!msg)
+		return -ENOMEM;
+
+	hdr = genlmsg_put(msg, 0, 0, &ovpn_nl_family, 0,
+			  OVPN_CMD_PEER_FLOAT_NTF);
+	if (!hdr) {
+		ret = -ENOBUFS;
+		goto err_free_msg;
+	}
+
+	if (nla_put_u32(msg, OVPN_A_IFINDEX, peer->ovpn->dev->ifindex))
+		goto err_cancel_msg;
+
+	attr = nla_nest_start(msg, OVPN_A_PEER);
+	if (!attr)
+		goto err_cancel_msg;
+
+	if (nla_put_u32(msg, OVPN_A_PEER_ID, peer->id))
+		goto err_cancel_msg;
+
+	if (ss->ss_family == AF_INET) {
+		sa = (struct sockaddr_in *)ss;
+		if (nla_put_in_addr(msg, OVPN_A_PEER_REMOTE_IPV4,
+				    sa->sin_addr.s_addr) ||
+		    nla_put_net16(msg, OVPN_A_PEER_REMOTE_PORT, sa->sin_port))
+			goto err_cancel_msg;
+	} else if (ss->ss_family == AF_INET6) {
+		sa6 = (struct sockaddr_in6 *)ss;
+		if (nla_put_in6_addr(msg, OVPN_A_PEER_REMOTE_IPV6,
+				     &sa6->sin6_addr) ||
+		    nla_put_u32(msg, OVPN_A_PEER_REMOTE_IPV6_SCOPE_ID,
+				sa6->sin6_scope_id) ||
+		    nla_put_net16(msg, OVPN_A_PEER_REMOTE_PORT, sa6->sin6_port))
+			goto err_cancel_msg;
+	} else {
+		ret = -EAFNOSUPPORT;
+		goto err_cancel_msg;
+	}
+
+	nla_nest_end(msg, attr);
+	genlmsg_end(msg, hdr);
+
+	rcu_read_lock();
+	sock = rcu_dereference(peer->sock);
+	if (!sock) {
+		ret = -EINVAL;
+		goto err_unlock;
+	}
+	genlmsg_multicast_netns(&ovpn_nl_family, sock_net(sock->sk), msg,
+				0, OVPN_NLGRP_PEERS, GFP_ATOMIC);
 	rcu_read_unlock();
 
 	return 0;

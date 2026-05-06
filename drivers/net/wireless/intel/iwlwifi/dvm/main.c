@@ -205,7 +205,7 @@ int iwlagn_send_beacon_cmd(struct iwl_priv *priv)
 
 	/* Allocate beacon command */
 	if (!priv->beacon_cmd)
-		priv->beacon_cmd = kzalloc(sizeof(*tx_beacon_cmd), GFP_KERNEL);
+		priv->beacon_cmd = kzalloc_obj(*tx_beacon_cmd);
 	tx_beacon_cmd = priv->beacon_cmd;
 	if (!tx_beacon_cmd)
 		return -ENOMEM;
@@ -1467,7 +1467,8 @@ static struct iwl_op_mode *iwl_op_mode_dvm_start(struct iwl_trans *trans,
 	/********************
 	 * 6. Setup services
 	 ********************/
-	if (iwl_setup_deferred_work(priv))
+	err = iwl_setup_deferred_work(priv);
+	if (err)
 		goto out_uninit_drv;
 
 	iwl_setup_rx_handlers(priv);

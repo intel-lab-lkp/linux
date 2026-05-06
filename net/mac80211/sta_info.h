@@ -3,7 +3,7 @@
  * Copyright 2002-2005, Devicescape Software, Inc.
  * Copyright 2013-2014  Intel Mobile Communications GmbH
  * Copyright(c) 2015-2017 Intel Deutschland GmbH
- * Copyright(c) 2020-2024 Intel Corporation
+ * Copyright(c) 2020-2026 Intel Corporation
  */
 
 #ifndef STA_INFO_H
@@ -171,6 +171,7 @@ struct sta_info;
  * @bar_pending: BAR needs to be re-sent
  * @amsdu: support A-MSDU within A-MDPU
  * @ssn: starting sequence number of the session
+ * @ndp: this session is using NDP Block ACKs
  *
  * This structure's lifetime is managed by RCU, assignments to
  * the array holding it must hold the aggregation mutex.
@@ -199,6 +200,7 @@ struct tid_ampdu_tx {
 	u16 failed_bar_ssn;
 	bool bar_pending;
 	bool amsdu;
+	bool ndp;
 	u8 tid;
 };
 
@@ -434,8 +436,8 @@ struct ieee80211_sta_rx_stats {
 	s8 chain_signal_last[IEEE80211_MAX_CHAINS];
 	u32 last_rate;
 	struct u64_stats_sync syncp;
-	u64 bytes;
-	u64 msdu[IEEE80211_NUM_TIDS + 1];
+	u64_stats_t bytes;
+	u64_stats_t msdu[IEEE80211_NUM_TIDS + 1];
 };
 
 /*
@@ -502,15 +504,15 @@ struct ieee80211_fragment_cache {
  * @status_stats.last_ack_signal: last ACK signal
  * @status_stats.ack_signal_filled: last ACK signal validity
  * @status_stats.avg_ack_signal: average ACK signal
- * @cur_max_bandwidth: maximum bandwidth to use for TX to the station,
- *	taken from HT/VHT capabilities or VHT operating mode notification
+ * @op_mode_bw: dynamic bandwidth limit to transmit to the STA,
+ *	taken from HT/VHT capabilities or VHT operating mode notification.
+ *	Invalid for NAN since that is operating on multiple bands.
  * @rx_omi_bw_rx: RX OMI bandwidth restriction to apply for RX
  * @rx_omi_bw_tx: RX OMI bandwidth restriction to apply for TX
  * @rx_omi_bw_staging: RX OMI bandwidth restriction to apply later
  *	during finalize
  * @debugfs_dir: debug filesystem directory dentry
  * @pub: public (driver visible) link STA data
- * TODO Move other link params from sta_info as required for MLD operation
  */
 struct link_sta_info {
 	u8 addr[ETH_ALEN];
@@ -556,7 +558,7 @@ struct link_sta_info {
 		u64 msdu[IEEE80211_NUM_TIDS + 1];
 	} tx_stats;
 
-	enum ieee80211_sta_rx_bandwidth cur_max_bandwidth;
+	enum ieee80211_sta_rx_bandwidth op_mode_bw;
 	enum ieee80211_sta_rx_bandwidth rx_omi_bw_rx,
 					rx_omi_bw_tx,
 					rx_omi_bw_staging;
@@ -995,11 +997,23 @@ void ieee80211_sta_ps_deliver_uapsd(struct sta_info *sta);
 
 unsigned long ieee80211_sta_last_active(struct sta_info *sta, int link_id);
 
+void ieee80211_sta_init_nss_bw_capa(struct link_sta_info *link_sta,
+				    struct cfg80211_chan_def *chandef);
 void ieee80211_sta_set_max_amsdu_subframes(struct sta_info *sta,
 					   const u8 *ext_capab,
 					   unsigned int ext_capab_len);
 
 void __ieee80211_sta_recalc_aggregates(struct sta_info *sta, u16 active_links);
+
+enum ieee80211_sta_bw_direction {
+	IEEE80211_STA_BW_RX_FROM_STA,
+	IEEE80211_STA_BW_TX_TO_STA,
+};
+
+enum ieee80211_sta_rx_bandwidth
+ieee80211_sta_current_bw(struct link_sta_info *link_sta,
+			 struct cfg80211_chan_def *chandef,
+			 enum ieee80211_sta_bw_direction direction);
 
 enum sta_stats_type {
 	STA_STATS_RATE_TYPE_INVALID = 0,
@@ -1009,25 +1023,49 @@ enum sta_stats_type {
 	STA_STATS_RATE_TYPE_HE,
 	STA_STATS_RATE_TYPE_S1G,
 	STA_STATS_RATE_TYPE_EHT,
+	STA_STATS_RATE_TYPE_UHR,
 };
 
-#define STA_STATS_FIELD_HT_MCS		GENMASK( 7,  0)
-#define STA_STATS_FIELD_LEGACY_IDX	GENMASK( 3,  0)
-#define STA_STATS_FIELD_LEGACY_BAND	GENMASK( 7,  4)
-#define STA_STATS_FIELD_VHT_MCS		GENMASK( 3,  0)
-#define STA_STATS_FIELD_VHT_NSS		GENMASK( 7,  4)
-#define STA_STATS_FIELD_HE_MCS		GENMASK( 3,  0)
-#define STA_STATS_FIELD_HE_NSS		GENMASK( 7,  4)
-#define STA_STATS_FIELD_EHT_MCS		GENMASK( 3,  0)
-#define STA_STATS_FIELD_EHT_NSS		GENMASK( 7,  4)
-#define STA_STATS_FIELD_BW		GENMASK(12,  8)
-#define STA_STATS_FIELD_SGI		GENMASK(13, 13)
-#define STA_STATS_FIELD_TYPE		GENMASK(16, 14)
-#define STA_STATS_FIELD_HE_RU		GENMASK(19, 17)
-#define STA_STATS_FIELD_HE_GI		GENMASK(21, 20)
-#define STA_STATS_FIELD_HE_DCM		GENMASK(22, 22)
-#define STA_STATS_FIELD_EHT_RU		GENMASK(20, 17)
-#define STA_STATS_FIELD_EHT_GI		GENMASK(22, 21)
+/* common */
+#define STA_STATS_FIELD_TYPE		0x0000000F
+#define STA_STATS_FIELD_BW		0x000001F0
+#define STA_STATS_FIELD_RESERVED	0x00000E00
+
+/* STA_STATS_RATE_TYPE_LEGACY */
+#define STA_STATS_FIELD_LEGACY_IDX	0x0000F000
+#define STA_STATS_FIELD_LEGACY_BAND	0x000F0000
+
+/* STA_STATS_RATE_TYPE_HT */
+#define STA_STATS_FIELD_HT_MCS		0x000FF000
+
+/* STA_STATS_RATE_TYPE_VHT */
+#define STA_STATS_FIELD_VHT_MCS		0x0000F000
+#define STA_STATS_FIELD_VHT_NSS		0x000F0000
+
+/* HT & VHT */
+#define STA_STATS_FIELD_SGI		0x00100000
+
+/* STA_STATS_RATE_TYPE_HE */
+#define STA_STATS_FIELD_HE_MCS		0x0000F000
+#define STA_STATS_FIELD_HE_NSS		0x000F0000
+#define STA_STATS_FIELD_HE_RU		0x00700000
+#define STA_STATS_FIELD_HE_GI		0x01800000
+#define STA_STATS_FIELD_HE_DCM		0x02000000
+
+/* STA_STATS_RATE_TYPE_EHT */
+#define STA_STATS_FIELD_EHT_MCS		0x0000F000
+#define STA_STATS_FIELD_EHT_NSS		0x000F0000
+#define STA_STATS_FIELD_EHT_RU		0x00F00000
+#define STA_STATS_FIELD_EHT_GI		0x03000000
+
+/* STA_STATS_RATE_TYPE_UHR */
+#define STA_STATS_FIELD_UHR_MCS		0x0001F000
+#define STA_STATS_FIELD_UHR_NSS		0x001E0000
+#define STA_STATS_FIELD_UHR_RU		0x01E00000
+#define STA_STATS_FIELD_UHR_GI		0x06000000
+#define STA_STATS_FIELD_UHR_ELR		0x08000000
+#define STA_STATS_FIELD_UHR_IM		0x10000000
+
 
 #define STA_STATS_FIELD(_n, _v)		FIELD_PREP(STA_STATS_FIELD_ ## _n, _v)
 #define STA_STATS_GET(_n, _v)		FIELD_GET(STA_STATS_FIELD_ ## _n, _v)
@@ -1040,8 +1078,15 @@ static inline u32 sta_stats_encode_rate(struct ieee80211_rx_status *s)
 
 	r = STA_STATS_FIELD(BW, s->bw);
 
-	if (s->enc_flags & RX_ENC_FLAG_SHORT_GI)
-		r |= STA_STATS_FIELD(SGI, 1);
+	switch (s->encoding) {
+	case RX_ENC_HT:
+	case RX_ENC_VHT:
+		if (s->enc_flags & RX_ENC_FLAG_SHORT_GI)
+			r |= STA_STATS_FIELD(SGI, 1);
+		break;
+	default:
+		break;
+	}
 
 	switch (s->encoding) {
 	case RX_ENC_VHT:
@@ -1072,6 +1117,15 @@ static inline u32 sta_stats_encode_rate(struct ieee80211_rx_status *s)
 		r |= STA_STATS_FIELD(EHT_MCS, s->rate_idx);
 		r |= STA_STATS_FIELD(EHT_GI, s->eht.gi);
 		r |= STA_STATS_FIELD(EHT_RU, s->eht.ru);
+		break;
+	case RX_ENC_UHR:
+		r |= STA_STATS_FIELD(TYPE, STA_STATS_RATE_TYPE_UHR);
+		r |= STA_STATS_FIELD(UHR_NSS, s->nss);
+		r |= STA_STATS_FIELD(UHR_MCS, s->rate_idx);
+		r |= STA_STATS_FIELD(UHR_GI, s->uhr.gi);
+		r |= STA_STATS_FIELD(UHR_RU, s->uhr.ru);
+		r |= STA_STATS_FIELD(UHR_ELR, s->uhr.elr);
+		r |= STA_STATS_FIELD(UHR_IM, s->uhr.im);
 		break;
 	default:
 		WARN_ON(1);

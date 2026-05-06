@@ -4964,6 +4964,7 @@ static const struct rtw_chip_ops rtw8822c_ops = {
 	.query_phy_status	= query_phy_status,
 	.set_channel		= rtw8822c_set_channel,
 	.mac_init		= rtw8822c_mac_init,
+	.mac_postinit		= NULL,
 	.dump_fw_crash		= rtw8822c_dump_fw_crash,
 	.read_rf		= rtw_phy_read_rf,
 	.write_rf		= rtw_phy_write_rf_reg_mix,
@@ -5034,6 +5035,9 @@ static const struct coex_table_para table_sant_8822c[] = {
 	{0x56555555, 0x5a5a5aaa},
 	{0xdaffdaff, 0xdaffdaff},
 	{0xddffddff, 0xddffddff},
+	{0xe5555555, 0xe5555555}, /* case-35 */
+	{0xea5a5a5a, 0xea5a5a5a},
+	{0xea6a6a6a, 0xea6a6a6a},
 };
 
 /* Non-Shared-Antenna Coex Table */
@@ -5400,7 +5404,7 @@ const struct rtw_chip_info rtw8822c_hw_spec = {
 	.max_sched_scan_ssids = 4,
 #endif
 	.max_scan_ie_len = (RTW_PROBE_PG_CNT - 1) * TX_PAGE_SIZE,
-	.coex_para_ver = 0x22020720,
+	.coex_para_ver = 0x26020420,
 	.bt_desired_ver = 0x20,
 	.scbd_support = true,
 	.new_scbd10_def = true,

@@ -354,7 +354,8 @@ static int ath11k_ce_rx_post_pipe(struct ath11k_ce_pipe *pipe)
 		ret = ath11k_ce_rx_buf_enqueue_pipe(pipe, skb, paddr);
 
 		if (ret) {
-			ath11k_warn(ab, "failed to enqueue rx buf: %d\n", ret);
+			ath11k_dbg(ab, ATH11K_DBG_CE, "failed to enqueue rx buf: %d\n",
+				   ret);
 			dma_unmap_single(ab->dev, paddr,
 					 skb->len + skb_tailroom(skb),
 					 DMA_FROM_DEVICE);
@@ -394,9 +395,6 @@ static int ath11k_ce_completed_recv_next(struct ath11k_ce_pipe *pipe,
 		ret = -EIO;
 		goto err;
 	}
-
-	/* Make sure descriptor is read after the head pointer. */
-	dma_rmb();
 
 	*nbytes = ath11k_hal_ce_dst_status_get_length(desc);
 
@@ -557,7 +555,7 @@ static int ath11k_ce_init_ring(struct ath11k_base *ab,
 			       struct ath11k_ce_ring *ce_ring,
 			       int ce_id, enum hal_ring_type type)
 {
-	struct hal_srng_params params = { 0 };
+	struct hal_srng_params params = {};
 	int ret;
 
 	params.ring_base_paddr = ce_ring->base_addr_ce_space;
@@ -617,7 +615,7 @@ ath11k_ce_alloc_ring(struct ath11k_base *ab, int nentries, int desc_sz)
 	struct ath11k_ce_ring *ce_ring;
 	dma_addr_t base_addr;
 
-	ce_ring = kzalloc(struct_size(ce_ring, skb, nentries), GFP_KERNEL);
+	ce_ring = kzalloc_flex(*ce_ring, skb, nentries);
 	if (ce_ring == NULL)
 		return ERR_PTR(-ENOMEM);
 

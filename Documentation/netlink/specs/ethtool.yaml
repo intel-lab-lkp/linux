@@ -158,6 +158,58 @@ definitions:
       -
         name: pse-event-sw-pw-control-error
         doc: PSE faced an error managing the power control from software
+  -
+    name: input-xfrm
+    doc: RSS hash function transformations.
+    type: flags
+    enum-name:
+    name-prefix: rxh-xfrm-
+    header: linux/ethtool.h
+    entries:
+      -
+        name: sym-xor
+        doc: >-
+          XOR the corresponding source and destination fields of each specified
+          protocol. Both copies of the XOR'ed fields are fed into the RSS and
+          RXHASH calculation. Note that this XORing reduces the input set
+          entropy and could be exploited to reduce the RSS queue spread.
+      -
+        name: sym-or-xor
+        doc: >-
+          Similar to SYM_XOR, except that one copy of the XOR'ed fields is
+          replaced by an OR of the same fields.
+  -
+    name: rxfh-fields
+    name-prefix: rxh-
+    enum-name:
+    header: linux/ethtool.h
+    type: flags
+    entries:
+      -
+        name: l2da
+        value: 1
+      -
+        name: vlan
+      -
+        name: l3-proto
+      -
+        name: ip-src
+      -
+        name: ip-dst
+      -
+        name: l4-b-0-1
+        doc: src port in case of TCP/UDP/SCTP
+      -
+        name: l4-b-2-3
+        doc: dst port in case of TCP/UDP/SCTP
+      -
+        name: gtp-teid
+      -
+        name: ip6-fl
+        doc: IPv6 Flow Label
+      -
+        name: discard
+        value: 31
 
 attribute-sets:
   -
@@ -254,10 +306,6 @@ attribute-sets:
     name: strings
     attr-cnt-name: __ethtool-a-strings-cnt
     attributes:
-      -
-        name: unspec
-        type: unused
-        value: 0
       -
         name: unspec
         type: unused
@@ -809,6 +857,12 @@ attribute-sets:
         name: tx-profile
         type: nest
         nested-attributes: profile
+      -
+        name: rx-cqe-frames
+        type: u32
+      -
+        name: rx-cqe-nsecs
+        type: u32
 
   -
     name: pause-stat
@@ -827,6 +881,19 @@ attribute-sets:
       -
         name: rx-frames
         type: u64
+      -
+        name: tx-pause-storm-events
+        type: u64
+        doc: >-
+            TX pause storm event count. Increments each time device
+            detects that its pause assertion condition has been true
+            for too long for normal operation. As a result, the device
+            has temporarily disabled its own Pause TX function to
+            protect the network from itself.
+            This counter should never increment under normal overload
+            conditions; it indicates catastrophic failure like an OS
+            crash. The rate of incrementing is implementation specific.
+
   -
     name: pause
     attr-cnt-name: __ethtool-a-pause-cnt
@@ -1168,6 +1235,30 @@ attribute-sets:
         type: nest
         nested-attributes: tunnel-udp
   -
+    name: fec-hist
+    attr-cnt-name: --ethtool-a-fec-hist-cnt
+    attributes:
+      -
+        name: pad
+        type: pad
+      -
+        name: bin-low
+        type: u32
+        doc: Low bound of FEC bin (inclusive)
+      -
+        name: bin-high
+        type: u32
+        doc: High bound of FEC bin (inclusive)
+      -
+        name: bin-val
+        type: uint
+        doc: Error count in the bin (optional if per-lane values exist)
+      -
+        name: bin-val-per-lane
+        type: binary
+        sub-type: u64
+        doc: An array of per-lane error counters in the bin (optional)
+  -
     name: fec-stat
     attr-cnt-name: __ethtool-a-fec-stat-cnt
     attributes:
@@ -1190,6 +1281,11 @@ attribute-sets:
         name: corr-bits
         type: binary
         sub-type: u64
+      -
+        name: hist
+        type: nest
+        multi-attr: true
+        nested-attributes: fec-hist
   -
     name: fec
     attr-cnt-name: __ethtool-a-fec-cnt
@@ -1448,6 +1544,123 @@ attribute-sets:
         type: u32
         name-prefix: ethtool-a-
   -
+    name: flow
+    attr-cnt-name: --ethtool-a-flow-cnt
+    doc: |
+      Flow types, corresponding to those defined in the old
+      ethtool header for RXFH and RXNFC as ${PROTO}_FLOW.
+      The values are not matching the old ones to avoid carrying
+      into Netlink the IP_USER_FLOW vs IPV4_FLOW vs IPV4_USER_FLOW confusion.
+    attributes:
+      -
+        name: ether
+        type: uint
+        enum: rxfh-fields
+      -
+        name: ip4
+        type: uint
+        enum: rxfh-fields
+      -
+        name: ip6
+        type: uint
+        enum: rxfh-fields
+      -
+        name: tcp4
+        type: uint
+        enum: rxfh-fields
+      -
+        name: tcp6
+        type: uint
+        enum: rxfh-fields
+      -
+        name: udp4
+        type: uint
+        enum: rxfh-fields
+      -
+        name: udp6
+        type: uint
+        enum: rxfh-fields
+      -
+        name: sctp4
+        type: uint
+        enum: rxfh-fields
+      -
+        name: sctp6
+        type: uint
+        enum: rxfh-fields
+      -
+        name: ah4
+        type: uint
+        enum: rxfh-fields
+      -
+        name: ah6
+        type: uint
+        enum: rxfh-fields
+      -
+        name: esp4
+        type: uint
+        enum: rxfh-fields
+      -
+        name: esp6
+        type: uint
+        enum: rxfh-fields
+      -
+        name: ah-esp4
+        type: uint
+        enum: rxfh-fields
+      -
+        name: ah-esp6
+        type: uint
+        enum: rxfh-fields
+      -
+        name: gtpu4
+        type: uint
+        enum: rxfh-fields
+      -
+        name: gtpu6
+        type: uint
+        enum: rxfh-fields
+      -
+        name: gtpc4
+        type: uint
+        enum: rxfh-fields
+      -
+        name: gtpc6
+        type: uint
+        enum: rxfh-fields
+      -
+        name: gtpc-teid4
+        type: uint
+        enum: rxfh-fields
+      -
+        name: gtpc-teid6
+        type: uint
+        enum: rxfh-fields
+      -
+        name: gtpu-eh4
+        type: uint
+        enum: rxfh-fields
+      -
+        name: gtpu-eh6
+        type: uint
+        enum: rxfh-fields
+      -
+        name: gtpu-ul4
+        type: uint
+        enum: rxfh-fields
+      -
+        name: gtpu-ul6
+        type: uint
+        enum: rxfh-fields
+      -
+        name: gtpu-dl4
+        type: uint
+        enum: rxfh-fields
+      -
+        name: gtpu-dl6
+        type: uint
+        enum: rxfh-fields
+  -
     name: rss
     attr-cnt-name: __ethtool-a-rss-cnt
     attributes:
@@ -1475,9 +1688,14 @@ attribute-sets:
       -
         name: input-xfrm
         type: u32
+        enum: input-xfrm
       -
         name: start-context
         type: u32
+      -
+        name: flow-hash
+        type: nest
+        nested-attributes: flow
   -
     name: plca
     attr-cnt-name: __ethtool-a-plca-cnt
@@ -1620,6 +1838,73 @@ attribute-sets:
         type: uint
         enum: pse-event
         doc: List of events reported by the PSE controller
+  -
+    name: mse-capabilities
+    doc: MSE capabilities attribute set
+    attr-cnt-name: --ethtool-a-mse-capabilities-cnt
+    attributes:
+      -
+        name: max-average-mse
+        type: uint
+      -
+        name: max-peak-mse
+        type: uint
+      -
+        name: refresh-rate-ps
+        type: uint
+      -
+        name: num-symbols
+        type: uint
+  -
+    name: mse-snapshot
+    doc: MSE snapshot attribute set
+    attr-cnt-name: --ethtool-a-mse-snapshot-cnt
+    attributes:
+      -
+        name: average-mse
+        type: uint
+      -
+        name: peak-mse
+        type: uint
+      -
+        name: worst-peak-mse
+        type: uint
+  -
+    name: mse
+    attr-cnt-name: --ethtool-a-mse-cnt
+    attributes:
+      -
+        name: header
+        type: nest
+        nested-attributes: header
+      -
+        name: capabilities
+        type: nest
+        nested-attributes: mse-capabilities
+      -
+        name: channel-a
+        type: nest
+        nested-attributes: mse-snapshot
+      -
+        name: channel-b
+        type: nest
+        nested-attributes: mse-snapshot
+      -
+        name: channel-c
+        type: nest
+        nested-attributes: mse-snapshot
+      -
+        name: channel-d
+        type: nest
+        nested-attributes: mse-snapshot
+      -
+        name: worst-channel
+        type: nest
+        nested-attributes: mse-snapshot
+      -
+        name: link
+        type: nest
+        nested-attributes: mse-snapshot
 
 operations:
   enum-model: directional
@@ -1974,6 +2259,8 @@ operations:
             - tx-aggr-time-usecs
             - rx-profile
             - tx-profile
+            - rx-cqe-frames
+            - rx-cqe-nsecs
       dump: *coalesce-get-op
     -
       name: coalesce-set
@@ -2173,14 +2460,14 @@ operations:
         request:
           attributes:
             - header
-        reply:
-          attributes:
-            - header
             - offset
             - length
             - page
             - bank
             - i2c-address
+        reply:
+          attributes:
+            - header
             - data
       dump: *module-eeprom-get-op
     -
@@ -2307,6 +2594,7 @@ operations:
             - indir
             - hkey
             - input-xfrm
+            - flow-hash
       dump:
         request:
           attributes:
@@ -2493,12 +2781,84 @@ operations:
           - header
           - events
     -
+      name: rss-set
+      doc: Set RSS params.
+
+      attribute-set: rss
+
+      do:
+        request:
+          attributes:
+            - header
+            - context
+            - hfunc
+            - indir
+            - hkey
+            - input-xfrm
+            - flow-hash
+    -
       name: rss-ntf
       doc: |
         Notification for change in RSS configuration.
-        For additional contexts only modifications are modified, not creation
-        or removal of the contexts.
+        For additional contexts only modifications use this notification,
+        creation and deletion have dedicated messages.
       notify: rss-get
+    -
+      name: rss-create-act
+      doc: Create an RSS context.
+      attribute-set: rss
+      do:
+        request: &rss-create-attrs
+          attributes:
+            - header
+            - context
+            - hfunc
+            - indir
+            - hkey
+            - input-xfrm
+        reply: *rss-create-attrs
+    -
+      name: rss-create-ntf
+      doc: |
+        Notification for creation of an additional RSS context.
+      notify: rss-create-act
+    -
+      name: rss-delete-act
+      doc: Delete an RSS context.
+      attribute-set: rss
+      do:
+        request:
+          attributes:
+            - header
+            - context
+    -
+      name: rss-delete-ntf
+      doc: |
+        Notification for deletion of an additional RSS context.
+      attribute-set: rss
+      event:
+        attributes:
+          - header
+          - context
+    -
+      name: mse-get
+      doc: Get PHY MSE measurement data and capabilities.
+      attribute-set: mse
+      do: &mse-get-op
+        request:
+          attributes:
+            - header
+        reply:
+          attributes:
+            - header
+            - capabilities
+            - channel-a
+            - channel-b
+            - channel-c
+            - channel-d
+            - worst-channel
+            - link
+      dump: *mse-get-op
 
 mcast-groups:
   list:
