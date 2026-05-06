@@ -23,7 +23,8 @@ int ionic_auxbus_register(struct ionic_lif *lif)
 	struct auxiliary_device *aux_dev;
 	int err, id;
 
-	if (!(le64_to_cpu(lif->ionic->ident.lif.capabilities) & IONIC_LIF_CAP_RDMA))
+	if (!IS_ENABLED(CONFIG_INFINIBAND_IONIC) ||
+	    !(le64_to_cpu(lif->ionic->ident.lif.capabilities) & IONIC_LIF_CAP_RDMA))
 		return 0;
 
 	ionic_adev = kzalloc_obj(*ionic_adev);
