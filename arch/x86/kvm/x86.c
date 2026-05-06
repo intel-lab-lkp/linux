@@ -9326,9 +9326,8 @@ static int kvm_vcpu_do_singlestep(struct kvm_vcpu *vcpu)
 	return 1;
 }
 
-int kvm_skip_emulated_instruction(struct kvm_vcpu *vcpu)
+int __kvm_skip_emulated_instruction(struct kvm_vcpu *vcpu)
 {
-	unsigned long rflags = kvm_x86_call(get_rflags)(vcpu);
 	int r;
 
 	r = kvm_x86_call(skip_emulated_instruction)(vcpu);
@@ -9336,6 +9335,18 @@ int kvm_skip_emulated_instruction(struct kvm_vcpu *vcpu)
 		return 0;
 
 	kvm_pmu_instruction_retired(vcpu);
+	return r;
+}
+EXPORT_SYMBOL_FOR_KVM_INTERNAL(__kvm_skip_emulated_instruction);
+
+int kvm_skip_emulated_instruction(struct kvm_vcpu *vcpu)
+{
+	unsigned long rflags = kvm_x86_call(get_rflags)(vcpu);
+	int r;
+
+	r = __kvm_skip_emulated_instruction(vcpu);
+	if (unlikely(!r))
+		return 0;
 
 	/*
 	 * rflags is the old, "raw" value of the flags.  The new value has

@@ -1133,11 +1133,16 @@ int nested_svm_vmrun(struct kvm_vcpu *vcpu)
 			return kvm_handle_memory_failure(vcpu, X86EMUL_IO_NEEDED, NULL);
 
 		/* Advance RIP past VMRUN as part of the nested #VMEXIT. */
-		return kvm_skip_emulated_instruction(vcpu);
+		return __kvm_skip_emulated_instruction(vcpu);
 	}
 
-	/* At this point, VMRUN is guaranteed to not fault; advance RIP. */
-	ret = kvm_skip_emulated_instruction(vcpu);
+	/*
+	 * At this point, VMRUN is guaranteed to not fault; advance RIP.
+	 *
+	 * FIXME: If TF is set on VMRUN should inject a #DB (or handle guest
+	 * debugging) right after #VMEXIT, right now it's just ignored.
+	 */
+	ret = __kvm_skip_emulated_instruction(vcpu);
 
 	/*
 	 * Since vmcb01 is not in use, we can use it to store some of the L1
