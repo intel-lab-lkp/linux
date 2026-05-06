@@ -93,6 +93,9 @@ static int scd30_i2c_command(struct scd30_state *state, enum scd30_cmd cmd, u16 
 	if (ret)
 		return ret;
 
+	if (!rsp)
+		return 0;
+
 	/* validate received data and strip off crc bytes */
 	for (i = 0; i < size; i += 3) {
 		crc = crc8(scd30_i2c_crc8_tbl, buf + i, 2, CRC8_INIT_VALUE);
