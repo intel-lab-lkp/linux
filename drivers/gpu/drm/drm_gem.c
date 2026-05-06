@@ -1660,15 +1660,19 @@ drm_gem_lru_scan(struct drm_gem_lru *lru,
 		if (!obj)
 			break;
 
-		drm_gem_lru_move_tail_locked(&still_in_lru, obj);
-
 		/*
 		 * If it's in the process of being freed, gem_object->free()
-		 * may be blocked on lock waiting to remove it.  So just
-		 * skip it.
+		 * may be blocked on lock waiting to remove it.  So just remove
+		 * it from its current LRU and skip it.
 		 */
-		if (!kref_get_unless_zero(&obj->refcount))
+		if (!kref_get_unless_zero(&obj->refcount)) {
+			if (obj->lru)
+				drm_gem_lru_remove_locked(obj);
+
 			continue;
+		}
+
+		drm_gem_lru_move_tail_locked(&still_in_lru, obj);
 
 		/*
 		 * Now that we own a reference, we can drop the lock for the
