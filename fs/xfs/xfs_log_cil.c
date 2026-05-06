@@ -876,7 +876,6 @@ xlog_cil_ail_insert(
 	 * available on return, only for it to disappear again immediately as
 	 * the AIL head update accounts in the log tail space.
 	 */
-	smp_wmb();	/* paired with smp_rmb in xlog_grant_space_left */
 	xlog_grant_return_space(ailp->ail_log, old_head, ailp->ail_head_lsn);
 
 	/* unpin all the log items */

@@ -113,17 +113,21 @@ xlog_grant_return_space(
 {
 	int64_t		diff = xlog_lsn_sub(log, new_head, old_head);
 
+	/*
+	 * Publish the tail-space update before dropping the grant heads so
+	 * readers cannot observe returned grant space without the matching
+	 * tail-space accounting.
+	 */
+	smp_mb__before_atomic();
 	xlog_grant_sub_space(&log->l_reserve_head, diff);
 	xlog_grant_sub_space(&log->l_write_head, diff);
 }
 
 /*
  * Return the space in the log between the tail and the head.  In the case where
- * we have overrun available reservation space, return 0. The memory barrier
- * pairs with the smp_wmb() in xlog_cil_ail_insert() to ensure that grant head
- * vs tail space updates are seen in the correct order and hence avoid
- * transients as space is transferred from the grant heads to the AIL on commit
- * completion.
+ * we have overrun available reservation space, return 0.  Sample the grant
+ * head before l_tail_space so that seeing returned grant space implies seeing
+ * the matching tail-space update from xlog_grant_return_space().
  */
 static uint64_t
 xlog_grant_space_left(
@@ -131,10 +135,11 @@ xlog_grant_space_left(
 	struct xlog_grant_head	*head)
 {
 	int64_t			free_bytes;
+	s64			grant;
 
-	smp_rmb();	/* paired with smp_wmb in xlog_cil_ail_insert() */
-	free_bytes = log->l_logsize - READ_ONCE(log->l_tail_space) -
-			atomic64_read(&head->grant);
+	grant = atomic64_read(&head->grant);
+	smp_rmb();	/* paired with smp_mb__before_atomic in xlog_grant_return_space */
+	free_bytes = log->l_logsize - READ_ONCE(log->l_tail_space) - grant;
 	if (free_bytes > 0)
 		return free_bytes;
 	return 0;
