@@ -191,6 +191,16 @@ struct panthor_device {
 		struct mutex lock;
 
 		/**
+		 * @reclaim.unreclaimable: unreclaimable BOs
+		 *
+		 * Either the BO is unreclaimable because it has no pages allocated,
+		 * or it's unreclaimable because pages are pinned.
+		 *
+		 * All BOs start in that list at creation time.
+		 */
+		struct drm_gem_lru unreclaimable;
+
+		/**
 		 * @reclaim.unused: BOs with unused pages
 		 *
 		 * Basically all buffers that got mmapped, vmapped or GPU mapped and

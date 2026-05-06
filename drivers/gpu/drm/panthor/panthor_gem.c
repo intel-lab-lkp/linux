@@ -204,7 +204,7 @@ void panthor_gem_update_reclaim_state_locked(struct panthor_gem_object *bo,
 		drm_gem_lru_move_tail(&ptdev->reclaim.gpu_mapped_shared, &bo->base);
 		break;
 	case PANTHOR_GEM_UNRECLAIMABLE:
-		drm_gem_lru_remove(&bo->base);
+		drm_gem_lru_move_tail(&ptdev->reclaim.unreclaimable, &bo->base);
 		break;
 	default:
 		drm_WARN(&ptdev->base, true, "invalid GEM reclaim state (%d)\n", new_state);
@@ -994,6 +994,7 @@ static struct panthor_gem_object *
 panthor_gem_create(struct drm_device *dev, size_t size, uint32_t flags,
 		   struct panthor_vm *exclusive_vm, u32 usage_flags)
 {
+	struct panthor_device *ptdev = container_of(dev, struct panthor_device, base);
 	struct panthor_gem_object *bo;
 	int ret;
 
@@ -1026,6 +1027,7 @@ panthor_gem_create(struct drm_device *dev, size_t size, uint32_t flags,
 	}
 
 	panthor_gem_debugfs_set_usage_flags(bo, usage_flags);
+	drm_gem_lru_move_tail(&ptdev->reclaim.unreclaimable, &bo->base);
 	return bo;
 
 err_put:
@@ -1551,6 +1553,7 @@ int panthor_gem_shrinker_init(struct panthor_device *ptdev)
 		return ret;
 
 	INIT_LIST_HEAD(&ptdev->reclaim.vms);
+	drm_gem_lru_init(&ptdev->reclaim.unreclaimable, &ptdev->reclaim.lock);
 	drm_gem_lru_init(&ptdev->reclaim.unused, &ptdev->reclaim.lock);
 	drm_gem_lru_init(&ptdev->reclaim.mmapped, &ptdev->reclaim.lock);
 	drm_gem_lru_init(&ptdev->reclaim.gpu_mapped_shared, &ptdev->reclaim.lock);
