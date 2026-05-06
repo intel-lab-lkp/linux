@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
-/* Copyright (C) 2018-2025, Advanced Micro Devices, Inc. */
+/* Copyright (C) 2018-2026, Advanced Micro Devices, Inc. */
 
 #include <linux/interrupt.h>
 #include <linux/module.h>
