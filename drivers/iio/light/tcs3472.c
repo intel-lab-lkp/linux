@@ -9,14 +9,14 @@
  * TCS34727)
  *
  * Datasheet: http://ams.com/eng/content/download/319364/1117183/file/TCS3472_Datasheet_EN_v2.pdf
- *
- * TODO: wait time
  */
 
 #include <linux/module.h>
 #include <linux/i2c.h>
 #include <linux/delay.h>
 #include <linux/pm.h>
+#include <linux/math64.h>
+#include <linux/cleanup.h>
 
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
@@ -51,9 +51,11 @@
 #define TCS3472_STATUS_AINT BIT(4)
 #define TCS3472_STATUS_AVALID BIT(0)
 #define TCS3472_ENABLE_AIEN BIT(4)
+#define TCS3472_ENABLE_WEN BIT(3)
 #define TCS3472_ENABLE_AEN BIT(1)
 #define TCS3472_ENABLE_PON BIT(0)
 #define TCS3472_CONTROL_AGAIN_MASK (BIT(0) | BIT(1))
+#define TCS3472_CONFIG_WLONG BIT(1)
 
 struct tcs3472_data {
 	struct i2c_client *client;
@@ -64,6 +66,10 @@ struct tcs3472_data {
 	u8 control;
 	u8 atime;
 	u8 apers;
+	u8 wtime;
+	bool wlong;
+	int target_freq_hz;
+	int target_freq_uhz;
 };
 
 static const struct iio_event_spec tcs3472_events[] = {
@@ -89,6 +95,7 @@ static const struct iio_event_spec tcs3472_events[] = {
 	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW), \
 	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_CALIBSCALE) | \
 		BIT(IIO_CHAN_INFO_INT_TIME), \
+	.info_mask_shared_by_all = BIT(IIO_CHAN_INFO_SAMP_FREQ), \
 	.channel2 = IIO_MOD_LIGHT_##_color, \
 	.address = _addr, \
 	.scan_index = _si, \
@@ -111,6 +118,22 @@ static const struct iio_chan_spec tcs3472_channels[] = {
 	TCS3472_CHANNEL(BLUE, 3, TCS3472_BDATA),
 	IIO_CHAN_SOFT_TIMESTAMP(4),
 };
+
+static unsigned int tcs3472_cycle_time_us(struct tcs3472_data *data)
+{
+	unsigned int atime_us = (256 - data->atime) * 2400;
+	unsigned int init_us = 2400;
+	unsigned int wtime_us;
+
+	if (!(data->enable & TCS3472_ENABLE_WEN))
+		wtime_us = 0;
+	else if (data->wlong)
+		wtime_us = (256 - data->wtime) * 28800;
+	else
+		wtime_us = (256 - data->wtime) * 2400;
+
+	return wtime_us + init_us + atime_us;
+}
 
 static int tcs3472_req_data(struct tcs3472_data *data)
 {
@@ -164,8 +187,109 @@ static int tcs3472_read_raw(struct iio_dev *indio_dev,
 		*val = 0;
 		*val2 = (256 - data->atime) * 2400;
 		return IIO_VAL_INT_PLUS_MICRO;
+	case IIO_CHAN_INFO_SAMP_FREQ: {
+		unsigned int cycle_us = tcs3472_cycle_time_us(data);
+
+		*val = USEC_PER_SEC / cycle_us;
+		*val2 = (u64)(USEC_PER_SEC % cycle_us) * USEC_PER_SEC / cycle_us;
+		return IIO_VAL_INT_PLUS_MICRO;
+	}
 	}
 	return -EINVAL;
+}
+
+static int tcs3472_set_sampling_freq(struct tcs3472_data *data,
+				     int val, int val2)
+{
+	unsigned int atime_us = (256 - data->atime) * 2400;
+	unsigned int init_us = 2400;
+	u64 cycle_us;
+	s64 wait_us;
+	int wtime;
+	bool wlong = false;
+	int ret;
+
+	if (val < 0 || (val == 0 && val2 <= 0))
+		return -EINVAL;
+
+	guard(mutex)(&data->lock);
+
+	cycle_us = div_u64((u64)USEC_PER_SEC * USEC_PER_SEC,
+			   (u64)val * USEC_PER_SEC + val2);
+
+	wait_us = (s64)cycle_us - init_us - atime_us;
+
+	/* Wait state is not needed.
+	 * Requested frequency is too high to be reached with any
+	 * non-zero wait time. Disable WEN so the chip runs at the
+	 * maximum rate allowed by ATIME alone.
+	 */
+	if (wait_us < 2400) {
+		if (data->enable & TCS3472_ENABLE_WEN) {
+			data->enable &= ~TCS3472_ENABLE_WEN;
+			ret = i2c_smbus_write_byte_data(data->client,
+							TCS3472_ENABLE,
+							data->enable);
+			if (ret < 0)
+				return ret;
+		}
+
+		data->target_freq_hz = val;
+		data->target_freq_uhz = val2;
+		return 0;
+	}
+
+	/*
+	 * Wait state is needed: make sure WEN is active before
+	 * programming WTIME (and possibly WLONG).
+	 */
+	if (!(data->enable & TCS3472_ENABLE_WEN)) {
+		data->enable |= TCS3472_ENABLE_WEN;
+		ret = i2c_smbus_write_byte_data(data->client,
+						TCS3472_ENABLE,
+						data->enable);
+		if (ret < 0)
+			return ret;
+	}
+
+	wtime = 256 - (int)DIV_ROUND_CLOSEST((unsigned long)wait_us, 2400);
+	if (wtime < 0) {
+		wlong = true;
+		wtime = 256 - (int)DIV_ROUND_CLOSEST((unsigned long)wait_us,
+						     28800);
+		if (wtime < 0)
+			wtime = 0;
+	}
+	if (wtime > 255)
+		wtime = 255;
+
+	if (wlong != data->wlong) {
+		ret = i2c_smbus_read_byte_data(data->client, TCS3472_CONFIG);
+		if (ret < 0)
+			return ret;
+
+		if (wlong)
+			ret |= TCS3472_CONFIG_WLONG;
+		else
+			ret &= ~TCS3472_CONFIG_WLONG;
+
+		ret = i2c_smbus_write_byte_data(data->client,
+						TCS3472_CONFIG, ret);
+		if (ret < 0)
+			return ret;
+
+		data->wlong = wlong;
+	}
+
+	ret = i2c_smbus_write_byte_data(data->client, TCS3472_WTIME, wtime);
+	if (ret < 0)
+		return ret;
+
+	data->wtime = wtime;
+	data->target_freq_hz = val;
+	data->target_freq_uhz = val2;
+
+	return 0;
 }
 
 static int tcs3472_write_raw(struct iio_dev *indio_dev,
@@ -174,6 +298,7 @@ static int tcs3472_write_raw(struct iio_dev *indio_dev,
 {
 	struct tcs3472_data *data = iio_priv(indio_dev);
 	int i;
+	int ret;
 
 	switch (mask) {
 	case IIO_CHAN_INFO_CALIBSCALE:
@@ -195,13 +320,22 @@ static int tcs3472_write_raw(struct iio_dev *indio_dev,
 		for (i = 0; i < 256; i++) {
 			if (val2 == (256 - i) * 2400) {
 				data->atime = i;
-				return i2c_smbus_write_byte_data(
-					data->client, TCS3472_ATIME,
-					data->atime);
+				ret = i2c_smbus_write_byte_data(data->client,
+								TCS3472_ATIME,
+								data->atime);
+				if (ret < 0)
+					return ret;
+				/* since ATIME has changed, recalculate
+				 * WTIME to maintain sampling freq
+				 */
+				return tcs3472_set_sampling_freq(data,
+								 data->target_freq_hz,
+								 data->target_freq_uhz);
 			}
-
 		}
 		return -EINVAL;
+	case IIO_CHAN_INFO_SAMP_FREQ:
+		return tcs3472_set_sampling_freq(data, val, val2);
 	}
 	return -EINVAL;
 }
@@ -443,7 +577,8 @@ static const struct iio_info tcs3472_info = {
 static int tcs3472_powerdown(struct tcs3472_data *data)
 {
 	int ret;
-	u8 enable_mask = TCS3472_ENABLE_AEN | TCS3472_ENABLE_PON;
+	u8 enable_mask = TCS3472_ENABLE_AEN | TCS3472_ENABLE_PON |
+			TCS3472_ENABLE_WEN;
 
 	mutex_lock(&data->lock);
 
@@ -466,6 +601,7 @@ static int tcs3472_probe(struct i2c_client *client)
 {
 	struct tcs3472_data *data;
 	struct iio_dev *indio_dev;
+	unsigned int cycle_us;
 	int ret;
 
 	indio_dev = devm_iio_device_alloc(&client->dev, sizeof(*data));
@@ -504,6 +640,16 @@ static int tcs3472_probe(struct i2c_client *client)
 		return ret;
 	data->atime = ret;
 
+	ret = i2c_smbus_read_byte_data(data->client, TCS3472_WTIME);
+	if (ret < 0)
+		return ret;
+	data->wtime = ret;
+
+	ret = i2c_smbus_read_byte_data(data->client, TCS3472_CONFIG);
+	if (ret < 0)
+		return ret;
+	data->wlong = ret & TCS3472_CONFIG_WLONG;
+
 	ret = i2c_smbus_read_word_data(data->client, TCS3472_AILT);
 	if (ret < 0)
 		return ret;
@@ -525,12 +671,18 @@ static int tcs3472_probe(struct i2c_client *client)
 		return ret;
 
 	/* enable device */
-	data->enable = ret | TCS3472_ENABLE_PON | TCS3472_ENABLE_AEN;
+	data->enable = ret | TCS3472_ENABLE_PON | TCS3472_ENABLE_AEN |
+			TCS3472_ENABLE_WEN;
 	data->enable &= ~TCS3472_ENABLE_AIEN;
 	ret = i2c_smbus_write_byte_data(data->client, TCS3472_ENABLE,
 		data->enable);
 	if (ret < 0)
 		return ret;
+
+	cycle_us = tcs3472_cycle_time_us(data);
+	data->target_freq_hz = USEC_PER_SEC / cycle_us;
+	data->target_freq_uhz = (u64)(USEC_PER_SEC % cycle_us) *
+				USEC_PER_SEC / cycle_us;
 
 	ret = devm_add_action_or_reset(&client->dev,
 				       tcs3472_powerdown_action, data);
@@ -567,7 +719,8 @@ static int tcs3472_resume(struct device *dev)
 	struct tcs3472_data *data = iio_priv(i2c_get_clientdata(
 		to_i2c_client(dev)));
 	int ret;
-	u8 enable_mask = TCS3472_ENABLE_AEN | TCS3472_ENABLE_PON;
+	u8 enable_mask = TCS3472_ENABLE_AEN | TCS3472_ENABLE_PON |
+			TCS3472_ENABLE_WEN;
 
 	mutex_lock(&data->lock);
 
