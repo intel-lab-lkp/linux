@@ -632,7 +632,6 @@ int stop_machine(cpu_stop_fn_t fn, void *data, const struct cpumask *cpus)
 }
 EXPORT_SYMBOL_GPL(stop_machine);
 
-#ifdef CONFIG_SCHED_SMT
 int stop_core_cpuslocked(unsigned int cpu, cpu_stop_fn_t fn, void *data)
 {
 	const struct cpumask *smt_mask = cpu_smt_mask(cpu);
@@ -651,7 +650,6 @@ int stop_core_cpuslocked(unsigned int cpu, cpu_stop_fn_t fn, void *data)
 	return stop_cpus(smt_mask, multi_cpu_stop, &msdata);
 }
 EXPORT_SYMBOL_GPL(stop_core_cpuslocked);
-#endif
 
 /**
  * stop_machine_from_inactive_cpu - stop_machine() from inactive CPU
