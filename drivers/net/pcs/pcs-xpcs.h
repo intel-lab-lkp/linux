@@ -94,6 +94,12 @@
 #define DW_VR_MII_DIG_CTRL2_TX_POL_INV		BIT(4)
 #define DW_VR_MII_DIG_CTRL2_RX_POL_INV		BIT(0)
 
+/* Clause 133 defines */
+/* RSFEC transcode pad alter
+ * DW vendor extension in RS-FEC control
+ */
+#define DW_VR_RSFEC_CTRL_TC_PAD_ALTER	BIT(10)
+
 #define DW_XPCS_INFO_DECLARE(_name, _pcs, _pma)				\
 	static const struct dw_xpcs_info _name = { .pcs = _pcs, .pma = _pma }
 
