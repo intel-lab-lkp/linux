@@ -580,9 +580,7 @@ impl<T: AsBytes + FromBytes + KnownSize + ?Sized> From<CoherentBox<T>> for Coher
 ///   to an allocated region of coherent memory and `dma_handle` is the DMA address base of the
 ///   region.
 /// - The size in bytes of the allocation is equal to size information via pointer.
-// TODO
-//
-// DMA allocations potentially carry device resources (e.g.IOMMU mappings), hence for soundness
+// DMA allocations potentially carry device resources (e.g. IOMMU mappings), hence for soundness
 // reasons DMA allocation would need to be embedded in a `Devres` container, in order to ensure
 // that device resources can never survive device unbind.
 //
