@@ -1464,6 +1464,8 @@ int mlx5_init_one(struct mlx5_core_dev *dev)
 	err = mlx5_init_one_devl_locked(dev);
 	if (err)
 		devl_unregister(devlink);
+	else
+		devl_apply_defaults(devlink);
 unlock:
 	devl_unlock(devlink);
 	return err;
