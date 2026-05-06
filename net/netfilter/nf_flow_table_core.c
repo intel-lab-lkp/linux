@@ -76,9 +76,11 @@ struct flow_offload *flow_offload_alloc(struct nf_conn *ct)
 }
 EXPORT_SYMBOL_GPL(flow_offload_alloc);
 
-static u32 flow_offload_dst_cookie(struct flow_offload_tuple *flow_tuple)
+static u32 flow_offload_dst_cookie(struct flow_offload_tuple *flow_tuple,
+				   u8 tun_encap_proto)
 {
-	if (flow_tuple->l3proto == NFPROTO_IPV6)
+	if (flow_tuple->l3proto == NFPROTO_IPV6 ||
+	    tun_encap_proto == NFPROTO_IPV6)
 		return rt6_get_cookie(dst_rt6_info(flow_tuple->dst_cache));
 
 	return 0;
@@ -134,10 +136,14 @@ static int flow_offload_fill_route(struct flow_offload *flow,
 		dst_release(dst);
 		break;
 	case FLOW_OFFLOAD_XMIT_XFRM:
-	case FLOW_OFFLOAD_XMIT_NEIGH:
+	case FLOW_OFFLOAD_XMIT_NEIGH: {
+		u8 encap_proto = route->tuple[!dir].in.tun.encap_proto;
+
 		flow_tuple->ifidx = route->tuple[dir].out.ifindex;
 		flow_tuple->dst_cache = dst;
-		flow_tuple->dst_cookie = flow_offload_dst_cookie(flow_tuple);
+		flow_tuple->dst_cookie = flow_offload_dst_cookie(flow_tuple,
+								 encap_proto);
+		}
 		break;
 	default:
 		WARN_ON_ONCE(1);
