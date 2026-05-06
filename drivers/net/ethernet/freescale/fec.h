@@ -701,5 +701,20 @@ int fec_ptp_set(struct net_device *ndev, struct kernel_hwtstamp_config *config,
 		struct netlink_ext_ack *extack);
 void fec_ptp_get(struct net_device *ndev, struct kernel_hwtstamp_config *config);
 
+/*
+ * ColdFire SoC peripheral blocks are big-endian, so use the raw IO access
+ * functions for them.
+ */
+#ifdef CONFIG_COLDFIRE
+#define fec_readl __raw_readl
+#define fec_writel __raw_writel
+#define fec_readl_poll_timeout_atomic(addr, val, cond, delay_us, timeout_us) \
+	readx_poll_timeout_atomic(__raw_readl, addr, val, cond, delay_us, timeout_us)
+#else
+#define fec_readl readl
+#define fec_writel writel
+#define fec_readl_poll_timeout_atomic readl_poll_timeout_atomic
+#endif
+
 /****************************************************************************/
 #endif /* FEC_H */
