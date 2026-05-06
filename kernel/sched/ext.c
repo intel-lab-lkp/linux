@@ -3689,7 +3689,15 @@ static int scx_init_task(struct scx_sched *sch, struct task_struct *p, bool fork
 		/*
 		 * While @p's rq is not locked. @p is not visible to the rest of
 		 * SCX yet and it's safe to update the flags and state.
+		 *
+		 * Install p->scx.sched before transitioning state off NONE so
+		 * that the invariant state!=NONE => p->scx.sched!=NULL holds as
+		 * soon as state becomes observable.  A concurrent sched_ext_dead()
+		 * that races the INIT window will then always find a valid
+		 * scheduler pointer and can call scx_disable_and_exit_task()
+		 * to release resources allocated by ops.init_task().
 		 */
+		scx_set_task_sched(p, sch);
 		p->scx.flags |= SCX_TASK_RESET_RUNNABLE_AT;
 		scx_set_task_state(p, SCX_TASK_INIT);
 	}
@@ -3875,8 +3883,6 @@ void scx_pre_fork(struct task_struct *p)
 
 int scx_fork(struct task_struct *p, struct kernel_clone_args *kargs)
 {
-	s32 ret;
-
 	percpu_rwsem_assert_held(&scx_fork_rwsem);
 
 	p->scx.tid = scx_alloc_tid();
@@ -3887,10 +3893,7 @@ int scx_fork(struct task_struct *p, struct kernel_clone_args *kargs)
 #else
 		struct scx_sched *sch = scx_root;
 #endif
-		ret = scx_init_task(sch, p, true);
-		if (!ret)
-			scx_set_task_sched(p, sch);
-		return ret;
+		return scx_init_task(sch, p, true);
 	}
 
 	return 0;
@@ -7143,7 +7146,49 @@ static void scx_root_enable_workfn(struct kthread_work *work)
 			goto err_disable_unlock_all;
 		}
 
-		scx_set_task_sched(p, sch);
+		/*
+		 * sched_ext_dead() may have raced while locks were dropped in
+		 * scx_task_iter_unlock().  Two cases:
+		 *
+		 * (a) sched_ext_dead() ran after scx_init_task() set state=INIT:
+		 *     it called scx_disable_and_exit_task() (cancelled=true) and
+		 *     reset state to NONE.  ops.exit_task() already ran; skip.
+		 *
+		 * (b) sched_ext_dead() ran before scx_init_task() (state=NONE at
+		 *     the time): it skipped scx_disable_and_exit_task() because
+		 *     state was NONE.  scx_init_task() subsequently called
+		 *     ops.init_task() and set state=INIT, leaving allocated
+		 *     resources with no owner.  We must call
+		 *     scx_disable_and_exit_task() here to release them.
+		 *
+		 * Distinguish case (a) from (b) by reading state: (a) leaves
+		 * state=NONE (reset by scx_disable_and_exit_task); (b) leaves
+		 * state=INIT (set by scx_init_task, never reset).
+		 */
+		{
+			bool p_dead = false, need_exit = false;
+
+			scoped_guard(raw_spinlock_irq, &scx_tasks_lock) {
+				if (list_empty(&p->scx.tasks_node)) {
+					p_dead = true;
+					need_exit = scx_get_task_state(p) != SCX_TASK_NONE;
+				}
+			}
+
+			if (p_dead) {
+				if (need_exit) {
+					struct rq_flags rf;
+					struct rq *rq;
+
+					rq = task_rq_lock(p, &rf);
+					scx_disable_and_exit_task(sch, p);
+					task_rq_unlock(rq, p, &rf);
+				}
+				put_task_struct(p);
+				continue;
+			}
+		}
+
 		scx_set_task_state(p, SCX_TASK_READY);
 
 		/*
