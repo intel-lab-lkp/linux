@@ -1585,6 +1585,8 @@ static int __tipc_sendstream(struct socket *sock, struct msghdr *m, size_t dlen)
 					 tipc_sk_connected(sk)));
 		if (unlikely(rc))
 			break;
+		if (unlikely(!dlen && sk->sk_type == SOCK_STREAM))
+			break;
 		send = min_t(size_t, dlen - sent, TIPC_MAX_USER_MSG_SIZE);
 		blocks = tsk->snd_backlog;
 		if (tsk->oneway++ >= tsk->nagle_start && maxnagle &&
