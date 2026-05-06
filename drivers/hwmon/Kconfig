@@ -940,6 +940,17 @@ config SENSORS_POWERZ
 	  This driver can also be built as a module. If so, the module
 	  will be called powerz.
 
+config SENSORS_PROM21
+	tristate "AMD PROM21 xHCI temperature sensor"
+	depends on USB_XHCI_PCI
+	select USB_XHCI_PCI_AUXDEV
+	help
+	  If you say yes here you get support for the AMD PROM21 xHCI
+	  temperature sensor.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called prom21-hwmon.
+
 config SENSORS_POWR1220
 	tristate "Lattice POWR1220 Power Monitoring"
 	depends on I2C

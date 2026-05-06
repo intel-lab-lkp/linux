@@ -215,6 +215,7 @@ Hardware Monitoring Kernel Drivers
    peci-dimmtemp
    pmbus
    powerz
+   prom21-hwmon
    powr1220
    pt5161l
    pxe1610
