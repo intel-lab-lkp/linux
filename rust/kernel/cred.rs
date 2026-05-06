@@ -90,3 +90,82 @@ unsafe impl AlwaysRefCounted for Credential {
         unsafe { bindings::put_cred(obj.cast().as_ptr()) };
     }
 }
+
+/// Checks whether the current task has the given capability in the init user namespace.
+///
+/// This function tests whether the current task has the specified POSIX capability available for
+/// use. The check is performed against the initial user namespace (`init_user_ns`).
+///
+/// When the check succeeds, the kernel sets the `PF_SUPERPRIV` flag on the current task. This
+/// marks the task as having used superuser privileges, which is visible in process accounting
+/// and auditing.
+///
+/// The capability constants are available as `bindings::CAP_*` values (for example,
+/// [`bindings::CAP_NET_ADMIN`], [`bindings::CAP_SYS_ADMIN`]). These constants are defined in
+/// `include/uapi/linux/capability.h`.
+///
+/// This function must be called from task (process) context only. Calling it from a context where
+/// there is no valid `current` task (such as hard interrupt context) is not permitted.
+///
+/// # Preconditions
+///
+/// `cap` must be a valid capability constant in the range `[0, CAP_LAST_CAP]`.
+/// Passing a value outside this range is a programming error and will trigger
+/// a kernel `BUG()`.
+///
+/// C header: [`include/linux/capability.h`](srctree/include/linux/capability.h)
+///
+/// # Examples
+///
+/// ```
+/// use kernel::bindings;
+/// use kernel::cred::capable;
+///
+/// if !capable(bindings::CAP_SYS_ADMIN) {
+///     return Err(EPERM);
+/// }
+/// # Ok::<(), Error>(())
+/// ```
+#[inline]
+pub fn capable(cap: u32) -> bool {
+    // SAFETY: `capable()` is safe to call from task context. It checks `current_cred()` against
+    // the init user namespace and returns whether the specified capability is granted.
+    unsafe { bindings::capable(cap as i32) }
+}
+
+/// Checks whether the current task has the given capability in the specified user namespace.
+///
+/// This is the namespace-aware variant of [`capable`]. It tests whether the current task has the
+/// specified capability in the given user namespace, rather than in the init user namespace.
+///
+/// This function is relevant for code that must respect user namespace boundaries (for example,
+/// operations inside unprivileged containers). For most driver code that is not namespace-aware,
+/// [`capable`] is the correct function to use instead.
+///
+/// Like [`capable`], this function sets `PF_SUPERPRIV` on the current task when the check
+/// succeeds, and it must be called from task context only.
+///
+/// # Preconditions
+///
+/// `cap` must be a valid capability constant in the range `[0, CAP_LAST_CAP]`.
+/// Passing a value outside this range is a programming error and will trigger
+/// a kernel `BUG()`.
+///
+/// C header: [`include/linux/capability.h`](srctree/include/linux/capability.h)
+///
+/// # Safety
+///
+/// The caller must ensure that:
+///
+/// - `ns` is a non-null pointer to a fully initialized `struct user_namespace`.
+/// - The `user_namespace` pointed to by `ns` remains valid and is not freed for
+///   the duration of this call.
+#[inline]
+pub unsafe fn ns_capable(ns: *mut bindings::user_namespace, cap: u32) -> bool {
+    // SAFETY: The caller guarantees that `ns` is a non-null, valid pointer to a fully initialized
+    // `struct user_namespace` that remains valid for the duration of this call.
+    // `ns_capable()` checks `current_cred()` against the provided namespace and returns whether
+    // the specified capability is granted.
+    unsafe { bindings::ns_capable(ns, cap as i32) }
+}
+
