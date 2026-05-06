@@ -1327,15 +1327,29 @@ static void __init parse_id(char *id)
 {
 	unsigned int vendor_id = 0, device_id = 0, flags = 0, i = 0;
 	char *token, *name = NULL;
+	int err;
 
-	if ((token = strsep(&id, ":")) != NULL)
+	token = strsep(&id, ":");
+	if (token)
 		name = token;
 	/* name now points to a null terminated string*/
-	if ((token = strsep(&id, ":")) != NULL)
-		vendor_id = simple_strtoul(token, NULL, 16);
-	if ((token = strsep(&id, ":")) != NULL)
-		device_id = simple_strtoul(token, NULL, 16);
-	flags = simple_strtoul(id, NULL, 16);
+	token = strsep(&id, ":");
+	if (token) {
+		err = kstrtouint(token, 16, &vendor_id);
+		if (err)
+			return;
+	}
+	token = strsep(&id, ":");
+	if (token) {
+		err = kstrtouint(token, 16, &device_id);
+		if (err)
+			return;
+	}
+	if (id) {
+		err = kstrtouint(id, 16, &flags);
+		if (err)
+			return;
+	}
 	pr_info("%s: new device %s, vendor ID 0x%04x, device ID 0x%04x, flags: 0x%x\n",
 		driver_name, name, vendor_id, device_id, flags);
 
