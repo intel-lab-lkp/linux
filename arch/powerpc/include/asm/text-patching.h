@@ -221,39 +221,23 @@ static inline unsigned long ppc_global_function_entry(void *func)
  * - For ABIv1, we lookup the dot variant.
  * - For ABIv2, we return the local entry point.
  */
-static inline unsigned long ppc_kallsyms_lookup_name(const char *name)
+static inline unsigned long __ppc_kallsyms_lookup_name(const char *name)
 {
-	unsigned long addr;
-#ifdef CONFIG_PPC64_ELF_ABI_V1
-	/* check for dot variant */
-	char dot_name[1 + KSYM_NAME_LEN];
-	bool dot_appended = false;
+	unsigned long addr = kallsyms_lookup_name(name);
 
-	if (strnlen(name, KSYM_NAME_LEN) >= KSYM_NAME_LEN)
-		return 0;
-
-	if (name[0] != '.') {
-		dot_name[0] = '.';
-		dot_name[1] = '\0';
-		strlcat(dot_name, name, sizeof(dot_name));
-		dot_appended = true;
-	} else {
-		dot_name[0] = '\0';
-		strlcat(dot_name, name, sizeof(dot_name));
-	}
-	addr = kallsyms_lookup_name(dot_name);
-	if (!addr && dot_appended)
-		/* Let's try the original non-dot symbol lookup	*/
-		addr = kallsyms_lookup_name(name);
-#elif defined(CONFIG_PPC64_ELF_ABI_V2)
-	addr = kallsyms_lookup_name(name);
-	if (addr)
+	if (IS_ENABLED(CONFIG_PPC64_ELF_ABI_V1) && !addr)
+		addr = kallsyms_lookup_name(name + 1);
+	if (IS_ENABLED(CONFIG_PPC64_ELF_ABI_V2) && addr)
 		addr = ppc_function_entry((void *)addr);
-#else
-	addr = kallsyms_lookup_name(name);
-#endif
+
 	return addr;
 }
+
+#ifdef CONFIG_PPC64_ELF_ABI_V1
+#define ppc_kallsyms_lookup_name(x)	__ppc_kallsyms_lookup_name("." x)
+#else
+#define ppc_kallsyms_lookup_name(x)	__ppc_kallsyms_lookup_name(x)
+#endif
 
 /*
  * Some instruction encodings commonly used in dynamic ftracing
