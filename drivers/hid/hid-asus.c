@@ -584,6 +584,38 @@ static void asus_sync_fn_lock(struct work_struct *work)
 	asus_kbd_set_fn_lock(drvdata->hdev, drvdata->fn_lock);
 }
 
+/*
+ * Module-level reference to the HID device that handles fn-lock via feature
+ * report. Set at probe and cleared at remove for QUIRK_HID_FN_LOCK devices.
+ * Protected by fnlock_hdev_lock.
+ */
+static DEFINE_MUTEX(fnlock_hdev_lock);
+static struct hid_device *fnlock_hdev;
+
+/**
+ * asus_hid_fnlock_notify() - Set fn-lock state directly via HID feature report.
+ * @enabled: true to lock fn (F1-F12 primary), false to unlock.
+ *
+ * Called by asus-armoury on platforms where the WMI DEVS path for fn-lock is
+ * non-functional (e.g. ASUS ProArt P16, N-Key keyboard product ID 0x19B6).
+ *
+ * Returns 0 on success, -ENODEV if no fn-lock capable HID device is present.
+ */
+int asus_hid_fnlock_notify(bool enabled)
+{
+	int ret = -ENODEV;
+
+	guard(mutex)(&fnlock_hdev_lock);
+	if (fnlock_hdev) {
+		ret = asus_kbd_set_fn_lock(fnlock_hdev, enabled);
+		/* hid_hw_raw_request returns byte count on success; normalise to 0 */
+		if (ret > 0)
+			ret = 0;
+	}
+	return ret;
+}
+EXPORT_SYMBOL_GPL(asus_hid_fnlock_notify);
+
 static void asus_schedule_work(struct asus_kbd_leds *led)
 {
 	unsigned long flags;
@@ -969,6 +1001,8 @@ static int asus_input_configured(struct hid_device *hdev, struct hid_input *hi)
 		drvdata->fn_lock = true;
 		INIT_WORK(&drvdata->fn_lock_sync_work, asus_sync_fn_lock);
 		asus_kbd_set_fn_lock(hdev, true);
+		guard(mutex)(&fnlock_hdev_lock);
+		fnlock_hdev = hdev;
 	}
 
 	if (drvdata->tp) {
@@ -1008,6 +1042,8 @@ static int asus_input_configured(struct hid_device *hdev, struct hid_input *hi)
 		drvdata->fn_lock = true;
 		INIT_WORK(&drvdata->fn_lock_sync_work, asus_sync_fn_lock);
 		asus_kbd_set_fn_lock(hdev, true);
+		guard(mutex)(&fnlock_hdev_lock);
+		fnlock_hdev = hdev;
 	}
 
 	return 0;
@@ -1362,8 +1398,13 @@ static void asus_remove(struct hid_device *hdev)
 		cancel_work_sync(&drvdata->kbd_backlight->work);
 	}
 
-	if (drvdata->quirks & QUIRK_HID_FN_LOCK)
+	if (drvdata->quirks & QUIRK_HID_FN_LOCK) {
+		scoped_guard(mutex, &fnlock_hdev_lock) {
+			if (fnlock_hdev == hdev)
+				fnlock_hdev = NULL;
+		}
 		cancel_work_sync(&drvdata->fn_lock_sync_work);
+	}
 
 	hid_hw_stop(hdev);
 }
