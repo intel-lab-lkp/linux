@@ -254,6 +254,7 @@ panthor_gem_get_dev_sgt(struct panthor_gem_object *bo);
 int panthor_gem_pin(struct panthor_gem_object *bo);
 void panthor_gem_unpin(struct panthor_gem_object *bo);
 int panthor_gem_swapin_locked(struct panthor_gem_object *bo);
+bool panthor_gem_try_evict(struct drm_gem_object *obj, struct ww_acquire_ctx *ticket);
 void panthor_gem_update_reclaim_state_locked(struct panthor_gem_object *bo,
 					     enum panthor_gem_reclaim_state *old_state);
 int panthor_gem_shrinker_init(struct panthor_device *ptdev);

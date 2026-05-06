@@ -3200,6 +3200,39 @@ panthor_mmu_reclaim_priv_bos(struct panthor_device *ptdev,
 }
 
 /**
+ * panthor_mmu_force_reclaim - Run a reclaim on all VMs associated with a file
+ * @pfile: pointer to the &struct panthor_file to reclaim memory on
+ *
+ * Attempt to evict all private BOs of VMs associated with @pfile. In other
+ * words, attempt to swap out as much GPU memory of the context associated with
+ * @pfile as possible.
+ */
+void panthor_mmu_force_reclaim(struct panthor_file *pfile)
+{
+	struct panthor_device *ptdev = pfile->ptdev;
+	unsigned long i, remaining, freed;
+	unsigned int nr_to_scan = 0;
+	struct panthor_vm *vm;
+	size_t freed_sz;
+
+	scoped_guard(mutex, &ptdev->reclaim.lock) {
+		xa_for_each(&pfile->vms->xa, i, vm) {
+			/* Skip VMs that already aren't backed by any pages */
+			if (!vm->reclaim.lru.count)
+				continue;
+
+			nr_to_scan += vm->reclaim.lru.count;
+			list_move(&vm->reclaim.lru_node, &ptdev->reclaim.vms);
+		}
+	}
+	freed = panthor_mmu_reclaim_priv_bos(ptdev, nr_to_scan, &remaining,
+					     &freed_sz, panthor_gem_try_evict);
+	drm_dbg(&ptdev->base,
+		"Reclaimed %lu pages (%zu bytes) out of %u scanned, with %lu remaining\n",
+		freed, freed_sz, nr_to_scan, remaining);
+}
+
+/**
  * panthor_mmu_unplug() - Unplug the MMU logic
  * @ptdev: Device.
  *

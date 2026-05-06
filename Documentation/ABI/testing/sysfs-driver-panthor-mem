@@ -1,0 +1,17 @@
+What:		/sys/bus/platform/drivers/panthor/.../mem_reclaim
+Date:		May 2026
+Contact:	Nicolas Frattaroli <nicolas.frattaroli@collabora.com>
+Description:
+		(WO) Writing to this file will trigger a GPU memory reclaim run for all
+		panthor GPU contexts associated with the TGID written to it. The write
+		completes when the reclaim operation has finished.
+
+		To run a reclaim on a TGID other than its own, a process requires the
+		CAP_SYS_RESOURCE capability.
+
+		Possible error codes:
+		* -ERANGE: given TGID is too large/small for the TGID type.
+		* -EINVAL: given TGID could not be parsed.
+		* -EPERM: insufficient permissions to run a reclaim on given TGID
+		* -EINTR: interrupted by signal
+		* -ESRCH: given TGID is not using panthor, and might not exist at all

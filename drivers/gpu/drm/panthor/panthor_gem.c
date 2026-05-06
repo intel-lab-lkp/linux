@@ -1473,8 +1473,8 @@ out_unlock:
 	return ret == 0;
 }
 
-static bool panthor_gem_try_evict(struct drm_gem_object *obj,
-				  struct ww_acquire_ctx *ticket)
+bool panthor_gem_try_evict(struct drm_gem_object *obj,
+			   struct ww_acquire_ctx *ticket)
 {
 	struct panthor_gem_object *bo = to_panthor_bo(obj);
 

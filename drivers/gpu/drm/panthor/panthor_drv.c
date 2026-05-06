@@ -1858,8 +1858,75 @@ static ssize_t profiling_store(struct device *dev,
 
 static DEVICE_ATTR_RW(profiling);
 
+/**
+ * panthor_run_on_pfiles_of_tgid - Run function on each panthor_file of process
+ * @ptdev: pointer to the &struct panthor_device
+ * @tgid: The TGID of the process to look for
+ * @func: function pointer to run on every &struct panthor_file opened by @tgid
+ *
+ * Searches through the list of all panthor DRM files for ones that are opened
+ * by a process with TGID @tgid. For every match found, runs @func with the
+ * associated &struct panthor_file.
+ *
+ * Returns: negative errno on error, number of files matching @tgid otherwise.
+ */
+static int panthor_run_on_pfiles_of_tgid(struct panthor_device *ptdev, pid_t tgid,
+					 void (*func)(struct panthor_file *pf))
+{
+	struct drm_file *file;
+	int found = 0;
+
+	scoped_cond_guard(mutex_intr, return -EINTR, &ptdev->base.filelist_mutex) {
+		list_for_each_entry(file, &ptdev->base.filelist, lhead) {
+			struct task_struct *task;
+			struct pid *file_pid;
+
+			rcu_read_lock();
+			file_pid = rcu_dereference(file->pid);
+			task = pid_task(file_pid, PIDTYPE_TGID);
+			if (!task || task->tgid != tgid) {
+				rcu_read_unlock();
+				continue;
+			}
+			rcu_read_unlock();
+			found++;
+			/* func needs to run outside RCU lock */
+			func(file->driver_priv);
+		}
+	}
+
+	return found;
+}
+
+static ssize_t mem_reclaim_store(struct device *dev,
+				 struct device_attribute *attr,
+				 const char *buf, size_t len)
+{
+	struct panthor_device *ptdev = dev_get_drvdata(dev);
+	pid_t tgid;
+	int ret;
+
+	ret = kstrtoint(buf, 0, &tgid);
+	if (ret)
+		return ret;
+
+	if (tgid != current->tgid && !capable(CAP_SYS_RESOURCE))
+		return -EPERM;
+
+	ret = panthor_run_on_pfiles_of_tgid(ptdev, tgid, panthor_mmu_force_reclaim);
+	if (ret < 0)
+		return ret;
+	else if (!ret)
+		return -ESRCH;
+
+	return len;
+}
+
+static DEVICE_ATTR_WO(mem_reclaim);
+
 static struct attribute *panthor_attrs[] = {
 	&dev_attr_profiling.attr,
+	&dev_attr_mem_reclaim.attr,
 	NULL,
 };
 
