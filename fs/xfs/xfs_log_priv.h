@@ -582,7 +582,7 @@ xfs_lsn_t xlog_cil_force_seq(struct xlog *log, xfs_csn_t sequence);
 static inline void
 xlog_cil_force(struct xlog *log)
 {
-	xlog_cil_force_seq(log, log->l_cilp->xc_current_sequence);
+	xlog_cil_force_seq(log, 0);
 }
 
 /*

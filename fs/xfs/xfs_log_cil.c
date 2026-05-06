@@ -1707,24 +1707,25 @@ xlog_cil_push_background(
  * mechanism. Hence in this case we need to pass a flag to the push work to
  * indicate it needs to flush the commit record itself.
  */
-static void
+static xfs_csn_t
 xlog_cil_push_now(
 	struct xlog	*log,
-	xfs_lsn_t	push_seq,
+	xfs_csn_t	push_seq,
 	bool		async)
 {
 	struct xfs_cil	*cil = log->l_cilp;
 
 	if (!cil)
-		return;
-
-	ASSERT(push_seq && push_seq <= cil->xc_current_sequence);
+		return 0;
 
 	/* start on any pending background push to minimise wait time on it */
 	if (!async)
 		flush_workqueue(cil->xc_push_wq);
 
 	spin_lock(&cil->xc_push_lock);
+	if (!push_seq)
+		push_seq = cil->xc_current_sequence;
+	ASSERT(push_seq && push_seq <= cil->xc_current_sequence);
 
 	/*
 	 * If this is an async flush request, we always need to set the
@@ -1742,12 +1743,13 @@ xlog_cil_push_now(
 	if (test_bit(XLOG_CIL_EMPTY, &cil->xc_flags) ||
 	    push_seq <= cil->xc_push_seq) {
 		spin_unlock(&cil->xc_push_lock);
-		return;
+		return push_seq;
 	}
 
 	cil->xc_push_seq = push_seq;
 	queue_work(cil->xc_push_wq, &cil->xc_ctx->push_work);
 	spin_unlock(&cil->xc_push_lock);
+	return push_seq;
 }
 
 bool
@@ -1880,16 +1882,16 @@ void
 xlog_cil_flush(
 	struct xlog	*log)
 {
-	xfs_csn_t	seq = log->l_cilp->xc_current_sequence;
+	struct xfs_cil	*cil = log->l_cilp;
+	xfs_csn_t	seq = xlog_cil_push_now(log, 0, true);
 
 	trace_xfs_log_force(log->l_mp, seq, _RET_IP_);
-	xlog_cil_push_now(log, seq, true);
 
 	/*
 	 * If the CIL is empty, make sure that any previous checkpoint that may
 	 * still be in an active iclog is pushed to stable storage.
 	 */
-	if (test_bit(XLOG_CIL_EMPTY, &log->l_cilp->xc_flags))
+	if (test_bit(XLOG_CIL_EMPTY, &cil->xc_flags))
 		xfs_log_force(log->l_mp, 0);
 }
 
@@ -1911,12 +1913,7 @@ xlog_cil_force_seq(
 	struct xfs_cil		*cil = log->l_cilp;
 	struct xfs_cil_ctx	*ctx;
 	xfs_lsn_t		commit_lsn = NULLCOMMITLSN;
-
-	ASSERT(sequence <= cil->xc_current_sequence);
-
-	if (!sequence)
-		sequence = cil->xc_current_sequence;
-	trace_xfs_log_force(log->l_mp, sequence, _RET_IP_);
+	bool			traced = false;
 
 	/*
 	 * check to see if we need to force out the current context.
@@ -1924,7 +1921,11 @@ xlog_cil_force_seq(
 	 * so no need to deal with it here.
 	 */
 restart:
-	xlog_cil_push_now(log, sequence, false);
+	sequence = xlog_cil_push_now(log, sequence, false);
+	if (!traced) {
+		trace_xfs_log_force(log->l_mp, sequence, _RET_IP_);
+		traced = true;
+	}
 
 	/*
 	 * See if we can find a previous sequence still committing.
@@ -2066,4 +2067,3 @@ xlog_cil_destroy(
 	destroy_workqueue(cil->xc_push_wq);
 	kfree(cil);
 }
-
