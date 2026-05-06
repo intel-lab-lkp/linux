@@ -93,6 +93,7 @@ struct asus_armoury_priv {
 
 	u32 mini_led_dev_id;
 	u32 gpu_mux_dev_id;
+	bool fnlock_use_hid;
 };
 
 static struct asus_armoury_priv asus_armoury = {
@@ -778,6 +779,58 @@ ASUS_ATTR_GROUP_ROG_TUNABLE(nv_tgp, "nv_tgp", ASUS_WMI_DEVID_DGPU_SET_TGP,
 ASUS_ATTR_GROUP_INT_VALUE_ONLY_RO(nv_base_tgp, ATTR_NV_BASE_TGP, ASUS_WMI_DEVID_DGPU_BASE_TGP,
 				  "Read the base TGP value");
 
+/*
+ * fn_lock: toggle whether Fn key is locked (F1-F12 primary) or unlocked
+ * (media/system keys primary).
+ *
+ * On most ASUS laptops this is backed by WMI DEVID 0x00100023. On some
+ * platforms (e.g. ProArt P16) that DEVS call is a no-op and the state must
+ * be sent as a HID feature report to the N-Key keyboard via hid-asus.
+ */
+static ssize_t fn_lock_current_value_show(struct kobject *kobj,
+					  struct kobj_attribute *attr, char *buf)
+{
+	u32 result;
+	int err;
+
+	if (asus_armoury.fnlock_use_hid)
+		return -EOPNOTSUPP;
+
+	err = armoury_get_devstate(attr, &result, ASUS_WMI_DEVID_FNLOCK);
+	if (err)
+		return err;
+
+	return sysfs_emit(buf, "%u\n", result & 1);
+}
+
+static ssize_t fn_lock_current_value_store(struct kobject *kobj,
+					   struct kobj_attribute *attr,
+					   const char *buf, size_t count)
+{
+	bool enable;
+	int err;
+
+	err = kstrtobool(buf, &enable);
+	if (err)
+		return err;
+
+	if (asus_armoury.fnlock_use_hid) {
+		err = asus_hid_fnlock_notify(enable);
+		if (err)
+			return err;
+	} else {
+		err = armoury_set_devstate(attr, enable ? 1 : 0, NULL,
+					   ASUS_WMI_DEVID_FNLOCK);
+		if (err)
+			return err;
+	}
+
+	sysfs_notify(kobj, NULL, attr->attr.name);
+	return count;
+}
+
+ASUS_ATTR_GROUP_BOOL(fn_lock, "fn_lock", "Set the Fn-lock state");
+
 /* If an attribute does not require any special case handling add it here */
 static const struct asus_attr_group armoury_attr_groups[] = {
 	{ &egpu_connected_attr_group, ASUS_WMI_DEVID_EGPU_CONNECTED },
@@ -926,6 +979,16 @@ static int asus_fw_attr_add(void)
 		}
 	}
 
+	if (asus_armoury.fnlock_use_hid ||
+	    armoury_has_devstate(ASUS_WMI_DEVID_FNLOCK)) {
+		err = sysfs_create_group(&asus_armoury.fw_attr_kset->kobj,
+					 &fn_lock_attr_group);
+		if (err) {
+			pr_err("Failed to create sysfs-group for fn_lock\n");
+			goto err_remove_gpu_mux_group;
+		}
+	}
+
 	for (i = 0; i < ARRAY_SIZE(armoury_attr_groups); i++) {
 		if (!armoury_has_devstate(armoury_attr_groups[i].wmi_devid))
 			continue;
@@ -963,6 +1026,8 @@ err_remove_groups:
 			sysfs_remove_group(&asus_armoury.fw_attr_kset->kobj,
 					   armoury_attr_groups[i].attr_group);
 	}
+	sysfs_remove_group(&asus_armoury.fw_attr_kset->kobj, &fn_lock_attr_group);
+err_remove_gpu_mux_group:
 	if (asus_armoury.gpu_mux_dev_id)
 		sysfs_remove_group(&asus_armoury.fw_attr_kset->kobj, &gpu_mux_mode_attr_group);
 err_remove_mini_led_group:
@@ -1121,6 +1186,8 @@ static int __init asus_fw_init(void)
 
 	init_rog_tunables();
 
+	asus_armoury.fnlock_use_hid = dmi_match(DMI_PRODUCT_FAMILY, "ProArt P16");
+
 	/* Must always be last step to ensure data is available */
 	return asus_fw_attr_add();
 }
@@ -1137,6 +1204,8 @@ static void __exit asus_fw_exit(void)
 
 	if (asus_armoury.gpu_mux_dev_id)
 		sysfs_remove_group(&asus_armoury.fw_attr_kset->kobj, &gpu_mux_mode_attr_group);
+
+	sysfs_remove_group(&asus_armoury.fw_attr_kset->kobj, &fn_lock_attr_group);
 
 	if (asus_armoury.mini_led_dev_id)
 		sysfs_remove_group(&asus_armoury.fw_attr_kset->kobj, &mini_led_mode_attr_group);
