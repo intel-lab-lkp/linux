@@ -441,8 +441,10 @@ void __khugepaged_enter(struct mm_struct *mm)
 		return;
 
 	slot = mm_slot_alloc(mm_slot_cache);
-	if (!slot)
+	if (!slot) {
+		mm_flags_clear(MMF_VM_HUGEPAGE, mm);
 		return;
+	}
 
 	spin_lock(&khugepaged_mm_lock);
 	mm_slot_insert(mm_slots_hash, mm, slot);
