@@ -1,0 +1,32 @@
+// SPDX-License-Identifier: GPL-2.0 OR MIT
+/*
+ * Copyright (c) 2024-2026 StarFive Technology Co., Ltd.
+ */
+
+#include "jhb100.dtsi"
+
+/ {
+	model = "StarFive JHB100 EVB-1";
+	compatible = "starfive,jhb100-evb1", "starfive,jhb100";
+
+	aliases {
+		serial6 = &uart6;
+	};
+
+	chosen {
+		stdout-path = "serial6:115200n8";
+	};
+
+	cpus {
+		timebase-frequency = <5000000>;
+	};
+
+	memory@40000000 {
+		device_type = "memory";
+		reg = <0x0 0x40000000 0x0 0x40000000>;	/* 1GB */
+	};
+};
+
+&uart6 {
+	status = "okay";
+};
