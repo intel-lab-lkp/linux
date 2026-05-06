@@ -290,6 +290,8 @@ static void ionic_destroy_resids(struct ionic_ibdev *dev)
 static void ionic_destroy_ibdev(struct ionic_ibdev *dev)
 {
 	ionic_kill_rdma_admin(dev, false);
+
+	ionic_dcqcn_destroy(dev);
 	ib_unregister_device(&dev->ibdev);
 	ionic_stats_cleanup(dev);
 	ionic_destroy_rdma_admin(dev);
@@ -356,6 +358,8 @@ static struct ionic_ibdev *ionic_create_ibdev(struct ionic_aux_dev *ionic_adev)
 	rc = ib_register_device(ibdev, "ionic_%d", ibdev->dev.parent);
 	if (rc)
 		goto err_register;
+
+	ionic_dcqcn_init(dev, dev->lif_cfg.dcqcn_profiles);
 
 	return dev;
 

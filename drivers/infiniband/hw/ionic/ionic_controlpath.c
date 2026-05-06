@@ -1512,6 +1512,7 @@ static int ionic_modify_qp_cmd(struct ionic_ibdev *dev,
 			cpu_to_le32(qp->ahid | (hdr_len << 24));
 		wr.wqe.cmd.mod_qp.dma_addr = cpu_to_le64(hdr_dma);
 
+		wr.wqe.cmd.mod_qp.dcqcn_profile = qp->dcqcn_profile;
 		wr.wqe.cmd.mod_qp.en_pcp = attr->ah_attr.sl;
 		wr.wqe.cmd.mod_qp.ip_dscp = grh->traffic_class >> 2;
 	}
@@ -2585,6 +2586,10 @@ int ionic_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr, int mask,
 
 	if (mask & IB_QP_CAP)
 		return -EINVAL;
+
+	if (mask & IB_QP_AV)
+		qp->dcqcn_profile =
+		    ionic_dcqcn_select_profile(dev, &attr->ah_attr);
 
 	rc = ionic_modify_qp_cmd(dev, pd, qp, attr, mask);
 	if (rc)

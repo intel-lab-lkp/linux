@@ -93,6 +93,7 @@ void ionic_fill_lif_cfg(struct ionic_lif *lif, struct ionic_lif_cfg *cfg)
 	    !!(lif->qtype_info[IONIC_QTYPE_RXQ].features & IONIC_QIDENT_F_EXPDB);
 
 	cfg->dbg_ctx = lif->dentry;
+	cfg->dcqcn_profiles = ident->rdma.dcqcn_profiles;
 }
 
 struct net_device *ionic_lif_netdev(struct ionic_lif *lif)

@@ -838,6 +838,36 @@ struct ionic_admin_query_qp {
 static_assert(sizeof(struct ionic_admin_query_qp) ==
 	       IONIC_ADMIN_QUERY_QP_IN_V1_LEN);
 
+enum ionic_v1_dcqcn_flags {
+	IONIC_RPF_CLAMP_TGT_RATE	= BIT(0),
+	IONIC_RPF_CLAMP_TGT_RATE_ATI	= BIT(1),
+};
+
+struct ionic_admin_mod_dcqcn {
+	__u8		np_incp_802p_prio;
+	__u8		np_cnp_dscp;
+	__be16		rp_dce_tcp_g;
+	__be32		rp_dce_tcp_rtt;
+	__be32		rp_rate_reduce_monitor_period;
+	__be32		rp_rate_to_set_on_first_cnp;
+	__be32		rp_min_rate;
+	__be16		rp_initial_alpha_value;
+	__u8		rp_gd;
+	__u8		rp_min_dec_fac;
+	__u8		rp_clamp_flags;
+	__u8		rp_threshold;
+	__be16		rp_time_reset;
+	__be32		rp_qp_rate;
+	__be32		rp_byte_reset;
+	__be32		rp_ai_rate;
+	__be32		rp_hai_rate;
+	__le32		id_ver;
+	__be64		rp_token_bucket_size;
+} __packed;
+
+#define IONIC_ADMIN_MODIFY_DCQCN_IN_V1_LEN 56
+static_assert(sizeof(struct ionic_admin_mod_dcqcn) == IONIC_ADMIN_MODIFY_DCQCN_IN_V1_LEN);
+
 #define ADMIN_WQE_STRIDE	64
 #define ADMIN_WQE_HDR_LEN	4
 
@@ -860,6 +890,7 @@ struct ionic_v1_admin_wqe {
 		struct ionic_admin_destroy_qp destroy_qp;
 		struct ionic_admin_mod_qp mod_qp;
 		struct ionic_admin_query_qp query_qp;
+		struct ionic_admin_mod_dcqcn mod_dcqcn;
 	} cmd;
 };
 

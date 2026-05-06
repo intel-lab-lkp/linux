@@ -74,6 +74,11 @@ enum ionic_mmap_flag {
 	IONIC_MMAP_WC = BIT(0),
 };
 
+enum ionic_profile_type {
+	IONIC_PROFILE_TYPE_DCQCN,
+	IONIC_PROFILE_TYPE_MAX,
+};
+
 struct ionic_mmap_entry {
 	struct rdma_user_mmap_entry rdma_entry;
 	unsigned long size;
@@ -123,6 +128,7 @@ struct ionic_ibdev {
 	struct dentry		*debug_qp;
 
 	int			hw_stats_count;
+	struct ionic_profile_root	*profile[IONIC_PROFILE_TYPE_MAX];
 };
 
 struct ionic_eq {
@@ -542,5 +548,11 @@ void ionic_dbg_add_mr(struct ionic_ibdev *dev, struct ionic_mr *mr);
 void ionic_dbg_rm_mr(struct ionic_mr *mr);
 void ionic_dbg_add_qp(struct ionic_ibdev *dev, struct ionic_qp *qp);
 void ionic_dbg_rm_qp(struct ionic_qp *qp);
+
+/* ionic_dcqcn.c */
+int ionic_dcqcn_init(struct ionic_ibdev *dev, int prof_count);
+void ionic_dcqcn_destroy(struct ionic_ibdev *dev);
+int ionic_dcqcn_select_profile(struct ionic_ibdev *dev,
+			       struct rdma_ah_attr *attr);
 
 #endif /* _IONIC_IBDEV_H_ */
