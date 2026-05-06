@@ -1734,7 +1734,10 @@ static int xfrm_get_spdinfo(struct sk_buff *skb, struct nlmsghdr *nlh,
 		return -ENOMEM;
 
 	err = build_spdinfo(r_skb, net, sportid, seq, *flags);
-	BUG_ON(err < 0);
+	if (err < 0) {
+		kfree_skb(r_skb);
+		return err;
+	}
 
 	return nlmsg_unicast(xfrm_net_nlsk(net, skb), r_skb, sportid);
 }
@@ -1794,7 +1797,11 @@ static int xfrm_get_sadinfo(struct sk_buff *skb, struct nlmsghdr *nlh,
 		return -ENOMEM;
 
 	err = build_sadinfo(r_skb, net, sportid, seq, *flags);
-	BUG_ON(err < 0);
+	if (err < 0) {
+		kfree_skb(r_skb);
+		return err;
+	}
+
 
 	return nlmsg_unicast(xfrm_net_nlsk(net, skb), r_skb, sportid);
 }
@@ -3284,7 +3291,10 @@ static int xfrm_send_migrate(const struct xfrm_selector *sel, u8 dir, u8 type,
 
 	/* build migrate */
 	err = build_migrate(skb, m, num_migrate, k, sel, encap, dir, type);
-	BUG_ON(err < 0);
+	if (err < 0) {
+		kfree_skb(skb);
+		return err;
+	}
 
 	return xfrm_nlmsg_multicast(net, skb, 0, XFRMNLGRP_MIGRATE);
 }
@@ -3622,7 +3632,10 @@ static int xfrm_aevent_state_notify(struct xfrm_state *x, const struct km_event 
 		return -ENOMEM;
 
 	err = build_aevent(skb, x, c);
-	BUG_ON(err < 0);
+	if (err < 0) {
+		kfree_skb(skb);
+		return err;
+	}
 
 	return xfrm_nlmsg_multicast(net, skb, 0, XFRMNLGRP_AEVENTS);
 }
@@ -3861,7 +3874,10 @@ static int xfrm_send_acquire(struct xfrm_state *x, struct xfrm_tmpl *xt,
 		return -ENOMEM;
 
 	err = build_acquire(skb, x, xt, xp);
-	BUG_ON(err < 0);
+	if (err < 0) {
+		kfree_skb(skb);
+		return err;
+	}
 
 	return xfrm_nlmsg_multicast(net, skb, 0, XFRMNLGRP_ACQUIRE);
 }
@@ -3983,7 +3999,10 @@ static int xfrm_exp_policy_notify(struct xfrm_policy *xp, int dir, const struct 
 		return -ENOMEM;
 
 	err = build_polexpire(skb, xp, dir, c);
-	BUG_ON(err < 0);
+	if (err < 0) {
+		kfree_skb(skb);
+		return err;
+	}
 
 	return xfrm_nlmsg_multicast(net, skb, 0, XFRMNLGRP_EXPIRE);
 }
@@ -4150,7 +4169,8 @@ static int xfrm_send_report(struct net *net, u8 proto,
 		return -ENOMEM;
 
 	err = build_report(skb, proto, sel, addr);
-	BUG_ON(err < 0);
+	if (err < 0)
+		return err;
 
 	return xfrm_nlmsg_multicast(net, skb, 0, XFRMNLGRP_REPORT);
 }
@@ -4205,7 +4225,10 @@ static int xfrm_send_mapping(struct xfrm_state *x, xfrm_address_t *ipaddr,
 		return -ENOMEM;
 
 	err = build_mapping(skb, x, ipaddr, sport);
-	BUG_ON(err < 0);
+	if (err < 0) {
+		kfree_skb(skb);
+		return err;
+	}
 
 	return xfrm_nlmsg_multicast(net, skb, 0, XFRMNLGRP_MAPPING);
 }
