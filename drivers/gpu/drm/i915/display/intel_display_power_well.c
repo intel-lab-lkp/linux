@@ -727,13 +727,13 @@ static void assert_can_disable_dc9(struct intel_display *display)
 }
 
 static void gen9_write_dc_state(struct intel_display *display,
-				u32 state)
+				u32 state, u32 mask)
 {
 	int rewrites = 0;
 	int rereads = 0;
 	u32 v;
 
-	intel_de_write(display, DC_STATE_EN, state);
+	intel_de_rmw(display, DC_STATE_EN, mask, state);
 
 	/* It has been observed that disabling the dc6 state sometimes
 	 * doesn't stick and dmc keeps returning old value. Make sure
@@ -742,9 +742,8 @@ static void gen9_write_dc_state(struct intel_display *display,
 	 */
 	do  {
 		v = intel_de_read(display, DC_STATE_EN);
-
-		if (v != state) {
-			intel_de_write(display, DC_STATE_EN, state);
+		if ((v & mask) != (state & mask)) {
+			intel_de_rmw(display, DC_STATE_EN, mask, state);
 			rewrites++;
 			rereads = 0;
 		} else if (rereads++ > 5) {
@@ -753,16 +752,16 @@ static void gen9_write_dc_state(struct intel_display *display,
 
 	} while (rewrites < 100);
 
-	if (v != state)
+	if ((v & mask) != (state & mask))
 		drm_err(display->drm,
 			"Writing dc state to 0x%x failed, now 0x%x\n",
-			state, v);
+			state & mask, v & mask);
 
 	/* Most of the times we need one retry, avoid spam */
 	if (rewrites > 1)
 		drm_dbg_kms(display->drm,
 			    "Rewrote dc state to 0x%x %d times\n",
-			    state, rewrites);
+			    state & mask, rewrites);
 }
 
 static u32 gen9_dc_mask(struct intel_display *display)
@@ -855,15 +854,13 @@ void gen9_set_dc_state(struct intel_display *display, u32 state)
 	if (!dc6_was_enabled && enable_dc6)
 		intel_dmc_update_dc6_allowed_count(display, true);
 
-	val &= ~mask;
-	val |= state;
 
-	gen9_write_dc_state(display, val);
+	gen9_write_dc_state(display, state, mask);
 
 	if (!enable_dc6 && dc6_was_enabled)
 		intel_dmc_update_dc6_allowed_count(display, false);
 
-	power_domains->dc_state = val & mask;
+	power_domains->dc_state = state & mask;
 }
 
 static void tgl_enable_dc3co(struct intel_display *display)
