@@ -1978,6 +1978,68 @@ static inline unsigned int folio_unmap_pte_batch(struct folio *folio,
 				     FPB_RESPECT_WRITE | FPB_RESPECT_SOFT_DIRTY);
 }
 
+/* Returns false if unmap needs to be aborted */
+static inline bool unmap_hugetlb_folio(struct vm_area_struct *vma,
+		struct folio *folio, struct page_vma_mapped_walk *pvmw,
+		struct page *page, enum ttu_flags flags, pte_t *pteval,
+		struct mmu_notifier_range *range, bool *exit_walk)
+{
+	/*
+	 * The try_to_unmap() is only passed a hugetlb page
+	 * in the case where the hugetlb page is poisoned.
+	 */
+	VM_WARN_ON_PAGE(!PageHWPoison(page), page);
+	/*
+	 * huge_pmd_unshare may unmap an entire PMD page.
+	 * There is no way of knowing exactly which PMDs may
+	 * be cached for this mm, so we must flush them all.
+	 * start/end were already adjusted above to cover this
+	 * range.
+	 */
+	flush_cache_range(vma, range->start, range->end);
+
+	/*
+	 * To call huge_pmd_unshare, i_mmap_rwsem must be
+	 * held in write mode.  Caller needs to explicitly
+	 * do this outside rmap routines.
+	 *
+	 * We also must hold hugetlb vma_lock in write mode.
+	 * Lock order dictates acquiring vma_lock BEFORE
+	 * i_mmap_rwsem.  We can only try lock here and fail
+	 * if unsuccessful.
+	 */
+	if (!folio_test_anon(folio)) {
+		struct mmu_gather tlb;
+
+		VM_WARN_ON(!(flags & TTU_RMAP_LOCKED));
+		if (!hugetlb_vma_trylock_write(vma)) {
+			*exit_walk = true;
+			return false;
+		}
+
+		tlb_gather_mmu_vma(&tlb, vma);
+		if (huge_pmd_unshare(&tlb, vma, pvmw->address, pvmw->pte)) {
+			hugetlb_vma_unlock_write(vma);
+			huge_pmd_unshare_flush(&tlb, vma);
+			tlb_finish_mmu(&tlb);
+			/*
+			 * The PMD table was unmapped,
+			 * consequently unmapping the folio.
+			 */
+			*exit_walk = true;
+			return true;
+		}
+		hugetlb_vma_unlock_write(vma);
+		tlb_finish_mmu(&tlb);
+	}
+	*pteval = huge_ptep_clear_flush(vma, pvmw->address, pvmw->pte);
+	if (pte_dirty(*pteval))
+		folio_mark_dirty(folio);
+
+	*exit_walk = false;
+	return true;
+}
+
 /*
  * @arg: enum ttu_flags will be passed to this argument
  */
@@ -2115,56 +2177,15 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 				 PageAnonExclusive(subpage);
 
 		if (folio_test_hugetlb(folio)) {
-			bool anon = folio_test_anon(folio);
+			bool exit_walk;
 
-			/*
-			 * The try_to_unmap() is only passed a hugetlb page
-			 * in the case where the hugetlb page is poisoned.
-			 */
-			VM_BUG_ON_PAGE(!PageHWPoison(subpage), subpage);
-			/*
-			 * huge_pmd_unshare may unmap an entire PMD page.
-			 * There is no way of knowing exactly which PMDs may
-			 * be cached for this mm, so we must flush them all.
-			 * start/end were already adjusted above to cover this
-			 * range.
-			 */
-			flush_cache_range(vma, range.start, range.end);
-
-			/*
-			 * To call huge_pmd_unshare, i_mmap_rwsem must be
-			 * held in write mode.  Caller needs to explicitly
-			 * do this outside rmap routines.
-			 *
-			 * We also must hold hugetlb vma_lock in write mode.
-			 * Lock order dictates acquiring vma_lock BEFORE
-			 * i_mmap_rwsem.  We can only try lock here and fail
-			 * if unsuccessful.
-			 */
-			if (!anon) {
-				struct mmu_gather tlb;
-
-				VM_BUG_ON(!(flags & TTU_RMAP_LOCKED));
-				if (!hugetlb_vma_trylock_write(vma))
-					goto walk_abort;
-
-				tlb_gather_mmu_vma(&tlb, vma);
-				if (huge_pmd_unshare(&tlb, vma, address, pvmw.pte)) {
-					hugetlb_vma_unlock_write(vma);
-					huge_pmd_unshare_flush(&tlb, vma);
-					tlb_finish_mmu(&tlb);
-					/*
-					 * The PMD table was unmapped,
-					 * consequently unmapping the folio.
-					 */
-					goto walk_done;
-				}
-				hugetlb_vma_unlock_write(vma);
-				tlb_finish_mmu(&tlb);
+			ret = unmap_hugetlb_folio(vma, folio, &pvmw, subpage,
+						  flags, &pteval, &range,
+						  &exit_walk);
+			if (exit_walk) {
+				page_vma_mapped_walk_done(&pvmw);
+				break;
 			}
-			pteval = huge_ptep_clear_flush(vma, address, pvmw.pte);
-			if (pte_dirty(pteval))
-				folio_mark_dirty(folio);
 		} else if (likely(pte_present(pteval))) {
 			nr_pages = folio_unmap_pte_batch(folio, &pvmw, flags, pteval);
 			end_addr = address + nr_pages * PAGE_SIZE;
