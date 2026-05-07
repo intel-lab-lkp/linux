@@ -45,9 +45,6 @@ static inline int fd_dma_setup(void *data, unsigned int length,
 #define fd_free_dma()		free_dma(DMA_FLOPPY)
 #define fd_disable_dma()	disable_dma(DMA_FLOPPY)
 
-/* need to clean up dma.h */
-#define DMA_FLOPPYDISK		DMA_FLOPPY
-
 /* Floppy_selects is the list of DOR's to select drive fd
  *
  * On initialisation, the floppy list is scanned, and the drives allocated
