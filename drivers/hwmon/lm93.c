@@ -372,6 +372,7 @@ static u8 LM93_IN_TO_REG(int nr, unsigned val)
 	const long intercept = uv_min - slope * lm93_vin_reg_min[nr];
 
 	u8 result = ((uv - intercept + (slope/2)) / slope);
+
 	result = clamp_val(result,
 			   lm93_vin_reg_min[nr], lm93_vin_reg_max[nr]);
 	return result;
@@ -383,6 +384,7 @@ static unsigned LM93_IN_REL_FROM_REG(u8 reg, int upper, int vid)
 	const long uv_offset = upper ? (((reg >> 4 & 0x0f) + 1) * 12500) :
 				(((reg >> 0 & 0x0f) + 1) * -25000);
 	const long uv_vid = vid * 1000;
+
 	return (uv_vid + uv_offset + 5000) / 10000;
 }
 
@@ -397,6 +399,7 @@ static unsigned LM93_IN_REL_FROM_REG(u8 reg, int upper, int vid)
 static u8 LM93_IN_REL_TO_REG(unsigned val, int upper, int vid)
 {
 	long uv_offset = vid * 1000 - val * 10000;
+
 	if (upper) {
 		uv_offset = clamp_val(uv_offset, 12500, 200000);
 		return (u8)((uv_offset /  12500 - 1) << 4);
@@ -425,6 +428,7 @@ static int LM93_TEMP_FROM_REG(u8 reg)
 static u8 LM93_TEMP_TO_REG(long temp)
 {
 	int ntemp = clamp_val(temp, LM93_TEMP_MIN, LM93_TEMP_MAX);
+
 	ntemp += (ntemp < 0 ? -500 : 500);
 	return (u8)(ntemp / 1000);
 }
@@ -582,6 +586,7 @@ static int LM93_PWM_FROM_REG(u8 reg, enum pwm_freq freq)
 static u8 LM93_PWM_TO_REG(int pwm, enum pwm_freq freq)
 {
 	int i;
+
 	for (i = 0; i < 13; i++)
 		if (pwm <= lm93_pwm_map[freq][i])
 			break;
@@ -632,6 +637,7 @@ static int LM93_PWM_FREQ_FROM_REG(u8 reg)
 static u8 LM93_PWM_FREQ_TO_REG(int freq)
 {
 	int i;
+
 	for (i = 7; i > 0; i--)
 		if (freq <= lm93_pwm_freq_map[i])
 			break;
@@ -657,6 +663,7 @@ static int LM93_SPINUP_TIME_FROM_REG(u8 reg)
 static u8 LM93_SPINUP_TIME_TO_REG(int time)
 {
 	int i;
+
 	for (i = 0; i < 7; i++)
 		if (time <= lm93_spinup_time_map[i])
 			break;
@@ -710,6 +717,7 @@ static int LM93_INTERVAL_FROM_REG(u8 reg)
 static u8 LM93_INTERVAL_TO_REG(long interval)
 {
 	int i;
+
 	for (i = 0; i < 9; i++)
 		if (interval <= lm93_interval_map[i])
 			break;
@@ -772,6 +780,7 @@ static unsigned LM93_GPI_FROM_REG(u8 reg)
 static unsigned LM93_ALARMS_FROM_REG(struct block1_t b1)
 {
 	unsigned result;
+
 	result  = b1.host_status_2 & 0x3f;
 
 	if (vccp_limit_type[0])
@@ -1104,6 +1113,7 @@ static ssize_t in_show(struct device *dev, struct device_attribute *attr,
 	int nr = (to_sensor_dev_attr(attr))->index;
 
 	struct lm93_data *data = lm93_update_device(dev);
+
 	return sprintf(buf, "%d\n", LM93_IN_FROM_REG(nr, data->block3[nr]));
 }
 
@@ -1259,6 +1269,7 @@ static ssize_t temp_show(struct device *dev, struct device_attribute *attr,
 {
 	int nr = (to_sensor_dev_attr(attr))->index;
 	struct lm93_data *data = lm93_update_device(dev);
+
 	return sprintf(buf, "%d\n", LM93_TEMP_FROM_REG(data->block2[nr]));
 }
 
@@ -1271,6 +1282,7 @@ static ssize_t temp_min_show(struct device *dev,
 {
 	int nr = (to_sensor_dev_attr(attr))->index;
 	struct lm93_data *data = lm93_update_device(dev);
+
 	return sprintf(buf, "%d\n", LM93_TEMP_FROM_REG(data->temp_lim[nr].min));
 }
 
@@ -1304,6 +1316,7 @@ static ssize_t temp_max_show(struct device *dev,
 {
 	int nr = (to_sensor_dev_attr(attr))->index;
 	struct lm93_data *data = lm93_update_device(dev);
+
 	return sprintf(buf, "%d\n", LM93_TEMP_FROM_REG(data->temp_lim[nr].max));
 }
 
@@ -1337,6 +1350,7 @@ static ssize_t temp_auto_base_show(struct device *dev,
 {
 	int nr = (to_sensor_dev_attr(attr))->index;
 	struct lm93_data *data = lm93_update_device(dev);
+
 	return sprintf(buf, "%d\n", LM93_TEMP_FROM_REG(data->block10.base[nr]));
 }
 
@@ -1370,6 +1384,7 @@ static ssize_t temp_auto_boost_show(struct device *dev,
 {
 	int nr = (to_sensor_dev_attr(attr))->index;
 	struct lm93_data *data = lm93_update_device(dev);
+
 	return sprintf(buf, "%d\n", LM93_TEMP_FROM_REG(data->boost[nr]));
 }
 
@@ -1405,6 +1420,7 @@ static ssize_t temp_auto_boost_hyst_show(struct device *dev,
 	int nr = (to_sensor_dev_attr(attr))->index;
 	struct lm93_data *data = lm93_update_device(dev);
 	int mode = LM93_TEMP_OFFSET_MODE_FROM_REG(data->sfc2, nr);
+
 	return sprintf(buf, "%d\n",
 		       LM93_AUTO_BOOST_HYST_FROM_REGS(data, nr, mode));
 }
@@ -1447,6 +1463,7 @@ static ssize_t temp_auto_offset_show(struct device *dev,
 	int ofs = s_attr->nr;
 	struct lm93_data *data = lm93_update_device(dev);
 	int mode = LM93_TEMP_OFFSET_MODE_FROM_REG(data->sfc2, nr);
+
 	return sprintf(buf, "%d\n",
 	       LM93_TEMP_AUTO_OFFSET_FROM_REG(data->block10.offset[ofs],
 					      nr, mode));
@@ -1525,6 +1542,7 @@ static ssize_t temp_auto_pwm_min_show(struct device *dev,
 	int nr = (to_sensor_dev_attr(attr))->index;
 	u8 reg, ctl4;
 	struct lm93_data *data = lm93_update_device(dev);
+
 	reg = data->auto_pwm_min_hyst[nr/2] >> 4 & 0x0f;
 	ctl4 = data->block9[nr][LM93_PWM_CTL4];
 	return sprintf(buf, "%d\n", LM93_PWM_FROM_REG(reg, (ctl4 & 0x07) ?
@@ -1570,6 +1588,7 @@ static ssize_t temp_auto_offset_hyst_show(struct device *dev,
 	int nr = (to_sensor_dev_attr(attr))->index;
 	struct lm93_data *data = lm93_update_device(dev);
 	int mode = LM93_TEMP_OFFSET_MODE_FROM_REG(data->sfc2, nr);
+
 	return sprintf(buf, "%d\n", LM93_TEMP_OFFSET_FROM_REG(
 					data->auto_pwm_min_hyst[nr / 2], mode));
 }
@@ -1921,6 +1940,7 @@ static ssize_t pwm_auto_channels_show(struct device *dev,
 {
 	int nr = (to_sensor_dev_attr(attr))->index;
 	struct lm93_data *data = lm93_update_device(dev);
+
 	return sprintf(buf, "%d\n", data->block9[nr][LM93_PWM_CTL1]);
 }
 
@@ -2000,6 +2020,7 @@ static ssize_t pwm_auto_spinup_time_show(struct device *dev,
 {
 	int nr = (to_sensor_dev_attr(attr))->index;
 	struct lm93_data *data = lm93_update_device(dev);
+
 	return sprintf(buf, "%d\n", LM93_SPINUP_TIME_FROM_REG(
 				data->block9[nr][LM93_PWM_CTL3]));
 }
@@ -2035,6 +2056,7 @@ static ssize_t pwm_auto_prochot_ramp_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
 	struct lm93_data *data = lm93_update_device(dev);
+
 	return sprintf(buf, "%d\n",
 		       LM93_RAMP_FROM_REG(data->pwm_ramp_ctl >> 4 & 0x0f));
 }
@@ -2067,6 +2089,7 @@ static ssize_t pwm_auto_vrdhot_ramp_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
 	struct lm93_data *data = lm93_update_device(dev);
+
 	return sprintf(buf, "%d\n",
 		       LM93_RAMP_FROM_REG(data->pwm_ramp_ctl & 0x0f));
 }
@@ -2100,6 +2123,7 @@ static ssize_t vid_show(struct device *dev, struct device_attribute *attr,
 {
 	int nr = (to_sensor_dev_attr(attr))->index;
 	struct lm93_data *data = lm93_update_device(dev);
+
 	return sprintf(buf, "%d\n", LM93_VID_FROM_REG(data->vid[nr]));
 }
 
@@ -2111,6 +2135,7 @@ static ssize_t prochot_show(struct device *dev, struct device_attribute *attr,
 {
 	int nr = (to_sensor_dev_attr(attr))->index;
 	struct lm93_data *data = lm93_update_device(dev);
+
 	return sprintf(buf, "%d\n", data->block4[nr].cur);
 }
 
@@ -2122,6 +2147,7 @@ static ssize_t prochot_avg_show(struct device *dev,
 {
 	int nr = (to_sensor_dev_attr(attr))->index;
 	struct lm93_data *data = lm93_update_device(dev);
+
 	return sprintf(buf, "%d\n", data->block4[nr].avg);
 }
 
@@ -2133,6 +2159,7 @@ static ssize_t prochot_max_show(struct device *dev,
 {
 	int nr = (to_sensor_dev_attr(attr))->index;
 	struct lm93_data *data = lm93_update_device(dev);
+
 	return sprintf(buf, "%d\n", data->prochot_max[nr]);
 }
 
@@ -2168,6 +2195,7 @@ static ssize_t prochot_override_show(struct device *dev,
 {
 	int nr = (to_sensor_dev_attr(attr))->index;
 	struct lm93_data *data = lm93_update_device(dev);
+
 	return sprintf(buf, "%d\n",
 		(data->prochot_override & prochot_override_mask[nr]) ? 1 : 0);
 }
@@ -2206,6 +2234,7 @@ static ssize_t prochot_interval_show(struct device *dev,
 	int nr = (to_sensor_dev_attr(attr))->index;
 	struct lm93_data *data = lm93_update_device(dev);
 	u8 tmp;
+
 	if (nr == 1)
 		tmp = (data->prochot_interval & 0xf0) >> 4;
 	else
@@ -2248,6 +2277,7 @@ static ssize_t prochot_override_duty_cycle_show(struct device *dev,
 						char *buf)
 {
 	struct lm93_data *data = lm93_update_device(dev);
+
 	return sprintf(buf, "%d\n", data->prochot_override & 0x0f);
 }
 
@@ -2279,6 +2309,7 @@ static ssize_t prochot_short_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
 	struct lm93_data *data = lm93_update_device(dev);
+
 	return sprintf(buf, "%d\n", (data->config & 0x10) ? 1 : 0);
 }
 
@@ -2312,6 +2343,7 @@ static ssize_t vrdhot_show(struct device *dev, struct device_attribute *attr,
 {
 	int nr = (to_sensor_dev_attr(attr))->index;
 	struct lm93_data *data = lm93_update_device(dev);
+
 	return sprintf(buf, "%d\n",
 		       data->block1.host_status_1 & (1 << (nr + 4)) ? 1 : 0);
 }
@@ -2323,6 +2355,7 @@ static ssize_t gpio_show(struct device *dev, struct device_attribute *attr,
 				char *buf)
 {
 	struct lm93_data *data = lm93_update_device(dev);
+
 	return sprintf(buf, "%d\n", LM93_GPI_FROM_REG(data->gpi));
 }
 
@@ -2332,6 +2365,7 @@ static ssize_t alarms_show(struct device *dev, struct device_attribute *attr,
 				char *buf)
 {
 	struct lm93_data *data = lm93_update_device(dev);
+
 	return sprintf(buf, "%d\n", LM93_ALARMS_FROM_REG(data->block1));
 }
 
