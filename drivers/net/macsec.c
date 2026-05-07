@@ -26,6 +26,8 @@
 
 #include <uapi/linux/if_macsec.h>
 
+static struct workqueue_struct *macsec_wq;
+
 /* SecTAG length = macsec_eth_header without the optional SCI */
 #define MACSEC_TAG_LEN 6
 
@@ -4505,10 +4507,14 @@ static int __init macsec_init(void)
 {
 	int err;
 
+	macsec_wq = alloc_ordered_workqueue("macsec", 0);
+	if (!macsec_wq)
+		return -ENOMEM;
+
 	pr_info("MACsec IEEE 802.1AE\n");
 	err = register_netdevice_notifier(&macsec_notifier);
 	if (err)
-		return err;
+		goto wq;
 
 	err = rtnl_link_register(&macsec_link_ops);
 	if (err)
@@ -4524,6 +4530,8 @@ rtnl:
 	rtnl_link_unregister(&macsec_link_ops);
 notifier:
 	unregister_netdevice_notifier(&macsec_notifier);
+wq:
+	destroy_workqueue(macsec_wq);
 	return err;
 }
 
@@ -4533,6 +4541,7 @@ static void __exit macsec_exit(void)
 	rtnl_link_unregister(&macsec_link_ops);
 	unregister_netdevice_notifier(&macsec_notifier);
 	rcu_barrier();
+	destroy_workqueue(macsec_wq);
 }
 
 module_init(macsec_init);
