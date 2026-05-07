@@ -29,6 +29,7 @@ void erofs_put_metabuf(struct erofs_buf *buf)
 void *erofs_bread(struct erofs_buf *buf, erofs_off_t offset, bool need_kmap)
 {
 	pgoff_t index = (buf->off + offset) >> PAGE_SHIFT;
+	const struct cred *old_cred = NULL;
 	struct folio *folio = NULL;
 	loff_t fpos;
 	int err;
@@ -40,9 +41,12 @@ void *erofs_bread(struct erofs_buf *buf, erofs_off_t offset, bool need_kmap)
 	 */
 	if (buf->file) {
 		fpos = (loff_t)index << PAGE_SHIFT;
+		old_cred = override_creds(buf->file->f_cred);
 		err = rw_verify_area(READ, buf->file, &fpos, PAGE_SIZE);
-		if (err < 0)
+		if (err < 0) {
+			revert_creds(old_cred);
 			return ERR_PTR(err);
+		}
 	}
 
 	if (buf->page) {
@@ -53,6 +57,8 @@ void *erofs_bread(struct erofs_buf *buf, erofs_off_t offset, bool need_kmap)
 	if (!folio || !folio_contains(folio, index)) {
 		erofs_put_metabuf(buf);
 		folio = read_mapping_folio(buf->mapping, index, buf->file);
+		if (old_cred)
+			revert_creds(old_cred);
 		if (IS_ERR(folio))
 			return folio;
 	}
