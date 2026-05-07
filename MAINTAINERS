@@ -8418,6 +8418,12 @@ R:	Douglas Anderson <dianders@chromium.org>
 F:	Documentation/devicetree/bindings/display/bridge/ti,sn65dsi86.yaml
 F:	drivers/gpu/drm/bridge/ti-sn65dsi86.c
 
+DRM DRIVER FOR TOSHIBA TC358768/TC358778 PARALLEL RGB TO MIPI-DSI BRIDGE
+M:	Francesco Dolcini <francesco@dolcini.it>
+S:	Maintained
+F:	Documentation/devicetree/bindings/display/bridge/toshiba,tc358768.yaml
+F:	drivers/gpu/drm/bridge/tc358768.c
+
 DRM DRIVER FOR TPO TPG110 PANELS
 M:	Linus Walleij <linusw@kernel.org>
 S:	Maintained
