@@ -302,17 +302,25 @@ xfs_validate_rt_geometry(
 		return false;
 
 	if (xfs_sb_is_v5(sbp) &&
-	    (sbp->sb_features_incompat & XFS_SB_FEAT_INCOMPAT_ZONED)) {
+	    (sbp->sb_features_incompat & XFS_SB_FEAT_INCOMPAT_METADIR)) {
+		uint64_t		nr_rgs;
 		uint32_t		mod;
 
 		/*
-		 * Zoned RT devices must be aligned to the RT group size,
-		 * because garbage collection assumes that all zones have the
-		 * same size to avoid insane complexity if that weren't the
-		 * case.
+		 * Check that the number of rgcounts is plausible for the RG
+		 * size.
 		 */
-		div_u64_rem(sbp->sb_rextents, sbp->sb_rgextents, &mod);
-		if (mod)
+		nr_rgs = div_u64_rem(sbp->sb_rextents, sbp->sb_rgextents, &mod);
+		if (nr_rgs != sbp->sb_rgcount + !!mod)
+			return false;
+
+		/*
+		 * Zoned RT devices must be aligned to the RT group size because
+		 * garbage collection assumes that all zones have the same size
+		 * to avoid insane complexity if that weren't the case.
+		 */
+		if ((sbp->sb_features_incompat & XFS_SB_FEAT_INCOMPAT_ZONED) &&
+		    mod > 0)
 			return false;
 	}
 
