@@ -1973,7 +1973,7 @@ mlx5e_skb_from_cqe_mpwrq_nonlinear(struct mlx5e_rq *rq, struct mlx5e_mpw_info *w
 
 		addr = page_pool_get_dma_addr_netmem(head_page->netmem);
 		dma_sync_single_for_cpu(rq->pdev, addr + head_offset,
-					ALIGN(headlen, sizeof(long)),
+					ALIGN(headlen, cache_line_size()),
 					rq->buff.map_dir);
 
 		headlen = eth_get_headlen(rq->netdev, head_addr, headlen);
@@ -2086,7 +2086,7 @@ mlx5e_skb_from_cqe_mpwrq_nonlinear(struct mlx5e_rq *rq, struct mlx5e_mpw_info *w
 
 		/* copy header */
 		skb_copy_to_linear_data(skb, head_addr,
-					ALIGN(headlen, sizeof(long)));
+					ALIGN(headlen, cache_line_size()));
 
 		/* skb linear part was allocated with headlen and aligned to long */
 		skb->tail += headlen;
