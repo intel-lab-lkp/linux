@@ -9,6 +9,7 @@
 
 #include <linux/u64_stats_sync.h>
 #include <linux/if_vlan.h>
+#include <linux/workqueue.h>
 #include <uapi/linux/if_link.h>
 #include <uapi/linux/if_macsec.h>
 
@@ -136,7 +137,7 @@ struct macsec_rx_sa {
 	bool active;
 	struct macsec_rx_sa_stats __percpu *stats;
 	struct macsec_rx_sc *sc;
-	struct rcu_head rcu;
+	struct rcu_work destroy_work;
 };
 
 struct pcpu_rx_sc_stats {
