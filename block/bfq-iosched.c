@@ -3036,7 +3036,7 @@ static void bfq_bfqq_save_state(struct bfq_queue *bfqq)
 {
 	struct bfq_io_cq *bic = bfqq->bic;
 	unsigned int a_idx = bfqq->actuator_idx;
-	struct bfq_iocq_bfqq_data *bfqq_data = &bic->bfqq_data[a_idx];
+	struct bfq_iocq_bfqq_data *bfqq_data = NULL;
 
 	/*
 	 * If !bfqq->bic, the queue is already shared or its requests
@@ -3046,6 +3046,7 @@ static void bfq_bfqq_save_state(struct bfq_queue *bfqq)
 	if (!bic)
 		return;
 
+	bfqq_data = &bic->bfqq_data[a_idx];
 	bfqq_data->saved_last_serv_time_ns = bfqq->last_serv_time_ns;
 	bfqq_data->saved_inject_limit =	bfqq->inject_limit;
 	bfqq_data->saved_decrease_time_jif = bfqq->decrease_time_jif;
