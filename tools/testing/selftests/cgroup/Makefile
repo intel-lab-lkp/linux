@@ -16,6 +16,7 @@ TEST_GEN_PROGS += test_kill
 TEST_GEN_PROGS += test_kmem
 TEST_GEN_PROGS += test_memcontrol
 TEST_GEN_PROGS += test_pids
+TEST_GEN_PROGS += test_rdma
 TEST_GEN_PROGS += test_zswap
 
 LOCAL_HDRS += $(selfdir)/clone3/clone3_selftests.h $(selfdir)/pidfd/pidfd.h
@@ -32,4 +33,12 @@ $(OUTPUT)/test_kill: $(LIBCGROUP_O)
 $(OUTPUT)/test_kmem: $(LIBCGROUP_O)
 $(OUTPUT)/test_memcontrol: $(LIBCGROUP_O)
 $(OUTPUT)/test_pids: $(LIBCGROUP_O)
+$(OUTPUT)/test_rdma: $(LIBCGROUP_O)
 $(OUTPUT)/test_zswap: $(LIBCGROUP_O)
+
+# Conditionally enable rdma.current/limit tests when libibverbs is available
+IBVERBS_AVAILABLE := $(shell pkg-config --exists libibverbs 2>/dev/null && echo y)
+ifeq ($(IBVERBS_AVAILABLE),y)
+$(OUTPUT)/test_rdma: CFLAGS += -DHAVE_LIBIBVERBS
+$(OUTPUT)/test_rdma: LDLIBS += -libverbs
+endif
