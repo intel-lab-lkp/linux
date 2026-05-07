@@ -4626,7 +4626,7 @@ static const struct backlight_ops dp_aux_bl_ops = {
  * Backlight will then be handled transparently without requiring
  * any intervention from the driver.
  *
- * drm_panel_dp_aux_backlight() must be called after the call to drm_panel_init().
+ * drm_panel_dp_aux_backlight() must be called after devm_drm_panel_alloc().
  *
  * Return: 0 on success or a negative error code on failure.
  */
