@@ -1291,32 +1291,38 @@ static int mshv_prepare_pinned_region(struct mshv_mem_region *region)
 			pt_err(partition,
 			       "Failed to unshare memory region (guest_pfn: %llu): %d\n",
 			       region->start_gfn, ret);
-			goto invalidate_region;
+			goto err_out;
 		}
 	}
 
 	ret = mshv_region_map(region);
-	if (ret && mshv_partition_encrypted(partition)) {
+	if (ret)
+		goto share_region;
+
+	return 0;
+
+share_region:
+	if (mshv_partition_encrypted(partition)) {
 		int shrc;
 
 		shrc = mshv_region_share(region);
 		if (!shrc)
-			goto invalidate_region;
+			goto err_out;
 
 		pt_err(partition,
 		       "Failed to share memory region (guest_pfn: %llu): %d\n",
 		       region->start_gfn, shrc);
 		/*
-		 * Don't unpin if marking shared failed because pages are no
-		 * longer mapped in the host, ie root, anymore.
+		 * Re-sharing failed — the pages remain inaccessible to the
+		 * host.  Zero the page array so that mshv_region_destroy()
+		 * won't attempt to unpin them (leaking the page references
+		 * is intentional; unpinning host-inaccessible pages would be
+		 * unsafe).
 		 */
+		memset(region->mreg_pages, 0,
+		       region->nr_pages * sizeof(region->mreg_pages[0]));
 		goto err_out;
 	}
-
-	return 0;
-
-invalidate_region:
-	mshv_region_invalidate(region);
 err_out:
 	return ret;
 }
