@@ -292,7 +292,7 @@ int __exfat_truncate(struct inode *inode)
 	return 0;
 }
 
-void exfat_truncate(struct inode *inode)
+static int exfat_truncate(struct inode *inode)
 {
 	struct super_block *sb = inode->i_sb;
 	struct exfat_sb_info *sbi = EXFAT_SB(sb);
@@ -315,6 +315,8 @@ void exfat_truncate(struct inode *inode)
 	inode->i_blocks = round_up(i_size_read(inode), sbi->cluster_size) >> 9;
 write_size:
 	mutex_unlock(&sbi->s_lock);
+
+	return err;
 }
 
 int exfat_getattr(struct mnt_idmap *idmap, const struct path *path,
@@ -400,7 +402,7 @@ int exfat_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 		 * __exfat_write_inode() is called from exfat_truncate(), inode
 		 * is already written by it, so mark_inode_dirty() is unneeded.
 		 */
-		exfat_truncate(inode);
+		error = exfat_truncate(inode);
 		up_write(&EXFAT_I(inode)->truncate_lock);
 	} else
 		mark_inode_dirty(inode);
@@ -664,6 +666,47 @@ static int exfat_extend_valid_size(struct inode *inode, loff_t new_valid_size)
 	return ret;
 }
 
+static ssize_t exfat_dio_write_iter(struct kiocb *iocb, struct iov_iter *from)
+{
+	ssize_t ret;
+
+	ret = iomap_dio_rw(iocb, from, &exfat_write_iomap_ops,
+			&exfat_write_dio_ops, 0, NULL, 0);
+	if (ret == -ENOTBLK)
+		ret = 0;
+	else if (ret < 0)
+		goto out;
+
+	if (iov_iter_count(from)) {
+		loff_t offset, end;
+		ssize_t written;
+		int ret2;
+
+		offset = iocb->ki_pos;
+		iocb->ki_flags &= ~IOCB_DIRECT;
+		written = iomap_file_buffered_write(iocb, from,
+				&exfat_write_iomap_ops, NULL, NULL);
+		if (written < 0) {
+			ret = written;
+			goto out;
+		}
+
+		ret += written;
+		end = iocb->ki_pos + written - 1;
+		ret2 = filemap_write_and_wait_range(iocb->ki_filp->f_mapping,
+				offset, end);
+		if (ret2) {
+			ret = -EIO;
+			goto out;
+		}
+		invalidate_mapping_pages(iocb->ki_filp->f_mapping,
+					 offset >> PAGE_SHIFT,
+					 end >> PAGE_SHIFT);
+	}
+out:
+	return ret;
+}
+
 static ssize_t exfat_file_write_iter(struct kiocb *iocb, struct iov_iter *iter)
 {
 	ssize_t ret;
@@ -688,16 +731,6 @@ static ssize_t exfat_file_write_iter(struct kiocb *iocb, struct iov_iter *iter)
 	if (ret <= 0)
 		goto unlock;
 
-	if (iocb->ki_flags & IOCB_DIRECT) {
-		unsigned long align = pos | iov_iter_alignment(iter);
-
-		if (!IS_ALIGNED(align, i_blocksize(inode)) &&
-		    !IS_ALIGNED(align, bdev_logical_block_size(inode->i_sb->s_bdev))) {
-			ret = -EINVAL;
-			goto unlock;
-		}
-	}
-
 	err = file_modified(iocb->ki_filp);
 	if (err) {
 		ret = err;
@@ -716,7 +749,7 @@ static ssize_t exfat_file_write_iter(struct kiocb *iocb, struct iov_iter *iter)
 	}
 
 	if (iocb->ki_flags & IOCB_DIRECT)
-		ret = __generic_file_write_iter(iocb, iter);
+		ret = exfat_dio_write_iter(iocb, iter);
 	else
 		ret = iomap_file_buffered_write(iocb, iter,
 				&exfat_write_iomap_ops, NULL, NULL);
@@ -746,11 +779,24 @@ unlock:
 static ssize_t exfat_file_read_iter(struct kiocb *iocb, struct iov_iter *iter)
 {
 	struct inode *inode = file_inode(iocb->ki_filp);
+	ssize_t ret;
 
 	if (unlikely(exfat_forced_shutdown(inode->i_sb)))
 		return -EIO;
 
-	return generic_file_read_iter(iocb, iter);
+	inode_lock_shared(inode);
+
+	if (iocb->ki_flags & IOCB_DIRECT) {
+		file_accessed(iocb->ki_filp);
+		ret = iomap_dio_rw(iocb, iter, &exfat_iomap_ops, NULL, 0,
+				NULL, 0);
+	} else {
+		ret = generic_file_read_iter(iocb, iter);
+	}
+
+	inode_unlock_shared(inode);
+
+	return ret;
 }
 
 static vm_fault_t exfat_page_mkwrite(struct vm_fault *vmf)
@@ -859,6 +905,8 @@ static int exfat_file_open(struct inode *inode, struct file *filp)
 	err = generic_file_open(inode, filp);
 	if (err)
 		return err;
+
+	filp->f_mode |= FMODE_CAN_ODIRECT;
 
 	return 0;
 }
