@@ -48,3 +48,8 @@ __rust_helper void rust_helper_vma_end_read(struct vm_area_struct *vma)
 {
 	vma_end_read(vma);
 }
+
+__rust_helper pgprot_t rust_helper_pgprot_noncached(pgprot_t prot)
+{
+	return pgprot_noncached(prot);
+}
