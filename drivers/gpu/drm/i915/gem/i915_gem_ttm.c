@@ -419,13 +419,12 @@ void i915_ttm_free_cached_io_rsgt(struct drm_i915_gem_object *obj)
 int i915_ttm_purge(struct drm_i915_gem_object *obj)
 {
 	struct ttm_buffer_object *bo = i915_gem_to_ttm(obj);
-	struct i915_ttm_tt *i915_tt =
-		container_of(bo->ttm, typeof(*i915_tt), ttm);
 	struct ttm_operation_ctx ctx = {
 		.interruptible = true,
 		.no_wait_gpu = false,
 	};
 	struct ttm_placement place = {};
+	struct i915_ttm_tt *i915_tt;
 	int ret;
 
 	if (obj->mm.madv == __I915_MADV_PURGED)
@@ -435,6 +434,7 @@ int i915_ttm_purge(struct drm_i915_gem_object *obj)
 	if (ret)
 		return ret;
 
+	i915_tt = container_of(bo->ttm, typeof(*i915_tt), ttm);
 	if (bo->ttm && i915_tt->filp) {
 		/*
 		 * The below fput(which eventually calls shmem_truncate) might
