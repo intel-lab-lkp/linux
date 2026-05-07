@@ -532,24 +532,17 @@ static int se_ioctl_cmd_snd_rcv_rsp_handler(struct se_if_device_ctx *dev_ctx,
 		return -ENOSPC;
 	}
 
-	err = se_chk_tx_msg_hdr(priv, (struct se_msg_hdr *)cmd_snd_rcv_rsp_info.tx_buf);
-	if (err) {
-		se_ioctl_cmd_snd_rcv_cleanup(dev_ctx, uarg, &cmd_snd_rcv_rsp_info);
-		return err;
-	}
-
-	struct se_api_msg *rx_msg __free(kfree) =
-		kzalloc(cmd_snd_rcv_rsp_info.rx_buf_sz, GFP_KERNEL);
-	if (!rx_msg) {
-		se_ioctl_cmd_snd_rcv_cleanup(dev_ctx, uarg, &cmd_snd_rcv_rsp_info);
-		return -ENOMEM;
-	}
-
 	struct se_api_msg *tx_msg __free(kfree) =
 		memdup_user(cmd_snd_rcv_rsp_info.tx_buf,
 			    cmd_snd_rcv_rsp_info.tx_buf_sz);
 	if (IS_ERR(tx_msg)) {
 		err = PTR_ERR(tx_msg);
+		se_ioctl_cmd_snd_rcv_cleanup(dev_ctx, uarg, &cmd_snd_rcv_rsp_info);
+		return err;
+	}
+
+	err = se_chk_tx_msg_hdr(priv, &tx_msg->header);
+	if (err) {
 		se_ioctl_cmd_snd_rcv_cleanup(dev_ctx, uarg, &cmd_snd_rcv_rsp_info);
 		return err;
 	}
@@ -569,6 +562,13 @@ static int se_ioctl_cmd_snd_rcv_rsp_handler(struct se_if_device_ctx *dev_ctx,
 		}
 	}
 	set_se_rcv_msg_timeout(priv, SE_RCV_MSG_LONG_TIMEOUT);
+
+	struct se_api_msg *rx_msg __free(kfree) =
+		kzalloc(cmd_snd_rcv_rsp_info.rx_buf_sz, GFP_KERNEL);
+	if (!rx_msg) {
+		se_ioctl_cmd_snd_rcv_cleanup(dev_ctx, uarg, &cmd_snd_rcv_rsp_info);
+		return -ENOMEM;
+	}
 
 	err = ele_msg_send_rcv(dev_ctx, tx_msg, cmd_snd_rcv_rsp_info.tx_buf_sz,
 			       rx_msg, cmd_snd_rcv_rsp_info.rx_buf_sz);
@@ -767,10 +767,6 @@ static ssize_t se_if_fops_write(struct file *fp, const char __user *buf,
 		if (dev_ctx != priv->cmd_receiver_clbk_hdl.dev_ctx)
 			return -EINVAL;
 
-		err = se_chk_tx_msg_hdr(priv, (struct se_msg_hdr *)buf);
-		if (err)
-			return err;
-
 		if (size < SE_MU_HDR_SZ) {
 			dev_err(priv->dev, "%s: User buffer too small(%zu < %d).",
 				dev_ctx->devname, size, SE_MU_HDR_SZ);
@@ -780,6 +776,10 @@ static ssize_t se_if_fops_write(struct file *fp, const char __user *buf,
 		struct se_api_msg *tx_msg __free(kfree) = memdup_user(buf, size);
 		if (IS_ERR(tx_msg))
 			return PTR_ERR(tx_msg);
+
+		err = se_chk_tx_msg_hdr(priv, &tx_msg->header);
+		if (err)
+			return err;
 
 		print_hex_dump_debug("from user ", DUMP_PREFIX_OFFSET, 4, 4,
 				     tx_msg, size, false);
