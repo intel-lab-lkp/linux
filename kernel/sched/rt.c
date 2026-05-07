@@ -7,6 +7,8 @@
 #include "sched.h"
 #include "pelt.h"
 
+#include <linux/kvm_para.h>
+
 int sched_rr_timeslice = RR_TIMESLICE;
 /* More than 4 hours if BW_SHIFT equals 20. */
 static const u64 max_rt_runtime = MAX_BW;
@@ -988,6 +990,18 @@ static void update_curr_rt(struct rq *rq)
 
 	if (!rt_bandwidth_enabled())
 		return;
+
+	/*
+	 * Forgive RT bandwidth charged across an unobserved CPU stall
+	 * like KVM live-migration stop_and_copy.
+	 *
+	 * The magnitude check is to avoid race where the local softlockup
+	 * hrtimer consumed PVCLOCK_GUEST_STOPPED bit before this
+	 * update_curr_rt() call.
+	 */
+	if (kvm_check_and_clear_guest_paused() ||
+	    unlikely(delta_exec > (u64)sysctl_sched_rt_period * NSEC_PER_USEC))
+		delta_exec = 0;
 
 	for_each_sched_rt_entity(rt_se) {
 		struct rt_rq *rt_rq = rt_rq_of_se(rt_se);
