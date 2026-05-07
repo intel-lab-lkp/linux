@@ -39,20 +39,18 @@ properties:
     maxItems: 1
 
   clocks:
+    minItems: 5
     items:
       - description: GMAC main clock
       - description: GMAC AHB clock
       - description: PTP clock
       - description: TX clock
       - description: GTX clock
+      - description: SGMII RX clock
 
   clock-names:
-    items:
-      - const: stmmaceth
-      - const: pclk
-      - const: ptp_ref
-      - const: tx
-      - const: gtx
+    minItems: 5
+    maxItems: 6
 
   starfive,tx-use-rgmii-clk:
     description:
@@ -99,6 +97,18 @@ allOf:
           minItems: 2
           maxItems: 2
 
+        clocks:
+          minItems: 5
+          maxItems: 5
+
+        clock-names:
+          items:
+            - const: stmmaceth
+            - const: pclk
+            - const: ptp_ref
+            - const: tx
+            - const: gtx
+
         resets:
           maxItems: 1
 
@@ -111,6 +121,26 @@ allOf:
           contains:
             const: starfive,jh7110-dwmac
     then:
+      properties:
+        clocks:
+          minItems: 5
+          maxItems: 6
+
+        clock-names:
+          oneOf:
+            - items:
+                - const: stmmaceth
+                - const: pclk
+                - const: ptp_ref
+                - const: tx
+                - const: gtx
+            - items:
+                - const: stmmaceth
+                - const: pclk
+                - const: ptp_ref
+                - const: tx
+                - const: gtx
+                - const: sgmii_rx
       if:
         properties:
           compatible:
