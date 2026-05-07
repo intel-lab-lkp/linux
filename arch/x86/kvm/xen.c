@@ -1814,6 +1814,10 @@ int kvm_xen_set_evtchn_fast(struct kvm_xen_evtchn *xe, struct kvm *kvm)
 
 	rc = -EWOULDBLOCK;
 
+	/* Bail in IRQ context on PREEMPT_RT; read_lock_irqsave() might block */
+	if (IS_ENABLED(CONFIG_PREEMPT_RT) && in_hardirq())
+		goto out;
+
 	idx = srcu_read_lock(&kvm->srcu);
 
 	read_lock_irqsave(&gpc->lock, flags);
@@ -1892,6 +1896,7 @@ int kvm_xen_set_evtchn_fast(struct kvm_xen_evtchn *xe, struct kvm *kvm)
 		kvm_vcpu_kick(vcpu);
 	}
 
+ out:
 	return rc;
 }
 
