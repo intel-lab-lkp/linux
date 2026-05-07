@@ -1,0 +1,115 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/i2c/i2c-gpio-shared.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Multiple GPIO bitbanged I2C buses with shared SCL
+
+maintainers:
+  - Markus Stockhausen <markus.stockhausen@gmx.de>
+
+description:
+  Bitbanging I2C bus driver that supports multiple independent I2C buses
+  sharing a single SCL line. Each child node represents one I2C bus with
+  its own SDA line. The shared SCL line is driven by the parent node.
+  A mutex serializes access so that only one bus transfers at a time.
+
+select:
+  properties:
+    compatible:
+      contains:
+        const: i2c-gpio-shared
+  required:
+    - compatible
+
+properties:
+  compatible:
+    const: i2c-gpio-shared
+
+  scl-gpios:
+    maxItems: 1
+    description:
+      GPIO used for the shared SCL signal. Must be configured as
+      open-drain. All child buses share this single clock line.
+
+  i2c-gpio-shared,scl-output-only:
+    type: boolean
+    description:
+      If present, SCL is treated as output only and clock stretching
+      by devices is not supported.
+
+  i2c-gpio-shared,timeout-ms:
+    description:
+      Bus timeout in milliseconds. If not specified, defaults to 100 ms.
+
+  "#address-cells":
+    const: 1
+
+  "#size-cells":
+    const: 0
+
+patternProperties:
+  "^i2c@[0-9a-f]+$":
+    $ref: /schemas/i2c/i2c-controller.yaml#
+    unevaluatedProperties: false
+
+    properties:
+      reg:
+        maxItems: 1
+        description:
+          Bus index used to identify this child bus. Must be unique among
+          siblings and match the node unit address.
+
+      sda-gpios:
+        maxItems: 1
+        description:
+          GPIO used for the SDA signal of this I2C bus. Must be
+          configured as open-drain.
+
+      i2c-gpio-shared,delay-us:
+        default: 5
+        description:
+          Delay in microseconds between signal transitions for this bus.
+          Controls the I2C clock frequency. Defaults to 5 us (~100 kHz).
+
+      i2c-gpio-shared,sda-output-only:
+        type: boolean
+        description:
+          If present, SDA is treated as output only. No acknowledgment
+          or read data from devices can be received on this bus.
+
+    required:
+      - reg
+      - sda-gpios
+
+required:
+  - compatible
+  - scl-gpios
+  - "#address-cells"
+  - "#size-cells"
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+
+    i2c-gpio-shared {
+        compatible = "i2c-gpio-shared";
+        scl-gpios = <&gpio1 31 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        i2c@0 {
+            reg = <0>;
+            sda-gpios = <&gpio1 6 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+            i2c-gpio-shared,delay-us = <2>;
+        };
+
+        i2c@1 {
+            reg = <1>;
+            sda-gpios = <&gpio1 7 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+            i2c-gpio-shared,delay-us = <2>;
+        };
+    };
