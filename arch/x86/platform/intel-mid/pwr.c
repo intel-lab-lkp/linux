@@ -471,8 +471,8 @@ static const struct mid_pwr_device_info tng_info = {
 
 /* This table should be in sync with the one in drivers/pci/pci-mid.c */
 static const struct pci_device_id mid_pwr_pci_ids[] = {
-	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_PENWELL), (kernel_ulong_t)&pnw_info },
-	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_TANGIER), (kernel_ulong_t)&tng_info },
+	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_PENWELL), .driver_data = (kernel_ulong_t)&pnw_info },
+	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_TANGIER), .driver_data = (kernel_ulong_t)&tng_info },
 	{}
 };
 
