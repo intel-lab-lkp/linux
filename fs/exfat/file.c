@@ -800,7 +800,22 @@ static ssize_t exfat_splice_read(struct file *in, loff_t *ppos,
 	return filemap_splice_read(in, ppos, pipe, len, flags);
 }
 
+static int exfat_file_open(struct inode *inode, struct file *filp)
+{
+	int err;
+
+	if (unlikely(exfat_forced_shutdown(inode->i_sb)))
+		return -EIO;
+
+	err = generic_file_open(inode, filp);
+	if (err)
+		return err;
+
+	return 0;
+}
+
 const struct file_operations exfat_file_operations = {
+	.open		= exfat_file_open,
 	.llseek		= generic_file_llseek,
 	.read_iter	= exfat_file_read_iter,
 	.write_iter	= exfat_file_write_iter,
