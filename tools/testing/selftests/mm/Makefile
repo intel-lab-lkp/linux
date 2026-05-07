@@ -104,6 +104,7 @@ TEST_GEN_FILES += hugetlb_dio
 TEST_GEN_FILES += droppable
 TEST_GEN_FILES += guard-regions
 TEST_GEN_FILES += merge
+TEST_GEN_FILES += vrealloc_shrink_test
 TEST_GEN_FILES += rmap
 TEST_GEN_FILES += folio_split_race_test
 
@@ -286,3 +287,7 @@ warn_missing_page_frag:
 	echo "Warning: $(PAGE_FRAG_WARNING). page_frag test will be skipped." ; \
 	echo
 endif
+
+# vrealloc shrink test module
+vrealloc_shrink_mod.ko: vrealloc_shrink_mod.c
+	$(MAKE) -C $(KDIR) M=$(PWD) modules
