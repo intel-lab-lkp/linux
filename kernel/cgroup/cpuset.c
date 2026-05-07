@@ -485,6 +485,30 @@ static void guarantee_active_cpus(struct task_struct *tsk,
 	rcu_read_unlock();
 }
 
+/* Compute the effective CPU mask cpuset_attach_task() will apply to @tsk. */
+static void cpuset_attach_task_cpus(struct cpuset *cs, struct task_struct *tsk,
+				    struct cpumask *pmask)
+{
+	const struct cpumask *possible_mask = task_cpu_possible_mask(tsk);
+
+	lockdep_assert_cpuset_lock_held();
+
+	if (cs == &top_cpuset) {
+		cpumask_andnot(pmask, possible_mask, subpartitions_cpus);
+		return;
+	}
+
+	if (WARN_ON(!cpumask_and(pmask, possible_mask, cpu_active_mask)))
+		cpumask_copy(pmask, cpu_active_mask);
+
+	rcu_read_lock();
+	while (!cpumask_intersects(cs->effective_cpus, pmask))
+		cs = parent_cs(cs);
+
+	cpumask_and(pmask, pmask, cs->effective_cpus);
+	rcu_read_unlock();
+}
+
 /*
  * Return in *pmask the portion of a cpusets's mems_allowed that
  * are online, with memory.  If none are online with memory, walk
@@ -2986,6 +3010,14 @@ static void reset_migrate_dl_data(struct cpuset *cs)
 	cs->dl_bw_cpu = -1;
 }
 
+/*
+ * Protected by cpuset_mutex. cpus_attach is used by the can_attach/attach
+ * paths but we can't allocate it dynamically there. Define it global and
+ * allocate from cpuset_init().
+ */
+static cpumask_var_t cpus_attach;
+static nodemask_t cpuset_attach_nodemask_to;
+
 /* Called by cgroups to determine if a cpuset is usable; cpuset_mutex held */
 static int cpuset_can_attach(struct cgroup_taskset *tset)
 {
@@ -2993,7 +3025,7 @@ static int cpuset_can_attach(struct cgroup_taskset *tset)
 	struct cpuset *cs, *oldcs;
 	struct task_struct *task;
 	bool setsched_check;
-	int ret;
+	int cpu = nr_cpu_ids, ret;
 
 	/* used later by cpuset_attach() */
 	cpuset_attach_old_cs = task_cs(cgroup_taskset_first(tset, &css));
@@ -3038,31 +3070,46 @@ static int cpuset_can_attach(struct cgroup_taskset *tset)
 		}
 
 		if (dl_task(task)) {
+			/*
+			 * Count all migrating DL tasks for cpuset task accounting.
+			 * Only tasks that need a root-domain bandwidth move
+			 * contribute to sum_migrate_dl_bw.
+			 */
 			cs->nr_migrate_dl_tasks++;
-			cs->sum_migrate_dl_bw += task->dl.dl_bw;
+			cpuset_attach_task_cpus(cs, task, cpus_attach);
+
+			if (dl_task_needs_bw_move(task, cpus_attach)) {
+				/*
+				 * Keep the existing aggregate reservation model.
+				 * Tasks in one attach enter the same destination
+				 * cpuset, so the first CPU found for a task needing
+				 * DL bandwidth reservation identifies the destination
+				 * root domain.
+				 */
+				if (cpu >= nr_cpu_ids)
+					cpu = cpumask_any_and(cpu_active_mask,
+							      cpus_attach);
+				cs->sum_migrate_dl_bw += task->dl.dl_bw;
+			}
 		}
 	}
 
-	if (!cs->nr_migrate_dl_tasks)
+	if (!cs->sum_migrate_dl_bw)
 		goto out_success;
 
-	if (!cpumask_intersects(oldcs->effective_cpus, cs->effective_cpus)) {
-		int cpu = cpumask_any_and(cpu_active_mask, cs->effective_cpus);
-
-		if (unlikely(cpu >= nr_cpu_ids)) {
-			reset_migrate_dl_data(cs);
-			ret = -EINVAL;
-			goto out_unlock;
-		}
-
-		ret = dl_bw_alloc(cpu, cs->sum_migrate_dl_bw);
-		if (ret) {
-			reset_migrate_dl_data(cs);
-			goto out_unlock;
-		}
-
-		cs->dl_bw_cpu = cpu;
+	if (unlikely(cpu >= nr_cpu_ids)) {
+		reset_migrate_dl_data(cs);
+		ret = -EINVAL;
+		goto out_unlock;
 	}
+
+	ret = dl_bw_alloc(cpu, cs->sum_migrate_dl_bw);
+	if (ret) {
+		reset_migrate_dl_data(cs);
+		goto out_unlock;
+	}
+
+	cs->dl_bw_cpu = cpu;
 
 out_success:
 	/*
@@ -3099,23 +3146,11 @@ static void cpuset_cancel_attach(struct cgroup_taskset *tset)
 	mutex_unlock(&cpuset_mutex);
 }
 
-/*
- * Protected by cpuset_mutex. cpus_attach is used only by cpuset_attach_task()
- * but we can't allocate it dynamically there.  Define it global and
- * allocate from cpuset_init().
- */
-static cpumask_var_t cpus_attach;
-static nodemask_t cpuset_attach_nodemask_to;
-
 static void cpuset_attach_task(struct cpuset *cs, struct task_struct *task)
 {
 	lockdep_assert_cpuset_lock_held();
 
-	if (cs != &top_cpuset)
-		guarantee_active_cpus(task, cpus_attach);
-	else
-		cpumask_andnot(cpus_attach, task_cpu_possible_mask(task),
-			       subpartitions_cpus);
+	cpuset_attach_task_cpus(cs, task, cpus_attach);
 	/*
 	 * can_attach beforehand should guarantee that this doesn't
 	 * fail.  TODO: have a better way to handle failure here
