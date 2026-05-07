@@ -11444,7 +11444,7 @@ void perf_tp_event(u16 event_type, u64 count, void *record, int entry_size,
 			/*
 			 * Here use the same on-stack perf_sample_data,
 			 * some members in data are event-specific and
-			 * need to be re-computed for different sweveents.
+			 * need to be re-computed for different swevents.
 			 * Re-initialize data->sample_flags safely to avoid
 			 * the problem that next event skips preparing data
 			 * because data->sample_flags is set.
