@@ -1379,7 +1379,7 @@ retry:
 		write_unlock_bh(&idev->lock);
 		pr_info("%s: use_tempaddr is disabled\n", __func__);
 		in6_dev_put(idev);
-		ret = -1;
+		ret = -EOPNOTSUPP;
 		goto out;
 	}
 	spin_lock_bh(&ifp->lock);
@@ -1390,7 +1390,7 @@ retry:
 		pr_warn("%s: regeneration time exceeded - disabled temporary address support\n",
 			__func__);
 		in6_dev_put(idev);
-		ret = -1;
+		ret = -EADDRNOTAVAIL;
 		goto out;
 	}
 	in6_ifa_hold(ifp);
@@ -1466,7 +1466,7 @@ retry:
 		    cfg.preferred_lft > if_public_preferred_lft) {
 			in6_ifa_put(ifp);
 			in6_dev_put(idev);
-			ret = -1;
+			ret = -EINVAL;
 			goto out;
 		}
 	}
@@ -4655,8 +4655,17 @@ restart:
 				/* This is a non-regenerated temporary addr. */
 
 				unsigned long regen_advance = ipv6_get_regen_advance(ifp->idev);
+				unsigned long pub_tstamp = READ_ONCE(ifp->ifpub->tstamp);
+				unsigned long pub_age = 0;
+				bool pub_expired = false;
 
-				if (age + regen_advance >= ifp->prefered_lft) {
+				if (time_after(now, pub_tstamp))
+					pub_age = (now - pub_tstamp) / HZ;
+
+				if (pub_age + regen_advance >= READ_ONCE(ifp->ifpub->prefered_lft))
+					pub_expired = true;
+
+				if (age + regen_advance >= ifp->prefered_lft && !pub_expired) {
 					struct inet6_ifaddr *ifpub = ifp->ifpub;
 					if (time_before(ifp->tstamp + ifp->prefered_lft * HZ, next))
 						next = ifp->tstamp + ifp->prefered_lft * HZ;
@@ -4670,12 +4679,19 @@ restart:
 					ifpub->regen_count = 0;
 					spin_unlock(&ifpub->lock);
 					rcu_read_unlock_bh();
-					ipv6_create_tempaddr(ifpub, true);
+
+					if (ipv6_create_tempaddr(ifpub, true) == -EINVAL) {
+						spin_lock_bh(&ifp->lock);
+						ifp->regen_count = 0;
+						spin_unlock_bh(&ifp->lock);
+						now = jiffies;
+					}
 					in6_ifa_put(ifpub);
 					in6_ifa_put(ifp);
 					rcu_read_lock_bh();
 					goto restart;
-				} else if (time_before(ifp->tstamp + ifp->prefered_lft * HZ - regen_advance * HZ, next))
+				} else if (time_before(ifp->tstamp + ifp->prefered_lft * HZ - regen_advance * HZ, next) &&
+					   !pub_expired)
 					next = ifp->tstamp + ifp->prefered_lft * HZ - regen_advance * HZ;
 			}
 
