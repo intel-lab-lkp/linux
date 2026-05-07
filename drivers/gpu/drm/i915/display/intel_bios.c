@@ -2202,11 +2202,11 @@ parse_vswing_preemph_icl(union intel_ddi_buf_trans_entry **bufs_mtrx,
 			vals = &tables[offset];
 
 			entry = &bufs_mtrx[idx][row];
-			entry->icl.dw2_swing_sel = vals[0];
-			entry->icl.dw7_n_scalar = vals[1];
-			entry->icl.dw4_cursor_coeff = vals[2];
-			entry->icl.dw4_post_cursor_2 = vals[3];
-			entry->icl.dw4_post_cursor_1 = vals[4];
+			entry->icl.dw2_swing_sel = (u8) vals[0];
+			entry->icl.dw7_n_scalar = (u8) vals[1];
+			entry->icl.dw4_cursor_coeff = (u8) vals[2];
+			entry->icl.dw4_post_cursor_2 = (u8) vals[3];
+			entry->icl.dw4_post_cursor_1 = (u8) vals[4];
 
 			offset += block->num_columns;
 		}
