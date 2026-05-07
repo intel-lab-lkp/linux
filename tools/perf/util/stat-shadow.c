@@ -326,8 +326,10 @@ void perf_stat__print_shadow_stats(struct perf_stat_config *config,
 	void *ctxp = out->ctx;
 	int num = 0;
 
-	if (config->iostat_run)
+	if (config->iostat_run) {
 		iostat_print_metric(config, evsel, out);
+		num = 1;
+	}
 
 	perf_stat__print_shadow_stats_metricgroup(config, evsel, aggr_idx,
 						  &num, NULL, out);
