@@ -1633,6 +1633,24 @@ pub(crate) mod mmu_control {
     }
 }
 
+/// This register corresponds to the USER register page.
+///
+/// This register page is read-only and user-mode accessible.
+/// It exposes cache flush tracking to userspace.
+pub(crate) mod user {
+    use kernel::register;
+
+    register! {
+        /// Latest flush ID register. Read-only.
+        pub(crate) LATEST_FLUSH(u32) @ 0x10000 {
+            /// Incremented when a full GPU cache clean-and-invalidate completes.
+            23:0    flush_id;
+            /// Indicates that a cache flush operation is currently pending.
+            31:31   active => bool;
+        }
+    }
+}
+
 /// This module corresponds to the DOORBELL_BLOCK_n[0-63] register pages.
 pub(crate) mod doorbell_block {
     use kernel::register;
