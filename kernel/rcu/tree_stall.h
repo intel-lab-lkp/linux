@@ -71,6 +71,73 @@ late_initcall(kernel_rcu_stall_sysfs_init);
 
 #endif // CONFIG_SYSFS
 
+#ifdef CONFIG_DEBUG_FS
+
+#include <linux/debugfs.h>
+#include <linux/seq_file.h>
+
+/*
+ * Debugfs interface for displaying per-CPU RCU callback counts broken down
+ * by callback-list segment.  This allows monitoring how many callbacks are
+ * waiting for grace periods without any steady-state overhead.
+ */
+static int rcu_pending_cbs_show(struct seq_file *m, void *v)
+{
+	int cpu;
+	long done, wait, nxtrdy, nxt, lazy;
+	long total_done = 0, total_wait = 0, total_nxtrdy = 0;
+	long total_nxt = 0, total_lazy = 0;
+	struct rcu_data *rdp;
+	struct rcu_segcblist *rsclp;
+
+	seq_printf(m, "%-8s %10s %10s %10s %10s %10s\n",
+		   "cpu", "done", "wait", "next_ready", "next", "lazy");
+
+	for_each_possible_cpu(cpu) {
+		rdp = per_cpu_ptr(&rcu_data, cpu);
+		rsclp = &rdp->cblist;
+
+		if (!rcu_segcblist_is_enabled(rsclp))
+			continue;
+
+		done   = rcu_segcblist_get_seglen(rsclp, RCU_DONE_TAIL);
+		wait   = rcu_segcblist_get_seglen(rsclp, RCU_WAIT_TAIL);
+		nxtrdy = rcu_segcblist_get_seglen(rsclp, RCU_NEXT_READY_TAIL);
+		nxt    = rcu_segcblist_get_seglen(rsclp, RCU_NEXT_TAIL);
+		lazy   = READ_ONCE(rdp->lazy_len);
+
+		seq_printf(m, "%-8d %10ld %10ld %10ld %10ld %10ld\n",
+			   cpu, done, wait, nxtrdy, nxt, lazy);
+
+		total_done   += done;
+		total_wait   += wait;
+		total_nxtrdy += nxtrdy;
+		total_nxt    += nxt;
+		total_lazy   += lazy;
+	}
+
+	seq_printf(m, "%-8s %10ld %10ld %10ld %10ld %10ld\n",
+		   "total", total_done, total_wait, total_nxtrdy,
+		   total_nxt, total_lazy);
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(rcu_pending_cbs);
+
+static struct dentry *rcu_debugfs_dir;
+
+static int __init rcu_debugfs_init(void)
+{
+	rcu_debugfs_dir = debugfs_create_dir("rcu", NULL);
+	debugfs_create_file("pending_cbs", 0444, rcu_debugfs_dir,
+			    NULL, &rcu_pending_cbs_fops);
+
+	return 0;
+}
+late_initcall(rcu_debugfs_init);
+
+#endif // #ifdef CONFIG_DEBUG_FS
+
 #ifdef CONFIG_PROVE_RCU
 #define RCU_STALL_DELAY_DELTA		(5 * HZ)
 #else
