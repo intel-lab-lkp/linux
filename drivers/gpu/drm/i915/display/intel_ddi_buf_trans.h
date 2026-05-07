@@ -115,6 +115,14 @@ enum ehl_vspeo_index {
 	EHL_COMBO_EDP_HBR3
 };
 
+enum jsl_vspeo_index {
+	JSL_ERR = -1,
+
+	JSL_COMBO_DP_DEF = 0,
+	JSL_COMBO_EDP_HBR,
+	JSL_COMBO_EDP_HBR2
+};
+
 bool is_hobl_buf_trans(const struct intel_ddi_buf_trans *table);
 
 void intel_ddi_buf_trans_init(struct intel_encoder *encoder);
