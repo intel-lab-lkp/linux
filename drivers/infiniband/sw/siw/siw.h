@@ -114,14 +114,15 @@ struct siw_ucontext {
  */
 
 struct siw_page_chunk {
-	struct page **plist;
+	unsigned int nents;
+	struct page *plist[] __counted_by(nents);
 };
 
 struct siw_umem {
 	struct ib_umem *base_mem;
-	struct siw_page_chunk *page_chunk;
-	int num_pages;
+	unsigned int num_chunks;
 	u64 fp_addr; /* First page base address */
+	struct siw_page_chunk *page_chunk[] __counted_by(num_chunks);
 };
 
 struct siw_pble {
