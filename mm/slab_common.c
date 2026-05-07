@@ -1280,6 +1280,11 @@ void kvfree_call_rcu(struct rcu_head *head, void *ptr)
 }
 EXPORT_SYMBOL_GPL(kvfree_call_rcu);
 
+int kfree_rcu_pending(int cpu)
+{
+	return 0;
+}
+
 void __init kvfree_rcu_init(void)
 {
 }
@@ -2214,6 +2219,19 @@ void __init kvfree_rcu_init(void)
 	kfree_rcu_shrinker->scan_objects = kfree_rcu_shrink_scan;
 
 	shrinker_register(kfree_rcu_shrinker);
+}
+
+/**
+ * kfree_rcu_pending() - Return number of objects pending in kfree_rcu batches.
+ * @cpu: CPU number to query.
+ *
+ * Returns the number of objects queued in kfree_rcu()/kvfree_rcu() batches
+ * on @cpu that are waiting for a grace period.  These objects are tracked
+ * separately from the main RCU callback list.
+ */
+int kfree_rcu_pending(int cpu)
+{
+	return krc_count(per_cpu_ptr(&krc, cpu));
 }
 
 #endif /* CONFIG_KVFREE_RCU_BATCHED */

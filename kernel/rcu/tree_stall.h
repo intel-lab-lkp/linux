@@ -84,14 +84,17 @@ late_initcall(kernel_rcu_stall_sysfs_init);
 static int rcu_pending_cbs_show(struct seq_file *m, void *v)
 {
 	int cpu;
+	int kfree;
 	long done, wait, nxtrdy, nxt, lazy;
 	long total_done = 0, total_wait = 0, total_nxtrdy = 0;
 	long total_nxt = 0, total_lazy = 0;
+	int total_kfree = 0;
 	struct rcu_data *rdp;
 	struct rcu_segcblist *rsclp;
 
-	seq_printf(m, "%-8s %10s %10s %10s %10s %10s\n",
-		   "cpu", "done", "wait", "next_ready", "next", "lazy");
+	seq_printf(m, "%-8s %10s %10s %10s %10s %10s %10s\n",
+		   "cpu", "done", "wait", "next_ready", "next", "lazy",
+		   "kfree_rcu");
 
 	for_each_possible_cpu(cpu) {
 		rdp = per_cpu_ptr(&rcu_data, cpu);
@@ -105,20 +108,22 @@ static int rcu_pending_cbs_show(struct seq_file *m, void *v)
 		nxtrdy = rcu_segcblist_get_seglen(rsclp, RCU_NEXT_READY_TAIL);
 		nxt    = rcu_segcblist_get_seglen(rsclp, RCU_NEXT_TAIL);
 		lazy   = READ_ONCE(rdp->lazy_len);
+		kfree  = kfree_rcu_pending(cpu);
 
-		seq_printf(m, "%-8d %10ld %10ld %10ld %10ld %10ld\n",
-			   cpu, done, wait, nxtrdy, nxt, lazy);
+		seq_printf(m, "%-8d %10ld %10ld %10ld %10ld %10ld %10d\n",
+			   cpu, done, wait, nxtrdy, nxt, lazy, kfree);
 
 		total_done   += done;
 		total_wait   += wait;
 		total_nxtrdy += nxtrdy;
 		total_nxt    += nxt;
 		total_lazy   += lazy;
+		total_kfree  += kfree;
 	}
 
-	seq_printf(m, "%-8s %10ld %10ld %10ld %10ld %10ld\n",
+	seq_printf(m, "%-8s %10ld %10ld %10ld %10ld %10ld %10d\n",
 		   "total", total_done, total_wait, total_nxtrdy,
-		   total_nxt, total_lazy);
+		   total_nxt, total_lazy, total_kfree);
 
 	return 0;
 }
