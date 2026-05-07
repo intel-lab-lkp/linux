@@ -86,6 +86,18 @@ enum lt_vspeo_index {
 	LT_DP21
 };
 
+enum snps_c20_vspeo_index {
+	C20_ERR = -1,
+
+	_C20_unused0 = 0,
+	_C20_unused1,
+	_C20_unused2,
+	_C20_unused3,
+
+	C20_DP14 = 4,
+	C20_DP20
+};
+
 bool is_hobl_buf_trans(const struct intel_ddi_buf_trans *table);
 
 void intel_ddi_buf_trans_init(struct intel_encoder *encoder);
