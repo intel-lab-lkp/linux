@@ -9652,7 +9652,7 @@ static int igb_runtime_idle(struct device *dev)
 	struct igb_adapter *adapter = netdev_priv(netdev);
 
 	if (!igb_has_link(adapter))
-		pm_schedule_suspend(dev, MSEC_PER_SEC * 5);
+		return 0;
 
 	return -EBUSY;
 }
