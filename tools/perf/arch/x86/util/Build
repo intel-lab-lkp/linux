@@ -7,7 +7,6 @@ perf-util-y += event.o
 perf-util-y += evlist.o
 perf-util-y += mem-events.o
 perf-util-y += evsel.o
-perf-util-y += iostat.o
 
 perf-util-$(CONFIG_LOCAL_LIBUNWIND)    += unwind-libunwind.o
 

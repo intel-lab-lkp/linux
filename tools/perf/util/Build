@@ -127,6 +127,7 @@ perf-util-y += thread-stack.o
 perf-util-y += spark.o
 perf-util-y += topdown.o
 perf-util-y += iostat.o
+perf-util-y += x86-iostat.o
 perf-util-y += stream.o
 perf-util-$(CONFIG_LIBTRACEEVENT) += kvm-stat.o
 perf-util-y += kvm-stat-arch/
