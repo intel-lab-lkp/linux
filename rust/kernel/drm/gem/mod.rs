@@ -348,7 +348,8 @@ impl<T: DriverObject> AllocImpl for Object<T> {
     };
 }
 
-pub(super) const fn create_fops() -> bindings::file_operations {
+/// Returns the default GEM [`bindings::file_operations`] for a DRM driver.
+pub const fn create_fops() -> bindings::file_operations {
     let mut fops: bindings::file_operations = pin_init::zeroed();
 
     fops.owner = core::ptr::null_mut();

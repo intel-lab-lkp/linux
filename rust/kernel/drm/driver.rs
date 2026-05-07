@@ -115,6 +115,12 @@ pub trait Driver {
 
     /// IOCTL list. See `kernel::drm::ioctl::declare_drm_ioctls!{}`.
     const IOCTLS: &'static [drm::ioctl::DrmIoctlDescriptor];
+
+    /// File operations for this driver.
+    ///
+    /// Override to replace or extend the default GEM file operations. The default
+    /// provides the standard GEM mmap handler via [`drm::gem::create_fops`].
+    const FOPS: bindings::file_operations = drm::gem::create_fops();
 }
 
 /// The registration type of a `drm::Device`.
