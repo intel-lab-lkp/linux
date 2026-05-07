@@ -13,7 +13,7 @@ static struct iostat_pmu *iostat_pmu;
 
 enum iostat_mode_t iostat_mode = IOSTAT_NONE;
 
-__weak int iostat_prepare(struct evlist *evlist, struct perf_stat_config *config)
+int iostat_prepare(struct evlist *evlist, struct perf_stat_config *config)
 {
 	if (!iostat_pmu)
 		return -1;
@@ -21,7 +21,7 @@ __weak int iostat_prepare(struct evlist *evlist, struct perf_stat_config *config
 	return iostat_pmu->prepare(evlist, config);
 }
 
-__weak int iostat_parse(const struct option *opt, const char *str, int unset)
+int iostat_parse(const struct option *opt, const char *str, int unset)
 {
 	if (!iostat_pmu)
 		return -1;
@@ -29,33 +29,33 @@ __weak int iostat_parse(const struct option *opt, const char *str, int unset)
 	return iostat_pmu->parse(opt, str, unset);
 }
 
-__weak void iostat_list(struct evlist *evlist, struct perf_stat_config *config)
+void iostat_list(struct evlist *evlist, struct perf_stat_config *config)
 {
 	iostat_pmu->list(evlist, config);
 }
 
-__weak void iostat_release(struct evlist *evlist)
+void iostat_release(struct evlist *evlist)
 {
 	iostat_pmu->release(evlist);
 }
 
-__weak void iostat_print_header_prefix(struct perf_stat_config *config)
+void iostat_print_header_prefix(struct perf_stat_config *config)
 {
 	iostat_pmu->print_header_prefix(config);
 }
 
-__weak void iostat_print_metric(struct perf_stat_config *config,
-				struct evsel *evsel,
-				struct perf_stat_output_ctx *out)
+void iostat_print_metric(struct perf_stat_config *config,
+			 struct evsel *evsel,
+			 struct perf_stat_output_ctx *out)
 {
 	iostat_pmu->print_metric(config, evsel, out);
 }
 
-__weak void iostat_print_counters(struct evlist *evlist,
-				  struct perf_stat_config *config,
-				  struct timespec *ts, char *prefix,
-				  iostat_print_counter_t print_cnt_cb,
-				  void *arg)
+void iostat_print_counters(struct evlist *evlist,
+			   struct perf_stat_config *config,
+			   struct timespec *ts, char *prefix,
+			   iostat_print_counter_t print_cnt_cb,
+			   void *arg)
 {
 	iostat_pmu->print_counters(evlist, config, ts, prefix,
 				   print_cnt_cb, arg);

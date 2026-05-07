@@ -332,9 +332,9 @@ err:
 	return ret;
 }
 
-static void iostat_prefix(struct evlist *evlist,
-			  struct perf_stat_config *config,
-			  char *prefix, struct timespec *ts)
+static void iio_iostat_prefix(struct evlist *evlist,
+			      struct perf_stat_config *config,
+			      char *prefix, struct timespec *ts)
 {
 	struct iio_root_port *rp = evlist->selected->priv;
 
@@ -354,7 +354,7 @@ static void iostat_prefix(struct evlist *evlist,
 	}
 }
 
-int iostat_prepare(struct evlist *evlist, struct perf_stat_config *config)
+static int iio_iostat_prepare(struct evlist *evlist, struct perf_stat_config *config)
 {
 	if (evlist->core.nr_entries > 0) {
 		pr_warning("The -e and -M options are not supported."
@@ -371,8 +371,8 @@ int iostat_prepare(struct evlist *evlist, struct perf_stat_config *config)
 	return iostat_event_group(evlist, root_ports);
 }
 
-int iostat_parse(const struct option *opt, const char *str,
-		 int unset __maybe_unused)
+static int iio_iostat_parse(const struct option *opt, const char *str,
+			    int unset __maybe_unused)
 {
 	int ret;
 	struct perf_stat_config *config = (struct perf_stat_config *)opt->data;
@@ -392,7 +392,7 @@ int iostat_parse(const struct option *opt, const char *str,
 	return ret;
 }
 
-void iostat_list(struct evlist *evlist, struct perf_stat_config *config)
+static void iio_iostat_list(struct evlist *evlist, struct perf_stat_config *config)
 {
 	struct evsel *evsel;
 	struct iio_root_port *rp = NULL;
@@ -405,7 +405,7 @@ void iostat_list(struct evlist *evlist, struct perf_stat_config *config)
 	}
 }
 
-void iostat_release(struct evlist *evlist)
+static void iio_iostat_release(struct evlist *evlist)
 {
 	struct evsel *evsel;
 	struct iio_root_port *rp = NULL;
@@ -418,7 +418,7 @@ void iostat_release(struct evlist *evlist)
 	}
 }
 
-void iostat_print_header_prefix(struct perf_stat_config *config)
+static void iio_iostat_print_header_prefix(struct perf_stat_config *config)
 {
 	if (config->csv_output)
 		fputs("port,", config->output);
@@ -428,8 +428,8 @@ void iostat_print_header_prefix(struct perf_stat_config *config)
 		fprintf(config->output, "   port         ");
 }
 
-void iostat_print_metric(struct perf_stat_config *config, struct evsel *evsel,
-			 struct perf_stat_output_ctx *out)
+static void iio_iostat_print_metric(struct perf_stat_config *config, struct evsel *evsel,
+				    struct perf_stat_output_ctx *out)
 {
 	double iostat_value = 0;
 	u64 prev_count_val = 0;
@@ -452,24 +452,54 @@ void iostat_print_metric(struct perf_stat_config *config, struct evsel *evsel,
 			  iostat_value / (256 * 1024));
 }
 
-void iostat_print_counters(struct evlist *evlist,
-			   struct perf_stat_config *config, struct timespec *ts,
-			   char *prefix, iostat_print_counter_t print_cnt_cb, void *arg)
+static void iio_iostat_print_counters(struct evlist *evlist,
+				      struct perf_stat_config *config, struct timespec *ts,
+				      char *prefix, iostat_print_counter_t print_cnt_cb, void *arg)
 {
 	void *perf_device = NULL;
 	struct evsel *counter = evlist__first(evlist);
 
 	evlist__set_selected(evlist, counter);
-	iostat_prefix(evlist, config, prefix, ts);
+	iio_iostat_prefix(evlist, config, prefix, ts);
 	fprintf(config->output, "%s", prefix);
 	evlist__for_each_entry(evlist, counter) {
 		perf_device = evlist->selected->priv;
 		if (perf_device && perf_device != counter->priv) {
 			evlist__set_selected(evlist, counter);
-			iostat_prefix(evlist, config, prefix, ts);
+			iio_iostat_prefix(evlist, config, prefix, ts);
 			fprintf(config->output, "\n%s", prefix);
 		}
 		print_cnt_cb(config, counter, arg);
 	}
 	fputc('\n', config->output);
+}
+
+/*
+ * FIXME: pmu name prefix match might not work for x86 iio.
+ */
+static bool iio_iostat_probe(struct iostat_pmu *iostat_pmu)
+{
+	return perf_pmus__scan_matching_wildcard(NULL, iostat_pmu->pmu_name_wildcard);
+}
+
+static struct iostat_pmu x86_iio_iostat_pmu_list[]  = {
+	{
+		.pmu_name_wildcard = "uncore_iio*",
+		.match = iio_iostat_probe,
+		.prepare = iio_iostat_prepare,
+		.parse = iio_iostat_parse,
+		.list = iio_iostat_list,
+		.print_header_prefix = iio_iostat_print_header_prefix,
+		.print_metric = iio_iostat_print_metric,
+		.print_counters = iio_iostat_print_counters,
+		.release = iio_iostat_release,
+	},
+};
+
+static void __attribute__((constructor)) x86_iio_iostat_pmu_init(void)
+{
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(x86_iio_iostat_pmu_list); i++)
+		register_iostat_pmu(&x86_iio_iostat_pmu_list[i]);
 }
