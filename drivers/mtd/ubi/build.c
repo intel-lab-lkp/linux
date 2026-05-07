@@ -1210,21 +1210,16 @@ static struct mtd_info * __init open_mtd_by_chdev(const char *mtd_dev)
 static struct mtd_info * __init open_mtd_device(const char *mtd_dev)
 {
 	struct mtd_info *mtd;
-	int mtd_num;
-	char *endp;
+	unsigned int mtd_num;
 
-	mtd_num = simple_strtoul(mtd_dev, &endp, 0);
-	if (*endp != '\0' || mtd_dev == endp) {
-		/*
-		 * This does not look like an ASCII integer, probably this is
-		 * MTD device name.
-		 */
+	if (kstrtouint(mtd_dev, 0, &mtd_num) != 0) {
+		/* Not a plain number, treat as MTD device name */
 		mtd = get_mtd_device_nm(mtd_dev);
 		if (PTR_ERR(mtd) == -ENODEV)
-			/* Probably this is an MTD character device node path */
 			mtd = open_mtd_by_chdev(mtd_dev);
-	} else
+	} else {
 		mtd = get_mtd_device(NULL, mtd_num);
+	}
 
 	return mtd;
 }
