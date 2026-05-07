@@ -1607,6 +1607,14 @@ dso__load_sym_internal(struct dso *dso, struct map *map, struct symsrc *syms_ss,
 				continue;
 		}
 
+		/*
+		 * For kernel modules, also reject x86 local symbols (.L* and L0*)
+		 * to match the kernel's is_mapping_symbol() logic and kallsyms
+		 * parsing behavior.
+		 */
+		if (kmodule && is_mapping_symbol(elf_name))
+			continue;
+
 		if (runtime_ss->opdsec && sym.st_shndx == runtime_ss->opdidx) {
 			u32 offset = sym.st_value - syms_ss->opdshdr.sh_addr;
 			u64 *opd = opddata->d_buf + offset;

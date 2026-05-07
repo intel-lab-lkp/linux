@@ -729,8 +729,14 @@ static int machine__process_ksymbol_register(struct machine *machine,
 {
 	struct symbol *sym;
 	struct dso *dso = NULL;
-	struct map *map = maps__find(machine__kernel_maps(machine), event->ksymbol.addr);
+	struct map *map;
 	int err = 0;
+
+	/* Ignore mapping symbols in ksymbol events - check early before any state mutation */
+	if (is_mapping_symbol(event->ksymbol.name))
+		return 0;
+
+	map = maps__find(machine__kernel_maps(machine), event->ksymbol.addr);
 
 	if (!map) {
 		dso = dso__new(event->ksymbol.name);
@@ -789,6 +795,10 @@ static int machine__process_ksymbol_unregister(struct machine *machine,
 {
 	struct symbol *sym;
 	struct map *map;
+
+	/* Ignore mapping symbols in ksymbol events */
+	if (is_mapping_symbol(event->ksymbol.name))
+		return 0;
 
 	map = maps__find(machine__kernel_maps(machine), event->ksymbol.addr);
 	if (!map)
