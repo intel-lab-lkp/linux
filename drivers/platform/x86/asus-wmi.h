@@ -52,6 +52,11 @@ struct quirk_entry {
 	 */
 	int no_display_toggle;
 	u32 xusb2pr;
+	/*
+	 * Some platforms report WMI DEVID_FNLOCK as present but the DEVS call
+	 * is a no-op. Force the HID feature report path via hid-asus instead.
+	 */
+	bool fnlock_use_hid;
 };
 
 struct asus_wmi_driver {

@@ -1759,6 +1759,28 @@ int asus_hid_event(enum asus_hid_event event)
 }
 EXPORT_SYMBOL_GPL(asus_hid_event);
 
+/**
+ * asus_wmi_fnlock_use_hid() - Return true if fn-lock must use the HID path.
+ *
+ * On some platforms (e.g. ASUS ProArt P16) the WMI DEVS call for fn-lock is
+ * silently a no-op. The fnlock_use_hid quirk flag marks these platforms so
+ * that callers can select the HID feature-report path instead.
+ *
+ * Returns: true if the HID path should be used, false otherwise.
+ */
+bool asus_wmi_fnlock_use_hid(void)
+{
+	struct asus_wmi *asus;
+
+	guard(spinlock_irqsave)(&asus_ref.lock);
+	asus = asus_ref.asus;
+	if (!asus)
+		return false;
+
+	return asus->driver->quirks->fnlock_use_hid;
+}
+EXPORT_SYMBOL_NS_GPL(asus_wmi_fnlock_use_hid, "ASUS_WMI");
+
 /*
  * These functions actually update the LED's, and are called from a
  * workqueue. By doing this as separate work rather than when the LED

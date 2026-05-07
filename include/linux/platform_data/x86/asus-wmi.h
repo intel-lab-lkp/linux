@@ -205,7 +205,7 @@ int asus_wmi_evaluate_method(u32 method_id, u32 arg0, u32 arg1, u32 *retval);
 int asus_hid_register_listener(struct asus_hid_listener *cdev);
 void asus_hid_unregister_listener(struct asus_hid_listener *cdev);
 int asus_hid_event(enum asus_hid_event event);
-int asus_hid_fnlock_set(bool enabled);
+bool asus_wmi_fnlock_use_hid(void);
 #else
 static inline void set_ally_mcu_hack(enum asus_ally_mcu_hack status)
 {
@@ -238,9 +238,9 @@ static inline int asus_hid_event(enum asus_hid_event event)
 	return -ENODEV;
 }
 
-static inline int asus_hid_fnlock_set(bool enabled)
+static inline bool asus_wmi_fnlock_use_hid(void)
 {
-	return -ENODEV;
+	return false;
 }
 #endif
 
