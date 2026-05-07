@@ -4,6 +4,7 @@
 
 #include <asm/types.h>
 #include <limits.h>
+#undef PAGE_SIZE
 #ifndef __WORDSIZE
 #define __WORDSIZE (__SIZEOF_LONG__ * 8)
 #endif
