@@ -332,6 +332,28 @@ err:
 	return ret;
 }
 
+static void iostat_prefix(struct evlist *evlist,
+			  struct perf_stat_config *config,
+			  char *prefix, struct timespec *ts)
+{
+	struct iio_root_port *rp = evlist->selected->priv;
+
+	if (rp) {
+		/*
+		 * TODO: This is the incorrect format in JSON mode.
+		 *       See prepare_timestamp()
+		 */
+		if (ts)
+			sprintf(prefix, "%6lu.%09lu%s%04x:%02x%s",
+				ts->tv_sec, ts->tv_nsec,
+				config->csv_sep, rp->domain, rp->bus,
+				config->csv_sep);
+		else
+			sprintf(prefix, "%04x:%02x%s", rp->domain, rp->bus,
+				config->csv_sep);
+	}
+}
+
 int iostat_prepare(struct evlist *evlist, struct perf_stat_config *config)
 {
 	if (evlist->core.nr_entries > 0) {
@@ -393,28 +415,6 @@ void iostat_release(struct evlist *evlist)
 			rp = evsel->priv;
 			zfree(&evsel->priv);
 		}
-	}
-}
-
-void iostat_prefix(struct evlist *evlist,
-		   struct perf_stat_config *config,
-		   char *prefix, struct timespec *ts)
-{
-	struct iio_root_port *rp = evlist->selected->priv;
-
-	if (rp) {
-		/*
-		 * TODO: This is the incorrect format in JSON mode.
-		 *       See prepare_timestamp()
-		 */
-		if (ts)
-			sprintf(prefix, "%6lu.%09lu%s%04x:%02x%s",
-				ts->tv_sec, ts->tv_nsec,
-				config->csv_sep, rp->domain, rp->bus,
-				config->csv_sep);
-		else
-			sprintf(prefix, "%04x:%02x%s", rp->domain, rp->bus,
-				config->csv_sep);
 	}
 }
 

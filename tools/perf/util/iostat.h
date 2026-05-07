@@ -35,8 +35,6 @@ int iostat_parse(const struct option *opt, const char *str,
 		 int unset __maybe_unused);
 void iostat_list(struct evlist *evlist, struct perf_stat_config *config);
 void iostat_release(struct evlist *evlist);
-void iostat_prefix(struct evlist *evlist, struct perf_stat_config *config,
-		   char *prefix, struct timespec *ts);
 void iostat_print_header_prefix(struct perf_stat_config *config);
 void iostat_print_metric(struct perf_stat_config *config, struct evsel *evsel,
 			 struct perf_stat_output_ctx *out);
