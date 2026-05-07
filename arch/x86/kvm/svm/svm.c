@@ -1162,6 +1162,7 @@ static void init_vmcb(struct kvm_vcpu *vcpu, bool init_event)
 	svm_set_intercept(svm, INTERCEPT_SKINIT);
 	svm_set_intercept(svm, INTERCEPT_WBINVD);
 	svm_set_intercept(svm, INTERCEPT_XSETBV);
+	svm_set_intercept(svm, INTERCEPT_ICEBP);
 	svm_set_intercept(svm, INTERCEPT_RDPRU);
 	svm_set_intercept(svm, INTERCEPT_RSM);
 
@@ -2062,6 +2063,25 @@ static int bp_interception(struct kvm_vcpu *vcpu)
 	kvm_run->debug.arch.pc = svm->vmcb->save.cs.base + svm->vmcb->save.rip;
 	kvm_run->debug.arch.exception = BP_VECTOR;
 	return 0;
+}
+
+static int icebp_interception(struct kvm_vcpu *vcpu)
+{
+	/*
+	 * ICEBP (INT1, opcode 0xF1) generates #DB as a trap. Intercept it
+	 * unconditionally so that RIP is advanced past the instruction
+	 * *before* #DB is injected. This is necessary because SVM reports
+	 * the wrong RIP for ICEBP-induced #DB when delivered via a task
+	 * gate: RIP points at the ICEBP instruction instead of after it.
+	 *
+	 * By intercepting ICEBP, NRIP (next_rip) gives us the correct
+	 * post-instruction RIP. Advancing RIP first and then injecting #DB
+	 * ensures consistent behaviour regardless of how the guest's IDT
+	 * delivers the exception.
+	 */
+	svm_skip_emulated_instruction(vcpu);
+	kvm_queue_exception(vcpu, DB_VECTOR);
+	return 1;
 }
 
 static int ud_interception(struct kvm_vcpu *vcpu)
@@ -3352,6 +3372,7 @@ static int (*const svm_exit_handlers[])(struct kvm_vcpu *vcpu) = {
 	[SVM_EXIT_MONITOR]			= kvm_emulate_monitor,
 	[SVM_EXIT_MWAIT]			= kvm_emulate_mwait,
 	[SVM_EXIT_XSETBV]			= kvm_emulate_xsetbv,
+	[SVM_EXIT_ICEBP]			= icebp_interception,
 	[SVM_EXIT_RDPRU]			= kvm_handle_invalid_op,
 	[SVM_EXIT_EFER_WRITE_TRAP]		= efer_trap,
 	[SVM_EXIT_CR0_WRITE_TRAP]		= cr_trap,
