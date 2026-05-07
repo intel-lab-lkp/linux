@@ -403,10 +403,9 @@ static u8 LM93_IN_REL_TO_REG(unsigned int val, int upper, int vid)
 	if (upper) {
 		uv_offset = clamp_val(uv_offset, 12500, 200000);
 		return (u8)((uv_offset /  12500 - 1) << 4);
-	} else {
-		uv_offset = clamp_val(uv_offset, -400000, -25000);
-		return (u8)((uv_offset / -25000 - 1) << 0);
 	}
+	uv_offset = clamp_val(uv_offset, -400000, -25000);
+	return (u8)((uv_offset / -25000 - 1) << 0);
 }
 
 /*
@@ -811,15 +810,12 @@ static u8 lm93_read_byte(struct i2c_client *client, u8 reg)
 	/* retry in case of read errors */
 	for (i = 1; i <= MAX_RETRIES; i++) {
 		value = i2c_smbus_read_byte_data(client, reg);
-		if (value >= 0) {
+		if (value >= 0)
 			return value;
-		} else {
-			dev_warn(&client->dev,
+		dev_warn(&client->dev,
 				 "lm93: read byte data failed, address 0x%02x.\n",
 				 reg);
-			mdelay(i + 3);
-		}
-
+		mdelay(i + 3);
 	}
 
 	/* <TODO> what to return in case of error? */
@@ -849,15 +845,12 @@ static u16 lm93_read_word(struct i2c_client *client, u8 reg)
 	/* retry in case of read errors */
 	for (i = 1; i <= MAX_RETRIES; i++) {
 		value = i2c_smbus_read_word_data(client, reg);
-		if (value >= 0) {
+		if (value >= 0)
 			return value;
-		} else {
-			dev_warn(&client->dev,
-				 "lm93: read word data failed, address 0x%02x.\n",
-				 reg);
-			mdelay(i + 3);
-		}
-
+		dev_warn(&client->dev,
+			 "lm93: read word data failed, address 0x%02x.\n",
+			 reg);
+		mdelay(i + 3);
 	}
 
 	/* <TODO> what to return in case of error? */
@@ -895,14 +888,12 @@ static void lm93_read_block(struct i2c_client *client, u8 fbn, u8 *values)
 		result = i2c_smbus_read_block_data(client,
 			lm93_block_read_cmds[fbn].cmd, lm93_block_buffer);
 
-		if (result == lm93_block_read_cmds[fbn].len) {
+		if (result == lm93_block_read_cmds[fbn].len)
 			break;
-		} else {
-			dev_warn(&client->dev,
-				 "lm93: block read data failed, command 0x%02x.\n",
-				 lm93_block_read_cmds[fbn].cmd);
-			mdelay(i + 3);
-		}
+		dev_warn(&client->dev,
+			 "lm93: block read data failed, command 0x%02x.\n",
+			 lm93_block_read_cmds[fbn].cmd);
+		mdelay(i + 3);
 	}
 
 	if (result == lm93_block_read_cmds[fbn].len) {
