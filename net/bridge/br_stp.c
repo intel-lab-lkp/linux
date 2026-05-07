@@ -640,7 +640,7 @@ int br_set_ageing_time(struct net_bridge *br, clock_t ageing_time)
 	br->ageing_time = t;
 	spin_unlock_bh(&br->lock);
 
-	mod_delayed_work(system_long_wq, &br->gc_work, 0);
+	mod_delayed_work(system_dfl_long_wq, &br->gc_work, 0);
 
 	return 0;
 }

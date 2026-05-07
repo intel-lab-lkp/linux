@@ -53,7 +53,7 @@ void br_stp_enable_bridge(struct net_bridge *br)
 	spin_lock_bh(&br->lock);
 	if (br->stp_enabled == BR_KERNEL_STP)
 		mod_timer(&br->hello_timer, jiffies + br->hello_time);
-	mod_delayed_work(system_long_wq, &br->gc_work, HZ / 10);
+	mod_delayed_work(system_dfl_long_wq, &br->gc_work, HZ / 10);
 
 	br_config_bpdu_generation(br);
 

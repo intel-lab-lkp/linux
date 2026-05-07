@@ -583,7 +583,7 @@ void br_fdb_cleanup(struct work_struct *work)
 
 	/* Cleanup minimum 10 milliseconds apart */
 	work_delay = max_t(unsigned long, work_delay, msecs_to_jiffies(10));
-	mod_delayed_work(system_long_wq, &br->gc_work, work_delay);
+	mod_delayed_work(system_dfl_long_wq, &br->gc_work, work_delay);
 }
 
 static void br_fdb_delete_locals_per_vlan_port(struct net_bridge *br,
