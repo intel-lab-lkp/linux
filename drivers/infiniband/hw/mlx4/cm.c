@@ -299,6 +299,7 @@ static void schedule_delayed(struct ib_device *ibdev, struct id_map_entry *id)
 }
 
 #define REJ_REASON(m) be16_to_cpu(((struct cm_generic_msg *)(m))->rej_reason)
+#define RTU_RECEIVE_TIMEOUT  (60 * HZ)
 int mlx4_ib_multiplex_cm_handler(struct ib_device *ibdev, int port, int slave_id,
 		struct ib_mad *mad)
 {
@@ -321,6 +322,9 @@ int mlx4_ib_multiplex_cm_handler(struct ib_device *ibdev, int port, int slave_id
 				__func__, slave_id, sl_cm_id);
 			return PTR_ERR(id);
 		}
+
+		schedule_delayed_work(&id->timeout, RTU_RECEIVE_TIMEOUT);
+
 	} else if (mad->mad_hdr.attr_id == CM_REJ_ATTR_ID ||
 		   mad->mad_hdr.attr_id == CM_SIDR_REP_ATTR_ID) {
 		return 0;
@@ -334,6 +338,9 @@ int mlx4_ib_multiplex_cm_handler(struct ib_device *ibdev, int port, int slave_id
 			 slave_id, sl_cm_id, be16_to_cpu(mad->mad_hdr.attr_id));
 		return -EINVAL;
 	}
+
+	if (mad->mad_hdr.attr_id == CM_RTU_ATTR_ID)
+		cancel_delayed_work_sync(&id->timeout);
 
 cont:
 	set_local_comm_id(mad, id->pv_cm_id);
@@ -478,6 +485,9 @@ int mlx4_ib_demux_cm_handler(struct ib_device *ibdev, int port, int *slave,
 	if (mad->mad_hdr.attr_id == CM_DREQ_ATTR_ID ||
 	    mad->mad_hdr.attr_id == CM_REJ_ATTR_ID)
 		schedule_delayed(ibdev, id);
+
+	if (mad->mad_hdr.attr_id == CM_RTU_ATTR_ID)
+		cancel_delayed_work_sync(&id->timeout);
 
 	return 0;
 }
