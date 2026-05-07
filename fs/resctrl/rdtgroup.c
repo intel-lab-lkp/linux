@@ -2879,8 +2879,10 @@ static int rdt_get_tree(struct fs_context *fc)
 out_psl:
 	rdt_pseudo_lock_release();
 out_mondata:
-	if (resctrl_arch_mon_capable())
+	if (resctrl_arch_mon_capable()) {
+		mon_put_kn_priv();
 		kernfs_remove(kn_mondata);
+	}
 out_mongrp:
 	if (resctrl_arch_mon_capable()) {
 		rdtgroup_unassign_cntrs(&rdtgroup_default);
