@@ -127,6 +127,22 @@ properties:
           - description: offset of the download mode control register
     description: TCSR hardware block
 
+  sram:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    description:
+      Phandle to a region in always-on SRAM used to store the download
+      mode value for boot firmware to read before DDR is initialised on
+      the next warm reset.
+    maxItems: 1
+
+  sram-names:
+    items:
+      - const: minidump
+
+dependencies:
+  sram: [ sram-names ]
+  sram-names: [ sram ]
+
 allOf:
   # Clocks
   - if:
@@ -229,6 +245,18 @@ allOf:
       properties:
         memory-region: false
 
+  - if:
+      not:
+        properties:
+          compatible:
+            contains:
+              enum:
+                - qcom,scm-kaanapali
+    then:
+      properties:
+        sram: false
+        sram-names: false
+
 required:
   - compatible
 
@@ -245,5 +273,34 @@ examples:
                      <&gcc GCC_CRYPTO_AXI_CLK>,
                      <&gcc GCC_CRYPTO_AHB_CLK>;
             clock-names = "core", "bus", "iface";
+        };
+    };
+
+  - |
+    /* kaanapali — minidump SRAM */
+    / {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        sram@14680000 {
+            compatible = "qcom,kaanapali-imem", "mmio-sram";
+            reg = <0x0 0x14680000 0x0 0x1000>;
+            ranges = <0x0 0x0 0x14680000 0x1000>;
+            no-memory-wc;
+            #address-cells = <1>;
+            #size-cells = <1>;
+
+            minidump_config: minidump-config@1c {
+                reg = <0x1c 0x4>;
+            };
+        };
+
+        firmware {
+            scm {
+                compatible = "qcom,scm-kaanapali", "qcom,scm";
+                sram = <&minidump_config>;
+                sram-names = "minidump";
+                #reset-cells = <1>;
+            };
         };
     };
