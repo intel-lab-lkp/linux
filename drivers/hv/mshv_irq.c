@@ -14,7 +14,44 @@
 #include "mshv.h"
 #include "mshv_root.h"
 
-/* called from the ioctl code, user wants to update the guest irq table */
+static int mshv_irqfd_validate_routing(struct mshv_partition *pt,
+				       struct mshv_girq_routing_table *new)
+{
+	int r = 0;
+#if IS_ENABLED(CONFIG_X86)
+	struct mshv_irqfd *irqfd;
+
+	if (!new)
+		return 0;
+
+	spin_lock_irq(&pt->pt_irqfds_lock);
+	hlist_for_each_entry(irqfd, &pt->pt_irqfds_list, irqfd_hnode) {
+		struct mshv_guest_irq_ent ent = {};
+		struct mshv_lapic_irq lirq;
+
+		if (!irqfd->irqfd_resampler)
+			continue;
+
+		if (irqfd->irqfd_irqnum < new->num_rt_entries)
+			ent = new->mshv_girq_info_tbl[irqfd->irqfd_irqnum];
+
+		mshv_copy_girq_info(&ent, &lirq);
+
+		if (ent.girq_entry_valid &&
+		    !lirq.lapic_control.level_triggered) {
+			r = -EINVAL;
+			break;
+		}
+	}
+	spin_unlock_irq(&pt->pt_irqfds_lock);
+#endif
+	return r;
+}
+
+/*
+ * Called from the ioctl code, user wants to update the guest irq table.
+ * Serialized with mshv_irqfd_assign by partition mutex.
+ */
 int mshv_update_routing_table(struct mshv_partition *partition,
 			      const struct mshv_user_irq_entry *ue,
 			      unsigned int numents)
@@ -65,6 +102,11 @@ int mshv_update_routing_table(struct mshv_partition *partition,
 
 swap_routes:
 	mutex_lock(&partition->pt_irq_lock);
+	r = mshv_irqfd_validate_routing(partition, new);
+	if (r) {
+		mutex_unlock(&partition->pt_irq_lock);
+		goto out;
+	}
 	old = rcu_dereference_protected(partition->pt_girq_tbl, 1);
 	rcu_assign_pointer(partition->pt_girq_tbl, new);
 	mshv_irqfd_routing_update(partition);
