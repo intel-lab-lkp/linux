@@ -41,26 +41,18 @@ static const struct pci_device_id nfp_netvf_pci_device_ids[] = {
 	{
 		PCI_VDEVICE_SUB(NETRONOME, PCI_DEVICE_ID_NFP3800_VF,
 				PCI_VENDOR_ID_NETRONOME, PCI_ANY_ID),
-		.class = PCI_ANY_ID,
-		.class_mask = 0,
 		.driver_data = NFP_DEV_NFP3800_VF,
 	}, {
 		PCI_VDEVICE_SUB(NETRONOME, PCI_DEVICE_ID_NFP6000_VF,
 				PCI_VENDOR_ID_NETRONOME, PCI_ANY_ID),
-		.class = PCI_ANY_ID,
-		.class_mask = 0,
 		.driver_data = NFP_DEV_NFP6000_VF,
 	}, {
 		PCI_VDEVICE_SUB(CORIGINE, PCI_DEVICE_ID_NFP3800_VF,
 				PCI_VENDOR_ID_CORIGINE, PCI_ANY_ID),
-		.class = PCI_ANY_ID,
-		.class_mask = 0,
 		.driver_data = NFP_DEV_NFP3800_VF,
 	}, {
 		PCI_VDEVICE_SUB(CORIGINE, PCI_DEVICE_ID_NFP6000_VF,
 				PCI_VENDOR_ID_CORIGINE, PCI_ANY_ID),
-		.class = PCI_ANY_ID,
-		.class_mask = 0,
 		.driver_data = NFP_DEV_NFP6000_VF,
 	},
 	{ } /* Required last entry. */
