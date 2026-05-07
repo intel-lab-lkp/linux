@@ -2463,10 +2463,13 @@ retry:
 		 * a contended DSQ, or the outer retry loop can repeatedly race
 		 * against scx_bypass() dequeueing tasks from @dsq trying to put
 		 * the system into the bypass mode. This can easily live-lock the
-		 * machine. If aborting, exit from all non-bypass DSQs.
+		 * machine. If aborting, skip remote tasks from non-bypass DSQs
+		 * but still allow consuming local tasks to prevent deadlocks
+		 * during CPU hotplug where the dying CPU must drain its rq.
 		 */
-		if (unlikely(READ_ONCE(sch->aborting)) && dsq->id != SCX_DSQ_BYPASS)
-			break;
+		if (unlikely(READ_ONCE(sch->aborting)) && dsq->id != SCX_DSQ_BYPASS
+		    && rq != task_rq)
+			continue;
 
 		if (rq == task_rq) {
 			task_unlink_from_dsq(p, dsq);
