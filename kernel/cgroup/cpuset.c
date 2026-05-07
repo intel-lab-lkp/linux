@@ -3029,12 +3029,12 @@ static int cpuset_can_attach(struct cgroup_taskset *tset)
 	cgroup_taskset_for_each(task, css, tset) {
 		ret = task_can_attach(task);
 		if (ret)
-			goto out_unlock;
+			goto out_reset_dl_data;
 
 		if (setsched_check) {
 			ret = security_task_setscheduler(task);
 			if (ret)
-				goto out_unlock;
+				goto out_reset_dl_data;
 		}
 
 		if (dl_task(task)) {
@@ -3070,6 +3070,10 @@ out_success:
 	 * changes which zero cpus/mems_allowed.
 	 */
 	cs->attach_in_progress++;
+	goto out_unlock;
+
+out_reset_dl_data:
+	reset_migrate_dl_data(cs);
 out_unlock:
 	mutex_unlock(&cpuset_mutex);
 	return ret;
