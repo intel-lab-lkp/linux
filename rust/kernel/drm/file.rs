@@ -45,6 +45,18 @@ impl<T: DriverFile> File<T> {
         self.0.get()
     }
 
+    /// Returns the DRM device associated with this open file.
+    pub fn device(&self) -> &drm::Device<T::Driver> {
+        // SAFETY: By the type invariant, `self.as_raw()` points to a valid open
+        // `struct drm_file`. DRM initializes `minor` for open DRM files, and
+        // `minor->dev` points to the registered DRM device associated with this
+        // file.
+        unsafe {
+            let minor = (*self.as_raw()).minor;
+            drm::Device::from_raw((*minor).dev)
+        }
+    }
+
     fn driver_priv(&self) -> *mut T {
         // SAFETY: By the type invariants of `Self`, `self.as_raw()` is always valid.
         unsafe { (*self.as_raw()).driver_priv }.cast()
