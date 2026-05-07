@@ -241,7 +241,7 @@ void mshv_irqfd_routing_update(struct mshv_partition *partition);
 
 void mshv_port_table_fini(void);
 int mshv_portid_alloc(struct port_table_info *info);
-int mshv_portid_lookup(int port_id, struct port_table_info *info);
+struct port_table_info *mshv_portid_lookup(int port_id) __must_hold(RCU);
 void mshv_portid_free(int port_id);
 
 int mshv_register_doorbell(u64 partition_id, doorbell_cb_t doorbell_cb,

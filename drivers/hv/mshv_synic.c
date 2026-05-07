@@ -113,24 +113,27 @@ mshv_doorbell_isr(struct hv_message *msg)
 	if (notification->sint_index != HV_SYNIC_DOORBELL_SINT_INDEX)
 		return false;
 
+	rcu_read_lock();
 	while ((port = synic_event_ring_get_queued_port(HV_SYNIC_DOORBELL_SINT_INDEX))) {
-		struct port_table_info ptinfo = { 0 };
+		struct port_table_info *ptinfo;
 
-		if (mshv_portid_lookup(port, &ptinfo)) {
+		ptinfo = mshv_portid_lookup(port);
+		if (!ptinfo) {
 			pr_debug("Failed to get port info from port_table!\n");
 			continue;
 		}
 
-		if (ptinfo.hv_port_type != HV_PORT_TYPE_DOORBELL) {
+		if (ptinfo->hv_port_type != HV_PORT_TYPE_DOORBELL) {
 			pr_debug("Not a doorbell port!, port: %d, port_type: %d\n",
-				 port, ptinfo.hv_port_type);
+				 port, ptinfo->hv_port_type);
 			continue;
 		}
 
 		/* Invoke the callback */
-		ptinfo.hv_port_doorbell.doorbell_cb(port,
-						 ptinfo.hv_port_doorbell.data);
+		ptinfo->hv_port_doorbell.doorbell_cb(port,
+						 ptinfo->hv_port_doorbell.data);
 	}
+	rcu_read_unlock();
 
 	return true;
 }

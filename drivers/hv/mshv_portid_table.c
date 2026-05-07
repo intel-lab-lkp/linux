@@ -64,20 +64,12 @@ mshv_portid_free(int port_id)
 	kfree(info);
 }
 
-int
-mshv_portid_lookup(int port_id, struct port_table_info *info)
+/*
+ * Caller must hold rcu_read_lock for the entire lifetime of the
+ * returned pointer.  Returns NULL if @port_id is not in the table.
+ */
+struct port_table_info *mshv_portid_lookup(int port_id)
+	__must_hold(RCU)
 {
-	struct port_table_info *_info;
-	int ret = -ENOENT;
-
-	rcu_read_lock();
-	_info = idr_find(&port_table_idr, port_id);
-	rcu_read_unlock();
-
-	if (_info) {
-		*info = *_info;
-		ret = 0;
-	}
-
-	return ret;
+	return idr_find(&port_table_idr, port_id);
 }
