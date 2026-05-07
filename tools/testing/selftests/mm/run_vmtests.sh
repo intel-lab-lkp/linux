@@ -508,7 +508,7 @@ fi
 
 if [ -n "${SPLIT_HUGE_PAGE_TEST_XFS_PATH}" ]; then
 CATEGORY="thp" run_test ./khugepaged all:file ${SPLIT_HUGE_PAGE_TEST_XFS_PATH}
-else
+elif test_selected thp; then
 	count_total=$(( count_total + 1 ))
 	count_skip=$(( count_skip + 1 ))
 	echo "[SKIP] ./khugepaged all:file" | tap_prefix
