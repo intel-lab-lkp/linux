@@ -487,7 +487,7 @@ static size_t loongson2_cmc_dma_desc_residue(struct loongson2_cmc_dma_chan *lcha
 	ndtr = loongson2_cmc_dma_read(lddev, LOONGSON2_CMCDMA_CNDTR, lchan->id);
 	residue = ndtr << width;
 
-	if (lchan->desc->cyclic && next_sg == 0)
+	if (desc->cyclic && next_sg == 0)
 		return residue;
 
 	for (i = next_sg; i < desc->num_sgs; i++)
