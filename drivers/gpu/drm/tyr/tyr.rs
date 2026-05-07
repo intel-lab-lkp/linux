@@ -11,6 +11,7 @@ mod driver;
 mod file;
 mod gem;
 mod gpu;
+mod mmap;
 mod regs;
 
 kernel::module_platform_driver! {

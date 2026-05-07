@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 or MIT
 
 use kernel::{
+    bindings,
     clk::{
         Clk,
         OptionalClk, //
@@ -42,6 +43,7 @@ use crate::{
     gem::BoData,
     gpu,
     gpu::GpuInfo,
+    mmap::FOPS,
     regs::gpu_control::*, //
 };
 
@@ -196,6 +198,8 @@ impl drm::Driver for TyrDrmDriver {
     kernel::declare_drm_ioctls! {
         (PANTHOR_DEV_QUERY, drm_panthor_dev_query, ioctl::RENDER_ALLOW, TyrDrmFileData::dev_query),
     }
+
+    const FOPS: bindings::file_operations = FOPS;
 }
 
 struct Clocks {
