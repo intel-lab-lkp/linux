@@ -187,6 +187,15 @@ enum asus_hid_event {
 
 #define ASUS_EV_MAX_BRIGHTNESS 3
 
+#if IS_REACHABLE(CONFIG_HID_ASUS)
+int asus_hid_fnlock_set(bool enabled);
+#else
+static inline int asus_hid_fnlock_set(bool enabled)
+{
+	return -ENODEV;
+}
+#endif
+
 #if IS_REACHABLE(CONFIG_ASUS_WMI)
 void set_ally_mcu_hack(enum asus_ally_mcu_hack status);
 void set_ally_mcu_powersave(bool enabled);
@@ -196,6 +205,7 @@ int asus_wmi_evaluate_method(u32 method_id, u32 arg0, u32 arg1, u32 *retval);
 int asus_hid_register_listener(struct asus_hid_listener *cdev);
 void asus_hid_unregister_listener(struct asus_hid_listener *cdev);
 int asus_hid_event(enum asus_hid_event event);
+int asus_hid_fnlock_set(bool enabled);
 #else
 static inline void set_ally_mcu_hack(enum asus_ally_mcu_hack status)
 {
@@ -224,6 +234,11 @@ static inline void asus_hid_unregister_listener(struct asus_hid_listener *bdev)
 {
 }
 static inline int asus_hid_event(enum asus_hid_event event)
+{
+	return -ENODEV;
+}
+
+static inline int asus_hid_fnlock_set(bool enabled)
 {
 	return -ENODEV;
 }
