@@ -4,6 +4,7 @@
 """
 
 import argparse
+from dataclasses import dataclass
 from datetime import date
 import enum
 import re
@@ -39,14 +40,28 @@ class Source(TypedDict):
     exclude_dirs: List[str]
 
 
-class Crate(TypedDict):
-    display_name: str
-    root_module: str
-    is_workspace_member: bool
-    deps: List[Dependency]
-    cfg: List[str]
-    edition: str
-    env: Dict[str, str]
+# TODO: clean up once Python 3.11 is adopted.
+if sys.version_info < (3, 11):
+    class Crate(TypedDict, total=False):
+        display_name: str
+        root_module: str
+        is_workspace_member: bool
+        deps: List[Dependency]
+        cfg: List[str]
+        crate_attrs: List[str]
+        edition: str
+        env: Dict[str, str]
+else:
+    from typing import NotRequired
+    class Crate(TypedDict):
+        display_name: str
+        root_module: str
+        is_workspace_member: bool
+        deps: List[Dependency]
+        cfg: List[str]
+        crate_attrs: NotRequired[List[str]]
+        edition: str
+        env: Dict[str, str]
 
 
 class ProcMacroCrate(Crate):
@@ -58,7 +73,14 @@ class CrateWithGenerated(Crate):
     source: Source
 
 
+@dataclass(frozen=True)
+class RaVersionCtx:
+    manual_sysroot_crates: bool
+    use_crate_attrs: bool
+
+
 def generate_crates(
+    ctx: RaVersionCtx,
     srctree: pathlib.Path,
     objtree: pathlib.Path,
     sysroot_src: pathlib.Path,
@@ -84,22 +106,24 @@ def generate_crates(
     def build_crate(
         display_name: str,
         root_module: pathlib.Path,
-        deps: List[Dependency],
+        deps: List[Optional[Dependency]],
         *,
         cfg: Optional[List[str]],
+        crate_attrs: Optional[List[str]],
         is_workspace_member: Optional[bool],
         edition: Optional[str],
     ) -> Crate:
+        filtered_deps = [dep for dep in deps if dep is not None]
         cfg = cfg if cfg is not None else crates_cfgs.get(display_name, [])
         is_workspace_member = (
             is_workspace_member if is_workspace_member is not None else True
         )
         edition = edition if edition is not None else "2021"
-        return {
+        crate: Crate = {
             "display_name": display_name,
             "root_module": str(root_module),
             "is_workspace_member": is_workspace_member,
-            "deps": deps,
+            "deps": filtered_deps,
             "cfg": cfg,
             "edition": edition,
             "env": {
@@ -107,10 +131,15 @@ def generate_crates(
             }
         }
 
+        if ctx.use_crate_attrs and crate_attrs is not None:
+            crate["crate_attrs"] = crate_attrs
+
+        return crate
+
     def append_proc_macro_crate(
         display_name: str,
         root_module: pathlib.Path,
-        deps: List[Dependency],
+        deps: List[Optional[Dependency]],
         *,
         cfg: Optional[List[str]] = None,
         is_workspace_member: Optional[bool] = None,
@@ -121,6 +150,7 @@ def generate_crates(
             root_module,
             deps,
             cfg=cfg,
+            crate_attrs=None,
             is_workspace_member=is_workspace_member,
             edition=edition,
         )
@@ -148,9 +178,10 @@ def generate_crates(
     def append_crate(
         display_name: str,
         root_module: pathlib.Path,
-        deps: List[Dependency],
+        deps: List[Optional[Dependency]],
         *,
         cfg: Optional[List[str]] = None,
+        crate_attrs: Optional[List[str]] = None,
         is_workspace_member: Optional[bool] = None,
         edition: Optional[str] = None,
     ) -> Dependency:
@@ -160,6 +191,7 @@ def generate_crates(
                 root_module,
                 deps,
                 cfg=cfg,
+                crate_attrs=crate_attrs,
                 is_workspace_member=is_workspace_member,
                 edition=edition,
             )
@@ -167,10 +199,12 @@ def generate_crates(
 
     def append_sysroot_crate(
         display_name: str,
-        deps: List[Dependency],
+        deps: List[Optional[Dependency]],
         *,
         cfg: Optional[List[str]] = None,
-    ) -> Dependency:
+    ) -> Optional[Dependency]:
+        if not ctx.manual_sysroot_crates:
+            return None
         return append_crate(
             display_name,
             sysroot_src / display_name / "src" / "lib.rs",
@@ -269,13 +303,14 @@ def generate_crates(
 
     def append_crate_with_generated(
         display_name: str,
-        deps: List[Dependency],
+        deps: List[Optional[Dependency]],
     ) -> Dependency:
         crate = build_crate(
             display_name,
             srctree / "rust"/ display_name / "lib.rs",
             deps,
             cfg=generated_cfg,
+            crate_attrs=None,
             is_workspace_member=True,
             edition=None,
         )
@@ -342,6 +377,7 @@ def generate_crates(
                 path,
                 [core, kernel, pin_init],
                 cfg=generated_cfg,
+                crate_attrs=["no_std"],
             )
 
     return crates
@@ -415,6 +451,21 @@ class RaVersionInfo(enum.Enum):
         date(2024, 12, 23),
         (0, 3, 2228),
         (1, 85, 0),
+        RaVersionCtx(
+            use_crate_attrs=False,
+            manual_sysroot_crates=True,
+        ),
+    )
+    # v0.3.2727, released on 2025-12-22;
+    # v0.3.2743 is shipped with the rustup 1.94.0 toolchain.
+    SUPPROTS_CRATE_ATTRS = (
+        date(2025, 12, 22),
+        (0, 3, 2727),
+        (1, 94, 0),
+        RaVersionCtx(
+            use_crate_attrs=True,
+            manual_sysroot_crates=False,
+        ),
     )
 
     def __init__(
@@ -422,19 +473,30 @@ class RaVersionInfo(enum.Enum):
         release_date: date,
         ra_version: Version,
         rust_version: Version,
+        ctx: RaVersionCtx,
     ) -> None:
         self.release_date = release_date
         self.ra_version = ra_version
         self.rust_version = rust_version
+        self.ctx = ctx
 
 
-class RustProject(TypedDict):
-    crates: List[Crate]
-    sysroot: str
+# TODO: clean up once Python 3.11 is adopted.
+if sys.version_info < (3, 11):
+    class RustProject(TypedDict, total=False):
+        crates: List[Crate]
+        sysroot: str
+        sysroot_src: str
+else:
+    from typing import NotRequired
+    class RustProject(TypedDict):
+        crates: List[Crate]
+        sysroot: str
+        sysroot_src: NotRequired[str]
 
 
 def generate_rust_project(
-    _version_info: RaVersionInfo,
+    version_info: RaVersionInfo,
     srctree: pathlib.Path,
     objtree: pathlib.Path,
     sysroot: pathlib.Path,
@@ -443,12 +505,16 @@ def generate_rust_project(
     cfgs: List[str],
     core_edition: str,
 ) -> RustProject:
+    ctx = version_info.ctx
     rust_project: RustProject = {
         "crates": generate_crates(
-            srctree, objtree, sysroot_src, external_src, cfgs, core_edition
+            ctx, srctree, objtree, sysroot_src, external_src, cfgs, core_edition
         ),
         "sysroot": str(sysroot),
     }
+
+    if not ctx.manual_sysroot_crates:
+        rust_project["sysroot_src"] = str(sysroot_src)
 
     return rust_project
 
