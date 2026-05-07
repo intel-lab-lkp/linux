@@ -122,6 +122,7 @@ struct stmmac_dma_cfg {
 	bool eame;
 	/* multi_msi_en: stmmac core internal */
 	bool multi_msi_en;
+	bool multi_irq_en;
 	/* atds: stmmac core internal */
 	bool atds;
 };
@@ -211,6 +212,7 @@ enum dwmac_core_type {
 #define STMMAC_FLAG_HWTSTAMP_CORRECT_LATENCY	BIT(14)
 #define STMMAC_FLAG_KEEP_PREAMBLE_BEFORE_SFD	BIT(15)
 #define STMMAC_FLAG_SERDES_SUPPORTS_2500M	BIT(16)
+#define STMMAC_FLAG_MULTI_IRQ_EN		BIT(17)
 
 struct mac_device_info;
 
