@@ -540,12 +540,17 @@ struct airoha_qdma {
 	u64 fwd_tx_packets;
 };
 
+enum airoha_priv_flags {
+	PRIV_FLAG_WAN = BIT(0),
+};
+
 struct airoha_gdm_dev {
 	struct airoha_gdm_port *port;
 	struct airoha_qdma *qdma;
 	struct airoha_eth *eth;
 	struct net_device *dev;
 
+	u32 flags;
 	int nbq;
 };
 
@@ -653,13 +658,7 @@ static inline u16 airoha_qdma_get_txq(struct airoha_qdma *qdma, u16 qid)
 
 static inline bool airoha_is_lan_gdm_dev(struct airoha_gdm_dev *dev)
 {
-	struct airoha_gdm_port *port = dev->port;
-
-	/* GDM1 port on EN7581 SoC is connected to the lan dsa switch.
-	 * GDM{2,3,4} can be used as wan port connected to an external
-	 * phy module.
-	 */
-	return port->id == 1;
+	return !(dev->flags & PRIV_FLAG_WAN);
 }
 
 static inline bool airoha_is_7581(struct airoha_eth *eth)
