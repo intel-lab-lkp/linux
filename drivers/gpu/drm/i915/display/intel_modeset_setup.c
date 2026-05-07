@@ -961,6 +961,8 @@ void intel_modeset_setup_hw_state(struct intel_display *display,
 	 * intel_sanitize_plane_mapping() may need to do vblank
 	 * waits, so we need vblank interrupts restored beforehand.
 	 */
+	intel_dmc_wait_fw_load(display);
+
 	for_each_intel_crtc(display->drm, crtc) {
 		struct intel_crtc_state *crtc_state =
 			to_intel_crtc_state(crtc->base.state);
