@@ -107,6 +107,14 @@ enum snps_c10_vspeo_index {
 	C10_EDP_HBR3
 };
 
+enum ehl_vspeo_index {
+	EHL_ERR = -1,
+
+	EHL_COMBO_DP_HBR = 0,
+	EHL_COMBO_EDP_HBR2,
+	EHL_COMBO_EDP_HBR3
+};
+
 bool is_hobl_buf_trans(const struct intel_ddi_buf_trans *table);
 
 void intel_ddi_buf_trans_init(struct intel_encoder *encoder);
