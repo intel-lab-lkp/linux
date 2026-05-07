@@ -1,0 +1,29 @@
+// SPDX-License-Identifier: GPL-2.0
+// Test that TCP does not reduce scaling_ratio for locked SO_RCVBUF.
+
+0 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
++0 setsockopt(3, SOL_SOCKET, SO_RCVBUF, [32768], 4) = 0
++0 bind(3, ..., ...) = 0
++0 listen(3, 1) = 0
+
+// Establish connection with standard MSS.
++0 < S 0:0(0) win 65535 <mss 1460,nop,wscale 8>
++0 > S. 0:0(0) ack 1 <...>
++0 < . 1:1(0) ack 1 win 65535
++0 accept(3, ..., ...) = 4
+
+// Inject varying payload sizes to force scaling_ratio recalculation.
++0.1 < P. 1:601(600) ack 1 win 65535
++0 > . 1:1(0) ack 601 <...>
+
++0.1 < P. 601:1301(700) ack 1 win 65535
++0 > . 1:1(0) ack 1301 <...>
+
++0.1 < P. 1301:2101(800) ack 1 win 65535
++0 > . 1:1(0) ack 2101 <...>
+
+// Check that truesize penalty did not reduce the window clamp.
+// On unpatched kernels, rcv_ssthresh drops to ~22K.
++0.1 %{
+assert tcpi_rcv_ssthresh > 28000, f"rcv_ssthresh dropped unexpectedly: {tcpi_rcv_ssthresh}"
+}%
