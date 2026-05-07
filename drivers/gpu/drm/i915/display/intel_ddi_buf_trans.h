@@ -98,6 +98,15 @@ enum snps_c20_vspeo_index {
 	C20_DP20
 };
 
+enum snps_c10_vspeo_index {
+	C10_ERR = -1,
+
+	C10_DP14_RBR_HBR = 0,
+	C10_DP14_HBR2_HBR3,
+	C10_EDP_NON_HBR3,
+	C10_EDP_HBR3
+};
+
 bool is_hobl_buf_trans(const struct intel_ddi_buf_trans *table);
 
 void intel_ddi_buf_trans_init(struct intel_encoder *encoder);
