@@ -35,6 +35,7 @@ static_assert(HV_HYP_PAGE_SIZE == MSHV_HV_PAGE_SIZE);
 #define MSHV_PIN_PAGES_BATCH_SIZE	(0x10000000ULL / HV_HYP_PAGE_SIZE)
 
 struct mshv_vp {
+	struct rcu_head vp_rcu;
 	u32 vp_index;
 	struct mshv_partition *vp_partition;
 	struct mutex vp_mutex;

@@ -30,6 +30,7 @@
 #include <linux/panic_notifier.h>
 #include <linux/vmalloc.h>
 #include <linux/rseq.h>
+#include <linux/rcupdate.h>
 
 #include "mshv_eventfd.h"
 #include "mshv.h"
@@ -1846,9 +1847,9 @@ static void destroy_partition(struct mshv_partition *partition)
 				vp->vp_ghcb_page = NULL;
 			}
 
-			kfree(vp);
-
 			partition->pt_vp_array[i] = NULL;
+
+			kfree_rcu(vp, vp_rcu);
 		}
 
 		mshv_debugfs_partition_remove(partition);
