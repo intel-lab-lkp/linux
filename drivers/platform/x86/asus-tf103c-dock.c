@@ -669,7 +669,8 @@ static irqreturn_t tf103c_dock_hpd_irq(int irq, void *data)
 {
 	struct tf103c_dock_data *dock = data;
 
-	mod_delayed_work(system_long_wq, &dock->hpd_work, TF103C_DOCK_HPD_DEBOUNCE);
+	mod_delayed_work(system_dfl_long_wq, &dock->hpd_work,
+			 TF103C_DOCK_HPD_DEBOUNCE);
 	return IRQ_HANDLED;
 }
 
@@ -677,7 +678,8 @@ static void tf103c_dock_start_hpd(struct tf103c_dock_data *dock)
 {
 	enable_irq(dock->hpd_irq);
 	/* Sync current HPD status */
-	queue_delayed_work(system_long_wq, &dock->hpd_work, TF103C_DOCK_HPD_DEBOUNCE);
+	queue_delayed_work(system_dfl_long_wq, &dock->hpd_work,
+			   TF103C_DOCK_HPD_DEBOUNCE);
 }
 
 static void tf103c_dock_stop_hpd(struct tf103c_dock_data *dock)
