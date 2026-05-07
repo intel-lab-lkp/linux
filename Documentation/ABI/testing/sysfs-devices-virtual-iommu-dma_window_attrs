@@ -1,0 +1,21 @@
+What:       /sys/devices/virtual/iommu/<iommu-isolation>/spapr-tce-ddw/*
+Date:       Oct 2025
+Contact:    linuxppc-dev@lists.ozlabs.org
+Description:    read only
+    For each IOMMU isolation unit spapr-tce-ddw sub-directory provides
+    attributes to query information related to the bigger Dynamic DMA
+    window (DDW) in the PowerPC virtualized platforms.
+
+    See Documentation/arch/powerpc/dma_window_attributes.rst for more
+    information.
+
+What:       /sys/devices/virtual/iommu/<iommu-isolation>/spapr-tce-dma/*
+Date:       Oct 2025
+Contact:    linuxppc-dev@lists.ozlabs.org
+Description:    read only
+    For each IOMMU isolation unit spapr-tce-dma sub-directory provides
+    attributes to query information related to the default 2GB DMA
+    window in the PowerPC virtualized platforms.
+
+    See Documentation/arch/powerpc/dma_window_attributes.rst for more
+    information.

@@ -124,6 +124,10 @@ struct pci_controller {
 	resource_size_t dma_window_base_cur;
 	resource_size_t dma_window_size;
 
+#if defined(CONFIG_PPC_PSERIES) || defined(CONFIG_PPC_POWERNV)
+	const struct attribute_group **iommu_groups;
+#endif
+
 #ifdef CONFIG_PPC64
 	unsigned long buid;
 	struct pci_dn *pci_data;

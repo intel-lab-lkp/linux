@@ -56,6 +56,20 @@ enum {
 	DDW_EXT_LIMITED_ADDR_MODE = 3
 };
 
+/* used by sysfs when querying Dynamic/Default DMA Window data */
+struct dma_win_data {
+	u32     page_size;
+	u64     direct_address;
+	u64     direct_size;
+	u64     dynamic_address;
+	u64     dynamic_size;
+	u32     dynamic_pages_mapped;
+	char    window_type[15];
+};
+
+#define SPAPR_SUCCESS		0
+#define SPAPR_ERROR			-1
+
 static struct iommu_table *iommu_pseries_alloc_table(int node)
 {
 	struct iommu_table *tbl;
@@ -836,6 +850,253 @@ static struct device_node *pci_dma_find(struct device_node *dn,
 
 	return rdn;
 }
+
+/* Get DDW information for the device */
+static int gather_ddw_info(struct device *dev, struct dma_win_data *data)
+{
+	struct iommu_device *iommu;
+	struct pci_controller *phb;
+	struct device_node *dn;
+	struct pci_dn *pci;
+	const __be32 *prop = NULL;
+	bool ddw_direct = false;
+	bool found = false;
+	struct iommu_table *tbl;
+	u32 pgshift;
+	struct dynamic_dma_window_prop *p;
+
+	memset(data, 0, sizeof(*data));
+
+	iommu = dev_get_drvdata(dev);
+	phb = container_of(iommu, struct pci_controller, iommu);
+	dn = phb->dn;
+
+	if (!dn)
+		return SPAPR_ERROR;
+
+	pci = PCI_DN(dn);
+	if (!pci || !pci->table_group)
+		return SPAPR_ERROR;
+
+	/* Find DDW */
+	prop = of_get_property(dn, DIRECT64_PROPNAME, NULL);
+	if (prop) {
+		ddw_direct = true;
+		found = true;
+	} else {
+		prop = of_get_property(dn, DMA64_PROPNAME, NULL);
+		if (prop)
+			found = true;
+	}
+
+	/* NO DDW */
+	if (!found)
+		return SPAPR_ERROR;
+
+	p = (struct dynamic_dma_window_prop *)prop;
+
+	pgshift = be32_to_cpu(p->tce_shift);
+	if (pgshift != 0xc && pgshift != 0x10 && pgshift != 0x15)
+		data->page_size = 0;
+	else
+		data->page_size = 1 << pgshift;
+
+	/* Check if DDW has table associated with it. Having a table associated with
+	 * DDW is indicative that is has some dynamic TCE allocations. In this case the
+	 * DDW can be fully Dynamic or in Hybrid mode. For SR-IOV DDW is on index 0,
+	 * for dedicated adapter on index 1.
+	 */
+	found = false;
+	for (int i = 0; i < IOMMU_TABLE_GROUP_MAX_TABLES; ++i) {
+		tbl = pci->table_group->tables[i];
+
+		if (tbl && tbl->it_index == be32_to_cpu(p->liobn)) {
+			found = true;
+			break;
+		}
+	}
+
+	/* set the parameters depnding on the DDW type */
+	if (ddw_direct && found) {          /* Hybrid */
+		data->direct_address = be64_to_cpu(p->dma_base);
+		data->dynamic_size = (u64)(tbl->it_size << tbl->it_page_shift);
+
+		data->dynamic_address = data->direct_address
+								+ (u64)(1UL << be32_to_cpu(p->window_shift))
+								- data->dynamic_size;
+
+		data->direct_size = data->dynamic_address - data->direct_address;
+		data->dynamic_pages_mapped = bitmap_weight(tbl->it_map, tbl->it_size);
+
+		sprintf(data->window_type, "%s", "Hybrid");
+	} else if (ddw_direct && !found) {    /* Direct */
+		data->direct_address = be64_to_cpu(p->dma_base);
+		data->direct_size = (u64)(1UL << be32_to_cpu(p->window_shift));
+
+		sprintf(data->window_type, "%s", "Direct");
+	} else {                              /* Dynamic */
+		data->dynamic_address = be64_to_cpu(p->dma_base);
+		data->dynamic_size = (u64)(1UL << be32_to_cpu(p->window_shift));
+		data->dynamic_pages_mapped = bitmap_weight(tbl->it_map, tbl->it_size);
+
+		sprintf(data->window_type, "%s", "Dynamic");
+	}
+
+	return SPAPR_SUCCESS;
+}
+
+/* Get DDW information for the device */
+static int gather_dma_info(struct device *dev, struct dma_win_data *data)
+{
+	struct iommu_device *iommu;
+	struct pci_controller *phb;
+	struct device_node *dn;
+	struct pci_dn *pci;
+	const __be32 *prop = NULL;
+	struct iommu_table *tbl;
+	unsigned long offset, size, liobn;
+
+	memset(data, 0, sizeof(*data));
+
+	iommu = dev_get_drvdata(dev);
+	phb = container_of(iommu, struct pci_controller, iommu);
+	dn = phb->dn;
+
+	if (!dn)
+		return SPAPR_ERROR;
+
+	pci = PCI_DN(dn);
+	if (!pci || !pci->table_group)
+		return SPAPR_ERROR;
+
+	/* search for default DMA window */
+	prop = of_get_property(dn, "ibm,dma-window", NULL);
+
+	if (!prop)
+		return SPAPR_ERROR;
+
+	/* default DMA Window is always at index 0 */
+	tbl = pci->table_group->tables[0];
+	if (!tbl)
+		return SPAPR_ERROR;
+
+	of_parse_dma_window(dn, prop, &liobn, &offset, &size);
+
+	data->dynamic_address = offset;
+	data->dynamic_size = size;
+	data->page_size = 1ULL << IOMMU_PAGE_SHIFT_4K;
+	data->dynamic_pages_mapped = bitmap_weight(tbl->it_map, tbl->it_size);
+
+	return SPAPR_SUCCESS;
+}
+
+#define DEVICE_SHOW_DDW(_name, _fmt)							\
+ssize_t ddw_##_name##_show(struct device *dev,					\
+								  struct device_attribute *attr,\
+								  char *buf)					\
+{																\
+	int rc = 0;													\
+	struct dma_win_data data;									\
+																\
+	rc = gather_ddw_info(dev, &data);							\
+																\
+	if (rc == SPAPR_SUCCESS)									\
+		return sysfs_emit(buf, _fmt, data._name);				\
+	else														\
+		return -ENODATA;										\
+}																\
+
+#define DEVICE_SHOW_DMA(_name, _fmt)							\
+ssize_t dma_##_name##_show(struct device *dev,					\
+								  struct device_attribute *attr,\
+								  char *buf)					\
+{																\
+	int rc = 0;													\
+	struct dma_win_data data;									\
+																\
+	rc = gather_dma_info(dev, &data);							\
+																\
+	if (rc == SPAPR_SUCCESS)									\
+		return sysfs_emit(buf, _fmt, data._name);				\
+	else														\
+		return -ENODATA;										\
+}																\
+
+static DEVICE_SHOW_DDW(direct_address, "%#llx\n");
+static DEVICE_SHOW_DDW(direct_size, "%lld\n");
+static DEVICE_SHOW_DDW(page_size, "%d\n");
+static DEVICE_SHOW_DDW(window_type, "%s\n");
+static DEVICE_SHOW_DDW(dynamic_address, "%#llx\n");
+static DEVICE_SHOW_DDW(dynamic_size, "%lld\n");
+static DEVICE_SHOW_DDW(dynamic_pages_mapped, "%d\n");
+static DEVICE_SHOW_DMA(dynamic_address, "%#llx\n");
+static DEVICE_SHOW_DMA(dynamic_size, "%lld\n");
+static DEVICE_SHOW_DMA(page_size, "%d\n");
+static DEVICE_SHOW_DMA(dynamic_pages_mapped, "%d\n");
+
+#define DEVICE_ATTR_DDW(_name)                              \
+		struct device_attribute dev_attr_ddw_##_name =      \
+			__ATTR(_name, 0444, ddw_##_name##_show, NULL)
+#define DEVICE_ATTR_DMA(_name)                              \
+		struct device_attribute dev_attr_dma_##_name =      \
+		__ATTR(_name, 0444, dma_##_name##_show, NULL)
+
+static DEVICE_ATTR_DDW(direct_address);
+static DEVICE_ATTR_DDW(direct_size);
+static DEVICE_ATTR_DDW(page_size);
+static DEVICE_ATTR_DDW(window_type);
+static DEVICE_ATTR_DDW(dynamic_address);
+static DEVICE_ATTR_DDW(dynamic_size);
+static DEVICE_ATTR_DDW(dynamic_pages_mapped);
+static DEVICE_ATTR_DMA(dynamic_address);
+static DEVICE_ATTR_DMA(dynamic_size);
+static DEVICE_ATTR_DMA(page_size);
+static DEVICE_ATTR_DMA(dynamic_pages_mapped);
+
+static struct attribute *spapr_tce_ddw_attrs[] = {
+	&dev_attr_ddw_direct_address.attr,
+	&dev_attr_ddw_direct_size.attr,
+	&dev_attr_ddw_page_size.attr,
+	&dev_attr_ddw_window_type.attr,
+	&dev_attr_ddw_dynamic_address.attr,
+	&dev_attr_ddw_dynamic_size.attr,
+	&dev_attr_ddw_dynamic_pages_mapped.attr,
+	NULL,
+};
+
+static struct attribute *spapr_tce_dma_attrs[] = {
+	&dev_attr_dma_dynamic_address.attr,
+	&dev_attr_dma_dynamic_size.attr,
+	&dev_attr_dma_page_size.attr,
+	&dev_attr_dma_dynamic_pages_mapped.attr,
+	NULL,
+};
+
+static struct attribute_group spapr_tce_ddw_group = {
+	.name = "spapr-tce-ddw",
+	.attrs = spapr_tce_ddw_attrs,
+};
+
+static struct attribute_group spapr_tce_dma_group = {
+	.name = "spapr-tce-dma",
+	.attrs = spapr_tce_dma_attrs,
+};
+
+static struct attribute *spapr_tce_iommu_attrs[] = {
+	NULL,
+};
+
+static struct attribute_group spapr_tce_iommu_group = {
+	.name = "spapr-tce-iommu",
+	.attrs = spapr_tce_iommu_attrs,
+};
+
+const struct attribute_group *spapr_tce_iommu_groups[] = {
+	&spapr_tce_iommu_group,
+	&spapr_tce_ddw_group,
+	&spapr_tce_dma_group,
+	NULL,
+};
 
 static void pci_dma_bus_setup_pSeriesLP(struct pci_bus *bus)
 {

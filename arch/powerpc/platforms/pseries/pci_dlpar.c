@@ -45,6 +45,8 @@ struct pci_controller *init_phb_dynamic(struct device_node *dn)
 	pci_process_bridge_OF_ranges(phb, dn, 0);
 	phb->controller_ops = pseries_pci_controller_ops;
 
+	phb->iommu_groups = spapr_tce_iommu_groups;
+
 	pci_devs_phb_init_dynamic(phb);
 
 	pseries_msi_allocate_domains(phb);

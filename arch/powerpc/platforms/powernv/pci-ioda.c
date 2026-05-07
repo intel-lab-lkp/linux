@@ -2493,6 +2493,20 @@ static const struct pci_controller_ops pnv_npu_ocapi_ioda_controller_ops = {
 	.shutdown		= pnv_pci_ioda_shutdown,
 };
 
+static struct attribute *pnv_tce_iommu_attrs[] = {
+	NULL,
+};
+
+static struct attribute_group pnv_tce_iommu_group = {
+	.name = "spapr-tce-iommu",
+	.attrs = pnv_tce_iommu_attrs,
+};
+
+static const struct attribute_group *pnv_tce_iommu_groups[] = {
+	&pnv_tce_iommu_group,
+	NULL,
+};
+
 static void __init pnv_pci_init_ioda_phb(struct device_node *np,
 					 u64 hub_id, int ioda_type)
 {
@@ -2696,6 +2710,8 @@ static void __init pnv_pci_init_ioda_phb(struct device_node *np,
 	default:
 		hose->controller_ops = pnv_pci_ioda_controller_ops;
 	}
+
+	hose->iommu_groups = pnv_tce_iommu_groups;
 
 	ppc_md.pcibios_default_alignment = pnv_pci_default_alignment;
 

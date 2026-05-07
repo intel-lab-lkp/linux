@@ -512,6 +512,8 @@ static void __init pSeries_discover_phbs(void)
 		isa_bridge_find_early(phb);
 		phb->controller_ops = pseries_pci_controller_ops;
 
+		phb->iommu_groups = spapr_tce_iommu_groups;
+
 		/* create pci_dn's for DT nodes under this PHB */
 		pci_devs_phb_init_dynamic(phb);
 

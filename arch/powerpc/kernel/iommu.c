@@ -1269,24 +1269,10 @@ static const struct iommu_ops spapr_tce_iommu_ops = {
 	.device_group = spapr_tce_iommu_device_group,
 };
 
-static struct attribute *spapr_tce_iommu_attrs[] = {
-	NULL,
-};
-
-static struct attribute_group spapr_tce_iommu_group = {
-	.name = "spapr-tce-iommu",
-	.attrs = spapr_tce_iommu_attrs,
-};
-
-static const struct attribute_group *spapr_tce_iommu_groups[] = {
-	&spapr_tce_iommu_group,
-	NULL,
-};
-
 void ppc_iommu_register_device(struct pci_controller *phb)
 {
 	iommu_device_sysfs_add(&phb->iommu, phb->parent,
-				spapr_tce_iommu_groups, "iommu-phb%04x",
+				phb->iommu_groups, "iommu-phb%04x",
 				phb->global_number);
 	iommu_device_register(&phb->iommu, &spapr_tce_iommu_ops,
 				phb->parent);

@@ -128,4 +128,5 @@ struct iommu_group *pSeries_pci_device_group(struct pci_controller *hose,
 					     struct pci_dev *pdev);
 #endif
 
+extern const struct attribute_group *spapr_tce_iommu_groups[];
 #endif /* _PSERIES_PSERIES_H */
