@@ -2289,10 +2289,12 @@ parse_vswing_preemph_override(struct intel_display *display)
 	} else if (DISPLAY_VER(display) >= 14) {
 		parse_vswing_preemph_snps(bufs_mtrx, block);
 	} else if (DISPLAY_VER(display) == 11) {
-		if (display->platform.elkhartlake)
+		if (display->platform.elkhartlake ||
+		    display->platform.jasperlake) {
 			parse_vswing_preemph_icl(bufs_mtrx, block);
-		else
+		} else {
 			drm_dbg_kms(display->drm, "VS/PE-O parsing not yet supported\n");
+		}
 	} else {
 		drm_dbg_kms(display->drm, "VS/PE-O parsing not yet supported\n");
 	}
@@ -2758,8 +2760,10 @@ static void override_vswing_preemph(struct intel_bios_encoder_data *devdata)
 	} else if (DISPLAY_VER(display) >= 14) {
 		parseable = true;
 	} else if (DISPLAY_VER(display) == 11) {
-		if (display->platform.elkhartlake)
+		if (display->platform.elkhartlake ||
+		    display->platform.jasperlake) {
 			parseable = true;
+		}
 	}
 
 	if (!parseable)
