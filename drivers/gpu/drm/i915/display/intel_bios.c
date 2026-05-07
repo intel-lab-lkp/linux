@@ -2211,9 +2211,9 @@ parse_vswing_preemph_override(struct intel_display *display)
 
 	drm_dbg_kms(display->drm, "VS/PE-O parsing not yet supported\n");
 
-	display->vbt.bufs_mtrx = bufs_mtrx;
-	display->vbt.num_tables = block->num_tables;
-	display->vbt.num_rows = num_rows;
+	display->vbt.vspeo.bufs_mtrx = bufs_mtrx;
+	display->vbt.vspeo.num_tables = block->num_tables;
+	display->vbt.vspeo.num_rows = num_rows;
 }
 
 static u8 translate_iboost(struct intel_display *display, u8 val)
@@ -3013,9 +3013,9 @@ init_vbt_defaults(struct intel_display *display)
 		    display->vbt.lvds_ssc_freq);
 
 	/* Vswing / Preemphasis Override */
-	display->vbt.bufs_mtrx = NULL;
-	display->vbt.num_tables = 0;
-	display->vbt.num_rows = 0;
+	display->vbt.vspeo.bufs_mtrx = NULL;
+	display->vbt.vspeo.num_tables = 0;
+	display->vbt.vspeo.num_rows = 0;
 }
 
 /* Common defaults which may be overridden by VBT. */
@@ -3398,11 +3398,11 @@ void intel_bios_driver_remove(struct intel_display *display)
 		kfree(entry);
 	}
 
-	if (display->vbt.bufs_mtrx) {
-		for (int idx = 0; idx < display->vbt.num_tables; idx++)
-			kfree(display->vbt.bufs_mtrx[idx]);
+	if (display->vbt.vspeo.bufs_mtrx) {
+		for (int idx = 0; idx < display->vbt.vspeo.num_tables; idx++)
+			kfree(display->vbt.vspeo.bufs_mtrx[idx]);
 
-		kfree(display->vbt.bufs_mtrx);
+		kfree(display->vbt.vspeo.bufs_mtrx);
 	}
 }
 
