@@ -1426,16 +1426,27 @@ module_exit(ubi_exit);
  */
 static int bytes_str_to_int(const char *str)
 {
-	char *endp;
 	unsigned long result;
+	unsigned int num_len;
+	char num_buf[32];
 
-	result = simple_strtoul(str, &endp, 0);
-	if (str == endp || result >= INT_MAX) {
+	/* Find the length of the numeric prefix */
+	num_len = strspn(str, "0123456789");
+	if (num_len == 0 || num_len >= sizeof(num_buf)) {
 		pr_err("UBI error: incorrect bytes count: \"%s\"\n", str);
 		return -EINVAL;
 	}
 
-	switch (*endp) {
+	/* Parse the numeric part */
+	memcpy(num_buf, str, num_len);
+	num_buf[num_len] = '\0';
+	if (kstrtoul(num_buf, 10, &result) < 0 || result >= INT_MAX) {
+		pr_err("UBI error: incorrect bytes count: \"%s\"\n", str);
+		return -EINVAL;
+	}
+
+	/* Handle suffix */
+	switch (str[num_len]) {
 	case 'G':
 		result *= 1024;
 		fallthrough;
