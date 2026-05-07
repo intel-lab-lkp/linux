@@ -221,8 +221,11 @@ failover_existing_slave_register(struct net_device *failover_dev)
 	for_each_netdev(net, dev) {
 		if (netif_is_failover(dev))
 			continue;
-		if (ether_addr_equal(failover_dev->perm_addr, dev->perm_addr))
+		if (ether_addr_equal(failover_dev->perm_addr, dev->perm_addr)) {
+			netdev_lock_ops(dev);
 			failover_slave_register(dev);
+			netdev_unlock_ops(dev);
+		}
 	}
 	rtnl_unlock();
 }
