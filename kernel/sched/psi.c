@@ -386,6 +386,9 @@ static void collect_percpu_times(struct psi_group *group,
 				&cpu_changed_states);
 		changed_states |= cpu_changed_states;
 
+		if (!(cpu_changed_states & (1 << PSI_NONIDLE)))
+			continue;
+
 		nonidle = nsecs_to_jiffies(times[PSI_NONIDLE]);
 		nonidle_total += nonidle;
 
