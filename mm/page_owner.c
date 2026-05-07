@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/debugfs.h>
+#include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
@@ -52,6 +53,24 @@ static DEFINE_SPINLOCK(stack_list_lock);
 struct stack_print_ctx {
 	struct stack *stack;
 	u8 flags;
+};
+
+enum page_owner_print_mode {
+	PAGE_OWNER_PRINT_FULL_STACK,
+	PAGE_OWNER_PRINT_STACK_HANDLE,
+};
+
+static const char * const page_owner_print_mode_strings[] = {
+	[PAGE_OWNER_PRINT_FULL_STACK]	= "full_stack",
+	[PAGE_OWNER_PRINT_STACK_HANDLE]	= "stack_handle",
+};
+
+struct page_owner_filter {
+	enum page_owner_print_mode print_mode;
+};
+
+static struct page_owner_filter owner_filter = {
+	.print_mode = PAGE_OWNER_PRINT_FULL_STACK,
 };
 
 static bool page_owner_enabled __initdata;
@@ -575,7 +594,11 @@ print_page_owner(char __user *buf, size_t count, unsigned long pfn,
 			migratetype_names[pageblock_mt],
 			&page->flags);
 
-	ret += stack_depot_snprint(handle, kbuf + ret, count - ret, 0);
+	if (READ_ONCE(owner_filter.print_mode) == PAGE_OWNER_PRINT_STACK_HANDLE) {
+		ret += scnprintf(kbuf + ret, count - ret,
+				"handle: %d\n", handle);
+	} else
+		ret += stack_depot_snprint(handle, kbuf + ret, count - ret, 0);
 	if (ret >= count)
 		goto err;
 
@@ -970,10 +993,71 @@ static int page_owner_threshold_set(void *data, u64 val)
 DEFINE_SIMPLE_ATTRIBUTE(page_owner_threshold_fops, &page_owner_threshold_get,
 			&page_owner_threshold_set, "%llu");
 
+static ssize_t print_mode_read(struct file *file, char __user *buf,
+				size_t count, loff_t *ppos)
+{
+	const char *output;
+	int mode;
+
+	mode = READ_ONCE(owner_filter.print_mode);
+
+	if (mode == PAGE_OWNER_PRINT_FULL_STACK)
+		output = "[full_stack] stack_handle\n";
+	else
+		output = "full_stack [stack_handle]\n";
+
+	return simple_read_from_buffer(buf, count, ppos, output, strlen(output));
+}
+
+static ssize_t print_mode_write(struct file *file,
+				 const char __user *buf,
+				 size_t count, loff_t *ppos)
+{
+	char *kbuf;
+	int mode;
+	int ret = count;
+
+	/*
+	 * Limit input size. Maximum valid input is "stack_handle" (12 chars)
+	 * plus newline and null terminator. Use 32 bytes as a reasonable limit.
+	 */
+	if (count > 32)
+		return -EINVAL;
+
+	kbuf = kmalloc(count + 1, GFP_KERNEL);
+	if (!kbuf)
+		return -ENOMEM;
+
+	if (strncpy_from_user(kbuf, buf, count) < 0) {
+		ret = -EFAULT;
+		goto out_free;
+	}
+	kbuf[count] = '\0';
+
+	mode = sysfs_match_string(page_owner_print_mode_strings, kbuf);
+	if (mode < 0) {
+		ret = -EINVAL;
+		goto out_free;
+	}
+
+	WRITE_ONCE(owner_filter.print_mode, mode);
+
+out_free:
+	kfree(kbuf);
+	return ret;
+}
+
+static const struct file_operations page_owner_print_mode_fops = {
+	.owner = THIS_MODULE,
+	.read = print_mode_read,
+	.write = print_mode_write,
+	.llseek = default_llseek,
+};
+
 
 static int __init pageowner_init(void)
 {
-	struct dentry *dir;
+	struct dentry *dir, *filter_dir;
 
 	if (!static_branch_unlikely(&page_owner_inited)) {
 		pr_info("page_owner is disabled\n");
@@ -981,6 +1065,11 @@ static int __init pageowner_init(void)
 	}
 
 	debugfs_create_file("page_owner", 0400, NULL, NULL, &page_owner_fops);
+
+	filter_dir = debugfs_create_dir("page_owner_filter", NULL);
+	debugfs_create_file("print_mode", 0600, filter_dir, NULL,
+			    &page_owner_print_mode_fops);
+
 	dir = debugfs_create_dir("page_owner_stacks", NULL);
 	debugfs_create_file("show_stacks", 0400, dir,
 			    (void *)(STACK_PRINT_FLAG_STACK |
