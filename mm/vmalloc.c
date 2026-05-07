@@ -4335,6 +4335,27 @@ void *vrealloc_node_align_noprof(const void *p, size_t size, unsigned long align
 			memset((void *)p + size, 0, old_size - size);
 		vm->requested_size = size;
 		kasan_vrealloc(p, old_size, size);
+
+		/* Shrink the vm_area: unmap and free unused pages. */
+		if (size < alloced_size) {
+			unsigned long new_nr_pages = PAGE_ALIGN(size) >> PAGE_SHIFT;
+			unsigned long i;
+
+			/* Unmap unused virtual range and flush TLB. */
+			vunmap_range((unsigned long)p + PAGE_ALIGN(size),
+				     (unsigned long)p + alloced_size);
+
+			/* Free unused physical pages back to buddy allocator. */
+			for (i = new_nr_pages; i < vm->nr_pages; i++) {
+				mod_lruvec_page_state(vm->pages[i],
+						      NR_VMALLOC, -1);
+				__free_page(vm->pages[i]);
+				vm->pages[i] = NULL;
+			}
+
+			vm->nr_pages = new_nr_pages;
+		}
+
 		return (void *)p;
 	}
 
