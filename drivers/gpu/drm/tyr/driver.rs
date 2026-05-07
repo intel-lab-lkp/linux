@@ -19,7 +19,8 @@ use kernel::{
     drm::ioctl,
     io::{
         poll,
-        Io, //
+        Io,
+        PhysAddr, //
     },
     new_mutex,
     of,
@@ -59,6 +60,9 @@ pub(crate) struct TyrPlatformDriverData {
 #[pin_data]
 pub(crate) struct TyrDrmDeviceData {
     pub(crate) pdev: ARef<platform::Device>,
+
+    /// Physical base address of the MMIO region.
+    pub(crate) mmio_phys_addr: PhysAddr,
 
     #[pin]
     clks: Mutex<Clocks>,
@@ -119,6 +123,7 @@ impl platform::Driver for TyrPlatformDriverData {
         let mali_regulator = Regulator::<regulator::Enabled>::get(pdev.as_ref(), c"mali")?;
         let sram_regulator = Regulator::<regulator::Enabled>::get(pdev.as_ref(), c"sram")?;
 
+        let mmio_phys_addr = pdev.resource_by_index(0).ok_or(ENODEV)?.start();
         let request = pdev.io_request_by_index(0).ok_or(ENODEV)?;
         let iomem = Arc::pin_init(request.iomap_sized::<SZ_2M>(), GFP_KERNEL)?;
 
@@ -140,6 +145,7 @@ impl platform::Driver for TyrPlatformDriverData {
 
         let data = try_pin_init!(TyrDrmDeviceData {
                 pdev: platform.clone(),
+                mmio_phys_addr,
                 clks <- new_mutex!(Clocks {
                     core: core_clk,
                     stacks: stacks_clk,
