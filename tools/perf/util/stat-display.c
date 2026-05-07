@@ -474,7 +474,7 @@ static void print_metric_std(struct perf_stat_config *config,
 		do_new_line_std(config, os);
 
 	n = fprintf(out, " # ");
-	if (color)
+	if (strlen(color))
 		n += color_fprintf(out, color, fmt, val);
 	else
 		n += fprintf(out, fmt, val);
@@ -607,7 +607,7 @@ static void print_metric_only(struct perf_stat_config *config,
 	if (mlen < strlen(unit))
 		mlen = strlen(unit) + 1;
 
-	if (color)
+	if (strlen(color))
 		mlen += strlen(color) + sizeof(PERF_COLOR_RESET) - 1;
 
 	color_snprintf(str, sizeof(str), color ?: "", fmt ?: "", val);

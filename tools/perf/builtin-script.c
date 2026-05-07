@@ -2111,7 +2111,7 @@ static void script_print_metric(struct perf_stat_config *config __maybe_unused,
 	perf_sample__fprintf_start(NULL, mctx->sample, mctx->thread, mctx->evsel,
 				   PERF_RECORD_SAMPLE, mctx->fp);
 	fputs("\tmetric: ", mctx->fp);
-	if (color)
+	if (strlen(color))
 		color_fprintf(mctx->fp, color, fmt, val);
 	else
 		printf(fmt, val);
