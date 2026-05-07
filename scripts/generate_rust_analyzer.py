@@ -4,6 +4,9 @@
 """
 
 import argparse
+from datetime import date
+import enum
+import re
 import json
 import logging
 import os
@@ -343,6 +346,161 @@ def generate_crates(
 
     return crates
 
+
+Version = tuple[int, int, int]
+
+
+@enum.unique
+class RaVersionInfo(enum.Enum):
+    """
+    Represents rust-analyzer compatibility baselines. Concrete versions are
+    mapped to the most recent baseline they have reached. Must be in release
+    order.
+    """
+
+    # NOTE:
+    # This rust-analyzer release should be kept in sync with our MSRV (currently
+    # 1.85.0). When the MSRV is bumped, follow the steps below to retrieve the
+    # information needed to update this:
+    #
+    #   1) Clone both Rust and rust-analyzer repositories.
+    #      ```console
+    #      $ git clone https://github.com/rust-lang/rust.git
+    #      $ git clone https://github.com/rust-lang/rust-analyzer.git
+    #      ```
+    #   2) Run the following script, providing the new MSRV as an argument. It
+    #      prints a link to the matching [1] rust-analyzer release page.
+    #      ```bash
+    #      #!/usr/bin/env bash
+    #
+    #      set -euo pipefail
+    #
+    #      RUST_VERSION=$1
+    #
+    #      grep_args=()
+    #      while IFS= read -r subject; do
+    #        grep_args+=(--grep "$subject")
+    #      done < <(git -C rust log \
+    #          --fixed-strings \
+    #          --format='%s' \
+    #          --grep 'Merge pull request #' \
+    #          --merges \
+    #          --no-follow \
+    #          -n 10 \
+    #          "$RUST_VERSION" \
+    #          -- src/tools/rust-analyzer
+    #      )
+    #
+    #      tag_predates=$(
+    #        git -C rust-analyzer log \
+    #          --fixed-strings \
+    #          --format='%(describe:tags,abbrev=0)' \
+    #          --merges \
+    #          -n 1 \
+    #          "${grep_args[@]}"
+    #      )
+    #
+    #      link_prefix="https://github.com/rust-lang/rust-analyzer/releases/tag"
+    #      echo "$link_prefix/$tag_predates"
+    #      ```
+    #   3) Grab the release date and the version string.
+    #
+    # [1] Note that rust-analyzer releases may not perfectly align with those
+    #     shipped in upstream Rust. We take a conservative approach here: use
+    #     the tag that directly predates the latest merge commit found upstream.
+    #
+    # v0.3.2228, released on 2024-12-23;
+    # shipped with the rustup 1.85.0 toolchain.
+    MSRV = (
+        date(2024, 12, 23),
+        (0, 3, 2228),
+        (1, 85, 0),
+    )
+
+    def __init__(
+        self,
+        release_date: date,
+        ra_version: Version,
+        rust_version: Version,
+    ) -> None:
+        self.release_date = release_date
+        self.ra_version = ra_version
+        self.rust_version = rust_version
+
+
+class RustProject(TypedDict):
+    crates: List[Crate]
+    sysroot: str
+
+
+def generate_rust_project(
+    _version_info: RaVersionInfo,
+    srctree: pathlib.Path,
+    objtree: pathlib.Path,
+    sysroot: pathlib.Path,
+    sysroot_src: pathlib.Path,
+    external_src: Optional[pathlib.Path],
+    cfgs: List[str],
+    core_edition: str,
+) -> RustProject:
+    rust_project: RustProject = {
+        "crates": generate_crates(
+            srctree, objtree, sysroot_src, external_src, cfgs, core_edition
+        ),
+        "sysroot": str(sysroot),
+    }
+
+    return rust_project
+
+def query_ra_version() -> Optional[str]:
+    try:
+        # Use the rust-analyzer binary found in $PATH.
+        ra_version_output = (
+            subprocess.check_output(
+                ["rust-analyzer", "--version"],
+                stdin=subprocess.DEVNULL,
+            )
+            .decode("utf-8")
+            .strip()
+        )
+        return ra_version_output
+    except FileNotFoundError:
+        return None
+
+def map_ra_version_baseline(ra_version_output: str) -> RaVersionInfo:
+    baselines = list(reversed(RaVersionInfo))
+
+    version_match = re.search(r"\d+\.\d+\.\d+", ra_version_output)
+    if version_match:
+        version_string = version_match.group()
+        found_version = tuple(map(int, version_string.split(".")))
+
+        # `rust-analyzer --version` shows a different version string depending
+        # on how the binary is built: it may print either the Rust version or
+        # the rust-analyzer version itself. To distinguish between them, we
+        # leverage rust-analyzer's versioning convention.
+        #
+        # See:
+        # - https://github.com/rust-lang/rust-analyzer/blob/fad5c3d2d642/xtask/src/dist.rs#L19-L21
+        is_ra_version = version_string.startswith(("0.3", "0.4", "0.5"))
+        if is_ra_version:
+            for info in baselines:
+                if found_version >= info.ra_version:
+                    return info
+        else:
+            for info in baselines:
+                if found_version >= info.rust_version:
+                    return info
+
+    date_match = re.search(r"\d{4}-\d{2}-\d{2}", ra_version_output)
+    if date_match:
+        found_date = date.fromisoformat(date_match.group())
+        for info in baselines:
+            if found_date >= info.release_date:
+                return info
+
+    return RaVersionInfo.MSRV
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('--verbose', '-v', action='store_true')
@@ -371,10 +529,30 @@ def main() -> None:
         level=logging.INFO if args.verbose else logging.WARNING
     )
 
-    rust_project = {
-        "crates": generate_crates(args.srctree, args.objtree, args.sysroot_src, args.exttree, args.cfgs, args.core_edition),
-        "sysroot": str(args.sysroot),
-    }
+    ra_version_output = query_ra_version()
+    if ra_version_output:
+        compatible_ra_version = map_ra_version_baseline(ra_version_output)
+    else:
+        logging.warning(
+            "Failed to find rust-analyzer in $PATH; " \
+            "falling back to `rust-project.json` for rust-analyzer " \
+            "%s, %s (shipped with Rust %s)",
+            ".".join(map(str, RaVersionInfo.MSRV.ra_version)),
+            RaVersionInfo.MSRV.release_date,
+            ".".join(map(str, RaVersionInfo.MSRV.rust_version)),
+        )
+        compatible_ra_version = RaVersionInfo.MSRV
+
+    rust_project = generate_rust_project(
+        compatible_ra_version,
+        args.srctree,
+        args.objtree,
+        args.sysroot,
+        args.sysroot_src,
+        args.exttree,
+        args.cfgs,
+        args.core_edition,
+    )
 
     json.dump(rust_project, sys.stdout, sort_keys=True, indent=4)
 
