@@ -441,9 +441,13 @@ failed_sensitivity:
 
 static void cmpc_accel_remove_v4(struct acpi_device *acpi)
 {
+	struct input_dev *inputdev = dev_get_drvdata(&acpi->dev);
+	struct cmpc_accel *accel = dev_get_drvdata(&inputdev->dev);
+
 	device_remove_file(&acpi->dev, &cmpc_accel_sensitivity_attr_v4);
 	device_remove_file(&acpi->dev, &cmpc_accel_g_select_attr_v4);
 	cmpc_remove_acpi_notify_device(acpi);
+	kfree(accel);
 }
 
 static SIMPLE_DEV_PM_OPS(cmpc_accel_pm, cmpc_accel_suspend_v4,
@@ -680,8 +684,12 @@ failed_file:
 
 static void cmpc_accel_remove(struct acpi_device *acpi)
 {
+	struct input_dev *inputdev = dev_get_drvdata(&acpi->dev);
+	struct cmpc_accel *accel = dev_get_drvdata(&inputdev->dev);
+
 	device_remove_file(&acpi->dev, &cmpc_accel_sensitivity_attr);
 	cmpc_remove_acpi_notify_device(acpi);
+	kfree(accel);
 }
 
 static const struct acpi_device_id cmpc_accel_device_ids[] = {
