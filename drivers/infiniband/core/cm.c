@@ -1542,13 +1542,13 @@ int ib_send_cm_req(struct ib_cm_id *cm_id,
 	ret = cm_init_av_by_path(param->primary_path,
 				 param->ppath_sgid_attr, &av);
 	if (ret)
-		return ret;
+		goto err_free_tw;
 	if (param->alternate_path) {
 		ret = cm_init_av_by_path(param->alternate_path, NULL,
 					 &alt_av);
 		if (ret) {
 			cm_destroy_av(&av);
-			return ret;
+			goto err_free_tw;
 		}
 	}
 	cm_id->service_id = param->service_id;
@@ -1577,7 +1577,7 @@ int ib_send_cm_req(struct ib_cm_id *cm_id,
 	msg = cm_alloc_priv_msg(cm_id_priv, IB_CM_REQ_SENT);
 	if (IS_ERR(msg)) {
 		ret = PTR_ERR(msg);
-		goto out_unlock;
+		goto err_destroy_id_av;
 	}
 
 	req_msg = (struct cm_req_msg *)msg->mad;
@@ -1590,15 +1590,21 @@ int ib_send_cm_req(struct ib_cm_id *cm_id,
 	trace_icm_send_req(&cm_id_priv->id);
 	ret = ib_post_send_mad(msg, NULL);
 	if (ret)
-		goto out_free;
+		goto err_free_msg;
 	BUG_ON(cm_id->state != IB_CM_IDLE);
 	cm_id->state = IB_CM_REQ_SENT;
 	spin_unlock_irqrestore(&cm_id_priv->lock, flags);
 	return 0;
-out_free:
+err_free_msg:
 	cm_free_priv_msg(msg);
-out_unlock:
+err_destroy_id_av:
+	if (param->alternate_path)
+		cm_destroy_av(&cm_id_priv->alt_av);
+	cm_destroy_av(&cm_id_priv->av);
 	spin_unlock_irqrestore(&cm_id_priv->lock, flags);
+err_free_tw:
+	kfree(cm_id_priv->timewait_info);
+	cm_id_priv->timewait_info = NULL;
 	return ret;
 }
 EXPORT_SYMBOL(ib_send_cm_req);
