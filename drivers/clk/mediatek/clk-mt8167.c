@@ -27,6 +27,7 @@ static const struct mtk_fixed_clk fixed_clks[] = {
 	FIXED_CLK(CLK_TOP_DSI0_LNTC_DSICK, "dsi0_lntc_dsick", "clk26m", 75000000),
 	FIXED_CLK(CLK_TOP_VPLL_DPIX, "vpll_dpix", "clk26m", 75000000),
 	FIXED_CLK(CLK_TOP_LVDSTX_CLKDIG_CTS, "lvdstx_dig_cts", "clk26m", 52500000),
+	FIXED_CLK(CLK_TOP_HDMTX_CLKDIG_CTS, "hdmtx_dig_cts", "clk26m", 75000000),
 };
 
 static const struct mtk_fixed_factor top_divs[] = {
