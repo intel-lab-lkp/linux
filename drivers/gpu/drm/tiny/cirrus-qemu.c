@@ -350,7 +350,7 @@ static void cirrus_primary_plane_helper_atomic_update(struct drm_plane *plane,
 	if (!old_fb || old_fb->pitches[0] != fb->pitches[0])
 		cirrus_pitch_set(cirrus, fb->pitches[0]);
 
-	drm_atomic_helper_damage_iter_init(&iter, old_plane_state, plane_state);
+	drm_atomic_helper_damage_iter_init(&iter, plane_state);
 	drm_atomic_for_each_plane_damage(&iter, &damage) {
 		unsigned int offset = drm_fb_clip_offset(fb->pitches[0], fb->format, &damage);
 		struct iosys_map dst = IOSYS_MAP_INIT_OFFSET(&vaddr, offset);
