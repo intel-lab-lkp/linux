@@ -444,6 +444,11 @@ LSM_HOOK(int, 0, bpf_prog, struct bpf_prog *prog)
 LSM_HOOK(int, 0, bpf_map_create, struct bpf_map *map, union bpf_attr *attr,
 	 struct bpf_token *token, bool kernel)
 LSM_HOOK(void, LSM_RET_VOID, bpf_map_free, struct bpf_map *map)
+LSM_HOOK(int, 0, bpf_prog_load_post_integrity, struct bpf_prog *prog,
+	 union bpf_attr *attr, struct bpf_token *token, bool kernel,
+	 const struct lsm_id *lsmid, enum lsm_integrity_verdict verdict)
+LSM_HOOK(int, 0, bpf_prog_load_integrity, struct bpf_prog *prog,
+	 union bpf_attr *attr, struct bpf_token *token, bool kernel)
 LSM_HOOK(int, 0, bpf_prog_load, struct bpf_prog *prog, union bpf_attr *attr,
 	 struct bpf_token *token, bool kernel)
 LSM_HOOK(void, LSM_RET_VOID, bpf_prog_free, struct bpf_prog *prog)
