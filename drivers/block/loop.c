@@ -1120,6 +1120,10 @@ static void __loop_clr_fd(struct loop_device *lo)
 
 	spin_lock_irq(&lo->lo_lock);
 	filp = lo->lo_backing_file;
+#ifdef CONFIG_DEBUG_AID_FOR_SYZBOT
+	pr_err("%s(loop%d) clearing lo_backing_file (refcnt=0x%lx)\n",
+	       __func__, lo->lo_number, __file_ref_read_raw(&filp->f_ref));
+#endif
 	lo->lo_backing_file = NULL;
 	spin_unlock_irq(&lo->lo_lock);
 
