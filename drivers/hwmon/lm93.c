@@ -339,7 +339,7 @@ static const unsigned long lm93_vin_val_max[16] = {
  * };
  */
 
-static unsigned LM93_IN_FROM_REG(int nr, u8 reg)
+static unsigned int LM93_IN_FROM_REG(int nr, u8 reg)
 {
 	const long uv_max = lm93_vin_val_max[nr] * 1000;
 	const long uv_min = lm93_vin_val_min[nr] * 1000;
@@ -355,7 +355,7 @@ static unsigned LM93_IN_FROM_REG(int nr, u8 reg)
  * IN: mV, limits determined by channel nr
  * REG: scaling determined by channel nr
  */
-static u8 LM93_IN_TO_REG(int nr, unsigned val)
+static u8 LM93_IN_TO_REG(int nr, unsigned int val)
 {
 	/* range limit */
 	const long mv = clamp_val(val,
@@ -379,7 +379,7 @@ static u8 LM93_IN_TO_REG(int nr, unsigned val)
 }
 
 /* vid in mV, upper == 0 indicates low limit, otherwise upper limit */
-static unsigned LM93_IN_REL_FROM_REG(u8 reg, int upper, int vid)
+static unsigned int LM93_IN_REL_FROM_REG(u8 reg, int upper, int vid)
 {
 	const long uv_offset = upper ? (((reg >> 4 & 0x0f) + 1) * 12500) :
 				(((reg >> 0 & 0x0f) + 1) * -25000);
@@ -396,7 +396,7 @@ static unsigned LM93_IN_REL_FROM_REG(u8 reg, int upper, int vid)
  * upper also determines which nibble of the register is returned
  * (the other nibble will be 0x0)
  */
-static u8 LM93_IN_REL_TO_REG(unsigned val, int upper, int vid)
+static u8 LM93_IN_REL_TO_REG(unsigned int val, int upper, int vid)
 {
 	long uv_offset = vid * 1000 - val * 10000;
 
@@ -730,7 +730,7 @@ static u8 LM93_INTERVAL_TO_REG(long interval)
  * GPIO: 0-255, GPIO0 is LSB
  * REG: inverted
  */
-static unsigned LM93_GPI_FROM_REG(u8 reg)
+static unsigned int LM93_GPI_FROM_REG(u8 reg)
 {
 	return ~reg & 0xff;
 }
@@ -777,9 +777,9 @@ static unsigned LM93_GPI_FROM_REG(u8 reg)
 #define LM93_ALARM_TEMP2	0x20000000
 #define LM93_ALARM_TEMP3	0x40000000
 
-static unsigned LM93_ALARMS_FROM_REG(struct block1_t b1)
+static unsigned int LM93_ALARMS_FROM_REG(struct block1_t b1)
 {
-	unsigned result;
+	unsigned int result;
 
 	result  = b1.host_status_2 & 0x3f;
 
