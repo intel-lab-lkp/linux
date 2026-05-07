@@ -206,6 +206,8 @@ static void mbt_init_sb_layout(struct super_block *sb,
 	sbi->s_desc_per_block_bits =
 		sb->s_blocksize_bits - (fls(layout->desc_size) - 1);
 	sbi->s_desc_per_block = 1 << sbi->s_desc_per_block_bits;
+	sbi->s_min_folio_order = get_order(sb->s_blocksize);
+	sbi->s_max_folio_order = sbi->s_min_folio_order;
 
 	es->s_first_data_block = cpu_to_le32(0);
 	es->s_blocks_count_lo = cpu_to_le32(layout->blocks_per_group *
@@ -781,6 +783,16 @@ test_mb_mark_used_range(struct kunit *test, struct ext4_buddy *e4b,
 	mbt_validate_group_info(test, grp, e4b->bd_info);
 }
 
+/*
+ * Skip if blocksize > PAGE_SIZE without THP.  The buddy cache folio
+ * allocation requires CONFIG_TRANSPARENT_HUGEPAGE for large blocks.
+ */
+static void mbt_check_lbs_support(struct kunit *test, struct super_block *sb)
+{
+	if (!IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) && sb->s_blocksize > PAGE_SIZE)
+		kunit_skip(test, "blocksize > PAGE_SIZE requires CONFIG_TRANSPARENT_HUGEPAGE");
+}
+
 static void test_mb_mark_used(struct kunit *test)
 {
 	struct ext4_buddy e4b;
@@ -791,9 +803,7 @@ static void test_mb_mark_used(struct kunit *test)
 	struct test_range ranges[TEST_RANGE_COUNT];
 	int i;
 
-	/* buddy cache assumes that each page contains at least one block */
-	if (sb->s_blocksize > PAGE_SIZE)
-		kunit_skip(test, "blocksize exceeds pagesize");
+	mbt_check_lbs_support(test, sb);
 
 	bitmap = kunit_kzalloc(test, sb->s_blocksize, GFP_KERNEL);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, bitmap);
@@ -858,9 +868,7 @@ static void test_mb_free_blocks(struct kunit *test)
 	int i;
 	struct test_range ranges[TEST_RANGE_COUNT];
 
-	/* buddy cache assumes that each page contains at least one block */
-	if (sb->s_blocksize > PAGE_SIZE)
-		kunit_skip(test, "blocksize exceeds pagesize");
+	mbt_check_lbs_support(test, sb);
 
 	bitmap = kunit_kzalloc(test, sb->s_blocksize, GFP_KERNEL);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, bitmap);
@@ -905,9 +913,7 @@ static void test_mb_mark_used_cost(struct kunit *test)
 	int i, j;
 	unsigned long start, end, all = 0;
 
-	/* buddy cache assumes that each page contains at least one block */
-	if (sb->s_blocksize > PAGE_SIZE)
-		kunit_skip(test, "blocksize exceeds pagesize");
+	mbt_check_lbs_support(test, sb);
 
 	ret = ext4_mb_load_buddy_test(sb, TEST_GOAL_GROUP, &e4b);
 	KUNIT_ASSERT_EQ(test, ret, 0);
