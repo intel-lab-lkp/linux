@@ -446,6 +446,17 @@ s32 igc_config_fc_after_link_up(struct igc_hw *hw)
 	u16 speed, duplex;
 	s32 ret_val = 0;
 
+	/* Without autoneg, flow control capability is not exchanged with the
+	 * link partner. IEEE 802.3 prohibits flow control in half-duplex mode.
+	 */
+	if (!hw->mac.autoneg_enabled) {
+		if (hw->mac.forced_speed_duplex == IGC_FORCED_10H ||
+		    hw->mac.forced_speed_duplex == IGC_FORCED_100H)
+			hw->fc.current_mode = igc_fc_none;
+
+		goto force_fc;
+	}
+
 	/* In auto-neg, we need to check and see if Auto-Neg has completed,
 	 * and if so, how the PHY and link partner has flow control
 	 * configured.
@@ -607,6 +618,7 @@ s32 igc_config_fc_after_link_up(struct igc_hw *hw)
 	/* Now we call a subroutine to actually force the MAC
 	 * controller to use the correct flow control settings.
 	 */
+force_fc:
 	ret_val = igc_force_mac_fc(hw);
 	if (ret_val) {
 		hw_dbg("Error forcing flow control settings\n");
