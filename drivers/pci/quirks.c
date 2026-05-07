@@ -4224,6 +4224,40 @@ reset_complete:
 	return 0;
 }
 
+/*
+ * Some devices need D3cold->D0 power cycle for proper firmware reset
+ * when used in VFIO passthrough. Some claim FLReset+ but it's incomplete,
+ * others lack FLR entirely, and standard reset methods don't fully reset
+ * firmware state. On bare metal with native drivers, we skip this and let
+ * the driver handle reset via standard methods.
+ */
+static int reset_device_d3cold(struct pci_dev *dev, bool probe)
+{
+	int ret;
+
+	if (probe)
+		return 0;
+
+	if (!dev->driver || strcmp(dev->driver->name, "vfio-pci") != 0)
+		return -ENOTTY;
+
+	/*
+	 * D3cold->D0 power cycle for firmware reset.
+	 * VFIO has already disabled interrupts and will handle state
+	 * save/restore, so we just do the power transition.
+	 */
+	ret = pci_set_power_state(dev, PCI_D3cold);
+	if (ret && ret != -EIO)
+		pci_warn(dev, "D3cold transition failed: %d\n", ret);
+
+	ret = pci_set_power_state(dev, PCI_D0);
+	if (ret && ret != -EIO)
+		pci_warn(dev, "D0 transition failed: %d\n", ret);
+
+	pci_info(dev, "D3cold reset completed\n");
+	return 0;
+}
+
 static const struct pci_dev_reset_methods pci_dev_reset_methods[] = {
 	{ PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82599_SFP_VF,
 		 reset_intel_82599_sfp_virtfn },
@@ -4239,6 +4273,10 @@ static const struct pci_dev_reset_methods pci_dev_reset_methods[] = {
 		reset_chelsio_generic_dev },
 	{ PCI_VENDOR_ID_HUAWEI, PCI_DEVICE_ID_HINIC_VF,
 		reset_hinic_vf_dev },
+	{ PCI_VENDOR_ID_QCOM, 0x1103, reset_device_d3cold },     /* Qualcomm ath11k WiFi */
+	{ PCI_VENDOR_ID_QCOM, 0x1107, reset_device_d3cold },     /* Qualcomm ath12k WiFi */
+	{ PCI_VENDOR_ID_QCOM, 0x0308, reset_device_d3cold },     /* Qualcomm SDX62/SDX65 5G modem */
+	{ PCI_VENDOR_ID_MEDIATEK, 0x7925, reset_device_d3cold }, /* MediaTek mt7925e WiFi */
 	{ 0 }
 };
 
