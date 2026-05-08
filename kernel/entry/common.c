@@ -177,6 +177,7 @@ irqentry_state_t noinstr irqentry_nmi_enter(struct pt_regs *regs)
 
 	instrumentation_begin();
 	kmsan_unpoison_entry_regs(regs);
+	kmsan_unpoison_memory(&irq_state, sizeof(irq_state));
 	trace_hardirqs_off_finish();
 	ftrace_nmi_enter();
 	instrumentation_end();
