@@ -327,6 +327,28 @@ static inline void lazy_mmu_mode_pause(void)
 }
 
 /**
+ * lazy_mmu_mode_resume_task() - Resume the lazy MMU mode for a specific task.
+ *
+ * Like lazy_mmu_mode_resume() below, but with a task specified.
+ * Must be called only by lazy_mmu_mode_resume() or during context switch.
+ * Must never be called in interrupt context.
+ *
+ * Must match a call to lazy_mmu_mode_pause().
+ *
+ * Has no effect if called:
+ * - While paused (inside another pause()/resume() pair)
+ */
+static inline void lazy_mmu_mode_resume_task(struct task_struct *task)
+{
+	struct lazy_mmu_state *state = &task->lazy_mmu_state;
+
+	VM_WARN_ON_ONCE(state->pause_count == 0);
+
+	if (--state->pause_count == 0 && state->enable_count > 0)
+		arch_enter_lazy_mmu_mode();
+}
+
+/**
  * lazy_mmu_mode_resume() - Resume the lazy MMU mode.
  *
  * Resumes the lazy MMU mode; if it was active at the point where the matching
@@ -341,15 +363,8 @@ static inline void lazy_mmu_mode_pause(void)
  */
 static inline void lazy_mmu_mode_resume(void)
 {
-	struct lazy_mmu_state *state = &current->lazy_mmu_state;
-
-	if (in_interrupt())
-		return;
-
-	VM_WARN_ON_ONCE(state->pause_count == 0);
-
-	if (--state->pause_count == 0 && state->enable_count > 0)
-		arch_enter_lazy_mmu_mode();
+	if (!in_interrupt())
+		lazy_mmu_mode_resume_task(current);
 }
 #else
 static inline void lazy_mmu_mode_enable(void) {}
