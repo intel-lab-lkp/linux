@@ -515,7 +515,7 @@ struct ixgbe_q_vector {
 	struct rcu_head rcu;	/* to avoid race with update stats on free */
 
 	cpumask_t affinity_mask;
-	int numa_node;
+	int node;
 	char name[IFNAMSIZ + 9];
 
 	/* for dynamic allocation of rings associated with this q_vector */
