@@ -681,8 +681,9 @@ retry:
 	 * between the original and resized sets.
 	 */
 	orig = ipset_dereference_bh_nfnl(h->table);
-	atomic_set(&orig->ref, 1);
 	atomic_inc(&orig->uref);
+	smp_mb__after_atomic();
+	atomic_set(&orig->ref, 1);
 	pr_debug("attempt to resize set %s from %u to %u, t %p\n",
 		 set->name, orig->htable_bits, htable_bits, orig);
 	for (r = 0; r < ahash_numof_locks(orig->htable_bits); r++) {
@@ -799,6 +800,7 @@ out:
 cleanup:
 	rcu_read_unlock_bh();
 	atomic_set(&orig->ref, 0);
+	smp_mb__before_atomic();
 	atomic_dec(&orig->uref);
 	mtype_ahash_destroy(set, t, false);
 	if (ret == -EAGAIN)
