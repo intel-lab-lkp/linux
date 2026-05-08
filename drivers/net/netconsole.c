@@ -1653,6 +1653,33 @@ static struct notifier_block netconsole_netdev_notifier = {
 	.notifier_call  = netconsole_netdev_event,
 };
 
+static struct sk_buff *find_skb(struct netpoll *np, int len, int reserve)
+{
+	int count = 0;
+	struct sk_buff *skb;
+
+	zap_completion_queue();
+repeat:
+
+	skb = alloc_skb(len, GFP_ATOMIC);
+	if (!skb) {
+		skb = skb_dequeue(&np->skb_pool);
+		schedule_work(&np->refill_wq);
+	}
+
+	if (!skb) {
+		if (++count < 10) {
+			netpoll_poll_dev(np->dev);
+			goto repeat;
+		}
+		return NULL;
+	}
+
+	refcount_set(&skb->users, 1);
+	skb_reserve(skb, reserve);
+	return skb;
+}
+
 static void netpoll_udp_checksum(struct netpoll *np, struct sk_buff *skb,
 				 int len)
 {
