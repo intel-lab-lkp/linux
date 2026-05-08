@@ -19,6 +19,7 @@
 #include <linux/init.h>
 #include <linux/iommu.h>
 #include <linux/iopoll.h>
+#include <linux/irqchip/riscv-imsic.h>
 #include <linux/kernel.h>
 #include <linux/pci.h>
 #include <linux/generic_pt/iommu.h>
@@ -1286,6 +1287,38 @@ static struct iommu_domain *riscv_iommu_alloc_paging_domain(struct device *dev)
 	return &domain->domain;
 }
 
+static void riscv_iommu_get_resv_regions(struct device *dev, struct list_head *head)
+{
+	const struct imsic_global_config *imsic_global;
+	unsigned int cpu;
+
+	if (!imsic_enabled())
+		return;
+
+	imsic_global = imsic_get_global_config();
+
+	for_each_possible_cpu(cpu) {
+		const struct imsic_local_config *local;
+		struct iommu_resv_region *reg;
+
+		local = per_cpu_ptr(imsic_global->local, cpu);
+		if (!local->msi_va)
+			continue;
+
+		/*
+		 * The device always writes to the host physical IMSIC address, so install
+		 * identity mappings directly. Use IOMMU_RESV_DIRECT_RELAXABLE instead of
+		 * IOMMU_RESV_DIRECT since these 1:1 mappings are not required for assigned
+		 * devices.
+		 */
+		reg = iommu_alloc_resv_region(local->msi_pa, IMSIC_MMIO_PAGE_SZ,
+					      IOMMU_WRITE | IOMMU_NOEXEC | IOMMU_MMIO,
+					      IOMMU_RESV_DIRECT_RELAXABLE, GFP_KERNEL);
+		if (reg)
+			list_add_tail(&reg->list, head);
+	}
+}
+
 static int riscv_iommu_attach_blocking_domain(struct iommu_domain *iommu_domain,
 					      struct device *dev,
 					      struct iommu_domain *old)
@@ -1401,6 +1434,7 @@ static const struct iommu_ops riscv_iommu_ops = {
 	.blocked_domain = &riscv_iommu_blocking_domain,
 	.release_domain = &riscv_iommu_blocking_domain,
 	.domain_alloc_paging = riscv_iommu_alloc_paging_domain,
+	.get_resv_regions = riscv_iommu_get_resv_regions,
 	.device_group = riscv_iommu_device_group,
 	.probe_device = riscv_iommu_probe_device,
 	.release_device	= riscv_iommu_release_device,
