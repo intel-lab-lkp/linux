@@ -50,20 +50,15 @@ static int inv_icm42600_spi_bus_setup(struct inv_icm42600_state *st)
 
 static int inv_icm42600_probe(struct spi_device *spi)
 {
-	const void *match;
 	enum inv_icm42600_chip chip;
 	struct regmap *regmap;
-
-	match = device_get_match_data(&spi->dev);
-	if (!match)
-		return -EINVAL;
-	chip = (uintptr_t)match;
 
 	/* use SPI specific regmap */
 	regmap = devm_regmap_init_spi(spi, &inv_icm42600_spi_regmap_config);
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
 
+	chip = (uintptr_t)device_get_match_data(&spi->dev);
 	return inv_icm42600_core_probe(regmap, chip, inv_icm42600_spi_bus_setup);
 }
 
@@ -115,6 +110,7 @@ static struct spi_driver inv_icm42600_driver = {
 		.name = "inv-icm42600-spi",
 		.of_match_table = inv_icm42600_of_matches,
 		.pm = pm_ptr(&inv_icm42600_pm_ops),
+		.suppress_override_attrs = true,
 	},
 	.id_table = inv_icm42600_id,
 	.probe = inv_icm42600_probe,
