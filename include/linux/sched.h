@@ -836,6 +836,11 @@ struct task_struct {
 	 */
 	randomized_struct_fields_start
 
+#ifdef CONFIG_STACKPROTECTOR
+	/* Canary value for the -fstack-protector GCC feature: */
+	unsigned long			stack_canary;
+#endif
+
 	void				*stack;
 	refcount_t			usage;
 	/* Per task flags (PF_*), defined further below: */
@@ -1060,10 +1065,6 @@ struct task_struct {
 	pid_t				pid;
 	pid_t				tgid;
 
-#ifdef CONFIG_STACKPROTECTOR
-	/* Canary value for the -fstack-protector GCC feature: */
-	unsigned long			stack_canary;
-#endif
 	/*
 	 * Pointers to the (original) parent process, youngest child, younger sibling,
 	 * older sibling, respectively.  (p->father can be replaced with
