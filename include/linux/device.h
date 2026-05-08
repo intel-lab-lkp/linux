@@ -1077,6 +1077,14 @@ static inline bool dev_has_sync_state(struct device *dev)
 	return false;
 }
 
+/**
+ * dev_set_drv_sync_state - Assign the ->sync_state callback for a device.
+ * @dev: The device.
+ * @fn: The callback.
+ *
+ * This function dynamically tries to assign the driver's ->sync_state()
+ * callback for the corresponding @dev.
+ */
 static inline int dev_set_drv_sync_state(struct device *dev,
 					 void (*fn)(struct device *dev))
 {
