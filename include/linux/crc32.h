@@ -81,6 +81,31 @@ u32 crc32_be(u32 crc, const void *p, size_t len);
  */
 u32 crc32c(u32 crc, const void *p, size_t len);
 
+/**
+ * crc32c_flip_range - Update CRC32c after flipping a range of bits
+ * @old_crc:    Existing CRC32c value of the buffer (pre-flip).
+ * @total_bits: Total size of the buffer in bits (e.g., 524288 for 64KB).
+ * @bit_off:    Starting bit offset of the modified range.
+ * @nbits:      Length of the flipped bit sequence.
+ *
+ * This function calculates the new CRC32c value when a contiguous range of
+ * bits is flipped (XORed with 1s) without re-scanning the entire buffer.
+ * It leverages the linearity of CRCs in Galois Field GF(2):
+ *
+ * New_CRC = Old_CRC ^ CRC(Mask_of_Ones << Trailing_Bits)
+ *
+ * The complexity is O(log nbits + log trailing_bits), making it
+ * significantly faster than recomputing the CRC for large buffers.
+ *
+ * Note: @total_bits must not exceed 524288 (2^19 bits = 64KB).  Callers
+ * must ensure that @bit_off + @nbits <= @total_bits.  Behavior is
+ * undefined if these constraints are violated.
+ *
+ * Return: The updated CRC32c value.
+ */
+u32 crc32c_flip_range(u32 old_crc, u32 total_bits,
+		      u32 bit_off, u32 nbits);
+
 /*
  * crc32_optimizations() returns flags that indicate which CRC32 library
  * functions are using architecture-specific optimizations.  Unlike

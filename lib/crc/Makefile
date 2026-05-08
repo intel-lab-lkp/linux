@@ -21,7 +21,7 @@ crc-t10dif-$(CONFIG_X86) += x86/crc16-msb-pclmul.o
 endif
 
 obj-$(CONFIG_CRC32) += crc32.o
-crc32-y := crc32-main.o
+crc32-y := crc32-main.o crc32c-incr.o
 ifeq ($(CONFIG_CRC32_ARCH),y)
 CFLAGS_crc32-main.o += -I$(src)/$(SRCARCH)
 crc32-$(CONFIG_ARM) += arm/crc32-core.o
@@ -49,20 +49,27 @@ endif # CONFIG_CRC64_ARCH
 
 obj-y += tests/
 
-hostprogs := gen_crc32table gen_crc64table
-clean-files := crc32table.h crc64table.h
+hostprogs := gen_crc32table gen_crc32c_incr_table gen_crc64table
+clean-files := crc32table.h crc32c-incr-table.h crc64table.h
 
 $(obj)/crc32-main.o: $(obj)/crc32table.h
+$(obj)/crc32c-incr.o: $(obj)/crc32c-incr-table.h
 $(obj)/crc64-main.o: $(obj)/crc64table.h
 
 quiet_cmd_crc32 = GEN     $@
       cmd_crc32 = $< > $@
+
+quiet_cmd_crc32c_incr = GEN     $@
+      cmd_crc32c_incr = $< > $@
 
 quiet_cmd_crc64 = GEN     $@
       cmd_crc64 = $< > $@
 
 $(obj)/crc32table.h: $(obj)/gen_crc32table
 	$(call cmd,crc32)
+
+$(obj)/crc32c-incr-table.h: $(obj)/gen_crc32c_incr_table
+	$(call cmd,crc32c_incr)
 
 $(obj)/crc64table.h: $(obj)/gen_crc64table
 	$(call cmd,crc64)
