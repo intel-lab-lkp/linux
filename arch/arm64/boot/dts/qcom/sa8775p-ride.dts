@@ -5,7 +5,7 @@
 
 /dts-v1/;
 
-#include "lemans-auto.dtsi"
+#include "lemans.dtsi"
 
 #include "lemans-pmics.dtsi"
 #include "lemans-ride-common.dtsi"
