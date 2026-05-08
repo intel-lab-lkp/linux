@@ -308,6 +308,11 @@ static void mxc_isi_channel_set_control(struct mxc_isi_pipe *pipe,
 	mutex_lock(&pipe->lock);
 
 	val = mxc_isi_read(pipe, CHNL_CTRL);
+
+	/* Clear the VC_ID_1 bit on platforms supporting more than 4 VCs. */
+	if (pipe->isi->pdata->num_vc > 4)
+		val &= ~CHNL_CTRL_VC_ID_1_MASK;
+
 	val &= ~(CHNL_CTRL_CHNL_BYPASS | CHNL_CTRL_CHAIN_BUF_MASK |
 		 CHNL_CTRL_SRC_TYPE_MASK | CHNL_CTRL_MIPI_VC_ID_MASK |
 		 CHNL_CTRL_SRC_INPUT_MASK);
@@ -338,7 +343,14 @@ static void mxc_isi_channel_set_control(struct mxc_isi_pipe *pipe,
 	} else {
 		val |= CHNL_CTRL_SRC_TYPE(CHNL_CTRL_SRC_TYPE_DEVICE);
 		val |= CHNL_CTRL_SRC_INPUT(input);
-		val |= CHNL_CTRL_MIPI_VC_ID(0); /* FIXME: For CSI-2 only */
+		val |= CHNL_CTRL_MIPI_VC_ID(pipe->vc); /* FIXME: For CSI-2 only */
+
+		/*
+		 * On platforms with more than 4 VCs (i.MX95), the VC ID is
+		 * split across VC_ID_0 (bits 7:6) and VC_ID_1 (bit 16).
+		 */
+		if (pipe->isi->pdata->num_vc > 4)
+			val |= CHNL_CTRL_VC_ID_1(pipe->vc >> 2);
 	}
 
 	mxc_isi_write(pipe, CHNL_CTRL, val);

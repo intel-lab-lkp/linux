@@ -169,6 +169,7 @@ struct mxc_isi_plat_data {
 	enum model model;
 	unsigned int num_ports;
 	unsigned int num_channels;
+	unsigned int num_vc;		/* Number of VCs, 0 = no VC support */
 	unsigned int reg_offset;
 	const struct mxc_isi_ier_reg  *ier_reg;
 	const struct mxc_isi_set_thd *set_thd;
@@ -257,6 +258,9 @@ struct mxc_isi_pipe {
 	u8				acquired_res;
 	u8				chained_res;
 	bool				chained;
+
+	/* Virtual channel ID for the ISI channel */
+	u8				vc;
 };
 
 struct mxc_isi_m2m {
