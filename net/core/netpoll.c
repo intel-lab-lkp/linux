@@ -29,8 +29,8 @@
 #include <linux/slab.h>
 #include <linux/export.h>
 #include <linux/if_vlan.h>
+#include <linux/udp.h>
 #include <net/tcp.h>
-#include <net/udp.h>
 #include <net/addrconf.h>
 #include <net/ndisc.h>
 #include <net/ip6_checksum.h>
@@ -411,25 +411,6 @@ netdev_tx_t netpoll_send_skb(struct netpoll *np, struct sk_buff *skb)
 	return ret;
 }
 EXPORT_SYMBOL(netpoll_send_skb);
-
-void push_udp(struct netpoll *np, struct sk_buff *skb, int len)
-{
-	struct udphdr *udph;
-	int udp_len;
-
-	udp_len = len + sizeof(struct udphdr);
-
-	skb_push(skb, sizeof(struct udphdr));
-	skb_reset_transport_header(skb);
-
-	udph = udp_hdr(skb);
-	udph->source = htons(np->local_port);
-	udph->dest = htons(np->remote_port);
-	udph->len = htons(udp_len);
-
-	netpoll_udp_checksum(np, skb, len);
-}
-EXPORT_SYMBOL_GPL(push_udp);
 
 static void skb_pool_flush(struct netpoll *np)
 {
