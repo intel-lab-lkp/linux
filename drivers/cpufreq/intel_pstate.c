@@ -585,7 +585,7 @@ static void intel_pstate_hybrid_hwp_adjust(struct cpudata *cpu)
 	if (scaling == perf_ctl_scaling)
 		return;
 
-	hwp_is_hybrid = true;
+	hwp_is_hybrid = cpu_feature_enabled(X86_FEATURE_HYBRID_CPU);
 
 	cpu->pstate.turbo_freq = rounddown(cpu->pstate.turbo_pstate * scaling,
 					   perf_ctl_scaling);
@@ -2275,6 +2275,9 @@ static int knl_get_turbo_pstate(int cpu)
 static int hwp_get_cpu_scaling(int cpu)
 {
 	if (hybrid_scaling_factor) {
+		if (!cpu_feature_enabled(X86_FEATURE_HYBRID_CPU))
+			return hybrid_scaling_factor;
+
 		/*
 		 * Return the hybrid scaling factor for P-cores and use the
 		 * default core scaling for E-cores.
