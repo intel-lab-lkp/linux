@@ -8,12 +8,14 @@
  */
 
 #include <linux/acpi.h>
+#include <linux/cleanup.h>
 #include <linux/dmi.h>
 #include <linux/errno.h>
 #include <linux/export.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/mutex.h>
+#include <linux/slab.h>
 #include <linux/pinctrl/pinctrl.h>
 
 #include <linux/gpio/consumer.h>
