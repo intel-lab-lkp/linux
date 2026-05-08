@@ -3999,6 +3999,9 @@ static struct sk_buff *validate_xmit_unreadable_skb(struct sk_buff *skb,
 	if (dev->netmem_tx == NETMEM_TX_NONE)
 		goto out_free;
 
+	if (dev->netmem_tx == NETMEM_TX_NO_DMA)
+		goto out;
+
 	shinfo = skb_shinfo(skb);
 
 	if (shinfo->nr_frags > 0) {
