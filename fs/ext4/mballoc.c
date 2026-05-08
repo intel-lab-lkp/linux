@@ -4095,6 +4095,7 @@ ext4_mb_mark_context(handle_t *handle, struct super_block *sb, bool state,
 	struct buffer_head *gdp_bh;
 	int err;
 	unsigned int i, already, changed = len;
+	bool fast_crc;
 
 	KUNIT_STATIC_STUB_REDIRECT(ext4_mb_mark_context,
 				   handle, sb, state, group, blkoff, len,
@@ -4127,12 +4128,28 @@ ext4_mb_mark_context(handle_t *handle, struct super_block *sb, bool state,
 			goto out_err;
 	}
 
+	/*
+	 * fast_crc: Use incremental CRC update via crc32c_flip_range().
+	 * This is only valid when all bits in [blkoff, blkoff+len) are
+	 * guaranteed to be in the opposite state (i.e., every bit will
+	 * actually flip). When EXT4_MB_BITMAP_MARKED_CHECK is set,
+	 * mb_set_bits/mb_clear_bits are idempotent, so some bits may not
+	 * change and incremental CRC would produce incorrect results.
+	 */
+	fast_crc = !(flags & EXT4_MB_BITMAP_MARKED_CHECK);
+
 	ext4_lock_group(sb, group);
 	if (ext4_has_group_desc_csum(sb) &&
 	    (gdp->bg_flags & cpu_to_le16(EXT4_BG_BLOCK_UNINIT))) {
 		gdp->bg_flags &= cpu_to_le16(~EXT4_BG_BLOCK_UNINIT);
 		ext4_free_group_clusters_set(sb, gdp,
 			ext4_free_clusters_after_init(sb, group, gdp));
+		/*
+		 * The bitmap was just initialized, so the old checksum
+		 * is invalid for incremental CRC update. Fall back to
+		 * full recalculation.
+		 */
+		fast_crc = false;
 	}
 
 	if (flags & EXT4_MB_BITMAP_MARKED_CHECK) {
@@ -4154,7 +4171,10 @@ ext4_mb_mark_context(handle_t *handle, struct super_block *sb, bool state,
 			ext4_free_group_clusters(sb, gdp) + changed);
 	}
 
-	ext4_block_bitmap_csum_set(sb, gdp, bitmap_bh);
+	if (fast_crc)
+		ext4_block_bitmap_csum_set_range(sb, gdp, blkoff, len);
+	else
+		ext4_block_bitmap_csum_set(sb, gdp, bitmap_bh);
 	ext4_group_desc_csum_set(sb, group, gdp);
 	ext4_unlock_group(sb, group);
 	if (ret_changed)
