@@ -238,6 +238,7 @@ def generate_crates(
         "macros",
         srctree / "rust" / "macros" / "lib.rs",
         [std, proc_macro, proc_macro2, quote, syn],
+        cfg=generated_cfg,
     )
 
     build_error = append_crate(
