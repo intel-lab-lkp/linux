@@ -1880,10 +1880,10 @@ static void ocfs2_dismount_volume(struct super_block *sb, int mnt_err)
 	printk(KERN_INFO "ocfs2: Unmounting device (%s) on (node %s)\n",
 	       osb->dev_str, nodestr);
 
+	sb->s_fs_info = NULL;
 	ocfs2_delete_osb(osb);
 	kfree(osb);
 	sb->s_dev = 0;
-	sb->s_fs_info = NULL;
 }
 
 static int ocfs2_setup_osb_uuid(struct ocfs2_super *osb, const unsigned char *uuid,
