@@ -470,6 +470,90 @@ static void crc64_nvme_benchmark(struct kunit *test)
 }
 #endif /* CONFIG_CRC64 */
 
+/*
+ * Test crc32c_flip_range() against naive full-buffer CRC recomputation.
+ * All tests use a 64KB buffer (2^19 bits = INCR_MAX_ORDER limit)
+ * and a non-zero seed to match real-world usage (e.g. ext4 checksums).
+ */
+static void crc32c_flip_range_test(struct kunit *test)
+{
+	size_t buflen = 65536;
+	size_t total_bits = buflen * 8;
+	u32 seed = 0x12345678;
+	u32 expected, flip_crc;
+	size_t start, num_bits, b, pos;
+	u8 *buf;
+	int i;
+
+	buf = kunit_kmalloc(test, buflen, GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, buf);
+
+	/* Test 1: Single bit at bit 0 (verifies ones_lookup[0]) */
+	buf[0] = 0x00;
+	expected = crc32c(seed, buf, 1);
+	buf[0] = 0x01;
+	flip_crc = crc32c_flip_range(expected, 8, 0, 1);
+	expected = crc32c(seed, buf, 1);
+	KUNIT_ASSERT_EQ_MSG(test, expected, flip_crc, "Single bit at bit 0");
+
+	/* Test 2: num_bits=0 should be a no-op */
+	memset(buf, 0, buflen);
+	expected = crc32c(seed, buf, buflen);
+	flip_crc = crc32c_flip_range(expected, total_bits, 0, 0);
+	KUNIT_ASSERT_EQ_MSG(test, expected, flip_crc,
+			    "num_bits=0: expected=0x%08x got=0x%08x",
+			    expected, flip_crc);
+
+	/* Test 3: Boundary flips - first byte, last byte, all bits */
+	buf[0] = 0xFF;
+	flip_crc = crc32c_flip_range(expected, total_bits, 0, 8);
+	expected = crc32c(seed, buf, buflen);
+	KUNIT_ASSERT_EQ_MSG(test, expected, flip_crc, "Flip first byte");
+
+	buf[buflen - 1] = 0xFF;
+	flip_crc = crc32c_flip_range(expected, total_bits, (buflen - 1) * 8, 8);
+	expected = crc32c(seed, buf, buflen);
+	KUNIT_ASSERT_EQ_MSG(test, expected, flip_crc, "Flip last byte");
+
+	memset(buf, 0, buflen);
+	expected = crc32c(seed, buf, buflen);
+	memset(buf, 0xFF, buflen);
+	flip_crc = crc32c_flip_range(expected, total_bits, 0, total_bits);
+	expected = crc32c(seed, buf, buflen);
+	KUNIT_ASSERT_EQ_MSG(test, expected, flip_crc, "Flip all 64KB bits");
+
+	/* Test 4: Random single-bit flips (100 iterations) */
+	memset(buf, 0, buflen);
+	expected = crc32c(seed, buf, buflen);
+	for (i = 0; i < 100; i++) {
+		start = rand32() % total_bits;
+		buf[start / 8] ^= (1 << (start % 8));
+
+		flip_crc = crc32c_flip_range(expected, total_bits, start, 1);
+		expected = crc32c(seed, buf, buflen);
+		KUNIT_ASSERT_EQ_MSG(test, expected, flip_crc,
+				    "Single bit at %zu: expected=0x%08x got=0x%08x",
+				    start, expected, flip_crc);
+	}
+
+	/* Test 5: Random multi-bit ranges (100 iterations) */
+	for (i = 0; i < 100; i++) {
+		num_bits = (rand32() % (total_bits - 1)) + 1;
+		start = rand32() % (total_bits - num_bits + 1);
+		for (b = 0; b < num_bits; b++) {
+			pos = start + b;
+			buf[pos / 8] ^= (1 << (pos % 8));
+		}
+
+		flip_crc = crc32c_flip_range(expected, total_bits, start, num_bits);
+		expected = crc32c(seed, buf, buflen);
+
+		KUNIT_ASSERT_EQ_MSG(test, expected, flip_crc,
+				    "Range [%zu, +%zu): expected=0x%08x got=0x%08x",
+				    start, num_bits, expected, flip_crc);
+	}
+}
+
 static struct kunit_case crc_test_cases[] = {
 #if IS_REACHABLE(CONFIG_CRC7)
 	KUNIT_CASE(crc7_be_test),
@@ -490,6 +574,7 @@ static struct kunit_case crc_test_cases[] = {
 	KUNIT_CASE(crc32_be_benchmark),
 	KUNIT_CASE(crc32c_test),
 	KUNIT_CASE(crc32c_benchmark),
+	KUNIT_CASE(crc32c_flip_range_test),
 #endif
 #if IS_REACHABLE(CONFIG_CRC64)
 	KUNIT_CASE(crc64_be_test),
