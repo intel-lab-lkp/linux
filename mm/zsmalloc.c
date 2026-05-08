@@ -96,11 +96,74 @@
 #define CLASS_BITS	8
 #define MAGIC_VAL_BITS	8
 
+/*
+ * Optionally encode the size class index in the obj value so that
+ * zs_free() can look up the correct class without holding pool->lock.
+ *
+ * Rather than fixing a hard CLASS_BITS constant for the class_idx field,
+ * we compute the minimum bits needed from the actual number of size classes
+ * and the actual maximum obj_idx, then check whether they all fit:
+ *
+ *   _PFN_BITS + OBJ_CLASS_BITS_NEEDED + OBJ_IDX_BITS_NEEDED <= BITS_PER_LONG
+ *
+ * This naturally handles all architectures and PAGE_SIZE configurations:
+ *
+ *  - 32-bit: BITS_PER_LONG=32, sum easily exceeds 32 --> disabled.
+ *  - powerpc64 64K pages: ZS_SIZE_CLASSES=257 --> OBJ_CLASS_BITS_NEEDED=9,
+ *    but the sum still fits in 64 bits --> enabled.
+ *  - riscv64 Sv57: _PFN_BITS=44, tight but still fits --> enabled.
+ *
+ * When enabled, obj layout is:
+ *
+ *  63                                              0
+ *  +-----------+--------------+-------------+
+ *  |    PFN    |  class_idx   |   obj_idx   |
+ *  | _PFN_BITS |OBJ_CLASS_BITS| OBJ_IDX_BITS|
+ *  +-----------+--------------+-------------+
+ *
+ * Migration only rewrites PFN; class_idx and obj_idx are invariant,
+ * so a lockless read of obj always yields a valid class_idx.
+ */
+
+#if BITS_PER_LONG >= 64
+#define ZS_OBJ_CLASS_IDX
+#endif
+
+#ifdef ZS_OBJ_CLASS_IDX
+
+/* ZS_SIZE_CLASSES computed conservatively with original OBJ_INDEX_BITS */
+#define ZS_MIN_ALLOC_SIZE_FULL \
+	MAX(32, (CONFIG_ZSMALLOC_CHAIN_SIZE << PAGE_SHIFT >> OBJ_INDEX_BITS))
+#define ZS_SIZE_CLASSES_FULL \
+	(DIV_ROUND_UP(PAGE_SIZE - ZS_MIN_ALLOC_SIZE_FULL, \
+		      PAGE_SIZE >> CLASS_BITS) + 1)
+
+#define ZS_MAX_OBJ_COUNT_FULL \
+	(CONFIG_ZSMALLOC_CHAIN_SIZE * PAGE_SIZE / 32)
+#define OBJ_CLASS_BITS_NEEDED	(ilog2(ZS_SIZE_CLASSES_FULL - 1) + 1)
+#define OBJ_IDX_BITS_NEEDED	(ilog2(ZS_MAX_OBJ_COUNT_FULL - 1) + 1)
+
+static_assert(_PFN_BITS + OBJ_CLASS_BITS_NEEDED + OBJ_IDX_BITS_NEEDED
+	      <= BITS_PER_LONG,
+	"zsmalloc: class_idx + obj_idx + PFN do not fit in obj on this config");
+
+#define OBJ_CLASS_BITS		OBJ_CLASS_BITS_NEEDED
+#define OBJ_IDX_BITS		(OBJ_INDEX_BITS - OBJ_CLASS_BITS)
+#define OBJ_IDX_MASK		((_AC(1, UL) << OBJ_IDX_BITS) - 1)
+#define OBJ_CLASS_MASK		((_AC(1, UL) << OBJ_CLASS_BITS) - 1)
+
+#else /* !ZS_OBJ_CLASS_IDX */
+
+#define OBJ_IDX_BITS		OBJ_INDEX_BITS
+#define OBJ_IDX_MASK		OBJ_INDEX_MASK
+
+#endif /* ZS_OBJ_CLASS_IDX */
+
 #define ZS_MAX_PAGES_PER_ZSPAGE	(_AC(CONFIG_ZSMALLOC_CHAIN_SIZE, UL))
 
 /* ZS_MIN_ALLOC_SIZE must be multiple of ZS_ALIGN */
 #define ZS_MIN_ALLOC_SIZE \
-	MAX(32, (ZS_MAX_PAGES_PER_ZSPAGE << PAGE_SHIFT >> OBJ_INDEX_BITS))
+	MAX(32, (ZS_MAX_PAGES_PER_ZSPAGE << PAGE_SHIFT >> OBJ_IDX_BITS))
 /* each chunk includes extra space to keep handle */
 #define ZS_MAX_ALLOC_SIZE	PAGE_SIZE
 
@@ -722,7 +785,7 @@ static void obj_to_location(unsigned long obj, struct zpdesc **zpdesc,
 				unsigned int *obj_idx)
 {
 	*zpdesc = pfn_zpdesc(obj >> OBJ_INDEX_BITS);
-	*obj_idx = (obj & OBJ_INDEX_MASK);
+	*obj_idx = (obj & OBJ_IDX_MASK);
 }
 
 static void obj_to_zpdesc(unsigned long obj, struct zpdesc **zpdesc)
@@ -730,17 +793,29 @@ static void obj_to_zpdesc(unsigned long obj, struct zpdesc **zpdesc)
 	*zpdesc = pfn_zpdesc(obj >> OBJ_INDEX_BITS);
 }
 
+#ifdef ZS_OBJ_CLASS_IDX
+static unsigned int obj_to_class_idx(unsigned long obj)
+{
+	return (obj >> OBJ_IDX_BITS) & OBJ_CLASS_MASK;
+}
+#endif
+
 /**
- * location_to_obj - get obj value encoded from (<zpdesc>, <obj_idx>)
+ * location_to_obj - encode (<zpdesc>, <obj_idx>, <class_idx>) into obj value
  * @zpdesc: zpdesc object resides in zspage
  * @obj_idx: object index
+ * @class_idx: size class index (used only when ZS_OBJ_CLASS_IDX is defined)
  */
-static unsigned long location_to_obj(struct zpdesc *zpdesc, unsigned int obj_idx)
+static unsigned long location_to_obj(struct zpdesc *zpdesc, unsigned int obj_idx,
+				     unsigned int class_idx)
 {
 	unsigned long obj;
 
 	obj = zpdesc_pfn(zpdesc) << OBJ_INDEX_BITS;
-	obj |= obj_idx & OBJ_INDEX_MASK;
+#ifdef ZS_OBJ_CLASS_IDX
+	obj |= (unsigned long)(class_idx & OBJ_CLASS_MASK) << OBJ_IDX_BITS;
+#endif
+	obj |= obj_idx & OBJ_IDX_MASK;
 
 	return obj;
 }
@@ -1276,7 +1351,7 @@ static unsigned long obj_malloc(struct zs_pool *pool,
 	kunmap_local(vaddr);
 	mod_zspage_inuse(zspage, 1);
 
-	obj = location_to_obj(m_zpdesc, obj);
+	obj = location_to_obj(m_zpdesc, obj, zspage->class);
 	record_obj(handle, obj);
 
 	return obj;
@@ -1762,7 +1837,13 @@ static int zs_page_migrate(struct page *newpage, struct page *page,
 
 			old_obj = handle_to_obj(handle);
 			obj_to_location(old_obj, &dummy, &obj_idx);
-			new_obj = (unsigned long)location_to_obj(newzpdesc, obj_idx);
+#ifdef ZS_OBJ_CLASS_IDX
+			new_obj = (unsigned long)location_to_obj(newzpdesc,
+					obj_idx, obj_to_class_idx(old_obj));
+#else
+			new_obj = (unsigned long)location_to_obj(newzpdesc,
+					obj_idx, 0);
+#endif
 			record_obj(handle, new_obj);
 		}
 	}
