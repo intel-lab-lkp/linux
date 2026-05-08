@@ -24,12 +24,28 @@ struct zs_pool_stats {
 struct zs_pool;
 struct scatterlist;
 
+enum zs_push_ret {
+	ZS_PUSH_OK = 0,
+	ZS_PUSH_FULL,
+	ZS_PUSH_FULL_QUEUED,
+};
+
+struct zs_deferred_ops {
+	enum zs_push_ret (*push)(void *buf, unsigned int count,
+					  unsigned long value);
+	void (*drain)(void *private, void *buf, unsigned int count);
+};
+
 struct zs_pool *zs_create_pool(const char *name);
 void zs_destroy_pool(struct zs_pool *pool);
 
 unsigned long zs_malloc(struct zs_pool *pool, size_t size, gfp_t flags,
 			const int nid);
 void zs_free(struct zs_pool *pool, unsigned long obj);
+int zs_pool_enable_deferred_free(struct zs_pool *pool,
+				 const struct zs_deferred_ops *ops,
+				 void *private);
+bool zs_free_deferred(struct zs_pool *pool, unsigned long value);
 
 size_t zs_huge_class_size(struct zs_pool *pool);
 

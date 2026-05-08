@@ -196,6 +196,13 @@ struct link_free {
 static struct kmem_cache *handle_cachep;
 static struct kmem_cache *zspage_cachep;
 
+#define ZS_DEFERRED_POOL_SIZE	(256 * 1024 / PAGE_SIZE)
+
+struct zs_deferred_percpu {
+	unsigned int count;
+	void *buf;
+};
+
 struct zs_pool {
 	const char *name;
 
@@ -217,6 +224,18 @@ struct zs_pool {
 	/* protect zspage migration/compaction */
 	rwlock_t lock;
 	atomic_t compaction_in_progress;
+
+	/* per-cpu deferred free */
+	const struct zs_deferred_ops *deferred_ops;
+	void *deferred_private;
+	struct zs_deferred_percpu __percpu *deferred;
+	struct work_struct deferred_work;
+	struct workqueue_struct *deferred_wq;
+	struct list_head deferred_pool;
+	unsigned int deferred_pool_count;
+	spinlock_t deferred_pool_lock;
+	struct list_head deferred_drain_list;
+	spinlock_t deferred_drain_lock;
 };
 
 static inline void zpdesc_set_first(struct zpdesc *zpdesc)
@@ -1416,6 +1435,171 @@ void zs_free(struct zs_pool *pool, unsigned long handle)
 }
 EXPORT_SYMBOL_GPL(zs_free);
 
+static struct page *deferred_pool_get(struct zs_pool *pool)
+{
+	struct page *page = NULL;
+
+	spin_lock(&pool->deferred_pool_lock);
+	if (!list_empty(&pool->deferred_pool)) {
+		page = list_first_entry(&pool->deferred_pool, struct page, lru);
+		list_del(&page->lru);
+		pool->deferred_pool_count--;
+	}
+	spin_unlock(&pool->deferred_pool_lock);
+	return page;
+}
+
+static void deferred_pool_put(struct zs_pool *pool, struct page *page)
+{
+	spin_lock(&pool->deferred_pool_lock);
+	list_add_tail(&page->lru, &pool->deferred_pool);
+	pool->deferred_pool_count++;
+	spin_unlock(&pool->deferred_pool_lock);
+}
+
+static void zs_deferred_work_fn(struct work_struct *work)
+{
+	struct zs_pool *pool = container_of(work, struct zs_pool, deferred_work);
+	struct page *page;
+
+	while (true) {
+		unsigned int count;
+
+		spin_lock(&pool->deferred_drain_lock);
+		if (list_empty(&pool->deferred_drain_list)) {
+			spin_unlock(&pool->deferred_drain_lock);
+			break;
+		}
+		page = list_first_entry(&pool->deferred_drain_list,
+					struct page, lru);
+		list_del(&page->lru);
+		count = page_private(page);
+		spin_unlock(&pool->deferred_drain_lock);
+
+		pool->deferred_ops->drain(pool->deferred_private,
+					  page_address(page), count);
+		deferred_pool_put(pool, page);
+		cond_resched();
+	}
+}
+
+bool zs_free_deferred(struct zs_pool *pool, unsigned long value)
+{
+	struct zs_deferred_percpu *def;
+	struct page *new_page, *full_page;
+	enum zs_push_ret ret;
+
+	if (!pool->deferred)
+		return false;
+
+	def = get_cpu_ptr(pool->deferred);
+
+	ret = pool->deferred_ops->push(def->buf, def->count, value);
+	if (ret == ZS_PUSH_OK) {
+		def->count++;
+		put_cpu_ptr(pool->deferred);
+		return true;
+	}
+
+	if (ret == ZS_PUSH_FULL_QUEUED)
+		def->count++;
+
+	new_page = deferred_pool_get(pool);
+	if (new_page) {
+		full_page = virt_to_page(def->buf);
+		set_page_private(full_page, def->count);
+		def->buf = page_address(new_page);
+		def->count = 0;
+
+		if (ret == ZS_PUSH_FULL) {
+			pool->deferred_ops->push(def->buf, 0, value);
+			def->count = 1;
+		}
+		put_cpu_ptr(pool->deferred);
+
+		spin_lock(&pool->deferred_drain_lock);
+		list_add_tail(&full_page->lru, &pool->deferred_drain_list);
+		spin_unlock(&pool->deferred_drain_lock);
+		queue_work(pool->deferred_wq, &pool->deferred_work);
+		return true;
+	}
+	put_cpu_ptr(pool->deferred);
+
+	/* ret==2: value already queued, will be drained eventually */
+	if (ret == 2)
+		return true;
+
+	/* ret==1: value not queued, caller must fallback */
+	return false;
+}
+EXPORT_SYMBOL_GPL(zs_free_deferred);
+
+int zs_pool_enable_deferred_free(struct zs_pool *pool,
+				 const struct zs_deferred_ops *ops,
+				 void *private)
+{
+	int cpu;
+	unsigned int pg_idx;
+	struct page *page, *tmp;
+
+	pool->deferred_ops = ops;
+	pool->deferred_private = private;
+
+	INIT_WORK(&pool->deferred_work, zs_deferred_work_fn);
+	pool->deferred_wq = alloc_workqueue("zs_drain", WQ_UNBOUND, 0);
+	if (!pool->deferred_wq)
+		return -ENOMEM;
+
+	INIT_LIST_HEAD(&pool->deferred_pool);
+	spin_lock_init(&pool->deferred_pool_lock);
+	pool->deferred_pool_count = 0;
+	INIT_LIST_HEAD(&pool->deferred_drain_list);
+	spin_lock_init(&pool->deferred_drain_lock);
+
+	for (pg_idx = 0; pg_idx < ZS_DEFERRED_POOL_SIZE; pg_idx++) {
+		page = alloc_page(GFP_KERNEL);
+		if (!page)
+			goto err_pages;
+		list_add_tail(&page->lru, &pool->deferred_pool);
+		pool->deferred_pool_count++;
+	}
+
+	pool->deferred = alloc_percpu(struct zs_deferred_percpu);
+	if (!pool->deferred)
+		goto err_pages;
+
+	for_each_possible_cpu(cpu) {
+		struct zs_deferred_percpu *def = per_cpu_ptr(pool->deferred, cpu);
+
+		page = deferred_pool_get(pool);
+		if (!page)
+			goto err_percpu;
+		def->buf = page_address(page);
+		def->count = 0;
+	}
+
+	return 0;
+
+err_percpu:
+	for_each_possible_cpu(cpu) {
+		struct zs_deferred_percpu *def = per_cpu_ptr(pool->deferred, cpu);
+
+		if (def->buf)
+			deferred_pool_put(pool, virt_to_page(def->buf));
+	}
+	free_percpu(pool->deferred);
+	pool->deferred = NULL;
+err_pages:
+	list_for_each_entry_safe(page, tmp, &pool->deferred_pool, lru) {
+		list_del(&page->lru);
+		__free_page(page);
+	}
+	destroy_workqueue(pool->deferred_wq);
+	pool->deferred_wq = NULL;
+	return -ENOMEM;
+}
+EXPORT_SYMBOL_GPL(zs_pool_enable_deferred_free);
+
 static void zs_object_copy(struct size_class *class, unsigned long dst,
 				unsigned long src)
 {
@@ -2182,9 +2366,31 @@ EXPORT_SYMBOL_GPL(zs_create_pool);
 
 void zs_destroy_pool(struct zs_pool *pool)
 {
-	int i;
+	int i, cpu;
+	struct page *page, *tmp;
 
 	zs_unregister_shrinker(pool);
+
+	if (pool->deferred) {
+		flush_work(&pool->deferred_work);
+		for_each_possible_cpu(cpu) {
+			struct zs_deferred_percpu *def =
+				per_cpu_ptr(pool->deferred, cpu);
+
+			if (def->buf && def->count)
+				pool->deferred_ops->drain(pool->deferred_private,
+							  def->buf, def->count);
+			if (def->buf)
+				deferred_pool_put(pool, virt_to_page(def->buf));
+		}
+		free_percpu(pool->deferred);
+		list_for_each_entry_safe(page, tmp, &pool->deferred_pool, lru) {
+			list_del(&page->lru);
+			__free_page(page);
+		}
+		destroy_workqueue(pool->deferred_wq);
+	}
+
 	zs_flush_migration(pool);
 	zs_pool_stat_destroy(pool);
 
