@@ -3,6 +3,7 @@
 #define _GPIO_KEYS_H
 
 #include <linux/types.h>
+#include <linux/regulator/consumer.h>
 
 struct device;
 
@@ -36,6 +37,7 @@ struct gpio_keys_button {
 	int value;
 	unsigned int irq;
 	unsigned int wakeirq;
+	struct regulator *regulator;
 };
 
 /**

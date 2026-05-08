@@ -28,6 +28,7 @@
 #include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/spinlock.h>
+#include <linux/regulator/consumer.h>
 #include <dt-bindings/input/gpio-keys.h>
 
 struct gpio_button_data {
@@ -729,6 +730,7 @@ static int gpio_keys_open(struct input_dev *input)
 	struct gpio_keys_drvdata *ddata = input_get_drvdata(input);
 	const struct gpio_keys_platform_data *pdata = ddata->pdata;
 	int error;
+	int i;
 
 	if (pdata->enable) {
 		error = pdata->enable(input->dev.parent);
@@ -736,19 +738,48 @@ static int gpio_keys_open(struct input_dev *input)
 			return error;
 	}
 
+	for (i = 0; i < pdata->nbuttons; i++) {
+		const struct gpio_keys_button *button = &pdata->buttons[i];
+
+		if (!button->regulator)
+			continue;
+		error = regulator_enable(button->regulator);
+		if (error)
+			goto reg_err;
+	}
+
 	/* Report current state of buttons that are connected to GPIOs */
 	gpio_keys_report_state(ddata);
 
 	return 0;
+
+reg_err:
+	for (--i; i >= 0; i--) {
+		const struct gpio_keys_button *button = &pdata->buttons[i];
+
+		if (!button->regulator)
+			continue;
+		regulator_disable(button->regulator);
+	}
+	return error;
 }
 
 static void gpio_keys_close(struct input_dev *input)
 {
 	struct gpio_keys_drvdata *ddata = input_get_drvdata(input);
 	const struct gpio_keys_platform_data *pdata = ddata->pdata;
+	int i;
 
 	if (pdata->disable)
 		pdata->disable(input->dev.parent);
+
+	for (i = 0; i < pdata->nbuttons; i++) {
+		const struct gpio_keys_button *button = &pdata->buttons[i];
+
+		if (!button->regulator)
+			continue;
+		regulator_disable(button->regulator);
+	}
 }
 
 /*
@@ -828,6 +859,16 @@ gpio_keys_get_devtree_pdata(struct device *dev)
 		if (fwnode_property_read_u32(child, "debounce-interval",
 					 &button->debounce_interval))
 			button->debounce_interval = 5;
+
+		if (fwnode_property_present(child, "vdd-supply")) {
+			button->regulator = devm_fwnode_regulator_get_optional(dev, child, "vdd");
+			if (IS_ERR(button->regulator)) {
+				if (PTR_ERR(button->regulator) != -ENODEV)
+					return dev_err_ptr_probe(dev, PTR_ERR(button->regulator),
+								 "Failed to get regulator\n");
+				button->regulator = NULL;
+			}
+		}
 
 		button++;
 	}
