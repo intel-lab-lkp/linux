@@ -525,6 +525,7 @@ static ssize_t node_read_meminfo(struct device *dev,
 #endif
 			     "Node %d GPUActive:      %8lu kB\n"
 			     "Node %d GPUReclaim:     %8lu kB\n"
+			     "Node %d Balloon:        %8lu kB\n"
 			     ,
 			     nid, K(node_page_state(pgdat, NR_FILE_DIRTY)),
 			     nid, K(node_page_state(pgdat, NR_WRITEBACK)),
@@ -560,7 +561,8 @@ static ssize_t node_read_meminfo(struct device *dev,
 #endif
 			     ,
 			     nid, K(node_page_state(pgdat, NR_GPU_ACTIVE)),
-			     nid, K(node_page_state(pgdat, NR_GPU_RECLAIM))
+			     nid, K(node_page_state(pgdat, NR_GPU_RECLAIM)),
+			     nid, K(node_page_state(pgdat, NR_BALLOON_PAGES))
 			    );
 	len += hugetlb_report_node_meminfo(buf, len, nid);
 	return len;
