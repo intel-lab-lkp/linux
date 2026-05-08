@@ -4228,7 +4228,7 @@ ext4_mb_mark_diskspace_used(struct ext4_allocation_context *ac, handle_t *handle
 					   ac->ac_b_ex.fe_group,
 					   ac->ac_b_ex.fe_start,
 					   ac->ac_b_ex.fe_len,
-					   0, NULL);
+					   EXT4_MB_BITMAP_MARKED_CHECK, NULL);
 		if (!err)
 			err = -EFSCORRUPTED;
 		return err;
