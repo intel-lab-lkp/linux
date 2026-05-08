@@ -16,6 +16,7 @@
 #include <linux/kprobes.h>
 #include <linux/kfence.h>
 #include <linux/entry-common.h>
+#include <linux/hugetlb.h>
 
 #include <asm/ptrace.h>
 #include <asm/tlbflush.h>
@@ -128,9 +129,18 @@ static inline void mm_fault_error(struct pt_regs *regs, unsigned long addr, vm_f
 		 */
 		pagefault_out_of_memory();
 		return;
-	} else if (fault & (VM_FAULT_SIGBUS | VM_FAULT_HWPOISON | VM_FAULT_HWPOISON_LARGE)) {
+	} else if (fault & VM_FAULT_SIGBUS) {
 		/* Kernel mode? Handle exceptions or die */
 		do_trap(regs, SIGBUS, BUS_ADRERR, addr);
+		return;
+	} else if (fault & (VM_FAULT_HWPOISON_LARGE | VM_FAULT_HWPOISON)) {
+		unsigned int lsb;
+
+		lsb = PAGE_SHIFT;
+		if (fault & VM_FAULT_HWPOISON_LARGE)
+			lsb = hstate_index_to_shift(VM_FAULT_GET_HINDEX(fault));
+
+		riscv_force_sig_mceerr(BUS_MCEERR_AR, addr, lsb);
 		return;
 	} else if (fault & VM_FAULT_SIGSEGV) {
 		do_trap(regs, SIGSEGV, SEGV_MAPERR, addr);
