@@ -50,6 +50,8 @@ config LAN743X
 	select CRC16
 	select CRC32
 	select PHYLINK
+	select I2C_PCI1XXXX
+	select GP_PCI1XXXX
 	help
 	  Support for the Microchip LAN743x and PCI11x1x families of PCI
 	  Express Ethernet devices

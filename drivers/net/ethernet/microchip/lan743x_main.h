@@ -4,13 +4,58 @@
 #ifndef _LAN743X_H
 #define _LAN743X_H
 
+#include <linux/auxiliary_bus.h>
+#include <linux/gpio/machine.h>
+#include <linux/i2c.h>
 #include <linux/phy.h>
 #include <linux/phylink.h>
+#include <linux/property.h>
 #include "lan743x_ptp.h"
 
 #define DRIVER_AUTHOR   "Bryan Whitehead <Bryan.Whitehead@microchip.com>"
 #define DRIVER_DESC "LAN743x PCIe Gigabit Ethernet Driver"
 #define DRIVER_NAME "lan743x"
+
+#define PCI1XXXX_VENDOR_ID		0x1055
+#define PCI1XXXX_BR_PERIF_ID		0xA00C
+#define PCI1XXXX_PERIF_I2C_ID		0xA003
+#define PCI1XXXX_PERIF_GPIO_ID		0xA005
+#define PCI1XXXX_DEV_MASK		GENMASK(7, 4)
+#define PCI11X1X_TX_FAULT_GPIO		46
+#define PCI11X1X_TX_DIS_GPIO		47
+#define PCI11X1X_RATE_SEL0_GPIO		48
+#define PCI11X1X_LOS_GPIO		49
+#define PCI11X1X_MOD_DEF0_GPIO		51
+
+#define NODE_PROP(_NAME, _PROP)		\
+	((const struct software_node) {	\
+		.name = _NAME,		\
+		.properties = _PROP,	\
+	 })
+
+struct pci1xxxx_i2c {
+	struct completion i2c_xfer_done;
+	bool i2c_xfer_in_progress;
+	struct i2c_adapter adap;
+	void __iomem *i2c_base;
+	u32 freq;
+	u32 flags;
+};
+
+struct gp_aux_data_type {
+	int irq_num;
+	resource_size_t region_start;
+	resource_size_t region_length;
+};
+
+struct auxiliary_device_wrapper {
+	struct auxiliary_device aux_dev;
+	struct gp_aux_data_type gp_aux_data;
+};
+
+struct aux_bus_device {
+	struct auxiliary_device_wrapper *aux_device_wrapper[2];
+};
 
 /* Register Definitions */
 #define ID_REV				(0x00)
@@ -1049,6 +1094,40 @@ enum lan743x_sgmii_lsd {
 
 #define MAC_SUPPORTED_WAKES  (WAKE_BCAST | WAKE_UCAST | WAKE_MCAST | \
 			      WAKE_MAGIC | WAKE_ARP)
+
+enum lan743x_swnodes {
+	SWNODE_GPIO = 0,
+	SWNODE_I2C,
+	SWNODE_SFP,
+	SWNODE_PHYLINK,
+	SWNODE_MAX
+};
+
+#define I2C_DRV_NAME           48
+#define GPIO_DRV_NAME          32
+#define SFP_NODE_NAME          32
+#define PHYLINK_NODE_NAME      32
+
+struct lan743x_sw_nodes {
+	char gpio_name[GPIO_DRV_NAME];
+	char i2c_name[I2C_DRV_NAME];
+	char sfp_name[SFP_NODE_NAME];
+	char phylink_name[PHYLINK_NODE_NAME];
+	struct property_entry gpio_props[1];
+	struct property_entry i2c_props[1];
+	struct property_entry sfp_props[8];
+	struct property_entry phylink_props[2];
+	struct software_node_ref_args i2c_ref[1];
+	struct software_node_ref_args tx_fault_ref[1];
+	struct software_node_ref_args tx_disable_ref[1];
+	struct software_node_ref_args mod_def0_ref[1];
+	struct software_node_ref_args los_ref[1];
+	struct software_node_ref_args rate_sel0_ref[1];
+	struct software_node_ref_args sfp_ref[1];
+	struct software_node swnodes[SWNODE_MAX];
+	const struct software_node *group[SWNODE_MAX + 1];
+};
+
 struct lan743x_adapter {
 	struct net_device       *netdev;
 	struct mii_bus		*mdiobus;
@@ -1092,6 +1171,8 @@ struct lan743x_adapter {
 	struct phylink		*phylink;
 	struct phylink_config	phylink_config;
 	int			rx_tstamp_filter;
+	struct lan743x_sw_nodes *nodes;
+	struct i2c_adapter      *i2c_adap;
 };
 
 #define LAN743X_COMPONENT_FLAG_RX(channel)  BIT(20 + (channel))
