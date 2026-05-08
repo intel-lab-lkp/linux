@@ -926,6 +926,8 @@ mtype_add(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 			j = 0;
 		data = ahash_data(n, j, set->dsize);
 		if (!deleted) {
+			clear_bit(j, n->used);
+			smp_mb__after_atomic();
 #ifdef IP_SET_HASH_WITH_NETS
 			for (i = 0; i < IPSET_NET_COUNT; i++)
 				mtype_del_cidr(set, h,
