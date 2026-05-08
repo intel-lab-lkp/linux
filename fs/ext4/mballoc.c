@@ -4181,9 +4181,7 @@ ext4_mb_mark_context(handle_t *handle, struct super_block *sb, bool state,
 		*ret_changed = changed;
 
 	if (sbi->s_log_groups_per_flex) {
-		ext4_group_t flex_group = ext4_flex_group(sbi, group);
-		struct flex_groups *fg = sbi_array_rcu_deref(sbi,
-					   s_flex_groups, flex_group);
+		struct flex_groups *fg = ext4_get_flex_group(sbi, group);
 
 		if (state)
 			atomic64_sub(changed, &fg->free_clusters);

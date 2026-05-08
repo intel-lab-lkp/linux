@@ -3211,7 +3211,6 @@ static int ext4_fill_flex_info(struct super_block *sb)
 	struct ext4_sb_info *sbi = EXT4_SB(sb);
 	struct ext4_group_desc *gdp = NULL;
 	struct flex_groups *fg;
-	ext4_group_t flex_group;
 	int i, err;
 
 	sbi->s_log_groups_per_flex = sbi->s_es->s_log_groups_per_flex;
@@ -3227,8 +3226,7 @@ static int ext4_fill_flex_info(struct super_block *sb)
 	for (i = 0; i < sbi->s_groups_count; i++) {
 		gdp = ext4_get_group_desc(sb, i, NULL);
 
-		flex_group = ext4_flex_group(sbi, i);
-		fg = sbi_array_rcu_deref(sbi, s_flex_groups, flex_group);
+		fg = ext4_get_flex_group(sbi, i);
 		atomic_add(ext4_free_inodes_count(sb, gdp), &fg->free_inodes);
 		atomic64_add(ext4_free_group_clusters(sb, gdp),
 			     &fg->free_clusters);

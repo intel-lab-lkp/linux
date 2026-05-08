@@ -336,8 +336,7 @@ void ext4_free_inode(handle_t *handle, struct inode *inode)
 	if (sbi->s_log_groups_per_flex) {
 		struct flex_groups *fg;
 
-		fg = sbi_array_rcu_deref(sbi, s_flex_groups,
-					 ext4_flex_group(sbi, block_group));
+		fg = ext4_get_flex_group(sbi, block_group);
 		atomic_inc(&fg->free_inodes);
 		if (is_directory)
 			atomic_dec(&fg->used_dirs);
@@ -826,12 +825,8 @@ static void ext4_update_inode_group_desc(struct super_block *sb,
 	ext4_free_inodes_set(sb, gdp, ext4_free_inodes_count(sb, gdp) - 1);
 	if (S_ISDIR(mode)) {
 		ext4_used_dirs_set(sb, gdp, ext4_used_dirs_count(sb, gdp) + 1);
-		if (sbi->s_log_groups_per_flex) {
-			ext4_group_t f = ext4_flex_group(sbi, group);
-
-			atomic_inc(&sbi_array_rcu_deref(sbi, s_flex_groups,
-							f)->used_dirs);
-		}
+		if (sbi->s_log_groups_per_flex)
+			atomic_inc(&ext4_get_flex_group(sbi, group)->used_dirs);
 	}
 
 	if (!ext4_has_group_desc_csum(sb))
@@ -997,7 +992,6 @@ struct inode *__ext4_new_inode(struct mnt_idmap *idmap,
 	int ret2, err;
 	struct inode *ret;
 	ext4_group_t i;
-	ext4_group_t flex_group;
 	struct ext4_group_info *grp = NULL;
 	bool encrypt = false;
 
@@ -1220,11 +1214,8 @@ got:
 	if (S_ISDIR(mode))
 		percpu_counter_inc(&sbi->s_dirs_counter);
 
-	if (sbi->s_log_groups_per_flex) {
-		flex_group = ext4_flex_group(sbi, group);
-		atomic_dec(&sbi_array_rcu_deref(sbi, s_flex_groups,
-						flex_group)->free_inodes);
-	}
+	if (sbi->s_log_groups_per_flex)
+		atomic_dec(&ext4_get_flex_group(sbi, group)->free_inodes);
 
 	/* the inode bitmap is zero-based */
 	inode->i_ino = bit + 1 + group * EXT4_INODES_PER_GROUP(sb);

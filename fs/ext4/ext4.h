@@ -3457,6 +3457,13 @@ static inline unsigned int ext4_flex_bg_size(struct ext4_sb_info *sbi)
 	return 1 << sbi->s_log_groups_per_flex;
 }
 
+static inline struct flex_groups *ext4_get_flex_group(struct ext4_sb_info *sbi,
+						      ext4_group_t block_group)
+{
+	return sbi_array_rcu_deref(sbi, s_flex_groups,
+				   ext4_flex_group(sbi, block_group));
+}
+
 static inline loff_t ext4_get_maxbytes(struct inode *inode)
 {
 	if (ext4_test_inode_flag(inode, EXT4_INODE_EXTENTS))
