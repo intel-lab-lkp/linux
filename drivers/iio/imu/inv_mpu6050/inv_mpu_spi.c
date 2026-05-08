@@ -46,8 +46,6 @@ static int inv_mpu_probe(struct spi_device *spi)
 	} else if ((match = device_get_match_data(&spi->dev))) {
 		chip_type = (uintptr_t)match;
 		name = dev_name(&spi->dev);
-	} else {
-		return -ENODEV;
 	}
 
 	regmap = devm_regmap_init_spi(spi, &inv_mpu_regmap_config);
@@ -175,6 +173,7 @@ static struct spi_driver inv_mpu_driver = {
 		.acpi_match_table = inv_acpi_match,
 		.name	=	"inv-mpu6000-spi",
 		.pm     =       pm_ptr(&inv_mpu_pmops),
+		.suppress_override_attrs = true,
 	},
 };
 
