@@ -103,19 +103,13 @@ static int nsim_napi_rx(struct net_device *tx_dev, struct net_device *rx_dev,
 static int nsim_forward_skb(struct net_device *tx_dev,
 			    struct net_device *rx_dev,
 			    struct sk_buff *skb,
-			    struct nsim_rq *rq,
-			    struct skb_ext *psp_ext)
+			    struct nsim_rq *rq)
 {
 	int ret;
 
 	ret = __dev_forward_skb(rx_dev, skb);
-	if (ret) {
-		if (psp_ext)
-			__skb_ext_put(psp_ext);
+	if (ret)
 		return ret;
-	}
-
-	nsim_psp_handle_ext(skb, psp_ext);
 
 	return nsim_napi_rx(tx_dev, rx_dev, rq, skb);
 }
@@ -123,7 +117,6 @@ static int nsim_forward_skb(struct net_device *tx_dev,
 static netdev_tx_t nsim_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct netdevsim *ns = netdev_priv(dev);
-	struct skb_ext *psp_ext = NULL;
 	struct net_device *peer_dev;
 	unsigned int len = skb->len;
 	struct netdevsim *peer_ns;
@@ -147,7 +140,7 @@ static netdev_tx_t nsim_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		peer_dev = peer_ns->netdev;
 	}
 
-	dr = nsim_do_psp(skb, ns, peer_ns, &psp_ext);
+	dr = nsim_psp_handle_tx(skb, ns);
 	if (dr)
 		goto out_drop_free;
 
@@ -165,7 +158,7 @@ static netdev_tx_t nsim_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	skb_tx_timestamp(skb);
 	if (unlikely(nsim_forward_skb(dev, peer_dev,
-				      skb, rq, psp_ext) == NET_RX_DROP))
+				      skb, rq) == NET_RX_DROP))
 		goto out_drop_cnt;
 
 	if (!hrtimer_active(&rq->napi_timer))
@@ -378,6 +371,9 @@ static int nsim_rcv(struct nsim_rq *rq, int budget)
 			break;
 
 		skb = skb_dequeue(&rq->skb_queue);
+
+		if (nsim_psp_handle_rx(ns, skb))
+			continue;
 
 		if (xdp_prog) {
 			/* skb might be freed directly by XDP, save the len */

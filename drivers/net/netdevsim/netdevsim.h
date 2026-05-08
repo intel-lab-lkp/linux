@@ -451,22 +451,22 @@ static inline void nsim_macsec_teardown(struct netdevsim *ns)
 #if IS_ENABLED(CONFIG_INET_PSP)
 int nsim_psp_init(struct netdevsim *ns);
 void nsim_psp_uninit(struct netdevsim *ns);
-void nsim_psp_handle_ext(struct sk_buff *skb, struct skb_ext *psp_ext);
 enum skb_drop_reason
-nsim_do_psp(struct sk_buff *skb, struct netdevsim *ns,
-	    struct netdevsim *peer_ns, struct skb_ext **psp_ext);
+nsim_psp_handle_tx(struct sk_buff *skb, struct netdevsim *ns);
+bool nsim_psp_handle_rx(struct netdevsim *ns, struct sk_buff *skb);
 #else
 static inline int nsim_psp_init(struct netdevsim *ns) { return 0; }
 static inline void nsim_psp_uninit(struct netdevsim *ns) {}
 static inline enum skb_drop_reason
-nsim_do_psp(struct sk_buff *skb, struct netdevsim *ns,
-	    struct netdevsim *peer_ns, struct skb_ext **psp_ext)
+nsim_psp_handle_tx(struct sk_buff *skb, struct netdevsim *ns)
 {
 	return 0;
 }
 
-static inline void
-nsim_psp_handle_ext(struct sk_buff *skb, struct skb_ext *psp_ext) {}
+static inline bool nsim_psp_handle_rx(struct netdevsim *ns, struct sk_buff *skb)
+{
+	return false;
+}
 #endif
 
 int nsim_setup_tc(struct net_device *dev, enum tc_setup_type type,

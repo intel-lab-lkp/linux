@@ -6,18 +6,10 @@
 
 #include "netdevsim.h"
 
-void nsim_psp_handle_ext(struct sk_buff *skb, struct skb_ext *psp_ext)
-{
-	if (psp_ext)
-		__skb_ext_set(skb, SKB_EXT_PSP, psp_ext);
-}
-
 enum skb_drop_reason
-nsim_do_psp(struct sk_buff *skb, struct netdevsim *ns,
-	    struct netdevsim *peer_ns, struct skb_ext **psp_ext)
+nsim_psp_handle_tx(struct sk_buff *skb, struct netdevsim *ns)
 {
 	enum skb_drop_reason rc = 0;
-	struct psp_dev *peer_psd;
 	struct psp_assoc *pas;
 	struct net *net;
 	void **ptr;
@@ -46,45 +38,108 @@ nsim_do_psp(struct sk_buff *skb, struct netdevsim *ns,
 		goto out_unlock;
 	}
 
-	/* Now pretend we just received this frame */
-	peer_psd = rcu_dereference(peer_ns->psp.dev);
-	if (peer_psd && peer_psd->config.versions & (1 << pas->version)) {
-		bool strip_icv = false;
-		u8 generation;
+	skb->decrypted = 0;
 
-		/* We cheat a bit and put the generation in the key.
-		 * In real life if generation was too old, then decryption would
-		 * fail. Here, we just make it so a bad key causes a bad
-		 * generation too, and psp_sk_rx_policy_check() will fail.
-		 */
-		generation = pas->tx.key[0];
-
-		skb_ext_reset(skb);
-		skb->mac_len = ETH_HLEN;
-		if (psp_dev_rcv(skb, peer_psd->id, generation, strip_icv)) {
-			rc = SKB_DROP_REASON_PSP_OUTPUT;
-			goto out_unlock;
-		}
-
-		*psp_ext = skb->extensions;
-		refcount_inc(&(*psp_ext)->refcnt);
-		skb->decrypted = 1;
-
-		u64_stats_update_begin(&ns->psp.syncp);
-		u64_stats_inc(&ns->psp.tx_packets);
-		u64_stats_inc(&ns->psp.rx_packets);
-		u64_stats_add(&ns->psp.tx_bytes,
-			      skb->len - skb_inner_transport_offset(skb));
-		u64_stats_add(&ns->psp.rx_bytes,
-			      skb->len - skb_inner_transport_offset(skb));
-		u64_stats_update_end(&ns->psp.syncp);
-	} else {
-		skb->ip_summed	= CHECKSUM_NONE;
-	}
-
+	u64_stats_update_begin(&ns->psp.syncp);
+	u64_stats_inc(&ns->psp.tx_packets);
+	u64_stats_add(&ns->psp.tx_bytes,
+		      skb->len - skb_inner_transport_offset(skb));
+	u64_stats_update_end(&ns->psp.syncp);
 out_unlock:
 	rcu_read_unlock();
 	return rc;
+}
+
+/* Returns true if skb was consumed, false otherwise. */
+bool nsim_psp_handle_rx(struct netdevsim *ns, struct sk_buff *skb)
+{
+	struct psp_dev *psd;
+	struct psphdr *psph;
+	struct udphdr *uh;
+	int payload_len;
+	u32 versions;
+	int psp_off;
+	bool is_udp;
+	int l3_hlen;
+	u8 version;
+	u32 psd_id;
+	int err;
+
+	if (skb->protocol == htons(ETH_P_IP)) {
+		struct iphdr *iph;
+
+		if (!pskb_may_pull(skb, sizeof(struct iphdr)))
+			return false;
+
+		iph = (struct iphdr *)skb->data;
+		if (iph->ihl < 5)
+			return false;
+
+		is_udp = iph->protocol == IPPROTO_UDP;
+		l3_hlen = iph->ihl * 4;
+	} else if (skb->protocol == htons(ETH_P_IPV6)) {
+		struct ipv6hdr *ip6h;
+
+		if (!pskb_may_pull(skb, sizeof(struct ipv6hdr)))
+			return false;
+		ip6h = (struct ipv6hdr *)skb->data;
+		is_udp = ip6h->nexthdr == IPPROTO_UDP;
+		l3_hlen = sizeof(struct ipv6hdr);
+	} else {
+		return false;
+	}
+
+	if (!is_udp)
+		return false;
+
+	if (!pskb_may_pull(skb, l3_hlen + sizeof(struct udphdr) + PSP_HDR_SIZE))
+		return false;
+
+	uh = (struct udphdr *)(skb->data + l3_hlen);
+	if (uh->dest != htons(PSP_DEFAULT_UDP_PORT))
+		return false;
+
+	psph = (struct psphdr *)(uh + 1);
+	version = FIELD_GET(PSPHDR_VERFL_VERSION, psph->verfl);
+
+	rcu_read_lock();
+	psd = rcu_dereference(ns->psp.dev);
+	if (psd) {
+		versions = READ_ONCE(psd->config.versions);
+		psd_id = psd->id;
+	}
+	rcu_read_unlock();
+
+	if (!psd || !(versions & (1 << version))) {
+		skb->ip_summed = CHECKSUM_NONE;
+		return false;
+	}
+
+	psp_off = l3_hlen + sizeof(struct udphdr);
+	payload_len = skb->len - psp_off - PSP_HDR_SIZE - PSP_TRL_SIZE;
+	if (payload_len < 0)
+		goto drop;
+
+	skb_push(skb, ETH_HLEN);
+	skb->mac_len = ETH_HLEN;
+	err = psp_dev_rcv(skb, psd_id, 0, false);
+	if (err)
+		goto drop;
+
+	skb_reset_mac_header(skb);
+	skb_pull(skb, ETH_HLEN);
+	skb->decrypted = 1;
+
+	u64_stats_update_begin(&ns->psp.syncp);
+	u64_stats_inc(&ns->psp.rx_packets);
+	u64_stats_add(&ns->psp.rx_bytes, payload_len);
+	u64_stats_update_end(&ns->psp.syncp);
+
+	return false;
+
+drop:
+	kfree_skb_reason(skb, SKB_DROP_REASON_PSP_INPUT);
+	return true;
 }
 
 static int
