@@ -418,7 +418,7 @@ static int kfr2r09_serial_i2c_setup(void)
 	msg.flags = 0;
 	ret = i2c_transfer(a, &msg, 1);
 	if (ret != 1)
-		return -ENODEV;
+		goto err_put_adapter;
 
 	buf[0] = 0;
 	msg.addr = 0x09;
@@ -427,7 +427,7 @@ static int kfr2r09_serial_i2c_setup(void)
 	msg.flags = I2C_M_RD;
 	ret = i2c_transfer(a, &msg, 1);
 	if (ret != 1)
-		return -ENODEV;
+		goto err_put_adapter;
 
 	buf[1] = buf[0] | (1 << 6);
 	buf[0] = 0x13;
@@ -437,9 +437,16 @@ static int kfr2r09_serial_i2c_setup(void)
 	msg.flags = 0;
 	ret = i2c_transfer(a, &msg, 1);
 	if (ret != 1)
-		return -ENODEV;
+		goto err_put_adapter;
+
+	i2c_put_adapter(a);
 
 	return 0;
+
+err_put_adapter:
+	i2c_put_adapter(a);
+
+	return -ENODEV;
 }
 #else
 static int kfr2r09_usb0_gadget_i2c_setup(void)
