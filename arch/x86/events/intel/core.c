@@ -5054,14 +5054,6 @@ static struct perf_guest_switch_msr *intel_guest_get_msrs(int *nr,
 			  cpuc->intel_ctrl_exclude_host_mask;
 
 	/*
-	 * Disable counters where the guest PMC is different than the host PMC
-	 * being used on behalf of the guest, as the PEBS record includes
-	 * PERF_GLOBAL_STATUS, i.e. the guest will see overflow status for the
-	 * wrong counter(s).
-	 */
-	guest_pebs_mask &= ~guest_pebs->cross_mapped_mask;
-
-	/*
 	 * FIXME: Allow guest and host usage of PEBS events to co-exist instead
 	 *        of disabling guest PEBS entirely if the host is using PEBS.
 	 *        What exactly goes wrong if guest and host are using PEBS is
