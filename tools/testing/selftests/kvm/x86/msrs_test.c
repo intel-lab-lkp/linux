@@ -476,6 +476,62 @@ static void test_msrs(void)
 	kvm_vm_free(vm);
 }
 
+/*
+ * AMD-specific: test that HWCR.McStatusWrEn (bit 18) gates guest writes to
+ * MCi_STATUS MSRs.  With the bit set, a non-zero write to MC0_STATUS must
+ * succeed and read back unchanged.  With the bit clear, the write must take
+ * a #GP.
+ *
+ * This exercises can_set_mci_status(), which is only reachable via the guest
+ * WRMSR path (host_initiated=false).
+ */
+static void guest_test_mcstatus_wren(void)
+{
+	const u64 val = 1;
+	u8 vec;
+
+	/* McStatusWrEn=1: non-zero write to MCi_STATUS must succeed. */
+	wrmsr(MSR_K7_HWCR, BIT_ULL(18));
+	__wrmsr(MSR_IA32_MC0_STATUS, val);
+
+	/* Clear before disabling the write-enable bit. */
+	__wrmsr(MSR_IA32_MC0_STATUS, 0);
+
+	/* McStatusWrEn=0: non-zero write to MCi_STATUS must #GP. */
+	wrmsr(MSR_K7_HWCR, 0);
+	vec = wrmsr_safe(MSR_IA32_MC0_STATUS, val);
+	__GUEST_ASSERT(vec == GP_VECTOR,
+		       "Wanted #GP on WRMSR(0x%x, 0x%lx), got %s",
+		       MSR_IA32_MC0_STATUS, val, ex_str(vec));
+
+	/* Confirm the failed write left the register at zero. */
+	__rdmsr(MSR_IA32_MC0_STATUS, 0);
+
+	GUEST_DONE();
+}
+
+static void test_mcstatus_wren(void)
+{
+	struct kvm_vcpu *vcpu;
+	struct kvm_vm *vm;
+	struct ucall uc;
+
+	vm = vm_create_with_one_vcpu(&vcpu, guest_test_mcstatus_wren);
+	vcpu_run(vcpu);
+	TEST_ASSERT_KVM_EXIT_REASON(vcpu, KVM_EXIT_IO);
+
+	switch (get_ucall(vcpu, &uc)) {
+	case UCALL_DONE:
+		break;
+	case UCALL_ABORT:
+		REPORT_GUEST_ASSERT(uc);
+	default:
+		TEST_FAIL("Unexpected ucall %lu", uc.cmd);
+	}
+
+	kvm_vm_free(vm);
+}
+
 int main(void)
 {
 	has_one_reg = kvm_has_cap(KVM_CAP_ONE_REG);
@@ -486,4 +542,7 @@ int main(void)
 		use_one_reg = true;
 		test_msrs();
 	}
+
+	if (host_cpu_is_amd_compatible)
+		test_mcstatus_wren();
 }
