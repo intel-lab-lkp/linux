@@ -27,6 +27,7 @@ struct zswap_lruvec_state {
 unsigned long zswap_total_pages(void);
 bool zswap_store(struct folio *folio);
 int zswap_load(struct folio *folio);
+int zswap_entry_batch(swp_entry_t swp, int max_nr, bool *is_zswap);
 void zswap_invalidate(swp_entry_t swp);
 int zswap_swapon(int type, unsigned long nr_pages);
 void zswap_swapoff(int type);
@@ -47,6 +48,14 @@ static inline bool zswap_store(struct folio *folio)
 static inline int zswap_load(struct folio *folio)
 {
 	return -ENOENT;
+}
+
+static inline int zswap_entry_batch(swp_entry_t swp, int max_nr,
+				    bool *is_zswap)
+{
+	if (is_zswap)
+		*is_zswap = false;
+	return max_nr;
 }
 
 static inline void zswap_invalidate(swp_entry_t swp) {}

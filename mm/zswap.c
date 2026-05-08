@@ -234,6 +234,42 @@ static inline struct xarray *swap_zswap_tree(swp_entry_t swp)
 		>> ZSWAP_ADDRESS_SPACE_SHIFT];
 }
 
+/*
+ * Return the number of contiguous swap entries that share the same zswap
+ * presence as @swp. If @is_zswap is not NULL, return @swp's zswap status.
+ *
+ * Context: callers must keep the swap type alive. The result is a snapshot
+ * of zswap xarray presence; callers must tolerate races by rechecking under
+ * the lock that matters for their operation or by falling back safely.
+ */
+int zswap_entry_batch(swp_entry_t swp, int max_nr, bool *is_zswap)
+{
+	pgoff_t offset = swp_offset(swp);
+	bool first;
+	int i;
+
+	if (zswap_never_enabled()) {
+		if (is_zswap)
+			*is_zswap = false;
+		return max_nr;
+	}
+
+	first = !!xa_load(swap_zswap_tree(swp), offset);
+	if (is_zswap)
+		*is_zswap = first;
+
+	for (i = 1; i < max_nr; i++) {
+		swp_entry_t entry = swp_entry(swp_type(swp), offset + i);
+		bool present;
+
+		present = !!xa_load(swap_zswap_tree(entry), offset + i);
+		if (present != first)
+			return i;
+	}
+
+	return max_nr;
+}
+
 #define zswap_pool_debug(msg, p)			\
 	pr_debug("%s pool %s\n", msg, (p)->tfm_name)
 
