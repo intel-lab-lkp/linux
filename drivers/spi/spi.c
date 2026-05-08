@@ -214,8 +214,19 @@ static struct attribute *spi_dev_attrs[] = {
 	NULL,
 };
 
+static umode_t spi_dev_attr_is_visible(struct kobject *kobj, struct attribute *attr, int i)
+{
+	struct device *dev = kobj_to_dev(kobj);
+
+	if (attr == &dev_attr_driver_override.attr)
+		return dev->driver->suppress_override_attrs ? 0 : attr->mode;
+
+	return attr->mode;
+}
+
 static const struct attribute_group spi_dev_group = {
 	.attrs  = spi_dev_attrs,
+	.is_visible	= spi_dev_attr_is_visible,
 };
 
 static struct attribute *spi_device_statistics_attrs[] = {
