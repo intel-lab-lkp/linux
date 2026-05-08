@@ -207,8 +207,12 @@ bool nsim_psp_handle_rx(struct netdevsim *ns, struct sk_buff *skb)
 
 	psp_off = l3_hlen + sizeof(struct udphdr);
 	payload_len = skb->len - psp_off - PSP_HDR_SIZE - PSP_TRL_SIZE;
-	if (payload_len < 0)
+	if (payload_len < 0) {
+		u64_stats_update_begin(&ns->psp.syncp);
+		u64_stats_inc(&ns->psp.rx_error);
+		u64_stats_update_end(&ns->psp.syncp);
 		goto drop;
+	}
 
 	if (FIELD_GET(PSPHDR_CRYPT_OFFSET, psph->crypt_offset))
 		goto drop;
@@ -238,6 +242,9 @@ bool nsim_psp_handle_rx(struct netdevsim *ns, struct sk_buff *skb)
 			    payload_len, (u8 *)psph, PSP_HDR_SIZE,
 			    iv, authtag)) {
 		memzero_explicit(&ctx, sizeof(ctx));
+		u64_stats_update_begin(&ns->psp.syncp);
+		u64_stats_inc(&ns->psp.rx_auth_fail);
+		u64_stats_update_end(&ns->psp.syncp);
 		goto drop;
 	}
 	memzero_explicit(&ctx, sizeof(ctx));
@@ -346,6 +353,8 @@ static void nsim_get_stats(struct psp_dev *psd, struct psp_dev_stats *stats)
 		start = u64_stats_fetch_begin(&ns->psp.syncp);
 		stats->rx_bytes = u64_stats_read(&ns->psp.rx_bytes);
 		stats->rx_packets = u64_stats_read(&ns->psp.rx_packets);
+		stats->rx_auth_fail = u64_stats_read(&ns->psp.rx_auth_fail);
+		stats->rx_error = u64_stats_read(&ns->psp.rx_error);
 		stats->tx_bytes = u64_stats_read(&ns->psp.tx_bytes);
 		stats->tx_packets = u64_stats_read(&ns->psp.tx_packets);
 	} while (u64_stats_fetch_retry(&ns->psp.syncp, start));

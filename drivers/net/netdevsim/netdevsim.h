@@ -118,6 +118,8 @@ struct netdevsim {
 	struct {
 		u64_stats_t rx_packets;
 		u64_stats_t rx_bytes;
+		u64_stats_t rx_auth_fail;
+		u64_stats_t rx_error;
 		u64_stats_t tx_packets;
 		u64_stats_t tx_bytes;
 		struct u64_stats_sync syncp;
