@@ -2756,6 +2756,9 @@ static void genpd_parse_for_consumer(struct device_node *sup,
 			genpd_lock(genpd);
 			genpd->wait_for_consumer = true;
 			genpd_unlock(genpd);
+
+			pr_debug("%s: wait for consumer %pOF\n",
+				 dev_name(&genpd->dev), con);
 		}
 		mutex_unlock(&gpd_list_lock);
 
@@ -2772,6 +2775,9 @@ static void genpd_queue_sync_state(struct device_node *np)
 		if (genpd->provider == of_fwnode_handle(np)) {
 			genpd_lock(genpd);
 			if (genpd->stay_on && !genpd->wait_for_consumer) {
+				pr_debug("%s: queuing sync state\n",
+					 dev_name(&genpd->dev));
+
 				genpd->stay_on = false;
 				genpd_queue_power_off_work(genpd);
 			}
@@ -3637,6 +3643,9 @@ void of_genpd_sync_state(struct device_node *np)
 		if (genpd->provider == of_fwnode_handle(np)) {
 			genpd_lock(genpd);
 			if (genpd->stay_on) {
+				pr_debug("%s: sync state\n",
+					 dev_name(&genpd->dev));
+
 				genpd->stay_on = false;
 				genpd_power_off(genpd, false, 0);
 			}
@@ -3677,6 +3686,8 @@ static void genpd_provider_sync_state(struct device *dev)
 	case GENPD_SYNC_STATE_SIMPLE:
 		genpd_lock(genpd);
 		if (genpd->stay_on) {
+			pr_debug("%s: sync state\n", dev_name(&genpd->dev));
+
 			genpd->stay_on = false;
 			genpd_power_off(genpd, false, 0);
 		}
