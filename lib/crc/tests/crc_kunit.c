@@ -554,6 +554,57 @@ static void crc32c_flip_range_test(struct kunit *test)
 	}
 }
 
+/*
+ * Benchmark crc32c_flip_range vs full crc32c recomputation
+ */
+static void crc32c_flip_range_benchmark(struct kunit *test)
+{
+	static const size_t bitmap_sizes[] = {
+		1024, 2048, 4096, 8192, 16384, 32768, 65536,
+	};
+	size_t i, j, num_iters, buflen, total_bits;
+	volatile u32 crc;
+	u64 t_flip, t_full;
+	u8 *buf;
+
+	if (!IS_ENABLED(CONFIG_CRC_BENCHMARK))
+		kunit_skip(test, "not enabled");
+
+	buf = kunit_kzalloc(test, 65536, GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, buf);
+
+	for (i = 0; i < ARRAY_SIZE(bitmap_sizes); i++) {
+		buflen = bitmap_sizes[i];
+		total_bits = buflen * 8;
+		num_iters = 10000000 / (buflen + 128);
+
+		/* Benchmark crc32c_flip_range */
+		crc = crc32c(0, buf, buflen);
+		preempt_disable();
+		t_flip = ktime_get_ns();
+		for (j = 0; j < num_iters; j++)
+			crc = crc32c_flip_range(crc, total_bits, 100, 100);
+		t_flip = ktime_get_ns() - t_flip;
+		preempt_enable();
+
+		/* Benchmark full crc32c recomputation */
+		preempt_disable();
+		t_full = ktime_get_ns();
+		for (j = 0; j < num_iters; j++)
+			crc = crc32c(0, buf, buflen);
+		t_full = ktime_get_ns() - t_full;
+		preempt_enable();
+
+		kunit_info(test,
+			   "bitmap=%zu: flip_range=%llu ns, full_crc=%llu ns, speedup=%llu.%01llux\n",
+			   buflen,
+			   div64_u64(t_flip, num_iters),
+			   div64_u64(t_full, num_iters),
+			   div64_u64(t_full * 10, t_flip ? t_flip : 1) / 10,
+			   div64_u64(t_full * 10, t_flip ? t_flip : 1) % 10);
+	}
+}
+
 static struct kunit_case crc_test_cases[] = {
 #if IS_REACHABLE(CONFIG_CRC7)
 	KUNIT_CASE(crc7_be_test),
@@ -575,6 +626,7 @@ static struct kunit_case crc_test_cases[] = {
 	KUNIT_CASE(crc32c_test),
 	KUNIT_CASE(crc32c_benchmark),
 	KUNIT_CASE(crc32c_flip_range_test),
+	KUNIT_CASE(crc32c_flip_range_benchmark),
 #endif
 #if IS_REACHABLE(CONFIG_CRC64)
 	KUNIT_CASE(crc64_be_test),
