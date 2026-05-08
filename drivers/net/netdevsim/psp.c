@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 
-#include <linux/ip.h>
 #include <linux/skbuff.h>
-#include <net/ip6_checksum.h>
 #include <net/psp.h>
 #include <net/sock.h>
 
@@ -81,36 +79,6 @@ nsim_do_psp(struct sk_buff *skb, struct netdevsim *ns,
 			      skb->len - skb_inner_transport_offset(skb));
 		u64_stats_update_end(&ns->psp.syncp);
 	} else {
-		struct ipv6hdr *ip6h __maybe_unused;
-		struct iphdr *iph;
-		struct udphdr *uh;
-		__wsum csum;
-
-		/* Do not decapsulate. Receive the skb with the udp and psp
-		 * headers still there as if this is a normal udp packet.
-		 * psp_dev_encapsulate() sets udp checksum to 0, so we need to
-		 * provide a valid checksum here, so the skb isn't dropped.
-		 */
-		uh = udp_hdr(skb);
-		csum = skb_checksum(skb, skb_transport_offset(skb),
-				    ntohs(uh->len), 0);
-
-		switch (skb->protocol) {
-		case htons(ETH_P_IP):
-			iph = ip_hdr(skb);
-			uh->check = udp_v4_check(ntohs(uh->len), iph->saddr,
-						 iph->daddr, csum);
-			break;
-#if IS_ENABLED(CONFIG_IPV6)
-		case htons(ETH_P_IPV6):
-			ip6h = ipv6_hdr(skb);
-			uh->check = udp_v6_check(ntohs(uh->len), &ip6h->saddr,
-						 &ip6h->daddr, csum);
-			break;
-#endif
-		}
-
-		uh->check	= uh->check ?: CSUM_MANGLED_0;
 		skb->ip_summed	= CHECKSUM_NONE;
 	}
 
