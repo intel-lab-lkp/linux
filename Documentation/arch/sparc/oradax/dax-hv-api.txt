@@ -485,7 +485,7 @@ Offset   Size   Field Description
                              the virtual machine to use when accessing this data stream
                              (checking is only guaranteed to be performed when using API
                              version 1.1 and later). If using a virtual address, this field will
-                             be used as as primary input address bits [59:56].
+                             be used as primary input address bits [59:56].
                 [55:0]       Primary input address bits [55:0]. Address type is determined
                              by CCB header.
 24       8      Data Access Control
@@ -576,7 +576,7 @@ Offset   Size   Field Description
                                                      the virtual machine to use when accessing this data stream
                                                      (checking is only guaranteed to be performed when using API
                                                      version 1.1 and later). If using a virtual address, this field will
-                                                     be used as as symbol table address bits [59:56].
+                                                     be used as symbol table address bits [59:56].
                                         [55:4]       Symbol table address bits [55:4]. Address type is determined
                                                      by CCB header.
                                         [3:0]        Symbol table version
@@ -815,7 +815,7 @@ Offset   Size   Field Description
                              the virtual machine to use when accessing this data stream
                              (checking is only guaranteed to be performed when using API
                              version 1.1 and later). If using a virtual address, this field will
-                             be used as as bit table address bits [59:56]
+                             be used as bit table address bits [59:56]
                 [55:4]       Bit table address bits [55:4]. Address type is determined by
                              CCB header. Address must be 64-byte aligned (CCB version
                              0) or 16-byte aligned (CCB version 1).
