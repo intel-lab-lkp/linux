@@ -1,10 +1,44 @@
 // SPDX-License-Identifier: GPL-2.0
 
+#include <crypto/aes-cbc-macs.h>
+#include <linux/random.h>
 #include <linux/skbuff.h>
+#include <linux/unaligned.h>
 #include <net/psp.h>
 #include <net/sock.h>
 
 #include "netdevsim.h"
+
+/* Session key derivation from device key per PSP Architecture Spec */
+static void nsim_psp_derive_key(const u8 *dev_key, __be32 spi, u32 version,
+				u8 *derived_key)
+{
+	unsigned int key_size = psp_key_size(version);
+	struct aes_cmac_key key;
+	u8 block[16];
+
+	aes_cmac_preparekey(&key, dev_key, NSIM_PSP_DEV_KEY_SIZE);
+
+	block[0]  = 0x00;
+	block[1]  = 0x00;
+	block[2]  = 0x00;
+	block[3]  = 0x01;		/* counter */
+	block[4]  = 0x50;		/* 'P' */
+	block[5]  = 0x76;		/* 'v' */
+	block[6]  = 0x30 | version;	/* '0' + version */
+	block[7]  = 0x00;
+	memcpy(&block[8], &spi, sizeof(spi));
+	put_unaligned_be32(key_size * 8, &block[12]);
+
+	aes_cmac(&key, block, sizeof(block), derived_key);
+
+	if (key_size > 16) {
+		block[3] = 0x02;
+		aes_cmac(&key, block, sizeof(block), derived_key + 16);
+	}
+
+	memzero_explicit(&key, sizeof(key));
+}
 
 enum skb_drop_reason
 nsim_psp_handle_tx(struct sk_buff *skb, struct netdevsim *ns)
@@ -155,7 +189,7 @@ nsim_rx_spi_alloc(struct psp_dev *psd, u32 version,
 		  struct netlink_ext_ack *extack)
 {
 	struct netdevsim *ns = psd->drv_priv;
-	int i;
+	unsigned int phase;
 
 	if ((ns->psp.spi ^ (ns->psp.spi + 1)) & PSP_SPI_KEY_PHASE) {
 		NL_SET_ERR_MSG(extack, "SPI space exhausted");
@@ -163,9 +197,11 @@ nsim_rx_spi_alloc(struct psp_dev *psd, u32 version,
 	}
 
 	assoc->spi = cpu_to_be32(++ns->psp.spi);
-	assoc->key[0] = psd->generation;
-	for (i = 1; i < PSP_MAX_KEY; i++)
-		assoc->key[i] = ns->psp.spi + i;
+	phase = !!(ns->psp.spi & PSP_SPI_KEY_PHASE);
+
+	/* dev_keys_lock not needed because of psd->lock */
+	nsim_psp_derive_key(ns->psp.dev_keys[phase], assoc->spi, version,
+			    assoc->key);
 
 	return 0;
 }
@@ -186,8 +222,15 @@ static int nsim_assoc_add(struct psp_dev *psd, struct psp_assoc *pas,
 static int nsim_key_rotate(struct psp_dev *psd, struct netlink_ext_ack *extack)
 {
 	struct netdevsim *ns = psd->drv_priv;
+	unsigned int next_phase;
 
+	psd->generation = 0;
 	ns->psp.spi = (ns->psp.spi & PSP_SPI_KEY_PHASE) ^ PSP_SPI_KEY_PHASE;
+	next_phase = !!(ns->psp.spi & PSP_SPI_KEY_PHASE);
+
+	spin_lock_bh(&ns->psp.dev_keys_lock);
+	get_random_bytes(ns->psp.dev_keys[next_phase], NSIM_PSP_DEV_KEY_SIZE);
+	spin_unlock_bh(&ns->psp.dev_keys_lock);
 
 	return 0;
 }
@@ -294,6 +337,10 @@ int nsim_psp_init(struct netdevsim *ns)
 {
 	struct dentry *ddir = ns->nsim_dev_port->ddir;
 	struct psp_dev *psd;
+
+	spin_lock_init(&ns->psp.dev_keys_lock);
+	get_random_bytes(ns->psp.dev_keys[0], NSIM_PSP_DEV_KEY_SIZE);
+	get_random_bytes(ns->psp.dev_keys[1], NSIM_PSP_DEV_KEY_SIZE);
 
 	psd = psp_dev_create(ns->netdev, &nsim_psp_ops, &nsim_psp_caps, ns);
 	if (IS_ERR(psd))

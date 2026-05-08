@@ -38,6 +38,7 @@
 #define NSIM_IPSEC_VALID		BIT(31)
 #define NSIM_UDP_TUNNEL_N_PORTS		4
 
+#define NSIM_PSP_DEV_KEY_SIZE		32
 #define NSIM_HDS_THRESHOLD_MAX		1024
 
 struct nsim_sa {
@@ -123,6 +124,8 @@ struct netdevsim {
 		struct psp_dev __rcu *dev;
 		struct dentry *rereg;
 		struct mutex rereg_lock;
+		spinlock_t dev_keys_lock;
+		u8 dev_keys[2][NSIM_PSP_DEV_KEY_SIZE];
 		u32 spi;
 		u32 assoc_cnt;
 	} psp;
