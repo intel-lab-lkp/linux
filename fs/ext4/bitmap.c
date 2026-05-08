@@ -58,11 +58,29 @@ void ext4_inode_bitmap_csum_set(struct super_block *sb,
 		gdp->bg_inode_bitmap_csum_hi = cpu_to_le16(csum >> 16);
 }
 
+static inline __u32 ext4_block_bitmap_csum_get(struct super_block *sb,
+					       struct ext4_group_desc *gdp)
+{
+	__u32 csum = le16_to_cpu(gdp->bg_block_bitmap_csum_lo);
+
+	if (EXT4_DESC_SIZE(sb) >= EXT4_BG_BLOCK_BITMAP_CSUM_HI_END)
+		csum |= (__u32)le16_to_cpu(gdp->bg_block_bitmap_csum_hi) << 16;
+	return csum;
+}
+
+static inline void ext4_block_bitmap_csum_store(struct super_block *sb,
+						struct ext4_group_desc *gdp,
+						__u32 csum)
+{
+	gdp->bg_block_bitmap_csum_lo = cpu_to_le16(csum & 0xFFFF);
+	if (EXT4_DESC_SIZE(sb) >= EXT4_BG_BLOCK_BITMAP_CSUM_HI_END)
+		gdp->bg_block_bitmap_csum_hi = cpu_to_le16(csum >> 16);
+}
+
 int ext4_block_bitmap_csum_verify(struct super_block *sb,
 				  struct ext4_group_desc *gdp,
 				  struct buffer_head *bh)
 {
-	__u32 hi;
 	__u32 provided, calculated;
 	struct ext4_sb_info *sbi = EXT4_SB(sb);
 	int sz = EXT4_CLUSTERS_PER_GROUP(sb) / 8;
@@ -70,12 +88,9 @@ int ext4_block_bitmap_csum_verify(struct super_block *sb,
 	if (!ext4_has_feature_metadata_csum(sb))
 		return 1;
 
-	provided = le16_to_cpu(gdp->bg_block_bitmap_csum_lo);
+	provided = ext4_block_bitmap_csum_get(sb, gdp);
 	calculated = ext4_chksum(sbi->s_csum_seed, (__u8 *)bh->b_data, sz);
-	if (sbi->s_desc_size >= EXT4_BG_BLOCK_BITMAP_CSUM_HI_END) {
-		hi = le16_to_cpu(gdp->bg_block_bitmap_csum_hi);
-		provided |= (hi << 16);
-	} else
+	if (EXT4_DESC_SIZE(sb) < EXT4_BG_BLOCK_BITMAP_CSUM_HI_END)
 		calculated &= 0xFFFF;
 
 	return provided == calculated;
@@ -93,7 +108,5 @@ void ext4_block_bitmap_csum_set(struct super_block *sb,
 		return;
 
 	csum = ext4_chksum(sbi->s_csum_seed, (__u8 *)bh->b_data, sz);
-	gdp->bg_block_bitmap_csum_lo = cpu_to_le16(csum & 0xFFFF);
-	if (sbi->s_desc_size >= EXT4_BG_BLOCK_BITMAP_CSUM_HI_END)
-		gdp->bg_block_bitmap_csum_hi = cpu_to_le16(csum >> 16);
+	ext4_block_bitmap_csum_store(sb, gdp, csum);
 }
