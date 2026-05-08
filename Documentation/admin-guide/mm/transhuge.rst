@@ -644,8 +644,8 @@ zswpout
 	piece without splitting.
 
 swpin
-	is incremented every time a huge page is swapped in from a non-zswap
-	swap device in one piece.
+	is incremented every time a huge page is swapped in from swap I/O or
+	zswap in one piece.
 
 swpin_fallback
 	is incremented if swapin fails to allocate or charge a huge page

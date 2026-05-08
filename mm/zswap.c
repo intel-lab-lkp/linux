@@ -28,6 +28,7 @@
 #include <crypto/acompress.h>
 #include <crypto/scatterwalk.h>
 #include <linux/zswap.h>
+#include <linux/huge_mm.h>
 #include <linux/mm_types.h>
 #include <linux/page-flags.h>
 #include <linux/swapops.h>
@@ -1614,20 +1615,23 @@ check_old:
  *  NOT marked up-to-date, so that an IO error is emitted (e.g. do_swap_page()
  *  will SIGBUS).
  *
- *  -EINVAL: if the swapped out content was in zswap, but the page belongs
- *  to a large folio, which is not supported by zswap. The folio is unlocked,
- *  but NOT marked up-to-date, so that an IO error is emitted (e.g.
- *  do_swap_page() will SIGBUS).
+ *  -EINVAL: if the folio spans a mix of zswap and non-zswap entries. The
+ *  folio is unlocked, but NOT marked up-to-date, so that an IO error is
+ *  emitted (e.g. do_swap_page() will SIGBUS). Large folio swapin should
+ *  reject such ranges before calling zswap_load().
  *
- *  -ENOENT: if the swapped out content was not in zswap. The folio remains
+ *  -ENOENT: if the swapped out content was not in zswap. For a large folio,
+ *  this means the whole folio range was not in zswap. The folio remains
  *  locked on return.
  */
 int zswap_load(struct folio *folio)
 {
 	swp_entry_t swp = folio->swap;
 	pgoff_t offset = swp_offset(swp);
-	struct xarray *tree = swap_zswap_tree(swp);
 	struct zswap_entry *entry;
+	int nr_pages = folio_nr_pages(folio);
+	bool is_zswap;
+	int index;
 
 	VM_WARN_ON_ONCE(!folio_test_locked(folio));
 	VM_WARN_ON_ONCE(!folio_test_swapcache(folio));
@@ -1635,30 +1639,36 @@ int zswap_load(struct folio *folio)
 	if (zswap_never_enabled())
 		return -ENOENT;
 
-	/*
-	 * Large folios should not be swapped in while zswap is being used, as
-	 * they are not properly handled. Zswap does not properly load large
-	 * folios, and a large folio may only be partially in zswap.
-	 */
-	if (WARN_ON_ONCE(folio_test_large(folio))) {
+	if (zswap_entry_batch(swp, nr_pages, &is_zswap) != nr_pages) {
+		WARN_ON_ONCE(folio_test_large(folio));
 		folio_unlock(folio);
 		return -EINVAL;
 	}
 
-	entry = xa_load(tree, offset);
-	if (!entry)
+	if (!is_zswap)
 		return -ENOENT;
 
-	if (!zswap_decompress(entry, folio, 0)) {
-		folio_unlock(folio);
-		return -EIO;
+	for (index = 0; index < nr_pages; index++) {
+		swp_entry_t entry_swp = swp_entry(swp_type(swp),
+						  offset + index);
+		struct xarray *tree = swap_zswap_tree(entry_swp);
+
+		entry = xa_load(tree, offset + index);
+		if (WARN_ON_ONCE(!entry)) {
+			folio_unlock(folio);
+			return -EINVAL;
+		}
+
+		if (!zswap_decompress(entry, folio, index)) {
+			folio_unlock(folio);
+			return -EIO;
+		}
 	}
 
 	folio_mark_uptodate(folio);
 
-	count_vm_event(ZSWPIN);
-	if (entry->objcg)
-		count_objcg_events(entry->objcg, ZSWPIN, 1);
+	count_mthp_stat(folio_order(folio), MTHP_STAT_SWPIN);
+	count_vm_events(ZSWPIN, nr_pages);
 
 	/*
 	 * We are reading into the swapcache, invalidate zswap entry.
@@ -1668,8 +1678,19 @@ int zswap_load(struct folio *folio)
 	 * compression work.
 	 */
 	folio_mark_dirty(folio);
-	xa_erase(tree, offset);
-	zswap_entry_free(entry);
+
+	for (index = 0; index < nr_pages; index++) {
+		swp_entry_t entry_swp = swp_entry(swp_type(swp),
+						  offset + index);
+		struct xarray *tree = swap_zswap_tree(entry_swp);
+
+		entry = xa_erase(tree, offset + index);
+		if (WARN_ON_ONCE(!entry))
+			continue;
+		if (entry->objcg)
+			count_objcg_events(entry->objcg, ZSWPIN, 1);
+		zswap_entry_free(entry);
+	}
 
 	folio_unlock(folio);
 	return 0;
