@@ -191,7 +191,8 @@ EXPORT_SYMBOL(pcie_tph_get_st_table_loc);
 
 /*
  * Return the size of ST table. If ST table is not in TPH Requester Extended
- * Capability space, return 0. Otherwise return the ST Table Size + 1.
+ * Capability space or MSI-X table, return 0. Otherwise return the
+ * ST Table Size + 1.
  */
 u16 pcie_tph_get_st_table_size(struct pci_dev *pdev)
 {
@@ -200,7 +201,7 @@ u16 pcie_tph_get_st_table_size(struct pci_dev *pdev)
 
 	/* Check ST table location first */
 	loc = pcie_tph_get_st_table_loc(pdev);
-	if (loc != PCI_TPH_LOC_CAP)
+	if (loc != PCI_TPH_LOC_CAP && loc != PCI_TPH_LOC_MSIX)
 		return 0;
 
 	pci_read_config_dword(pdev, pdev->tph_cap + PCI_TPH_CAP, &reg);
