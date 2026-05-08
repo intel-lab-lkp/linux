@@ -30,6 +30,7 @@ use kernel::{
     sync::{
         aref::ARef,
         lock::{spinlock::SpinLockBackend, Guard},
+        poll::PollCondVarBox,
         Arc, ArcBorrow, CondVar, CondVarTimeoutResult, Mutex, SpinLock, UniqueArc,
     },
     task::Task,
@@ -135,6 +136,7 @@ pub(crate) struct ProcessInner {
     pub(crate) binderfs_file: Option<BinderfsProcFile>,
     /// Check for oneway spam
     oneway_spam_detection_enabled: bool,
+    poll: Option<PollCondVarBox>,
 }
 
 impl ProcessInner {
@@ -158,6 +160,7 @@ impl ProcessInner {
             async_recv: false,
             binderfs_file: None,
             oneway_spam_detection_enabled: false,
+            poll: None,
         }
     }
 
@@ -174,19 +177,23 @@ impl ProcessInner {
         &mut self,
         work: DLArc<dyn DeliverToRead>,
     ) -> Result<(), (BinderError, DLArc<dyn DeliverToRead>)> {
+        let sync = work.should_sync_wakeup();
+
         // Try to find a ready thread to which to push the work.
         if let Some(thread) = self.ready_threads.pop_front() {
             // Push to thread while holding state lock. This prevents the thread from giving up
             // (for example, because of a signal) when we're about to deliver work.
-            match thread.push_work(work) {
+            match thread.push_work_inner(work, sync) {
                 PushWorkRes::Ok => Ok(()),
+                PushWorkRes::OkNotifyPoll => {
+                    self.notify_poll(sync);
+                    Ok(())
+                }
                 PushWorkRes::FailedDead(work) => Err((BinderError::new_dead(), work)),
             }
         } else if self.is_dead {
             Err((BinderError::new_dead(), work))
         } else {
-            let sync = work.should_sync_wakeup();
-
             // Didn't find a thread waiting for proc work; this can happen
             // in two scenarios:
             // 1. All threads are busy handling transactions
@@ -194,19 +201,23 @@ impl ProcessInner {
             //    the kernel driver soon and pick up this work.
             // 2. Threads are using the (e)poll interface, in which case
             //    they may be blocked on the waitqueue without having been
-            //    added to waiting_threads. For this case, we just iterate
-            //    over all threads not handling transaction work, and
-            //    wake them all up. We wake all because we don't know whether
-            //    a thread that called into (e)poll is handling non-binder
-            //    work currently.
+            //    added to waiting_threads. For this case, we wake it up
+            //    directly.
             self.work.push_back(work);
 
             // Wake up polling threads, if any.
-            for thread in self.threads.values() {
-                thread.notify_if_poll_ready(sync);
-            }
+            self.notify_poll(sync);
 
             Ok(())
+        }
+    }
+
+    pub(crate) fn notify_poll(&self, sync: bool) {
+        if let Some(poll) = &self.poll {
+            if sync {
+                poll.notify_sync();
+            }
+            poll.notify_all();
         }
     }
 
@@ -1322,11 +1333,15 @@ impl Process {
 
     fn deferred_release(self: Arc<Self>) {
         let is_manager = {
+            // These variables contain values to be dropped after releasing spinlock.
+            let _poll;
+
             let mut inner = self.inner.lock();
             inner.is_dead = true;
             inner.is_frozen = IsFrozen::No;
             inner.sync_recv = false;
             inner.async_recv = false;
+            _poll = inner.poll.take();
             inner.is_manager
         };
 
@@ -1696,7 +1711,19 @@ impl Process {
         table: PollTable<'_>,
     ) -> Result<u32> {
         let thread = this.get_current_thread()?;
-        let (from_proc, mut mask) = thread.poll(file, table);
+        {
+            let mut inner = this.inner.lock();
+            let poll = if let Some(poll) = &inner.poll {
+                &**poll
+            } else {
+                drop(inner);
+                let poll = PollCondVarBox::new(c"Process::poll", kernel::static_lock_class!())?;
+                inner = this.inner.lock();
+                &**inner.poll.get_or_insert(poll)
+            };
+            table.register_wait(file, poll);
+        }
+        let (from_proc, mut mask) = thread.poll()?;
         if mask == 0 && from_proc && !this.inner.lock().work.is_empty() {
             mask |= bindings::POLLIN;
         }
