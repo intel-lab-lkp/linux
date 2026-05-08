@@ -37,7 +37,7 @@ enum scan_result {
 	SCAN_EXCEED_SWAP_PTE,
 	SCAN_EXCEED_SHARED_PTE,
 	SCAN_PTE_NON_PRESENT,
-	SCAN_PTE_UFFD_WP,
+	SCAN_PTE_UFFD,
 	SCAN_PTE_MAPPED_HUGEPAGE,
 	SCAN_LACK_REFERENCED_PAGE,
 	SCAN_PAGE_NULL,
@@ -566,8 +566,8 @@ static enum scan_result __collapse_huge_page_isolate(struct vm_area_struct *vma,
 			result = SCAN_PTE_NON_PRESENT;
 			goto out;
 		}
-		if (pte_uffd_wp(pteval)) {
-			result = SCAN_PTE_UFFD_WP;
+		if (pte_uffd(pteval)) {
+			result = SCAN_PTE_UFFD;
 			goto out;
 		}
 		page = vm_normal_page(vma, addr, pteval);
@@ -1303,10 +1303,10 @@ static enum scan_result collapse_scan_pmd(struct mm_struct *mm,
 				/*
 				 * Always be strict with uffd-wp
 				 * enabled swap entries.  Please see
-				 * comment below for pte_uffd_wp().
+				 * comment below for pte_uffd().
 				 */
-				if (pte_swp_uffd_wp_any(pteval)) {
-					result = SCAN_PTE_UFFD_WP;
+				if (pte_swp_uffd_any(pteval)) {
+					result = SCAN_PTE_UFFD;
 					goto out_unmap;
 				}
 				continue;
@@ -1316,7 +1316,7 @@ static enum scan_result collapse_scan_pmd(struct mm_struct *mm,
 				goto out_unmap;
 			}
 		}
-		if (pte_uffd_wp(pteval)) {
+		if (pte_uffd(pteval)) {
 			/*
 			 * Don't collapse the page if any of the small
 			 * PTEs are armed with uffd write protection.
@@ -1326,7 +1326,7 @@ static enum scan_result collapse_scan_pmd(struct mm_struct *mm,
 			 * userfault messages that falls outside of
 			 * the registered range.  So, just be simple.
 			 */
-			result = SCAN_PTE_UFFD_WP;
+			result = SCAN_PTE_UFFD;
 			goto out_unmap;
 		}
 
@@ -1534,7 +1534,7 @@ static enum scan_result try_collapse_pte_mapped_thp(struct mm_struct *mm, unsign
 
 	/* Keep pmd pgtable for uffd-wp; see comment in retract_page_tables() */
 	if (userfaultfd_wp(vma))
-		return SCAN_PTE_UFFD_WP;
+		return SCAN_PTE_UFFD;
 
 	folio = filemap_lock_folio(vma->vm_file->f_mapping,
 			       linear_page_index(vma, haddr));
@@ -2876,7 +2876,7 @@ int madvise_collapse(struct vm_area_struct *vma, unsigned long start,
 		/* Whitelisted set of results where continuing OK */
 		case SCAN_NO_PTE_TABLE:
 		case SCAN_PTE_NON_PRESENT:
-		case SCAN_PTE_UFFD_WP:
+		case SCAN_PTE_UFFD:
 		case SCAN_LACK_REFERENCED_PAGE:
 		case SCAN_PAGE_NULL:
 		case SCAN_PAGE_COUNT:
