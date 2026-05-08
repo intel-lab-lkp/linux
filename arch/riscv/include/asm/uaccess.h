@@ -487,6 +487,31 @@ static inline void user_access_restore(unsigned long enabled) { }
 	if (__asm_copy_from_user_sum_enabled(_dst, _src, _len))		\
 		goto label;
 
+#ifdef CONFIG_ARCH_HAS_COPY_MC
+unsigned long memcpy_mc(void *dst, const void *src, unsigned long n);
+/**
+ * copy_mc_to_kernel/user - memory copy that handles source exceptions
+ *
+ * @to:		destination address
+ * @from:	source address
+ * @size:	number of bytes to copy
+ *
+ * Return 0 for success, or bytes not copied.
+ */
+static inline unsigned long __must_check
+copy_mc_to_kernel(void *to, const void *from, unsigned long size)
+{
+	return memcpy_mc(to, from, size);
+}
+#define copy_mc_to_kernel copy_mc_to_kernel
+
+static inline unsigned long __must_check
+copy_mc_to_user(void __user *to, const void *from, unsigned long size)
+{
+	return raw_copy_to_user(to, from, size);
+}
+#endif
+
 #else /* CONFIG_MMU */
 #include <asm-generic/uaccess.h>
 #endif /* CONFIG_MMU */
