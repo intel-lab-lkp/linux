@@ -4757,6 +4757,44 @@ static struct folio *alloc_swap_folio(struct vm_fault *vmf)
 }
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE */
 
+static struct folio *swapin_synchronous_folio(swp_entry_t entry,
+					      struct vm_fault *vmf)
+{
+	struct folio *swapcache, *folio;
+	bool large;
+	int order;
+
+	folio = alloc_swap_folio(vmf);
+	if (!folio)
+		return NULL;
+
+	large = folio_test_large(folio);
+	order = folio_order(folio);
+
+	/*
+	 * folio is charged, so swapin can only fail due to raced swapin and
+	 * return NULL.
+	 */
+	swapcache = swapin_folio(entry, folio);
+	if (swapcache == folio)
+		return folio;
+
+	if (!swapcache && large)
+		count_mthp_stat(order, MTHP_STAT_SWPIN_FALLBACK);
+	folio_put(folio);
+	if (swapcache || !large)
+		return swapcache;
+
+	folio = __alloc_swap_folio(vmf);
+	if (!folio)
+		return NULL;
+
+	swapcache = swapin_folio(entry, folio);
+	if (swapcache != folio)
+		folio_put(folio);
+	return swapcache;
+}
+
 /* Sanity check that a folio is fully exclusive */
 static void check_swap_exclusive(struct folio *folio, swp_entry_t entry,
 				 unsigned int nr_pages)
@@ -4860,17 +4898,7 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 		swap_update_readahead(folio, vma, vmf->address);
 	if (!folio) {
 		if (data_race(si->flags & SWP_SYNCHRONOUS_IO)) {
-			folio = alloc_swap_folio(vmf);
-			if (folio) {
-				/*
-				 * folio is charged, so swapin can only fail due
-				 * to raced swapin and return NULL.
-				 */
-				swapcache = swapin_folio(entry, folio);
-				if (swapcache != folio)
-					folio_put(folio);
-				folio = swapcache;
-			}
+			folio = swapin_synchronous_folio(entry, vmf);
 		} else {
 			folio = swapin_readahead(entry, GFP_HIGHUSER_MOVABLE, vmf);
 		}
