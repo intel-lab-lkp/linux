@@ -21,6 +21,7 @@
 #define THRESHOLD_MIN_ADC_CODE	0x0
 
 #define MAX_SENSORS 16
+#define MAX_READ_RETRY 3
 
 #include <linux/interrupt.h>
 #include <linux/thermal.h>
@@ -511,6 +512,9 @@ enum regfield_ids {
  * @max_sensors: maximum sensors supported by this version of the IP
  * @trip_min_temp: minimum trip temperature supported by this version of the IP
  * @trip_max_temp: maximum trip temperature supported by this version of the IP
+ * @valid_bit: validate if read temperature is valid or not?
+ * @last_temp_mask: mask register for last temperature
+ * @last_temp_resolution: last temperarure sign bit resolution
  */
 struct tsens_features {
 	unsigned int ver_major;
@@ -522,6 +526,9 @@ struct tsens_features {
 	unsigned int max_sensors;
 	int trip_min_temp;
 	int trip_max_temp;
+	int valid_bit;
+	int last_temp_mask;
+	u32 last_temp_resolution;
 };
 
 /**

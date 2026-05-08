@@ -287,6 +287,7 @@ static struct tsens_features tsens_v0_1_feat = {
 	.max_sensors	= 11,
 	.trip_min_temp	= -40000,
 	.trip_max_temp	= 120000,
+	.last_temp_resolution = 9,
 };
 
 static const struct reg_field tsens_v0_1_regfields[MAX_REGFIELDS] = {

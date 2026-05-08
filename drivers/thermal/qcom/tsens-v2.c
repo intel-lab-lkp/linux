@@ -56,6 +56,8 @@ static struct tsens_features tsens_v2_feat = {
 	.max_sensors	= 16,
 	.trip_min_temp	= -40000,
 	.trip_max_temp	= 120000,
+	.valid_bit = BIT(21),
+	.last_temp_resolution = 11,
 };
 
 static struct tsens_features ipq8074_feat = {
@@ -67,6 +69,8 @@ static struct tsens_features ipq8074_feat = {
 	.max_sensors	= 16,
 	.trip_min_temp	= 0,
 	.trip_max_temp	= 204000,
+	.valid_bit = BIT(21),
+	.last_temp_resolution = 11,
 };
 
 static struct tsens_features ipq5332_feat = {
@@ -78,6 +82,8 @@ static struct tsens_features ipq5332_feat = {
 	.max_sensors	= 16,
 	.trip_min_temp	= 0,
 	.trip_max_temp	= 204000,
+	.valid_bit = BIT(21),
+	.last_temp_resolution = 11,
 };
 
 static const struct reg_field tsens_v2_regfields[MAX_REGFIELDS] = {
