@@ -808,12 +808,63 @@ out_brelse:
 	return err;
 }
 
+/*
+ * Update group descriptor checksums and itable_unused after allocating
+ * inode @bit (0-based relative inode number within the group).
+ * Must be called with the group lock held.
+ */
+static void ext4_update_inode_group_desc(struct super_block *sb,
+					 ext4_group_t group,
+					 struct ext4_group_desc *gdp,
+					 struct buffer_head *inode_bitmap_bh,
+					 int bit, umode_t mode)
+{
+	int free;
+	struct ext4_sb_info *sbi = EXT4_SB(sb);
+	bool fast_crc = true;
+
+	ext4_free_inodes_set(sb, gdp, ext4_free_inodes_count(sb, gdp) - 1);
+	if (S_ISDIR(mode)) {
+		ext4_used_dirs_set(sb, gdp, ext4_used_dirs_count(sb, gdp) + 1);
+		if (sbi->s_log_groups_per_flex) {
+			ext4_group_t f = ext4_flex_group(sbi, group);
+
+			atomic_inc(&sbi_array_rcu_deref(sbi, s_flex_groups,
+							f)->used_dirs);
+		}
+	}
+
+	if (!ext4_has_group_desc_csum(sb))
+		return;
+
+	free = EXT4_INODES_PER_GROUP(sb) - ext4_itable_unused_count(sb, gdp);
+	if (gdp->bg_flags & cpu_to_le16(EXT4_BG_INODE_UNINIT)) {
+		gdp->bg_flags &= cpu_to_le16(~EXT4_BG_INODE_UNINIT);
+		free = 0;
+		/* Incremental CRC needs a valid checksum baseline */
+		fast_crc = false;
+	}
+
+	/*
+	 * Check the relative inode number against the last used
+	 * relative inode number in this group. If it is greater
+	 * we need to update the bg_itable_unused count.
+	 */
+	if (bit >= free)
+		ext4_itable_unused_set(sb, gdp,
+				       EXT4_INODES_PER_GROUP(sb) - bit - 1);
+	if (fast_crc)
+		ext4_inode_bitmap_csum_set_fast(sb, gdp, bit);
+	else
+		ext4_inode_bitmap_csum_set(sb, gdp, inode_bitmap_bh);
+	ext4_group_desc_csum_set(sb, group, gdp);
+}
+
 int ext4_mark_inode_used(struct super_block *sb, int ino, umode_t mode)
 {
 	unsigned long max_ino = le32_to_cpu(EXT4_SB(sb)->s_es->s_inodes_count);
 	struct buffer_head *inode_bitmap_bh = NULL, *group_desc_bh = NULL;
 	struct ext4_group_desc *gdp;
-	struct ext4_sb_info *sbi = EXT4_SB(sb);
 	ext4_group_t group;
 	int bit;
 	int err;
@@ -848,44 +899,8 @@ int ext4_mark_inode_used(struct super_block *sb, int ino, umode_t mode)
 	ext4_set_bit(bit, inode_bitmap_bh->b_data);
 
 	/* Update the relevant bg descriptor fields */
-	ext4_free_inodes_set(sb, gdp, ext4_free_inodes_count(sb, gdp) - 1);
-	if (S_ISDIR(mode)) {
-		ext4_used_dirs_set(sb, gdp, ext4_used_dirs_count(sb, gdp) + 1);
-		if (sbi->s_log_groups_per_flex) {
-			ext4_group_t f = ext4_flex_group(sbi, group);
-
-			atomic_inc(&sbi_array_rcu_deref(sbi, s_flex_groups,
-							f)->used_dirs);
-		}
-	}
-
-	if (ext4_has_group_desc_csum(sb)) {
-		bool fast_crc = true;
-		int free = EXT4_INODES_PER_GROUP(sb) -
-				ext4_itable_unused_count(sb, gdp);
-
-		if (gdp->bg_flags & cpu_to_le16(EXT4_BG_INODE_UNINIT)) {
-			gdp->bg_flags &= cpu_to_le16(~EXT4_BG_INODE_UNINIT);
-			free = 0;
-			/* Incremental CRC needs a valid checksum baseline */
-			fast_crc = false;
-		}
-
-		/*
-		 * Check the relative inode number against the last used
-		 * relative inode number in this group. if it is greater
-		 * we need to update the bg_itable_unused count
-		 */
-		if (bit >= free)
-			ext4_itable_unused_set(sb, gdp,
-					(EXT4_INODES_PER_GROUP(sb) - bit - 1));
-		if (fast_crc)
-			ext4_inode_bitmap_csum_set_fast(sb, gdp, bit);
-		else
-			ext4_inode_bitmap_csum_set(sb, gdp, inode_bitmap_bh);
-		ext4_group_desc_csum_set(sb, group, gdp);
-	}
-
+	ext4_update_inode_group_desc(sb, group, gdp,
+				     inode_bitmap_bh, bit, mode);
 	ext4_unlock_group(sb, group);
 
 	BUFFER_TRACE(inode_bitmap_bh, "call ext4_handle_dirty_metadata");
@@ -1165,50 +1180,13 @@ got_group:
 				ret2 = 0;
 			} else {
 				ret2 = 1; /* we didn't grab the inode */
-				goto unlock_group;
 			}
 		}
 
 		/* Update the relevant bg descriptor fields */
-		ext4_free_inodes_set(sb, gdp,
-				     ext4_free_inodes_count(sb, gdp) - 1);
-		if (S_ISDIR(mode)) {
-			ext4_used_dirs_set(sb, gdp,
-					   ext4_used_dirs_count(sb, gdp) + 1);
-			if (sbi->s_log_groups_per_flex) {
-				ext4_group_t f = ext4_flex_group(sbi, group);
-				atomic_inc(&sbi_array_rcu_deref(sbi, s_flex_groups,
-								f)->used_dirs);
-			}
-		}
-
-		if (ext4_has_group_desc_csum(sb)) {
-			bool fast_crc = true;
-			int free = EXT4_INODES_PER_GROUP(sb) -
-					ext4_itable_unused_count(sb, gdp);
-
-			if (gdp->bg_flags & cpu_to_le16(EXT4_BG_INODE_UNINIT)) {
-				gdp->bg_flags &= cpu_to_le16(~EXT4_BG_INODE_UNINIT);
-				free = 0;
-				/* Incremental CRC needs a valid csum baseline */
-				fast_crc = false;
-			}
-			/*
-			 * Check the relative inode number against the
-			 * last used relative inode number in this group.
-			 * If it is greater we need to update the
-			 * bg_itable_unused count.
-			 */
-			if (bit >= free)
-				ext4_itable_unused_set(sb, gdp,
-					EXT4_INODES_PER_GROUP(sb) - bit - 1);
-			if (fast_crc)
-				ext4_inode_bitmap_csum_set_fast(sb, gdp, bit);
-			else
-				ext4_inode_bitmap_csum_set(sb, gdp, inode_bitmap_bh);
-			ext4_group_desc_csum_set(sb, group, gdp);
-		}
-unlock_group:
+		if (!ret2)
+			ext4_update_inode_group_desc(sb, group, gdp,
+						     inode_bitmap_bh, bit, mode);
 		ext4_unlock_group(sb, group);
 		if (ext4_has_group_desc_csum(sb) &&
 		    !(sbi->s_mount_state & EXT4_FC_REPLAY))
