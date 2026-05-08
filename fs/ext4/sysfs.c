@@ -250,7 +250,7 @@ EXT4_ATTR_OFFSET(mb_best_avail_max_trim_order, 0644, mb_order,
 		 ext4_sb_info, s_mb_best_avail_max_trim_order);
 EXT4_ATTR_OFFSET(err_report_sec, 0644, err_report_sec, ext4_sb_info, s_err_report_sec);
 EXT4_RW_ATTR_SBI_UI(inode_goal, s_inode_goal);
-EXT4_RW_ATTR_SBI_UI(mb_stats, s_mb_stats);
+EXT4_ATTR_OFFSET(mb_stats, 0644, pointer_atomic, ext4_sb_info, s_mb_stats);
 EXT4_RW_ATTR_SBI_UI(mb_max_to_scan, s_mb_max_to_scan);
 EXT4_RW_ATTR_SBI_UI(mb_min_to_scan, s_mb_min_to_scan);
 EXT4_RW_ATTR_SBI_UI(mb_order2_req, s_mb_order2_reqs);
@@ -493,6 +493,7 @@ static ssize_t ext4_generic_attr_store(struct ext4_attr *a,
 				       const char *buf, size_t len)
 {
 	int ret;
+	int i;
 	unsigned int t;
 	unsigned long lt;
 	void *ptr = calc_ptr(a, sbi);
@@ -539,6 +540,12 @@ static ssize_t ext4_generic_attr_store(struct ext4_attr *a,
 		if (ret)
 			return ret;
 		*((unsigned long *) ptr) = lt;
+		return len;
+	case attr_pointer_atomic:
+		ret = kstrtoint(skip_spaces(buf), 0, &i);
+		if (ret)
+			return ret;
+		atomic_set((atomic_t *)ptr, i);
 		return len;
 	}
 	return 0;
