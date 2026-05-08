@@ -105,7 +105,7 @@ static bool ethnl_bitmap32_not_zero(const u32 *map, unsigned int start,
 		start_word++;
 	}
 
-	if (!memchr_inv(map + start_word, '\0',
+	if (memchr_inv(map + start_word, '\0',
 			(end_word - start_word) * sizeof(u32)))
 		return true;
 	if (end % 32 == 0)
