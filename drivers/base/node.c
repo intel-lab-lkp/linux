@@ -513,6 +513,7 @@ static ssize_t node_read_meminfo(struct device *dev,
 			     "Node %d Slab:           %8lu kB\n"
 			     "Node %d SReclaimable:   %8lu kB\n"
 			     "Node %d SUnreclaim:     %8lu kB\n"
+			     "Node %d Balloon:        %8lu kB\n"
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 			     "Node %d AnonHugePages:  %8lu kB\n"
 			     "Node %d ShmemHugePages: %8lu kB\n"
@@ -546,7 +547,8 @@ static ssize_t node_read_meminfo(struct device *dev,
 				    node_page_state(pgdat, NR_KERNEL_MISC_RECLAIMABLE)),
 			     nid, K(sreclaimable + sunreclaimable),
 			     nid, K(sreclaimable),
-			     nid, K(sunreclaimable)
+			     nid, K(sunreclaimable),
+			     nid, K(node_page_state(pgdat, NR_BALLOON_PAGES))
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 			     ,
 			     nid, K(node_page_state(pgdat, NR_ANON_THPS)),
