@@ -392,6 +392,7 @@ static struct phy_driver dp83811_driver[] = {
 		/* PHY_BASIC_FEATURES */
 		.config_init = dp83811_config_init,
 		.config_aneg = dp83811_config_aneg,
+		.get_features = genphy_c45_pma_read_ext_abilities,
 		.soft_reset = dp83811_phy_reset,
 		.get_wol = dp83811_get_wol,
 		.set_wol = dp83811_set_wol,
