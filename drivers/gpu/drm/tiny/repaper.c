@@ -941,23 +941,13 @@ MODULE_DEVICE_TABLE(spi, repaper_id);
 static int repaper_probe(struct spi_device *spi)
 {
 	const struct drm_display_mode *mode;
-	const struct spi_device_id *spi_id;
 	struct device *dev = &spi->dev;
 	enum repaper_model model;
 	const char *thermal_zone;
 	struct repaper_epd *epd;
 	size_t line_buffer_size;
 	struct drm_device *drm;
-	const void *match;
 	int ret;
-
-	match = device_get_match_data(dev);
-	if (match) {
-		model = (enum repaper_model)(uintptr_t)match;
-	} else {
-		spi_id = spi_get_device_id(spi);
-		model = (enum repaper_model)spi_id->driver_data;
-	}
 
 	/* The SPI device is used to allocate dma memory */
 	if (!dev->coherent_dma_mask) {
@@ -1023,6 +1013,7 @@ static int repaper_probe(struct spi_device *spi)
 		}
 	}
 
+	model = (enum repaper_model)(uintptr_t)spi_get_device_match_data(dev);
 	switch (model) {
 	case E1144CS021:
 		mode = &repaper_e1144cs021_mode;
