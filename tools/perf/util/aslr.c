@@ -751,18 +751,13 @@ static int aslr_tool__process_sample(const struct perf_tool *tool, union perf_ev
 		if (abi != PERF_SAMPLE_REGS_ABI_NONE) {
 			u64 nr = hweight64(evsel->core.attr.sample_regs_user);
 
-			if (nr > max_i - i || nr > max_j - j) {
+			if (nr > max_i - i) {
 				ret = -EFAULT;
 				goto out_put;
 			}
-			memcpy(&out_array[j], &in_array[i], nr * sizeof(u64));
 			i += nr;
-			j += nr;
+			out_array[j-1] = PERF_SAMPLE_REGS_ABI_NONE;
 		}
-		/* TODO: can this be less conservative? */
-		pr_debug("Dropping regs user sample as possible ASLR leak\n");
-		ret = 0;
-		goto out_put;
 	}
 	if (sample_type & PERF_SAMPLE_STACK_USER) {
 		u64 size;
@@ -806,18 +801,13 @@ static int aslr_tool__process_sample(const struct perf_tool *tool, union perf_ev
 		if (abi != PERF_SAMPLE_REGS_ABI_NONE) {
 			u64 nr = hweight64(evsel->core.attr.sample_regs_intr);
 
-			if (nr > max_i - i || nr > max_j - j) {
+			if (nr > max_i - i) {
 				ret = -EFAULT;
 				goto out_put;
 			}
-			memcpy(&out_array[j], &in_array[i], nr * sizeof(u64));
 			i += nr;
-			j += nr;
+			out_array[j-1] = PERF_SAMPLE_REGS_ABI_NONE;
 		}
-		/* TODO: can this be less conservative? */
-		pr_debug("Dropping interrupt register sample as possible ASLR leak\n");
-		ret = 0;
-		goto out_put;
 	}
 	if (sample_type & PERF_SAMPLE_PHYS_ADDR) {
 		COPY_U64(); /* phys_addr */
@@ -906,6 +896,15 @@ static int aslr_tool__process_attr(const struct perf_tool *tool,
 	memcpy(&new_event->attr, &event->attr, event->attr.header.size);
 	if (new_event->attr.attr.type == PERF_TYPE_BREAKPOINT)
 		new_event->attr.attr.bp_addr = 0;  /* Conservatively remove addresses. */
+
+	if (new_event->attr.attr.sample_type & PERF_SAMPLE_REGS_USER) {
+		new_event->attr.attr.sample_type &= ~PERF_SAMPLE_REGS_USER;
+		new_event->attr.attr.sample_regs_user = 0;
+	}
+	if (new_event->attr.attr.sample_type & PERF_SAMPLE_REGS_INTR) {
+		new_event->attr.attr.sample_type &= ~PERF_SAMPLE_REGS_INTR;
+		new_event->attr.attr.sample_regs_intr = 0;
+	}
 
 	return delegate->attr(delegate, new_event, pevlist);
 }

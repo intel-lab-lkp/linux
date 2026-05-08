@@ -2462,6 +2462,17 @@ static int __cmd_inject(struct perf_inject *inject)
 			}
 		}
 
+		if (inject->aslr) {
+			struct evsel *evsel;
+
+			evlist__for_each_entry(session->evlist, evsel) {
+				evsel__reset_sample_bit(evsel, REGS_USER);
+				evsel__reset_sample_bit(evsel, REGS_INTR);
+				evsel->core.attr.sample_regs_user = 0;
+				evsel->core.attr.sample_regs_intr = 0;
+			}
+		}
+
 
 
 		session->header.data_offset = output_data_offset;
