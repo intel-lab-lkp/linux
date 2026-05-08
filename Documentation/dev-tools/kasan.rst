@@ -392,7 +392,7 @@ reserved to tag freed memory regions.
 If the hardware does not support MTE (pre ARMv8.5), Hardware Tag-Based KASAN
 will not be enabled. In this case, all KASAN boot parameters are ignored.
 
-Note that enabling CONFIG_KASAN_HW_TAGS always results in in-kernel TBI being
+Note that enabling CONFIG_KASAN_HW_TAGS always results in-kernel TBI being
 enabled. Even when ``kasan.mode=off`` is provided or when the hardware does not
 support MTE (but supports TBI).
 
