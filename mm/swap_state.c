@@ -22,6 +22,7 @@
 #include <linux/vmalloc.h>
 #include <linux/huge_mm.h>
 #include <linux/shmem_fs.h>
+#include <linux/zswap.h>
 #include "internal.h"
 #include "swap_table.h"
 #include "swap.h"
@@ -207,6 +208,11 @@ static int swap_cache_add_folio(struct folio *folio, swp_entry_t entry,
 		if (swp_tb_is_shadow(old_tb))
 			shadow = swp_tb_to_shadow(old_tb);
 	} while (++ci_off < ci_end);
+	if (unlikely(folio_test_large(folio) &&
+		     zswap_entry_batch(entry, nr_pages, NULL) != nr_pages)) {
+		err = -EAGAIN;
+		goto failed;
+	}
 	__swap_cache_add_folio(ci, folio, entry);
 	swap_cluster_unlock(ci);
 	if (shadowp)
@@ -460,7 +466,8 @@ void swap_update_readahead(struct folio *folio, struct vm_area_struct *vma,
  *
  * Context: Caller must protect the swap device with reference count or locks.
  * Return: Returns the folio being added on success. Returns the existing folio
- * if @entry is already cached. Returns NULL if raced with swapin or swapoff.
+ * if @entry is already cached. Returns NULL if raced with swapin or swapoff,
+ * or if a large folio fails a backend recheck before insertion.
  */
 static struct folio *__swap_cache_prepare_and_add(swp_entry_t entry,
 						  struct folio *folio,
@@ -483,10 +490,10 @@ static struct folio *__swap_cache_prepare_and_add(swp_entry_t entry,
 
 		/*
 		 * Large order allocation needs special handling on
-		 * race: if a smaller folio exists in cache, swapin needs
-		 * to fallback to order 0, and doing a swap cache lookup
-		 * might return a folio that is irrelevant to the faulting
-		 * entry because @entry is aligned down. Just return NULL.
+		 * race or backend recheck failure: swapin needs to fall back
+		 * to order 0, and doing a swap cache lookup might return a
+		 * folio that is irrelevant to the faulting entry because
+		 * @entry is aligned down. Just return NULL.
 		 */
 		if (ret != -EEXIST || folio_test_large(folio))
 			goto failed;
@@ -567,9 +574,9 @@ struct folio *swap_cache_alloc_folio(swp_entry_t entry, gfp_t gfp_mask,
  * with the folio size.
  *
  * Return: returns pointer to @folio on success. If folio is a large folio
- * and this raced with another swapin, NULL will be returned to allow fallback
- * to order 0. Else, if another folio was already added to the swap cache,
- * return that swap cache folio instead.
+ * and it raced with another swapin or failed a backend recheck, NULL will be
+ * returned to allow fallback to order 0. Else, if another folio was already
+ * added to the swap cache, return that swap cache folio instead.
  */
 struct folio *swapin_folio(swp_entry_t entry, struct folio *folio)
 {

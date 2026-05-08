@@ -78,6 +78,7 @@
 #include <linux/sched/sysctl.h>
 #include <linux/pgalloc.h>
 #include <linux/uaccess.h>
+#include <linux/zswap.h>
 
 #include <trace/events/kmem.h>
 
@@ -4635,12 +4636,10 @@ static bool can_swapin_thp(struct vm_fault *vmf, pte_t *ptep, int nr_pages)
 	if (swap_pte_batch(ptep, nr_pages, pte) != nr_pages)
 		return false;
 
-	/*
-	 * swap_read_folio() can't handle the case a large folio is hybridly
-	 * from different backends. And they are likely corner cases. Similar
-	 * things might be added once zswap support large folios.
-	 */
+	/* swap_read_folio() can't handle hybrid backend large folios. */
 	if (unlikely(swap_zeromap_batch(entry, nr_pages, NULL) != nr_pages))
+		return false;
+	if (unlikely(zswap_entry_batch(entry, nr_pages, NULL) != nr_pages))
 		return false;
 	if (unlikely(non_swapcache_batch(entry, nr_pages) != nr_pages))
 		return false;
@@ -4688,14 +4687,6 @@ static struct folio *alloc_swap_folio(struct vm_fault *vmf)
 	 * maintain the uffd semantics.
 	 */
 	if (unlikely(userfaultfd_armed(vma)))
-		goto fallback;
-
-	/*
-	 * A large swapped out folio could be partially or fully in zswap. We
-	 * lack handling for such cases, so fallback to swapping in order-0
-	 * folio.
-	 */
-	if (!zswap_never_enabled())
 		goto fallback;
 
 	entry = softleaf_from_pte(vmf->orig_pte);
@@ -4772,8 +4763,8 @@ static struct folio *swapin_synchronous_folio(swp_entry_t entry,
 	order = folio_order(folio);
 
 	/*
-	 * folio is charged, so swapin can only fail due to raced swapin and
-	 * return NULL.
+	 * folio is charged, so NULL means the large folio could not be
+	 * inserted and needs order-0 fallback.
 	 */
 	swapcache = swapin_folio(entry, folio);
 	if (swapcache == folio)
