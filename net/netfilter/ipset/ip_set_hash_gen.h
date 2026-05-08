@@ -501,6 +501,8 @@ mtype_gc_do(struct ip_set *set, struct htype *h, struct htable *t, u32 r)
 			continue;
 		pos = smp_load_acquire(&n->pos);
 		for (j = 0, d = 0; j < pos; j++) {
+			if (atomic_read(&t->ref))
+				goto resize_in_progress;
 			if (!test_bit(j, n->used)) {
 				d++;
 				continue;
@@ -552,6 +554,7 @@ mtype_gc_do(struct ip_set *set, struct htype *h, struct htable *t, u32 r)
 			kfree_rcu(n, rcu);
 		}
 	}
+resize_in_progress:
 	spin_unlock_bh(&t->hregion[r].lock);
 }
 
@@ -672,7 +675,10 @@ retry:
 		spin_lock_init(&t->hregion[i].lock);
 
 	/* There can't be another parallel resizing,
-	 * but dumping, gc, kernel side add/del are possible
+	 * but dumping, kernel side add/del are possible.
+	 * gc must detect ongoing resize when comments are in use
+	 * in order not to free the comment extension area shared
+	 * between the original and resized sets.
 	 */
 	orig = ipset_dereference_bh_nfnl(h->table);
 	atomic_set(&orig->ref, 1);
