@@ -21,6 +21,10 @@
  *	pool->lock
  *	class->lock
  *	zspage->lock
+ *
+ * On 64-bit systems with ZS_OBJ_CLASS_IDX enabled, zs_free() does not
+ * take pool->lock; it extracts class_idx from the obj encoding with a
+ * lockless read, then re-reads obj under class->lock.
  */
 
 #include <linux/module.h>
@@ -1467,10 +1471,24 @@ void zs_free(struct zs_pool *pool, unsigned long handle)
 	if (IS_ERR_OR_NULL((void *)handle))
 		return;
 
+#ifdef ZS_OBJ_CLASS_IDX
 	/*
-	 * The pool->lock protects the race with zpage's migration
-	 * so it's safe to get the page from handle.
+	 * The class_idx encoded in obj is invariant across migration
+	 * (only PFN changes), and the read of *(unsigned long *)handle
+	 * is atomic on 64-bit, so we can determine the correct class
+	 * without holding pool->lock.
 	 */
+	obj = handle_to_obj(handle);
+	class = pool->size_class[obj_to_class_idx(obj)];
+	spin_lock(&class->lock);
+	/*
+	 * Re-read under class->lock: migration also acquires class->lock,
+	 * so the obj value is now stable and the PFN is valid.
+	 */
+	obj = handle_to_obj(handle);
+	obj_to_zpdesc(obj, &f_zpdesc);
+	zspage = get_zspage(f_zpdesc);
+#else
 	read_lock(&pool->lock);
 	obj = handle_to_obj(handle);
 	obj_to_zpdesc(obj, &f_zpdesc);
@@ -1478,6 +1496,7 @@ void zs_free(struct zs_pool *pool, unsigned long handle)
 	class = zspage_class(pool, zspage);
 	spin_lock(&class->lock);
 	read_unlock(&pool->lock);
+#endif
 
 	class_stat_sub(class, ZS_OBJS_INUSE, 1);
 	obj_free(class->size, obj);
