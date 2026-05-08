@@ -3066,6 +3066,31 @@ static int lan743x_swnodes_register(struct lan743x_adapter *adapter)
 	return software_node_register_node_group(nodes->group);
 }
 
+static int lan743x_sfp_register(struct lan743x_adapter *adapter)
+{
+	struct pci_dev *pdev = adapter->pdev;
+	struct platform_device_info sfp_info;
+	struct platform_device *sfp_dev;
+
+	memset(&sfp_info, 0, sizeof(sfp_info));
+	sfp_info.parent = &adapter->pdev->dev;
+	sfp_info.fwnode = software_node_fwnode(adapter->nodes->group[SWNODE_SFP]);
+	sfp_info.name = "sfp";
+	sfp_info.id = (pdev->bus->number << 8) | pdev->devfn;
+	sfp_dev = platform_device_register_full(&sfp_info);
+	if (IS_ERR(sfp_dev)) {
+		netif_err(adapter, drv, adapter->netdev,
+			  "Failed to register SFP device\n");
+		return PTR_ERR(sfp_dev);
+	}
+
+	adapter->sfp_dev = sfp_dev;
+	netif_dbg(adapter, drv, adapter->netdev,
+		  "SFP platform device registered");
+
+	return 0;
+}
+
 static int lan743x_phylink_sgmii_config(struct lan743x_adapter *adapter)
 {
 	u32 sgmii_ctl;
@@ -3682,6 +3707,12 @@ static void lan743x_destroy_phylink(struct lan743x_adapter *adapter)
 static void lan743x_full_cleanup(struct lan743x_adapter *adapter)
 {
 	unregister_netdev(adapter->netdev);
+	if (adapter->sfp_dev) {
+		platform_device_unregister(adapter->sfp_dev);
+		adapter->sfp_dev = NULL;
+	}
+	if (adapter->i2c_adap)
+		adapter->i2c_adap = NULL;
 
 	lan743x_destroy_phylink(adapter);
 	lan743x_mdiobus_cleanup(adapter);
@@ -3909,10 +3940,28 @@ static int lan743x_pcidev_probe(struct pci_dev *pdev,
 		goto cleanup_mdiobus;
 	}
 
+	if (adapter->is_sfp_support_en) {
+		adapter->i2c_adap->dev.fwnode =
+			software_node_fwnode(adapter->nodes->group[SWNODE_I2C]);
+
+		ret = lan743x_sfp_register(adapter);
+		if (ret < 0) {
+			netif_err(adapter, probe, netdev,
+				  "failed to sfp register (%d)\n", ret);
+			goto cleanup_phylink;
+		}
+	}
+
 	ret = register_netdev(adapter->netdev);
 	if (ret < 0)
-		goto cleanup_phylink;
+		goto cleanup_sfp;
 	return 0;
+
+cleanup_sfp:
+	if (adapter->sfp_dev) {
+		platform_device_unregister(adapter->sfp_dev);
+		adapter->sfp_dev = NULL;
+	}
 
 cleanup_phylink:
 	lan743x_destroy_phylink(adapter);
