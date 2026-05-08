@@ -52,3 +52,38 @@ CFLAGS_tc:= $(call get_hdr_inc,__LINUX_RTNETLINK_H,rtnetlink.h) \
 	$(call get_hdr_inc,_TC_TUNNEL_KEY_H,tc_act/tc_tunnel_key.h)
 CFLAGS_tcp_metrics:=$(call get_hdr_inc,_LINUX_TCP_METRICS_H,tcp_metrics.h)
 CFLAGS_wireguard:=$(call get_hdr_inc2,_LINUX_WIREGUARD_H,_WG_UAPI_WIREGUARD_H,wireguard.h)
+
+# For families that already have CFLAGS, verify that every #include in
+# their force-included headers is accounted for.
+#
+# How it works:
+#   1. Extract -include paths from CFLAGS_<family>      (grep + sed)
+#   2. Parse each header for #include <...> directives  (sed)
+#   3. Skip if the included file is not a uapi header   (test against UAPI_PATH)
+#   4. Skip if it is already listed in CFLAGS_<family>  (grep)
+#   5. Skip if the compiler can find it without help    (try $(CC))
+#   6. Otherwise error -- the header needs to be added
+check-existing-deps-%:
+	@for inc in $$(sed -n 's/.*#include <\([^>]*\)>.*/\1/p' \
+		$$(echo "$(CFLAGS_$*)" | grep -o '\-include [^ ]*' | sed 's/-include //')); do \
+	  test -f $(UAPI_PATH)/$$inc || continue; \
+	  echo "$(CFLAGS_$*)" | grep -qF "$$inc" && continue; \
+	  echo "#include <$$inc>" | $(CC) -x c -fsyntax-only - 2>/dev/null && continue; \
+	  echo "ERROR: $* missing $$inc"; exit 1; \
+	done; true
+
+# For families without CFLAGS, check whether their default uapi header
+# (linux/<family>.h) exists in the kernel tree but is not findable by
+# the compiler -- meaning it needs a new CFLAGS entry.
+#
+# How it works (short-circuit chain, all four must fail to error):
+#   1. Skip if CFLAGS_<family> is already defined          (test -n)
+#   2. Skip if the default uapi header does not exist      (test -f)
+#   3. Skip if the compiler can find it without help       (try $(CC))
+#   4. Otherwise error -- a new CFLAGS entry is needed
+check-new-deps-%:
+	@test -n "$(CFLAGS_$*)" \
+	  || ! test -f $(UAPI_PATH)/linux/$(subst -,_,$*).h \
+	  || echo "#include <linux/$(subst -,_,$*).h>" | \
+	     $(CC) -x c -fsyntax-only - 2>/dev/null \
+	  || { echo "ERROR: $* needs CFLAGS entry for linux/$(subst -,_,$*).h"; exit 1; }

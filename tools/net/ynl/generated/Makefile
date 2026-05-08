@@ -83,5 +83,9 @@ install-specs:
 
 install: install-headers install-rsts install-specs
 
-.PHONY: all clean distclean regen install install-headers install-rsts install-specs
+check-deps: $(patsubst %,check-existing-deps-%,$(GENS)) \
+	    $(patsubst %,check-new-deps-%,$(GENS))
+	@echo "All Makefile.deps OK"
+
+.PHONY: all clean distclean regen install install-headers install-rsts install-specs check-deps
 .DEFAULT_GOAL: all
