@@ -444,12 +444,32 @@ static int virtio_transport_send_pkt_info(struct vsock_sock *vsk,
 	return ret;
 }
 
+/* vvs->rx_lock held by the caller */
+static u32 virtio_transport_rx_buf_size(struct virtio_vsock_sock *vvs)
+{
+	u64 skb_overhead = (skb_queue_len(&vvs->rx_queue) + 1) * SKB_TRUESIZE(0);
+	/* Use buf_alloc * 2 as total budget (payload + overhead), similar to
+	 * how SO_RCVBUF is doubled to reserve space for sk_buff metadata.
+	 */
+	u64 total_budget = (u64)vvs->buf_alloc * 2;
+
+	/* Overhead within buf_alloc: full buf_alloc available for payload */
+	if (skb_overhead < vvs->buf_alloc)
+		return vvs->buf_alloc;
+
+	/* Overhead exceeded buf_alloc: gradually reduce to bound skb queue */
+	if (skb_overhead < total_budget)
+		return total_budget - skb_overhead;
+
+	return 0;
+}
+
 static bool virtio_transport_inc_rx_pkt(struct virtio_vsock_sock *vvs,
 					u32 len)
 {
-	u64 skb_overhead = (skb_queue_len(&vvs->rx_queue) + 1) * SKB_TRUESIZE(0);
+	u32 rx_buf_size = virtio_transport_rx_buf_size(vvs);
 
-	if (skb_overhead + vvs->buf_used + len > vvs->buf_alloc)
+	if (!rx_buf_size || vvs->buf_used + len > rx_buf_size)
 		return false;
 
 	vvs->rx_bytes += len;
@@ -472,7 +492,7 @@ void virtio_transport_inc_tx_pkt(struct virtio_vsock_sock *vvs, struct sk_buff *
 	spin_lock_bh(&vvs->rx_lock);
 	vvs->last_fwd_cnt = vvs->fwd_cnt;
 	hdr->fwd_cnt = cpu_to_le32(vvs->fwd_cnt);
-	hdr->buf_alloc = cpu_to_le32(vvs->buf_alloc);
+	hdr->buf_alloc = cpu_to_le32(virtio_transport_rx_buf_size(vvs));
 	spin_unlock_bh(&vvs->rx_lock);
 }
 EXPORT_SYMBOL_GPL(virtio_transport_inc_tx_pkt);
@@ -594,6 +614,7 @@ virtio_transport_stream_do_dequeue(struct vsock_sock *vsk,
 	bool low_rx_bytes;
 	int err = -EFAULT;
 	size_t total = 0;
+	u32 rx_buf_size;
 	u32 free_space;
 
 	spin_lock_bh(&vvs->rx_lock);
@@ -639,7 +660,9 @@ virtio_transport_stream_do_dequeue(struct vsock_sock *vsk,
 	}
 
 	fwd_cnt_delta = vvs->fwd_cnt - vvs->last_fwd_cnt;
-	free_space = vvs->buf_alloc - fwd_cnt_delta;
+	rx_buf_size = virtio_transport_rx_buf_size(vvs);
+	free_space = rx_buf_size > fwd_cnt_delta ?
+		     rx_buf_size - fwd_cnt_delta : 0;
 	low_rx_bytes = (vvs->rx_bytes <
 			sock_rcvlowat(sk_vsock(vsk), 0, INT_MAX));
 
