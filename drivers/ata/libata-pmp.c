@@ -113,14 +113,34 @@ int sata_pmp_qc_defer_cmd_switch(struct ata_queued_cmd *qc)
 
 	if (ap->excl_link == NULL || ap->excl_link == link) {
 		if (ap->nr_active_links == 0 || ata_link_active(link)) {
+			int ret;
+
 			qc->flags |= ATA_QCFLAG_CLEAR_EXCL;
-			return ata_std_qc_defer(qc);
+			ret = ata_std_qc_defer(qc);
+			switch (ret) {
+			case 0:
+				return ret;
+			case ATA_DEFER_LINK:
+				return ATA_DEFER_LINK_PMP_CBS;
+			case ATA_DEFER_PORT:
+				return ATA_DEFER_PORT_PMP_CBS;
+			default:
+				WARN_ON_ONCE(1);
+				return ATA_DEFER_PORT_PMP_CBS;
+			}
 		}
 
+		/*
+		 * Note: ap->excl_link contains the link that is next in line,
+		 * i.e. implicit round robin. If there is only one link
+		 * dispatching, ap->excl_link will be left unclaimed, allowing
+		 * other links to set ap->excl_link, ensuring that the currently
+		 * active link cannot queue any more.
+		 */
 		ap->excl_link = link;
 	}
 
-	return ATA_DEFER_PORT;
+	return ATA_DEFER_PORT_PMP_CBS;
 }
 
 /**
