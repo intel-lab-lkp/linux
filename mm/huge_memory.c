@@ -4045,7 +4045,8 @@ static int __folio_freeze_and_split_unmapped(struct folio *folio, unsigned int n
  */
 static int __folio_split(struct folio *folio, unsigned int new_order,
 		struct page *split_at, struct page *lock_at,
-		struct list_head *list, enum split_type split_type)
+		struct list_head *list, enum split_type split_type,
+		bool is_underused_thp)
 {
 	XA_STATE(xas, &folio->mapping->i_pages, folio->index);
 	struct folio *end_folio = folio_next(folio);
@@ -4174,7 +4175,7 @@ fail:
 	if (nr_shmem_dropped)
 		shmem_uncharge(mapping->host, nr_shmem_dropped);
 
-	if (!ret && is_anon && !folio_is_device_private(folio))
+	if (!ret && is_anon && !folio_is_device_private(folio) && is_underused_thp)
 		ttu_flags = TTU_USE_SHARED_ZEROPAGE;
 
 	remap_page(folio, 1 << old_order, ttu_flags);
@@ -4308,7 +4309,7 @@ int __split_huge_page_to_list_to_order(struct page *page, struct list_head *list
 	struct folio *folio = page_folio(page);
 
 	return __folio_split(folio, new_order, &folio->page, page, list,
-			     SPLIT_TYPE_UNIFORM);
+			     SPLIT_TYPE_UNIFORM, false);
 }
 
 /**
@@ -4339,7 +4340,13 @@ int folio_split(struct folio *folio, unsigned int new_order,
 		struct page *split_at, struct list_head *list)
 {
 	return __folio_split(folio, new_order, split_at, &folio->page, list,
-			     SPLIT_TYPE_NON_UNIFORM);
+			     SPLIT_TYPE_NON_UNIFORM, false);
+}
+
+int folio_split_underused(struct folio *folio)
+{
+	return __folio_split(folio, 0, &folio->page, &folio->page,
+			     NULL, SPLIT_TYPE_NON_UNIFORM, true);
 }
 
 /**
@@ -4558,7 +4565,7 @@ retry:
 		}
 		if (!folio_trylock(folio))
 			goto requeue;
-		if (!split_folio(folio)) {
+		if (!folio_split_underused(folio)) {
 			did_split = true;
 			if (underused)
 				count_vm_event(THP_UNDERUSED_SPLIT_PAGE);
