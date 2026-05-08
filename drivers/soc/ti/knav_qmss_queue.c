@@ -477,8 +477,8 @@ static int knav_queue_debug_show(struct seq_file *s, void *v)
 
 DEFINE_SHOW_ATTRIBUTE(knav_queue_debug);
 
-static inline int knav_queue_pdsp_wait(u32 * __iomem addr, unsigned timeout,
-					u32 flags)
+static inline int knav_queue_pdsp_wait(u32 __iomem *addr, unsigned int timeout,
+				       u32 flags)
 {
 	unsigned long end;
 	u32 val = 0;
@@ -1368,7 +1368,7 @@ static void __iomem *knav_queue_map_reg(struct knav_device *kdev,
 	if (ret) {
 		dev_err(kdev->dev, "Can't translate of node(%pOFn) address for index(%d)\n",
 			node, index);
-		return ERR_PTR(ret);
+		return IOMEM_ERR_PTR(ret);
 	}
 
 	regs = devm_ioremap_resource(kdev->dev, &res);
@@ -1556,7 +1556,7 @@ static int knav_queue_load_pdsp(struct knav_device *kdev,
 	int i, ret, fwlen;
 	const struct firmware *fw;
 	bool found = false;
-	u32 *fwdata;
+	const __be32 *fwdata;
 
 	for (i = 0; i < ARRAY_SIZE(knav_acc_firmwares); i++) {
 		if (knav_acc_firmwares[i]) {
@@ -1580,7 +1580,7 @@ static int knav_queue_load_pdsp(struct knav_device *kdev,
 
 	writel_relaxed(pdsp->id + 1, pdsp->command + 0x18);
 	/* download the firmware */
-	fwdata = (u32 *)fw->data;
+	fwdata = (const __be32 *)fw->data;
 	fwlen = (fw->size + sizeof(u32) - 1) / sizeof(u32);
 	for (i = 0; i < fwlen; i++)
 		writel_relaxed(be32_to_cpu(fwdata[i]), pdsp->iram + i);
@@ -1610,7 +1610,7 @@ static int knav_queue_start_pdsp(struct knav_device *kdev,
 	writel_relaxed(val, &pdsp->regs->control);
 
 	/* wait for command register to clear */
-	ret = knav_queue_pdsp_wait(pdsp->command, timeout, 0);
+	ret = knav_queue_pdsp_wait((u32 __iomem *)pdsp->command, timeout, 0);
 	if (ret < 0) {
 		dev_err(kdev->dev,
 			"timed out on pdsp %s command register wait\n",
