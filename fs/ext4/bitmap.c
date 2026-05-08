@@ -110,3 +110,27 @@ void ext4_block_bitmap_csum_set(struct super_block *sb,
 	csum = ext4_chksum(sbi->s_csum_seed, (__u8 *)bh->b_data, sz);
 	ext4_block_bitmap_csum_store(sb, gdp, csum);
 }
+
+/*
+ * Update block bitmap checksum using incremental CRC calculation.
+ *
+ * This function assumes that ALL bits in the range [offset, offset+len)
+ * have been flipped (XORed with 1). It uses crc32c_flip_range() to
+ * efficiently compute the CRC delta without re-scanning the entire bitmap.
+ * The csum_seed cancels out in the XOR delta, so it is not needed here.
+ */
+void ext4_block_bitmap_csum_set_range(struct super_block *sb,
+				      struct ext4_group_desc *gdp,
+				      ext4_grpblk_t offset, ext4_grpblk_t len)
+{
+	__u32 new_csum, old_csum;
+
+	if (!ext4_has_feature_metadata_csum(sb))
+		return;
+
+	old_csum = ext4_block_bitmap_csum_get(sb, gdp);
+	new_csum = crc32c_flip_range(old_csum, EXT4_CLUSTERS_PER_GROUP(sb),
+				     offset, len);
+
+	ext4_block_bitmap_csum_store(sb, gdp, new_csum);
+}

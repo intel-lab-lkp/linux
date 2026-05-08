@@ -2770,6 +2770,9 @@ int ext4_inode_bitmap_csum_verify(struct super_block *sb,
 void ext4_block_bitmap_csum_set(struct super_block *sb,
 				struct ext4_group_desc *gdp,
 				struct buffer_head *bh);
+void ext4_block_bitmap_csum_set_range(struct super_block *sb,
+				      struct ext4_group_desc *gdp,
+				      ext4_grpblk_t offset, ext4_grpblk_t len);
 int ext4_block_bitmap_csum_verify(struct super_block *sb,
 				  struct ext4_group_desc *gdp,
 				  struct buffer_head *bh);
