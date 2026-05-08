@@ -2011,10 +2011,7 @@ static void slot_free(struct zram *zram, u32 index)
 	zram->table[index].attr.ac_time = 0;
 #endif
 
-	clear_slot_flag(zram, index, ZRAM_IDLE);
-	clear_slot_flag(zram, index, ZRAM_INCOMPRESSIBLE);
-	clear_slot_flag(zram, index, ZRAM_PP_SLOT);
-	set_slot_comp_priority(zram, index, 0);
+	zram->table[index].attr.flags &= ~ZRAM_SLOT_FREE_CLEAR_MASK;
 
 	if (test_slot_flag(zram, index, ZRAM_HUGE)) {
 		/*

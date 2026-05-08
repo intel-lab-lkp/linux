@@ -57,6 +57,12 @@ enum zram_pageflags {
 	__NR_ZRAM_PAGEFLAGS,
 };
 
+#define ZRAM_SLOT_FREE_CLEAR_MASK	(BIT(ZRAM_IDLE) | \
+					 BIT(ZRAM_INCOMPRESSIBLE) | \
+					 BIT(ZRAM_PP_SLOT) | \
+					 (ZRAM_COMP_PRIORITY_MASK << \
+					  ZRAM_COMP_PRIORITY_BIT1))
+
 /*
  * Allocated for each disk page.  We use bit-lock (ZRAM_ENTRY_LOCK bit
  * of flags) to save memory.  There can be plenty of entries and standard
