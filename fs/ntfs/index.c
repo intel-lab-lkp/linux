@@ -178,7 +178,8 @@ int ntfs_icx_ib_sync_write(struct ntfs_index_context *icx)
 		icx->ib = NULL;
 		icx->ib_dirty = false;
 	} else {
-		post_write_mst_fixup((struct ntfs_record *)icx->ib);
+		post_write_mst_fixup((struct ntfs_record *)icx->ib,
+				icx->block_size);
 		icx->sync_write = false;
 	}
 

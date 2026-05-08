@@ -9,6 +9,30 @@
 
 #include "ntfs.h"
 
+static bool mst_fixup_valid(const struct ntfs_record *b, const u32 size,
+		u16 *usa_ofs, u16 *fixup_count)
+{
+	u16 usa_count;
+	u32 usa_end;
+
+	if (!b)
+		return false;
+
+	*usa_ofs = le16_to_cpu(b->usa_ofs);
+	usa_count = le16_to_cpu(b->usa_count);
+
+	if (!size || (size & (NTFS_BLOCK_SIZE - 1)) || (*usa_ofs & 1) ||
+	    usa_count != (size >> NTFS_BLOCK_SIZE_BITS) + 1)
+		return false;
+
+	usa_end = *usa_ofs + usa_count * sizeof(__le16);
+	if (usa_end > size || usa_end > NTFS_BLOCK_SIZE - sizeof(__le16))
+		return false;
+
+	*fixup_count = usa_count - 1;
+	return true;
+}
+
 /*
  * post_read_mst_fixup - deprotect multi sector transfer protected data
  * @b:		pointer to the data to deprotect
@@ -28,18 +52,12 @@
  */
 int post_read_mst_fixup(struct ntfs_record *b, const u32 size)
 {
-	u16 usa_ofs, usa_count, usn;
+	u16 usa_ofs, usa_count, fixup_count, usn;
 	u16 *usa_pos, *data_pos;
 
-	/* Setup the variables. */
-	usa_ofs = le16_to_cpu(b->usa_ofs);
-	/* Decrement usa_count to get number of fixups. */
-	usa_count = le16_to_cpu(b->usa_count) - 1;
-	/* Size and alignment checks. */
-	if (size & (NTFS_BLOCK_SIZE - 1) || usa_ofs & 1	||
-	    usa_ofs + (usa_count * 2) > size ||
-	    (size >> NTFS_BLOCK_SIZE_BITS) != usa_count)
+	if (!mst_fixup_valid(b, size, &usa_ofs, &fixup_count))
 		return 0;
+	usa_count = fixup_count;
 	/* Position of usn in update sequence array. */
 	usa_pos = (u16 *)b + usa_ofs/sizeof(u16);
 	/*
@@ -75,8 +93,7 @@ int post_read_mst_fixup(struct ntfs_record *b, const u32 size)
 		}
 		data_pos += NTFS_BLOCK_SIZE / sizeof(u16);
 	}
-	/* Re-setup the variables. */
-	usa_count = le16_to_cpu(b->usa_count) - 1;
+	usa_count = fixup_count;
 	data_pos = (u16 *)b + NTFS_BLOCK_SIZE / sizeof(u16) - 1;
 	/* Fixup all sectors. */
 	while (usa_count--) {
@@ -115,21 +132,14 @@ int post_read_mst_fixup(struct ntfs_record *b, const u32 size)
 int pre_write_mst_fixup(struct ntfs_record *b, const u32 size)
 {
 	__le16 *usa_pos, *data_pos;
-	u16 usa_ofs, usa_count, usn;
+	u16 usa_ofs, fixup_count, usn;
 	__le16 le_usn;
 
 	/* Sanity check + only fixup if it makes sense. */
 	if (!b || ntfs_is_baad_record(b->magic) ||
 	    ntfs_is_hole_record(b->magic))
 		return -EINVAL;
-	/* Setup the variables. */
-	usa_ofs = le16_to_cpu(b->usa_ofs);
-	/* Decrement usa_count to get number of fixups. */
-	usa_count = le16_to_cpu(b->usa_count) - 1;
-	/* Size and alignment checks. */
-	if (size & (NTFS_BLOCK_SIZE - 1) || usa_ofs & 1	||
-	    usa_ofs + (usa_count * 2) > size ||
-	    (size >> NTFS_BLOCK_SIZE_BITS) != usa_count)
+	if (!mst_fixup_valid(b, size, &usa_ofs, &fixup_count))
 		return -EINVAL;
 	/* Position of usn in update sequence array. */
 	usa_pos = (__le16 *)((u8 *)b + usa_ofs);
@@ -145,7 +155,7 @@ int pre_write_mst_fixup(struct ntfs_record *b, const u32 size)
 	/* Position in data of first u16 that needs fixing up. */
 	data_pos = (__le16 *)b + NTFS_BLOCK_SIZE/sizeof(__le16) - 1;
 	/* Fixup all sectors. */
-	while (usa_count--) {
+	while (fixup_count--) {
 		/*
 		 * Increment the position in the usa and save the
 		 * original data from the data buffer into the usa.
@@ -162,17 +172,19 @@ int pre_write_mst_fixup(struct ntfs_record *b, const u32 size)
 /*
  * post_write_mst_fixup - fast deprotect multi sector transfer protected data
  * @b:		pointer to the data to deprotect
+ * @size:	size in bytes of @b
  *
- * Perform the necessary post write multi sector transfer fixup, not checking
- * for any errors, because we assume we have just used pre_write_mst_fixup(),
- * thus the data will be fine or we would never have gotten here.
+ * Perform the necessary post write multi sector transfer fixup. This is only
+ * expected after pre_write_mst_fixup() has applied fixups, but keep the bounds
+ * checks so error paths cannot restore from a malformed update sequence array.
  */
-void post_write_mst_fixup(struct ntfs_record *b)
+void post_write_mst_fixup(struct ntfs_record *b, const u32 size)
 {
 	__le16 *usa_pos, *data_pos;
+	u16 usa_ofs, fixup_count;
 
-	u16 usa_ofs = le16_to_cpu(b->usa_ofs);
-	u16 usa_count = le16_to_cpu(b->usa_count) - 1;
+	if (!mst_fixup_valid(b, size, &usa_ofs, &fixup_count))
+		return;
 
 	/* Position of usn in update sequence array. */
 	usa_pos = (__le16 *)b + usa_ofs/sizeof(__le16);
@@ -181,7 +193,7 @@ void post_write_mst_fixup(struct ntfs_record *b)
 	data_pos = (__le16 *)b + NTFS_BLOCK_SIZE/sizeof(__le16) - 1;
 
 	/* Fixup all sectors. */
-	while (usa_count--) {
+	while (fixup_count--) {
 		/*
 		 * Increment position in usa and restore original data from
 		 * the usa into the data buffer.

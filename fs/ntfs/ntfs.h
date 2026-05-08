@@ -223,7 +223,7 @@ int ntfs_write_volume_label(struct ntfs_volume *vol, char *label);
 /* From fs/ntfs/mst.c */
 int post_read_mst_fixup(struct ntfs_record *b, const u32 size);
 int pre_write_mst_fixup(struct ntfs_record *b, const u32 size);
-void post_write_mst_fixup(struct ntfs_record *b);
+void post_write_mst_fixup(struct ntfs_record *b, const u32 size);
 
 /* From fs/ntfs/unistr.c */
 bool ntfs_are_names_equal(const __le16 *s1, size_t s1_len,
