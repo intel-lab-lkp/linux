@@ -248,17 +248,14 @@ static int st7735r_probe(struct spi_device *spi)
 	u32 rotation = 0;
 	int ret;
 
-	cfg = device_get_match_data(&spi->dev);
-	if (!cfg)
-		cfg = (void *)spi_get_device_id(spi)->driver_data;
-
 	st7735r = devm_drm_dev_alloc(dev, &st7735r_driver, struct st7735r_device, dbidev.drm);
 	if (IS_ERR(st7735r))
 		return PTR_ERR(st7735r);
 
-	dbidev = &st7735r->dbidev;
+	cfg = spi_get_device_match_data(&spi->dev);
 	st7735r->cfg = cfg;
 
+	dbidev = &st7735r->dbidev;
 	dbi = &dbidev->dbi;
 	drm = &dbidev->drm;
 
