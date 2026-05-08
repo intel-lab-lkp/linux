@@ -132,14 +132,14 @@ nsim_rx_spi_alloc(struct psp_dev *psd, u32 version,
 		  struct netlink_ext_ack *extack)
 {
 	struct netdevsim *ns = psd->drv_priv;
-	unsigned int new;
 	int i;
 
-	new = ++ns->psp.spi & PSP_SPI_KEY_ID;
-	if (psd->generation & 1)
-		new |= PSP_SPI_KEY_PHASE;
+	if ((ns->psp.spi ^ (ns->psp.spi + 1)) & PSP_SPI_KEY_PHASE) {
+		NL_SET_ERR_MSG(extack, "SPI space exhausted");
+		return -ENOSPC;
+	}
 
-	assoc->spi = cpu_to_be32(new);
+	assoc->spi = cpu_to_be32(++ns->psp.spi);
 	assoc->key[0] = psd->generation;
 	for (i = 1; i < PSP_MAX_KEY; i++)
 		assoc->key[i] = ns->psp.spi + i;
@@ -162,6 +162,10 @@ static int nsim_assoc_add(struct psp_dev *psd, struct psp_assoc *pas,
 
 static int nsim_key_rotate(struct psp_dev *psd, struct netlink_ext_ack *extack)
 {
+	struct netdevsim *ns = psd->drv_priv;
+
+	ns->psp.spi = (ns->psp.spi & PSP_SPI_KEY_PHASE) ^ PSP_SPI_KEY_PHASE;
+
 	return 0;
 }
 
