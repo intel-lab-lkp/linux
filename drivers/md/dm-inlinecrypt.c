@@ -325,11 +325,13 @@ static int inlinecrypt_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	}
 
 	/* <key> */
-	ctx->key_size = get_key_size(&argv[1]);
-	if (ctx->key_size < 0) {
+	err = get_key_size(&argv[1]);
+	if (err < 0) {
 		ti->error = "Cannot parse key size";
 		return -EINVAL;
 	}
+	ctx->key_size = err;
+
 	err = inlinecrypt_get_key(argv[1], raw_key, ctx->key_size);
 	if (err) {
 		ti->error = "Malformed key string";
