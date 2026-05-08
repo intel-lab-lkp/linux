@@ -101,6 +101,8 @@ static const struct ice_health_status ice_health_status_lookup[] = {
 		"Supplied MIB file is invalid. DCB reverted to default configuration.",
 		"Disable FW-LLDP and check DCBx system configuration.",
 		{ice_port_number_label, "MIB ID"}},
+	{ICE_AQC_HEALTH_STATUS_INFO_LOSS_OF_LOCK, "Local DPLL lock status",
+		NULL,},
 };
 
 static int ice_health_status_lookup_compare(const void *a, const void *b)
@@ -242,6 +244,10 @@ void ice_process_health_status_event(struct ice_pf *pf, struct ice_rq_event_info
 				pf->health_reporters.fw_status = *health_info;
 				devlink_health_report(pf->health_reporters.fw,
 						      "FW syndrome reported", NULL);
+				if (status_code == ICE_AQC_HEALTH_STATUS_INFO_LOSS_OF_LOCK &&
+				    test_bit(ICE_FLAG_DPLL, pf->flags) &&
+				    pf->dplls.unmanaged)
+					ice_dpll_lock_state_set_unmanaged(pf, health_info, true);
 				break;
 			case ICE_AQC_HEALTH_STATUS_PF:
 			case ICE_AQC_HEALTH_STATUS_PORT:
