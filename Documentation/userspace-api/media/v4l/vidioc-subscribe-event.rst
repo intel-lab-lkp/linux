@@ -94,7 +94,7 @@ using the :ref:`VIDIOC_DQEVENT` ioctl.
 	a V4L2_EVENT_CTRL to be sent back to that same filehandle.
 	Normally such events are suppressed to prevent feedback loops
 	where an application changes a control to a one value and then
-	another, and then receives an event telling it that that control
+	another, and then receives an event telling it that control
 	has changed to the first value.
 
 	Since it can't tell whether that event was caused by another

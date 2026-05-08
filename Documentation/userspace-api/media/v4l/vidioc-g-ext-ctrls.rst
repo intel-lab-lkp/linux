@@ -64,7 +64,7 @@ should re-allocate the memory to this new size and try again. For the
 string type it is possible that the same issue occurs again if the
 string has grown in the meantime. It is recommended to call
 :ref:`VIDIOC_QUERYCTRL` first and use
-``maximum``\ +1 as the new ``size`` value. It is guaranteed that that is
+``maximum``\ +1 as the new ``size`` value. It is guaranteed that is
 sufficient memory.
 
 N-dimensional arrays are set and retrieved row-by-row. You cannot set a
