@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0
 
 #include <crypto/aes-cbc-macs.h>
+#include <crypto/gcm.h>
+#include <linux/ip.h>
 #include <linux/random.h>
 #include <linux/skbuff.h>
+#include <linux/timekeeping.h>
 #include <linux/unaligned.h>
 #include <net/psp.h>
 #include <net/sock.h>
@@ -44,9 +47,17 @@ enum skb_drop_reason
 nsim_psp_handle_tx(struct sk_buff *skb, struct netdevsim *ns)
 {
 	enum skb_drop_reason rc = 0;
+	u8 iv[GCM_AES_IV_SIZE];
+	struct aesgcm_ctx ctx;
 	struct psp_assoc *pas;
+	unsigned int key_size;
+	struct psphdr *psph;
+	int payload_len;
 	struct net *net;
+	u8 *authtag;
+	int psp_off;
 	void **ptr;
+	int err;
 
 	rcu_read_lock();
 	pas = psp_skb_get_assoc_rcu(skb);
@@ -72,12 +83,52 @@ nsim_psp_handle_tx(struct sk_buff *skb, struct netdevsim *ns)
 		goto out_unlock;
 	}
 
+	key_size = psp_key_size(pas->version);
+	err = aesgcm_expandkey(&ctx, pas->tx.key, key_size, PSP_TRL_SIZE);
+	if (err) {
+		rc = SKB_DROP_REASON_PSP_OUTPUT;
+		goto out_unlock;
+	}
+
+	if (skb_linearize_cow(skb) ||
+	    (skb_tailroom(skb) < PSP_TRL_SIZE &&
+	     pskb_expand_head(skb, 0, PSP_TRL_SIZE, GFP_ATOMIC))) {
+		rc = SKB_DROP_REASON_PSP_OUTPUT;
+		goto out_unlock;
+	}
+	skb_put(skb, PSP_TRL_SIZE);
+
+	if (skb->protocol == htons(ETH_P_IP)) {
+		be16_add_cpu(&ip_hdr(skb)->tot_len, PSP_TRL_SIZE);
+		ip_send_check(ip_hdr(skb));
+	} else if (skb->protocol == htons(ETH_P_IPV6)) {
+		be16_add_cpu(&ipv6_hdr(skb)->payload_len, PSP_TRL_SIZE);
+	}
+	be16_add_cpu(&udp_hdr(skb)->len, PSP_TRL_SIZE);
+
+	psph = (struct psphdr *)(skb_transport_header(skb) +
+				sizeof(struct udphdr));
+
+	/* Real impl needs to guarantee IV isn't reused on the same key */
+	psph->iv = cpu_to_be64(ktime_get_mono_fast_ns());
+	memcpy(iv, &psph->spi, sizeof(psph->spi));
+	memcpy(iv + sizeof(psph->spi), &psph->iv, sizeof(psph->iv));
+	psp_off = skb_transport_offset(skb) + sizeof(struct udphdr);
+	payload_len = skb->len - psp_off - PSP_HDR_SIZE - PSP_TRL_SIZE;
+	authtag = skb->data + skb->len - PSP_TRL_SIZE;
+
+	aesgcm_encrypt(&ctx,
+		       skb->data + psp_off + PSP_HDR_SIZE,
+		       skb->data + psp_off + PSP_HDR_SIZE,
+		       payload_len, (u8 *)psph, PSP_HDR_SIZE,
+		       iv, authtag);
+	memzero_explicit(&ctx, sizeof(ctx));
+
 	skb->decrypted = 0;
 
 	u64_stats_update_begin(&ns->psp.syncp);
 	u64_stats_inc(&ns->psp.tx_packets);
-	u64_stats_add(&ns->psp.tx_bytes,
-		      skb->len - skb_inner_transport_offset(skb));
+	u64_stats_add(&ns->psp.tx_bytes, payload_len);
 	u64_stats_update_end(&ns->psp.syncp);
 out_unlock:
 	rcu_read_unlock();
@@ -87,12 +138,17 @@ out_unlock:
 /* Returns true if skb was consumed, false otherwise. */
 bool nsim_psp_handle_rx(struct netdevsim *ns, struct sk_buff *skb)
 {
+	u8 iv[GCM_AES_IV_SIZE];
+	struct aesgcm_ctx ctx;
 	struct psp_dev *psd;
+	u8 key[PSP_MAX_KEY];
 	struct psphdr *psph;
+	unsigned int phase;
 	struct udphdr *uh;
 	int payload_len;
 	u32 versions;
 	int psp_off;
+	u8 *authtag;
 	bool is_udp;
 	int l3_hlen;
 	u8 version;
@@ -154,9 +210,41 @@ bool nsim_psp_handle_rx(struct netdevsim *ns, struct sk_buff *skb)
 	if (payload_len < 0)
 		goto drop;
 
+	if (FIELD_GET(PSPHDR_CRYPT_OFFSET, psph->crypt_offset))
+		goto drop;
+
+	if (skb_linearize_cow(skb))
+		goto drop;
+
+	psph = (struct psphdr *)(skb->data + psp_off);
+	phase = !!(ntohl(psph->spi) & PSP_SPI_KEY_PHASE);
+
+	spin_lock_bh(&ns->psp.dev_keys_lock);
+	nsim_psp_derive_key(ns->psp.dev_keys[phase], psph->spi, version, key);
+	spin_unlock_bh(&ns->psp.dev_keys_lock);
+
+	err = aesgcm_expandkey(&ctx, key, psp_key_size(version), PSP_TRL_SIZE);
+	memzero_explicit(key, sizeof(key));
+	if (err)
+		goto drop;
+
+	memcpy(iv, &psph->spi, sizeof(psph->spi));
+	memcpy(iv + sizeof(psph->spi), &psph->iv, sizeof(psph->iv));
+	authtag = skb->data + skb->len - PSP_TRL_SIZE;
+
+	if (!aesgcm_decrypt(&ctx,
+			    skb->data + psp_off + PSP_HDR_SIZE,
+			    skb->data + psp_off + PSP_HDR_SIZE,
+			    payload_len, (u8 *)psph, PSP_HDR_SIZE,
+			    iv, authtag)) {
+		memzero_explicit(&ctx, sizeof(ctx));
+		goto drop;
+	}
+	memzero_explicit(&ctx, sizeof(ctx));
+
 	skb_push(skb, ETH_HLEN);
 	skb->mac_len = ETH_HLEN;
-	err = psp_dev_rcv(skb, psd_id, 0, false);
+	err = psp_dev_rcv(skb, psd_id, 0, true);
 	if (err)
 		goto drop;
 
@@ -274,9 +362,7 @@ static struct psp_dev_ops nsim_psp_ops = {
 
 static struct psp_dev_caps nsim_psp_caps = {
 	.versions = 1 << PSP_VERSION_HDR0_AES_GCM_128 |
-		    1 << PSP_VERSION_HDR0_AES_GMAC_128 |
-		    1 << PSP_VERSION_HDR0_AES_GCM_256 |
-		    1 << PSP_VERSION_HDR0_AES_GMAC_256,
+		    1 << PSP_VERSION_HDR0_AES_GCM_256,
 	.assoc_drv_spc = sizeof(void *),
 };
 
