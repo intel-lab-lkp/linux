@@ -71,6 +71,29 @@ void ext4_inode_bitmap_csum_set(struct super_block *sb,
 	ext4_inode_bitmap_csum_store(sb, gdp, csum);
 }
 
+/*
+ * Update inode bitmap checksum for a single flipped bit.
+ *
+ * Use crc32c_flip_range() to incrementally update the checksum after
+ * flipping the bit at @offset, avoiding a full bitmap CRC rescan.
+ * The csum_seed cancels out in the XOR delta, so it is not needed here.
+ */
+void ext4_inode_bitmap_csum_set_fast(struct super_block *sb,
+				     struct ext4_group_desc *gdp,
+				     ext4_grpblk_t offset)
+{
+	__u32 new_csum, old_csum;
+
+	if (!ext4_has_feature_metadata_csum(sb))
+		return;
+
+	old_csum = ext4_inode_bitmap_csum_get(sb, gdp);
+	new_csum = crc32c_flip_range(old_csum, EXT4_INODES_PER_GROUP(sb),
+				     offset, 1);
+
+	ext4_inode_bitmap_csum_store(sb, gdp, new_csum);
+}
+
 static inline __u32 ext4_block_bitmap_csum_get(struct super_block *sb,
 					       struct ext4_group_desc *gdp)
 {

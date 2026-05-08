@@ -2764,6 +2764,9 @@ extern unsigned int ext4_count_free(char *bitmap, unsigned numchars);
 void ext4_inode_bitmap_csum_set(struct super_block *sb,
 				struct ext4_group_desc *gdp,
 				struct buffer_head *bh);
+void ext4_inode_bitmap_csum_set_fast(struct super_block *sb,
+				     struct ext4_group_desc *gdp,
+				     ext4_grpblk_t offset);
 int ext4_inode_bitmap_csum_verify(struct super_block *sb,
 				  struct ext4_group_desc *gdp,
 				  struct buffer_head *bh);
