@@ -801,9 +801,11 @@ int ccs_pll_calculate(struct device *dev, const struct ccs_pll_limits *lim,
 	switch (pll->bus_type) {
 	case CCS_PLL_BUS_TYPE_CSI2_DPHY:
 	case CCS_PLL_BUS_TYPE_CSI2_CPHY:
-		op_sys_clk_freq_hz_sdr = pll->link_freq * 2
+		op_sys_clk_freq_hz_sdr = pll->link_freq
 			* (pll->flags & CCS_PLL_FLAG_LANE_SPEED_MODEL ?
 			   1 : pll->csi2.lanes);
+		if (!(pll->flags & CCS_PLL_FLAG_OP_SYS_DDR))
+			op_sys_clk_freq_hz_sdr *= 2;
 		break;
 	default:
 		return -EINVAL;
