@@ -817,7 +817,7 @@ static void __vm_mem_region_delete(struct kvm_vm *vm,
 		kvm_munmap(region->mmap_alias, region->mmap_size);
 		close(region->fd);
 	}
-	if (region->region.guest_memfd >= 0)
+	if (region->region.flags & KVM_MEM_GUEST_MEMFD)
 		close(region->region.guest_memfd);
 
 	free(region);
@@ -1101,8 +1101,6 @@ void vm_mem_add(struct kvm_vm *vm, enum vm_mem_backing_src_type src_type,
 
 		region->region.guest_memfd = guest_memfd;
 		region->region.guest_memfd_offset = guest_memfd_offset;
-	} else {
-		region->region.guest_memfd = -1;
 	}
 
 	region->unused_phy_pages = sparsebit_alloc();
