@@ -270,6 +270,8 @@ static void acomp_ctx_free(struct crypto_acomp_ctx *acomp_ctx)
 	acomp_ctx->buffer = NULL;
 }
 
+static const struct zs_deferred_ops zswap_deferred_ops;
+
 static struct zswap_pool *zswap_pool_create(char *compressor)
 {
 	struct zswap_pool *pool;
@@ -288,6 +290,8 @@ static struct zswap_pool *zswap_pool_create(char *compressor)
 	pool->zs_pool = zs_create_pool(name);
 	if (!pool->zs_pool)
 		goto error;
+
+	zs_pool_enable_deferred_free(pool->zs_pool, &zswap_deferred_ops, pool);
 
 	strscpy(pool->tfm_name, compressor, sizeof(pool->tfm_name));
 
@@ -776,6 +780,36 @@ static void zswap_entry_free(struct zswap_entry *entry)
 	zswap_entry_cache_free(entry);
 	atomic_long_dec(&zswap_stored_pages);
 }
+
+static enum zs_push_ret zswap_deferred_push(void *buf,
+		unsigned int count, unsigned long value)
+{
+	unsigned long *entries = buf;
+
+	if (count >= PAGE_SIZE / sizeof(unsigned long))
+		return ZS_PUSH_FULL;
+	entries[count] = value;
+	if (count + 1 >= PAGE_SIZE / sizeof(unsigned long))
+		return ZS_PUSH_FULL_QUEUED;
+	return ZS_PUSH_OK;
+}
+
+static void zswap_deferred_drain(void *private, void *buf, unsigned int count)
+{
+	unsigned long *entries = buf;
+	unsigned int i;
+
+	for (i = 0; i < count; i++) {
+		struct zswap_entry *entry = (struct zswap_entry *)entries[i];
+
+		zswap_entry_free(entry);
+	}
+}
+
+static const struct zs_deferred_ops zswap_deferred_ops = {
+	.push = zswap_deferred_push,
+	.drain = zswap_deferred_drain,
+};
 
 /*********************************
 * compressed storage functions
@@ -1647,7 +1681,9 @@ void zswap_invalidate(swp_entry_t swp)
 		return;
 
 	entry = xa_erase(tree, offset);
-	if (entry)
+	if (!entry)
+		return;
+	if (!zs_free_deferred(entry->pool->zs_pool, (unsigned long)entry))
 		zswap_entry_free(entry);
 }
 
