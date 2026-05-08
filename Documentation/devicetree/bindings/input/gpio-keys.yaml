@@ -102,6 +102,10 @@ patternProperties:
           which can be disabled to suppress events from the button.
         type: boolean
 
+      vdd-supply:
+        description:
+          Regulator that provides a VDD power supply.
+
     required:
       - linux,code
 
