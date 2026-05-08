@@ -240,6 +240,8 @@ static void hung_task_info(struct task_struct *t, unsigned long timeout,
 	if (sysctl_hung_task_panic && this_round_count >= sysctl_hung_task_panic) {
 		console_verbose();
 		hung_task_call_panic = true;
+	} else {
+		add_taint(TAINT_WARN, LOCKDEP_STILL_OK);
 	}
 
 	/*
