@@ -329,38 +329,6 @@ unlock:
 	return NULL;
 }
 
-int adf_devmgr_verify_id(u32 id)
-{
-	if (id == ADF_CFG_ALL_DEVICES)
-		return 0;
-
-	if (adf_devmgr_get_dev_by_id(id))
-		return 0;
-
-	return -ENODEV;
-}
-
-static int adf_get_num_dettached_vfs(void)
-{
-	struct list_head *itr;
-	int vfs = 0;
-
-	mutex_lock(&table_lock);
-	list_for_each(itr, &vfs_table) {
-		struct vf_id_map *ptr =
-			list_entry(itr, struct vf_id_map, list);
-		if (ptr->bdf != ~0 && !ptr->attached)
-			vfs++;
-	}
-	mutex_unlock(&table_lock);
-	return vfs;
-}
-
-void adf_devmgr_get_num_dev(u32 *num)
-{
-	*num = num_devices - adf_get_num_dettached_vfs();
-}
-
 /**
  * adf_dev_in_use() - Check whether accel_dev is currently in use
  * @accel_dev: Pointer to acceleration device.
