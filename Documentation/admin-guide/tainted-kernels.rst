@@ -102,6 +102,7 @@ Bit  Log  Number  Reason that got the kernel tainted
  17  _/T  131072  kernel was built with the struct randomization plugin
  18  _/N  262144  an in-kernel test has been run
  19  _/J  524288  userspace used a mutating debug operation in fwctl
+ 20  _/H 1048576  killswitch override engaged (function short-circuited)
 ===  ===  ======  ========================================================
 
 Note: The character ``_`` is representing a blank in this table to make reading
@@ -189,3 +190,10 @@ More detailed explanation for tainting
  19) ``J`` if userspace opened /dev/fwctl/* and performed a FWTCL_RPC_DEBUG_WRITE
      to use the devices debugging features. Device debugging features could
      cause the device to malfunction in undefined ways.
+
+ 20) ``H`` if the killswitch primitive (see
+     Documentation/admin-guide/killswitch.rst) has been engaged on at least
+     one function. The kernel is no longer running its source: at least one
+     function has been short-circuited to return a fixed value. The taint
+     persists across ``disengage`` until the next reboot — once the running
+     image has been modified, oops triage must reflect that.

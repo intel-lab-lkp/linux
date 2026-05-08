@@ -3349,6 +3349,19 @@ config TEST_HMM
 
 	  If unsure, say N.
 
+config TEST_KILLSWITCH
+	tristate "Test module for the killswitch mitigation primitive"
+	depends on KILLSWITCH && DEBUG_FS
+	depends on m
+	help
+	  Build a module that exposes a deliberately-vulnerable function
+	  ks_test_vuln() and a debugfs trigger /sys/kernel/debug/test_killswitch/fire.
+	  The killswitch selftest in tools/testing/selftests/killswitch/
+	  uses this to confirm engaging a killswitch suppresses the BUG()
+	  the function would otherwise hit.
+
+	  If unsure, say N.
+
 config TEST_FREE_PAGES
 	tristate "Test freeing pages"
 	help

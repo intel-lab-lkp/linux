@@ -53,6 +53,7 @@ TARGETS += ipc
 TARGETS += ir
 TARGETS += kcmp
 TARGETS += kexec
+TARGETS += killswitch
 TARGETS += kselftest_harness
 TARGETS += kvm
 TARGETS += landlock
