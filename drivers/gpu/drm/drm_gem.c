@@ -1108,6 +1108,15 @@ drm_gem_release(struct drm_device *dev, struct drm_file *file_private)
 	idr_destroy(&file_private->object_idr);
 }
 
+static void
+drm_gem_lru_remove_locked(struct drm_gem_object *obj)
+{
+	obj->lru->count -= obj->size >> PAGE_SHIFT;
+	WARN_ON(obj->lru->count < 0);
+	list_del(&obj->lru_node);
+	obj->lru = NULL;
+}
+
 /**
  * drm_gem_object_release - release GEM buffer object resources
  * @obj: GEM buffer object
@@ -1118,13 +1127,42 @@ drm_gem_release(struct drm_device *dev, struct drm_file *file_private)
 void
 drm_gem_object_release(struct drm_gem_object *obj)
 {
+	struct drm_gem_lru *lru;
+
 	if (obj->filp)
 		fput(obj->filp);
 
 	drm_gem_private_object_fini(obj);
 
 	drm_gem_free_mmap_offset(obj);
-	drm_gem_lru_remove(obj);
+
+	/*
+	 * We do the lru != NULL check without the lru->lock held, which
+	 * means we might end up with a stale lru value by the time the
+	 * lock is acquired.
+	 *
+	 * This is deemed safe because:
+	 * 1. the LRU is assumed to outlive any GEM object it was attached
+	 *    (LRUs are usually bound to a drm_device). So even if obj->lru
+	 *    has become NULL, it still point to a valid object that can
+	 *    safely be dereferenced to get the lock.
+	 *
+	 * 2. all LRUs a GEM object might be attached to must share the same
+	 *    lock (lock that's usually part of the driver-specific device
+	 *    object), so taking the lock on the 'old' LRU is equivalent
+	 *    to taking it on the new one (if any)
+	 */
+	lru = obj->lru;
+	if (lru) {
+		guard(mutex)(lru->lock);
+
+		/* Check a second time with the lock held to make sure we're
+		 * not racing with the drm_gem_lru_remove_locked() call in
+		 * drm_gem_lru_scan().
+		 */
+		if (obj->lru)
+			drm_gem_lru_remove_locked(obj);
+	}
 }
 EXPORT_SYMBOL(drm_gem_object_release);
 
@@ -1551,56 +1589,6 @@ drm_gem_lru_init(struct drm_gem_lru *lru, struct mutex *lock)
 	INIT_LIST_HEAD(&lru->list);
 }
 EXPORT_SYMBOL(drm_gem_lru_init);
-
-static void
-drm_gem_lru_remove_locked(struct drm_gem_object *obj)
-{
-	obj->lru->count -= obj->size >> PAGE_SHIFT;
-	WARN_ON(obj->lru->count < 0);
-	list_del(&obj->lru_node);
-	obj->lru = NULL;
-}
-
-/**
- * drm_gem_lru_remove - remove object from whatever LRU it is in
- *
- * If the object is currently in any LRU, remove it.
- *
- * @obj: The GEM object to remove from current LRU
- */
-void
-drm_gem_lru_remove(struct drm_gem_object *obj)
-{
-	struct drm_gem_lru *lru = obj->lru;
-
-	/*
-	 * We do the lru != NULL check without the lru->lock held, which
-	 * means we might end up with a stale lru value by the time the
-	 * lock is acquired.
-	 *
-	 * This is deemed safe because:
-	 * 1. the LRU is assumed to outlive any GEM object it was attached
-	 *    (LRUs are usually bound to a drm_device). So even if obj->lru
-	 *    has become NULL, it still point to a valid object that can
-	 *    safely be dereferenced to get the lock.
-	 *
-	 * 2. all LRUs a GEM object might be attached to must share the same
-	 *    lock (lock that's usually part of the driver-specific device
-	 *    object), so taking the lock on the 'old' LRU is equivalent
-	 *    to taking it on the new one (if any)
-	 */
-	if (!lru)
-		return;
-
-	mutex_lock(lru->lock);
-	/* Check a second time with the lock held to make sure we're not racing
-	 * with another drm_gem_lru_remove[_locked]() call.
-	 */
-	if (obj->lru)
-		drm_gem_lru_remove_locked(obj);
-	mutex_unlock(lru->lock);
-}
-EXPORT_SYMBOL(drm_gem_lru_remove);
 
 /**
  * drm_gem_lru_move_tail_locked - move the object to the tail of the LRU
