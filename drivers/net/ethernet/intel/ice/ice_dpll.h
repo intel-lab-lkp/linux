@@ -26,6 +26,8 @@
 #define ICE_CGU_R11_SYNCE_S_BYP_CLK	GENMASK(6, 1)
 
 #define ICE_CGU_BYPASS_MUX_OFFSET_E825C	3
+#define ICE_DPLL_UNMANAGED_PIN_NUM	4
+#define ICE_DPLL_IN_ESYNC_ENABLED	ICE_AQC_GET_CGU_IN_CFG_FLG2_ESYNC_EN
 
 /**
  * enum ice_dpll_pin_sw - enumerate ice software pin indices:
@@ -193,6 +195,7 @@ struct ice_dplls {
 	s32 output_phase_adj_max;
 	u32 periodic_counter;
 	bool generic;
+	bool unmanaged;
 	struct work_struct txclk_work;
 	bool txclk_switch_requested;
 	struct rw_semaphore txclk_notify_rwsem;
@@ -201,9 +204,16 @@ struct ice_dplls {
 #if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
 void ice_dpll_init(struct ice_pf *pf);
 void ice_dpll_deinit(struct ice_pf *pf);
+void ice_dpll_lock_state_set_unmanaged(struct ice_pf *pf,
+				       const struct ice_aqc_health_status_elem *buff,
+				       bool notify);
 #else
 static inline void ice_dpll_init(struct ice_pf *pf) { }
 static inline void ice_dpll_deinit(struct ice_pf *pf) { }
+static inline void
+ice_dpll_lock_state_set_unmanaged(struct ice_pf *pf,
+				  const struct ice_aqc_health_status_elem *buff,
+				  bool notify) { }
 #endif
 
 #endif
