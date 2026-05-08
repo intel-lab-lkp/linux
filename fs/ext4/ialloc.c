@@ -756,11 +756,12 @@ not_found:
 	return 1;
 }
 
-int ext4_mark_inode_used(struct super_block *sb, int ino)
+int ext4_mark_inode_used(struct super_block *sb, int ino, umode_t mode)
 {
 	unsigned long max_ino = le32_to_cpu(EXT4_SB(sb)->s_es->s_inodes_count);
 	struct buffer_head *inode_bitmap_bh = NULL, *group_desc_bh = NULL;
 	struct ext4_group_desc *gdp;
+	struct ext4_sb_info *sbi = EXT4_SB(sb);
 	ext4_group_t group;
 	int bit;
 	int err;
@@ -858,6 +859,16 @@ int ext4_mark_inode_used(struct super_block *sb, int ino)
 	}
 
 	ext4_free_inodes_set(sb, gdp, ext4_free_inodes_count(sb, gdp) - 1);
+	if (S_ISDIR(mode)) {
+		ext4_used_dirs_set(sb, gdp, ext4_used_dirs_count(sb, gdp) + 1);
+		if (sbi->s_log_groups_per_flex) {
+			ext4_group_t f = ext4_flex_group(sbi, group);
+
+			atomic_inc(&sbi_array_rcu_deref(sbi, s_flex_groups,
+							f)->used_dirs);
+		}
+	}
+
 	if (ext4_has_group_desc_csum(sb)) {
 		ext4_inode_bitmap_csum_set(sb, gdp, inode_bitmap_bh);
 		ext4_group_desc_csum_set(sb, group, gdp);

@@ -2941,7 +2941,7 @@ extern int ext4fs_dirhash(const struct inode *dir, const char *name, int len,
 			  struct dx_hash_info *hinfo);
 
 /* ialloc.c */
-extern int ext4_mark_inode_used(struct super_block *sb, int ino);
+extern int ext4_mark_inode_used(struct super_block *sb, int ino, umode_t mode);
 extern struct inode *__ext4_new_inode(struct mnt_idmap *, handle_t *,
 				      struct inode *, umode_t,
 				      const struct qstr *qstr, __u32 goal,

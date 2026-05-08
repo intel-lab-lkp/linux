@@ -1578,7 +1578,7 @@ static int ext4_fc_replay_inode(struct super_block *sb,
 	ret = sync_dirty_buffer(iloc.bh);
 	if (ret)
 		goto out_brelse;
-	ret = ext4_mark_inode_used(sb, ino);
+	ret = ext4_mark_inode_used(sb, ino, le16_to_cpu(raw_fc_inode->i_mode));
 	if (ret)
 		goto out_brelse;
 
@@ -1635,11 +1635,7 @@ static int ext4_fc_replay_create(struct super_block *sb,
 	trace_ext4_fc_replay(sb, EXT4_FC_TAG_CREAT, darg.ino,
 			darg.parent_ino, darg.dname_len);
 
-	/* This takes care of update group descriptor and other metadata */
-	ret = ext4_mark_inode_used(sb, darg.ino);
-	if (ret)
-		goto out;
-
+	/* Inode already on disk from TAG_INODE replay; iget first for mode. */
 	inode = ext4_iget(sb, darg.ino, EXT4_IGET_NORMAL);
 	if (IS_ERR(inode)) {
 		ext4_debug("inode %d not found.", darg.ino);
@@ -1647,6 +1643,11 @@ static int ext4_fc_replay_create(struct super_block *sb,
 		ret = -EINVAL;
 		goto out;
 	}
+
+	/* This takes care of update group descriptor and other metadata */
+	ret = ext4_mark_inode_used(sb, darg.ino, inode->i_mode);
+	if (ret)
+		goto out;
 
 	if (S_ISDIR(inode->i_mode)) {
 		/*
