@@ -2094,6 +2094,11 @@ static int mana_gd_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	gc->numa_node = dev_to_node(&pdev->dev);
 	gc->is_pf = mana_is_pf(pdev->device);
+
+	/* Disable VF autoprobe on BM */
+	if (gc->is_pf)
+		pci_vf_drivers_autoprobe(pdev, false);
+
 	gc->bar0_va = bar0_va;
 	gc->dev = &pdev->dev;
 	xa_init(&gc->irq_contexts);
@@ -2262,6 +2267,20 @@ static void mana_gd_shutdown(struct pci_dev *pdev)
 	pci_disable_device(pdev);
 }
 
+static int mana_sriov_configure(struct pci_dev *pdev, int numvfs)
+{
+	int err = 0;
+
+	dev_info(&pdev->dev, "Requested num VFs: %d\n", numvfs);
+
+	if (numvfs > 0)
+		err = pci_enable_sriov(pdev, numvfs);
+	else
+		pci_disable_sriov(pdev);
+
+	return err ? err : numvfs;
+}
+
 static const struct pci_device_id mana_id_table[] = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_MICROSOFT, MANA_PF_DEVICE_ID) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_MICROSOFT, MANA_VF_DEVICE_ID) },
@@ -2276,6 +2295,7 @@ static struct pci_driver mana_driver = {
 	.suspend	= mana_gd_suspend,
 	.resume		= mana_gd_resume,
 	.shutdown	= mana_gd_shutdown,
+	.sriov_configure = mana_sriov_configure,
 };
 
 static int __init mana_driver_init(void)

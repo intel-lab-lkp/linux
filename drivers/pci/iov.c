@@ -1127,6 +1127,7 @@ void pci_vf_drivers_autoprobe(struct pci_dev *dev, bool auto_probe)
 	if (dev->is_physfn)
 		dev->sriov->drivers_autoprobe = auto_probe;
 }
+EXPORT_SYMBOL_GPL(pci_vf_drivers_autoprobe);
 
 /**
  * pci_iov_bus_range - find bus range used by Virtual Function
