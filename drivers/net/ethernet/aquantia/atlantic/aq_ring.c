@@ -308,24 +308,30 @@ bool aq_ring_tx_clean(struct aq_ring_s *self)
 			}
 		}
 
-		if (likely(!buff->is_eop))
-			goto out;
+		if (unlikely(buff->is_eop)) {
+			if (unlikely(buff->request_ts) &&
+			    self->aq_nic->aq_hw_ops->hw_ring_tx_ptp_get_ts) {
+				u64 ts = self->aq_nic->aq_hw_ops->hw_ring_tx_ptp_get_ts(self);
 
-		if (buff->skb) {
-			u64_stats_update_begin(&self->stats.tx.syncp);
-			++self->stats.tx.packets;
-			self->stats.tx.bytes += buff->skb->len;
-			u64_stats_update_end(&self->stats.tx.syncp);
-			dev_kfree_skb_any(buff->skb);
-		} else if (buff->xdpf) {
-			u64_stats_update_begin(&self->stats.tx.syncp);
-			++self->stats.tx.packets;
-			self->stats.tx.bytes += xdp_get_frame_len(buff->xdpf);
-			u64_stats_update_end(&self->stats.tx.syncp);
-			xdp_return_frame_rx_napi(buff->xdpf);
+				if (!ts)
+					break;
+
+				aq_ptp_tx_hwtstamp(self->aq_nic, ts);
+			}
+			if (buff->skb) {
+				u64_stats_update_begin(&self->stats.tx.syncp);
+				++self->stats.tx.packets;
+				self->stats.tx.bytes += buff->skb->len;
+				u64_stats_update_end(&self->stats.tx.syncp);
+				dev_kfree_skb_any(buff->skb);
+			} else if (buff->xdpf) {
+				u64_stats_update_begin(&self->stats.tx.syncp);
+				++self->stats.tx.packets;
+				self->stats.tx.bytes += xdp_get_frame_len(buff->xdpf);
+				u64_stats_update_end(&self->stats.tx.syncp);
+				xdp_return_frame_rx_napi(buff->xdpf);
+			}
 		}
-
-out:
 		buff->skb = NULL;
 		buff->xdpf = NULL;
 		buff->pa = 0U;
@@ -570,7 +576,7 @@ static int __aq_ring_rx_clean(struct aq_ring_s *self, struct napi_struct *napi,
 							    self->hw_head);
 
 				if (unlikely(!is_rsc_completed) ||
-						frag_cnt > MAX_SKB_FRAGS) {
+				    frag_cnt > MAX_SKB_FRAGS) {
 					err = 0;
 					goto err_exit;
 				}
