@@ -32,6 +32,9 @@ pub fn fsleep(delta: Delta) {
     // overflow inside fsleep, which could lead to unintentional infinite sleep.
     const MAX_DELTA: Delta = Delta::from_micros(i32::MAX as i64);
 
+    debug_assert!(delta.as_nanos() >= 0);
+    debug_assert!(delta <= MAX_DELTA);
+
     let delta = if (Delta::ZERO..=MAX_DELTA).contains(&delta) {
         delta
     } else {
