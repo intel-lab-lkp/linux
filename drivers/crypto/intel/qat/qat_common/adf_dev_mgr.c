@@ -320,8 +320,14 @@ struct adf_accel_dev *adf_devmgr_get_dev_by_id(u32 id)
 		struct adf_accel_dev *ptr =
 				list_entry(itr, struct adf_accel_dev, list);
 		if (ptr->accel_id == id) {
-			mutex_unlock(&table_lock);
-			return ptr;
+			/* Increment refcount to prevent UAF during removal.
+			 * If adf_dev_get() fails, the module is unloading.
+			 */
+			if (adf_dev_get(ptr) == 0) {
+				mutex_unlock(&table_lock);
+				return ptr;
+			}
+			break;
 		}
 	}
 unlock:
@@ -331,11 +337,17 @@ unlock:
 
 int adf_devmgr_verify_id(u32 id)
 {
+	struct adf_accel_dev *accel_dev;
+
 	if (id == ADF_CFG_ALL_DEVICES)
 		return 0;
 
-	if (adf_devmgr_get_dev_by_id(id))
+	accel_dev = adf_devmgr_get_dev_by_id(id);
+	if (accel_dev) {
+		/* Release the reference immediately as we only verify existence */
+		adf_dev_put(accel_dev);
 		return 0;
+	}
 
 	return -ENODEV;
 }

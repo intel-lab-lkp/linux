@@ -201,6 +201,10 @@ static int adf_ctl_ioctl_dev_config(struct file *fp, unsigned int cmd,
 	}
 	set_bit(ADF_STATUS_CONFIGURED, &accel_dev->status);
 out:
+	/* Release the reference acquired by adf_devmgr_get_dev_by_id() */
+	if (accel_dev)
+		adf_dev_put(accel_dev);
+
 	kfree(ctl_data);
 	return ret;
 }
@@ -278,6 +282,10 @@ static int adf_ctl_ioctl_dev_stop(struct file *fp, unsigned int cmd,
 	adf_ctl_stop_devices(ctl_data->device_id);
 
 out:
+	/* Release the reference acquired by adf_devmgr_get_dev_by_id() */
+	if (accel_dev)
+		adf_dev_put(accel_dev);
+
 	kfree(ctl_data);
 	return ret;
 }
@@ -310,6 +318,10 @@ static int adf_ctl_ioctl_dev_start(struct file *fp, unsigned int cmd,
 		adf_dev_down(accel_dev);
 	}
 out:
+	/* Release the reference acquired by adf_devmgr_get_dev_by_id() */
+	if (accel_dev)
+		adf_dev_put(accel_dev);
+
 	kfree(ctl_data);
 	return ret;
 }
@@ -360,8 +372,12 @@ static int adf_ctl_ioctl_get_status(struct file *fp, unsigned int cmd,
 	if (copy_to_user((void __user *)arg, &dev_info,
 			 sizeof(struct adf_dev_status_info))) {
 		dev_err(&GET_DEV(accel_dev), "failed to copy status.\n");
+		adf_dev_put(accel_dev);
 		return -EFAULT;
 	}
+	/* Release the reference acquired by adf_devmgr_get_dev_by_id() */
+	adf_dev_put(accel_dev);
+
 	return 0;
 }
 
