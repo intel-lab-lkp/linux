@@ -7313,12 +7313,17 @@ static void atomic_switch_perf_msrs(struct vcpu_vmx *vmx)
 	if (kvm_vcpu_has_mediated_pmu(&vmx->vcpu))
 		return;
 
-	pmu->host_cross_mapped_mask = 0;
+	struct x86_guest_pebs guest_pebs = {
+		.enable = pmu->pebs_enable,
+		.ds_area = pmu->ds_area,
+		.data_cfg = pmu->pebs_data_cfg,
+	};
+
 	if (pmu->pebs_enable & pmu->global_ctrl)
-		intel_pmu_cross_mapped_check(pmu);
+		guest_pebs.cross_mapped_mask = intel_pmu_get_cross_mapped_mask(pmu);
 
 	/* Note, nr_msrs may be garbage if perf_guest_get_msrs() returns NULL. */
-	msrs = perf_guest_get_msrs(&nr_msrs, (void *)pmu);
+	msrs = perf_guest_get_msrs(&nr_msrs, &guest_pebs);
 	if (!msrs)
 		return;
 
