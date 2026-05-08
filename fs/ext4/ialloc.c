@@ -756,6 +756,58 @@ not_found:
 	return 1;
 }
 
+/*
+ * If the block bitmap for @group is not yet initialized (EXT4_BG_BLOCK_UNINIT),
+ * read it into memory, dirty it, and clear the UNINIT flag under the group lock
+ * so that the on-disk checksum is established.  @handle may be NULL during fast
+ * commit replay (no journal credits needed in that path).
+ */
+static int ext4_might_init_block_bitmap(handle_t *handle,
+					struct super_block *sb,
+					ext4_group_t group,
+					struct ext4_group_desc *gdp)
+{
+	int err;
+	struct buffer_head *block_bitmap_bh;
+
+	if (!ext4_has_group_desc_csum(sb) ||
+	    !(gdp->bg_flags & cpu_to_le16(EXT4_BG_BLOCK_UNINIT)))
+		return 0;
+
+	block_bitmap_bh = ext4_read_block_bitmap(sb, group);
+	if (IS_ERR(block_bitmap_bh))
+		return PTR_ERR(block_bitmap_bh);
+
+	if (handle) {
+		BUFFER_TRACE(block_bitmap_bh, "get block bitmap access");
+		err = ext4_journal_get_write_access(handle, sb,
+				block_bitmap_bh, EXT4_JTR_NONE);
+		if (err)
+			goto out_brelse;
+	}
+
+	BUFFER_TRACE(block_bitmap_bh, "dirty block bitmap");
+	err = ext4_handle_dirty_metadata(handle, NULL, block_bitmap_bh);
+	if (!handle)
+		sync_dirty_buffer(block_bitmap_bh);
+
+	/* recheck and clear flag under lock if we still need to */
+	ext4_lock_group(sb, group);
+	if (gdp->bg_flags & cpu_to_le16(EXT4_BG_BLOCK_UNINIT)) {
+		gdp->bg_flags &= cpu_to_le16(~EXT4_BG_BLOCK_UNINIT);
+		ext4_free_group_clusters_set(sb, gdp,
+			ext4_free_clusters_after_init(sb, group, gdp));
+		ext4_block_bitmap_csum_set(sb, gdp, block_bitmap_bh);
+		ext4_group_desc_csum_set(sb, group, gdp);
+	}
+	ext4_unlock_group(sb, group);
+
+out_brelse:
+	brelse(block_bitmap_bh);
+	ext4_std_error(sb, err);
+	return err;
+}
+
 int ext4_mark_inode_used(struct super_block *sb, int ino, umode_t mode)
 {
 	unsigned long max_ino = le32_to_cpu(EXT4_SB(sb)->s_es->s_inodes_count);
@@ -801,38 +853,9 @@ int ext4_mark_inode_used(struct super_block *sb, int ino, umode_t mode)
 	}
 
 	/* We may have to initialize the block bitmap if it isn't already */
-	if (ext4_has_group_desc_csum(sb) &&
-	    gdp->bg_flags & cpu_to_le16(EXT4_BG_BLOCK_UNINIT)) {
-		struct buffer_head *block_bitmap_bh;
-
-		block_bitmap_bh = ext4_read_block_bitmap(sb, group);
-		if (IS_ERR(block_bitmap_bh)) {
-			err = PTR_ERR(block_bitmap_bh);
-			goto out;
-		}
-
-		BUFFER_TRACE(block_bitmap_bh, "dirty block bitmap");
-		err = ext4_handle_dirty_metadata(NULL, NULL, block_bitmap_bh);
-		sync_dirty_buffer(block_bitmap_bh);
-
-		/* recheck and clear flag under lock if we still need to */
-		ext4_lock_group(sb, group);
-		if (ext4_has_group_desc_csum(sb) &&
-		    (gdp->bg_flags & cpu_to_le16(EXT4_BG_BLOCK_UNINIT))) {
-			gdp->bg_flags &= cpu_to_le16(~EXT4_BG_BLOCK_UNINIT);
-			ext4_free_group_clusters_set(sb, gdp,
-				ext4_free_clusters_after_init(sb, group, gdp));
-			ext4_block_bitmap_csum_set(sb, gdp, block_bitmap_bh);
-			ext4_group_desc_csum_set(sb, group, gdp);
-		}
-		ext4_unlock_group(sb, group);
-		brelse(block_bitmap_bh);
-
-		if (err) {
-			ext4_std_error(sb, err);
-			goto out;
-		}
-	}
+	err = ext4_might_init_block_bitmap(NULL, sb, group, gdp);
+	if (err)
+		goto out;
 
 	/* Update the relevant bg descriptor fields */
 	if (ext4_has_group_desc_csum(sb)) {
@@ -1154,45 +1177,9 @@ got:
 	}
 
 	/* We may have to initialize the block bitmap if it isn't already */
-	if (ext4_has_group_desc_csum(sb) &&
-	    gdp->bg_flags & cpu_to_le16(EXT4_BG_BLOCK_UNINIT)) {
-		struct buffer_head *block_bitmap_bh;
-
-		block_bitmap_bh = ext4_read_block_bitmap(sb, group);
-		if (IS_ERR(block_bitmap_bh)) {
-			err = PTR_ERR(block_bitmap_bh);
-			goto out;
-		}
-		BUFFER_TRACE(block_bitmap_bh, "get block bitmap access");
-		err = ext4_journal_get_write_access(handle, sb, block_bitmap_bh,
-						    EXT4_JTR_NONE);
-		if (err) {
-			brelse(block_bitmap_bh);
-			ext4_std_error(sb, err);
-			goto out;
-		}
-
-		BUFFER_TRACE(block_bitmap_bh, "dirty block bitmap");
-		err = ext4_handle_dirty_metadata(handle, NULL, block_bitmap_bh);
-
-		/* recheck and clear flag under lock if we still need to */
-		ext4_lock_group(sb, group);
-		if (ext4_has_group_desc_csum(sb) &&
-		    (gdp->bg_flags & cpu_to_le16(EXT4_BG_BLOCK_UNINIT))) {
-			gdp->bg_flags &= cpu_to_le16(~EXT4_BG_BLOCK_UNINIT);
-			ext4_free_group_clusters_set(sb, gdp,
-				ext4_free_clusters_after_init(sb, group, gdp));
-			ext4_block_bitmap_csum_set(sb, gdp, block_bitmap_bh);
-			ext4_group_desc_csum_set(sb, group, gdp);
-		}
-		ext4_unlock_group(sb, group);
-		brelse(block_bitmap_bh);
-
-		if (err) {
-			ext4_std_error(sb, err);
-			goto out;
-		}
-	}
+	err = ext4_might_init_block_bitmap(handle, sb, group, gdp);
+	if (err)
+		goto out;
 
 	/* Update the relevant bg descriptor fields */
 	if (ext4_has_group_desc_csum(sb)) {
