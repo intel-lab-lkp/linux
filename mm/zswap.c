@@ -921,12 +921,14 @@ unlock:
 	return comp_ret == 0 && alloc_ret == 0;
 }
 
-static bool zswap_decompress(struct zswap_entry *entry, struct folio *folio)
+static bool zswap_decompress(struct zswap_entry *entry, struct folio *folio,
+			     unsigned long index)
 {
 	struct zswap_pool *pool = entry->pool;
 	struct scatterlist input[2]; /* zsmalloc returns an SG list 1-2 entries */
 	struct scatterlist output;
 	struct crypto_acomp_ctx *acomp_ctx;
+	size_t offset = index * PAGE_SIZE;
 	int ret = 0, dlen;
 
 	acomp_ctx = raw_cpu_ptr(pool->acomp_ctx);
@@ -939,14 +941,14 @@ static bool zswap_decompress(struct zswap_entry *entry, struct folio *folio)
 
 		WARN_ON_ONCE(input->length != PAGE_SIZE);
 
-		dst = kmap_local_folio(folio, 0);
+		dst = kmap_local_folio(folio, offset);
 		memcpy_from_sglist(dst, input, 0, PAGE_SIZE);
 		dlen = PAGE_SIZE;
 		kunmap_local(dst);
 		flush_dcache_folio(folio);
 	} else {
 		sg_init_table(&output, 1);
-		sg_set_folio(&output, folio, PAGE_SIZE, 0);
+		sg_set_folio(&output, folio, PAGE_SIZE, offset);
 		acomp_request_set_params(acomp_ctx->req, input, &output,
 					 entry->length, PAGE_SIZE);
 		ret = crypto_acomp_decompress(acomp_ctx->req);
@@ -1034,7 +1036,7 @@ static int zswap_writeback_entry(struct zswap_entry *entry,
 		goto out;
 	}
 
-	if (!zswap_decompress(entry, folio)) {
+	if (!zswap_decompress(entry, folio, 0)) {
 		ret = -EIO;
 		goto out;
 	}
@@ -1611,7 +1613,7 @@ int zswap_load(struct folio *folio)
 	if (!entry)
 		return -ENOENT;
 
-	if (!zswap_decompress(entry, folio)) {
+	if (!zswap_decompress(entry, folio, 0)) {
 		folio_unlock(folio);
 		return -EIO;
 	}
