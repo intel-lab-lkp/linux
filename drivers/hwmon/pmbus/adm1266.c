@@ -428,16 +428,23 @@ static int adm1266_config_nvmem(struct adm1266_data *data)
 
 static int adm1266_set_rtc(struct adm1266_data *data)
 {
-	time64_t kt;
+	struct timespec64 ts;
 	char write_buf[6];
+	u16 frac;
 	int i;
 
-	kt = ktime_get_real_seconds();
+	ktime_get_real_ts64(&ts);
 
-	memset(write_buf, 0, sizeof(write_buf));
-
+	/*
+	 * SET_RTC frame layout (datasheet Rev. D, Table 84):
+	 *   bytes [1:0] = fractional seconds, LSB = 1/65536 s
+	 *   bytes [5:2] = seconds since 1970-01-01 UTC
+	 */
+	frac = (u16)(((u64)ts.tv_nsec << 16) / NSEC_PER_SEC);
+	for (i = 0; i < 2; i++)
+		write_buf[i] = (frac >> (i * 8)) & 0xFF;
 	for (i = 0; i < 4; i++)
-		write_buf[2 + i] = (kt >> (i * 8)) & 0xFF;
+		write_buf[2 + i] = (ts.tv_sec >> (i * 8)) & 0xFF;
 
 	return i2c_smbus_write_block_data(data->client, ADM1266_SET_RTC, sizeof(write_buf),
 					  write_buf);
