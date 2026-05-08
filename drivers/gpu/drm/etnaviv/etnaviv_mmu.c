@@ -269,9 +269,17 @@ int etnaviv_iommu_map_gem(struct etnaviv_iommu_context *context,
 {
 	struct sg_table *sgt = etnaviv_obj->sgt;
 	struct drm_mm_node *node;
+	int prot = ETNAVIV_PROT_READ;
 	int ret;
 
 	lockdep_assert_held(&etnaviv_obj->lock);
+
+	if (!etnaviv_obj->userptr.ptr || !etnaviv_obj->userptr.ro)
+		prot |= ETNAVIV_PROT_WRITE;
+
+	if (etnaviv_obj->userptr.ptr && etnaviv_obj->userptr.ro &&
+	    context->global->version == ETNAVIV_IOMMU_V1)
+		return -ENODEV;
 
 	mutex_lock(&context->lock);
 
@@ -301,7 +309,7 @@ int etnaviv_iommu_map_gem(struct etnaviv_iommu_context *context,
 
 	mapping->iova = node->start;
 	ret = etnaviv_iommu_map(context, node->start, etnaviv_obj->size, sgt,
-				ETNAVIV_PROT_READ | ETNAVIV_PROT_WRITE);
+				prot);
 
 	if (ret < 0) {
 		drm_mm_remove_node(node);
