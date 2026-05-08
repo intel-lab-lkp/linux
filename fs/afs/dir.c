@@ -9,6 +9,7 @@
 #include <linux/fs.h>
 #include <linux/namei.h>
 #include <linux/pagemap.h>
+#include <linux/string.h>
 #include <linux/swap.h>
 #include <linux/ctype.h>
 #include <linux/sched.h>
@@ -914,7 +915,7 @@ static struct dentry *afs_lookup_atsys(struct inode *dir, struct dentry *dentry)
 	struct afs_net *net = afs_i2net(dir);
 	struct dentry *ret;
 	char *buf, *p, *name;
-	int len, i;
+	int i;
 
 	_enter("");
 
@@ -935,13 +936,11 @@ static struct dentry *afs_lookup_atsys(struct inode *dir, struct dentry *dentry)
 
 	for (i = 0; i < subs->nr; i++) {
 		name = subs->subs[i];
-		len = dentry->d_name.len - 4 + strlen(name);
-		if (len >= AFSNAMEMAX) {
+		if (strscpy(p, name, AFSNAMEMAX - (p - buf)) < 0) {
 			ret = ERR_PTR(-ENAMETOOLONG);
 			goto out_s;
 		}
 
-		strcpy(p, name);
 		ret = lookup_noperm(&QSTR(buf), dentry->d_parent);
 		if (IS_ERR(ret) || d_is_positive(ret))
 			goto out_s;
