@@ -2535,7 +2535,7 @@ static void __intel_pmu_enable_all(int added, bool pmi)
 	}
 
 	wrmsrq(MSR_CORE_PERF_GLOBAL_CTRL,
-	       intel_ctrl & ~cpuc->intel_ctrl_guest_mask);
+	       intel_ctrl & ~cpuc->intel_ctrl_exclude_host_mask);
 
 	if (test_bit(INTEL_PMC_IDX_FIXED_BTS, cpuc->active_mask)) {
 		struct perf_event *event =
@@ -2733,9 +2733,9 @@ static inline void intel_set_masks(struct perf_event *event, int idx)
 	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
 
 	if (event->attr.exclude_host)
-		__set_bit(idx, (unsigned long *)&cpuc->intel_ctrl_guest_mask);
+		__set_bit(idx, (unsigned long *)&cpuc->intel_ctrl_exclude_host_mask);
 	if (event->attr.exclude_guest)
-		__set_bit(idx, (unsigned long *)&cpuc->intel_ctrl_host_mask);
+		__set_bit(idx, (unsigned long *)&cpuc->intel_ctrl_exclude_guest_mask);
 	if (event_is_checkpointed(event))
 		__set_bit(idx, (unsigned long *)&cpuc->intel_cp_status);
 }
@@ -2744,8 +2744,8 @@ static inline void intel_clear_masks(struct perf_event *event, int idx)
 {
 	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
 
-	__clear_bit(idx, (unsigned long *)&cpuc->intel_ctrl_guest_mask);
-	__clear_bit(idx, (unsigned long *)&cpuc->intel_ctrl_host_mask);
+	__clear_bit(idx, (unsigned long *)&cpuc->intel_ctrl_exclude_host_mask);
+	__clear_bit(idx, (unsigned long *)&cpuc->intel_ctrl_exclude_guest_mask);
 	__clear_bit(idx, (unsigned long *)&cpuc->intel_cp_status);
 }
 
@@ -3473,7 +3473,7 @@ static void x86_pmu_handle_guest_pebs(struct pt_regs *regs,
 				      struct perf_sample_data *data)
 {
 	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
-	u64 guest_pebs_idxs = cpuc->pebs_enabled & ~cpuc->intel_ctrl_host_mask;
+	u64 guest_pebs_idxs = cpuc->pebs_enabled & ~cpuc->intel_ctrl_exclude_guest_mask;
 	struct perf_event *event = NULL;
 	int bit;
 
@@ -5013,8 +5013,8 @@ static struct perf_guest_switch_msr *intel_guest_get_msrs(int *nr, void *data)
 	global_ctrl = (*nr)++;
 	arr[global_ctrl] = (struct perf_guest_switch_msr){
 		.msr = MSR_CORE_PERF_GLOBAL_CTRL,
-		.host = intel_ctrl & ~cpuc->intel_ctrl_guest_mask,
-		.guest = intel_ctrl & ~cpuc->intel_ctrl_host_mask & ~pebs_mask,
+		.host = intel_ctrl & ~cpuc->intel_ctrl_exclude_host_mask,
+		.guest = intel_ctrl & ~cpuc->intel_ctrl_exclude_guest_mask & ~pebs_mask,
 	};
 
 	if (!x86_pmu.ds_pebs)
@@ -5051,8 +5051,8 @@ static struct perf_guest_switch_msr *intel_guest_get_msrs(int *nr, void *data)
 	 * in the guest, and (d) _are_ excluded from counting in the host.
 	 */
 	guest_pebs_mask = pebs_mask & intel_ctrl & kvm_pmu->pebs_enable &
-			  ~cpuc->intel_ctrl_host_mask &
-			  cpuc->intel_ctrl_guest_mask;
+			  ~cpuc->intel_ctrl_exclude_guest_mask &
+			  cpuc->intel_ctrl_exclude_host_mask;
 
 	/*
 	 * Disable counters where the guest PMC is different than the host PMC
@@ -5068,7 +5068,7 @@ static struct perf_guest_switch_msr *intel_guest_get_msrs(int *nr, void *data)
 	 *        What exactly goes wrong if guest and host are using PEBS is
 	 *        unknown.
 	 */
-	if (pebs_mask & ~cpuc->intel_ctrl_guest_mask)
+	if (pebs_mask & ~cpuc->intel_ctrl_exclude_host_mask)
 		guest_pebs_mask = 0;
 
 	/*
