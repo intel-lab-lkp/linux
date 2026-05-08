@@ -180,6 +180,24 @@ static inline void dev_sync_state(struct device *dev)
 		dev->driver->sync_state(dev);
 }
 
+static inline bool dev_has_queue_sync_state(struct device *dev)
+{
+	struct device_driver *drv;
+
+	if (!dev)
+		return false;
+	drv = READ_ONCE(dev->driver);
+	if (drv && drv->queue_sync_state)
+		return true;
+	return false;
+}
+
+static inline void dev_queue_sync_state(struct device *dev)
+{
+	if (dev->driver && dev->driver->queue_sync_state)
+		dev->driver->queue_sync_state(dev);
+}
+
 int driver_add_groups(const struct device_driver *drv, const struct attribute_group **groups);
 void driver_remove_groups(const struct device_driver *drv, const struct attribute_group **groups);
 void device_driver_detach(struct device *dev);

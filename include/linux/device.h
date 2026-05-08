@@ -414,12 +414,14 @@ enum device_removable {
  * @suppliers: List of links to supplier devices.
  * @consumers: List of links to consumer devices.
  * @defer_sync: Hook to global list of devices that have deferred sync_state.
+ * @defer_sync: Hook to global list of devices scheduled for queue_sync_state.
  * @status: Driver status information.
  */
 struct dev_links_info {
 	struct list_head suppliers;
 	struct list_head consumers;
 	struct list_head defer_sync;
+	struct list_head queue_sync;
 	enum dl_dev_state status;
 };
 
