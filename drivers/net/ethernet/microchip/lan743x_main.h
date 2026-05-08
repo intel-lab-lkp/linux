@@ -8,6 +8,7 @@
 #include <linux/gpio/machine.h>
 #include <linux/i2c.h>
 #include <linux/phy.h>
+#include <linux/pcs/pcs-xpcs.h>
 #include <linux/phylink.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
@@ -1132,6 +1133,7 @@ struct lan743x_sw_nodes {
 struct lan743x_adapter {
 	struct net_device       *netdev;
 	struct mii_bus		*mdiobus;
+	struct mii_bus		*pcs_mdiobus;
 	int                     msg_enable;
 #ifdef CONFIG_PM
 	u32			wolopts;
@@ -1169,6 +1171,7 @@ struct lan743x_adapter {
 	u32			flags;
 	u32			hw_cfg;
 	phy_interface_t		phy_interface;
+	struct phylink_pcs      *xpcs;
 	struct phylink		*phylink;
 	struct phylink_config	phylink_config;
 	int			rx_tstamp_filter;
