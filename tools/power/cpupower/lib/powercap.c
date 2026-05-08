@@ -70,6 +70,27 @@ out:
 	return ret;
 }
 
+static int sysfs_set_enabled(const char *path, int mode)
+{
+	char yes_no;
+	int fd;
+	ssize_t ret;
+
+	if (mode != 0 && mode != 1)
+		return -1;
+
+	yes_no = mode ? '1' : '0';
+	fd = open(path, O_WRONLY);
+	if (-1 == fd)
+		return -1;
+	ret = write(fd, &yes_no, 1);
+	if (ret != 1) {
+		close(fd);
+		return -1;
+	}
+	return close(fd);
+}
+
 int powercap_get_enabled(int *mode)
 {
 	char path[SYSFS_PATH_MAX] = PATH_TO_POWERCAP "/intel-rapl/enabled";
@@ -77,17 +98,13 @@ int powercap_get_enabled(int *mode)
 	return sysfs_get_enabled(path, mode);
 }
 
-/*
- * TODO: implement function. Returns dummy 0 for now.
- */
 int powercap_set_enabled(int mode)
 {
-	return 0;
+	return sysfs_set_enabled(PATH_TO_RAPL "/enabled", mode);
 }
-
 /*
  * Hardcoded, because rapl is the only powercap implementation
-- * this needs to get more generic if more powercap implementations
+ * this needs to get more generic if more powercap implementations
  * should show up
  */
 int powercap_get_driver(char *driver, int buflen)
@@ -180,8 +197,18 @@ int powercap_zone_get_enabled(struct powercap_zone *zone, int *mode)
 
 int powercap_zone_set_enabled(struct powercap_zone *zone, int mode)
 {
-	/* To be done if needed */
-	return 0;
+	char path[SYSFS_PATH_MAX];
+	int ret;
+
+	if (!zone)
+		return -1;
+
+	ret = snprintf(path, sizeof(path), "%s/%s/enabled",
+		       PATH_TO_POWERCAP, zone->sys_name);
+	if (ret < 0 || ret >= (int)sizeof(path))
+		return -1;
+
+	return sysfs_set_enabled(path, mode);
 }
 
 
