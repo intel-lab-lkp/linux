@@ -974,7 +974,7 @@ struct inode *__ext4_new_inode(struct mnt_idmap *idmap,
 	struct buffer_head *inode_bitmap_bh = NULL;
 	struct buffer_head *group_desc_bh;
 	ext4_group_t ngroups, group = 0;
-	unsigned long ino = 0;
+	unsigned long bit = 0;
 	struct inode *inode;
 	struct ext4_group_desc *gdp = NULL;
 	struct ext4_inode_info *ei;
@@ -1050,7 +1050,7 @@ struct inode *__ext4_new_inode(struct mnt_idmap *idmap,
 
 	if (goal && goal <= le32_to_cpu(sbi->s_es->s_inodes_count)) {
 		group = (goal - 1) / EXT4_INODES_PER_GROUP(sb);
-		ino = (goal - 1) % EXT4_INODES_PER_GROUP(sb);
+		bit = (goal - 1) % EXT4_INODES_PER_GROUP(sb);
 		ret2 = 0;
 		goto got_group;
 	}
@@ -1071,7 +1071,7 @@ got_group:
 	 * unless we get unlucky and it turns out the group we selected
 	 * had its last inode grabbed by someone else.
 	 */
-	for (i = 0; i < ngroups; i++, ino = 0) {
+	for (i = 0; i < ngroups; i++, bit = 0) {
 		err = -EIO;
 
 		gdp = ext4_get_group_desc(sb, group, &group_desc_bh);
@@ -1105,13 +1105,13 @@ got_group:
 		    EXT4_MB_GRP_IBITMAP_CORRUPT(grp))
 			goto next_group;
 
-		ret2 = find_inode_bit(sb, group, inode_bitmap_bh, &ino);
+		ret2 = find_inode_bit(sb, group, inode_bitmap_bh, &bit);
 		if (!ret2)
 			goto next_group;
 
-		if (group == 0 && (ino + 1) < EXT4_FIRST_INO(sb)) {
+		if (group == 0 && (bit + 1) < EXT4_FIRST_INO(sb)) {
 			ext4_error(sb, "reserved inode found cleared - "
-				   "inode=%lu", ino + 1);
+				   "inode=%lu", bit + 1);
 			ext4_mark_group_bitmap_corrupted(sb, group,
 					EXT4_GROUP_INFO_IBITMAP_CORRUPT);
 			goto next_group;
@@ -1136,21 +1136,20 @@ got_group:
 			goto out;
 		}
 		ext4_lock_group(sb, group);
-		ret2 = ext4_test_and_set_bit(ino, inode_bitmap_bh->b_data);
+		ret2 = ext4_test_and_set_bit(bit, inode_bitmap_bh->b_data);
 		if (ret2) {
 			/* Someone already took the bit. Repeat the search
 			 * with lock held.
 			 */
-			ret2 = find_inode_bit(sb, group, inode_bitmap_bh, &ino);
+			ret2 = find_inode_bit(sb, group, inode_bitmap_bh, &bit);
 			if (ret2) {
-				ext4_set_bit(ino, inode_bitmap_bh->b_data);
+				ext4_set_bit(bit, inode_bitmap_bh->b_data);
 				ret2 = 0;
 			} else {
 				ret2 = 1; /* we didn't grab the inode */
 			}
 		}
 		ext4_unlock_group(sb, group);
-		ino++;		/* the inode bitmap is zero-based */
 		if (!ret2)
 			goto got; /* we grabbed the inode! */
 
@@ -1210,9 +1209,9 @@ got:
 		 * relative inode number in this group. if it is greater
 		 * we need to update the bg_itable_unused count
 		 */
-		if (ino > free)
+		if (bit >= free)
 			ext4_itable_unused_set(sb, gdp,
-					(EXT4_INODES_PER_GROUP(sb) - ino));
+					(EXT4_INODES_PER_GROUP(sb) - bit - 1));
 		if (!(sbi->s_mount_state & EXT4_FC_REPLAY))
 			up_read(&grp->alloc_sem);
 	} else {
@@ -1252,7 +1251,8 @@ got:
 						flex_group)->free_inodes);
 	}
 
-	inode->i_ino = ino + group * EXT4_INODES_PER_GROUP(sb);
+	/* the inode bitmap is zero-based */
+	inode->i_ino = bit + 1 + group * EXT4_INODES_PER_GROUP(sb);
 	/* This is the optimal IO size (for stat), not the fs block size */
 	inode->i_blocks = 0;
 	simple_inode_init_ts(inode);
