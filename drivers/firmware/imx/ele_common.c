@@ -110,7 +110,7 @@ int ele_msg_send(struct se_if_device_ctx *dev_ctx,
 	 */
 	if (header->size << 2 != tx_msg_sz) {
 		dev_err(dev_ctx->priv->dev,
-			"%s: User buf hdr: 0x%x, sz mismatced with input-sz (%d != %d).",
+			"%s: User buf hdr: 0x%x, sz mismatched with input-sz (%d != %d).",
 			dev_ctx->devname, *(u32 *)header, header->size << 2, tx_msg_sz);
 		return -EINVAL;
 	}
