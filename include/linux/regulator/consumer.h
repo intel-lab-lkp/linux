@@ -691,6 +691,15 @@ struct regulator *__must_check devm_of_regulator_get_optional(struct device *dev
 							      const char *id);
 int __must_check of_regulator_bulk_get_all(struct device *dev, struct device_node *np,
 					   struct regulator_bulk_data **consumers);
+struct regulator *__must_check devm_fwnode_regulator_get(struct device *dev,
+							 struct fwnode_handle *fwnode,
+							 const char *id);
+struct regulator *__must_check devm_fwnode_regulator_get_exclusive(struct device *dev,
+								   struct fwnode_handle *fwnode,
+								   const char *id);
+struct regulator *__must_check devm_fwnode_regulator_get_optional(struct device *dev,
+								  struct fwnode_handle *fwnode,
+								  const char *id);
 #else
 static inline struct regulator *__must_check of_regulator_get_optional(struct device *dev,
 								       struct device_node *node,
@@ -710,6 +719,27 @@ static inline int of_regulator_bulk_get_all(struct device *dev, struct device_no
 					    struct regulator_bulk_data **consumers)
 {
 	return 0;
+}
+
+static inline struct regulator *__must_check
+devm_fwnode_regulator_get(struct device *dev, struct fwnode_handle *fwnode,
+	const char *id)
+{
+	return NULL;
+}
+
+static inline struct regulator *__must_check
+devm_fwnode_regulator_get_exclusive(struct device *dev, struct fwnode_handle *fwnode,
+	const char *id)
+{
+	return NULL;
+}
+
+static inline struct regulator *__must_check
+devm_fwnode_regulator_get_optional(struct device *dev, struct fwnode_handle *fwnode,
+	const char *id)
+{
+	return NULL;
 }
 
 #endif

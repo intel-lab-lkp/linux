@@ -11,6 +11,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/regulator/driver.h>
 #include <linux/module.h>
+#include <linux/of.h>
 
 #include "internal.h"
 
@@ -803,4 +804,69 @@ struct regulator *devm_of_regulator_get_optional(struct device *dev, struct devi
 	return _devm_of_regulator_get(dev, node, id, OPTIONAL_GET);
 }
 EXPORT_SYMBOL_GPL(devm_of_regulator_get_optional);
+
+static struct regulator *_devm_fwnode_regulator_get(struct device *dev,
+						    struct fwnode_handle *fwnode,
+						    const char *id,
+						    enum regulator_get_type get_type)
+{
+	if (is_of_node(fwnode))
+		return _devm_of_regulator_get(dev, to_of_node(fwnode), id, get_type);
+
+	return ERR_PTR(-ENODEV);
+}
+
+/**
+ * devm_fwnode_regulator_get() - get resource managed regulator from firmware node
+ * @dev: device to supply
+ * @fwnode: firmware node to get regulator from
+ * @id: supply name or regulator ID.
+ *
+ * Managed of_regulator_get(). Regulators returned from this
+ * function are automatically regulator_put() on driver detach. See
+ * of_regulator_get() for more information.
+ */
+struct regulator *devm_fwnode_regulator_get(struct device *dev,
+					    struct fwnode_handle *fwnode,
+					    const char *id)
+{
+	return _devm_fwnode_regulator_get(dev, fwnode, id, NORMAL_GET);
+}
+EXPORT_SYMBOL_GPL(devm_fwnode_regulator_get);
+
+/**
+ * devm_fwnode_regulator_get_exclusive() - get resource managed regulator from firmware node
+ * @dev: device to supply
+ * @fwnode: firmware node to get regulator from
+ * @id: supply name or regulator ID.
+ *
+ * Managed of_regulator_get_exclusive(). Regulators returned from this
+ * function are automatically regulator_put() on driver detach. See
+ * of_regulator_get_exclusive() for more information.
+ */
+struct regulator *devm_fwnode_regulator_get_exclusive(struct device *dev,
+						      struct fwnode_handle *fwnode,
+						      const char *id)
+{
+	return _devm_fwnode_regulator_get(dev, fwnode, id, EXCLUSIVE_GET);
+}
+EXPORT_SYMBOL_GPL(devm_fwnode_regulator_get_exclusive);
+
+/**
+ * devm_fwnode_regulator_get_optional() - get resource managed regulator from firmware node
+ * @dev: device to supply
+ * @fwnode: firmware node to get regulator from
+ * @id: supply name or regulator ID.
+ *
+ * Managed of_regulator_get_optional(). Regulators returned from this
+ * function are automatically regulator_put() on driver detach. See
+ * of_regulator_get_optional() for more information.
+ */
+struct regulator *devm_fwnode_regulator_get_optional(struct device *dev,
+						     struct fwnode_handle *fwnode,
+						     const char *id)
+{
+	return _devm_fwnode_regulator_get(dev, fwnode, id, OPTIONAL_GET);
+}
+EXPORT_SYMBOL_GPL(devm_fwnode_regulator_get_optional);
 #endif
