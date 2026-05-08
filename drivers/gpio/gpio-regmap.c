@@ -203,6 +203,9 @@ static int gpio_regmap_set_direction(struct gpio_chip *chip,
 	unsigned int base, val, reg, mask;
 	int invert, ret;
 
+	if (gpio_regmap_fixed_direction(gpio, offset))
+		return 0;
+
 	if (gpio->reg_dir_out_base) {
 		base = gpio_regmap_addr(gpio->reg_dir_out_base);
 		invert = 0;
