@@ -429,6 +429,7 @@ static unsigned long convert_to_physical(struct mc_priv *priv,
 static void handle_error(struct mc_priv  *priv, struct ecc_status *stat,
 			 int ctl_num, int *error_data)
 {
+	enum hw_event_mc_err_type type;
 	union ecc_error_info pinf;
 	struct mem_ctl_info *mci;
 	unsigned long pa;
@@ -440,29 +441,26 @@ static void handle_error(struct mc_priv  *priv, struct ecc_status *stat,
 
 	mci = priv->mci[ctl_num];
 
-	if (stat->error_type == MC5_ERR_TYPE_CE) {
-		pinf = stat->ceinfo[stat->channel];
-		snprintf(priv->message, sizeof(priv->message),
-			 "Error type:%s Controller %d Addr at %lx\n",
-			 "CE", ctl_num, convert_to_physical(priv, pinf, ctl_num, error_data));
-
-		edac_mc_handle_error(HW_EVENT_ERR_CORRECTED, mci,
-				     1, 0, 0, 0, 0, 0, -1,
-				     priv->message, "");
-	}
-
 	if (stat->error_type == MC5_ERR_TYPE_UE) {
 		pinf = stat->ueinfo[stat->channel];
-		snprintf(priv->message, sizeof(priv->message),
-			 "Error type:%s controller %d Addr at %lx\n",
-			 "UE", ctl_num, convert_to_physical(priv, pinf, ctl_num, error_data));
+		type = HW_EVENT_ERR_UNCORRECTED;
+	} else {
+		pinf = stat->ceinfo[stat->channel];
+		type = HW_EVENT_ERR_CORRECTED;
+	}
 
-		edac_mc_handle_error(HW_EVENT_ERR_UNCORRECTED, mci,
-				     1, 0, 0, 0, 0, 0, -1,
-				     priv->message, "");
-		pa = convert_to_physical(priv, pinf, ctl_num, error_data);
-		pfn = PHYS_PFN(pa);
+	pa = convert_to_physical(priv, pinf, ctl_num, error_data);
+	pfn = PHYS_PFN(pa);
+	snprintf(priv->message, sizeof(priv->message),
+		 "Error type:%s Controller %d Addr at %lx\n",
+		 type == HW_EVENT_ERR_UNCORRECTED ? "UE" : "CE",
+		 ctl_num, pa);
 
+	edac_mc_handle_error(type, mci,
+			     1, pfn, offset_in_page(pa), 0, 0, 0, -1,
+			     priv->message, "");
+
+	if (stat->error_type == MC5_ERR_TYPE_UE) {
 		if (IS_ENABLED(CONFIG_MEMORY_FAILURE)) {
 			err = memory_failure(pfn, MF_ACTION_REQUIRED);
 			if (err)
