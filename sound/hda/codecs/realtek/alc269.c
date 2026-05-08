@@ -3550,6 +3550,16 @@ static void alc2xx_fixup_headset_mic(struct hda_codec *codec,
 		alc_update_coef_idx(codec, 0x45, 0xf<<12 | 1<<10, 5<<12);
 		spec->parse_flags |= HDA_PINCFG_HEADSET_MIC;
 		break;
+	case HDA_FIXUP_ACT_INIT:
+		/*
+		 * COEF 0x45 (CTIA combo jack mode) is not preserved across suspend.
+		 * Restore it before restarting HP JD so the headset is re-detected.
+		 */
+		if (is_s3_resume(codec) || is_s4_resume(codec)) {
+			alc_update_coef_idx(codec, 0x45, 0xf<<12 | 1<<10, 5<<12);
+			alc_combo_jack_hp_jd_restart(codec);
+		}
+		break;
 	}
 }
 
