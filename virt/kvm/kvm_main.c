@@ -1818,7 +1818,7 @@ static void kvm_invalidate_memslot(struct kvm *kvm,
 	/*
 	 * From this point no new shadow pages pointing to a deleted, or moved,
 	 * memslot will be created.  Validation of sp->gfn happens in:
-	 *	- gfn_to_hva (kvm_read_guest, gfn_to_pfn)
+	 *	- gfn_to_hva (kvm_read_guest, __kvm_faultin_pfn)
 	 *	- kvm_is_visible_gfn (mmu_check_root)
 	 */
 	kvm_arch_flush_shadow_memslot(kvm, old);
