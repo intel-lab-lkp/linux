@@ -1312,7 +1312,7 @@ static int lan743x_get_regs_len(struct net_device *dev)
 	struct lan743x_adapter *adapter = netdev_priv(dev);
 	u32 num_regs = MAX_LAN743X_ETH_COMMON_REGS;
 
-	if (adapter->is_sgmii_en)
+	if (adapter->is_pcs_en)
 		num_regs += MAX_LAN743X_ETH_SGMII_REGS;
 
 	return num_regs * sizeof(u32);
@@ -1333,7 +1333,7 @@ static void lan743x_get_regs(struct net_device *dev,
 	lan743x_common_regs(dev, p);
 	p = (u32 *)p + MAX_LAN743X_ETH_COMMON_REGS;
 
-	if (adapter->is_sgmii_en) {
+	if (adapter->is_pcs_en) {
 		lan743x_sgmii_regs(dev, p);
 		p = (u32 *)p + MAX_LAN743X_ETH_SGMII_REGS;
 	}

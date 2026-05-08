@@ -59,22 +59,22 @@ static void pci11x1x_strap_get_status(struct lan743x_adapter *adapter)
 	      hw_cfg & HW_CFG_RST_PROTECT_)) ||
 	    (strap & STRAP_READ_USE_SGMII_EN_)) {
 		if (strap & STRAP_READ_SGMII_EN_)
-			adapter->is_sgmii_en = true;
+			adapter->is_pcs_en = true;
 		else
-			adapter->is_sgmii_en = false;
+			adapter->is_pcs_en = false;
 	} else {
 		fpga_rev = lan743x_csr_read(adapter, FPGA_REV);
 		if (fpga_rev) {
 			if (fpga_rev & FPGA_SGMII_OP)
-				adapter->is_sgmii_en = true;
+				adapter->is_pcs_en = true;
 			else
-				adapter->is_sgmii_en = false;
+				adapter->is_pcs_en = false;
 		} else {
-			adapter->is_sgmii_en = false;
+			adapter->is_pcs_en = false;
 		}
 	}
 	netif_dbg(adapter, drv, adapter->netdev,
-		  "SGMII I/F %sable\n", adapter->is_sgmii_en ? "En" : "Dis");
+		  "PCS I/F %s\n", str_enable_disable(adapter->is_pcs_en));
 }
 
 static bool is_pci11x1x_chip(struct lan743x_adapter *adapter)
@@ -1361,7 +1361,7 @@ static void lan743x_phy_interface_select(struct lan743x_adapter *adapter)
 	data = lan743x_csr_read(adapter, MAC_CR);
 	id_rev = adapter->csr.id_rev & ID_REV_ID_MASK_;
 
-	if (adapter->is_pci11x1x && adapter->is_sgmii_en)
+	if (adapter->is_pci11x1x && adapter->is_pcs_en)
 		adapter->phy_interface = PHY_INTERFACE_MODE_SGMII;
 	else if (id_rev == ID_REV_ID_LAN7430_)
 		adapter->phy_interface = PHY_INTERFACE_MODE_GMII;
@@ -3515,7 +3515,7 @@ static int lan743x_hardware_init(struct lan743x_adapter *adapter,
 		mutex_init(&adapter->sgmii_rw_lock);
 		pci11x1x_set_rfe_rd_fifo_threshold(adapter);
 		sgmii_ctl = lan743x_csr_read(adapter, SGMII_CTL);
-		if (adapter->is_sgmii_en) {
+		if (adapter->is_pcs_en) {
 			sgmii_ctl |= SGMII_CTL_SGMII_ENABLE_;
 			sgmii_ctl &= ~SGMII_CTL_SGMII_POWER_DN_;
 		} else {
@@ -3580,7 +3580,7 @@ static int lan743x_mdiobus_init(struct lan743x_adapter *adapter)
 
 	adapter->mdiobus->priv = (void *)adapter;
 	if (adapter->is_pci11x1x) {
-		if (adapter->is_sgmii_en) {
+		if (adapter->is_pcs_en) {
 			netif_dbg(adapter, drv, adapter->netdev,
 				  "SGMII operation\n");
 			adapter->mdiobus->read = lan743x_mdiobus_read_c22;
