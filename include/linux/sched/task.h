@@ -131,18 +131,24 @@ static inline void put_task_struct(struct task_struct *t)
 		return;
 
 	/*
-	 * Under PREEMPT_RT, we can't call __put_task_struct
-	 * in atomic context because it will indirectly
-	 * acquire sleeping locks. The same is true if the
-	 * current process has a mutex enqueued (blocked on
-	 * a PI chain).
+	 * Delay __put_task_struct() for one grace period so
+	 * that tryget_task_struct() may be used for one
+	 * grace period after any call to put_task_struct().
 	 *
-	 * In !RT, it is always safe to call __put_task_struct().
-	 * Though, in order to simplify the code, resort to the
-	 * deferred call too.
+	 * This also has the benefit of making it legal to
+	 * call put_task_struct() in atomic context. We
+	 * can't do that under PREEMPT_RT because it will
+	 * indirectly acquire sleeping locks. The same is
+	 * true if the current process has a mutex enqueued
+	 * (blocked on a PI chain).
 	 *
 	 * call_rcu() will schedule __put_task_struct_rcu_cb()
 	 * to be called in process context.
+	 *
+	 * In !RT, it is safe to call __put_task_struct()
+	 * from atomic context, but we still need to delay
+	 * cleanup for a grace period to accommodate
+	 * tryget_task_struct() callers.
 	 *
 	 * __put_task_struct() is called when
 	 * refcount_dec_and_test(&t->usage) succeeds.
@@ -164,7 +170,7 @@ DEFINE_FREE(put_task, struct task_struct *, if (_T) put_task_struct(_T))
 static inline void put_task_struct_many(struct task_struct *t, int nr)
 {
 	if (refcount_sub_and_test(nr, &t->usage))
-		__put_task_struct(t);
+		call_rcu(&t->rcu, __put_task_struct_rcu_cb);
 }
 
 void put_task_struct_rcu_user(struct task_struct *task);
