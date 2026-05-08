@@ -949,9 +949,7 @@ unbind:
 	kfree(pos);
 }
 
-static const struct class thermal_class = {
-	.name = "thermal",
-};
+static struct class *thermal_class;
 static bool thermal_class_unavailable __ro_after_init = true;
 
 static inline
@@ -1078,7 +1076,7 @@ __thermal_cooling_device_register(struct device_node *np,
 	cdev->np = np;
 	cdev->ops = ops;
 	cdev->updated = false;
-	cdev->device.class = &thermal_class;
+	cdev->device.class = thermal_class;
 	cdev->device.release = thermal_cdev_release;
 	cdev->devdata = devdata;
 
@@ -1574,7 +1572,7 @@ thermal_zone_device_register_with_trips(const char *type,
 	if (!tz->ops.critical)
 		tz->ops.critical = thermal_zone_device_critical;
 
-	tz->device.class = &thermal_class;
+	tz->device.class = thermal_class;
 	tz->device.release = thermal_zone_device_release;
 	tz->devdata = devdata;
 	tz->num_trips = num_trips;
@@ -1898,15 +1896,18 @@ static int __init thermal_init(void)
 	if (result)
 		goto destroy_workqueue;
 
-	result = class_register(&thermal_class);
-	if (result)
+	thermal_class = class_create("thermal");
+	if (IS_ERR(thermal_class)) {
+		result = PTR_ERR(thermal_class);
 		goto unregister_governors;
+	}
 
 	thermal_class_unavailable = false;
 
 	return 0;
 
 unregister_governors:
+	thermal_class = NULL;
 	thermal_unregister_governors();
 destroy_workqueue:
 	destroy_workqueue(thermal_wq);
