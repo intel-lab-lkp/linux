@@ -12,6 +12,7 @@
 #include <drm/drm_cache.h>
 #include <drm/drm_debugfs.h>
 #include <drm/drm_file.h>
+#include <drm/drm_prime.h>
 #include <drm/drm_utils.h>
 
 #include "ivpu_drv.h"
@@ -247,6 +248,33 @@ fail_detach:
 	dma_buf_put(dma_buf);
 
 	return ERR_PTR(ret);
+}
+
+int ivpu_gem_prime_handle_to_fd(struct drm_device *dev, struct drm_file *file_priv,
+				u32 handle, u32 flags, int *prime_fd)
+{
+	struct ivpu_device *vdev = to_ivpu_device(dev);
+	struct dma_buf *dmabuf;
+	int fd;
+
+	dmabuf = drm_gem_prime_handle_to_dmabuf(dev, file_priv, handle, flags);
+	if (IS_ERR(dmabuf))
+		return PTR_ERR(dmabuf);
+
+	if (ivpu_gem_is_userptr_dma_buf(dmabuf)) {
+		ivpu_dbg(vdev, IOCTL, "Exporting userptr BO is not allowed\n");
+		dma_buf_put(dmabuf);
+		return -EINVAL;
+	}
+
+	fd = dma_buf_fd(dmabuf, flags);
+	if (fd < 0) {
+		dma_buf_put(dmabuf);
+		return fd;
+	}
+
+	*prime_fd = fd;
+	return 0;
 }
 
 static struct ivpu_bo *ivpu_bo_alloc(struct ivpu_device *vdev, u64 size, u32 flags)

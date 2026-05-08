@@ -61,6 +61,11 @@ static const struct dma_buf_ops ivpu_gem_userptr_dmabuf_ops = {
 	.release = ivpu_gem_userptr_dmabuf_release,
 };
 
+bool ivpu_gem_is_userptr_dma_buf(struct dma_buf *dma_buf)
+{
+	return dma_buf->ops == &ivpu_gem_userptr_dmabuf_ops;
+}
+
 static struct dma_buf *
 ivpu_create_userptr_dmabuf(struct ivpu_device *vdev, void __user *user_ptr,
 			   size_t size, uint32_t flags)
