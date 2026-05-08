@@ -427,7 +427,10 @@ static void vli_mult(u64 *result, const u64 *left, const u64 *right,
 			product = mul_64_64(left[i], right[k - i]);
 
 			r01 = add_128_128(r01, product);
-			r2 += (r01.m_high < product.m_high);
+			if (r01.m_high != product.m_high)
+				r2 += (r01.m_high < product.m_high);
+			else
+				r2 += (r01.m_low < product.m_low);
 		}
 
 		result[k] = r01.m_low;
@@ -488,7 +491,10 @@ static void vli_square(u64 *result, const u64 *left, unsigned int ndigits)
 			}
 
 			r01 = add_128_128(r01, product);
-			r2 += (r01.m_high < product.m_high);
+			if (r01.m_high != product.m_high)
+				r2 += (r01.m_high < product.m_high);
+			else
+				r2 += (r01.m_low < product.m_low);
 		}
 
 		result[k] = r01.m_low;
