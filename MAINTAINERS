@@ -24803,7 +24803,7 @@ F:	include/linux/property.h
 SOFTWARE RAID (Multiple Disks) SUPPORT
 M:	Song Liu <song@kernel.org>
 M:	Yu Kuai <yukuai@fnnas.com>
-R:	Li Nan <linan122@huawei.com>
+R:	Li Nan <magiclinan@didiglobal.com>
 R:	Xiao Ni <xiao@kernel.org>
 L:	linux-raid@vger.kernel.org
 S:	Supported
