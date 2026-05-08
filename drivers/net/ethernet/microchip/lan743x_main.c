@@ -62,6 +62,12 @@ static void pci11x1x_strap_get_status(struct lan743x_adapter *adapter)
 			adapter->is_pcs_en = true;
 		else
 			adapter->is_pcs_en = false;
+
+		if ((strap & STRAP_SFP_USE_EN_) && (strap & STRAP_SFP_EN_))
+			adapter->is_sfp_support_en = true;
+		else
+			adapter->is_sfp_support_en = false;
+
 	} else {
 		fpga_rev = lan743x_csr_read(adapter, FPGA_REV);
 		if (fpga_rev) {
@@ -73,8 +79,17 @@ static void pci11x1x_strap_get_status(struct lan743x_adapter *adapter)
 			adapter->is_pcs_en = false;
 		}
 	}
+
+	if (adapter->is_pci11x1x && !adapter->is_pcs_en &&
+	    adapter->is_sfp_support_en) {
+		netif_err(adapter, drv, adapter->netdev,
+			  "Invalid EEPROM configuration: SFP_EN strap specified without SGMII_EN strap\n");
+	}
+
 	netif_dbg(adapter, drv, adapter->netdev,
 		  "PCS I/F %s\n", str_enable_disable(adapter->is_pcs_en));
+	netif_dbg(adapter, drv, adapter->netdev,
+		  "SFP support %s\n", str_enable_disable(adapter->is_sfp_support_en));
 }
 
 static bool is_pci11x1x_chip(struct lan743x_adapter *adapter)
@@ -3665,6 +3680,7 @@ static int lan743x_pcidev_probe(struct pci_dev *pdev,
 			      NETIF_MSG_LINK | NETIF_MSG_IFUP |
 			      NETIF_MSG_IFDOWN | NETIF_MSG_TX_QUEUED;
 	netdev->max_mtu = LAN743X_MAX_FRAME_SIZE;
+	adapter->is_sfp_support_en = false;
 
 	of_get_mac_address(pdev->dev.of_node, adapter->mac_address);
 
