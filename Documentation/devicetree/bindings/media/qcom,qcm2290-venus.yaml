@@ -57,7 +57,10 @@ properties:
     type: object
 
 required:
+  - clocks
+  - clock-names
   - compatible
+  - power-domains
   - power-domain-names
   - iommus
 

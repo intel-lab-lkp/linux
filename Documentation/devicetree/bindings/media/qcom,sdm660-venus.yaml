@@ -96,8 +96,11 @@ properties:
     additionalProperties: false
 
 required:
+  - clocks
+  - clock-names
   - compatible
   - iommus
+  - power-domains
   - video-decoder
   - video-encoder
 

@@ -68,11 +68,14 @@ properties:
       - const: vcodec0_core
 
 required:
+  - clocks
+  - clock-names
   - compatible
   - dma-coherent
   - interconnects
   - interconnect-names
   - iommus
+  - power-domains
   - power-domain-names
   - resets
   - reset-names

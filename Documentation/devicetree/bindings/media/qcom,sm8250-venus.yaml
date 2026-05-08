@@ -90,11 +90,14 @@ properties:
     additionalProperties: false
 
 required:
+  - clocks
+  - clock-names
   - compatible
   - power-domain-names
   - interconnects
   - interconnect-names
   - iommus
+  - power-domains
   - resets
   - reset-names
 
