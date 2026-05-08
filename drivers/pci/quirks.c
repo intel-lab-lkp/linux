@@ -5583,6 +5583,19 @@ static void quirk_intel_qat_vf_cap(struct pci_dev *pdev)
 DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x443, quirk_intel_qat_vf_cap);
 
 /*
+ * Some devices incorrectly advertise NoSoftRst+ (suggesting PM reset won't
+ * work), but PM reset via D3hot->D0 transition actually works fine. Force
+ * PM reset for these devices to provide working reset capability.
+ */
+static void quirk_force_pm_reset(struct pci_dev *dev)
+{
+	dev->dev_flags |= PCI_DEV_FLAGS_FORCE_PM_RESET;
+}
+DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_QCOM, 0x1103, quirk_force_pm_reset); /* ath11k */
+DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_QCOM, 0x1107, quirk_force_pm_reset); /* ath12k */
+DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_QCOM, 0x0308, quirk_force_pm_reset); /* SDX62/SDX65 */
+
+/*
  * FLR may cause the following to devices to hang:
  *
  * AMD Starship/Matisse HD Audio Controller 0x1487

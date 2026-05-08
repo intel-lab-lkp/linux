@@ -4438,6 +4438,10 @@ done:
  * cooldown period, which for the D0->D3hot and D3hot->D0 transitions is 10 ms
  * by default (i.e. unless the @dev's d3hot_delay field has a different value).
  * Moreover, only devices in D0 can be reset by this function.
+ *
+ * Some devices incorrectly advertise PCI_PM_CTRL_NO_SOFT_RESET but PM reset
+ * actually works. For such devices, PCI_DEV_FLAGS_FORCE_PM_RESET can be set
+ * via quirk to bypass the NO_SOFT_RESET check and enable PM reset.
  */
 static int pci_pm_reset(struct pci_dev *dev, bool probe)
 {
@@ -4447,9 +4451,11 @@ static int pci_pm_reset(struct pci_dev *dev, bool probe)
 	if (!dev->pm_cap || dev->dev_flags & PCI_DEV_FLAGS_NO_PM_RESET)
 		return -ENOTTY;
 
-	pci_read_config_word(dev, dev->pm_cap + PCI_PM_CTRL, &csr);
-	if (csr & PCI_PM_CTRL_NO_SOFT_RESET)
-		return -ENOTTY;
+	if (!(dev->dev_flags & PCI_DEV_FLAGS_FORCE_PM_RESET)) {
+		pci_read_config_word(dev, dev->pm_cap + PCI_PM_CTRL, &csr);
+		if (csr & PCI_PM_CTRL_NO_SOFT_RESET)
+			return -ENOTTY;
+	}
 
 	if (probe)
 		return 0;
