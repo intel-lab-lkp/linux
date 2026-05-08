@@ -1046,14 +1046,14 @@ static int dualpi2_dump_stats(struct Qdisc *sch, struct gnet_dump *d)
 	struct dualpi2_sched_data *q = qdisc_priv(sch);
 	struct tc_dualpi2_xstats st = {
 		.prob			= READ_ONCE(q->pi2_prob),
-		.packets_in_c		= q->packets_in_c,
-		.packets_in_l		= q->packets_in_l,
-		.maxq			= q->maxq,
-		.ecn_mark		= q->ecn_mark,
-		.credit			= q->c_protection_credit,
-		.step_marks		= q->step_marks,
-		.memory_used		= q->memory_used,
-		.max_memory_used	= q->max_memory_used,
+		.packets_in_c		= READ_ONCE(q->packets_in_c),
+		.packets_in_l		= READ_ONCE(q->packets_in_l),
+		.maxq			= READ_ONCE(q->maxq),
+		.ecn_mark		= READ_ONCE(q->ecn_mark),
+		.credit                 = q->c_protection_credit,
+		.step_marks		= READ_ONCE(q->step_marks),
+		.memory_used		= READ_ONCE(q->memory_used),
+		.max_memory_used	= READ_ONCE(q->max_memory_used),
 		.memory_limit		= q->memory_limit,
 	};
 	u64 qc, ql;
