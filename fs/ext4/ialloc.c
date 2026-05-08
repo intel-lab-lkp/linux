@@ -1135,7 +1135,25 @@ got_group:
 			ext4_std_error(sb, err);
 			goto out;
 		}
+
+		BUFFER_TRACE(group_desc_bh, "get_write_access");
+		err = ext4_journal_get_write_access(handle, sb, group_desc_bh,
+						    EXT4_JTR_NONE);
+		if (err) {
+			ext4_std_error(sb, err);
+			goto out;
+		}
+
+		/* We may have to initialize the block bitmap if it isn't already */
+		err = ext4_might_init_block_bitmap(handle, sb, group, gdp);
+		if (err)
+			goto out;
+
+		if (ext4_has_group_desc_csum(sb) &&
+		    !(sbi->s_mount_state & EXT4_FC_REPLAY))
+			down_read(&grp->alloc_sem);
 		ext4_lock_group(sb, group);
+
 		ret2 = ext4_test_and_set_bit(bit, inode_bitmap_bh->b_data);
 		if (ret2) {
 			/* Someone already took the bit. Repeat the search
@@ -1147,9 +1165,54 @@ got_group:
 				ret2 = 0;
 			} else {
 				ret2 = 1; /* we didn't grab the inode */
+				goto unlock_group;
 			}
 		}
+
+		/* Update the relevant bg descriptor fields */
+		ext4_free_inodes_set(sb, gdp,
+				     ext4_free_inodes_count(sb, gdp) - 1);
+		if (S_ISDIR(mode)) {
+			ext4_used_dirs_set(sb, gdp,
+					   ext4_used_dirs_count(sb, gdp) + 1);
+			if (sbi->s_log_groups_per_flex) {
+				ext4_group_t f = ext4_flex_group(sbi, group);
+				atomic_inc(&sbi_array_rcu_deref(sbi, s_flex_groups,
+								f)->used_dirs);
+			}
+		}
+
+		if (ext4_has_group_desc_csum(sb)) {
+			bool fast_crc = true;
+			int free = EXT4_INODES_PER_GROUP(sb) -
+					ext4_itable_unused_count(sb, gdp);
+
+			if (gdp->bg_flags & cpu_to_le16(EXT4_BG_INODE_UNINIT)) {
+				gdp->bg_flags &= cpu_to_le16(~EXT4_BG_INODE_UNINIT);
+				free = 0;
+				/* Incremental CRC needs a valid csum baseline */
+				fast_crc = false;
+			}
+			/*
+			 * Check the relative inode number against the
+			 * last used relative inode number in this group.
+			 * If it is greater we need to update the
+			 * bg_itable_unused count.
+			 */
+			if (bit >= free)
+				ext4_itable_unused_set(sb, gdp,
+					EXT4_INODES_PER_GROUP(sb) - bit - 1);
+			if (fast_crc)
+				ext4_inode_bitmap_csum_set_fast(sb, gdp, bit);
+			else
+				ext4_inode_bitmap_csum_set(sb, gdp, inode_bitmap_bh);
+			ext4_group_desc_csum_set(sb, group, gdp);
+		}
+unlock_group:
 		ext4_unlock_group(sb, group);
+		if (ext4_has_group_desc_csum(sb) &&
+		    !(sbi->s_mount_state & EXT4_FC_REPLAY))
+			up_read(&grp->alloc_sem);
 		if (!ret2)
 			goto got; /* we grabbed the inode! */
 
@@ -1167,72 +1230,6 @@ got:
 		ext4_std_error(sb, err);
 		goto out;
 	}
-
-	BUFFER_TRACE(group_desc_bh, "get_write_access");
-	err = ext4_journal_get_write_access(handle, sb, group_desc_bh,
-					    EXT4_JTR_NONE);
-	if (err) {
-		ext4_std_error(sb, err);
-		goto out;
-	}
-
-	/* We may have to initialize the block bitmap if it isn't already */
-	err = ext4_might_init_block_bitmap(handle, sb, group, gdp);
-	if (err)
-		goto out;
-
-	/* Update the relevant bg descriptor fields */
-	if (ext4_has_group_desc_csum(sb)) {
-		int free;
-		struct ext4_group_info *grp = NULL;
-
-		if (!(sbi->s_mount_state & EXT4_FC_REPLAY)) {
-			grp = ext4_get_group_info(sb, group);
-			if (!grp) {
-				err = -EFSCORRUPTED;
-				goto out;
-			}
-			down_read(&grp->alloc_sem); /*
-						     * protect vs itable
-						     * lazyinit
-						     */
-		}
-		ext4_lock_group(sb, group); /* while we modify the bg desc */
-		free = EXT4_INODES_PER_GROUP(sb) -
-			ext4_itable_unused_count(sb, gdp);
-		if (gdp->bg_flags & cpu_to_le16(EXT4_BG_INODE_UNINIT)) {
-			gdp->bg_flags &= cpu_to_le16(~EXT4_BG_INODE_UNINIT);
-			free = 0;
-		}
-		/*
-		 * Check the relative inode number against the last used
-		 * relative inode number in this group. if it is greater
-		 * we need to update the bg_itable_unused count
-		 */
-		if (bit >= free)
-			ext4_itable_unused_set(sb, gdp,
-					(EXT4_INODES_PER_GROUP(sb) - bit - 1));
-		if (!(sbi->s_mount_state & EXT4_FC_REPLAY))
-			up_read(&grp->alloc_sem);
-	} else {
-		ext4_lock_group(sb, group);
-	}
-
-	ext4_free_inodes_set(sb, gdp, ext4_free_inodes_count(sb, gdp) - 1);
-	if (S_ISDIR(mode)) {
-		ext4_used_dirs_set(sb, gdp, ext4_used_dirs_count(sb, gdp) + 1);
-		if (sbi->s_log_groups_per_flex) {
-			ext4_group_t f = ext4_flex_group(sbi, group);
-
-			atomic_inc(&sbi_array_rcu_deref(sbi, s_flex_groups,
-							f)->used_dirs);
-		}
-	}
-	if (ext4_has_group_desc_csum(sb)) {
-		ext4_inode_bitmap_csum_set(sb, gdp, inode_bitmap_bh);
-		ext4_group_desc_csum_set(sb, group, gdp);
-	}
-	ext4_unlock_group(sb, group);
 
 	BUFFER_TRACE(group_desc_bh, "call ext4_handle_dirty_metadata");
 	err = ext4_handle_dirty_metadata(handle, NULL, group_desc_bh);
