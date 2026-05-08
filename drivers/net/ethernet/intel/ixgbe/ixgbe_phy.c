@@ -1090,6 +1090,26 @@ int ixgbe_mii_bus_init(struct ixgbe_hw *hw)
 }
 
 /**
+ * ixgbe_restart_auto_neg - restart PHY autonegotiation
+ * @hw: pointer to hardware structure
+ *
+ * Sets the restart autoneg bit in MDIO_CTRL1 to trigger a new
+ * autonegotiation cycle.
+ **/
+static void ixgbe_restart_auto_neg(struct ixgbe_hw *hw)
+{
+	u16 autoneg_reg;
+	int status;
+
+	status = hw->phy.ops.read_reg(hw, MDIO_CTRL1, MDIO_MMD_AN,
+				      &autoneg_reg);
+	if (status)
+		return;
+	autoneg_reg |= MDIO_AN_CTRL1_RESTART;
+	hw->phy.ops.write_reg(hw, MDIO_CTRL1, MDIO_MMD_AN, autoneg_reg);
+}
+
+/**
  *  ixgbe_setup_phy_link_generic - Set and restart autoneg
  *  @hw: pointer to hardware structure
  *
@@ -1156,13 +1176,7 @@ int ixgbe_setup_phy_link_generic(struct ixgbe_hw *hw)
 		return 0;
 
 	/* Restart PHY autonegotiation and wait for completion */
-	hw->phy.ops.read_reg(hw, MDIO_CTRL1,
-			     MDIO_MMD_AN, &autoneg_reg);
-
-	autoneg_reg |= MDIO_AN_CTRL1_RESTART;
-
-	hw->phy.ops.write_reg(hw, MDIO_CTRL1,
-			      MDIO_MMD_AN, autoneg_reg);
+	ixgbe_restart_auto_neg(hw);
 
 	return status;
 }
@@ -1386,13 +1400,7 @@ int ixgbe_setup_phy_link_tnx(struct ixgbe_hw *hw)
 		return 0;
 
 	/* Restart PHY autonegotiation and wait for completion */
-	hw->phy.ops.read_reg(hw, MDIO_CTRL1,
-			     MDIO_MMD_AN, &autoneg_reg);
-
-	autoneg_reg |= MDIO_AN_CTRL1_RESTART;
-
-	hw->phy.ops.write_reg(hw, MDIO_CTRL1,
-			      MDIO_MMD_AN, autoneg_reg);
+	ixgbe_restart_auto_neg(hw);
 	return 0;
 }
 
