@@ -174,6 +174,7 @@ struct grcan_registers {
 #define GRCAN_IRQ_DEFAULT (GRCAN_IRQ_RX | GRCAN_IRQ_TX | GRCAN_IRQ_ERRORS)
 
 #define GRCAN_MSG_SIZE		16
+#define GRCAN_CLASSIC_DATA_SIZE 8
 
 #define GRCAN_MSG_IDE		0x80000000
 #define GRCAN_MSG_RTR		0x40000000
@@ -194,6 +195,10 @@ struct grcan_registers {
 #define GRCAN_MSG_OR		0x00000004
 #define GRCAN_MSG_OFF		0x00000002
 #define GRCAN_MSG_PASS		0x00000001
+
+#define GRCAN_MSG_EID_MASK      GENMASK(28, 0)
+#define GRCAN_MSG_BID_MASK      GENMASK(28, 18)
+#define GRCAN_MSG_DLC_MASK      GENMASK(31, 28)
 
 #define GRCAN_BUFFER_ALIGNMENT		1024
 #define GRCAN_DEFAULT_BUFFER_SIZE	1024
@@ -226,6 +231,9 @@ struct grcan_registers {
 #define GRCANFD_FDBTR_PS1_BIT 10
 #define GRCANFD_FDBTR_PS2_BIT 5
 #define GRCANFD_FDBTR_SJW_BIT 0
+
+#define GRCAN_TX_BRS  BIT(25)
+#define GRCAN_TX_FDF  BIT(26)
 
 /* Hardware capabilities */
 struct grcan_hwcap {
@@ -432,6 +440,12 @@ static inline struct grcan_msg_header *
 grcan_msg_header_at(struct grcan_dma_buffer *dbuf, u32 offset)
 {
 	return (struct grcan_msg_header *)((u8 *)dbuf->buf + offset);
+}
+
+static inline struct grcan_msg_fragment *
+grcan_msg_frag_at(struct grcan_dma_buffer *dbuf, u32 offset)
+{
+	return (struct grcan_msg_fragment *)((u8 *)dbuf->buf + offset);
 }
 
 /* Configuration parameters that can be set via module parameters */
@@ -1226,6 +1240,14 @@ static void grcan_transmit_catch_up(struct net_device *dev)
 	spin_unlock_irqrestore(&priv->lock, flags);
 }
 
+static int grcan_numbds(int len)
+{
+	if (len <= GRCAN_CLASSIC_DATA_SIZE)
+		return 1;
+
+	return 1 + DIV_ROUND_UP(len - GRCAN_CLASSIC_DATA_SIZE, GRCAN_MSG_SIZE);
+}
+
 static int grcan_receive(struct net_device *dev, int budget)
 {
 	struct grcan_priv *priv = netdev_priv(dev);
@@ -1412,15 +1434,24 @@ static netdev_tx_t grcan_start_xmit(struct sk_buff *skb,
 				    struct net_device *dev)
 {
 	struct grcan_priv *priv = netdev_priv(dev);
-	struct grcan_registers __iomem *regs = priv->regs;
+	struct grcan_registers __iomem *regs;
+	u32 eff, rtr, dlc, tmp, err, can_id;
 	struct grcan_dma *dma = &priv->dma;
-	struct can_frame *cf = (struct can_frame *)skb->data;
-	struct grcan_msg_header *hdr;
+	u32 bds, copy_len, payload_offset;
 	u32 id, txwr, txrd, space, txctrl;
-	int slotindex;
-	u32 rtr, eff, dlc, tmp, err;
+	struct grcan_msg_fragment *frag;
+	struct grcan_msg_header *hdr;
+	struct canfd_frame *cfd;
+	struct can_frame *cf;
 	unsigned long flags;
-	u32 oneshotmode = priv->can.ctrlmode & CAN_CTRLMODE_ONE_SHOT;
+	u32 oneshotmode;
+	int slotindex;
+	u8 *payload;
+	u8 len;
+	int i;
+
+	regs = priv->regs;
+	oneshotmode = priv->can.ctrlmode & CAN_CTRLMODE_ONE_SHOT;
 
 	if (can_dev_dropped_skb(dev, skb))
 		return NETDEV_TX_OK;
@@ -1430,6 +1461,18 @@ static netdev_tx_t grcan_start_xmit(struct sk_buff *skb,
 	 */
 	if (priv->can.ctrlmode & CAN_CTRLMODE_LISTENONLY)
 		return NETDEV_TX_BUSY;
+
+	cfd = (struct canfd_frame *)skb->data;
+	len = cfd->len;
+	can_id  = cfd->can_id;
+	payload = cfd->data;
+
+	if (can_is_canfd_skb(skb)) {
+		dlc = can_fd_len2dlc(len);
+	} else {
+		cf = (struct can_frame *)skb->data;
+		dlc = can_get_cc_dlc(cf, priv->can.ctrlmode);
+	}
 
 	/* Reads of priv->eskbp and shut-downs of the queue needs to
 	 * be atomic towards the updates to priv->eskbp and wake-ups
@@ -1441,40 +1484,55 @@ static netdev_tx_t grcan_start_xmit(struct sk_buff *skb,
 	space = grcan_txspace(dma->tx.size, txwr, priv->eskbp);
 
 	slotindex = txwr / GRCAN_MSG_SIZE;
+	bds = grcan_numbds(len);
 
-	if (unlikely(space == 1))
+	if (unlikely(space < bds)) {
 		netif_stop_queue(dev);
+		spin_unlock_irqrestore(&priv->lock, flags);
+		return NETDEV_TX_BUSY;
+	}
 
 	spin_unlock_irqrestore(&priv->lock, flags);
 	/* End of critical section*/
 
-	/* This should never happen. If circular buffer is full, the
-	 * netif_stop_queue should have been stopped already.
-	 */
-	if (unlikely(!space)) {
-		netdev_err(dev, "No buffer space, but queue is non-stopped.\n");
-		return NETDEV_TX_BUSY;
-	}
-
 	hdr = grcan_msg_header_at(&dma->tx, txwr);
 	memset(hdr, 0, sizeof(*hdr));
 
-	/* Convert and write CAN message to DMA buffer */
-	eff = cf->can_id & CAN_EFF_FLAG;
-	rtr = cf->can_id & CAN_RTR_FLAG;
-	id = cf->can_id & (eff ? CAN_EFF_MASK : CAN_SFF_MASK);
-	dlc = cf->len;
-	if (eff)
-		tmp = (id << GRCAN_MSG_EID_BIT) & GRCAN_MSG_EID;
-	else
-		tmp = (id << GRCAN_MSG_BID_BIT) & GRCAN_MSG_BID;
+	eff = can_id & CAN_EFF_FLAG;
+	rtr = can_id & CAN_RTR_FLAG;
+	id  = can_id & (eff ? CAN_EFF_MASK : CAN_SFF_MASK);
 
-	hdr->id = (eff ? GRCAN_MSG_IDE : 0) | (rtr ? GRCAN_MSG_RTR : 0) | tmp;
+	tmp = eff ? FIELD_PREP(GRCAN_MSG_EID_MASK, id)
+		  : FIELD_PREP(GRCAN_MSG_BID_MASK, id);
 
-	hdr->ctrl = ((dlc << GRCAN_MSG_DLC_BIT) & GRCAN_MSG_DLC);
+	hdr->id = (eff ? GRCAN_MSG_IDE : 0) |
+		  (rtr ? GRCAN_MSG_RTR : 0) |
+		  tmp;
 
-	if (dlc > 0)
-		memcpy(hdr->data, cf->data, min_t(u32, cf->len, CAN_MAX_DLEN));
+	hdr->ctrl = FIELD_PREP(GRCAN_MSG_DLC_MASK, dlc);
+
+	if (can_is_canfd_skb(skb)) {
+		hdr->ctrl |= GRCAN_TX_FDF;
+		if (cfd->flags & CANFD_BRS)
+			hdr->ctrl |= GRCAN_TX_BRS;
+	}
+
+	copy_len = min_t(u32, len, CAN_MAX_DLEN);
+	memcpy(hdr->data, payload, copy_len);
+	payload_offset = copy_len;
+
+	txwr = grcan_ring_add(txwr, GRCAN_MSG_SIZE, dma->tx.size);
+
+	for (i = 1; i < bds; i++) {
+		frag = grcan_msg_frag_at(&dma->tx, txwr);
+
+		memset(frag, 0, sizeof(*frag));
+		copy_len = min_t(u32, (u32)len - payload_offset, (u32)GRCAN_MSG_SIZE);
+		memcpy(frag->data, payload + payload_offset, copy_len);
+		payload_offset += copy_len;
+
+		txwr = grcan_ring_add(txwr, GRCAN_MSG_SIZE, dma->tx.size);
+	}
 
 	/* Checking that channel has not been disabled. These cases
 	 * should never happen
@@ -1516,8 +1574,7 @@ static netdev_tx_t grcan_start_xmit(struct sk_buff *skb,
 	wmb();
 
 	/* Update write pointer to start transmission */
-	grcan_write_reg(&regs->txwr,
-			grcan_ring_add(txwr, GRCAN_MSG_SIZE, dma->tx.size));
+	grcan_write_reg(&regs->txwr, txwr);
 
 	return NETDEV_TX_OK;
 }
