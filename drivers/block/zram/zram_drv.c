@@ -56,6 +56,7 @@ static size_t huge_class_size;
 static const struct block_device_operations zram_devops;
 
 static void slot_free(struct zram *zram, u32 index);
+static const struct zs_deferred_ops zram_deferred_ops;
 #define slot_dep_map(zram, index) (&(zram)->table[(index)].dep_map)
 
 static void slot_lock_init(struct zram *zram, u32 index)
@@ -1994,6 +1995,8 @@ static bool zram_meta_alloc(struct zram *zram, u64 disksize)
 	if (!huge_class_size)
 		huge_class_size = zs_huge_class_size(zram->mem_pool);
 
+	zs_pool_enable_deferred_free(zram->mem_pool, &zram_deferred_ops, zram);
+
 	for (index = 0; index < num_pages; index++)
 		slot_lock_init(zram, index);
 
@@ -2784,6 +2787,39 @@ static void zram_submit_bio(struct bio *bio)
 	}
 }
 
+static enum zs_push_ret zram_deferred_push(void *buf,
+		unsigned int count, unsigned long value)
+{
+	u32 *indices = buf;
+
+	if (count >= PAGE_SIZE / sizeof(u32))
+		return ZS_PUSH_FULL;
+	indices[count] = (u32)value;
+	if (count + 1 >= PAGE_SIZE / sizeof(u32))
+		return ZS_PUSH_FULL_QUEUED;
+	return ZS_PUSH_OK;
+}
+
+static void zram_deferred_drain(void *private, void *buf, unsigned int count)
+{
+	struct zram *zram = private;
+	u32 *indices = buf;
+	unsigned int i;
+
+	for (i = 0; i < count; i++) {
+		u32 index = indices[i];
+
+		slot_lock(zram, index);
+		slot_free(zram, index);
+		slot_unlock(zram, index);
+	}
+}
+
+static const struct zs_deferred_ops zram_deferred_ops = {
+	.push = zram_deferred_push,
+	.drain = zram_deferred_drain,
+};
+
 static void zram_slot_free_notify(struct block_device *bdev,
 				unsigned long index)
 {
@@ -2792,6 +2828,9 @@ static void zram_slot_free_notify(struct block_device *bdev,
 	zram = bdev->bd_disk->private_data;
 
 	atomic64_inc(&zram->stats.notify_free);
+	if (zs_free_deferred(zram->mem_pool, (unsigned long)index))
+		return;
+
 	if (!slot_trylock(zram, index)) {
 		atomic64_inc(&zram->stats.miss_free);
 		return;
