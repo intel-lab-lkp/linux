@@ -94,8 +94,6 @@ static struct adf_user_cfg_ctl_data *adf_ctl_alloc_resources(unsigned long arg)
 	struct adf_user_cfg_ctl_data *cfg_data;
 
 	cfg_data = memdup_user((void __user *)arg, sizeof(*cfg_data));
-	if (IS_ERR(cfg_data))
-		pr_err("QAT: failed to copy from user cfg_data.\n");
 	return cfg_data;
 }
 
@@ -139,8 +137,6 @@ static int adf_copy_key_value_data(struct adf_accel_dev *accel_dev,
 	for (i = 0; section_head && i < ADF_CFG_MAX_SECTION; i++) {
 		if (copy_from_user(&section, (void __user *)section_head,
 				   sizeof(*section_head))) {
-			dev_err(&GET_DEV(accel_dev),
-				"failed to copy section info\n");
 			goto out_err;
 		}
 
@@ -155,8 +151,6 @@ static int adf_copy_key_value_data(struct adf_accel_dev *accel_dev,
 		for (j = 0; params_head && j < ADF_CFG_MAX_KEY_VAL; j++) {
 			if (copy_from_user(&key_val, (void __user *)params_head,
 					   sizeof(key_val))) {
-				dev_err(&GET_DEV(accel_dev),
-					"Failed to copy keyvalue.\n");
 				goto out_err;
 			}
 			if (adf_add_key_value_data(accel_dev, section.name,
@@ -335,7 +329,6 @@ static int adf_ctl_ioctl_get_status(struct file *fp, unsigned int cmd,
 
 	if (copy_from_user(&dev_info, (void __user *)arg,
 			   sizeof(struct adf_dev_status_info))) {
-		pr_err("QAT: failed to copy from user.\n");
 		return -EFAULT;
 	}
 
@@ -359,7 +352,6 @@ static int adf_ctl_ioctl_get_status(struct file *fp, unsigned int cmd,
 
 	if (copy_to_user((void __user *)arg, &dev_info,
 			 sizeof(struct adf_dev_status_info))) {
-		dev_err(&GET_DEV(accel_dev), "failed to copy status.\n");
 		return -EFAULT;
 	}
 	return 0;
@@ -393,8 +385,7 @@ static long adf_ctl_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 		ret = adf_ctl_ioctl_get_status(fp, cmd, arg);
 		break;
 	default:
-		pr_err_ratelimited("QAT: Invalid ioctl %d\n", cmd);
-		ret = -EFAULT;
+		ret = -ENOTTY; /* ENOTTY is the standard POSIX error for invalid ioctls */
 		break;
 	}
 	mutex_unlock(&adf_ctl_lock);
