@@ -147,3 +147,7 @@ Additional helpers are available:
 
 - ``device_set_driver_override()`` - set or clear the override from kernel code.
 - ``device_has_driver_override()`` - check whether an override is set.
+
+Any driver, which bus has ``driver_override`` flag set, can suppress that
+behaviour by setting the ``suppress_override_attrs`` flag in their ``struct
+device_driver``. In this case the sysfs attribute will not show.

@@ -594,7 +594,7 @@ int bus_add_device(struct device *dev)
 out_subsys:
 	sysfs_remove_link(&sp->devices_kset->kobj, dev_name(dev));
 out_override:
-	if (dev->bus->driver_override)
+	if (dev->bus->driver_override && !dev->driver->suppress_override_attrs)
 		device_remove_group(dev, &driver_override_dev_group);
 out_groups:
 	device_remove_groups(dev, sp->bus->dev_groups);
@@ -653,7 +653,7 @@ void bus_remove_device(struct device *dev)
 
 	sysfs_remove_link(&dev->kobj, "subsystem");
 	sysfs_remove_link(&sp->devices_kset->kobj, dev_name(dev));
-	if (dev->bus->driver_override)
+	if (dev->bus->driver_override && !dev->driver->suppress_override_attrs)
 		device_remove_group(dev, &driver_override_dev_group);
 	device_remove_groups(dev, dev->bus->dev_groups);
 	if (klist_node_attached(&dev->p->knode_bus))
