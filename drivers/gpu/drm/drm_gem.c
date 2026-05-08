@@ -1573,11 +1573,31 @@ drm_gem_lru_remove(struct drm_gem_object *obj)
 {
 	struct drm_gem_lru *lru = obj->lru;
 
+	/*
+	 * We do the lru != NULL check without the lru->lock held, which
+	 * means we might end up with a stale lru value by the time the
+	 * lock is acquired.
+	 *
+	 * This is deemed safe because:
+	 * 1. the LRU is assumed to outlive any GEM object it was attached
+	 *    (LRUs are usually bound to a drm_device). So even if obj->lru
+	 *    has become NULL, it still point to a valid object that can
+	 *    safely be dereferenced to get the lock.
+	 *
+	 * 2. all LRUs a GEM object might be attached to must share the same
+	 *    lock (lock that's usually part of the driver-specific device
+	 *    object), so taking the lock on the 'old' LRU is equivalent
+	 *    to taking it on the new one (if any)
+	 */
 	if (!lru)
 		return;
 
 	mutex_lock(lru->lock);
-	drm_gem_lru_remove_locked(obj);
+	/* Check a second time with the lock held to make sure we're not racing
+	 * with another drm_gem_lru_remove[_locked]() call.
+	 */
+	if (obj->lru)
+		drm_gem_lru_remove_locked(obj);
 	mutex_unlock(lru->lock);
 }
 EXPORT_SYMBOL(drm_gem_lru_remove);
@@ -1660,15 +1680,17 @@ drm_gem_lru_scan(struct drm_gem_lru *lru,
 		if (!obj)
 			break;
 
-		drm_gem_lru_move_tail_locked(&still_in_lru, obj);
-
 		/*
 		 * If it's in the process of being freed, gem_object->free()
-		 * may be blocked on lock waiting to remove it.  So just
-		 * skip it.
+		 * may be blocked on lock waiting to remove it.  So just remove
+		 * it from its current LRU and skip it.
 		 */
-		if (!kref_get_unless_zero(&obj->refcount))
+		if (!kref_get_unless_zero(&obj->refcount)) {
+			drm_gem_lru_remove_locked(obj);
 			continue;
+		}
+
+		drm_gem_lru_move_tail_locked(&still_in_lru, obj);
 
 		/*
 		 * Now that we own a reference, we can drop the lock for the
