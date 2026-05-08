@@ -195,9 +195,6 @@ struct grcan_registers {
 #define GRCAN_MSG_OFF		0x00000002
 #define GRCAN_MSG_PASS		0x00000001
 
-#define GRCAN_MSG_DATA_SLOT_INDEX(i) (2 + (i) / 4)
-#define GRCAN_MSG_DATA_SHIFT(i) ((3 - (i) % 4) * 8)
-
 #define GRCAN_BUFFER_ALIGNMENT		1024
 #define GRCAN_DEFAULT_BUFFER_SIZE	1024
 #define GRCAN_VALID_TR_SIZE_MASK	0x001fffc0
@@ -242,9 +239,23 @@ struct grcan_hwcap {
 	bool fd;
 };
 
+struct grcan_msg_header {
+	u32 id;
+	u32 ctrl;
+	u8 data[CAN_MAX_DLEN];
+} __packed;
+
+struct grcan_msg_fragment {
+	u8 data[GRCAN_MSG_SIZE];
+} __packed;
+
 struct grcan_dma_buffer {
 	size_t size;
 	void *buf;
+	union {
+		struct grcan_msg_header *header;
+		struct grcan_msg_fragment *frag;
+	};
 	dma_addr_t handle;
 };
 
@@ -415,6 +426,12 @@ static inline u32 grcan_txspace(size_t txsize, u32 txwr, u32 eskbp)
 	u32 used = grcan_ring_sub(txwr, eskbp, txsize) / GRCAN_MSG_SIZE;
 
 	return slots - used;
+}
+
+static inline struct grcan_msg_header *
+grcan_msg_header_at(struct grcan_dma_buffer *dbuf, u32 offset)
+{
+	return (struct grcan_msg_header *)((u8 *)dbuf->buf + offset);
 }
 
 /* Configuration parameters that can be set via module parameters */
@@ -1215,11 +1232,11 @@ static int grcan_receive(struct net_device *dev, int budget)
 	struct grcan_registers __iomem *regs = priv->regs;
 	struct grcan_dma *dma = &priv->dma;
 	struct net_device_stats *stats = &dev->stats;
+	struct grcan_msg_header *hdr;
 	struct can_frame *cf;
 	struct sk_buff *skb;
 	u32 wr, rd, startrd;
-	u32 *slot;
-	u32 i, rtr, eff, j, shift;
+	u32 rtr, eff;
 	int work_done = 0;
 
 	rd = grcan_read_reg(&regs->rxrd);
@@ -1239,30 +1256,33 @@ static int grcan_receive(struct net_device *dev, int budget)
 			continue;
 		}
 
-		slot = dma->rx.buf + rd;
-		eff = slot[0] & GRCAN_MSG_IDE;
-		rtr = slot[0] & GRCAN_MSG_RTR;
+		hdr = grcan_msg_header_at(&dma->rx, rd);
+
+		eff = hdr->id & GRCAN_MSG_IDE;
+		rtr = hdr->id & GRCAN_MSG_RTR;
+
 		if (eff) {
-			cf->can_id = ((slot[0] & GRCAN_MSG_EID)
+			cf->can_id = ((hdr->id & GRCAN_MSG_EID)
 				      >> GRCAN_MSG_EID_BIT);
 			cf->can_id |= CAN_EFF_FLAG;
 		} else {
-			cf->can_id = ((slot[0] & GRCAN_MSG_BID)
+			cf->can_id = ((hdr->id & GRCAN_MSG_BID)
 				      >> GRCAN_MSG_BID_BIT);
 		}
-		cf->len = can_cc_dlc2len((slot[1] & GRCAN_MSG_DLC)
-					  >> GRCAN_MSG_DLC_BIT);
+
+		cf->len = can_cc_dlc2len((hdr->ctrl & GRCAN_MSG_DLC)
+					 >> GRCAN_MSG_DLC_BIT);
+
 		if (rtr) {
 			cf->can_id |= CAN_RTR_FLAG;
 		} else {
-			for (i = 0; i < cf->len; i++) {
-				j = GRCAN_MSG_DATA_SLOT_INDEX(i);
-				shift = GRCAN_MSG_DATA_SHIFT(i);
-				cf->data[i] = (u8)(slot[j] >> shift);
-			}
+			if (cf->len > 0)
+				memcpy(cf->data, hdr->data,
+				       min_t(u32, cf->len, CAN_MAX_DLEN));
 
 			stats->rx_bytes += cf->len;
 		}
+
 		stats->rx_packets++;
 
 		netif_receive_skb(skb);
@@ -1395,11 +1415,10 @@ static netdev_tx_t grcan_start_xmit(struct sk_buff *skb,
 	struct grcan_registers __iomem *regs = priv->regs;
 	struct grcan_dma *dma = &priv->dma;
 	struct can_frame *cf = (struct can_frame *)skb->data;
+	struct grcan_msg_header *hdr;
 	u32 id, txwr, txrd, space, txctrl;
 	int slotindex;
-	u32 *slot;
-	u32 i, rtr, eff, dlc, tmp, err;
-	int j, shift;
+	u32 rtr, eff, dlc, tmp, err;
 	unsigned long flags;
 	u32 oneshotmode = priv->can.ctrlmode & CAN_CTRLMODE_ONE_SHOT;
 
@@ -1422,7 +1441,6 @@ static netdev_tx_t grcan_start_xmit(struct sk_buff *skb,
 	space = grcan_txspace(dma->tx.size, txwr, priv->eskbp);
 
 	slotindex = txwr / GRCAN_MSG_SIZE;
-	slot = dma->tx.buf + txwr;
 
 	if (unlikely(space == 1))
 		netif_stop_queue(dev);
@@ -1438,6 +1456,9 @@ static netdev_tx_t grcan_start_xmit(struct sk_buff *skb,
 		return NETDEV_TX_BUSY;
 	}
 
+	hdr = grcan_msg_header_at(&dma->tx, txwr);
+	memset(hdr, 0, sizeof(*hdr));
+
 	/* Convert and write CAN message to DMA buffer */
 	eff = cf->can_id & CAN_EFF_FLAG;
 	rtr = cf->can_id & CAN_RTR_FLAG;
@@ -1447,16 +1468,13 @@ static netdev_tx_t grcan_start_xmit(struct sk_buff *skb,
 		tmp = (id << GRCAN_MSG_EID_BIT) & GRCAN_MSG_EID;
 	else
 		tmp = (id << GRCAN_MSG_BID_BIT) & GRCAN_MSG_BID;
-	slot[0] = (eff ? GRCAN_MSG_IDE : 0) | (rtr ? GRCAN_MSG_RTR : 0) | tmp;
 
-	slot[1] = ((dlc << GRCAN_MSG_DLC_BIT) & GRCAN_MSG_DLC);
-	slot[2] = 0;
-	slot[3] = 0;
-	for (i = 0; i < dlc; i++) {
-		j = GRCAN_MSG_DATA_SLOT_INDEX(i);
-		shift = GRCAN_MSG_DATA_SHIFT(i);
-		slot[j] |= cf->data[i] << shift;
-	}
+	hdr->id = (eff ? GRCAN_MSG_IDE : 0) | (rtr ? GRCAN_MSG_RTR : 0) | tmp;
+
+	hdr->ctrl = ((dlc << GRCAN_MSG_DLC_BIT) & GRCAN_MSG_DLC);
+
+	if (dlc > 0)
+		memcpy(hdr->data, cf->data, min_t(u32, cf->len, CAN_MAX_DLEN));
 
 	/* Checking that channel has not been disabled. These cases
 	 * should never happen
