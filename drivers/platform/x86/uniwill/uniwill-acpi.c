@@ -230,6 +230,17 @@
 #define KBD_TURBO_LEVEL_MASK		GENMASK(3, 2)
 #define KBD_APPLY			BIT(4)
 #define KBD_BRIGHTNESS			GENMASK(7, 5)
+/*
+ * The EC brightness field (KBD_BRIGHTNESS, bits [7:5] of EC_ADDR_KBD_STATUS)
+ * is a 3-bit value but the EC firmware only responds correctly to levels 0-4.
+ * Writing values 5-7 causes the EC to reset the backlight to level 0.
+ *
+ * This limit has only been verified on the MECHREVO WUJIE Series. If other
+ * devices with RGB keyboard support (UNIWILL_FEATURE_KBD_BACKLIGHT) are added
+ * in the future and have a different valid range, this constant should be moved
+ * into struct uniwill_device_descriptor as a per-device field.
+ */
+#define KBD_MAX_BRIGHTNESS_LEVEL	4
 
 #define EC_ADDR_FAN_CTRL		0x078E
 #define FAN3P5				BIT(1)
@@ -327,6 +338,7 @@
 #define UNIWILL_FEATURE_SECONDARY_FAN		BIT(8)
 #define UNIWILL_FEATURE_NVIDIA_CTGP_CONTROL	BIT(9)
 #define UNIWILL_FEATURE_USB_C_POWER_PRIORITY	BIT(10)
+#define UNIWILL_FEATURE_KBD_BACKLIGHT		BIT(11)
 
 enum usb_c_power_priority_options {
 	USB_C_POWER_PRIORITY_CHARGING = 0,
@@ -348,6 +360,9 @@ struct uniwill_data {
 	struct mutex led_lock;		/* Protects writes to the lightbar registers */
 	struct led_classdev_mc led_mc_cdev;
 	struct mc_subled led_mc_subled_info[LED_CHANNELS];
+	struct mutex kbd_led_lock;	/* Protects writes to keyboard LED registers */
+	struct led_classdev_mc kbd_led_mc_cdev;
+	struct mc_subled kbd_led_mc_subled_info[LED_CHANNELS];
 	struct mutex input_lock;	/* Protects input sequence during notify */
 	struct input_dev *input_device;
 	struct notifier_block nb;
@@ -538,6 +553,10 @@ static bool uniwill_writeable_reg(struct device *dev, unsigned int reg)
 	case EC_ADDR_CTGP_DB_TPP_OFFSET:
 	case EC_ADDR_CTGP_DB_DB_OFFSET:
 	case EC_ADDR_USB_C_POWER_PRIORITY:
+	case EC_ADDR_RGB_RED:
+	case EC_ADDR_RGB_GREEN:
+	case EC_ADDR_RGB_BLUE:
+	case EC_ADDR_KBD_STATUS:
 		return true;
 	default:
 		return false;
@@ -577,6 +596,11 @@ static bool uniwill_readable_reg(struct device *dev, unsigned int reg)
 	case EC_ADDR_CTGP_DB_TPP_OFFSET:
 	case EC_ADDR_CTGP_DB_DB_OFFSET:
 	case EC_ADDR_USB_C_POWER_PRIORITY:
+	case EC_ADDR_SUPPORT_2:
+	case EC_ADDR_RGB_RED:
+	case EC_ADDR_RGB_GREEN:
+	case EC_ADDR_RGB_BLUE:
+	case EC_ADDR_KBD_STATUS:
 		return true;
 	default:
 		return false;
@@ -1223,6 +1247,119 @@ static int uniwill_hwmon_init(struct uniwill_data *data)
 	return PTR_ERR_OR_ZERO(hdev);
 }
 
+static const unsigned int uniwill_kbd_led_channel_to_reg[LED_CHANNELS] = {
+	EC_ADDR_RGB_RED,
+	EC_ADDR_RGB_GREEN,
+	EC_ADDR_RGB_BLUE,
+};
+
+static int uniwill_kbd_led_brightness_set(struct led_classdev *led_cdev,
+					 enum led_brightness brightness)
+{
+	struct led_classdev_mc *led_mc_cdev = lcdev_to_mccdev(led_cdev);
+	struct uniwill_data *data = container_of(led_mc_cdev, struct uniwill_data, kbd_led_mc_cdev);
+	unsigned int value;
+	int ret;
+
+	ret = led_mc_calc_color_components(led_mc_cdev, brightness);
+	if (ret < 0)
+		return ret;
+
+	guard(mutex)(&data->kbd_led_lock);
+
+	for (int i = 0; i < LED_CHANNELS; i++) {
+		value = min(LED_MAX_BRIGHTNESS, data->kbd_led_mc_subled_info[i].brightness);
+		ret = regmap_write(data->regmap, uniwill_kbd_led_channel_to_reg[i], value);
+		if (ret < 0)
+			return ret;
+	}
+
+	value = FIELD_PREP(KBD_BRIGHTNESS,
+			   DIV_ROUND_CLOSEST(brightness * KBD_MAX_BRIGHTNESS_LEVEL,
+					     LED_MAX_BRIGHTNESS)) | KBD_APPLY;
+	ret = regmap_update_bits(data->regmap, EC_ADDR_KBD_STATUS,
+				 KBD_BRIGHTNESS | KBD_APPLY, value);
+	if (ret < 0)
+		return ret;
+
+	return regmap_write_bits(data->regmap, EC_ADDR_TRIGGER, RGB_APPLY_COLOR, RGB_APPLY_COLOR);
+}
+
+static int uniwill_kbd_led_probe(struct uniwill_data *data)
+{
+	unsigned int value;
+	int ret;
+
+	ret = regmap_read(data->regmap, EC_ADDR_SUPPORT_2, &value);
+	if (ret < 0)
+		return ret;
+
+	if (!(value & RGB_KEYBOARD))
+		return 0;
+
+	data->features |= UNIWILL_FEATURE_KBD_BACKLIGHT;
+
+	return 0;
+}
+
+static int uniwill_kbd_led_init(struct uniwill_data *data)
+{
+	struct led_init_data init_data = {
+		.devicename = DRIVER_NAME,
+		.default_label = "multicolor:" LED_FUNCTION_KBD_BACKLIGHT,
+		.devname_mandatory = true,
+	};
+	const unsigned int color_indices[3] = {
+		LED_COLOR_ID_RED,
+		LED_COLOR_ID_GREEN,
+		LED_COLOR_ID_BLUE,
+	};
+	unsigned int value;
+	int ret;
+
+	if (!uniwill_device_supports(data, UNIWILL_FEATURE_KBD_BACKLIGHT))
+		return 0;
+
+	ret = devm_mutex_init(data->dev, &data->kbd_led_lock);
+	if (ret < 0)
+		return ret;
+
+	data->kbd_led_mc_cdev.led_cdev.color = LED_COLOR_ID_MULTI;
+	data->kbd_led_mc_cdev.led_cdev.max_brightness = LED_MAX_BRIGHTNESS;
+	data->kbd_led_mc_cdev.led_cdev.flags = LED_REJECT_NAME_CONFLICT;
+	data->kbd_led_mc_cdev.led_cdev.brightness_set_blocking = uniwill_kbd_led_brightness_set;
+
+	ret = regmap_read(data->regmap, EC_ADDR_KBD_STATUS, &value);
+	if (ret < 0)
+		return ret;
+
+	data->kbd_led_mc_cdev.led_cdev.brightness =
+		DIV_ROUND_CLOSEST(FIELD_GET(KBD_BRIGHTNESS, value) * LED_MAX_BRIGHTNESS,
+				  KBD_MAX_BRIGHTNESS_LEVEL);
+
+	for (int i = 0; i < LED_CHANNELS; i++) {
+		data->kbd_led_mc_subled_info[i].color_index = color_indices[i];
+
+		ret = regmap_read(data->regmap, uniwill_kbd_led_channel_to_reg[i], &value);
+		if (ret < 0)
+			return ret;
+
+		value = min(LED_MAX_BRIGHTNESS, value);
+		ret = regmap_write(data->regmap, uniwill_kbd_led_channel_to_reg[i], value);
+		if (ret < 0)
+			return ret;
+
+		data->kbd_led_mc_subled_info[i].intensity = value;
+		data->kbd_led_mc_subled_info[i].channel = i;
+	}
+
+	data->kbd_led_mc_cdev.subled_info = data->kbd_led_mc_subled_info;
+	data->kbd_led_mc_cdev.num_colors = LED_CHANNELS;
+
+	return devm_led_classdev_multicolor_register_ext(data->dev, &data->kbd_led_mc_cdev,
+							 &init_data);
+}
+
 static const unsigned int uniwill_led_channel_to_bat_reg[LED_CHANNELS] = {
 	EC_ADDR_LIGHTBAR_BAT_RED,
 	EC_ADDR_LIGHTBAR_BAT_GREEN,
@@ -1654,11 +1791,19 @@ static int uniwill_probe(struct platform_device *pdev)
 			return ret;
 	}
 
+	ret = uniwill_kbd_led_probe(data);
+	if (ret < 0)
+		return ret;
+
 	ret = uniwill_battery_init(data);
 	if (ret < 0)
 		return ret;
 
 	ret = uniwill_led_init(data);
+	if (ret < 0)
+		return ret;
+
+	ret = uniwill_kbd_led_init(data);
 	if (ret < 0)
 		return ret;
 
@@ -2192,6 +2337,14 @@ static const struct dmi_system_id uniwill_dmi_table[] __initconst = {
 			DMI_EXACT_MATCH(DMI_BOARD_NAME, "X6AR55xU"),
 		},
 		.driver_data = &tux_featureset_3_nvidia_descriptor,
+	},
+	{
+		.ident = "MECHREVO WUJIE Series",
+		.matches = {
+			DMI_EXACT_MATCH(DMI_SYS_VENDOR, "MECHREVO"),
+			DMI_EXACT_MATCH(DMI_BOARD_NAME, "WUJIE Series-X5SP4NAG"),
+		},
+		.driver_data = &tux_featureset_3_descriptor,
 	},
 	{
 		.ident = "TUXEDO Polaris 15 Gen1 AMD",
