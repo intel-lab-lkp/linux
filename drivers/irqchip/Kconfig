@@ -385,7 +385,7 @@ config IRQ_CROSSBAR
 
 config KEYSTONE_IRQ
 	tristate "Keystone 2 IRQ controller IP"
-	depends on ARCH_KEYSTONE
+	depends on ARCH_KEYSTONE || COMPILE_TEST
 	help
 		Support for Texas Instruments Keystone 2 IRQ controller IP which
 		is part of the Keystone 2 IPC mechanism
