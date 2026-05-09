@@ -6,7 +6,12 @@
 //!
 //! C header: [`include/linux/completion.h`](srctree/include/linux/completion.h)
 
-use crate::{bindings, prelude::*, types::Opaque};
+use crate::{
+    bindings,
+    prelude::*,
+    time::Jiffies,
+    types::Opaque, //
+};
 
 /// Synchronization primitive to signal when a certain task has been completed.
 ///
@@ -108,5 +113,40 @@ impl Completion {
     pub fn wait_for_completion(&self) {
         // SAFETY: `self.as_raw()` is a pointer to a valid `struct completion`.
         unsafe { bindings::wait_for_completion(self.as_raw()) };
+    }
+
+    /// Wait for completion of an interruptible task without a timeout.
+    ///
+    /// See also [`Completion::complete_all`].
+    #[inline]
+    pub fn wait_for_completion_interruptible(&self) -> Result {
+        // SAFETY: `self.as_raw()` is a pointer to a valid `struct completion`.
+        let err = unsafe { bindings::wait_for_completion_interruptible(self.as_raw()) };
+        if err < 0 {
+            Err(Error::from_errno(err))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Wait for completion of an interruptible task with a timeout.
+    ///
+    /// See also [`Completion::complete_all`].
+    #[inline]
+    pub fn wait_for_completion_interruptible_timeout(
+        &self,
+        timeout_jiffies: Jiffies,
+    ) -> Result<Jiffies> {
+        // SAFETY: `self.as_raw()` is a pointer to a valid `struct completion`.
+        let ret: c_long = unsafe {
+            bindings::wait_for_completion_interruptible_timeout(self.as_raw(), timeout_jiffies)
+        };
+        if ret == 0 {
+            return Err(ETIMEDOUT);
+        }
+        match Jiffies::try_from(ret) {
+            Ok(ret) => Ok(ret),
+            Err(_) => Err(Error::from_errno(ret as c_int)),
+        }
     }
 }
