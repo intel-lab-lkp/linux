@@ -1511,7 +1511,7 @@ sh_mobile_lcdc_overlay_fb_unregister(struct sh_mobile_lcdc_overlay *ovl)
 {
 	struct fb_info *info = ovl->info;
 
-	if (info == NULL || info->dev == NULL)
+	if (!info || !refcount_read(&info->count))
 		return;
 
 	unregister_framebuffer(ovl->info);
@@ -1983,7 +1983,7 @@ static const struct fb_ops sh_mobile_lcdc_ops = {
 static void
 sh_mobile_lcdc_channel_fb_unregister(struct sh_mobile_lcdc_chan *ch)
 {
-	if (ch->info && ch->info->dev)
+	if (ch->info && refcount_read(&ch->info->count))
 		unregister_framebuffer(ch->info);
 }
 
@@ -2640,7 +2640,9 @@ err1:
 static struct platform_driver sh_mobile_lcdc_driver = {
 	.driver		= {
 		.name		= "sh_mobile_lcdc_fb",
+#ifdef CONFIG_FB_DEVICE
 		.dev_groups	= overlay_sysfs_groups,
+#endif
 		.pm		= &sh_mobile_lcdc_dev_pm_ops,
 	},
 	.probe		= sh_mobile_lcdc_probe,
