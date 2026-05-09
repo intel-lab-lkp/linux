@@ -1042,10 +1042,13 @@ again:
 		*lcn = RESIDENT_LCN;
 		*len = data_size;
 		if (res && data_size) {
-			*res = kmemdup(resident_data(attr_b), data_size,
-				       GFP_KERNEL);
-			if (!*res)
+			void *page = alloc_page(GFP_KERNEL);
+			if (!page) {
 				err = -ENOMEM;
+			} else {
+				*res = page_address(page);
+				memcpy(*res, resident_data(attr_b), data_size);
+			}
 		}
 		goto out;
 	}
