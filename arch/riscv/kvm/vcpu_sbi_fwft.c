@@ -186,8 +186,10 @@ static long kvm_sbi_fwft_set_pointer_masking_pmlen(struct kvm_vcpu *vcpu,
 	 * update here so that VCPU see's pointer masking mode change
 	 * immediately.
 	 */
-	if (!one_reg_access)
+	if (!one_reg_access) {
 		csr_write(CSR_HENVCFG, vcpu->arch.cfg.henvcfg);
+		kvm_riscv_local_hfence_gvma_all();
+	}
 
 	return SBI_SUCCESS;
 }
