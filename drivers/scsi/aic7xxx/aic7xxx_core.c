@@ -7064,7 +7064,8 @@ ahc_print_register(const ahc_reg_parse_entry_t *table, u_int num_entries,
 	printed  = printk("%s[0x%x]", name, value);
 	if (table == NULL) {
 		printed += printk(" ");
-		*cur_column += printed;
+		if (cur_column != NULL)
+			*cur_column += printed;
 		return (printed);
 	}
 	printed_mask = 0;
