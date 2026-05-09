@@ -1021,12 +1021,15 @@ static int ocfs2_journal_toggle_dirty(struct ocfs2_super *osb,
 	struct buffer_head *bh = journal->j_bh;
 	struct ocfs2_dinode *fe;
 
-	fe = (struct ocfs2_dinode *)bh->b_data;
+	/* The journal inode block can be forced back in from disk while the
+	 * mount path is still running, so validate the cached bh again before
+	 * updating the journal state on disk.
+	 */
+	status = ocfs2_validate_inode_block(osb->sb, bh);
+	if (status < 0)
+		return status;
 
-	/* The journal bh on the osb always comes from ocfs2_journal_init()
-	 * and was validated there inside ocfs2_inode_lock_full().  It's a
-	 * code bug if we mess it up. */
-	BUG_ON(!OCFS2_IS_VALID_DINODE(fe));
+	fe = (struct ocfs2_dinode *)bh->b_data;
 
 	flags = le32_to_cpu(fe->id1.journal1.ij_flags);
 	if (dirty)
