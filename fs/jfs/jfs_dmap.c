@@ -533,7 +533,7 @@ dbUpdatePMap(struct inode *ipbmap,
 	struct dmap *dp;
 	struct metapage *mp;
 	struct jfs_log *log;
-	int lsn, difft, diffp;
+	int lsn, difft, diffp, syncpt;
 	unsigned long flags;
 
 	/* the blocks better be within the mapsize. */
@@ -545,10 +545,8 @@ dbUpdatePMap(struct inode *ipbmap,
 		return -EIO;
 	}
 
-	/* compute delta of transaction lsn from log syncpt */
 	lsn = tblk->lsn;
 	log = (struct jfs_log *) JFS_SBI(tblk->sb)->log;
-	logdiff(difft, lsn, log);
 
 	/*
 	 * update the block state a dmap at a time.
@@ -640,9 +638,11 @@ dbUpdatePMap(struct inode *ipbmap,
 		lastlblkno = lblkno;
 
 		LOGSYNC_LOCK(log, flags);
+		syncpt = READ_ONCE(log->syncpt);
+		difft = logdiff_syncpt(lsn, syncpt, log->logsize);
 		if (mp->lsn != 0) {
 			/* inherit older/smaller lsn */
-			logdiff(diffp, mp->lsn, log);
+			diffp = logdiff_syncpt(mp->lsn, syncpt, log->logsize);
 			if (difft < diffp) {
 				mp->lsn = lsn;
 
@@ -651,8 +651,8 @@ dbUpdatePMap(struct inode *ipbmap,
 			}
 
 			/* inherit younger/larger clsn */
-			logdiff(difft, tblk->clsn, log);
-			logdiff(diffp, mp->clsn, log);
+			difft = logdiff_syncpt(tblk->clsn, syncpt, log->logsize);
+			diffp = logdiff_syncpt(mp->clsn, syncpt, log->logsize);
 			if (difft > diffp)
 				mp->clsn = tblk->clsn;
 		} else {

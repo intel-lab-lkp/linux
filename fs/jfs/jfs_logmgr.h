@@ -494,6 +494,16 @@ struct logsyncblk {
 		diff += (log)->logsize;\
 }
 
+static inline int logdiff_syncpt(int lsn, int syncpt, int logsize)
+{
+	int diff = lsn - syncpt;
+
+	if (diff < 0)
+		diff += logsize;
+
+	return diff;
+}
+
 extern int lmLogOpen(struct super_block *sb);
 extern int lmLogClose(struct super_block *sb);
 extern int lmLogShutdown(struct jfs_log * log);

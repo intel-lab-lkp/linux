@@ -2732,7 +2732,7 @@ diUpdatePMap(struct inode *ipimap,
 	struct inomap *imap;
 	u32 mask;
 	struct jfs_log *log;
-	int lsn, difft, diffp;
+	int lsn, difft, diffp, syncpt;
 	unsigned long flags;
 
 	imap = JFS_IP(ipimap)->i_imap;
@@ -2808,10 +2808,11 @@ diUpdatePMap(struct inode *ipimap,
 	lsn = tblk->lsn;
 	log = JFS_SBI(tblk->sb)->log;
 	LOGSYNC_LOCK(log, flags);
+	syncpt = READ_ONCE(log->syncpt);
 	if (mp->lsn != 0) {
 		/* inherit older/smaller lsn */
-		logdiff(difft, lsn, log);
-		logdiff(diffp, mp->lsn, log);
+		difft = logdiff_syncpt(lsn, syncpt, log->logsize);
+		diffp = logdiff_syncpt(mp->lsn, syncpt, log->logsize);
 		if (difft < diffp) {
 			mp->lsn = lsn;
 			/* move mp after tblock in logsync list */
@@ -2819,8 +2820,8 @@ diUpdatePMap(struct inode *ipimap,
 		}
 		/* inherit younger/larger clsn */
 		assert(mp->clsn);
-		logdiff(difft, tblk->clsn, log);
-		logdiff(diffp, mp->clsn, log);
+		difft = logdiff_syncpt(tblk->clsn, syncpt, log->logsize);
+		diffp = logdiff_syncpt(mp->clsn, syncpt, log->logsize);
 		if (difft > diffp)
 			mp->clsn = tblk->clsn;
 	} else {

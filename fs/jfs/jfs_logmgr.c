@@ -966,7 +966,7 @@ static int lmLogSync(struct jfs_log * log, int hard_sync)
 		lrd.log.syncpt.sync = cpu_to_le32(log->sync);
 		lsn = lmWriteRecord(log, NULL, &lrd, NULL);
 
-		log->syncpt = log->sync;
+		WRITE_ONCE(log->syncpt, log->sync);
 	} else
 		lsn = log->lsn;
 
@@ -1000,7 +1000,8 @@ static int lmLogSync(struct jfs_log * log, int hard_sync)
 		/* log->state = LOGWRAP; */
 
 		/* reset sync point computation */
-		log->syncpt = log->sync = lsn;
+		log->sync = lsn;
+		WRITE_ONCE(log->syncpt, lsn);
 		log->nextsync = delta;
 	} else
 		/* next syncpt trigger = written + more */

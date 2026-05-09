@@ -906,7 +906,7 @@ static void txUnlock(struct tblock * tblk)
 	lid_t lid, next, llid, k;
 	struct metapage *mp;
 	struct jfs_log *log;
-	int difft, diffp;
+	int difft, diffp, syncpt;
 	unsigned long flags;
 
 	jfs_info("txUnlock: tblk = 0x%p", tblk);
@@ -936,8 +936,11 @@ static void txUnlock(struct tblock * tblk)
 			/* inherit younger/larger clsn */
 			LOGSYNC_LOCK(log, flags);
 			if (mp->clsn) {
-				logdiff(difft, tblk->clsn, log);
-				logdiff(diffp, mp->clsn, log);
+				syncpt = READ_ONCE(log->syncpt);
+				difft = logdiff_syncpt(tblk->clsn, syncpt,
+						       log->logsize);
+				diffp = logdiff_syncpt(mp->clsn, syncpt,
+						       log->logsize);
 				if (difft > diffp)
 					mp->clsn = tblk->clsn;
 			} else
