@@ -71,7 +71,7 @@ inv_icm42607_fifo_is_data_valid(const struct inv_icm42607_fifo_sensor_data *s)
 
 ssize_t inv_icm42607_fifo_decode_packet(const void *packet, const void **accel,
 					const void **gyro, const s8 **temp,
-					const void **timestamp);
+					const void **timestamp, unsigned int *odr);
 
 extern const struct iio_buffer_setup_ops inv_icm42607_buffer_ops;
 
@@ -86,6 +86,8 @@ int inv_icm42607_buffer_update_watermark(struct inv_icm42607_state *st);
 
 int inv_icm42607_buffer_fifo_read(struct inv_icm42607_state *st,
 				  unsigned int max);
+
+int inv_icm42607_buffer_fifo_parse(struct inv_icm42607_state *st);
 
 int inv_icm42607_buffer_hwfifo_flush(struct inv_icm42607_state *st,
 				     unsigned int count);
