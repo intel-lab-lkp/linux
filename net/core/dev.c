@@ -5445,11 +5445,11 @@ static struct netdev_rx_queue *netif_get_rxqueue(struct sk_buff *skb)
 	return rxqueue;
 }
 
-u32 bpf_prog_run_generic_xdp(struct sk_buff *skb, struct xdp_buff *xdp,
-			     const struct bpf_prog *xdp_prog)
+static u32 __bpf_prog_run_generic_xdp(struct sk_buff *skb, struct xdp_buff *xdp,
+				      const struct bpf_prog *xdp_prog,
+				      struct xdp_rxq_info *xdp_rxq)
 {
 	void *orig_data, *orig_data_end, *hard_start;
-	struct netdev_rx_queue *rxqueue;
 	bool orig_bcast, orig_host;
 	u32 mac_len, frame_sz;
 	__be16 orig_eth_type;
@@ -5467,8 +5467,13 @@ u32 bpf_prog_run_generic_xdp(struct sk_buff *skb, struct xdp_buff *xdp,
 	frame_sz = (void *)skb_end_pointer(skb) - hard_start;
 	frame_sz += SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
 
-	rxqueue = netif_get_rxqueue(skb);
-	xdp_init_buff(xdp, frame_sz, &rxqueue->xdp_rxq);
+	if (!xdp_rxq) {
+		struct netdev_rx_queue *rxqueue;
+
+		rxqueue = netif_get_rxqueue(skb);
+		xdp_rxq = &rxqueue->xdp_rxq;
+	}
+	xdp_init_buff(xdp, frame_sz, xdp_rxq);
 	xdp_prepare_buff(xdp, hard_start, skb_headroom(skb) - mac_len,
 			 skb_headlen(skb) + mac_len, true);
 	if (skb_is_nonlinear(skb)) {
@@ -5547,15 +5552,27 @@ u32 bpf_prog_run_generic_xdp(struct sk_buff *skb, struct xdp_buff *xdp,
 	return act;
 }
 
+u32 bpf_prog_run_generic_xdp(struct sk_buff *skb, struct xdp_buff *xdp,
+			     const struct bpf_prog *xdp_prog)
+{
+	return __bpf_prog_run_generic_xdp(skb, xdp, xdp_prog, NULL);
+}
+
 static int
-netif_skb_check_for_xdp(struct sk_buff **pskb, const struct bpf_prog *prog)
+netif_skb_check_for_xdp(struct sk_buff **pskb, const struct bpf_prog *prog,
+			struct page_pool *page_pool)
 {
 	struct sk_buff *skb = *pskb;
 	int err, hroom, troom;
 
-	local_lock_nested_bh(&system_page_pool.bh_lock);
-	err = skb_cow_data_for_xdp(this_cpu_read(system_page_pool.pool), pskb, prog);
-	local_unlock_nested_bh(&system_page_pool.bh_lock);
+	if (page_pool) {
+		err = skb_cow_data_for_xdp(page_pool, pskb, prog);
+	} else {
+		local_lock_nested_bh(&system_page_pool.bh_lock);
+		err = skb_cow_data_for_xdp(this_cpu_read(system_page_pool.pool),
+					   pskb, prog);
+		local_unlock_nested_bh(&system_page_pool.bh_lock);
+	}
 	if (!err)
 		return 0;
 
@@ -5573,9 +5590,29 @@ netif_skb_check_for_xdp(struct sk_buff **pskb, const struct bpf_prog *prog)
 	return skb_linearize(skb);
 }
 
+bool skb_needs_xdp_cow(const struct sk_buff *skb)
+{
+	/* Keep this predicate aligned with the old veth skb->xdp_buff
+	 * conversion rules. A page_pool-backed COW is needed when the skb head
+	 * cannot be reused as-is, when frags need to be made page_pool backed,
+	 * or when the XDP headroom contract is not met.
+	 */
+	return skb_shared(skb) || skb_head_is_locked(skb) ||
+	       skb_shinfo(skb)->nr_frags ||
+	       skb_headroom(skb) < XDP_PACKET_HEADROOM;
+}
+EXPORT_SYMBOL_GPL(skb_needs_xdp_cow);
+
+static bool generic_skb_needs_xdp_cow(const struct sk_buff *skb)
+{
+	return skb_cloned(skb) || skb_is_nonlinear(skb) ||
+	       skb_headroom(skb) < XDP_PACKET_HEADROOM;
+}
+
 static u32 netif_receive_generic_xdp(struct sk_buff **pskb,
 				     struct xdp_buff *xdp,
-				     const struct bpf_prog *xdp_prog)
+				     const struct bpf_prog *xdp_prog,
+				     struct xdp_generic_ctx *ctx)
 {
 	struct sk_buff *skb = *pskb;
 	u32 mac_len, act = XDP_DROP;
@@ -5593,15 +5630,20 @@ static u32 netif_receive_generic_xdp(struct sk_buff **pskb,
 	mac_len = skb->data - skb_mac_header(skb);
 	__skb_push(skb, mac_len);
 
-	if (skb_cloned(skb) || skb_is_nonlinear(skb) ||
-	    skb_headroom(skb) < XDP_PACKET_HEADROOM) {
-		if (netif_skb_check_for_xdp(pskb, xdp_prog))
+	if (INDIRECT_CALL_2(ctx->skb_cow_check,
+			    generic_skb_needs_xdp_cow,
+			    skb_needs_xdp_cow,
+			    skb)) {
+		if (netif_skb_check_for_xdp(pskb, xdp_prog, ctx->page_pool))
 			goto do_drop;
 	}
 
 	__skb_pull(*pskb, mac_len);
 
-	act = bpf_prog_run_generic_xdp(*pskb, xdp, xdp_prog);
+	if (ctx->xdp_skb)
+		*ctx->xdp_skb = *pskb;
+
+	act = __bpf_prog_run_generic_xdp(*pskb, xdp, xdp_prog, ctx->xdp_rxq);
 	switch (act) {
 	case XDP_REDIRECT:
 	case XDP_TX:
@@ -5660,27 +5702,27 @@ int generic_xdp_tx(struct sk_buff *skb, const struct bpf_prog *xdp_prog)
 
 static DEFINE_STATIC_KEY_FALSE(generic_xdp_needed_key);
 
-int do_xdp_generic(const struct bpf_prog *xdp_prog, struct sk_buff **pskb)
+int __do_xdp_generic(const struct bpf_prog *xdp_prog, struct sk_buff **pskb,
+		     struct xdp_generic_ctx *ctx)
 {
 	struct bpf_net_context __bpf_net_ctx, *bpf_net_ctx;
 
-	if (xdp_prog) {
-		struct xdp_buff xdp;
-		u32 act;
-		int err;
+	ctx->act = XDP_PASS;
+	ctx->err = 0;
 
+	if (xdp_prog) {
 		bpf_net_ctx = bpf_net_ctx_set(&__bpf_net_ctx);
-		act = netif_receive_generic_xdp(pskb, &xdp, xdp_prog);
-		if (act != XDP_PASS) {
-			switch (act) {
+		ctx->act = netif_receive_generic_xdp(pskb, ctx->xdp, xdp_prog, ctx);
+		if (ctx->act != XDP_PASS) {
+			switch (ctx->act) {
 			case XDP_REDIRECT:
-				err = xdp_do_generic_redirect((*pskb)->dev, *pskb,
-							      &xdp, xdp_prog);
-				if (err)
+				ctx->err = xdp_do_generic_redirect((*pskb)->dev, *pskb,
+								   ctx->xdp, xdp_prog);
+				if (ctx->err)
 					goto out_redir;
 				break;
 			case XDP_TX:
-				generic_xdp_tx(*pskb, xdp_prog);
+				ctx->err = generic_xdp_tx(*pskb, xdp_prog);
 				break;
 			}
 			bpf_net_ctx_clear(bpf_net_ctx);
@@ -5693,6 +5735,18 @@ out_redir:
 	bpf_net_ctx_clear(bpf_net_ctx);
 	kfree_skb_reason(*pskb, SKB_DROP_REASON_XDP);
 	return XDP_DROP;
+}
+EXPORT_SYMBOL_GPL(__do_xdp_generic);
+
+int do_xdp_generic(const struct bpf_prog *xdp_prog, struct sk_buff **pskb)
+{
+	struct xdp_generic_ctx ctx = {};
+	struct xdp_buff xdp;
+
+	ctx.xdp = &xdp;
+	ctx.skb_cow_check = generic_skb_needs_xdp_cow;
+
+	return __do_xdp_generic(xdp_prog, pskb, &ctx);
 }
 EXPORT_SYMBOL_GPL(do_xdp_generic);
 

@@ -4275,9 +4275,40 @@ static inline void dev_consume_skb_any(struct sk_buff *skb)
 	dev_kfree_skb_any_reason(skb, SKB_CONSUMED);
 }
 
+struct page_pool;
+struct xdp_rxq_info;
+
+/**
+ * struct xdp_generic_ctx - caller context for skb-backed generic XDP
+ * @xdp: caller-provided xdp_buff storage
+ * @page_pool: optional page_pool used when skb COW is needed
+ * @xdp_rxq: optional rxq used to initialise @xdp
+ * @xdp_skb: optional pointer updated with the skb used for the XDP run
+ * @skb_cow_check: caller-selected skb COW predicate, required
+ * @act: actual XDP action returned by the program
+ * @err: redirect error, valid when @act is XDP_REDIRECT
+ *
+ * If @page_pool is NULL, the generic path uses the per-CPU system
+ * page_pool. If @xdp_rxq is NULL, the generic path derives the rxq
+ * from the skb device/rx-queue, preserving existing do_xdp_generic()
+ * behaviour.
+ */
+struct xdp_generic_ctx {
+	struct xdp_buff *xdp;
+	struct page_pool *page_pool;
+	struct xdp_rxq_info *xdp_rxq;
+	struct sk_buff **xdp_skb;
+	bool (*skb_cow_check)(const struct sk_buff *skb);
+	u32 act;
+	int err;
+};
+
+bool skb_needs_xdp_cow(const struct sk_buff *skb);
 u32 bpf_prog_run_generic_xdp(struct sk_buff *skb, struct xdp_buff *xdp,
 			     const struct bpf_prog *xdp_prog);
 int generic_xdp_tx(struct sk_buff *skb, const struct bpf_prog *xdp_prog);
+int __do_xdp_generic(const struct bpf_prog *xdp_prog, struct sk_buff **pskb,
+		     struct xdp_generic_ctx *ctx);
 int do_xdp_generic(const struct bpf_prog *xdp_prog, struct sk_buff **pskb);
 int netif_rx(struct sk_buff *skb);
 int __netif_rx(struct sk_buff *skb);
