@@ -2874,6 +2874,35 @@ void txResume(struct super_block *sb)
 	TXN_WAKEUP(&log->syncwait);
 }
 
+void txDrain(struct super_block *sb)
+{
+	struct jfs_sb_info *sbi = JFS_SBI(sb);
+	struct tblock *tblk;
+	unsigned long flags;
+	bool pending;
+
+	for (;;) {
+		pending = false;
+		LAZY_LOCK(flags);
+		if (sbi->commit_state & IN_LAZYCOMMIT) {
+			pending = true;
+		} else {
+			list_for_each_entry(tblk, &TxAnchor.unlock_queue, cqueue) {
+				if (tblk->sb == sb) {
+					pending = true;
+					break;
+				}
+			}
+		}
+		LAZY_UNLOCK(flags);
+
+		if (!pending)
+			return;
+
+		schedule_timeout_uninterruptible(1);
+	}
+}
+
 /*
  *	jfs_sync(void)
  *

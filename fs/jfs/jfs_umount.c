@@ -23,6 +23,7 @@
 #include "jfs_logmgr.h"
 #include "jfs_metapage.h"
 #include "jfs_debug.h"
+#include "jfs_txnmgr.h"
 
 /*
  * NAME:	jfs_umount(vfsp, flags, crp)
@@ -52,11 +53,17 @@ int jfs_umount(struct super_block *sb)
 	 *
 	 * if mounted read-write and log based recovery was enabled
 	 */
+
 	if ((log = sbi->log))
+		txQuiesce(sb);
+
+	if (log)
 		/*
 		 * Wait for outstanding transactions to be written to log:
 		 */
 		jfs_flush_journal(log, 2);
+
+	txDrain(sb);
 
 	/*
 	 * Hold log lock so write_special_inodes (lmLogSync) cannot see
@@ -141,7 +148,9 @@ int jfs_umount_rw(struct super_block *sb)
 	 *
 	 * remove file system from log active file system list.
 	 */
+	txQuiesce(sb);
 	jfs_flush_journal(log, 2);
+	txDrain(sb);
 
 	/*
 	 * Make sure all metadata makes it to disk

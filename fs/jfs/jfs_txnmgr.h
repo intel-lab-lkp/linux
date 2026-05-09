@@ -293,6 +293,7 @@ extern int lmLog(struct jfs_log *, struct tblock *, struct lrd *,
 extern void txQuiesce(struct super_block *);
 extern void txResume(struct super_block *);
 extern void txLazyUnlock(struct tblock *);
+extern void txDrain(struct super_block *sb);
 extern int jfs_lazycommit(void *);
 extern int jfs_sync(void *);
 #endif				/* _H_JFS_TXNMGR */
