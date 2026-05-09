@@ -26,6 +26,8 @@ config NET_DSA_LOOP
 
 source "drivers/net/dsa/hirschmann/Kconfig"
 
+source "drivers/net/dsa/hms/Kconfig"
+
 source "drivers/net/dsa/lantiq/Kconfig"
 
 config NET_DSA_MT7530

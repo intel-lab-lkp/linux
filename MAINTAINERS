@@ -19336,6 +19336,15 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/sound/fsl,sgtl5000.yaml
 F:	sound/soc/codecs/sgtl5000*
 
+NXP HMS DSA SWITCH DRIVER
+M:	Minghuan Lian <minghuan.lian@nxp.com>
+L:	netdev@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/net/dsa/nxp,imxrt1180-netc-switch.yaml
+F:	drivers/net/dsa/hms/
+F:	include/linux/dsa/tag_hms.h
+F:	net/dsa/tag_hms.c
+
 NXP SJA1105 ETHERNET SWITCH DRIVER
 M:	Vladimir Oltean <olteanv@gmail.com>
 L:	linux-kernel@vger.kernel.org

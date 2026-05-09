@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config NET_DSA_HMS_SWITCH
+	tristate "NXP HMS DSA switch driver"
+	depends on NET_DSA
+	depends on SPI
+	select NET_DSA_TAG_HMS
+	select NET_DSA_TAG_8021Q
+	help
+	  This enables support for the NXP i.MX RT1180 NETC Ethernet
+	  switch managed through the Heterogeneous Multi-SoC (HMS)
+	  interface over SPI.
+
+	  Say Y or M if your system uses an i.MX RT1180 as a companion
+	  switch controller and exposes its switch ports through DSA.

@@ -17,6 +17,7 @@ obj-$(CONFIG_NET_DSA_VITESSE_VSC73XX_SPI) += vitesse-vsc73xx-spi.o
 obj-$(CONFIG_NET_DSA_YT921X) += yt921x.o
 obj-y				+= b53/
 obj-y				+= hirschmann/
+obj-y				+= hms/
 obj-y				+= lantiq/
 obj-y				+= microchip/
 obj-y				+= mv88e6xxx/
