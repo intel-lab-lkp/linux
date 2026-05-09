@@ -30,7 +30,6 @@ enum hrtimer_restart kvm_swtimer_wakeup(struct hrtimer *timer)
 	struct kvm_vcpu *vcpu;
 
 	vcpu = container_of(timer, struct kvm_vcpu, arch.swtimer);
-	kvm_queue_irq(vcpu, INT_TI);
 	rcuwait_wake_up(&vcpu->wait);
 
 	return HRTIMER_NORESTART;
