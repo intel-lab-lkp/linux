@@ -1,0 +1,118 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/net/dsa/nxp,imxrt1180-netc-switch.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: NXP i.MX RT1180 NETC Ethernet Switch
+
+description: |
+  The NXP i.MX RT1180 integrates a TSN-capable NETC Ethernet switch.
+
+  The i.MX RT1180 is an MCU and does not run Linux. In heterogeneous multi-SoC
+  systems, the RT1180 runs firmware that manages the switch, while the host SoC
+  runs Linux and exposes the switch ports using the DSA framework, with a
+  dedicated CPU (conduit) port connected to a host Ethernet controller.
+
+  The switch control plane is accessed through a management link to the
+  companion MCU. Current systems may use SPI, but other transports may be used
+  in the future (for example, in-band management over an Ethernet port).
+
+maintainers:
+  - Minghuan Lian <minghuan.lian@nxp.com>
+
+allOf:
+  # Base: always a DSA switch
+  - $ref: /schemas/net/dsa/dsa.yaml#
+
+  # If the SPI-specific compatible is used, allow SPI properties and require reg.
+  - if:
+      properties:
+        compatible:
+          type: array
+          contains:
+            const: nxp,imxrt1180-netc-switch-spi
+    then:
+      $ref: /schemas/spi/spi-peripheral-props.yaml#
+      required:
+        - reg
+
+properties:
+  compatible:
+    oneOf:
+      # SPI-attached switch representation (current integration)
+      - items:
+          - const: nxp,imxrt1180-netc-switch-spi
+          - const: nxp,imxrt1180-netc-switch
+      # Transport-agnostic representation (future integration)
+      - const: nxp,imxrt1180-netc-switch
+
+  reg:
+    description: |
+      SPI chip select number (only for SPI-attached deployments).
+    maxItems: 1
+
+required:
+  - compatible
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    spi {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        ethernet-switch@0 {
+            compatible = "nxp,imxrt1180-netc-switch-spi",
+                         "nxp,imxrt1180-netc-switch";
+            reg = <0>;
+            spi-max-frequency = <12000000>;
+
+            ports {
+                #address-cells = <1>;
+                #size-cells = <0>;
+
+                port@0 {
+                    reg = <0>;
+                    label = "hms0p0";
+                    phy-mode = "internal";
+                    fixed-link {
+                        speed = <100>;
+                        full-duplex;
+                    };
+                };
+
+                port@1 {
+                    reg = <1>;
+                    label = "hms0p1";
+                    phy-mode = "internal";
+                    fixed-link {
+                        speed = <1000>;
+                        full-duplex;
+                    };
+                };
+
+                port@2 {
+                    reg = <2>;
+                    label = "hms0p2";
+                    phy-mode = "internal";
+                    fixed-link {
+                        speed = <1000>;
+                        full-duplex;
+                    };
+                };
+
+                port@3 {
+                    reg = <3>;
+                    label = "cpu";
+                    ethernet = <&eth0>;
+                    phy-mode = "internal";
+                    fixed-link {
+                        speed = <1000>;
+                        full-duplex;
+                    };
+                };
+            };
+        };
+    };
