@@ -554,14 +554,14 @@ struct airoha_gdm_dev {
 
 	u32 flags;
 	int nbq;
+
+	struct airoha_hw_stats stats;
 };
 
 struct airoha_gdm_port {
 	struct airoha_gdm_dev *devs[AIROHA_MAX_NUM_GDM_DEVS];
 	int id;
 	int users;
-
-	struct airoha_hw_stats stats;
 
 	struct metadata_dst *dsa_meta[AIROHA_MAX_DSA_PORTS];
 };
