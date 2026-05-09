@@ -470,6 +470,23 @@ static struct list_head *rcu_next_node_entry(struct task_struct *t,
  */
 static bool rcu_preempt_has_tasks(struct rcu_node *rnp)
 {
+	return !list_empty(&rnp->blkd_tasks) || !list_empty(&rnp->dqs_blkd_tasks);
+}
+
+/*
+ * Return true if the specified rcu_node structure has tasks that were
+ * preempted within an RCU read-side critical section, but excluding any
+ * tasks that are currently deferring quiescent states, that is, they were
+ * preempted in an earlier rcu_read_lock() segment, preemption has been
+ * disabled since before the end of that segment, and they have not yet been
+ * preempted within some later rcu_read_lock() segment.  As in RCU-preempt
+ * has preempted tasks, even excluding those with deferred quiescent states.
+ *
+ * This is used when grace-period-end checks might race with later readers
+ * being preempted and then having deferred quiescent states.
+ */
+static bool rcu_preempt_has_tasks_ndqs(struct rcu_node *rnp)
+{
 	return !list_empty(&rnp->blkd_tasks);
 }
 
@@ -799,7 +816,7 @@ static void rcu_preempt_check_blocked_tasks(struct rcu_node *rnp)
 	raw_lockdep_assert_held_rcu_node(rnp);
 	if (WARN_ON_ONCE(rcu_preempt_blocked_readers_cgp(rnp)))
 		dump_blkd_tasks(rnp, 10);
-	if (rcu_preempt_has_tasks(rnp) &&
+	if (rcu_preempt_has_tasks_ndqs(rnp) &&
 	    (rnp->qsmaskinit || rnp->wait_blkd_tasks)) {
 		WRITE_ONCE(rnp->gp_tasks, rnp->blkd_tasks.next);
 		t = container_of(rnp->gp_tasks, struct task_struct,
@@ -1031,6 +1048,14 @@ static int rcu_preempt_blocked_readers_cgp(struct rcu_node *rnp)
  * Because there is no preemptible RCU, there can be no readers blocked.
  */
 static bool rcu_preempt_has_tasks(struct rcu_node *rnp)
+{
+	return false;
+}
+
+/*
+ * Because there is no preemptible RCU, there can be no readers blocked.
+ */
+static bool rcu_preempt_has_tasks_ndqs(struct rcu_node *rnp)
 {
 	return false;
 }
