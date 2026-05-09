@@ -452,7 +452,9 @@ config MVEBU_SEI
         bool
 
 config LS_EXTIRQ
-	def_bool y if SOC_LS1021A || ARCH_LAYERSCAPE
+	bool "Freescale Layerscape external IRQ support" if COMPILE_TEST
+	default y if SOC_LS1021A || ARCH_LAYERSCAPE
+	depends on SOC_LS1021A || ARCH_LAYERSCAPE || COMPILE_TEST
 	select MFD_SYSCON
 
 config LS_SCFG_MSI
