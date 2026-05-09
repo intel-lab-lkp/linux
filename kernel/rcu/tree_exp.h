@@ -146,7 +146,7 @@ static void __maybe_unused sync_exp_reset_tree(void)
 		 * additional blocking tasks will also block the expedited GP
 		 * until such time as the ->expmask bits are cleared.
 		 */
-		if (rcu_is_leaf_node(rnp) && rcu_preempt_has_tasks(rnp))
+		if (rcu_is_leaf_node(rnp) && rcu_preempt_has_tasks_ndqs(rnp))
 			WRITE_ONCE(rnp->exp_tasks, rnp->blkd_tasks.next);
 		raw_spin_unlock_irqrestore_rcu_node(rnp, flags);
 	}
