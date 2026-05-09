@@ -179,4 +179,19 @@ config SAMPLE_RUST_HOSTPROGS
 
 	  If unsure, say N.
 
+config SAMPLE_RUST_VIRTIO_RTC
+	tristate "Rust Virtio RTC driver"
+	depends on VIRTIO
+	depends on PTP_1588_CLOCK_OPTIONAL
+	help
+	 This driver provides current time from a Virtio RTC device. The driver
+	 provides the time through one or more clocks. The Virtio RTC PTP
+	 clocks and/or the Real Time Clock driver for Virtio RTC must be
+	 enabled to expose the clocks to userspace.
+
+	 To compile this code as a module, choose M here: the module will be
+	 called rust_virtio_rtc.
+
+	 If unsure, say M.
+
 endif # SAMPLES_RUST
