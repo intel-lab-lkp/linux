@@ -1,0 +1,94 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/connector/fsl,io-connector.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: NXP I/O Connector
+
+maintainers:
+  - Frank Li <Frank.li@nxp.com>
+  - Chancel Liu <chancel.liu@nxp.com>
+
+description:
+  The NXP I/O connector represents a physically present I/O connector on the
+  base board. It acts as a nexus that exposes a constrained set of I/O
+  resources, such as GPIOs, clocks, PWMs and interrupts, through fixed
+  electrical wiring. All actual hardware providers reside on the base board.
+  The connector node only defines index-based mappings to those providers.
+
+properties:
+  compatible:
+    const: fsl,io-connector
+
+  gpio-controller: true
+
+  '#gpio-cells':
+    const: 2
+
+  gpio-map:
+    $ref: /schemas/types.yaml#/definitions/uint32-matrix
+
+  gpio-map-mask:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+
+  gpio-map-pass-thru:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+
+  '#clock-cells':
+    const: 1
+
+  clock-map:
+    $ref: /schemas/types.yaml#/definitions/uint32-matrix
+
+  clock-map-mask:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+
+  clock-map-pass-thru:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+
+  pwm-map:
+    $ref: /schemas/types.yaml#/definitions/uint32-matrix
+
+  pwm-map-mask:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+
+  pwm-map-pass-thru:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+
+  '#address-cells':
+    const: 0
+
+  interrupt-controller: true
+
+  "#interrupt-cells":
+    const: 2
+
+  interrupt-map: true
+
+  interrupt-map-mask: true
+
+required:
+  - compatible
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    connector {
+        compatible = "fsl,io-connector";
+        gpio-controller;
+        #gpio-cells = <2>;
+        gpio-map = <0 0 &gpio1 8 1>;
+        gpio-map-mask = <0xff 0x0>;
+        gpio-map-pass-thru = <0x0 0x1>;
+        #clock-cells = <1>;
+        clock-map = <0 &clk 1>;
+        #address-cells = <0>;
+        interrupt-controller;
+        #interrupt-cells = <2>;
+        interrupt-map-mask = <0xff 0x0>;
+        interrupt-map = <0 0 &gpio2 27 IRQ_TYPE_LEVEL_LOW>;
+    };
