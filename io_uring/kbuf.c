@@ -220,6 +220,14 @@ static struct io_br_sel io_ring_buffer_select(struct io_kiocb *req, size_t *len,
 			req->flags |= REQ_F_BUF_MORE;
 		sel.buf_list = NULL;
 	}
+	if ((req->flags & REQ_F_BUFFERS_COMMIT) && sel.buf_list) {
+		if (WARN_ON_ONCE(req->buf_list && req->buf_list != bl))
+			return sel;
+		if (!req->buf_list) {
+			io_get_bl(bl);
+			req->buf_list = bl;
+		}
+	}
 	return sel;
 }
 
@@ -407,6 +415,7 @@ static inline bool __io_put_kbuf_ring(struct io_kiocb *req,
 unsigned int __io_put_kbufs(struct io_kiocb *req, struct io_buffer_list *bl,
 			    int len, int nbufs)
 {
+	struct io_buffer_list *stored_bl;
 	unsigned int ret;
 
 	ret = IORING_CQE_F_BUFFER | (req->buf_index << IORING_CQE_BUFFER_SHIFT);
@@ -416,8 +425,17 @@ unsigned int __io_put_kbufs(struct io_kiocb *req, struct io_buffer_list *bl,
 		return ret;
 	}
 
+	stored_bl = req->buf_list;
+	if (!bl)
+		bl = stored_bl;
+	else if (stored_bl && WARN_ON_ONCE(stored_bl != bl))
+		bl = stored_bl;
 	if (!__io_put_kbuf_ring(req, bl, len, nbufs))
 		ret |= IORING_CQE_F_BUF_MORE;
+	if (stored_bl) {
+		req->buf_list = NULL;
+		io_put_bl(req->ctx, stored_bl);
+	}
 	return ret;
 }
 
@@ -442,7 +460,7 @@ static int io_remove_buffers_legacy(struct io_ring_ctx *ctx,
 	return i;
 }
 
-static void io_put_bl(struct io_ring_ctx *ctx, struct io_buffer_list *bl)
+static void __io_put_bl(struct io_ring_ctx *ctx, struct io_buffer_list *bl)
 {
 	if (bl->flags & IOBL_BUF_RING)
 		io_free_region(ctx->user, &bl->region);
@@ -450,6 +468,12 @@ static void io_put_bl(struct io_ring_ctx *ctx, struct io_buffer_list *bl)
 		io_remove_buffers_legacy(ctx, bl, -1U);
 
 	kfree(bl);
+}
+
+void io_put_bl(struct io_ring_ctx *ctx, struct io_buffer_list *bl)
+{
+	if (refcount_dec_and_test(&bl->refs))
+		__io_put_bl(ctx, bl);
 }
 
 void io_destroy_buffers(struct io_ring_ctx *ctx)
@@ -579,6 +603,7 @@ static int __io_manage_buffers_legacy(struct io_kiocb *req,
 		bl = kzalloc_obj(*bl, GFP_KERNEL_ACCOUNT);
 		if (!bl)
 			return -ENOMEM;
+		refcount_set(&bl->refs, 1);
 
 		INIT_LIST_HEAD(&bl->buf_list);
 		ret = io_buffer_add_list(req->ctx, bl, p->bgid);
@@ -652,6 +677,7 @@ int io_register_pbuf_ring(struct io_ring_ctx *ctx, void __user *arg)
 	bl = kzalloc_obj(*bl, GFP_KERNEL_ACCOUNT);
 	if (!bl)
 		return -ENOMEM;
+	refcount_set(&bl->refs, 1);
 
 	mmap_offset = (unsigned long)reg.bgid << IORING_OFF_PBUF_SHIFT;
 	ring_size = flex_array_size(br, bufs, reg.ring_entries);

@@ -8,6 +8,7 @@
 #include <linux/llist.h>
 #include <uapi/linux/io_uring.h>
 
+struct io_buffer_list;
 struct iou_loop_params;
 struct io_uring_bpf_ops;
 
@@ -94,7 +95,8 @@ struct io_mapped_region {
  * struct io_kiocb. For legacy/classic provided buffers, keeping a reference
  * across execution contexts are fine. But for ring provided buffers, the
  * list may go away as soon as ->uring_lock is dropped. As the io_kiocb
- * persists, it's better to just keep the buffer local for those cases.
+ * persists, it's better to just keep the buffer local for those cases,
+ * unless the request has taken its own explicit lifetime reference.
  */
 struct io_br_sel {
 	struct io_buffer_list *buf_list;
@@ -741,6 +743,12 @@ struct io_kiocb {
 	union {
 		/* stores selected buf, valid IFF REQ_F_BUFFER_SELECTED is set */
 		struct io_buffer	*kbuf;
+		/*
+		 * Stores selected provided buffer ring list for deferred
+		 * commit, valid for REQ_F_BUFFER_RING requests with
+		 * REQ_F_BUFFERS_COMMIT set.
+		 */
+		struct io_buffer_list	*buf_list;
 
 		struct io_rsrc_node	*buf_node;
 	};

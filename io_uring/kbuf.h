@@ -3,6 +3,7 @@
 #define IOU_KBUF_H
 
 #include <uapi/linux/io_uring.h>
+#include <linux/refcount.h>
 #include <linux/io_uring_types.h>
 
 enum {
@@ -23,6 +24,7 @@ struct io_buffer_list {
 	};
 	/* count of classic/legacy buffers in buffer list */
 	int nbufs;
+	refcount_t refs;
 
 	__u16 bgid;
 
@@ -81,6 +83,13 @@ int io_manage_buffers_legacy(struct io_kiocb *req, unsigned int issue_flags);
 
 int io_register_pbuf_ring(struct io_ring_ctx *ctx, void __user *arg);
 int io_unregister_pbuf_ring(struct io_ring_ctx *ctx, void __user *arg);
+void io_put_bl(struct io_ring_ctx *ctx, struct io_buffer_list *bl);
+
+static inline void io_get_bl(struct io_buffer_list *bl)
+{
+	refcount_inc(&bl->refs);
+}
+
 int io_register_pbuf_status(struct io_ring_ctx *ctx, void __user *arg);
 
 bool io_kbuf_recycle_legacy(struct io_kiocb *req, unsigned issue_flags);
@@ -97,8 +106,17 @@ struct io_mapped_region *io_pbuf_get_region(struct io_ring_ctx *ctx,
 static inline bool io_kbuf_recycle_ring(struct io_kiocb *req,
 					struct io_buffer_list *bl)
 {
+	struct io_buffer_list *stored_bl = req->buf_list;
+
+	if (stored_bl) {
+		WARN_ON_ONCE(bl && bl != stored_bl);
+		req->buf_list = NULL;
+		req->flags &= ~(REQ_F_BUFFER_RING | REQ_F_BUFFERS_COMMIT);
+		io_put_bl(req->ctx, stored_bl);
+		return true;
+	}
 	if (bl) {
-		req->flags &= ~(REQ_F_BUFFER_RING|REQ_F_BUFFERS_COMMIT);
+		req->flags &= ~(REQ_F_BUFFER_RING | REQ_F_BUFFERS_COMMIT);
 		return true;
 	}
 	return false;
