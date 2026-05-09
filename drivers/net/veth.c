@@ -49,6 +49,10 @@ struct veth_stats {
 	u64	xdp_drops;
 	u64	xdp_tx;
 	u64	xdp_tx_err;
+	/* skb-backed XDP_TX is handled immediately by generic_xdp_tx().
+	 * xdp_frame XDP_TX is accounted from veth_xdp_flush_bq().
+	 */
+	u64 xdp_skb_tx;
 	u64	peer_tq_xdp_xmit;
 	u64	peer_tq_xdp_xmit_err;
 };
@@ -63,7 +67,6 @@ struct veth_rq {
 	struct napi_struct __rcu *napi; /* points to xdp_napi when the latter is initialized */
 	struct net_device	*dev;
 	struct bpf_prog __rcu	*xdp_prog;
-	struct xdp_mem_info	xdp_mem;
 	struct veth_rq_stats	stats;
 	bool			rx_notify_masked;
 	struct ptr_ring		xdp_ring;
@@ -648,10 +651,15 @@ static struct xdp_frame *veth_xdp_rcv_one(struct veth_rq *rq,
 	if (likely(xdp_prog)) {
 		struct veth_xdp_buff vxbuf;
 		struct xdp_buff *xdp = &vxbuf.xdp;
+		struct xdp_rxq_info rxq;
 		u32 act;
 
 		xdp_convert_frame_to_buff(frame, xdp);
-		xdp->rxq = &rq->xdp_rxq;
+
+		rxq = rq->xdp_rxq;
+		rxq.mem.type = frame->mem_type;
+		xdp->rxq = &rxq;
+
 		vxbuf.skb = NULL;
 
 		act = bpf_prog_run_xdp(xdp_prog, xdp);
@@ -663,19 +671,16 @@ static struct xdp_frame *veth_xdp_rcv_one(struct veth_rq *rq,
 			break;
 		case XDP_TX:
 			orig_frame = *frame;
-			xdp->rxq->mem.type = frame->mem_type;
 			if (unlikely(veth_xdp_tx(rq, xdp, bq) < 0)) {
 				trace_xdp_exception(rq->dev, xdp_prog, act);
 				frame = &orig_frame;
 				stats->rx_drops++;
 				goto err_xdp;
 			}
-			stats->xdp_tx++;
 			rcu_read_unlock();
 			goto xdp_xmit;
 		case XDP_REDIRECT:
 			orig_frame = *frame;
-			xdp->rxq->mem.type = frame->mem_type;
 			if (xdp_do_redirect(rq->dev, xdp, xdp_prog)) {
 				frame = &orig_frame;
 				stats->rx_drops++;
@@ -735,69 +740,20 @@ static void veth_xdp_rcv_bulk_skb(struct veth_rq *rq, void **frames,
 	}
 }
 
-static void veth_xdp_get(struct xdp_buff *xdp)
-{
-	struct skb_shared_info *sinfo = xdp_get_shared_info_from_buff(xdp);
-	int i;
-
-	get_page(virt_to_page(xdp->data));
-	if (likely(!xdp_buff_has_frags(xdp)))
-		return;
-
-	for (i = 0; i < sinfo->nr_frags; i++)
-		__skb_frag_ref(&sinfo->frags[i]);
-}
-
-static int veth_convert_skb_to_xdp_buff(struct veth_rq *rq,
-					struct xdp_buff *xdp,
-					struct sk_buff **pskb)
-{
-	struct sk_buff *skb = *pskb;
-	u32 frame_sz;
-
-	if (skb_shared(skb) || skb_head_is_locked(skb) ||
-	    skb_shinfo(skb)->nr_frags ||
-	    skb_headroom(skb) < XDP_PACKET_HEADROOM) {
-		if (skb_pp_cow_data(rq->page_pool, pskb, XDP_PACKET_HEADROOM))
-			goto drop;
-
-		skb = *pskb;
-	}
-
-	/* SKB "head" area always have tailroom for skb_shared_info */
-	frame_sz = skb_end_pointer(skb) - skb->head;
-	frame_sz += SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
-	xdp_init_buff(xdp, frame_sz, &rq->xdp_rxq);
-	xdp_prepare_buff(xdp, skb->head, skb_headroom(skb),
-			 skb_headlen(skb), true);
-
-	if (skb_is_nonlinear(skb)) {
-		skb_shinfo(skb)->xdp_frags_size = skb->data_len;
-		xdp_buff_set_frags_flag(xdp);
-	} else {
-		xdp_buff_clear_frags_flag(xdp);
-	}
-	*pskb = skb;
-
-	return 0;
-drop:
-	consume_skb(skb);
-	*pskb = NULL;
-
-	return -ENOMEM;
-}
-
 static struct sk_buff *veth_xdp_rcv_skb(struct veth_rq *rq,
 					struct sk_buff *skb,
-					struct veth_xdp_tx_bq *bq,
 					struct veth_stats *stats)
 {
-	void *orig_data, *orig_data_end;
 	struct bpf_prog *xdp_prog;
 	struct veth_xdp_buff vxbuf;
-	struct xdp_buff *xdp = &vxbuf.xdp;
-	u32 act, metalen;
-	int off;
+	struct xdp_generic_ctx ctx = {
+		.skb_cow_check = skb_needs_xdp_cow,
+		.page_pool = rq->page_pool,
+		.xdp_rxq = &rq->xdp_rxq,
+		.xdp_skb = &vxbuf.skb,
+		.xdp = &vxbuf.xdp,
+	};
+	int ret;
 
 	skb_prepare_for_gro(skb);
 
@@ -808,94 +764,33 @@ static struct sk_buff *veth_xdp_rcv_skb(struct veth_rq *rq,
 		goto out;
 	}
 
-	__skb_push(skb, skb->data - skb_mac_header(skb));
-	if (veth_convert_skb_to_xdp_buff(rq, xdp, &skb))
-		goto drop;
-	vxbuf.skb = skb;
-
-	orig_data = xdp->data;
-	orig_data_end = xdp->data_end;
-
-	act = bpf_prog_run_xdp(xdp_prog, xdp);
-
-	switch (act) {
+	ret = __do_xdp_generic(xdp_prog, &skb, &ctx);
+	switch (ctx.act) {
 	case XDP_PASS:
 		break;
 	case XDP_TX:
-		veth_xdp_get(xdp);
-		consume_skb(skb);
-		xdp->rxq->mem = rq->xdp_mem;
-		if (unlikely(veth_xdp_tx(rq, xdp, bq) < 0)) {
-			trace_xdp_exception(rq->dev, xdp_prog, act);
-			stats->rx_drops++;
-			goto err_xdp;
-		}
-		stats->xdp_tx++;
-		rcu_read_unlock();
-		goto xdp_xmit;
+		if (!ctx.err)
+			stats->xdp_skb_tx++;
+		break;
 	case XDP_REDIRECT:
-		veth_xdp_get(xdp);
-		consume_skb(skb);
-		xdp->rxq->mem = rq->xdp_mem;
-		if (xdp_do_redirect(rq->dev, xdp, xdp_prog)) {
+		if (ctx.err)
 			stats->rx_drops++;
-			goto err_xdp;
-		}
-		stats->xdp_redirect++;
-		rcu_read_unlock();
-		goto xdp_xmit;
+		else
+			stats->xdp_redirect++;
+		break;
 	default:
-		bpf_warn_invalid_xdp_action(rq->dev, xdp_prog, act);
-		fallthrough;
 	case XDP_ABORTED:
-		trace_xdp_exception(rq->dev, xdp_prog, act);
-		fallthrough;
 	case XDP_DROP:
 		stats->xdp_drops++;
-		goto xdp_drop;
+		break;
 	}
 	rcu_read_unlock();
 
-	/* check if bpf_xdp_adjust_head was used */
-	off = orig_data - xdp->data;
-	if (off > 0)
-		__skb_push(skb, off);
-	else if (off < 0)
-		__skb_pull(skb, -off);
-
-	skb_reset_mac_header(skb);
-
-	/* check if bpf_xdp_adjust_tail was used */
-	off = xdp->data_end - orig_data_end;
-	if (off != 0)
-		__skb_put(skb, off); /* positive on grow, negative on shrink */
-
-	/* XDP frag metadata (e.g. nr_frags) are updated in eBPF helpers
-	 * (e.g. bpf_xdp_adjust_tail), we need to update data_len here.
-	 */
-	if (xdp_buff_has_frags(xdp))
-		skb->data_len = skb_shinfo(skb)->xdp_frags_size;
-	else
-		skb->data_len = 0;
-
-	skb->protocol = eth_type_trans(skb, rq->dev);
-
-	metalen = xdp->data - xdp->data_meta;
-	if (metalen)
-		skb_metadata_set(skb, metalen);
+	if (ret == XDP_PASS)
+		return skb;
+	return NULL;
 out:
 	return skb;
-drop:
-	stats->rx_drops++;
-xdp_drop:
-	rcu_read_unlock();
-	kfree_skb(skb);
-	return NULL;
-err_xdp:
-	rcu_read_unlock();
-	xdp_return_buff(xdp);
-xdp_xmit:
-	return NULL;
 }
 
 static int veth_xdp_rcv(struct veth_rq *rq, int budget,
@@ -931,7 +826,7 @@ static int veth_xdp_rcv(struct veth_rq *rq, int budget,
 			struct sk_buff *skb = ptr;
 
 			stats->xdp_bytes += skb->len;
-			skb = veth_xdp_rcv_skb(rq, skb, bq, stats);
+			skb = veth_xdp_rcv_skb(rq, skb, stats);
 			if (skb) {
 				if (skb_shared(skb) || skb_unclone(skb, GFP_ATOMIC))
 					netif_receive_skb(skb);
@@ -947,7 +842,9 @@ static int veth_xdp_rcv(struct veth_rq *rq, int budget,
 
 	u64_stats_update_begin(&rq->stats.syncp);
 	rq->stats.vs.xdp_redirect += stats->xdp_redirect;
+	rq->stats.vs.xdp_tx += stats->xdp_skb_tx;
 	rq->stats.vs.xdp_bytes += stats->xdp_bytes;
+	rq->stats.vs.xdp_tx_err += stats->xdp_tx_err;
 	rq->stats.vs.xdp_drops += stats->xdp_drops;
 	rq->stats.vs.rx_drops += stats->rx_drops;
 	rq->stats.vs.xdp_packets += done;
@@ -980,7 +877,7 @@ static int veth_poll(struct napi_struct *napi, int budget)
 
 	if (stats.xdp_redirect > 0)
 		xdp_do_flush();
-	if (stats.xdp_tx > 0)
+	if (bq.count > 0)
 		veth_xdp_flush(rq, &bq);
 	xdp_clear_return_frame_no_direct();
 
@@ -1124,13 +1021,10 @@ static int veth_enable_xdp_range(struct net_device *dev, int start, int end,
 			goto err_rxq_reg;
 
 		err = xdp_rxq_info_reg_mem_model(&rq->xdp_rxq,
-						 MEM_TYPE_PAGE_SHARED,
+						 MEM_TYPE_PAGE_POOL_OR_SHARED,
 						 NULL);
 		if (err < 0)
 			goto err_reg_mem;
-
-		/* Save original mem info as it can be overwritten */
-		rq->xdp_mem = rq->xdp_rxq.mem;
 	}
 	return 0;
 
@@ -1157,7 +1051,6 @@ static void veth_disable_xdp_range(struct net_device *dev, int start, int end,
 	for (i = start; i < end; i++) {
 		struct veth_rq *rq = &priv->rq[i];
 
-		rq->xdp_rxq.mem = rq->xdp_mem;
 		xdp_rxq_info_unreg(&rq->xdp_rxq);
 
 		if (delete_napi)
