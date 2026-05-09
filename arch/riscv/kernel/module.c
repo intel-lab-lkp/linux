@@ -594,7 +594,7 @@ static const struct relocation_handlers reloc_handlers[] = {
 	/* 192-255 nonstandard ABI extensions  */
 };
 
-static void
+static int
 process_accumulated_relocations(struct module *me,
 				struct hlist_head **relocation_hashtable,
 				struct list_head *used_buckets_list)
@@ -625,6 +625,7 @@ process_accumulated_relocations(struct module *me,
 	int curr_type;
 	void *location;
 	long buffer;
+	int res, error = 0;
 
 	list_for_each_entry_safe(bucket_iter, bucket_iter_tmp,
 				 used_buckets_list, head) {
@@ -637,18 +638,27 @@ process_accumulated_relocations(struct module *me,
 						 &rel_head_iter->rel_entry,
 						 head) {
 				curr_type = rel_entry_iter->type;
-				reloc_handlers[curr_type].reloc_handler(
-					me, &buffer, rel_entry_iter->value);
+				if (!error) {
+					res = reloc_handlers[curr_type].reloc_handler(
+						me, &buffer, rel_entry_iter->value);
+					if (res)
+						error = res;
+				}
 				kfree(rel_entry_iter);
 			}
-			reloc_handlers[curr_type].accumulate_handler(
-				me, location, buffer);
+			if (!error) {
+				res = reloc_handlers[curr_type].accumulate_handler(
+					me, location, buffer);
+				if (res)
+					error = res;
+			}
 			kfree(rel_head_iter);
 		}
 		kfree(bucket_iter);
 	}
 
 	kvfree(*relocation_hashtable);
+	return error;
 }
 
 static int add_relocation_to_accumulate(struct module *me, int type,
@@ -886,10 +896,8 @@ int apply_relocate_add(Elf_Shdr *sechdrs, const char *strtab,
 			return res;
 	}
 
-	process_accumulated_relocations(me, &relocation_hashtable,
+	return process_accumulated_relocations(me, &relocation_hashtable,
 					&used_buckets_list);
-
-	return 0;
 }
 
 int module_finalize(const Elf_Ehdr *hdr,
