@@ -11174,6 +11174,13 @@ static int netif_alloc_rx_queues(struct net_device *dev)
 		err = xdp_rxq_info_reg(&rx[i].xdp_rxq, dev, i, 0);
 		if (err < 0)
 			goto err_rxq_info;
+		err = xdp_rxq_info_reg_mem_model(&rx[i].xdp_rxq,
+						 MEM_TYPE_PAGE_POOL_OR_SHARED,
+						 NULL);
+		if (err < 0) {
+			xdp_rxq_info_unreg(&rx[i].xdp_rxq);
+			goto err_rxq_info;
+		}
 	}
 	return 0;
 

@@ -22,6 +22,7 @@
 #include <net/xdp_priv.h> /* struct xdp_mem_allocator */
 #include <trace/events/xdp.h>
 #include <net/xdp_sock_drv.h>
+#include "netmem_priv.h"
 
 #define REG_STATE_NEW		0x0
 #define REG_STATE_REGISTERED	0x1
@@ -280,6 +281,12 @@ static struct xdp_mem_allocator *__xdp_reg_mem_model(struct xdp_mem_info *mem,
 	if (!__is_supported_mem_type(type))
 		return ERR_PTR(-EOPNOTSUPP);
 
+	/* MEM_TYPE_PAGE_POOL_OR_SHARED is expected to handle pp's allocator
+	 * separately;
+	 */
+	if (type == MEM_TYPE_PAGE_POOL_OR_SHARED && allocator)
+		return ERR_PTR(-EINVAL);
+
 	mem->type = type;
 
 	if (!allocator) {
@@ -424,6 +431,23 @@ void xdp_rxq_info_attach_page_pool(struct xdp_rxq_info *xdp_rxq,
 }
 EXPORT_SYMBOL_GPL(xdp_rxq_info_attach_page_pool);
 
+static bool xdp_netmem_is_pp(netmem_ref netmem)
+{
+#if IS_ENABLED(CONFIG_PAGE_POOL)
+	return netmem_is_pp(netmem);
+#else
+	return false;
+#endif
+}
+
+static void __xdp_return_page_pool(netmem_ref netmem, bool napi_direct)
+{
+	if (napi_direct && xdp_return_frame_no_direct())
+		napi_direct = false;
+
+	page_pool_put_full_netmem(netmem_get_pp(netmem), netmem, napi_direct);
+}
+
 /* XDP RX runs under NAPI protection, and in different delivery error
  * scenarios (e.g. queue full), it is possible to return the xdp_frame
  * while still leveraging this protection.  The @napi_direct boolean
@@ -433,19 +457,25 @@ EXPORT_SYMBOL_GPL(xdp_rxq_info_attach_page_pool);
 void __xdp_return(netmem_ref netmem, enum xdp_mem_type mem_type,
 		  bool napi_direct, struct xdp_buff *xdp)
 {
+	netmem_ref head;
+
 	switch (mem_type) {
 	case MEM_TYPE_PAGE_POOL:
 		netmem = netmem_compound_head(netmem);
-		if (napi_direct && xdp_return_frame_no_direct())
-			napi_direct = false;
 		/* No need to check netmem_is_pp() as mem->type knows this a
 		 * page_pool page
 		 */
-		page_pool_put_full_netmem(netmem_get_pp(netmem), netmem,
-					  napi_direct);
+		__xdp_return_page_pool(netmem, napi_direct);
 		break;
 	case MEM_TYPE_PAGE_SHARED:
 		page_frag_free(__netmem_address(netmem));
+		break;
+	case MEM_TYPE_PAGE_POOL_OR_SHARED:
+		head = netmem_compound_head(netmem);
+		if (xdp_netmem_is_pp(head))
+			__xdp_return_page_pool(head, napi_direct);
+		else
+			page_frag_free(__netmem_address(netmem));
 		break;
 	case MEM_TYPE_PAGE_ORDER0:
 		put_page(__netmem_to_page(netmem));
@@ -791,6 +821,19 @@ out:
 }
 EXPORT_SYMBOL_GPL(xdp_build_skb_from_zc);
 
+static bool xdp_mem_is_page_pool_backed(enum xdp_mem_type mem_type,
+					netmem_ref netmem)
+{
+	switch (mem_type) {
+	case MEM_TYPE_PAGE_POOL:
+		return true;
+	case MEM_TYPE_PAGE_POOL_OR_SHARED:
+		return xdp_netmem_is_pp(netmem_compound_head(netmem));
+	default:
+		return false;
+	}
+}
+
 struct sk_buff *__xdp_build_skb_from_frame(struct xdp_frame *xdpf,
 					   struct sk_buff *skb,
 					   struct net_device *dev)
@@ -836,7 +879,8 @@ struct sk_buff *__xdp_build_skb_from_frame(struct xdp_frame *xdpf,
 	 * - RX ring dev queue index	(skb_record_rx_queue)
 	 */
 
-	if (xdpf->mem_type == MEM_TYPE_PAGE_POOL)
+	if (xdp_mem_is_page_pool_backed(xdpf->mem_type,
+					virt_to_netmem(xdpf->data)))
 		skb_mark_for_recycle(skb);
 
 	/* Allow SKB to reuse area used by xdp_frame */
