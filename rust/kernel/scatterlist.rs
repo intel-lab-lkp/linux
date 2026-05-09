@@ -75,7 +75,7 @@ impl SGEntry {
 
     /// Obtain the raw `struct scatterlist *`.
     #[inline]
-    fn as_raw(&self) -> *mut bindings::scatterlist {
+    pub(crate) fn as_raw(&self) -> *mut bindings::scatterlist {
         self.0.get()
     }
 
