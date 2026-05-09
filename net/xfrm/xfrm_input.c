@@ -765,6 +765,8 @@ resume_decapped:
 			return err;
 		}
 
+		if (unlikely(!afinfo) && async)
+			dev_put(skb->dev);
 		return err;
 	}
 
