@@ -948,6 +948,10 @@ panic_on_rcu_stall
 When set to 1, calls panic() after RCU stall detection messages. This
 is useful to define the root cause of RCU stalls using a vmcore.
 
+The default value can be configured at build time via
+``CONFIG_BOOTPARAM_RCU_STALL_PANIC``. Runtime updates to this sysctl
+always override the built-in default.
+
 = ============================================================
 0 Do not panic() when RCU stall takes place, default behavior.
 1 panic() after printing RCU stall messages.
