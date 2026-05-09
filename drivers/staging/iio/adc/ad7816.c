@@ -222,7 +222,7 @@ static ssize_t ad7816_show_value(struct device *dev,
 
 	ret = ad7816_spi_read(chip, &data);
 	if (ret)
-		return -EIO;
+		return ret;
 
 	data >>= AD7816_VALUE_OFFSET;
 
@@ -320,7 +320,7 @@ static inline ssize_t ad7816_set_oti(struct device *dev,
 
 	ret = ad7816_spi_write(chip, data);
 	if (ret)
-		return -EIO;
+		return ret;
 
 	chip->oti_data[chip->channel_id] = data;
 
