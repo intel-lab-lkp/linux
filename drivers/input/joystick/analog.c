@@ -653,7 +653,7 @@ static struct analog_types analog_types[] = {
 static void analog_parse_options(void)
 {
 	int i, j;
-	char *end;
+	unsigned int parsed_val;
 
 	for (i = 0; i < js_nargs; i++) {
 
@@ -664,8 +664,10 @@ static void analog_parse_options(void)
 			}
 		if (analog_types[j].name) continue;
 
-		analog_options[i] = simple_strtoul(js[i], &end, 0);
-		if (end != js[i]) continue;
+		if (kstrtouint(js[i], 0, &parsed_val) == 0) {
+			analog_options[i] = parsed_val;
+			continue;
+		}
 
 		analog_options[i] = 0xff;
 		if (!strlen(js[i])) continue;
