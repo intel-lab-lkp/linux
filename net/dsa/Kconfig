@@ -211,4 +211,13 @@ config NET_DSA_TAG_YT921X
 	  Say Y or M if you want to enable support for tagging frames for
 	  Motorcomm YT921x switches.
 
+config NET_DSA_TAG_HMS
+	tristate "Tag driver for NXP Heterogeneous Multi-SoC switches"
+	select NET_DSA_TAG_8021Q
+	help
+	  Say Y or M if you want to enable support for tagging frames for
+	  NXP Heterogeneous Multi-SoC switch family. This driver uses a
+	  custom 802.1Q VLAN header for injection and extraction of frames
+	  between the host and the NXP i.MX RT1180 NETC switch.
+
 endif
