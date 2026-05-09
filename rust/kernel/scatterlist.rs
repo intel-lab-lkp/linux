@@ -95,6 +95,24 @@ impl SGEntry {
         // SAFETY: `self.as_raw()` is a valid pointer to a `struct scatterlist`.
         unsafe { bindings::sg_dma_len(self.as_raw()) }.into()
     }
+
+    /// Initialize a new entry with borrowed data.
+    ///
+    /// # Safety
+    ///
+    /// Callers must ensure that:
+    /// - `buf` is a valid pointer
+    /// - `buf_len` describes a valid allocation size for this pointer
+    pub unsafe fn init_one(
+        val: &'_ mut core::mem::MaybeUninit<bindings::scatterlist>,
+        buf: NonNull<u8>,
+        buf_len: u32,
+    ) -> &'_ Self {
+        // SAFETY: `val` points to a correctly sized `struct scatterlist`.
+        unsafe { bindings::sg_init_one(val.as_mut_ptr(), buf.as_ptr().cast(), buf_len) };
+        // SAFETY: `val` points to an initialized `struct scatterlist`.
+        unsafe { Self::from_raw(val.as_mut_ptr()) }
+    }
 }
 
 /// The borrowed generic type of an [`SGTable`], representing a borrowed or externally managed
