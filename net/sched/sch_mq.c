@@ -19,16 +19,16 @@
 
 static int mq_offload(struct Qdisc *sch, enum tc_mq_command cmd)
 {
-	struct net_device *dev = qdisc_dev(sch);
 	struct tc_mq_qopt_offload opt = {
 		.command = cmd,
 		.handle = sch->handle,
 	};
 
-	if (!tc_can_offload(dev) || !dev->netdev_ops->ndo_setup_tc)
-		return -EOPNOTSUPP;
+	if (cmd == TC_MQ_CREATE)
+		return qdisc_offload_change_helper(sch, TC_SETUP_QDISC_MQ, &opt);
 
-	return dev->netdev_ops->ndo_setup_tc(dev, TC_SETUP_QDISC_MQ, &opt);
+	qdisc_offload_destroy_helper(sch, TC_SETUP_QDISC_MQ, &opt);
+	return 0;
 }
 
 static int mq_offload_stats(struct Qdisc *sch)

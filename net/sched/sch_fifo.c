@@ -58,30 +58,24 @@ static int pfifo_tail_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 
 static void fifo_offload_init(struct Qdisc *sch)
 {
-	struct net_device *dev = qdisc_dev(sch);
 	struct tc_fifo_qopt_offload qopt;
-
-	if (!tc_can_offload(dev) || !dev->netdev_ops->ndo_setup_tc)
-		return;
 
 	qopt.command = TC_FIFO_REPLACE;
 	qopt.handle = sch->handle;
 	qopt.parent = sch->parent;
-	dev->netdev_ops->ndo_setup_tc(dev, TC_SETUP_QDISC_FIFO, &qopt);
+
+	qdisc_offload_change_helper(sch, TC_SETUP_QDISC_FIFO, &qopt);
 }
 
 static void fifo_offload_destroy(struct Qdisc *sch)
 {
-	struct net_device *dev = qdisc_dev(sch);
 	struct tc_fifo_qopt_offload qopt;
-
-	if (!tc_can_offload(dev) || !dev->netdev_ops->ndo_setup_tc)
-		return;
 
 	qopt.command = TC_FIFO_DESTROY;
 	qopt.handle = sch->handle;
 	qopt.parent = sch->parent;
-	dev->netdev_ops->ndo_setup_tc(dev, TC_SETUP_QDISC_FIFO, &qopt);
+
+	qdisc_offload_destroy_helper(sch, TC_SETUP_QDISC_FIFO, &qopt);
 }
 
 static int fifo_offload_dump(struct Qdisc *sch)

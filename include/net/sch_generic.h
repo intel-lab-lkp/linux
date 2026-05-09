@@ -92,6 +92,7 @@ struct Qdisc {
 #define TCQ_F_NOLOCK		0x100 /* qdisc does not require locking */
 #define TCQ_F_OFFLOADED		0x200 /* qdisc is offloaded to HW */
 #define TCQ_F_DEQUEUE_DROPS	0x400 /* ->dequeue() can drop packets in q->to_free */
+#define TCQ_F_IN_HW		0x800 /* qdisc offloading has been accepted by HW */
 
 	u32			limit;
 	const struct Qdisc_ops	*ops;
@@ -748,18 +749,37 @@ static inline void dev_reset_queue(struct net_device *dev,
 }
 
 #ifdef CONFIG_NET_SCHED
-int qdisc_offload_dump_helper(struct Qdisc *q, enum tc_setup_type type,
+void qdisc_offload_destroy_helper(struct Qdisc *sch, enum tc_setup_type type,
+				  void *type_data);
+int qdisc_offload_change_helper(struct Qdisc *sch, enum tc_setup_type type,
+				void *type_data);
+int qdisc_offload_dump_helper(struct Qdisc *sch, enum tc_setup_type type,
 			      void *type_data);
 void qdisc_offload_graft_helper(struct net_device *dev, struct Qdisc *sch,
 				struct Qdisc *new, struct Qdisc *old,
 				enum tc_setup_type type, void *type_data,
 				struct netlink_ext_ack *extack);
 #else
+static inline void
+qdisc_offload_destroy_helper(struct Qdisc *sch, enum tc_setup_type type,
+			     void *type_data)
+{
+	sch->flags &= ~TCQ_F_IN_HW;
+}
+
 static inline int
-qdisc_offload_dump_helper(struct Qdisc *q, enum tc_setup_type type,
+qdisc_offload_change_helper(struct Qdisc *sch, enum tc_setup_type type,
+			     void *type_data)
+{
+	sch->flags &= ~TCQ_F_IN_HW;
+	return -EOPNOTSUPP;
+}
+
+static inline int
+qdisc_offload_dump_helper(struct Qdisc *sch, enum tc_setup_type type,
 			  void *type_data)
 {
-	q->flags &= ~TCQ_F_OFFLOADED;
+	sch->flags &= ~TCQ_F_OFFLOADED;
 	return 0;
 }
 

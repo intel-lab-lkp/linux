@@ -154,11 +154,12 @@ static int prio_offload(struct Qdisc *sch, struct tc_prio_qopt *qopt)
 		memcpy(&opt.replace_params.priomap, qopt->priomap,
 		       TC_PRIO_MAX + 1);
 		opt.replace_params.qstats = &sch->qstats;
-	} else {
-		opt.command = TC_PRIO_DESTROY;
+		return qdisc_offload_change_helper(sch, TC_SETUP_QDISC_PRIO, &opt);
 	}
 
-	return dev->netdev_ops->ndo_setup_tc(dev, TC_SETUP_QDISC_PRIO, &opt);
+	opt.command = TC_PRIO_DESTROY;
+	qdisc_offload_destroy_helper(sch, TC_SETUP_QDISC_PRIO, &opt);
+	return 0;
 }
 
 static void

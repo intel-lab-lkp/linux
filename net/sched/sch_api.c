@@ -813,6 +813,44 @@ void qdisc_tree_reduce_backlog(struct Qdisc *sch, int n, int len)
 }
 EXPORT_SYMBOL(qdisc_tree_reduce_backlog);
 
+void qdisc_offload_destroy_helper(struct Qdisc *sch, enum tc_setup_type type,
+				  void *type_data)
+{
+	struct net_device *dev = qdisc_dev(sch);
+	int err;
+
+	if (!(sch->flags & TCQ_F_IN_HW))
+		return;
+
+	sch->flags &= ~TCQ_F_IN_HW;
+	if (!tc_can_offload(dev) || !dev->netdev_ops->ndo_setup_tc)
+		return;
+
+	err = dev->netdev_ops->ndo_setup_tc(dev, type, type_data);
+	if (err)
+		netdev_warn(dev, "Error when destroying offloaded qdisc: %d",
+			    err);
+}
+EXPORT_SYMBOL(qdisc_offload_destroy_helper);
+
+int qdisc_offload_change_helper(struct Qdisc *sch, enum tc_setup_type type,
+				void *type_data)
+{
+	struct net_device *dev = qdisc_dev(sch);
+	int err;
+
+	if (!tc_can_offload(dev) || !dev->netdev_ops->ndo_setup_tc)
+		return -EOPNOTSUPP;
+
+	err = dev->netdev_ops->ndo_setup_tc(dev, type, type_data);
+
+	if (!err)
+		sch->flags |= TCQ_F_IN_HW;
+
+	return err;
+}
+EXPORT_SYMBOL(qdisc_offload_change_helper);
+
 int qdisc_offload_dump_helper(struct Qdisc *sch, enum tc_setup_type type,
 			      void *type_data)
 {

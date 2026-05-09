@@ -346,9 +346,10 @@ static void gred_offload(struct Qdisc *sch, enum tc_gred_command command)
 			opt->set.tab[i].backlog = &q->backlog;
 		}
 		opt->set.qstats = &sch->qstats;
+		qdisc_offload_change_helper(sch, TC_SETUP_QDISC_GRED, opt);
+	} else {
+		qdisc_offload_destroy_helper(sch, TC_SETUP_QDISC_GRED, opt);
 	}
-
-	dev->netdev_ops->ndo_setup_tc(dev, TC_SETUP_QDISC_GRED, opt);
 }
 
 static int gred_offload_dump_stats(struct Qdisc *sch)

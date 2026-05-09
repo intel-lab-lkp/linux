@@ -212,11 +212,12 @@ static int red_offload(struct Qdisc *sch, bool enable)
 		opt.set.is_harddrop = red_use_harddrop(q);
 		opt.set.is_nodrop = red_use_nodrop(q);
 		opt.set.qstats = &sch->qstats;
-	} else {
-		opt.command = TC_RED_DESTROY;
+		return qdisc_offload_change_helper(sch, TC_SETUP_QDISC_RED, &opt);
 	}
 
-	return dev->netdev_ops->ndo_setup_tc(dev, TC_SETUP_QDISC_RED, &opt);
+	opt.command = TC_RED_DESTROY;
+	qdisc_offload_destroy_helper(sch, TC_SETUP_QDISC_RED, &opt);
+	return 0;
 }
 
 static void red_destroy(struct Qdisc *sch)
