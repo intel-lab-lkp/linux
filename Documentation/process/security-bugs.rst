@@ -66,6 +66,42 @@ In addition, the following information are highly desirable:
     the issue appear. It is useful to share them, as they can be helpful to
     keep end users protected during the time it takes them to apply the fix.
 
+What qualifies as a security bug
+--------------------------------
+
+It is important that most bugs are handled publicly so as to involve the widest
+possible audience and find the best solution.  By nature, bugs that are handled
+in closed discussions between a small set of participants are less likely to
+produce the best possible fix (e.g., risk of missing valid use cases, limited
+testing abilities).
+
+It turns out that the majority of the bugs reported via the security team are
+just regular bugs that have been improperly qualified as security bugs due to
+a lack of awareness of the Linux kernel's threat model, as described in
+Documentation/process/threat-model.rst, and ought to have been sent through
+the normal channels described in Documentation/admin-guide/reporting-issues.rst
+instead.
+
+The security list exists for urgent bugs that grant an attacker a capability
+they are not supposed to have on a correctly configured production system, and
+can be easily exploited, representing an imminent threat to many users.  Before
+reporting, consider whether the issue actually crosses a trust boundary on such
+a system.
+
+**If you resorted to AI assistance to identify a bug, you must treat it as
+public**. While you may have valid reasons to believe it is not, the security
+team's experience shows that bugs discovered this way systematically surface
+simultaneously across multiple researchers, often on the same day. In this
+case, do not publicly share a reproducer, as this could cause unintended harm;
+just mention that one is available and maintainers might ask for it privately
+if they need it.
+
+If you are unsure whether an issue qualifies, err on the side of reporting
+privately: the security team would rather triage a borderline report than miss
+a real vulnerability.  Reporting ordinary bugs to the security list, however,
+does not make them move faster and consumes triage capacity that other reports
+need.
+
 Identifying contacts
 --------------------
 
@@ -74,7 +110,7 @@ affected subsystem's maintainers and Cc: the Linux kernel security team.  Do
 not send it to a public list at this stage, unless you have good reasons to
 consider the issue as being public or trivial to discover (e.g. result of a
 widely available automated vulnerability scanning tool that can be repeated by
-anyone).
+anyone, or use of AI-based tools).
 
 If you're sending a report for issues affecting multiple parts in the kernel,
 even if they're fairly similar issues, please send individual messages (think
