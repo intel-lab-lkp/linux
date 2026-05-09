@@ -540,7 +540,7 @@ recheck:
 		if (attr->sched_flags & SCHED_FLAG_SUGOV)
 			return -EINVAL;
 
-		retval = security_task_setscheduler(p);
+		retval = security_task_setscheduler(p, NULL);
 		if (retval)
 			return retval;
 	}
@@ -1213,7 +1213,7 @@ long sched_setaffinity(pid_t pid, const struct cpumask *in_mask)
 			return -EPERM;
 	}
 
-	retval = security_task_setscheduler(p);
+	retval = security_task_setscheduler(p, in_mask);
 	if (retval)
 		return retval;
 
