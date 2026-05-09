@@ -43,14 +43,6 @@ properties:
               - nxp,s32g3-usb
           - const: nxp,s32g2-usb
 
-  clocks:
-    minItems: 1
-    maxItems: 2
-
-  clock-names:
-    minItems: 1
-    maxItems: 2
-
   operating-points-v2:
     description: A phandle to the OPP table containing the performance states.
     $ref: /schemas/types.yaml#/definitions/phandle
@@ -91,6 +83,27 @@ allOf:
   - $ref: chipidea,usb2-common.yaml#
   - $ref: usb-hcd.yaml#
   - $ref: usb-drd.yaml#
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: qcom,ci-hdrc
+    then:
+      properties:
+        clocks:
+          minItems: 1
+          maxItems: 3
+        clock-names:
+          minItems: 1
+          maxItems: 3
+    else:
+      properties:
+        clocks:
+          minItems: 1
+          maxItems: 2
+        clock-names:
+          minItems: 1
+          maxItems: 2
 
 unevaluatedProperties: false
 
