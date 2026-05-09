@@ -1036,7 +1036,10 @@ armada_lcd_bind(struct device *dev, struct device *master, void *data)
 		}
 	}
 
-	return armada_drm_crtc_create(drm, dev, res, irq, variant, port);
+	ret = armada_drm_crtc_create(drm, dev, res, irq, variant, port);
+	if (ret)
+		of_node_put(port);
+	return ret;
 }
 
 static void
