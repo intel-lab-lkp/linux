@@ -181,20 +181,18 @@ new_device_store(const struct bus_type *bus, const char *buf, size_t count)
 		return -EINVAL;
 	}
 
+	nsim_bus_dev = nsim_bus_dev_new(id, port_count, num_queues);
+	if (IS_ERR(nsim_bus_dev))
+		return PTR_ERR(nsim_bus_dev);
+
 	mutex_lock(&nsim_bus_dev_list_lock);
 	/* Prevent to use resource before initialization. */
 	if (!smp_load_acquire(&nsim_bus_enable)) {
-		err = -EBUSY;
-		goto err;
+		mutex_unlock(&nsim_bus_dev_list_lock);
+		nsim_bus_dev_del(nsim_bus_dev);
+		return -EBUSY;
 	}
 
-	nsim_bus_dev = nsim_bus_dev_new(id, port_count, num_queues);
-	if (IS_ERR(nsim_bus_dev)) {
-		err = PTR_ERR(nsim_bus_dev);
-		goto err;
-	}
-
-	refcount_inc(&nsim_bus_devs);
 	/* Allow using nsim_bus_dev */
 	smp_store_release(&nsim_bus_dev->init, true);
 
@@ -202,9 +200,6 @@ new_device_store(const struct bus_type *bus, const char *buf, size_t count)
 	mutex_unlock(&nsim_bus_dev_list_lock);
 
 	return count;
-err:
-	mutex_unlock(&nsim_bus_dev_list_lock);
-	return err;
 }
 static BUS_ATTR_WO(new_device);
 
@@ -241,9 +236,9 @@ del_device_store(const struct bus_type *bus, const char *buf, size_t count)
 		if (nsim_bus_dev->dev.id != id)
 			continue;
 		list_del(&nsim_bus_dev->list);
+		mutex_unlock(&nsim_bus_dev_list_lock);
 		nsim_bus_dev_del(nsim_bus_dev);
-		err = 0;
-		break;
+		return count;
 	}
 	mutex_unlock(&nsim_bus_dev_list_lock);
 	return !err ? count : err;
@@ -467,6 +462,11 @@ nsim_bus_dev_new(unsigned int id, unsigned int port_count, unsigned int num_queu
 	nsim_bus_dev->max_vfs = NSIM_BUS_DEV_MAX_VFS;
 	/* Disallow using nsim_bus_dev */
 	smp_store_release(&nsim_bus_dev->init, false);
+
+	/* Increment refcount before device_register() so that the device
+	 * is accounted for even if the bus is being torn down concurrently.
+	 */
+	refcount_inc(&nsim_bus_devs);
 
 	err = device_register(&nsim_bus_dev->dev);
 	if (err)
