@@ -232,6 +232,13 @@ static int scd30_read_raw(struct iio_dev *indio_dev, struct iio_chan_spec const 
 		if (ret)
 			return ret;
 
+		/* Likely only taken if something really strange happens */
+		if (!tmp) {
+			dev_err(&indio_dev->dev,
+				"Invalid measurement interval 0 received\n");
+			return -EIO;
+		}
+
 		*val = 0;
 		*val2 = 1000000000 / tmp;
 		return IIO_VAL_INT_PLUS_NANO;
