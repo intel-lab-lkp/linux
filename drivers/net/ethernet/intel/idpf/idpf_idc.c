@@ -162,9 +162,12 @@ void idpf_idc_vdev_mtu_event(struct iidc_rdma_vport_dev_info *vdev_info,
 
 	set_bit(event_type, event.type);
 
+	if (!vdev_info->adev)
+		return;
+
 	device_lock(&vdev_info->adev->dev);
 	adev = vdev_info->adev;
-	if (!adev || !adev->dev.driver)
+	if (!adev->dev.driver)
 		goto unlock;
 	iadrv = container_of(adev->dev.driver,
 			     struct iidc_rdma_vport_auxiliary_drv,
