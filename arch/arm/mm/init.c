@@ -14,6 +14,7 @@
 #include <linux/export.h>
 #include <linux/nodemask.h>
 #include <linux/initrd.h>
+#include <linux/of.h>
 #include <linux/of_fdt.h>
 #include <linux/highmem.h>
 #include <linux/gfp.h>
@@ -25,7 +26,6 @@
 #include <linux/execmem.h>
 
 #include <asm/cp15.h>
-#include <asm/mach-types.h>
 #include <asm/memblock.h>
 #include <asm/page.h>
 #include <asm/prom.h>
@@ -415,7 +415,8 @@ void free_initmem(void)
 	fix_kernmem_perms();
 
 	poison_init_mem(__init_begin, __init_end - __init_begin);
-	if (!machine_is_integrator() && !machine_is_cintegrator())
+	if (!of_machine_is_compatible("arm,integrator-ap") &&
+	    !of_machine_is_compatible("arm,integrator-cp"))
 		free_initmem_default(-1);
 }
 
