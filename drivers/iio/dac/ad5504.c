@@ -14,10 +14,12 @@
 #include <linux/kstrtox.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
+#include <linux/property.h>
 #include <linux/regulator/consumer.h>
 #include <linux/spi/spi.h>
 #include <linux/sysfs.h>
 #include <linux/types.h>
+#include <linux/units.h>
 
 #include <linux/iio/dac/ad5504.h>
 #include <linux/iio/events.h>
@@ -274,9 +276,9 @@ static const struct iio_chan_spec ad5504_channels[] = {
 static int ad5504_probe(struct spi_device *spi)
 {
 	struct device *dev = &spi->dev;
-	const struct ad5504_platform_data *pdata = dev_get_platdata(dev);
 	struct iio_dev *indio_dev;
 	struct ad5504_state *st;
+	u32 range[2];
 	int ret;
 
 	indio_dev = devm_iio_device_alloc(dev, sizeof(*st));
@@ -285,16 +287,19 @@ static int ad5504_probe(struct spi_device *spi)
 
 	st = iio_priv(indio_dev);
 
-	ret = devm_regulator_get_enable_read_voltage(dev, "vcc");
-	if (ret < 0 && ret != -ENODEV)
+	ret = devm_regulator_get_enable(dev, "vcc");
+	if (ret && ret != -ENODEV)
 		return ret;
-	if (ret == -ENODEV) {
-		if (pdata->vref_mv)
-			st->vref_mv = pdata->vref_mv;
-		else
-			dev_warn(dev, "reference voltage unspecified\n");
-	} else {
-		st->vref_mv = ret / 1000;
+
+	st->vref_mv = 60 * MILLI;
+	ret = device_property_read_u32_array(dev, "output-range-microvolt",
+					     range, ARRAY_SIZE(range));
+	if (!ret) {
+		if (range[0] != 0 || (range[1] != 30 * MICRO && range[1] != 60 * MICRO))
+			return -EINVAL;
+
+		if (range[1] == 30 * MICRO)
+			st->vref_mv = 30 * MILLI;
 	}
 
 	st->spi = spi;
