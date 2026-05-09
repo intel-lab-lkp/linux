@@ -164,15 +164,13 @@ static void sophgo_pcie_msi_enable(struct dw_pcie_rp *pp)
 static void sophgo_pcie_disable_l0s_l1(struct dw_pcie_rp *pp)
 {
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
-	u32 offset, val;
-
-	offset = dw_pcie_find_capability(pci, PCI_CAP_ID_EXP);
+	u32 val;
 
 	dw_pcie_dbi_ro_wr_en(pci);
 
-	val = dw_pcie_readl_dbi(pci, PCI_EXP_LNKCAP + offset);
+	val = dw_pcie_readl_dbi(pci, PCI_EXP_LNKCAP + pci->pcie_cap);
 	val &= ~(PCI_EXP_LNKCAP_ASPM_L0S | PCI_EXP_LNKCAP_ASPM_L1);
-	dw_pcie_writel_dbi(pci, PCI_EXP_LNKCAP + offset, val);
+	dw_pcie_writel_dbi(pci, PCI_EXP_LNKCAP + pci->pcie_cap, val);
 
 	dw_pcie_dbi_ro_wr_dis(pci);
 }

@@ -114,11 +114,8 @@ static void k1_pcie_disable_resources(struct k1_pcie *k1)
 static void k1_pcie_disable_aspm_l1(struct k1_pcie *k1)
 {
 	struct dw_pcie *pci = &k1->pci;
-	u8 offset;
+	u8 offset = pci->pcie_cap + PCI_EXP_LNKCAP;
 	u32 val;
-
-	offset = dw_pcie_find_capability(pci, PCI_CAP_ID_EXP);
-	offset += PCI_EXP_LNKCAP;
 
 	dw_pcie_dbi_ro_wr_en(pci);
 	val = dw_pcie_readl_dbi(pci, offset);

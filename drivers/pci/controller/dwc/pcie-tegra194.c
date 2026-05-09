@@ -268,7 +268,6 @@ struct tegra_pcie_dw {
 	u32 num_lanes;
 	u32 cid;
 	u32 ras_des_cap;
-	u32 pcie_cap_base;
 	u32 aspm_cmrt;
 	u32 aspm_pwr_on_t;
 	u32 aspm_l0s_enter_lat;
@@ -312,7 +311,7 @@ static void tegra_pcie_icc_set(struct tegra_pcie_dw *pcie)
 	struct dw_pcie *pci = &pcie->pci;
 	u32 val, speed, width;
 
-	val = dw_pcie_readw_dbi(pci, pcie->pcie_cap_base + PCI_EXP_LNKSTA);
+	val = dw_pcie_readw_dbi(pci, pci->pcie_cap + PCI_EXP_LNKSTA);
 
 	speed = FIELD_GET(PCI_EXP_LNKSTA_CLS, val);
 	width = FIELD_GET(PCI_EXP_LNKSTA_NLW, val);
@@ -340,22 +339,22 @@ static void apply_bad_link_workaround(struct dw_pcie_rp *pp)
 	 * stable anyway, not waiting to confirm if link is really
 	 * transitioning to Gen-2 speed
 	 */
-	val = dw_pcie_readw_dbi(pci, pcie->pcie_cap_base + PCI_EXP_LNKSTA);
+	val = dw_pcie_readw_dbi(pci, pci->pcie_cap + PCI_EXP_LNKSTA);
 	if (val & PCI_EXP_LNKSTA_LBMS) {
 		current_link_width = FIELD_GET(PCI_EXP_LNKSTA_NLW, val);
 		if (pcie->init_link_width > current_link_width) {
 			dev_warn(pci->dev, "PCIe link is bad, width reduced\n");
-			val = dw_pcie_readw_dbi(pci, pcie->pcie_cap_base +
+			val = dw_pcie_readw_dbi(pci, pci->pcie_cap +
 						PCI_EXP_LNKCTL2);
 			val &= ~PCI_EXP_LNKCTL2_TLS;
 			val |= PCI_EXP_LNKCTL2_TLS_2_5GT;
-			dw_pcie_writew_dbi(pci, pcie->pcie_cap_base +
+			dw_pcie_writew_dbi(pci, pci->pcie_cap +
 					   PCI_EXP_LNKCTL2, val);
 
-			val = dw_pcie_readw_dbi(pci, pcie->pcie_cap_base +
+			val = dw_pcie_readw_dbi(pci, pci->pcie_cap +
 						PCI_EXP_LNKCTL);
 			val |= PCI_EXP_LNKCTL_RL;
-			dw_pcie_writew_dbi(pci, pcie->pcie_cap_base +
+			dw_pcie_writew_dbi(pci, pci->pcie_cap +
 					   PCI_EXP_LNKCTL, val);
 		}
 	}
@@ -399,17 +398,17 @@ static irqreturn_t tegra_pcie_rp_irq_handler(int irq, void *arg)
 			apply_bad_link_workaround(pp);
 		}
 		if (status_l1 & APPL_INTR_STATUS_L1_8_0_BW_MGT_INT_STS) {
-			val_w = dw_pcie_readw_dbi(pci, pcie->pcie_cap_base +
+			val_w = dw_pcie_readw_dbi(pci, pci->pcie_cap +
 						  PCI_EXP_LNKSTA);
 			val_w |= PCI_EXP_LNKSTA_LBMS;
-			dw_pcie_writew_dbi(pci, pcie->pcie_cap_base +
+			dw_pcie_writew_dbi(pci, pci->pcie_cap +
 					   PCI_EXP_LNKSTA, val_w);
 
 			appl_writel(pcie,
 				    APPL_INTR_STATUS_L1_8_0_BW_MGT_INT_STS,
 				    APPL_INTR_STATUS_L1_8_0);
 
-			val_w = dw_pcie_readw_dbi(pci, pcie->pcie_cap_base +
+			val_w = dw_pcie_readw_dbi(pci, pci->pcie_cap +
 						  PCI_EXP_LNKSTA);
 			dev_dbg(pci->dev, "Link Speed : Gen-%u\n", val_w &
 				PCI_EXP_LNKSTA_CLS);
@@ -675,7 +674,7 @@ static void init_host_aspm(struct tegra_pcie_dw *pcie)
 
 	l1ss = dw_pcie_find_ext_capability(pci, PCI_EXT_CAP_ID_L1SS);
 
-	pcie->ras_des_cap = dw_pcie_find_ext_capability(&pcie->pci,
+	pcie->ras_des_cap = dw_pcie_find_ext_capability(pci,
 							PCI_EXT_CAP_ID_VNDR);
 
 	/* Enable ASPM counters */
@@ -766,15 +765,12 @@ static void tegra_pcie_enable_system_interrupts(struct dw_pcie_rp *pp)
 		appl_writel(pcie, val, APPL_INTR_EN_L1_18);
 	}
 
-	val_w = dw_pcie_readw_dbi(&pcie->pci, pcie->pcie_cap_base +
-				  PCI_EXP_LNKSTA);
+	val_w = dw_pcie_readw_dbi(pci, pci->pcie_cap + PCI_EXP_LNKSTA);
 	pcie->init_link_width = FIELD_GET(PCI_EXP_LNKSTA_NLW, val_w);
 
-	val_w = dw_pcie_readw_dbi(&pcie->pci, pcie->pcie_cap_base +
-				  PCI_EXP_LNKCTL);
+	val_w = dw_pcie_readw_dbi(pci, pci->pcie_cap + PCI_EXP_LNKCTL);
 	val_w |= PCI_EXP_LNKCTL_LBMIE;
-	dw_pcie_writew_dbi(&pcie->pci, pcie->pcie_cap_base + PCI_EXP_LNKCTL,
-			   val_w);
+	dw_pcie_writew_dbi(pci, pci->pcie_cap + PCI_EXP_LNKCTL, val_w);
 }
 
 static void tegra_pcie_enable_intx_interrupts(struct dw_pcie_rp *pp)
@@ -903,10 +899,6 @@ static int tegra_pcie_dw_host_init(struct dw_pcie_rp *pp)
 
 	pp->bridge->ops = &tegra_pci_ops;
 
-	if (!pcie->pcie_cap_base)
-		pcie->pcie_cap_base = dw_pcie_find_capability(&pcie->pci,
-							      PCI_CAP_ID_EXP);
-
 	val = dw_pcie_readl_dbi(pci, PCI_IO_BASE);
 	val &= ~(IO_BASE_IO_DECODE | IO_BASE_IO_DECODE_BIT8);
 	dw_pcie_writel_dbi(pci, PCI_IO_BASE, val);
@@ -927,10 +919,9 @@ static int tegra_pcie_dw_host_init(struct dw_pcie_rp *pp)
 
 	/* Clear Slot Clock Configuration bit if SRNS configuration */
 	if (pcie->enable_srns) {
-		val_16 = dw_pcie_readw_dbi(pci, pcie->pcie_cap_base +
-					   PCI_EXP_LNKSTA);
+		val_16 = dw_pcie_readw_dbi(pci, pci->pcie_cap + PCI_EXP_LNKSTA);
 		val_16 &= ~PCI_EXP_LNKSTA_SLC;
-		dw_pcie_writew_dbi(pci, pcie->pcie_cap_base + PCI_EXP_LNKSTA,
+		dw_pcie_writew_dbi(pci, pci->pcie_cap + PCI_EXP_LNKSTA,
 				   val_16);
 	}
 
@@ -1047,8 +1038,7 @@ retry_link:
 
 static bool tegra_pcie_dw_link_up(struct dw_pcie *pci)
 {
-	struct tegra_pcie_dw *pcie = to_tegra_pcie(pci);
-	u32 val = dw_pcie_readw_dbi(pci, pcie->pcie_cap_base + PCI_EXP_LNKSTA);
+	u32 val = dw_pcie_readw_dbi(pci, pci->pcie_cap + PCI_EXP_LNKSTA);
 
 	return val & PCI_EXP_LNKSTA_DLLLA;
 }
@@ -1878,16 +1868,13 @@ static void pex_ep_event_pex_rst_deassert(struct tegra_pcie_dw *pcie)
 		dw_pcie_writel_dbi(pci, GEN3_RELATED_OFF, val);
 	}
 
-	pcie->pcie_cap_base = dw_pcie_find_capability(&pcie->pci,
-						      PCI_CAP_ID_EXP);
+	dw_pcie_get_pcie_cap(pci);
 
 	/* Clear Slot Clock Configuration bit if SRNS configuration */
 	if (pcie->enable_srns) {
-		val_16 = dw_pcie_readw_dbi(pci, pcie->pcie_cap_base +
-					   PCI_EXP_LNKSTA);
+		val_16 = dw_pcie_readw_dbi(pci, pci->pcie_cap + PCI_EXP_LNKSTA);
 		val_16 &= ~PCI_EXP_LNKSTA_SLC;
-		dw_pcie_writew_dbi(pci, pcie->pcie_cap_base + PCI_EXP_LNKSTA,
-				   val_16);
+		dw_pcie_writew_dbi(pci, pci->pcie_cap + PCI_EXP_LNKSTA, val_16);
 	}
 
 	clk_set_rate(pcie->core_clk, GEN4_CORE_CLK_FREQ);

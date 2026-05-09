@@ -122,7 +122,7 @@ static int spear13xx_pcie_host_init(struct dw_pcie_rp *pp)
 {
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
 	struct spear13xx_pcie *spear13xx_pcie = to_spear13xx_pcie(pci);
-	u32 exp_cap_off = dw_pcie_find_capability(pci, PCI_CAP_ID_EXP);
+	u8 offset = pci->pcie_cap;
 	u32 val;
 
 	spear13xx_pcie->app_base = pci->dbi_base + 0x2000;
@@ -132,9 +132,9 @@ static int spear13xx_pcie_host_init(struct dw_pcie_rp *pp)
 	 * default value in capability register is 512 bytes. So force
 	 * it to 128 here.
 	 */
-	val = dw_pcie_readw_dbi(pci, exp_cap_off + PCI_EXP_DEVCTL);
+	val = dw_pcie_readw_dbi(pci, offset + PCI_EXP_DEVCTL);
 	val &= ~PCI_EXP_DEVCTL_READRQ;
-	dw_pcie_writew_dbi(pci, exp_cap_off + PCI_EXP_DEVCTL, val);
+	dw_pcie_writew_dbi(pci, offset + PCI_EXP_DEVCTL, val);
 
 	dw_pcie_writew_dbi(pci, PCI_VENDOR_ID, 0x104A);
 	dw_pcie_writew_dbi(pci, PCI_DEVICE_ID, 0xCD80);
