@@ -64,4 +64,10 @@ int hms_xfer_get_cmd(struct hms_private *priv,
 		     enum hms_cmd cmd, u32 id,
 		     void *resp, size_t resp_len);
 
+/* From hms_ethtool.c */
+void hms_get_ethtool_stats(struct dsa_switch *ds, int port, u64 *data);
+void hms_get_strings(struct dsa_switch *ds, int port,
+		     u32 stringset, u8 *data);
+int hms_get_sset_count(struct dsa_switch *ds, int port, int sset);
+
 #endif /* _HMS_SWITCH_H */

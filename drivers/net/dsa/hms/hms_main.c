@@ -761,6 +761,10 @@ static const struct dsa_switch_ops hms_switch_ops = {
 	.port_vlan_add		= hms_bridge_vlan_add,
 	.port_vlan_del		= hms_bridge_vlan_del,
 
+	.get_strings		= hms_get_strings,
+	.get_ethtool_stats	= hms_get_ethtool_stats,
+	.get_sset_count		= hms_get_sset_count,
+
 	.tag_8021q_vlan_add	= hms_8021q_vlan_add,
 	.tag_8021q_vlan_del	= hms_8021q_vlan_del,
 	.port_prechangeupper	= hms_prechangeupper,
