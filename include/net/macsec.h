@@ -176,6 +176,7 @@ struct macsec_rx_sc {
  * @key: key structure
  * @ssci: short secure channel identifier
  * @stats: per-SA stats
+ * @destroy_work: deferred work to free the SA in process context after RCU grace period
  */
 struct macsec_tx_sa {
 	struct macsec_key key;
@@ -188,7 +189,7 @@ struct macsec_tx_sa {
 	refcount_t refcnt;
 	bool active;
 	struct macsec_tx_sa_stats __percpu *stats;
-	struct rcu_head rcu;
+	struct rcu_work destroy_work;
 };
 
 /**
