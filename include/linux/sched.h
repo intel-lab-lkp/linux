@@ -848,9 +848,15 @@ struct task_struct {
 
 	int				on_cpu;
 	struct __call_single_node	wake_entry;
-	unsigned int			wakee_flips;
+
+#ifdef CONFIG_STACKPROTECTOR
+	/* Canary value for the -fstack-protector GCC feature: */
+	unsigned long			stack_canary;
+#endif
+
 	unsigned long			wakee_flip_decay_ts;
 	struct task_struct		*last_wakee;
+	unsigned int			wakee_flips;
 
 	/*
 	 * recent_used_cpu is initially set as the last CPU used by a task
@@ -1060,10 +1066,6 @@ struct task_struct {
 	pid_t				pid;
 	pid_t				tgid;
 
-#ifdef CONFIG_STACKPROTECTOR
-	/* Canary value for the -fstack-protector GCC feature: */
-	unsigned long			stack_canary;
-#endif
 	/*
 	 * Pointers to the (original) parent process, youngest child, younger sibling,
 	 * older sibling, respectively.  (p->father can be replaced with
