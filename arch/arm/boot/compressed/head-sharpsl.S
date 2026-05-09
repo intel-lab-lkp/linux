@@ -103,16 +103,22 @@ __SharpSL_start:
 	.word 	0x08010000		@ w100 Chip ID Reg Address
 .SCOOP2ADDR:
 	.word	0x08800040
+/*
+ * These five machines are no longer supported by the kernel, but if checks for
+ * them were removed, they would be detected as other supported machines,
+ * causing incorrect behavior. The kernel will abort on detecting an unsupported
+ * machine ID.
+ */
 .POODLEID:
-	.word	MACH_TYPE_POODLE
+	.word	424			@ MACH_TYPE_POODLE
 .CORGIID:
-	.word	MACH_TYPE_CORGI
+	.word	423			@ MACH_TYPE_CORGI
 .SHEPHERDID:
-	.word	MACH_TYPE_SHEPHERD
+	.word	545			@ MACH_TYPE_SHEPHERD
 .HUSKYID:
-	.word	MACH_TYPE_HUSKY
+	.word	543			@ MACH_TYPE_HUSKY
 .TOSAID:
-	.word	MACH_TYPE_TOSA
+	.word	520			@ MACH_TYPE_TOSA
 .SPITZID:
 	.word	MACH_TYPE_SPITZ
 .AKITAID:
