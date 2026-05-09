@@ -313,7 +313,7 @@ static int tmp102_probe(struct i2c_client *client)
 	if (!tmp102)
 		return -ENOMEM;
 
-	of_property_read_string(dev->of_node, "label", &tmp102->label);
+	device_property_read_string(dev, "label", &tmp102->label);
 
 	i2c_set_clientdata(client, tmp102);
 
