@@ -4630,7 +4630,7 @@ int xdp_do_generic_redirect(struct net_device *dev, struct sk_buff *skb,
 
 		skb->dev = fwd;
 		_trace_xdp_redirect(dev, xdp_prog, ri->tgt_index);
-		generic_xdp_tx(skb, xdp_prog);
+		(void)generic_xdp_tx(skb, xdp_prog);
 		return 0;
 	}
 
