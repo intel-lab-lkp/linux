@@ -739,12 +739,12 @@ static int coresight_get_trace_id(struct coresight_device *csdev,
  * Call this after creating the path and before enabling it. This leaves
  * the trace ID set on the path, or it remains 0 if it couldn't be assigned.
  */
-void coresight_path_assign_trace_id(struct coresight_path *path,
+int coresight_path_assign_trace_id(struct coresight_path *path,
 				    enum cs_mode mode)
 {
 	struct coresight_device *sink = coresight_get_sink(path);
 	struct coresight_node *nd;
-	int trace_id;
+	int trace_id, ret = -EINVAL;
 
 	list_for_each_entry(nd, &path->path_list, link) {
 		/* Assign a trace ID to the path for the first device that wants to do it */
@@ -755,10 +755,16 @@ void coresight_path_assign_trace_id(struct coresight_path *path,
 		 * Non 0 is either success or fail.
 		 */
 		if (trace_id != 0) {
-			path->trace_id = trace_id;
-			return;
+			if (IS_VALID_CS_TRACE_ID(trace_id)) {
+				path->trace_id = trace_id;
+				ret = 0;
+			}
+
+			return ret;
 		}
 	}
+
+	return ret;
 }
 
 /**
