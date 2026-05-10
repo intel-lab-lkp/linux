@@ -210,13 +210,13 @@ assert_carrier_up nscl "$NSIM_DEV_2_NAME"
 # send/recv packets
 
 tmp_file=$(mktemp)
-ip netns exec nssv socat TCP-LISTEN:1234,fork $tmp_file &
+ip netns exec nssv socat TCP-LISTEN:1234,fork $tmp_file 2>/dev/null &
 pid=$!
 res=0
 
 wait_local_port_listen nssv 1234 tcp
 
-echo "HI" | ip netns exec nscl socat STDIN TCP:192.168.1.1:1234
+echo "HI" | ip netns exec nscl socat -u STDIN TCP:192.168.1.1:1234
 
 count=$(cat $tmp_file | wc -c)
 if [[ $count -ne 3 ]]; then
