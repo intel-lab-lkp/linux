@@ -141,7 +141,7 @@ static void rds_message_purge(struct rds_message *rm)
 	spin_lock_irqsave(&rm->m_rs_lock, flags);
 	znotifier = rm->data.op_mmp_znotifier;
 	rm->data.op_mmp_znotifier = NULL;
-	zcopy = !!znotifier;
+	zcopy = rm->data.op_zcopy || !!znotifier;
 
 	if (rm->m_rs) {
 		struct rds_sock *rs = rm->m_rs;
@@ -170,6 +170,7 @@ static void rds_message_purge(struct rds_message *rm)
 			put_page(sg_page(&rm->data.op_sg[i]));
 	}
 	rm->data.op_nents = 0;
+	rm->data.op_zcopy = 0;
 
 	if (rm->rdma.op_active)
 		rds_rdma_free_op(&rm->rdma);
@@ -414,7 +415,6 @@ struct rds_message *rds_message_map_pages(unsigned long *page_addrs, unsigned in
 static int rds_message_zcopy_from_user(struct rds_message *rm, struct iov_iter *from)
 {
 	struct scatterlist *sg;
-	int ret = 0;
 	int length = iov_iter_count(from);
 	struct rds_msg_zcopy_info *info;
 
@@ -429,12 +429,12 @@ static int rds_message_zcopy_from_user(struct rds_message *rm, struct iov_iter *
 	if (!info)
 		return -ENOMEM;
 	INIT_LIST_HEAD(&info->rs_zcookie_next);
-	rm->data.op_mmp_znotifier = &info->znotif;
-	if (mm_account_pinned_pages(&rm->data.op_mmp_znotifier->z_mmp,
-				    length)) {
-		ret = -ENOMEM;
-		goto err;
+	if (mm_account_pinned_pages(&info->znotif.z_mmp, length)) {
+		kfree(info);
+		return -ENOMEM;
 	}
+	rm->data.op_mmp_znotifier = &info->znotif;
+	rm->data.op_zcopy = 1;
 	while (iov_iter_count(from)) {
 		struct page *pages;
 		size_t start;
@@ -442,28 +442,15 @@ static int rds_message_zcopy_from_user(struct rds_message *rm, struct iov_iter *
 
 		copied = iov_iter_get_pages2(from, &pages, PAGE_SIZE,
 					    1, &start);
-		if (copied < 0) {
-			struct mmpin *mmp;
-			int i;
-
-			for (i = 0; i < rm->data.op_nents; i++)
-				put_page(sg_page(&rm->data.op_sg[i]));
-			mmp = &rm->data.op_mmp_znotifier->z_mmp;
-			mm_unaccount_pinned_pages(mmp);
-			ret = -EFAULT;
-			goto err;
-		}
+		if (copied < 0)
+			return -EFAULT;
 		length -= copied;
 		sg_set_page(sg, pages, copied, start);
 		rm->data.op_nents++;
 		sg++;
 	}
 	WARN_ON_ONCE(length != 0);
-	return ret;
-err:
-	kfree(info);
-	rm->data.op_mmp_znotifier = NULL;
-	return ret;
+	return 0;
 }
 
 int rds_message_copy_from_user(struct rds_message *rm, struct iov_iter *from,
