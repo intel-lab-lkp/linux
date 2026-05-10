@@ -42,17 +42,8 @@ static int __init parse_tag_acorn(const struct tag *tag)
 {
 	memc_ctrl_reg = tag->u.acorn.memc_control_reg;
 	number_mfm_drives = tag->u.acorn.adfsdrives;
+	vram_size = tag->u.acorn.vram_pages * PAGE_SIZE;
 
-	switch (tag->u.acorn.vram_pages) {
-	case 512:
-		vram_size += PAGE_SIZE * 256;
-		fallthrough;	/* ??? */
-	case 256:
-		vram_size += PAGE_SIZE * 256;
-		break;
-	default:
-		break;
-	}
 #if 0
 	if (vram_size) {
 		desc->video_start = 0x02000000;
