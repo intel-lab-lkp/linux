@@ -232,6 +232,16 @@ static int scd30_read_raw(struct iio_dev *indio_dev, struct iio_chan_spec const 
 		if (ret)
 			return ret;
 
+		/*
+		 * Value of 0 is unexpected but possible if hardware is failing
+		 * or noise on data bus
+		 */
+		if (!tmp) {
+			dev_err_ratelimited(&indio_dev->dev,
+					    "Invalid measurement interval 0 received\n");
+			return -EIO;
+		}
+
 		*val = 0;
 		*val2 = 1000000000 / tmp;
 		return IIO_VAL_INT_PLUS_NANO;
@@ -256,7 +266,7 @@ static int scd30_write_raw(struct iio_dev *indio_dev, struct iio_chan_spec const
 	guard(mutex)(&state->lock);
 	switch (mask) {
 	case IIO_CHAN_INFO_SAMP_FREQ:
-		if (val)
+		if (val || !val2)
 			return -EINVAL;
 
 		val = 1000000000 / val2;
