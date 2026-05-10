@@ -94,6 +94,10 @@ struct adxl313_data {
 	u8 watermark;
 	__le16		transf_buf __aligned(IIO_DMA_MINALIGN);
 	__le16		fifo_buf[ADXL313_NUM_AXIS * ADXL313_FIFO_SIZE + 1];
+	struct {
+		__le16 channels[ADXL313_NUM_AXIS];
+		aligned_s64 ts;
+	} scan;
 };
 
 struct adxl313_chip_info {

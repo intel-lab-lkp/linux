@@ -1013,6 +1013,7 @@ static const struct iio_buffer_setup_ops adxl313_buffer_ops = {
 static int adxl313_fifo_push(struct iio_dev *indio_dev, int samples)
 {
 	struct adxl313_data *data = iio_priv(indio_dev);
+	s64 ts = iio_get_time_ns(indio_dev);
 	unsigned int i;
 	int ret;
 
@@ -1020,8 +1021,11 @@ static int adxl313_fifo_push(struct iio_dev *indio_dev, int samples)
 	if (ret)
 		return ret;
 
-	for (i = 0; i < ADXL313_NUM_AXIS * samples; i += ADXL313_NUM_AXIS)
-		iio_push_to_buffers(indio_dev, &data->fifo_buf[i]);
+	for (i = 0; i < ADXL313_NUM_AXIS * samples; i += ADXL313_NUM_AXIS) {
+		memcpy(data->scan.channels, &data->fifo_buf[i],
+		       sizeof(data->scan.channels));
+		iio_push_to_buffers_with_timestamp(indio_dev, &data->scan, ts);
+	}
 
 	return 0;
 }
