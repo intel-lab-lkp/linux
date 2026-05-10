@@ -6,6 +6,9 @@
  *
  *  Note that we don't touch FLOPPY_DMA nor FLOPPY_IRQ here
  */
+
+#include <mach/irqs.h> /* for IRQ_FLOPPYDISK */
+
 #ifndef __ASM_ARM_FLOPPY_H
 #define __ASM_ARM_FLOPPY_H
 
