@@ -204,7 +204,6 @@ static struct dma_fence *v3d_bin_job_run(struct drm_sched_job *sched_job)
 	struct v3d_queue_state *queue = &v3d->queue[V3D_BIN];
 	struct drm_device *dev = &v3d->drm;
 	struct dma_fence *fence;
-	unsigned long irqflags;
 
 	if (unlikely(job->base.base.s_fence->finished.error))
 		goto out_clean_job;
@@ -212,13 +211,13 @@ static struct dma_fence *v3d_bin_job_run(struct drm_sched_job *sched_job)
 	/* Lock required around bin_job update vs
 	 * v3d_overflow_mem_work().
 	 */
-	spin_lock_irqsave(&queue->queue_lock, irqflags);
-	queue->active_job = &job->base;
-	/* Clear out the overflow allocation, so we don't
-	 * reuse the overflow attached to a previous job.
-	 */
-	V3D_CORE_WRITE(0, V3D_PTB_BPOS, 0);
-	spin_unlock_irqrestore(&queue->queue_lock, irqflags);
+	scoped_guard(spinlock, &queue->queue_lock) {
+		queue->active_job = &job->base;
+		/* Clear out the overflow allocation, so we don't
+		 * reuse the overflow attached to a previous job.
+		 */
+		V3D_CORE_WRITE(0, V3D_PTB_BPOS, 0);
+	}
 
 	v3d_invalidate_caches(v3d);
 
@@ -254,9 +253,9 @@ static struct dma_fence *v3d_bin_job_run(struct drm_sched_job *sched_job)
 	return fence;
 
 out_clean_job:
-	spin_lock_irqsave(&queue->queue_lock, irqflags);
-	queue->active_job = NULL;
-	spin_unlock_irqrestore(&queue->queue_lock, irqflags);
+	scoped_guard(spinlock, &queue->queue_lock) {
+		queue->active_job = NULL;
+	}
 	return NULL;
 }
 
