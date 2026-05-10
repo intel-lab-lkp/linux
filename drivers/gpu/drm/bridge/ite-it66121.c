@@ -322,6 +322,7 @@ static inline struct it66121_ctx *bridge_to_it66121_ctx(struct drm_bridge *bridg
 
 struct it66121_bridge_state {
 	struct drm_bridge_state base;
+	bool sink_is_hdmi;
 };
 
 static inline struct it66121_bridge_state *
@@ -790,6 +791,14 @@ static int it66121_bridge_check(struct drm_bridge *bridge,
 				struct drm_connector_state *conn_state)
 {
 	struct it66121_ctx *ctx = bridge_to_it66121_ctx(bridge);
+	struct it66121_bridge_state *state =
+		to_it66121_bridge_state(bridge_state);
+
+	/* Default to HDMI to preserve legacy behavior. */
+	state->sink_is_hdmi = true;
+
+	if (conn_state && conn_state->connector)
+		state->sink_is_hdmi = conn_state->connector->display_info.is_hdmi;
 
 	if (ctx->id == ID_IT6610) {
 		/* The IT6610 only supports these settings */
@@ -809,40 +818,51 @@ void it66121_bridge_mode_set(struct drm_bridge *bridge,
 {
 	u8 buf[HDMI_INFOFRAME_SIZE(AVI)];
 	struct it66121_ctx *ctx = bridge_to_it66121_ctx(bridge);
+	struct drm_bridge_state *bridge_state =
+		drm_priv_to_bridge_state(bridge->base.state);
+	struct it66121_bridge_state *state =
+		to_it66121_bridge_state(bridge_state);
+	unsigned int hdmi_mode = state->sink_is_hdmi ?
+		IT66121_HDMI_MODE_HDMI : 0;
+	unsigned int avi_pkt = 0;
 	int ret;
 
 	mutex_lock(&ctx->lock);
 
-	ret = drm_hdmi_avi_infoframe_from_display_mode(&ctx->hdmi_avi_infoframe, ctx->connector,
-						       adjusted_mode);
-	if (ret) {
-		DRM_ERROR("Failed to setup AVI infoframe: %d\n", ret);
-		goto unlock;
+	if (hdmi_mode) {
+		ret = drm_hdmi_avi_infoframe_from_display_mode(&ctx->hdmi_avi_infoframe,
+							       ctx->connector,
+							       adjusted_mode);
+		if (ret) {
+			DRM_ERROR("Failed to setup AVI infoframe: %d\n", ret);
+			goto unlock;
+		}
+
+		ret = hdmi_avi_infoframe_pack(&ctx->hdmi_avi_infoframe, buf, sizeof(buf));
+		if (ret < 0) {
+			DRM_ERROR("Failed to pack infoframe: %d\n", ret);
+			goto unlock;
+		}
+
+		/* Write new AVI infoframe packet */
+		ret = regmap_bulk_write(ctx->regmap, IT66121_AVIINFO_DB1_REG,
+					&buf[HDMI_INFOFRAME_HEADER_SIZE],
+					HDMI_AVI_INFOFRAME_SIZE);
+		if (ret)
+			goto unlock;
+
+		if (regmap_write(ctx->regmap, IT66121_AVIINFO_CSUM_REG, buf[3]))
+			goto unlock;
+
+		avi_pkt = IT66121_AVI_INFO_PKT_ON | IT66121_AVI_INFO_PKT_RPT;
 	}
 
-	ret = hdmi_avi_infoframe_pack(&ctx->hdmi_avi_infoframe, buf, sizeof(buf));
-	if (ret < 0) {
-		DRM_ERROR("Failed to pack infoframe: %d\n", ret);
-		goto unlock;
-	}
-
-	/* Write new AVI infoframe packet */
-	ret = regmap_bulk_write(ctx->regmap, IT66121_AVIINFO_DB1_REG,
-				&buf[HDMI_INFOFRAME_HEADER_SIZE],
-				HDMI_AVI_INFOFRAME_SIZE);
-	if (ret)
+	/* Enable or disable AVI infoframe */
+	if (regmap_write(ctx->regmap, IT66121_AVI_INFO_PKT_REG, avi_pkt))
 		goto unlock;
 
-	if (regmap_write(ctx->regmap, IT66121_AVIINFO_CSUM_REG, buf[3]))
-		goto unlock;
-
-	/* Enable AVI infoframe */
-	if (regmap_write(ctx->regmap, IT66121_AVI_INFO_PKT_REG,
-			 IT66121_AVI_INFO_PKT_ON | IT66121_AVI_INFO_PKT_RPT))
-		goto unlock;
-
-	/* Set TX mode to HDMI */
-	if (regmap_write(ctx->regmap, IT66121_HDMI_MODE_REG, IT66121_HDMI_MODE_HDMI))
+	/* Set TX mode to HDMI or DVI */
+	if (regmap_write(ctx->regmap, IT66121_HDMI_MODE_REG, hdmi_mode))
 		goto unlock;
 
 	if ((ctx->id == ID_IT66121 || ctx->id == ID_IT66122) &&
