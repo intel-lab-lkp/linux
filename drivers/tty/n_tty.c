@@ -2437,12 +2437,16 @@ static __poll_t n_tty_poll(struct tty_struct *tty, struct file *file,
 
 	poll_wait(file, &tty->read_wait, wait);
 	poll_wait(file, &tty->write_wait, wait);
-	if (input_available_p(tty, 1))
-		mask |= EPOLLIN | EPOLLRDNORM;
-	else {
-		tty_buffer_flush_work(tty->port);
+	scoped_guard(rwsem_read, &tty->termios_rwsem) {
 		if (input_available_p(tty, 1))
 			mask |= EPOLLIN | EPOLLRDNORM;
+	}
+	if (!(mask & (EPOLLIN | EPOLLRDNORM))) {
+		tty_buffer_flush_work(tty->port);
+		scoped_guard(rwsem_read, &tty->termios_rwsem) {
+			if (input_available_p(tty, 1))
+				mask |= EPOLLIN | EPOLLRDNORM;
+		}
 	}
 	if (tty->ctrl.packet && tty->link->ctrl.pktstatus)
 		mask |= EPOLLPRI | EPOLLIN | EPOLLRDNORM;
