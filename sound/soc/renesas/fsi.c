@@ -211,6 +211,7 @@ struct fsi_stream {
 	int sample_width;	/* sample width */
 	int uerr_num;
 	int oerr_num;
+	bool running;
 
 	/*
 	 * bus options
@@ -254,6 +255,8 @@ struct fsi_priv {
 	struct fsi_clk clock;
 
 	u32 fmt;
+
+	int running_streams;
 
 	int chan_num:16;
 	unsigned int clk_master:1;
@@ -460,6 +463,9 @@ static int fsi_get_current_fifo_samples(struct fsi_priv *fsi,
 
 static void fsi_count_fifo_err(struct fsi_priv *fsi)
 {
+	if (fsi->running_streams == 0)
+		return;
+
 	u32 ostatus = fsi_reg_read(fsi, DOFF_ST);
 	u32 istatus = fsi_reg_read(fsi, DIFF_ST);
 
@@ -680,6 +686,9 @@ static void fsi_irq_clear_status(struct fsi_priv *fsi)
 {
 	u32 data = 0;
 	struct fsi_master *master = fsi_get_master(fsi);
+
+	if (fsi->running_streams == 0)
+		return;
 
 	data |= AB_IO(1, fsi_get_port_shift(fsi, &fsi->playback));
 	data |= AB_IO(1, fsi_get_port_shift(fsi, &fsi->capture));
@@ -1573,10 +1582,17 @@ static int fsi_dai_trigger(struct snd_pcm_substream *substream, int cmd,
 {
 	struct fsi_priv *fsi = fsi_get_priv(substream);
 	struct fsi_stream *io = fsi_stream_get(fsi, substream);
+	bool need_shutdown = false;
 	int ret = 0;
 
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
+		scoped_guard(spinlock_irqsave, &fsi->master->lock) {
+			if (!io->running) {
+				io->running = true;
+				fsi->running_streams++;
+			}
+		}
 		fsi_stream_init(fsi, io, substream);
 		if (!ret)
 			ret = fsi_hw_startup(fsi, io, dai->dev);
@@ -1586,8 +1602,15 @@ static int fsi_dai_trigger(struct snd_pcm_substream *substream, int cmd,
 			ret = fsi_stream_transfer(io);
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
+		scoped_guard(spinlock_irqsave, &fsi->master->lock) {
+			if (io->running) {
+				io->running = false;
+				if (--fsi->running_streams == 0)
+					need_shutdown = true;
+			}
+		}
 		fsi_stream_stop(fsi, io);
-		if (!ret)
+		if (!ret && need_shutdown)
 			ret = fsi_hw_shutdown(fsi, dai->dev);
 		fsi_stream_quit(fsi, io);
 		break;
@@ -1968,6 +1991,7 @@ static int fsi_probe(struct platform_device *pdev)
 	fsi->base	= master->base;
 	fsi->phys	= res->start;
 	fsi->master	= master;
+	fsi->running_streams = 0;
 	fsi_port_info_init(fsi, &info.port_a);
 	fsi_handler_init(fsi, &info.port_a);
 	ret = fsi_stream_probe(fsi, &pdev->dev);
@@ -1981,6 +2005,7 @@ static int fsi_probe(struct platform_device *pdev)
 	fsi->base	= master->base + 0x40;
 	fsi->phys	= res->start + 0x40;
 	fsi->master	= master;
+	fsi->running_streams = 0;
 	fsi_port_info_init(fsi, &info.port_b);
 	fsi_handler_init(fsi, &info.port_b);
 	ret = fsi_stream_probe(fsi, &pdev->dev);
