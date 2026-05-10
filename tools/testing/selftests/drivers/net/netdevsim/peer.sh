@@ -52,21 +52,17 @@ cleanup_ns()
 	ip netns del nssv
 }
 
-is_carrier_up()
-{
-	local netns="$1"
-	local nsim_dev="$2"
-
-	test "$(ip netns exec "$netns"	\
-		cat /sys/class/net/"$nsim_dev"/carrier 2>/dev/null)" -eq 1
-}
-
 assert_carrier_up()
 {
 	local netns="$1"
 	local nsim_dev="$2"
 
-	if ! is_carrier_up "$netns" "$nsim_dev"; then
+	local sysfs_carrier="$(ip netns exec "$netns" \
+		cat /sys/class/net/"$nsim_dev"/carrier 2>/dev/null)"
+	local ethtool_carrier="$(ip netns exec "$netns" \
+		ethtool -j "$nsim_dev" | jq '.[0]["link-detected"]' 2>/dev/null)"
+
+	if [ "$sysfs_carrier" -ne 1 -o "$ethtool_carrier" != "true" ]; then
 		echo "$nsim_dev's carrier should be UP, but it isn't"
 		cleanup_ns
 		exit 1
@@ -78,11 +74,34 @@ assert_carrier_down()
 	local netns="$1"
 	local nsim_dev="$2"
 
-	if is_carrier_up "$netns" "$nsim_dev"; then
+	local sysfs_carrier="$(ip netns exec "$netns" \
+		cat /sys/class/net/"$nsim_dev"/carrier 2>/dev/null)"
+	local ethtool_carrier="$(ip netns exec "$netns" \
+		ethtool -j "$nsim_dev" | jq '.[0]["link-detected"]' 2>/dev/null)"
+
+	if [ "$sysfs_carrier" -ne 0 -o "$ethtool_carrier" != "false" ]; then
 		echo "$nsim_dev's carrier should be DOWN, but it isn't"
 		cleanup_ns
 		exit 1
 	fi
+}
+
+set_carrier_up()
+{
+	local netns="$1"
+	local nsim_dev="$2"
+
+	ip netns exec "$netns" \
+		sh -c "echo 1 > /sys/class/net/$nsim_dev/carrier" 2>/dev/null
+}
+
+set_carrier_down()
+{
+	local netns="$1"
+	local nsim_dev="$2"
+
+	ip netns exec "$netns" \
+		sh -c "echo 0 > /sys/class/net/$nsim_dev/carrier" 2>/dev/null
 }
 
 ###
@@ -161,6 +180,14 @@ ip netns exec nssv ip link set dev "$NSIM_DEV_1_NAME" up
 assert_carrier_down nssv "$NSIM_DEV_1_NAME"
 assert_carrier_down nscl "$NSIM_DEV_2_NAME"
 
+set_carrier_up nssv "$NSIM_DEV_1_NAME"
+
+assert_carrier_up nssv "$NSIM_DEV_1_NAME"
+assert_carrier_down nscl "$NSIM_DEV_2_NAME"
+
+set_carrier_down nssv "$NSIM_DEV_1_NAME"
+assert_carrier_down nssv "$NSIM_DEV_1_NAME"
+
 echo "$NSIM_DEV_1_FD:$NSIM_DEV_1_IFIDX $NSIM_DEV_2_FD:$NSIM_DEV_2_IFIDX" > $NSIM_DEV_SYS_LINK
 
 assert_carrier_up nssv "$NSIM_DEV_1_NAME"
@@ -168,6 +195,16 @@ assert_carrier_up nscl "$NSIM_DEV_2_NAME"
 
 ip netns exec nssv ip link set dev "$NSIM_DEV_1_NAME" down
 ip netns exec nssv ip link set dev "$NSIM_DEV_1_NAME" up
+
+assert_carrier_up nssv "$NSIM_DEV_1_NAME"
+assert_carrier_up nscl "$NSIM_DEV_2_NAME"
+
+set_carrier_down nssv "$NSIM_DEV_1_NAME"
+
+assert_carrier_down nssv "$NSIM_DEV_1_NAME"
+assert_carrier_down nscl "$NSIM_DEV_2_NAME"
+
+set_carrier_up nscl "$NSIM_DEV_2_NAME"
 
 assert_carrier_up nssv "$NSIM_DEV_1_NAME"
 assert_carrier_up nscl "$NSIM_DEV_2_NAME"
