@@ -1453,7 +1453,9 @@ static int e100_phy_init(struct nic *nic)
 		 * But do this AFTER MII checking only, since this does
 		 * lookup of EEPROM values which may easily be unreliable. */
 		if (e100_phy_check_without_mii(nic))
-			return 0; /* simply return and hope for the best */
+                        netif_dbg(nic, probe, nic->netdev,
+                                  "No MII PHY detected, continuing anyway\n");
+                        return 0;
 		else {
 			/* for unknown cases log a fatal error */
 			netif_err(nic, hw, nic->netdev,
