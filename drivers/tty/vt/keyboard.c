@@ -1180,7 +1180,13 @@ static void kbd_init_leds(void)
  */
 static unsigned char getledstate(void)
 {
-	return ledstate & 0xff;
+	unsigned char leds;
+
+	tasklet_disable(&keyboard_tasklet);
+	leds = ledstate & 0xff;
+	tasklet_enable(&keyboard_tasklet);
+
+	return leds;
 }
 
 void setledstate(struct kbd_struct *kb, unsigned int led)
