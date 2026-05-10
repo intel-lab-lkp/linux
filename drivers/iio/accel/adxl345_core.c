@@ -204,6 +204,10 @@ struct adxl345_state {
 	u32 tap_window_us;
 
 	__le16 fifo_buf[ADXL345_DIRS * ADXL345_FIFO_SIZE + 1] __aligned(IIO_DMA_MINALIGN);
+	struct {
+		__le16 channels[ADXL345_DIRS];
+		aligned_s64 ts;
+	} scan;
 };
 
 static const struct iio_event_spec adxl345_events[] = {
@@ -1657,6 +1661,7 @@ static int adxl345_fifo_push(struct iio_dev *indio_dev,
 			     int samples)
 {
 	struct adxl345_state *st = iio_priv(indio_dev);
+	s64 ts = iio_get_time_ns(indio_dev);
 	int i, ret;
 
 	if (samples <= 0)
@@ -1666,8 +1671,11 @@ static int adxl345_fifo_push(struct iio_dev *indio_dev,
 	if (ret)
 		return ret;
 
-	for (i = 0; i < ADXL345_DIRS * samples; i += ADXL345_DIRS)
-		iio_push_to_buffers(indio_dev, &st->fifo_buf[i]);
+	for (i = 0; i < ADXL345_DIRS * samples; i += ADXL345_DIRS) {
+		memcpy(st->scan.channels, &st->fifo_buf[i],
+		       sizeof(st->scan.channels));
+		iio_push_to_buffers_with_timestamp(indio_dev, &st->scan, ts);
+	}
 
 	return 0;
 }
