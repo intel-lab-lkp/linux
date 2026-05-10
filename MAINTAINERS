@@ -24391,6 +24391,13 @@ M:	Steve Wahl <steve.wahl@hpe.com>
 S:	Maintained
 F:	drivers/misc/sgi-xp/
 
+SGMICRO SGM3804 REGULATOR DRIVER
+M:	Alexandre Hamamdjian <azkali.limited@gmail.com>
+M:	Philippe Simons <simons.philippe@gmail.com>
+S:	Maintained
+F:	Documentation/devicetree/bindings/regulator/sgmicro,sgm3804.yaml
+F:	drivers/regulator/sgm3804-regulator.c
+
 SHARED MEMORY COMMUNICATIONS (SMC) SOCKETS
 M:	D. Wythe <alibuda@linux.alibaba.com>
 M:	Dust Li <dust.li@linux.alibaba.com>

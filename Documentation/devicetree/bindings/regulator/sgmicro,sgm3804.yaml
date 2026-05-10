@@ -1,0 +1,60 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/regulator/sgmicro,sgm3804.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: SGMicro SGM3804 I2C charge-pump regulator
+
+maintainers:
+  - Alexandre Hamamdjian <azkali.limited@gmail.com>
+  - Philippe Simons <simons.philippe@gmail.com>
+
+description:
+  The SGM3804 is an I2C-controlled positive and negative output charge-pump
+  regulator typically used to provide the AVDD and AVEE supplies for display
+  panels. Two reset GPIOs are used to sequence the positive and negative
+  outputs independently.
+
+allOf:
+  - $ref: regulator.yaml#
+
+properties:
+  compatible:
+    const: sgmicro,sgm3804
+
+  reg:
+    maxItems: 1
+
+  reset-gpios:
+    minItems: 1
+    maxItems: 2
+    description:
+      Reset/enable GPIOs for the positive (index 0) and, optionally, the
+      negative (index 1) output rails.
+
+required:
+  - compatible
+  - reg
+  - reset-gpios
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        regulator@3e {
+            compatible = "sgmicro,sgm3804";
+            reg = <0x3e>;
+            reset-gpios = <&tlmm 10 GPIO_ACTIVE_HIGH>,
+                          <&tlmm 11 GPIO_ACTIVE_HIGH>;
+            regulator-name = "panel-avdd";
+            regulator-min-microvolt = <5000000>;
+            regulator-max-microvolt = <5000000>;
+        };
+    };
