@@ -422,9 +422,6 @@ struct v3d_indirect_csd_info {
 	/* Indirect CSD */
 	struct v3d_csd_job *job;
 
-	/* Clean cache job associated to the Indirect CSD job */
-	struct v3d_job *clean_job;
-
 	/* Indirect CSD args, stashed by the extension parser and later used
 	 * to create the CSD job from them.
 	 */
@@ -443,9 +440,6 @@ struct v3d_indirect_csd_info {
 
 	/* Indirect BO */
 	struct drm_gem_object *indirect;
-
-	/* Context of the Indirect CSD job */
-	struct drm_exec exec;
 };
 
 struct v3d_timestamp_query_info {
