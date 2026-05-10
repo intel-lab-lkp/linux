@@ -23311,6 +23311,7 @@ M:	CTCaer <ctcaer@gmail.com>
 M:	Alexandre Hamamdjian <azkali.limited@gmail.com>
 L:	linux-usb@vger.kernel.org
 S:	Maintained
+F:	Documentation/devicetree/bindings/usb/rohm,bm92t.yaml
 F:	drivers/usb/typec/bm92txx.c
 
 ROHM BU270xx LIGHT SENSOR DRIVERs
