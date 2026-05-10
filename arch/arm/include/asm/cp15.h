@@ -42,11 +42,7 @@
 
 #ifndef __ASSEMBLY__
 
-#if __LINUX_ARM_ARCH__ >= 4
 #define vectors_high()	(get_cr() & CR_V)
-#else
-#define vectors_high()	(0)
-#endif
 
 #ifdef CONFIG_CPU_CP15
 
