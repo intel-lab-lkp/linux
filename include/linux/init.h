@@ -182,6 +182,16 @@ extern struct module __this_module;
 
 #ifndef __ASSEMBLY__
 
+#if defined(CONFIG_DEBUG_FS) && defined(CONFIG_KALLSYMS)
+#ifndef KBUILD_MODNAME
+#define KBUILD_MODNAME "unknown"
+#endif
+struct builtin_initcall_record {
+	const char *modname;
+	const char *fnname;
+};
+#endif
+
 /*
  * initcalls are now grouped by functionality into separate
  * subsections. Ordering inside the subsections is determined
@@ -271,8 +281,19 @@ extern struct module __this_module;
 		__initcall_name(initcall, __iid, id),		\
 		__initcall_section(__sec, __iid))
 
+#if defined(CONFIG_DEBUG_FS) && defined(CONFIG_KALLSYMS)
+#define ___define_initcall(fn, id, __sec)					\
+	__unique_initcall(fn, id, __sec, __initcall_id(fn));			\
+	static const struct builtin_initcall_record				\
+	__initcall_name(builtin_initcall_rec, __initcall_id(fn), id)		\
+	__used __aligned(8) __section(".rodata_builtin_initcall_records") = {	\
+		.modname = KBUILD_MODNAME,					\
+		.fnname = #fn,							\
+	};
+#else
 #define ___define_initcall(fn, id, __sec)			\
 	__unique_initcall(fn, id, __sec, __initcall_id(fn))
+#endif
 
 #define __define_initcall(fn, id) ___define_initcall(fn, id, .initcall##id)
 

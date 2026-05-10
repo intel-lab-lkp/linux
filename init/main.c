@@ -104,6 +104,8 @@
 #include <linux/randomize_kstack.h>
 #include <linux/pidfs.h>
 #include <linux/ptdump.h>
+#include <linux/debugfs.h>
+#include <linux/seq_file.h>
 #include <linux/time_namespace.h>
 #include <linux/unaligned.h>
 #include <linux/vdso_datastore.h>
@@ -1251,7 +1253,7 @@ struct blacklist_entry {
 	char *buf;
 };
 
-static __initdata_or_module LIST_HEAD(blacklisted_initcalls);
+static LIST_HEAD(blacklisted_initcalls);
 
 static int __init initcall_blacklist(char *str)
 {
@@ -1315,6 +1317,57 @@ static bool __init_or_module initcall_blacklisted(initcall_t fn)
 }
 #endif
 __setup("initcall_blacklist=", initcall_blacklist);
+
+#if defined(CONFIG_DEBUG_FS) && defined(CONFIG_KALLSYMS)
+extern struct builtin_initcall_record __builtin_initcall_records_start[];
+extern struct builtin_initcall_record __builtin_initcall_records_end[];
+
+static int builtin_initcalls_show(struct seq_file *m, void *v)
+{
+	struct builtin_initcall_record *rec;
+	bool blacklisted;
+	struct blacklist_entry *entry;
+
+	for (rec = __builtin_initcall_records_start; rec < __builtin_initcall_records_end; rec++) {
+		blacklisted = false;
+		list_for_each_entry(entry, &blacklisted_initcalls, next) {
+			if (!strcmp(rec->fnname, entry->buf)) {
+				blacklisted = true;
+				break;
+			}
+		}
+		seq_printf(m, "%s %s%s\n",
+			   rec->modname,
+			   rec->fnname,
+			   blacklisted ? " [blacklisted]" : "");
+	}
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(builtin_initcalls);
+
+static int __init builtin_initcalls_debugfs_init(void)
+{
+	struct dentry *modules_dir;
+
+	/* Attempt to safely grab a reference to the existing directory */
+	modules_dir = debugfs_lookup("modules", NULL);
+
+	/* * Use modules_dir if found, otherwise dynamically create and use
+	 * the fallback directory without.
+	 */
+	debugfs_create_file("builtin_initcalls", 0444,
+			    modules_dir ?: debugfs_create_dir("modules", NULL),
+			    NULL, &builtin_initcalls_fops);
+
+	/* dput() safely ignores NULL if the lookup failed */
+	dput(modules_dir);
+
+	return 0;
+}
+late_initcall(builtin_initcalls_debugfs_init);
+#endif /* CONFIG_DEBUG_FS && CONFIG_KALLSYMS */
+
 
 static __init_or_module void
 trace_initcall_start_cb(void *data, initcall_t fn)

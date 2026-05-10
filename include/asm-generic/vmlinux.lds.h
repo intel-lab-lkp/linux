@@ -483,6 +483,10 @@
 		SCHED_DATA						\
 		RO_AFTER_INIT_DATA	/* Read only after init */	\
 		. = ALIGN(8);						\
+		__builtin_initcall_records_start = .;			\
+		KEEP(*(.rodata_builtin_initcall_records))		\
+		__builtin_initcall_records_end = .;			\
+		. = ALIGN(8);						\
 		BOUNDED_SECTION_BY(__tracepoints_ptrs, ___tracepoints_ptrs) \
 		*(__tracepoints_strings)/* Tracepoints: strings */	\
 	}								\
