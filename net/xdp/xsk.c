@@ -1016,6 +1016,8 @@ free_err:
 			xs->tx->invalid_descs++;
 		}
 		xskq_cons_release(xs->tx);
+		if (xp_mb_desc(desc))
+			xs->drain_cont = true;
 	} else {
 		/* Let application retry */
 		xsk_cq_cancel_locked(xs->pool, 1);
@@ -1060,6 +1062,26 @@ static int __xsk_generic_xmit(struct sock *sk)
 		if (err) {
 			err = -EAGAIN;
 			goto out;
+		}
+
+		if (unlikely(xs->drain_cont)) {
+			unsigned long flags;
+			u32 idx;
+
+			spin_lock_irqsave(&xs->pool->cq_prod_lock, flags);
+			idx = xskq_get_prod(xs->pool->cq);
+			xskq_prod_write_addr(xs->pool->cq, idx, desc.addr);
+			xskq_prod_submit_n(xs->pool->cq, 1);
+			spin_unlock_irqrestore(&xs->pool->cq_prod_lock, flags);
+
+			xs->tx->invalid_descs++;
+			xskq_cons_release(xs->tx);
+			if (!xp_mb_desc(&desc)) {
+				xs->drain_cont = false;
+				err = -EOVERFLOW;
+				goto out;
+			}
+			continue;
 		}
 
 		skb = xsk_build_skb(xs, &desc);
