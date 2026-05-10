@@ -224,6 +224,10 @@ struct adxl380_state {
 	int hpf_tbl[7][2];
 
 	__be16 fifo_buf[ADXL380_FIFO_SAMPLES] __aligned(IIO_DMA_MINALIGN);
+	struct {
+		__be16 channels[4];
+		aligned_s64 ts;
+	} scan;
 };
 
 bool adxl380_readable_noinc_reg(struct device *dev, unsigned int reg)
@@ -948,6 +952,7 @@ static irqreturn_t adxl380_irq_handler(int irq, void  *p)
 	struct adxl380_state *st = iio_priv(indio_dev);
 	u8 status0, status1;
 	u16 fifo_entries;
+	s64 ts;
 	int i;
 	int ret;
 
@@ -957,7 +962,8 @@ static irqreturn_t adxl380_irq_handler(int irq, void  *p)
 	if (ret)
 		return IRQ_HANDLED;
 
-	adxl380_push_event(indio_dev, iio_get_time_ns(indio_dev), status1);
+	ts = iio_get_time_ns(indio_dev);
+	adxl380_push_event(indio_dev, ts, status1);
 
 	if (!FIELD_GET(ADXL380_STATUS_0_FIFO_WM_MSK, status0))
 		return IRQ_HANDLED;
@@ -971,8 +977,11 @@ static irqreturn_t adxl380_irq_handler(int irq, void  *p)
 				sizeof(*st->fifo_buf) * fifo_entries);
 	if (ret)
 		return IRQ_HANDLED;
-	for (i = 0; i < fifo_entries; i += st->fifo_set_size)
-		iio_push_to_buffers(indio_dev, &st->fifo_buf[i]);
+	for (i = 0; i < fifo_entries; i += st->fifo_set_size) {
+		memcpy(st->scan.channels, &st->fifo_buf[i],
+		       st->fifo_set_size * sizeof(__be16));
+		iio_push_to_buffers_with_timestamp(indio_dev, &st->scan, ts);
+	}
 
 	return IRQ_HANDLED;
 }
