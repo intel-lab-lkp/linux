@@ -315,6 +315,11 @@ struct it66121_ctx {
 	enum chip_id id;
 };
 
+static inline struct it66121_ctx *bridge_to_it66121_ctx(struct drm_bridge *bridge)
+{
+	return container_of(bridge, struct it66121_ctx, bridge);
+}
+
 static const struct regmap_range_cfg it66121_regmap_banks[] = {
 	{
 		.name = "it66121",
@@ -589,7 +594,7 @@ static int it66121_bridge_attach(struct drm_bridge *bridge,
 				 struct drm_encoder *encoder,
 				 enum drm_bridge_attach_flags flags)
 {
-	struct it66121_ctx *ctx = container_of(bridge, struct it66121_ctx, bridge);
+	struct it66121_ctx *ctx = bridge_to_it66121_ctx(bridge);
 	int ret;
 
 	if (!(flags & DRM_BRIDGE_ATTACH_NO_CONNECTOR))
@@ -700,7 +705,7 @@ static u32 *it66121_bridge_atomic_get_input_bus_fmts(struct drm_bridge *bridge,
 						     u32 output_fmt,
 						     unsigned int *num_input_fmts)
 {
-	struct it66121_ctx *ctx = container_of(bridge, struct it66121_ctx, bridge);
+	struct it66121_ctx *ctx = bridge_to_it66121_ctx(bridge);
 	u32 *input_fmts;
 
 	*num_input_fmts = 0;
@@ -724,7 +729,7 @@ static u32 *it66121_bridge_atomic_get_input_bus_fmts(struct drm_bridge *bridge,
 static void it66121_bridge_enable(struct drm_bridge *bridge,
 				  struct drm_atomic_commit *state)
 {
-	struct it66121_ctx *ctx = container_of(bridge, struct it66121_ctx, bridge);
+	struct it66121_ctx *ctx = bridge_to_it66121_ctx(bridge);
 
 	ctx->connector = drm_atomic_get_new_connector_for_encoder(state, bridge->encoder);
 
@@ -734,7 +739,7 @@ static void it66121_bridge_enable(struct drm_bridge *bridge,
 static void it66121_bridge_disable(struct drm_bridge *bridge,
 				   struct drm_atomic_commit *state)
 {
-	struct it66121_ctx *ctx = container_of(bridge, struct it66121_ctx, bridge);
+	struct it66121_ctx *ctx = bridge_to_it66121_ctx(bridge);
 
 	it66121_set_mute(ctx, true);
 
@@ -746,7 +751,7 @@ static int it66121_bridge_check(struct drm_bridge *bridge,
 				struct drm_crtc_state *crtc_state,
 				struct drm_connector_state *conn_state)
 {
-	struct it66121_ctx *ctx = container_of(bridge, struct it66121_ctx, bridge);
+	struct it66121_ctx *ctx = bridge_to_it66121_ctx(bridge);
 
 	if (ctx->id == ID_IT6610) {
 		/* The IT6610 only supports these settings */
@@ -765,7 +770,7 @@ void it66121_bridge_mode_set(struct drm_bridge *bridge,
 			     const struct drm_display_mode *adjusted_mode)
 {
 	u8 buf[HDMI_INFOFRAME_SIZE(AVI)];
-	struct it66121_ctx *ctx = container_of(bridge, struct it66121_ctx, bridge);
+	struct it66121_ctx *ctx = bridge_to_it66121_ctx(bridge);
 	int ret;
 
 	mutex_lock(&ctx->lock);
@@ -829,7 +834,7 @@ static enum drm_mode_status it66121_bridge_mode_valid(struct drm_bridge *bridge,
 						      const struct drm_display_info *info,
 						      const struct drm_display_mode *mode)
 {
-	struct it66121_ctx *ctx = container_of(bridge, struct it66121_ctx, bridge);
+	struct it66121_ctx *ctx = bridge_to_it66121_ctx(bridge);
 	unsigned long max_clock;
 
 	max_clock = (ctx->bus_width == 12) ? 74250 : 148500;
@@ -846,7 +851,7 @@ static enum drm_mode_status it66121_bridge_mode_valid(struct drm_bridge *bridge,
 static enum drm_connector_status
 it66121_bridge_detect(struct drm_bridge *bridge, struct drm_connector *connector)
 {
-	struct it66121_ctx *ctx = container_of(bridge, struct it66121_ctx, bridge);
+	struct it66121_ctx *ctx = bridge_to_it66121_ctx(bridge);
 
 	return it66121_is_hpd_detect(ctx) ? connector_status_connected
 					  : connector_status_disconnected;
@@ -854,7 +859,7 @@ it66121_bridge_detect(struct drm_bridge *bridge, struct drm_connector *connector
 
 static void it66121_bridge_hpd_enable(struct drm_bridge *bridge)
 {
-	struct it66121_ctx *ctx = container_of(bridge, struct it66121_ctx, bridge);
+	struct it66121_ctx *ctx = bridge_to_it66121_ctx(bridge);
 	int ret;
 
 	ret = regmap_write_bits(ctx->regmap, IT66121_INT_MASK1_REG, IT66121_INT_MASK1_HPD, 0);
@@ -864,7 +869,7 @@ static void it66121_bridge_hpd_enable(struct drm_bridge *bridge)
 
 static void it66121_bridge_hpd_disable(struct drm_bridge *bridge)
 {
-	struct it66121_ctx *ctx = container_of(bridge, struct it66121_ctx, bridge);
+	struct it66121_ctx *ctx = bridge_to_it66121_ctx(bridge);
 	int ret;
 
 	ret = regmap_write_bits(ctx->regmap, IT66121_INT_MASK1_REG,
@@ -876,7 +881,7 @@ static void it66121_bridge_hpd_disable(struct drm_bridge *bridge)
 static const struct drm_edid *it66121_bridge_edid_read(struct drm_bridge *bridge,
 						       struct drm_connector *connector)
 {
-	struct it66121_ctx *ctx = container_of(bridge, struct it66121_ctx, bridge);
+	struct it66121_ctx *ctx = bridge_to_it66121_ctx(bridge);
 	const struct drm_edid *drm_edid;
 	int ret;
 
