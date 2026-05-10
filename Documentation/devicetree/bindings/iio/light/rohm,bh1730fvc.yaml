@@ -1,0 +1,95 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/light/rohm,bh1730fvc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: ROHM BH1730FVC ambient light sensor
+
+maintainers:
+  - CTCaer <ctcaer@gmail.com>
+
+description:
+  Digital 16-bit ambient light sensor with an I2C interface. The device has
+  two photodiodes (visible and infrared) and supports four gain settings and
+  programmable integration time.
+
+properties:
+  compatible:
+    const: rohm,bh1730fvc
+
+  reg:
+    maxItems: 1
+
+  als-vdd-supply:
+    description: Regulator for the analog/digital supply (VDD).
+
+  als-vid-supply:
+    description: Regulator for the LED indicator supply (VID).
+
+  rohm,integration-cycle:
+    description:
+      Number of internal clock cycles used for the ADC integration time.
+      Used together with rohm,lux-multiplier to calibrate the lux output.
+    $ref: /schemas/types.yaml#/definitions/uint32
+
+  rohm,lux-multiplier:
+    description:
+      Lux scaling multiplier applied after integration. Used together with
+      rohm,integration-cycle to calibrate the lux output.
+    $ref: /schemas/types.yaml#/definitions/uint32
+
+  rohm,opt-win-coeff:
+    description:
+      Optical-window calibration coefficients. Specified as a flat list of
+      triplets <rc cv ci>, one triplet per window region, where rc is the
+      visible/IR ratio cutoff and cv/ci are the visible and IR weighting
+      factors used in that region.
+    $ref: /schemas/types.yaml#/definitions/uint32-matrix
+    items:
+      minItems: 3
+      maxItems: 3
+
+  rohm,gain-coeff:
+    description:
+      Per-gain sensitivity coefficients. Eight u32 values arranged as four
+      <cl fl> pairs, one pair for each supported gain (1x, 2x, 64x, 128x).
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 8
+    maxItems: 8
+
+required:
+  - compatible
+  - reg
+
+dependencies:
+  rohm,integration-cycle: ['rohm,lux-multiplier']
+  rohm,lux-multiplier: ['rohm,integration-cycle']
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        light-sensor@29 {
+            compatible = "rohm,bh1730fvc";
+            reg = <0x29>;
+            als-vdd-supply = <&vdd_als>;
+            als-vid-supply = <&vid_als>;
+            rohm,integration-cycle = <38>;
+            rohm,lux-multiplier = <1000>;
+            rohm,opt-win-coeff = <260 1290 2733>,
+                                 <550 795 859>,
+                                 <1090 510 345>,
+                                 <2130 276 130>;
+            rohm,gain-coeff = <3000 0xffffffff
+                               2000 9800
+                               15 60000
+                               0 1300>;
+        };
+    };
+
+...
