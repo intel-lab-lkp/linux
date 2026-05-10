@@ -784,6 +784,44 @@ out:
 	return s2_mmu;
 }
 
+void kvm_remove_nested_revmap(struct kvm_s2_mmu *mmu, u64 nested_ipa, size_t size)
+{
+	/*
+	 * Iterate through the mt of this mmu, remove all canonical ipa ranges
+	 * with !UNKNOWN_IPA that maps to ranges that are strictly within
+	 * [addr, addr + size).
+	 */
+	struct maple_tree *revmap_mt = &mmu->nested_revmap_mt;
+	void *entry;
+	u64 entry_val, nested_ipa_end = nested_ipa + size;
+	u64 this_nested_ipa, this_nested_ipa_end;
+	size_t revmap_size;
+
+	MA_STATE(mas_rev, revmap_mt, 0, ULONG_MAX);
+
+	mtree_lock(revmap_mt);
+	mas_for_each(&mas_rev, entry, ULONG_MAX) {
+		entry_val = xa_to_value(entry);
+		if (entry_val & UNKNOWN_IPA)
+			continue;
+
+		revmap_size = mas_rev.last - mas_rev.index + 1;
+		this_nested_ipa = entry_val & ADDR_MASK;
+		this_nested_ipa_end = this_nested_ipa + revmap_size;
+
+		if (this_nested_ipa >= nested_ipa &&
+		    this_nested_ipa_end <= nested_ipa_end) {
+			/*
+			 * As the shadow stage-2 is about to be unmapped
+			 * after this function, it doesn't matter whether the
+			 * removal of the reverse map failed or not.
+			 */
+			mas_store_gfp(&mas_rev, NULL, GFP_NOWAIT | __GFP_ACCOUNT);
+		}
+	}
+	mtree_unlock(revmap_mt);
+}
+
 void kvm_record_nested_revmap(gpa_t ipa, struct kvm_s2_mmu *mmu,
 			      gpa_t fault_ipa, size_t map_size)
 {

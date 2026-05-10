@@ -4006,6 +4006,7 @@ union tlbi_info {
 static void s2_mmu_unmap_range(struct kvm_s2_mmu *mmu,
 			       const union tlbi_info *info)
 {
+	kvm_remove_nested_revmap(mmu, info->range.start, info->range.size);
 	/*
 	 * The unmap operation is allowed to drop the MMU lock and block, which
 	 * means that @mmu could be used for a different context than the one
@@ -4103,6 +4104,8 @@ static void s2_mmu_unmap_ipa(struct kvm_s2_mmu *mmu,
 	base_addr = (info->ipa.addr & GENMASK_ULL(35, 0)) << 12;
 	max_size = compute_tlb_inval_range(mmu, info->ipa.addr);
 	base_addr &= ~(max_size - 1);
+
+	kvm_remove_nested_revmap(mmu, base_addr, max_size);
 
 	/*
 	 * See comment in s2_mmu_unmap_range() for why this is allowed to
