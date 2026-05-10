@@ -1956,7 +1956,8 @@ static int btrfs_ioctl_get_subvol_info(struct inode *inode, void __user *argp)
 	struct btrfs_root_ref *rref;
 	struct extent_buffer *leaf;
 	unsigned long item_off;
-	unsigned long item_len;
+	u32 item_size;
+	u16 name_len;
 	int slot;
 	int ret = 0;
 
@@ -2034,14 +2035,21 @@ static int btrfs_ioctl_get_subvol_info(struct inode *inode, void __user *argp)
 			subvol_info->parent_id = key.offset;
 
 			rref = btrfs_item_ptr(leaf, slot, struct btrfs_root_ref);
+			item_size = btrfs_item_size(leaf, slot);
+			name_len = btrfs_root_ref_name_len(leaf, rref);
+			if (name_len > item_size - sizeof(*rref) ||
+			    name_len > BTRFS_VOL_NAME_MAX) {
+				ret = -EUCLEAN;
+				goto out;
+			}
+
 			subvol_info->dirid = btrfs_root_ref_dirid(leaf, rref);
 
-			item_off = btrfs_item_ptr_offset(leaf, slot)
-					+ sizeof(struct btrfs_root_ref);
-			item_len = btrfs_item_size(leaf, slot)
-					- sizeof(struct btrfs_root_ref);
+			item_off = btrfs_item_ptr_offset(leaf, slot) +
+				   sizeof(*rref);
 			read_extent_buffer(leaf, subvol_info->name,
-					   item_off, item_len);
+					   item_off, name_len);
+			subvol_info->name[name_len] = '\0';
 		} else {
 			ret = -ENOENT;
 			goto out;
