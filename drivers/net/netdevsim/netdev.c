@@ -616,6 +616,28 @@ static void nsim_shaper_cap(struct net_shaper_binding *binding,
 	*flags = ULONG_MAX;
 }
 
+static int nsim_change_carrier(struct net_device *dev, bool new_carrier)
+{
+	struct netdevsim *ns = netdev_priv(dev);
+	struct netdevsim *peer;
+
+	netdev_assert_locked(dev);
+
+	peer = rtnl_dereference(ns->peer);
+
+	if (new_carrier) {
+		netif_carrier_on(dev);
+		if (peer)
+			netif_carrier_on(peer->netdev);
+	} else {
+		netif_carrier_off(dev);
+		if (peer)
+			netif_carrier_off(peer->netdev);
+	}
+
+	return 0;
+}
+
 static const struct net_shaper_ops nsim_shaper_ops = {
 	.set			= nsim_shaper_set,
 	.delete			= nsim_shaper_del,
@@ -645,6 +667,7 @@ static const struct net_device_ops nsim_netdev_ops = {
 	.ndo_stop		= nsim_stop,
 	.ndo_vlan_rx_add_vid	= nsim_vlan_rx_add_vid,
 	.ndo_vlan_rx_kill_vid	= nsim_vlan_rx_kill_vid,
+	.ndo_change_carrier     = nsim_change_carrier,
 	.net_shaper_ops		= &nsim_shaper_ops,
 };
 
