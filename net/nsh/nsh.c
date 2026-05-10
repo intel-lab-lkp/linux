@@ -107,12 +107,14 @@ static struct sk_buff *nsh_gso_segment(struct sk_buff *skb,
 	skb->protocol = proto;
 
 	features &= NETIF_F_SG;
+	if (dev_xmit_recursion())
+		goto err;
+
+	dev_xmit_recursion_inc();
 	segs = skb_mac_gso_segment(skb, features);
-	if (IS_ERR_OR_NULL(segs)) {
-		skb_gso_error_unwind(skb, htons(ETH_P_NSH), nsh_len,
-				     mac_offset, mac_len);
-		goto out;
-	}
+	dev_xmit_recursion_dec();
+	if (IS_ERR_OR_NULL(segs))
+		goto err;
 
 	for (skb = segs; skb; skb = skb->next) {
 		skb->protocol = outer_proto;
@@ -121,6 +123,11 @@ static struct sk_buff *nsh_gso_segment(struct sk_buff *skb,
 		skb_set_network_header(skb, outer_hlen);
 		skb->mac_len = mac_len;
 	}
+
+	goto out;
+
+err:
+	skb_gso_error_unwind(skb, outer_proto, nsh_len, mac_offset, mac_len);
 
 out:
 	return segs;
