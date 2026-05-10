@@ -16,6 +16,7 @@
 #include <linux/mm.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/string.h>
 #include <asm/dma.h>
 
 DEFINE_SPINLOCK(dma_spin_lock);
@@ -232,7 +233,7 @@ int register_dmac(struct dma_info *info)
 		chan->chan  = info->first_channel_nr + i;
 		chan->vchan = info->first_channel_nr + i + total_channels;
 
-		memcpy(chan->dev_id, "Unused", 7);
+		strscpy(chan->dev_id, "Unused");
 
 		if (info->flags & DMAC_CHANNELS_TEI_CAPABLE)
 			chan->flags |= DMA_TEI_CAPABLE;
