@@ -197,11 +197,7 @@ static void lkdtm_FORTIFY_STRSCPY(void)
 	/* Restore src to its initial value. */
 	src[3] = 'b';
 
-	/*
-	 * Use strlen here so size cannot be known at compile time and there is
-	 * a runtime write overflow.
-	 */
-	strscpy(dst, src, strlen(src));
+	strscpy(dst, src);
 
 	pr_err("FAIL: strscpy() overflow not detected!\n");
 	pr_expected_config(CONFIG_FORTIFY_SOURCE);
