@@ -7,7 +7,6 @@
 
 #include <crypto/algapi.h>
 #include <crypto/ctr.h>
-#include <crypto/internal/cipher.h>
 #include <crypto/internal/skcipher.h>
 #include <linux/err.h>
 #include <linux/init.h>
@@ -25,139 +24,105 @@ struct crypto_rfc3686_req_ctx {
 	struct skcipher_request subreq CRYPTO_MINALIGN_ATTR;
 };
 
-static void crypto_ctr_crypt_final(struct skcipher_walk *walk,
-				   struct crypto_cipher *tfm)
+static int crypto_ctr_crypt_segment(struct crypto_lskcipher *cipher,
+				    const u8 *src, u8 *dst, unsigned int nbytes,
+				    u8 *iv)
 {
-	unsigned int bsize = crypto_cipher_blocksize(tfm);
-	unsigned long alignmask = crypto_cipher_alignmask(tfm);
-	u8 *ctrblk = walk->iv;
-	u8 tmp[MAX_CIPHER_BLOCKSIZE + MAX_CIPHER_ALIGNMASK];
-	u8 *keystream = PTR_ALIGN(tmp + 0, alignmask + 1);
-	const u8 *src = walk->src.virt.addr;
-	u8 *dst = walk->dst.virt.addr;
-	unsigned int nbytes = walk->nbytes;
+	unsigned int bsize = crypto_lskcipher_blocksize(cipher);
 
-	crypto_cipher_encrypt_one(tfm, keystream, ctrblk);
-	crypto_xor_cpy(dst, keystream, src, nbytes);
-
-	crypto_inc(ctrblk, bsize);
-}
-
-static int crypto_ctr_crypt_segment(struct skcipher_walk *walk,
-				    struct crypto_cipher *tfm)
-{
-	void (*fn)(struct crypto_tfm *, u8 *, const u8 *) =
-		   crypto_cipher_alg(tfm)->cia_encrypt;
-	unsigned int bsize = crypto_cipher_blocksize(tfm);
-	u8 *ctrblk = walk->iv;
-	const u8 *src = walk->src.virt.addr;
-	u8 *dst = walk->dst.virt.addr;
-	unsigned int nbytes = walk->nbytes;
-
-	do {
-		/* create keystream */
-		fn(crypto_cipher_tfm(tfm), dst, ctrblk);
+	while (nbytes >= bsize) {
+		/* Encrypt counter block to produce keystream */
+		crypto_lskcipher_encrypt(cipher, iv, dst, bsize, NULL);
 		crypto_xor(dst, src, bsize);
-
-		/* increment counter in counterblock */
-		crypto_inc(ctrblk, bsize);
+		crypto_inc(iv, bsize);  /* Increment counter */
 
 		src += bsize;
 		dst += bsize;
-	} while ((nbytes -= bsize) >= bsize);
+		nbytes -= bsize;
+	}
 
 	return nbytes;
 }
 
-static int crypto_ctr_crypt_inplace(struct skcipher_walk *walk,
-				    struct crypto_cipher *tfm)
+static int crypto_ctr_crypt_inplace(struct crypto_lskcipher *cipher,
+				    u8 *dst, unsigned int nbytes, u8 *iv)
 {
-	void (*fn)(struct crypto_tfm *, u8 *, const u8 *) =
-		   crypto_cipher_alg(tfm)->cia_encrypt;
-	unsigned int bsize = crypto_cipher_blocksize(tfm);
-	unsigned long alignmask = crypto_cipher_alignmask(tfm);
-	unsigned int nbytes = walk->nbytes;
-	u8 *dst = walk->dst.virt.addr;
-	u8 *ctrblk = walk->iv;
-	u8 tmp[MAX_CIPHER_BLOCKSIZE + MAX_CIPHER_ALIGNMASK];
-	u8 *keystream = PTR_ALIGN(tmp + 0, alignmask + 1);
+	unsigned int bsize = crypto_lskcipher_blocksize(cipher);
+	u8 keystream[MAX_CIPHER_BLOCKSIZE];
 
-	do {
-		/* create keystream */
-		fn(crypto_cipher_tfm(tfm), keystream, ctrblk);
+	while (nbytes >= bsize) {
+		/* Encrypt counter block to produce keystream */
+		crypto_lskcipher_encrypt(cipher, iv, keystream, bsize, NULL);
 		crypto_xor(dst, keystream, bsize);
-
-		/* increment counter in counterblock */
-		crypto_inc(ctrblk, bsize);
+		crypto_inc(iv, bsize);  /* Increment counter */
 
 		dst += bsize;
-	} while ((nbytes -= bsize) >= bsize);
+		nbytes -= bsize;
+	}
 
+	memzero_explicit(keystream, sizeof(keystream));
 	return nbytes;
 }
 
-static int crypto_ctr_crypt(struct skcipher_request *req)
+static int crypto_ctr_crypt(struct crypto_lskcipher *tfm, const u8 *src,
+			    u8 *dst, unsigned int len, u8 *iv, u32 flags)
 {
-	struct crypto_skcipher *tfm = crypto_skcipher_reqtfm(req);
-	struct crypto_cipher *cipher = skcipher_cipher_simple(tfm);
-	const unsigned int bsize = crypto_cipher_blocksize(cipher);
-	struct skcipher_walk walk;
+	struct crypto_lskcipher **ctx = crypto_lskcipher_ctx(tfm);
+	struct crypto_lskcipher *cipher = *ctx;
+	unsigned int bsize = crypto_lskcipher_blocksize(cipher);
+	bool final = flags & CRYPTO_LSKCIPHER_FLAG_FINAL;
 	unsigned int nbytes;
-	int err;
 
-	err = skcipher_walk_virt(&walk, req, false);
+	if (src == dst)
+		nbytes = crypto_ctr_crypt_inplace(cipher, dst, len, iv);
+	else
+		nbytes = crypto_ctr_crypt_segment(cipher, src, dst, len, iv);
 
-	while (walk.nbytes >= bsize) {
-		if (walk.src.virt.addr == walk.dst.virt.addr)
-			nbytes = crypto_ctr_crypt_inplace(&walk, cipher);
-		else
-			nbytes = crypto_ctr_crypt_segment(&walk, cipher);
+	/* Handle final partial block. */
+	if (nbytes && final) {
+		u8 keystream[MAX_CIPHER_BLOCKSIZE];
 
-		err = skcipher_walk_done(&walk, nbytes);
+		crypto_lskcipher_encrypt(cipher, iv, keystream, bsize, NULL);
+		crypto_xor_cpy(dst + len - nbytes, src + len - nbytes,
+			       keystream, nbytes);
+		crypto_inc(iv, bsize);
+		memzero_explicit(keystream, sizeof(keystream));
+		nbytes = 0;
 	}
 
-	if (walk.nbytes) {
-		crypto_ctr_crypt_final(&walk, cipher);
-		err = skcipher_walk_done(&walk, 0);
-	}
-
-	return err;
+	return nbytes;
 }
 
 static int crypto_ctr_create(struct crypto_template *tmpl, struct rtattr **tb)
 {
-	struct skcipher_instance *inst;
-	struct crypto_alg *alg;
+	struct lskcipher_instance *inst;
 	int err;
 
-	inst = skcipher_alloc_instance_simple(tmpl, tb);
+	inst = lskcipher_alloc_instance_simple(tmpl, tb);
 	if (IS_ERR(inst))
 		return PTR_ERR(inst);
 
-	alg = skcipher_ialg_simple(inst);
-
 	/* Block size must be >= 4 bytes. */
 	err = -EINVAL;
-	if (alg->cra_blocksize < 4)
+	if (inst->alg.co.base.cra_blocksize < 4)
 		goto out_free_inst;
 
 	/* If this is false we'd fail the alignment of crypto_inc. */
-	if (alg->cra_blocksize % 4)
+	if (inst->alg.co.base.cra_blocksize % 4)
 		goto out_free_inst;
 
-	/* CTR mode is a stream cipher. */
-	inst->alg.base.cra_blocksize = 1;
-
 	/*
-	 * To simplify the implementation, configure the skcipher walk to only
-	 * give a partial block at the very end, never earlier.
+	 * CTR mode is a stream cipher.  Set chunksize to the underlying
+	 * cipher block size so partial blocks only occur at the end.
 	 */
-	inst->alg.chunksize = alg->cra_blocksize;
+	inst->alg.co.chunksize = inst->alg.co.base.cra_blocksize;
+	inst->alg.co.base.cra_blocksize = 1;
 
+	/* CTR encrypt and decrypt are the same XOR-based operation. */
 	inst->alg.encrypt = crypto_ctr_crypt;
 	inst->alg.decrypt = crypto_ctr_crypt;
 
-	err = skcipher_register_instance(tmpl, inst);
+	err = lskcipher_register_instance(tmpl, inst);
 	if (err) {
 out_free_inst:
 		inst->free(inst);
