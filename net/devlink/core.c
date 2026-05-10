@@ -4,6 +4,10 @@
  * Copyright (c) 2016 Jiri Pirko <jiri@mellanox.com>
  */
 
+#include <linux/init.h>
+#include <linux/list.h>
+#include <linux/slab.h>
+#include <linux/string.h>
 #include <net/genetlink.h>
 #define CREATE_TRACE_POINTS
 #include <trace/events/devlink.h>
@@ -15,6 +19,247 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(devlink_hwerr);
 EXPORT_TRACEPOINT_SYMBOL_GPL(devlink_trap_report);
 
 DEFINE_XARRAY_FLAGS(devlinks, XA_FLAGS_ALLOC);
+
+static char *devlink_default;
+static bool devlink_default_match_all;
+static enum devlink_eswitch_mode devlink_default_eswitch_mode;
+static LIST_HEAD(devlink_default_nodes);
+
+struct devlink_default_node {
+	struct list_head list;
+	char *bus_name;
+	char *dev_name;
+};
+
+static int __init
+devlink_default_esw_mode_to_value(const char *str,
+				  enum devlink_eswitch_mode *mode)
+{
+	if (!strcmp(str, "legacy")) {
+		*mode = DEVLINK_ESWITCH_MODE_LEGACY;
+		return 0;
+	}
+	if (!strcmp(str, "switchdev")) {
+		*mode = DEVLINK_ESWITCH_MODE_SWITCHDEV;
+		return 0;
+	}
+	if (!strcmp(str, "switchdev_inactive")) {
+		*mode = DEVLINK_ESWITCH_MODE_SWITCHDEV_INACTIVE;
+		return 0;
+	}
+
+	return -EINVAL;
+}
+
+static int __init
+devlink_default_cmd_parse(char *str)
+{
+	char *cmd;
+	char *attr;
+	char *mode;
+
+	cmd = strsep(&str, ":");
+	attr = strsep(&str, ":");
+	mode = strsep(&str, ":");
+	if (!cmd || strcmp(cmd, "esw") || !attr || strcmp(attr, "mode") ||
+	    !mode || !*mode || str)
+		return -EINVAL;
+
+	return devlink_default_esw_mode_to_value(mode,
+						 &devlink_default_eswitch_mode);
+}
+
+static int devlink_default_eswitch_apply(struct devlink *devlink)
+{
+	const struct devlink_ops *ops = devlink->ops;
+
+	if (!ops->eswitch_mode_set)
+		return -EOPNOTSUPP;
+
+	return ops->eswitch_mode_set(devlink, devlink_default_eswitch_mode,
+				     NULL);
+}
+
+static int __init
+devlink_default_handle_parse(char *handle, char **bus_name, char **dev_name)
+{
+	char *slash;
+	char *p;
+
+	if (!handle || !*handle)
+		return -EINVAL;
+
+	for (p = handle; *p; p++) {
+		if (*p == '[' || *p == ']' || *p == '*')
+			return -EINVAL;
+	}
+
+	slash = strchr(handle, '/');
+	if (!slash || slash == handle || !slash[1])
+		return -EINVAL;
+	if (strchr(slash + 1, '/'))
+		return -EINVAL;
+
+	*slash = '\0';
+	if (strchr(handle, ':'))
+		return -EINVAL;
+
+	*bus_name = handle;
+	*dev_name = slash + 1;
+	return 0;
+}
+
+static struct devlink_default_node *
+devlink_default_node_find(const char *bus_name, const char *dev_name)
+{
+	struct devlink_default_node *node;
+
+	list_for_each_entry(node, &devlink_default_nodes, list) {
+		if (!strcmp(node->bus_name, bus_name) &&
+		    !strcmp(node->dev_name, dev_name))
+			return node;
+	}
+
+	return NULL;
+}
+
+static int __init
+devlink_default_node_add(const char *bus_name, const char *dev_name)
+{
+	struct devlink_default_node *node;
+
+	if (devlink_default_node_find(bus_name, dev_name))
+		return -EEXIST;
+
+	node = kzalloc_obj(*node);
+	if (!node)
+		return -ENOMEM;
+
+	INIT_LIST_HEAD(&node->list);
+	node->bus_name = kstrdup(bus_name, GFP_KERNEL);
+	node->dev_name = kstrdup(dev_name, GFP_KERNEL);
+	if (!node->bus_name || !node->dev_name) {
+		kfree(node->bus_name);
+		kfree(node->dev_name);
+		kfree(node);
+		return -ENOMEM;
+	}
+
+	list_add_tail(&node->list, &devlink_default_nodes);
+	return 0;
+}
+
+static int __init devlink_default_handles_parse(char *handles)
+{
+	char *handle;
+	int err;
+
+	if (!strcmp(handles, "*")) {
+		devlink_default_match_all = true;
+		return 0;
+	}
+
+	while ((handle = strsep(&handles, ",")) != NULL) {
+		char *bus_name;
+		char *dev_name;
+
+		err = devlink_default_handle_parse(handle, &bus_name,
+						   &dev_name);
+		if (err)
+			return err;
+
+		err = devlink_default_node_add(bus_name, dev_name);
+		if (err)
+			return err;
+	}
+
+	return 0;
+}
+
+static void __init devlink_default_node_free(struct devlink_default_node *node)
+{
+	kfree(node->bus_name);
+	kfree(node->dev_name);
+	kfree(node);
+}
+
+static void __init devlink_default_nodes_clear(void)
+{
+	struct devlink_default_node *node;
+	struct devlink_default_node *node_tmp;
+
+	list_for_each_entry_safe(node, node_tmp, &devlink_default_nodes, list) {
+		list_del(&node->list);
+		devlink_default_node_free(node);
+	}
+
+	devlink_default_match_all = false;
+}
+
+static int __init devlink_default_parse(char *str)
+{
+	char *handles_end;
+	char *handles;
+	char *cmd;
+	int err;
+
+	if (!str || *str != '[')
+		return -EINVAL;
+
+	handles = str + 1;
+	handles_end = strchr(handles, ']');
+	if (!handles_end || handles_end[1] != ':' || !handles_end[2])
+		return -EINVAL;
+
+	*handles_end = '\0';
+	cmd = handles_end + 2;
+	if (!*handles)
+		return -EINVAL;
+
+	err = devlink_default_cmd_parse(cmd);
+	if (err)
+		return err;
+
+	err = devlink_default_handles_parse(handles);
+	if (err)
+		devlink_default_nodes_clear();
+
+	return err;
+}
+
+/**
+ * devl_apply_defaults - Apply defaults matching the devlink instance
+ * @devlink: devlink
+ *
+ * The caller must hold the devlink instance lock.
+ *
+ * Return: 0 on success, negative error code otherwise.
+ */
+int devl_apply_defaults(struct devlink *devlink)
+{
+	const char *bus_name = devlink_bus_name(devlink);
+	const char *dev_name = devlink_dev_name(devlink);
+	struct devlink_default_node *node;
+
+	devl_assert_locked(devlink);
+
+	if (devlink_default_match_all)
+		return devlink_default_eswitch_apply(devlink);
+
+	node = devlink_default_node_find(bus_name, dev_name);
+	if (node)
+		return devlink_default_eswitch_apply(devlink);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(devl_apply_defaults);
+
+static int __init devlink_default_setup(char *str)
+{
+	devlink_default = str;
+	return 1;
+}
+__setup("devlink=", devlink_default_setup);
 
 static struct devlink *devlinks_xa_get(unsigned long index)
 {
@@ -578,6 +823,27 @@ static int __init devlink_init(void)
 {
 	int err;
 
+	if (devlink_default) {
+		char *def;
+
+		def = kstrdup(devlink_default, GFP_KERNEL);
+		if (!def) {
+			err = -ENOMEM;
+			goto out;
+		}
+		err = devlink_default_parse(def);
+		kfree(def);
+		if (err == -EEXIST) {
+			devlink_default = NULL;
+			pr_warn("devlink: duplicate handles ignored\n");
+		} else if (err == -EINVAL) {
+			devlink_default = NULL;
+			pr_warn("devlink: invalid command line parameter ignored\n");
+		} else if (err) {
+			goto out;
+		}
+	}
+
 	err = register_pernet_subsys(&devlink_pernet_ops);
 	if (err)
 		goto out;
@@ -593,7 +859,10 @@ static int __init devlink_init(void)
 out_unreg_pernet_subsys:
 	unregister_pernet_subsys(&devlink_pernet_ops);
 out:
+	if (err)
+		devlink_default_nodes_clear();
 	WARN_ON(err);
+
 	return err;
 }
 
