@@ -23306,6 +23306,13 @@ L:	linux-iio@vger.kernel.org
 S:	Supported
 F:	drivers/iio/pressure/rohm-bm1390.c
 
+ROHM BM92TXX USB TYPE-C CONTROLLER DRIVER
+M:	CTCaer <ctcaer@gmail.com>
+M:	Alexandre Hamamdjian <azkali.limited@gmail.com>
+L:	linux-usb@vger.kernel.org
+S:	Maintained
+F:	drivers/usb/typec/bm92txx.c
+
 ROHM BU270xx LIGHT SENSOR DRIVERs
 M:	Matti Vaittinen <mazziesaccount@gmail.com>
 L:	linux-iio@vger.kernel.org
