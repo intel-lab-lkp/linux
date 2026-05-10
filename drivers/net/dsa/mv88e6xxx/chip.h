@@ -454,6 +454,9 @@ struct mv88e6xxx_chip {
 
 	/* TCAM entries */
 	struct mv88e6xxx_tcam tcam;
+
+	/* Global2 scratch register config data3 */
+	u8 g2_scratch_config3;
 };
 
 #define TCAM_MATCH_SIZE 96
@@ -719,6 +722,9 @@ struct mv88e6xxx_ops {
 
 	/* Ternary Content Addressable Memory operations */
 	const struct mv88e6xxx_tcam_ops *tcam_ops;
+
+	/* Apply chip specific setup steps */
+	int (*setup_chip_specific)(struct mv88e6xxx_chip *chip);
 };
 
 struct mv88e6xxx_irq_ops {
