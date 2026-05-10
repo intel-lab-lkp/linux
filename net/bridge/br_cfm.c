@@ -489,11 +489,6 @@ static int br_cfm_frame_rx(struct net_bridge_port *port, struct sk_buff *skb)
 	return 1;
 }
 
-static struct br_frame_type cfm_frame_type __read_mostly = {
-	.type = cpu_to_be16(ETH_P_CFM),
-	.frame_handler = br_cfm_frame_rx,
-};
-
 int br_cfm_mep_create(struct net_bridge *br,
 		      const u32 instance,
 		      struct br_cfm_mep_create *const create,
@@ -558,8 +553,11 @@ int br_cfm_mep_create(struct net_bridge *br,
 	INIT_HLIST_HEAD(&mep->peer_mep_list);
 	INIT_DELAYED_WORK(&mep->ccm_tx_dwork, ccm_tx_work_expired);
 
-	if (hlist_empty(&br->mep_list))
-		br_add_frame(br, &cfm_frame_type);
+	if (hlist_empty(&br->mep_list)) {
+		br->cfm_frame_type.type = cpu_to_be16(ETH_P_CFM);
+		br->cfm_frame_type.frame_handler = br_cfm_frame_rx;
+		br_add_frame(br, &br->cfm_frame_type);
+	}
 
 	hlist_add_tail_rcu(&mep->head, &br->mep_list);
 
@@ -588,7 +586,7 @@ static void mep_delete_implementation(struct net_bridge *br,
 	kfree_rcu(mep, rcu);
 
 	if (hlist_empty(&br->mep_list))
-		br_del_frame(br, &cfm_frame_type);
+		br_del_frame(br, &br->cfm_frame_type);
 }
 
 int br_cfm_mep_delete(struct net_bridge *br,

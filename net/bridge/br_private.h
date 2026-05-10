@@ -61,6 +61,9 @@ typedef struct bridge_id bridge_id;
 typedef struct mac_addr mac_addr;
 typedef __u16 port_id;
 
+struct net_bridge_port;
+struct sk_buff;
+
 struct bridge_id {
 	unsigned char	prio[2];
 	unsigned char	addr[ETH_ALEN];
@@ -68,6 +71,13 @@ struct bridge_id {
 
 struct mac_addr {
 	unsigned char	addr[ETH_ALEN];
+};
+
+struct br_frame_type {
+	__be16			type;
+	int			(*frame_handler)(struct net_bridge_port *port,
+						 struct sk_buff *skb);
+	struct hlist_node	list;
 };
 
 #ifdef CONFIG_BRIDGE_IGMP_SNOOPING
@@ -585,6 +595,7 @@ struct net_bridge {
 	struct hlist_head		mrp_list;
 #endif
 #if IS_ENABLED(CONFIG_BRIDGE_CFM)
+	struct br_frame_type	cfm_frame_type;
 	struct hlist_head		mep_list;
 #endif
 };
@@ -925,13 +936,6 @@ int nbp_backup_change(struct net_bridge_port *p, struct net_device *backup_dev);
 /* br_input.c */
 int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb);
 rx_handler_func_t *br_get_rx_handler(const struct net_device *dev);
-
-struct br_frame_type {
-	__be16			type;
-	int			(*frame_handler)(struct net_bridge_port *port,
-						 struct sk_buff *skb);
-	struct hlist_node	list;
-};
 
 void br_add_frame(struct net_bridge *br, struct br_frame_type *ft);
 void br_del_frame(struct net_bridge *br, struct br_frame_type *ft);
