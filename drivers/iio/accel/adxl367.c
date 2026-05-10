@@ -179,6 +179,10 @@ struct adxl367_state {
 
 	__be16		fifo_buf[ADXL367_FIFO_SIZE] __aligned(IIO_DMA_MINALIGN);
 	__be16		sample_buf;
+	struct {
+		__be16 channels[4];
+		aligned_s64 ts;
+	} scan;
 	u8		act_threshold_buf[2];
 	u8		inact_time_buf[2];
 	u8		status_buf[3];
@@ -779,7 +783,7 @@ static bool adxl367_push_event(struct iio_dev *indio_dev, u8 status)
 }
 
 static bool adxl367_push_fifo_data(struct iio_dev *indio_dev, u8 status,
-				   u16 fifo_entries)
+				   u16 fifo_entries, s64 ts)
 {
 	struct adxl367_state *st = iio_priv(indio_dev);
 	int ret;
@@ -796,8 +800,11 @@ static bool adxl367_push_fifo_data(struct iio_dev *indio_dev, u8 status,
 		return true;
 	}
 
-	for (i = 0; i < fifo_entries; i += st->fifo_set_size)
-		iio_push_to_buffers(indio_dev, &st->fifo_buf[i]);
+	for (i = 0; i < fifo_entries; i += st->fifo_set_size) {
+		memcpy(st->scan.channels, &st->fifo_buf[i],
+		       st->fifo_set_size * sizeof(__be16));
+		iio_push_to_buffers_with_timestamp(indio_dev, &st->scan, ts);
+	}
 
 	return true;
 }
@@ -809,14 +816,16 @@ static irqreturn_t adxl367_irq_handler(int irq, void *private)
 	u16 fifo_entries;
 	bool handled;
 	u8 status;
+	s64 ts;
 	int ret;
 
 	ret = adxl367_get_status(st, &status, &fifo_entries);
 	if (ret)
 		return IRQ_NONE;
 
+	ts = iio_get_time_ns(indio_dev);
 	handled = adxl367_push_event(indio_dev, status);
-	handled |= adxl367_push_fifo_data(indio_dev, status, fifo_entries);
+	handled |= adxl367_push_fifo_data(indio_dev, status, fifo_entries, ts);
 
 	return handled ? IRQ_HANDLED : IRQ_NONE;
 }
