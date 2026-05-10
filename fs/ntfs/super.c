@@ -1895,7 +1895,6 @@ static void ntfs_shutdown(struct super_block *sb)
 static int ntfs_sync_fs(struct super_block *sb, int wait)
 {
 	struct ntfs_volume *vol = NTFS_SB(sb);
-	int err = 0;
 
 	if (NVolShutdown(vol))
 		return -EIO;
@@ -1903,15 +1902,10 @@ static int ntfs_sync_fs(struct super_block *sb, int wait)
 	if (!wait)
 		return 0;
 
-	/* If there are some dirty buffers in the bdev inode */
-	if (ntfs_clear_volume_flags(vol, VOLUME_IS_DIRTY)) {
-		ntfs_warning(sb, "Failed to clear dirty bit in volume information flags.  Run chkdsk.");
-		err = -EIO;
-	}
 	sync_inodes_sb(sb);
 	sync_blockdev(sb->s_bdev);
 	blkdev_issue_flush(sb->s_bdev);
-	return err;
+	return 0;
 }
 
 /*
