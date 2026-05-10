@@ -74,8 +74,8 @@ static irqreturn_t ad7766_trigger_handler(int irq, void *p)
 	if (ret < 0)
 		goto done;
 
-	iio_push_to_buffers_with_timestamp(indio_dev, ad7766->data,
-		pf->timestamp);
+	iio_push_to_buffers_with_ts(indio_dev, ad7766->data, sizeof(ad7766->data),
+				    pf->timestamp);
 done:
 	iio_trigger_notify_done(indio_dev->trig);
 
