@@ -442,22 +442,43 @@ pub unsafe trait RawDelayedWorkItem<const ID: u64>: RawWorkItem<ID> {}
 ///
 /// # Safety
 ///
-/// Implementers must ensure that [`__enqueue`] uses a `work_struct` initialized with the [`run`]
-/// method of this trait as the function pointer.
+/// Implementers must ensure that [`__enqueue`] uses a `work_struct` initialized with [`run`] as
+/// its function pointer, and that [`from_raw_work`] rebuilds the exact ownership transferred by
+/// a successful [`__enqueue`] call.
 ///
 /// [`__enqueue`]: RawWorkItem::__enqueue
+/// [`from_raw_work`]: WorkItemPointer::from_raw_work
 /// [`run`]: WorkItemPointer::run
-pub unsafe trait WorkItemPointer<const ID: u64>: RawWorkItem<ID> {
+pub unsafe trait WorkItemPointer<const ID: u64>: RawWorkItem<ID> + Sized {
+    /// The work item type containing the embedded `work_struct`.
+    type Item: WorkItem<ID, Pointer = Self> + ?Sized;
+
+    /// Rebuild this work item's pointer from its embedded `work_struct`.
+    ///
+    /// # Safety
+    ///
+    /// The provided `work_struct` pointer must originate from a previous call to
+    /// [`RawWorkItem::__enqueue`] where the `queue_work_on` closure returned true
+    /// and the pointer must still be valid.
+    unsafe fn from_raw_work(ptr: *mut bindings::work_struct) -> Self;
+
     /// Run this work item.
     ///
     /// # Safety
     ///
-    /// The provided `work_struct` pointer must originate from a previous call to [`__enqueue`]
-    /// where the `queue_work_on` closure returned true, and the pointer must still be valid.
-    ///
-    /// [`__enqueue`]: RawWorkItem::__enqueue
-    unsafe extern "C" fn run(ptr: *mut bindings::work_struct);
+    /// The provided `work_struct` pointer must satisfy the same requirements as
+    /// [`WorkItemPointer::from_raw_work`].
+    #[inline]
+    unsafe extern "C" fn run(ptr: *mut bindings::work_struct) {
+        <Self::Item as WorkItem<ID>>::run(
+            // SAFETY: The requirements for `run` are exactly those of `from_raw_work`.
+            unsafe { Self::from_raw_work(ptr) },
+        );
+    }
 }
+
+/// Marker for work item types that support cancellation.
+pub trait SupportsCancelling<const ID: u64>: WorkItemPointer<ID> {}
 
 /// Defines the method that should be called when this work item is executed.
 ///
@@ -521,6 +542,32 @@ impl<T: ?Sized, const ID: u64> Work<T, ID> {
             }),
             _inner: PhantomData,
         })
+    }
+
+    /// Cancels this work item if it is pending and waits for any running execution to finish.
+    ///
+    /// On return, the work item is guaranteed to not be pending or executing as long as there are
+    /// no racing re-enqueues.
+    ///
+    /// # Note
+    ///
+    /// Should be called from a sleepable context if the work was last queued on a non-BH
+    /// workqueue.
+    #[inline]
+    pub fn cancel_sync(&self) -> Option<T::Pointer>
+    where
+        T: WorkItem<ID>,
+        T::Pointer: SupportsCancelling<ID>,
+    {
+        let ptr = self.work.get();
+        // SAFETY: `ptr` is a valid embedded `work_struct`.
+        if unsafe { bindings::cancel_work_sync(ptr) } {
+            // SAFETY: A `true` return means the work was pending and got canceled, so the queued
+            // ownership transfer performed by `__enqueue` is reclaimed here.
+            Some(unsafe { T::Pointer::from_raw_work(ptr) })
+        } else {
+            None
+        }
     }
 
     /// Get a pointer to the inner `work_struct`.
@@ -709,6 +756,34 @@ impl<T: ?Sized, const ID: u64> DelayedWork<T, ID> {
         })
     }
 
+    /// Cancels this delayed work item if it is pending and waits for any running execution to
+    /// finish.
+    ///
+    /// On return, the work item is guaranteed to not be pending or executing as long as there are
+    /// no racing re-enqueues.
+    ///
+    /// # Note
+    ///
+    /// Should be called from a sleepable context if the work was last queued on a non-BH
+    /// workqueue.
+    #[inline]
+    pub fn cancel_sync(&self) -> Option<T::Pointer>
+    where
+        T: WorkItem<ID>,
+        T::Pointer: SupportsCancelling<ID>,
+    {
+        let ptr = self.dwork.get();
+
+        // SAFETY: `ptr` is a valid embedded `delayed_work`.
+        if unsafe { bindings::cancel_delayed_work_sync(ptr) } {
+            // SAFETY: A `true` return means the work was pending and got canceled, so the queued
+            // ownership transfer performed by `__enqueue` is reclaimed here.
+            Some(unsafe { T::Pointer::from_raw_work(core::ptr::addr_of_mut!((*ptr).work)) })
+        } else {
+            None
+        }
+    }
+
     /// Get a pointer to the inner `delayed_work`.
     ///
     /// # Safety
@@ -824,16 +899,23 @@ where
     T: WorkItem<ID, Pointer = Self>,
     T: HasWork<T, ID>,
 {
-    unsafe extern "C" fn run(ptr: *mut bindings::work_struct) {
+    type Item = T;
+
+    unsafe fn from_raw_work(ptr: *mut bindings::work_struct) -> Self {
         // The `__enqueue` method always uses a `work_struct` stored in a `Work<T, ID>`.
         let ptr = ptr.cast::<Work<T, ID>>();
         // SAFETY: This computes the pointer that `__enqueue` got from `Arc::into_raw`.
         let ptr = unsafe { T::work_container_of(ptr) };
         // SAFETY: This pointer comes from `Arc::into_raw` and we've been given back ownership.
-        let arc = unsafe { Arc::from_raw(ptr) };
-
-        T::run(arc)
+        unsafe { Arc::from_raw(ptr) }
     }
+}
+
+impl<T, const ID: u64> SupportsCancelling<ID> for Arc<T>
+where
+    T: WorkItem<ID, Pointer = Self>,
+    T: HasWork<T, ID>,
+{
 }
 
 // SAFETY: The `work_struct` raw pointer is guaranteed to be valid for the duration of the call to
@@ -842,7 +924,7 @@ where
 // to be valid until a call to the function pointer in `work_struct` because we leak the memory it
 // points to, and only reclaim it if the closure returns false, or in `WorkItemPointer::run`, which
 // is what the function pointer in the `work_struct` must be pointing to, according to the safety
-// requirements of `WorkItemPointer`.
+// requirements of `WorkItemPointer`, or after a successful cancellation.
 unsafe impl<T, const ID: u64> RawWorkItem<ID> for Arc<T>
 where
     T: WorkItem<ID, Pointer = Self>,
@@ -887,7 +969,9 @@ where
     T: WorkItem<ID, Pointer = Self>,
     T: HasWork<T, ID>,
 {
-    unsafe extern "C" fn run(ptr: *mut bindings::work_struct) {
+    type Item = T;
+
+    unsafe fn from_raw_work(ptr: *mut bindings::work_struct) -> Self {
         // The `__enqueue` method always uses a `work_struct` stored in a `Work<T, ID>`.
         let ptr = ptr.cast::<Work<T, ID>>();
         // SAFETY: This computes the pointer that `__enqueue` got from `Arc::into_raw`.
@@ -895,9 +979,7 @@ where
         // SAFETY: This pointer comes from `Arc::into_raw` and we've been given back ownership.
         let boxed = unsafe { KBox::from_raw(ptr) };
         // SAFETY: The box was already pinned when it was enqueued.
-        let pinned = unsafe { Pin::new_unchecked(boxed) };
-
-        T::run(pinned)
+        unsafe { Pin::new_unchecked(boxed) }
     }
 }
 
@@ -958,7 +1040,9 @@ where
     T: WorkItem<ID, Pointer = Self>,
     T: HasWork<T, ID>,
 {
-    unsafe extern "C" fn run(ptr: *mut bindings::work_struct) {
+    type Item = T;
+
+    unsafe fn from_raw_work(ptr: *mut bindings::work_struct) -> Self {
         // The `__enqueue` method always uses a `work_struct` stored in a `Work<T, ID>`.
         let ptr = ptr.cast::<Work<T, ID>>();
 
@@ -972,10 +1056,16 @@ where
 
         // SAFETY: This pointer comes from `ARef::into_raw` and we've been given
         // back ownership.
-        let aref = unsafe { ARef::from_raw(ptr) };
-
-        T::run(aref)
+        unsafe { ARef::from_raw(ptr) }
     }
+}
+
+impl<T, const ID: u64> SupportsCancelling<ID> for ARef<T>
+where
+    T: AlwaysRefCounted,
+    T: WorkItem<ID, Pointer = Self>,
+    T: HasWork<T, ID>,
+{
 }
 
 // SAFETY: The `work_struct` raw pointer is guaranteed to be valid for the duration of the call to
@@ -984,7 +1074,7 @@ where
 // to be valid until a call to the function pointer in `work_struct` because we leak the memory it
 // points to, and only reclaim it if the closure returns false, or in `WorkItemPointer::run`, which
 // is what the function pointer in the `work_struct` must be pointing to, according to the safety
-// requirements of `WorkItemPointer`.
+// requirements of `WorkItemPointer`, or after a successful cancellation.
 unsafe impl<T, const ID: u64> RawWorkItem<ID> for ARef<T>
 where
     T: AlwaysRefCounted,
