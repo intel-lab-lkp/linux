@@ -320,6 +320,44 @@ static inline struct it66121_ctx *bridge_to_it66121_ctx(struct drm_bridge *bridg
 	return container_of(bridge, struct it66121_ctx, bridge);
 }
 
+struct it66121_bridge_state {
+	struct drm_bridge_state base;
+};
+
+static inline struct it66121_bridge_state *
+to_it66121_bridge_state(struct drm_bridge_state *state)
+{
+	return container_of(state, struct it66121_bridge_state, base);
+}
+
+static struct drm_bridge_state *
+it66121_bridge_atomic_duplicate_state(struct drm_bridge *bridge)
+{
+	struct it66121_bridge_state *state;
+
+	state = kzalloc_obj(*state);
+	if (!state)
+		return NULL;
+
+	__drm_atomic_helper_bridge_duplicate_state(bridge, &state->base);
+
+	return &state->base;
+}
+
+static struct drm_bridge_state *
+it66121_bridge_atomic_reset(struct drm_bridge *bridge)
+{
+	struct it66121_bridge_state *state;
+
+	state = kzalloc_obj(*state);
+	if (!state)
+		return NULL;
+
+	__drm_atomic_helper_bridge_reset(bridge, &state->base);
+
+	return &state->base;
+}
+
 static const struct regmap_range_cfg it66121_regmap_banks[] = {
 	{
 		.name = "it66121",
@@ -908,9 +946,9 @@ out_unlock:
 }
 
 static const struct drm_bridge_funcs it66121_bridge_funcs = {
-	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
+	.atomic_duplicate_state = it66121_bridge_atomic_duplicate_state,
 	.atomic_destroy_state = drm_atomic_helper_bridge_destroy_state,
-	.atomic_reset = drm_atomic_helper_bridge_reset,
+	.atomic_reset = it66121_bridge_atomic_reset,
 	.attach = it66121_bridge_attach,
 	.atomic_get_output_bus_fmts = it66121_bridge_atomic_get_output_bus_fmts,
 	.atomic_get_input_bus_fmts = it66121_bridge_atomic_get_input_bus_fmts,
