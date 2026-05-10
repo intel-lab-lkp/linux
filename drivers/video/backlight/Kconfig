@@ -461,6 +461,20 @@ config BACKLIGHT_SKY81452
 	  To compile this driver as a module, choose M here: the module will
 	  be called sky81452-backlight
 
+config BACKLIGHT_SY7758
+	tristate "Backlight Driver for Silergy SY7758"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  This enables support for the Silergy SY7758 I2C-controlled
+	  multi-channel LED backlight driver, commonly used to drive the
+	  edge-lit LED strings of LCD panels in handheld and embedded
+	  devices. The driver exposes a 12-bit linear brightness control
+	  through the standard backlight class.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called sy7758.
+
 config BACKLIGHT_TPS65217
 	tristate "TPS65217 Backlight"
 	depends on MFD_TPS65217
