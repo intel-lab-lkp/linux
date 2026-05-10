@@ -755,7 +755,8 @@ static int tsi148_alloc_resource(struct vme_master_resource *image,
 					size, 0x10000, PCIBIOS_MIN_MEM,
 					0, NULL, NULL);
 	if (retval) {
-		dev_err(tsi148_bridge->parent, "Failed to allocate mem resource for window %d size 0x%lx start 0x%lx\n",
+		dev_err(tsi148_bridge->parent,
+			"Failed to allocate mem resource for window %d size 0x%lx start 0x%lx\n",
 			image->number, (unsigned long)size,
 			(unsigned long)image->bus_resource.start);
 		goto err_resource;
@@ -2252,7 +2253,8 @@ static int tsi148_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	struct vme_lm_resource *lm;
 
 	if (geoid >= VME_MAX_SLOTS) {
-		dev_err(&pdev->dev, "VME geographical address must be between 0 and %d (exclusive), but got %d\n",
+		dev_err(&pdev->dev,
+			"VME geographical address must be between 0 and %d (exclusive), but got %d\n",
 			VME_MAX_SLOTS, geoid);
 		return -EINVAL;
 	}
