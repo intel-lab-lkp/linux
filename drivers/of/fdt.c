@@ -1087,7 +1087,7 @@ int __init early_init_dt_scan_memory(void)
 	return found_memory;
 }
 
-int __init early_init_dt_scan_chosen(char *cmdline)
+void __init early_init_dt_scan_chosen(char *cmdline)
 {
 	int l, node;
 	const char *p;
@@ -1144,8 +1144,6 @@ handle_cmdline:
 #endif /* CONFIG_CMDLINE */
 
 	pr_debug("Command line is: %s\n", (char *)cmdline);
-
-	return 0;
 }
 
 #ifndef MIN_MEMBLOCK_ADDR
@@ -1226,12 +1224,8 @@ bool __init early_init_dt_verify(void *dt_virt, phys_addr_t dt_phys)
 
 void __init early_init_dt_scan_nodes(void)
 {
-	int rc;
-
 	/* Retrieve various information from the /chosen node */
-	rc = early_init_dt_scan_chosen(boot_command_line);
-	if (rc)
-		pr_warn("No chosen node found, continuing without\n");
+	early_init_dt_scan_chosen(boot_command_line);
 
 	/* Setup memory, calling early_init_dt_add_memory_arch */
 	early_init_dt_scan_memory();
