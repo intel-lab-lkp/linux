@@ -472,6 +472,17 @@ static const struct dmi_system_id reboot_dmi_table[] __initconst = {
 		},
 	},
 
+	/* Lenovo */
+	{
+		/* BootNext EFI variable is not respected without EFI reboot */
+		.callback = set_efi_reboot,
+		.ident = "Lenovo ThinkPad X1 Carbon 5th",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_VERSION, "ThinkPad X1 Carbon 5th"),
+		},
+	},
+
 	{	/* PCIe Wifi card isn't detected after reboot otherwise */
 		.callback = set_pci_reboot,
 		.ident = "Zotac ZBOX CI327 nano",
