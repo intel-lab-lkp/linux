@@ -7493,6 +7493,14 @@ static void bpf_scx_unreg(void *kdata, struct bpf_link *link)
 	struct sched_ext_ops *ops = kdata;
 	struct scx_sched *sch = rcu_dereference_protected(ops->priv, true);
 
+	/*
+	 * ops->priv can be NULL if scx_alloc_and_add_sched() failed before
+	 * assigning it, or if bpf_scx_unreg() somehow re-entered. There's
+	 * nothing to tear down in either case.
+	 */
+	if (!sch)
+		return;
+
 	scx_disable(sch, SCX_EXIT_UNREG);
 	scx_flush_disable_work(sch);
 	RCU_INIT_POINTER(ops->priv, NULL);

@@ -1433,11 +1433,21 @@ static inline bool scx_task_on_sched(struct scx_sched *sch,
 static inline struct scx_sched *scx_prog_sched(const struct bpf_prog_aux *aux)
 {
 	struct sched_ext_ops *ops;
-	struct scx_sched *root;
+	struct scx_sched *root, *sch;
 
 	ops = bpf_prog_get_assoc_struct_ops(aux);
-	if (likely(ops))
-		return rcu_dereference_all(ops->priv);
+	if (likely(ops)) {
+		sch = rcu_dereference_all(ops->priv);
+		if (likely(sch))
+			return sch;
+		/*
+		 * @aux is associated with @ops but @ops->priv is NULL. This can
+		 * be observed transiently under concurrent attach/detach (e.g.
+		 * bpf_scx_unreg() clears @ops->priv before kdata is freed).
+		 * Continue with the scx_root path so single-sched users keep
+		 * working, sub-sched users see no scheduler.
+		 */
+	}
 
 	root = rcu_dereference_all(scx_root);
 	if (root) {
