@@ -223,6 +223,10 @@ struct kvm_s2_mmu {
 	 */
 	bool	pending_unmap;
 
+	bool	nested_revmap_broken;
+	/* canonical IPA to nested IPA range lookup */
+	struct maple_tree nested_revmap_mt;
+
 #ifdef CONFIG_PTDUMP_STAGE2_DEBUGFS
 	struct dentry *shadow_pt_debugfs_dentry;
 #endif

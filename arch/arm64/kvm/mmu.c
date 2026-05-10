@@ -5,6 +5,7 @@
  */
 
 #include <linux/acpi.h>
+#include <linux/maple_tree.h>
 #include <linux/mman.h>
 #include <linux/kvm_host.h>
 #include <linux/io.h>
@@ -1099,6 +1100,7 @@ void kvm_free_stage2_pgd(struct kvm_s2_mmu *mmu)
 {
 	struct kvm *kvm = kvm_s2_mmu_to_kvm(mmu);
 	struct kvm_pgtable *pgt = NULL;
+	struct maple_tree *revmap_mt = &mmu->nested_revmap_mt;
 
 	write_lock(&kvm->mmu_lock);
 	pgt = mmu->pgt;
@@ -1108,8 +1110,11 @@ void kvm_free_stage2_pgd(struct kvm_s2_mmu *mmu)
 		free_percpu(mmu->last_vcpu_ran);
 	}
 
-	if (kvm_is_nested_s2_mmu(kvm, mmu))
+	if (kvm_is_nested_s2_mmu(kvm, mmu)) {
+		if (!mtree_empty(revmap_mt))
+			mtree_destroy(revmap_mt);
 		kvm_init_nested_s2_mmu(mmu);
+	}
 
 	write_unlock(&kvm->mmu_lock);
 
@@ -1631,6 +1636,10 @@ static int gmem_abort(const struct kvm_s2_fault_desc *s2fd)
 		goto out_unlock;
 	}
 
+	if (s2fd->nested)
+		kvm_record_nested_revmap(gfn << PAGE_SHIFT, pgt->mmu,
+					 s2fd->fault_ipa, PAGE_SIZE);
+
 	ret = KVM_PGT_FN(kvm_pgtable_stage2_map)(pgt, s2fd->fault_ipa, PAGE_SIZE,
 						 __pfn_to_phys(pfn), prot,
 						 memcache, flags);
@@ -2034,6 +2043,10 @@ static int kvm_s2_fault_map(const struct kvm_s2_fault_desc *s2fd,
 		ret = KVM_PGT_FN(kvm_pgtable_stage2_relax_perms)(pgt, gfn_to_gpa(gfn),
 								 prot, flags);
 	} else {
+		if (s2fd->nested)
+			kvm_record_nested_revmap(canonical_gpa, pgt->mmu,
+						 gfn_to_gpa(gfn), mapping_size);
+
 		ret = KVM_PGT_FN(kvm_pgtable_stage2_map)(pgt, gfn_to_gpa(gfn), mapping_size,
 							 __pfn_to_phys(pfn), prot,
 							 memcache, flags);
@@ -2389,14 +2402,16 @@ out_unlock:
 
 bool kvm_unmap_gfn_range(struct kvm *kvm, struct kvm_gfn_range *range)
 {
+	gpa_t gpa = range->start << PAGE_SHIFT;
+	size_t size = (range->end - range->start) << PAGE_SHIFT;
+	bool may_block = range->may_block;
+
 	if (!kvm->arch.mmu.pgt || kvm_vm_is_protected(kvm))
 		return false;
 
-	__unmap_stage2_range(&kvm->arch.mmu, range->start << PAGE_SHIFT,
-			     (range->end - range->start) << PAGE_SHIFT,
-			     range->may_block);
+	__unmap_stage2_range(&kvm->arch.mmu, gpa, size, may_block);
+	kvm_unmap_gfn_range_nested(kvm, gpa, size, may_block);
 
-	kvm_nested_s2_unmap(kvm, range->may_block);
 	return false;
 }
 
@@ -2674,7 +2689,7 @@ void kvm_arch_flush_shadow_memslot(struct kvm *kvm,
 
 	write_lock(&kvm->mmu_lock);
 	kvm_stage2_unmap_range(&kvm->arch.mmu, gpa, size, true);
-	kvm_nested_s2_unmap(kvm, true);
+	kvm_unmap_gfn_range_nested(kvm, gpa, size, true);
 	write_unlock(&kvm->mmu_lock);
 }
 
