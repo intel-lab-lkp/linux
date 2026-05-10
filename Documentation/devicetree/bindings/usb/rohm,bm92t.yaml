@@ -71,15 +71,19 @@ properties:
       Disable the lower power limit applied when a dock is detected.
 
   rohm,pd-5v-current-limit-ma:
+    $ref: /schemas/types.yaml#/definitions/uint32
     description: Charging current limit in mA when 5V PD contract is active.
 
   rohm,pd-9v-current-limit-ma:
+    $ref: /schemas/types.yaml#/definitions/uint32
     description: Charging current limit in mA when 9V PD contract is active.
 
   rohm,pd-12v-current-limit-ma:
+    $ref: /schemas/types.yaml#/definitions/uint32
     description: Charging current limit in mA when 12V PD contract is active.
 
   rohm,pd-15v-current-limit-ma:
+    $ref: /schemas/types.yaml#/definitions/uint32
     description: Charging current limit in mA when 15V PD contract is active.
 
   port:
