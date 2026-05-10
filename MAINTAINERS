@@ -27935,6 +27935,8 @@ M:	Manos Pitsidianakis <manos@pitsidianak.is>
 L:	virtualization@lists.linux.dev
 S:	Maintained
 F:	rust/helpers/virtio.c
+F:	rust/kernel/virtio.rs
+F:	rust/kernel/virtio/
 
 VIRTIO CRYPTO DRIVER
 M:	Gonglei <arei.gonglei@huawei.com>
