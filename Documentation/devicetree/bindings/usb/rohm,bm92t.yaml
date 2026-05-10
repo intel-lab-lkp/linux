@@ -1,0 +1,128 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/usb/rohm,bm92t.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Rohm BM92TXX USB Type-C and Power Delivery controller
+
+maintainers:
+  - CTCaer <ctcaer@gmail.com>
+  - Alexandre Hamamdjian <azkali.limited@gmail.com>
+
+description:
+  The Rohm BM92TXX is a family of USB Type-C and Power Delivery
+  controllers with an integrated MCU. The host communicates with the
+  device over I2C and is notified of state changes through a dedicated
+  interrupt line.
+
+properties:
+  compatible:
+    const: rohm,bm92t
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  vbus-supply:
+    description: VBUS sink regulator.
+
+  vbus-source-supply:
+    description: VBUS source (provider) regulator.
+
+  pd_bat_chg-supply:
+    description: Battery charger regulator gated by Power Delivery state.
+
+  rohm,vconn-en-gpio:
+    maxItems: 1
+    description: GPIO controlling the external VCONN switch.
+
+  rohm,dp-disable:
+    type: boolean
+    description: Disable DisplayPort alternate-mode handling.
+
+  rohm,dp-alerts-enable:
+    type: boolean
+    description: Enable DisplayPort status alerts.
+
+  rohm,dp-signal-toggle-on-resume:
+    type: boolean
+    description:
+      Toggle the DisplayPort signal on resume to work around sinks that
+      do not re-train after system resume.
+
+  rohm,dp-lanes:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [2, 4]
+    default: 2
+    description: Number of DisplayPort lanes to negotiate.
+
+  rohm,led-static-on-suspend:
+    type: boolean
+    description:
+      Keep the charge LED in a static state during system suspend
+      instead of letting the controller animate it.
+
+  rohm,dock-power-limit-disable:
+    type: boolean
+    description:
+      Disable the lower power limit applied when a dock is detected.
+
+  rohm,pd-5v-current-limit-ma:
+    description: Charging current limit in mA when 5V PD contract is active.
+
+  rohm,pd-9v-current-limit-ma:
+    description: Charging current limit in mA when 9V PD contract is active.
+
+  rohm,pd-12v-current-limit-ma:
+    description: Charging current limit in mA when 12V PD contract is active.
+
+  rohm,pd-15v-current-limit-ma:
+    description: Charging current limit in mA when 15V PD contract is active.
+
+  port:
+    $ref: /schemas/graph.yaml#/properties/port
+    description:
+      Output port linking to a USB role switch consumer endpoint.
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - port
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        typec@18 {
+            compatible = "rohm,bm92t";
+            reg = <0x18>;
+            interrupt-parent = <&gpio>;
+            interrupts = <42 IRQ_TYPE_LEVEL_LOW>;
+
+            vbus-supply = <&vbus_reg>;
+            vbus-source-supply = <&vbus_src_reg>;
+            pd_bat_chg-supply = <&pd_bat_chg_reg>;
+
+            rohm,dp-lanes = <4>;
+            rohm,pd-5v-current-limit-ma = <2000>;
+            rohm,pd-9v-current-limit-ma = <2000>;
+            rohm,pd-12v-current-limit-ma = <1500>;
+            rohm,pd-15v-current-limit-ma = <1200>;
+
+            port {
+                bm92t_ep: endpoint {
+                    remote-endpoint = <&usb_role_sw>;
+                };
+            };
+        };
+    };
