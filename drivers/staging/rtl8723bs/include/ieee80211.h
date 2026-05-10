@@ -639,7 +639,7 @@ struct rtw_ieee80211_channel {
 	/*"orig_mpwr:%d\n"*/
 
 #define CHAN_ARG(channel) \
-	/*(channel)->band*/ \
+	(/*(channel)->band*/ \
 	/*, (channel)->center_freq*/ \
 	(channel)->hw_value \
 	, (channel)->flags \
@@ -649,7 +649,7 @@ struct rtw_ieee80211_channel {
 	/*, (channel)->beacon_found*/ \
 	/*, (channel)->orig_flags*/ \
 	/*, (channel)->orig_mag*/ \
-	/*, (channel)->orig_mpwr*/ \
+	/*, (channel)->orig_mpwr*/)
 
 /* Parsed Information Elements */
 struct rtw_ieee802_11_elems {
