@@ -450,15 +450,17 @@ static int __init early_init_dt_scan_cpus(unsigned long node,
 	return 0;
 }
 
-static int __init early_init_dt_scan_chosen_ppc(unsigned long node,
-						const char *uname,
-						int depth, void *data)
+static void __init early_init_dt_scan_chosen_ppc(void)
 {
+	const void *fdt = initial_boot_params;
 	const unsigned long *lprop; /* All these set by kernel, so no need to convert endian */
+	int node;
 
-	/* Use common scan routine to determine if this is the chosen node */
-	if (early_init_dt_scan_chosen(data) < 0)
-		return 0;
+	node = fdt_path_offset(fdt, "/chosen");
+	if (node < 0)
+		node = fdt_path_offset(fdt, "/chosen@0");
+	if (node < 0)
+		return;
 
 #ifdef CONFIG_PPC64
 	/* check if iommu is forced on or off */
@@ -491,9 +493,6 @@ static int __init early_init_dt_scan_chosen_ppc(unsigned long node,
 	if (lprop)
 		crashk_res.end = crashk_res.start + *lprop - 1;
 #endif
-
-	/* break now */
-	return 1;
 }
 
 /*
@@ -818,7 +817,8 @@ void __init early_init_devtree(void *params)
 	 * device-tree, including the platform type, initrd location and
 	 * size, TCE reserve, and more ...
 	 */
-	of_scan_flat_dt(early_init_dt_scan_chosen_ppc, boot_command_line);
+	early_init_dt_scan_chosen(boot_command_line);
+	early_init_dt_scan_chosen_ppc();
 
 	/* Append additional parameters passed for fadump capture kernel */
 	fadump_append_bootargs();
