@@ -1644,8 +1644,15 @@ static int fsi_dai_startup(struct snd_pcm_substream *substream,
 			   struct snd_soc_dai *dai)
 {
 	struct fsi_priv *fsi = fsi_get_priv(substream);
+	int ret;
 
 	fsi_clk_invalid(fsi);
+
+	if (fsi->clock.count == 0) {
+		ret = fsi_clk_prepare(fsi);
+		if (ret)
+			return ret;
+	}
 
 	return 0;
 }
@@ -1655,6 +1662,8 @@ static void fsi_dai_shutdown(struct snd_pcm_substream *substream,
 {
 	struct fsi_priv *fsi = fsi_get_priv(substream);
 
+	if (fsi->clock.count == 0)
+		fsi_clk_unprepare(fsi);
 	fsi_clk_invalid(fsi);
 }
 
