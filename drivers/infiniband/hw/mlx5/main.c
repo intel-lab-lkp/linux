@@ -2006,8 +2006,14 @@ static void mlx5_ib_disable_lb_mp(struct mlx5_core_dev *master,
 	lb_state->force_enable = false;
 }
 
+static inline u32 mlx5_ib_lb_td_base(struct mlx5_core_dev *mdev)
+{
+	return MLX5_CAP_GEN(mdev, log_max_transport_domain) ? 1 : 0;
+}
+
 int mlx5_ib_enable_lb(struct mlx5_ib_dev *dev, bool td, bool qp)
 {
+	u32 td_base = mlx5_ib_lb_td_base(dev->mdev);
 	int err = 0;
 
 	if (dev->lb.force_enable)
@@ -2019,11 +2025,18 @@ int mlx5_ib_enable_lb(struct mlx5_ib_dev *dev, bool td, bool qp)
 	if (qp)
 		dev->lb.qps++;
 
-	if (dev->lb.user_td == 2 ||
+	if (dev->lb.user_td == td_base + 1 ||
 	    dev->lb.qps == 1) {
 		if (!dev->lb.enabled) {
 			err = mlx5_nic_vport_update_local_lb(dev->mdev, true);
-			dev->lb.enabled = true;
+			if (err) {
+				if (td)
+					dev->lb.user_td--;
+				if (qp)
+					dev->lb.qps--;
+			} else {
+				dev->lb.enabled = true;
+			}
 		}
 	}
 
@@ -2034,6 +2047,8 @@ int mlx5_ib_enable_lb(struct mlx5_ib_dev *dev, bool td, bool qp)
 
 void mlx5_ib_disable_lb(struct mlx5_ib_dev *dev, bool td, bool qp)
 {
+	u32 td_base = mlx5_ib_lb_td_base(dev->mdev);
+
 	if (dev->lb.force_enable)
 		return;
 
@@ -2043,7 +2058,7 @@ void mlx5_ib_disable_lb(struct mlx5_ib_dev *dev, bool td, bool qp)
 	if (qp)
 		dev->lb.qps--;
 
-	if (dev->lb.user_td == 1 &&
+	if (dev->lb.user_td <= td_base &&
 	    dev->lb.qps == 0) {
 		if (dev->lb.enabled) {
 			mlx5_nic_vport_update_local_lb(dev->mdev, false);
