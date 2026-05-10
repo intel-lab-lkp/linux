@@ -803,16 +803,6 @@ static int arasan_cf_probe(struct platform_device *pdev)
 	irq_handler_t irq_handler = NULL;
 	int ret;
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res)
-		return -EINVAL;
-
-	if (!devm_request_mem_region(&pdev->dev, res->start, resource_size(res),
-				DRIVER_NAME)) {
-		dev_warn(&pdev->dev, "Failed to get memory region resource\n");
-		return -ENOENT;
-	}
-
 	acdev = devm_kzalloc(&pdev->dev, sizeof(*acdev), GFP_KERNEL);
 	if (!acdev)
 		return -ENOMEM;
@@ -836,13 +826,13 @@ static int arasan_cf_probe(struct platform_device *pdev)
 		quirk |= CF_BROKEN_MWDMA | CF_BROKEN_UDMA;
 	}
 
-	acdev->pbase = res->start;
-	acdev->vbase = devm_ioremap(&pdev->dev, res->start,
-			resource_size(res));
-	if (!acdev->vbase) {
+	acdev->vbase = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
+	if (IS_ERR(acdev->vbase)) {
 		dev_warn(&pdev->dev, "ioremap fail\n");
-		return -ENOMEM;
+		return PTR_ERR(acdev->vbase);
 	}
+
+	acdev->pbase = res->start;
 
 	acdev->clk = devm_clk_get(&pdev->dev, NULL);
 	if (IS_ERR(acdev->clk)) {
