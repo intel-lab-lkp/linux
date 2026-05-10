@@ -1101,6 +1101,7 @@ void kvm_free_stage2_pgd(struct kvm_s2_mmu *mmu)
 	struct kvm *kvm = kvm_s2_mmu_to_kvm(mmu);
 	struct kvm_pgtable *pgt = NULL;
 	struct maple_tree *revmap_mt = &mmu->nested_revmap_mt;
+	struct maple_tree *direct_mt = &mmu->nested_direct_mt;
 
 	write_lock(&kvm->mmu_lock);
 	pgt = mmu->pgt;
@@ -1111,8 +1112,12 @@ void kvm_free_stage2_pgd(struct kvm_s2_mmu *mmu)
 	}
 
 	if (kvm_is_nested_s2_mmu(kvm, mmu)) {
-		if (!mtree_empty(revmap_mt))
-			mtree_destroy(revmap_mt);
+		if (!mtree_empty(revmap_mt) || !mtree_empty(direct_mt)) {
+			mtree_lock(revmap_mt);
+			__mt_destroy(revmap_mt);
+			__mt_destroy(direct_mt);
+			mtree_unlock(revmap_mt);
+		}
 		kvm_init_nested_s2_mmu(mmu);
 	}
 

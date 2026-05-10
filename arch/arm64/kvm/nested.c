@@ -45,14 +45,14 @@ struct vncr_tlb {
 #define S2_MMU_PER_VCPU		2
 
 /*
- * Per shadow S2 reverse map (IPA -> nested IPA range) maple tree payload
- * layout:
+ * Per shadow S2 reverse & direct map maple tree payload layout:
  *
- * bit  62:     valid, prevents the case where the nested IPA is 0 and turning
+ * bit  62:     valid, prevents the case where the address is 0 and turning
  *              the whole value to 0
- * bits 55-12:  nested IPA bits 55-12
+ * bits 55-12:  {nested, canonical} IPA bits 55-12
  * bit  0:      UNKNOWN_IPA bit, 1 indicates we give up on tracking what nested
- *              IPA maps to this canonical IPA in the shadow stage-2
+ *              IPA maps to this canonical IPA in the shadow stage-2, only used
+ *              in reverse map
  */
 #define VALID_ENTRY		BIT(62)
 #define ADDR_MASK		GENMASK_ULL(55, 12)
@@ -787,37 +787,67 @@ out:
 void kvm_remove_nested_revmap(struct kvm_s2_mmu *mmu, u64 nested_ipa, size_t size)
 {
 	/*
-	 * Iterate through the mt of this mmu, remove all canonical ipa ranges
-	 * with !UNKNOWN_IPA that maps to ranges that are strictly within
-	 * [addr, addr + size).
+	 * For all ranges in direct_mt that are completely covered by the range
+	 * we are TLBIing [gpa, gpa + size), remove the reverse map and its
+	 * corresponding direct map together, when these conditions are met:
+	 *
+	 * 1. The reverse map is not UNKNOWN_IPA.
+	 * 2. The reverse map is completely covered by the TLBI range.
+	 * 3. The reverse map and the direct map are symmetric i.e. they map to
+	 *    each other, with the same size.
+	 *
+	 * Symmetry must be checked because there are three places where the
+	 * direct map could become inconsistent:
+	 *
+	 * 1. Direct map removal failure during an mmu notifier in
+	 *    unmap_mmu_ipa_range().
+	 * 2. Direct map insertion failure during an s2 fault in
+	 *    kvm_record_nested_revmap().
+	 * 3. Direct map removal failure during a previous call of this very
+	 *    function.
 	 */
 	struct maple_tree *revmap_mt = &mmu->nested_revmap_mt;
-	void *entry;
-	u64 entry_val, nested_ipa_end = nested_ipa + size;
-	u64 this_nested_ipa, this_nested_ipa_end;
-	size_t revmap_size;
+	struct maple_tree *direct_mt = &mmu->nested_direct_mt;
+	gpa_t nested_ipa_end = nested_ipa + size - 1;
+	u64 entry_dir;
+	struct mapping {
+		u64 from;
+		u64 to;
+		size_t size;
+	};
 
-	MA_STATE(mas_rev, revmap_mt, 0, ULONG_MAX);
-
+	MA_STATE(mas_dir, direct_mt, nested_ipa, nested_ipa_end);
 	mtree_lock(revmap_mt);
-	mas_for_each(&mas_rev, entry, ULONG_MAX) {
-		entry_val = xa_to_value(entry);
-		if (entry_val & UNKNOWN_IPA)
-			continue;
+	entry_dir = xa_to_value(mas_find_range(&mas_dir, nested_ipa_end));
 
-		revmap_size = mas_rev.last - mas_rev.index + 1;
-		this_nested_ipa = entry_val & ADDR_MASK;
-		this_nested_ipa_end = this_nested_ipa + revmap_size;
+	while (entry_dir && mas_dir.index <= nested_ipa_end) {
+		struct mapping dir, rev;
+		u64 entry_rev;
 
-		if (this_nested_ipa >= nested_ipa &&
-		    this_nested_ipa_end <= nested_ipa_end) {
-			/*
-			 * As the shadow stage-2 is about to be unmapped
-			 * after this function, it doesn't matter whether the
-			 * removal of the reverse map failed or not.
-			 */
+		dir.from = mas_dir.index;
+		dir.to   = entry_dir & ADDR_MASK;
+		dir.size = mas_dir.last - mas_dir.index + 1;
+
+		/* Use ipa range to find the corresponding entry in revmap. */
+		MA_STATE(mas_rev, revmap_mt, dir.to, dir.to + dir.size - 1);
+		entry_rev = xa_to_value(mas_find_range(&mas_rev,
+						       dir.to + dir.size - 1));
+
+		rev.from = mas_rev.index;
+		rev.to   = entry_rev & ADDR_MASK;
+		rev.size = mas_rev.last - mas_rev.index + 1;
+
+		/* The three conditions outlined above. */
+		if (entry_rev && !(entry_rev & UNKNOWN_IPA) &&
+		    dir.from >= nested_ipa &&
+		    dir.from + dir.size - 1 <= nested_ipa_end &&
+		    dir.from == rev.to &&
+		    rev.from == dir.to &&
+		    dir.size == rev.size) {
+			mas_store_gfp(&mas_dir, NULL, GFP_NOWAIT | __GFP_ACCOUNT);
 			mas_store_gfp(&mas_rev, NULL, GFP_NOWAIT | __GFP_ACCOUNT);
 		}
+		entry_dir = xa_to_value(mas_find_range(&mas_dir, nested_ipa_end));
 	}
 	mtree_unlock(revmap_mt);
 }
@@ -826,9 +856,12 @@ void kvm_record_nested_revmap(gpa_t ipa, struct kvm_s2_mmu *mmu,
 			      gpa_t fault_ipa, size_t map_size)
 {
 	struct maple_tree *revmap_mt = &mmu->nested_revmap_mt;
+	struct maple_tree *direct_mt = &mmu->nested_direct_mt;
 	gpa_t ipa_end = ipa + map_size - 1;
+	gpa_t fault_ipa_end = fault_ipa + map_size - 1;
 	u64 entry, new_entry = 0;
 	MA_STATE(mas_rev, revmap_mt, ipa, ipa_end);
+	MA_STATE(mas_dir, direct_mt, fault_ipa, fault_ipa_end);
 
 	if (mmu->nested_revmap_broken)
 		return;
@@ -861,6 +894,15 @@ void kvm_record_nested_revmap(gpa_t ipa, struct kvm_s2_mmu *mmu,
 	if (mas_store_gfp(&mas_rev, xa_mk_value(new_entry),
 			  GFP_NOWAIT | __GFP_ACCOUNT))
 		mmu->nested_revmap_broken = true;
+
+	/*
+	 * Add direct map but ignore the result, missing a direct map does not
+	 * affect correctness.
+	 */
+	if (new_entry & VALID_ENTRY && !mmu->nested_revmap_broken)
+		mas_store_gfp(&mas_dir, xa_mk_value(ipa | VALID_ENTRY),
+			      GFP_NOWAIT | __GFP_ACCOUNT);
+
 unlock:
 	mtree_unlock(revmap_mt);
 }
@@ -872,6 +914,8 @@ void kvm_init_nested_s2_mmu(struct kvm_s2_mmu *mmu)
 	mmu->nested_stage2_enabled = false;
 	atomic_set(&mmu->refcnt, 0);
 	mt_init(&mmu->nested_revmap_mt);
+	mt_init_flags(&mmu->nested_direct_mt, MT_FLAGS_LOCK_EXTERN);
+	mt_set_external_lock(&mmu->nested_direct_mt, &mmu->nested_revmap_mt.ma_lock);
 	mmu->nested_revmap_broken = false;
 }
 
@@ -1250,7 +1294,10 @@ void kvm_nested_s2_wp(struct kvm *kvm)
 
 static void reset_revmap_and_unmap(struct kvm_s2_mmu *mmu, bool may_block)
 {
-	mtree_destroy(&mmu->nested_revmap_mt);
+	mtree_lock(&mmu->nested_revmap_mt);
+	__mt_destroy(&mmu->nested_revmap_mt);
+	__mt_destroy(&mmu->nested_direct_mt);
+	mtree_unlock(&mmu->nested_revmap_mt);
 	mmu->nested_revmap_broken = false;
 	kvm_stage2_unmap_range(mmu, 0, kvm_phys_size(mmu), may_block);
 }
@@ -1259,11 +1306,14 @@ static void unmap_mmu_ipa_range(struct kvm_s2_mmu *mmu, gpa_t gpa,
 				  size_t unmap_size, bool may_block)
 {
 	struct maple_tree *revmap_mt = &mmu->nested_revmap_mt;
+	struct maple_tree *direct_mt = &mmu->nested_direct_mt;
 	gpa_t ipa = gpa;
 	gpa_t ipa_end = gpa + unmap_size - 1;
+	gpa_t nested_ipa, nested_ipa_end;
 	u64 entry;
 	size_t entry_size;
 	MA_STATE(mas_rev, revmap_mt, gpa, ipa_end);
+	MA_STATE(mas_dir, direct_mt, 0, ULONG_MAX);
 
 	if (mmu->nested_revmap_broken) {
 		reset_revmap_and_unmap(mmu, may_block);
@@ -1291,6 +1341,16 @@ static void unmap_mmu_ipa_range(struct kvm_s2_mmu *mmu, gpa_t gpa,
 		 * fails.
 		 */
 		mas_store_gfp(&mas_rev, NULL, GFP_NOWAIT | __GFP_ACCOUNT);
+
+		/*
+		 * Try to also remove the direct map, it is okay if this fails,
+		 * as we check for direct map consistency in
+		 * kvm_remove_nested_revmap().
+		 */
+		nested_ipa = entry & ADDR_MASK;
+		nested_ipa_end = nested_ipa + entry_size - 1;
+		mas_set_range(&mas_dir, nested_ipa, nested_ipa_end);
+		mas_store_gfp(&mas_dir, NULL, GFP_NOWAIT | __GFP_ACCOUNT);
 
 		mtree_unlock(revmap_mt);
 		kvm_stage2_unmap_range(mmu, entry & ADDR_MASK, entry_size,

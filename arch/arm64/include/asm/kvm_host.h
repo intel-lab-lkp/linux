@@ -226,6 +226,11 @@ struct kvm_s2_mmu {
 	bool	nested_revmap_broken;
 	/* canonical IPA to nested IPA range lookup */
 	struct maple_tree nested_revmap_mt;
+	/*
+	 * Nested IPA to canonical IPA range lookup, essentially a cache of
+	 * the guest's stage-2.
+	 */
+	struct maple_tree nested_direct_mt;
 
 #ifdef CONFIG_PTDUMP_STAGE2_DEBUGFS
 	struct dentry *shadow_pt_debugfs_dentry;
