@@ -27937,6 +27937,7 @@ S:	Maintained
 F:	rust/helpers/virtio.c
 F:	rust/kernel/virtio.rs
 F:	rust/kernel/virtio/
+F:	samples/rust/rust_virtio_rtc.rs
 
 VIRTIO CRYPTO DRIVER
 M:	Gonglei <arei.gonglei@huawei.com>
