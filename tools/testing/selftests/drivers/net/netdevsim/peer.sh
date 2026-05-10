@@ -46,10 +46,13 @@ setup_ns()
 	set +e
 }
 
-cleanup_ns()
+cleanup()
 {
 	ip netns del nscl
 	ip netns del nssv
+	echo $NSIM_DEV_2_ID > $NSIM_DEV_SYS_DEL
+	echo $NSIM_DEV_1_ID > $NSIM_DEV_SYS_DEL
+	modprobe -r netdevsim
 }
 
 assert_carrier_up()
@@ -64,7 +67,6 @@ assert_carrier_up()
 
 	if [ "$sysfs_carrier" -ne 1 -o "$ethtool_carrier" != "true" ]; then
 		echo "$nsim_dev's carrier should be UP, but it isn't"
-		cleanup_ns
 		exit 1
 	fi
 }
@@ -81,7 +83,6 @@ assert_carrier_down()
 
 	if [ "$sysfs_carrier" -ne 0 -o "$ethtool_carrier" != "false" ]; then
 		echo "$nsim_dev's carrier should be DOWN, but it isn't"
-		cleanup_ns
 		exit 1
 	fi
 }
@@ -120,6 +121,8 @@ udevadm settle
 
 setup_ns
 
+trap cleanup EXIT
+
 NSIM_DEV_1_FD=$((256 + RANDOM % 256))
 exec {NSIM_DEV_1_FD}</var/run/netns/nssv
 NSIM_DEV_1_IFIDX=$(ip netns exec nssv cat /sys/class/net/$NSIM_DEV_1_NAME/ifindex)
@@ -131,28 +134,24 @@ NSIM_DEV_2_IFIDX=$(ip netns exec nscl cat /sys/class/net/$NSIM_DEV_2_NAME/ifinde
 echo "$NSIM_DEV_1_FD:$NSIM_DEV_1_IFIDX $NSIM_DEV_2_FD:2000" > $NSIM_DEV_SYS_LINK 2>/dev/null
 if [ $? -eq 0 ]; then
 	echo "linking with non-existent netdevsim should fail"
-	cleanup_ns
 	exit 1
 fi
 
 echo "$NSIM_DEV_1_FD:$NSIM_DEV_1_IFIDX 2000:$NSIM_DEV_2_IFIDX" > $NSIM_DEV_SYS_LINK 2>/dev/null
 if [ $? -eq 0 ]; then
 	echo "linking with non-existent netnsid should fail"
-	cleanup_ns
 	exit 1
 fi
 
 echo "$NSIM_DEV_1_FD:$NSIM_DEV_1_IFIDX $NSIM_DEV_1_FD:$NSIM_DEV_1_IFIDX" > $NSIM_DEV_SYS_LINK 2>/dev/null
 if [ $? -eq 0 ]; then
 	echo "linking with self should fail"
-	cleanup_ns
 	exit 1
 fi
 
 echo "$NSIM_DEV_1_FD:$NSIM_DEV_1_IFIDX $NSIM_DEV_2_FD:$NSIM_DEV_2_IFIDX" > $NSIM_DEV_SYS_LINK
 if [ $? -ne 0 ]; then
 	echo "linking netdevsim1 with netdevsim2 should succeed"
-	cleanup_ns
 	exit 1
 fi
 
@@ -161,7 +160,6 @@ fi
 echo "$NSIM_DEV_1_FD:$NSIM_DEV_1_IFIDX $NSIM_DEV_2_FD:a" > $NSIM_DEV_SYS_LINK 2>/dev/null
 if [ $? -eq 0 ]; then
 	echo "invalid arg should fail"
-	cleanup_ns
 	exit 1
 fi
 
@@ -228,13 +226,6 @@ fi
 
 echo "$NSIM_DEV_1_FD:$NSIM_DEV_1_IFIDX" > $NSIM_DEV_SYS_UNLINK
 
-echo $NSIM_DEV_2_ID > $NSIM_DEV_SYS_DEL
-
 kill $pid
-echo $NSIM_DEV_1_ID > $NSIM_DEV_SYS_DEL
-
-cleanup_ns
-
-modprobe -r netdevsim
 
 exit $res
