@@ -3391,7 +3391,6 @@ S:	Maintained
 W:	http://www.armlinux.org.uk/
 F:	arch/arm/include/asm/hardware/ioc.h
 F:	arch/arm/include/asm/hardware/iomd.h
-F:	arch/arm/include/asm/hardware/memc.h
 F:	arch/arm/mach-rpc/
 F:	drivers/net/ethernet/8390/etherh.c
 F:	drivers/net/ethernet/i825xx/ether1*
