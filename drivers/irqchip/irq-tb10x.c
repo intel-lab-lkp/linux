@@ -90,28 +90,14 @@ static int __init of_tb10x_init_irq(struct device_node *ictl,
 					struct device_node *parent)
 {
 	int i, ret, nrirqs = of_irq_count(ictl);
-	struct resource mem;
 	struct irq_chip_generic *gc;
 	struct irq_domain *domain;
 	void __iomem *reg_base;
 
-	if (of_address_to_resource(ictl, 0, &mem)) {
-		pr_err("%pOFn: No registers declared in DeviceTree.\n",
-			ictl);
-		return -EINVAL;
-	}
-
-	if (!request_mem_region(mem.start, resource_size(&mem),
-		ictl->full_name)) {
-		pr_err("%pOFn: Request mem region failed.\n", ictl);
-		return -EBUSY;
-	}
-
-	reg_base = ioremap(mem.start, resource_size(&mem));
-	if (!reg_base) {
-		ret = -EBUSY;
+	reg_base = of_io_request_and_map(ictl, 0, ictl->full_name);
+	if (IS_ERR(reg_base)) {
 		pr_err("%pOFn: ioremap failed.\n", ictl);
-		goto ioremap_fail;
+		return PTR_ERR(reg_base);
 	}
 
 	domain = irq_domain_create_linear(of_fwnode_handle(ictl), AB_IRQCTL_MAXIRQ,
@@ -169,8 +155,6 @@ gc_alloc_fail:
 	irq_domain_remove(domain);
 irq_domain_create_fail:
 	iounmap(reg_base);
-ioremap_fail:
-	release_mem_region(mem.start, resource_size(&mem));
 	return ret;
 }
 IRQCHIP_DECLARE(tb10x_intc, "abilis,tb10x-ictl", of_tb10x_init_irq);
