@@ -270,6 +270,28 @@ static const struct mfd_cell cpcap_mapphone_mfd_devices[] = {
 	MFD_CELL_NAME("cpcap-codec"),
 };
 
+/*
+ * The Mot board features a USB-PHY and charger similar to the ones in
+ * Mapphone; however, because Mot is based on Tegra20, it is incompatible
+ * with the existing implementation, which is tightly interconnected with
+ * the OMAP USB PHY.
+ */
+static const struct mfd_cell cpcap_mot_mfd_devices[] = {
+	MFD_CELL_OF("cpcap_adc", NULL, NULL, 0, 0, "motorola,mot-cpcap-adc"),
+	MFD_CELL_OF("cpcap_battery", NULL, NULL, 0, 0,
+		    "motorola,cpcap-battery"),
+	MFD_CELL_OF("cpcap-regulator", NULL, NULL, 0, 0,
+		    "motorola,mot-cpcap-regulator"),
+	MFD_CELL_OF("cpcap-rtc", NULL, NULL, 0, 0, "motorola,cpcap-rtc"),
+	MFD_CELL_OF("cpcap-pwrbutton", NULL, NULL, 0, 0,
+		    "motorola,cpcap-pwrbutton"),
+	MFD_CELL_OF("cpcap-led", NULL, NULL, 0, 0, "motorola,cpcap-led-red"),
+	MFD_CELL_OF("cpcap-led", NULL, NULL, 0, 1, "motorola,cpcap-led-green"),
+	MFD_CELL_OF("cpcap-led", NULL, NULL, 0, 2, "motorola,cpcap-led-blue"),
+	MFD_CELL_OF("cpcap-led", NULL, NULL, 0, 3, "motorola,cpcap-led-adl"),
+	MFD_CELL_NAME("cpcap-codec"),
+};
+
 static int cpcap_probe(struct spi_device *spi)
 {
 	struct cpcap_ddata *cpcap;
@@ -293,6 +315,10 @@ static int cpcap_probe(struct spi_device *spi)
 	case CPCAP_MAPPHONE:
 		cells = cpcap_mapphone_mfd_devices;
 		num_cells = ARRAY_SIZE(cpcap_mapphone_mfd_devices);
+		break;
+	case CPCAP_MOT:
+		cells = cpcap_mot_mfd_devices;
+		num_cells = ARRAY_SIZE(cpcap_mot_mfd_devices);
 		break;
 	default:
 		return dev_err_probe(&spi->dev, -EINVAL,
@@ -343,6 +369,9 @@ static const struct of_device_id cpcap_of_match[] = {
 	}, {
 		.compatible = "motorola,mapphone-cpcap",
 		.data = (void *)CPCAP_MAPPHONE
+	}, {
+		.compatible = "motorola,mot-cpcap",
+		.data = (void *)CPCAP_MOT
 	},
 	{ /* sentinel */ }
 };
@@ -351,6 +380,7 @@ MODULE_DEVICE_TABLE(of, cpcap_of_match);
 static const struct spi_device_id cpcap_spi_ids[] = {
 	{ "cpcap", CPCAP_DEFAULT },
 	{ "mapphone-cpcap", CPCAP_MAPPHONE },
+	{ "mot-cpcap", CPCAP_MOT },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(spi, cpcap_spi_ids);
