@@ -7067,6 +7067,12 @@ sub process {
 			     "Prefer strscpy over strlcpy - see: https://github.com/KSPP/linux/issues/89\n" . $herecurr);
 		}
 
+# strlcat uses that should likely be
+		if ($line =~ /\bstrlcat\s*\(/ && !is_userspace($realfile)) {
+			WARN("STRLCAT",
+			     "Prefer seq_buf_printf() over strlcat - see: https://github.com/KSPP/linux/issues/370\n" . $herecurr);
+		}
+
 # strncpy uses that should likely be strscpy or strscpy_pad
 		if ($line =~ /\bstrncpy\s*\(/ && !is_userspace($realfile)) {
 			WARN("STRNCPY",
