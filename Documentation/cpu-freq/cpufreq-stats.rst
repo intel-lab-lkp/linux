@@ -28,6 +28,13 @@ Various statistics will form read_only files under this directory.
 This driver is designed to be independent of any particular cpufreq_driver
 that may be running on your CPU. So, it will work with any cpufreq_driver.
 
+.. note::
+	
+   On some modern systems, this interface may not be available or may not
+   expose meaningful statistics depending on the active CPU frequency scaling driver.
+
+   In particular, drivers such as intel_pstate or amd_pstate may use alternative
+   mechanisms for frequency scaling and accounting.
 
 2. Statistics Provided (with example)
 =====================================
