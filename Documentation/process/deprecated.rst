@@ -162,6 +162,12 @@ if a source string is not NUL-terminated. The safe replacement is strscpy(),
 though care must be given to any cases where the return value of strlcpy()
 is used, since strscpy() will return negative errno values when it truncates.
 
+strlcat()
+---------
+strlcat() must re-scan the destination string from the beginning on each
+call (O(n^2) behavior). Alternatives are seq_buf_puts(), seq_buf_printf(),
+snprintf() and scnprintf()
+
 %p format specifier
 -------------------
 Traditionally, using "%p" in format strings would lead to regular address
