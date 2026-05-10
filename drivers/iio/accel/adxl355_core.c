@@ -349,7 +349,7 @@ static int adxl355_setup(struct adxl355_data *data)
 			return ret;
 
 		/* Wait at least 5ms after software reset */
-		usleep_range(5000, 10000);
+		fsleep(5000);
 
 		/* Read shadow registers for comparison */
 		ret = regmap_bulk_read(data->regmap,
