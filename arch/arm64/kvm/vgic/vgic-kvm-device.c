@@ -540,7 +540,7 @@ static int vgic_v3_attr_regs_access(struct kvm_device *dev,
 	struct vgic_reg_attr reg_attr;
 	gpa_t addr;
 	struct kvm_vcpu *vcpu;
-	bool uaccess;
+	bool uaccess, vcpus_locked = false;
 	u32 val;
 	int ret;
 
@@ -566,18 +566,37 @@ static int vgic_v3_attr_regs_access(struct kvm_device *dev,
 			return -EFAULT;
 	}
 
+	if (!vgic_initialized(dev->kvm) && !reg_allowed_pre_init(attr))
+		return -EBUSY;
+
 	mutex_lock(&dev->kvm->lock);
 
-	if (kvm_trylock_all_vcpus(dev->kvm)) {
-		mutex_unlock(&dev->kvm->lock);
-		return -EBUSY;
+	/*
+	 * Pre-init registers (e.g. GICD_IIDR) don't need vCPU quiescence
+	 * since the VGIC isn't live yet.  Skip the trylock to avoid spurious
+	 * -EBUSY when vCPU threads happen to be running.
+	 */
+	if (vgic_initialized(dev->kvm)) {
+		if (kvm_trylock_all_vcpus(dev->kvm)) {
+			mutex_unlock(&dev->kvm->lock);
+			return -EBUSY;
+		}
+		vcpus_locked = true;
 	}
-
 	mutex_lock(&dev->kvm->arch.config_lock);
 
-	if (!(vgic_initialized(dev->kvm) || reg_allowed_pre_init(attr))) {
-		ret = -EBUSY;
-		goto out;
+	/*
+	 * If the VGIC becomes initialized between the above check and taking
+	 * config_lock, drop config_lock to lock the VCPUS.
+	 */
+	if (vgic_initialized(dev->kvm) && !vcpus_locked) {
+		mutex_unlock(&dev->kvm->arch.config_lock);
+		if (kvm_trylock_all_vcpus(dev->kvm)) {
+			mutex_unlock(&dev->kvm->lock);
+			return -EBUSY;
+		}
+		mutex_lock(&dev->kvm->arch.config_lock);
+		vcpus_locked = true;
 	}
 
 	switch (attr->group) {
@@ -612,7 +631,8 @@ static int vgic_v3_attr_regs_access(struct kvm_device *dev,
 
 out:
 	mutex_unlock(&dev->kvm->arch.config_lock);
-	kvm_unlock_all_vcpus(dev->kvm);
+	if (vcpus_locked)
+		kvm_unlock_all_vcpus(dev->kvm);
 	mutex_unlock(&dev->kvm->lock);
 
 	if (!ret && uaccess && !is_write) {
