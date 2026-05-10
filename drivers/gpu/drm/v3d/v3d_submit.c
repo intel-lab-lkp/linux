@@ -274,6 +274,25 @@ v3d_attach_perfmon_to_jobs(struct v3d_submit *submit, u32 perfmon_id)
 }
 
 static void
+v3d_submit_attach_object_fences(struct v3d_submit *submit)
+{
+	struct v3d_job *last_job = submit->jobs[submit->job_count - 1];
+
+	/* The submission's last fence covers the entire submission. Attach it
+	 * to every BO touched by any job in the submission.
+	 */
+	for (int i = 0; i < submit->job_count; i++) {
+		struct v3d_job *job = submit->jobs[i];
+
+		for (int j = 0; j < job->bo_count; j++) {
+			/* XXX: Use shared fences for read-only objects. */
+			dma_resv_add_fence(job->bo[j]->resv, last_job->done_fence,
+					   DMA_RESV_USAGE_WRITE);
+		}
+	}
+}
+
+static void
 v3d_push_job(struct v3d_job *job)
 {
 	drm_sched_job_arm(&job->base);
@@ -307,6 +326,13 @@ v3d_submit_jobs(struct v3d_submit *submit)
 		}
 	}
 
+	mutex_unlock(&v3d->sched_lock);
+
+	v3d_submit_attach_object_fences(submit);
+	v3d_submit_unlock_reservations(submit);
+
+	return 0;
+
 err:
 	mutex_unlock(&v3d->sched_lock);
 	return ret;
@@ -327,27 +353,12 @@ v3d_submit_cleanup_jobs(struct v3d_submit *submit)
 }
 
 static void
-v3d_attach_fences_and_unlock_reservation(struct v3d_submit *submit,
-					 u32 out_sync, struct v3d_submit_ext *se)
+v3d_submit_process_post_deps(struct v3d_submit *submit, u32 out_sync,
+			     struct v3d_submit_ext *se)
 {
 	bool has_multisync = se && (se->flags & DRM_V3D_EXT_ID_MULTI_SYNC);
 	struct v3d_job *last_job = submit->jobs[submit->job_count - 1];
 	struct drm_syncobj *sync_out;
-
-	/* The submission's last fence covers the entire submission. Attach it
-	 * to every BO touched by any job in the submission.
-	 */
-	for (int i = 0; i < submit->job_count; i++) {
-		struct v3d_job *job = submit->jobs[i];
-
-		for (int j = 0; j < job->bo_count; j++) {
-			/* XXX: Use shared fences for read-only objects. */
-			dma_resv_add_fence(job->bo[j]->resv, last_job->done_fence,
-					   DMA_RESV_USAGE_WRITE);
-		}
-	}
-
-	v3d_submit_unlock_reservations(submit);
 
 	/* Update the return sync object for the job */
 	/* If it only supports a single signal semaphore*/
@@ -1052,8 +1063,7 @@ v3d_submit_cl_ioctl(struct drm_device *dev, void *data,
 	if (ret)
 		goto fail_unreserve;
 
-	v3d_attach_fences_and_unlock_reservation(&submit, args->out_sync, &se);
-
+	v3d_submit_process_post_deps(&submit, args->out_sync, &se);
 	v3d_submit_put_jobs(&submit);
 
 	return 0;
@@ -1145,8 +1155,7 @@ v3d_submit_tfu_ioctl(struct drm_device *dev, void *data,
 	if (ret)
 		goto fail_unreserve;
 
-	v3d_attach_fences_and_unlock_reservation(&submit, args->out_sync, &se);
-
+	v3d_submit_process_post_deps(&submit, args->out_sync, &se);
 	v3d_submit_put_jobs(&submit);
 
 	return 0;
@@ -1213,8 +1222,7 @@ v3d_submit_csd_ioctl(struct drm_device *dev, void *data,
 	if (ret)
 		goto fail_unreserve;
 
-	v3d_attach_fences_and_unlock_reservation(&submit, args->out_sync, &se);
-
+	v3d_submit_process_post_deps(&submit, args->out_sync, &se);
 	v3d_submit_put_jobs(&submit);
 
 	return 0;
@@ -1322,8 +1330,7 @@ v3d_submit_cpu_ioctl(struct drm_device *dev, void *data,
 	if (ret)
 		goto fail_unreserve;
 
-	v3d_attach_fences_and_unlock_reservation(&submit, 0, &se);
-
+	v3d_submit_process_post_deps(&submit, 0, &se);
 	v3d_submit_put_jobs(&submit);
 
 	return 0;
