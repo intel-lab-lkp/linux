@@ -2628,6 +2628,7 @@ static long mpi3mr_bsg_process_mpt_cmds(struct bsg_job *job)
 			       drv_buf_iter->kern_buf_len);
 			tmplen = min(drv_buf_iter->kern_buf_len,
 				     drv_buf_iter->bsg_buf_len);
+			drv_buf_iter->bsg_buf_len = tmplen;
 			rmc_size = tmplen;
 			memcpy(drv_buf_iter->kern_buf, drv_buf_iter->bsg_buf, tmplen);
 		} else if (is_rmrb && (count == 1)) {
