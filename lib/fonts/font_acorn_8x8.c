@@ -265,6 +265,7 @@ static const struct font_data acorndata_8x8 = {
 /* FF */  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 } };
 
+#ifndef OMIT_FONT_DESC /* Used by arch/arm/boot/compressed/Makefile */
 const struct font_desc font_acorn_8x8 = {
 	.idx	= ACORN8x8_IDX,
 	.name	= "Acorn8x8",
@@ -278,3 +279,4 @@ const struct font_desc font_acorn_8x8 = {
 	.pref	= 0,
 #endif
 };
+#endif /* OMIT_FONT_DESC */

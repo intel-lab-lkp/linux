@@ -157,4 +157,8 @@ $(obj)/piggy_data: $(obj)/../Image FORCE
 
 $(obj)/piggy.o: $(obj)/piggy_data
 
-CFLAGS_font.o := -Dstatic=
+# Defining _VIDEO_FONT_H prevents including <linux/font.h>, which contains
+# inline functions that require __do_div64, which is not linked into the
+# decompressor. OMIT_FONT_DESC is used in lib/fonts/font_acorn_8x8.c to omit the
+# definition of the font's font_desc structure, which requires <linux/font.h>.
+CFLAGS_font.o := -Dstatic= -D_VIDEO_FONT_H -DOMIT_FONT_DESC
