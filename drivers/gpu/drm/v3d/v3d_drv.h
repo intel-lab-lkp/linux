@@ -7,6 +7,7 @@
 #include <linux/spinlock_types.h>
 #include <linux/workqueue.h>
 
+#include <drm/drm_exec.h>
 #include <drm/drm_gem.h>
 #include <drm/drm_gem_shmem_helper.h>
 #include <drm/gpu_scheduler.h>
@@ -418,7 +419,7 @@ struct v3d_indirect_csd_info {
 	struct drm_gem_object *indirect;
 
 	/* Context of the Indirect CSD job */
-	struct ww_acquire_ctx acquire_ctx;
+	struct drm_exec exec;
 };
 
 struct v3d_timestamp_query_info {
