@@ -604,6 +604,7 @@ struct rockchip_aux_grf {
  * @grf: regmap of the general-register-files syscon
  * @aux_grf_table: hashtable of auxiliary GRF regmaps, indexed by grf_type
  * @lock: maintains exclusion between callbacks for a given clock-provider.
+ * @clk_table: clock lookup table.
  */
 struct rockchip_clk_provider {
 	void __iomem *reg_base;
@@ -612,6 +613,7 @@ struct rockchip_clk_provider {
 	struct regmap *grf;
 	DECLARE_HASHTABLE(aux_grf_table, GRF_HASH_ORDER);
 	spinlock_t lock;
+	struct clk *clk_table[];
 };
 
 struct rockchip_pll_rate_table {

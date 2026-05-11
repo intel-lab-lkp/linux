@@ -359,26 +359,21 @@ static struct rockchip_clk_provider *rockchip_clk_init_base(
 		unsigned long nr_clks, bool has_late_clocks)
 {
 	struct rockchip_clk_provider *ctx;
-	struct clk **clk_table;
 	struct clk *default_clk_val;
 	int i;
 
 	default_clk_val = ERR_PTR(has_late_clocks ? -EPROBE_DEFER : -ENOENT);
 
-	ctx = kzalloc_obj(struct rockchip_clk_provider);
+	ctx = kzalloc_flex(*ctx, clk_table, nr_clks);
 	if (!ctx)
 		return ERR_PTR(-ENOMEM);
 
-	clk_table = kzalloc_objs(struct clk *, nr_clks);
-	if (!clk_table)
-		goto err_free;
-
 	for (i = 0; i < nr_clks; ++i)
-		clk_table[i] = default_clk_val;
+		ctx->clk_table[i] = default_clk_val;
 
-	ctx->reg_base = base;
-	ctx->clk_data.clks = clk_table;
 	ctx->clk_data.clk_num = nr_clks;
+	ctx->clk_data.clks = ctx->clk_table;
+	ctx->reg_base = base;
 	ctx->cru_node = np;
 	spin_lock_init(&ctx->lock);
 
@@ -388,10 +383,6 @@ static struct rockchip_clk_provider *rockchip_clk_init_base(
 						   "rockchip,grf");
 
 	return ctx;
-
-err_free:
-	kfree(ctx);
-	return ERR_PTR(-ENOMEM);
 }
 
 struct rockchip_clk_provider *rockchip_clk_init(struct device_node *np,
