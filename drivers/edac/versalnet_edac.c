@@ -728,8 +728,7 @@ static int rpmsg_probe(struct rpmsg_device *rpdev)
 	pg = (struct mc_priv *)amd_rpmsg_id_table[0].driver_data;
 	chinfo.src = RPMSG_ADDR_ANY;
 	chinfo.dst = rpdev->dst;
-	strscpy(chinfo.name, amd_rpmsg_id_table[0].name,
-		strlen(amd_rpmsg_id_table[0].name));
+	strscpy(chinfo.name, amd_rpmsg_id_table[0].name);
 
 	pg->ept = rpmsg_create_ept(rpdev, rpmsg_cb, NULL, chinfo);
 	if (!pg->ept)
