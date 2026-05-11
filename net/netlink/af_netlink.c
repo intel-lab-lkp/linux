@@ -1325,14 +1325,17 @@ static int netlink_unicast_kernel(struct sock *sk, struct sk_buff *skb,
 }
 
 int netlink_unicast(struct sock *ssk, struct sk_buff *skb,
-		    u32 portid, int nonblock)
+		    u32 portid, int flags)
 {
 	struct sock *sk;
 	int err;
 	long timeo;
+	int nonblock;
 
 	skb = netlink_trim(skb, gfp_any());
 
+	/* Extract blocking mode: strip internal flags, preserve MSG_DONTWAIT */
+	nonblock = flags & ~NETLINK_UNICAST_TIMED;
 	timeo = sock_sndtimeo(ssk, nonblock);
 retry:
 	sk = netlink_getsockbyportid(ssk, portid);
@@ -1351,8 +1354,18 @@ retry:
 	}
 
 	err = netlink_attachskb(sk, skb, &timeo, ssk);
-	if (err == 1)
+	if (err == 1) {
+		/* timeo may have been zeroed by schedule_timeout inside
+		 * netlink_attachskb. If the caller is a timed-blocking sender
+		 * (not genuinely nonblocking), don't re-enter with timeo=0 as
+		 * that would misfire netlink_overrun on the next iteration.
+		 */
+		if (!timeo && (flags & NETLINK_UNICAST_TIMED)) {
+			kfree_skb(skb);
+			return -EAGAIN;
+		}
 		goto retry;
+	}
 	if (err)
 		return err;
 

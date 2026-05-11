@@ -226,7 +226,10 @@ void netlink_ack(struct sk_buff *in_skb, struct nlmsghdr *nlh, int err,
 int netlink_has_listeners(struct sock *sk, unsigned int group);
 bool netlink_strict_get_check(struct sk_buff *skb);
 
-int netlink_unicast(struct sock *ssk, struct sk_buff *skb, __u32 portid, int nonblock);
+/* Internal flags for netlink_unicast (do not overlap with MSG_* flags) */
+#define NETLINK_UNICAST_TIMED 0x80000
+
+int netlink_unicast(struct sock *ssk, struct sk_buff *skb, __u32 portid, int flags);
 int netlink_broadcast(struct sock *ssk, struct sk_buff *skb, __u32 portid,
 		      __u32 group, gfp_t allocation);
 
