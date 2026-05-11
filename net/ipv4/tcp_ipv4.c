@@ -1878,6 +1878,7 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 reset:
 	tcp_v4_send_reset(sk, skb, sk_rst_convert_drop_reason(reason));
 discard:
+	__this_cpu_write(tcp_tw_isn, 0);
 	sk_skb_reason_drop(sk, skb, reason);
 	/* Be careful here. If this function gets more complicated and
 	 * gcc suffers from register pressure on the x86, sk (in %ebx)
@@ -2198,6 +2199,7 @@ lookup:
 		}
 	}
 
+	DEBUG_NET_WARN_ON_ONCE(__this_cpu_read(tcp_tw_isn));
 process:
 	if (static_branch_unlikely(&ip4_min_ttl)) {
 		/* min_ttl can be changed concurrently from do_ip_setsockopt() */
@@ -2274,6 +2276,7 @@ bad_packet:
 	}
 
 discard_it:
+	__this_cpu_write(tcp_tw_isn, 0);
 	SKB_DR_OR(drop_reason, NOT_SPECIFIED);
 	/* Discard frame. */
 	sk_skb_reason_drop(sk, skb, drop_reason);

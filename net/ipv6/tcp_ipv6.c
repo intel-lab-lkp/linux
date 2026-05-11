@@ -1641,6 +1641,7 @@ int tcp_v6_do_rcv(struct sock *sk, struct sk_buff *skb)
 reset:
 	tcp_v6_send_reset(sk, skb, sk_rst_convert_drop_reason(reason));
 discard:
+	__this_cpu_write(tcp_tw_isn, 0);
 	if (opt_skb)
 		__kfree_skb(opt_skb);
 	sk_skb_reason_drop(sk, skb, reason);
@@ -1839,6 +1840,7 @@ lookup:
 		}
 	}
 
+	DEBUG_NET_WARN_ON_ONCE(__this_cpu_read(tcp_tw_isn));
 process:
 	if (static_branch_unlikely(&ip6_min_hopcount)) {
 		/* min_hopcount can be changed concurrently from do_ipv6_setsockopt() */
@@ -1913,6 +1915,7 @@ bad_packet:
 	}
 
 discard_it:
+	__this_cpu_write(tcp_tw_isn, 0);
 	SKB_DR_OR(drop_reason, NOT_SPECIFIED);
 	sk_skb_reason_drop(sk, skb, drop_reason);
 	return 0;
