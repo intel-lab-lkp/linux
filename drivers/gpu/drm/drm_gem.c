@@ -1067,9 +1067,6 @@ int drm_gem_change_handle_ioctl(struct drm_device *dev, void *data,
 
 	spin_unlock(&file_priv->table_lock);
 
-	if (ret < 0)
-		goto out_unlock;
-
 	if (obj->dma_buf) {
 		ret = drm_prime_add_buf_handle(&file_priv->prime, obj->dma_buf,
 					       handle);
