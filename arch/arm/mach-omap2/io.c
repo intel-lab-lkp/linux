@@ -15,6 +15,7 @@
  */
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/reboot.h>
 #include <linux/init.h>
 #include <linux/io.h>
 #include <linux/clk.h>
@@ -546,6 +547,12 @@ void __init ti816x_init_early(void)
 #ifdef CONFIG_SOC_AM33XX
 void __init am33xx_init_early(void)
 {
+	/*
+	 * Historically am33xx supported only REBOOT_WARM even though default
+	 * reboot_mode was REBOOT_COLD. Reflect legacy de-facto behaviour in
+	 * SYSFS.
+	 */
+	reboot_mode = REBOOT_WARM;
 	omap2_set_globals_tap(AM335X_CLASS,
 			      AM33XX_L4_WK_IO_ADDRESS(AM33XX_TAP_BASE));
 	omap2_control_base_init();

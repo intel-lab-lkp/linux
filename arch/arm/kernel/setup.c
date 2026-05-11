@@ -1123,9 +1123,6 @@ void __init setup_arch(char **cmdline_p)
 	machine_name = mdesc->name;
 	dump_stack_set_arch_desc("%s", mdesc->name);
 
-	if (mdesc->reboot_mode != REBOOT_HARD)
-		reboot_mode = mdesc->reboot_mode;
-
 	setup_initial_init_mm(_text, _etext, _edata, _end);
 
 	/* populate cmd_line too for later use, preserving boot_command_line */
