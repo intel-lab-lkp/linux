@@ -32,6 +32,7 @@
 #include <drm/drm_fixed.h>
 #include <drm/drm_print.h>
 #include <drm/drm_probe_helper.h>
+#include <drm/display/drm_dp_tunnel.h>
 #include <drm/intel/step.h>
 
 #include "intel_atomic.h"
@@ -1435,6 +1436,16 @@ static void
 mst_connector_early_unregister(struct drm_connector *_connector)
 {
 	struct intel_connector *connector = to_intel_connector(_connector);
+	struct intel_dp *intel_dp = connector->mst.dp;
+
+	/*
+	 * Drop the per-connector dp_tunnel/ debugfs entry before the
+	 * connector's debugfs root is recursively removed, so the
+	 * tunnel does not retain a stale dentry pointer.
+	 */
+	if (intel_dp && intel_dp->tunnel)
+		drm_dp_tunnel_debugfs_remove(intel_dp->tunnel,
+					     connector->base.debugfs_entry);
 
 	intel_connector_unregister(&connector->base);
 	drm_dp_mst_connector_early_unregister(&connector->base, connector->mst.port);

@@ -13,6 +13,7 @@
 #include <drm/drm_file.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_print.h>
+#include <drm/display/drm_dp_tunnel.h>
 #include <drm/intel/intel_gmd_misc_regs.h>
 
 #include "hsw_ips.h"
@@ -1337,6 +1338,27 @@ void intel_connector_debugfs_add(struct intel_connector *connector)
 	intel_alpm_lobf_debugfs_add(connector);
 	intel_dp_link_training_debugfs_add(connector);
 	intel_link_bw_connector_debugfs_add(connector);
+
+	if (connector_type == DRM_MODE_CONNECTOR_DisplayPort ||
+	    connector_type == DRM_MODE_CONNECTOR_eDP) {
+		struct intel_dp *intel_dp;
+
+		/*
+		 * For MST child connectors the relevant intel_dp is
+		 * pointed to by connector->mst.dp; intel_attached_dp()
+		 * follows the SST/eDP encoder path. Pick the right one
+		 * so MST children also get a dp_tunnel/ subdir under
+		 * their own connector debugfs root.
+		 */
+		if (connector_type == DRM_MODE_CONNECTOR_DisplayPort &&
+		    connector->mst.dp)
+			intel_dp = connector->mst.dp;
+		else
+			intel_dp = intel_attached_dp(connector);
+
+		if (intel_dp && intel_dp->tunnel)
+			drm_dp_tunnel_debugfs_add(intel_dp->tunnel, root);
+	}
 
 	if (DISPLAY_VER(display) >= 11 &&
 	    ((connector_type == DRM_MODE_CONNECTOR_DisplayPort && !connector->mst.dp) ||

@@ -6643,6 +6643,17 @@ intel_dp_connector_unregister(struct drm_connector *_connector)
 	struct intel_connector *connector = to_intel_connector(_connector);
 	struct intel_dp *intel_dp = intel_attached_dp(connector);
 
+	/*
+	 * Drop any DP tunnel debugfs entries registered under this
+	 * connector before drm_connector core tears down the connector
+	 * debugfs root. The SST tunnel object itself outlives the
+	 * connector (destroyed in intel_dp_encoder_flush_work()), so
+	 * stale dentries would otherwise be left on tunnel->debugfs_dirs.
+	 */
+	if (intel_dp->tunnel)
+		drm_dp_tunnel_debugfs_remove(intel_dp->tunnel,
+					     connector->base.debugfs_entry);
+
 	drm_dp_cec_unregister_connector(&intel_dp->aux);
 	drm_dp_aux_unregister(&intel_dp->aux);
 	intel_connector_unregister(&connector->base);
