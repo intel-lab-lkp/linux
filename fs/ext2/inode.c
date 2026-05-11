@@ -1612,6 +1612,7 @@ static int __ext2_write_inode(struct inode *inode, int do_sync)
 	} else for (n = 0; n < EXT2_N_BLOCKS; n++)
 		raw_inode->i_block[n] = ei->i_data[n];
 	mark_buffer_dirty(bh);
+	ei->i_metadata_bhs.inode_blk = bh->b_blocknr;
 	if (do_sync) {
 		sync_dirty_buffer(bh);
 		if (buffer_req(bh) && !buffer_uptodate(bh)) {
@@ -1627,7 +1628,7 @@ static int __ext2_write_inode(struct inode *inode, int do_sync)
 
 int ext2_write_inode(struct inode *inode, struct writeback_control *wbc)
 {
-	return __ext2_write_inode(inode, wbc->sync_mode == WB_SYNC_ALL);
+	return __ext2_write_inode(inode, 0);
 }
 
 int ext2_getattr(struct mnt_idmap *idmap, const struct path *path,
