@@ -3530,14 +3530,18 @@ bool __memcg_slab_post_alloc_hook(struct kmem_cache *s, struct list_lru *lru,
 		unsigned long obj_exts;
 		struct slabobj_ext *obj_ext;
 		struct obj_stock_pcp *stock;
+		struct obj_cgroup *nid_objcg;
+		int nid;
 
 		slab = virt_to_slab(p[i]);
+		nid = slab_pgdat(slab)->node_id;
 
 		if (!slab_obj_exts(slab) &&
 		    alloc_slab_obj_exts(slab, s, flags, false)) {
 			continue;
 		}
 
+		nid_objcg = obj_cgroup_get_nid(objcg, nid);
 		/*
 		 * if we fail and size is 1, memcg_alloc_abort_single() will
 		 * just free the object, which is ok as we have not assigned
@@ -3550,17 +3554,17 @@ bool __memcg_slab_post_alloc_hook(struct kmem_cache *s, struct list_lru *lru,
 		 * between iterations, with a more complicated undo
 		 */
 		stock = trylock_stock();
-		if (!stock || !__consume_obj_stock(objcg, stock, obj_size)) {
+		if (!stock || !__consume_obj_stock(nid_objcg, stock, obj_size)) {
 			size_t remainder;
 
 			unlock_stock(stock);
-			if (__obj_cgroup_charge(objcg, flags, obj_size, &remainder))
+			if (__obj_cgroup_charge(nid_objcg, flags, obj_size, &remainder))
 				return false;
 			stock = trylock_stock();
 			if (remainder)
-				__refill_obj_stock(objcg, stock, remainder, false);
+				__refill_obj_stock(nid_objcg, stock, remainder, false);
 		}
-		__account_obj_stock(objcg, stock, obj_size,
+		__account_obj_stock(nid_objcg, stock, obj_size,
 				    slab_pgdat(slab), cache_vmstat_idx(s));
 		unlock_stock(stock);
 
@@ -3568,8 +3572,8 @@ bool __memcg_slab_post_alloc_hook(struct kmem_cache *s, struct list_lru *lru,
 		get_slab_obj_exts(obj_exts);
 		off = obj_to_index(s, slab, p[i]);
 		obj_ext = slab_obj_ext(slab, obj_exts, off);
-		obj_cgroup_get(objcg);
-		obj_ext->objcg = objcg;
+		obj_cgroup_get(nid_objcg);
+		obj_ext->objcg = nid_objcg;
 		put_slab_obj_exts(obj_exts);
 	}
 
