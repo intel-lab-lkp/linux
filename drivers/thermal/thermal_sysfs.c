@@ -82,7 +82,7 @@ mode_store(struct device *dev, struct device_attribute *attr,
 }
 
 #define thermal_trip_of_attr(_ptr_, _attr_)				\
-	({ 								\
+	({\
 		struct thermal_trip_desc *td;				\
 									\
 		td = container_of(_ptr_, struct thermal_trip_desc,	\
@@ -405,7 +405,7 @@ static int create_trip_attrs(struct thermal_zone_device *tz)
 
 		sysfs_attr_init(&trip_attrs->type.attr.attr);
 		trip_attrs->type.attr.attr.name = trip_attrs->type.name;
-		trip_attrs->type.attr.attr.mode = S_IRUGO;
+		trip_attrs->type.attr.attr.mode = 0444;
 		trip_attrs->type.attr.show = trip_point_type_show;
 		attrs[i] = &trip_attrs->type.attr.attr;
 
@@ -415,10 +415,10 @@ static int create_trip_attrs(struct thermal_zone_device *tz)
 
 		sysfs_attr_init(&trip_attrs->temp.attr.attr);
 		trip_attrs->temp.attr.attr.name = trip_attrs->temp.name;
-		trip_attrs->temp.attr.attr.mode = S_IRUGO;
+		trip_attrs->temp.attr.attr.mode = 0444;
 		trip_attrs->temp.attr.show = trip_point_temp_show;
 		if (td->trip.flags & THERMAL_TRIP_FLAG_RW_TEMP) {
-			trip_attrs->temp.attr.attr.mode |= S_IWUSR;
+			trip_attrs->temp.attr.attr.mode |= 0200;
 			trip_attrs->temp.attr.store = trip_point_temp_store;
 		}
 		attrs[i + tz->num_trips] = &trip_attrs->temp.attr.attr;
@@ -428,10 +428,10 @@ static int create_trip_attrs(struct thermal_zone_device *tz)
 
 		sysfs_attr_init(&trip_attrs->hyst.attr.attr);
 		trip_attrs->hyst.attr.attr.name = trip_attrs->hyst.name;
-		trip_attrs->hyst.attr.attr.mode = S_IRUGO;
+		trip_attrs->hyst.attr.attr.mode = 0444;
 		trip_attrs->hyst.attr.show = trip_point_hyst_show;
 		if (td->trip.flags & THERMAL_TRIP_FLAG_RW_HYST) {
-			trip_attrs->hyst.attr.attr.mode |= S_IWUSR;
+			trip_attrs->hyst.attr.attr.mode |= 0200;
 			trip_attrs->hyst.attr.store = trip_point_hyst_store;
 		}
 		attrs[i + 2 * tz->num_trips] = &trip_attrs->hyst.attr.attr;
