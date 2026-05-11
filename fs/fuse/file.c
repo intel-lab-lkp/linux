@@ -96,6 +96,8 @@ static void fuse_release_end(struct fuse_args *args, int error)
 {
 	struct fuse_release_args *ra = container_of(args, typeof(*ra), args);
 
+	(void)error;
+
 	iput(ra->inode);
 	kfree(ra);
 }
@@ -117,6 +119,8 @@ static void fuse_file_put(struct fuse_file *ff, bool sync)
 			fuse_simple_request(ff->fm, args);
 			fuse_release_end(args, 0);
 		} else {
+			int err;
+
 			/*
 			 * DAX inodes may need to issue a number of synchronous
 			 * request for clearing the mappings.
@@ -124,9 +128,10 @@ static void fuse_file_put(struct fuse_file *ff, bool sync)
 			if (ra && ra->inode && FUSE_IS_DAX(ra->inode))
 				args->may_block = true;
 			args->end = fuse_release_end;
-			if (fuse_simple_background(ff->fm, args,
-						   GFP_KERNEL | __GFP_NOFAIL))
-				fuse_release_end(args, -ENOTCONN);
+			err = fuse_simple_background(ff->fm, args,
+						     GFP_KERNEL | __GFP_NOFAIL);
+			if (err)
+				fuse_release_end(args, err);
 		}
 		kfree(ff);
 	}
