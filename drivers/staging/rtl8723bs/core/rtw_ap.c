@@ -826,7 +826,7 @@ int rtw_check_beacon_data(struct adapter *padapter, u8 *pbuf,  int len)
 
 	memcpy(ie, pbuf, pbss_network->ie_length);
 
-	if (pbss_network->infrastructure_mode != Ndis802_11APMode)
+	if (pbss_network->infrastructure_mode != NDIS_802_11_AP_MODE)
 		return _FAIL;
 
 	pbss_network->rssi = 0;
@@ -1954,7 +1954,7 @@ void rtw_ap_restore_network(struct adapter *padapter)
 	char chk_alive_list[NUM_STA];
 	int i;
 
-	rtw_setopmode_cmd(padapter, Ndis802_11APMode, false);
+	rtw_setopmode_cmd(padapter, NDIS_802_11_AP_MODE, false);
 
 	set_channel_bwmode(padapter,
 			   pmlmeext->cur_channel,

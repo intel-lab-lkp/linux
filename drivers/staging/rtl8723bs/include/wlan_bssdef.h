@@ -43,11 +43,11 @@ struct ndis_802_11_conf {
 };
 
 enum ndis_802_11_network_infrastructure {
-	Ndis802_11IBSS,
-	Ndis802_11Infrastructure,
-	Ndis802_11AutoUnknown,
-	Ndis802_11InfrastructureMax,     /*  Not a real value, defined as upper bound */
-	Ndis802_11APMode,
+	NDIS_802_11_IBSS,
+	NDIS_802_11_INFRASTRUCTURE,
+	NDIS_802_11_AUTO_UNKNOWN,
+	NDIS_802_11_INFRASTRUCTURE_MAX,     /*  Not a real value, defined as upper bound */
+	NDIS_802_11_AP_MODE,
 };
 
 struct ndis_802_11_fix_ie {
@@ -125,8 +125,8 @@ struct ndis_802_11_wep {
 /*  MIC check time, 60 seconds. */
 #define MIC_CHECK_TIME	60000000
 
-#ifndef Ndis802_11APMode
-#define Ndis802_11APMode (Ndis802_11InfrastructureMax + 1)
+#ifndef NDIS_802_11_AP_MODE
+#define NDIS_802_11_AP_MODE (NDIS_802_11_INFRASTRUCTURE_MAX + 1)
 #endif
 
 struct wlan_phy_info {

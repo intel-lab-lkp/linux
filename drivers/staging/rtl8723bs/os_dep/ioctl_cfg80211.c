@@ -1059,13 +1059,13 @@ static int cfg80211_rtw_change_iface(struct wiphy *wiphy,
 
 	switch (type) {
 	case NL80211_IFTYPE_ADHOC:
-		networkType = Ndis802_11IBSS;
+		networkType = NDIS_802_11_IBSS;
 		break;
 	case NL80211_IFTYPE_STATION:
-		networkType = Ndis802_11Infrastructure;
+		networkType = NDIS_802_11_INFRASTRUCTURE;
 		break;
 	case NL80211_IFTYPE_AP:
-		networkType = Ndis802_11APMode;
+		networkType = NDIS_802_11_AP_MODE;
 		break;
 	default:
 		ret = -EOPNOTSUPP;
@@ -1610,12 +1610,12 @@ static int cfg80211_rtw_leave_ibss(struct wiphy *wiphy, struct net_device *ndev)
 
 		rtw_wdev->iftype = NL80211_IFTYPE_STATION;
 
-		if (rtw_set_802_11_infrastructure_mode(padapter, Ndis802_11Infrastructure) == false) {
+		if (rtw_set_802_11_infrastructure_mode(padapter, NDIS_802_11_INFRASTRUCTURE) == false) {
 			rtw_wdev->iftype = old_type;
 			ret = -EPERM;
 			goto leave_ibss;
 		}
-		rtw_setopmode_cmd(padapter, Ndis802_11Infrastructure, true);
+		rtw_setopmode_cmd(padapter, NDIS_802_11_INFRASTRUCTURE, true);
 	}
 
 leave_ibss:
