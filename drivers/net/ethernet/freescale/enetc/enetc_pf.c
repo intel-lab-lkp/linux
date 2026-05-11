@@ -497,7 +497,7 @@ static u16 enetc_msg_pf_set_vf_primary_mac_addr(struct enetc_pf *pf,
 		dev_warn(dev, "Attempt to override PF set mac addr for VF%d\n",
 			 vf_id);
 	else
-		enetc_pf_set_primary_mac_addr(&pf->si->hw, vf_id + 1, addr);
+		pf->ops->set_si_primary_mac(&pf->si->hw, vf_id + 1, addr);
 
 	return ENETC_MSG_CMD_STATUS_OK;
 }
