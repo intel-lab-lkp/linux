@@ -42,6 +42,7 @@ initial_plane_bo(struct xe_device *xe,
 {
 	struct xe_tile *tile0 = xe_device_get_root_tile(xe);
 	struct xe_bo *bo;
+	dma_addr_t dma_addr;
 	resource_size_t phys_base;
 	u32 base, size, flags;
 	u64 page_size = xe->info.vram_flags & XE_VRAM_FLAGS_NEED64K ? SZ_64K : SZ_4K;
@@ -64,7 +65,8 @@ initial_plane_bo(struct xe_device *xe,
 			return NULL;
 		}
 
-		phys_base = pte & ~(page_size - 1);
+		dma_addr = pte & ~(page_size - 1);
+		phys_base = dma_addr;
 
 		flags |= XE_BO_FLAG_VRAM0;
 
@@ -78,10 +80,6 @@ initial_plane_bo(struct xe_device *xe,
 				&phys_base);
 			return NULL;
 		}
-
-		drm_dbg_kms(&xe->drm,
-			    "Using phys_base=%pa, based on initial plane programming\n",
-			    &phys_base);
 	} else {
 		struct ttm_resource_manager *stolen;
 		u64 pte;
@@ -99,11 +97,29 @@ initial_plane_bo(struct xe_device *xe,
 			return NULL;
 		}
 
-		phys_base = base;
+		dma_addr = pte & ~(page_size - 1);
+		phys_base = dma_addr - xe_ttm_stolen_gpu_offset(xe);
+
 		flags |= XE_BO_FLAG_STOLEN;
 	}
 
-	bo = xe_bo_create_pin_map_at_novm(xe, tile0, size, phys_base, phys_base,
+	drm_dbg_kms(&xe->drm,
+		    "Initial plane dma_addr=%pa phys_base=%pa\n",
+		    &dma_addr, &phys_base);
+
+	/*
+	 * Pin to xe_ggtt_start() to avoid conflicting with
+	 * the horrible ggtt->start and GUC_GGTT_TOP hacks.
+	 *
+	 * FIXME this is complete crap. To do this properly we
+	 * need to prevent the original PTEs from being overwritten
+	 * while bindind to the new address. Any overlap between
+	 * the old and new ranges will corrupt the old PTEs that
+	 * the display hardware is currently using for scanout.
+	 */
+	base = xe_ggtt_start(tile0->mem.ggtt);
+
+	bo = xe_bo_create_pin_map_at_novm(xe, tile0, size, phys_base, base,
 					  ttm_bo_type_kernel, flags, 0, false);
 	if (IS_ERR(bo)) {
 		drm_dbg_kms(&xe->drm,
@@ -111,6 +127,11 @@ initial_plane_bo(struct xe_device *xe,
 			    &phys_base, size, flags, PTR_ERR(bo));
 		return NULL;
 	}
+
+	drm_dbg_kms(&xe->drm,
+		    "Initial plane fb bound to 0x%llx in the ggtt (original 0x%x)\n",
+		    xe_ggtt_node_addr(bo->ggtt_node[tile0->id]),
+		    plane_config->base);
 
 	return bo;
 }
