@@ -1024,6 +1024,7 @@ EXPORT_SYMBOL_IF_KUNIT(tlob_num_monitored_read);
 /* Tracepoint probes for KUnit; rv_trace.h is only included here. */
 static struct tlob_captured_event     tlob_kunit_last_event;
 static struct tlob_captured_error_env tlob_kunit_last_error_env;
+static struct tlob_captured_detail    tlob_kunit_last_detail;
 static atomic_t tlob_kunit_event_cnt    = ATOMIC_INIT(0);
 static atomic_t tlob_kunit_error_env_cnt = ATOMIC_INIT(0);
 
@@ -1054,6 +1055,17 @@ static void tlob_kunit_error_env_probe(void *data, int id, char *state,
 	atomic_inc(&tlob_kunit_error_env_cnt);
 }
 
+static void tlob_kunit_detail_probe(void *data, int pid, u64 threshold_us,
+				    u64 running_ns, u64 waiting_ns,
+				    u64 sleeping_ns)
+{
+	tlob_kunit_last_detail.pid		= pid;
+	tlob_kunit_last_detail.threshold_us	= threshold_us;
+	tlob_kunit_last_detail.running_ns	= running_ns;
+	tlob_kunit_last_detail.waiting_ns	= waiting_ns;
+	tlob_kunit_last_detail.sleeping_ns	= sleeping_ns;
+}
+
 int tlob_register_kunit_probes(void)
 {
 	int ret;
@@ -1069,6 +1081,12 @@ int tlob_register_kunit_probes(void)
 		unregister_trace_event_tlob(tlob_kunit_event_probe, NULL);
 		return ret;
 	}
+	ret = register_trace_detail_env_tlob(tlob_kunit_detail_probe, NULL);
+	if (ret) {
+		unregister_trace_error_env_tlob(tlob_kunit_error_env_probe, NULL);
+		unregister_trace_event_tlob(tlob_kunit_event_probe, NULL);
+		return ret;
+	}
 	return 0;
 }
 EXPORT_SYMBOL_IF_KUNIT(tlob_register_kunit_probes);
@@ -1077,6 +1095,7 @@ void tlob_unregister_kunit_probes(void)
 {
 	unregister_trace_event_tlob(tlob_kunit_event_probe, NULL);
 	unregister_trace_error_env_tlob(tlob_kunit_error_env_probe, NULL);
+	unregister_trace_detail_env_tlob(tlob_kunit_detail_probe, NULL);
 	tracepoint_synchronize_unregister();
 }
 EXPORT_SYMBOL_IF_KUNIT(tlob_unregister_kunit_probes);
@@ -1105,6 +1124,7 @@ void tlob_error_env_count_reset(void)
 }
 EXPORT_SYMBOL_IF_KUNIT(tlob_error_env_count_reset);
 
+
 const struct tlob_captured_event *tlob_last_event_read(void)
 {
 	return &tlob_kunit_last_event;
@@ -1116,6 +1136,12 @@ const struct tlob_captured_error_env *tlob_last_error_env_read(void)
 	return &tlob_kunit_last_error_env;
 }
 EXPORT_SYMBOL_IF_KUNIT(tlob_last_error_env_read);
+
+const struct tlob_captured_detail *tlob_last_detail_read(void)
+{
+	return &tlob_kunit_last_detail;
+}
+EXPORT_SYMBOL_IF_KUNIT(tlob_last_detail_read);
 
 #endif /* CONFIG_KUNIT */
 
