@@ -1002,7 +1002,7 @@ void kvm_inject_emulated_page_fault(struct kvm_vcpu *vcpu,
 	 */
 	if ((fault->error_code & PFERR_PRESENT_MASK) &&
 	    !(fault->error_code & PFERR_RSVD_MASK))
-		kvm_mmu_invalidate_addr(vcpu, fault_mmu, fault->address,
+		kvm_mmu_invalidate_addr(vcpu, &fault_mmu->w, fault->address,
 					KVM_MMU_ROOT_CURRENT);
 
 	fault_mmu->w.inject_page_fault(vcpu, fault);
