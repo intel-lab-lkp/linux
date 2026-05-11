@@ -386,6 +386,9 @@ int vfio_device_block_group(struct vfio_device *device)
 	struct vfio_group *group = device->group;
 	int ret = 0;
 
+	if (!group)
+		return 0;
+
 	mutex_lock(&group->group_lock);
 	if (group->opened_file) {
 		ret = -EBUSY;
@@ -402,6 +405,9 @@ out_unlock:
 void vfio_device_unblock_group(struct vfio_device *device)
 {
 	struct vfio_group *group = device->group;
+
+	if (!group)
+		return;
 
 	mutex_lock(&group->group_lock);
 	group->cdev_device_open_cnt--;
@@ -641,7 +647,8 @@ static struct vfio_group *vfio_group_find_or_alloc(struct device *dev)
 	struct vfio_group *group;
 
 	iommu_group = iommu_group_get(dev);
-	if (!iommu_group && vfio_noiommu) {
+	if (!iommu_group && IS_ENABLED(CONFIG_VFIO_GROUP_NOIOMMU) &&
+	    vfio_noiommu) {
 		/*
 		 * With noiommu enabled, create an IOMMU group for devices that
 		 * don't already have one, implying no IOMMU hardware/driver
@@ -686,8 +693,19 @@ int vfio_device_set_group(struct vfio_device *device,
 	else
 		group = vfio_noiommu_group_alloc(device->dev, type);
 
-	if (IS_ERR(group))
+	if (IS_ERR(group)) {
+		/*
+		 * Cdev noiommu devices don't need a vfio_group. When
+		 * CONFIG_VFIO_GROUP_NOIOMMU is not set, the group alloc
+		 * above returns -EINVAL for devices without an IOMMU.
+		 * That's fine — a NULL group is expected and iommufd
+		 * handles these devices directly.
+		 */
+		if (IS_ENABLED(CONFIG_VFIO_CDEV_NOIOMMU) &&
+		    vfio_noiommu && !device->dev->iommu)
+			return 0;
 		return PTR_ERR(group);
+	}
 
 	/* Our reference on group is moved to the device */
 	device->group = group;
@@ -698,6 +716,9 @@ void vfio_device_remove_group(struct vfio_device *device)
 {
 	struct vfio_group *group = device->group;
 	struct iommu_group *iommu_group;
+
+	if (!group)
+		return;
 
 	if (group->type == VFIO_NO_IOMMU || group->type == VFIO_EMULATED_IOMMU)
 		iommu_group_remove_device(device->dev);
@@ -742,6 +763,8 @@ void vfio_device_remove_group(struct vfio_device *device)
 
 void vfio_device_group_register(struct vfio_device *device)
 {
+	if (!device->group)
+		return;
 	mutex_lock(&device->group->device_lock);
 	list_add(&device->group_next, &device->group->device_list);
 	mutex_unlock(&device->group->device_lock);
@@ -749,6 +772,8 @@ void vfio_device_group_register(struct vfio_device *device)
 
 void vfio_device_group_unregister(struct vfio_device *device)
 {
+	if (!device->group)
+		return;
 	mutex_lock(&device->group->device_lock);
 	list_del(&device->group_next);
 	mutex_unlock(&device->group->device_lock);
@@ -786,6 +811,8 @@ void vfio_device_group_unuse_iommu(struct vfio_device *device)
 
 bool vfio_device_has_container(struct vfio_device *device)
 {
+	if (!device->group)
+		return false;
 	return device->group->container;
 }
 

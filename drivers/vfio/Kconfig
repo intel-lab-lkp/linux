@@ -75,6 +75,23 @@ config VFIO_GROUP_NOIOMMU
 
 	  If you don't know what to do here, say N.
 
+config VFIO_CDEV_NOIOMMU
+	bool "VFIO cdev No-IOMMU support"
+	depends on VFIO_DEVICE_CDEV
+	select IOMMUFD_NOIOMMU
+	help
+	  VFIO cdev no-IOMMU mode enables device access via the cdev
+	  interface without hardware IOMMU backing. This relies on
+	  IOMMUFD_NOIOMMU to provide a SW-only IO page table for
+	  IOVA-to-PA lookups.
+
+	  Use of this mode will result in an unsupportable kernel and
+	  will therefore taint the kernel. Device assignment to virtual
+	  machines is also not possible with this mode since there is
+	  no IOMMU to provide DMA translation.
+
+	  If you don't know what to do here, say N.
+
 config VFIO_VIRQFD
 	bool
 	select EVENTFD
