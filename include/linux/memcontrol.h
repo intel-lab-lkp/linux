@@ -228,6 +228,12 @@ struct mem_cgroup {
 	 * swap, and from being swapped out on zswap store failures.
 	 */
 	bool zswap_writeback;
+
+	/*
+	 * Per-memcg writeback cursor: root by shrink_worker, non-root by
+	 * proactive writeback.
+	 */
+	struct zswap_wb_iter zswap_wb_iter;
 #endif
 
 	/* vmpressure notifications */
