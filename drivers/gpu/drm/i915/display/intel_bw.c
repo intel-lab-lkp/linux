@@ -54,6 +54,8 @@ struct intel_qgv_point {
 
 #define DEPROGBWPCLIMIT		60
 
+#define PEAK_BW_THRESHOLD	20000
+
 struct intel_psf_gv_point {
 	u8 clk; /* clock in multiples of 16.6666 MHz */
 };
@@ -589,6 +591,50 @@ static int icl_get_bw_info(struct intel_display *display,
 	return 0;
 }
 
+static bool xe3_check_lower_peakbw(struct intel_display *display,
+				   const struct intel_qgv_info *qi,
+				   int num_channels)
+{
+	unsigned int lowest_peakbw;
+
+	if (!HAS_PEAK_BW_THRESHOLD(display))
+		return false;
+
+	if (qi->num_points >= I915_NUM_QGV_POINTS) {
+		drm_warn(display->drm, "Cannot insert lowest QGV point, not enough space\n");
+		return false;
+	}
+
+	lowest_peakbw = DIV_ROUND_CLOSEST(qi->points[0].dclk *
+					  qi->channel_width * num_channels, 8);
+	if (lowest_peakbw <= PEAK_BW_THRESHOLD) {
+		drm_dbg_kms(display->drm,
+			    "Lowest QGV point has peak BW %u MB/s, no need to insert lower point\n",
+			    lowest_peakbw);
+		return false;
+	}
+
+	return true;
+}
+
+static void xe3_insert_lowest_qgv_point(struct intel_display *display,
+					struct intel_bw_info *bi)
+{
+	if (bi->num_qgv_points >= ARRAY_SIZE(bi->deratedbw))
+		return;
+
+	memmove(&bi->deratedbw[1], &bi->deratedbw[0],
+		bi->num_qgv_points * sizeof(*bi->deratedbw));
+
+	memmove(&bi->peakbw[1], &bi->peakbw[0],
+		bi->num_qgv_points * sizeof(*bi->peakbw));
+
+	/* Keep the derated bandwidth as the threshold*/
+	bi->deratedbw[0] = PEAK_BW_THRESHOLD;
+	bi->peakbw[0] = PEAK_BW_THRESHOLD;
+	bi->num_qgv_points++;
+}
+
 static int tgl_get_bw_info(struct intel_display *display,
 			   const struct dram_info *dram_info,
 			   const struct intel_sa_info *sa)
@@ -598,6 +644,7 @@ static int tgl_get_bw_info(struct intel_display *display,
 	int num_channels = max_t(u8, 1, dram_info->num_channels);
 	int ipqdepth, ipqdepthpch = 16;
 	int dclk_max;
+	bool insert_low_peakbw;
 	int maxdebw, peakbw;
 	int clperchgroup;
 	int num_groups = ARRAY_SIZE(display->bw.max);
@@ -635,6 +682,10 @@ static int tgl_get_bw_info(struct intel_display *display,
 	 * clperchperblock = 8 / num_channels * interleave
 	 */
 	clperchgroup = 4 * DIV_ROUND_UP(8, num_channels) * qi.deinterleave;
+
+	insert_low_peakbw = xe3_check_lower_peakbw(display, &qi, num_channels);
+
+	display->bw.max[i].num_planes = 0;
 
 	for (i = 0; i < num_groups; i++) {
 		struct intel_bw_info *bi = &display->bw.max[i];
@@ -677,6 +728,9 @@ static int tgl_get_bw_info(struct intel_display *display,
 							  num_channels *
 							  qi.channel_width, 8);
 		}
+
+		if (insert_low_peakbw)
+			xe3_insert_lowest_qgv_point(display, bi);
 
 		for (j = 0; j < qi.num_psf_points; j++) {
 			const struct intel_psf_gv_point *sp = &qi.psf_points[j];
