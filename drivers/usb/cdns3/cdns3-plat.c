@@ -21,6 +21,7 @@
 
 #include "core.h"
 #include "gadget-export.h"
+#include "glue.h"
 #include "host-export.h"
 #include "drd.h"
 
@@ -59,29 +60,21 @@ static int cdns3_plat_host_init(struct cdns *cdns)
 }
 
 /**
- * cdns3_plat_probe - probe for cdns3 core device
- * @pdev: Pointer to cdns3 core platform device
+ * cdns3_core_probe - Initialize the Cadence USB3 platform core
+ * @data: Controller context and platform device supplied by the glue layer
  *
  * Returns 0 on success otherwise negative errno
  */
-static int cdns3_plat_probe(struct platform_device *pdev)
+int cdns3_core_probe(const struct cdns3_probe_data *data)
 {
+	struct platform_device *pdev = data->pdev;
 	struct device *dev = &pdev->dev;
-	struct resource	*res;
-	struct cdns *cdns;
+	struct cdns *cdns = data->cdns;
+	struct resource *res;
 	void __iomem *regs;
 	int ret;
 
-	cdns = devm_kzalloc(dev, sizeof(*cdns), GFP_KERNEL);
-	if (!cdns)
-		return -ENOMEM;
-
-	cdns->dev = dev;
-	cdns->pdata = dev_get_platdata(dev);
-	if (cdns->pdata && cdns->pdata->override_apb_timeout)
-		cdns->override_apb_timeout = cdns->pdata->override_apb_timeout;
-
-	platform_set_drvdata(pdev, cdns);
+	dev_set_drvdata(dev, cdns);
 
 	ret = platform_get_irq_byname(pdev, "host");
 	if (ret < 0)
@@ -195,14 +188,41 @@ err_phy3_init:
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(cdns3_core_probe);
 
 /**
- * cdns3_plat_remove() - unbind drd driver and clean up
- * @pdev: Pointer to Linux platform device
+ * cdns3_plat_probe - probe for cdns3 core device
+ * @pdev: Pointer to cdns3 core platform device
+ *
+ * Returns 0 on success otherwise negative errno
  */
-static void cdns3_plat_remove(struct platform_device *pdev)
+static int cdns3_plat_probe(struct platform_device *pdev)
 {
-	struct cdns *cdns = platform_get_drvdata(pdev);
+	struct device *dev = &pdev->dev;
+	struct cdns *cdns;
+	struct cdns3_probe_data probe_data;
+
+	cdns = devm_kzalloc(dev, sizeof(*cdns), GFP_KERNEL);
+	if (!cdns)
+		return -ENOMEM;
+
+	cdns->dev = dev;
+	cdns->pdata = dev_get_platdata(dev);
+	if (cdns->pdata && cdns->pdata->override_apb_timeout)
+		cdns->override_apb_timeout = cdns->pdata->override_apb_timeout;
+
+	probe_data.cdns = cdns;
+	probe_data.pdev = pdev;
+
+	return cdns3_core_probe(&probe_data);
+}
+
+/**
+ * cdns3_core_remove - Tear down the Cadence USB3 platform core
+ * @cdns: Controller context previously initialized by cdns3_core_probe()
+ */
+void cdns3_core_remove(struct cdns *cdns)
+{
 	struct device *dev = cdns->dev;
 
 	pm_runtime_get_sync(dev);
@@ -213,24 +233,30 @@ static void cdns3_plat_remove(struct platform_device *pdev)
 	phy_exit(cdns->usb2_phy);
 	phy_exit(cdns->usb3_phy);
 }
+EXPORT_SYMBOL_GPL(cdns3_core_remove);
+
+/**
+ * cdns3_plat_remove() - unbind drd driver and clean up
+ * @pdev: Pointer to Linux platform device
+ */
+static void cdns3_plat_remove(struct platform_device *pdev)
+{
+	cdns3_core_remove(platform_get_drvdata(pdev));
+}
 
 #ifdef CONFIG_PM
 
-static int cdns3_set_platform_suspend(struct device *dev,
-				      bool suspend, bool wakeup)
+static int cdns3_set_platform_suspend(struct cdns *cdns, bool suspend, bool wakeup)
 {
-	struct cdns *cdns = dev_get_drvdata(dev);
-	int ret = 0;
-
 	if (cdns->pdata && cdns->pdata->platform_suspend)
-		ret = cdns->pdata->platform_suspend(dev, suspend, wakeup);
+		return cdns->pdata->platform_suspend(cdns->dev, suspend, wakeup);
 
-	return ret;
+	return 0;
 }
 
-static int cdns3_controller_suspend(struct device *dev, pm_message_t msg)
+static int cdns3_controller_suspend(struct cdns *cdns, pm_message_t msg)
 {
-	struct cdns *cdns = dev_get_drvdata(dev);
+	struct device *dev = cdns->dev;
 	bool wakeup;
 	unsigned long flags;
 
@@ -242,7 +268,7 @@ static int cdns3_controller_suspend(struct device *dev, pm_message_t msg)
 	else
 		wakeup = device_may_wakeup(dev);
 
-	cdns3_set_platform_suspend(cdns->dev, true, wakeup);
+	cdns3_set_platform_suspend(cdns, true, wakeup);
 	set_phy_power_off(cdns);
 	spin_lock_irqsave(&cdns->lock, flags);
 	cdns->in_lpm = true;
@@ -252,9 +278,8 @@ static int cdns3_controller_suspend(struct device *dev, pm_message_t msg)
 	return 0;
 }
 
-static int cdns3_controller_resume(struct device *dev, pm_message_t msg)
+static int cdns3_controller_resume(struct cdns *cdns, pm_message_t msg)
 {
-	struct cdns *cdns = dev_get_drvdata(dev);
 	int ret;
 	unsigned long flags;
 
@@ -277,7 +302,7 @@ static int cdns3_controller_resume(struct device *dev, pm_message_t msg)
 	if (ret)
 		return ret;
 
-	cdns3_set_platform_suspend(cdns->dev, false, false);
+	cdns3_set_platform_suspend(cdns, false, false);
 
 	spin_lock_irqsave(&cdns->lock, flags);
 	cdns_resume(cdns);
@@ -293,26 +318,37 @@ static int cdns3_controller_resume(struct device *dev, pm_message_t msg)
 	return ret;
 }
 
-static int cdns3_plat_runtime_suspend(struct device *dev)
+int cdns3_runtime_suspend(struct cdns *cdns)
 {
-	return cdns3_controller_suspend(dev, PMSG_AUTO_SUSPEND);
+	return cdns3_controller_suspend(cdns, PMSG_AUTO_SUSPEND);
+}
+EXPORT_SYMBOL_GPL(cdns3_runtime_suspend);
+
+int cdns3_runtime_resume(struct cdns *cdns)
+{
+	return cdns3_controller_resume(cdns, PMSG_AUTO_RESUME);
+}
+EXPORT_SYMBOL_GPL(cdns3_runtime_resume);
+
+static int cdns3_dev_runtime_suspend(struct device *dev)
+{
+	return cdns3_runtime_suspend(dev_get_drvdata(dev));
 }
 
-static int cdns3_plat_runtime_resume(struct device *dev)
+static int cdns3_dev_runtime_resume(struct device *dev)
 {
-	return cdns3_controller_resume(dev, PMSG_AUTO_RESUME);
+	return cdns3_runtime_resume(dev_get_drvdata(dev));
 }
 
 #ifdef CONFIG_PM_SLEEP
-
-static int cdns3_plat_suspend(struct device *dev)
+int cdns3_pm_suspend(struct cdns *cdns)
 {
-	struct cdns *cdns = dev_get_drvdata(dev);
+	struct device *dev = cdns->dev;
 	int ret;
 
 	cdns_suspend(cdns);
 
-	ret = cdns3_controller_suspend(dev, PMSG_SUSPEND);
+	ret = cdns3_controller_suspend(cdns, PMSG_SUSPEND);
 	if (ret)
 		return ret;
 
@@ -321,18 +357,30 @@ static int cdns3_plat_suspend(struct device *dev)
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(cdns3_pm_suspend);
 
-static int cdns3_plat_resume(struct device *dev)
+int cdns3_pm_resume(struct cdns *cdns)
 {
-	return cdns3_controller_resume(dev, PMSG_RESUME);
+	return cdns3_controller_resume(cdns, PMSG_RESUME);
+}
+EXPORT_SYMBOL_GPL(cdns3_pm_resume);
+
+static int cdns3_dev_pm_suspend(struct device *dev)
+{
+	return cdns3_pm_suspend(dev_get_drvdata(dev));
+}
+
+static int cdns3_dev_pm_resume(struct device *dev)
+{
+	return cdns3_pm_resume(dev_get_drvdata(dev));
 }
 #endif /* CONFIG_PM_SLEEP */
 #endif /* CONFIG_PM */
 
 static const struct dev_pm_ops cdns3_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(cdns3_plat_suspend, cdns3_plat_resume)
-	SET_RUNTIME_PM_OPS(cdns3_plat_runtime_suspend,
-			   cdns3_plat_runtime_resume, NULL)
+	SET_SYSTEM_SLEEP_PM_OPS(cdns3_dev_pm_suspend, cdns3_dev_pm_resume)
+	SET_RUNTIME_PM_OPS(cdns3_dev_runtime_suspend,
+			   cdns3_dev_runtime_resume, NULL)
 };
 
 #ifdef CONFIG_OF
