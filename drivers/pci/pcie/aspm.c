@@ -799,6 +799,13 @@ static void aspm_l1ss_init(struct pcie_link_state *link)
 
 #define FLAG(x, y, d)	(((x) & (PCIE_LINK_STATE_##y)) ? d : "")
 
+static bool pcie_link_has_aspm_override(const struct pcie_link_state *link,
+					const char *aspm)
+{
+	return (device_property_present(&link->pdev->dev, aspm) ||
+		device_property_present(&link->downstream->dev, aspm));
+}
+
 static void pcie_aspm_override_default_link_state(struct pcie_link_state *link)
 {
 	struct pci_dev *pdev = link->downstream;
@@ -806,6 +813,15 @@ static void pcie_aspm_override_default_link_state(struct pcie_link_state *link)
 
 	/* For devicetree platforms, enable L0s and L1 by default */
 	if (of_have_populated_dt()) {
+		if (pcie_link_has_aspm_override(link, "aspm-no-l0s"))
+			link->aspm_support &= ~PCIE_LINK_STATE_L0S;
+
+		if (pcie_link_has_aspm_override(link, "aspm-no-l1"))
+			link->aspm_support &= ~PCIE_LINK_STATE_L1;
+
+		if (pcie_link_has_aspm_override(link, "aspm-no-l1ss"))
+			link->aspm_support &= ~PCIE_LINK_STATE_L1SS;
+
 		if (link->aspm_support & PCIE_LINK_STATE_L0S)
 			link->aspm_default |= PCIE_LINK_STATE_L0S;
 		if (link->aspm_support & PCIE_LINK_STATE_L1)
