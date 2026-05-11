@@ -1112,7 +1112,6 @@ static int tls_sw_sendmsg_locked(struct sock *sk, struct msghdr *msg,
 		if (!sk_stream_memory_free(sk))
 			goto wait_for_sndbuf;
 
-alloc_encrypted:
 		ret = tls_alloc_encrypted_msg(sk, required_size);
 		if (ret) {
 			if (ret != -ENOSPC)
@@ -1255,9 +1254,6 @@ trim_sgl:
 				tls_trim_both_msgs(sk, orig_size);
 			goto send_end;
 		}
-
-		if (ctx->open_rec && msg_en->sg.size < required_size)
-			goto alloc_encrypted;
 	}
 
 send_end:
