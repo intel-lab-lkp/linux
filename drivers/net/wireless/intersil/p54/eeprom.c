@@ -77,10 +77,10 @@ struct p54_channel_entry {
 };
 
 struct p54_channel_list {
-	struct p54_channel_entry *channels;
 	size_t entries;
 	size_t max_entries;
 	size_t band_channel_num[NUM_NL80211_BANDS];
+	struct p54_channel_entry channels[] __counted_by(max_entries);
 };
 
 static int p54_get_band_from_freq(u16 freq)
@@ -335,24 +335,21 @@ static int p54_generate_channel_lists(struct ieee80211_hw *dev)
 	max_channel_num = max_t(unsigned int, max_channel_num,
 				priv->curve_data->entries);
 
-	list = kzalloc_obj(*list);
+	list = kzalloc_flex(*list, channels, max_channel_num);
 	if (!list) {
 		ret = -ENOMEM;
 		goto free;
 	}
-	priv->chan_num = max_channel_num;
+
+	list->max_entries = max_channel_num;
+
 	priv->survey = kzalloc_objs(struct survey_info, max_channel_num);
 	if (!priv->survey) {
 		ret = -ENOMEM;
 		goto free;
 	}
 
-	list->max_entries = max_channel_num;
-	list->channels = kzalloc_objs(struct p54_channel_entry, max_channel_num);
-	if (!list->channels) {
-		ret = -ENOMEM;
-		goto free;
-	}
+	priv->chan_num = max_channel_num;
 
 	for (i = 0; i < max_channel_num; i++) {
 		if (i < priv->iq_autocal_len) {
@@ -401,10 +398,7 @@ static int p54_generate_channel_lists(struct ieee80211_hw *dev)
 	}
 
 free:
-	if (list) {
-		kfree(list->channels);
-		kfree(list);
-	}
+	kfree(list);
 	if (ret) {
 		kfree(priv->survey);
 		priv->survey = NULL;
