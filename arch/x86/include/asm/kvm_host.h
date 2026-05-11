@@ -879,7 +879,7 @@ struct kvm_vcpu_arch {
 	 * Pointer to the mmu context currently used for
 	 * gva_to_gpa translations.
 	 */
-	struct kvm_mmu *walk_mmu;
+	struct kvm_pagewalk *cpu_walk;
 
 	u64 pdptrs[4]; /* pae */
 
