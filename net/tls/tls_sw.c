@@ -2411,13 +2411,13 @@ int tls_sw_read_sock(struct sock *sk, read_descriptor_t *desc,
 		if (used < rxm->full_len) {
 			rxm->offset += used;
 			rxm->full_len -= used;
-			if (!desc->count)
-				goto read_sock_requeue;
-		} else {
-			consume_skb(skb);
-			if (!desc->count)
-				break;
+			__skb_queue_head(&ctx->rx_list, skb);
+			skb = NULL;
+			continue;
 		}
+		consume_skb(skb);
+		if (!desc->count)
+			break;
 	}
 
 read_sock_end:
