@@ -648,6 +648,15 @@ static int do_tls_setsockopt_conf(struct sock *sk, sockptr_t optval,
 	if (sockptr_is_null(optval) || (optlen < sizeof(*crypto_info)))
 		return -EINVAL;
 
+	if (!tx) {
+		struct sk_psock *psock = sk_psock_get(sk);
+
+		if (psock) {
+			sk_psock_put(sk, psock);
+			return -EBUSY;
+		}
+	}
+
 	if (tx) {
 		crypto_ctx = &ctx->crypto_send;
 		alt_crypto_info = &ctx->crypto_recv.info;
