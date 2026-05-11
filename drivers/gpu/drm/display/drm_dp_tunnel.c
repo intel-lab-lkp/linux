@@ -213,9 +213,17 @@ struct drm_dp_tunnel_mgr {
 	 * also taken when flipping tunnel->destroyed in
 	 * drm_dp_tunnel_destroy() so debugfs writers and
 	 * drm_dp_tunnel_debugfs_add() can observe the teardown and
-	 * bail out. It does NOT synchronize against driver-side
-	 * modeset paths; the debug knobs are intended for test /
-	 * validation use only.
+	 * bail out.
+	 *
+	 * Note: the bw_alloc_enable writer holds this lock across
+	 * drm_dp_tunnel_{enable,disable}_bw_alloc(), which issue
+	 * AUX/DPCD transactions. No driver-side path takes this lock,
+	 * so there is no nesting against AUX-internal locks; however
+	 * callers must not acquire this lock from any context that
+	 * already holds an AUX or DPCD lock.
+	 *
+	 * It does NOT synchronize against driver-side modeset paths;
+	 * the debug knobs are intended for test / validation use only.
 	 */
 	struct mutex debugfs_lock;
 #endif
@@ -2019,6 +2027,67 @@ static int tunnel_info_show(struct seq_file *m, void *data)
 }
 DEFINE_SHOW_ATTRIBUTE(tunnel_info);
 
+static int tunnel_bw_alloc_enable_show(struct seq_file *m, void *data)
+{
+	struct drm_dp_tunnel *tunnel = m->private;
+
+	/*
+	 * Print 0/1 so the file is round-trippable through
+	 * kstrtobool_from_user(): cat foo > saved && cat saved > foo.
+	 * The human-readable state is also available in 'info'.
+	 */
+	seq_printf(m, "%d\n", drm_dp_tunnel_bw_alloc_is_enabled(tunnel));
+
+	return 0;
+}
+
+static ssize_t tunnel_bw_alloc_enable_write(struct file *file,
+					    const char __user *ubuf,
+					    size_t len, loff_t *offp)
+{
+	struct seq_file *m = file->private_data;
+	struct drm_dp_tunnel *tunnel = m->private;
+	bool enable;
+	int ret;
+
+	ret = kstrtobool_from_user(ubuf, len, &enable);
+	if (ret)
+		return ret;
+
+	mutex_lock(&tunnel->group->mgr->debugfs_lock);
+
+	if (tunnel->destroyed) {
+		ret = -ENODEV;
+		goto unlock;
+	}
+
+	if (enable == drm_dp_tunnel_bw_alloc_is_enabled(tunnel))
+		ret = 0;
+	else if (enable)
+		ret = drm_dp_tunnel_enable_bw_alloc(tunnel);
+	else
+		ret = drm_dp_tunnel_disable_bw_alloc(tunnel);
+
+unlock:
+	mutex_unlock(&tunnel->group->mgr->debugfs_lock);
+
+	return ret < 0 ? ret : len;
+}
+
+static int tunnel_bw_alloc_enable_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, tunnel_bw_alloc_enable_show, inode->i_private);
+}
+
+static const struct file_operations tunnel_bw_alloc_enable_fops = {
+	.owner		= THIS_MODULE,
+	.open		= tunnel_bw_alloc_enable_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+	.write		= tunnel_bw_alloc_enable_write,
+};
+
 /**
  * drm_dp_tunnel_debugfs_add - Add DP tunnel debugfs entries
  * @tunnel: Tunnel object the entries are registered for
@@ -2079,6 +2148,8 @@ void drm_dp_tunnel_debugfs_add(struct drm_dp_tunnel *tunnel, struct dentry *root
 	list_add(&d->link, &tunnel->debugfs_dirs);
 
 	debugfs_create_file("info", 0444, dir, tunnel, &tunnel_info_fops);
+	debugfs_create_file("bw_alloc_enable", 0644, dir, tunnel,
+			    &tunnel_bw_alloc_enable_fops);
 
 unlock:
 	mutex_unlock(&tunnel->group->mgr->debugfs_lock);
