@@ -350,7 +350,7 @@ int __ext4_journal_get_create_access(const char *where, unsigned int line,
 	return 0;
 }
 
-static void ext4_inode_attach_mmb(struct inode *inode)
+void ext4_inode_attach_mmb(struct inode *inode)
 {
 	struct mapping_metadata_bhs *mmb;
 
