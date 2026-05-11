@@ -793,8 +793,14 @@ void kvm_vm_release(struct kvm_vm *vmp)
 	list_for_each_entry_safe(vcpu, tmp, &vmp->vcpus, list)
 		vm_vcpu_rm(vmp, vcpu);
 
-	kvm_close(vmp->fd);
-	kvm_close(vmp->kvm_fd);
+	if (vmp->fd >= 0) {
+		kvm_close(vmp->fd);
+		vmp->fd = -1;
+	}
+	if (vmp->kvm_fd >= 0) {
+		kvm_close(vmp->kvm_fd);
+		vmp->kvm_fd = -1;
+	}
 
 	/* Free cached stats metadata and close FD */
 	kvm_stats_release(&vmp->stats);
