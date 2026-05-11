@@ -298,7 +298,7 @@ static int lsdc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (loongson_vblank) {
 		ret = drm_vblank_init(ddev, descp->num_of_crtc);
 		if (ret)
-			return ret;
+			goto err_poll_fini;
 
 		ret = devm_request_irq(&pdev->dev, pdev->irq,
 				       descp->funcs->irq_handler,
@@ -306,7 +306,7 @@ static int lsdc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 				       dev_name(&pdev->dev), ddev);
 		if (ret) {
 			drm_err(ddev, "Failed to register interrupt: %d\n", ret);
-			return ret;
+			goto err_poll_fini;
 		}
 
 		drm_info(ddev, "registered irq: %u\n", pdev->irq);
@@ -314,17 +314,22 @@ static int lsdc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	ret = drm_dev_register(ddev, 0);
 	if (ret)
-		return ret;
+		goto err_poll_fini;
 
 	drm_client_setup(ddev, NULL);
 
 	return 0;
+
+err_poll_fini:
+	drm_kms_helper_poll_fini(ddev);
+	return ret;
 }
 
 static void lsdc_pci_remove(struct pci_dev *pdev)
 {
 	struct drm_device *ddev = pci_get_drvdata(pdev);
 
+	drm_kms_helper_poll_fini(ddev);
 	drm_dev_unregister(ddev);
 	drm_atomic_helper_shutdown(ddev);
 }
