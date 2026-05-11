@@ -887,11 +887,11 @@ int hsr_get_node_data(struct hsr_priv *hsr,
 	if (hsr->prot_version != PRP_V1)
 		fill_last_seq_nrs(node, if1_seq, if2_seq);
 
+	*addr_b_ifindex = -1;
 	if (node->addr_B_port != HSR_PT_NONE) {
 		port = hsr_port_get_hsr(hsr, node->addr_B_port);
-		*addr_b_ifindex = port->dev->ifindex;
-	} else {
-		*addr_b_ifindex = -1;
+		if (port)
+			*addr_b_ifindex = port->dev->ifindex;
 	}
 
 	return 0;
