@@ -105,7 +105,7 @@ bool kvm_can_do_async_pf(struct kvm_vcpu *vcpu);
 int kvm_handle_page_fault(struct kvm_vcpu *vcpu, u64 error_code,
 				u64 fault_address, char *insn, int insn_len);
 void __kvm_mmu_refresh_passthrough_bits(struct kvm_vcpu *vcpu,
-					struct kvm_mmu *mmu);
+					struct kvm_pagewalk *pw);
 
 int kvm_mmu_load(struct kvm_vcpu *vcpu);
 void kvm_mmu_unload(struct kvm_vcpu *vcpu);
@@ -183,8 +183,7 @@ static inline void kvm_mmu_refresh_passthrough_bits(struct kvm_vcpu *vcpu,
 	if (!tdp_enabled || w == &vcpu->arch.guest_mmu.w)
 		return;
 
-	__kvm_mmu_refresh_passthrough_bits(vcpu,
-					   container_of(w, struct kvm_mmu, w));
+	__kvm_mmu_refresh_passthrough_bits(vcpu, w);
 }
 
 /*
@@ -199,8 +198,6 @@ static inline u8 permission_fault(struct kvm_vcpu *vcpu, struct kvm_pagewalk *w,
 				  unsigned pte_access, unsigned pte_pkey,
 				  u64 access)
 {
-	struct kvm_mmu *mmu = container_of(w, struct kvm_mmu, w);
-
 	/* strip nested paging fault error codes */
 	unsigned int pfec = access;
 	unsigned long rflags = kvm_x86_call(get_rflags)(vcpu);
@@ -225,10 +222,10 @@ static inline u8 permission_fault(struct kvm_vcpu *vcpu, struct kvm_pagewalk *w,
 
 	kvm_mmu_refresh_passthrough_bits(vcpu, w);
 
-	fault = (mmu->permissions[index] >> pte_access) & 1;
+	fault = (w->permissions[index] >> pte_access) & 1;
 
 	WARN_ON_ONCE(pfec & (PFERR_PK_MASK | PFERR_SS_MASK | PFERR_RSVD_MASK));
-	if (unlikely(mmu->pkru_mask)) {
+	if (unlikely(w->pkru_mask)) {
 		u32 pkru_bits, offset;
 
 		/*
@@ -242,7 +239,7 @@ static inline u8 permission_fault(struct kvm_vcpu *vcpu, struct kvm_pagewalk *w,
 		/* clear present bit, replace PFEC.RSVD with ACC_USER_MASK. */
 		offset = (pfec & ~1) | ((pte_access & PT_USER_MASK) ? PFERR_RSVD_MASK : 0);
 
-		pkru_bits &= mmu->pkru_mask >> offset;
+		pkru_bits &= w->pkru_mask >> offset;
 		errcode |= -pkru_bits & PFERR_PK_MASK;
 		fault |= (pkru_bits != 0);
 	}
