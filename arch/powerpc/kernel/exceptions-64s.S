@@ -2498,7 +2498,7 @@ EXC_COMMON_BEGIN(facility_unavailable_common)
 
 
 /**
- * Interrupt 0xf60 - Hypervisor Facility Unavailable Interrupt.
+ * Interrupt 0xf80 - Hypervisor Facility Unavailable Interrupt.
  * This is a synchronous interrupt in response to
  * executing an instruction without access to the facility that can only
  * be resolved in HV mode (e.g., HFSCR).
