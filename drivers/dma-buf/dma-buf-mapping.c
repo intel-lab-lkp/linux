@@ -95,7 +95,8 @@ struct sg_table *dma_buf_phys_vec_to_sgt(struct dma_buf_attachment *attach,
 					 size_t nr_ranges, size_t size,
 					 enum dma_data_direction dir)
 {
-	unsigned int nents, mapped_len = 0;
+	unsigned int nents = 0;
+	size_t mapped_len = 0;
 	struct dma_buf_dma *dma;
 	struct scatterlist *sgl;
 	dma_addr_t addr;
