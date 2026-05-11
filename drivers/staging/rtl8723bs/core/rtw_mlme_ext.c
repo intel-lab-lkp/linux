@@ -682,6 +682,9 @@ unsigned int OnAuth(struct adapter *padapter, union recv_frame *precv_frame)
 	if ((pmlmeinfo->state&0x03) != WIFI_FW_AP_STATE)
 		return _FAIL;
 
+	if (len < WLAN_HDR_A3_LEN)
+		return _FAIL;
+
 	sa = GetAddr2Ptr(pframe);
 
 	auth_mode = psecuritypriv->dot11AuthAlgrthm;
@@ -693,6 +696,9 @@ unsigned int OnAuth(struct adapter *padapter, union recv_frame *precv_frame)
 		prxattrib->hdrlen = WLAN_HDR_A3_LEN;
 		prxattrib->encrypt = _WEP40_;
 
+		if (len < WLAN_HDR_A3_LEN + 4)
+			return _FAIL;
+
 		iv = pframe+prxattrib->hdrlen;
 		prxattrib->key_index = ((iv[3]>>6)&0x3);
 
@@ -702,6 +708,11 @@ unsigned int OnAuth(struct adapter *padapter, union recv_frame *precv_frame)
 		rtw_wep_decrypt(padapter, (u8 *)precv_frame);
 
 		offset = 4;
+	}
+
+	if (len < WLAN_HDR_A3_LEN + offset + 4) {
+		status = WLAN_STATUS_UNSPECIFIED_FAILURE;
+		goto auth_fail;
 	}
 
 	algorithm = le16_to_cpu(*(__le16 *)((SIZE_PTR)pframe + WLAN_HDR_A3_LEN + offset));
