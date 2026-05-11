@@ -504,11 +504,11 @@ struct kvm_pagewalk {
 };
 
 struct kvm_mmu {
-	struct kvm_pagewalk w;
-
 	int (*page_fault)(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault);
 	int (*sync_spte)(struct kvm_vcpu *vcpu,
 			 struct kvm_mmu_page *sp, int i);
+	struct kvm_pagewalk *w;
+
 	struct kvm_mmu_root_info root;
 	hpa_t mirror_root_hpa;
 	union kvm_mmu_page_role root_role;
@@ -862,8 +862,9 @@ struct kvm_vcpu_arch {
 	/* Non-nested MMU for L1 */
 	struct kvm_mmu root_mmu;
 
-	/* L1 MMU when running nested */
+	/* L1 TDP when running nested */
 	struct kvm_mmu guest_mmu;
+	struct kvm_pagewalk tdp_walk;
 
 	/*
 	 * Pagewalk context used for gva_to_gpa translations.
