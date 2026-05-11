@@ -1,0 +1,36 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
+# description: Test tlob ioctl self-instrumentation (within/over-budget, error paths)
+# requires: tlob:monitor tlob_ioctl:program
+
+TLOB_HELPER=$(command -v tlob_ioctl)
+
+[ -c /dev/rv ] || exit_unsupported
+
+echo 1 > monitors/tlob/enable
+
+# within budget: 50 ms threshold, 10 ms workload
+"$TLOB_HELPER" within_budget
+
+# over budget in running state: 1 ms threshold, 100 ms busy-spin
+"$TLOB_HELPER" over_budget_running
+
+# over budget in sleeping state: 3 ms threshold, 50 ms sleep
+"$TLOB_HELPER" over_budget_sleeping
+
+# over budget in waiting state: 1 us threshold, sched_yield
+"$TLOB_HELPER" over_budget_waiting
+
+# error paths
+"$TLOB_HELPER" double_start
+"$TLOB_HELPER" stop_no_start
+
+# per-thread isolation
+"$TLOB_HELPER" multi_thread
+
+# bind against disabled monitor must return ENODEV, not crash
+echo 0 > monitors/tlob/enable
+"$TLOB_HELPER" not_enabled
+echo 1 > monitors/tlob/enable
+
+echo 0 > monitors/tlob/enable

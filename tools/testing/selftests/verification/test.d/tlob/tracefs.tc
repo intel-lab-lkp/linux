@@ -1,0 +1,17 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
+# description: Test tlob monitor tracefs interface (enable/disable and files)
+# requires: tlob:monitor
+
+check_requires monitors/tlob/enable monitors/tlob/desc monitors/tlob/monitor
+
+# enable / disable via the enable file
+echo 1 > monitors/tlob/enable
+grep -q 1 monitors/tlob/enable
+echo "tlob" >> enabled_monitors
+grep -q tlob enabled_monitors
+
+echo 0 > monitors/tlob/enable
+grep -q 0 monitors/tlob/enable
+echo "!tlob" >> enabled_monitors
+! grep -q "^tlob$" enabled_monitors
