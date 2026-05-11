@@ -106,6 +106,9 @@ static int enetc_msg_vsi_send(struct enetc_si *si, struct enetc_msg_swbd *msg)
 		case ENETC_MSG_CLASS_ID_MAC_FILTER:
 			err = -EINVAL;
 			break;
+		case ENETC_MSG_CLASS_ID_IP_REVISION:
+			msg->class_code = pf_msg.class_code_u8;
+			break;
 		default:
 			err = -EIO;
 		}
@@ -139,6 +142,27 @@ static int enetc_msg_vsi_set_primary_mac_addr(struct enetc_ndev_priv *priv,
 
 	/* send the command and wait */
 	return enetc_msg_vsi_send(priv->si, &msg_swbd);
+}
+
+static int enetc_vf_get_ip_minor_revision(struct enetc_si *si)
+{
+	struct device *dev = &si->pdev->dev;
+	struct enetc_msg_swbd msg_swbd;
+	int err;
+
+	msg_swbd.size = ALIGN(sizeof(struct enetc_msg_generic),
+			      ENETC_MSG_ALIGN);
+	msg_swbd.vaddr = dma_alloc_coherent(dev, msg_swbd.size,
+					    &msg_swbd.dma, GFP_KERNEL);
+	if (!msg_swbd.vaddr)
+		return -ENOMEM;
+
+	enetc_msg_fill_common_hdr(&msg_swbd, ENETC_MSG_CLASS_ID_IP_REVISION,
+				  ENETC_MSG_GET_IP_MN, 0, 0);
+
+	err = enetc_msg_vsi_send(si, &msg_swbd);
+
+	return err ? err : msg_swbd.class_code;
 }
 
 static int enetc_vf_set_mac_addr(struct net_device *ndev, void *addr)
@@ -191,6 +215,27 @@ static const struct net_device_ops enetc_ndev_ops = {
 	.ndo_hwtstamp_get	= enetc_hwtstamp_get,
 	.ndo_hwtstamp_set	= enetc_hwtstamp_set,
 };
+
+static void enetc_vf_get_revision(struct enetc_si *si)
+{
+	int ip_mn;
+
+	if (is_enetc_rev1(si)) {
+		si->revision = ENETC_REV_1_0;
+		return;
+	}
+
+	ip_mn = enetc_vf_get_ip_minor_revision(si);
+	if (ip_mn >= 0) {
+		si->revision = (si->pdev->revision << 8) | ip_mn;
+		return;
+	}
+
+	si->revision = ENETC_REV_4_1;
+	dev_info(&si->pdev->dev,
+		 "Failed to get revision, use compatible revision: 0x%04x\n",
+		 si->revision);
+}
 
 static void enetc_vf_netdev_setup(struct enetc_si *si, struct net_device *ndev,
 				  const struct net_device_ops *ndev_ops)
@@ -251,7 +296,7 @@ static int enetc_vf_probe(struct pci_dev *pdev,
 		return dev_err_probe(&pdev->dev, err, "PCI probing failed\n");
 
 	si = pci_get_drvdata(pdev);
-	si->revision = ENETC_REV_1_0;
+	enetc_vf_get_revision(si);
 	si->ops = &enetc_vsi_ops;
 	err = enetc_get_driver_data(si);
 	if (err) {
