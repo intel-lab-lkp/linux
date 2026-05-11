@@ -487,16 +487,24 @@ static inline int neigh_event_send(struct neighbour *neigh, struct sk_buff *skb)
 }
 
 #if IS_ENABLED(CONFIG_BRIDGE_NETFILTER)
-static inline int neigh_hh_bridge(struct hh_cache *hh, struct sk_buff *skb)
+static inline struct sk_buff *
+neigh_hh_bridge(struct hh_cache *hh, struct sk_buff *skb)
 {
-	unsigned int seq, hh_alen;
+	unsigned int seq, hh_alen = HH_DATA_ALIGN(ETH_HLEN);
+
+	if (unlikely(skb_headroom(skb) < hh_alen ||
+		     skb_header_cloned(skb) || skb_shared(skb))) {
+		skb = skb_expand_head(skb, hh_alen);
+		if (!skb)
+			return NULL;
+	}
 
 	do {
 		seq = read_seqbegin(&hh->hh_lock);
-		hh_alen = HH_DATA_ALIGN(ETH_HLEN);
 		memcpy(skb->data - hh_alen, hh->hh_data, ETH_ALEN + hh_alen - ETH_HLEN);
 	} while (read_seqretry(&hh->hh_lock, seq));
-	return 0;
+
+	return skb;
 }
 #endif
 
