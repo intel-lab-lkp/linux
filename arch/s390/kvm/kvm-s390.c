@@ -3263,7 +3263,7 @@ int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 	}
 
 	mutex_init(&kvm->arch.float_int.ais_lock);
-	spin_lock_init(&kvm->arch.float_int.lock);
+	raw_spin_lock_init(&kvm->arch.float_int.lock);
 	for (i = 0; i < FIRQ_LIST_COUNT; i++)
 		INIT_LIST_HEAD(&kvm->arch.float_int.lists[i]);
 	init_waitqueue_head(&kvm->arch.ipte_wq);
@@ -3734,7 +3734,7 @@ int kvm_arch_vcpu_create(struct kvm_vcpu *vcpu)
 	vcpu->arch.sie_block->msl = sclp.hamax;
 
 	vcpu->arch.sie_block->icpua = vcpu->vcpu_id;
-	spin_lock_init(&vcpu->arch.local_int.lock);
+	raw_spin_lock_init(&vcpu->arch.local_int.lock);
 	vcpu->arch.sie_block->gd = kvm_s390_get_gisa_desc(vcpu->kvm);
 	seqcount_init(&vcpu->arch.cputm_seqcount);
 

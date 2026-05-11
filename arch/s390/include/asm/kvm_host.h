@@ -321,7 +321,7 @@ struct kvm_s390_irq_payload {
 };
 
 struct kvm_s390_local_interrupt {
-	spinlock_t lock;
+	raw_spinlock_t lock;
 	DECLARE_BITMAP(sigp_emerg_pending, KVM_MAX_VCPUS);
 	struct kvm_s390_irq_payload irq;
 	unsigned long pending_irqs;
@@ -353,7 +353,7 @@ struct kvm_s390_local_interrupt {
 struct kvm_s390_float_interrupt {
 	unsigned long pending_irqs;
 	unsigned long masked_irqs;
-	spinlock_t lock;
+	raw_spinlock_t lock;
 	struct list_head lists[FIRQ_LIST_COUNT];
 	int counters[FIRQ_MAX_COUNT];
 	struct kvm_s390_mchk_info mchk;

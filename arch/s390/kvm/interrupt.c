@@ -483,11 +483,11 @@ static int __must_check __deliver_pfault_init(struct kvm_vcpu *vcpu)
 	struct kvm_s390_ext_info ext;
 	int rc;
 
-	spin_lock(&li->lock);
+	raw_spin_lock(&li->lock);
 	ext = li->irq.ext;
 	clear_bit(IRQ_PEND_PFAULT_INIT, &li->pending_irqs);
 	li->irq.ext.ext_params2 = 0;
-	spin_unlock(&li->lock);
+	raw_spin_unlock(&li->lock);
 
 	VCPU_EVENT(vcpu, 4, "deliver: pfault init token 0x%llx",
 		   ext.ext_params2);
@@ -625,8 +625,8 @@ static int __must_check __deliver_machine_check(struct kvm_vcpu *vcpu)
 	int deliver = 0;
 	int rc = 0;
 
-	spin_lock(&fi->lock);
-	spin_lock(&li->lock);
+	raw_spin_lock(&fi->lock);
+	raw_spin_lock(&li->lock);
 	if (test_bit(IRQ_PEND_MCHK_EX, &li->pending_irqs) ||
 	    test_bit(IRQ_PEND_MCHK_REP, &li->pending_irqs)) {
 		/*
@@ -653,8 +653,8 @@ static int __must_check __deliver_machine_check(struct kvm_vcpu *vcpu)
 		memset(&fi->mchk, 0, sizeof(mchk));
 		deliver = 1;
 	}
-	spin_unlock(&li->lock);
-	spin_unlock(&fi->lock);
+	raw_spin_unlock(&li->lock);
+	raw_spin_unlock(&fi->lock);
 
 	if (deliver) {
 		VCPU_EVENT(vcpu, 3, "deliver: machine check mcic 0x%llx",
@@ -695,11 +695,11 @@ static int __must_check __deliver_set_prefix(struct kvm_vcpu *vcpu)
 	struct kvm_s390_local_interrupt *li = &vcpu->arch.local_int;
 	struct kvm_s390_prefix_info prefix;
 
-	spin_lock(&li->lock);
+	raw_spin_lock(&li->lock);
 	prefix = li->irq.prefix;
 	li->irq.prefix.address = 0;
 	clear_bit(IRQ_PEND_SET_PREFIX, &li->pending_irqs);
-	spin_unlock(&li->lock);
+	raw_spin_unlock(&li->lock);
 
 	vcpu->stat.deliver_prefix_signal++;
 	trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id,
@@ -716,12 +716,12 @@ static int __must_check __deliver_emergency_signal(struct kvm_vcpu *vcpu)
 	int rc;
 	int cpu_addr;
 
-	spin_lock(&li->lock);
+	raw_spin_lock(&li->lock);
 	cpu_addr = find_first_bit(li->sigp_emerg_pending, KVM_MAX_VCPUS);
 	clear_bit(cpu_addr, li->sigp_emerg_pending);
 	if (bitmap_empty(li->sigp_emerg_pending, KVM_MAX_VCPUS))
 		clear_bit(IRQ_PEND_EXT_EMERGENCY, &li->pending_irqs);
-	spin_unlock(&li->lock);
+	raw_spin_unlock(&li->lock);
 
 	VCPU_EVENT(vcpu, 4, "%s", "deliver: sigp emerg");
 	vcpu->stat.deliver_emergency_signal++;
@@ -750,11 +750,11 @@ static int __must_check __deliver_external_call(struct kvm_vcpu *vcpu)
 	struct kvm_s390_extcall_info extcall;
 	int rc;
 
-	spin_lock(&li->lock);
+	raw_spin_lock(&li->lock);
 	extcall = li->irq.extcall;
 	li->irq.extcall.code = 0;
 	clear_bit(IRQ_PEND_EXT_EXTERNAL, &li->pending_irqs);
-	spin_unlock(&li->lock);
+	raw_spin_unlock(&li->lock);
 
 	VCPU_EVENT(vcpu, 4, "%s", "deliver: sigp ext call");
 	vcpu->stat.deliver_external_call++;
@@ -800,11 +800,11 @@ static int __must_check __deliver_prog(struct kvm_vcpu *vcpu)
 	int rc = 0, nullifying = false;
 	u16 ilen;
 
-	spin_lock(&li->lock);
+	raw_spin_lock(&li->lock);
 	pgm_info = li->irq.pgm;
 	clear_bit(IRQ_PEND_PROG, &li->pending_irqs);
 	memset(&li->irq.pgm, 0, sizeof(pgm_info));
-	spin_unlock(&li->lock);
+	raw_spin_unlock(&li->lock);
 
 	ilen = pgm_info.flags & KVM_S390_PGM_FLAGS_ILC_MASK;
 	VCPU_EVENT(vcpu, 3, "deliver: program irq code 0x%x, ilen:%d",
@@ -942,10 +942,10 @@ static int __must_check __deliver_service(struct kvm_vcpu *vcpu)
 	struct kvm_s390_float_interrupt *fi = &vcpu->kvm->arch.float_int;
 	struct kvm_s390_ext_info ext;
 
-	spin_lock(&fi->lock);
+	raw_spin_lock(&fi->lock);
 	if (test_bit(IRQ_PEND_EXT_SERVICE, &fi->masked_irqs) ||
 	    !(test_bit(IRQ_PEND_EXT_SERVICE, &fi->pending_irqs))) {
-		spin_unlock(&fi->lock);
+		raw_spin_unlock(&fi->lock);
 		return 0;
 	}
 	ext = fi->srv_signal;
@@ -954,7 +954,7 @@ static int __must_check __deliver_service(struct kvm_vcpu *vcpu)
 	clear_bit(IRQ_PEND_EXT_SERVICE_EV, &fi->pending_irqs);
 	if (kvm_s390_pv_cpu_is_protected(vcpu))
 		set_bit(IRQ_PEND_EXT_SERVICE, &fi->masked_irqs);
-	spin_unlock(&fi->lock);
+	raw_spin_unlock(&fi->lock);
 
 	if (!ext.ext_params)
 		return 0;
@@ -973,16 +973,16 @@ static int __must_check __deliver_service_ev(struct kvm_vcpu *vcpu)
 	struct kvm_s390_float_interrupt *fi = &vcpu->kvm->arch.float_int;
 	struct kvm_s390_ext_info ext;
 
-	spin_lock(&fi->lock);
+	raw_spin_lock(&fi->lock);
 	if (!(test_bit(IRQ_PEND_EXT_SERVICE_EV, &fi->pending_irqs))) {
-		spin_unlock(&fi->lock);
+		raw_spin_unlock(&fi->lock);
 		return 0;
 	}
 	ext = fi->srv_signal;
 	/* only clear the event bits */
 	fi->srv_signal.ext_params &= ~SCCB_EVENT_PENDING;
 	clear_bit(IRQ_PEND_EXT_SERVICE_EV, &fi->pending_irqs);
-	spin_unlock(&fi->lock);
+	raw_spin_unlock(&fi->lock);
 
 	VCPU_EVENT(vcpu, 4, "%s", "deliver: sclp parameter event");
 	vcpu->stat.deliver_service_signal++;
@@ -998,7 +998,7 @@ static int __must_check __deliver_pfault_done(struct kvm_vcpu *vcpu)
 	struct kvm_s390_interrupt_info *inti;
 	int rc = 0;
 
-	spin_lock(&fi->lock);
+	raw_spin_lock(&fi->lock);
 	inti = list_first_entry_or_null(&fi->lists[FIRQ_LIST_PFAULT],
 					struct kvm_s390_interrupt_info,
 					list);
@@ -1008,7 +1008,7 @@ static int __must_check __deliver_pfault_done(struct kvm_vcpu *vcpu)
 	}
 	if (list_empty(&fi->lists[FIRQ_LIST_PFAULT]))
 		clear_bit(IRQ_PEND_PFAULT_DONE, &fi->pending_irqs);
-	spin_unlock(&fi->lock);
+	raw_spin_unlock(&fi->lock);
 
 	if (inti) {
 		trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id,
@@ -1040,7 +1040,7 @@ static int __must_check __deliver_virtio(struct kvm_vcpu *vcpu)
 	struct kvm_s390_interrupt_info *inti;
 	int rc = 0;
 
-	spin_lock(&fi->lock);
+	raw_spin_lock(&fi->lock);
 	inti = list_first_entry_or_null(&fi->lists[FIRQ_LIST_VIRTIO],
 					struct kvm_s390_interrupt_info,
 					list);
@@ -1058,7 +1058,7 @@ static int __must_check __deliver_virtio(struct kvm_vcpu *vcpu)
 	}
 	if (list_empty(&fi->lists[FIRQ_LIST_VIRTIO]))
 		clear_bit(IRQ_PEND_VIRTIO, &fi->pending_irqs);
-	spin_unlock(&fi->lock);
+	raw_spin_unlock(&fi->lock);
 
 	if (inti) {
 		rc  = put_guest_lc(vcpu, EXT_IRQ_CP_SERVICE,
@@ -1119,7 +1119,7 @@ static int __must_check __deliver_io(struct kvm_vcpu *vcpu,
 
 	fi = &vcpu->kvm->arch.float_int;
 
-	spin_lock(&fi->lock);
+	raw_spin_lock(&fi->lock);
 	isc = irq_type_to_isc(irq_type);
 	isc_list = &fi->lists[isc];
 	inti = list_first_entry_or_null(isc_list,
@@ -1146,7 +1146,7 @@ static int __must_check __deliver_io(struct kvm_vcpu *vcpu,
 	}
 	if (list_empty(isc_list))
 		clear_bit(irq_type, &fi->pending_irqs);
-	spin_unlock(&fi->lock);
+	raw_spin_unlock(&fi->lock);
 
 	if (inti) {
 		rc = __do_deliver_io(vcpu, &(inti->io));
@@ -1323,11 +1323,11 @@ void kvm_s390_clear_local_irqs(struct kvm_vcpu *vcpu)
 {
 	struct kvm_s390_local_interrupt *li = &vcpu->arch.local_int;
 
-	spin_lock(&li->lock);
+	raw_spin_lock(&li->lock);
 	li->pending_irqs = 0;
 	bitmap_zero(li->sigp_emerg_pending, KVM_MAX_VCPUS);
 	memset(&li->irq, 0, sizeof(li->irq));
-	spin_unlock(&li->lock);
+	raw_spin_unlock(&li->lock);
 
 	sca_clear_ext_call(vcpu);
 }
@@ -1663,7 +1663,7 @@ static struct kvm_s390_interrupt_info *get_io_int(struct kvm *kvm,
 	u16 id = (schid & 0xffff0000U) >> 16;
 	u16 nr = schid & 0x0000ffffU;
 
-	spin_lock(&fi->lock);
+	raw_spin_lock(&fi->lock);
 	list_for_each_entry(iter, isc_list, list) {
 		if (schid && (id != iter->io.subchannel_id ||
 			      nr != iter->io.subchannel_nr))
@@ -1673,10 +1673,10 @@ static struct kvm_s390_interrupt_info *get_io_int(struct kvm *kvm,
 		fi->counters[FIRQ_CNTR_IO] -= 1;
 		if (list_empty(isc_list))
 			clear_bit(isc_to_irq_type(isc), &fi->pending_irqs);
-		spin_unlock(&fi->lock);
+		raw_spin_unlock(&fi->lock);
 		return iter;
 	}
-	spin_unlock(&fi->lock);
+	raw_spin_unlock(&fi->lock);
 	return NULL;
 }
 
@@ -1771,7 +1771,7 @@ static int __inject_service(struct kvm *kvm,
 	struct kvm_s390_float_interrupt *fi = &kvm->arch.float_int;
 
 	kvm->stat.inject_service_signal++;
-	spin_lock(&fi->lock);
+	raw_spin_lock(&fi->lock);
 	fi->srv_signal.ext_params |= inti->ext.ext_params & SCCB_EVENT_PENDING;
 
 	/* We always allow events, track them separately from the sccb ints */
@@ -1791,7 +1791,7 @@ static int __inject_service(struct kvm *kvm,
 	fi->srv_signal.ext_params |= inti->ext.ext_params & SCCB_MASK;
 	set_bit(IRQ_PEND_EXT_SERVICE, &fi->pending_irqs);
 out:
-	spin_unlock(&fi->lock);
+	raw_spin_unlock(&fi->lock);
 	kfree(inti);
 	return 0;
 }
@@ -1802,15 +1802,15 @@ static int __inject_virtio(struct kvm *kvm,
 	struct kvm_s390_float_interrupt *fi = &kvm->arch.float_int;
 
 	kvm->stat.inject_virtio++;
-	spin_lock(&fi->lock);
+	raw_spin_lock(&fi->lock);
 	if (fi->counters[FIRQ_CNTR_VIRTIO] >= KVM_S390_MAX_VIRTIO_IRQS) {
-		spin_unlock(&fi->lock);
+		raw_spin_unlock(&fi->lock);
 		return -EBUSY;
 	}
 	fi->counters[FIRQ_CNTR_VIRTIO] += 1;
 	list_add_tail(&inti->list, &fi->lists[FIRQ_LIST_VIRTIO]);
 	set_bit(IRQ_PEND_VIRTIO, &fi->pending_irqs);
-	spin_unlock(&fi->lock);
+	raw_spin_unlock(&fi->lock);
 	return 0;
 }
 
@@ -1820,16 +1820,16 @@ static int __inject_pfault_done(struct kvm *kvm,
 	struct kvm_s390_float_interrupt *fi = &kvm->arch.float_int;
 
 	kvm->stat.inject_pfault_done++;
-	spin_lock(&fi->lock);
+	raw_spin_lock(&fi->lock);
 	if (fi->counters[FIRQ_CNTR_PFAULT] >=
 		(ASYNC_PF_PER_VCPU * KVM_MAX_VCPUS)) {
-		spin_unlock(&fi->lock);
+		raw_spin_unlock(&fi->lock);
 		return -EBUSY;
 	}
 	fi->counters[FIRQ_CNTR_PFAULT] += 1;
 	list_add_tail(&inti->list, &fi->lists[FIRQ_LIST_PFAULT]);
 	set_bit(IRQ_PEND_PFAULT_DONE, &fi->pending_irqs);
-	spin_unlock(&fi->lock);
+	raw_spin_unlock(&fi->lock);
 	return 0;
 }
 
@@ -1840,11 +1840,11 @@ static int __inject_float_mchk(struct kvm *kvm,
 	struct kvm_s390_float_interrupt *fi = &kvm->arch.float_int;
 
 	kvm->stat.inject_float_mchk++;
-	spin_lock(&fi->lock);
+	raw_spin_lock(&fi->lock);
 	fi->mchk.cr14 |= inti->mchk.cr14 & (1UL << CR_PENDING_SUBCLASS);
 	fi->mchk.mcic |= inti->mchk.mcic;
 	set_bit(IRQ_PEND_MCHK_REP, &fi->pending_irqs);
-	spin_unlock(&fi->lock);
+	raw_spin_unlock(&fi->lock);
 	kfree(inti);
 	return 0;
 }
@@ -1873,9 +1873,9 @@ static int __inject_io(struct kvm *kvm, struct kvm_s390_interrupt_info *inti)
 	}
 
 	fi = &kvm->arch.float_int;
-	spin_lock(&fi->lock);
+	raw_spin_lock(&fi->lock);
 	if (fi->counters[FIRQ_CNTR_IO] >= KVM_S390_MAX_FLOAT_IRQS) {
-		spin_unlock(&fi->lock);
+		raw_spin_unlock(&fi->lock);
 		return -EBUSY;
 	}
 	fi->counters[FIRQ_CNTR_IO] += 1;
@@ -1890,7 +1890,7 @@ static int __inject_io(struct kvm *kvm, struct kvm_s390_interrupt_info *inti)
 	list = &fi->lists[FIRQ_LIST_IO_ISC_0 + isc];
 	list_add_tail(&inti->list, list);
 	set_bit(isc_to_irq_type(isc), &fi->pending_irqs);
-	spin_unlock(&fi->lock);
+	raw_spin_unlock(&fi->lock);
 	return 0;
 }
 
@@ -2082,10 +2082,10 @@ void kvm_s390_clear_stop_irq(struct kvm_vcpu *vcpu)
 {
 	struct kvm_s390_local_interrupt *li = &vcpu->arch.local_int;
 
-	spin_lock(&li->lock);
+	raw_spin_lock(&li->lock);
 	li->irq.stop.flags = 0;
 	clear_bit(IRQ_PEND_SIGP_STOP, &li->pending_irqs);
-	spin_unlock(&li->lock);
+	raw_spin_unlock(&li->lock);
 }
 
 static int do_inject_vcpu(struct kvm_vcpu *vcpu, struct kvm_s390_irq *irq)
@@ -2138,9 +2138,9 @@ int kvm_s390_inject_vcpu(struct kvm_vcpu *vcpu, struct kvm_s390_irq *irq)
 	struct kvm_s390_local_interrupt *li = &vcpu->arch.local_int;
 	int rc;
 
-	spin_lock(&li->lock);
+	raw_spin_lock(&li->lock);
 	rc = do_inject_vcpu(vcpu, irq);
-	spin_unlock(&li->lock);
+	raw_spin_unlock(&li->lock);
 	if (!rc)
 		kvm_s390_vcpu_wakeup(vcpu);
 	return rc;
@@ -2181,7 +2181,7 @@ void kvm_s390_clear_float_irqs(struct kvm *kvm)
 	if (!kvm_s390_pv_is_protected(kvm))
 		fi->masked_irqs = 0;
 	mutex_unlock(&kvm->lock);
-	spin_lock(&fi->lock);
+	raw_spin_lock(&fi->lock);
 	fi->pending_irqs = 0;
 	memset(&fi->srv_signal, 0, sizeof(fi->srv_signal));
 	memset(&fi->mchk, 0, sizeof(fi->mchk));
@@ -2189,7 +2189,7 @@ void kvm_s390_clear_float_irqs(struct kvm *kvm)
 		clear_irq_list(&fi->lists[i]);
 	for (i = 0; i < FIRQ_MAX_COUNT; i++)
 		fi->counters[i] = 0;
-	spin_unlock(&fi->lock);
+	raw_spin_unlock(&fi->lock);
 	kvm_s390_gisa_clear(kvm);
 };
 
@@ -2235,7 +2235,7 @@ static int get_all_floating_irqs(struct kvm *kvm, u8 __user *usrbuf, u64 len)
 		}
 	}
 	fi = &kvm->arch.float_int;
-	spin_lock(&fi->lock);
+	raw_spin_lock(&fi->lock);
 	for (i = 0; i < FIRQ_LIST_COUNT; i++) {
 		list_for_each_entry(inti, &fi->lists[i], list) {
 			if (n == max_irqs) {
@@ -2272,7 +2272,7 @@ static int get_all_floating_irqs(struct kvm *kvm, u8 __user *usrbuf, u64 len)
 }
 
 out:
-	spin_unlock(&fi->lock);
+	raw_spin_unlock(&fi->lock);
 out_nolock:
 	if (!ret && n > 0) {
 		if (copy_to_user(usrbuf, buf, sizeof(struct kvm_s390_irq) * n))
@@ -3105,7 +3105,7 @@ int kvm_s390_set_irq_state(struct kvm_vcpu *vcpu, void __user *irqstate, int len
 	 * Don't allow setting the interrupt state
 	 * when there are already interrupts pending
 	 */
-	spin_lock(&li->lock);
+	raw_spin_lock(&li->lock);
 	if (li->pending_irqs) {
 		r = -EBUSY;
 		goto out_unlock;
@@ -3118,7 +3118,7 @@ int kvm_s390_set_irq_state(struct kvm_vcpu *vcpu, void __user *irqstate, int len
 	}
 
 out_unlock:
-	spin_unlock(&li->lock);
+	raw_spin_unlock(&li->lock);
 out_free:
 	vfree(buf);
 
@@ -3178,11 +3178,11 @@ int kvm_s390_get_irq_state(struct kvm_vcpu *vcpu, __u8 __user *buf, int len)
 	int cpuaddr;
 	int n = 0;
 
-	spin_lock(&li->lock);
+	raw_spin_lock(&li->lock);
 	pending_irqs = li->pending_irqs;
 	memcpy(&sigp_emerg_pending, &li->sigp_emerg_pending,
 	       sizeof(sigp_emerg_pending));
-	spin_unlock(&li->lock);
+	raw_spin_unlock(&li->lock);
 
 	for_each_set_bit(irq_type, &pending_irqs, IRQ_PEND_COUNT) {
 		memset(&irq, 0, sizeof(irq));

@@ -245,10 +245,10 @@ static int __prepare_sigp_re_start(struct kvm_vcpu *vcpu,
 	int rc = -EOPNOTSUPP;
 
 	/* make sure we don't race with STOP irq injection */
-	spin_lock(&li->lock);
+	raw_spin_lock(&li->lock);
 	if (kvm_s390_is_stop_irq_pending(dst_vcpu))
 		rc = SIGP_CC_BUSY;
-	spin_unlock(&li->lock);
+	raw_spin_unlock(&li->lock);
 
 	return rc;
 }

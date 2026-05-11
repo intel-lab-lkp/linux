@@ -64,10 +64,10 @@ static int handle_stop(struct kvm_vcpu *vcpu)
 		return 0;
 
 	/* avoid races with the injection/SIGP STOP code */
-	spin_lock(&li->lock);
+	raw_spin_lock(&li->lock);
 	flags = li->irq.stop.flags;
 	stop_pending = kvm_s390_is_stop_irq_pending(vcpu);
-	spin_unlock(&li->lock);
+	raw_spin_unlock(&li->lock);
 
 	trace_kvm_s390_stop_request(stop_pending, flags);
 	if (!stop_pending)
@@ -518,7 +518,7 @@ static int handle_pv_sclp(struct kvm_vcpu *vcpu)
 {
 	struct kvm_s390_float_interrupt *fi = &vcpu->kvm->arch.float_int;
 
-	spin_lock(&fi->lock);
+	raw_spin_lock(&fi->lock);
 	/*
 	 * 2 cases:
 	 * a: an sccb answering interrupt was already pending or in flight.
@@ -534,7 +534,7 @@ static int handle_pv_sclp(struct kvm_vcpu *vcpu)
 	fi->srv_signal.ext_params |= 0x43000;
 	set_bit(IRQ_PEND_EXT_SERVICE, &fi->pending_irqs);
 	clear_bit(IRQ_PEND_EXT_SERVICE, &fi->masked_irqs);
-	spin_unlock(&fi->lock);
+	raw_spin_unlock(&fi->lock);
 	return 0;
 }
 
