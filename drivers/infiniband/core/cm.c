@@ -4378,7 +4378,7 @@ static int cm_add_one(struct ib_device *ib_device)
 		ret = ib_port_register_client_groups(ib_device, i,
 						     cm_counter_groups);
 		if (ret)
-			goto error1;
+			goto error2;
 
 		port->mad_agent = ib_register_mad_agent(ib_device, i,
 							IB_QPT_GSI,
