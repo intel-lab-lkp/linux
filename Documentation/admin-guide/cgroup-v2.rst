@@ -1908,6 +1908,30 @@ The following nested keys are defined.
 	This setting has no effect if zswap is disabled, and swapping
 	is allowed unless memory.swap.max is set to 0.
 
+  memory.zswap.proactive_writeback
+	A write-only nested-keyed file which exists in non-root cgroups.
+
+	This interface allows proactive writeback of pages from the zswap
+	pool to the backing swap device. This is useful to offload cold
+	pages from the zswap pool to the slower swap device. It is only
+	available if zswap writeback is enabled.
+
+	Users can trigger writeback by writing to this file with the following
+	parameters:
+
+	- "max=<bytes>" : Optional. The maximum amount of data to write back.
+	  (default: unlimited). Please note that the kernel can over or under
+	  writeback this value.
+
+	- "<age>" : Required. The minimum age of the pages to write back
+	  (in seconds). Only pages that have been in the zswap pool for at
+	  least this amount of time will be written back.
+
+	Example::
+
+	  # Write back pages older than 1 hour (3600 seconds), max 10MB
+	  echo "max=10M 3600" > memory.zswap.proactive_writeback
+
   memory.pressure
 	A read-only nested-keyed file.
 

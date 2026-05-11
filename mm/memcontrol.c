@@ -70,6 +70,7 @@
 #include "memcontrol-v1.h"
 
 #include <linux/uaccess.h>
+#include <linux/parser.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/memcg.h>
@@ -5890,6 +5891,76 @@ static ssize_t zswap_writeback_write(struct kernfs_open_file *of,
 	return nbytes;
 }
 
+enum {
+	ZSWAP_WRITEBACK_MAX,
+	ZSWAP_WRITEBACK_AGE,
+	ZSWAP_WRITEBACK_ERR,
+};
+
+static const match_table_t zswap_writeback_tokens = {
+	{ ZSWAP_WRITEBACK_MAX, "max=%s" },
+	{ ZSWAP_WRITEBACK_AGE, "%u" },
+	{ ZSWAP_WRITEBACK_ERR, NULL },
+};
+
+static ssize_t zswap_proactive_writeback_write(struct kernfs_open_file *of,
+					       char *buf, size_t nbytes,
+					       loff_t off)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+	unsigned long nr_max_writeback = ULONG_MAX;
+	substring_t args[MAX_OPT_ARGS];
+	unsigned int age_sec;
+	bool age_set = false;
+	ktime_t cutoff_time;
+	char *token, *end;
+	int err;
+
+	if (!mem_cgroup_zswap_writeback_enabled(memcg))
+		return -EINVAL;
+
+	buf = strstrip(buf);
+
+	while ((token = strsep(&buf, " ")) != NULL) {
+		if (!strlen(token))
+			continue;
+
+		switch (match_token(token, zswap_writeback_tokens, args)) {
+		case ZSWAP_WRITEBACK_MAX:
+			nr_max_writeback = memparse(args[0].from, &end);
+			if (*end != '\0')
+				return -EINVAL;
+			nr_max_writeback >>= PAGE_SHIFT;
+			break;
+		case ZSWAP_WRITEBACK_AGE:
+			if (age_set)
+				return -EINVAL;
+
+			if (match_uint(&args[0], &age_sec))
+				return -EINVAL;
+			age_set = true;
+			break;
+		default:
+			return -EINVAL;
+		}
+	}
+
+	if (!age_set || !age_sec || !nr_max_writeback)
+		return -EINVAL;
+
+	cutoff_time = ktime_sub(ktime_get_boottime(),
+				ns_to_ktime((u64)age_sec * NSEC_PER_SEC));
+	/* age_sec >= uptime: no entry can be that old, skip the walk. */
+	if (ktime_to_ns(cutoff_time) <= 0)
+		return nbytes;
+
+	err = zswap_proactive_writeback(memcg, nr_max_writeback, cutoff_time);
+	if (err)
+		return err;
+
+	return nbytes;
+}
+
 static struct cftype zswap_files[] = {
 	{
 		.name = "zswap.current",
@@ -5906,6 +5977,11 @@ static struct cftype zswap_files[] = {
 		.name = "zswap.writeback",
 		.seq_show = zswap_writeback_show,
 		.write = zswap_writeback_write,
+	},
+	{
+		.name = "zswap.proactive_writeback",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.write = zswap_proactive_writeback_write,
 	},
 	{ }	/* terminate */
 };

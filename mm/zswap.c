@@ -36,6 +36,7 @@
 #include <linux/workqueue.h>
 #include <linux/list_lru.h>
 #include <linux/zsmalloc.h>
+#include <linux/timekeeping.h>
 
 #include "swap.h"
 #include "internal.h"
@@ -160,6 +161,12 @@ struct zswap_pool {
 	char tfm_name[CRYPTO_MAX_ALG_NAME];
 };
 
+struct zswap_shrink_walk_arg {
+	ktime_t cutoff_time;
+	bool proactive;
+	bool encountered_page_in_swapcache;
+};
+
 /* Global LRU lists shared by all zswap pools. */
 static struct list_lru zswap_list_lru;
 
@@ -183,6 +190,7 @@ static struct shrinker *zswap_shrinker;
  * handle - zsmalloc allocation handle that stores the compressed page data
  * objcg - the obj_cgroup that the compressed memory is charged to
  * lru - handle to the pool's lru used to evict pages.
+ * store_time - Time when the entry was stored, for proactive writeback.
  */
 struct zswap_entry {
 	swp_entry_t swpentry;
@@ -192,6 +200,7 @@ struct zswap_entry {
 	unsigned long handle;
 	struct obj_cgroup *objcg;
 	struct list_head lru;
+	ktime_t store_time;
 };
 
 static struct xarray *zswap_trees[MAX_SWAPFILES];
@@ -1148,10 +1157,19 @@ static enum lru_status shrink_memcg_cb(struct list_head *item, struct list_lru_o
 				       void *arg)
 {
 	struct zswap_entry *entry = container_of(item, struct zswap_entry, lru);
-	bool *encountered_page_in_swapcache = (bool *)arg;
-	swp_entry_t swpentry;
+	struct zswap_shrink_walk_arg *walk_arg = arg;
+	bool proactive_wb = walk_arg && walk_arg->proactive;
 	enum lru_status ret = LRU_REMOVED_RETRY;
 	int writeback_result;
+	swp_entry_t swpentry;
+
+	/*
+	 * For proactive writeback, rotate young entries to the LRU tail
+	 * so that subsequent list_lru_walk_one() batches start past
+	 * them.
+	 */
+	if (proactive_wb && ktime_after(entry->store_time, walk_arg->cutoff_time))
+		return LRU_ROTATE;
 
 	/*
 	 * Second chance algorithm: if the entry has its referenced bit set, give it
@@ -1160,7 +1178,9 @@ static enum lru_status shrink_memcg_cb(struct list_head *item, struct list_lru_o
 	 */
 	if (entry->referenced) {
 		entry->referenced = false;
-		return LRU_ROTATE;
+		/* Proactive writeback is an explicit hint; don't rotate. */
+		if (!proactive_wb)
+			return LRU_ROTATE;
 	}
 
 	/*
@@ -1214,9 +1234,9 @@ static enum lru_status shrink_memcg_cb(struct list_head *item, struct list_lru_o
 		 * into the warmer region. We should terminate shrinking (if we're in the dynamic
 		 * shrinker context).
 		 */
-		if (writeback_result == -EEXIST && encountered_page_in_swapcache) {
+		if (writeback_result == -EEXIST && walk_arg) {
 			ret = LRU_STOP;
-			*encountered_page_in_swapcache = true;
+			walk_arg->encountered_page_in_swapcache = true;
 		}
 	} else {
 		zswap_written_back_pages++;
@@ -1228,8 +1248,12 @@ static enum lru_status shrink_memcg_cb(struct list_head *item, struct list_lru_o
 static unsigned long zswap_shrinker_scan(struct shrinker *shrinker,
 		struct shrink_control *sc)
 {
+	struct zswap_shrink_walk_arg walk_arg = {
+		.cutoff_time = KTIME_MAX,
+		.proactive = false,
+		.encountered_page_in_swapcache = false,
+	};
 	unsigned long shrink_ret;
-	bool encountered_page_in_swapcache = false;
 
 	if (!zswap_shrinker_enabled ||
 			!mem_cgroup_zswap_writeback_enabled(sc->memcg)) {
@@ -1238,9 +1262,9 @@ static unsigned long zswap_shrinker_scan(struct shrinker *shrinker,
 	}
 
 	shrink_ret = list_lru_shrink_walk(&zswap_list_lru, sc, &shrink_memcg_cb,
-		&encountered_page_in_swapcache);
+					  &walk_arg);
 
-	if (encountered_page_in_swapcache)
+	if (walk_arg.encountered_page_in_swapcache)
 		return SHRINK_STOP;
 
 	return shrink_ret ? shrink_ret : SHRINK_STOP;
@@ -1508,6 +1532,7 @@ static bool zswap_store_page(struct page *page,
 	entry->swpentry = page_swpentry;
 	entry->objcg = objcg;
 	entry->referenced = true;
+	entry->store_time = ktime_get_boottime();
 	if (entry->length) {
 		INIT_LIST_HEAD(&entry->lru);
 		zswap_lru_add(&zswap_list_lru, entry);
@@ -1679,6 +1704,141 @@ int zswap_load(struct folio *folio)
 
 	folio_unlock(folio);
 	return 0;
+}
+
+/* Cap LRU scan to this many entries per page of remaining budget. */
+#define ZSWAP_PROACTIVE_WB_SCAN_RATIO	16UL
+/*
+ * Batch size for proactive writeback, used both as the per-memcg
+ * writeback target in the outer memcg loop and as the per-walk budget
+ * for list_lru_walk_one().
+ */
+#define ZSWAP_PROACTIVE_WB_BATCH	128UL
+
+/*
+ * Walk @memcg's per-node LRUs, writing back entries older than @cutoff
+ * up to @nr_to_write pages. Returns the number of pages written back,
+ * or -ENOENT if @memcg is a zombie or has writeback disabled.
+ */
+static long zswap_proactive_shrink_memcg(struct mem_cgroup *memcg,
+					 ktime_t cutoff,
+					 unsigned long nr_to_write)
+{
+	unsigned long nr_written = 0;
+	int nid;
+
+	if (!mem_cgroup_zswap_writeback_enabled(memcg))
+		return -ENOENT;
+
+	if (!mem_cgroup_online(memcg))
+		return -ENOENT;
+
+	for_each_node_state(nid, N_NORMAL_MEMORY) {
+		struct zswap_shrink_walk_arg walk_arg = {
+			.cutoff_time = cutoff,
+			.proactive = true,
+			.encountered_page_in_swapcache = false,
+		};
+		unsigned long nr_to_scan, nr_scanned = 0;
+
+		/*
+		 * Cap by LRU length: bounds rewalks when entries keep
+		 * rotating (young or referenced).
+		 */
+		nr_to_scan = list_lru_count_one(&zswap_list_lru, nid, memcg);
+		if (!nr_to_scan)
+			continue;
+
+		/*
+		 * Cap by SCAN_RATIO * remaining budget: bounds scan cost
+		 * to the remaining writeback budget.
+		 */
+		nr_to_scan = min(nr_to_scan,
+				 (nr_to_write - nr_written) * ZSWAP_PROACTIVE_WB_SCAN_RATIO);
+
+		while (nr_scanned < nr_to_scan) {
+			unsigned long nr_to_walk = min(ZSWAP_PROACTIVE_WB_BATCH,
+						       nr_to_scan - nr_scanned);
+
+			if (signal_pending(current))
+				return nr_written;
+
+			/*
+			 * Account the committed budget rather than the walker's
+			 * actual delta: if the list empties under us the walker
+			 * visits nothing and nr_scanned would never advance.
+			 */
+			nr_scanned += nr_to_walk;
+
+			nr_written += list_lru_walk_one(&zswap_list_lru, nid, memcg,
+							&shrink_memcg_cb, &walk_arg,
+							&nr_to_walk);
+
+			if (nr_written >= nr_to_write)
+				return nr_written;
+			if (walk_arg.encountered_page_in_swapcache)
+				break;
+
+			cond_resched();
+		}
+	}
+
+	return nr_written;
+}
+
+int zswap_proactive_writeback(struct mem_cgroup *root,
+			      unsigned long nr_max_writeback,
+			      ktime_t cutoff)
+{
+	struct mem_cgroup *memcg;
+	unsigned long nr_written = 0;
+	int failures = 0, attempts = 0;
+
+	/*
+	 * Writeback will be aborted with -EAGAIN if @nr_written is still
+	 * zero and we encounter the following MAX_RECLAIM_RETRIES times:
+	 * - No writeback-candidate memcgs found in a subtree walk.
+	 * - A writeback-candidate memcg wrote back zero pages.
+	 */
+	while (nr_written < nr_max_writeback) {
+		unsigned long nr_to_write;
+		long shrunk;
+
+		if (signal_pending(current))
+			return -EINTR;
+
+		memcg = zswap_mem_cgroup_iter(root);
+
+		if (!memcg) {
+			/*
+			 * Continue without incrementing failures if we found
+			 * candidate memcgs in the last subtree walk.
+			 */
+			if (!attempts && ++failures == MAX_RECLAIM_RETRIES)
+				goto out;
+			attempts = 0;
+			continue;
+		}
+
+		nr_to_write = min(nr_max_writeback - nr_written,
+				  ZSWAP_PROACTIVE_WB_BATCH);
+		shrunk = zswap_proactive_shrink_memcg(memcg, cutoff, nr_to_write);
+		mem_cgroup_put(memcg);
+
+		/* Writeback-disabled or offline: skip without counting. */
+		if (shrunk == -ENOENT)
+			continue;
+
+		++attempts;
+		if (shrunk > 0)
+			nr_written += shrunk;
+		else if (++failures == MAX_RECLAIM_RETRIES)
+			goto out;
+
+		cond_resched();
+	}
+out:
+	return nr_written ? 0 : -EAGAIN;
 }
 
 void zswap_invalidate(swp_entry_t swp)
