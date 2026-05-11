@@ -1376,8 +1376,14 @@ tls_rx_rec_wait(struct sock *sk, struct sk_psock *psock, bool nonblock,
 		if (!sk_psock_queue_empty(psock))
 			return 0;
 
+		/* Report sk_err without clearing it. The caller may
+		 * discard the error return from this function in favor
+		 * of bytes already copied; leaving sk_err set ensures
+		 * the next read syscall surfaces the error instead of
+		 * a spurious EOF.
+		 */
 		if (sk->sk_err)
-			return sock_error(sk);
+			return -READ_ONCE(sk->sk_err);
 
 		if (ret < 0)
 			return ret;
@@ -1399,7 +1405,7 @@ tls_rx_rec_wait(struct sock *sk, struct sk_psock *psock, bool nonblock,
 		 * actual error rather than a clean EOF.
 		 */
 		if (sk->sk_err)
-			return sock_error(sk);
+			return -READ_ONCE(sk->sk_err);
 		if (sk->sk_shutdown & RCV_SHUTDOWN)
 			return 0;
 
@@ -1428,6 +1434,18 @@ tls_rx_rec_wait(struct sock *sk, struct sk_psock *psock, bool nonblock,
 		return tls_rx_rec_wait(sk, psock, nonblock, false);
 
 	return 1;
+}
+
+/* Clear sk_err only when it matches the err about to be returned.
+ * tls_rx_one_record() can raise sk_err to EBADMSG via tls_err_abort()
+ * while returning a different errno; preserving sk_err in that case
+ * lets the EBADMSG surface on the next read.
+ */
+static int tls_sw_consume_matching_sk_err(struct sock *sk, int err)
+{
+	if (err < 0 && -err == READ_ONCE(sk->sk_err))
+		return sock_error(sk);
+	return err;
 }
 
 static int tls_setup_from_iter(struct iov_iter *from,
@@ -2285,7 +2303,9 @@ end:
 	tls_rx_reader_unlock(sk, ctx);
 	if (psock)
 		sk_psock_put(sk, psock);
-	return copied ? : err;
+	if (copied)
+		return copied;
+	return tls_sw_consume_matching_sk_err(sk, err);
 }
 
 ssize_t tls_sw_splice_read(struct socket *sock,  loff_t *ppos,
@@ -2350,7 +2370,9 @@ ssize_t tls_sw_splice_read(struct socket *sock,  loff_t *ppos,
 
 splice_read_end:
 	tls_rx_reader_unlock(sk, ctx);
-	return copied ? : err;
+	if (copied)
+		return copied;
+	return tls_sw_consume_matching_sk_err(sk, err);
 
 splice_requeue:
 	__skb_queue_head(&ctx->rx_list, skb);
@@ -2444,7 +2466,9 @@ int tls_sw_read_sock(struct sock *sk, read_descriptor_t *desc,
 
 read_sock_end:
 	tls_rx_reader_release(sk, ctx);
-	return copied ? : err;
+	if (copied)
+		return copied;
+	return tls_sw_consume_matching_sk_err(sk, err);
 
 read_sock_requeue:
 	__skb_queue_head(&ctx->rx_list, skb);
