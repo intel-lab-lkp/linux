@@ -154,6 +154,7 @@ struct drm_dp_tunnel {
 
 #ifdef CONFIG_DEBUG_FS
 	struct list_head debugfs_dirs;
+	int bw_limit;
 #endif
 };
 
@@ -1445,10 +1446,26 @@ EXPORT_SYMBOL(drm_dp_tunnel_max_dprx_lane_count);
  * Returns the @tunnel group's estimated total available bandwidth in kB/s
  * units, or -1 if the available BW isn't valid (the BW allocation mode is
  * not enabled or the tunnel's state hasn't been updated).
+ *
+ * If a debug BW cap has been set via the "dp_tunnel/bw_limit" debugfs
+ * file, the returned value is min(group->available_bw, bw_limit). The
+ * cap defaults to 0 (no cap) and is only available when CONFIG_DEBUG_FS
+ * is enabled.
  */
 int drm_dp_tunnel_available_bw(const struct drm_dp_tunnel *tunnel)
 {
-	return tunnel->group->available_bw;
+	int bw = tunnel->group->available_bw;
+
+#ifdef CONFIG_DEBUG_FS
+	{
+		int limit = READ_ONCE(tunnel->bw_limit);
+
+		if (bw > 0 && limit > 0)
+			bw = min(bw, limit);
+	}
+#endif
+
+	return bw;
 }
 EXPORT_SYMBOL(drm_dp_tunnel_available_bw);
 
@@ -2088,6 +2105,61 @@ static const struct file_operations tunnel_bw_alloc_enable_fops = {
 	.write		= tunnel_bw_alloc_enable_write,
 };
 
+static int tunnel_bw_limit_show(struct seq_file *m, void *data)
+{
+	struct drm_dp_tunnel *tunnel = m->private;
+
+	seq_printf(m, "%d\n", READ_ONCE(tunnel->bw_limit));
+
+	return 0;
+}
+
+static ssize_t tunnel_bw_limit_write(struct file *file,
+				     const char __user *ubuf,
+				     size_t len, loff_t *offp)
+{
+	struct seq_file *m = file->private_data;
+	struct drm_dp_tunnel *tunnel = m->private;
+	int limit;
+	int ret;
+
+	ret = kstrtoint_from_user(ubuf, len, 0, &limit);
+	if (ret)
+		return ret;
+
+	if (limit < 0)
+		return -EINVAL;
+
+	mutex_lock(&tunnel->group->mgr->debugfs_lock);
+
+	if (tunnel->destroyed) {
+		ret = -ENODEV;
+		goto unlock;
+	}
+
+	WRITE_ONCE(tunnel->bw_limit, limit);
+	ret = 0;
+
+unlock:
+	mutex_unlock(&tunnel->group->mgr->debugfs_lock);
+
+	return ret < 0 ? ret : len;
+}
+
+static int tunnel_bw_limit_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, tunnel_bw_limit_show, inode->i_private);
+}
+
+static const struct file_operations tunnel_bw_limit_fops = {
+	.owner		= THIS_MODULE,
+	.open		= tunnel_bw_limit_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+	.write		= tunnel_bw_limit_write,
+};
+
 /**
  * drm_dp_tunnel_debugfs_add - Add DP tunnel debugfs entries
  * @tunnel: Tunnel object the entries are registered for
@@ -2150,6 +2222,8 @@ void drm_dp_tunnel_debugfs_add(struct drm_dp_tunnel *tunnel, struct dentry *root
 	debugfs_create_file("info", 0444, dir, tunnel, &tunnel_info_fops);
 	debugfs_create_file("bw_alloc_enable", 0644, dir, tunnel,
 			    &tunnel_bw_alloc_enable_fops);
+	debugfs_create_file("bw_limit", 0644, dir, tunnel,
+			    &tunnel_bw_limit_fops);
 
 unlock:
 	mutex_unlock(&tunnel->group->mgr->debugfs_lock);
