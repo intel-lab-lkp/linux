@@ -348,7 +348,7 @@ retry_walk:
 #if PTTYPE == 64
 	walk_nx_mask = 1ULL << PT64_NX_SHIFT;
 	if (walker->level == PT32E_ROOT_LEVEL) {
-		pte = mmu->get_pdptr(vcpu, (addr >> 30) & 3);
+		pte = w->get_pdptr(vcpu, (addr >> 30) & 3);
 		trace_kvm_mmu_paging_element(pte, walker->level);
 		if (!FNAME(is_present_gpte)(mmu, pte))
 			goto error;
