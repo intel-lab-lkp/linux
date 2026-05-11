@@ -11,6 +11,7 @@
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
 #include <linux/dmapool.h>
+#include <linux/idr.h>
 #include <linux/iopoll.h>
 #include <linux/jiffies.h>
 #include <linux/log2.h>
@@ -327,6 +328,7 @@ int sdxi_register(struct device *dev, const struct sdxi_bus_ops *ops)
 
 	sdxi->dev = dev;
 	sdxi->bus_ops = ops;
+	ida_init(&sdxi->vectors);
 	xa_init_flags(&sdxi->client_cxts, XA_FLAGS_ALLOC1);
 	dev_set_drvdata(dev, sdxi);
 
@@ -346,6 +348,8 @@ void sdxi_unregister(struct device *dev)
 	xa_for_each(&sdxi->client_cxts, index, cxt)
 		sdxi_cxt_exit(cxt);
 	xa_destroy(&sdxi->client_cxts);
+
+	ida_destroy(&sdxi->vectors);
 
 	sdxi_dev_stop(sdxi);
 }
