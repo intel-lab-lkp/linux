@@ -59,9 +59,9 @@ initial_plane_bo(struct xe_device *xe,
 			return NULL;
 		}
 
-		drm_dbg(&xe->drm,
-			"Using phys_base=%pa, based on initial plane programming\n",
-			&phys_base);
+		drm_dbg_kms(&xe->drm,
+			    "Using phys_base=%pa, based on initial plane programming\n",
+			    &phys_base);
 	} else {
 		struct ttm_resource_manager *stolen = ttm_manager_type(&xe->ttm, XE_PL_STOLEN);
 
@@ -78,9 +78,9 @@ initial_plane_bo(struct xe_device *xe,
 	bo = xe_bo_create_pin_map_at_novm(xe, tile0, size, phys_base,
 					  ttm_bo_type_kernel, flags, 0, false);
 	if (IS_ERR(bo)) {
-		drm_dbg(&xe->drm,
-			"Failed to create bo phys_base=%pa size %u with flags %x: %li\n",
-			&phys_base, size, flags, PTR_ERR(bo));
+		drm_dbg_kms(&xe->drm,
+			    "Failed to create bo phys_base=%pa size %u with flags %x: %li\n",
+			    &phys_base, size, flags, PTR_ERR(bo));
 		return NULL;
 	}
 

@@ -68,8 +68,8 @@ initial_plane_phys(struct drm_i915_private *i915,
 		return false;
 	}
 
-	drm_dbg(&i915->drm, "Using dma_addr=%pa, based on initial plane programming\n",
-		&dma_addr);
+	drm_dbg_kms(&i915->drm, "Using dma_addr=%pa, based on initial plane programming\n",
+		    &dma_addr);
 
 	*out_phys_base = dma_addr - mem->region.start;
 	*out_mem = mem;
