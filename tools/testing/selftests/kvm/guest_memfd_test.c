@@ -23,6 +23,10 @@
 #include "test_util.h"
 #include "ucall_common.h"
 
+#ifndef MADV_COLLAPSE
+#define MADV_COLLAPSE	25
+#endif
+
 static size_t page_size;
 
 static void test_file_read_write(int fd, size_t total_size)
