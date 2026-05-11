@@ -995,7 +995,7 @@ void kvm_inject_emulated_page_fault(struct kvm_vcpu *vcpu,
 	WARN_ON_ONCE(fault->vector != PF_VECTOR);
 
 	fault_walk = fault->nested_page_fault ? &vcpu->arch.mmu->w :
-						vcpu->arch.cpu_walk;
+						&vcpu->arch.cpu_walk;
 
 	/*
 	 * Invalidate the TLB entry for the faulting address, if it exists,
@@ -1061,7 +1061,7 @@ static inline u64 pdptr_rsvd_bits(struct kvm_vcpu *vcpu)
  */
 int load_pdptrs(struct kvm_vcpu *vcpu, unsigned long cr3)
 {
-	struct kvm_pagewalk *w = vcpu->arch.cpu_walk;
+	struct kvm_pagewalk *w = &vcpu->arch.cpu_walk;
 	gfn_t pdpt_gfn = cr3 >> PAGE_SHIFT;
 	gpa_t real_gpa;
 	int i;
@@ -7853,7 +7853,7 @@ void kvm_get_segment(struct kvm_vcpu *vcpu,
 gpa_t kvm_mmu_gva_to_gpa_read(struct kvm_vcpu *vcpu, gva_t gva,
 			      struct x86_exception *exception)
 {
-	struct kvm_pagewalk *cpu_walk = vcpu->arch.cpu_walk;
+	struct kvm_pagewalk *cpu_walk = &vcpu->arch.cpu_walk;
 
 	u64 access = (kvm_x86_call(get_cpl)(vcpu) == 3) ? PFERR_USER_MASK : 0;
 	return cpu_walk->gva_to_gpa(vcpu, cpu_walk, gva, access, exception);
@@ -7863,7 +7863,7 @@ EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_mmu_gva_to_gpa_read);
 gpa_t kvm_mmu_gva_to_gpa_write(struct kvm_vcpu *vcpu, gva_t gva,
 			       struct x86_exception *exception)
 {
-	struct kvm_pagewalk *cpu_walk = vcpu->arch.cpu_walk;
+	struct kvm_pagewalk *cpu_walk = &vcpu->arch.cpu_walk;
 
 	u64 access = (kvm_x86_call(get_cpl)(vcpu) == 3) ? PFERR_USER_MASK : 0;
 	access |= PFERR_WRITE_MASK;
@@ -7875,7 +7875,7 @@ EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_mmu_gva_to_gpa_write);
 gpa_t kvm_mmu_gva_to_gpa_system(struct kvm_vcpu *vcpu, gva_t gva,
 				struct x86_exception *exception)
 {
-	struct kvm_pagewalk *cpu_walk = vcpu->arch.cpu_walk;
+	struct kvm_pagewalk *cpu_walk = &vcpu->arch.cpu_walk;
 
 	return cpu_walk->gva_to_gpa(vcpu, cpu_walk, gva, 0, exception);
 }
@@ -7884,7 +7884,7 @@ static int kvm_read_guest_virt_helper(gva_t addr, void *val, unsigned int bytes,
 				      struct kvm_vcpu *vcpu, u64 access,
 				      struct x86_exception *exception)
 {
-	struct kvm_pagewalk *cpu_walk = vcpu->arch.cpu_walk;
+	struct kvm_pagewalk *cpu_walk = &vcpu->arch.cpu_walk;
 	void *data = val;
 	int r = X86EMUL_CONTINUE;
 
@@ -7917,7 +7917,7 @@ static int kvm_fetch_guest_virt(struct x86_emulate_ctxt *ctxt,
 				struct x86_exception *exception)
 {
 	struct kvm_vcpu *vcpu = emul_to_vcpu(ctxt);
-	struct kvm_pagewalk *cpu_walk = vcpu->arch.cpu_walk;
+	struct kvm_pagewalk *cpu_walk = &vcpu->arch.cpu_walk;
 	u64 access = (kvm_x86_call(get_cpl)(vcpu) == 3) ? PFERR_USER_MASK : 0;
 	unsigned offset;
 	int ret;
@@ -7976,7 +7976,7 @@ static int kvm_write_guest_virt_helper(gva_t addr, void *val, unsigned int bytes
 				      struct kvm_vcpu *vcpu, u64 access,
 				      struct x86_exception *exception)
 {
-	struct kvm_pagewalk *cpu_walk = vcpu->arch.cpu_walk;
+	struct kvm_pagewalk *cpu_walk = &vcpu->arch.cpu_walk;
 	void *data = val;
 	int r = X86EMUL_CONTINUE;
 
@@ -8082,7 +8082,7 @@ static int vcpu_mmio_gva_to_gpa(struct kvm_vcpu *vcpu, unsigned long gva,
 				gpa_t *gpa, struct x86_exception *exception,
 				bool write)
 {
-	struct kvm_pagewalk *cpu_walk = vcpu->arch.cpu_walk;
+	struct kvm_pagewalk *cpu_walk = &vcpu->arch.cpu_walk;
 	u64 access = ((kvm_x86_call(get_cpl)(vcpu) == 3) ? PFERR_USER_MASK : 0)
 		     | (write ? PFERR_WRITE_MASK : 0);
 
@@ -14213,7 +14213,7 @@ EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_spec_ctrl_test_value);
 
 void kvm_fixup_and_inject_pf_error(struct kvm_vcpu *vcpu, gva_t gva, u16 error_code)
 {
-	struct kvm_pagewalk *cpu_walk = vcpu->arch.cpu_walk;
+	struct kvm_pagewalk *cpu_walk = &vcpu->arch.cpu_walk;
 	struct x86_exception fault;
 	u64 access = error_code &
 		(PFERR_WRITE_MASK | PFERR_FETCH_MASK | PFERR_USER_MASK);

@@ -176,9 +176,9 @@ static inline void kvm_mmu_refresh_passthrough_bits(struct kvm_vcpu *vcpu,
 	 * @w's snapshot of CR0.WP and thus all related paging metadata may
 	 * be stale.  Refresh CR0.WP and the metadata on-demand when checking
 	 * for permission faults.  Exempt nested MMUs, i.e. MMUs for shadowing
-	 * nEPT and nNPT, as CR0.WP is ignored in both cases.  Note, KVM does
-	 * need to refresh nested_cpu_walk, a.k.a. the walker used to translate L2
-	 * GVAs to GPAs, so as to honor L2's CR0.WP.
+	 * nEPT and nNPT, as CR0.WP is ignored in both cases.  Note, KVM will
+	 * still refresh cpu_walk, so as to honor L2's CR0.WP when translating
+	 * L2 GVAs to GPAs.
 	 */
 	if (!tdp_enabled || w == &vcpu->arch.guest_mmu.w)
 		return;
@@ -306,7 +306,7 @@ static inline gpa_t kvm_translate_gpa(struct kvm_vcpu *vcpu,
 				      struct x86_exception *exception,
 				      u64 pte_access)
 {
-	if (w != &vcpu->arch.nested_cpu_walk)
+	if (!mmu_is_nested(vcpu) || w == &vcpu->arch.guest_mmu.w)
 		return gpa;
 	return kvm_x86_ops.nested_ops->translate_nested_gpa(vcpu, gpa, access,
 							    exception,

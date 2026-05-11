@@ -5943,6 +5943,27 @@ static void kvm_init_shadow_mmu(struct kvm_vcpu *vcpu,
 	shadow_mmu_init_context(vcpu, context, cpu_role, root_role);
 }
 
+static void init_kvm_page_walk(struct kvm_vcpu *vcpu, struct kvm_pagewalk *w,
+			       union kvm_cpu_role cpu_role)
+{
+	if (cpu_role.as_u64 == w->cpu_role.as_u64)
+		return;
+
+	w->cpu_role.as_u64   = cpu_role.as_u64;
+	w->inject_page_fault = kvm_inject_page_fault;
+	w->get_pdptr         = kvm_pdptr_read;
+	w->get_guest_pgd     = get_guest_cr3;
+
+	if (!is_cr0_pg(w))
+		w->gva_to_gpa = nonpaging_gva_to_gpa;
+	else if (is_cr4_pae(w))
+		w->gva_to_gpa = paging64_gva_to_gpa;
+	else
+		w->gva_to_gpa = paging32_gva_to_gpa;
+
+	reset_guest_paging_metadata(vcpu, w);
+}
+
 void kvm_init_shadow_npt_mmu(struct kvm_vcpu *vcpu, unsigned long cr4,
 			     u64 efer, gpa_t nested_cr3, u64 misc_ctl)
 {
@@ -6037,50 +6058,19 @@ static void init_kvm_softmmu(struct kvm_vcpu *vcpu,
 	context->w.get_guest_pgd     = get_guest_cr3;
 }
 
-static void init_kvm_nested_cpu_walk(struct kvm_vcpu *vcpu,
-				union kvm_cpu_role new_mode)
-{
-	struct kvm_pagewalk *g_context = &vcpu->arch.nested_cpu_walk;
-
-	if (new_mode.as_u64 == g_context->cpu_role.as_u64)
-		return;
-
-	g_context->cpu_role.as_u64   = new_mode.as_u64;
-	g_context->inject_page_fault = kvm_inject_page_fault;
-	g_context->get_pdptr         = kvm_pdptr_read;
-	g_context->get_guest_pgd     = get_guest_cr3;
-
-	/*
-	 * Note that arch.mmu->gva_to_gpa translates l2_gpa to l1_gpa using
-	 * L1's nested page tables (e.g. EPT12). The nested translation
-	 * of l2_gva to l1_gpa is done by arch.nested_cpu_walk.gva_to_gpa using
-	 * L2's page tables as the first level of translation and L1's
-	 * nested page tables as the second level of translation. Basically
-	 * the gva_to_gpa functions between mmu and nested_cpu_walk are swapped.
-	 */
-	if (!is_paging(vcpu))
-		g_context->gva_to_gpa = nonpaging_gva_to_gpa;
-	else if (is_long_mode(vcpu))
-		g_context->gva_to_gpa = paging64_gva_to_gpa;
-	else if (is_pae(vcpu))
-		g_context->gva_to_gpa = paging64_gva_to_gpa;
-	else
-		g_context->gva_to_gpa = paging32_gva_to_gpa;
-
-	reset_guest_paging_metadata(vcpu, g_context);
-}
-
 void kvm_init_mmu(struct kvm_vcpu *vcpu)
 {
 	struct kvm_mmu_role_regs regs = vcpu_to_role_regs(vcpu);
 	union kvm_cpu_role cpu_role = kvm_calc_cpu_role(vcpu, &regs);
 
-	if (mmu_is_nested(vcpu))
-		init_kvm_nested_cpu_walk(vcpu, cpu_role);
-	else if (tdp_enabled)
-		init_kvm_tdp_mmu(vcpu, cpu_role);
-	else
-		init_kvm_softmmu(vcpu, cpu_role);
+	init_kvm_page_walk(vcpu, &vcpu->arch.cpu_walk, cpu_role);
+
+	if (!mmu_is_nested(vcpu)) {
+		if (tdp_enabled)
+			init_kvm_tdp_mmu(vcpu, cpu_role);
+		else
+			init_kvm_softmmu(vcpu, cpu_role);
+	}
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_init_mmu);
 
@@ -6102,7 +6092,7 @@ void kvm_mmu_after_set_cpuid(struct kvm_vcpu *vcpu)
 	vcpu->arch.guest_mmu.root_role.invalid = 1;
 	vcpu->arch.root_mmu.w.cpu_role.ext.valid = 0;
 	vcpu->arch.guest_mmu.w.cpu_role.ext.valid = 0;
-	vcpu->arch.nested_cpu_walk.cpu_role.ext.valid = 0;
+	vcpu->arch.cpu_walk.cpu_role.ext.valid = 0;
 	kvm_mmu_reset_context(vcpu);
 
 	KVM_BUG_ON(!kvm_can_set_cpuid_and_feature_msrs(vcpu), vcpu->kvm);
@@ -6598,17 +6588,22 @@ void kvm_mmu_invalidate_addr(struct kvm_vcpu *vcpu, struct kvm_pagewalk *w,
 	WARN_ON_ONCE(roots & ~KVM_MMU_ROOTS_ALL);
 
 	/* It's actually a GPA for vcpu->arch.guest_mmu.  */
-	if (w != &vcpu->arch.guest_mmu.w) {
+	if (w == &vcpu->arch.cpu_walk) {
 		/* INVLPG on a non-canonical address is a NOP according to the SDM.  */
 		if (is_noncanonical_invlpg_address(addr, vcpu))
 			return;
 
 		kvm_x86_call(flush_tlb_gva)(vcpu, addr);
-		if (w == &vcpu->arch.nested_cpu_walk)
+
+		if (tdp_enabled)
 			return;
+
+		mmu = &vcpu->arch.root_mmu;
+	} else {
+		mmu = &vcpu->arch.guest_mmu;
 	}
 
-	mmu = container_of(w, struct kvm_mmu, w);
+	/* Invalidate shadow pages, whether GPA->GVA or nGPA->GPA.  */
 	if (!mmu->sync_spte)
 		return;
 
@@ -6634,7 +6629,7 @@ void kvm_mmu_invlpg(struct kvm_vcpu *vcpu, gva_t gva)
 	 * be synced when switching to that new cr3, so nothing needs to be
 	 * done here for them.
 	 */
-	kvm_mmu_invalidate_addr(vcpu, vcpu->arch.cpu_walk, gva, KVM_MMU_ROOTS_ALL);
+	kvm_mmu_invalidate_addr(vcpu, &vcpu->arch.cpu_walk, gva, KVM_MMU_ROOTS_ALL);
 	++vcpu->stat.invlpg;
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_mmu_invlpg);
@@ -6656,7 +6651,7 @@ void kvm_mmu_invpcid_gva(struct kvm_vcpu *vcpu, gva_t gva, unsigned long pcid)
 	}
 
 	if (roots)
-		kvm_mmu_invalidate_addr(vcpu, &mmu->w, gva, roots);
+		kvm_mmu_invalidate_addr(vcpu, &vcpu->arch.cpu_walk, gva, roots);
 	++vcpu->stat.invlpg;
 
 	/*
@@ -6771,7 +6766,6 @@ int kvm_mmu_create(struct kvm_vcpu *vcpu)
 		vcpu->arch.mmu_shadow_page_cache.gfp_zero = __GFP_ZERO;
 
 	vcpu->arch.mmu = &vcpu->arch.root_mmu;
-	vcpu->arch.cpu_walk = &vcpu->arch.root_mmu.w;
 
 	ret = __kvm_mmu_create(vcpu, &vcpu->arch.guest_mmu);
 	if (ret)

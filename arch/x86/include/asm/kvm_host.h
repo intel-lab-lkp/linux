@@ -866,19 +866,9 @@ struct kvm_vcpu_arch {
 	struct kvm_mmu guest_mmu;
 
 	/*
-	 * Paging state of an L2 guest (used for nested npt)
-	 *
-	 * This context will save all necessary information to walk page tables
-	 * of an L2 guest. This context is only initialized for page table
-	 * walking and not for faulting since we never handle l2 page faults on
-	 * the host.
-	 */
-	struct kvm_pagewalk nested_cpu_walk;
-
-	/*
 	 * Pagewalk context used for gva_to_gpa translations.
 	 */
-	struct kvm_pagewalk *cpu_walk;
+	struct kvm_pagewalk cpu_walk;
 
 	u64 pdptrs[4]; /* pae */
 
