@@ -153,6 +153,25 @@
 		enable-active-high;
 		startup-delay-us = <20000>;
 	};
+
+	rfkill-wlan {
+		compatible = "rfkill-gpio";
+		label = "wlan";
+		radio-type = "wlan";
+		shutdown-gpios = <&tlmm 54 GPIO_ACTIVE_HIGH>;
+	};
+
+	wlan_reg_3v3: wlan-3v3-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "wlan_en";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		vin-supply = <&vdc_3v3>;
+		gpio = <&tlmm 56 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		startup-delay-us = <20000>;
+		regulator-boot-on;
+	};
 };
 
 &ethernet0 {
@@ -326,7 +345,7 @@
 	pinctrl-0 = <&pcie0_default_state>;
 	pinctrl-names = "default";
 
-	vddpe-3v3-supply = <&vdc_3v3>;
+	vddpe-3v3-supply = <&wlan_reg_3v3>;
 };
 
 &pcie1 {
