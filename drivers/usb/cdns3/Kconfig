@@ -110,6 +110,19 @@ config USB_CDNS3_STARFIVE
 	  If you choose to build this driver as module it will
 	  be dynamically linked and module will be called cdns3-starfive.ko
 
+config USB_CDNSP_SKY1
+	tristate "Cadence USB3 support on CIX Sky1 SoC platforms"
+	depends on USB_CDNS3
+	depends on ARCH_CIX || COMPILE_TEST
+	default USB_CDNS3
+	help
+	  Glue driver for the Cadence USB dual-role controllers on CIX Sky1
+	  (device tree compatible cix,sky1-usb3). It enables clocks and resets
+	  from the SoC, then uses the shared cdns3 platform core (cdns.ko).
+
+	  If built as a module, the module is named cdnsp-sky1.ko and must be
+	  loaded after the cdns core module when both are loadable modules.
+
 endif # USB_CDNS3
 
 endif # USB_CDNS_SUPPORT
