@@ -1559,24 +1559,20 @@ int __meminit vmemmap_check_pmd(pmd_t *pmd, int node,
 int __meminit vmemmap_populate(unsigned long start, unsigned long end, int node,
 		struct vmem_altmap *altmap)
 {
-	int err;
-
 	VM_BUG_ON(!PAGE_ALIGNED(start));
 	VM_BUG_ON(!PAGE_ALIGNED(end));
 
 	if (end - start < PAGES_PER_SECTION * sizeof(struct page))
-		err = vmemmap_populate_basepages(start, end, node, NULL);
-	else if (boot_cpu_has(X86_FEATURE_PSE))
-		err = vmemmap_populate_hugepages(start, end, node, altmap);
-	else if (altmap) {
+		return vmemmap_populate_basepages(start, end, node, NULL);
+	if (boot_cpu_has(X86_FEATURE_PSE))
+		return vmemmap_populate_hugepages(start, end, node, altmap);
+	if (altmap) {
 		pr_err_once("%s: no cpu support for altmap allocations\n",
 				__func__);
-		err = -ENOMEM;
-	} else
-		err = vmemmap_populate_basepages(start, end, node, NULL);
-	if (!err)
-		sync_global_pgds(start, end - 1);
-	return err;
+		return -ENOMEM;
+	}
+
+	return vmemmap_populate_basepages(start, end, node, NULL);
 }
 
 #ifdef CONFIG_HAVE_BOOTMEM_INFO_NODE
