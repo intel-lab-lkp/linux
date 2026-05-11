@@ -204,14 +204,21 @@ static struct device_attribute debug_device_attr =
 void fbtft_sysfs_init(struct fbtft_par *par)
 {
 	struct device *dev;
+	int ret;
 
 	dev = dev_of_fbinfo(par->info);
 	if (!dev)
 		return;
 
-	device_create_file(dev, &debug_device_attr);
-	if (par->gamma.curves && par->fbtftops.set_gamma)
-		device_create_file(dev, &gamma_device_attrs[0]);
+	ret = device_create_file(dev, &debug_device_attr);
+	if (ret)
+		dev_warn(dev, "failed to create debug sysfs entry\n");
+
+	if (par->gamma.curves && par->fbtftops.set_gamma) {
+		ret = device_create_file(dev, &gamma_device_attrs[0]);
+		if (ret)
+			dev_warn(dev, "failed to create gamma sysfs entry\n");
+	}
 }
 
 void fbtft_sysfs_exit(struct fbtft_par *par)
