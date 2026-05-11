@@ -1048,6 +1048,22 @@ int drm_dp_tunnel_enable_bw_alloc(struct drm_dp_tunnel *tunnel)
 		goto out;
 	}
 
+	/*
+	 * Sync the SW allocated_bw to whatever the HW reports right after
+	 * enabling BWA mode. The TBT CM may settle to a different
+	 * allocation than the SW state held before BWA was disabled (e.g.
+	 * after a disable/enable toggle while streams are active, or after
+	 * suspend/resume). Without this sync, the next
+	 * drm_dp_tunnel_update_state() call - which does NOT pass
+	 * ALLOW_ALLOCATED_BW_CHANGE - would observe the SW/HW mismatch in
+	 * tunnel_info_changes_are_valid() and return -EINVAL, triggering
+	 * an unnecessary tunnel teardown/re-detect.
+	 */
+	tunnel->allocated_bw = tunnel_reg(&regs, DP_ALLOCATED_BW) *
+			       tunnel->bw_granularity;
+	if (!tunnel->allocated_bw)
+		tunnel->allocated_bw = -1;
+
 	if (!tunnel->max_dprx_rate)
 		update_dprx_caps(tunnel, &regs);
 
