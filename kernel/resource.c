@@ -30,6 +30,7 @@
 #include <linux/string.h>
 #include <linux/vmalloc.h>
 #include <asm/io.h>
+#include <linux/dmi.h>
 
 
 struct resource ioport_resource = {
@@ -1858,6 +1859,14 @@ int iomem_map_sanity_check(resource_size_t addr, unsigned long size)
 		 */
 		if (p->flags & IORESOURCE_BUSY)
 			continue;
+		/*
+		 * Only apply this quirk on Dell systems to avoid false
+		 * positives elsewhere.
+		 */
+		if (dmi_match(DMI_SYS_VENDOR, "Dell Inc.")) {
+			if (p->start == 0xfe000000 && p->end == 0xfe010fff)
+				continue;
+		}
 
 		pr_warn("resource sanity check: requesting [mem %pa-%pa], which spans more than %s %pR\n",
 			&addr, &end, p->name, p);
