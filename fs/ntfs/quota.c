@@ -21,6 +21,7 @@ bool ntfs_mark_quotas_out_of_date(struct ntfs_volume *vol)
 {
 	struct ntfs_index_context *ictx;
 	struct quota_control_entry *qce;
+	static __le16 Q[3] = { cpu_to_le16('$'), cpu_to_le16('Q'), 0 };
 	const __le32 qid = QUOTA_DEFAULTS_ID;
 	int err;
 
@@ -32,7 +33,7 @@ bool ntfs_mark_quotas_out_of_date(struct ntfs_volume *vol)
 		return false;
 	}
 	inode_lock(vol->quota_q_ino);
-	ictx = ntfs_index_ctx_get(NTFS_I(vol->quota_q_ino), I30, 4);
+	ictx = ntfs_index_ctx_get(NTFS_I(vol->quota_q_ino), Q, 2);
 	if (!ictx) {
 		ntfs_error(vol->sb, "Failed to get index context.");
 		goto err_out;
