@@ -11,6 +11,13 @@
  *   that always reports the required buffer length back via optlen,
  *   even when the user buffer is too small to receive any group bits.
  * - vsock:   SO_VM_SOCKETS_BUFFER_SIZE covers the u64 path.
+ * - bluetooth/sco: BT_CODEC exercises the SCO conversion that
+ *   replaced an open-coded ptr cursor with copy_to_iter() — the
+ *   test pre-fills the user buffer with a sentinel and asserts that
+ *   the error-return paths (hit when no controller / no codec
+ *   offload is available, the common case in CI) leave the buffer
+ *   untouched. If a capable controller is present, the success
+ *   path's copy_to_iter() write is validated instead.
  *
  * Author: Breno Leitao <leitao@debian.org>
  */
@@ -30,6 +37,15 @@
 #ifndef AF_VSOCK
 #define AF_VSOCK 40
 #endif
+
+#ifndef AF_BLUETOOTH
+#define AF_BLUETOOTH	31
+#endif
+
+#define BTPROTO_SCO		2
+#define SOL_BLUETOOTH		274
+#define BT_CODEC		19
+#define BT_SENTINEL		0xa5
 
 /* ---------- netlink ---------- */
 
@@ -295,6 +311,55 @@ TEST_F(vsock, connect_timeout_old_exact)
 				SO_VM_SOCKETS_CONNECT_TIMEOUT_OLD,
 				&tv, &optlen));
 	ASSERT_EQ(sizeof(tv), optlen);
+}
+
+/* ---------- bluetooth ---------- */
+
+/* sco: BT_CODEC. The SCO conversion replaced an open-coded ptr
+ * cursor in this option with plain copy_to_iter() calls. Without a
+ * controller exposing HCI_OFFLOAD_CODECS_ENABLED + a get_data_path_id
+ * op, the kernel returns -EBADFD / -EOPNOTSUPP from an early check
+ * and must NOT touch the user buffer. With such a controller the
+ * call succeeds and the buffer is filled by copy_to_iter().
+ */
+TEST(bt_sco_codec)
+{
+	socklen_t optlen;
+	uint8_t buf[256];
+	int fd, ret;
+
+	fd = socket(AF_BLUETOOTH, SOCK_SEQPACKET, BTPROTO_SCO);
+	if (fd < 0)
+		SKIP(return, "AF_BLUETOOTH/SCO: %s", strerror(errno));
+
+	memset(buf, BT_SENTINEL, sizeof(buf));
+	optlen = sizeof(buf);
+	ret = getsockopt(fd, SOL_BLUETOOTH, BT_CODEC, buf, &optlen);
+
+	if (ret < 0) {
+		size_t i, changed = 0;
+
+		ASSERT_TRUE(errno == EBADFD || errno == EOPNOTSUPP)
+			TH_LOG("unexpected errno %d (%s)", errno,
+			       strerror(errno));
+		for (i = 0; i < sizeof(buf); i++)
+			if (buf[i] != BT_SENTINEL)
+				changed++;
+		ASSERT_EQ(0, changed)
+			TH_LOG("error path modified %zu byte(s)", changed);
+	} else {
+		size_t i, changed = 0;
+
+		ASSERT_GT(optlen, 0);
+		ASSERT_LE(optlen, sizeof(buf));
+		for (i = 0; i < optlen; i++)
+			if (buf[i] != BT_SENTINEL)
+				changed++;
+		ASSERT_GT(changed, 0)
+			TH_LOG("success path left buffer untouched");
+	}
+
+	close(fd);
 }
 
 TEST_HARNESS_MAIN
