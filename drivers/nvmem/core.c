@@ -928,7 +928,8 @@ struct nvmem_device *nvmem_register(const struct nvmem_config *config)
 
 	if (!config->ignore_wp)
 		nvmem->wp_gpio = gpiod_get_optional(config->dev, "wp",
-						    GPIOD_OUT_HIGH);
+						    GPIOD_OUT_HIGH |
+						    GPIOD_FLAGS_BIT_NONEXCLUSIVE);
 	if (IS_ERR(nvmem->wp_gpio)) {
 		rval = PTR_ERR(nvmem->wp_gpio);
 		nvmem->wp_gpio = NULL;
