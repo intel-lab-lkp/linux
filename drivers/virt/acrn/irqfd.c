@@ -44,30 +44,37 @@ static void acrn_irqfd_inject(struct hsm_irqfd *irqfd)
 			irqfd->msi.msi_data);
 }
 
-static void hsm_irqfd_shutdown(struct hsm_irqfd *irqfd)
+static bool hsm_irqfd_shutdown(struct hsm_irqfd *irqfd)
 {
 	u64 cnt;
 
 	lockdep_assert_held(&irqfd->vm->irqfds_lock);
 
+	if (list_empty(&irqfd->list))
+		return false;
+
 	/* remove from wait queue */
 	list_del_init(&irqfd->list);
 	eventfd_ctx_remove_wait_queue(irqfd->eventfd, &irqfd->wait, &cnt);
 	eventfd_ctx_put(irqfd->eventfd);
-	kfree(irqfd);
+
+	return true;
 }
 
 static void hsm_irqfd_shutdown_work(struct work_struct *work)
 {
 	struct hsm_irqfd *irqfd;
 	struct acrn_vm *vm;
+	bool free;
 
 	irqfd = container_of(work, struct hsm_irqfd, shutdown);
 	vm = irqfd->vm;
 	mutex_lock(&vm->irqfds_lock);
-	if (!list_empty(&irqfd->list))
-		hsm_irqfd_shutdown(irqfd);
+	free = hsm_irqfd_shutdown(irqfd);
 	mutex_unlock(&vm->irqfds_lock);
+
+	if (free)
+		kfree(irqfd);
 }
 
 /* Called with wqh->lock held and interrupts disabled */
@@ -170,7 +177,7 @@ out:
 static int acrn_irqfd_deassign(struct acrn_vm *vm,
 			       struct acrn_irqfd *args)
 {
-	struct hsm_irqfd *irqfd, *tmp;
+	struct hsm_irqfd *irqfd, *tmp, *to_free = NULL;
 	struct eventfd_ctx *eventfd;
 
 	eventfd = eventfd_ctx_fdget(args->fd);
@@ -180,12 +187,18 @@ static int acrn_irqfd_deassign(struct acrn_vm *vm,
 	mutex_lock(&vm->irqfds_lock);
 	list_for_each_entry_safe(irqfd, tmp, &vm->irqfds, list) {
 		if (irqfd->eventfd == eventfd) {
-			hsm_irqfd_shutdown(irqfd);
+			if (hsm_irqfd_shutdown(irqfd))
+				to_free = irqfd;
 			break;
 		}
 	}
 	mutex_unlock(&vm->irqfds_lock);
 	eventfd_ctx_put(eventfd);
+
+	if (to_free) {
+		cancel_work_sync(&to_free->shutdown);
+		kfree(to_free);
+	}
 
 	return 0;
 }
@@ -219,9 +232,23 @@ void acrn_irqfd_deinit(struct acrn_vm *vm)
 	struct hsm_irqfd *irqfd, *next;
 
 	dev_dbg(acrn_dev.this_device, "VM %u irqfd deinit.\n", vm->vmid);
+
+	for (;;) {
+		irqfd = NULL;
+
+		mutex_lock(&vm->irqfds_lock);
+		if (!list_empty(&vm->irqfds)) {
+			irqfd = list_first_entry(&vm->irqfds, struct hsm_irqfd, list);
+			hsm_irqfd_shutdown(irqfd);
+		}
+		mutex_unlock(&vm->irqfds_lock);
+
+		if (!irqfd)
+			break;
+
+		cancel_work_sync(&irqfd->shutdown);
+		kfree(irqfd);
+	}
+
 	destroy_workqueue(vm->irqfd_wq);
-	mutex_lock(&vm->irqfds_lock);
-	list_for_each_entry_safe(irqfd, next, &vm->irqfds, list)
-		hsm_irqfd_shutdown(irqfd);
-	mutex_unlock(&vm->irqfds_lock);
 }
