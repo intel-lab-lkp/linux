@@ -260,9 +260,8 @@ of the devices.
 ASPM
 ----
 For the best runtime power consumption, ASPM should be programmed as intended
-by the BIOS from the hardware vendor.  To accomplish this the Linux kernel
-should be compiled with ``CONFIG_PCIEASPM_DEFAULT`` set to ``y`` and the
-sysfs file ``/sys/module/pcie_aspm/parameters/policy`` should not be modified.
+by the BIOS from the hardware vendor.  To accomplish this the sysfs file
+``/sys/module/pcie_aspm/parameters/policy`` should not be modified.
 
 Most notably, if L1.2 is not configured properly for any devices, the SoC
 will not be able to enter the deepest idle state.
