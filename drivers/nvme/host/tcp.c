@@ -1767,6 +1767,17 @@ static int nvme_tcp_start_tls(struct nvme_ctrl *nctrl,
 			dev_err(nctrl->device,
 				"queue %d: TLS handshake complete, error %d\n",
 				qid, queue->tls_err);
+
+			/*
+			 * Key maybe stale, revoke it such that on a subsequent
+			 * reconnect, we will generate a new PSK.
+			 */
+			if (queue->tls_err == EKEYREJECTED && qid == 0 &&
+			    nctrl->opts->concat && nctrl->opts->tls_key) {
+				nvme_auth_revoke_tls_key(nctrl);
+				dev_warn(nctrl->device,
+					 "qid 0: revoking stale key\n");
+			}
 		} else {
 			dev_dbg(nctrl->device,
 				"queue %d: TLS handshake complete\n", qid);
