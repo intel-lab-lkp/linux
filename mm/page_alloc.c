@@ -6384,6 +6384,8 @@ static void calculate_totalreserve_pages(void)
 	trace_mm_calculate_totalreserve_pages(totalreserve_pages);
 }
 
+static DEFINE_SPINLOCK(zone_reserve_lock);
+
 /*
  * setup_per_zone_lowmem_reserve - called whenever
  *	sysctl_lowmem_reserve_ratio changes.  Ensures that each zone
@@ -6394,6 +6396,8 @@ static void setup_per_zone_lowmem_reserve(void)
 {
 	struct pglist_data *pgdat;
 	enum zone_type i, j;
+
+	guard(spinlock_irqsave)(&zone_reserve_lock);
 	/*
 	 * For a given zone node_zones[i], lowmem_reserve[j] (j > i)
 	 * represents how many pages in zone i must effectively be kept
@@ -6509,11 +6513,9 @@ static void __setup_per_zone_wmarks(void)
 void setup_per_zone_wmarks(void)
 {
 	struct zone *zone;
-	static DEFINE_SPINLOCK(lock);
 
-	spin_lock(&lock);
-	__setup_per_zone_wmarks();
-	spin_unlock(&lock);
+	scoped_guard(spinlock_irqsave, &zone_reserve_lock)
+		__setup_per_zone_wmarks();
 
 	/*
 	 * The watermark size have changed so update the pcpu batch
