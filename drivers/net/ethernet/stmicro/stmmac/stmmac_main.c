@@ -4147,6 +4147,9 @@ static int __stmmac_open(struct net_device *dev,
 
 	stmmac_reset_queues_param(priv);
 
+	/* Clear DOWN flag when opening the interface */
+	clear_bit(STMMAC_DOWN, &priv->state);
+
 	ret = stmmac_hw_setup(dev);
 	if (ret < 0) {
 		netdev_err(priv->dev, "%s: Hw setup failed\n", __func__);
@@ -4251,8 +4254,17 @@ static void __stmmac_release(struct net_device *dev)
 	/* Free the IRQ lines */
 	stmmac_free_irq(dev, REQ_IRQ_ERR_ALL, 0);
 
+	/* Set DOWN flag to prevent XDP from processing new packets */
+	set_bit(STMMAC_DOWN, &priv->state);
+
 	/* Stop TX/RX DMA and clear the descriptors */
 	stmmac_stop_all_dma(priv);
+
+	/* Ensure NAPI has finished before freeing resources.
+	 * This prevents use-after-free when NAPI is mid-execution
+	 * accessing TX/RX ring buffers and page pool during ifconfig down.
+	 */
+	synchronize_rcu();
 
 	/* Release and free the Rx/Tx resources */
 	free_dma_desc_resources(priv, &priv->dma_conf);
@@ -5267,6 +5279,9 @@ static int stmmac_xdp_xmit_back(struct stmmac_priv *priv,
 	if (unlikely(!xdpf))
 		return STMMAC_XDP_CONSUMED;
 
+	if (unlikely(test_bit(STMMAC_DOWN, &priv->state)))
+		return -ENETDOWN;
+
 	queue = stmmac_xdp_get_tx_queue(priv, cpu);
 	nq = netdev_get_tx_queue(priv->dev, queue);
 
@@ -5308,7 +5323,9 @@ static int __stmmac_xdp_run_prog(struct stmmac_priv *priv,
 		res = stmmac_xdp_xmit_back(priv, xdp);
 		break;
 	case XDP_REDIRECT:
-		if (xdp_do_redirect(priv->dev, xdp, prog) < 0)
+		if (unlikely(test_bit(STMMAC_DOWN, &priv->state)))
+			res = STMMAC_XDP_CONSUMED;
+		else if (xdp_do_redirect(priv->dev, xdp, prog) < 0)
 			res = STMMAC_XDP_CONSUMED;
 		else
 			res = STMMAC_XDP_REDIRECT;
