@@ -68,5 +68,11 @@ struct enetc_pf {
 #define phylink_to_enetc_pf(config) \
 	container_of((config), struct enetc_pf, phylink_config)
 
-int enetc_msg_psi_init(struct enetc_pf *pf);
-void enetc_msg_psi_free(struct enetc_pf *pf);
+#if IS_ENABLED(CONFIG_PCI_IOV)
+int enetc_sriov_configure(struct pci_dev *pdev, int num_vfs);
+#else
+static inline int enetc_sriov_configure(struct pci_dev *pdev, int num_vfs)
+{
+	return 0;
+}
+#endif
