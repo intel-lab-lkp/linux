@@ -325,13 +325,10 @@ static void vsp1_video_pipeline_frame_end(struct vsp1_pipeline *pipe,
 {
 	struct vsp1_device *vsp1 = pipe->output->entity.vsp1;
 	enum vsp1_pipeline_state state;
-	unsigned long flags;
 	unsigned int i;
 
 	/* M2M Pipelines should never call here with an incomplete frame. */
 	WARN_ON_ONCE(!(completion & VSP1_DL_FRAME_END_COMPLETED));
-
-	spin_lock_irqsave(&pipe->irqlock, flags);
 
 	/* Complete buffers on all video nodes. */
 	for (i = 0; i < vsp1->info->rpf_count; ++i) {
@@ -354,8 +351,6 @@ static void vsp1_video_pipeline_frame_end(struct vsp1_pipeline *pipe,
 		wake_up(&pipe->wq);
 	else if (vsp1_pipeline_ready(pipe))
 		vsp1_video_pipeline_run(pipe);
-
-	spin_unlock_irqrestore(&pipe->irqlock, flags);
 }
 
 static int vsp1_video_pipeline_build_branch(struct vsp1_pipeline *pipe,

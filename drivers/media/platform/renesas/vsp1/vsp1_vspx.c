@@ -176,14 +176,11 @@ static void vsp1_vspx_pipeline_frame_end(struct vsp1_pipeline *pipe,
 {
 	struct vsp1_vspx_pipeline *vspx_pipe = to_vsp1_vspx_pipeline(pipe);
 
-	scoped_guard(spinlock_irqsave, &pipe->irqlock) {
-		/*
-		 * Operating the vsp1_pipe in singleshot mode requires to
-		 * manually set the pipeline state to stopped when a transfer
-		 * is completed.
-		 */
-		pipe->state = VSP1_PIPELINE_STOPPED;
-	}
+	/*
+	 * Operating the vsp1_pipe in singleshot mode requires to manually set
+	 * the pipeline state to stopped when a transfer is completed.
+	 */
+	pipe->state = VSP1_PIPELINE_STOPPED;
 
 	if (vspx_pipe->vspx_frame_end)
 		vspx_pipe->vspx_frame_end(vspx_pipe->frame_end_data);

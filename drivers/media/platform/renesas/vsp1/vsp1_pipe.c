@@ -509,6 +509,10 @@ int vsp1_pipeline_stop(struct vsp1_pipeline *pipe)
 		 * When using display lists in continuous frame mode the only
 		 * way to stop the pipeline is to reset the hardware.
 		 */
+		scoped_guard(spinlock_irqsave, &pipe->irqlock) {
+			pipe->state = VSP1_PIPELINE_STOPPING;
+		}
+
 		ret = vsp1_reset_wpf(vsp1, pipe->output->entity.index);
 		if (ret == 0) {
 			spin_lock_irqsave(&pipe->irqlock, flags);
@@ -583,8 +587,12 @@ void vsp1_pipeline_frame_end(struct vsp1_pipeline *pipe)
 	 * Regardless of frame completion we still need to notify the pipe
 	 * frame_end to account for vblank events.
 	 */
-	if (pipe->frame_end)
-		pipe->frame_end(pipe, flags);
+	scoped_guard(spinlock_irqsave, &pipe->irqlock) {
+		if (pipe->state == VSP1_PIPELINE_RUNNING || !pipe->lif) {
+			if (pipe->frame_end)
+				pipe->frame_end(pipe, flags);
+		}
+	}
 
 	pipe->sequence++;
 }
