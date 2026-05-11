@@ -5569,17 +5569,14 @@ reset_ept_shadow_zero_bits_mask(struct kvm_mmu *context, bool execonly)
 	 (14 & (access) ? 1 << 14 : 0) | \
 	 (15 & (access) ? 1 << 15 : 0))
 
-static void update_permission_bitmask(struct kvm_pagewalk *pw, bool tdp, bool ept)
+static void __update_permission_bitmask(struct kvm_page_format *fmt, bool tdp,
+					bool ept, bool cr4_smep, bool cr4_smap,
+					bool cr0_wp, bool efer_nx)
 {
 	unsigned index;
 
 	const u16 w = ACC_BITS_MASK(ACC_WRITE_MASK);
 	const u16 r = ACC_BITS_MASK(ACC_READ_MASK);
-
-	bool cr4_smep = is_cr4_smep(pw);
-	bool cr4_smap = is_cr4_smap(pw);
-	bool cr0_wp = is_cr0_wp(pw);
-	bool efer_nx = is_efer_nx(pw);
 
 	/*
 	 * In hardware, page fault error codes are generated (as the name
@@ -5593,7 +5590,7 @@ static void update_permission_bitmask(struct kvm_pagewalk *pw, bool tdp, bool ep
 	 * permission_fault() to indicate accesses that are *not* subject to
 	 * SMAP restrictions.
 	 */
-	for (index = 0; index < ARRAY_SIZE(pw->fmt.permissions); ++index) {
+	for (index = 0; index < ARRAY_SIZE(fmt->permissions); ++index) {
 		unsigned pfec = index << 1;
 
 		/*
@@ -5667,8 +5664,15 @@ static void update_permission_bitmask(struct kvm_pagewalk *pw, bool tdp, bool ep
 				smapf = (pfec & (PFERR_RSVD_MASK|PFERR_FETCH_MASK)) ? 0 : kf;
 		}
 
-		pw->fmt.permissions[index] = ff | uf | wf | rf | smapf;
+		fmt->permissions[index] = ff | uf | wf | rf | smapf;
 	}
+}
+
+static void update_permission_bitmask(struct kvm_pagewalk *w, bool tdp, bool ept)
+{
+	__update_permission_bitmask(&w->fmt, tdp, ept,
+				    is_cr4_smep(w), is_cr4_smap(w),
+				    is_cr0_wp(w), is_efer_nx(w));
 }
 
 /*
