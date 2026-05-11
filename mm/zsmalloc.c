@@ -1381,6 +1381,17 @@ static void obj_free(int class_size, unsigned long obj)
 	mod_zspage_inuse(zspage, -1);
 }
 
+int zs_handle_to_nid(struct zs_pool *pool, unsigned long handle)
+{
+	unsigned long obj;
+	struct zpdesc *zpdesc;
+
+	obj = handle_to_obj(handle);
+	obj_to_zpdesc(obj, &zpdesc);
+	return page_to_nid(zpdesc_page(zpdesc));
+}
+EXPORT_SYMBOL(zs_handle_to_nid);
+
 void zs_free(struct zs_pool *pool, unsigned long handle)
 {
 	struct zspage *zspage;

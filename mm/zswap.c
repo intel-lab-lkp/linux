@@ -1443,8 +1443,13 @@ static bool zswap_store_page(struct page *page,
 	 */
 	zswap_pool_get(pool);
 	if (objcg) {
-		obj_cgroup_get(objcg);
-		obj_cgroup_charge_zswap(objcg, entry->length);
+		struct obj_cgroup *nid_objcg;
+		int nid = zs_handle_to_nid(pool->zs_pool, entry->handle);
+
+		nid_objcg = obj_cgroup_get_nid(objcg, nid);
+		obj_cgroup_charge_zswap(nid_objcg, entry->length);
+		obj_cgroup_get(nid_objcg);
+		objcg = nid_objcg;
 	}
 	atomic_long_inc(&zswap_stored_pages);
 	if (entry->length == PAGE_SIZE)

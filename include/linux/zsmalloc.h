@@ -50,6 +50,8 @@ void zs_obj_read_sg_end(struct zs_pool *pool, unsigned long handle);
 void zs_obj_write(struct zs_pool *pool, unsigned long handle,
 		  void *handle_mem, size_t mem_len);
 
+int zs_handle_to_nid(struct zs_pool *pool, unsigned long handle);
+
 extern const struct movable_operations zsmalloc_mops;
 
 #endif
