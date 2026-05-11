@@ -421,15 +421,23 @@ static int intel_pstate_cppc_get_scaling(int cpu)
 {
 	struct cppc_perf_caps cppc_perf;
 
-	/*
-	 * Compute the perf-to-frequency scaling factor for the given CPU if
-	 * possible, unless it would be 0.
-	 */
-	if (!cppc_get_perf_caps(cpu, &cppc_perf) &&
-	    cppc_perf.nominal_perf && cppc_perf.nominal_freq)
-		return div_u64(cppc_perf.nominal_freq * KHZ_PER_MHZ,
-			       cppc_perf.nominal_perf);
+	if (cppc_get_perf_caps(cpu, &cppc_perf) || !cppc_perf.nominal_freq ||
+	    !cppc_perf.nominal_perf)
+		goto core_scaling;
 
+	if (cppc_perf.nominal_perf * 100 == cppc_perf.nominal_freq)
+		goto core_scaling;
+
+	if (hybrid_scaling_factor)
+		return hybrid_scaling_factor;
+
+	/*
+	 * Compute the perf-to-frequency scaling factor for the given CPU
+	 * from nominal freq and nominal_perf
+	 */
+	return div_u64(cppc_perf.nominal_freq * KHZ_PER_MHZ, cppc_perf.nominal_perf);
+
+core_scaling:
 	return core_get_scaling();
 }
 
@@ -2284,17 +2292,10 @@ static int hwp_get_cpu_scaling(int cpu)
 		 */
 		if (hybrid_get_cpu_type(cpu) == INTEL_CPU_TYPE_CORE)
 			return hybrid_scaling_factor;
-
-		return core_get_scaling();
 	}
 
-	/* Use core scaling on non-hybrid systems. */
-	if (!cpu_feature_enabled(X86_FEATURE_HYBRID_CPU))
-		return core_get_scaling();
-
 	/*
-	 * The system is hybrid, but the hybrid scaling factor is not known or
-	 * the CPU type is not one of the above, so use CPPC to compute the
+	 * The system is hybrid, so use CPPC to compute the
 	 * scaling factor for this CPU.
 	 */
 	return intel_pstate_cppc_get_scaling(cpu);
