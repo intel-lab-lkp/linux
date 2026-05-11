@@ -16,6 +16,17 @@
 #include "intel_dp_tunnel.h"
 #include "intel_link_bw.h"
 
+static void intel_dp_tunnel_debugfs_add(struct intel_dp *intel_dp)
+{
+	struct intel_connector *connector = intel_dp->attached_connector;
+
+	if (!connector || !intel_dp->tunnel)
+		return;
+
+	drm_dp_tunnel_debugfs_add(intel_dp->tunnel,
+				  connector->base.debugfs_entry);
+}
+
 struct intel_dp_tunnel_inherited_state {
 	struct drm_dp_tunnel_ref ref[I915_MAX_PIPES];
 };
@@ -214,8 +225,10 @@ static int detect_new_tunnel(struct intel_dp *intel_dp, struct drm_modeset_acqui
 
 	ret = drm_dp_tunnel_enable_bw_alloc(intel_dp->tunnel);
 	if (ret) {
-		if (ret == -EOPNOTSUPP)
+		if (ret == -EOPNOTSUPP) {
+			intel_dp_tunnel_debugfs_add(intel_dp);
 			return 0;
+		}
 
 		drm_dbg_kms(display->drm,
 			    "[DPTUN %s][ENCODER:%d:%s] Failed to enable BW allocation mode (ret %pe)\n",
@@ -224,6 +237,7 @@ static int detect_new_tunnel(struct intel_dp *intel_dp, struct drm_modeset_acqui
 			    ERR_PTR(ret));
 
 		/* Keep the tunnel with BWA disabled */
+		intel_dp_tunnel_debugfs_add(intel_dp);
 		return 0;
 	}
 
@@ -237,6 +251,13 @@ static int detect_new_tunnel(struct intel_dp *intel_dp, struct drm_modeset_acqui
 	ret = __update_tunnel_state(intel_dp, true);
 	if (ret)
 		return ret;
+
+	/*
+	 * Register debugfs only after BWA negotiation has fully
+	 * settled so the first read of 'info' shows steady-state
+	 * values rather than transient ones.
+	 */
+	intel_dp_tunnel_debugfs_add(intel_dp);
 
 	return has_tunnel_bw_changed(intel_dp, old_bw) ? 1 : 0;
 }
