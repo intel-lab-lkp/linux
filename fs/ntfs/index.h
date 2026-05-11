@@ -58,7 +58,8 @@
  *
  * We use this context to allow ntfs_index_lookup() to return the found index
  * @entry and its @data without having to allocate a buffer and copy the @entry
- * and/or its @data into it.
+ * and/or its @data into it.  For file name indexes @data points to the entry
+ * key; for view indexes @data points to the entry value.
  *
  * When finished with the @entry and its @data, call ntfs_index_ctx_put() to
  * free the context and other associated resources.

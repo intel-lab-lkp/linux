@@ -696,6 +696,53 @@ static int ntfs_icx_parent_dec(struct ntfs_index_context *icx)
 }
 
 /*
+ * ntfs_index_lookup_set_data - populate icx->data for the matched entry
+ *
+ * For directory $FILE_NAME indexes the caller updates the key in place, so
+ * expose the key.  For view indexes the value lives at data.vi; validate
+ * its offset and length before exposing the pointer.  Return 0 on success,
+ * or -EIO if the entry value is out of bounds.
+ */
+static int ntfs_index_lookup_set_data(struct ntfs_index_context *icx,
+				      struct index_root *ir,
+				      struct index_entry *ie)
+{
+	u16 data_len, data_off, entry_len, found_key_len;
+	unsigned int data_end, min_data_off;
+
+	if (ie->flags & INDEX_ENTRY_END)
+		return -EIO;
+
+	found_key_len = le16_to_cpu(ie->key_length);
+	if (ir->type == AT_FILE_NAME) {
+		icx->data = (u8 *)ie + offsetof(struct index_entry, key);
+		icx->data_len = found_key_len;
+		return 0;
+	}
+
+	entry_len = le16_to_cpu(ie->length);
+	data_off = le16_to_cpu(ie->data.vi.data_offset);
+	data_len = le16_to_cpu(ie->data.vi.data_length);
+	data_end = entry_len;
+	if (ie->flags & INDEX_ENTRY_NODE) {
+		/* The trailing child VCN is not part of the entry value. */
+		if (data_end < sizeof(s64))
+			return -EIO;
+		data_end -= sizeof(s64);
+	}
+
+	min_data_off = offsetof(struct index_entry, key) + found_key_len;
+	if (data_off < min_data_off || data_off > data_end)
+		return -EIO;
+	if (data_len > data_end - data_off)
+		return -EIO;
+
+	icx->data = (u8 *)ie + data_off;
+	icx->data_len = data_len;
+	return 0;
+}
+
+/*
  * ntfs_index_lookup - find a key in an index and return its index entry
  * @key:	key for which to search in the index
  * @key_len:	length of @key in bytes
@@ -710,7 +757,8 @@ static int ntfs_icx_parent_dec(struct ntfs_index_context *icx)
  * If the @key is found in the index, 0 is returned and @icx is setup to
  * describe the index entry containing the matching @key.  @icx->entry is the
  * index entry and @icx->data and @icx->data_len are the index entry data and
- * its length in bytes, respectively.
+ * its length in bytes, respectively.  For file name indexes @icx->data points
+ * to the entry key; for view indexes @icx->data points to the entry value.
  *
  * If the @key is not found in the index, -ENOENT is returned and
  * @icx is setup to describe the index entry whose key collates immediately
@@ -836,11 +884,30 @@ err_out:
 	return err;
 done:
 	icx->entry = ie;
-	icx->data = (u8 *)ie + offsetof(struct index_entry, key);
-	icx->data_len = le16_to_cpu(ie->key_length);
+	if (err) {
+		/* When the key is not found, ie is an insertion point. */
+		icx->data = NULL;
+		icx->data_len = 0;
+		ntfs_debug("Done.\n");
+		return err;
+	}
+	err = ntfs_index_lookup_set_data(icx, ir, ie);
+	if (err) {
+		ntfs_error(sb,
+			   "Index entry data out of bounds in inode 0x%llx.",
+			   (unsigned long long)ni->mft_no);
+		icx->entry = NULL;
+		icx->data = NULL;
+		icx->data_len = 0;
+		if (!icx->is_in_root) {
+			kvfree(ib);
+			ib = NULL;
+			icx->ib = NULL;
+		}
+		goto err_out;
+	}
 	ntfs_debug("Done.\n");
 	return err;
-
 }
 
 static struct index_block *ntfs_ib_alloc(s64 ib_vcn, u32 ib_size,
