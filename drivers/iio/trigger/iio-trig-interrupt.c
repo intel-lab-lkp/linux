@@ -9,15 +9,10 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/interrupt.h>
-#include <linux/slab.h>
 
 #include <linux/iio/iio.h>
 #include <linux/iio/trigger.h>
 
-
-struct iio_interrupt_trigger_info {
-	unsigned int irq;
-};
 
 static irqreturn_t iio_interrupt_trigger_poll(int irq, void *private)
 {
@@ -27,11 +22,11 @@ static irqreturn_t iio_interrupt_trigger_poll(int irq, void *private)
 
 static int iio_interrupt_trigger_probe(struct platform_device *pdev)
 {
-	struct iio_interrupt_trigger_info *trig_info;
+	struct device *dev = &pdev->dev;
 	struct iio_trigger *trig;
 	unsigned long irqflags;
 	struct resource *irq_res;
-	int irq, ret = 0;
+	int irq, ret;
 
 	irq_res = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
 
@@ -42,61 +37,20 @@ static int iio_interrupt_trigger_probe(struct platform_device *pdev)
 
 	irq = irq_res->start;
 
-	trig = iio_trigger_alloc(NULL, "irqtrig%d", irq);
-	if (!trig) {
-		ret = -ENOMEM;
-		goto error_ret;
-	}
+	trig = devm_iio_trigger_alloc(dev, "irqtrig%d", irq);
+	if (!trig)
+		return -ENOMEM;
 
-	trig_info = kzalloc_obj(*trig_info);
-	if (!trig_info) {
-		ret = -ENOMEM;
-		goto error_free_trigger;
-	}
-	iio_trigger_set_drvdata(trig, trig_info);
-	trig_info->irq = irq;
-	ret = request_irq(irq, iio_interrupt_trigger_poll,
-			  irqflags, trig->name, trig);
-	if (ret) {
-		dev_err(&pdev->dev,
-			"request IRQ-%d failed", irq);
-		goto error_free_trig_info;
-	}
-
-	ret = iio_trigger_register(trig);
+	ret = devm_request_irq(dev, irq, iio_interrupt_trigger_poll,
+			       irqflags, trig->name, trig);
 	if (ret)
-		goto error_release_irq;
-	platform_set_drvdata(pdev, trig);
+		return ret;
 
-	return 0;
-
-/* First clean up the partly allocated trigger */
-error_release_irq:
-	free_irq(irq, trig);
-error_free_trig_info:
-	kfree(trig_info);
-error_free_trigger:
-	iio_trigger_free(trig);
-error_ret:
-	return ret;
-}
-
-static void iio_interrupt_trigger_remove(struct platform_device *pdev)
-{
-	struct iio_trigger *trig;
-	struct iio_interrupt_trigger_info *trig_info;
-
-	trig = platform_get_drvdata(pdev);
-	trig_info = iio_trigger_get_drvdata(trig);
-	iio_trigger_unregister(trig);
-	free_irq(trig_info->irq, trig);
-	kfree(trig_info);
-	iio_trigger_free(trig);
+	return devm_iio_trigger_register(dev, trig);
 }
 
 static struct platform_driver iio_interrupt_trigger_driver = {
 	.probe = iio_interrupt_trigger_probe,
-	.remove = iio_interrupt_trigger_remove,
 	.driver = {
 		.name = "iio_interrupt_trigger",
 	},
