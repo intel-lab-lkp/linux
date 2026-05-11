@@ -158,14 +158,14 @@ struct mlx5_vhca_qp {
 struct mlx5_vhca_page_tracker {
 	u32 id;
 	u32 pdn;
-	u8 is_err:1;
-	u8 object_changed:1;
+	u8 is_err;
+	u8 object_changed;
+	int status;
 	struct mlx5_uars_page *uar;
 	struct mlx5_vhca_cq cq;
 	struct mlx5_vhca_qp *host_qp;
 	struct mlx5_vhca_qp *fw_qp;
 	struct mlx5_nb nb;
-	int status;
 };
 
 struct mlx5vf_pci_core_device {
@@ -173,11 +173,11 @@ struct mlx5vf_pci_core_device {
 	int vf_id;
 	u16 vhca_id;
 	u8 migrate_cap:1;
-	u8 deferred_reset:1;
 	u8 mdev_detach:1;
 	u8 log_active:1;
 	u8 chunk_mode:1;
 	u8 mig_state_cap:1;
+	u8 deferred_reset;
 	struct completion tracker_comp;
 	/* protect migration state */
 	struct mutex state_mutex;
