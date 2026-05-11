@@ -263,8 +263,7 @@ int fbnic_mdiobus_create(struct fbnic_dev *fbd)
 	bus->read_c45 = &fbnic_mdio_read_c45;
 	bus->write_c45 = &fbnic_mdio_write_c45;
 
-	/* Disable PHY auto probing. We will add PCS manually */
-	bus->phy_mask = ~0;
+	bus->phy_mask = GENMASK(31, 2);
 
 	bus->parent = fbd->dev;
 	bus->priv = fbd;

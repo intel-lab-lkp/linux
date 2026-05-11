@@ -1402,6 +1402,107 @@ static int xpcs_read_ids(struct dw_xpcs *xpcs)
 	return 0;
 }
 
+static int xpcs_get_pma_mmd(struct dw_xpcs *xpcs)
+{
+	int devs1, b;
+
+	devs1 = xpcs_read(xpcs, MDIO_MMD_PMAPMD, MDIO_DEVS1);
+	if (devs1 < 0)
+		return devs1;
+
+	/* Locate the PMA closest to the PCS as this should be the one provided
+	 * with the DW IP. This is identified by being the PMA with the
+	 * highest MMD device address.
+	 */
+	devs1 &= MDIO_DEVS_SEP_PMA1 | MDIO_DEVS_SEP_PMA2 | MDIO_DEVS_SEP_PMA3 |
+		 MDIO_DEVS_SEP_PMA4 | MDIO_DEVS_PMAPMD;
+	b = fls(devs1);
+	if (b)
+		return b - 1;
+
+	return -ENODEV;
+}
+
+struct pma_pcs_values {
+	int lanes;
+	u16 rsfec_ctrl;
+};
+
+static struct mdio_device *xpcs_find_first_mdev(struct dw_xpcs *xpcs)
+{
+	struct phy_device *p = phy_find_first(xpcs->mdiodev->bus);
+
+	if (!p)
+		return NULL;
+	return &p->mdio;
+}
+
+static struct mdio_device *
+xpcs_find_next_mdev(struct dw_xpcs *xpcs, struct mdio_device *mdev)
+{
+	struct phy_device *p = container_of(mdev, struct phy_device, mdio), *n;
+
+	n = phy_find_next(xpcs->mdiodev->bus, p);
+	if (!n)
+		return NULL;
+	return &n->mdio;
+}
+
+static int
+xpcs_config_rsfec_pma(struct dw_xpcs *xpcs, const struct pma_pcs_values *v)
+{
+	struct mdio_device *mdev;
+	int ret = 0, i, pma_mmd;
+
+	pma_mmd = xpcs_get_pma_mmd(xpcs);
+	if (pma_mmd < 1)
+		return pma_mmd;
+
+	mdev = xpcs_find_first_mdev(xpcs);
+	if (!mdev)
+		return -ENODEV;
+
+	for (i = 0; mdev && ret >= 0 && i < v->lanes;
+	     i++, mdev = xpcs_find_next_mdev(xpcs, mdev)) {
+		ret = mdiodev_c45_write(mdev, pma_mmd, MDIO_PMA_RSFEC_CTRL,
+					v->rsfec_ctrl);
+	}
+	if (!ret && i < v->lanes)
+		return -ENODEV;
+
+	return ret;
+}
+
+static int xpcs_25gbaser_pma_config(struct dw_xpcs *xpcs)
+{
+	const struct pma_pcs_values v = {
+		.rsfec_ctrl = 0,
+		.lanes = 1,
+	};
+
+	return xpcs_config_rsfec_pma(xpcs, &v);
+}
+
+static int xpcs_50gbaser_pma_config(struct dw_xpcs *xpcs)
+{
+	const struct pma_pcs_values v = {
+		.rsfec_ctrl = DW_VR_RSFEC_CTRL_TC_PAD_ALTER,
+		.lanes = 2,
+	};
+
+	return xpcs_config_rsfec_pma(xpcs, &v);
+}
+
+static int xpcs_100gbasep_pma_config(struct dw_xpcs *xpcs)
+{
+	const struct pma_pcs_values v = {
+		.rsfec_ctrl = MDIO_PMA_RSFEC_CTRL_4LANE_PMD,
+		.lanes = 2,
+	};
+
+	return xpcs_config_rsfec_pma(xpcs, &v);
+}
+
 static const struct dw_xpcs_compat synopsys_xpcs_compat[] = {
 	{
 		.interface = PHY_INTERFACE_MODE_USXGMII,
@@ -1415,6 +1516,7 @@ static const struct dw_xpcs_compat synopsys_xpcs_compat[] = {
 		.interface = PHY_INTERFACE_MODE_25GBASER,
 		.supported = xpcs_25gbaser_features,
 		.an_mode = DW_AN_C73,
+		.pma_config = xpcs_25gbaser_pma_config,
 	}, {
 		.interface = PHY_INTERFACE_MODE_XLGMII,
 		.supported = xpcs_xlgmii_features,
@@ -1423,14 +1525,17 @@ static const struct dw_xpcs_compat synopsys_xpcs_compat[] = {
 		.interface = PHY_INTERFACE_MODE_50GBASER,
 		.supported = xpcs_50gbaser_features,
 		.an_mode = DW_AN_C73,
+		.pma_config = xpcs_50gbaser_pma_config,
 	}, {
 		.interface = PHY_INTERFACE_MODE_LAUI,
 		.supported = xpcs_50gbaser2_features,
 		.an_mode = DW_AN_C73,
+		.pma_config = xpcs_50gbaser_pma_config,
 	}, {
 		.interface = PHY_INTERFACE_MODE_100GBASEP,
 		.supported = xpcs_100gbasep_features,
 		.an_mode = DW_AN_C73,
+		.pma_config = xpcs_100gbasep_pma_config,
 	}, {
 		.interface = PHY_INTERFACE_MODE_10GBASER,
 		.supported = xpcs_10gbaser_features,
