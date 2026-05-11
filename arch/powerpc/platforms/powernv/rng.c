@@ -87,12 +87,16 @@ int pnv_get_random_long(unsigned long *v)
 
 	if (mfmsr() & MSR_DR) {
 		rng = get_cpu_var(pnv_rng);
-		*v = rng_whiten(rng, in_be64(rng->regs));
+		if (rng)
+			*v = rng_whiten(rng, in_be64(rng->regs));
 		put_cpu_var(rng);
-	} else {
-		rng = raw_cpu_read(pnv_rng);
-		*v = rng_whiten(rng, __raw_rm_readq(rng->regs_real));
+		return rng ? 1 : 0;
 	}
+
+	rng = raw_cpu_read(pnv_rng);
+	if (!rng)
+		return 0;
+	*v = rng_whiten(rng, __raw_rm_readq(rng->regs_real));
 	return 1;
 }
 EXPORT_SYMBOL_GPL(pnv_get_random_long);
