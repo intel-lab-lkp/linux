@@ -18,22 +18,30 @@ Review checklist for kvm patches
 5.  New features must default to off (userspace should explicitly request them).
     Performance improvements can and should default to on.
 
-6.  New cpu features should be exposed via KVM_GET_SUPPORTED_CPUID2,
+6.  Guest-visible changes must not break migration compatibility.  A guest
+    migrated from an older kernel must be able to run with its original
+    observable environment, and a guest launched on a newer kernel must be
+    configurable to match the older kernel's feature set for rollback.
+    Where a change alters guest-visible behaviour, provide a mechanism
+    (capability, device attribute, etc.) for userspace to select the
+    previous behaviour.
+
+7.  New cpu features should be exposed via KVM_GET_SUPPORTED_CPUID2,
     or its equivalent for non-x86 architectures
 
-7.  The feature should be testable (see below).
+8.  The feature should be testable (see below).
 
-8.  Changes should be vendor neutral when possible.  Changes to common code
+9.  Changes should be vendor neutral when possible.  Changes to common code
     are better than duplicating changes to vendor code.
 
-9.  Similarly, prefer changes to arch independent code than to arch dependent
+10. Similarly, prefer changes to arch independent code than to arch dependent
     code.
 
-10. User/kernel interfaces and guest/host interfaces must be 64-bit clean
+11. User/kernel interfaces and guest/host interfaces must be 64-bit clean
     (all variables and sizes naturally aligned on 64-bit; use specific types
     only - u64 rather than ulong).
 
-11. New guest visible features must either be documented in a hardware manual
+12. New guest visible features must either be documented in a hardware manual
     or be accompanied by documentation.
 
 Testing of KVM code

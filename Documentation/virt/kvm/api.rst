@@ -97,6 +97,20 @@ Instead, kvm defines extension identifiers and a facility to query
 whether a particular extension identifier is available.  If it is, a
 set of ioctls is available for application use.
 
+KVM will ensure that the state that can be saved and restored via the
+KVM ioctls is sufficient to allow migration of a running guest between
+host kernels while maintaining full compatibility of the guest-visible
+device model.  This includes migration to newer kernels (upgrade) and
+to older kernels (rollback), provided that the older kernel supports
+the set of features exposed to the guest.  Where a new kernel version
+introduces a guest-visible change, it will provide a mechanism (such
+as a capability or a device attribute) that allows userspace to select
+the previous behaviour.  This serves two purposes: guests migrated
+from an older kernel can continue to run with their original
+observable environment, and new guests launched on the newer kernel
+can be configured to match the feature set of the older kernel, so
+that they remain migratable to the older kernel in case of rollback.
+
 
 4. API description
 ==================
