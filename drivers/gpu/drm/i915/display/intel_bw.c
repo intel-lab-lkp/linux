@@ -483,12 +483,21 @@ static const struct intel_sa_info xe3lpd_3002_sa_info = {
 	.derating = 10,
 };
 
+static bool is_tile_y_factored(struct intel_display *display)
+{
+	/* TGL supports Y-tile for LPDDR4/5, but not for DDR4 */
+	if (DISPLAY_VER(display) >= 14)
+		return false;
+
+	return true;
+}
+
 static int icl_get_bw_info(struct intel_display *display,
 			   const struct dram_info *dram_info,
 			   const struct intel_sa_info *sa)
 {
 	struct intel_qgv_info qi = {};
-	bool is_y_tile = true; /* assume y tile may be used */
+	bool is_y_tile = is_tile_y_factored(display);
 	int num_channels = max_t(u8, 1, dram_info->num_channels);
 	int ipqdepth, ipqdepthpch = 16;
 	int dclk_max;
@@ -559,7 +568,7 @@ static int tgl_get_bw_info(struct intel_display *display,
 			   const struct intel_sa_info *sa)
 {
 	struct intel_qgv_info qi = {};
-	bool is_y_tile = true; /* assume y tile may be used */
+	bool is_y_tile = is_tile_y_factored(display);
 	int num_channels = max_t(u8, 1, dram_info->num_channels);
 	int ipqdepth, ipqdepthpch = 16;
 	int dclk_max;
