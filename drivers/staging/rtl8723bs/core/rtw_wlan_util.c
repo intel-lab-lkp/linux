@@ -850,7 +850,7 @@ static void bwmode_update_check(struct adapter *padapter, struct ndis_80211_var_
 	if (phtpriv->ht_option == false)
 		return;
 
-	if (pIE->length > sizeof(struct HT_info_element))
+	if (pIE->length != sizeof(struct HT_info_element))
 		return;
 
 	pHT_info = (struct HT_info_element *)pIE->data;
@@ -1286,6 +1286,9 @@ void update_beacon_info(struct adapter *padapter, u8 *pframe, uint pkt_len, stru
 	unsigned int len;
 	struct ndis_80211_var_ie *pIE;
 
+	if (pkt_len < _BEACON_IE_OFFSET_ + WLAN_HDR_A3_LEN)
+		return;
+
 	len = pkt_len - (_BEACON_IE_OFFSET_ + WLAN_HDR_A3_LEN);
 
 	for (i = 0; i < len;) {
@@ -1294,7 +1297,8 @@ void update_beacon_info(struct adapter *padapter, u8 *pframe, uint pkt_len, stru
 		switch (pIE->element_id) {
 		case WLAN_EID_VENDOR_SPECIFIC:
 			/* to update WMM parameter set while receiving beacon */
-			if (!memcmp(pIE->data, WMM_PARA_OUI, 6) && pIE->length == WLAN_WMM_LEN)	/* WMM */
+			if (pIE->length == WLAN_WMM_LEN &&
+			    !memcmp(pIE->data, WMM_PARA_OUI, 6))	/* WMM */
 				if (WMM_param_handler(padapter, pIE))
 					report_wmm_edca_update(padapter);
 
