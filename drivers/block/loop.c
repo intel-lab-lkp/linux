@@ -93,6 +93,7 @@ struct loop_cmd {
 static DEFINE_IDR(loop_index_idr);
 static DEFINE_MUTEX(loop_ctl_mutex);
 static DEFINE_MUTEX(loop_validate_mutex);
+DEFINE_SRCU(loop_io_srcu);
 
 /**
  * loop_global_lock_killable() - take locks for safe loop_validate_file() test
@@ -1747,8 +1748,19 @@ static void lo_release(struct gendisk *disk)
 	need_clear = (lo->lo_state == Lo_rundown);
 	mutex_unlock(&lo->lo_mutex);
 
-	if (need_clear)
+	if (need_clear) {
+		/*
+		 * Now that loop_queue_rq() sees lo->lo_state != Lo_bound,
+		 * wait for already started loop_queue_rq() to complete.
+		 */
+		synchronize_srcu(&loop_io_srcu);
+		/*
+		 * Now that no more works are scheduled by loop_queue_rq(),
+		 * wait for already scheduled works to complete.
+		 */
+		drain_workqueue(lo->workqueue);
 		__loop_clr_fd(lo);
+	}
 }
 
 static void lo_free_disk(struct gendisk *disk)
@@ -1854,11 +1866,15 @@ static blk_status_t loop_queue_rq(struct blk_mq_hw_ctx *hctx,
 	struct request *rq = bd->rq;
 	struct loop_cmd *cmd = blk_mq_rq_to_pdu(rq);
 	struct loop_device *lo = rq->q->queuedata;
+	int idx;
 
 	blk_mq_start_request(rq);
 
-	if (data_race(READ_ONCE(lo->lo_state)) != Lo_bound)
+	idx = srcu_read_lock(&loop_io_srcu);
+	if (data_race(READ_ONCE(lo->lo_state)) != Lo_bound) {
+		srcu_read_unlock(&loop_io_srcu, idx);
 		return BLK_STS_IOERR;
+	}
 
 	switch (req_op(rq)) {
 	case REQ_OP_FLUSH:
@@ -1888,6 +1904,7 @@ static blk_status_t loop_queue_rq(struct blk_mq_hw_ctx *hctx,
 #endif
 	loop_queue_work(lo, cmd);
 
+	srcu_read_unlock(&loop_io_srcu, idx);
 	return BLK_STS_OK;
 }
 
