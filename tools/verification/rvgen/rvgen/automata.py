@@ -69,14 +69,40 @@ class Automata:
         self.states, self.initial_state, self.final_states = self.__get_state_variables()
         self.env_types = {}
         self.env_stored = set()
+        self.env_init_started = set()
         self.constraint_vars = set()
         self.self_loop_reset_events = set()
         self.events, self.envs = self.__get_event_variables()
+        self.__parse_init_resets()
         self.function, self.constraints = self.__create_matrix()
         self.events_start, self.events_start_run = self.__store_init_events()
         self.env_stored = sorted(self.env_stored)
+        self.env_init_started = sorted(self.env_init_started)
         self.constraint_vars = sorted(self.constraint_vars)
         self.self_loop_reset_events = sorted(self.self_loop_reset_events)
+
+    def __parse_init_resets(self) -> None:
+        """Parse reset() annotations on the __init_STATE -> STATE arrow.
+
+        Adds each listed env to env_stored (HA framework allocates per-object
+        storage) and env_init_started (ha2k generates handle_monitor_start()).
+        """
+        init_prefix = f'"{self.init_marker}'
+        for line in map(str.lstrip, self.__dot_lines):
+            if not line.startswith(init_prefix):
+                continue
+            split_line = line.split()
+            if len(split_line) < 3 or split_line[1] != "->":
+                continue
+            if "label" not in line:
+                continue
+            label = "".join(split_line[split_line.index("label") + 2:-1]).replace('"', '')
+            for part in label.split(";"):
+                reset_m = self.constraint_reset.search(part.strip())
+                if reset_m:
+                    env = reset_m["env"]
+                    self.env_stored.add(env)
+                    self.env_init_started.add(env)
 
     def __get_model_name(self) -> str:
         basename = ntpath.basename(self.__dot_path)

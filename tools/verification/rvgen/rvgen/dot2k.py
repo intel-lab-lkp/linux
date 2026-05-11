@@ -366,7 +366,18 @@ f"""static inline void ha_convert_inv_guard(struct ha_monitor *ha_mon,
             conf_g = [e for s, e in conflict_guards if s == state]
             if not conf_i and not conf_g:
                 continue
-            buff.append(f"\t{_else}if (curr_state == {self.states[state]}{self.enum_suffix})")
+
+            state_name = f"{self.states[state]}{self.enum_suffix}"
+            env_full = self.__get_constraint_env(constr)
+            env_bare = env_full[:-len(self.enum_suffix)]
+            if env_bare in self.env_init_started:
+                # env_store is ENV_INVALID_VALUE until handle_monitor_start();
+                # skip ha_inv_to_guard during the init race window.
+                cont = "\t\t " if _else else "\t    "
+                buff.append(f"\t{_else}if (curr_state == {state_name} &&")
+                buff.append(f"{cont}!ha_monitor_env_invalid(ha_mon, {env_full}))")
+            else:
+                buff.append(f"\t{_else}if (curr_state == {state_name})")
 
             buff.append(f"\t\t{self.__start_to_conv(constr)};")
             _else = "else "
@@ -376,16 +387,22 @@ f"""static inline void ha_convert_inv_guard(struct ha_monitor *ha_mon,
 
     def __fill_verify_guards_func(self) -> list[str]:
         buff = []
-        if not self.guards:
+        # Always generate for monitors with invariants: stable extension
+        # point for future guard conditions.
+        if not self.guards and not self.invariants:
             return []
 
         buff.append(
 f"""static inline bool ha_verify_guards(struct ha_monitor *ha_mon,
 \t\t\t\t    enum {self.enum_states_def} curr_state, enum {self.enum_events_def} event,
 \t\t\t\t    enum {self.enum_states_def} next_state, u64 time_ns)
-{{
-\tbool res = true;
-""")
+{{""")
+
+        if not self.guards:
+            buff.append("\treturn true;\n}\n")
+            return buff
+
+        buff.append("\tbool res = true;\n")
 
         _else = ""
         for edge, constr in sorted(self.guards.items()):
@@ -522,7 +539,7 @@ f"""static bool ha_verify_constraint(struct ha_monitor *ha_mon,
             buff.append("\tha_convert_inv_guard(ha_mon, curr_state, event, "
                         "next_state, time_ns);\n")
 
-        if self.guards:
+        if self.guards or self.invariants:
             buff.append("\tif (!ha_verify_guards(ha_mon, curr_state, event, "
                         "next_state, time_ns))\n\t\treturn false;\n")
 
@@ -599,8 +616,77 @@ f"""static bool ha_verify_constraint(struct ha_monitor *ha_mon,
                 buff.append("}\n")
         return buff
 
+    def __fill_init_start_helper(self) -> list[str]:
+        """Generate handle_monitor_start() for envs reset on the __init arrow.
+
+        env_store is invalid inside da_handle_start_event(); this helper must
+        be called after DA storage is allocated and initial state is set.
+        """
+        if not self.env_init_started:
+            return []
+
+        # Collect the ha_start_timer call for each init-started env from the
+        # first state invariant that references it.
+        timer_calls: dict[str, str] = {}
+        for env in self.env_init_started:
+            env_full = f"{env}{self.enum_suffix}"
+            for constr in self.invariants.values():
+                if env_full in constr:
+                    timer_calls[env] = constr
+                    break
+
+        buff = []
+        buff.append(
+"""/*
+ * handle_monitor_start - reset per-object clock(s) and arm the timer.
+ *
+ * env_store is invalid inside da_handle_start_event(); call this helper
+ * after allocating DA storage and setting the initial DA state.
+ *
+ * XXX: replace the placeholders with the actual logic for your monitor.
+ */""")
+
+        if self.monitor_type == "per_obj":
+            buff.append("static int handle_monitor_start(int id, monitor_target t)")
+            buff.append("{")
+            buff.append("\tstruct ha_monitor *ha_mon;")
+            buff.append("\tu64 time_ns = ktime_get_ns();\n")
+            buff.append("\t/* XXX: allocate DA storage, e.g. da_create_or_get(id, t) */")
+            buff.append("\t/* XXX: set initial DA state, e.g. da_handle_start_event(id, t, <event>) */")
+            buff.append("\tha_mon = /* XXX: retrieve ha_monitor for (id, t) */;")
+        elif self.monitor_type == "per_task":
+            buff.append("static int handle_monitor_start(struct task_struct *p)")
+            buff.append("{")
+            buff.append("\tstruct ha_monitor *ha_mon;")
+            buff.append("\tu64 time_ns = ktime_get_ns();\n")
+            buff.append("\t/* XXX: allocate DA storage, e.g. da_create_or_get(p->pid, p) */")
+            buff.append("\t/* XXX: set initial DA state, e.g. da_handle_start_event(p->pid, p, <event>) */")
+            buff.append("\tha_mon = /* XXX: retrieve ha_monitor for p */;")
+        else:
+            buff.append("static int handle_monitor_start(void)")
+            buff.append("{")
+            buff.append("\tstruct ha_monitor *ha_mon;")
+            buff.append("\tu64 time_ns = ktime_get_ns();\n")
+            buff.append("\tha_mon = /* XXX: retrieve global ha_monitor */;")
+
+        buff.append("\tif (!ha_mon)")
+        buff.append("\t\treturn -ENOENT;")
+
+        for env in self.env_init_started:
+            buff.append(f"\tha_reset_env(ha_mon, {env}{self.enum_suffix}, time_ns);")
+            if env in timer_calls:
+                buff.append(f"\t{timer_calls[env]};")
+            else:
+                buff.append(f"\t/* XXX: arm timer for {env} */")
+
+        buff.append("\treturn 0;")
+        buff.append("}\n")
+        return buff
+
     def _fill_hybrid_definitions(self) -> list[str]:
-        return self.__fill_hybrid_get_reset_functions() + self.__fill_constr_func()
+        return (self.__fill_hybrid_get_reset_functions() +
+                self.__fill_init_start_helper() +
+                self.__fill_constr_func())
 
     def _fill_timer_type(self) -> list:
         if self.invariants:
