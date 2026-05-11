@@ -46,6 +46,44 @@ static const struct debugfs_reg32 xhci_runtime_regs[] = {
 	dump_register(IR0_ERDP_HIGH),
 };
 
+static int xhci_runtime_ir_show(struct seq_file *s, void *unused)
+{
+	struct xhci_hcd		*xhci = s->private;
+	unsigned long		flags;
+	unsigned int		i;
+
+	for (i = 0; i < xhci->max_interrupters; i++) {
+		struct xhci_interrupter *ir;
+		u32 iman, imod, erstsz;
+		u64 erstba, erdp;
+
+		spin_lock_irqsave(&xhci->lock, flags);
+		ir = xhci->interrupters[i];
+		if (!ir || !ir->ir_set) {
+			spin_unlock_irqrestore(&xhci->lock, flags);
+			continue;
+		}
+
+		iman = readl(&ir->ir_set->iman);
+		imod = readl(&ir->ir_set->imod);
+		erstsz = readl(&ir->ir_set->erst_size);
+		erstba = xhci_read_64(xhci, &ir->ir_set->erst_base);
+		erdp = xhci_read_64(xhci, &ir->ir_set->erst_dequeue);
+		spin_unlock_irqrestore(&xhci->lock, flags);
+
+		seq_printf(s, "IR%u_IMAN = 0x%08x\n", i, iman);
+		seq_printf(s, "IR%u_IMOD = 0x%08x\n", i, imod);
+		seq_printf(s, "IR%u_ERSTSZ = 0x%08x\n", i, erstsz);
+		seq_printf(s, "IR%u_ERSTBA = 0x%016llx\n", i,
+			   (unsigned long long)erstba);
+		seq_printf(s, "IR%u_ERDP = 0x%016llx\n", i,
+			   (unsigned long long)erdp);
+	}
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(xhci_runtime_ir);
+
 static const struct debugfs_reg32 xhci_extcap_legsup[] = {
 	dump_register(EXTCAP_USBLEGSUP),
 	dump_register(EXTCAP_USBLEGCTLSTS),
@@ -799,6 +837,9 @@ void xhci_debugfs_init(struct xhci_hcd *xhci)
 			    readl(&xhci->cap_regs->run_regs_off) & RTSOFF_MASK,
 			    xhci_runtime_regs, ARRAY_SIZE(xhci_runtime_regs),
 			    xhci->debugfs_root, "reg-runtime");
+	debugfs_create_file("reg-runtime-ir", 0444,
+			    xhci->debugfs_root, xhci,
+			    &xhci_runtime_ir_fops);
 
 	xhci_debugfs_extcap_regset(xhci, XHCI_EXT_CAPS_LEGACY,
 				   xhci_extcap_legsup,
