@@ -304,6 +304,20 @@ static int da_monitor_init(void)
 
 /*
  * da_monitor_destroy - return the allocated slot
+ *
+ * Call tracepoint_synchronize_unregister() before reset_all() to close
+ * the race where an in-flight non-HA probe handler sets monitoring=1
+ * (without calling timer_setup()) after da_monitor_reset_all() has
+ * already cleared the slot but before the caller's own sync completes.
+ * Without this barrier, an HA_TIMER_WHEEL monitor that later acquires
+ * the same slot would call timer_delete() on a never-initialised
+ * timer_list, triggering ODEBUG warnings.
+ *
+ * Note: tracepoint_synchronize_unregister() is a system-wide barrier
+ * that waits for all CPUs to finish any in-flight tracepoint handlers.
+ * The caller's own __rv_disable_monitor() issues a second sync after
+ * returning from disable(); that redundant call is harmless on the
+ * infrequent admin (enable/disable) path.
  */
 static inline void da_monitor_destroy(void)
 {
@@ -311,10 +325,10 @@ static inline void da_monitor_destroy(void)
 		WARN_ONCE(1, "Disabling a disabled monitor: " __stringify(MONITOR_NAME));
 		return;
 	}
+	tracepoint_synchronize_unregister();
+	da_monitor_reset_all();
 	rv_put_task_monitor_slot(task_mon_slot);
 	task_mon_slot = RV_PER_TASK_MONITOR_INIT;
-
-	da_monitor_reset_all();
 }
 
 #elif RV_MON_TYPE == RV_MON_PER_OBJ
