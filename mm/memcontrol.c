@@ -3114,17 +3114,19 @@ static void page_set_objcg(struct page *page, const struct obj_cgroup *objcg)
  */
 int __memcg_kmem_charge_page(struct page *page, gfp_t gfp, int order)
 {
-	struct obj_cgroup *objcg;
+	struct obj_cgroup *objcg, *nid_objcg;
+	int nid = page_to_nid(page);
 	int ret = 0;
 
 	objcg = current_obj_cgroup();
 	if (objcg && !obj_cgroup_is_root(objcg)) {
-		ret = obj_cgroup_charge_pages(objcg, gfp, 1 << order);
-		if (!ret) {
-			obj_cgroup_get(objcg);
-			page_set_objcg(page, objcg);
-			return 0;
-		}
+		nid_objcg = obj_cgroup_get_nid(objcg, nid);
+		ret = obj_cgroup_charge_pages(nid_objcg, gfp, 1 << order);
+		if (ret)
+			return ret;
+		obj_cgroup_get(nid_objcg);
+		page_set_objcg(page, nid_objcg);
+		return 0;
 	}
 	return ret;
 }
