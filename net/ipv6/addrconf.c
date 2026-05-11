@@ -2595,8 +2595,9 @@ static void manage_tempaddrs(struct inet6_dev *idev,
 			     __u32 valid_lft, __u32 prefered_lft,
 			     bool create, unsigned long now)
 {
-	u32 flags;
 	struct inet6_ifaddr *ift;
+	bool all_regen = true;
+	u32 flags;
 
 	read_lock_bh(&idev->lock);
 	/* update all temporary addresses in the list */
@@ -2637,6 +2638,8 @@ static void manage_tempaddrs(struct inet6_dev *idev,
 		ift->tstamp = now;
 		if (prefered_lft > 0)
 			ift->flags &= ~IFA_F_DEPRECATED;
+		if (!ift->regen_count)
+			all_regen = false;
 
 		spin_unlock(&ift->lock);
 		if (!(flags&IFA_F_TENTATIVE))
@@ -2644,12 +2647,14 @@ static void manage_tempaddrs(struct inet6_dev *idev,
 	}
 
 	/* Also create a temporary address if it's enabled but no temporary
-	 * address currently exists.
+	 * address currently exists or if all temporary addresses already
+	 * generated an address.
 	 * However, we get called with valid_lft == 0, prefered_lft == 0, create == false
 	 * as part of cleanup (ie. deleting the mngtmpaddr).
 	 * We don't want that to result in creating a new temporary ip address.
 	 */
-	if (list_empty(&idev->tempaddr_list) && (valid_lft || prefered_lft))
+	if ((list_empty(&idev->tempaddr_list) || all_regen) &&
+	    (valid_lft || prefered_lft))
 		create = true;
 
 	if (create && READ_ONCE(idev->cnf.use_tempaddr) > 0) {
