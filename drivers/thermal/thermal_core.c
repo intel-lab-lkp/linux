@@ -877,7 +877,7 @@ static int thermal_bind_cdev_to_trip(struct thermal_zone_device *tz,
 		 "cdev%d_weight", dev->id);
 	sysfs_attr_init(&dev->weight_attr.attr);
 	dev->weight_attr.attr.name = dev->weight_attr_name;
-	dev->weight_attr.attr.mode = S_IWUSR | S_IRUGO;
+	dev->weight_attr.attr.mode = 0644;
 	dev->weight_attr.show = weight_show;
 	dev->weight_attr.store = weight_store;
 	result = device_create_file(&tz->device, &dev->weight_attr);
