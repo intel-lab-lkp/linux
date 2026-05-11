@@ -238,13 +238,11 @@ intel_read_qgv_point_info(struct intel_display *display,
 		return icl_pcode_read_qgv_point_info(display, sp, point);
 }
 
-static int icl_get_qgv_points(struct intel_display *display,
-			      const struct dram_info *dram_info,
-			      struct intel_qgv_info *qi,
-			      bool is_y_tile)
+static int icl_init_qgv_info(struct intel_display *display,
+			     const struct dram_info *dram_info,
+			     struct intel_qgv_info *qi,
+			     bool is_y_tile)
 {
-	int i, ret;
-
 	qi->num_points = dram_info->num_qgv_points;
 	qi->num_psf_points = dram_info->num_psf_gv_points;
 
@@ -315,6 +313,19 @@ static int icl_get_qgv_points(struct intel_display *display,
 		qi->t_bl = dram_info->type == INTEL_DRAM_DDR4 ? 4 : 8;
 		qi->max_numchannels = 1;
 	}
+
+	return 0;
+}
+
+static int icl_get_qgv_points(struct intel_display *display,
+			      const struct dram_info *dram_info,
+			      struct intel_qgv_info *qi,
+			      bool is_y_tile)
+{
+	int i, ret;
+
+	if (icl_init_qgv_info(display, dram_info, qi, is_y_tile))
+		return -EINVAL;
 
 	if (drm_WARN_ON(display->drm,
 			qi->num_points > ARRAY_SIZE(qi->points)))
