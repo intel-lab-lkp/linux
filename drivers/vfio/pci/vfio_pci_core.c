@@ -585,9 +585,42 @@ out_power:
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_enable);
 
+void vfio_pci_core_try_reset(struct vfio_pci_core_device *vdev)
+{
+	struct pci_dev *pdev = vdev->pdev;
+	struct pci_dev *bridge = pci_upstream_bridge(pdev);
+
+	lockdep_assert_held(&vdev->vdev.dev_set->lock);
+
+	if (!vdev->reset_works)
+		return;
+
+	/*
+	 * Try to get the locks ourselves to prevent a deadlock. The
+	 * success of this is dependent on being able to lock the device,
+	 * which is not always possible.
+	 *
+	 * We cannot use the "try" reset interface here, since that will
+	 * overwrite the previously restored configuration information.
+	 */
+	if (bridge && !pci_dev_trylock(bridge))
+		return;
+
+	if (!pci_dev_trylock(pdev))
+		goto out;
+
+	if (!__pci_reset_function_locked(pdev))
+		vdev->needs_reset = false;
+
+	pci_dev_unlock(pdev);
+out:
+	if (bridge)
+		pci_dev_unlock(bridge);
+}
+EXPORT_SYMBOL_GPL(vfio_pci_core_try_reset);
+
 void vfio_pci_core_disable(struct vfio_pci_core_device *vdev)
 {
-	struct pci_dev *bridge;
 	struct pci_dev *pdev = vdev->pdev;
 	struct vfio_pci_dummy_resource *dummy_res, *tmp;
 	struct vfio_pci_ioeventfd *ioeventfd, *ioeventfd_tmp;
@@ -687,27 +720,7 @@ void vfio_pci_core_disable(struct vfio_pci_core_device *vdev)
 	 */
 	pci_write_config_word(pdev, PCI_COMMAND, PCI_COMMAND_INTX_DISABLE);
 
-	/*
-	 * Try to get the locks ourselves to prevent a deadlock. The
-	 * success of this is dependent on being able to lock the device,
-	 * which is not always possible.
-	 * We can not use the "try" reset interface here, which will
-	 * overwrite the previously restored configuration information.
-	 */
-	if (vdev->reset_works) {
-		bridge = pci_upstream_bridge(pdev);
-		if (bridge && !pci_dev_trylock(bridge))
-			goto out_restore_state;
-		if (pci_dev_trylock(pdev)) {
-			if (!__pci_reset_function_locked(pdev))
-				vdev->needs_reset = false;
-			pci_dev_unlock(pdev);
-		}
-		if (bridge)
-			pci_dev_unlock(bridge);
-	}
-
-out_restore_state:
+	vfio_pci_core_try_reset(vdev);
 	pci_restore_state(pdev);
 out:
 	pci_disable_device(pdev);
@@ -1613,7 +1626,7 @@ ssize_t vfio_pci_core_write(struct vfio_device *core_vdev, const char __user *bu
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_write);
 
-static void vfio_pci_zap_bars(struct vfio_pci_core_device *vdev)
+void vfio_pci_zap_bars(struct vfio_pci_core_device *vdev)
 {
 	struct vfio_device *core_vdev = &vdev->vdev;
 	loff_t start = VFIO_PCI_INDEX_TO_OFFSET(VFIO_PCI_BAR0_REGION_INDEX);
@@ -1622,6 +1635,7 @@ static void vfio_pci_zap_bars(struct vfio_pci_core_device *vdev)
 
 	unmap_mapping_range(core_vdev->inode->i_mapping, start, len, true);
 }
+EXPORT_SYMBOL_GPL(vfio_pci_zap_bars);
 
 void vfio_pci_zap_and_down_write_memory_lock(struct vfio_pci_core_device *vdev)
 {

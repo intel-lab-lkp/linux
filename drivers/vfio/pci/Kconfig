@@ -45,12 +45,14 @@ config VFIO_PCI_IGD
 
 config VFIO_PCI_LIVEUPDATE
 	bool "VFIO PCI support for Live Update (EXPERIMENTAL)"
-	depends on PCI_LIVEUPDATE
+	depends on PCI_LIVEUPDATE && VFIO_DEVICE_CDEV
 	help
 	  Support for preserving devices bound to vfio-pci across a Live
 	  Update. This option should only be enabled by developers working on
 	  implementing this support. Once enough support has landed in the
 	  kernel, this option will no longer be marked EXPERIMENTAL.
+
+	  Enabling this will disable support for VFIO PCI DMA buffer.
 
 	  If you don't know what to do here, say N.
 
@@ -68,7 +70,7 @@ config VFIO_PCI_ZDEV_KVM
 	  To enable s390x KVM vfio-pci extensions, say Y.
 
 config VFIO_PCI_DMABUF
-	def_bool y if VFIO_PCI_CORE && PCI_P2PDMA && DMA_SHARED_BUFFER
+	def_bool y if VFIO_PCI_CORE && PCI_P2PDMA && DMA_SHARED_BUFFER && !VFIO_PCI_LIVEUPDATE
 
 source "drivers/vfio/pci/mlx5/Kconfig"
 
