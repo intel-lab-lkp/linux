@@ -18,13 +18,40 @@
 
 static void intel_dp_tunnel_debugfs_add(struct intel_dp *intel_dp)
 {
+	struct intel_display *display = to_intel_display(intel_dp);
 	struct intel_connector *connector = intel_dp->attached_connector;
+	struct drm_connector_list_iter conn_iter;
+	struct intel_connector *iter;
 
 	if (!connector || !intel_dp->tunnel)
 		return;
 
 	drm_dp_tunnel_debugfs_add(intel_dp->tunnel,
 				  connector->base.debugfs_entry);
+
+	/*
+	 * After a tunnel destroy/re-detect cycle the new tunnel object
+	 * has an empty debugfs_dirs list, but MST child connectors are
+	 * not unregistered/re-registered (only the primary path goes
+	 * through intel_connector_debugfs_add() again). Walk live MST
+	 * children of @intel_dp and (re-)register their dp_tunnel/
+	 * subdir against the current tunnel. The DRM-core helper
+	 * deduplicates by parent dentry, so this is safe on the initial
+	 * detect path too.
+	 */
+	drm_connector_list_iter_begin(display->drm, &conn_iter);
+	for_each_intel_connector_iter(iter, &conn_iter) {
+		if (iter == connector)
+			continue;
+		if (iter->mst.dp != intel_dp)
+			continue;
+		if (!iter->base.debugfs_entry)
+			continue;
+
+		drm_dp_tunnel_debugfs_add(intel_dp->tunnel,
+					  iter->base.debugfs_entry);
+	}
+	drm_connector_list_iter_end(&conn_iter);
 }
 
 struct intel_dp_tunnel_inherited_state {
