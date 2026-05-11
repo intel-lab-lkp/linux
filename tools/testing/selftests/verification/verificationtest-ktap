@@ -5,4 +5,6 @@
 #
 # Copyright (C) Arm Ltd., 2023
 
-../ftrace/ftracetest -K -v --rv ../verification
+dir=$(cd "$(dirname "$0")" && pwd)
+export PATH="$dir:$PATH"
+"$dir/../ftrace/ftracetest" -K -v --rv "$dir"
