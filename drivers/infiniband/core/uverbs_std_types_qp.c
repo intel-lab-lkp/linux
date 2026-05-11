@@ -15,6 +15,8 @@ static int uverbs_free_qp(struct ib_uobject *uobject,
 	struct ib_qp *qp = uobject->object;
 	struct ib_uqp_object *uqp =
 		container_of(uobject, struct ib_uqp_object, uevent.uobject);
+	struct ib_comp_cntr *cc;
+	unsigned long index;
 	int ret;
 
 	/*
@@ -34,6 +36,10 @@ static int uverbs_free_qp(struct ib_uobject *uobject,
 	ret = ib_destroy_qp_user(qp, &attrs->driver_udata);
 	if (ret)
 		return ret;
+
+	xa_for_each(&qp->comp_cntrs, index, cc)
+		atomic_dec(&cc->usecnt);
+	xa_destroy(&qp->comp_cntrs);
 
 	if (uqp->uxrcd)
 		atomic_dec(&uqp->uxrcd->refcnt);
@@ -392,7 +398,21 @@ static int UVERBS_HANDLER(UVERBS_METHOD_QP_ATTACH_COMP_CNTR)(
 	if (ret)
 		return ret;
 
-	return qp->device->ops.qp_attach_comp_cntr(qp, cc, &attr);
+	if (attr.op_mask & qp->comp_cntr_op_mask)
+		return -EBUSY;
+
+	ret = qp->device->ops.qp_attach_comp_cntr(qp, cc, &attr);
+	if (ret)
+		return ret;
+
+	ret = xa_err(xa_store(&qp->comp_cntrs, attr.op_mask, cc, GFP_KERNEL));
+	if (ret)
+		return ret;
+
+	atomic_inc(&cc->usecnt);
+	qp->comp_cntr_op_mask |= attr.op_mask;
+
+	return 0;
 }
 
 DECLARE_UVERBS_NAMED_METHOD(
