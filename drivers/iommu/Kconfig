@@ -195,6 +195,7 @@ config MSM_IOMMU
 source "drivers/iommu/amd/Kconfig"
 source "drivers/iommu/arm/Kconfig"
 source "drivers/iommu/intel/Kconfig"
+source "drivers/iommu/hyperv/Kconfig"
 source "drivers/iommu/iommufd/Kconfig"
 source "drivers/iommu/riscv/Kconfig"
 
@@ -350,15 +351,6 @@ config MTK_IOMMU_V1
 	  DMA memory accesses for the multimedia subsystem.
 
 	  if unsure, say N here.
-
-config HYPERV_IOMMU
-	bool "Hyper-V IRQ Handling"
-	depends on HYPERV && X86
-	select IOMMU_API
-	default HYPERV
-	help
-	  Stub IOMMU driver to handle IRQs to support Hyper-V Linux
-	  guest and root partitions.
 
 config VIRTIO_IOMMU
 	tristate "Virtio IOMMU driver"

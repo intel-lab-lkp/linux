@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# HyperV paravirtualized IOMMU support
+config HYPERV_IOMMU
+	bool "Hyper-V IRQ Handling"
+	depends on HYPERV && X86
+	select IOMMU_API
+	default HYPERV
+	help
+	  Stub IOMMU driver to handle IRQs to support Hyper-V Linux
+	  guest and root partitions.

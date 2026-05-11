@@ -22,7 +22,7 @@
 #include <asm/hypervisor.h>
 #include <asm/mshyperv.h>
 
-#include "irq_remapping.h"
+#include "../irq_remapping.h"
 
 #ifdef CONFIG_IRQ_REMAP
 
