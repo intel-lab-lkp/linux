@@ -1297,14 +1297,13 @@ void cgroup_favor_dynmods(struct cgroup_root *root, bool favor)
 	 */
 	percpu_down_write(&cgroup_threadgroup_rwsem);
 	if (favor && !favoring) {
-		cgroup_enable_per_threadgroup_rwsem = true;
-		rcu_sync_enter(&cgroup_threadgroup_rwsem.rss);
+		if (!cgroup_enable_per_threadgroup_rwsem) {
+			cgroup_enable_per_threadgroup_rwsem = true;
+			rcu_sync_enter(&cgroup_threadgroup_rwsem.rss);
+		}
 		root->flags |= CGRP_ROOT_FAVOR_DYNMODS;
 	} else if (!favor && favoring) {
-		if (cgroup_enable_per_threadgroup_rwsem)
-			pr_warn_once("cgroup favordynmods: per threadgroup rwsem mechanism can't be disabled\n");
-		rcu_sync_exit(&cgroup_threadgroup_rwsem.rss);
-		root->flags &= ~CGRP_ROOT_FAVOR_DYNMODS;
+		pr_warn_once("cgroup favordynmods: per threadgroup rwsem mechanism can't be disabled\n");
 	}
 	percpu_up_write(&cgroup_threadgroup_rwsem);
 }
