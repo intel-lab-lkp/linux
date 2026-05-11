@@ -1239,6 +1239,15 @@ void debug_dma_map_phys(struct device *dev, phys_addr_t phys, size_t size,
 	if (dma_mapping_error(dev, dma_addr))
 		return;
 
+	if (attrs & DMA_ATTR_MMIO) {
+		unsigned long pfn = PHYS_PFN(phys);
+
+		WARN_ONCE(pfn_valid(pfn) && !PageReserved(pfn_to_page(pfn)),
+			  "dma_map_resource called for RAM address %pa\n",
+			  &phys);
+		return;
+	}
+
 	entry = dma_entry_alloc();
 	if (!entry)
 		return;
