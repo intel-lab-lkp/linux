@@ -1521,7 +1521,8 @@ static struct pcpu_chunk *pcpu_alloc_chunk(gfp_t gfp)
 	if (need_pcpuobj_ext()) {
 		chunk->obj_exts =
 			pcpu_mem_zalloc(pcpu_chunk_map_bits(chunk) *
-					sizeof(struct pcpuobj_ext), gfp);
+					sizeof(struct pcpuobj_ext),
+					gfp | __GFP_ACCOUNT);
 		if (!chunk->obj_exts)
 			goto objcg_fail;
 	}
@@ -1686,7 +1687,7 @@ static bool pcpu_memcg_pre_alloc_hook(size_t size, gfp_t gfp,
 	if (!objcg || obj_cgroup_is_root(objcg))
 		return true;
 
-	if (obj_cgroup_charge(objcg, gfp, pcpu_obj_full_size(size)))
+	if (obj_cgroup_charge(objcg, gfp, pcpu_obj_total_size(size)))
 		return false;
 
 	*objcgp = objcg;
@@ -1706,10 +1707,10 @@ static void pcpu_memcg_post_alloc_hook(struct obj_cgroup *objcg,
 
 		rcu_read_lock();
 		mod_memcg_state(obj_cgroup_memcg(objcg), MEMCG_PERCPU_B,
-				pcpu_obj_full_size(size));
+				pcpu_obj_total_size(size));
 		rcu_read_unlock();
 	} else {
-		obj_cgroup_uncharge(objcg, pcpu_obj_full_size(size));
+		obj_cgroup_uncharge(objcg, pcpu_obj_total_size(size));
 	}
 }
 
@@ -1725,11 +1726,11 @@ static void pcpu_memcg_free_hook(struct pcpu_chunk *chunk, int off, size_t size)
 		return;
 	chunk->obj_exts[off >> PCPU_MIN_ALLOC_SHIFT].cgroup = NULL;
 
-	obj_cgroup_uncharge(objcg, pcpu_obj_full_size(size));
+	obj_cgroup_uncharge(objcg, pcpu_obj_total_size(size));
 
 	rcu_read_lock();
 	mod_memcg_state(obj_cgroup_memcg(objcg), MEMCG_PERCPU_B,
-			-pcpu_obj_full_size(size));
+			-pcpu_obj_total_size(size));
 	rcu_read_unlock();
 
 	obj_cgroup_put(objcg);
@@ -1958,7 +1959,7 @@ area_found:
 
 	trace_percpu_alloc_percpu(_RET_IP_, reserved, is_atomic, size, align,
 				  chunk->base_addr, off, ptr,
-				  pcpu_obj_full_size(size), gfp);
+				  pcpu_obj_total_size(size), gfp);
 
 	pcpu_memcg_post_alloc_hook(objcg, chunk, off, size);
 
