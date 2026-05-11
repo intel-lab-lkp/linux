@@ -302,6 +302,16 @@ vhost_transport_send_pkt(struct sk_buff *skb, struct net *net)
 		return -ENODEV;
 	}
 
+	/* Fast-fail if the guest hasn't enabled the RX vq yet. Reading
+	 * private_data without vq->mutex is deliberate: even if the backend becomes
+	 * NULL right after that check, do_send_pkt() checks it under the mutex.
+	 */
+	if (!data_race(READ_ONCE(vsock->vqs[VSOCK_VQ_RX].private_data))) {
+		rcu_read_unlock();
+		kfree_skb(skb);
+		return -ECONNREFUSED;
+	}
+
 	if (virtio_vsock_skb_reply(skb))
 		atomic_inc(&vsock->queued_replies);
 
