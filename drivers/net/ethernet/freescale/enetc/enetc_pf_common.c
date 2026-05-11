@@ -449,6 +449,12 @@ int enetc_init_sriov_resources(struct enetc_pf *pf)
 	if (!pf->vf_state)
 		return -ENOMEM;
 
+	pf->rxmsg = devm_kcalloc(dev, pf->total_vfs,
+				 sizeof(struct enetc_msg_swbd),
+				 GFP_KERNEL);
+	if (!pf->rxmsg)
+		return -ENOMEM;
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(enetc_init_sriov_resources);
