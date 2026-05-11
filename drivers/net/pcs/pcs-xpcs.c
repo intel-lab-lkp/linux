@@ -1423,9 +1423,39 @@ static int xpcs_get_pma_mmd(struct dw_xpcs *xpcs)
 	return -ENODEV;
 }
 
+/* m0 - m2 from Table 82-2/82-3
+ * m4 - m6 are skipped since they are inversions of m0 - m2.
+ * Inverted parity fields (IEEE 82.2.8) bip3 and bip7 are omitted.
+ */
+struct lane_markers {
+	u8 m0, m1, m2;
+};
+
+/* Alignment marker encodings, see table 82-2 in IEEE 802.3-2022 */
+static const struct lane_markers xpcs_100gbaser_markers[] = {
+	{0xc1, 0x68, 0x21},
+	{0x9d, 0x71, 0x8e},
+	{0x59, 0x4b, 0xe8},
+	{0x4d, 0x95, 0x7b},
+};
+
+/* Alignment marker encodings, see table 82-3 in IEEE 802.3-2022
+ * The content of the 50G markers is identical to 40G values (IEEE 133.2.2).
+ */
+static const struct lane_markers xpcs_50gbaser_markers[] = {
+	{0x90, 0x76, 0x47},
+	{0xf0, 0xc4, 0xe6},
+	{0xc5, 0x65, 0x9b},
+	{0xa2, 0x79, 0x3d},
+};
+
 struct pma_pcs_values {
+	const struct lane_markers *vl0_markers;
+	const struct lane_markers *vl123_markers;
 	int lanes;
 	u16 rsfec_ctrl;
+	u16 pcs_mode;
+	u16 vl_intvl;
 };
 
 static struct mdio_device *xpcs_find_first_mdev(struct dw_xpcs *xpcs)
@@ -1448,11 +1478,38 @@ xpcs_find_next_mdev(struct dw_xpcs *xpcs, struct mdio_device *mdev)
 	return &n->mdio;
 }
 
+#define XPCS_VL_TO_REG(vl, lh) \
+	(((vl) * 2) + DW_VR_MII_PCS_VL0_##lh)
+
+static int
+xpcs_write_pcs_mdev(struct mdio_device *mdev, int reg, u16 val)
+{
+	return mdiodev_c45_write(mdev, MDIO_MMD_PCS, reg, val);
+}
+
+static int
+xpcs_config_vl_markers(struct dw_xpcs *xpcs, int vl, struct mdio_device *mdev,
+		       const struct lane_markers *m)
+{
+	int ret;
+
+	/* m0, m1, m2 written to _L and _H registers
+	 *
+	 * _L = (m1 << 8) | m0
+	 * _H = m2
+	 */
+	ret = xpcs_write_pcs_mdev(mdev, XPCS_VL_TO_REG(vl, L),
+				  ((u16)m->m1 << 8) | m->m0);
+	if (ret < 0)
+		return ret;
+	return xpcs_write_pcs_mdev(mdev, XPCS_VL_TO_REG(vl, H), m->m2);
+}
+
 static int
 xpcs_config_rsfec_pma(struct dw_xpcs *xpcs, const struct pma_pcs_values *v)
 {
+	int ret = 0, i, vl, pma_mmd;
 	struct mdio_device *mdev;
-	int ret = 0, i, pma_mmd;
 
 	pma_mmd = xpcs_get_pma_mmd(xpcs);
 	if (pma_mmd < 1)
@@ -1464,6 +1521,23 @@ xpcs_config_rsfec_pma(struct dw_xpcs *xpcs, const struct pma_pcs_values *v)
 
 	for (i = 0; mdev && ret >= 0 && i < v->lanes;
 	     i++, mdev = xpcs_find_next_mdev(xpcs, mdev)) {
+		/* code word markings */
+		for (vl = 0; mdev && ret >= 0 && vl < 4; vl++)
+			ret = xpcs_config_vl_markers(xpcs, vl, mdev,
+						     !vl ? &v->vl0_markers[0] :
+						     &v->vl123_markers[vl - 1]);
+		if (ret < 0)
+			break;
+		/* vendor registers */
+		ret = xpcs_write_pcs_mdev(mdev, DW_VR_MII_PCS_VL_INTVL,
+					  v->vl_intvl);
+		if (ret < 0)
+			break;
+		ret = xpcs_write_pcs_mdev(mdev, DW_VR_MII_PCS_PCS_MODE,
+					  v->pcs_mode);
+		if (ret < 0)
+			break;
+		/* rsfec register */
 		ret = mdiodev_c45_write(mdev, pma_mmd, MDIO_PMA_RSFEC_CTRL,
 					v->rsfec_ctrl);
 	}
@@ -1478,6 +1552,13 @@ static int xpcs_25gbaser_pma_config(struct dw_xpcs *xpcs)
 	const struct pma_pcs_values v = {
 		.rsfec_ctrl = 0,
 		.lanes = 1,
+		/* 25g markers from 100g and 50g tables per 802.3-2022
+		 * 108.5.2.4
+		 */
+		.vl0_markers = &xpcs_100gbaser_markers[0],
+		.vl123_markers = &xpcs_50gbaser_markers[1],
+		.vl_intvl = 20479,
+		.pcs_mode = DW_VR_MII_PCS_MODE_CLAUSE107,
 	};
 
 	return xpcs_config_rsfec_pma(xpcs, &v);
@@ -1488,6 +1569,10 @@ static int xpcs_50gbaser_pma_config(struct dw_xpcs *xpcs)
 	const struct pma_pcs_values v = {
 		.rsfec_ctrl = DW_VR_RSFEC_CTRL_TC_PAD_ALTER,
 		.lanes = 2,
+		.vl0_markers = &xpcs_50gbaser_markers[0],
+		.vl123_markers = &xpcs_50gbaser_markers[1],
+		.pcs_mode = 0,
+		.vl_intvl = 20479,
 	};
 
 	return xpcs_config_rsfec_pma(xpcs, &v);
@@ -1498,6 +1583,10 @@ static int xpcs_100gbasep_pma_config(struct dw_xpcs *xpcs)
 	const struct pma_pcs_values v = {
 		.rsfec_ctrl = MDIO_PMA_RSFEC_CTRL_4LANE_PMD,
 		.lanes = 2,
+		.vl0_markers = &xpcs_100gbaser_markers[0],
+		.vl123_markers = &xpcs_100gbaser_markers[1],
+		.pcs_mode = DW_VR_MII_PCS_MODE_DISABLE_MLD,
+		.vl_intvl = 16383,
 	};
 
 	return xpcs_config_rsfec_pma(xpcs, &v);
