@@ -1213,9 +1213,18 @@ struct rswitch_private {
 	bool etha_no_runtime_change;
 	bool gwca_halt;
 	struct net_device *offload_brdev;
+	netdevice_tracker dev_tracker;
 
 	enum hwtstamp_tx_types tstamp_tx_ctrl;
 	enum hwtstamp_rx_filters tstamp_rx_ctrl;
+};
+
+struct rswitch_switchdev_event_work {
+	struct work_struct work;
+	struct switchdev_notifier_fdb_info fdb_info;
+	struct net_device *ndev;
+	struct rswitch_private *priv;
+	unsigned long event;
 };
 
 bool is_rdev(const struct net_device *ndev);
