@@ -804,6 +804,29 @@ out:
 	return IRQ_HANDLED;
 }
 
+static void opt3001_power_off(void *data)
+{
+	struct opt3001 *opt = data;
+	int ret;
+	u16 reg;
+
+	ret = i2c_smbus_read_word_swapped(opt->client, OPT3001_CONFIGURATION);
+	if (ret < 0) {
+		dev_err(opt->dev, "failed to read register %02x\n",
+			OPT3001_CONFIGURATION);
+		return;
+	}
+
+	reg = ret;
+	opt3001_set_mode(opt, &reg, OPT3001_CONFIGURATION_M_SHUTDOWN);
+
+	ret = i2c_smbus_write_word_swapped(opt->client, OPT3001_CONFIGURATION,
+					   reg);
+	if (ret < 0)
+		dev_err(opt->dev, "failed to write register %02x\n",
+			OPT3001_CONFIGURATION);
+}
+
 static int opt3001_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
@@ -822,7 +845,10 @@ static int opt3001_probe(struct i2c_client *client)
 	opt->dev = dev;
 	opt->chip_info = i2c_get_match_data(client);
 
-	mutex_init(&opt->lock);
+	ret = devm_mutex_init(dev, &opt->lock);
+	if (ret)
+		return dev_err_probe(dev, ret, "Failed to initialize mutex\n");
+
 	init_waitqueue_head(&opt->result_ready_queue);
 	i2c_set_clientdata(client, iio);
 
@@ -833,6 +859,10 @@ static int opt3001_probe(struct i2c_client *client)
 	}
 
 	ret = opt3001_configure(opt);
+	if (ret)
+		return ret;
+
+	ret = devm_add_action_or_reset(dev, opt3001_power_off, opt);
 	if (ret)
 		return ret;
 
@@ -849,9 +879,9 @@ static int opt3001_probe(struct i2c_client *client)
 
 	/* Make use of INT pin only if valid IRQ no. is given */
 	if (irq > 0) {
-		ret = request_threaded_irq(irq, NULL, opt3001_irq,
-				IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
-				"opt3001", iio);
+		ret = devm_request_threaded_irq(dev, irq, NULL, opt3001_irq,
+						IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+						"opt3001", iio);
 		if (ret)
 			return dev_err_probe(dev, ret,
 					     "failed to request IRQ #%d\n",
@@ -862,34 +892,6 @@ static int opt3001_probe(struct i2c_client *client)
 	}
 
 	return 0;
-}
-
-static void opt3001_remove(struct i2c_client *client)
-{
-	struct iio_dev *iio = i2c_get_clientdata(client);
-	struct opt3001 *opt = iio_priv(iio);
-	int ret;
-	u16 reg;
-
-	if (opt->use_irq)
-		free_irq(client->irq, iio);
-
-	ret = i2c_smbus_read_word_swapped(opt->client, OPT3001_CONFIGURATION);
-	if (ret < 0) {
-		dev_err(opt->dev, "failed to read register %02x\n",
-				OPT3001_CONFIGURATION);
-		return;
-	}
-
-	reg = ret;
-	opt3001_set_mode(opt, &reg, OPT3001_CONFIGURATION_M_SHUTDOWN);
-
-	ret = i2c_smbus_write_word_swapped(opt->client, OPT3001_CONFIGURATION,
-			reg);
-	if (ret < 0) {
-		dev_err(opt->dev, "failed to write register %02x\n",
-				OPT3001_CONFIGURATION);
-	}
 }
 
 static const struct opt3001_chip_info opt3001_chip_information = {
@@ -930,7 +932,6 @@ MODULE_DEVICE_TABLE(of, opt3001_of_match);
 
 static struct i2c_driver opt3001_driver = {
 	.probe = opt3001_probe,
-	.remove = opt3001_remove,
 	.id_table = opt3001_id,
 
 	.driver = {
