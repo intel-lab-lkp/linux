@@ -27,6 +27,9 @@ int vfio_device_fops_cdev_open(struct inode *inode, struct file *filep)
 	struct vfio_device_file *df;
 	int ret;
 
+	if (device->noiommu && !capable(CAP_SYS_RAWIO))
+		return -EPERM;
+
 	/* Paired with the put in vfio_device_fops_release() */
 	if (!vfio_device_try_get_registration(device))
 		return -ENODEV;
@@ -109,6 +112,13 @@ long vfio_df_ioctl_bind_iommufd(struct vfio_device_file *df,
 	/* BIND_IOMMUFD only allowed for cdev fds */
 	if (df->group)
 		return -EINVAL;
+
+	/*
+	 * CAP_SYS_RAWIO is already checked at cdev open, recheck here
+	 * in case the fd was passed to a less privileged process.
+	 */
+	if (device->noiommu && !capable(CAP_SYS_RAWIO))
+		return -EPERM;
 
 	ret = vfio_device_block_group(device);
 	if (ret)
