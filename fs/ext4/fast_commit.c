@@ -874,13 +874,17 @@ static int ext4_fc_write_inode(struct inode *inode, u32 *crc)
 	int inode_len;
 	int ret;
 
-	if (!snap)
+	if (!snap) {
+		EXT4_SB(inode->i_sb)->s_fc_snap_stats.snap_fail_no_snap++;
 		return -ECANCELED;
+	}
 
 	src = snap->inode_buf;
 	inode_len = snap->inode_len;
-	if (!src || inode_len == 0)
+	if (!src || inode_len == 0) {
+		EXT4_SB(inode->i_sb)->s_fc_snap_stats.snap_fail_no_snap++;
 		return -ECANCELED;
+	}
 
 	fc_inode.fc_ino = cpu_to_le32(inode->i_ino);
 	tl.fc_tag = cpu_to_le16(EXT4_FC_TAG_INODE);
@@ -915,8 +919,10 @@ static int ext4_fc_write_inode_data(struct inode *inode, u32 *crc)
 	struct ext4_extent *ex;
 	struct ext4_fc_range *range;
 
-	if (!snap)
+	if (!snap) {
+		EXT4_SB(inode->i_sb)->s_fc_snap_stats.snap_fail_no_snap++;
 		return -ECANCELED;
+	}
 
 	list_for_each_entry(range, &snap->data_list, list) {
 		if (range->tag == EXT4_FC_TAG_DEL_RANGE) {
@@ -977,6 +983,8 @@ static int ext4_fc_snapshot_inode_data(struct inode *inode,
 				       int *snap_err)
 {
 	struct ext4_inode_info *ei = EXT4_I(inode);
+	struct ext4_fc_snap_stats *stats =
+		&EXT4_SB(inode->i_sb)->s_fc_snap_stats;
 	ext4_lblk_t start_lblk, end_lblk, cur_lblk;
 	unsigned int nr_ranges = 0;
 
@@ -1004,11 +1012,13 @@ static int ext4_fc_snapshot_inode_data(struct inode *inode,
 		u64 remaining = (u64)end_lblk - cur_lblk + 1;
 
 		if (!ext4_es_lookup_extent(inode, cur_lblk, NULL, &es, NULL)) {
+			stats->snap_fail_es_miss++;
 			ext4_fc_set_snap_err(snap_err, EXT4_FC_SNAP_ERR_ES_MISS);
 			return -EAGAIN;
 		}
 
 		if (ext4_es_is_delayed(&es)) {
+			stats->snap_fail_es_delayed++;
 			ext4_fc_set_snap_err(snap_err,
 					     EXT4_FC_SNAP_ERR_ES_DELAYED);
 			return -EAGAIN;
@@ -1023,6 +1033,7 @@ static int ext4_fc_snapshot_inode_data(struct inode *inode,
 		}
 
 		if (nr_ranges_total + nr_ranges >= EXT4_FC_SNAPSHOT_MAX_RANGES) {
+			stats->snap_fail_ranges_cap++;
 			ext4_fc_set_snap_err(snap_err,
 					     EXT4_FC_SNAP_ERR_RANGES_CAP);
 			return -E2BIG;
@@ -1030,6 +1041,7 @@ static int ext4_fc_snapshot_inode_data(struct inode *inode,
 
 		range = kmem_cache_alloc(ext4_fc_range_cachep, GFP_NOFS);
 		if (!range) {
+			stats->snap_fail_nomem++;
 			ext4_fc_set_snap_err(snap_err, EXT4_FC_SNAP_ERR_NOMEM);
 			return -ENOMEM;
 		}
@@ -1057,6 +1069,7 @@ static int ext4_fc_snapshot_inode_data(struct inode *inode,
 				range->len = max;
 		} else {
 			kmem_cache_free(ext4_fc_range_cachep, range);
+			stats->snap_fail_es_other++;
 			ext4_fc_set_snap_err(snap_err, EXT4_FC_SNAP_ERR_ES_OTHER);
 			return -EAGAIN;
 		}
@@ -1080,6 +1093,8 @@ static int ext4_fc_snapshot_inode(struct inode *inode,
 				  unsigned int *nr_rangesp, int *snap_err)
 {
 	struct ext4_inode_info *ei = EXT4_I(inode);
+	struct ext4_fc_snap_stats *stats =
+		&EXT4_SB(inode->i_sb)->s_fc_snap_stats;
 	struct ext4_fc_inode_snap *snap;
 	int inode_len = EXT4_GOOD_OLD_INODE_SIZE;
 	struct ext4_iloc iloc;
@@ -1090,6 +1105,7 @@ static int ext4_fc_snapshot_inode(struct inode *inode,
 
 	ret = ext4_get_inode_loc_noio(inode, &iloc);
 	if (ret) {
+		stats->snap_fail_inode_loc++;
 		ext4_fc_set_snap_err(snap_err, EXT4_FC_SNAP_ERR_INODE_LOC);
 		return ret;
 	}
@@ -1101,6 +1117,7 @@ static int ext4_fc_snapshot_inode(struct inode *inode,
 
 	snap = kmalloc(struct_size(snap, inode_buf, inode_len), GFP_NOFS);
 	if (!snap) {
+		stats->snap_fail_nomem++;
 		ext4_fc_set_snap_err(snap_err, EXT4_FC_SNAP_ERR_NOMEM);
 		brelse(iloc.bh);
 		return -ENOMEM;
@@ -1125,6 +1142,8 @@ static int ext4_fc_snapshot_inode(struct inode *inode,
 	list_splice_tail_init(&ranges, &snap->data_list);
 	ext4_fc_unlock(inode->i_sb, alloc_ctx);
 
+	stats->snap_inodes++;
+	stats->snap_ranges += nr_ranges;
 	if (nr_rangesp)
 		*nr_rangesp = nr_ranges;
 	return 0;
@@ -1234,6 +1253,7 @@ static int ext4_fc_snapshot_inodes(journal_t *journal, struct inode **inodes,
 	alloc_ctx = ext4_fc_lock(sb);
 	list_for_each_entry(iter, &sbi->s_fc_q[FC_Q_MAIN], i_fc_list) {
 		if (i >= inodes_size) {
+			sbi->s_fc_snap_stats.snap_fail_inodes_cap++;
 			ext4_fc_set_snap_err(snap_err,
 					     EXT4_FC_SNAP_ERR_INODES_CAP);
 			ret = -E2BIG;
@@ -1259,6 +1279,7 @@ static int ext4_fc_snapshot_inodes(journal_t *journal, struct inode **inodes,
 			continue;
 
 		if (i >= inodes_size) {
+			sbi->s_fc_snap_stats.snap_fail_inodes_cap++;
 			ext4_fc_set_snap_err(snap_err,
 					     EXT4_FC_SNAP_ERR_INODES_CAP);
 			ret = -E2BIG;
@@ -1302,6 +1323,7 @@ static int ext4_fc_perform_commit(journal_t *journal, tid_t commit_tid)
 {
 	struct super_block *sb = journal->j_private;
 	struct ext4_sb_info *sbi = EXT4_SB(sb);
+	struct ext4_fc_snap_stats *snap_stats = &sbi->s_fc_snap_stats;
 	struct ext4_inode_info *iter;
 	struct ext4_fc_head head;
 	struct inode *inode;
@@ -1364,8 +1386,13 @@ static int ext4_fc_perform_commit(journal_t *journal, tid_t commit_tid)
 		return ret;
 
 	ret = ext4_fc_alloc_snapshot_inodes(sb, &inodes, &inodes_size);
-	if (ret)
+	if (ret) {
+		if (ret == -E2BIG)
+			snap_stats->snap_fail_inodes_cap++;
+		else if (ret == -ENOMEM)
+			snap_stats->snap_fail_nomem++;
 		return ret;
+	}
 
 	/* Step 4: Mark all inodes as being committed. */
 	jbd2_journal_lock_updates(journal);
@@ -1386,12 +1413,15 @@ static int ext4_fc_perform_commit(journal_t *journal, tid_t commit_tid)
 	ret = ext4_fc_snapshot_inodes(journal, inodes, inodes_size,
 				      &snap_inodes, &snap_ranges, &snap_err);
 	jbd2_journal_unlock_updates(journal);
-	if (trace_ext4_fc_lock_updates_enabled()) {
-		locked_ns = ktime_to_ns(ktime_sub(ktime_get(), lock_start));
-		trace_ext4_fc_lock_updates(sb, commit_tid, locked_ns,
-					   snap_inodes, snap_ranges, ret,
-					   snap_err);
-	}
+	locked_ns = ktime_to_ns(ktime_sub(ktime_get(), lock_start));
+	snap_stats->lock_updates_ns_total += locked_ns;
+	snap_stats->lock_updates_samples++;
+	if (locked_ns > snap_stats->lock_updates_ns_max)
+		snap_stats->lock_updates_ns_max = locked_ns;
+	if (trace_ext4_fc_lock_updates_enabled())
+		trace_call__ext4_fc_lock_updates(sb, commit_tid, locked_ns,
+						 snap_inodes, snap_ranges,
+						 ret, snap_err);
 	kvfree(inodes);
 	if (ret)
 		return ret;
@@ -2667,10 +2697,22 @@ int ext4_fc_info_show(struct seq_file *seq, void *v)
 {
 	struct ext4_sb_info *sbi = EXT4_SB((struct super_block *)seq->private);
 	struct ext4_fc_stats *stats = &sbi->s_fc_stats;
+	struct ext4_fc_snap_stats *snap_stats = &sbi->s_fc_snap_stats;
+	u64 lock_avg_ns = 0;
+	u64 lock_updates_samples;
+	u64 lock_updates_ns_total;
+	u64 lock_updates_ns_max;
 	int i;
 
 	if (v != SEQ_START_TOKEN)
 		return 0;
+
+	lock_updates_samples = READ_ONCE(snap_stats->lock_updates_samples);
+	lock_updates_ns_total = READ_ONCE(snap_stats->lock_updates_ns_total);
+	lock_updates_ns_max = READ_ONCE(snap_stats->lock_updates_ns_max);
+	if (lock_updates_samples)
+		lock_avg_ns = div64_u64(lock_updates_ns_total,
+					lock_updates_samples);
 
 	seq_printf(seq,
 		"fc stats:\n%ld commits\n%ld ineligible\n%ld numblks\n%lluus avg_commit_time\n",
@@ -2681,6 +2723,22 @@ int ext4_fc_info_show(struct seq_file *seq, void *v)
 	for (i = 0; i < EXT4_FC_REASON_MAX; i++)
 		seq_printf(seq, "\"%s\":\t%d\n", fc_ineligible_reasons[i],
 			stats->fc_ineligible_reason_count[i]);
+
+	seq_printf(seq,
+		   "Snapshot stats:\n%llu inodes\n%llu ranges\n%lluus lock_updates_avg\n%lluus lock_updates_max\n",
+		   snap_stats->snap_inodes, snap_stats->snap_ranges,
+		   div_u64(lock_avg_ns, 1000),
+		   div_u64(lock_updates_ns_max, 1000));
+	seq_printf(seq,
+		   "Snapshot failures:\n%llu es_miss\n%llu es_delayed\n%llu es_other\n%llu inodes_cap\n%llu ranges_cap\n%llu nomem\n%llu inode_loc\n%llu no_snap\n",
+		   snap_stats->snap_fail_es_miss,
+		   snap_stats->snap_fail_es_delayed,
+		   snap_stats->snap_fail_es_other,
+		   snap_stats->snap_fail_inodes_cap,
+		   snap_stats->snap_fail_ranges_cap,
+		   snap_stats->snap_fail_nomem,
+		   snap_stats->snap_fail_inode_loc,
+		   snap_stats->snap_fail_no_snap);
 
 	return 0;
 }

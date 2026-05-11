@@ -1551,6 +1551,36 @@ struct ext4_orphan_info {
 };
 
 /*
+ * Ext4 fast commit snapshot statistics.
+ *
+ * These are best-effort counters intended for debugging / performance
+ * introspection; they are not exact under concurrent updates.
+ */
+struct ext4_fc_snap_stats {
+	u64 lock_updates_ns_total;
+	u64 lock_updates_ns_max;
+	u64 lock_updates_samples;
+
+	u64 snap_inodes;
+	u64 snap_ranges;
+
+	u64 snap_fail_es_miss;
+	u64 snap_fail_es_delayed;
+	u64 snap_fail_es_other;
+
+	u64 snap_fail_inodes_cap;
+	u64 snap_fail_ranges_cap;
+	u64 snap_fail_nomem;
+	u64 snap_fail_inode_loc;
+
+	/*
+	 * Missing inode snapshots during log writing should never happen.
+	 * Keep this counter to help catch unexpected regressions.
+	 */
+	u64 snap_fail_no_snap;
+};
+
+/*
  * fourth extended-fs super-block data in memory
  */
 struct ext4_sb_info {
@@ -1824,6 +1854,7 @@ struct ext4_sb_info {
 	struct mutex s_fc_lock;
 	struct buffer_head *s_fc_bh;
 	struct ext4_fc_stats s_fc_stats;
+	struct ext4_fc_snap_stats s_fc_snap_stats;
 	tid_t s_fc_ineligible_tid;
 #ifdef CONFIG_EXT4_DEBUG
 	int s_fc_debug_max_replay;
