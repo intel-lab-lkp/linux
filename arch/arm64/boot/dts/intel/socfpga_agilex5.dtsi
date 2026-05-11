@@ -317,6 +317,14 @@
 					<3300000 0x0>;
 		};
 
+		emmc_io_1v8_reg: regulator-fixed-1p8v {
+			compatible = "regulator-fixed";
+			regulator-name = "emmc-io-power";
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+			regulator-always-on;
+		};
+
 		emmc: mmc@10808000 {
 			#address-cells = <1>;
 			#size-cells = <0>;

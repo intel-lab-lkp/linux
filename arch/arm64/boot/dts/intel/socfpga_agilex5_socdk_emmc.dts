@@ -1,0 +1,111 @@
+// SPDX-License-Identifier:     GPL-2.0
+/*
+ * Copyright (C) 2026, Altera Corporation
+ */
+#include "socfpga_agilex5.dtsi"
+
+/ {
+	model = "SoCFPGA Agilex5 SoCDK eMMC daughter board";
+	compatible = "intel,socfpga-agilex5-socdk-emmc", "intel,socfpga-agilex5";
+
+	aliases {
+		serial0 = &uart0;
+		ethernet0 = &gmac0;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	leds {
+		compatible = "gpio-leds";
+		led0 {
+			label = "hps_led0";
+			gpios = <&porta 6 GPIO_ACTIVE_HIGH>;
+		};
+
+		led1 {
+			label = "hps_led1";
+			gpios = <&porta 7 GPIO_ACTIVE_HIGH>;
+		};
+	};
+
+	memory@80000000 {
+		device_type = "memory";
+		/* We expect the bootloader to fill in the reg */
+		reg = <0x0 0x80000000 0x0 0x0>;
+	};
+};
+
+&gmac0 {
+	status = "okay";
+	phy-mode = "rgmii-id";
+	phy-handle = <&emac0_phy0>;
+	max-frame-size = <9000>;
+
+	mdio0 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		compatible = "snps,dwmac-mdio";
+
+		emac0_phy0: ethernet-phy@0 {
+			reg = <0>;
+		};
+	};
+};
+
+&gpio0 {
+	status = "okay";
+};
+
+&gpio1 {
+	status = "okay";
+};
+
+&i2c0 {
+	status = "okay";
+};
+
+&i3c0 {
+	status = "okay";
+};
+
+&i3c1 {
+	status = "okay";
+};
+
+&emmc {
+	status = "okay";
+
+	no-sd;
+	no-sdio;
+	no-1-8-v;
+	disable-wp;
+	non-removable;
+	cap-mmc-highspeed;
+	mmc-hs400-1_8v;
+	mmc-hs200-1_8v;
+	bus-width = <8>;
+	vmmc-supply = <&sd_emmc_power>;
+	vqmmc-supply = <&emmc_io_1v8_reg>;
+	max-frequency = <200000000>;
+	/*
+	 * SDHCI capability overrides:
+	 *  - caps_mask[0] 0x0000ff00 / caps[0] 0x0000c800:
+	 *      Override SDHCI_CLOCK_BASE_MASK to 0xc8 (200 MHz).
+	 */
+	sdhci-caps = <0x00000000 0x0000c800>;
+	sdhci-caps-mask = <0x00000000 0x0000ff00>;
+};
+
+&osc1 {
+	clock-frequency = <25000000>;
+};
+
+&uart0 {
+	status = "okay";
+};
+
+&watchdog0 {
+	status = "okay";
+};
