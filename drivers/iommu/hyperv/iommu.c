@@ -486,10 +486,98 @@ static void hv_iommu_flush_iotlb_all(struct iommu_domain *domain)
 	hv_flush_device_domain(to_hv_iommu_domain(domain));
 }
 
+/* Max number of iova_list entries in a single hypercall input page. */
+#define HV_IOMMU_MAX_FLUSH_VA_COUNT \
+	((HV_HYP_PAGE_SIZE - sizeof(struct hv_input_flush_device_domain_list)) / \
+	 sizeof(union hv_iommu_flush_va))
+
+/* Returned by hv_iommu_fill_iova_list() when the range exceeds the capacity */
+#define HV_IOMMU_FLUSH_VA_OVERFLOW	U16_MAX
+
+static inline u16 hv_iommu_fill_iova_list(union hv_iommu_flush_va *iova_list,
+					  unsigned long start,
+					  unsigned long end)
+{
+	unsigned long start_pfn = start >> PAGE_SHIFT;
+	unsigned long end_pfn = PAGE_ALIGN(end) >> PAGE_SHIFT;
+	unsigned long nr_pages = end_pfn - start_pfn;
+	u16 count = 0;
+
+	while (nr_pages > 0) {
+		unsigned long flush_pages;
+		int order;
+		unsigned long pfn_align;
+		unsigned long size_align;
+
+		if (count >= HV_IOMMU_MAX_FLUSH_VA_COUNT) {
+			count = HV_IOMMU_FLUSH_VA_OVERFLOW;
+			break;
+		}
+
+		if (start_pfn)
+			pfn_align = __ffs(start_pfn);
+		else
+			pfn_align = BITS_PER_LONG - 1;
+
+		size_align = __fls(nr_pages);
+		order = min(pfn_align, size_align);
+		iova_list[count].page_mask_shift = order;
+		iova_list[count].page_number = start_pfn;
+
+		flush_pages = 1UL << order;
+		start_pfn += flush_pages;
+		nr_pages -= flush_pages;
+		count++;
+	}
+
+	return count;
+}
+
+static void hv_flush_device_domain_list(struct hv_iommu_domain *hv_domain,
+					struct iommu_iotlb_gather *iotlb_gather)
+{
+	u64 status;
+	u16 count;
+	unsigned long flags;
+	struct hv_input_flush_device_domain_list *input;
+
+	local_irq_save(flags);
+
+	input = *this_cpu_ptr(hyperv_pcpu_input_arg);
+	memset(input, 0, sizeof(*input));
+
+	input->device_domain = hv_domain->device_domain;
+	input->flags |= HV_FLUSH_DEVICE_DOMAIN_LIST_IOMMU_FORMAT;
+	count = hv_iommu_fill_iova_list(input->iova_list,
+					iotlb_gather->start,
+					iotlb_gather->end);
+	if (count == HV_IOMMU_FLUSH_VA_OVERFLOW) {
+		/*
+		 * Range exceeds hypercall page capacity. Fall back to a full
+		 * domain flush.
+		 */
+		struct hv_input_flush_device_domain *flush_all = (void *)input;
+
+		memset(flush_all, 0, sizeof(*flush_all));
+		flush_all->device_domain = hv_domain->device_domain;
+		status = hv_do_hypercall(HVCALL_FLUSH_DEVICE_DOMAIN,
+					flush_all, NULL);
+	} else {
+		status = hv_do_rep_hypercall(
+				HVCALL_FLUSH_DEVICE_DOMAIN_LIST,
+				count, 0, input, NULL);
+	}
+
+	local_irq_restore(flags);
+
+	if (!hv_result_success(status))
+		pr_err("HVCALL_FLUSH_DEVICE_DOMAIN_LIST failed, status %lld\n", status);
+}
+
 static void hv_iommu_iotlb_sync(struct iommu_domain *domain,
 				struct iommu_iotlb_gather *iotlb_gather)
 {
-	hv_flush_device_domain(to_hv_iommu_domain(domain));
+	hv_flush_device_domain_list(to_hv_iommu_domain(domain), iotlb_gather);
 
 	iommu_put_pages_list(&iotlb_gather->freelist);
 }
@@ -543,6 +631,7 @@ static struct iommu_domain *hv_iommu_domain_alloc_paging(struct device *dev)
 
 	cfg.common.hw_max_vasz_lg2 = hv_iommu_device->max_iova_width;
 	cfg.common.hw_max_oasz_lg2 = 52;
+	cfg.common.features |= BIT(PT_FEAT_FLUSH_RANGE);
 	cfg.top_level = (hv_iommu_device->max_iova_width > 48) ? 4 : 3;
 
 	ret = pt_iommu_x86_64_init(&hv_domain->pt_iommu_x86_64, &cfg, GFP_KERNEL);
