@@ -2348,6 +2348,7 @@ int memory_failure(unsigned long pfn, int flags)
 	unsigned long page_flags;
 	bool retry = true;
 	int hugetlb = 0;
+	bool is_reserved;
 
 	if (!sysctl_memory_failure_recovery)
 		panic("Memory failure on page %lx", pfn);
@@ -2411,6 +2412,18 @@ try_again:
 	 * In fact it's dangerous to directly bump up page count from 0,
 	 * that may make page_ref_freeze()/page_ref_unfreeze() mismatch.
 	 */
+	/*
+	 * Pages with PG_reserved set are not currently managed by the
+	 * page allocator (memblock-reserved memory, driver reservations,
+	 * etc.), so classify them as kernel-owned for reporting.
+	 *
+	 * Sample the flag before get_hwpoison_page(): in the
+	 * MF_COUNT_INCREASED path, get_any_page() can drop the caller's
+	 * reference before returning -EIO, after which page->flags may
+	 * have been reset by the allocator.
+	 */
+	is_reserved = PageReserved(p);
+
 	res = get_hwpoison_page(p, flags);
 	if (!res) {
 		if (is_free_buddy_page(p)) {
@@ -2432,7 +2445,11 @@ try_again:
 		}
 		goto unlock_mutex;
 	} else if (res < 0) {
-		res = action_result(pfn, MF_MSG_GET_HWPOISON, MF_IGNORED);
+		if (is_reserved)
+			res = action_result(pfn, MF_MSG_KERNEL, MF_IGNORED);
+		else
+			res = action_result(pfn, MF_MSG_GET_HWPOISON,
+					    MF_IGNORED);
 		goto unlock_mutex;
 	}
 
