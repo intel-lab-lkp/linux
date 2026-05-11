@@ -21,6 +21,13 @@
 #include <linux/list.h>
 #include <linux/types.h>
 
+/* Forward declaration: poll_table is only needed by rv_chardev_ops::poll.
+ * Avoid pulling in <linux/poll.h> from rv.h — that header is included by
+ * sched.h, and poll.h → fs.h → rcupdate.h creates a header-ordering cycle
+ * with migrate_disable() on UML/non-SMP targets.
+ */
+struct poll_table_struct;
+
 /*
  * Deterministic automaton per-object variables.
  */
@@ -157,6 +164,44 @@ int rv_unregister_monitor(struct rv_monitor *monitor);
 int rv_register_monitor(struct rv_monitor *monitor, struct rv_monitor *parent);
 int rv_get_task_monitor_slot(void);
 void rv_put_task_monitor_slot(int slot);
+
+/**
+ * struct rv_chardev_ops - per-monitor callbacks for the /dev/rv chardev
+ *
+ * Monitors that want to expose an ioctl self-instrumentation interface
+ * register an instance of this struct with rv_chardev_register_monitor().
+ *
+ * @owner:   Module that owns this ops struct.  Set to THIS_MODULE.
+ *           The chardev holds a module reference for every bound fd so
+ *           the module cannot be unloaded while any fd remains open.
+ * @bind:    Called when userspace issues RV_IOCTL_BIND_MONITOR.  Should
+ *           allocate and return per-fd private data (opaque pointer), or
+ *           ERR_PTR(errno) on failure.
+ * @ioctl:   Called for every monitor-specific ioctl after binding.  @priv
+ *           is the pointer returned by @bind.
+ * @poll:    Optional.  Called from the fd's poll() / epoll_wait() path.
+ *           Should call poll_wait(@file, wq, @wait) on the monitor's internal
+ *           wait queue and return the current event mask (EPOLLIN | EPOLLRDNORM
+ *           when an event is pending, 0 otherwise).  If NULL, poll() always
+ *           returns 0 (no events).
+ * @release: Called when the fd is closed.  Must free @priv.
+ */
+struct rv_chardev_ops {
+	struct module *owner;
+	void *(*bind)(void);
+	long  (*ioctl)(void *priv, unsigned int cmd, unsigned long arg);
+	__poll_t (*poll)(void *priv, struct file *file, struct poll_table_struct *wait);
+	void  (*release)(void *priv);
+};
+
+int  rv_chardev_register_monitor(const char *name,
+				 const struct rv_chardev_ops *ops);
+void rv_chardev_unregister_monitor(const char *name);
+
+#if IS_ENABLED(CONFIG_KUNIT)
+void rv_kunit_monitoring_on(void);
+void rv_kunit_monitoring_off(void);
+#endif
 
 #ifdef CONFIG_RV_REACTORS
 int rv_unregister_reactor(struct rv_reactor *reactor);

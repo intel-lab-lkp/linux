@@ -28,6 +28,7 @@ static inline void ha_monitor_init_env(struct da_monitor *da_mon);
 static inline void ha_monitor_reset_env(struct da_monitor *da_mon);
 static inline void ha_setup_timer(struct ha_monitor *ha_mon);
 static inline bool ha_cancel_timer(struct ha_monitor *ha_mon);
+static inline void ha_cancel_timer_sync(struct ha_monitor *ha_mon);
 static bool ha_monitor_handle_constraint(struct da_monitor *da_mon,
 					 enum states curr_state,
 					 enum events event,
@@ -35,7 +36,10 @@ static bool ha_monitor_handle_constraint(struct da_monitor *da_mon,
 					 da_id_type id);
 #define da_monitor_event_hook ha_monitor_handle_constraint
 #define da_monitor_init_hook ha_monitor_init_env
+/* Allow monitors to override da_monitor_reset_hook before including this header. */
+#ifndef da_monitor_reset_hook
 #define da_monitor_reset_hook ha_monitor_reset_env
+#endif
 
 #include <rv/da_monitor.h>
 #include <linux/seq_buf.h>
@@ -70,7 +74,7 @@ static void ha_react(enum states curr_state, enum events event, char *env)
 	rv_react(&rv_this,
 		 "rv: monitor %s does not allow event %s on state %s with env %s\n",
 		 __stringify(MONITOR_NAME),
-		 event == EVENT_NONE ? EVENT_NONE_LBL : model_get_event_name(event),
+		 event == EVENT_NONE ? model_get_timer_event_name() : model_get_event_name(event),
 		 model_get_state_name(curr_state), env);
 }
 
@@ -246,7 +250,7 @@ static inline void __ha_monitor_timer_callback(struct ha_monitor *ha_mon)
 	ha_get_env_string(&env_string, ha_mon, time_ns);
 	ha_react(curr_state, EVENT_NONE, env_string.buffer);
 	ha_trace_error_env(ha_mon, model_get_state_name(curr_state),
-			   EVENT_NONE_LBL, env_string.buffer,
+			   model_get_timer_event_name(), env_string.buffer,
 			   da_get_id(&ha_mon->da_mon));
 
 	da_monitor_reset(&ha_mon->da_mon);
@@ -412,6 +416,14 @@ static inline bool ha_cancel_timer(struct ha_monitor *ha_mon)
 {
 	return timer_delete(&ha_mon->timer);
 }
+/*
+ * ha_cancel_timer_sync - Cancel the timer, blocking until any running
+ * callback has completed.
+ */
+static inline void ha_cancel_timer_sync(struct ha_monitor *ha_mon)
+{
+	timer_delete_sync(&ha_mon->timer);
+}
 #elif HA_TIMER_TYPE == HA_TIMER_HRTIMER
 /*
  * Helper functions to handle the monitor timer.
@@ -432,12 +444,12 @@ static enum hrtimer_restart ha_monitor_timer_callback(struct hrtimer *hrtimer)
 static inline void ha_setup_timer(struct ha_monitor *ha_mon)
 {
 	hrtimer_setup(&ha_mon->hrtimer, ha_monitor_timer_callback,
-		      CLOCK_MONOTONIC, HRTIMER_MODE_REL_HARD);
+		      CLOCK_MONOTONIC, HRTIMER_MODE_REL_SOFT);
 }
 static inline void ha_start_timer_ns(struct ha_monitor *ha_mon, enum envs env,
 				     u64 expire, u64 time_ns)
 {
-	int mode = HRTIMER_MODE_REL_HARD;
+	int mode = HRTIMER_MODE_REL_SOFT;
 	u64 passed = ha_invariant_passed_ns(ha_mon, env, expire, time_ns);
 
 	if (RV_MON_TYPE == RV_MON_PER_CPU)
@@ -463,6 +475,18 @@ static inline bool ha_cancel_timer(struct ha_monitor *ha_mon)
 {
 	return hrtimer_try_to_cancel(&ha_mon->hrtimer) == 1;
 }
+/*
+ * ha_cancel_timer_sync - Cancel the timer, blocking until any running
+ * callback has completed.
+ *
+ * Use in teardown paths (e.g. stop_task) where the caller must know the
+ * callback has finished before inspecting or freeing monitor state.
+ * Must not be called from atomic context or within the timer callback.
+ */
+static inline void ha_cancel_timer_sync(struct ha_monitor *ha_mon)
+{
+	hrtimer_cancel(&ha_mon->hrtimer);
+}
 #else /* HA_TIMER_NONE */
 /*
  * Start function is intentionally not defined, monitors using timers must
@@ -473,6 +497,7 @@ static inline bool ha_cancel_timer(struct ha_monitor *ha_mon)
 {
 	return false;
 }
+static inline void ha_cancel_timer_sync(struct ha_monitor *ha_mon) { }
 #endif
 
 #endif

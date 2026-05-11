@@ -142,10 +142,17 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/slab.h>
+#include <kunit/visibility.h>
 
 #ifdef CONFIG_RV_MON_EVENTS
 #define CREATE_TRACE_POINTS
 #include <rv_trace.h>
+
+#ifdef CONFIG_RV_MON_TLOB
+EXPORT_TRACEPOINT_SYMBOL_GPL(error_tlob);
+EXPORT_TRACEPOINT_SYMBOL_GPL(event_tlob);
+EXPORT_TRACEPOINT_SYMBOL_GPL(error_env_tlob);
+#endif
 #endif
 
 #include "rv.h"
@@ -696,6 +703,33 @@ static void turn_monitoring_on(void)
 	WRITE_ONCE(monitoring_on, true);
 }
 
+#if IS_ENABLED(CONFIG_KUNIT)
+/**
+ * rv_kunit_monitoring_on - enable the global monitoring_on flag for KUnit tests.
+ *
+ * KUnit test suite_init functions must call this before initialising any
+ * monitor, mirroring the turn_monitoring_on() call in rv_init_interface().
+ * The matching rv_kunit_monitoring_off() must be called in suite_exit to
+ * restore the flag so that test suites do not interfere with each other.
+ */
+void rv_kunit_monitoring_on(void)
+{
+	turn_monitoring_on();
+}
+EXPORT_SYMBOL_IF_KUNIT(rv_kunit_monitoring_on);
+
+/**
+ * rv_kunit_monitoring_off - disable the global monitoring_on flag for KUnit tests.
+ *
+ * Must be called in suite_exit to restore global state after rv_kunit_monitoring_on().
+ */
+void rv_kunit_monitoring_off(void)
+{
+	turn_monitoring_off();
+}
+EXPORT_SYMBOL_IF_KUNIT(rv_kunit_monitoring_off);
+#endif /* CONFIG_KUNIT */
+
 static void turn_monitoring_on_with_reset(void)
 {
 	lockdep_assert_held(&rv_interface_lock);
@@ -843,6 +877,10 @@ int __init rv_init_interface(void)
 	if (!tmp)
 		return 1;
 	retval = init_rv_reactors(root_dir);
+	if (retval)
+		return 1;
+
+	retval = rv_chardev_init();
 	if (retval)
 		return 1;
 

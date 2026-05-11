@@ -42,6 +42,21 @@ static char *model_get_event_name(enum events event)
 }
 
 /*
+ * model_get_timer_event_name - label used when the HA timer fires (no event).
+ *
+ * Monitors may define MONITOR_TIMER_EVENT_NAME before including the model
+ * header to give the timer-fired violation a semantically meaningful label
+ * (e.g. "budget_exceeded" for tlob).  Defaults to "none".
+ */
+#ifndef MONITOR_TIMER_EVENT_NAME
+#define MONITOR_TIMER_EVENT_NAME "none"
+#endif
+static inline char *model_get_timer_event_name(void)
+{
+	return MONITOR_TIMER_EVENT_NAME;
+}
+
+/*
  * model_get_initial_state - return the automaton's initial state
  */
 static inline enum states model_get_initial_state(void)

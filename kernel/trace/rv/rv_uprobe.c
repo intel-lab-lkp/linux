@@ -132,13 +132,10 @@ EXPORT_SYMBOL_GPL(rv_uprobe_attach);
  */
 void rv_uprobe_detach(struct rv_uprobe *p)
 {
-	struct rv_uprobe_impl *impl;
-
 	if (!p)
 		return;
 
-	impl = container_of(p, struct rv_uprobe_impl, pub);
-	uprobe_unregister_nosync(impl->uprobe, &impl->uc);
+	rv_uprobe_unregister_nosync(p);
 	/*
 	 * uprobe_unregister_sync() is a global barrier: it waits for all
 	 * in-flight uprobe handlers across the entire system to complete,
@@ -146,8 +143,47 @@ void rv_uprobe_detach(struct rv_uprobe *p)
 	 * guarantees that no handler touching impl->pub.priv is running by
 	 * the time we return, even if the caller immediately frees priv.
 	 */
+	rv_uprobe_sync();
+	rv_uprobe_free(p);
+}
+EXPORT_SYMBOL_GPL(rv_uprobe_detach);
+
+/**
+ * rv_uprobe_unregister_nosync - dequeue an uprobe without waiting
+ */
+void rv_uprobe_unregister_nosync(struct rv_uprobe *p)
+{
+	struct rv_uprobe_impl *impl;
+
+	if (!p)
+		return;
+
+	impl = container_of(p, struct rv_uprobe_impl, pub);
+	uprobe_unregister_nosync(impl->uprobe, &impl->uc);
+}
+EXPORT_SYMBOL_GPL(rv_uprobe_unregister_nosync);
+
+/**
+ * rv_uprobe_sync - wait for all in-flight uprobe handlers to complete
+ */
+void rv_uprobe_sync(void)
+{
 	uprobe_unregister_sync();
+}
+EXPORT_SYMBOL_GPL(rv_uprobe_sync);
+
+/**
+ * rv_uprobe_free - release resources of a previously deregistered probe
+ */
+void rv_uprobe_free(struct rv_uprobe *p)
+{
+	struct rv_uprobe_impl *impl;
+
+	if (!p)
+		return;
+
+	impl = container_of(p, struct rv_uprobe_impl, pub);
 	path_put(&p->path);
 	kfree(impl);
 }
-EXPORT_SYMBOL_GPL(rv_uprobe_detach);
+EXPORT_SYMBOL_GPL(rv_uprobe_free);

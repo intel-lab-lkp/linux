@@ -1,0 +1,69 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+config RV_MON_TLOB
+	depends on RV
+	select RV_UPROBE
+	select HA_MON_EVENTS_ID
+	bool "tlob monitor"
+	help
+	  Enable the tlob (task latency over budget) monitor.  This monitor
+	  tracks the elapsed time (CLOCK_MONOTONIC) of a marked code path
+	  within a task (including both on-CPU and off-CPU time) and reports
+	  a violation when the elapsed time exceeds a configurable budget.
+
+	  The monitor uses a three-state hybrid automaton (running, waiting,
+	  sleeping) stored per object using RV_MON_PER_OBJ.  A single HA
+	  clock invariant (clk_elapsed < BUDGET_NS) is enforced in all three
+	  states via a per-task hrtimer.
+
+	  States: running (initial, on-CPU), waiting (in runqueue, off-CPU),
+	          sleeping (blocked on resource, off-CPU).
+	  Key transitions:
+	    running  --(sleep)------> sleeping
+	    running  --(preempt)----> waiting
+	    sleeping --(wakeup)-----> waiting
+	    waiting  --(switch_in)--> running
+	  task_start calls da_handle_start_event() to set the initial state,
+	  then arms the budget timer directly via ha_reset_clk_ns() +
+	  ha_start_timer_ns().  task_stop cancels the timer synchronously via
+	  ha_cancel_timer_sync() then calls da_monitor_reset().
+
+	  Two userspace interfaces are provided:
+
+	  tracefs uprobe binding (external, unmodified binaries):
+	    echo "p PATH:OFFSET_START OFFSET_STOP threshold=NS" \
+	        > /sys/kernel/tracing/rv/monitors/tlob/monitor
+	  The uprobe at offset_start fires tlob_start_task(); the uprobe at
+	  offset_stop fires tlob_stop_task().  Both are plain entry uprobes
+	  so a mistyped offset cannot corrupt the call stack.
+
+	  /dev/rv ioctl (in-process self-instrumentation):
+	    ioctl(fd, TLOB_IOCTL_TRACE_START, &args);
+	    do_critical_work();
+	    ret = ioctl(fd, TLOB_IOCTL_TRACE_STOP, NULL);
+	    /* ret == -EOVERFLOW when budget exceeded */
+	  Allows conditional monitoring, sub-function granularity, and
+	  inline reaction to violations without polling the trace buffer.
+
+	  Up to TLOB_MAX_MONITORED tasks may be monitored simultaneously.
+
+	  Violations are always reported via the standard error_env_tlob RV
+	  tracepoint regardless of which interface triggered them.  The
+	  tracefs interface requires only tracefs write permissions, avoiding
+	  the CAP_BPF privilege needed for equivalent eBPF-based approaches.
+
+	  For further information, see:
+	    Documentation/trace/rv/monitor_tlob.rst
+
+config TLOB_KUNIT_TEST
+	tristate "KUnit tests for tlob monitor" if !KUNIT_ALL_TESTS
+	depends on RV_MON_TLOB && KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  Enable KUnit in-kernel unit tests for the tlob RV monitor.
+
+	  Tests cover automaton state transitions, the start/stop task
+	  interface, scheduler context-switch accounting, and the uprobe
+	  format string parser.
+
+	  Say Y or M here to run the tlob KUnit test suite; otherwise say N.

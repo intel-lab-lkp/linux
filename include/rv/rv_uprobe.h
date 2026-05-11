@@ -79,9 +79,41 @@ struct rv_uprobe *rv_uprobe_attach(const char *binpath, loff_t offset,
  * for any in-progress handler to finish, then releases the path reference
  * and frees the rv_uprobe struct.  The caller's priv data is NOT freed.
  *
+ * When removing a single probe, prefer this over the three-phase API.
  * Safe to call from process context only (uprobe_unregister_sync() may
  * schedule).
  */
 void rv_uprobe_detach(struct rv_uprobe *p);
+
+/**
+ * rv_uprobe_unregister_nosync - dequeue an uprobe without waiting
+ * @p:  probe to dequeue; may be NULL (no-op)
+ *
+ * Removes the uprobe from the uprobe subsystem but does NOT wait for
+ * in-flight handlers to complete.  The caller must call rv_uprobe_sync()
+ * before calling rv_uprobe_free() on the same probe.
+ *
+ * Use this to batch multiple deregistrations before a single rv_uprobe_sync().
+ */
+void rv_uprobe_unregister_nosync(struct rv_uprobe *p);
+
+/**
+ * rv_uprobe_sync - wait for all in-flight uprobe handlers to complete
+ *
+ * Global barrier: waits for every in-flight uprobe handler across the system
+ * to finish.  Call once after a batch of rv_uprobe_unregister_nosync() calls
+ * and before any rv_uprobe_free() call.
+ */
+void rv_uprobe_sync(void);
+
+/**
+ * rv_uprobe_free - release resources of a previously deregistered probe
+ * @p:  probe to free; may be NULL (no-op)
+ *
+ * Releases the path reference and frees the rv_uprobe struct.  Must only
+ * be called after rv_uprobe_sync() has returned.  The caller's priv data
+ * is NOT freed.
+ */
+void rv_uprobe_free(struct rv_uprobe *p);
 
 #endif /* _RV_UPROBE_H */
