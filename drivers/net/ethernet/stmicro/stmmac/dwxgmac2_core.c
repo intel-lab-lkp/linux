@@ -102,6 +102,9 @@ static void dwxgmac2_rx_queue_prio(struct mac_device_info *hw, u32 prio,
 	u32 ctrl2, ctrl3;
 	int i;
 
+	if (WARN_ONCE(queue >= hw->num_tc, "invalid RX prio queue"))
+		return;
+
 	ctrl2 = readl(ioaddr + XGMAC_RXQ_CTRL2);
 	ctrl3 = readl(ioaddr + XGMAC_RXQ_CTRL3);
 
@@ -140,6 +143,9 @@ static void dwxgmac2_tx_queue_prio(struct mac_device_info *hw, u32 prio,
 {
 	void __iomem *ioaddr = hw->pcsr;
 	u32 value, reg;
+
+	if (WARN_ONCE(queue >= hw->num_tc, "invalid TX prio queue"))
+		return;
 
 	reg = (queue < 4) ? XGMAC_TC_PRTY_MAP0 : XGMAC_TC_PRTY_MAP1;
 	if (queue >= 4)
@@ -233,7 +239,7 @@ static void dwxgmac2_prog_mtl_tx_algorithms(struct mac_device_info *hw,
 	writel(value, ioaddr + XGMAC_MTL_OPMODE);
 
 	/* Set ETS if desired */
-	for (i = 0; i < MTL_MAX_TX_QUEUES; i++) {
+	for (i = 0; i < hw->num_tc; i++) {
 		value = readl(ioaddr + XGMAC_MTL_TCx_ETS_CONTROL(i));
 		value &= ~XGMAC_TSA;
 		if (ets)
@@ -247,6 +253,9 @@ static void dwxgmac2_set_mtl_tx_queue_weight(struct stmmac_priv *priv,
 					     u32 weight, u32 queue)
 {
 	void __iomem *ioaddr = hw->pcsr;
+
+	if (WARN_ONCE(queue >= hw->num_tc, "invalid MTL TC queue"))
+		return;
 
 	writel(weight, ioaddr + XGMAC_MTL_TCx_QUANTUM_WEIGHT(queue));
 }
@@ -275,6 +284,9 @@ static void dwxgmac2_config_cbs(struct stmmac_priv *priv,
 {
 	void __iomem *ioaddr = hw->pcsr;
 	u32 value;
+
+	if (WARN_ONCE(queue >= hw->num_tc, "invalid TC queue"))
+		return;
 
 	writel(send_slope, ioaddr + XGMAC_MTL_TCx_SENDSLOPE(queue));
 	writel(idle_slope, ioaddr + XGMAC_MTL_TCx_QUANTUM_WEIGHT(queue));
@@ -365,6 +377,9 @@ static void dwxgmac2_flow_ctrl(struct mac_device_info *hw, unsigned int duplex,
 	if (fc & FLOW_TX) {
 		for (i = 0; i < tx_cnt; i++) {
 			u32 value = XGMAC_TFE;
+
+			if (WARN_ONCE(i >= hw->num_tc, "invalid TC queue"))
+				break;
 
 			if (duplex)
 				value |= FIELD_PREP(XGMAC_PT, pause_time);

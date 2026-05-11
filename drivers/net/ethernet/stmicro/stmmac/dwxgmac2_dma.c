@@ -204,8 +204,18 @@ static void dwxgmac2_dma_tx_mode(struct stmmac_priv *priv, void __iomem *ioaddr,
 		value = u32_replace_bits(value, ttc, XGMAC_TTC);
 	}
 
-	/* Use static TC to Queue mapping */
-	value |= FIELD_PREP(XGMAC_Q2TCMAP, channel);
+	/* Newer XGMAC hardware does support up to 16 MTL/DMA queues but
+	 * only 8 traffic class queues. Redirect these, but this is error in
+	 * configuration.
+	 */
+	if (channel >= priv->hw->num_tc) {
+		dev_err(priv->device,
+			"Wrong channel set for TX mode, redirecting to TC 0\n");
+		value |= FIELD_PREP(XGMAC_Q2TCMAP, 0);
+	} else {
+		/* Use static TC to Queue mapping */
+		value |= FIELD_PREP(XGMAC_Q2TCMAP, channel);
+	}
 
 	if (qmode != MTL_QUEUE_AVB)
 		txqen = 0x2;

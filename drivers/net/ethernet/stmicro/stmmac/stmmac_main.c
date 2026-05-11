@@ -4140,7 +4140,7 @@ static int __stmmac_open(struct net_device *dev,
 	u8 chan;
 	int ret;
 
-	for (int i = 0; i < MTL_MAX_TX_QUEUES; i++)
+	for (int i = 0; i < priv->plat->tx_queues_to_use; i++)
 		if (priv->dma_conf.tx_queue[i].tbs & STMMAC_TBS_EN)
 			dma_conf->tx_queue[i].tbs = priv->dma_conf.tx_queue[i].tbs;
 	memcpy(&priv->dma_conf, dma_conf, sizeof(*dma_conf));
@@ -7442,6 +7442,9 @@ static int stmmac_hw_init(struct stmmac_priv *priv)
 			priv->plat->tx_coe = false;
 		else
 			priv->plat->tx_coe = priv->dma_cap.tx_coe;
+
+		/* set number of traffic class queues */
+		priv->hw->num_tc = priv->dma_cap.numtc;
 
 		/* In case of GMAC4 rx_coe is from HW cap register. */
 		priv->plat->rx_coe = priv->dma_cap.rx_coe;
