@@ -23372,7 +23372,10 @@ S:	Maintained
 F:	Documentation/trace/rv/
 F:	include/linux/rv.h
 F:	include/rv/
+F:	include/uapi/linux/rv.h
 F:	kernel/trace/rv/
+F:	samples/rv/
+F:	tools/testing/selftests/rv/
 F:	tools/testing/selftests/verification/
 F:	tools/verification/
 
