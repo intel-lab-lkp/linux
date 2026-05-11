@@ -505,6 +505,19 @@ static void debug_print_bw_info(struct intel_display *display)
 	}
 }
 
+static void update_sagv_status(struct intel_display *display, int qgv_points)
+{
+	/*
+	 * In case if SAGV is disabled in BIOS, we always get 1
+	 * SAGV point, but we can't send PCode commands to restrict it
+	 * as it will fail and pointless anyway.
+	 */
+	if (qgv_points == 1)
+		display->sagv.status = I915_SAGV_NOT_CONTROLLED;
+	else
+		display->sagv.status = I915_SAGV_ENABLED;
+}
+
 static bool is_tile_y_factored(struct intel_display *display)
 {
 	/* TGL supports Y-tile for LPDDR4/5, but not for DDR4 */
@@ -571,15 +584,7 @@ static int icl_get_bw_info(struct intel_display *display,
 
 	debug_print_bw_info(display);
 
-	/*
-	 * In case if SAGV is disabled in BIOS, we always get 1
-	 * SAGV point, but we can't send PCode commands to restrict it
-	 * as it will fail and pointless anyway.
-	 */
-	if (qi.num_points == 1)
-		display->sagv.status = I915_SAGV_NOT_CONTROLLED;
-	else
-		display->sagv.status = I915_SAGV_ENABLED;
+	update_sagv_status(display, qi.num_points);
 
 	return 0;
 }
@@ -682,15 +687,7 @@ static int tgl_get_bw_info(struct intel_display *display,
 
 	debug_print_bw_info(display);
 
-	/*
-	 * In case if SAGV is disabled in BIOS, we always get 1
-	 * SAGV point, but we can't send PCode commands to restrict it
-	 * as it will fail and pointless anyway.
-	 */
-	if (qi.num_points == 1)
-		display->sagv.status = I915_SAGV_NOT_CONTROLLED;
-	else
-		display->sagv.status = I915_SAGV_ENABLED;
+	update_sagv_status(display, qi.num_points);
 
 	return 0;
 }
