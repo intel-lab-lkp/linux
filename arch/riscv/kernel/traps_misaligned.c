@@ -224,6 +224,7 @@ static int handle_scalar_misaligned_load(struct pt_regs *regs)
 	unsigned long insn;
 	unsigned long addr = regs->badaddr;
 	int fp = 0, shift = 0, len = 0;
+	int ret = -1;
 
 	perf_sw_event(PERF_COUNT_SW_ALIGNMENT_FAULTS, 1, regs, addr);
 
@@ -303,17 +304,18 @@ static int handle_scalar_misaligned_load(struct pt_regs *regs)
 		shift = 8 * (sizeof(ulong) - len);
 		insn = RVC_RS2S(insn) << SH_RD;
 	} else {
-		regs->epc = epc;
-		return -1;
+		goto out_restore_epc;
 	}
 
-	if (!IS_ENABLED(CONFIG_FPU) && fp)
-		return -EOPNOTSUPP;
+	if (!IS_ENABLED(CONFIG_FPU) && fp) {
+		ret = -EOPNOTSUPP;
+		goto out_restore_epc;
+	}
 
 	val.data_u64 = 0;
 	if (user_mode(regs)) {
 		if (copy_from_user(&val, (u8 __user *)addr, len))
-			return -1;
+			goto out_restore_epc;
 	} else {
 		memcpy(&val, (u8 *)addr, len);
 	}
@@ -328,6 +330,10 @@ static int handle_scalar_misaligned_load(struct pt_regs *regs)
 	regs->epc = epc + INSN_LEN(insn);
 
 	return 0;
+
+out_restore_epc:
+	regs->epc = epc;
+	return ret;
 }
 
 static int handle_scalar_misaligned_store(struct pt_regs *regs)
@@ -337,6 +343,7 @@ static int handle_scalar_misaligned_store(struct pt_regs *regs)
 	unsigned long insn;
 	unsigned long addr = regs->badaddr;
 	int len = 0, fp = 0;
+	int ret = -1;
 
 	perf_sw_event(PERF_COUNT_SW_ALIGNMENT_FAULTS, 1, regs, addr);
 
@@ -405,16 +412,17 @@ static int handle_scalar_misaligned_store(struct pt_regs *regs)
 		len = 2;
 		val.data_ulong = GET_RS2S(insn, regs);
 	} else {
-		regs->epc = epc;
-		return -1;
+		goto out_restore_epc;
 	}
 
-	if (!IS_ENABLED(CONFIG_FPU) && fp)
-		return -EOPNOTSUPP;
+	if (!IS_ENABLED(CONFIG_FPU) && fp) {
+		ret = -EOPNOTSUPP;
+		goto out_restore_epc;
+	}
 
 	if (user_mode(regs)) {
 		if (copy_to_user((u8 __user *)addr, &val, len))
-			return -1;
+			goto out_restore_epc;
 	} else {
 		memcpy((u8 *)addr, &val, len);
 	}
@@ -422,6 +430,10 @@ static int handle_scalar_misaligned_store(struct pt_regs *regs)
 	regs->epc = epc + INSN_LEN(insn);
 
 	return 0;
+
+out_restore_epc:
+	regs->epc = epc;
+	return ret;
 }
 
 int handle_misaligned_load(struct pt_regs *regs)
