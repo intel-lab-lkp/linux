@@ -680,9 +680,12 @@ static int nested_svm_load_cr3(struct kvm_vcpu *vcpu, unsigned long cr3,
 	if (CC(!kvm_vcpu_is_legal_cr3(vcpu, cr3)))
 		return -EINVAL;
 
-	if (reload_pdptrs && !nested_npt && is_pae_paging(vcpu) &&
-	    CC(!load_pdptrs(vcpu, cr3)))
-		return -EINVAL;
+	if (reload_pdptrs && is_pae_paging(vcpu)) {
+		if (nested_npt)
+			kvm_register_mark_dirty(vcpu, VCPU_EXREG_PDPTR);
+		else if (CC(!load_pdptrs(vcpu, cr3)))
+			return -EINVAL;
+	}
 
 	vcpu->arch.cr3 = cr3;
 

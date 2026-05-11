@@ -1192,12 +1192,16 @@ static int nested_vmx_load_cr3(struct kvm_vcpu *vcpu, unsigned long cr3,
 
 	/*
 	 * If PAE paging and EPT are both on, CR3 is not used by the CPU and
-	 * must not be dereferenced.
+	 * must not be dereferenced.  Marking the PDPTRs dirty is enough,
+	 * if ever needed they will be fished out of VMCS02's GUEST_PDPTRx.
 	 */
-	if (reload_pdptrs && !nested_ept && is_pae_paging(vcpu) &&
-	    CC(!load_pdptrs(vcpu, cr3))) {
-		*entry_failure_code = ENTRY_FAIL_PDPTE;
-		return -EINVAL;
+	if (reload_pdptrs && is_pae_paging(vcpu)) {
+		if (nested_ept) {
+			kvm_register_mark_dirty(vcpu, VCPU_EXREG_PDPTR);
+		} else if (CC(!load_pdptrs(vcpu, cr3))) {
+			*entry_failure_code = ENTRY_FAIL_PDPTE;
+			return -EINVAL;
+		}
 	}
 
 	vcpu->arch.cr3 = cr3;
