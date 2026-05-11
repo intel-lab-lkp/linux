@@ -10,9 +10,9 @@ static void enetc_msg_set_mr_int(struct enetc_pf *pf, bool enable)
 
 	val = enetc_rd(hw, ENETC_PSIIER);
 	if (enable)
-		val |= ENETC_PSIIER_MR_MASK;
+		val |= PSIIER_MR_MASK(pf->num_vfs);
 	else
-		val &= ~ENETC_PSIIER_MR_MASK;
+		val &= ~PSIIER_MR_MASK(pf->num_vfs);
 
 	enetc_wr(hw, ENETC_PSIIER, val);
 }
@@ -162,15 +162,16 @@ static void enetc_msg_handle_rxmsg(struct enetc_pf *pf, int vf_id,
 static void enetc_msg_task(struct work_struct *work)
 {
 	struct enetc_pf *pf = container_of(work, struct enetc_pf, msg_task);
+	u32 mr_mask = PSIIER_MR_MASK(pf->num_vfs);
 	struct enetc_hw *hw = &pf->si->hw;
-	unsigned long mr_mask;
+	u32 mr_status;
 	int i;
 
 	for (;;) {
-		mr_mask = enetc_rd(hw, ENETC_PSIMSGRR) & ENETC_PSIMSGRR_MR_MASK;
-		if (!mr_mask) {
+		mr_status = enetc_rd(hw, ENETC_PSIMSGRR) & mr_mask;
+		if (!mr_status) {
 			/* re-arm MR interrupts, w1c the IDR reg */
-			enetc_wr(hw, ENETC_PSIIDR, ENETC_PSIIER_MR_MASK);
+			enetc_wr(hw, ENETC_PSIIDR, mr_mask);
 			enetc_msg_set_mr_int(pf, true);
 			return;
 		}
@@ -179,7 +180,7 @@ static void enetc_msg_task(struct work_struct *work)
 			union enetc_pf_msg pf_msg = {};
 			u32 psimsgrr;
 
-			if (!(ENETC_PSIMSGRR_MR(i) & mr_mask))
+			if (!(ENETC_PSIMSGRR_MR(i) & mr_status))
 				continue;
 
 			enetc_msg_handle_rxmsg(pf, i, &pf_msg);
