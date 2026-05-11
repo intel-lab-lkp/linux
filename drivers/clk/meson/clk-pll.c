@@ -388,8 +388,13 @@ static int meson_clk_pll_enable(struct clk_hw *hw)
 	}
 
 	if (MESON_PARM_APPLICABLE(&pll->l_detect)) {
-		meson_parm_write(clk->map, &pll->l_detect, 1);
-		meson_parm_write(clk->map, &pll->l_detect, 0);
+		if (pll->flags & CLK_MESON_PLL_L_DETECT_ACTIVE_HIGH) {
+			meson_parm_write(clk->map, &pll->l_detect, 0);
+			meson_parm_write(clk->map, &pll->l_detect, 1);
+		} else {
+			meson_parm_write(clk->map, &pll->l_detect, 1);
+			meson_parm_write(clk->map, &pll->l_detect, 0);
+		}
 	}
 
 	if (meson_clk_pll_wait_lock(hw))
