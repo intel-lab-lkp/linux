@@ -34,7 +34,16 @@ static inline struct espintcp_ctx *espintcp_getctx(const struct sock *sk)
 {
 	const struct inet_connection_sock *icsk = inet_csk(sk);
 
-	/* RCU is only needed for diag */
-	return (__force void *)icsk->icsk_ulp_data;
+	/*
+	 * The caller reached an ESP entry point by observing sk_prot,
+	 * sk_socket->ops, or one of the socket callbacks.  Keep the ctx
+	 * load after that observation so the caller cannot see the new
+	 * entry point while still seeing stale icsk_ulp_data.
+	 *
+	 * Pairs with smp_wmb() in espintcp_init_sk().
+	 */
+	smp_rmb();
+
+	return (__force void *)READ_ONCE(icsk->icsk_ulp_data);
 }
 #endif
