@@ -40,6 +40,12 @@ properties:
   interrupts:
     maxItems: 1
 
+  sdma-io-width:
+    description: Slave DMA data port I/O width (in bytes)
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 1
+    enum: [ 1, 4 ]
+
 required:
   - compatible
   - reg
