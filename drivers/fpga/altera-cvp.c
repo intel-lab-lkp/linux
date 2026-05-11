@@ -76,6 +76,9 @@ struct altera_cvp_conf {
 	char			mgr_name[64];
 	u8			numclks;
 	u32			sent_packets;
+	u32			overflow_counter;
+	u32			last_credit_hw;
+	bool			credit_ext_inited;
 	u32			vsec_offset;
 	const struct cvp_priv	*priv;
 };
@@ -228,19 +231,64 @@ static int altera_cvp_v2_wait_for_credit(struct fpga_manager *mgr,
 	u32 timeout = V2_CREDIT_TIMEOUT_US / V2_CHECK_CREDIT_US;
 	struct altera_cvp_conf *conf = mgr->priv;
 	int ret;
-	u8 val;
+	u32 val;
+	u32 credit_mask;
+	u32 vse_cvp_tx_credits_offset = VSE_CVP_TX_CREDITS;
+	u32 mod;
+	u32 real_credit;
 
 	do {
-		ret = altera_read_config_byte(conf, VSE_CVP_TX_CREDITS, &val);
+		/* READ DWORD is required for Agilex5 but READ BYTE is required for non-Agilex5 */
+		if (conf->device_family_type == SOCFPGA_CVP_V2_AGILEX5) {
+			vse_cvp_tx_credits_offset = VSE_CVP_AG5_TX_CREDITS;
+			credit_mask = 0xFFF;
+			ret = altera_read_config_dword(conf, vse_cvp_tx_credits_offset, &val);
+		} else {
+			/*
+			 * For the byte config read path, val is zeroed before pci_read_config_byte
+			 * so only the low byte is defined before masking.
+			 */
+			val = 0;
+			credit_mask = 0xFF;
+			ret = altera_read_config_byte(conf, vse_cvp_tx_credits_offset,
+						      (u8 *)&val);
+		}
+
+
 		if (ret) {
 			dev_err(&conf->pci_dev->dev,
 				"Error reading CVP Credit Register\n");
 			return ret;
 		}
 
-		/* Return if there is space in FIFO */
-		if (val - (u8)conf->sent_packets)
+		val &= credit_mask;
+		mod = credit_mask + 1;
+
+		/*
+		 * HW credit is n bits and wraps; extend it in software so we can
+		 * compare to sent_packets directly. On a forward wrap the masked
+		 * value jumps from high to low; require (last - val) > mod/2 so a
+		 * small backward glitch is not counted as a wrap. More than one
+		 * wrap between polls is not detected if the low bits repeat.
+		 */
+		if (conf->credit_ext_inited &&
+		    val < conf->last_credit_hw &&
+		    (conf->last_credit_hw - val) > (mod / 2))
+			conf->overflow_counter++;
+
+		conf->last_credit_hw = val;
+		conf->credit_ext_inited = true;
+
+		real_credit = conf->overflow_counter * mod + val;
+
+		if (real_credit > conf->sent_packets)
 			return 0;
+		if (real_credit < conf->sent_packets) {
+			dev_err(&conf->pci_dev->dev,
+				"CVP credit behind sent count (real %u reg 0x%x sent %u)\n",
+				real_credit, val, conf->sent_packets);
+			return -EPROTO;
+		}
 
 		ret = altera_cvp_chk_error(mgr, blocks * ALTERA_CVP_V2_SIZE);
 		if (ret) {
@@ -378,6 +426,8 @@ static int altera_cvp_write_init(struct fpga_manager *mgr,
 	}
 
 	conf->sent_packets = 0;
+	conf->overflow_counter = 0;
+	conf->credit_ext_inited = false;
 
 	/* STEP 4 - set CVP_CONFIG bit */
 	altera_read_config_dword(conf, VSE_CVP_PROG_CTRL, &val);
