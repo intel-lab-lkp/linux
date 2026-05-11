@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: (GPL-2.0+ OR BSD-3-Clause)
 /* Copyright 2017-2019 NXP */
 
-#include "enetc_pf.h"
+#include "enetc_pf_common.h"
 
 static void enetc_msg_disable_mr_int(struct enetc_hw *hw)
 {
@@ -245,3 +245,4 @@ err_msg_psi:
 
 	return err;
 }
+EXPORT_SYMBOL_GPL(enetc_sriov_configure);
