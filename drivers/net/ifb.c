@@ -255,19 +255,36 @@ static void ifb_fill_stats_data(u64 **data,
 	*data += IFB_Q_STATS_LEN;
 }
 
+static void ifb_fill_empty_stats_data(u64 **data)
+{
+	memset(*data, 0, IFB_Q_STATS_LEN * sizeof(**data));
+	*data += IFB_Q_STATS_LEN;
+}
+
 static void ifb_get_ethtool_stats(struct net_device *dev,
 				  struct ethtool_stats *stats, u64 *data)
 {
 	struct ifb_dev_private *dp = netdev_priv(dev);
 	struct ifb_q_private *txp;
+	unsigned int n_queues = dev->num_tx_queues;
 	int i;
 
 	for (i = 0; i < dev->real_num_rx_queues; i++) {
+		if (i >= n_queues) {
+			ifb_fill_empty_stats_data(&data);
+			continue;
+		}
+
 		txp = dp->tx_private + i;
 		ifb_fill_stats_data(&data, &txp->rx_stats);
 	}
 
 	for (i = 0; i < dev->real_num_tx_queues; i++) {
+		if (i >= n_queues) {
+			ifb_fill_empty_stats_data(&data);
+			continue;
+		}
+
 		txp = dp->tx_private + i;
 		ifb_fill_stats_data(&data, &txp->tx_stats);
 	}
