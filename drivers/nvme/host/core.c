@@ -4043,6 +4043,10 @@ static int nvme_init_ns_head(struct nvme_ns *ns, struct nvme_ns_info *info)
 		ctrl->quirks |= NVME_QUIRK_BOGUS_NID;
 	}
 
+	if (uuid_is_null(&info->ids.uuid)) {
+		dev_info(ctrl->device, "No UUID available, uuid_show providing old NGUID\n");
+	}
+
 	mutex_lock(&ctrl->subsys->lock);
 	head = nvme_find_ns_head(ctrl, info->nsid);
 	if (!head) {
