@@ -6,6 +6,7 @@ sdxi-objs += \
 	context.o     \
 	descriptor.o  \
 	device.o      \
+	dma.o         \
 	ring.o
 
 sdxi-$(CONFIG_PCI_MSI) += pci.o
