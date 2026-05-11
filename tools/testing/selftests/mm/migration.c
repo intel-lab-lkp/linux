@@ -163,6 +163,11 @@ TEST_F_TIMEOUT(migration, shared_anon, 2*RUNTIME)
 	memset(ptr, 0xde, TWOMEG);
 	for (i = 0; i < self->nthreads - 1; i++) {
 		pid = fork();
+		if (pid < 0) {
+			while (--i >= 0)
+				kill(self->pids[i], SIGTERM);
+			ASSERT_GE(pid, 0);
+		}
 		if (!pid) {
 			prctl(PR_SET_PDEATHSIG, SIGHUP);
 			/* Parent may have died before prctl so check now. */
@@ -235,6 +240,11 @@ TEST_F_TIMEOUT(migration, shared_anon_thp, 2*RUNTIME)
 	memset(ptr, 0xde, TWOMEG);
 	for (i = 0; i < self->nthreads - 1; i++) {
 		pid = fork();
+		if (pid < 0) {
+			while (--i >= 0)
+				kill(self->pids[i], SIGTERM);
+			ASSERT_GE(pid, 0);
+		}
 		if (!pid) {
 			prctl(PR_SET_PDEATHSIG, SIGHUP);
 			/* Parent may have died before prctl so check now. */
@@ -295,6 +305,11 @@ TEST_F_TIMEOUT(migration, shared_anon_htlb, 2*RUNTIME)
 	memset(ptr, 0xde, TWOMEG);
 	for (i = 0; i < self->nthreads - 1; i++) {
 		pid = fork();
+		if (pid < 0) {
+			while (--i >= 0)
+				kill(self->pids[i], SIGTERM);
+			ASSERT_GE(pid, 0);
+		}
 		if (!pid) {
 			prctl(PR_SET_PDEATHSIG, SIGHUP);
 			/* Parent may have died before prctl so check now. */
