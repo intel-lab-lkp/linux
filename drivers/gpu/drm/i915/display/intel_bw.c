@@ -7,6 +7,8 @@
 #include <drm/drm_print.h>
 #include <drm/intel/intel_pcode_regs.h>
 
+#include <linux/sort.h>
+
 #include "intel_bw.h"
 #include "intel_crtc.h"
 #include "intel_de.h"
@@ -317,6 +319,20 @@ static int icl_init_qgv_info(struct intel_display *display,
 	return 0;
 }
 
+static int qgv_point_cmp(const void *a, const void *b)
+{
+	const struct intel_qgv_point *pa = a;
+	const struct intel_qgv_point *pb = b;
+
+	return pa->dclk - pb->dclk;
+}
+
+static void intel_sort_qgv_points(struct intel_qgv_info *qi)
+{
+	sort(qi->points, qi->num_points, sizeof(*qi->points),
+	     qgv_point_cmp, NULL);
+}
+
 static int icl_get_qgv_points(struct intel_display *display,
 			      const struct dram_info *dram_info,
 			      struct intel_qgv_info *qi,
@@ -345,6 +361,9 @@ static int icl_get_qgv_points(struct intel_display *display,
 			    i, sp->dclk, sp->t_rp, sp->t_rdpre, sp->t_ras,
 			    sp->t_rcd, sp->t_rc);
 	}
+
+	if (HAS_PMDEMAND(display))
+		intel_sort_qgv_points(qi);
 
 	if (qi->num_psf_points > 0) {
 		ret = adls_pcode_read_psf_gv_point_info(display, qi->psf_points);
