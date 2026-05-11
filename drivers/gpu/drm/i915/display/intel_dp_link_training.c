@@ -1776,9 +1776,12 @@ void intel_dp_start_link_train(struct intel_atomic_state *state,
 
 	lttpr_count = intel_dp_init_lttpr_and_dprx_caps(intel_dp);
 
-	if (lttpr_count < 0)
-		/* Still continue with enabling the port and link training. */
-		lttpr_count = 0;
+	if (lttpr_count < 0) {
+		/* skip LT but complete the modeset seq */
+		lt_dbg(intel_dp, DP_PHY_DPRX,
+		       "Reading LTTPR/DPRX caps failed, skip LT\n");
+		goto retry;
+	}
 
 	intel_dp_prepare_link_train(intel_dp, crtc_state);
 
@@ -1795,6 +1798,7 @@ void intel_dp_start_link_train(struct intel_atomic_state *state,
 		return;
 	}
 
+retry:
 	intel_dp->link.seq_train_failures++;
 
 	/*
