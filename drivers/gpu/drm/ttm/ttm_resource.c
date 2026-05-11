@@ -937,3 +937,40 @@ void ttm_resource_manager_create_debugfs(struct ttm_resource_manager *man,
 #endif
 }
 EXPORT_SYMBOL(ttm_resource_manager_create_debugfs);
+
+static int ttm_resource_manager_dmem_reclaim(struct dmem_cgroup_pool_state *pool,
+					     u64 target_bytes, void *priv)
+{
+	struct ttm_resource_manager *man = priv;
+	struct ttm_operation_ctx ctx = { .interruptible = true };
+	s64 freed;
+
+	freed = ttm_bo_evict_cgroup(man->bdev, man, pool, target_bytes, &ctx);
+	if (freed < 0)
+		return freed;
+
+	return freed >= (s64)target_bytes ? 0 : -ENOSPC;
+}
+
+/**
+ * ttm_resource_manager_set_dmem_region() - Associate a dmem cgroup region with a
+ *                                        resource manager and register a reclaim
+ *                                        callback.
+ * @man: The resource manager.
+ * @region: The dmem cgroup region to associate, may be NULL or IS_ERR().
+ *
+ * Sets @man->cg and registers ttm_resource_manager_dmem_reclaim() so that
+ * writing to dmem.max below current usage triggers TTM eviction rather than
+ * returning -EBUSY to userspace.
+ */
+void ttm_resource_manager_set_dmem_region(struct ttm_resource_manager *man,
+					  struct dmem_cgroup_region *region)
+{
+	if (!IS_ERR_OR_NULL(region)) {
+		man->cg = region;
+		dmem_cgroup_region_set_reclaim(region,
+					       ttm_resource_manager_dmem_reclaim,
+					       man);
+	}
+}
+EXPORT_SYMBOL(ttm_resource_manager_set_dmem_region);
