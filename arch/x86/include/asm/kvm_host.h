@@ -447,9 +447,24 @@ struct kvm_pio_request {
 
 #define PT64_ROOT_MAX_LEVEL 5
 
-struct rsvd_bits_validate {
+struct kvm_page_format {
 	u64 rsvd_bits_mask[2][PT64_ROOT_MAX_LEVEL];
 	u64 bad_mt_xwr;
+
+	/*
+	* The pkru_mask indicates if protection key checks are needed.  It
+	* consists of 16 domains indexed by page fault error code bits [4:1],
+	* with PFEC.RSVD replaced by ACC_USER_MASK from the page tables.
+	* Each domain has 2 bits which are ANDed with AD and WD from PKRU.
+	*/
+	u32 pkru_mask;
+
+	/*
+	 * Bitmap; bit set = permission fault
+	 * Array index: page fault error code [4:1]
+	 * Bit index: pte permissions in ACC_* format
+	 */
+	u16 permissions[16];
 };
 
 struct kvm_mmu_root_info {
@@ -476,25 +491,6 @@ struct kvm_page_fault;
  * and 2-level 32-bit).  The kvm_pagewalk structure abstracts the details of the
  * current mmu mode.
  */
-struct kvm_page_format {
-	struct rsvd_bits_validate guest_rsvd_check;
-
-	/*
-	* The pkru_mask indicates if protection key checks are needed.  It
-	* consists of 16 domains indexed by page fault error code bits [4:1],
-	* with PFEC.RSVD replaced by ACC_USER_MASK from the page tables.
-	* Each domain has 2 bits which are ANDed with AD and WD from PKRU.
-	*/
-	u32 pkru_mask;
-
-	/*
-	 * Bitmap; bit set = permission fault
-	 * Array index: page fault error code [4:1]
-	 * Bit index: pte permissions in ACC_* format
-	 */
-	u16 permissions[16];
-};
-
 struct kvm_pagewalk {
 	unsigned long (*get_guest_pgd)(struct kvm_vcpu *vcpu);
 	u64 (*get_pdptr)(struct kvm_vcpu *vcpu, int index);
@@ -529,7 +525,7 @@ struct kvm_mmu {
 	 * bits include not only hardware reserved bits but also
 	 * the bits spte never used.
 	 */
-	struct rsvd_bits_validate shadow_zero_check;
+	struct kvm_page_format fmt;
 };
 
 enum pmc_type {

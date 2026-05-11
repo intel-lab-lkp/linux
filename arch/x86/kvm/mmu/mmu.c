@@ -4422,7 +4422,7 @@ static int get_sptes_lockless(struct kvm_vcpu *vcpu, u64 addr, u64 *sptes,
 static bool get_mmio_spte(struct kvm_vcpu *vcpu, u64 addr, u64 *sptep)
 {
 	u64 sptes[PT64_ROOT_MAX_LEVEL + 1];
-	struct rsvd_bits_validate *rsvd_check;
+	struct kvm_page_format *rsvd_check;
 	int root, leaf, level;
 	bool reserved = false;
 
@@ -4443,7 +4443,7 @@ static bool get_mmio_spte(struct kvm_vcpu *vcpu, u64 addr, u64 *sptep)
 	if (!is_shadow_present_pte(sptes[leaf]))
 		leaf++;
 
-	rsvd_check = &vcpu->arch.mmu->shadow_zero_check;
+	rsvd_check = &vcpu->arch.mmu->fmt;
 
 	for (level = root; level >= leaf; level--)
 		reserved |= is_rsvd_spte(rsvd_check, sptes[level], level);
@@ -5298,7 +5298,7 @@ static bool sync_mmio_spte(struct kvm_vcpu *vcpu, u64 *sptep, gfn_t gfn,
 #include "paging_tmpl.h"
 #undef PTTYPE
 
-static void __reset_rsvds_bits_mask(struct rsvd_bits_validate *rsvd_check,
+static void __reset_rsvds_bits_mask(struct kvm_page_format *fmt,
 				    u64 pa_bits_rsvd, int level, bool nx,
 				    bool gbpages, bool pse, bool amd)
 {
@@ -5306,7 +5306,7 @@ static void __reset_rsvds_bits_mask(struct rsvd_bits_validate *rsvd_check,
 	u64 nonleaf_bit8_rsvd = 0;
 	u64 high_bits_rsvd;
 
-	rsvd_check->bad_mt_xwr = 0;
+	fmt->bad_mt_xwr = 0;
 
 	if (!gbpages)
 		gbpages_bit_rsvd = rsvd_bits(7, 7);
@@ -5330,59 +5330,59 @@ static void __reset_rsvds_bits_mask(struct rsvd_bits_validate *rsvd_check,
 	switch (level) {
 	case PT32_ROOT_LEVEL:
 		/* no rsvd bits for 2 level 4K page table entries */
-		rsvd_check->rsvd_bits_mask[0][1] = 0;
-		rsvd_check->rsvd_bits_mask[0][0] = 0;
-		rsvd_check->rsvd_bits_mask[1][0] =
-			rsvd_check->rsvd_bits_mask[0][0];
+		fmt->rsvd_bits_mask[0][1] = 0;
+		fmt->rsvd_bits_mask[0][0] = 0;
+		fmt->rsvd_bits_mask[1][0] =
+			fmt->rsvd_bits_mask[0][0];
 
 		if (!pse) {
-			rsvd_check->rsvd_bits_mask[1][1] = 0;
+			fmt->rsvd_bits_mask[1][1] = 0;
 			break;
 		}
 
 		if (is_cpuid_PSE36())
 			/* 36bits PSE 4MB page */
-			rsvd_check->rsvd_bits_mask[1][1] = rsvd_bits(17, 21);
+			fmt->rsvd_bits_mask[1][1] = rsvd_bits(17, 21);
 		else
 			/* 32 bits PSE 4MB page */
-			rsvd_check->rsvd_bits_mask[1][1] = rsvd_bits(13, 21);
+			fmt->rsvd_bits_mask[1][1] = rsvd_bits(13, 21);
 		break;
 	case PT32E_ROOT_LEVEL:
-		rsvd_check->rsvd_bits_mask[0][2] = rsvd_bits(63, 63) |
+		fmt->rsvd_bits_mask[0][2] = rsvd_bits(63, 63) |
 						   high_bits_rsvd |
 						   rsvd_bits(5, 8) |
 						   rsvd_bits(1, 2);	/* PDPTE */
-		rsvd_check->rsvd_bits_mask[0][1] = high_bits_rsvd;	/* PDE */
-		rsvd_check->rsvd_bits_mask[0][0] = high_bits_rsvd;	/* PTE */
-		rsvd_check->rsvd_bits_mask[1][1] = high_bits_rsvd |
+		fmt->rsvd_bits_mask[0][1] = high_bits_rsvd;	/* PDE */
+		fmt->rsvd_bits_mask[0][0] = high_bits_rsvd;	/* PTE */
+		fmt->rsvd_bits_mask[1][1] = high_bits_rsvd |
 						   rsvd_bits(13, 20);	/* large page */
-		rsvd_check->rsvd_bits_mask[1][0] =
-			rsvd_check->rsvd_bits_mask[0][0];
+		fmt->rsvd_bits_mask[1][0] =
+			fmt->rsvd_bits_mask[0][0];
 		break;
 	case PT64_ROOT_5LEVEL:
-		rsvd_check->rsvd_bits_mask[0][4] = high_bits_rsvd |
+		fmt->rsvd_bits_mask[0][4] = high_bits_rsvd |
 						   nonleaf_bit8_rsvd |
 						   rsvd_bits(7, 7);
-		rsvd_check->rsvd_bits_mask[1][4] =
-			rsvd_check->rsvd_bits_mask[0][4];
+		fmt->rsvd_bits_mask[1][4] =
+			fmt->rsvd_bits_mask[0][4];
 		fallthrough;
 	case PT64_ROOT_4LEVEL:
-		rsvd_check->rsvd_bits_mask[0][3] = high_bits_rsvd |
+		fmt->rsvd_bits_mask[0][3] = high_bits_rsvd |
 						   nonleaf_bit8_rsvd |
 						   rsvd_bits(7, 7);
-		rsvd_check->rsvd_bits_mask[0][2] = high_bits_rsvd |
+		fmt->rsvd_bits_mask[0][2] = high_bits_rsvd |
 						   gbpages_bit_rsvd;
-		rsvd_check->rsvd_bits_mask[0][1] = high_bits_rsvd;
-		rsvd_check->rsvd_bits_mask[0][0] = high_bits_rsvd;
-		rsvd_check->rsvd_bits_mask[1][3] =
-			rsvd_check->rsvd_bits_mask[0][3];
-		rsvd_check->rsvd_bits_mask[1][2] = high_bits_rsvd |
+		fmt->rsvd_bits_mask[0][1] = high_bits_rsvd;
+		fmt->rsvd_bits_mask[0][0] = high_bits_rsvd;
+		fmt->rsvd_bits_mask[1][3] =
+			fmt->rsvd_bits_mask[0][3];
+		fmt->rsvd_bits_mask[1][2] = high_bits_rsvd |
 						   gbpages_bit_rsvd |
 						   rsvd_bits(13, 29);
-		rsvd_check->rsvd_bits_mask[1][1] = high_bits_rsvd |
+		fmt->rsvd_bits_mask[1][1] = high_bits_rsvd |
 						   rsvd_bits(13, 20); /* large page */
-		rsvd_check->rsvd_bits_mask[1][0] =
-			rsvd_check->rsvd_bits_mask[0][0];
+		fmt->rsvd_bits_mask[1][0] =
+			fmt->rsvd_bits_mask[0][0];
 		break;
 	}
 }
@@ -5390,7 +5390,7 @@ static void __reset_rsvds_bits_mask(struct rsvd_bits_validate *rsvd_check,
 static void reset_guest_rsvds_bits_mask(struct kvm_vcpu *vcpu,
 					struct kvm_pagewalk *w)
 {
-	__reset_rsvds_bits_mask(&w->fmt.guest_rsvd_check,
+	__reset_rsvds_bits_mask(&w->fmt,
 				vcpu->arch.reserved_gpa_bits,
 				w->cpu_role.base.level, is_efer_nx(w),
 				guest_cpu_cap_has(vcpu, X86_FEATURE_GBPAGES),
@@ -5398,7 +5398,7 @@ static void reset_guest_rsvds_bits_mask(struct kvm_vcpu *vcpu,
 				guest_cpuid_is_amd_compatible(vcpu));
 }
 
-static void __reset_rsvds_bits_mask_ept(struct rsvd_bits_validate *rsvd_check,
+static void __reset_rsvds_bits_mask_ept(struct kvm_page_format *fmt,
 					u64 pa_bits_rsvd, bool execonly,
 					int huge_page_level)
 {
@@ -5411,18 +5411,18 @@ static void __reset_rsvds_bits_mask_ept(struct rsvd_bits_validate *rsvd_check,
 	if (huge_page_level < PG_LEVEL_2M)
 		large_2m_rsvd = rsvd_bits(7, 7);
 
-	rsvd_check->rsvd_bits_mask[0][4] = high_bits_rsvd | rsvd_bits(3, 7);
-	rsvd_check->rsvd_bits_mask[0][3] = high_bits_rsvd | rsvd_bits(3, 7);
-	rsvd_check->rsvd_bits_mask[0][2] = high_bits_rsvd | rsvd_bits(3, 6) | large_1g_rsvd;
-	rsvd_check->rsvd_bits_mask[0][1] = high_bits_rsvd | rsvd_bits(3, 6) | large_2m_rsvd;
-	rsvd_check->rsvd_bits_mask[0][0] = high_bits_rsvd;
+	fmt->rsvd_bits_mask[0][4] = high_bits_rsvd | rsvd_bits(3, 7);
+	fmt->rsvd_bits_mask[0][3] = high_bits_rsvd | rsvd_bits(3, 7);
+	fmt->rsvd_bits_mask[0][2] = high_bits_rsvd | rsvd_bits(3, 6) | large_1g_rsvd;
+	fmt->rsvd_bits_mask[0][1] = high_bits_rsvd | rsvd_bits(3, 6) | large_2m_rsvd;
+	fmt->rsvd_bits_mask[0][0] = high_bits_rsvd;
 
 	/* large page */
-	rsvd_check->rsvd_bits_mask[1][4] = rsvd_check->rsvd_bits_mask[0][4];
-	rsvd_check->rsvd_bits_mask[1][3] = rsvd_check->rsvd_bits_mask[0][3];
-	rsvd_check->rsvd_bits_mask[1][2] = high_bits_rsvd | rsvd_bits(12, 29) | large_1g_rsvd;
-	rsvd_check->rsvd_bits_mask[1][1] = high_bits_rsvd | rsvd_bits(12, 20) | large_2m_rsvd;
-	rsvd_check->rsvd_bits_mask[1][0] = rsvd_check->rsvd_bits_mask[0][0];
+	fmt->rsvd_bits_mask[1][4] = fmt->rsvd_bits_mask[0][4];
+	fmt->rsvd_bits_mask[1][3] = fmt->rsvd_bits_mask[0][3];
+	fmt->rsvd_bits_mask[1][2] = high_bits_rsvd | rsvd_bits(12, 29) | large_1g_rsvd;
+	fmt->rsvd_bits_mask[1][1] = high_bits_rsvd | rsvd_bits(12, 20) | large_2m_rsvd;
+	fmt->rsvd_bits_mask[1][0] = fmt->rsvd_bits_mask[0][0];
 
 	bad_mt_xwr = 0xFFull << (2 * 8);	/* bits 3..5 must not be 2 */
 	bad_mt_xwr |= 0xFFull << (3 * 8);	/* bits 3..5 must not be 3 */
@@ -5433,13 +5433,13 @@ static void __reset_rsvds_bits_mask_ept(struct rsvd_bits_validate *rsvd_check,
 		/* bits 0..2 must not be 100 unless VMX capabilities allow it */
 		bad_mt_xwr |= REPEAT_BYTE(1ull << 4);
 	}
-	rsvd_check->bad_mt_xwr = bad_mt_xwr;
+	fmt->bad_mt_xwr = bad_mt_xwr;
 }
 
 static void reset_rsvds_bits_mask_ept(struct kvm_vcpu *vcpu,
 		bool execonly, int huge_page_level)
 {
-	__reset_rsvds_bits_mask_ept(&vcpu->arch.tdp_walk.fmt.guest_rsvd_check,
+	__reset_rsvds_bits_mask_ept(&vcpu->arch.tdp_walk.fmt,
 				    vcpu->arch.reserved_gpa_bits, execonly,
 				    huge_page_level);
 }
@@ -5461,13 +5461,13 @@ static void reset_shadow_zero_bits_mask(struct kvm_vcpu *vcpu,
 	bool is_amd = true;
 	/* KVM doesn't use 2-level page tables for the shadow MMU. */
 	bool is_pse = false;
-	struct rsvd_bits_validate *shadow_zero_check;
+	struct kvm_page_format *fmt;
 	int i;
 
 	WARN_ON_ONCE(context->root_role.level < PT32E_ROOT_LEVEL);
 
-	shadow_zero_check = &context->shadow_zero_check;
-	__reset_rsvds_bits_mask(shadow_zero_check, reserved_hpa_bits(),
+	fmt = &context->fmt;
+	__reset_rsvds_bits_mask(fmt, reserved_hpa_bits(),
 				context->root_role.level,
 				context->root_role.efer_nx,
 				guest_cpu_cap_has(vcpu, X86_FEATURE_GBPAGES),
@@ -5483,10 +5483,10 @@ static void reset_shadow_zero_bits_mask(struct kvm_vcpu *vcpu,
 		 * Bits in shadow_me_mask but not in shadow_me_value are
 		 * not allowed to be set.
 		 */
-		shadow_zero_check->rsvd_bits_mask[0][i] |= shadow_me_mask;
-		shadow_zero_check->rsvd_bits_mask[1][i] |= shadow_me_mask;
-		shadow_zero_check->rsvd_bits_mask[0][i] &= ~shadow_me_value;
-		shadow_zero_check->rsvd_bits_mask[1][i] &= ~shadow_me_value;
+		fmt->rsvd_bits_mask[0][i] |= shadow_me_mask;
+		fmt->rsvd_bits_mask[1][i] |= shadow_me_mask;
+		fmt->rsvd_bits_mask[0][i] &= ~shadow_me_value;
+		fmt->rsvd_bits_mask[1][i] &= ~shadow_me_value;
 	}
 
 }
@@ -5503,18 +5503,18 @@ static inline bool boot_cpu_is_amd(void)
  */
 static void reset_tdp_shadow_zero_bits_mask(struct kvm_mmu *context)
 {
-	struct rsvd_bits_validate *shadow_zero_check;
+	struct kvm_page_format *fmt;
 	int i;
 
-	shadow_zero_check = &context->shadow_zero_check;
+	fmt = &context->fmt;
 
 	if (boot_cpu_is_amd())
-		__reset_rsvds_bits_mask(shadow_zero_check, reserved_hpa_bits(),
+		__reset_rsvds_bits_mask(fmt, reserved_hpa_bits(),
 					context->root_role.level, true,
 					boot_cpu_has(X86_FEATURE_GBPAGES),
 					false, true);
 	else
-		__reset_rsvds_bits_mask_ept(shadow_zero_check,
+		__reset_rsvds_bits_mask_ept(fmt,
 					    reserved_hpa_bits(), false,
 					    max_huge_page_level);
 
@@ -5522,8 +5522,8 @@ static void reset_tdp_shadow_zero_bits_mask(struct kvm_mmu *context)
 		return;
 
 	for (i = context->root_role.level; --i >= 0;) {
-		shadow_zero_check->rsvd_bits_mask[0][i] &= ~shadow_me_mask;
-		shadow_zero_check->rsvd_bits_mask[1][i] &= ~shadow_me_mask;
+		fmt->rsvd_bits_mask[0][i] &= ~shadow_me_mask;
+		fmt->rsvd_bits_mask[1][i] &= ~shadow_me_mask;
 	}
 }
 
@@ -5534,7 +5534,7 @@ static void reset_tdp_shadow_zero_bits_mask(struct kvm_mmu *context)
 static void
 reset_ept_shadow_zero_bits_mask(struct kvm_mmu *context, bool execonly)
 {
-	__reset_rsvds_bits_mask_ept(&context->shadow_zero_check,
+	__reset_rsvds_bits_mask_ept(&context->fmt,
 				    reserved_hpa_bits(), execonly,
 				    max_huge_page_level);
 }

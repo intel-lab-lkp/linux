@@ -8703,7 +8703,7 @@ __init int vmx_hardware_setup(void)
 
 	/*
 	 * Setup shadow_me_value/shadow_me_mask to include MKTME KeyID
-	 * bits to shadow_zero_check.
+	 * bits into the MMU's struct kvm_page_format.
 	 */
 	vmx_setup_me_spte_mask();
 
