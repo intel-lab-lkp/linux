@@ -642,4 +642,19 @@ config USB_RTL8153_ECM
 	  CONFIG_USB_RTL8152 is not set, or the RTL8153 device is not
 	  supported by r8152 driver.
 
+config USB_NET_XMM6260
+	tristate "Infineon XMM626X Baseband HSPA/HSUPA modem"
+	depends on GPIOLIB && OF && USB_CHIPIDEA
+	help
+	  Select this if you want to use an Infineon XMM626X modem, found in
+	  devices such as the LG Optimus 4X P880, LG Optimus Vu P895, Samsung
+	  Galaxy S II (GT-I9100), and Galaxy Nexus (GT-I9250). This driver
+	  handles the modem configuration and provides a stable way to expose
+	  the modem's USB interface. To establish a connection, you will first
+	  need a userspace program to send the correct commands to the modem
+	  through its CDC ACM port, as well as a DHCP client.
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called baseband-xmm6260.
+
 endif # USB_NET_DRIVERS
