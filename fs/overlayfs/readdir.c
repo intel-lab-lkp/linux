@@ -292,6 +292,27 @@ void ovl_dir_cache_free(struct inode *inode)
 	}
 }
 
+static void ovl_dir_cache_drop(struct inode *inode)
+{
+	struct ovl_dir_cache *cache = ovl_dir_cache(inode);
+
+	if (!cache)
+		return;
+
+	ovl_set_dir_cache(inode, NULL);
+
+	/*
+	 * Merged dir caches are refcounted by open directory files.  If the
+	 * inode cache is replaced while such a file still references it, keep
+	 * the old cache alive until ovl_cache_put().
+	 */
+	if (cache->refcount)
+		return;
+
+	ovl_cache_free(&cache->entries);
+	kfree(cache);
+}
+
 static void ovl_cache_put(struct ovl_dir_file *od, struct inode *inode)
 {
 	struct ovl_dir_cache *cache = od->cache;
@@ -485,13 +506,7 @@ static struct ovl_dir_cache *ovl_cache_get(struct dentry *dentry)
 	struct ovl_dir_cache *cache;
 	struct inode *inode = d_inode(dentry);
 
-	cache = ovl_dir_cache(inode);
-	if (cache && ovl_inode_version_get(inode) == cache->version) {
-		WARN_ON(!cache->refcount);
-		cache->refcount++;
-		return cache;
-	}
-	ovl_set_dir_cache(d_inode(dentry), NULL);
+	ovl_dir_cache_drop(inode);
 
 	cache = kzalloc_obj(struct ovl_dir_cache);
 	if (!cache)
@@ -509,7 +524,6 @@ static struct ovl_dir_cache *ovl_cache_get(struct dentry *dentry)
 	}
 
 	cache->version = ovl_inode_version_get(inode);
-	ovl_set_dir_cache(inode, cache);
 
 	return cache;
 }
@@ -699,12 +713,12 @@ static struct ovl_dir_cache *ovl_cache_get_impure(const struct path *path)
 	struct ovl_dir_cache *cache;
 
 	cache = ovl_dir_cache(inode);
-	if (cache && ovl_inode_version_get(inode) == cache->version)
+	if (cache && !cache->refcount &&
+	    ovl_inode_version_get(inode) == cache->version)
 		return cache;
 
-	/* Impure cache is not refcounted, free it here */
-	ovl_dir_cache_free(inode);
-	ovl_set_dir_cache(inode, NULL);
+	/* Drop stale or incompatible inode cache before building impure cache */
+	ovl_dir_cache_drop(inode);
 
 	cache = kzalloc_obj(struct ovl_dir_cache);
 	if (!cache)
