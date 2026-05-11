@@ -4,6 +4,7 @@ obj-$(CONFIG_SDXI) += sdxi.o
 sdxi-objs += \
 	completion.o  \
 	context.o     \
+	descriptor.o  \
 	device.o      \
 	ring.o
 
