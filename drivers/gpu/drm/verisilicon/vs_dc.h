@@ -31,6 +31,7 @@ struct vs_dc {
 	struct clk *pix_clk[VSDC_MAX_OUTPUTS];
 	struct reset_control_bulk_data rsts[VSDC_RESET_COUNT];
 
+	const struct vs_dc_info *info;
 	struct vs_drm_dev *drm_dev;
 	struct vs_chip_identity identity;
 };

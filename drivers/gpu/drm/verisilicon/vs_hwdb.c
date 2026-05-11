@@ -78,7 +78,7 @@ static const u32 vs_formats_array_with_yuv444[] = {
 	/* TODO: non-RGB formats */
 };
 
-static const struct vs_formats vs_formats_no_yuv444 = {
+const struct vs_formats vs_formats_no_yuv444 = {
 	.array = vs_formats_array_no_yuv444,
 	.num = ARRAY_SIZE(vs_formats_array_no_yuv444)
 };

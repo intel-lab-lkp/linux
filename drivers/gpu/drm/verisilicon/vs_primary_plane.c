@@ -55,8 +55,9 @@ static int vs_primary_plane_atomic_check(struct drm_plane *plane,
 
 static void vs_primary_plane_commit(struct vs_dc *dc, unsigned int output)
 {
-	regmap_set_bits(dc->regs, VSDC_FB_CONFIG_EX(output),
-			VSDC_FB_CONFIG_EX_COMMIT);
+	if (dc->info->has_config_ex)
+		regmap_set_bits(dc->regs, VSDC_FB_CONFIG_EX(output),
+				VSDC_FB_CONFIG_EX_COMMIT);
 }
 
 static void vs_primary_plane_atomic_enable(struct drm_plane *plane,
@@ -69,11 +70,13 @@ static void vs_primary_plane_atomic_enable(struct drm_plane *plane,
 	unsigned int output = vcrtc->id;
 	struct vs_dc *dc = vcrtc->dc;
 
-	regmap_set_bits(dc->regs, VSDC_FB_CONFIG_EX(output),
-			VSDC_FB_CONFIG_EX_FB_EN);
-	regmap_update_bits(dc->regs, VSDC_FB_CONFIG_EX(output),
-			   VSDC_FB_CONFIG_EX_DISPLAY_ID_MASK,
-			   VSDC_FB_CONFIG_EX_DISPLAY_ID(output));
+	if (dc->info->has_config_ex) {
+		regmap_set_bits(dc->regs, VSDC_FB_CONFIG_EX(output),
+				VSDC_FB_CONFIG_EX_FB_EN);
+		regmap_update_bits(dc->regs, VSDC_FB_CONFIG_EX(output),
+				   VSDC_FB_CONFIG_EX_DISPLAY_ID_MASK,
+				   VSDC_FB_CONFIG_EX_DISPLAY_ID(output));
+	}
 
 	vs_primary_plane_commit(dc, output);
 }
@@ -88,8 +91,9 @@ static void vs_primary_plane_atomic_disable(struct drm_plane *plane,
 	unsigned int output = vcrtc->id;
 	struct vs_dc *dc = vcrtc->dc;
 
-	regmap_set_bits(dc->regs, VSDC_FB_CONFIG_EX(output),
-			VSDC_FB_CONFIG_EX_FB_EN);
+	if (dc->info->has_config_ex)
+		regmap_set_bits(dc->regs, VSDC_FB_CONFIG_EX(output),
+				VSDC_FB_CONFIG_EX_FB_EN);
 
 	vs_primary_plane_commit(dc, output);
 }
@@ -126,6 +130,11 @@ static void vs_primary_plane_atomic_update(struct drm_plane *plane,
 			   VSDC_FB_CONFIG_UV_SWIZZLE_EN,
 			   vs_state->format.uv_swizzle);
 
+	/* DCUltra Lite requires explicit enable/reset bits in FB_CONFIG */
+	if (!dc->info->has_config_ex)
+		regmap_set_bits(dc->regs, VSDC_FB_CONFIG(output),
+				VSDC_FB_CONFIG_ENABLE | VSDC_FB_CONFIG_RESET);
+
 	dma_addr = vs_fb_get_dma_addr(fb, &state->src);
 
 	regmap_write(dc->regs, VSDC_FB_ADDRESS(output),
@@ -133,16 +142,18 @@ static void vs_primary_plane_atomic_update(struct drm_plane *plane,
 	regmap_write(dc->regs, VSDC_FB_STRIDE(output),
 		     fb->pitches[0]);
 
-	regmap_write(dc->regs, VSDC_FB_TOP_LEFT(output),
-		     VSDC_MAKE_PLANE_POS(state->crtc_x, state->crtc_y));
-	regmap_write(dc->regs, VSDC_FB_BOTTOM_RIGHT(output),
-		     VSDC_MAKE_PLANE_POS(state->crtc_x + state->crtc_w,
-					 state->crtc_y + state->crtc_h));
 	regmap_write(dc->regs, VSDC_FB_SIZE(output),
 		     VSDC_MAKE_PLANE_SIZE(state->crtc_w, state->crtc_h));
 
-	regmap_write(dc->regs, VSDC_FB_BLEND_CONFIG(output),
-		     VSDC_FB_BLEND_CONFIG_BLEND_DISABLE);
+	if (dc->info->has_config_ex) {
+		regmap_write(dc->regs, VSDC_FB_TOP_LEFT(output),
+			     VSDC_MAKE_PLANE_POS(state->crtc_x, state->crtc_y));
+		regmap_write(dc->regs, VSDC_FB_BOTTOM_RIGHT(output),
+			     VSDC_MAKE_PLANE_POS(state->crtc_x + state->crtc_w,
+						 state->crtc_y + state->crtc_h));
+		regmap_write(dc->regs, VSDC_FB_BLEND_CONFIG(output),
+			     VSDC_FB_BLEND_CONFIG_BLEND_DISABLE);
+	}
 
 	vs_primary_plane_commit(dc, output);
 }

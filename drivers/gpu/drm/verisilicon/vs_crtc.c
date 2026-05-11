@@ -18,6 +18,7 @@
 #include "vs_dc.h"
 #include "vs_dc_top_regs.h"
 #include "vs_drm.h"
+#include "vs_hwdb.h"
 #include "vs_plane.h"
 
 static void vs_crtc_atomic_disable(struct drm_crtc *crtc,
@@ -132,7 +133,11 @@ static int vs_crtc_enable_vblank(struct drm_crtc *crtc)
 	struct vs_crtc *vcrtc = drm_crtc_to_vs_crtc(crtc);
 	struct vs_dc *dc = vcrtc->dc;
 
-	regmap_set_bits(dc->regs, VSDC_TOP_IRQ_EN, VSDC_TOP_IRQ_VSYNC(vcrtc->id));
+	if (dc->info->family == VS_DC_FAMILY_DCULTRA_LITE)
+		regmap_write(dc->regs, VSDC_DISP_IRQ_EN, BIT(0));
+	else
+		regmap_set_bits(dc->regs, VSDC_TOP_IRQ_EN,
+				VSDC_TOP_IRQ_VSYNC(vcrtc->id));
 
 	return 0;
 }
@@ -142,7 +147,11 @@ static void vs_crtc_disable_vblank(struct drm_crtc *crtc)
 	struct vs_crtc *vcrtc = drm_crtc_to_vs_crtc(crtc);
 	struct vs_dc *dc = vcrtc->dc;
 
-	regmap_clear_bits(dc->regs, VSDC_TOP_IRQ_EN, VSDC_TOP_IRQ_VSYNC(vcrtc->id));
+	if (dc->info->family == VS_DC_FAMILY_DCULTRA_LITE)
+		regmap_write(dc->regs, VSDC_DISP_IRQ_EN, 0);
+	else
+		regmap_clear_bits(dc->regs, VSDC_TOP_IRQ_EN,
+				  VSDC_TOP_IRQ_VSYNC(vcrtc->id));
 }
 
 static const struct drm_crtc_funcs vs_crtc_funcs = {

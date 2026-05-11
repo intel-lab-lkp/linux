@@ -164,13 +164,16 @@ static void vs_bridge_enable_common(struct vs_crtc *crtc,
 			VSDC_DISP_PANEL_CONFIG_CLK_EN);
 	regmap_set_bits(dc->regs, VSDC_DISP_PANEL_CONFIG(output),
 			VSDC_DISP_PANEL_CONFIG_RUNNING);
-	regmap_clear_bits(dc->regs, VSDC_DISP_PANEL_START,
-			  VSDC_DISP_PANEL_START_MULTI_DISP_SYNC);
-	regmap_set_bits(dc->regs, VSDC_DISP_PANEL_START,
-			VSDC_DISP_PANEL_START_RUNNING(output));
 
-	regmap_set_bits(dc->regs, VSDC_DISP_PANEL_CONFIG_EX(crtc->id),
-			VSDC_DISP_PANEL_CONFIG_EX_COMMIT);
+	if (dc->info->has_config_ex) {
+		regmap_clear_bits(dc->regs, VSDC_DISP_PANEL_START,
+				  VSDC_DISP_PANEL_START_MULTI_DISP_SYNC);
+		regmap_set_bits(dc->regs, VSDC_DISP_PANEL_START,
+				VSDC_DISP_PANEL_START_RUNNING(output));
+
+		regmap_set_bits(dc->regs, VSDC_DISP_PANEL_CONFIG_EX(crtc->id),
+				VSDC_DISP_PANEL_CONFIG_EX_COMMIT);
+	}
 }
 
 static void vs_bridge_atomic_enable_dpi(struct drm_bridge *bridge,
@@ -228,14 +231,17 @@ static void vs_bridge_atomic_disable(struct drm_bridge *bridge,
 	struct vs_dc *dc = crtc->dc;
 	unsigned int output = crtc->id;
 
-	regmap_clear_bits(dc->regs, VSDC_DISP_PANEL_START,
-			  VSDC_DISP_PANEL_START_MULTI_DISP_SYNC |
-			  VSDC_DISP_PANEL_START_RUNNING(output));
 	regmap_clear_bits(dc->regs, VSDC_DISP_PANEL_CONFIG(output),
 			  VSDC_DISP_PANEL_CONFIG_RUNNING);
 
-	regmap_set_bits(dc->regs, VSDC_DISP_PANEL_CONFIG_EX(crtc->id),
-			VSDC_DISP_PANEL_CONFIG_EX_COMMIT);
+	if (dc->info->has_config_ex) {
+		regmap_clear_bits(dc->regs, VSDC_DISP_PANEL_START,
+				  VSDC_DISP_PANEL_START_MULTI_DISP_SYNC |
+				  VSDC_DISP_PANEL_START_RUNNING(output));
+
+		regmap_set_bits(dc->regs, VSDC_DISP_PANEL_CONFIG_EX(crtc->id),
+				VSDC_DISP_PANEL_CONFIG_EX_COMMIT);
+	}
 }
 
 static const struct drm_bridge_funcs vs_dpi_bridge_funcs = {
