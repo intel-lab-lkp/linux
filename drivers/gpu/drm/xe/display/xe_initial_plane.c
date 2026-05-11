@@ -75,7 +75,7 @@ initial_plane_bo(struct xe_device *xe,
 		flags |= XE_BO_FLAG_STOLEN;
 	}
 
-	bo = xe_bo_create_pin_map_at_novm(xe, tile0, size, phys_base,
+	bo = xe_bo_create_pin_map_at_novm(xe, tile0, size, phys_base, phys_base,
 					  ttm_bo_type_kernel, flags, 0, false);
 	if (IS_ERR(bo)) {
 		drm_dbg_kms(&xe->drm,

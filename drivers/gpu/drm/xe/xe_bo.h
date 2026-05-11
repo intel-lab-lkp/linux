@@ -137,8 +137,8 @@ struct xe_bo *xe_bo_create_pin_range_novm(struct xe_device *xe, struct xe_tile *
 					  enum ttm_bo_type type, u32 flags);
 struct xe_bo *
 xe_bo_create_pin_map_at_novm(struct xe_device *xe, struct xe_tile *tile,
-			     size_t size, u64 offset, enum ttm_bo_type type,
-			     u32 flags, u64 alignment, bool intr);
+			     size_t size, u64 phys_offset, u64 ggtt_offset,
+			     enum ttm_bo_type type, u32 flags, u64 alignment, bool intr);
 struct xe_bo *xe_managed_bo_create_pin_map(struct xe_device *xe, struct xe_tile *tile,
 					   size_t size, u32 flags);
 void xe_managed_bo_unpin_map_no_vm(struct xe_bo *bo);

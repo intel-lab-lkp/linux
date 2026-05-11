@@ -166,7 +166,7 @@ static int __xe_pin_fb_vma_dpt(struct drm_gem_object *obj,
 
 	if (IS_DGFX(xe))
 		dpt = xe_bo_create_pin_map_at_novm(xe, tile0,
-						   dpt_size, ~0ull,
+						   dpt_size, ~0ull, ~0ull,
 						   ttm_bo_type_kernel,
 						   XE_BO_FLAG_VRAM0 |
 						   XE_BO_FLAG_GGTT |
@@ -174,7 +174,7 @@ static int __xe_pin_fb_vma_dpt(struct drm_gem_object *obj,
 						   pin_params->alignment, false);
 	else
 		dpt = xe_bo_create_pin_map_at_novm(xe, tile0,
-						   dpt_size,  ~0ull,
+						   dpt_size,  ~0ull, ~0ull,
 						   ttm_bo_type_kernel,
 						   XE_BO_FLAG_STOLEN |
 						   XE_BO_FLAG_GGTT |
@@ -182,7 +182,7 @@ static int __xe_pin_fb_vma_dpt(struct drm_gem_object *obj,
 						   pin_params->alignment, false);
 	if (IS_ERR(dpt))
 		dpt = xe_bo_create_pin_map_at_novm(xe, tile0,
-						   dpt_size,  ~0ull,
+						   dpt_size,  ~0ull, ~0ull,
 						   ttm_bo_type_kernel,
 						   XE_BO_FLAG_SYSTEM |
 						   XE_BO_FLAG_GGTT |

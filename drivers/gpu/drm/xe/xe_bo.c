@@ -2473,7 +2473,9 @@ static int __xe_bo_fixed_placement(struct xe_device *xe,
 static struct xe_bo *
 __xe_bo_create_locked(struct xe_device *xe,
 		      struct xe_tile *tile, struct xe_vm *vm,
-		      size_t size, u64 start, u64 end,
+		      size_t size,
+		      u64 phys_start, u64 phys_end,
+		      u64 ggtt_start, u64 ggtt_end,
 		      u16 cpu_caching, enum ttm_bo_type type, u32 flags,
 		      u64 alignment, struct drm_exec *exec)
 {
@@ -2483,13 +2485,14 @@ __xe_bo_create_locked(struct xe_device *xe,
 	if (vm)
 		xe_vm_assert_held(vm);
 
-	if (start || end != ~0ULL) {
+	if (phys_start || phys_end != ~0ULL) {
 		bo = xe_bo_alloc();
 		if (IS_ERR(bo))
 			return bo;
 
 		flags |= XE_BO_FLAG_FIXED_PLACEMENT;
-		err = __xe_bo_fixed_placement(xe, bo, type, flags, start, end, size);
+		err = __xe_bo_fixed_placement(xe, bo, type, flags,
+					      phys_start, phys_end, size);
 		if (err) {
 			xe_bo_free(bo);
 			return ERR_PTR(err);
@@ -2532,9 +2535,9 @@ __xe_bo_create_locked(struct xe_device *xe,
 			if (t != tile && !(bo->flags & XE_BO_FLAG_GGTTx(t)))
 				continue;
 
-			if (flags & XE_BO_FLAG_FIXED_PLACEMENT) {
+			if (ggtt_start || ggtt_end != ~0ULL) {
 				err = xe_ggtt_insert_bo_at(t->mem.ggtt, bo,
-							   start + xe_bo_size(bo), U64_MAX,
+							   ggtt_start, ggtt_end,
 							   exec);
 			} else {
 				err = xe_ggtt_insert_bo(t->mem.ggtt, bo, exec);
@@ -2574,8 +2577,9 @@ struct xe_bo *xe_bo_create_locked(struct xe_device *xe, struct xe_tile *tile,
 				  enum ttm_bo_type type, u32 flags,
 				  struct drm_exec *exec)
 {
-	return __xe_bo_create_locked(xe, tile, vm, size, 0, ~0ULL, 0, type,
-				     flags, 0, exec);
+	return __xe_bo_create_locked(xe, tile, vm, size,
+				     0, ~0ULL, 0, ~0ULL,
+				     0, type, flags, 0, exec);
 }
 
 static struct xe_bo *xe_bo_create_novm(struct xe_device *xe, struct xe_tile *tile,
@@ -2590,7 +2594,8 @@ static struct xe_bo *xe_bo_create_novm(struct xe_device *xe, struct xe_tile *til
 
 	xe_validation_guard(&ctx, &xe->val, &exec, (struct xe_val_flags) {.interruptible = intr},
 			    ret) {
-		bo = __xe_bo_create_locked(xe, tile, NULL, size, 0, ~0ULL,
+		bo = __xe_bo_create_locked(xe, tile, NULL, size,
+					   0, ~0ULL, 0, ~0ULL,
 					   cpu_caching, type, flags, alignment, &exec);
 		drm_exec_retry_on_contention(&exec);
 		if (IS_ERR(bo)) {
@@ -2629,7 +2634,8 @@ struct xe_bo *xe_bo_create_user(struct xe_device *xe,
 
 	if (vm || exec) {
 		xe_assert(xe, exec);
-		bo = __xe_bo_create_locked(xe, NULL, vm, size, 0, ~0ULL,
+		bo = __xe_bo_create_locked(xe, NULL, vm, size,
+					   0, ~0ULL, 0, ~0ULL,
 					   cpu_caching, ttm_bo_type_device,
 					   flags, 0, exec);
 		if (!IS_ERR(bo))
@@ -2669,7 +2675,8 @@ struct xe_bo *xe_bo_create_pin_range_novm(struct xe_device *xe, struct xe_tile *
 	int err = 0;
 
 	xe_validation_guard(&ctx, &xe->val, &exec, (struct xe_val_flags) {}, err) {
-		bo = __xe_bo_create_locked(xe, tile, NULL, size, start, end,
+		bo = __xe_bo_create_locked(xe, tile, NULL, size,
+					   start, end, 0, ~0ULL,
 					   0, type, flags, 0, &exec);
 		if (IS_ERR(bo)) {
 			drm_exec_retry_on_contention(&exec);
@@ -2694,20 +2701,24 @@ struct xe_bo *xe_bo_create_pin_range_novm(struct xe_device *xe, struct xe_tile *
 static struct xe_bo *xe_bo_create_pin_map_at_aligned(struct xe_device *xe,
 						     struct xe_tile *tile,
 						     struct xe_vm *vm,
-						     size_t size, u64 offset,
+						     size_t size, u64 phys_offset, u64 ggtt_offset,
 						     enum ttm_bo_type type, u32 flags,
 						     u64 alignment, struct drm_exec *exec)
 {
 	struct xe_bo *bo;
 	int err;
-	u64 start = offset == ~0ull ? 0 : offset;
-	u64 end = offset == ~0ull ? ~0ull : start + size;
+	u64 phys_start = phys_offset == ~0ull ? 0 : phys_offset;
+	u64 phys_end = phys_offset == ~0ull ? ~0ull : phys_start + size;
+	u64 ggtt_start = ggtt_offset == ~0ull ? 0 : ggtt_offset;
+	u64 ggtt_end = ggtt_offset == ~0ull ? ~0ull : ggtt_start + size;
 
 	if (flags & XE_BO_FLAG_STOLEN &&
 	    xe_ttm_stolen_cpu_access_needs_ggtt(xe))
 		flags |= XE_BO_FLAG_GGTT;
 
-	bo = __xe_bo_create_locked(xe, tile, vm, size, start, end, 0, type,
+	bo = __xe_bo_create_locked(xe, tile, vm, size,
+				   phys_start, phys_end, ggtt_start, ggtt_end,
+				   0, type,
 				   flags | XE_BO_FLAG_NEEDS_CPU_ACCESS | XE_BO_FLAG_PINNED,
 				   alignment, exec);
 	if (IS_ERR(bo))
@@ -2739,7 +2750,8 @@ err_put:
  * @tile: The tile to select for migration of this bo, and the tile used for
  * GGTT binding if any. Only to be non-NULL for ttm_bo_type_kernel bos.
  * @size: The storage size to use for the bo.
- * @offset: Optional VRAM offset or %~0ull for don't care.
+ * @phys_offset: Optional VRAM offset or %~0ull for don't care.
+ * @ggtt_offset: Optional GGTT offset or %~0ull for don't care.
  * @type: The TTM buffer object type.
  * @flags: XE_BO_FLAG_ flags.
  * @alignment: GGTT alignment.
@@ -2754,7 +2766,8 @@ err_put:
  */
 struct xe_bo *
 xe_bo_create_pin_map_at_novm(struct xe_device *xe, struct xe_tile *tile,
-			     size_t size, u64 offset, enum ttm_bo_type type, u32 flags,
+			     size_t size, u64 phys_offset, u64 ggtt_offset,
+			     enum ttm_bo_type type, u32 flags,
 			     u64 alignment, bool intr)
 {
 	struct xe_validation_ctx ctx;
@@ -2764,7 +2777,7 @@ xe_bo_create_pin_map_at_novm(struct xe_device *xe, struct xe_tile *tile,
 
 	xe_validation_guard(&ctx, &xe->val, &exec, (struct xe_val_flags) {.interruptible = intr},
 			    ret) {
-		bo = xe_bo_create_pin_map_at_aligned(xe, tile, NULL, size, offset,
+		bo = xe_bo_create_pin_map_at_aligned(xe, tile, NULL, size, phys_offset, ggtt_offset,
 						     type, flags, alignment, &exec);
 		if (IS_ERR(bo)) {
 			drm_exec_retry_on_contention(&exec);
@@ -2801,8 +2814,9 @@ struct xe_bo *xe_bo_create_pin_map(struct xe_device *xe, struct xe_tile *tile,
 				   enum ttm_bo_type type, u32 flags,
 				   struct drm_exec *exec)
 {
-	return xe_bo_create_pin_map_at_aligned(xe, tile, vm, size, ~0ull, type, flags,
-					       0, exec);
+	return xe_bo_create_pin_map_at_aligned(xe, tile, vm,
+					       size, ~0ull, ~0ull,
+					       type, flags, 0, exec);
 }
 
 /**
@@ -2826,7 +2840,9 @@ struct xe_bo *xe_bo_create_pin_map_novm(struct xe_device *xe, struct xe_tile *ti
 					size_t size, enum ttm_bo_type type, u32 flags,
 					bool intr)
 {
-	return xe_bo_create_pin_map_at_novm(xe, tile, size, ~0ull, type, flags, 0, intr);
+	return xe_bo_create_pin_map_at_novm(xe, tile,
+					    size, ~0ull, ~0ull,
+					    type, flags, 0, intr);
 }
 
 static void __xe_bo_unpin_map_no_vm(void *arg)
