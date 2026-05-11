@@ -26,7 +26,7 @@ int vfio_df_iommufd_bind(struct vfio_device_file *df)
 	lockdep_assert_held(&vdev->dev_set->lock);
 
 	/* Returns 0 to permit device opening under noiommu mode */
-	if (vfio_device_is_noiommu(vdev))
+	if (vfio_device_is_group_noiommu(vdev))
 		return 0;
 
 	return vdev->ops->bind_iommufd(vdev, ictx, &df->devid);
@@ -41,7 +41,7 @@ int vfio_iommufd_compat_attach_ioas(struct vfio_device *vdev,
 	lockdep_assert_held(&vdev->dev_set->lock);
 
 	/* compat noiommu does not need to do ioas attach */
-	if (vfio_device_is_noiommu(vdev))
+	if (vfio_device_is_group_noiommu(vdev))
 		return 0;
 
 	ret = iommufd_vfio_compat_ioas_get_id(ictx, &ioas_id);
@@ -58,7 +58,7 @@ void vfio_df_iommufd_unbind(struct vfio_device_file *df)
 
 	lockdep_assert_held(&vdev->dev_set->lock);
 
-	if (vfio_device_is_noiommu(vdev))
+	if (vfio_device_is_group_noiommu(vdev))
 		return;
 
 	if (vdev->ops->unbind_iommufd)

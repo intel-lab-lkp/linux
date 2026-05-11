@@ -54,7 +54,7 @@ static struct vfio {
 	int				fs_count;
 } vfio;
 
-#ifdef CONFIG_VFIO_NOIOMMU
+#ifdef CONFIG_VFIO_GROUP_NOIOMMU
 bool vfio_noiommu __read_mostly;
 module_param_named(enable_unsafe_noiommu_mode,
 		   vfio_noiommu, bool, S_IRUGO | S_IWUSR);
@@ -353,7 +353,7 @@ static int __vfio_register_dev(struct vfio_device *device,
 	 * restore cache coherency. It has to be checked here because it is only
 	 * valid for cases where we are using iommu groups.
 	 */
-	if (type == VFIO_IOMMU && !vfio_device_is_noiommu(device) &&
+	if (type == VFIO_IOMMU && !vfio_device_is_group_noiommu(device) &&
 	    !device_iommu_capable(device->dev, IOMMU_CAP_CACHE_COHERENCY)) {
 		ret = -EINVAL;
 		goto err_out;

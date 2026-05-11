@@ -286,7 +286,7 @@ static int iommufd_vfio_check_extension(struct iommufd_ctx *ictx,
 		return !ictx->no_iommu_mode;
 
 	case VFIO_NOIOMMU_IOMMU:
-		return IS_ENABLED(CONFIG_VFIO_NOIOMMU);
+		return IS_ENABLED(CONFIG_VFIO_GROUP_NOIOMMU);
 
 	case VFIO_DMA_CC_IOMMU:
 		return iommufd_vfio_cc_iommu(ictx);
@@ -318,7 +318,7 @@ static int iommufd_vfio_set_iommu(struct iommufd_ctx *ictx, unsigned long type)
 	 * other ioctls. We let them keep working but they mostly fail since no
 	 * IOAS should exist.
 	 */
-	if (IS_ENABLED(CONFIG_VFIO_NOIOMMU) && type == VFIO_NOIOMMU_IOMMU &&
+	if (IS_ENABLED(CONFIG_VFIO_GROUP_NOIOMMU) && type == VFIO_NOIOMMU_IOMMU &&
 	    no_iommu_mode) {
 		if (!capable(CAP_SYS_RAWIO))
 			return -EPERM;

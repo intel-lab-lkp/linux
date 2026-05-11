@@ -80,7 +80,7 @@ static const struct vfio_iommu_driver_ops vfio_noiommu_ops = {
 static bool vfio_iommu_driver_allowed(struct vfio_container *container,
 				      const struct vfio_iommu_driver *driver)
 {
-	if (!IS_ENABLED(CONFIG_VFIO_NOIOMMU))
+	if (!IS_ENABLED(CONFIG_VFIO_GROUP_NOIOMMU))
 		return true;
 	return container->noiommu == (driver->ops == &vfio_noiommu_ops);
 }
@@ -583,7 +583,7 @@ int __init vfio_container_init(void)
 		return ret;
 	}
 
-	if (IS_ENABLED(CONFIG_VFIO_NOIOMMU)) {
+	if (IS_ENABLED(CONFIG_VFIO_GROUP_NOIOMMU)) {
 		ret = vfio_register_iommu_driver(&vfio_noiommu_ops);
 		if (ret)
 			goto err_misc;
@@ -597,7 +597,7 @@ err_misc:
 
 void vfio_container_cleanup(void)
 {
-	if (IS_ENABLED(CONFIG_VFIO_NOIOMMU))
+	if (IS_ENABLED(CONFIG_VFIO_GROUP_NOIOMMU))
 		vfio_unregister_iommu_driver(&vfio_noiommu_ops);
 	misc_deregister(&vfio_dev);
 	mutex_destroy(&vfio.iommu_drivers_lock);

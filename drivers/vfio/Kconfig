@@ -60,9 +60,9 @@ config VFIO_IOMMU_SPAPR_TCE
 	default VFIO
 endif
 
-config VFIO_NOIOMMU
-	bool "VFIO No-IOMMU support"
-	depends on VFIO_GROUP
+config VFIO_GROUP_NOIOMMU
+	bool "VFIO group No-IOMMU support"
+	depends on VFIO_GROUP && (VFIO_CONTAINER || IOMMUFD_VFIO_CONTAINER)
 	help
 	  VFIO is built on the ability to isolate devices using the IOMMU.
 	  Only with an IOMMU can userspace access to DMA capable devices be

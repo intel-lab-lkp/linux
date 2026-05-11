@@ -137,7 +137,7 @@ static int vfio_group_ioctl_set_container(struct vfio_group *group,
 
 	iommufd = iommufd_ctx_from_file(fd_file(f));
 	if (!IS_ERR(iommufd)) {
-		if (IS_ENABLED(CONFIG_VFIO_NOIOMMU) &&
+		if (IS_ENABLED(CONFIG_VFIO_GROUP_NOIOMMU) &&
 		    group->type == VFIO_NO_IOMMU)
 			ret = iommufd_vfio_compat_set_no_iommu(iommufd);
 		else
@@ -190,7 +190,7 @@ static int vfio_df_group_open(struct vfio_device_file *df)
 		vfio_device_group_get_kvm_safe(device);
 
 	df->iommufd = device->group->iommufd;
-	if (df->iommufd && vfio_device_is_noiommu(device) && device->open_count == 0) {
+	if (df->iommufd && vfio_device_is_group_noiommu(device) && device->open_count == 0) {
 		/*
 		 * Require no compat ioas to be assigned to proceed.  The basic
 		 * statement is that the user cannot have done something that

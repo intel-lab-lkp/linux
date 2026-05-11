@@ -36,7 +36,7 @@ vfio_allocate_device_file(struct vfio_device *device);
 
 extern const struct file_operations vfio_device_fops;
 
-#ifdef CONFIG_VFIO_NOIOMMU
+#ifdef CONFIG_VFIO_GROUP_NOIOMMU
 extern bool vfio_noiommu __read_mostly;
 #else
 enum { vfio_noiommu = false };
@@ -112,9 +112,9 @@ bool vfio_device_has_container(struct vfio_device *device);
 int __init vfio_group_init(void);
 void vfio_group_cleanup(void);
 
-static inline bool vfio_device_is_noiommu(struct vfio_device *vdev)
+static inline bool vfio_device_is_group_noiommu(struct vfio_device *vdev)
 {
-	return IS_ENABLED(CONFIG_VFIO_NOIOMMU) &&
+	return IS_ENABLED(CONFIG_VFIO_GROUP_NOIOMMU) &&
 	       vdev->group->type == VFIO_NO_IOMMU;
 }
 #else
@@ -188,7 +188,7 @@ static inline void vfio_group_cleanup(void)
 {
 }
 
-static inline bool vfio_device_is_noiommu(struct vfio_device *vdev)
+static inline bool vfio_device_is_group_noiommu(struct vfio_device *vdev)
 {
 	return false;
 }
@@ -359,7 +359,7 @@ void vfio_init_device_cdev(struct vfio_device *device);
 static inline int vfio_device_add(struct vfio_device *device)
 {
 	/* cdev does not support noiommu device */
-	if (vfio_device_is_noiommu(device))
+	if (vfio_device_is_group_noiommu(device))
 		return device_add(&device->device);
 	vfio_init_device_cdev(device);
 	return cdev_device_add(&device->cdev, &device->device);
@@ -367,7 +367,7 @@ static inline int vfio_device_add(struct vfio_device *device)
 
 static inline void vfio_device_del(struct vfio_device *device)
 {
-	if (vfio_device_is_noiommu(device))
+	if (vfio_device_is_group_noiommu(device))
 		device_del(&device->device);
 	else
 		cdev_device_del(&device->cdev, &device->device);
