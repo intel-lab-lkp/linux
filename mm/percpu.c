@@ -1675,6 +1675,16 @@ static struct pcpu_chunk *pcpu_chunk_addr_search(void *addr)
 }
 
 #ifdef CONFIG_MEMCG
+static unsigned int pcpu_memcg_nr_precharge_pages(size_t size)
+{
+	size_t total = pcpu_obj_total_size(size);
+
+	if (total < PAGE_SIZE)
+		return num_possible_nodes();
+
+	return PAGE_ALIGN(total) >> PAGE_SHIFT;
+}
+
 static bool pcpu_memcg_pre_alloc_hook(size_t size, gfp_t gfp,
 				      struct obj_cgroup **objcgp)
 {
@@ -1687,8 +1697,7 @@ static bool pcpu_memcg_pre_alloc_hook(size_t size, gfp_t gfp,
 	if (!objcg || obj_cgroup_is_root(objcg))
 		return true;
 
-	if (obj_cgroup_precharge(objcg, gfp,
-				 PAGE_ALIGN(pcpu_obj_total_size(size)) >> PAGE_SHIFT))
+	if (obj_cgroup_precharge(objcg, gfp, pcpu_memcg_nr_precharge_pages(size)))
 		return false;
 
 	*objcgp = objcg;
@@ -1703,29 +1712,68 @@ static void pcpu_memcg_post_alloc_hook(struct obj_cgroup *objcg,
 		return;
 
 	if (likely(chunk && chunk->obj_exts)) {
-		size_t total = pcpu_obj_total_size(size);
-		size_t remainder = PAGE_ALIGN(total) - total;
+		unsigned int nr_pages = PAGE_ALIGN(size) >> PAGE_SHIFT;
+		unsigned int precharge_pages = pcpu_memcg_nr_precharge_pages(size);
+		unsigned int pages_used = 0;
+		unsigned int node_credit[MAX_NUMNODES] = { 0 };
+		unsigned int cpu;
+		int nid;
 
 		obj_cgroup_get(objcg);
 		chunk->obj_exts[off >> PCPU_MIN_ALLOC_SHIFT].cgroup = objcg;
 
 		rcu_read_lock();
 		mod_memcg_state(obj_cgroup_memcg(objcg), MEMCG_PERCPU_B,
-				total);
+				pcpu_obj_total_size(size));
 		rcu_read_unlock();
 
-		obj_cgroup_account_kmem(objcg, PAGE_ALIGN(total) >> PAGE_SHIFT);
-		if (remainder)
-			obj_cgroup_uncharge(objcg, remainder);
+		for_each_possible_cpu(cpu) {
+			unsigned int i;
+
+			for (i = 0; i < nr_pages; i++) {
+				void *addr = (void *)pcpu_chunk_addr(chunk, cpu,
+								     PFN_DOWN(off) + i);
+				size_t page_sz = i < nr_pages - 1 ?
+					PAGE_SIZE : size - (nr_pages - 1) * PAGE_SIZE;
+
+				nid = page_to_nid(pcpu_addr_to_page(addr));
+
+				if (node_credit[nid] < page_sz) {
+					struct obj_cgroup *nid_objcg;
+
+					nid_objcg = obj_cgroup_get_nid(objcg, nid);
+					obj_cgroup_account_kmem(nid_objcg, 1);
+					node_credit[nid] += PAGE_SIZE;
+					pages_used++;
+				}
+
+				node_credit[nid] -= page_sz;
+			}
+		}
+
+		/* Return unused precharged pages */
+		if (pages_used < precharge_pages)
+			obj_cgroup_unprecharge(objcg, precharge_pages - pages_used);
+
+		/* Put leftover per-node credit into stock */
+		for_each_online_node(nid) {
+			if (node_credit[nid] > 0) {
+				struct obj_cgroup *nid_objcg;
+
+				nid_objcg = obj_cgroup_get_nid(objcg, nid);
+				obj_cgroup_uncharge(nid_objcg, node_credit[nid]);
+			}
+		}
 	} else {
-		obj_cgroup_unprecharge(objcg,
-				       PAGE_ALIGN(pcpu_obj_total_size(size)) >> PAGE_SHIFT);
+		obj_cgroup_unprecharge(objcg, pcpu_memcg_nr_precharge_pages(size));
 	}
 }
 
 static void pcpu_memcg_free_hook(struct pcpu_chunk *chunk, int off, size_t size)
 {
+	unsigned int nr_pages = PAGE_ALIGN(size) >> PAGE_SHIFT;
 	struct obj_cgroup *objcg;
+	unsigned int cpu;
 
 	if (unlikely(!chunk->obj_exts))
 		return;
@@ -1735,12 +1783,28 @@ static void pcpu_memcg_free_hook(struct pcpu_chunk *chunk, int off, size_t size)
 		return;
 	chunk->obj_exts[off >> PCPU_MIN_ALLOC_SHIFT].cgroup = NULL;
 
-	obj_cgroup_uncharge(objcg, pcpu_obj_total_size(size));
-
 	rcu_read_lock();
 	mod_memcg_state(obj_cgroup_memcg(objcg), MEMCG_PERCPU_B,
 			-pcpu_obj_total_size(size));
 	rcu_read_unlock();
+
+	for_each_possible_cpu(cpu) {
+		unsigned int i;
+
+		for (i = 0; i < nr_pages; i++) {
+			void *addr = (void *)pcpu_chunk_addr(chunk, cpu,
+							     PFN_DOWN(off) + i);
+			struct obj_cgroup *nid_objcg;
+			int nid;
+			size_t unc;
+
+			nid = page_to_nid(pcpu_addr_to_page(addr));
+			nid_objcg = obj_cgroup_get_nid(objcg, nid);
+			unc = i < nr_pages - 1 ?
+				PAGE_SIZE : size - (nr_pages - 1) * PAGE_SIZE;
+			obj_cgroup_uncharge(nid_objcg, unc);
+		}
+	}
 
 	obj_cgroup_put(objcg);
 }
