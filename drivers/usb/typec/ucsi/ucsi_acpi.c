@@ -155,6 +155,91 @@ static const struct dmi_system_id ucsi_acpi_quirks[] = {
 	{ }
 };
 
+static const struct dmi_system_id ucsi_acpi_broken_devices[] = {
+	/* Firmware reads/writes half-valid-half-garbage values. */
+
+	/* BIOS: P1CN??WW */
+	{
+		.ident = "Lenovo IdeaPad 5 2-in-1 14AHP9",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "83DR"),
+		},
+	},
+	{
+		.ident = "Lenovo IdeaPad 5 2-in-1 16AHP9",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "83DS"),
+		},
+	},
+
+	/* BIOS: R0CN??WW */
+	{
+		.ident = "Lenovo IdeaPad Slim 5 14AKP10",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "83NJ"),
+		},
+	},
+	{
+		.ident = "Lenovo IdeaPad Slim 5 14AKP10",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "83HX"),
+		},
+	},
+	{
+		.ident = "Lenovo IdeaPad Slim 5 16AKP10",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "83HY"),
+		},
+	},
+
+	/* BIOS: QXCN??WW */
+	{
+		.ident = "Lenovo Yoga 7 2-in-1 14AKP10",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "83JR"),
+		},
+	},
+	{
+		.ident = "Lenovo Yoga 7 2-in-1 16AKP10",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "83JU"),
+		},
+	},
+
+	/* BIOS: LNCN??WW */
+	{
+		.ident = "Lenovo Yoga Pro 7 14ARP8",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "83AU"),
+		},
+	},
+	{
+		.ident = "Lenovo Slim Pro 7 14ARP8",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "83AX"),
+		},
+	},
+
+	/* BIOS: PSCN??WW */
+	{
+		.ident = "Lenovo Yoga Pro 7 14ASP9",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "83HN"),
+		},
+	},
+	{ }
+};
+
 static void ucsi_acpi_notify(acpi_handle handle, u32 event, void *data)
 {
 	struct ucsi_acpi *ua = data;
@@ -180,6 +265,12 @@ static int ucsi_acpi_probe(struct platform_device *pdev)
 
 	if (adev->dep_unmet)
 		return -EPROBE_DEFER;
+
+	id = dmi_first_match(ucsi_acpi_broken_devices);
+	if (id) {
+		dev_warn(&pdev->dev, "broken UCSI ACPI implementation, disabling");
+		return -ENODEV;
+	}
 
 	ua = devm_kzalloc(&pdev->dev, sizeof(*ua), GFP_KERNEL);
 	if (!ua)
