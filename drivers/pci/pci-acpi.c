@@ -1523,6 +1523,9 @@ static int __init acpi_pci_init(void)
 	if (acpi_gbl_FADT.boot_flags & ACPI_FADT_NO_ASPM) {
 		pr_info("ACPI FADT declares the system doesn't support PCIe ASPM, so disable it\n");
 		pcie_no_aspm();
+	} else {
+		/* If ASPM is supported, configure the default policy here. */
+		pcie_aspm_policy_config_init();
 	}
 
 	if (acpi_pci_disabled)
