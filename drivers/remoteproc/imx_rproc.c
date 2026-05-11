@@ -680,17 +680,6 @@ static int imx_rproc_prepare(struct rproc *rproc)
 	return 0;
 }
 
-static int imx_rproc_parse_fw(struct rproc *rproc, const struct firmware *fw)
-{
-	int ret;
-
-	ret = rproc_elf_load_rsc_table(rproc, fw);
-	if (ret)
-		dev_info(&rproc->dev, "No resource table in elf\n");
-
-	return 0;
-}
-
 static void imx_rproc_kick(struct rproc *rproc, int vqid)
 {
 	struct imx_rproc *priv = rproc->priv;
@@ -777,7 +766,7 @@ static const struct rproc_ops imx_rproc_ops = {
 	.kick		= imx_rproc_kick,
 	.da_to_va       = imx_rproc_da_to_va,
 	.load		= rproc_elf_load_segments,
-	.parse_fw	= imx_rproc_parse_fw,
+	.parse_fw	= rproc_elf_load_rsc_table_optional,
 	.find_loaded_rsc_table = imx_rproc_elf_find_loaded_rsc_table,
 	.get_loaded_rsc_table = imx_rproc_get_loaded_rsc_table,
 	.sanity_check	= rproc_elf_sanity_check,

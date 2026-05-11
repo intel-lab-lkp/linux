@@ -664,33 +664,6 @@ release_tcm:
 	return ret;
 }
 
-/*
- * zynqmp_r5_parse_fw()
- * @rproc: single R5 core's corresponding rproc instance
- * @fw: ptr to firmware to be loaded onto r5 core
- *
- * get resource table if available
- *
- * return 0 on success, otherwise non-zero value on failure
- */
-static int zynqmp_r5_parse_fw(struct rproc *rproc, const struct firmware *fw)
-{
-	int ret;
-
-	ret = rproc_elf_load_rsc_table(rproc, fw);
-	if (ret == -EINVAL) {
-		/*
-		 * resource table only required for IPC.
-		 * if not present, this is not necessarily an error;
-		 * for example, loading r5 hello world application
-		 * so simply inform user and keep going.
-		 */
-		dev_info(&rproc->dev, "no resource table found.\n");
-		ret = 0;
-	}
-	return ret;
-}
-
 /**
  * zynqmp_r5_rproc_prepare() - prepare core to boot/attach
  * adds carveouts for TCM bank and reserved memory regions
@@ -849,7 +822,7 @@ static const struct rproc_ops zynqmp_r5_rproc_ops = {
 	.start		= zynqmp_r5_rproc_start,
 	.stop		= zynqmp_r5_rproc_stop,
 	.load		= rproc_elf_load_segments,
-	.parse_fw	= zynqmp_r5_parse_fw,
+	.parse_fw	= rproc_elf_load_rsc_table_optional,
 	.find_loaded_rsc_table = rproc_elf_find_loaded_rsc_table,
 	.sanity_check	= rproc_elf_sanity_check,
 	.get_boot_addr	= rproc_elf_get_boot_addr,

@@ -55,17 +55,6 @@ static int rcar_rproc_prepare(struct rproc *rproc)
 	}
 }
 
-static int rcar_rproc_parse_fw(struct rproc *rproc, const struct firmware *fw)
-{
-	int ret;
-
-	ret = rproc_elf_load_rsc_table(rproc, fw);
-	if (ret)
-		dev_info(&rproc->dev, "No resource table in elf\n");
-
-	return 0;
-}
-
 static int rcar_rproc_start(struct rproc *rproc)
 {
 	struct rcar_rproc *priv = rproc->priv;
@@ -104,7 +93,7 @@ static struct rproc_ops rcar_rproc_ops = {
 	.start		= rcar_rproc_start,
 	.stop		= rcar_rproc_stop,
 	.load		= rproc_elf_load_segments,
-	.parse_fw	= rcar_rproc_parse_fw,
+	.parse_fw	= rproc_elf_load_rsc_table_optional,
 	.find_loaded_rsc_table = rproc_elf_find_loaded_rsc_table,
 	.sanity_check	= rproc_elf_sanity_check,
 	.get_boot_addr	= rproc_elf_get_boot_addr,

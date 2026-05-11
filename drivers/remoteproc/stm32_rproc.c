@@ -232,14 +232,6 @@ static int stm32_rproc_prepare(struct rproc *rproc)
 	}
 }
 
-static int stm32_rproc_parse_fw(struct rproc *rproc, const struct firmware *fw)
-{
-	if (rproc_elf_load_rsc_table(rproc, fw))
-		dev_warn(&rproc->dev, "no resource table found for this firmware\n");
-
-	return 0;
-}
-
 static irqreturn_t stm32_rproc_wdg(int irq, void *data)
 {
 	struct platform_device *pdev = data;
@@ -631,7 +623,7 @@ static const struct rproc_ops st_rproc_ops = {
 	.detach		= stm32_rproc_detach,
 	.kick		= stm32_rproc_kick,
 	.load		= rproc_elf_load_segments,
-	.parse_fw	= stm32_rproc_parse_fw,
+	.parse_fw	= rproc_elf_load_rsc_table_optional,
 	.find_loaded_rsc_table = rproc_elf_find_loaded_rsc_table,
 	.get_loaded_rsc_table = stm32_rproc_get_loaded_rsc_table,
 	.sanity_check	= rproc_elf_sanity_check,
