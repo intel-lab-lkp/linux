@@ -369,7 +369,6 @@ static int opt3001_get_processed(struct opt3001 *opt, int *val, int *val2)
 		if (ret == 0)
 			return -ETIMEDOUT;
 	} else {
-		/* Sleep for result ready time */
 		timeout = (opt->int_time == OPT3001_INT_TIME_SHORT) ?
 			OPT3001_RESULT_READY_SHORT : OPT3001_RESULT_READY_LONG;
 		msleep(timeout);
@@ -388,7 +387,6 @@ static int opt3001_get_processed(struct opt3001 *opt, int *val, int *val2)
 			goto err;
 		}
 
-		/* Obtain value */
 		ret = i2c_smbus_read_word_swapped(opt->client, OPT3001_RESULT);
 		if (ret < 0) {
 			dev_err(opt->dev, "failed to read register %02x\n",
@@ -919,7 +917,7 @@ static const struct opt3001_chip_info opt3002_chip_information = {
 static const struct i2c_device_id opt3001_id[] = {
 	{ "opt3001", (kernel_ulong_t)&opt3001_chip_information },
 	{ "opt3002", (kernel_ulong_t)&opt3002_chip_information },
-	{ } /* Terminating Entry */
+	{ }
 };
 MODULE_DEVICE_TABLE(i2c, opt3001_id);
 
