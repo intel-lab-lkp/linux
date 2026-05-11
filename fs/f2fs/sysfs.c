@@ -981,6 +981,8 @@ out:
 	}
 
 	if (!strcmp(a->attr.name, "critical_task_priority")) {
+		struct f2fs_gc_kthread *gc_th;
+
 		if (t < NICE_TO_PRIO(MIN_NICE) || t > NICE_TO_PRIO(MAX_NICE))
 			return -EINVAL;
 		if (!capable(CAP_SYS_NICE))
@@ -989,9 +991,12 @@ out:
 		if (sbi->cprc_info.f2fs_issue_ckpt)
 			set_user_nice(sbi->cprc_info.f2fs_issue_ckpt,
 					PRIO_TO_NICE(sbi->critical_task_priority));
-		if (sbi->gc_thread && sbi->gc_thread->f2fs_gc_task)
-			set_user_nice(sbi->gc_thread->f2fs_gc_task,
-					PRIO_TO_NICE(sbi->critical_task_priority));
+		if (f2fs_get_gc_thread(sbi, &gc_th)) {
+			if (gc_th->f2fs_gc_task)
+				set_user_nice(gc_th->f2fs_gc_task,
+						PRIO_TO_NICE(sbi->critical_task_priority));
+			f2fs_put_gc_thread(gc_th);
+		}
 		return count;
 	}
 
@@ -1011,10 +1016,13 @@ static ssize_t f2fs_sbi_store(struct f2fs_attr *a,
 	if (gc_entry) {
 		if (!down_read_trylock(&sbi->sb->s_umount))
 			return -EAGAIN;
+		f2fs_down_read(&sbi->gc_thread_lock);
 	}
 	ret = __sbi_store(a, sbi, buf, count);
-	if (gc_entry)
+	if (gc_entry) {
+		f2fs_up_read(&sbi->gc_thread_lock);
 		up_read(&sbi->sb->s_umount);
+	}
 
 	return ret;
 }
@@ -1025,8 +1033,16 @@ static ssize_t f2fs_attr_show(struct kobject *kobj,
 	struct f2fs_sb_info *sbi = container_of(kobj, struct f2fs_sb_info,
 								s_kobj);
 	struct f2fs_attr *a = container_of(attr, struct f2fs_attr, attr);
+	ssize_t ret;
 
-	return a->show ? a->show(a, sbi, buf) : 0;
+	if (a->struct_type != GC_THREAD)
+		return a->show ? a->show(a, sbi, buf) : 0;
+
+	f2fs_down_read(&sbi->gc_thread_lock);
+	ret = a->show ? a->show(a, sbi, buf) : 0;
+	f2fs_up_read(&sbi->gc_thread_lock);
+
+	return ret;
 }
 
 static ssize_t f2fs_attr_store(struct kobject *kobj, struct attribute *attr,

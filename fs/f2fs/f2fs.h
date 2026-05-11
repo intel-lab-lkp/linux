@@ -1873,6 +1873,7 @@ struct f2fs_sb_info {
 						 * semaphore for GC, avoid
 						 * race between GC and GC or CP
 						 */
+	struct f2fs_rwsem gc_thread_lock;	/* protects gc_thread pointer */
 	struct f2fs_gc_kthread	*gc_thread;	/* GC thread */
 	struct atgc_management am;		/* atgc management */
 	unsigned int cur_victim_sec;		/* current victim section num */

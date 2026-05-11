@@ -4973,6 +4973,7 @@ try_onemore:
 
 	/* initialize locks within allocated memory */
 	init_f2fs_rwsem_trace(&sbi->gc_lock, sbi, LOCK_NAME_GC_LOCK);
+	init_f2fs_rwsem(&sbi->gc_thread_lock);
 	mutex_init(&sbi->writepages);
 	init_f2fs_rwsem_trace(&sbi->cp_global_sem, sbi, LOCK_NAME_CP_GLOBAL);
 #ifdef CONFIG_DEBUG_LOCK_ALLOC

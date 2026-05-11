@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
+#include <linux/refcount.h>
 /*
  * fs/f2fs/gc.h
  *
@@ -46,6 +47,9 @@
 #define NR_GC_CHECKPOINT_SECS (3)	/* data/node/dentry sections */
 
 struct f2fs_gc_kthread {
+	struct f2fs_sb_info *sbi;
+	refcount_t refcnt;
+	struct completion refcnt_completion;
 	struct task_struct *f2fs_gc_task;
 	wait_queue_head_t gc_wait_queue_head;
 
@@ -83,6 +87,10 @@ struct victim_entry {
 	unsigned int segno;		/* segment No. */
 	struct list_head list;
 };
+
+bool f2fs_get_gc_thread(struct f2fs_sb_info *sbi,
+				struct f2fs_gc_kthread **gc_thread);
+void f2fs_put_gc_thread(struct f2fs_gc_kthread *gc_th);
 
 /*
  * inline functions
@@ -193,10 +201,10 @@ static inline bool has_enough_invalid_blocks(struct f2fs_sb_info *sbi)
 			limit_free_user_blocks(invalid_user_blocks));
 }
 
-static inline bool need_to_boost_gc(struct f2fs_sb_info *sbi)
+static inline bool need_to_boost_gc(struct f2fs_sb_info *sbi,
+					struct f2fs_gc_kthread *gc_th)
 {
 	if (f2fs_sb_has_blkzoned(sbi))
-		return !has_enough_free_blocks(sbi,
-				sbi->gc_thread->boost_zoned_gc_percent);
+		return !has_enough_free_blocks(sbi, gc_th->boost_zoned_gc_percent);
 	return has_enough_invalid_blocks(sbi);
 }
