@@ -1222,6 +1222,39 @@ static bool load_and_init_quota(struct ntfs_volume *vol)
 }
 
 /*
+ * ntfs_init_quota_for_mount - finish quota setup at mount time
+ * @sb:		super block of the volume being mounted
+ * @vol:	ntfs volume to set up
+ *
+ * Load $Quota and, on a read-write mount, mark quotas out of date so that
+ * Windows rescans them on next boot.  On failure, downgrade the mount to
+ * read-only when on_errors=remount-ro, matching the volume error policy.
+ */
+static void ntfs_init_quota_for_mount(struct super_block *sb,
+				      struct ntfs_volume *vol)
+{
+	bool quota_loaded, quota_marked = true;
+	const char *reason = NULL;
+
+	quota_loaded = load_and_init_quota(vol);
+	if (quota_loaded && !sb_rdonly(sb))
+		quota_marked = ntfs_mark_quotas_out_of_date(vol);
+
+	if (!quota_loaded)
+		reason = "Failed to load $Quota";
+	else if (!quota_marked)
+		reason = "Failed to mark quotas out of date";
+
+	if (!reason || vol->on_errors != ON_ERRORS_REMOUNT_RO)
+		return;
+
+	sb->s_flags |= SB_RDONLY;
+	ntfs_error(sb, "%s.  Mounting read-only.  Run chkdsk.", reason);
+	/* This will prevent a read-write remount. */
+	NVolSetErrors(vol);
+}
+
+/*
  * load_and_init_attrdef - load the attribute definitions table for a volume
  * @vol:	ntfs super block describing device whose attrdef to load
  *
@@ -1639,16 +1672,7 @@ get_ctx_vol_failed:
 		goto iput_sec_err_out;
 	}
 	/* Find the quota file, load it if present, and set it up. */
-	if (!load_and_init_quota(vol) &&
-	    vol->on_errors == ON_ERRORS_REMOUNT_RO) {
-		static const char *es1 = "Failed to load $Quota";
-		static const char *es2 = ".  Run chkdsk.";
-
-		sb->s_flags |= SB_RDONLY;
-		ntfs_error(sb, "%s.  Mounting read-only%s", es1, es2);
-		/* This will prevent a read-write remount. */
-		NVolSetErrors(vol);
-	}
+	ntfs_init_quota_for_mount(sb, vol);
 
 	return true;
 
