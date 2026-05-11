@@ -9,15 +9,34 @@ title: Verisilicon DC-series display controllers
 maintainers:
   - Icenowy Zheng <uwu@icenowy.me>
 
+description:
+  Verisilicon DC-series display controllers.
+
+# Select any node whose compatible contains one of the known Verisilicon DC
+# or DC-derived compatible strings, including SoC-specific glue variants.
+select:
+  properties:
+    compatible:
+      contains:
+        enum:
+          - verisilicon,dc
+          - thead,th1520-dc8200
+          - nuvoton,ma35d1-dcu
+  required:
+    - compatible
+
 properties:
   $nodename:
     pattern: "^display@[0-9a-f]+$"
 
   compatible:
-    items:
-      - enum:
-          - thead,th1520-dc8200
-      - const: verisilicon,dc # DC IPs have discoverable ID/revision registers
+    # Enumerated in full so the schema validator can verify any compatible
+    # string against this list, including those from child schemas.
+    contains:
+      enum:
+        - verisilicon,dc
+        - thead,th1520-dc8200
+        - nuvoton,ma35d1-dcu
 
   reg:
     maxItems: 1
@@ -26,32 +45,24 @@ properties:
     maxItems: 1
 
   clocks:
-    items:
-      - description: DC Core clock
-      - description: DMA AXI bus clock
-      - description: Configuration AHB bus clock
-      - description: Pixel clock of output 0
-      - description: Pixel clock of output 1
+    minItems: 2
+    maxItems: 5
 
   clock-names:
-    items:
-      - const: core
-      - const: axi
-      - const: ahb
-      - const: pix0
-      - const: pix1
+    minItems: 2
+    maxItems: 5
 
   resets:
-    items:
-      - description: DC Core reset
-      - description: DMA AXI bus reset
-      - description: Configuration AHB bus reset
+    minItems: 1
+    maxItems: 3
 
   reset-names:
-    items:
-      - const: core
-      - const: axi
-      - const: ahb
+    minItems: 1
+    maxItems: 3
+
+  port:
+    $ref: /schemas/graph.yaml#/properties/port
+    description: Single video output port for single-output variants.
 
   ports:
     $ref: /schemas/graph.yaml#/properties/ports
@@ -59,7 +70,7 @@ properties:
     properties:
       port@0:
         $ref: /schemas/graph.yaml#/properties/port
-        description: The first output channel , endpoint 0 should be
+        description: The first output channel, endpoint 0 should be
           used for DPI format output and endpoint 1 should be used
           for DP format output.
 
@@ -75,9 +86,8 @@ required:
   - interrupts
   - clocks
   - clock-names
-  - ports
 
-additionalProperties: false
+additionalProperties: true
 
 examples:
   - |
