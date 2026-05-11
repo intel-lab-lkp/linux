@@ -291,29 +291,29 @@ stop_pcaps()
 
 # We're done sending and receiving stuff, now let's check if what
 # we received is what we sent.
-ret = 0
+RC = 0
 for (sender, receiver), send_hash in send_hashes.items():
     recv_hash = recv_hashes.get((sender, receiver))
 
     if recv_hash is None:
         ksft_pr("FAIL: No data received")
-        ret = 1
+        RC = 1
         break
 
     if send_hash.hexdigest() != recv_hash.hexdigest():
         ksft_pr("FAIL: Send/recv mismatch")
         ksft_pr("hash expected:", send_hash.hexdigest())
         ksft_pr("hash received:", recv_hash.hexdigest())
-        ret = 1
+        RC = 1
         break
 
     ksft_pr(f"{sender}/{receiver}: ok")
 
-if ret == 0:
+if RC == 0:
     ksft_pr("Success")
     print("ok 1 rds selftest")
 else:
     print("not ok 1 rds selftest")
 
-ksft_pr(f"Totals: pass:{1-ret} fail:{ret} skip:0")
-sys.exit(ret)
+ksft_pr(f"Totals: pass:{1-RC} fail:{RC} skip:0")
+sys.exit(RC)
