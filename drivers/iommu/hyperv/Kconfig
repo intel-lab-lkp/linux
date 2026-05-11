@@ -8,3 +8,20 @@ config HYPERV_IOMMU
 	help
 	  Stub IOMMU driver to handle IRQs to support Hyper-V Linux
 	  guest and root partitions.
+
+if HYPERV_IOMMU
+config HYPERV_PVIOMMU
+	bool "Microsoft Hypervisor para-virtualized IOMMU support"
+	depends on X86 && HYPERV
+	select IOMMU_API
+	select GENERIC_PT
+	select IOMMU_PT
+	select IOMMU_PT_X86_64
+	select IOMMU_IOVA
+	default HYPERV
+	help
+	  Para-virtualized IOMMU driver for Linux guests running on
+	  Microsoft Hyper-V. Provides DMA remapping and IOTLB
+	  flush support to enable DMA isolation for devices
+	  assigned to the guest.
+endif

@@ -3715,6 +3715,7 @@ static int hv_pci_probe(struct hv_device *hdev,
 	struct hv_pcibus_device *hbus;
 	int ret, dom;
 	u16 dom_req;
+	u32 prefix;
 	char *name;
 
 	bridge = devm_pci_alloc_host_bridge(&hdev->device, 0);
@@ -3857,13 +3858,25 @@ static int hv_pci_probe(struct hv_device *hdev,
 
 	hbus->state = hv_pcibus_probed;
 
-	ret = create_root_hv_pci_bus(hbus);
+	/* Notify pvIOMMU before any device on the bus is scanned. */
+	prefix = (hdev->dev_instance.b[5] << 24) |
+		 (hdev->dev_instance.b[4] << 16) |
+		 (hdev->dev_instance.b[7] <<  8) |
+		 (hdev->dev_instance.b[6] & 0xf8);
+
+	ret = hv_iommu_register_pci_bus(dom, prefix);
 	if (ret)
 		goto free_windows;
+
+	ret = create_root_hv_pci_bus(hbus);
+	if (ret)
+		goto unregister_pviommu;
 
 	mutex_unlock(&hbus->state_lock);
 	return 0;
 
+unregister_pviommu:
+	hv_iommu_unregister_pci_bus(dom);
 free_windows:
 	hv_pci_free_bridge_windows(hbus);
 exit_d0:
@@ -3974,8 +3987,10 @@ static int hv_pci_bus_exit(struct hv_device *hdev, bool keep_devs)
 static void hv_pci_remove(struct hv_device *hdev)
 {
 	struct hv_pcibus_device *hbus;
+	int dom;
 
 	hbus = hv_get_drvdata(hdev);
+	dom = hbus->bridge->domain_nr;
 	if (hbus->state == hv_pcibus_installed) {
 		tasklet_disable(&hdev->channel->callback_event);
 		hbus->state = hv_pcibus_removing;
@@ -3994,6 +4009,8 @@ static void hv_pci_remove(struct hv_device *hdev)
 		hv_pci_remove_slots(hbus);
 		pci_remove_root_bus(hbus->bridge->bus);
 		pci_unlock_rescan_remove();
+
+		hv_iommu_unregister_pci_bus(dom);
 	}
 
 	hv_pci_bus_exit(hdev, false);
