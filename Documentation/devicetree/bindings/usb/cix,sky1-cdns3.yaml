@@ -1,0 +1,151 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/usb/cix,sky1-cdns3.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: CIX Sky1 Cadence USB3 Controller
+
+maintainers:
+  - Peter Chen <peter.chen@cixtech.com>
+
+description:
+  The CIX Sky1 USB3 controller is based on the Cadence USBSSP DRD
+  controller. The integration adds glue registers and mode strap controls
+  in the Sky1 S5 system controller.
+
+allOf:
+  - $ref: usb-drd.yaml#
+  - $ref: usb-xhci.yaml#
+
+properties:
+  compatible:
+    items:
+      - const: cix,sky1-usb3
+      - const: cix,cdns-usb3
+
+  reg:
+    items:
+      - description: OTG controller registers
+      - description: Device controller registers
+      - description: XHCI host controller registers
+      - description: Sky1 USB glue registers
+
+  reg-names:
+    items:
+      - const: otg
+      - const: dev
+      - const: xhci
+      - const: glue
+
+  interrupts:
+    items:
+      - description: XHCI host controller interrupt
+      - description: Device controller interrupt
+      - description: OTG/DRD controller interrupt
+      - description: Wakeup interrupt
+
+  interrupt-names:
+    items:
+      - const: host
+      - const: peripheral
+      - const: otg
+      - const: wakeup
+
+  clocks:
+    items:
+      - description: Start-of-frame clock
+      - description: AXI bus clock
+      - description: Low-power mode clock
+      - description: APB register interface clock
+
+  clock-names:
+    items:
+      - const: sof
+      - const: aclk
+      - const: lpm
+      - const: pclk
+
+  resets:
+    items:
+      - description: APB register reset
+      - description: Controller reset
+
+  reset-names:
+    items:
+      - const: prst
+      - const: rst
+
+  cix,syscon-usb:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      Phandle to the Sky1 S5 system controller used to program USB mode
+      strap controls.
+
+  dma-coherent: true
+
+  maximum-speed:
+    enum: [super-speed-plus, super-speed, high-speed, full-speed]
+
+  phys:
+    minItems: 1
+    maxItems: 2
+
+  phy-names:
+    minItems: 1
+    maxItems: 2
+    items:
+      anyOf:
+        - const: cdns3,usb2-phy
+        - const: cdns3,usb3-phy
+
+required:
+  - compatible
+  - reg
+  - reg-names
+  - interrupts
+  - interrupt-names
+  - clocks
+  - clock-names
+  - resets
+  - reset-names
+  - cix,syscon-usb
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/clock/cix,sky1.h>
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/reset/cix,sky1-s5-system-control.h>
+
+    soc {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        usb@91d0000 {
+            compatible = "cix,sky1-usb3", "cix,cdns-usb3";
+            reg = <0x00 0x91d0000 0x00 0x4000>,
+                  <0x00 0x91d4000 0x00 0x4000>,
+                  <0x00 0x91d8000 0x00 0x8000>,
+                  <0x00 0x91c0314 0x00 0x4>;
+            reg-names = "otg", "dev", "xhci", "glue";
+            interrupts = <GIC_SPI 252 IRQ_TYPE_LEVEL_HIGH 0>,
+                         <GIC_SPI 252 IRQ_TYPE_LEVEL_HIGH 0>,
+                         <GIC_SPI 253 IRQ_TYPE_LEVEL_HIGH 0>,
+                         <GIC_SPI 252 IRQ_TYPE_LEVEL_HIGH 0>;
+            interrupt-names = "host", "peripheral", "otg", "wakeup";
+            clocks = <&scmi_clk CLK_TREE_USB3A_H0_CLK_SOF>,
+                     <&scmi_clk CLK_TREE_USB3A_0_AXI_GATE>,
+                     <&scmi_clk CLK_TREE_USB3A_H0_CLK_LPM>,
+                     <&scmi_clk CLK_TREE_USB3A_0_APB_GATE>;
+            clock-names = "sof", "aclk", "lpm", "pclk";
+            resets = <&s5_syscon SKY1_USBC_SS2_PRST_N>,
+                     <&s5_syscon SKY1_USBC_SS2_RST_N>;
+            reset-names = "prst", "rst";
+            cix,syscon-usb = <&s5_syscon>;
+            dma-coherent;
+            maximum-speed = "super-speed-plus";
+            dr_mode = "otg";
+        };
+    };
