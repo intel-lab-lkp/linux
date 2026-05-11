@@ -483,6 +483,28 @@ static const struct intel_sa_info xe3lpd_3002_sa_info = {
 	.derating = 10,
 };
 
+static void debug_print_bw_info(struct intel_display *display)
+{
+	int num_groups = ARRAY_SIZE(display->bw.max);
+	int i;
+
+	for (i = 0; i < num_groups; i++) {
+		struct intel_bw_info *bi = &display->bw.max[i];
+		int j;
+
+		drm_dbg_kms(display->drm, "BW%d: num_planes=%d num_qgv_points:%d\n",
+			    i, bi->num_planes, bi->num_qgv_points);
+
+		for (j = 0; j < bi->num_qgv_points; j++)
+			drm_dbg_kms(display->drm, "\tQGV %d: deratedbw=%u peakbw=%u\n",
+				    j,  bi->deratedbw[j], bi->peakbw[j]);
+
+		for (j = 0; j < bi->num_psf_gv_points; j++)
+			drm_dbg_kms(display->drm, "\tPSF GV %d bw=%u\n",
+				    j, bi->psf_bw[j]);
+	}
+}
+
 static bool is_tile_y_factored(struct intel_display *display)
 {
 	/* TGL supports Y-tile for LPDDR4/5, but not for DDR4 */
@@ -544,12 +566,11 @@ static int icl_get_bw_info(struct intel_display *display,
 
 			bi->deratedbw[j] = min(maxdebw,
 					       bw * (100 - sa->derating) / 100);
-
-			drm_dbg_kms(display->drm,
-				    "BW%d / QGV %d: num_planes=%d deratedbw=%u\n",
-				    i, j, bi->num_planes, bi->deratedbw[j]);
 		}
 	}
+
+	debug_print_bw_info(display);
+
 	/*
 	 * In case if SAGV is disabled in BIOS, we always get 1
 	 * SAGV point, but we can't send PCode commands to restrict it
@@ -650,23 +671,16 @@ static int tgl_get_bw_info(struct intel_display *display,
 			bi->peakbw[j] = DIV_ROUND_CLOSEST(sp->dclk *
 							  num_channels *
 							  qi.channel_width, 8);
-
-			drm_dbg_kms(display->drm,
-				    "BW%d / QGV %d: num_planes=%d deratedbw=%u peakbw: %u\n",
-				    i, j, bi->num_planes, bi->deratedbw[j],
-				    bi->peakbw[j]);
 		}
 
 		for (j = 0; j < qi.num_psf_points; j++) {
 			const struct intel_psf_gv_point *sp = &qi.psf_points[j];
 
 			bi->psf_bw[j] = adl_calc_psf_bw(sp->clk);
-
-			drm_dbg_kms(display->drm,
-				    "BW%d / PSF GV %d: num_planes=%d bw=%u\n",
-				    i, j, bi->num_planes, bi->psf_bw[j]);
 		}
 	}
+
+	debug_print_bw_info(display);
 
 	/*
 	 * In case if SAGV is disabled in BIOS, we always get 1
