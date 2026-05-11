@@ -391,10 +391,18 @@ static int adl_calc_psf_bw(int clk)
 	return DIV_ROUND_CLOSEST(64 * clk * 100, 6);
 }
 
-static int icl_sagv_max_dclk(const struct intel_qgv_info *qi)
+static int icl_sagv_max_dclk(struct intel_display *display,
+			     const struct intel_qgv_info *qi)
 {
 	u16 dclk = 0;
 	int i;
+
+	/* QGV points are in sorted order in pmdemand supported versions */
+	if (HAS_PMDEMAND(display)) {
+		int max_point = max(0, qi->num_points - 1);
+
+		return qi->points[max_point].dclk;
+	}
 
 	for (i = 0; i < qi->num_points; i++)
 		dclk = max(dclk, qi->points[i].dclk);
@@ -495,7 +503,7 @@ static int icl_get_bw_info(struct intel_display *display,
 		return ret;
 	}
 
-	dclk_max = icl_sagv_max_dclk(&qi);
+	dclk_max = icl_sagv_max_dclk(display, &qi);
 	maxdebw = min(sa->deprogbwlimit * 1000, dclk_max * 16 * 6 / 10);
 	ipqdepth = min(ipqdepthpch, sa->displayrtids / num_channels);
 	qi.deinterleave = DIV_ROUND_UP(num_channels, is_y_tile ? 4 : 2);
@@ -581,7 +589,7 @@ static int tgl_get_bw_info(struct intel_display *display,
 	if (qi.max_numchannels != 0)
 		num_channels = min_t(u8, num_channels, qi.max_numchannels);
 
-	dclk_max = icl_sagv_max_dclk(&qi);
+	dclk_max = icl_sagv_max_dclk(display, &qi);
 
 	peakbw = num_channels * DIV_ROUND_UP(qi.channel_width, 8) * dclk_max;
 	maxdebw = min(sa->deprogbwlimit * 1000, peakbw * DEPROGBWPCLIMIT / 100);
@@ -705,7 +713,7 @@ static int xe2_hpd_get_bw_info(struct intel_display *display,
 		return ret;
 	}
 
-	peakbw = num_channels * qi.channel_width / 8 * icl_sagv_max_dclk(&qi);
+	peakbw = num_channels * qi.channel_width / 8 * icl_sagv_max_dclk(display, &qi);
 	maxdebw = min(sa->deprogbwlimit * 1000, peakbw * DEPROGBWPCLIMIT / 10);
 
 	for (i = 0; i < qi.num_points; i++) {
