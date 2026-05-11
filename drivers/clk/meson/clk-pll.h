@@ -31,6 +31,8 @@ struct pll_mult_range {
 #define CLK_MESON_PLL_NOINIT_ENABLED	BIT(1)
 /* l_detect signal is active-high */
 #define CLK_MESON_PLL_L_DETECT_ACTIVE_HIGH	BIT(2)
+/* rst signal is active-low (Power-on reset) */
+#define CLK_MESON_PLL_RST_ACTIVE_LOW	BIT(3)
 
 struct meson_clk_pll_data {
 	struct parm en;
