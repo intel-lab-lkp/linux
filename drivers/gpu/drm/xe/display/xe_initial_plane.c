@@ -36,6 +36,10 @@ initial_plane_bo(struct xe_device *xe,
 	flags = XE_BO_FLAG_FORCE_WC | XE_BO_FLAG_GGTT;
 
 	base = round_down(plane_config->base, page_size);
+	size = round_up(plane_config->base + plane_config->size,
+			page_size);
+	size -= base;
+
 	if (IS_DGFX(xe)) {
 		u64 pte = xe_ggtt_read_pte(tile0->mem.ggtt, base);
 
@@ -70,10 +74,6 @@ initial_plane_bo(struct xe_device *xe,
 		phys_base = base;
 		flags |= XE_BO_FLAG_STOLEN;
 	}
-
-	size = round_up(plane_config->base + plane_config->size,
-			page_size);
-	size -= base;
 
 	bo = xe_bo_create_pin_map_at_novm(xe, tile0, size, phys_base,
 					  ttm_bo_type_kernel, flags, 0, false);
