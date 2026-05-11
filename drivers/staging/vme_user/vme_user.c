@@ -446,8 +446,9 @@ static void vme_user_vm_close(struct vm_area_struct *vma)
 	kfree(vma_priv);
 }
 
-static int vme_user_vm_mapped(unsigned long start, unsigned long end, pgoff_t pgoff,
-			      const struct file *file, void **vm_private_data)
+static int vme_user_vm_mapped(unsigned long start, unsigned long end,
+			      pgoff_t pgoff, const struct file *file,
+			      void **vm_private_data)
 {
 	const unsigned int minor = iminor(file_inode(file));
 	struct vme_user_vma_priv *vma_priv;
