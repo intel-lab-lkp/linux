@@ -48,7 +48,7 @@
 #define BTINTEL_PCIE_CSR_BOOT_STAGE_OPFW		(BIT(2))
 #define BTINTEL_PCIE_CSR_BOOT_STAGE_ROM_LOCKDOWN	(BIT(10))
 #define BTINTEL_PCIE_CSR_BOOT_STAGE_IML_LOCKDOWN	(BIT(11))
-#define BTINTEL_PCIE_CSR_BOOT_STAGE_DEVICE_ERR		(BIT(12))
+#define BTINTEL_PCIE_CSR_BOOT_STAGE_DEVICE_WARNING	(BIT(12))
 #define BTINTEL_PCIE_CSR_BOOT_STAGE_ABORT_HANDLER	(BIT(13))
 #define BTINTEL_PCIE_CSR_BOOT_STAGE_DEVICE_HALTED	(BIT(14))
 #define BTINTEL_PCIE_CSR_BOOT_STAGE_MAC_ACCESS_ON	(BIT(16))
@@ -117,7 +117,9 @@ enum {
 enum {
 	BTINTEL_PCIE_CORE_HALTED,
 	BTINTEL_PCIE_HWEXP_INPROGRESS,
-	BTINTEL_PCIE_COREDUMP_INPROGRESS
+	BTINTEL_PCIE_COREDUMP_INPROGRESS,
+	BTINTEL_PCIE_RECOVERY_IN_PROGRESS,
+	BTINTEL_PCIE_SETUP_DONE
 };
 
 enum btintel_pcie_tlv_type {
@@ -130,6 +132,8 @@ enum btintel_pcie_tlv_type {
 	BTINTEL_CNVI_TOP,
 	BTINTEL_DUMP_TIME,
 	BTINTEL_FW_BUILD,
+	BTINTEL_VENDOR,
+	BTINTEL_DRIVER
 };
 
 /* causes for the MBOX interrupts */
@@ -154,6 +158,8 @@ enum msix_mbox_int_causes {
 /* Default interrupt timeout in msec */
 #define BTINTEL_DEFAULT_INTR_TIMEOUT_MS	3000
 
+#define BTINTEL_PCIE_DX_TRANSITION_MAX_RETRIES	3
+
 /* The number of descriptors in TX queues */
 #define BTINTEL_PCIE_TX_DESCS_COUNT	32
 
@@ -171,9 +177,6 @@ enum {
 
 /* The size of DMA buffer for TX and RX in bytes */
 #define BTINTEL_PCIE_BUFFER_SIZE	4096
-
-/* DMA allocation alignment */
-#define BTINTEL_PCIE_DMA_POOL_ALIGNMENT	256
 
 #define BTINTEL_PCIE_TX_WAIT_TIMEOUT_MS		500
 
@@ -460,6 +463,7 @@ struct btintel_pcie_dump_header {
  * @txq: TX Queue struct
  * @rxq: RX Queue struct
  * @alive_intr_ctxt: Alive interrupt context
+ * @pm_sx_event: PM event on which system got suspended
  */
 struct btintel_pcie_data {
 	struct pci_dev	*pdev;
@@ -509,6 +513,7 @@ struct btintel_pcie_data {
 	u32	alive_intr_ctxt;
 	struct btintel_pcie_dbgc	dbgc;
 	struct btintel_pcie_dump_header dmp_hdr;
+	u8	pm_sx_event;
 };
 
 static inline u32 btintel_pcie_rd_reg32(struct btintel_pcie_data *data,
