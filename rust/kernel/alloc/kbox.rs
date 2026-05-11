@@ -296,7 +296,10 @@ where
     /// # Examples
     ///
     /// ```
-    /// use kernel::sync::{new_spinlock, SpinLock};
+    /// use kernel::sync::{
+    ///     new_spinlock,
+    ///     SpinLock, //
+    /// };
     ///
     /// struct Inner {
     ///     a: u32,
@@ -589,7 +592,6 @@ where
 ///
 /// ```
 /// # use core::borrow::Borrow;
-/// # use kernel::alloc::KBox;
 /// struct Foo<B: Borrow<u32>>(B);
 ///
 /// // Owned instance.
@@ -617,7 +619,6 @@ where
 ///
 /// ```
 /// # use core::borrow::BorrowMut;
-/// # use kernel::alloc::KBox;
 /// struct Foo<B: BorrowMut<u32>>(B);
 ///
 /// // Owned instance.
@@ -682,9 +683,13 @@ where
 /// # Examples
 ///
 /// ```
-/// # use kernel::prelude::*;
-/// use kernel::alloc::allocator::VmallocPageIter;
-/// use kernel::page::{AsPageIter, PAGE_SIZE};
+/// use kernel::{
+///     alloc::allocator::VmallocPageIter,
+///     page::{
+///         AsPageIter,
+///         PAGE_SIZE, //
+///     }, //
+/// };
 ///
 /// let mut vbox = VBox::new((), GFP_KERNEL)?;
 ///
