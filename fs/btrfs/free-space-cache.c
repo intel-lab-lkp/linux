@@ -375,15 +375,14 @@ static void readahead_cache(struct inode *inode)
 	page_cache_sync_readahead(inode->i_mapping, &ra, NULL, 0, last_index);
 }
 
-static int io_ctl_init(struct btrfs_io_ctl *io_ctl, struct inode *inode,
-		       int write)
+static int io_ctl_init(struct btrfs_io_ctl *io_ctl, struct inode *inode)
 {
-	int num_pages;
+	u64 num_pages;
 
 	num_pages = DIV_ROUND_UP(i_size_read(inode), PAGE_SIZE);
 
 	/* Make sure we can fit our crcs and generation into the first page */
-	if (write && (num_pages * sizeof(u32) + sizeof(u64)) > PAGE_SIZE)
+	if (num_pages * sizeof(u32) + sizeof(u64) > PAGE_SIZE)
 		return -ENOSPC;
 
 	memset(io_ctl, 0, sizeof(struct btrfs_io_ctl));
@@ -791,7 +790,7 @@ static int __load_free_space_cache(struct btrfs_root *root, struct inode *inode,
 	if (!num_entries)
 		return 0;
 
-	ret = io_ctl_init(&io_ctl, inode, 0);
+	ret = io_ctl_init(&io_ctl, inode);
 	if (ret)
 		return ret;
 
@@ -1384,7 +1383,7 @@ static int __btrfs_write_out_cache(struct inode *inode,
 		return -EIO;
 
 	WARN_ON(io_ctl->pages);
-	ret = io_ctl_init(io_ctl, inode, 1);
+	ret = io_ctl_init(io_ctl, inode);
 	if (ret)
 		return ret;
 
