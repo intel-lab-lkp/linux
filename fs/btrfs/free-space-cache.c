@@ -839,8 +839,14 @@ static int __load_free_space_cache(struct btrfs_root *root, struct inode *inode,
 				kmem_cache_free(btrfs_free_space_cachep, e);
 				goto free_cache;
 			}
-		} else {
-			ASSERT(num_bitmaps);
+		} else if (type == BTRFS_FREE_SPACE_BITMAP) {
+			if (!num_bitmaps) {
+				ret = -EUCLEAN;
+				btrfs_err(fs_info,
+					  "free space cache has more bitmap entries than bitmaps");
+				kmem_cache_free(btrfs_free_space_cachep, e);
+				goto free_cache;
+			}
 			num_bitmaps--;
 			e->bitmap = kmem_cache_zalloc(
 					btrfs_free_space_bitmap_cachep, GFP_NOFS);
@@ -864,6 +870,12 @@ static int __load_free_space_cache(struct btrfs_root *root, struct inode *inode,
 			recalculate_thresholds(ctl);
 			spin_unlock(&ctl->tree_lock);
 			list_add_tail(&e->list, &bitmaps);
+		} else {
+			ret = -EUCLEAN;
+			btrfs_err(fs_info,
+				  "unknown free space cache entry type %u", type);
+			kmem_cache_free(btrfs_free_space_cachep, e);
+			goto free_cache;
 		}
 
 		num_entries--;
