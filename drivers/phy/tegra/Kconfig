@@ -18,3 +18,15 @@ config PHY_TEGRA194_P2U
 	help
 	  Enable this to support the P2U (PIPE to UPHY) that is part of Tegra 19x
 	  and 234 SOCs.
+
+config PHY_TEGRA_XMM6260
+	tristate "NVIDIA Tegra XMM6260 PHY driver"
+	depends on ARCH_TEGRA && USB_NET_XMM6260 && USB_SUPPORT
+	select GENERIC_PHY
+	help
+	  Enable this to support XMM6260 modem found in various Tegra devices
+	  with cellular capabilities, like LG Optimus 4X P880, LG Optimus Vu
+	  P895, Google Nexus 7 (2012) 3G and ASUS Transformer Pad 3G TF300TG.
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called phy-tegra-xmm6260.
