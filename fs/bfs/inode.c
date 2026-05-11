@@ -165,11 +165,7 @@ static int bfs_write_inode(struct inode *inode, struct writeback_control *wbc)
 	di->i_eoffset = cpu_to_le32(i_sblock * BFS_BSIZE + inode->i_size - 1);
 
 	mark_buffer_dirty(bh);
-	if (wbc->sync_mode == WB_SYNC_ALL) {
-		sync_dirty_buffer(bh);
-		if (buffer_req(bh) && !buffer_uptodate(bh))
-			err = -EIO;
-	}
+	BFS_I(inode)->i_metadata_bhs.inode_blk = bh->b_blocknr;
 	brelse(bh);
 	mutex_unlock(&info->bfs_lock);
 	return err;
