@@ -331,7 +331,6 @@ void drm_sysfb_plane_helper_atomic_update(struct drm_plane *plane, struct drm_at
 	struct drm_device *dev = plane->dev;
 	struct drm_sysfb_device *sysfb = to_drm_sysfb_device(dev);
 	struct drm_plane_state *plane_state = drm_atomic_get_new_plane_state(state, plane);
-	struct drm_plane_state *old_plane_state = drm_atomic_get_old_plane_state(state, plane);
 	struct drm_sysfb_plane_state *sysfb_plane_state = to_drm_sysfb_plane_state(plane_state);
 	struct drm_shadow_plane_state *shadow_plane_state = &sysfb_plane_state->base;
 	struct drm_framebuffer *fb = plane_state->fb;
@@ -351,7 +350,7 @@ void drm_sysfb_plane_helper_atomic_update(struct drm_plane *plane, struct drm_at
 	if (!drm_dev_enter(dev, &idx))
 		goto out_drm_gem_fb_end_cpu_access;
 
-	drm_atomic_helper_damage_iter_init(&iter, old_plane_state, plane_state);
+	drm_atomic_helper_damage_iter_init(&iter, plane_state);
 	drm_atomic_for_each_plane_damage(&iter, &damage) {
 		struct iosys_map dst = sysfb->fb_addr;
 		struct drm_rect dst_clip = plane_state->dst;

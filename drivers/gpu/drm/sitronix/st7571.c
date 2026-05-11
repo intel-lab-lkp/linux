@@ -342,7 +342,6 @@ static int st7571_primary_plane_helper_atomic_check(struct drm_plane *plane,
 static void st7571_primary_plane_helper_atomic_update(struct drm_plane *plane,
 						      struct drm_atomic_commit *state)
 {
-	struct drm_plane_state *old_plane_state = drm_atomic_get_old_plane_state(state, plane);
 	struct drm_plane_state *plane_state = drm_atomic_get_new_plane_state(state, plane);
 	struct drm_shadow_plane_state *shadow_plane_state = to_drm_shadow_plane_state(plane_state);
 	struct drm_framebuffer *fb = plane_state->fb;
@@ -362,7 +361,7 @@ static void st7571_primary_plane_helper_atomic_update(struct drm_plane *plane,
 	if (!drm_dev_enter(drm, &idx))
 		goto out_drm_gem_fb_end_cpu_access;
 
-	drm_atomic_helper_damage_iter_init(&iter, old_plane_state, plane_state);
+	drm_atomic_helper_damage_iter_init(&iter, plane_state);
 	drm_atomic_for_each_plane_damage(&iter, &damage) {
 		st7571->pformat->prepare_buffer(st7571,
 						&shadow_plane_state->data[0],
