@@ -66,6 +66,9 @@ static unsigned long __pll_params_to_rate(unsigned long parent_rate,
 		rate += DIV_ROUND_UP_ULL(frac_rate, frac_max);
 	}
 
+	if (pll->flags & CLK_MESON_PLL_N_POWER_OF_TWO)
+		n = 1 << n;
+
 	return DIV_ROUND_UP_ULL(rate, n);
 }
 
@@ -83,7 +86,7 @@ static unsigned long meson_clk_pll_recalc_rate(struct clk_hw *hw,
 	 * it would result in a division by zero. The rate can't be
 	 * calculated in this case
 	 */
-	if (n == 0)
+	if (n == 0 && !(pll->flags & CLK_MESON_PLL_N_POWER_OF_TWO))
 		return 0;
 
 	m = meson_parm_read(clk->map, &pll->m);
@@ -103,7 +106,12 @@ static unsigned int __pll_params_with_frac(unsigned long rate,
 {
 	unsigned int frac_max = pll->frac_max ? pll->frac_max :
 						(1 << pll->frac.width);
-	u64 val = (u64)rate * n;
+	u64 val;
+
+	if (pll->flags & CLK_MESON_PLL_N_POWER_OF_TWO)
+		n = 1 << n;
+
+	val = (u64)rate * n;
 
 	/* Bail out if we are already over the requested rate */
 	if (rate < parent_rate * m / n)
@@ -142,7 +150,8 @@ static int meson_clk_get_pll_table_index(unsigned int index,
 					 unsigned int *n,
 					 struct meson_clk_pll_data *pll)
 {
-	if (!pll->table[index].n)
+	if (!pll->table[index].n &&
+	    !(pll->flags & CLK_MESON_PLL_N_POWER_OF_TWO))
 		return -EINVAL;
 
 	*m = pll->table[index].m;
@@ -156,7 +165,12 @@ static unsigned int meson_clk_get_pll_range_m(unsigned long rate,
 					      unsigned int n,
 					      struct meson_clk_pll_data *pll)
 {
-	u64 val = (u64)rate * n;
+	u64 val;
+
+	if (pll->flags & CLK_MESON_PLL_N_POWER_OF_TWO)
+		n = 1 << n;
+
+	val = (u64)rate * n;
 
 	if (__pll_round_closest_mult(pll))
 		return DIV_ROUND_CLOSEST_ULL(val, parent_rate);
@@ -173,11 +187,15 @@ static int meson_clk_get_pll_range_index(unsigned long rate,
 {
 	*n = index + 1;
 
+	if ((pll->flags & CLK_MESON_PLL_N_POWER_OF_TWO))
+		*n = index;
+
 	/* Check the predivider range */
 	if (*n >= (1 << pll->n.width))
 		return -EINVAL;
 
-	if (*n == 1) {
+	if ((*n == 1 && !(pll->flags & CLK_MESON_PLL_N_POWER_OF_TWO)) ||
+	    (*n == 0 && (pll->flags & CLK_MESON_PLL_N_POWER_OF_TWO))) {
 		/* Get the boundaries out the way */
 		if (rate <= pll->range->min * parent_rate) {
 			*m = pll->range->min;

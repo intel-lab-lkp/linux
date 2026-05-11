@@ -33,6 +33,8 @@ struct pll_mult_range {
 #define CLK_MESON_PLL_L_DETECT_ACTIVE_HIGH	BIT(2)
 /* rst signal is active-low (Power-on reset) */
 #define CLK_MESON_PLL_RST_ACTIVE_LOW	BIT(3)
+/* The division factor of the PLL pre-divider is 2^n */
+#define CLK_MESON_PLL_N_POWER_OF_TWO	BIT(4)
 
 struct meson_clk_pll_data {
 	struct parm en;
