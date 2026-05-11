@@ -271,6 +271,11 @@ static bool bios_fb_ok(const struct intel_framebuffer *fb,
 	int depth = fb->base.format->depth;
 	int bpp = fb->base.format->cpp[0] * 8;
 
+	if (!intel_bo_fbdev_bios_fb_ok(display, intel_fb_bo(&fb->base)->size)) {
+		drm_dbg_kms(display->drm, "BIOS fb unusable, releasing it\n");
+		return false;
+	}
+
 	if (sizes->fb_width > width || sizes->fb_height > height) {
 		drm_dbg_kms(display->drm,
 			    "BIOS fb too small (%dx%d), we require (%dx%d), releasing it\n",

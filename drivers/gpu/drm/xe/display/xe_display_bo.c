@@ -119,7 +119,7 @@ static u32 xe_display_bo_fbdev_pitch_align(u32 stride)
 	return ALIGN(stride, XE_PAGE_SIZE);
 }
 
-bool xe_display_bo_fbdev_prefer_stolen(struct xe_device *xe, unsigned int size)
+static bool xe_display_bo_fbdev_prefer_stolen(struct xe_device *xe, unsigned int size)
 {
 	struct ttm_resource_manager *stolen;
 
@@ -130,6 +130,7 @@ bool xe_display_bo_fbdev_prefer_stolen(struct xe_device *xe, unsigned int size)
 	if (IS_DGFX(xe))
 		return false;
 
+	/* machine hang when doing lots of LMEMBAR accesses */
 	if (XE_DEVICE_WA(xe, 22019338487_display))
 		return false;
 
@@ -139,6 +140,16 @@ bool xe_display_bo_fbdev_prefer_stolen(struct xe_device *xe, unsigned int size)
 	 * features.
 	 */
 	return stolen->size >= (size * 2) >> PAGE_SHIFT;
+}
+
+static bool xe_display_bo_fbdev_bios_fb_ok(struct drm_device *drm, int size)
+{
+	struct xe_device *xe = to_xe_device(drm);
+
+	if (IS_DGFX(xe))
+		return true;
+
+	return xe_display_bo_fbdev_prefer_stolen(xe, size);
 }
 
 static struct drm_gem_object *xe_display_bo_fbdev_create(struct drm_device *drm, int size)
@@ -224,6 +235,7 @@ const struct intel_display_bo_interface xe_display_bo_interface = {
 	.framebuffer_fini = xe_display_bo_framebuffer_fini,
 	.framebuffer_lookup = xe_display_bo_framebuffer_lookup,
 #if IS_ENABLED(CONFIG_DRM_FBDEV_EMULATION)
+	.fbdev_bios_fb_ok = xe_display_bo_fbdev_bios_fb_ok,
 	.fbdev_create = xe_display_bo_fbdev_create,
 	.fbdev_destroy = xe_display_bo_fbdev_destroy,
 	.fbdev_fill_info = xe_display_bo_fbdev_fill_info,
