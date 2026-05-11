@@ -3,6 +3,7 @@
  * Copyright © 2023 Intel Corporation
  */
 
+#include <linux/debugfs.h>
 #include <linux/export.h>
 #include <linux/ref_tracker.h>
 #include <linux/types.h>
@@ -150,7 +151,19 @@ struct drm_dp_tunnel {
 	bool has_io_error:1;
 	bool destroyed:1;
 	bool pr_optimization_support:1;
+
+#ifdef CONFIG_DEBUG_FS
+	struct list_head debugfs_dirs;
+#endif
 };
+
+#ifdef CONFIG_DEBUG_FS
+struct drm_dp_tunnel_debugfs_dir {
+	struct list_head link;
+	struct dentry *parent;
+	struct dentry *dentry;
+};
+#endif
 
 struct drm_dp_tunnel_group_state;
 
@@ -192,6 +205,20 @@ struct drm_dp_tunnel_mgr {
 	int group_count;
 	struct drm_dp_tunnel_group *groups;
 	wait_queue_head_t bw_req_queue;
+
+#ifdef CONFIG_DEBUG_FS
+	/*
+	 * Serializes per-tunnel debugfs_dirs list mutations and the
+	 * debugfs writers (bw_alloc_enable, bw_limit). The lock is
+	 * also taken when flipping tunnel->destroyed in
+	 * drm_dp_tunnel_destroy() so debugfs writers and
+	 * drm_dp_tunnel_debugfs_add() can observe the teardown and
+	 * bail out. It does NOT synchronize against driver-side
+	 * modeset paths; the debug knobs are intended for test /
+	 * validation use only.
+	 */
+	struct mutex debugfs_lock;
+#endif
 
 #ifdef CONFIG_DRM_DISPLAY_DP_TUNNEL_STATE_DEBUG
 	struct ref_tracker_dir ref_tracker;
@@ -482,6 +509,9 @@ create_tunnel(struct drm_dp_tunnel_mgr *mgr,
 		return NULL;
 
 	INIT_LIST_HEAD(&tunnel->node);
+#ifdef CONFIG_DEBUG_FS
+	INIT_LIST_HEAD(&tunnel->debugfs_dirs);
+#endif
 
 	kref_init(&tunnel->kref);
 
@@ -820,7 +850,36 @@ int drm_dp_tunnel_destroy(struct drm_dp_tunnel *tunnel)
 
 	tun_dbg(tunnel, "destroying\n");
 
+#ifdef CONFIG_DEBUG_FS
+	{
+		struct drm_dp_tunnel_debugfs_dir *d, *tmp;
+		LIST_HEAD(debugfs_dirs);
+
+		/*
+		 * Mark the tunnel destroyed and detach the tracked
+		 * debugfs entries under debugfs_lock so concurrent
+		 * drm_dp_tunnel_debugfs_add() / writer paths observe
+		 * teardown and bail out before touching this tunnel.
+		 * Do the actual debugfs removal after dropping
+		 * debugfs_lock: removal may synchronize against active
+		 * debugfs file operations, and those writers also take
+		 * debugfs_lock.
+		 */
+		mutex_lock(&tunnel->group->mgr->debugfs_lock);
+		tunnel->destroyed = true;
+		list_splice_init(&tunnel->debugfs_dirs, &debugfs_dirs);
+		mutex_unlock(&tunnel->group->mgr->debugfs_lock);
+
+		list_for_each_entry_safe(d, tmp, &debugfs_dirs, link) {
+			debugfs_remove_recursive(d->dentry);
+			list_del(&d->link);
+			kfree(d);
+		}
+	}
+#else
 	tunnel->destroyed = true;
+#endif
+
 	destroy_tunnel(tunnel);
 
 	return 0;
@@ -1897,6 +1956,179 @@ int drm_dp_tunnel_atomic_check_stream_bws(struct drm_atomic_state *state,
 }
 EXPORT_SYMBOL(drm_dp_tunnel_atomic_check_stream_bws);
 
+#ifdef CONFIG_DEBUG_FS
+
+static const char *dp_link_rate_name(int rate)
+{
+	switch (rate) {
+	case 162000:	return "RBR";
+	case 270000:	return "HBR";
+	case 540000:	return "HBR2";
+	case 810000:	return "HBR3";
+	case 1000000:	return "UHBR10";
+	case 1350000:	return "UHBR13.5";
+	case 2000000:	return "UHBR20";
+	default:	return "unknown";
+	}
+}
+
+static int tunnel_info_show(struct seq_file *m, void *data)
+{
+	struct drm_dp_tunnel *tunnel = m->private;
+	bool bwa_enabled = drm_dp_tunnel_bw_alloc_is_enabled(tunnel);
+	int allocated_bw = drm_dp_tunnel_get_allocated_bw(tunnel);
+	int max_rate = tunnel->max_dprx_rate;
+
+	seq_printf(m, "Tunnel: DPTUN %s\n", drm_dp_tunnel_name(tunnel));
+	seq_printf(m, "  BW alloc mode:     %s\n",
+		   bwa_enabled ? "enabled" : "disabled");
+
+	/*
+	 * Print BW values in kB/s only so userspace parsers can use a
+	 * single format. Estimated/Allocated/granularity are only
+	 * meaningful while BWA is enabled; when disabled, surface 'n/a'
+	 * rather than the raw -1 sentinel returned by
+	 * drm_dp_tunnel_get_allocated_bw().
+	 */
+	if (bwa_enabled) {
+		seq_printf(m, "  Estimated BW:      %d kB/s\n",
+			   tunnel->estimated_bw);
+		seq_printf(m, "  Allocated BW:      %d kB/s\n", allocated_bw);
+		seq_printf(m, "  BW granularity:    %d kB/s\n",
+			   tunnel->bw_granularity);
+	} else {
+		seq_puts(m, "  Estimated BW:      n/a\n");
+		seq_puts(m, "  Allocated BW:      n/a\n");
+		seq_puts(m, "  BW granularity:    n/a\n");
+	}
+
+	/*
+	 * The DPRX caps are only valid once BWA has been enabled at
+	 * least once. Surface 'n/a' before that to avoid a bogus
+	 * '0 (unknown)'.
+	 */
+	if (max_rate > 0)
+		seq_printf(m, "  DPRX max rate:     %d (%s)\n",
+			   max_rate, dp_link_rate_name(max_rate));
+	else
+		seq_puts(m, "  DPRX max rate:     n/a\n");
+	seq_printf(m, "  DPRX max lanes:    %d\n",
+		   tunnel->max_dprx_lane_count);
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(tunnel_info);
+
+/**
+ * drm_dp_tunnel_debugfs_add - Add DP tunnel debugfs entries
+ * @tunnel: Tunnel object the entries are registered for
+ * @root: Parent debugfs directory under which the tunnel debugfs
+ *        subdir is created. Typically a connector's debugfs root.
+ *
+ * Create a "dp_tunnel" subdirectory under @root and populate it
+ * with the DP tunnel debugfs files. The subdirectory is owned by
+ * @tunnel; it is removed when @tunnel is destroyed via
+ * drm_dp_tunnel_destroy() or when the caller explicitly drops it
+ * via drm_dp_tunnel_debugfs_remove().
+ *
+ * May be called multiple times with different @root values - for
+ * example to expose the same tunnel's files under every DP
+ * connector that shares the tunnel (primary + MST children).
+ * Passing the same @root twice is a no-op.
+ *
+ * If @root may be removed before @tunnel is destroyed (for
+ * instance, an MST child connector being unregistered), the
+ * matching teardown path must call drm_dp_tunnel_debugfs_remove()
+ * so the tunnel does not retain a stale dentry pointer.
+ */
+void drm_dp_tunnel_debugfs_add(struct drm_dp_tunnel *tunnel, struct dentry *root)
+{
+	struct drm_dp_tunnel_debugfs_dir *d;
+	struct dentry *dir;
+
+	if (!tunnel || !root)
+		return;
+
+	mutex_lock(&tunnel->group->mgr->debugfs_lock);
+
+	/*
+	 * Bail out if the tunnel is being torn down: drm_dp_tunnel_destroy()
+	 * has already drained debugfs_dirs and will not run again, so any
+	 * entry added here would be leaked.
+	 */
+	if (tunnel->destroyed)
+		goto unlock;
+
+	list_for_each_entry(d, &tunnel->debugfs_dirs, link) {
+		if (d->parent == root)
+			goto unlock;
+	}
+
+	d = kzalloc(sizeof(*d), GFP_KERNEL);
+	if (!d)
+		goto unlock;
+
+	dir = debugfs_create_dir("dp_tunnel", root);
+	if (IS_ERR(dir)) {
+		kfree(d);
+		goto unlock;
+	}
+
+	d->parent = root;
+	d->dentry = dir;
+	list_add(&d->link, &tunnel->debugfs_dirs);
+
+	debugfs_create_file("info", 0444, dir, tunnel, &tunnel_info_fops);
+
+unlock:
+	mutex_unlock(&tunnel->group->mgr->debugfs_lock);
+}
+EXPORT_SYMBOL(drm_dp_tunnel_debugfs_add);
+
+/**
+ * drm_dp_tunnel_debugfs_remove - Drop DP tunnel debugfs entries for a parent
+ * @tunnel: Tunnel object the entries were registered for
+ * @root: Parent debugfs directory previously passed to
+ *        drm_dp_tunnel_debugfs_add()
+ *
+ * Remove the "dp_tunnel" subdirectory previously created under
+ * @root for @tunnel and drop it from the tunnel's tracked list.
+ * Must be called when @root is about to be torn down while
+ * @tunnel may still be alive (e.g. an MST child connector being
+ * unregistered) so the tunnel does not retain a stale dentry
+ * pointer.
+ *
+ * Calling with a @root that was never registered (or that has
+ * already been removed) is a no-op.
+ */
+void drm_dp_tunnel_debugfs_remove(struct drm_dp_tunnel *tunnel, struct dentry *root)
+{
+	struct drm_dp_tunnel_debugfs_dir *d, *found = NULL;
+
+	if (!tunnel || !root)
+		return;
+
+	mutex_lock(&tunnel->group->mgr->debugfs_lock);
+
+	list_for_each_entry(d, &tunnel->debugfs_dirs, link) {
+		if (d->parent == root) {
+			found = d;
+			list_del(&d->link);
+			break;
+		}
+	}
+
+	mutex_unlock(&tunnel->group->mgr->debugfs_lock);
+
+	if (found) {
+		debugfs_remove_recursive(found->dentry);
+		kfree(found);
+	}
+}
+EXPORT_SYMBOL(drm_dp_tunnel_debugfs_remove);
+
+#endif /* CONFIG_DEBUG_FS */
+
 static void destroy_mgr(struct drm_dp_tunnel_mgr *mgr)
 {
 	int i;
@@ -1908,6 +2140,10 @@ static void destroy_mgr(struct drm_dp_tunnel_mgr *mgr)
 
 #ifdef CONFIG_DRM_DISPLAY_DP_TUNNEL_STATE_DEBUG
 	ref_tracker_dir_exit(&mgr->ref_tracker);
+#endif
+
+#ifdef CONFIG_DEBUG_FS
+	mutex_destroy(&mgr->debugfs_lock);
 #endif
 
 	kfree(mgr->groups);
@@ -1936,6 +2172,9 @@ drm_dp_tunnel_mgr_create(struct drm_device *dev, int max_group_count)
 
 	mgr->dev = dev;
 	init_waitqueue_head(&mgr->bw_req_queue);
+#ifdef CONFIG_DEBUG_FS
+	mutex_init(&mgr->debugfs_lock);
+#endif
 
 	mgr->groups = kzalloc_objs(*mgr->groups, max_group_count);
 	if (!mgr->groups) {

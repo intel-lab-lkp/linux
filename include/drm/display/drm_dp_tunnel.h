@@ -18,6 +18,8 @@ struct drm_atomic_state;
 struct drm_dp_tunnel_mgr;
 struct drm_dp_tunnel_state;
 
+struct dentry;
+
 struct ref_tracker;
 
 struct drm_dp_tunnel_ref {
@@ -96,6 +98,16 @@ int drm_dp_tunnel_atomic_get_required_bw(const struct drm_dp_tunnel_state *tunne
 struct drm_dp_tunnel_mgr *
 drm_dp_tunnel_mgr_create(struct drm_device *dev, int max_group_count);
 void drm_dp_tunnel_mgr_destroy(struct drm_dp_tunnel_mgr *mgr);
+
+#if defined(CONFIG_DEBUG_FS)
+void drm_dp_tunnel_debugfs_add(struct drm_dp_tunnel *tunnel, struct dentry *root);
+void drm_dp_tunnel_debugfs_remove(struct drm_dp_tunnel *tunnel, struct dentry *root);
+#else
+static inline void
+drm_dp_tunnel_debugfs_add(struct drm_dp_tunnel *tunnel, struct dentry *root) {}
+static inline void
+drm_dp_tunnel_debugfs_remove(struct drm_dp_tunnel *tunnel, struct dentry *root) {}
+#endif
 
 #else
 
@@ -248,6 +260,11 @@ drm_dp_tunnel_mgr_create(struct drm_device *dev, int max_group_count)
 
 static inline
 void drm_dp_tunnel_mgr_destroy(struct drm_dp_tunnel_mgr *mgr) {}
+
+static inline void
+drm_dp_tunnel_debugfs_add(struct drm_dp_tunnel *tunnel, struct dentry *root) {}
+static inline void
+drm_dp_tunnel_debugfs_remove(struct drm_dp_tunnel *tunnel, struct dentry *root) {}
 
 #endif /* CONFIG_DRM_DISPLAY_DP_TUNNEL */
 
