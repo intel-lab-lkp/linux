@@ -683,6 +683,14 @@ static int i801_block_transaction_byte_by_byte(struct i801_priv *priv,
 		return -EOPNOTSUPP;
 
 	len = data->block[0];
+	/*
+	 * Prevent kernel stack buffer overflow.
+	 * The user-provided length must not exceed the maximum SMBus block size.
+	 * Without this check, a malicious I2C_SMBUS_I2C_BLOCK_DATA ioctl can
+	 * overwrite the stack variable allocated in i2cdev_ioctl_smbus().
+	 */
+	if (len < 1 || len > I2C_SMBUS_BLOCK_MAX)
+		return -EINVAL;
 
 	if (read_write == I2C_SMBUS_WRITE) {
 		iowrite8(len, SMBHSTDAT0(priv));
