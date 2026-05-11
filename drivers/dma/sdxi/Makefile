@@ -7,3 +7,6 @@ sdxi-objs += \
 	ring.o
 
 sdxi-$(CONFIG_PCI_MSI) += pci.o
+
+obj-$(CONFIG_SDXI_KUNIT_TEST) += \
+	ring_kunit.o

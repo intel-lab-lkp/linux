@@ -6,3 +6,11 @@ config SDXI
 	  Platform Data Mover devices. SDXI is a vendor-neutral
 	  standard for a memory-to-memory data mover and acceleration
 	  interface.
+
+config SDXI_KUNIT_TEST
+	tristate "SDXI unit tests" if !KUNIT_ALL_TESTS
+	depends on SDXI && KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  KUnit tests for parts of the SDXI driver. Does not require
+	  SDXI hardware.
