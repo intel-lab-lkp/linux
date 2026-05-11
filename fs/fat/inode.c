@@ -907,6 +907,7 @@ retry:
 	}
 	spin_unlock(&sbi->inode_hash_lock);
 	mark_buffer_dirty(bh);
+	MSDOS_I(inode)->i_metadata_bhs.inode_blk = bh->b_blocknr;
 	err = 0;
 	if (wait)
 		err = sync_dirty_buffer(bh);
@@ -925,7 +926,7 @@ static int fat_write_inode(struct inode *inode, struct writeback_control *wbc)
 		err = fat_clusters_flush(sb);
 		mutex_unlock(&MSDOS_SB(sb)->s_lock);
 	} else
-		err = __fat_write_inode(inode, wbc->sync_mode == WB_SYNC_ALL);
+		err = __fat_write_inode(inode, 0);
 
 	return err;
 }
