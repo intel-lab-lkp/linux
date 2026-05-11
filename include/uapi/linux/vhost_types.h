@@ -197,5 +197,9 @@ struct vhost_vdpa_iova_range {
 #define VHOST_BACKEND_F_DESC_ASID    0x7
 /* IOTLB don't flush memory mapping across device reset */
 #define VHOST_BACKEND_F_IOTLB_PERSIST  0x8
+/* Device supports changing the group ASID after DRIVER_OK.
+ * Requires VHOST_BACKEND_F_IOTLB_ASID.
+ */
+#define VHOST_BACKEND_F_GROUP_ASID_AFTER_DRIVER_OK  0x9
 
 #endif

@@ -682,7 +682,8 @@ static long vhost_vdpa_vring_ioctl(struct vhost_vdpa *v, unsigned int cmd,
 			return -EFAULT;
 		if (idx >= vdpa->ngroups || s.num >= vdpa->nas)
 			return -EINVAL;
-		if (ops->get_status(vdpa) & VIRTIO_CONFIG_S_DRIVER_OK)
+		if ((ops->get_status(vdpa) & VIRTIO_CONFIG_S_DRIVER_OK) &&
+		    !vhost_backend_has_feature(vq, VHOST_BACKEND_F_GROUP_ASID_AFTER_DRIVER_OK))
 			return -EBUSY;
 		if (!ops->set_group_asid)
 			return -EOPNOTSUPP;
@@ -791,7 +792,8 @@ static long vhost_vdpa_unlocked_ioctl(struct file *filep,
 				 BIT_ULL(VHOST_BACKEND_F_IOTLB_PERSIST) |
 				 BIT_ULL(VHOST_BACKEND_F_SUSPEND) |
 				 BIT_ULL(VHOST_BACKEND_F_RESUME) |
-				 BIT_ULL(VHOST_BACKEND_F_ENABLE_AFTER_DRIVER_OK)))
+				 BIT_ULL(VHOST_BACKEND_F_ENABLE_AFTER_DRIVER_OK) |
+				 BIT_ULL(VHOST_BACKEND_F_GROUP_ASID_AFTER_DRIVER_OK)))
 			return -EOPNOTSUPP;
 		if ((features & BIT_ULL(VHOST_BACKEND_F_SUSPEND)) &&
 		     !vhost_vdpa_can_suspend(v))
@@ -805,6 +807,13 @@ static long vhost_vdpa_unlocked_ioctl(struct file *filep,
 		if ((features & BIT_ULL(VHOST_BACKEND_F_DESC_ASID)) &&
 		     !vhost_vdpa_has_desc_group(v))
 			return -EOPNOTSUPP;
+		if (features & BIT_ULL(VHOST_BACKEND_F_GROUP_ASID_AFTER_DRIVER_OK)) {
+			if (!(features & BIT_ULL(VHOST_BACKEND_F_IOTLB_ASID)))
+				return -EINVAL;
+			if (!(vhost_vdpa_get_backend_features(v) &
+				BIT_ULL(VHOST_BACKEND_F_GROUP_ASID_AFTER_DRIVER_OK)))
+				return -EOPNOTSUPP;
+		}
 		if ((features & BIT_ULL(VHOST_BACKEND_F_IOTLB_PERSIST)) &&
 		     !vhost_vdpa_has_persistent_map(v))
 			return -EOPNOTSUPP;
