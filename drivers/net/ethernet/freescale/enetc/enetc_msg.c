@@ -29,49 +29,104 @@ static irqreturn_t enetc_msg_psi_msix(int irq, void *data)
 }
 
 /* Messaging */
-static u16 enetc_msg_pf_set_vf_primary_mac_addr(struct enetc_pf *pf,
-						int vf_id)
+static void enetc_msg_set_vf_primary_mac_addr(struct enetc_pf *pf, int vf_id,
+					      union enetc_pf_msg *pf_msg)
 {
 	struct enetc_vf_state *vf_state = &pf->vf_state[vf_id];
-	struct enetc_msg_swbd *msg = &pf->rxmsg[vf_id];
-	struct enetc_msg_cmd_set_primary_mac *cmd;
+	struct enetc_msg_swbd *msg_swbd = &pf->rxmsg[vf_id];
 	struct device *dev = &pf->si->pdev->dev;
-	u16 cmd_id;
+	struct enetc_msg_mac_exact_filter *msg;
 	char *addr;
 
-	cmd = (struct enetc_msg_cmd_set_primary_mac *)msg->vaddr;
-	cmd_id = cmd->header.id;
-	if (cmd_id != ENETC_MSG_CMD_MNG_ADD)
-		return ENETC_MSG_CMD_STATUS_FAIL;
+	msg = (struct enetc_msg_mac_exact_filter *)msg_swbd->vaddr;
+	addr = msg->mac[0].addr;
+	if (!is_valid_ether_addr(addr)) {
+		dev_err(dev, "Invalid MAC address from VSI message\n");
+		pf_msg->class_id = ENETC_MSG_CLASS_ID_MAC_FILTER;
+		pf_msg->class_code = ENETC_MF_CLASS_CODE_INVALID_MAC;
 
-	addr = cmd->mac.sa_data;
+		return;
+	}
+
 	if (vf_state->flags & ENETC_VF_FLAG_PF_SET_MAC)
 		dev_warn(dev, "Attempt to override PF set mac addr for VF%d\n",
 			 vf_id);
 	else
 		pf->ops->set_si_primary_mac(&pf->si->hw, vf_id + 1, addr);
 
-	return ENETC_MSG_CMD_STATUS_OK;
+	pf_msg->class_id = ENETC_MSG_CLASS_ID_CMD_SUCCESS;
 }
 
-static void enetc_msg_handle_rxmsg(struct enetc_pf *pf, int vf_id, u16 *status)
+static bool enetc_msg_check_crc16(void *msg_addr, u32 msg_size)
 {
-	struct enetc_msg_swbd *msg = &pf->rxmsg[vf_id];
-	struct device *dev = &pf->si->pdev->dev;
-	struct enetc_msg_cmd_header *cmd_hdr;
-	u16 cmd_type;
+	u32 data_size = msg_size - 2;
+	u8 *data_buf = msg_addr + 2;
+	u16 verify_val;
 
-	*status = ENETC_MSG_CMD_STATUS_OK;
-	cmd_hdr = (struct enetc_msg_cmd_header *)msg->vaddr;
-	cmd_type = cmd_hdr->type;
+	if (msg_size > ENETC_DEFAULT_MSG_SIZE)
+		return false;
 
-	switch (cmd_type) {
-	case ENETC_MSG_CMD_MNG_MAC:
-		*status = enetc_msg_pf_set_vf_primary_mac_addr(pf, vf_id);
+	verify_val = crc_itu_t(ENETC_CRC_INIT, data_buf, data_size);
+	verify_val = crc_itu_t(verify_val, msg_addr, 2);
+	if (verify_val)
+		return false;
+
+	return true;
+}
+
+static void enetc_msg_handle_mac_filter(struct enetc_msg_header *msg_hdr,
+					struct enetc_pf *pf, int vf_id,
+					union enetc_pf_msg *pf_msg)
+{
+	switch (msg_hdr->cmd_id) {
+	case ENETC_MSG_SET_PRIMARY_MAC:
+		enetc_msg_set_vf_primary_mac_addr(pf, vf_id, pf_msg);
 		break;
 	default:
-		dev_err(dev, "command not supported (cmd_type: 0x%x)\n",
-			cmd_type);
+		pf_msg->class_id = ENETC_MSG_CLASS_ID_CMD_NOT_SUPPORT;
+	}
+}
+
+static void enetc_msg_handle_rxmsg(struct enetc_pf *pf, int vf_id,
+				   union enetc_pf_msg *pf_msg)
+{
+	struct enetc_msg_swbd *msg_swbd = &pf->rxmsg[vf_id];
+	struct device *dev = &pf->si->pdev->dev;
+	struct enetc_msg_header *msg_hdr;
+	u32 msg_size;
+
+	msg_hdr = (struct enetc_msg_header *)msg_swbd->vaddr;
+	msg_size = ENETC_MSG_SIZE(msg_hdr->len);
+	if (!enetc_msg_check_crc16(msg_swbd->vaddr, msg_size)) {
+		dev_err(dev, "VSI to PSI Message CRC16 error\n");
+		pf_msg->class_id = ENETC_MSG_CLASS_ID_CRC_ERROR;
+
+		return;
+	}
+
+	/* Currently, asynchronous actions are not supported */
+	if (msg_hdr->cookie) {
+		dev_err(dev, "Cookie field is not supported yet\n");
+		pf_msg->class_id = ENETC_MSG_CLASS_ID_CMD_NOT_SUPPORT;
+
+		return;
+	}
+
+	/* Currently only support protocol version 0 */
+	if (msg_hdr->proto_ver) {
+		dev_err(dev, "Protocol version %u is not supported yet\n",
+			msg_hdr->proto_ver);
+		pf_msg->class_id = ENETC_MSG_CLASS_ID_PROTO_NOT_SUPPORT;
+
+		return;
+	}
+
+	switch (msg_hdr->class_id) {
+	case ENETC_MSG_CLASS_ID_MAC_FILTER:
+		enetc_msg_handle_mac_filter(msg_hdr, pf, vf_id, pf_msg);
+		break;
+	default:
+		pf_msg->class_id = ENETC_MSG_CLASS_ID_CMD_NOT_SUPPORT;
 	}
 }
 
@@ -92,15 +147,15 @@ static void enetc_msg_task(struct work_struct *work)
 		}
 
 		for (i = 0; i < pf->num_vfs; i++) {
+			union enetc_pf_msg pf_msg = {};
 			u32 psimsgrr;
-			u16 msg_code;
 
 			if (!(ENETC_PSIMSGRR_MR(i) & mr_mask))
 				continue;
 
-			enetc_msg_handle_rxmsg(pf, i, &msg_code);
+			enetc_msg_handle_rxmsg(pf, i, &pf_msg);
 
-			psimsgrr = ENETC_SIMSGSR_SET_MC(msg_code);
+			psimsgrr = ENETC_SIMSGSR_SET_MC(pf_msg.code);
 			psimsgrr |= ENETC_PSIMSGRR_MR(i); /* w1c */
 			enetc_wr(hw, ENETC_PSIMSGRR, psimsgrr);
 		}
