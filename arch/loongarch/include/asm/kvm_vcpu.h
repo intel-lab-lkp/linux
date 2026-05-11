@@ -95,12 +95,18 @@ struct kvm_vcpu *kvm_get_vcpu_by_cpuid(struct kvm *kvm, int cpuid);
  */
 static inline void kvm_queue_irq(struct kvm_vcpu *vcpu, unsigned int irq)
 {
+	if (!kvm_guest_has_msgint(&vcpu->arch) && (irq == INT_AVEC))
+		return;
+
 	set_bit(irq, &vcpu->arch.irq_pending);
 	clear_bit(irq, &vcpu->arch.irq_clear);
 }
 
 static inline void kvm_dequeue_irq(struct kvm_vcpu *vcpu, unsigned int irq)
 {
+	if (!kvm_guest_has_msgint(&vcpu->arch) && (irq == INT_AVEC))
+		return;
+
 	clear_bit(irq, &vcpu->arch.irq_pending);
 	set_bit(irq, &vcpu->arch.irq_clear);
 }
