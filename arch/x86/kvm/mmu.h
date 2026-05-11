@@ -169,21 +169,22 @@ static inline void kvm_mmu_load_pgd(struct kvm_vcpu *vcpu)
 }
 
 static inline void kvm_mmu_refresh_passthrough_bits(struct kvm_vcpu *vcpu,
-						    struct kvm_mmu *mmu)
+						    struct kvm_pagewalk *w)
 {
 	/*
 	 * When EPT is enabled, KVM may passthrough CR0.WP to the guest, i.e.
-	 * @mmu's snapshot of CR0.WP and thus all related paging metadata may
+	 * @w's snapshot of CR0.WP and thus all related paging metadata may
 	 * be stale.  Refresh CR0.WP and the metadata on-demand when checking
 	 * for permission faults.  Exempt nested MMUs, i.e. MMUs for shadowing
 	 * nEPT and nNPT, as CR0.WP is ignored in both cases.  Note, KVM does
 	 * need to refresh nested_mmu, a.k.a. the walker used to translate L2
 	 * GVAs to GPAs, as that "MMU" needs to honor L2's CR0.WP.
 	 */
-	if (!tdp_enabled || mmu == &vcpu->arch.guest_mmu)
+	if (!tdp_enabled || w == &vcpu->arch.guest_mmu.w)
 		return;
 
-	__kvm_mmu_refresh_passthrough_bits(vcpu, mmu);
+	__kvm_mmu_refresh_passthrough_bits(vcpu,
+					   container_of(w, struct kvm_mmu, w));
 }
 
 /*
@@ -194,10 +195,12 @@ static inline void kvm_mmu_refresh_passthrough_bits(struct kvm_vcpu *vcpu,
  * Return zero if the access does not fault; return the page fault error code
  * if the access faults.
  */
-static inline u8 permission_fault(struct kvm_vcpu *vcpu, struct kvm_mmu *mmu,
+static inline u8 permission_fault(struct kvm_vcpu *vcpu, struct kvm_pagewalk *w,
 				  unsigned pte_access, unsigned pte_pkey,
 				  u64 access)
 {
+	struct kvm_mmu *mmu = container_of(w, struct kvm_mmu, w);
+
 	/* strip nested paging fault error codes */
 	unsigned int pfec = access;
 	unsigned long rflags = kvm_x86_call(get_rflags)(vcpu);
@@ -220,7 +223,7 @@ static inline u8 permission_fault(struct kvm_vcpu *vcpu, struct kvm_mmu *mmu,
 	u32 errcode = PFERR_PRESENT_MASK;
 	bool fault;
 
-	kvm_mmu_refresh_passthrough_bits(vcpu, mmu);
+	kvm_mmu_refresh_passthrough_bits(vcpu, w);
 
 	fault = (mmu->permissions[index] >> pte_access) & 1;
 
@@ -301,12 +304,12 @@ static inline void kvm_update_page_stats(struct kvm *kvm, int level, int count)
 }
 
 static inline gpa_t kvm_translate_gpa(struct kvm_vcpu *vcpu,
-				      struct kvm_mmu *mmu,
+				      struct kvm_pagewalk *w,
 				      gpa_t gpa, u64 access,
 				      struct x86_exception *exception,
 				      u64 pte_access)
 {
-	if (mmu != &vcpu->arch.nested_mmu)
+	if (w != &vcpu->arch.nested_mmu.w)
 		return gpa;
 	return kvm_x86_ops.nested_ops->translate_nested_gpa(vcpu, gpa, access,
 							    exception,
