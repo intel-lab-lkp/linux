@@ -28,8 +28,8 @@ struct ne_mem_region {
 	struct list_head	mem_region_list_entry;
 	u64			memory_size;
 	unsigned long		nr_pages;
-	struct page		**pages;
 	u64			userspace_addr;
+	struct page		*pages[];
 };
 
 /**

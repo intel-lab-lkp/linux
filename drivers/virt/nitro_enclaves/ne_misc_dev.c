@@ -927,18 +927,10 @@ static int ne_set_user_memory_region_ioctl(struct ne_enclave *ne_enclave,
 	if (rc < 0)
 		return rc;
 
-	ne_mem_region = kzalloc_obj(*ne_mem_region);
+	max_nr_pages = mem_region.memory_size / NE_MIN_MEM_REGION_SIZE;
+	ne_mem_region = kzalloc_flex(*ne_mem_region, pages, max_nr_pages);
 	if (!ne_mem_region)
 		return -ENOMEM;
-
-	max_nr_pages = mem_region.memory_size / NE_MIN_MEM_REGION_SIZE;
-
-	ne_mem_region->pages = kzalloc_objs(*ne_mem_region->pages, max_nr_pages);
-	if (!ne_mem_region->pages) {
-		rc = -ENOMEM;
-
-		goto free_mem_region;
-	}
 
 	phys_contig_mem_regions.regions = kzalloc_objs(*phys_contig_mem_regions.regions,
 						       max_nr_pages);
@@ -1049,7 +1041,6 @@ put_pages:
 		put_page(ne_mem_region->pages[i]);
 free_mem_region:
 	kfree(phys_contig_mem_regions.regions);
-	kfree(ne_mem_region->pages);
 	kfree(ne_mem_region);
 
 	return rc;
@@ -1397,8 +1388,6 @@ static void ne_enclave_remove_all_mem_region_entries(struct ne_enclave *ne_encla
 
 		for (i = 0; i < ne_mem_region->nr_pages; i++)
 			put_page(ne_mem_region->pages[i]);
-
-		kfree(ne_mem_region->pages);
 
 		kfree(ne_mem_region);
 	}
