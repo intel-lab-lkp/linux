@@ -493,6 +493,26 @@ static const struct intel_display_bw_params xelpdp_bw_params = {
 	.displayrtids = 256,
 };
 
+static const struct intel_display_bw_params *get_display_bw_params(struct intel_display *display)
+{
+	if (DISPLAY_VER(display) >= 14) {
+		return &xelpdp_bw_params;
+	} else if (DISPLAY_VER(display) >= 12) {
+		/*
+		 * RKL's SoC was based on ICL and the display, even though being
+		 * gen12, had changes to the memory interface to match gen11's,
+		 * consequently inheriting gen11's display-specific bandwidth
+		 * parameters.
+		 */
+		if (display->platform.rocketlake)
+			return &gen11_bw_params;
+		else
+			return &gen12_bw_params;
+	} else {
+		return &gen11_bw_params;
+	}
+}
+
 static int icl_get_bw_info(struct intel_display *display,
 			   const struct dram_info *dram_info,
 			   const struct intel_soc_bw_params *soc_bw_params,
@@ -843,6 +863,7 @@ void intel_bw_init_hw(struct intel_display *display)
 {
 	const struct dram_info *dram_info = intel_dram_info(display);
 	const struct intel_soc_bw_params *soc_bw_params = get_soc_bw_params(display);
+	const struct intel_display_bw_params *display_bw_params = get_display_bw_params(display);
 
 	if (!HAS_DISPLAY(display))
 		return;
@@ -858,23 +879,12 @@ void intel_bw_init_hw(struct intel_display *display)
 
 	if (DISPLAY_VERx100(display) >= 1401 && display->platform.dgfx) {
 		xe2_hpd_get_bw_info(display, dram_info, soc_bw_params);
-	} else if (DISPLAY_VER(display) >= 14) {
-		tgl_get_bw_info(display, dram_info, soc_bw_params, &xelpdp_bw_params);
 	} else if (display->platform.dg2) {
 		dg2_get_bw_info(display);
 	} else if (DISPLAY_VER(display) >= 12) {
-		/*
-		 * RKL's SoC was based on ICL and the display, even though being
-		 * gen12, had changes to the memory interface to match gen11's,
-		 * consequently inheriting gen11's display-specific bandwidth
-		 * parameters.
-		 */
-		if (display->platform.rocketlake)
-			tgl_get_bw_info(display, dram_info, soc_bw_params, &gen11_bw_params);
-		else
-			tgl_get_bw_info(display, dram_info, soc_bw_params, &gen12_bw_params);
+		tgl_get_bw_info(display, dram_info, soc_bw_params, display_bw_params);
 	} else if (DISPLAY_VER(display) == 11) {
-		icl_get_bw_info(display, dram_info, soc_bw_params, &gen11_bw_params);
+		icl_get_bw_info(display, dram_info, soc_bw_params, display_bw_params);
 	}
 }
 
