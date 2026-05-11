@@ -6,6 +6,8 @@
 
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/clock/cix,sky1.h>
+#include <dt-bindings/phy/phy.h>
+#include <dt-bindings/reset/cix,sky1-s5-system-control.h>
 #include "sky1-power.h"
 
 / {
@@ -502,6 +504,72 @@
 			interrupts = <GIC_SPI 392 IRQ_TYPE_LEVEL_HIGH 0>;
 			#mbox-cells = <1>;
 			cix,mbox-dir = "tx";
+		};
+
+		usb4: usb@91d0000 {
+			compatible = "cix,sky1-usb3", "cix,cdns-usb3";
+			reg = <0x00 0x91d0000 0x00 0x4000>,
+					<0x00 0x91d4000 0x00 0x4000>,
+					<0x00 0x91d8000 0x00 0x8000>,
+					<0x00 0x91c0314 0x00 0x4>;
+			reg-names = "otg", "dev", "xhci", "glue";
+
+			interrupts = <GIC_SPI 252 IRQ_TYPE_LEVEL_HIGH 0>,	/* host irq */
+					<GIC_SPI 252 IRQ_TYPE_LEVEL_HIGH 0>,	/* peripheral irq */
+					<GIC_SPI 253 IRQ_TYPE_LEVEL_HIGH 0>,	/* otgirq */
+					<GIC_SPI 252 IRQ_TYPE_LEVEL_HIGH 0>;	/* wakeup irq */
+			interrupt-names = "host",
+					"peripheral",
+					"otg",
+					"wakeup";
+
+			resets = <&s5_syscon SKY1_USBC_SS2_PRST_N>,
+				<&s5_syscon SKY1_USBC_SS2_RST_N>;
+			reset-names = "prst", "rst";
+
+			clocks = <&scmi_clk CLK_TREE_USB3A_H0_CLK_SOF>,
+				<&scmi_clk CLK_TREE_USB3A_0_AXI_GATE>,
+				<&scmi_clk CLK_TREE_USB3A_H0_CLK_LPM>,
+				<&scmi_clk CLK_TREE_USB3A_0_APB_GATE>;
+			clock-names = "sof", "aclk", "lpm", "pclk";
+
+			cix,syscon-usb = <&s5_syscon>;
+			dma-coherent;
+			maximum-speed = "super-speed-plus";
+			dr_mode = "otg";
+		};
+
+		usb5: usb@91e0000 {
+			compatible = "cix,sky1-usb3", "cix,cdns-usb3";
+			reg = <0x00 0x91e0000 0x00 0x4000>,
+					<0x00 0x91e4000 0x00 0x4000>,
+					<0x00 0x91e8000 0x00 0x8000>,
+					<0x00 0x91c0324 0x00 0x4>;
+			reg-names = "otg", "dev", "xhci", "glue";
+
+			interrupts = <GIC_SPI 257 IRQ_TYPE_LEVEL_HIGH 0>,	/* host irq */
+					<GIC_SPI 257 IRQ_TYPE_LEVEL_HIGH 0>,	/* peripheral irq */
+					<GIC_SPI 258 IRQ_TYPE_LEVEL_HIGH 0>,	/* otgirq */
+					<GIC_SPI 257 IRQ_TYPE_LEVEL_HIGH 0>;	/* wakeup irq */
+			interrupt-names = "host",
+					"peripheral",
+					"otg",
+					"wakeup";
+
+			resets = <&s5_syscon SKY1_USBC_SS3_PRST_N>,
+				<&s5_syscon SKY1_USBC_SS3_RST_N>;
+			reset-names = "prst", "rst";
+
+			clocks = <&scmi_clk CLK_TREE_USB3A_H1_CLK_SOF>,
+				<&scmi_clk CLK_TREE_USB3A_1_AXI_GATE>,
+				<&scmi_clk CLK_TREE_USB3A_H1_CLK_LPM>,
+				<&scmi_clk CLK_TREE_USB3A_1_APB_GATE>;
+			clock-names = "sof", "aclk", "lpm", "pclk";
+
+			cix,syscon-usb = <&s5_syscon>;
+			dma-coherent;
+			maximum-speed = "super-speed-plus";
+			dr_mode = "otg";
 		};
 
 		pcie_x8_rc: pcie@a010000 {
