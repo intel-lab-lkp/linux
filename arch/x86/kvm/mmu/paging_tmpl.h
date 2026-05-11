@@ -55,7 +55,7 @@
 	#define PT_LEVEL_BITS 9
 	#define PT_GUEST_DIRTY_SHIFT 9
 	#define PT_GUEST_ACCESSED_SHIFT 8
-	#define PT_HAVE_ACCESSED_DIRTY(mmu) (!(mmu)->cpu_role.base.ad_disabled)
+	#define PT_HAVE_ACCESSED_DIRTY(w) (!(w)->cpu_role.base.ad_disabled)
 	#define PT_MAX_FULL_LEVELS PT64_ROOT_MAX_LEVEL
 #else
 	#error Invalid PTTYPE value
@@ -109,11 +109,10 @@ static gfn_t gpte_to_gfn_lvl(pt_element_t gpte, int lvl)
 static inline void FNAME(protect_clean_gpte)(struct kvm_pagewalk *w, unsigned *access,
 					     unsigned gpte)
 {
-	struct kvm_mmu __maybe_unused *mmu = container_of(w, struct kvm_mmu, w);
 	unsigned mask;
 
 	/* dirty bit is not supported, so no need to track it */
-	if (!PT_HAVE_ACCESSED_DIRTY(mmu))
+	if (!PT_HAVE_ACCESSED_DIRTY(w))
 		return;
 
 	BUILD_BUG_ON(PT_WRITABLE_MASK != ACC_WRITE_MASK);
@@ -125,7 +124,7 @@ static inline void FNAME(protect_clean_gpte)(struct kvm_pagewalk *w, unsigned *a
 	*access &= mask;
 }
 
-static inline int FNAME(is_present_gpte)(struct kvm_mmu *mmu,
+static inline int FNAME(is_present_gpte)(struct kvm_pagewalk *w,
 					 unsigned long pte)
 {
 #if PTTYPE != PTTYPE_EPT
@@ -135,7 +134,7 @@ static inline int FNAME(is_present_gpte)(struct kvm_mmu *mmu,
 	 * For EPT, an entry is present if any of bits 2:0 are set.
 	 * With mode-based execute control, bit 10 also indicates presence.
 	 */
-	return pte & (7 | (mmu_has_mbec(mmu) ? VMX_EPT_USER_EXECUTABLE_MASK : 0));
+	return pte & (7 | (w->cpu_role.base.cr4_smep ? VMX_EPT_USER_EXECUTABLE_MASK : 0));
 #endif
 }
 
@@ -150,25 +149,25 @@ static bool FNAME(is_bad_mt_xwr)(struct rsvd_bits_validate *rsvd_check, u64 gpte
 
 static bool FNAME(is_rsvd_bits_set)(struct kvm_pagewalk *w, u64 gpte, int level)
 {
-	struct kvm_mmu *mmu = container_of(w, struct kvm_mmu, w);
-
-	return __is_rsvd_bits_set(&mmu->guest_rsvd_check, gpte, level) ||
-	       FNAME(is_bad_mt_xwr)(&mmu->guest_rsvd_check, gpte);
+	return __is_rsvd_bits_set(&w->guest_rsvd_check, gpte, level) ||
+	       FNAME(is_bad_mt_xwr)(&w->guest_rsvd_check, gpte);
 }
 
 static bool FNAME(prefetch_invalid_gpte)(struct kvm_vcpu *vcpu,
 				  struct kvm_mmu_page *sp, u64 *spte,
 				  u64 gpte)
 {
-	if (!FNAME(is_present_gpte)(vcpu->arch.mmu, gpte))
+	struct kvm_pagewalk *w = &vcpu->arch.mmu->w;
+
+	if (!FNAME(is_present_gpte)(w, gpte))
 		goto no_present;
 
 	/* Prefetch only accessed entries (unless A/D bits are disabled). */
-	if (PT_HAVE_ACCESSED_DIRTY(vcpu->arch.mmu) &&
+	if (PT_HAVE_ACCESSED_DIRTY(w) &&
 	    !(gpte & PT_GUEST_ACCESSED_MASK))
 		goto no_present;
 
-	if (FNAME(is_rsvd_bits_set)(&vcpu->arch.mmu->w, gpte, PG_LEVEL_4K))
+	if (FNAME(is_rsvd_bits_set)(w, gpte, PG_LEVEL_4K))
 		goto no_present;
 
 	return false;
@@ -213,7 +212,6 @@ static int FNAME(update_accessed_dirty_bits)(struct kvm_vcpu *vcpu,
 					     struct guest_walker *walker,
 					     gpa_t addr, int write_fault)
 {
-	struct kvm_mmu __maybe_unused *mmu = container_of(w, struct kvm_mmu, w);
 	unsigned level, index;
 	pt_element_t pte, orig_pte;
 	pt_element_t __user *ptep_user;
@@ -221,7 +219,7 @@ static int FNAME(update_accessed_dirty_bits)(struct kvm_vcpu *vcpu,
 	int ret;
 
 	/* dirty/accessed bits are not supported, so no need to update them */
-	if (!PT_HAVE_ACCESSED_DIRTY(mmu))
+	if (!PT_HAVE_ACCESSED_DIRTY(w))
 		return 0;
 
 	for (level = walker->max_level; level >= walker->level; --level) {
@@ -285,8 +283,6 @@ static inline unsigned FNAME(gpte_pkeys)(struct kvm_vcpu *vcpu, u64 gpte)
 static inline bool FNAME(is_last_gpte)(struct kvm_pagewalk *w,
 				       unsigned int level, unsigned int gpte)
 {
-	struct kvm_mmu __maybe_unused *mmu = container_of(w, struct kvm_mmu, w);
-
 	/*
 	 * For EPT and PAE paging (both variants), bit 7 is either reserved at
 	 * all level or indicates a huge page (ignoring CR3/EPTP).  In either
@@ -302,7 +298,7 @@ static inline bool FNAME(is_last_gpte)(struct kvm_pagewalk *w,
 	 * is not reserved and does not indicate a large page at this level,
 	 * so clear PT_PAGE_SIZE_MASK in gpte if that is the case.
 	 */
-	gpte &= level - (PT32_ROOT_LEVEL + mmu->cpu_role.ext.cr4_pse);
+	gpte &= level - (PT32_ROOT_LEVEL + w->cpu_role.ext.cr4_pse);
 #endif
 	/*
 	 * PG_LEVEL_4K always terminates.  The RHS has bit 7 set
@@ -341,16 +337,16 @@ static int FNAME(walk_addr_generic)(struct guest_walker *walker,
 
 	trace_kvm_mmu_pagetable_walk(addr, access);
 retry_walk:
-	walker->level = mmu->cpu_role.base.level;
+	walker->level = w->cpu_role.base.level;
 	pte           = kvm_mmu_get_guest_pgd(vcpu, w);
-	have_ad       = PT_HAVE_ACCESSED_DIRTY(mmu);
+	have_ad       = PT_HAVE_ACCESSED_DIRTY(w);
 
 #if PTTYPE == 64
 	walk_nx_mask = 1ULL << PT64_NX_SHIFT;
 	if (walker->level == PT32E_ROOT_LEVEL) {
 		pte = w->get_pdptr(vcpu, (addr >> 30) & 3);
 		trace_kvm_mmu_paging_element(pte, walker->level);
-		if (!FNAME(is_present_gpte)(mmu, pte))
+		if (!FNAME(is_present_gpte)(w, pte))
 			goto error;
 		--walker->level;
 	}
@@ -433,7 +429,7 @@ retry_walk:
 		 */
 		pte_access = pt_access & (pte ^ walk_nx_mask);
 
-		if (unlikely(!FNAME(is_present_gpte)(mmu, pte)))
+		if (unlikely(!FNAME(is_present_gpte)(w, pte)))
 			goto error;
 
 		if (unlikely(FNAME(is_rsvd_bits_set)(w, pte, walker->level))) {
@@ -655,7 +651,7 @@ static int FNAME(fetch)(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault,
 	WARN_ON_ONCE(gw->gfn != base_gfn);
 	direct_access = gw->pte_access;
 
-	top_level = vcpu->arch.mmu->cpu_role.base.level;
+	top_level = vcpu->arch.mmu->w.cpu_role.base.level;
 	if (top_level == PT32E_ROOT_LEVEL)
 		top_level = PT32_ROOT_LEVEL;
 	/*

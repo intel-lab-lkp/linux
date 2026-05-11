@@ -484,6 +484,8 @@ struct kvm_pagewalk {
 	gpa_t (*gva_to_gpa)(struct kvm_vcpu *vcpu, struct kvm_pagewalk *w,
 			    gpa_t gva_or_gpa, u64 access,
 			    struct x86_exception *exception);
+	union kvm_cpu_role cpu_role;
+	struct rsvd_bits_validate guest_rsvd_check;
 };
 
 struct kvm_mmu {
@@ -494,7 +496,6 @@ struct kvm_mmu {
 			 struct kvm_mmu_page *sp, int i);
 	struct kvm_mmu_root_info root;
 	hpa_t mirror_root_hpa;
-	union kvm_cpu_role cpu_role;
 	union kvm_mmu_page_role root_role;
 
 	/*
@@ -524,7 +525,6 @@ struct kvm_mmu {
 	 * the bits spte never used.
 	 */
 	struct rsvd_bits_validate shadow_zero_check;
-	struct rsvd_bits_validate guest_rsvd_check;
 };
 
 enum pmc_type {
