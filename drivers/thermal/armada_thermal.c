@@ -178,7 +178,7 @@ static void armada370_init(struct platform_device *pdev,
 
 	regmap_write(priv->syscon, data->syscon_control1_off, reg);
 
-	msleep(10);
+	usleep_range(10000, 11000);
 }
 
 static void armada375_init(struct platform_device *pdev,
