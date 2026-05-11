@@ -98,6 +98,32 @@
 	};
 };
 
+&sd_io_1v8_reg {
+	gpios = <&portb 3 GPIO_ACTIVE_HIGH>;
+};
+
+&emmc {
+	status = "okay";
+
+	no-mmc;
+	disable-wp;
+	bus-width = <4>;
+	cap-sd-highspeed;
+	sd-uhs-sdr104;
+	vmmc-supply = <&sd_emmc_power>;
+	vqmmc-supply = <&sd_io_1v8_reg>;
+	max-frequency = <200000000>;
+	/*
+	 * SDHCI capability overrides:
+	 *  - caps_mask[0] 0x0000ff00 / caps[0] 0x0000c800:
+	 *      Override SDHCI_CLOCK_BASE_MASK to 0xc8 (200 MHz).
+	 *  - caps_mask[1] 0x00002000 / caps[1] 0:
+	 *      Clear SDHCI_USE_SDR50_TUNING; SDR50 tuning is unsupported.
+	 */
+	sdhci-caps = <0x00000000 0x0000c800>;
+	sdhci-caps-mask = <0x00002000 0x0000ff00>;
+};
+
 &uart0 {
 	status = "okay";
 };

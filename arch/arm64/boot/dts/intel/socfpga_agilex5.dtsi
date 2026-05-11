@@ -300,6 +300,44 @@
 			};
 		};
 
+		sd_emmc_power: regulator-fixed-3p3v {
+			compatible = "regulator-fixed";
+			regulator-name = "card-power";
+			regulator-min-microvolt = <3300000>;
+			regulator-max-microvolt = <3300000>;
+			regulator-always-on;
+		};
+
+		sd_io_1v8_reg: regulator-1p8v {
+			compatible = "regulator-gpio";
+			regulator-name = "sd-bus-io-power";
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <3300000>;
+			states =	<1800000 0x1>,
+					<3300000 0x0>;
+		};
+
+		emmc: mmc@10808000 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "altr,agilex5-sd6hc", "cdns,sd6hc";
+			reg = <0x10808000 0x1000>;
+			interrupts = <GIC_SPI 96 IRQ_TYPE_LEVEL_HIGH>;
+			fifo-depth = <0x800>;
+			resets = <&rst SDMMC_RESET>, <&rst COMBOPHY_RESET>, <&rst SDMMC_OCP_RESET>;
+			reset-names = "sdhc-reset", "combophy", "sdmmc-ocp";
+			/*
+			 * "ciu" (SDMCLK) is listed first so it is selected as the
+			 * primary clock by the SDHCI platform layer; the SD6HC PHY
+			 * timing calculations are derived from this clock rate.
+			 */
+			clocks = <&clkmgr AGILEX5_SDMCLK>, <&clkmgr AGILEX5_L4_MP_CLK>;
+			clock-names = "ciu", "biu";
+			iommus = <&smmu 5>;
+			dma-coherent;
+			status = "disabled";
+		};
+
 		nand: nand-controller@10b80000 {
 			compatible = "cdns,hp-nfc";
 			reg = <0x10b80000 0x10000>,
