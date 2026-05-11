@@ -50,6 +50,13 @@ enum {
 #define AMD_MSR_RANGE		(0x7)
 #define HYGON_MSR_RANGE		(0x7)
 
+#define MSR_AMD_PSTATE_DEF0 0xc0010064
+
+#ifndef rdmsrl_safe_on_cpu
+#define rdmsrl_safe_on_cpu(cpu, reg, val) rdmsrq_safe_on_cpu(cpu, reg, val)
+#define wrmsrl_safe_on_cpu(cpu, reg, val) wrmsrq_safe_on_cpu(cpu, reg, val)
+#endif
+
 struct acpi_cpufreq_data {
 	unsigned int resume;
 	unsigned int cpu_feature;
@@ -57,6 +64,8 @@ struct acpi_cpufreq_data {
 	cpumask_var_t freqdomain_cpus;
 	void (*cpu_freq_write)(struct acpi_pct_register *reg, u32 val);
 	u32 (*cpu_freq_read)(struct acpi_pct_register *reg);
+	int is_amd_zen;
+	int on_ac;
 };
 
 /* acpi_perf_data is a pointer to percpu data. */
@@ -454,35 +463,50 @@ static unsigned int acpi_cpufreq_fast_switch(struct cpufreq_policy *policy,
 					     unsigned int target_freq)
 {
 	struct acpi_cpufreq_data *data = policy->driver_data;
-	struct acpi_processor_performance *perf;
-	struct cpufreq_frequency_table *entry;
-	unsigned int next_perf_state, next_freq, index;
+	if (!data->is_amd_zen) {
+		struct acpi_processor_performance *perf;
+		struct cpufreq_frequency_table *entry;
+		unsigned int next_perf_state, next_freq, index;
 
-	/*
-	 * Find the closest frequency above target_freq.
-	 */
-	if (policy->cached_target_freq == target_freq)
-		index = policy->cached_resolved_idx;
-	else
-		index = cpufreq_table_find_index_dl(policy, target_freq,
-						    false);
-
-	entry = &policy->freq_table[index];
-	next_freq = entry->frequency;
-	next_perf_state = entry->driver_data;
-
-	perf = to_perf_data(data);
-	if (perf->state == next_perf_state) {
-		if (unlikely(data->resume))
-			data->resume = 0;
+		/*
+		 * Find the closest frequency above target_freq.
+		 */
+		if (policy->cached_target_freq == target_freq)
+			index = policy->cached_resolved_idx;
 		else
-			return next_freq;
-	}
+			index = cpufreq_table_find_index_dl(policy, target_freq,
+							    false);
 
-	data->cpu_freq_write(&perf->control_register,
-			     perf->states[next_perf_state].control);
-	perf->state = next_perf_state;
-	return next_freq;
+		entry = &policy->freq_table[index];
+		next_freq = entry->frequency;
+		next_perf_state = entry->driver_data;
+
+		perf = to_perf_data(data);
+		if (perf->state == next_perf_state) {
+			if (unlikely(data->resume))
+				data->resume = 0;
+			else
+				return next_freq;
+		}
+
+		data->cpu_freq_write(&perf->control_register,
+				     perf->states[next_perf_state].control);
+		perf->state = next_perf_state;
+		return next_freq;
+	} else {
+		u64 val;
+		u8 fid = (u8)((target_freq / 1000 * 8) / 200);
+
+		if (target_freq > policy->cpuinfo.max_freq)
+			target_freq = policy->cpuinfo.max_freq * 7 / 10;
+
+		if (rdmsrl_safe_on_cpu(policy->cpu, MSR_AMD_PSTATE_DEF0, &val))
+			return policy->cur;
+		val &= ~0xFFULL;
+		val |= fid;
+		wrmsrl_safe_on_cpu(policy->cpu, MSR_AMD_PSTATE_DEF0, val);
+		return target_freq;
+	}
 }
 
 static unsigned long
@@ -675,14 +699,25 @@ static inline u64 get_max_boost_ratio(unsigned int cpu, u64 *nominal_freq)
 }
 #endif
 
+static unsigned int get_max_freq(unsigned int cpu)
+{
+	u64 cap1;
+	u32 highest_perf;
+
+	if (rdmsrl_safe_on_cpu(cpu, MSR_AMD_CPPC_CAP1, &cap1))
+		return 0;
+	highest_perf = (cap1 >> 24) & 0xFF;
+	return highest_perf * 100 * 1000;
+}
+
 static void acpi_cpufreq_resolve_max_freq(struct cpufreq_policy *policy,
 					  unsigned int pss_max_freq)
 {
 #ifdef CONFIG_ACPI_CPPC_LIB
-	u64 max_speed = cppc_get_dmi_max_khz();
+	u64 max_speed = get_max_freq(policy->cpu);
 	/*
-	 * Use DMI "Max Speed" if it looks plausible: must be
-	 * above _PSS P0 frequency and within 2x of it.
+	  Use DMI "Max Speed" if it looks plausible: must be
+	  above _PSS P0 frequency and within 2x of it.
 	 */
 	if (max_speed > pss_max_freq && max_speed < pss_max_freq * 2) {
 		policy->cpuinfo.max_freq = max_speed;
@@ -696,6 +731,21 @@ static void acpi_cpufreq_resolve_max_freq(struct cpufreq_policy *policy,
 	 * governor from selecting inadequate CPU frequencies.
 	 */
 	arch_set_max_freq_ratio(true);
+}
+
+static unsigned int get_current_freq(unsigned int cpu)
+{
+	u64 val;
+	u8 fid, did;
+
+	if (rdmsrl_safe_on_cpu(cpu, MSR_AMD_PSTATE_DEF0, &val))
+		return 0;
+	fid = val & 0xFF;
+	did = (val >> 8) & 0x3F;
+
+	if (!did)
+		return 0;
+	return (200 * fid / did) * 1000;
 }
 
 static int acpi_cpufreq_cpu_init(struct cpufreq_policy *policy)
@@ -735,15 +785,37 @@ static int acpi_cpufreq_cpu_init(struct cpufreq_policy *policy)
 	perf = per_cpu_ptr(acpi_perf_data, cpu);
 	data->acpi_perf_cpu = cpu;
 	policy->driver_data = data;
-
+	if (c->x86_vendor == X86_VENDOR_AMD && c->x86 >= 0x17 && c->x86_model >= 0x30) {
+		data->is_amd_zen = 1;
+		policy->cur = get_current_freq(cpu);
+		policy->shared_type = CPUFREQ_SHARED_TYPE_NONE;
+		unsigned int max_boost = get_max_freq(cpu);
+		u8 virtual_pstates = 16;
+		unsigned int max_freq = get_max_freq(policy->cpu);
+		unsigned int min_freq = perf->states[perf->state_count - 1].core_frequency * 1000;
+		unsigned int step = (max_freq - min_freq) / (virtual_pstates - 1);
+		freq_table = kcalloc(virtual_pstates + 1, sizeof(*freq_table), GFP_KERNEL);
+		for (int i = 0; i < virtual_pstates; i++) {
+			freq_table[i].driver_data = i;
+			freq_table[i].frequency = max_freq - (i * step);
+		}
+		freq_table[virtual_pstates].frequency = CPUFREQ_TABLE_END;
+		policy->freq_table = freq_table;
+		if (max_boost) {
+			policy->cpuinfo.max_freq = max_boost;
+			policy->max = max_boost;
+		} else {
+			policy->cpuinfo.max_freq = perf->states[0].core_frequency * 1000;
+		}
+	} else {
+		policy->shared_type = CPUFREQ_SHARED_TYPE_HW;
+	}
 	if (cpu_has(c, X86_FEATURE_CONSTANT_TSC))
 		acpi_cpufreq_driver.flags |= CPUFREQ_CONST_LOOPS;
 
 	result = acpi_processor_register_performance(perf, cpu);
 	if (result)
 		goto err_free_mask;
-
-	policy->shared_type = perf->shared_type;
 
 	/*
 	 * Will let policy->cpus know about dependency only when software
