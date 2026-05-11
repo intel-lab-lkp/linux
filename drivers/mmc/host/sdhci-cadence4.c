@@ -7,6 +7,7 @@
 
 #include <linux/bitfield.h>
 #include <linux/bits.h>
+#include <linux/dma-mapping.h>
 #include <linux/module.h>
 
 #include "sdhci-cadence.h"
@@ -84,6 +85,7 @@ struct sdhci_cdns4_phy_cfg {
 struct sdhci_cdns_drv_data {
 	int (*init)(struct platform_device *pdev);
 	const struct sdhci_pltfm_data pltfm_data;
+	u64 dma_mask;
 };
 
 static const struct sdhci_cdns4_phy_cfg sdhci_cdns4_phy_cfgs[] = {
@@ -191,6 +193,31 @@ static unsigned int sdhci_cdns_get_timeout_clock(struct sdhci_host *host)
 	 * Base Clock Frequency.
 	 */
 	return host->max_clk;
+}
+
+/**
+ * sdhci_cdns_set_dma_mask - Set platform-specific DMA mask
+ * @host: SDHCI host controller
+ *
+ * Configure DMA mask based on platform capabilities to avoid IOMMU
+ * address allocation beyond controller's reach or unnecessary bounce
+ * buffers.
+ */
+static int sdhci_cdns_set_dma_mask(struct sdhci_host *host)
+{
+	struct mmc_host *mmc = host->mmc;
+	struct device *dev = mmc_dev(mmc);
+	const struct sdhci_cdns_drv_data *data = of_device_get_match_data(dev);
+	int ret;
+
+	if (!data->dma_mask)
+		return 0;
+
+	ret = dma_set_mask_and_coherent(dev, data->dma_mask);
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to set DMA mask\n");
+
+	return 0;
 }
 
 static void sdhci_cdns_set_emmc_mode(struct sdhci_cdns_priv *priv, u32 mode)
@@ -479,6 +506,17 @@ static const struct sdhci_ops sdhci_cdns6_ops = {
 	.hw_reset = sdhci_cdns6_hw_reset,
 };
 
+static const struct sdhci_ops sdhci_cdns6_agilex5_ops = {
+	.set_clock = sdhci_set_clock,
+	.get_timeout_clock = sdhci_cdns_get_timeout_clock,
+	.set_bus_width = sdhci_set_bus_width,
+	.reset = sdhci_reset,
+	.platform_execute_tuning = sdhci_cdns_execute_tuning,
+	.set_uhs_signaling = sdhci_cdns_set_uhs_signaling,
+	.hw_reset = sdhci_cdns6_hw_reset,
+	.set_dma_mask = sdhci_cdns_set_dma_mask,
+};
+
 static const struct sdhci_cdns_drv_data sdhci_cdns_uniphier_drv_data = {
 	.pltfm_data = {
 		.ops = &sdhci_cdns4_ops,
@@ -504,6 +542,16 @@ static const struct sdhci_cdns_drv_data sdhci_cdns4_drv_data = {
 	.pltfm_data = {
 		.ops = &sdhci_cdns4_ops,
 	},
+};
+
+static const struct sdhci_cdns_drv_data sdhci_cdns6_agilex5_drv_data = {
+	.pltfm_data = {
+		.ops = &sdhci_cdns6_agilex5_ops,
+		.quirks = SDHCI_QUIRK_MULTIBLOCK_READ_ACMD12,
+		.quirks2 = SDHCI_QUIRK2_PRESET_VALUE_BROKEN |
+			   SDHCI_QUIRK2_ACMD23_BROKEN,
+	},
+	.dma_mask = DMA_BIT_MASK(40),
 };
 
 static const struct sdhci_cdns_drv_data sdhci_cdns6_drv_data = {
@@ -690,6 +738,10 @@ static const struct of_device_id sdhci_cdns_match[] = {
 	{
 		.compatible = "cdns,sd4hc",
 		.data = &sdhci_cdns4_drv_data,
+	},
+	{
+		.compatible = "altr,agilex5-sd6hc",
+		.data = &sdhci_cdns6_agilex5_drv_data,
 	},
 	{
 		.compatible = "cdns,sd6hc",
