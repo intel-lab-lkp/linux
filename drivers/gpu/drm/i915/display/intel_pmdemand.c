@@ -152,7 +152,7 @@ intel_pmdemand_update_phys_mask(struct intel_display *display,
 {
 	enum phy phy;
 
-	if (DISPLAY_VER(display) < 14)
+	if (!HAS_PMDEMAND(display))
 		return;
 
 	if (!encoder)
@@ -174,7 +174,7 @@ intel_pmdemand_update_port_clock(struct intel_display *display,
 				 struct intel_pmdemand_state *pmdemand_state,
 				 enum pipe pipe, int port_clock)
 {
-	if (DISPLAY_VER(display) < 14)
+	if (!HAS_PMDEMAND(display))
 		return;
 
 	pmdemand_state->ddi_clocks[pipe] = port_clock;
@@ -326,7 +326,7 @@ int intel_pmdemand_atomic_check(struct intel_atomic_state *state)
 	const struct intel_dbuf_state *new_dbuf_state;
 	struct intel_pmdemand_state *new_pmdemand_state;
 
-	if (DISPLAY_VER(display) < 14)
+	if (!HAS_PMDEMAND(display))
 		return 0;
 
 	if (!intel_pmdemand_needs_update(state))
@@ -406,7 +406,7 @@ intel_pmdemand_init_pmdemand_params(struct intel_display *display,
 {
 	u32 reg1, reg2;
 
-	if (DISPLAY_VER(display) < 14)
+	if (!HAS_PMDEMAND(display))
 		return;
 
 	mutex_lock(&display->pmdemand.lock);
@@ -639,7 +639,7 @@ void intel_pmdemand_pre_plane_update(struct intel_atomic_state *state)
 	const struct intel_pmdemand_state *old_pmdemand_state =
 		intel_atomic_get_old_pmdemand_state(state);
 
-	if (DISPLAY_VER(display) < 14)
+	if (!HAS_PMDEMAND(display))
 		return;
 
 	if (!new_pmdemand_state ||
@@ -662,7 +662,7 @@ void intel_pmdemand_post_plane_update(struct intel_atomic_state *state)
 	const struct intel_pmdemand_state *old_pmdemand_state =
 		intel_atomic_get_old_pmdemand_state(state);
 
-	if (DISPLAY_VER(display) < 14)
+	if (!HAS_PMDEMAND(display))
 		return;
 
 	if (!new_pmdemand_state ||
