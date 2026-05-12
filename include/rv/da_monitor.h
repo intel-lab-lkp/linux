@@ -58,6 +58,15 @@ static struct rv_monitor rv_this;
 #endif
 
 /*
+ * Hook to allow the implementation of hybrid automata: define it with a
+ * function that waits for the termination of all monitors background
+ * activities (e.g. all timers). This hook can sleep.
+ */
+#ifndef da_monitor_sync_hook
+#define da_monitor_sync_hook()
+#endif
+
+/*
  * Type for the target id, default to int but can be overridden.
  * A long type can work as hash table key (PER_OBJ) but will be downgraded to
  * int in the event tracepoint.
@@ -179,6 +188,7 @@ static inline int da_monitor_init(void)
 static inline void da_monitor_destroy(void)
 {
 	da_monitor_reset_all();
+	da_monitor_sync_hook();
 }
 
 #ifndef da_implicit_guard
@@ -232,6 +242,7 @@ static inline int da_monitor_init(void)
 static inline void da_monitor_destroy(void)
 {
 	da_monitor_reset_all();
+	da_monitor_sync_hook();
 }
 
 #ifndef da_implicit_guard
@@ -319,6 +330,7 @@ static inline void da_monitor_destroy(void)
 	}
 
 	da_monitor_reset_all();
+	da_monitor_sync_hook();
 
 	rv_put_task_monitor_slot(task_mon_slot);
 	task_mon_slot = RV_PER_TASK_MONITOR_INIT;
@@ -497,10 +509,9 @@ static void da_monitor_reset_all(void)
 	struct da_monitor_storage *mon_storage;
 	int bkt;
 
-	rcu_read_lock();
+	guard(rcu)();
 	hash_for_each_rcu(da_monitor_ht, bkt, mon_storage, node)
 		da_monitor_reset(&mon_storage->rv.da_mon);
-	rcu_read_unlock();
 }
 
 static inline int da_monitor_init(void)
@@ -516,13 +527,17 @@ static inline void da_monitor_destroy(void)
 	int bkt;
 
 	tracepoint_synchronize_unregister();
+	scoped_guard(rcu) {
+		hash_for_each_rcu(da_monitor_ht, bkt, mon_storage, node) {
+			da_monitor_reset_hook(&mon_storage->rv.da_mon);
+		}
+	}
+	da_monitor_sync_hook();
 	/*
 	 * This function is called after all probes are disabled and no longer
 	 * pending, we can safely assume no concurrent user.
 	 */
-	synchronize_rcu();
 	hash_for_each_safe(da_monitor_ht, bkt, tmp, mon_storage, node) {
-		da_monitor_reset_hook(&mon_storage->rv.da_mon);
 		hash_del_rcu(&mon_storage->node);
 		kfree(mon_storage);
 	}
