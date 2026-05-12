@@ -40,13 +40,14 @@ static void atmel_sha204a_rng_done(struct atmel_i2c_work_data *work_data,
 	atomic_dec(&i2c_priv->tfm_count);
 }
 
-static int atmel_sha204a_rng_read_nonblocking(struct hwrng *rng, void *data,
+static int atmel_sha204a_rng_read_nonblocking(struct hwrng *rng, void *buf,
 					      size_t max)
 {
-	struct atmel_i2c_client_priv *i2c_priv;
+	struct atmel_i2c_client_priv *i2c_priv = container_of(rng,
+							      struct atmel_i2c_client_priv,
+							      hwrng);
+	const struct atmel_i2c_of_match_data *data = i2c_priv->data;
 	struct atmel_i2c_work_data *work_data;
-
-	i2c_priv = container_of(rng, struct atmel_i2c_client_priv, hwrng);
 
 	/* keep maximum 1 asynchronous read in flight at any time */
 	if (!atomic_add_unless(&i2c_priv->tfm_count, 1, 1))
@@ -55,7 +56,7 @@ static int atmel_sha204a_rng_read_nonblocking(struct hwrng *rng, void *data,
 	if (rng->priv) {
 		work_data = (struct atmel_i2c_work_data *)rng->priv;
 		max = min(RANDOM_RSP_SIZE - CMD_OVERHEAD_SIZE, max);
-		memcpy(data, &work_data->cmd.data[RSP_DATA_IDX], max);
+		memcpy(buf, &work_data->cmd.data[RSP_DATA_IDX], max);
 		rng->priv = 0;
 	} else {
 		work_data = kmalloc_obj(*work_data, GFP_ATOMIC);
@@ -69,42 +70,45 @@ static int atmel_sha204a_rng_read_nonblocking(struct hwrng *rng, void *data,
 		max = 0;
 	}
 
-	atmel_i2c_init_random_cmd(&work_data->cmd);
+	atmel_i2c_init_random_cmd(&work_data->cmd, &data->timings);
 	atmel_i2c_enqueue(work_data, atmel_sha204a_rng_done, rng);
 
 	return max;
 }
 
-static int atmel_sha204a_rng_read(struct hwrng *rng, void *data, size_t max,
+static int atmel_sha204a_rng_read(struct hwrng *rng, void *buf, size_t max,
 				  bool wait)
 {
-	struct atmel_i2c_client_priv *i2c_priv;
+	struct atmel_i2c_client_priv *i2c_priv = container_of(rng,
+							      struct atmel_i2c_client_priv,
+							      hwrng);
+	const struct atmel_i2c_of_match_data *data = i2c_priv->data;
 	struct atmel_i2c_cmd cmd;
 	int ret;
 
 	if (!wait)
-		return atmel_sha204a_rng_read_nonblocking(rng, data, max);
+		return atmel_sha204a_rng_read_nonblocking(rng, buf, max);
 
-	i2c_priv = container_of(rng, struct atmel_i2c_client_priv, hwrng);
-
-	atmel_i2c_init_random_cmd(&cmd);
+	atmel_i2c_init_random_cmd(&cmd, &data->timings);
 
 	ret = atmel_i2c_send_receive(i2c_priv->client, &cmd);
 	if (ret)
 		return ret;
 
 	max = min(RANDOM_RSP_SIZE - CMD_OVERHEAD_SIZE, max);
-	memcpy(data, &cmd.data[RSP_DATA_IDX], max);
+	memcpy(buf, &cmd.data[RSP_DATA_IDX], max);
 
 	return max;
 }
 
 static int atmel_sha204a_otp_read(struct i2c_client *client, u16 addr, u8 *otp)
 {
+	struct atmel_i2c_client_priv *i2c_priv = i2c_get_clientdata(client);
+	const struct atmel_i2c_of_match_data *data = i2c_priv->data;
 	struct atmel_i2c_cmd cmd;
 	int ret;
 
-	ret = atmel_i2c_init_read_otp_cmd(&cmd, addr);
+	ret = atmel_i2c_init_read_otp_cmd(&cmd, addr, &data->timings);
 	if (ret < 0) {
 		dev_err(&client->dev, "failed, invalid otp address %04X\n",
 			addr);
@@ -164,6 +168,7 @@ static const struct attribute_group atmel_sha204a_groups = {
 static int atmel_sha204a_probe(struct i2c_client *client)
 {
 	struct atmel_i2c_client_priv *i2c_priv;
+	const struct atmel_i2c_of_match_data *data;
 	const unsigned short *quality;
 	int ret;
 
@@ -171,8 +176,15 @@ static int atmel_sha204a_probe(struct i2c_client *client)
 	if (ret)
 		goto done;
 
-	i2c_priv = i2c_get_clientdata(client);
+	data = device_get_match_data(&client->dev);
+	if (!data) {
+		dev_err(&client->dev, "no match data found via OF or ID table\n");
+		ret = -ENODEV;
+		goto done;
+	}
 
+	i2c_priv = i2c_get_clientdata(client);
+	i2c_priv->data = data;
 	i2c_priv->caps = 0;
 
 	/* add to client list */
@@ -187,7 +199,7 @@ static int atmel_sha204a_probe(struct i2c_client *client)
 	i2c_priv->hwrng.name = dev_name(&client->dev);
 	i2c_priv->hwrng.read = atmel_sha204a_rng_read;
 
-	quality = i2c_get_match_data(client);
+	quality = i2c_priv->data->legacy_hwrng;
 	if (quality)
 		i2c_priv->hwrng.quality = *quality;
 
@@ -227,15 +239,34 @@ static void atmel_sha204a_remove(struct i2c_client *client)
 	kfree((void *)i2c_priv->hwrng.priv);
 }
 
+static const struct atmel_i2c_of_match_data atsha204_match_data = {
+	.timings = {
+		.max_exec_time_genkey = 43,
+		.max_exec_time_random = 50,
+		.max_exec_time_read = 4,
+		.max_exec_time_write = 42,
+	},
+	.legacy_hwrng = &atsha204_quality,
+};
+
+static const struct atmel_i2c_of_match_data atsha204a_match_data = {
+	.timings = {
+		.max_exec_time_genkey = 43,
+		.max_exec_time_random = 50,
+		.max_exec_time_read = 4,
+		.max_exec_time_write = 42,
+	},
+};
+
 static const struct of_device_id atmel_sha204a_dt_ids[] __maybe_unused = {
-	{ .compatible = "atmel,atsha204", .data = &atsha204_quality },
-	{ .compatible = "atmel,atsha204a", },
+	{ .compatible = "atmel,atsha204", .data = &atsha204_match_data, },
+	{ .compatible = "atmel,atsha204a", .data = &atsha204a_match_data, },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, atmel_sha204a_dt_ids);
 
 static const struct i2c_device_id atmel_sha204a_id[] = {
-	{ "atsha204", (kernel_ulong_t)&atsha204_quality },
+	{ "atsha204" },
 	{ "atsha204a" },
 	{ /* sentinel */ }
 };

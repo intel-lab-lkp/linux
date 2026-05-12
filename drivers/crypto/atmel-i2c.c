@@ -96,7 +96,8 @@ struct i2c_client *atmel_i2c_client_alloc(enum atmel_i2c_capability cap)
 }
 EXPORT_SYMBOL(atmel_i2c_client_alloc);
 
-void atmel_i2c_init_read_config_cmd(struct atmel_i2c_cmd *cmd)
+void atmel_i2c_init_read_config_cmd(struct atmel_i2c_cmd *cmd,
+				    const struct atmel_i2c_max_exec_timings *timings)
 {
 	cmd->word_addr = COMMAND;
 	cmd->opcode = OPCODE_READ;
@@ -110,12 +111,13 @@ void atmel_i2c_init_read_config_cmd(struct atmel_i2c_cmd *cmd)
 
 	atmel_i2c_checksum(cmd);
 
-	cmd->msecs = MAX_EXEC_TIME_READ;
+	cmd->msecs = timings->max_exec_time_read;
 	cmd->rxsize = READ_RSP_SIZE;
 }
 EXPORT_SYMBOL(atmel_i2c_init_read_config_cmd);
 
-int atmel_i2c_init_read_otp_cmd(struct atmel_i2c_cmd *cmd, u16 addr)
+int atmel_i2c_init_read_otp_cmd(struct atmel_i2c_cmd *cmd, u16 addr,
+				const struct atmel_i2c_max_exec_timings *timings)
 {
 	if (addr >= OTP_ZONE_SIZE / 4)
 		return -EINVAL;
@@ -132,14 +134,15 @@ int atmel_i2c_init_read_otp_cmd(struct atmel_i2c_cmd *cmd, u16 addr)
 
 	atmel_i2c_checksum(cmd);
 
-	cmd->msecs = MAX_EXEC_TIME_READ;
+	cmd->msecs = timings->max_exec_time_read;
 	cmd->rxsize = READ_RSP_SIZE;
 
 	return 0;
 }
 EXPORT_SYMBOL(atmel_i2c_init_read_otp_cmd);
 
-void atmel_i2c_init_random_cmd(struct atmel_i2c_cmd *cmd)
+void atmel_i2c_init_random_cmd(struct atmel_i2c_cmd *cmd,
+			       const struct atmel_i2c_max_exec_timings *timings)
 {
 	cmd->word_addr = COMMAND;
 	cmd->opcode = OPCODE_RANDOM;
@@ -149,12 +152,13 @@ void atmel_i2c_init_random_cmd(struct atmel_i2c_cmd *cmd)
 
 	atmel_i2c_checksum(cmd);
 
-	cmd->msecs = MAX_EXEC_TIME_RANDOM;
+	cmd->msecs = timings->max_exec_time_random;
 	cmd->rxsize = RANDOM_RSP_SIZE;
 }
 EXPORT_SYMBOL(atmel_i2c_init_random_cmd);
 
-void atmel_i2c_init_genkey_cmd(struct atmel_i2c_cmd *cmd, u16 keyid)
+void atmel_i2c_init_genkey_cmd(struct atmel_i2c_cmd *cmd, u16 keyid,
+			       const struct atmel_i2c_max_exec_timings *timings)
 {
 	cmd->word_addr = COMMAND;
 	cmd->count = GENKEY_COUNT;
@@ -165,13 +169,14 @@ void atmel_i2c_init_genkey_cmd(struct atmel_i2c_cmd *cmd, u16 keyid)
 
 	atmel_i2c_checksum(cmd);
 
-	cmd->msecs = MAX_EXEC_TIME_GENKEY;
+	cmd->msecs = timings->max_exec_time_genkey;
 	cmd->rxsize = GENKEY_RSP_SIZE;
 }
 EXPORT_SYMBOL(atmel_i2c_init_genkey_cmd);
 
 int atmel_i2c_init_ecdh_cmd(struct atmel_i2c_cmd *cmd,
-			    struct scatterlist *pubkey)
+			    struct scatterlist *pubkey,
+			    const struct atmel_i2c_max_exec_timings *timings)
 {
 	size_t copied;
 
@@ -196,7 +201,7 @@ int atmel_i2c_init_ecdh_cmd(struct atmel_i2c_cmd *cmd,
 
 	atmel_i2c_checksum(cmd);
 
-	cmd->msecs = MAX_EXEC_TIME_ECDH;
+	cmd->msecs = timings->max_exec_time_ecdh;
 	cmd->rxsize = ECDH_RSP_SIZE;
 
 	return 0;
@@ -363,6 +368,8 @@ static inline size_t atmel_i2c_wake_token_sz(u32 bus_clk_rate)
 
 static int device_sanity_check(struct i2c_client *client)
 {
+	struct atmel_i2c_client_priv *i2c_priv = i2c_get_clientdata(client);
+	const struct atmel_i2c_of_match_data *data = i2c_priv->data;
 	struct atmel_i2c_cmd *cmd;
 	int ret;
 
@@ -370,7 +377,7 @@ static int device_sanity_check(struct i2c_client *client)
 	if (!cmd)
 		return -ENOMEM;
 
-	atmel_i2c_init_read_config_cmd(cmd);
+	atmel_i2c_init_read_config_cmd(cmd, &data->timings);
 
 	ret = atmel_i2c_send_receive(client, cmd);
 	if (ret)

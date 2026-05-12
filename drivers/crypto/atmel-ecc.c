@@ -76,6 +76,8 @@ static int atmel_ecdh_set_secret(struct crypto_kpp *tfm, const void *buf,
 				 unsigned int len)
 {
 	struct atmel_ecdh_ctx *ctx = kpp_tfm_ctx(tfm);
+	struct atmel_i2c_client_priv *i2c_priv = i2c_get_clientdata(ctx->client);
+	const struct atmel_i2c_of_match_data *data = i2c_priv->data;
 	struct atmel_i2c_cmd *cmd;
 	void *public_key;
 	struct ecdh params;
@@ -112,7 +114,7 @@ static int atmel_ecdh_set_secret(struct crypto_kpp *tfm, const void *buf,
 
 	ctx->do_fallback = false;
 
-	atmel_i2c_init_genkey_cmd(cmd, DATA_SLOT_2);
+	atmel_i2c_init_genkey_cmd(cmd, DATA_SLOT_2, &data->timings);
 
 	ret = atmel_i2c_send_receive(ctx->client, cmd);
 	if (ret)
@@ -164,6 +166,8 @@ static int atmel_ecdh_compute_shared_secret(struct kpp_request *req)
 {
 	struct crypto_kpp *tfm = crypto_kpp_reqtfm(req);
 	struct atmel_ecdh_ctx *ctx = kpp_tfm_ctx(tfm);
+	struct atmel_i2c_client_priv *i2c_priv = i2c_get_clientdata(ctx->client);
+	const struct atmel_i2c_of_match_data *data = i2c_priv->data;
 	struct atmel_i2c_work_data *work_data;
 	gfp_t gfp;
 	int ret;
@@ -187,7 +191,7 @@ static int atmel_ecdh_compute_shared_secret(struct kpp_request *req)
 	work_data->ctx = ctx;
 	work_data->client = ctx->client;
 
-	ret = atmel_i2c_init_ecdh_cmd(&work_data->cmd, req->src);
+	ret = atmel_i2c_init_ecdh_cmd(&work_data->cmd, req->src, &data->timings);
 	if (ret)
 		goto free_work_data;
 
@@ -278,14 +282,22 @@ static struct kpp_alg atmel_ecdh_nist_p256 = {
 static int atmel_ecc_probe(struct i2c_client *client)
 {
 	struct atmel_i2c_client_priv *i2c_priv;
+	const struct atmel_i2c_of_match_data *data;
 	int ret;
 
 	ret = atmel_i2c_probe(client);
 	if (ret)
 		goto done;
 
-	i2c_priv = i2c_get_clientdata(client);
+	data = device_get_match_data(&client->dev);
+	if (!data) {
+		dev_err(&client->dev, "no match data found via OF or ID table\n");
+		ret = -ENODEV;
+		goto done;
+	}
 
+	i2c_priv = i2c_get_clientdata(client);
+	i2c_priv->data = data;
 	i2c_priv->caps = BIT(ATMEL_CAP_ECDH);
 
 	/* add to client list */
@@ -339,9 +351,19 @@ static void atmel_ecc_remove(struct i2c_client *client)
 	crypto_unregister_kpp(&atmel_ecdh_nist_p256);
 }
 
+static const struct atmel_i2c_of_match_data atecc508a_match_data = {
+	.timings = {
+		.max_exec_time_ecdh = 58,
+		.max_exec_time_genkey = 115,
+		.max_exec_time_random = 23,
+		.max_exec_time_read = 1,
+		.max_exec_time_write = 42,
+	},
+};
+
 static const struct of_device_id atmel_ecc_dt_ids[] = {
-	{ .compatible = "atmel,atecc508a", },
-	{ .compatible = "atmel,atecc608b", },
+	{ .compatible = "atmel,atecc508a", .data = &atecc508a_match_data, },
+	{ .compatible = "atmel,atecc608b", .data = &atecc508a_match_data, },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, atmel_ecc_dt_ids);

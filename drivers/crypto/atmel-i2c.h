@@ -57,6 +57,19 @@ struct atmel_i2c_cmd {
 	u16 rxsize;
 } __packed;
 
+struct atmel_i2c_max_exec_timings {
+	unsigned int max_exec_time_genkey;
+	unsigned int max_exec_time_ecdh;
+	unsigned int max_exec_time_random;
+	unsigned int max_exec_time_read;
+	unsigned int max_exec_time_write;
+};
+
+struct atmel_i2c_of_match_data {
+	const unsigned short *legacy_hwrng;
+	struct atmel_i2c_max_exec_timings timings;
+};
+
 /* Status/Error codes */
 #define STATUS_SIZE			0x04
 #define STATUS_NOERR			0x00
@@ -87,12 +100,6 @@ struct atmel_i2c_cmd {
 
 /* Wake Low duration */
 #define TWLO_USEC			60
-
-/* Command execution time (milliseconds) */
-#define MAX_EXEC_TIME_ECDH		58
-#define MAX_EXEC_TIME_GENKEY		115
-#define MAX_EXEC_TIME_READ		1
-#define MAX_EXEC_TIME_RANDOM		50
 
 /* Command opcode */
 #define OPCODE_ECDH			0x43
@@ -135,6 +142,7 @@ extern struct atmel_i2c_client_mgmt atmel_i2c_mgmt;
  * @tfm_count           : number of active crypto transformations on i2c client
  * @hwrng               : hold the hardware generated rng
  * @caps                : feature capability of the particular driver
+ * @data                : preinitialized driver data
  *
  * Reads and writes from/to the i2c client are sequential. The first byte
  * transmitted to the device is treated as the byte size. Any attempt to send
@@ -152,6 +160,7 @@ struct atmel_i2c_client_priv {
 	atomic_t tfm_count ____cacheline_aligned;
 	struct hwrng hwrng;
 	u32 caps;
+	const struct atmel_i2c_of_match_data *data;
 };
 
 /**
@@ -189,12 +198,17 @@ void atmel_i2c_flush_queue(void);
 
 int atmel_i2c_send_receive(struct i2c_client *client, struct atmel_i2c_cmd *cmd);
 
-void atmel_i2c_init_read_config_cmd(struct atmel_i2c_cmd *cmd);
-int atmel_i2c_init_read_otp_cmd(struct atmel_i2c_cmd *cmd, u16 addr);
-void atmel_i2c_init_random_cmd(struct atmel_i2c_cmd *cmd);
-void atmel_i2c_init_genkey_cmd(struct atmel_i2c_cmd *cmd, u16 keyid);
+void atmel_i2c_init_read_config_cmd(struct atmel_i2c_cmd *cmd,
+				    const struct atmel_i2c_max_exec_timings *timings);
+int atmel_i2c_init_read_otp_cmd(struct atmel_i2c_cmd *cmd, u16 addr,
+				const struct atmel_i2c_max_exec_timings *timings);
+void atmel_i2c_init_random_cmd(struct atmel_i2c_cmd *cmd,
+			       const struct atmel_i2c_max_exec_timings *timings);
+void atmel_i2c_init_genkey_cmd(struct atmel_i2c_cmd *cmd, u16 keyid,
+			       const struct atmel_i2c_max_exec_timings *timings);
 int atmel_i2c_init_ecdh_cmd(struct atmel_i2c_cmd *cmd,
-			    struct scatterlist *pubkey);
+			    struct scatterlist *pubkey,
+			    const struct atmel_i2c_max_exec_timings *timings);
 
 struct i2c_client *atmel_i2c_client_alloc(enum atmel_i2c_capability cap);
 void atmel_i2c_unregister_client(struct atmel_i2c_client_priv *i2c_priv);
