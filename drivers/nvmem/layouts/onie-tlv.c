@@ -124,7 +124,7 @@ static int onie_tlv_add_cells(struct device *dev, struct nvmem_device *nvmem,
 		cell.offset = hdr_len + offset + sizeof(tlv.type) + sizeof(tlv.len);
 		cell.bytes = tlv.len;
 		cell.np = of_get_child_by_name(layout, cell.name);
-		cell.read_post_process = onie_tlv_read_cb(tlv.type, data + offset + sizeof(tlv));
+		cell.read_post_process = onie_tlv_read_cb;
 
 		ret = nvmem_add_one_cell(nvmem, &cell);
 		if (ret) {
