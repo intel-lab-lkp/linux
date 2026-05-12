@@ -1507,6 +1507,21 @@ static const struct of_device_id __maybe_unused max310x_dt_ids[] = {
 };
 MODULE_DEVICE_TABLE(of, max310x_dt_ids);
 
+static const char *max310x_regmap_name(u8 port_id)
+{
+	switch (port_id) {
+	case 0:	return "port0";
+	case 1:	return "port1";
+	case 2:	return "port2";
+	case 3:	return "port3";
+	default:
+		WARN_ON(true);
+		return NULL;
+	}
+}
+
+#ifdef CONFIG_SPI_MASTER
+
 static struct regmap_config regcfg = {
 	.reg_bits = 8,
 	.val_bits = 8,
@@ -1522,20 +1537,6 @@ static struct regmap_config regcfg = {
 	.max_raw_write = MAX310X_FIFO_SIZE,
 };
 
-static const char *max310x_regmap_name(u8 port_id)
-{
-	switch (port_id) {
-	case 0:	return "port0";
-	case 1:	return "port1";
-	case 2:	return "port2";
-	case 3:	return "port3";
-	default:
-		WARN_ON(true);
-		return NULL;
-	}
-}
-
-#ifdef CONFIG_SPI_MASTER
 static int max310x_spi_extended_reg_enable(struct device *dev, bool enable)
 {
 	struct max310x_port *s = dev_get_drvdata(dev);
@@ -1742,10 +1743,11 @@ static int __init max310x_uart_init(void)
 
 #ifdef CONFIG_I2C
 err_i2c_register:
-	spi_unregister_driver(&max310x_spi_driver);
 #endif
-
+#ifdef CONFIG_SPI_MASTER
+	spi_unregister_driver(&max310x_spi_driver);
 err_spi_register:
+#endif
 	uart_unregister_driver(&max310x_uart);
 
 	return ret;
