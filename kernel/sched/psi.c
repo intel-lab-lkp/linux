@@ -793,6 +793,15 @@ static void record_times(struct psi_group_cpu *groupc, u64 now)
 #define for_each_group(iter, group) \
 	for (typeof(group) iter = group; iter; iter = iter->parent)
 
+static inline struct psi_group_cpu *prefetch_and_get_groupc(struct psi_group *group, int cpu)
+{
+	struct psi_group_cpu *groupc = per_cpu_ptr(group->pcpu, cpu);
+
+	if (group->parent)
+		prefetchw(per_cpu_ptr(group->parent->pcpu, cpu));
+	return groupc;
+}
+
 static void psi_group_change(struct psi_group *group, int cpu,
 			     unsigned int clear, unsigned int set,
 			     u64 now, bool wake_clock, bool curr_in_memstall)
@@ -802,7 +811,7 @@ static void psi_group_change(struct psi_group *group, int cpu,
 	u32 state_mask;
 
 	lockdep_assert_rq_held(cpu_rq(cpu));
-	groupc = per_cpu_ptr(group->pcpu, cpu);
+	groupc = prefetch_and_get_groupc(group, cpu);
 
 	/*
 	 * Start with TSK_ONCPU, which doesn't have a corresponding
