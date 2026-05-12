@@ -522,15 +522,21 @@ static int mdiobus_scan_bus_c45(struct mii_bus *bus)
  * devices have been found, see if any of them are bad for C45, and if we
  * should skip the C45 scan.
  */
+static const u32 mdio_c45_bad_oui_list[] = {
+	MICREL_OUI,
+};
 static bool mdiobus_prevent_c45_scan(struct mii_bus *bus)
 {
 	struct phy_device *phydev;
 
 	mdiobus_for_each_phy(bus, phydev) {
 		u32 oui = phydev->phy_id >> 10;
+		int i;
 
-		if (oui == MICREL_OUI)
-			return true;
+		for (i = 0; i < ARRAY_SIZE(mdio_c45_bad_oui_list); i++) {
+			if (oui == mdio_c45_bad_oui_list[i])
+				return true;
+		}
 	}
 
 	return false;
