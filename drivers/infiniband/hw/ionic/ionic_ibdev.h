@@ -72,6 +72,7 @@ enum ionic_admin_flags {
 
 enum ionic_mmap_flag {
 	IONIC_MMAP_WC = BIT(0),
+	IONIC_MMAP_PHC = BIT(1),
 };
 
 struct ionic_mmap_entry {
@@ -173,6 +174,7 @@ struct ionic_ctx {
 	struct ib_ucontext	ibctx;
 	u32			dbid;
 	struct rdma_user_mmap_entry	*mmap_dbell;
+	struct rdma_user_mmap_entry	*mmap_phc;
 };
 
 struct ionic_tbl_buf {
