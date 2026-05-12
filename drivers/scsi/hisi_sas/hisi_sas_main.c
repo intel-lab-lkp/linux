@@ -900,6 +900,21 @@ err_out:
 	return rc;
 }
 
+static void hisi_sas_dev_info_update(struct domain_device *device)
+{
+	struct hisi_hba *hisi_hba = dev_to_hisi_hba(device);
+	struct hisi_sas_device *sas_dev = device->lldd_dev;
+	struct device *dev = hisi_hba->dev;
+
+	if (!sas_dev)
+		return;
+
+	dev_info(dev, "%016llx update itct\n",
+		SAS_ADDR(device->sas_addr));
+	hisi_hba->hw->clear_itct(hisi_hba, sas_dev);
+	hisi_hba->hw->setup_itct(hisi_hba, sas_dev);
+}
+
 int hisi_sas_sdev_configure(struct scsi_device *sdev, struct queue_limits *lim)
 {
 	struct domain_device *dev = sdev_to_domain_dev(sdev);
@@ -2168,6 +2183,7 @@ EXPORT_SYMBOL_GPL(hisi_sas_stt);
 static struct sas_domain_function_template hisi_sas_transport_ops = {
 	.lldd_dev_found		= hisi_sas_dev_found,
 	.lldd_dev_gone		= hisi_sas_dev_gone,
+	.lldd_dev_info_update	= hisi_sas_dev_info_update,
 	.lldd_execute_task	= hisi_sas_queue_command,
 	.lldd_control_phy	= hisi_sas_control_phy,
 	.lldd_abort_task	= hisi_sas_abort_task,

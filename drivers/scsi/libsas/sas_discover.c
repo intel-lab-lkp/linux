@@ -204,6 +204,18 @@ void sas_notify_lldd_dev_gone(struct domain_device *dev)
 	}
 }
 
+void sas_notify_lldd_dev_info_update(struct domain_device *dev)
+{
+	struct sas_ha_struct *sas_ha = dev->port->ha;
+	struct Scsi_Host *shost = sas_ha->shost;
+	struct sas_internal *i = to_sas_internal(shost->transportt);
+
+	if (!i->dft->lldd_dev_info_update)
+		return;
+
+	i->dft->lldd_dev_info_update(dev);
+}
+
 static void sas_probe_devices(struct asd_sas_port *port)
 {
 	struct domain_device *dev, *n;
