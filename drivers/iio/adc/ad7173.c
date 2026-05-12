@@ -561,21 +561,41 @@ out:
 	return ret;
 }
 
-static int ad7173_mask_xlate(struct gpio_regmap *gpio, unsigned int base,
-			     unsigned int offset, unsigned int *reg,
+static int ad7173_mask_xlate(struct gpio_regmap *gpio, enum gpio_regmap_operation op,
+			     unsigned int base, unsigned int offset, unsigned int *reg,
 			     unsigned int *mask)
 {
-	*mask = AD7173_GPO_DATA(offset);
+	switch (op) {
+	case GPIO_REGMAP_SET_WREN_OP:
+	case GPIO_REGMAP_SET_DIR_WREN_OP:
+		*mask = 0;
+		return 0;
+	default:
+		*mask = AD7173_GPO_DATA(offset);
+		break;
+	}
+
 	*reg = base;
+
 	return 0;
 }
 
-static int ad4111_mask_xlate(struct gpio_regmap *gpio, unsigned int base,
-			     unsigned int offset, unsigned int *reg,
+static int ad4111_mask_xlate(struct gpio_regmap *gpio, enum gpio_regmap_operation op,
+			     unsigned int base, unsigned int offset, unsigned int *reg,
 			     unsigned int *mask)
 {
-	*mask = AD4111_GPO01_DATA(offset);
+	switch (op) {
+	case GPIO_REGMAP_SET_WREN_OP:
+	case GPIO_REGMAP_SET_DIR_WREN_OP:
+		*mask = 0;
+		break;
+	default:
+		*mask = AD4111_GPO01_DATA(offset);
+		break;
+	}
+
 	*reg = base;
+
 	return 0;
 }
 

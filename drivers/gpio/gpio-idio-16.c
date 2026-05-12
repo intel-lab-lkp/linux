@@ -66,9 +66,9 @@ static int idio_16_handle_mask_sync(const int index, const unsigned int mask_buf
 	return 0;
 }
 
-static int idio_16_reg_mask_xlate(struct gpio_regmap *const gpio, const unsigned int base,
-				  const unsigned int offset, unsigned int *const reg,
-				  unsigned int *const mask)
+static int idio_16_reg_mask_xlate(struct gpio_regmap *const gpio, enum gpio_regmap_operation op,
+				  const unsigned int base, const unsigned int offset,
+				  unsigned int *const reg, unsigned int *const mask)
 {
 	unsigned int stride;
 
@@ -81,7 +81,15 @@ static int idio_16_reg_mask_xlate(struct gpio_regmap *const gpio, const unsigned
 		*reg = IDIO_16_IN_BASE + stride * IDIO_16_REG_STRIDE;
 	}
 
-	*mask = BIT(offset % IDIO_16_NGPIO_PER_REG);
+	switch (op) {
+	case GPIO_REGMAP_SET_WREN_OP:
+	case GPIO_REGMAP_SET_DIR_WREN_OP:
+		*mask = 0;
+		break;
+	default:
+		*mask = BIT(offset % IDIO_16_NGPIO_PER_REG);
+		break;
+	}
 
 	return 0;
 }

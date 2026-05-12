@@ -347,11 +347,21 @@ static struct tps6594_pinctrl tps6594_template_pinctrl = {
 };
 
 static int tps6594_gpio_regmap_xlate(struct gpio_regmap *gpio,
+				     enum gpio_regmap_operation op,
 				     unsigned int base, unsigned int offset,
 				     unsigned int *reg, unsigned int *mask)
 {
 	unsigned int line = offset % 8;
 	unsigned int stride = offset / 8;
+
+	switch (op) {
+	case GPIO_REGMAP_SET_WREN_OP:
+	case GPIO_REGMAP_SET_DIR_WREN_OP:
+		*mask = 0;
+		return 0;
+	default:
+		break;
+	}
 
 	switch (base) {
 	case TPS6594_REG_GPIOX_CONF(0):

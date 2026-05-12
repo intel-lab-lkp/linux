@@ -225,15 +225,24 @@ exit_unlock:
 	return ret;
 }
 
-static int idio_24_reg_mask_xlate(struct gpio_regmap *const gpio, const unsigned int base,
-				  const unsigned int offset, unsigned int *const reg,
-				  unsigned int *const mask)
+static int idio_24_reg_mask_xlate(struct gpio_regmap *const gpio, enum gpio_regmap_operation op,
+				  const unsigned int base, const unsigned int offset,
+				  unsigned int *const reg, unsigned int *const mask)
 {
 	const unsigned int out_stride = offset / IDIO_24_NGPIO_PER_REG;
 	const unsigned int in_stride = (offset - 24) / IDIO_24_NGPIO_PER_REG;
 	struct regmap *const map = gpio_regmap_get_drvdata(gpio);
 	int err;
 	unsigned int ctrl_reg;
+
+	switch (op) {
+	case GPIO_REGMAP_SET_WREN_OP:
+	case GPIO_REGMAP_SET_DIR_WREN_OP:
+		*mask = 0;
+		return 0;
+	default:
+		break;
+	}
 
 	switch (base) {
 	case IDIO_24_OUT_BASE:

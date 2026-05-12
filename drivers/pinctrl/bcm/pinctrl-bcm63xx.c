@@ -20,6 +20,7 @@
 #define BCM63XX_DATA_REG	0x0c
 
 static int bcm63xx_reg_mask_xlate(struct gpio_regmap *gpio,
+				  enum gpio_regmap_operation op,
 				  unsigned int base, unsigned int offset,
 				  unsigned int *reg, unsigned int *mask)
 {
@@ -27,7 +28,16 @@ static int bcm63xx_reg_mask_xlate(struct gpio_regmap *gpio,
 	unsigned int stride = offset / BCM63XX_BANK_GPIOS;
 
 	*reg = base - stride * BCM63XX_BANK_SIZE;
-	*mask = BIT(line);
+
+	switch (op) {
+	case GPIO_REGMAP_SET_WREN_OP:
+	case GPIO_REGMAP_SET_DIR_WREN_OP:
+		*mask = 0;
+		break;
+	default:
+		*mask = BIT(line);
+		break;
+	}
 
 	return 0;
 }

@@ -67,14 +67,23 @@ static int i8255_ppi_init(struct regmap *const map, const unsigned int base)
 	return regmap_write(map, base + I8255_PORTC, 0x00);
 }
 
-static int i8255_reg_mask_xlate(struct gpio_regmap *gpio, unsigned int base,
-				unsigned int offset, unsigned int *reg,
+static int i8255_reg_mask_xlate(struct gpio_regmap *gpio, enum gpio_regmap_operation op,
+				unsigned int base, unsigned int offset, unsigned int *reg,
 				unsigned int *mask)
 {
 	const unsigned int ppi = offset / I8255_NGPIO;
 	const unsigned int ppi_offset = offset % I8255_NGPIO;
 	const unsigned int stride = ppi_offset / I8255_NGPIO_PER_REG;
 	const unsigned int line = ppi_offset % I8255_NGPIO_PER_REG;
+
+	switch (op) {
+	case GPIO_REGMAP_SET_WREN_OP:
+	case GPIO_REGMAP_SET_DIR_WREN_OP:
+		*mask = 0;
+		return 0;
+	default:
+		break;
+	}
 
 	switch (base) {
 	case I8255_REG_DAT_BASE:
