@@ -1676,6 +1676,7 @@ struct mmu_gather;
 struct inode;
 
 extern void prep_compound_page(struct page *page, unsigned int order);
+extern void undo_compound_page(struct page *page);
 
 static inline unsigned int folio_large_order(const struct folio *folio)
 {

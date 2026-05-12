@@ -716,6 +716,27 @@ void prep_compound_page(struct page *page, unsigned int order)
 	prep_compound_head(page, order);
 }
 
+/**
+ * undo_compound_page() - Reverse the effect of prep_compound_page().
+ * @page: The head page of a compound page to demote.
+ *
+ * Returns the pages to non-compound state as if prep_compound_page()
+ * had never been called.  split_page() must NOT have been called on
+ * the compound page; tail refcounts must be 0.  The caller must ensure
+ * no other users hold references to the compound page.
+ */
+void undo_compound_page(struct page *page)
+{
+	unsigned int i, nr = 1U << compound_order(page);
+
+	page[1].flags.f &= ~PAGE_FLAGS_SECOND;
+	for (i = 1; i < nr; i++) {
+		page[i].mapping = NULL;
+		clear_compound_head(&page[i]);
+	}
+	ClearPageHead(page);
+}
+
 static inline void set_buddy_order(struct page *page, unsigned int order)
 {
 	set_page_private(page, order);

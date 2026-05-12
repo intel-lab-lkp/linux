@@ -937,6 +937,111 @@ unlock:
 	return 0;
 }
 
+/**
+ * shmem_insert_folio() - Insert an isolated folio into a shmem file.
+ * @file: The shmem file created with shmem_file_setup().
+ * @folio: The folio to insert. Must be isolated (not on LRU), unlocked,
+ *         have exactly one reference (the caller's), have no page-table
+ *         mappings, and have folio->mapping == NULL.
+ * @order: The allocation order of @folio.  If @order > 0 and @folio is
+ *         not already a large (compound) folio, it will be promoted to a
+ *         compound folio of this order inside this function.  This requires
+ *         the standard post-alloc state: head refcount == 1, tail
+ *         refcounts == 0 (i.e. split_page() must NOT have been called).
+ *         On failure the promotion is reversed and the folio is returned
+ *         to its original non-compound state.
+ * @index: Page-cache index at which to insert. Must be aligned to
+ *         (1 << @order) and within the file's size.
+ * @writeback: If true, attempt immediate writeback to swap after insertion.
+ *             Best-effort; failure is silently ignored.
+ * @folio_gfp: The GFP flags to use for memory-cgroup charging.
+ *
+ * The folio is inserted zero-copy into the shmem page cache and placed on
+ * the anon LRU, where it participates in normal kernel reclaim (written to
+ * swap under memory pressure).  Any previous content at @index is discarded.
+ * On success the caller should release their reference with folio_put() and
+ * track the (@file, @index) pair for later recovery via shmem_read_folio()
+ * and release via shmem_truncate_range().
+ *
+ * Return: 0 on success.  On failure the folio is returned to its original
+ * state and the caller retains ownership.
+ */
+int shmem_insert_folio(struct file *file, struct folio *folio, unsigned int order,
+		       pgoff_t index, bool writeback, gfp_t folio_gfp)
+{
+	struct address_space *mapping = file->f_mapping;
+	struct inode *inode = mapping->host;
+	bool promoted;
+	long nr_pages;
+	int ret;
+
+	promoted = order > 0 && !folio_test_large(folio);
+	if (promoted)
+		prep_compound_page(&folio->page, order);
+	nr_pages = folio_nr_pages(folio);
+
+	VM_BUG_ON_FOLIO(folio_test_lru(folio), folio);
+	VM_BUG_ON_FOLIO(folio_mapped(folio), folio);
+	VM_BUG_ON_FOLIO(folio_test_swapcache(folio), folio);
+	VM_BUG_ON_FOLIO(folio->mapping, folio);
+	VM_BUG_ON(index != round_down(index, nr_pages));
+
+	folio_lock(folio);
+	__folio_set_swapbacked(folio);
+	folio_mark_uptodate(folio);
+
+	folio_gfp &= GFP_RECLAIM_MASK;
+	ret = mem_cgroup_charge(folio, NULL, folio_gfp);
+	if (ret)
+		goto err_unlock;
+
+	ret = shmem_add_to_page_cache(folio, mapping, index, NULL, folio_gfp);
+	if (ret == -EEXIST) {
+		shmem_truncate_range(inode,
+				     (loff_t)index << PAGE_SHIFT,
+				     ((loff_t)(index + nr_pages) << PAGE_SHIFT) - 1);
+		ret = shmem_add_to_page_cache(folio, mapping, index, NULL,
+					      folio_gfp);
+	}
+	if (ret)
+		goto err_uncharge;
+
+	folio_mark_dirty(folio);
+
+	ret = shmem_inode_acct_blocks(inode, nr_pages);
+	if (ret) {
+		filemap_remove_folio(folio);
+		goto err_uncharge;
+	}
+
+	shmem_recalc_inode(inode, nr_pages, 0);
+
+	if (writeback) {
+		ret = shmem_writeout(folio, NULL, NULL);
+		if (ret == AOP_WRITEPAGE_ACTIVATE) {
+			/* No swap slot available; reclaim will retry. */
+			folio_add_lru(folio);
+			folio_unlock(folio);
+		}
+		/* ret == 0 or ret < 0: folio unlocked by shmem_writeout */
+	} else {
+		folio_add_lru(folio);
+		folio_unlock(folio);
+	}
+
+	return 0;
+
+err_uncharge:
+	mem_cgroup_uncharge(folio);
+err_unlock:
+	__folio_clear_swapbacked(folio);
+	folio_unlock(folio);
+	if (promoted)
+		undo_compound_page(&folio->page);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(shmem_insert_folio);
+
 /*
  * Somewhat like filemap_remove_folio, but substitutes swap for @folio.
  */
