@@ -3188,7 +3188,7 @@ static int remap_pfn_range_prepare_vma(struct vm_area_struct *vma,
 }
 
 /**
- * remap_pfn_range - remap kernel memory to userspace
+ * remap_pfn_range - remap physical address range to user space
  * @vma: user vma to map to
  * @addr: target page aligned user address to start at
  * @pfn: page frame number of kernel physical memory address
