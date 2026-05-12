@@ -3598,7 +3598,7 @@ intel_dp_compute_config(struct intel_encoder *encoder,
 	int ret = 0, link_bpp_x16;
 
 	if (intel_dp_is_edp(intel_dp)) {
-		ret = intel_panel_compute_config(connector, adjusted_mode);
+		ret = intel_panel_compute_config(connector, pipe_config, conn_state->state);
 		if (ret)
 			return ret;
 	}

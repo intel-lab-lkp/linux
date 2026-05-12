@@ -280,7 +280,7 @@ static int intel_dsi_compute_config(struct intel_encoder *encoder,
 	pipe_config->sink_format = INTEL_OUTPUT_FORMAT_RGB;
 	pipe_config->output_format = INTEL_OUTPUT_FORMAT_RGB;
 
-	ret = intel_panel_compute_config(intel_connector, adjusted_mode);
+	ret = intel_panel_compute_config(intel_connector, pipe_config, conn_state->state);
 	if (ret)
 		return ret;
 

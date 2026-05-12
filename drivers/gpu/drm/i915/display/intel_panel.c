@@ -213,8 +213,10 @@ enum drrs_type intel_panel_drrs_type(struct intel_connector *connector)
 }
 
 int intel_panel_compute_config(struct intel_connector *connector,
-			       struct drm_display_mode *adjusted_mode)
+			       struct intel_crtc_state *crtc_state,
+			       const struct drm_atomic_commit *state)
 {
+	struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
 	const struct drm_display_mode *fixed_mode =
 		intel_panel_fixed_mode(connector, adjusted_mode);
 	int vrefresh, fixed_mode_vrefresh;
