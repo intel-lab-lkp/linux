@@ -110,12 +110,11 @@ static void panthor_gpu_irq_handler(struct panthor_irq *pirq, u32 status)
 	if (status & GPU_IRQ_PROTM_FAULT)
 		drm_warn(&ptdev->base, "GPU Fault in protected mode\n");
 
-	spin_lock(&ptdev->gpu->reqs_lock);
+	guard(spinlock_irqsave)(&ptdev->gpu->reqs_lock);
 	if (status & ptdev->gpu->pending_reqs) {
 		ptdev->gpu->pending_reqs &= ~status;
 		wake_up_all(&ptdev->gpu->reqs_acked);
 	}
-	spin_unlock(&ptdev->gpu->reqs_lock);
 }
 
 static irqreturn_t panthor_gpu_irq_threaded_handler(int irq, void *data)
