@@ -20,7 +20,9 @@
 #define S_IXUGO         (S_IXUSR|S_IXGRP|S_IXOTH)
 #endif
 
-static size_t syscall_arg__scnprintf_mode_t(char *bf, size_t size, struct syscall_arg *arg)
+#include "trace/beauty/beauty.h"
+
+size_t syscall_arg__scnprintf_mode_t(char *bf, size_t size, struct syscall_arg *arg)
 {
 	bool show_prefix = arg->show_string_prefix;
 	const char *prefix = "S_";
@@ -68,4 +70,4 @@ static size_t syscall_arg__scnprintf_mode_t(char *bf, size_t size, struct syscal
 	return printed;
 }
 
-#define SCA_MODE_T syscall_arg__scnprintf_mode_t
+
