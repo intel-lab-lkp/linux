@@ -1099,16 +1099,6 @@ void intel_vrr_get_config(struct intel_crtc_state *crtc_state)
 			crtc_state->vrr.vmin += intel_vrr_vmin_flipline_offset(display);
 		}
 
-		/*
-		 * For platforms that always use VRR Timing Generator, the VTOTAL.Vtotal
-		 * bits are not filled. Since for these platforms TRAN_VMIN is always
-		 * filled with crtc_vtotal, use TRAN_VRR_VMIN to get the vtotal for
-		 * adjusted_mode.
-		 */
-		if (intel_vrr_always_use_vrr_tg(display))
-			crtc_state->hw.adjusted_mode.crtc_vtotal =
-				intel_vrr_vmin_vtotal(crtc_state);
-
 		if (HAS_AS_SDP(display)) {
 			trans_vrr_vsync =
 				intel_de_read(display,
@@ -1117,6 +1107,29 @@ void intel_vrr_get_config(struct intel_crtc_state *crtc_state)
 				REG_FIELD_GET(VRR_VSYNC_START_MASK, trans_vrr_vsync);
 			crtc_state->vrr.vsync_end =
 				REG_FIELD_GET(VRR_VSYNC_END_MASK, trans_vrr_vsync);
+		}
+
+		/*
+		 * For platforms that always use VRR Timing Generator, the VTOTAL.Vtotal
+		 * bits are not filled. Since for these platforms TRAN_VMIN is always
+		 * filled with crtc_vtotal, use TRAN_VRR_VMIN to get the vtotal for
+		 * adjusted_mode.
+		 *
+		 * Similarly Vsync start/end are also not used when VRR TG is used.
+		 * Use the TRANS_VRR_VSYNC to fill these. Since these are relative
+		 * from the Vtotal, subtract from the crtc_vtotal to get the correct
+		 * value.
+		 */
+		if (intel_vrr_always_use_vrr_tg(display)) {
+			crtc_state->hw.adjusted_mode.crtc_vtotal =
+				intel_vrr_vmin_vtotal(crtc_state);
+
+			crtc_state->hw.adjusted_mode.crtc_vsync_start =
+				crtc_state->hw.adjusted_mode.crtc_vtotal -
+				crtc_state->vrr.vsync_start;
+			crtc_state->hw.adjusted_mode.crtc_vsync_end =
+				crtc_state->hw.adjusted_mode.crtc_vtotal -
+				crtc_state->vrr.vsync_end;
 		}
 	}
 

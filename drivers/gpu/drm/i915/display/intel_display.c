@@ -2653,6 +2653,7 @@ static void intel_set_transcoder_timings(const struct intel_crtc_state *crtc_sta
 	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
 	const struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
 	u32 crtc_vdisplay, crtc_vtotal, crtc_vblank_start, crtc_vblank_end;
+	u32 crtc_vsync_start, crtc_vsync_end;
 	int vsyncshift = 0;
 
 	drm_WARN_ON(display->drm, transcoder_is_dsi(cpu_transcoder));
@@ -2727,9 +2728,17 @@ static void intel_set_transcoder_timings(const struct intel_crtc_state *crtc_sta
 	intel_de_write(display, TRANS_VBLANK(display, cpu_transcoder),
 		       VBLANK_START(crtc_vblank_start - 1) |
 		       VBLANK_END(crtc_vblank_end - 1));
+	if (intel_vrr_always_use_vrr_tg(display)) {
+		crtc_vsync_start = 1;
+		crtc_vsync_end = 1;
+	} else {
+		crtc_vsync_start = adjusted_mode->crtc_vsync_start;
+		crtc_vsync_end = adjusted_mode->crtc_vsync_end;
+	}
+
 	intel_de_write(display, TRANS_VSYNC(display, cpu_transcoder),
-		       VSYNC_START(adjusted_mode->crtc_vsync_start - 1) |
-		       VSYNC_END(adjusted_mode->crtc_vsync_end - 1));
+		       VSYNC_START(crtc_vsync_start - 1) |
+		       VSYNC_END(crtc_vsync_end - 1));
 
 	/* Workaround: when the EDP input selection is B, the VTOTAL_B must be
 	 * programmed with the VTOTAL_EDP value. Same for VTOTAL_C. This is
@@ -5162,8 +5171,10 @@ intel_pipe_config_compare(const struct intel_crtc_state *current_config,
 	PIPE_CONF_CHECK_I(name.crtc_vdisplay); \
 	if (!fastset || !allow_vblank_delay_fastset(current_config)) \
 		PIPE_CONF_CHECK_I(name.crtc_vblank_start); \
-	PIPE_CONF_CHECK_I(name.crtc_vsync_start); \
-	PIPE_CONF_CHECK_I(name.crtc_vsync_end); \
+	if (!intel_vrr_always_use_vrr_tg(display)) { \
+		PIPE_CONF_CHECK_I(name.crtc_vsync_start); \
+		PIPE_CONF_CHECK_I(name.crtc_vsync_end); \
+	} \
 	if (!fastset || !pipe_config->update_lrr) { \
 		PIPE_CONF_CHECK_I(name.crtc_vtotal); \
 		PIPE_CONF_CHECK_I(name.crtc_vblank_end); \
