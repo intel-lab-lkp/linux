@@ -111,6 +111,11 @@ static void atmel_sha204a_remove(struct i2c_client *client)
 {
 	struct atmel_i2c_client_priv *i2c_priv = i2c_get_clientdata(client);
 
+	sysfs_remove_group(&client->dev.kobj, &atmel_sha204a_groups);
+
+	if (!i2c_priv)
+		return;
+
 	devm_hwrng_unregister(&client->dev, &i2c_priv->hwrng);
 	atmel_i2c_flush_queue();
 
@@ -118,8 +123,6 @@ static void atmel_sha204a_remove(struct i2c_client *client)
 		kfree((void *)i2c_priv->hwrng.priv);
 		i2c_priv->hwrng.priv = 0;
 	}
-
-	sysfs_remove_group(&client->dev.kobj, &atmel_sha204a_groups);
 }
 
 static const struct atmel_i2c_of_match_data atsha204_match_data = {
