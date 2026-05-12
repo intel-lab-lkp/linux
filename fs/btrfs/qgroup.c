@@ -4959,7 +4959,7 @@ int btrfs_record_squota_delta(struct btrfs_fs_info *fs_info,
 	spin_lock(&fs_info->qgroup_lock);
 	qgroup = find_qgroup_rb(fs_info, root);
 	if (!qgroup) {
-		ret = -ENOENT;
+		ret = 0;
 		goto out;
 	}
 
