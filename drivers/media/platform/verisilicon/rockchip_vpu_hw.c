@@ -9,6 +9,7 @@
 #include <linux/clk.h>
 
 #include "hantro.h"
+#include "hantro_av1.h"
 #include "hantro_jpeg.h"
 #include "hantro_g1_regs.h"
 #include "hantro_h1_regs.h"
@@ -608,9 +609,9 @@ static const struct hantro_codec_ops rk3568_vepu_codec_ops[] = {
 static const struct hantro_codec_ops rk3588_vpu981_codec_ops[] = {
 	[HANTRO_MODE_AV1_DEC] = {
 		.run = rockchip_vpu981_av1_dec_run,
-		.init = rockchip_vpu981_av1_dec_init,
-		.exit = rockchip_vpu981_av1_dec_exit,
-		.done = rockchip_vpu981_av1_dec_done,
+		.init = hantro_av1_init,
+		.exit = hantro_av1_exit,
+		.done = hantro_av1_update_prob,
 	},
 };
 /*
