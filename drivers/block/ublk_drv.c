@@ -2682,6 +2682,9 @@ static void __ublk_fail_req(struct ublk_device *ub, struct ublk_io *io,
 	WARN_ON_ONCE(!ublk_dev_support_batch_io(ub) &&
 			io->flags & UBLK_IO_FLAG_ACTIVE);
 
+	/* The ublk server no longer owns this request once abort starts. */
+	io->flags &= ~UBLK_IO_FLAG_OWNED_BY_SRV;
+
 	if (ublk_nosrv_should_reissue_outstanding(ub))
 		blk_mq_requeue_request(req, false);
 	else {
