@@ -55,7 +55,7 @@
 				reg = <0>;
 
 				usb0_con_hs_ep: endpoint {
-					remote-endpoint = <&usb_0_dwc3_hs>;
+					remote-endpoint = <&eud_con>;
 				};
 			};
 
@@ -508,6 +508,14 @@
 			snps,low_credit = <0xffc18000>;
 		};
 	};
+};
+
+&eud_ep {
+	remote-endpoint = <&usb_0_dwc3_hs>;
+};
+
+&eud_con {
+	remote-endpoint = <&usb0_con_hs_ep>;
 };
 
 &gpi_dma0 {
@@ -985,7 +993,7 @@
 };
 
 &usb_0_dwc3_hs {
-	remote-endpoint = <&usb0_con_hs_ep>;
+	remote-endpoint = <&eud_ep>;
 };
 
 &usb_0_dwc3_ss {
