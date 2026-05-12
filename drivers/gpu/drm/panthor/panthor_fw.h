@@ -432,12 +432,11 @@ struct panthor_fw_global_iface {
 #define panthor_fw_toggle_reqs(__iface, __in_reg, __out_reg, __mask) \
 	do { \
 		u32 __cur_val, __new_val, __out_val; \
-		spin_lock(&(__iface)->lock); \
+		guard(spinlock_irqsave)(&(__iface)->lock); \
 		__cur_val = READ_ONCE((__iface)->input->__in_reg); \
 		__out_val = READ_ONCE((__iface)->output->__out_reg); \
 		__new_val = ((__out_val ^ (__mask)) & (__mask)) | (__cur_val & ~(__mask)); \
 		WRITE_ONCE((__iface)->input->__in_reg, __new_val); \
-		spin_unlock(&(__iface)->lock); \
 	} while (0)
 
 /**
@@ -458,21 +457,19 @@ struct panthor_fw_global_iface {
 #define panthor_fw_update_reqs(__iface, __in_reg, __val, __mask) \
 	do { \
 		u32 __cur_val, __new_val; \
-		spin_lock(&(__iface)->lock); \
+		guard(spinlock_irqsave)(&(__iface)->lock); \
 		__cur_val = READ_ONCE((__iface)->input->__in_reg); \
 		__new_val = (__cur_val & ~(__mask)) | ((__val) & (__mask)); \
 		WRITE_ONCE((__iface)->input->__in_reg, __new_val); \
-		spin_unlock(&(__iface)->lock); \
 	} while (0)
 
 #define panthor_fw_update_reqs64(__iface, __in_reg, __val, __mask) \
 	do { \
 		u64 __cur_val, __new_val; \
-		spin_lock(&(__iface)->lock); \
+		guard(spinlock_irqsave)(&(__iface)->lock); \
 		__cur_val = READ_ONCE((__iface)->input->__in_reg); \
 		__new_val = (__cur_val & ~(__mask)) | ((__val) & (__mask)); \
 		WRITE_ONCE((__iface)->input->__in_reg, __new_val); \
-		spin_unlock(&(__iface)->lock); \
 	} while (0)
 
 struct panthor_fw_global_iface *
