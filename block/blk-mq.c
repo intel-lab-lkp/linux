@@ -260,12 +260,16 @@ EXPORT_SYMBOL_GPL(blk_mq_unfreeze_queue_non_owner);
  */
 void blk_mq_quiesce_queue_nowait(struct request_queue *q)
 {
-	unsigned long flags;
-
-	spin_lock_irqsave(&q->queue_lock, flags);
-	if (!q->quiesce_depth++)
-		blk_queue_flag_set(QUEUE_FLAG_QUIESCED, q);
-	spin_unlock_irqrestore(&q->queue_lock, flags);
+	atomic_inc(&q->quiesce_depth);
+	/*
+	 * Publish the quiesce_depth increment.  Callers must follow this
+	 * with blk_mq_wait_quiesce_done() (synchronize_srcu()/
+	 * synchronize_rcu()), which is what actually guarantees that any
+	 * in-flight dispatcher has finished and that later dispatchers see
+	 * the queue as quiesced; the barrier here only keeps this helper
+	 * self-contained for the few callers that defer the wait.
+	 */
+	smp_mb__after_atomic();
 }
 EXPORT_SYMBOL_GPL(blk_mq_quiesce_queue_nowait);
 
@@ -314,21 +318,30 @@ EXPORT_SYMBOL_GPL(blk_mq_quiesce_queue);
  */
 void blk_mq_unquiesce_queue(struct request_queue *q)
 {
-	unsigned long flags;
-	bool run_queue = false;
+	int depth;
 
-	spin_lock_irqsave(&q->queue_lock, flags);
-	if (WARN_ON_ONCE(q->quiesce_depth <= 0)) {
-		;
-	} else if (!--q->quiesce_depth) {
-		blk_queue_flag_clear(QUEUE_FLAG_QUIESCED, q);
-		run_queue = true;
-	}
-	spin_unlock_irqrestore(&q->queue_lock, flags);
+	depth = atomic_dec_if_positive(&q->quiesce_depth);
+	if (WARN_ON_ONCE(depth < 0))
+		return;
 
-	/* dispatch requests which are inserted during quiescing */
-	if (run_queue)
+	if (depth == 0) {
+		/*
+		 * Full barrier between the quiesce_depth store above and the
+		 * blk_mq_hctx_has_pending() load done from blk_mq_run_hw_queues()
+		 * below.  This pairs with the smp_mb() before the requiesce
+		 * re-check in blk_mq_run_hw_queue(): of the two racing CPUs
+		 * (one inserting a request and then re-checking quiesce state,
+		 * the other unquiescing here and then checking for pending
+		 * work) at least one sees the other's store, so the hw queue
+		 * is not left with a request stranded on a now-running queue.
+		 *
+		 * atomic_dec_if_positive() already orders the decrement on
+		 * success, but spell the barrier out so the pairing is obvious.
+		 */
+		smp_mb__after_atomic();
+		/* dispatch requests which are inserted during quiescing */
 		blk_mq_run_hw_queues(q, true);
+	}
 }
 EXPORT_SYMBOL_GPL(blk_mq_unquiesce_queue);
 
@@ -2362,17 +2375,21 @@ void blk_mq_run_hw_queue(struct blk_mq_hw_ctx *hctx, bool async)
 
 	need_run = blk_mq_hw_queue_need_run(hctx);
 	if (!need_run) {
-		unsigned long flags;
-
 		/*
-		 * Synchronize with blk_mq_unquiesce_queue(), because we check
-		 * if hw queue is quiesced locklessly above, we need the use
-		 * ->queue_lock to make sure we see the up-to-date status to
-		 * not miss rerunning the hw queue.
+		 * Re-check after a full barrier.  A request may have been
+		 * inserted before this call, while a concurrent
+		 * blk_mq_unquiesce_queue() drops quiesce_depth to zero and
+		 * then runs the hw queues.  This smp_mb() orders the request
+		 * insert (the store that makes blk_mq_hctx_has_pending() true)
+		 * before the requiesce-state load below, and pairs with the
+		 * smp_mb__after_atomic() between the quiesce_depth store and
+		 * the blk_mq_hctx_has_pending() load in blk_mq_unquiesce_queue()
+		 * (and in blk_mq_quiesce_queue_nowait()).  With a full barrier
+		 * on both sides, at least one CPU observes the other's store,
+		 * so the queue is not left both un-quiesced and not rerun.
 		 */
-		spin_lock_irqsave(&hctx->queue->queue_lock, flags);
+		smp_mb();
 		need_run = blk_mq_hw_queue_need_run(hctx);
-		spin_unlock_irqrestore(&hctx->queue->queue_lock, flags);
 
 		if (!need_run)
 			return;
