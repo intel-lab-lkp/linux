@@ -5628,7 +5628,6 @@ static void free_exit_info(struct scx_exit_info *ei)
 {
 	kvfree(ei->dump);
 	kfree(ei->msg);
-	kfree(ei->bt);
 	kfree(ei);
 }
 
@@ -5636,16 +5635,15 @@ static struct scx_exit_info *alloc_exit_info(size_t exit_dump_len)
 {
 	struct scx_exit_info *ei;
 
-	ei = kzalloc_obj(*ei);
+	ei = kzalloc_flex(*ei, bt, SCX_EXIT_BT_LEN);
 	if (!ei)
 		return NULL;
 
 	ei->exit_cpu = -1;
-	ei->bt = kzalloc_objs(ei->bt[0], SCX_EXIT_BT_LEN);
 	ei->msg = kzalloc(SCX_EXIT_MSG_LEN, GFP_KERNEL);
 	ei->dump = kvzalloc(exit_dump_len, GFP_KERNEL);
 
-	if (!ei->bt || !ei->msg || !ei->dump) {
+	if (!ei->msg || !ei->dump) {
 		free_exit_info(ei);
 		return NULL;
 	}

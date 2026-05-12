@@ -80,15 +80,15 @@ struct scx_exit_info {
 	/* textual representation of the above */
 	const char		*reason;
 
-	/* backtrace if exiting due to an error */
-	unsigned long		*bt;
-	u32			bt_len;
-
 	/* informational message */
 	char			*msg;
 
 	/* debug dump */
 	char			*dump;
+
+	/* backtrace if exiting due to an error */
+	u32			bt_len;
+	unsigned long		bt[];
 };
 
 /* sched_ext_ops.flags */
