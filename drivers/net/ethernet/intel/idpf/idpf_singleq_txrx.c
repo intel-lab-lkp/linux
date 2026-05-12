@@ -78,12 +78,7 @@ static int idpf_tx_singleq_csum(struct sk_buff *skb,
 			l4.hdr = skb_inner_network_header(skb);
 			break;
 		default:
-			if (is_tso)
-				return -1;
-
-			skb_checksum_help(skb);
-
-			return 0;
+			goto checksum_sw_fb;
 		}
 		off->tx_flags |= IDPF_TX_FLAGS_TUNNEL;
 
@@ -138,7 +133,7 @@ static int idpf_tx_singleq_csum(struct sk_buff *skb,
 					 sizeof(*ip.v6), &l4_proto,
 					 &frag_off);
 	} else {
-		return -1;
+		goto checksum_sw_fb;
 	}
 
 	/* compute inner L3 header size */
@@ -163,12 +158,7 @@ static int idpf_tx_singleq_csum(struct sk_buff *skb,
 		l4_len = sizeof(struct sctphdr) >> 2;
 		break;
 	default:
-		if (is_tso)
-			return -1;
-
-		skb_checksum_help(skb);
-
-		return 0;
+		goto checksum_sw_fb;
 	}
 
 	offset |= l4_len << IDPF_TX_DESC_LEN_L4_LEN_S;
@@ -176,6 +166,12 @@ static int idpf_tx_singleq_csum(struct sk_buff *skb,
 	off->hdr_offsets |= offset;
 
 	return 1;
+
+checksum_sw_fb:
+	if (is_tso)
+		return -1;
+
+	return skb_checksum_help(skb);
 }
 
 /**
