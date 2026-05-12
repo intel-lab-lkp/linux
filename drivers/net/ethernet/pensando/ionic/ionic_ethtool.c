@@ -115,9 +115,16 @@ static void ionic_get_link_ext_stats(struct net_device *netdev,
 				     struct ethtool_link_ext_stats *stats)
 {
 	struct ionic_lif *lif = netdev_priv(netdev);
+	struct ionic *ionic = lif->ionic;
 
-	if (lif->ionic->pdev->is_physfn)
-		stats->link_down_events = lif->link_down_count;
+	if (!ionic->idev.port_info) {
+		netdev_err(netdev, "port_info not initialized\n");
+		return;
+	}
+
+	if (ionic->pdev->is_physfn)
+		stats->link_down_events =
+		    le16_to_cpu(ionic->idev.port_info->status.link_down_count);
 }
 
 static int ionic_get_link_ksettings(struct net_device *netdev,
