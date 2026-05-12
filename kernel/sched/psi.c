@@ -795,7 +795,7 @@ static void record_times(struct psi_group_cpu *groupc, u64 now)
 
 static void psi_group_change(struct psi_group *group, int cpu,
 			     unsigned int clear, unsigned int set,
-			     u64 now, bool wake_clock)
+			     u64 now, bool wake_clock, bool curr_in_memstall)
 {
 	struct psi_group_cpu *groupc;
 	unsigned int t, m;
@@ -868,7 +868,7 @@ static void psi_group_change(struct psi_group *group, int cpu,
 	 * task in a cgroup is in_memstall, the corresponding groupc
 	 * on that cpu is in PSI_MEM_FULL state.
 	 */
-	if (unlikely((state_mask & PSI_ONCPU) && cpu_curr(cpu)->in_memstall))
+	if (unlikely((state_mask & PSI_ONCPU) && curr_in_memstall))
 		state_mask |= (1 << PSI_MEM_FULL);
 
 	record_times(groupc, now);
@@ -910,6 +910,7 @@ void psi_task_change(struct task_struct *task, int clear, int set)
 {
 	int cpu = task_cpu(task);
 	u64 now;
+	bool curr_in_memstall;
 
 	if (!task->pid)
 		return;
@@ -917,9 +918,11 @@ void psi_task_change(struct task_struct *task, int clear, int set)
 	psi_flags_change(task, clear, set);
 
 	psi_write_begin(cpu);
+	curr_in_memstall = cpu_curr(cpu)->in_memstall;
 	now = cpu_clock(cpu);
 	for_each_group(group, task_psi_group(task))
-		psi_group_change(group, cpu, clear, set, now, true);
+		psi_group_change(group, cpu, clear, set, now, true,
+			curr_in_memstall);
 	psi_write_end(cpu);
 }
 
@@ -929,11 +932,13 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 	struct psi_group *common = NULL;
 	int cpu = task_cpu(prev);
 	u64 now;
+	bool curr_in_memstall = false;
 
 	psi_write_begin(cpu);
 	now = cpu_clock(cpu);
 
 	if (next->pid) {
+		curr_in_memstall = next->in_memstall;
 		psi_flags_change(next, 0, TSK_ONCPU);
 		/*
 		 * Set TSK_ONCPU on @next's cgroups. If @next shares any
@@ -947,7 +952,8 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 				common = group;
 				break;
 			}
-			psi_group_change(group, cpu, 0, TSK_ONCPU, now, true);
+			psi_group_change(group, cpu, 0, TSK_ONCPU, now, true,
+				curr_in_memstall);
 		}
 	}
 
@@ -984,7 +990,8 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 		for_each_group(group, task_psi_group(prev)) {
 			if (group == common)
 				break;
-			psi_group_change(group, cpu, clear, set, now, wake_clock);
+			psi_group_change(group, cpu, clear, set, now, wake_clock,
+				curr_in_memstall);
 		}
 
 		/*
@@ -996,7 +1003,8 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 		if ((prev->psi_flags ^ next->psi_flags) & ~TSK_ONCPU) {
 			clear &= ~TSK_ONCPU;
 			for_each_group(group, common)
-				psi_group_change(group, cpu, clear, set, now, wake_clock);
+				psi_group_change(group, cpu, clear, set, now, wake_clock,
+					curr_in_memstall);
 		}
 	}
 	psi_write_end(cpu);
@@ -1236,7 +1244,8 @@ void psi_cgroup_restart(struct psi_group *group)
 
 		psi_write_begin(cpu);
 		now = cpu_clock(cpu);
-		psi_group_change(group, cpu, 0, 0, now, true);
+		psi_group_change(group, cpu, 0, 0, now, true,
+			cpu_curr(cpu)->in_memstall);
 		psi_write_end(cpu);
 	}
 }
