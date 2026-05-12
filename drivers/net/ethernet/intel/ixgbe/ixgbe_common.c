@@ -2683,7 +2683,7 @@ int prot_autoc_write_generic(struct ixgbe_hw *hw, u32 reg_val, bool locked)
  **/
 int ixgbe_disable_rx_buff_generic(struct ixgbe_hw *hw)
 {
-#define IXGBE_MAX_SECRX_POLL 40
+#define IXGBE_MAX_SECRX_POLL 4000
 	int i;
 	int secrxreg;
 
@@ -2695,8 +2695,7 @@ int ixgbe_disable_rx_buff_generic(struct ixgbe_hw *hw)
 		if (secrxreg & IXGBE_SECRXSTAT_SECRX_RDY)
 			break;
 		else
-			/* Use interrupt-safe sleep just in case */
-			udelay(1000);
+			usleep_range(10, 20);
 	}
 
 	/* For informational purposes only */
