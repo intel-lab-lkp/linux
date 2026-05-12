@@ -3,7 +3,6 @@
  * Support for Intel Camera Imaging ISP subsystem.
  * Copyright (c) 2015, Intel Corporation.
  */
-/* Generated code: do not edit or commmit. */
 
 #include "ia_css_pipeline.h"
 #include "ia_css_isp_states.h"
