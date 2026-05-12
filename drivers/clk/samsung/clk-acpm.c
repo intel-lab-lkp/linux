@@ -40,6 +40,18 @@ struct acpm_clk_driver_data {
 		.name		= cname,		\
 	}
 
+static const struct acpm_clk_variant exynos850_acpm_clks[] = {
+	ACPM_CLK("mif"),
+	ACPM_CLK("int"),
+	ACPM_CLK("cpucl0"),
+	ACPM_CLK("cpucl1"),
+	ACPM_CLK("g3d"),
+	ACPM_CLK("aud"),
+	ACPM_CLK("cam"),
+	ACPM_CLK("disp"),
+	ACPM_CLK("cp"),
+};
+
 static const struct acpm_clk_variant gs101_acpm_clks[] = {
 	ACPM_CLK("mif"),
 	ACPM_CLK("int"),
@@ -55,6 +67,12 @@ static const struct acpm_clk_variant gs101_acpm_clks[] = {
 	ACPM_CLK("mfc"),
 	ACPM_CLK("disp"),
 	ACPM_CLK("bo"),
+};
+
+static const struct acpm_clk_driver_data acpm_clk_exynos850 = {
+	.clks = exynos850_acpm_clks,
+	.nr_clks = ARRAY_SIZE(exynos850_acpm_clks),
+	.mbox_chan_id = 0,
 };
 
 static const struct acpm_clk_driver_data acpm_clk_gs101 = {
@@ -173,6 +191,7 @@ static int acpm_clk_probe(struct platform_device *pdev)
 }
 
 static const struct platform_device_id acpm_clk_id[] = {
+	{ "exynos850-acpm-clk", (kernel_ulong_t)&acpm_clk_exynos850 },
 	{ "gs101-acpm-clk", (kernel_ulong_t)&acpm_clk_gs101 },
 	{}
 };
