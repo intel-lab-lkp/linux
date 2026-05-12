@@ -249,6 +249,31 @@ state entry.
 
 `commit 40b8c14936bd2 ("drm/amd/display: Disable unneeded hpd interrupts during dm_init") <https://git.kernel.org/torvalds/c/40b8c14936bd2>`_
 
+Keyboard and Lid Switch stop working after resume
+-------------------------------------------------
+On various variants of the Lenovo IdeaPad Slim 3 with Barcelo and Rembrandt CPUs
+the lid switch and keyboard, or at least the Fn/Multimedia keys, stopped working
+after resume, until the next reboot.
+
+This was caused by buggy firmware having timing probles, the EC needed some idle
+time right before the CPU cores are suspended, or it got into an inconsistent state.
+
+For laptops that are known to be affected this workaround is enabled
+automatically, to test this workaround on other machines you can set the
+``delay_suspend`` parameter of the ``amd_pmc`` module.
+
+If you need to set the ``delay_suspend`` parameter to fix your machine, please
+report this at platform-driver-x86@vger.kernel.org for it to be added to the
+list of devices that need this workaround, so in future kernel versions it's
+enabled automatically.
+
+Note that the current workaround isn't perfect: On some devices the problems
+still happen if resume is triggered by a timer (wakealarm).
+
+`commit TODO ("platform/x86/amd/pmc: Delay suspend for some Lenovo Laptops") <https://git.kernel.org/torvalds/c/TODO>`_
+
+`commit TODO ("platform/x86/amd/pmc: Add delay_suspend module parameter") <https://git.kernel.org/torvalds/c/TODO>`_
+
 Runtime power consumption issues
 ================================
 
