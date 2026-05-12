@@ -874,12 +874,6 @@ static int opt3001_probe(struct i2c_client *client)
 	iio->modes = INDIO_DIRECT_MODE;
 	iio->info = &opt3001_info;
 
-	ret = devm_iio_device_register(dev, iio);
-	if (ret) {
-		dev_err(dev, "failed to register IIO device\n");
-		return ret;
-	}
-
 	/* Make use of INT pin only if valid IRQ no. is given */
 	if (irq > 0) {
 		ret = request_threaded_irq(irq, NULL, opt3001_irq,
@@ -893,6 +887,10 @@ static int opt3001_probe(struct i2c_client *client)
 	} else {
 		dev_dbg(opt->dev, "enabling interrupt-less operation\n");
 	}
+
+	ret = devm_iio_device_register(dev, iio);
+	if (ret)
+		return dev_err(dev, "failed to register IIO device\n");
 
 	return 0;
 }
