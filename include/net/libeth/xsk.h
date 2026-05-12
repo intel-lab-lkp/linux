@@ -468,7 +468,7 @@ __libeth_xsk_run_pass(struct libeth_xdp_buff *xdp,
 	if (act != LIBETH_XDP_PASS)
 		return act != LIBETH_XDP_ABORTED;
 
-	skb = xdp_build_skb_from_zc(&xdp->base);
+	skb = xdp_build_skb_from_zc(napi, &xdp->base);
 	if (unlikely(!skb)) {
 		libeth_xsk_buff_free_slow(xdp);
 		return true;

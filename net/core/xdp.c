@@ -677,16 +677,14 @@ EXPORT_SYMBOL_GPL(xdp_build_skb_from_buff);
  * xdp_copy_frags_from_zc - copy frags from XSk buff to skb
  * @skb: skb to copy frags to
  * @xdp: XSk &xdp_buff from which the frags will be copied
- * @pp: &page_pool backing page allocation, if available
  *
  * Copy all frags from XSk &xdp_buff to the skb to pass it up the stack.
- * Allocate a new buffer for each frag, copy it and attach to the skb.
+ * Allocate a new page for each frag, copy it and attach to the skb.
  *
- * Return: true on success, false on netmem allocation fail.
+ * Return: true on success, false on page allocation fail.
  */
 static noinline bool xdp_copy_frags_from_zc(struct sk_buff *skb,
-					    const struct xdp_buff *xdp,
-					    struct page_pool *pp)
+					    const struct xdp_buff *xdp)
 {
 	struct skb_shared_info *sinfo = skb_shinfo(skb);
 	const struct skb_shared_info *xinfo;
@@ -699,20 +697,18 @@ static noinline bool xdp_copy_frags_from_zc(struct sk_buff *skb,
 	for (u32 i = 0; i < nr_frags; i++) {
 		const skb_frag_t *frag = &xinfo->frags[i];
 		u32 len = skb_frag_size(frag);
-		u32 offset, truesize = len;
 		struct page *page;
 
-		page = page_pool_dev_alloc(pp, &offset, &truesize);
+		page = alloc_page(GFP_ATOMIC | __GFP_NOWARN);
 		if (unlikely(!page)) {
 			sinfo->nr_frags = i;
 			return false;
 		}
 
-		memcpy(page_address(page) + offset, skb_frag_address(frag),
-		       LARGEST_ALIGN(len));
-		__skb_fill_page_desc_noacc(sinfo, i, page, offset, len);
+		memcpy(page_address(page), skb_frag_address(frag), len);
+		__skb_fill_page_desc_noacc(sinfo, i, page, 0, len);
 
-		tsize += truesize;
+		tsize += PAGE_SIZE;
 		if (page_is_pfmemalloc(page))
 			flags |= XDP_FLAGS_FRAGS_PF_MEMALLOC;
 	}
@@ -725,49 +721,34 @@ static noinline bool xdp_copy_frags_from_zc(struct sk_buff *skb,
 
 /**
  * xdp_build_skb_from_zc - create an skb from XSk &xdp_buff
+ * @napi: NAPI instance the buffer was received on (provides the skb cache)
  * @xdp: source XSk buff
  *
  * Similar to xdp_build_skb_from_buff(), but for XSk frames. Allocate an skb
- * head, new buffer for the head, copy the data and initialize the skb fields.
- * If there are frags, allocate new buffers for them and copy.
- * Buffers are allocated from the system percpu pools to try recycling them.
- * If new skb was built successfully, @xdp is returned to XSk pool's freelist.
- * On error, it remains untouched and the caller must take care of this.
+ * sized to the packet from the NAPI cache, copy the head data, and copy
+ * any frags into freshly allocated pages.
+ *
+ * If a new skb was built successfully, @xdp is returned to the XSk pool's
+ * freelist. On error, it remains untouched and the caller must take care
+ * of this.
  *
  * Return: new &sk_buff on success, %NULL on error.
  */
-struct sk_buff *xdp_build_skb_from_zc(struct xdp_buff *xdp)
+struct sk_buff *xdp_build_skb_from_zc(struct napi_struct *napi,
+				      struct xdp_buff *xdp)
 {
 	const struct xdp_rxq_info *rxq = xdp->rxq;
-	u32 len = xdp->data_end - xdp->data_meta;
-	u32 truesize = xdp->frame_sz;
-	struct sk_buff *skb = NULL;
-	struct page_pool *pp;
-	int metalen;
-	void *data;
+	u32 totallen = xdp->data_end - xdp->data_meta;
+	u32 metalen = xdp->data - xdp->data_meta;
+	struct sk_buff *skb;
 
-	if (!IS_ENABLED(CONFIG_PAGE_POOL))
+	skb = napi_alloc_skb(napi, totallen);
+	if (unlikely(!skb))
 		return NULL;
 
-	local_lock_nested_bh(&system_page_pool.bh_lock);
-	pp = this_cpu_read(system_page_pool.pool);
-	data = page_pool_dev_alloc_va(pp, &truesize);
-	if (unlikely(!data))
-		goto out;
+	skb_put_data(skb, xdp->data_meta, totallen);
 
-	skb = napi_build_skb(data, truesize);
-	if (unlikely(!skb)) {
-		page_pool_free_va(pp, data, true);
-		goto out;
-	}
-
-	skb_mark_for_recycle(skb);
-	skb_reserve(skb, xdp->data_meta - xdp->data_hard_start);
-
-	memcpy(__skb_put(skb, len), xdp->data_meta, LARGEST_ALIGN(len));
-
-	metalen = xdp->data - xdp->data_meta;
-	if (metalen > 0) {
+	if (metalen) {
 		skb_metadata_set(skb, metalen);
 		__skb_pull(skb, metalen);
 	}
@@ -775,18 +756,15 @@ struct sk_buff *xdp_build_skb_from_zc(struct xdp_buff *xdp)
 	skb_record_rx_queue(skb, rxq->queue_index);
 
 	if (unlikely(xdp_buff_has_frags(xdp)) &&
-	    unlikely(!xdp_copy_frags_from_zc(skb, xdp, pp))) {
+	    unlikely(!xdp_copy_frags_from_zc(skb, xdp))) {
 		napi_consume_skb(skb, true);
-		skb = NULL;
-		goto out;
+		return NULL;
 	}
 
 	xsk_buff_free(xdp);
 
 	skb->protocol = eth_type_trans(skb, rxq->dev);
 
-out:
-	local_unlock_nested_bh(&system_page_pool.bh_lock);
 	return skb;
 }
 EXPORT_SYMBOL_GPL(xdp_build_skb_from_zc);

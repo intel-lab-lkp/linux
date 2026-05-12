@@ -653,7 +653,7 @@ int ice_clean_rx_irq_zc(struct ice_rx_ring *rx_ring,
 
 construct_skb:
 		/* XDP_PASS path */
-		skb = xdp_build_skb_from_zc(first);
+		skb = xdp_build_skb_from_zc(&rx_ring->q_vector->napi, first);
 		if (!skb) {
 			xsk_buff_free(first);
 			first = NULL;
