@@ -1557,6 +1557,9 @@ static inline bool is_core_idle(int cpu)
 {
 	int sibling;
 
+	if (!IS_ENABLED(CONFIG_SCHED_SMT))
+		return true;
+
 	for_each_cpu(sibling, cpu_smt_mask(cpu)) {
 		if (cpu == sibling)
 			continue;
@@ -11973,7 +11976,8 @@ static int should_we_balance(struct lb_env *env)
 			 * idle has been found, then its not needed to check other
 			 * SMT siblings for idleness:
 			 */
-			cpumask_andnot(swb_cpus, swb_cpus, cpu_smt_mask(cpu));
+			if (IS_ENABLED(CONFIG_SCHED_SMT))
+				cpumask_andnot(swb_cpus, swb_cpus, cpu_smt_mask(cpu));
 			continue;
 		}
 
