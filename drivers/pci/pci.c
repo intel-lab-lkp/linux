@@ -1682,6 +1682,199 @@ static void pci_restore_pcie_state(struct pci_dev *dev)
 	pcie_capability_write_word(dev, PCI_EXP_SLTCTL2, cap[i++]);
 }
 
+static int pci_save_dev3_state(struct pci_dev *dev)
+{
+	struct pci_cap_saved_state *save_state;
+	u32 *cap;
+	int pos;
+
+	pos = pci_find_ext_capability(dev, PCI_EXT_CAP_ID_DEV3);
+	if (!pos)
+		return 0;
+
+	save_state = pci_find_saved_ext_cap(dev, PCI_EXT_CAP_ID_DEV3);
+	if (!save_state)
+		return -ENOMEM;
+
+	cap = (u32 *)&save_state->cap.data[0];
+	pci_read_config_dword(dev, pos + PCI_DEV3_CTL, &cap[0]);
+
+	return 0;
+}
+
+static void pci_restore_dev3_state(struct pci_dev *dev)
+{
+	struct pci_cap_saved_state *save_state;
+	u32 *cap, val, dev3_cap, dev3_sta;
+	u16 lnksta2 = 0;
+	bool flit_now;
+	int pos;
+
+	pos = pci_find_ext_capability(dev, PCI_EXT_CAP_ID_DEV3);
+	if (!pos)
+		return;
+
+	save_state = pci_find_saved_ext_cap(dev, PCI_EXT_CAP_ID_DEV3);
+	if (!save_state)
+		return;
+
+	cap = (u32 *)&save_state->cap.data[0];
+	val = cap[0];
+
+	/*
+	 * The 14-Bit Tag enable bits in DEV3_CTL are only valid in flit
+	 * mode.  On devices that advertise 14-Bit Tag support, sanitize
+	 * the saved value before writing it back, so that callers that
+	 * issue further TLPs through this device after restore see a
+	 * coherent enable state.  On other devices (and for any other
+	 * DEV3_CTL bits, including future architected or vendor-specific
+	 * ones), the saved value is written back unchanged.
+	 *
+	 * Note: bridge-side and link-event paths are handled separately by
+	 * pci_bridge_refresh_14bit_tag(), which runs from
+	 * pci_bridge_wait_for_secondary_bus() and __pcie_update_link_speed()
+	 * and clears the bits directly in hardware as soon as the link is
+	 * observed to leave flit mode.  This function's responsibility is
+	 * narrowed to the save-buffer-restore path.
+	 */
+	pci_read_config_dword(dev, pos + PCI_DEV3_CAP, &dev3_cap);
+	if (dev3_cap & (PCI_DEV3_CAP_14BIT_TAG_REQ |
+			PCI_DEV3_CAP_14BIT_TAG_COMP)) {
+		/*
+		 * Re-check link state here too: pci_restore_state() may run
+		 * on paths where the link has changed mode but
+		 * pci_bridge_refresh_14bit_tag() has not yet been called for
+		 * this device.  Check both LNKSTA2.Flit_Mode (link-level)
+		 * and DEV3_STA.Segment Captured (end-to-end); both must be
+		 * active for 14-bit tags.  Refresh bus->flit_mode and
+		 * dev->fm_enabled in lock-step.
+		 */
+		pci_read_config_dword(dev, pos + PCI_DEV3_STA, &dev3_sta);
+		dev->fm_enabled = !!(dev3_sta & PCI_DEV3_STA_SEGMENT);
+
+		pcie_capability_read_word(dev, PCI_EXP_LNKSTA2, &lnksta2);
+		flit_now = !!(lnksta2 & PCI_EXP_LNKSTA2_FLIT);
+		if (dev->bus)
+			dev->bus->flit_mode = flit_now;
+
+		if ((!dev->fm_enabled || !flit_now) &&
+		    (val & (PCI_DEV3_CTL_14BIT_TAG_REQ_EN |
+			    PCI_DEV3_CTL_14BIT_TAG_COMP_EN))) {
+			val &= ~(PCI_DEV3_CTL_14BIT_TAG_REQ_EN |
+				 PCI_DEV3_CTL_14BIT_TAG_COMP_EN);
+			cap[0] = val;
+			pci_info(dev, "clearing 14-bit tag enable: flit mode no longer active (LNKSTA2=%#06x, DEV3_STA=%#010x)\n",
+				 lnksta2, dev3_sta);
+		}
+	}
+
+	pci_write_config_dword(dev, pos + PCI_DEV3_CTL, val);
+}
+
+/*
+ * Clear DEV3_CTL.14-Bit Tag {Req,Comp} Enable on @dev if flit mode is
+ * no longer active.  Touches only @dev's own config space, so it is safe
+ * to call on a bridge before the first downstream TLP is issued after a
+ * reset.
+ *
+ * 14-Bit Tag enables are only meaningful in flit mode.  If the link came
+ * back as non-flit (e.g. after SBR, DPC, slot reset, or D3cold resume),
+ * a requester that still has these bits set will emit TLPs the completer
+ * cannot match, producing Completion Timeout plus Unexpected Completion
+ * on the first transaction.
+ */
+static void __pci_dev_clear_stale_14bit_tag(struct pci_dev *dev, bool flit_now)
+{
+	u32 dev3_cap, dev3_ctl, dev3_sta;
+	int pos;
+
+	if (!pci_is_pcie(dev))
+		return;
+
+	pos = pci_find_ext_capability(dev, PCI_EXT_CAP_ID_DEV3);
+	if (!pos)
+		return;
+
+	pci_read_config_dword(dev, pos + PCI_DEV3_CAP, &dev3_cap);
+	if (!(dev3_cap & (PCI_DEV3_CAP_14BIT_TAG_REQ |
+			  PCI_DEV3_CAP_14BIT_TAG_COMP)))
+		return;
+
+	pci_read_config_dword(dev, pos + PCI_DEV3_STA, &dev3_sta);
+	dev->fm_enabled = !!(dev3_sta & PCI_DEV3_STA_SEGMENT);
+
+	if (flit_now && dev->fm_enabled)
+		return;
+
+	pci_read_config_dword(dev, pos + PCI_DEV3_CTL, &dev3_ctl);
+	if (!(dev3_ctl & (PCI_DEV3_CTL_14BIT_TAG_REQ_EN |
+			  PCI_DEV3_CTL_14BIT_TAG_COMP_EN)))
+		return;
+
+	dev3_ctl &= ~(PCI_DEV3_CTL_14BIT_TAG_REQ_EN |
+		      PCI_DEV3_CTL_14BIT_TAG_COMP_EN);
+	pci_write_config_dword(dev, pos + PCI_DEV3_CTL, dev3_ctl);
+	pci_info(dev, "cleared 14-bit Tag enable: flit mode no longer active (DEV3_STA=%#010x)\n",
+		 dev3_sta);
+}
+
+/**
+ * pci_bridge_refresh_14bit_tag - Drop stale 14-Bit Tag enables across a link
+ * @bridge: PCIe bridge whose link may have changed mode
+ *
+ * Re-evaluate the bridge's own DEV3_CTL 14-Bit Tag enables against the
+ * live LNKSTA2.Flit_Mode, then walk the bridge's subordinate bus and do
+ * the same for every device that advertises 14-Bit Tag support.  Also
+ * refresh bus->flit_mode so the rest of the PCI core sees a consistent
+ * view of the link.
+ *
+ * Called from every kernel-visible link state change site:
+ *   - pci_bridge_wait_for_secondary_bus() (covers SBR, DPC release, slot
+ *     reset, AER bus reset, bridge D3cold->D0 resume).
+ *   - __pcie_update_link_speed() (covers manual retrain, bwctrl IRQ,
+ *     hotplug link status check, initial enumeration).
+ *
+ * Safe to call repeatedly; only writes hardware when the enable bits are
+ * set and flit mode is no longer active.
+ */
+void pci_bridge_refresh_14bit_tag(struct pci_dev *bridge)
+{
+	struct pci_bus *bus;
+	struct pci_dev *child;
+	u16 lnksta2 = 0;
+	bool flit_now;
+
+	if (!bridge || !pci_is_pcie(bridge))
+		return;
+
+	pcie_capability_read_word(bridge, PCI_EXP_LNKSTA2, &lnksta2);
+	flit_now = !!(lnksta2 & PCI_EXP_LNKSTA2_FLIT);
+
+	/*
+	 * Fix the bridge itself first.  The bridge is the requester for
+	 * outbound config/MMIO TLPs, so stale 14-bit Tag enables here are
+	 * what produce the post-reset Completion Timeout / Unexpected
+	 * Completion failure.
+	 */
+	__pci_dev_clear_stale_14bit_tag(bridge, flit_now);
+
+	bus = bridge->subordinate;
+	if (!bus)
+		return;
+
+	bus->flit_mode = flit_now;
+
+	/*
+	 * Walk the secondary bus.  pci_restore_dev3_state() only fires on
+	 * paths that go through pci_dev_restore(); DPC release, hotplug
+	 * link status updates, and similar paths do not.  Fix those too.
+	 */
+	down_read(&pci_bus_sem);
+	list_for_each_entry(child, &bus->devices, bus_list)
+		__pci_dev_clear_stale_14bit_tag(child, flit_now);
+	up_read(&pci_bus_sem);
+}
+
 static int pci_save_pcix_state(struct pci_dev *dev)
 {
 	int pos;
@@ -1735,6 +1928,10 @@ int pci_save_state(struct pci_dev *dev)
 	dev->state_saved = true;
 
 	i = pci_save_pcie_state(dev);
+	if (i != 0)
+		return i;
+
+	i = pci_save_dev3_state(dev);
 	if (i != 0)
 		return i;
 
@@ -1815,6 +2012,7 @@ static void pci_restore_config_space(struct pci_dev *pdev)
 void pci_restore_state(struct pci_dev *dev)
 {
 	pci_restore_pcie_state(dev);
+	pci_restore_dev3_state(dev);
 	pci_restore_pasid_state(dev);
 	pci_restore_pri_state(dev);
 	pci_restore_ats_state(dev);
@@ -4745,6 +4943,14 @@ int pci_bridge_wait_for_secondary_bus(struct pci_dev *dev, char *reset_type)
 		pci_dbg(dev, "waiting %d ms for downstream link\n", delay);
 		msleep(delay);
 
+		/*
+		 * The link has had a chance to come back; refresh the
+		 * bridge's (and subtree's) DEV3_CTL 14-Bit Tag enables
+		 * against the live LNKSTA2.Flit_Mode before we issue the
+		 * first config TLP to the child.
+		 */
+		pci_bridge_refresh_14bit_tag(dev);
+
 		if (!pci_dev_wait(child, reset_type, PCI_RESET_WAIT - delay))
 			return 0;
 
@@ -4771,6 +4977,13 @@ int pci_bridge_wait_for_secondary_bus(struct pci_dev *dev, char *reset_type)
 		pci_info(dev, "Data Link Layer Link Active not set in %d msec\n", delay);
 		return -ENOTTY;
 	}
+
+	/*
+	 * Link is up.  Refresh the bridge's (and subtree's) DEV3_CTL
+	 * 14-Bit Tag enables against the live LNKSTA2.Flit_Mode before
+	 * we issue the first config TLP to the child below.
+	 */
+	pci_bridge_refresh_14bit_tag(dev);
 
 	return pci_dev_wait(child, reset_type,
 			    PCIE_RESET_READY_POLL_MS - delay);

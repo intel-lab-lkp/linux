@@ -826,6 +826,30 @@ const char *pci_speed_string(enum pci_bus_speed speed)
 }
 EXPORT_SYMBOL_GPL(pci_speed_string);
 
+void __pcie_update_link_speed(struct pci_bus *bus,
+			      enum pcie_link_change_reason reason,
+			      u16 linksta, u16 linksta2)
+{
+	bus->cur_bus_speed = pcie_link_speed[linksta & PCI_EXP_LNKSTA_CLS];
+	bus->flit_mode = (linksta2 & PCI_EXP_LNKSTA2_FLIT) ? 1 : 0;
+
+	trace_pcie_link_event(bus,
+			      reason,
+			      FIELD_GET(PCI_EXP_LNKSTA_NLW, linksta),
+			      linksta & PCI_EXP_LNKSTA_LINK_STATUS_MASK);
+
+	/*
+	 * Re-evaluate DEV3_CTL 14-Bit Tag enables on this bridge and its
+	 * subordinate bus.  Any time bus->flit_mode is updated, the link
+	 * has just changed state; if flit mode is no longer active, the
+	 * bridge and downstream devices must drop their 14-Bit Tag enables
+	 * before further TLPs are issued, or the requester (the bridge)
+	 * will tag config/MMIO requests with 14-bit tags that the
+	 * completer can no longer echo back in non-flit mode.
+	 */
+	pci_bridge_refresh_14bit_tag(bus->self);
+}
+
 void pcie_update_link_speed(struct pci_bus *bus,
 			    enum pcie_link_change_reason reason)
 {
@@ -2320,11 +2344,19 @@ static void pci_dev3_init(struct pci_dev *pdev)
 {
 	u16 cap = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_DEV3);
 	u32 val = 0;
+	int err;
 
 	if (!cap)
 		return;
 	pci_read_config_dword(pdev, cap + PCI_DEV3_STA, &val);
 	pdev->fm_enabled = !!(val & PCI_DEV3_STA_SEGMENT);
+
+	/* Save buffer for DEV3_CTL only; DEV3_STA is RW1C and is not restored. */
+	err = pci_add_ext_cap_save_buffer(pdev, PCI_EXT_CAP_ID_DEV3,
+					  sizeof(u32));
+	if (err)
+		pci_warn(pdev,
+			 "unable to preallocate Device 3 save buffer\n");
 }
 
 /**
