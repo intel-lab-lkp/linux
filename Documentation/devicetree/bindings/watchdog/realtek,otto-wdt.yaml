@@ -25,11 +25,21 @@ allOf:
 
 properties:
   compatible:
-    enum:
-      - realtek,rtl8380-wdt
-      - realtek,rtl8390-wdt
-      - realtek,rtl9300-wdt
-      - realtek,rtl9310-wdt
+    oneOf:
+      - items:
+          - enum:
+              - realtek,rtl8380-wdt
+              - realtek,rtl8390-wdt
+              - realtek,rtl9300-wdt
+              - realtek,rtl9310-wdt
+          - const: realtek,otto-wdt
+      # Legacy without fallback, do not extend
+      - deprecated: true
+        enum:
+          - realtek,rtl8380-wdt
+          - realtek,rtl8390-wdt
+          - realtek,rtl9300-wdt
+          - realtek,rtl9310-wdt
 
   reg:
     maxItems: 1
@@ -74,7 +84,7 @@ unevaluatedProperties: false
 examples:
   - |
     watchdog: watchdog@3150 {
-        compatible = "realtek,rtl8380-wdt";
+        compatible = "realtek,rtl8380-wdt", "realtek,otto-wdt";
         reg = <0x3150 0xc>;
 
         realtek,reset-mode = "soc";
