@@ -483,6 +483,9 @@ struct xe_device {
 	/** @needs_flr_on_fini: requests function-reset on fini */
 	bool needs_flr_on_fini;
 
+	/** @in_reset: Indicates if device is in reset */
+	atomic_t in_reset;
+
 	/** @wedged: Struct to control Wedged States and mode */
 	struct {
 		/** @wedged.flag: Xe device faced a critical error and is now blocked. */
@@ -494,6 +497,9 @@ struct xe_device {
 		/** @wedged.inconsistent_reset: Inconsistent reset policy state between GTs */
 		bool inconsistent_reset;
 	} wedged;
+
+	/** @devres_group_id: id for devres group */
+	void *devres_group_id;
 
 	/** @bo_device: Struct to control async free of BOs */
 	struct xe_bo_dev {
