@@ -379,7 +379,8 @@ static int decode_choose_args(void **p, void *end, struct crush_map *c)
 			u32 bucket_index;
 
 			ceph_decode_32_safe(p, end, bucket_index, e_inval);
-			if (bucket_index >= arg_map->size)
+			if (bucket_index >= arg_map->size ||
+			    !c->buckets[bucket_index])
 				goto e_inval;
 
 			arg = &arg_map->args[bucket_index];
