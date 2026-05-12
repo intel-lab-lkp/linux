@@ -339,18 +339,12 @@ static void atmel_ecc_remove(struct i2c_client *client)
 	crypto_unregister_kpp(&atmel_ecdh_nist_p256);
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id atmel_ecc_dt_ids[] = {
-	{
-		.compatible = "atmel,atecc508a",
-	}, {
-		.compatible = "atmel,atecc608b",
-	}, {
-		/* sentinel */
-	}
+	{ .compatible = "atmel,atecc508a", },
+	{ .compatible = "atmel,atecc608b", },
+	{ }
 };
 MODULE_DEVICE_TABLE(of, atmel_ecc_dt_ids);
-#endif
 
 static const struct i2c_device_id atmel_ecc_id[] = {
 	{ "atecc508a" },
