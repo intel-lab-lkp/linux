@@ -13,6 +13,7 @@
 	compatible = "nuvoton,ma35d1-som", "nuvoton,ma35d1";
 
 	aliases {
+		i2c0 = &i2c2;
 		serial0 = &uart0;
 		serial11 = &uart11;
 		serial12 = &uart12;
@@ -53,6 +54,12 @@
 			   "integer",
 			   "integer",
 			   "integer";
+};
+
+&i2c1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_i2c1>;
+	status = "okay";
 };
 
 &pinctrl {
@@ -96,6 +103,14 @@
 				       <10 3 2>;
 			bias-disable;
 			power-source = <1>;
+		};
+	};
+
+	i2c-grp {
+		pinctrl_i2c1: i2c1-pins {
+			nuvoton,pins = <1 10 12>,
+				       <1 11 12>;
+			bias-disable;
 		};
 	};
 };
