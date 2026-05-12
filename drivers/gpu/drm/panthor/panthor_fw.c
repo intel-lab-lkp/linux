@@ -1087,9 +1087,29 @@ static void panthor_job_irq_handler(struct panthor_irq *pirq, u32 status)
 	}
 }
 
-static irqreturn_t panthor_job_irq_threaded_handler(int irq, void *data)
+static irqreturn_t panthor_job_irq_raw_handler(int irq, void *data)
 {
-	return panthor_irq_default_threaded_handler(data, panthor_job_irq_handler);
+	struct panthor_irq *pirq = data;
+
+	if (!gpu_read(pirq->iomem, INT_STAT))
+		return IRQ_NONE;
+
+	scoped_guard(spinlock_irqsave, &pirq->mask_lock) {
+		if (pirq->state != PANTHOR_IRQ_STATE_ACTIVE)
+			return IRQ_NONE;
+
+		pirq->state = PANTHOR_IRQ_STATE_PROCESSING;
+	}
+
+	/* We can use INT_STAT here, because we didn't mask the IRQs. */
+	panthor_job_irq_handler(pirq, gpu_read(pirq->iomem, INT_STAT));
+
+	scoped_guard(spinlock_irqsave, &pirq->mask_lock) {
+		if (pirq->state == PANTHOR_IRQ_STATE_PROCESSING)
+			pirq->state = PANTHOR_IRQ_STATE_ACTIVE;
+	}
+
+	return IRQ_HANDLED;
 }
 
 static int panthor_fw_start(struct panthor_device *ptdev)
@@ -1489,8 +1509,7 @@ int panthor_fw_init(struct panthor_device *ptdev)
 
 	ret = panthor_irq_request(ptdev, &fw->irq, irq, 0,
 				  ptdev->iomem + JOB_INT_BASE, "job",
-				  panthor_irq_default_raw_handler,
-				  panthor_job_irq_threaded_handler);
+				  panthor_job_irq_raw_handler, NULL);
 	if (ret) {
 		drm_err(&ptdev->base, "failed to request job irq");
 		return ret;
