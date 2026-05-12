@@ -487,7 +487,7 @@ static void ttm_pool_split_for_swap(struct ttm_pool *pool, struct page *p)
 /**
  * DOC: Partial backup and restoration of a struct ttm_tt.
  *
- * Swapout using ttm_backup_backup_page() and swapin using
+ * Swapout using ttm_backup_insert_folio() and swapin using
  * ttm_backup_copy_page() may fail.
  * The former most likely due to lack of swap-space or memory, the latter due
  * to lack of memory or because of signal interruption during waits.
@@ -1036,12 +1036,11 @@ long ttm_pool_backup(struct ttm_pool *pool, struct ttm_tt *tt,
 {
 	struct file *backup = tt->backup;
 	struct page *page;
-	unsigned long handle;
-	gfp_t alloc_gfp;
 	gfp_t gfp;
 	int ret = 0;
 	pgoff_t shrunken = 0;
-	pgoff_t i, num_pages;
+	pgoff_t i, num_pages, npages;
+	unsigned long j;
 
 	if (WARN_ON(ttm_tt_is_backed_up(tt)))
 		return -EINVAL;
@@ -1061,7 +1060,8 @@ long ttm_pool_backup(struct ttm_pool *pool, struct ttm_tt *tt,
 			unsigned int order;
 
 			page = tt->pages[i];
-			if (unlikely(!page)) {
+			if (unlikely(!page ||
+				     ttm_backup_page_ptr_is_handle(page))) {
 				num_pages = 1;
 				continue;
 			}
@@ -1089,34 +1089,63 @@ long ttm_pool_backup(struct ttm_pool *pool, struct ttm_tt *tt,
 	else
 		gfp = GFP_HIGHUSER;
 
-	alloc_gfp = GFP_KERNEL | __GFP_HIGH | __GFP_NOWARN | __GFP_RETRY_MAYFAIL;
-
 	num_pages = tt->num_pages;
 
 	/* Pretend doing fault injection by shrinking only half of the pages. */
 	if (IS_ENABLED(CONFIG_FAULT_INJECTION) && should_fail(&backup_fault_inject, 1))
 		num_pages = DIV_ROUND_UP(num_pages, 2);
 
-	for (i = 0; i < num_pages; ++i) {
-		s64 shandle;
+	for (i = 0; i < num_pages; i += npages) {
+		unsigned int order;
+		s64 handle;
 
+		npages = 1;
 		page = tt->pages[i];
 		if (unlikely(!page))
 			continue;
 
-		ttm_pool_split_for_swap(pool, page);
+		/* Already-handled entry from a previous attempt. */
+		if (unlikely(ttm_backup_page_ptr_is_handle(page)))
+			continue;
 
-		shandle = ttm_backup_backup_page(backup, page, flags->writeback, i,
-						 gfp, alloc_gfp);
-		if (shandle < 0) {
-			/* We allow partially shrunken tts */
-			ret = shandle;
+		order = ttm_pool_page_order(pool, page);
+		npages = 1UL << order;
+
+		/*
+		 * If fault injection truncated num_pages mid-compound, skip
+		 * the partial tail rather than inserting it.
+		 */
+		if (unlikely(i + npages > num_pages))
+			break;
+
+		/*
+		 * Transfer this page zero-copy into shmem.  page->private
+		 * stores the TTM order; clear it before inserting.
+		 */
+		page->private = 0;
+		handle = ttm_backup_insert_folio(backup, page_folio(page),
+						 order, flags->writeback,
+						 i, gfp);
+		if (unlikely(handle < 0)) {
+			if (order) {
+				page->private = order;
+				ttm_pool_split_for_swap(pool, page);
+				npages = 0;
+				continue;
+			}
+			ret = (int)handle;
 			break;
 		}
-		handle = shandle;
-		tt->pages[i] = ttm_backup_handle_to_page_ptr(handle);
-		__free_pages_gpu_account(page, 0, false);
-		shrunken++;
+
+		/*
+		 * NR_GPU_ACTIVE is node-only; use mod_node_page_state()
+		 * directly after the folio becomes memcg-charged.
+		 */
+		mod_node_page_state(page_pgdat(page), NR_GPU_ACTIVE, -(1 << order));
+		folio_put(page_folio(page));
+		for (j = 0; j < npages; j++)
+			tt->pages[i + j] = ttm_backup_handle_to_page_ptr(handle + j);
+		shrunken += npages;
 	}
 
 	return shrunken ? shrunken : ret;

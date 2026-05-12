@@ -6,7 +6,6 @@
 #include <drm/ttm/ttm_backup.h>
 
 #include <linux/export.h>
-#include <linux/page-flags.h>
 #include <linux/swap.h>
 
 /*
@@ -68,73 +67,50 @@ int ttm_backup_copy_page(struct file *backup, struct page *dst,
 }
 
 /**
- * ttm_backup_backup_page() - Backup a page
+ * ttm_backup_insert_folio() - Zero-copy insert of an isolated folio into backup.
  * @backup: The struct backup pointer to use.
- * @page: The page to back up.
- * @writeback: Whether to perform immediate writeback of the page.
- * This may have performance implications.
- * @idx: A unique integer for each page and each struct backup.
- * This allows the backup implementation to avoid managing
- * its address space separately.
- * @page_gfp: The gfp value used when the page was allocated.
- * This is used for accounting purposes.
- * @alloc_gfp: The gfp to be used when allocating memory.
+ * @folio: The folio to insert. Must be isolated (not on LRU), unlocked,
+ *         have exactly one reference (the caller's), and have no page-table
+ *         mappings.  The folio must not be swapbacked or in the swapcache,
+ *         and folio->private must have been cleared by the caller.
+ * @order: The allocation order of @folio.  If @order > 0 and @folio is not
+ *         already a large folio, it is promoted to a compound folio of this
+ *         order (see shmem_insert_folio()).  split_page() must NOT have been
+ *         called; tail-page refcounts must be 0.
+ * @writeback: Whether to attempt immediate writeback to swap after insertion.
+ *             Best-effort; failure is silently ignored.
+ * @idx: Page-cache index within @backup.  Must be aligned to (1 << @order).
+ * @folio_gfp: The gfp value used when the folio was allocated.
+ *             Used for memory-cgroup charging.
  *
- * Context: If called from reclaim context, the caller needs to
- * assert that the shrinker gfp has __GFP_FS set, to avoid
- * deadlocking on lock_page(). If @writeback is set to true and
- * called from reclaim context, the caller also needs to assert
- * that the shrinker gfp has __GFP_IO set, since without it,
- * we're not allowed to start backup IO.
+ * Context: May be called from reclaim context.  If @writeback is true, the
+ * caller must assert that the shrinker gfp has __GFP_IO set.
  *
- * Return: A handle on success. Negative error code on failure.
+ * The folio is transferred zero-copy into the shmem page cache.  On success
+ * the caller should release their reference with folio_put() and track the
+ * handle for later recovery via ttm_backup_copy_page() and release via
+ * ttm_backup_drop().  Handles for sub-pages of a compound folio follow
+ * sequentially: handle + j addresses sub-page j.
  *
- * Note: This function could be extended to back up a folio and
- * implementations would then split the folio internally if needed.
- * Drawback is that the caller would then have to keep track of
- * the folio size- and usage.
+ * Return: A positive handle on success. Negative error code on failure;
+ *         the folio is returned to its original non-compound state and the
+ *         caller retains ownership.
  */
 s64
-ttm_backup_backup_page(struct file *backup, struct page *page,
-		       bool writeback, pgoff_t idx, gfp_t page_gfp,
-		       gfp_t alloc_gfp)
+ttm_backup_insert_folio(struct file *backup, struct folio *folio,
+			unsigned int order, bool writeback, pgoff_t idx,
+			gfp_t folio_gfp)
 {
-	struct address_space *mapping = backup->f_mapping;
-	unsigned long handle = 0;
-	struct folio *to_folio;
 	int ret;
 
-	to_folio = shmem_read_folio_gfp(mapping, idx, alloc_gfp);
-	if (IS_ERR(to_folio))
-		return PTR_ERR(to_folio);
+	WARN_ON_ONCE(folio_get_private(folio));
+	ret = shmem_insert_folio(backup, folio, order, idx, writeback, folio_gfp);
+	if (ret)
+		return ret;
 
-	folio_mark_accessed(to_folio);
-	folio_lock(to_folio);
-	folio_mark_dirty(to_folio);
-	copy_highpage(folio_file_page(to_folio, idx), page);
-	handle = ttm_backup_shmem_idx_to_handle(idx);
-
-	if (writeback && !folio_mapped(to_folio) &&
-	    folio_clear_dirty_for_io(to_folio)) {
-		folio_set_reclaim(to_folio);
-		ret = shmem_writeout(to_folio, NULL, NULL);
-		if (!folio_test_writeback(to_folio))
-			folio_clear_reclaim(to_folio);
-		/*
-		 * If writeout succeeds, it unlocks the folio.	errors
-		 * are otherwise dropped, since writeout is only best
-		 * effort here.
-		 */
-		if (ret)
-			folio_unlock(to_folio);
-	} else {
-		folio_unlock(to_folio);
-	}
-
-	folio_put(to_folio);
-
-	return handle;
+	return ttm_backup_shmem_idx_to_handle(idx);
 }
+EXPORT_SYMBOL_GPL(ttm_backup_insert_folio);
 
 /**
  * ttm_backup_fini() - Free the struct backup resources after last use.
