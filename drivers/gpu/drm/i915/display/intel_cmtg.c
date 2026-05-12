@@ -448,3 +448,28 @@ void intel_cmtg_disable_interrupt(const struct intel_crtc_state *crtc_state)
 	intel_cmtg_mask_interrupt(crtc_state, true);
 	spin_unlock_irq(&display->irq.lock);
 }
+
+void intel_cmtg_set_hwgb(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
+	u32 breakeven_gb;
+	u32 dc5_exit_latency;
+	u32 line_time_us = 75;
+	u32 val;
+
+	if (crtc_state->linetime)
+		line_time_us = DIV_ROUND_UP(crtc_state->linetime, 8);
+
+	/* Break Even Guardband - DC3co Entry Latency / linetime )*/
+	breakeven_gb = DIV_ROUND_UP(55, line_time_us);
+
+	/* DC5 Exit Latency - DC3co Exit Latency / linetime ) */
+	dc5_exit_latency = DIV_ROUND_UP(40, line_time_us);
+
+	val = REG_FIELD_PREP(CMTG_HW_GB_BREAKEVEN_MASK, breakeven_gb) |
+	REG_FIELD_PREP(CMTG_HW_GB_DC5_EXIT_LATENCY_MASK, dc5_exit_latency) |
+	REG_FIELD_PREP(CMTG_HW_GB_UP_LW_BG_DIFF_MASK, 1);
+
+	intel_de_write(display, CMTG_HW_GB(cpu_transcoder), val);
+}
