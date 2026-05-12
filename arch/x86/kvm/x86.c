@@ -2737,6 +2737,9 @@ static void kvm_vcpu_write_tsc_offset(struct kvm_vcpu *vcpu, u64 l1_offset)
 
 static void kvm_vcpu_write_tsc_multiplier(struct kvm_vcpu *vcpu, u64 l1_multiplier)
 {
+	if (vcpu->arch.guest_tsc_protected)
+		return;
+
 	vcpu->arch.l1_tsc_scaling_ratio = l1_multiplier;
 
 	/* Userspace is changing the multiplier while L2 is active */
