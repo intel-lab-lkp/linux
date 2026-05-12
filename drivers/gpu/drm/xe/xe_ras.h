@@ -11,6 +11,7 @@
 struct xe_device;
 struct xe_sysctrl_event_response;
 
+void xe_ras_init(struct xe_device *xe);
 void xe_ras_counter_threshold_crossed(struct xe_device *xe,
 				      struct xe_sysctrl_event_response *response);
 int xe_ras_get_threshold(struct xe_device *xe, u32 severity, u32 component, u32 *threshold);

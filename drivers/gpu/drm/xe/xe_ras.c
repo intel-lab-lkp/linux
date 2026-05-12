@@ -4,6 +4,7 @@
  */
 
 #include "xe_device.h"
+#include "xe_drm_ras.h"
 #include "xe_pm.h"
 #include "xe_printk.h"
 #include "xe_ras.h"
@@ -221,3 +222,22 @@ int xe_ras_set_threshold(struct xe_device *xe, u32 severity, u32 component, u32 
 	       comp_to_str(counter.common.component), sev_to_str(counter.common.severity));
 	return 0;
 }
+
+/**
+ * xe_ras_init - Initialize Xe RAS
+ * @xe: xe device instance
+ *
+ * Initialize Xe RAS
+ */
+void xe_ras_init(struct xe_device *xe)
+{
+	int ret;
+
+	if (xe->info.platform != XE_PVC)
+		return;
+
+	ret = xe_drm_ras_init(xe);
+	if (ret)
+		drm_err(&xe->drm, "Failed to initialize xe_drm_ras %d\n", ret);
+}
+
