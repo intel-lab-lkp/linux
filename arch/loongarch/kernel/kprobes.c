@@ -12,8 +12,8 @@ DEFINE_PER_CPU(struct kprobe_ctlblk, kprobe_ctlblk);
 
 static void arch_prepare_ss_slot(struct kprobe *p)
 {
-	p->ainsn.insn[0] = *p->addr;
-	p->ainsn.insn[1] = KPROBE_SSTEPBP_INSN;
+	larch_insn_patch_text(p->ainsn.insn, *p->addr);
+	larch_insn_patch_text(p->ainsn.insn + 1, KPROBE_SSTEPBP_INSN);
 	p->ainsn.restore = (unsigned long)p->addr + LOONGARCH_INSN_SIZE;
 }
 NOKPROBE_SYMBOL(arch_prepare_ss_slot);
