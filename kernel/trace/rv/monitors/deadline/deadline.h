@@ -194,7 +194,10 @@ static void __maybe_unused handle_newtask(void *data, struct task_struct *task, 
 		da_create_storage(EXPAND_ID_TASK(task), NULL);
 }
 
-static void __maybe_unused handle_exit(void *data, struct task_struct *p, bool group_dead)
+/*
+ * Deallocation hook, use da_skip_deallocation() when not necessary
+ */
+static void handle_exit(void *data, struct task_struct *p, bool group_dead)
 {
 	if (p->policy == SCHED_DEADLINE)
 		da_destroy_storage(get_entity_id(&p->dl, DL_TASK, DL_TASK));

@@ -489,8 +489,11 @@ static inline monitor_target da_get_target_by_id(da_id_type id)
  * locks.
  * This function includes an RCU read-side critical section to synchronise
  * against da_monitor_destroy().
+ * NOTE: inline is omitted on purpose to let the compiler warn if this function
+ * is never referenced. For monitors that don't require a deallocation hook,
+ * da_skip_deallocation() can be used.
  */
-static inline void da_destroy_storage(da_id_type id)
+static void da_destroy_storage(da_id_type id)
 {
 	struct da_monitor_storage *mon_storage;
 
@@ -503,6 +506,15 @@ static inline void da_destroy_storage(da_id_type id)
 	hash_del_rcu(&mon_storage->node);
 	kfree_rcu(mon_storage, rcu);
 }
+
+/*
+ * da_skip_deallocation - explicitly mark a deallocation function as not required
+ *
+ * Only use when you are absolutely sure the monitor doesn't require a
+ * deallocation hook (i.e. it's not possible for an object to finish existing
+ * when the monitor is still running).
+ */
+#define da_skip_deallocation(hook) ((void)hook)
 
 static void da_monitor_reset_all(void)
 {
