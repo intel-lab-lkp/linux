@@ -237,6 +237,36 @@ unsigned long _find_last_bit(const unsigned long *addr, unsigned long size)
 EXPORT_SYMBOL(_find_last_bit);
 #endif
 
+#ifndef find_last_bit_range
+unsigned long _find_last_bit_range(const unsigned long *addr, unsigned long size,
+				unsigned long offset)
+{
+	unsigned long val, idx, start_idx;
+
+	if (unlikely(offset >= size))
+		return size;
+
+	val = BITMAP_LAST_WORD_MASK(size);
+	idx = (size - 1) / BITS_PER_LONG;
+	start_idx = offset / BITS_PER_LONG;
+
+	do {
+		val &= addr[idx];
+
+		if (idx == start_idx)
+			val &= BITMAP_FIRST_WORD_MASK(offset);
+
+		if (val)
+			return idx * BITS_PER_LONG + __fls(val);
+
+		val = ~0UL;
+	} while (idx-- > start_idx);
+
+	return size;
+}
+EXPORT_SYMBOL(_find_last_bit_range);
+#endif
+
 unsigned long find_next_clump8(unsigned long *clump, const unsigned long *addr,
 			       unsigned long size, unsigned long offset)
 {
