@@ -178,6 +178,9 @@ static DEFINE_PER_CPU(struct cgroup_rstat_base_cpu, root_rstat_base_cpu);
 /* the default hierarchy */
 struct cgroup_root cgrp_dfl_root = {
 	.cgrp.self.rstat_cpu = &root_rstat_cpu,
+#ifdef CONFIG_PSI
+	.cgrp.psi = &psi_system,
+#endif
 	.cgrp.rstat_base_cpu = &root_rstat_base_cpu,
 };
 EXPORT_SYMBOL_GPL(cgrp_dfl_root);
