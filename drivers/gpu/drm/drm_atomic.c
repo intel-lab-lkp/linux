@@ -47,6 +47,63 @@
 #include "drm_crtc_internal.h"
 #include "drm_internal.h"
 
+/**
+ * DOC: state lifetime
+ *
+ * &struct drm_atomic_commit represents an update to video pipeline
+ * state. It's a transient object that holds a state update as a
+ * collection of pointers to individual objects' states. &struct
+ * drm_atomic_commit has a much shorter lifetime than the objects'
+ * states, since it's only allocated while preparing, checking or
+ * committing the update, while object states are allocated when
+ * preparing the update and kept alive as long as they are active in the
+ * device.
+ *
+ * Their respective lifetimes are:
+ *
+ * - at reset time, the object reset implementation will allocate a new
+ *   default state and will store it in the object state pointer.
+ *
+ * - whenever a new update is needed:
+ *
+ *   + A new &struct drm_atomic_commit is allocated using
+ *     drm_atomic_commit_alloc().
+ *
+ *   + The current active state of all entities affected by the update
+ *     is copied into this new &struct drm_atomic_commit using
+ *     drm_atomic_get_plane_state(), drm_atomic_get_crtc_state(),
+ *     drm_atomic_get_connector_state(), or
+ *     drm_atomic_get_private_obj_state(). This new state can then be
+ *     modified.
+ *
+ *     At that point, &struct drm_atomic_commit stores three state
+ *     pointers for any affected entity: the "old" and "new" states, and
+ *     state_to_destroy. The old state is the state currently active in
+ *     the hardware, which is either the one initialized by reset() or a
+ *     newer one if a commit has been made. The new state is the state
+ *     we just allocated and we might eventually commit to the hardware.
+ *     The state_to_destroy points to the state we'll eventually have to
+ *     free when the drm_atomic_commit will be destroyed, and points to
+ *     the new state for now since the old state is still the active
+ *     state.
+ *
+ *   + After the state is populated, it is checked. If the check is
+ *     successful, the update is committed. Part of the commit is a call
+ *     to drm_atomic_helper_swap_state() which will turn the new states
+ *     into the active states. Doing so involves updating the object's
+ *     state pointer (&drm_crtc.state or similar) to point to the new
+ *     state, and state_to_destroy will now point to the old states,
+ *     that used to be active but aren't anymore.
+ *
+ *   + When the commit is done, and when all references to our &struct
+ *     drm_atomic_commit are put, drm_atomic_commit_clear() runs and
+ *     will free all state_to_destroy (ie. old states), and the &struct
+ *     drm_atomic_commit instance.
+ *
+ *   + Now, we don't have any active &struct drm_atomic_commit anymore,
+ *     and only the entity active states remain allocated.
+ */
+
 void __drm_crtc_commit_free(struct kref *kref)
 {
 	struct drm_crtc_commit *commit =
