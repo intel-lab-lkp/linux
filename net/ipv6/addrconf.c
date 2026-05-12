@@ -3666,6 +3666,9 @@ static int addrconf_notify(struct notifier_block *this, unsigned long event,
 		break;
 
 	case NETDEV_CHANGEMTU:
+		if (dev->reg_state == NETREG_UNREGISTERING)
+			break;
+
 		/* if MTU under IPV6_MIN_MTU stop IPv6 on this interface. */
 		if (dev->mtu < IPV6_MIN_MTU) {
 			addrconf_ifdown(dev, dev != net->loopback_dev);
@@ -3691,6 +3694,9 @@ static int addrconf_notify(struct notifier_block *this, unsigned long event,
 		fallthrough;
 	case NETDEV_UP:
 	case NETDEV_CHANGE:
+		if (dev->reg_state == NETREG_UNREGISTERING)
+			break;
+
 		if (idev && idev->cnf.disable_ipv6)
 			break;
 
