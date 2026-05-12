@@ -21,6 +21,15 @@
 #include <linux/workqueue.h>
 #include "atmel-i2c.h"
 
+#define ATMEL_I2C_COMMAND			0x03 /* packet function */
+
+/* Command opcode */
+#define ATMEL_I2C_OPCODE_ECDH			0x43
+#define ATMEL_I2C_OPCODE_GENKEY			0x40
+#define ATMEL_I2C_OPCODE_READ			0x02
+#define ATMEL_I2C_OPCODE_RANDOM			0x1b
+#define ATMEL_I2C_OPCODE_WRITE			0x12
+
 struct atmel_i2c_client_mgmt atmel_i2c_mgmt = {
 	.i2c_list_lock = __SPIN_LOCK_UNLOCKED(atmel_i2c_mgmt.i2c_list_lock),
 	.i2c_client_list = LIST_HEAD_INIT(atmel_i2c_mgmt.i2c_client_list),
@@ -96,56 +105,55 @@ struct i2c_client *atmel_i2c_client_alloc(enum atmel_i2c_capability cap)
 }
 EXPORT_SYMBOL(atmel_i2c_client_alloc);
 
+static int atmel_i2c_init_read_eeprom_cmd(struct atmel_i2c_cmd *cmd, u16 addr,
+					  enum atmel_i2c_eeprom_zones zone,
+					  const struct atmel_i2c_of_match_data *data)
+{
+	const struct atmel_i2c_max_exec_timings *timings = &data->timings;
+	size_t zone_size = data->eeprom_zone_size[zone];
+
+	if (addr > zone_size)
+		return -EINVAL;
+
+	cmd->word_addr = ATMEL_I2C_COMMAND;
+	cmd->opcode = ATMEL_I2C_OPCODE_READ;
+	cmd->param1 = zone;
+	cmd->param2 = cpu_to_le16(addr);
+	cmd->count = ATMEL_I2C_READ_COUNT;
+
+	atmel_i2c_checksum(cmd);
+
+	cmd->msecs = timings->max_exec_time_read;
+	cmd->rxsize = ATMEL_I2C_READ_RSP_SIZE;
+
+	return 0;
+}
+
 void atmel_i2c_init_read_config_cmd(struct atmel_i2c_cmd *cmd,
 				    const struct atmel_i2c_max_exec_timings *timings)
 {
-	cmd->word_addr = COMMAND;
-	cmd->opcode = OPCODE_READ;
+	cmd->word_addr = ATMEL_I2C_COMMAND;
+	cmd->opcode = ATMEL_I2C_OPCODE_READ;
 	/*
 	 * Read the word from Configuration zone that contains the lock bytes
 	 * (UserExtra, Selector, LockValue, LockConfig).
 	 */
 	cmd->param1 = CONFIGURATION_ZONE;
 	cmd->param2 = cpu_to_le16(DEVICE_LOCK_ADDR);
-	cmd->count = READ_COUNT;
+	cmd->count = ATMEL_I2C_READ_COUNT;
 
 	atmel_i2c_checksum(cmd);
 
 	cmd->msecs = timings->max_exec_time_read;
-	cmd->rxsize = READ_RSP_SIZE;
+	cmd->rxsize = ATMEL_I2C_READ_RSP_SIZE;
 }
 EXPORT_SYMBOL(atmel_i2c_init_read_config_cmd);
-
-int atmel_i2c_init_read_otp_cmd(struct atmel_i2c_cmd *cmd, u16 addr,
-				const struct atmel_i2c_max_exec_timings *timings)
-{
-	if (addr >= OTP_ZONE_SIZE / 4)
-		return -EINVAL;
-
-	cmd->word_addr = COMMAND;
-	cmd->opcode = OPCODE_READ;
-	/*
-	 * Read the word from OTP zone that may contain e.g. serial
-	 * numbers or similar if persistently pre-initialized and locked
-	 */
-	cmd->param1 = OTP_ZONE;
-	cmd->param2 = cpu_to_le16(addr);
-	cmd->count = READ_COUNT;
-
-	atmel_i2c_checksum(cmd);
-
-	cmd->msecs = timings->max_exec_time_read;
-	cmd->rxsize = READ_RSP_SIZE;
-
-	return 0;
-}
-EXPORT_SYMBOL(atmel_i2c_init_read_otp_cmd);
 
 void atmel_i2c_init_random_cmd(struct atmel_i2c_cmd *cmd,
 			       const struct atmel_i2c_max_exec_timings *timings)
 {
-	cmd->word_addr = COMMAND;
-	cmd->opcode = OPCODE_RANDOM;
+	cmd->word_addr = ATMEL_I2C_COMMAND;
+	cmd->opcode = ATMEL_I2C_OPCODE_RANDOM;
 	cmd->param1 = 0;
 	cmd->param2 = 0;
 	cmd->count = RANDOM_COUNT;
@@ -160,9 +168,9 @@ EXPORT_SYMBOL(atmel_i2c_init_random_cmd);
 void atmel_i2c_init_genkey_cmd(struct atmel_i2c_cmd *cmd, u16 keyid,
 			       const struct atmel_i2c_max_exec_timings *timings)
 {
-	cmd->word_addr = COMMAND;
+	cmd->word_addr = ATMEL_I2C_COMMAND;
 	cmd->count = GENKEY_COUNT;
-	cmd->opcode = OPCODE_GENKEY;
+	cmd->opcode = ATMEL_I2C_OPCODE_GENKEY;
 	cmd->param1 = GENKEY_MODE_PRIVATE;
 	/* a random private key will be generated and stored in slot keyID */
 	cmd->param2 = cpu_to_le16(keyid);
@@ -180,9 +188,9 @@ int atmel_i2c_init_ecdh_cmd(struct atmel_i2c_cmd *cmd,
 {
 	size_t copied;
 
-	cmd->word_addr = COMMAND;
+	cmd->word_addr = ATMEL_I2C_COMMAND;
 	cmd->count = ECDH_COUNT;
-	cmd->opcode = OPCODE_ECDH;
+	cmd->opcode = ATMEL_I2C_OPCODE_ECDH;
 	cmd->param1 = ECDH_PREFIX_MODE;
 	/* private key slot */
 	cmd->param2 = cpu_to_le16(DATA_SLOT_2);
@@ -300,6 +308,81 @@ int atmel_i2c_register_rng(struct atmel_i2c_client_priv *i2c_priv,
 	return devm_hwrng_register(dev, &i2c_priv->hwrng);
 }
 EXPORT_SYMBOL(atmel_i2c_register_rng);
+
+static int atmel_i2c_eeprom_read(struct i2c_client *client, u16 addr,
+				 enum atmel_i2c_eeprom_zones zone, u8 *buf)
+{
+	struct atmel_i2c_client_priv *i2c_priv = i2c_get_clientdata(client);
+	const struct atmel_i2c_of_match_data *data = i2c_priv->data;
+	struct atmel_i2c_cmd *cmd;
+	int ret = -1;
+
+	cmd = kmalloc_obj(*cmd);
+	if (!cmd)
+		return -ENOMEM;
+
+	ret = atmel_i2c_init_read_eeprom_cmd(cmd, addr, zone, data);
+	if (ret < 0) {
+		dev_err(&client->dev, "failed, invalid eeprom address %04X\n",
+			addr);
+		goto err;
+	}
+
+	ret = atmel_i2c_send_receive(client, cmd);
+	if (ret)
+		goto err;
+
+	if (cmd->data[0] == 0xff) {
+		dev_err(&client->dev, "failed, device not ready\n");
+		ret = -EINVAL;
+		goto err;
+	}
+
+	memcpy(buf, cmd->data + RSP_DATA_IDX, 4);
+
+err:
+	kfree(cmd);
+	return ret;
+}
+
+ssize_t atmel_i2c_eeprom_display(struct device *dev,
+				 struct device_attribute *attr,
+				 char *buf,
+				 enum atmel_i2c_eeprom_zones zone)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	const struct atmel_i2c_client_priv *i2c_priv = i2c_get_clientdata(client);
+	const struct atmel_i2c_of_match_data *data = i2c_priv->data;
+	const size_t *eeprom = data->eeprom_zone_size;
+	u16 block_addr;
+	u8 *eeprom_buf;
+	ssize_t len = 0;
+	int i, ret = 0;
+
+	eeprom_buf = kcalloc(eeprom[zone], sizeof(*eeprom_buf), GFP_KERNEL);
+	if (!eeprom_buf)
+		return -ENOMEM;
+
+	for (block_addr = 0; block_addr < eeprom[zone] / 4; block_addr++) {
+		ret = atmel_i2c_eeprom_read(client, block_addr, zone,
+					    eeprom_buf + block_addr * 4);
+		if (ret < 0) {
+			dev_err(dev, "failed to read %s zone\n",
+				zone == ATMEL_EEPROM_CONFIG_ZONE ? "CONFIG"
+				: (zone == ATMEL_EEPROM_OTP_ZONE ? "OTP" : "DATA"));
+			goto err;
+		}
+	}
+
+	for (i = 0; i < eeprom[zone]; i++)
+		len += sysfs_emit_at(buf, len, "%02X", eeprom_buf[i]);
+	len += sysfs_emit_at(buf, len, "\n");
+	ret = len;
+err:
+	kfree(eeprom_buf);
+	return ret;
+}
+EXPORT_SYMBOL(atmel_i2c_eeprom_display);
 
 /*
  * After wake and after execution of a command, there will be error, status, or

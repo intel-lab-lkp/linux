@@ -12,7 +12,6 @@
 
 #define ATMEL_ECC_PRIORITY		300
 
-#define COMMAND				0x03 /* packet function */
 #define SLEEP_TOKEN			0x01
 #define WAKE_TOKEN_MAX_SIZE		8
 
@@ -30,7 +29,7 @@
 #define ECDH_RSP_SIZE			(32 + CMD_OVERHEAD_SIZE)
 #define GENKEY_RSP_SIZE			(ATMEL_ECC_PUBKEY_SIZE + \
 					 CMD_OVERHEAD_SIZE)
-#define READ_RSP_SIZE			(4 + CMD_OVERHEAD_SIZE)
+#define ATMEL_I2C_READ_RSP_SIZE		(4 + CMD_OVERHEAD_SIZE)
 #define RANDOM_RSP_SIZE			(32 + CMD_OVERHEAD_SIZE)
 #define MAX_RSP_SIZE			GENKEY_RSP_SIZE
 
@@ -57,6 +56,13 @@ struct atmel_i2c_cmd {
 	u16 rxsize;
 } __packed;
 
+/* Definitions for eeprom organization */
+enum atmel_i2c_eeprom_zones {
+	ATMEL_EEPROM_CONFIG_ZONE = 0,
+	ATMEL_EEPROM_OTP_ZONE = 1,
+	ATMEL_EEPROM_DATA_ZONE = 2,
+};
+
 struct atmel_i2c_max_exec_timings {
 	unsigned int max_exec_time_genkey;
 	unsigned int max_exec_time_ecdh;
@@ -68,6 +74,7 @@ struct atmel_i2c_max_exec_timings {
 struct atmel_i2c_of_match_data {
 	const unsigned short needs_legacy_hwrng;
 	struct atmel_i2c_max_exec_timings timings;
+	size_t eeprom_zone_size[3]; /* all atmel devices have three zones */
 };
 
 /* Status/Error codes */
@@ -77,10 +84,6 @@ struct atmel_i2c_of_match_data {
 
 /* Definitions for eeprom organization */
 #define CONFIGURATION_ZONE		0
-#define OTP_ZONE			1
-
-/* Definitions for eeprom zone sizes */
-#define OTP_ZONE_SIZE			64
 
 /* Definitions for Indexes common to all commands */
 #define RSP_DATA_IDX			1 /* buffer index of data in response */
@@ -101,14 +104,8 @@ struct atmel_i2c_of_match_data {
 /* Wake Low duration */
 #define TWLO_USEC			60
 
-/* Command opcode */
-#define OPCODE_ECDH			0x43
-#define OPCODE_GENKEY			0x40
-#define OPCODE_READ			0x02
-#define OPCODE_RANDOM			0x1b
-
 /* Definitions for the READ Command */
-#define READ_COUNT			7
+#define ATMEL_I2C_READ_COUNT		7
 
 /* Definitions for the RANDOM Command */
 #define RANDOM_COUNT			7
@@ -200,8 +197,6 @@ int atmel_i2c_send_receive(struct i2c_client *client, struct atmel_i2c_cmd *cmd)
 
 void atmel_i2c_init_read_config_cmd(struct atmel_i2c_cmd *cmd,
 				    const struct atmel_i2c_max_exec_timings *timings);
-int atmel_i2c_init_read_otp_cmd(struct atmel_i2c_cmd *cmd, u16 addr,
-				const struct atmel_i2c_max_exec_timings *timings);
 void atmel_i2c_init_random_cmd(struct atmel_i2c_cmd *cmd,
 			       const struct atmel_i2c_max_exec_timings *timings);
 void atmel_i2c_init_genkey_cmd(struct atmel_i2c_cmd *cmd, u16 keyid,
@@ -211,6 +206,11 @@ int atmel_i2c_init_ecdh_cmd(struct atmel_i2c_cmd *cmd,
 			    const struct atmel_i2c_max_exec_timings *timings);
 int atmel_i2c_register_rng(struct atmel_i2c_client_priv *i2c_priv,
 			   struct device *dev);
+
+ssize_t atmel_i2c_eeprom_display(struct device *dev,
+				 struct device_attribute *attr,
+				 char *buf,
+				 enum atmel_i2c_eeprom_zones zone);
 
 struct i2c_client *atmel_i2c_client_alloc(enum atmel_i2c_capability cap);
 void atmel_i2c_unregister_client(struct atmel_i2c_client_priv *i2c_priv);

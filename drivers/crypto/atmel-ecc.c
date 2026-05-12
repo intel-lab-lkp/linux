@@ -23,6 +23,22 @@
 #include <crypto/kpp.h>
 #include "atmel-i2c.h"
 
+static ssize_t otp_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return atmel_i2c_eeprom_display(dev, attr, buf, ATMEL_EEPROM_OTP_ZONE);
+}
+static DEVICE_ATTR_RO(otp);
+
+static struct attribute *atmel_ecc508a_attrs[] = {
+	&dev_attr_otp.attr,
+	NULL
+};
+
+static const struct attribute_group atmel_ecc508a_groups = {
+	.name = "atecc508a",
+	.attrs = atmel_ecc508a_attrs,
+};
+
 /**
  * struct atmel_ecdh_ctx - transformation context
  * @client     : pointer to i2c client device
@@ -306,6 +322,18 @@ static int atmel_ecc_probe(struct i2c_client *client)
 		      &atmel_i2c_mgmt.i2c_client_list);
 	spin_unlock(&atmel_i2c_mgmt.i2c_list_lock);
 
+	/* EEPROM read out */
+	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
+		ret = -ENODEV;
+		goto err_list_del;
+	}
+
+	ret = sysfs_create_group(&client->dev.kobj, &atmel_ecc508a_groups);
+	if (ret) {
+		dev_err(&client->dev, "failed to register sysfs entry\n");
+		goto err_list_del;
+	}
+
 	/* register rng */
 	ret = atmel_i2c_register_rng(i2c_priv, &client->dev);
 	if (ret) {
@@ -326,6 +354,7 @@ static int atmel_ecc_probe(struct i2c_client *client)
 	goto done;
 
 err_list_del:
+	sysfs_remove_group(&client->dev.kobj, &atmel_ecc508a_groups);
 	spin_lock(&atmel_i2c_mgmt.i2c_list_lock);
 	list_del(&i2c_priv->i2c_client_list_node);
 	spin_unlock(&atmel_i2c_mgmt.i2c_list_lock);
@@ -361,6 +390,8 @@ static void atmel_ecc_remove(struct i2c_client *client)
 		kfree((void *)i2c_priv->hwrng.priv);
 		i2c_priv->hwrng.priv = 0;
 	}
+
+	sysfs_remove_group(&client->dev.kobj, &atmel_ecc508a_groups);
 }
 
 static const struct atmel_i2c_of_match_data atecc508a_match_data = {
@@ -370,6 +401,11 @@ static const struct atmel_i2c_of_match_data atecc508a_match_data = {
 		.max_exec_time_random = 23,
 		.max_exec_time_read = 1,
 		.max_exec_time_write = 42,
+	},
+	.eeprom_zone_size = {
+		[ATMEL_EEPROM_CONFIG_ZONE] = 128,
+		[ATMEL_EEPROM_OTP_ZONE] = 64,
+		[ATMEL_EEPROM_DATA_ZONE] = 1208
 	},
 };
 

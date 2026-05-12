@@ -19,57 +19,10 @@
 #include <linux/workqueue.h>
 #include "atmel-i2c.h"
 
-static int atmel_sha204a_otp_read(struct i2c_client *client, u16 addr, u8 *otp)
-{
-	struct atmel_i2c_client_priv *i2c_priv = i2c_get_clientdata(client);
-	const struct atmel_i2c_of_match_data *data = i2c_priv->data;
-	struct atmel_i2c_cmd cmd;
-	int ret;
-
-	ret = atmel_i2c_init_read_otp_cmd(&cmd, addr, &data->timings);
-	if (ret < 0) {
-		dev_err(&client->dev, "failed, invalid otp address %04X\n",
-			addr);
-		return ret;
-	}
-
-	ret = atmel_i2c_send_receive(client, &cmd);
-	if (ret < 0) {
-		dev_err(&client->dev, "failed to read otp at %04X\n", addr);
-		return ret;
-	}
-
-	if (cmd.data[0] == 0xff) {
-		dev_err(&client->dev, "failed, device not ready\n");
-		return -EIO;
-	}
-
-	memcpy(otp, cmd.data+1, 4);
-
-	return ret;
-}
-
 static ssize_t otp_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
-	u16 addr;
-	u8 otp[OTP_ZONE_SIZE];
-	struct i2c_client *client = to_i2c_client(dev);
-	ssize_t len = 0;
-	int i, ret;
-
-	for (addr = 0; addr < OTP_ZONE_SIZE / 4; addr++) {
-		ret = atmel_sha204a_otp_read(client, addr, otp + addr * 4);
-		if (ret < 0) {
-			dev_err(dev, "failed to read otp zone\n");
-			return ret;
-		}
-	}
-
-	for (i = 0; i < OTP_ZONE_SIZE; i++)
-		len += sysfs_emit_at(buf, len, "%02X", otp[i]);
-	len += sysfs_emit_at(buf, len, "\n");
-	return len;
+	return atmel_i2c_eeprom_display(dev, attr, buf, ATMEL_EEPROM_OTP_ZONE);
 }
 static DEVICE_ATTR_RO(otp);
 
@@ -109,6 +62,12 @@ static int atmel_sha204a_probe(struct i2c_client *client)
 	list_add_tail(&i2c_priv->i2c_client_list_node,
 		      &atmel_i2c_mgmt.i2c_client_list);
 	spin_unlock(&atmel_i2c_mgmt.i2c_list_lock);
+
+	/* EEPROM read out */
+	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
+		ret = -ENODEV;
+		goto err_list_del;
+	}
 
 	ret = sysfs_create_group(&client->dev.kobj, &atmel_sha204a_groups);
 	if (ret) {
@@ -157,6 +116,11 @@ static const struct atmel_i2c_of_match_data atsha204_match_data = {
 		.max_exec_time_read = 4,
 		.max_exec_time_write = 42,
 	},
+	.eeprom_zone_size = {
+		[ATMEL_EEPROM_CONFIG_ZONE] = 88,
+		[ATMEL_EEPROM_OTP_ZONE] = 64,
+		[ATMEL_EEPROM_DATA_ZONE] = 512
+	},
 	/*
 	 * According to review by Bill Cox [1], the ATSHA204 has very low entropy.
 	 * [1] https://www.metzdowd.com/pipermail/cryptography/2014-December/023858.html
@@ -170,6 +134,11 @@ static const struct atmel_i2c_of_match_data atsha204a_match_data = {
 		.max_exec_time_random = 50,
 		.max_exec_time_read = 4,
 		.max_exec_time_write = 42,
+	},
+	.eeprom_zone_size = {
+		[ATMEL_EEPROM_CONFIG_ZONE] = 88,
+		[ATMEL_EEPROM_OTP_ZONE] = 64,
+		[ATMEL_EEPROM_DATA_ZONE] = 512
 	},
 };
 
