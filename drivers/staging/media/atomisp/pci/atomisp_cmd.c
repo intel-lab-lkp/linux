@@ -14,6 +14,7 @@
 #include <linux/kernel.h>
 #include <linux/kfifo.h>
 #include <linux/pm_runtime.h>
+#include <linux/overflow.h>
 #include <linux/timer.h>
 
 #include <asm/iosf_mbi.h>
@@ -2570,6 +2571,29 @@ int atomisp_css_cp_dvs2_coefs(struct atomisp_sub_device *asd,
 	return 0;
 }
 
+static int atomisp_dvs_6axis_size(struct ia_css_dvs_6axis_config *config,
+				  u32 width_y, u32 height_y,
+				  u32 width_uv, u32 height_uv,
+				  size_t *y_size, size_t *uv_size)
+{
+	if (config->width_y != width_y ||
+	    config->height_y != height_y ||
+	    config->width_uv != width_uv ||
+	    config->height_uv != height_uv)
+		return -EINVAL;
+
+	*y_size = array3_size(width_y, height_y, sizeof(*config->xcoords_y));
+	if (*y_size == SIZE_MAX)
+		return -EINVAL;
+
+	*uv_size = array3_size(width_uv, height_uv,
+			       sizeof(*config->xcoords_uv));
+	if (*uv_size == SIZE_MAX)
+		return -EINVAL;
+
+	return 0;
+}
+
 int atomisp_cp_dvs_6axis_config(struct atomisp_sub_device *asd,
 				struct atomisp_dvs_6axis_config *source_6axis_config,
 				struct atomisp_css_params *css_param,
@@ -2582,6 +2606,8 @@ int atomisp_cp_dvs_6axis_config(struct atomisp_sub_device *asd,
 	struct ia_css_dvs_grid_info *dvs_grid_info =
 	    atomisp_css_get_dvs_grid_info(&asd->params.curr_grid_info);
 	int ret = -EFAULT;
+	size_t y_size;
+	size_t uv_size;
 
 	if (!stream) {
 		dev_err(asd->isp->dev, "%s: internal error!", __func__);
@@ -2628,35 +2654,32 @@ int atomisp_cp_dvs_6axis_config(struct atomisp_sub_device *asd,
 				return -ENOMEM;
 		}
 
+		ret = atomisp_dvs_6axis_size(dvs_6axis_config,
+					     t_6axis_config.width_y,
+					     t_6axis_config.height_y,
+					     t_6axis_config.width_uv,
+					     t_6axis_config.height_uv,
+					     &y_size, &uv_size);
+		if (ret)
+			goto error;
+
 		dvs_6axis_config->exp_id = t_6axis_config.exp_id;
 
 		if (copy_from_compatible(dvs_6axis_config->xcoords_y,
 					t_6axis_config.xcoords_y,
-					t_6axis_config.width_y *
-					t_6axis_config.height_y *
-					sizeof(*dvs_6axis_config->xcoords_y),
-					from_user))
+					y_size, from_user))
 			goto error;
 		if (copy_from_compatible(dvs_6axis_config->ycoords_y,
 					t_6axis_config.ycoords_y,
-					t_6axis_config.width_y *
-					t_6axis_config.height_y *
-					sizeof(*dvs_6axis_config->ycoords_y),
-					from_user))
+					y_size, from_user))
 			goto error;
 		if (copy_from_compatible(dvs_6axis_config->xcoords_uv,
 					t_6axis_config.xcoords_uv,
-					t_6axis_config.width_uv *
-					t_6axis_config.height_uv *
-					sizeof(*dvs_6axis_config->xcoords_uv),
-					from_user))
+					uv_size, from_user))
 			goto error;
 		if (copy_from_compatible(dvs_6axis_config->ycoords_uv,
 					t_6axis_config.ycoords_uv,
-					t_6axis_config.width_uv *
-					t_6axis_config.height_uv *
-					sizeof(*dvs_6axis_config->ycoords_uv),
-					from_user))
+					uv_size, from_user))
 			goto error;
 	} else {
 		if (old_6axis_config &&
@@ -2680,35 +2703,32 @@ int atomisp_cp_dvs_6axis_config(struct atomisp_sub_device *asd,
 			}
 		}
 
+		ret = atomisp_dvs_6axis_size(dvs_6axis_config,
+					     source_6axis_config->width_y,
+					     source_6axis_config->height_y,
+					     source_6axis_config->width_uv,
+					     source_6axis_config->height_uv,
+					     &y_size, &uv_size);
+		if (ret)
+			goto error;
+
 		dvs_6axis_config->exp_id = source_6axis_config->exp_id;
 
 		if (copy_from_compatible(dvs_6axis_config->xcoords_y,
 					source_6axis_config->xcoords_y,
-					source_6axis_config->width_y *
-					source_6axis_config->height_y *
-					sizeof(*source_6axis_config->xcoords_y),
-					from_user))
+					y_size, from_user))
 			goto error;
 		if (copy_from_compatible(dvs_6axis_config->ycoords_y,
 					source_6axis_config->ycoords_y,
-					source_6axis_config->width_y *
-					source_6axis_config->height_y *
-					sizeof(*source_6axis_config->ycoords_y),
-					from_user))
+					y_size, from_user))
 			goto error;
 		if (copy_from_compatible(dvs_6axis_config->xcoords_uv,
 					source_6axis_config->xcoords_uv,
-					source_6axis_config->width_uv *
-					source_6axis_config->height_uv *
-					sizeof(*source_6axis_config->xcoords_uv),
-					from_user))
+					uv_size, from_user))
 			goto error;
 		if (copy_from_compatible(dvs_6axis_config->ycoords_uv,
 					source_6axis_config->ycoords_uv,
-					source_6axis_config->width_uv *
-					source_6axis_config->height_uv *
-					sizeof(*source_6axis_config->ycoords_uv),
-					from_user))
+					uv_size, from_user))
 			goto error;
 	}
 	css_param->dvs_6axis = dvs_6axis_config;
