@@ -669,6 +669,22 @@ static int it66121_set_mute(struct it66121_ctx *ctx, bool mute)
 			    IT66121_PKT_GEN_CTRL_ON | IT66121_PKT_GEN_CTRL_RPT);
 }
 
+static void it66121_set_tx_mode(struct it66121_ctx *ctx)
+{
+	mutex_lock(&ctx->lock);
+
+	/* Enable AVI infoframe */
+	if (regmap_write(ctx->regmap, IT66121_AVI_INFO_PKT_REG,
+			 IT66121_AVI_INFO_PKT_ON | IT66121_AVI_INFO_PKT_RPT))
+		goto unlock;
+
+	/* Set TX mode to HDMI */
+	regmap_write(ctx->regmap, IT66121_HDMI_MODE_REG, IT66121_HDMI_MODE_HDMI);
+
+unlock:
+	mutex_unlock(&ctx->lock);
+}
+
 #define MAX_OUTPUT_SEL_FORMATS	1
 
 static u32 *it66121_bridge_atomic_get_output_bus_fmts(struct drm_bridge *bridge,
@@ -729,6 +745,8 @@ static void it66121_bridge_enable(struct drm_bridge *bridge,
 	ctx->connector = drm_atomic_get_new_connector_for_encoder(state, bridge->encoder);
 
 	it66121_set_mute(ctx, false);
+
+	it66121_set_tx_mode(ctx);
 }
 
 static void it66121_bridge_disable(struct drm_bridge *bridge,
