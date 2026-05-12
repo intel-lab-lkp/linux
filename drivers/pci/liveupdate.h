@@ -18,6 +18,13 @@ bool pci_liveupdate_inherit_buses(void);
 void pci_liveupdate_init_acs(struct pci_dev *dev);
 bool pci_liveupdate_inherit_acs(struct pci_dev *dev);
 bool pci_liveupdate_inherit_ari(struct pci_dev *dev);
+
+static inline bool pci_liveupdate_is_outgoing(struct pci_dev *dev)
+{
+	guard(read_lock)(&dev->liveupdate.lock);
+	pci_WARN_ONCE(dev, !dev->liveupdate.frozen, "Preservation status is unstable!\n");
+	return dev->liveupdate.outgoing;
+}
 #else
 static inline void pci_liveupdate_setup_device(struct pci_dev *dev)
 {
@@ -46,6 +53,11 @@ static inline bool pci_liveupdate_inherit_acs(struct pci_dev *dev)
 }
 
 static inline bool pci_liveupdate_inherit_ari(struct pci_dev *dev)
+{
+	return false;
+}
+
+static inline bool pci_liveupdate_is_outgoing(struct pci_dev *dev)
 {
 	return false;
 }
