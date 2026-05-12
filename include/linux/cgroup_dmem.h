@@ -14,6 +14,21 @@ struct dmem_cgroup_pool_state;
 /* Opaque definition of a cgroup region, used internally */
 struct dmem_cgroup_region;
 
+/**
+ * typedef dmem_cgroup_reclaim_fn_t - Reclaim callback for a dmem cgroup region.
+ * @pool: The cgroup pool that needs memory reclaimed.
+ * @target_bytes: Minimum number of bytes the driver should attempt to free.
+ * @priv: Private data registered with dmem_cgroup_region_set_reclaim().
+ *
+ * Called by the dmem cgroup controller when dmem.max is set below the current
+ * usage of @pool. The driver should evict at least @target_bytes of memory
+ * from @pool. May be called multiple times if usage remains above the limit.
+ *
+ * Return: 0 if progress was made, negative error code otherwise.
+ */
+typedef int (*dmem_cgroup_reclaim_fn_t)(struct dmem_cgroup_pool_state *pool,
+					u64 target_bytes, void *priv);
+
 #if IS_ENABLED(CONFIG_CGROUP_DMEM)
 struct dmem_cgroup_region *dmem_cgroup_register_region(u64 size, const char *name_fmt, ...) __printf(2,3);
 void dmem_cgroup_unregister_region(struct dmem_cgroup_region *region);
@@ -26,6 +41,9 @@ bool dmem_cgroup_state_evict_valuable(struct dmem_cgroup_pool_state *limit_pool,
 				      bool ignore_low, bool *ret_hit_low);
 
 void dmem_cgroup_pool_state_put(struct dmem_cgroup_pool_state *pool);
+void dmem_cgroup_region_set_reclaim(struct dmem_cgroup_region *region,
+				    dmem_cgroup_reclaim_fn_t reclaim,
+				    void *priv);
 #else
 static inline __printf(2,3) struct dmem_cgroup_region *
 dmem_cgroup_register_region(u64 size, const char *name_fmt, ...)
@@ -60,6 +78,12 @@ bool dmem_cgroup_state_evict_valuable(struct dmem_cgroup_pool_state *limit_pool,
 }
 
 static inline void dmem_cgroup_pool_state_put(struct dmem_cgroup_pool_state *pool)
+{ }
+
+static inline void
+dmem_cgroup_region_set_reclaim(struct dmem_cgroup_region *region,
+			       dmem_cgroup_reclaim_fn_t reclaim,
+			       void *priv)
 { }
 
 #endif
