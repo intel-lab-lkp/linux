@@ -491,6 +491,7 @@ int panthor_pwr_init(struct panthor_device *ptdev)
 	err = panthor_irq_request(
 		ptdev, &pwr->irq, irq, PWR_INTERRUPTS_MASK,
 		pwr->iomem + PWR_INT_BASE, "pwr",
+		panthor_irq_default_raw_handler,
 		panthor_pwr_irq_threaded_handler);
 	if (err)
 		return err;

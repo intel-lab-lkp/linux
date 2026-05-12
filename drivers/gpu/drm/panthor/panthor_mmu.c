@@ -3266,6 +3266,7 @@ int panthor_mmu_init(struct panthor_device *ptdev)
 	ret = panthor_irq_request(ptdev, &mmu->irq, irq,
 				  panthor_mmu_fault_mask(ptdev, ~0),
 				  ptdev->iomem + MMU_INT_BASE, "mmu",
+				  panthor_irq_default_raw_handler,
 				  panthor_mmu_irq_threaded_handler);
 	if (ret)
 		return ret;

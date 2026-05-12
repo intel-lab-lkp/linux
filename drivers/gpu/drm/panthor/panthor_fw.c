@@ -1483,6 +1483,7 @@ int panthor_fw_init(struct panthor_device *ptdev)
 
 	ret = panthor_irq_request(ptdev, &fw->irq, irq, 0,
 				  ptdev->iomem + JOB_INT_BASE, "job",
+				  panthor_irq_default_raw_handler,
 				  panthor_job_irq_threaded_handler);
 	if (ret) {
 		drm_err(&ptdev->base, "failed to request job irq");

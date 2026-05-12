@@ -672,6 +672,7 @@ static inline void panthor_irq_disable_events(struct panthor_irq *pirq, u32 mask
 static inline int
 panthor_irq_request(struct panthor_device *ptdev, struct panthor_irq *pirq,
 		    int irq, u32 mask, void __iomem *iomem, const char *name,
+		    irqreturn_t (*raw_handler)(int, void *data),
 		    irqreturn_t (*threaded_handler)(int, void *data))
 {
 	const char *full_name;
@@ -687,9 +688,13 @@ panthor_irq_request(struct panthor_device *ptdev, struct panthor_irq *pirq,
 		return -ENOMEM;
 
 	panthor_irq_resume(pirq);
-	return devm_request_threaded_irq(ptdev->base.dev, irq,
-					 panthor_irq_default_raw_handler,
-					 threaded_handler,
+
+	if (!threaded_handler) {
+		return devm_request_irq(ptdev->base.dev, irq, raw_handler,
+					IRQF_SHARED, full_name, pirq);
+	}
+
+	return devm_request_threaded_irq(ptdev->base.dev, irq, raw_handler, threaded_handler,
 					 IRQF_SHARED, full_name, pirq);
 }
 

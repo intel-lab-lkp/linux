@@ -177,6 +177,7 @@ int panthor_gpu_init(struct panthor_device *ptdev)
 	ret = panthor_irq_request(ptdev, &ptdev->gpu->irq, irq,
 				  GPU_INTERRUPTS_MASK,
 				  ptdev->iomem + GPU_INT_BASE, "gpu",
+				  panthor_irq_default_raw_handler,
 				  panthor_gpu_irq_threaded_handler);
 	if (ret)
 		return ret;
