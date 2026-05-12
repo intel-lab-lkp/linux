@@ -794,7 +794,6 @@ struct qla_tgt {
 	struct scsi_qla_host *vha;
 	struct qla_hw_data *ha;
 	struct btree_head64 lun_qpair_map;
-	struct qla_qpair_hint *qphints;
 	/*
 	 * To sync between IRQ handlers and qlt_target_release(). Needed,
 	 * because req_pkt() can drop/reaquire HW lock inside. Protected by
@@ -834,6 +833,7 @@ struct qla_tgt {
 	atomic_t tgt_global_resets_count;
 
 	struct list_head tgt_list_entry;
+	struct qla_qpair_hint qphints[];
 };
 
 struct qla_tgt_sess_op {

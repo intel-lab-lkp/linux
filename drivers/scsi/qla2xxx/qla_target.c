@@ -1590,7 +1590,6 @@ static void qlt_release(struct qla_tgt *tgt)
 			h->qpair = NULL;
 		}
 	}
-	kfree(tgt->qphints);
 	mutex_lock(&qla_tgt_mutex);
 	list_del(&vha->vha_tgt.qla_tgt->tgt_list_entry);
 	mutex_unlock(&qla_tgt_mutex);
@@ -7458,18 +7457,10 @@ int qlt_add_target(struct qla_hw_data *ha, struct scsi_qla_host *base_vha)
 
 	BUG_ON(base_vha->vha_tgt.qla_tgt != NULL);
 
-	tgt = kzalloc_obj(struct qla_tgt);
+	tgt = kzalloc_flex(*tgt, qphints, ha->max_qpairs + 1);
 	if (!tgt) {
 		ql_dbg(ql_dbg_tgt, base_vha, 0xe066,
 		    "Unable to allocate struct qla_tgt\n");
-		return -ENOMEM;
-	}
-
-	tgt->qphints = kzalloc_objs(struct qla_qpair_hint, ha->max_qpairs + 1);
-	if (!tgt->qphints) {
-		kfree(tgt);
-		ql_log(ql_log_warn, base_vha, 0x0197,
-		    "Unable to allocate qpair hints.\n");
 		return -ENOMEM;
 	}
 
@@ -7477,7 +7468,6 @@ int qlt_add_target(struct qla_hw_data *ha, struct scsi_qla_host *base_vha)
 
 	rc = btree_init64(&tgt->lun_qpair_map);
 	if (rc) {
-		kfree(tgt->qphints);
 		kfree(tgt);
 		ql_log(ql_log_info, base_vha, 0x0198,
 			"Unable to initialize lun_qpair_map btree\n");
