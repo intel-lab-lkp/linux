@@ -388,6 +388,13 @@ properties:
               - renesas,gray-hawk-single # Gray Hawk Single board (RTP8A779H0ASKB0F10S)
           - const: renesas,r8a779h0
 
+      - description: R-Car V4M-7 (R8A779H2)
+        items:
+          - enum:
+              - renesas,gray-hawk-single # Gray Hawk Single board (RTP8A779H2ASKB0F10SA001)
+          - const: renesas,r8a779h2 # ES2.x
+          - const: renesas,r8a779h0
+
       - description: R-Car H3e (R8A779M0)
         items:
           - enum:
@@ -466,6 +473,12 @@ properties:
           - const: renesas,r8a779mb
           - const: renesas,r8a7795
 
+      - description: R-Car X5H (R8A78000)
+        items:
+          - enum:
+              - renesas,ironhide    # Ironhide (RTP8A78000ASKB0F10S)
+          - const: renesas,r8a78000
+
       - description: RZ/N1D (R9A06G032)
         items:
           - enum:
@@ -535,6 +548,19 @@ properties:
           - const: renesas,r9a08g045s33 # PCIe support
           - const: renesas,r9a08g045
 
+      - description: RZ/G3L (R9A08G046)
+        items:
+          - enum:
+              - renesas,smarc2-evk # RZ SMARC Carrier-II EVK
+          - enum:
+              - renesas,rzg3l-smarcm # RZ/G3L SMARC Module (SoM)
+          - enum:
+              - renesas,r9a08g046l26 # Dual Cortex-A55 + Cortex-M33 + GE3D/VCP (14mm LFBGA)
+              - renesas,r9a08g046l28 # Dual Cortex-A55 + Cortex-M33 + GE3D/VCP (17mm LFBGA)
+              - renesas,r9a08g046l46 # Quad Cortex-A55 + Cortex-M33 + GE3D/VCP (14mm LFBGA)
+              - renesas,r9a08g046l48 # Quad Cortex-A55 + Cortex-M33 + GE3D/VCP (17mm LFBGA)
+          - const: renesas,r9a08g046
+
       - description: RZ/V2M (R9A09G011)
         items:
           - enum:
@@ -576,7 +602,7 @@ properties:
       - description: RZ/V2H(P) (R9A09G057)
         items:
           - enum:
-              - renesas,rzv2h-evk # RZ/V2H EVK
+              - renesas,rzv2h-evk # RZ/V2H EVK (RTK0EF0168C06001BJ)
           - enum:
               - renesas,r9a09g057h41 # RZ/V2H
               - renesas,r9a09g057h42 # RZ/V2H with Mali-G31 support
@@ -595,12 +621,22 @@ properties:
       - description: RZ/T2H (R9A09G077)
         items:
           - enum:
-              - renesas,rzt2h-evk # RZ/T2H Evaluation Board
+              - renesas,rzt2h-evk # RZ/T2H Evaluation Board (RTK9RZT2H0S00000BJ)
           - enum:
               - renesas,r9a09g077m04 # RZ/T2H with Single Cortex-A55 + Dual Cortex-R52 - no security
               - renesas,r9a09g077m24 # RZ/T2H with Dual Cortex-A55 + Dual Cortex-R52 - no security
               - renesas,r9a09g077m44 # RZ/T2H with Quad Cortex-A55 + Dual Cortex-R52 - no security
           - const: renesas,r9a09g077
+
+      - description: RZ/N2H (R9A09G087)
+        items:
+          - enum:
+              - renesas,rzn2h-evk # RZ/N2H Evaluation Board (RTK9RZN2H0S00000BJ)
+          - enum:
+              - renesas,r9a09g087m04 # RZ/N2H with Single Cortex-A55 + Dual Cortex-R52 - no security
+              - renesas,r9a09g087m24 # RZ/N2H with Dual Cortex-A55 + Dual Cortex-R52 - no security
+              - renesas,r9a09g087m44 # RZ/N2H with Quad Cortex-A55 + Dual Cortex-R52 - no security
+          - const: renesas,r9a09g087
 
 additionalProperties: true
 
