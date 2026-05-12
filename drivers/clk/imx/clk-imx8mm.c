@@ -298,6 +298,7 @@ static struct clk_hw **hws;
 
 static int imx8mm_clocks_probe(struct platform_device *pdev)
 {
+	struct clk_hw *audio_pll_hws[2];
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev->of_node;
 	void __iomem *base;
@@ -609,6 +610,11 @@ static int imx8mm_clocks_probe(struct platform_device *pdev)
 	}
 
 	imx_register_uart_clocks();
+
+	/* Add debug interface for audio PLLs */
+	audio_pll_hws[0] = hws[IMX8MM_AUDIO_PLL1];
+	audio_pll_hws[1] = hws[IMX8MM_AUDIO_PLL2];
+	audio_pll_debug_init(audio_pll_hws, ARRAY_SIZE(audio_pll_hws));
 
 	return 0;
 
