@@ -420,9 +420,8 @@ static int nvmet_pci_epf_dma_transfer(struct nvmet_pci_epf *nvme_epf,
 	if (dma_sync_wait(chan, cookie) != DMA_COMPLETE) {
 		dev_err(dev, "DMA transfer failed\n");
 		ret = -EIO;
+		dmaengine_terminate_sync(chan);
 	}
-
-	dmaengine_terminate_sync(chan);
 
 unmap:
 	dma_unmap_single(dma_dev, dma_addr, seg->length, dir);
