@@ -2523,6 +2523,9 @@ struct pci_dev *pci_alloc_dev(struct pci_bus *bus)
 #ifdef CONFIG_PCI_MSI
 	raw_spin_lock_init(&dev->msi_lock);
 #endif
+#ifdef CONFIG_PCI_LIVEUPDATE
+	rwlock_init(&dev->liveupdate.lock);
+#endif
 	return dev;
 }
 EXPORT_SYMBOL(pci_alloc_dev);

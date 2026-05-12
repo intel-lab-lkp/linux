@@ -43,6 +43,26 @@
  *
  *  * ``pci_liveupdate_register_flb(driver_file_handler)``
  *  * ``pci_liveupdate_unregister_flb(driver_file_handler)``
+ *
+ * Device Tracking
+ * ===============
+ *
+ * Drivers must notify the PCI core when specific devices are preserved or
+ * unpreserved with the following APIs:
+ *
+ *  * ``pci_liveupdate_preserve(pci_dev)``
+ *  * ``pci_liveupdate_unpreserve(pci_dev)``
+ *
+ * This allows the PCI core to keep its FLB data (struct pci_ser) up to date
+ * with the list of **outgoing** preserved devices for the next kernel.
+ *
+ * Restrictions
+ * ============
+ *
+ * The PCI core enforces the following restrictions on which devices can be
+ * preserved. These may be relaxed in the future:
+ *
+ *  * The device cannot be a Virtual Function (VF).
  */
 
 #define pr_fmt(fmt) "PCI: liveupdate: " fmt
@@ -55,12 +75,28 @@
 #include <linux/mm.h>
 #include <linux/pci.h>
 
+/**
+ * struct pci_flb_outgoing - Outgoing PCI FLB object
+ * @ser: The outgoing struct pci_ser for the next kernel.
+ * @lock: Lock used to protect against changes to @ser.
+ */
+struct pci_flb_outgoing {
+	struct pci_ser *ser;
+	struct mutex lock;
+};
+
 static int pci_flb_preserve(struct liveupdate_flb_op_args *args)
 {
+	struct pci_flb_outgoing *outgoing;
 	struct pci_dev *dev = NULL;
 	u32 max_nr_devices = 0;
-	struct pci_ser *ser;
 	unsigned long size;
+
+	outgoing = kmalloc_obj(*outgoing);
+	if (!outgoing)
+		return -ENOMEM;
+
+	mutex_init(&outgoing->lock);
 
 	/*
 	 * Allocate enough space to preserve all of the devices that are
@@ -74,27 +110,30 @@ static int pci_flb_preserve(struct liveupdate_flb_op_args *args)
 
 	size = struct_size_t(struct pci_ser, devices, max_nr_devices);
 
-	ser = kho_alloc_preserve(size);
-	if (IS_ERR(ser))
-		return PTR_ERR(ser);
+	outgoing->ser = kho_alloc_preserve(size);
+	if (IS_ERR(outgoing->ser)) {
+		kfree(outgoing);
+		return PTR_ERR(outgoing->ser);
+	}
 
 	pr_debug("Preserved struct pci_ser with room for %u devices\n",
 		 max_nr_devices);
 
-	ser->max_nr_devices = max_nr_devices;
-	ser->nr_devices = 0;
+	outgoing->ser->max_nr_devices = max_nr_devices;
+	outgoing->ser->nr_devices = 0;
 
-	args->obj = ser;
-	args->data = virt_to_phys(ser);
+	args->obj = outgoing;
+	args->data = virt_to_phys(outgoing->ser);
 	return 0;
 }
 
 static void pci_flb_unpreserve(struct liveupdate_flb_op_args *args)
 {
-	struct pci_ser *ser = args->obj;
+	struct pci_flb_outgoing *outgoing = args->obj;
 
-	WARN_ON_ONCE(ser->nr_devices);
-	kho_unpreserve_free(ser);
+	WARN_ON_ONCE(outgoing->ser->nr_devices);
+	kho_unpreserve_free(outgoing->ser);
+	kfree(outgoing);
 
 	pr_debug("Unpreserved struct pci_ser\n");
 }
@@ -122,6 +161,112 @@ static struct liveupdate_flb pci_liveupdate_flb = {
 	.ops = &pci_liveupdate_flb_ops,
 	.compatible = PCI_LUO_FLB_COMPATIBLE,
 };
+
+/**
+ * pci_liveupdate_preserve() - Preserve a PCI device across Live Update
+ * @dev: The PCI device to preserve.
+ *
+ * pci_liveupdate_preserve() notifies the PCI core that a PCI device should be
+ * preserved across the next Live Update. Drivers must call
+ * pci_liveupdate_preserve() from their struct liveupdate_file_handler
+ * preserve() callback to ensure the outgoing struct pci_ser is allocated.
+ *
+ * Returns: 0 on success, <0 on failure.
+ */
+int pci_liveupdate_preserve(struct pci_dev *dev)
+{
+	struct pci_flb_outgoing *outgoing = NULL;
+	struct pci_ser *ser;
+	int i, ret;
+
+	if (dev->is_virtfn)
+		return -EINVAL;
+
+	ret = liveupdate_flb_get_outgoing(&pci_liveupdate_flb, (void **)&outgoing);
+	if (ret)
+		return ret;
+
+	if (!outgoing)
+		return -ENOENT;
+
+	guard(mutex)(&outgoing->lock);
+	ser = outgoing->ser;
+
+	guard(write_lock)(&dev->liveupdate.lock);
+
+	if (dev->liveupdate.outgoing)
+		return -EBUSY;
+
+	if (ser->nr_devices == ser->max_nr_devices)
+		return -ENOSPC;
+
+	for (i = 0; i < ser->max_nr_devices; i++) {
+		/*
+		 * Start searching at index ser->nr_devices. This should result
+		 * in a constant time search under expected conditions (devices
+		 * are not getting unpreserved).
+		 */
+		int index = (ser->nr_devices + i) % ser->max_nr_devices;
+		struct pci_dev_ser *dev_ser = &ser->devices[index];
+
+		if (dev_ser->refcount)
+			continue;
+
+		pci_info(dev, "Device will be preserved across next Live Update\n");
+		ser->nr_devices++;
+
+		dev_ser->domain = pci_domain_nr(dev->bus);
+		dev_ser->bdf = pci_dev_id(dev);
+		dev_ser->refcount = 1;
+
+		dev->liveupdate.outgoing = dev_ser;
+		return 0;
+	}
+
+	return -ENOSPC;
+}
+EXPORT_SYMBOL_GPL(pci_liveupdate_preserve);
+
+/**
+ * pci_liveupdate_unpreserve() - Cancel preservation of a PCI device
+ * @dev: The PCI device to preserve.
+ *
+ * pci_liveupdate_unpreserve() notifies the PCI core that a PCI device should no
+ * longer be preserved across the next Live Update. Drivers must call
+ * pci_liveupdate_unpreserve() from their struct liveupdate_file_handler
+ * unpreserve() callback to ensure the outgoing struct pci_ser is allocated.
+ */
+void pci_liveupdate_unpreserve(struct pci_dev *dev)
+{
+	struct pci_flb_outgoing *outgoing = NULL;
+	struct pci_dev_ser *dev_ser;
+	struct pci_ser *ser;
+	int ret;
+
+	ret = liveupdate_flb_get_outgoing(&pci_liveupdate_flb, (void **)&outgoing);
+
+	if (ret || !outgoing) {
+		pci_warn(dev, "Cannot unpreserve device without outgoing Live Update state\n");
+		return;
+	}
+
+	guard(mutex)(&outgoing->lock);
+	ser = outgoing->ser;
+
+	guard(write_lock)(&dev->liveupdate.lock);
+
+	dev_ser = dev->liveupdate.outgoing;
+	if (!dev_ser) {
+		pci_warn(dev, "Cannot unpreserve device that is not preserved\n");
+		return;
+	}
+
+	pci_info(dev, "Device will no longer be preserved across next Live Update\n");
+	ser->nr_devices--;
+	memset(dev_ser, 0, sizeof(*dev_ser));
+	dev->liveupdate.outgoing = NULL;
+}
+EXPORT_SYMBOL_GPL(pci_liveupdate_unpreserve);
 
 /**
  * pci_liveupdate_register_flb() - Register a file handler with the PCI core
