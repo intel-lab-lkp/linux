@@ -41,6 +41,8 @@ enum transcoder {
 	 * doesn't need to stay fixed.
 	 */
 	TRANSCODER_EDP,
+	TRANSCODER_CMTG0 = TRANSCODER_EDP,
+	TRANSCODER_CMTG1,
 	TRANSCODER_DSI_0,
 	TRANSCODER_DSI_1,
 	TRANSCODER_DSI_A = TRANSCODER_DSI_0,	/* legacy DSI */
