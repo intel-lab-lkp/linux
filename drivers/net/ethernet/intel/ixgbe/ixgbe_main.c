@@ -7074,7 +7074,7 @@ int ixgbe_setup_tx_resources(struct ixgbe_ring *tx_ring)
 	size = sizeof(struct ixgbe_tx_buffer) * tx_ring->count;
 
 	if (tx_ring->q_vector)
-		ring_node = tx_ring->q_vector->numa_node;
+		ring_node = tx_ring->q_vector->node;
 
 	tx_ring->tx_buffer_info = vmalloc_node(size, ring_node);
 	if (!tx_ring->tx_buffer_info)
@@ -7175,7 +7175,7 @@ int ixgbe_setup_rx_resources(struct ixgbe_adapter *adapter,
 	size = sizeof(struct ixgbe_rx_buffer) * rx_ring->count;
 
 	if (rx_ring->q_vector)
-		ring_node = rx_ring->q_vector->numa_node;
+		ring_node = rx_ring->q_vector->node;
 
 	rx_ring->rx_buffer_info = vmalloc_node(size, ring_node);
 	if (!rx_ring->rx_buffer_info)

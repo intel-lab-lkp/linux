@@ -864,7 +864,7 @@ static int ixgbe_alloc_q_vector(struct ixgbe_adapter *adapter,
 	/* setup affinity mask and node */
 	if (cpu != -1)
 		cpumask_set_cpu(cpu, &q_vector->affinity_mask);
-	q_vector->numa_node = node;
+	q_vector->node = node;
 
 #ifdef CONFIG_IXGBE_DCA
 	/* initialize CPU for DCA */
