@@ -81,7 +81,7 @@ static void atmel_ecdh_done(struct atmel_i2c_work_data *work_data, void *areq,
 
 	/* copy the shared secret */
 	copied = sg_copy_from_buffer(req->dst, sg_nents_for_len(req->dst, n_sz),
-				     &cmd->data[RSP_DATA_IDX], n_sz);
+				     &cmd->data[ATMEL_I2C_RSP_DATA_IDX], n_sz);
 	if (copied != n_sz)
 		status = -EINVAL;
 
@@ -144,7 +144,7 @@ static int atmel_ecdh_set_secret(struct crypto_kpp *tfm, const void *buf,
 		goto free_public_key;
 
 	/* save the public key */
-	memcpy(public_key, &cmd->data[RSP_DATA_IDX], ATMEL_ECC_PUBKEY_SIZE);
+	memcpy(public_key, &cmd->data[ATMEL_I2C_RSP_DATA_IDX], ATMEL_ECC_PUBKEY_SIZE);
 	ctx->public_key = public_key;
 
 	kfree(cmd);
@@ -322,6 +322,12 @@ static int atmel_ecc_probe(struct i2c_client *client)
 	i2c_priv = i2c_get_clientdata(client);
 	i2c_priv->data = data;
 	i2c_priv->caps = BIT(ATMEL_CAP_ECDH);
+
+	ret = atmel_i2c_device_sanity_check(client);
+	if (ret) {
+		dev_err(&client->dev, "failed to read EEPROM, is hardware attached?\n");
+		goto done;
+	}
 
 	/* add to client list */
 	spin_lock(&atmel_i2c_mgmt.i2c_list_lock);

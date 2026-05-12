@@ -64,6 +64,12 @@ static int atmel_sha204a_probe(struct i2c_client *client)
 	i2c_priv->data = data;
 	i2c_priv->caps = 0;
 
+	ret = atmel_i2c_device_sanity_check(client);
+	if (ret) {
+		dev_err(&client->dev, "failed to read EEPROM, is hardware attached?\n");
+		goto done;
+	}
+
 	/* add to client list */
 	spin_lock(&atmel_i2c_mgmt.i2c_list_lock);
 	list_add_tail(&i2c_priv->i2c_client_list_node,

@@ -82,17 +82,9 @@ struct atmel_i2c_of_match_data {
 #define STATUS_NOERR			0x00
 #define STATUS_WAKE_SUCCESSFUL		0x11
 
-/* Definitions for eeprom organization */
-#define CONFIGURATION_ZONE		0
-
 /* Definitions for Indexes common to all commands */
-#define RSP_DATA_IDX			1 /* buffer index of data in response */
+#define ATMEL_I2C_RSP_DATA_IDX		1 /* buffer index of data in response */
 #define DATA_SLOT_2			2 /* used for ECDH private key */
-
-/* Definitions for the device lock state */
-#define DEVICE_LOCK_ADDR		0x15
-#define LOCK_VALUE_IDX			(RSP_DATA_IDX + 2)
-#define LOCK_CONFIG_IDX			(RSP_DATA_IDX + 3)
 
 /*
  * Wake High delay to data communication (microseconds). SDA should be stable
@@ -195,8 +187,6 @@ void atmel_i2c_flush_queue(void);
 
 int atmel_i2c_send_receive(struct i2c_client *client, struct atmel_i2c_cmd *cmd);
 
-void atmel_i2c_init_read_config_cmd(struct atmel_i2c_cmd *cmd,
-				    const struct atmel_i2c_max_exec_timings *timings);
 void atmel_i2c_init_random_cmd(struct atmel_i2c_cmd *cmd,
 			       const struct atmel_i2c_max_exec_timings *timings);
 void atmel_i2c_init_genkey_cmd(struct atmel_i2c_cmd *cmd, u16 keyid,
@@ -206,6 +196,8 @@ int atmel_i2c_init_ecdh_cmd(struct atmel_i2c_cmd *cmd,
 			    const struct atmel_i2c_max_exec_timings *timings);
 int atmel_i2c_register_rng(struct atmel_i2c_client_priv *i2c_priv,
 			   struct device *dev);
+
+int atmel_i2c_device_sanity_check(struct i2c_client *client);
 
 ssize_t atmel_i2c_eeprom_display(struct device *dev,
 				 struct device_attribute *attr,

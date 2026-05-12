@@ -23,6 +23,11 @@
 
 #define ATMEL_I2C_COMMAND			0x03 /* packet function */
 
+/* Definitions for the device lock state */
+#define ATMEL_I2C_DEVICE_LOCK_ADDR		0x15
+#define ATMEL_I2C_LOCK_VALUE_IDX		(ATMEL_I2C_RSP_DATA_IDX + 2)
+#define ATMEL_I2C_LOCK_CONFIG_IDX		(ATMEL_I2C_RSP_DATA_IDX + 3)
+
 /* Command opcode */
 #define ATMEL_I2C_OPCODE_ECDH			0x43
 #define ATMEL_I2C_OPCODE_GENKEY			0x40
@@ -129,26 +134,6 @@ static int atmel_i2c_init_read_eeprom_cmd(struct atmel_i2c_cmd *cmd, u16 addr,
 	return 0;
 }
 
-void atmel_i2c_init_read_config_cmd(struct atmel_i2c_cmd *cmd,
-				    const struct atmel_i2c_max_exec_timings *timings)
-{
-	cmd->word_addr = ATMEL_I2C_COMMAND;
-	cmd->opcode = ATMEL_I2C_OPCODE_READ;
-	/*
-	 * Read the word from Configuration zone that contains the lock bytes
-	 * (UserExtra, Selector, LockValue, LockConfig).
-	 */
-	cmd->param1 = CONFIGURATION_ZONE;
-	cmd->param2 = cpu_to_le16(DEVICE_LOCK_ADDR);
-	cmd->count = ATMEL_I2C_READ_COUNT;
-
-	atmel_i2c_checksum(cmd);
-
-	cmd->msecs = timings->max_exec_time_read;
-	cmd->rxsize = ATMEL_I2C_READ_RSP_SIZE;
-}
-EXPORT_SYMBOL(atmel_i2c_init_read_config_cmd);
-
 void atmel_i2c_init_random_cmd(struct atmel_i2c_cmd *cmd,
 			       const struct atmel_i2c_max_exec_timings *timings)
 {
@@ -247,7 +232,7 @@ static int atmel_i2c_rng_read_nonblocking(struct hwrng *rng, void *buf,
 	if (rng->priv) {
 		work_data = (struct atmel_i2c_work_data *)rng->priv;
 		max = min(RANDOM_RSP_SIZE - CMD_OVERHEAD_SIZE, max);
-		memcpy(buf, &work_data->cmd.data[RSP_DATA_IDX], max);
+		memcpy(buf, &work_data->cmd.data[ATMEL_I2C_RSP_DATA_IDX], max);
 		rng->priv = 0;
 	} else {
 		work_data = kmalloc_obj(*work_data, GFP_ATOMIC);
@@ -287,7 +272,7 @@ static int atmel_i2c_rng_read(struct hwrng *rng, void *buf, size_t max,
 		return ret;
 
 	max = min(RANDOM_RSP_SIZE - CMD_OVERHEAD_SIZE, max);
-	memcpy(buf, &cmd.data[RSP_DATA_IDX], max);
+	memcpy(buf, &cmd.data[ATMEL_I2C_RSP_DATA_IDX], max);
 
 	return max;
 }
@@ -338,7 +323,7 @@ static int atmel_i2c_eeprom_read(struct i2c_client *client, u16 addr,
 		goto err;
 	}
 
-	memcpy(buf, cmd->data + RSP_DATA_IDX, 4);
+	memcpy(buf, cmd->data + ATMEL_I2C_RSP_DATA_IDX, 4);
 
 err:
 	kfree(cmd);
@@ -542,7 +527,7 @@ static inline size_t atmel_i2c_wake_token_sz(u32 bus_clk_rate)
 	return DIV_ROUND_UP(no_of_bits, 8);
 }
 
-static int device_sanity_check(struct i2c_client *client)
+int atmel_i2c_device_sanity_check(struct i2c_client *client)
 {
 	struct atmel_i2c_client_priv *i2c_priv = i2c_get_clientdata(client);
 	const struct atmel_i2c_of_match_data *data = i2c_priv->data;
@@ -553,7 +538,8 @@ static int device_sanity_check(struct i2c_client *client)
 	if (!cmd)
 		return -ENOMEM;
 
-	atmel_i2c_init_read_config_cmd(cmd, &data->timings);
+	atmel_i2c_init_read_eeprom_cmd(cmd, ATMEL_I2C_DEVICE_LOCK_ADDR,
+				       ATMEL_EEPROM_CONFIG_ZONE, data);
 
 	ret = atmel_i2c_send_receive(client, cmd);
 	if (ret)
@@ -565,8 +551,8 @@ static int device_sanity_check(struct i2c_client *client)
 	 * Failure to lock these zones may permit modification of any secret
 	 * keys and may lead to other security problems.
 	 */
-	if (cmd->data[LOCK_CONFIG_IDX] || cmd->data[LOCK_VALUE_IDX]) {
-		dev_err(&client->dev, "Configuration or Data and OTP zones are unlocked!\n");
+	if (cmd->data[ATMEL_I2C_LOCK_CONFIG_IDX] || cmd->data[ATMEL_I2C_LOCK_VALUE_IDX]) {
+		dev_err(&client->dev, "Config, Data and OTP zones are unlocked!\n");
 		ret = -ENOTSUPP;
 	}
 
@@ -575,6 +561,7 @@ free_cmd:
 	kfree(cmd);
 	return ret;
 }
+EXPORT_SYMBOL(atmel_i2c_device_sanity_check);
 
 void atmel_i2c_unregister_client(struct atmel_i2c_client_priv *i2c_priv)
 {
@@ -633,7 +620,7 @@ int atmel_i2c_probe(struct i2c_client *client)
 
 	i2c_set_clientdata(client, i2c_priv);
 
-	return device_sanity_check(client);
+	return 0;
 }
 EXPORT_SYMBOL(atmel_i2c_probe);
 
