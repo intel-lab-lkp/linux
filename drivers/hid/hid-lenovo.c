@@ -1424,12 +1424,25 @@ err:
 
 static int lenovo_reset_resume(struct hid_device *hdev)
 {
+	struct lenovo_drvdata *data;
+
 	switch (hdev->product) {
 	case USB_DEVICE_ID_LENOVO_CUSBKBD:
 	case USB_DEVICE_ID_LENOVO_TPIIUSBKBD:
 		if (hdev->type == HID_TYPE_USBMOUSE)
 			lenovo_features_set_cptkbd(hdev);
 
+		break;
+	case USB_DEVICE_ID_LENOVO_X12_TAB:
+	case USB_DEVICE_ID_LENOVO_X12_TAB2:
+	case USB_DEVICE_ID_LENOVO_TP10UBKBD:
+	case USB_DEVICE_ID_LENOVO_X1_TAB:
+	case USB_DEVICE_ID_LENOVO_X1_TAB2:
+	case USB_DEVICE_ID_LENOVO_X1_TAB3:
+		data = hid_get_drvdata(hdev);
+		if (data)
+			lenovo_led_set_tp10ubkbd(hdev, TP10UBKBD_FN_LOCK_LED,
+						 data->fn_lock ? LED_ON : LED_OFF);
 		break;
 	default:
 		break;
