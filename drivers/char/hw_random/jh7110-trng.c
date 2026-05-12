@@ -234,12 +234,18 @@ static irqreturn_t starfive_trng_irq(int irq, void *priv)
 static void starfive_trng_cleanup(struct hwrng *rng)
 {
 	struct starfive_trng *trng = to_trng(rng);
+	bool is_jhb100 = device_is_compatible(trng->dev, "starfive,jhb100-trng");
 
 	writel(0, trng->base + STARFIVE_CTRL);
 
-	reset_control_assert(trng->rst);
+	if (!is_jhb100)
+		reset_control_assert(trng->rst);
+
 	clk_disable_unprepare(trng->hclk);
 	clk_disable_unprepare(trng->ahb);
+
+	if (is_jhb100)
+		reset_control_assert(trng->rst);
 }
 
 static int starfive_trng_read(struct hwrng *rng, void *buf, size_t max, bool wait)
@@ -337,11 +343,18 @@ static int starfive_trng_probe(struct platform_device *pdev)
 
 	ret = devm_hwrng_register(&pdev->dev, &trng->rng);
 	if (ret) {
+		bool is_jhb100 = device_is_compatible(trng->dev, "starfive,jhb100-trng");
+
 		pm_runtime_disable(&pdev->dev);
 
-		reset_control_assert(trng->rst);
+		if (!is_jhb100)
+			reset_control_assert(trng->rst);
+
 		clk_disable_unprepare(trng->ahb);
 		clk_disable_unprepare(trng->hclk);
+
+		if (is_jhb100)
+			reset_control_assert(trng->rst);
 
 		return dev_err_probe(&pdev->dev, ret, "Failed to register hwrng\n");
 	}
@@ -378,6 +391,7 @@ static const struct dev_pm_ops starfive_trng_pm_ops = {
 
 static const struct of_device_id trng_dt_ids[] __maybe_unused = {
 	{ .compatible = "starfive,jh7110-trng" },
+	{ .compatible = "starfive,jhb100-trng" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, trng_dt_ids);
