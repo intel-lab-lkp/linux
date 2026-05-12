@@ -3799,6 +3799,15 @@ SYSCALL_DEFINE2(swapon, const char __user *, specialfile, int, swap_flags)
 		goto free_swap_zswap;
 	}
 
+	/*
+	 * init_swap_ops() sets si->ops based on flags. It does not need
+	 * swapon_mutex, and must complete before enable_swap_info()
+	 * exposes the device.
+	 */
+	error = init_swap_ops(si);
+	if (error)
+		goto bad_swap_unlock_inode;
+
 	mutex_lock(&swapon_mutex);
 	prio = DEF_SWAP_PRIO;
 	if (swap_flags & SWAP_FLAG_PREFER)
