@@ -7330,6 +7330,8 @@ asmlinkage __visible void __sched schedule_user(void)
  */
 void __sched schedule_preempt_disabled(void)
 {
+	if (!task_is_running(current))
+		blk_flush_plug(current->plug, true);
 	sched_preempt_enable_no_resched();
 	schedule();
 	preempt_disable();
