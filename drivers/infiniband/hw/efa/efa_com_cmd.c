@@ -320,7 +320,19 @@ int efa_com_create_ah(struct efa_com_dev *edev,
 	struct efa_admin_create_ah_resp cmd_completion;
 	struct efa_com_admin_queue *aq = &edev->aq;
 	struct efa_admin_create_ah_cmd ah_cmd = {};
+	struct efa_ah_cache_entry *entry;
 	int err;
+
+	entry = efa_ah_cache_get_or_create(&edev->ah_cache, params->pdn, params->dest_addr);
+	if (IS_ERR(entry))
+		return PTR_ERR(entry);
+
+	mutex_lock(&entry->lock);
+	if (entry->initialized) {
+		result->ah = entry->ah;
+		mutex_unlock(&entry->lock);
+		return 0;
+	}
 
 	ah_cmd.aq_common_desc.opcode = EFA_ADMIN_CREATE_AH;
 
@@ -333,13 +345,18 @@ int efa_com_create_ah(struct efa_com_dev *edev,
 			       (struct efa_admin_acq_entry *)&cmd_completion,
 			       sizeof(cmd_completion));
 	if (err) {
+		mutex_unlock(&entry->lock);
+		efa_ah_cache_put(&edev->ah_cache, entry);
 		ibdev_err_ratelimited(edev->efa_dev,
 				      "Failed to create ah for %pI6 [%d]\n",
 				      ah_cmd.dest_addr, err);
 		return err;
 	}
 
+	entry->ah = cmd_completion.ah;
+	entry->initialized = true;
 	result->ah = cmd_completion.ah;
+	mutex_unlock(&entry->lock);
 
 	return 0;
 }
@@ -350,7 +367,12 @@ int efa_com_destroy_ah(struct efa_com_dev *edev,
 	struct efa_admin_destroy_ah_resp cmd_completion;
 	struct efa_admin_destroy_ah_cmd ah_cmd = {};
 	struct efa_com_admin_queue *aq = &edev->aq;
+	struct efa_ah_cache_entry *entry;
 	int err;
+
+	entry = efa_ah_cache_put_unless_last(&edev->ah_cache, params->pdn, params->gid);
+	if (!entry)
+		return 0;
 
 	ah_cmd.aq_common_desc.opcode = EFA_ADMIN_DESTROY_AH;
 	ah_cmd.ah = params->ah;
@@ -362,11 +384,16 @@ int efa_com_destroy_ah(struct efa_com_dev *edev,
 			       (struct efa_admin_acq_entry *)&cmd_completion,
 			       sizeof(cmd_completion));
 	if (err) {
+		mutex_unlock(&entry->lock);
 		ibdev_err_ratelimited(edev->efa_dev,
 				      "Failed to destroy ah-%d pd-%d [%d]\n",
 				      ah_cmd.ah, ah_cmd.pd, err);
 		return err;
 	}
+
+	entry->initialized = false;
+	mutex_unlock(&entry->lock);
+	efa_ah_cache_put(&edev->ah_cache, entry);
 
 	return 0;
 }
