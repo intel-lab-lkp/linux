@@ -9,5 +9,6 @@ luo-y :=								\
 obj-$(CONFIG_KEXEC_HANDOVER)		+= kexec_handover.o
 obj-$(CONFIG_KEXEC_HANDOVER_DEBUG)	+= kexec_handover_debug.o
 obj-$(CONFIG_KEXEC_HANDOVER_DEBUGFS)	+= kexec_handover_debugfs.o
+obj-$(CONFIG_KEXEC_HANDOVER_KUNIT_TEST) += kexec_handover_test.o
 
 obj-$(CONFIG_LIVEUPDATE)		+= luo.o

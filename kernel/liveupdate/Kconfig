@@ -49,6 +49,16 @@ config KEXEC_HANDOVER_ENABLE_DEFAULT
 	  The default behavior can still be overridden at boot time by
 	  passing 'kho=off'.
 
+config KEXEC_HANDOVER_KUNIT_TEST
+	tristate "KUnit test for Kexec Handover (KHO)"
+	depends on KEXEC_HANDOVER && KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  Enable Kunit tests for Kexec Handover to verify preservation and
+	  unpreservation of memory using KHO API without triggering kexec.
+
+	  If unsure, say N.
+
 config LIVEUPDATE
 	bool "Live Update Orchestrator"
 	depends on KEXEC_HANDOVER
