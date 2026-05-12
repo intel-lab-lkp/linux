@@ -285,6 +285,27 @@ sanitize_target_dc_state(struct intel_display *display,
 	return target_dc_state;
 }
 
+bool intel_display_power_get_dc3co_to_dc6(struct intel_display *display)
+{
+	struct i915_power_domains *power_domains = &display->power.domains;
+	bool ret;
+
+	mutex_lock(&power_domains->lock);
+	ret = power_domains->dc3co_to_dc6;
+	mutex_unlock(&power_domains->lock);
+
+	return ret;
+}
+
+void intel_display_power_reset_dc3co_to_dc6(struct intel_display *display)
+{
+	struct i915_power_domains *power_domains = &display->power.domains;
+
+	mutex_lock(&power_domains->lock);
+	power_domains->dc3co_to_dc6 = false;
+	mutex_unlock(&power_domains->lock);
+}
+
 /**
  * intel_display_power_set_target_dc_state - Set target dc state.
  * @display: display device
@@ -319,6 +340,10 @@ void intel_display_power_set_target_dc_state(struct intel_display *display,
 	 */
 	if (!dc_off_enabled)
 		intel_power_well_enable(display, power_well);
+
+	if (power_domains->target_dc_state == DC_STATE_EN_UPTO_DC3CO &&
+	    state == DC_STATE_EN_UPTO_DC6)
+		power_domains->dc3co_to_dc6 = true;
 
 	power_domains->target_dc_state = state;
 
