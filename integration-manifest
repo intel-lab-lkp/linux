@@ -1,0 +1,36 @@
+drm drm-fixes 5d6919055dec134de3c40167a490f33c74c12581
+	Linux 7.1-rc3
+drm-misc drm-misc-fixes aa16b2bc0f02709919e2435f531406531e5bcc69
+	accel/qaic: Add overflow check to remap_pfn_range during mmap
+drm-rust drm-rust-fixes 0a69ac25bd596d50823d530d0a2004336668c0df
+	rust: drm: fix unsound initialization in drm::Device::new
+drm-intel drm-intel-fixes 1ae15b6c7965d137eef21f2cc7d367b29cb88369
+	drm/i915/dp: Fix VSC dynamic range signaling for RGB formats
+drm-xe drm-xe-fixes 155a372a1cc50fa93387c5d3cdfd614a61e1afd1
+	drm/xe/dma-buf: fix UAF with retry loop
+drm drm-next f96538285cfdbb3acf5e3356e0bb88c38815790b
+	Merge tag 'drm-misc-next-2026-05-07' of https://gitlab.freedesktop.org/drm/misc/kernel into drm-next
+drm-misc drm-misc-next-fixes f6c73e7156b54d8b9ddf1a27f4e93d3a1e49a73e
+	drm: rcar-du: Fix crash when no CMM is available
+drm-intel drm-intel-next-fixes 314f6179e370988ac00dadf373a4f6166eb3db15
+	drm/i915/psr: Init variable to avoid early exit from et alignment loop
+drm-xe drm-xe-next-fixes 6de23f81a5e08be8fbf5e8d7e9febc72a5b5f27f
+	Linux 7.0-rc1
+drm-misc drm-misc-next 6101f78b684895d5860a96322e607e0f46f433ad
+	accel/qaic: kcalloc + kzalloc to kzalloc
+drm-rust drm-rust-next 8bfe9d72cf2064f679c4192dba84be79eb70675d
+	gpu: nova: Use module names consistently
+drm-intel drm-intel-next e8308fb5e05ca08ddfb8b46f6d947a6e3fd80cd7
+	drm/i915/display: Copy color pipeline from plane in the primary joiner pipe
+drm-intel drm-intel-gt-next 8edf8b09fc44990977b3fbcb708035b1740d0b7e
+	Merge drm/drm-next into drm-intel-gt-next
+drm-xe drm-xe-next 160c1af4fbb66ad887825eda5601eccd386015f8
+	drm/xe/oa: MERTOA Wa_14026779378
+drm-intel topic/core-for-CI 3d15d7e81d498d56ca6ba3af63f2fa1106da87ad
+	ACPI: PM: s2idle: Add module parameter for LPS0 constraints checking
+drm-xe topic/xe-for-CI bd9ef8d19f9e9ff47518ce48fb2002d58bfeeaaa
+	drm/xe/nvlp: Define GuC firmware for NVL-P
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
+drm-intel topic/pipe-reorder 2c683e9b419328da3433a49f7c467da71aaf0469
+	drm/i915/display: change pipe allocation order for discrete platforms
