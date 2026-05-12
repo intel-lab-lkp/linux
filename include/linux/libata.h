@@ -722,7 +722,8 @@ struct ata_device {
 	unsigned int		devno;		/* 0 or 1 */
 	u64			quirks;		/* List of broken features */
 	unsigned long		flags;		/* ATA_DFLAG_xxx */
-	struct scsi_device	*sdev;		/* attached SCSI device */
+	struct scsi_device	*sdev[ATAPI_MAX_LUN];	/* per-LUN SCSI devices */
+	unsigned int		nr_luns;	/* valid entries in sdev[] */
 	void			*private_data;
 #ifdef CONFIG_ATA_ACPI
 	union acpi_object	*gtf_cache;
@@ -1713,6 +1714,14 @@ static inline unsigned int ata_dev_disabled(const struct ata_device *dev)
 static inline unsigned int ata_dev_absent(const struct ata_device *dev)
 {
 	return ata_class_absent(dev->class);
+}
+
+static inline struct scsi_device *
+ata_dev_scsi_device(struct ata_device *dev, unsigned int lun)
+{
+	if (WARN_ON_ONCE(lun >= dev->nr_luns))
+		return NULL;
+	return dev->sdev[lun];
 }
 
 /*
