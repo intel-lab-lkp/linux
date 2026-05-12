@@ -826,6 +826,7 @@ int rtw_check_beacon_data(struct adapter *padapter, u8 *pbuf,  int len)
 		       &ie_len,
 		       (pbss_network->ie_length - _BEACON_IE_OFFSET_));
 	if (p) {
+		ie_len = min_t(uint, ie_len, NDIS_802_11_LENGTH_RATES_EX);
 		memcpy(support_rate, p + 2, ie_len);
 		support_rate_num = ie_len;
 	}
@@ -835,8 +836,11 @@ int rtw_check_beacon_data(struct adapter *padapter, u8 *pbuf,  int len)
 		       WLAN_EID_EXT_SUPP_RATES,
 		       &ie_len,
 		       pbss_network->ie_length - _BEACON_IE_OFFSET_);
-	if (p)
+	if (p && support_rate_num < NDIS_802_11_LENGTH_RATES_EX) {
+		ie_len = min_t(uint, ie_len,
+			       NDIS_802_11_LENGTH_RATES_EX - support_rate_num);
 		memcpy(support_rate + support_rate_num, p + 2, ie_len);
+	}
 
 	network_type = rtw_check_network_type(support_rate, channel);
 
