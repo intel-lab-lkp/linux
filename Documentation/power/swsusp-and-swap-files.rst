@@ -35,6 +35,14 @@ FIBMAP ioctl and determine the location of the file's swap header, as the
 offset, in <PAGE_SIZE> units, from the beginning of the partition which
 holds the swap file.
 
+.. note::
+
+   On Btrfs, the FIBMAP ioctl does not return physical block addresses, so
+   tools such as ``filefrag`` cannot be used to determine the correct offset.
+   On Btrfs, use btrfs-progs instead::
+
+      btrfs inspect-internal map-swapfile -r <swap_file_path>
+
 3) Add the following parameters to the kernel command line::
 
     resume=<swap_file_partition> resume_offset=<swap_file_offset>
