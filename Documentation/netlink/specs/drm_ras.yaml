@@ -8,8 +8,10 @@ doc: >-
   DRM RAS (Reliability, Availability, Serviceability) over Generic Netlink.
   Provides a standardized mechanism for DRM drivers to register "nodes"
   representing hardware/software components capable of reporting error counters.
-  Userspace tools can query the list of nodes or individual error counters
-  via the Generic Netlink interface.
+  Userspace tools can query the list of nodes or individual error counters or
+  their thresholds via the Generic Netlink interface. Threshold in RAS context
+  means the number of errors the hardware is expected to accumulate before it
+  raises them to software.
 
 definitions:
   -
@@ -69,6 +71,10 @@ attribute-sets:
         name: error-value
         type: u32
         doc: Current value of the requested error counter.
+      -
+        name: error-threshold
+        type: u32
+        doc: Threshold value of the error counter.
 
 operations:
   list:
@@ -124,3 +130,21 @@ operations:
       do:
         request:
           attributes: *id-attrs
+    -
+      name: get-error-threshold
+      doc: >-
+           Retrieve threshold value of an error.
+           The response includes the id, the name, and current threshold
+           value of the error.
+      attribute-set: error-counter-attrs
+      flags: [admin-perm]
+      do:
+        request:
+          attributes:
+            - node-id
+            - error-id
+        reply:
+          attributes:
+            - error-id
+            - error-name
+            - error-threshold
