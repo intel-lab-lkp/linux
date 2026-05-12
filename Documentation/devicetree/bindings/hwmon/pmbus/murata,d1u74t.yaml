@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/hwmon/pmbus/murata,d1u74t.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Murata D1U74T-W power supply unit
+
+maintainers:
+  - Abdurrahman Hussain <abdurrahman@nexthop.ai>
+
+description:
+  The Murata D1U74T-W is a PMBus-compliant AC/DC power supply unit that
+  exposes input/output voltage, current and power telemetry, three
+  temperature sensors and dual fan monitoring over an I2C interface.
+
+properties:
+  compatible:
+    enum:
+      - murata,d1u74t
+
+  reg:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        psu@58 {
+            compatible = "murata,d1u74t";
+            reg = <0x58>;
+        };
+    };
