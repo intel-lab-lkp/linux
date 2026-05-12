@@ -174,6 +174,26 @@ u32 pcie_tph_get_st_table_loc(struct pci_dev *pdev)
 }
 EXPORT_SYMBOL(pcie_tph_get_st_table_loc);
 
+/**
+ * pcie_tph_get_st_width - Return the device's negotiated Steering Tag width
+ * @pdev: PCI device to query
+ *
+ * Return: 16 if the TPH Requester is enabled in Extended TPH mode, 8 if
+ * enabled in regular TPH mode, 0 if TPH is not enabled or supported.
+ */
+u8 pcie_tph_get_st_width(struct pci_dev *pdev)
+{
+	switch (pdev->tph_req_type) {
+	case PCI_TPH_REQ_TPH_ONLY:
+		return 8;
+	case PCI_TPH_REQ_EXT_TPH:
+		return 16;
+	default:
+		return 0;
+	}
+}
+EXPORT_SYMBOL(pcie_tph_get_st_width);
+
 /*
  * Return the size of ST table. If ST table is not in TPH Requester Extended
  * Capability space, return 0. Otherwise return the ST Table Size + 1.
