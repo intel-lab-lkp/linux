@@ -18,7 +18,9 @@
 #define SOCK_TYPE_MASK 0xf
 #endif
 
-static size_t syscall_arg__scnprintf_socket_type(char *bf, size_t size, struct syscall_arg *arg)
+#include "trace/beauty/beauty.h"
+
+size_t syscall_arg__scnprintf_socket_type(char *bf, size_t size, struct syscall_arg *arg)
 {
 	bool show_prefix = arg->show_string_prefix;
 	const char *prefix = "SOCK_";
@@ -60,4 +62,4 @@ static size_t syscall_arg__scnprintf_socket_type(char *bf, size_t size, struct s
 	return printed;
 }
 
-#define SCA_SK_TYPE syscall_arg__scnprintf_socket_type
+

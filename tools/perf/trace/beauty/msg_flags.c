@@ -27,8 +27,10 @@
 # define MSG_CMSG_CLOEXEC	0x40000000
 #endif
 
-static size_t syscall_arg__scnprintf_msg_flags(char *bf, size_t size,
-					       struct syscall_arg *arg)
+#include "trace/beauty/beauty.h"
+
+size_t syscall_arg__scnprintf_msg_flags(char *bf, size_t size,
+					struct syscall_arg *arg)
 {
 	bool show_prefix = arg->show_string_prefix;
 	const char *prefix = "MSG_";
@@ -73,4 +75,4 @@ static size_t syscall_arg__scnprintf_msg_flags(char *bf, size_t size,
 	return printed;
 }
 
-#define SCA_MSG_FLAGS syscall_arg__scnprintf_msg_flags
+
