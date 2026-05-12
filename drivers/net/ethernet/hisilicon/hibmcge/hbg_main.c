@@ -420,6 +420,8 @@ static int hbg_pci_init(struct pci_dev *pdev)
 		return -ENOMEM;
 
 	pci_set_master(pdev);
+	pcie_capability_clear_word(pdev, PCI_EXP_DEVCTL,
+				   PCI_EXP_DEVCTL_RELAX_EN);
 	return 0;
 }
 
@@ -525,4 +527,4 @@ module_exit(hbg_module_exit);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Huawei Tech. Co., Ltd.");
 MODULE_DESCRIPTION("hibmcge driver");
-MODULE_VERSION("1.0");
+MODULE_VERSION("2.0");
