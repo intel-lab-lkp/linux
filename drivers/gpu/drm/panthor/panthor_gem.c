@@ -1013,7 +1013,8 @@ panthor_gem_create(struct drm_device *dev, size_t size, uint32_t flags,
 	 * going to pin these pages.
 	 */
 	mapping_set_gfp_mask(bo->base.filp->f_mapping,
-			     GFP_HIGHUSER | __GFP_RETRY_MAYFAIL | __GFP_NOWARN);
+			     (GFP_HIGHUSER_MOVABLE & ~__GFP_MOVABLE) |
+				     __GFP_RETRY_MAYFAIL | __GFP_NOWARN);
 
 	ret = drm_gem_create_mmap_offset(&bo->base);
 	if (ret)
