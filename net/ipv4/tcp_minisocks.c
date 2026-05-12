@@ -99,7 +99,7 @@ static void twsk_rcv_nxt_update(struct tcp_timewait_sock *tcptw, u32 seq,
  */
 enum tcp_tw_status
 tcp_timewait_state_process(struct inet_timewait_sock *tw, struct sk_buff *skb,
-			   const struct tcphdr *th, u32 *tw_isn,
+			   const struct tcphdr *th,
 			   enum skb_drop_reason *drop_reason)
 {
 	struct tcp_timewait_sock *tcptw = tcp_twsk((struct sock *)tw);
@@ -255,9 +255,10 @@ kill:
 	     (tmp_opt.saw_tstamp &&
 	      (s32)(READ_ONCE(tcptw->tw_ts_recent) - tmp_opt.rcv_tsval) < 0))) {
 		u32 isn = tcptw->tw_snd_nxt + 65535 + 2;
+
 		if (isn == 0)
 			isn++;
-		*tw_isn = isn;
+		skb->tcp_tw_isn = isn;
 		return TCP_TW_SYN;
 	}
 
