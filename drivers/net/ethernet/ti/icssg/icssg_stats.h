@@ -8,9 +8,14 @@
 #ifndef __NET_TI_ICSSG_STATS_H
 #define __NET_TI_ICSSG_STATS_H
 
-#include "icssg_prueth.h"
+#include <linux/ethtool.h>
+#include <linux/kernel.h>
+#include "icssg_switch_map.h"
 
 #define STATS_TIME_LIMIT_1G_MS    25000    /* 25 seconds @ 1G */
+
+#define ICSSG_NUM_MIIG_STATS	ARRAY_SIZE(icssg_all_miig_stats)
+#define ICSSG_NUM_PA_STATS	ARRAY_SIZE(icssg_all_pa_stats)
 
 struct miig_stats_regs {
 	/* Rx */
