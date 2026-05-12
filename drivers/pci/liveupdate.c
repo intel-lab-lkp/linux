@@ -120,6 +120,18 @@
  * This enables the PCI core and any drivers bound to the bridge to participate
  * in the Live Update so that preserved endpoints can continue issuing memory
  * transactions during the Live Update.
+ *
+ * Handling Preserved Devices
+ * ==========================
+ *
+ * The PCI core treats preserved devices differently than non-preserved devices.
+ * This section enumerates those differences.
+ *
+ *  * The PCI core inherits all ACS flags enabled on incoming preserved devices
+ *    rather than assigning new ones. This ensures that TLPs are routed the same
+ *    way after Live Update and ensures that IOMMU groups do not change. Note
+ *    that a device will use its inherited ACS flags for the lifetime of its
+ *    struct pci_dev (i.e. even after pci_liveupdate_finish()).
  */
 
 #define pr_fmt(fmt) "PCI: liveupdate: " fmt
@@ -361,6 +373,16 @@ static int pci_liveupdate_preserve_device_new(struct pci_ser *ser, struct pci_de
 {
 	int i;
 
+	/*
+	 * Do not preserve a devices that rely on device-specific ACS
+	 * equivalents (for now) since that would complicate keeping ACS
+	 * flags constant across Live Update.
+	 */
+	if (dev->dev_flags & PCI_DEV_FLAGS_ACS_ENABLED_QUIRK) {
+		pci_warn(dev, "Refusing to preserve device that relies on ACS quirks\n");
+		return -EINVAL;
+	}
+
 	if (ser->nr_devices == ser->max_nr_devices)
 		return -ENOSPC;
 
@@ -571,6 +593,7 @@ void pci_liveupdate_setup_device(struct pci_dev *dev)
 	pci_info(dev, "Device was preserved by previous kernel across Live Update\n");
 	guard(write_lock)(&dev->liveupdate.lock);
 	dev->liveupdate.incoming = dev_ser;
+	dev->liveupdate.was_preserved = true;
 
 	/*
 	 * Hold the ref on the incoming FLB until pci_liveupdate_finish() so
@@ -670,6 +693,32 @@ void pci_liveupdate_finish(struct pci_dev *dev)
 	pci_liveupdate_finish(dev->bus->self);
 }
 EXPORT_SYMBOL_GPL(pci_liveupdate_finish);
+
+void pci_liveupdate_init_acs(struct pci_dev *dev)
+{
+	guard(read_lock)(&dev->liveupdate.lock);
+
+	if (!dev->acs_cap || !dev->liveupdate.incoming)
+		return;
+
+	pci_read_config_word(dev, dev->acs_cap + PCI_ACS_CTRL, &dev->liveupdate.acs_ctrl);
+}
+
+bool pci_liveupdate_inherit_acs(struct pci_dev *dev)
+{
+	guard(read_lock)(&dev->liveupdate.lock);
+
+	/*
+	 * Use liveupdate.was_preserved instead of liveupdate.incoming since the
+	 * device's ACS controls should not change even after the device is
+	 * finished participating in the Live Update.
+	 */
+	if (!dev->acs_cap || !dev->liveupdate.was_preserved)
+		return false;
+
+	pci_write_config_word(dev, dev->acs_cap + PCI_ACS_CTRL, dev->liveupdate.acs_ctrl);
+	return true;
+}
 
 /**
  * pci_liveupdate_is_incoming() - Check if a device is incoming preserved

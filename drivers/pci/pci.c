@@ -33,6 +33,7 @@
 #include <asm/dma.h>
 #include <linux/aer.h>
 #include <linux/bitfield.h>
+#include "liveupdate.h"
 #include "pci.h"
 
 DEFINE_MUTEX(pci_slot_mutex);
@@ -1016,6 +1017,9 @@ void pci_enable_acs(struct pci_dev *dev)
 	struct pci_acs caps;
 	bool enable_acs = false;
 	int pos;
+
+	if (pci_liveupdate_inherit_acs(dev))
+		return;
 
 	/* If an iommu is present we start with kernel default caps */
 	if (pci_acs_enable) {
@@ -3657,6 +3661,7 @@ void pci_acs_init(struct pci_dev *dev)
 
 	pci_read_config_word(dev, pos + PCI_ACS_CAP, &dev->acs_capabilities);
 	pci_disable_broken_acs_cap(dev);
+	pci_liveupdate_init_acs(dev);
 }
 
 /**
