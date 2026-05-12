@@ -5339,10 +5339,12 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 {
 	struct vm_area_struct *vma = vmf->vma;
 	unsigned long addr = vmf->address;
+	unsigned long fault_offset;
 	struct folio *folio;
 	vm_fault_t ret = 0;
 	int nr_pages;
 	pte_t entry;
+	bool should_retry = false;
 
 	/* File mapping without ->vm_ops ? */
 	if (vma->vm_flags & VM_SHARED)
@@ -5389,6 +5391,7 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 	ret = vmf_anon_prepare(vmf);
 	if (ret)
 		return ret;
+retry:
 	/* Returns NULL on OOM or ERR_PTR(-EAGAIN) if we must retry the fault */
 	folio = alloc_anon_folio(vmf);
 	if (IS_ERR(folio))
@@ -5413,13 +5416,25 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 		update_mmu_tlb(vma, addr, vmf->pte);
 		goto release;
 	} else if (nr_pages > 1 && !pte_range_none(vmf->pte, nr_pages)) {
-		update_mmu_tlb_range(vma, addr, vmf->pte, nr_pages);
-		goto release;
+		fault_offset = (vmf->address - addr) >> PAGE_SHIFT;
+		if (!pte_none(ptep_get(vmf->pte + fault_offset))) {
+			update_mmu_tlb_range(vma, addr, vmf->pte, nr_pages);
+			goto release;
+		}
+
+		should_retry = true;
 	}
 
 	ret = check_stable_address_space(vma->vm_mm);
 	if (ret)
 		goto release;
+
+	if (should_retry) {
+		pte_unmap_unlock(vmf->pte, vmf->ptl);
+		folio_put(folio);
+		should_retry = false;
+		goto retry;
+	}
 
 	/* Deliver the page fault to userland, check inside PT lock */
 	if (userfaultfd_missing(vma)) {
