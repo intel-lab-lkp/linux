@@ -23,6 +23,12 @@
 #include <crypto/kpp.h>
 #include "atmel-i2c.h"
 
+static ssize_t config_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return atmel_i2c_eeprom_display(dev, attr, buf, ATMEL_EEPROM_CONFIG_ZONE);
+}
+static DEVICE_ATTR_ADMIN_RO(config);
+
 static ssize_t otp_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	return atmel_i2c_eeprom_display(dev, attr, buf, ATMEL_EEPROM_OTP_ZONE);
@@ -30,6 +36,7 @@ static ssize_t otp_show(struct device *dev, struct device_attribute *attr, char 
 static DEVICE_ATTR_RO(otp);
 
 static struct attribute *atmel_ecc508a_attrs[] = {
+	&dev_attr_config.attr,
 	&dev_attr_otp.attr,
 	NULL
 };
