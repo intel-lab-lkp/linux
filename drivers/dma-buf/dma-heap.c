@@ -18,6 +18,7 @@
 #include <linux/list.h>
 #include <linux/nospec.h>
 #include <linux/pidfd.h>
+#include <linux/security.h>
 #include <linux/syscalls.h>
 #include <linux/uaccess.h>
 #include <linux/xarray.h>
@@ -122,12 +123,13 @@ static int dma_heap_open(struct inode *inode, struct file *file)
 
 static long dma_heap_ioctl_allocate(struct file *file, void *data)
 {
+	const struct cred *tcred;
 	struct dma_heap_allocation_data *heap_allocation = data;
 	struct dma_heap *heap = file->private_data;
 	struct mem_cgroup *memcg = NULL;
 	struct task_struct *task;
 	unsigned int pidfd_flags;
-	int fd;
+	int fd, ret;
 
 	if (heap_allocation->fd)
 		return -EINVAL;
@@ -142,6 +144,14 @@ static long dma_heap_ioctl_allocate(struct file *file, void *data)
 		task = pidfd_get_task(heap_allocation->charge_pid_fd, &pidfd_flags);
 		if (IS_ERR(task))
 			return PTR_ERR(task);
+
+		tcred = get_task_cred(task);
+		ret = security_dma_heap_alloc(current_cred(), tcred);
+		put_cred(tcred);
+		if (ret) {
+			put_task_struct(task);
+			return ret;
+		}
 
 		memcg = get_mem_cgroup_from_mm(task->mm);
 		put_task_struct(task);
