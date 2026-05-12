@@ -929,6 +929,19 @@ static int do_sync(unsigned int num_qd, struct gfs2_quota_data **qda,
 	sort(qda, num_qd, sizeof(struct gfs2_quota_data *), sort_qd, NULL);
 	inode_lock(&ip->i_inode);
 	for (qx = 0; qx < num_qd; qx++) {
+		/*
+		 * If we already hold this quota glock (because do_sync was
+		 * called from a context where quota glocks are already held,
+		 * such as during unmount), skip the recursive acquisition.
+		 *
+		 * We mark the holder with a NULL glock pointer so the cleanup
+		 * path knows not to release it.
+		 */
+		if (gfs2_glock_is_locked_by_me(qda[qx]->qd_gl)) {
+			memset(&ghs[qx], 0, sizeof(ghs[qx]));
+			continue;
+		}
+
 		error = gfs2_glock_nq_init(qda[qx]->qd_gl, LM_ST_EXCLUSIVE,
 					   GL_NOCACHE, &ghs[qx]);
 		if (error)
@@ -990,7 +1003,8 @@ out_alloc:
 	gfs2_glock_dq_uninit(&i_gh);
 out_dq:
 	while (qx--)
-		gfs2_glock_dq_uninit(&ghs[qx]);
+		if (ghs[qx].gh_gl)
+			gfs2_glock_dq_uninit(&ghs[qx]);
 	inode_unlock(&ip->i_inode);
 	kfree(ghs);
 	gfs2_log_flush(glock_sbd(ip->i_gl), ip->i_gl,
