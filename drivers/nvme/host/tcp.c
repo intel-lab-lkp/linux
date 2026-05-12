@@ -1809,6 +1809,8 @@ static int nvme_tcp_alloc_queue(struct nvme_ctrl *nctrl, int qid,
 	sock_file = sock_alloc_file(queue->sock, O_CLOEXEC, NULL);
 	if (IS_ERR(sock_file)) {
 		ret = PTR_ERR(sock_file);
+		sock_release(queue->sock);
+		queue->sock = NULL;
 		goto err_destroy_mutex;
 	}
 
