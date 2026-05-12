@@ -86,10 +86,15 @@ static void panthor_gpu_l2_config_set(struct panthor_device *ptdev)
 	gpu_write(gpu->iomem, GPU_L2_CONFIG, l2_config);
 }
 
-static void panthor_gpu_irq_handler(struct panthor_irq *pirq, u32 status)
+static irqreturn_t panthor_gpu_irq_raw_handler(int irq, void *data)
 {
+	struct panthor_irq *pirq = data;
 	struct panthor_device *ptdev = pirq->ptdev;
 	struct panthor_gpu *gpu = ptdev->gpu;
+	u32 status = gpu_read(gpu->irq.iomem, INT_STAT);
+
+	if (!status)
+		return IRQ_NONE;
 
 	gpu_write(gpu->irq.iomem, INT_CLEAR, status);
 
@@ -115,11 +120,8 @@ static void panthor_gpu_irq_handler(struct panthor_irq *pirq, u32 status)
 		ptdev->gpu->pending_reqs &= ~status;
 		wake_up_all(&ptdev->gpu->reqs_acked);
 	}
-}
 
-static irqreturn_t panthor_gpu_irq_threaded_handler(int irq, void *data)
-{
-	return panthor_irq_default_threaded_handler(data, panthor_gpu_irq_handler);
+	return IRQ_HANDLED;
 }
 
 /**
@@ -176,8 +178,7 @@ int panthor_gpu_init(struct panthor_device *ptdev)
 	ret = panthor_irq_request(ptdev, &ptdev->gpu->irq, irq,
 				  GPU_INTERRUPTS_MASK,
 				  ptdev->iomem + GPU_INT_BASE, "gpu",
-				  panthor_irq_default_raw_handler,
-				  panthor_gpu_irq_threaded_handler);
+				  panthor_gpu_irq_raw_handler, NULL);
 	if (ret)
 		return ret;
 
