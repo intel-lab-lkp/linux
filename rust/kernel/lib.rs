@@ -74,6 +74,8 @@ pub mod fmt;
 pub mod fs;
 #[cfg(CONFIG_GPU_BUDDY = "y")]
 pub mod gpu;
+#[cfg(CONFIG_HWMON = "y")]
+pub mod hwmon;
 #[cfg(CONFIG_I2C = "y")]
 pub mod i2c;
 pub mod id_pool;
