@@ -1039,16 +1039,10 @@ static void panthor_fw_init_global_iface(struct panthor_device *ptdev)
 	glb_iface->input->progress_timer = PROGRESS_TIMEOUT_CYCLES >> PROGRESS_TIMEOUT_SCALE_SHIFT;
 	glb_iface->input->idle_timer = panthor_fw_conv_timeout(ptdev, IDLE_HYSTERESIS_US);
 
-	/* Enable interrupts we care about. */
-	glb_iface->input->ack_irq_mask = GLB_CFG_ALLOC_EN |
-					 GLB_PING |
-					 GLB_CFG_PROGRESS_TIMER |
-					 GLB_CFG_POWEROFF_TIMER |
-					 GLB_IDLE_EN |
-					 GLB_IDLE;
-
-	if (panthor_fw_has_glb_state(ptdev))
-		glb_iface->input->ack_irq_mask |= GLB_STATE_MASK;
+	/* Enable interrupts for asynchronous events that are not
+	 * triggered by request acks.
+	 */
+	glb_iface->input->ack_irq_mask = GLB_IDLE;
 
 	panthor_fw_update_reqs(glb_iface, req, GLB_IDLE_EN | GLB_COUNTER_EN,
 			       GLB_IDLE_EN | GLB_COUNTER_EN);
@@ -1318,8 +1312,8 @@ void panthor_fw_unplug(struct panthor_device *ptdev)
  * Return: 0 on success, -ETIMEDOUT otherwise.
  */
 static int panthor_fw_wait_acks(const u32 *req_ptr, const u32 *ack_ptr,
-				wait_queue_head_t *wq,
-				u32 req_mask, u32 *acked,
+				u32 *ack_irq_mask_ptr, spinlock_t *lock,
+				wait_queue_head_t *wq, u32 req_mask, u32 *acked,
 				u32 timeout_ms)
 {
 	u32 ack, req = READ_ONCE(*req_ptr) & req_mask;
@@ -1334,8 +1328,16 @@ static int panthor_fw_wait_acks(const u32 *req_ptr, const u32 *ack_ptr,
 	if (!ret)
 		return 0;
 
-	if (wait_event_timeout(*wq, (READ_ONCE(*ack_ptr) & req_mask) == req,
-			       msecs_to_jiffies(timeout_ms)))
+	scoped_guard(spinlock_irqsave, lock)
+		*ack_irq_mask_ptr |= req_mask;
+
+	ret = wait_event_timeout(*wq, (READ_ONCE(*ack_ptr) & req_mask) == req,
+				 msecs_to_jiffies(timeout_ms));
+
+	scoped_guard(spinlock_irqsave, lock)
+		*ack_irq_mask_ptr &= ~req_mask;
+
+	if (ret)
 		return 0;
 
 	/* Check one last time, in case we were not woken up for some reason. */
@@ -1369,6 +1371,8 @@ int panthor_fw_glb_wait_acks(struct panthor_device *ptdev,
 
 	return panthor_fw_wait_acks(&glb_iface->input->req,
 				    &glb_iface->output->ack,
+				    &glb_iface->input->ack_irq_mask,
+				    &glb_iface->lock,
 				    &ptdev->fw->req_waitqueue,
 				    req_mask, acked, timeout_ms);
 }
@@ -1395,6 +1399,8 @@ int panthor_fw_csg_wait_acks(struct panthor_device *ptdev, u32 csg_slot,
 
 	ret = panthor_fw_wait_acks(&csg_iface->input->req,
 				   &csg_iface->output->ack,
+				   &csg_iface->input->ack_irq_mask,
+				   &csg_iface->lock,
 				   &ptdev->fw->req_waitqueue,
 				   req_mask, acked, timeout_ms);
 

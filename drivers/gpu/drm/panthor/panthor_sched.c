@@ -1110,7 +1110,7 @@ cs_slot_prog_locked(struct panthor_device *ptdev, u32 csg_id, u32 cs_id)
 	cs_iface->input->ringbuf_output = queue->iface.output_fw_va;
 	cs_iface->input->config = CS_CONFIG_PRIORITY(queue->priority) |
 				  CS_CONFIG_DOORBELL(queue->doorbell_id);
-	cs_iface->input->ack_irq_mask = ~0;
+	cs_iface->input->ack_irq_mask = CS_FATAL | CS_FAULT | CS_TILER_OOM;
 	panthor_fw_update_reqs(cs_iface, req,
 			       CS_IDLE_SYNC_WAIT |
 			       CS_IDLE_EMPTY |
@@ -1378,7 +1378,8 @@ csg_slot_prog_locked(struct panthor_device *ptdev, u32 csg_id, u32 priority)
 		csg_iface->input->protm_suspend_buf = 0;
 	}
 
-	csg_iface->input->ack_irq_mask = ~0;
+	csg_iface->input->ack_irq_mask = CSG_SYNC_UPDATE | CSG_IDLE |
+					 CSG_PROGRESS_TIMER_EVENT;
 	panthor_fw_toggle_reqs(csg_iface, doorbell_req, doorbell_ack, queue_mask);
 	return 0;
 }
