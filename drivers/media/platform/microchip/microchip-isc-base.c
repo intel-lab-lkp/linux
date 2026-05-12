@@ -1730,10 +1730,22 @@ static int isc_s_awb_ctrl(struct v4l2_ctrl *ctrl)
 
 	switch (ctrl->id) {
 	case V4L2_CID_AUTO_WHITE_BALANCE:
-		if (ctrl->val == 1)
+		if (ctrl->val == 1) {
 			ctrls->awb = ISC_WB_AUTO;
-		else
+			/*
+			 * Reset gamma and CC to defaults when enabling kernel
+			 * AWB so it starts with a clean pipeline.
+			 */
+			ctrls->gamma_lut_override = false;
+			memset(ctrls->cc_coeff, 0, sizeof(ctrls->cc_coeff));
+			ctrls->cc_coeff[0] = 256; /* RR */
+			ctrls->cc_coeff[4] = 256; /* GG */
+			ctrls->cc_coeff[8] = 256; /* BB */
+			memset(ctrls->cc_offset, 0, sizeof(ctrls->cc_offset));
+			ctrls->cc_dirty = true;
+		} else {
 			ctrls->awb = ISC_WB_NONE;
+		}
 
 		/* configure the controls with new values from v4l2 */
 		if (ctrl->cluster[ISC_CTRL_R_GAIN]->is_new)
