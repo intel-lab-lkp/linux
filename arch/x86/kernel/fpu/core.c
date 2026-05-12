@@ -420,6 +420,8 @@ void fpu_copy_guest_fpstate_to_uabi(struct fpu_guest *gfpu, void *buf,
 	struct membuf mb = { .p = buf, .left = size };
 
 	if (cpu_feature_enabled(X86_FEATURE_XSAVE)) {
+		/* Up to date APX registers are in struct kvm_vcpu anyway.  */
+		xfeatures &= ~XFEATURE_MASK_APX;
 		__copy_xstate_to_uabi_buf(mb, kstate, xfeatures, pkru,
 					  XSTATE_COPY_XSAVE);
 	} else {
@@ -431,11 +433,11 @@ void fpu_copy_guest_fpstate_to_uabi(struct fpu_guest *gfpu, void *buf,
 }
 EXPORT_SYMBOL_FOR_KVM(fpu_copy_guest_fpstate_to_uabi);
 
-int fpu_copy_uabi_to_guest_fpstate(struct fpu_guest *gfpu, const void *buf,
+int fpu_copy_uabi_to_guest_fpstate(struct fpu_guest *gfpu, void *buf,
 				   u64 xcr0, u32 *vpkru)
 {
 	struct fpstate *kstate = gfpu->fpstate;
-	const union fpregs_state *ustate = buf;
+	union fpregs_state *ustate = buf;
 
 	if (!cpu_feature_enabled(X86_FEATURE_XSAVE)) {
 		if (ustate->xsave.header.xfeatures & ~XFEATURE_MASK_FPSSE)
@@ -463,6 +465,9 @@ int fpu_copy_uabi_to_guest_fpstate(struct fpu_guest *gfpu, const void *buf,
 	 */
 	if (!(ustate->xsave.header.xfeatures & XFEATURE_MASK_PKRU))
 		vpkru = NULL;
+
+	/* APX registers are copied to and from struct kvm_vcpu, not the FPU.  */
+	ustate->xsave.header.xfeatures &= ~XFEATURE_MASK_APX;
 
 	return copy_uabi_from_kernel_to_xstate(kstate, ustate, vpkru);
 }
