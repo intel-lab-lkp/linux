@@ -845,7 +845,7 @@ static const struct of_device_id sx9360_of_match[] = {
 MODULE_DEVICE_TABLE(of, sx9360_of_match);
 
 static const struct i2c_device_id sx9360_id[] = {
-	{"sx9360", SX9360_WHOAMI_VALUE },
+	{ .name = "sx9360", .driver_data = SX9360_WHOAMI_VALUE },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, sx9360_id);

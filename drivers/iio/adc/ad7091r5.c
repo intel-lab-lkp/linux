@@ -117,7 +117,7 @@ static const struct of_device_id ad7091r5_dt_ids[] = {
 MODULE_DEVICE_TABLE(of, ad7091r5_dt_ids);
 
 static const struct i2c_device_id ad7091r5_i2c_ids[] = {
-	{ "ad7091r5", (kernel_ulong_t)&ad7091r5_init_info },
+	{ .name = "ad7091r5", .driver_data = (kernel_ulong_t)&ad7091r5_init_info },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, ad7091r5_i2c_ids);
