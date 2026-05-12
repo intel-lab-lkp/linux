@@ -167,6 +167,15 @@ static inline bool gmap_unmap_prefix(struct gmap *gmap, gfn_t gfn, gfn_t end)
 	return _gmap_unmap_prefix(gmap, gfn, end, false);
 }
 
+static inline bool pte_needs_unshadow(union pte oldpte, union pte newpte, union pgste pgste)
+{
+	if (!pgste.vsie_notif)
+		return false;
+	if (pgste.vsie_gmem)
+		return (oldpte.h.p != newpte.h.p) || newpte.h.i;
+	return !newpte.h.p || !newpte.s.pr;
+}
+
 static inline union pgste _gmap_ptep_xchg(struct gmap *gmap, union pte *ptep, union pte newpte,
 					  union pgste pgste, gfn_t gfn, bool needs_lock)
 {
@@ -180,8 +189,9 @@ static inline union pgste _gmap_ptep_xchg(struct gmap *gmap, union pte *ptep, un
 		pgste.prefix_notif = 0;
 		gmap_unmap_prefix(gmap, gfn, gfn + 1);
 	}
-	if (pgste.vsie_notif && (ptep->h.p != newpte.h.p || newpte.h.i)) {
+	if (pte_needs_unshadow(*ptep, newpte, pgste)) {
 		pgste.vsie_notif = 0;
+		pgste.vsie_gmem = 0;
 		if (needs_lock)
 			gmap_handle_vsie_unshadow_event(gmap, gfn);
 		else
@@ -196,6 +206,13 @@ static inline union pgste gmap_ptep_xchg(struct gmap *gmap, union pte *ptep, uni
 					 union pgste pgste, gfn_t gfn)
 {
 	return _gmap_ptep_xchg(gmap, ptep, newpte, pgste, gfn, true);
+}
+
+static inline bool crste_needs_unshadow(union crste oldcrste, union crste newcrste)
+{
+	if (!oldcrste.s.fc1.vsie_notif)
+		return false;
+	return (newcrste.h.p != oldcrste.h.p) || newcrste.h.i || !newcrste.s.fc1.vsie_notif;
 }
 
 static inline bool __must_check _gmap_crstep_xchg_atomic(struct gmap *gmap, union crste *crstep,
@@ -216,8 +233,7 @@ static inline bool __must_check _gmap_crstep_xchg_atomic(struct gmap *gmap, unio
 		newcrste.s.fc1.prefix_notif = 0;
 		gmap_unmap_prefix(gmap, gfn, gfn + align);
 	}
-	if (crste_leaf(oldcrste) && oldcrste.s.fc1.vsie_notif &&
-	    (newcrste.h.p || newcrste.h.i || !newcrste.s.fc1.vsie_notif)) {
+	if (crste_leaf(oldcrste) && crste_needs_unshadow(oldcrste, newcrste)) {
 		newcrste.s.fc1.vsie_notif = 0;
 		if (needs_lock)
 			gmap_handle_vsie_unshadow_event(gmap, gfn);
