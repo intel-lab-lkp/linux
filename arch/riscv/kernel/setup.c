@@ -71,16 +71,14 @@ static struct resource *standard_resources;
 static int __init add_resource(struct resource *parent,
 				struct resource *res)
 {
-	int ret = 0;
+	int ret;
 
 	ret = insert_resource(parent, res);
-	if (ret < 0) {
+	if (ret < 0)
 		pr_err("Failed to add a %s resource at %llx\n",
 			res->name, (unsigned long long) res->start);
-		return ret;
-	}
 
-	return 1;
+	return ret;
 }
 
 static int __init add_kernel_resources(void)
