@@ -616,7 +616,7 @@ Huizenga for some of the list of things you should and should not say.
 Also thanks to Pat Mochel, Hanna Linder, Randy Dunlap, Kay Sievers,
 Vojtech Pavlik, Jan Kara, Josh Boyer, Kees Cook, Andrew Morton, Andi
 Kleen, Vadim Lobanov, Jesper Juhl, Adrian Bunk, Keri Harris, Frans Pop,
-David A. Wheeler, Junio Hamano, Michael Kerrisk, and Alex Shepard for
+David A. Wheeler, Junio Hamano, Michael Kerrisk, and Alex Shepherd for
 their review, comments, and contributions.  Without their help, this
 document would not have been possible.
 
