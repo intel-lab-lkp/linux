@@ -24,6 +24,9 @@ struct xe_sysctrl_mailbox_command;
 	FIELD_GET(APP_HDR_VERSION_MASK, (hdr)->data)
 
 void xe_sysctrl_mailbox_init(struct xe_sysctrl *sc);
+void xe_sysctrl_populate_command(struct xe_sysctrl_mailbox_command *command, void *request,
+				 void *response, size_t request_len, size_t response_len,
+				 u8 group_id, u8 cmd_id);
 int xe_sysctrl_send_command(struct xe_sysctrl *sc,
 			    struct xe_sysctrl_mailbox_command *cmd,
 			    size_t *rdata_len);

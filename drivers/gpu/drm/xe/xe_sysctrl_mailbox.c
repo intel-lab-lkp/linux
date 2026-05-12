@@ -308,6 +308,35 @@ void xe_sysctrl_mailbox_init(struct xe_sysctrl *sc)
 }
 
 /**
+ * xe_sysctrl_populate_command() - Populate System Controller command structure
+ * @command: System Controller command structure
+ * @request: Pointer to request structure
+ * @response: Pointer to response structure
+ * @request_len: Length of request structure
+ * @response_len: Length of response structure
+ * @group_id: Group ID to be used with command
+ * @cmd_id: Command ID to be used with command
+ *
+ * Helper for mailbox users to populate command structure fields to be later
+ * sent to xe_sysctrl_send_command().
+ */
+void xe_sysctrl_populate_command(struct xe_sysctrl_mailbox_command *command, void *request,
+				 void *response, size_t request_len, size_t response_len,
+				 u8 group_id, u8 cmd_id)
+{
+	struct xe_sysctrl_app_msg_hdr header = {};
+
+	header.data = FIELD_PREP(APP_HDR_GROUP_ID_MASK, group_id) |
+		      FIELD_PREP(APP_HDR_COMMAND_MASK, cmd_id);
+
+	command->header = header;
+	command->data_in = request;
+	command->data_in_len = request_len;
+	command->data_out = response;
+	command->data_out_len = response_len;
+}
+
+/**
  * xe_sysctrl_send_command() - Send mailbox command to System Controller
  * @sc: System Controller instance
  * @cmd: Command descriptor containing request header and payload buffers
