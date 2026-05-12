@@ -83,6 +83,20 @@ struct drm_ras_node {
 	 */
 	int (*query_error_threshold)(struct drm_ras_node *node, u32 error_id,
 				     const char **name, u32 *val);
+	/**
+	 * @set_error_threshold:
+	 *
+	 * This callback is used by drm-ras to set threshold value of a specific
+	 * error.
+	 *
+	 * Driver should expect set_error_threshold() to be called with error_id
+	 * from `error_counter_range.first` to `error_counter_range.last`.
+	 * Driver is responsible for threshold value bounds checking.
+	 *
+	 * Returns: 0 on success, negative error code on failure.
+	 */
+	int (*set_error_threshold)(struct drm_ras_node *node, u32 error_id,
+				   u32 val);
 
 	/** @priv: Driver private data */
 	void *priv;

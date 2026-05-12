@@ -56,6 +56,8 @@ User space tools can:
   ``node-id`` and ``error-id`` as parameters.
 * Query specific error threshold value with the ``get-error-threshold`` command, using both
   ``node-id`` and ``error-id`` as parameters.
+* Set specific error threshold value with the ``set-error-threshold`` command, using
+  ``node-id``, ``error-id`` and ``error-threshold`` as parameters.
 
 YAML-based Interface
 --------------------
@@ -118,3 +120,10 @@ Example: Query threshold value of a given error
 
     sudo ynl --family drm_ras --do get-error-threshold --json '{"node-id":0, "error-id":1}'
     {'error-id': 1, 'error-name': 'error_name1', 'error-threshold': 16}
+
+Example: Set threshold value of a given error
+
+.. code-block:: bash
+
+    sudo ynl --family drm_ras --do set-error-threshold --json '{"node-id":0, "error-id":1, "error-threshold":8}'
+    None
