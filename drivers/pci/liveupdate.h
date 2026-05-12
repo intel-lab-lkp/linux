@@ -13,6 +13,7 @@
 #ifdef CONFIG_PCI_LIVEUPDATE
 void pci_liveupdate_setup_device(struct pci_dev *dev);
 void pci_liveupdate_cleanup_device(struct pci_dev *dev);
+bool pci_liveupdate_inherit_buses(void);
 #else
 static inline void pci_liveupdate_setup_device(struct pci_dev *dev)
 {
@@ -20,6 +21,11 @@ static inline void pci_liveupdate_setup_device(struct pci_dev *dev)
 
 static inline void pci_liveupdate_cleanup_device(struct pci_dev *dev)
 {
+}
+
+static inline bool pci_liveupdate_inherit_buses(void)
+{
+	return false;
 }
 #endif
 
