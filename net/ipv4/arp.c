@@ -1154,9 +1154,9 @@ static int arp_req_set(struct net *net, struct arpreq *r)
 
 static unsigned int arp_state_to_flags(struct neighbour *neigh)
 {
-	if (neigh->nud_state&NUD_PERMANENT)
+	if (neigh->nud_state & NUD_PERMANENT)
 		return ATF_PERM | ATF_COM;
-	else if (neigh->nud_state&NUD_VALID)
+	else if (neigh->nud_state & NUD_VALID)
 		return ATF_COM;
 	else
 		return 0;
