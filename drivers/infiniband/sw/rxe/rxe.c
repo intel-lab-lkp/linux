@@ -94,8 +94,13 @@ static void rxe_init_device_param(struct rxe_dev *rxe, struct net_device *ndev)
 	if (IS_ENABLED(CONFIG_INFINIBAND_ON_DEMAND_PAGING)) {
 		rxe->attr.kernel_cap_flags |= IBK_ON_DEMAND_PAGING;
 
-		/* IB_ODP_SUPPORT_IMPLICIT is not supported right now. */
 		rxe->attr.odp_caps.general_caps |= IB_ODP_SUPPORT;
+		/* IMPLICIT is gated to the local-access subset. The fault path
+		 * in rxe_odp.c rejects remote-access implicit forms at
+		 * registration time. Per-transport caps below stay unchanged:
+		 * they describe explicit ODP MR semantics and remain accurate.
+		 */
+		rxe->attr.odp_caps.general_caps |= IB_ODP_SUPPORT_IMPLICIT;
 
 		rxe->attr.odp_caps.per_transport_caps.ud_odp_caps |= IB_ODP_SUPPORT_SEND;
 		rxe->attr.odp_caps.per_transport_caps.ud_odp_caps |= IB_ODP_SUPPORT_RECV;
