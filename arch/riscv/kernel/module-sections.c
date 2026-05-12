@@ -118,7 +118,7 @@ int module_frob_arch_sections(Elf_Ehdr *ehdr, Elf_Shdr *sechdrs,
 	size_t num_scratch_relas = 0;
 	unsigned int num_plts = 0;
 	unsigned int num_gots = 0;
-	Elf_Rela *scratch = NULL;
+	Elf_Rela *scratch __free(kvfree) = NULL;
 	Elf_Rela *new_scratch;
 	size_t scratch_size = 0;
 	int i;
@@ -170,10 +170,9 @@ int module_frob_arch_sections(Elf_Ehdr *ehdr, Elf_Shdr *sechdrs,
 		if (scratch_size_needed > scratch_size) {
 			scratch_size = scratch_size_needed;
 			new_scratch = kvrealloc(scratch, scratch_size, GFP_KERNEL);
-			if (!new_scratch) {
-				kvfree(scratch);
+			if (!new_scratch)
 				return -ENOMEM;
-			}
+
 			scratch = new_scratch;
 		}
 
@@ -186,7 +185,6 @@ int module_frob_arch_sections(Elf_Ehdr *ehdr, Elf_Shdr *sechdrs,
 		/* sort the accumulated PLT/GOT relocations so duplicates are adjacent */
 		sort(scratch, num_scratch_relas, sizeof(*scratch), cmp_rela, NULL);
 		count_max_entries(scratch, num_scratch_relas, &num_plts, &num_gots);
-		kvfree(scratch);
 	}
 
 	mod->arch.plt.shdr->sh_type = SHT_NOBITS;
