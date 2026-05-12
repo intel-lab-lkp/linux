@@ -1920,7 +1920,8 @@ config GPIO_RDC321X
 
 config GPIO_SODAVILLE
 	bool "Intel Sodaville GPIO support"
-	depends on X86 && OF
+	depends on X86 || COMPILE_TEST
+	depends on OF
 	select GPIO_GENERIC
 	select GENERIC_IRQ_CHIP
 	help
