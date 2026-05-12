@@ -1206,6 +1206,9 @@ dev_cmp(struct nf_queue_entry *entry, unsigned long ifindex)
 #if IS_ENABLED(CONFIG_BRIDGE_NETFILTER)
 	int physinif, physoutif;
 
+	if (entry->skb_dev && entry->skb_dev->ifindex == ifindex)
+		return 1;
+
 	physinif = nf_bridge_get_physinif(entry->skb);
 	physoutif = nf_bridge_get_physoutif(entry->skb);
 

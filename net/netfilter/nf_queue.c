@@ -67,6 +67,7 @@ static void nf_queue_entry_release_refs(struct nf_queue_entry *entry)
 		nf_queue_sock_put(state->sk);
 
 #if IS_ENABLED(CONFIG_BRIDGE_NETFILTER)
+	dev_put(entry->skb_dev);
 	dev_put(entry->physin);
 	dev_put(entry->physout);
 #endif
@@ -106,6 +107,7 @@ bool nf_queue_entry_get_refs(struct nf_queue_entry *entry)
 	dev_hold(state->out);
 
 #if IS_ENABLED(CONFIG_BRIDGE_NETFILTER)
+	dev_hold(entry->skb_dev);
 	dev_hold(entry->physin);
 	dev_hold(entry->physout);
 #endif
@@ -207,6 +209,9 @@ static int __nf_queue(struct sk_buff *skb, const struct nf_hook_state *state,
 		.size	= sizeof(*entry) + route_key_size,
 	};
 
+#if IS_ENABLED(CONFIG_BRIDGE_NETFILTER)
+	entry->skb_dev = skb->dev;
+#endif
 	__nf_queue_entry_init_physdevs(entry);
 
 	if (!nf_queue_entry_get_refs(entry)) {
