@@ -134,6 +134,12 @@ enum{
 	HIST_DISABLED,
 };
 
+#define GAMMA_ENTRIES		64
+
+/* CC matrix coefficients (3x3 row-major) and per-channel offsets */
+#define ISC_CC_COEFF_NUM	9
+#define ISC_CC_OFFSET_NUM	3
+
 struct isc_ctrls {
 	struct v4l2_ctrl_handler handler;
 
@@ -158,6 +164,11 @@ struct isc_ctrls {
 #define HIST_MIN_INDEX		0
 #define HIST_MAX_INDEX		1
 	u32 hist_minmax[HIST_BAYER][2];
+
+	/* CC matrix shadow; committed from isc_set_pipeline() and isc_awb_work() */
+	s32 cc_coeff[ISC_CC_COEFF_NUM];
+	s32 cc_offset[ISC_CC_OFFSET_NUM];
+	bool cc_dirty;
 };
 
 #define ISC_PIPE_LINE_NODE_NUM	15
@@ -338,6 +349,18 @@ struct isc_device {
 		struct v4l2_ctrl	*b_off_ctrl;
 		struct v4l2_ctrl	*gr_off_ctrl;
 		struct v4l2_ctrl	*gb_off_ctrl;
+		struct v4l2_ctrl        *cc_rr;
+		struct v4l2_ctrl        *cc_rg;
+		struct v4l2_ctrl        *cc_rb;
+		struct v4l2_ctrl        *cc_or;
+		struct v4l2_ctrl        *cc_gr;
+		struct v4l2_ctrl        *cc_gg;
+		struct v4l2_ctrl        *cc_gb;
+		struct v4l2_ctrl        *cc_og;
+		struct v4l2_ctrl        *cc_br;
+		struct v4l2_ctrl        *cc_bg;
+		struct v4l2_ctrl        *cc_bb;
+		struct v4l2_ctrl        *cc_ob;
 	};
 
 #define GAMMA_ENTRIES	64
