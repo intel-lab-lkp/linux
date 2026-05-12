@@ -92,4 +92,32 @@ struct xe_ras_get_threshold_response {
 	u32 reserved[4];
 } __packed;
 
+/**
+ * struct xe_ras_set_threshold_request - Request structure for set threshold
+ */
+struct xe_ras_set_threshold_request {
+	/** @counter: Counter to set threshold for */
+	struct xe_ras_error_class counter;
+	/** @threshold: Threshold value to set */
+	u32 threshold;
+	/** @reserved: Reserved for future use */
+	u32 reserved;
+} __packed;
+
+/**
+ * struct xe_ras_set_threshold_response - Response structure for set threshold
+ */
+struct xe_ras_set_threshold_response {
+	/** @counter: Counter ID */
+	struct xe_ras_error_class counter;
+	/** @threshold_prev: Previous threshold value */
+	u32 threshold_prev;
+	/** @threshold: Updated threshold value */
+	u32 threshold;
+	/** @status: Set threshold operation status */
+	u32 status;
+	/** @reserved: Reserved for future use */
+	u32 reserved[2];
+} __packed;
+
 #endif
