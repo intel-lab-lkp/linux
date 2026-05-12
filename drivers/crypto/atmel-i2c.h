@@ -7,8 +7,11 @@
 #ifndef __ATMEL_I2C_H__
 #define __ATMEL_I2C_H__
 
+#include <linux/device.h>
+#include <crypto/internal/hash.h>
 #include <linux/hw_random.h>
 #include <linux/types.h>
+#include <crypto/sha2.h>
 
 #define ATMEL_I2C_PRIORITY		300
 
@@ -79,11 +82,13 @@ struct atmel_i2c_max_exec_timings {
 	unsigned int max_exec_time_ecdh;
 	unsigned int max_exec_time_random;
 	unsigned int max_exec_time_read;
+	unsigned int max_exec_time_sha;
 	unsigned int max_exec_time_write;
 };
 
 struct atmel_i2c_of_match_data {
 	const unsigned short needs_legacy_hwrng;
+	const unsigned short needs_sha_padding;
 	struct atmel_i2c_max_exec_timings timings;
 	size_t eeprom_zone_size[3]; /* all atmel devices have three zones */
 };
@@ -91,6 +96,30 @@ struct atmel_i2c_of_match_data {
 /* Used for binding tfm objects to i2c clients. */
 enum atmel_i2c_capability {
 	ATMEL_CAP_ECDH = 0,
+	ATMEL_CAP_SHA,
+};
+
+enum atmel_i2c_sha_engine_cmd {
+	atmel_sha_init = 0,
+	atmel_sha_compute,
+	atmel_sha_ecc_end,
+};
+
+size_t atmel_i2c_sha_rsp_size[] = {
+	[atmel_sha_init] = ATMEL_I2C_STATUS_RSP_SIZE,
+	[atmel_sha_compute] = SHA256_DIGEST_SIZE + ATMEL_I2C_RSP_OVERHEAD_SIZE,
+	[atmel_sha_ecc_end] = SHA256_DIGEST_SIZE + ATMEL_I2C_RSP_OVERHEAD_SIZE,
+};
+
+struct atmel_i2c_sha_ctx {
+	struct i2c_client *client;
+};
+
+struct atmel_i2c_sha_reqctx {
+	u8 buffer[SHA256_BLOCK_SIZE];
+	size_t bufcnt;
+	size_t total; /* size of full input, needed for padding */
+	struct atmel_i2c_client_priv *ctx;
 };
 
 struct atmel_i2c_client_mgmt {
@@ -172,8 +201,19 @@ void atmel_i2c_init_genkey_cmd(struct atmel_i2c_cmd *cmd, u16 keyid,
 int atmel_i2c_init_ecdh_cmd(struct atmel_i2c_cmd *cmd,
 			    struct scatterlist *pubkey,
 			    const struct atmel_i2c_max_exec_timings *timings);
+int atmel_i2c_init_sha_cmd(struct atmel_i2c_cmd *cmd, u8 *challenge, size_t len,
+			   enum atmel_i2c_sha_engine_cmd sha_engine_cmd,
+			   const struct atmel_i2c_max_exec_timings *timings);
 int atmel_i2c_register_rng(struct atmel_i2c_client_priv *i2c_priv,
 			   struct device *dev);
+
+int atmel_i2c_sha_init(struct ahash_request *req);
+int atmel_i2c_sha_update(struct ahash_request *req);
+int atmel_i2c_sha_final(struct ahash_request *req);
+int atmel_i2c_sha_finup(struct ahash_request *req);
+int atmel_i2c_sha_digest(struct ahash_request *req);
+int atmel_i2c_sha_export(struct ahash_request *req, void *out);
+int atmel_i2c_sha_import(struct ahash_request *req, const void *in);
 
 int atmel_i2c_device_sanity_check(struct i2c_client *client);
 

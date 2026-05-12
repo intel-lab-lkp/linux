@@ -17,7 +17,47 @@
 #include <linux/slab.h>
 #include <linux/sysfs.h>
 #include <linux/workqueue.h>
+#include <crypto/sha2.h>
+
 #include "atmel-i2c.h"
+
+static int atmel_sha204a_sha_init_tfm(struct crypto_tfm *tfm)
+{
+	struct atmel_i2c_sha_ctx *ctx = crypto_tfm_ctx(tfm);
+
+	ctx->client = atmel_i2c_client_alloc(ATMEL_CAP_SHA);
+	if (IS_ERR(ctx->client)) {
+		pr_err("tfm - i2c_client binding failed\n");
+		return PTR_ERR(ctx->client);
+	}
+
+	return 0;
+}
+
+static struct ahash_alg atmel_sha204a_sha = {
+	.init = atmel_i2c_sha_init,
+	.update	= atmel_i2c_sha_update,
+	.final = atmel_i2c_sha_final,
+	.finup = atmel_i2c_sha_finup,
+	.digest	= atmel_i2c_sha_digest,
+	.export = atmel_i2c_sha_export,
+	.import = atmel_i2c_sha_import,
+	.halg = {
+		.digestsize = SHA256_DIGEST_SIZE,
+		.statesize = sizeof(struct atmel_i2c_sha_reqctx),
+		.base = {
+			.cra_name		= "sha256",
+			.cra_driver_name	= "atmel-sha256",
+			.cra_init		= atmel_sha204a_sha_init_tfm,
+			.cra_priority		= ATMEL_I2C_PRIORITY,
+			.cra_flags		= CRYPTO_ALG_TYPE_AHASH,
+			.cra_blocksize		= SHA256_BLOCK_SIZE,
+			.cra_ctxsize		= sizeof(struct atmel_i2c_sha_ctx),
+			.cra_reqsize		= sizeof(struct atmel_i2c_sha_reqctx),
+			.cra_module		= THIS_MODULE,
+		}
+	}
+};
 
 static ssize_t config_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
@@ -62,7 +102,7 @@ static int atmel_sha204a_probe(struct i2c_client *client)
 
 	i2c_priv = i2c_get_clientdata(client);
 	i2c_priv->data = data;
-	i2c_priv->caps = 0;
+	i2c_priv->caps = BIT(ATMEL_CAP_SHA);
 
 	ret = atmel_i2c_device_sanity_check(client);
 	if (ret) {
@@ -95,6 +135,13 @@ static int atmel_sha204a_probe(struct i2c_client *client)
 		goto err_list_del;
 	}
 
+	/* register algorithms */
+	ret = crypto_register_ahash(&atmel_sha204a_sha);
+	if (ret) {
+		dev_err(&client->dev, "SHA256 registration failed\n");
+		goto err_list_del;
+	}
+
 	goto done;
 
 err_list_del:
@@ -119,6 +166,8 @@ static void atmel_sha204a_remove(struct i2c_client *client)
 	devm_hwrng_unregister(&client->dev, &i2c_priv->hwrng);
 	atmel_i2c_flush_queue();
 
+	crypto_unregister_ahash(&atmel_sha204a_sha);
+
 	if (i2c_priv->hwrng.priv) {
 		kfree((void *)i2c_priv->hwrng.priv);
 		i2c_priv->hwrng.priv = 0;
@@ -130,6 +179,7 @@ static const struct atmel_i2c_of_match_data atsha204_match_data = {
 		.max_exec_time_genkey = 43,
 		.max_exec_time_random = 50,
 		.max_exec_time_read = 4,
+		.max_exec_time_sha = 22,
 		.max_exec_time_write = 42,
 	},
 	.eeprom_zone_size = {
@@ -142,6 +192,7 @@ static const struct atmel_i2c_of_match_data atsha204_match_data = {
 	 * [1] https://www.metzdowd.com/pipermail/cryptography/2014-December/023858.html
 	 */
 	.needs_legacy_hwrng = 1,
+	.needs_sha_padding = 1,
 };
 
 static const struct atmel_i2c_of_match_data atsha204a_match_data = {
@@ -149,6 +200,7 @@ static const struct atmel_i2c_of_match_data atsha204a_match_data = {
 		.max_exec_time_genkey = 43,
 		.max_exec_time_random = 50,
 		.max_exec_time_read = 4,
+		.max_exec_time_sha = 22,
 		.max_exec_time_write = 42,
 	},
 	.eeprom_zone_size = {
@@ -156,6 +208,7 @@ static const struct atmel_i2c_of_match_data atsha204a_match_data = {
 		[ATMEL_EEPROM_OTP_ZONE] = 64,
 		[ATMEL_EEPROM_DATA_ZONE] = 512
 	},
+	.needs_sha_padding = 1,
 };
 
 static const struct of_device_id atmel_sha204a_dt_ids[] __maybe_unused = {
