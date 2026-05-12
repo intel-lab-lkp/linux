@@ -1188,6 +1188,8 @@ struct bnxt_cmn_sw_stats {
 enum bnxt_ktls_data_counters {
 	BNXT_KTLS_TX_PKTS = 0,
 	BNXT_KTLS_TX_BYTES,
+	BNXT_KTLS_TX_OOO_PKTS,
+	BNXT_KTLS_TX_DROP_NO_SYNC,
 
 	BNXT_KTLS_MAX_DATA_COUNTERS,
 };
