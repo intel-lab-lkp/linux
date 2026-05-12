@@ -10,24 +10,6 @@
 
 #ifdef CONFIG_PSI
 
-/* Tracked task states */
-enum psi_task_count {
-	NR_IOWAIT,
-	NR_MEMSTALL,
-	NR_RUNNING,
-	/*
-	 * For IO and CPU stalls the presence of running/oncpu tasks
-	 * in the domain means a partial rather than a full stall.
-	 * For memory it's not so simple because of page reclaimers:
-	 * they are running/oncpu while representing a stall. To tell
-	 * whether a domain has productivity left or not, we need to
-	 * distinguish between regular running (i.e. productive)
-	 * threads and memstall ones.
-	 */
-	NR_MEMSTALL_RUNNING,
-	NR_PSI_TASK_COUNTS = 4,
-};
-
 /* Task state bitmasks */
 #define TSK_IOWAIT	(1 << NR_IOWAIT)
 #define TSK_MEMSTALL	(1 << NR_MEMSTALL)
@@ -35,7 +17,7 @@ enum psi_task_count {
 #define TSK_MEMSTALL_RUNNING	(1 << NR_MEMSTALL_RUNNING)
 
 /* Only one task can be scheduled, no corresponding task count */
-#define TSK_ONCPU	(1 << NR_PSI_TASK_COUNTS)
+#define TSK_ONCPU	(1 << NR_TSK_ONCPU)
 
 /* Resources that workloads could be stalled on */
 enum psi_res {

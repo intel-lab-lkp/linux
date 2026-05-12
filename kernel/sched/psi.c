@@ -912,7 +912,7 @@ void psi_task_change(struct task_struct *task, int clear, int set)
 	u64 now;
 	bool curr_in_memstall;
 
-	if (!task->pid)
+	if (!task->need_psi)
 		return;
 
 	psi_flags_change(task, clear, set);
@@ -937,7 +937,7 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 	psi_write_begin(cpu);
 	now = cpu_clock(cpu);
 
-	if (next->pid) {
+	if (next->need_psi) {
 		curr_in_memstall = next->in_memstall;
 		psi_flags_change(next, 0, TSK_ONCPU);
 		/*
@@ -957,7 +957,7 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 		}
 	}
 
-	if (prev->pid) {
+	if (prev->need_psi) {
 		int clear = TSK_ONCPU, set = 0;
 		bool wake_clock = true;
 

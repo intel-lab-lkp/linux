@@ -2177,6 +2177,16 @@ __latent_entropy struct task_struct *copy_process(
 
 #ifdef CONFIG_PSI
 	p->psi_flags = 0;
+	/*
+	 * Only setup need_psi to 1 for non-idle tasks. We
+	 * also need to reset need_psi of idle tasks to 0 since
+	 * their values are copied from the init task whose
+	 * need_psi is not 0.
+	 */
+	if (pid != &init_struct_pid)
+		p->need_psi = 1;
+	else
+		p->need_psi = 0;
 #endif
 
 	task_io_accounting_init(&p->ioac);

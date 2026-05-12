@@ -817,6 +817,28 @@ struct kmap_ctrl {
 #endif
 };
 
+#ifdef CONFIG_PSI
+/* Tracked task states */
+enum psi_task_count {
+	NR_IOWAIT,
+	NR_MEMSTALL,
+	NR_RUNNING,
+	/*
+	 * For IO and CPU stalls the presence of running/oncpu tasks
+	 * in the domain means a partial rather than a full stall.
+	 * For memory it's not so simple because of page reclaimers:
+	 * they are running/oncpu while representing a stall. To tell
+	 * whether a domain has productivity left or not, we need to
+	 * distinguish between regular running (i.e. productive)
+	 * threads and memstall ones.
+	 */
+	NR_MEMSTALL_RUNNING,
+	NR_PSI_TASK_COUNTS,
+	NR_TSK_ONCPU = NR_PSI_TASK_COUNTS,
+	NR_PSI_ALL_COUNTS,
+};
+#endif
+
 struct task_struct {
 #ifdef CONFIG_THREAD_INFO_IN_TASK
 	/*
@@ -1030,6 +1052,9 @@ struct task_struct {
 #ifdef CONFIG_PSI
 	/* Stalled due to lack of memory */
 	unsigned			in_memstall:1;
+	unsigned			need_psi:1;
+	/* Pressure stall state */
+	unsigned            psi_flags:NR_PSI_ALL_COUNTS;
 #endif
 #ifdef CONFIG_PAGE_OWNER
 	/* Used by page_owner=on to detect recursion in page tracking. */
@@ -1299,10 +1324,6 @@ struct task_struct {
 	kernel_siginfo_t		*last_siginfo;
 
 	struct task_io_accounting	ioac;
-#ifdef CONFIG_PSI
-	/* Pressure stall state */
-	unsigned int			psi_flags;
-#endif
 #ifdef CONFIG_TASK_XACCT
 	/* Accumulated RSS usage: */
 	u64				acct_rss_mem1;
