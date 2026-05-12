@@ -5993,6 +5993,8 @@ static bool scx_claim_exit(struct scx_sched *sch, enum scx_exit_kind kind)
 	 */
 	WRITE_ONCE(sch->aborting, true);
 
+	trace_sched_ext_exit(kind);
+
 	/*
 	 * Propagate exits to descendants immediately. Each has a dedicated
 	 * helper kthread and can run in parallel. While most of disabling is

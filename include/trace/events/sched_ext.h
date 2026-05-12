@@ -84,6 +84,25 @@ TRACE_EVENT(sched_ext_bypass_lb,
 	)
 );
 
+TRACE_EVENT(sched_ext_exit,
+
+	TP_PROTO(__u32 kind),
+
+	TP_ARGS(kind),
+
+	TP_STRUCT__entry(
+		__field(__u32, kind)
+	),
+
+	TP_fast_assign(
+		__entry->kind		= kind;
+	),
+
+	TP_printk("kind %u",
+		  __entry->kind
+	)
+);
+
 #endif /* _TRACE_SCHED_EXT_H */
 
 /* This part must be outside protection */
