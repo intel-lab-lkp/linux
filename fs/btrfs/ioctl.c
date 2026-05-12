@@ -3469,19 +3469,43 @@ out:
 	return ret;
 }
 
+static int btrfs_ioctl_lock_live_super(struct btrfs_fs_info *fs_info)
+{
+	struct super_block *sb = fs_info->sb;
+
+	down_read(&sb->s_umount);
+	if (!(sb->s_flags & SB_BORN) || (sb->s_flags & SB_DYING) || !sb->s_root) {
+		up_read(&sb->s_umount);
+		return -EIO;
+	}
+
+	return 0;
+}
+
 static long btrfs_ioctl_balance_ctl(struct btrfs_fs_info *fs_info, int cmd)
 {
+	int ret;
+
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 
+	ret = btrfs_ioctl_lock_live_super(fs_info);
+	if (ret)
+		return ret;
+
 	switch (cmd) {
 	case BTRFS_BALANCE_CTL_PAUSE:
-		return btrfs_pause_balance(fs_info);
+		ret = btrfs_pause_balance(fs_info);
+		break;
 	case BTRFS_BALANCE_CTL_CANCEL:
-		return btrfs_cancel_balance(fs_info);
+		ret = btrfs_cancel_balance(fs_info);
+		break;
+	default:
+		ret = -EINVAL;
 	}
 
-	return -EINVAL;
+	up_read(&fs_info->sb->s_umount);
+	return ret;
 }
 
 static long btrfs_ioctl_balance_progress(struct btrfs_fs_info *fs_info,
@@ -3492,6 +3516,10 @@ static long btrfs_ioctl_balance_progress(struct btrfs_fs_info *fs_info,
 
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
+
+	ret = btrfs_ioctl_lock_live_super(fs_info);
+	if (ret)
+		return ret;
 
 	mutex_lock(&fs_info->balance_mutex);
 	if (!fs_info->balance_ctl) {
@@ -3511,6 +3539,7 @@ static long btrfs_ioctl_balance_progress(struct btrfs_fs_info *fs_info,
 		ret = -EFAULT;
 out:
 	mutex_unlock(&fs_info->balance_mutex);
+	up_read(&fs_info->sb->s_umount);
 	return ret;
 }
 
