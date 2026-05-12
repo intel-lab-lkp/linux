@@ -19,88 +19,6 @@
 #include <linux/workqueue.h>
 #include "atmel-i2c.h"
 
-/*
- * According to review by Bill Cox [1], the ATSHA204 has very low entropy.
- * [1] https://www.metzdowd.com/pipermail/cryptography/2014-December/023858.html
- */
-static const unsigned short atsha204_quality = 1;
-
-static void atmel_sha204a_rng_done(struct atmel_i2c_work_data *work_data,
-				   void *areq, int status)
-{
-	struct atmel_i2c_client_priv *i2c_priv = work_data->ctx;
-	struct hwrng *rng = areq;
-
-	if (status)
-		dev_warn_ratelimited(&i2c_priv->client->dev,
-				     "i2c transaction failed (%d)\n",
-				     status);
-
-	rng->priv = (unsigned long)work_data;
-	atomic_dec(&i2c_priv->tfm_count);
-}
-
-static int atmel_sha204a_rng_read_nonblocking(struct hwrng *rng, void *buf,
-					      size_t max)
-{
-	struct atmel_i2c_client_priv *i2c_priv = container_of(rng,
-							      struct atmel_i2c_client_priv,
-							      hwrng);
-	const struct atmel_i2c_of_match_data *data = i2c_priv->data;
-	struct atmel_i2c_work_data *work_data;
-
-	/* keep maximum 1 asynchronous read in flight at any time */
-	if (!atomic_add_unless(&i2c_priv->tfm_count, 1, 1))
-		return 0;
-
-	if (rng->priv) {
-		work_data = (struct atmel_i2c_work_data *)rng->priv;
-		max = min(RANDOM_RSP_SIZE - CMD_OVERHEAD_SIZE, max);
-		memcpy(buf, &work_data->cmd.data[RSP_DATA_IDX], max);
-		rng->priv = 0;
-	} else {
-		work_data = kmalloc_obj(*work_data, GFP_ATOMIC);
-		if (!work_data) {
-			atomic_dec(&i2c_priv->tfm_count);
-			return -ENOMEM;
-		}
-		work_data->ctx = i2c_priv;
-		work_data->client = i2c_priv->client;
-
-		max = 0;
-	}
-
-	atmel_i2c_init_random_cmd(&work_data->cmd, &data->timings);
-	atmel_i2c_enqueue(work_data, atmel_sha204a_rng_done, rng);
-
-	return max;
-}
-
-static int atmel_sha204a_rng_read(struct hwrng *rng, void *buf, size_t max,
-				  bool wait)
-{
-	struct atmel_i2c_client_priv *i2c_priv = container_of(rng,
-							      struct atmel_i2c_client_priv,
-							      hwrng);
-	const struct atmel_i2c_of_match_data *data = i2c_priv->data;
-	struct atmel_i2c_cmd cmd;
-	int ret;
-
-	if (!wait)
-		return atmel_sha204a_rng_read_nonblocking(rng, buf, max);
-
-	atmel_i2c_init_random_cmd(&cmd, &data->timings);
-
-	ret = atmel_i2c_send_receive(i2c_priv->client, &cmd);
-	if (ret)
-		return ret;
-
-	max = min(RANDOM_RSP_SIZE - CMD_OVERHEAD_SIZE, max);
-	memcpy(buf, &cmd.data[RSP_DATA_IDX], max);
-
-	return max;
-}
-
 static int atmel_sha204a_otp_read(struct i2c_client *client, u16 addr, u8 *otp)
 {
 	struct atmel_i2c_client_priv *i2c_priv = i2c_get_clientdata(client);
@@ -169,7 +87,6 @@ static int atmel_sha204a_probe(struct i2c_client *client)
 {
 	struct atmel_i2c_client_priv *i2c_priv;
 	const struct atmel_i2c_of_match_data *data;
-	const unsigned short *quality;
 	int ret;
 
 	ret = atmel_i2c_probe(client);
@@ -193,25 +110,16 @@ static int atmel_sha204a_probe(struct i2c_client *client)
 		      &atmel_i2c_mgmt.i2c_client_list);
 	spin_unlock(&atmel_i2c_mgmt.i2c_list_lock);
 
-	/* register rng */
-	memset(&i2c_priv->hwrng, 0, sizeof(i2c_priv->hwrng));
-
-	i2c_priv->hwrng.name = dev_name(&client->dev);
-	i2c_priv->hwrng.read = atmel_sha204a_rng_read;
-
-	quality = i2c_priv->data->legacy_hwrng;
-	if (quality)
-		i2c_priv->hwrng.quality = *quality;
-
-	ret = devm_hwrng_register(&client->dev, &i2c_priv->hwrng);
-	if (ret) {
-		dev_warn(&client->dev, "failed to register RNG (%d)\n", ret);
-		goto err_list_del;
-	}
-
 	ret = sysfs_create_group(&client->dev.kobj, &atmel_sha204a_groups);
 	if (ret) {
 		dev_err(&client->dev, "failed to register sysfs entry\n");
+		goto err_list_del;
+	}
+
+	/* register rng */
+	ret = atmel_i2c_register_rng(i2c_priv, &client->dev);
+	if (ret) {
+		dev_err(&client->dev, "failed to register hw_random\n");
 		goto err_list_del;
 	}
 
@@ -234,9 +142,12 @@ static void atmel_sha204a_remove(struct i2c_client *client)
 	devm_hwrng_unregister(&client->dev, &i2c_priv->hwrng);
 	atmel_i2c_flush_queue();
 
-	sysfs_remove_group(&client->dev.kobj, &atmel_sha204a_groups);
+	if (i2c_priv->hwrng.priv) {
+		kfree((void *)i2c_priv->hwrng.priv);
+		i2c_priv->hwrng.priv = 0;
+	}
 
-	kfree((void *)i2c_priv->hwrng.priv);
+	sysfs_remove_group(&client->dev.kobj, &atmel_sha204a_groups);
 }
 
 static const struct atmel_i2c_of_match_data atsha204_match_data = {
@@ -246,7 +157,11 @@ static const struct atmel_i2c_of_match_data atsha204_match_data = {
 		.max_exec_time_read = 4,
 		.max_exec_time_write = 42,
 	},
-	.legacy_hwrng = &atsha204_quality,
+	/*
+	 * According to review by Bill Cox [1], the ATSHA204 has very low entropy.
+	 * [1] https://www.metzdowd.com/pipermail/cryptography/2014-December/023858.html
+	 */
+	.needs_legacy_hwrng = 1,
 };
 
 static const struct atmel_i2c_of_match_data atsha204a_match_data = {

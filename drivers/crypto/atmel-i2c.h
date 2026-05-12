@@ -66,7 +66,7 @@ struct atmel_i2c_max_exec_timings {
 };
 
 struct atmel_i2c_of_match_data {
-	const unsigned short *legacy_hwrng;
+	const unsigned short needs_legacy_hwrng;
 	struct atmel_i2c_max_exec_timings timings;
 };
 
@@ -209,6 +209,8 @@ void atmel_i2c_init_genkey_cmd(struct atmel_i2c_cmd *cmd, u16 keyid,
 int atmel_i2c_init_ecdh_cmd(struct atmel_i2c_cmd *cmd,
 			    struct scatterlist *pubkey,
 			    const struct atmel_i2c_max_exec_timings *timings);
+int atmel_i2c_register_rng(struct atmel_i2c_client_priv *i2c_priv,
+			   struct device *dev);
 
 struct i2c_client *atmel_i2c_client_alloc(enum atmel_i2c_capability cap);
 void atmel_i2c_unregister_client(struct atmel_i2c_client_priv *i2c_priv);

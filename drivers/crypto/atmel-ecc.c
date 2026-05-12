@@ -306,6 +306,13 @@ static int atmel_ecc_probe(struct i2c_client *client)
 		      &atmel_i2c_mgmt.i2c_client_list);
 	spin_unlock(&atmel_i2c_mgmt.i2c_list_lock);
 
+	/* register rng */
+	ret = atmel_i2c_register_rng(i2c_priv, &client->dev);
+	if (ret) {
+		dev_err(&client->dev, "failed to register hw_random\n");
+		goto err_list_del;
+	}
+
 	/* register algorithms */
 	ret = crypto_register_kpp(&atmel_ecdh_nist_p256);
 	if (ret) {
@@ -349,6 +356,11 @@ static void atmel_ecc_remove(struct i2c_client *client)
 	atmel_i2c_flush_queue();
 
 	crypto_unregister_kpp(&atmel_ecdh_nist_p256);
+
+	if (i2c_priv->hwrng.priv) {
+		kfree((void *)i2c_priv->hwrng.priv);
+		i2c_priv->hwrng.priv = 0;
+	}
 }
 
 static const struct atmel_i2c_of_match_data atecc508a_match_data = {
