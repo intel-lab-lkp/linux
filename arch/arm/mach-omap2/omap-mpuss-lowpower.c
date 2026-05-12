@@ -111,6 +111,11 @@ static struct cpu_pm_ops omap_pm_ops = {
 	.hotplug_restart	= dummy_cpu_resume,
 };
 
+static int omap4_finish_suspend_wrapper(unsigned long cpu_state)
+{
+	return omap4_finish_suspend(cpu_state);
+}
+
 /*
  * Program the wakeup routine address for the CPU0 and CPU1
  * used for OFF or DORMANT wakeup.
@@ -437,7 +442,7 @@ int __init omap4_mpuss_init(void)
 	}
 
 	if (cpu_is_omap44xx()) {
-		omap_pm_ops.finish_suspend = omap4_finish_suspend;
+		omap_pm_ops.finish_suspend = omap4_finish_suspend_wrapper;
 		omap_pm_ops.resume = omap4_cpu_resume;
 		omap_pm_ops.scu_prepare = scu_pwrst_prepare;
 		omap_pm_ops.hotplug_restart = omap4_secondary_startup;
