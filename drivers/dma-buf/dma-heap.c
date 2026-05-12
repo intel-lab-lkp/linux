@@ -7,13 +7,17 @@
  */
 
 #include <linux/cdev.h>
+#include <linux/cgroup.h>
 #include <linux/device.h>
 #include <linux/dma-buf.h>
 #include <linux/dma-heap.h>
+#include <linux/memcontrol.h>
+#include <linux/sched/mm.h>
 #include <linux/err.h>
 #include <linux/export.h>
 #include <linux/list.h>
 #include <linux/nospec.h>
+#include <linux/pidfd.h>
 #include <linux/syscalls.h>
 #include <linux/uaccess.h>
 #include <linux/xarray.h>
@@ -55,10 +59,12 @@ MODULE_PARM_DESC(mem_accounting,
 		 "Enable cgroup-based memory accounting for dma-buf heap allocations (default=false).");
 
 static int dma_heap_buffer_alloc(struct dma_heap *heap, size_t len,
-				 u32 fd_flags,
-				 u64 heap_flags)
+				 u32 fd_flags, u64 heap_flags,
+				 struct mem_cgroup *charge_to)
 {
 	struct dma_buf *dmabuf;
+	unsigned int nr_pages;
+	struct mem_cgroup *memcg = charge_to;
 	int fd;
 
 	/*
@@ -72,6 +78,22 @@ static int dma_heap_buffer_alloc(struct dma_heap *heap, size_t len,
 	dmabuf = heap->ops->allocate(heap, len, fd_flags, heap_flags);
 	if (IS_ERR(dmabuf))
 		return PTR_ERR(dmabuf);
+
+	nr_pages = len / PAGE_SIZE;
+
+	if (memcg)
+		css_get(&memcg->css);
+	else if (mem_accounting)
+		memcg = get_mem_cgroup_from_mm(current->mm);
+
+	if (memcg) {
+		if (!mem_cgroup_charge_dmabuf(memcg, nr_pages, GFP_KERNEL)) {
+			mem_cgroup_put(memcg);
+			dma_buf_put(dmabuf);
+			return -ENOMEM;
+		}
+		dmabuf->memcg = memcg;
+	}
 
 	fd = dma_buf_fd(dmabuf, fd_flags);
 	if (fd < 0) {
@@ -102,6 +124,9 @@ static long dma_heap_ioctl_allocate(struct file *file, void *data)
 {
 	struct dma_heap_allocation_data *heap_allocation = data;
 	struct dma_heap *heap = file->private_data;
+	struct mem_cgroup *memcg = NULL;
+	struct task_struct *task;
+	unsigned int pidfd_flags;
 	int fd;
 
 	if (heap_allocation->fd)
@@ -113,9 +138,20 @@ static long dma_heap_ioctl_allocate(struct file *file, void *data)
 	if (heap_allocation->heap_flags & ~DMA_HEAP_VALID_HEAP_FLAGS)
 		return -EINVAL;
 
+	if (heap_allocation->charge_pid_fd) {
+		task = pidfd_get_task(heap_allocation->charge_pid_fd, &pidfd_flags);
+		if (IS_ERR(task))
+			return PTR_ERR(task);
+
+		memcg = get_mem_cgroup_from_mm(task->mm);
+		put_task_struct(task);
+	}
+
 	fd = dma_heap_buffer_alloc(heap, heap_allocation->len,
 				   heap_allocation->fd_flags,
-				   heap_allocation->heap_flags);
+				   heap_allocation->heap_flags,
+				   memcg);
+	mem_cgroup_put(memcg);
 	if (fd < 0)
 		return fd;
 

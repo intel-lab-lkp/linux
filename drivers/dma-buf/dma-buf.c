@@ -181,8 +181,11 @@ static void dma_buf_release(struct dentry *dentry)
 	 */
 	BUG_ON(dmabuf->cb_in.active || dmabuf->cb_out.active);
 
-	mem_cgroup_uncharge_dmabuf(dmabuf->memcg, PAGE_ALIGN(dmabuf->size) / PAGE_SIZE);
-	mem_cgroup_put(dmabuf->memcg);
+	if (dmabuf->memcg) {
+		mem_cgroup_uncharge_dmabuf(dmabuf->memcg,
+					  PAGE_ALIGN(dmabuf->size) / PAGE_SIZE);
+		mem_cgroup_put(dmabuf->memcg);
+	}
 
 	dmabuf->ops->release(dmabuf);
 
@@ -764,13 +767,6 @@ struct dma_buf *dma_buf_export(const struct dma_buf_export_info *exp_info)
 		dmabuf->resv = resv;
 	}
 
-	dmabuf->memcg = get_mem_cgroup_from_mm(current->mm);
-	if (!mem_cgroup_charge_dmabuf(dmabuf->memcg, PAGE_ALIGN(dmabuf->size) / PAGE_SIZE,
-				      GFP_KERNEL)) {
-		ret = -ENOMEM;
-		goto err_memcg;
-	}
-
 	file->private_data = dmabuf;
 	file->f_path.dentry->d_fsdata = dmabuf;
 	dmabuf->file = file;
@@ -781,8 +777,6 @@ struct dma_buf *dma_buf_export(const struct dma_buf_export_info *exp_info)
 
 	return dmabuf;
 
-err_memcg:
-	mem_cgroup_put(dmabuf->memcg);
 err_file:
 	fput(file);
 err_module:
