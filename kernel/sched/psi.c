@@ -880,9 +880,15 @@ static void psi_group_change(struct psi_group *group, int cpu,
 	if (unlikely((state_mask & PSI_ONCPU) && curr_in_memstall))
 		state_mask |= (1 << PSI_MEM_FULL);
 
-	record_times(groupc, now);
-
-	groupc->state_mask = state_mask;
+	/*
+	 * We only need to record times when the state changes. Or
+	 * we can keep it unchanged and wait for get_recent_times()
+	 * to handle the remaining time.
+	 */
+	if (state_mask != groupc->state_mask) {
+		record_times(groupc, now);
+		groupc->state_mask = state_mask;
+	}
 
 	if (state_mask & group->rtpoll_states)
 		psi_schedule_rtpoll_work(group, 1, false);
