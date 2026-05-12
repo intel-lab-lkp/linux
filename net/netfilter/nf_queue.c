@@ -59,8 +59,11 @@ static void nf_queue_sock_put(struct sock *sk)
 static void nf_queue_entry_release_refs(struct nf_queue_entry *entry)
 {
 	struct nf_hook_state *state = &entry->state;
+	struct sk_buff *skb = entry->skb;
 
 	/* Release those devices we held, or Alexey will kill me. */
+	if (skb->dev)
+		dev_put(skb->dev);
 	dev_put(state->in);
 	dev_put(state->out);
 	if (state->sk)
@@ -98,10 +101,13 @@ static void __nf_queue_entry_init_physdevs(struct nf_queue_entry *entry)
 bool nf_queue_entry_get_refs(struct nf_queue_entry *entry)
 {
 	struct nf_hook_state *state = &entry->state;
+	struct sk_buff *skb = entry->skb;
 
 	if (state->sk && !refcount_inc_not_zero(&state->sk->sk_refcnt))
 		return false;
 
+	if (skb->dev)
+		dev_hold(skb->dev);
 	dev_hold(state->in);
 	dev_hold(state->out);
 
