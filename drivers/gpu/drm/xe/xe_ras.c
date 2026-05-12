@@ -233,7 +233,7 @@ void xe_ras_init(struct xe_device *xe)
 {
 	int ret;
 
-	if (xe->info.platform != XE_PVC)
+	if (!xe->info.has_drm_ras)
 		return;
 
 	ret = xe_drm_ras_init(xe);
