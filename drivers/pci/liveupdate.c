@@ -108,6 +108,18 @@
  * If a misconfigured or unconfigured bridge is encountered during enumeration
  * while there are preserved devices, itss secondary and subordinate bus numbers
  * will be cleared and devices below it will not be enumerated.
+ *
+ * PCI-to-PCI Bridges
+ * ==================
+ *
+ * Any PCI-to-PCI bridges upstream of a preserved device are automatically
+ * preserved when the device is preserved. The PCI core keeps track of the
+ * number of downstream devices that are preserved under a bridge so that the
+ * bridge is only unpreserved once all downstream devices are unpreserved.
+ *
+ * This enables the PCI core and any drivers bound to the bridge to participate
+ * in the Live Update so that preserved endpoints can continue issuing memory
+ * transactions during the Live Update.
  */
 
 #define pr_fmt(fmt) "PCI: liveupdate: " fmt
@@ -300,40 +312,54 @@ static struct liveupdate_flb pci_liveupdate_flb = {
 	.compatible = PCI_LUO_FLB_COMPATIBLE,
 };
 
-/**
- * pci_liveupdate_preserve() - Preserve a PCI device across Live Update
- * @dev: The PCI device to preserve.
- *
- * pci_liveupdate_preserve() notifies the PCI core that a PCI device should be
- * preserved across the next Live Update. Drivers must call
- * pci_liveupdate_preserve() from their struct liveupdate_file_handler
- * preserve() callback to ensure the outgoing struct pci_ser is allocated.
- *
- * Returns: 0 on success, <0 on failure.
- */
-int pci_liveupdate_preserve(struct pci_dev *dev)
+static int pci_liveupdate_unpreserve_device(struct pci_ser *ser, struct pci_dev *dev)
 {
-	struct pci_flb_outgoing *outgoing = NULL;
-	struct pci_ser *ser;
-	int i, ret;
-
-	if (dev->is_virtfn)
-		return -EINVAL;
-
-	ret = liveupdate_flb_get_outgoing(&pci_liveupdate_flb, (void **)&outgoing);
-	if (ret)
-		return ret;
-
-	if (!outgoing)
-		return -ENOENT;
-
-	guard(mutex)(&outgoing->lock);
-	ser = outgoing->ser;
+	struct pci_dev_ser *dev_ser;
 
 	guard(write_lock)(&dev->liveupdate.lock);
 
-	if (dev->liveupdate.outgoing)
+	dev_ser = dev->liveupdate.outgoing;
+	if (!dev_ser) {
+		pci_warn(dev, "Cannot unpreserve device that is not preserved\n");
+		return -EINVAL;
+	}
+
+	if (!dev_ser->refcount) {
+		pci_WARN(dev, 1, "Preserved device has a 0 refcount!\n");
+		return -EINVAL;
+	}
+
+	if (--dev_ser->refcount)
+		return 0;
+
+	pci_info(dev, "Device will no longer be preserved across next Live Update\n");
+	ser->nr_devices--;
+	memset(dev_ser, 0, sizeof(*dev_ser));
+	dev->liveupdate.outgoing = NULL;
+	return 0;
+}
+
+static int pci_liveupdate_preserve_device_existing(struct pci_dev *dev)
+{
+	if (!dev->liveupdate.outgoing->refcount) {
+		pci_WARN(dev, 1, "Preserved device with 0 refcount!\n");
+		return -EINVAL;
+	}
+
+	/*
+	 * Endpoint devices should not be preserved more than once. Bridges are
+	 * preserved once for every downstream device that is preserved.
+	 */
+	if (!dev->subordinate)
 		return -EBUSY;
+
+	dev->liveupdate.outgoing->refcount++;
+	return 0;
+}
+
+static int pci_liveupdate_preserve_device_new(struct pci_ser *ser, struct pci_dev *dev)
+{
+	int i;
 
 	if (ser->nr_devices == ser->max_nr_devices)
 		return -ENOSPC;
@@ -363,7 +389,81 @@ int pci_liveupdate_preserve(struct pci_dev *dev)
 
 	return -ENOSPC;
 }
+
+static int pci_liveupdate_preserve_device(struct pci_ser *ser, struct pci_dev *dev)
+{
+	guard(write_lock)(&dev->liveupdate.lock);
+
+	if (dev->liveupdate.outgoing)
+		return pci_liveupdate_preserve_device_existing(dev);
+	else
+		return pci_liveupdate_preserve_device_new(ser, dev);
+}
+
+static int pci_liveupdate_preserve_path(struct pci_ser *ser, struct pci_dev *dev)
+{
+	int ret;
+
+	if (!dev)
+		return 0;
+
+	ret = pci_liveupdate_preserve_device(ser, dev);
+	if (ret)
+		return ret;
+
+	ret = pci_liveupdate_preserve_path(ser, dev->bus->self);
+	if (ret) {
+		pci_liveupdate_unpreserve_device(ser, dev);
+		return ret;
+	}
+
+	return 0;
+}
+
+/**
+ * pci_liveupdate_preserve() - Preserve a PCI device across Live Update
+ * @dev: The PCI device to preserve.
+ *
+ * pci_liveupdate_preserve() notifies the PCI core that a PCI device should be
+ * preserved across the next Live Update. Drivers must call
+ * pci_liveupdate_preserve() from their struct liveupdate_file_handler
+ * preserve() callback to ensure the outgoing struct pci_ser is allocated.
+ *
+ * pci_liveupdate_preserve() automatically preserves all bridges upstream of
+ * @dev.
+ *
+ * Returns: 0 on success, <0 on failure.
+ */
+int pci_liveupdate_preserve(struct pci_dev *dev)
+{
+	struct pci_flb_outgoing *outgoing = NULL;
+	int ret;
+
+	if (dev->is_virtfn)
+		return -EINVAL;
+
+	ret = liveupdate_flb_get_outgoing(&pci_liveupdate_flb, (void **)&outgoing);
+	if (ret)
+		return ret;
+
+	if (!outgoing)
+		return -ENOENT;
+
+	guard(mutex)(&outgoing->lock);
+	return pci_liveupdate_preserve_path(outgoing->ser, dev);
+}
 EXPORT_SYMBOL_GPL(pci_liveupdate_preserve);
+
+static void pci_liveupdate_unpreserve_path(struct pci_ser *ser, struct pci_dev *dev)
+{
+	if (!dev)
+		return;
+
+	if (pci_liveupdate_unpreserve_device(ser, dev))
+		return;
+
+	pci_liveupdate_unpreserve_path(ser, dev->bus->self);
+}
 
 /**
  * pci_liveupdate_unpreserve() - Cancel preservation of a PCI device
@@ -373,12 +473,13 @@ EXPORT_SYMBOL_GPL(pci_liveupdate_preserve);
  * longer be preserved across the next Live Update. Drivers must call
  * pci_liveupdate_unpreserve() from their struct liveupdate_file_handler
  * unpreserve() callback to ensure the outgoing struct pci_ser is allocated.
+ *
+ * pci_liveupdate_unpreserve() automatically unpreserves all bridges upstream of
+ * @dev.
  */
 void pci_liveupdate_unpreserve(struct pci_dev *dev)
 {
 	struct pci_flb_outgoing *outgoing = NULL;
-	struct pci_dev_ser *dev_ser;
-	struct pci_ser *ser;
 	int ret;
 
 	ret = liveupdate_flb_get_outgoing(&pci_liveupdate_flb, (void **)&outgoing);
@@ -389,20 +490,7 @@ void pci_liveupdate_unpreserve(struct pci_dev *dev)
 	}
 
 	guard(mutex)(&outgoing->lock);
-	ser = outgoing->ser;
-
-	guard(write_lock)(&dev->liveupdate.lock);
-
-	dev_ser = dev->liveupdate.outgoing;
-	if (!dev_ser) {
-		pci_warn(dev, "Cannot unpreserve device that is not preserved\n");
-		return;
-	}
-
-	pci_info(dev, "Device will no longer be preserved across next Live Update\n");
-	ser->nr_devices--;
-	memset(dev_ser, 0, sizeof(*dev_ser));
-	dev->liveupdate.outgoing = NULL;
+	pci_liveupdate_unpreserve_path(outgoing->ser, dev);
 }
 EXPORT_SYMBOL_GPL(pci_liveupdate_unpreserve);
 
@@ -510,6 +598,55 @@ void pci_liveupdate_cleanup_device(struct pci_dev *dev)
 		pci_liveupdate_flb_put_incoming();
 }
 
+static int __pci_liveupdate_finish_device(struct pci_dev *dev)
+{
+	guard(write_lock)(&dev->liveupdate.lock);
+
+	if (!dev->liveupdate.incoming) {
+		pci_warn(dev, "Cannot finish preserving an unpreserved device\n");
+		return -EINVAL;
+	}
+
+	if (!dev->liveupdate.incoming->refcount) {
+		pci_WARN(dev, 1, "Preserved device has a 0 refcount!\n");
+		return -EINVAL;
+	}
+
+	/*
+	 * Decrement the refcount so this device does not get treated as an
+	 * incoming device again, e.g. in case pci_liveupdate_setup_device()
+	 * gets called again because the device is hot-plugged.
+	 */
+	if (--dev->liveupdate.incoming->refcount)
+		return -EBUSY;
+
+	pci_info(dev, "Device is finished participating in Live Update\n");
+	dev->liveupdate.incoming = NULL;
+	return 0;
+}
+
+static int pci_liveupdate_finish_device(struct pci_dev *dev)
+{
+	int ret;
+
+	/*
+	 * If ret == -EBUSY the device is still preserved due to remaining
+	 * references. Return 0 up to the caller to indicate it should proceed
+	 * to finish preserving upstream devices but do not drop the device's
+	 * reference on the incoming FLB below.
+	 */
+	ret = __pci_liveupdate_finish_device(dev);
+	if (ret)
+		return ret == -EBUSY ? 0 : ret;
+
+	/*
+	 * Once the device's refcount reaches zero drop the device's reference
+	 * on the incoming FLB so it can be freed.
+	 */
+	pci_liveupdate_flb_put_incoming();
+	return 0;
+}
+
 /**
  * pci_liveupdate_finish() - Finish the preservation of a PCI device across Live Update
  * @dev: The PCI device
@@ -519,28 +656,18 @@ void pci_liveupdate_cleanup_device(struct pci_dev *dev)
  * Update. Drivers must call pci_liveupdate_finish() from their struct
  * liveupdate_file_handler finish() callback to ensure the incoming struct
  * pci_ser is allocated.
+ *
+ * pci_liveupdate_finish() automatically finishes all bridges upstream of @dev.
  */
 void pci_liveupdate_finish(struct pci_dev *dev)
 {
-	guard(write_lock)(&dev->liveupdate.lock);
-
-	if (!dev->liveupdate.incoming) {
-		pci_warn(dev, "Cannot finish preserving an unpreserved device\n");
+	if (!dev)
 		return;
-	}
 
-	pci_info(dev, "Device is finished participating in Live Update\n");
+	if (pci_liveupdate_finish_device(dev))
+		return;
 
-	/*
-	 * Drop the refcount so this device does not get treated as an incoming
-	 * device again, e.g. in case pci_liveupdate_setup_device() gets called
-	 * again because the device is hot-plugged.
-	 */
-	dev->liveupdate.incoming->refcount = 0;
-	dev->liveupdate.incoming = NULL;
-
-	/* Drop this device's reference on the incoming FLB. */
-	pci_liveupdate_flb_put_incoming();
+	pci_liveupdate_finish(dev->bus->self);
 }
 EXPORT_SYMBOL_GPL(pci_liveupdate_finish);
 
