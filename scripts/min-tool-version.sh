@@ -31,7 +31,11 @@ llvm)
 	fi
 	;;
 rustc)
-	echo 1.85.0
+	if [ "$SRCARCH" = "s390" ]; then
+		echo 1.97.0-nightly
+	else
+		echo 1.85.0
+	fi
 	;;
 bindgen)
 	echo 0.71.1
