@@ -310,6 +310,29 @@ void kprobe_ftrace_handler(unsigned long ip, unsigned long parent_ip,
 		goto out;
 
 	kcb = get_kprobe_ctlblk();
+
+	if (kprobe_running()) {
+		/*
+		 * If a previous kprobe handler was interrupted by a scheduling event
+		 * and the task migrated to another CPU, the "current_kprobe" state
+		 * might be left stale on this CPU.
+		 *
+		 * Reset the stale state here to allow the current probe to proceed
+		 * normally instead of being falsely treated as a nested probe if:
+		 *
+		 * (1) In task context (not a legitimate interrupt nest).
+		 * (2) A different kprobe (not a recursive trigger on the same probe).
+		 * (3) In an active or stepping state.
+		 *
+		 * This acts as a defensive mechanism to recover the CPU's kprobe state
+		 * machine from inconsistent states caused by unexpected task migrations.
+		 */
+		if (in_task() && kprobe_running() != p &&
+		    (kcb->kprobe_status == KPROBE_HIT_ACTIVE ||
+		     kcb->kprobe_status == KPROBE_HIT_SSDONE))
+			reset_current_kprobe();
+	}
+
 	if (kprobe_running()) {
 		kprobes_inc_nmissed_count(p);
 	} else {
