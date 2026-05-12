@@ -3034,32 +3034,36 @@ static int cpuset_can_attach(struct cgroup_taskset *tset)
 		if (setsched_check) {
 			ret = security_task_setscheduler(task);
 			if (ret)
-				goto out_unlock;
+				goto out_unlock_reset;
 		}
 
 		if (dl_task(task)) {
+			struct cpuset *old_cs = task_cs(task);
+
 			cs->nr_migrate_dl_tasks++;
-			cs->sum_migrate_dl_bw += task->dl.dl_bw;
+			old_cs->nr_deadline_tasks--;
+			cs->nr_deadline_tasks++;
+
+			if (!cpumask_intersects(old_cs->effective_cpus,
+						cs->effective_cpus))
+				cs->sum_migrate_dl_bw += task->dl.dl_bw;
 		}
 	}
 
 	if (!cs->nr_migrate_dl_tasks)
 		goto out_success;
 
-	if (!cpumask_intersects(oldcs->effective_cpus, cs->effective_cpus)) {
+	if (cs->sum_migrate_dl_bw) {
 		int cpu = cpumask_any_and(cpu_active_mask, cs->effective_cpus);
 
 		if (unlikely(cpu >= nr_cpu_ids)) {
-			reset_migrate_dl_data(cs);
 			ret = -EINVAL;
-			goto out_unlock;
+			goto out_unlock_reset;
 		}
 
 		ret = dl_bw_alloc(cpu, cs->sum_migrate_dl_bw);
-		if (ret) {
-			reset_migrate_dl_data(cs);
-			goto out_unlock;
-		}
+		if (ret)
+			goto out_unlock_reset;
 
 		cs->dl_bw_cpu = cpu;
 	}
@@ -3070,6 +3074,22 @@ out_success:
 	 * changes which zero cpus/mems_allowed.
 	 */
 	cs->attach_in_progress++;
+	goto out_unlock;
+
+out_unlock_reset:
+	if (cs->nr_migrate_dl_tasks) {
+		struct task_struct *t;
+
+		cgroup_taskset_for_each(t, css, tset) {
+			if (t == task)
+				break;
+			if (dl_task(t)) {
+				task_cs(t)->nr_deadline_tasks++;
+				cs->nr_deadline_tasks--;
+			}
+		}
+		reset_migrate_dl_data(cs);
+	}
 out_unlock:
 	mutex_unlock(&cpuset_mutex);
 	return ret;
@@ -3079,6 +3099,7 @@ static void cpuset_cancel_attach(struct cgroup_taskset *tset)
 {
 	struct cgroup_subsys_state *css;
 	struct cpuset *cs;
+	struct task_struct *task;
 
 	cgroup_taskset_first(tset, &css);
 	cs = css_cs(css);
@@ -3089,8 +3110,15 @@ static void cpuset_cancel_attach(struct cgroup_taskset *tset)
 	if (cs->dl_bw_cpu >= 0)
 		dl_bw_free(cs->dl_bw_cpu, cs->sum_migrate_dl_bw);
 
-	if (cs->nr_migrate_dl_tasks)
+	if (cs->nr_migrate_dl_tasks) {
+		cgroup_taskset_for_each(task, css, tset) {
+			if (dl_task(task)) {
+				task_cs(task)->nr_deadline_tasks++;
+				cs->nr_deadline_tasks--;
+			}
+		}
 		reset_migrate_dl_data(cs);
+	}
 
 	mutex_unlock(&cpuset_mutex);
 }
@@ -3195,11 +3223,8 @@ out:
 		schedule_flush_migrate_mm();
 	cs->old_mems_allowed = cpuset_attach_nodemask_to;
 
-	if (cs->nr_migrate_dl_tasks) {
-		cs->nr_deadline_tasks += cs->nr_migrate_dl_tasks;
-		oldcs->nr_deadline_tasks -= cs->nr_migrate_dl_tasks;
+	if (cs->nr_migrate_dl_tasks)
 		reset_migrate_dl_data(cs);
-	}
 
 	dec_attach_in_progress_locked(cs);
 
