@@ -5,6 +5,7 @@
 
 #include <linux/hmm.h>
 #include <linux/libnvdimm.h>
+#include <linux/xarray.h>
 
 #include <rdma/ib_umem_odp.h>
 
@@ -41,9 +42,14 @@ const struct mmu_interval_notifier_ops rxe_mn_ops = {
 #define RXE_PAGEFAULT_DEFAULT 0
 #define RXE_PAGEFAULT_RDONLY BIT(0)
 #define RXE_PAGEFAULT_SNAPSHOT BIT(1)
-static int rxe_odp_do_pagefault_and_lock(struct rxe_mr *mr, u64 user_va, int bcnt, u32 flags)
+
+/* Low-level fault helper. Operates directly on a umem_odp (parent for
+ * explicit MRs, child for implicit). On success the caller holds
+ * umem_odp->umem_mutex via ib_umem_odp_map_dma_and_lock.
+ */
+static int rxe_odp_do_pagefault_and_lock(struct ib_umem_odp *umem_odp,
+					 u64 user_va, int bcnt, u32 flags)
 {
-	struct ib_umem_odp *umem_odp = to_ib_umem_odp(mr->umem);
 	bool fault = !(flags & RXE_PAGEFAULT_SNAPSHOT);
 	u64 access_mask = 0;
 	int np;
@@ -51,11 +57,6 @@ static int rxe_odp_do_pagefault_and_lock(struct rxe_mr *mr, u64 user_va, int bcn
 	if (umem_odp->umem.writable && !(flags & RXE_PAGEFAULT_RDONLY))
 		access_mask |= HMM_PFN_WRITE;
 
-	/*
-	 * ib_umem_odp_map_dma_and_lock() locks umem_mutex on success.
-	 * Callers must release the lock later to let invalidation handler
-	 * do its work again.
-	 */
 	np = ib_umem_odp_map_dma_and_lock(umem_odp, user_va, bcnt,
 					  access_mask, fault);
 	return np;
@@ -66,7 +67,8 @@ static int rxe_odp_init_pages(struct rxe_mr *mr)
 	struct ib_umem_odp *umem_odp = to_ib_umem_odp(mr->umem);
 	int ret;
 
-	ret = rxe_odp_do_pagefault_and_lock(mr, mr->umem->address,
+	/* Explicit MR only: snapshot the page table at registration. */
+	ret = rxe_odp_do_pagefault_and_lock(umem_odp, mr->umem->address,
 					    mr->umem->length,
 					    RXE_PAGEFAULT_SNAPSHOT);
 
@@ -74,6 +76,50 @@ static int rxe_odp_init_pages(struct rxe_mr *mr)
 		mutex_unlock(&umem_odp->umem_mutex);
 
 	return ret >= 0 ? 0 : ret;
+}
+
+/* Remote access on an implicit MR is intentionally out of scope. A
+ * remote rkey on a full-VA-shaped MR would let a peer drive faults
+ * against arbitrary process memory, and that surface needs separate
+ * thinking. Reject up front.
+ */
+#define RXE_REMOTE_ACCESS_MASK (IB_ACCESS_REMOTE_READ |	\
+				IB_ACCESS_REMOTE_WRITE |	\
+				IB_ACCESS_REMOTE_ATOMIC)
+
+static int rxe_odp_mr_init_implicit(struct rxe_dev *rxe, int access_flags,
+				    struct rxe_mr *mr)
+{
+	struct ib_umem_odp *umem_odp;
+
+	if (access_flags & RXE_REMOTE_ACCESS_MASK)
+		return -EOPNOTSUPP;
+
+	umem_odp = ib_umem_odp_alloc_implicit(&rxe->ib_dev, access_flags);
+	if (IS_ERR(umem_odp)) {
+		rxe_dbg_mr(mr, "implicit umem alloc failed err=%d\n",
+			   (int)PTR_ERR(umem_odp));
+		return PTR_ERR(umem_odp);
+	}
+
+	umem_odp->private = mr;
+	mr->umem = &umem_odp->umem;
+	mr->access = access_flags;
+	mr->ibmr.length = U64_MAX;
+	mr->ibmr.iova = 0;
+
+	/* Init the per-MR child xarray here so the cleanup path can
+	 * unconditionally xa_destroy() regardless of MR mode. Explicit MRs
+	 * never touch this xarray, so it stays empty for them. The xarray
+	 * allocator is invoked under GFP_KERNEL on the cmpxchg insertion
+	 * path below.
+	 */
+	xa_init(&mr->implicit_children);
+
+	mr->state = RXE_MR_STATE_VALID;
+	mr->ibmr.type = IB_MR_TYPE_USER;
+
+	return 0;
 }
 
 int rxe_odp_mr_init_user(struct rxe_dev *rxe, u64 start, u64 length,
@@ -93,7 +139,7 @@ int rxe_odp_mr_init_user(struct rxe_dev *rxe, u64 start, u64 length,
 		if (!(rxe->attr.odp_caps.general_caps & IB_ODP_SUPPORT_IMPLICIT))
 			return -EINVAL;
 
-		/* Never reach here, for implicit ODP is not implemented. */
+		return rxe_odp_mr_init_implicit(rxe, access_flags, mr);
 	}
 
 	umem_odp = ib_umem_odp_get(&rxe->ib_dev, start, length, access_flags,
@@ -123,6 +169,73 @@ int rxe_odp_mr_init_user(struct rxe_dev *rxe, u64 start, u64 length,
 	return err;
 }
 
+/* Look up or create the child umem covering the chunk that contains iova.
+ * Each chunk is RXE_ODP_CHILD_SIZE aligned. A cmpxchg insertion avoids
+ * leaking a child if a concurrent fault wins the race.
+ */
+static struct ib_umem_odp *rxe_odp_get_child(struct rxe_mr *mr, u64 iova)
+{
+	struct ib_umem_odp *parent = to_ib_umem_odp(mr->umem);
+	struct ib_umem_odp *child, *existing;
+	unsigned long aligned_start = iova & ~RXE_ODP_CHILD_MASK;
+	unsigned long key = aligned_start >> RXE_ODP_CHILD_SHIFT;
+
+	child = xa_load(&mr->implicit_children, key);
+	if (child)
+		return child;
+
+	child = ib_umem_odp_alloc_child(parent, aligned_start,
+					RXE_ODP_CHILD_SIZE, &rxe_mn_ops);
+	if (IS_ERR(child))
+		return child;
+	child->private = mr;
+
+	existing = xa_cmpxchg(&mr->implicit_children, key, NULL, child,
+			      GFP_KERNEL);
+	if (xa_is_err(existing)) {
+		ib_umem_odp_release(child);
+		return ERR_PTR(xa_err(existing));
+	}
+	if (existing) {
+		/* Another thread inserted while this allocation was in
+		 * flight. Drop the loser and use the winner.
+		 */
+		ib_umem_odp_release(child);
+		return existing;
+	}
+	return child;
+}
+
+/* Pick the umem_odp to use for an operation on mr at iova. For explicit
+ * MRs that is mr->umem. For implicit MRs it is the chunk's child. The
+ * caller is responsible for clamping the access length to one chunk via
+ * rxe_odp_chunk_len_at(); each call here returns one child.
+ */
+static struct ib_umem_odp *rxe_odp_umem_for_iova(struct rxe_mr *mr, u64 iova)
+{
+	struct ib_umem_odp *umem_odp = to_ib_umem_odp(mr->umem);
+
+	if (!umem_odp->is_implicit_odp)
+		return umem_odp;
+	return rxe_odp_get_child(mr, iova);
+}
+
+/* How many bytes of an access starting at iova can be served by a single
+ * umem? For explicit MRs the answer is "the whole request" (bounded by
+ * mr length elsewhere). For implicit MRs it is the bytes remaining in
+ * the current chunk.
+ */
+static int rxe_odp_chunk_len_at(struct rxe_mr *mr, u64 iova, int length)
+{
+	u64 next_boundary;
+
+	if (!to_ib_umem_odp(mr->umem)->is_implicit_odp)
+		return length;
+
+	next_boundary = (iova & ~RXE_ODP_CHILD_MASK) + RXE_ODP_CHILD_SIZE;
+	return min_t(u64, (u64)length, next_boundary - iova);
+}
+
 static inline bool rxe_check_pagefault(struct ib_umem_odp *umem_odp, u64 iova,
 				       int length)
 {
@@ -132,7 +245,6 @@ static inline bool rxe_check_pagefault(struct ib_umem_odp *umem_odp, u64 iova,
 
 	addr = iova & (~(BIT(umem_odp->page_shift) - 1));
 
-	/* Skim through all pages that are to be accessed. */
 	while (addr < iova + length) {
 		idx = (addr - ib_umem_start(umem_odp)) >> umem_odp->page_shift;
 
@@ -156,14 +268,24 @@ static unsigned long rxe_odp_iova_to_page_offset(struct ib_umem_odp *umem_odp, u
 	return iova & (BIT(umem_odp->page_shift) - 1);
 }
 
-static int rxe_odp_map_range_and_lock(struct rxe_mr *mr, u64 iova, int length, u32 flags)
+/* Resolve, lock, and fault one chunk worth of access. On success the
+ * caller holds umem_odp->umem_mutex and gets the chosen umem_odp via
+ * *out_umem_odp. length must already be clamped via rxe_odp_chunk_len_at.
+ */
+static int rxe_odp_map_range_and_lock(struct rxe_mr *mr, u64 iova, int length,
+				      u32 flags,
+				      struct ib_umem_odp **out_umem_odp)
 {
-	struct ib_umem_odp *umem_odp = to_ib_umem_odp(mr->umem);
+	struct ib_umem_odp *umem_odp;
 	bool need_fault;
 	int err;
 
 	if (unlikely(length < 1))
 		return -EINVAL;
+
+	umem_odp = rxe_odp_umem_for_iova(mr, iova);
+	if (IS_ERR(umem_odp))
+		return PTR_ERR(umem_odp);
 
 	mutex_lock(&umem_odp->umem_mutex);
 
@@ -171,8 +293,7 @@ static int rxe_odp_map_range_and_lock(struct rxe_mr *mr, u64 iova, int length, u
 	if (need_fault) {
 		mutex_unlock(&umem_odp->umem_mutex);
 
-		/* umem_mutex is locked on success. */
-		err = rxe_odp_do_pagefault_and_lock(mr, iova, length,
+		err = rxe_odp_do_pagefault_and_lock(umem_odp, iova, length,
 						    flags);
 		if (err < 0)
 			return err;
@@ -184,13 +305,14 @@ static int rxe_odp_map_range_and_lock(struct rxe_mr *mr, u64 iova, int length, u
 		}
 	}
 
+	*out_umem_odp = umem_odp;
 	return 0;
 }
 
-static int __rxe_odp_mr_copy(struct rxe_mr *mr, u64 iova, void *addr,
-			     int length, enum rxe_mr_copy_dir dir)
+static int __rxe_odp_mr_copy_one(struct ib_umem_odp *umem_odp, u64 iova,
+				 void *addr, int length,
+				 enum rxe_mr_copy_dir dir)
 {
-	struct ib_umem_odp *umem_odp = to_ib_umem_odp(mr->umem);
 	struct page *page;
 	int idx, bytes;
 	size_t offset;
@@ -226,8 +348,10 @@ static int __rxe_odp_mr_copy(struct rxe_mr *mr, u64 iova, void *addr,
 int rxe_odp_mr_copy(struct rxe_mr *mr, u64 iova, void *addr, int length,
 		    enum rxe_mr_copy_dir dir)
 {
-	struct ib_umem_odp *umem_odp = to_ib_umem_odp(mr->umem);
 	u32 flags = RXE_PAGEFAULT_DEFAULT;
+	u64 cur_iova = iova;
+	u8 *cur_addr = addr;
+	int remaining = length;
 	int err;
 
 	if (length == 0)
@@ -248,15 +372,43 @@ int rxe_odp_mr_copy(struct rxe_mr *mr, u64 iova, void *addr, int length,
 		return -EINVAL;
 	}
 
-	err = rxe_odp_map_range_and_lock(mr, iova, length, flags);
-	if (err)
-		return err;
+	/* Walk one chunk at a time. For explicit MRs the chunk-length helper
+	 * returns the full remaining length, so this loop runs exactly once
+	 * and is identical to the pre-implicit behavior.
+	 */
+	while (remaining > 0) {
+		struct ib_umem_odp *umem_odp;
+		int this_len = rxe_odp_chunk_len_at(mr, cur_iova, remaining);
 
-	err =  __rxe_odp_mr_copy(mr, iova, addr, length, dir);
+		err = rxe_odp_map_range_and_lock(mr, cur_iova, this_len, flags,
+						 &umem_odp);
+		if (err)
+			return err;
 
-	mutex_unlock(&umem_odp->umem_mutex);
+		err = __rxe_odp_mr_copy_one(umem_odp, cur_iova, cur_addr,
+					    this_len, dir);
+		mutex_unlock(&umem_odp->umem_mutex);
+		if (err)
+			return err;
 
-	return err;
+		cur_iova += this_len;
+		cur_addr += this_len;
+		remaining -= this_len;
+	}
+
+	return 0;
+}
+
+/* Atomic, flush, and atomic-write paths assume mr->umem itself holds the
+ * pfn_list. That is true for explicit MRs only. The implicit parent has
+ * no pages of its own. Reject those operations on implicit MRs rather
+ * than extend them: remote access on implicit is already out of scope,
+ * so the only way these helpers could be reached is via a local atomic
+ * or flush, which the test matrix does not exercise.
+ */
+static inline bool rxe_odp_mr_is_implicit(struct rxe_mr *mr)
+{
+	return to_ib_umem_odp(mr->umem)->is_implicit_odp;
 }
 
 static enum resp_states rxe_odp_do_atomic_op(struct rxe_mr *mr, u64 iova,
@@ -313,11 +465,16 @@ static enum resp_states rxe_odp_do_atomic_op(struct rxe_mr *mr, u64 iova,
 enum resp_states rxe_odp_atomic_op(struct rxe_mr *mr, u64 iova, int opcode,
 				   u64 compare, u64 swap_add, u64 *orig_val)
 {
-	struct ib_umem_odp *umem_odp = to_ib_umem_odp(mr->umem);
+	struct ib_umem_odp *umem_odp;
 	int err;
 
+	if (rxe_odp_mr_is_implicit(mr)) {
+		rxe_dbg_mr(mr, "atomic op not supported on implicit ODP MR\n");
+		return RESPST_ERR_RKEY_VIOLATION;
+	}
+
 	err = rxe_odp_map_range_and_lock(mr, iova, sizeof(char),
-					 RXE_PAGEFAULT_DEFAULT);
+					 RXE_PAGEFAULT_DEFAULT, &umem_odp);
 	if (err < 0)
 		return RESPST_ERR_RKEY_VIOLATION;
 
@@ -331,7 +488,7 @@ enum resp_states rxe_odp_atomic_op(struct rxe_mr *mr, u64 iova, int opcode,
 int rxe_odp_flush_pmem_iova(struct rxe_mr *mr, u64 iova,
 			    unsigned int length)
 {
-	struct ib_umem_odp *umem_odp = to_ib_umem_odp(mr->umem);
+	struct ib_umem_odp *umem_odp;
 	unsigned int page_offset;
 	unsigned long index;
 	struct page *page;
@@ -339,8 +496,11 @@ int rxe_odp_flush_pmem_iova(struct rxe_mr *mr, u64 iova,
 	int err;
 	u8 *va;
 
+	if (rxe_odp_mr_is_implicit(mr))
+		return -EOPNOTSUPP;
+
 	err = rxe_odp_map_range_and_lock(mr, iova, length,
-					 RXE_PAGEFAULT_DEFAULT);
+					 RXE_PAGEFAULT_DEFAULT, &umem_odp);
 	if (err)
 		return err;
 
@@ -368,12 +528,15 @@ int rxe_odp_flush_pmem_iova(struct rxe_mr *mr, u64 iova,
 
 enum resp_states rxe_odp_do_atomic_write(struct rxe_mr *mr, u64 iova, u64 value)
 {
-	struct ib_umem_odp *umem_odp = to_ib_umem_odp(mr->umem);
+	struct ib_umem_odp *umem_odp;
 	unsigned int page_offset;
 	unsigned long index;
 	struct page *page;
 	int err;
 	u64 *va;
+
+	if (rxe_odp_mr_is_implicit(mr))
+		return RESPST_ERR_RKEY_VIOLATION;
 
 	/* See IBA oA19-28 */
 	err = mr_check_range(mr, iova, sizeof(value));
@@ -383,7 +546,7 @@ enum resp_states rxe_odp_do_atomic_write(struct rxe_mr *mr, u64 iova, u64 value)
 	}
 
 	err = rxe_odp_map_range_and_lock(mr, iova, sizeof(value),
-					 RXE_PAGEFAULT_DEFAULT);
+					 RXE_PAGEFAULT_DEFAULT, &umem_odp);
 	if (err)
 		return RESPST_ERR_RKEY_VIOLATION;
 
@@ -419,6 +582,38 @@ struct prefetch_mr_work {
 	} frags[];
 };
 
+/* Prefetch one SGE range. For implicit MRs the range may span multiple
+ * chunks; fault each chunk separately and drop the lock between them
+ * so concurrent invalidators are not blocked across the whole range.
+ */
+static int rxe_odp_prefetch_one(struct rxe_mr *mr, u64 io_virt, size_t length,
+				u32 pf_flags)
+{
+	u64 cur = io_virt;
+	size_t remaining = length;
+	int ret;
+
+	while (remaining > 0) {
+		struct ib_umem_odp *umem_odp;
+		int this_len = rxe_odp_chunk_len_at(mr, cur, remaining);
+
+		umem_odp = rxe_odp_umem_for_iova(mr, cur);
+		if (IS_ERR(umem_odp))
+			return PTR_ERR(umem_odp);
+
+		ret = rxe_odp_do_pagefault_and_lock(umem_odp, cur, this_len,
+						    pf_flags);
+		if (ret < 0)
+			return ret;
+
+		mutex_unlock(&umem_odp->umem_mutex);
+
+		cur += this_len;
+		remaining -= this_len;
+	}
+	return 0;
+}
+
 static void rxe_ib_prefetch_mr_work(struct work_struct *w)
 {
 	struct prefetch_mr_work *work =
@@ -426,28 +621,16 @@ static void rxe_ib_prefetch_mr_work(struct work_struct *w)
 	int ret;
 	u32 i;
 
-	/*
-	 * We rely on IB/core that work is executed
-	 * if we have num_sge != 0 only.
-	 */
 	WARN_ON(!work->num_sge);
 	for (i = 0; i < work->num_sge; ++i) {
-		struct ib_umem_odp *umem_odp;
-
-		ret = rxe_odp_do_pagefault_and_lock(work->frags[i].mr,
-						    work->frags[i].io_virt,
-						    work->frags[i].length,
-						    work->pf_flags);
-		if (ret < 0) {
+		ret = rxe_odp_prefetch_one(work->frags[i].mr,
+					   work->frags[i].io_virt,
+					   work->frags[i].length,
+					   work->pf_flags);
+		if (ret < 0)
 			rxe_dbg_mr(work->frags[i].mr,
 				   "failed to prefetch the mr\n");
-			goto deref;
-		}
 
-		umem_odp = to_ib_umem_odp(work->frags[i].mr->umem);
-		mutex_unlock(&umem_odp->umem_mutex);
-
-deref:
 		rxe_put(work->frags[i].mr);
 	}
 
@@ -465,7 +648,6 @@ static int rxe_ib_prefetch_sg_list(struct ib_pd *ibpd,
 
 	for (i = 0; i < num_sge; ++i) {
 		struct rxe_mr *mr;
-		struct ib_umem_odp *umem_odp;
 
 		mr = lookup_mr(pd, IB_ACCESS_LOCAL_WRITE,
 			       sg_list[i].lkey, RXE_LOOKUP_LOCAL);
@@ -483,16 +665,13 @@ static int rxe_ib_prefetch_sg_list(struct ib_pd *ibpd,
 			return -EPERM;
 		}
 
-		ret = rxe_odp_do_pagefault_and_lock(
-			mr, sg_list[i].addr, sg_list[i].length, pf_flags);
+		ret = rxe_odp_prefetch_one(mr, sg_list[i].addr,
+					   sg_list[i].length, pf_flags);
 		if (ret < 0) {
 			rxe_dbg_mr(mr, "failed to prefetch the mr\n");
 			rxe_put(mr);
 			return ret;
 		}
-
-		umem_odp = to_ib_umem_odp(mr->umem);
-		mutex_unlock(&umem_odp->umem_mutex);
 
 		rxe_put(mr);
 	}
@@ -517,7 +696,6 @@ static int rxe_ib_advise_mr_prefetch(struct ib_pd *ibpd,
 	if (advice == IB_UVERBS_ADVISE_MR_ADVICE_PREFETCH_NO_FAULT)
 		pf_flags |= RXE_PAGEFAULT_SNAPSHOT;
 
-	/* Synchronous call */
 	if (flags & IB_UVERBS_ADVISE_MR_FLAG_FLUSH)
 		return rxe_ib_prefetch_sg_list(ibpd, advice, pf_flags, sg_list,
 					       num_sge);
@@ -532,7 +710,6 @@ static int rxe_ib_advise_mr_prefetch(struct ib_pd *ibpd,
 	work->num_sge = num_sge;
 
 	for (i = 0; i < num_sge; ++i) {
-		/* Takes a reference, which will be released in the queued work */
 		mr = lookup_mr(pd, IB_ACCESS_LOCAL_WRITE,
 			       sg_list[i].lkey, RXE_LOOKUP_LOCAL);
 		if (!mr) {
@@ -550,7 +727,6 @@ static int rxe_ib_advise_mr_prefetch(struct ib_pd *ibpd,
 	return 0;
 
  err:
-	/* rollback reference counts for the invalid request */
 	while (i > 0) {
 		i--;
 		rxe_put(work->frags[i].mr);

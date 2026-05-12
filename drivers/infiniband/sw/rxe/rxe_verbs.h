@@ -341,11 +341,29 @@ struct rxe_mr_page {
 	unsigned int		offset; /* offset in system page */
 };
 
+/* For implicit ODP MRs the virtual address space is split into fixed-size
+ * chunks. Each chunk is backed by at most one child umem allocated on
+ * first access. The 2 MiB chunk size keeps the child count bounded while
+ * limiting the amount of VA covered by each child. Whether the chunk
+ * size should be fixed, derived from page_shift, or configurable is an
+ * open design question for review.
+ */
+#define RXE_ODP_CHILD_SHIFT 21
+#define RXE_ODP_CHILD_SIZE  (BIT(RXE_ODP_CHILD_SHIFT))
+#define RXE_ODP_CHILD_MASK  (RXE_ODP_CHILD_SIZE - 1)
+
 struct rxe_mr {
 	struct rxe_pool_elem	elem;
 	struct ib_mr		ibmr;
 
 	struct ib_umem		*umem;
+
+	/* For implicit ODP MRs only: xarray of child umems keyed by
+	 * (aligned_start >> RXE_ODP_CHILD_SHIFT). Each entry covers one
+	 * RXE_ODP_CHILD_SIZE-aligned chunk and is created lazily on first
+	 * access. Unused (xa_empty) for explicit MRs.
+	 */
+	struct xarray		implicit_children;
 
 	u32			lkey;
 	u32			rkey;

@@ -6,6 +6,8 @@
 
 #include <linux/libnvdimm.h>
 
+#include <rdma/ib_umem_odp.h>
+
 #include "rxe.h"
 #include "rxe_loc.h"
 
@@ -809,6 +811,23 @@ void rxe_mr_cleanup(struct rxe_pool_elem *elem)
 	struct rxe_mr *mr = container_of(elem, typeof(*mr), elem);
 
 	rxe_put(mr_pd(mr));
+
+	/* Implicit ODP MRs may have created child umems on demand for each
+	 * accessed 2 MiB chunk. Release them before the parent so each
+	 * child's mmu_interval_notifier tears down while the parent's
+	 * per_mm is still alive. The xarray is empty for explicit MRs, so
+	 * walking it is a no-op there.
+	 */
+	if (mr->umem && mr->umem->is_odp &&
+	    to_ib_umem_odp(mr->umem)->is_implicit_odp) {
+		struct ib_umem_odp *child;
+		unsigned long key;
+
+		xa_for_each(&mr->implicit_children, key, child)
+			ib_umem_odp_release(child);
+		xa_destroy(&mr->implicit_children);
+	}
+
 	ib_umem_release(mr->umem);
 
 	if (mr->ibmr.type != IB_MR_TYPE_DMA)
