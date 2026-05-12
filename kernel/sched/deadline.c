@@ -1826,6 +1826,20 @@ void dl_server_stop(struct sched_dl_entity *dl_se)
 	dl_se->dl_server_active = 0;
 }
 
+/*
+ * Stop all dl-servers on this runqueue. Called when transitioning to a state
+ * where the tick can be stopped (e.g., single RR/FIFO task, or no RT tasks).
+ * This ensures server timers are disarmed and won't cause spurious wakeups on
+ * nohz_full isolated cores.
+ */
+void dl_servers_stop_all(struct rq *rq)
+{
+	dl_server_stop(&rq->fair_server);
+#ifdef CONFIG_SCHED_CLASS_EXT
+	dl_server_stop(&rq->ext_server);
+#endif
+}
+
 void dl_server_init(struct sched_dl_entity *dl_se, struct rq *rq,
 		    dl_server_pick_f pick_task)
 {

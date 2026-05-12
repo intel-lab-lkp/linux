@@ -1414,30 +1414,35 @@ static inline bool __need_bw_check(struct rq *rq, struct task_struct *p)
 
 bool sched_can_stop_tick(struct rq *rq)
 {
-	int fifo_nr_running;
-
 	/* Deadline tasks, even if single, need the tick */
 	if (rq->dl.dl_nr_running)
 		return false;
 
 	/*
-	 * If there are more than one RR tasks, we need the tick to affect the
-	 * actual RR behaviour.
+	 * If there are RT tasks, we may need the tick (for >1 RR tasks),
+	 * but we must also service lower-priority CFS/SCX tasks via dl-servers.
 	 */
-	if (rq->rt.rr_nr_running) {
-		if (rq->rt.rr_nr_running == 1)
-			return true;
-		else
+	if (rq->rt.rt_nr_running) {
+		if (rq->cfs.h_nr_queued) {
+			dl_server_start(&rq->fair_server);
 			return false;
-	}
-
-	/*
-	 * If there's no RR tasks, but FIFO tasks, we can skip the tick, no
-	 * forced preemption between FIFO tasks.
-	 */
-	fifo_nr_running = rq->rt.rt_nr_running - rq->rt.rr_nr_running;
-	if (fifo_nr_running)
+		}
+#ifdef CONFIG_SCHED_CLASS_EXT
+		if (rq->scx.nr_running) {
+			dl_server_start(&rq->ext_server);
+			return false;
+		}
+#endif
+		/*
+		 * Only RT tasks, no CFS/SCX. Stop servers to prevent spurious
+		 * wakeups. Tick can stop for single RR or any FIFO, but must
+		 * run for multiple RR (round-robin behavior).
+		 */
+		dl_servers_stop_all(rq);
+		if (rq->rt.rr_nr_running > 1)
+			return false;
 		return true;
+	}
 
 	/*
 	 * If there are no DL,RR/FIFO tasks, there must only be CFS or SCX tasks
@@ -1462,6 +1467,7 @@ bool sched_can_stop_tick(struct rq *rq)
 			return false;
 	}
 
+	dl_servers_stop_all(rq);
 	return true;
 }
 #endif /* CONFIG_NO_HZ_FULL */
@@ -8810,10 +8816,7 @@ int sched_cpu_dying(unsigned int cpu)
 		WARN(true, "Dying CPU not properly vacated!");
 		dump_rq_tasks(rq, KERN_WARNING);
 	}
-	dl_server_stop(&rq->fair_server);
-#ifdef CONFIG_SCHED_CLASS_EXT
-	dl_server_stop(&rq->ext_server);
-#endif
+	dl_servers_stop_all(rq);
 	rq_unlock_irqrestore(rq, &rf);
 
 	calc_load_migrate(rq);
