@@ -1534,6 +1534,47 @@ struct vfio_device_feature_dma_buf {
  */
 #define VFIO_DEVICE_FEATURE_MIG_PRECOPY_INFOv2  12
 
+/**
+ * VFIO_DEVICE_FEATURE_TPH_ST - Get/Set PCIe TPH Steering Tag (ST) entries
+ *
+ * Provides userspace interface to manage PCIe TPH ST table entries.
+ * This feature is only available when device TPH is enabled.
+ *
+ * Upon VFIO_DEVICE_FEATURE_SET:
+ *   Program contiguous ST table entries from the starting @index.
+ *   Valid only for hardware with ST table located in TPH Capability
+ *   space or MSI-X table. If an entry CPU ID is specified as U32_MAX,
+ *   the corresponding ST entry will be cleared. @index and @count define
+ *   the contiguous entry range to be programmed.
+ *   If any entry programming fails, the operation will roll back and
+ *   clear all entries that were successfully programmed before the error.
+ *
+ * Upon VFIO_DEVICE_FEATURE_GET:
+ *   Retrieve the ST value mapped to each given CPU ID in the @data array.
+ *   Userspace fills @data with CPU ID array, the interface returns each
+ *   CPU's corresponding ST value back in place.
+ *   Valid only when TPH DS mode is enabled.
+ *
+ * @flags: Operation flags (VFIO_TPH_ST_MEM_TYPE_*).
+ * @index: Starting ST entry index, only valid for FEATURE_SET.
+ * @count: Number of contiguous entries to access.
+ * @data: Array of CPU IDs for both SET and GET. On SET it programs ST for
+ *        each CPU; on GET it returns the mapped ST value of each CPU.
+ *
+ * This feature is gated by enable_unsafe_tph module parameter.
+ */
+#define VFIO_DEVICE_FEATURE_TPH_ST	13
+
+struct vfio_device_feature_tph_st {
+	__u32 flags;
+#define VFIO_TPH_ST_MEM_TYPE_VM		(0U << 0)
+#define VFIO_TPH_ST_MEM_TYPE_PM		(1U << 0)
+	__u16 index;
+	__u16 count;
+#define VFIO_TPH_ST_MAX_COUNT		2048
+	__u32 data[] __counted_by(count);
+};
+
 /* -------- API for Type1 VFIO IOMMU -------- */
 
 /**
