@@ -160,7 +160,7 @@ static inline void fpu_sync_guest_vmexit_xfd_state(void) { }
 
 extern void fpu_copy_guest_fpstate_to_uabi(struct fpu_guest *gfpu, void *buf,
 					   unsigned int size, u64 xfeatures, u32 pkru);
-extern int fpu_copy_uabi_to_guest_fpstate(struct fpu_guest *gfpu, const void *buf, u64 xcr0, u32 *vpkru);
+extern int fpu_copy_uabi_to_guest_fpstate(struct fpu_guest *gfpu, void *buf, u64 xcr0, u32 *vpkru);
 
 static inline void fpstate_set_confidential(struct fpu_guest *gfpu)
 {
