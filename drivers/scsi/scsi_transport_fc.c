@@ -3180,8 +3180,7 @@ delete_rport:
 	list_del(&rport->peers);
 	scsi_host_put(shost);			/* for fc_host->rport list */
 	spin_unlock_irqrestore(shost->host_lock, flags);
-	put_device(dev->parent);
-	kfree(rport);
+	put_device(dev);
 	return NULL;
 }
 
