@@ -291,8 +291,9 @@ static int tcs3472_read_raw(struct iio_dev *indio_dev,
 				cycle_us);
 		return IIO_VAL_INT_PLUS_MICRO;
 	}
+	default:
+		return -EINVAL;
 	}
-	return -EINVAL;
 }
 
 static int tcs3472_write_raw(struct iio_dev *indio_dev,
@@ -344,8 +345,9 @@ static int tcs3472_write_raw(struct iio_dev *indio_dev,
 		return -EINVAL;
 	case IIO_CHAN_INFO_SAMP_FREQ:
 		return tcs3472_set_sampling_freq(data, val, val2);
+	default:
+		return -EINVAL;
 	}
-	return -EINVAL;
 }
 
 /*
