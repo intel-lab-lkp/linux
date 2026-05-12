@@ -417,7 +417,20 @@ void mlx5_hwmon_dev_unregister(struct mlx5_core_dev *mdev)
 	mdev->hwmon = NULL;
 }
 
-const char *hwmon_get_sensor_name(struct mlx5_hwmon *hwmon, int channel)
+const char *hwmon_get_sensor_name(struct mlx5_hwmon *hwmon, int sensor_idx)
 {
+	int channel;
+
+	if (sensor_idx >= 64) {
+		if (hwmon->module_scount == 0)
+			return NULL;
+		channel = hwmon->asic_platform_scount;
+		if (sensor_idx != hwmon->temp_channel_desc[channel].sensor_index)
+			return NULL;
+	} else {
+		if (sensor_idx >= hwmon->asic_platform_scount)
+			return NULL;
+		channel = sensor_idx;
+	}
 	return hwmon->temp_channel_desc[channel].sensor_name;
 }

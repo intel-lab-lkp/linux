@@ -165,6 +165,8 @@ static void print_sensor_names_in_bit_set(struct mlx5_core_dev *dev, struct mlx5
 	for_each_set_bit(i, bit_set_ptr, num_bits) {
 		const char *sensor_name = hwmon_get_sensor_name(hwmon, i + bit_set_offset);
 
+		if (!sensor_name)
+			continue;
 		mlx5_core_warn(dev, "Sensor name[%d]: %s\n", i + bit_set_offset, sensor_name);
 	}
 }
