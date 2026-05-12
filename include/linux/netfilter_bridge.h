@@ -10,6 +10,12 @@ struct nf_bridge_frag_data {
 	bool    vlan_present;
 	u16     vlan_tci;
 	__be16  vlan_proto;
+	bool    inner_vlan_present;
+	u16     inner_vlan_tci;
+	__be16  inner_vlan_proto;
+	bool    pppoe_present;
+	__be16  pppoe_sid;
+	__be16  pppoe_proto;
 };
 
 #if IS_ENABLED(CONFIG_BRIDGE_NETFILTER)
