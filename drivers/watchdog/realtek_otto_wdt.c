@@ -350,6 +350,8 @@ static int otto_wdt_probe(struct platform_device *pdev)
 }
 
 static const struct of_device_id otto_wdt_ids[] = {
+	{ .compatible = "realtek,otto-wdt" },
+	/* Legacy bindings without fallback compatible */
 	{ .compatible = "realtek,rtl8380-wdt" },
 	{ .compatible = "realtek,rtl8390-wdt" },
 	{ .compatible = "realtek,rtl9300-wdt" },
