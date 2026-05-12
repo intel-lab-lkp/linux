@@ -21,7 +21,6 @@
 #include "ia_css.h"
 
 extern int dbg_level;
-extern int dbg_func;
 extern int pad_w;
 extern int pad_h;
 

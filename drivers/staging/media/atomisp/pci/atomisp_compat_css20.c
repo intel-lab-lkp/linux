@@ -25,6 +25,7 @@
 #include "sh_css_hrt.h"
 #include "ia_css_isys.h"
 
+#include <linux/dynamic_debug.h>
 #include <linux/io.h>
 #include <linux/pm_runtime.h>
 
@@ -149,6 +150,19 @@ static void atomisp_css2_hw_load(hrt_address addr, void *to, uint32_t n)
 static int  __printf(1, 0) atomisp_vprintk(const char *fmt, va_list args)
 {
 	vprintk(fmt, args);
+	return 0;
+}
+
+static int __printf(1, 0) atomisp_vpr_debug(const char *fmt, va_list args)
+{
+#if defined(CONFIG_DYNAMIC_DEBUG)
+	DEFINE_DYNAMIC_DEBUG_METADATA(descriptor, "CSS debug");
+
+	if (DYNAMIC_DEBUG_BRANCH(descriptor))
+		vprintk(fmt, args);
+#elif defined(DEBUG)
+	vprintk(fmt, args);
+#endif
 	return 0;
 }
 
@@ -745,20 +759,6 @@ int atomisp_css_init(struct atomisp_device *isp)
 	return 0;
 }
 
-static inline int __set_css_print_env(struct atomisp_device *isp, int opt)
-{
-	int ret = 0;
-
-	if (opt == 0)
-		isp->css_env.isp_css_env.print_env.debug_print = NULL;
-	else if (opt == 1)
-		isp->css_env.isp_css_env.print_env.debug_print = atomisp_vprintk;
-	else
-		ret = -EINVAL;
-
-	return ret;
-}
-
 int atomisp_css_load_firmware(struct atomisp_device *isp)
 {
 	int err;
@@ -783,8 +783,7 @@ int atomisp_css_load_firmware(struct atomisp_device *isp)
 	isp->css_env.isp_css_env.hw_access_env.load = atomisp_css2_hw_load;
 	isp->css_env.isp_css_env.hw_access_env.store = atomisp_css2_hw_store;
 
-	__set_css_print_env(isp, dbg_func);
-
+	isp->css_env.isp_css_env.print_env.debug_print = atomisp_vpr_debug;
 	isp->css_env.isp_css_env.print_env.error_print = atomisp_vprintk;
 
 	/* load isp fw into ISP memory */
@@ -3358,22 +3357,6 @@ void atomisp_css_set_isp_config_applied_frame(struct atomisp_sub_device *asd,
 	struct ia_css_frame *output_frame)
 {
 	asd->params.config.output_frame = output_frame;
-}
-
-int atomisp_get_css_dbgfunc(void)
-{
-	return dbg_func;
-}
-
-int atomisp_set_css_dbgfunc(struct atomisp_device *isp, int opt)
-{
-	int ret;
-
-	ret = __set_css_print_env(isp, opt);
-	if (ret == 0)
-		dbg_func = opt;
-
-	return ret;
 }
 
 void atomisp_en_dz_capt_pipe(struct atomisp_sub_device *asd, bool enable)

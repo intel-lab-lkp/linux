@@ -48,12 +48,6 @@ int dbg_level;
 module_param(dbg_level, int, 0644);
 MODULE_PARM_DESC(dbg_level, "debug message level (default:0)");
 
-/* log function switch */
-int dbg_func = 1;
-module_param(dbg_func, int, 0644);
-MODULE_PARM_DESC(dbg_func,
-		 "log function switch non/printk (default:printk)");
-
 /*
  * Set to 16x16 since this is the amount of lines and pixels the sensor
  * exports extra. If these are kept at the 10x8 that they were on, in yuv
