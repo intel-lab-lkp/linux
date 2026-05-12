@@ -83,8 +83,10 @@ struct rdmacg_resource_pool {
 	/* total number counts which are set to max */
 	int			num_max_cnt;
 
-	/* per-resource hierarchical max event counters */
+	/* per-resource event counters */
 	atomic64_t		events_max[RDMACG_RESOURCE_MAX];
+	atomic64_t		events_local_max[RDMACG_RESOURCE_MAX];
+	atomic64_t		events_failcnt[RDMACG_RESOURCE_MAX];
 };
 
 static struct rdma_cgroup *css_rdmacg(struct cgroup_subsys_state *css)
@@ -230,15 +232,18 @@ uncharge_cg_locked(struct rdma_cgroup *cg,
 }
 
 /**
- * rdmacg_event_locked - fire hierarchical max event when resource limit is hit
+ * rdmacg_event_locked - fire event when resource allocation exceeds limit
+ * @cg: requesting cgroup
  * @over_cg: cgroup whose limit was exceeded
  * @device: rdma device
  * @index: resource type index
  *
- * Must be called under rdmacg_mutex. Propagates max event counts upward
- * from @over_cg to all ancestors and notifies userspace.
+ * Must be called under rdmacg_mutex. Updates event counters in the
+ * resource pools of @cg and @over_cg, propagates hierarchical max
+ * events upward, and notifies userspace via cgroup_file_notify().
  */
-static void rdmacg_event_locked(struct rdma_cgroup *over_cg,
+static void rdmacg_event_locked(struct rdma_cgroup *cg,
+				struct rdma_cgroup *over_cg,
 				struct rdmacg_device *device,
 				enum rdmacg_resource_type index)
 {
@@ -247,6 +252,21 @@ static void rdmacg_event_locked(struct rdma_cgroup *over_cg,
 
 	lockdep_assert_held(&rdmacg_mutex);
 
+	/* Increment failcnt in requesting cgroup */
+	rpool = find_cg_rpool_locked(cg, device);
+	if (rpool) {
+		atomic64_inc(&rpool->events_failcnt[index]);
+		cgroup_file_notify(&cg->events_local_file);
+	}
+
+	/* Increment local max in the over-limit cgroup */
+	rpool = find_cg_rpool_locked(over_cg, device);
+	if (rpool) {
+		atomic64_inc(&rpool->events_local_max[index]);
+		cgroup_file_notify(&over_cg->events_local_file);
+	}
+
+	/* Propagate hierarchical max events upward, creating rpools as needed */
 	for (p = over_cg; parent_rdmacg(p); p = parent_rdmacg(p)) {
 		rpool = get_cg_rpool_locked(p, device);
 		if (!IS_ERR(rpool)) {
@@ -363,7 +383,7 @@ int rdmacg_try_charge(struct rdma_cgroup **rdmacg,
 
 err:
 	if (ret == -EAGAIN)
-		rdmacg_event_locked(p, device, index);
+		rdmacg_event_locked(cg, p, device, index);
 	mutex_unlock(&rdmacg_mutex);
 	rdmacg_uncharge_hierarchy(cg, device, p, index);
 	return ret;
@@ -625,6 +645,35 @@ static int rdmacg_events_show(struct seq_file *sf, void *v)
 	return 0;
 }
 
+static int rdmacg_events_local_show(struct seq_file *sf, void *v)
+{
+	struct rdma_cgroup *cg = css_rdmacg(seq_css(sf));
+	struct rdmacg_resource_pool *rpool;
+	struct rdmacg_device *device;
+	int i;
+
+	mutex_lock(&rdmacg_mutex);
+
+	list_for_each_entry(device, &rdmacg_devices, dev_node) {
+		rpool = find_cg_rpool_locked(cg, device);
+		if (!rpool)
+			continue;
+
+		seq_printf(sf, "%s ", device->name);
+		for (i = 0; i < RDMACG_RESOURCE_MAX; i++) {
+			seq_printf(sf, "%s.max %lld %s.failcnt %lld ",
+				   rdmacg_resource_names[i],
+				   (s64)atomic64_read(&rpool->events_local_max[i]),
+				   rdmacg_resource_names[i],
+				   (s64)atomic64_read(&rpool->events_failcnt[i]));
+		}
+		seq_putc(sf, '\n');
+	}
+
+	mutex_unlock(&rdmacg_mutex);
+	return 0;
+}
+
 static struct cftype rdmacg_files[] = {
 	{
 		.name = "max",
@@ -649,6 +698,12 @@ static struct cftype rdmacg_files[] = {
 		.name = "events",
 		.seq_show = rdmacg_events_show,
 		.file_offset = offsetof(struct rdma_cgroup, events_file),
+		.flags = CFTYPE_NOT_ON_ROOT,
+	},
+	{
+		.name = "events.local",
+		.seq_show = rdmacg_events_local_show,
+		.file_offset = offsetof(struct rdma_cgroup, events_local_file),
 		.flags = CFTYPE_NOT_ON_ROOT,
 	},
 	{ }	/* terminate */
