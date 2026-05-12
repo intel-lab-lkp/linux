@@ -59,23 +59,19 @@ edac_device_alloc_ctl_info(unsigned pvt_sz, char *dev_name, unsigned nr_instance
 			   int device_index)
 {
 	struct edac_device_block *dev_blk, *blk_p, *blk;
-	struct edac_device_instance *dev_inst, *inst;
 	struct edac_device_ctl_info *dev_ctl;
+	struct edac_device_instance *inst;
 	unsigned instance, block;
 	void *pvt;
 	int err;
 
 	edac_dbg(4, "instances=%d blocks=%d\n", nr_instances, nr_blocks);
 
-	dev_ctl = kzalloc_obj(struct edac_device_ctl_info);
+	dev_ctl = kzalloc_flex(*dev_ctl, instances, nr_instances);
 	if (!dev_ctl)
 		return NULL;
 
-	dev_inst = kzalloc_objs(struct edac_device_instance, nr_instances);
-	if (!dev_inst)
-		goto free;
-
-	dev_ctl->instances = dev_inst;
+	dev_ctl->nr_instances = nr_instances;
 
 	dev_blk = kzalloc_objs(struct edac_device_block,
 			       nr_instances * nr_blocks);
@@ -93,7 +89,6 @@ edac_device_alloc_ctl_info(unsigned pvt_sz, char *dev_name, unsigned nr_instance
 	}
 
 	dev_ctl->dev_idx	= device_index;
-	dev_ctl->nr_instances	= nr_instances;
 
 	/* Default logging of CEs and UEs */
 	dev_ctl->log_ce = 1;
@@ -104,7 +99,7 @@ edac_device_alloc_ctl_info(unsigned pvt_sz, char *dev_name, unsigned nr_instance
 
 	/* Initialize every Instance */
 	for (instance = 0; instance < nr_instances; instance++) {
-		inst = &dev_inst[instance];
+		inst = &dev_ctl->instances[instance];
 		inst->ctl = dev_ctl;
 		inst->nr_blocks = nr_blocks;
 		blk_p = &dev_blk[instance * nr_blocks];

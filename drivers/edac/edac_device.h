@@ -199,11 +199,7 @@ struct edac_device_ctl_info {
 	 */
 	char name[EDAC_DEVICE_NAME_LEN + 1];
 
-	/* Number of instances supported on this control structure
-	 * and the array of those instances
-	 */
-	u32 nr_instances;
-	struct edac_device_instance *instances;
+	/* Array of all blocks for all instances. */
 	struct edac_device_block *blocks;
 
 	/* Event counters for the this whole EDAC Device */
@@ -213,6 +209,11 @@ struct edac_device_ctl_info {
 	 * device this structure controls
 	 */
 	struct kobject kobj;
+
+	/* Number of instances supported on this control structure. */
+	u32 nr_instances;
+	/* Array of instances for this control structure. */
+	struct edac_device_instance instances[] __counted_by(nr_instances);
 };
 
 /* To get from the instance's wq to the beginning of the ctl structure */
@@ -342,7 +343,6 @@ static inline void __edac_device_free_ctl_info(struct edac_device_ctl_info *ci)
 	if (ci) {
 		kfree(ci->pvt_info);
 		kfree(ci->blocks);
-		kfree(ci->instances);
 		kfree(ci);
 	}
 }
