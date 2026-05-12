@@ -6808,6 +6808,8 @@ M:	Abdurrahman Hussain <abdurrahman@nexthop.ai>
 L:	linux-hwmon@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/hwmon/pmbus/murata,d1u74t.yaml
+F:	Documentation/hwmon/d1u74t.rst
+F:	drivers/hwmon/pmbus/d1u74t.c
 
 CRYPTO API
 M:	Herbert Xu <herbert@gondor.apana.org.au>
