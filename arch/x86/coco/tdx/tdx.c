@@ -543,10 +543,10 @@ static int handle_cpuid(struct pt_regs *regs, struct ve_info *ve)
 	 * EAX, EBX, ECX, EDX registers after the CPUID instruction execution.
 	 * So copy the register contents back to pt_regs.
 	 */
-	regs->ax = args.r12;
-	regs->bx = args.r13;
-	regs->cx = args.r14;
-	regs->dx = args.r15;
+	regs->ax = lower_32_bits(args.r12);
+	regs->bx = lower_32_bits(args.r13);
+	regs->cx = lower_32_bits(args.r14);
+	regs->dx = lower_32_bits(args.r15);
 
 	return ve_instr_len(ve);
 }
