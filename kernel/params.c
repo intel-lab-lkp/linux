@@ -628,9 +628,6 @@ static __init_or_module int add_sysfs_param(struct module_kobject *mk,
 	struct attribute **new_attrs;
 	unsigned int i;
 
-	/* We don't bother calling this with invisible parameters. */
-	BUG_ON(!kp->perm);
-
 	if (!mk->mp) {
 		/* First allocation. */
 		mk->mp = kzalloc_obj(*mk->mp);
