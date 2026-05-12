@@ -2110,7 +2110,13 @@ EXPORT_SYMBOL_GPL(kvfree_rcu_barrier);
 void kvfree_rcu_barrier_on_cache(struct kmem_cache *s)
 {
 	if (cache_has_sheaves(s)) {
+		/*
+		 * flush_rcu_sheaves_on_cache() use queue_work_on() and queue_work_on()
+		 * must be called with the CPU hotplug read lock.
+		 */
+		cpus_read_lock();
 		flush_rcu_sheaves_on_cache(s);
+		cpus_read_unlock();
 		rcu_barrier();
 	}
 
