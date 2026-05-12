@@ -694,13 +694,6 @@ efct_pci_io_slot_reset(struct pci_dev *pdev)
 		return PCI_ERS_RESULT_DISCONNECT;
 	}
 
-	/*
-	 * As the new kernel behavior of pci_restore_state() API call clears
-	 * device saved_state flag, need to save the restored state again.
-	 */
-
-	pci_save_state(pdev);
-
 	pci_set_master(pdev);
 
 	rc = efct_setup_msix(efct, efct->n_msix_vec);
