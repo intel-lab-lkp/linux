@@ -1254,7 +1254,11 @@
 
 /* Device 3 Extended Capability */
 #define PCI_DEV3_CAP		0x04	/* Device 3 Capabilities Register */
+#define  PCI_DEV3_CAP_14BIT_TAG_COMP	0x00000004 /* 14-Bit Tag Completer Supported */
+#define  PCI_DEV3_CAP_14BIT_TAG_REQ	0x00000008 /* 14-Bit Tag Requester Supported */
 #define PCI_DEV3_CTL		0x08	/* Device 3 Control Register */
+#define  PCI_DEV3_CTL_14BIT_TAG_COMP_EN	0x00000002 /* 14-Bit Tag Completer Enable */
+#define  PCI_DEV3_CTL_14BIT_TAG_REQ_EN	0x00000004 /* 14-Bit Tag Requester Enable */
 #define PCI_DEV3_STA		0x0c	/* Device 3 Status Register */
 #define  PCI_DEV3_STA_SEGMENT	0x8	/* Segment Captured (end-to-end flit-mode detected) */
 
