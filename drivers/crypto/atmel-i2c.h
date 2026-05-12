@@ -10,28 +10,39 @@
 #include <linux/hw_random.h>
 #include <linux/types.h>
 
-#define ATMEL_ECC_PRIORITY		300
+#define ATMEL_I2C_PRIORITY		300
 
-#define SLEEP_TOKEN			0x01
-#define WAKE_TOKEN_MAX_SIZE		8
+#define ATMEL_I2C_WAKE_TOKEN_MAX_SIZE	8
 
 /* Definitions of Data and Command sizes */
-#define WORD_ADDR_SIZE			1
-#define COUNT_SIZE			1
-#define CRC_SIZE			2
-#define CMD_OVERHEAD_SIZE		(COUNT_SIZE + CRC_SIZE)
+#define ATMEL_I2C_ADDR_SIZE		1
+#define ATMEL_I2C_OPCODE_SIZE		1
+#define ATMEL_I2C_COUNT_SIZE		1
+#define ATMEL_I2C_PARAM1_SIZE		1
+#define ATMEL_I2C_PARAM2_SIZE		2
+#define ATMEL_I2C_CRC_SIZE		2
+
+#define ATMEL_I2C_RSP_OVERHEAD_SIZE	(ATMEL_I2C_COUNT_SIZE + \
+					ATMEL_I2C_CRC_SIZE)
+#define ATMEL_I2C_COUNT_OVERHEAD_SIZE	(ATMEL_I2C_OPCODE_SIZE + \
+					ATMEL_I2C_COUNT_SIZE + \
+					ATMEL_I2C_PARAM1_SIZE + \
+					ATMEL_I2C_PARAM2_SIZE + \
+					ATMEL_I2C_CRC_SIZE)
+
+/* Definitions for the status Command */
+#define ATMEL_I2C_STATUS_RSP_SIZE	4
 
 /* size in bytes of the n prime */
 #define ATMEL_ECC_NIST_P256_N_SIZE	32
 #define ATMEL_ECC_PUBKEY_SIZE		(2 * ATMEL_ECC_NIST_P256_N_SIZE)
+#define ATMEL_I2C_GENKEY_RSP_SIZE	(ATMEL_ECC_PUBKEY_SIZE + \
+					 ATMEL_I2C_RSP_OVERHEAD_SIZE)
+#define ATMEL_I2C_MAX_RSP_SIZE		ATMEL_I2C_GENKEY_RSP_SIZE
 
-#define STATUS_RSP_SIZE			4
-#define ECDH_RSP_SIZE			(32 + CMD_OVERHEAD_SIZE)
-#define GENKEY_RSP_SIZE			(ATMEL_ECC_PUBKEY_SIZE + \
-					 CMD_OVERHEAD_SIZE)
-#define ATMEL_I2C_READ_RSP_SIZE		(4 + CMD_OVERHEAD_SIZE)
-#define RANDOM_RSP_SIZE			(32 + CMD_OVERHEAD_SIZE)
-#define MAX_RSP_SIZE			GENKEY_RSP_SIZE
+/* Definitions for Indexes common to all commands */
+#define ATMEL_I2C_RSP_DATA_IDX		1 /* buffer index of data in response */
+#define ATMEL_I2C_ECDH_SLOT_DEFAULT	2
 
 /**
  * atmel_i2c_cmd - structure used for communicating with the device.
@@ -51,7 +62,7 @@ struct atmel_i2c_cmd {
 	u8 opcode;
 	u8 param1;
 	__le16 param2;
-	u8 data[MAX_RSP_SIZE];
+	u8 data[ATMEL_I2C_MAX_RSP_SIZE];
 	u8 msecs;
 	u16 rxsize;
 } __packed;
@@ -76,39 +87,6 @@ struct atmel_i2c_of_match_data {
 	struct atmel_i2c_max_exec_timings timings;
 	size_t eeprom_zone_size[3]; /* all atmel devices have three zones */
 };
-
-/* Status/Error codes */
-#define STATUS_SIZE			0x04
-#define STATUS_NOERR			0x00
-#define STATUS_WAKE_SUCCESSFUL		0x11
-
-/* Definitions for Indexes common to all commands */
-#define ATMEL_I2C_RSP_DATA_IDX		1 /* buffer index of data in response */
-#define DATA_SLOT_2			2 /* used for ECDH private key */
-
-/*
- * Wake High delay to data communication (microseconds). SDA should be stable
- * high for this entire duration.
- */
-#define TWHI_MIN			1500
-#define TWHI_MAX			1550
-
-/* Wake Low duration */
-#define TWLO_USEC			60
-
-/* Definitions for the READ Command */
-#define ATMEL_I2C_READ_COUNT		7
-
-/* Definitions for the RANDOM Command */
-#define RANDOM_COUNT			7
-
-/* Definitions for the GenKey Command */
-#define GENKEY_COUNT			7
-#define GENKEY_MODE_PRIVATE		0x04
-
-/* Definitions for the ECDH Command */
-#define ECDH_COUNT			71
-#define ECDH_PREFIX_MODE		0x00
 
 /* Used for binding tfm objects to i2c clients. */
 enum atmel_i2c_capability {
@@ -144,7 +122,7 @@ struct atmel_i2c_client_priv {
 	struct i2c_client *client;
 	struct list_head i2c_client_list_node;
 	struct mutex lock;
-	u8 wake_token[WAKE_TOKEN_MAX_SIZE];
+	u8 wake_token[ATMEL_I2C_WAKE_TOKEN_MAX_SIZE];
 	size_t wake_token_sz;
 	atomic_t tfm_count ____cacheline_aligned;
 	struct hwrng hwrng;

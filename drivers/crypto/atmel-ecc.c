@@ -137,7 +137,7 @@ static int atmel_ecdh_set_secret(struct crypto_kpp *tfm, const void *buf,
 
 	ctx->do_fallback = false;
 
-	atmel_i2c_init_genkey_cmd(cmd, DATA_SLOT_2, &data->timings);
+	atmel_i2c_init_genkey_cmd(cmd, ATMEL_I2C_ECDH_SLOT_DEFAULT, &data->timings);
 
 	ret = atmel_i2c_send_receive(ctx->client, cmd);
 	if (ret)
@@ -296,7 +296,7 @@ static struct kpp_alg atmel_ecdh_nist_p256 = {
 		.cra_flags = CRYPTO_ALG_NEED_FALLBACK,
 		.cra_name = "ecdh-nist-p256",
 		.cra_driver_name = "atmel-ecdh",
-		.cra_priority = ATMEL_ECC_PRIORITY,
+		.cra_priority = ATMEL_I2C_PRIORITY,
 		.cra_module = THIS_MODULE,
 		.cra_ctxsize = sizeof(struct atmel_ecdh_ctx),
 	},
