@@ -1269,14 +1269,16 @@ vmci_transport_recv_connecting_server(struct sock *listener,
 destroy:
 	pending->sk_err = skerr;
 	pending->sk_state = TCP_CLOSE;
-	/* As long as we drop our reference, all necessary cleanup will handle
-	 * when the cleanup function drops its reference and our destruct
-	 * implementation is called.  Note that since the listen handler will
-	 * remove pending from the pending list upon our failure, the cleanup
-	 * function won't drop the additional reference, which is why we do it
-	 * here.
+	/* Drop the reference taken by vmci_transport_recv_listen() before
+	 * schedule_delayed_work() only on real errors.  For a peer RST
+	 * (err == 0) the listener leaves pending on the pending list, and
+	 * vsock_pending_work() will drop that reference itself when it
+	 * later cleans the socket up.  Calling sock_put() here in that
+	 * case would be a double-put and free the socket while
+	 * vsock_pending_work() still holds it.
 	 */
-	sock_put(pending);
+	if (err < 0)
+		sock_put(pending);
 
 	return err;
 }
