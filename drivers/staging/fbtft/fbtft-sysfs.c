@@ -142,9 +142,30 @@ static ssize_t show_gamma_curve(struct device *device,
 	return sprintf_gamma(par, par->gamma.curves, buf);
 }
 
-static struct device_attribute gamma_device_attrs[] = {
-	__ATTR(gamma, 0660, show_gamma_curve, store_gamma_curve),
-};
+static ssize_t store_debug(struct device *device,
+			   struct device_attribute *attr,
+			   const char *buf, size_t count)
+{
+	struct fb_info *fb_info = dev_get_drvdata(device);
+	struct fbtft_par *par = fb_info->par;
+	int ret;
+
+	ret = kstrtoul(buf, 10, &par->debug);
+	if (ret)
+		return ret;
+	fbtft_expand_debug_value(&par->debug);
+
+	return count;
+}
+
+static ssize_t show_debug(struct device *device,
+			  struct device_attribute *attr, char *buf)
+{
+	struct fb_info *fb_info = dev_get_drvdata(device);
+	struct fbtft_par *par = fb_info->par;
+
+	return sysfs_emit(buf, "%lu\n", par->debug);
+}
 
 void fbtft_expand_debug_value(unsigned long *debug)
 {
@@ -173,45 +194,45 @@ void fbtft_expand_debug_value(unsigned long *debug)
 	}
 }
 
-static ssize_t store_debug(struct device *device,
-			   struct device_attribute *attr,
-			   const char *buf, size_t count)
-{
-	struct fb_info *fb_info = dev_get_drvdata(device);
-	struct fbtft_par *par = fb_info->par;
-	int ret;
+static DEVICE_ATTR(gamma, 0644, show_gamma_curve, store_gamma_curve);
+static DEVICE_ATTR(debug, 0644, show_debug, store_debug);
 
-	ret = kstrtoul(buf, 10, &par->debug);
-	if (ret)
-		return ret;
-	fbtft_expand_debug_value(&par->debug);
+static struct attribute *fbtft_attrs[] = {
+	&dev_attr_debug.attr,
+	NULL,
+};
 
-	return count;
-}
+static struct attribute *fbtft_gamma_attrs[] = {
+	&dev_attr_gamma.attr,
+	NULL,
+};
 
-static ssize_t show_debug(struct device *device,
-			  struct device_attribute *attr, char *buf)
-{
-	struct fb_info *fb_info = dev_get_drvdata(device);
-	struct fbtft_par *par = fb_info->par;
+static const struct attribute_group fbtft_attr_group = {
+	.attrs = fbtft_attrs,
+};
 
-	return sysfs_emit(buf, "%lu\n", par->debug);
-}
-
-static struct device_attribute debug_device_attr =
-	__ATTR(debug, 0660, show_debug, store_debug);
+static const struct attribute_group fbtft_gamma_attr_group = {
+	.attrs = fbtft_gamma_attrs,
+};
 
 void fbtft_sysfs_init(struct fbtft_par *par)
 {
 	struct device *dev;
+	int ret;
 
 	dev = dev_of_fbinfo(par->info);
 	if (!dev)
 		return;
 
-	device_create_file(dev, &debug_device_attr);
-	if (par->gamma.curves && par->fbtftops.set_gamma)
-		device_create_file(dev, &gamma_device_attrs[0]);
+	ret = sysfs_create_group(&dev->kobj, &fbtft_attr_group);
+	if (ret)
+		dev_warn(dev, "failed to create debug sysfs entry\n");
+
+	if (par->gamma.curves && par->fbtftops.set_gamma) {
+		ret = sysfs_create_group(&dev->kobj, &fbtft_gamma_attr_group);
+		if (ret)
+			dev_warn(dev, "failed to create gamma sysfs entry\n");
+	}
 }
 
 void fbtft_sysfs_exit(struct fbtft_par *par)
@@ -222,7 +243,7 @@ void fbtft_sysfs_exit(struct fbtft_par *par)
 	if (!dev)
 		return;
 
-	device_remove_file(dev, &debug_device_attr);
+	sysfs_remove_group(&dev->kobj, &fbtft_attr_group);
 	if (par->gamma.curves && par->fbtftops.set_gamma)
-		device_remove_file(dev, &gamma_device_attrs[0]);
+		sysfs_remove_group(&dev->kobj, &fbtft_gamma_attr_group);
 }
