@@ -626,12 +626,13 @@ EXPORT_SYMBOL(atmel_i2c_probe);
 
 static int __init atmel_i2c_init(void)
 {
-	atmel_wq = alloc_workqueue("atmel_wq", WQ_PERCPU, 0);
+	atmel_wq = alloc_workqueue("atmel_wq", WQ_MEM_RECLAIM, 0);
 	return atmel_wq ? 0 : -ENOMEM;
 }
 
 static void __exit atmel_i2c_exit(void)
 {
+	flush_workqueue(atmel_wq);
 	destroy_workqueue(atmel_wq);
 }
 
