@@ -72,8 +72,10 @@ static bool is_best_fixed_mode(int vrefresh, int fixed_mode_vrefresh,
 }
 
 static bool need_higher_rr_mode(struct intel_connector *connector,
-				const struct drm_display_mode *mode)
+				const struct drm_display_mode *mode,
+				const struct drm_atomic_commit *state)
 {
+	struct intel_display *display = to_intel_display(connector);
 	int vrefresh = drm_mode_vrefresh(mode);
 
 	if (!intel_vrr_is_capable(connector))
@@ -82,12 +84,33 @@ static bool need_higher_rr_mode(struct intel_connector *connector,
 	if (!intel_vrr_is_in_range(connector, vrefresh))
 		return false;
 
-	return true;
+	if (!state)
+		return false;
+
+	/*
+	 * If Seamless switch requested, use highest RR mode + vtotal
+	 * adjustment, unless DRRS with double-buffered M/N which
+	 * can change the clock on the fly.
+	 */
+	if (!state->allow_modeset) {
+		if (intel_panel_drrs_type(connector) == DRRS_TYPE_SEAMLESS &&
+		    HAS_DOUBLE_BUFFERED_M_N(display))
+			return false;
+		return true;
+	}
+
+	/*
+	 * If full modeset is allowed, then for DRRS panels, use nearest mode
+	 * (lower clock saves power). For non-DRRS VRR panels, use highest RR
+	 * mode (no clock advantage from picking a lower mode).
+	 */
+	return intel_panel_drrs_type(connector) != DRRS_TYPE_SEAMLESS;
 }
 
 const struct drm_display_mode *
 intel_panel_fixed_mode(struct intel_connector *connector,
-		       const struct drm_display_mode *mode)
+		       const struct drm_display_mode *mode,
+		       const struct drm_atomic_commit *state)
 {
 	const struct drm_display_mode *fixed_mode, *best_mode = NULL;
 	int vrefresh = drm_mode_vrefresh(mode);
@@ -97,7 +120,7 @@ intel_panel_fixed_mode(struct intel_connector *connector,
 	 * which we can then reduce to match the requested
 	 * vrefresh by extending the vblank length.
 	 */
-	if (need_higher_rr_mode(connector, mode))
+	if (need_higher_rr_mode(connector, mode, state))
 		return intel_panel_highest_vrefresh_mode(connector);
 
 	list_for_each_entry(fixed_mode, &connector->panel.fixed_modes, head) {
@@ -229,7 +252,7 @@ int intel_panel_compute_config(struct intel_connector *connector,
 {
 	struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
 	const struct drm_display_mode *fixed_mode =
-		intel_panel_fixed_mode(connector, adjusted_mode);
+		intel_panel_fixed_mode(connector, adjusted_mode, state);
 	int vrefresh, fixed_mode_vrefresh;
 	bool is_vrr;
 
@@ -435,7 +458,7 @@ intel_panel_mode_valid(struct intel_connector *connector,
 		       int *target_clock)
 {
 	const struct drm_display_mode *fixed_mode =
-		intel_panel_fixed_mode(connector, mode);
+		intel_panel_fixed_mode(connector, mode, NULL);
 
 	if (target_clock)
 		*target_clock = mode->clock;

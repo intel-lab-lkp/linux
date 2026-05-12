@@ -797,7 +797,7 @@ intel_sdvo_create_preferred_input_timing(struct intel_sdvo *intel_sdvo,
 
 	if (IS_LVDS(intel_sdvo_connector)) {
 		const struct drm_display_mode *fixed_mode =
-intel_panel_fixed_mode(&intel_sdvo_connector->base, mode);
+			intel_panel_fixed_mode(&intel_sdvo_connector->base, mode, NULL);
 
 		if (fixed_mode->hdisplay != args.width ||
 		    fixed_mode->vdisplay != args.height)
@@ -1564,7 +1564,8 @@ static void intel_sdvo_pre_enable(struct intel_atomic_state *state,
 	/* lvds has a special fixed output timing. */
 	if (IS_LVDS(intel_sdvo_connector)) {
 		const struct drm_display_mode *fixed_mode =
-			intel_panel_fixed_mode(&intel_sdvo_connector->base, mode);
+			intel_panel_fixed_mode(&intel_sdvo_connector->base,
+					       mode, conn_state->state);
 
 		intel_sdvo_get_dtd_from_mode(&output_dtd, fixed_mode);
 	} else {

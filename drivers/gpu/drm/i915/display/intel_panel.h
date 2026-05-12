@@ -33,7 +33,8 @@ const struct drm_display_mode *
 intel_panel_preferred_fixed_mode(struct intel_connector *connector);
 const struct drm_display_mode *
 intel_panel_fixed_mode(struct intel_connector *connector,
-		       const struct drm_display_mode *mode);
+		       const struct drm_display_mode *mode,
+		       const struct drm_atomic_commit *state);
 const struct drm_display_mode *
 intel_panel_downclock_mode(struct intel_connector *connector,
 			   const struct drm_display_mode *adjusted_mode);
