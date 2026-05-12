@@ -89,6 +89,9 @@ enum gpio_regmap_operation {
  *			domain will be set accordingly.
  * @regmap_irq_line:	(Optional) The IRQ the device uses to signal interrupts.
  * @regmap_irq_flags:	(Optional) The IRQF_ flags to use for the interrupt.
+ * @set_config:		(Optional) Callback for setting GPIO configuration such
+ *			as debounce, drive strength, or other hardware specific
+ *			settings.
  *
  * The ->reg_mask_xlate translates a given base address and GPIO offset to
  * register and mask pair. The base address is one of the given register
@@ -141,6 +144,10 @@ struct gpio_regmap_config {
 	int (*init_valid_mask)(struct gpio_chip *gc,
 			       unsigned long *valid_mask,
 			       unsigned int ngpios);
+
+	int (*set_config)(struct gpio_chip *gc,
+			  unsigned int offset,
+			  unsigned long config);
 
 	void *drvdata;
 };
