@@ -2,6 +2,8 @@
 #ifndef __KVM_X86_VMENTER_H
 #define __KVM_X86_VMENTER_H
 
+#include <asm/kvm_vcpu_regs.h>
+
 #define KVM_ENTER_VMRESUME			BIT(0)
 #define KVM_ENTER_SAVE_SPEC_CTRL		BIT(1)
 #define KVM_ENTER_CLEAR_CPU_BUFFERS_FOR_MMIO	BIT(2)
@@ -74,6 +76,47 @@
 	ALTERNATIVE __stringify(je \label), "", X86_FEATURE_KERNEL_IBRS
 #endif
 	wrmsr
+.endm
+
+#define WORD_SIZE (BITS_PER_LONG / 8)
+
+.macro LOAD_REGS src:req, regs_ofs:req, regs:vararg
+.irp reg, \regs
+	REG_NUM reg_num \reg
+	.if reg_num <> REG_NUM_INVALID
+	mov (\regs_ofs + reg_num * WORD_SIZE)(\src), \reg
+	.else
+	.err invalid register \reg
+	.endif
+.endr
+.endm
+
+.macro STORE_REGS dst:req, regs_ofs:req, regs:vararg
+.irp reg, \regs
+	REG_NUM reg_num \reg
+	.if reg_num <> REG_NUM_INVALID
+	mov \reg, (\regs_ofs + reg_num * WORD_SIZE)(\dst)
+	.else
+	.err invalid register \reg
+	.endif
+.endr
+.endm
+
+.macro POP_REGS dst:req, regs_ofs:req, regs:vararg
+.irp reg, \regs
+	REG_NUM reg_num \reg
+	.if reg_num <> REG_NUM_INVALID
+	pop (\regs_ofs + reg_num * WORD_SIZE)(\dst)
+	.else
+	.err invalid register \reg
+	.endif
+.endr
+.endm
+
+.macro CLEAR_REGS regs:vararg
+.irp reg, \regs
+	xorl \reg, \reg
+.endr
 .endm
 
 #endif /* __ASSEMBLER__ */
