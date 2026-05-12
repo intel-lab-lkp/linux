@@ -613,6 +613,10 @@ static void platform_device_release(struct device *dev)
  *
  * Create a platform device object which can have other objects attached
  * to it, and which will have attached objects freed when it is released.
+ *
+ * Note: devices allocated with this function must not have the following
+ * members assigned manually: swnode, resources and dev->platform_data.
+ * Please use the provided helper interfaces.
  */
 struct platform_device *platform_device_alloc(const char *name, int id)
 {
@@ -686,6 +690,25 @@ int platform_device_add_data(struct platform_device *pdev, const void *data,
 	return 0;
 }
 EXPORT_SYMBOL_GPL(platform_device_add_data);
+
+/**
+ * platform_device_add_software_node - add a software node to a platform device
+ * @pdev: platform device allocated with platform_device_alloc()
+ * @swnode: software node to assign to this device, does not need to be registered
+ *
+ * If this device is already associated with a primary firmware node, add the
+ * software node as the secondary firmware node. Otherwise, make it the primary
+ * firmware node. Register the software node if needed.
+ *
+ * Returns:
+ * 0 on success, negative error number on failure.
+ */
+int platform_device_add_software_node(struct platform_device *pdev,
+				      const struct software_node *swnode)
+{
+	return device_add_software_node(&pdev->dev, swnode);
+}
+EXPORT_SYMBOL_GPL(platform_device_add_software_node);
 
 /**
  * platform_device_add - add a platform device to device hierarchy
@@ -881,7 +904,7 @@ struct platform_device *platform_device_register_full(const struct platform_devi
 		goto err;
 
 	if (pdevinfo->swnode) {
-		ret = device_add_software_node(&pdev->dev, pdevinfo->swnode);
+		ret = platform_device_add_software_node(pdev, pdevinfo->swnode);
 		if (ret)
 			goto err;
 	} else if (pdevinfo->properties) {
