@@ -334,6 +334,11 @@ static int pci_liveupdate_unpreserve_device(struct pci_ser *ser, struct pci_dev 
 
 	guard(write_lock)(&dev->liveupdate.lock);
 
+	if (dev->liveupdate.frozen) {
+		pci_WARN(dev, 1, "Cannot unpreserve device after it is frozen!\n");
+		return -EINVAL;
+	}
+
 	dev_ser = dev->liveupdate.outgoing;
 	if (!dev_ser) {
 		pci_warn(dev, "Cannot unpreserve device that is not preserved\n");
@@ -419,6 +424,11 @@ static int pci_liveupdate_preserve_device_new(struct pci_ser *ser, struct pci_de
 static int pci_liveupdate_preserve_device(struct pci_ser *ser, struct pci_dev *dev)
 {
 	guard(write_lock)(&dev->liveupdate.lock);
+
+	if (dev->liveupdate.frozen) {
+		pci_WARN(dev, 1, "Cannot preserve device after it is frozen!\n");
+		return -EINVAL;
+	}
 
 	if (dev->liveupdate.outgoing)
 		return pci_liveupdate_preserve_device_existing(dev);
@@ -623,6 +633,12 @@ void pci_liveupdate_cleanup_device(struct pci_dev *dev)
 	 */
 	if (incoming)
 		pci_liveupdate_flb_put_incoming();
+}
+
+void pci_liveupdate_freeze(struct pci_dev *dev)
+{
+	guard(write_lock)(&dev->liveupdate.lock);
+	dev->liveupdate.frozen = 1;
 }
 
 static int __pci_liveupdate_finish_device(struct pci_dev *dev)

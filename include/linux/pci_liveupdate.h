@@ -22,6 +22,8 @@
  * @was_preserved: True if this struct pci_dev was preserved by the previous
  *                 kernel. Unlike @incoming, this field is not cleared after
  *                 the device is finished participating in Live Update.
+ * @frozen: True if the outgoing preservation status of this device is frozen
+ *          and thus cannot be changed.
  */
 struct pci_liveupdate {
 	rwlock_t lock;
@@ -29,6 +31,7 @@ struct pci_liveupdate {
 	struct pci_dev_ser *incoming;
 	u16 acs_ctrl;
 	unsigned int was_preserved:1;
+	unsigned int frozen:1;
 };
 
 struct pci_dev;

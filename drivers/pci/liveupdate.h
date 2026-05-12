@@ -13,6 +13,7 @@
 #ifdef CONFIG_PCI_LIVEUPDATE
 void pci_liveupdate_setup_device(struct pci_dev *dev);
 void pci_liveupdate_cleanup_device(struct pci_dev *dev);
+void pci_liveupdate_freeze(struct pci_dev *dev);
 bool pci_liveupdate_inherit_buses(void);
 void pci_liveupdate_init_acs(struct pci_dev *dev);
 bool pci_liveupdate_inherit_acs(struct pci_dev *dev);
@@ -23,6 +24,10 @@ static inline void pci_liveupdate_setup_device(struct pci_dev *dev)
 }
 
 static inline void pci_liveupdate_cleanup_device(struct pci_dev *dev)
+{
+}
+
+static inline void pci_liveupdate_freeze(struct pci_dev *dev);
 {
 }
 
