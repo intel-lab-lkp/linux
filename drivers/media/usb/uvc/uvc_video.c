@@ -524,7 +524,7 @@ static void uvc_video_clock_add_sample(struct uvc_clock *clock,
 
 	spin_lock_irqsave(&clock->lock, flags);
 
-	if (clock->count > 0 && clock->last_sof > sample->dev_sof) {
+	if (clock->count > 0 && clock->last_sof_processed > sample->dev_sof) {
 		/*
 		 * Remove data from the circular buffer that is older than the
 		 * last SOF overflow. We only support one SOF overflow per
@@ -606,6 +606,12 @@ uvc_video_clock_decode(struct uvc_streaming *stream, struct uvc_buffer *buf,
 	sample.dev_sof = get_unaligned_le16(&data[header_size - 2]);
 	sample.dev_stc = get_unaligned_le32(&data[header_size - 6]);
 
+	/* If the sample sof is very similar to the previous one quit early. */
+	if (stream->clock.last_sof_raw == sample.dev_sof)
+		return;
+
+	stream->clock.last_sof_raw = sample.dev_sof;
+
 	/*
 	 * STC (Source Time Clock) is the clock used by the camera. The UVC 1.5
 	 * standard states that it "must be captured when the first video data
@@ -644,8 +650,6 @@ uvc_video_clock_decode(struct uvc_streaming *stream, struct uvc_buffer *buf,
 	if (stream->dev->quirks & UVC_QUIRK_INVALID_DEVICE_SOF)
 		sample.dev_sof = sample.host_sof;
 
-	sample.host_time = uvc_video_get_time();
-
 	/*
 	 * The UVC specification allows device implementations that can't obtain
 	 * the USB frame number to keep their own frame counters as long as they
@@ -682,19 +686,23 @@ uvc_video_clock_decode(struct uvc_streaming *stream, struct uvc_buffer *buf,
 	 * all the data packets of the same frame contains the same SOF. In that
 	 * case only the first one will match the host_sof.
 	 */
-	if (sof_diff(sample.dev_sof, stream->clock.last_sof) <=
+	if (sof_diff(sample.dev_sof, stream->clock.last_sof_processed) <=
 	    (UVC_MIN_HW_TIMESTAMP_DIFF / stream->clock.size))
 		return;
 
+	/* This is expensive, only do it if needed */
+	sample.host_time = uvc_video_get_time();
+
 	uvc_video_clock_add_sample(&stream->clock, &sample);
-	stream->clock.last_sof = sample.dev_sof;
+	stream->clock.last_sof_processed = sample.dev_sof;
 }
 
 static void uvc_video_clock_reset(struct uvc_clock *clock)
 {
 	clock->head = 0;
 	clock->count = 0;
-	clock->last_sof = -1;
+	clock->last_sof_processed = -1;
+	clock->last_sof_raw = -1;
 	clock->last_sof_overflow = -1;
 	clock->sof_offset = -1;
 }
