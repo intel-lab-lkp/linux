@@ -18,6 +18,7 @@ void ksz9477_r_mib_cnt(struct ksz_device *dev, int port, u16 addr, u64 *cnt);
 void ksz9477_r_mib_pkt(struct ksz_device *dev, int port, u16 addr,
 		       u64 *dropped, u64 *cnt);
 void ksz9477_freeze_mib(struct ksz_device *dev, int port, bool freeze);
+int ksz9477_dsa_port_setup(struct dsa_switch *ds, int port);
 void ksz9477_port_init_cnt(struct ksz_device *dev, int port);
 int ksz9477_port_vlan_filtering(struct dsa_switch *ds, int port,
 				bool flag, struct netlink_ext_ack *extack);
