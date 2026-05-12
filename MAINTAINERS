@@ -15154,6 +15154,7 @@ L:	MPT-FusionLinux.pdl@broadcom.com
 L:	linux-scsi@vger.kernel.org
 S:	Supported
 W:	http://www.avagotech.com/support/
+F:	Documentation/hwmon/mpt3sas.rst
 F:	drivers/message/fusion/
 F:	drivers/scsi/mpt3sas/
 

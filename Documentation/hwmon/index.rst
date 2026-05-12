@@ -193,6 +193,7 @@ Hardware Monitoring Kernel Drivers
    mp9941
    mp9945
    mpq8785
+   mpt3sas
    nct6683
    nct6775
    nct7363
