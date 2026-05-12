@@ -141,8 +141,6 @@
 #include <linux/psi.h>
 #include "sched.h"
 
-static int psi_bug __read_mostly;
-
 DEFINE_STATIC_KEY_FALSE(psi_disabled);
 static DEFINE_STATIC_KEY_TRUE(psi_cgroups_enabled);
 
@@ -262,7 +260,7 @@ static u32 test_states(unsigned int *tasks, u32 state_mask)
 	if (tasks[NR_RUNNING] && !oncpu)
 		state_mask |= BIT(PSI_CPU_FULL);
 
-	if (tasks[NR_IOWAIT] || tasks[NR_MEMSTALL] || tasks[NR_RUNNING])
+	if (tasks[NR_RUNNING] || tasks[NR_MEMSTALL] || tasks[NR_IOWAIT])
 		state_mask |= BIT(PSI_NONIDLE);
 
 	return state_mask;
@@ -836,14 +834,13 @@ static void psi_group_change(struct psi_group *group, int cpu,
 	for (t = 0, m = clear; m; m &= ~(1 << t), t++) {
 		if (!(m & (1 << t)))
 			continue;
-		if (groupc->tasks[t]) {
+		if (likely(groupc->tasks[t])) {
 			groupc->tasks[t]--;
-		} else if (!psi_bug) {
-			printk_deferred(KERN_ERR "psi: task underflow! cpu=%d t=%d tasks=[%u %u %u %u] clear=%x set=%x\n",
+		} else {
+			printk_deferred_once("psi: task underflow! cpu=%d t=%d tasks=[%u %u %u %u] clear=%x set=%x\n",
 					cpu, t, groupc->tasks[0],
 					groupc->tasks[1], groupc->tasks[2],
 					groupc->tasks[3], clear, set);
-			psi_bug = 1;
 		}
 	}
 
@@ -908,13 +905,11 @@ static inline struct psi_group *task_psi_group(struct task_struct *task)
 
 static void psi_flags_change(struct task_struct *task, int clear, int set)
 {
-	if (((task->psi_flags & set) ||
-	     (task->psi_flags & clear) != clear) &&
-	    !psi_bug) {
-		printk_deferred(KERN_ERR "psi: inconsistent task state! task=%d:%s cpu=%d psi_flags=%x clear=%x set=%x\n",
+	if (unlikely(((task->psi_flags & set) ||
+	     (task->psi_flags & clear) != clear))) {
+		printk_deferred_once("psi: inconsistent task state! task=%d:%s cpu=%d psi_flags=%x clear=%x set=%x\n",
 				task->pid, task->comm, task_cpu(task),
 				task->psi_flags, clear, set);
-		psi_bug = 1;
 	}
 
 	task->psi_flags &= ~clear;
@@ -927,7 +922,7 @@ void psi_task_change(struct task_struct *task, int clear, int set)
 	u64 now;
 	bool curr_in_memstall;
 
-	if (!task->need_psi)
+	if (unlikely(!task->need_psi))
 		return;
 
 	psi_flags_change(task, clear, set);
