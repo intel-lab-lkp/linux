@@ -165,6 +165,17 @@ struct isc_ctrls {
 #define HIST_MAX_INDEX		1
 	u32 hist_minmax[HIST_BAYER][2];
 
+	/*
+	 * Custom per-channel gamma LUT (10-bit output values, 64 entries).
+	 * Set via ISC_CID_GAMMA_{R,G,B}_LUT controls.  When gamma_lut_override
+	 * is true these arrays are converted to hardware format at pipeline
+	 * start-up, overriding the preset curve from gamma_index.
+	 */
+	u32 gamma_lut_r[GAMMA_ENTRIES];
+	u32 gamma_lut_g[GAMMA_ENTRIES];
+	u32 gamma_lut_b[GAMMA_ENTRIES];
+	bool gamma_lut_override;
+
 	/* CC matrix shadow; committed from isc_set_pipeline() and isc_awb_work() */
 	s32 cc_coeff[ISC_CC_COEFF_NUM];
 	s32 cc_offset[ISC_CC_OFFSET_NUM];
@@ -363,11 +374,23 @@ struct isc_device {
 		struct v4l2_ctrl        *cc_ob;
 	};
 
-#define GAMMA_ENTRIES	64
 	/* pointer to the defined gamma table */
 	const u32	(*gamma_table)[GAMMA_ENTRIES];
 	u32		gamma_max;
 	bool		has_cbhs;
+
+	/*
+	 * When true the GAM block operates in bipartite piecewise-linear
+	 * interpolation mode (ISC_GAM_CTRL_BIPART set).  The LUT-to-hardware
+	 * conversion uses a Q9 per-step delta; without bipartite mode the
+	 * delta is a plain per-segment increment.
+	 */
+	bool		gamma_bipartite;
+
+	/* V4L2 ctrl handles for the per-channel gamma LUT override */
+	struct v4l2_ctrl	*gamma_b_lut_ctrl;
+	struct v4l2_ctrl	*gamma_g_lut_ctrl;
+	struct v4l2_ctrl	*gamma_r_lut_ctrl;
 
 	u32		max_width;
 	u32		max_height;
