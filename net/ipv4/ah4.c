@@ -137,7 +137,7 @@ static void ah_output_done(void *data, int err)
 	top_iph->tos = iph->tos;
 	top_iph->ttl = iph->ttl;
 	top_iph->frag_off = iph->frag_off;
-	if (top_iph->ihl != 5) {
+	if (top_iph->ihl > 5) {
 		top_iph->daddr = iph->daddr;
 		memcpy(top_iph+1, iph+1, top_iph->ihl*4 - sizeof(struct iphdr));
 	}
@@ -197,7 +197,7 @@ static int ah_output(struct xfrm_state *x, struct sk_buff *skb)
 	iph->ttl = top_iph->ttl;
 	iph->frag_off = top_iph->frag_off;
 
-	if (top_iph->ihl != 5) {
+	if (top_iph->ihl > 5) {
 		iph->daddr = top_iph->daddr;
 		memcpy(iph+1, top_iph+1, top_iph->ihl*4 - sizeof(struct iphdr));
 		err = ip_clear_mutable_options(top_iph, &top_iph->daddr);
@@ -253,7 +253,7 @@ static int ah_output(struct xfrm_state *x, struct sk_buff *skb)
 	top_iph->tos = iph->tos;
 	top_iph->ttl = iph->ttl;
 	top_iph->frag_off = iph->frag_off;
-	if (top_iph->ihl != 5) {
+	if (top_iph->ihl > 5) {
 		top_iph->daddr = iph->daddr;
 		memcpy(top_iph+1, iph+1, top_iph->ihl*4 - sizeof(struct iphdr));
 	}
