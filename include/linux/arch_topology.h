@@ -111,4 +111,9 @@ static inline bool topology_core_has_smt(int cpu) { return false; }
 
 #endif /* CONFIG_GENERIC_ARCH_TOPOLOGY */
 
+
+#if defined(CONFIG_ARM64) || defined(CONFIG_RISCV)
+extern unsigned int nr_possible_packages;
+#endif
+
 #endif /* _LINUX_ARCH_TOPOLOGY_H_ */

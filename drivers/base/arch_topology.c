@@ -850,6 +850,16 @@ static bool __init acpi_cpu_is_threaded(int cpu)
 	return !!is_threaded;
 }
 
+unsigned int nr_possible_packages __ro_after_init = 1;
+EXPORT_SYMBOL(nr_possible_packages);
+
+/*
+ * Assuming silicon has a sane package ID decoding method to not have
+ * an ID bigger than 255 (1 byte).
+ */
+#define MAX_PACKAGE_ID	255
+DECLARE_BITMAP(package_id_mask, MAX_PACKAGE_ID + 1);
+
 /*
  * Propagate the topology information of the processor_topology_node tree to the
  * cpu_topology array.
@@ -912,6 +922,13 @@ __weak int __init parse_acpi_topology(void)
 		cpu_topology[cpu].cluster_id = topology_id;
 		topology_id = find_acpi_cpu_topology_package(cpu);
 		cpu_topology[cpu].package_id = topology_id;
+
+
+		if (topology_id >= 0 && topology_id <= MAX_PACKAGE_ID)
+			bitmap_set(package_id_mask, topology_id, 1);
+		else
+			pr_warn("ACPI: abnormal package ID: %d !\n",
+				topology_id);
 	}
 
 	/*
@@ -927,6 +944,10 @@ __weak int __init parse_acpi_topology(void)
 
 	cpu_smt_set_num_threads(max_smt_thread_num, max_smt_thread_num);
 	xa_destroy(&hetero_cpu);
+
+	/* Count the number of possible packages in system */
+	nr_possible_packages = bitmap_weight(package_id_mask, MAX_PACKAGE_ID + 1);
+	pr_info("ACPI: System has %u Package(s) detected\n", nr_possible_packages);
 	return 0;
 }
 
