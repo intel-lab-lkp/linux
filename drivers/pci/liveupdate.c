@@ -132,6 +132,10 @@
  *    way after Live Update and ensures that IOMMU groups do not change. Note
  *    that a device will use its inherited ACS flags for the lifetime of its
  *    struct pci_dev (i.e. even after pci_liveupdate_finish()).
+ *
+ *  * The PCI core inherits ARI Forwarding Enable on all bridges with downstream
+ *    preserved devices to ensure that all preserved devices on the bridge's
+ *    secondary bus are addressable after the Live Update.
  */
 
 #define pr_fmt(fmt) "PCI: liveupdate: " fmt
@@ -717,6 +721,20 @@ bool pci_liveupdate_inherit_acs(struct pci_dev *dev)
 		return false;
 
 	pci_write_config_word(dev, dev->acs_cap + PCI_ACS_CTRL, dev->liveupdate.acs_ctrl);
+	return true;
+}
+
+bool pci_liveupdate_inherit_ari(struct pci_dev *dev)
+{
+	u16 val;
+
+	guard(read_lock)(&dev->liveupdate.lock);
+
+	if (!dev->liveupdate.incoming)
+		return false;
+
+	pcie_capability_read_word(dev, PCI_EXP_DEVCTL2, &val);
+	dev->ari_enabled = !!(val & PCI_EXP_DEVCTL2_ARI);
 	return true;
 }
 
