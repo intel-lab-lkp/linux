@@ -38,6 +38,10 @@
 #define OV08X40_REG_CHIP_ID		0x300a
 #define OV08X40_CHIP_ID			0x560858
 
+/* Pixel array */
+#define OV08X40_NATIVE_WIDTH		3856U
+#define OV08X40_NATIVE_HEIGHT		2416U
+
 /* V_TIMING internal */
 #define OV08X40_REG_VTS			0x380e
 #define OV08X40_VTS_30FPS		0x09c4	/* the VTS need to be half in normal mode */
@@ -1556,10 +1560,31 @@ static int ov08x40_open(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 	try_fmt->code = MEDIA_BUS_FMT_SGRBG10_1X10;
 	try_fmt->field = V4L2_FIELD_NONE;
 
-	/* No crop or compose */
 	mutex_unlock(&ov08x->mutex);
 
 	return 0;
+}
+
+static int ov08x40_get_selection(struct v4l2_subdev *sd,
+				 struct v4l2_subdev_state *state,
+				 struct v4l2_subdev_selection *sel)
+{
+	if (sel->which != V4L2_SUBDEV_FORMAT_ACTIVE)
+		return -EINVAL;
+
+	switch (sel->target) {
+	case V4L2_SEL_TGT_NATIVE_SIZE:
+	case V4L2_SEL_TGT_CROP_BOUNDS:
+	case V4L2_SEL_TGT_CROP_DEFAULT:
+	case V4L2_SEL_TGT_CROP:
+		sel->r.top = 0;
+		sel->r.left = 0;
+		sel->r.width = OV08X40_NATIVE_WIDTH;
+		sel->r.height = OV08X40_NATIVE_HEIGHT;
+		return 0;
+	}
+
+	return -EINVAL;
 }
 
 static int ov08x40_update_digital_gain(struct ov08x40 *ov08x, u32 d_gain)
@@ -2059,6 +2084,7 @@ static const struct v4l2_subdev_pad_ops ov08x40_pad_ops = {
 	.enum_mbus_code = ov08x40_enum_mbus_code,
 	.get_fmt = ov08x40_get_pad_format,
 	.set_fmt = ov08x40_set_pad_format,
+	.get_selection = ov08x40_get_selection,
 	.enum_frame_size = ov08x40_enum_frame_size,
 };
 
