@@ -182,6 +182,7 @@
 
 #define IT66121_HDMI_MODE_REG			0xC0
 #define IT66121_HDMI_MODE_HDMI			BIT(0)
+#define IT66121_HDMI_MODE_DVI			0
 
 #define IT66121_SYS_STATUS_REG			0x0E
 #define IT66121_SYS_STATUS_ACTIVE_IRQ		BIT(7)
@@ -671,15 +672,23 @@ static int it66121_set_mute(struct it66121_ctx *ctx, bool mute)
 
 static void it66121_set_tx_mode(struct it66121_ctx *ctx)
 {
+	unsigned int avi_pkt = 0;
+	unsigned int mode = IT66121_HDMI_MODE_DVI;
+	struct drm_connector *connector = ctx->connector;
+
+	if (connector->display_info.is_hdmi) {
+		mode = IT66121_HDMI_MODE_HDMI;
+		avi_pkt = IT66121_AVI_INFO_PKT_ON | IT66121_AVI_INFO_PKT_RPT;
+	}
+
 	mutex_lock(&ctx->lock);
 
-	/* Enable AVI infoframe */
-	if (regmap_write(ctx->regmap, IT66121_AVI_INFO_PKT_REG,
-			 IT66121_AVI_INFO_PKT_ON | IT66121_AVI_INFO_PKT_RPT))
+	/* Enable or disable AVI infoframe */
+	if (regmap_write(ctx->regmap, IT66121_AVI_INFO_PKT_REG, avi_pkt))
 		goto unlock;
 
-	/* Set TX mode to HDMI */
-	regmap_write(ctx->regmap, IT66121_HDMI_MODE_REG, IT66121_HDMI_MODE_HDMI);
+	/* Set TX mode to DVI or HDMI */
+	regmap_write(ctx->regmap, IT66121_HDMI_MODE_REG, mode);
 
 unlock:
 	mutex_unlock(&ctx->lock);
