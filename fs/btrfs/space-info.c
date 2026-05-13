@@ -1451,6 +1451,17 @@ static void do_async_reclaim_data_space(struct btrfs_space_info *space_info)
 
 	while (!space_info->full) {
 		flush_space(space_info, U64_MAX, ALLOC_CHUNK_FORCE, false);
+		/*
+		 * For zoned filesystems, also run RECLAIM_ZONES and RESET_ZONES
+		 * in the first loop to avoid starvation. Zoned filesystems have
+		 * sequential write requirements, so space cannot be reused until
+		 * zones are reset. Running these states early ensures zones are
+		 * reclaimed and reset before we get into a starvation situation.
+		 */
+		if (btrfs_is_zoned(fs_info)) {
+			flush_space(space_info, U64_MAX, RECLAIM_ZONES, false);
+			flush_space(space_info, U64_MAX, RESET_ZONES, false);
+		}
 		spin_lock(&space_info->lock);
 		if (list_empty(&space_info->tickets)) {
 			space_info->flush = false;
