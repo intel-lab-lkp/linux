@@ -28,10 +28,26 @@
 
 #define NETC_TC_NUM			8
 #define NETC_CBDR_NUM			2
+#define NETC_IPV_NUM			8
 
 #define NETC_MAX_FRAME_LEN		9600
 
 #define NETC_STANDALONE_PVID		0
+
+/* Threshold format: MANT (bits 11:4) * 2^EXP (bits 3:0)
+ * Unit: Memory words (average of 20 bytes each)
+ * NETC_BP_THRESH = 0x334, MANT = 0x33, EXP = 4. Threshold: 816 words
+ * NETC_FC_THRESH_ON = 0x533, MANT = 0x53, EXP = 3. Threshold: 664 words
+ * NETC_FC_THRESH_OFF = 0x3c3, MANT = 0x3c, EXP = 3. Threshold: 480 words
+ */
+#define NETC_BP_THRESH			0x334
+#define NETC_FC_THRESH_ON		0x533
+#define NETC_FC_THRESH_OFF		0x3c3
+
+/* PAUSE quanta: 0xFFFF = 65535 quanta (each quanta = 512 bit times) */
+#define NETC_PAUSE_QUANTA		0xFFFF
+/* PAUSE refresh threshold: send refresh when timer reaches this value */
+#define NETC_PAUSE_THRESH		0xFF00
 
 struct netc_switch;
 
@@ -94,6 +110,9 @@ struct netc_switch {
 
 	/* Switch hardware capabilities */
 	u32 num_fdb_gmac;
+	u32 num_bp;
+
+	struct bpt_cfge_data *bpt_list;
 };
 
 #define NETC_PRIV(ds)			((struct netc_switch *)((ds)->priv))
