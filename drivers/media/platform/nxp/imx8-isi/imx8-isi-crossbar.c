@@ -5,6 +5,7 @@
  * Copyright (c) 2022 Laurent Pinchart <laurent.pinchart@ideasonboard.com>
  */
 
+#include <linux/cleanup.h>
 #include <linux/device.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
@@ -32,7 +33,8 @@ static int mxc_isi_crossbar_gasket_enable(struct mxc_isi_crossbar *xbar,
 	struct mxc_isi_dev *isi = xbar->isi;
 	const struct mxc_gasket_ops *gasket_ops = isi->pdata->gasket_ops;
 	const struct v4l2_mbus_framefmt *fmt;
-	struct v4l2_mbus_frame_desc fd;
+	struct v4l2_mbus_frame_desc *fd __free(v4l2_subdev_free_frame_desc) =
+		NULL;
 	int ret;
 
 	if (!gasket_ops)
@@ -44,15 +46,16 @@ static int mxc_isi_crossbar_gasket_enable(struct mxc_isi_crossbar *xbar,
 	 * to match the configuration of the CSIS.
 	 */
 
-	ret = v4l2_subdev_call(remote_sd, pad, get_frame_desc, remote_pad, &fd);
+	fd = v4l2_subdev_get_fmame_desc(remote_sd, remote_pad,
+					V4L2_MBUS_FRAME_DESC_TYPE_PARALLEL);
 	if (ret) {
 		dev_err(isi->dev,
 			"failed to get frame descriptor from '%s':%u: %d\n",
-			remote_sd->name, remote_pad, ret);
-		return ret;
+			remote_sd->name, remote_pad, PTR_ERR(ret));
+		return PTR_ERR(ret);
 	}
 
-	if (fd.num_entries != 1) {
+	if (fd->num_entries != 1) {
 		dev_err(isi->dev, "invalid frame descriptor for '%s':%u\n",
 			remote_sd->name, remote_pad);
 		return -EINVAL;
@@ -62,7 +65,7 @@ static int mxc_isi_crossbar_gasket_enable(struct mxc_isi_crossbar *xbar,
 	if (!fmt)
 		return -EINVAL;
 
-	gasket_ops->enable(isi, &fd, fmt, port);
+	gasket_ops->enable(isi, fd, fmt, port);
 	return 0;
 }
 
