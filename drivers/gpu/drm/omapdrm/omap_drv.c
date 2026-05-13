@@ -546,8 +546,6 @@ static int omap_modeset_init(struct drm_device *dev)
 static void omap_modeset_fini(struct drm_device *ddev)
 {
 	omap_drm_irq_uninstall(ddev);
-
-	drm_mode_config_cleanup(ddev);
 }
 
 /*
