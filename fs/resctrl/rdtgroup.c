@@ -594,7 +594,8 @@ unlock:
 static void rdtgroup_remove(struct rdtgroup *rdtgrp)
 {
 	kernfs_put(rdtgrp->kn);
-	kfree(rdtgrp);
+	if (rdtgrp != &rdtgroup_default)
+		kfree(rdtgrp);
 }
 
 static void _update_task_closid_rmid(void *task)
@@ -3164,6 +3165,8 @@ static void resctrl_fs_teardown(void)
 	mon_put_kn_priv();
 	rdt_pseudo_lock_release();
 	rdtgroup_default.mode = RDT_MODE_SHAREABLE;
+	if (atomic_read(&rdtgroup_default.waitcount) != 0)
+		rdtgroup_default.flags = RDT_DELETED;
 	closid_exit();
 	schemata_list_destroy();
 	rdtgroup_destroy_root();
@@ -4264,6 +4267,7 @@ static int rdtgroup_setup_root(struct rdt_fs_context *ctx)
 
 	ctx->kfc.root = rdt_root;
 	rdtgroup_default.kn = kernfs_root_to_node(rdt_root);
+	rdtgroup_default.flags = 0;
 
 	return 0;
 }
