@@ -526,14 +526,6 @@ static void fsl_edma_irq_exit(
 	}
 }
 
-static void fsl_disable_clocks(struct fsl_edma_engine *fsl_edma, int nr_clocks)
-{
-	int i;
-
-	for (i = 0; i < nr_clocks; i++)
-		clk_disable_unprepare(fsl_edma->muxclk[i]);
-}
-
 static struct fsl_edma_drvdata vf610_data = {
 	.dmamuxs = DMAMUX_NR,
 	.flags = FSL_EDMA_DRV_WRAP_IO,
@@ -747,23 +739,28 @@ static int fsl_edma_probe(struct platform_device *pdev)
 		fsl_edma->chan_masked |= chan_mask[0];
 	}
 
-	for (i = 0; i < fsl_edma->drvdata->dmamuxs; i++) {
-		char clkname[32];
+	if (fsl_edma->drvdata->dmamuxs) {
+		fsl_edma->muxclk = devm_kcalloc(&pdev->dev, fsl_edma->drvdata->dmamuxs,
+						sizeof(*fsl_edma->muxclk), GFP_KERNEL);
+		if (!fsl_edma->muxclk)
+			return -ENOMEM;
 
-		fsl_edma->muxbase[i] = devm_platform_ioremap_resource(pdev,
-								      1 + i);
-		if (IS_ERR(fsl_edma->muxbase[i])) {
-			/* on error: disable all previously enabled clks */
-			fsl_disable_clocks(fsl_edma, i);
-			return PTR_ERR(fsl_edma->muxbase[i]);
+		for (i = 0; i < fsl_edma->drvdata->dmamuxs; i++) {
+			fsl_edma->muxbase[i] = devm_platform_ioremap_resource(pdev, 1 + i);
+			if (IS_ERR(fsl_edma->muxbase[i]))
+				return PTR_ERR(fsl_edma->muxbase[i]);
+
+			fsl_edma->muxclk[i].id = devm_kasprintf(&pdev->dev, GFP_KERNEL,
+								"dmamux%d", i);
+			if (!fsl_edma->muxclk[i].id)
+				return -ENOMEM;
 		}
 
-		sprintf(clkname, "dmamux%d", i);
-		fsl_edma->muxclk[i] = devm_clk_get_enabled(&pdev->dev, clkname);
-		if (IS_ERR(fsl_edma->muxclk[i]))
-			return dev_err_probe(&pdev->dev,
-					     PTR_ERR(fsl_edma->muxclk[i]),
-					     "Missing DMAMUX block clock.\n");
+		ret = devm_clk_bulk_get_optional_enable(&pdev->dev, fsl_edma->drvdata->dmamuxs,
+							fsl_edma->muxclk);
+		if (ret)
+			return dev_err_probe(&pdev->dev, ret,
+					     "Failed to enable DMAMUX block clock.\n");
 	}
 
 	fsl_edma->big_endian = of_property_read_bool(np, "big-endian");
