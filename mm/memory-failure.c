@@ -2399,6 +2399,19 @@ try_again:
 	}
 
 	/*
+	 * PG_reserved pages are kernel-owned (memblock reservations,
+	 * driver reservations, ...) and cannot be recovered.  Skip the
+	 * get_hwpoison_page() lifecycle dance and report MF_MSG_KERNEL
+	 * straight away; HWPoisonHandlable() would just keep rejecting
+	 * the page through the retry budget anyway.
+	 */
+	if (PageReserved(p)) {
+		put_ref_page(pfn, flags);
+		res = action_result(pfn, MF_MSG_KERNEL, MF_IGNORED);
+		goto unlock_mutex;
+	}
+
+	/*
 	 * We need/can do nothing about count=0 pages.
 	 * 1) it's a free page, and therefore in safe hand:
 	 *    check_new_page() will be the gate keeper.
