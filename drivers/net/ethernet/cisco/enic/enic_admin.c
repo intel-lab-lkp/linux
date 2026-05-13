@@ -589,5 +589,7 @@ void enic_admin_channel_close(struct enic *enic)
 	vnic_cq_clean(&enic->admin_cq[0]);
 	vnic_cq_clean(&enic->admin_cq[1]);
 	vnic_intr_clean(&enic->admin_intr);
+
+	WRITE_ONCE(enic->admin_rq_handler, NULL);
 	enic_admin_free_resources(enic);
 }
