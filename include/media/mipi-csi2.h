@@ -44,4 +44,6 @@
 #define MIPI_CSI2_DT_RAW20		0x2f
 #define MIPI_CSI2_DT_USER_DEFINED(n)	(0x30 + (n))	/* 0..7 */
 
+int mipi_csi2_dt_for_mbus(u32 code);
+
 #endif /* _MEDIA_MIPI_CSI2_H */
