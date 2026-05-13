@@ -83,6 +83,11 @@ struct vport *ovs_netdev_link(struct vport *vport, bool tunnel)
 	}
 
 	rtnl_lock();
+	if (vport->dev->reg_state != NETREG_REGISTERED) {
+		err = -ENODEV;
+		goto error_put_unlock;
+	}
+
 	err = netdev_master_upper_dev_link(vport->dev,
 					   get_dpdev(vport->dp),
 					   NULL, NULL, NULL);
