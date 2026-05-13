@@ -164,6 +164,8 @@ struct isc_ctrls {
 #define HIST_MIN_INDEX		0
 #define HIST_MAX_INDEX		1
 	u32 hist_minmax[HIST_BAYER][2];
+	u32 channel_avg[HIST_BAYER];      /* Average pixel intensity per channel */
+	u32 total_pixels[HIST_BAYER];     /* Total pixels per channel */
 
 	/*
 	 * Custom per-channel gamma LUT (10-bit output values, 64 entries).
