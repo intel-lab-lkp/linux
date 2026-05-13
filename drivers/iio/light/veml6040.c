@@ -13,6 +13,7 @@
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
 #include <linux/module.h>
+#include <linux/pm.h>
 #include <linux/regmap.h>
 
 /* VEML6040 Configuration Registers
@@ -201,6 +202,32 @@ static void veml6040_shutdown_action(void *data)
 			   VEML6040_CONF_SD_MSK, VEML6040_CONF_SD_MSK);
 }
 
+/*
+ * Per Vishay VEML6040 datasheet (Doc# 84276 Rev. 1.7), Table 2-1 and
+ * Table 2-2, the SD bit in CONF register 00H controls chip shutdown:
+ * SD = 1 disables the color sensor, SD = 0 re-enables it.
+ */
+static int veml6040_suspend(struct device *dev)
+{
+	struct iio_dev *indio_dev = i2c_get_clientdata(to_i2c_client(dev));
+	struct veml6040_data *data = iio_priv(indio_dev);
+
+	return regmap_update_bits(data->regmap, VEML6040_CONF_REG,
+				  VEML6040_CONF_SD_MSK, VEML6040_CONF_SD_MSK);
+}
+
+static int veml6040_resume(struct device *dev)
+{
+	struct iio_dev *indio_dev = i2c_get_clientdata(to_i2c_client(dev));
+	struct veml6040_data *data = iio_priv(indio_dev);
+
+	return regmap_update_bits(data->regmap, VEML6040_CONF_REG,
+				  VEML6040_CONF_SD_MSK, 0);
+}
+
+static DEFINE_SIMPLE_DEV_PM_OPS(veml6040_pm_ops, veml6040_suspend,
+				veml6040_resume);
+
 static int veml6040_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
@@ -271,6 +298,7 @@ static struct i2c_driver veml6040_driver = {
 	.driver = {
 		.name = "veml6040",
 		.of_match_table = veml6040_of_match,
+		.pm = pm_sleep_ptr(&veml6040_pm_ops),
 	},
 };
 module_i2c_driver(veml6040_driver);
