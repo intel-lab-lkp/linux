@@ -16,6 +16,7 @@
 #include <linux/platform_device.h>
 #include <linux/platform_data/cros_ec_commands.h>
 #include <linux/platform_data/cros_ec_proto.h>
+#include <linux/revocable.h>
 #include <linux/slab.h>
 #include <linux/suspend.h>
 
@@ -37,6 +38,7 @@ static void cros_ec_device_free(void *data)
 
 	mutex_destroy(&ec_dev->lock);
 	lockdep_unregister_key(&ec_dev->lockdep_key);
+	revocable_revoke(ec_dev->its_rev);
 }
 
 struct cros_ec_device *cros_ec_device_alloc(struct device *dev)
@@ -46,6 +48,15 @@ struct cros_ec_device *cros_ec_device_alloc(struct device *dev)
 	ec_dev = devm_kzalloc(dev, sizeof(*ec_dev), GFP_KERNEL);
 	if (!ec_dev)
 		return NULL;
+
+	ec_dev->its_rev = revocable_alloc(ec_dev);
+	if (!ec_dev->its_rev)
+		return NULL;
+	/*
+	 * Drop the extra reference for the caller as the caller is the
+	 * resource provider.
+	 */
+	revocable_put(ec_dev->its_rev);
 
 	ec_dev->din_size = sizeof(struct ec_host_response) +
 			   sizeof(struct ec_response_get_protocol_info) +
