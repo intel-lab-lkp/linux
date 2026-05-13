@@ -12,6 +12,7 @@
 #include <linux/jiffies.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/types.h>
 
@@ -122,6 +123,7 @@ struct corsairpsu_data {
 	struct device *hwmon_dev;
 	struct dentry *debugfs;
 	struct completion wait_completion;
+	struct mutex lock; /* serializes chained commands and parallel debugfs/hwmon access */
 	u8 *cmd_buffer;
 	char vendor[REPLY_SIZE];
 	char product[REPLY_SIZE];
@@ -194,12 +196,14 @@ static int corsairpsu_init(struct corsairpsu_data *priv)
 	/*
 	 * PSU_CMD_INIT uses swapped length/command and expects 2 parameter bytes, this command
 	 * actually generates a reply, but we don't need it
+	 * only runs during probe/resume and does not switch rails, no locking required
 	 */
 	return corsairpsu_usb_cmd(priv, PSU_CMD_INIT, 3, 0, NULL);
 }
 
 static int corsairpsu_fwinfo(struct corsairpsu_data *priv)
 {
+	/* only runs in probe and does not switch rails, no locking required */
 	int ret;
 
 	ret = corsairpsu_usb_cmd(priv, 3, PSU_CMD_VEND_STR, 0, priv->vendor);
@@ -217,6 +221,7 @@ static int corsairpsu_request(struct corsairpsu_data *priv, u8 cmd, u8 rail, voi
 {
 	int ret;
 
+	mutex_lock(&priv->lock);
 	switch (cmd) {
 	case PSU_CMD_RAIL_VOLTS_HCRIT:
 	case PSU_CMD_RAIL_VOLTS_LCRIT:
@@ -226,13 +231,17 @@ static int corsairpsu_request(struct corsairpsu_data *priv, u8 cmd, u8 rail, voi
 	case PSU_CMD_RAIL_WATTS:
 		ret = corsairpsu_usb_cmd(priv, 2, PSU_CMD_SELECT_RAIL, rail, NULL);
 		if (ret < 0)
-			return ret;
+			goto cmd_fail;
 		break;
 	default:
 		break;
 	}
 
-	return corsairpsu_usb_cmd(priv, 3, cmd, 0, data);
+	ret = corsairpsu_usb_cmd(priv, 3, cmd, 0, data);
+
+cmd_fail:
+	mutex_unlock(&priv->lock);
+	return ret;
 }
 
 static int corsairpsu_get_value(struct corsairpsu_data *priv, u8 cmd, u8 rail, long *val)
@@ -789,6 +798,7 @@ static int corsairpsu_probe(struct hid_device *hdev, const struct hid_device_id 
 
 	priv->hdev = hdev;
 	hid_set_drvdata(hdev, priv);
+	mutex_init(&priv->lock);
 	init_completion(&priv->wait_completion);
 
 	hid_device_io_start(hdev);
