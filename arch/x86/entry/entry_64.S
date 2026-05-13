@@ -364,6 +364,67 @@ _ASM_NOKPROBE(\asmsym)
 SYM_CODE_END(\asmsym)
 .endm
 
+/**
+ * idtentry_body_pf - Macro to emit code calling the #PF C function
+ * @cfunc:		C function to be called
+ *
+ * Reads CR2 immediately after error_entry completes (PUSH_AND_CLEAR_REGS
+ * and SWAPGS are done) and passes it as the 3rd argument to the C handler.
+ * This minimizes the window where an NMI can clobber CR2 by triggering a
+ * nested fault (e.g., KASAN shadow access on unmapped CEA gap addresses).
+ */
+.macro idtentry_body_pf cfunc
+
+	ALTERNATIVE "call error_entry; movq %rax, %rsp", \
+		    "call xen_error_entry", X86_FEATURE_XENPV
+
+	ENCODE_FRAME_POINTER
+	UNWIND_HINT_REGS
+
+	/*
+	 * Read CR2 immediately.  error_entry has completed SWAPGS (if
+	 * needed) so per-cpu state is accessible, but more importantly
+	 * we read CR2 before calling any C code that might be
+	 * KASAN-instrumented or otherwise trigger nested faults.
+	 */
+	movq	%cr2, %rdx
+
+	movq	%rsp, %rdi			/* pt_regs pointer into 1st argument*/
+	movq	ORIG_RAX(%rsp), %rsi		/* get error code into 2nd argument*/
+	movq	$-1, ORIG_RAX(%rsp)		/* no syscall to restart */
+
+	/* %rdx already has CR2 value as 3rd argument */
+
+	/* For some configurations \cfunc ends up being a noreturn. */
+	ANNOTATE_REACHABLE
+	call	\cfunc
+
+	jmp	error_return
+.endm
+
+/**
+ * idtentry_pf - Entry point for #PF (page fault)
+ * @vector:		Vector number
+ * @asmsym:		ASM symbol for the entry point
+ * @cfunc:		C function to be called
+ *
+ * Page fault specific entry macro that reads CR2 as early as possible
+ * to avoid NMI-induced CR2 clobbering.  Hardware pushes the error code.
+ */
+.macro idtentry_pf vector asmsym cfunc
+SYM_CODE_START(\asmsym)
+
+	UNWIND_HINT_IRET_ENTRY offset=8
+	ENDBR
+	ASM_CLAC
+	cld
+
+	idtentry_body_pf \cfunc
+
+_ASM_NOKPROBE(\asmsym)
+SYM_CODE_END(\asmsym)
+.endm
+
 /*
  * Interrupt entry/exit.
  *

@@ -181,6 +181,35 @@ noinstr void fred_##func(struct pt_regs *regs)
 __visible noinstr void func(struct pt_regs *regs, unsigned long error_code)
 
 /**
+ * DECLARE_IDTENTRY_PF - Declare functions for page fault IDT entry point
+ * @vector:	Vector number (ignored for C)
+ * @func:	Function name of the entry point
+ *
+ * Same as DECLARE_IDTENTRY_RAW_ERRORCODE() but with an extra address
+ * argument. The address (CR2 or FRED event data) is read as early as
+ * possible in the asm entry stub to minimize the window where an NMI
+ * can clobber CR2 by triggering a nested fault.
+ */
+#define DECLARE_IDTENTRY_PF(vector, func)				\
+	asmlinkage void asm_##func(void);				\
+	asmlinkage void xen_asm_##func(void);				\
+	__visible void func(struct pt_regs *regs,			\
+			    unsigned long error_code,			\
+			    unsigned long address)
+
+/**
+ * DEFINE_IDTENTRY_PF - Emit code for page fault IDT entry point
+ * @func:	Function name of the entry point
+ *
+ * Same as DEFINE_IDTENTRY_RAW_ERRORCODE() but with an extra address
+ * argument containing the faulting address (from CR2 or FRED event data).
+ */
+#define DEFINE_IDTENTRY_PF(func)					\
+__visible noinstr void func(struct pt_regs *regs,			\
+			    unsigned long error_code,			\
+			    unsigned long address)
+
+/**
  * DECLARE_IDTENTRY_IRQ - Declare functions for device interrupt IDT entry
  *			  points (common/spurious)
  * @vector:	Vector number (ignored for C)
@@ -466,6 +495,9 @@ void fred_install_sysvec(unsigned int vector, const idtentry_t function);
 #define DECLARE_IDTENTRY_RAW_ERRORCODE(vector, func)			\
 	DECLARE_IDTENTRY_ERRORCODE(vector, func)
 
+#define DECLARE_IDTENTRY_PF(vector, func)				\
+	idtentry_pf vector asm_##func func
+
 /* Entries for common/spurious (device) interrupts */
 #define DECLARE_IDTENTRY_IRQ(vector, func)				\
 	idtentry_irq vector func
@@ -592,7 +624,7 @@ DECLARE_IDTENTRY_ERRORCODE(X86_TRAP_AC,	exc_alignment_check);
 /* Raw exception entries which need extra work */
 DECLARE_IDTENTRY_RAW(X86_TRAP_UD,		exc_invalid_op);
 DECLARE_IDTENTRY_RAW(X86_TRAP_BP,		exc_int3);
-DECLARE_IDTENTRY_RAW_ERRORCODE(X86_TRAP_PF,	exc_page_fault);
+DECLARE_IDTENTRY_PF(X86_TRAP_PF,	exc_page_fault);
 
 #if defined(CONFIG_IA32_EMULATION)
 DECLARE_IDTENTRY_RAW(IA32_SYSCALL_VECTOR,	int80_emulation);

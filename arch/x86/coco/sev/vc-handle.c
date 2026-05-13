@@ -113,8 +113,7 @@ void vc_forward_exception(struct es_em_ctxt *ctxt)
 		exc_invalid_op(ctxt->regs);
 		break;
 	case X86_TRAP_PF:
-		write_cr2(ctxt->fi.cr2);
-		exc_page_fault(ctxt->regs, error_code);
+		exc_page_fault(ctxt->regs, error_code, ctxt->fi.cr2);
 		break;
 	case X86_TRAP_AC:
 		exc_alignment_check(ctxt->regs, error_code);

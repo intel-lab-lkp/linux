@@ -1485,12 +1485,17 @@ handle_page_fault(struct pt_regs *regs, unsigned long error_code,
 	local_irq_disable();
 }
 
-DEFINE_IDTENTRY_RAW_ERRORCODE(exc_page_fault)
+DEFINE_IDTENTRY_PF(exc_page_fault)
 {
 	irqentry_state_t state;
-	unsigned long address;
 
-	address = cpu_feature_enabled(X86_FEATURE_FRED) ? fred_event_data(regs) : read_cr2();
+	/*
+	 * For FRED, the faulting address is saved atomically by hardware
+	 * as event data.  Override the asm-provided CR2 value which is
+	 * meaningless under FRED.
+	 */
+	if (cpu_feature_enabled(X86_FEATURE_FRED))
+		address = fred_event_data(regs);
 
 	/*
 	 * KVM uses #PF vector to deliver 'page not present' events to guests

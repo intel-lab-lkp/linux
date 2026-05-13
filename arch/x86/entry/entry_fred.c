@@ -181,7 +181,7 @@ static noinstr void fred_hwexc(struct pt_regs *regs, unsigned long error_code)
 {
 	/* Optimize for #PF. That's the only exception which matters performance wise */
 	if (likely(regs->fred_ss.vector == X86_TRAP_PF))
-		return exc_page_fault(regs, error_code);
+		return exc_page_fault(regs, error_code, fred_event_data(regs));
 
 	switch (regs->fred_ss.vector) {
 	case X86_TRAP_DE: return exc_divide_error(regs);
