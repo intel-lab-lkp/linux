@@ -51,6 +51,7 @@
 #include "cs-etm.h"
 #include "intel-pt.h"
 #include "intel-bts.h"
+#include "intel-tpebs.h"
 #include "arm-spe.h"
 #include "hisi-ptt.h"
 #include "s390-cpumsf.h"
@@ -2960,3 +2961,72 @@ bool auxtrace__evsel_is_auxtrace(struct perf_session *session,
 
 	return session->auxtrace->evsel_is_auxtrace(session, evsel);
 }
+
+/*
+ * Stub functions for architecture-specific features to support cross-platform building.
+ * These weak symbols are overridden by strong symbols when the corresponding
+ * architecture-specific code is compiled in.
+ */
+#ifndef HAVE_ARCH_X86_64_SUPPORT
+int __weak intel_pt_process_auxtrace_info(union perf_event *event __maybe_unused,
+					  struct perf_session *session __maybe_unused)
+{
+	return -EOPNOTSUPP;
+}
+
+int __weak intel_bts_process_auxtrace_info(union perf_event *event __maybe_unused,
+					   struct perf_session *session __maybe_unused)
+{
+	return -EOPNOTSUPP;
+}
+
+int __weak evsel__tpebs_open(struct evsel *evsel __maybe_unused)
+{
+	return -EOPNOTSUPP;
+}
+
+void __weak evsel__tpebs_close(struct evsel *evsel __maybe_unused)
+{
+}
+
+int __weak evsel__tpebs_read(struct evsel *evsel __maybe_unused,
+			     int cpu_map_idx __maybe_unused,
+			     int thread __maybe_unused)
+{
+	return -EOPNOTSUPP;
+}
+
+int __weak insn_decode(void *insn __maybe_unused, const void *kaddr __maybe_unused,
+		       int len __maybe_unused, int mode __maybe_unused)
+{
+	return -EOPNOTSUPP;
+}
+#endif
+
+#ifndef HAVE_ARCH_ARM64_SUPPORT
+int __weak arm_spe_process_auxtrace_info(union perf_event *event __maybe_unused,
+					 struct perf_session *session __maybe_unused)
+{
+	return -EOPNOTSUPP;
+}
+
+int __weak hisi_ptt_process_auxtrace_info(union perf_event *event __maybe_unused,
+					  struct perf_session *session __maybe_unused)
+{
+	return -EOPNOTSUPP;
+}
+
+int __weak cs_etm__process_auxtrace_info(union perf_event *event __maybe_unused,
+					 struct perf_session *session __maybe_unused)
+{
+	return -EOPNOTSUPP;
+}
+#endif
+
+#ifndef HAVE_ARCH_S390_SUPPORT
+int __weak s390_cpumsf_process_auxtrace_info(union perf_event *event __maybe_unused,
+					     struct perf_session *session __maybe_unused)
+{
+	return -EOPNOTSUPP;
+}
+#endif

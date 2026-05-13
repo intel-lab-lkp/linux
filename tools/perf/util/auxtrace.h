@@ -699,4 +699,10 @@ void itrace_synth_opts__clear_time_range(struct itrace_synth_opts *opts)
 	opts->range_num = 0;
 }
 
+/*
+ * Prototypes for architecture-specific functions that require weak stubs
+ * to support cross-platform builds on non-x86 architectures.
+ */
+int insn_decode(void *insn, const void *kaddr, int len, int mode);
+
 #endif

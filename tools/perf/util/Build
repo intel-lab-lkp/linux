@@ -132,21 +132,21 @@ perf-util-$(CONFIG_LIBTRACEEVENT) += kvm-stat.o
 perf-util-y += kvm-stat-arch/
 perf-util-y += lock-contention.o
 perf-util-y += auxtrace.o
-perf-util-y += intel-pt-decoder/
-perf-util-y += intel-pt.o
-perf-util-y += intel-bts.o
-perf-util-y += arm-spe.o
-perf-util-y += arm-spe-decoder/
-perf-util-y += hisi-ptt.o
-perf-util-y += hisi-ptt-decoder/
-perf-util-y += s390-cpumsf.o
+perf-util-$(CONFIG_PERF_INTEL_PT) += intel-pt-decoder/
+perf-util-$(CONFIG_PERF_INTEL_PT) += intel-pt.o
+perf-util-$(CONFIG_PERF_INTEL_PT) += intel-bts.o
+perf-util-$(CONFIG_PERF_ARM_SPE) += arm-spe.o
+perf-util-$(CONFIG_PERF_ARM_SPE) += arm-spe-decoder/
+perf-util-$(CONFIG_PERF_HISI_PTT) += hisi-ptt.o
+perf-util-$(CONFIG_PERF_HISI_PTT) += hisi-ptt-decoder/
+perf-util-$(CONFIG_PERF_S390_CPUMSF) += s390-cpumsf.o
 perf-util-y += powerpc-vpadtl.o
 
 ifdef CONFIG_LIBOPENCSD
 perf-util-y += cs-etm.o
 perf-util-y += cs-etm-decoder/
 endif
-perf-util-y += cs-etm-base.o
+perf-util-$(CONFIG_PERF_CS_ETM) += cs-etm-base.o
 
 perf-util-y += parse-branch-options.o
 perf-util-y += parse-regs-options.o
@@ -168,7 +168,7 @@ perf-util-y += clockid.o
 perf-util-y += list_sort.o
 perf-util-y += mutex.o
 perf-util-y += sharded_mutex.o
-perf-util-y += intel-tpebs.o
+perf-util-$(CONFIG_PERF_INTEL_PT) += intel-tpebs.o
 
 perf-util-$(CONFIG_PERF_BPF_SKEL) += bpf_counter.o
 perf-util-$(CONFIG_PERF_BPF_SKEL) += bpf_counter_cgroup.o
