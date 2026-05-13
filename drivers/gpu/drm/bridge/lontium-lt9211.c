@@ -40,6 +40,11 @@
 /* DSI lane count - 0 means 4 lanes ; 1, 2, 3 means 1, 2, 3 lanes. */
 #define REG_DSI_LANE_COUNT(n)			((n) & 3)
 
+/* Maps register value (index) to drive-strength-microamp DT property value */
+static const u8 lt9211_hsdrv_microamp[] = {
+	12, 14, 16, 17, 19, 20, 22, 23, 25, 27, 28, 30, 31, 33, 34, 36
+};
+
 struct lt9211 {
 	struct drm_bridge		bridge;
 	struct device			*dev;
@@ -50,6 +55,7 @@ struct lt9211 {
 	struct regulator		*vccio;
 	bool				lvds_dual_link;
 	bool				lvds_dual_link_even_odd_swap;
+	u8				lvds_hsdrv_isel;
 };
 
 static const struct regmap_range lt9211_rw_ranges[] = {
@@ -374,7 +380,8 @@ static int lt9211_configure_tx(struct lt9211 *ctx, bool jeida,
 		/* BIT(7) is LVDS dual-port */
 		{ 0x823b, 0x38 | (ctx->lvds_dual_link ? BIT(7) : 0) },
 		{ 0x823e, 0x92 },
-		{ 0x823f, 0x48 },
+		/* bits 3:0: RG_MLTX_HSDRV_ISEL, LVDS TX driver current */
+		{ 0x823f, 0x40 | ctx->lvds_hsdrv_isel },
 		{ 0x8240, 0x31 },
 		{ 0x8243, 0x80 },
 		{ 0x8244, 0x00 },
@@ -629,7 +636,9 @@ static int lt9211_parse_dt(struct lt9211 *ctx)
 	struct device *dev = ctx->dev;
 	struct drm_panel *panel;
 	int dual_link;
+	u32 microamp;
 	int ret;
+	int i;
 
 	ctx->vccio = devm_regulator_get(dev, "vccio");
 	if (IS_ERR(ctx->vccio))
@@ -665,6 +674,26 @@ static int lt9211_parse_dt(struct lt9211 *ctx)
 	}
 
 	ctx->panel_bridge = panel_bridge;
+
+	ctx->lvds_hsdrv_isel = 8; /* default: 25 uA */
+	ret = of_property_read_u32(dev->of_node, "drive-strength-microamp",
+				   &microamp);
+	if (!ret) {
+		for (i = 0; i < ARRAY_SIZE(lt9211_hsdrv_microamp); i++) {
+			if (lt9211_hsdrv_microamp[i] == microamp) {
+				ctx->lvds_hsdrv_isel = i;
+				break;
+			}
+		}
+		if (i == ARRAY_SIZE(lt9211_hsdrv_microamp)) {
+			dev_err(dev, "Invalid drive-strength-microamp value %u\n",
+				microamp);
+			return -EINVAL;
+		}
+	} else if (ret != -EINVAL) {
+		dev_warn(dev, "Failed to read drive-strength-microamp: %d, using default\n",
+			 ret);
+	}
 
 	return 0;
 }
