@@ -3729,7 +3729,7 @@ static int prepare_write_begin(struct f2fs_sb_info *sbi,
 
 	/* f2fs_lock_op avoids race between write CP and convert_inline_page */
 	if (f2fs_has_inline_data(inode)) {
-		if (pos + len > MAX_INLINE_DATA(inode))
+		if (pos + len > f2fs_max_inline_data(inode))
 			flag = F2FS_GET_BLOCK_DEFAULT;
 		f2fs_map_lock(sbi, &lc, flag);
 		locked = true;
@@ -3749,8 +3749,10 @@ restart:
 	set_new_dnode(&dn, inode, ifolio, ifolio, 0);
 
 	if (f2fs_has_inline_data(inode)) {
-		if (pos + len <= MAX_INLINE_DATA(inode)) {
-			f2fs_do_read_inline_data(folio, ifolio);
+		if (pos + len <= f2fs_max_inline_data(inode)) {
+			err = f2fs_do_read_inline_data(folio, ifolio);
+			if (err)
+				goto out;
 			set_inode_flag(inode, FI_DATA_EXIST);
 			if (inode->i_nlink)
 				folio_set_f2fs_inline(ifolio);

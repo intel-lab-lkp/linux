@@ -825,12 +825,32 @@ int f2fs_do_truncate_blocks(struct inode *inode, u64 from, bool lock)
 	}
 
 	if (f2fs_has_inline_data(inode)) {
+		if (f2fs_uses_encrypted_inline_data(inode) && from) {
+			f2fs_folio_put(ifolio, true);
+			if (lock)
+				f2fs_unlock_op(sbi, &lc);
+
+			err = f2fs_convert_inline_inode(inode);
+
+			if (lock)
+				f2fs_lock_op(sbi, &lc);
+			if (err)
+				goto out;
+
+			ifolio = f2fs_get_inode_folio(sbi, inode->i_ino);
+			if (IS_ERR(ifolio)) {
+				err = PTR_ERR(ifolio);
+				goto out;
+			}
+			goto truncate_blocks;
+		}
 		f2fs_truncate_inline_inode(inode, ifolio, from);
 		f2fs_folio_put(ifolio, true);
 		truncate_page = true;
 		goto out;
 	}
 
+truncate_blocks:
 	set_new_dnode(&dn, inode, ifolio, NULL, 0);
 	err = f2fs_get_dnode_of_data(&dn, free_from, LOOKUP_NODE_RA);
 	if (err) {
@@ -1147,7 +1167,7 @@ int f2fs_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 	if (attr->ia_valid & ATTR_SIZE) {
 		loff_t old_size = i_size_read(inode);
 
-		if (attr->ia_size > MAX_INLINE_DATA(inode)) {
+		if (attr->ia_size > f2fs_max_inline_data(inode)) {
 			/*
 			 * should convert inline inode before i_size_write to
 			 * keep smaller than inline_data size with inline flag.
@@ -5007,7 +5027,7 @@ static int f2fs_preallocate_blocks(struct kiocb *iocb, struct iov_iter *iter,
 
 	if (f2fs_has_inline_data(inode)) {
 		/* If the data will fit inline, don't bother. */
-		if (pos + count <= MAX_INLINE_DATA(inode))
+		if (pos + count <= f2fs_max_inline_data(inode))
 			return 0;
 		ret = f2fs_convert_inline_inode(inode);
 		if (ret)

@@ -285,6 +285,7 @@ struct f2fs_mount_info {
 #define F2FS_FEATURE_RO				0x00004000
 #define F2FS_FEATURE_DEVICE_ALIAS		0x00008000
 #define F2FS_FEATURE_PACKED_SSA			0x00010000
+#define F2FS_FEATURE_ENCRYPTED_INLINE_DATA	0x00020000
 
 #define __F2FS_HAS_FEATURE(raw_super, mask)				\
 	((raw_super->feature & cpu_to_le32(mask)) != 0)
@@ -4519,7 +4520,7 @@ extern struct kmem_cache *f2fs_inode_entry_slab;
 bool f2fs_may_inline_data(struct inode *inode);
 bool f2fs_sanity_check_inline_data(struct inode *inode, struct folio *ifolio);
 bool f2fs_may_inline_dentry(struct inode *inode);
-void f2fs_do_read_inline_data(struct folio *folio, struct folio *ifolio);
+int f2fs_do_read_inline_data(struct folio *folio, struct folio *ifolio);
 void f2fs_truncate_inline_inode(struct inode *inode, struct folio *ifolio,
 		u64 from);
 int f2fs_read_inline_data(struct inode *inode, struct folio *folio);
@@ -4610,6 +4611,39 @@ extern const struct fsverity_operations f2fs_verityops;
 static inline bool f2fs_encrypted_file(struct inode *inode)
 {
 	return IS_ENCRYPTED(inode) && S_ISREG(inode->i_mode);
+}
+
+static inline bool f2fs_sb_has_encrypted_inline_data(struct f2fs_sb_info *sbi);
+
+static inline bool f2fs_uses_encrypted_inline_data(struct inode *inode)
+{
+#ifdef CONFIG_F2FS_FS_ENCRYPTED_INLINE_DATA
+	/*
+	 * When the filesystem allows encrypted inline data, inline payloads
+	 * in encrypted regular files are interpreted as ciphertext.
+	 */
+	return f2fs_sb_has_encrypted_inline_data(F2FS_I_SB(inode)) &&
+	       f2fs_encrypted_file(inode);
+#else
+	return false;
+#endif
+}
+
+static inline unsigned int f2fs_max_inline_data(struct inode *inode)
+{
+	unsigned int max_bytes = MAX_INLINE_DATA(inode);
+
+	/*
+	 * Encrypted inline data is rounded up to the fscrypt contents
+	 * alignment before being stored back into the inode.  This is an
+	 * on-disk layout constraint, so it must not depend on whether the
+	 * inode's key has been prepared yet.
+	 */
+#ifdef CONFIG_F2FS_FS_ENCRYPTED_INLINE_DATA
+	if (f2fs_uses_encrypted_inline_data(inode))
+		max_bytes = round_down(max_bytes, FSCRYPT_CONTENTS_ALIGNMENT);
+#endif
+	return max_bytes;
 }
 
 static inline void f2fs_set_encrypted_inode(struct inode *inode)
@@ -4844,6 +4878,7 @@ F2FS_FEATURE_FUNCS(compression, COMPRESSION);
 F2FS_FEATURE_FUNCS(readonly, RO);
 F2FS_FEATURE_FUNCS(device_alias, DEVICE_ALIAS);
 F2FS_FEATURE_FUNCS(packed_ssa, PACKED_SSA);
+F2FS_FEATURE_FUNCS(encrypted_inline_data, ENCRYPTED_INLINE_DATA);
 
 #ifdef CONFIG_BLK_DEV_ZONED
 static inline bool f2fs_zone_is_seq(struct f2fs_sb_info *sbi, int devi,

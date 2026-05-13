@@ -92,6 +92,20 @@ config F2FS_FAULT_INJECTION
 
 	  If unsure, say N.
 
+config F2FS_FS_ENCRYPTED_INLINE_DATA
+	bool "F2FS encrypted inline data support"
+	depends on F2FS_FS && FS_ENCRYPTION_INLINE_CRYPT
+	help
+	  Allow encrypted regular files to keep inline data inside the inode
+	  while encrypting that inode-managed payload in software.
+
+	  This does not change normal data block encryption.  Normal data
+	  blocks continue to use the existing fscrypt path, such as blk-crypto
+	  when inline encryption is enabled.
+
+	  Filesystems carrying the encrypted_inline_data incompat feature
+	  require this option in order to be mounted correctly.
+
 config F2FS_FS_COMPRESSION
 	bool "F2FS compression feature"
 	depends on F2FS_FS

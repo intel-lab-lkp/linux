@@ -1549,6 +1549,18 @@ static int f2fs_check_opt_consistency(struct fs_context *fc,
 		return -EINVAL;
 	}
 
+	if (f2fs_sb_has_encrypted_inline_data(sbi)) {
+		if (!IS_ENABLED(CONFIG_F2FS_FS_ENCRYPTED_INLINE_DATA)) {
+			f2fs_err(sbi,
+				 "encrypted_inline_data requires CONFIG_F2FS_FS_ENCRYPTED_INLINE_DATA");
+			return -EINVAL;
+		}
+		if (!f2fs_sb_has_encrypt(sbi)) {
+			f2fs_err(sbi, "encrypted inline_data requires encryption feature");
+			return -EINVAL;
+		}
+	}
+
 	/*
 	 * The BLKZONED feature indicates that the drive was formatted with
 	 * zone alignment optimization. This is optional for host-aware

@@ -21,7 +21,7 @@ static bool support_inline_data(struct inode *inode)
 		return false;
 	if (!S_ISREG(inode->i_mode) && !S_ISLNK(inode->i_mode))
 		return false;
-	if (i_size_read(inode) > MAX_INLINE_DATA(inode))
+	if (i_size_read(inode) > f2fs_max_inline_data(inode))
 		return false;
 	return true;
 }
@@ -30,6 +30,9 @@ bool f2fs_may_inline_data(struct inode *inode)
 {
 	if (!support_inline_data(inode))
 		return false;
+
+	if (f2fs_uses_encrypted_inline_data(inode))
+		return fscrypt_inode_supports_data_unit_inplace(inode);
 
 	return !f2fs_post_read_required(inode);
 }
@@ -65,7 +68,9 @@ bool f2fs_sanity_check_inline_data(struct inode *inode, struct folio *ifolio)
 	 * been synchronized to inmem fields.
 	 */
 	return (S_ISREG(inode->i_mode) &&
-		(file_is_encrypt(inode) || file_is_verity(inode) ||
+		((file_is_encrypt(inode) &&
+		  !f2fs_sb_has_encrypted_inline_data(F2FS_I_SB(inode))) ||
+		 file_is_verity(inode) ||
 		(F2FS_I(inode)->i_flags & F2FS_COMPR_FL)));
 }
 
@@ -80,22 +85,60 @@ bool f2fs_may_inline_dentry(struct inode *inode)
 	return true;
 }
 
-void f2fs_do_read_inline_data(struct folio *folio, struct folio *ifolio)
+int f2fs_do_read_inline_data(struct folio *folio, struct folio *ifolio)
 {
 	struct inode *inode = folio->mapping->host;
+	unsigned int len = min_t(loff_t, i_size_read(inode),
+				 f2fs_max_inline_data(inode));
 
 	if (folio_test_uptodate(folio))
-		return;
+		return 0;
 
 	f2fs_bug_on(F2FS_I_SB(inode), folio->index);
 
-	folio_zero_segment(folio, MAX_INLINE_DATA(inode), folio_size(folio));
+	if (f2fs_uses_encrypted_inline_data(inode)) {
+		struct page *tmp_page;
+		void *kaddr;
+		int err;
 
-	/* Copy the whole inline data block */
-	memcpy_to_folio(folio, 0, inline_data_addr(inode, ifolio),
-		       MAX_INLINE_DATA(inode));
+		folio_zero_segment(folio, 0, folio_size(folio));
+
+		/*
+		 * Decrypt through a temporary page because inline data occupies
+		 * only a byte range inside the inode folio.
+		 */
+		tmp_page = alloc_page(GFP_NOFS | __GFP_ZERO);
+		if (!tmp_page)
+			return -ENOMEM;
+
+		len = round_up(len, FSCRYPT_CONTENTS_ALIGNMENT);
+		if (len) {
+			memcpy_to_page(tmp_page, 0, inline_data_addr(inode, ifolio),
+				       len);
+			err = fscrypt_decrypt_data_unit_inplace(inode, tmp_page,
+								len, 0, 0);
+			if (err) {
+				__free_page(tmp_page);
+				return err;
+			}
+		}
+
+		kaddr = kmap_local_page(tmp_page);
+		memcpy_to_folio(folio, 0, kaddr,
+				min_t(loff_t, i_size_read(inode),
+				      f2fs_max_inline_data(inode)));
+		kunmap_local(kaddr);
+		__free_page(tmp_page);
+	} else {
+		folio_zero_segment(folio, MAX_INLINE_DATA(inode),
+				   folio_size(folio));
+		/* Copy the whole inline data block */
+		memcpy_to_folio(folio, 0, inline_data_addr(inode, ifolio),
+				MAX_INLINE_DATA(inode));
+	}
 	if (!folio_test_uptodate(folio))
 		folio_mark_uptodate(folio);
+	return 0;
 }
 
 void f2fs_truncate_inline_inode(struct inode *inode, struct folio *ifolio,
@@ -119,6 +162,7 @@ void f2fs_truncate_inline_inode(struct inode *inode, struct folio *ifolio,
 int f2fs_read_inline_data(struct inode *inode, struct folio *folio)
 {
 	struct folio *ifolio;
+	int ret = 0;
 
 	ifolio = f2fs_get_inode_folio(F2FS_I_SB(inode), inode->i_ino);
 	if (IS_ERR(ifolio)) {
@@ -134,7 +178,13 @@ int f2fs_read_inline_data(struct inode *inode, struct folio *folio)
 	if (folio->index)
 		folio_zero_segment(folio, 0, folio_size(folio));
 	else
-		f2fs_do_read_inline_data(folio, ifolio);
+		ret = f2fs_do_read_inline_data(folio, ifolio);
+
+	if (!folio->index && ret) {
+		f2fs_folio_put(ifolio, true);
+		folio_unlock(folio);
+		return ret;
+	}
 
 	if (!folio_test_uptodate(folio))
 		folio_mark_uptodate(folio);
@@ -186,7 +236,9 @@ int f2fs_convert_inline_folio(struct dnode_of_data *dn, struct folio *folio)
 
 	f2fs_bug_on(F2FS_F_SB(folio), folio_test_writeback(folio));
 
-	f2fs_do_read_inline_data(folio, dn->inode_folio);
+	err = f2fs_do_read_inline_data(folio, dn->inode_folio);
+	if (err)
+		return err;
 	folio_mark_dirty(folio);
 
 	/* clear dirty state */
@@ -267,6 +319,8 @@ int f2fs_write_inline_data(struct inode *inode, struct folio *folio)
 {
 	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
 	struct folio *ifolio;
+	void *inline_addr;
+	int err = 0;
 
 	ifolio = f2fs_get_inode_folio(sbi, inode->i_ino);
 	if (IS_ERR(ifolio))
@@ -280,8 +334,44 @@ int f2fs_write_inline_data(struct inode *inode, struct folio *folio)
 	f2fs_bug_on(F2FS_I_SB(inode), folio->index);
 
 	f2fs_folio_wait_writeback(ifolio, NODE, true, true);
-	memcpy_from_folio(inline_data_addr(inode, ifolio),
-			 folio, 0, MAX_INLINE_DATA(inode));
+	inline_addr = inline_data_addr(inode, ifolio);
+
+	if (f2fs_uses_encrypted_inline_data(inode)) {
+		struct page *tmp_page;
+		void *kaddr;
+		unsigned int len = min_t(loff_t, i_size_read(inode),
+					 f2fs_max_inline_data(inode));
+
+		tmp_page = alloc_page(GFP_NOFS | __GFP_ZERO);
+		if (!tmp_page) {
+			err = -ENOMEM;
+			goto out;
+		}
+
+		len = round_up(len, FSCRYPT_CONTENTS_ALIGNMENT);
+		if (len) {
+			kaddr = kmap_local_page(tmp_page);
+			memcpy_from_folio(kaddr, folio, 0,
+					  min_t(loff_t, i_size_read(inode),
+						f2fs_max_inline_data(inode)));
+			kunmap_local(kaddr);
+			err = fscrypt_encrypt_data_unit_inplace(inode, tmp_page,
+								len, 0, 0);
+		}
+		if (!err) {
+			memset(inline_addr, 0, MAX_INLINE_DATA(inode));
+			if (len) {
+				kaddr = kmap_local_page(tmp_page);
+				memcpy(inline_addr, kaddr, len);
+				kunmap_local(kaddr);
+			}
+		}
+		__free_page(tmp_page);
+		if (err)
+			goto out;
+	} else {
+		memcpy_from_folio(inline_addr, folio, 0, MAX_INLINE_DATA(inode));
+	}
 	folio_mark_dirty(ifolio);
 
 	f2fs_clear_page_cache_dirty_tag(folio);
@@ -290,8 +380,9 @@ int f2fs_write_inline_data(struct inode *inode, struct folio *folio)
 	set_inode_flag(inode, FI_DATA_EXIST);
 
 	folio_clear_f2fs_inline(ifolio);
+out:
 	f2fs_folio_put(ifolio, true);
-	return 0;
+	return err;
 }
 
 int f2fs_recover_inline_data(struct inode *inode, struct folio *nfolio)
@@ -826,7 +917,7 @@ int f2fs_inline_data_fiemap(struct inode *inode,
 			return PTR_ERR(ifolio);
 		f2fs_folio_wait_writeback(ifolio, NODE, true, true);
 	}
-	ilen = min_t(size_t, MAX_INLINE_DATA(inode), i_size_read(inode));
+	ilen = min_t(size_t, f2fs_max_inline_data(inode), i_size_read(inode));
 	if (start >= ilen)
 		goto out;
 	if (start + len < ilen)
