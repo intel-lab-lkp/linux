@@ -572,6 +572,13 @@ zl3073x_dev_chan_states_update(struct zl3073x_dev *zldev)
 	int i, rc;
 
 	for (i = 0; i < zldev->info->num_channels; i++) {
+		const struct zl3073x_chan *chan;
+
+		/* Skip channels in NCO mode - no reference tracking */
+		chan = zl3073x_chan_state_get(zldev, i);
+		if (zl3073x_chan_mode_is_nco(chan))
+			continue;
+
 		rc = zl3073x_chan_state_update(zldev, i);
 		if (rc)
 			dev_warn(zldev->dev,
