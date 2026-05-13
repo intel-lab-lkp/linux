@@ -1160,6 +1160,96 @@ void iova_cache_put(void)
 }
 EXPORT_SYMBOL_GPL(iova_cache_put);
 
+#if IS_ENABLED(CONFIG_IOMMU_IOVA_KUNIT_TEST)
+/*
+ * Walk the iova rbtree and verify that every node's gap_to_prev,
+ * clamped_gap32, __subtree_max_gap, and __subtree_max_gap32 match what
+ * recomputation from scratch would yield. Returns true on success.
+ *
+ * Intended for use by kunit tests to catch invariant corruption from
+ * insertion / deletion / rotation paths.
+ */
+struct iova_subtree_maxes {
+	unsigned long max_gap;
+	unsigned long max_gap32;
+};
+
+static struct iova_subtree_maxes
+iova_walk_verify(struct rb_node *node, struct iova_domain *iovad, bool *ok)
+{
+	struct iova_subtree_maxes m = { 0, 0 };
+	struct iova_subtree_maxes left, right;
+	struct rb_node *prev_node;
+	struct iova *iova;
+	unsigned long expected_gap;
+	unsigned long expected_clamped;
+
+	if (!node)
+		return m;
+
+	left = iova_walk_verify(node->rb_left, iovad, ok);
+	right = iova_walk_verify(node->rb_right, iovad, ok);
+	iova = to_iova(node);
+
+	prev_node = rb_prev(node);
+	if (prev_node)
+		expected_gap = iova->pfn_lo - to_iova(prev_node)->pfn_hi - 1;
+	else
+		expected_gap = iova->pfn_lo;
+	if (iova->gap_to_prev != expected_gap) {
+		pr_err("iova_verify: pfn_lo=0x%lx gap_to_prev=%lu expected=%lu\n",
+		       iova->pfn_lo, iova->gap_to_prev, expected_gap);
+		*ok = false;
+	}
+
+	expected_clamped = iova_compute_clamped_gap32(iova, iovad->dma_32bit_pfn);
+	if (iova->clamped_gap32 != expected_clamped) {
+		pr_err("iova_verify: pfn_lo=0x%lx clamped_gap32=%lu expected=%lu\n",
+		       iova->pfn_lo, iova->clamped_gap32, expected_clamped);
+		*ok = false;
+	}
+
+	m.max_gap = iova->gap_to_prev;
+	if (left.max_gap > m.max_gap)
+		m.max_gap = left.max_gap;
+	if (right.max_gap > m.max_gap)
+		m.max_gap = right.max_gap;
+
+	m.max_gap32 = iova->clamped_gap32;
+	if (left.max_gap32 > m.max_gap32)
+		m.max_gap32 = left.max_gap32;
+	if (right.max_gap32 > m.max_gap32)
+		m.max_gap32 = right.max_gap32;
+
+	if (iova->__subtree_max_gap != m.max_gap) {
+		pr_err("iova_verify: pfn_lo=0x%lx __subtree_max_gap=%lu expected=%lu (own=%lu left=%lu right=%lu)\n",
+		       iova->pfn_lo, iova->__subtree_max_gap, m.max_gap,
+		       iova->gap_to_prev, left.max_gap, right.max_gap);
+		*ok = false;
+	}
+	if (iova->__subtree_max_gap32 != m.max_gap32) {
+		pr_err("iova_verify: pfn_lo=0x%lx __subtree_max_gap32=%lu expected=%lu (own=%lu left=%lu right=%lu)\n",
+		       iova->pfn_lo, iova->__subtree_max_gap32, m.max_gap32,
+		       iova->clamped_gap32, left.max_gap32, right.max_gap32);
+		*ok = false;
+	}
+
+	return m;
+}
+
+bool iova_domain_verify_invariants(struct iova_domain *iovad)
+{
+	bool ok = true;
+	unsigned long flags;
+
+	spin_lock_irqsave(&iovad->iova_rbtree_lock, flags);
+	iova_walk_verify(iovad->rbroot.rb_node, iovad, &ok);
+	spin_unlock_irqrestore(&iovad->iova_rbtree_lock, flags);
+	return ok;
+}
+EXPORT_SYMBOL_GPL(iova_domain_verify_invariants);
+#endif /* CONFIG_IOMMU_IOVA_KUNIT_TEST */
+
 MODULE_AUTHOR("Anil S Keshavamurthy <anil.s.keshavamurthy@intel.com>");
 MODULE_DESCRIPTION("IOMMU I/O Virtual Address management");
 MODULE_LICENSE("GPL");
