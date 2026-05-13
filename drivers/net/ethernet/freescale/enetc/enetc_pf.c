@@ -493,6 +493,12 @@ static u16 enetc_msg_pf_set_vf_primary_mac_addr(struct enetc_pf *pf,
 		return ENETC_MSG_CMD_STATUS_FAIL;
 
 	addr = cmd->mac.sa_data;
+	if (!is_valid_ether_addr(addr)) {
+		dev_warn_ratelimited(dev, "VF%d attempted to set invalid MAC",
+				     vf_id);
+		return ENETC_MSG_CMD_STATUS_FAIL;
+	}
+
 	if (vf_state->flags & ENETC_VF_FLAG_PF_SET_MAC)
 		dev_warn(dev, "Attempt to override PF set mac addr for VF%d\n",
 			 vf_id);
