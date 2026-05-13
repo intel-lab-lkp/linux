@@ -71,6 +71,7 @@ TEST_PROGS := \
 	pmtu.sh \
 	protodown.sh \
 	psock_snd.sh \
+	ptp.py \
 	reuseaddr_ports_exhausted.sh \
 	reuseport_addr_any.sh \
 	route_hint.sh \
