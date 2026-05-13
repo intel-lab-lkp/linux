@@ -604,7 +604,7 @@ struct sk_buff *__udp_gso_segment(struct sk_buff *gso_skb,
 		       seg->data_len);
 	check = csum16_add(csum16_sub(uh->check, uh->len), newlen);
 
-	uh->len = newlen;
+	uh->len = skb_is_gso(seg) ? msslen : newlen;
 	uh->check = check;
 
 	if (seg->ip_summed == CHECKSUM_PARTIAL)
