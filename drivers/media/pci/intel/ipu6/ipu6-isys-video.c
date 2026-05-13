@@ -323,8 +323,12 @@ static int ipu6_isys_vidioc_s_fmt_vid_cap(struct file *file, void *fh,
 				      struct v4l2_format *f)
 {
 	struct ipu6_isys_video *av = video_drvdata(file);
+	int ret;
 
-	ipu6_isys_vidioc_try_fmt_vid_cap(file, fh, f);
+	ret = ipu6_isys_vidioc_try_fmt_vid_cap(file, fh, f);
+	if (ret)
+		return ret;
+
 	av->pix_fmt = f->fmt.pix;
 
 	return 0;
