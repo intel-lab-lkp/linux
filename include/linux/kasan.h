@@ -102,6 +102,12 @@ static inline bool kasan_has_integrated_init(void)
 	return kasan_hw_tags_enabled();
 }
 
+static inline bool kasan_has_tag_based_kmalloc_redzones(void)
+{
+	return kasan_enabled() &&
+	       (IS_ENABLED(CONFIG_KASAN_SW_TAGS) || kasan_hw_tags_enabled());
+}
+
 #ifdef CONFIG_KASAN
 void __kasan_unpoison_range(const void *addr, size_t size);
 static __always_inline void kasan_unpoison_range(const void *addr, size_t size)
@@ -244,13 +250,14 @@ static __always_inline void kasan_kfree_large(void *ptr)
 		__kasan_kfree_large(ptr, _RET_IP_);
 }
 
-void * __must_check __kasan_slab_alloc(struct kmem_cache *s,
-				       void *object, gfp_t flags, bool init);
+void * __must_check __kasan_slab_alloc(struct kmem_cache *s, void *object,
+				       size_t size, gfp_t flags, bool init);
 static __always_inline void * __must_check kasan_slab_alloc(
-		struct kmem_cache *s, void *object, gfp_t flags, bool init)
+		struct kmem_cache *s, void *object, size_t size,
+		gfp_t flags, bool init)
 {
 	if (kasan_enabled())
-		return __kasan_slab_alloc(s, object, flags, init);
+		return __kasan_slab_alloc(s, object, size, flags, init);
 	return object;
 }
 
@@ -437,7 +444,7 @@ static inline bool kasan_slab_free(struct kmem_cache *s, void *object,
 }
 static inline void kasan_kfree_large(void *ptr) {}
 static inline void *kasan_slab_alloc(struct kmem_cache *s, void *object,
-				   gfp_t flags, bool init)
+				   size_t size, gfp_t flags, bool init)
 {
 	return object;
 }

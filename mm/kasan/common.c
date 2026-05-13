@@ -326,14 +326,25 @@ void __kasan_kfree_large(void *ptr, unsigned long ip)
 	/* The object will be poisoned by kasan_poison_pages(). */
 }
 
+static inline size_t slab_unpoison_size(struct kmem_cache *cache, size_t size)
+{
+	if (kasan_has_tag_based_kmalloc_redzones() && is_kmalloc_cache(cache))
+		return min_t(size_t, size, cache->object_size);
+
+	return cache->object_size;
+}
+
 static inline void unpoison_slab_object(struct kmem_cache *cache, void *object,
-					gfp_t flags, bool init)
+					size_t size, gfp_t flags, bool init)
 {
 	/*
-	 * Unpoison the whole object. For kmalloc() allocations,
-	 * poison_kmalloc_redzone() will do precise poisoning.
+	 * For tag-based modes, kmalloc redzones all use the same invalid tag.
+	 * Keep the tail poisoned and only unpoison the requested allocation
+	 * size. Generic KASAN keeps distinct shadow values for free objects and
+	 * redzones, so it still unpoisons the whole object and later poisons
+	 * the precise redzone.
 	 */
-	kasan_unpoison(object, cache->object_size, init);
+	kasan_unpoison(object, slab_unpoison_size(cache, size), init);
 
 	/* Save alloc info (if possible) for non-kmalloc() allocations. */
 	if (kasan_stack_collection_enabled() && !is_kmalloc_cache(cache))
@@ -341,7 +352,8 @@ static inline void unpoison_slab_object(struct kmem_cache *cache, void *object,
 }
 
 void * __must_check __kasan_slab_alloc(struct kmem_cache *cache,
-					void *object, gfp_t flags, bool init)
+					void *object, size_t size,
+					gfp_t flags, bool init)
 {
 	u8 tag;
 	void *tagged_object;
@@ -363,9 +375,16 @@ void * __must_check __kasan_slab_alloc(struct kmem_cache *cache,
 	tagged_object = set_tag(object, tag);
 
 	/* Unpoison the object and save alloc info for non-kmalloc() allocations. */
-	unpoison_slab_object(cache, tagged_object, flags, init);
+	unpoison_slab_object(cache, tagged_object, size, flags, init);
 
 	return tagged_object;
+}
+
+static inline void save_kmalloc_alloc_info(struct kmem_cache *cache,
+					   void *object, gfp_t flags)
+{
+	if (kasan_stack_collection_enabled() && is_kmalloc_cache(cache))
+		kasan_save_alloc_info(cache, object, flags);
 }
 
 static inline void poison_kmalloc_redzone(struct kmem_cache *cache,
@@ -394,8 +413,7 @@ static inline void poison_kmalloc_redzone(struct kmem_cache *cache,
 	 * Save alloc info (if possible) for kmalloc() allocations.
 	 * This also rewrites the alloc info when called from kasan_krealloc().
 	 */
-	if (kasan_stack_collection_enabled() && is_kmalloc_cache(cache))
-		kasan_save_alloc_info(cache, (void *)object, flags);
+	save_kmalloc_alloc_info(cache, (void *)object, flags);
 
 }
 
@@ -411,8 +429,14 @@ void * __must_check __kasan_kmalloc(struct kmem_cache *cache, const void *object
 	if (is_kfence_address(object))
 		return (void *)object;
 
-	/* The object has already been unpoisoned by kasan_slab_alloc(). */
-	poison_kmalloc_redzone(cache, object, size, flags);
+	/*
+	 * For tag-based modes, the object has already been precisely
+	 * unpoisoned by kasan_slab_alloc(). The tail remains poisoned.
+	 */
+	if (kasan_has_tag_based_kmalloc_redzones())
+		save_kmalloc_alloc_info(cache, (void *)object, flags);
+	else
+		poison_kmalloc_redzone(cache, object, size, flags);
 
 	/* Keep the tag that was set by kasan_slab_alloc(). */
 	return (void *)object;
@@ -561,11 +585,16 @@ void __kasan_mempool_unpoison_object(void *ptr, size_t size, unsigned long ip)
 		return;
 
 	/* Unpoison the object and save alloc info for non-kmalloc() allocations. */
-	unpoison_slab_object(slab->slab_cache, ptr, flags, false);
+	unpoison_slab_object(slab->slab_cache, ptr, size, flags, false);
 
 	/* Poison the redzone and save alloc info for kmalloc() allocations. */
-	if (is_kmalloc_cache(slab->slab_cache))
-		poison_kmalloc_redzone(slab->slab_cache, ptr, size, flags);
+	if (is_kmalloc_cache(slab->slab_cache)) {
+		if (kasan_has_tag_based_kmalloc_redzones())
+			save_kmalloc_alloc_info(slab->slab_cache, ptr, flags);
+		else
+			poison_kmalloc_redzone(slab->slab_cache, ptr, size,
+					       flags);
+	}
 }
 
 bool __kasan_check_byte(const void *address, unsigned long ip)

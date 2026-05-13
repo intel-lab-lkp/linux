@@ -4550,8 +4550,9 @@ bool slab_post_alloc_hook(struct kmem_cache *s, struct list_lru *lru,
 	 * replacement of current poisoning under certain debug option, and
 	 * won't break other sanity checks.
 	 */
-	if (kmem_cache_debug_flags(s, SLAB_STORE_USER | SLAB_RED_ZONE) &&
-	    (s->flags & SLAB_KMALLOC))
+	if ((s->flags & SLAB_KMALLOC) &&
+	    (kmem_cache_debug_flags(s, SLAB_STORE_USER | SLAB_RED_ZONE) ||
+	     kasan_has_tag_based_kmalloc_redzones()))
 		zero_size = orig_size;
 
 	/*
@@ -4573,7 +4574,8 @@ bool slab_post_alloc_hook(struct kmem_cache *s, struct list_lru *lru,
 	 * As p[i] might get tagged, memset and kmemleak hook come after KASAN.
 	 */
 	for (i = 0; i < size; i++) {
-		p[i] = kasan_slab_alloc(s, p[i], init_flags, kasan_init);
+		p[i] = kasan_slab_alloc(s, p[i], orig_size, init_flags,
+					kasan_init);
 		if (p[i] && init && (!kasan_init ||
 				     !kasan_has_integrated_init()))
 			memset(p[i], 0, zero_size);
@@ -7615,7 +7617,8 @@ static void early_kmem_cache_node_alloc(int node)
 #ifdef CONFIG_SLUB_DEBUG
 	init_object(kmem_cache_node, n, SLUB_RED_ACTIVE);
 #endif
-	n = kasan_slab_alloc(kmem_cache_node, n, GFP_KERNEL, false);
+	n = kasan_slab_alloc(kmem_cache_node, n, kmem_cache_node->object_size,
+			     GFP_KERNEL, false);
 	slab->freelist = get_freepointer(kmem_cache_node, n);
 	slab->inuse = 1;
 	kmem_cache_node->per_node[node].node = n;
