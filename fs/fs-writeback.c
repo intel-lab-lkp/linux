@@ -554,8 +554,12 @@ relock:
 		wb_put_many(old_wb, nr_switched);
 	}
 
-	for (inodep = isw->inodes; *inodep; inodep++)
+	for (inodep = isw->inodes; *inodep; inodep++) {
+		struct super_block *sb = (*inodep)->i_sb;
+
 		iput(*inodep);
+		atomic_dec(&sb->s_isw_nr_in_flight);
+	}
 	wb_put(new_wb);
 	kfree(isw);
 	atomic_dec(&isw_nr_in_flight);
@@ -600,14 +604,15 @@ static bool inode_prepare_wbs_switch(struct inode *inode,
 {
 	/*
 	 * Paired with smp_mb() in cgroup_writeback_umount().
-	 * isw_nr_in_flight must be increased before checking SB_ACTIVE and
-	 * grabbing an inode, otherwise isw_nr_in_flight can be observed as 0
-	 * in cgroup_writeback_umount() and the isw_wq will be not flushed.
+	 * s_isw_nr_in_flight must be increased before checking SB_ACTIVE and
+	 * grabbing an inode, otherwise s_isw_nr_in_flight can be observed as
+	 * 0 in cgroup_writeback_umount() and the isw_wq will be not flushed.
 	 */
+	atomic_inc(&inode->i_sb->s_isw_nr_in_flight);
 	smp_mb();
 
 	if (IS_DAX(inode))
-		return false;
+		goto out_dec;
 
 	/* while holding I_WB_SWITCH, no one else can update the association */
 	spin_lock(&inode->i_lock);
@@ -615,13 +620,17 @@ static bool inode_prepare_wbs_switch(struct inode *inode,
 	    inode_state_read(inode) & (I_WB_SWITCH | I_FREEING | I_WILL_FREE) ||
 	    inode_to_wb(inode) == new_wb) {
 		spin_unlock(&inode->i_lock);
-		return false;
+		goto out_dec;
 	}
 	inode_state_set(inode, I_WB_SWITCH);
 	__iget(inode);
 	spin_unlock(&inode->i_lock);
 
 	return true;
+
+out_dec:
+	atomic_dec(&inode->i_sb->s_isw_nr_in_flight);
+	return false;
 }
 
 static void wb_queue_isw(struct bdi_writeback *wb,
@@ -1202,31 +1211,28 @@ out_bdi_put:
  * @sb: target super_block
  *
  * This function is called when a super_block is about to be destroyed and
- * flushes in-flight inode wb switches.  An inode wb switch goes through
- * RCU and then workqueue, so the two need to be flushed in order to ensure
- * that all previously scheduled switches are finished.  As wb switches are
- * rare occurrences and synchronize_rcu() can take a while, perform
- * flushing iff wb switches are in flight.
+ * waits for all in-flight inode wb switches on this sb to complete.  Since
+ * SB_ACTIVE is cleared before this is called, no new switches can start,
+ * so the per-sb counter will monotonically decrease to zero.
  */
 void cgroup_writeback_umount(struct super_block *sb)
 {
-
 	if (!(sb->s_bdi->capabilities & BDI_CAP_WRITEBACK))
 		return;
 
 	/*
 	 * SB_ACTIVE should be reliably cleared before checking
-	 * isw_nr_in_flight, see generic_shutdown_super().
+	 * s_isw_nr_in_flight, see generic_shutdown_super().
+	 *
+	 * Paired with smp_mb() in inode_prepare_wbs_switch(), which ensures
+	 * that either we see the incremented counter, or the switcher sees
+	 * SB_ACTIVE cleared and aborts.
 	 */
 	smp_mb();
 
-	if (atomic_read(&isw_nr_in_flight)) {
-		/*
-		 * Use rcu_barrier() to wait for all pending callbacks to
-		 * ensure that all in-flight wb switches are in the workqueue.
-		 */
-		rcu_barrier();
+	while (atomic_read(&sb->s_isw_nr_in_flight)) {
 		flush_workqueue(isw_wq);
+		cond_resched();
 	}
 }
 

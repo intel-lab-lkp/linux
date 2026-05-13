@@ -274,6 +274,9 @@ struct super_block {
 
 	/* number of fserrors that are being sent to fsnotify/filesystems */
 	refcount_t				s_pending_errors;
+
+	/* number of in-flight inode writeback switches on this sb */
+	atomic_t				s_isw_nr_in_flight;
 } __randomize_layout;
 
 /*
