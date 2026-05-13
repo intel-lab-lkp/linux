@@ -285,6 +285,9 @@ static struct devfreq_governor *find_devfreq_governor(const char *name)
  * and the driver that call devfreq_add_device) are built as modules.
  * devfreq_list_lock should be held by the caller. Returns the matched
  * governor's pointer or an error pointer.
+ * On success, this holds a refcount of the governor module to prevent the
+ * module from being unloaded during usage, so the caller should put a module
+ * refcount after using it.
  */
 static struct devfreq_governor *try_then_request_governor(const char *name)
 {
@@ -313,7 +316,12 @@ static struct devfreq_governor *try_then_request_governor(const char *name)
 			return (err < 0) ? ERR_PTR(err) : ERR_PTR(-EINVAL);
 
 		governor = find_devfreq_governor(name);
+		if (IS_ERR(governor))
+			return governor;
 	}
+
+	if (!try_module_get(governor->owner))
+		return ERR_PTR(-EBUSY);
 
 	return governor;
 }
@@ -1009,6 +1017,7 @@ struct devfreq *devfreq_add_device(struct device *dev,
 	}
 
 	err = devfreq_set_governor(devfreq, governor);
+	module_put(governor->owner);
 	if (err) {
 		dev_err_probe(dev, err,
 			"%s: Unable to start governor for the device\n",
@@ -1446,6 +1455,7 @@ static ssize_t governor_store(struct device *dev, struct device_attribute *attr,
 		return PTR_ERR(governor);
 
 	ret = devfreq_set_governor(df, governor);
+	module_put(governor->owner);
 	if (ret)
 		return ret;
 
