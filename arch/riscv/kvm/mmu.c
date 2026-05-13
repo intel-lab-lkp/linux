@@ -90,6 +90,50 @@ void kvm_riscv_mmu_iounmap(struct kvm *kvm, gpa_t gpa, unsigned long size)
 	spin_unlock(&kvm->mmu_lock);
 }
 
+static bool need_topup_split_caches_or_resched(struct kvm_mmu_memory_cache *cache,
+					       int count)
+{
+	if (need_resched())
+		return true;
+
+	return kvm_mmu_memory_cache_nr_free_objects(cache) < count;
+}
+
+/* the caller must held mmu lock */
+static void kvm_riscv_split_huge_pages(struct kvm_gstage *gstage,
+				       phys_addr_t start, phys_addr_t end,
+				       bool flush)
+{
+	struct kvm *kvm = gstage->kvm;
+	struct kvm_mmu_memory_cache *pcache = &kvm->arch.split_page_cache;
+	int count = gstage->pgd_levels;
+	phys_addr_t addr = start;
+	int ret;
+
+	while (addr < end) {
+		if (need_topup_split_caches_or_resched(pcache, count)) {
+			spin_unlock(&kvm->mmu_lock);
+			cond_resched();
+
+			ret = kvm_mmu_topup_memory_cache(pcache, count);
+			if (ret) {
+				kvm_err("Failed to toup split page cache\n");
+				spin_lock(&kvm->mmu_lock);
+				return;
+			}
+			spin_lock(&kvm->mmu_lock);
+		}
+
+		ret = kvm_riscv_gstage_split_huge(gstage, pcache, addr, 0, flush);
+		if (ret != 0) {
+			kvm_err("split huge page for addr(0x%llx) failed %d\n", addr, ret);
+			break;
+		}
+
+		addr += PMD_SIZE;
+	}
+}
+
 void kvm_arch_mmu_enable_log_dirty_pt_masked(struct kvm *kvm,
 					     struct kvm_memory_slot *slot,
 					     gfn_t gfn_offset,
@@ -136,6 +180,23 @@ void kvm_arch_flush_shadow_memslot(struct kvm *kvm,
 	spin_unlock(&kvm->mmu_lock);
 }
 
+static void kvm_riscv_split_memory_region(struct kvm *kvm, int slot)
+{
+	struct kvm_memslots *slots = kvm_memslots(kvm);
+	struct kvm_memory_slot *memslot = id_to_memslot(slots, slot);
+	phys_addr_t start = memslot->base_gfn << PAGE_SHIFT;
+	phys_addr_t end = (memslot->base_gfn + memslot->npages) << PAGE_SHIFT;
+	struct kvm_gstage gstage;
+
+	kvm_riscv_gstage_init(&gstage, kvm);
+
+	spin_lock(&kvm->mmu_lock);
+	kvm_riscv_split_huge_pages(&gstage, start, end, false);
+	spin_unlock(&kvm->mmu_lock);
+
+	kvm_flush_remote_tlbs_memslot(kvm, memslot);
+}
+
 void kvm_arch_commit_memory_region(struct kvm *kvm,
 				struct kvm_memory_slot *old,
 				const struct kvm_memory_slot *new,
@@ -150,6 +211,7 @@ void kvm_arch_commit_memory_region(struct kvm *kvm,
 		if (kvm_dirty_log_manual_protect_and_init_set(kvm))
 			return;
 		mmu_wp_memory_region(kvm, new->id);
+		kvm_riscv_split_memory_region(kvm, new->id);
 	}
 }
 
