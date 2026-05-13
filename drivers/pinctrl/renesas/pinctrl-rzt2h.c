@@ -188,8 +188,18 @@ static void rzt2h_pinctrl_set_pfc_mode(struct rzt2h_pinctrl *pctrl,
 {
 	u64 reg64;
 	u16 reg16;
+	u8 pmc;
 
 	guard(raw_spinlock_irqsave)(&pctrl->lock);
+	reg64 = rzt2h_pinctrl_readq(pctrl, port, PFC(port));
+	pmc = rzt2h_pinctrl_readb(pctrl, port, PMC(port));
+	/* Check if pin is already configured to the desired function */
+	if (pmc & BIT(pin)) {
+		u8 current_func = field_get(PFC_PIN_MASK(pin), reg64);
+
+		if (current_func == func)
+			return;
+	}
 
 	/* Set pin to 'Non-use (Hi-Z input protection)'  */
 	reg16 = rzt2h_pinctrl_readw(pctrl, port, PM(port));
@@ -200,7 +210,6 @@ static void rzt2h_pinctrl_set_pfc_mode(struct rzt2h_pinctrl *pctrl,
 	rzt2h_pinctrl_set_gpio_en(pctrl, port, pin, true);
 
 	/* Select Pin function mode with PFC register */
-	reg64 = rzt2h_pinctrl_readq(pctrl, port, PFC(port));
 	reg64 &= ~PFC_PIN_MASK(pin);
 	rzt2h_pinctrl_writeq(pctrl, port, reg64 | ((u64)func << (pin * 8)), PFC(port));
 
