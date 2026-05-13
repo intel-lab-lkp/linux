@@ -27,6 +27,7 @@
 #include <uapi/linux/vmclock-abi.h>
 
 #include <linux/ptp_clock_kernel.h>
+#include <linux/timekeeping_reference.h>
 
 #ifdef CONFIG_X86
 #include <asm/pvclock.h>
@@ -334,6 +335,27 @@ static const struct ptp_clock_info ptp_vmclock_info = {
 	.getcrosststamp = ptp_vmclock_getcrosststamp,
 };
 
+static void vmclock_set_tk_reference(struct vmclock_state *st)
+{
+	struct vmclock_abi *clk = st->clk;
+	struct tk_reference ref = {
+		.cs_id = st->cs_id,
+		.counter_value = le64_to_cpu(clk->counter_value),
+		.time_sec = le64_to_cpu(clk->time_sec),
+		.time_frac_sec = le64_to_cpu(clk->time_frac_sec),
+		.period_frac_sec = le64_to_cpu(clk->counter_period_frac_sec),
+		.period_shift = clk->counter_period_shift,
+	};
+
+	/* Convert TAI to UTC for comparison with xtime_sec */
+	if (clk->time_type == VMCLOCK_TIME_TAI &&
+	    (le64_to_cpu(clk->flags) & VMCLOCK_FLAG_TAI_OFFSET_VALID))
+		ref.time_sec += (int16_t)le16_to_cpu(clk->tai_offset_sec);
+
+	if (clk->clock_status != VMCLOCK_STATUS_UNRELIABLE)
+		timekeeping_set_reference(&ref);
+}
+
 static struct ptp_clock *vmclock_ptp_register(struct device *dev,
 					      struct vmclock_state *st)
 {
@@ -525,6 +547,7 @@ vmclock_acpi_notification_handler(acpi_handle __always_unused handle,
 	struct device *device = dev;
 	struct vmclock_state *st = device->driver_data;
 
+	vmclock_set_tk_reference(st);
 	wake_up_interruptible(&st->disrupt_wait);
 }
 
@@ -580,6 +603,7 @@ static irqreturn_t vmclock_of_irq_handler(int __always_unused irq, void *_st)
 {
 	struct vmclock_state *st = _st;
 
+	vmclock_set_tk_reference(st);
 	wake_up_interruptible(&st->disrupt_wait);
 	return IRQ_HANDLED;
 }
@@ -751,6 +775,8 @@ static int vmclock_probe(struct platform_device *pdev)
 			st->ptp_clock = NULL;
 			return ret;
 		}
+		if (st->ptp_clock)
+			vmclock_set_tk_reference(st);
 	}
 
 	if (!st->miscdev.minor && !st->ptp_clock) {
