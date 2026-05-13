@@ -501,6 +501,8 @@ ip_set_timeout_set(unsigned long *timeout, u32 value)
 
 void ip_set_init_comment(struct ip_set *set, struct ip_set_comment *comment,
 			 const struct ip_set_ext *ext);
+int ip_set_clone_comment(struct ip_set *set, struct ip_set_comment *dst,
+			 const struct ip_set_comment *src);
 
 static inline void
 ip_set_init_counter(struct ip_set_counter *counter,

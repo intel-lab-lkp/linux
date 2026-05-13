@@ -584,7 +584,7 @@ mtype_gc(struct work_struct *work)
 
 	if (atomic_dec_and_test(&t->uref) && atomic_read(&t->ref)) {
 		pr_debug("Table destroy after resize by expire: %p\n", t);
-		mtype_ahash_destroy(set, t, false);
+		mtype_ahash_destroy(set, t, true);
 	}
 
 	queue_delayed_work(system_power_efficient_wq, &gc->dwork, next_run);
@@ -743,6 +743,13 @@ retry:
 				}
 				d = ahash_data(m, m->pos, dsize);
 				memcpy(d, data, dsize);
+				if (SET_WITH_COMMENT(set)) {
+					ret = ip_set_clone_comment(set,
+								   ext_comment(d, set),
+								   ext_comment(data, set));
+					if (ret)
+						goto cleanup;
+				}
 				set_bit(m->pos++, m->used);
 				t->hregion[nr].elements++;
 #ifdef IP_SET_HASH_WITH_NETS
@@ -778,7 +785,7 @@ retry:
 	/* If there's nobody else using the table, destroy it */
 	if (atomic_dec_and_test(&orig->uref)) {
 		pr_debug("Table destroy by resize %p\n", orig);
-		mtype_ahash_destroy(set, orig, false);
+		mtype_ahash_destroy(set, orig, true);
 	}
 
 out:
@@ -791,7 +798,7 @@ cleanup:
 	rcu_read_unlock_bh();
 	atomic_set(&orig->ref, 0);
 	atomic_dec(&orig->uref);
-	mtype_ahash_destroy(set, t, false);
+	mtype_ahash_destroy(set, t, true);
 	if (ret == -EAGAIN)
 		goto retry;
 	goto out;
@@ -1023,7 +1030,7 @@ unlock:
 out:
 	if (atomic_dec_and_test(&t->uref) && atomic_read(&t->ref)) {
 		pr_debug("Table destroy after resize by add: %p\n", t);
-		mtype_ahash_destroy(set, t, false);
+		mtype_ahash_destroy(set, t, true);
 	}
 	return ret;
 }
@@ -1135,7 +1142,7 @@ out:
 	}
 	if (atomic_dec_and_test(&t->uref) && atomic_read(&t->ref)) {
 		pr_debug("Table destroy after resize by del: %p\n", t);
-		mtype_ahash_destroy(set, t, false);
+		mtype_ahash_destroy(set, t, true);
 	}
 	return ret;
 }
@@ -1341,7 +1348,7 @@ mtype_uref(struct ip_set *set, struct netlink_callback *cb, bool start)
 		if (atomic_dec_and_test(&t->uref) && atomic_read(&t->ref)) {
 			pr_debug("Table destroy after resize "
 				 " by dump: %p\n", t);
-			mtype_ahash_destroy(set, t, false);
+			mtype_ahash_destroy(set, t, true);
 		}
 		cb->args[IPSET_CB_PRIVATE] = 0;
 	}
