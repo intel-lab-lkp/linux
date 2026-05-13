@@ -109,6 +109,15 @@ int enetc_msg_psi_init(struct enetc_pf *pf)
 	struct enetc_si *si = pf->si;
 	int vector, i, err;
 
+	/* initialize PSI mailbox */
+	INIT_WORK(&pf->msg_task, enetc_msg_task);
+
+	for (i = 0; i < pf->num_vfs; i++) {
+		err = enetc_msg_alloc_mbx(si, i);
+		if (err)
+			goto free_mbx;
+	}
+
 	/* register message passing interrupt handler */
 	snprintf(pf->msg_int_name, sizeof(pf->msg_int_name), "%s-vfmsg",
 		 si->ndev->name);
@@ -117,31 +126,20 @@ int enetc_msg_psi_init(struct enetc_pf *pf)
 	if (err) {
 		dev_err(&si->pdev->dev,
 			"PSI messaging: request_irq() failed!\n");
-		return err;
+		goto free_mbx;
 	}
 
 	/* set one IRQ entry for PSI message receive notification (SI int) */
 	enetc_wr(&si->hw, ENETC_SIMSIVR, ENETC_SI_INT_IDX);
-
-	/* initialize PSI mailbox */
-	INIT_WORK(&pf->msg_task, enetc_msg_task);
-
-	for (i = 0; i < pf->num_vfs; i++) {
-		err = enetc_msg_alloc_mbx(si, i);
-		if (err)
-			goto err_init_mbx;
-	}
 
 	/* enable MR interrupts */
 	enetc_msg_enable_mr_int(&si->hw);
 
 	return 0;
 
-err_init_mbx:
+free_mbx:
 	for (i--; i >= 0; i--)
 		enetc_msg_free_mbx(si, i);
-
-	free_irq(vector, si);
 
 	return err;
 }
