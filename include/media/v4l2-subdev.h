@@ -8,6 +8,7 @@
 #ifndef _V4L2_SUBDEV_H
 #define _V4L2_SUBDEV_H
 
+#include <linux/cleanup.h>
 #include <linux/types.h>
 #include <linux/v4l2-subdev.h>
 #include <media/media-entity.h>
@@ -1794,7 +1795,7 @@ int v4l2_subdev_get_frame_desc_passthrough(struct v4l2_subdev *sd,
  * v4l2_subdev_get_frame_desc() - Get a frame descriptor for a pad
  * @sd: The sub-device
  * @pad: The number of the pad in @sd from which to obtain the frame descriptor
- * @desc: A pointer to a frame descriptor, with its type field set
+ * @type: The type of the frame descriptor
  *
  * Obtain a frame descriptor from a sub-device. If the sub-device supports the
  * get_frame_desc pad operation, its result is returned, just like calling it
@@ -1810,19 +1811,28 @@ int v4l2_subdev_get_frame_desc_passthrough(struct v4l2_subdev *sd,
  * each frame descriptor obtained by calling this function using
  * v4l2_subdev_free_frame_desc().
  *
- * Return: %0 on success or negative error code on failure.
+ * Use __free() to release the frame descriptor automatically:
+ *
+ * struct v4l2_mbus_frame_desc *desc __free(v4l2_subdev_free_frame_desc) =
+ *	v4l2_subdev_get_frame_desc(sd, pad, desc);
+ *
+ * Return: The frame descriptor on success or a negative error code on failure.
  */
-int v4l2_subdev_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
-			       struct v4l2_mbus_frame_desc *desc);
+struct v4l2_mbus_frame_desc *
+v4l2_subdev_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
+			   enum v4l2_mbus_frame_desc_type type);
 
 /**
  * v4l2_subdev_free_frame_desc() - Release the memory of a frame descriptor
  * @desc: A pointer to a frame descriptor
  *
- * Release the frame descriptor entries in a frame descriptor. The number of
- * entries in the descriptor are set to 0 again.
+ * Release the frame descriptor entries and the frame descriptor itself.
  */
 void v4l2_subdev_free_frame_desc(struct v4l2_mbus_frame_desc *desc);
+
+DEFINE_FREE(v4l2_subdev_free_frame_desc, struct v4l2_mbus_frame_desc *, \
+	    if (!IS_ERR_OR_NULL(_T))					\
+		    v4l2_subdev_free_frame_desc(_T))
 
 #endif /* CONFIG_VIDEO_V4L2_SUBDEV_API */
 

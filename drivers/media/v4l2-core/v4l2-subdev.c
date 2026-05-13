@@ -2684,8 +2684,8 @@ int v4l2_subdev_get_frame_desc_passthrough(struct v4l2_subdev *sd,
 }
 EXPORT_SYMBOL_GPL(v4l2_subdev_get_frame_desc_passthrough);
 
-int v4l2_subdev_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
-			       struct v4l2_mbus_frame_desc *desc)
+static int __v4l2_subdev_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
+					struct v4l2_mbus_frame_desc *desc)
 {
 	struct v4l2_subdev_format subdev_fmt = {
 		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
@@ -2740,15 +2740,45 @@ int v4l2_subdev_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
 
 	return 0;
 }
+
+struct v4l2_mbus_frame_desc *
+v4l2_subdev_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
+			   enum v4l2_mbus_frame_desc_type type)
+{
+	struct v4l2_mbus_frame_desc *desc;
+	int ret;
+
+	desc = kzalloc_obj(*desc, GFP_KERNEL);
+	if (!desc)
+		return ERR_PTR(-ENOMEM);
+
+	desc->type = type;
+	desc->entry = desc->entry_mem;
+	desc->len_entries = ARRAY_SIZE(desc->entry_mem);
+
+	ret = __v4l2_subdev_get_frame_desc(sd, pad, desc);
+	if (ret) {
+		kfree(desc);
+		return ERR_PTR(ret);
+	}
+
+	return desc;
+}
 EXPORT_SYMBOL_GPL(v4l2_subdev_get_frame_desc);
 
-void v4l2_subdev_free_frame_desc(struct v4l2_mbus_frame_desc *desc)
+static void __v4l2_subdev_free_frame_desc(struct v4l2_mbus_frame_desc *desc)
 {
 	if (desc->entry != desc->entry_mem)
 		kfree(desc->entry);
 
 	desc->entry = NULL;
 	desc->len_entries = desc->num_entries = 0;
+}
+
+void v4l2_subdev_free_frame_desc(struct v4l2_mbus_frame_desc *desc)
+{
+	__v4l2_subdev_free_frame_desc(desc);
+	kfree(desc);
 }
 EXPORT_SYMBOL_GPL(v4l2_subdev_free_frame_desc);
 
