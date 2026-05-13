@@ -353,7 +353,7 @@ int libdw__get_entries(unwind_entry_cb_t cb, void *arg,
 	static struct unwind_info *ui;
 	Dwfl *dwfl;
 	Dwarf_Word ip;
-	int err = -EINVAL, i;
+	int err = -EINVAL, i, entries;
 
 	if (!data->user_regs || !data->user_regs->regs)
 		return 0;
@@ -430,7 +430,7 @@ int libdw__get_entries(unwind_entry_cb_t cb, void *arg,
 		map_symbol__exit(&ui->entries[i].ms);
 
 	dwfl_ui_ti->ui = NULL;
-	int entries = (int)ui->idx;
+	entries = (int)ui->idx;
 	free(ui);
 	/*
 	 * Unwinder return contract:
