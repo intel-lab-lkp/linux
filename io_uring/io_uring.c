@@ -714,7 +714,9 @@ static bool io_fill_nop_cqe(struct io_ring_ctx *ctx, unsigned int off)
 bool io_cqe_cache_refill(struct io_ring_ctx *ctx, bool overflow, bool cqe32)
 {
 	struct io_rings *rings = ctx->rings;
-	unsigned int off = ctx->cached_cq_tail & (ctx->cq_entries - 1);
+	unsigned int head = READ_ONCE(ctx->rings->cq.head);
+	unsigned int tail = ctx->cached_cq_tail;
+	unsigned int off = tail & (ctx->cq_entries - 1);
 	unsigned int free, queued, len;
 
 	/*
@@ -735,8 +737,16 @@ bool io_cqe_cache_refill(struct io_ring_ctx *ctx, bool overflow, bool cqe32)
 		off = 0;
 	}
 
-	/* userspace may cheat modifying the tail, be safe and do min */
-	queued = min(__io_cqring_events(ctx), ctx->cq_entries);
+	/*
+	 * rings->cq.head is user-writable.  If userspace advances it past
+	 * cached_cq_tail, (tail - head) underflows and free becomes 0, which
+	 * traps io_cqring_wait() in an unkillable loop via the overflow path.
+	 * Treat such a state as "nothing queued" to guarantee forward progress.
+	 */
+	if (unlikely((s32)(tail - head) < 0))
+		queued = 0;
+	else
+		queued = min(tail - head, ctx->cq_entries);
 	free = ctx->cq_entries - queued;
 	/* we need a contiguous range, limit based on the current array offset */
 	len = min(free, ctx->cq_entries - off);
