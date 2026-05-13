@@ -316,7 +316,6 @@
 };
 
 &pcie1 {
-	vpcie3v3-supply = <&pcie_vcc_3v3>;
 	status = "okay";
 };
 
@@ -332,7 +331,6 @@
 };
 
 &pcie2 {
-	vpcie3v3-supply = <&pcie_vcc_3v3>;
 	status = "okay";
 };
 
