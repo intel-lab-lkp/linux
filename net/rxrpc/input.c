@@ -1173,6 +1173,8 @@ static void rxrpc_input_ack(struct rxrpc_call *call, struct sk_buff *skb)
 	if (nr_acks > 0) {
 		if (offset > (int)skb->len - nr_acks)
 			return rxrpc_proto_abort(call, 0, rxrpc_eproto_ackr_short_sack);
+		if (!pskb_may_pull(skb, offset + nr_acks))
+			return rxrpc_proto_abort(call, 0, rxrpc_eproto_ackr_short_sack);
 		rxrpc_input_soft_acks(call, &summary, skb);
 	}
 
