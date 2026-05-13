@@ -1638,7 +1638,7 @@ static ssize_t lpvo_do_write(struct lpvo *dev, const char *buffer, size_t count)
 		goto error;
 	}
 
-	memcpy(buf, buffer, count);
+	memcpy(buf, buffer, writesize);
 
 	/* this lock makes sure we don't submit URBs to gone devices */
 	mutex_lock(&dev->io_mutex);
