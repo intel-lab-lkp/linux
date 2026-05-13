@@ -364,9 +364,6 @@ void *__kasan_unpoison_vmalloc(const void *start, unsigned long size,
 	tag = (flags & KASAN_VMALLOC_KEEP_TAG) ? get_tag(start) : kasan_random_tag();
 	start = set_tag(start, tag);
 
-	/* Unpoison and initialize memory up to size. */
-	kasan_unpoison(start, size, flags & KASAN_VMALLOC_INIT);
-
 	/*
 	 * Explicitly poison and initialize the in-page vmalloc() redzone.
 	 * Unlike software KASAN modes, hardware tag-based KASAN doesn't
@@ -375,8 +372,14 @@ void *__kasan_unpoison_vmalloc(const void *start, unsigned long size,
 	redzone_start = round_up((unsigned long)start + size,
 				 KASAN_GRANULE_SIZE);
 	redzone_size = round_up(redzone_start, PAGE_SIZE) - redzone_start;
-	kasan_poison((void *)redzone_start, redzone_size, KASAN_TAG_INVALID,
-		     flags & KASAN_VMALLOC_INIT);
+
+	/* Unpoison and initialize memory before the redzone. */
+	kasan_unpoison(start, redzone_start - (unsigned long)start,
+		       flags & KASAN_VMALLOC_INIT);
+
+	if (redzone_size)
+		kasan_poison((void *)redzone_start, redzone_size,
+			     KASAN_TAG_INVALID, flags & KASAN_VMALLOC_INIT);
 
 	/*
 	 * Set per-page tag flags to allow accessing physical memory for the
