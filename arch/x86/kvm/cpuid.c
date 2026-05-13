@@ -1288,6 +1288,8 @@ void kvm_initialize_cpu_caps(void)
 		F(PMM_EN),
 		F(RNG2),
 		F(RNG2_EN),
+		F(PHE2),
+		F(PHE2_EN),
 	);
 
 	/*
