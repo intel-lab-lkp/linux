@@ -2032,7 +2032,7 @@ out:
  *	-EHWPOISON	- folio or exact page already poisoned
  *	-EFAULT		- kill_accessing_process finds current->mm null
  */
-static int try_memory_failure_hugetlb(unsigned long pfn, int flags, int *hugetlb)
+static int try_memory_failure_hugetlb(unsigned long pfn, int flags, bool *hugetlb)
 {
 	int res, rv;
 	struct page *p = pfn_to_page(pfn);
@@ -2040,12 +2040,12 @@ static int try_memory_failure_hugetlb(unsigned long pfn, int flags, int *hugetlb
 	unsigned long page_flags;
 	bool migratable_cleared = false;
 
-	*hugetlb = 1;
+	*hugetlb = true;
 retry:
 	res = get_huge_page_for_hwpoison(pfn, flags, &migratable_cleared);
 	switch (res) {
 	case MF_HUGETLB_NON_HUGEPAGE:	/* fallback to normal page handling */
-		*hugetlb = 0;
+		*hugetlb = false;
 		return 0;
 	case MF_HUGETLB_RETRY:
 		if (!(flags & MF_NO_RETRY)) {
@@ -2107,7 +2107,7 @@ retry:
 }
 
 #else
-static inline int try_memory_failure_hugetlb(unsigned long pfn, int flags, int *hugetlb)
+static inline int try_memory_failure_hugetlb(unsigned long pfn, int flags, bool *hugetlb)
 {
 	return 0;
 }
@@ -2347,7 +2347,7 @@ int memory_failure(unsigned long pfn, int flags)
 	int res = 0;
 	unsigned long page_flags;
 	bool retry = true;
-	int hugetlb = 0;
+	bool hugetlb = false;
 
 	if (!sysctl_memory_failure_recovery)
 		panic("Memory failure on page %lx", pfn);
