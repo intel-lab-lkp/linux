@@ -400,7 +400,7 @@ int bio_integrity_map_user(struct bio *bio, struct iov_iter *iter)
 	ret = iov_iter_extract_pages(iter, &pages, bytes, nr_vecs,
 					extraction_flags, &offset);
 	if (unlikely(ret < 0))
-		goto free_bvec;
+		goto out_free;
 
 	/*
 	 * Handle partial pinning. This can happen when pin_user_pages_fast()
@@ -414,16 +414,12 @@ int bio_integrity_map_user(struct bio *bio, struct iov_iter *iter)
 			for (i = 0; i < npinned; i++)
 				unpin_user_page(pages[i]);
 		}
-		if (pages != stack_pages)
-			kvfree(pages);
 		ret = -EFAULT;
-		goto free_bvec;
+		goto out_free;
 	}
 
 	nr_bvecs = bvec_from_pages(bvec, pages, nr_vecs, bytes, offset,
 				   &is_p2p);
-	if (pages != stack_pages)
-		kvfree(pages);
 	if (nr_bvecs > queue_max_integrity_segments(q))
 		copy = true;
 	if (is_p2p)
@@ -434,15 +430,10 @@ int bio_integrity_map_user(struct bio *bio, struct iov_iter *iter)
 	else
 		ret = bio_integrity_init_user(bio, bvec, nr_bvecs, bytes);
 	if (ret)
-		goto release_pages;
-	if (bvec != stack_vec)
-		kfree(bvec);
-
-	return 0;
-
-release_pages:
-	bio_integrity_unpin_bvec(bvec, nr_bvecs);
-free_bvec:
+		bio_integrity_unpin_bvec(bvec, nr_bvecs);
+out_free:
+	if (pages != stack_pages)
+		kvfree(pages);
 	if (bvec != stack_vec)
 		kfree(bvec);
 	return ret;
