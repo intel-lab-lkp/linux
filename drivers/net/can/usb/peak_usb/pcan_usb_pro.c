@@ -534,6 +534,10 @@ static int pcan_usb_pro_handle_canmsg(struct pcan_usb_pro_interface *usb_if,
 				      struct pcan_usb_pro_rxmsg *rx)
 {
 	const unsigned int ctrl_idx = (rx->len >> 4) & 0x0f;
+
+	if (ctrl_idx >= ARRAY_SIZE(usb_if->dev))
+		return -EINVAL;
+
 	struct peak_usb_device *dev = usb_if->dev[ctrl_idx];
 	struct net_device *netdev = dev->netdev;
 	struct can_frame *can_frame;
@@ -573,6 +577,10 @@ static int pcan_usb_pro_handle_error(struct pcan_usb_pro_interface *usb_if,
 {
 	const u16 raw_status = le16_to_cpu(er->status);
 	const unsigned int ctrl_idx = (er->channel >> 4) & 0x0f;
+
+	if (ctrl_idx >= ARRAY_SIZE(usb_if->dev))
+		return -EINVAL;
+
 	struct peak_usb_device *dev = usb_if->dev[ctrl_idx];
 	struct net_device *netdev = dev->netdev;
 	struct can_frame *can_frame;
