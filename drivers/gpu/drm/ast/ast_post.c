@@ -37,13 +37,19 @@
 u32 __ast_mindwm(void __iomem *regs, u32 r)
 {
 	u32 data;
+	int retries = 10000; /* ~100ms timeout */
 
 	__ast_write32(regs, 0xf004, r & 0xffff0000);
 	__ast_write32(regs, 0xf000, 0x1);
 
 	do {
 		data = __ast_read32(regs, 0xf004) & 0xffff0000;
-	} while (data != (r & 0xffff0000));
+		if (data == (r & 0xffff0000))
+			break;
+		udelay(10);
+	} while (--retries);
+
+	WARN_ONCE(!retries, "ast: timeout reading from AHB/SCU\n");
 
 	return __ast_read32(regs, 0x10000 + (r & 0x0000ffff));
 }
@@ -51,13 +57,19 @@ u32 __ast_mindwm(void __iomem *regs, u32 r)
 void __ast_moutdwm(void __iomem *regs, u32 r, u32 v)
 {
 	u32 data;
+	int retries = 10000; /* ~100ms timeout */
 
 	__ast_write32(regs, 0xf004, r & 0xffff0000);
 	__ast_write32(regs, 0xf000, 0x1);
 
 	do {
 		data = __ast_read32(regs, 0xf004) & 0xffff0000;
-	} while (data != (r & 0xffff0000));
+		if (data == (r & 0xffff0000))
+			break;
+		udelay(10);
+	} while (--retries);
+
+	WARN_ONCE(!retries, "ast: timeout writing to AHB/SCU\n");
 
 	__ast_write32(regs, 0x10000 + (r & 0x0000ffff), v);
 }

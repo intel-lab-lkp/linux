@@ -107,6 +107,7 @@ static const u32 ast2500_ddr4_1600_timing_table[REGTBL_NUM] = {
 void ast_2500_patch_ahb(void __iomem *regs)
 {
 	u32 data;
+	int retries = 10000; /* ~100ms timeout */
 
 	/* Clear bus lock condition */
 	__ast_moutdwm(regs, 0x1e600000, 0xAEED1A03);
@@ -136,7 +137,12 @@ void ast_2500_patch_ahb(void __iomem *regs)
 	do {
 		__ast_moutdwm(regs, 0x1e6e2000, 0x1688A8A8);
 		data = __ast_mindwm(regs, 0x1e6e2000);
-	} while (data != 1);
+		if (data == 1)
+			break;
+		udelay(10);
+	} while (--retries);
+
+	WARN_ONCE(!retries, "ast: timeout waiting for AHB patch\n");
 
 	__ast_moutdwm(regs, 0x1e6e207c, 0x08000000); /* clear fast reset */
 }
