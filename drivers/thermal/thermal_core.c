@@ -116,78 +116,24 @@ static int thermal_set_governor(struct thermal_zone_device *tz,
 	return ret;
 }
 
-int thermal_register_governor(struct thermal_governor *governor)
+static int __init thermal_register_governor(struct thermal_governor *governor)
 {
-	int err;
-	const char *name;
-	struct thermal_zone_device *pos;
 
 	if (!governor)
 		return -EINVAL;
 
-	guard(mutex)(&thermal_governor_lock);
+	if (__find_governor(governor->name))
+		return -EBUSY;
 
-	err = -EBUSY;
-	if (!__find_governor(governor->name)) {
-		bool match_default;
+	list_add(&governor->governor_list, &thermal_governor_list);
 
-		err = 0;
-		list_add(&governor->governor_list, &thermal_governor_list);
-		match_default = !strncmp(governor->name,
-					 DEFAULT_THERMAL_GOVERNOR,
-					 THERMAL_NAME_LENGTH);
+	if (strncmp(governor->name, DEFAULT_THERMAL_GOVERNOR, THERMAL_NAME_LENGTH))
+		return 0;
 
-		if (!def_governor && match_default)
-			def_governor = governor;
-	}
+	if (!def_governor)
+		def_governor = governor;
 
-	guard(mutex)(&thermal_list_lock);
-
-	list_for_each_entry(pos, &thermal_tz_list, node) {
-		/*
-		 * only thermal zones with specified tz->tzp->governor_name
-		 * may run with tz->govenor unset
-		 */
-		if (pos->governor)
-			continue;
-
-		name = pos->tzp->governor_name;
-
-		if (!strncasecmp(name, governor->name, THERMAL_NAME_LENGTH)) {
-			int ret;
-
-			ret = thermal_set_governor(pos, governor);
-			if (ret)
-				dev_err(&pos->device,
-					"Failed to set governor %s for thermal zone %s: %d\n",
-					governor->name, pos->type, ret);
-		}
-	}
-
-	return err;
-}
-
-void thermal_unregister_governor(struct thermal_governor *governor)
-{
-	struct thermal_zone_device *pos;
-
-	if (!governor)
-		return;
-
-	guard(mutex)(&thermal_governor_lock);
-
-	if (!__find_governor(governor->name))
-		return;
-
-	list_del(&governor->governor_list);
-
-	guard(mutex)(&thermal_list_lock);
-
-	list_for_each_entry(pos, &thermal_tz_list, node) {
-		if (!strncasecmp(pos->governor->name, governor->name,
-				 THERMAL_NAME_LENGTH))
-			thermal_set_governor(pos, NULL);
-	}
+	return 0;
 }
 
 int thermal_zone_device_set_policy(struct thermal_zone_device *tz,
@@ -225,40 +171,34 @@ int thermal_build_list_of_policies(char *buf)
 
 static void __init thermal_unregister_governors(void)
 {
-	struct thermal_governor **governor;
+	struct thermal_governor *gov, *pos;
 
-	for_each_governor_table(governor)
-		thermal_unregister_governor(*governor);
+	guard(mutex)(&thermal_governor_lock);
+
+	list_for_each_entry_safe(gov, pos, &thermal_governor_list, governor_list)
+		list_del(&gov->governor_list);
 }
 
 static int __init thermal_register_governors(void)
 {
-	int ret = 0;
 	struct thermal_governor **governor;
 
+	guard(mutex)(&thermal_governor_lock);
+
 	for_each_governor_table(governor) {
+		int ret;
+
 		ret = thermal_register_governor(*governor);
 		if (ret) {
 			pr_err("Failed to register governor: '%s'",
 			       (*governor)->name);
-			break;
+			return ret;
 		}
 
-		pr_info("Registered thermal governor '%s'",
-			(*governor)->name);
+		pr_info("Registered thermal governor '%s'", (*governor)->name);
 	}
 
-	if (ret) {
-		struct thermal_governor **gov;
-
-		for_each_governor_table(gov) {
-			if (gov == governor)
-				break;
-			thermal_unregister_governor(*gov);
-		}
-	}
-
-	return ret;
+	return 0;
 }
 
 static int __thermal_zone_device_set_mode(struct thermal_zone_device *tz,
@@ -949,34 +889,7 @@ unbind:
 	kfree(pos);
 }
 
-static void thermal_release(struct device *dev)
-{
-	struct thermal_zone_device *tz;
-	struct thermal_cooling_device *cdev;
-
-	if (!strncmp(dev_name(dev), "thermal_zone",
-		     sizeof("thermal_zone") - 1)) {
-		tz = to_thermal_zone(dev);
-		thermal_zone_destroy_device_groups(tz);
-		thermal_set_governor(tz, NULL);
-		ida_destroy(&tz->ida);
-		mutex_destroy(&tz->lock);
-		complete(&tz->removal);
-	} else if (!strncmp(dev_name(dev), "cooling_device",
-			    sizeof("cooling_device") - 1)) {
-		cdev = to_cooling_device(dev);
-		thermal_cooling_device_destroy_sysfs(cdev);
-		kfree_const(cdev->type);
-		ida_free(&thermal_cdev_ida, cdev->id);
-		kfree(cdev);
-	}
-}
-
-static const struct class thermal_class = {
-	.name = "thermal",
-	.dev_release = thermal_release,
-};
-static bool thermal_class_unavailable __ro_after_init = true;
+static struct class *thermal_class __ro_after_init;
 
 static inline
 void print_bind_err_msg(struct thermal_zone_device *tz,
@@ -1040,6 +953,16 @@ static void thermal_cooling_device_init_complete(struct thermal_cooling_device *
 		thermal_zone_cdev_bind(tz, cdev);
 }
 
+static void thermal_cdev_release(struct device *dev)
+{
+	struct thermal_cooling_device *cdev = to_cooling_device(dev);
+
+	thermal_cooling_device_destroy_sysfs(cdev);
+	kfree_const(cdev->type);
+	ida_free(&thermal_cdev_ida, cdev->id);
+	kfree(cdev);
+}
+
 /**
  * __thermal_cooling_device_register() - register a new thermal cooling device
  * @np:		a pointer to a device tree node.
@@ -1069,7 +992,7 @@ __thermal_cooling_device_register(struct device_node *np,
 	    !ops->set_cur_state)
 		return ERR_PTR(-EINVAL);
 
-	if (thermal_class_unavailable)
+	if (!thermal_class)
 		return ERR_PTR(-ENODEV);
 
 	cdev = kzalloc_obj(*cdev);
@@ -1092,7 +1015,8 @@ __thermal_cooling_device_register(struct device_node *np,
 	cdev->np = np;
 	cdev->ops = ops;
 	cdev->updated = false;
-	cdev->device.class = &thermal_class;
+	cdev->device.class = thermal_class;
+	cdev->device.release = thermal_cdev_release;
 	cdev->devdata = devdata;
 
 	ret = cdev->ops->get_max_state(cdev, &cdev->max_state);
@@ -1470,6 +1394,17 @@ static void thermal_zone_init_complete(struct thermal_zone_device *tz)
 	__thermal_zone_device_update(tz, THERMAL_EVENT_UNSPECIFIED);
 }
 
+static void thermal_zone_device_release(struct device *dev)
+{
+	struct thermal_zone_device *tz = to_thermal_zone(dev);
+
+	thermal_zone_destroy_device_groups(tz);
+	thermal_set_governor(tz, NULL);
+	ida_destroy(&tz->ida);
+	mutex_destroy(&tz->lock);
+	complete(&tz->removal);
+}
+
 /**
  * thermal_zone_device_register_with_trips() - register a new thermal zone device
  * @type:	the thermal zone device type
@@ -1540,7 +1475,7 @@ thermal_zone_device_register_with_trips(const char *type,
 	if (polling_delay && passive_delay > polling_delay)
 		return ERR_PTR(-EINVAL);
 
-	if (thermal_class_unavailable)
+	if (!thermal_class)
 		return ERR_PTR(-ENODEV);
 
 	tz = kzalloc_flex(*tz, trips, num_trips);
@@ -1576,7 +1511,8 @@ thermal_zone_device_register_with_trips(const char *type,
 	if (!tz->ops.critical)
 		tz->ops.critical = thermal_zone_device_critical;
 
-	tz->device.class = &thermal_class;
+	tz->device.class = thermal_class;
+	tz->device.release = thermal_zone_device_release;
 	tz->devdata = devdata;
 	tz->num_trips = num_trips;
 	for_each_trip_desc(tz, td) {
@@ -1837,7 +1773,7 @@ static void __thermal_pm_prepare(void)
 
 void thermal_pm_prepare(void)
 {
-	if (thermal_class_unavailable)
+	if (!thermal_class)
 		return;
 
 	__thermal_pm_prepare();
@@ -1868,7 +1804,7 @@ void thermal_pm_complete(void)
 {
 	struct thermal_zone_device *tz;
 
-	if (thermal_class_unavailable)
+	if (!thermal_class)
 		return;
 
 	guard(mutex)(&thermal_list_lock);
@@ -1881,6 +1817,7 @@ void thermal_pm_complete(void)
 
 static int __init thermal_init(void)
 {
+	struct class *tc;
 	int result;
 
 	thermal_debug_init();
@@ -1897,19 +1834,19 @@ static int __init thermal_init(void)
 
 	result = thermal_register_governors();
 	if (result)
-		goto destroy_workqueue;
-
-	result = class_register(&thermal_class);
-	if (result)
 		goto unregister_governors;
 
-	thermal_class_unavailable = false;
+	tc = class_create("thermal");
+	if (IS_ERR(tc)) {
+		result = PTR_ERR(tc);
+		goto unregister_governors;
+	}
 
+	thermal_class = tc;
 	return 0;
 
 unregister_governors:
 	thermal_unregister_governors();
-destroy_workqueue:
 	destroy_workqueue(thermal_wq);
 unregister_netlink:
 	thermal_netlink_exit();
