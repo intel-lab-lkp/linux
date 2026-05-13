@@ -45,7 +45,8 @@ struct gpio_shared_desc {
 	bool can_sleep;
 	unsigned long cfg;
 	unsigned int usecnt;
-	unsigned int highcnt;
+	unsigned int votecnt;
+	int def_val;
 	union {
 		struct mutex mutex;
 		spinlock_t spinlock;
