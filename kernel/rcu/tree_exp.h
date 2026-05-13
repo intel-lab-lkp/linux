@@ -161,8 +161,8 @@ static void __maybe_unused sync_exp_reset_tree(void)
 static bool sync_rcu_exp_done(struct rcu_node *rnp)
 {
 	raw_lockdep_assert_held_rcu_node(rnp);
-	return READ_ONCE(rnp->exp_tasks) == NULL &&
-	       READ_ONCE(rnp->expmask) == 0;
+	return READ_ONCE(rnp->exp_tasks) == NULL && READ_ONCE(rnp->expmask) == 0 &&
+	       list_empty(&rnp->dqs_blkd_tasks);
 }
 
 /*
