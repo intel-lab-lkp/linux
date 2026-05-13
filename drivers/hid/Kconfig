@@ -105,6 +105,16 @@ config HID_HAPTIC
 
 menu "Special HID drivers"
 
+config HID_LATTEPANDA_IOTA_UPS
+	tristate "LattePanda IOTA UPS"
+	depends on USB_HID && X86
+	help
+	Support for the LattePanda IOTA UPS (DFRobot, VID 0x2341 PID 0x8036).
+	Exposes the battery status and capacity via the power_supply interface.
+
+	To compile as a module, choose M here: the module will be
+	called hid-lattepanda-iota-ups.
+
 config HID_A4TECH
 	tristate "A4TECH mice"
 	help
