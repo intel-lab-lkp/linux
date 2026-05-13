@@ -3754,7 +3754,7 @@ sub process {
 
 # check for DT compatible documentation
 		if (defined $root &&
-			(($realfile =~ /\.dtsi?$/ && $line =~ /^\+\s*compatible\s*=\s*\"/) ||
+			(($realfile =~ /\.(dts|dtsi|dtso)$/ && $line =~ /^\+\s*compatible\s*=\s*\"/) ||
 			 ($realfile =~ /\.[ch]$/ && $line =~ /^\+.*\.compatible\s*=\s*\"/))) {
 
 			my @compats = $rawline =~ /\"([a-zA-Z0-9\-\,\.\+_]+)\"/g;
