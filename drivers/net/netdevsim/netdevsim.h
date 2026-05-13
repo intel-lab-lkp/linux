@@ -115,6 +115,7 @@ struct netdevsim {
 	int rq_reset_mode;
 
 	struct {
+		spinlock_t stats_lock;
 		u64_stats_t rx_packets;
 		u64_stats_t rx_bytes;
 		u64_stats_t tx_packets;
