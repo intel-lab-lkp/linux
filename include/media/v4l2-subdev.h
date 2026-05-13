@@ -365,11 +365,13 @@ struct v4l2_mbus_frame_desc_entry {
 	} bus;
 };
 
- /*
-  * If this number is too small, it should be dropped altogether and the
-  * API switched to a dynamic number of frame descriptor entries.
-  */
-#define V4L2_FRAME_DESC_ENTRY_MAX	8
+/* Size of the statically allocated frame descriptor array. */
+#define V4L2_FRAME_DESC_ENTRY_PREALLOC	8
+/*
+ * Maximum number of dynamically allocated frame descriptors. Note that
+ * V4L2_SUBDEV_MAX_STREAM_ID is related to this limit as well.
+ */
+#define V4L2_FRAME_DESC_ENTRY_MAX	64
 
 /**
  * enum v4l2_mbus_frame_desc_type - media bus frame description type
@@ -392,13 +394,17 @@ enum v4l2_mbus_frame_desc_type {
 /**
  * struct v4l2_mbus_frame_desc - media bus data frame description
  * @type: type of the bus (enum v4l2_mbus_frame_desc_type)
- * @entry: frame descriptors array
- * @num_entries: number of entries in @entry array
+ * @entry_mem: memory for the frame descriptors (@entry)
+ * @entry: pointer to the frame descriptors
+ * @num_entries: number of entries in @entry
+ * @len_entries: number of entries allocated for @entry
  */
 struct v4l2_mbus_frame_desc {
 	enum v4l2_mbus_frame_desc_type type;
-	struct v4l2_mbus_frame_desc_entry entry[V4L2_FRAME_DESC_ENTRY_MAX];
+	struct v4l2_mbus_frame_desc_entry entry_mem[V4L2_FRAME_DESC_ENTRY_PREALLOC];
+	struct v4l2_mbus_frame_desc_entry *entry;
 	unsigned short num_entries;
+	unsigned short len_entries;
 };
 
 /**
@@ -780,7 +786,13 @@ struct v4l2_subdev_state {
  * @link_validate: used by the media controller code to check if the links
  *		   that belongs to a pipeline can be used for stream.
  *
- * @get_frame_desc: get the current low level media bus frame parameters.
+ * @get_frame_desc: get the current low level media bus frame parameters. The
+ *		    callback is required to update the num_entries field to the
+ *		    total number of entries in the frame descriptor. The
+ *		    callback shall fill the first entries array up to
+ *		    len_entries, which signifies the number of entries
+ *		    allocated. If num_entries exceeds len_entries, the callback
+ *		    shall return -ENOSPC.
  *
  * @set_frame_desc: set the low level media bus frame parameters, @fd array
  *                  may be adjusted by the subdev driver to device capabilities.
@@ -1793,10 +1805,24 @@ int v4l2_subdev_get_frame_desc_passthrough(struct v4l2_subdev *sd,
  *
  * The caller is required to set @desc->type to the expected bus type.
  *
+ * The entries in the frame descriptor are allocated based on the need. The
+ * caller is required to release the memory of the frame descriptor entries for
+ * each frame descriptor obtained by calling this function using
+ * v4l2_subdev_free_frame_desc().
+ *
  * Return: %0 on success or negative error code on failure.
  */
 int v4l2_subdev_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
 			       struct v4l2_mbus_frame_desc *desc);
+
+/**
+ * v4l2_subdev_free_frame_desc() - Release the memory of a frame descriptor
+ * @desc: A pointer to a frame descriptor
+ *
+ * Release the frame descriptor entries in a frame descriptor. The number of
+ * entries in the descriptor are set to 0 again.
+ */
+void v4l2_subdev_free_frame_desc(struct v4l2_mbus_frame_desc *desc);
 
 #endif /* CONFIG_VIDEO_V4L2_SUBDEV_API */
 
