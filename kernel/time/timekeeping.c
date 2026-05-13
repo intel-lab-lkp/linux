@@ -27,6 +27,8 @@
 #include "tick-internal.h"
 #include "timekeeping_internal.h"
 #include "ntp_internal.h"
+#include <linux/timekeeping_reference.h>
+#include <linux/math64.h>
 #include <linux/vmclock_host.h>
 
 void (*vmclock_host_update_fn)(struct timekeeper *tk);
@@ -396,6 +398,7 @@ static void tk_setup_internals(struct timekeeper *tk, struct clocksource *clock)
 	tk->skip_second_overflow = 0;
 
 	tk->cs_id = clock->id;
+	timekeeping_clear_reference();
 
 	/* Coupled clockevent data */
 	if (IS_ENABLED(CONFIG_GENERIC_CLOCKEVENTS_COUPLED) &&
@@ -2323,9 +2326,77 @@ static __always_inline void timekeeping_apply_adjustment(struct timekeeper *tk,
 	tk->tkr_mono.xtime_nsec -= offset;
 }
 
+static struct tk_reference tk_ref;
+static bool tk_ref_valid;
+
+int timekeeping_set_reference(const struct tk_reference *ref)
+{
+	struct timekeeper *tk = &tk_core.timekeeper;
+	__uint128_t product;
+	u64 delta, ref_frac, ref_ns;
+	s64 offset_ns;
+
+	tk_ref = *ref;
+	if (!tk_ref.cycle_interval)
+		tk_ref.cycle_interval = tk->cycle_interval;
+
+	/* Reject if the clocksource doesn't match */
+	if (tk->cs_id != ref->cs_id)
+		return -ENODEV;
+
+	tk_ref_valid = true;
+	ntp_set_tick_length(TIMEKEEPER_CORE,
+		mul_u64_u64_shr(ref->period_frac_sec,
+				(u64)tk_ref.cycle_interval * NSEC_PER_SEC,
+				32 + ref->period_shift));
+
+	/* Compute phase offset: (reference_time - xtime) in ns */
+	delta = tk->tkr_mono.cycle_last - tk_ref.counter_value;
+	product = (__uint128_t)delta * tk_ref.period_frac_sec;
+	product >>= tk_ref.period_shift;
+	product += tk_ref.time_frac_sec;
+	ref_frac = (u64)product;
+	ref_ns = mul_u64_u64_shr(ref_frac, NSEC_PER_SEC, 64);
+
+	if (tk_ref.time_sec + (u64)(product >> 64) == tk->xtime_sec) {
+		offset_ns = (s64)ref_ns -
+			(s64)(tk->tkr_mono.xtime_nsec >> tk->tkr_mono.shift);
+		ntp_set_time_offset(TIMEKEEPER_CORE, offset_ns);
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(timekeeping_set_reference);
+
+bool timekeeping_has_reference(void) { return tk_ref_valid; }
+void timekeeping_clear_reference(void) { tk_ref_valid = false; }
+
+bool timekeeping_ref_ahead(struct timekeeper *tk)
+{
+	u64 delta, ref_frac, ref_sec, ref_shifted_ns;
+	__uint128_t product;
+
+	if (tk->cs_id != tk_ref.cs_id)
+		return false;
+	delta = tk->tkr_mono.cycle_last - tk_ref.counter_value;
+	product = (__uint128_t)delta * tk_ref.period_frac_sec;
+	product >>= tk_ref.period_shift;
+	product += tk_ref.time_frac_sec;
+	ref_sec = tk_ref.time_sec + (u64)(product >> 64);
+	ref_frac = (u64)product;
+	ref_shifted_ns = mul_u64_u64_shr(ref_frac,
+				(u64)NSEC_PER_SEC << tk->tkr_mono.shift, 64);
+	if (tk->xtime_sec > ref_sec)
+		return true;
+	if (tk->xtime_sec == ref_sec &&
+	    tk->tkr_mono.xtime_nsec > ref_shifted_ns)
+		return true;
+	return false;
+}
 /*
  * Adjust the timekeeper's multiplier to the correct frequency
  * and also to reduce the accumulated error value.
+
  */
 static void timekeeping_adjust(struct timekeeper *tk, s64 offset)
 {
@@ -2352,7 +2423,10 @@ static void timekeeping_adjust(struct timekeeper *tk, s64 offset)
 	 * tick division, the clock will slow down. Otherwise it will stay
 	 * ahead until the tick length changes to a non-divisible value.
 	 */
-	tk->ntp_err_mult = tk->ntp_error > 0 ? 1 : 0;
+	if (timekeeping_has_reference())
+		tk->ntp_err_mult = timekeeping_ref_ahead(tk) ? 0 : 1;
+	else
+		tk->ntp_err_mult = tk->ntp_error > 0 ? 1 : 0;
 	mult += tk->ntp_err_mult;
 
 	timekeeping_apply_adjustment(tk, offset, mult - tk->tkr_mono.mult);

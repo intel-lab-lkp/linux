@@ -21,6 +21,7 @@
 #include <linux/timekeeper_internal.h>
 
 #include "ntp_internal.h"
+#include <linux/timekeeping_reference.h>
 #include "timekeeping_internal.h"
 
 /**
@@ -362,6 +363,37 @@ void ntp_clear(unsigned int tkid)
 u64 ntp_tick_length(unsigned int tkid)
 {
 	return tk_ntp_data[tkid].tick_length;
+}
+
+void ntp_set_tick_length(unsigned int tkid, u64 tick_length)
+{
+	struct ntp_data *ntpdata = &tk_ntp_data[tkid];
+	u64 base;
+
+	/*
+	 * Reverse ntp_update_frequency() to find the time_freq that
+	 * produces this tick_length, keeping everything consistent.
+	 *
+	 * tick_length = ((tick_usec * 1000 * USER_HZ) << 32 +
+	 *                ntp_tick_adj + time_freq) / NTP_INTERVAL_FREQ
+	 *
+	 * time_freq = tick_length * NTP_INTERVAL_FREQ -
+	 *             (tick_usec * 1000 * USER_HZ) << 32 - ntp_tick_adj
+	 */
+	base = (u64)(ntpdata->tick_usec * NSEC_PER_USEC * USER_HZ) << NTP_SCALE_SHIFT;
+	base += ntpdata->ntp_tick_adj;
+
+	ntpdata->time_freq = (s64)(tick_length * NTP_INTERVAL_FREQ - base);
+	ntp_update_frequency(ntpdata);
+}
+
+void ntp_set_time_offset(unsigned int tkid, s64 offset_ns)
+{
+	struct ntp_data *ntpdata = &tk_ntp_data[tkid];
+
+	ntpdata->time_offset = div_s64((s64)offset_ns << NTP_SCALE_SHIFT,
+				       NTP_INTERVAL_FREQ);
+	ntpdata->time_adjust = 0;
 }
 
 /**
@@ -736,6 +768,7 @@ static inline void process_adjtimex_modes(struct ntp_data *ntpdata, const struct
 		ntpdata->time_freq = max(ntpdata->time_freq, -MAXFREQ_SCALED);
 		/* Update pps_freq */
 		pps_set_freq(ntpdata);
+		timekeeping_clear_reference();
 	}
 
 	if (txc->modes & ADJ_MAXERROR)

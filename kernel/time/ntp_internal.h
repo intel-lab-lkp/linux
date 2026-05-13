@@ -7,6 +7,8 @@ extern bool ntp_synced(void);
 extern void ntp_clear(unsigned int tkid);
 /* Returns how long ticks are at present, in ns / 2^NTP_SCALE_SHIFT. */
 extern u64 ntp_tick_length(unsigned int tkid);
+extern void ntp_set_tick_length(unsigned int tkid, u64 length);
+extern void ntp_set_time_offset(unsigned int tkid, s64 offset_ns);
 extern ktime_t ntp_get_next_leap(unsigned int tkid);
 extern int second_overflow(unsigned int tkid, time64_t secs);
 extern int ntp_adjtimex(unsigned int tkid, struct __kernel_timex *txc, const struct timespec64 *ts,
