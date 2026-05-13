@@ -306,8 +306,10 @@ int qcomtee_object_user_init(struct qcomtee_object *object,
 		break;
 	case QCOMTEE_OBJECT_TYPE_CB:
 		object->ops = ops;
-		if (!object->ops->dispatch)
-			return -EINVAL;
+		if (!object->ops->dispatch) {
+			ret = -EINVAL;
+			goto out;
+		}
 
 		/* If failed, "no-name". */
 		object->name = kvasprintf_const(GFP_KERNEL, fmt, ap);
@@ -320,6 +322,8 @@ int qcomtee_object_user_init(struct qcomtee_object *object,
 	default:
 		ret = -EINVAL;
 	}
+
+out:
 	va_end(ap);
 
 	return ret;
