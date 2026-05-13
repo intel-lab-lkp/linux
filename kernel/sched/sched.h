@@ -412,6 +412,7 @@ extern void dl_server_update_idle(struct sched_dl_entity *dl_se, s64 delta_exec)
 extern void dl_server_update(struct sched_dl_entity *dl_se, s64 delta_exec);
 extern void dl_server_start(struct sched_dl_entity *dl_se);
 extern void dl_server_stop(struct sched_dl_entity *dl_se);
+extern void dl_servers_stop_all(struct rq *rq);
 extern void dl_server_init(struct sched_dl_entity *dl_se, struct rq *rq,
 		    dl_server_pick_f pick_task);
 extern void sched_init_dl_servers(void);
