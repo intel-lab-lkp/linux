@@ -674,19 +674,26 @@ static void mlx5e_ipsec_handle_netdev_event(struct work_struct *_work)
 	struct mlx5e_ipsec_sa_entry *sa_entry = work->sa_entry;
 	struct mlx5e_ipsec_netevent_data *data = work->data;
 	struct mlx5_accel_esp_xfrm_attrs *attrs;
+	u8 *mac;
 
 	attrs = &sa_entry->attrs;
 
 	switch (attrs->dir) {
 	case XFRM_DEV_OFFLOAD_IN:
-		ether_addr_copy(attrs->smac, data->addr);
+		mac = attrs->smac;
 		break;
 	case XFRM_DEV_OFFLOAD_OUT:
-		ether_addr_copy(attrs->dmac, data->addr);
+		mac = attrs->dmac;
 		break;
 	default:
 		WARN_ON_ONCE(true);
+		return;
 	}
+
+	if (ether_addr_equal(mac, data->addr) && !attrs->drop)
+		return;
+
+	ether_addr_copy(mac, data->addr);
 	attrs->drop = false;
 	mlx5e_accel_ipsec_fs_modify(sa_entry);
 }
