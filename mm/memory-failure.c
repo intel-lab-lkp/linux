@@ -1408,6 +1408,15 @@ try_again:
 				shake_page(p);
 				goto try_again;
 			}
+			/*
+			 * Return -EIO rather than -ENOTRECOVERABLE: this
+			 * branch is also reached for pages that are merely
+			 * off-LRU transiently (e.g. a folio in the middle
+			 * of migration or compaction), which shake_page()
+			 * cannot drag back.  The caller cannot prove the
+			 * page is permanently kernel-owned from here, so
+			 * keep it on the recoverable errno.
+			 */
 			ret = -EIO;
 			goto out;
 		}
@@ -1427,10 +1436,10 @@ try_again:
 			goto try_again;
 		}
 		put_page(p);
-		ret = -EIO;
+		ret = -ENOTRECOVERABLE;
 	}
 out:
-	if (ret == -EIO)
+	if (ret == -EIO || ret == -ENOTRECOVERABLE)
 		pr_err("%#lx: unhandlable page.\n", page_to_pfn(p));
 
 	return ret;
@@ -1487,7 +1496,10 @@ static int __get_unpoison_page(struct page *page)
  *         -EIO for pages on which we can not handle memory errors,
  *         -EBUSY when get_hwpoison_page() has raced with page lifecycle
  *         operations like allocation and free,
- *         -EHWPOISON when the page is hwpoisoned and taken off from buddy.
+ *         -EHWPOISON when the page is hwpoisoned and taken off from buddy,
+ *         -ENOTRECOVERABLE for stable kernel-owned pages the handler
+ *         cannot recover (PG_reserved, slab, vmalloc, page tables,
+ *         kernel stacks, and similar non-LRU/non-buddy pages).
  */
 static int get_hwpoison_page(struct page *p, unsigned long flags)
 {
