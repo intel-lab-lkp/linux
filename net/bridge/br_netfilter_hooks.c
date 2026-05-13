@@ -297,7 +297,13 @@ int br_nf_pre_routing_finish_bridge(struct net *net, struct sock *sk, struct sk_
 				goto free_skb;
 			}
 
-			neigh_hh_bridge(&neigh->hh, skb);
+			ret = neigh_hh_bridge(&neigh->hh, skb);
+			if (ret) {
+				neigh_release(neigh);
+				kfree_skb(skb);
+				return ret;
+			}
+
 			skb->dev = br_indev;
 
 			ret = br_handle_frame_finish(net, sk, skb);
