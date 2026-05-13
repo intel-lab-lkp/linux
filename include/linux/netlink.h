@@ -90,6 +90,13 @@ struct netlink_ext_ack {
 	char _msg_buf[NETLINK_MAX_FMTMSG_LEN];
 };
 
+#define __NL_SET_MSG(__extack, __msg) do {			\
+	if (__extack->_msg)					\
+		net_warn_ratelimited("overriding extack: %s",	\
+				     __extack->_msg);		\
+	__extack->_msg = __msg;					\
+} while (0)
+
 /* Always use this macro, this allows later putting the
  * message into a separate section or such for things
  * like translation or listing all possible messages.
@@ -102,7 +109,7 @@ struct netlink_ext_ack {
 	do_trace_netlink_extack(__msg);			\
 							\
 	if (__extack)					\
-		__extack->_msg = __msg;			\
+		__NL_SET_MSG(__extack, __msg);		\
 } while (0)
 
 /* We splice fmt with %s at each end even in the snprintf so that both calls
@@ -121,7 +128,7 @@ struct netlink_ext_ack {
 									       \
 	do_trace_netlink_extack(__extack->_msg_buf);			       \
 									       \
-	__extack->_msg = __extack->_msg_buf;				       \
+	__NL_SET_MSG(__extack, __extack->_msg_buf);			       \
 } while (0)
 
 #define NL_SET_ERR_MSG_MOD(extack, msg)			\
@@ -156,7 +163,7 @@ struct netlink_ext_ack {
 	do_trace_netlink_extack(__msg);				\
 								\
 	if (__extack) {						\
-		__extack->_msg = __msg;				\
+		__NL_SET_MSG(__extack, __msg);			\
 		__extack->bad_attr = (attr);			\
 		__extack->policy = (pol);			\
 	}							\
@@ -176,7 +183,7 @@ struct netlink_ext_ack {
 										\
 	do_trace_netlink_extack(__extack->_msg_buf);				\
 										\
-	__extack->_msg = __extack->_msg_buf;					\
+	__NL_SET_MSG(__extack, __extack->_msg_buf);				\
 	__extack->bad_attr = (attr);						\
 	__extack->policy = (pol);						\
 } while (0)
