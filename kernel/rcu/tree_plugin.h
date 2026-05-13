@@ -705,7 +705,8 @@ static bool rcu_unlock_needs_exp_handling(struct task_struct *t,
 	 * check because 't' might not be on the exp_tasks list at all - its
 	 * just a fast heuristic that can be false-positive sometimes.
 	 */
-	if (t->rcu_blocked_node && READ_ONCE(t->rcu_blocked_node->exp_tasks))
+	if (t->rcu_blocked_node &&
+	    (READ_ONCE(t->rcu_blocked_node->exp_tasks) || !list_empty(&rnp->dqs_blkd_tasks)))
 		return true;
 
 	/*
