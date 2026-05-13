@@ -496,6 +496,17 @@ intel_dp_aux_vesa_enable_backlight(const struct intel_crtc_state *crtc_state,
 	struct intel_panel *panel = &connector->panel;
 	struct intel_dp *intel_dp = enc_to_intel_dp(connector->encoder);
 
+	/*
+	 * In full AUX VESA mode the native PWM is never driven by us. If BIOS
+	 * left it enabled, the PCH PWM keeps the system alive and blocks
+	 * S0ix. Sanitize it once via pwm_funcs->disable.
+	 */
+	if (panel->backlight.edp.vesa.info.aux_enable &&
+	    panel->backlight.edp.vesa.info.aux_set &&
+	    panel->backlight.pwm_enabled)
+		panel->backlight.pwm_funcs->disable(conn_state,
+						    intel_backlight_invert_pwm_level(connector, 0));
+
 	if (!(panel->backlight.edp.vesa.info.aux_enable ||
 	      panel->backlight.edp.vesa.info.luminance_set)) {
 		u32 pwm_level;
@@ -558,15 +569,18 @@ static int intel_dp_aux_vesa_setup_backlight(struct intel_connector *connector, 
 				    panel->backlight.edp.vesa.info.luminance_set),
 		    backlight_unit_str(panel));
 
-	if (!panel->backlight.edp.vesa.info.aux_set ||
-	    !panel->backlight.edp.vesa.info.aux_enable) {
-		ret = panel->backlight.pwm_funcs->setup(connector, pipe);
-		if (ret < 0) {
-			drm_err(display->drm,
-				"[CONNECTOR:%d:%s] Failed to setup PWM backlight controls for eDP backlight: %d\n",
-				connector->base.base.id, connector->base.name, ret);
-			return ret;
-		}
+	/*
+	 * Always probe the native PWM HW state so panel->backlight.pwm_enabled
+	 * reflects what BIOS left behind. Required for the full-AUX VESA path
+	 * to detect and sanitize a BIOS-enabled PCH PWM that would otherwise
+	 * block S0ix.
+	 */
+	ret = panel->backlight.pwm_funcs->setup(connector, pipe);
+	if (ret < 0) {
+		drm_err(display->drm,
+			"[CONNECTOR:%d:%s] Failed to setup PWM backlight controls for eDP backlight: %d\n",
+			connector->base.base.id, connector->base.name, ret);
+		return ret;
 	}
 
 	if (panel->backlight.edp.vesa.info.luminance_set) {
