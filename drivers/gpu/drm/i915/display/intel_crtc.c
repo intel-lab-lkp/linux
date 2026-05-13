@@ -534,9 +534,8 @@ void intel_wait_for_vblank_workers(struct intel_atomic_state *state)
 {
 	struct intel_crtc_state *crtc_state;
 	struct intel_crtc *crtc;
-	int i;
 
-	for_each_new_intel_crtc_in_state(state, crtc, crtc_state, i) {
+	for_each_new_intel_crtc_in_state(state, crtc, crtc_state) {
 		if (!intel_crtc_needs_vblank_work(crtc_state))
 			continue;
 
@@ -828,10 +827,8 @@ bool intel_any_crtc_enable_changed(struct intel_atomic_state *state)
 {
 	const struct intel_crtc_state *old_crtc_state, *new_crtc_state;
 	struct intel_crtc *crtc;
-	int i;
 
-	for_each_oldnew_intel_crtc_in_state(state, crtc, old_crtc_state,
-					    new_crtc_state, i) {
+	for_each_oldnew_intel_crtc_in_state(state, crtc, old_crtc_state, new_crtc_state) {
 		if (intel_crtc_enable_changed(old_crtc_state, new_crtc_state))
 			return true;
 	}
@@ -849,10 +846,8 @@ bool intel_any_crtc_active_changed(struct intel_atomic_state *state)
 {
 	const struct intel_crtc_state *old_crtc_state, *new_crtc_state;
 	struct intel_crtc *crtc;
-	int i;
 
-	for_each_oldnew_intel_crtc_in_state(state, crtc, old_crtc_state,
-					    new_crtc_state, i) {
+	for_each_oldnew_intel_crtc_in_state(state, crtc, old_crtc_state, new_crtc_state) {
 		if (intel_crtc_active_changed(old_crtc_state, new_crtc_state))
 			return true;
 	}
