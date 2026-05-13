@@ -12,6 +12,42 @@ static bool arm64_rmi_is_available;
 unsigned long rmm_feat_reg0;
 unsigned long rmm_feat_reg1;
 
+int rmi_delegate_range(phys_addr_t phys, unsigned long size)
+{
+	unsigned long ret = 0;
+	unsigned long top = phys + size;
+	unsigned long out_top;
+
+	while (phys < top) {
+		ret = rmi_granule_range_delegate(phys, top, &out_top);
+		if (ret == RMI_SUCCESS)
+			phys = out_top;
+		else if (ret != RMI_BUSY && ret != RMI_BLOCKED)
+			return ret;
+	}
+
+	return ret;
+}
+
+int rmi_undelegate_range(phys_addr_t phys, unsigned long size)
+{
+	unsigned long ret = 0;
+	unsigned long top = phys + size;
+	unsigned long out_top;
+
+	WARN_ON(size == 0);
+
+	while (phys < top) {
+		ret = rmi_granule_range_undelegate(phys, top, &out_top);
+		if (ret == RMI_SUCCESS)
+			phys = out_top;
+		else if (ret != RMI_BUSY && ret != RMI_BLOCKED)
+			return ret;
+	}
+
+	return ret;
+}
+
 static int rmi_check_version(void)
 {
 	struct arm_smccc_res res;

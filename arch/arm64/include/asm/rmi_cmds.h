@@ -33,6 +33,19 @@ struct rmi_sro_state {
 } while (RMI_RETURN_STATUS(res.a0) == RMI_BUSY ||			\
 	 RMI_RETURN_STATUS(res.a0) == RMI_BLOCKED)
 
+int rmi_delegate_range(phys_addr_t phys, unsigned long size);
+int rmi_undelegate_range(phys_addr_t phys, unsigned long size);
+
+static inline int rmi_delegate_page(phys_addr_t phys)
+{
+	return rmi_delegate_range(phys, PAGE_SIZE);
+}
+
+static inline int rmi_undelegate_page(phys_addr_t phys)
+{
+	return rmi_undelegate_range(phys, PAGE_SIZE);
+}
+
 bool rmi_is_available(void);
 
 unsigned long rmi_sro_execute(struct rmi_sro_state *sro, gfp_t gfp);
