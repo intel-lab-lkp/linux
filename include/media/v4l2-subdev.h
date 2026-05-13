@@ -1816,6 +1816,8 @@ int v4l2_subdev_get_frame_desc_passthrough(struct v4l2_subdev *sd,
  * struct v4l2_mbus_frame_desc *desc __free(v4l2_subdev_free_frame_desc) =
  *	v4l2_subdev_get_frame_desc(sd, pad, desc);
  *
+ * The returned frame descriptor will contain at least one entry.
+ *
  * Return: The frame descriptor on success or a negative error code on failure.
  */
 struct v4l2_mbus_frame_desc *

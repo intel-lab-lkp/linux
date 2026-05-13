@@ -2702,6 +2702,11 @@ static int __v4l2_subdev_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad
 			return -EINVAL;
 		}
 
+		if (!desc->num_entries) {
+			dev_dbg(sd->dev, "no frame descriptor entries\n");
+			return -EINVAL;
+		}
+
 		return ret;
 	}
 
