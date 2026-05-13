@@ -35,6 +35,7 @@ struct rmi_sro_state {
 
 int rmi_delegate_range(phys_addr_t phys, unsigned long size);
 int rmi_undelegate_range(phys_addr_t phys, unsigned long size);
+int free_delegated_page(phys_addr_t phys);
 
 static inline int rmi_delegate_page(phys_addr_t phys)
 {
