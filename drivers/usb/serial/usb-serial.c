@@ -626,6 +626,19 @@ static void usb_serial_port_work(struct work_struct *work)
 	struct usb_serial_port *port =
 		container_of(work, struct usb_serial_port, work);
 
+	if (test_and_clear_bit(USB_SERIAL_RX_STALLED, &port->flags)) {
+		int i;
+
+		for (i = 0; i < ARRAY_SIZE(port->read_urbs); ++i)
+			usb_kill_urb(port->read_urbs[i]);
+
+		usb_clear_halt(port->serial->dev,
+			       usb_rcvbulkpipe(port->serial->dev,
+					       port->bulk_in_endpointAddress));
+
+		usb_serial_generic_submit_read_urbs(port, GFP_KERNEL);
+	}
+
 	tty_port_tty_wakeup(&port->port);
 }
 

@@ -20,6 +20,7 @@
 /* USB serial flags */
 #define USB_SERIAL_WRITE_BUSY	0
 #define USB_SERIAL_THROTTLED	1
+#define USB_SERIAL_RX_STALLED	2
 
 /**
  * usb_serial_port: structure for the specific ports of a device.

@@ -370,6 +370,7 @@ void usb_serial_generic_read_bulk_callback(struct urb *urb)
 	struct usb_serial_port *port = urb->context;
 	unsigned char *data = urb->transfer_buffer;
 	bool stopped = false;
+	bool stalled = false;
 	int status = urb->status;
 	int i;
 
@@ -394,9 +395,10 @@ void usb_serial_generic_read_bulk_callback(struct urb *urb)
 		stopped = true;
 		break;
 	case -EPIPE:
-		dev_err(&port->dev, "%s - urb stopped: %d\n",
-							__func__, status);
-		stopped = true;
+		dev_err(&port->dev, "%s - urb stalled: %d\n",
+			__func__, status);
+		set_bit(USB_SERIAL_RX_STALLED, &port->flags);
+		stalled = true;
 		break;
 	default:
 		dev_dbg(&port->dev, "%s - nonzero urb status: %d\n",
@@ -419,7 +421,9 @@ void usb_serial_generic_read_bulk_callback(struct urb *urb)
 	 */
 	smp_mb__after_atomic();
 
-	if (stopped)
+	if (stalled)
+		schedule_work(&port->work);
+	if (stopped || stalled)
 		return;
 
 	if (test_bit(USB_SERIAL_THROTTLED, &port->flags))
