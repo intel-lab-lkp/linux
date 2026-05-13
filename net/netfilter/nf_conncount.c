@@ -129,13 +129,13 @@ static bool get_ct_or_tuple_from_skb(struct net *net,
 				     struct nf_conn **ct,
 				     struct nf_conntrack_tuple *tuple,
 				     const struct nf_conntrack_zone **zone,
+				     enum ip_conntrack_info *ctinfo,
 				     bool *refcounted)
 {
 	const struct nf_conntrack_tuple_hash *h;
-	enum ip_conntrack_info ctinfo;
 	struct nf_conn *found_ct;
 
-	found_ct = nf_ct_get(skb, &ctinfo);
+	found_ct = nf_ct_get(skb, ctinfo);
 	if (found_ct && !nf_ct_is_template(found_ct)) {
 		*tuple = found_ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple;
 		*zone = nf_ct_zone(found_ct);
@@ -169,27 +169,22 @@ static int __nf_conncount_add(struct net *net,
 	const struct nf_conntrack_tuple_hash *found;
 	struct nf_conncount_tuple *conn, *conn_n;
 	struct nf_conntrack_tuple tuple;
+	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct = NULL;
 	struct nf_conn *found_ct;
 	unsigned int collect = 0;
 	bool refcounted = false;
 	int err = 0;
 
-	if (!get_ct_or_tuple_from_skb(net, skb, l3num, &ct, &tuple, &zone, &refcounted))
+	if (!get_ct_or_tuple_from_skb(net, skb, l3num, &ct, &tuple, &zone, &ctinfo, &refcounted))
 		return -ENOENT;
 
 	if (ct && nf_ct_is_confirmed(ct)) {
-		/* local connections are confirmed in postrouting so confirmation
-		 * might have happened before hitting connlimit
-		 */
-		if (skb->skb_iif != LOOPBACK_IFINDEX) {
+		if (test_bit(IPS_ASSURED_BIT, &ct->status) || ctinfo == IP_CT_ESTABLISHED) {
 			err = -EEXIST;
 			goto out_put;
 		}
 
-		/* this is likely a local connection, skip optimization to avoid
-		 * adding duplicates from a 'packet train'
-		 */
 		goto check_connections;
 	}
 
@@ -408,6 +403,7 @@ insert_tree(struct net *net,
 	struct nf_conntrack_tuple tuple;
 	struct nf_conncount_tuple *conn;
 	struct nf_conncount_rb *rbconn;
+	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct = NULL;
 
 	spin_lock_bh(&nf_conncount_locks[hash]);
@@ -451,7 +447,7 @@ restart:
 		goto restart;
 	}
 
-	if (get_ct_or_tuple_from_skb(net, skb, l3num, &ct, &tuple, &zone, &refcounted)) {
+	if (get_ct_or_tuple_from_skb(net, skb, l3num, &ct, &tuple, &zone, &ctinfo, &refcounted)) {
 		/* expected case: match, insert new node */
 		rbconn = kmem_cache_alloc(conncount_rb_cachep, GFP_ATOMIC);
 		if (rbconn == NULL)
