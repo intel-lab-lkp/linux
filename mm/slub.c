@@ -3269,9 +3269,16 @@ static inline struct slab *alloc_slab_page(gfp_t flags, int node,
 	struct slab *slab;
 	unsigned int order = oo_order(oo);
 
+	/*
+	 * New slab pages are immediately poisoned by kasan_poison_slab()
+	 * before any object is handed out, so page allocator unpoisoning
+	 * is wasted work for HW_TAGS KASAN.
+	 */
+	flags |= __GFP_SKIP_KASAN;
+
 	if (unlikely(!allow_spin))
-		page = alloc_frozen_pages_nolock(0/* __GFP_COMP is implied */,
-								  node, order);
+		page = alloc_frozen_pages_nolock(__GFP_SKIP_KASAN,
+						 node, order);
 	else if (node == NUMA_NO_NODE)
 		page = alloc_frozen_pages(flags, order);
 	else
