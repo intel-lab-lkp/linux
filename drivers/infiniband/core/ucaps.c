@@ -51,7 +51,7 @@ static const struct file_operations ucaps_cdev_fops = {
  *
  * This is called once, when removing the ib_uverbs module.
  */
-void ib_cleanup_ucaps(void)
+static int ib_cleanup_ucaps(void)
 {
 	mutex_lock(&ucaps_mutex);
 	if (!ucaps_class_is_registered) {
@@ -66,6 +66,7 @@ void ib_cleanup_ucaps(void)
 	ucaps_class_is_registered = false;
 	unregister_chrdev_region(ucaps_base_dev, RDMA_UCAP_MAX);
 	mutex_unlock(&ucaps_mutex);
+	return 0;
 }
 
 static int get_ucap_from_devt(dev_t devt, u64 *idx_mask)
@@ -265,3 +266,6 @@ end:
 	mutex_unlock(&ucaps_mutex);
 	return ret;
 }
+EXPORT_SYMBOL_NS_GPL(ib_get_ucaps, "rdma_core");
+
+module_init(ib_cleanup_ucaps);
