@@ -408,9 +408,58 @@ static void rkvdec_hevc_prepare_hw_st_rps(struct rkvdec_hevc_run *run, struct rk
 	memcpy(cache, run->ext_sps_st_rps, sizeof(struct v4l2_ctrl_hevc_ext_sps_st_rps));
 }
 
+/*
+ * V4L2 caps the EXT_SPS RPS payload length but not the SPS-derived counts
+ * that the helpers walk. Caps match the HEVC spec ranges.
+ */
+#define RKVDEC_HEVC_MAX_SHORT_TERM_REF_PIC_SETS	64
+#define RKVDEC_HEVC_MAX_LONG_TERM_REF_PICS_SPS	32
+#define RKVDEC_HEVC_MAX_RPS_NEG_POS_PICS	16
+
+static int rkvdec_hevc_validate_rps_ctrls(struct rkvdec_hevc_run *run)
+{
+	const struct v4l2_ctrl_hevc_sps *sps = run->sps;
+
+	if (run->ext_sps_lt_rps &&
+	    sps->num_long_term_ref_pics_sps >
+	    RKVDEC_HEVC_MAX_LONG_TERM_REF_PICS_SPS)
+		return -EINVAL;
+
+	if (run->ext_sps_st_rps) {
+		unsigned int i;
+
+		if (sps->num_short_term_ref_pic_sets >
+		    RKVDEC_HEVC_MAX_SHORT_TERM_REF_PIC_SETS)
+			return -EINVAL;
+
+		for (i = 0; i < sps->num_short_term_ref_pic_sets; i++) {
+			const struct v4l2_ctrl_hevc_ext_sps_st_rps *r =
+				&run->ext_sps_st_rps[i];
+
+			if (r->num_negative_pics >
+			    RKVDEC_HEVC_MAX_RPS_NEG_POS_PICS ||
+			    r->num_positive_pics >
+			    RKVDEC_HEVC_MAX_RPS_NEG_POS_PICS)
+				return -EINVAL;
+
+			if ((r->flags &
+			     V4L2_HEVC_EXT_SPS_ST_RPS_FLAG_INTER_REF_PIC_SET_PRED) &&
+			    (unsigned int)r->delta_idx_minus1 + 1 > i)
+				return -EINVAL;
+		}
+	}
+
+	return 0;
+}
+
 void rkvdec_hevc_assemble_hw_rps(struct rkvdec_hevc_run *run, struct rkvdec_rps *rps,
 				 struct v4l2_ctrl_hevc_ext_sps_st_rps *st_cache)
 {
+	if (rkvdec_hevc_validate_rps_ctrls(run)) {
+		pr_err_ratelimited("rkvdec: rejecting HEVC SPS/RPS controls with out-of-range counts\n");
+		return;
+	}
+
 	rkvdec_hevc_prepare_hw_st_rps(run, rps, st_cache);
 	rkvdec_hevc_assemble_hw_lt_rps(run, rps);
 }
