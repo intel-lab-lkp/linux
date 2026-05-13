@@ -291,7 +291,7 @@ rust-analyzer
 ``rust-analyzer`` 需要一个配置文件， ``rust-project.json``, 它可以由 ``rust-analyzer``
 Make 目标生成::
 
-       make LLVM=1 rust-analyzer
+       make LLVM=1 prepare rust-analyzer
 
 
 配置
