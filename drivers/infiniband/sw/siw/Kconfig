@@ -18,3 +18,21 @@ config RDMA_SIW
 	space verbs API, libibverbs. To implement RDMA over
 	TCP/IP, the driver further interfaces with the Linux
 	in-kernel TCP socket layer.
+
+config SIW_MPA_RX_KUNIT_TEST
+	bool "KUnit tests for Soft-iWARP MPA receive parsing" if !KUNIT_ALL_TESTS
+	depends on KUNIT && RDMA_SIW
+	default KUNIT_ALL_TESTS
+	help
+	  Build KUnit regression tests for the Soft-iWARP MPA receive
+	  state machine. The tests cover the MPA length consistency
+	  check in siw_get_hdr(): malformed FPDUs whose mpa_len is
+	  below the opcode's fixed DDP/RDMAP header must be rejected
+	  with TERM(LLP/MPA/FPDU_START); the minimum-valid mpa_len
+	  (zero-length WRITE) must still be accepted. One case drives
+	  the real kernel TCP receive path via a loopback socketpair
+	  so the same softirq sk_data_ready -> tcp_read_sock ->
+	  siw_tcp_rx_data chain a remote peer would exercise is
+	  covered.
+
+	  If unsure, say N.

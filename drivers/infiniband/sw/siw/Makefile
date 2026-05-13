@@ -9,3 +9,5 @@ siw-y := \
 	siw_qp_tx.o \
 	siw_qp_rx.o \
 	siw_verbs.o
+
+siw-$(CONFIG_SIW_MPA_RX_KUNIT_TEST) += siw_mpa_rx_kunit.o
