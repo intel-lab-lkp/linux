@@ -425,6 +425,14 @@ static int elan_query_device_parameters(struct elan_tp_data *data)
 		if (error)
 			return error;
 	}
+
+	if (unlikely(x_traces == 0 || y_traces == 0)) {
+		dev_err(&client->dev,
+			"Invalid trace numbers: x=%u, y=%u\n",
+			x_traces, y_traces);
+		return -EINVAL;
+	}
+
 	data->width_x = data->max_x / x_traces;
 	data->width_y = data->max_y / y_traces;
 
@@ -440,6 +448,14 @@ static int elan_query_device_parameters(struct elan_tp_data *data)
 		data->x_res = elan_convert_resolution(hw_x_res, data->pattern);
 		data->y_res = elan_convert_resolution(hw_y_res, data->pattern);
 	} else {
+
+		if (unlikely(x_mm == 0 || y_mm == 0)) {
+			dev_err(&client->dev,
+				"Invalid physical dimensions: x_mm=%u, y_mm=%u\n",
+				x_mm, y_mm);
+			return -EINVAL;
+		}
+
 		data->x_res = (data->max_x + 1) / x_mm;
 		data->y_res = (data->max_y + 1) / y_mm;
 	}
