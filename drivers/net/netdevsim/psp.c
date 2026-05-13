@@ -268,6 +268,8 @@ int nsim_psp_init(struct netdevsim *ns)
 	struct dentry *ddir = ns->nsim_dev_port->ddir;
 	struct psp_dev *psd;
 
+	u64_stats_init(&ns->psp.syncp);
+
 	psd = psp_dev_create(ns->netdev, &nsim_psp_ops, &nsim_psp_caps, ns);
 	if (IS_ERR(psd))
 		return PTR_ERR(psd);
