@@ -36,6 +36,9 @@
 #define  VFHTDECR2_MLO			GENMASK(26, 24)
 #define  VFHTDECR2_MFO			GENMASK(28, 27)
 
+#define NETC_FDBHTCAPR			0x2020
+#define  FDBHTCAPR_NUM_GMAC		GENMASK(8, 0)
+
 /* Definition of Switch port registers */
 #define NETC_PCAPR			0x0000
 #define  PCAPR_LINK_TYPE		BIT(4)
@@ -66,6 +69,9 @@
 #define  PQOSMR_DIPV			GENMASK(6, 4)
 #define  PQOSMR_VQMP			GENMASK(19, 16)
 #define  PQOSMR_QVMP			GENMASK(23, 20)
+
+#define NETC_PIPFCR			0x0084
+#define  PIPFCR_EN			BIT(0)
 
 #define NETC_POR			0x100
 #define  POR_TXDIS			BIT(0)
@@ -121,6 +127,14 @@ enum netc_mfo {
 #define  BPDVR_RXTAGA			GENMASK(23, 20)
 #define  BPDVR_RXVAM			BIT(24)
 #define  BPDVR_TXTAGA			GENMASK(26, 25)
+
+#define NETC_BPSTGSR			0x520
+
+enum netc_stg_stage {
+	NETC_STG_STATE_DISABLED = 0,
+	NETC_STG_STATE_LEARNING,
+	NETC_STG_STATE_FORWARDING,
+};
 
 /* Definition of Switch ethernet MAC port registers */
 #define NETC_PMAC_OFFSET		0x400
