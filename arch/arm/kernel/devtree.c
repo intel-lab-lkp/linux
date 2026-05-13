@@ -93,7 +93,7 @@ void __init arm_dt_init_cpu_maps(void)
 		 */
 		if (hwid & ~MPIDR_HWID_BITMASK) {
 			of_node_put(cpu);
-			return;
+			goto out_put_cpus;
 		}
 
 		/*
@@ -107,7 +107,7 @@ void __init arm_dt_init_cpu_maps(void)
 			if (WARN(tmp_map[j] == hwid,
 				 "Duplicate /cpu reg properties in the DT\n")) {
 				of_node_put(cpu);
-				return;
+				goto out_put_cpus;
 			}
 
 		/*
@@ -149,7 +149,7 @@ void __init arm_dt_init_cpu_maps(void)
 
 	if (!bootcpu_valid) {
 		pr_warn("DT missing boot CPU MPIDR[23:0], fall back to default cpu_logical_map\n");
-		return;
+		goto out_put_cpus;
 	}
 
 	/*
@@ -162,6 +162,9 @@ void __init arm_dt_init_cpu_maps(void)
 		cpu_logical_map(i) = tmp_map[i];
 		pr_debug("cpu logical map 0x%x\n", cpu_logical_map(i));
 	}
+
+out_put_cpus:
+	of_node_put(cpus);
 }
 
 bool arch_match_cpu_phys_id(int cpu, u64 phys_id)
