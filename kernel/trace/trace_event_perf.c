@@ -497,7 +497,14 @@ static int perf_ftrace_function_register(struct perf_event *event)
 static int perf_ftrace_function_unregister(struct perf_event *event)
 {
 	struct ftrace_ops *ops = &event->ftrace_ops;
-	int ret = unregister_ftrace_function(ops);
+	int ret;
+
+	if (!(ops->flags & FTRACE_OPS_FL_ENABLED)) {
+		ftrace_free_filter(ops);
+		return 0;
+	}
+
+	ret = unregister_ftrace_function(ops);
 	ftrace_free_filter(ops);
 	return ret;
 }
