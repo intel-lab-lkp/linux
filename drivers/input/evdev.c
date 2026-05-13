@@ -235,10 +235,8 @@ static void __pass_event(struct evdev_client *client,
 		client->packet_head = client->tail;
 	}
 
-	if (event->type == EV_SYN && event->code == SYN_REPORT) {
+	if (event->type == EV_SYN && event->code == SYN_REPORT)
 		client->packet_head = client->head;
-		kill_fasync(&client->fasync, SIGIO, POLL_IN);
-	}
 }
 
 static void evdev_pass_values(struct evdev_client *client,
@@ -280,9 +278,11 @@ static void evdev_pass_values(struct evdev_client *client,
 
 	spin_unlock(&client->buffer_lock);
 
-	if (wakeup)
+	if (wakeup) {
+		kill_fasync(&client->fasync, SIGIO, POLL_IN);
 		wake_up_interruptible_poll(&client->wait,
 			EPOLLIN | EPOLLOUT | EPOLLRDNORM | EPOLLWRNORM);
+	}
 }
 
 /*
