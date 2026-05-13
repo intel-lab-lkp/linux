@@ -272,7 +272,8 @@ static inline u16 mm_global_asid(struct mm_struct *mm)
 {
 	u16 asid;
 
-	if (!cpu_feature_enabled(X86_FEATURE_INVLPGB))
+	if (!cpu_feature_enabled(X86_FEATURE_INVLPGB) ||
+	    !cpu_feature_enabled(X86_FEATURE_PCID))
 		return 0;
 
 	asid = smp_load_acquire(&mm->context.global_asid);
