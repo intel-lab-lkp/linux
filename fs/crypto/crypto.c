@@ -209,6 +209,44 @@ struct page *fscrypt_encrypt_pagecache_blocks(struct folio *folio,
 EXPORT_SYMBOL(fscrypt_encrypt_pagecache_blocks);
 
 /**
+ * fscrypt_encrypt_data_unit_inplace() - Encrypt a data unit in-place
+ * @inode: The inode to which this data unit belongs
+ * @page:  The page containing the data unit to encrypt
+ * @len:   Size of data unit to encrypt.  This must be a multiple of
+ *	   FSCRYPT_CONTENTS_ALIGNMENT.
+ * @offs:  Byte offset within @page at which the data unit begins
+ * @index: Fscrypt data unit index within the file
+ *
+ * Return: 0 on success; -errno on failure
+ */
+int fscrypt_encrypt_data_unit_inplace(const struct inode *inode,
+				      struct page *page, unsigned int len,
+				      unsigned int offs, u64 index)
+{
+	const struct fscrypt_inode_info *ci = fscrypt_get_inode_info_raw(inode);
+
+	if (!fscrypt_inode_supports_data_unit_inplace(inode))
+		return -EOPNOTSUPP;
+
+	return fscrypt_crypt_data_unit(ci, FS_ENCRYPT, index, page, page, len,
+				       offs);
+}
+EXPORT_SYMBOL(fscrypt_encrypt_data_unit_inplace);
+
+bool fscrypt_inode_supports_data_unit_inplace(const struct inode *inode)
+{
+	const struct fscrypt_inode_info *ci = fscrypt_get_inode_info_raw(inode);
+
+	if (!IS_ENABLED(CONFIG_FS_ENCRYPTION_INLINE_CRYPT))
+		return false;
+	if (!ci)
+		return false;
+	/* pairs with smp_store_release() in fscrypt_prepare_software_key() */
+	return smp_load_acquire(&ci->ci_enc_key.tfm);
+}
+EXPORT_SYMBOL(fscrypt_inode_supports_data_unit_inplace);
+
+/**
  * fscrypt_encrypt_block_inplace() - Encrypt a filesystem block in-place
  * @inode:     The inode to which this block belongs
  * @page:      The page containing the block to encrypt
@@ -281,6 +319,31 @@ int fscrypt_decrypt_pagecache_blocks(struct folio *folio, size_t len,
 	return 0;
 }
 EXPORT_SYMBOL(fscrypt_decrypt_pagecache_blocks);
+
+/**
+ * fscrypt_decrypt_data_unit_inplace() - Decrypt a data unit in-place
+ * @inode: The inode to which this data unit belongs
+ * @page:  The page containing the data unit to decrypt
+ * @len:   Size of data unit to decrypt.  This must be a multiple of
+ *	   FSCRYPT_CONTENTS_ALIGNMENT.
+ * @offs:  Byte offset within @page at which the data unit begins
+ * @index: Fscrypt data unit index within the file
+ *
+ * Return: 0 on success; -errno on failure
+ */
+int fscrypt_decrypt_data_unit_inplace(const struct inode *inode,
+				      struct page *page, unsigned int len,
+				      unsigned int offs, u64 index)
+{
+	const struct fscrypt_inode_info *ci = fscrypt_get_inode_info_raw(inode);
+
+	if (!fscrypt_inode_supports_data_unit_inplace(inode))
+		return -EOPNOTSUPP;
+
+	return fscrypt_crypt_data_unit(ci, FS_DECRYPT, index, page, page, len,
+				       offs);
+}
+EXPORT_SYMBOL(fscrypt_decrypt_data_unit_inplace);
 
 /**
  * fscrypt_decrypt_block_inplace() - Decrypt a filesystem block in-place
