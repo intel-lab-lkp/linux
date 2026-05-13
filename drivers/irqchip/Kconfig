@@ -191,9 +191,9 @@ config FARADAY_FTINTC010
 	select SPARSE_IRQ
 
 config HISILICON_IRQ_MBIGEN
-	bool
-	select ARM_GIC_V3
-	select ARM_GIC_V3_ITS
+	bool "HiSilicon MBIGEN interrupt controller"
+	depends on ARCH_HISI || COMPILE_TEST
+	select GENERIC_MSI_IRQ
 
 config IMGPDC_IRQ
 	bool
