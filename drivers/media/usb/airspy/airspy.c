@@ -584,12 +584,14 @@ static void airspy_stop_streaming(struct vb2_queue *vq)
 
 	mutex_lock(&s->v4l2_lock);
 
-	/* stop hardware streaming */
-	airspy_ctrl_msg(s, CMD_RECEIVER_MODE, 0, 0, NULL, 0);
+	if (s->udev) {
+		/* stop hardware streaming */
+		airspy_ctrl_msg(s, CMD_RECEIVER_MODE, 0, 0, NULL, 0);
 
-	airspy_kill_urbs(s);
-	airspy_free_urbs(s);
-	airspy_free_stream_bufs(s);
+		airspy_kill_urbs(s);
+		airspy_free_urbs(s);
+		airspy_free_stream_bufs(s);
+	}
 
 	airspy_cleanup_queued_bufs(s);
 
