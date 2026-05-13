@@ -674,6 +674,7 @@ struct sas_domain_function_template {
 	/* GPIO support */
 	int (*lldd_write_gpio)(struct sas_ha_struct *, u8 reg_type,
 			       u8 reg_index, u8 reg_count, u8 *write_data);
+	void (*lldd_dev_info_update)(struct domain_device *dev);
 };
 
 extern int sas_register_ha(struct sas_ha_struct *);
