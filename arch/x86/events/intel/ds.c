@@ -973,17 +973,24 @@ void release_ds_buffers(void)
 	if (!x86_pmu.bts && !x86_pmu.ds_pebs)
 		return;
 
-	for_each_possible_cpu(cpu)
-		release_ds_buffer(cpu);
-
 	for_each_possible_cpu(cpu) {
 		/*
-		 * Again, ignore errors from offline CPUs, they will no longer
-		 * observe cpu_hw_events.ds and not program the DS_AREA when
-		 * they come up.
+		 * Clear MSR_IA32_DS_AREA BEFORE NULLing hwev->ds.
+		 * fini_debug_store_on_cpu() checks hwev->ds and bails
+		 * if it's NULL, so calling release_ds_buffer() first
+		 * would prevent the MSR from being cleared. That leaves
+		 * the hardware writing into CEA pages that get unmapped
+		 * below, causing asynchronous page faults at random RIPs.
+		 *
+		 * Ignore errors from offline CPUs, they will no longer
+		 * observe cpu_hw_events.ds and not program the DS_AREA
+		 * when they come up.
 		 */
 		fini_debug_store_on_cpu(cpu);
 	}
+
+	for_each_possible_cpu(cpu)
+		release_ds_buffer(cpu);
 
 	for_each_possible_cpu(cpu) {
 		if (x86_pmu.ds_pebs)
