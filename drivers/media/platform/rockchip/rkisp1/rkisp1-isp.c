@@ -8,6 +8,7 @@
  * Copyright (C) 2017 Rockchip Electronics Co., Ltd.
  */
 
+#include <linux/cleanup.h>
 #include <linux/iopoll.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
@@ -87,7 +88,8 @@ static int rkisp1_gasket_enable(struct rkisp1_device *rkisp1,
 				struct media_pad *source)
 {
 	struct v4l2_subdev *source_sd;
-	struct v4l2_mbus_frame_desc fd;
+	struct v4l2_mbus_frame_desc *fd = __free(v4l2_subdev_free_frame_desc) =
+		NULL;
 	unsigned int dt;
 	u32 mask;
 	u32 val;
@@ -101,8 +103,8 @@ static int rkisp1_gasket_enable(struct rkisp1_device *rkisp1,
 	 */
 
 	source_sd = media_entity_to_v4l2_subdev(source->entity);
-	ret = v4l2_subdev_call(source_sd, pad, get_frame_desc,
-			       source->index, &fd);
+	fd = v4l2_subdev_get_frame_desc(source_sd, source->index,
+					V4L2_MBUS_FRAME_DESC_TYPE_CSI2);
 	if (ret) {
 		dev_err(rkisp1->dev,
 			"failed to get frame descriptor from '%s':%u: %d\n",
@@ -110,13 +112,13 @@ static int rkisp1_gasket_enable(struct rkisp1_device *rkisp1,
 		return ret;
 	}
 
-	if (fd.num_entries != 1) {
+	if (fd->num_entries != 1) {
 		dev_err(rkisp1->dev, "invalid frame descriptor for '%s':%u\n",
 			source_sd->name, 0);
 		return -EINVAL;
 	}
 
-	dt = fd.entry[0].bus.csi2.dt;
+	dt = fd->entry[0].bus.csi2.dt;
 
 	if (rkisp1->gasket_id == 0) {
 		mask = ISP_DEWARP_CONTROL_MIPI_CSI1_HS_POLARITY
