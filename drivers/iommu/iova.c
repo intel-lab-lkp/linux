@@ -210,18 +210,29 @@ iova_insert_rbtree(struct iova_domain *iovad, struct iova *iova,
 }
 
 /*
- * Search the augmented rbtree for the highest-addressed free gap of at least
- * @size pages, with the allocation fitting below @limit_pfn and at or above
- * @start_pfn. When @is_32bit, prune by the 32-bit-clamped subtree max so
- * that 32-bit-restricted allocations on a domain dominated by high-pfn
+ * Search the augmented rbtree for the highest-addressed free gap that fits
+ * @size pages with @align_mask alignment, below @limit_pfn and at or above
+ * @start_pfn.
+ *
+ * @prune_size is the threshold compared against the augmented subtree max:
+ *   - If @prune_size == @size, every subtree containing any size-fitting
+ *     gap is descended (lax search; can visit O(n) nodes when alignment or
+ *     limit_pfn rejects most candidates).
+ *   - If @prune_size == @size + alignment - 1, only subtrees containing a
+ *     gap big enough to GUARANTEE an aligned fit are descended (strict
+ *     search; O(log n) but may miss borderline-sized fortuitously aligned
+ *     gaps).
+ *
+ * When @is_32bit, prune by the 32-bit-clamped subtree max so that
+ * 32-bit-restricted allocations on a domain dominated by high-pfn
  * allocations stay O(log n) instead of degrading to O(n). Returns the node
  * whose gap_to_prev is used, or NULL.
  */
 static struct rb_node *
 __iova_search_free_gap(struct rb_node *node, unsigned long size,
-		       unsigned long limit_pfn, unsigned long start_pfn,
-		       unsigned long align_mask, bool is_32bit,
-		       unsigned long *new_pfn)
+		       unsigned long prune_size, unsigned long limit_pfn,
+		       unsigned long start_pfn, unsigned long align_mask,
+		       bool is_32bit, unsigned long *new_pfn)
 {
 	struct iova *iova;
 	struct rb_node *result;
@@ -233,11 +244,12 @@ __iova_search_free_gap(struct rb_node *node, unsigned long size,
 	iova = to_iova(node);
 	subtree_max = is_32bit ? iova->__subtree_max_gap32
 			       : iova->__subtree_max_gap;
-	if (subtree_max < size)
+	if (subtree_max < prune_size)
 		return NULL;
 
-	result = __iova_search_free_gap(node->rb_right, size, limit_pfn,
-					start_pfn, align_mask, is_32bit, new_pfn);
+	result = __iova_search_free_gap(node->rb_right, size, prune_size,
+					limit_pfn, start_pfn, align_mask,
+					is_32bit, new_pfn);
 	if (result)
 		return result;
 
@@ -257,8 +269,9 @@ __iova_search_free_gap(struct rb_node *node, unsigned long size,
 		}
 	}
 
-	return __iova_search_free_gap(node->rb_left, size, limit_pfn,
-				      start_pfn, align_mask, is_32bit, new_pfn);
+	return __iova_search_free_gap(node->rb_left, size, prune_size,
+				      limit_pfn, start_pfn, align_mask,
+				      is_32bit, new_pfn);
 }
 
 static int __alloc_and_insert_iova_range(struct iova_domain *iovad,
@@ -268,11 +281,24 @@ static int __alloc_and_insert_iova_range(struct iova_domain *iovad,
 	unsigned long flags;
 	unsigned long new_pfn;
 	unsigned long align_mask = ~0UL;
+	unsigned long strict_size = size;
 	struct rb_node *gap_node;
 	bool is_32bit;
 
-	if (size_aligned)
-		align_mask <<= fls_long(size - 1);
+	if (size_aligned) {
+		unsigned long align_shift = fls_long(size - 1);
+
+		align_mask <<= align_shift;
+		/*
+		 * For an A-aligned allocation of S pages, a gap of size G is
+		 * guaranteed to contain a fitting aligned position iff
+		 * G >= S + A - 1. Use that as the strict pruning threshold for
+		 * a fast O(log n) first pass; if it fails, fall back to a
+		 * pruning threshold of just S to catch fortuitously-aligned
+		 * borderline gaps.
+		 */
+		strict_size = size + (1UL << align_shift) - 1;
+	}
 
 	spin_lock_irqsave(&iovad->iova_rbtree_lock, flags);
 	is_32bit = limit_pfn <= iovad->dma_32bit_pfn;
@@ -280,8 +306,15 @@ static int __alloc_and_insert_iova_range(struct iova_domain *iovad,
 		goto iova32_full;
 
 	gap_node = __iova_search_free_gap(iovad->rbroot.rb_node, size,
-					  limit_pfn, iovad->start_pfn,
-					  align_mask, is_32bit, &new_pfn);
+					  strict_size, limit_pfn,
+					  iovad->start_pfn, align_mask,
+					  is_32bit, &new_pfn);
+	if (!gap_node && strict_size > size) {
+		gap_node = __iova_search_free_gap(iovad->rbroot.rb_node, size,
+						  size, limit_pfn,
+						  iovad->start_pfn, align_mask,
+						  is_32bit, &new_pfn);
+	}
 	if (!gap_node) {
 		if (is_32bit)
 			iovad->max32_alloc_size = size;
