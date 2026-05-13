@@ -93,6 +93,8 @@ struct kvm_arch {
 
 	/* KVM_CAP_RISCV_MP_STATE_RESET */
 	bool mp_state_reset;
+
+	struct kvm_mmu_memory_cache split_page_cache;
 };
 
 struct kvm_cpu_trap {
