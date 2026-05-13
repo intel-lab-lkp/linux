@@ -242,10 +242,11 @@ void intel_cmtg_sanitize(struct intel_display *display)
 
 bool intel_cmtg_is_allowed(const struct intel_crtc_state *crtc_state)
 {
-	struct intel_display *display = to_intel_display(crtc_state);
+	//struct intel_display *display = to_intel_display(crtc_state);
 
-	if (intel_cmtg_is_supported(crtc_state) &&
-	    intel_display_power_get_current_dc_state(display) == DC_STATE_EN_DC3CO)
+	//if (intel_cmtg_is_supported(crtc_state) &&
+	//    intel_display_power_get_current_dc_state(display) == DC_STATE_EN_DC3CO)
+	if (intel_cmtg_is_supported(crtc_state))
 		return true;
 
 	return false;
@@ -331,6 +332,14 @@ void intel_cmtg_set_timings(const struct intel_crtc_state *crtc_state, bool lrr)
 		       VSYNC_END(adjusted_mode->crtc_vsync_end - 1));
 	intel_de_write(display, TRANS_SET_CONTEXT_LATENCY(display, cmtg_transcoder),
 		       crtc_state->set_context_latency);
+
+	drm_dbg_kms(display->drm, "0x%x\n", INTEL_DISPLAY_DEVICE_TRANS_OFFSET(display, cmtg_transcoder));
+	drm_dbg_kms(display->drm, "0x%x\n", TRANS_HTOTAL(display, cmtg_transcoder).reg);
+	drm_dbg_kms(display->drm, "0x%x\n", TRANS_HBLANK(display, cmtg_transcoder).reg);
+	drm_dbg_kms(display->drm, "0x%x\n", TRANS_HSYNC(display, cmtg_transcoder).reg);
+	drm_dbg_kms(display->drm, "0x%x\n", TRANS_VTOTAL(display, cmtg_transcoder).reg);
+	drm_dbg_kms(display->drm, "0x%x\n", TRANS_VBLANK(display, cmtg_transcoder).reg);
+	drm_dbg_kms(display->drm, "0x%x\n", TRANS_VSYNC(display, cmtg_transcoder).reg);
 }
 
 void intel_cmtg_set_vrr_timings(const struct intel_crtc_state *crtc_state)
@@ -345,6 +354,10 @@ void intel_cmtg_set_vrr_timings(const struct intel_crtc_state *crtc_state)
 	intel_de_write(display, TRANS_VRR_VMAX(display, cmtg_transcoder), crtc_state->vrr.vmax - 1);
 	intel_de_write(display, TRANS_VRR_FLIPLINE(display, cmtg_transcoder),
 		       crtc_state->vrr.flipline - 1);
+
+	drm_dbg_kms(display->drm, "0x%x, 0x%x\n", TRANS_VRR_VMIN(display, cmtg_transcoder).reg, crtc_state->vrr.vmin - 1);
+	drm_dbg_kms(display->drm, "0x%x, 0x%x\n", TRANS_VRR_VMAX(display, cmtg_transcoder).reg, crtc_state->vrr.vmax - 1);
+	drm_dbg_kms(display->drm, "0x%x, 0x%x\n", TRANS_VRR_FLIPLINE(display, cmtg_transcoder).reg, crtc_state->vrr.flipline - 1);
 }
 
 void intel_cmtg_set_vrr_ctl(const struct intel_crtc_state *crtc_state)
@@ -364,6 +377,7 @@ void intel_cmtg_set_vrr_ctl(const struct intel_crtc_state *crtc_state)
 		vrr_ctl |= VRR_CTL_CMRR_ENABLE;
 
 	intel_de_write(display, TRANS_VRR_CTL(display, cmtg_transcoder), vrr_ctl);
+	drm_dbg_kms(display->drm, "0x%x, 0x%x\n", TRANS_VRR_CTL(display, cmtg_transcoder).reg, vrr_ctl);
 }
 
 void intel_cmtg_set_m_n(const struct intel_crtc_state *crtc_state)
@@ -377,6 +391,8 @@ void intel_cmtg_set_m_n(const struct intel_crtc_state *crtc_state)
 
 	intel_de_write(display, PIPE_DATA_M1(display, cmtg_transcoder), m_n->link_m);
 	intel_de_write(display, PIPE_DATA_N1(display, cmtg_transcoder), m_n->link_n);
+	drm_dbg_kms(display->drm, "0x%x, 0x%x\n", PIPE_DATA_M1(display, cmtg_transcoder).reg, m_n->link_m);
+	drm_dbg_kms(display->drm, "0x%x, 0x%x\n", PIPE_DATA_N1(display, cmtg_transcoder).reg, m_n->link_n);
 }
 
 void intel_cmtg_enable_sync(const struct intel_crtc_state *crtc_state)
@@ -391,6 +407,7 @@ void intel_cmtg_enable_sync(const struct intel_crtc_state *crtc_state)
 	cmtg_ctl = CMTG_SYNC_TO_PORT | CMTG_ENABLE;
 
 	intel_de_rmw(display, TRANS_CMTG_CTL(cpu_transcoder), 0, cmtg_ctl);
+	drm_dbg_kms(display->drm, "0x%x, 0x%x\n", TRANS_CMTG_CTL(cpu_transcoder).reg, cmtg_ctl);
 	if (intel_de_wait_for_clear_ms(display, TRANS_CMTG_CTL(cpu_transcoder),
 				       CMTG_SYNC_TO_PORT, 50)) {
 		drm_WARN(display->drm, 1, "CMTG: %s enable timeout\n",
@@ -478,4 +495,5 @@ void intel_cmtg_set_hwgb(const struct intel_crtc_state *crtc_state)
 	REG_FIELD_PREP(CMTG_HW_GB_UP_LW_BG_DIFF_MASK, 1);
 
 	intel_de_write(display, CMTG_HW_GB(cpu_transcoder), val);
+	drm_dbg_kms(display->drm, "0x%x, 0x%x\n", CMTG_HW_GB(cpu_transcoder).reg, val);
 }
