@@ -2021,6 +2021,7 @@ static void ops_dequeue(struct rq *rq, struct task_struct *p, u64 deq_flags)
 	/* dequeue is always temporary, don't reset runnable_at */
 	clr_task_runnable(p, false);
 
+retry:
 	/* acquire ensures that we see the preceding updates on QUEUED */
 	opss = atomic_long_read_acquire(&p->scx.ops_state);
 
@@ -2035,7 +2036,9 @@ static void ops_dequeue(struct rq *rq, struct task_struct *p, u64 deq_flags)
 		BUG();
 	case SCX_OPSS_QUEUED:
 		/* A queued task must always be in BPF scheduler's custody */
-		WARN_ON_ONCE(!(p->scx.flags & SCX_TASK_IN_CUSTODY));
+		if (!(p->scx.flags & SCX_TASK_IN_CUSTODY))
+			goto retry;
+
 		if (atomic_long_try_cmpxchg(&p->scx.ops_state, &opss,
 					    SCX_OPSS_NONE))
 			break;
