@@ -596,6 +596,34 @@ int ib_cache_gid_add(struct ib_device *ib_dev, u32 port,
 	return __ib_cache_gid_add(ib_dev, port, gid, attr, mask, false);
 }
 
+/**
+ * gid_table_is_shared - Check if GID table has other reference owners
+ * @table: GID table to check
+ * @ix: index of entry
+ *
+ * Returns true if the gid table refcount is greater than 1,
+ */
+static bool gid_table_is_shared(struct ib_gid_table *table, int ix)
+{
+	unsigned int refcount;
+	struct ib_gid_table_entry *entry;
+
+	write_lock_irq(&table->rwlock);
+
+	entry = table->data_vec[ix];
+	refcount = kref_read(&entry->kref);
+
+	write_unlock_irq(&table->rwlock);
+
+	if (refcount > 1) {
+		pr_debug("%s: The GID table is still referenced and cannot be deleted.\n",
+			__func__);
+		return true;
+	} else {
+		return false;
+	}
+}
+
 static int
 _ib_cache_gid_del(struct ib_device *ib_dev, u32 port,
 		  union ib_gid *gid, struct ib_gid_attr *attr,
@@ -614,6 +642,9 @@ _ib_cache_gid_del(struct ib_device *ib_dev, u32 port,
 		ret = -EINVAL;
 		goto out_unlock;
 	}
+
+	if (gid_table_is_shared(table, ix))
+		goto out_unlock;
 
 	del_gid(ib_dev, port, table, ix);
 	dispatch_gid_change_event(ib_dev, port);
