@@ -427,10 +427,9 @@ static int sun4i_spdif_get_status(struct snd_kcontrol *kcontrol,
 	struct snd_soc_dai *cpu_dai = snd_kcontrol_chip(kcontrol);
 	struct sun4i_spdif_dev *host = snd_soc_dai_get_drvdata(cpu_dai);
 	u8 *status = ucontrol->value.iec958.status;
-	unsigned long flags;
 	unsigned int reg;
 
-	spin_lock_irqsave(&host->lock, flags);
+	guard(spinlock_irqsave)(&host->lock);
 
 	regmap_read(host->regmap, SUN4I_SPDIF_TXCHSTA0, &reg);
 
@@ -444,8 +443,6 @@ static int sun4i_spdif_get_status(struct snd_kcontrol *kcontrol,
 	status[4] = reg & 0xff;
 	status[5] = (reg >> 8) & 0x3;
 
-	spin_unlock_irqrestore(&host->lock, flags);
-
 	return 0;
 }
 
@@ -455,11 +452,10 @@ static int sun4i_spdif_set_status(struct snd_kcontrol *kcontrol,
 	struct snd_soc_dai *cpu_dai = snd_kcontrol_chip(kcontrol);
 	struct sun4i_spdif_dev *host = snd_soc_dai_get_drvdata(cpu_dai);
 	u8 *status = ucontrol->value.iec958.status;
-	unsigned long flags;
 	unsigned int reg;
 	bool chg0, chg1;
 
-	spin_lock_irqsave(&host->lock, flags);
+	guard(spinlock_irqsave)(&host->lock);
 
 	reg = (u32)status[3] << 24;
 	reg |= (u32)status[2] << 16;
@@ -482,8 +478,6 @@ static int sun4i_spdif_set_status(struct snd_kcontrol *kcontrol,
 	regmap_update_bits(host->regmap, SUN4I_SPDIF_TXCFG,
 			   SUN4I_SPDIF_TXCFG_CHSTMODE |
 			   SUN4I_SPDIF_TXCFG_NONAUDIO, reg);
-
-	spin_unlock_irqrestore(&host->lock, flags);
 
 	return chg0 || chg1;
 }
