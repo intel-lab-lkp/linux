@@ -254,6 +254,12 @@ int iavf_send_vf_ptp_caps_msg(struct iavf_adapter *adapter)
  **/
 static void iavf_validate_num_queues(struct iavf_adapter *adapter)
 {
+	if (adapter->vf_res->num_vsis > IAVF_MAX_VF_VSI) {
+		dev_info(&adapter->pdev->dev, "Received %d VSIs, but can only have a max of %d\n",
+			 adapter->vf_res->num_vsis, IAVF_MAX_VF_VSI);
+		adapter->vf_res->num_vsis = IAVF_MAX_VF_VSI;
+	}
+
 	if (adapter->vf_res->num_queue_pairs > IAVF_MAX_REQ_QUEUES) {
 		struct virtchnl_vsi_resource *vsi_res;
 		int i;
