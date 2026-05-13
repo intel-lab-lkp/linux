@@ -21,12 +21,12 @@ static char *_get_field(const char *line)
 {
 	char *line2, *nl;
 
-	line2 = strrchr(line, ' ');
+	line2 = (char *)strrchr(line, ' ');
 	if (!line2)
 		return NULL;
 
 	line2++;
-	nl = strrchr(line, '\n');
+	nl = (char *)strrchr(line, '\n');
 	if (!nl)
 		return NULL;
 
