@@ -10,6 +10,9 @@
 
 #include <asm/rmi_smc.h>
 
+extern unsigned long rmm_feat_reg0;
+extern unsigned long rmm_feat_reg1;
+
 struct rtt_entry {
 	unsigned long walk_level;
 	unsigned long desc;
