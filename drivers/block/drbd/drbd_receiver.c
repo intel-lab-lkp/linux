@@ -2569,50 +2569,56 @@ bool drbd_rs_should_slow_down(struct drbd_peer_device *peer_device, sector_t sec
 	return throttle;
 }
 
+/*
+ * Throttle resync when application I/O is in flight on the backing
+ * device and the resync is running faster than c-min-rate.
+ *
+ * The previous heuristic compared the backing device's part_stat
+ * sectors counter against our own rs_sect_ev counter (similar to
+ * MD RAID is_mddev_idle()) and fired on a delta > 64 sectors.  That
+ * comparison is racy: rs_sect_ev is bumped at submission while
+ * part_stat is updated on bio completion (and is per-cpu), and the
+ * receiver path bumps rs_sect_ev *after* the throttle check.  On
+ * fast hardware the transient skew routinely exceeds 64 sectors
+ * even with no application I/O, capping resync throughput at
+ * c-min-rate.
+ *
+ * ap_bio_cnt is incremented unconditionally for every application
+ * request in drbd_make_request(), so it is the authoritative
+ * "is application I/O in flight" signal.
+ */
 bool drbd_rs_c_min_rate_throttle(struct drbd_device *device)
 {
-	struct gendisk *disk = device->ldev->backing_bdev->bd_disk;
 	unsigned long db, dt, dbdt;
 	unsigned int c_min_rate;
-	int curr_events;
+	unsigned long rs_left;
+	int i;
 
 	rcu_read_lock();
 	c_min_rate = rcu_dereference(device->ldev->disk_conf)->c_min_rate;
 	rcu_read_unlock();
 
-	/* feature disabled? */
 	if (c_min_rate == 0)
 		return false;
 
-	curr_events = (int)part_stat_read_accum(disk->part0, sectors) -
-			atomic_read(&device->rs_sect_ev);
+	if (!atomic_read(&device->ap_bio_cnt))
+		return false;
 
-	if (atomic_read(&device->ap_actlog_cnt)
-	    || curr_events - device->rs_last_events > 64) {
-		unsigned long rs_left;
-		int i;
+	/* sync speed average over the last 2*DRBD_SYNC_MARK_STEP, approx. */
+	i = (device->rs_last_mark + DRBD_SYNC_MARKS - 1) % DRBD_SYNC_MARKS;
 
-		device->rs_last_events = curr_events;
+	if (device->state.conn == C_VERIFY_S || device->state.conn == C_VERIFY_T)
+		rs_left = device->ov_left;
+	else
+		rs_left = drbd_bm_total_weight(device) - device->rs_failed;
 
-		/* sync speed average over the last 2*DRBD_SYNC_MARK_STEP,
-		 * approx. */
-		i = (device->rs_last_mark + DRBD_SYNC_MARKS-1) % DRBD_SYNC_MARKS;
+	dt = ((long)jiffies - (long)device->rs_mark_time[i]) / HZ;
+	if (!dt)
+		dt++;
+	db = device->rs_mark_left[i] - rs_left;
+	dbdt = Bit2KB(db / dt);
 
-		if (device->state.conn == C_VERIFY_S || device->state.conn == C_VERIFY_T)
-			rs_left = device->ov_left;
-		else
-			rs_left = drbd_bm_total_weight(device) - device->rs_failed;
-
-		dt = ((long)jiffies - (long)device->rs_mark_time[i]) / HZ;
-		if (!dt)
-			dt++;
-		db = device->rs_mark_left[i] - rs_left;
-		dbdt = Bit2KB(db/dt);
-
-		if (dbdt > c_min_rate)
-			return true;
-	}
-	return false;
+	return dbdt > c_min_rate;
 }
 
 static int receive_DataRequest(struct drbd_connection *connection, struct packet_info *pi)

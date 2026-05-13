@@ -2018,7 +2018,6 @@ void drbd_device_cleanup(struct drbd_device *device)
 	device->rs_start     =
 	device->rs_total     =
 	device->rs_failed    = 0;
-	device->rs_last_events = 0;
 	device->rs_last_sect_ev = 0;
 	for (i = 0; i < DRBD_SYNC_MARKS; i++) {
 		device->rs_mark_left[i] = 0;
