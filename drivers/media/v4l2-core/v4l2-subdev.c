@@ -2643,20 +2643,22 @@ int __v4l2_subdev_get_frame_desc_passthrough(struct v4l2_subdev *sd,
 				return -EPIPE;
 			}
 
-			if (fd->num_entries >= V4L2_FRAME_DESC_ENTRY_PREALLOC) {
+			if (fd->num_entries >= V4L2_FRAME_DESC_ENTRY_MAX) {
 				dev_dbg(dev, "Frame desc entry limit reached\n");
 				return -E2BIG;
 			}
 
-			fd->entry[fd->num_entries] = *source_entry;
-
-			fd->entry[fd->num_entries].stream = route->source_stream;
+			if (fd->num_entries < fd->len_entries) {
+				fd->entry[fd->num_entries] = *source_entry;
+				fd->entry[fd->num_entries].stream =
+					route->source_stream;
+			}
 
 			fd->num_entries++;
 		}
 	}
 
-	return 0;
+	return fd->num_entries < fd->len_entries ? 0 : -ENOSPC;
 }
 EXPORT_SYMBOL_GPL(__v4l2_subdev_get_frame_desc_passthrough);
 
