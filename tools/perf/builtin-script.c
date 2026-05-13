@@ -4608,3 +4608,25 @@ out_delete:
 out:
 	return err;
 }
+
+/*
+ * Provide weak stubs for architectures that have not yet implemented
+ * instruction decoding. This prevents linker errors (undefined
+ * references) on non-x86 architectures (like ARM64, RISC-V) when
+ * building perf script.
+ */
+const char * __weak dump_insn(struct perf_insn *x __maybe_unused,
+			      u64 ip __maybe_unused,
+			      u8 *inbuf __maybe_unused,
+			      int inlen __maybe_unused,
+			      int *lenp __maybe_unused)
+{
+	return NULL;
+}
+
+int __weak arch_is_uncond_branch(const unsigned char *buf __maybe_unused,
+				 size_t len __maybe_unused,
+				 int x86_64 __maybe_unused)
+{
+	return 0;
+}
