@@ -20,6 +20,7 @@
 #include <linux/version.h>
 #include <linux/videodev2.h>
 
+#include <media/mipi-csi2.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-event.h>
@@ -2663,6 +2664,64 @@ int v4l2_subdev_get_frame_desc_passthrough(struct v4l2_subdev *sd,
 	return ret;
 }
 EXPORT_SYMBOL_GPL(v4l2_subdev_get_frame_desc_passthrough);
+
+int v4l2_subdev_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
+			       struct v4l2_mbus_frame_desc *desc)
+{
+	struct v4l2_subdev_format subdev_fmt = {
+		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
+		.pad = pad,
+	};
+	int ret;
+
+	if (v4l2_subdev_has_op(sd, pad, get_frame_desc)) {
+		unsigned int type = desc->type;
+
+		ret = v4l2_subdev_call(sd, pad, get_frame_desc, pad, desc);
+		if (ret)
+			return ret;
+
+		if (desc->type != type) {
+			dev_dbg(sd->dev,
+				"wrong type of frame descriptor for pad %d (got %u, expected %u)\n",
+				pad, desc->type, type);
+			return -EINVAL;
+		}
+
+		return ret;
+	}
+
+	if (desc->type != V4L2_MBUS_FRAME_DESC_TYPE_PARALLEL &&
+	    desc->type != V4L2_MBUS_FRAME_DESC_TYPE_CSI2)
+		return -EINVAL;
+
+	struct v4l2_subdev_state *state =
+		v4l2_subdev_lock_and_get_active_state(sd);
+	ret = v4l2_subdev_call(sd, pad, get_fmt, state, &subdev_fmt);
+	v4l2_subdev_unlock_state(state);
+	if (ret)
+		return ret;
+
+	struct v4l2_mbus_frame_desc_entry entry = {
+		.pixelcode = subdev_fmt.format.code,
+	};
+
+	if (desc->type == V4L2_MBUS_FRAME_DESC_TYPE_CSI2) {
+		int dt;
+
+		dt = mipi_csi2_dt_for_mbus(subdev_fmt.format.code);
+		if (dt < 0)
+			return dt;
+
+		entry.bus.csi2.dt = dt;
+	}
+
+	desc->entry[0] = entry;
+	desc->num_entries = 1;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(v4l2_subdev_get_frame_desc);
 
 #endif /* CONFIG_VIDEO_V4L2_SUBDEV_API */
 
