@@ -358,13 +358,22 @@ static int __init sama5d2_aic5_of_init(struct device_node *node,
 				       struct device_node *parent)
 {
 #ifdef CONFIG_PM
+	int rc = 0;
 	smr_cache = kcalloc(DIV_ROUND_UP(NR_SAMA5D2_IRQS, 32) * 32,
 			    sizeof(*smr_cache), GFP_KERNEL);
 	if (!smr_cache)
 		return -ENOMEM;
-#endif
 
+	rc = aic5_of_init(node, parent, NR_SAMA5D2_IRQS);
+	if (rc) {
+		kfree(smr_cache);
+		smr_cache = NULL;
+	}
+
+	return rc;
+#else
 	return aic5_of_init(node, parent, NR_SAMA5D2_IRQS);
+#endif
 }
 IRQCHIP_DECLARE(sama5d2_aic5, "atmel,sama5d2-aic", sama5d2_aic5_of_init);
 
