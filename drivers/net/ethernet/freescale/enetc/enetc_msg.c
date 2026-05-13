@@ -151,14 +151,14 @@ void enetc_msg_psi_free(struct enetc_pf *pf)
 	struct enetc_si *si = pf->si;
 	int i;
 
-	cancel_work_sync(&pf->msg_task);
+	/* de-register message passing interrupt handler */
+	free_irq(pci_irq_vector(si->pdev, ENETC_SI_INT_IDX), si);
 
-	/* disable MR interrupts */
-	enetc_msg_disable_mr_int(&si->hw);
+	cancel_work_sync(&pf->msg_task);
 
 	for (i = 0; i < pf->num_vfs; i++)
 		enetc_msg_free_mbx(si, i);
 
-	/* de-register message passing interrupt handler */
-	free_irq(pci_irq_vector(si->pdev, ENETC_SI_INT_IDX), si);
+	/* disable MR interrupts */
+	enetc_msg_disable_mr_int(&si->hw);
 }
