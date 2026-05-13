@@ -144,7 +144,7 @@ static int emit_bb_start(u64 batch_addr, u32 ppgtt_flag, u32 *dw, int i)
 static int emit_flush_invalidate(u32 addr, u32 val, u32 flush_flags, u32 *dw, int i)
 {
 	dw[i++] = MI_FLUSH_DW | MI_FLUSH_DW_OP_STOREDW |
-		  MI_FLUSH_IMM_DW | (flush_flags & MI_INVALIDATE_TLB) ?: 0;
+		  MI_FLUSH_IMM_DW | (flush_flags & MI_INVALIDATE_TLB);
 
 	dw[i++] = addr | MI_FLUSH_DW_USE_GTT;
 	dw[i++] = 0;
