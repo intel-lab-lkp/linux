@@ -611,10 +611,11 @@ static inline int update_rtc(struct timespec64 *to_set, unsigned long *offset_ns
  * ntp_synced - Tells whether the NTP status is not UNSYNC
  * Returns:	true if not UNSYNC, false otherwise
  */
-static inline bool ntp_synced(void)
+bool ntp_synced(void)
 {
 	return !(tk_ntp_data[TIMEKEEPER_CORE].time_status & STA_UNSYNC);
 }
+EXPORT_SYMBOL_GPL(ntp_synced);
 
 /*
  * If we have an externally synchronized Linux clock, then update RTC clock

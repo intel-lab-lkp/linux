@@ -27,6 +27,10 @@
 #include "tick-internal.h"
 #include "timekeeping_internal.h"
 #include "ntp_internal.h"
+#include <linux/vmclock_host.h>
+
+void (*vmclock_host_update_fn)(struct timekeeper *tk);
+EXPORT_SYMBOL_GPL(vmclock_host_update_fn);
 
 #define TK_CLEAR_NTP		(1 << 0)
 #define TK_CLOCK_WAS_SET	(1 << 1)
@@ -2339,6 +2343,8 @@ static void timekeeping_adjust(struct timekeeper *tk, s64 offset)
 		mult = div64_u64(tk->ntp_tick >> tk->ntp_error_shift,
 				 tk->cycle_interval);
 	}
+
+	vmclock_host_update(tk);
 
 	/*
 	 * If the clock is behind the NTP time, increase the multiplier by 1

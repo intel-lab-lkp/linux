@@ -3,6 +3,7 @@
 #define _LINUX_NTP_INTERNAL_H
 
 extern void ntp_init(void);
+extern bool ntp_synced(void);
 extern void ntp_clear(unsigned int tkid);
 /* Returns how long ticks are at present, in ns / 2^NTP_SCALE_SHIFT. */
 extern u64 ntp_tick_length(unsigned int tkid);

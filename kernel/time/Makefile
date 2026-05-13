@@ -33,3 +33,4 @@ obj-$(CONFIG_TIME_NS)				+= namespace.o
 obj-$(CONFIG_TIME_NS_VDSO)			+= namespace_vdso.o
 obj-$(CONFIG_TEST_CLOCKSOURCE_WATCHDOG)		+= clocksource-wdtest.o
 obj-$(CONFIG_TIME_KUNIT_TEST)			+= time_test.o
+obj-$(CONFIG_VMCLOCK_HOST)	+= vmclock_host.o
