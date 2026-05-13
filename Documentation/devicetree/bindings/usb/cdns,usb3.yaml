@@ -20,19 +20,21 @@ properties:
     const: cdns,usb3
 
   reg:
+    minItems: 2
     items:
       - description: OTG controller registers
       - description: XHCI Host controller registers
       - description: DEVICE controller registers
 
   reg-names:
+    minItems: 2
     items:
-      - const: otg
-      - const: xhci
-      - const: dev
+      - enum: [ otg, xhci, dev ]
+      - enum: [ otg, xhci, dev ]
+      - enum: [ otg, xhci, dev ]
 
   interrupts:
-    minItems: 3
+    minItems: 2
     items:
       - description: XHCI host controller interrupt
       - description: Device controller interrupt
@@ -41,12 +43,12 @@ properties:
                      cleared by xhci core, this interrupt is optional
 
   interrupt-names:
-    minItems: 3
+    minItems: 2
     items:
-      - const: host
-      - const: peripheral
-      - const: otg
-      - const: wakeup
+      - enum: [ host, peripheral, otg, wakeup ]
+      - enum: [ host, peripheral, otg, wakeup ]
+      - enum: [ host, peripheral, otg, wakeup ]
+      - enum: [ host, peripheral, otg, wakeup ]
 
   port:
     $ref: /schemas/graph.yaml#/properties/port
@@ -79,6 +81,13 @@ properties:
     description: Enable resetting of PHY if Rx fail is detected
     type: boolean
 
+  no_drd:
+    description:
+      Indicates that the Dual-Role Device (DRD) register block is not
+      implemented or is inaccessible. In this case, the controller
+      must operate in a fixed peripheral or host mode.
+    type: boolean
+
 dependencies:
   port: [ usb-role-switch ]
 
@@ -92,6 +101,46 @@ required:
 allOf:
   - $ref: usb-drd.yaml#
   - $ref: usb-xhci.yaml#
+
+  - if:
+      properties:
+        no_drd: true
+      required:
+        - no_drd
+    then:
+      required:
+        - dr_mode
+      properties:
+        reg:
+          maxItems: 2
+        reg-names:
+          items:
+            - const: xhci
+            - const: dev
+        interrupts:
+          maxItems: 2
+        interrupt-names:
+          items:
+            - const: host
+            - const: peripheral
+        dr_mode:
+          enum: [host, peripheral]
+    else:
+      properties:
+        reg:
+          minItems: 3
+        reg-names:
+          items:
+            - const: otg
+            - const: xhci
+            - const: dev
+        interrupts:
+          minItems: 3
+        interrupt-names:
+          items:
+            - const: host
+            - const: peripheral
+            - const: otg
 
 unevaluatedProperties: false
 
