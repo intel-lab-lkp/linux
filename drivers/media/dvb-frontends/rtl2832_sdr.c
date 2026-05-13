@@ -1470,6 +1470,14 @@ static void rtl2832_sdr_remove(struct platform_device *pdev)
 
 	mutex_lock(&dev->vb_queue_lock);
 	mutex_lock(&dev->v4l2_lock);
+	/*
+	 * Release URBs and coherent DMA stream buffers while dev->udev
+	 * is still valid; once it is cleared, usb_free_coherent() silently
+	 * returns and any later stop_streaming() leaks the DMA memory.
+	 */
+	rtl2832_sdr_kill_urbs(dev);
+	rtl2832_sdr_free_urbs(dev);
+	rtl2832_sdr_free_stream_bufs(dev);
 	/* No need to keep the urbs around after disconnection */
 	dev->udev = NULL;
 	v4l2_device_disconnect(&dev->v4l2_dev);
