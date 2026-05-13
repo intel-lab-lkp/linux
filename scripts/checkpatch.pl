@@ -3774,7 +3774,7 @@ sub process {
 
 # check for DT compatible documentation
 		if (defined $root &&
-			(($realfile =~ /\.dtsi?$/ && $line =~ /^\+\s*compatible\s*=\s*\"/) ||
+			(($realfile =~ /\.(?:dts|dtsi|dtso)$/ && $line =~ /^\+\s*compatible\s*=\s*\"/) ||
 			 ($realfile =~ /\.[ch]$/ && $line =~ /^\+.*\.compatible\s*=\s*\"/))) {
 
 			my @compats = $rawline =~ /\"([a-zA-Z0-9\-\,\.\+_]+)\"/g;
@@ -3804,7 +3804,7 @@ sub process {
 		}
 
 # Check for RGMII phy-mode with delay on PCB
-		if ($realfile =~ /\.(dts|dtsi|dtso)$/ &&
+		if ($realfile =~ /\.(?:dts|dtsi|dtso)$/ &&
 		    $line =~ /^\+\s*(phy-mode|phy-connection-type)\s*=\s*"/ &&
 		    !ctx_has_comment($first_line, $linenr)) {
 			my $prop = $1;
@@ -3821,7 +3821,7 @@ sub process {
 				$checklicenseline = 2;
 			} elsif ($rawline =~ /^\+/) {
 				my $comment = "";
-				if ($realfile =~ /\.(c|rs|dts|dtsi)$/) {
+				if ($realfile =~ /\.(?:c|rs|dts|dtsi|dtso)$/) {
 					$comment = '//';
 				} elsif (($checklicenseline == 2) || $realfile =~ /\.(sh|pl|py|awk|tc|yaml)$/) {
 					$comment = '#';
@@ -3883,7 +3883,7 @@ sub process {
 		}
 
 # check we are in a valid source file if not then ignore this hunk
-		next if ($realfile !~ /\.(h|c|rs|s|S|sh|dtsi|dts)$/);
+		next if ($realfile !~ /\.(?:h|c|rs|s|S|sh|dtsi|dts|dtso)$/);
 
 # check for using SPDX-License-Identifier on the wrong line number
 		if ($realline != $checklicenseline &&
@@ -3982,7 +3982,7 @@ sub process {
 		}
 
 # check we are in a valid source file C or perl if not then ignore this hunk
-		next if ($realfile !~ /\.(h|c|pl|dtsi|dts)$/);
+		next if ($realfile !~ /\.(?:h|c|pl|dtsi|dts|dtso)$/);
 
 # at the beginning of a line any tabs must come first and anything
 # more than $tabsize must use tabs.
