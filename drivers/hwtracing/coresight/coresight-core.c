@@ -825,8 +825,10 @@ out:
 		return ret;
 
 	node = kzalloc_obj(struct coresight_node);
-	if (!node)
+	if (!node) {
+		coresight_drop_device(csdev);
 		return -ENOMEM;
+	}
 
 	node->csdev = csdev;
 	list_add(&node->link, &path->path_list);
@@ -851,7 +853,7 @@ struct coresight_path *coresight_build_path(struct coresight_device *source,
 
 	rc = _coresight_build_path(source, source, sink, path);
 	if (rc) {
-		kfree(path);
+		coresight_release_path(path);
 		return ERR_PTR(rc);
 	}
 
