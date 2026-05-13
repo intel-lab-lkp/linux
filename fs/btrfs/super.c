@@ -1753,6 +1753,8 @@ static int btrfs_statfs(struct dentry *dentry, struct kstatfs *buf)
 					factor = btrfs_bg_type_to_factor(
 						btrfs_raid_array[i].bg_flag);
 			}
+
+			total_free_data -= found->bytes_zone_unusable * factor;
 		}
 
 		/*
