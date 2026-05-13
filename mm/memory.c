@@ -2174,9 +2174,10 @@ void unmap_vmas(struct mmu_gather *tlb, struct unmap_desc *unmap)
 		unsigned long start = max(vma->vm_start, unmap->vma_start);
 		unsigned long end = min(vma->vm_end, unmap->vma_end);
 
-		hugetlb_zap_begin(vma, &start, &end);
-		__zap_vma_range(tlb, vma, start, end, &details);
-		hugetlb_zap_end(vma, &details);
+		if (hugetlb_zap_begin(vma, &start, &end)) {
+			__zap_vma_range(tlb, vma, start, end, &details);
+			hugetlb_zap_end(vma, &details);
+		}
 		vma = mas_find(unmap->mas, unmap->tree_end - 1);
 	} while (vma);
 	mmu_notifier_invalidate_range_end(&range);
@@ -2210,7 +2211,8 @@ void zap_vma_range_batched(struct mmu_gather *tlb,
 
 	mmu_notifier_range_init(&range, MMU_NOTIFY_CLEAR, 0, vma->vm_mm,
 				address, end);
-	hugetlb_zap_begin(vma, &range.start, &range.end);
+	if (!hugetlb_zap_begin(vma, &range.start, &range.end))
+		return;
 	update_hiwater_rss(vma->vm_mm);
 	mmu_notifier_invalidate_range_start(&range);
 	/*

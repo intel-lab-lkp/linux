@@ -5290,16 +5290,18 @@ void __unmap_hugepage_range(struct mmu_gather *tlb, struct vm_area_struct *vma,
 	huge_pmd_unshare_flush(tlb, vma);
 }
 
-void __hugetlb_zap_begin(struct vm_area_struct *vma,
+bool __hugetlb_zap_begin(struct vm_area_struct *vma,
 			 unsigned long *start, unsigned long *end)
 {
 	if (!vma->vm_file)	/* hugetlbfs_file_mmap error */
-		return;
+		return false;
 
 	adjust_range_if_pmd_sharing_possible(vma, start, end);
-	hugetlb_vma_lock_write(vma);
+	if (!hugetlb_vma_trylock_write(vma))
+		return false;
 	if (vma->vm_file)
 		i_mmap_lock_write(vma->vm_file->f_mapping);
+	return true;
 }
 
 void __hugetlb_zap_end(struct vm_area_struct *vma,
