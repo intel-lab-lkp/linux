@@ -4485,6 +4485,46 @@ static int pci_pm_reset(struct pci_dev *dev, bool probe)
 }
 
 /**
+ * pci_d3cold_reset - Put device into D3cold (or D3hot) and back to D0 for reset
+ * @dev: PCI device to reset
+ * @probe: if true, check if D3cold reset is supported; if false, perform reset
+ *
+ * Attempt to reset the device by transitioning through D3cold and back to D0.
+ * On platforms with ACPI _PR3 power resources, this performs a true D3cold
+ * power cycle (actual power removal). On platforms without _PR3 support,
+ * pci_set_power_state() automatically falls back to D3hot, providing a
+ * D3hot->D0 reset transition.
+ *
+ * Only available for single-function devices to avoid affecting other
+ * functions in multi-function devices.
+ *
+ * Returns 0 if device can be/was reset this way, -ENOTTY if not supported,
+ * or other negative error code on failure.
+ */
+static int pci_d3cold_reset(struct pci_dev *dev, bool probe)
+{
+	int ret;
+
+	if (dev->multifunction)
+		return -ENOTTY;
+
+	if (probe) {
+		if (!pci_pr3_present(dev))
+			pci_dbg(dev, "d3cold reset: no _PR3 support, will use D3hot fallback\n");
+		return 0;
+	}
+
+	if (dev->current_state != PCI_D0)
+		return -EINVAL;
+
+	ret = pci_set_power_state(dev, PCI_D3cold);
+	if (ret)
+		return ret;
+
+	return pci_set_power_state(dev, PCI_D0);
+}
+
+/**
  * pcie_wait_for_link_status - Wait for link status change
  * @pdev: Device whose link to wait for.
  * @use_lt: Use the LT bit if TRUE, or the DLLLA bit if FALSE.
@@ -5058,6 +5098,7 @@ const struct pci_reset_fn_method pci_reset_fn_methods[] = {
 	{ pci_pm_reset, .name = "pm" },
 	{ pci_reset_bus_function, .name = "bus" },
 	{ cxl_reset_bus_function, .name = "cxl_bus" },
+	{ pci_d3cold_reset, .name = "d3cold" },
 };
 
 /**
