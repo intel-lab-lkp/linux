@@ -35,14 +35,97 @@ static struct iova *to_iova(struct rb_node *node)
 	return rb_entry(node, struct iova, node);
 }
 
-static inline unsigned long iova_gap_value(struct iova *iova)
+/*
+ * Portion of @iova->gap_to_prev that lies strictly below @dma_32bit_pfn,
+ * i.e. the largest contiguous sub-gap that a 32-bit-restricted allocation
+ * could possibly use. Maintained alongside gap_to_prev so the augmented
+ * callbacks can compare against it without needing per-iova access to the
+ * domain's dma_32bit_pfn.
+ */
+static unsigned long
+iova_compute_clamped_gap32(struct iova *iova, unsigned long dma_32bit_pfn)
 {
-	return iova->gap_to_prev;
+	unsigned long gap_lo, gap_hi;
+
+	if (iova->gap_to_prev == 0)
+		return 0;
+	gap_lo = iova->pfn_lo - iova->gap_to_prev;
+	if (gap_lo >= dma_32bit_pfn)
+		return 0;
+	gap_hi = iova->pfn_lo - 1;
+	if (gap_hi >= dma_32bit_pfn)
+		gap_hi = dma_32bit_pfn - 1;
+	return gap_hi - gap_lo + 1;
 }
 
-RB_DECLARE_CALLBACKS_MAX(static, iova_gap_callbacks,
-			 struct iova, node, unsigned long, __subtree_max_gap,
-			 iova_gap_value)
+/*
+ * Recompute @node's __subtree_max_gap and __subtree_max_gap32 from its
+ * own gap fields and its children's subtree maxes. Returns true (for
+ * propagate's early-termination) if neither value would change.
+ */
+static bool iova_compute_max(struct iova *node, bool exit)
+{
+	unsigned long max_gap = node->gap_to_prev;
+	unsigned long max_gap32 = node->clamped_gap32;
+	struct iova *child;
+
+	if (node->node.rb_left) {
+		child = to_iova(node->node.rb_left);
+		if (child->__subtree_max_gap > max_gap)
+			max_gap = child->__subtree_max_gap;
+		if (child->__subtree_max_gap32 > max_gap32)
+			max_gap32 = child->__subtree_max_gap32;
+	}
+	if (node->node.rb_right) {
+		child = to_iova(node->node.rb_right);
+		if (child->__subtree_max_gap > max_gap)
+			max_gap = child->__subtree_max_gap;
+		if (child->__subtree_max_gap32 > max_gap32)
+			max_gap32 = child->__subtree_max_gap32;
+	}
+	if (exit && node->__subtree_max_gap == max_gap &&
+	    node->__subtree_max_gap32 == max_gap32)
+		return true;
+	node->__subtree_max_gap = max_gap;
+	node->__subtree_max_gap32 = max_gap32;
+	return false;
+}
+
+static void iova_gap_propagate(struct rb_node *rb, struct rb_node *stop)
+{
+	while (rb != stop) {
+		struct iova *node = to_iova(rb);
+
+		if (iova_compute_max(node, true))
+			break;
+		rb = rb_parent(&node->node);
+	}
+}
+
+static void iova_gap_copy(struct rb_node *rb_old, struct rb_node *rb_new)
+{
+	struct iova *old = to_iova(rb_old);
+	struct iova *new = to_iova(rb_new);
+
+	new->__subtree_max_gap = old->__subtree_max_gap;
+	new->__subtree_max_gap32 = old->__subtree_max_gap32;
+}
+
+static void iova_gap_rotate(struct rb_node *rb_old, struct rb_node *rb_new)
+{
+	struct iova *old = to_iova(rb_old);
+	struct iova *new = to_iova(rb_new);
+
+	new->__subtree_max_gap = old->__subtree_max_gap;
+	new->__subtree_max_gap32 = old->__subtree_max_gap32;
+	iova_compute_max(old, false);
+}
+
+static const struct rb_augment_callbacks iova_gap_callbacks = {
+	.propagate = iova_gap_propagate,
+	.copy = iova_gap_copy,
+	.rotate = iova_gap_rotate,
+};
 
 void
 init_iova_domain(struct iova_domain *iovad, unsigned long granule,
@@ -64,6 +147,9 @@ init_iova_domain(struct iova_domain *iovad, unsigned long granule,
 	iovad->anchor.pfn_lo = iovad->anchor.pfn_hi = IOVA_ANCHOR;
 	iovad->anchor.gap_to_prev = IOVA_ANCHOR;
 	iovad->anchor.__subtree_max_gap = IOVA_ANCHOR;
+	iovad->anchor.clamped_gap32 = iova_compute_clamped_gap32(&iovad->anchor,
+								 iovad->dma_32bit_pfn);
+	iovad->anchor.__subtree_max_gap32 = iovad->anchor.clamped_gap32;
 	rb_link_node(&iovad->anchor.node, NULL, &iovad->rbroot.rb_node);
 	rb_insert_color(&iovad->anchor.node, &iovad->rbroot);
 }
@@ -71,9 +157,10 @@ EXPORT_SYMBOL_GPL(init_iova_domain);
 
 /* Insert the iova into domain rbtree by holding writer lock */
 static void
-iova_insert_rbtree(struct rb_root *root, struct iova *iova,
+iova_insert_rbtree(struct iova_domain *iovad, struct iova *iova,
 		   struct rb_node *start)
 {
+	struct rb_root *root = &iovad->rbroot;
 	struct rb_node **new, *parent = NULL;
 	struct rb_node *prev_node, *next_node;
 
@@ -101,12 +188,18 @@ iova_insert_rbtree(struct rb_root *root, struct iova *iova,
 		iova->gap_to_prev = iova->pfn_lo - to_iova(prev_node)->pfn_hi - 1;
 	else
 		iova->gap_to_prev = iova->pfn_lo;
+	iova->clamped_gap32 = iova_compute_clamped_gap32(iova, iovad->dma_32bit_pfn);
 	iova->__subtree_max_gap = iova->gap_to_prev;
+	iova->__subtree_max_gap32 = iova->clamped_gap32;
 
 	next_node = rb_next(&iova->node);
-	if (next_node)
-		to_iova(next_node)->gap_to_prev =
-			to_iova(next_node)->pfn_lo - iova->pfn_hi - 1;
+	if (next_node) {
+		struct iova *next_iova = to_iova(next_node);
+
+		next_iova->gap_to_prev = next_iova->pfn_lo - iova->pfn_hi - 1;
+		next_iova->clamped_gap32 = iova_compute_clamped_gap32(next_iova,
+								      iovad->dma_32bit_pfn);
+	}
 
 	if (parent)
 		iova_gap_callbacks.propagate(parent, NULL);
@@ -119,25 +212,32 @@ iova_insert_rbtree(struct rb_root *root, struct iova *iova,
 /*
  * Search the augmented rbtree for the highest-addressed free gap of at least
  * @size pages, with the allocation fitting below @limit_pfn and at or above
- * @start_pfn. Returns the node whose gap_to_prev is used, or NULL.
+ * @start_pfn. When @is_32bit, prune by the 32-bit-clamped subtree max so
+ * that 32-bit-restricted allocations on a domain dominated by high-pfn
+ * allocations stay O(log n) instead of degrading to O(n). Returns the node
+ * whose gap_to_prev is used, or NULL.
  */
 static struct rb_node *
 __iova_search_free_gap(struct rb_node *node, unsigned long size,
 		       unsigned long limit_pfn, unsigned long start_pfn,
-		       unsigned long align_mask, unsigned long *new_pfn)
+		       unsigned long align_mask, bool is_32bit,
+		       unsigned long *new_pfn)
 {
 	struct iova *iova;
 	struct rb_node *result;
+	unsigned long subtree_max;
 
 	if (!node)
 		return NULL;
 
 	iova = to_iova(node);
-	if (iova->__subtree_max_gap < size)
+	subtree_max = is_32bit ? iova->__subtree_max_gap32
+			       : iova->__subtree_max_gap;
+	if (subtree_max < size)
 		return NULL;
 
 	result = __iova_search_free_gap(node->rb_right, size, limit_pfn,
-					start_pfn, align_mask, new_pfn);
+					start_pfn, align_mask, is_32bit, new_pfn);
 	if (result)
 		return result;
 
@@ -158,7 +258,7 @@ __iova_search_free_gap(struct rb_node *node, unsigned long size,
 	}
 
 	return __iova_search_free_gap(node->rb_left, size, limit_pfn,
-				      start_pfn, align_mask, new_pfn);
+				      start_pfn, align_mask, is_32bit, new_pfn);
 }
 
 static int __alloc_and_insert_iova_range(struct iova_domain *iovad,
@@ -169,20 +269,21 @@ static int __alloc_and_insert_iova_range(struct iova_domain *iovad,
 	unsigned long new_pfn;
 	unsigned long align_mask = ~0UL;
 	struct rb_node *gap_node;
+	bool is_32bit;
 
 	if (size_aligned)
 		align_mask <<= fls_long(size - 1);
 
 	spin_lock_irqsave(&iovad->iova_rbtree_lock, flags);
-	if (limit_pfn <= iovad->dma_32bit_pfn &&
-			size >= iovad->max32_alloc_size)
+	is_32bit = limit_pfn <= iovad->dma_32bit_pfn;
+	if (is_32bit && size >= iovad->max32_alloc_size)
 		goto iova32_full;
 
 	gap_node = __iova_search_free_gap(iovad->rbroot.rb_node, size,
 					  limit_pfn, iovad->start_pfn,
-					  align_mask, &new_pfn);
+					  align_mask, is_32bit, &new_pfn);
 	if (!gap_node) {
-		if (limit_pfn <= iovad->dma_32bit_pfn)
+		if (is_32bit)
 			iovad->max32_alloc_size = size;
 		goto iova32_full;
 	}
@@ -190,7 +291,7 @@ static int __alloc_and_insert_iova_range(struct iova_domain *iovad,
 	new->pfn_lo = new_pfn;
 	new->pfn_hi = new_pfn + size - 1;
 
-	iova_insert_rbtree(&iovad->rbroot, new, gap_node);
+	iova_insert_rbtree(iovad, new, gap_node);
 
 	spin_unlock_irqrestore(&iovad->iova_rbtree_lock, flags);
 	return 0;
@@ -291,13 +392,15 @@ static void remove_iova(struct iova_domain *iovad, struct iova *iova)
 				next_iova->pfn_lo - to_iova(prev_node)->pfn_hi - 1;
 		else
 			next_iova->gap_to_prev = next_iova->pfn_lo;
+		next_iova->clamped_gap32 = iova_compute_clamped_gap32(next_iova,
+								      iovad->dma_32bit_pfn);
 		/*
 		 * Propagate next_iova's new augmented values to the root BEFORE
 		 * the erase. Otherwise rotations inside rb_erase_augmented may
-		 * copy a stale __subtree_max_gap from next_iova to other nodes,
-		 * leaving ancestors in an inconsistent state that the post-erase
-		 * propagate cannot fully repair (early-termination at matching
-		 * intermediate values).
+		 * copy a stale __subtree_max_gap or __subtree_max_gap32 from
+		 * next_iova to other nodes, leaving ancestors in an inconsistent
+		 * state that the post-erase propagate cannot fully repair
+		 * (early-termination at matching intermediate values).
 		 */
 		iova_gap_callbacks.propagate(&next_iova->node, NULL);
 	}
@@ -493,7 +596,7 @@ __insert_new_range(struct iova_domain *iovad,
 
 	iova = alloc_and_init_iova(pfn_lo, pfn_hi);
 	if (iova)
-		iova_insert_rbtree(&iovad->rbroot, iova, NULL);
+		iova_insert_rbtree(iovad, iova, NULL);
 
 	return iova;
 }
@@ -544,6 +647,8 @@ reserve_iova(struct iova_domain *iovad,
 				gap = iova->pfn_lo;
 			if (iova->gap_to_prev != gap) {
 				iova->gap_to_prev = gap;
+				iova->clamped_gap32 = iova_compute_clamped_gap32(iova,
+										 iovad->dma_32bit_pfn);
 				iova_gap_callbacks.propagate(node, NULL);
 			}
 			if ((pfn_lo >= iova->pfn_lo) &&
