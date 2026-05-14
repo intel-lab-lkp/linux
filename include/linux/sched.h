@@ -2529,6 +2529,8 @@ struct steal_monitor_t {
 };
 
 extern struct steal_monitor_t steal_mon;
+void arch_dec_preferred_cpus(struct steal_monitor_t *sm, u64 steal_ratio);
+void arch_inc_preferred_cpus(struct steal_monitor_t *sm, u64 steal_ratio);
 #endif
 
 #endif

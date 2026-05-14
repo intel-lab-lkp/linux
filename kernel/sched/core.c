@@ -11374,6 +11374,64 @@ void sched_init_steal_monitor(void)
 	steal_mon.sampling_period_ms  = 1000;		/* once per second */
 }
 
+/*
+ * Default implementation of decrementing the preferred CPUs based on steal
+ * time. This is simple logic and decrease the preferred CPUs by 1 core.
+ * It takes out the last core in the online & preferred.
+ *
+ * Ensure at least one housekeeping core is always kept as preferred
+ *
+ * Could be overwritten by arch specific handling.
+ */
+#ifndef arch_dec_preferred_cpus
+void arch_dec_preferred_cpus(struct steal_monitor_t *sm, u64 steal_ratio)
+{
+	int last_cpu, tmp_cpu;
+	int this_cpu = raw_smp_processor_id();
+
+	cpumask_and(sm->tmp_mask, cpu_online_mask, cpu_preferred_mask);
+	last_cpu = cpumask_last(sm->tmp_mask);
+
+	/*
+	 * If the core belongs to the housekeeping CPUs, no action is
+	 * taken. This leaves at least one core preferred always.
+	 * This ensures at least some CPUs are available to run
+	 */
+	if (cpumask_equal(cpu_smt_mask(last_cpu), cpu_smt_mask(this_cpu)))
+		return;
+
+	for_each_cpu_and(tmp_cpu, cpu_smt_mask(last_cpu), cpu_online_mask) {
+		set_cpu_preferred(tmp_cpu, false);
+		if (tick_nohz_full_cpu(tmp_cpu))
+			tick_nohz_dep_set_cpu(tmp_cpu, TICK_DEP_BIT_SCHED);
+	}
+}
+#endif
+
+/*
+ * Default implementation of incrementing preferred CPUs based on steal
+ * time. This is simple logic and increases the preferred CPUs by 1 core.
+ * It adds the first core in online & !preferred
+ *
+ * Nothing to do if online == preferred
+ *
+ * Could be overwritten by arch specific handling.
+ */
+#ifndef arch_inc_preferred_cpus
+void arch_inc_preferred_cpus(struct steal_monitor_t *sm, u64 steal_ratio)
+{
+	int first_cpu, tmp_cpu;
+
+	first_cpu = cpumask_first_andnot(cpu_online_mask, cpu_preferred_mask);
+	/* All CPUs are preferred. Nothing to increase further */
+	if (first_cpu >= nr_cpu_ids)
+		return;
+
+	for_each_cpu_and(tmp_cpu, cpu_smt_mask(first_cpu), cpu_online_mask)
+		set_cpu_preferred(tmp_cpu, true);
+}
+#endif
+
 /* This is only a skeleton. Subsequent patches introduce more of it */
 void sched_steal_detection_work(struct work_struct *work)
 {
