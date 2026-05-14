@@ -719,7 +719,11 @@ static int __init cmem_lat_pmu_init(void)
 
 	cmem_lat_pmu_cpuhp_state = ret;
 
-	return platform_driver_register(&cmem_lat_pmu_driver);
+	ret = platform_driver_register(&cmem_lat_pmu_driver);
+	if (ret)
+		cpuhp_remove_multi_state(cmem_lat_pmu_cpuhp_state);
+
+	return ret;
 }
 
 static void __exit cmem_lat_pmu_exit(void)
