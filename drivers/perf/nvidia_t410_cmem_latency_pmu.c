@@ -303,6 +303,12 @@ static void cmem_lat_pmu_start(struct perf_event *event, int pmu_flags)
 
 static void cmem_lat_pmu_stop(struct perf_event *event, int pmu_flags)
 {
+	if (event->hw.state & PERF_HES_STOPPED)
+		return;
+
+	if (pmu_flags & PERF_EF_UPDATE)
+		cmem_lat_pmu_event_update(event);
+
 	event->hw.state |= PERF_HES_STOPPED;
 }
 
