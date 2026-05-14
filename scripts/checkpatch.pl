@@ -3775,6 +3775,9 @@ sub process {
 
 				next if $compat !~ /^([a-zA-Z0-9\-]+)\,/;
 				my $vendor = $1;
+				next if $vendor eq "pciclass";
+				next if $vendor =~ /^pci[a-f0-9]{2,4}$/;
+				next if $vendor =~ /^usb(if)?[a-f0-9]{1,4}$/;
 				`grep -Eq "\\"\\^\Q$vendor\E,\\.\\*\\":" $vp_file`;
 				if ( $? >> 8 ) {
 					WARN("UNDOCUMENTED_DT_STRING",
