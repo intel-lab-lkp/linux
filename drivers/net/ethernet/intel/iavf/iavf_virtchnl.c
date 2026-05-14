@@ -248,12 +248,28 @@ int iavf_send_vf_ptp_caps_msg(struct iavf_adapter *adapter)
 /**
  * iavf_validate_num_queues
  * @adapter: adapter structure
+ * @msglen: length of the received VF resource message
  *
- * Validate that the number of queues the PF has sent in
- * VIRTCHNL_OP_GET_VF_RESOURCES is not larger than the VF can handle.
+ * Validate the VIRTCHNL_OP_GET_VF_RESOURCES response from the PF. Ensure
+ * num_vsis does not exceed what the message length can cover, and cap
+ * num_queue_pairs to the VF maximum.
  **/
-static void iavf_validate_num_queues(struct iavf_adapter *adapter)
+static void iavf_validate_num_queues(struct iavf_adapter *adapter, u16 msglen)
 {
+	u16 max_vsis;
+
+	if (msglen < sizeof(struct virtchnl_vf_resource))
+		max_vsis = 0;
+	else
+		max_vsis = (msglen - sizeof(struct virtchnl_vf_resource)) /
+			   sizeof(struct virtchnl_vsi_resource);
+
+	if (adapter->vf_res->num_vsis > max_vsis) {
+		dev_info(&adapter->pdev->dev, "Received %d VSIs, but message can only cover %d\n",
+			 adapter->vf_res->num_vsis, max_vsis);
+		adapter->vf_res->num_vsis = max_vsis;
+	}
+
 	if (adapter->vf_res->num_queue_pairs > IAVF_MAX_REQ_QUEUES) {
 		struct virtchnl_vsi_resource *vsi_res;
 		int i;
@@ -300,7 +316,7 @@ int iavf_get_vf_config(struct iavf_adapter *adapter)
 	 * we aren't getting too many queues
 	 */
 	if (!err)
-		iavf_validate_num_queues(adapter);
+		iavf_validate_num_queues(adapter, min(event.msg_len, len));
 	iavf_vf_parse_hw_config(hw, adapter->vf_res);
 
 	kfree(event.msg_buf);
@@ -2609,7 +2625,7 @@ void iavf_virtchnl_completion(struct iavf_adapter *adapter,
 		u16 len = IAVF_VIRTCHNL_VF_RESOURCE_SIZE;
 
 		memcpy(adapter->vf_res, msg, min(msglen, len));
-		iavf_validate_num_queues(adapter);
+		iavf_validate_num_queues(adapter, min(msglen, len));
 		iavf_vf_parse_hw_config(&adapter->hw, adapter->vf_res);
 		if (is_zero_ether_addr(adapter->hw.mac.addr)) {
 			/* restore current mac address */
