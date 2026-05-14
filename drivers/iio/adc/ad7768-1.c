@@ -907,7 +907,7 @@ static int ad7768_get_filter_type_attr(struct iio_dev *dev,
 {
 	struct ad7768_state *st = iio_priv(dev);
 	int ret;
-	unsigned int mode, mask;
+	unsigned int mode, mask, idx;
 
 	ret = regmap_read(st->regmap, AD7768_REG_DIGITAL_FILTER, &mode);
 	if (ret)
@@ -915,7 +915,11 @@ static int ad7768_get_filter_type_attr(struct iio_dev *dev,
 
 	mask = AD7768_DIG_FIL_EN_60HZ_REJ | AD7768_DIG_FIL_FIL_MSK;
 	/* From the register value, get the corresponding filter type */
-	return ad7768_filter_regval_to_type[FIELD_GET(mask, mode)];
+	idx = FIELD_GET(mask, mode);
+	if (idx >= ARRAY_SIZE(ad7768_filter_regval_to_type))
+		return -EINVAL;
+
+	return ad7768_filter_regval_to_type[idx];
 }
 
 static int ad7768_update_dec_rate(struct iio_dev *dev, unsigned int dec_rate)
