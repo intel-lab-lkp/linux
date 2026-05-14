@@ -36,19 +36,35 @@ properties:
       Hotplug detect GPIO.
       Indicates which GPIO should be used for hotplug detection
 
+  data-lanes:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    deprecated: true
+    minItems: 1
+    maxItems: 4
+    items:
+      maximum: 3
+
   ports:
     $ref: /schemas/graph.yaml#/properties/ports
 
     properties:
       port@0:
         $ref: /schemas/graph.yaml#/properties/port
-        description:
-          Input node to receive pixel data.
+        description: Input node to receive pixel data.
 
       port@1:
         $ref: /schemas/graph.yaml#/properties/port
-        description:
-          Port node with one endpoint connected to a dp-connector node.
+        description: Port node with one endpoint connected to sink device node.
+        properties:
+          endpoint:
+            $ref: /schemas/media/video-interfaces.yaml#
+            unevaluatedProperties: false
+            properties:
+              data-lanes:
+                minItems: 1
+                maxItems: 4
+                items:
+                  enum: [ 0, 1, 2, 3 ]
 
     required:
       - port@0
