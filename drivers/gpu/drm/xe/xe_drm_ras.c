@@ -80,7 +80,7 @@ static struct xe_drm_ras_counter *allocate_and_copy_counters(struct xe_device *x
 	struct xe_drm_ras_counter *counter;
 	int i;
 
-	counter = kcalloc(DRM_XE_RAS_ERR_COMP_MAX, sizeof(*counter), GFP_KERNEL);
+	counter = drmm_kcalloc(&xe->drm, DRM_XE_RAS_ERR_COMP_MAX, sizeof(*counter), GFP_KERNEL);
 	if (!counter)
 		return ERR_PTR(-ENOMEM);
 
@@ -134,9 +134,6 @@ static int assign_node_params(struct xe_device *xe, struct drm_ras_node *node,
 static void cleanup_node_param(struct xe_drm_ras *ras, const enum drm_xe_ras_error_severity severity)
 {
 	struct drm_ras_node *node = &ras->node[severity];
-
-	kfree(ras->info[severity]);
-	ras->info[severity] = NULL;
 
 	kfree(node->device_name);
 	node->device_name = NULL;
