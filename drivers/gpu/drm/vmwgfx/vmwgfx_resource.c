@@ -143,7 +143,7 @@ static void vmw_resource_release(struct kref *kref)
 		if (res->coherent)
 			vmw_bo_dirty_release(res->guest_memory_bo);
 		ttm_bo_unreserve(bo);
-		vmw_user_bo_unref(&res->guest_memory_bo);
+		vmw_bo_unreference(&res->guest_memory_bo);
 	}
 
 	if (likely(res->hw_destroy != NULL)) {
@@ -315,7 +315,7 @@ int vmw_user_object_lookup(struct vmw_private *dev_priv,
 							    uo->buffer,
 							    handle);
 		if (uo->surface)
-			vmw_user_bo_unref(&uo->buffer);
+			vmw_bo_unreference(&uo->buffer);
 	}
 
 	return ret;
@@ -466,11 +466,11 @@ void vmw_resource_unreserve(struct vmw_resource *res,
 			vmw_resource_mob_detach(res);
 			if (res->coherent)
 				vmw_bo_dirty_release(res->guest_memory_bo);
-			vmw_user_bo_unref(&res->guest_memory_bo);
+			vmw_bo_unreference(&res->guest_memory_bo);
 		}
 
 		if (new_guest_memory_bo) {
-			res->guest_memory_bo = vmw_user_bo_ref(new_guest_memory_bo);
+			res->guest_memory_bo = vmw_bo_reference(new_guest_memory_bo);
 
 			/*
 			 * The validation code should already have added a
@@ -560,7 +560,7 @@ out_no_reserve:
 	drm_gem_object_put(&val_buf->bo->base);
 	val_buf->bo = NULL;
 	if (guest_memory_dirty)
-		vmw_user_bo_unref(&res->guest_memory_bo);
+		vmw_bo_unreference(&res->guest_memory_bo);
 
 	return ret;
 }
@@ -736,7 +736,7 @@ int vmw_resource_validate(struct vmw_resource *res, bool intr,
 		goto out_no_validate;
 	else if (!res->func->needs_guest_memory && res->guest_memory_bo) {
 		WARN_ON_ONCE(vmw_resource_mob_attached(res));
-		vmw_user_bo_unref(&res->guest_memory_bo);
+		vmw_bo_unreference(&res->guest_memory_bo);
 	}
 
 	return 0;

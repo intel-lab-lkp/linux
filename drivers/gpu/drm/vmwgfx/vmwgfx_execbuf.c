@@ -1148,7 +1148,7 @@ static int vmw_translate_mob_ptr(struct vmw_private *dev_priv,
 	vmw_bo_placement_set(vmw_bo, VMW_BO_DOMAIN_MOB, VMW_BO_DOMAIN_MOB);
 	ret = vmw_validation_add_bo(sw_context->ctx, vmw_bo);
 	tmp_bo = vmw_bo;
-	vmw_user_bo_unref(&tmp_bo);
+	vmw_bo_unreference(&tmp_bo);
 	if (unlikely(ret != 0))
 		return ret;
 
@@ -1205,7 +1205,7 @@ static int vmw_translate_guest_ptr(struct vmw_private *dev_priv,
 			     VMW_BO_DOMAIN_GMR | VMW_BO_DOMAIN_VRAM);
 	ret = vmw_validation_add_bo(sw_context->ctx, vmw_bo);
 	tmp_bo = vmw_bo;
-	vmw_user_bo_unref(&tmp_bo);
+	vmw_bo_unreference(&tmp_bo);
 	if (unlikely(ret != 0))
 		return ret;
 

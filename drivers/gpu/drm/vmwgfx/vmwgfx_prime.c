@@ -117,7 +117,7 @@ int vmw_prime_handle_to_fd(struct drm_device *dev,
 								 handle, flags,
 								 prime_fd);
 		}
-		vmw_user_bo_unref(&vbo);
+		vmw_bo_unreference(&vbo);
 	}
 
 	return ret;
