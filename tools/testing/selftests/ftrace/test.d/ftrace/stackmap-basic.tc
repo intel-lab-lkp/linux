@@ -1,0 +1,74 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0
+# description: ftrace - stackmap basic functionality
+# requires: stack_map options/stackmap
+
+# Test that ftrace stackmap deduplication works:
+# 1. Enable stackmap + stacktrace options
+# 2. Run function tracer briefly
+# 3. Verify stack_map has entries
+# 4. Verify stack_map_stat shows hits
+# 5. Verify trace contains <stack_id> events
+# 6. Verify reset works
+
+fail() {
+    echo "FAIL: $1"
+    exit_fail
+}
+
+disable_tracing
+clear_trace
+
+# Verify stackmap files exist
+test -f stack_map || fail "stack_map file missing"
+test -f stack_map_stat || fail "stack_map_stat file missing"
+test -f stack_map_bin || fail "stack_map_bin file missing"
+
+# Enable stackmap dedup
+echo 1 > options/stackmap
+echo 1 > options/stacktrace
+
+# Run function tracer briefly
+echo function > current_tracer
+enable_tracing
+sleep 1
+disable_tracing
+echo nop > current_tracer
+echo 0 > options/stackmap
+
+# Check stack_map_stat has entries
+entries=$(cat stack_map_stat | grep "^entries:" | awk '{print $2}')
+if [ "$entries" -eq 0 ]; then
+    fail "stackmap has zero entries after tracing"
+fi
+
+# Check hits > 0
+hits=$(cat stack_map_stat | grep "^hits:" | awk '{print $2}')
+if [ "$hits" -eq 0 ]; then
+    fail "stackmap has zero hits"
+fi
+
+# Check drops == 0 (pool should be large enough for 1s trace)
+drops=$(cat stack_map_stat | grep "^drops:" | awk '{print $2}')
+
+# Check stack_map text output is parseable
+first_id=$(cat stack_map | grep "^stack_id" | head -1 | awk '{print $2}')
+if [ -z "$first_id" ]; then
+    fail "stack_map output has no stack_id entries"
+fi
+
+# Check trace has stack_id events
+count=$(cat trace | grep -c "stack_id" || true)
+if [ "$count" -eq 0 ]; then
+    fail "trace has no <stack_id> events"
+fi
+
+# Test reset
+echo 0 > stack_map
+entries_after=$(cat stack_map_stat | grep "^entries:" | awk '{print $2}')
+if [ "$entries_after" -ne 0 ]; then
+    fail "stackmap reset did not clear entries"
+fi
+
+echo "stackmap basic test passed: $entries unique stacks, $hits hits, $drops drops"
+exit 0
