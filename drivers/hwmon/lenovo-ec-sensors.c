@@ -546,6 +546,8 @@ static int lenovo_ec_probe(struct platform_device *pdev)
 	}
 
 	dmi_id = dmi_first_match(thinkstation_dmi_table);
+	if (!dmi_id)
+		return -ENODEV;
 
 	switch ((long)dmi_id->driver_data) {
 	case 0:
