@@ -62,6 +62,55 @@ Your cpu_idle routines need to obey the following rules:
 arch/x86/kernel/process.c has examples of both polling and
 sleeping idle functions.
 
+Preferred CPUs
+==============
+
+In virtualised environments it is possible to overcommit CPU resources.
+i.e sum of virtual CPU(vCPU) of all VM's is greater than number of physical
+CPUs(pCPU). Under such conditions when all or many VM's have high utilization,
+hypervisor won't be able to satisfy the CPU requirement and has to context
+switch within or across VM. i.e hypervisor need to preempt one vCPU to run
+another. This is called vCPU preemption. This is more expensive compared to
+task context switch within a vCPU.
+
+In such cases it is better that VM's co-ordinate among themselves and ask for
+less CPU by not using some of the vCPUs. vCPUs where workload can be safely
+scheduled which won't increase any contention for pCPU are called as
+"Preferred CPUs".
+
+In most cases preferred CPUs will be same as online CPUs, when there is pCPU
+contention, Preferred CPUs will reduce based on the amount of steal time.
+When the pCPU contention goes away as indicated by steal time, Preferred CPUs
+will become same as online CPUs again. One has to enable the feature by
+writing 1 to /sys/kernel/debug/sched/steal_monitor/enable
+
+One of the design construct is preferred CPUs is always subset of online CPUs.
+With CONFIG_PREFERRED_CPU=n, it is same as online CPUs.
+
+For scheduling decisions such as wakeup, pushing the task etc, needs this
+CPU state info. This is maintained in cpu_preferred_mask.
+
+vCPUs which are not in cpu_preferred_mask should be treated as vCPUs which
+should not be used at this moment provided it doesn't break user affinity.
+This is achieved by
+1. Selecting only a preferred CPU at wakeup.
+2. Push the task away from non-preferred CPU at tick.
+3. Only select preferred CPUs for load balance.
+
+/sys/devices/system/cpu/preferred prints the current cpu_preferred_mask in
+cpulist format.
+
+Notes:
+1. This feature is available under CONFIG_PREFERRED_CPU
+2. This feature works for FAIR/RT class.
+3. A task pinned, which can't be moved to preferred CPUs will continue
+   to run based on its affinity. But no load balancing happens
+4. If needed, steal time based governors/arch dependent method
+   could be used to cater to different types of cpu numbers.
+   Arch can do so by implementing its own hooks.
+5. Decision to use/not use is driven by kernel. Hence it shouldn't
+   break user affinities. One of the main reason why CPU hotplug
+   or Isolated cpuset partitions was not a solution.
 
 Possible arch/ problems
 =======================
