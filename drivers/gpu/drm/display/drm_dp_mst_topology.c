@@ -4939,12 +4939,12 @@ void drm_dp_mst_dump_topology(struct seq_file *m,
 		return;
 
 	state = to_drm_dp_mst_topology_state(mgr->base.state);
-	seq_printf(m, "\n*** Atomic state info ***\n");
+	seq_puts(m, "\n*** Atomic state info ***\n");
 	seq_printf(m, "payload_mask: %x, max_payloads: %d, start_slot: %u, pbn_div: %d\n",
 		   state->payload_mask, mgr->max_payloads, state->start_slot,
 		   dfixed_trunc(state->pbn_div));
 
-	seq_printf(m, "\n| idx | port | vcpi | slots | pbn | dsc | status |     sink name     |\n");
+	seq_puts(m, "\n| idx | port | vcpi | slots | pbn | dsc | status |     sink name     |\n");
 	for (i = 0; i < mgr->max_payloads; i++) {
 		list_for_each_entry(payload, &state->payloads, next) {
 			char name[14];
@@ -4966,28 +4966,28 @@ void drm_dp_mst_dump_topology(struct seq_file *m,
 		}
 	}
 
-	seq_printf(m, "\n*** DPCD Info ***\n");
+	seq_puts(m, "\n*** DPCD Info ***\n");
 	mutex_lock(&mgr->lock);
 	if (mgr->mst_primary) {
 		u8 buf[DP_PAYLOAD_TABLE_SIZE];
 		int ret;
 
 		if (drm_dp_read_dpcd_caps(mgr->aux, buf) < 0) {
-			seq_printf(m, "dpcd read failed\n");
+			seq_puts(m, "dpcd read failed\n");
 			goto out;
 		}
 		seq_printf(m, "dpcd: %*ph\n", DP_RECEIVER_CAP_SIZE, buf);
 
 		ret = drm_dp_dpcd_read_data(mgr->aux, DP_FAUX_CAP, buf, 2);
 		if (ret < 0) {
-			seq_printf(m, "faux/mst read failed\n");
+			seq_puts(m, "faux/mst read failed\n");
 			goto out;
 		}
 		seq_printf(m, "faux/mst: %*ph\n", 2, buf);
 
 		ret = drm_dp_dpcd_read_data(mgr->aux, DP_MSTM_CTRL, buf, 1);
 		if (ret < 0) {
-			seq_printf(m, "mst ctrl read failed\n");
+			seq_puts(m, "mst ctrl read failed\n");
 			goto out;
 		}
 		seq_printf(m, "mst ctrl: %*ph\n", 1, buf);
@@ -4996,7 +4996,7 @@ void drm_dp_mst_dump_topology(struct seq_file *m,
 		ret = drm_dp_dpcd_read_data(mgr->aux, DP_BRANCH_OUI, buf,
 					    DP_BRANCH_OUI_HEADER_SIZE);
 		if (ret < 0) {
-			seq_printf(m, "branch oui read failed\n");
+			seq_puts(m, "branch oui read failed\n");
 			goto out;
 		}
 		seq_printf(m, "branch oui: %*phN devid: ", 3, buf);
