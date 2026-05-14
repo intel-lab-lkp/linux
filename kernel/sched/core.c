@@ -11454,12 +11454,20 @@ void sched_steal_detection_work(struct work_struct *work)
 	steal_ratio = (delta_steal * 100 * 100) / (delta_ns * num_online_cpus());
 
 	/* If the steal time values are high, reduce one core from preferred CPUs */
-	if (steal_ratio > sm->high_threshold)
+	if (sm->previous_decision == 1 && steal_ratio > sm->high_threshold)
 		arch_dec_preferred_cpus(sm, steal_ratio);
 
 	/* If the steal time values are low, increase one core as preferred CPUs */
-	if (steal_ratio < sm->low_threshold)
+	if (sm->previous_decision == -1 && steal_ratio < sm->low_threshold)
 		arch_inc_preferred_cpus(sm, steal_ratio);
+
+	/* mark the direction. This helps to avoid ping-pongs */
+	if (steal_ratio > sm->high_threshold)
+		sm->previous_decision = 1;
+	else if (steal_ratio < sm->low_threshold)
+		sm->previous_decision = -1;
+	else
+		sm->previous_decision = 0;
 }
 
 void sched_trigger_steal_computation(int cpu)
