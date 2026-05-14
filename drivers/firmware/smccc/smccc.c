@@ -10,6 +10,7 @@
 #include <linux/arm-smccc.h>
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
+#include <linux/auxiliary_bus.h>
 #include <asm/archrandom.h>
 
 #include "rmm.h"
@@ -94,20 +95,21 @@ static int __init smccc_devices_init(void)
 					PLATFORM_DEVID_NONE, NULL, 0);
 	if (IS_ERR(pdev)) {
 		pr_err("arm-smccc: could not register device: %ld\n", PTR_ERR(pdev));
-	} else {
-		/*
-		 * Register the RMI and RSI devices only when firmware exposes
-		 * the required SMCCC function IDs at a supported revision.
-		 */
-		register_rsi_device(pdev);
+		return 0;
 	}
+	/*
+	 * Register the RMI and RSI devices only when firmware exposes
+	 * the required SMCCC function IDs at a supported revision.
+	 */
+	register_rsi_device(pdev);
 
 	if (smccc_trng_available) {
-		pdev = platform_device_register_simple("smccc_trng", -1,
-						       NULL, 0);
-		if (IS_ERR(pdev))
-			pr_err("smccc_trng: could not register device: %ld\n",
-			       PTR_ERR(pdev));
+		struct auxiliary_device *adev;
+
+		adev = __devm_auxiliary_device_create(&pdev->dev,
+					"arm_smccc_trng", "smccc_trng", NULL, 0);
+		if (!adev)
+			pr_err("smccc_trng: could not register device\n");
 	}
 
 	return 0;
