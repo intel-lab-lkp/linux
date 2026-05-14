@@ -11432,15 +11432,34 @@ void arch_inc_preferred_cpus(struct steal_monitor_t *sm, u64 steal_ratio)
 }
 #endif
 
-/* This is only a skeleton. Subsequent patches introduce more of it */
 void sched_steal_detection_work(struct work_struct *work)
 {
 	struct steal_monitor_t *sm = container_of(work, struct steal_monitor_t, work);
+	u64 steal_ratio, delta_steal, delta_ns, steal = 0;
 	ktime_t now;
+	int tmp_cpu;
+
+	for_each_cpu(tmp_cpu, cpu_online_mask)
+		steal += kcpustat_cpu(tmp_cpu).cpustat[CPUTIME_STEAL];
 
 	/* Update the prev_time for next iteration*/
 	now = ktime_get();
+	delta_steal = steal > sm->prev_steal ? steal - sm->prev_steal : 0;
+	delta_ns = max_t(u64, ktime_to_ns(ktime_sub(now, sm->prev_time)), 1);
+
 	sm->prev_time = now;
+	sm->prev_steal = steal;
+
+	/* Multiply by 100 to consider the fractional values of steal time */
+	steal_ratio = (delta_steal * 100 * 100) / (delta_ns * num_online_cpus());
+
+	/* If the steal time values are high, reduce one core from preferred CPUs */
+	if (steal_ratio > sm->high_threshold)
+		arch_dec_preferred_cpus(sm, steal_ratio);
+
+	/* If the steal time values are low, increase one core as preferred CPUs */
+	if (steal_ratio < sm->low_threshold)
+		arch_inc_preferred_cpus(sm, steal_ratio);
 }
 
 void sched_trigger_steal_computation(int cpu)
