@@ -491,8 +491,12 @@ static int jfs_fill_super(struct super_block *sb, struct fs_context *fc)
 	/*
 	 * Initialize blocksize to 4K.
 	 */
-	sb_set_blocksize(sb, PSIZE);
-
+	if (!sb_set_blocksize(sb, PSIZE)) {
+		jfs_err("block size %lu > page size %lu not supported",
+			sb->s_blocksize, PAGE_SIZE);
+		ret = -EINVAL;
+		goto out_unload;
+	}
 	/*
 	 * Set method vectors.
 	 */
