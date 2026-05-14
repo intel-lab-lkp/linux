@@ -4,7 +4,7 @@
 
     Copyright (c) 2004 Mark M. Hoffman <mhoffman@lightlink.com>
     Copyright (C) 2007-2014 Jean Delvare <jdelvare@suse.de>
-
+    Copyright (c) 2026 Peter Bohner <peter@bohner.me>
 */
 
 #define pr_fmt(fmt) "i2c-stub: " fmt
@@ -23,6 +23,7 @@
  * Support for I2C_FUNC_SMBUS_BLOCK_DATA is disabled by default and must
  * be enabled explicitly by setting the I2C_FUNC_SMBUS_BLOCK_DATA bits
  * in the 'functionality' module parameter.
+ * The same applies to I2C_FUNC_I2C.
  */
 #define STUB_FUNC_DEFAULT \
 		(I2C_FUNC_SMBUS_QUICK | I2C_FUNC_SMBUS_BYTE | \
@@ -30,7 +31,7 @@
 		 I2C_FUNC_SMBUS_I2C_BLOCK)
 
 #define STUB_FUNC_ALL \
-		(STUB_FUNC_DEFAULT | I2C_FUNC_SMBUS_BLOCK_DATA)
+		(STUB_FUNC_DEFAULT | I2C_FUNC_SMBUS_BLOCK_DATA | I2C_FUNC_I2C)
 
 static unsigned short chip_addr[MAX_CHIPS];
 module_param_array(chip_addr, ushort, NULL, S_IRUGO);
@@ -81,6 +82,9 @@ struct stub_chip {
 	u8 bank_end;
 	u16 bank_size;
 	u16 *bank_words;	/* Room for bank_mask * bank_size registers */
+
+	u8 *i2c_rw_data;
+	u16 i2c_rw_size;
 };
 
 static struct stub_chip *stub_chips;
@@ -119,23 +123,82 @@ static u16 *stub_get_wordp(struct stub_chip *chip, u8 offset)
 		return chip->words + offset;
 }
 
-/* Return negative errno on error. */
-static s32 stub_xfer(struct i2c_adapter *adap, u16 addr, unsigned short flags,
-	char read_write, u8 command, int size, union i2c_smbus_data *data)
+static struct stub_chip *stub_addr_to_chip(u16 addr)
 {
-	s32 ret;
-	int i, len;
+	int i;
 	struct stub_chip *chip = NULL;
-	struct smbus_block_data *b;
-	u16 *wordp;
 
-	/* Search for the right chip */
 	for (i = 0; i < stub_chips_nr; i++) {
+		/* we do not need to handle I2C_FUNC_10BIT_ADDR explicitly */
 		if (addr == chip_addr[i]) {
 			chip = stub_chips + i;
 			break;
 		}
 	}
+	return chip;
+}
+
+static s32 stub_xfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
+{
+	int i;
+	u8 *new_rw_mem;
+	struct stub_chip *chip = NULL;
+	struct i2c_msg *msg;
+
+	for (i = 0; i < num; i++) {
+		msg = msgs + i;
+		chip = stub_addr_to_chip(msg->addr);
+		if (!chip)
+			return -ENODEV;
+
+		/* len is guaranteed to be <= 8192 by i2cdev_ioctl_rdwr */
+		if (chip->i2c_rw_size < msg->len) {
+			new_rw_mem =
+				krelloc_array(chip->i2c_rw_data, msg->len, 1,
+					      GFP_KERNEL | __GFP_ZERO);
+			if (!new_rw_mem)
+				return -ENOMEM;
+			chip->i2c_rw_data = new_rw_mem;
+			chip->i2c_rw_size = msg->len;
+		}
+
+		/* read, size determined by slave */
+		if ((msg->flags & I2C_M_RD) && (msg->flags & I2C_M_RECV_LEN)) {
+			/* i2cdev_ioctl_rdwr expects this as a maximum, even
+			 * though 0xff would be the theoretically possible
+			 */
+			msg->len = min(chip->i2c_rw_size, I2C_SMBUS_BLOCK_MAX);
+			msg->buf[0] = msg->len - 1;
+			dev_dbg(&adap->dev,
+				"i2c read with RECV_LEN - addr 0x%02x, read %u bytes\n",
+				msg->addr, msg->len);
+			memcpy(msg->buf + 1, chip->i2c_rw_data, msg->len - 1);
+		} else if (msg->flags & I2C_M_RD) {
+			dev_dbg(&adap->dev,
+				"i2c read - addr 0x%02x, read %u bytes\n",
+				msg->addr, msg->len);
+			memcpy(msg->buf, chip->i2c_rw_data, msg->len);
+		} else {
+			dev_dbg(&adap->dev,
+				"i2c write - addr 0x%02x, wrote %u bytes\n",
+				msg->addr, msg->len);
+			memcpy(chip->i2c_rw_data, msg->buf, msg->len);
+		}
+	}
+	return num;
+}
+
+/* Return negative errno on error. */
+static s32 stub_smbus_xfer(struct i2c_adapter *adap, u16 addr, unsigned short flags,
+			   char read_write, u8 command, int size, union i2c_smbus_data *data)
+{
+	s32 ret;
+	int i, len;
+	struct stub_chip *chip;
+	struct smbus_block_data *b;
+	u16 *wordp;
+
+	chip = stub_addr_to_chip(addr);
 	if (!chip)
 		return -ENODEV;
 
@@ -308,7 +371,8 @@ static u32 stub_func(struct i2c_adapter *adapter)
 
 static const struct i2c_algorithm smbus_algorithm = {
 	.functionality	= stub_func,
-	.smbus_xfer	= stub_xfer,
+	.smbus_xfer	= stub_smbus_xfer,
+	.xfer           = stub_xfer,
 };
 
 static struct i2c_adapter stub_adapter = {
@@ -351,8 +415,10 @@ static void i2c_stub_free(void)
 {
 	int i;
 
-	for (i = 0; i < stub_chips_nr; i++)
+	for (i = 0; i < stub_chips_nr; i++) {
 		kfree(stub_chips[i].bank_words);
+		kfree(stub_chips[i].i2c_rw_data);
+	}
 	kfree(stub_chips);
 }
 
