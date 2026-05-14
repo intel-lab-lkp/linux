@@ -33,6 +33,8 @@ unsigned long _find_first_and_and_bit(const unsigned long *addr1, const unsigned
 				      const unsigned long *addr3, unsigned long size);
 extern unsigned long _find_first_zero_bit(const unsigned long *addr, unsigned long size);
 extern unsigned long _find_last_bit(const unsigned long *addr, unsigned long size);
+extern unsigned long _find_last_bit_from(const unsigned long *addr, unsigned long size,
+					unsigned long offset);
 
 #ifdef __BIG_ENDIAN
 unsigned long _find_first_zero_bit_le(const unsigned long *addr, unsigned long size);
@@ -412,6 +414,37 @@ unsigned long find_last_bit(const unsigned long *addr, unsigned long size)
 	return _find_last_bit(addr, size);
 }
 #endif
+
+/**
+ * find_last_bit_from - find the last set bit in a memory region
+ * @addr: The address to base the search on
+ * @size: The bitmap size in bits
+ * @offset: The bit number to start searching at
+ *
+ * Compared to the find_last_bit(),
+ * find_last_bit_from() has an additional parameter @offset,
+ * so it can search within a specific range of the bitmap,
+ * just like the find_next_bit().
+ *
+ * Returns the bit number of the last set bit, or size.
+ */
+static __always_inline
+unsigned long find_last_bit_from(const unsigned long *addr, unsigned long size,
+				unsigned long offset)
+{
+	if (small_const_nbits(size)) {
+		unsigned long val;
+
+		if (unlikely(offset >= size))
+			return size;
+
+		val = *addr & GENMASK(size - 1, offset);
+
+		return val ? __fls(val) : size;
+	}
+
+	return _find_last_bit_from(addr, size, offset);
+}
 
 /**
  * find_next_and_bit_wrap - find the next set bit in both memory regions
