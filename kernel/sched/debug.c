@@ -592,6 +592,33 @@ static void debugfs_ext_server_init(void)
 #endif /* CONFIG_SCHED_CLASS_EXT */
 
 #ifdef CONFIG_PREFERRED_CPU
+__read_mostly bool sched_sm_wr_enable;
+
+static ssize_t sched_sm_en_write(struct file *filp, const char __user *ubuf,
+				 size_t cnt, loff_t *ppos)
+{
+	bool orig = sched_sm_wr_enable;
+	ssize_t result;
+
+	result = debugfs_write_file_bool(filp, ubuf, cnt, ppos);
+
+	if (sched_sm_wr_enable && !orig) {
+		static_branch_enable(&__sched_sm_enable);
+	} else if (!sched_sm_wr_enable && orig) {
+		static_branch_disable(&__sched_sm_enable);
+		cpumask_copy(&__cpu_preferred_mask, cpu_online_mask);
+	}
+
+	return result;
+}
+
+static const struct file_operations sched_sm_en_fops = {
+	.read   =	debugfs_read_file_bool,
+	.write	=	sched_sm_en_write,
+	.open   =	simple_open,
+	.llseek =	default_llseek,
+};
+
 static void sched_steal_monitor_debugfs_init(void)
 {
 	struct dentry __maybe_unused *sm;
@@ -599,6 +626,8 @@ static void sched_steal_monitor_debugfs_init(void)
 	sm = debugfs_create_dir("steal_monitor", debugfs_sched);
 	if (!sm)
 		return;
+
+	debugfs_create_file("enable", 0644, sm, &sched_sm_wr_enable, &sched_sm_en_fops);
 }
 #endif
 

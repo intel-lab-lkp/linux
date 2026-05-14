@@ -11276,6 +11276,7 @@ void sched_change_end(struct sched_change_ctx *ctx)
 #ifdef CONFIG_PREFERRED_CPU
 /* npc - non preferred CPU */
 static DEFINE_PER_CPU(struct cpu_stop_work, npc_push_task_work);
+DEFINE_STATIC_KEY_FALSE(__sched_sm_enable);
 
 static int sched_non_preferred_cpu_push_stop(void *arg)
 {
