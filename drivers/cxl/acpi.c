@@ -631,8 +631,21 @@ static int add_host_bridge_dport(struct device *match, void *arg)
 	struct acpi_pci_root *pci_root;
 	struct cxl_port *root_port = arg;
 	struct device *host = root_port->dev.parent;
-	struct acpi_device *hb = to_cxl_host_bridge(host, match);
+	struct acpi_device *adev = to_acpi_device(match);
+	struct acpi_device *hb;
 
+	/*
+	 * If this is an ACPI0016 device but acpi_pci_find_root() hasn't
+	 * found the PCI root yet (driver not probed), defer the probe
+	 * to allow acpi_pci_root to bind first.
+	 */
+	if (strcmp(acpi_device_hid(adev), "ACPI0016") == 0 &&
+	    !acpi_pci_find_root(adev->handle)) {
+		dev_dbg(host, "deferring probe, ACPI0016 PCI root not ready\n");
+		return -EPROBE_DEFER;
+	}
+
+	hb = to_cxl_host_bridge(host, match);
 	if (!hb)
 		return 0;
 
@@ -688,7 +701,8 @@ static int add_host_bridge_uport(struct device *match, void *arg)
 {
 	struct cxl_port *root_port = arg;
 	struct device *host = root_port->dev.parent;
-	struct acpi_device *hb = to_cxl_host_bridge(host, match);
+	struct acpi_device *adev = to_acpi_device(match);
+	struct acpi_device *hb;
 	struct acpi_pci_root *pci_root;
 	struct cxl_dport *dport;
 	struct cxl_port *port;
@@ -697,6 +711,14 @@ static int add_host_bridge_uport(struct device *match, void *arg)
 	resource_size_t component_reg_phys;
 	int rc;
 
+	/* Same deferral check as in add_host_bridge_dport() */
+	if (strcmp(acpi_device_hid(adev), "ACPI0016") == 0 &&
+	    !acpi_pci_find_root(adev->handle)) {
+		dev_dbg(host, "deferring probe, ACPI0016 PCI root not ready\n");
+		return -EPROBE_DEFER;
+	}
+
+	hb = to_cxl_host_bridge(host, match);
 	if (!hb)
 		return 0;
 
