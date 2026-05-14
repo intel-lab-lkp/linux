@@ -8,6 +8,8 @@
 #ifndef _MEDIA_MIPI_CSI2_H
 #define _MEDIA_MIPI_CSI2_H
 
+#include <linux/types.h>
+
 /* Short packet data types */
 #define MIPI_CSI2_DT_FS			0x00
 #define MIPI_CSI2_DT_FE			0x01
@@ -43,5 +45,30 @@
 #define MIPI_CSI2_DT_RAW16		0x2e
 #define MIPI_CSI2_DT_RAW20		0x2f
 #define MIPI_CSI2_DT_USER_DEFINED(n)	(0x30 + (n))	/* 0..7 */
+
+/* Use one undefined value in spec */
+#define MIPI_CSI2_DT_INVALID		0xff
+
+/**
+ * media_bus_fmt_to_csi2_dt - Get MIPI CSI2 data type from media bus format
+ *
+ * @bus_fmt: media bus format identifier (MEDIA_BUS_FMT_*)
+ *
+ * Return: MIPI CSI2 data type MIPI_CSI2_DT_*, MIPI_CSI2_DT_INVALIDATE means
+ * can't get data type from bus_fmt.
+ */
+u32 media_bus_fmt_to_csi2_dt(u32 bus_fmt);
+
+/**
+ * media_bus_fmt_to_csi2_bpp - Get media bus format's bit depth
+ *
+ * @bus_fmt: media bus format identifier (MEDIA_BUS_FMT_*)
+ *
+ * Return: bit depth, -EINVAL if fail to get from bus_fmt.
+ *
+ * Notes: this bpp is suffix from MEDIA_BUS_FMT_*, no pad, not for compressed
+ * data.
+ */
+int media_bus_fmt_to_csi2_bpp(u32 bus_fmt);
 
 #endif /* _MEDIA_MIPI_CSI2_H */
