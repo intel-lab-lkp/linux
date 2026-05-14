@@ -372,6 +372,10 @@ static int icl_sagv_max_dclk(const struct intel_qgv_info *qi)
 	return dclk;
 }
 
+/*
+ * Bandwidth parameters that are tied to the SoC (as opposed to struct
+ * intel_display_bw_params).
+ */
 struct intel_soc_bw_params {
 	u8 deprogbwlimit;
 	u8 derating;
@@ -462,22 +466,26 @@ static const struct intel_soc_bw_params *get_soc_bw_params(struct intel_display 
 	return NULL;
 }
 
-struct intel_sa_info {
+/*
+ * Bandwidth parameters that are tied to the display IP (as opposed to struct
+ * intel_soc_bw_params).
+ */
+struct intel_display_bw_params {
 	u16 displayrtids;
 	u8 deburst;
 };
 
-static const struct intel_sa_info icl_sa_info = {
+static const struct intel_display_bw_params gen11_bw_params = {
 	.deburst = 8,
 	.displayrtids = 128,
 };
 
-static const struct intel_sa_info tgl_sa_info = {
+static const struct intel_display_bw_params gen12_bw_params = {
 	.deburst = 16,
 	.displayrtids = 256,
 };
 
-static const struct intel_sa_info mtl_sa_info = {
+static const struct intel_display_bw_params xelpdp_bw_params = {
 	.deburst = 32,
 	.displayrtids = 256,
 };
@@ -485,7 +493,7 @@ static const struct intel_sa_info mtl_sa_info = {
 static int icl_get_bw_info(struct intel_display *display,
 			   const struct dram_info *dram_info,
 			   const struct intel_soc_bw_params *soc_bw_params,
-			   const struct intel_sa_info *sa)
+			   const struct intel_display_bw_params *display_bw_params)
 {
 	struct intel_qgv_info qi = {};
 	bool is_y_tile = true; /* assume y tile may be used */
@@ -505,7 +513,7 @@ static int icl_get_bw_info(struct intel_display *display,
 
 	dclk_max = icl_sagv_max_dclk(&qi);
 	maxdebw = min(soc_bw_params->deprogbwlimit * 1000, dclk_max * 16 * 6 / 10);
-	ipqdepth = min(ipqdepthpch, sa->displayrtids / num_channels);
+	ipqdepth = min(ipqdepthpch, display_bw_params->displayrtids / num_channels);
 	qi.deinterleave = DIV_ROUND_UP(num_channels, is_y_tile ? 4 : 2);
 
 	for (i = 0; i < num_groups; i++) {
@@ -513,7 +521,7 @@ static int icl_get_bw_info(struct intel_display *display,
 		int clpchgroup;
 		int j;
 
-		clpchgroup = (sa->deburst * qi.deinterleave / num_channels) << i;
+		clpchgroup = (display_bw_params->deburst * qi.deinterleave / num_channels) << i;
 		bi->num_planes = (ipqdepth - clpchgroup) / clpchgroup + 1;
 
 		bi->num_qgv_points = qi.num_points;
@@ -557,7 +565,7 @@ static int icl_get_bw_info(struct intel_display *display,
 static int tgl_get_bw_info(struct intel_display *display,
 			   const struct dram_info *dram_info,
 			   const struct intel_soc_bw_params *soc_bw_params,
-			   const struct intel_sa_info *sa)
+			   const struct intel_display_bw_params *display_bw_params)
 {
 	struct intel_qgv_info qi = {};
 	bool is_y_tile = true; /* assume y tile may be used */
@@ -595,7 +603,7 @@ static int tgl_get_bw_info(struct intel_display *display,
 	peakbw = num_channels * DIV_ROUND_UP(qi.channel_width, 8) * dclk_max;
 	maxdebw = min(soc_bw_params->deprogbwlimit * 1000, peakbw * DEPROGBWPCLIMIT / 100);
 
-	ipqdepth = min(ipqdepthpch, sa->displayrtids / num_channels);
+	ipqdepth = min(ipqdepthpch, display_bw_params->displayrtids / num_channels);
 	/*
 	 * clperchgroup = 4kpagespermempage * clperchperblock,
 	 * clperchperblock = 8 / num_channels * interleave
@@ -608,7 +616,7 @@ static int tgl_get_bw_info(struct intel_display *display,
 		int clpchgroup;
 		int j;
 
-		clpchgroup = (sa->deburst * qi.deinterleave / num_channels) << i;
+		clpchgroup = (display_bw_params->deburst * qi.deinterleave / num_channels) << i;
 
 		if (i < num_groups - 1) {
 			bi_next = &display->bw.max[i + 1];
@@ -854,7 +862,7 @@ void intel_bw_init_hw(struct intel_display *display)
 	if (DISPLAY_VERx100(display) >= 1401 && display->platform.dgfx) {
 		xe2_hpd_get_bw_info(display, dram_info, soc_bw_params);
 	} else if (DISPLAY_VER(display) >= 14) {
-		tgl_get_bw_info(display, dram_info, soc_bw_params, &mtl_sa_info);
+		tgl_get_bw_info(display, dram_info, soc_bw_params, &xelpdp_bw_params);
 	} else if (display->platform.dg2) {
 		dg2_get_bw_info(display);
 	} else if (DISPLAY_VER(display) >= 12) {
@@ -865,11 +873,11 @@ void intel_bw_init_hw(struct intel_display *display)
 		 * parameters.
 		 */
 		if (display->platform.rocketlake)
-			tgl_get_bw_info(display, dram_info, soc_bw_params, &icl_sa_info);
+			tgl_get_bw_info(display, dram_info, soc_bw_params, &gen11_bw_params);
 		else
-			tgl_get_bw_info(display, dram_info, soc_bw_params, &tgl_sa_info);
+			tgl_get_bw_info(display, dram_info, soc_bw_params, &gen12_bw_params);
 	} else if (DISPLAY_VER(display) == 11) {
-		icl_get_bw_info(display, dram_info, soc_bw_params, &icl_sa_info);
+		icl_get_bw_info(display, dram_info, soc_bw_params, &gen11_bw_params);
 	}
 }
 
