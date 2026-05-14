@@ -591,6 +591,17 @@ static void debugfs_ext_server_init(void)
 }
 #endif /* CONFIG_SCHED_CLASS_EXT */
 
+#ifdef CONFIG_PREFERRED_CPU
+static void sched_steal_monitor_debugfs_init(void)
+{
+	struct dentry __maybe_unused *sm;
+
+	sm = debugfs_create_dir("steal_monitor", debugfs_sched);
+	if (!sm)
+		return;
+}
+#endif
+
 static __init int sched_init_debug(void)
 {
 	struct dentry __maybe_unused *numa;
@@ -631,6 +642,9 @@ static __init int sched_init_debug(void)
 	debugfs_fair_server_init();
 #ifdef CONFIG_SCHED_CLASS_EXT
 	debugfs_ext_server_init();
+#endif
+#ifdef CONFIG_PREFERRED_CPU
+	sched_steal_monitor_debugfs_init();
 #endif
 
 	return 0;
