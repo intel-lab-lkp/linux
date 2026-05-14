@@ -1093,6 +1093,7 @@ static int qdisc_graft(struct net_device *dev, struct Qdisc *parent,
 	struct net *net = dev_net(dev);
 
 	if (parent == NULL) {
+		bool need_skip = false;
 		unsigned int i, num_q, ingress;
 		struct netdev_queue *dev_queue;
 
@@ -1119,12 +1120,15 @@ static int qdisc_graft(struct net_device *dev, struct Qdisc *parent,
 			}
 		}
 
+		if (new && new->ops->attach && !ingress)
+			need_skip = true;
+
 		if (dev->flags & IFF_UP)
-			dev_deactivate(dev, false);
+			dev_deactivate(dev, !need_skip);
 
 		qdisc_offload_graft_root(dev, new, old, extack);
 
-		if (new && new->ops->attach && !ingress)
+		if (need_skip)
 			goto skip;
 
 		if (!ingress) {
