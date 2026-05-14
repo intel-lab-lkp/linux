@@ -57,3 +57,11 @@ examples:
         clocks = <&clks VF610_CLK_PIT>;
         clock-names = "pit";
     };
+
+    pit@40188000 {
+        compatible = "nxp,s32g2-pit";
+        reg = <0x40188000 0x3000>;
+        interrupts = <53 IRQ_TYPE_LEVEL_HIGH>;
+        clocks = <&clks 61>;
+        clock-names = "pit";
+    };
