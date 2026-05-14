@@ -7,6 +7,7 @@
 #include <linux/device/bus.h>
 #include <linux/device/driver.h>
 #include <linux/platform_device.h>
+#include <linux/string.h>
 
 #include <kunit/platform_device.h>
 #include <kunit/resource.h>
@@ -80,6 +81,20 @@ kunit_platform_device_alloc_match(struct kunit *test,
 
 KUNIT_DEFINE_ACTION_WRAPPER(platform_device_unregister_wrapper,
 			    platform_device_unregister, struct platform_device *);
+
+struct kunit_pdev_dup_match {
+	const char *name;
+	int id;
+};
+
+static int kunit_pdev_dup_match_fn(struct device *dev, void *data)
+{
+	struct kunit_pdev_dup_match *m = data;
+	struct platform_device *p = to_platform_device(dev);
+
+	return p->id == m->id && p->name && !strcmp(p->name, m->name);
+}
+
 /**
  * kunit_platform_device_add() - Register a KUnit test managed platform device
  * @test: test context
@@ -94,6 +109,22 @@ int kunit_platform_device_add(struct kunit *test, struct platform_device *pdev)
 {
 	struct kunit_resource *res;
 	int ret;
+
+	/*
+	 * Detect duplicate (name, id) registrations early, before
+	 * platform_device_add() reaches sysfs_create_dir_ns() and
+	 * unconditionally dumps a stack trace via sysfs_warn_dup(). This keeps
+	 * tests that intentionally exercise the duplicate-add failure path
+	 * (e.g. kunit_platform_device_add_twice_fails_test) quiet without
+	 * losing the negative return value they assert on.
+	 */
+	if (pdev->name && pdev->id != PLATFORM_DEVID_AUTO) {
+		struct kunit_pdev_dup_match m = { pdev->name, pdev->id };
+
+		if (bus_for_each_dev(&platform_bus_type, NULL, &m,
+				     kunit_pdev_dup_match_fn))
+			return -EEXIST;
+	}
 
 	ret = platform_device_add(pdev);
 	if (ret)
