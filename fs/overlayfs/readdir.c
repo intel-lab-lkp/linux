@@ -844,9 +844,8 @@ static int ovl_iterate_merged(struct file *file, struct dir_context *ctx)
 		struct ovl_dir_cache *cache;
 
 		cache = ovl_cache_get(dentry);
-		err = PTR_ERR(cache);
 		if (IS_ERR(cache))
-			return err;
+			return PTR_ERR(cache);
 
 		od->cache = cache;
 		ovl_seek_cursor(od, ctx->pos);
