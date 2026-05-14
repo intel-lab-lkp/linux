@@ -366,8 +366,7 @@ unsigned sizeof_namespace_label(struct nvdimm_drvdata *ndd);
 			res; res = next, next = next ? next->sibling : NULL)
 
 struct nd_percpu_lane {
-	int count;
-	spinlock_t lock;
+	struct mutex lock; /* serialize lane access */
 };
 
 enum nd_label_flags {
