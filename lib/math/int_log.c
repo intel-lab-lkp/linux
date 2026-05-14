@@ -59,10 +59,8 @@ unsigned int intlog2(u32 value)
 	unsigned int significand;
 	unsigned int interpolation;
 
-	if (unlikely(value == 0)) {
-		WARN_ON(1);
+	if (unlikely(value == 0))
 		return 0;
-	}
 
 	/* first detect the msb (count begins at 0) */
 	msb = fls(value) - 1;
@@ -116,10 +114,8 @@ unsigned int intlog10(u32 value)
 	 */
 	u64 log;
 
-	if (unlikely(value == 0)) {
-		WARN_ON(1);
+	if (unlikely(value == 0))
 		return 0;
-	}
 
 	log = intlog2(value);
 
