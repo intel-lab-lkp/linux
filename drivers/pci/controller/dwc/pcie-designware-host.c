@@ -215,6 +215,13 @@ int dw_pcie_allocate_domains(struct dw_pcie_rp *pp)
 		.host_data	= pp,
 	};
 
+	/*
+	 * Initialize pp->lock here to cover direct callers from custom
+	 * .msi_init() paths (e.g. firmware-managed platforms) that
+	 * bypass dw_pcie_host_init().
+	 */
+	raw_spin_lock_init(&pp->lock);
+
 	pp->irq_domain = msi_create_parent_irq_domain(&info, &dw_pcie_msi_parent_ops);
 	if (!pp->irq_domain) {
 		dev_err(pci->dev, "Failed to create IRQ domain\n");
