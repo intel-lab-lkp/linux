@@ -51,6 +51,10 @@ static bool report_undeciphered;
 module_param(report_undeciphered, bool, 0644);
 MODULE_PARM_DESC(report_undeciphered, "Report undeciphered multi-touch state field using a MSC_RAW event");
 
+static unsigned int haptic_click;
+module_param(haptic_click, uint, 0644);
+MODULE_PARM_DESC(haptic_click, "Haptic click feedback: 0=unchanged, 1=silent-low, 2=off");
+
 #define TRACKPAD2_2021_BT_VERSION 0x110
 #define TRACKPAD_2024_BT_VERSION 0x314
 
@@ -61,6 +65,17 @@ MODULE_PARM_DESC(report_undeciphered, "Report undeciphered multi-touch state fie
 #define MOUSE2_REPORT_ID   0x12
 #define DOUBLE_REPORT_ID   0xf7
 #define USB_BATTERY_TIMEOUT_SEC 60
+
+#define TRACKPAD2_HAPTIC_CLICK_REPORT_ID     0x22
+#define TRACKPAD2_HAPTIC_RELEASE_REPORT_ID   0x23
+#define TRACKPAD2_HAPTIC_ACTUATOR_REPORT_ID  0x53
+#define TRACKPAD2_HAPTIC_REPORT_LEN          14
+#define TRACKPAD2_HAPTIC_CLICK_UNCHANGED     0
+#define TRACKPAD2_HAPTIC_CLICK_SILENT_LOW    1
+#define TRACKPAD2_HAPTIC_CLICK_OFF           2
+#define TRACKPAD2_HAPTIC_SILENT_CLICK        0x000015
+#define TRACKPAD2_HAPTIC_SILENT_RELEASE      0x000010
+#define TRACKPAD2_HAPTIC_OFF                 0x000000
 
 /* These definitions are not precise, but they're close enough.  (Bits
  * 0x03 seem to indicate the aspect ratio of the touch, bits 0x70 seem
@@ -828,6 +843,82 @@ static bool is_usb_magictrackpad2(__u32 vendor, __u32 product)
 	       product == USB_DEVICE_ID_APPLE_MAGICTRACKPAD2_USBC;
 }
 
+static bool magicmouse_is_haptic_interface(struct hid_device *hdev)
+{
+	struct hid_report_enum *report_enum;
+
+	report_enum = &hdev->report_enum[HID_OUTPUT_REPORT];
+
+	/*
+	 * The persistent haptic configuration reports are accepted as feature
+	 * reports, but are not advertised in the feature report descriptor.
+	 * Report 0x53 is the one-shot actuator output report and identifies
+	 * the HID interface that accepts the persistent reports.
+	 */
+	return report_enum->report_id_hash[TRACKPAD2_HAPTIC_ACTUATOR_REPORT_ID];
+}
+
+static int magicmouse_send_haptic_report(struct hid_device *hdev, u8 report_id,
+					 u32 feedback)
+{
+	static const u8 report_template[TRACKPAD2_HAPTIC_REPORT_LEN] = {
+		0x00, 0x01, 0x00, 0x78, 0x02, 0x00, 0x24,
+		0x30, 0x06, 0x01, 0x00, 0x18, 0x48, 0x13,
+	};
+	u8 *buf;
+	int ret;
+
+	buf = kmemdup(report_template, sizeof(report_template), GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	buf[0] = report_id;
+	buf[2] = feedback & 0xff;
+	buf[5] = (feedback >> 8) & 0xff;
+	buf[10] = (feedback >> 16) & 0xff;
+
+	ret = hid_hw_raw_request(hdev, buf[0], buf, TRACKPAD2_HAPTIC_REPORT_LEN,
+				 HID_FEATURE_REPORT, HID_REQ_SET_REPORT);
+	kfree(buf);
+
+	return ret;
+}
+
+static int magicmouse_apply_haptic_click(struct hid_device *hdev)
+{
+	unsigned int click = READ_ONCE(haptic_click);
+	u32 click_feedback;
+	u32 release_feedback;
+	int ret;
+
+	if (click == TRACKPAD2_HAPTIC_CLICK_UNCHANGED)
+		return 0;
+
+	switch (click) {
+	case TRACKPAD2_HAPTIC_CLICK_SILENT_LOW:
+		click_feedback = TRACKPAD2_HAPTIC_SILENT_CLICK;
+		release_feedback = TRACKPAD2_HAPTIC_SILENT_RELEASE;
+		break;
+	case TRACKPAD2_HAPTIC_CLICK_OFF:
+		click_feedback = TRACKPAD2_HAPTIC_OFF;
+		release_feedback = TRACKPAD2_HAPTIC_OFF;
+		break;
+	default:
+		hid_warn(hdev, "invalid haptic_click value %u\n", click);
+		return -EINVAL;
+	}
+
+	ret = magicmouse_send_haptic_report(hdev,
+					    TRACKPAD2_HAPTIC_CLICK_REPORT_ID,
+					    click_feedback);
+	if (ret < 0)
+		return ret;
+
+	return magicmouse_send_haptic_report(hdev,
+					     TRACKPAD2_HAPTIC_RELEASE_REPORT_ID,
+					     release_feedback);
+}
+
 static int magicmouse_fetch_battery(struct hid_device *hdev)
 {
 #ifdef CONFIG_HID_BATTERY_STRENGTH
@@ -910,8 +1001,17 @@ static int magicmouse_probe(struct hid_device *hdev,
 
 	if (is_usb_magicmouse2(id->vendor, id->product) ||
 	    (is_usb_magictrackpad2(id->vendor, id->product) &&
-	     hdev->type != HID_TYPE_USBMOUSE))
+	     hdev->type != HID_TYPE_USBMOUSE)) {
+		if (is_usb_magictrackpad2(id->vendor, id->product) &&
+		    magicmouse_is_haptic_interface(hdev)) {
+			ret = magicmouse_apply_haptic_click(hdev);
+			if (ret < 0)
+				hid_warn(hdev,
+					 "unable to apply haptic click setting (%d)\n",
+					 ret);
+		}
 		return 0;
+	}
 
 	if (!msc->input) {
 		hid_err(hdev, "magicmouse input not registered\n");
