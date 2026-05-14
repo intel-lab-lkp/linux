@@ -284,6 +284,11 @@ static int bpf_xmit(struct sk_buff *skb)
 		__be16 proto = skb->protocol;
 		int ret;
 
+		/* LWT BPF programs cannot access skb metadata but can corrupt
+		 * it with helpers that operate on skb headroom. Drop it.
+		 */
+		skb_metadata_clear(skb);
+
 		ret = run_lwt_bpf(skb, &bpf->xmit, dst, CAN_REDIRECT);
 		switch (ret) {
 		case BPF_OK:
