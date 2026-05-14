@@ -933,6 +933,12 @@ mtype_add(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 			j = 0;
 		data = ahash_data(n, j, set->dsize);
 		if (!deleted) {
+			clear_bit(j, n->used);
+			/* Give time to other readers of the set
+			 * to avoid torn reads due to the memcpy()
+			 * below.
+			 */
+			synchronize_rcu();
 #ifdef IP_SET_HASH_WITH_NETS
 			for (i = 0; i < IPSET_NET_COUNT; i++)
 				mtype_del_cidr(set, h,
