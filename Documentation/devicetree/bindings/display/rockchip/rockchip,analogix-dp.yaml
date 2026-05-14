@@ -50,6 +50,13 @@ properties:
   aux-bus:
     $ref: /schemas/display/dp-aux-bus.yaml#
 
+  reg: true
+  interrupts: true
+  phys: true
+  phy-names: true
+  force-hpd: true
+  ports: true
+
 required:
   - compatible
   - clocks
