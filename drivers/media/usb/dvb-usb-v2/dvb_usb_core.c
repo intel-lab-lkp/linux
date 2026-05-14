@@ -852,7 +852,9 @@ static int dvb_usbv2_init(struct dvb_usb_device *d)
 	int ret;
 	dev_dbg(&d->udev->dev, "%s:\n", __func__);
 
-	dvb_usbv2_device_power_ctrl(d, 1);
+	ret = dvb_usbv2_device_power_ctrl(d, 1);
+	if (ret < 0)
+		goto err;
 
 	if (d->props->read_config) {
 		ret = d->props->read_config(d);
