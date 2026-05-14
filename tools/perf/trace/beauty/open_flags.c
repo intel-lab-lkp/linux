@@ -2,6 +2,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include "trace/beauty/beauty.h"
 
 #ifndef O_DIRECT
 #define O_DIRECT	00040000

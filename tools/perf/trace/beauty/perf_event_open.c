@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: LGPL-2.1
+#include <linux/perf_event.h>
+#include "util/evsel_fprintf.h"
+
 #ifndef PERF_FLAG_FD_NO_GROUP
 # define PERF_FLAG_FD_NO_GROUP		(1UL << 0)
 #endif
@@ -15,8 +18,10 @@
 # define PERF_FLAG_FD_CLOEXEC		(1UL << 3) /* O_CLOEXEC */
 #endif
 
-static size_t syscall_arg__scnprintf_perf_flags(char *bf, size_t size,
-						struct syscall_arg *arg)
+#include "trace/beauty/beauty.h"
+
+size_t syscall_arg__scnprintf_perf_flags(char *bf, size_t size,
+					 struct syscall_arg *arg)
 {
 	bool show_prefix = arg->show_string_prefix;
 	const char *prefix = "PERF_";
@@ -43,7 +48,7 @@ static size_t syscall_arg__scnprintf_perf_flags(char *bf, size_t size,
 	return printed;
 }
 
-#define SCA_PERF_FLAGS syscall_arg__scnprintf_perf_flags
+
 
 struct attr_fprintf_args {
 	size_t size, printed;
@@ -76,10 +81,11 @@ static size_t perf_event_attr___scnprintf(struct perf_event_attr *attr, char *bf
 
 static size_t syscall_arg__scnprintf_augmented_perf_event_attr(struct syscall_arg *arg, char *bf, size_t size)
 {
-	return perf_event_attr___scnprintf((void *)arg->augmented.args->value, bf, size, arg->trace->show_zeros);
+	return perf_event_attr___scnprintf((void *)arg->augmented.args->value, bf, size,
+					   trace__show_zeros(arg->trace));
 }
 
-static size_t syscall_arg__scnprintf_perf_event_attr(char *bf, size_t size, struct syscall_arg *arg)
+size_t syscall_arg__scnprintf_perf_event_attr(char *bf, size_t size, struct syscall_arg *arg)
 {
 	if (arg->augmented.args)
 		return syscall_arg__scnprintf_augmented_perf_event_attr(arg, bf, size);
@@ -87,8 +93,4 @@ static size_t syscall_arg__scnprintf_perf_event_attr(char *bf, size_t size, stru
 	return scnprintf(bf, size, "%#lx", arg->val);
 }
 
-#define SCA_PERF_ATTR syscall_arg__scnprintf_perf_event_attr
-// 'argname' is just documentational at this point, to remove the previous comment with that info
-#define SCA_PERF_ATTR_FROM_USER(argname) \
-          { .scnprintf  = SCA_PERF_ATTR, \
-            .from_user  = true, }
+

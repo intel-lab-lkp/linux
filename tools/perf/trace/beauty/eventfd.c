@@ -11,7 +11,9 @@
 #define EFD_CLOEXEC		02000000
 #endif
 
-static size_t syscall_arg__scnprintf_eventfd_flags(char *bf, size_t size, struct syscall_arg *arg)
+#include "trace/beauty/beauty.h"
+
+size_t syscall_arg__scnprintf_eventfd_flags(char *bf, size_t size, struct syscall_arg *arg)
 {
 	bool show_prefix = arg->show_string_prefix;
 	const char *prefix = "EFD_";
@@ -36,4 +38,4 @@ static size_t syscall_arg__scnprintf_eventfd_flags(char *bf, size_t size, struct
 	return printed;
 }
 
-#define SCA_EFD_FLAGS syscall_arg__scnprintf_eventfd_flags
+
