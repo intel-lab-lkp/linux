@@ -137,6 +137,9 @@ static void test_many_cpus(struct kunit *test)
 	for_each_online_cpu(cpu) {
 		bool do_continue = fill_bp_slots(test, &idx, cpu, NULL, 0);
 
+		if (idx >= MAX_TEST_BREAKPOINTS)
+			break;
+
 		TEST_EXPECT_NOSPC(register_test_bp(cpu, NULL, idx));
 		if (!do_continue)
 			break;
