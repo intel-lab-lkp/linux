@@ -2328,11 +2328,12 @@ int vmw_dumb_create(struct drm_file *file_priv,
 	struct vmw_user_surface *usurf = container_of(vbo->dumb_surface,
 						struct vmw_user_surface, srf);
 	usurf->prime.base.refcount_release = NULL;
+
 err:
 	if (res)
 		vmw_resource_unreference(&res);
-
-	ttm_ref_object_base_unref(tfile, arg.rep.handle);
+	if (ret)
+		ttm_ref_object_base_unref(tfile, arg.rep.handle);
 
 	return ret;
 }
