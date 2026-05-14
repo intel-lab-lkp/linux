@@ -1228,6 +1228,12 @@ xfs_mountfs(
 	return 0;
 
  out_agresv:
+	/*
+	 * Drain ordinary inodegc before we drop per-AG reservations or tear
+	 * down quota state.  Background inactivation can still attach dquots
+	 * here, and dqget can still need the quota inodes.
+	 */
+	xfs_inodegc_flush(mp);
 	xfs_fs_unreserve_ag_blocks(mp);
 	xfs_qm_unmount_quotas(mp);
 	if (xfs_has_zoned(mp))
@@ -1236,24 +1242,25 @@ xfs_mountfs(
 	xfs_rtunmount_inodes(mp);
  out_rele_rip:
 	xfs_irele(rip);
-	/* Clean out dquots that might be in memory after quotacheck. */
-	xfs_qm_unmount(mp);
  out_free_metadir:
 	if (mp->m_metadirip)
 		xfs_irele(mp->m_metadirip);
 
 	/*
-	 * Inactivate all inodes that might still be in memory after a log
-	 * intent recovery failure so that reclaim can free them.  Metadata
-	 * inodes and the root directory shouldn't need inactivation, but the
-	 * mount failed for some reason, so pull down all the state and flee.
+	 * Flush inodegc before we destroy quotainfo.  This is the first drain
+	 * for paths that bypass out_agresv, and it also catches any reclaim
+	 * queued by the quota, realtime, root, or metadir teardown above.
 	 */
 	xfs_inodegc_flush(mp);
+
+	/* Clean out dquots that might be in memory after quotacheck. */
+	xfs_qm_unmount(mp);
 
 	/*
 	 * Flush all inode reclamation work and flush the log.
 	 * We have to do this /after/ rtunmount and qm_unmount because those
-	 * two will have scheduled delayed reclaim for the rt/quota inodes.
+	 * will have scheduled delayed reclaim for the rt/quota/root/metadir
+	 * inodes.
 	 *
 	 * This is slightly different from the unmountfs call sequence
 	 * because we could be tearing down a partially set up mount.  In
