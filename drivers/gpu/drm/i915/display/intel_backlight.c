@@ -1280,7 +1280,7 @@ static int lpt_setup_backlight(struct intel_connector *connector, enum pipe unus
 	}
 
 	drm_dbg_kms(display->drm,
-		    "[CONNECTOR:%d:%s] Using native PCH PWM for backlight control\n",
+		    "[CONNECTOR:%d:%s] Setting up native PCH PWM for backlight control\n",
 		    connector->base.base.id, connector->base.name);
 
 	return 0;
@@ -1311,7 +1311,7 @@ static int pch_setup_backlight(struct intel_connector *connector, enum pipe unus
 		(pch_ctl1 & BLM_PCH_PWM_ENABLE);
 
 	drm_dbg_kms(display->drm,
-		    "[CONNECTOR:%d:%s] Using native PCH PWM for backlight control\n",
+		    "[CONNECTOR:%d:%s] Setting up native PCH PWM for backlight control\n",
 		    connector->base.base.id, connector->base.name);
 
 	return 0;
@@ -1353,7 +1353,7 @@ static int i9xx_setup_backlight(struct intel_connector *connector, enum pipe unu
 	panel->backlight.pwm_enabled = val != 0;
 
 	drm_dbg_kms(display->drm,
-		    "[CONNECTOR:%d:%s] Using native PWM for backlight control\n",
+		    "[CONNECTOR:%d:%s] Setting up native PWM for backlight control\n",
 		    connector->base.base.id, connector->base.name);
 
 	return 0;
@@ -1386,7 +1386,7 @@ static int i965_setup_backlight(struct intel_connector *connector, enum pipe unu
 	panel->backlight.pwm_enabled = ctl2 & BLM_PWM_ENABLE;
 
 	drm_dbg_kms(display->drm,
-		    "[CONNECTOR:%d:%s] Using native PWM for backlight control\n",
+		    "[CONNECTOR:%d:%s] Setting up native PWM for backlight control\n",
 		    connector->base.base.id, connector->base.name);
 
 	return 0;
@@ -1418,7 +1418,7 @@ static int vlv_setup_backlight(struct intel_connector *connector, enum pipe pipe
 	panel->backlight.pwm_enabled = ctl2 & BLM_PWM_ENABLE;
 
 	drm_dbg_kms(display->drm,
-		    "[CONNECTOR:%d:%s] Using native PWM for backlight control (on pipe %c)\n",
+		    "[CONNECTOR:%d:%s] Setting up native PWM for backlight control (on pipe %c)\n",
 		    connector->base.base.id, connector->base.name, pipe_name(pipe));
 
 	return 0;
@@ -1458,7 +1458,7 @@ bxt_setup_backlight(struct intel_connector *connector, enum pipe unused)
 	panel->backlight.pwm_enabled = pwm_ctl & BXT_BLC_PWM_ENABLE;
 
 	drm_dbg_kms(display->drm,
-		    "[CONNECTOR:%d:%s] Using native PWM for backlight control (controller=%d)\n",
+		    "[CONNECTOR:%d:%s] Setting up native PWM for backlight control (controller=%d)\n",
 		    connector->base.base.id, connector->base.name,
 		    panel->backlight.controller);
 
@@ -1530,7 +1530,7 @@ cnp_setup_backlight(struct intel_connector *connector, enum pipe unused)
 	panel->backlight.pwm_enabled = pwm_ctl & BXT_BLC_PWM_ENABLE;
 
 	drm_dbg_kms(display->drm,
-		    "[CONNECTOR:%d:%s] Using native PCH PWM for backlight control (controller=%d)\n",
+		    "[CONNECTOR:%d:%s] Setting up native PCH PWM for backlight control (controller=%d)\n",
 		    connector->base.base.id, connector->base.name,
 		    panel->backlight.controller);
 
