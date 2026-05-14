@@ -1984,6 +1984,14 @@ static int macb_tx_poll(struct napi_struct *napi, int budget)
 		 * actions if an interrupt is raised just after enabling them,
 		 * but this should be harmless.
 		 */
+		/*
+		 * PCIe read barrier: flush any in-flight peripheral DMA
+		 * writes (descriptor TX_USED updates) so the subsequent
+		 * macb_tx_complete_pending() check observes them.  IMR is
+		 * the read-only interrupt mask mirror; the read has no
+		 * side effects on either read-clear or W1C ISR silicon.
+		 */
+		(void)queue_readl(queue, IMR);
 		if (macb_tx_complete_pending(queue)) {
 			queue_writel(queue, IDR, MACB_BIT(TCOMP));
 			macb_queue_isr_clear(bp, queue, MACB_BIT(TCOMP));
