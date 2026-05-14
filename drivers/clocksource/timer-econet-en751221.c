@@ -126,6 +126,19 @@ static void __init cevt_dev_init(uint cpu)
 	iowrite32(U32_MAX, reg_compare(cpu));
 }
 
+static void __init cevt_setup_clockevent(struct clock_event_device *cd,
+					 struct device_node *np,
+					 int irq, int cpu)
+{
+	cd->rating		= 310;
+	cd->features		= CLOCK_EVT_FEAT_ONESHOT |
+				  CLOCK_EVT_FEAT_C3STOP;
+	cd->set_next_event	= cevt_set_next_event;
+	cd->irq			= irq;
+	cd->cpumask		= cpumask_of(cpu);
+	cd->name		= np->name;
+}
+
 static int __init cevt_init(struct device_node *np)
 {
 	int i, irq, ret;
@@ -146,21 +159,11 @@ static int __init cevt_init(struct device_node *np)
 	for_each_possible_cpu(i) {
 		struct clock_event_device *cd = &per_cpu(econet_timer_pcpu, i);
 
-		cd->rating		= 310;
-		cd->features		= CLOCK_EVT_FEAT_ONESHOT |
-					  CLOCK_EVT_FEAT_C3STOP |
-					  CLOCK_EVT_FEAT_PERCPU;
-		cd->set_next_event	= cevt_set_next_event;
-		cd->irq			= irq;
-		cd->cpumask		= cpumask_of(i);
-		cd->name		= np->name;
-
+		cevt_setup_clockevent(cd, np, irq, i);
+		cd->features |= CLOCK_EVT_FEAT_PERCPU;
 		cevt_dev_init(i);
 	}
 
-	cpuhp_setup_state(CPUHP_AP_ONLINE_DYN,
-			  "clockevents/econet/timer:starting",
-			  cevt_init_cpu, NULL);
 	return 0;
 
 err_unmap_irq:
@@ -202,6 +205,10 @@ static int __init timer_init(struct device_node *np)
 	ret = cevt_init(np);
 	if (ret < 0)
 		return ret;
+
+	cpuhp_setup_state(CPUHP_AP_ONLINE_DYN,
+			  "clockevents/econet/timer:starting",
+			  cevt_init_cpu, NULL);
 
 	sched_clock_register(sched_clock_read, ECONET_BITS,
 			     econet_timer.freq_hz);
