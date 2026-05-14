@@ -16,6 +16,7 @@
 #include <linux/iopoll.h>
 #include <linux/crc16.h>
 #include <linux/phylink.h>
+
 #include "lan743x_main.h"
 #include "lan743x_ethtool.h"
 
@@ -118,6 +119,139 @@ static void lan743x_pci_cleanup(struct lan743x_adapter *adapter)
 						     IORESOURCE_MEM));
 	pci_disable_device(adapter->pdev);
 }
+
+#ifdef CONFIG_LAN743X_SFP
+/* Walk the PCI11x1x topology to find a peripheral controller function by its
+ * device ID. Returns the matching pci_dev with its reference count incremented
+ * (caller must call pci_dev_put()), or NULL if not found.
+ *
+ * PCI11x1x devices consist of a PCIe switch with downstream ports. One port
+ * carries the embedded ethernet controller handled by this driver; another
+ * carries a multifunction peripheral endpoint (I2C, GPIO, UART, SPI).
+ *
+ * pci_walk_bus() is used to traverse the bus safely, as it holds the
+ * appropriate PCI bus lock during the walk.
+ */
+struct pci1xxxx_perif_ctx {
+	u16 perif_id;
+	struct pci_dev *found;
+};
+
+static int pci1xxxx_perif_match(struct pci_dev *dev, void *data)
+{
+	struct pci1xxxx_perif_ctx *ctx = data;
+
+	if (dev->vendor == PCI1XXXX_VENDOR_ID &&
+	    (dev->device & ~PCI1XXXX_DEV_MASK) == ctx->perif_id) {
+		ctx->found = pci_dev_get(dev);
+		return 1;
+	}
+	return 0;
+}
+
+static struct pci_dev *pci1xxxx_perif_dev_find(struct lan743x_adapter *adapter,
+					       u16 perif_id)
+{
+	struct pci1xxxx_perif_ctx ctx = { .perif_id = perif_id };
+	struct pci_dev *br_dev;
+
+	br_dev = pci_upstream_bridge(adapter->pdev);
+	if (!br_dev) {
+		netif_err(adapter, drv, adapter->netdev,
+			  "upstream bridge not found\n");
+		return NULL;
+	}
+
+	pci_walk_bus(br_dev->bus, pci1xxxx_perif_match, &ctx);
+
+	if (!ctx.found)
+		netif_err(adapter, drv, adapter->netdev,
+			  "pci1xxxx peripheral (0x%X) device not found\n",
+			  perif_id);
+	return ctx.found;
+}
+
+static int pci1xxxx_i2c_dev_match(struct device *dev, const void *data)
+{
+	return i2c_verify_adapter(dev);
+}
+
+static int pci1xxxx_i2c_adapter_get(struct lan743x_adapter *adapter)
+{
+	struct pci_dev *perif_dev;
+	struct device *adap_dev;
+
+	perif_dev = pci1xxxx_perif_dev_find(adapter, PCI1XXXX_PERIF_I2C_ID);
+	if (!perif_dev)
+		return -EPROBE_DEFER;
+
+	adap_dev = device_find_child(&perif_dev->dev, NULL,
+				     pci1xxxx_i2c_dev_match);
+	if (!adap_dev) {
+		pci_dev_put(perif_dev);
+		return -EPROBE_DEFER;
+	}
+
+	if (!device_link_add(&perif_dev->dev, &adapter->pdev->dev,
+			     DL_FLAG_MANAGED | DL_FLAG_AUTOREMOVE_CONSUMER)) {
+		netif_err(adapter, drv, adapter->netdev,
+			  "failed to link I2C peripheral device\n");
+		put_device(adap_dev);
+		pci_dev_put(perif_dev);
+		return -EINVAL;
+	}
+
+	adapter->i2c_adap = i2c_verify_adapter(adap_dev);
+	strscpy(adapter->nodes->i2c_name, adapter->i2c_adap->name,
+		sizeof(adapter->nodes->i2c_name));
+	netif_dbg(adapter, drv, adapter->netdev, "Found %s\n",
+		  adapter->i2c_adap->name);
+	put_device(adap_dev);
+	pci_dev_put(perif_dev);
+	return 0;
+}
+
+static int pci1xxxx_gpio_aux_dev_match(struct device *dev, const void *data)
+{
+	if (!dev_is_auxiliary(dev))
+		return 0;
+	return strcmp(to_auxiliary_dev(dev)->name, "gp_gpio") == 0;
+}
+
+static int pci1xxxx_gpio_dev_get(struct lan743x_adapter *adapter)
+{
+	struct pci_dev *perif_dev;
+	struct device *gpio_dev;
+
+	perif_dev = pci1xxxx_perif_dev_find(adapter, PCI1XXXX_PERIF_GPIO_ID);
+	if (!perif_dev)
+		return -EPROBE_DEFER;
+
+	gpio_dev = device_find_child(&perif_dev->dev, NULL,
+				     pci1xxxx_gpio_aux_dev_match);
+	if (!gpio_dev) {
+		pci_dev_put(perif_dev);
+		return -EPROBE_DEFER;
+	}
+
+	if (!device_link_add(&perif_dev->dev, &adapter->pdev->dev,
+			     DL_FLAG_MANAGED | DL_FLAG_AUTOREMOVE_CONSUMER)) {
+		netif_err(adapter, drv, adapter->netdev,
+			  "failed to link GPIO peripheral device\n");
+		put_device(gpio_dev);
+		pci_dev_put(perif_dev);
+		return -EINVAL;
+	}
+
+	strscpy(adapter->nodes->gpio_name, dev_name(gpio_dev),
+		sizeof(adapter->nodes->gpio_name));
+	netif_dbg(adapter, drv, adapter->netdev, "Found %s\n",
+		  adapter->nodes->gpio_name);
+	put_device(gpio_dev);
+	pci_dev_put(perif_dev);
+	return 0;
+}
+#endif /* CONFIG_LAN743X_SFP */
 
 static int lan743x_pci_init(struct lan743x_adapter *adapter,
 			    struct pci_dev *pdev)
@@ -2897,6 +3031,107 @@ return_error:
 	return ret;
 }
 
+#ifdef CONFIG_LAN743X_SFP
+static void lan743x_swnodes_unregister(struct lan743x_adapter *adapter)
+{
+	if (adapter->nodes) {
+		software_node_unregister_node_group(adapter->nodes->group);
+		kfree(adapter->nodes);
+		adapter->nodes = NULL;
+	}
+}
+
+static int lan743x_swnodes_register(struct lan743x_adapter *adapter)
+{
+	struct pci_dev *pdev = adapter->pdev;
+	struct lan743x_sw_nodes *nodes;
+	struct software_node *swnodes;
+	int ret;
+	u32 id;
+
+	nodes = kzalloc_obj(*nodes);
+	if (!nodes)
+		return -ENOMEM;
+
+	adapter->nodes = nodes;
+
+	ret = pci1xxxx_gpio_dev_get(adapter);
+	if (ret < 0)
+		goto return_error;
+
+	ret = pci1xxxx_i2c_adapter_get(adapter);
+	if (ret < 0)
+		goto return_error;
+
+	id = (pdev->bus->number << 8) | pdev->devfn;
+	snprintf(nodes->sfp_name, sizeof(nodes->sfp_name), "sfp-%d", id);
+	snprintf(nodes->phylink_name, sizeof(nodes->phylink_name),
+		 "mchp-pci1xxxx-phylink-%d", id);
+
+	swnodes = nodes->swnodes;
+
+	nodes->gpio_props[0] = PROPERTY_ENTRY_STRING("pinctrl-names", "default");
+	swnodes[SWNODE_GPIO] = NODE_PROP(nodes->gpio_name, nodes->gpio_props);
+
+	nodes->tx_fault_ref[0] = SOFTWARE_NODE_REFERENCE(&swnodes[SWNODE_GPIO],
+							 PCI11X1X_TX_FAULT_GPIO,
+							 GPIO_ACTIVE_HIGH);
+	nodes->tx_disable_ref[0] = SOFTWARE_NODE_REFERENCE(&swnodes[SWNODE_GPIO],
+							   PCI11X1X_TX_DIS_GPIO,
+							   GPIO_ACTIVE_HIGH);
+	nodes->mod_def0_ref[0] = SOFTWARE_NODE_REFERENCE(&swnodes[SWNODE_GPIO],
+							 PCI11X1X_MOD_DEF0_GPIO,
+							 GPIO_ACTIVE_LOW);
+	nodes->los_ref[0] = SOFTWARE_NODE_REFERENCE(&swnodes[SWNODE_GPIO],
+						    PCI11X1X_LOS_GPIO,
+						    GPIO_ACTIVE_HIGH);
+	nodes->rate_sel0_ref[0] = SOFTWARE_NODE_REFERENCE(&swnodes[SWNODE_GPIO],
+							  PCI11X1X_RATE_SEL0_GPIO,
+							  GPIO_ACTIVE_HIGH);
+
+	nodes->i2c_props[0] = PROPERTY_ENTRY_STRING("pinctrl-names", "default");
+	swnodes[SWNODE_I2C] = NODE_PROP(nodes->i2c_name, nodes->i2c_props);
+	nodes->i2c_ref[0] = SOFTWARE_NODE_REFERENCE(&swnodes[SWNODE_I2C]);
+
+	nodes->sfp_props[0] = PROPERTY_ENTRY_STRING("compatible", "sff,sfp");
+	nodes->sfp_props[1] = PROPERTY_ENTRY_REF_ARRAY("i2c-bus", nodes->i2c_ref);
+	nodes->sfp_props[2] = PROPERTY_ENTRY_REF_ARRAY("tx-fault-gpios",
+						       nodes->tx_fault_ref);
+	nodes->sfp_props[3] = PROPERTY_ENTRY_REF_ARRAY("tx-disable-gpios",
+						       nodes->tx_disable_ref);
+	nodes->sfp_props[4] = PROPERTY_ENTRY_REF_ARRAY("mod-def0-gpios",
+						       nodes->mod_def0_ref);
+	nodes->sfp_props[5] = PROPERTY_ENTRY_REF_ARRAY("los-gpios",
+						       nodes->los_ref);
+	nodes->sfp_props[6] = PROPERTY_ENTRY_REF_ARRAY("rate-select0-gpios",
+						       nodes->rate_sel0_ref);
+	swnodes[SWNODE_SFP] = NODE_PROP(nodes->sfp_name, nodes->sfp_props);
+	nodes->sfp_ref[0] = SOFTWARE_NODE_REFERENCE(&swnodes[SWNODE_SFP]);
+	nodes->phylink_props[0] = PROPERTY_ENTRY_STRING("managed",
+							"in-band-status");
+	nodes->phylink_props[1] = PROPERTY_ENTRY_REF_ARRAY("sfp",
+							   nodes->sfp_ref);
+	swnodes[SWNODE_PHYLINK] = NODE_PROP(nodes->phylink_name,
+					    nodes->phylink_props);
+
+	nodes->group[SWNODE_GPIO] = &swnodes[SWNODE_GPIO];
+	nodes->group[SWNODE_I2C] = &swnodes[SWNODE_I2C];
+	nodes->group[SWNODE_SFP] = &swnodes[SWNODE_SFP];
+	nodes->group[SWNODE_PHYLINK] = &swnodes[SWNODE_PHYLINK];
+
+	ret = software_node_register_node_group(nodes->group);
+	if (ret)
+		goto return_error;
+
+	return 0;
+
+return_error:
+	kfree(nodes);
+	adapter->nodes = NULL;
+	return ret;
+}
+#endif /* CONFIG_LAN743X_SFP */
+
 static int lan743x_phylink_sgmii_config(struct lan743x_adapter *adapter)
 {
 	u32 sgmii_ctl;
@@ -3141,7 +3376,9 @@ static const struct phylink_mac_ops lan743x_phylink_mac_ops = {
 static int lan743x_phylink_create(struct lan743x_adapter *adapter)
 {
 	struct net_device *netdev = adapter->netdev;
+	struct fwnode_handle *fwnode = NULL;
 	struct phylink *pl;
+	int ret;
 
 	adapter->phylink_config.dev = &netdev->dev;
 	adapter->phylink_config.type = PHYLINK_NETDEV;
@@ -3181,11 +3418,28 @@ static int lan743x_phylink_create(struct lan743x_adapter *adapter)
 	       adapter->phylink_config.supported_interfaces,
 	       sizeof(adapter->phylink_config.lpi_interfaces));
 
-	pl = phylink_create(&adapter->phylink_config, NULL,
-			    adapter->phy_interface, &lan743x_phylink_mac_ops);
+#ifdef CONFIG_LAN743X_SFP
+	if (adapter->is_sfp_support_en) {
+		ret = lan743x_swnodes_register(adapter);
+		if (ret) {
+			netdev_err(netdev, "failed to register software nodes\n");
+			return ret;
+		}
+		fwnode = software_node_fwnode(adapter->nodes->group[SWNODE_PHYLINK]);
+		if (!fwnode) {
+			lan743x_swnodes_unregister(adapter);
+			return -ENODEV;
+		}
+	}
+#endif
 
+	pl = phylink_create(&adapter->phylink_config, fwnode,
+			    adapter->phy_interface, &lan743x_phylink_mac_ops);
 	if (IS_ERR(pl)) {
 		netdev_err(netdev, "Could not create phylink (%pe)\n", pl);
+#ifdef CONFIG_LAN743X_SFP
+		lan743x_swnodes_unregister(adapter);
+#endif
 		return PTR_ERR(pl);
 	}
 
@@ -3492,6 +3746,9 @@ static void lan743x_destroy_phylink(struct lan743x_adapter *adapter)
 {
 	phylink_destroy(adapter->phylink);
 	adapter->phylink = NULL;
+#ifdef CONFIG_LAN743X_SFP
+	lan743x_swnodes_unregister(adapter);
+#endif
 }
 
 static void lan743x_full_cleanup(struct lan743x_adapter *adapter)
