@@ -144,6 +144,19 @@ static DEFINE_PER_CPU(long, nr_dentry_unused);
 static DEFINE_PER_CPU(long, nr_dentry_negative);
 static int dentry_negative_policy;
 
+/*
+ * Soft cap on the total number of dentries. When non-zero and exceeded,
+ * a background worker prunes unused dentries (preferring negative ones)
+ * until we are back under the limit. Zero (the default) disables the
+ * feature entirely; the fast path in __d_alloc() only pays the cost of
+ * a READ_ONCE and a branch in that case.
+ */
+static unsigned long sysctl_dentry_limit __read_mostly;
+static unsigned int sysctl_dentry_limit_interval_ms __read_mostly = 1000;
+static unsigned long dentry_limit_last_kick;
+
+static void dentry_limit_kick(void);
+
 #if defined(CONFIG_SYSCTL) && defined(CONFIG_PROC_FS)
 /* Statistics gathering. */
 static struct dentry_stat_t dentry_stat = {
@@ -199,6 +212,20 @@ static int proc_nr_dentry(const struct ctl_table *table, int write, void *buffer
 	return proc_doulongvec_minmax(table, write, buffer, lenp, ppos);
 }
 
+/*
+ * Writing fs.dentry-limit should give prompt feedback to admins
+ * lowering the cap, so kick the worker on every successful write.
+ */
+static int proc_dentry_limit(const struct ctl_table *table, int write,
+			     void *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret = proc_doulongvec_minmax(table, write, buffer, lenp, ppos);
+
+	if (write && !ret)
+		dentry_limit_kick();
+	return ret;
+}
+
 static const struct ctl_table fs_dcache_sysctls[] = {
 	{
 		.procname	= "dentry-state",
@@ -206,6 +233,21 @@ static const struct ctl_table fs_dcache_sysctls[] = {
 		.maxlen		= 6*sizeof(long),
 		.mode		= 0444,
 		.proc_handler	= proc_nr_dentry,
+	},
+	{
+		.procname	= "dentry-limit",
+		.data		= &sysctl_dentry_limit,
+		.maxlen		= sizeof(sysctl_dentry_limit),
+		.mode		= 0644,
+		.proc_handler	= proc_dentry_limit,
+	},
+	{
+		.procname	= "dentry-limit-interval-ms",
+		.data		= &sysctl_dentry_limit_interval_ms,
+		.maxlen		= sizeof(sysctl_dentry_limit_interval_ms),
+		.mode		= 0644,
+		.proc_handler	= proc_douintvec_minmax,
+		.extra1		= SYSCTL_ONE,
 	},
 	{
 		.procname	= "dentry-negative",
@@ -1325,6 +1367,160 @@ static enum lru_status dentry_lru_isolate_shrink(struct list_head *item,
 	return LRU_REMOVED;
 }
 
+#define DENTRY_LIMIT_BATCH	1024UL
+
+static void dentry_limit_worker_fn(struct work_struct *work);
+static DECLARE_DELAYED_WORK(dentry_limit_work, dentry_limit_worker_fn);
+
+/*
+ * Variant of dentry_lru_isolate() that only frees negative dentries.
+ * DCACHE_REFERENCED is intentionally not honoured here: the whole point
+ * of an admin-imposed cap on negatives is that even frequently-looked-up
+ * negative entries should be evicted before any positive dentry.
+ * Positive entries are rotated to the tail so the walk continues to
+ * make progress without disturbing their LRU position.
+ */
+static enum lru_status dentry_lru_isolate_negative(struct list_head *item,
+		struct list_lru_one *lru, void *arg)
+{
+	struct list_head *freeable = arg;
+	struct dentry *dentry = container_of(item, struct dentry, d_lru);
+
+	if (!spin_trylock(&dentry->d_lock))
+		return LRU_SKIP;
+
+	/* Same handling as dentry_lru_isolate() for in-use entries. */
+	if (dentry->d_lockref.count) {
+		d_lru_isolate(lru, dentry);
+		spin_unlock(&dentry->d_lock);
+		return LRU_REMOVED;
+	}
+
+	if (!d_is_negative(dentry)) {
+		spin_unlock(&dentry->d_lock);
+		return LRU_ROTATE;
+	}
+
+	d_lru_shrink_move(lru, dentry, freeable);
+	spin_unlock(&dentry->d_lock);
+	return LRU_REMOVED;
+}
+
+struct dentry_limit_ctx {
+	long over;		/* remaining dentries to evict */
+	list_lru_walk_cb isolate;
+};
+
+static void dentry_limit_prune_sb(struct super_block *sb, void *arg)
+{
+	struct dentry_limit_ctx *ctx = arg;
+	unsigned long walked = 0;
+	unsigned long budget;
+
+	if (ctx->over <= 0)
+		return;
+
+	/*
+	 * Walk up to one full pass of this superblock's LRU, in
+	 * DENTRY_LIMIT_BATCH-sized chunks. The loop matters mainly for
+	 * phase 1: dentry_lru_isolate_negative() returns LRU_ROTATE for
+	 * positive dentries, which still counts against list_lru_walk()'s
+	 * nr_to_walk. A single batch can therefore finish having freed
+	 * nothing when positives crowd the head of the LRU, and without
+	 * the inner loop the worker would have to wait a full
+	 * dentry-limit-interval-ms before retrying never reaching the
+	 * negatives buried behind a long run of positives.
+	 *
+	 * The budget is snapshot at entry so a filesystem allocating
+	 * dentries faster than we drain them can't keep us spinning here
+	 * forever; freshly added dentries are picked up on the next
+	 * worker invocation.
+	 *
+	 * Phase 2 normally exits much sooner: its isolate callback frees
+	 * any non-referenced dentry, so ctx->over typically hits zero
+	 * inside the first batch. The worst-case over-eviction is one
+	 * batch past the cap, which is within the soft semantics of
+	 * fs.dentry-limit.
+	 */
+	budget = list_lru_count(&sb->s_dentry_lru);
+
+	while (ctx->over > 0 && walked < budget) {
+		LIST_HEAD(dispose);
+		unsigned long nr;
+		long freed;
+
+		nr = min(DENTRY_LIMIT_BATCH, budget - walked);
+		freed = list_lru_walk(&sb->s_dentry_lru, ctx->isolate,
+				      &dispose, nr);
+		shrink_dentry_list(&dispose);
+
+		ctx->over -= freed;
+		walked += nr;
+
+		cond_resched();
+	}
+}
+
+static void dentry_limit_worker_fn(struct work_struct *work)
+{
+	struct dentry_limit_ctx ctx;
+	unsigned long limit = READ_ONCE(sysctl_dentry_limit);
+	unsigned int ms;
+	long nr;
+
+	if (!limit)
+		return;
+
+	nr = get_nr_dentry();
+	if (nr <= (long)limit)
+		return;
+
+	ctx.over = nr - (long)limit;
+
+	/* Phase 1: drain negative dentries across every superblock. */
+	ctx.isolate = dentry_lru_isolate_negative;
+	iterate_supers(dentry_limit_prune_sb, &ctx);
+
+	/* Phase 2: still over? Apply the ordinary LRU policy. */
+	if (ctx.over > 0) {
+		ctx.isolate = dentry_lru_isolate;
+		iterate_supers(dentry_limit_prune_sb, &ctx);
+	}
+
+	/*
+	 * Re-arm while still above the limit. Re-read the sysctls in
+	 * case the admin raised the cap or disabled the feature during
+	 * the walk.
+	 */
+	limit = READ_ONCE(sysctl_dentry_limit);
+	if (!limit || get_nr_dentry() <= (long)limit)
+		return;
+
+	ms = READ_ONCE(sysctl_dentry_limit_interval_ms);
+	queue_delayed_work(system_unbound_wq, &dentry_limit_work,
+			   msecs_to_jiffies(ms));
+}
+
+static void dentry_limit_kick(void)
+{
+	unsigned long limit = READ_ONCE(sysctl_dentry_limit);
+	unsigned long now;
+
+	if (!limit)
+		return;
+	if (delayed_work_pending(&dentry_limit_work))
+		return;
+
+	now = jiffies;
+	if (time_before(now, READ_ONCE(dentry_limit_last_kick) + HZ / 10))
+		return;
+	WRITE_ONCE(dentry_limit_last_kick, now);
+
+	if (get_nr_dentry() <= (long)limit)
+		return;
+
+	queue_delayed_work(system_unbound_wq, &dentry_limit_work, 0);
+}
 
 /**
  * shrink_dcache_sb - shrink dcache for a superblock
@@ -1868,6 +2064,7 @@ static struct dentry *__d_alloc(struct super_block *sb, const struct qstr *name)
 	}
 
 	this_cpu_inc(nr_dentry);
+	dentry_limit_kick();
 
 	return dentry;
 }

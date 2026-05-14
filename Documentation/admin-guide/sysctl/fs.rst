@@ -38,6 +38,34 @@ requests.  ``aio-max-nr`` allows you to change the maximum value
 ``aio-max-nr`` does not result in the
 pre-allocation or re-sizing of any kernel data structures.
 
+dentry-limit
+------------
+
+Soft cap on the total number of dentries allocated system-wide (i.e. on
+``nr_dentry`` from ``dentry-state``).  A value of ``0`` (the default)
+disables the feature and the dcache grows or shrinks only under memory
+pressure as before.
+
+When set to a non-zero value, a background worker is woken whenever
+the live dentry count exceeds the limit. The worker walks every
+superblock's LRU and prefers to evict negative dentries first; if it
+cannot get back under the limit using negative entries alone it falls
+back to the same LRU policy used by the memory-pressure shrinker.
+
+The limit is *soft*: allocations never fail because of it, and brief
+overshoots while the worker catches up are expected. Set the cap a
+comfortable margin above your steady-state working set.
+
+dentry-limit-interval-ms
+------------------------
+
+How often, in milliseconds, the ``dentry-limit`` worker re-runs while
+``nr_dentry`` is still above the cap. Defaults to ``1000`` (one
+second); the minimum accepted value is ``1``. Smaller values trim the
+cache more aggressively at the cost of more CPU spent walking LRUs;
+larger values let temporary spikes ride out before any work is done.
+Has no effect when ``dentry-limit`` is ``0``.
+
 dentry-negative
 ----------------------------
 
