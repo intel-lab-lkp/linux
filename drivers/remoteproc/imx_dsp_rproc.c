@@ -954,14 +954,6 @@ static int imx_dsp_rproc_elf_load_segments(struct rproc *rproc, const struct fir
 	return ret;
 }
 
-static int imx_dsp_rproc_parse_fw(struct rproc *rproc, const struct firmware *fw)
-{
-	if (rproc_elf_load_rsc_table(rproc, fw))
-		dev_warn(&rproc->dev, "no resource table found for this firmware\n");
-
-	return 0;
-}
-
 static int imx_dsp_rproc_load(struct rproc *rproc, const struct firmware *fw)
 {
 	struct imx_dsp_rproc *priv = rproc->priv;
@@ -986,6 +978,22 @@ static int imx_dsp_rproc_load(struct rproc *rproc, const struct firmware *fw)
 	ret = imx_dsp_rproc_elf_load_segments(rproc, fw);
 	if (ret)
 		return ret;
+
+	return 0;
+}
+
+static int imx_dsp_rproc_parse_fw(struct rproc *rproc,
+				  const struct firmware *fw)
+{
+	int ret;
+
+	ret = rproc_elf_load_rsc_table_optional(rproc, fw);
+	if (ret)
+		return ret;
+
+	if (!rproc->table_ptr)
+		dev_warn(&rproc->dev,
+			 "no resource table found for this firmware\n");
 
 	return 0;
 }

@@ -55,17 +55,6 @@ static int rcar_rproc_prepare(struct rproc *rproc)
 	}
 }
 
-static int rcar_rproc_parse_fw(struct rproc *rproc, const struct firmware *fw)
-{
-	int ret;
-
-	ret = rproc_elf_load_rsc_table(rproc, fw);
-	if (ret)
-		dev_info(&rproc->dev, "No resource table in elf\n");
-
-	return 0;
-}
-
 static int rcar_rproc_start(struct rproc *rproc)
 {
 	struct rcar_rproc *priv = rproc->priv;
@@ -97,6 +86,20 @@ static int rcar_rproc_stop(struct rproc *rproc)
 		dev_err(&rproc->dev, "failed to assert reset\n");
 
 	return err;
+}
+
+static int rcar_rproc_parse_fw(struct rproc *rproc, const struct firmware *fw)
+{
+	int ret;
+
+	ret = rproc_elf_load_rsc_table_optional(rproc, fw);
+	if (ret)
+		return ret;
+
+	if (!rproc->table_ptr)
+		dev_info(&rproc->dev, "No resource table in elf\n");
+
+	return 0;
 }
 
 static struct rproc_ops rcar_rproc_ops = {
