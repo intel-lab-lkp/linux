@@ -1633,7 +1633,8 @@ void icssg_ndo_get_stats64(struct net_device *ndev,
 			    emac_get_stat_by_name(emac, "FW_RX_EOF_SHORT_FRMERR") +
 			    emac_get_stat_by_name(emac, "FW_RX_B0_DROP_EARLY_EOF") +
 			    emac_get_stat_by_name(emac, "FW_RX_EXP_FRAG_Q_DROP") +
-			    emac_get_stat_by_name(emac, "FW_RX_FIFO_OVERRUN");
+			    emac_get_stat_by_name(emac, "FW_RX_FIFO_OVERRUN") +
+			    emac_get_stat_by_name(emac, "FW_LRE_CNT_ERRWRONGLAN");
 	stats->rx_dropped = ndev->stats.rx_dropped +
 			    emac_get_stat_by_name(emac, "FW_DROPPED_PKT") +
 			    emac_get_stat_by_name(emac, "FW_INF_PORT_DISABLED") +
@@ -1643,7 +1644,9 @@ void icssg_ndo_get_stats64(struct net_device *ndev,
 			    emac_get_stat_by_name(emac, "FW_INF_DROP_TAGGED") +
 			    emac_get_stat_by_name(emac, "FW_INF_DROP_PRIOTAGGED") +
 			    emac_get_stat_by_name(emac, "FW_INF_DROP_NOTAG") +
-			    emac_get_stat_by_name(emac, "FW_INF_DROP_NOTMEMBER");
+			    emac_get_stat_by_name(emac, "FW_INF_DROP_NOTMEMBER") +
+			    emac_get_stat_by_name(emac, "FW_HSR_FWD_CHECK_FAIL_DROP") +
+			    emac_get_stat_by_name(emac, "FW_HSR_HE_CHECK_FAIL_DROP");
 	stats->tx_errors  = ndev->stats.tx_errors;
 	stats->tx_dropped = ndev->stats.tx_dropped +
 			    emac_get_stat_by_name(emac, "FW_RTU_PKT_DROP") +
