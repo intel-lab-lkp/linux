@@ -4136,4 +4136,9 @@ DEFINE_CLASS_IS_UNCONDITIONAL(sched_change)
 
 #include "ext.h"
 
+static inline bool task_has_preferred_cpus(struct task_struct *p)
+{
+	return cpumask_intersects(p->cpus_ptr, cpu_preferred_mask);
+}
+
 #endif /* _KERNEL_SCHED_SCHED_H */
