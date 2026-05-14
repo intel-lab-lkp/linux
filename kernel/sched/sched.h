@@ -1244,6 +1244,7 @@ struct rq {
 
 	unsigned char		nohz_idle_balance;
 	unsigned char		idle_balance;
+	bool			push_task_work_done;
 
 	unsigned long		misfit_task_load;
 
@@ -4143,5 +4144,11 @@ static inline bool task_has_preferred_cpus(struct task_struct *p)
 {
 	return cpumask_intersects(p->cpus_ptr, cpu_preferred_mask);
 }
+
+#ifdef CONFIG_PREFERRED_CPU
+void sched_push_current_non_preferred_cpu(struct rq *rq);
+#else	/* !CONFIG_PREFERRED_CPU */
+static inline void sched_push_current_non_preferred_cpu(struct rq *rq) { }
+#endif
 
 #endif /* _KERNEL_SCHED_SCHED_H */
