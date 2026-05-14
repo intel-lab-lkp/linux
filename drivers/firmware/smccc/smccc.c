@@ -12,6 +12,8 @@
 #include <linux/platform_device.h>
 #include <asm/archrandom.h>
 
+#include "rmm.h"
+
 static u32 smccc_version = ARM_SMCCC_VERSION_1_0;
 static enum arm_smccc_conduit smccc_conduit = SMCCC_CONDUIT_NONE;
 
@@ -84,6 +86,21 @@ EXPORT_SYMBOL_GPL(arm_smccc_hypervisor_has_uuid);
 static int __init smccc_devices_init(void)
 {
 	struct platform_device *pdev;
+
+	if (smccc_conduit == SMCCC_CONDUIT_NONE)
+		return 0;
+
+	pdev = platform_device_register_simple("arm-smccc",
+					PLATFORM_DEVID_NONE, NULL, 0);
+	if (IS_ERR(pdev)) {
+		pr_err("arm-smccc: could not register device: %ld\n", PTR_ERR(pdev));
+	} else {
+		/*
+		 * Register the RMI and RSI devices only when firmware exposes
+		 * the required SMCCC function IDs at a supported revision.
+		 */
+		register_rsi_device(pdev);
+	}
 
 	if (smccc_trng_available) {
 		pdev = platform_device_register_simple("smccc_trng", -1,
