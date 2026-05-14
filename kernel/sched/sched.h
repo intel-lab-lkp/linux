@@ -1418,6 +1418,9 @@ static inline bool available_idle_cpu(int cpu)
 	if (!idle_rq(cpu_rq(cpu)))
 		return 0;
 
+	if (!cpu_preferred(cpu))
+		return 0;
+
 	if (vcpu_is_preempted(cpu))
 		return 0;
 

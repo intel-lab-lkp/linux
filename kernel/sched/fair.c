@@ -7726,7 +7726,8 @@ static inline int sched_balance_find_dst_cpu(struct sched_domain *sd, struct tas
 {
 	int new_cpu = cpu;
 
-	if (!cpumask_intersects(sched_domain_span(sd), p->cpus_ptr))
+	if (!cpumask_intersects(sched_domain_span(sd), p->cpus_ptr) &&
+	    cpu_preferred(prev_cpu))
 		return prev_cpu;
 
 	/*
