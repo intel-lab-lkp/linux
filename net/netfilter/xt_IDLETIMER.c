@@ -28,6 +28,7 @@
 #include <linux/kobject.h>
 #include <linux/workqueue.h>
 #include <linux/sysfs.h>
+#include <net/net_namespace.h>
 
 struct idletimer_tg {
 	struct list_head entry;
@@ -37,6 +38,8 @@ struct idletimer_tg {
 
 	struct kobject *kobj;
 	struct device_attribute attr;
+	struct net *net;
+	char label[MAX_IDLETIMER_LABEL_SIZE];
 
 	unsigned int refcnt;
 	u8 timer_type;
@@ -48,38 +51,46 @@ static DEFINE_MUTEX(list_mutex);
 static struct kobject *idletimer_tg_kobj;
 
 static
-struct idletimer_tg *__idletimer_tg_find_by_label(const char *label)
+struct idletimer_tg *__idletimer_tg_find_by_label(const struct net *net,
+						  const char *label)
 {
 	struct idletimer_tg *entry;
 
 	list_for_each_entry(entry, &idletimer_tg_list, entry) {
-		if (!strcmp(label, entry->attr.attr.name))
+		if (net_eq(entry->net, net) && !strcmp(label, entry->label))
 			return entry;
 	}
 
 	return NULL;
 }
 
+static char *idletimer_tg_sysfs_name(struct net *net, const char *label)
+{
+	if (net_eq(net, &init_net))
+		return kstrdup(label, GFP_KERNEL);
+
+	return kasprintf(GFP_KERNEL, "%u_%s", net->ns.inum, label);
+}
+
 static ssize_t idletimer_tg_show(struct device *dev,
 				 struct device_attribute *attr, char *buf)
 {
-	struct idletimer_tg *timer;
+	struct idletimer_tg *timer = container_of(attr, struct idletimer_tg,
+						  attr);
 	unsigned long expires = 0;
 	struct timespec64 ktimespec = {};
 	long time_diff = 0;
 
 	mutex_lock(&list_mutex);
 
-	timer =	__idletimer_tg_find_by_label(attr->attr.name);
-	if (timer) {
-		if (timer->timer_type & XT_IDLETIMER_ALARM) {
-			ktime_t expires_alarm = alarm_expires_remaining(&timer->alarm);
-			ktimespec = ktime_to_timespec64(expires_alarm);
-			time_diff = ktimespec.tv_sec;
-		} else {
-			expires = timer->timer.expires;
-			time_diff = jiffies_to_msecs(expires - jiffies) / 1000;
-		}
+	if (timer->timer_type & XT_IDLETIMER_ALARM) {
+		ktime_t expires_alarm = alarm_expires_remaining(&timer->alarm);
+
+		ktimespec = ktime_to_timespec64(expires_alarm);
+		time_diff = ktimespec.tv_sec;
+	} else {
+		expires = timer->timer.expires;
+		time_diff = jiffies_to_msecs(expires - jiffies) / 1000;
 	}
 
 	mutex_unlock(&list_mutex);
@@ -102,7 +113,7 @@ static void idletimer_tg_expired(struct timer_list *t)
 {
 	struct idletimer_tg *timer = timer_container_of(timer, t, timer);
 
-	pr_debug("timer %s expired\n", timer->attr.attr.name);
+	pr_debug("timer %s expired\n", timer->label);
 
 	schedule_work(&timer->work);
 }
@@ -111,7 +122,7 @@ static void idletimer_tg_alarmproc(struct alarm *alarm, ktime_t now)
 {
 	struct idletimer_tg *timer = alarm->data;
 
-	pr_debug("alarm %s expired\n", timer->attr.attr.name);
+	pr_debug("alarm %s expired\n", timer->label);
 	schedule_work(&timer->work);
 }
 
@@ -131,7 +142,7 @@ static int idletimer_check_sysfs_name(const char *name, unsigned int size)
 	return 0;
 }
 
-static int idletimer_tg_create(struct idletimer_tg_info *info)
+static int idletimer_tg_create(struct idletimer_tg_info *info, struct net *net)
 {
 	int ret;
 
@@ -145,11 +156,14 @@ static int idletimer_tg_create(struct idletimer_tg_info *info)
 	if (ret < 0)
 		goto out_free_timer;
 
+	info->timer->net = get_net(net);
+	strscpy(info->timer->label, info->label, sizeof(info->timer->label));
+
 	sysfs_attr_init(&info->timer->attr.attr);
-	info->timer->attr.attr.name = kstrdup(info->label, GFP_KERNEL);
+	info->timer->attr.attr.name = idletimer_tg_sysfs_name(net, info->label);
 	if (!info->timer->attr.attr.name) {
 		ret = -ENOMEM;
-		goto out_free_timer;
+		goto out_put_net;
 	}
 	info->timer->attr.attr.mode = 0444;
 	info->timer->attr.show = idletimer_tg_show;
@@ -174,13 +188,16 @@ static int idletimer_tg_create(struct idletimer_tg_info *info)
 
 out_free_attr:
 	kfree(info->timer->attr.attr.name);
+out_put_net:
+	put_net(info->timer->net);
 out_free_timer:
 	kfree(info->timer);
 out:
 	return ret;
 }
 
-static int idletimer_tg_create_v1(struct idletimer_tg_info_v1 *info)
+static int idletimer_tg_create_v1(struct idletimer_tg_info_v1 *info,
+				  struct net *net)
 {
 	int ret;
 
@@ -194,11 +211,14 @@ static int idletimer_tg_create_v1(struct idletimer_tg_info_v1 *info)
 	if (ret < 0)
 		goto out_free_timer;
 
+	info->timer->net = get_net(net);
+	strscpy(info->timer->label, info->label, sizeof(info->timer->label));
+
 	sysfs_attr_init(&info->timer->attr.attr);
-	info->timer->attr.attr.name = kstrdup(info->label, GFP_KERNEL);
+	info->timer->attr.attr.name = idletimer_tg_sysfs_name(net, info->label);
 	if (!info->timer->attr.attr.name) {
 		ret = -ENOMEM;
-		goto out_free_timer;
+		goto out_put_net;
 	}
 	info->timer->attr.attr.mode = 0444;
 	info->timer->attr.show = idletimer_tg_show;
@@ -236,6 +256,8 @@ static int idletimer_tg_create_v1(struct idletimer_tg_info_v1 *info)
 
 out_free_attr:
 	kfree(info->timer->attr.attr.name);
+out_put_net:
+	put_net(info->timer->net);
 out_free_timer:
 	kfree(info->timer);
 out:
@@ -316,7 +338,7 @@ static int idletimer_tg_checkentry(const struct xt_tgchk_param *par)
 	}
 	mutex_lock(&list_mutex);
 
-	info->timer = __idletimer_tg_find_by_label(info->label);
+	info->timer = __idletimer_tg_find_by_label(par->net, info->label);
 	if (info->timer) {
 		if (info->timer->timer_type & XT_IDLETIMER_ALARM) {
 			pr_debug("Adding/Replacing rule with same label and different timer type is not allowed\n");
@@ -331,7 +353,7 @@ static int idletimer_tg_checkentry(const struct xt_tgchk_param *par)
 		pr_debug("increased refcnt of timer %s to %u\n",
 			 info->label, info->timer->refcnt);
 	} else {
-		ret = idletimer_tg_create(info);
+		ret = idletimer_tg_create(info, par->net);
 		if (ret < 0) {
 			pr_debug("failed to create timer\n");
 			mutex_unlock(&list_mutex);
@@ -367,7 +389,7 @@ static int idletimer_tg_checkentry_v1(const struct xt_tgchk_param *par)
 
 	mutex_lock(&list_mutex);
 
-	info->timer = __idletimer_tg_find_by_label(info->label);
+	info->timer = __idletimer_tg_find_by_label(par->net, info->label);
 	if (info->timer) {
 		if (info->timer->timer_type != info->timer_type) {
 			pr_debug("Adding/Replacing rule with same label and different timer type is not allowed\n");
@@ -393,7 +415,7 @@ static int idletimer_tg_checkentry_v1(const struct xt_tgchk_param *par)
 		pr_debug("increased refcnt of timer %s to %u\n",
 			 info->label, info->timer->refcnt);
 	} else {
-		ret = idletimer_tg_create_v1(info);
+		ret = idletimer_tg_create_v1(info, par->net);
 		if (ret < 0) {
 			pr_debug("failed to create timer\n");
 			mutex_unlock(&list_mutex);
@@ -429,6 +451,7 @@ static void idletimer_tg_destroy(const struct xt_tgdtor_param *par)
 	cancel_work_sync(&info->timer->work);
 	sysfs_remove_file(idletimer_tg_kobj, &info->timer->attr.attr);
 	kfree(info->timer->attr.attr.name);
+	put_net(info->timer->net);
 	kfree(info->timer);
 }
 
@@ -460,6 +483,7 @@ static void idletimer_tg_destroy_v1(const struct xt_tgdtor_param *par)
 	cancel_work_sync(&info->timer->work);
 	sysfs_remove_file(idletimer_tg_kobj, &info->timer->attr.attr);
 	kfree(info->timer->attr.attr.name);
+	put_net(info->timer->net);
 	kfree(info->timer);
 }
 
