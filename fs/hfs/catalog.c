@@ -208,7 +208,20 @@ int hfs_cat_find_brec(struct super_block *sb, u32 cnid,
 		return -EIO;
 	}
 	memcpy(fd->search_key->cat.CName.name, rec.thread.CName.name, len);
-	return hfs_brec_find(fd);
+	res = hfs_brec_find(fd);
+	if (res)
+		return res;
+	if (rec.type == HFS_CDR_THD && fd->entrylength == sizeof(rec.dir)) {
+		hfs_bnode_read(fd->bnode, &rec.dir, fd->entryoffset, sizeof(rec.dir));
+		if (rec.type == HFS_CDR_DIR && cnid == be32_to_cpu(rec.dir.DirID))
+			return 0;
+	} else if (rec.type == HFS_CDR_FTH && fd->entrylength == sizeof(rec.file)) {
+		hfs_bnode_read(fd->bnode, &rec.file, fd->entryoffset, sizeof(rec.file));
+		if (rec.type == HFS_CDR_FIL && cnid == be32_to_cpu(rec.file.FlNum))
+			return 0;
+	}
+	pr_err("found corrupted record in catalog\n");
+	return -EIO;
 }
 
 static inline
