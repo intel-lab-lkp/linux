@@ -11293,6 +11293,7 @@ static int sched_non_preferred_cpu_push_stop(void *arg)
 	if (task_rq(p) == rq && task_on_rq_queued(p)) {
 		cpu = select_fallback_rq(rq->cpu, p);
 		rq = __migrate_task(rq, &rf, p, cpu);
+		schedstat_inc(p->stats.nr_migrations_cpu_non_preferred);
 	}
 
 	rq_unlock(rq, &rf);
