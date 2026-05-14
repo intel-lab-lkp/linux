@@ -69,6 +69,24 @@ static const struct vm_uffd_ops *vma_uffd_ops(struct vm_area_struct *vma)
 	return vma->vm_ops ? vma->vm_ops->uffd_ops : NULL;
 }
 
+static const struct vm_uffd_ops *vma_uffd_copy_ops(struct vm_area_struct *vma)
+{
+	const struct vm_uffd_ops *ops = vma_uffd_ops(vma);
+
+	if (!ops)
+		return NULL;
+
+	/*
+	 * UFFDIO_COPY fills MAP_PRIVATE file-backed mappings as anonymous
+	 * memory. This is an effective ops override, so retry validation must
+	 * compare the override result, not just vma->vm_ops->uffd_ops.
+	 */
+	if (!(vma->vm_flags & VM_SHARED))
+		return &anon_uffd_ops;
+
+	return ops;
+}
+
 static __always_inline
 bool validate_dst_vma(struct vm_area_struct *dst_vma, unsigned long dst_end)
 {
@@ -447,6 +465,7 @@ static int mfill_copy_folio_retry(struct mfill_state *state,
 				  struct folio *folio)
 {
 	const struct vm_uffd_ops *orig_ops = vma_uffd_ops(state->vma);
+	const struct vm_uffd_ops *orig_copy_ops = vma_uffd_copy_ops(state->vma);
 	unsigned long src_addr = state->src_addr;
 	void *kaddr;
 	int err;
@@ -469,10 +488,11 @@ static int mfill_copy_folio_retry(struct mfill_state *state,
 
 	/*
 	 * The VMA type may have changed while the lock was dropped
-	 * (e.g. replaced with a hugetlb mapping), making the caller's
-	 * ops pointer stale.
+	 * (e.g. replaced with a hugetlb mapping). Also catch changes where
+	 * the raw ops stay equal but the effective UFFDIO_COPY ops differ.
 	 */
-	if (vma_uffd_ops(state->vma) != orig_ops)
+	if (vma_uffd_ops(state->vma) != orig_ops ||
+	    vma_uffd_copy_ops(state->vma) != orig_copy_ops)
 		return -EAGAIN;
 
 	err = mfill_establish_pmd(state);
@@ -545,19 +565,7 @@ err_folio_put:
 
 static int mfill_atomic_pte_copy(struct mfill_state *state)
 {
-	const struct vm_uffd_ops *ops = vma_uffd_ops(state->vma);
-
-	/*
-	 * The normal page fault path for a MAP_PRIVATE mapping in a
-	 * file-backed VMA will invoke the fault, fill the hole in the file and
-	 * COW it right away. The result generates plain anonymous memory.
-	 * So when we are asked to fill a hole in a MAP_PRIVATE mapping, we'll
-	 * generate anonymous memory directly without actually filling the
-	 * hole. For the MAP_PRIVATE case the robustness check only happens in
-	 * the pagetable (to verify it's still none) and not in the page cache.
-	 */
-	if (!(state->vma->vm_flags & VM_SHARED))
-		ops = &anon_uffd_ops;
+	const struct vm_uffd_ops *ops = vma_uffd_copy_ops(state->vma);
 
 	return __mfill_atomic_pte(state, ops);
 }
