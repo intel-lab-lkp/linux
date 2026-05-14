@@ -23,7 +23,7 @@
 #include <asm/sev-common.h>
 
 #include "cpuid.h"
-#include "kvm_cache_regs.h"
+#include "regs.h"
 #include "x86.h"
 
 /*
