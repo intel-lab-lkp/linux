@@ -629,6 +629,9 @@ static void sched_steal_monitor_debugfs_init(void)
 		return;
 
 	debugfs_create_file("enable", 0644, sm, &sched_sm_wr_enable, &sched_sm_en_fops);
+	debugfs_create_u32("low_threshold", 0644, sm, &steal_mon.low_threshold);
+	debugfs_create_u32("high_threshold", 0644, sm, &steal_mon.high_threshold);
+	debugfs_create_u32("sampling_period", 0644, sm, &steal_mon.sampling_period_ms);
 }
 #endif
 

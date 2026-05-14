@@ -52,3 +52,35 @@ rate for each task.
 
 ``scan_size_mb`` is how many megabytes worth of pages are scanned for
 a given scan.
+
+==================================
+Tunables for generic steal monitor
+==================================
+Feature for preferred CPUs logic. Available under CONFIG_PREFERRED_CPU
+Files are at /sys/kernel/debug/sched/steal_monitor/
+
+enable  - used for enable/disable the steal_monitor feature.
+Disable needs more than a static branch disable to maintain design
+construct of preferred is same as online when feature is disabled.
+Once enabled, it starts sampling steal time at intervals specified in
+sampling_period and takes action based on high/low thresholds.
+
+sampling_period - sampling frequency in milliseconds.
+How often sampling for steal values happen. This controls how fast scheduler
+acts on detecting the changes to steal time values.
+Default value is 1000 milliseconds.
+
+low_threshold   - lower threshold value in percentage * 100
+This determines what values should be considered as nil/no steal values.
+When scheduler see steal times below this value, it will try to increase
+the preferred CPUs by 1 core. Having value as zero causes too much oscillations.
+Default value is 200, i.e 2% steal is considered as low threshold.
+
+high_threshold  - higher threshold value in percentage * 100
+This determines what values should be considered as high steal values.
+When scheduler see steal times higher than this value, it will reduce
+the preferred CPUs by 1 core.
+Default value is 500, i.e 5% steal is considered as high threshold.
+
+Note: When the steal values in between high and low threshold no action is taken
+by scheduler. This is to avoid oscillations.
