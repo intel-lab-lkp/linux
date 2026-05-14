@@ -35,6 +35,7 @@ struct mlx5_irq {
 	int refcount;
 	struct msi_map map;
 	u32 pool_index;
+	struct irq_affinity_notify af_notify;
 };
 
 struct mlx5_irq_table {
@@ -158,6 +159,9 @@ static void mlx5_system_free_irq(struct mlx5_irq *irq)
 	struct cpu_rmap *rmap;
 #endif
 
+	if (irq->af_notify.notify)
+		irq_set_affinity_notifier(irq->map.virq, NULL);
+
 	/* free_irq requires that affinity_hint and rmap will be cleared before
 	 * calling it. To satisfy this requirement, we call
 	 * irq_cpu_rmap_remove() to remove the notifier
@@ -252,6 +256,16 @@ static void irq_set_name(struct mlx5_irq_pool *pool, char *name, int vecidx)
 	snprintf(name, MLX5_MAX_IRQ_NAME, "mlx5_comp%d", vecidx);
 }
 
+static void mlx5_irq_affinity_changed(struct irq_affinity_notify *notify,
+				      const cpumask_t *mask)
+{
+	struct mlx5_irq *irq = container_of(notify, struct mlx5_irq, af_notify);
+
+	cpumask_copy(irq->mask, mask);
+}
+
+static void mlx5_irq_affinity_notifier_release(struct kref *ref) {}
+
 struct mlx5_irq *mlx5_irq_alloc(struct mlx5_irq_pool *pool, int i,
 				struct irq_affinity_desc *af_desc,
 				struct cpu_rmap **rmap)
@@ -307,6 +321,10 @@ struct mlx5_irq *mlx5_irq_alloc(struct mlx5_irq_pool *pool, int i,
 	if (af_desc) {
 		cpumask_copy(irq->mask, &af_desc->mask);
 		irq_set_affinity_and_hint(irq->map.virq, irq->mask);
+
+		irq->af_notify.notify  = mlx5_irq_affinity_changed;
+		irq->af_notify.release = mlx5_irq_affinity_notifier_release;
+		irq_set_affinity_notifier(irq->map.virq, &irq->af_notify);
 	}
 	irq->pool = pool;
 	irq->refcount = 1;
