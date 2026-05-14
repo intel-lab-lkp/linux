@@ -59,9 +59,10 @@ static atomic_t deferred_trigger_count = ATOMIC_INIT(0);
 static bool initcalls_done;
 
 /* Save the async probe drivers' name from kernel cmdline */
-#define ASYNC_DRV_NAMES_MAX_LEN	256
-static char async_probe_drv_names[ASYNC_DRV_NAMES_MAX_LEN];
-static bool async_probe_default;
+#define DRIVER_PROBE_NAMES_MAX_LEN 256
+static char driver_probe_names[DRIVER_PROBE_NAMES_MAX_LEN];
+static enum probe_type driver_probe_default = PROBE_DEFAULT_STRATEGY;
+static bool driver_probe_wildcard;
 
 /*
  * In some cases, like suspend to RAM or hibernation, It might be reasonable
@@ -912,30 +913,67 @@ static int driver_probe_device(const struct device_driver *drv, struct device *d
 	return ret;
 }
 
-static inline bool cmdline_requested_async_probing(const char *drv_name)
+static int __init save_driver_probe_options(char *buf)
 {
-	bool async_drv;
+	if (strlen(buf) >= DRIVER_PROBE_NAMES_MAX_LEN)
+		pr_warn("Too long list of driver names for 'driver_probe'!\n");
 
-	async_drv = parse_option_str(async_probe_drv_names, drv_name);
+	strscpy(driver_probe_names, buf, DRIVER_PROBE_NAMES_MAX_LEN);
 
-	return (async_probe_default != async_drv);
-}
+	if (parse_option_str(driver_probe_names, "PROBE_TYPE_SYNC"))
+		driver_probe_default = PROBE_FORCE_SYNCHRONOUS;
+	else if (parse_option_str(driver_probe_names, "PROBE_TYPE_ASYNC"))
+		driver_probe_default = PROBE_PREFER_ASYNCHRONOUS;
+	else {
+		pr_warn("driver_probe: invalid type\n");
+		return 1;
+	}
 
-/* The option format is "driver_async_probe=drv_name1,drv_name2,..." */
-static int __init save_async_options(char *buf)
-{
-	if (strlen(buf) >= ASYNC_DRV_NAMES_MAX_LEN)
-		pr_warn("Too long list of driver names for 'driver_async_probe'!\n");
-
-	strscpy(async_probe_drv_names, buf, ASYNC_DRV_NAMES_MAX_LEN);
-	async_probe_default = parse_option_str(async_probe_drv_names, "*");
+	driver_probe_wildcard = parse_option_str(driver_probe_names, "*");
+	pr_info("driver_probe: %s mode, list=\"%s\"\n",
+		driver_probe_wildcard ? "wildcard" : "specific",
+		driver_probe_names);
 
 	return 1;
 }
-__setup("driver_async_probe=", save_async_options);
+__setup("driver_probe=", save_driver_probe_options);
+
+static int driver_probe_type_override(const char *drv_name)
+{
+	bool driver_listed;
+
+	if (driver_probe_default == PROBE_DEFAULT_STRATEGY)
+		return -1;
+
+	driver_listed = parse_option_str(driver_probe_names, drv_name);
+
+	if (driver_probe_wildcard) {
+		/* Wildcard mode: apply default to all, exceptions get opposite */
+		if (driver_listed)
+			return (driver_probe_default == PROBE_PREFER_ASYNCHRONOUS) ? 0 : 1;
+		else
+			return (driver_probe_default == PROBE_PREFER_ASYNCHRONOUS) ? 1 : 0;
+	} else {
+		/* Specific mode: only listed drivers get the specified type */
+		if (driver_listed)
+			return (driver_probe_default == PROBE_PREFER_ASYNCHRONOUS) ? 1 : 0;
+		else
+			return -1;  /* Not listed - no override */
+	}
+}
 
 static bool driver_allows_async_probing(const struct device_driver *drv)
 {
+	int probe_override;
+
+	/* Check driver_probe parameter first (highest priority) */
+	probe_override = driver_probe_type_override(drv->name);
+	if (probe_override >= 0) {
+		pr_info("driver_probe override: %s -> %s\n",
+			drv->name, probe_override ? "async" : "sync");
+		return probe_override;
+	}
+
 	switch (drv->probe_type) {
 	case PROBE_PREFER_ASYNCHRONOUS:
 		return true;
@@ -944,9 +982,6 @@ static bool driver_allows_async_probing(const struct device_driver *drv)
 		return false;
 
 	default:
-		if (cmdline_requested_async_probing(drv->name))
-			return true;
-
 		if (module_requested_async_probing(drv->owner))
 			return true;
 

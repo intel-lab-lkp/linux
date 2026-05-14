@@ -1378,12 +1378,27 @@ Kernel parameters
 			it becomes active and is searched during signature
 			verification.
 
-	driver_async_probe=  [KNL]
-			List of driver names to be probed asynchronously. *
-			matches with all driver names. If * is specified, the
-			rest of the listed driver names are those that will NOT
-			match the *.
-			Format: <driver_name1>,<driver_name2>...
+	driver_probe=   [KNL]
+			Control device driver probe types. This parameter takes
+			precedence over driver hard-coded probe_type settings.
+			Format: <probe_type>,<driver_name1>,<driver_name2>,...
+
+			<probe_type>:
+			  PROBE_TYPE_SYNC  - Force synchronous probing
+			  PROBE_TYPE_ASYNC - Force asynchronous probing
+
+			Driver name patterns:
+			  driver1,driver2  - Apply to specific drivers only
+			  *,driver1,driver2 - Apply to all drivers except listed ones
+			  * (alone)        - Apply to all drivers
+
+			Examples:
+			  driver_probe=PROBE_TYPE_SYNC,nvme,sd
+			    Force synchronous probe for nvme and sd drivers
+			  driver_probe=PROBE_TYPE_SYNC,*,graphics,usb-storage
+			    Force sync for all drivers except graphics and usb-storage
+			  driver_probe=PROBE_TYPE_ASYNC,*
+			    Force async probe for all drivers
 
 	drm.edid_firmware=[<connector>:]<file>[,[<connector>:]<file>]
 			Broken monitors, graphic adapters, KVMs and EDIDless
