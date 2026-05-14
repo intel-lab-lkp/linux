@@ -208,6 +208,17 @@ char *strndup(const char *str, size_t maxlen)
 }
 
 static __attribute__((unused))
+/**
+ * strlcat - Append a string to an existing string
+ *
+ * @dst: pointer to %NUL-terminated string to append to
+ * @src: pointer to %NUL-terminated string to append from
+ * @size: Maximum bytes available in @dst
+ *
+ * Do not use this function. Prefer building the string with
+ * formatting, via scnprintf(), seq_buf, or similar.
+ *
+ */
 size_t strlcat(char *dst, const char *src, size_t size)
 {
 	size_t len = strnlen(dst, size);

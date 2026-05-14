@@ -249,6 +249,17 @@ EXPORT_SYMBOL(strncat);
 #endif
 
 #ifndef __HAVE_ARCH_STRLCAT
+/**
+ * strlcat - Append a string to an existing string
+ *
+ * @dest: pointer to %NUL-terminated string to append to
+ * @src: pointer to %NUL-terminated string to append from
+ * @count: Maximum bytes available in @dest
+ *
+ * Do not use this function. Prefer building the string with
+ * formatting, via scnprintf(), seq_buf, or similar.
+ *
+ */
 size_t strlcat(char *dest, const char *src, size_t count)
 {
 	size_t dsize = strlen(dest);
