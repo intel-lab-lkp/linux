@@ -131,12 +131,18 @@ static int assign_node_params(struct xe_device *xe, struct drm_ras_node *node,
 	return 0;
 }
 
-static void cleanup_node_param(struct xe_drm_ras *ras, const enum drm_xe_ras_error_severity severity)
+static void cleanup_node_param(struct drm_ras_node *node)
 {
-	struct drm_ras_node *node = &ras->node[severity];
-
 	kfree(node->device_name);
 	node->device_name = NULL;
+}
+
+static void cleanup_node(struct drm_device *drm, void *arg)
+{
+	struct drm_ras_node *node = arg;
+
+	drm_ras_node_unregister(node);
+	cleanup_node_param(node);
 }
 
 static int register_nodes(struct xe_device *xe)
@@ -150,32 +156,24 @@ static int register_nodes(struct xe_device *xe)
 
 		ret = assign_node_params(xe, node, i);
 		if (ret) {
-			cleanup_node_param(ras, i);
+			cleanup_node_param(node);
 			return ret;
 		}
 
 		ret = drm_ras_node_register(node);
 		if (ret) {
-			cleanup_node_param(ras, i);
+			cleanup_node_param(node);
+			return ret;
+		}
+
+		ret = drmm_add_action_or_reset(&xe->drm, cleanup_node, node);
+		if (ret) {
+			cleanup_node(&xe->drm, node);
 			return ret;
 		}
 	}
 
 	return 0;
-}
-
-static void xe_drm_ras_unregister_nodes(struct drm_device *device, void *arg)
-{
-	struct xe_device *xe = arg;
-	struct xe_drm_ras *ras = &xe->ras;
-	int i;
-
-	for_each_error_severity(i) {
-		struct drm_ras_node *node = &ras->node[i];
-
-		drm_ras_node_unregister(node);
-		cleanup_node_param(ras, i);
-	}
 }
 
 /**
@@ -201,12 +199,6 @@ int xe_drm_ras_init(struct xe_device *xe)
 	err = register_nodes(xe);
 	if (err) {
 		drm_err(&xe->drm, "Failed to register DRM RAS nodes (%pe)\n", ERR_PTR(err));
-		return err;
-	}
-
-	err = drmm_add_action_or_reset(&xe->drm, xe_drm_ras_unregister_nodes, xe);
-	if (err) {
-		drm_err(&xe->drm, "Failed to add action for Xe DRM RAS (%pe)\n", ERR_PTR(err));
 		return err;
 	}
 
