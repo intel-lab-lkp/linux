@@ -3107,6 +3107,11 @@ EXPORT_SYMBOL(__cpu_dying_mask);
 atomic_t __num_online_cpus __read_mostly;
 EXPORT_SYMBOL(__num_online_cpus);
 
+#ifdef CONFIG_PREFERRED_CPU
+struct cpumask __cpu_preferred_mask __read_mostly;
+EXPORT_SYMBOL(__cpu_preferred_mask);
+#endif
+
 void init_cpu_present(const struct cpumask *src)
 {
 	cpumask_copy(&__cpu_present_mask, src);
@@ -3137,6 +3142,9 @@ void set_cpu_online(unsigned int cpu, bool online)
 		if (cpumask_test_and_clear_cpu(cpu, &__cpu_online_mask))
 			atomic_dec(&__num_online_cpus);
 	}
+
+	/* preferred is always subset of online */
+	set_cpu_preferred(cpu, online);
 }
 
 /*
@@ -3152,6 +3160,14 @@ void set_cpu_possible(unsigned int cpu, bool possible)
 		if (cpumask_test_and_clear_cpu(cpu, &__cpu_possible_mask))
 			__num_possible_cpus--;
 	}
+}
+
+void set_cpu_preferred(unsigned int cpu, bool preferred)
+{
+	if (!IS_ENABLED(CONFIG_PREFERRED_CPU))
+		return;
+
+	assign_cpu((cpu), &__cpu_preferred_mask, (preferred));
 }
 
 /*
