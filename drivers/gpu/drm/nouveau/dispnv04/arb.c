@@ -202,6 +202,9 @@ nv04_update_arb(struct drm_device *dev, int VClk, int bpp,
 	uint32_t cfg1 = nvif_rd32(device, NV04_PFB_CFG1);
 	struct pci_dev *pdev = to_pci_dev(dev->dev);
 
+	if (MClk <= 0 || NVClk <= 0)
+		return;
+
 	sim_data.pclk_khz = VClk;
 	sim_data.mclk_khz = MClk;
 	sim_data.nvclk_khz = NVClk;
