@@ -173,7 +173,6 @@ err_unmap_irq:
 
 static int __init timer_init(struct device_node *np)
 {
-	int num_blocks = DIV_ROUND_UP(num_possible_cpus(), 2);
 	struct clk *clk;
 	int ret;
 
@@ -185,7 +184,7 @@ static int __init timer_init(struct device_node *np)
 
 	econet_timer.freq_hz = clk_get_rate(clk);
 
-	for (int i = 0; i < num_blocks; i++) {
+	for (int i = 0; i < ARRAY_SIZE(econet_timer.membase); i++) {
 		econet_timer.membase[i] = of_iomap(np, i);
 		if (!econet_timer.membase[i]) {
 			pr_err("%pOFn: failed to map register [%d]\n", np, i);
