@@ -367,17 +367,13 @@ static inline bool vcpu_match_mmio_gpa(struct kvm_vcpu *vcpu, gpa_t gpa)
 
 static inline unsigned long kvm_register_read(struct kvm_vcpu *vcpu, int reg)
 {
-	unsigned long val = kvm_register_read_raw(vcpu, reg);
-
-	return is_64_bit_mode(vcpu) ? val : (u32)val;
+	return kvm_register_read_raw(vcpu, reg) & kvm_reg_mode_mask(vcpu);
 }
 
 static inline void kvm_register_write(struct kvm_vcpu *vcpu,
 				       int reg, unsigned long val)
 {
-	if (!is_64_bit_mode(vcpu))
-		val = (u32)val;
-	return kvm_register_write_raw(vcpu, reg, val);
+	return kvm_register_write_raw(vcpu, reg, val & kvm_reg_mode_mask(vcpu));
 }
 
 static inline bool kvm_check_has_quirk(struct kvm *kvm, u64 quirk)
