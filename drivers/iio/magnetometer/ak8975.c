@@ -756,8 +756,11 @@ static int ak8975_read_axis(struct iio_dev *indio_dev, int index, int *val)
 	ret = i2c_smbus_read_i2c_block_data_or_emulated(
 			client, def->data_regs[index],
 			sizeof(rval), (u8*)&rval);
-	if (ret < 0)
+	if (ret != sizeof(rval)) {
+		if (ret >= 0)
+			ret = -EIO;
 		goto exit;
+	}
 
 	/* Read out ST2 for release lock on measurement data. */
 	ret = i2c_smbus_read_byte_data(client, data->def->ctrl_regs[ST2]);
@@ -871,8 +874,11 @@ static void ak8975_fill_buffer(struct iio_dev *indio_dev)
 							def->data_regs[0],
 							3 * sizeof(fval[0]),
 							(u8 *)fval);
-	if (ret < 0)
+	if (ret != sizeof(fval)) {
+		if (ret >= 0)
+			ret = -EIO;
 		goto unlock;
+	}
 
 	mutex_unlock(&data->lock);
 
