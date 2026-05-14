@@ -2916,45 +2916,46 @@ void wx_update_stats(struct wx *wx)
 	wx->restart_queue = restart_queue;
 	wx->tx_busy = tx_busy;
 
-	wx_update_xoff_rx_lfc(wx);
+	if (wx->pdev->is_physfn) {
+		wx_update_xoff_rx_lfc(wx);
 
-	hwstats->gprc += rd32(wx, WX_RDM_PKT_CNT);
-	hwstats->gptc += rd32(wx, WX_TDM_PKT_CNT);
-	hwstats->gorc += rd64(wx, WX_RDM_BYTE_CNT_LSB);
-	hwstats->gotc += rd64(wx, WX_TDM_BYTE_CNT_LSB);
-	hwstats->tpr += rd64(wx, WX_RX_FRAME_CNT_GOOD_BAD_L);
-	hwstats->tpt += rd64(wx, WX_TX_FRAME_CNT_GOOD_BAD_L);
-	hwstats->crcerrs += rd64(wx, WX_RX_CRC_ERROR_FRAMES_L);
-	hwstats->rlec += rd64(wx, WX_RX_LEN_ERROR_FRAMES_L);
-	hwstats->bprc += rd64(wx, WX_RX_BC_FRAMES_GOOD_L);
-	hwstats->bptc += rd64(wx, WX_TX_BC_FRAMES_GOOD_L);
-	hwstats->mprc += rd64(wx, WX_RX_MC_FRAMES_GOOD_L);
-	hwstats->mptc += rd64(wx, WX_TX_MC_FRAMES_GOOD_L);
-	hwstats->roc += rd32(wx, WX_RX_OVERSIZE_FRAMES_GOOD);
-	hwstats->ruc += rd32(wx, WX_RX_UNDERSIZE_FRAMES_GOOD);
-	if (wx->mac.type >= wx_mac_aml)
-		hwstats->lxonrxc += rd32_wrap(wx, WX_MAC_LXONRXC_AML,
-					      &wx->last_stats.lxonrxc);
-	else
-		hwstats->lxonrxc += rd32(wx, WX_MAC_LXONRXC);
-	hwstats->lxontxc += rd32(wx, WX_RDB_LXONTXC);
-	hwstats->lxofftxc += rd32(wx, WX_RDB_LXOFFTXC);
-	hwstats->o2bgptc += rd32(wx, WX_TDM_OS2BMC_CNT);
-	hwstats->b2ospc += rd32(wx, WX_MNG_BMC2OS_CNT);
-	hwstats->o2bspc += rd32(wx, WX_MNG_OS2BMC_CNT);
-	hwstats->b2ogprc += rd32(wx, WX_RDM_BMC2OS_CNT);
-	hwstats->rdmdrop += rd32(wx, WX_RDM_DRP_PKT);
+		hwstats->gprc += rd32(wx, WX_RDM_PKT_CNT);
+		hwstats->gptc += rd32(wx, WX_TDM_PKT_CNT);
+		hwstats->gorc += rd64(wx, WX_RDM_BYTE_CNT_LSB);
+		hwstats->gotc += rd64(wx, WX_TDM_BYTE_CNT_LSB);
+		hwstats->tpr += rd64(wx, WX_RX_FRAME_CNT_GOOD_BAD_L);
+		hwstats->tpt += rd64(wx, WX_TX_FRAME_CNT_GOOD_BAD_L);
+		hwstats->crcerrs += rd64(wx, WX_RX_CRC_ERROR_FRAMES_L);
+		hwstats->rlec += rd64(wx, WX_RX_LEN_ERROR_FRAMES_L);
+		hwstats->bprc += rd64(wx, WX_RX_BC_FRAMES_GOOD_L);
+		hwstats->bptc += rd64(wx, WX_TX_BC_FRAMES_GOOD_L);
+		hwstats->mprc += rd64(wx, WX_RX_MC_FRAMES_GOOD_L);
+		hwstats->mptc += rd64(wx, WX_TX_MC_FRAMES_GOOD_L);
+		hwstats->roc += rd32(wx, WX_RX_OVERSIZE_FRAMES_GOOD);
+		hwstats->ruc += rd32(wx, WX_RX_UNDERSIZE_FRAMES_GOOD);
+		if (wx->mac.type >= wx_mac_aml)
+			hwstats->lxonrxc += rd32_wrap(wx, WX_MAC_LXONRXC_AML,
+						&wx->last_stats.lxonrxc);
+		else
+			hwstats->lxonrxc += rd32(wx, WX_MAC_LXONRXC);
+		hwstats->lxontxc += rd32(wx, WX_RDB_LXONTXC);
+		hwstats->lxofftxc += rd32(wx, WX_RDB_LXOFFTXC);
+		hwstats->o2bgptc += rd32(wx, WX_TDM_OS2BMC_CNT);
+		hwstats->b2ospc += rd32(wx, WX_MNG_BMC2OS_CNT);
+		hwstats->o2bspc += rd32(wx, WX_MNG_OS2BMC_CNT);
+		hwstats->b2ogprc += rd32(wx, WX_RDM_BMC2OS_CNT);
+		hwstats->rdmdrop += rd32(wx, WX_RDM_DRP_PKT);
 
-	if (test_bit(WX_FLAG_FDIR_CAPABLE, wx->flags)) {
-		hwstats->fdirmatch += rd32(wx, WX_RDB_FDIR_MATCH);
-		hwstats->fdirmiss += rd32(wx, WX_RDB_FDIR_MISS);
+		if (test_bit(WX_FLAG_FDIR_CAPABLE, wx->flags)) {
+			hwstats->fdirmatch += rd32(wx, WX_RDB_FDIR_MATCH);
+			hwstats->fdirmiss += rd32(wx, WX_RDB_FDIR_MISS);
+		}
+
+		for (i = wx->num_vfs * wx->num_rx_queues_per_pool;
+		     i < wx->mac.max_rx_queues; i++)
+			hwstats->qmprc += rd32_wrap(wx, WX_PX_MPRC(i),
+						&wx->last_stats.qmprc[i]);
 	}
-
-	for (i = wx->num_vfs * wx->num_rx_queues_per_pool;
-	     i < wx->mac.max_rx_queues; i++)
-		hwstats->qmprc += rd32_wrap(wx, WX_PX_MPRC(i),
-					    &wx->last_stats.qmprc[i]);
-
 	spin_unlock(&wx->hw_stats_lock);
 }
 EXPORT_SYMBOL(wx_update_stats);

@@ -5,6 +5,7 @@
 #include <linux/pci.h>
 
 #include "wx_type.h"
+#include "wx_hw.h"
 #include "wx_mbx.h"
 #include "wx_lib.h"
 #include "wx_vf.h"
@@ -332,6 +333,7 @@ void wxvf_down(struct wx *wx)
 	netif_tx_disable(netdev);
 	netif_carrier_off(netdev);
 	wx_napi_disable_all(wx);
+	wx_update_stats(wx);
 	wx_reset_vf(wx);
 
 	wx_clean_all_tx_rings(wx);
@@ -405,6 +407,7 @@ static void wxvf_service_task(struct work_struct *work)
 
 	wxvf_link_config_subtask(wx);
 	wxvf_reset_subtask(wx);
+	wx_update_stats(wx);
 	wx_service_event_complete(wx);
 }
 
