@@ -7,10 +7,28 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/property.h>
+
+static struct fwnode_handle *psci_reboot_mode_get_child_fwnode(struct device *parent)
+{
+	struct fwnode_handle *fwnode;
+
+	fwnode = fwnode_get_named_child_node(dev_fwnode(parent), "reboot-mode");
+	if (!fwnode_device_is_available(fwnode)) {
+		fwnode_handle_put(fwnode);
+		fwnode = NULL;
+	}
+
+	return fwnode;
+}
 
 static const struct mfd_cell psci_cells[] = {
 	{
 		.name = "psci-cpuidle-domain",
+	},
+	{
+		.name = "psci-reboot-mode",
+		.get_child_fwnode = psci_reboot_mode_get_child_fwnode,
 	},
 };
 
