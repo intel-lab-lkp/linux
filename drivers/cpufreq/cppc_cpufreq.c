@@ -985,11 +985,50 @@ store_energy_performance_preference_val(struct cpufreq_policy *policy,
 CPPC_CPUFREQ_ATTR_RW_U64(perf_limited, cppc_get_perf_limited,
 			 cppc_set_perf_limited)
 
+static ssize_t show_ospm_nominal_freq(struct cpufreq_policy *policy, char *buf)
+{
+	struct cppc_cpudata *cpu_data = policy->driver_data;
+	unsigned int freq_khz;
+
+	if (!cpu_data->ospm_nominal_perf)
+		return sysfs_emit(buf, "0\n");
+
+	freq_khz = cppc_perf_to_khz(&cpu_data->perf_caps,
+				    cpu_data->ospm_nominal_perf);
+	return sysfs_emit(buf, "%u\n", freq_khz);
+}
+
+static ssize_t store_ospm_nominal_freq(struct cpufreq_policy *policy,
+				       const char *buf, size_t count)
+{
+	struct cppc_cpudata *cpu_data = policy->driver_data;
+	unsigned int sib;
+	u64 freq_khz;
+	u32 perf;
+	int ret;
+
+	ret = kstrtou64(buf, 0, &freq_khz);
+	if (ret)
+		return ret;
+
+	perf = cppc_khz_to_perf(&cpu_data->perf_caps, freq_khz);
+
+	for_each_cpu(sib, policy->cpus) {
+		ret = cppc_set_ospm_nominal_perf(sib, perf);
+		if (ret)
+			return ret;
+	}
+
+	cpu_data->ospm_nominal_perf = perf;
+	return count;
+}
+
 cpufreq_freq_attr_ro(freqdomain_cpus);
 cpufreq_freq_attr_rw(auto_select);
 cpufreq_freq_attr_rw(auto_act_window);
 cpufreq_freq_attr_rw(energy_performance_preference_val);
 cpufreq_freq_attr_rw(perf_limited);
+cpufreq_freq_attr_rw(ospm_nominal_freq);
 
 static struct freq_attr *cppc_cpufreq_attr[] = {
 	&freqdomain_cpus,
@@ -997,6 +1036,7 @@ static struct freq_attr *cppc_cpufreq_attr[] = {
 	&auto_act_window,
 	&energy_performance_preference_val,
 	&perf_limited,
+	&ospm_nominal_freq,
 	NULL,
 };
 

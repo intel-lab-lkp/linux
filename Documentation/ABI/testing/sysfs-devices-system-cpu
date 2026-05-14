@@ -346,6 +346,23 @@ Description:	Performance Limited
 
 		This file is only present if the cppc-cpufreq driver is in use.
 
+What:		/sys/devices/system/cpu/cpuX/cpufreq/ospm_nominal_freq
+Date:		May 2026
+Contact:	linux-pm@vger.kernel.org
+Description:	OSPM Nominal Performance (kHz)
+
+		OSPM uses this attribute to request a nominal performance
+		level lower than the platform-reported nominal. The
+		platform treats performance above this level as boost
+		and below as throttle for power and thermal decisions.
+
+		Read returns the last written value in kHz, or 0 if no
+		value has been written. Write a kHz value in the range
+		[lowest_freq, nominal_freq].
+
+		This file is only present if the cppc-cpufreq driver is
+		in use.
+
 What:		/sys/devices/system/cpu/cpu*/cache/index3/cache_disable_{0,1}
 Date:		August 2008
 KernelVersion:	2.6.27
