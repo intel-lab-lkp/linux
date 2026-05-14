@@ -75,7 +75,9 @@ struct hbucket {
 struct htable_gc {
 	struct delayed_work dwork;
 	struct ip_set *set;	/* Set the gc belongs to */
+	spinlock_t lock;	/* Lock to exclude gc and resize */
 	u32 region;		/* Last gc run position */
+	bool resizing;		/* Signal resize in progress */
 };
 
 /* The hash table: the table size stored here in order to make resizing easy */
@@ -569,28 +571,24 @@ mtype_gc(struct work_struct *work)
 	set = gc->set;
 	h = set->data;
 
-	spin_lock_bh(&set->lock);
 	t = ipset_dereference_set(h->table, set);
-	atomic_inc(&t->uref);
 	numof_locks = ahash_numof_locks(t->htable_bits);
+	next_run = (IPSET_GC_PERIOD(set->timeout) * HZ) / numof_locks;
+	if (next_run < HZ/10)
+		next_run = HZ/10;
+
+	spin_lock_bh(&gc->lock);
+	if (gc->resizing)
+		goto skip_gc;
 	r = gc->region++;
 	if (r >= numof_locks) {
 		r = gc->region = 0;
 	}
-	next_run = (IPSET_GC_PERIOD(set->timeout) * HZ) / numof_locks;
-	if (next_run < HZ/10)
-		next_run = HZ/10;
-	spin_unlock_bh(&set->lock);
-
 	mtype_gc_do(set, h, t, r);
-
-	if (atomic_dec_and_test(&t->uref) && atomic_read(&t->ref)) {
-		pr_debug("Table destroy after resize by expire: %p\n", t);
-		mtype_ahash_destroy(set, t, false);
-	}
+skip_gc:
+	spin_unlock_bh(&gc->lock);
 
 	queue_delayed_work(system_power_efficient_wq, &gc->dwork, next_run);
-
 }
 
 static void
@@ -646,6 +644,9 @@ mtype_resize(struct ip_set *set, bool retried)
 #endif
 	orig = ipset_dereference_bh_nfnl(h->table);
 	htable_bits = orig->htable_bits;
+	spin_lock_bh(&h->gc.lock);
+	h->gc.resizing = 1;
+	spin_unlock_bh(&h->gc.lock);
 
 retry:
 	ret = 0;
@@ -672,7 +673,11 @@ retry:
 		spin_lock_init(&t->hregion[i].lock);
 
 	/* There can't be another parallel resizing,
-	 * but dumping, gc, kernel side add/del are possible
+	 * but dumping, kernel side add/del are possible.
+	 *
+	 * Parallel gc is explicitly excluded because
+	 * resize destroys the old set and its extensions
+	 * which can interfere with an ongoing gc.
 	 */
 	orig = ipset_dereference_bh_nfnl(h->table);
 	atomic_set(&orig->ref, 1);
@@ -692,8 +697,7 @@ retry:
 				if (!test_bit_acquire(j, n->used))
 					continue;
 				data = ahash_data(n, j, dsize);
-				if (SET_ELEM_EXPIRED(set, data))
-					continue;
+				/* Expired elements copied as well */
 #ifdef IP_SET_HASH_WITH_NETS
 				/* We have readers running parallel with us,
 				 * so the live data cannot be modified.
@@ -785,6 +789,9 @@ retry:
 	}
 
 out:
+	spin_lock_bh(&h->gc.lock);
+	h->gc.resizing = 0;
+	spin_unlock_bh(&h->gc.lock);
 #ifdef IP_SET_HASH_WITH_NETS
 	kfree(tmp);
 #endif
@@ -1594,6 +1601,7 @@ IPSET_TOKEN(HTYPE, _create)(struct net *net, struct ip_set *set,
 		return -ENOMEM;
 	}
 	h->gc.set = set;
+	spin_lock_init(&h->gc.lock);
 	for (i = 0; i < ahash_numof_locks(hbits); i++)
 		spin_lock_init(&t->hregion[i].lock);
 	h->maxelem = maxelem;
