@@ -934,6 +934,8 @@ static inline int acpi_spi_count_resources(struct acpi_device *adev)
 }
 #endif
 
+int spi_for_each_controller(int (*fn)(struct spi_controller *, void *), void *data);
+
 /*
  * SPI resource management while processing a SPI message
  */
