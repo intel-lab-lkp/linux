@@ -234,6 +234,14 @@ static int dw_spi_intel_init(struct platform_device *pdev,
 	return 0;
 }
 
+static int dw_spi_lecarc_init(struct platform_device *pdev,
+			     struct dw_spi_mmio *dwsmmio)
+{
+	dwsmmio->dws.ip = DW_HSSI_ID;
+
+	return 0;
+}
+
 /*
  * DMA-based mem ops are not configured for this device and are not tested.
  */
@@ -453,6 +461,7 @@ MODULE_DEVICE_TABLE(of, dw_spi_mmio_of_match);
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id dw_spi_mmio_acpi_match[] = {
 	{"HISI0173", (kernel_ulong_t)dw_spi_pssi_init},
+	{"LECA0002", (kernel_ulong_t)dw_spi_lecarc_init},
 	{},
 };
 MODULE_DEVICE_TABLE(acpi, dw_spi_mmio_acpi_match);
