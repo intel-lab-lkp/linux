@@ -481,15 +481,16 @@ static int init_device_context(struct se_if_priv *priv, int ch_id,
 	dev_ctx->priv = priv;
 	*new_dev_ctx = dev_ctx;
 
-	list_add_tail(&dev_ctx->link, &priv->dev_ctx_list);
-	priv->active_devctx_count++;
-
 	ret = init_se_shared_mem(dev_ctx);
 	if (ret < 0) {
 		kfree(dev_ctx->devname);
 		kfree(dev_ctx);
 		*new_dev_ctx = NULL;
+		return ret;
 	}
+
+	list_add_tail(&dev_ctx->link, &priv->dev_ctx_list);
+	priv->active_devctx_count++;
 
 	return ret;
 }
