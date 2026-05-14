@@ -1291,6 +1291,7 @@ struct ufs_hw_queue {
 	struct utp_transfer_req_desc *sqe_base_addr;
 	dma_addr_t sqe_dma_addr;
 	struct cq_entry *cqe_base_addr;
+	struct cq_entry *cqe_last_addr;
 	dma_addr_t cqe_dma_addr;
 	u32 max_entries;
 	u32 id;

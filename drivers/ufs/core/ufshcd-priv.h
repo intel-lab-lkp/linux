@@ -440,6 +440,26 @@ static inline struct scsi_cmnd *ufshcd_tag_to_cmd(struct ufs_hba *hba, u32 tag)
 	return blk_mq_rq_to_pdu(rq);
 }
 
+/**
+ * ufshcd_mcq_inc_cqe_addr - increment CQE pointer with wraparound
+ * @hwq: pointer to the hardware queue
+ * @cqe: current CQE pointer to increment
+ *
+ * Increments the CQE pointer to the next entry. If the pointer
+ * exceeds the last entry, it wraps around to the base address.
+ *
+ * Returns: pointer to the next cq_entry
+ */
+static inline struct cq_entry *ufshcd_mcq_inc_cqe_addr(struct ufs_hw_queue *q,
+	struct cq_entry *cqe)
+{
+        cqe++;
+        if (cqe > q->cqe_last_addr)
+                cqe = q->cqe_base_addr;
+
+        return cqe;
+}
+
 static inline void ufshcd_inc_sq_tail(struct ufs_hw_queue *q)
 	__must_hold(&q->sq_lock)
 {

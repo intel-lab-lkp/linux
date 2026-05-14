@@ -248,6 +248,7 @@ int ufshcd_mcq_memory_alloc(struct ufs_hba *hba)
 			dev_err(hba->dev, "CQE allocation failed\n");
 			return -ENOMEM;
 		}
+		hwq->cqe_last_addr = hwq->cqe_base_addr + hwq->max_entries - 1;
 	}
 
 	return 0;
@@ -307,10 +308,8 @@ static int ufshcd_mcq_get_tag(struct ufs_hba *hba, struct cq_entry *cqe)
 }
 
 static void ufshcd_mcq_process_cqe(struct ufs_hba *hba,
-				   struct ufs_hw_queue *hwq)
+			           struct cq_entry *cqe)
 {
-	struct cq_entry *cqe = ufshcd_mcq_cur_cqe(hwq);
-
 	if (cqe->command_desc_base_addr) {
 		int tag = ufshcd_mcq_get_tag(hba, cqe);
 
@@ -335,10 +334,12 @@ void ufshcd_mcq_compl_all_cqes_lock(struct ufs_hba *hba,
 {
 	unsigned long flags;
 	u32 entries = hwq->max_entries;
+	struct cq_entry *cqe;
+	int i;
 
 	spin_lock_irqsave(&hwq->cq_lock, flags);
+	cqe = ufshcd_mcq_cur_cqe(hwq);
 	while (entries > 0) {
-		ufshcd_mcq_process_cqe(hba, hwq);
 		ufshcd_mcq_inc_cq_head_slot(hwq);
 		entries--;
 	}
@@ -346,6 +347,11 @@ void ufshcd_mcq_compl_all_cqes_lock(struct ufs_hba *hba,
 	ufshcd_mcq_update_cq_tail_slot(hwq);
 	hwq->cq_head_slot = hwq->cq_tail_slot;
 	spin_unlock_irqrestore(&hwq->cq_lock, flags);
+
+	for (i = 0; i < hwq->max_entries; i++) {
+		ufshcd_mcq_process_cqe(hba, cqe);
+		cqe = ufshcd_mcq_inc_cqe_addr(hwq, cqe);
+	}
 }
 
 unsigned long ufshcd_mcq_poll_cqe_lock(struct ufs_hba *hba,
@@ -353,11 +359,13 @@ unsigned long ufshcd_mcq_poll_cqe_lock(struct ufs_hba *hba,
 {
 	unsigned long completed_reqs = 0;
 	unsigned long flags;
+	struct cq_entry *cqe;
+	int i;
 
 	spin_lock_irqsave(&hwq->cq_lock, flags);
+	cqe = ufshcd_mcq_cur_cqe(hwq);
 	ufshcd_mcq_update_cq_tail_slot(hwq);
 	while (!ufshcd_mcq_is_cq_empty(hwq)) {
-		ufshcd_mcq_process_cqe(hba, hwq);
 		ufshcd_mcq_inc_cq_head_slot(hwq);
 		completed_reqs++;
 	}
@@ -365,6 +373,11 @@ unsigned long ufshcd_mcq_poll_cqe_lock(struct ufs_hba *hba,
 	if (completed_reqs)
 		ufshcd_mcq_update_cq_head(hwq);
 	spin_unlock_irqrestore(&hwq->cq_lock, flags);
+
+	for (i = 0; i < completed_reqs; i++) {
+		ufshcd_mcq_process_cqe(hba, cqe);
+		cqe = ufshcd_mcq_inc_cqe_addr(hwq, cqe);
+	}
 
 	return completed_reqs;
 }
