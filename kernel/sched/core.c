@@ -9108,6 +9108,8 @@ void __init sched_init(void)
 
 	preempt_dynamic_init();
 
+	sched_init_steal_monitor();
+
 	scheduler_running = 1;
 }
 
@@ -11356,5 +11358,27 @@ void sched_push_current_non_preferred_cpu(struct rq *rq)
 	stop_one_cpu_nowait(rq->cpu, sched_non_preferred_cpu_push_stop,
 			    push_task, this_cpu_ptr(&npc_push_task_work));
 	local_irq_restore(flags);
+}
+
+struct steal_monitor_t steal_mon;
+
+void sched_init_steal_monitor(void)
+{
+	INIT_WORK(&steal_mon.work, sched_steal_detection_work);
+	zalloc_cpumask_var(&steal_mon.tmp_mask, GFP_KERNEL);
+	steal_mon.low_threshold       = 200;		/* 2% steal time */
+	steal_mon.high_threshold      = 500;		/* 5% steal time */
+	steal_mon.sampling_period_ms  = 1000;		/* once per second */
+}
+
+/* This is only a skeleton. Subsequent patches introduce more of it */
+void sched_steal_detection_work(struct work_struct *work)
+{
+	struct steal_monitor_t *sm = container_of(work, struct steal_monitor_t, work);
+	ktime_t now;
+
+	/* Update the prev_time for next iteration*/
+	now = ktime_get();
+	sm->prev_time = now;
 }
 #endif

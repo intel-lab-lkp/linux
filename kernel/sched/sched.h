@@ -4149,8 +4149,11 @@ static inline bool task_has_preferred_cpus(struct task_struct *p)
 DECLARE_STATIC_KEY_FALSE(__sched_sm_enable);
 
 void sched_push_current_non_preferred_cpu(struct rq *rq);
+void sched_init_steal_monitor(void);
+void sched_steal_detection_work(struct work_struct *work);
 #else	/* !CONFIG_PREFERRED_CPU */
 static inline void sched_push_current_non_preferred_cpu(struct rq *rq) { }
+static inline void sched_init_steal_monitor(void) { }
 #endif
 
 #endif /* _KERNEL_SCHED_SCHED_H */
