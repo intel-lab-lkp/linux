@@ -248,6 +248,28 @@ int misc_register(struct miscdevice *misc)
 		}
 	}
 
+	/*
+	 * Detect duplicate names up-front so the subsequent
+	 * device_create_with_groups() does not trip
+	 * sysfs_create_dir_ns()->sysfs_warn_dup(), which unconditionally
+	 * dumps a stack trace. Both the existing miscdev kunit suite
+	 * (miscdev_test_duplicate_name) and any caller racing on the same
+	 * name would otherwise pollute dmesg on every -EEXIST.
+	 */
+	{
+		struct miscdevice *c;
+
+		list_for_each_entry(c, &misc_list, list) {
+			if (strcmp(c->name, misc->name) == 0) {
+				misc_minor_free(misc->minor);
+				if (is_dynamic)
+					misc->minor = MISC_DYNAMIC_MINOR;
+				err = -EEXIST;
+				goto out;
+			}
+		}
+	}
+
 	dev = MKDEV(MISC_MAJOR, misc->minor);
 
 	misc->this_device =
