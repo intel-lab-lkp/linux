@@ -669,8 +669,14 @@ ltc2983_thermocouple_new(const struct fwnode_handle *child, struct ltc2983_data 
 	if (fwnode_property_read_bool(child, "adi,single-ended"))
 		thermo->sensor_config = LTC2983_THERMOCOUPLE_SGL(1);
 
-	ret = fwnode_property_read_u32(child, "adi,sensor-oc-current-microamp", &oc_current);
-	if (!ret) {
+	if (fwnode_property_present(child, "adi,sensor-oc-current-microamp")) {
+		ret = fwnode_property_read_u32(child,
+					       "adi,sensor-oc-current-microamp",
+					       &oc_current);
+		if (ret)
+			return dev_err_ptr_probe(dev, ret,
+						 "Failed to read adi,sensor-oc-current-microamp\n");
+
 		switch (oc_current) {
 		case 10:
 			thermo->sensor_config |=
@@ -760,8 +766,12 @@ ltc2983_rtd_new(const struct fwnode_handle *child, struct ltc2983_data *st,
 		return dev_err_ptr_probe(dev, ret,
 					 "Property reg must be given\n");
 
-	ret = fwnode_property_read_u32(child, "adi,number-of-wires", &n_wires);
-	if (!ret) {
+	if (fwnode_property_present(child, "adi,number-of-wires")) {
+		ret = fwnode_property_read_u32(child, "adi,number-of-wires", &n_wires);
+		if (ret)
+			return dev_err_ptr_probe(dev, ret,
+						 "Failed to read adi,number-of-wires\n");
+
 		switch (n_wires) {
 		case 2:
 			rtd->sensor_config = LTC2983_RTD_N_WIRES(0);
