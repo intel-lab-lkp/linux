@@ -393,7 +393,7 @@
 #define X86_FEATURE_OSPKE		(16*32+ 4) /* "ospke" OS Protection Keys Enable */
 #define X86_FEATURE_WAITPKG		(16*32+ 5) /* "waitpkg" UMONITOR/UMWAIT/TPAUSE Instructions */
 #define X86_FEATURE_AVX512_VBMI2	(16*32+ 6) /* "avx512_vbmi2" Additional AVX512 Vector Bit Manipulation Instructions */
-#define X86_FEATURE_SHSTK		(16*32+ 7) /* Shadow stack */
+#define X86_FEATURE_SHSTK		(16*32+ 7) /* "shstk" CET Shadow Stack */
 #define X86_FEATURE_GFNI		(16*32+ 8) /* "gfni" Galois Field New Instructions */
 #define X86_FEATURE_VAES		(16*32+ 9) /* "vaes" Vector AES */
 #define X86_FEATURE_VPCLMULQDQ		(16*32+10) /* "vpclmulqdq" Carry-Less Multiplication Double Quadword */
