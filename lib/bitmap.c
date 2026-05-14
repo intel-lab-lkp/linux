@@ -442,7 +442,7 @@ again:
 	end = index + nr;
 	if (end > size)
 		return end;
-	i = find_next_bit(map, end, index);
+	i = find_last_bit_from(map, end, index);
 	if (i < end) {
 		start = i + 1;
 		goto again;
