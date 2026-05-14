@@ -5886,6 +5886,24 @@ static struct workqueue_struct *__alloc_workqueue(const char *fmt,
 		pr_warn_once("workqueue: name exceeds WQ_NAME_LEN. Truncating to: %s\n",
 			     wq->name);
 
+	/*
+	 * One among WQ_PERCPU and WQ_UNBOUND must be set, but not both.
+	 * - If neither is set, default to WQ_PERCPU
+	 * - If both are set, default to WQ_UNBOUND
+	 *
+	 * This code can be removed after workqueue are unbound by default
+	 */
+	if (!(flags & (WQ_UNBOUND | WQ_PERCPU))) {
+		pr_warn_ratelimited("workqueue: %s is using neither WQ_PERCPU or WQ_UNBOUND. "
+			"Seting WQ_PERCPU.\n", wq->name);
+		flags |= WQ_PERCPU;
+	}
+	else if((flags & WQ_PERCPU) && (flags & WQ_UNBOUND)) {
+		pr_warn_ratelimited("workqueue: %s uses both WQ_PERCPU and WQ_UNBOUND. "
+			"Dropped WQ_PERCPU, keeping WQ_UNBOUND.\n", wq->name);
+		flags &= (~WQ_PERCPU);
+	}
+
 	if (flags & WQ_BH) {
 		/*
 		 * BH workqueues always share a single execution context per CPU
