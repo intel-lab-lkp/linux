@@ -18,9 +18,23 @@
 #include <linux/property.h>
 #include <linux/slab.h>
 
+static LIST_HEAD(i2c_gpio_scl_list);
+static DEFINE_MUTEX(i2c_gpio_scl_list_lock);
+
+struct i2c_gpio_scl_data {
+	struct fwnode_handle *fw_node;
+	u32 fw_pin;
+	u32 fw_flags;
+	struct gpio_desc *gpio;
+	struct mutex lock;
+	refcount_t ref;
+	struct list_head list;
+	bool valid;
+};
+
 struct i2c_gpio_private_data {
 	struct gpio_desc *sda;
-	struct gpio_desc *scl;
+	struct i2c_gpio_scl_data *scl;
 	struct i2c_adapter adap;
 	struct i2c_algo_bit_data bit_data;
 	struct i2c_gpio_platform_data pdata;
@@ -30,6 +44,11 @@ struct i2c_gpio_private_data {
 	u64 scl_irq_data;
 #endif
 };
+
+static inline struct i2c_gpio_private_data *adap_to_priv(struct i2c_adapter *adap)
+{
+	return container_of(adap, struct i2c_gpio_private_data, adap);
+}
 
 /*
  * Toggle SDA by changing the output value of the pin. This is only
@@ -53,7 +72,7 @@ static void i2c_gpio_setscl_val(void *data, int state)
 {
 	struct i2c_gpio_private_data *priv = data;
 
-	gpiod_set_value_cansleep(priv->scl, state);
+	gpiod_set_value_cansleep(priv->scl->gpio, state);
 }
 
 static int i2c_gpio_getsda(void *data)
@@ -67,7 +86,17 @@ static int i2c_gpio_getscl(void *data)
 {
 	struct i2c_gpio_private_data *priv = data;
 
-	return gpiod_get_value_cansleep(priv->scl);
+	return gpiod_get_value_cansleep(priv->scl->gpio);
+}
+
+static int i2c_gpio_pre_xfer(struct i2c_adapter *adap)
+{
+	return mutex_lock_interruptible(&adap_to_priv(adap)->scl->lock);
+}
+
+static void i2c_gpio_post_xfer(struct i2c_adapter *adap)
+{
+	mutex_unlock(&adap_to_priv(adap)->scl->lock);
 }
 
 #ifdef CONFIG_I2C_GPIO_FAULT_INJECTOR
@@ -308,13 +337,14 @@ static struct gpio_desc *i2c_gpio_get_desc(struct device *dev,
 	struct gpio_desc *retdesc;
 	int ret;
 
-	retdesc = devm_gpiod_get(dev, con_id, gflags);
+	/* Don't use resource-managed functions because of shared SCL */
+	retdesc = gpiod_get(dev, con_id, gflags);
 	if (!IS_ERR(retdesc)) {
 		dev_dbg(dev, "got GPIO from name %s\n", con_id);
 		return retdesc;
 	}
 
-	retdesc = devm_gpiod_get_index(dev, NULL, index, gflags);
+	retdesc = gpiod_get_index(dev, NULL, index, gflags);
 	if (!IS_ERR(retdesc)) {
 		dev_dbg(dev, "got GPIO from index %u\n", index);
 		return retdesc;
@@ -334,6 +364,117 @@ static struct gpio_desc *i2c_gpio_get_desc(struct device *dev,
 		dev_err(dev, "error trying to get descriptor: %d\n", ret);
 
 	return retdesc;
+}
+
+static struct i2c_gpio_scl_data *i2c_gpio_create_scl(struct fwnode_handle *fwnode)
+{
+	struct fwnode_reference_args args;
+	struct i2c_gpio_scl_data *scl;
+	int ret;
+
+	ret = fwnode_property_get_reference_args(fwnode, "scl-gpios",
+						 "#gpio-cells", 0, 0, &args);
+	if (ret)
+		/* try the ancient way */
+		ret = fwnode_property_get_reference_args(fwnode, "gpios",
+							 "#gpio-cells", 0, 1, &args);
+	if (ret)
+		return ERR_PTR(ret);
+
+	if (args.nargs < 2) {
+		fwnode_handle_put(args.fwnode);
+		return ERR_PTR(-EINVAL);
+	}
+
+	scl = kzalloc(sizeof(*scl), GFP_KERNEL);
+	if (!scl) {
+		fwnode_handle_put(args.fwnode);
+		return ERR_PTR(-ENOMEM);
+	}
+
+	/* The unique identification from the SCL GPIO reference in the device tree */
+	scl->fw_node = args.fwnode;
+	scl->fw_pin = args.args[0];
+	scl->fw_flags = args.args[1];
+
+	mutex_init(&scl->lock);
+	refcount_set(&scl->ref, 1);
+
+	return scl;
+}
+
+static void i2c_gpio_free_scl(struct i2c_gpio_scl_data *scl)
+{
+	fwnode_handle_put(scl->fw_node);
+	kfree(scl);
+}
+
+/*
+ * Look up an existing or create a new shared SCL structure described by the device's fwnode.
+ * If it exists, reuse it. Otherwise a new entry is allocated and the GPIO is requested.
+ *
+ * Memory allocation and gpiod_get() might sleep and must not run under a lock. To work around
+ * this, always create and add the entry to the list before requesting the GPIO. So concurrent
+ * probes for the same SCL pin see the entry and do not race into a second gpiod_get() for the
+ * same pin. The entry is marked valid only after the GPIO is successfully acquired. Until then,
+ * other consumers get -EPROBE_DEFER.
+ */
+static struct i2c_gpio_scl_data *i2c_gpio_lookup_scl(struct device *dev, enum gpiod_flags gflags)
+{
+	struct i2c_gpio_scl_data *scl, *new_scl;
+	struct gpio_desc *gpio;
+
+	new_scl = i2c_gpio_create_scl(dev_fwnode(dev));
+	if (IS_ERR(new_scl))
+		return new_scl;
+
+	scoped_guard(mutex, &i2c_gpio_scl_list_lock) {
+		list_for_each_entry(scl, &i2c_gpio_scl_list, list) {
+			if (scl->fw_node == new_scl->fw_node &&
+			    scl->fw_pin == new_scl->fw_pin &&
+			    scl->fw_flags == new_scl->fw_flags) {
+				i2c_gpio_free_scl(new_scl);
+				if (!scl->valid)
+					return ERR_PTR(-EPROBE_DEFER);
+
+				refcount_inc(&scl->ref);
+				dev_info(dev, "reusing shared SCL (%pfwP, pin %u)\n",
+					scl->fw_node, scl->fw_pin);
+
+				return scl;
+			}
+		}
+		list_add(&new_scl->list, &i2c_gpio_scl_list);
+	}
+
+	gpio = i2c_gpio_get_desc(dev, "scl", 1, gflags);
+	if (IS_ERR(gpio)) {
+		scoped_guard(mutex, &i2c_gpio_scl_list_lock)
+			list_del(&new_scl->list);
+		i2c_gpio_free_scl(new_scl);
+
+		return ERR_CAST(gpio);
+	}
+
+	new_scl->gpio = gpio;
+	scoped_guard(mutex, &i2c_gpio_scl_list_lock)
+		new_scl->valid = true;
+
+	dev_info(dev, "registered shared SCL (%pfwP, pin %u)\n",
+		new_scl->fw_node, new_scl->fw_pin);
+
+	return new_scl;
+}
+
+static void i2c_gpio_cleanup_scl(struct i2c_gpio_scl_data *scl)
+{
+	if (!refcount_dec_and_mutex_lock(&scl->ref, &i2c_gpio_scl_list_lock))
+		return;
+
+	list_del(&scl->list);
+	mutex_unlock(&i2c_gpio_scl_list_lock);
+	gpiod_put(scl->gpio);
+	i2c_gpio_free_scl(scl);
 }
 
 static int i2c_gpio_probe(struct platform_device *pdev)
@@ -386,15 +527,17 @@ static int i2c_gpio_probe(struct platform_device *pdev)
 		gflags = GPIOD_OUT_HIGH;
 	else
 		gflags = GPIOD_OUT_HIGH_OPEN_DRAIN;
-	priv->scl = i2c_gpio_get_desc(dev, "scl", 1, gflags);
+	priv->scl = i2c_gpio_lookup_scl(dev, gflags);
 	if (IS_ERR(priv->scl))
 		return PTR_ERR(priv->scl);
 
-	if (gpiod_cansleep(priv->sda) || gpiod_cansleep(priv->scl))
+	if (gpiod_cansleep(priv->sda) || gpiod_cansleep(priv->scl->gpio))
 		dev_warn(dev, "Slow GPIO pins might wreak havoc into I2C/SMBus bus timing");
 	else
 		bit_data->can_do_atomic = true;
 
+	bit_data->pre_xfer = i2c_gpio_pre_xfer;
+	bit_data->post_xfer = i2c_gpio_post_xfer;
 	bit_data->setsda = i2c_gpio_setsda_val;
 	bit_data->setscl = i2c_gpio_setscl_val;
 
@@ -441,7 +584,7 @@ static int i2c_gpio_probe(struct platform_device *pdev)
 	 * from the descriptor, then provide that instead.
 	 */
 	dev_info(dev, "using lines %u (SDA) and %u (SCL%s)\n",
-		 desc_to_gpio(priv->sda), desc_to_gpio(priv->scl),
+		 desc_to_gpio(priv->sda), desc_to_gpio(priv->scl->gpio),
 		 pdata->scl_is_output_only
 		 ? ", no clock stretching" : "");
 
@@ -459,6 +602,8 @@ static void i2c_gpio_remove(struct platform_device *pdev)
 	adap = &priv->adap;
 
 	i2c_del_adapter(adap);
+	i2c_gpio_cleanup_scl(priv->scl);
+	gpiod_put(priv->sda);
 }
 
 static const struct of_device_id i2c_gpio_dt_ids[] = {
