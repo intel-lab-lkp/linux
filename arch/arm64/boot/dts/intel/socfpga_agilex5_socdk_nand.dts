@@ -42,6 +42,7 @@
 	phy-mode = "rgmii-id";
 	phy-handle = <&emac0_phy0>;
 	max-frame-size = <9000>;
+	dma-coherent;
 
 	mdio0 {
 		#address-cells = <1>;

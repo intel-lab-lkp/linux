@@ -47,6 +47,7 @@
 	phy-mode = "rgmii-id";
 	phy-handle = <&emac2_phy0>;
 	max-frame-size = <9000>;
+	dma-coherent;
 
 	mdio0 {
 		compatible = "snps,dwmac-mdio";
