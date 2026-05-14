@@ -57,6 +57,21 @@ config LAN743X
 	  To compile this driver as a module, choose M here. The module will be
 	  called lan743x.
 
+config LAN743X_SFP
+	bool "SFP support for PCI11x1x"
+	depends on LAN743X
+	select HWMON if LAN743X=y
+	select I2C_PCI1XXXX
+	select GP_PCI1XXXX
+	select SFP
+	select PCS_XPCS
+	help
+	  Enable SFP module support for the Microchip PCI11x1x Ethernet
+	  controller. Requires the GPIO and I2C peripheral controllers on
+	  the PCI11x1x device to be present and probed.
+
+	  If unsure, say N.
+
 source "drivers/net/ethernet/microchip/lan865x/Kconfig"
 source "drivers/net/ethernet/microchip/lan966x/Kconfig"
 source "drivers/net/ethernet/microchip/sparx5/Kconfig"
