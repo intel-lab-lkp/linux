@@ -4017,6 +4017,15 @@ rescale_entity(struct sched_entity *se, unsigned long weight, bool rel_vprot)
 	 */
 	se->vlag = div64_long(se->vlag * old_weight, weight);
 
+	{
+		u64 max_slice = cfs_rq_max_slice(cfs_rq_of(se)) + TICK_NSEC;
+		s64 limit;
+
+		limit = calc_delta_fair(max_slice, se);
+
+		se->vlag = clamp(se->vlag, -limit, limit);
+	}
+
 	/*
 	 * DEADLINE
 	 * --------
