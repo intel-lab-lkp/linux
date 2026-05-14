@@ -188,7 +188,8 @@ static int __init timer_init(struct device_node *np)
 		econet_timer.membase[i] = of_iomap(np, i);
 		if (!econet_timer.membase[i]) {
 			pr_err("%pOFn: failed to map register [%d]\n", np, i);
-			return -ENXIO;
+			ret = -ENXIO;
+			goto err_unmap;
 		}
 	}
 
@@ -198,12 +199,12 @@ static int __init timer_init(struct device_node *np)
 				    clocksource_mmio_readl_up);
 	if (ret) {
 		pr_err("%pOFn: clocksource_mmio_init failed: %d", np, ret);
-		return ret;
+		goto err_unmap;
 	}
 
 	ret = cevt_init(np);
 	if (ret < 0)
-		return ret;
+		goto err_unmap;
 
 	cpuhp_setup_state(CPUHP_AP_ONLINE_DYN,
 			  "clockevents/econet/timer:starting",
@@ -217,6 +218,14 @@ static int __init timer_init(struct device_node *np)
 		(econet_timer.freq_hz / 1000) % 1000);
 
 	return 0;
+
+err_unmap:
+	for (int i = 0; i < ARRAY_SIZE(econet_timer.membase); i++) {
+		if (econet_timer.membase[i])
+			iounmap(econet_timer.membase[i]);
+	}
+
+	return ret;
 }
 
 TIMER_OF_DECLARE(econet_timer_hpt, "econet,en751221-timer", timer_init);
