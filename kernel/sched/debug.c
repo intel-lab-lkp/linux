@@ -606,6 +606,7 @@ static ssize_t sched_sm_en_write(struct file *filp, const char __user *ubuf,
 		static_branch_enable(&__sched_sm_enable);
 	} else if (!sched_sm_wr_enable && orig) {
 		static_branch_disable(&__sched_sm_enable);
+		cancel_work_sync(&steal_mon.work);
 		cpumask_copy(&__cpu_preferred_mask, cpu_online_mask);
 	}
 
