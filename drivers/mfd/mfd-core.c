@@ -10,6 +10,7 @@
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
 #include <linux/acpi.h>
+#include <linux/fwnode.h>
 #include <linux/list.h>
 #include <linux/property.h>
 #include <linux/mfd/core.h>
@@ -148,6 +149,11 @@ allocate_of_node:
 	return 0;
 }
 
+static void mfd_child_fwnode_put(void *data)
+{
+	fwnode_handle_put(data);
+}
+
 static int mfd_add_device(struct device *parent, int id,
 			  const struct mfd_cell *cell,
 			  struct resource *mem_base,
@@ -156,6 +162,7 @@ static int mfd_add_device(struct device *parent, int id,
 	struct resource *res;
 	struct platform_device *pdev;
 	struct mfd_of_node_entry *of_entry, *tmp;
+	struct fwnode_handle *fwnode;
 	bool disabled = false;
 	int ret = -ENOMEM;
 	int platform_id;
@@ -223,6 +230,29 @@ match:
 	}
 
 	mfd_acpi_add_device(cell, pdev);
+
+	if (!pdev->dev.fwnode && cell->get_child_fwnode) {
+		fwnode = cell->get_child_fwnode(parent);
+		if (fwnode) {
+			device_set_node(&pdev->dev, fwnode);
+
+			/*
+			 * platform_device_release() drops only of_node refs.
+			 * Track non-OF fwnodes explicitly so they are put on
+			 * all teardown paths.
+			 */
+			if (!to_of_node(fwnode)) {
+				ret = devm_add_action(&pdev->dev,
+						      mfd_child_fwnode_put,
+						      fwnode);
+				if (ret) {
+					device_set_node(&pdev->dev, NULL);
+					fwnode_handle_put(fwnode);
+					goto fail_of_entry;
+				}
+			}
+		}
+	}
 
 	if (cell->pdata_size) {
 		ret = platform_device_add_data(pdev,

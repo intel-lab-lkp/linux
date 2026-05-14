@@ -50,6 +50,7 @@
 #define MFD_DEP_LEVEL_HIGH 1
 
 struct irq_domain;
+struct fwnode_handle;
 struct software_node;
 
 /* Matches ACPI PNP id, either _HID or _CID, or ACPI _ADR */
@@ -80,6 +81,19 @@ struct mfd_cell {
 
 	/* Software node for the device. */
 	const struct software_node *swnode;
+	/*
+	 * Callback to return an explicit firmware node.
+	 * @parent: MFD parent device passed to mfd_add_devices().
+	 *
+	 * Called only if OF/ACPI matching did not assign a fwnode.
+	 * Ownership of the returned reference is transferred to MFD core.
+	 *
+	 * Return a referenced fwnode or NULL if none is available.
+	 *
+	 * mfd_cell must be zero-initialized or get_child_fwnode must be NULL
+	 * when unused.
+	 */
+	struct fwnode_handle *(*get_child_fwnode)(struct device *parent);
 
 	/*
 	 * Device Tree compatible string
