@@ -1034,7 +1034,12 @@ static int __init nv_c2c_pmu_init(void)
 		return ret;
 
 	nv_c2c_pmu_cpuhp_state = ret;
-	return platform_driver_register(&nv_c2c_pmu_driver);
+
+	ret = platform_driver_register(&nv_c2c_pmu_driver);
+	if (ret)
+		cpuhp_remove_multi_state(nv_c2c_pmu_cpuhp_state);
+
+	return ret;
 }
 
 static void __exit nv_c2c_pmu_exit(void)
