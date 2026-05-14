@@ -10745,12 +10745,18 @@ static int __perf_event_overflow(struct perf_event *event,
 	 * events
 	 */
 
+	/*
+	 * Disable is pending, skip further overflow processing so the pending
+	 * POLL_HUP is preserved and no samples are recorded beyond the limit.
+	 */
+	if (event->pending_disable)
+		goto out;
+
 	event->pending_kill = POLL_IN;
 	if (events && atomic_dec_and_test(&event->event_limit)) {
 		ret = 1;
 		event->pending_kill = POLL_HUP;
 		perf_event_disable_inatomic(event);
-		event->pmu->stop(event, 0);
 	}
 
 	if (event->attr.sigtrap) {
