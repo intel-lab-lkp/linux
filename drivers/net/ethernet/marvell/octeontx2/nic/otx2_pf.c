@@ -2154,6 +2154,8 @@ EXPORT_SYMBOL(otx2_open);
 int otx2_stop(struct net_device *netdev)
 {
 	struct otx2_nic *pf = netdev_priv(netdev);
+	struct otx2_dev_stats *old_stats = &pf->hw.old_stats;
+	struct otx2_dev_stats *dev = &pf->hw.dev_stats;
 	struct otx2_cq_poll *cq_poll = NULL;
 	struct otx2_qset *qset = &pf->qset;
 	int qidx, vec, wrk;
@@ -2162,15 +2164,33 @@ int otx2_stop(struct net_device *netdev)
 	if (pf->flags & OTX2_FLAG_INTF_DOWN)
 		return 0;
 
+	/* First stop packet Rx/Tx */
+	otx2_rxtx_enable(pf, false);
+
+	/* Read final HW counters and accumulate */
+	otx2_get_dev_stats(pf);
+
+	/* Accumulate old stats */
+	old_stats->rx_bytes     += dev->rx_bytes;
+	old_stats->rx_drops     += dev->rx_drops;
+	old_stats->rx_bcast_frames      += dev->rx_bcast_frames;
+	old_stats->rx_mcast_frames      += dev->rx_mcast_frames;
+	old_stats->rx_ucast_frames      += dev->rx_ucast_frames;
+	old_stats->rx_frames            += dev->rx_frames;
+
+	old_stats->tx_bytes             += dev->tx_bytes;
+	old_stats->tx_drops             += dev->tx_drops;
+	old_stats->tx_bcast_frames      += dev->tx_bcast_frames;
+	old_stats->tx_mcast_frames      += dev->tx_mcast_frames;
+	old_stats->tx_ucast_frames      += dev->tx_ucast_frames;
+	old_stats->tx_frames            += dev->tx_frames;
+
 	netif_carrier_off(netdev);
 	netif_tx_stop_all_queues(netdev);
 
 	pf->flags |= OTX2_FLAG_INTF_DOWN;
 	/* 'intf_down' may be checked on any cpu */
 	smp_wmb();
-
-	/* First stop packet Rx/Tx */
-	otx2_rxtx_enable(pf, false);
 
 	/* Clear RSS enable flag */
 	pf->hw.rss_info.enable = false;
