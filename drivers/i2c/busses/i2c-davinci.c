@@ -760,9 +760,9 @@ static int davinci_i2c_probe(struct platform_device *pdev)
 
 	r = device_property_read_u32(&pdev->dev, "clock-frequency", &prop);
 	if (r)
-		prop = DAVINCI_I2C_DEFAULT_BUS_FREQ;
-
-	dev->bus_freq = prop / 1000;
+		dev->bus_freq = DAVINCI_I2C_DEFAULT_BUS_FREQ;
+	else
+		dev->bus_freq = prop / 1000;
 
 	dev->has_pfunc = device_property_present(&pdev->dev, "ti,has-pfunc");
 
