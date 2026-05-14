@@ -42,14 +42,14 @@ class EnrichFormatter(argparse.HelpFormatter):
                           lambda m: f'\033[1m{m.group(1)}\033[0m', text)
         return text
 
-    def _fill_text(self, text, width, indent):
+    def _fill_text(self, text, indent):
         """
         Enrich descriptions with markups on it.
         """
         enriched = self.enrich_text(text)
         return "\n".join(indent + line for line in enriched.splitlines())
 
-    def _format_usage(self, usage, actions, groups, prefix):
+    def _format_usage(self, actions, prefix):
         """
         Enrich positional arguments at usage: line.
         """
