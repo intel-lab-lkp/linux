@@ -3576,6 +3576,12 @@ static int __vmap_huge(unsigned long addr, unsigned long end,
 			map_addr = addr;
 			idx = i;
 		}
+		/*
+		 * Once small pages are encountered, the remaining pages
+		 * are likely small as well
+		 */
+		if (shift == PAGE_SHIFT)
+			break;
 
 		addr += 1UL << shift;
 		i += 1U << (shift - PAGE_SHIFT);
