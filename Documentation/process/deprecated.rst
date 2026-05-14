@@ -153,6 +153,13 @@ used, and the destinations should be marked with the `__nonstring
 attribute to avoid future compiler warnings. For cases still needing
 NUL-padding, strtomem_pad() can be used.
 
+strlcat()
+---------
+strlcat() must re-scan the destination string from the beginning on each
+call (O(n^2) behavior). Alternatives are seq_buf_puts() and seq_buf_printf().
+snprintf(), scnprintf() and sysfs_emit() are possible aswell, but the adoption
+of the arguments needs to be taken care off.
+
 strlcpy()
 ---------
 strlcpy() reads the entire source buffer first (since the return value
