@@ -394,6 +394,12 @@ static void nv_c2c_pmu_start(struct perf_event *event, int pmu_flags)
 
 static void nv_c2c_pmu_stop(struct perf_event *event, int pmu_flags)
 {
+	if (event->hw.state & PERF_HES_STOPPED)
+		return;
+
+	if (pmu_flags & PERF_EF_UPDATE)
+		nv_c2c_pmu_event_update(event);
+
 	event->hw.state |= PERF_HES_STOPPED;
 }
 
