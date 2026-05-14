@@ -375,22 +375,8 @@ static ssize_t cifs_debug_dirs_proc_write(struct file *file, const char __user *
 	if (rc)
 		return rc;
 
-	if (v == 0) {
-		struct TCP_Server_Info *server;
-		struct cifs_ses *ses;
-		struct cifs_tcon *tcon;
-
-		spin_lock(&cifs_tcp_ses_lock);
-		list_for_each_entry(server, &cifs_tcp_ses_list, tcp_ses_list) {
-			list_for_each_entry(ses, &server->smb_ses_list, smb_ses_list) {
-				if (cifs_ses_exiting(ses))
-					continue;
-				list_for_each_entry(tcon, &ses->tcon_list, tcon_list)
-					invalidate_all_cached_dirs(tcon, false);
-			}
-		}
-		spin_unlock(&cifs_tcp_ses_lock);
-	}
+	if (v == 0)
+		cifs_shrink_dir_caches(false, ULONG_MAX);
 
 	return count;
 }

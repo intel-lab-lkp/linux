@@ -122,6 +122,10 @@ extern const struct dentry_operations cifs_ci_dentry_ops;
 
 struct vfsmount *cifs_d_automount(struct path *path);
 
+/* Functions related to dir cache */
+unsigned long cifs_shrink_dir_caches(bool wait,
+				     unsigned long nr_to_free);
+
 /* Functions related to symlinks */
 const char *cifs_get_link(struct dentry *dentry, struct inode *inode,
 			  struct delayed_call *done);
