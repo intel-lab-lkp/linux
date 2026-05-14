@@ -95,6 +95,15 @@ void __rq_qos_done_bio(struct rq_qos *rqos, struct bio *bio)
 	} while (rqos);
 }
 
+void __rq_qos_done_split_bio(struct rq_qos *rqos, struct bio *bio)
+{
+	do {
+		if (rqos->ops->done_split_bio)
+			rqos->ops->done_split_bio(rqos, bio);
+		rqos = rqos->next;
+	} while (rqos);
+}
+
 void __rq_qos_queue_depth_changed(struct rq_qos *rqos)
 {
 	do {
