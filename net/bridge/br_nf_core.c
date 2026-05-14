@@ -14,6 +14,8 @@
 #include <linux/kernel.h>
 #include <linux/in_route.h>
 #include <linux/inetdevice.h>
+#include <linux/slab.h>
+#include <linux/rcupdate.h>
 #include <net/route.h>
 
 #include "br_private.h"
@@ -49,6 +51,11 @@ static unsigned int fake_mtu(const struct dst_entry *dst)
 	return dst->dev->mtu;
 }
 
+struct br_fake_rtable {
+	struct rtable	rt;
+	u32		metrics[RTAX_MAX];
+};
+
 static struct dst_ops fake_dst_ops = {
 	.family		= AF_INET,
 	.update_pmtu	= fake_update_pmtu,
@@ -65,24 +72,50 @@ static struct dst_ops fake_dst_ops = {
  * ipt_REJECT needs it.  Future netfilter modules might
  * require us to fill additional fields.
  */
-void br_netfilter_rtable_init(struct net_bridge *br)
+int br_netfilter_rtable_init(struct net_bridge *br)
 {
-	struct rtable *rt = &br->fake_rtable;
+	struct br_fake_rtable *fake_rt;
+	struct rtable *rt;
 
-	rcuref_init(&rt->dst.__rcuref, 1);
-	rt->dst.dev = br->dev;
-	dst_init_metrics(&rt->dst, br->metrics, false);
+	fake_rt = kmem_cache_zalloc(fake_dst_ops.kmem_cachep, GFP_KERNEL);
+	if (!fake_rt)
+		return -ENOMEM;
+
+	rt = &fake_rt->rt;
+	dst_init(&rt->dst, &fake_dst_ops, br->dev, DST_OBSOLETE_NONE,
+		 DST_NOXFRM | DST_FAKE_RTABLE);
+	dst_init_metrics(&rt->dst, fake_rt->metrics, false);
 	dst_metric_set(&rt->dst, RTAX_MTU, br->dev->mtu);
-	rt->dst.flags	= DST_NOXFRM | DST_FAKE_RTABLE;
-	rt->dst.ops = &fake_dst_ops;
+	rcu_assign_pointer(br->fake_rtable, rt);
+
+	return 0;
+}
+
+void br_netfilter_rtable_fini(struct net_bridge *br)
+{
+	struct rtable *rt;
+
+	rt = rcu_replace_pointer(br->fake_rtable, NULL, lockdep_rtnl_is_held());
+	if (rt)
+		dst_release(&rt->dst);
 }
 
 int __init br_nf_core_init(void)
 {
-	return dst_entries_init(&fake_dst_ops);
+	int err;
+
+	fake_dst_ops.kmem_cachep =
+		KMEM_CACHE(br_fake_rtable, SLAB_HWCACHE_ALIGN | SLAB_PANIC);
+	err = dst_entries_init(&fake_dst_ops);
+	if (err)
+		fake_dst_ops.kmem_cachep = NULL;
+
+	return err;
 }
 
 void br_nf_core_fini(void)
 {
 	dst_entries_destroy(&fake_dst_ops);
+	kmem_cache_destroy(fake_dst_ops.kmem_cachep);
+	fake_dst_ops.kmem_cachep = NULL;
 }

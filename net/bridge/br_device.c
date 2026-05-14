@@ -146,6 +146,15 @@ static int br_dev_init(struct net_device *dev)
 		return err;
 	}
 
+	err = br_netfilter_rtable_init(br);
+	if (err) {
+		br_multicast_uninit_stats(br);
+		br_vlan_flush(br);
+		br_mdb_hash_fini(br);
+		br_fdb_hash_fini(br);
+		return err;
+	}
+
 	netdev_lockdep_set_classes(dev);
 	return 0;
 }
@@ -154,6 +163,7 @@ static void br_dev_uninit(struct net_device *dev)
 {
 	struct net_bridge *br = netdev_priv(dev);
 
+	br_netfilter_rtable_fini(br);
 	br_multicast_dev_del(br);
 	br_multicast_uninit_stats(br);
 	br_vlan_flush(br);
@@ -210,8 +220,11 @@ static int br_change_mtu(struct net_device *dev, int new_mtu)
 	/* this flag will be cleared if the MTU was automatically adjusted */
 	br_opt_toggle(br, BROPT_MTU_SET_BY_USER, true);
 #if IS_ENABLED(CONFIG_BRIDGE_NETFILTER)
-	/* remember the MTU in the rtable for PMTU */
-	dst_metric_set(&br->fake_rtable.dst, RTAX_MTU, new_mtu);
+	struct rtable *rt;
+
+	rt = rcu_dereference_protected(br->fake_rtable, lockdep_rtnl_is_held());
+	if (rt)
+		dst_metric_set(&rt->dst, RTAX_MTU, new_mtu);
 #endif
 
 	return 0;
@@ -529,7 +542,6 @@ void br_dev_setup(struct net_device *dev)
 	br->bridge_ageing_time = br->ageing_time = BR_DEFAULT_AGEING_TIME;
 	dev->max_mtu = ETH_MAX_MTU;
 
-	br_netfilter_rtable_init(br);
 	br_stp_timer_init(br);
 	br_multicast_init(br);
 	INIT_DELAYED_WORK(&br->gc_work, br_fdb_cleanup);
