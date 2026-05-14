@@ -301,7 +301,9 @@ int etnaviv_iommu_map_gem(struct etnaviv_iommu_context *context,
 
 	mapping->iova = node->start;
 	ret = etnaviv_iommu_map(context, node->start, etnaviv_obj->size, sgt,
-				ETNAVIV_PROT_READ | ETNAVIV_PROT_WRITE);
+				(etnaviv_obj->userptr.mm && etnaviv_obj->userptr.ro) ?
+				ETNAVIV_PROT_READ :
+				(ETNAVIV_PROT_READ | ETNAVIV_PROT_WRITE));
 
 	if (ret < 0) {
 		drm_mm_remove_node(node);
