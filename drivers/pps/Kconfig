@@ -22,6 +22,15 @@ menuconfig PPS
 
 if PPS
 
+config PPS_NR_SOURCES
+	int "Maximum number of PPS devices"
+	depends on PPS
+	range 16 256
+	default "16"
+	help
+	  Set this to the number of PPS devices you want the driver
+	  to support.
+
 config PPS_DEBUG
 	bool "PPS debugging messages"
 	help
