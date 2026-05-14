@@ -8,67 +8,6 @@
  * derived from USB Skeleton driver - 0.5
  * Copyright (C) 2001 Greg Kroah-Hartman (greg@kroah.com)
  *
- * History:
- *
- * 2001-10-13 - 0.1 js
- *   - first version
- * 2001-11-03 - 0.2 js
- *   - simplified buffering, one-shot URBs for writing
- * 2001-11-10 - 0.3 js
- *   - removed IOCTL (setting power/mode is more complicated, postponed)
- * 2001-11-28 - 0.4 js
- *   - added vendor commands for mode of operation and power level in open
- * 2001-12-04 - 0.5 js
- *   - set IR mode by default (by oversight 0.4 set VLL mode)
- * 2002-01-11 - 0.5? pcchan
- *   - make read buffer reusable and work around bytes_to_write issue between
- *     uhci and legusbtower
- * 2002-09-23 - 0.52 david (david@csse.uwa.edu.au)
- *   - imported into lejos project
- *   - changed wake_up to wake_up_interruptible
- *   - changed to use lego0 rather than tower0
- *   - changed dbg() to use __func__ rather than deprecated __func__
- * 2003-01-12 - 0.53 david (david@csse.uwa.edu.au)
- *   - changed read and write to write everything or
- *     timeout (from a patch by Chris Riesen and Brett Thaeler driver)
- *   - added ioctl functionality to set timeouts
- * 2003-07-18 - 0.54 davidgsf (david@csse.uwa.edu.au)
- *   - initial import into LegoUSB project
- *   - merge of existing LegoUSB.c driver
- * 2003-07-18 - 0.56 davidgsf (david@csse.uwa.edu.au)
- *   - port to 2.6 style driver
- * 2004-02-29 - 0.6 Juergen Stuber <starblue@users.sourceforge.net>
- *   - fix locking
- *   - unlink read URBs which are no longer needed
- *   - allow increased buffer size, eliminates need for timeout on write
- *   - have read URB running continuously
- *   - added poll
- *   - forbid seeking
- *   - added nonblocking I/O
- *   - changed back __func__ to __func__
- *   - read and log tower firmware version
- *   - reset tower on probe, avoids failure of first write
- * 2004-03-09 - 0.7 Juergen Stuber <starblue@users.sourceforge.net>
- *   - timeout read now only after inactivity, shorten default accordingly
- * 2004-03-11 - 0.8 Juergen Stuber <starblue@users.sourceforge.net>
- *   - log major, minor instead of possibly confusing device filename
- *   - whitespace cleanup
- * 2004-03-12 - 0.9 Juergen Stuber <starblue@users.sourceforge.net>
- *   - normalize whitespace in debug messages
- *   - take care about endianness in control message responses
- * 2004-03-13 - 0.91 Juergen Stuber <starblue@users.sourceforge.net>
- *   - make default intervals longer to accommodate current EHCI driver
- * 2004-03-19 - 0.92 Juergen Stuber <starblue@users.sourceforge.net>
- *   - replaced atomic_t by memory barriers
- * 2004-04-21 - 0.93 Juergen Stuber <starblue@users.sourceforge.net>
- *   - wait for completion of write urb in release (needed for remotecontrol)
- *   - corrected poll for write direction (missing negation)
- * 2004-04-22 - 0.94 Juergen Stuber <starblue@users.sourceforge.net>
- *   - make device locking interruptible
- * 2004-04-30 - 0.95 Juergen Stuber <starblue@users.sourceforge.net>
- *   - check for valid udev on resubmitting and unlinking urbs
- * 2004-08-03 - 0.96 Juergen Stuber <starblue@users.sourceforge.net>
- *   - move reset into open to clean out spurious data
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
