@@ -24,30 +24,30 @@
 
 #define TRAP(routine)					\
 	sethi	%hi(109f), %g7;				\
-	ba,pt	%xcc, etrap;				\
+	ba,pt	%xcc, .Letrap;				\
 109:	 or	%g7, %lo(109b), %g7;			\
 	call	routine;				\
 	 add	%sp, PTREGS_OFF, %o0;			\
-	ba,pt	%xcc, rtrap;				\
+	ba,pt	%xcc, .Lrtrap;				\
 	 nop;						\
 	nop;
 
 #define TRAP_7INSNS(routine)				\
 	sethi	%hi(109f), %g7;				\
-	ba,pt	%xcc, etrap;				\
+	ba,pt	%xcc, .Letrap;				\
 109:	 or	%g7, %lo(109b), %g7;			\
 	call	routine;				\
 	 add	%sp, PTREGS_OFF, %o0;			\
-	ba,pt	%xcc, rtrap;				\
+	ba,pt	%xcc, .Lrtrap;				\
 	 nop;
 
 #define TRAP_SAVEFPU(routine)				\
 	sethi	%hi(109f), %g7;				\
-	ba,pt	%xcc, do_fptrap;			\
+	ba,pt	%xcc, .Ldo_fptrap;			\
 109:	 or	%g7, %lo(109b), %g7;			\
 	call	routine;				\
 	 add	%sp, PTREGS_OFF, %o0;			\
-	ba,pt	%xcc, rtrap;				\
+	ba,pt	%xcc, .Lrtrap;				\
 	 nop;						\
 	nop;
 
@@ -63,39 +63,39 @@
 
 #define TRAPTL1(routine)				\
 	sethi	%hi(109f), %g7;				\
-	ba,pt	%xcc, etraptl1;				\
+	ba,pt	%xcc, .Letraptl1;				\
 109:	 or	%g7, %lo(109b), %g7;			\
 	call	routine;				\
 	 add	%sp, PTREGS_OFF, %o0;			\
-	ba,pt	%xcc, rtrap;				\
+	ba,pt	%xcc, .Lrtrap;				\
 	 nop;						\
 	nop;
 
 #define TRAP_ARG(routine, arg)				\
 	sethi	%hi(109f), %g7;				\
-	ba,pt	%xcc, etrap;				\
+	ba,pt	%xcc, .Letrap;				\
 109:	 or	%g7, %lo(109b), %g7;			\
 	add	%sp, PTREGS_OFF, %o0;			\
 	call	routine;				\
 	 mov	arg, %o1;				\
-	ba,pt	%xcc, rtrap;				\
+	ba,pt	%xcc, .Lrtrap;				\
 	 nop;
 
 #define TRAPTL1_ARG(routine, arg)			\
 	sethi	%hi(109f), %g7;				\
-	ba,pt	%xcc, etraptl1;				\
+	ba,pt	%xcc, .Letraptl1;				\
 109:	 or	%g7, %lo(109b), %g7;			\
 	add	%sp, PTREGS_OFF, %o0;			\
 	call	routine;				\
 	 mov	arg, %o1;				\
-	ba,pt	%xcc, rtrap;				\
+	ba,pt	%xcc, .Lrtrap;				\
 	 nop;
 
 #define SYSCALL_TRAP(routine, systbl)			\
 	rdpr	%pil, %g2;				\
 	mov	TSTATE_SYSCALL, %g3;			\
 	sethi	%hi(109f), %g7;				\
-	ba,pt	%xcc, etrap_syscall;			\
+	ba,pt	%xcc, .Letrap_syscall;			\
 109:	 or	%g7, %lo(109b), %g7;			\
 	sethi	%hi(systbl), %l7;			\
 	ba,pt	%xcc, routine;				\
@@ -103,7 +103,7 @@
 
 #define TRAP_UTRAP(handler,lvl)				\
 	mov	handler, %g3;				\
-	ba,pt	%xcc, utrap_trap;			\
+	ba,pt	%xcc, .Lutrap_trap;			\
 	 mov	lvl, %g4;				\
 	nop;						\
 	nop;						\
@@ -116,7 +116,7 @@
 #else
 #define	LINUX_32BIT_SYSCALL_TRAP BTRAP(0x110)
 #endif
-#define LINUX_64BIT_SYSCALL_TRAP SYSCALL_TRAP(linux_sparc_syscall, sys_call_table64)
+#define LINUX_64BIT_SYSCALL_TRAP SYSCALL_TRAP(.Llinux_sparc_syscall, sys_call_table64)
 #define GETCC_TRAP TRAP(getcc)
 #define SETCC_TRAP TRAP(setcc)
 #define BREAKPOINT_TRAP TRAP(breakpoint_trap)
@@ -127,7 +127,7 @@
 	rdpr	%pil, %g2;				\
 	wrpr	%g0, PIL_NORMAL_MAX, %pil;		\
 	sethi	%hi(1f-4), %g7;				\
-	ba,pt	%xcc, etrap_irq;			\
+	ba,pt	%xcc, .Letrap_irq;			\
 	 or	%g7, %lo(1f-4), %g7;			\
 	nop;						\
 	nop;						\
@@ -138,7 +138,7 @@
 	mov	level, %o0;				\
 	call	routine;				\
 	 add	%sp, PTREGS_OFF, %o1;			\
-	ba,a,pt	%xcc, rtrap_irq;			\
+	ba,a,pt	%xcc, .Lrtrap_irq;			\
 	.previous;
 
 #else
@@ -146,39 +146,43 @@
 #define TRAP_IRQ(routine, level)			\
 	rdpr	%pil, %g2;				\
 	wrpr	%g0, PIL_NORMAL_MAX, %pil;		\
-	ba,pt	%xcc, etrap_irq;			\
+	ba,pt	%xcc, .Letrap_irq;			\
 	 rd	%pc, %g7;				\
 	mov	level, %o0;				\
 	call	routine;				\
 	 add	%sp, PTREGS_OFF, %o1;			\
-	ba,a,pt	%xcc, rtrap_irq;
+	ba,a,pt	%xcc, .Lrtrap_irq;
 
 #endif
 
 #define TRAP_NMI_IRQ(routine, level)			\
 	rdpr	%pil, %g2;				\
 	wrpr	%g0, PIL_NMI, %pil;			\
-	ba,pt	%xcc, etrap_irq;			\
+	ba,pt	%xcc, .Letrap_irq;			\
 	 rd	%pc, %g7;				\
 	mov	level, %o0;				\
 	call	routine;				\
 	 add	%sp, PTREGS_OFF, %o1;			\
-	ba,a,pt	%xcc, rtrap_nmi;
+	ba,a,pt	%xcc, .Lrtrap_nmi;
 
-#define TRAP_IVEC TRAP_NOSAVE(do_ivec)
+#define TRAP_IVEC					\
+	sethi	%hi(do_ivec), %g1;			\
+	jmpl	%g1 + %lo(do_ivec), %g0;		\
+	 nop;						\
+	nop; nop; nop; nop; nop;
 
 #define BTRAP(lvl) TRAP_ARG(bad_trap, lvl)
 
 #define BTRAPTL1(lvl) TRAPTL1_ARG(bad_trap_tl1, lvl)
 
 #define FLUSH_WINDOW_TRAP						\
-	ba,pt	%xcc, etrap;						\
+	ba,pt	%xcc, .Letrap;						\
 	 rd	%pc, %g7;						\
 	flushw;								\
 	ldx	[%sp + PTREGS_OFF + PT_V9_TNPC], %l1;			\
 	add	%l1, 4, %l2;						\
 	stx	%l1, [%sp + PTREGS_OFF + PT_V9_TPC];			\
-	ba,pt	%xcc, rtrap;						\
+	ba,pt	%xcc, .Lrtrap;						\
 	 stx	%l2, [%sp + PTREGS_OFF + PT_V9_TNPC];
 
 #ifdef CONFIG_KPROBES
@@ -204,7 +208,7 @@
 	ldx	[%g2 + HV_FAULT_I_ADDR_OFFSET], %g4;	\
 	ldx	[%g2 + HV_FAULT_I_CTX_OFFSET], %g5;	\
 	srlx	%g4, 22, %g6;				\
-	ba,pt	%xcc, sun4v_itsb_miss;			\
+	ba,pt	%xcc, .Lsun4v_itsb_miss;			\
 	 nop;						\
 	nop;						\
 	nop;
@@ -214,7 +218,7 @@
 	ldx	[%g2 + HV_FAULT_D_ADDR_OFFSET], %g4;	\
 	ldx	[%g2 + HV_FAULT_D_CTX_OFFSET], %g5;	\
 	srlx	%g4, 22, %g6;				\
-	ba,pt	%xcc, sun4v_dtsb_miss;			\
+	ba,pt	%xcc, .Lsun4v_dtsb_miss;			\
 	 nop;						\
 	nop;						\
 	nop;
@@ -223,9 +227,9 @@
 	ldxa	[%g0] ASI_SCRATCHPAD, %g2;		\
 	ldx	[%g2 + HV_FAULT_D_ADDR_OFFSET], %g4;	\
 	ldx	[%g2 + HV_FAULT_D_CTX_OFFSET], %g5;	\
-	ba,pt	%xcc, etrap;				\
+	ba,pt	%xcc, .Letrap;				\
 	 rd	%pc, %g7;				\
-	ba,pt	%xcc, sun4v_mcd_detect_precise;		\
+	ba,pt	%xcc, .Lsun4v_mcd_detect_precise;		\
 	 nop;						\
 	nop;
 
@@ -288,7 +292,7 @@ etrap_kernel_spill:					\
 	stx	%i7, [%sp + STACK_BIAS + 0x78];		\
 	saved;						\
 	sub	%g1, 2, %g1;				\
-	ba,pt	%xcc, etrap_save;			\
+	ba,pt	%xcc, .Letrap_save;			\
 	wrpr	%g1, %cwp;				\
 	nop; nop; nop; nop; nop; nop; nop; nop;		\
 	nop; nop; nop; nop;
@@ -346,7 +350,7 @@ etrap_user_spill_64bit:					\
 	stxa	%i7, [%sp + STACK_BIAS + 0x78] %asi;	\
 	saved;						\
 	sub	%g1, 2, %g1;				\
-	ba,pt	%xcc, etrap_save;			\
+	ba,pt	%xcc, .Letrap_save;			\
 	 wrpr	%g1, %cwp;				\
 	nop; nop; nop; nop; nop;			\
 	nop; nop; nop; nop;				\
@@ -383,7 +387,7 @@ etrap_spill_fixup_64bit:				\
 	saved;						\
 	rdpr	%cwp, %g1;				\
 	sub	%g1, 2, %g1;				\
-	ba,pt	%xcc, etrap_save;			\
+	ba,pt	%xcc, .Letrap_save;			\
 	 wrpr	%g1, %cwp;				\
 	nop; nop; nop
 
@@ -445,7 +449,7 @@ etrap_user_spill_32bit:			\
 	stwa	%i7, [%sp + 0x3c] %asi;	\
 	saved;				\
 	sub	%g1, 2, %g1;		\
-	ba,pt	%xcc, etrap_save;	\
+	ba,pt	%xcc, .Letrap_save;	\
 	 wrpr	%g1, %cwp;		\
 	nop; nop; nop; nop;		\
 	nop; nop;			\
@@ -482,7 +486,7 @@ etrap_spill_fixup_32bit:				\
 	saved;						\
 	rdpr	%cwp, %g1;				\
 	sub	%g1, 2, %g1;				\
-	ba,pt	%xcc, etrap_save;			\
+	ba,pt	%xcc, .Letrap_save;			\
 	 wrpr	%g1, %cwp;				\
 	nop; nop; nop
 
@@ -547,7 +551,7 @@ kern_rtt_fill:						\
 	ldx	[%sp + STACK_BIAS + 0x78], %i7;		\
 	restored;					\
 	add	%g1, 1, %g1;				\
-	ba,pt	%xcc, kern_rtt_restore;			\
+	ba,pt	%xcc, .Lkern_rtt_restore;			\
 	 wrpr	%g1, %cwp;				\
 	nop; nop; nop; nop; nop;			\
 	nop; nop; nop; nop;
@@ -602,7 +606,7 @@ user_rtt_fill_64bit:					\
 	ldxa	[%sp + STACK_BIAS + 0x68] %asi, %i5;	\
 	ldxa	[%sp + STACK_BIAS + 0x70] %asi, %i6;	\
 	ldxa	[%sp + STACK_BIAS + 0x78] %asi, %i7;	\
-	ba,pt	%xcc, user_rtt_pre_restore;		\
+	ba,pt	%xcc, .Luser_rtt_pre_restore;		\
 	 restored;					\
 	nop; nop; nop; nop; nop; nop;			\
 	nop; nop; nop; nop; nop;			\
@@ -665,7 +669,7 @@ user_rtt_fill_32bit:					\
 	lduwa	[%sp + 0x34] %asi, %i5;			\
 	lduwa	[%sp + 0x38] %asi, %i6;			\
 	lduwa	[%sp + 0x3c] %asi, %i7;			\
-	ba,pt	%xcc, user_rtt_pre_restore;		\
+	ba,pt	%xcc, .Luser_rtt_pre_restore;		\
 	 restored;					\
 	nop; nop; nop; nop; nop;			\
 	nop; nop; nop;					\

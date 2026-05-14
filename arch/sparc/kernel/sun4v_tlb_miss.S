@@ -62,7 +62,7 @@ sun4v_itlb_miss:
 	bne,a,pn %xcc, tsb_miss_page_table_walk
 	 mov	FAULT_CODE_ITLB, %g3
 	andcc	%g3, _PAGE_EXEC_4V, %g0
-	be,a,pn	%xcc, tsb_do_fault
+	be,a,pn	%xcc, .Ltsb_do_fault
 	 mov	FAULT_CODE_ITLB, %g3
 
 	/* We have a valid entry, make hypervisor call to load
@@ -144,7 +144,7 @@ sun4v_dtlb_prot:
 	cmp	%g1, 1
 	bgu,pn	%xcc, winfix_trampoline
 	 mov	FAULT_CODE_DTLB | FAULT_CODE_WRITE, %g4
-	ba,pt	%xcc, sparc64_realfault_common
+	ba,pt	%xcc, .Lsparc64_realfault_common
 	 nop
 
 	/* Called from trap table:
@@ -152,6 +152,7 @@ sun4v_dtlb_prot:
 	 * %g5:	context
 	 * %g6: TAG TARGET
 	 */
+.Lsun4v_itsb_miss:
 sun4v_itsb_miss:
 	mov	SCRATCHPAD_UTSBREG1, %g1
 	ldxa	[%g1] ASI_SCRATCHPAD, %g1
@@ -164,6 +165,7 @@ sun4v_itsb_miss:
 	 * %g5:	context
 	 * %g6: TAG TARGET
 	 */
+.Lsun4v_dtsb_miss:
 sun4v_dtsb_miss:
 	mov	SCRATCHPAD_UTSBREG1, %g1
 	ldxa	[%g1] ASI_SCRATCHPAD, %g1
@@ -214,7 +216,7 @@ sun4v_itlb_error:
 
 	sethi	%hi(1f), %g7
 	rdpr	%tl, %g4
-	ba,pt	%xcc, etraptl1
+	ba,pt	%xcc, .Letraptl1
 1:	 or	%g7, %lo(1f), %g7
 	mov	%l4, %o1
 	call	sun4v_itlb_error_report
@@ -241,7 +243,7 @@ sun4v_dtlb_error:
 
 	sethi	%hi(1f), %g7
 	rdpr	%tl, %g4
-	ba,pt	%xcc, etraptl1
+	ba,pt	%xcc, .Letraptl1
 1:	 or	%g7, %lo(1f), %g7
 	mov	%l4, %o1
 	call	sun4v_dtlb_error_report
@@ -251,7 +253,7 @@ sun4v_dtlb_error:
 
 sun4v_bad_ra:
 	or	%g0, %g4, %g5
-	ba,pt	%xcc, sparc64_realfault_common
+	ba,pt	%xcc, .Lsparc64_realfault_common
 	 or	%g1, %g0, %g4
 
 	/* NOTREACHED */
@@ -264,13 +266,13 @@ sun4v_iacc:
 	ldx	[%g2 + HV_FAULT_I_CTX_OFFSET], %g5
 	sllx	%g3, 16, %g3
 	or	%g5, %g3, %g5
-	ba,pt	%xcc, etrap
+	ba,pt	%xcc, .Letrap
 	 rd	%pc, %g7
 	mov	%l4, %o1
 	mov	%l5, %o2
 	call	sun4v_insn_access_exception
 	 add	%sp, PTREGS_OFF, %o0
-	ba,a,pt	%xcc, rtrap
+	ba,a,pt	%xcc, .Lrtrap
 
 	/* Instruction Access Exception, tl1. */
 sun4v_iacc_tl1:
@@ -280,13 +282,13 @@ sun4v_iacc_tl1:
 	ldx	[%g2 + HV_FAULT_I_CTX_OFFSET], %g5
 	sllx	%g3, 16, %g3
 	or	%g5, %g3, %g5
-	ba,pt	%xcc, etraptl1
+	ba,pt	%xcc, .Letraptl1
 	 rd	%pc, %g7
 	mov	%l4, %o1
 	mov	%l5, %o2
 	call	sun4v_insn_access_exception_tl1
 	 add	%sp, PTREGS_OFF, %o0
-	ba,a,pt	%xcc, rtrap
+	ba,a,pt	%xcc, .Lrtrap
 
 	/* Data Access Exception, tl0. */
 sun4v_dacc:
@@ -296,13 +298,13 @@ sun4v_dacc:
 	ldx	[%g2 + HV_FAULT_D_CTX_OFFSET], %g5
 	sllx	%g3, 16, %g3
 	or	%g5, %g3, %g5
-	ba,pt	%xcc, etrap
+	ba,pt	%xcc, .Letrap
 	 rd	%pc, %g7
 	mov	%l4, %o1
 	mov	%l5, %o2
 	call	sun4v_data_access_exception
 	 add	%sp, PTREGS_OFF, %o0
-	ba,a,pt	%xcc, rtrap
+	ba,a,pt	%xcc, .Lrtrap
 
 	/* Data Access Exception, tl1. */
 sun4v_dacc_tl1:
@@ -312,13 +314,13 @@ sun4v_dacc_tl1:
 	ldx	[%g2 + HV_FAULT_D_CTX_OFFSET], %g5
 	sllx	%g3, 16, %g3
 	or	%g5, %g3, %g5
-	ba,pt	%xcc, etraptl1
+	ba,pt	%xcc, .Letraptl1
 	 rd	%pc, %g7
 	mov	%l4, %o1
 	mov	%l5, %o2
 	call	sun4v_data_access_exception_tl1
 	 add	%sp, PTREGS_OFF, %o0
-	ba,a,pt	%xcc, rtrap
+	ba,a,pt	%xcc, .Lrtrap
 
 	/* Memory Address Unaligned.  */
 sun4v_mna:
@@ -346,22 +348,22 @@ sun4v_mna:
 	sllx	%g3, 16, %g3
 	or	%g5, %g3, %g5
 
-	ba,pt	%xcc, etrap
+	ba,pt	%xcc, .Letrap
 	 rd	%pc, %g7
 	mov	%l4, %o1
 	mov	%l5, %o2
 	call	sun4v_do_mna
 	 add	%sp, PTREGS_OFF, %o0
-	ba,a,pt	%xcc, rtrap
+	ba,a,pt	%xcc, .Lrtrap
 	 nop
 
 	/* Privileged Action.  */
 sun4v_privact:
-	ba,pt	%xcc, etrap
+	ba,pt	%xcc, .Letrap
 	 rd	%pc, %g7
 	call	do_privact
 	 add	%sp, PTREGS_OFF, %o0
-	ba,a,pt	%xcc, rtrap
+	ba,a,pt	%xcc, .Lrtrap
 
 	/* Unaligned ldd float, tl0. */
 sun4v_lddfmna:
@@ -371,13 +373,13 @@ sun4v_lddfmna:
 	ldx	[%g2 + HV_FAULT_D_CTX_OFFSET], %g5
 	sllx	%g3, 16, %g3
 	or	%g5, %g3, %g5
-	ba,pt	%xcc, etrap
+	ba,pt	%xcc, .Letrap
 	 rd	%pc, %g7
 	mov	%l4, %o1
 	mov	%l5, %o2
 	call	handle_lddfmna
 	 add	%sp, PTREGS_OFF, %o0
-	ba,a,pt	%xcc, rtrap
+	ba,a,pt	%xcc, .Lrtrap
 
 	/* Unaligned std float, tl0. */
 sun4v_stdfmna:
@@ -387,13 +389,13 @@ sun4v_stdfmna:
 	ldx	[%g2 + HV_FAULT_D_CTX_OFFSET], %g5
 	sllx	%g3, 16, %g3
 	or	%g5, %g3, %g5
-	ba,pt	%xcc, etrap
+	ba,pt	%xcc, .Letrap
 	 rd	%pc, %g7
 	mov	%l4, %o1
 	mov	%l5, %o2
 	call	handle_stdfmna
 	 add	%sp, PTREGS_OFF, %o0
-	ba,a,pt	%xcc, rtrap
+	ba,a,pt	%xcc, .Lrtrap
 
 #define BRANCH_ALWAYS	0x10680000
 #define NOP		0x01000000

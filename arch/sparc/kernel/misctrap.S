@@ -15,11 +15,11 @@ __do_privact:
 	stxa		%g0, [%g3] ASI_DMMU	! Clear FaultValid bit
 	membar		#Sync
 	sethi		%hi(109f), %g7
-	ba,pt		%xcc, etrap
+	ba,pt		%xcc, .Letrap
 109:	or		%g7, %lo(109b), %g7
 	call		do_privact
 	 add		%sp, PTREGS_OFF, %o0
-	ba,a,pt		%xcc, rtrap
+	ba,a,pt		%xcc, .Lrtrap
 	.size		__do_privact,.-__do_privact
 
 	.type		do_mna,#function
@@ -40,13 +40,13 @@ do_mna:
 	 rdpr		%tpc, %g3
 
 1:	sethi		%hi(109f), %g7
-	ba,pt		%xcc, etrap
+	ba,pt		%xcc, .Letrap
 109:	 or		%g7, %lo(109b), %g7
 	mov		%l4, %o1
 	mov		%l5, %o2
 	call		mem_address_unaligned
 	 add		%sp, PTREGS_OFF, %o0
-	ba,a,pt		%xcc, rtrap
+	ba,a,pt		%xcc, .Lrtrap
 	.size		do_mna,.-do_mna
 
 	.type		do_lddfmna,#function
@@ -58,13 +58,13 @@ do_lddfmna:
 	membar		#Sync
 	mov		DMMU_SFAR, %g4
 	ldxa		[%g4] ASI_DMMU, %g4
-	ba,pt		%xcc, etrap
+	ba,pt		%xcc, .Letrap
 109:	 or		%g7, %lo(109b), %g7
 	mov		%l4, %o1
 	mov		%l5, %o2
 	call		handle_lddfmna
 	 add		%sp, PTREGS_OFF, %o0
-	ba,a,pt		%xcc, rtrap
+	ba,a,pt		%xcc, .Lrtrap
 	.size		do_lddfmna,.-do_lddfmna
 
 	.type		do_stdfmna,#function
@@ -76,13 +76,13 @@ do_stdfmna:
 	membar		#Sync
 	mov		DMMU_SFAR, %g4
 	ldxa		[%g4] ASI_DMMU, %g4
-	ba,pt		%xcc, etrap
+	ba,pt		%xcc, .Letrap
 109:	 or		%g7, %lo(109b), %g7
 	mov		%l4, %o1
 	mov		%l5, %o2
 	call		handle_stdfmna
 	 add		%sp, PTREGS_OFF, %o0
-	ba,a,pt		%xcc, rtrap
+	ba,a,pt		%xcc, .Lrtrap
 	 nop
 	.size		do_stdfmna,.-do_stdfmna
 
@@ -90,6 +90,6 @@ do_stdfmna:
 breakpoint_trap:
 	call		sparc_breakpoint
 	 add		%sp, PTREGS_OFF, %o0
-	ba,pt		%xcc, rtrap
+	ba,pt		%xcc, .Lrtrap
 	 nop
 	.size		breakpoint_trap,.-breakpoint_trap

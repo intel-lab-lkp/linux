@@ -66,7 +66,8 @@ user_rtt_fill_fixup_common:
 
 		call	do_sparc64_fault
 		 add	%sp, PTREGS_OFF, %o0
-		ba,pt	%xcc, rtrap
+		set	rtrap, %g1
+		jmpl	%g1, %g0
 		 nop
 
 1:		cmp	%g3, 2
@@ -81,12 +82,16 @@ user_rtt_fill_fixup_common:
 		mov	%l4, %o2
 		call	sun4v_do_mna
 		 mov	%l5, %o1
-		ba,a,pt	%xcc, rtrap
+		set	rtrap, %g1
+		jmpl	%g1, %g0
+		 nop
 1:		mov	%l4, %o1
 		mov	%l5, %o2
 		call	mem_address_unaligned
 		 nop
-		ba,a,pt	%xcc, rtrap
+		set	rtrap, %g1
+		jmpl	%g1, %g0
+		 nop
 
 2:		sethi	%hi(tlb_type), %g1
 		mov	%l4, %o1
@@ -97,9 +102,12 @@ user_rtt_fill_fixup_common:
 		 add	%sp, PTREGS_OFF, %o0
 		call	sun4v_data_access_exception
 		 nop
-		ba,a,pt	%xcc, rtrap
+		set	rtrap, %g1
+		jmpl	%g1, %g0
 		 nop
 
 1:		call	spitfire_data_access_exception
 		 nop
-		ba,a,pt	%xcc, rtrap
+		set	rtrap, %g1
+		jmpl	%g1, %g0
+		 nop

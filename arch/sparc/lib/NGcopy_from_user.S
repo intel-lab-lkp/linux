@@ -26,8 +26,12 @@
 #define PREAMBLE					\
 	rd		%asi, %g1;			\
 	cmp		%g1, ASI_AIUS;			\
-	bne,pn		%icc, raw_copy_in_user;		\
-	 nop
+	be,pt		%icc, 1f;			\
+	 nop;					\
+	set		raw_copy_in_user, %g1;		\
+	jmpl		%g1, %g0;			\
+	 nop;					\
+1:
 #endif
 
 #include "NGmemcpy.S"

@@ -26,11 +26,14 @@
  * %g4 and %g5 will be preserved %l4 and %l5 respectively.
  */
 
-		.text		
-		.align	64
-		.globl	etrap_syscall, etrap, etrap_irq, etraptl1
+		.text
+	.align	64
+	.globl	etrap_syscall, etrap, etrap_irq, etraptl1
+.Letrap:
 etrap:		rdpr	%pil, %g2
+.Letrap_irq:
 etrap_irq:	clr	%g3
+.Letrap_syscall:
 etrap_syscall:	TRAP_LOAD_THREAD_REG(%g6, %g1)
 		rdpr	%tstate, %g1
 		or	%g1, %g3, %g1
@@ -66,7 +69,7 @@ etrap_syscall:	TRAP_LOAD_THREAD_REG(%g6, %g1)
 		st	%g1, [%g2 + STACKFRAME_SZ + PT_V9_MAGIC]
 
 		rdpr	%cansave, %g1
-		brnz,pt %g1, etrap_save
+		brnz,pt %g1, .Letrap_save
 		 nop
 
 		rdpr	%cwp, %g1
@@ -88,6 +91,7 @@ etrap_user_spill:
 		 nop
 		ba,a,pt	%xcc, etrap_user_spill_64bit
 
+.Letrap_save:
 etrap_save:	save	%g2, -STACK_BIAS, %sp
 		mov	%g6, %l6
 
@@ -205,6 +209,7 @@ etrap_save:	save	%g2, -STACK_BIAS, %sp
 		 stb	%g0, [%l4 + %l3]
 		nop
 
+.Letraptl1:
 etraptl1:	/* Save tstate/tpc/tnpc of TL 1-->4 and the tl register itself.
 		 * We place this right after pt_regs on the trap stack.
 		 * The layout is:

@@ -31,6 +31,7 @@ GENmemset:		/* %o0=buf, %o1=pat, %o2=len */
 
 	.globl		GENbzero
 	.type		GENbzero, #function
+.LGENbzero:
 GENbzero:
 	clr		%o2
 1:	brz,pn		%o1, GENbzero_return
@@ -121,7 +122,7 @@ GENclear_user:		/* %o0=buf, %o1=len */
 	brz,pn		%o1, GENbzero_done
 	 clr		%o3
 	cmp		%o5, ASI_AIUS
-	bne,pn		%icc, GENbzero
+	bne,pn		%icc, .LGENbzero
 	 clr		%o2
 	ba,pt		%xcc, GENbzero_from_clear_user
 	 mov		ASI_AIUS, %o4

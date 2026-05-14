@@ -104,7 +104,7 @@ cheetah_plus_dcpe_trap_vector:
 do_cheetah_plus_data_parity:
 	rdpr		%pil, %g2
 	wrpr		%g0, PIL_NORMAL_MAX, %pil
-	ba,pt		%xcc, etrap_irq
+	ba,pt		%xcc, .Letrap_irq
 	 rd		%pc, %g7
 #ifdef CONFIG_TRACE_IRQFLAGS
 	call		trace_hardirqs_off
@@ -113,7 +113,7 @@ do_cheetah_plus_data_parity:
 	mov		0x0, %o0
 	call		cheetah_plus_parity_error
 	 add		%sp, PTREGS_OFF, %o1
-	ba,a,pt		%xcc, rtrap_irq
+	ba,a,pt		%xcc, .Lrtrap_irq
 	.size		do_cheetah_plus_data_parity,.-do_cheetah_plus_data_parity
 
 	.globl		cheetah_plus_dcpe_trap_vector_tl1
@@ -146,7 +146,7 @@ cheetah_plus_icpe_trap_vector:
 do_cheetah_plus_insn_parity:
 	rdpr		%pil, %g2
 	wrpr		%g0, PIL_NORMAL_MAX, %pil
-	ba,pt		%xcc, etrap_irq
+	ba,pt		%xcc, .Letrap_irq
 	 rd		%pc, %g7
 #ifdef CONFIG_TRACE_IRQFLAGS
 	call		trace_hardirqs_off
@@ -155,7 +155,7 @@ do_cheetah_plus_insn_parity:
 	mov		0x1, %o0
 	call		cheetah_plus_parity_error
 	 add		%sp, PTREGS_OFF, %o1
-	ba,a,pt		%xcc, rtrap_irq
+	ba,a,pt		%xcc, .Lrtrap_irq
 	.size		do_cheetah_plus_insn_parity,.-do_cheetah_plus_insn_parity
 
 	.globl		cheetah_plus_icpe_trap_vector_tl1
@@ -219,12 +219,12 @@ do_dcpe_tl1_nonfatal:	/* Ok we may use interrupt globals safely. */
 
 do_dcpe_tl1_fatal:
 	sethi		%hi(1f), %g7
-	ba,pt		%xcc, etraptl1
+	ba,pt		%xcc, .Letraptl1
 1:	or		%g7, %lo(1b), %g7
 	mov		0x2, %o0
 	call		cheetah_plus_parity_error
 	 add		%sp, PTREGS_OFF, %o1
-	ba,a,pt		%xcc, rtrap
+	ba,a,pt		%xcc, .Lrtrap
 	.size		do_dcpe_tl1,.-do_dcpe_tl1
 
 	.globl		do_icpe_tl1
@@ -262,12 +262,12 @@ do_icpe_tl1_nonfatal:	/* Ok we may use interrupt globals safely. */
 
 do_icpe_tl1_fatal:
 	sethi		%hi(1f), %g7
-	ba,pt		%xcc, etraptl1
+	ba,pt		%xcc, .Letraptl1
 1:	or		%g7, %lo(1b), %g7
 	mov		0x3, %o0
 	call		cheetah_plus_parity_error
 	 add		%sp, PTREGS_OFF, %o1
-	ba,a,pt		%xcc, rtrap
+	ba,a,pt		%xcc, .Lrtrap
 	.size		do_icpe_tl1,.-do_icpe_tl1
 	
 	.type		dcpe_icpe_tl1_common,#function
@@ -490,7 +490,7 @@ cheetah_fast_ecc:
 c_fast_ecc:
 	rdpr		%pil, %g2
 	wrpr		%g0, PIL_NORMAL_MAX, %pil
-	ba,pt		%xcc, etrap_irq
+	ba,pt		%xcc, .Letrap_irq
 	 rd		%pc, %g7
 #ifdef CONFIG_TRACE_IRQFLAGS
 	call		trace_hardirqs_off
@@ -500,7 +500,7 @@ c_fast_ecc:
 	mov		%l5, %o2
 	call		cheetah_fecc_handler
 	 add		%sp, PTREGS_OFF, %o0
-	ba,a,pt		%xcc, rtrap_irq
+	ba,a,pt		%xcc, .Lrtrap_irq
 	.size		c_fast_ecc,.-c_fast_ecc
 
 	/* Our caller has disabled I-cache and performed membar Sync. */
@@ -526,7 +526,7 @@ cheetah_cee:
 c_cee:
 	rdpr		%pil, %g2
 	wrpr		%g0, PIL_NORMAL_MAX, %pil
-	ba,pt		%xcc, etrap_irq
+	ba,pt		%xcc, .Letrap_irq
 	 rd		%pc, %g7
 #ifdef CONFIG_TRACE_IRQFLAGS
 	call		trace_hardirqs_off
@@ -536,7 +536,7 @@ c_cee:
 	mov		%l5, %o2
 	call		cheetah_cee_handler
 	 add		%sp, PTREGS_OFF, %o0
-	ba,a,pt		%xcc, rtrap_irq
+	ba,a,pt		%xcc, .Lrtrap_irq
 	.size		c_cee,.-c_cee
 
 	/* Our caller has disabled I-cache+D-cache and performed membar Sync. */
@@ -562,7 +562,7 @@ cheetah_deferred_trap:
 c_deferred:
 	rdpr		%pil, %g2
 	wrpr		%g0, PIL_NORMAL_MAX, %pil
-	ba,pt		%xcc, etrap_irq
+	ba,pt		%xcc, .Letrap_irq
 	 rd		%pc, %g7
 #ifdef CONFIG_TRACE_IRQFLAGS
 	call		trace_hardirqs_off
@@ -572,5 +572,5 @@ c_deferred:
 	mov		%l5, %o2
 	call		cheetah_deferred_handler
 	 add		%sp, PTREGS_OFF, %o0
-	ba,a,pt		%xcc, rtrap_irq
+	ba,a,pt		%xcc, .Lrtrap_irq
 	.size		c_deferred,.-c_deferred

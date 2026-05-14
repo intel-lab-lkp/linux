@@ -14,7 +14,7 @@
 	 mov	FAULT_CODE_ITLB, %g3
 	sethi	%hi(_PAGE_EXEC_4U), %g4
 	andcc	%g5, %g4, %g0			! Executable?
-	be,pn	%xcc, tsb_do_fault
+	be,pn	%xcc, .Ltsb_do_fault
 	 nop					! Delay slot, fill me
 	stxa	%g5, [%g0] ASI_ITLB_DATA_IN	! Load TLB
 	retry					! Trap done

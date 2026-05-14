@@ -29,11 +29,11 @@ fill_fixup:
 	stb	%g4, [%g6 + TI_FAULT_CODE]
 	stx	%g5, [%g6 + TI_FAULT_ADDR]
 	wrpr	%g1, %cwp
-	ba,pt	%xcc, etrap
+	ba,pt	%xcc, .Letrap
 	 rd	%pc, %g7
 	call	do_sparc64_fault
 	 add	%sp, PTREGS_OFF, %o0
-	ba,a,pt	%xcc, rtrap
+	ba,a,pt	%xcc, .Lrtrap
 
 	/* Be very careful about usage of the trap globals here.
 	 * You cannot touch %g5 as that has the fault information.
@@ -98,11 +98,11 @@ spill_fixup_dax:
 	stb	%g4, [%g6 + TI_FAULT_CODE]
 	stx	%g5, [%g6 + TI_FAULT_ADDR]
 	wrpr	%g1, %cwp
-	ba,pt	%xcc, etrap
+	ba,pt	%xcc, .Letrap
 	 rd	%pc, %g7
 	call	do_sparc64_fault
 	 add	%sp, PTREGS_OFF, %o0
-	ba,a,pt	%xcc, rtrap
+	ba,a,pt	%xcc, .Lrtrap
 
 winfix_mna:
 	andn	%g3, 0x7f, %g3
@@ -114,7 +114,7 @@ fill_fixup_mna:
 	rdpr	%tstate, %g1
 	and	%g1, TSTATE_CWP, %g1
 	wrpr	%g1, %cwp
-	ba,pt	%xcc, etrap
+	ba,pt	%xcc, .Letrap
 	 rd	%pc, %g7
 	sethi	%hi(tlb_type), %g1
 	lduw	[%g1 + %lo(tlb_type)], %g1
@@ -124,13 +124,14 @@ fill_fixup_mna:
 	mov	%l4, %o2
 	call	sun4v_do_mna
 	 mov	%l5, %o1
-	ba,a,pt	%xcc, rtrap
+	ba,a,pt	%xcc, .Lrtrap
 1:	mov	%l4, %o1
 	mov	%l5, %o2
 	call	mem_address_unaligned
 	 nop
-	ba,a,pt	%xcc, rtrap
+	ba,a,pt	%xcc, .Lrtrap
 
+.Lwinfix_dax:
 winfix_dax:
 	andn	%g3, 0x7f, %g3
 	add	%g3, 0x74, %g3
@@ -141,7 +142,7 @@ fill_fixup_dax:
 	rdpr	%tstate, %g1
 	and	%g1, TSTATE_CWP, %g1
 	wrpr	%g1, %cwp
-	ba,pt	%xcc, etrap
+	ba,pt	%xcc, .Letrap
 	 rd	%pc, %g7
 	sethi	%hi(tlb_type), %g1
 	mov	%l4, %o1
@@ -152,9 +153,9 @@ fill_fixup_dax:
 	 add	%sp, PTREGS_OFF, %o0
 	call	sun4v_data_access_exception
 	 nop
-	ba,a,pt	%xcc, rtrap
+	ba,a,pt	%xcc, .Lrtrap
 	 nop
 1:	call	spitfire_data_access_exception
 	 nop
-	ba,a,pt	%xcc, rtrap
+	ba,a,pt	%xcc, .Lrtrap
 	 nop

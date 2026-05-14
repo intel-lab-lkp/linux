@@ -204,7 +204,7 @@ sun4v_res_mondo:
 	rdpr	%pil, %g2
 	wrpr	%g0, PIL_NORMAL_MAX, %pil
 	mov	%g1, %g4
-	ba,pt	%xcc, etrap_irq
+	ba,pt	%xcc, .Letrap_irq
 	 rd	%pc, %g7
 #ifdef CONFIG_TRACE_IRQFLAGS
 	call		trace_hardirqs_off
@@ -216,7 +216,7 @@ sun4v_res_mondo:
 	 mov	%l4, %o1
 
 	/* Return from trap.  */
-	ba,pt	%xcc, rtrap_irq
+	ba,pt	%xcc, .Lrtrap_irq
 	 nop
 
 sun4v_res_mondo_queue_empty:
@@ -233,7 +233,7 @@ sun4v_res_mondo_queue_full:
 
 	rdpr	%pil, %g2
 	wrpr	%g0, PIL_NORMAL_MAX, %pil
-	ba,pt	%xcc, etrap_irq
+	ba,pt	%xcc, .Letrap_irq
 	 rd	%pc, %g7
 #ifdef CONFIG_TRACE_IRQFLAGS
 	call		trace_hardirqs_off
@@ -242,7 +242,7 @@ sun4v_res_mondo_queue_full:
 	call	sun4v_resum_overflow
 	 add	%sp, PTREGS_OFF, %o0
 
-	ba,pt	%xcc, rtrap_irq
+	ba,pt	%xcc, .Lrtrap_irq
 	 nop
 
 sun4v_nonres_mondo:
@@ -315,7 +315,7 @@ sun4v_nonres_mondo:
 	rdpr	%pil, %g2
 	wrpr	%g0, PIL_NORMAL_MAX, %pil
 	mov	%g1, %g4
-	ba,pt	%xcc, etrap_irq
+	ba,pt	%xcc, .Letrap_irq
 	 rd	%pc, %g7
 #ifdef CONFIG_TRACE_IRQFLAGS
 	call		trace_hardirqs_off
@@ -327,7 +327,7 @@ sun4v_nonres_mondo:
 	 mov	%l4, %o1
 
 	/* Return from trap.  */
-	ba,pt	%xcc, rtrap_irq
+	ba,pt	%xcc, .Lrtrap_irq
 	 nop
 
 sun4v_nonres_mondo_queue_empty:
@@ -344,7 +344,7 @@ sun4v_nonres_mondo_queue_full:
 
 	rdpr	%pil, %g2
 	wrpr	%g0, PIL_NORMAL_MAX, %pil
-	ba,pt	%xcc, etrap_irq
+	ba,pt	%xcc, .Letrap_irq
 	 rd	%pc, %g7
 #ifdef CONFIG_TRACE_IRQFLAGS
 	call		trace_hardirqs_off
@@ -353,5 +353,5 @@ sun4v_nonres_mondo_queue_full:
 	call	sun4v_nonresum_overflow
 	 add	%sp, PTREGS_OFF, %o0
 
-	ba,pt	%xcc, rtrap_irq
+	ba,pt	%xcc, .Lrtrap_irq
 	 nop

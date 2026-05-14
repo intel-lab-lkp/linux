@@ -92,7 +92,7 @@ kvmap_itlb_longpath:
 	.previous
 
 	rdpr	%tpc, %g5
-	ba,pt	%xcc, sparc64_realfault_common
+	ba,pt	%xcc, .Lsparc64_realfault_common
 	 mov	FAULT_CODE_ITLB, %g4
 
 kvmap_itlb_obp:
@@ -264,7 +264,7 @@ kvmap_dtlb_longpath:
 	 * need to clear the context ID bits out of %g5 here.
 	 */
 
-	be,pt	%xcc, sparc64_realfault_common
+	be,pt	%xcc, .Lsparc64_realfault_common
 	 mov	FAULT_CODE_DTLB, %g4
 	ba,pt	%xcc, winfix_trampoline
 	 nop

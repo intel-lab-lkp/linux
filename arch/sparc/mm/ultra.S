@@ -189,6 +189,7 @@ __spitfire_flush_tlb_mm_slow:
 	.section .kprobes.text, "ax"
 	.align		32
 	.globl		__flush_icache_page
+.L__flush_icache_page:
 __flush_icache_page:	/* %o0 = phys_page */
 	srlx		%o0, PAGE_SHIFT, %o0
 	sethi		%hi(PAGE_OFFSET), %g1
@@ -237,7 +238,7 @@ __flush_dcache_page:	/* %o0=kaddr, %o1=flush_icache */
 	/* The I-cache does not snoop local stores so we
 	 * better flush that too when necessary.
 	 */
-	brnz,pt		%o1, __flush_icache_page
+	brnz,pt		%o1, .L__flush_icache_page
 	 sllx		%o0, 11, %o0
 	retl
 	 nop
@@ -642,7 +643,8 @@ xcall_sync_tick:
 	rdpr		%pil, %g2
 	wrpr		%g0, PIL_NORMAL_MAX, %pil
 	sethi		%hi(109f), %g7
-	b,pt		%xcc, etrap_irq
+	set		etrap_irq, %g1
+	jmpl		%g1, %g0
 109:	 or		%g7, %lo(109b), %g7
 #ifdef CONFIG_TRACE_IRQFLAGS
 	call		trace_hardirqs_off
@@ -650,7 +652,8 @@ xcall_sync_tick:
 #endif
 	call		smp_synchronize_tick_client
 	 nop
-	b		rtrap_xcall
+	set		rtrap_xcall, %g1
+	jmpl		%g1, %g0
 	 ldx		[%sp + PTREGS_OFF + PT_V9_TSTATE], %l1
 
 	.globl		xcall_fetch_glob_regs
@@ -844,12 +847,15 @@ xcall_flush_dcache_page_spitfire: /* %g1 == physical page address
 __hypervisor_tlb_xcall_error:
 	mov	%g5, %g4
 	mov	%g6, %g5
-	ba,pt	%xcc, etrap
+	set	etrap, %g1
+	jmpl	%g1, %g0
 	 rd	%pc, %g7
 	mov	%l4, %o0
 	call	hypervisor_tlbop_error_xcall
 	 mov	%l5, %o1
-	ba,a,pt	%xcc, rtrap
+	set	rtrap, %g1
+	jmpl	%g1, %g0
+	 nop
 
 	.globl		__hypervisor_xcall_flush_tlb_mm
 __hypervisor_xcall_flush_tlb_mm: /* 24 insns */

@@ -2,6 +2,7 @@
 	/* This is trivial with the new code... */
 	.globl		do_fpdis
 	.type		do_fpdis,#function
+.Ldo_fpdis:
 do_fpdis:
 	sethi		%hi(TSTATE_PEF), %g4
 	rdpr		%tstate, %g5
@@ -15,10 +16,10 @@ do_fpdis:
 
 	/* Legal state when DCR_IFPOE is set in Cheetah %dcr. */
 	sethi		%hi(109f), %g7
-	ba,pt		%xcc, etrap
+	ba,pt		%xcc, .Letrap
 109:	 or		%g7, %lo(109b), %g7
 	add		%g0, %g0, %g0
-	ba,a,pt		%xcc, rtrap
+	ba,a,pt		%xcc, .Lrtrap
 
 1:	TRAP_LOAD_THREAD_REG(%g6, %g1)
 	ldub		[%g6 + TI_FPSAVED], %g5
@@ -198,12 +199,13 @@ fpdis_exit2:
 fp_other_bounce:
 	call		do_fpother
 	 add		%sp, PTREGS_OFF, %o0
-	ba,a,pt		%xcc, rtrap
+	ba,a,pt		%xcc, .Lrtrap
 	.size		fp_other_bounce,.-fp_other_bounce
 
 	.align		32
 	.globl		do_fpother_check_fitos
 	.type		do_fpother_check_fitos,#function
+.Ldo_fpother_check_fitos:
 do_fpother_check_fitos:
 	TRAP_LOAD_THREAD_REG(%g6, %g1)
 	sethi		%hi(fp_other_bounce - 4), %g7
@@ -330,6 +332,7 @@ fitos_emul_fini:
 	.align		32
 	.globl		do_fptrap
 	.type		do_fptrap,#function
+.Ldo_fptrap:
 do_fptrap:
 	TRAP_LOAD_THREAD_REG(%g6, %g1)
 	stx		%fsr, [%g6 + TI_XFSR]
@@ -379,6 +382,6 @@ do_fptrap_after_fsr:
 	.previous
 
 	membar		#Sync
-	ba,pt		%xcc, etrap
+	ba,pt		%xcc, .Letrap
 	 wr		%g0, 0, %fprs
 	.size		do_fptrap,.-do_fptrap

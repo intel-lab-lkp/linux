@@ -113,7 +113,7 @@ tsb_miss_page_table_walk:
 	 * TSB both lack a matching entry.
 	 */
 tsb_miss_page_table_walk_sun4v_fastpath:
-	USER_PGTABLE_WALK_TL1(%g4, %g7, %g5, %g2, tsb_do_fault)
+	USER_PGTABLE_WALK_TL1(%g4, %g7, %g5, %g2, .Ltsb_do_fault)
 
 	/* Valid PTE is now in %g5.  */
 
@@ -156,11 +156,11 @@ tsb_miss_page_table_walk_sun4v_fastpath:
 	cmp	%g7, 1
 	bne,pn	%xcc, winfix_trampoline
 	 mov	%g3, %g4
-	ba,pt	%xcc, etrap
+	ba,pt	%xcc, .Letrap
 	 rd	%pc, %g7
 	call	hugetlb_setup
 	 add	%sp, PTREGS_OFF, %o0
-	ba,pt	%xcc, rtrap
+	ba,pt	%xcc, .Lrtrap
 	 nop
 
 60:
@@ -217,7 +217,7 @@ tsb_itlb_load:
 	nop
 	.previous
 
-	be,pn		%xcc, tsb_do_fault
+	be,pn		%xcc, .Ltsb_do_fault
 	 nop
 
 661:	stxa		%g5, [%g0] ASI_ITLB_DATA_IN
@@ -248,6 +248,7 @@ tsb_itlb_load:
 	 */
 
 	.globl		tsb_do_fault
+.Ltsb_do_fault:
 tsb_do_fault:
 	cmp		%g3, FAULT_CODE_DTLB
 
@@ -278,28 +279,29 @@ tsb_do_dtlb_fault:
 	srlx		%g5, PAGE_SHIFT, %g5
 	sllx		%g5, PAGE_SHIFT, %g5
 
-	be,pt	%xcc, sparc64_realfault_common
+	be,pt	%xcc, .Lsparc64_realfault_common
 	 mov	FAULT_CODE_DTLB, %g4
 	ba,pt	%xcc, winfix_trampoline
 	 nop
 
 tsb_do_itlb_fault:
 	rdpr	%tpc, %g5
-	ba,pt	%xcc, sparc64_realfault_common
+	ba,pt	%xcc, .Lsparc64_realfault_common
 	 mov	FAULT_CODE_ITLB, %g4
 
 	.globl	sparc64_realfault_common
+.Lsparc64_realfault_common:
 sparc64_realfault_common:
 	/* fault code in %g4, fault address in %g5, etrap will
 	 * preserve these two values in %l4 and %l5 respectively
 	 */
-	ba,pt	%xcc, etrap			! Save trap state
+	ba,pt	%xcc, .Letrap			! Save trap state
 1:	 rd	%pc, %g7			! ...
 	stb	%l4, [%g6 + TI_FAULT_CODE]	! Save fault code
 	stx	%l5, [%g6 + TI_FAULT_ADDR]	! Save fault address
 	call	do_sparc64_fault		! Call fault handler
 	 add	%sp, PTREGS_OFF, %o0		! Compute pt_regs arg
-	ba,pt	%xcc, rtrap			! Restore cpu state
+	ba,pt	%xcc, .Lrtrap			! Restore cpu state
 	 nop					! Delay slot (fill me)
 
 winfix_trampoline:

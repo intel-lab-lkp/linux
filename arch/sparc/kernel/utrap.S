@@ -1,18 +1,19 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 	.globl		utrap_trap
 	.type		utrap_trap,#function
+.Lutrap_trap:
 utrap_trap:		/* %g3=handler,%g4=level */
 	TRAP_LOAD_THREAD_REG(%g6, %g1)
 	ldx		[%g6 + TI_UTRAPS], %g1
 	brnz,pt		%g1, invoke_utrap
 	 nop
 
-	ba,pt		%xcc, etrap
+	ba,pt		%xcc, .Letrap
 	 rd		%pc, %g7
 	mov		%l4, %o1
         call		bad_trap
 	 add		%sp, PTREGS_OFF, %o0
-	ba,a,pt		%xcc, rtrap
+	ba,a,pt		%xcc, .Lrtrap
 
 invoke_utrap:
 	sllx		%g3, 3, %g3

@@ -8,10 +8,11 @@
 	.text
 	.align 32
 
+.Lsun4v_mcd_detect_precise:
 sun4v_mcd_detect_precise:
 	mov	%l4, %o1
 	mov 	%l5, %o2
 	call	sun4v_mem_corrupt_detect_precise
 	 add	%sp, PTREGS_OFF, %o0
-	ba,a,pt	%xcc, rtrap
+	ba,a,pt	%xcc, .Lrtrap
 	 nop

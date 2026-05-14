@@ -78,93 +78,94 @@
 	.text
 #ifndef EX_RETVAL
 #define EX_RETVAL(x)	x
+.L__restore_asi:
 __restore_asi:
 	wr	%g0, ASI_AIUS, %asi
 	ret
 	 restore
 ENTRY(NG_ret_i2_plus_i4_plus_1)
-	ba,pt	%xcc, __restore_asi
+	ba,pt	%xcc, .L__restore_asi
 	 add	%i2, %i5, %i0
 ENDPROC(NG_ret_i2_plus_i4_plus_1)
 ENTRY(NG_ret_i2_plus_g1)
-	ba,pt	%xcc, __restore_asi
+	ba,pt	%xcc, .L__restore_asi
 	 add	%i2, %g1, %i0
 ENDPROC(NG_ret_i2_plus_g1)
 ENTRY(NG_ret_i2_plus_g1_minus_8)
 	sub	%g1, 8, %g1
-	ba,pt	%xcc, __restore_asi
+	ba,pt	%xcc, .L__restore_asi
 	 add	%i2, %g1, %i0
 ENDPROC(NG_ret_i2_plus_g1_minus_8)
 ENTRY(NG_ret_i2_plus_g1_minus_16)
 	sub	%g1, 16, %g1
-	ba,pt	%xcc, __restore_asi
+	ba,pt	%xcc, .L__restore_asi
 	 add	%i2, %g1, %i0
 ENDPROC(NG_ret_i2_plus_g1_minus_16)
 ENTRY(NG_ret_i2_plus_g1_minus_24)
 	sub	%g1, 24, %g1
-	ba,pt	%xcc, __restore_asi
+	ba,pt	%xcc, .L__restore_asi
 	 add	%i2, %g1, %i0
 ENDPROC(NG_ret_i2_plus_g1_minus_24)
 ENTRY(NG_ret_i2_plus_g1_minus_32)
 	sub	%g1, 32, %g1
-	ba,pt	%xcc, __restore_asi
+	ba,pt	%xcc, .L__restore_asi
 	 add	%i2, %g1, %i0
 ENDPROC(NG_ret_i2_plus_g1_minus_32)
 ENTRY(NG_ret_i2_plus_g1_minus_40)
 	sub	%g1, 40, %g1
-	ba,pt	%xcc, __restore_asi
+	ba,pt	%xcc, .L__restore_asi
 	 add	%i2, %g1, %i0
 ENDPROC(NG_ret_i2_plus_g1_minus_40)
 ENTRY(NG_ret_i2_plus_g1_minus_48)
 	sub	%g1, 48, %g1
-	ba,pt	%xcc, __restore_asi
+	ba,pt	%xcc, .L__restore_asi
 	 add	%i2, %g1, %i0
 ENDPROC(NG_ret_i2_plus_g1_minus_48)
 ENTRY(NG_ret_i2_plus_g1_minus_56)
 	sub	%g1, 56, %g1
-	ba,pt	%xcc, __restore_asi
+	ba,pt	%xcc, .L__restore_asi
 	 add	%i2, %g1, %i0
 ENDPROC(NG_ret_i2_plus_g1_minus_56)
 ENTRY(NG_ret_i2_plus_i4_plus_16)
         add     %i4, 16, %i4
-	ba,pt	%xcc, __restore_asi
+	ba,pt	%xcc, .L__restore_asi
 	 add	%i2, %i4, %i0
 ENDPROC(NG_ret_i2_plus_i4_plus_16)
 ENTRY(NG_ret_i2_plus_i4_plus_8)
 	add	%i4, 8, %i4
-	ba,pt	%xcc, __restore_asi
+	ba,pt	%xcc, .L__restore_asi
 	 add	%i2, %i4, %i0
 ENDPROC(NG_ret_i2_plus_i4_plus_8)
 ENTRY(NG_ret_i2_plus_8)
-	ba,pt	%xcc, __restore_asi
+	ba,pt	%xcc, .L__restore_asi
 	 add	%i2, 8, %i0
 ENDPROC(NG_ret_i2_plus_8)
 ENTRY(NG_ret_i2_plus_4)
-	ba,pt	%xcc, __restore_asi
+	ba,pt	%xcc, .L__restore_asi
 	 add	%i2, 4, %i0
 ENDPROC(NG_ret_i2_plus_4)
 ENTRY(NG_ret_i2_plus_1)
-	ba,pt	%xcc, __restore_asi
+	ba,pt	%xcc, .L__restore_asi
 	 add	%i2, 1, %i0
 ENDPROC(NG_ret_i2_plus_1)
 ENTRY(NG_ret_i2_plus_g1_plus_1)
 	add	%g1, 1, %g1
-	ba,pt	%xcc, __restore_asi
+	ba,pt	%xcc, .L__restore_asi
 	 add	%i2, %g1, %i0
 ENDPROC(NG_ret_i2_plus_g1_plus_1)
 ENTRY(NG_ret_i2)
-	ba,pt	%xcc, __restore_asi
+	ba,pt	%xcc, .L__restore_asi
 	 mov	%i2, %i0
 ENDPROC(NG_ret_i2)
 ENTRY(NG_ret_i2_and_7_plus_i4)
 	and	%i2, 7, %i2
-	ba,pt	%xcc, __restore_asi
+	ba,pt	%xcc, .L__restore_asi
 	 add	%i2, %i4, %i0
 ENDPROC(NG_ret_i2_and_7_plus_i4)
 ENTRY(NG_ret_i2_and_7_plus_i4_plus_8)
 	and	%i2, 7, %i2
 	add	%i4, 8, %i4
-	ba,pt	%xcc, __restore_asi
+	ba,pt	%xcc, .L__restore_asi
 	 add	%i2, %i4, %i0
 ENDPROC(NG_ret_i2_and_7_plus_i4)
 #endif

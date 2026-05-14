@@ -55,11 +55,11 @@ sys32_rt_sigreturn:
 	.align	32
 1:	ldx	[%g6 + TI_FLAGS], %l5
 	andcc	%l5, (_TIF_SYSCALL_TRACE|_TIF_SECCOMP|_TIF_SYSCALL_AUDIT|_TIF_SYSCALL_TRACEPOINT|_TIF_NOHZ), %g0
-	be,pt	%icc, rtrap
+	be,pt	%icc, .Lrtrap
 	 nop
 	call	syscall_trace_leave
 	 add	%sp, PTREGS_OFF, %o0
-	ba,pt	%xcc, rtrap
+	ba,pt	%xcc, .Lrtrap
 	 nop
 
 	/* This is how fork() was meant to be done, 8 instruction entry.
@@ -87,26 +87,30 @@ sys32_rt_sigreturn:
 	 */
 	.align	32
 sys_vfork:
+	set	sparc_vfork, %g1
 	flushw
-	ba,pt	%xcc, sparc_vfork
+	jmpl	%g1, %g0
 	 add	%sp, PTREGS_OFF, %o0
 
 	.align	32
 sys_fork:
+	set	sparc_fork, %g1
 	flushw
-	ba,pt	%xcc, sparc_fork
+	jmpl	%g1, %g0
 	 add	%sp, PTREGS_OFF, %o0
 
 	.align	32
 sys_clone:
+	set	sparc_clone, %g1
 	flushw
-	ba,pt	%xcc, sparc_clone
+	jmpl	%g1, %g0
 	 add	%sp, PTREGS_OFF, %o0
 
 	.align	32
 __sys_clone3:
+	set	sparc_clone3, %g1
 	flushw
-	ba,pt	%xcc, sparc_clone3
+	jmpl	%g1, %g0
 	 add	%sp, PTREGS_OFF, %o0
 
 	.globl	ret_from_fork
@@ -156,6 +160,7 @@ linux_sparc_ni_syscall:
 	ba,pt	%xcc, 4f
 	 or	%l7, %lo(sys_ni_syscall), %l7
 
+#ifdef CONFIG_COMPAT
 linux_syscall_trace32:
 	call	syscall_trace_enter
 	 add	%sp, PTREGS_OFF, %o0
@@ -185,6 +190,7 @@ linux_syscall_trace32:
 	srl	%i2, 0, %o2
 	ba,pt	%xcc, 5f
 	 srl	%i3, 0, %o3
+#endif
 
 linux_syscall_trace:
 	call	syscall_trace_enter
@@ -217,6 +223,7 @@ linux_syscall_trace:
 	 mov	%i4, %o4
 
 
+#ifdef CONFIG_COMPAT
 	/* Linux 32-bit system calls enter here... */
 	.align	32
 	.globl	linux_sparc_syscall32
@@ -240,10 +247,12 @@ linux_sparc_syscall32:
 	 srl	%i5, 0, %o5				! IEU1
 	ba,pt	%xcc, 3f
 	 sra	%o0, 0, %o0
+#endif
 
 	/* Linux native system calls enter here... */
 	.align	32
 	.globl	linux_sparc_syscall
+.Llinux_sparc_syscall:
 linux_sparc_syscall:
 	/* Direct access to user regs, much faster. */
 	cmp	%g1, NR_syscalls			! IEU1	Group
@@ -283,7 +292,7 @@ ret_sys_call:
 	bne,pn	%icc, linux_syscall_trace2
 	 add	%l1, 0x4, %l2			! npc = npc+4
 	stx	%l1, [%sp + PTREGS_OFF + PT_V9_TPC]
-	ba,pt	%xcc, rtrap
+	ba,pt	%xcc, .Lrtrap
 	 stx	%l2, [%sp + PTREGS_OFF + PT_V9_TNPC]
 
 1:
@@ -305,5 +314,5 @@ linux_syscall_trace2:
 	call	syscall_trace_leave
 	 add	%sp, PTREGS_OFF, %o0
 	stx	%l1, [%sp + PTREGS_OFF + PT_V9_TPC]
-	ba,pt	%xcc, rtrap
+	ba,pt	%xcc, .Lrtrap
 	 stx	%l2, [%sp + PTREGS_OFF + PT_V9_TNPC]

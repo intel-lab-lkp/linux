@@ -83,13 +83,13 @@ __spitfire_cee_trap_continue:
 	bleu,pt		%xcc, 1f
 	 wrpr		%g0, PIL_NORMAL_MAX, %pil
 
-	ba,pt		%xcc, etraptl1
+	ba,pt		%xcc, .Letraptl1
 	 rd		%pc, %g7
 
 	ba,a,pt		%xcc, 2f
 	 nop
 
-1:	ba,pt		%xcc, etrap_irq
+1:	ba,pt		%xcc, .Letrap_irq
 	 rd		%pc, %g7
 
 2:
@@ -101,7 +101,7 @@ __spitfire_cee_trap_continue:
 	mov		%l5, %o2
 	call		spitfire_access_error
 	 add		%sp, PTREGS_OFF, %o0
-	ba,a,pt		%xcc, rtrap
+	ba,a,pt		%xcc, .Lrtrap
 	.size		__spitfire_access_error,.-__spitfire_access_error
 
 	/* This is the trap handler entry point for ECC correctable
@@ -170,16 +170,16 @@ __spitfire_data_access_exception_tl1:
 	 cmp		%g3, 0xff		! last win spill/fill trap
 	bgu,pn		%xcc, 1f
 	 nop
-	ba,pt		%xcc, winfix_dax
+	ba,pt		%xcc, .Lwinfix_dax
 	 rdpr		%tpc, %g3
 1:	sethi		%hi(109f), %g7
-	ba,pt		%xcc, etraptl1
+	ba,pt		%xcc, .Letraptl1
 109:	 or		%g7, %lo(109b), %g7
 	mov		%l4, %o1
 	mov		%l5, %o2
 	call		spitfire_data_access_exception_tl1
 	 add		%sp, PTREGS_OFF, %o0
-	ba,a,pt		%xcc, rtrap
+	ba,a,pt		%xcc, .Lrtrap
 	.size		__spitfire_data_access_exception_tl1,.-__spitfire_data_access_exception_tl1
 
 	.type		__spitfire_data_access_exception,#function
@@ -193,13 +193,13 @@ __spitfire_data_access_exception:
 	stxa		%g0, [%g3] ASI_DMMU	! Clear SFSR.FaultValid bit
 	membar		#Sync
 	sethi		%hi(109f), %g7
-	ba,pt		%xcc, etrap
+	ba,pt		%xcc, .Letrap
 109:	 or		%g7, %lo(109b), %g7
 	mov		%l4, %o1
 	mov		%l5, %o2
 	call		spitfire_data_access_exception
 	 add		%sp, PTREGS_OFF, %o0
-	ba,a,pt		%xcc, rtrap
+	ba,a,pt		%xcc, .Lrtrap
 	.size		__spitfire_data_access_exception,.-__spitfire_data_access_exception
 
 	.type		__spitfire_insn_access_exception_tl1,#function
@@ -212,13 +212,13 @@ __spitfire_insn_access_exception_tl1:
 	stxa		%g0, [%g3] ASI_IMMU	! Clear FaultValid bit
 	membar		#Sync
 	sethi		%hi(109f), %g7
-	ba,pt		%xcc, etraptl1
+	ba,pt		%xcc, .Letraptl1
 109:	 or		%g7, %lo(109b), %g7
 	mov		%l4, %o1
 	mov		%l5, %o2
 	call		spitfire_insn_access_exception_tl1
 	 add		%sp, PTREGS_OFF, %o0
-	ba,a,pt		%xcc, rtrap
+	ba,a,pt		%xcc, .Lrtrap
 	.size		__spitfire_insn_access_exception_tl1,.-__spitfire_insn_access_exception_tl1
 
 	.type		__spitfire_insn_access_exception,#function
@@ -231,11 +231,11 @@ __spitfire_insn_access_exception:
 	stxa		%g0, [%g3] ASI_IMMU	! Clear FaultValid bit
 	membar		#Sync
 	sethi		%hi(109f), %g7
-	ba,pt		%xcc, etrap
+	ba,pt		%xcc, .Letrap
 109:	 or		%g7, %lo(109b), %g7
 	mov		%l4, %o1
 	mov		%l5, %o2
 	call		spitfire_insn_access_exception
 	 add		%sp, PTREGS_OFF, %o0
-	ba,a,pt		%xcc, rtrap
+	ba,a,pt		%xcc, .Lrtrap
 	.size		__spitfire_insn_access_exception,.-__spitfire_insn_access_exception

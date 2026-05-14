@@ -181,38 +181,39 @@
 #define EX_RETVAL(x)	x
 __restore_fp:
 	VISExitHalf
+.L__restore_asi:
 __restore_asi:
 	retl
 	 wr	%g0, ASI_AIUS, %asi
 ENTRY(NG2_retl_o2)
-	ba,pt	%xcc, __restore_asi
+	ba,pt	%xcc, .L__restore_asi
 	 mov	%o2, %o0
 ENDPROC(NG2_retl_o2)
 ENTRY(NG2_retl_o2_plus_1)
-	ba,pt	%xcc, __restore_asi
+	ba,pt	%xcc, .L__restore_asi
 	 add	%o2, 1, %o0
 ENDPROC(NG2_retl_o2_plus_1)
 ENTRY(NG2_retl_o2_plus_4)
-	ba,pt	%xcc, __restore_asi
+	ba,pt	%xcc, .L__restore_asi
 	 add	%o2, 4, %o0
 ENDPROC(NG2_retl_o2_plus_4)
 ENTRY(NG2_retl_o2_plus_8)
-	ba,pt	%xcc, __restore_asi
+	ba,pt	%xcc, .L__restore_asi
 	 add	%o2, 8, %o0
 ENDPROC(NG2_retl_o2_plus_8)
 ENTRY(NG2_retl_o2_plus_o4_plus_1)
 	add	%o4, 1, %o4
-	ba,pt	%xcc, __restore_asi
+	ba,pt	%xcc, .L__restore_asi
 	 add	%o2, %o4, %o0
 ENDPROC(NG2_retl_o2_plus_o4_plus_1)
 ENTRY(NG2_retl_o2_plus_o4_plus_8)
 	add	%o4, 8, %o4
-	ba,pt	%xcc, __restore_asi
+	ba,pt	%xcc, .L__restore_asi
 	 add	%o2, %o4, %o0
 ENDPROC(NG2_retl_o2_plus_o4_plus_8)
 ENTRY(NG2_retl_o2_plus_o4_plus_16)
 	add	%o4, 16, %o4
-	ba,pt	%xcc, __restore_asi
+	ba,pt	%xcc, .L__restore_asi
 	 add	%o2, %o4, %o0
 ENDPROC(NG2_retl_o2_plus_o4_plus_16)
 ENTRY(NG2_retl_o2_plus_g1_fp)
@@ -226,18 +227,18 @@ ENTRY(NG2_retl_o2_plus_g1_plus_64_fp)
 ENDPROC(NG2_retl_o2_plus_g1_plus_64_fp)
 ENTRY(NG2_retl_o2_plus_g1_plus_1)
 	add	%g1, 1, %g1
-	ba,pt	%xcc, __restore_asi
+	ba,pt	%xcc, .L__restore_asi
 	 add	%o2, %g1, %o0
 ENDPROC(NG2_retl_o2_plus_g1_plus_1)
 ENTRY(NG2_retl_o2_and_7_plus_o4)
 	and	%o2, 7, %o2
-	ba,pt	%xcc, __restore_asi
+	ba,pt	%xcc, .L__restore_asi
 	 add	%o2, %o4, %o0
 ENDPROC(NG2_retl_o2_and_7_plus_o4)
 ENTRY(NG2_retl_o2_and_7_plus_o4_plus_8)
 	and	%o2, 7, %o2
 	add	%o4, 8, %o4
-	ba,pt	%xcc, __restore_asi
+	ba,pt	%xcc, .L__restore_asi
 	 add	%o2, %o4, %o0
 ENDPROC(NG2_retl_o2_and_7_plus_o4_plus_8)
 #endif

@@ -93,6 +93,7 @@ __handle_signal:
 		 * avoid running softirqs, doing IRQ tracing, preempting, etc.
 		 */
 		.globl			rtrap_nmi
+.Lrtrap_nmi:
 rtrap_nmi:	ldx			[%sp + PTREGS_OFF + PT_V9_TSTATE], %l1
 		sethi			%hi(0xf << 20), %l4
 		and			%l1, %l4, %l4
@@ -109,7 +110,9 @@ rtrap_nmi:	ldx			[%sp + PTREGS_OFF + PT_V9_TSTATE], %l1
 
 		.align			64
 		.globl			rtrap_irq, rtrap, irqsz_patchme, rtrap_xcall
+.Lrtrap_irq:
 rtrap_irq:
+.Lrtrap:
 rtrap:
 		/* mm/ultra.S:xcall_report_regs KNOWS about this load. */
 		ldx			[%sp + PTREGS_OFF + PT_V9_TSTATE], %l1
@@ -279,17 +282,21 @@ rt_continue:	ldx			[%sp + PTREGS_OFF + PT_V9_G1], %g1
 		 nop
 
 user_rtt_fill_fixup_dax:
-		ba,pt	%xcc, user_rtt_fill_fixup_common
+		set	user_rtt_fill_fixup_common, %g1
+		jmpl	%g1, %g0
 		 mov	1, %g3
 
 user_rtt_fill_fixup_mna:
-		ba,pt	%xcc, user_rtt_fill_fixup_common
+		set	user_rtt_fill_fixup_common, %g1
+		jmpl	%g1, %g0
 		 mov	2, %g3
 
 user_rtt_fill_fixup:
-		ba,pt	%xcc, user_rtt_fill_fixup_common
+		set	user_rtt_fill_fixup_common, %g1
+		jmpl	%g1, %g0
 		 clr	%g3
 
+.Luser_rtt_pre_restore:
 user_rtt_pre_restore:
 		add			%g1, 1, %g1
 		wrpr			%g1, 0x0, %cwp
@@ -304,6 +311,7 @@ user_rtt_restore:
 kern_rtt:	rdpr			%canrestore, %g1
 		brz,pn			%g1, kern_rtt_fill
 		 nop
+.Lkern_rtt_restore:
 kern_rtt_restore:
 		stw			%g0, [%sp + PTREGS_OFF + PT_V9_MAGIC]
 		restore
@@ -322,7 +330,7 @@ to_kernel:
 		 nop
 		call			preempt_schedule_irq
 		 nop
-		ba,pt			%xcc, rtrap
+		ba,pt			%xcc, .Lrtrap
 #endif
 kern_fpucheck:	ldub			[%g6 + TI_FPDEPTH], %l5
 		brz,pt			%l5, rt_continue

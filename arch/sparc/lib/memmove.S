@@ -17,8 +17,12 @@ ENTRY(memmove) /* o0=dst o1=src o2=len */
 	bleu,pt		%xcc, 2f
 	 add		%o1, %o2, %g7
 	cmp		%g7, %o0
-	bleu,pt		%xcc, memcpy
+	bgu,pn		%xcc, 1f
 	 add		%o0, %o2, %o5
+	set		memcpy, %g7
+	jmpl		%g7, %g0
+	 nop
+1:
 	sub		%g7, 1, %o1
 
 	sub		%o5, 1, %o0
