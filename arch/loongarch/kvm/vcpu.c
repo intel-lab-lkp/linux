@@ -1487,15 +1487,23 @@ void kvm_lose_fpu(struct kvm_vcpu *vcpu)
 int kvm_vcpu_ioctl_interrupt(struct kvm_vcpu *vcpu, struct kvm_interrupt *irq)
 {
 	int intr = (int)irq->irq;
+	int vector;
 
-	if (intr > 0)
-		kvm_queue_irq(vcpu, intr);
-	else if (intr < 0)
-		kvm_dequeue_irq(vcpu, -intr);
-	else {
-		kvm_err("%s: invalid interrupt ioctl %d\n", __func__, irq->irq);
+	vector = intr;
+	if (intr < 0)
+		vector = -intr;
+
+	if (vector >= EXCCODE_INT_NUM)
 		return -EINVAL;
-	}
+
+	if (!kvm_guest_has_msgint(&vcpu->arch) && (vector == INT_AVEC))
+		return -EINVAL;
+
+	/* Clear irq function with intr == 0 is missing... */
+	if (intr >= 0)
+		kvm_queue_irq(vcpu, vector);
+	else
+		kvm_dequeue_irq(vcpu, vector);
 
 	kvm_vcpu_kick(vcpu);
 
