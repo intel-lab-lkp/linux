@@ -207,8 +207,11 @@ static int doit_reply_value(struct genl_info *info, u32 node_id,
 
 	ret = get_node_error_counter(node_id, error_id,
 				     &error_name, &value);
-	if (ret)
+	if (ret) {
+		genlmsg_cancel(msg, hdr);
+		nlmsg_free(msg);
 		return ret;
+	}
 
 	ret = msg_reply_value(msg, error_id, error_name, value);
 	if (ret) {
