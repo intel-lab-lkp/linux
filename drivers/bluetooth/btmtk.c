@@ -717,19 +717,19 @@ static int btmtk_usb_hci_wmt_sync(struct hci_dev *hdev,
 			status = BTMTK_WMT_PATCH_DONE;
 		break;
 	case BTMTK_WMT_FUNC_CTRL:
-		if (!skb_pull_data(data->evt_skb,
-				   sizeof(wmt_evt_funcc->status))) {
-			err = -EINVAL;
-			goto err_free_skb;
-		}
-
-		wmt_evt_funcc = (struct btmtk_hci_wmt_evt_funcc *)wmt_evt;
-		if (be16_to_cpu(wmt_evt_funcc->status) == 0x404)
-			status = BTMTK_WMT_ON_DONE;
-		else if (be16_to_cpu(wmt_evt_funcc->status) == 0x420)
-			status = BTMTK_WMT_ON_PROGRESS;
-		else
+		if (skb_pull_data(data->evt_skb,
+				  sizeof(wmt_evt_funcc->status))) {
+			wmt_evt_funcc =
+				(struct btmtk_hci_wmt_evt_funcc *)wmt_evt;
+			if (be16_to_cpu(wmt_evt_funcc->status) == 0x404)
+				status = BTMTK_WMT_ON_DONE;
+			else if (be16_to_cpu(wmt_evt_funcc->status) == 0x420)
+				status = BTMTK_WMT_ON_PROGRESS;
+			else
+				status = BTMTK_WMT_ON_UNDONE;
+		} else {
 			status = BTMTK_WMT_ON_UNDONE;
+		}
 		break;
 	case BTMTK_WMT_PATCH_DWNLD:
 		if (wmt_evt->whdr.flag == 2)
