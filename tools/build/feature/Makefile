@@ -385,7 +385,7 @@ $(OUTPUT)test-libzstd.bin:
 
 $(OUTPUT)test-clang-bpf-co-re.bin:
 	$(CLANG) -S -g --target=bpf -o - $(patsubst %.bin,%.c,$(@F)) |	\
-		grep BTF_KIND_VAR
+		grep BTF_KIND_VAR > $@.tmp && mv $@.tmp $@
 
 $(OUTPUT)test-file-handle.bin:
 	$(BUILD)
