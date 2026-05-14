@@ -192,3 +192,16 @@ config SCHED_CLASS_EXT
 	  For more information:
 	    Documentation/scheduler/sched-ext.rst
 	    https://github.com/sched-ext/scx
+
+config PREFERRED_CPU
+	bool "Dynamic vCPU management based on steal time"
+	default y if PARAVIRT && SMP
+	help
+	This feature helps to reduce the steal time in paravirtualised
+	environment, there by reducing vCPU preemption. Reducing vCPU
+	preemption provides improved lock holder preemption and reduces
+	cost of vCPU preemption in the host.
+
+	By default preferred CPUs will be same as online CPUs. Depending
+	on the steal time when steal monitor is enabled, preferred CPUs
+	could become subset of online CPUs.
