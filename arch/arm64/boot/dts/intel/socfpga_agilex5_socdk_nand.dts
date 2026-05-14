@@ -102,6 +102,10 @@
 	status = "okay";
 };
 
+&smmu {
+	status = "okay";
+};
+
 &watchdog0 {
 	status = "okay";
 };
