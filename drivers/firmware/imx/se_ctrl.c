@@ -670,11 +670,6 @@ static int se_ioctl_setup_iobuf_handler(struct se_if_device_ctx *dev_ctx,
 		goto copy;
 	}
 
-	if (io.length > SIZE_MAX - 7) {
-		dev_err(dev_ctx->priv->dev, "%s: Invalid buffer length.",
-			dev_ctx->devname);
-		return -EINVAL;
-	}
 	aligned_len = round_up((size_t)io.length, 8);
 
 	/* No specific requirement for this buffer. */
