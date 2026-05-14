@@ -204,6 +204,9 @@ static void lynxfb_ops_copyarea(struct fb_info *info,
 	struct sm750_dev *sm750_dev;
 	unsigned int base, pitch, bpp;
 
+	if (info->state != FBINFO_STATE_RUNNING)
+		return;
+
 	par = info->par;
 	sm750_dev = par->dev;
 
@@ -238,6 +241,9 @@ static void lynxfb_ops_imageblit(struct fb_info *info,
 	unsigned int fgcol, bgcol;
 	struct lynxfb_par *par;
 	struct sm750_dev *sm750_dev;
+
+	if (info->state != FBINFO_STATE_RUNNING)
+		return;
 
 	par = info->par;
 	sm750_dev = par->dev;
