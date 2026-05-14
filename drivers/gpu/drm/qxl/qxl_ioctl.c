@@ -231,6 +231,26 @@ static int qxl_process_single_command(struct qxl_device *qdev,
 			reloc_info[i].dst_offset = reloc.dst_offset + release->release_offset;
 		}
 
+		/*
+		 * dst must be validated, i.e. whole bo on vram/surfacesram.
+		 * Refuse offsets that would write past the end of the bo, or
+		 * where dst_offset + write_size would overflow uint32_t.
+		 */
+		if (reloc_info[i].type == QXL_RELOC_TYPE_BO &&
+		    (reloc_info[i].dst_offset > U32_MAX - sizeof(uint64_t) ||
+		     reloc_info[i].dst_offset + sizeof(uint64_t) >
+		     reloc_info[i].dst_bo->tbo.base.size)) {
+			ret = -EINVAL;
+			goto out_free_bos;
+		}
+		if (reloc_info[i].type == QXL_RELOC_TYPE_SURF &&
+		    (reloc_info[i].dst_offset > U32_MAX - sizeof(uint32_t) ||
+		     reloc_info[i].dst_offset + sizeof(uint32_t) >
+		     reloc_info[i].dst_bo->tbo.base.size)) {
+			ret = -EINVAL;
+			goto out_free_bos;
+		}
+
 		/* reserve and validate the reloc dst bo */
 		if (reloc.reloc_type == QXL_RELOC_TYPE_BO || reloc.src_handle) {
 			ret = qxlhw_handle_to_bo(file_priv, reloc.src_handle, release,
