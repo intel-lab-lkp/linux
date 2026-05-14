@@ -1301,7 +1301,13 @@ unsigned int is_ap_in_tkip(struct adapter *padapter)
 
 	if (rtw_get_capability((struct wlan_bssid_ex *)cur_network) & WLAN_CAPABILITY_PRIVACY) {
 		for (i = sizeof(struct ndis_802_11_fix_ie); i < pmlmeinfo->network.ie_length;) {
+			if (i + 2 > pmlmeinfo->network.ie_length)
+				return false;
+
 			pIE = (struct ndis_80211_var_ie *)(pmlmeinfo->network.ies + i);
+
+			if (pIE->length > pmlmeinfo->network.ie_length - i - 2)
+				return false;
 
 			switch (pIE->element_id) {
 			case WLAN_EID_VENDOR_SPECIFIC:
