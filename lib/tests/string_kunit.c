@@ -881,6 +881,110 @@ static void string_bench_strrchr(struct kunit *test)
 	STRING_BENCH_BUF(test, buf, len, strrchr, buf, '\0');
 }
 
+static void string_test_memcmp(struct kunit *test)
+{
+	const int max_offset = 16;
+	const int max_len = 32;
+	const int buf_size = max_offset + max_len + 32;
+	u8 *buf1, *buf2;
+	int i, j, len, k;
+
+	buf1 = kunit_kzalloc(test, buf_size, GFP_KERNEL);
+	buf2 = kunit_kzalloc(test, buf_size, GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, buf1);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, buf2);
+
+	for (i = 0; i < max_offset; i++) {
+		for (j = 0; j < max_offset; j++) {
+			for (len = 0; len <= max_len; len++) {
+				memset(buf1, 'A', buf_size);
+				memset(buf2, 'A', buf_size);
+				KUNIT_EXPECT_EQ_MSG(test, memcmp(buf1 + i, buf2 + j, len), 0,
+						    "Should be equal: i:%d j:%d len:%d", i, j, len);
+				for (k = 0; k < len; k++) {
+					memset(buf1, 'A', buf_size);
+					memset(buf2, 'A', buf_size);
+					buf2[j + k] = 'B';
+					int res = memcmp(buf1 + i, buf2 + j, len);
+
+					KUNIT_EXPECT_NE_MSG(test, res, 0,
+							    "Should detect difference at k:%d (i:%d j:%d len:%d)",
+						k, i, j, len);
+
+					if (buf1[i + k] < buf2[j + k])
+						KUNIT_EXPECT_LT(test, res, 0);
+					else
+						KUNIT_EXPECT_GT(test, res, 0);
+				}
+			}
+		}
+	}
+}
+
+#if IS_ENABLED(CONFIG_STRING_KUNIT_BENCH)
+static void string_bench_memcmp(struct kunit *test)
+{
+	char *buf1, *buf2;
+	size_t lengths[] = { 1, 7, 8, 16, 32, 64, 128, 512, 1024, 4096};
+	int offsets[] = {0, 1, 3, 7};
+	const size_t max_len = 4096 + 64;
+
+	buf1 = vmalloc(max_len);
+	buf2 = vmalloc(max_len);
+
+	if (!buf1 || !buf2) {
+		vfree(buf1);
+		vfree(buf2);
+		kunit_err(test, "vmalloc failed\n");
+		return;
+	}
+
+	memset(buf1, 'A', max_len);
+	memset(buf2, 'A', max_len);
+
+	for (int i = 0; i < 100000; i++)
+		(void)memcmp(buf1, buf2, 4096);
+
+	for (int o = 0; o < ARRAY_SIZE(offsets); o++) {
+		int off = offsets[o];
+
+		for (int i = 0; i < ARRAY_SIZE(lengths); i++) {
+			size_t len = lengths[i];
+			char *p1 = buf1;
+			char *p2 = buf2 + off;
+
+			u32 iterations = (len < 512) ? 100000 : 10000;
+
+			for (u32 j = 0; j < iterations; j++) {
+				(void)memcmp(p1, p2, len);
+				barrier();
+			}
+
+			u64 elapsed = STRING_BENCH(iterations, memcmp, p1, p2, len);
+			u64 ns_per_call = div_u64(elapsed, iterations);
+			u64 mbps = len ? div_u64((u64)len * iterations * 1000,
+									 elapsed) : 0;
+
+			if (off == 0) {
+				kunit_info(test, "bench_memcmp_aligned: len=%-4zu: %llu MB/s (%llu ns/call)\n",
+					   len, mbps, ns_per_call);
+			} else {
+				kunit_info(test, "bench_memcmp_unaligned(off=%d): len=%-4zu: %llu MB/s (%llu ns/call)\n",
+					   off, len, mbps, ns_per_call);
+			}
+		}
+	}
+
+	vfree(buf1);
+	vfree(buf2);
+}
+#else
+static void string_bench_memcmp(struct kunit *test)
+{
+	kunit_skip(test, "not enabled");
+}
+#endif
+
 static struct kunit_case string_test_cases[] = {
 	KUNIT_CASE(string_test_memset16),
 	KUNIT_CASE(string_test_memset32),
@@ -910,6 +1014,8 @@ static struct kunit_case string_test_cases[] = {
 	KUNIT_CASE(string_bench_strnlen),
 	KUNIT_CASE(string_bench_strchr),
 	KUNIT_CASE(string_bench_strrchr),
+	KUNIT_CASE(string_test_memcmp),
+	KUNIT_CASE_SLOW(string_bench_memcmp),
 	{}
 };
 
