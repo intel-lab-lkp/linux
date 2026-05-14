@@ -24,6 +24,7 @@
 #include <linux/iio/iio.h>
 #include <linux/iio/buffer.h>
 #include <linux/iio/kfifo_buf.h>
+#include <linux/iio/trigger_consumer.h>
 
 #define MAX30102_DRV_NAME	"max30102"
 #define MAX30102_PART_NUMBER	0x15
@@ -106,8 +107,11 @@ struct max30102_data {
 	struct regmap *regmap;
 	enum max30102_chip_id chip_id;
 
-	u8 buffer[12];
-	__be32 processed_buffer[3]; /* 3 x 18-bit (padded to 32-bits) */
+	u8 buffer[12] __aligned(IIO_DMA_MINALIGN);
+	struct {
+		__be32 channels[3]; /* 3 x 18-bit (padded to 32-bits) */
+		aligned_s64 ts;
+	} scan;
 };
 
 static const struct regmap_config max30102_regmap_config = {
@@ -152,6 +156,7 @@ static const struct iio_chan_spec max30102_channels[] = {
 			BIT(IIO_CHAN_INFO_RAW) | BIT(IIO_CHAN_INFO_SCALE),
 		.scan_index = -1,
 	},
+	IIO_CHAN_SOFT_TIMESTAMP(2),
 };
 
 static const struct iio_chan_spec max30105_channels[] = {
@@ -164,6 +169,7 @@ static const struct iio_chan_spec max30105_channels[] = {
 			BIT(IIO_CHAN_INFO_RAW) | BIT(IIO_CHAN_INFO_SCALE),
 		.scan_index = -1,
 	},
+	IIO_CHAN_SOFT_TIMESTAMP(3),
 };
 
 static int max30102_set_power(struct max30102_data *data, bool en)
@@ -253,7 +259,7 @@ static inline int max30102_fifo_count(struct max30102_data *data)
 }
 
 #define MAX30102_COPY_DATA(i) \
-	memcpy(&data->processed_buffer[(i)], \
+	memcpy(&data->scan.channels[(i)], \
 	       &buffer[(i) * MAX30102_REG_FIFO_DATA_BYTES], \
 	       MAX30102_REG_FIFO_DATA_BYTES)
 
@@ -298,11 +304,13 @@ static irqreturn_t max30102_interrupt_handler(int irq, void *private)
 	mutex_lock(&data->lock);
 
 	while (cnt || (cnt = max30102_fifo_count(data)) > 0) {
+		s64 ts = iio_get_time_ns(indio_dev);
+
 		ret = max30102_read_measurement(data, measurements);
 		if (ret)
 			break;
 
-		iio_push_to_buffers(data->indio_dev, data->processed_buffer);
+		iio_push_to_buffers_with_timestamp(indio_dev, &data->scan, ts);
 		cnt--;
 	}
 
