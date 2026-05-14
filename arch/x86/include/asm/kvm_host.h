@@ -2326,8 +2326,6 @@ static inline int __kvm_irq_line_state(unsigned long *irq_state,
 void kvm_inject_nmi(struct kvm_vcpu *vcpu);
 int kvm_get_nr_pending_nmis(struct kvm_vcpu *vcpu);
 
-void kvm_update_dr7(struct kvm_vcpu *vcpu);
-
 bool __kvm_mmu_unprotect_gfn_and_retry(struct kvm_vcpu *vcpu, gpa_t cr2_or_gpa,
 				       bool always_retry);
 

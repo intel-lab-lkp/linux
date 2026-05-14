@@ -401,4 +401,20 @@ static inline bool is_guest_mode(struct kvm_vcpu *vcpu)
 	return vcpu->arch.hflags & HF_GUEST_MASK;
 }
 
+void kvm_x86_vcpu_ioctl_get_sregs2(struct kvm_vcpu *vcpu,
+				   struct kvm_sregs2 *sregs2);
+int kvm_x86_vcpu_ioctl_set_sregs2(struct kvm_vcpu *vcpu,
+				  struct kvm_sregs2 *sregs2);
+
+void kvm_run_get_regs(struct kvm_vcpu *vcpu);
+int kvm_run_set_regs(struct kvm_vcpu *vcpu);
+
+void kvm_update_dr0123(struct kvm_vcpu *vcpu);
+void kvm_update_dr7(struct kvm_vcpu *vcpu);
+int kvm_vcpu_ioctl_x86_get_debugregs(struct kvm_vcpu *vcpu,
+				     struct kvm_debugregs *dbgregs);
+int kvm_vcpu_ioctl_x86_set_debugregs(struct kvm_vcpu *vcpu,
+				     struct kvm_debugregs *dbgregs);
+
+
 #endif
