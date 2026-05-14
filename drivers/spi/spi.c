@@ -5118,6 +5118,23 @@ static struct notifier_block spi_acpi_notifier = {
 extern struct notifier_block spi_acpi_notifier;
 #endif
 
+int spi_for_each_controller(int (*fn)(struct spi_controller *, void *), void *data)
+{
+	struct spi_controller *ctlr;
+	int ret = 0;
+
+	mutex_lock(&board_lock);
+	list_for_each_entry(ctlr, &spi_controller_list, list) {
+		ret = fn(ctlr, data);
+		if (ret)
+			break;
+	}
+	mutex_unlock(&board_lock);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(spi_for_each_controller);
+
 static int __init spi_init(void)
 {
 	int	status;
