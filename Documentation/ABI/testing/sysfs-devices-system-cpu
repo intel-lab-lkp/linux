@@ -806,3 +806,14 @@ Date:		Nov 2022
 Contact:	Linux kernel mailing list <linux-kernel@vger.kernel.org>
 Description:
 		(RO) the list of CPUs that can be brought online.
+
+What:		/sys/devices/system/cpu/preferred
+Date:		May 2026
+Contact:	Linux kernel mailing list <linux-kernel@vger.kernel.org>
+Description:
+		(RO) the list of preferred CPUs at this moment.
+		These are the only CPUs meant to be used at the moment.
+		Using CPU outside of the list could lead to more
+		contention of underlying physical CPU resource. Dynamically
+		changes based on steal time. With CONFIG_PREFERRED_CPU=n it
+		is same as online CPUs. See sched-arch.rst for more details.
