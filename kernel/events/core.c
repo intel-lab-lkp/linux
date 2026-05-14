@@ -2756,6 +2756,7 @@ void perf_event_disable_inatomic(struct perf_event *event)
 
 static void perf_log_throttle(struct perf_event *event, int enable);
 static void perf_log_itrace_start(struct perf_event *event);
+static void perf_event_aux_pause(struct perf_event *event, bool pause);
 
 static void perf_event_unthrottle(struct perf_event *event, bool start)
 {
@@ -2763,8 +2764,14 @@ static void perf_event_unthrottle(struct perf_event *event, bool start)
 		return;
 
 	event->hw.interrupts = 0;
-	if (start)
-		event->pmu->start(event, 0);
+
+	if (start) {
+		if (event->pmu->capabilities & PERF_PMU_CAP_AUX_PAUSE)
+			perf_event_aux_pause(event, false);
+		else
+			event->pmu->start(event, 0);
+	}
+
 	if (event == event->group_leader)
 		perf_log_throttle(event, 1);
 }
@@ -2775,7 +2782,12 @@ static void perf_event_throttle(struct perf_event *event)
 		return;
 
 	event->hw.interrupts = MAX_INTERRUPTS;
-	event->pmu->stop(event, 0);
+
+	if (event->pmu->capabilities & PERF_PMU_CAP_AUX_PAUSE)
+		perf_event_aux_pause(event, true);
+	else
+		event->pmu->stop(event, 0);
+
 	if (event == event->group_leader)
 		perf_log_throttle(event, 0);
 }
