@@ -1,0 +1,36 @@
+drm drm-fixes 68055b285428a09f098861a702024e9d8f1370c8
+	Merge tag 'amd-drm-fixes-7.1-2026-05-13' of https://gitlab.freedesktop.org/agd5f/linux into drm-fixes
+drm-misc drm-misc-fixes 1d59f36e95f7f7134db0e313c9d787cb0adb2153
+	drm/ttm: Fix ttm_bo_shrink() infinite LRU walk on backup failure
+drm-rust drm-rust-fixes 0a69ac25bd596d50823d530d0a2004336668c0df
+	rust: drm: fix unsound initialization in drm::Device::new
+drm-intel drm-intel-fixes 1ae15b6c7965d137eef21f2cc7d367b29cb88369
+	drm/i915/dp: Fix VSC dynamic range signaling for RGB formats
+drm-xe drm-xe-fixes 8fb70afe671cc8c1f6237a39aabd50714fcd1189
+	drm/xe: Drop unused ggtt_balloon field
+drm drm-next e53bf933163f88eb31762052e63c5bec50c35afb
+	drm/bridge/rockchip: fix build after atomic API change.
+drm-misc drm-misc-next-fixes f6c73e7156b54d8b9ddf1a27f4e93d3a1e49a73e
+	drm: rcar-du: Fix crash when no CMM is available
+drm-intel drm-intel-next-fixes 314f6179e370988ac00dadf373a4f6166eb3db15
+	drm/i915/psr: Init variable to avoid early exit from et alignment loop
+drm-xe drm-xe-next-fixes 6de23f81a5e08be8fbf5e8d7e9febc72a5b5f27f
+	Linux 7.0-rc1
+drm-misc drm-misc-next 4c26e162947f91aa78ba57dd4fddd38fc80e7d60
+	drm/virtio: Extend blob UAPI with deferred-mapping hinting
+drm-rust drm-rust-next 8bfe9d72cf2064f679c4192dba84be79eb70675d
+	gpu: nova: Use module names consistently
+drm-intel drm-intel-next ae27befd097f1ddaec61b231ba775d0768aab859
+	drm/i915/sdvo: use the i2c bus locking functions
+drm-intel drm-intel-gt-next 8edf8b09fc44990977b3fbcb708035b1740d0b7e
+	Merge drm/drm-next into drm-intel-gt-next
+drm-xe drm-xe-next 4de503bde4d76e8d75b226c316ba9f879c09cfb9
+	drm/xe: Make drm_driver const
+drm-intel topic/core-for-CI 3d15d7e81d498d56ca6ba3af63f2fa1106da87ad
+	ACPI: PM: s2idle: Add module parameter for LPS0 constraints checking
+drm-xe topic/xe-for-CI bd9ef8d19f9e9ff47518ce48fb2002d58bfeeaaa
+	drm/xe/nvlp: Define GuC firmware for NVL-P
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
+drm-intel topic/pipe-reorder 2c683e9b419328da3433a49f7c467da71aaf0469
+	drm/i915/display: change pipe allocation order for discrete platforms
