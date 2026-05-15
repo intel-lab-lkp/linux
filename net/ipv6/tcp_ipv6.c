@@ -1722,7 +1722,6 @@ INDIRECT_CALLABLE_SCOPE int tcp_v6_rcv(struct sk_buff *skb)
 	struct sock *sk = NULL;
 	bool refcounted;
 	int ret;
-	u32 isn;
 
 	drop_reason = SKB_DROP_REASON_NOT_SPECIFIED;
 	if (skb->pkt_type != PACKET_HOST)
@@ -1839,6 +1838,7 @@ lookup:
 		}
 	}
 
+	skb->tcp_tw_isn = 0;
 process:
 	if (static_branch_unlikely(&ip6_min_hopcount)) {
 		/* min_hopcount can be changed concurrently from do_ipv6_setsockopt() */
@@ -1937,7 +1937,7 @@ do_time_wait:
 		goto csum_error;
 	}
 
-	tw_status = tcp_timewait_state_process(inet_twsk(sk), skb, th, &isn,
+	tw_status = tcp_timewait_state_process(inet_twsk(sk), skb, th,
 					       &drop_reason);
 	switch (tw_status) {
 	case TCP_TW_SYN:
@@ -1956,7 +1956,6 @@ do_time_wait:
 			sk = sk2;
 			tcp_v6_restore_cb(skb);
 			refcounted = false;
-			__this_cpu_write(tcp_tw_isn, isn);
 			goto process;
 		}
 

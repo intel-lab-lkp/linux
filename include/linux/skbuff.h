@@ -860,6 +860,7 @@ enum skb_tstamp_type {
  *	@mark: Generic packet mark
  *	@reserved_tailroom: (aka @mark) number of bytes of free space available
  *		at the tail of an sk_buff
+ *	@tcp_tw_isn: ISN when a TW socket receives a valid SYN.
  *	@vlan_all: vlan fields (proto & tci)
  *	@vlan_proto: vlan encapsulation protocol
  *	@vlan_tci: vlan tag control information
@@ -1066,6 +1067,7 @@ struct sk_buff {
 	union {
 		__u32		mark;
 		__u32		reserved_tailroom;
+		u32		tcp_tw_isn;
 	};
 
 	union {
