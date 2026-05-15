@@ -1300,7 +1300,7 @@ int qxl_modeset_init(struct qxl_device *qdev)
 
 	qxl_display_read_client_monitors_config(qdev);
 
-	ret = drm_vblank_init(&qdev->ddev, qxl_num_crtc);
+	ret = drmm_vblank_init(&qdev->ddev, qxl_num_crtc, DRM_VBLANK_FLAG_SIMULATED);
 	if (ret)
 		return ret;
 
