@@ -1043,8 +1043,7 @@ static int tls_sw_sendmsg_splice(struct sock *sk, struct msghdr *msg,
 	return 0;
 }
 
-static int tls_sw_sendmsg_locked(struct sock *sk, struct msghdr *msg,
-				 size_t size)
+int tls_sw_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
 {
 	long timeo = sock_sndtimeo(sk, msg->msg_flags & MSG_DONTWAIT);
 	struct tls_context *tls_ctx = tls_get_ctx(sk);
@@ -2684,6 +2683,23 @@ void tls_sw_ctx_tx_init(struct sock *sk, struct tls_sw_context_tx *sw_ctx)
 	INIT_LIST_HEAD(&sw_ctx->tx_list);
 	INIT_DELAYED_WORK(&sw_ctx->tx_work.work, tx_work_handler);
 	sw_ctx->tx_work.sk = sk;
+}
+
+int tls_sw_drain_tx(struct sock *sk, struct tls_context *ctx)
+{
+	struct tls_sw_context_tx *sw_ctx = tls_sw_ctx_tx(ctx);
+	int rc;
+
+	if (tls_is_pending_open_record(ctx))
+		tls_sw_push_pending_record(sk, 0);
+	tls_encrypt_async_wait(sw_ctx);
+	rc = tls_tx_records(sk, -1);
+	if (rc < 0 || tls_is_partially_sent_record(ctx) ||
+	    tls_is_pending_open_record(ctx))
+		return rc < 0 ? rc : -EAGAIN;
+
+	cancel_delayed_work_sync(&sw_ctx->tx_work.work);
+	return 0;
 }
 
 static bool tls_is_tx_ready(struct tls_sw_context_tx *ctx)
