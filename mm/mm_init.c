@@ -1013,7 +1013,7 @@ static inline int zone_device_page_init_refcount(
 	}
 }
 
-static void __ref generic_init_zone_device_page(struct page *page,
+static void __ref generic_init_zone_device_page_slow(struct page *page,
 		unsigned long pfn, unsigned long zone_idx, int nid,
 		struct dev_pagemap *pgmap)
 {
@@ -1040,12 +1040,9 @@ static void __ref generic_init_zone_device_page(struct page *page,
 		set_page_count(page, 0);
 }
 
-static void __ref __init_zone_device_page(struct page *page, unsigned long pfn,
-					  unsigned long zone_idx, int nid,
-					  struct dev_pagemap *pgmap)
+static void __ref zone_device_page_init_pageblock(struct page *page,
+						  unsigned long pfn)
 {
-	generic_init_zone_device_page(page, pfn, zone_idx, nid, pgmap);
-
 	/*
 	 * Mark the block movable so that blocks are reserved for
 	 * movable at startup. This will force kernel allocations
@@ -1061,6 +1058,88 @@ static void __ref __init_zone_device_page(struct page *page, unsigned long pfn,
 		cond_resched();
 	}
 }
+
+static inline void __init_zone_device_page(struct page *page, unsigned long pfn,
+					   unsigned long zone_idx, int nid,
+					   struct dev_pagemap *pgmap)
+{
+	generic_init_zone_device_page_slow(page, pfn, zone_idx, nid, pgmap);
+	zone_device_page_init_pageblock(page, pfn);
+}
+
+#if BITS_PER_LONG == 64
+static inline bool zone_device_page_init_optimization_enabled(void)
+{
+	/*
+	 * We use template pages and assign page->_refcount via memory copy.
+	 * This means the optimized path bypasses set_page_count(), so the
+	 * page_ref_set tracepoint cannot observe this initialization.
+	 * Skip the optimized path when the tracepoint is enabled.
+	 */
+	return !page_ref_tracepoint_active(page_ref_set);
+}
+
+static inline void struct_page_layout_check(void)
+{
+	BUILD_BUG_ON(sizeof(struct page) & (sizeof(u64) - 1));
+}
+
+static inline void init_template_page(struct page *template,
+				      unsigned long pfn,
+				      unsigned long zone_idx,
+				      int nid,
+				      struct dev_pagemap *pgmap)
+{
+	generic_init_zone_device_page_slow(template, pfn, zone_idx, nid, pgmap);
+}
+
+/*
+ * Initialize parts that differ from the template
+ */
+static inline void generic_init_zone_device_page_finish(struct page *page,
+							unsigned long pfn)
+{
+#ifdef SECTION_IN_PAGE_FLAGS
+	set_page_section(page, pfn_to_section_nr(pfn));
+#endif
+#ifdef WANT_PAGE_VIRTUAL
+	if (!is_highmem_idx(ZONE_DEVICE))
+		set_page_address(page, __va(pfn << PAGE_SHIFT));
+#endif
+}
+
+static void init_zone_device_page_from_template(struct page *page,
+		unsigned long pfn, const struct page *template)
+{
+	const u64 *src = (const u64 *)template;
+	u64 *dst = (u64 *)page;
+	unsigned int i;
+
+	for (i = 0; i < sizeof(struct page) / sizeof(u64); i++)
+		dst[i] = src[i];
+	generic_init_zone_device_page_finish(page, pfn);
+	zone_device_page_init_pageblock(page, pfn);
+}
+#else
+static inline bool zone_device_page_init_optimization_enabled(void)
+{
+	return false;
+}
+static inline void init_template_page(struct page *template,
+				      unsigned long pfn,
+				      unsigned long zone_idx,
+				      int nid,
+				      struct dev_pagemap *pgmap)
+{
+}
+static inline void struct_page_layout_check(void)
+{
+}
+static void init_zone_device_page_from_template(struct page *page,
+		unsigned long pfn, const struct page *template)
+{
+}
+#endif
 
 /*
  * With compound page geometry and when struct pages are stored in ram most
@@ -1110,6 +1189,7 @@ void __ref memmap_init_zone_device(struct zone *zone,
 				   unsigned long nr_pages,
 				   struct dev_pagemap *pgmap)
 {
+	bool use_template = zone_device_page_init_optimization_enabled();
 	unsigned long pfn, end_pfn = start_pfn + nr_pages;
 	struct pglist_data *pgdat = zone->zone_pgdat;
 	struct vmem_altmap *altmap = pgmap_altmap(pgmap);
@@ -1117,6 +1197,7 @@ void __ref memmap_init_zone_device(struct zone *zone,
 	unsigned long zone_idx = zone_idx(zone);
 	unsigned long start = jiffies;
 	int nid = pgdat->node_id;
+	struct page template;
 
 	if (WARN_ON_ONCE(!pgmap || zone_idx != ZONE_DEVICE))
 		return;
@@ -1131,10 +1212,18 @@ void __ref memmap_init_zone_device(struct zone *zone,
 		nr_pages = end_pfn - start_pfn;
 	}
 
+	if (use_template) {
+		struct_page_layout_check();
+		init_template_page(&template, start_pfn, zone_idx, nid, pgmap);
+	}
+
 	for (pfn = start_pfn; pfn < end_pfn; pfn += pfns_per_compound) {
 		struct page *page = pfn_to_page(pfn);
 
-		__init_zone_device_page(page, pfn, zone_idx, nid, pgmap);
+		if (use_template)
+			init_zone_device_page_from_template(page, pfn, &template);
+		else
+			__init_zone_device_page(page, pfn, zone_idx, nid, pgmap);
 
 		if (pfns_per_compound == 1)
 			continue;
