@@ -3367,15 +3367,13 @@ static ssize_t shmem_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 			break;
 
 		index = iocb->ki_pos >> PAGE_SHIFT;
-		error = shmem_get_folio(inode, index, 0, &folio, SGP_READ);
+		error = shmem_get_folio(inode, index, 0, &folio, SGP_GET);
 		if (error) {
 			if (error == -EINVAL)
 				error = 0;
 			break;
 		}
 		if (folio) {
-			folio_unlock(folio);
-
 			page = folio_file_page(folio, index);
 			if (PageHWPoison(page)) {
 				folio_put(folio);
@@ -3558,15 +3556,13 @@ static ssize_t shmem_file_splice_read(struct file *in, loff_t *ppos,
 			break;
 
 		index = *ppos >> PAGE_SHIFT;
-		error = shmem_get_folio(inode, index, 0, &folio, SGP_READ);
+		error = shmem_get_folio(inode, index, 0, &folio, SGP_GET);
 		if (error) {
 			if (error == -EINVAL)
 				error = 0;
 			break;
 		}
 		if (folio) {
-			folio_unlock(folio);
-
 			page = folio_file_page(folio, index);
 			if (PageHWPoison(page)) {
 				error = -EIO;
@@ -4167,17 +4163,15 @@ static const char *shmem_get_link(struct dentry *dentry, struct inode *inode,
 			return ERR_PTR(-ECHILD);
 		}
 	} else {
-		error = shmem_get_folio(inode, 0, 0, &folio, SGP_READ);
+		error = shmem_get_folio(inode, 0, 0, &folio, SGP_GET);
 		if (error)
 			return ERR_PTR(error);
 		if (!folio)
 			return ERR_PTR(-ECHILD);
 		if (PageHWPoison(folio_page(folio, 0))) {
-			folio_unlock(folio);
 			folio_put(folio);
 			return ERR_PTR(-ECHILD);
 		}
-		folio_unlock(folio);
 	}
 	set_delayed_call(done, shmem_put_link, folio);
 	return folio_address(folio);
