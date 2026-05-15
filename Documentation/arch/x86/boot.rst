@@ -482,6 +482,14 @@ Protocol:	2.00+
 	    - If 1, KASLR enabled.
 	    - If 0, KASLR disabled.
 
+  Bit 2 (kernel internal): SLAUNCH_FLAG
+
+	- Used internally by the setup kernel to communicate
+	  Secure Launch status to the kernel proper.
+
+	    - If 1, Secure Launch enabled.
+	    - If 0, Secure Launch disabled.
+
   Bit 5 (write): QUIET_FLAG
 
 	- If 0, print early messages.
