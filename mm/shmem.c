@@ -3345,15 +3345,99 @@ shmem_write_end(const struct kiocb *iocb, struct address_space *mapping,
 	return copied;
 }
 
+static pgoff_t shmem_get_read_batch(struct address_space *mapping,
+		pgoff_t index, pgoff_t max, struct folio_batch *fbatch)
+{
+	XA_STATE(xas, &mapping->i_pages, index);
+	struct folio *folio;
+	pgoff_t end = max;
+
+	rcu_read_lock();
+	xas_for_each(&xas, folio, max) {
+		if (xas_retry(&xas, folio))
+			continue;
+		if (xa_is_value(folio)) {
+			end = xas.xa_index;
+			break;
+		}
+		if (!folio_try_get(folio))
+			goto retry;
+
+		if (unlikely(folio != xas_reload(&xas)))
+			goto put_folio;
+
+		end = folio_next_index(folio);
+
+		if (!folio_test_uptodate(folio)) {
+			xas_advance(&xas, end - 1);
+			folio_put(folio);
+			continue;
+		}
+		if (!folio_batch_add(fbatch, folio))
+			break;
+		xas_advance(&xas, end - 1);
+		continue;
+put_folio:
+		folio_put(folio);
+retry:
+		xas_reset(&xas);
+	}
+	rcu_read_unlock();
+
+	return end;
+}
+
+static inline int shmem_get_folio_from_batch(struct inode *inode,
+		pgoff_t index, pgoff_t last_index, struct folio **folio,
+		struct folio_batch *fbatch, pgoff_t *batch_end)
+{
+	struct folio *next;
+	int error;
+
+	if (*batch_end > index) {
+retry:
+		next = folio_batch_next(fbatch);
+		if (next) {
+			if (next->index > index) {
+				next = NULL;
+				fbatch->i--;	/* revert folio_batch_next */
+			}
+		}
+		*folio = next;
+		return 0;
+	}
+
+	for (int i = 0; i < folio_batch_count(fbatch); i++)
+		folio_put(fbatch->folios[i]);
+	folio_batch_init(fbatch);
+
+	*batch_end = shmem_get_read_batch(inode->i_mapping, index,
+					  last_index, fbatch);
+	if (*batch_end > index)
+		goto retry;
+
+	error = shmem_get_folio(inode, index, 0, folio, SGP_GET);
+	if (unlikely(error))
+		return error;
+	if (*folio) {
+		folio_batch_add(fbatch, *folio);
+		goto retry;
+	}
+	return 0;
+}
+
 static ssize_t shmem_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 {
 	struct file *file = iocb->ki_filp;
 	struct inode *inode = file_inode(file);
 	struct address_space *mapping = inode->i_mapping;
-	pgoff_t index;
+	struct folio_batch fbatch;
+	pgoff_t index, last_index, fbatch_end = 0;
 	unsigned long offset;
 	int error = 0;
 	ssize_t retval = 0;
+
+	folio_batch_init(&fbatch);
 
 	for (;;) {
 		struct folio *folio = NULL;
@@ -3367,8 +3451,10 @@ static ssize_t shmem_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 			break;
 
 		index = iocb->ki_pos >> PAGE_SHIFT;
-		error = shmem_get_folio(inode, index, 0, &folio, SGP_GET);
-		if (error) {
+		last_index = (iocb->ki_pos + to->count - 1) >> PAGE_SHIFT;
+		error = shmem_get_folio_from_batch(inode, index, last_index, &folio,
+						   &fbatch, &fbatch_end);
+		if (unlikely(error)) {
 			if (error == -EINVAL)
 				error = 0;
 			break;
@@ -3376,7 +3462,6 @@ static ssize_t shmem_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 		if (folio) {
 			page = folio_file_page(folio, index);
 			if (PageHWPoison(page)) {
-				folio_put(folio);
 				error = -EIO;
 				break;
 			}
@@ -3391,11 +3476,9 @@ static ssize_t shmem_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 		 * are called without i_rwsem protection against truncate
 		 */
 		i_size = i_size_read(inode);
-		if (unlikely(iocb->ki_pos >= i_size)) {
-			if (folio)
-				folio_put(folio);
+		if (unlikely(iocb->ki_pos >= i_size))
 			break;
-		}
+
 		end_offset = min_t(loff_t, i_size, iocb->ki_pos + to->count);
 		if (folio && likely(!fallback_page_copy))
 			fsize = folio_size(folio);
@@ -3430,7 +3513,6 @@ static ssize_t shmem_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 				ret = copy_folio_to_iter(folio, offset, nr, to);
 			else
 				ret = copy_page_to_iter(page, offset, nr, to);
-			folio_put(folio);
 		} else if (user_backed_iter(to)) {
 			/*
 			 * Copy to user tends to be so well optimized, but
@@ -3459,6 +3541,8 @@ static ssize_t shmem_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 		cond_resched();
 	}
 
+	for (int i = 0; i < folio_batch_count(&fbatch); i++)
+		folio_put(fbatch.folios[i]);
 	file_accessed(file);
 	return retval ? retval : error;
 }
