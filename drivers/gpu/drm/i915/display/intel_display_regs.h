@@ -3149,8 +3149,11 @@ enum skl_power_gate {
 /* g4x+, except vlv/chv! */
 #define _PIPE_FRMTMSTMP_A		0x70048
 #define _PIPE_FRMTMSTMP_B		0x71048
-#define PIPE_FRMTMSTMP(pipe)		\
-	_MMIO_PIPE(pipe, _PIPE_FRMTMSTMP_A, _PIPE_FRMTMSTMP_B)
+#define _PIPEDMC_FRMTMSTMP_A		0x5f0ac
+#define _PIPEDMC_FRMTMSTMP_B		0x5f4ac
+#define PIPE_FRMTMSTMP(display, pipe)	(DISPLAY_VER(display) >= 30 ? \
+	_MMIO_PIPE(pipe, _PIPEDMC_FRMTMSTMP_A, _PIPEDMC_FRMTMSTMP_B) : \
+	_MMIO_PIPE(pipe, _PIPE_FRMTMSTMP_A, _PIPE_FRMTMSTMP_B))
 
 /* g4x+, except vlv/chv! */
 #define _PIPE_FLIPTMSTMP_A		0x7004C

@@ -157,7 +157,7 @@ static u32 intel_crtc_scanlines_since_frame_timestamp(struct intel_crtc *crtc)
 		 * is sampled at every start of vertical blank.
 		 */
 		scan_prev_time = intel_de_read_fw(display,
-						  PIPE_FRMTMSTMP(crtc->pipe));
+						  PIPE_FRMTMSTMP(display, crtc->pipe));
 
 		/*
 		 * The TIMESTAMP_CTR register has the current
@@ -166,7 +166,7 @@ static u32 intel_crtc_scanlines_since_frame_timestamp(struct intel_crtc *crtc)
 		scan_curr_time = intel_de_read_fw(display, IVB_TIMESTAMP_CTR);
 
 		scan_post_time = intel_de_read_fw(display,
-						  PIPE_FRMTMSTMP(crtc->pipe));
+						  PIPE_FRMTMSTMP(display, crtc->pipe));
 	} while (scan_post_time != scan_prev_time);
 
 	return div_u64(mul_u32_u32(scan_curr_time - scan_prev_time,
