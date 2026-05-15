@@ -401,18 +401,8 @@ EXPORT_SYMBOL_GPL(pcc_mbox_request_channel);
 void pcc_mbox_free_channel(struct pcc_mbox_chan *pchan)
 {
 	struct mbox_chan *chan = pchan->mchan;
-	struct pcc_chan_info *pchan_info;
-	struct pcc_mbox_chan *pcc_mbox_chan;
-
 	if (!chan || !chan->cl)
 		return;
-	pchan_info = chan->con_priv;
-	pcc_mbox_chan = &pchan_info->chan;
-	if (pcc_mbox_chan->shmem) {
-		iounmap(pcc_mbox_chan->shmem);
-		pcc_mbox_chan->shmem = NULL;
-	}
-
 	mbox_free_channel(chan);
 }
 EXPORT_SYMBOL_GPL(pcc_mbox_free_channel);
@@ -488,15 +478,22 @@ static int pcc_startup(struct mbox_chan *chan)
 
 /**
  * pcc_shutdown - Called from Mailbox Controller code. Used here
- *		to free the interrupt.
+ *		to free the interrupt and unmap the shared memory.
  * @chan: Pointer to Mailbox channel to shutdown.
  */
 static void pcc_shutdown(struct mbox_chan *chan)
 {
 	struct pcc_chan_info *pchan = chan->con_priv;
+	struct pcc_mbox_chan *pcc_mbox_chan;
 
 	if (pchan->plat_irq > 0)
 		devm_free_irq(chan->mbox->dev, pchan->plat_irq, chan);
+
+	pcc_mbox_chan = &pchan->chan;
+	if (pcc_mbox_chan->shmem) {
+		iounmap(pcc_mbox_chan->shmem);
+		pcc_mbox_chan->shmem = NULL;
+	}
 }
 
 static const struct mbox_chan_ops pcc_chan_ops = {
