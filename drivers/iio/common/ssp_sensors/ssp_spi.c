@@ -196,6 +196,44 @@ static inline void ssp_pending_del(struct ssp_data *data, struct ssp_msg *msg,
 	mutex_unlock(&data->pending_lock);
 }
 
+static int __ssp_do_transfer(struct ssp_data *data, struct ssp_msg *msg,
+			     bool no_irq)
+{
+	int status;
+
+	/* msg->done must be initialized by caller */
+	WARN_ON(!msg->done);
+
+	mutex_lock(&data->comm_lock);
+
+	status = ssp_check_lines(data, false);
+	if (status < 0)
+		goto _error_locked;
+
+	status = spi_write(data->spi, msg->buffer, SSP_HEADER_SIZE);
+	if (status < 0) {
+		gpiod_set_value_cansleep(data->ap_mcu_gpiod, 1);
+		dev_err(SSP_DEV, "%s spi_write fail\n", __func__);
+		goto _error_locked;
+	}
+
+	ssp_pending_add(data, msg, no_irq);
+
+	status = ssp_check_lines(data, true);
+	if (status < 0) {
+		ssp_pending_del(data, msg, no_irq);
+		goto _error_locked;
+	}
+
+	mutex_unlock(&data->comm_lock);
+	return 0;
+
+_error_locked:
+	mutex_unlock(&data->comm_lock);
+	data->timeout_cnt++;
+	return status;
+}
+
 static int ssp_do_transfer(struct ssp_data *data, struct ssp_msg *msg,
 			   struct completion *done, int timeout)
 {
@@ -211,28 +249,9 @@ static int ssp_do_transfer(struct ssp_data *data, struct ssp_msg *msg,
 
 	msg->done = done;
 
-	mutex_lock(&data->comm_lock);
-
-	status = ssp_check_lines(data, false);
+	status = __ssp_do_transfer(data, msg, use_no_irq);
 	if (status < 0)
-		goto _error_locked;
-
-	status = spi_write(data->spi, msg->buffer, SSP_HEADER_SIZE);
-	if (status < 0) {
-		gpiod_set_value_cansleep(data->ap_mcu_gpiod, 1);
-		dev_err(SSP_DEV, "%s spi_write fail\n", __func__);
-		goto _error_locked;
-	}
-
-	ssp_pending_add(data, msg, use_no_irq);
-
-	status = ssp_check_lines(data, true);
-	if (status < 0) {
-		ssp_pending_del(data, msg, use_no_irq);
-		goto _error_locked;
-	}
-
-	mutex_unlock(&data->comm_lock);
+		return status;
 
 	if (!use_no_irq && done &&
 	    !wait_for_completion_timeout(done, msecs_to_jiffies(timeout))) {
@@ -243,11 +262,6 @@ static int ssp_do_transfer(struct ssp_data *data, struct ssp_msg *msg,
 	}
 
 	return 0;
-
-_error_locked:
-	mutex_unlock(&data->comm_lock);
-	data->timeout_cnt++;
-	return status;
 }
 
 static inline int ssp_spi_sync_command(struct ssp_data *data,
