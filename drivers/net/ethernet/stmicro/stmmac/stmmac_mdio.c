@@ -385,28 +385,22 @@ int stmmac_mdio_reset(struct mii_bus *bus)
 	unsigned int mii_address = priv->hw->mii.addr;
 
 #ifdef CONFIG_OF
-	if (priv->device->of_node) {
-		struct gpio_desc *reset_gpio;
+	if (priv->device->of_node && priv->reset_gpio) {
 		u32 delays[3] = { 0, 0, 0 };
-
-		reset_gpio = devm_gpiod_get_optional(priv->device,
-						     "snps,reset",
-						     GPIOD_OUT_LOW);
-		if (IS_ERR(reset_gpio))
-			return PTR_ERR(reset_gpio);
 
 		device_property_read_u32_array(priv->device,
 					       "snps,reset-delays-us",
 					       delays, ARRAY_SIZE(delays));
 
+		gpiod_set_value_cansleep(priv->reset_gpio, 0);
 		if (delays[0])
 			msleep(DIV_ROUND_UP(delays[0], 1000));
 
-		gpiod_set_value_cansleep(reset_gpio, 1);
+		gpiod_set_value_cansleep(priv->reset_gpio, 1);
 		if (delays[1])
 			msleep(DIV_ROUND_UP(delays[1], 1000));
 
-		gpiod_set_value_cansleep(reset_gpio, 0);
+		gpiod_set_value_cansleep(priv->reset_gpio, 0);
 		if (delays[2])
 			msleep(DIV_ROUND_UP(delays[2], 1000));
 	}
@@ -665,6 +659,14 @@ int stmmac_mdio_register(struct net_device *ndev)
 	/* Looks like we need a dummy read for XGMAC only and C45 PHYs */
 	if (priv->plat->core_type == DWMAC_CORE_XGMAC)
 		stmmac_xgmac2_mdio_read_c45(new_bus, 0, 0, 0);
+
+	priv->reset_gpio = devm_gpiod_get_optional(priv->device,
+						   "snps,reset",
+						   GPIOD_ASIS);
+	if (IS_ERR(priv->reset_gpio)) {
+		priv->reset_gpio = NULL;
+		dev_warn(dev, "No reset GPIO found\n");
+	}
 
 	/* If fixed-link is set, skip PHY scanning */
 	fwnode = dev_fwnode(priv->device);
