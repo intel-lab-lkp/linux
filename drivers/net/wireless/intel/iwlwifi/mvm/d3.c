@@ -2514,16 +2514,20 @@ static void iwl_mvm_query_set_freqs(struct iwl_mvm *mvm,
 		       IWL_UCODE_TLV_API_SCAN_OFFLOAD_CHANS)) {
 		struct iwl_scan_offload_profile_match *matches =
 			 (void *)results->matches;
+		int max = min_t(int, SCAN_OFFLOAD_MATCHING_CHANNELS_LEN * 8,
+				mvm->n_nd_channels);
 
-		for (i = 0; i < SCAN_OFFLOAD_MATCHING_CHANNELS_LEN * 8; i++)
+		for (i = 0; i < max; i++)
 			if (matches[idx].matching_channels[i / 8] & (BIT(i % 8)))
 				match->channels[n_channels++] =
 					mvm->nd_channels[i]->center_freq;
 	} else {
 		struct iwl_scan_offload_profile_match_v1 *matches =
 			 (void *)results->matches;
+		int max = min_t(int, SCAN_OFFLOAD_MATCHING_CHANNELS_LEN_V1 * 8,
+				mvm->n_nd_channels);
 
-		for (i = 0; i < SCAN_OFFLOAD_MATCHING_CHANNELS_LEN_V1 * 8; i++)
+		for (i = 0; i < max; i++)
 			if (matches[idx].matching_channels[i / 8] & (BIT(i % 8)))
 				match->channels[n_channels++] =
 					mvm->nd_channels[i]->center_freq;
