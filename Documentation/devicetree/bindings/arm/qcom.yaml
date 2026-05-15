@@ -63,6 +63,8 @@ properties:
 
       - items:
           - enum:
+              - qcom,eliza-cqm-evk
+              - qcom,eliza-cqs-evk
               - qcom,eliza-mtp
           - const: qcom,eliza
 
