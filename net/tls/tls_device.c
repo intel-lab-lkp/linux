@@ -1234,6 +1234,9 @@ int tls_device_decrypted(struct sock *sk, struct tls_context *tls_ctx)
 		if (ctx->old_key_reencrypted) {
 			struct sk_buff *frag_iter;
 
+			trace_tls_device_rekey_reencrypt(sk, rec_start_seq,
+							 ctx->rekey.old_nic_boundary,
+							 true);
 			skb->decrypted = !skb->decrypted;
 			skb_walk_frags(skb, frag_iter)
 				frag_iter->decrypted = !frag_iter->decrypted;
@@ -1253,12 +1256,17 @@ int tls_device_decrypted(struct sock *sk, struct tls_context *tls_ctx)
 			/* For mixed records, first old key rencrypt and if
 			 * SW AEAD fails then retry with decrypted flags toggled
 			 */
+			trace_tls_device_rekey_reencrypt(sk, rec_start_seq,
+							 ctx->rekey.old_nic_boundary,
+							 false);
 			if (!is_decrypted)
 				ctx->old_key_reencrypted = 1;
 			return tls_device_reencrypt_old_key(sk, ctx,
 							   sw_ctx, tls_ctx);
 		}
 
+		trace_tls_device_rekey_done(sk, rec_start_seq,
+					    ctx->rekey.old_nic_boundary);
 		crypto_free_aead(ctx->rekey.old_aead_recv);
 		ctx->rekey.old_aead_recv = NULL;
 
@@ -1827,6 +1835,8 @@ int tls_set_device_offload_rx(struct sock *sk, struct tls_context *ctx,
 				context->rekey.old_nic_boundary = rcv_nxt;
 				context->dev_add_pending = 1;
 			}
+			trace_tls_device_rekey_start(sk, copied_seq, rcv_nxt,
+						    before(copied_seq, rcv_nxt));
 		}
 	}
 
