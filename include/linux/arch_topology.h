@@ -105,6 +105,7 @@ static inline bool topology_core_has_smt(int cpu)
 	return cpu_topology[cpu].thread_id != -1;
 }
 
+extern unsigned int nr_possible_packages;
 #else
 
 static inline bool topology_core_has_smt(int cpu) { return false; }
