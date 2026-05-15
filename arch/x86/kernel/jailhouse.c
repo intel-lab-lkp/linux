@@ -210,8 +210,6 @@ static void __init jailhouse_init_platform(void)
 	x86_init.mpparse.parse_smp_cfg		= jailhouse_parse_smp_config;
 	x86_init.pci.arch_init			= jailhouse_pci_arch_init;
 
-	x86_platform.calibrate_cpu		= jailhouse_get_tsc;
-	x86_platform.calibrate_tsc		= jailhouse_get_tsc;
 	x86_platform.get_wallclock		= jailhouse_get_wallclock;
 	x86_platform.legacy.rtc			= 0;
 	x86_platform.legacy.warm_reset		= 0;
@@ -220,6 +218,8 @@ static void __init jailhouse_init_platform(void)
 	legacy_pic				= &null_legacy_pic;
 
 	machine_ops.emergency_restart		= jailhouse_no_restart;
+
+	tsc_register_calibration_routines(jailhouse_get_tsc, jailhouse_get_tsc);
 
 	while (pa_data) {
 		mapping = early_memremap(pa_data, sizeof(header));
