@@ -716,7 +716,8 @@ int aa_unix_file_perm(const struct cred *subj_cred, struct aa_label *label,
 	struct sock *peer_sk = NULL;
 	u32 sk_req = request & ~NET_PEER_MASK;
 	struct path path;
-	bool is_sk_fs;
+	struct path peer_path = {};
+	bool is_sk_fs, is_peer_fs = false;
 	int error = 0;
 
 	AA_BUG(!label);
@@ -724,9 +725,8 @@ int aa_unix_file_perm(const struct cred *subj_cred, struct aa_label *label,
 	AA_BUG(!sock->sk);
 	AA_BUG(sock->sk->sk_family != PF_UNIX);
 
-	/* investigate only using lock via unix_peer_get()
-	 * addr only needs the memory barrier, but need to investigate
-	 * path
+	/* addr only needs the memory barrier; hold a peer path reference
+	 * under peer_sk's state lock after sock_hold(peer_sk)
 	 */
 	unix_state_lock(sock->sk);
 	peer_sk = unix_peer(sock->sk);
@@ -749,14 +749,18 @@ int aa_unix_file_perm(const struct cred *subj_cred, struct aa_label *label,
 		goto out;
 
 	peer_addr = aa_sunaddr(unix_sk(peer_sk), &peer_addrlen);
-
-	struct path peer_path;
-
-	peer_path = unix_sk(peer_sk)->path;
-	if (!is_sk_fs && is_unix_fs(peer_sk)) {
+	if (!is_sk_fs) {
+		unix_state_lock(peer_sk);
+		is_peer_fs = is_unix_fs(peer_sk);
+		peer_path = unix_sk(peer_sk)->path;
+		if (peer_path.dentry)
+			path_get(&peer_path);
+		unix_state_unlock(peer_sk);
+	}
+	if (!is_sk_fs && is_peer_fs) {
 		last_error(error,
 			   unix_fs_perm(op, request, subj_cred, label,
-					is_unix_fs(peer_sk) ? &peer_path : NULL));
+					&peer_path));
 	} else if (!is_sk_fs) {
 		struct aa_label *plabel;
 		struct aa_sk_ctx *pctx = aa_sock(peer_sk);
@@ -772,12 +776,12 @@ int aa_unix_file_perm(const struct cred *subj_cred, struct aa_label *label,
 					      MAY_READ | MAY_WRITE, sock->sk,
 					      is_sk_fs ? &path : NULL,
 					      peer_addr, peer_addrlen,
-					      is_unix_fs(peer_sk) ?
+					      is_peer_fs ?
 							&peer_path : NULL,
 					      plabel),
 			       unix_peer_perm(file->f_cred, plabel, op,
 					      MAY_READ | MAY_WRITE, peer_sk,
-					      is_unix_fs(peer_sk) ?
+					      is_peer_fs ?
 							&peer_path : NULL,
 					      addr, addrlen,
 					      is_sk_fs ? &path : NULL,
@@ -785,6 +789,8 @@ int aa_unix_file_perm(const struct cred *subj_cred, struct aa_label *label,
 		if (!error && !__aa_subj_label_is_cached(plabel, label))
 			update_peer_ctx(peer_sk, pctx, label);
 	}
+	if (peer_path.dentry)
+		path_put(&peer_path);
 	sock_put(peer_sk);
 
 out:
@@ -796,4 +802,3 @@ out:
 
 	return error;
 }
-
