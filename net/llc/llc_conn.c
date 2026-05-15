@@ -65,6 +65,11 @@ int llc_conn_state_process(struct sock *sk, struct sk_buff *skb)
 	struct llc_sock *llc = llc_sk(skb->sk);
 	struct llc_conn_state_ev *ev = llc_conn_ev(skb);
 
+	if (unlikely(llc->state == LLC_CONN_OUT_OF_SVC)) {
+		kfree_skb(skb);
+		return -ENOTCONN;
+	}
+
 	ev->ind_prim = ev->cfm_prim = 0;
 	/*
 	 * Send event to state machine
