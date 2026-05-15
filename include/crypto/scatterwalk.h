@@ -249,6 +249,12 @@ static inline void scatterwalk_map_and_copy(void *buf, struct scatterlist *sg,
 		memcpy_from_sglist(buf, sg, start, nbytes);
 }
 
+void sglist_shift_left(struct scatterlist *sg, unsigned int dst_off,
+		       unsigned int src_off, unsigned int nbytes);
+
+void sglist_shift_right(struct scatterlist *sg, unsigned int dst_off,
+			unsigned int src_off, unsigned int nbytes);
+
 struct scatterlist *scatterwalk_ffwd(struct scatterlist dst[2],
 				     struct scatterlist *src,
 				     unsigned int len);

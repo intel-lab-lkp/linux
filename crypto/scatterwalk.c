@@ -180,6 +180,85 @@ void memcpy_sglist(struct scatterlist *dst, struct scatterlist *src,
 }
 EXPORT_SYMBOL_GPL(memcpy_sglist);
 
+static unsigned int sglist_total_len(struct scatterlist *sg)
+{
+	unsigned int total = 0;
+
+	for (; sg; sg = sg_next(sg))
+		total += sg->length;
+	return total;
+}
+
+/**
+ * sglist_shift_left - shift a region of data left within a scatterlist
+ * @sg:      scatterlist to operate on
+ * @dst_off: destination offset in bytes (must be <= @src_off)
+ * @src_off: source offset in bytes (start of the region to move)
+ * @nbytes:  number of bytes to move
+ *
+ * Moves [src_off, src_off+nbytes) to [dst_off, dst_off+nbytes).
+ * Handles overlapping regions safely by copying forward (low to high).
+ */
+void sglist_shift_left(struct scatterlist *sg, unsigned int dst_off,
+		       unsigned int src_off, unsigned int nbytes)
+{
+	u8 buf[16];
+
+	if (!nbytes || dst_off == src_off)
+		return;
+	if (WARN_ON_ONCE(dst_off > src_off))
+		return;
+	if (WARN_ON_ONCE(src_off + nbytes > sglist_total_len(sg)))
+		return;
+
+	while (nbytes) {
+		unsigned int chunk = min_t(unsigned int, nbytes, sizeof(buf));
+
+		memcpy_from_sglist(buf, sg, src_off, chunk);
+		memcpy_to_sglist(sg, dst_off, buf, chunk);
+		src_off += chunk;
+		dst_off += chunk;
+		nbytes -= chunk;
+	}
+}
+EXPORT_SYMBOL_GPL(sglist_shift_left);
+
+/**
+ * sglist_shift_right - shift a region of data right within a scatterlist
+ * @sg:      scatterlist to operate on
+ * @dst_off: destination offset in bytes (must be >= @src_off)
+ * @src_off: source offset in bytes (start of the region to move)
+ * @nbytes:  number of bytes to move
+ *
+ * Moves [src_off, src_off+nbytes) to [dst_off, dst_off+nbytes).
+ * Handles overlapping regions safely by copying backward (high to low).
+ */
+void sglist_shift_right(struct scatterlist *sg, unsigned int dst_off,
+			unsigned int src_off, unsigned int nbytes)
+{
+	unsigned int src_end = src_off + nbytes;
+	unsigned int dst_end = dst_off + nbytes;
+	u8 buf[16];
+
+	if (!nbytes || dst_off == src_off)
+		return;
+	if (WARN_ON_ONCE(dst_off < src_off))
+		return;
+	if (WARN_ON_ONCE(dst_end > sglist_total_len(sg)))
+		return;
+
+	while (nbytes) {
+		unsigned int chunk = min_t(unsigned int, nbytes, sizeof(buf));
+
+		src_end -= chunk;
+		dst_end -= chunk;
+		memcpy_from_sglist(buf, sg, src_end, chunk);
+		memcpy_to_sglist(sg, dst_end, buf, chunk);
+		nbytes -= chunk;
+	}
+}
+EXPORT_SYMBOL_GPL(sglist_shift_right);
+
 struct scatterlist *scatterwalk_ffwd(struct scatterlist dst[2],
 				     struct scatterlist *src,
 				     unsigned int len)
