@@ -15,6 +15,7 @@
 #include <linux/regulator/consumer.h>
 
 #include "inv_icm42607.h"
+#include "inv_icm42607_buffer.h"
 
 static bool inv_icm42607_is_volatile_reg(struct device *dev, unsigned int reg)
 {
@@ -72,6 +73,40 @@ const struct inv_icm42607_hw inv_icm42607p_hw_data = {
 	.conf = &inv_icm42607_default_conf,
 };
 EXPORT_SYMBOL_NS_GPL(inv_icm42607p_hw_data, "IIO_ICM42607");
+
+u32 inv_icm42607_odr_to_period(enum inv_icm42607_odr odr)
+{
+	static const u32 odr_periods[INV_ICM42607_ODR_NB] = {
+		/* Reserved values */
+		0, 0, 0, 0, 0,
+		/* 1600Hz */
+		625000,
+		/* 800Hz */
+		1250000,
+		/* 400Hz */
+		2500000,
+		/* 200Hz */
+		5000000,
+		/* 100 Hz */
+		10000000,
+		/* 50Hz */
+		20000000,
+		/* 25Hz */
+		40000000,
+		/* 12.5Hz */
+		80000000,
+		/* 6.25Hz */
+		160000000,
+		/* 3.125Hz */
+		320000000,
+		/* 1.5625Hz */
+		640000000,
+	};
+
+	odr = clamp(odr, INV_ICM42607_ODR_1600HZ, INV_ICM42607_ODR_1_5625HZ_LP);
+
+	return odr_periods[odr];
+}
 
 static int inv_icm42607_set_pwr_mgmt0(struct inv_icm42607_state *st,
 				      enum inv_icm42607_sensor_mode gyro,
@@ -333,6 +368,11 @@ int inv_icm42607_core_probe(struct regmap *regmap, const struct inv_icm42607_hw 
 	if (ret)
 		return ret;
 
+	/* Initialize buffer/FIFO handling */
+	ret = inv_icm42607_buffer_init(st);
+	if (ret)
+		return ret;
+
 	ret = devm_pm_runtime_set_active_enabled(dev);
 	if (ret)
 		return ret;
@@ -353,6 +393,13 @@ static int inv_icm42607_suspend(struct device *dev)
 
 	if (pm_runtime_suspended(dev))
 		return 0;
+
+	if (st->fifo.on) {
+		ret = regmap_write(st->map, INV_ICM42607_REG_FIFO_CONFIG1,
+				   INV_ICM42607_FIFO_CONFIG1_BYPASS);
+		if (ret)
+			return ret;
+	}
 
 	ret = inv_icm42607_set_pwr_mgmt0(st, INV_ICM42607_SENSOR_MODE_OFF,
 					 INV_ICM42607_SENSOR_MODE_OFF,
@@ -378,7 +425,12 @@ static int inv_icm42607_resume(struct device *dev)
 	if (ret)
 		return ret;
 
-	/* Nothing else to restore at this time. */
+	if (st->fifo.on) {
+		ret = regmap_write(st->map, INV_ICM42607_REG_FIFO_CONFIG1,
+				   INV_ICM42607_FIFO_CONFIG1_MODE);
+		if (ret)
+			return ret;
+	}
 
 	return 0;
 }
