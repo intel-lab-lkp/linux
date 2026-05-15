@@ -40,7 +40,7 @@ struct inv_icm42607_fifo_2sensors_packet {
 
 ssize_t inv_icm42607_fifo_decode_packet(const void *packet, const void **accel,
 					const void **gyro, const int8_t **temp,
-					const void **timestamp)
+					const void **timestamp, unsigned int *odr)
 {
 	const struct inv_icm42607_fifo_1sensor_packet *pack1 = packet;
 	const struct inv_icm42607_fifo_2sensors_packet *pack2 = packet;
@@ -52,8 +52,16 @@ ssize_t inv_icm42607_fifo_decode_packet(const void *packet, const void **accel,
 		*gyro = NULL;
 		*temp = NULL;
 		*timestamp = NULL;
+		*odr = 0;
 		return 0;
 	}
+
+	/* handle odr flags */
+	*odr = 0;
+	if (header & INV_ICM42607_FIFO_HEADER_ODR_GYRO)
+		*odr |= INV_ICM42607_SENSOR_GYRO;
+	if (header & INV_ICM42607_FIFO_HEADER_ODR_ACCEL)
+		*odr |= INV_ICM42607_SENSOR_ACCEL;
 
 	/* accel + gyro */
 	if ((header & INV_ICM42607_FIFO_HEADER_ACCEL) &&
@@ -348,6 +356,7 @@ static int inv_icm42607_buffer_postdisable(struct iio_dev *indio_dev)
 	struct device *dev = regmap_get_device(st->map);
 	unsigned int sensor;
 	unsigned int *watermark;
+	struct inv_icm42607_sensor_conf conf = INV_ICM42607_SENSOR_CONF_INIT;
 	unsigned int sleep_temp = 0;
 	unsigned int sleep_sensor = 0;
 	unsigned int sleep;
@@ -374,6 +383,16 @@ static int inv_icm42607_buffer_postdisable(struct iio_dev *indio_dev)
 	if (ret)
 		goto out_unlock;
 
+	conf.mode = INV_ICM42607_SENSOR_MODE_OFF;
+	if (sensor != INV_ICM42607_SENSOR_GYRO)
+		ret = inv_icm42607_set_accel_conf(st, &conf, &sleep_sensor);
+	if (ret)
+		goto out_unlock;
+
+	/* if FIFO is off, turn temperature off */
+	if (!st->fifo.on)
+		ret = inv_icm42607_set_temp_conf(st, false, &sleep_temp);
+
 out_unlock:
 	mutex_unlock(&st->lock);
 
@@ -399,6 +418,7 @@ int inv_icm42607_buffer_fifo_read(struct inv_icm42607_state *st,
 {
 	const void *accel, *gyro, *timestamp;
 	size_t i, max_count;
+	unsigned int odr;
 	const s8 *temp;
 	ssize_t size;
 	int ret;
@@ -440,7 +460,7 @@ int inv_icm42607_buffer_fifo_read(struct inv_icm42607_state *st,
 	/* compute number of samples for each sensor */
 	for (i = 0; i < st->fifo.count; i += size) {
 		size = inv_icm42607_fifo_decode_packet(&st->fifo.data[i],
-				&accel, &gyro, &temp, &timestamp);
+				&accel, &gyro, &temp, &timestamp, &odr);
 		/* Make sure the size is at least 1 valid packet. */
 		if (size < INV_ICM42607_FIFO_1SENSOR_PACKET_SIZE)
 			break;
@@ -454,14 +474,54 @@ int inv_icm42607_buffer_fifo_read(struct inv_icm42607_state *st,
 	return 0;
 }
 
+int inv_icm42607_buffer_fifo_parse(struct inv_icm42607_state *st)
+{
+	struct inv_icm42607_sensor_state *accel_st = iio_priv(st->indio_accel);
+	struct inv_sensors_timestamp *ts;
+	int ret;
+
+	if (st->fifo.nb.total == 0)
+		return 0;
+
+	/* handle accelerometer timestamp and FIFO data parsing */
+	if (st->fifo.nb.accel > 0) {
+		ts = &accel_st->ts;
+		inv_sensors_timestamp_interrupt(ts, st->fifo.watermark.eff_accel,
+						st->timestamp.accel);
+		ret = inv_icm42607_accel_parse_fifo(st->indio_accel);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
 int inv_icm42607_buffer_hwfifo_flush(struct inv_icm42607_state *st,
 				     unsigned int count)
 {
+	struct inv_icm42607_sensor_state *accel_st = iio_priv(st->indio_accel);
+	struct inv_sensors_timestamp *ts;
+	s64 accel_ts;
 	int ret;
 
-	ret = inv_icm42607_buffer_fifo_read(st, count);
+	accel_ts = iio_get_time_ns(st->indio_accel);
 
-	return ret;
+	ret = inv_icm42607_buffer_fifo_read(st, count);
+	if (ret)
+		return ret;
+
+	if (st->fifo.nb.total == 0)
+		return 0;
+
+	if (st->fifo.nb.accel > 0) {
+		ts = &accel_st->ts;
+		inv_sensors_timestamp_interrupt(ts, st->fifo.nb.accel, accel_ts);
+		ret = inv_icm42607_accel_parse_fifo(st->indio_accel);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
 }
 
 int inv_icm42607_buffer_init(struct inv_icm42607_state *st)
