@@ -905,6 +905,10 @@ static inline bool ieee80211_mle_size_ok(const u8 *data, size_t len)
 	if (!check_common_len)
 		return true;
 
+	/* common_info length must not exceed the element */
+	if (len < fixed + mle->variable[0])
+		return false;
+
 	/* if present, common length is the first octet there */
 	return mle->variable[0] >= common;
 }
