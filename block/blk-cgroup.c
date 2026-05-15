@@ -1621,6 +1621,10 @@ retry:
 		if (blkg->pd[pol->plid])
 			continue;
 
+		/* a destroyed blkg may still be on q->blkg_list; skip it via tryget */
+		if (!blkg_tryget(blkg))
+			continue;
+
 		/* If prealloc matches, use it; otherwise try GFP_NOWAIT */
 		if (blkg == pinned_blkg) {
 			pd = pd_prealloc;
@@ -1637,7 +1641,6 @@ retry:
 			 */
 			if (pinned_blkg)
 				blkg_put(pinned_blkg);
-			blkg_get(blkg);
 			pinned_blkg = blkg;
 
 			spin_unlock_irq(&q->queue_lock);
@@ -1666,6 +1669,8 @@ retry:
 		pd->online = true;
 
 		spin_unlock(&blkg->blkcg->lock);
+
+		blkg_put(blkg);
 	}
 
 	__set_bit(pol->plid, q->blkcg_pols);
