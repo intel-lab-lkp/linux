@@ -78,6 +78,7 @@
 #include <asm/io_apic.h>
 #include <asm/fpu/api.h>
 #include <asm/setup.h>
+#include <asm/timer.h>
 #include <asm/uv/uv.h>
 #include <asm/microcode.h>
 #include <asm/i8259.h>
@@ -275,7 +276,7 @@ static void notrace __noendbr start_secondary(void *unused)
 	cpu_init();
 	fpu__init_cpu();
 	rcutree_report_cpu_starting(raw_smp_processor_id());
-	x86_cpuinit.early_percpu_clock_init();
+	paravirt_sched_clock_start_secondary();
 
 	ap_starting();
 

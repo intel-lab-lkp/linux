@@ -15,14 +15,18 @@ extern bool using_native_sched_clock(void);
 
 #ifdef CONFIG_PARAVIRT
 int __init __paravirt_set_sched_clock(u64 (*func)(void), bool stable,
-				      void (*save)(void), void (*restore)(void));
+				      void (*save)(void), void (*restore)(void),
+				      void (*start_secondary));
 
 static __always_inline void paravirt_set_sched_clock(u64 (*func)(void),
 						     void (*save)(void),
 						     void (*restore)(void))
 {
-	(void)__paravirt_set_sched_clock(func, true, save, restore);
+	(void)__paravirt_set_sched_clock(func, true, save, restore, NULL);
 }
+void paravirt_sched_clock_start_secondary(void);
+#else
+static inline void paravirt_sched_clock_start_secondary(void) { }
 #endif
 
 /*
