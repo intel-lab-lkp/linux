@@ -1035,9 +1035,6 @@ static void __ref generic_init_zone_device_page_slow(struct page *page,
 	 */
 	page_folio(page)->pgmap = pgmap;
 	page->zone_device_data = NULL;
-
-	if (!zone_device_page_init_refcount(pgmap))
-		set_page_count(page, 0);
 }
 
 static void __ref zone_device_page_init_pageblock(struct page *page,
@@ -1064,6 +1061,8 @@ static inline void __init_zone_device_page(struct page *page, unsigned long pfn,
 					   struct dev_pagemap *pgmap)
 {
 	generic_init_zone_device_page_slow(page, pfn, zone_idx, nid, pgmap);
+	if (!zone_device_page_init_refcount(pgmap))
+		set_page_count(page, 0);
 	zone_device_page_init_pageblock(page, pfn);
 }
 
@@ -1084,13 +1083,28 @@ static inline void struct_page_layout_check(void)
 	BUILD_BUG_ON(sizeof(struct page) & (sizeof(u64) - 1));
 }
 
-static inline void init_template_page(struct page *template,
-				      unsigned long pfn,
-				      unsigned long zone_idx,
-				      int nid,
-				      struct dev_pagemap *pgmap)
+static inline void init_template_head_page(struct page *template,
+					   unsigned long pfn,
+					   unsigned long zone_idx,
+					   int nid,
+					   struct dev_pagemap *pgmap)
 {
 	generic_init_zone_device_page_slow(template, pfn, zone_idx, nid, pgmap);
+	if (!zone_device_page_init_refcount(pgmap))
+		set_page_count(template, 0);
+}
+
+static inline void init_template_tail_page(struct page *template,
+					   unsigned long pfn,
+					   unsigned long zone_idx,
+					   int nid,
+					   struct dev_pagemap *pgmap,
+					   const struct page *head,
+					   unsigned int order)
+{
+	generic_init_zone_device_page_slow(template, pfn, zone_idx, nid, pgmap);
+	prep_compound_tail(template, head, order);
+	set_page_count(template, 0);
 }
 
 /*
@@ -1125,11 +1139,11 @@ static inline bool zone_device_page_init_optimization_enabled(void)
 {
 	return false;
 }
-static inline void init_template_page(struct page *template,
-				      unsigned long pfn,
-				      unsigned long zone_idx,
-				      int nid,
-				      struct dev_pagemap *pgmap)
+static inline void init_template_head_page(struct page *template,
+					   unsigned long pfn,
+					   unsigned long zone_idx,
+					   int nid,
+					   struct dev_pagemap *pgmap)
 {
 }
 static inline void struct_page_layout_check(void)
@@ -1137,6 +1151,15 @@ static inline void struct_page_layout_check(void)
 }
 static void init_zone_device_page_from_template(struct page *page,
 		unsigned long pfn, const struct page *template)
+{
+}
+static inline void init_template_tail_page(struct page *template,
+					   unsigned long pfn,
+					   unsigned long zone_idx,
+					   int nid,
+					   struct dev_pagemap *pgmap,
+					   const struct page *head,
+					   unsigned int order)
 {
 }
 #endif
@@ -1162,10 +1185,12 @@ static void __ref memmap_init_compound(struct page *head,
 				       unsigned long head_pfn,
 				       unsigned long zone_idx, int nid,
 				       struct dev_pagemap *pgmap,
-				       unsigned long nr_pages)
+				       unsigned long nr_pages,
+				       bool use_template)
 {
 	unsigned long pfn, end_pfn = head_pfn + nr_pages;
 	unsigned int order = pgmap->vmemmap_shift;
+	struct page template;
 
 	/*
 	 * We have to initialize the pages, including setting up page links.
@@ -1174,12 +1199,27 @@ static void __ref memmap_init_compound(struct page *head,
 	 * the pages in the same go.
 	 */
 	__SetPageHead(head);
+
+	/*
+	 * A tail template can be reused for all tail pages in the same compound page
+	 * because shared state for compound tails is pre-set by prep_compound_tail().
+	 * The per-page page->virtual and section in flags are fixed up after copying.
+	 */
+	if (use_template)
+		init_template_tail_page(&template, head_pfn + 1, zone_idx, nid,
+					pgmap, head, order);
+
 	for (pfn = head_pfn + 1; pfn < end_pfn; pfn++) {
 		struct page *page = pfn_to_page(pfn);
 
-		__init_zone_device_page(page, pfn, zone_idx, nid, pgmap);
-		prep_compound_tail(page, head, order);
-		set_page_count(page, 0);
+		if (use_template) {
+			init_zone_device_page_from_template(page, pfn,
+							    &template);
+		} else {
+			__init_zone_device_page(page, pfn, zone_idx, nid, pgmap);
+			prep_compound_tail(page, head, order);
+			set_page_count(page, 0);
+		}
 	}
 	prep_compound_head(head, order);
 }
@@ -1214,7 +1254,8 @@ void __ref memmap_init_zone_device(struct zone *zone,
 
 	if (use_template) {
 		struct_page_layout_check();
-		init_template_page(&template, start_pfn, zone_idx, nid, pgmap);
+		init_template_head_page(&template, start_pfn, zone_idx,
+					nid, pgmap);
 	}
 
 	for (pfn = start_pfn; pfn < end_pfn; pfn += pfns_per_compound) {
@@ -1229,7 +1270,8 @@ void __ref memmap_init_zone_device(struct zone *zone,
 			continue;
 
 		memmap_init_compound(page, pfn, zone_idx, nid, pgmap,
-				     compound_nr_pages(altmap, pgmap));
+				     compound_nr_pages(altmap, pgmap),
+				     use_template);
 	}
 
 	pr_debug("%s initialised %lu pages in %ums\n", __func__,
