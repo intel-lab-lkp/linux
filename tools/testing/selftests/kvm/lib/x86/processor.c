@@ -164,12 +164,9 @@ bool kvm_is_tdp_enabled(void)
 static void virt_mmu_init(struct kvm_vm *vm, struct kvm_mmu *mmu,
 			  struct pte_masks *pte_masks)
 {
-	/* If needed, create the top-level page table. */
-	if (!mmu->pgd_created) {
-		mmu->pgd = vm_alloc_page_table(vm);
-		mmu->pgd_created = true;
-		mmu->arch.pte_masks = *pte_masks;
-	}
+	/* Create the top-level page table. */
+	mmu->pgd = vm_alloc_page_table(vm);
+	mmu->arch.pte_masks = *pte_masks;
 
 	TEST_ASSERT(mmu->pgtable_levels == 4 || mmu->pgtable_levels == 5,
 		    "Selftests MMU only supports 4-level and 5-level paging, not %u-level paging",
