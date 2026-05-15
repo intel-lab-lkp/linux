@@ -1474,7 +1474,8 @@ int _intel_psr_min_set_context_latency(const struct intel_crtc_state *crtc_state
 	 * SRD_STATUS is used by PSR1 and Panel Replay DP on LunarLake.
 	 */
 
-	if (needs_sel_update ||
+	if (intel_vrr_always_use_vrr_tg(display) ||
+	    needs_sel_update ||
 	    (DISPLAY_VER(display) >= 30 && needs_panel_replay) ||
 	    (DISPLAY_VER(display) < 30 && intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP)))
 		return 0;
