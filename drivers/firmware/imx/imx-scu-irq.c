@@ -179,6 +179,7 @@ static void imx_scu_irq_callback(struct mbox_client *c, void *msg)
 
 static ssize_t wakeup_source_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
 {
+	ssize_t len = 0;
 	int i;
 
 	for (i = 0; i < IMX_SC_IRQ_NUM_GROUP; i++) {
@@ -186,14 +187,16 @@ static ssize_t wakeup_source_show(struct kobject *kobj, struct kobj_attribute *a
 			continue;
 
 		if (scu_irq_wakeup[i].valid)
-			sprintf(buf, "Wakeup source group = %d, irq = 0x%x\n",
+			len += sysfs_emit_at(buf, len,
+				"Wakeup source group = %d, irq = 0x%x\n",
 				i, scu_irq_wakeup[i].wakeup_src);
 		else
-			sprintf(buf, "Spurious SCU wakeup, group = %d, irq = 0x%x\n",
+			len += sysfs_emit_at(buf, len,
+				"Spurious SCU wakeup, group = %d, irq = 0x%x\n",
 				i, scu_irq_wakeup[i].wakeup_src);
 	}
 
-	return strlen(buf);
+	return len;
 }
 
 int imx_scu_enable_general_irq_channel(struct device *dev)
