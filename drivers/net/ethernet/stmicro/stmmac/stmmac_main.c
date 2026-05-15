@@ -8176,6 +8176,9 @@ int stmmac_suspend(struct device *dev)
 {
 	struct net_device *ndev = dev_get_drvdata(dev);
 	struct stmmac_priv *priv = netdev_priv(ndev);
+	u32 rx_count = priv->plat->rx_queues_to_use;
+	struct stmmac_rx_queue *rx_q;
+	u32 queue;
 	u8 chan;
 
 	if (!ndev || !netif_running(ndev))
@@ -8197,6 +8200,19 @@ int stmmac_suspend(struct device *dev)
 
 	/* Stop TX/RX DMA */
 	stmmac_stop_all_dma(priv);
+
+	/* Free RX queue resources */
+	for (queue = 0; queue < rx_count; queue++) {
+		rx_q = &priv->dma_conf.rx_queue[queue];
+
+		/* Release the DMA RX socket buffers */
+		if (rx_q->xsk_pool)
+			dma_free_rx_xskbufs(priv, &priv->dma_conf, queue);
+		else
+			dma_free_rx_skbufs(priv, &priv->dma_conf, queue);
+		rx_q->buf_alloc_num = 0;
+		rx_q->xsk_pool = NULL;
+	}
 
 	stmmac_legacy_serdes_power_down(priv);
 
@@ -8315,6 +8331,14 @@ int stmmac_resume(struct device *dev)
 	phylink_prepare_resume(priv->phylink);
 
 	mutex_lock(&priv->lock);
+
+	ret = init_dma_rx_desc_rings(ndev, &priv->dma_conf, GFP_KERNEL);
+	if (ret < 0) {
+		netdev_err(priv->dev, "%s: rx dma desc rings init failed\n", __func__);
+		mutex_unlock(&priv->lock);
+		rtnl_unlock();
+		return ret;
+	}
 
 	stmmac_reset_queues_param(priv);
 
