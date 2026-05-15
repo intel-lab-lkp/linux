@@ -2504,6 +2504,13 @@ repeat:
 	}
 
 	if (folio) {
+		if (sgp == SGP_GET) {
+			if (!folio_test_uptodate(folio)) {
+				folio_put(folio);
+				folio = NULL;
+			}
+			goto out;
+		}
 		folio_lock(folio);
 
 		/* Has the folio been truncated or swapped out? */
@@ -2524,11 +2531,11 @@ repeat:
 	}
 
 	/*
-	 * SGP_READ: succeed on hole, with NULL folio, letting caller zero.
+	 * SGP_READ/SGP_GET: succeed on hole, with NULL folio, letting caller zero.
 	 * SGP_NOALLOC: fail on hole, with NULL folio, letting caller fail.
 	 */
 	*foliop = NULL;
-	if (sgp == SGP_READ)
+	if (sgp == SGP_READ || sgp == SGP_GET)
 		return 0;
 	if (sgp == SGP_NOALLOC)
 		return -ENOENT;
@@ -2649,13 +2656,15 @@ unlock:
  * @sgp:	SGP_* flags to control behavior
  *
  * Looks up the page cache entry at @inode & @index.  If a folio is
- * present, it is returned locked with an increased refcount.
+ * present, it is returned locked with an increased refcount, except
+ * for SGP_GET which returns the folio unlocked with an increased refcount.
  *
  * If the caller modifies data in the folio, it must call folio_mark_dirty()
  * before unlocking the folio to ensure that the folio is not reclaimed.
  * There is no need to reserve space before calling folio_mark_dirty().
  *
  * When no folio is found, the behavior depends on @sgp:
+ *  - for SGP_GET, *@foliop is %NULL and 0 is returned
  *  - for SGP_READ, *@foliop is %NULL and 0 is returned
  *  - for SGP_NOALLOC, *@foliop is %NULL and -ENOENT is returned
  *  - for all other flags a new folio is allocated, inserted into the
