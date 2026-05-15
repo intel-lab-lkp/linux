@@ -67,6 +67,8 @@ definitions:
         $ref: simple-card.yaml#/definitions/system-clock-direction-out
       system-clock-fixed:
         $ref: simple-card.yaml#/definitions/system-clock-fixed
+      system-clock-id:
+        $ref: simple-card.yaml#/definitions/system-clock-id
 
       dai-format:
         description: audio format.

@@ -49,6 +49,14 @@ definitions:
       single fixed sampling rate.
     $ref: /schemas/types.yaml#/definitions/flag
 
+  system-clock-id:
+    description:
+      Selects which system clock to configure via set_sysclk(). Corresponds
+      to the clk_id argument of snd_soc_dai_set_sysclk(). When absent the
+      driver default (0) is used. CPU and codec sub-nodes are parsed
+      independently so each side may carry a different value.
+    $ref: /schemas/types.yaml#/definitions/uint32
+
   mclk-fs:
     description: |
       Multiplication factor between stream rate and codec mclk.
@@ -135,6 +143,8 @@ definitions:
         $ref: "#/definitions/system-clock-direction-out"
       system-clock-fixed:
         $ref: "#/definitions/system-clock-fixed"
+      system-clock-id:
+        $ref: "#/definitions/system-clock-id"
     required:
       - sound-dai
 
