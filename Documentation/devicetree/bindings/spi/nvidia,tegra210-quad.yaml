@@ -78,7 +78,9 @@ allOf:
         compatible:
           not:
             contains:
-              const: nvidia,tegra234-qspi
+              enum:
+                - nvidia,tegra194-qspi
+                - nvidia,tegra234-qspi
     then:
       properties:
         iommus: false
