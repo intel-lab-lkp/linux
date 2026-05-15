@@ -1128,7 +1128,7 @@ iwl_mld_netdetect_match_info_handler(struct iwl_mld *mld,
 			 mld->netdetect))
 		return true;
 
-	if (IWL_FW_CHECK(mld, len < sizeof(*notif),
+	if (IWL_FW_CHECK(mld, len < sizeof(*notif) + NETDETECT_QUERY_BUF_LEN,
 			 "Invalid scan offload match notif of length: %d\n",
 			 len))
 		return true;
