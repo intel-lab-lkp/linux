@@ -10,6 +10,7 @@
 #include <drm/drm_rect.h>
 #include <drm/drm_mode.h>
 
+#include <linux/limits.h>
 #include <linux/string_helpers.h>
 #include <linux/errno.h>
 
@@ -407,10 +408,22 @@ KUNIT_ARRAY_PARAM(drm_rect_scale, drm_rect_scale_cases, drm_rect_scale_case_desc
 static void drm_test_rect_calc_hscale(struct kunit *test)
 {
 	const struct drm_rect_scale_case *params = test->param_value;
-	int scaling_factor;
+	/* With CONFIG_BUG=n, WARN_ON() is a no-op so no warning fires. */
+	int expected_warnings = IS_ENABLED(CONFIG_BUG) ?
+			(params->expected_scaling_factor == -EINVAL) : 0;
+	int scaling_factor = INT_MIN;
 
-	scaling_factor = drm_rect_calc_hscale(&params->src, &params->dst,
-					      params->min_range, params->max_range);
+	/*
+	 * drm_rect_calc_hscale() generates a warning backtrace whenever bad
+	 * parameters are passed to it. This affects unit tests with -EINVAL
+	 * error code in expected_scaling_factor.
+	 */
+	kunit_warning_suppress(test) {
+		scaling_factor = drm_rect_calc_hscale(&params->src, &params->dst,
+						      params->min_range,
+						      params->max_range);
+		KUNIT_EXPECT_SUPPRESSED_WARNING_COUNT(test, expected_warnings);
+	}
 
 	KUNIT_EXPECT_EQ(test, scaling_factor, params->expected_scaling_factor);
 }
@@ -418,10 +431,21 @@ static void drm_test_rect_calc_hscale(struct kunit *test)
 static void drm_test_rect_calc_vscale(struct kunit *test)
 {
 	const struct drm_rect_scale_case *params = test->param_value;
-	int scaling_factor;
+	/* With CONFIG_BUG=n, WARN_ON() is a no-op so no warning fires. */
+	int expected_warnings = IS_ENABLED(CONFIG_BUG) ?
+			(params->expected_scaling_factor == -EINVAL) : 0;
+	int scaling_factor = INT_MIN;
 
-	scaling_factor = drm_rect_calc_vscale(&params->src, &params->dst,
-					      params->min_range, params->max_range);
+	/*
+	 * drm_rect_calc_vscale() generates a warning backtrace whenever bad
+	 * parameters are passed to it. This affects unit tests with -EINVAL
+	 * error code in expected_scaling_factor.
+	 */
+	kunit_warning_suppress(test) {
+		scaling_factor = drm_rect_calc_vscale(&params->src, &params->dst,
+						      params->min_range, params->max_range);
+		KUNIT_EXPECT_SUPPRESSED_WARNING_COUNT(test, expected_warnings);
+	}
 
 	KUNIT_EXPECT_EQ(test, scaling_factor, params->expected_scaling_factor);
 }
