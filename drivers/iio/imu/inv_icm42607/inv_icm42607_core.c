@@ -15,6 +15,63 @@
 
 #include "inv_icm42607.h"
 
+static bool inv_icm42607_is_volatile_reg(struct device *dev, unsigned int reg)
+{
+	switch (reg) {
+	case INV_ICM42607_REG_MCLK_RDY:
+	case INV_ICM42607_REG_SIGNAL_PATH_RESET:
+	case INV_ICM42607_REG_TEMP_DATA1 ... INV_ICM42607_REG_APEX_DATA5:
+	case INV_ICM42607_REG_APEX_CONFIG0:
+	case INV_ICM42607_REG_FIFO_CONFIG2 ... INV_ICM42607_REG_FIFO_CONFIG3:
+	case INV_ICM42607_REG_FIFO_LOST_PKT0 ... INV_ICM42607_REG_APEX_DATA3:
+	case INV_ICM42607_REG_INT_STATUS_DRDY:
+	case INV_ICM42607_REG_INT_STATUS ... INV_ICM42607_REG_FIFO_DATA:
+		return true;
+	}
+
+	return false;
+}
+
+const struct regmap_config inv_icm42607_regmap_config = {
+	.reg_bits = 8,
+	.val_bits = 8,
+	.max_register = INV_ICM42607_REG_WHOAMI,
+	.cache_type = REGCACHE_MAPLE,
+	.volatile_reg = inv_icm42607_is_volatile_reg,
+};
+EXPORT_SYMBOL_NS_GPL(inv_icm42607_regmap_config, "IIO_ICM42607");
+
+/* chip initial default configuration */
+static const struct inv_icm42607_conf inv_icm42607_default_conf = {
+	.gyro = {
+		.mode = INV_ICM42607_SENSOR_MODE_OFF,
+		.fs = INV_ICM42607_GYRO_FS_1000DPS,
+		.odr = INV_ICM42607_ODR_100HZ,
+		.filter = INV_ICM42607_FILTER_BW_25HZ,
+	},
+	.accel = {
+		.mode = INV_ICM42607_SENSOR_MODE_OFF,
+		.fs = INV_ICM42607_ACCEL_FS_4G,
+		.odr = INV_ICM42607_ODR_100HZ,
+		.filter = INV_ICM42607_FILTER_BW_25HZ,
+	},
+	.temp_en = false,
+};
+
+const struct inv_icm42607_hw inv_icm42607_hw_data = {
+	.whoami = INV_ICM42607_WHOAMI,
+	.name = "icm42607",
+	.conf = &inv_icm42607_default_conf,
+};
+EXPORT_SYMBOL_NS_GPL(inv_icm42607_hw_data, "IIO_ICM42607");
+
+const struct inv_icm42607_hw inv_icm42607p_hw_data = {
+	.whoami = INV_ICM42607P_WHOAMI,
+	.name = "icm42607p",
+	.conf = &inv_icm42607_default_conf,
+};
+EXPORT_SYMBOL_NS_GPL(inv_icm42607p_hw_data, "IIO_ICM42607");
+
 static int inv_icm42607_set_conf(struct inv_icm42607_state *st,
 				 const struct inv_icm42607_conf *conf)
 {
@@ -81,6 +138,14 @@ static int inv_icm42607_setup(struct inv_icm42607_state *st,
 	unsigned int val;
 	int ret;
 
+	/*
+	 * Setup the bus first in case we need to set the SPI mode or
+	 * change the slew rate in order.
+	 */
+	ret = bus_setup(st);
+	if (ret)
+		return ret;
+
 	ret = regmap_read(st->map, INV_ICM42607_REG_WHOAMI, &val);
 	if (ret)
 		return ret;
@@ -94,19 +159,26 @@ static int inv_icm42607_setup(struct inv_icm42607_state *st,
 	if (ret)
 		return ret;
 
-	fsleep(1000);
+	/*
+	 * In order to confirm a reset is complete, we need to read the reset
+	 * bit, but in certain circumstances we need to set the bus up before
+	 * we can do a read. So we should wait the required amount of time
+	 * per the datasheet first, then set the bus up again, then read to
+	 * ensure the reset status is done. Invalidate the regmap cache since
+	 * we're doing a hardware reset.
+	 */
+	regcache_mark_dirty(st->map);
 
-	ret = regmap_read_poll_timeout(st->map, INV_ICM42607_REG_INT_STATUS,
-				       val, val & INV_ICM42607_INT_STATUS_RESET_DONE,
-				       INV_ICM42607_RESET_TIME_MS * 100,
-				       INV_ICM42607_RESET_TIME_MS * 1000);
-	if (ret)
-		return dev_err_probe(dev, ret,
-				     "reset error, reset done bit not set\n");
+	fsleep(INV_ICM42607_RESET_TIME_MS * 1000);
 
 	ret = bus_setup(st);
 	if (ret)
 		return ret;
+
+	ret = regmap_read(st->map, INV_ICM42607_REG_INT_STATUS, &val);
+	if (ret || (!(val & INV_ICM42607_INT_STATUS_RESET_DONE)))
+		return dev_err_probe(dev, -EIO,
+				     "reset error, reset done bit not set\n");
 
 	ret = regmap_set_bits(st->map, INV_ICM42607_REG_INTF_CONFIG0,
 			      INV_ICM42607_INTF_CONFIG0_SENSOR_DATA_ENDIAN);
