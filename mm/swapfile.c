@@ -3597,6 +3597,15 @@ SYSCALL_DEFINE2(swapon, const char __user *, specialfile, int, swap_flags)
 		}
 	}
 
+	/*
+	 * init_swap_ops() sets si->ops based on flags. It does not need
+	 * swapon_mutex, and must complete before enable_swap_info()
+	 * exposes the device.
+	 */
+	error = init_swap_ops(si);
+	if (error)
+		goto bad_swap_unlock_inode;
+
 	error = zswap_swapon(si->type, maxpages);
 	if (error)
 		goto bad_swap_unlock_inode;
