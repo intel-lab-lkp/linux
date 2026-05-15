@@ -487,27 +487,28 @@ EXPORT_SYMBOL_NS(ssp_register_consumer, "IIO_SSP_SENSORS");
 
 static int ssp_probe(struct spi_device *spi)
 {
+	struct device *dev = &spi->dev;
 	int ret, i;
 	struct ssp_data *data;
 
-	data = ssp_parse_dt(&spi->dev);
+	data = ssp_parse_dt(dev);
 	if (!data) {
-		dev_err(&spi->dev, "Failed to find platform data\n");
+		dev_err(dev, "Failed to find platform data\n");
 		return -ENODEV;
 	}
 
-	ret = mfd_add_devices(&spi->dev, PLATFORM_DEVID_NONE,
+	ret = mfd_add_devices(dev, PLATFORM_DEVID_NONE,
 			      sensorhub_sensor_devs,
 			      ARRAY_SIZE(sensorhub_sensor_devs), NULL, 0, NULL);
 	if (ret < 0) {
-		dev_err(&spi->dev, "mfd add devices fail\n");
+		dev_err(dev, "mfd add devices fail\n");
 		return ret;
 	}
 
 	spi->mode = SPI_MODE_1;
 	ret = spi_setup(spi);
 	if (ret < 0) {
-		dev_err(&spi->dev, "Failed to setup spi\n");
+		dev_err(dev, "Failed to setup spi\n");
 		goto err_setup_spi;
 	}
 
@@ -543,7 +544,7 @@ static int ssp_probe(struct spi_device *spi)
 				   IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 				   "SSP_Int", data);
 	if (ret < 0) {
-		dev_err(&spi->dev, "Irq request fail\n");
+		dev_err(dev, "Irq request fail\n");
 		goto err_setup_irq;
 	}
 
@@ -557,11 +558,11 @@ static int ssp_probe(struct spi_device *spi)
 	if (data->fw_dl_state == SSP_FW_DL_STATE_NONE) {
 		ret = ssp_initialize_mcu(data);
 		if (ret < 0) {
-			dev_err(&spi->dev, "Initialize_mcu failed\n");
+			dev_err(dev, "Initialize_mcu failed\n");
 			goto err_read_reg;
 		}
 	} else {
-		dev_err(&spi->dev, "Firmware version not supported\n");
+		dev_err(dev, "Firmware version not supported\n");
 		ret = -EPERM;
 		goto err_read_reg;
 	}
@@ -574,9 +575,7 @@ err_setup_irq:
 	mutex_destroy(&data->pending_lock);
 	mutex_destroy(&data->comm_lock);
 err_setup_spi:
-	mfd_remove_devices(&spi->dev);
-
-	dev_err(&spi->dev, "Probe failed!\n");
+	mfd_remove_devices(dev);
 
 	return ret;
 }
