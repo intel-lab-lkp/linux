@@ -2360,6 +2360,7 @@ err_dma_free:
 	dma_free_coherent(unicam->dev, node->dummy_buf.size,
 			  node->dummy_buf_cpu_addr,
 			  node->dummy_buf.dma_addr);
+	node->dummy_buf_cpu_addr = NULL;
 err_entity_cleanup:
 	media_entity_cleanup(&vdev->entity);
 err_unicam_put:
@@ -2379,10 +2380,12 @@ static void unicam_unregister_nodes(struct unicam_device *unicam)
 			node->registered = false;
 		}
 
-		if (node->dummy_buf_cpu_addr)
+		if (node->dummy_buf_cpu_addr) {
 			dma_free_coherent(unicam->dev, node->dummy_buf.size,
 					  node->dummy_buf_cpu_addr,
 					  node->dummy_buf.dma_addr);
+			node->dummy_buf_cpu_addr = NULL;
+		}
 	}
 }
 
