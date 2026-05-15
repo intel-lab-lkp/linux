@@ -445,7 +445,7 @@ static int setup_maple_commands(struct device *device, void *ignored)
 /* VBLANK bottom half - implemented via workqueue */
 static void maple_vblank_handler(struct work_struct *work)
 {
-	int x, locking;
+	int x;
 	struct maple_device *mdev;
 
 	if (!maple_dma_done())
@@ -474,13 +474,10 @@ static void maple_vblank_handler(struct work_struct *work)
 				if (!mdev)
 					break;
 				atomic_set(&mdev->busy, 1);
-				locking = maple_add_packet(mdev, 0,
+				maple_add_packet(mdev, 0,
 					MAPLE_COMMAND_DEVINFO, 0, NULL);
-				if (!locking)
-					break;
-				}
 			}
-
+		}
 		maple_pnp_time = jiffies + MAPLE_PNP_INTERVAL;
 	}
 
@@ -578,7 +575,8 @@ static void maple_response_devinfo(struct maple_device *mdev,
 				   char *recvbuf)
 {
 	char submask;
-	if (!started || (scanning == 2) || !fullscan) {
+	if (!started || (scanning == 2) || !fullscan ||
+	    ((mdev->unit == 0) && empty[mdev->port])) {
 		if ((mdev->unit == 0) && (checked[mdev->port] == false)) {
 			checked[mdev->port] = true;
 			maple_attach_driver(mdev);
@@ -644,7 +642,7 @@ static void maple_dma_handler(struct work_struct *work)
 			recvbuf = mq->recvbuf->buf;
 			__flush_invalidate_region(sh_cacheop_vaddr(recvbuf),
 					0x400);
-			code = recvbuf[0];
+			code = (s8)recvbuf[0];
 			kfree(mq->sendbuf);
 			list_del_init(&mq->list);
 			switch (code) {
