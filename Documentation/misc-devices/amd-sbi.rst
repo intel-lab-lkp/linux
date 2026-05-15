@@ -48,6 +48,56 @@ Access restrictions:
  * APML Mailbox messages and Register xfer access are read-write,
  * CPUID and MCA_MSR access is read-only.
 
+SBTSI device
+============
+
+sbtsi driver under the drivers/misc/amd-sbi creates miscdevice
+/dev/sbtsi-* to let user space programs run APML TSI register xfer
+commands.
+
+The driver supports both I2C and I3C transports for SB-TSI targets.
+The transport is selected by the bus where the device is enumerated.
+
+.. code-block:: bash
+
+   $ ls -al /dev/sbtsi-4c
+   crw-------    1 root     root       10, 116 Apr  2 05:22 /dev/sbtsi-4c
+
+
+Access restrictions:
+ * Only root user is allowed to open the file.
+ * APML TSI Register xfer access is read-write.
+
+SBTSI hwmon interface
+=====================
+
+The sbtsi_temp auxiliary driver binds to the auxiliary device published
+by the core sbtsi driver on the auxiliary bus. The auxiliary device is
+named amd-sbtsi.temp-sensor.<addr> where <addr> is the device's dynamic
+address.
+
+It registers a hwmon device, providing a standard Linux hwmon interface
+for reading CPU temperature and managing temperature limits.
+
+The hwmon device appears under ``/sys/class/hwmon/`` when both ``sbtsi.ko``
+and ``sbtsi_temp.ko`` are loaded.
+
+Verify auxiliary bus device::
+
+  ls /sys/bus/auxiliary/devices/
+  # e.g. amd-sbtsi.temp-sensor.X
+
+Example usage::
+
+  # Read current temperature
+  cat /sys/class/hwmon/hwmon<N>/temp1_input
+
+  # Set high temperature limit to 70 °C
+  echo 70000 > /sys/class/hwmon/hwmon<N>/temp1_max
+
+  # Verify
+  cat /sys/class/hwmon/hwmon<N>/temp1_max
+
 Driver IOCTLs
 =============
 
@@ -63,6 +113,9 @@ Driver IOCTLs
 .. c:macro:: SBRMI_IOCTL_REG_XFER_CMD
 .. kernel-doc:: include/uapi/misc/amd-apml.h
    :doc: SBRMI_IOCTL_REG_XFER_CMD
+.. c:macro:: SBTSI_IOCTL_REG_XFER_CMD
+.. kernel-doc:: include/uapi/misc/amd-apml.h
+   :doc: SBTSI_IOCTL_REG_XFER_CMD
 
 User-space usage
 ================
@@ -85,6 +138,16 @@ Next thing, open the device file, as follows::
     exit(1);
   }
 
+To open SB-TSI device::
+
+  int file;
+
+  file = open("/dev/sbtsi-*", O_RDWR);
+  if (file < 0) {
+    /* ERROR HANDLING */
+    exit(1);
+  }
+
 The following IOCTLs are defined:
 
 ``#define SB_BASE_IOCTL_NR      	0xF9``
@@ -92,6 +155,7 @@ The following IOCTLs are defined:
 ``#define SBRMI_IOCTL_CPUID_CMD		_IOWR(SB_BASE_IOCTL_NR, 1, struct apml_cpuid_msg)``
 ``#define SBRMI_IOCTL_MCAMSR_CMD	_IOWR(SB_BASE_IOCTL_NR, 2, struct apml_mcamsr_msg)``
 ``#define SBRMI_IOCTL_REG_XFER_CMD	_IOWR(SB_BASE_IOCTL_NR, 3, struct apml_reg_xfer_msg)``
+``#define SBTSI_IOCTL_REG_XFER_CMD      _IOWR(SB_BASE_IOCTL_NR, 4, struct apml_tsi_xfer_msg)``
 
 
 User space C-APIs are made available by esmi_oob_library, hosted at
