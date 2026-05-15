@@ -1509,9 +1509,13 @@ static int stage2_split_walker(const struct kvm_pgtable_visit_ctx *ctx,
 	int nr_pages;
 	u64 phys;
 
-	/* No huge-pages exist at the last level */
+	/*
+	 * No huge-pages exist at the last level
+	 * Also, if one PTE exist in the last level, the whole block is already
+	 * split, so skip walking it's siblings.
+	 */
 	if (level == KVM_PGTABLE_LAST_LEVEL)
-		return 0;
+		return SKIP_SIBLINGS;
 
 	/* We only split valid block mappings */
 	if (!kvm_pte_valid(pte))
@@ -1561,7 +1565,9 @@ static int stage2_split_walker(const struct kvm_pgtable_visit_ctx *ctx,
 	 */
 	new = kvm_init_table_pte(childp, mm_ops);
 	stage2_make_pte(ctx, new);
-	return 0;
+
+	/* All child entries are already split, so skip walking them */
+	return SKIP_CHILDREN;
 }
 
 int kvm_pgtable_stage2_split(struct kvm_pgtable *pgt, u64 addr, u64 size,
