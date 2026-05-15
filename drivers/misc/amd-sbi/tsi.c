@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
- * tsi.c - AMD SBTSI I2C core driver. Probes the SBTSI device over I2C
+ * tsi.c - AMD SBTSI I2C/I3C core driver. Probes the SBTSI device over I2C/I3C
  *         and publishes an auxiliary device on the auxiliary bus.
  *
  * Copyright (C) 2026 Advanced Micro Devices, Inc.
@@ -89,6 +89,7 @@ static int sbtsi_i2c_probe(struct i2c_client *client)
 	if (!data)
 		return -ENOMEM;
 
+	data->is_i3c = false;
 	data->client = client;
 	err = i2c_smbus_read_byte_data(data->client, SBTSI_REG_CONFIG);
 	if (err < 0)
@@ -123,7 +124,61 @@ static struct i2c_driver sbtsi_driver = {
 	.id_table = sbtsi_id,
 };
 
-module_i2c_driver(sbtsi_driver);
+static int sbtsi_i3c_probe(struct i3c_device *i3cdev)
+{
+	struct device *dev = i3cdev_to_dev(i3cdev);
+	struct sbtsi_data *data;
+	int err;
+	u8 val;
 
-MODULE_DESCRIPTION("AMD SB-TSI I2C core driver");
+	/*
+	 * AMD OOB devices differ on basis of Instance ID,
+	 * for SBTSI, instance ID is 0.
+	 * As the device Id match is not on basis of Instance ID,
+	 * add the below check to probe the SBTSI device only and
+	 * not other OOB devices.
+	 */
+	if (I3C_PID_INSTANCE_ID(i3cdev->desc->info.pid) != 0)
+		return -ENXIO;
+
+	data = devm_kzalloc(dev, sizeof(*data), GFP_KERNEL);
+	if (!data)
+		return -ENOMEM;
+
+	data->i3cdev = i3cdev;
+	data->is_i3c = true;
+
+	err = sbtsi_xfer(data, SBTSI_REG_CONFIG, &val, true);
+	if (err)
+		return err;
+
+	data->ext_range_mode = FIELD_GET(BIT(SBTSI_CONFIG_EXT_RANGE_SHIFT), val);
+	data->read_order = FIELD_GET(BIT(SBTSI_CONFIG_READ_ORDER_SHIFT), val);
+
+	dev_set_drvdata(dev, data);
+	return sbtsi_create_hwmon_adev(dev, i3cdev->desc->info.dyn_addr);
+}
+
+static const struct i3c_device_id sbtsi_i3c_id[] = {
+	/* PID for AMD SBTSI device */
+	I3C_DEVICE_EXTRA_INFO(0x112, 0x0, 0x1, NULL),
+	I3C_DEVICE_EXTRA_INFO(0x0, 0x0, 0x118, NULL),	/* Socket:0, Venice */
+	I3C_DEVICE_EXTRA_INFO(0x0, 0x100, 0x118, NULL),	/* Socket:1, Venice */
+	I3C_DEVICE_EXTRA_INFO(0x112, 0x0, 0x119, NULL),	/* Socket:0, Venice */
+	I3C_DEVICE_EXTRA_INFO(0x112, 0x100, 0x119, NULL),	/* Socket:1, Venice */
+	{}
+};
+MODULE_DEVICE_TABLE(i3c, sbtsi_i3c_id);
+
+static struct i3c_driver sbtsi_i3c_driver = {
+	.driver = {
+		.name = "sbtsi-i3c",
+	},
+	.probe = sbtsi_i3c_probe,
+	.id_table = sbtsi_i3c_id,
+};
+
+module_i3c_i2c_driver(sbtsi_i3c_driver, &sbtsi_driver);
+
+MODULE_DESCRIPTION("AMD SB-TSI I2C/I3C core driver");
 MODULE_LICENSE("GPL");

@@ -9,18 +9,26 @@
 #define _LINUX_TSI_H_
 
 #include <linux/i2c.h>
+#include <linux/i3c/device.h>
+#include <linux/i3c/master.h>
 #include <linux/types.h>
 
 /**
  * struct sbtsi_data - driver private data for an AMD SB-TSI device
  * @client:	underlying I2C client
+ * @i3cdev:	underlying I3C device (when using I3C bus)
  * @ext_range_mode:	sensor uses extended temperature range
  * @read_order:	if set, decimal part must be read before integer part
+ * @is_i3c:	true when the device is accessed over I3C
  */
 struct sbtsi_data {
-	struct i2c_client *client;
+	union {
+		struct i2c_client *client;
+		struct i3c_device *i3cdev;
+	};
 	bool ext_range_mode;
 	bool read_order;
+	bool is_i3c;
 };
 
 /*
