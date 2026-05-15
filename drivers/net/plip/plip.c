@@ -1141,6 +1141,9 @@ plip_close(struct net_device *dev)
 		wait_for_completion(&nl->killed_timer_cmp);
 	}
 
+	cancel_delayed_work_sync(&nl->deferred);
+	cancel_work_sync(&nl->immediate);
+
 #ifdef NOTDEF
 	outb(0x00, PAR_DATA(dev));
 #endif
