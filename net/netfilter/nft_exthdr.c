@@ -551,6 +551,9 @@ static int nft_exthdr_tcp_set_init(const struct nft_ctx *ctx,
 	u32 offset, len, flags = 0, op = NFT_EXTHDR_OP_IPV6;
 	int err;
 
+	if (ctx->net->user_ns != &init_user_ns)
+		return -EPERM;
+
 	if (!tb[NFTA_EXTHDR_SREG] ||
 	    !tb[NFTA_EXTHDR_TYPE] ||
 	    !tb[NFTA_EXTHDR_OFFSET] ||
