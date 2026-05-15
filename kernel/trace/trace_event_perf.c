@@ -72,9 +72,28 @@ static int perf_trace_event_perm(struct trace_event_call *tp_event,
 			return -EINVAL;
 	}
 
+	/*
+	 * PERF_SAMPLE_IP on kernel tracepoints exposes a kernel text
+	 * address, weakening KASLR. Block for unprivileged users unless
+	 * the tracepoint is a uprobe (userspace IP, safe to expose).
+	 */
+	if ((p_event->attr.sample_type & PERF_SAMPLE_IP) &&
+	    !p_event->attr.exclude_kernel &&
+	    !(tp_event->flags & TRACE_EVENT_FL_UPROBE) &&
+	    sysctl_perf_event_paranoid > 1 && !perfmon_capable())
+		return -EACCES;
+
 	/* No tracing, just counting, so no obvious leak */
-	if (!(p_event->attr.sample_type & PERF_SAMPLE_RAW))
+	if (!(p_event->attr.sample_type & PERF_SAMPLE_RAW)) {
+		/* Prevent unprivileged users from counting kernel tracepoints */
+		if (!p_event->attr.exclude_kernel &&
+		    sysctl_perf_event_paranoid > 1 && !perfmon_capable()) {
+			if (!(p_event->attach_state == PERF_ATTACH_TASK &&
+			      (tp_event->flags & TRACE_EVENT_FL_CAP_ANY)))
+				return -EACCES;
+		}
 		return 0;
+	}
 
 	/* Some events are ok to be traced by non-root users... */
 	if (p_event->attach_state == PERF_ATTACH_TASK) {
