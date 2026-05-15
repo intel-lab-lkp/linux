@@ -12,3 +12,10 @@ PROVIDE(snp_cpuid			= __pi_snp_cpuid);
 PROVIDE(snp_cpuid_get_table		= __pi_snp_cpuid_get_table);
 PROVIDE(svsm_issue_call			= __pi_svsm_issue_call);
 PROVIDE(svsm_process_result_codes	= __pi_svsm_process_result_codes);
+
+#ifdef CONFIG_SECURE_LAUNCH
+__pi_bcmp				= bcmp;
+__pi_memcmp				= memcmp;
+__pi_strlen				= strlen;
+__pi___WARN_trap			= __WARN_trap;
+#endif

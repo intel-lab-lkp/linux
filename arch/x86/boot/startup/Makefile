@@ -24,6 +24,7 @@ obj-$(CONFIG_AMD_MEM_ENCRYPT)	+= sme.o sev-startup.o
 slaunch-objs			+= lib-sha1.o
 slaunch-objs			+= lib-sha256.o
 slaunch-objs			+= lib-sha512.o
+slaunch-objs			+= tpm_drv.o
 obj-$(CONFIG_SECURE_LAUNCH)	+= $(slaunch-objs)
 
 pi-objs				:= $(patsubst %.o,$(obj)/%.o,$(obj-y))
