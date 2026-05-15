@@ -1165,7 +1165,7 @@ iwl_mld_set_netdetect_info(struct iwl_mld *mld,
 
 	for_each_set_bit(i, &matched_profiles, netdetect_cfg->n_match_sets) {
 		struct cfg80211_wowlan_nd_match *match;
-		int idx, j, n_channels = 0;
+		int idx, j, max, n_channels = 0;
 		struct iwl_scan_offload_profile_match *matches =
 			(void *)netdetect_res->matches;
 
@@ -1192,9 +1192,19 @@ iwl_mld_set_netdetect_info(struct iwl_mld *mld,
 		if (netdetect_cfg->n_channels < n_channels)
 			continue;
 
-		for_each_set_bit(j,
-				 (unsigned long *)&matches[i].matching_channels[0],
-				 sizeof(matches[i].matching_channels)) {
+		/* Clamp bit-index iteration to the channels table length:
+		 * a firmware-set bit past n_channels would otherwise index
+		 * past the kmemdup'd netdetect_cfg->channels[] allocation.
+		 */
+		max = min_t(int, BITS_PER_BYTE *
+			    sizeof(matches[i].matching_channels),
+			    netdetect_cfg->n_channels);
+
+		for (j = 0; j < max; j++) {
+			if (!(matches[i].matching_channels[j / BITS_PER_BYTE] &
+			      BIT(j % BITS_PER_BYTE)))
+				continue;
+
 			match->channels[match->n_channels] =
 				netdetect_cfg->channels[j]->center_freq;
 			match->n_channels++;
