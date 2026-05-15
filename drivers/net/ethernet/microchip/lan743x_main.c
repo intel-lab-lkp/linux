@@ -1266,6 +1266,8 @@ static int lan743x_mac_open(struct lan743x_adapter *adapter)
 	u32 temp;
 
 	temp = lan743x_csr_read(adapter, MAC_RX);
+	temp |= MAC_RX_FSE_;
+	lan743x_csr_write(adapter, MAC_RX, temp);
 	lan743x_csr_write(adapter, MAC_RX, temp | MAC_RX_RXEN_);
 	temp = lan743x_csr_read(adapter, MAC_TX);
 	lan743x_csr_write(adapter, MAC_TX, temp | MAC_TX_TXEN_);
