@@ -141,4 +141,6 @@ int pmu_for_each_sys_metric(pmu_metric_iter_fn fn, void *data);
 
 const char *describe_metricgroup(const char *group);
 
+extern const char big_c_string[];
+
 #endif
