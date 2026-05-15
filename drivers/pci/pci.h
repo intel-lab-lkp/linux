@@ -366,6 +366,9 @@ static inline void pci_create_legacy_files(struct pci_bus *bus) { }
 static inline void pci_remove_legacy_files(struct pci_bus *bus) { }
 #endif
 
+/* List of all known PCI buses */
+extern struct list_head pci_root_buses;
+
 /* Lock for read/write access to pci device and bus lists */
 extern struct rw_semaphore pci_bus_sem;
 extern struct mutex pci_slot_mutex;

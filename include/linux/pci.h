@@ -1192,10 +1192,6 @@ extern enum pcie_bus_config_types pcie_bus_config;
 
 extern const struct bus_type pci_bus_type;
 
-/* Do NOT directly access these two variables, unless you are arch-specific PCI
- * code, or PCI core code. */
-extern struct list_head pci_root_buses;	/* List of all known PCI buses */
-
 void pcibios_resource_survey_bus(struct pci_bus *bus);
 void pcibios_bus_add_device(struct pci_dev *pdev);
 void pcibios_add_bus(struct pci_bus *bus);

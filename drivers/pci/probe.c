@@ -33,9 +33,7 @@ static struct resource busn_resource = {
 	.flags	= IORESOURCE_BUS,
 };
 
-/* Ugh.  Need to stop exporting this to modules. */
 LIST_HEAD(pci_root_buses);
-EXPORT_SYMBOL(pci_root_buses);
 
 static LIST_HEAD(pci_domain_busn_res_list);
 
