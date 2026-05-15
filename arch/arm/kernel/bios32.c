@@ -59,9 +59,9 @@ static void pcibios_bus_report_status(struct pci_bus *bus, u_int status_mask, in
 
 void pcibios_report_status(u_int status_mask, int warn)
 {
-	struct pci_bus *bus;
+	struct pci_bus *bus = NULL;
 
-	list_for_each_entry(bus, &pci_root_buses, node)
+	while ((bus = pci_find_next_bus(bus)) != NULL)
 		pcibios_bus_report_status(bus, status_mask, warn);
 }
 
