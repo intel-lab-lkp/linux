@@ -1910,10 +1910,26 @@ EXPORT_SYMBOL(set_binfmt);
  */
 void set_dumpable(struct mm_struct *mm, int value)
 {
+	struct task_struct *t;
+	bool user;
+
 	if (WARN_ON((unsigned)value > SUID_DUMP_ROOT))
 		return;
 
 	__mm_flags_set_mask_dumpable(mm, value);
+
+	/*
+	 * Mirror to every sibling's user_dumpable cache, serialized with
+	 * exit_mm()'s write via task_lock(t) to avoid bit-field RMW races.
+	 */
+	user = (value == SUID_DUMP_USER);
+	rcu_read_lock();
+	for_each_thread(current, t) {
+		task_lock(t);
+		t->user_dumpable = user;
+		task_unlock(t);
+	}
+	rcu_read_unlock();
 }
 
 static inline struct user_arg_ptr native_arg(const char __user *const __user *p)
