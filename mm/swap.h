@@ -58,7 +58,11 @@ struct swap_io_ctx {
 	struct swap_info_struct	*sis;
 };
 
+#define SWAP_OPS_F_NOFS		(1U << 0)
+
 struct swap_ops {
+	unsigned int		flags;
+
 	bool (*can_merge)(struct folio *folio, struct folio *prev_folio,
 			size_t prev_folio_size);
 	void (*submit_write)(struct swap_io_ctx *ctx);
@@ -503,7 +507,6 @@ static inline int non_swapcache_batch(swp_entry_t entry, int max_nr)
 #endif /* CONFIG_SWAP */
 
 extern const struct swap_ops swap_bdev_ops;
-extern const struct swap_ops swap_fs_ops;
 
 int shmem_writeout(struct swap_io_ctx *ctx, struct folio *folio,
 		struct list_head *folio_list);
