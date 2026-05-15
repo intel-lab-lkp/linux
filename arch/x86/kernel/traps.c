@@ -863,6 +863,8 @@ static bool try_fixup_enqcmd_gp(void)
 		return false;
 
 	pasid = mm_get_enqcmd_pasid(current->mm);
+	if (pasid == IOMMU_PASID_INVALID)
+		return false;
 
 	/*
 	 * Did this thread already have its PASID activated?
