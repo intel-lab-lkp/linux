@@ -2531,14 +2531,11 @@ repeat:
 	}
 
 	/*
-	 * SGP_READ/SGP_GET: succeed on hole, with NULL folio, letting caller zero.
-	 * SGP_NOALLOC: fail on hole, with NULL folio, letting caller fail.
+	 * SGP_READ/SGP_GET/SGP_NOALLOC: succeed on hole, with NULL folio.
 	 */
 	*foliop = NULL;
-	if (sgp == SGP_READ || sgp == SGP_GET)
+	if (sgp <= SGP_NOALLOC)
 		return 0;
-	if (sgp == SGP_NOALLOC)
-		return -ENOENT;
 
 	/*
 	 * Fast cache lookup and swap lookup did not find it: allocate.
@@ -2666,7 +2663,7 @@ unlock:
  * When no folio is found, the behavior depends on @sgp:
  *  - for SGP_GET, *@foliop is %NULL and 0 is returned
  *  - for SGP_READ, *@foliop is %NULL and 0 is returned
- *  - for SGP_NOALLOC, *@foliop is %NULL and -ENOENT is returned
+ *  - for SGP_NOALLOC, *@foliop is %NULL and 0 is returned
  *  - for all other flags a new folio is allocated, inserted into the
  *    page cache and returned locked in @foliop.
  *
