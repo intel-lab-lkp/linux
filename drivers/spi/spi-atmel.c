@@ -1625,12 +1625,12 @@ static int atmel_spi_probe(struct platform_device *pdev)
 					0, dev_name(&pdev->dev), host);
 	}
 	if (ret)
-		return ret;
+		goto out_free_dma;
 
 	/* Initialize the hardware */
 	ret = clk_prepare_enable(clk);
 	if (ret)
-		return ret;
+		goto out_free_dma;
 
 	/*
 	 * In cases where the peripheral clock is higher,the FLEX_SPI_CSRx.SCBR
@@ -1661,7 +1661,7 @@ static int atmel_spi_probe(struct platform_device *pdev)
 
 	ret = spi_register_controller(host);
 	if (ret)
-		goto out_free_dma;
+		goto out_disable_rpm;
 
 	/* go! */
 	dev_info(&pdev->dev, "Atmel SPI Controller version 0x%x at 0x%08lx (irq %d)\n",
@@ -1670,18 +1670,18 @@ static int atmel_spi_probe(struct platform_device *pdev)
 
 	return 0;
 
-out_free_dma:
+out_disable_rpm:
 	pm_runtime_disable(&pdev->dev);
 	pm_runtime_set_suspended(&pdev->dev);
-
-	if (as->use_dma)
-		atmel_spi_release_dma(host, as);
-
 	spi_writel(as, CR, SPI_BIT(SWRST));
 	spi_writel(as, CR, SPI_BIT(SWRST)); /* AT91SAM9263 Rev B workaround */
-	clk_disable_unprepare(as->gclk);
+	if (as->gclk)
+		clk_disable_unprepare(as->gclk);
 out_disable_clk:
 	clk_disable_unprepare(clk);
+out_free_dma:
+	if (as->use_dma)
+		atmel_spi_release_dma(host, as);
 
 	return ret;
 }
