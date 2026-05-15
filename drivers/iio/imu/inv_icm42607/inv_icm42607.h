@@ -158,6 +158,7 @@ struct inv_icm42607_state {
 	struct iio_dev *indio_gyro;
 	struct iio_dev *indio_accel;
 	struct {
+		s64 gyro;
 		s64 accel;
 	} timestamp;
 	struct inv_icm42607_apex apex;
@@ -428,6 +429,10 @@ int inv_icm42607_set_accel_conf(struct inv_icm42607_state *st,
 				struct inv_icm42607_sensor_conf *conf,
 				unsigned int *sleep_ms);
 
+int inv_icm42607_set_gyro_conf(struct inv_icm42607_state *st,
+			       struct inv_icm42607_sensor_conf *conf,
+			       unsigned int *sleep_ms);
+
 int inv_icm42607_set_temp_conf(struct inv_icm42607_state *st, bool enable,
 			       unsigned int *sleep_ms);
 
@@ -436,6 +441,10 @@ int inv_icm42607_disable_wom(struct inv_icm42607_state *st);
 
 int inv_icm42607_core_probe(struct regmap *regmap, const struct inv_icm42607_hw *hw,
 			    inv_icm42607_bus_setup bus_setup);
+
+struct iio_dev *inv_icm42607_gyro_init(struct inv_icm42607_state *st);
+
+int inv_icm42607_gyro_parse_fifo(struct iio_dev *indio_dev);
 
 struct iio_dev *inv_icm42607_accel_init(struct inv_icm42607_state *st);
 
