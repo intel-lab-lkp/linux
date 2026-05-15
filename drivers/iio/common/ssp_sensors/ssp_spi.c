@@ -386,7 +386,7 @@ int ssp_irq_msg(struct ssp_data *data)
 			if (iter->options == msg_options) {
 				list_del(&iter->list);
 				msg = iter;
-				break;
+				return ret;
 			}
 		}
 
@@ -410,7 +410,7 @@ int ssp_irq_msg(struct ssp_data *data)
 			dev_err(SSP_DEV, "No match error %x\n",
 				msg_options);
 
-			break;
+			return ret;
 		}
 
 		if (msg_type == SSP_AP2HUB_READ)
@@ -428,14 +428,14 @@ int ssp_irq_msg(struct ssp_data *data)
 				msg->length = 1;
 
 				list_add_tail(&msg->list, &data->pending_list);
-				break;
+				return ret;
 			}
 		}
 
 		if (msg->done)
 			if (!completion_done(msg->done))
 				complete(msg->done);
-		break;
+		return ret;
 	}
 	case SSP_HUB2AP_WRITE:
 		buffer = kzalloc(length, GFP_KERNEL | GFP_DMA);
@@ -446,20 +446,20 @@ int ssp_irq_msg(struct ssp_data *data)
 		if (ret < 0) {
 			dev_err(SSP_DEV, "spi read fail\n");
 			kfree(buffer);
-			break;
+			return ret;
 		}
 
 		ret = ssp_parse_dataframe(data, buffer, length);
 
 		kfree(buffer);
-		break;
+		return ret;
 
 	default:
 		dev_err(SSP_DEV, "unknown msg type\n");
 		return -EPROTO;
 	}
 
-	return ret;
+	return 0;
 }
 
 void ssp_clean_pending_list(struct ssp_data *data)
