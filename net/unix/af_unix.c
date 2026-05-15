@@ -2710,39 +2710,22 @@ static int unix_read_skb(struct sock *sk, skb_read_actor_t recv_actor)
 /*
  *	Sleep until more data has arrived. But check for races..
  */
-static long unix_stream_data_wait(struct sock *sk, long timeo,
-				  struct sk_buff *last, bool freezable)
+static long unix_stream_data_wait(struct sock *sk, long timeo, bool freezable)
+__releases(&unix_sk(sk)->iolock)
+__releases(&unix_sk(sk)->lock)
 {
 	unsigned int state = TASK_INTERRUPTIBLE | freezable * TASK_FREEZABLE;
-	struct sk_buff *tail;
 	DEFINE_WAIT(wait);
 
-	unix_state_lock(sk);
+	prepare_to_wait(sk_sleep(sk), &wait, state);
+	unix_state_unlock(sk);
+	mutex_unlock(&unix_sk(sk)->iolock);
 
-	for (;;) {
-		prepare_to_wait(sk_sleep(sk), &wait, state);
-
-		tail = skb_peek_tail(&sk->sk_receive_queue);
-		if (tail != last ||
-		    sk->sk_err ||
-		    (sk->sk_shutdown & RCV_SHUTDOWN) ||
-		    signal_pending(current) ||
-		    !timeo)
-			break;
-
-		sk_set_bit(SOCKWQ_ASYNC_WAITDATA, sk);
-		unix_state_unlock(sk);
-		timeo = schedule_timeout(timeo);
-		unix_state_lock(sk);
-
-		if (sock_flag(sk, SOCK_DEAD))
-			break;
-
-		sk_clear_bit(SOCKWQ_ASYNC_WAITDATA, sk);
-	}
+	sk_set_bit(SOCKWQ_ASYNC_WAITDATA, sk);
+	timeo = schedule_timeout(timeo);
+	sk_clear_bit(SOCKWQ_ASYNC_WAITDATA, sk);
 
 	finish_wait(sk_sleep(sk), &wait);
-	unix_state_unlock(sk);
 	return timeo;
 }
 
@@ -2955,7 +2938,7 @@ redo:
 	skip = max(sk_peek_offset(sk, flags), 0);
 
 	do {
-		struct sk_buff *skb, *last;
+		struct sk_buff *skb;
 		int chunk;
 
 		unix_state_lock(sk);
@@ -2963,7 +2946,7 @@ redo:
 			err = -ECONNRESET;
 			goto unlock;
 		}
-		last = skb = skb_peek(&sk->sk_receive_queue);
+		skb = skb_peek(&sk->sk_receive_queue);
 
 again:
 #if IS_ENABLED(CONFIG_AF_UNIX_OOB)
@@ -2989,15 +2972,13 @@ again:
 			if (sk->sk_shutdown & RCV_SHUTDOWN)
 				goto unlock;
 
-			unix_state_unlock(sk);
 			if (!timeo) {
 				err = -EAGAIN;
-				break;
+				goto unlock;
 			}
 
-			mutex_unlock(&u->iolock);
-
-			timeo = unix_stream_data_wait(sk, timeo, last, freezable);
+			/* does unix_state_unlock() and drops u->iolock */
+			timeo = unix_stream_data_wait(sk, timeo, freezable);
 
 			if (signal_pending(current)) {
 				err = sock_intr_errno(timeo);
@@ -3013,7 +2994,6 @@ unlock:
 
 		while (skip >= unix_skb_len(skb)) {
 			skip -= unix_skb_len(skb);
-			last = skb;
 			skb = skb_peek_next(skb, &sk->sk_receive_queue);
 			if (!skb)
 				goto again;
@@ -3087,7 +3067,6 @@ unlock:
 				break;
 
 			skip = 0;
-			last = skb;
 			unix_state_lock(sk);
 			skb = skb_peek_next(skb, &sk->sk_receive_queue);
 			if (skb)
