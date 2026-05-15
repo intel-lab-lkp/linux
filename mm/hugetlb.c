@@ -3010,9 +3010,22 @@ out_subpool_put:
 	 * put page to subpool iff the quota of subpool's rsv_hpages is used
 	 * during hugepage_subpool_get_pages.
 	 */
-	if (map_chg && !gbl_chg) {
-		gbl_reserve = hugepage_subpool_put_pages(spool, 1);
-		hugetlb_acct_memory(h, -gbl_reserve);
+	if (map_chg) {
+		/*
+		 * Put used_hpages back for the global portion of the request that
+		 * was never actually consumed; restore the subpool-reservation
+		 * portion via hugepage_subpool_put_pages() so rsv_hpages is rebuilt.
+		 */
+		if (!gbl_chg) {
+			gbl_reserve = hugepage_subpool_put_pages(spool, 1);
+			hugetlb_acct_memory(h, -gbl_reserve);
+		} else if (spool && spool->max_hpages != -1) {
+			unsigned long flags;
+
+			spin_lock_irqsave(&spool->lock, flags);
+			spool->used_hpages -= 1;
+			unlock_or_release_subpool(spool, flags);
+		}
 	}
 
 
