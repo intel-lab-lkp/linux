@@ -179,6 +179,82 @@ static void tls_device_commit_start_marker(struct sock *sk,
 	tcp_write_collapse_fence(sk);
 }
 
+static int tls_device_dev_add_rx(struct sock *sk, struct tls_context *tls_ctx,
+				 struct net_device *netdev,
+				 struct tls_crypto_info *crypto_info,
+				 u32 cur_seq, bool is_rekey)
+{
+	const struct tls_cipher_desc *cipher_desc;
+	char *rec_seq;
+	int rc;
+
+	cipher_desc = get_cipher_desc(crypto_info->cipher_type);
+	DEBUG_NET_WARN_ON_ONCE(!cipher_desc || !cipher_desc->offloadable);
+
+	rc = netdev->tlsdev_ops->tls_dev_add(netdev, sk,
+					     TLS_OFFLOAD_CTX_DIR_RX,
+					     crypto_info, cur_seq);
+	rec_seq = crypto_info_rec_seq(crypto_info, cipher_desc);
+	trace_tls_device_offload_set(sk, TLS_OFFLOAD_CTX_DIR_RX,
+				     cur_seq, rec_seq, rc);
+	if (!rc) {
+		clear_bit(TLS_RX_DEV_DEGRADED, &tls_ctx->flags);
+		clear_bit(TLS_RX_DEV_CLOSED, &tls_ctx->flags);
+		if (is_rekey)
+			TLS_INC_STATS(sock_net(sk), LINUX_MIB_TLSRXREKEYOK);
+	} else if (is_rekey) {
+		set_bit(TLS_RX_DEV_DEGRADED, &tls_ctx->flags);
+		set_bit(TLS_RX_DEV_CLOSED, &tls_ctx->flags);
+		TLS_INC_STATS(sock_net(sk), LINUX_MIB_TLSRXREKEYFALLBACK);
+	}
+	return rc;
+}
+
+static void tls_device_deferred_dev_add_rx(struct sock *sk,
+					   struct tls_context *tls_ctx,
+					   struct tls_offload_context_rx *ctx)
+{
+	struct net_device *netdev;
+
+	ctx->dev_add_pending = 0;
+
+	down_read(&device_offload_lock);
+	netdev = rcu_dereference_protected(tls_ctx->netdev,
+					   lockdep_is_held(&device_offload_lock));
+	if (netdev)
+		tls_device_dev_add_rx(sk, tls_ctx, netdev,
+				      &tls_ctx->crypto_recv.info,
+				      tcp_sk(sk)->copied_seq, true);
+	else
+		TLS_INC_STATS(sock_net(sk), LINUX_MIB_TLSRXREKEYFALLBACK);
+	up_read(&device_offload_lock);
+	TLS_DEC_STATS(sock_net(sk), LINUX_MIB_TLSRXREKEYINPROGRESS);
+}
+
+void tls_device_rx_del_key(struct sock *sk, struct tls_context *ctx)
+{
+	struct net_device *netdev;
+
+	if (ctx->rx_conf != TLS_HW)
+		return;
+	if (test_bit(TLS_RX_DEV_CLOSED, &ctx->flags))
+		return;
+
+	down_read(&device_offload_lock);
+	netdev = rcu_dereference_protected(ctx->netdev,
+					   lockdep_is_held(&device_offload_lock));
+	if (!netdev) {
+		up_read(&device_offload_lock);
+		return;
+	}
+
+	set_bit(TLS_RX_DEV_CLOSED, &ctx->flags);
+	synchronize_net();
+	netdev->tlsdev_ops->tls_dev_del(netdev, ctx,
+					TLS_OFFLOAD_CTX_DIR_RX);
+	up_read(&device_offload_lock);
+}
+
 static void destroy_record(struct tls_record_info *record)
 {
 	int i;
@@ -887,6 +963,8 @@ void tls_device_rx_resync_new_rec(struct sock *sk, u32 rcd_len, u32 seq)
 		return;
 	if (unlikely(test_bit(TLS_RX_DEV_DEGRADED, &tls_ctx->flags)))
 		return;
+	if (unlikely(test_bit(TLS_RX_DEV_CLOSED, &tls_ctx->flags)))
+		return;
 
 	prot = &tls_ctx->prot_info;
 	rx_ctx = tls_offload_ctx_rx(tls_ctx);
@@ -1076,13 +1154,56 @@ free_buf:
 	return err;
 }
 
+/*
+ * Temporarily swap in the old key, run
+ * tls_device_reencrypt(), then restore the current key.
+ */
+static int tls_device_reencrypt_old_key(struct sock *sk,
+					struct tls_offload_context_rx *ctx,
+					struct tls_sw_context_rx *sw_ctx,
+					struct tls_context *tls_ctx)
+{
+	struct crypto_aead *saved_aead = sw_ctx->aead_recv;
+	char saved_iv[TLS_MAX_IV_SIZE + TLS_MAX_SALT_SIZE];
+	char saved_rec_seq[TLS_MAX_REC_SEQ_SIZE];
+	int ret;
+
+	memcpy(saved_iv, tls_ctx->rx.iv, sizeof(saved_iv));
+	memcpy(saved_rec_seq, tls_ctx->rx.rec_seq, sizeof(saved_rec_seq));
+
+	sw_ctx->aead_recv = ctx->rekey.old_aead_recv;
+	memcpy(tls_ctx->rx.iv, ctx->rekey.old_iv, sizeof(ctx->rekey.old_iv));
+	memcpy(tls_ctx->rx.rec_seq, ctx->rekey.old_rec_seq,
+	       sizeof(ctx->rekey.old_rec_seq));
+
+	ret = tls_device_reencrypt(sk, tls_ctx);
+
+	memcpy(ctx->rekey.old_rec_seq, tls_ctx->rx.rec_seq,
+	       sizeof(ctx->rekey.old_rec_seq));
+
+	sw_ctx->aead_recv = saved_aead;
+	memcpy(tls_ctx->rx.iv, saved_iv, sizeof(saved_iv));
+	memcpy(tls_ctx->rx.rec_seq, saved_rec_seq, sizeof(saved_rec_seq));
+
+	if (ret)
+		return ret;
+
+	tls_bigint_increment(ctx->rekey.old_rec_seq,
+			     tls_ctx->prot_info.rec_seq_size);
+	ctx->resync_nh_reset = 1;
+
+	return 0;
+}
+
 int tls_device_decrypted(struct sock *sk, struct tls_context *tls_ctx)
 {
 	struct tls_offload_context_rx *ctx = tls_offload_ctx_rx(tls_ctx);
 	struct tls_sw_context_rx *sw_ctx = tls_sw_ctx_rx(tls_ctx);
 	struct sk_buff *skb = tls_strp_msg(sw_ctx);
+	u32 copied_seq = tcp_sk(sk)->copied_seq;
 	struct strp_msg *rxm = strp_msg(skb);
 	int is_decrypted, is_encrypted;
+	u32 rec_start_seq;
 
 	if (!tls_strp_msg_mixed_decrypted(sw_ctx)) {
 		is_decrypted = skb->decrypted;
@@ -1092,9 +1213,58 @@ int tls_device_decrypted(struct sock *sk, struct tls_context *tls_ctx)
 		is_encrypted = 0;
 	}
 
-	trace_tls_device_decrypted(sk, tcp_sk(sk)->copied_seq - rxm->full_len,
+	rec_start_seq = sw_ctx->strp.copy_mode
+		? copied_seq - rxm->full_len
+		: copied_seq;
+
+	trace_tls_device_decrypted(sk, rec_start_seq,
 				   tls_ctx->rx.rec_seq, rxm->full_len,
 				   is_encrypted, is_decrypted);
+
+	if (unlikely(ctx->rekey.old_aead_recv)) {
+		bool before_nic_boundary =
+			before(rec_start_seq, ctx->rekey.old_nic_boundary);
+
+		/* Retry path: mixed record first-pass XOR-undo produced
+		 * EBADMSG because per-fragment decrypted flags don't
+		 * reflect which fragments were actually XOR'd (NIC auth
+		 * failure clearing flags). Toggle decrypted flag and re-XOR,
+		 * decrement rekey.old_rec_seq to reuse the same nonce.
+		 */
+		if (ctx->old_key_reencrypted) {
+			struct sk_buff *frag_iter;
+
+			skb->decrypted = !skb->decrypted;
+			skb_walk_frags(skb, frag_iter)
+				frag_iter->decrypted = !frag_iter->decrypted;
+
+			tls_bigint_decrement(ctx->rekey.old_rec_seq,
+					     tls_ctx->prot_info.rec_seq_size);
+			return tls_device_reencrypt_old_key(sk, ctx,
+							   sw_ctx, tls_ctx);
+		}
+
+		if (before_nic_boundary) {
+			if (is_encrypted) {
+				tls_bigint_increment(ctx->rekey.old_rec_seq,
+						     tls_ctx->prot_info.rec_seq_size);
+				return 0;
+			}
+			/* For mixed records, first old key rencrypt and if
+			 * SW AEAD fails then retry with decrypted flags toggled
+			 */
+			if (!is_decrypted)
+				ctx->old_key_reencrypted = 1;
+			return tls_device_reencrypt_old_key(sk, ctx,
+							   sw_ctx, tls_ctx);
+		}
+
+		crypto_free_aead(ctx->rekey.old_aead_recv);
+		ctx->rekey.old_aead_recv = NULL;
+
+		if (ctx->dev_add_pending)
+			tls_device_deferred_dev_add_rx(sk, tls_ctx, ctx);
+	}
 
 	if (unlikely(test_bit(TLS_RX_DEV_DEGRADED, &tls_ctx->flags))) {
 		if (likely(is_encrypted || is_decrypted))
@@ -1552,12 +1722,29 @@ release_netdev:
 	return rc;
 }
 
-int tls_set_device_offload_rx(struct sock *sk, struct tls_context *ctx)
+int tls_set_device_offload_rx(struct sock *sk, struct tls_context *ctx,
+			      struct tls_crypto_info *new_crypto_info)
 {
-	struct tls12_crypto_info_aes_gcm_128 *info;
+	struct tls_crypto_info *crypto_info, *src_crypto_info;
+	const struct tls_cipher_desc *cipher_desc;
+	u32 copied_seq = tcp_sk(sk)->copied_seq;
 	struct tls_offload_context_rx *context;
 	struct net_device *netdev;
+	bool was_dev_add_pending;
 	int rc = 0;
+
+	/* Rekey is only supported for connections that are already
+	 * using HW offload. For SW offload connections, the caller
+	 * should fall back to tls_set_sw_offload() for rekey.
+	 */
+	if (new_crypto_info && ctx->rx_conf != TLS_HW)
+		return -EINVAL;
+
+	crypto_info = &ctx->crypto_recv.info;
+	src_crypto_info = new_crypto_info ?: crypto_info;
+	cipher_desc = get_cipher_desc(src_crypto_info->cipher_type);
+	if (!cipher_desc || !cipher_desc->offloadable)
+		return -EINVAL;
 
 	netdev = get_netdev_for_sock(sk);
 	if (!netdev) {
@@ -1584,29 +1771,85 @@ int tls_set_device_offload_rx(struct sock *sk, struct tls_context *ctx)
 		goto release_lock;
 	}
 
-	context = kzalloc_obj(*context);
-	if (!context) {
-		rc = -ENOMEM;
-		goto release_lock;
+	if (!new_crypto_info) {
+		context = kzalloc_obj(*context);
+		if (!context) {
+			rc = -ENOMEM;
+			goto release_lock;
+		}
+		ctx->priv_ctx_rx = context;
+	} else {
+		context = tls_offload_ctx_rx(ctx);
 	}
+	was_dev_add_pending = context->dev_add_pending;
 	context->resync_nh_reset = 1;
 
-	ctx->priv_ctx_rx = context;
-	rc = tls_sw_ctx_init(sk, 0, NULL);
+	if (new_crypto_info) {
+		struct tls_sw_context_rx *sw_ctx = tls_sw_ctx_rx(ctx);
+
+		if (!test_bit(TLS_RX_DEV_CLOSED, &ctx->flags)) {
+			set_bit(TLS_RX_DEV_CLOSED, &ctx->flags);
+			synchronize_net();
+			netdev->tlsdev_ops->tls_dev_del(netdev, ctx,
+							TLS_OFFLOAD_CTX_DIR_RX);
+		}
+
+		if (context->rekey.old_aead_recv &&
+		    before(copied_seq, context->rekey.old_nic_boundary)) {
+			/* Previous rekey still draining. Keep rekey.old_aead_recv,
+			 * it is the only key that can undo the NIC-XOR on queued
+			 * records. sw_ctx->aead_recv may be re-setkey'd by
+			 * tls_sw_ctx_init(); that intermediate key was never on
+			 * the NIC and its wire era is drained, so it is needed
+			 * for neither undo nor AEAD. Defer dev_add; the new key
+			 * is installed once copied_seq crosses rekey.old_nic_boundary.
+			 */
+			context->dev_add_pending = 1;
+		} else {
+			u32 rcv_nxt;
+
+			if (context->rekey.old_aead_recv) {
+				crypto_free_aead(context->rekey.old_aead_recv);
+				context->rekey.old_aead_recv = NULL;
+			}
+
+			/* flush the backlog so rcv_nxt is accurate */
+			__sk_flush_backlog(sk);
+			rcv_nxt = tcp_sk(sk)->rcv_nxt;
+
+			if (before(copied_seq, rcv_nxt)) {
+				context->rekey.old_aead_recv = sw_ctx->aead_recv;
+				sw_ctx->aead_recv = NULL;
+				memcpy(context->rekey.old_iv, ctx->rx.iv,
+				       sizeof(context->rekey.old_iv));
+				memcpy(context->rekey.old_rec_seq, ctx->rx.rec_seq,
+				       sizeof(context->rekey.old_rec_seq));
+				context->rekey.old_nic_boundary = rcv_nxt;
+				context->dev_add_pending = 1;
+			}
+		}
+	}
+
+	rc = tls_sw_ctx_init(sk, 0, new_crypto_info);
 	if (rc)
 		goto release_ctx;
 
-	rc = netdev->tlsdev_ops->tls_dev_add(netdev, sk, TLS_OFFLOAD_CTX_DIR_RX,
-					     &ctx->crypto_recv.info,
-					     tcp_sk(sk)->copied_seq);
-	info = (void *)&ctx->crypto_recv.info;
-	trace_tls_device_offload_set(sk, TLS_OFFLOAD_CTX_DIR_RX,
-				     tcp_sk(sk)->copied_seq, info->rec_seq, rc);
-	if (rc)
-		goto free_sw_resources;
+	if (!context->dev_add_pending) {
+		rc = tls_device_dev_add_rx(sk, ctx, netdev, src_crypto_info,
+					   copied_seq, !!new_crypto_info);
+		if (!new_crypto_info) {
+			if (rc)
+				goto free_sw_resources;
+			tls_device_attach(ctx, sk, netdev);
+		}
+	} else if (!was_dev_add_pending) {
+		TLS_INC_STATS(sock_net(sk), LINUX_MIB_TLSRXREKEYINPROGRESS);
+	} else {
+		TLS_INC_STATS(sock_net(sk), LINUX_MIB_TLSRXREKEYOK);
+	}
 
-	tls_device_attach(ctx, sk, netdev);
-	tls_sw_ctx_finalize(sk, 0, NULL);
+	tls_sw_ctx_finalize(sk, 0, new_crypto_info);
+
 	up_read(&device_offload_lock);
 
 	dev_put(netdev);
@@ -1615,10 +1858,13 @@ int tls_set_device_offload_rx(struct sock *sk, struct tls_context *ctx)
 
 free_sw_resources:
 	up_read(&device_offload_lock);
-	tls_sw_free_resources_rx(sk);
+	tls_sw_release_resources_rx(sk);
 	down_read(&device_offload_lock);
 release_ctx:
-	ctx->priv_ctx_rx = NULL;
+	if (!new_crypto_info) {
+		kfree(ctx->priv_ctx_rx);
+		ctx->priv_ctx_rx = NULL;
+	}
 release_lock:
 	up_read(&device_offload_lock);
 release_netdev:
@@ -1629,6 +1875,7 @@ release_netdev:
 void tls_device_offload_cleanup_rx(struct sock *sk)
 {
 	struct tls_context *tls_ctx = tls_get_ctx(sk);
+	struct tls_offload_context_rx *rx_ctx;
 	struct net_device *netdev;
 
 	down_read(&device_offload_lock);
@@ -1637,8 +1884,9 @@ void tls_device_offload_cleanup_rx(struct sock *sk)
 	if (!netdev)
 		goto out;
 
-	netdev->tlsdev_ops->tls_dev_del(netdev, tls_ctx,
-					TLS_OFFLOAD_CTX_DIR_RX);
+	if (!test_bit(TLS_RX_DEV_CLOSED, &tls_ctx->flags))
+		netdev->tlsdev_ops->tls_dev_del(netdev, tls_ctx,
+						TLS_OFFLOAD_CTX_DIR_RX);
 
 	if (tls_ctx->tx_conf != TLS_HW) {
 		dev_put(netdev);
@@ -1648,6 +1896,19 @@ void tls_device_offload_cleanup_rx(struct sock *sk)
 	}
 out:
 	up_read(&device_offload_lock);
+
+	rx_ctx = tls_offload_ctx_rx(tls_ctx);
+	if (rx_ctx && rx_ctx->rekey.old_aead_recv) {
+		crypto_free_aead(rx_ctx->rekey.old_aead_recv);
+		rx_ctx->rekey.old_aead_recv = NULL;
+	}
+
+	if (rx_ctx && rx_ctx->dev_add_pending) {
+		rx_ctx->dev_add_pending = 0;
+		TLS_INC_STATS(sock_net(sk), LINUX_MIB_TLSRXREKEYOK);
+		TLS_DEC_STATS(sock_net(sk), LINUX_MIB_TLSRXREKEYINPROGRESS);
+	}
+
 	tls_sw_release_resources_rx(sk);
 }
 
@@ -1705,9 +1966,11 @@ static int tls_device_down(struct net_device *netdev)
 			set_bit(TLS_TX_DEV_CLOSED, &ctx->flags);
 		}
 		if (ctx->rx_conf == TLS_HW &&
-		    !test_bit(TLS_RX_DEV_CLOSED, &ctx->flags))
+		    !test_bit(TLS_RX_DEV_CLOSED, &ctx->flags)) {
 			netdev->tlsdev_ops->tls_dev_del(netdev, ctx,
 							TLS_OFFLOAD_CTX_DIR_RX);
+			set_bit(TLS_RX_DEV_CLOSED, &ctx->flags);
+		}
 
 		dev_put(netdev);
 

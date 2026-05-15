@@ -1811,11 +1811,42 @@ static int tls_check_pending_rekey(struct sock *sk, struct tls_context *ctx,
 	if (hs_type == TLS_HANDSHAKE_KEYUPDATE) {
 		struct tls_sw_context_rx *rx_ctx = ctx->priv_ctx_rx;
 
+		tls_device_rx_del_key(sk, ctx);
 		WRITE_ONCE(rx_ctx->key_update_pending, true);
 		TLS_INC_STATS(sock_net(sk), LINUX_MIB_TLSRXREKEYRECEIVED);
 	}
 
 	return 0;
+}
+
+static int tls_rx_rekey_retry(struct sock *sk, struct msghdr *msg,
+			      struct tls_context *tls_ctx,
+			      struct tls_decrypt_arg *darg, int err)
+{
+	struct tls_offload_context_rx *rx_ctx = tls_offload_ctx_rx(tls_ctx);
+	struct tls_prot_info *prot = &tls_ctx->prot_info;
+
+	if (!rx_ctx->old_key_reencrypted)
+		return err;
+
+	if (err == -EBADMSG) {
+		if (darg->zc) {
+			struct tls_sw_context_rx *sw_ctx =
+				tls_sw_ctx_rx(tls_ctx);
+			struct strp_msg *rxm;
+
+			rxm = strp_msg(tls_strp_msg(sw_ctx));
+			iov_iter_revert(&msg->msg_iter,
+					rxm->full_len - prot->overhead_size);
+		}
+
+		err = tls_decrypt_device(sk, msg, tls_ctx, darg);
+		if (!err)
+			err = tls_decrypt_sw(sk, tls_ctx, msg, darg);
+	}
+
+	rx_ctx->old_key_reencrypted = 0;
+	return err;
 }
 
 static int tls_rx_one_record(struct sock *sk, struct msghdr *msg,
@@ -1829,6 +1860,10 @@ static int tls_rx_one_record(struct sock *sk, struct msghdr *msg,
 	err = tls_decrypt_device(sk, msg, tls_ctx, darg);
 	if (!err)
 		err = tls_decrypt_sw(sk, tls_ctx, msg, darg);
+
+	if (tls_ctx->rx_conf == TLS_HW)
+		err = tls_rx_rekey_retry(sk, msg, tls_ctx, darg, err);
+
 	if (err < 0)
 		return err;
 
