@@ -109,7 +109,7 @@ static int __init get_max_slots(void)
  * Parameters: struct slot
  * Returns 0 or errors
  */
-int ibmphp_init_devno(struct slot **cur_slot)
+int ibmphp_init_devno(struct slot *cur_slot)
 {
 	struct irq_routing_table *rtable;
 	int len;
@@ -130,21 +130,21 @@ int ibmphp_init_devno(struct slot **cur_slot)
 		return -1;
 	}
 	for (loop = 0; loop < len; loop++) {
-		if ((*cur_slot)->number == rtable->slots[loop].slot &&
-		    (*cur_slot)->bus == rtable->slots[loop].bus) {
-			(*cur_slot)->device = PCI_SLOT(rtable->slots[loop].devfn);
+		if (cur_slot->number == rtable->slots[loop].slot &&
+		    cur_slot->bus == rtable->slots[loop].bus) {
+			cur_slot->device = PCI_SLOT(rtable->slots[loop].devfn);
 			for (i = 0; i < 4; i++)
-				(*cur_slot)->irq[i] = IO_APIC_get_PCI_irq_vector((int) (*cur_slot)->bus,
-						(int) (*cur_slot)->device, i);
+				cur_slot->irq[i] = IO_APIC_get_PCI_irq_vector((int) cur_slot->bus,
+						(int) cur_slot->device, i);
 
-			debug("(*cur_slot)->irq[0] = %x\n",
-					(*cur_slot)->irq[0]);
-			debug("(*cur_slot)->irq[1] = %x\n",
-					(*cur_slot)->irq[1]);
-			debug("(*cur_slot)->irq[2] = %x\n",
-					(*cur_slot)->irq[2]);
-			debug("(*cur_slot)->irq[3] = %x\n",
-					(*cur_slot)->irq[3]);
+			debug("cur_slot->irq[0] = %x\n",
+					cur_slot->irq[0]);
+			debug("cur_slot->irq[1] = %x\n",
+					cur_slot->irq[1]);
+			debug("cur_slot->irq[2] = %x\n",
+					cur_slot->irq[2]);
+			debug("cur_slot->irq[3] = %x\n",
+					cur_slot->irq[3]);
 
 			debug("rtable->exclusive_irqs = %x\n",
 					rtable->exclusive_irqs);
