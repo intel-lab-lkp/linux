@@ -202,7 +202,7 @@ struct ATTRIB *mi_enum_attr(struct ntfs_inode *ni, struct mft_inode *mi,
 	u32 used = le32_to_cpu(rec->used);
 	u32 t32, off, asize, prev_type;
 	u16 t16;
-	u64 data_size, alloc_size, tot_size;
+	u64 svcn, evcn, data_size, alloc_size, tot_size;
 
 	if (!attr) {
 		u32 total = le32_to_cpu(rec->total);
@@ -310,8 +310,17 @@ struct ATTRIB *mi_enum_attr(struct ntfs_inode *ni, struct mft_inode *mi,
 	if (t32 && le16_to_cpu(attr->name_off) + t32 > t16)
 		goto out;
 
-	/* Check start/end vcn. */
-	if (le64_to_cpu(attr->nres.svcn) > le64_to_cpu(attr->nres.evcn) + 1)
+	/*
+	 * Check start/end vcn.  evcn must be a valid cluster index, i.e.
+	 * less than the volume's total cluster count (sbi->used.bitmap.nbits);
+	 * rejecting it here also keeps "svcn > evcn + 1" meaningful, since
+	 * evcn == U64_MAX would wrap "evcn + 1" to 0.  svcn does not need
+	 * its own bound: once evcn < nbits, "svcn > evcn + 1" implies
+	 * svcn <= nbits.
+	 */
+	svcn = le64_to_cpu(attr->nres.svcn);
+	evcn = le64_to_cpu(attr->nres.evcn);
+	if (evcn >= mi->sbi->used.bitmap.nbits || svcn > evcn + 1)
 		goto out;
 
 	data_size = le64_to_cpu(attr->nres.data_size);
