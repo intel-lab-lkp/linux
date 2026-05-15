@@ -2017,15 +2017,39 @@ static int sas_rediscover_dev(struct domain_device *dev, int phy_id,
 		goto out_free_resp;
 	} else if (SAS_ADDR(sas_addr) == SAS_ADDR(phy->attached_sas_addr) &&
 		   dev_type_flutter(type, phy->attached_dev_type)) {
-		struct domain_device *ata_dev = sas_ex_to_ata(dev, phy_id);
+		struct domain_device *child_dev = sas_ex_to_dev(dev, phy_id);
+		bool need_rediscover = false;
 		char *action = "";
 
 		sas_ex_phy_discover(dev, phy_id);
 
-		if (ata_dev && phy->attached_dev_type == SAS_SATA_PENDING)
+		if (child_dev && dev_is_sata(child_dev) &&
+		    phy->attached_dev_type == SAS_SATA_PENDING) {
 			action = ", needs recovery";
-		pr_debug("ex %016llx phy%02d broadcast flutter%s\n",
-			 SAS_ADDR(dev->sas_addr), phy_id, action);
+		} else if (child_dev && phy->linkrate != child_dev->linkrate) {
+			pr_info("ex %016llx phy%02d linkrate changed from %d to %d\n",
+				SAS_ADDR(dev->sas_addr), phy_id,
+				child_dev->linkrate, phy->linkrate);
+			need_rediscover = true;
+		} else if (child_dev &&
+			   SAS_ADDR(child_dev->sas_addr) != SAS_ADDR(phy->attached_sas_addr)) {
+			pr_info("ex %016llx phy%02d sas_addr changed from %016llx to %016llx\n",
+				SAS_ADDR(dev->sas_addr), phy_id,
+				SAS_ADDR(child_dev->sas_addr),
+				SAS_ADDR(phy->attached_sas_addr));
+			need_rediscover = true;
+		}
+
+		if (need_rediscover) {
+			set_bit(SAS_DEV_GONE, &child_dev->state);
+			phy->phy_change_count = -1;
+			ex->ex_change_count = -1;
+			sas_unregister_devs_sas_addr(dev, phy_id, true);
+			sas_discover_event(dev->port, DISCE_REVALIDATE_DOMAIN);
+		} else {
+			pr_debug("ex %016llx phy%02d broadcast flutter%s\n",
+				 SAS_ADDR(dev->sas_addr), phy_id, action);
+		}
 		goto out_free_resp;
 	}
 
