@@ -147,10 +147,13 @@ static void usage(char *progname)
 		" -t val     shift the ptp clock time by 'val' seconds\n"
 		" -T val     set the ptp clock time to 'val' seconds\n"
 		" -x val     get an extended ptp clock time with the desired number of samples (up to %d)\n"
+		" -a val     get extended timestamps with attributes (error_bound,\n"
+		"            clock_status, timescale, counter), up to %d samples\n"
 		" -X         get a ptp clock cross timestamp\n"
+		" -A         get a precise cross timestamp with attributes\n"
 		" -y val     pre/post tstamp timebase to use {realtime|monotonic|monotonic-raw}\n"
 		" -z         test combinations of rising/falling external time stamp flags\n",
-		progname, PTP_MAX_SAMPLES);
+		progname, PTP_MAX_SAMPLES, PTP_MAX_SAMPLES);
 }
 
 static void print_system_timestamp(int sample_num, __kernel_clockid_t clockid,
@@ -171,6 +174,8 @@ static void print_system_timestamp(int sample_num, __kernel_clockid_t clockid,
 		       sample_num, when, sec, nsec);
 		break;
 	default:
+		printf("sample #%2d: unknown clock %d %s: %lld.%09u\n",
+		       sample_num, clockid, when, sec, nsec);
 		break;
 	}
 }
@@ -188,6 +193,8 @@ int main(int argc, char *argv[])
 	struct ptp_sys_offset *sysoff;
 	struct ptp_sys_offset_extended *soe;
 	struct ptp_sys_offset_precise *xts;
+	struct ptp_sys_offset_precise_attrs *xtsa;
+	struct ptp_sys_offset_extended_attrs *soea;
 
 	char *progname;
 	unsigned int i;
@@ -208,7 +215,9 @@ int main(int argc, char *argv[])
 	int list_pins = 0;
 	int pct_offset = 0;
 	int getextended = 0;
+	int getextendedattrs = 0;
 	int getcross = 0;
+	int getcrossattrs = 0;
 	int n_samples = 0;
 	int pin_index = -1, pin_func;
 	int pps = -1;
@@ -226,7 +235,7 @@ int main(int argc, char *argv[])
 
 	progname = strrchr(argv[0], '/');
 	progname = progname ? 1+progname : argv[0];
-	while (EOF != (c = getopt(argc, argv, "cd:e:E:f:F:ghH:i:k:lL:n:o:p:P:rsSt:T:w:x:Xy:z"))) {
+	while (EOF != (c = getopt(argc, argv, "a:Acd:e:E:f:F:ghH:i:k:lL:n:o:p:P:rsSt:T:w:x:Xy:z"))) {
 		switch (c) {
 		case 'c':
 			capabilities = 1;
@@ -311,8 +320,21 @@ int main(int argc, char *argv[])
 				return -1;
 			}
 			break;
+		case 'a':
+			getextendedattrs = atoi(optarg);
+			if (getextendedattrs < 1 ||
+			    getextendedattrs > PTP_MAX_SAMPLES) {
+				fprintf(stderr,
+					"number of extended attrs timestamp samples must be between 1 and %d; was asked for %d\n",
+					PTP_MAX_SAMPLES, getextendedattrs);
+				return -1;
+			}
+			break;
 		case 'X':
 			getcross = 1;
+			break;
+		case 'A':
+			getcrossattrs = 1;
 			break;
 		case 'y':
 			if (!strcasecmp(optarg, "realtime"))
@@ -367,6 +389,7 @@ int main(int argc, char *argv[])
 			       "  %d programmable pins\n"
 			       "  %d cross timestamping\n"
 			       "  %d adjust_phase\n"
+			       "  %d clock_attrs\n"
 			       "  %d maximum phase adjustment (ns)\n",
 			       caps.max_adj,
 			       caps.n_alarm,
@@ -376,6 +399,7 @@ int main(int argc, char *argv[])
 			       caps.n_pins,
 			       caps.cross_timestamping,
 			       caps.adjust_phase,
+			       caps.clock_attrs,
 			       caps.max_phase_adj);
 		}
 	}
@@ -648,6 +672,50 @@ int main(int argc, char *argv[])
 		free(soe);
 	}
 
+	if (getextendedattrs) {
+		soea = calloc(1, sizeof(*soea));
+		if (!soea) {
+			perror("calloc");
+			return -1;
+		}
+
+		soea->n_samples = getextendedattrs;
+		soea->clockid = ext_clockid;
+
+		if (ioctl(fd, PTP_SYS_OFFSET_EXTENDED_ATTRS, soea)) {
+			perror("PTP_SYS_OFFSET_EXTENDED_ATTRS");
+		} else {
+			printf("extended timestamp request returned %d samples\n",
+			       getextendedattrs);
+
+			for (i = 0; i < getextendedattrs; i++) {
+				print_system_timestamp(i, ext_clockid,
+						       soea->ts[i][0].pct.sec,
+						       soea->ts[i][0].pct.nsec,
+						       "before");
+
+				printf("            phc time: %lld.%09u, error bound: %u, clock status: %u, timescale: %u\n",
+				       soea->ts[i][1].pct.sec,
+				       soea->ts[i][1].pct.nsec,
+				       soea->ts[i][1].att.error_bound,
+				       soea->ts[i][1].att.status,
+				       soea->ts[i][1].att.timescale);
+
+				if (soea->ts[i][1].att.counter_id)
+					printf("            counter: %llu (id: %u)\n",
+					       (unsigned long long)soea->ts[i][1].att.counter_value,
+					       soea->ts[i][1].att.counter_id);
+
+				print_system_timestamp(i, ext_clockid,
+						       soea->ts[i][2].pct.sec,
+						       soea->ts[i][2].pct.nsec,
+						       "after");
+			}
+		}
+
+		free(soea);
+	}
+
 	if (getcross) {
 		xts = calloc(1, sizeof(*xts));
 		if (!xts) {
@@ -669,6 +737,39 @@ int main(int argc, char *argv[])
 		}
 
 		free(xts);
+	}
+
+	if (getcrossattrs) {
+		xtsa = calloc(1, sizeof(*xtsa));
+		if (!xtsa) {
+			perror("calloc");
+			return -1;
+		}
+
+		if (ioctl(fd, PTP_SYS_OFFSET_PRECISE_ATTRS, xtsa)) {
+			perror("PTP_SYS_OFFSET_PRECISE_ATTRS");
+		} else {
+			puts("system and phc crosstimestamping with attributes request okay");
+
+			printf("device time: %lld.%09u\n",
+			       xtsa->device.pct.sec, xtsa->device.pct.nsec);
+			printf("error_bound: %u ns\n",
+			       xtsa->device.att.error_bound);
+			printf("status: %u\n",
+			       xtsa->device.att.status);
+			printf("timescale: %u\n",
+			       xtsa->device.att.timescale);
+			if (xtsa->device.att.counter_id)
+				printf("counter: %llu (id: %u)\n",
+				       (unsigned long long)xtsa->device.att.counter_value,
+				       xtsa->device.att.counter_id);
+			printf("system time: %lld.%09u\n",
+			       xtsa->sys_realtime.sec, xtsa->sys_realtime.nsec);
+			printf("monoraw time: %lld.%09u\n",
+			       xtsa->sys_monoraw.sec, xtsa->sys_monoraw.nsec);
+		}
+
+		free(xtsa);
 	}
 
 	if (channel >= 0) {
