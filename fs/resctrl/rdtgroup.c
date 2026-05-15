@@ -593,6 +593,13 @@ unlock:
  */
 static void rdtgroup_remove(struct rdtgroup *rdtgrp)
 {
+	/*
+	 * Groups created with mkdir() have an extra hold, that doesn't
+	 * apply to the default group. It is stacically allocated, so
+	 * does not need to be freed.
+	 */
+	if (rdtgrp == &rdtgroup_default)
+		return;
 	kernfs_put(rdtgrp->kn);
 	kfree(rdtgrp);
 }
@@ -2965,6 +2972,7 @@ static void resctrl_fs_teardown(void)
 	mon_put_kn_priv();
 	rdt_pseudo_lock_release();
 	rdtgroup_default.mode = RDT_MODE_SHAREABLE;
+	rdtgroup_default.flags = RDT_DELETED;
 	closid_exit();
 	schemata_list_destroy();
 	rdtgroup_destroy_root();
@@ -2986,6 +2994,12 @@ static int rdt_get_tree(struct fs_context *fc)
 	 * resctrl file system can only be mounted once.
 	 */
 	if (resctrl_mounted) {
+		ret = -EBUSY;
+		goto out;
+	}
+
+	/* Avoid races from pending operations from a previous mount */
+	if (atomic_read(&rdtgroup_default.waitcount) != 0) {
 		ret = -EBUSY;
 		goto out;
 	}
@@ -4265,6 +4279,7 @@ static int rdtgroup_setup_root(struct rdt_fs_context *ctx)
 
 	ctx->kfc.root = rdt_root;
 	rdtgroup_default.kn = kernfs_root_to_node(rdt_root);
+	rdtgroup_default.flags = 0;
 
 	return 0;
 }
