@@ -1601,7 +1601,7 @@ int intel_pinctrl_probe(struct platform_device *pdev,
 
 	for (i = 0; i < pctrl->ncommunities; i++) {
 		struct intel_community *community = &pctrl->communities[i];
-		unsigned short capability_offset[6];
+		unsigned short capability_offset[6] = { };
 		void __iomem *regs;
 		u32 revision;
 		u32 offset;
