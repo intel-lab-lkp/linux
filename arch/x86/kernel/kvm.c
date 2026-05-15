@@ -471,17 +471,23 @@ static void kvm_guest_cpu_offline(enum kvm_guest_cpu_action action)
 	kvmclock_cpu_action(action);
 }
 
-static int kvm_cpu_online(unsigned int cpu)
+static int __kvm_cpu_online(unsigned int cpu, enum kvm_guest_cpu_action action)
 {
 	unsigned long flags;
 
 	local_irq_save(flags);
+	kvmclock_cpu_action(action);
 	kvm_guest_cpu_init();
 	local_irq_restore(flags);
 	return 0;
 }
 
 #ifdef CONFIG_SMP
+
+static int kvm_cpu_online(unsigned int cpu)
+{
+	return __kvm_cpu_online(cpu, KVM_GUEST_AP_ONLINE);
+}
 
 static DEFINE_PER_CPU(cpumask_var_t, __pv_cpu_mask);
 
@@ -747,7 +753,7 @@ static int kvm_suspend(void *data)
 
 static void kvm_resume(void *data)
 {
-	kvm_cpu_online(raw_smp_processor_id());
+	__kvm_cpu_online(raw_smp_processor_id(), KVM_GUEST_BSP_RESUME);
 
 #ifdef CONFIG_ARCH_CPUIDLE_HALTPOLL
 	if (kvm_para_has_feature(KVM_FEATURE_POLL_CONTROL) && has_guest_poll)
