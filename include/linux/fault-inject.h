@@ -60,6 +60,7 @@ bool should_fail(struct fault_attr *attr, ssize_t size);
 struct fault_attr {
 };
 
+#define FAULT_ATTR_INITIALIZER {}
 #define DECLARE_FAULT_ATTR(name) struct fault_attr name = {}
 
 static inline int setup_fault_attr(struct fault_attr *attr, char *str)
