@@ -210,18 +210,14 @@ static int crypto_authenc_esn_decrypt_tail(struct aead_request *req,
 	struct scatterlist *src = req->src;
 	struct scatterlist *dst = req->dst;
 	u8 *ihash = ohash + crypto_ahash_digestsize(auth);
-	u32 tmp[2];
+	u32 tmp;
 
 	if (!authsize)
 		goto decrypt;
 
-	if (src == dst) {
-		/* Move high-order bits of sequence number back. */
-		scatterwalk_map_and_copy(tmp, dst, 4, 4, 0);
-		scatterwalk_map_and_copy(tmp + 1, dst, assoclen + cryptlen, 4, 0);
-		scatterwalk_map_and_copy(tmp, dst, 0, 8, 1);
-	} else
-		memcpy_sglist(dst, src, assoclen);
+	memcpy_from_sglist(&tmp, dst, assoclen + cryptlen - 4, 4);
+	sglist_shift_right(dst, 8, 4, assoclen + cryptlen - 8);
+	memcpy_to_sglist(dst, 4, &tmp, 4);
 
 	if (crypto_memneq(ihash, ohash, authsize))
 		return -EBADMSG;
@@ -264,7 +260,7 @@ static int crypto_authenc_esn_decrypt(struct aead_request *req)
 	u8 *ihash = ohash + crypto_ahash_digestsize(auth);
 	struct scatterlist *src = req->src;
 	struct scatterlist *dst = req->dst;
-	u32 tmp[2];
+	u32 tmp;
 	int err;
 
 	if (assoclen < 8)
@@ -274,24 +270,14 @@ static int crypto_authenc_esn_decrypt(struct aead_request *req)
 		goto tail;
 
 	cryptlen -= authsize;
-	scatterwalk_map_and_copy(ihash, req->src, assoclen + cryptlen,
-				 authsize, 0);
+	memcpy_from_sglist(ihash, req->src, assoclen + cryptlen, authsize);
 
-	/* Move high-order bits of sequence number to the end. */
-	scatterwalk_map_and_copy(tmp, src, 0, 8, 0);
-	if (src == dst) {
-		scatterwalk_map_and_copy(tmp, dst, 4, 4, 1);
-		scatterwalk_map_and_copy(tmp + 1, dst, assoclen + cryptlen, 4, 1);
-		dst = scatterwalk_ffwd(areq_ctx->dst, dst, 4);
-	} else {
-		scatterwalk_map_and_copy(tmp, dst, 0, 4, 1);
-		scatterwalk_map_and_copy(tmp + 1, dst, assoclen + cryptlen - 4, 4, 1);
+	memcpy_from_sglist(&tmp, src, 4, 4);
+	if (src != dst)
+		memcpy_sglist(dst, src, assoclen + cryptlen);
 
-		src = scatterwalk_ffwd(areq_ctx->src, src, 8);
-		dst = scatterwalk_ffwd(areq_ctx->dst, dst, 4);
-		memcpy_sglist(dst, src, assoclen + cryptlen - 8);
-		dst = req->dst;
-	}
+	sglist_shift_left(dst, 4, 8, assoclen + cryptlen - 8);
+	memcpy_to_sglist(dst, assoclen + cryptlen - 4, &tmp, 4);
 
 	ahash_request_set_tfm(ahreq, auth);
 	ahash_request_set_crypt(ahreq, dst, ohash, assoclen + cryptlen);
