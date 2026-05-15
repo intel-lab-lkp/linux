@@ -47,6 +47,8 @@ properties:
   iommus:
     maxItems: 1
 
+  dma-coherent: true
+
 patternProperties:
   "@[0-9a-f]+$":
     type: object
