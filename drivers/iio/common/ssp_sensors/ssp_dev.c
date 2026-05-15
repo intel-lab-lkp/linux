@@ -488,8 +488,9 @@ EXPORT_SYMBOL_NS(ssp_register_consumer, "IIO_SSP_SENSORS");
 static int ssp_probe(struct spi_device *spi)
 {
 	struct device *dev = &spi->dev;
-	int ret, i;
 	struct ssp_data *data;
+	unsigned int i;
+	int ret;
 
 	data = ssp_parse_dt(dev);
 	if (!data) {
