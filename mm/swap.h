@@ -224,6 +224,7 @@ struct swap_ops {
 	void (*write_folio)(struct swap_info_struct *sis,
 			struct folio *folio,
 			struct swap_iocb **plug);
+	void (*unplug)(struct swap_iocb *sio);
 };
 int init_swap_ops(struct swap_info_struct *sis);
 void swap_read_folio(struct folio *folio, struct swap_iocb **plug);

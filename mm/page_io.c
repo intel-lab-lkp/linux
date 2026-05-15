@@ -329,6 +329,7 @@ static void bio_associate_blkg_from_page(struct bio *bio, struct folio *folio)
 
 struct swap_iocb {
 	struct kiocb		iocb;
+	const struct swap_ops   *ops;
 	struct bio_vec		bvec[SWAP_CLUSTER_MAX];
 	int			pages;
 	int			len;
@@ -401,6 +402,7 @@ static void swap_fs_write_folio(struct swap_info_struct *sis,
 		init_sync_kiocb(&sio->iocb, swap_file);
 		sio->iocb.ki_complete = sio_write_complete;
 		sio->iocb.ki_pos = pos;
+		sio->ops = sis->ops;
 		sio->pages = 0;
 		sio->len = 0;
 	}
@@ -454,7 +456,7 @@ static void swap_bdev_async_write_folio(struct swap_info_struct *sis,
 	submit_bio(bio);
 }
 
-void swap_write_unplug(struct swap_iocb *sio)
+static void swap_fs_write_folio_unplug(struct swap_iocb *sio)
 {
 	struct iov_iter from;
 	struct address_space *mapping = sio->iocb.ki_filp->f_mapping;
@@ -464,6 +466,12 @@ void swap_write_unplug(struct swap_iocb *sio)
 	ret = mapping->a_ops->swap_rw(&sio->iocb, &from);
 	if (ret != -EIOCBQUEUED)
 		sio_write_complete(&sio->iocb, ret);
+}
+
+void swap_write_unplug(struct swap_iocb *sio)
+{
+	if (sio->ops && sio->ops->unplug)
+		sio->ops->unplug(sio);
 }
 
 static void sio_read_complete(struct kiocb *iocb, long ret)
@@ -599,6 +607,7 @@ static void swap_bdev_async_read_folio(struct swap_info_struct *sis,
 static const struct swap_ops bdev_fs_swap_ops = {
 	.read_folio = swap_fs_read_folio,
 	.write_folio = swap_fs_write_folio,
+	.unplug = swap_fs_write_folio_unplug,
 };
 
 static const struct swap_ops bdev_sync_swap_ops = {
