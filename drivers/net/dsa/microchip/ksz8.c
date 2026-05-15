@@ -3,6 +3,7 @@
  * Microchip KSZ8XXX series switch driver
  *
  * It supports the following switches:
+ * - KSZ8995XA (the oldest ancestor)
  * - KSZ8463
  * - KSZ8863, KSZ8873 aka KSZ88X3
  * - KSZ8895, KSZ8864 aka KSZ8895 family
@@ -135,7 +136,10 @@ int ksz8_pme_pwrite8(struct ksz_device *dev, int port, int offset, u8 data)
 
 int ksz8_reset_switch(struct ksz_device *dev)
 {
-	if (ksz_is_ksz88x3(dev)) {
+	if (ksz_is_ksz8995xa(dev)) {
+		/* KSZ8995XA lacks software reset */
+		return 0;
+	} else if (ksz_is_ksz88x3(dev)) {
 		/* reset switch */
 		ksz_cfg(dev, KSZ8863_REG_SW_RESET,
 			KSZ8863_GLOBAL_SOFTWARE_RESET | KSZ8863_PCS_RESET, true);
@@ -159,8 +163,14 @@ int ksz8_reset_switch(struct ksz_device *dev)
 static int ksz8863_change_mtu(struct ksz_device *dev, int frame_size)
 {
 	u8 ctrl2 = 0;
+	unsigned int legalsz;
 
-	if (frame_size <= KSZ8_LEGAL_PACKET_SIZE)
+	if (ksz_is_ksz8995xa(dev))
+		legalsz = KSZ8995XA_LEGAL_PACKET_SIZE;
+	else
+		legalsz = KSZ8_LEGAL_PACKET_SIZE;
+
+	if (frame_size <= legalsz)
 		ctrl2 |= KSZ8863_LEGAL_PACKET_ENABLE;
 	else if (frame_size > KSZ8863_NORMAL_PACKET_SIZE)
 		ctrl2 |= KSZ8863_HUGE_PACKET_ENABLE;
@@ -204,6 +214,7 @@ int ksz8_change_mtu(struct ksz_device *dev, int port, int mtu)
 	case KSZ88X3_CHIP_ID:
 	case KSZ8864_CHIP_ID:
 	case KSZ8895_CHIP_ID:
+	case KSZ8995XA_CHIP_ID:
 		return ksz8863_change_mtu(dev, frame_size);
 	}
 
@@ -838,6 +849,10 @@ static int ksz8_r_phy_ctrl(struct ksz_device *dev, int port, u16 *val)
 	if (reg_val & PORT_MDIX_STATUS)
 		*val |= KSZ886X_CTRL_MDIX_STAT;
 
+	/* KSZ8995XA has no fancy features in register 0xA */
+	if (ksz_is_ksz8995xa(dev))
+		return 0;
+
 	ret = ksz_pread8(dev, port, REG_PORT_LINK_MD_CTRL, &reg_val);
 	if (ret < 0)
 		return ret;
@@ -936,8 +951,10 @@ static int ksz8_r_phy_bmcr(struct ksz_device *dev, u16 port, u16 *val)
 	if (ctrl & PORT_FORCE_FULL_DUPLEX)
 		*val |= BMCR_FULLDPLX;
 
-	if (speed & PORT_HP_MDIX)
-		*val |= KSZ886X_BMCR_HP_MDIX;
+	if (!ksz_is_ksz8995xa(dev)) {
+		if (speed & PORT_HP_MDIX)
+			*val |= KSZ886X_BMCR_HP_MDIX;
+	}
 
 	if (restart & PORT_FORCE_MDIX)
 		*val |= KSZ886X_BMCR_FORCE_MDI;
@@ -1032,6 +1049,9 @@ int ksz8_r_phy(struct ksz_device *dev, u16 phy, u16 reg, u16 *val)
 			data |= LPA_LPACK;
 		break;
 	case PHY_REG_LINK_MD:
+		if (ksz_is_ksz8995xa(dev))
+			return -EOPNOTSUPP;
+
 		ret = ksz_pread8(dev, p, REG_PORT_LINK_MD_CTRL, &val1);
 		if (ret)
 			return ret;
@@ -1146,13 +1166,15 @@ static int ksz8_w_phy_bmcr(struct ksz_device *dev, u16 port, u16 val)
 	if (val & BMCR_RESET)
 		return 0;
 
-	speed = 0;
-	if (val & KSZ886X_BMCR_HP_MDIX)
-		speed |= PORT_HP_MDIX;
+	if (!ksz_is_ksz8995xa(dev)) {
+		speed = 0;
+		if (val & KSZ886X_BMCR_HP_MDIX)
+			speed |= PORT_HP_MDIX;
 
-	ret = ksz_prmw8(dev, port, regs[P_SPEED_STATUS], PORT_HP_MDIX, speed);
-	if (ret)
-		return ret;
+		ret = ksz_prmw8(dev, port, regs[P_SPEED_STATUS], PORT_HP_MDIX, speed);
+		if (ret)
+			return ret;
+	}
 
 	ctrl = 0;
 	if (ksz_is_ksz88x3(dev)) {
@@ -1262,11 +1284,17 @@ int ksz8_w_phy(struct ksz_device *dev, u16 phy, u16 reg, u16 val)
 		}
 		break;
 	case PHY_REG_LINK_MD:
+		if (ksz_is_ksz8995xa(dev))
+			return -EOPNOTSUPP;
+
 		if (val & PHY_START_CABLE_DIAG)
 			ksz_port_cfg(dev, p, REG_PORT_LINK_MD_CTRL, PORT_START_CABLE_DIAG, true);
 		break;
 
 	case PHY_REG_PHY_CTRL:
+		if (ksz_is_ksz8995xa(dev))
+			return -EOPNOTSUPP;
+
 		ret = ksz8_w_phy_ctrl(dev, p, val);
 		if (ret)
 			return ret;
@@ -1458,7 +1486,7 @@ int ksz8_fdb_del(struct ksz_device *dev, int port, const unsigned char *addr,
 int ksz8_port_vlan_filtering(struct ksz_device *dev, int port, bool flag,
 			     struct netlink_ext_ack *extack)
 {
-	if (ksz_is_ksz88x3(dev) || ksz_is_ksz8463(dev))
+	if (ksz_is_ksz88x3(dev) || ksz_is_ksz8463(dev) || ksz_is_ksz8995xa(dev))
 		return -ENOTSUPP;
 
 	/* Discard packets with VID not enabled on the switch */
@@ -1670,14 +1698,16 @@ void ksz8_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 		offset = P1CR1;
 	ksz_port_cfg(dev, port, offset, PORT_BROADCAST_STORM, true);
 
-	ksz8_port_queue_split(dev, port, dev->info->num_tx_queues);
+	if (!ksz_is_ksz8995xa(dev)) {
+		ksz8_port_queue_split(dev, port, dev->info->num_tx_queues);
 
-	/* replace priority */
-	offset = P_802_1P_CTRL;
-	if (ksz_is_ksz8463(dev))
-		offset = P1CR2;
-	ksz_port_cfg(dev, port, offset,
-		     masks[PORT_802_1P_REMAPPING], false);
+		/* replace priority */
+		offset = P_802_1P_CTRL;
+		if (ksz_is_ksz8463(dev))
+			offset = P1CR2;
+		ksz_port_cfg(dev, port, offset,
+			     masks[PORT_802_1P_REMAPPING], false);
+	}
 
 	if (cpu_port)
 		member = dsa_user_ports(ds);
@@ -1685,6 +1715,19 @@ void ksz8_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 		member = BIT(dsa_upstream_port(ds, port));
 
 	ksz8_cfg_port_member(dev, port, member);
+
+	if (ksz_is_ksz8995xa(dev)) {
+		/*
+		 * The KSZ8995XA has a special tag format in the front of the frame
+		 * that need to be inserted by the CPU and then removed by each
+		 * port. PORT_REMOVE_TAG simply means "remove tags coming from the
+		 * CPU port" it does not affect ingress packets.
+		 */
+		if (cpu_port)
+			ksz_port_cfg(dev, port, offset, PORT_INSERT_TAG, true);
+		else
+			ksz_port_cfg(dev, port, offset, PORT_REMOVE_TAG, true);
+	}
 
 	/* Disable all WoL options by default. Otherwise
 	 * ksz_switch_macaddr_get/put logic will not work properly.
@@ -1722,7 +1765,9 @@ void ksz8_config_cpu_port(struct dsa_switch *ds)
 	masks = dev->info->masks;
 	regs = dev->info->regs;
 
-	ksz_cfg(dev, regs[S_TAIL_TAG_CTRL], masks[SW_TAIL_TAG_ENABLE], true);
+	/* KSZ8995XA uses a tag in the header instead of the tail */
+	if (!ksz_is_ksz8995xa(dev))
+		ksz_cfg(dev, regs[S_TAIL_TAG_CTRL], masks[SW_TAIL_TAG_ENABLE], true);
 
 	ksz8_port_setup(dev, dev->cpu_port, true);
 
@@ -1922,6 +1967,10 @@ int ksz8_enable_stp_addr(struct ksz_device *dev)
 {
 	struct alu_struct alu;
 
+	/* KSZ8995XA lacks STP */
+	if (ksz_is_ksz8995xa(dev))
+		return 0;
+
 	/* Setup STP address for STP operation. */
 	memset(&alu, 0, sizeof(alu));
 	ether_addr_copy(alu.mac, eth_stp_addr);
@@ -1937,6 +1986,7 @@ int ksz8_setup(struct dsa_switch *ds)
 	struct ksz_device *dev = ds->priv;
 	const u16 *regs = dev->info->regs;
 	int i, ret = 0;
+	u8 val;
 
 	ds->mtu_enforcement_ingress = true;
 
@@ -1962,9 +2012,10 @@ int ksz8_setup(struct dsa_switch *ds)
 	 * Make sure unicast VLAN boundary is set as default and
 	 * enable no excessive collision drop.
 	 */
-	ret = ksz_rmw8(dev, REG_SW_CTRL_2,
-		       UNICAST_VLAN_BOUNDARY | NO_EXC_COLLISION_DROP,
-		       UNICAST_VLAN_BOUNDARY | NO_EXC_COLLISION_DROP);
+	val = NO_EXC_COLLISION_DROP;
+	if (!ksz_is_ksz8995xa(dev))
+		val |= UNICAST_VLAN_BOUNDARY;
+	ret = ksz_rmw8(dev, REG_SW_CTRL_2, val, val);
 	if (ret)
 		return ret;
 
@@ -1972,11 +2023,15 @@ int ksz8_setup(struct dsa_switch *ds)
 
 	ksz_cfg(dev, S_MIRROR_CTRL, SW_MIRROR_RX_TX, false);
 
-	if (!ksz_is_ksz88x3(dev) && !ksz_is_ksz8463(dev))
+	if (ksz_is_ksz8995xa(dev))
+		ksz_cfg(dev, REG_SW_CTRL_9, SW_SPECIAL_TAG, true);
+	else if (!ksz_is_ksz88x3(dev) && !ksz_is_ksz8463(dev))
 		ksz_cfg(dev, REG_SW_CTRL_19, SW_INS_TAG_ENABLE, true);
 
-	for (i = 0; i < (dev->info->num_vlans / 4); i++)
-		ksz8_r_vlan_entries(dev, i);
+	if (!ksz_is_ksz8995xa(dev)) {
+		for (i = 0; i < (dev->info->num_vlans / 4); i++)
+			ksz8_r_vlan_entries(dev, i);
+	}
 
 	/* Make sure PME (WoL) is not enabled. If requested, it will
 	 * be enabled by ksz_wol_pre_shutdown(). Otherwise, some PMICs
