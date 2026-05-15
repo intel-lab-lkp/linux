@@ -70,15 +70,10 @@ static int sbtsi_temp_read(struct sbtsi_data *data, u8 reg1, u8 reg2,
 {
 	int ret;
 
-	ret = i2c_smbus_read_byte_data(data->client, reg1);
-	if (ret < 0)
-		return ret;
-	*val1 = ret;
-	ret = i2c_smbus_read_byte_data(data->client, reg2);
-	if (ret < 0)
-		return ret;
-	*val2 = ret;
-	return 0;
+	ret = sbtsi_xfer(data, reg1, val1, true);
+	if (!ret)
+		ret = sbtsi_xfer(data, reg2, val2, true);
+	return ret;
 }
 
 /*
@@ -89,9 +84,9 @@ static int sbtsi_temp_write(struct sbtsi_data *data, u8 reg_int, u8 reg_dec,
 {
 	int ret;
 
-	ret = i2c_smbus_write_byte_data(data->client, reg_int, val_int);
+	ret = sbtsi_xfer(data, reg_int, &val_int, false);
 	if (!ret)
-		ret = i2c_smbus_write_byte_data(data->client, reg_dec, val_dec);
+		ret = sbtsi_xfer(data, reg_dec, &val_dec, false);
 	return ret;
 }
 

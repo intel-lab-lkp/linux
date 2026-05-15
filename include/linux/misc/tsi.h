@@ -31,4 +31,17 @@ struct sbtsi_data {
 #define AMD_SBTSI_ADEV		"amd-sbtsi"
 #define AMD_SBTSI_AUX_HWMON	"temp-sensor"
 
+/**
+ * sbtsi_xfer - Perform a register read or write transfer on an AMD SB-TSI device.
+ *
+ * @data:    Pointer to the sbtsi_data structure containing the device context
+ * @reg:     Register address to access.
+ * @val:     Pointer to the value to read into or write from.
+ * @is_read: If true, performs a read transfer and stores the result in @val.
+ *           If false, performs a write transfer using the value in @val.
+ *
+ * Returns 0 on success, or a negative error code on failure.
+ */
+int sbtsi_xfer(struct sbtsi_data *data, u8 reg, u8 *val, bool is_read);
+
 #endif /* _LINUX_TSI_H_ */
