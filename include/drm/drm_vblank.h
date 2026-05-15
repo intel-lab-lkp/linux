@@ -38,6 +38,11 @@ struct drm_crtc;
 struct drm_vblank_work;
 
 /**
+ * DRM_VBLANK_FLAG_SIMULATED - vblank uses a software timer
+ */
+#define DRM_VBLANK_FLAG_SIMULATED	BIT(1)
+
+/**
  * struct drm_pending_vblank_event - pending vblank event tracking
  */
 struct drm_pending_vblank_event {
