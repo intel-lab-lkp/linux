@@ -1758,6 +1758,7 @@ static int io_init_req(struct io_ring_ctx *ctx, struct io_kiocb *req,
 		return io_init_fail_req(req, -EINVAL);
 	}
 	opcode = array_index_nospec(opcode, IORING_OP_LAST);
+	req->opcode = opcode;
 
 	def = &io_issue_defs[opcode];
 	if (def->is_128 && !(ctx->flags & IORING_SETUP_SQE128)) {
