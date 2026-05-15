@@ -766,6 +766,10 @@ struct rtl8169_private {
 	dma_addr_t counters_phys_addr;
 	struct rtl8169_counters *counters;
 	struct rtl8169_tc_offsets tc_offset;
+	atomic64_t rx_alloc_fail;
+	atomic64_t rx_buf_alloc_fail;
+	atomic64_t rx_dma_mapping_fail;
+	atomic64_t rx_skb_alloc_fail;
 	u32 saved_wolopts;
 
 	const char *fw_name;
@@ -1901,6 +1905,10 @@ static const char rtl8169_gstrings[][ETH_GSTRING_LEN] = {
 	"multicast",
 	"tx_aborted",
 	"tx_underrun",
+	"rx_alloc_fail",
+	"rx_buf_alloc_fail",
+	"rx_dma_mapping_fail",
+	"rx_skb_alloc_fail",
 };
 
 static int rtl8169_get_sset_count(struct net_device *dev, int sset)
@@ -1999,6 +2007,10 @@ static void rtl8169_get_ethtool_stats(struct net_device *dev,
 	data[10] = le32_to_cpu(counters->rx_multicast);
 	data[11] = le16_to_cpu(counters->tx_aborted);
 	data[12] = le16_to_cpu(counters->tx_underrun);
+	data[13] = atomic64_read(&tp->rx_alloc_fail);
+	data[14] = atomic64_read(&tp->rx_buf_alloc_fail);
+	data[15] = atomic64_read(&tp->rx_dma_mapping_fail);
+	data[16] = atomic64_read(&tp->rx_skb_alloc_fail);
 }
 
 static void rtl8169_get_strings(struct net_device *dev, u32 stringset, u8 *data)
@@ -4167,12 +4179,17 @@ static struct page *rtl8169_alloc_rx_data(struct rtl8169_private *tp,
 	struct page *data;
 
 	data = alloc_pages_node(node, GFP_KERNEL, get_order(R8169_RX_BUF_SIZE));
-	if (!data)
+	if (!data) {
+		atomic64_inc(&tp->rx_alloc_fail);
+		atomic64_inc(&tp->rx_buf_alloc_fail);
 		return NULL;
+	}
 
 	mapping = dma_map_page(d, data, 0, R8169_RX_BUF_SIZE, DMA_FROM_DEVICE);
 	if (unlikely(dma_mapping_error(d, mapping))) {
 		netdev_err(tp->dev, "Failed to map RX DMA!\n");
+		atomic64_inc(&tp->rx_alloc_fail);
+		atomic64_inc(&tp->rx_dma_mapping_fail);
 		__free_pages(data, get_order(R8169_RX_BUF_SIZE));
 		return NULL;
 	}
@@ -4823,6 +4840,8 @@ static int rtl_rx(struct net_device *dev, struct rtl8169_private *tp, int budget
 		skb = napi_alloc_skb(&tp->napi, pkt_size);
 		if (unlikely(!skb)) {
 			dev->stats.rx_dropped++;
+			atomic64_inc(&tp->rx_alloc_fail);
+			atomic64_inc(&tp->rx_skb_alloc_fail);
 			goto release_descriptor;
 		}
 
