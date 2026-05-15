@@ -3111,6 +3111,7 @@ static int DAC960_PD_hw_init(struct pci_dev *pdev,
 {
 	int timeout = 0;
 	unsigned char error, parm0, parm1;
+	int ret = 0;
 
 	if (!request_region(cb->io_addr, 0x80, "myrb")) {
 		dev_err(&pdev->dev, "IO port 0x%lx busy\n",
@@ -3124,21 +3125,25 @@ static int DAC960_PD_hw_init(struct pci_dev *pdev,
 	       timeout < MYRB_MAILBOX_TIMEOUT) {
 		if (DAC960_PD_read_error_status(base, &error,
 					      &parm0, &parm1) &&
-		    myrb_err_status(cb, error, parm0, parm1))
-			return -EIO;
+		    myrb_err_status(cb, error, parm0, parm1)) {
+			ret = -EIO;
+			goto out_release_region;
+		}
 		udelay(10);
 		timeout++;
 	}
 	if (timeout == MYRB_MAILBOX_TIMEOUT) {
 		dev_err(&pdev->dev,
 			"Timeout waiting for Controller Initialisation\n");
-		return -ETIMEDOUT;
+		ret = -ETIMEDOUT;
+		goto out_release_region;
 	}
 	if (!myrb_enable_mmio(cb, NULL)) {
 		dev_err(&pdev->dev,
 			"Unable to Enable Memory Mailbox Interface\n");
 		DAC960_PD_reset_ctrl(base);
-		return -ENODEV;
+		ret = -ENODEV;
+		goto out_release_region;
 	}
 	DAC960_PD_enable_intr(base);
 	cb->qcmd = DAC960_PD_qcmd;
@@ -3146,6 +3151,10 @@ static int DAC960_PD_hw_init(struct pci_dev *pdev,
 	cb->reset = DAC960_PD_reset_ctrl;
 
 	return 0;
+
+out_release_region:
+	release_region(cb->io_addr, 0x80);
+	return ret;
 }
 
 static irqreturn_t DAC960_PD_intr_handler(int irq, void *arg)
@@ -3277,6 +3286,7 @@ static int DAC960_P_hw_init(struct pci_dev *pdev,
 {
 	int timeout = 0;
 	unsigned char error, parm0, parm1;
+	int ret = 0;
 
 	if (!request_region(cb->io_addr, 0x80, "myrb")) {
 		dev_err(&pdev->dev, "IO port 0x%lx busy\n",
@@ -3290,21 +3300,25 @@ static int DAC960_P_hw_init(struct pci_dev *pdev,
 	       timeout < MYRB_MAILBOX_TIMEOUT) {
 		if (DAC960_PD_read_error_status(base, &error,
 						&parm0, &parm1) &&
-		    myrb_err_status(cb, error, parm0, parm1))
-			return -EAGAIN;
+		    myrb_err_status(cb, error, parm0, parm1)) {
+			ret = -EAGAIN;
+			goto out_release_region;
+		}
 		udelay(10);
 		timeout++;
 	}
 	if (timeout == MYRB_MAILBOX_TIMEOUT) {
 		dev_err(&pdev->dev,
 			"Timeout waiting for Controller Initialisation\n");
-		return -ETIMEDOUT;
+		ret = -ETIMEDOUT;
+		goto out_release_region;
 	}
 	if (!myrb_enable_mmio(cb, NULL)) {
 		dev_err(&pdev->dev,
 			"Unable to allocate DMA mapped memory\n");
 		DAC960_PD_reset_ctrl(base);
-		return -ETIMEDOUT;
+		ret = -ETIMEDOUT;
+		goto out_release_region;
 	}
 	DAC960_PD_enable_intr(base);
 	cb->qcmd = DAC960_P_qcmd;
@@ -3312,6 +3326,10 @@ static int DAC960_P_hw_init(struct pci_dev *pdev,
 	cb->reset = DAC960_PD_reset_ctrl;
 
 	return 0;
+
+out_release_region:
+	release_region(cb->io_addr, 0x80);
+	return ret;
 }
 
 static irqreturn_t DAC960_P_intr_handler(int irq, void *arg)
