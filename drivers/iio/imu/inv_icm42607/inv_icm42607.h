@@ -119,6 +119,14 @@ struct inv_icm42607_suspended {
 	bool temp;
 };
 
+struct inv_icm42607_apex {
+	unsigned int on;
+	struct {
+		u64 value;
+		bool enable;
+	} wom;
+};
+
 /**
  *  struct inv_icm42607_state - driver state variables
  *  @lock:		lock for serializing multiple registers access.
@@ -133,6 +141,7 @@ struct inv_icm42607_suspended {
  *  @indio_gyro:	gyroscope IIO device.
  *  @indio_accel:	accelerometer IIO device.
  *  @timestamp:         interrupt timestamps.
+ *  @apex:		APEX (Advanced Pedometer and Event detection) management
  *  @fifo:		FIFO management structure.
  *  @buffer:		data transfer buffer aligned for DMA.
  */
@@ -151,6 +160,7 @@ struct inv_icm42607_state {
 	struct {
 		s64 accel;
 	} timestamp;
+	struct inv_icm42607_apex apex;
 	struct inv_icm42607_fifo fifo;
 	__be16 buffer[3] __aligned(IIO_DMA_MINALIGN);
 };
@@ -376,6 +386,18 @@ struct inv_icm42607_sensor_state {
 #define INV_ICM42607P_WHOAMI				0x60
 #define INV_ICM42607_WHOAMI				0x67
 
+/* Bank 2/3 register access */
+#define INV_ICM42607_BLK_SEL_W				0x79
+#define INV_ICM42607_MADDR_W				0x7A
+#define INV_ICM42607_M_W				0x7B
+#define INV_ICM42607_BLK_SEL_R				0x7C
+#define INV_ICM42607_MADDR_R				0x7D
+#define INV_ICM42607_M_R				0x7E
+
+#define INV_ICM42607_MREG_1				0x00
+#define INV_ICM42607_MREG_2				0x28
+#define INV_ICM42607_MREG_3				0x50
+
 /* Sleep times required by the driver */
 #define INV_ICM42607_POWER_UP_TIME_US			100000
 #define INV_ICM42607_RESET_TIME_MS			1
@@ -384,6 +406,7 @@ struct inv_icm42607_sensor_state {
 #define INV_ICM42607_GYRO_STOP_TIME_MS			150
 #define INV_ICM42607_TEMP_STARTUP_TIME_MS		14
 #define INV_ICM42607_SUSPEND_DELAY_MS			2000
+#define INV_ICM42607_MREG_DELAY_US			10
 
 typedef int (*inv_icm42607_bus_setup)(struct inv_icm42607_state *);
 
@@ -391,6 +414,9 @@ extern const struct regmap_config inv_icm42607_regmap_config;
 extern const struct inv_icm42607_hw inv_icm42607_hw_data;
 extern const struct inv_icm42607_hw inv_icm42607p_hw_data;
 extern const struct dev_pm_ops inv_icm42607_pm_ops;
+
+int inv_icm42607_mreg_write(struct regmap *map, unsigned int bank,
+			    u8 reg, u8 data);
 
 const struct iio_mount_matrix *
 inv_icm42607_get_mount_matrix(struct iio_dev *indio_dev,
@@ -405,11 +431,18 @@ int inv_icm42607_set_accel_conf(struct inv_icm42607_state *st,
 int inv_icm42607_set_temp_conf(struct inv_icm42607_state *st, bool enable,
 			       unsigned int *sleep_ms);
 
+int inv_icm42607_enable_wom(struct inv_icm42607_state *st);
+int inv_icm42607_disable_wom(struct inv_icm42607_state *st);
+
 int inv_icm42607_core_probe(struct regmap *regmap, const struct inv_icm42607_hw *hw,
 			    inv_icm42607_bus_setup bus_setup);
 
 struct iio_dev *inv_icm42607_accel_init(struct inv_icm42607_state *st);
 
 int inv_icm42607_accel_parse_fifo(struct iio_dev *indio_dev);
+
+void inv_icm42607_accel_handle_events(struct iio_dev *indio_dev,
+				      unsigned int status2, unsigned int status3,
+				      s64 timestamp);
 
 #endif
