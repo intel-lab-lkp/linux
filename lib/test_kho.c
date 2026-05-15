@@ -23,12 +23,16 @@
 
 #include <net/checksum.h>
 
-#define KHO_TEST_MAGIC	0x4b484f21	/* KHO! */
-#define KHO_TEST_FDT	"kho_test"
 #define KHO_TEST_COMPAT "kho-test-v1"
 
 static long max_mem = (PAGE_SIZE << MAX_PAGE_ORDER) * 2;
 module_param(max_mem, long, 0644);
+
+static bool second_boot;
+module_param(second_boot, bool, 0644);
+
+static bool third_boot;
+module_param(third_boot, bool, 0644);
 
 struct kho_test_state {
 	unsigned int nr_folios;
@@ -40,7 +44,25 @@ struct kho_test_state {
 	__wsum csum;
 };
 
-static struct kho_test_state kho_test_state;
+struct kho_superstate {
+	struct kho_test_state kho_test_state;
+	const char *kho_test_fdt;
+	int kho_test_magic;
+};
+
+static struct kho_superstate kho_superstate[] = {
+	{{}, "kho_test0", 0x4b484f30},	/* KHO0 */
+	{{}, "kho_test1", 0x4b484f31},
+	{{}, "kho_test2", 0x4b484f32},
+	{{}, "kho_test3", 0x4b484f33},
+};
+
+enum superstate_index {
+	FIRST_BOOT_EARLY_ALLOC,
+	FIRST_BOOT_LATE_ALLOC,
+	SECOND_BOOT_EARLY_ALLOC,
+	SECOND_BOOT_LATE_ALLOC,
+};
 
 static void kho_test_unpreserve_data(struct kho_test_state *state)
 {
@@ -94,10 +116,11 @@ err_free_info:
 	return err;
 }
 
-static int kho_test_prepare_fdt(struct kho_test_state *state, ssize_t fdt_size)
+static int kho_test_prepare_fdt(struct kho_superstate *superstate, ssize_t fdt_size)
 {
+	struct kho_test_state *state = &superstate->kho_test_state;
 	const char compatible[] = KHO_TEST_COMPAT;
-	unsigned int magic = KHO_TEST_MAGIC;
+	unsigned int magic = superstate->kho_test_magic;
 	void *fdt = folio_address(state->fdt);
 	int err;
 
@@ -121,10 +144,11 @@ static int kho_test_prepare_fdt(struct kho_test_state *state, ssize_t fdt_size)
 	return err;
 }
 
-static int kho_test_preserve(struct kho_test_state *state)
+static int kho_test_preserve(struct kho_superstate *superstate)
 {
 	ssize_t fdt_size;
 	int err;
+	struct kho_test_state *state = &superstate->kho_test_state;
 
 	fdt_size = state->nr_folios * sizeof(phys_addr_t) + PAGE_SIZE;
 	state->fdt = folio_alloc(GFP_KERNEL, get_order(fdt_size));
@@ -139,11 +163,11 @@ static int kho_test_preserve(struct kho_test_state *state)
 	if (err)
 		goto err_unpreserve_fdt;
 
-	err = kho_test_prepare_fdt(state, fdt_size);
+	err = kho_test_prepare_fdt(superstate, fdt_size);
 	if (err)
 		goto err_unpreserve_data;
 
-	err = kho_add_subtree(KHO_TEST_FDT, folio_address(state->fdt),
+	err = kho_add_subtree(superstate->kho_test_fdt, folio_address(state->fdt),
 			      fdt_totalsize(folio_address(state->fdt)));
 	if (err)
 		goto err_unpreserve_data;
@@ -202,14 +226,12 @@ err_free_folios:
 	return -ENOMEM;
 }
 
-static int kho_test_save(void)
+static int kho_test_alloc(struct kho_test_state *state)
 {
-	struct kho_test_state *state = &kho_test_state;
 	struct folio **folios;
 	unsigned long max_nr;
 	int err;
 
-	max_mem = PAGE_ALIGN(max_mem);
 	max_nr = max_mem >> PAGE_SHIFT;
 
 	folios = kvmalloc_objs(*state->folios, max_nr);
@@ -221,15 +243,23 @@ static int kho_test_save(void)
 	if (err)
 		goto err_free_folios;
 
-	err = kho_test_preserve(state);
-	if (err)
-		goto err_free_folios;
-
 	return 0;
 
 err_free_folios:
 	kvfree(folios);
 	return err;
+}
+
+static int kho_test_alloc_and_preserve(int nr)
+{
+	struct kho_test_state *state = &kho_superstate[nr].kho_test_state;
+	int err;
+
+	err = kho_test_alloc(state);
+	if (err)
+		return err;
+
+	return kho_test_preserve(&kho_superstate[nr]);
 }
 
 static int kho_test_restore_data(const void *fdt, int node)
@@ -284,12 +314,31 @@ static int kho_test_restore_data(const void *fdt, int node)
 	return 0;
 }
 
-static int kho_test_restore(phys_addr_t fdt_phys)
+static int kho_test_early_alloc(void)
 {
-	void *fdt = phys_to_virt(fdt_phys);
-	const unsigned int *magic;
-	int node, len, err;
+	if (third_boot)
+		return 0;
+	else if (second_boot)
+		return kho_test_alloc(&kho_superstate[SECOND_BOOT_EARLY_ALLOC].kho_test_state);
+	else
+		return kho_test_alloc(&kho_superstate[FIRST_BOOT_EARLY_ALLOC].kho_test_state);
+}
+core_initcall(kho_test_early_alloc);
 
+static int kho_test_restore(int nr)
+{
+	int node, len, err;
+	phys_addr_t fdt_phys;
+	void *fdt;
+	const unsigned int *magic;
+
+	err = kho_retrieve_subtree(kho_superstate[nr].kho_test_fdt, &fdt_phys, NULL);
+	if (err) {
+		pr_err("failed to retrieve %s FDT: %d\n", kho_superstate[nr].kho_test_fdt, err);
+		return err;
+	}
+
+	fdt = phys_to_virt(fdt_phys);
 	node = fdt_path_offset(fdt, "/");
 	if (node < 0)
 		return -EINVAL;
@@ -301,62 +350,90 @@ static int kho_test_restore(phys_addr_t fdt_phys)
 	if (!magic || len != sizeof(*magic))
 		return -EINVAL;
 
-	if (*magic != KHO_TEST_MAGIC)
+	if (*magic != kho_superstate[nr].kho_test_magic)
 		return -EINVAL;
 
 	err = kho_test_restore_data(fdt, node);
 	if (err)
-		return err;
+		pr_err("KHO restore failed\n");
+	else
+		pr_info("KHO restore succeeded\n");
 
+	return err;
+}
+
+extern struct kho_scratch *kho_scratch;
+extern unsigned int kho_scratch_cnt;
+
+static int check_cma(void)
+{
+	for (int i = 0; i < kho_scratch_cnt; i++) {
+		unsigned long base_pfn = PHYS_PFN(kho_scratch[i].addr);
+		unsigned long count = kho_scratch[i].size >> PAGE_SHIFT;
+		unsigned long pfn;
+
+		for (pfn = base_pfn; pfn < base_pfn + count;
+		     pfn += pageblock_nr_pages)
+			if (get_pageblock_migratetype(pfn_to_page(pfn)) != MIGRATE_CMA) {
+				pr_err("KHO wrong migratetype\n");
+				return 1;
+			}
+	}
 	return 0;
 }
 
 static int __init kho_test_init(void)
 {
-	phys_addr_t fdt_phys;
 	int err;
 
 	if (!kho_is_enabled())
 		return 0;
 
-	err = kho_retrieve_subtree(KHO_TEST_FDT, &fdt_phys, NULL);
-	if (!err) {
-		err = kho_test_restore(fdt_phys);
-		if (err)
-			pr_err("KHO restore failed\n");
-		else
-			pr_info("KHO restore succeeded\n");
+	if (check_cma())
+		return -EINVAL;
 
-		return err;
+	if (third_boot) {
+		err = kho_test_restore(SECOND_BOOT_EARLY_ALLOC);
+		err |= kho_test_restore(SECOND_BOOT_LATE_ALLOC);
+	} else if (second_boot) {
+		err = kho_test_restore(FIRST_BOOT_EARLY_ALLOC);
+		err |= kho_test_restore(FIRST_BOOT_LATE_ALLOC);
+
+		err |= kho_test_preserve(&kho_superstate[SECOND_BOOT_EARLY_ALLOC]);
+		err |= kho_test_alloc_and_preserve(SECOND_BOOT_LATE_ALLOC);
+	} else {
+		err = kho_test_preserve(&kho_superstate[FIRST_BOOT_EARLY_ALLOC]);
+		err |= kho_test_alloc_and_preserve(FIRST_BOOT_LATE_ALLOC);
 	}
-
-	if (err != -ENOENT) {
-		pr_warn("failed to retrieve %s FDT: %d\n", KHO_TEST_FDT, err);
-		return err;
-	}
-
-	return kho_test_save();
+	return err;
 }
 module_init(kho_test_init);
 
-static void kho_test_cleanup(void)
+static void kho_test_cleanup(struct kho_test_state *state)
 {
-	/* unpreserve and free the data stored in folios */
-	kho_test_unpreserve_data(&kho_test_state);
-	for (int i = 0; i < kho_test_state.nr_folios; i++)
-		folio_put(kho_test_state.folios[i]);
+	kho_remove_subtree(folio_address(state->fdt));
 
-	kvfree(kho_test_state.folios);
+	/* unpreserve and free the data stored in folios */
+	kho_test_unpreserve_data(state);
+	for (int i = 0; i < state->nr_folios; i++)
+		folio_put(state->folios[i]);
+
+	kvfree(state->folios);
 
 	/* Unpreserve and release the FDT folio */
-	kho_unpreserve_folio(kho_test_state.fdt);
-	folio_put(kho_test_state.fdt);
+	kho_unpreserve_folio(state->fdt);
+	folio_put(state->fdt);
 }
 
 static void __exit kho_test_exit(void)
 {
-	kho_remove_subtree(folio_address(kho_test_state.fdt));
-	kho_test_cleanup();
+	if (second_boot) {
+		kho_test_cleanup(&kho_superstate[SECOND_BOOT_EARLY_ALLOC].kho_test_state);
+		kho_test_cleanup(&kho_superstate[SECOND_BOOT_LATE_ALLOC].kho_test_state);
+	} else {
+		kho_test_cleanup(&kho_superstate[FIRST_BOOT_EARLY_ALLOC].kho_test_state);
+		kho_test_cleanup(&kho_superstate[FIRST_BOOT_LATE_ALLOC].kho_test_state);
+	}
 }
 module_exit(kho_test_exit);
 

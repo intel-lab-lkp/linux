@@ -43,6 +43,14 @@ function fail() {
 	local msg=${1:-""}
 
 	ktap_test_fail "$msg"
+
+	local serial_log="$tmp_dir/qemu.serial"
+	if [[ -f "$serial_log" ]]; then
+		echo "=== QEMU Serial Output ===" >&2
+		cat "$serial_log" >&2
+		echo "==========================" >&2
+	fi
+
 	exit "$KSFT_FAIL"
 }
 
@@ -80,11 +88,11 @@ EOF
 
 function mkinitrd() {
 	local kernel=$1
+	local initrd_temp="$tmp_dir/initrd_temp.cpio"
 
-	"$CROSS_COMPILE"gcc -s -static -Os -nostdinc -nostdlib \
+	"$CROSS_COMPILE"gcc -s -static -Os \
 			-fno-asynchronous-unwind-tables -fno-ident \
 			-I "$headers_dir/include" \
-			-I "$kernel_dir/tools/include/nolibc" \
 			-o "$tmp_dir/init" "$test_dir/init.c"
 
 	cat > "$tmp_dir/cpio_list" <<EOF
@@ -96,6 +104,18 @@ file /init $tmp_dir/init 0755 0 0
 file /kernel $kernel 0644 0 0
 EOF
 
+	"$build_dir/usr/gen_init_cpio" "$tmp_dir/cpio_list" > "$initrd_temp"
+
+	cat > "$tmp_dir/cpio_list" <<EOF
+dir /dev 0755 0 0
+dir /proc 0755 0 0
+dir /debugfs 0755 0 0
+nod /dev/console 0600 0 0 c 5 1
+file /init $tmp_dir/init 0755 0 0
+file /kernel $kernel 0644 0 0
+file /initrd $initrd_temp 0755 0 0
+EOF
+
 	"$build_dir/usr/gen_init_cpio" "$tmp_dir/cpio_list" > "$initrd"
 }
 
@@ -105,16 +125,22 @@ function run_qemu() {
 	local kernel=$3
 	local serial="$tmp_dir/qemu.serial"
 
-	cmdline="$cmdline kho=on panic=-1"
+	# 2GiB of preserved mem to exhaust memory initialized early
+	cmdline="$cmdline kho=on panic=-1 test_kho.max_mem=2147483648 \
+ ignore_loglevel earlyprintk=serial,ttyS0,115200 printk.time=1"
 
-	$qemu_cmd -m 1G -smp 2 -no-reboot -nographic -nodefaults \
+	$qemu_cmd -m 8G -smp 2 -no-reboot -nographic -nodefaults \
 		  -accel kvm -accel hvf -accel tcg  \
 		  -serial file:"$serial" \
 		  -append "$cmdline" \
 		  -kernel "$kernel" \
 		  -initrd "$initrd"
 
-	grep "KHO restore succeeded" "$serial" &> /dev/null || fail "KHO failed"
+	count="$(grep --text "KHO restore succeeded" $serial | wc -l)"
+	echo Successful restores: "$count"
+	if [[ $count -ne 4 ]]; then
+		fail "KHO failed"
+	fi
 }
 
 function target_to_arch() {
