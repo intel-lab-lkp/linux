@@ -3,13 +3,14 @@
 
 import time
 
-from lib.py import ksft_run, ksft_exit, ksft_true
+from lib.py import ksft_run, ksft_exit, ksft_eq, ksft_true
 from lib.py import ip
 from lib.py import NetNS, NetNSEnter
 from lib.py import RtnlFamily
 
 
 LINK_NETNSID = 100
+LINK_NETNSID2 = 200
 
 
 def test_event() -> None:
@@ -132,8 +133,52 @@ def test_peer_net() -> None:
                 ip(f"link del foo", ns=tgt_net)
 
 
+def test_peer_net_cross_ns() -> None:
+    """Cross-namespace RTM_GETLINK queries using target-netnsid.
+    IFLA_LINK_NETNSID should report the link peer's namespace from the
+    querier's perspective.  Absent means the peer is in the querier's
+    own namespace.  Must not create self-referential nsid mappings."""
+
+    with NetNS() as ns1, NetNS() as ns2, NetNS() as ns3:
+        net1, net2, net3 = str(ns1), str(ns2), str(ns3)
+
+        ip(f"netns set {net2} {LINK_NETNSID}", ns=net1)
+        ip(f"netns set {net3} {LINK_NETNSID2}", ns=net1)
+
+        with NetNSEnter(net1):
+            rtnl = RtnlFamily()
+
+        cases = [
+            # "dev netns", "peer netns", "query nsid", expected link-netnsid.
+            (net2, net1, LINK_NETNSID, None),
+            (net2, net2, LINK_NETNSID, LINK_NETNSID),
+            (net2, net3, LINK_NETNSID, LINK_NETNSID2),
+        ]
+
+        for dev_ns, peer_ns, query_nsid, exp in cases:
+            ip(f"link add foo netns {dev_ns} type veth"
+               f" peer name bar netns {peer_ns}")
+
+            resp = rtnl.getlink({"target-netnsid": query_nsid,
+                                 "ifname": "foo"})
+            ksft_eq(resp.get("link-netnsid"), exp,
+                    f"link-netnsid mismatch for dev={dev_ns} peer={peer_ns}")
+
+            ip("link del foo", ns=dev_ns)
+
+        # Verify no extra nsid was created by the queries.
+        nsids = ip("netns list-id", ns=net1, json=True)
+        ksft_eq(len(nsids), 2,
+                f"unexpected nsid mappings after cross-ns queries: {nsids}")
+
+
 def main() -> None:
-    ksft_run([test_event, test_link_net, test_peer_net])
+    ksft_run([
+        test_event,
+        test_link_net,
+        test_peer_net,
+        test_peer_net_cross_ns,
+    ])
     ksft_exit()
 
 
