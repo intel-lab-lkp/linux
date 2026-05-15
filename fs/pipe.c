@@ -111,7 +111,11 @@ void pipe_double_lock(struct pipe_inode_info *pipe1,
 	pipe_lock(pipe2);
 }
 
-static struct page *anon_pipe_get_page(struct pipe_inode_info *pipe)
+#define PIPE_PREALLOC_MAX 8
+
+static struct page *anon_pipe_get_page(struct pipe_inode_info *pipe,
+				       struct page **prealloc,
+				       unsigned int *prealloc_n)
 {
 	for (int i = 0; i < ARRAY_SIZE(pipe->tmp_page); i++) {
 		if (pipe->tmp_page[i]) {
@@ -119,6 +123,14 @@ static struct page *anon_pipe_get_page(struct pipe_inode_info *pipe)
 			pipe->tmp_page[i] = NULL;
 			return page;
 		}
+	}
+
+	if (*prealloc_n) {
+		unsigned int idx = --(*prealloc_n);
+		struct page *page = prealloc[idx];
+
+		prealloc[idx] = NULL;
+		return page;
 	}
 
 	return alloc_page(GFP_HIGHUSER | __GFP_ACCOUNT);
@@ -438,6 +450,8 @@ anon_pipe_write(struct kiocb *iocb, struct iov_iter *from)
 	ssize_t chars;
 	bool was_empty = false;
 	bool wake_next_writer = false;
+	struct page *prealloc[PIPE_PREALLOC_MAX] = { NULL };
+	unsigned int prealloc_n = 0;
 
 	/*
 	 * Reject writing to watch queue pipes before the point where we lock
@@ -454,6 +468,26 @@ anon_pipe_write(struct kiocb *iocb, struct iov_iter *from)
 	/* Null write succeeds. */
 	if (unlikely(total_len == 0))
 		return 0;
+
+	/*
+	 * Bulk pre-allocate up to PIPE_PREALLOC_MAX pages outside pipe->mutex
+	 * for writes that span at least one full page. alloc_page() with
+	 * GFP_HIGHUSER may sleep doing reclaim and runs memcg charging, so
+	 * doing it under the mutex extends the critical section and stalls
+	 * the reader. The merge path handles sub-PAGE_SIZE writes without
+	 * needing a fresh page; for writes larger than PIPE_PREALLOC_MAX
+	 * pages, anon_pipe_get_page() falls back to a single alloc_page()
+	 * under the mutex for the remainder. Unused prealloc pages are
+	 * returned to the pipe's tmp_page[] cache (or freed) before unlock.
+	 */
+	if (total_len >= PAGE_SIZE) {
+		unsigned int want = min_t(unsigned int,
+					  DIV_ROUND_UP(total_len, PAGE_SIZE),
+					  PIPE_PREALLOC_MAX);
+
+		prealloc_n = alloc_pages_bulk(GFP_HIGHUSER | __GFP_ACCOUNT,
+					      want, prealloc);
+	}
 
 	mutex_lock(&pipe->mutex);
 
@@ -512,7 +546,7 @@ anon_pipe_write(struct kiocb *iocb, struct iov_iter *from)
 			struct page *page;
 			int copied;
 
-			page = anon_pipe_get_page(pipe);
+			page = anon_pipe_get_page(pipe, prealloc, &prealloc_n);
 			if (unlikely(!page)) {
 				if (!ret)
 					ret = -ENOMEM;
@@ -576,6 +610,8 @@ anon_pipe_write(struct kiocb *iocb, struct iov_iter *from)
 		wake_next_writer = true;
 	}
 out:
+	while (prealloc_n)
+		anon_pipe_put_page(pipe, prealloc[--prealloc_n]);
 	if (pipe_is_full(pipe))
 		wake_next_writer = false;
 	mutex_unlock(&pipe->mutex);
