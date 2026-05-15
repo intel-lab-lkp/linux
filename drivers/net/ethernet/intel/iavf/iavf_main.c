@@ -264,7 +264,7 @@ void iavf_free_virt_mem(struct iavf_hw *hw, struct iavf_virt_mem *mem)
  **/
 void iavf_schedule_reset(struct iavf_adapter *adapter, u64 flags)
 {
-	if (!test_bit(__IAVF_IN_REMOVE_TASK, &adapter->crit_section) &&
+	if (!test_bit(__IAVF_IN_REMOVE_TASK, adapter->crit_section) &&
 	    !(adapter->flags &
 	    (IAVF_FLAG_RESET_PENDING | IAVF_FLAG_RESET_NEEDED))) {
 		adapter->flags |= flags;
@@ -1395,7 +1395,7 @@ void iavf_down(struct iavf_adapter *adapter)
 	if (adapter->flags & IAVF_FLAG_PF_COMMS_FAILED)
 		return;
 
-	if (!test_bit(__IAVF_IN_REMOVE_TASK, &adapter->crit_section)) {
+	if (!test_bit(__IAVF_IN_REMOVE_TASK, adapter->crit_section)) {
 		/* cancel any current operation */
 		adapter->current_op = VIRTCHNL_OP_UNKNOWN;
 		/* Schedule operations to close down the HW. Don't wait
@@ -2000,7 +2000,7 @@ static void iavf_finish_config(struct work_struct *work)
 
 	if ((adapter->flags & IAVF_FLAG_SETUP_NETDEV_FEATURES) &&
 	    adapter->netdev->reg_state == NETREG_REGISTERED &&
-	    !test_bit(__IAVF_IN_REMOVE_TASK, &adapter->crit_section)) {
+	    !test_bit(__IAVF_IN_REMOVE_TASK, adapter->crit_section)) {
 		netdev_update_features(adapter->netdev);
 		adapter->flags &= ~IAVF_FLAG_SETUP_NETDEV_FEATURES;
 	}
@@ -2056,7 +2056,7 @@ out:
  **/
 void iavf_schedule_finish_config(struct iavf_adapter *adapter)
 {
-	if (!test_bit(__IAVF_IN_REMOVE_TASK, &adapter->crit_section))
+	if (!test_bit(__IAVF_IN_REMOVE_TASK, adapter->crit_section))
 		queue_work(adapter->wq, &adapter->finish_config);
 }
 
@@ -2969,7 +2969,7 @@ static int iavf_watchdog_step(struct iavf_adapter *adapter)
 		return 1;
 	case __IAVF_INIT_FAILED:
 		if (test_bit(__IAVF_IN_REMOVE_TASK,
-			     &adapter->crit_section)) {
+			     adapter->crit_section)) {
 			/* Do not update the state and do not reschedule
 			 * watchdog task, iavf_remove should handle this state
 			 * as it can loop forever
@@ -2988,7 +2988,7 @@ static int iavf_watchdog_step(struct iavf_adapter *adapter)
 		return 1000;
 	case __IAVF_COMM_FAILED:
 		if (test_bit(__IAVF_IN_REMOVE_TASK,
-			     &adapter->crit_section)) {
+			     adapter->crit_section)) {
 			/* Set state to __IAVF_INIT_FAILED and perform remove
 			 * steps. Remove IAVF_FLAG_PF_COMMS_FAILED so the task
 			 * doesn't bring the state back to __IAVF_COMM_FAILED.
@@ -3868,7 +3868,7 @@ static int __iavf_setup_tc(struct net_device *netdev, void *type_data)
 		}
 	}
 exit:
-	if (test_bit(__IAVF_IN_REMOVE_TASK, &adapter->crit_section))
+	if (test_bit(__IAVF_IN_REMOVE_TASK, adapter->crit_section))
 		return 0;
 
 	netif_set_real_num_rx_queues(netdev, total_qps);
@@ -5615,7 +5615,7 @@ static void iavf_remove(struct pci_dev *pdev)
 	adapter = iavf_pdev_to_adapter(pdev);
 	hw = &adapter->hw;
 
-	if (test_and_set_bit(__IAVF_IN_REMOVE_TASK, &adapter->crit_section))
+	if (test_and_set_bit(__IAVF_IN_REMOVE_TASK, adapter->crit_section))
 		return;
 
 	/* Wait until port initialization is complete.
