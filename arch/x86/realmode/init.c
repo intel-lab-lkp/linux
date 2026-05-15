@@ -4,6 +4,7 @@
 #include <linux/memblock.h>
 #include <linux/cc_platform.h>
 #include <linux/pgtable.h>
+#include <linux/slaunch.h>
 
 #include <asm/set_memory.h>
 #include <asm/realmode.h>
@@ -213,6 +214,13 @@ void __init init_real_mode(void)
 
 	setup_real_mode();
 	set_real_mode_permissions();
+
+	/*
+	 * If Secure Launch is active, it will use the rmpiggy to do the TXT AP
+	 * startup. Secure Launch has its own entry stub in the rmpiggy and this prepares
+	 * it for SMP boot.
+	 */
+	slaunch_fixup_ap_wake_vector();
 }
 
 static int __init do_init_real_mode(void)

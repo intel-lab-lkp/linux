@@ -511,3 +511,29 @@ void __init slaunch_setup(void)
 	if (boot_cpu_has(X86_FEATURE_SMX))
 		slaunch_setup_txt();
 }
+
+/*
+ * After a launch, the APs are woken up, enter the DRTM and are left to
+ * wait for a wakeup call on a MONITOR address. The block where they are
+ * idle has a long jump to the AP startup code in the mainline kernel.
+ * This address has to be calculated at runtime and "fixed up" to point
+ * to the SL startup location in the rmpiggy SMP startup image. This image
+ * is loaded into separate memory at kernel start time.
+ */
+void __init slaunch_fixup_ap_wake_vector(void)
+{
+	struct sl_ap_wake_info *ap_wake_info;
+	u32 *ap_jmp_ptr;
+
+	if (!slaunch_is_txt_launch())
+		return;
+
+	ap_wake_info = slaunch_get_ap_wake_info();
+
+	ap_jmp_ptr = (u32 *)__va(ap_wake_info->ap_wake_block +
+				 ap_wake_info->ap_jmp_offset);
+
+	*ap_jmp_ptr = real_mode_header->sl_trampoline_start32;
+
+	pr_info("TXT AP startup vector address updated\n");
+}
