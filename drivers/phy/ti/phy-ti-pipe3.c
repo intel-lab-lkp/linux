@@ -604,15 +604,22 @@ static int ti_pipe3_get_clk(struct ti_pipe3 *phy)
 {
 	struct clk *clk;
 	struct device *dev = phy->dev;
+	int ret;
 
 	phy->refclk = devm_clk_get(dev, "refclk");
 	if (IS_ERR(phy->refclk)) {
-		dev_err(dev, "unable to get refclk\n");
+		ret = PTR_ERR(phy->refclk);
 		/* older DTBs have missing refclk in SATA PHY
-		 * so don't bail out in case of SATA PHY.
+		 * so don't bail out for -ENOENT, but still defer
+		 * probe for other errors like -EPROBE_DEFER.
 		 */
-		if (phy->mode != PIPE3_MODE_SATA)
-			return PTR_ERR(phy->refclk);
+		if (ret == -ENOENT) {
+			if (phy->mode != PIPE3_MODE_SATA)
+				return ret;
+		} else {
+			dev_err(dev, "unable to get refclk\n");
+			return ret;
+		}
 	}
 
 	if (phy->mode != PIPE3_MODE_SATA) {
@@ -629,7 +636,7 @@ static int ti_pipe3_get_clk(struct ti_pipe3 *phy)
 		phy->sys_clk = devm_clk_get(dev, "sysclk");
 		if (IS_ERR(phy->sys_clk)) {
 			dev_err(dev, "unable to get sysclk\n");
-			return -EINVAL;
+			return PTR_ERR(phy->sys_clk);
 		}
 	}
 
