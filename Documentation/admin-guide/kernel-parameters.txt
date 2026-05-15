@@ -1049,6 +1049,22 @@ Kernel parameters
 			policy to use. This governor must be registered in the
 			kernel before the cpufreq driver probes.
 
+	cppc_cpufreq.auto_sel_mode=
+			[CPU_FREQ] Enable ACPI CPPC autonomous performance
+			selection. When enabled, hardware automatically adjusts
+			CPU frequency on all CPUs based on workload demands.
+			In Autonomous mode, Energy Performance Preference (EPP)
+			hints guide hardware toward performance (0x0) or energy
+			efficiency (0xff).
+			Requires ACPI CPPC autonomous selection register
+			support.
+			Accepts:
+			  performance, 1: enable auto_sel + set EPP to
+					  performance (0x0)
+			  default_epp, 2: enable auto_sel, preserve EPP value
+					  programmed by BIOS/firmware
+			Unset: cpufreq governors are used (auto_sel disabled).
+
 	cpu_init_udelay=N
 			[X86,EARLY] Delay for N microsec between assert and de-assert
 			of APIC INIT to start processors.  This delay occurs
