@@ -54,7 +54,7 @@ static struct ee1004_bus_data {
 } ee1004_bus_data[EE1004_MAX_BUSSES];
 
 static const struct i2c_device_id ee1004_ids[] = {
-	{ "ee1004" },
+	{ .name = "ee1004" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, ee1004_ids);

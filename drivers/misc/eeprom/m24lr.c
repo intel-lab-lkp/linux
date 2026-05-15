@@ -104,9 +104,9 @@ static const struct m24lr_chip m24lr64e_r_chip = {
 };
 
 static const struct i2c_device_id m24lr_ids[] = {
-	{ "m24lr04e-r", (kernel_ulong_t)&m24lr04e_r_chip},
-	{ "m24lr16e-r", (kernel_ulong_t)&m24lr16e_r_chip},
-	{ "m24lr64e-r", (kernel_ulong_t)&m24lr64e_r_chip},
+	{ .name = "m24lr04e-r", .driver_data = (kernel_ulong_t)&m24lr04e_r_chip },
+	{ .name = "m24lr16e-r", .driver_data = (kernel_ulong_t)&m24lr16e_r_chip },
+	{ .name = "m24lr64e-r", .driver_data = (kernel_ulong_t)&m24lr64e_r_chip },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, m24lr_ids);

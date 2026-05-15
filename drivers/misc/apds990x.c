@@ -1254,8 +1254,8 @@ static int apds990x_runtime_resume(struct device *dev)
 #endif
 
 static const struct i2c_device_id apds990x_id[] = {
-	{ "apds990x" },
-	{}
+	{ .name = "apds990x" },
+	{ }
 };
 
 MODULE_DEVICE_TABLE(i2c, apds990x_id);
