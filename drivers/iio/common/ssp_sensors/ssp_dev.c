@@ -513,24 +513,18 @@ static int ssp_probe(struct spi_device *spi)
 	int ret;
 
 	data = ssp_parse_dt(dev);
-	if (!data) {
-		dev_err(dev, "Failed to find platform data\n");
-		return -ENODEV;
-	}
+	if (!data)
+		return dev_err_probe(dev, -ENODEV, "Failed to find platform data\n");
 
 	ret = devm_mfd_add_devices(dev, PLATFORM_DEVID_NONE, sensorhub_sensor_devs,
 				   ARRAY_SIZE(sensorhub_sensor_devs), NULL, 0, NULL);
-	if (ret < 0) {
-		dev_err(dev, "mfd add devices fail\n");
-		return ret;
-	}
+	if (ret < 0)
+		return dev_err_probe(dev, ret, "mfd add devices fail\n");
 
 	spi->mode = SPI_MODE_1;
 	ret = spi_setup(spi);
-	if (ret < 0) {
-		dev_err(dev, "Failed to setup spi\n");
-		return ret;
-	}
+	if (ret < 0)
+		return dev_err_probe(dev, ret, "Failed to setup spi\n");
 
 	data->fw_dl_state = SSP_FW_DL_STATE_NONE;
 	data->spi = spi;
@@ -588,16 +582,12 @@ static int ssp_probe(struct spi_device *spi)
 	enable_irq_wake(data->spi->irq);
 
 	data->fw_dl_state = ssp_check_fwbl(data);
-	if (data->fw_dl_state == SSP_FW_DL_STATE_NONE) {
-		ret = ssp_initialize_mcu(data);
-		if (ret < 0) {
-			dev_err(dev, "Initialize_mcu failed\n");
-			return ret;
-		}
-	} else {
-		dev_err(dev, "Firmware version not supported\n");
-		return -EPERM;
-	}
+	if (data->fw_dl_state != SSP_FW_DL_STATE_NONE)
+		return dev_err_probe(dev, -EPERM, "Firmware version not supported\n");
+
+	ret = ssp_initialize_mcu(data);
+	if (ret < 0)
+		return dev_err_probe(dev, ret, "Initialize_mcu failed\n");
 
 	/*
 	 * Managed shutdown action for the SSP device lifecycle.
