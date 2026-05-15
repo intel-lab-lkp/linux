@@ -9344,12 +9344,25 @@ static void md_end_clone_io(struct bio *bio)
 	struct md_io_clone *md_io_clone = bio->bi_private;
 	struct bio *orig_bio = md_io_clone->orig_bio;
 	struct mddev *mddev = md_io_clone->mddev;
+	struct md_rdev *target_rdev = md_io_clone->target_rdev;
+	sector_t target_start_sector = md_io_clone->target_start_sector;
+	unsigned int target_nr_sectors = md_io_clone->target_nr_sectors;
+	enum md_submodule_id id = mddev->pers->head.id;
+	bool is_raid0_or_linear = (id == ID_LINEAR || id == ID_RAID0);
+	enum req_op op = bio_op(orig_bio);
+	bool is_rw = (op == REQ_OP_READ || op == REQ_OP_WRITE);
 
 	if (bio_data_dir(orig_bio) == WRITE && md_bitmap_enabled(mddev, false))
 		md_bitmap_end(mddev, md_io_clone);
 
 	if (bio->bi_status && !orig_bio->bi_status)
 		orig_bio->bi_status = bio->bi_status;
+
+	if (bio->bi_status && target_rdev && target_nr_sectors &&
+	    is_raid0_or_linear && is_rw) {
+		rdev_set_badblocks(target_rdev, target_start_sector,
+				   target_nr_sectors, 0);
+	}
 
 	if (md_io_clone->start_time)
 		bio_end_io_acct(orig_bio, md_io_clone->start_time);
@@ -9369,6 +9382,9 @@ static void md_clone_bio(struct mddev *mddev, struct bio **bio)
 	md_io_clone = container_of(clone, struct md_io_clone, bio_clone);
 	md_io_clone->orig_bio = *bio;
 	md_io_clone->mddev = mddev;
+	md_io_clone->target_rdev = NULL;
+	md_io_clone->target_start_sector = 0;
+	md_io_clone->target_nr_sectors = 0;
 	if (blk_queue_io_stat(bdev->bd_disk->queue))
 		md_io_clone->start_time = bio_start_io_acct(*bio);
 

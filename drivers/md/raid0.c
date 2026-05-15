@@ -559,8 +559,12 @@ static void raid0_map_submit_bio(struct mddev *mddev, struct bio *bio)
 	struct md_rdev *tmp_dev;
 	sector_t bio_sector = bio->bi_iter.bi_sector;
 	sector_t sector = bio_sector;
-
-	md_account_bio(mddev, &bio);
+	sector_t bio_start_sector, target_start_sector;
+	sector_t first_bad, bad_sectors, good_sectors;
+	unsigned int target_nr_sectors;
+	struct md_io_clone *md_io_clone;
+	enum req_op op = bio_op(bio);
+	bool is_rw = (op == REQ_OP_READ || op == REQ_OP_WRITE);
 
 	zone = find_zone(mddev->private, &sector);
 	switch (conf->layout) {
@@ -576,13 +580,29 @@ static void raid0_map_submit_bio(struct mddev *mddev, struct bio *bio)
 		return;
 	}
 
-	if (unlikely(is_rdev_broken(tmp_dev))) {
-		bio_io_error(bio);
-		md_error(mddev, tmp_dev);
-		return;
+	bio_start_sector = sector + zone->dev_start;
+
+	if (is_rw && is_badblock(tmp_dev, bio_start_sector, bio_sectors(bio),
+				 &first_bad, &bad_sectors)) {
+		if (first_bad == bio_start_sector) {
+			bio_io_error(bio);
+			return;
+		}
+
+		good_sectors = first_bad - bio_start_sector;
+		bio = bio_submit_split_bioset(bio, good_sectors, &mddev->bio_set);
+		if (!bio)
+			return;
 	}
 
+	target_start_sector = sector + zone->dev_start;
+	target_nr_sectors = bio_sectors(bio);
+
+	md_account_bio(mddev, &bio);
 	bio_set_dev(bio, tmp_dev->bdev);
+	md_io_clone = bio->bi_private;
+	md_set_clone_target(md_io_clone, tmp_dev, target_start_sector,
+			    target_nr_sectors);
 	bio->bi_iter.bi_sector = sector + zone->dev_start +
 		tmp_dev->data_offset;
 	mddev_trace_remap(mddev, bio, bio_sector);

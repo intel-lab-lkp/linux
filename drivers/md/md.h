@@ -875,6 +875,9 @@ struct md_thread {
 
 struct md_io_clone {
 	struct mddev	*mddev;
+	struct md_rdev	*target_rdev;
+	sector_t	target_start_sector;
+	unsigned int	target_nr_sectors;
 	struct bio	*orig_bio;
 	unsigned long	start_time;
 	sector_t	offset;
@@ -964,9 +967,13 @@ extern void mddev_destroy_serial_pool(struct mddev *mddev,
 struct md_rdev *md_find_rdev_nr_rcu(struct mddev *mddev, int nr);
 struct md_rdev *md_find_rdev_rcu(struct mddev *mddev, dev_t dev);
 
-static inline bool is_rdev_broken(struct md_rdev *rdev)
+static inline void
+md_set_clone_target(struct md_io_clone *clone, struct md_rdev *rdev,
+		    sector_t start_sector, unsigned int nr_sectors)
 {
-	return !disk_live(rdev->bdev->bd_disk);
+	clone->target_rdev = rdev;
+	clone->target_start_sector = start_sector;
+	clone->target_nr_sectors = nr_sectors;
 }
 
 static inline void rdev_dec_pending(struct md_rdev *rdev, struct mddev *mddev)

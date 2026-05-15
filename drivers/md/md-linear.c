@@ -237,6 +237,12 @@ static bool linear_make_request(struct mddev *mddev, struct bio *bio)
 	struct dev_info *tmp_dev;
 	sector_t start_sector, end_sector, data_offset;
 	sector_t bio_sector = bio->bi_iter.bi_sector;
+	sector_t first_bad, bad_sectors, good_sectors;
+	sector_t target_start_sector, bio_start_sector;
+	struct md_io_clone *md_io_clone;
+	unsigned int target_nr_sectors;
+	enum req_op op = bio_op(bio);
+	bool is_rw = (op == REQ_OP_READ || op == REQ_OP_WRITE);
 
 	if (unlikely(bio->bi_opf & REQ_PREFLUSH)
 	    && md_flush_request(mddev, bio))
@@ -251,12 +257,6 @@ static bool linear_make_request(struct mddev *mddev, struct bio *bio)
 		     bio_sector < start_sector))
 		goto out_of_bounds;
 
-	if (unlikely(is_rdev_broken(tmp_dev->rdev))) {
-		md_error(mddev, tmp_dev->rdev);
-		bio_io_error(bio);
-		return true;
-	}
-
 	if (unlikely(bio_end_sector(bio) > end_sector)) {
 		/* This bio crosses a device boundary, so we have to split it */
 		bio = bio_submit_split_bioset(bio, end_sector - bio_sector,
@@ -265,10 +265,31 @@ static bool linear_make_request(struct mddev *mddev, struct bio *bio)
 			return true;
 	}
 
+	bio_start_sector = bio->bi_iter.bi_sector - start_sector;
+
+	if (is_rw && is_badblock(tmp_dev->rdev, bio_start_sector,
+				 bio_sectors(bio), &first_bad, &bad_sectors)) {
+		if (first_bad == bio_start_sector) {
+			bio_io_error(bio);
+			return true;
+		}
+
+		good_sectors = first_bad - bio_start_sector;
+		bio = bio_submit_split_bioset(bio, good_sectors, &mddev->bio_set);
+		if (!bio)
+			return true;
+	}
+
+	target_start_sector = bio->bi_iter.bi_sector - start_sector;
+	target_nr_sectors = bio_sectors(bio);
+
 	md_account_bio(mddev, &bio);
 	bio_set_dev(bio, tmp_dev->rdev->bdev);
 	bio->bi_iter.bi_sector = bio->bi_iter.bi_sector -
 		start_sector + data_offset;
+	md_io_clone = bio->bi_private;
+	md_set_clone_target(md_io_clone, tmp_dev->rdev,
+			    target_start_sector, target_nr_sectors);
 
 	if (unlikely((bio_op(bio) == REQ_OP_DISCARD) &&
 		     !bdev_max_discard_sectors(bio->bi_bdev))) {
