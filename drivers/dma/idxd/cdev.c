@@ -216,7 +216,7 @@ static int idxd_cdev_open(struct inode *inode, struct file *filp)
 	struct idxd_user_context *ctx;
 	struct idxd_device *idxd;
 	struct idxd_wq *wq;
-	struct device *dev, *fdev;
+	struct device *dev, *fdev __free(put_device) = NULL;
 	int rc = 0;
 	struct iommu_sva *sva = NULL;
 	unsigned int pasid;
@@ -289,6 +289,7 @@ static int idxd_cdev_open(struct inode *inode, struct file *filp)
 	fdev->bus = &dsa_bus_type;
 	fdev->type = &idxd_cdev_file_type;
 
+	idxd_wq_get(wq);
 	rc = dev_set_name(fdev, "file%d", ctx->id);
 	if (rc < 0) {
 		dev_warn(dev, "set name failure\n");
@@ -301,13 +302,14 @@ static int idxd_cdev_open(struct inode *inode, struct file *filp)
 		goto failed_dev_add;
 	}
 
-	idxd_wq_get(wq);
+	fdev = NULL;
 	mutex_unlock(&wq->wq_lock);
 	return 0;
 
 failed_dev_add:
 failed_dev_name:
-	put_device(fdev);
+	mutex_unlock(&wq->wq_lock);
+	return rc;
 failed_ida:
 failed_set_pasid:
 	if (device_user_pasid_enabled(idxd))
