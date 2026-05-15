@@ -672,7 +672,7 @@ static void macb_tx_lpi_work_fn(struct work_struct *work)
 static void macb_tx_lpi_schedule(struct macb *bp)
 {
 	if (bp->eee_active)
-		mod_delayed_work(system_wq, &bp->tx_lpi_work,
+		mod_delayed_work(system_dfl_wq, &bp->tx_lpi_work,
 				 usecs_to_jiffies(bp->tx_lpi_timer));
 }
 
@@ -724,7 +724,7 @@ static int macb_mac_enable_tx_lpi(struct phylink_config *config, u32 timer,
 	/* Defer initial LPI entry by 1 second after link-up per
 	 * IEEE 802.3az section 22.7a.
 	 */
-	mod_delayed_work(system_wq, &bp->tx_lpi_work, msecs_to_jiffies(1000));
+	mod_delayed_work(system_dfl_wq, &bp->tx_lpi_work, msecs_to_jiffies(1000));
 
 	return 0;
 }
