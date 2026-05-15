@@ -652,6 +652,9 @@ ___neigh_create(struct neigh_table *tbl, const void *pkey,
 	struct neigh_hash_table *nht;
 	int error;
 
+	if (dev->flags & IFF_NOARP)
+		return ERR_PTR(-EOPNOTSUPP);
+
 	n = neigh_alloc(tbl, dev, flags, exempt_from_gc);
 	trace_neigh_create(tbl, dev, pkey, n, exempt_from_gc);
 	if (!n) {
