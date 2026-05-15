@@ -594,7 +594,7 @@ static int evergreen_cs_track_validate_stencil(struct radeon_cs_parser *p)
 		return r;
 	}
 
-	r = evergreen_surface_check(p, &surf, NULL);
+	r = evergreen_surface_check(p, &surf, "");
 	if (r) {
 		/* old userspace doesn't compute proper depth/stencil alignment
 		 * check that alignment against a bigger byte per elements and
@@ -823,7 +823,7 @@ static int evergreen_cs_track_validate_texture(struct radeon_cs_parser *p,
 	}
 
 	/* align height */
-	evergreen_surface_check(p, &surf, NULL);
+	evergreen_surface_check(p, &surf, "");
 	surf.nby = ALIGN(surf.nby, surf.halign);
 
 	r = evergreen_surface_check(p, &surf, "texture");
@@ -886,7 +886,7 @@ static int evergreen_cs_track_validate_texture(struct radeon_cs_parser *p,
 				surf.mode = ARRAY_1D_TILED_THIN1;
 			}
 			/* recompute alignment */
-			evergreen_surface_check(p, &surf, NULL);
+			evergreen_surface_check(p, &surf, "");
 			break;
 		case ARRAY_LINEAR_GENERAL:
 		case ARRAY_LINEAR_ALIGNED:
