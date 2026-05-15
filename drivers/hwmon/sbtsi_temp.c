@@ -61,40 +61,82 @@ static inline void sbtsi_mc_to_reg(s32 temp, u8 *integer, u8 *decimal)
 	*decimal = (temp & 0x7) << 5;
 }
 
+/*
+ * Read integer and decimal parts of an SB-TSI temperature register pair
+ * The read order is determined by the ReadOrder bit to ensure atomic latching.
+ */
+static int sbtsi_temp_read(struct sbtsi_data *data, u8 reg1, u8 reg2,
+			   u8 *val1, u8 *val2)
+{
+	int ret;
+
+	ret = i2c_smbus_read_byte_data(data->client, reg1);
+	if (ret < 0)
+		return ret;
+	*val1 = ret;
+	ret = i2c_smbus_read_byte_data(data->client, reg2);
+	if (ret < 0)
+		return ret;
+	*val2 = ret;
+	return 0;
+}
+
+/*
+ * Write integer and decimal parts of an SB-TSI temperature register pair.
+ */
+static int sbtsi_temp_write(struct sbtsi_data *data, u8 reg_int, u8 reg_dec,
+			    u8 val_int, u8 val_dec)
+{
+	int ret;
+
+	ret = i2c_smbus_write_byte_data(data->client, reg_int, val_int);
+	if (!ret)
+		ret = i2c_smbus_write_byte_data(data->client, reg_dec, val_dec);
+	return ret;
+}
+
 static int sbtsi_read(struct device *dev, enum hwmon_sensor_types type,
 		      u32 attr, int channel, long *val)
 {
 	struct sbtsi_data *data = dev_get_drvdata(dev);
 	s32 temp_int, temp_dec;
+	int err;
+	u8 val_int, val_dec;
 
 	switch (attr) {
 	case hwmon_temp_input:
-		if (data->read_order) {
-			temp_dec = i2c_smbus_read_byte_data(data->client, SBTSI_REG_TEMP_DEC);
-			temp_int = i2c_smbus_read_byte_data(data->client, SBTSI_REG_TEMP_INT);
-		} else {
-			temp_int = i2c_smbus_read_byte_data(data->client, SBTSI_REG_TEMP_INT);
-			temp_dec = i2c_smbus_read_byte_data(data->client, SBTSI_REG_TEMP_DEC);
-		}
+		if (data->read_order)
+			err = sbtsi_temp_read(data,
+					      SBTSI_REG_TEMP_DEC, SBTSI_REG_TEMP_INT,
+					      &val_dec, &val_int);
+		else
+			err = sbtsi_temp_read(data,
+					      SBTSI_REG_TEMP_INT, SBTSI_REG_TEMP_DEC,
+					      &val_int, &val_dec);
+		if (err < 0)
+			return err;
 		break;
 	case hwmon_temp_max:
-		temp_int = i2c_smbus_read_byte_data(data->client, SBTSI_REG_TEMP_HIGH_INT);
-		temp_dec = i2c_smbus_read_byte_data(data->client, SBTSI_REG_TEMP_HIGH_DEC);
+		err = sbtsi_temp_read(data,
+				      SBTSI_REG_TEMP_HIGH_INT, SBTSI_REG_TEMP_HIGH_DEC,
+				      &val_int, &val_dec);
+		if (err < 0)
+			return err;
 		break;
 	case hwmon_temp_min:
-		temp_int = i2c_smbus_read_byte_data(data->client, SBTSI_REG_TEMP_LOW_INT);
-		temp_dec = i2c_smbus_read_byte_data(data->client, SBTSI_REG_TEMP_LOW_DEC);
+		err = sbtsi_temp_read(data,
+				      SBTSI_REG_TEMP_LOW_INT, SBTSI_REG_TEMP_LOW_DEC,
+				      &val_int, &val_dec);
+
+		if (err < 0)
+			return err;
 		break;
 	default:
 		return -EINVAL;
 	}
 
-
-	if (temp_int < 0)
-		return temp_int;
-	if (temp_dec < 0)
-		return temp_dec;
-
+	temp_int = val_int;
+	temp_dec = val_dec;
 	*val = sbtsi_reg_to_mc(temp_int, temp_dec);
 	if (data->ext_range_mode)
 		*val -= SBTSI_TEMP_EXT_RANGE_ADJ;
@@ -106,7 +148,7 @@ static int sbtsi_write(struct device *dev, enum hwmon_sensor_types type,
 		       u32 attr, int channel, long val)
 {
 	struct sbtsi_data *data = dev_get_drvdata(dev);
-	int reg_int, reg_dec, err;
+	int reg_int, reg_dec;
 	u8 temp_int, temp_dec;
 
 	switch (attr) {
@@ -127,11 +169,7 @@ static int sbtsi_write(struct device *dev, enum hwmon_sensor_types type,
 	val = clamp_val(val, SBTSI_TEMP_MIN, SBTSI_TEMP_MAX);
 	sbtsi_mc_to_reg(val, &temp_int, &temp_dec);
 
-	err = i2c_smbus_write_byte_data(data->client, reg_int, temp_int);
-	if (err)
-		return err;
-
-	return i2c_smbus_write_byte_data(data->client, reg_dec, temp_dec);
+	return sbtsi_temp_write(data, reg_int, reg_dec, temp_int, temp_dec);
 }
 
 static umode_t sbtsi_is_visible(const void *data,
