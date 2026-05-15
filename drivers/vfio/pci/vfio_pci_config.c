@@ -22,6 +22,7 @@
 
 #include <linux/fs.h>
 #include <linux/pci.h>
+#include <linux/pci-tph.h>
 #include <linux/uaccess.h>
 #include <linux/vfio.h>
 #include <linux/slab.h>
@@ -34,6 +35,8 @@
 #define is_bar(offset)	\
 	((offset >= PCI_BASE_ADDRESS_0 && offset < PCI_BASE_ADDRESS_5 + 4) || \
 	 (offset >= PCI_ROM_ADDRESS && offset < PCI_ROM_ADDRESS + 4))
+
+extern bool enable_unsafe_tph;
 
 /*
  * Lengths of PCI Config Capabilities
@@ -310,6 +313,31 @@ static int vfio_virt_config_read(struct vfio_pci_core_device *vdev, int pos,
 				 int offset, __le32 *val)
 {
 	memcpy(val, vdev->vconfig + pos, count);
+	return count;
+}
+
+static int vfio_pci_tph_config_write(struct vfio_pci_core_device *vdev, int pos,
+				     int count, struct perm_bits *perm,
+				     int offset, __le32 val)
+{
+	u32 data = le32_to_cpu(val);
+
+	if (!enable_unsafe_tph)
+		return count;
+
+	if (count != 4 || offset != PCI_TPH_CTRL)
+		return count;
+
+	/* Only permit write TPH mode. */
+	data &= PCI_TPH_CTRL_MODE_SEL_MASK;
+	if (data > PCI_TPH_ST_DS_MODE)
+		return count;
+
+	if (data != PCI_TPH_ST_NS_MODE)
+		pcie_enable_tph(vdev->pdev, data);
+	else
+		pcie_disable_tph(vdev->pdev);
+
 	return count;
 }
 
@@ -1121,6 +1149,7 @@ int __init vfio_pci_init_perm_bits(void)
 	ret |= init_pci_ext_cap_err_perm(&ecap_perms[PCI_EXT_CAP_ID_ERR]);
 	ret |= init_pci_ext_cap_pwr_perm(&ecap_perms[PCI_EXT_CAP_ID_PWR]);
 	ecap_perms[PCI_EXT_CAP_ID_VNDR].writefn = vfio_raw_config_write;
+	ecap_perms[PCI_EXT_CAP_ID_TPH].writefn = vfio_pci_tph_config_write;
 	ecap_perms[PCI_EXT_CAP_ID_DVSEC].writefn = vfio_raw_config_write;
 
 	if (ret)
