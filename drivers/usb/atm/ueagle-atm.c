@@ -597,20 +597,15 @@ static int uea_send_modem_cmd(struct usb_device *usb,
 	return (ret == size) ? 0 : -EIO;
 }
 
-static void uea_upload_pre_firmware(const struct firmware *fw_entry,
-								void *context)
+static int uea_upload_pre_firmware(const struct firmware *fw_entry,
+				   struct usb_device *usb)
 {
-	struct usb_device *usb = context;
 	const u8 *pfw;
 	u8 value;
 	u32 crc = 0;
 	int ret, size;
 
 	uea_enters(usb);
-	if (!fw_entry) {
-		uea_err(usb, "firmware is not available\n");
-		goto err;
-	}
 
 	pfw = fw_entry->data;
 	size = fw_entry->size;
@@ -668,9 +663,11 @@ static void uea_upload_pre_firmware(const struct firmware *fw_entry,
 
 err_fw_corrupted:
 	uea_err(usb, "firmware is corrupted\n");
+	ret = -EINVAL;
 err:
 	release_firmware(fw_entry);
 	uea_leaves(usb);
+	return ret;
 }
 
 /*
@@ -680,6 +677,7 @@ static int uea_load_firmware(struct usb_device *usb, unsigned int ver)
 {
 	int ret;
 	char *fw_name = EAGLE_FIRMWARE;
+	const struct firmware *firmware;
 
 	uea_enters(usb);
 	uea_info(usb, "pre-firmware device, uploading firmware\n");
@@ -702,13 +700,13 @@ static int uea_load_firmware(struct usb_device *usb, unsigned int ver)
 		break;
 	}
 
-	ret = request_firmware_nowait(THIS_MODULE, 1, fw_name, &usb->dev,
-					GFP_KERNEL, usb,
-					uea_upload_pre_firmware);
-	if (ret)
+	ret = request_firmware(&firmware, fw_name, &usb->dev);
+	if (ret) {
 		uea_err(usb, "firmware %s is not available\n", fw_name);
-	else
+	} else {
 		uea_info(usb, "loading firmware %s\n", fw_name);
+		ret = uea_upload_pre_firmware(firmware, usb);
+	}
 
 	uea_leaves(usb);
 	return ret;
