@@ -46,6 +46,7 @@ struct kernel_symbol {
 
 extern struct mutex module_mutex;
 extern struct list_head modules;
+extern bool module_autoload_restrict;
 
 extern const struct module_attribute *const modinfo_attrs[];
 extern const size_t modinfo_attrs_count;

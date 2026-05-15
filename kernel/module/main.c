@@ -130,6 +130,10 @@ static void mod_update_bounds(struct module *mod)
 static int modules_disabled;
 core_param(nomodule, modules_disabled, bint, 0);
 
+/* Restrict auto-loading? */
+bool module_autoload_restrict = IS_ENABLED(CONFIG_MODULE_RESTRICT_AUTOLOAD);
+core_param(modrestrict, module_autoload_restrict, bool, 0);
+
 static const struct ctl_table module_sysctl_table[] = {
 	{
 		.procname	= "modprobe",
@@ -147,6 +151,13 @@ static const struct ctl_table module_sysctl_table[] = {
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= SYSCTL_ONE,
 		.extra2		= SYSCTL_ONE,
+	},
+	{
+		.procname	= "modrestrict",
+		.data		= &module_autoload_restrict,
+		.maxlen		= sizeof(bool),
+		.mode		= 0644,
+		.proc_handler   = proc_dobool,
 	},
 };
 

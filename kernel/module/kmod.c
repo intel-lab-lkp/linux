@@ -156,6 +156,11 @@ int __request_module(bool wait, const char *fmt, ...)
 	if (ret)
 		return ret;
 
+	if (module_autoload_restrict && !capable(CAP_SYS_ADMIN)) {
+		pr_alert("denied attempt to auto-load module %s\n", module_name);
+		return -EPERM;
+	}
+
 	ret = down_timeout(&kmod_concurrent_max, MAX_KMOD_ALL_BUSY_TIMEOUT * HZ);
 	if (ret) {
 		pr_warn_ratelimited("request_module: modprobe %s cannot be processed, kmod busy with %d threads for more than %d seconds now",
