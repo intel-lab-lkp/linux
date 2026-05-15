@@ -1710,9 +1710,9 @@ static int snd_pcm_oss_sync(struct snd_pcm_oss_file *pcm_oss_file)
 		if (size > 0) {
 			size = runtime->period_size - size;
 			if (runtime->access == SNDRV_PCM_ACCESS_RW_INTERLEAVED)
-				snd_pcm_lib_write(substream, NULL, size);
+				snd_pcm_kernel_write(substream, NULL, size);
 			else if (runtime->access == SNDRV_PCM_ACCESS_RW_NONINTERLEAVED)
-				snd_pcm_lib_writev(substream, NULL, size);
+				snd_pcm_kernel_writev(substream, NULL, size);
 		}
 unlock:
 		mutex_unlock(&runtime->oss.params_lock);
