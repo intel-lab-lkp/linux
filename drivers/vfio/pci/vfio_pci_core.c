@@ -1521,6 +1521,93 @@ static int vfio_pci_core_feature_token(struct vfio_pci_core_device *vdev,
 	return 0;
 }
 
+static int vfio_pci_core_feature_tph_st(struct vfio_pci_core_device *vdev,
+					u32 flags,
+					struct vfio_device_feature_tph_st __user *arg,
+					size_t argsz)
+{
+	bool is_set = !!(flags & VFIO_DEVICE_FEATURE_SET);
+	struct vfio_device_feature_tph_st tph_st;
+	struct pci_dev *pdev = vdev->pdev;
+	enum tph_mem_type mtype;
+	int i, j, ret;
+	u32 *cpus;
+	u16 st;
+
+	if (!enable_unsafe_tph ||
+		pcie_tph_enabled_mode(pdev) == PCI_TPH_ST_NS_MODE)
+		return -EOPNOTSUPP;
+	if (!is_set && pcie_tph_enabled_mode(pdev) != PCI_TPH_ST_DS_MODE)
+		return -EOPNOTSUPP;
+	if (is_set && pcie_tph_get_st_table_loc(pdev) == PCI_TPH_LOC_NONE)
+		return -EOPNOTSUPP;
+
+	ret = vfio_check_feature(flags, argsz,
+				 VFIO_DEVICE_FEATURE_GET |
+				 VFIO_DEVICE_FEATURE_SET,
+				 sizeof(tph_st));
+	if (ret <= 0)
+		return ret;
+
+	if (copy_from_user(&tph_st, arg, sizeof(tph_st)))
+		return -EFAULT;
+
+	if (tph_st.count == 0 || tph_st.count > VFIO_TPH_ST_MAX_COUNT ||
+		tph_st.flags > VFIO_TPH_ST_MEM_TYPE_PM)
+		return -EINVAL;
+	if (!is_set && tph_st.index != 0)
+		return -EINVAL;
+	if (is_set && (tph_st.index >= VFIO_TPH_ST_MAX_COUNT ||
+		       tph_st.index + tph_st.count > VFIO_TPH_ST_MAX_COUNT))
+		return -EINVAL;
+
+	cpus = memdup_array_user(&arg->data, tph_st.count, sizeof(*cpus));
+	if (IS_ERR(cpus))
+		return PTR_ERR(cpus);
+
+	mtype = tph_st.flags & VFIO_TPH_ST_MEM_TYPE_PM ? TPH_MEM_TYPE_PM :
+							 TPH_MEM_TYPE_VM;
+	if (!is_set) {
+		for (i = 0; i < tph_st.count; i++) {
+			ret = pcie_tph_get_cpu_st(pdev, mtype, cpus[i], &st);
+			if (ret)
+				goto out;
+			cpus[i] = st;
+		}
+		goto out;
+	}
+
+	for (i = 0; i < tph_st.count; i++) {
+		if (cpus[i] == U32_MAX) {
+			ret = pcie_tph_set_st_entry(pdev, tph_st.index + i, 0);
+			if (ret)
+				goto out;
+			continue;
+		}
+
+		ret = pcie_tph_get_cpu_st(pdev, mtype, cpus[i], &st);
+		if (ret)
+			goto out;
+		ret = pcie_tph_set_st_entry(pdev, tph_st.index + i, st);
+		if (ret)
+			goto out;
+	}
+
+out:
+	if (!is_set && !ret) {
+		if (copy_to_user(&arg->data, cpus,
+			tph_st.count * sizeof(*cpus)))
+			return -EFAULT;
+	}
+	if (is_set && ret) {
+		/* Roll back previously programmed entries to 0 */
+		for (j = 0; j < i; j++)
+			pcie_tph_set_st_entry(pdev, tph_st.index + j, 0);
+	}
+	kfree(cpus);
+	return ret;
+}
+
 int vfio_pci_core_ioctl_feature(struct vfio_device *device, u32 flags,
 				void __user *arg, size_t argsz)
 {
@@ -1539,6 +1626,8 @@ int vfio_pci_core_ioctl_feature(struct vfio_device *device, u32 flags,
 		return vfio_pci_core_feature_token(vdev, flags, arg, argsz);
 	case VFIO_DEVICE_FEATURE_DMA_BUF:
 		return vfio_pci_core_feature_dma_buf(vdev, flags, arg, argsz);
+	case VFIO_DEVICE_FEATURE_TPH_ST:
+		return vfio_pci_core_feature_tph_st(vdev, flags, arg, argsz);
 	default:
 		return -ENOTTY;
 	}
