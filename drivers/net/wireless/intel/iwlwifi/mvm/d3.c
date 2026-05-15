@@ -2458,7 +2458,7 @@ iwl_mvm_netdetect_query_results(struct iwl_mvm *mvm,
 	}
 
 	len = iwl_rx_packet_payload_len(cmd.resp_pkt);
-	if (len < query_len) {
+	if (len < query_len + matches_len) {
 		IWL_ERR(mvm, "Invalid scan offload profiles query response!\n");
 		ret = -EIO;
 		goto out_free_resp;
