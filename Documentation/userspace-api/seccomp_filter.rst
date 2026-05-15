@@ -289,6 +289,48 @@ above in this document: all arguments being read from the tracee's memory
 should be read into the tracer's memory before any policy decisions are made.
 This allows for an atomic decision on syscall arguments.
 
+Syscall Injection
+-----------------
+
+For unprivileged supervisors, ``ptrace()`` and ``/proc/pid/mem`` are not
+available, and reading the tracee's memory via ``process_vm_readv()``
+remains racy: a sibling thread or ``CLONE_VM`` peer can mutate pointer-arg
+buffers between the supervisor's read and the kernel's re-read on
+``SECCOMP_USER_NOTIF_FLAG_CONTINUE``. ``SECCOMP_IOCTL_NOTIF_INJECT``
+closes that race by letting the supervisor describe a substitute syscall
+(``nr`` plus ``args[6]``, mirroring ``ptrace_syscall_info.entry``) whose
+pointer arguments are backed by a kernel-side copy of supervisor-supplied
+bytes rather than the tracee's user mm.
+
+The supervisor receives a notification as today, then issues
+``ioctl(SECCOMP_IOCTL_NOTIF_INJECT, &inj)`` with a
+``struct seccomp_notif_inject`` describing the substitute. Each pointer-
+shaped argument is encoded as a byte offset into ``inj.buf`` (a user
+buffer the kernel copies in at attach time); the ``args_in_buf_mask``
+field flags which ``args[i]`` are offsets versus raw scalar values.
+The substitute is consumed by ``ioctl(SECCOMP_IOCTL_NOTIF_SEND)`` with
+``SECCOMP_USER_NOTIF_FLAG_INJECTED``: the trapped task wakes, dispatches
+into the matching kernel-mode helper (``filp_open`` for ``openat``,
+``kernel_bind`` for ``bind``, ``kernel_write`` for ``write``), and the
+helper's return value becomes the trapped syscall's return value.
+
+The trapped task's user mm is never re-read for the substituted syscall,
+so peer mutations after ``SECCOMP_IOCTL_NOTIF_INJECT`` returns have no
+effect.
+
+Injection is gated by listener-fd possession (the same capability model
+as the rest of the user-notification interface) and by an explicit
+kernel-side whitelist of injectable syscalls. The substitute ``nr`` must
+match the trapped syscall's number, preventing a malicious supervisor
+from converting "task tried to bind()" into "kernel does an openat() on
+the task's behalf".
+
+This is intentionally a strict subset of ``PTRACE_SYSCALL`` +
+``PTRACE_POKEDATA`` + ``PTRACE_SETREGSET``: the same kernel capability
+(running a syscall in the trapped task's context with kernel-validated
+args), exposed to unprivileged listener-fd-holding supervisors with a
+narrowed surface and no need for ``CAP_SYS_PTRACE``.
+
 Sysctls
 =======
 
