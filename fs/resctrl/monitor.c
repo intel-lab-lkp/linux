@@ -791,11 +791,37 @@ static void mbm_update(struct rdt_resource *r, struct rdt_l3_mon_domain *d,
  */
 void cqm_handle_limbo(struct work_struct *work)
 {
+	struct rdt_resource *r = resctrl_arch_get_resource(RDT_RESOURCE_L3);
 	unsigned long delay = msecs_to_jiffies(CQM_LIMBOCHECK_INTERVAL);
 	struct rdt_l3_mon_domain *d;
 
 	cpus_read_lock();
 	mutex_lock(&rdtgroup_mutex);
+
+	/*
+	 * Worker was blocked waiting for the CPU it was running on to go
+	 * offline. Handle two scenarios:
+	 * - Worker was running on the last CPU of a domain. The domain and
+	 *   thus the work_struct has been freed so do not attempt to obtain
+	 *   domain via container_of(). All remaining domains have limbo
+	 *   handlers so the loop will not find any domains needing a
+	 *   limbo handler. Just exit.
+	 * - Worker was running on CPU that just went offline with other
+	 *   CPUs in domain still running and available to take over the
+	 *   worker. Offline handler could not schedule a new worker on
+	 *   another CPU in the domain but signaled that this needs to be
+	 *   done by setting cqm_work_cpu to nr_cpu_ids. Find the domain
+	 *   that needs a worker and schedule it after the normal CQM
+	 *   interval.
+	 */
+	if (!is_percpu_thread()) {
+		list_for_each_entry(d, &r->mon_domains, hdr.list) {
+			if (d->cqm_work_cpu == nr_cpu_ids)
+				cqm_setup_limbo_handler(d, CQM_LIMBOCHECK_INTERVAL,
+							RESCTRL_PICK_ANY_CPU);
+		}
+		goto out_unlock;
+	}
 
 	d = container_of(work, struct rdt_l3_mon_domain, cqm_limbo.work);
 
@@ -808,6 +834,7 @@ void cqm_handle_limbo(struct work_struct *work)
 					 delay);
 	}
 
+out_unlock:
 	mutex_unlock(&rdtgroup_mutex);
 	cpus_read_unlock();
 }
@@ -852,6 +879,34 @@ void mbm_handle_overflow(struct work_struct *work)
 		goto out_unlock;
 
 	r = resctrl_arch_get_resource(RDT_RESOURCE_L3);
+
+	/*
+	 * Worker was blocked waiting for the CPU it was running on to go
+	 * offline. Handle two scenarios:
+	 * - Worker was running on the last CPU of a domain. The domain and
+	 *   thus the work_struct has been freed so do not attempt to obtain
+	 *   domain via container_of(). All remaining domains have overflow
+	 *   handlers so the loop will not find any domains needing an
+	 *   overflow handler. Just exit.
+	 * - Worker was running on CPU that just went offline with other
+	 *   CPUs in domain still running and available to take over the
+	 *   worker. Offline handler could not schedule a new worker on
+	 *   another CPU in the domain but signaled that this needs to be
+	 *   done by setting mbm_work_cpu to nr_cpu_ids. Find the domain
+	 *   that needs a worker and schedule it to run after the normal
+	 *   MBM interval. This is completely safe on CPUs with wide MBM
+	 *   counters. Likely OK for old CPUs with narrow counters as the
+	 *   MBM_OVERFLOW_INTERVAL was picked conservatively.
+	 */
+	if (!is_percpu_thread()) {
+		list_for_each_entry(d, &r->mon_domains, hdr.list) {
+			if (d->mbm_work_cpu == nr_cpu_ids)
+				mbm_setup_overflow_handler(d, MBM_OVERFLOW_INTERVAL,
+							   RESCTRL_PICK_ANY_CPU);
+		}
+		goto out_unlock;
+	}
+
 	d = container_of(work, struct rdt_l3_mon_domain, mbm_over.work);
 
 	list_for_each_entry(prgrp, &rdt_all_groups, rdtgroup_list) {

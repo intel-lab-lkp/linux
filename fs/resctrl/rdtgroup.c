@@ -4376,8 +4376,7 @@ void resctrl_offline_mon_domain(struct rdt_resource *r, struct rdt_domain_hdr *h
 		goto out_unlock;
 
 	d = container_of(hdr, struct rdt_l3_mon_domain, hdr);
-	if (resctrl_is_mbm_enabled())
-		cancel_delayed_work(&d->mbm_over);
+
 	if (resctrl_is_mon_event_enabled(QOS_L3_OCCUP_EVENT_ID) && has_busy_rmid(d)) {
 		/*
 		 * When a package is going down, forcefully
@@ -4388,7 +4387,6 @@ void resctrl_offline_mon_domain(struct rdt_resource *r, struct rdt_domain_hdr *h
 		 * package never comes back.
 		 */
 		__check_limbo(d, true);
-		cancel_delayed_work(&d->cqm_limbo);
 	}
 
 	domain_destroy_l3_mon_state(d);
@@ -4569,13 +4567,28 @@ void resctrl_offline_cpu(unsigned int cpu)
 	d = get_mon_domain_from_cpu(cpu, l3);
 	if (d) {
 		if (resctrl_is_mbm_enabled() && cpu == d->mbm_work_cpu) {
-			cancel_delayed_work(&d->mbm_over);
-			mbm_setup_overflow_handler(d, 0, cpu);
+			if (cancel_delayed_work(&d->mbm_over)) {
+				mbm_setup_overflow_handler(d, 0, cpu);
+			} else {
+				/*
+				 * Unable to schedule work on new CPU if it
+				 * is currently running since the re-schedule
+				 * will just force new work to run on
+				 * current CPU. Mark domain's worker as
+				 * needing to be rescheduled to be handled
+				 * by worker itself.
+				 */
+				d->mbm_work_cpu = nr_cpu_ids;
+			}
 		}
 		if (resctrl_is_mon_event_enabled(QOS_L3_OCCUP_EVENT_ID) &&
 		    cpu == d->cqm_work_cpu && has_busy_rmid(d)) {
-			cancel_delayed_work(&d->cqm_limbo);
-			cqm_setup_limbo_handler(d, 0, cpu);
+			if (cancel_delayed_work(&d->cqm_limbo)) {
+				cqm_setup_limbo_handler(d, 0, cpu);
+			} else {
+				/* Same as mbm_work_cpu case above */
+				d->cqm_work_cpu = nr_cpu_ids;
+			}
 		}
 	}
 
