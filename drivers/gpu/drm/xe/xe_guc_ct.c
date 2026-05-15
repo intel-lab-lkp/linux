@@ -1032,8 +1032,9 @@ static int h2g_write(struct xe_guc_ct *ct, const u32 *action, u32 len,
 	 * the fast H2G submission path when tracing is not active.
 	 */
 	if (trace_xe_guc_ctb_h2g_enabled())
-		trace_xe_guc_ctb_h2g(xe, gt->info.id, *(action - 1), full_len,
-				     desc_read(xe, h2g, head), h2g->info.tail);
+		trace_call__xe_guc_ctb_h2g(xe, gt->info.id, *(action - 1),
+					   full_len, desc_read(xe, h2g, head),
+					   h2g->info.tail);
 
 	return 0;
 
