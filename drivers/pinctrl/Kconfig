@@ -394,6 +394,22 @@ config PINCTRL_MAX77620
 	  function in alternate mode. This driver also configure push-pull,
 	  open drain, FPS slots etc.
 
+config PINCTRL_MC33978
+	tristate "MC33978/MC34978 industrial input controller support"
+	depends on MFD_MC33978
+	select GPIOLIB
+	select GPIOLIB_IRQCHIP
+	select IRQ_DOMAIN_HIERARCHY
+	select GENERIC_PINCONF
+	help
+	  Say Y here to enable support for NXP MC33978/MC34978 Multiple
+	  Switch Detection Interface (MSDI) devices. This driver provides
+	  pinctrl and GPIO interfaces for the 22 mechanical switch inputs
+	  (14 Switch-to-Ground, 8 Programmable).
+
+	  It allows reading switch states, configuring hardware pull
+	  topologies, and handling interrupts for state changes.
+
 config PINCTRL_MCP23S08_I2C
 	tristate
 	select REGMAP_I2C
