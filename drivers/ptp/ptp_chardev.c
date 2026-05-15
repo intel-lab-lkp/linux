@@ -190,6 +190,8 @@ static long ptp_clock_getcaps(struct ptp_clock *ptp, void __user *arg)
 		.cross_timestamping	= ptp->info->getcrosststamp != NULL,
 		.adjust_phase		= ptp->info->adjphase != NULL &&
 					  ptp->info->getmaxphase != NULL,
+		.clock_attrs		= ptp->info->gettimexattrs64 ||
+					  ptp->info->getcrosststampattrs,
 	};
 
 	if (caps.adjust_phase)
@@ -343,15 +345,69 @@ static long ptp_sys_offset_precise(struct ptp_clock *ptp, void __user *arg,
 	return copy_to_user(arg, &precise_offset, sizeof(precise_offset)) ? -EFAULT : 0;
 }
 
+static long ptp_sys_offset_precise_attrs(struct ptp_clock *ptp, void __user *arg)
+{
+	struct ptp_sys_offset_precise_attrs precise_offset_attrs;
+	struct system_device_crosststamp xtstamp;
+	struct ptp_clock_attributes att = {};
+	struct timespec64 ts;
+	int err;
+
+	if (!ptp->info->getcrosststampattrs)
+		return -EOPNOTSUPP;
+
+	err = ptp->info->getcrosststampattrs(ptp->info, &xtstamp, &att);
+	if (err)
+		return err;
+
+	memset(&precise_offset_attrs, 0, sizeof(precise_offset_attrs));
+	ts = ktime_to_timespec64(xtstamp.device);
+	precise_offset_attrs.device.pct.sec = ts.tv_sec;
+	precise_offset_attrs.device.pct.nsec = ts.tv_nsec;
+	precise_offset_attrs.device.att.error_bound = att.error_bound;
+	precise_offset_attrs.device.att.timescale = att.timescale;
+	precise_offset_attrs.device.att.status = att.status;
+	precise_offset_attrs.device.att.counter_id = att.counter_id;
+	precise_offset_attrs.device.att.counter_value = att.counter_value;
+
+	ts = ktime_to_timespec64(xtstamp.sys_realtime);
+	precise_offset_attrs.sys_realtime.sec = ts.tv_sec;
+	precise_offset_attrs.sys_realtime.nsec = ts.tv_nsec;
+
+	ts = ktime_to_timespec64(xtstamp.sys_monoraw);
+	precise_offset_attrs.sys_monoraw.sec = ts.tv_sec;
+	precise_offset_attrs.sys_monoraw.nsec = ts.tv_nsec;
+
+	return copy_to_user(arg, &precise_offset_attrs,
+			    sizeof(precise_offset_attrs)) ? -EFAULT : 0;
+}
+
 typedef int (*ptp_gettimex_fn)(struct ptp_clock_info *,
 			       struct timespec64 *,
 			       struct ptp_system_timestamp *);
+
+static int ptp_validate_sys_offset_clockid(__kernel_clockid_t clockid)
+{
+	switch (clockid) {
+	case CLOCK_REALTIME:
+	case CLOCK_MONOTONIC:
+	case CLOCK_MONOTONIC_RAW:
+		return 0;
+	case CLOCK_AUX ... CLOCK_AUX_LAST:
+		if (IS_ENABLED(CONFIG_POSIX_AUX_CLOCKS))
+			return 0;
+		fallthrough;
+	default:
+		return -EINVAL;
+	}
+}
 
 static long ptp_sys_offset_extended(struct ptp_clock *ptp, void __user *arg,
 				    ptp_gettimex_fn gettimex_fn)
 {
 	struct ptp_sys_offset_extended *extoff __free(kfree) = NULL;
 	struct ptp_system_timestamp sts;
+	int err;
 
 	if (!gettimex_fn)
 		return -EOPNOTSUPP;
@@ -363,23 +419,13 @@ static long ptp_sys_offset_extended(struct ptp_clock *ptp, void __user *arg,
 	if (extoff->n_samples > PTP_MAX_SAMPLES || extoff->rsv[0] || extoff->rsv[1])
 		return -EINVAL;
 
-	switch (extoff->clockid) {
-	case CLOCK_REALTIME:
-	case CLOCK_MONOTONIC:
-	case CLOCK_MONOTONIC_RAW:
-		break;
-	case CLOCK_AUX ... CLOCK_AUX_LAST:
-		if (IS_ENABLED(CONFIG_POSIX_AUX_CLOCKS))
-			break;
-		fallthrough;
-	default:
-		return -EINVAL;
-	}
+	err = ptp_validate_sys_offset_clockid(extoff->clockid);
+	if (err)
+		return err;
 
 	sts.clockid = extoff->clockid;
 	for (unsigned int i = 0; i < extoff->n_samples; i++) {
 		struct timespec64 ts;
-		int err;
 
 		err = gettimex_fn(ptp->info, &ts, &sts);
 		if (err)
@@ -398,6 +444,58 @@ static long ptp_sys_offset_extended(struct ptp_clock *ptp, void __user *arg,
 	}
 
 	return copy_to_user(arg, extoff, sizeof(*extoff)) ? -EFAULT : 0;
+}
+
+static long ptp_sys_offset_extended_attrs(struct ptp_clock *ptp, void __user *arg)
+{
+	struct ptp_sys_offset_extended_attrs *extoffattrs __free(kfree) = NULL;
+	struct ptp_clock_attributes att = {};
+	struct ptp_system_timestamp sts;
+	int err;
+
+	if (!ptp->info->gettimexattrs64)
+		return -EOPNOTSUPP;
+
+	extoffattrs = memdup_user(arg, sizeof(*extoffattrs));
+	if (IS_ERR(extoffattrs))
+		return PTR_ERR(extoffattrs);
+
+	if (extoffattrs->n_samples > PTP_MAX_SAMPLES ||
+	    extoffattrs->rsv[0] ||
+	    extoffattrs->rsv[1])
+		return -EINVAL;
+
+	err = ptp_validate_sys_offset_clockid(extoffattrs->clockid);
+	if (err)
+		return err;
+
+	sts.clockid = extoffattrs->clockid;
+	memset(extoffattrs->ts, 0, sizeof(extoffattrs->ts));
+	for (unsigned int i = 0; i < extoffattrs->n_samples; i++) {
+		struct timespec64 ts;
+
+		err = ptp->info->gettimexattrs64(ptp->info, &ts, &sts, &att);
+		if (err)
+			return err;
+
+		/* Filter out disabled or unavailable clocks */
+		if (sts.pre_ts.tv_sec < 0 || sts.post_ts.tv_sec < 0)
+			return -EINVAL;
+
+		extoffattrs->ts[i][0].pct.sec = sts.pre_ts.tv_sec;
+		extoffattrs->ts[i][0].pct.nsec = sts.pre_ts.tv_nsec;
+		extoffattrs->ts[i][1].pct.sec = ts.tv_sec;
+		extoffattrs->ts[i][1].pct.nsec = ts.tv_nsec;
+		extoffattrs->ts[i][1].att.error_bound = att.error_bound;
+		extoffattrs->ts[i][1].att.timescale = att.timescale;
+		extoffattrs->ts[i][1].att.status = att.status;
+		extoffattrs->ts[i][1].att.counter_id = att.counter_id;
+		extoffattrs->ts[i][1].att.counter_value = att.counter_value;
+		extoffattrs->ts[i][2].pct.sec = sts.post_ts.tv_sec;
+		extoffattrs->ts[i][2].pct.nsec = sts.post_ts.tv_nsec;
+	}
+
+	return copy_to_user(arg, extoffattrs, sizeof(*extoffattrs)) ? -EFAULT : 0;
 }
 
 static long ptp_sys_offset(struct ptp_clock *ptp, void __user *arg)
@@ -535,10 +633,16 @@ long ptp_ioctl(struct posix_clock_context *pccontext, unsigned int cmd,
 		return ptp_sys_offset_precise(ptp, argptr,
 					      ptp->info->getcrosststamp);
 
+	case PTP_SYS_OFFSET_PRECISE_ATTRS:
+		return ptp_sys_offset_precise_attrs(ptp, argptr);
+
 	case PTP_SYS_OFFSET_EXTENDED:
 	case PTP_SYS_OFFSET_EXTENDED2:
 		return ptp_sys_offset_extended(ptp, argptr,
 					       ptp->info->gettimex64);
+
+	case PTP_SYS_OFFSET_EXTENDED_ATTRS:
+		return ptp_sys_offset_extended_attrs(ptp, argptr);
 
 	case PTP_SYS_OFFSET:
 	case PTP_SYS_OFFSET2:
