@@ -87,41 +87,71 @@ static __be16 gre_keymap_lookup(struct net *net, struct nf_conntrack_tuple *t)
 	return key;
 }
 
-/* add a single keymap entry, associate with specified master ct */
-int nf_ct_gre_keymap_add(struct nf_conn *ct, enum ip_conntrack_dir dir,
-			 struct nf_conntrack_tuple *t)
+/* add keymap entries, associate with specified master ct */
+bool nf_ct_gre_keymap_add(struct nf_conn *ct,
+			  const struct nf_conntrack_tuple *orig,
+			  const struct nf_conntrack_tuple *repl)
 {
 	struct net *net = nf_ct_net(ct);
 	struct nf_gre_net *net_gre = gre_pernet(net);
 	struct nf_ct_pptp_master *ct_pptp_info = nfct_help_data(ct);
-	struct nf_ct_gre_keymap **kmp, *km;
+	struct nf_ct_gre_keymap *km_orig, *km_repl;
 
-	kmp = &ct_pptp_info->keymap[dir];
-	if (*kmp) {
-		/* check whether it's a retransmission */
-		list_for_each_entry_rcu(km, &net_gre->keymap_list, list) {
-			if (gre_key_cmpfn(km, t) && km == *kmp)
-				return 0;
+	km_orig = ct_pptp_info->keymap[IP_CT_DIR_ORIGINAL];
+	km_repl = ct_pptp_info->keymap[IP_CT_DIR_REPLY];
+	if (km_orig || km_repl) {
+		DEBUG_NET_WARN_ON_ONCE(!km_orig);
+		DEBUG_NET_WARN_ON_ONCE(!km_repl);
+		if (!km_orig || !km_repl)
+			return false;
+
+		if (!gre_key_cmpfn(km_orig, orig)) {
+			pr_debug("trying to override keymap_%s for ct %p\n", "orig", ct);
+			return false;
 		}
-		pr_debug("trying to override keymap_%s for ct %p\n",
-			 dir == IP_CT_DIR_REPLY ? "reply" : "orig", ct);
-		return -EEXIST;
+
+		if (!gre_key_cmpfn(km_repl, repl)) {
+			pr_debug("trying to override keymap_%s for ct %p\n", "repl", ct);
+			return false;
+		}
+
+		return true;
 	}
 
-	km = kmalloc_obj(*km, GFP_ATOMIC);
-	if (!km)
-		return -ENOMEM;
-	memcpy(&km->tuple, t, sizeof(*t));
-	*kmp = km;
+	km_orig = kmalloc_obj(*km_orig, GFP_ATOMIC);
+	if (!km_orig)
+		return false;
+	km_repl = kmalloc_obj(*km_repl, GFP_ATOMIC);
+	if (!km_repl)
+		goto km_free;
 
-	pr_debug("adding new entry %p: ", km);
-	nf_ct_dump_tuple(&km->tuple);
+	memcpy(&km_orig->tuple, orig, sizeof(*orig));
+	memcpy(&km_repl->tuple, repl, sizeof(*repl));
 
 	spin_lock_bh(&keymap_lock);
-	list_add_tail(&km->list, &net_gre->keymap_list);
+	if (ct_pptp_info->keymap[IP_CT_DIR_ORIGINAL] ||
+	    ct_pptp_info->keymap[IP_CT_DIR_REPLY] ||
+	    nf_ct_is_dying(ct))
+		goto unlock_free;
+
+	pr_debug("adding new entries %p,%p: ", km_orig, km_repl);
+	nf_ct_dump_tuple(&km_orig->tuple);
+	nf_ct_dump_tuple(&km_repl->tuple);
+
+	list_add_tail(&km_orig->list, &net_gre->keymap_list);
+	list_add_tail(&km_repl->list, &net_gre->keymap_list);
+	ct_pptp_info->keymap[IP_CT_DIR_ORIGINAL] = km_orig;
+	ct_pptp_info->keymap[IP_CT_DIR_REPLY] = km_repl;
 	spin_unlock_bh(&keymap_lock);
 
-	return 0;
+	return true;
+
+unlock_free:
+	spin_unlock_bh(&keymap_lock);
+km_free:
+	kfree(km_orig);
+	kfree(km_repl);
+	return false;
 }
 EXPORT_SYMBOL_GPL(nf_ct_gre_keymap_add);
 
