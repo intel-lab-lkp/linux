@@ -86,6 +86,10 @@ extern const unsigned long kernel_inittext_offset;
 extern const unsigned long kernel_inittext_size;
 extern const unsigned long kernel_total_size;
 
+#ifdef CONFIG_SECURE_LAUNCH
+extern const unsigned long mle_header_offset;
+#endif
+
 unsigned long decompress_kernel(unsigned char *outbuf, unsigned long virt_addr,
 				void (*error)(char *x));
 

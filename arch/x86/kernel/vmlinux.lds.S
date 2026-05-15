@@ -537,4 +537,9 @@ xen_elfnote_phys32_entry_value =
 	ABSOLUTE(xen_elfnote_phys32_entry) + ABSOLUTE(pvh_start_xen - LOAD_OFFSET);
 #endif
 
+#ifdef CONFIG_SECURE_LAUNCH
+__sl_stub_entry_offset = ABSOLUTE(mle_header) + ABSOLUTE(sl_stub_entry - _text);
+__sl_mle_end_offset    = ABSOLUTE(mle_header) + ABSOLUTE(__bss_start - _text);
+#endif
+
 #include "../boot/startup/exports.h"

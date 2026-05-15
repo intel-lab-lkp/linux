@@ -75,6 +75,7 @@ obj-y			+= resource.o
 obj-y			+= irqflags.o
 obj-y			+= static_call.o
 
+obj-$(CONFIG_SECURE_LAUNCH)	+= sl_stub.o
 obj-y				+= process.o
 obj-y				+= fpu/
 obj-y				+= ptrace.o

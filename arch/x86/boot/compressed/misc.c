@@ -336,6 +336,10 @@ const unsigned long kernel_inittext_offset = VO__sinittext - VO__text;
 const unsigned long kernel_inittext_size = VO___inittext_end - VO__sinittext;
 const unsigned long kernel_total_size = VO__end - VO__text;
 
+#ifdef CONFIG_SECURE_LAUNCH
+const unsigned long mle_header_offset = VO_mle_header - VO__text;
+#endif
+
 static u8 boot_heap[BOOT_HEAP_SIZE] __aligned(4);
 
 extern unsigned char input_data[];

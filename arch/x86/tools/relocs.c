@@ -88,6 +88,7 @@ static const char * const	sym_regex_kernel[S_NSYMTYPES] = {
 	"__end_rodata|"
 	"__end_rodata_aligned|"
 	"__initramfs_start|"
+	"__sl_.+offset|"
 	"(jiffies|jiffies_64)|"
 #if ELF_BITS == 64
 	"__end_rodata_hpage_align|"
