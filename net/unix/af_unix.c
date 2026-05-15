@@ -2707,6 +2707,14 @@ static int unix_read_skb(struct sock *sk, skb_read_actor_t recv_actor)
 	return recv_actor(sk, skb);
 }
 
+static int unix_recv_wake(wait_queue_entry_t *wait, unsigned int mode,
+			  int sync, void *key)
+{
+	if (key && !(key_to_poll(key) & (EPOLLIN | EPOLLERR)))
+		return 0;
+	return autoremove_wake_function(wait, mode, sync, key);
+}
+
 /*
  *	Sleep until more data has arrived. But check for races..
  */
@@ -2715,7 +2723,7 @@ __releases(&unix_sk(sk)->iolock)
 __releases(&unix_sk(sk)->lock)
 {
 	unsigned int state = TASK_INTERRUPTIBLE | freezable * TASK_FREEZABLE;
-	DEFINE_WAIT(wait);
+	DEFINE_WAIT_FUNC(wait, unix_recv_wake);
 
 	prepare_to_wait(sk_sleep(sk), &wait, state);
 	unix_state_unlock(sk);
