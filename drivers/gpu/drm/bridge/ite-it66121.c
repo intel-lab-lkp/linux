@@ -20,6 +20,8 @@
 #include <linux/pinctrl/consumer.h>
 #include <linux/regulator/consumer.h>
 
+#include <drm/display/drm_hdmi_helper.h>
+#include <drm/display/drm_hdmi_state_helper.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_bridge.h>
 #include <drm/drm_edid.h>
@@ -304,7 +306,6 @@ struct it66121_ctx {
 	struct i2c_client *client;
 	u32 bus_width;
 	struct mutex lock; /* Protects fields below and device registers */
-	struct hdmi_avi_infoframe hdmi_avi_infoframe;
 	struct {
 		struct platform_device *pdev;
 		u8 ch_enable;
@@ -727,6 +728,10 @@ static void it66121_bridge_enable(struct drm_bridge *bridge,
 	struct it66121_ctx *ctx = container_of(bridge, struct it66121_ctx, bridge);
 
 	ctx->connector = drm_atomic_get_new_connector_for_encoder(state, bridge->encoder);
+	if (!ctx->connector)
+		return;
+
+	drm_atomic_helper_connector_hdmi_update_infoframes(ctx->connector, state);
 
 	it66121_set_mute(ctx, false);
 }
@@ -764,39 +769,9 @@ void it66121_bridge_mode_set(struct drm_bridge *bridge,
 			     const struct drm_display_mode *mode,
 			     const struct drm_display_mode *adjusted_mode)
 {
-	u8 buf[HDMI_INFOFRAME_SIZE(AVI)];
 	struct it66121_ctx *ctx = container_of(bridge, struct it66121_ctx, bridge);
-	int ret;
 
 	mutex_lock(&ctx->lock);
-
-	ret = drm_hdmi_avi_infoframe_from_display_mode(&ctx->hdmi_avi_infoframe, ctx->connector,
-						       adjusted_mode);
-	if (ret) {
-		DRM_ERROR("Failed to setup AVI infoframe: %d\n", ret);
-		goto unlock;
-	}
-
-	ret = hdmi_avi_infoframe_pack(&ctx->hdmi_avi_infoframe, buf, sizeof(buf));
-	if (ret < 0) {
-		DRM_ERROR("Failed to pack infoframe: %d\n", ret);
-		goto unlock;
-	}
-
-	/* Write new AVI infoframe packet */
-	ret = regmap_bulk_write(ctx->regmap, IT66121_AVIINFO_DB1_REG,
-				&buf[HDMI_INFOFRAME_HEADER_SIZE],
-				HDMI_AVI_INFOFRAME_SIZE);
-	if (ret)
-		goto unlock;
-
-	if (regmap_write(ctx->regmap, IT66121_AVIINFO_CSUM_REG, buf[3]))
-		goto unlock;
-
-	/* Enable AVI infoframe */
-	if (regmap_write(ctx->regmap, IT66121_AVI_INFO_PKT_REG,
-			 IT66121_AVI_INFO_PKT_ON | IT66121_AVI_INFO_PKT_RPT))
-		goto unlock;
 
 	/* Set TX mode to HDMI */
 	if (regmap_write(ctx->regmap, IT66121_HDMI_MODE_REG, IT66121_HDMI_MODE_HDMI))
@@ -823,24 +798,6 @@ void it66121_bridge_mode_set(struct drm_bridge *bridge,
 
 unlock:
 	mutex_unlock(&ctx->lock);
-}
-
-static enum drm_mode_status it66121_bridge_mode_valid(struct drm_bridge *bridge,
-						      const struct drm_display_info *info,
-						      const struct drm_display_mode *mode)
-{
-	struct it66121_ctx *ctx = container_of(bridge, struct it66121_ctx, bridge);
-	unsigned long max_clock;
-
-	max_clock = (ctx->bus_width == 12) ? 74250 : 148500;
-
-	if (mode->clock > max_clock)
-		return MODE_CLOCK_HIGH;
-
-	if (mode->clock < 25000)
-		return MODE_CLOCK_LOW;
-
-	return MODE_OK;
 }
 
 static enum drm_connector_status
@@ -871,6 +828,72 @@ static void it66121_bridge_hpd_disable(struct drm_bridge *bridge)
 				IT66121_INT_MASK1_HPD, IT66121_INT_MASK1_HPD);
 	if (ret)
 		dev_err(ctx->dev, "failed to disable HPD IRQ\n");
+}
+
+static enum drm_mode_status
+it66121_bridge_hdmi_tmds_char_rate_valid(const struct drm_bridge *bridge,
+					 const struct drm_display_mode *mode,
+					 unsigned long long tmds_rate)
+{
+	const struct it66121_ctx *ctx =
+		container_of(bridge, const struct it66121_ctx, bridge);
+	unsigned long max_clock;
+
+	max_clock = (ctx->bus_width == 12) ? 74250 : 148500;
+
+	if (mode->clock > max_clock)
+		return MODE_CLOCK_HIGH;
+
+	if (mode->clock < 25000)
+		return MODE_CLOCK_LOW;
+
+	return MODE_OK;
+}
+
+static int it66121_bridge_hdmi_clear_avi_infoframe(struct drm_bridge *bridge)
+{
+	struct it66121_ctx *ctx = container_of(bridge, struct it66121_ctx, bridge);
+
+	return regmap_write(ctx->regmap, IT66121_AVI_INFO_PKT_REG, 0);
+}
+
+static int it66121_bridge_hdmi_clear_hdmi_infoframe(struct drm_bridge *bridge)
+{
+	return 0;
+}
+
+static int it66121_bridge_hdmi_write_avi_infoframe(struct drm_bridge *bridge,
+						   const u8 *buffer, size_t len)
+{
+	struct it66121_ctx *ctx = container_of(bridge, struct it66121_ctx, bridge);
+	int ret;
+
+	mutex_lock(&ctx->lock);
+
+	/* Write new AVI infoframe packet */
+	ret = regmap_bulk_write(ctx->regmap, IT66121_AVIINFO_DB1_REG,
+				&buffer[HDMI_INFOFRAME_HEADER_SIZE],
+				HDMI_AVI_INFOFRAME_SIZE);
+	if (ret)
+		goto unlock;
+
+	ret = regmap_write(ctx->regmap, IT66121_AVIINFO_CSUM_REG, buffer[3]);
+	if (ret)
+		goto unlock;
+
+	/* Enable AVI infoframe */
+	ret = regmap_write(ctx->regmap, IT66121_AVI_INFO_PKT_REG,
+			   IT66121_AVI_INFO_PKT_ON | IT66121_AVI_INFO_PKT_RPT);
+
+unlock:
+	mutex_unlock(&ctx->lock);
+	return ret;
+}
+
+static int it66121_bridge_hdmi_write_hdmi_infoframe(struct drm_bridge *bridge,
+						    const u8 *buffer, size_t len)
+{
+	return 0;
 }
 
 static const struct drm_edid *it66121_bridge_edid_read(struct drm_bridge *bridge,
@@ -913,11 +936,15 @@ static const struct drm_bridge_funcs it66121_bridge_funcs = {
 	.atomic_disable = it66121_bridge_disable,
 	.atomic_check = it66121_bridge_check,
 	.mode_set = it66121_bridge_mode_set,
-	.mode_valid = it66121_bridge_mode_valid,
 	.detect = it66121_bridge_detect,
 	.edid_read = it66121_bridge_edid_read,
 	.hpd_enable = it66121_bridge_hpd_enable,
 	.hpd_disable = it66121_bridge_hpd_disable,
+	.hdmi_tmds_char_rate_valid = it66121_bridge_hdmi_tmds_char_rate_valid,
+	.hdmi_clear_avi_infoframe = it66121_bridge_hdmi_clear_avi_infoframe,
+	.hdmi_write_avi_infoframe = it66121_bridge_hdmi_write_avi_infoframe,
+	.hdmi_clear_hdmi_infoframe = it66121_bridge_hdmi_clear_hdmi_infoframe,
+	.hdmi_write_hdmi_infoframe = it66121_bridge_hdmi_write_hdmi_infoframe,
 };
 
 static irqreturn_t it66121_irq_threaded_handler(int irq, void *dev_id)
@@ -1588,7 +1615,10 @@ static int it66121_probe(struct i2c_client *client)
 
 	ctx->bridge.of_node = dev->of_node;
 	ctx->bridge.type = DRM_MODE_CONNECTOR_HDMIA;
-	ctx->bridge.ops = DRM_BRIDGE_OP_DETECT | DRM_BRIDGE_OP_EDID;
+	ctx->bridge.ops = DRM_BRIDGE_OP_DETECT | DRM_BRIDGE_OP_EDID |
+			  DRM_BRIDGE_OP_HDMI;
+	ctx->bridge.vendor = "ITE";
+	ctx->bridge.product = "IT66121";
 	if (client->irq > 0) {
 		ctx->bridge.ops |= DRM_BRIDGE_OP_HPD;
 
