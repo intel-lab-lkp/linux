@@ -15,6 +15,8 @@
 #include "intel_display_regs.h"
 #include "intel_display_types.h"
 #include "intel_display_utils.h"
+#include "intel_display_wa.h"
+#include "intel_dmc_regs.h"
 #include "intel_vblank.h"
 #include "intel_vrr.h"
 
@@ -156,8 +158,12 @@ static u32 intel_crtc_scanlines_since_frame_timestamp(struct intel_crtc *crtc)
 		 * pipe frame time stamp. The time stamp value
 		 * is sampled at every start of vertical blank.
 		 */
-		scan_prev_time = intel_de_read_fw(display,
-						  PIPE_FRMTMSTMP(crtc->pipe));
+		if (intel_display_wa(display, INTEL_DISPLAY_WA_14022946399))
+			scan_prev_time = intel_de_read_fw(display,
+							  PIPEDMC_FRMTMSTMP(crtc->pipe));
+		else
+			scan_prev_time = intel_de_read_fw(display,
+							  PIPE_FRMTMSTMP(crtc->pipe));
 
 		/*
 		 * The TIMESTAMP_CTR register has the current
@@ -165,8 +171,12 @@ static u32 intel_crtc_scanlines_since_frame_timestamp(struct intel_crtc *crtc)
 		 */
 		scan_curr_time = intel_de_read_fw(display, IVB_TIMESTAMP_CTR);
 
-		scan_post_time = intel_de_read_fw(display,
-						  PIPE_FRMTMSTMP(crtc->pipe));
+		if (intel_display_wa(display, INTEL_DISPLAY_WA_14022946399))
+			scan_post_time = intel_de_read_fw(display,
+							  PIPEDMC_FRMTMSTMP(crtc->pipe));
+		else
+			scan_post_time = intel_de_read_fw(display,
+							  PIPE_FRMTMSTMP(crtc->pipe));
 	} while (scan_post_time != scan_prev_time);
 
 	return div_u64(mul_u32_u32(scan_curr_time - scan_prev_time,
