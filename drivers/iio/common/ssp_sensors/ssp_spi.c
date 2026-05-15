@@ -4,6 +4,7 @@
  */
 
 #include "ssp.h"
+#include <linux/cleanup.h>
 
 #define SSP_DEV (&data->spi->dev)
 #define SSP_GET_MESSAGE_TYPE(data) ((data) & (3 << SSP_RW))
@@ -180,9 +181,8 @@ static inline void ssp_pending_add(struct ssp_data *data, struct ssp_msg *msg,
 	if (no_irq)
 		return;
 
-	mutex_lock(&data->pending_lock);
+	guard(mutex)(&data->pending_lock);
 	list_add_tail(&msg->list, &data->pending_list);
-	mutex_unlock(&data->pending_lock);
 }
 
 static inline void ssp_pending_del(struct ssp_data *data, struct ssp_msg *msg,
@@ -191,9 +191,8 @@ static inline void ssp_pending_del(struct ssp_data *data, struct ssp_msg *msg,
 	if (no_irq)
 		return;
 
-	mutex_lock(&data->pending_lock);
+	guard(mutex)(&data->pending_lock);
 	list_del(&msg->list);
-	mutex_unlock(&data->pending_lock);
 }
 
 static int __ssp_do_transfer(struct ssp_data *data, struct ssp_msg *msg,
@@ -204,17 +203,20 @@ static int __ssp_do_transfer(struct ssp_data *data, struct ssp_msg *msg,
 	/* msg->done must be initialized by caller */
 	WARN_ON(!msg->done);
 
-	mutex_lock(&data->comm_lock);
+	guard(mutex)(&data->comm_lock);
 
 	status = ssp_check_lines(data, false);
-	if (status < 0)
-		goto _error_locked;
+	if (status < 0) {
+		data->timeout_cnt++;
+		return status;
+	}
 
 	status = spi_write(data->spi, msg->buffer, SSP_HEADER_SIZE);
 	if (status < 0) {
 		gpiod_set_value_cansleep(data->ap_mcu_gpiod, 1);
 		dev_err(SSP_DEV, "%s spi_write fail\n", __func__);
-		goto _error_locked;
+		data->timeout_cnt++;
+		return status;
 	}
 
 	ssp_pending_add(data, msg, no_irq);
@@ -222,16 +224,11 @@ static int __ssp_do_transfer(struct ssp_data *data, struct ssp_msg *msg,
 	status = ssp_check_lines(data, true);
 	if (status < 0) {
 		ssp_pending_del(data, msg, no_irq);
-		goto _error_locked;
+		data->timeout_cnt++;
+		return status;
 	}
 
-	mutex_unlock(&data->comm_lock);
 	return 0;
-
-_error_locked:
-	mutex_unlock(&data->comm_lock);
-	data->timeout_cnt++;
-	return status;
 }
 
 static int ssp_do_transfer(struct ssp_data *data, struct ssp_msg *msg,
@@ -379,12 +376,12 @@ int ssp_irq_msg(struct ssp_data *data)
 
 	switch (msg_type) {
 	case SSP_AP2HUB_READ:
-	case SSP_AP2HUB_WRITE:
+	case SSP_AP2HUB_WRITE: {
 		/*
 		 * this is a small list, a few elements - the packets can be
 		 * received with no order
 		 */
-		mutex_lock(&data->pending_lock);
+		guard(mutex)(&data->pending_lock);
 		list_for_each_entry_safe(iter, n, &data->pending_list, list) {
 			if (iter->options == msg_options) {
 				list_del(&iter->list);
@@ -400,10 +397,8 @@ int ssp_irq_msg(struct ssp_data *data)
 			 * check but let's handle this
 			 */
 			buffer = kmalloc(length, GFP_KERNEL | GFP_DMA);
-			if (!buffer) {
-				ret = -ENOMEM;
-				goto _unlock;
-			}
+			if (!buffer)
+				return -ENOMEM;
 
 			/* got dead packet so it is always an error */
 			ret = spi_read(data->spi, buffer, length);
@@ -415,7 +410,7 @@ int ssp_irq_msg(struct ssp_data *data)
 			dev_err(SSP_DEV, "No match error %x\n",
 				msg_options);
 
-			goto _unlock;
+			break;
 		}
 
 		if (msg_type == SSP_AP2HUB_READ)
@@ -433,16 +428,15 @@ int ssp_irq_msg(struct ssp_data *data)
 				msg->length = 1;
 
 				list_add_tail(&msg->list, &data->pending_list);
-				goto _unlock;
+				break;
 			}
 		}
 
 		if (msg->done)
 			if (!completion_done(msg->done))
 				complete(msg->done);
-_unlock:
-		mutex_unlock(&data->pending_lock);
 		break;
+	}
 	case SSP_HUB2AP_WRITE:
 		buffer = kzalloc(length, GFP_KERNEL | GFP_DMA);
 		if (!buffer)
@@ -472,7 +466,7 @@ void ssp_clean_pending_list(struct ssp_data *data)
 {
 	struct ssp_msg *msg, *n;
 
-	mutex_lock(&data->pending_lock);
+	guard(mutex)(&data->pending_lock);
 	list_for_each_entry_safe(msg, n, &data->pending_list, list) {
 		list_del(&msg->list);
 
@@ -480,7 +474,6 @@ void ssp_clean_pending_list(struct ssp_data *data)
 			if (!completion_done(msg->done))
 				complete(msg->done);
 	}
-	mutex_unlock(&data->pending_lock);
 }
 
 int ssp_command(struct ssp_data *data, char command, int arg)
