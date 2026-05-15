@@ -213,6 +213,7 @@ enum iavf_state_t {
 
 enum iavf_critical_section_t {
 	__IAVF_IN_REMOVE_TASK,	/* device being removed */
+	__IAVF_CRIT_SECTION_NBITS	/* must be last */
 };
 
 #define IAVF_CLOUD_FIELD_OMAC		0x01
@@ -396,7 +397,7 @@ struct iavf_adapter {
 
 	enum iavf_state_t state;
 	enum iavf_state_t last_state;
-	unsigned long crit_section;
+	DECLARE_BITMAP(crit_section, __IAVF_CRIT_SECTION_NBITS);
 
 	struct delayed_work watchdog_task;
 	bool link_up;
