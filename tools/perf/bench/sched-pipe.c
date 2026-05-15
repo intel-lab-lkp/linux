@@ -39,6 +39,7 @@ struct thread_data {
 	int			epoll_fd;
 	bool			cgroup_failed;
 	pthread_t		pthread;
+	char			*buf;
 };
 
 #define LOOPS_DEFAULT 1000000
@@ -48,6 +49,7 @@ static	int			loops = LOOPS_DEFAULT;
 static bool			threaded;
 
 static bool			nonblocking;
+static unsigned int		write_size = sizeof(int);
 static char			*cgrp_names[2];
 static struct cgroup		*cgrps[2];
 
@@ -88,6 +90,9 @@ static const struct option options[] = {
 	OPT_BOOLEAN('n', "nonblocking",	&nonblocking,	"Use non-blocking operations"),
 	OPT_INTEGER('l', "loop",	&loops,		"Specify number of loops"),
 	OPT_BOOLEAN('T', "threaded",	&threaded,	"Specify threads/process based task setup"),
+	OPT_UINTEGER('s', "write-size", &write_size,
+		     "Bytes per ping-pong write (default 4-bytes). Use larger "
+		     "values to exercise the pipe page-allocation path."),
 	OPT_CALLBACK('G', "cgroups", NULL, "SEND,RECV",
 		     "Put sender and receivers in given cgroups",
 		     parse_two_cgroups),
@@ -172,14 +177,14 @@ static void exit_cgroup(int nr)
 
 static inline int read_pipe(struct thread_data *td)
 {
-	int ret, m;
+	int ret;
 retry:
 	if (nonblocking) {
 		ret = epoll_wait(td->epoll_fd, &td->epoll_ev, 1, -1);
 		if (ret < 0)
 			return ret;
 	}
-	ret = read(td->pipe_read, &m, sizeof(int));
+	ret = read(td->pipe_read, td->buf, write_size);
 	if (nonblocking && ret < 0 && errno == EWOULDBLOCK)
 		goto retry;
 	return ret;
@@ -188,7 +193,7 @@ retry:
 static void *worker_thread(void *__tdata)
 {
 	struct thread_data *td = __tdata;
-	int i, ret, m = 0;
+	int i, ret;
 
 	ret = enter_cgroup(td->nr);
 	if (ret < 0) {
@@ -204,10 +209,10 @@ static void *worker_thread(void *__tdata)
 	}
 
 	for (i = 0; i < loops; i++) {
-		ret = write(td->pipe_write, &m, sizeof(int));
-		BUG_ON(ret != sizeof(int));
+		ret = write(td->pipe_write, td->buf, write_size);
+		BUG_ON(ret != (int)write_size);
 		ret = read_pipe(td);
-		BUG_ON(ret != sizeof(int));
+		BUG_ON(ret != (int)write_size);
 	}
 
 	return NULL;
@@ -238,6 +243,22 @@ int bench_sched_pipe(int argc, const char **argv)
 
 	BUG_ON(pipe2(pipe_1, flags));
 	BUG_ON(pipe2(pipe_2, flags));
+
+	/*
+	 * On custom write_size, set the pipe size to acommodate write_size
+	 */
+	if (write_size > sizeof(int) &&
+	    (fcntl(pipe_1[1], F_SETPIPE_SZ, write_size) < (int)write_size ||
+	     fcntl(pipe_2[1], F_SETPIPE_SZ, write_size) < (int)write_size)) {
+		fprintf(stderr, "--write-size %u exceeds /proc/sys/fs/pipe-max-size\n",
+			write_size);
+		return -1;
+	}
+
+	for (t = 0; t < nr_threads; t++) {
+		threads[t].buf = calloc(1, write_size);
+		BUG_ON(!threads[t].buf);
+	}
 
 	gettimeofday(&start, NULL);
 
@@ -286,6 +307,9 @@ int bench_sched_pipe(int argc, const char **argv)
 
 	gettimeofday(&stop, NULL);
 	timersub(&stop, &start, &diff);
+
+	for (t = 0; t < nr_threads; t++)
+		free(threads[t].buf);
 
 	exit_cgroup(0);
 	exit_cgroup(1);
