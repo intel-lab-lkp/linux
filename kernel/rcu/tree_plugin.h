@@ -384,8 +384,30 @@ EXPORT_SYMBOL_GPL(rcu_note_context_switch);
  */
 static int rcu_preempt_blocked_readers_cgp(struct rcu_node *rnp)
 {
+	return READ_ONCE(rnp->gp_tasks) != NULL || !list_empty(&rnp->dqs_blkd_tasks);
+}
+
+#ifdef CONFIG_RCU_BOOST
+
+/*
+ * Check for preempted RCU readers blocking the current grace period
+ * for the specified rcu_node structure, but excluding any tasks that are
+ * currently deferring quiescent states, that is, they were preempted in
+ * an earlier rcu_read_lock() segment, preemption has been disabled since
+ * before the end of that segment, and they have not yet been preempted
+ * within some later rcu_read_lock() segment.  As in RCU-preempt has
+ * preempted tasks blocking the current grace period, even excluding
+ * those with deferred quiescent states.
+ *
+ * If the caller needs a reliable answer, it must hold the rcu_node's
+ * ->lock.
+ */
+static int rcu_preempt_blocked_readers_cgp_ndqs(struct rcu_node *rnp)
+{
 	return READ_ONCE(rnp->gp_tasks) != NULL;
 }
+
+#endif // #ifdef CONFIG_RCU_BOOST
 
 /* limit value for ->rcu_read_lock_nesting. */
 #define RCU_NEST_PMAX (INT_MAX / 2)
@@ -1297,7 +1319,7 @@ static void rcu_initiate_boost(struct rcu_node *rnp, unsigned long flags)
 {
 	raw_lockdep_assert_held_rcu_node(rnp);
 	if (!rnp->boost_kthread_task ||
-	    (!rcu_preempt_blocked_readers_cgp(rnp) && !rnp->exp_tasks)) {
+	    (!rcu_preempt_blocked_readers_cgp_ndqs(rnp) && !rnp->exp_tasks)) {
 		raw_spin_unlock_irqrestore_rcu_node(rnp, flags);
 		return;
 	}
