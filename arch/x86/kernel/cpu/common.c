@@ -2485,6 +2485,79 @@ void cpu_init(void)
 	load_fixmap_gdt(cpu);
 }
 
+#ifdef CONFIG_NUMA
+/*
+ * To workaround broken NUMA config.  Read the comment in
+ * srat_detect_node().
+ */
+static int nearby_node(int apicid)
+{
+	int i, node;
+
+	for (i = apicid - 1; i >= 0; i--) {
+		node = __apicid_to_node[i];
+		if (node != NUMA_NO_NODE && node_online(node))
+			return node;
+	}
+	for (i = apicid + 1; i < MAX_LOCAL_APIC; i++) {
+		node = __apicid_to_node[i];
+		if (node != NUMA_NO_NODE && node_online(node))
+			return node;
+	}
+	return first_node(node_online_map); /* Shouldn't happen */
+}
+#endif
+
+void srat_detect_node(struct cpuinfo_x86 *c)
+{
+#ifdef CONFIG_NUMA
+	int cpu = smp_processor_id();
+	int node;
+	unsigned int apicid = c->topo.apicid;
+
+	node = numa_cpu_node(cpu);
+	if (node == NUMA_NO_NODE)
+		node = c->topo.llc_id;
+
+	/*
+	 * On multi-fabric platform (e.g. Numascale NumaChip) a
+	 * platform-specific handler needs to be called to fixup some
+	 * IDs of the CPU.
+	 */
+	if (x86_cpuinit.fixup_cpu_id)
+		x86_cpuinit.fixup_cpu_id(c, node);
+
+	if (!node_online(node)) {
+		/*
+		 * Two possibilities here:
+		 *
+		 * - The CPU is missing memory and no node was created.  In
+		 *   that case try picking one from a nearby CPU.
+		 *
+		 * - The APIC IDs differ from the HyperTransport node IDs.
+		 *   Assume they are all increased by a constant offset, but
+		 *   in the same order as the HT nodeids.  If that doesn't
+		 *   result in a usable node fall back to the path for the
+		 *   previous case.
+		 *
+		 * This workaround operates directly on the mapping between
+		 * APIC ID and NUMA node, assuming certain relationship
+		 * between APIC ID, HT node ID and NUMA topology.  As going
+		 * through CPU mapping may alter the outcome, directly
+		 * access __apicid_to_node[].
+		 */
+		int ht_nodeid = c->topo.initial_apicid;
+
+		if (__apicid_to_node[ht_nodeid] != NUMA_NO_NODE)
+			node = __apicid_to_node[ht_nodeid];
+		/* Pick a nearby node */
+		if (!node_online(node))
+			node = nearby_node(apicid);
+	}
+	numa_set_node(cpu, node);
+#endif
+}
+
 #ifdef CONFIG_MICROCODE_LATE_LOADING
 /**
  * store_cpu_caps() - Store a snapshot of CPU capabilities

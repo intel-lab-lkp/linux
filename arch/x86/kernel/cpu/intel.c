@@ -469,7 +469,7 @@ static void intel_workarounds(struct cpuinfo_x86 *c)
 }
 #endif
 
-static void srat_detect_node(struct cpuinfo_x86 *c)
+static void srat_detect_node_intel(struct cpuinfo_x86 *c)
 {
 #ifdef CONFIG_NUMA
 	unsigned node;
@@ -615,7 +615,7 @@ static void init_intel(struct cpuinfo_x86 *c)
 		set_cpu_cap(c, X86_FEATURE_PREFER_YMM);
 
 	/* Work around errata */
-	srat_detect_node(c);
+	srat_detect_node_intel(c);
 
 	init_ia32_feat_ctl(c);
 

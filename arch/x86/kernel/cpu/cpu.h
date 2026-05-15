@@ -65,6 +65,7 @@ extern void check_null_seg_clears_base(struct cpuinfo_x86 *c);
 
 void cacheinfo_amd_init_llc_id(struct cpuinfo_x86 *c, u16 die_id);
 void cacheinfo_hygon_init_llc_id(struct cpuinfo_x86 *c);
+void srat_detect_node(struct cpuinfo_x86 *c);
 
 #if defined(CONFIG_AMD_NB) && defined(CONFIG_SYSFS)
 struct amd_northbridge *amd_init_l3_cache(int index);
