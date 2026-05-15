@@ -19,6 +19,12 @@ struct kvm_pgtable_walk_data {
 	const u64			end;
 };
 
+/* Positive walker return values point levels to skip */
+enum walker_return{
+	SKIP_CHILDREN = 1,
+	SKIP_SIBLINGS
+};
+
 static bool kvm_pgtable_walk_skip_bbm_tlbi(const struct kvm_pgtable_visit_ctx *ctx)
 {
 	return unlikely(ctx->flags & KVM_PGTABLE_WALK_SKIP_BBM_TLBI);
@@ -141,7 +147,7 @@ static bool kvm_pgtable_walk_continue(const struct kvm_pgtable_walker *walker,
 	if (r == -EAGAIN)
 		return walker->flags & KVM_PGTABLE_WALK_IGNORE_EAGAIN;
 
-	return !r;
+	return r >= 0;
 }
 
 static int __kvm_pgtable_walk(struct kvm_pgtable_walk_data *data,
@@ -192,9 +198,15 @@ static inline int __kvm_pgtable_visit(struct kvm_pgtable_walk_data *data,
 	if (!kvm_pgtable_walk_continue(data->walker, ret))
 		goto out;
 
-	if (!table) {
-		data->addr = ALIGN_DOWN(data->addr, kvm_granule_size(level));
-		data->addr += kvm_granule_size(level);
+	if (!table || ret >= SKIP_CHILDREN) {
+		u64 size;
+
+		if (ret == SKIP_SIBLINGS)	/* Skip siblings */
+			size = kvm_granule_size(level - 1);
+		else				/* Skip children */
+			size = kvm_granule_size(level);
+
+		data->addr = ALIGN_DOWN(data->addr, size) + size;
 		goto out;
 	}
 
