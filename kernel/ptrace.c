@@ -272,14 +272,58 @@ static bool ptrace_has_cap(struct user_namespace *ns, unsigned int mode)
 	return ns_capable(ns, CAP_SYS_PTRACE);
 }
 
+static bool task_sibling_mm_dumpable(struct task_struct *task,
+				     unsigned int mode, bool *result)
+{
+	struct task_struct *t;
+	bool found = false;
+
+	rcu_read_lock();
+	for_each_thread(task, t) {
+		struct mm_struct *sib_mm;
+		struct user_namespace *sib_uns;
+		int sib_dumpable;
+
+		if (t == task)
+			continue;
+		if (!spin_trylock(&t->alloc_lock))
+			continue;
+		sib_mm = t->mm;
+		if (!sib_mm) {
+			spin_unlock(&t->alloc_lock);
+			continue;
+		}
+		sib_dumpable = get_dumpable(sib_mm);
+		sib_uns = get_user_ns(sib_mm->user_ns);
+		spin_unlock(&t->alloc_lock);
+
+		if (sib_dumpable == SUID_DUMP_USER)
+			*result = true;
+		else
+			*result = ptrace_has_cap(sib_uns, mode);
+		put_user_ns(sib_uns);
+		found = true;
+		break;
+	}
+	rcu_read_unlock();
+	return found;
+}
+
 static bool task_still_dumpable(struct task_struct *task, unsigned int mode)
 {
 	struct mm_struct *mm = task->mm;
+	bool sib_result;
+
 	if (mm) {
 		if (get_dumpable(mm) == SUID_DUMP_USER)
 			return true;
 		return ptrace_has_cap(mm->user_ns, mode);
 	}
+
+	/* user_dumpable can be stale; prefer a live sibling mm if any. */
+	if (!(task->flags & PF_KTHREAD) &&
+	    task_sibling_mm_dumpable(task, mode, &sib_result))
+		return sib_result;
 
 	if (task->user_dumpable)
 		return true;
