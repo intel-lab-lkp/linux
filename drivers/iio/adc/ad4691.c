@@ -25,6 +25,7 @@
 #include <linux/reset.h>
 #include <linux/string.h>
 #include <linux/spi/spi.h>
+#include <linux/types.h>
 #include <linux/spi/offload/consumer.h>
 #include <linux/spi/offload/provider.h>
 #include <linux/units.h>
@@ -117,6 +118,7 @@ enum ad4691_ref_ctrl {
 
 struct ad4691_channel_info {
 	const struct iio_chan_spec *channels __counted_by_ptr(num_channels);
+	const struct iio_chan_spec *manual_channels __counted_by_ptr(num_channels);
 	unsigned int num_channels;
 };
 
@@ -127,12 +129,39 @@ struct ad4691_chip_info {
 	const struct ad4691_channel_info *offload_info;
 };
 
+/* CNV burst mode channel — exposes oversampling ratio. */
 #define AD4691_CHANNEL(ch)						\
 	{								\
 		.type = IIO_VOLTAGE,					\
 		.indexed = 1,						\
-		.info_mask_separate = BIT(IIO_CHAN_INFO_RAW)		\
-				    | BIT(IIO_CHAN_INFO_SAMP_FREQ),	\
+		.info_mask_separate = BIT(IIO_CHAN_INFO_RAW) |		\
+				      BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO) | \
+				      BIT(IIO_CHAN_INFO_SAMP_FREQ),	\
+		.info_mask_separate_available =				\
+				      BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO) | \
+				      BIT(IIO_CHAN_INFO_SAMP_FREQ),	\
+		.info_mask_shared_by_all = BIT(IIO_CHAN_INFO_SCALE),	\
+		.channel = ch,						\
+		.scan_index = ch,					\
+		.scan_type = {						\
+			.sign = 'u',					\
+			.realbits = 16,					\
+			.storagebits = 16,				\
+			.endianness = IIO_BE,				\
+		},							\
+	}
+
+/*
+ * Manual mode channel — no oversampling ratio attribute. OSR is not
+ * supported in manual mode; ACC_DEPTH_IN is not configured during manual
+ * buffer enable.
+ */
+#define AD4691_MANUAL_CHANNEL(ch)					\
+	{								\
+		.type = IIO_VOLTAGE,					\
+		.indexed = 1,						\
+		.info_mask_separate = BIT(IIO_CHAN_INFO_RAW) |		\
+				      BIT(IIO_CHAN_INFO_SAMP_FREQ),	\
 		.info_mask_separate_available =				\
 				      BIT(IIO_CHAN_INFO_SAMP_FREQ),	\
 		.info_mask_shared_by_all = BIT(IIO_CHAN_INFO_SCALE),	\
@@ -151,8 +180,33 @@ struct ad4691_chip_info {
  * bits into native 16-bit words before DMA, so samples are in
  * CPU-native byte order (IIO_CPU). storagebits=16 matches the 16-bit
  * DMA word size.
+ *
+ * CNV burst offload configures ACC_DEPTH_IN per channel, so the
+ * oversampling_ratio attribute is exposed. Manual offload does not;
+ * use AD4691_OFFLOAD_MANUAL_CHANNEL for that path.
  */
 #define AD4691_OFFLOAD_CHANNEL(ch)					\
+	{								\
+		.type = IIO_VOLTAGE,					\
+		.indexed = 1,						\
+		.info_mask_separate = BIT(IIO_CHAN_INFO_RAW)		\
+				    | BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO) \
+				    | BIT(IIO_CHAN_INFO_SAMP_FREQ),	\
+		.info_mask_separate_available =				\
+				      BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO) \
+				    | BIT(IIO_CHAN_INFO_SAMP_FREQ),	\
+		.info_mask_shared_by_all = BIT(IIO_CHAN_INFO_SCALE),	\
+		.channel = ch,						\
+		.scan_index = ch,					\
+		.scan_type = {						\
+			.sign = 'u',					\
+			.realbits = 16,					\
+			.storagebits = 16,				\
+		},							\
+	}
+
+/* Manual offload — same IIO_CPU layout but no oversampling_ratio attribute. */
+#define AD4691_OFFLOAD_MANUAL_CHANNEL(ch)				\
 	{								\
 		.type = IIO_VOLTAGE,					\
 		.indexed = 1,						\
@@ -236,23 +290,91 @@ static const struct iio_chan_spec ad4693_offload_channels[] = {
 	AD4691_OFFLOAD_CHANNEL(7),
 };
 
+static const struct iio_chan_spec ad4691_manual_channels[] = {
+	AD4691_MANUAL_CHANNEL(0),
+	AD4691_MANUAL_CHANNEL(1),
+	AD4691_MANUAL_CHANNEL(2),
+	AD4691_MANUAL_CHANNEL(3),
+	AD4691_MANUAL_CHANNEL(4),
+	AD4691_MANUAL_CHANNEL(5),
+	AD4691_MANUAL_CHANNEL(6),
+	AD4691_MANUAL_CHANNEL(7),
+	AD4691_MANUAL_CHANNEL(8),
+	AD4691_MANUAL_CHANNEL(9),
+	AD4691_MANUAL_CHANNEL(10),
+	AD4691_MANUAL_CHANNEL(11),
+	AD4691_MANUAL_CHANNEL(12),
+	AD4691_MANUAL_CHANNEL(13),
+	AD4691_MANUAL_CHANNEL(14),
+	AD4691_MANUAL_CHANNEL(15),
+	IIO_CHAN_SOFT_TIMESTAMP(16),
+};
+
+static const struct iio_chan_spec ad4693_manual_channels[] = {
+	AD4691_MANUAL_CHANNEL(0),
+	AD4691_MANUAL_CHANNEL(1),
+	AD4691_MANUAL_CHANNEL(2),
+	AD4691_MANUAL_CHANNEL(3),
+	AD4691_MANUAL_CHANNEL(4),
+	AD4691_MANUAL_CHANNEL(5),
+	AD4691_MANUAL_CHANNEL(6),
+	AD4691_MANUAL_CHANNEL(7),
+	IIO_CHAN_SOFT_TIMESTAMP(8),
+};
+
+static const struct iio_chan_spec ad4691_offload_manual_channels[] = {
+	AD4691_OFFLOAD_MANUAL_CHANNEL(0),
+	AD4691_OFFLOAD_MANUAL_CHANNEL(1),
+	AD4691_OFFLOAD_MANUAL_CHANNEL(2),
+	AD4691_OFFLOAD_MANUAL_CHANNEL(3),
+	AD4691_OFFLOAD_MANUAL_CHANNEL(4),
+	AD4691_OFFLOAD_MANUAL_CHANNEL(5),
+	AD4691_OFFLOAD_MANUAL_CHANNEL(6),
+	AD4691_OFFLOAD_MANUAL_CHANNEL(7),
+	AD4691_OFFLOAD_MANUAL_CHANNEL(8),
+	AD4691_OFFLOAD_MANUAL_CHANNEL(9),
+	AD4691_OFFLOAD_MANUAL_CHANNEL(10),
+	AD4691_OFFLOAD_MANUAL_CHANNEL(11),
+	AD4691_OFFLOAD_MANUAL_CHANNEL(12),
+	AD4691_OFFLOAD_MANUAL_CHANNEL(13),
+	AD4691_OFFLOAD_MANUAL_CHANNEL(14),
+	AD4691_OFFLOAD_MANUAL_CHANNEL(15),
+};
+
+static const struct iio_chan_spec ad4693_offload_manual_channels[] = {
+	AD4691_OFFLOAD_MANUAL_CHANNEL(0),
+	AD4691_OFFLOAD_MANUAL_CHANNEL(1),
+	AD4691_OFFLOAD_MANUAL_CHANNEL(2),
+	AD4691_OFFLOAD_MANUAL_CHANNEL(3),
+	AD4691_OFFLOAD_MANUAL_CHANNEL(4),
+	AD4691_OFFLOAD_MANUAL_CHANNEL(5),
+	AD4691_OFFLOAD_MANUAL_CHANNEL(6),
+	AD4691_OFFLOAD_MANUAL_CHANNEL(7),
+};
+
+static const int ad4691_oversampling_ratios[] = { 1, 2, 4, 8, 16, 32 };
+
 static const struct ad4691_channel_info ad4691_sw_info = {
 	.channels = ad4691_channels,
+	.manual_channels = ad4691_manual_channels,
 	.num_channels = ARRAY_SIZE(ad4691_channels),
 };
 
 static const struct ad4691_channel_info ad4693_sw_info = {
 	.channels = ad4693_channels,
+	.manual_channels = ad4693_manual_channels,
 	.num_channels = ARRAY_SIZE(ad4693_channels),
 };
 
 static const struct ad4691_channel_info ad4691_offload_info = {
 	.channels = ad4691_offload_channels,
+	.manual_channels = ad4691_offload_manual_channels,
 	.num_channels = ARRAY_SIZE(ad4691_offload_channels),
 };
 
 static const struct ad4691_channel_info ad4693_offload_info = {
 	.channels = ad4693_offload_channels,
+	.manual_channels = ad4693_offload_manual_channels,
 	.num_channels = ARRAY_SIZE(ad4693_offload_channels),
 };
 
@@ -325,6 +447,19 @@ struct ad4691_state {
 	int irq;
 	int vref_uV;
 	u32 cnv_period_ns;
+	/*
+	 * Snapped oscillator frequency (Hz) shared by all channels. Set when
+	 * sampling_frequency or oversampling_ratio is written; written to
+	 * OSC_FREQ_REG at buffer enable and single-shot time so both attributes
+	 * can be set in any order. Reading in_voltageN_sampling_frequency
+	 * returns target_osc_freq_Hz / osr[N] — the effective rate for that
+	 * channel given its oversampling ratio.
+	 */
+	u32 target_osc_freq_Hz;
+	/* Per-channel oversampling ratio; always 1 in manual mode. */
+	u8 osr[16];
+	/* Scratch buffer for read_avail SAMP_FREQ; content is OSR-dependent. */
+	int samp_freq_avail[16][ARRAY_SIZE(ad4691_osc_freqs_Hz)];
 
 	bool manual_mode;
 	bool refbuf_en;
@@ -398,8 +533,7 @@ static bool ad4691_offload_trigger_match(struct spi_offload_trigger *trigger,
 					 enum spi_offload_trigger_type type,
 					 u64 *args, u32 nargs)
 {
-	return type == SPI_OFFLOAD_TRIGGER_DATA_READY &&
-	       nargs == 1 && args[0] <= 3;
+	return type == SPI_OFFLOAD_TRIGGER_DATA_READY && nargs == 1 && args[0] <= 3;
 }
 
 static int ad4691_offload_trigger_request(struct spi_offload_trigger *trigger,
@@ -578,6 +712,16 @@ static const struct regmap_config ad4691_regmap_config = {
 	.cache_type = REGCACHE_MAPLE,
 };
 
+/* Write target_osc_freq_Hz to OSC_FREQ_REG. Called at use time. */
+static int ad4691_write_osc_freq(struct ad4691_state *st)
+{
+	for (unsigned int i = 0; i < ARRAY_SIZE(ad4691_osc_freqs_Hz); i++) {
+		if (ad4691_osc_freqs_Hz[i] == st->target_osc_freq_Hz)
+			return regmap_write(st->regmap, AD4691_OSC_FREQ_REG, i);
+	}
+	return -EINVAL;
+}
+
 /*
  * Index 0 in ad4691_osc_freqs_Hz is 1 MHz — valid only for AD4692/AD4694
  * (max_rate == 1 MHz). AD4691/AD4693 cap at 500 kHz so their valid range
@@ -588,41 +732,65 @@ static unsigned int ad4691_samp_freq_start(const struct ad4691_chip_info *info)
 	return (info->max_rate == 1 * HZ_PER_MHZ) ? 0 : 1;
 }
 
-static int ad4691_get_sampling_freq(struct ad4691_state *st, int *val)
+/*
+ * Find the largest oscillator table entry that is both <= needed_osc and
+ * evenly divisible by osr (guaranteeing an integer effective rate on
+ * read-back). Returns 0 if no such entry exists in the chip's valid range.
+ */
+static unsigned int ad4691_find_osc_freq(struct ad4691_state *st,
+					 unsigned int needed_osc,
+					 unsigned int osr)
 {
-	unsigned int reg_val;
-	int ret;
+	unsigned int start = ad4691_samp_freq_start(st->info);
 
-	/*
-	 * AD4691_OSC_FREQ_REG is non-volatile and written during
-	 * ad4691_config(), so regmap returns the cached value here without
-	 * touching the SPI bus. No lock is needed.
-	 */
-	ret = regmap_read(st->regmap, AD4691_OSC_FREQ_REG, &reg_val);
-	if (ret)
-		return ret;
+	for (unsigned int i = start; i < ARRAY_SIZE(ad4691_osc_freqs_Hz); i++) {
+		if ((unsigned int)ad4691_osc_freqs_Hz[i] > needed_osc)
+			continue;
+		if (ad4691_osc_freqs_Hz[i] % osr)
+			continue;
+		return ad4691_osc_freqs_Hz[i];
+	}
+	return 0;
+}
 
-	*val = ad4691_osc_freqs_Hz[FIELD_GET(AD4691_OSC_FREQ_MASK, reg_val)];
+static int ad4691_get_sampling_freq(struct ad4691_state *st, u8 osr, int *val)
+{
+	*val = st->target_osc_freq_Hz / osr;
 	return IIO_VAL_INT;
 }
 
-static int ad4691_set_sampling_freq(struct iio_dev *indio_dev, int freq)
+static int ad4691_set_sampling_freq(struct iio_dev *indio_dev,
+				    struct iio_chan_spec const *chan, int freq)
 {
 	struct ad4691_state *st = iio_priv(indio_dev);
-	unsigned int start = ad4691_samp_freq_start(st->info);
+	unsigned int osr, found;
 
 	IIO_DEV_ACQUIRE_DIRECT_MODE(indio_dev, claim);
 	if (IIO_DEV_ACQUIRE_FAILED(claim))
 		return -EBUSY;
 
-	for (unsigned int i = start; i < ARRAY_SIZE(ad4691_osc_freqs_Hz); i++) {
-		if (ad4691_osc_freqs_Hz[i] != freq)
-			continue;
-		return regmap_update_bits(st->regmap, AD4691_OSC_FREQ_REG,
-					  AD4691_OSC_FREQ_MASK, i);
-	}
+	/*
+	 * Read osr under st->lock: osr[chan] and target_osc_freq_Hz are
+	 * modified together under the lock; reading after acquiring it ensures
+	 * we see a consistent snapshot with no concurrent write racing us.
+	 */
+	guard(mutex)(&st->lock);
+	osr = st->osr[chan->channel];
 
-	return -EINVAL;
+	if (freq <= 0 || (unsigned int)freq > st->info->max_rate / osr)
+		return -EINVAL;
+
+	found = ad4691_find_osc_freq(st, (unsigned int)freq * osr, osr);
+	if (!found)
+		return -EINVAL;
+
+	/*
+	 * Store the snapped oscillator frequency; OSC_FREQ_REG is written at
+	 * buffer enable and single-shot time so that sampling_frequency and
+	 * oversampling_ratio can be set in any order.
+	 */
+	st->target_osc_freq_Hz = found;
+	return 0;
 }
 
 static int ad4691_read_avail(struct iio_dev *indio_dev,
@@ -634,10 +802,46 @@ static int ad4691_read_avail(struct iio_dev *indio_dev,
 	unsigned int start = ad4691_samp_freq_start(st->info);
 
 	switch (mask) {
-	case IIO_CHAN_INFO_SAMP_FREQ:
-		*vals = &ad4691_osc_freqs_Hz[start];
+	case IIO_CHAN_INFO_SAMP_FREQ: {
+		unsigned int osr;
+		int n = 0;
+
+		/*
+		 * Hold the lock while reading osr[chan] and populating the
+		 * scratch buffer: a concurrent oversampling_ratio write modifies
+		 * both target_osc_freq_Hz and osr[] under the lock, so we must
+		 * read osr atomically with respect to that write. The scratch
+		 * buffer is per-channel, so concurrent reads on different
+		 * channels do not race; concurrent reads on the same channel
+		 * would compute identical values, but holding the lock avoids
+		 * the formal data race.
+		 */
+		scoped_guard(mutex, &st->lock) {
+			osr = st->osr[chan->channel];
+
+			/*
+			 * Only oscillator frequencies evenly divisible by the
+			 * channel's OSR yield an integer effective rate; expose
+			 * those as effective rates (osc / osr) so the user works
+			 * entirely in output-sample space.
+			 */
+			for (unsigned int i = start;
+			     i < ARRAY_SIZE(ad4691_osc_freqs_Hz); i++) {
+				if (ad4691_osc_freqs_Hz[i] % osr)
+					continue;
+				st->samp_freq_avail[chan->channel][n++] =
+					ad4691_osc_freqs_Hz[i] / osr;
+			}
+		}
+		*vals = st->samp_freq_avail[chan->channel];
 		*type = IIO_VAL_INT;
-		*length = ARRAY_SIZE(ad4691_osc_freqs_Hz) - start;
+		*length = n;
+		return IIO_AVAIL_LIST;
+	}
+	case IIO_CHAN_INFO_OVERSAMPLING_RATIO:
+		*vals = ad4691_oversampling_ratios;
+		*type = IIO_VAL_INT;
+		*length = ARRAY_SIZE(ad4691_oversampling_ratios);
 		return IIO_AVAIL_LIST;
 	default:
 		return -EINVAL;
@@ -648,7 +852,7 @@ static int ad4691_single_shot_read(struct iio_dev *indio_dev,
 				   struct iio_chan_spec const *chan, int *val)
 {
 	struct ad4691_state *st = iio_priv(indio_dev);
-	unsigned int reg_val, osc_idx, period_us;
+	unsigned int reg_val, period_us;
 	int ret;
 
 	guard(mutex)(&st->lock);
@@ -669,7 +873,12 @@ static int ad4691_single_shot_read(struct iio_dev *indio_dev,
 	if (ret)
 		return ret;
 
-	ret = regmap_read(st->regmap, AD4691_OSC_FREQ_REG, &reg_val);
+	ret = regmap_write(st->regmap, AD4691_ACC_DEPTH_IN(chan->channel),
+			   st->osr[chan->channel]);
+	if (ret)
+		return ret;
+
+	ret = ad4691_write_osc_freq(st);
 	if (ret)
 		return ret;
 
@@ -677,9 +886,12 @@ static int ad4691_single_shot_read(struct iio_dev *indio_dev,
 	if (ret)
 		return ret;
 
-	osc_idx = FIELD_GET(AD4691_OSC_FREQ_MASK, reg_val);
-	/* Wait 2 oscillator periods for the conversion to complete. */
-	period_us = DIV_ROUND_UP(2UL * USEC_PER_SEC, ad4691_osc_freqs_Hz[osc_idx]);
+	/*
+	 * Wait osr + 1 oscillator periods: osr for accumulation, +1 for the
+	 * pipeline margin (one extra period ensures the final result is ready).
+	 */
+	period_us = DIV_ROUND_UP((st->osr[chan->channel] + 1) * USEC_PER_SEC,
+				 st->target_osc_freq_Hz);
 	fsleep(period_us);
 
 	ret = regmap_write(st->regmap, AD4691_OSC_EN_REG, 0);
@@ -713,8 +925,21 @@ static int ad4691_read_raw(struct iio_dev *indio_dev,
 
 		return ad4691_single_shot_read(indio_dev, chan, val);
 	}
-	case IIO_CHAN_INFO_SAMP_FREQ:
-		return ad4691_get_sampling_freq(st, val);
+	case IIO_CHAN_INFO_SAMP_FREQ: {
+		/*
+		 * Read target_osc_freq_Hz and osr[chan] under st->lock to get a
+		 * consistent snapshot: write_raw for SAMP_FREQ or OSR modifies
+		 * both fields under the lock, so a concurrent read without the
+		 * lock could observe a new oscillator frequency with the old OSR.
+		 */
+		guard(mutex)(&st->lock);
+		return ad4691_get_sampling_freq(st, st->osr[chan->channel], val);
+	}
+	case IIO_CHAN_INFO_OVERSAMPLING_RATIO: {
+		guard(mutex)(&st->lock);
+		*val = st->osr[chan->channel];
+		return IIO_VAL_INT;
+	}
 	case IIO_CHAN_INFO_SCALE:
 		*val = st->vref_uV / (MICRO / MILLI);
 		*val2 = chan->scan_type.realbits;
@@ -728,9 +953,48 @@ static int ad4691_write_raw(struct iio_dev *indio_dev,
 			    struct iio_chan_spec const *chan,
 			    int val, int val2, long mask)
 {
+	struct ad4691_state *st = iio_priv(indio_dev);
+
 	switch (mask) {
 	case IIO_CHAN_INFO_SAMP_FREQ:
-		return ad4691_set_sampling_freq(indio_dev, val);
+		return ad4691_set_sampling_freq(indio_dev, chan, val);
+	case IIO_CHAN_INFO_OVERSAMPLING_RATIO: {
+		unsigned int old_effective, found;
+		bool valid = false;
+
+		for (unsigned int i = 0; i < ARRAY_SIZE(ad4691_oversampling_ratios); i++) {
+			if (ad4691_oversampling_ratios[i] == val) {
+				valid = true;
+				break;
+			}
+		}
+		if (!valid)
+			return -EINVAL;
+
+		IIO_DEV_ACQUIRE_DIRECT_MODE(indio_dev, claim);
+		if (IIO_DEV_ACQUIRE_FAILED(claim))
+			return -EBUSY;
+
+		/*
+		 * Hold st->lock while computing the new oscillator frequency
+		 * and updating both target_osc_freq_Hz and osr[chan] atomically:
+		 * read_raw for SAMP_FREQ reads both fields under the lock and
+		 * must see a consistent pair (new osc ↔ new osr).
+		 *
+		 * Snap target_osc_freq_Hz to the largest table entry that is
+		 * both <= old_effective * new_osr and evenly divisible by
+		 * new_osr, preserving an integer read-back of
+		 * in_voltageN_sampling_frequency after the OSR change.
+		 */
+		guard(mutex)(&st->lock);
+		old_effective = st->target_osc_freq_Hz / st->osr[chan->channel];
+		found = ad4691_find_osc_freq(st, old_effective * (unsigned int)val, val);
+		if (!found)
+			return -EINVAL;
+		st->target_osc_freq_Hz = found;
+		st->osr[chan->channel] = val;
+		return 0;
+	}
 	default:
 		return -EINVAL;
 	}
@@ -784,6 +1048,10 @@ static int ad4691_enter_conversion_mode(struct ad4691_state *st)
 	if (st->manual_mode)
 		return regmap_update_bits(st->regmap, AD4691_DEVICE_SETUP,
 					  AD4691_MANUAL_MODE, AD4691_MANUAL_MODE);
+
+	ret = ad4691_write_osc_freq(st);
+	if (ret)
+		return ret;
 
 	ret = regmap_update_bits(st->regmap, AD4691_ADC_SETUP,
 				 AD4691_ADC_MODE_MASK, AD4691_CNV_BURST_MODE);
@@ -947,6 +1215,14 @@ static int ad4691_cnv_burst_buffer_preenable(struct iio_dev *indio_dev)
 	ret = regmap_write(st->regmap, AD4691_ACC_MASK_REG, acc_mask);
 	if (ret)
 		goto err_unoptimize;
+
+	iio_for_each_active_channel(indio_dev, i) {
+		if (i >= indio_dev->num_channels - 1)
+			break; /* skip soft timestamp */
+		ret = regmap_write(st->regmap, AD4691_ACC_DEPTH_IN(i), st->osr[i]);
+		if (ret)
+			goto err_unoptimize;
+	}
 
 	ret = ad4691_enter_conversion_mode(st);
 	if (ret)
@@ -1125,6 +1401,14 @@ static int ad4691_cnv_burst_offload_buffer_postenable(struct iio_dev *indio_dev)
 	ret = regmap_write(st->regmap, AD4691_ACC_MASK_REG, acc_mask);
 	if (ret)
 		return ret;
+
+	iio_for_each_active_channel(indio_dev, bit) {
+		if (bit >= indio_dev->num_channels)
+			break; /* defensive guard; offload channels have no soft timestamp */
+		ret = regmap_write(st->regmap, AD4691_ACC_DEPTH_IN(bit), st->osr[bit]);
+		if (ret)
+			return ret;
+	}
 
 	ret = ad4691_enter_conversion_mode(st);
 	if (ret)
@@ -1524,6 +1808,8 @@ static int ad4691_config(struct ad4691_state *st)
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to write OSC_FREQ\n");
 
+	st->target_osc_freq_Hz = ad4691_osc_freqs_Hz[ad4691_samp_freq_start(st->info)];
+
 	ret = regmap_update_bits(st->regmap, AD4691_ADC_SETUP,
 				 AD4691_ADC_MODE_MASK, AD4691_AUTONOMOUS_MODE);
 	if (ret)
@@ -1540,7 +1826,14 @@ static int ad4691_setup_triggered_buffer(struct iio_dev *indio_dev,
 	unsigned int i;
 	int irq, ret;
 
-	indio_dev->channels = st->info->sw_info->channels;
+	/*
+	 * Manual mode exposes channels without the oversampling_ratio attribute
+	 * because ACC_DEPTH_IN is not configured in manual mode.
+	 */
+	if (st->manual_mode)
+		indio_dev->channels = st->info->sw_info->manual_channels;
+	else
+		indio_dev->channels = st->info->sw_info->channels;
 	indio_dev->num_channels = st->info->sw_info->num_channels;
 	indio_dev->info = st->manual_mode ? &ad4691_manual_info : &ad4691_cnv_burst_info;
 
@@ -1621,7 +1914,18 @@ static int ad4691_setup_offload(struct iio_dev *indio_dev,
 	offload->offload = spi_offload;
 	st->offload = offload;
 
-	indio_dev->channels = st->info->offload_info->channels;
+	/*
+	 * CNV burst offload exposes oversampling_ratio (ACC_DEPTH_IN is
+	 * configured per channel at buffer enable). Manual offload does not
+	 * configure ACC_DEPTH_IN, so it uses a separate channel array
+	 * without the oversampling_ratio attribute. Both paths use IIO_CPU
+	 * (no .endianness annotation) because bits_per_word=16 causes the
+	 * SPI Engine to produce native 16-bit DMA words.
+	 */
+	if (st->manual_mode)
+		indio_dev->channels = st->info->offload_info->manual_channels;
+	else
+		indio_dev->channels = st->info->offload_info->channels;
 	indio_dev->num_channels = st->info->offload_info->num_channels;
 	/*
 	 * Offload path uses DMA directly; no IIO trigger is involved, so
@@ -1695,6 +1999,7 @@ static int ad4691_probe(struct spi_device *spi)
 	st->info = spi_get_device_match_data(spi);
 	if (!st->info)
 		return -ENODEV;
+	memset(st->osr, 1, sizeof(st->osr));
 
 	ret = devm_mutex_init(dev, &st->lock);
 	if (ret)
