@@ -37,6 +37,7 @@
 #include "shuffle.h"
 
 #include <asm/setup.h>
+#include <asm/struct_page_init.h>
 
 #ifndef CONFIG_NUMA
 unsigned long max_mapnr;
@@ -1078,9 +1079,21 @@ static inline bool zone_device_page_init_optimization_enabled(void)
 	return !page_ref_tracepoint_active(page_ref_set);
 }
 
+/*
+ * The fast path copies struct page with fixed-offset u64 stores instead of
+ * a runtime loop. Keep that copy sequence in sync with the struct page
+ * layouts supported by this build.
+ *
+ * The sequence below requires struct page to be u64-aligned and currently
+ * handles layouts from 7 to 12 u64 words (56 to 96 bytes). If a future
+ * layout falls outside that range, fail the build so the store sequence is
+ * updated together with the layout change.
+ */
 static inline void struct_page_layout_check(void)
 {
 	BUILD_BUG_ON(sizeof(struct page) & (sizeof(u64) - 1));
+	BUILD_BUG_ON(sizeof(struct page) < 56);
+	BUILD_BUG_ON(sizeof(struct page) > 96);
 }
 
 static inline void init_template_head_page(struct page *template,
@@ -1108,30 +1121,67 @@ static inline void init_template_tail_page(struct page *template,
 }
 
 /*
- * Initialize parts that differ from the template
+ * 'template' is a reusable page prototype rather than a strictly immutable
+ * object. Most ZONE_DEVICE fields stay constant across the pages covered by
+ * the current template, but section bits and page->virtual may still depend
+ * on the PFN. Refresh those PFN-dependent fields in the template before
+ * copying it into @page.
  */
-static inline void generic_init_zone_device_page_finish(struct page *page,
-							unsigned long pfn)
+static inline void zone_device_page_update_template(struct page *template,
+						    unsigned long pfn)
 {
 #ifdef SECTION_IN_PAGE_FLAGS
-	set_page_section(page, pfn_to_section_nr(pfn));
+	set_page_section(template, pfn_to_section_nr(pfn));
 #endif
 #ifdef WANT_PAGE_VIRTUAL
 	if (!is_highmem_idx(ZONE_DEVICE))
-		set_page_address(page, __va(pfn << PAGE_SHIFT));
+		set_page_address(template, __va(pfn << PAGE_SHIFT));
 #endif
 }
 
 static void init_zone_device_page_from_template(struct page *page,
-		unsigned long pfn, const struct page *template)
+		unsigned long pfn, struct page *template)
 {
 	const u64 *src = (const u64 *)template;
 	u64 *dst = (u64 *)page;
-	unsigned int i;
 
-	for (i = 0; i < sizeof(struct page) / sizeof(u64); i++)
-		dst[i] = src[i];
-	generic_init_zone_device_page_finish(page, pfn);
+	/*
+	 * 'template' carries the invariant portion of a ZONE_DEVICE struct
+	 * page. Update the PFN-dependent fields in place before copying it
+	 * to the destination page.
+	 */
+	zone_device_page_update_template(template, pfn);
+
+	/*
+	 * Keep the copy open-coded so the compiler emits fixed-offset stores
+	 * for the hot path instead of a runtime copy loop.
+	 */
+	switch (sizeof(struct page)) {
+	case 96:
+		arch_optimize_store_u64(&dst[11], src[11]);
+		fallthrough;
+	case 88:
+		arch_optimize_store_u64(&dst[10], src[10]);
+		fallthrough;
+	case 80:
+		arch_optimize_store_u64(&dst[9], src[9]);
+		fallthrough;
+	case 72:
+		arch_optimize_store_u64(&dst[8], src[8]);
+		fallthrough;
+	case 64:
+		arch_optimize_store_u64(&dst[7], src[7]);
+		fallthrough;
+	case 56:
+		arch_optimize_store_u64(&dst[6], src[6]);
+		arch_optimize_store_u64(&dst[5], src[5]);
+		arch_optimize_store_u64(&dst[4], src[4]);
+		arch_optimize_store_u64(&dst[3], src[3]);
+		arch_optimize_store_u64(&dst[2], src[2]);
+		arch_optimize_store_u64(&dst[1], src[1]);
+		arch_optimize_store_u64(&dst[0], src[0]);
+	}
+
 	zone_device_page_init_pageblock(page, pfn);
 }
 #else
@@ -1201,9 +1251,10 @@ static void __ref memmap_init_compound(struct page *head,
 	__SetPageHead(head);
 
 	/*
-	 * A tail template can be reused for all tail pages in the same compound page
-	 * because shared state for compound tails is pre-set by prep_compound_tail().
-	 * The per-page page->virtual and section in flags are fixed up after copying.
+	 * All tails of the same compound page share the state established by
+	 * prep_compound_tail(). Reuse one tail template for the whole range
+	 * and refresh only the PFN-dependent fields in that template before
+	 * each copy.
 	 */
 	if (use_template)
 		init_template_tail_page(&template, head_pfn + 1, zone_idx, nid,
@@ -1269,10 +1320,22 @@ void __ref memmap_init_zone_device(struct zone *zone,
 		if (pfns_per_compound == 1)
 			continue;
 
+		/*
+		 * Compound-head setup immediately updates head->flags, so make
+		 * the template copy visible before entering memmap_init_compound().
+		 */
+		if (use_template)
+			arch_optimize_store_drain();
+
 		memmap_init_compound(page, pfn, zone_idx, nid, pgmap,
 				     compound_nr_pages(altmap, pgmap),
 				     use_template);
 	}
+	/*
+	 * Drain any remaining non-temporal stores before returning.
+	 */
+	if (use_template)
+		arch_optimize_store_drain();
 
 	pr_debug("%s initialised %lu pages in %ums\n", __func__,
 		nr_pages, jiffies_to_msecs(jiffies - start));
