@@ -220,6 +220,33 @@ static char gdrom_execute_diagnostic(void)
 }
 
 /*
+ * Test unit command
+ * byte 0 = 0x0
+ *
+ * This command verifies whether device can be accessed.
+ *
+ * -EIO indicates that device is not ready for operation.
+ */
+static int gdrom_test_unit_cmd(void)
+{
+	struct packet_command *test_command;
+
+	test_command = kzalloc_obj(struct packet_command);
+	if (!test_command)
+		return -ENOMEM;
+	test_command->cmd[0] = 0x0;
+	test_command->buflen = 0;
+	gd.pending = 1;
+	gdrom_packetcommand(gd.cd_info, test_command);
+	wait_event_interruptible_timeout(command_queue, gd.pending == 0,
+					 GDROM_DEFAULT_TIMEOUT);
+	gd.pending = 0;
+	kfree(test_command);
+
+	return gd.status & 0x1 ? -EIO : 0;
+}
+
+/*
  * Prepare disk command
  * byte 0 = 0x70
  * byte 1 = 0x1f
@@ -353,6 +380,9 @@ static int gdrom_get_last_session(struct cdrom_device_info *cd_info,
 
 static int gdrom_open(struct cdrom_device_info *cd_info, int purpose)
 {
+	/* Sink pending UNIT_ATTENTION sense error after a disc swap. */
+	(void)gdrom_test_unit_cmd();
+
 	/* spin up the disk */
 	return gdrom_preparedisk_cmd();
 }
