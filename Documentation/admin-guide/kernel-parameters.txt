@@ -4185,6 +4185,11 @@ Kernel parameters
 			For details see:
 			Documentation/admin-guide/hw-vuln/processor_mmio_stale_data.rst
 
+	modrestrict=<bool>
+			Control the restriction of module auto-loading to
+			CAP_SYS_ADMIN. If no <bool> value is specified, this
+			is set to the value of CONFIG_MODULE_RESTRICT_AUTOLOAD.
+
 	<module>.async_probe[=<bool>] [KNL]
 			If no <bool> value is specified or if the value
 			specified is not a valid <bool>, enable asynchronous

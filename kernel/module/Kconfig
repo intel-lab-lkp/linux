@@ -337,6 +337,21 @@ config MODULE_SIG_HASH
 
 endif # MODULE_SIG || IMA_APPRAISE_MODSIG
 
+config MODULE_RESTRICT_AUTOLOAD
+	bool "Restrict module auto-loading to privileged users"
+	default n
+	help
+	  Restrict module auto-loading in response to use of some feature
+	  implemented by an unloaded module to CAP_SYS_ADMIN. Enabling this
+	  option helps reducing the attack surface where unprivileged users
+	  can abuse auto-loading to cause a vulnerable module to load that is
+	  then exploited.
+
+	  Note that this option also prevents a benign use of auto-loading for
+	  a non-root users. Thus if enabled, the root user should execute
+	  modprobe manually if needed, or add the module to the list of modules
+	  loaded at the boot by modifying init scripts.
+
 config MODULE_COMPRESS
 	bool "Module compression"
 	help
