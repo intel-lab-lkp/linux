@@ -183,6 +183,15 @@ config EXTCON_RT8973A
 	  and switch that is optimized to protect low voltage system
 	  from abnormal high input voltage (up to 28V).
 
+config EXTCON_S2M
+	tristate "Samsung S2M series PMIC EXTCON support"
+	depends on MFD_SEC_CORE
+	help
+	  This option enables support for MUIC devices found in certain
+	  Samsung S2M series PMICs, such as the S2MU005. These devices
+	  have internal ADCs measuring the ID-GND resistance, thereby
+	  can be used as a USB port accessory detector.
+
 config EXTCON_SM5502
 	tristate "Silicon Mitus SM5502/SM5504/SM5703 EXTCON support"
 	depends on I2C
