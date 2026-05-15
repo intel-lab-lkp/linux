@@ -63,6 +63,8 @@ properties:
       - auo,p320hvn03
         # Shanghai AVIC Optoelectronics 7" 1024x600 color TFT-LCD panel
       - avic,tm070ddh03
+        # Shanghai AVIC Optoelectronics 9.7" 1024x600 color TFT-LCD panel
+      - avic,tm097tdh02
         # BOE AV101HDT-a10 10.1" 1280x720 LVDS panel
       - boe,av101hdt-a10
         # BOE BP082WX1-100 8.2" WXGA (1280x800) LVDS panel
