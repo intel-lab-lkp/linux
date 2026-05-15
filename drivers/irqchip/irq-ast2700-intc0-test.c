@@ -6,23 +6,41 @@
 
 #include "irq-ast2700.h"
 
+static int aspeed_intc0_resolve_route_test(struct fwnode_handle *fwnode,
+					   void *host_data,
+					   size_t nc1outs,
+					   const u32 *c1outs,
+					   size_t nc1ranges,
+					   const struct aspeed_intc_interrupt_range *c1ranges,
+					   struct aspeed_intc_interrupt_range *resolved)
+{
+	struct irq_domain *c0domain __free(kfree) = kzalloc_obj(*c0domain);
+
+	if (!c0domain)
+		return -ENOMEM;
+
+	c0domain->host_data = host_data;
+	c0domain->fwnode = fwnode;
+	return aspeed_intc0_resolve_route(c0domain, nc1outs, c1outs,
+					  nc1ranges, c1ranges, resolved);
+}
+
 static void aspeed_intc0_resolve_route_bad_args(struct kunit *test)
 {
 	static const struct aspeed_intc_interrupt_range c1ranges[] = { 0 };
 	static const u32 c1outs[] = { 0 };
 	struct aspeed_intc_interrupt_range resolved;
-	const struct irq_domain c0domain = { 0 };
 	int rc;
 
 	rc = aspeed_intc0_resolve_route(NULL, 0, c1outs, 0, c1ranges, NULL);
 	KUNIT_EXPECT_EQ(test, rc, -EINVAL);
 
-	rc = aspeed_intc0_resolve_route(&c0domain, 0, c1outs,
+	rc = aspeed_intc0_resolve_route_test(NULL, NULL, 0, c1outs,
 					ARRAY_SIZE(c1ranges), c1ranges,
 					&resolved);
 	KUNIT_EXPECT_EQ(test, rc, -ENOENT);
 
-	rc = aspeed_intc0_resolve_route(&c0domain, ARRAY_SIZE(c1outs), c1outs,
+	rc = aspeed_intc0_resolve_route_test(NULL, NULL, ARRAY_SIZE(c1outs), c1outs,
 					0, c1ranges, &resolved);
 	KUNIT_EXPECT_EQ(test, rc, -ENOENT);
 }
@@ -52,15 +70,15 @@ static void aspeed_intc_resolve_route_invalid_c0domain(struct kunit *test)
 	struct device_node intc0_node = {
 		.fwnode = { .ops = &arm_gicv3_fwnode_ops },
 	};
-	const struct irq_domain c0domain = { .fwnode = &intc0_node.fwnode };
 	static const struct aspeed_intc_interrupt_range c1ranges[] = { 0 };
 	static const u32 c1outs[] = { 0 };
 	struct aspeed_intc_interrupt_range resolved;
 	int rc;
 
-	rc = aspeed_intc0_resolve_route(&c0domain, ARRAY_SIZE(c1outs), c1outs,
-					ARRAY_SIZE(c1ranges), c1ranges,
-					&resolved);
+	rc = aspeed_intc0_resolve_route_test(&intc0_node.fwnode, NULL,
+					     ARRAY_SIZE(c1outs), c1outs,
+					     ARRAY_SIZE(c1ranges), c1ranges,
+					     &resolved);
 	KUNIT_EXPECT_NE(test, rc, 0);
 }
 
@@ -119,15 +137,12 @@ aspeed_intc0_resolve_route_c1i1o1c0i1o1_connected(struct kunit *test)
 	struct aspeed_intc0 intc0 = {
 		.ranges = { .ranges = intc0_ranges, .nranges = ARRAY_SIZE(intc0_ranges), }
 	};
-	const struct irq_domain c0domain = {
-		.host_data = &intc0,
-		.fwnode = &intc0_node.fwnode
-	};
 	int rc;
 
-	rc = aspeed_intc0_resolve_route(&c0domain, ARRAY_SIZE(c1outs), c1outs,
-					ARRAY_SIZE(c1ranges), c1ranges,
-					&resolved);
+	rc = aspeed_intc0_resolve_route_test(&intc0_node.fwnode, &intc0,
+					     ARRAY_SIZE(c1outs), c1outs,
+					     ARRAY_SIZE(c1ranges), c1ranges,
+					     &resolved);
 	KUNIT_EXPECT_EQ(test, rc, 0);
 	KUNIT_EXPECT_EQ(test, resolved.start, 0);
 	KUNIT_EXPECT_EQ(test, resolved.count, 1);
@@ -170,15 +185,12 @@ aspeed_intc0_resolve_route_c1i1o1c0i1o1_disconnected(struct kunit *test)
 			.nranges = ARRAY_SIZE(intc0_ranges),
 		}
 	};
-	const struct irq_domain c0domain = {
-		.host_data = &intc0,
-		.fwnode = &intc0_node.fwnode
-	};
 	int rc;
 
-	rc = aspeed_intc0_resolve_route(&c0domain, ARRAY_SIZE(c1outs), c1outs,
-					ARRAY_SIZE(c1ranges), c1ranges,
-					&resolved);
+	rc = aspeed_intc0_resolve_route_test(&intc0_node.fwnode, &intc0,
+					     ARRAY_SIZE(c1outs), c1outs,
+					     ARRAY_SIZE(c1ranges), c1ranges,
+					     &resolved);
 	KUNIT_EXPECT_NE(test, rc, 0);
 }
 
@@ -217,15 +229,12 @@ static void aspeed_intc0_resolve_route_c1i1o1mc0i1o1(struct kunit *test)
 			.nranges = ARRAY_SIZE(intc0_ranges),
 		}
 	};
-	const struct irq_domain c0domain = {
-		.host_data = &intc0,
-		.fwnode = &intc0_node.fwnode
-	};
 	int rc;
 
-	rc = aspeed_intc0_resolve_route(&c0domain, ARRAY_SIZE(c1outs), c1outs,
-					ARRAY_SIZE(c1ranges), c1ranges,
-					&resolved);
+	rc = aspeed_intc0_resolve_route_test(&intc0_node.fwnode, &intc0,
+					     ARRAY_SIZE(c1outs), c1outs,
+					     ARRAY_SIZE(c1ranges), c1ranges,
+					     &resolved);
 	KUNIT_EXPECT_EQ(test, rc, 0);
 	KUNIT_EXPECT_EQ(test, resolved.start, 0);
 	KUNIT_EXPECT_EQ(test, resolved.count, 1);
@@ -276,15 +285,12 @@ static void aspeed_intc0_resolve_route_c1i2o2mc0i1o1(struct kunit *test)
 			.nranges = ARRAY_SIZE(intc0_ranges),
 		}
 	};
-	const struct irq_domain c0domain = {
-		.host_data = &intc0,
-		.fwnode = &intc0_node.fwnode
-	};
 	int rc;
 
-	rc = aspeed_intc0_resolve_route(&c0domain, ARRAY_SIZE(c1outs), c1outs,
-					ARRAY_SIZE(c1ranges), c1ranges,
-					&resolved);
+	rc = aspeed_intc0_resolve_route_test(&intc0_node.fwnode, &intc0,
+					     ARRAY_SIZE(c1outs), c1outs,
+					     ARRAY_SIZE(c1ranges), c1ranges,
+					     &resolved);
 	KUNIT_EXPECT_EQ(test, rc, 0);
 	KUNIT_EXPECT_EQ(test, resolved.start, 1);
 	KUNIT_EXPECT_EQ(test, resolved.count, 1);
@@ -335,15 +341,12 @@ static void aspeed_intc0_resolve_route_c1i1o1mc0i2o1(struct kunit *test)
 			.nranges = ARRAY_SIZE(intc0_ranges),
 		}
 	};
-	const struct irq_domain c0domain = {
-		.host_data = &intc0,
-		.fwnode = &intc0_node.fwnode
-	};
 	int rc;
 
-	rc = aspeed_intc0_resolve_route(&c0domain, ARRAY_SIZE(c1outs), c1outs,
-					ARRAY_SIZE(c1ranges), c1ranges,
-					&resolved);
+	rc = aspeed_intc0_resolve_route_test(&intc0_node.fwnode, &intc0,
+					     ARRAY_SIZE(c1outs), c1outs,
+					     ARRAY_SIZE(c1ranges), c1ranges,
+					     &resolved);
 	KUNIT_EXPECT_EQ(test, rc, 0);
 	KUNIT_EXPECT_EQ(test, resolved.start, 0);
 	KUNIT_EXPECT_EQ(test, resolved.count, 1);
@@ -387,15 +390,12 @@ static void aspeed_intc0_resolve_route_c1i1o2mc0i1o1_invalid(struct kunit *test)
 			.nranges = ARRAY_SIZE(intc0_ranges),
 		}
 	};
-	const struct irq_domain c0domain = {
-		.host_data = &intc0,
-		.fwnode = &intc0_node.fwnode
-	};
 	int rc;
 
-	rc = aspeed_intc0_resolve_route(&c0domain, ARRAY_SIZE(c1outs), c1outs,
-					ARRAY_SIZE(c1ranges), c1ranges,
-					&resolved);
+	rc = aspeed_intc0_resolve_route_test(&intc0_node.fwnode, &intc0,
+					     ARRAY_SIZE(c1outs), c1outs,
+					     ARRAY_SIZE(c1ranges), c1ranges,
+					     &resolved);
 	KUNIT_EXPECT_EQ(test, rc, 1);
 	KUNIT_EXPECT_EQ(test, resolved.start, 0);
 	KUNIT_EXPECT_EQ(test, resolved.count, 1);
@@ -438,15 +438,12 @@ aspeed_intc0_resolve_route_c1i1o1mc0i1o1_bad_range_upstream(struct kunit *test)
 			.nranges = ARRAY_SIZE(intc0_ranges),
 		}
 	};
-	const struct irq_domain c0domain = {
-		.host_data = &intc0,
-		.fwnode = &intc0_node.fwnode
-	};
 	int rc;
 
-	rc = aspeed_intc0_resolve_route(&c0domain, ARRAY_SIZE(c1outs), c1outs,
-					ARRAY_SIZE(c1ranges), c1ranges,
-					&resolved);
+	rc = aspeed_intc0_resolve_route_test(&intc0_node.fwnode, &intc0,
+					     ARRAY_SIZE(c1outs), c1outs,
+					     ARRAY_SIZE(c1ranges), c1ranges,
+					     &resolved);
 	KUNIT_EXPECT_NE(test, rc, 0);
 }
 
