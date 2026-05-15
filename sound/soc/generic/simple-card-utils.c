@@ -290,6 +290,9 @@ int simple_util_parse_clk(struct device *dev,
 	if (of_property_read_bool(node, "system-clock-direction-out"))
 		simple_dai->clk_direction = SND_SOC_CLOCK_OUT;
 
+	if (!of_property_read_u32(node, "system-clock-id", &val))
+		simple_dai->clk_id = val;
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(simple_util_parse_clk);
@@ -506,14 +509,16 @@ int simple_util_hw_params(struct snd_pcm_substream *substream,
 			/* CPU first */
 			for_each_rtd_cpu_dais(rtd, i, sdai) {
 				pdai = simple_props_to_dai_cpu(props, i);
-				ret = snd_soc_dai_set_sysclk(sdai, 0, mclk, pdai->clk_direction);
+				ret = snd_soc_dai_set_sysclk(sdai, pdai->clk_id,
+						mclk, pdai->clk_direction);
 				if (ret && ret != -ENOTSUPP)
 					goto end;
 			}
 
 			for_each_rtd_codec_dais(rtd, i, sdai) {
 				pdai = simple_props_to_dai_codec(props, i);
-				ret = snd_soc_dai_set_sysclk(sdai, 0, mclk, pdai->clk_direction);
+				ret = snd_soc_dai_set_sysclk(sdai, pdai->clk_id,
+						mclk, pdai->clk_direction);
 				if (ret && ret != -ENOTSUPP)
 					goto end;
 			}
@@ -521,14 +526,16 @@ int simple_util_hw_params(struct snd_pcm_substream *substream,
 			/* default: codec first */
 			for_each_rtd_codec_dais(rtd, i, sdai) {
 				pdai = simple_props_to_dai_codec(props, i);
-				ret = snd_soc_dai_set_sysclk(sdai, 0, mclk, pdai->clk_direction);
+				ret = snd_soc_dai_set_sysclk(sdai, pdai->clk_id,
+						mclk, pdai->clk_direction);
 				if (ret && ret != -ENOTSUPP)
 					goto end;
 			}
 
 			for_each_rtd_cpu_dais(rtd, i, sdai) {
 				pdai = simple_props_to_dai_cpu(props, i);
-				ret = snd_soc_dai_set_sysclk(sdai, 0, mclk, pdai->clk_direction);
+				ret = snd_soc_dai_set_sysclk(sdai, pdai->clk_id,
+						mclk, pdai->clk_direction);
 				if (ret && ret != -ENOTSUPP)
 					goto end;
 			}
@@ -587,7 +594,8 @@ static int simple_init_dai(struct simple_util_priv *priv,
 		return 0;
 
 	if (simple_dai->sysclk) {
-		ret = snd_soc_dai_set_sysclk(dai, 0, simple_dai->sysclk,
+		ret = snd_soc_dai_set_sysclk(dai, simple_dai->clk_id,
+					     simple_dai->sysclk,
 					     simple_dai->clk_direction);
 		if (ret && ret != -ENOTSUPP) {
 			dev_err(dai->dev, "simple-card: set_sysclk error\n");
