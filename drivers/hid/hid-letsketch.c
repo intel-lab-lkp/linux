@@ -36,6 +36,7 @@
  */
 #include <linux/device.h>
 #include <linux/input.h>
+#include <linux/cleanup.h>
 #include <linux/hid.h>
 #include <linux/module.h>
 #include <linux/timer.h>
@@ -62,6 +63,8 @@ struct letsketch_data {
 	struct input_dev *input_tablet;
 	struct input_dev *input_tablet_pad;
 	struct timer_list inrange_timer;
+	spinlock_t lock;	/* serialises arming inrange_timer vs. teardown */
+	bool removing;		/* set during teardown; gates mod_timer */
 };
 
 static int letsketch_open(struct input_dev *dev)
@@ -189,9 +192,15 @@ static int letsketch_raw_event(struct hid_device *hdev,
 				 get_unaligned_le16(raw_data + 6));
 		/*
 		 * There is no out of range event, so use a timer for this
-		 * when in range we get an event approx. every 8 ms.
+		 * when in range we get an event approx. every 8 ms.  Skip
+		 * arming if the driver is being torn down so the timer
+		 * cannot outlive devm-freed data after letsketch_remove().
 		 */
-		mod_timer(&data->inrange_timer, jiffies + msecs_to_jiffies(100));
+		scoped_guard(spinlock_irqsave, &data->lock) {
+			if (!data->removing)
+				mod_timer(&data->inrange_timer,
+					  jiffies + msecs_to_jiffies(100));
+		}
 		break;
 	case 0xe0: /* Pad data */
 		input = data->input_tablet_pad;
@@ -291,6 +300,7 @@ static int letsketch_probe(struct hid_device *hdev, const struct hid_device_id *
 		return -ENOMEM;
 
 	data->hdev = hdev;
+	spin_lock_init(&data->lock);
 	timer_setup(&data->inrange_timer, letsketch_inrange_timeout, 0);
 	hid_set_drvdata(hdev, data);
 
@@ -305,6 +315,23 @@ static int letsketch_probe(struct hid_device *hdev, const struct hid_device_id *
 	return hid_hw_start(hdev, HID_CONNECT_HIDRAW);
 }
 
+static void letsketch_remove(struct hid_device *hdev)
+{
+	struct letsketch_data *data = hid_get_drvdata(hdev);
+
+	/*
+	 * Block raw_event from arming inrange_timer during teardown so
+	 * timer_delete_sync() below cannot race with a fresh mod_timer()
+	 * issued from a URB completion handler still in flight while
+	 * hid_hw_stop() is running.
+	 */
+	scoped_guard(spinlock_irqsave, &data->lock)
+		data->removing = true;
+
+	timer_delete_sync(&data->inrange_timer);
+	hid_hw_stop(hdev);
+}
+
 static const struct hid_device_id letsketch_devices[] = {
 	{ HID_USB_DEVICE(USB_VENDOR_ID_LETSKETCH, USB_DEVICE_ID_WP9620N) },
 	{ }
@@ -315,6 +342,7 @@ static struct hid_driver letsketch_driver = {
 	.name = "letsketch",
 	.id_table = letsketch_devices,
 	.probe = letsketch_probe,
+	.remove = letsketch_remove,
 	.raw_event = letsketch_raw_event,
 };
 module_hid_driver(letsketch_driver);
