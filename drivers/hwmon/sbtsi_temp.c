@@ -64,12 +64,15 @@ static inline void sbtsi_mc_to_reg(s32 temp, u8 *integer, u8 *decimal)
 /*
  * Read integer and decimal parts of an SB-TSI temperature register pair
  * The read order is determined by the ReadOrder bit to ensure atomic latching.
+ * The mutex protects against concurrent access to the shared I2C/I3C bus by
+ * the hwmon sysfs and a userspace ioctl
  */
 static int sbtsi_temp_read(struct sbtsi_data *data, u8 reg1, u8 reg2,
 			   u8 *val1, u8 *val2)
 {
 	int ret;
 
+	guard(mutex)(&data->lock);
 	ret = sbtsi_xfer(data, reg1, val1, true);
 	if (!ret)
 		ret = sbtsi_xfer(data, reg2, val2, true);
@@ -78,12 +81,15 @@ static int sbtsi_temp_read(struct sbtsi_data *data, u8 reg1, u8 reg2,
 
 /*
  * Write integer and decimal parts of an SB-TSI temperature register pair.
+ * The mutex protects against concurrent access to the shared I2C/I3C bus by
+ * the hwmon sysfs and a userspace ioctl
  */
 static int sbtsi_temp_write(struct sbtsi_data *data, u8 reg_int, u8 reg_dec,
 			    u8 val_int, u8 val_dec)
 {
 	int ret;
 
+	guard(mutex)(&data->lock);
 	ret = sbtsi_xfer(data, reg_int, &val_int, false);
 	if (!ret)
 		ret = sbtsi_xfer(data, reg_dec, &val_dec, false);

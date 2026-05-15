@@ -10,8 +10,8 @@
 #include <linux/bitfield.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/misc/tsi.h>
 #include <linux/slab.h>
+#include "tsi-core.h"
 
 #define SBTSI_REG_CONFIG		0x03 /* RO */
 
@@ -89,6 +89,9 @@ static int sbtsi_i2c_probe(struct i2c_client *client)
 	if (!data)
 		return -ENOMEM;
 
+	err = devm_mutex_init(dev, &data->lock);
+	if (err)
+		return err;
 	data->is_i3c = false;
 	data->client = client;
 	err = i2c_smbus_read_byte_data(data->client, SBTSI_REG_CONFIG);
@@ -98,7 +101,11 @@ static int sbtsi_i2c_probe(struct i2c_client *client)
 	data->read_order = FIELD_GET(BIT(SBTSI_CONFIG_READ_ORDER_SHIFT), err);
 
 	dev_set_drvdata(dev, data);
-	return sbtsi_create_hwmon_adev(dev, client->addr);
+	err = sbtsi_create_hwmon_adev(dev, client->addr);
+	if (err < 0)
+		return err;
+	data->dev_addr = client->addr;
+	return create_misc_tsi_device(data, dev);
 }
 
 static const struct i2c_device_id sbtsi_id[] = {
@@ -145,6 +152,9 @@ static int sbtsi_i3c_probe(struct i3c_device *i3cdev)
 	if (!data)
 		return -ENOMEM;
 
+	err = devm_mutex_init(dev, &data->lock);
+	if (err)
+		return err;
 	data->i3cdev = i3cdev;
 	data->is_i3c = true;
 
@@ -156,7 +166,11 @@ static int sbtsi_i3c_probe(struct i3c_device *i3cdev)
 	data->read_order = FIELD_GET(BIT(SBTSI_CONFIG_READ_ORDER_SHIFT), val);
 
 	dev_set_drvdata(dev, data);
-	return sbtsi_create_hwmon_adev(dev, i3cdev->desc->info.dyn_addr);
+	err = sbtsi_create_hwmon_adev(dev, i3cdev->desc->info.dyn_addr);
+	if (err < 0)
+		return err;
+	data->dev_addr = i3cdev->desc->info.dyn_addr;
+	return create_misc_tsi_device(data, dev);
 }
 
 static const struct i3c_device_id sbtsi_i3c_id[] = {
