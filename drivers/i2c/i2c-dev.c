@@ -244,6 +244,7 @@ static noinline int i2cdev_ioctl_rdwr(struct i2c_client *client,
 		unsigned nmsgs, struct i2c_msg *msgs)
 {
 	u8 __user **data_ptrs;
+	u16 *orig_lens;
 	int i, res;
 
 	/* Adapter must support I2C transfers */
@@ -253,6 +254,12 @@ static noinline int i2cdev_ioctl_rdwr(struct i2c_client *client,
 	data_ptrs = kmalloc_array(nmsgs, sizeof(u8 __user *), GFP_KERNEL);
 	if (!data_ptrs)
 		return -ENOMEM;
+
+	orig_lens = kmalloc_array(nmsgs, sizeof(u16), GFP_KERNEL);
+	if (!orig_lens) {
+		kfree(data_ptrs);
+		return -ENOMEM;
+	}
 
 	res = 0;
 	for (i = 0; i < nmsgs; i++) {
@@ -268,6 +275,7 @@ static noinline int i2cdev_ioctl_rdwr(struct i2c_client *client,
 			res = PTR_ERR(msgs[i].buf);
 			break;
 		}
+		orig_lens[i] = msgs[i].len;
 		/* memdup_user allocates with GFP_KERNEL, so DMA is ok */
 		msgs[i].flags |= I2C_M_DMA_SAFE;
 
@@ -300,12 +308,15 @@ static noinline int i2cdev_ioctl_rdwr(struct i2c_client *client,
 		for (j = 0; j < i; ++j)
 			kfree(msgs[j].buf);
 		kfree(data_ptrs);
+		kfree(orig_lens);
 		return res;
 	}
 
 	res = i2c_transfer(client->adapter, msgs, nmsgs);
 	while (i-- > 0) {
 		if (res >= 0 && (msgs[i].flags & I2C_M_RD)) {
+			if (msgs[i].len > orig_lens[i])
+				msgs[i].len = orig_lens[i];
 			if (copy_to_user(data_ptrs[i], msgs[i].buf,
 					 msgs[i].len))
 				res = -EFAULT;
@@ -313,6 +324,7 @@ static noinline int i2cdev_ioctl_rdwr(struct i2c_client *client,
 		kfree(msgs[i].buf);
 	}
 	kfree(data_ptrs);
+	kfree(orig_lens);
 	return res;
 }
 
