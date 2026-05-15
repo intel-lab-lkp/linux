@@ -87,10 +87,10 @@ static void panthor_gpu_irq_handler(struct panthor_device *ptdev, u32 status)
 	gpu_write(ptdev, GPU_INT_CLEAR, status);
 
 	if (tracepoint_enabled(gpu_power_status) && (status & GPU_POWER_INTERRUPTS_MASK))
-		trace_gpu_power_status(ptdev->base.dev,
-				       gpu_read64(ptdev, SHADER_READY),
-				       gpu_read64(ptdev, TILER_READY),
-				       gpu_read64(ptdev, L2_READY));
+		trace_call__gpu_power_status(ptdev->base.dev,
+					     gpu_read64(ptdev, SHADER_READY),
+					     gpu_read64(ptdev, TILER_READY),
+					     gpu_read64(ptdev, L2_READY));
 
 	if (status & GPU_IRQ_FAULT) {
 		u32 fault_status = gpu_read(ptdev, GPU_FAULT_STATUS);

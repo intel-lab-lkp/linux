@@ -1080,10 +1080,10 @@ static void panthor_job_irq_handler(struct panthor_device *ptdev, u32 status)
 
 	panthor_sched_report_fw_events(ptdev, status);
 
-	if (tracepoint_enabled(gpu_job_irq) && start) {
+	if (start) {
 		if (check_sub_overflow(ktime_get_ns(), start, &duration))
 			duration = U32_MAX;
-		trace_gpu_job_irq(ptdev->base.dev, status, duration);
+		trace_call__gpu_job_irq(ptdev->base.dev, status, duration);
 	}
 }
 PANTHOR_IRQ_HANDLER(job, JOB, panthor_job_irq_handler);
