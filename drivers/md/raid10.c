@@ -275,7 +275,7 @@ static void put_all_bios(struct r10conf *conf, struct r10bio *r10_bio)
 {
 	int i;
 
-	for (i = 0; i < conf->geo.raid_disks; i++) {
+	for (i = 0; i < r10_bio->used_nr_devs; i++) {
 		struct bio **bio = & r10_bio->devs[i].bio;
 		if (!BIO_SPECIAL(*bio))
 			bio_put(*bio);
@@ -372,7 +372,7 @@ static int find_bio_disk(struct r10conf *conf, struct r10bio *r10_bio,
 	int slot;
 	int repl = 0;
 
-	for (slot = 0; slot < conf->geo.raid_disks; slot++) {
+	for (slot = 0; slot < r10_bio->used_nr_devs; slot++) {
 		if (r10_bio->devs[slot].bio == bio)
 			break;
 		if (r10_bio->devs[slot].repl_bio == bio) {
@@ -1555,6 +1555,7 @@ static void __make_request(struct mddev *mddev, struct bio *bio, int sectors)
 	r10_bio->sector = bio->bi_iter.bi_sector;
 	r10_bio->state = 0;
 	r10_bio->read_slot = -1;
+	r10_bio->used_nr_devs = conf->geo.raid_disks;
 	memset(r10_bio->devs, 0, sizeof(r10_bio->devs[0]) *
 			conf->geo.raid_disks);
 
@@ -1742,6 +1743,7 @@ retry_discard:
 	r10_bio->mddev = mddev;
 	r10_bio->state = 0;
 	r10_bio->sectors = 0;
+	r10_bio->used_nr_devs = geo->raid_disks;
 	memset(r10_bio->devs, 0, sizeof(r10_bio->devs[0]) * geo->raid_disks);
 	wait_blocked_dev(mddev, r10_bio);
 
@@ -3075,6 +3077,8 @@ static struct r10bio *raid10_alloc_init_r10buf(struct r10conf *conf)
 		nalloc = conf->copies; /* resync */
 	else
 		nalloc = 2; /* recovery */
+
+	r10bio->used_nr_devs = nalloc;
 
 	for (i = 0; i < nalloc; i++) {
 		bio = r10bio->devs[i].bio;

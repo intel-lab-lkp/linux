@@ -127,6 +127,8 @@ struct r10bio {
 	 * if the IO is in READ direction, then this is where we read
 	 */
 	int			read_slot;
+	/* Used to bound devs[] walks when the object is reused. */
+	unsigned int		used_nr_devs;
 
 	struct list_head	retry_list;
 	/*
