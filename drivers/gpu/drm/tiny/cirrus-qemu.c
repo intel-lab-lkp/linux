@@ -501,7 +501,7 @@ static int cirrus_pipe_init(struct cirrus_device *cirrus)
 	if (ret)
 		return ret;
 
-	ret = drm_vblank_init(dev, 1);
+	ret = drmm_vblank_init(dev, 1, DRM_VBLANK_FLAG_SIMULATED);
 	if (ret)
 		return ret;
 
