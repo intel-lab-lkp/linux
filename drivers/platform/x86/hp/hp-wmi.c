@@ -11,6 +11,7 @@
  * Copyright (C) 2005 Dmitry Torokhov <dtor@mail.ru>
  */
 
+#include <linux/input-event-codes.h>
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/acpi.h>
@@ -35,6 +36,13 @@
 #include <linux/string.h>
 #include <linux/types.h>
 #include <linux/workqueue.h>
+
+#include <acpi/acpi_bus.h>
+#include <acpi/acpi_drivers.h>
+
+#ifndef ACPI_AC_CLASS
+#define ACPI_AC_CLASS "ac_adapter"
+#endif
 
 MODULE_AUTHOR("Matthew Garrett <mjg59@srcf.ucam.org>");
 MODULE_DESCRIPTION("HP laptop WMI driver");
@@ -206,10 +214,6 @@ static const struct dmi_system_id victus_s_thermal_profile_boards[] __initconst 
 		.driver_data = (void *)&victus_s_thermal_params,
 	},
 	{
-		.matches = { DMI_MATCH(DMI_BOARD_NAME, "8BC2") },
-		.driver_data = (void *)&omen_v1_thermal_params,
-	},
-	{
 		.matches = { DMI_MATCH(DMI_BOARD_NAME, "8BCA") },
 		.driver_data = (void *)&omen_v1_thermal_params,
 	},
@@ -252,6 +256,10 @@ static const struct dmi_system_id victus_s_thermal_profile_boards[] __initconst 
 	{
 		.matches = { DMI_MATCH(DMI_BOARD_NAME, "8D87") },
 		.driver_data = (void *)&omen_v1_no_ec_thermal_params,
+	},
+	{
+		.matches = { DMI_MATCH(DMI_BOARD_NAME, "8B2F") },
+		.driver_data = (void *)&victus_s_thermal_params,
 	},
 	{},
 };
@@ -407,6 +415,7 @@ struct bios_rfkill2_state {
 static const struct key_entry hp_wmi_keymap[] = {
 	{ KE_KEY, 0x02,    { KEY_BRIGHTNESSUP } },
 	{ KE_KEY, 0x03,    { KEY_BRIGHTNESSDOWN } },
+	{ KE_KEY, 0xb7,		{ KEY_PRINT } },
 	{ KE_KEY, 0x270,   { KEY_MICMUTE } },
 	{ KE_KEY, 0x20e6,  { KEY_PROG1 } },
 	{ KE_KEY, 0x20e8,  { KEY_MEDIA } },
@@ -1086,6 +1095,7 @@ static int camera_shutter_input_setup(void)
 	int err;
 
 	camera_shutter_input_dev = input_allocate_device();
+
 	if (!camera_shutter_input_dev)
 		return -ENOMEM;
 
