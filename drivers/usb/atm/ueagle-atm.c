@@ -2598,8 +2598,10 @@ static int uea_probe(struct usb_interface *intf, const struct usb_device_id *id)
 
 	usb_reset_device(usb);
 
-	if (UEA_IS_PREFIRM(id))
-		return uea_load_firmware(usb, UEA_CHIP_VERSION(id));
+	if (UEA_IS_PREFIRM(id)) {
+		ret = uea_load_firmware(usb, UEA_CHIP_VERSION(id));
+		goto out;
+	}
 
 	ret = usbatm_usb_probe(intf, id, &uea_usbatm_driver);
 	if (ret == 0) {
@@ -2613,6 +2615,8 @@ static int uea_probe(struct usb_interface *intf, const struct usb_device_id *id)
 		wake_up_process(sc->kthread);
 	}
 
+out:
+	uea_leaves(usb);
 	return ret;
 }
 
