@@ -1881,7 +1881,7 @@ static int rtnl_fill_link_netnsid(struct sk_buff *skb,
 	if (dev->rtnl_link_ops && dev->rtnl_link_ops->get_link_net) {
 		struct net *link_net = dev->rtnl_link_ops->get_link_net(dev);
 
-		if (!net_eq(dev_net(dev), link_net)) {
+		if (!net_eq(src_net, link_net)) {
 			int id = peernet2id_alloc(src_net, link_net, gfp);
 
 			if (nla_put_s32(skb, IFLA_LINK_NETNSID, id))
