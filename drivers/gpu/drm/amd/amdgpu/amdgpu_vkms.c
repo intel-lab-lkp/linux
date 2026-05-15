@@ -413,7 +413,8 @@ static int amdgpu_vkms_sw_init(struct amdgpu_ip_block *ip_block)
 			return r;
 	}
 
-	r = drm_vblank_init(adev_to_drm(adev), adev->mode_info.num_crtc);
+	r = drmm_vblank_init(adev_to_drm(adev), adev->mode_info.num_crtc,
+			     DRM_VBLANK_FLAG_SIMULATED);
 	if (r)
 		return r;
 
