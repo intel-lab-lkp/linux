@@ -613,7 +613,7 @@ static bool
 check_if_vesa_backlight_possible(struct intel_dp *intel_dp)
 {
 	int ret;
-	u8 bit_min, bit_max;
+	u8 bit_min, bit_max, mode_reg;
 
 	/*
 	 * Since we only support Fully AUX Based VESA Backlight interface make sure
@@ -621,6 +621,15 @@ check_if_vesa_backlight_possible(struct intel_dp *intel_dp)
 	 */
 	if (!(intel_dp->edp_dpcd[1] & DP_EDP_BACKLIGHT_AUX_ENABLE_CAP &&
 	      intel_dp->edp_dpcd[2] & DP_EDP_BACKLIGHT_BRIGHTNESS_AUX_SET_CAP))
+		return false;
+
+	ret = drm_dp_dpcd_read_byte(&intel_dp->aux, DP_EDP_BACKLIGHT_MODE_SET_REGISTER,
+				    &mode_reg);
+	if (ret < 0)
+		return false;
+
+	if ((mode_reg & DP_EDP_BACKLIGHT_CONTROL_MODE_MASK) ==
+	    DP_EDP_BACKLIGHT_CONTROL_MODE_PRODUCT)
 		return false;
 
 	ret = drm_dp_dpcd_read_byte(&intel_dp->aux, DP_EDP_PWMGEN_BIT_COUNT_CAP_MIN, &bit_min);
