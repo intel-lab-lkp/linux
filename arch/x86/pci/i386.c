@@ -357,10 +357,10 @@ static void pcibios_allocate_rom_resources(struct pci_bus *bus)
 
 static int __init pcibios_assign_resources(void)
 {
-	struct pci_bus *bus;
+	struct pci_bus *bus = NULL;
 
 	if (!(pci_probe & PCI_ASSIGN_ROMS))
-		list_for_each_entry(bus, &pci_root_buses, node)
+		while ((bus = pci_find_next_bus(bus)) != NULL)
 			pcibios_allocate_rom_resources(bus);
 
 	pci_assign_unassigned_resources();
@@ -390,16 +390,18 @@ void pcibios_resource_survey_bus(struct pci_bus *bus)
 
 void __init pcibios_resource_survey(void)
 {
-	struct pci_bus *bus;
+	struct pci_bus *bus = NULL;
 
 	DBG("PCI: Allocating resources\n");
 
-	list_for_each_entry(bus, &pci_root_buses, node)
+	while ((bus = pci_find_next_bus(bus)) != NULL)
 		pcibios_allocate_bus_resources(bus);
 
-	list_for_each_entry(bus, &pci_root_buses, node)
+	bus = NULL; /* start all over */
+	while ((bus = pci_find_next_bus(bus)) != NULL)
 		pcibios_allocate_resources(bus, 0);
-	list_for_each_entry(bus, &pci_root_buses, node)
+	bus = NULL; /* start all over */
+	while ((bus = pci_find_next_bus(bus)) != NULL)
 		pcibios_allocate_resources(bus, 1);
 
 	e820__reserve_resources_late();
