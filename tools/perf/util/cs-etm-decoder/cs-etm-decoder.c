@@ -402,6 +402,18 @@ cs_etm_decoder__buffer_packet(struct cs_etm_queue *etmq,
 	packet_queue->packet_buffer[et].flags = 0;
 	packet_queue->packet_buffer[et].exception_number = UINT32_MAX;
 	packet_queue->packet_buffer[et].trace_chan_id = trace_chan_id;
+	/*
+	 * Stamp the owner thread (pid/tid) onto the packet at buffer time.
+	 * A subsequent OCSD_GEN_TRC_ELEM_PE_CONTEXT element will mutate
+	 * tidq->thread before this packet is emitted as a sample; recording
+	 * the identity here keeps each buffered packet correctly attributed
+	 * to the thread that retired its instructions. See
+	 * cs_etm__synth_instruction_sample().
+	 */
+	cs_etm__etmq_get_pid_tid_el(etmq, trace_chan_id,
+				    &packet_queue->packet_buffer[et].pid,
+				    &packet_queue->packet_buffer[et].tid,
+				    &packet_queue->packet_buffer[et].el);
 
 	if (packet_queue->packet_count == CS_ETM_PACKET_MAX_BUFFER - 1)
 		return OCSD_RESP_WAIT;

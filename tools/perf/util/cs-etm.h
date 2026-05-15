@@ -10,6 +10,7 @@
 #include "debug.h"
 #include "util/event.h"
 #include <linux/bits.h>
+#include <sys/types.h>
 
 struct perf_session;
 struct perf_pmu;
@@ -184,6 +185,20 @@ struct cs_etm_packet {
 	u8 last_instr_size;
 	u8 trace_chan_id;
 	int cpu;
+	/*
+	 * Owner identity captured at cs_etm_decoder__buffer_packet() time.
+	 * A subsequent PE_CONTEXT element will mutate tidq->thread/tidq->el
+	 * before this packet is emitted as a sample; stamping pid/tid/el on
+	 * the packet keeps each one attributed to the thread that actually
+	 * retired its instructions and the EL it ran at. Read at sample
+	 * emission time by cs_etm__synth_instruction_sample() and
+	 * cs_etm__synth_branch_sample(). 'el' holds an ocsd_ex_level value
+	 * but is typed as int so the struct does not depend on OpenCSD
+	 * headers (which are only included inside HAVE_CSTRACE_SUPPORT).
+	 */
+	pid_t pid;
+	pid_t tid;
+	int el;
 };
 
 #define CS_ETM_PACKET_MAX_BUFFER 1024
@@ -266,6 +281,16 @@ void cs_etm__etmq_set_traceid_queue_timestamp(struct cs_etm_queue *etmq,
 					      u8 trace_chan_id);
 struct cs_etm_packet_queue
 *cs_etm__etmq_get_packet_queue(struct cs_etm_queue *etmq, u8 trace_chan_id);
+/*
+ * Read the pid/tid/EL currently associated with the given trace_chan_id.
+ * Called from cs_etm_decoder__buffer_packet() to stamp owner identity on
+ * each buffered packet at buffer time, before any subsequent PE_CONTEXT
+ * (CONTEXTIDR / EL change) can mutate tidq->thread / tidq->el. The stamp
+ * is consumed at sample emission time so that each sample is attributed
+ * to the thread/EL that actually retired its instructions.
+ */
+void cs_etm__etmq_get_pid_tid_el(struct cs_etm_queue *etmq, u8 trace_chan_id,
+				 pid_t *pid, pid_t *tid, int *el);
 int cs_etm__process_auxtrace_info_full(union perf_event *event __maybe_unused,
 				       struct perf_session *session __maybe_unused);
 u64 cs_etm__convert_sample_time(struct cs_etm_queue *etmq, u64 cs_timestamp);

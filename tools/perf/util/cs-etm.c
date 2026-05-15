@@ -86,8 +86,6 @@ struct cs_etm_traceid_queue {
 	size_t last_branch_pos;
 	union perf_event *event_buf;
 	struct thread *thread;
-	struct thread *prev_packet_thread;
-	ocsd_ex_level prev_packet_el;
 	ocsd_ex_level el;
 	struct branch_stack *last_branch;
 	struct branch_stack *last_branch_rb;
@@ -614,10 +612,9 @@ static int cs_etm__init_traceid_queue(struct cs_etm_queue *etmq,
 
 	queue = &etmq->etm->queues.queue_array[etmq->queue_nr];
 	tidq->trace_chan_id = trace_chan_id;
-	tidq->el = tidq->prev_packet_el = ocsd_EL_unknown;
+	tidq->el = ocsd_EL_unknown;
 	tidq->thread = machine__findnew_thread(&etm->session->machines.host, -1,
 					       queue->tid);
-	tidq->prev_packet_thread = machine__idle_thread(&etm->session->machines.host);
 
 	tidq->packet = zalloc(sizeof(struct cs_etm_packet));
 	if (!tidq->packet)
@@ -740,6 +737,26 @@ struct cs_etm_packet_queue
 	return NULL;
 }
 
+void cs_etm__etmq_get_pid_tid_el(struct cs_etm_queue *etmq, u8 trace_chan_id,
+				 pid_t *pid, pid_t *tid, int *el)
+{
+	struct cs_etm_traceid_queue *tidq;
+
+	*pid = -1;
+	*tid = -1;
+	*el  = ocsd_EL_unknown;
+
+	tidq = cs_etm__etmq_get_traceid_queue(etmq, trace_chan_id);
+	if (!tidq)
+		return;
+
+	*el = tidq->el;
+	if (tidq->thread) {
+		*pid = thread__pid(tidq->thread);
+		*tid = thread__tid(tidq->thread);
+	}
+}
+
 static void cs_etm__packet_swap(struct cs_etm_auxtrace *etm,
 				struct cs_etm_traceid_queue *tidq)
 {
@@ -748,23 +765,15 @@ static void cs_etm__packet_swap(struct cs_etm_auxtrace *etm,
 	if (etm->synth_opts.branches || etm->synth_opts.last_branch ||
 	    etm->synth_opts.instructions) {
 		/*
-		 * Swap PACKET with PREV_PACKET: PACKET becomes PREV_PACKET for
-		 * the next incoming packet.
-		 *
-		 * Threads and exception levels are also tracked for both the
-		 * previous and current packets. This is because the previous
-		 * packet is used for the 'from' IP for branch samples, so the
-		 * thread at that time must also be assigned to that sample.
-		 * Across discontinuity packets the thread can change, so by
-		 * tracking the thread for the previous packet the branch sample
-		 * will have the correct info.
+		 * Rotate PACKET into PREV_PACKET so the next decoded packet
+		 * lands in PACKET. Owner identity (pid/tid/el) travels with
+		 * the packet itself — it was stamped at
+		 * cs_etm_decoder__buffer_packet() time — so no separate
+		 * thread/EL tracking is needed here.
 		 */
 		tmp = tidq->packet;
 		tidq->packet = tidq->prev_packet;
 		tidq->prev_packet = tmp;
-		tidq->prev_packet_el = tidq->el;
-		thread__put(tidq->prev_packet_thread);
-		tidq->prev_packet_thread = thread__get(tidq->thread);
 	}
 }
 
@@ -938,7 +947,6 @@ static void cs_etm__free_traceid_queues(struct cs_etm_queue *etmq)
 		/* Free this traceid_queue from the array */
 		tidq = etmq->traceid_queues[idx];
 		thread__zput(tidq->thread);
-		thread__zput(tidq->prev_packet_thread);
 		zfree(&tidq->event_buf);
 		zfree(&tidq->last_branch);
 		zfree(&tidq->last_branch_rb);
@@ -1570,15 +1578,24 @@ static int cs_etm__synth_instruction_sample(struct cs_etm_queue *etmq,
 
 	perf_sample__init(&sample, /*all=*/true);
 	event->sample.header.type = PERF_RECORD_SAMPLE;
-	event->sample.header.misc = cs_etm__cpu_mode(etmq, addr, tidq->el);
+	event->sample.header.misc = cs_etm__cpu_mode(etmq, addr,
+						     (ocsd_ex_level)tidq->packet->el);
 	event->sample.header.size = sizeof(struct perf_event_header);
 
 	/* Set time field based on etm auxtrace config. */
 	sample.time = cs_etm__resolve_sample_time(etmq, tidq);
 
 	sample.ip = addr;
-	sample.pid = thread__pid(tidq->thread);
-	sample.tid = thread__tid(tidq->thread);
+	/*
+	 * Read pid/tid (and EL above for cpumode) from the packet's
+	 * stamped owner identity rather than tidq->thread / tidq->el,
+	 * which reflect the thread that is current at sample emission
+	 * time. A PE_CONTEXT element delivered between buffer time and
+	 * emit time would otherwise misattribute pre-context packets to
+	 * the next thread/EL on the CPU.
+	 */
+	sample.pid = tidq->packet->pid;
+	sample.tid = tidq->packet->tid;
 	sample.id = etmq->etm->instructions_id;
 	sample.stream_id = etmq->etm->instructions_id;
 	sample.period = period;
@@ -1586,6 +1603,16 @@ static int cs_etm__synth_instruction_sample(struct cs_etm_queue *etmq,
 	sample.flags = tidq->prev_packet->flags;
 	sample.cpumode = event->sample.header.misc;
 
+	/*
+	 * Note: cs_etm__copy_insn() reads sample.insn bytes via
+	 * cs_etm__mem_access(), which uses tidq->thread (the *current*
+	 * thread). For samples whose pid/tid were stamped from an
+	 * outgoing thread that has since been replaced by a PE_CONTEXT,
+	 * the inline insn bytes may be looked up against the wrong
+	 * address space. sample.ip / sample.pid attribution is correct;
+	 * fixing the insn bytes requires threading the packet's owner
+	 * pid through cs_etm__mem_access and is left for a follow-up.
+	 */
 	cs_etm__copy_insn(etmq, tidq->trace_chan_id, tidq->packet, &sample);
 
 	if (etm->synth_opts.last_branch)
@@ -1631,15 +1658,15 @@ static int cs_etm__synth_branch_sample(struct cs_etm_queue *etmq,
 
 	event->sample.header.type = PERF_RECORD_SAMPLE;
 	event->sample.header.misc = cs_etm__cpu_mode(etmq, ip,
-						     tidq->prev_packet_el);
+						     (ocsd_ex_level)tidq->prev_packet->el);
 	event->sample.header.size = sizeof(struct perf_event_header);
 
 	/* Set time field based on etm auxtrace config. */
 	sample.time = cs_etm__resolve_sample_time(etmq, tidq);
 
 	sample.ip = ip;
-	sample.pid = thread__pid(tidq->prev_packet_thread);
-	sample.tid = thread__tid(tidq->prev_packet_thread);
+	sample.pid = tidq->prev_packet->pid;
+	sample.tid = tidq->prev_packet->tid;
 	sample.addr = cs_etm__first_executed_instr(tidq->packet);
 	sample.id = etmq->etm->branches_id;
 	sample.stream_id = etmq->etm->branches_id;
