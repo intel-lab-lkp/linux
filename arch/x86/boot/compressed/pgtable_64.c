@@ -124,6 +124,13 @@ asmlinkage void configure_5level_paging(struct boot_params *bp, void *pgtable)
 
 	l5_required = !cmdline_find_option_bool("no5lvl");
 
+	/*
+	 * Don't change the number of levels when doing a Secure Launch. The
+	 * Secure Launch stub will take care of that if needed.
+	 */
+	if (bp->slr_table_addr)
+		l5_required = l5_enabled;
+
 	if (l5_required) {
 		/* Initialize variables for 5-level paging */
 		__pgtable_l5_enabled = 1;
