@@ -184,6 +184,7 @@
 
 #define IT66121_HDMI_MODE_REG			0xC0
 #define IT66121_HDMI_MODE_HDMI			BIT(0)
+#define IT66121_HDMI_MODE_DVI			0
 
 #define IT66121_SYS_STATUS_REG			0x0E
 #define IT66121_SYS_STATUS_ACTIVE_IRQ		BIT(7)
@@ -658,6 +659,7 @@ static void it66121_set_mode(struct it66121_ctx *ctx,
 			     struct drm_atomic_commit *state)
 {
 	struct drm_connector *connector = ctx->connector;
+	unsigned int tx_mode = IT66121_HDMI_MODE_HDMI;
 	const struct drm_crtc_state *crtc_state;
 	const struct drm_display_mode *mode;
 	struct drm_crtc *crtc;
@@ -666,10 +668,13 @@ static void it66121_set_mode(struct it66121_ctx *ctx,
 	crtc_state = drm_atomic_get_new_crtc_state(state, crtc);
 	mode = &crtc_state->adjusted_mode;
 
+	if (!connector->display_info.is_hdmi)
+		tx_mode = IT66121_HDMI_MODE_DVI;
+
 	mutex_lock(&ctx->lock);
 
-	/* Set TX mode to HDMI */
-	if (regmap_write(ctx->regmap, IT66121_HDMI_MODE_REG, IT66121_HDMI_MODE_HDMI))
+	/* Set TX mode to HDMI or DVI */
+	if (regmap_write(ctx->regmap, IT66121_HDMI_MODE_REG, tx_mode))
 		goto unlock;
 
 	if ((ctx->id == ID_IT66121 || ctx->id == ID_IT66122) &&
