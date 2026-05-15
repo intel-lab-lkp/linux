@@ -374,9 +374,23 @@ __ffa_partition_info_get_regs(u32 uuid0, u32 uuid1, u32 uuid2, u32 uuid3,
 			return -EINVAL;
 
 		tag = UUID_INFO_TAG(partition_info.a2);
+
+		/*
+		 * Per FF-A v1.2 section 18.5 the SPMC reports the per-
+		 * descriptor size and consumers must stride by that size,
+		 * reading only the fields they understand and ignoring any
+		 * trailing ones. Reject sizes that cannot hold the v1.1
+		 * fields parsed below, are not u64-aligned, or whose total
+		 * payload would walk past the x3..x17 window (e.g. a v1.3
+		 * 48-byte descriptor with nr_desc > 2).
+		 */
 		buf_sz = PARTITION_INFO_SZ(partition_info.a2);
-		if (buf_sz > sizeof(*buffer))
-			buf_sz = sizeof(*buffer);
+		if (buf_sz < FFA_PART_INFO_GET_REGS_REGS_PER_DESC * sizeof(u64) ||
+		    buf_sz % sizeof(u64) ||
+		    nr_desc * (buf_sz / sizeof(u64)) >
+		    FFA_PART_INFO_GET_REGS_MAX_DESC *
+		    FFA_PART_INFO_GET_REGS_REGS_PER_DESC)
+			return -EINVAL;
 
 		regs = (void *)&partition_info.a3;
 		for (idx = 0; idx < nr_desc; idx++, buf++) {
@@ -395,7 +409,7 @@ __ffa_partition_info_get_regs(u32 uuid0, u32 uuid1, u32 uuid2, u32 uuid3,
 			buf->exec_ctxt = PART_INFO_EXEC_CXT(val);
 			buf->properties = PART_INFO_PROPERTIES(val);
 			uuid_copy(&buf->uuid, &uuid_regs.uuid);
-			regs += 3;
+			regs += buf_sz / sizeof(u64);
 		}
 		start_idx = cur_idx + 1;
 
