@@ -6729,8 +6729,10 @@ int __init ip6_route_init(void)
 #if IS_BUILTIN(CONFIG_IPV6)
 #if defined(CONFIG_BPF_SYSCALL) && defined(CONFIG_PROC_FS)
 	ret = bpf_iter_register();
-	if (ret)
+	if (ret) {
+		unregister_netdevice_notifier(&ip6_route_dev_notifier);
 		goto out_register_late_subsys;
+	}
 #endif
 #endif
 
