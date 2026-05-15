@@ -590,15 +590,12 @@ static void ssp_remove(struct spi_device *spi)
 			"SSP_MSG2SSP_AP_STATUS_SHUTDOWN failed\n");
 
 	ssp_disable_mcu(data);
-	ssp_disable_wdt_timer(data);
-
 	ssp_clean_pending_list(data);
 
 	free_irq(data->spi->irq, data);
 	cancel_delayed_work_sync(&data->work_refresh);
 
-	timer_delete_sync(&data->wdt_timer);
-	cancel_work_sync(&data->work_wdt);
+	ssp_disable_wdt_timer(data);
 
 	mutex_destroy(&data->comm_lock);
 	mutex_destroy(&data->pending_lock);
