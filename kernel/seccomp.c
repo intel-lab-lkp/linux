@@ -44,6 +44,8 @@
 #include <linux/anon_inodes.h>
 #include <linux/lockdep.h>
 
+#include "seccomp_inject.h"
+
 /*
  * When SECCOMP_IOCTL_NOTIF_ID_VALID was first introduced, it had the
  * wrong direction flag in the ioctl number. This is the broken one,
@@ -97,6 +99,15 @@ struct seccomp_knotif {
 
 	/* outstanding addfd requests */
 	struct list_head addfd;
+
+	/*
+	 * Outstanding SECCOMP_IOCTL_NOTIF_INJECT record, attached by
+	 * the supervisor under filter->notify_lock. Consumed by the
+	 * trapped task on SECCOMP_USER_NOTIF_FLAG_INJECTED, freed in
+	 * the same path. Also freed if the knotif is dropped without
+	 * being injected.
+	 */
+	struct seccomp_inject_record *inject;
 };
 
 /**
@@ -1248,8 +1259,41 @@ out:
 	mutex_unlock(&match->notify_lock);
 
 	/* Userspace requests to continue the syscall. */
-	if (flags & SECCOMP_USER_NOTIF_FLAG_CONTINUE)
+	if (flags & SECCOMP_USER_NOTIF_FLAG_CONTINUE) {
+		/*
+		 * Discard any inject the supervisor attached then changed
+		 * its mind about.
+		 */
+		seccomp_inject_record_free(n.inject);
 		return 0;
+	}
+
+	/*
+	 * Userspace requested kernel-side syscall injection. Run the
+	 * helper in the trapped task's context, free the record, and
+	 * deliver the helper's result as the syscall return value.
+	 */
+	if (flags & SECCOMP_USER_NOTIF_FLAG_INJECTED) {
+		long inject_ret = -EINVAL;
+
+		if (n.inject) {
+			inject_ret = seccomp_inject_dispatch(n.inject);
+			seccomp_inject_record_free(n.inject);
+		}
+		if (inject_ret < 0)
+			syscall_set_return_value(current, current_pt_regs(),
+						 (int)inject_ret, 0);
+		else
+			syscall_set_return_value(current, current_pt_regs(),
+						 0, inject_ret);
+		return -1;
+	}
+
+	/*
+	 * Interrupted, listener gone, or normal deny/allow: free any
+	 * inject the supervisor attached but never consumed.
+	 */
+	seccomp_inject_record_free(n.inject);
 
 	syscall_set_return_value(current, current_pt_regs(),
 				 err, ret);
@@ -1632,10 +1676,19 @@ static long seccomp_notify_send(struct seccomp_filter *filter,
 	if (copy_from_user(&resp, buf, sizeof(resp)))
 		return -EFAULT;
 
-	if (resp.flags & ~SECCOMP_USER_NOTIF_FLAG_CONTINUE)
+	if (resp.flags & ~(SECCOMP_USER_NOTIF_FLAG_CONTINUE |
+			   SECCOMP_USER_NOTIF_FLAG_INJECTED))
 		return -EINVAL;
 
 	if ((resp.flags & SECCOMP_USER_NOTIF_FLAG_CONTINUE) &&
+	    (resp.flags & SECCOMP_USER_NOTIF_FLAG_INJECTED))
+		return -EINVAL;
+
+	if ((resp.flags & SECCOMP_USER_NOTIF_FLAG_CONTINUE) &&
+	    (resp.error || resp.val))
+		return -EINVAL;
+
+	if ((resp.flags & SECCOMP_USER_NOTIF_FLAG_INJECTED) &&
 	    (resp.error || resp.val))
 		return -EINVAL;
 
@@ -1652,6 +1705,12 @@ static long seccomp_notify_send(struct seccomp_filter *filter,
 	/* Allow exactly one reply. */
 	if (knotif->state != SECCOMP_NOTIFY_SENT) {
 		ret = -EINPROGRESS;
+		goto out;
+	}
+
+	/* INJECTED requires a prior SECCOMP_IOCTL_NOTIF_INJECT for this id. */
+	if ((resp.flags & SECCOMP_USER_NOTIF_FLAG_INJECTED) && !knotif->inject) {
+		ret = -EINVAL;
 		goto out;
 	}
 
@@ -1823,6 +1882,62 @@ out:
 	return ret;
 }
 
+static long seccomp_notify_inject(struct seccomp_filter *filter,
+				  struct seccomp_notif_inject __user *uinj)
+{
+	struct seccomp_notif_inject inj;
+	struct seccomp_inject_record *rec = NULL;
+	struct seccomp_knotif *knotif;
+	long ret;
+
+	if (copy_from_user(&inj, uinj, sizeof(inj)))
+		return -EFAULT;
+
+	ret = seccomp_inject_record_build(&inj, &rec);
+	if (ret)
+		return ret;
+
+	ret = mutex_lock_interruptible(&filter->notify_lock);
+	if (ret < 0)
+		goto err_free;
+
+	knotif = find_notification(filter, inj.id);
+	if (!knotif) {
+		ret = -ENOENT;
+		goto err_unlock;
+	}
+
+	if (knotif->state != SECCOMP_NOTIFY_SENT) {
+		ret = -EINPROGRESS;
+		goto err_unlock;
+	}
+
+	/*
+	 * The supervisor cannot redirect a trapped syscall into an
+	 * unrelated syscall (e.g. inject openat into a task trapped on
+	 * bind), which would be a confused-deputy.
+	 */
+	if (inj.nr != (u64)knotif->data->nr) {
+		ret = -ESRCH;
+		goto err_unlock;
+	}
+
+	if (knotif->inject) {
+		ret = -EEXIST;
+		goto err_unlock;
+	}
+
+	knotif->inject = rec;
+	mutex_unlock(&filter->notify_lock);
+	return 0;
+
+err_unlock:
+	mutex_unlock(&filter->notify_lock);
+err_free:
+	seccomp_inject_record_free(rec);
+	return ret;
+}
+
 static long seccomp_notify_ioctl(struct file *file, unsigned int cmd,
 				 unsigned long arg)
 {
@@ -1840,6 +1955,8 @@ static long seccomp_notify_ioctl(struct file *file, unsigned int cmd,
 		return seccomp_notify_id_valid(filter, buf);
 	case SECCOMP_IOCTL_NOTIF_SET_FLAGS:
 		return seccomp_notify_set_flags(filter, arg);
+	case SECCOMP_IOCTL_NOTIF_INJECT:
+		return seccomp_notify_inject(filter, buf);
 	}
 
 	/* Extensible Argument ioctls */

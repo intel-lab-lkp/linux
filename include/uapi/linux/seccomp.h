@@ -108,6 +108,18 @@ struct seccomp_notif {
  */
 #define SECCOMP_USER_NOTIF_FLAG_CONTINUE (1UL << 0)
 
+/*
+ * SECCOMP_USER_NOTIF_FLAG_INJECTED — consume a syscall-redirect
+ * description previously attached via SECCOMP_IOCTL_NOTIF_INJECT for
+ * this notification. The trapped task wakes, dispatches into the
+ * matching kernel-mode syscall helper using the supervisor-provided
+ * (in-kernel) buffer for any pointer-shaped argument, and the helper's
+ * return value becomes the trapped syscall's return value.
+ *
+ * Mutually exclusive with SECCOMP_USER_NOTIF_FLAG_CONTINUE.
+ */
+#define SECCOMP_USER_NOTIF_FLAG_INJECTED (1UL << 1)
+
 struct seccomp_notif_resp {
 	__u64 id;
 	__s64 val;
@@ -137,6 +149,52 @@ struct seccomp_notif_addfd {
 	__u32 newfd_flags;
 };
 
+/**
+ * struct seccomp_notif_inject — describe a kernel-validated syscall
+ * to perform on behalf of a trapped task.
+ *
+ * The supervisor attaches one of these to a pending notification via
+ * SECCOMP_IOCTL_NOTIF_INJECT, then commits with SECCOMP_IOCTL_NOTIF_SEND
+ * setting SECCOMP_USER_NOTIF_FLAG_INJECTED. The kernel substitutes the
+ * trapped task's syscall with @nr/@args[6] and dispatches into a
+ * kernel-mode helper for the syscall, with any pointer argument backed
+ * by an offset into @buf (a kernel-side copy of the supervisor's
+ * bytes), so the trapped task's user mm is not re-read.
+ *
+ * @id: notification id from SECCOMP_IOCTL_NOTIF_RECV.
+ * @nr: substitute syscall number (matches ptrace_syscall_info.entry.nr).
+ * @args: substitute syscall arguments. For each i with the i'th bit
+ *	  set in @args_in_buf_mask, args[i] is interpreted as a byte
+ *	  offset into @buf rather than as the raw syscall argument
+ *	  value; the kernel materializes the corresponding pointer
+ *	  from its in-kernel copy of @buf before dispatch. Other args
+ *	  pass through as scalars (matches
+ *	  ptrace_syscall_info.entry.args).
+ * @buf: __user pointer to kernel-input bytes. The kernel copies
+ *	  @buf_size bytes from this buffer at SECCOMP_IOCTL_NOTIF_INJECT
+ *	  time and acts on its kernel-side copy thereafter.
+ * @buf_size: bytes available at @buf, capped at
+ *	  SECCOMP_NOTIF_INJECT_MAX_BYTES.
+ * @args_in_buf_mask: bitmask. Bit i set means args[i] is a byte
+ *	  offset into @buf rather than a raw argument value.
+ */
+struct seccomp_notif_inject {
+	__u64 id;
+	__u64 nr;
+	__u64 args[6];
+	__u64 buf;
+	__u32 buf_size;
+	__u32 args_in_buf_mask;
+};
+
+/*
+ * Hard cap on the cumulative bytes a single SECCOMP_IOCTL_NOTIF_INJECT
+ * request may copy. Defensive bound only — typical injects are a few
+ * KiB (one PATH_MAX path, an argv block, etc.). Hardcoded rather than
+ * a sysctl: there is no legitimate reason to tune this at runtime.
+ */
+#define SECCOMP_NOTIF_INJECT_MAX_BYTES	(1UL << 20)	/* 1 MiB */
+
 #define SECCOMP_IOC_MAGIC		'!'
 #define SECCOMP_IO(nr)			_IO(SECCOMP_IOC_MAGIC, nr)
 #define SECCOMP_IOR(nr, type)		_IOR(SECCOMP_IOC_MAGIC, nr, type)
@@ -153,5 +211,12 @@ struct seccomp_notif_addfd {
 						struct seccomp_notif_addfd)
 
 #define SECCOMP_IOCTL_NOTIF_SET_FLAGS	SECCOMP_IOW(4, __u64)
+
+/* Attach a kernel-validated syscall redirect to a pending notification.
+ * Consumed by SECCOMP_IOCTL_NOTIF_SEND with
+ * SECCOMP_USER_NOTIF_FLAG_INJECTED.
+ */
+#define SECCOMP_IOCTL_NOTIF_INJECT	SECCOMP_IOW(5, \
+						struct seccomp_notif_inject)
 
 #endif /* _UAPI_LINUX_SECCOMP_H */
