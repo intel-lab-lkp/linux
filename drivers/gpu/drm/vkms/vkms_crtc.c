@@ -57,7 +57,7 @@ static enum hrtimer_restart vkms_vblank_simulate(struct hrtimer *timer)
 
 	dma_fence_end_signalling(fence_cookie);
 
-	return HRTIMER_RESTART;
+	return ret ? HRTIMER_RESTART : HRTIMER_NORESTART;
 }
 
 static int vkms_enable_vblank(struct drm_crtc *crtc)
@@ -77,7 +77,7 @@ static void vkms_disable_vblank(struct drm_crtc *crtc)
 {
 	struct vkms_output *out = drm_crtc_to_vkms_output(crtc);
 
-	hrtimer_cancel(&out->vblank_hrtimer);
+	hrtimer_try_to_cancel(&out->vblank_hrtimer);
 }
 
 static bool vkms_get_vblank_timestamp(struct drm_crtc *crtc,
