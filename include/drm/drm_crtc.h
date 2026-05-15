@@ -163,7 +163,7 @@ struct drm_crtc_state {
 	 *
 	 * One usage is for drivers and/or hardware without support for VBLANK
 	 * interrupts. Such drivers typically do not initialize vblanking
-	 * (i.e., call drm_vblank_init() with the number of CRTCs). For CRTCs
+	 * (i.e., call drmm_vblank_init() with the number of CRTCs). For CRTCs
 	 * without initialized vblanking, this field is set to true in
 	 * drm_atomic_helper_check_modeset(), and a fake VBLANK event will be
 	 * send out on each update of the display pipeline by

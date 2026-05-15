@@ -25,7 +25,7 @@
  * for drivers without further requirements. The initializer macro
  * DRM_CRTC_HELPER_VBLANK_FUNCS sets them coveniently.
  *
- * Once the driver enables vblank support with drm_vblank_init(), each
+ * Once the driver enables vblank support with drmm_vblank_init(), each
  * CRTC's vblank timer fires according to the programmed display mode. By
  * default, the vblank timer invokes drm_crtc_handle_vblank(). Drivers with
  * more specific requirements can set their own handler function in

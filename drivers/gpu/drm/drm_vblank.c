@@ -117,7 +117,7 @@
  * optionally provide a hardware vertical blanking counter.
  *
  * Drivers must initialize the vertical blanking handling core with a call to
- * drm_vblank_init(). Minimally, a driver needs to implement
+ * drmm_vblank_init(). Minimally, a driver needs to implement
  * &drm_crtc_funcs.enable_vblank and &drm_crtc_funcs.disable_vblank plus call
  * drm_crtc_handle_vblank() in its vblank interrupt handler for working vblank
  * support.
@@ -146,7 +146,7 @@
  * See also DRM vblank helpers for more information.
  *
  * Drivers without support for vertical-blanking interrupts nor timers must
- * not call drm_vblank_init(). For these drivers, atomic helpers will
+ * not call drmm_vblank_init(). For these drivers, atomic helpers will
  * automatically generate fake vblank events as part of the display update.
  * This functionality also can be controlled by the driver by enabling and
  * disabling struct drm_crtc_state.no_vblank.
@@ -519,7 +519,7 @@ static void vblank_disable_fn(struct timer_list *t)
 	spin_unlock_irqrestore(&dev->vbl_lock, irqflags);
 }
 
-static void drm_vblank_init_release(struct drm_device *dev, void *ptr)
+static void drmm_vblank_init_release(struct drm_device *dev, void *ptr)
 {
 	struct drm_vblank_crtc *vblank = ptr;
 
@@ -534,9 +534,10 @@ static void drm_vblank_init_release(struct drm_device *dev, void *ptr)
 }
 
 /**
- * drm_vblank_init - initialize vblank support
+ * drmm_vblank_init - initialize vblank support
  * @dev: DRM device
  * @num_crtcs: number of CRTCs supported by @dev
+ * @flags: flags for vblank handling
  *
  * This function initializes vblank support for @num_crtcs display pipelines.
  * Cleanup is handled automatically through a cleanup function added with
@@ -545,7 +546,7 @@ static void drm_vblank_init_release(struct drm_device *dev, void *ptr)
  * Returns:
  * Zero on success or a negative error code on failure.
  */
-int drm_vblank_init(struct drm_device *dev, unsigned int num_crtcs)
+int drmm_vblank_init(struct drm_device *dev, unsigned int num_crtcs, unsigned int flags)
 {
 	int ret;
 	unsigned int i;
@@ -564,11 +565,12 @@ int drm_vblank_init(struct drm_device *dev, unsigned int num_crtcs)
 
 		vblank->dev = dev;
 		vblank->pipe = i;
+		vblank->flags = flags;
 		init_waitqueue_head(&vblank->queue);
 		timer_setup(&vblank->disable_timer, vblank_disable_fn, 0);
 		seqlock_init(&vblank->seqlock);
 
-		ret = drmm_add_action_or_reset(dev, drm_vblank_init_release,
+		ret = drmm_add_action_or_reset(dev, drmm_vblank_init_release,
 					       vblank);
 		if (ret)
 			return ret;
@@ -580,7 +582,7 @@ int drm_vblank_init(struct drm_device *dev, unsigned int num_crtcs)
 
 	return 0;
 }
-EXPORT_SYMBOL(drm_vblank_init);
+EXPORT_SYMBOL(drmm_vblank_init);
 
 /**
  * drm_dev_has_vblank - test if vblanking has been initialized for

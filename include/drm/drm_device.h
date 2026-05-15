@@ -283,7 +283,7 @@ struct drm_device {
 	 * Array of vblank tracking structures, one per &struct drm_crtc. For
 	 * historical reasons (vblank support predates kernel modesetting) this
 	 * is free-standing and not part of &struct drm_crtc itself. It must be
-	 * initialized explicitly by calling drm_vblank_init().
+	 * initialized explicitly by calling drmm_vblank_init().
 	 */
 	struct drm_vblank_crtc *vblank;
 

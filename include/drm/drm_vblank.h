@@ -282,10 +282,12 @@ struct drm_vblank_crtc {
 	 * @vblank_timer: Holds the state of the vblank timer
 	 */
 	struct drm_vblank_crtc_timer vblank_timer;
+
+	unsigned int flags;
 };
 
 struct drm_vblank_crtc *drm_crtc_vblank_crtc(struct drm_crtc *crtc);
-int drm_vblank_init(struct drm_device *dev, unsigned int num_crtcs);
+int drmm_vblank_init(struct drm_device *dev, unsigned int num_crtcs, unsigned int flags);
 bool drm_dev_has_vblank(const struct drm_device *dev);
 u64 drm_crtc_vblank_count(struct drm_crtc *crtc);
 u64 drm_crtc_vblank_count_and_time(struct drm_crtc *crtc,
@@ -320,6 +322,12 @@ void drm_crtc_set_max_vblank_count(struct drm_crtc *crtc,
 int drm_crtc_vblank_start_timer(struct drm_crtc *crtc);
 void drm_crtc_vblank_cancel_timer(struct drm_crtc *crtc);
 void drm_crtc_vblank_get_vblank_timeout(struct drm_crtc *crtc, ktime_t *vblank_time);
+
+/* deprecated; use drmm_vblank_init() instead */
+static inline int drm_vblank_init(struct drm_device *dev, unsigned int num_crtcs)
+{
+	return drmm_vblank_init(dev, num_crtcs, 0);
+}
 
 /*
  * Helpers for struct drm_crtc_funcs
