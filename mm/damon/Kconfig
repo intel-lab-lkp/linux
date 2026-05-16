@@ -131,4 +131,14 @@ config DAMON_ACMA
 	  min/max memory for the system and maximum memory pressure stall time
 	  ratio.
 
+config DAMON_IBS
+	tristate "AMD IBS-based access sampling for DAMON"
+	depends on DAMON_PADDR && CPU_SUP_AMD && X86_64 && PERF_EVENTS
+	help
+	  Uses AMD IBS (Instruction-Based Sampling) hardware to deliver
+	  physical-address-keyed access reports to DAMON's shared-layer
+	  ring buffer, without relying on PTE Accessed-bit scanning or
+	  page faults.  Registers as the "paddr_ibs" operations set.
+	  Requires AMD processors with IBS Op support.
+
 endmenu
