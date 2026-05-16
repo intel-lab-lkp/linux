@@ -234,6 +234,7 @@ static inline __printf(1, 2) void ksft_test_result_fail(const char *msg, ...)
  * ksft_test_result() - Report test success based on truth of condition
  *
  * @condition: if true, report test success, otherwise failure.
+ * @fmt: format string for the test description
  */
 #define ksft_test_result(condition, fmt, ...) do {	\
 	if (!!(condition))				\
@@ -349,6 +350,7 @@ void ksft_test_result_code(int exit_code, const char *test_name,
  * ksft_test_result_report() - Report test result based on a kselftest exit code
  *
  * @result: a kselftest exit code
+ * @fmt: format string for the test description
  */
 #define ksft_test_result_report(result, fmt, ...) do {		\
 	switch (result) {					\
