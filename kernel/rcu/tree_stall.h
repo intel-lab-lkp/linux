@@ -273,6 +273,7 @@ static void rcu_iw_handler(struct irq_work *iwp)
  */
 static void rcu_print_detail_task_stall_rnp(struct rcu_node *rnp)
 {
+	bool firsttime = true;
 	unsigned long flags;
 	struct task_struct *t;
 
@@ -281,13 +282,23 @@ static void rcu_print_detail_task_stall_rnp(struct rcu_node *rnp)
 		raw_spin_unlock_irqrestore_rcu_node(rnp, flags);
 		return;
 	}
-	t = list_entry(rnp->gp_tasks->prev,
-		       struct task_struct, rcu_node_entry);
-	list_for_each_entry_continue(t, &rnp->blkd_tasks, rcu_node_entry) {
-		/*
-		 * We could be printing a lot while holding a spinlock.
-		 * Avoid triggering hard lockup.
-		 */
+	if (rnp->gp_tasks) {
+		t = list_entry(rnp->gp_tasks->prev,
+			       struct task_struct, rcu_node_entry);
+		list_for_each_entry_continue(t, &rnp->blkd_tasks, rcu_node_entry) {
+			/*
+			 * We could be printing a lot while holding a spinlock.
+			 * Avoid triggering hard lockup.
+			 */
+			touch_nmi_watchdog();
+			sched_show_task(t);
+		}
+	}
+	list_for_each_entry(t, &rnp->blkd_tasks, rcu_node_entry) {
+		if (firsttime) {
+			pr_alert("Tasks with deferred quiescent states:\n");
+			firsttime = false;
+		}
 		touch_nmi_watchdog();
 		sched_show_task(t);
 	}
