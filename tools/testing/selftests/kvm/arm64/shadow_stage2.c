@@ -14,6 +14,8 @@
 #define L2FAILED	(0x1)
 #define L2SYNC		(0x2)
 
+#define TGRAN2NOSUP	(0x3)
+
 /* Used for L2 stack and guest S2 page tables. */
 #define L2_PAGE_POOL_ADDR	(0x80000000)
 #define L2_PAGE_POOL_NPAGES	(512)
@@ -53,6 +55,7 @@ static void guest_code(void)
 	int ret, i = 0;
 	gpa_t l2_pc, l2_stack_top;
 	struct page_pool pp;
+	u64 mmfr0 = read_sysreg(id_aa64mmfr0_el1);
 
 	GUEST_ASSERT_EQ(get_current_el(), 2);
 	GUEST_PRINTF("vEL2 entry\n");
@@ -61,6 +64,9 @@ static void guest_code(void)
 	pp.npages = L2_PAGE_POOL_NPAGES;
 	pp.current = L2_PAGE_POOL_ADDR;
 	pp.page_size = get_page_size();
+
+	if (!has_tgran_2(mmfr0, pp.page_size))
+		GUEST_SYNC1(TGRAN2NOSUP);
 
 	l2_stack_top = alloc_page(&pp) + pp.page_size;
 	l2_pc = ucall_translate_to_gpa(l2_guest_code);
@@ -119,6 +125,8 @@ int main(void)
 			}
 			if (uc.args[0] == L2SYNC)
 				pr_info("L2SYNC, L1 info: %ld, L2 info: %ld\n", uc.args[1], uc.args[2]);
+			if (uc.args[0] == TGRAN2NOSUP)
+				ksft_exit_skip("Guest page size not supported as guest stage-2 page size!\n");
 			break;
 		case UCALL_PRINTF:
 			pr_info("[L1] %s", uc.buffer);

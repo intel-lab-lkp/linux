@@ -9,6 +9,36 @@
 #include <asm/sysreg.h>
 #include <linux/sizes.h>
 
+#define _has_tgran_2(__r, __sz)						\
+	({								\
+		u64 _s1, _s2, _mmfr0 = __r;				\
+									\
+		_s2 = SYS_FIELD_GET(ID_AA64MMFR0_EL1,			\
+				    TGRAN##__sz##_2, _mmfr0);		\
+									\
+		_s1 = SYS_FIELD_GET(ID_AA64MMFR0_EL1,			\
+				    TGRAN##__sz, _mmfr0);		\
+									\
+		((_s2 != ID_AA64MMFR0_EL1_TGRAN##__sz##_2_NI &&		\
+		  _s2 != ID_AA64MMFR0_EL1_TGRAN##__sz##_2_TGRAN##__sz) || \
+		 (_s2 == ID_AA64MMFR0_EL1_TGRAN##__sz##_2_TGRAN##__sz && \
+		  _s1 != ID_AA64MMFR0_EL1_TGRAN##__sz##_NI));		\
+	})
+
+bool has_tgran_2(u64 mmfr0, size_t size)
+{
+	switch (size) {
+	case SZ_4K:
+		return _has_tgran_2(mmfr0, 4);
+	case SZ_16K:
+		return _has_tgran_2(mmfr0, 16);
+	case SZ_64K:
+		return _has_tgran_2(mmfr0, 64);
+	default:
+		return false;
+	}
+}
+
 size_t get_page_size(void)
 {
 	u64 tcr_el1 = read_sysreg(tcr_el1);
