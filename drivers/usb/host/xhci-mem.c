@@ -2182,7 +2182,7 @@ static void xhci_create_rhub_port_array(struct xhci_hcd *xhci, struct xhci_hub *
 	 * descriptors aren't longer than the USB core will allocate.
 	 */
 	if (rhub->num_ports > max_ports) {
-		xhci->usb3_rhub.num_ports = max_ports;
+		rhub->num_ports = max_ports;
 		xhci_dbg_trace(xhci, trace_xhci_dbg_init, "Limiting USB%u root hub ports to %u",
 			       rhub->maj_rev, max_ports);
 	}
