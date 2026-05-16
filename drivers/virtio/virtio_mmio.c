@@ -254,6 +254,16 @@ static void vm_reset(struct virtio_device *vdev)
 
 	/* 0 status means a reset. */
 	writel(0, vm_dev->base + VIRTIO_MMIO_STATUS);
+
+	/*
+	 * The virtio-mmio legacy spec requires the driver to write the
+	 * guest page size during initialization, before any queues are
+	 * used.  Since reset is step 1 of initialization (Section 3.1),
+	 * set it here so it is always in place for subsequent queue setup
+	 * in every code path (probe, restore, etc.).
+	 */
+	if (vm_dev->version == 1)
+		writel(PAGE_SIZE, vm_dev->base + VIRTIO_MMIO_GUEST_PAGE_SIZE);
 }
 
 
@@ -547,9 +557,6 @@ static int virtio_mmio_restore(struct device *dev)
 {
 	struct virtio_mmio_device *vm_dev = dev_get_drvdata(dev);
 
-	if (vm_dev->version == 1)
-		writel(PAGE_SIZE, vm_dev->base + VIRTIO_MMIO_GUEST_PAGE_SIZE);
-
 	return virtio_device_restore(&vm_dev->vdev);
 }
 
@@ -619,8 +626,6 @@ static int virtio_mmio_probe(struct platform_device *pdev)
 	vm_dev->vdev.id.vendor = readl(vm_dev->base + VIRTIO_MMIO_VENDOR_ID);
 
 	if (vm_dev->version == 1) {
-		writel(PAGE_SIZE, vm_dev->base + VIRTIO_MMIO_GUEST_PAGE_SIZE);
-
 		rc = dma_set_mask(&pdev->dev, DMA_BIT_MASK(64));
 		/*
 		 * In the legacy case, ensure our coherently-allocated virtio
