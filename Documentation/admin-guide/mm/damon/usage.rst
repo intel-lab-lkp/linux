@@ -319,13 +319,13 @@ In the beginning, this directory has only one file, ``nr_probes``.  Writing a
 number (``N``) to the file creates the number of child directories named ``0``
 to ``N-1``.  Each directory represents each monitoring probe.
 
-In each probe directory, one directory, ``filters`` exist.  The directory
-contains files for installingt filters for the probe, that is used to determine
+In each probe directory, one directory, ``filters`` exists.  The directory
+contains files for installing filters for the probe, that is used to determine
 the data attribute for the probe.
 
 In the beginning, ``filters`` directory has only one file, ``nr_filters``.
 Writing a number (``N``) to the file creates the number of child directories
-named ``0`` to ``N-1``.  Each directory represents each filter and work in a
+named ``0`` to ``N-1``.  Each directory represents each filter and works in a
 way similar to that for :ref:`DAMOS filter <sysfs_filters>`.  When the filter
 ``type`` is ``memcg``, ``path`` file works the role of ``memcg_path`` for
 :ref:`DAMOS filter <sysfs_filters>`.
@@ -682,13 +682,19 @@ set the ``access pattern`` as their interested pattern that they want to query.
 tried_regions/<N>/
 ------------------
 
-In each region directory, you will find six files (``start``, ``end``,
-``nr_accesses``, ``age``, ``sz_filter_passed`` and ``probe_hits``).  Reading
-the files will show the properties of the region that corresponding DAMON-based
-operation scheme ``action`` has tried to be applied.
+In each region directory, you will find five files (``start``, ``end``,
+``nr_accesses``, ``age`` and ``sz_filter_passed``).  Reading the files will
+show the properties of the region that corresponding DAMON-based operation
+scheme ``action`` has tried to be applied.
 
-Reading ``probe_hists`` shows the number of data attributes monitoring
-probe-hit positive samples of the region.
+tried_regions/<N>/probes/
+-------------------------
+
+In each region directory, one directory (``probes``) also exists.  In the
+directory, subdirectories named ``0`` to ``N-1`` exists.  ``N`` is the number
+of installed probes.  In each number-named directory, a file (``hits``) exist.
+Reading the file shows the number of data attributes monitoring probe-hit
+positive samples of the region.
 
 Example
 ~~~~~~~
