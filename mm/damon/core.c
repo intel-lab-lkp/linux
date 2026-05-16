@@ -73,6 +73,16 @@ static bool __damon_is_registered_ops(enum damon_ops_id id)
 	return true;
 }
 
+/*
+ * Returns true if the given ops id reports access samples through the
+ * hardware-sampling ring-buffer drain path (rather than its own
+ * .check_accesses callback).
+ */
+static bool damon_ops_is_hw_hotness(enum damon_ops_id id)
+{
+	return id == DAMON_OPS_PADDR_IBS;
+}
+
 /**
  * damon_is_registered_ops() - Check if a given damon_operations is registered.
  * @id:	Id of the damon_operations to check if registered.
@@ -4048,7 +4058,8 @@ static int kdamond_fn(void *data)
 		ctx->passed_sample_intervals++;
 
 		/* todo: make these non-exclusive */
-		if (ctx->sample_control.primitives_enabled.page_fault)
+		if (ctx->sample_control.primitives_enabled.page_fault ||
+		    damon_ops_is_hw_hotness(ctx->ops.id))
 			max_nr_accesses = kdamond_check_reported_accesses(ctx);
 		else if (ctx->ops.check_accesses)
 			max_nr_accesses = ctx->ops.check_accesses(ctx);

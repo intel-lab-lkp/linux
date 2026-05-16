@@ -1388,6 +1388,10 @@ static const struct damon_sysfs_ops_name damon_sysfs_ops_names[] = {
 		.ops_id = DAMON_OPS_PADDR,
 		.name = "paddr",
 	},
+	{
+		.ops_id = DAMON_OPS_PADDR_IBS,
+		.name = "paddr_ibs",
+	},
 };
 
 struct damon_sysfs_context {
@@ -2023,7 +2027,8 @@ static int damon_sysfs_add_targets(struct damon_ctx *ctx,
 	int i, err;
 
 	/* Multiple physical address space monitoring targets makes no sense */
-	if (ctx->ops.id == DAMON_OPS_PADDR && sysfs_targets->nr > 1)
+	if ((ctx->ops.id == DAMON_OPS_PADDR ||
+	     ctx->ops.id == DAMON_OPS_PADDR_IBS) && sysfs_targets->nr > 1)
 		return -EINVAL;
 
 	for (i = 0; i < sysfs_targets->nr; i++) {
@@ -2072,8 +2077,9 @@ static int damon_sysfs_apply_inputs(struct damon_ctx *ctx,
 	if (err)
 		return err;
 	ctx->addr_unit = sys_ctx->addr_unit;
-	/* addr_unit is respected by only DAMON_OPS_PADDR */
-	if (sys_ctx->ops_id == DAMON_OPS_PADDR)
+	/* addr_unit is respected by only paddr-family ops */
+	if (sys_ctx->ops_id == DAMON_OPS_PADDR ||
+	    sys_ctx->ops_id == DAMON_OPS_PADDR_IBS)
 		ctx->min_region_sz = max(
 				DAMON_MIN_REGION_SZ / sys_ctx->addr_unit, 1);
 	ctx->pause = sys_ctx->pause;
