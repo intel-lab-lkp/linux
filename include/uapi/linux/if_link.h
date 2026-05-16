@@ -456,6 +456,14 @@ enum {
 
 #define IFLA_INET6_MAX	(__IFLA_INET6_MAX - 1)
 
+/* TPMR section */
+enum {
+	IFLA_TPMR_UNSPEC,
+	__IFLA_TPMR_MAX,
+};
+
+#define IFLA_TPMR_MAX (__IFLA_TPMR_MAX - 1)
+
 enum in6_addr_gen_mode {
 	IN6_ADDR_GEN_MODE_EUI64,
 	IN6_ADDR_GEN_MODE_NONE,

@@ -242,6 +242,20 @@ config VXLAN
 	  To compile this driver as a module, choose M here: the module
 	  will be called vxlan.
 
+config TPMR
+        tristate "Two-Port MAC Relay (TPMR) driver"
+        help
+          This driver provides an IEEE 802.1Q-2014 §6.7.1 Two-Port MAC
+          Relay netdevice: a stripped-down L2 relay between exactly two
+          member ports, with no MAC learning, no FDB and no STP. Unlike
+          the bridge driver it forwards the IEEE-reserved
+          01:80:c2:00:00:0x group (LACPDUs, LLDP, EAPOL/802.1X, ...),
+          which makes it suitable as a transparent bump-in-the-wire in
+          deployments using link aggregation, MACsec, or 802.1X.
+
+          To compile this driver as a module, choose M here: the module
+          will be called tpmr.
+
 config GENEVE
 	tristate "Generic Network Virtualization Encapsulation"
 	depends on INET
