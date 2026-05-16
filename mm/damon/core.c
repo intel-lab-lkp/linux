@@ -2650,6 +2650,10 @@ static void damos_set_effective_quota(struct damon_ctx *ctx, struct damos *s)
 		esz = quota->esz_bp / 10000;
 	}
 
+	/* avoid cold-start deadlock, but respect tuner stop signal (esz=0) */
+	if (esz)
+		esz = max_t(unsigned long, esz, ctx->min_region_sz);
+
 	if (quota->ms) {
 		if (quota->total_charged_ns)
 			throughput = mult_frac(quota->total_charged_sz,
