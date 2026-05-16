@@ -194,10 +194,8 @@ static struct dma_fence *ethosu_job_run(struct drm_sched_job *sched_job)
 		       dev->fence_context, ++dev->emit_seqno);
 	dma_fence_get(fence);
 
-	scoped_guard(mutex, &dev->job_lock) {
-		dev->in_flight_job = job;
-		ethosu_job_hw_submit(dev, job);
-	}
+	WRITE_ONCE(dev->in_flight_job, job);
+	ethosu_job_hw_submit(dev, job);
 
 	return fence;
 }
@@ -205,6 +203,7 @@ static struct dma_fence *ethosu_job_run(struct drm_sched_job *sched_job)
 static void ethosu_job_handle_irq(struct ethosu_device *dev)
 {
 	u32 status = readl_relaxed(dev->regs + NPU_REG_STATUS);
+	struct ethosu_job *job;
 
 	if (status & (STATUS_BUS_STATUS | STATUS_CMD_PARSE_ERR)) {
 		dev_err(dev->base.dev, "Error IRQ - %x\n", status);
@@ -212,11 +211,10 @@ static void ethosu_job_handle_irq(struct ethosu_device *dev)
 		return;
 	}
 
-	scoped_guard(mutex, &dev->job_lock) {
-		if (dev->in_flight_job) {
-			dma_fence_signal(dev->in_flight_job->done_fence);
-			dev->in_flight_job = NULL;
-		}
+	job = READ_ONCE(dev->in_flight_job);
+	if (job) {
+		WRITE_ONCE(dev->in_flight_job, NULL);
+		dma_fence_signal(job->done_fence);
 	}
 }
 
@@ -272,8 +270,7 @@ static enum drm_gpu_sched_stat ethosu_job_timedout(struct drm_sched_job *bad)
 
 	drm_sched_stop(&dev->sched, bad);
 
-	scoped_guard(mutex, &dev->job_lock)
-		dev->in_flight_job = NULL;
+	WRITE_ONCE(dev->in_flight_job, NULL);
 
 	/* Proceed with reset now. */
 	pm_runtime_force_suspend(dev->base.dev);
@@ -304,9 +301,6 @@ int ethosu_job_init(struct ethosu_device *edev)
 	int ret;
 
 	spin_lock_init(&edev->fence_lock);
-	ret = devm_mutex_init(dev, &edev->job_lock);
-	if (ret)
-		return ret;
 	ret = devm_mutex_init(dev, &edev->sched_lock);
 	if (ret)
 		return ret;

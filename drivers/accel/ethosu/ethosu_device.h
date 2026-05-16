@@ -173,8 +173,6 @@ struct ethosu_device {
 	struct drm_ethosu_npu_info npu_info;
 
 	struct ethosu_job *in_flight_job;
-	/* For in_flight_job and ethosu_job_hw_submit() */
-	struct mutex job_lock;
 
 	/* For dma_fence */
 	spinlock_t fence_lock;
