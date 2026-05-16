@@ -1105,7 +1105,7 @@ static struct attribute *damon_sysfs_probe_attrs[] = {
 };
 ATTRIBUTE_GROUPS(damon_sysfs_probe);
 
-const struct kobj_type damon_sysfs_probe_ktype = {
+static const struct kobj_type damon_sysfs_probe_ktype = {
 	.release = damon_sysfs_probe_release,
 	.sysfs_ops = &kobj_sysfs_ops,
 	.default_groups = damon_sysfs_probe_groups,
