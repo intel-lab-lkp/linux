@@ -46,6 +46,15 @@ struct hyp_data {
 	struct cpu_context hyp_context;
 };
 
+struct page_pool {
+	gpa_t start;
+	gpa_t current;
+	size_t npages;
+	size_t page_size;
+};
+
+size_t get_page_size(void);
+gpa_t alloc_page(struct page_pool *pp);
 void prepare_hyp(void);
 void init_vcpu(struct vcpu *vcpu, gpa_t l2_pc, gpa_t l2_stack_top);
 int run_l2(struct vcpu *vcpu, struct hyp_data *hyp_data);

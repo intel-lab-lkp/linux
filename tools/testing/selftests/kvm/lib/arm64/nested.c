@@ -7,6 +7,39 @@
 #include "processor.h"
 #include "test_util.h"
 #include <asm/sysreg.h>
+#include <linux/sizes.h>
+
+size_t get_page_size(void)
+{
+	u64 tcr_el1 = read_sysreg(tcr_el1);
+	u64 tg0 = SYS_FIELD_GET(TCR_EL1, TG0, tcr_el1);
+
+	switch (tg0) {
+	case TCR_EL1_TG0_4K:
+		return SZ_4K;
+	case TCR_EL1_TG0_16K:
+		return SZ_16K;
+	case TCR_EL1_TG0_64K:
+		return SZ_64K;
+	default:
+		GUEST_FAIL("Unexpected tg0 value!\n");
+		return 0;
+	}
+}
+
+gpa_t alloc_page(struct page_pool *pp)
+{
+	gpa_t page = pp->current;
+
+	pp->current += pp->page_size;
+
+	if ((pp->current - pp->start) / pp->page_size <= pp->npages) {
+		return page;
+	} else {
+		GUEST_FAIL("%s failed!\n", __func__);
+		return 0;
+	}
+}
 
 void prepare_hyp(void)
 {

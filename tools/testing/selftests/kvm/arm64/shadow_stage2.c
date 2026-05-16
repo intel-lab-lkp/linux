@@ -9,11 +9,15 @@
 #include "ucall.h"
 
 #define XLATE2GPA	(0xABCD)
-#define L2STACKSZ	(0x100)
 
 #define L2SUCCESS	(0x0)
 #define L2FAILED	(0x1)
 #define L2SYNC		(0x2)
+
+/* Used for L2 stack and guest S2 page tables. */
+#define L2_PAGE_POOL_ADDR	(0x80000000)
+#define L2_PAGE_POOL_NPAGES	(512)
+#define L2_PAGE_POOL_MEMSLOT	(0x2)
 
 /*
  * TPIDR_EL2 is used to store vcpu id, so save and restore it.
@@ -48,14 +52,18 @@ static void guest_code(void)
 	struct hyp_data hyp_data;
 	int ret, i = 0;
 	gpa_t l2_pc, l2_stack_top;
-	/* force 16-byte alignment for the stack pointer */
-	u8 l2_stack[L2STACKSZ] __attribute__((aligned(16)));
+	struct page_pool pp;
 
 	GUEST_ASSERT_EQ(get_current_el(), 2);
 	GUEST_PRINTF("vEL2 entry\n");
 
+	pp.start = L2_PAGE_POOL_ADDR;
+	pp.npages = L2_PAGE_POOL_NPAGES;
+	pp.current = L2_PAGE_POOL_ADDR;
+	pp.page_size = get_page_size();
+
+	l2_stack_top = alloc_page(&pp) + pp.page_size;
 	l2_pc = ucall_translate_to_gpa(l2_guest_code);
-	l2_stack_top = ucall_translate_to_gpa(&l2_stack[L2STACKSZ]);
 
 	init_vcpu(&vcpu, l2_pc, l2_stack_top);
 	prepare_hyp();
@@ -95,6 +103,10 @@ int main(void)
 	init.features[0] |= BIT(KVM_ARM_VCPU_HAS_EL2);
 	vcpu = aarch64_vcpu_add(vm, 0, &init, guest_code);
 	kvm_arch_vm_finalize_vcpus(vm);
+
+	vm_userspace_mem_region_add(vm, VM_MEM_SRC_ANONYMOUS,
+				    L2_PAGE_POOL_ADDR, L2_PAGE_POOL_MEMSLOT,
+				    L2_PAGE_POOL_NPAGES, 0);
 
 	while (true) {
 		vcpu_run(vcpu);
