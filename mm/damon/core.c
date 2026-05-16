@@ -2614,6 +2614,19 @@ static void damos_goal_tune_esz_bp_temporal(struct damon_ctx *c,
 		quota->esz_bp = ULONG_MAX;
 }
 
+/* Sum of all monitored region sizes across all targets in @ctx. */
+static unsigned long damon_ctx_total_monitored_sz(struct damon_ctx *ctx)
+{
+	struct damon_target *t;
+	struct damon_region *r;
+	unsigned long total = 0;
+
+	damon_for_each_target(t, ctx)
+		damon_for_each_region(r, t)
+			total += damon_sz_region(r);
+	return total;
+}
+
 /*
  * Called only if quota->ms, or quota->sz are set, or quota->goals is not empty
  */
@@ -2621,6 +2634,7 @@ static void damos_set_effective_quota(struct damon_ctx *ctx, struct damos *s)
 {
 	struct damos_quota *quota = &s->quota;
 	unsigned long throughput;
+	unsigned long total_sz;
 	unsigned long esz = ULONG_MAX;
 
 	if (!quota->ms && list_empty(&quota->goals)) {
@@ -2648,6 +2662,11 @@ static void damos_set_effective_quota(struct damon_ctx *ctx, struct damos *s)
 
 	if (quota->sz && quota->sz < esz)
 		esz = quota->sz;
+
+	/* Safety cap: never migrate more than total monitored memory */
+	total_sz = damon_ctx_total_monitored_sz(ctx);
+	if (total_sz && esz > total_sz)
+		esz = total_sz;
 
 	quota->esz = esz;
 }
