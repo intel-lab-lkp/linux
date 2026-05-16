@@ -15,3 +15,8 @@
 &cpu5 { compatible = "qcom,kryo670"; };
 &cpu6 { compatible = "qcom,kryo670"; };
 &cpu7 { compatible = "qcom,kryo670"; };
+
+&ipa {
+	qcom,gsi-loader = "self";
+	memory-region = <&ipa_fw_mem>;
+};
