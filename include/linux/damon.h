@@ -1084,10 +1084,10 @@ static inline unsigned long damon_sz_region(struct damon_region *r)
 }
 
 #define damon_for_each_filter(f, p) \
-	list_for_each_entry(f, &p->filters, list)
+	list_for_each_entry(f, &(p)->filters, list)
 
 #define damon_for_each_filter_safe(f, next, p) \
-	list_for_each_entry_safe(f, next, &p->filters, list)
+	list_for_each_entry_safe(f, next, &(p)->filters, list)
 
 #define damon_for_each_probe(p, ctx) \
 	list_for_each_entry(p, &(ctx)->probes, list)
