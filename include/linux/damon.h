@@ -682,6 +682,8 @@ enum damon_ops_id {
  * struct damon_operations - Monitoring operations for given use cases.
  *
  * @id:				Identifier of this operations set.
+ * @owner:			Module that provides this operations set, or NULL
+ *				for built-in ops.
  * @init:			Initialize operations-related data structures.
  * @update:			Update operations-related data structures.
  * @prepare_access_checks:	Prepare next access check of target regions.
@@ -728,6 +730,7 @@ enum damon_ops_id {
  */
 struct damon_operations {
 	enum damon_ops_id id;
+	struct module *owner;
 	void (*init)(struct damon_ctx *context);
 	void (*update)(struct damon_ctx *context);
 	void (*prepare_access_checks)(struct damon_ctx *context);
@@ -1206,6 +1209,7 @@ int damon_commit_ctx(struct damon_ctx *old_ctx, struct damon_ctx *new_ctx);
 int damon_nr_running_ctxs(void);
 bool damon_is_registered_ops(enum damon_ops_id id);
 int damon_register_ops(struct damon_operations *ops);
+int damon_unregister_ops(enum damon_ops_id id);
 int damon_select_ops(struct damon_ctx *ctx, enum damon_ops_id id);
 
 static inline bool damon_target_has_pid(const struct damon_ctx *ctx)

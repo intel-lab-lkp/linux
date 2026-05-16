@@ -12,6 +12,7 @@
 #include <linux/kthread.h>
 #include <linux/memcontrol.h>
 #include <linux/mm.h>
+#include <linux/module.h>
 #include <linux/psi.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
@@ -93,6 +94,31 @@ int damon_register_ops(struct damon_operations *ops)
 	mutex_unlock(&damon_ops_lock);
 	return err;
 }
+EXPORT_SYMBOL_GPL(damon_register_ops);
+
+/**
+ * damon_unregister_ops() - Unregister a monitoring operations set.
+ * @id:	ID of the operations set to unregister.
+ *
+ * Return: 0 on success, negative error code otherwise.
+ */
+int damon_unregister_ops(enum damon_ops_id id)
+{
+	if (id >= NR_DAMON_OPS)
+		return -EINVAL;
+
+	/*
+	 * Callers (typically the owning module exit path) hold a
+	 * module ref via try_module_get() in damon_select_ops(); the
+	 * unregister cannot race with active ctxs because module_exit
+	 * runs only at owner refcount 0.
+	 */
+	mutex_lock(&damon_ops_lock);
+	memset(&damon_registered_ops[id], 0, sizeof(damon_registered_ops[id]));
+	mutex_unlock(&damon_ops_lock);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(damon_unregister_ops);
 
 /**
  * damon_select_ops() - Select a monitoring operations to use with the context.
@@ -112,10 +138,18 @@ int damon_select_ops(struct damon_ctx *ctx, enum damon_ops_id id)
 		return -EINVAL;
 
 	mutex_lock(&damon_ops_lock);
-	if (!__damon_is_registered_ops(id))
+	if (!__damon_is_registered_ops(id)) {
 		err = -EINVAL;
-	else
-		ctx->ops = damon_registered_ops[id];
+		goto out;
+	}
+	if (!try_module_get(damon_registered_ops[id].owner)) {
+		err = -EBUSY;
+		goto out;
+	}
+	/* Drop previous owner ref if this ctx had ops selected before. */
+	module_put(ctx->ops.owner);
+	ctx->ops = damon_registered_ops[id];
+out:
 	mutex_unlock(&damon_ops_lock);
 	return err;
 }
@@ -835,6 +869,7 @@ void damon_destroy_ctx(struct damon_ctx *ctx)
 	damon_for_each_sample_filter_safe(f, next_f, &ctx->sample_control)
 		damon_destroy_sample_filter(f, &ctx->sample_control);
 
+	module_put(ctx->ops.owner);
 	kfree(ctx);
 }
 
@@ -1749,6 +1784,11 @@ int damon_commit_ctx(struct damon_ctx *dst, struct damon_ctx *src)
 			return err;
 	}
 	dst->pause = src->pause;
+	if (src->ops.owner != dst->ops.owner) {
+		if (!try_module_get(src->ops.owner))
+			return -EBUSY;
+		module_put(dst->ops.owner);
+	}
 	dst->ops = src->ops;
 	err = damon_commit_probes(dst, src);
 	if (err)

@@ -342,7 +342,7 @@ static void damon_test_split_regions_of(struct kunit *test)
 static void damon_test_ops_registration(struct kunit *test)
 {
 	struct damon_ctx *c = damon_new_ctx();
-	struct damon_operations ops = {.id = DAMON_OPS_VADDR}, bak;
+	struct damon_operations ops = {.id = DAMON_OPS_VADDR}, bak = {};
 	bool need_cleanup = false;
 
 	if (!c)
