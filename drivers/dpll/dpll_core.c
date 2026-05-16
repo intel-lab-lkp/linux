@@ -1024,8 +1024,14 @@ void dpll_pin_on_pin_unregister(struct dpll_pin *parent, struct dpll_pin *pin,
 	mutex_lock(&dpll_lock);
 	dpll_pin_delete_ntf(pin);
 	dpll_xa_ref_pin_del(&pin->parent_refs, parent, ops, priv, pin);
-	xa_for_each(&pin->dpll_refs, i, ref)
+	/* pin->dpll_refs is the union over all of pin's parents; only
+	 * touch entries actually registered via @parent.
+	 */
+	xa_for_each(&pin->dpll_refs, i, ref) {
+		if (!dpll_pin_registration_find(ref, ops, priv, parent))
+			continue;
 		__dpll_pin_unregister(ref->dpll, pin, ops, priv, parent);
+	}
 	mutex_unlock(&dpll_lock);
 }
 EXPORT_SYMBOL_GPL(dpll_pin_on_pin_unregister);
