@@ -842,23 +842,34 @@ static int rcu_print_task_exp_stall(struct rcu_node *rnp)
  */
 static void rcu_exp_print_detail_task_stall_rnp(struct rcu_node *rnp)
 {
+	bool firsttime = true;
 	unsigned long flags;
 	struct task_struct *t;
 
 	if (!rcu_exp_stall_task_details)
 		return;
 	raw_spin_lock_irqsave_rcu_node(rnp, flags);
-	if (!READ_ONCE(rnp->exp_tasks)) {
+	if (!READ_ONCE(rnp->exp_tasks) && list_empty(&rnp->dqs_blkd_tasks)) {
 		raw_spin_unlock_irqrestore_rcu_node(rnp, flags);
 		return;
 	}
-	t = list_entry(rnp->exp_tasks->prev,
-		       struct task_struct, rcu_node_entry);
-	list_for_each_entry_continue(t, &rnp->blkd_tasks, rcu_node_entry) {
-		/*
-		 * We could be printing a lot while holding a spinlock.
-		 * Avoid triggering hard lockup.
-		 */
+	if (rnp->exp_tasks) {
+		t = list_entry(rnp->exp_tasks->prev,
+			       struct task_struct, rcu_node_entry);
+		list_for_each_entry_continue(t, &rnp->blkd_tasks, rcu_node_entry) {
+			/*
+			 * We could be printing a lot while holding a spinlock.
+			 * Avoid triggering hard lockup.
+			 */
+			touch_nmi_watchdog();
+			sched_show_task(t);
+		}
+	}
+	list_for_each_entry(t, &rnp->dqs_blkd_tasks, rcu_node_entry) {
+		if (firsttime) {
+			pr_alert("Tasks with deferred quiescent states:\n");
+			firsttime = false;
+		}
 		touch_nmi_watchdog();
 		sched_show_task(t);
 	}
