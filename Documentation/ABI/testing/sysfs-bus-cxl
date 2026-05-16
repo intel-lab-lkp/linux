@@ -297,7 +297,7 @@ Description:
 		Each entry in the list is a dport id.
 
 
-What:		/sys/bus/cxl/devices/decoderX.Y/cap_{pmem,ram,type2,type3}
+What:		/sys/bus/cxl/devices/decoderX.Y/cap_{pmem,ram,type2,type3,bi}
 Date:		June, 2021
 KernelVersion:	v5.14
 Contact:	linux-cxl@vger.kernel.org
@@ -306,8 +306,9 @@ Description:
 		represents a fixed memory window identified by platform
 		firmware. A fixed window may only support a subset of memory
 		types. The 'cap_*' attributes indicate whether persistent
-		memory, volatile memory, accelerator memory, and / or expander
-		memory may be mapped behind this decoder's memory window.
+		memory, volatile memory, accelerator memory, expander memory,
+		and / or back-invalidate (HDM-DB) memory may be mapped behind
+		this decoder's memory window.
 
 
 What:		/sys/bus/cxl/devices/decoderX.Y/target_type
@@ -424,6 +425,38 @@ Description:
 		region and allocate the region-id for the next creation attempt.
 		EBUSY is returned if the region name written does not match the
 		current cached value.
+
+
+What:		/sys/bus/cxl/devices/decoderX.Y/create_{pmem,ram}_bi_region
+Date:		May, 2026
+KernelVersion:	v7.2
+Contact:	linux-cxl@vger.kernel.org
+Description:
+		(RW) Same as create_{pmem,ram}_region but creates an HDM-DB
+		(Back-Invalidate) region where the device manages coherency
+		via BISnp/BIRsp messages. Only visible when the root decoder
+		has the cap_bi flag set. Requires 256B Flit mode and BI
+		capability throughout the CXL topology.
+
+
+What:		/sys/bus/cxl/devices/decoderX.Y/bi
+Date:		May, 2026
+KernelVersion:	v7.2
+Contact:	linux-cxl@vger.kernel.org
+Description:
+		(RW) HDM-DB (device-managed coherency with back-invalidate)
+		state of this endpoint decoder. Writing '1' configures the
+		decoder for HDM-DB; '0' clears it. Reads return '1' if the
+		decoder is configured for HDM-DB and the device's BI is
+		enabled.
+
+What:		/sys/bus/cxl/devices/regionZ/bi
+Date:		May, 2026
+KernelVersion:	v7.2
+Contact:	linux-cxl@vger.kernel.org
+Description:
+		(RO) Shows '1' if the region uses HDM-DB coherency model,
+		'0' otherwise.
 
 
 What:		/sys/bus/cxl/devices/decoderX.Y/delete_region

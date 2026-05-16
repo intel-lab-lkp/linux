@@ -131,6 +131,7 @@ CXL_DECODER_FLAG_ATTR(cap_ram, CXL_DECODER_F_RAM);
 CXL_DECODER_FLAG_ATTR(cap_type2, CXL_DECODER_F_TYPE2);
 CXL_DECODER_FLAG_ATTR(cap_type3, CXL_DECODER_F_TYPE3);
 CXL_DECODER_FLAG_ATTR(locked, CXL_DECODER_F_LOCK);
+CXL_DECODER_FLAG_ATTR(cap_bi, CXL_DECODER_F_BI);
 
 static ssize_t target_type_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
@@ -233,6 +234,39 @@ static ssize_t mode_store(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RW(mode);
 
+static ssize_t bi_show(struct device *dev, struct device_attribute *attr,
+		       char *buf)
+{
+	struct cxl_endpoint_decoder *cxled = to_cxl_endpoint_decoder(dev);
+	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
+	struct cxl_dev_state *cxlds = cxlmd->cxlds;
+
+	return sysfs_emit(buf, "%d\n", cxlds->bi &&
+			  cxled->cxld.target_type == CXL_DECODER_DEVMEM);
+}
+
+static ssize_t bi_store(struct device *dev, struct device_attribute *attr,
+			const char *buf, size_t len)
+{
+	struct cxl_endpoint_decoder *cxled = to_cxl_endpoint_decoder(dev);
+	enum cxl_decoder_type type;
+	ssize_t rc;
+
+	if (sysfs_streq(buf, "1"))
+		type = CXL_DECODER_DEVMEM;
+	else if (sysfs_streq(buf, "0"))
+		type = CXL_DECODER_HOSTONLYMEM;
+	else
+		return -EINVAL;
+
+	rc = cxl_dpa_set_coherence(cxled, type);
+	if (rc)
+		return rc;
+
+	return len;
+}
+static DEVICE_ATTR_RW(bi);
+
 static ssize_t dpa_resource_show(struct device *dev, struct device_attribute *attr,
 			    char *buf)
 {
@@ -329,10 +363,13 @@ static struct attribute *cxl_decoder_root_attrs[] = {
 	&dev_attr_cap_ram.attr,
 	&dev_attr_cap_type2.attr,
 	&dev_attr_cap_type3.attr,
+	&dev_attr_cap_bi.attr,
 	&dev_attr_target_list.attr,
 	&dev_attr_qos_class.attr,
 	SET_CXL_REGION_ATTR(create_pmem_region)
 	SET_CXL_REGION_ATTR(create_ram_region)
+	SET_CXL_REGION_ATTR(create_pmem_bi_region)
+	SET_CXL_REGION_ATTR(create_ram_bi_region)
 	SET_CXL_REGION_ATTR(delete_region)
 	NULL,
 };
@@ -351,6 +388,21 @@ static bool can_create_ram(struct cxl_root_decoder *cxlrd)
 	return (cxlrd->cxlsd.cxld.flags & flags) == flags;
 }
 
+static bool can_create_bi(struct cxl_root_decoder *cxlrd)
+{
+	return cxlrd->cxlsd.cxld.flags & CXL_DECODER_F_BI;
+}
+
+static bool can_create_pmem_bi(struct cxl_root_decoder *cxlrd)
+{
+	return can_create_pmem(cxlrd) && can_create_bi(cxlrd);
+}
+
+static bool can_create_ram_bi(struct cxl_root_decoder *cxlrd)
+{
+	return can_create_ram(cxlrd) && can_create_bi(cxlrd);
+}
+
 static umode_t cxl_root_decoder_visible(struct kobject *kobj, struct attribute *a, int n)
 {
 	struct device *dev = kobj_to_dev(kobj);
@@ -362,8 +414,17 @@ static umode_t cxl_root_decoder_visible(struct kobject *kobj, struct attribute *
 	if (a == CXL_REGION_ATTR(create_ram_region) && !can_create_ram(cxlrd))
 		return 0;
 
+	if (a == CXL_REGION_ATTR(create_pmem_bi_region) &&
+	    !can_create_pmem_bi(cxlrd))
+		return 0;
+
+	if (a == CXL_REGION_ATTR(create_ram_bi_region) &&
+	    !can_create_ram_bi(cxlrd))
+		return 0;
+
 	if (a == CXL_REGION_ATTR(delete_region) &&
-	    !(can_create_pmem(cxlrd) || can_create_ram(cxlrd)))
+	    !(can_create_pmem(cxlrd) || can_create_ram(cxlrd) ||
+	      can_create_pmem_bi(cxlrd) || can_create_ram_bi(cxlrd)))
 		return 0;
 
 	return a->mode;
@@ -402,6 +463,7 @@ static const struct attribute_group *cxl_decoder_switch_attribute_groups[] = {
 static struct attribute *cxl_decoder_endpoint_attrs[] = {
 	&dev_attr_target_type.attr,
 	&dev_attr_mode.attr,
+	&dev_attr_bi.attr,
 	&dev_attr_dpa_size.attr,
 	&dev_attr_dpa_resource.attr,
 	SET_CXL_REGION_ATTR(region)
