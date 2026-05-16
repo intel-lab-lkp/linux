@@ -25,7 +25,26 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/damon.h>
 
-#define DAMON_ACCESS_REPORTS_CAP 1000
+/* Sized so the per-CPU ring set fits in L3 on typical multi-socket boxes. */
+#define DAMON_REPORT_RING_SIZE	256
+#define DAMON_REPORT_RING_MASK	(DAMON_REPORT_RING_SIZE - 1)
+
+struct damon_report_ring {
+	unsigned int head;	/* written by producer (NMI) */
+	unsigned int tail	/* written by consumer (kdamond) */
+		____cacheline_aligned_in_smp;
+	struct damon_access_report entries[DAMON_REPORT_RING_SIZE]
+		____cacheline_aligned_in_smp;
+};
+
+static DEFINE_PER_CPU(struct damon_report_ring, damon_report_rings);
+static DEFINE_PER_CPU(int, damon_report_ring_busy);
+/*
+ * Per-CPU bitmap: producer (NMI) sets after publishing a report;
+ * consumer (kdamond) clears before draining the corresponding ring.
+ * Hot-write under sampling load - do NOT mark __read_mostly.
+ */
+static cpumask_t damon_rings_pending;
 
 static DEFINE_MUTEX(damon_lock);
 static int nr_running_ctxs;
@@ -36,10 +55,6 @@ static struct damon_operations damon_registered_ops[NR_DAMON_OPS];
 
 static struct kmem_cache *damon_region_cache __ro_after_init;
 
-static DEFINE_MUTEX(damon_access_reports_lock);
-static struct damon_access_report damon_access_reports[
-	DAMON_ACCESS_REPORTS_CAP];
-static int damon_access_reports_len;
 
 /* Should be called under damon_ops_lock with id smaller than NR_DAMON_OPS */
 static bool __damon_is_registered_ops(enum damon_ops_id id)
@@ -2127,33 +2142,56 @@ int damos_walk(struct damon_ctx *ctx, struct damos_walk_control *control)
 }
 
 /**
- * damon_report_access() - Report identified access events to DAMON.
- * @report:	The reporting access information.
+ * damon_report_access() - Report a hardware-observed memory access.
+ * @report:	pointer to a filled damon_access_report struct.
  *
- * Report access events to DAMON.
- *
- * Context: May sleep.
- *
- * NOTE: we may be able to implement this as a lockless queue, and allow any
- * context.  As the overhead is unknown, and region-based DAMON logics would
- * guarantee the reports would be not made that frequently, let's start with
- * this simple implementation.
+ * Context: NMI-safe.  No sleeping, no allocation, no locks.
  */
 void damon_report_access(struct damon_access_report *report)
 {
-	struct damon_access_report *dst;
+	struct damon_report_ring *ring;
+	unsigned int head, next;
 
-	/* silently fail for races */
-	if (!mutex_trylock(&damon_access_reports_lock))
-		return;
-	dst = &damon_access_reports[damon_access_reports_len++];
-	/* just drop all existing reports in favor of simplicity. */
-	if (damon_access_reports_len == DAMON_ACCESS_REPORTS_CAP)
-		damon_access_reports_len = 0;
-	*dst = *report;
-	dst->report_jiffies = jiffies;
-	mutex_unlock(&damon_access_reports_lock);
+	/* Pin to a CPU so the SPSC invariant holds for preemptible callers. */
+	preempt_disable();
+	/*
+	 * NMI nesting on the same CPU as a process-context producer would
+	 * stomp the same entries[head] slot.  Detect and drop instead.
+	 */
+	if (this_cpu_inc_return(damon_report_ring_busy) != 1) {
+		/* NMI nested on a process-context producer; drop. */
+		goto out;
+	}
+
+	ring = this_cpu_ptr(&damon_report_rings);
+	head = ring->head;
+	next = (head + 1) & DAMON_REPORT_RING_MASK;
+
+	if (next == READ_ONCE(ring->tail)) {
+		/* Ring full; consumer is behind, drop the report. */
+		goto out;
+	}
+
+	ring->entries[head] = *report;
+	ring->entries[head].report_jiffies = jiffies;
+	smp_wmb(); /* ensure entry visible before head advance */
+	WRITE_ONCE(ring->head, next);
+	/*
+	 * Order the head advance before publishing the pending bit
+	 * so that the consumer, on observing the bit, is also
+	 * guaranteed to observe the new head.  set_bit/cpumask_set_cpu
+	 * are documented as unordered RMW (atomic_bitops.txt), hence
+	 * the explicit barrier; without it, a weakly-ordered arch
+	 * could let the consumer drain stale head, clear the bit, and
+	 * delay the report until the next producer sets the bit again.
+	 */
+	smp_mb__before_atomic();
+	cpumask_set_cpu(smp_processor_id(), &damon_rings_pending);
+out:
+	this_cpu_dec(damon_report_ring_busy);
+	preempt_enable();
 }
+EXPORT_SYMBOL_GPL(damon_report_access);
 
 #ifdef CONFIG_MMU
 void damon_report_page_fault(struct vm_fault *vmf, bool huge_pmd)
@@ -3814,26 +3852,47 @@ static unsigned int kdamond_apply_zero_access_report(struct damon_ctx *ctx)
 
 static unsigned int kdamond_check_reported_accesses(struct damon_ctx *ctx)
 {
-	int i;
-	struct damon_access_report *report;
+	int cpu;
 	struct damon_target *t;
 
-	/* currently damon_access_report supports only physical address */
-	if (damon_target_has_pid(ctx))
-		return 0;
+	for_each_cpu(cpu, &damon_rings_pending) {
+		struct damon_report_ring *ring =
+			per_cpu_ptr(&damon_report_rings, cpu);
+		unsigned int head, tail;
 
-	mutex_lock(&damon_access_reports_lock);
-	for (i = 0; i < damon_access_reports_len; i++) {
-		report = &damon_access_reports[i];
-		if (time_before(report->report_jiffies,
-					jiffies -
-					usecs_to_jiffies(
-						ctx->attrs.sample_interval)))
-			continue;
-		damon_for_each_target(t, ctx)
-			kdamond_apply_access_report(report, t, ctx);
+		cpumask_clear_cpu(cpu, &damon_rings_pending);
+		/*
+		 * Pair with the producer's smp_mb__before_atomic() between
+		 * the head publish and cpumask_set_cpu(): order the bit
+		 * clear before the head read so that a producer publishing
+		 * between our clear and our READ_ONCE(head) is observed via
+		 * the bit it re-sets, not lost as a stale-head drain.
+		 */
+		smp_mb__after_atomic();
+		head = READ_ONCE(ring->head);
+		/*
+		 * Pair with smp_wmb in damon_report_access(): the entry
+		 * data published before the producer advanced head must be
+		 * visible to the entries[] reads inside the loop below.
+		 */
+		smp_rmb();
+		tail = ring->tail;
+
+		while (tail != head) {
+			struct damon_access_report *report =
+				&ring->entries[tail];
+
+			if (!time_before(report->report_jiffies,
+					jiffies - usecs_to_jiffies(
+						ctx->attrs.sample_interval))) {
+				damon_for_each_target(t, ctx)
+					kdamond_apply_access_report(
+							report, t, ctx);
+			}
+			tail = (tail + 1) & DAMON_REPORT_RING_MASK;
+		}
+		WRITE_ONCE(ring->tail, tail);
 	}
-	mutex_unlock(&damon_access_reports_lock);
 	/* For nr_accesses_bp, absence of access should also be reported. */
 	return kdamond_apply_zero_access_report(ctx);
 }
