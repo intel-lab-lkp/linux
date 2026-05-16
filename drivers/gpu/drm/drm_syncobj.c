@@ -1675,9 +1675,6 @@ drm_syncobj_timeline_signal_ioctl(struct drm_device *dev, void *data,
 {
 	struct drm_syncobj_timeline_array *args = data;
 	struct drm_syncobj **syncobjs;
-	struct dma_fence_chain **chains;
-	uint64_t *points;
-	uint32_t i, j;
 	int ret;
 
 	if (!drm_core_check_feature(dev, DRIVER_SYNCOBJ_TIMELINE))
@@ -1696,26 +1693,55 @@ drm_syncobj_timeline_signal_ioctl(struct drm_device *dev, void *data,
 	if (ret < 0)
 		return ret;
 
-	points = kmalloc_array(args->count_handles, sizeof(*points),
+	ret = drm_syncobj_timeline_signal(syncobjs, args->points, args->count_handles);
+
+	drm_syncobj_array_free(syncobjs, args->count_handles);
+
+	return ret;
+}
+
+/**
+ * drm_syncobj_timeline_signal - signal timeline points on syncobjs
+ * @syncobjs: array of syncobjs
+ * @user_points: user pointer to array of timeline points
+ * @count: number of syncobjs
+ *
+ * Signals each syncobj at the corresponding timeline point.
+ *
+ * Returns 0 on success or a negative error value on failure.
+ */
+int
+drm_syncobj_timeline_signal(struct drm_syncobj **syncobjs,
+			    u64 user_points, u32 count)
+{
+	struct dma_fence_chain **chains;
+	uint64_t *points;
+	uint32_t i, j;
+	int ret = 0;
+
+	if (count == 0)
+		return -EINVAL;
+
+	points = kmalloc_array(count, sizeof(*points),
 			       GFP_KERNEL);
 	if (!points) {
 		ret = -ENOMEM;
 		goto out;
 	}
-	if (!u64_to_user_ptr(args->points)) {
-		memset(points, 0, args->count_handles * sizeof(uint64_t));
-	} else if (copy_from_user(points, u64_to_user_ptr(args->points),
-				  sizeof(uint64_t) * args->count_handles)) {
+	if (!u64_to_user_ptr(user_points)) {
+		memset(points, 0, count * sizeof(uint64_t));
+	} else if (copy_from_user(points, u64_to_user_ptr(user_points),
+				  sizeof(uint64_t) * count)) {
 		ret = -EFAULT;
 		goto err_points;
 	}
 
-	chains = kmalloc_array(args->count_handles, sizeof(void *), GFP_KERNEL);
+	chains = kmalloc_array(count, sizeof(void *), GFP_KERNEL);
 	if (!chains) {
 		ret = -ENOMEM;
 		goto err_points;
 	}
-	for (i = 0; i < args->count_handles; i++) {
+	for (i = 0; i < count; i++) {
 		chains[i] = dma_fence_chain_alloc();
 		if (!chains[i]) {
 			for (j = 0; j < i; j++)
@@ -1725,7 +1751,7 @@ drm_syncobj_timeline_signal_ioctl(struct drm_device *dev, void *data,
 		}
 	}
 
-	for (i = 0; i < args->count_handles; i++) {
+	for (i = 0; i < count; i++) {
 		struct dma_fence *fence = dma_fence_get_stub();
 
 		drm_syncobj_add_point(syncobjs[i], chains[i],
@@ -1737,10 +1763,10 @@ err_chains:
 err_points:
 	kfree(points);
 out:
-	drm_syncobj_array_free(syncobjs, args->count_handles);
 
 	return ret;
 }
+EXPORT_SYMBOL(drm_syncobj_timeline_signal);
 
 int drm_syncobj_query_ioctl(struct drm_device *dev, void *data,
 			    struct drm_file *file_private)
