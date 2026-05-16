@@ -25,11 +25,13 @@ int mt7915_run(struct ieee80211_hw *hw)
 	struct mt7915_dev *dev = mt7915_hw_dev(hw);
 	struct mt7915_phy *phy = mt7915_hw_phy(hw);
 	bool running;
+	bool reset;
 	int ret;
 
 	running = mt7915_dev_running(dev);
+	reset = test_bit(MT76_RESET, &phy->mt76->state);
 
-	if (!running) {
+	if (!running || (reset && phy == &dev->phy)) {
 		ret = mt76_connac_mcu_set_pm(&dev->mt76,
 					     dev->phy.mt76->band_idx, 0);
 		if (ret)
