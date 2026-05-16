@@ -809,7 +809,7 @@ enum damon_filter_type {
  * struct damon_filter - DAMON region filter for &struct damon_probe.
  *
  * @type:	Type of the region.
- * @matcing:	Whether this filter is for the type-matching ones.
+ * @matching:	Whether this filter is for the type-matching ones.
  * @allow:	Whether the @type-@matching ones should pass this filter.
  * @memcg_id:	Memcg id of the question if @type is DAMON_FILTER_MEMCG.
  * @list:	Siblings list.
