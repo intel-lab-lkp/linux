@@ -682,6 +682,12 @@ dpll_cmd_pin_get_one(struct sk_buff *msg, struct dpll_pin *pin,
 	ref = dpll_xa_ref_dpll_first(&pin->dpll_refs);
 	ASSERT_NOT_NULL(ref);
 
+	/* The first dpll the pin references may be torn down while still
+	 * pinned by foreign-driver refs; drop the notification cleanly.
+	 */
+	if (!dpll_device_ops(ref->dpll))
+		return -ENODEV;
+
 	ret = dpll_msg_add_pin_handle(msg, pin);
 	if (ret)
 		return ret;
