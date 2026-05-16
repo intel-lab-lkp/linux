@@ -190,6 +190,10 @@ static void belkin_sa_read_int_callback(struct urb *urb)
 		goto exit;
 	}
 
+	if (urb->actual_length < BELKIN_SA_MSR_INDEX + 1 ||
+	    urb->transfer_buffer_length < BELKIN_SA_MSR_INDEX + 1)
+		goto exit;
+
 	usb_serial_debug_data(&port->dev, __func__, urb->actual_length, data);
 
 	/* Handle known interrupt data */
