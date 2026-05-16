@@ -243,6 +243,15 @@ properties:
     minItems: 1
     maxItems: 3
 
+  interconnects:
+    maxItems: 1
+    description:
+      Optional interconnect path to the SMMU register space. On some SoCs
+      the SMMU registers are only accessible after a bandwidth vote has been
+      placed on the interconnect fabric. When present the driver votes for
+      bandwidth on this path before accessing any SMMU registers and releases
+      the vote on runtime suspend.
+
   nvidia,memory-controller:
     description: |
       A phandle to the memory controller on NVIDIA Tegra186 and later SoCs.
