@@ -7,6 +7,7 @@
 #include <linux/pci.h>
 #include <linux/pci-doe.h>
 #include <linux/aer.h>
+#include <linux/string_choices.h>
 #include <cxlpci.h>
 #include <cxlmem.h>
 #include <cxl.h>
@@ -926,3 +927,321 @@ int cxl_port_get_possible_dports(struct cxl_port *port)
 
 	return ctx.count;
 }
+
+static bool cxl_is_bi_capable(struct pci_dev *pdev, void __iomem *bi)
+{
+	if (pci_pcie_type(pdev) != PCI_EXP_TYPE_UPSTREAM && !bi) {
+		dev_dbg(&pdev->dev, "No BI Decoder registers.\n");
+		return false;
+	}
+
+	return true;
+}
+
+/* limit any insane timeouts from hw */
+#define CXL_BI_COMMIT_MAXTMO_US (5 * USEC_PER_SEC)
+
+static unsigned long __cxl_bi_get_timeout_us(struct device *dev,
+					     unsigned int scale,
+					     unsigned int base)
+{
+	static const unsigned long scale_tbl[] = {
+		1, 10, 100, 1000, 10000, 100000, 1000000, 10000000,
+	};
+
+	if (scale >= ARRAY_SIZE(scale_tbl)) {
+		dev_dbg(dev, "Invalid BI commit timeout scale: %u\n", scale);
+		return CXL_BI_COMMIT_MAXTMO_US;
+	}
+
+	return scale_tbl[scale] * base;
+}
+
+#define ___cxl_bi_commit(dev, bi, ctype)				\
+do {									\
+	u32 status, ctrl;						\
+	unsigned int scale, base;					\
+	ktime_t tmo, now, start;					\
+	unsigned long poll_us, tmo_us;					\
+									\
+	ctrl = readl(bi + CXL_BI_##ctype##_CTRL_OFFSET);		\
+	writel(ctrl & ~CXL_BI_##ctype##_CTRL_BI_COMMIT,			\
+	       (bi) + CXL_BI_##ctype##_CTRL_OFFSET);			\
+	writel(ctrl | CXL_BI_##ctype##_CTRL_BI_COMMIT,			\
+	       (bi) + CXL_BI_##ctype##_CTRL_OFFSET);			\
+									\
+	status = readl((bi) + CXL_BI_##ctype##_STATUS_OFFSET);		\
+	scale = FIELD_GET(CXL_BI_##ctype##_STATUS_BI_COMMIT_TM_SCALE,	\
+			  status);					\
+	base = FIELD_GET(CXL_BI_##ctype##_STATUS_BI_COMMIT_TM_BASE,	\
+			 status);					\
+									\
+	/* ... and poll */						\
+	tmo_us = min_t(unsigned long, CXL_BI_COMMIT_MAXTMO_US,		\
+		       __cxl_bi_get_timeout_us((dev), scale, base));	\
+	poll_us = tmo_us / 10; /* arbitrary 10% of timeout */		\
+	start = now = ktime_get();					\
+	tmo = ktime_add_us(now, tmo_us);				\
+	while (!FIELD_GET(CXL_BI_##ctype##_STATUS_BI_COMMITTED, status) && \
+	       !FIELD_GET(CXL_BI_##ctype##_STATUS_BI_ERR_NOT_COMMITTED,	\
+			  status)) {					\
+		if (ktime_after(now, tmo)) {				\
+			dev_dbg((dev), "BI-ID commit timed out (%luus)\n", \
+				tmo_us);				\
+			return -ETIMEDOUT;				\
+		}							\
+									\
+		fsleep(poll_us);					\
+		now = ktime_get();					\
+		status = readl((bi) + CXL_BI_##ctype##_STATUS_OFFSET);	\
+	}								\
+									\
+	if (FIELD_GET(CXL_BI_##ctype##_STATUS_BI_ERR_NOT_COMMITTED, status)) \
+		return -EIO;						\
+									\
+	dev_dbg((dev), "BI-ID commit wait took %lluus\n",		\
+		ktime_to_us(ktime_sub(now, start)));			\
+} while (0)
+
+static int __cxl_bi_commit_rt(struct device *dev, void __iomem *bi)
+{
+	if (!bi)
+		return 0;
+
+	if (FIELD_GET(CXL_BI_RT_CAPS_EXPLICIT_COMMIT_REQ,
+		      readl(bi + CXL_BI_RT_CAPS_OFFSET)))
+		___cxl_bi_commit(dev, bi, RT);
+
+	return 0;
+}
+
+static int __cxl_bi_commit(struct device *dev, void __iomem *bi)
+{
+	if (!bi)
+		return -EINVAL;
+
+	if (!FIELD_GET(CXL_BI_DECODER_CAPS_EXPLICIT_COMMIT_REQ,
+		       readl(bi + CXL_BI_DECODER_CAPS_OFFSET)))
+		return 0;
+
+	___cxl_bi_commit(dev, bi, DECODER);
+	return 0;
+}
+
+/* Enable or dealloc BI-ID changes in the given level of the topology. */
+static int cxl_bi_ctrl_dport(struct cxl_dport *dport, bool enable)
+{
+	struct pci_dev *pdev = to_pci_dev(dport->dport_dev);
+	void __iomem *bi = dport->regs.bi_decoder;
+	struct cxl_port *port = dport->port;
+	u32 ctrl, value;
+	int rc;
+
+	guard(device)(&port->dev);
+
+	if (!bi)
+		return -EINVAL;
+
+	ctrl = readl(bi + CXL_BI_DECODER_CTRL_OFFSET);
+
+	switch (pci_pcie_type(pdev)) {
+	case PCI_EXP_TYPE_ROOT_PORT:
+		if (enable) {
+			/*
+			 * There is no point of failure from here on,
+			 * BI will be enabled on the endpoint device.
+			 */
+			port->nr_bi++;
+
+			if (FIELD_GET(CXL_BI_DECODER_CTRL_BI_FW, ctrl))
+				return 0;
+
+			value = ctrl | CXL_BI_DECODER_CTRL_BI_FW;
+			value &= ~CXL_BI_DECODER_CTRL_BI_ENABLE;
+		} else {
+			if (WARN_ON_ONCE(port->nr_bi == 0))
+				return -EINVAL;
+			if (--port->nr_bi > 0)
+				return 0;
+
+			value = ctrl & ~(CXL_BI_DECODER_CTRL_BI_FW |
+					 CXL_BI_DECODER_CTRL_BI_ENABLE);
+		}
+
+		writel(value, bi + CXL_BI_DECODER_CTRL_OFFSET);
+		return 0;
+	case PCI_EXP_TYPE_DOWNSTREAM:
+		if (enable) {
+			value = ctrl & ~CXL_BI_DECODER_CTRL_BI_FW;
+			value |= CXL_BI_DECODER_CTRL_BI_ENABLE;
+		} else {
+			if (!FIELD_GET(CXL_BI_DECODER_CTRL_BI_ENABLE, ctrl))
+				return 0;
+			value = ctrl & ~(CXL_BI_DECODER_CTRL_BI_FW |
+					 CXL_BI_DECODER_CTRL_BI_ENABLE);
+		}
+
+		writel(value, bi + CXL_BI_DECODER_CTRL_OFFSET);
+
+		rc = __cxl_bi_commit(dport->dport_dev, bi);
+		if (rc)
+			return rc;
+
+		return __cxl_bi_commit_rt(&port->dev, port->regs.bi_rt);
+	default:
+		return -EINVAL;
+	}
+}
+
+static int cxl_bi_ctrl_endpoint(struct cxl_dev_state *cxlds, bool enable)
+{
+	struct cxl_port *endpoint = cxlds->cxlmd->endpoint;
+	void __iomem *bi = endpoint->regs.bi_decoder;
+	u32 ctrl, val;
+
+	if (!bi)
+		return -EINVAL;
+
+	ctrl = readl(bi + CXL_BI_DECODER_CTRL_OFFSET);
+
+	if (enable) {
+		if (FIELD_GET(CXL_BI_DECODER_CTRL_BI_ENABLE, ctrl)) {
+			WARN_ON_ONCE(!cxlds->bi);
+			return 0;
+		}
+		val = ctrl | CXL_BI_DECODER_CTRL_BI_ENABLE;
+	} else {
+		if (!FIELD_GET(CXL_BI_DECODER_CTRL_BI_ENABLE, ctrl)) {
+			WARN_ON_ONCE(cxlds->bi);
+			return 0;
+		}
+		val = ctrl & ~CXL_BI_DECODER_CTRL_BI_ENABLE;
+	}
+
+	writel(val, bi + CXL_BI_DECODER_CTRL_OFFSET);
+	cxlds->bi = enable;
+
+	dev_dbg(cxlds->dev, "BI requests %s\n",
+		str_enabled_disabled(enable));
+
+	return 0;
+}
+
+/*
+ * devm teardown on cxl_mem unbind. Endpoint decoders may still be
+ * committed here (cxl_workqueue tears them down asynchronously), but
+ * memory access has been quiesced.
+ */
+static void cxl_bi_dealloc(void *data)
+{
+	struct cxl_dev_state *cxlds = data;
+	struct cxl_memdev *cxlmd = cxlds->cxlmd;
+	struct cxl_port *endpoint = cxlmd->endpoint;
+	struct cxl_dport *dport, *_dport;
+	struct cxl_port *port;
+
+	struct cxl_port *_port __free(put_cxl_port) =
+		cxl_pci_find_port(to_pci_dev(cxlds->dev), &_dport);
+
+	if (!_port || !cxlds->bi)
+		return;
+
+	if (endpoint) {
+		scoped_guard(rwsem_read, &cxl_rwsem.region)
+			cxl_bi_ctrl_endpoint(cxlds, false);
+	} else {
+		/*
+		 * Endpoint already removed: regions torn down and
+		 * decoders uncommitted. Endpoint BI registers are no
+		 * longer mapped; just clear the flag.
+		 */
+		cxlds->bi = false;
+	}
+
+	port = _port;
+	dport = _dport;
+	while (!is_cxl_root(port)) {
+		int rc = cxl_bi_ctrl_dport(dport, false);
+
+		/* best effort */
+		if (rc)
+			dev_dbg(&port->dev,
+				"BI dport disable failed: %d\n", rc);
+
+		dport = port->parent_dport;
+		port = dport->port;
+	}
+}
+
+int cxl_bi_setup(struct cxl_dev_state *cxlds)
+{
+	struct pci_dev *pdev = to_pci_dev(cxlds->dev);
+	struct cxl_port *endpoint = cxlds->cxlmd->endpoint;
+	struct cxl_dport *dport, *_dport, *failed;
+	struct cxl_port *port;
+	int rc;
+
+	struct cxl_port *_port __free(put_cxl_port) =
+		cxl_pci_find_port(pdev, &_dport);
+
+	if (!_port)
+		return -EINVAL;
+
+	if (!cxl_is_bi_capable(pdev, endpoint->regs.bi_decoder))
+		return 0;
+
+	/* walkup the topology twice, first to check, then to enable */
+	port = _port;
+	dport = _dport;
+	while (!is_cxl_root(port)) {
+		/* check rp, dsp */
+		if (!cxl_is_bi_capable(to_pci_dev(dport->dport_dev),
+				       dport->regs.bi_decoder))
+			return -EINVAL;
+
+		/* check usp */
+		if (dev_is_pci(port->uport_dev) &&
+		    pci_pcie_type(to_pci_dev(port->uport_dev)) ==
+			    PCI_EXP_TYPE_UPSTREAM)
+			if (!cxl_is_bi_capable(to_pci_dev(port->uport_dev),
+					       port->regs.bi_rt))
+				return -EINVAL;
+
+		dport = port->parent_dport;
+		port = dport->port;
+	}
+
+	port = _port;
+	dport = _dport;
+	while (!is_cxl_root(port)) {
+		rc = cxl_bi_ctrl_dport(dport, true);
+		if (rc)
+			goto err_rollback;
+
+		dport = port->parent_dport;
+		port = dport->port;
+	}
+
+	/* finally, enable BI on the device */
+	cxl_bi_ctrl_endpoint(cxlds, true);
+
+	return devm_add_action_or_reset(&cxlds->cxlmd->dev,
+					cxl_bi_dealloc, cxlds);
+
+err_rollback:
+	/*
+	 * Undo all dports enabled so far, including the failed one.
+	 */
+	failed = dport;
+	dport = _dport;
+	port = _port;
+	while (!is_cxl_root(port)) {
+		cxl_bi_ctrl_dport(dport, false);
+		if (dport == failed)
+			break;
+		dport = port->parent_dport;
+		port = dport->port;
+	}
+	return rc;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_bi_setup, "CXL");
