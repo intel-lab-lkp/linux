@@ -67,8 +67,8 @@ static void com90xx_copy_from_card(struct net_device *dev, int bufnum,
 
 /* Known ARCnet cards */
 
-static struct net_device *cards[16];
-static int numcards;
+static struct net_device *cards[16] __ro_after_init;
+static int numcards __ro_after_init;
 
 /* Handy defines for ARCnet specific stuff */
 
