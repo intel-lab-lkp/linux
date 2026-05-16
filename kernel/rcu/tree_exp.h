@@ -815,14 +815,20 @@ static int rcu_print_task_exp_stall(struct rcu_node *rnp)
 	struct task_struct *t;
 
 	raw_spin_lock_irqsave_rcu_node(rnp, flags);
-	if (!rnp->exp_tasks) {
+	if (!rnp->exp_tasks && list_empty(&rnp->dqs_blkd_tasks)) {
 		raw_spin_unlock_irqrestore_rcu_node(rnp, flags);
 		return 0;
 	}
-	t = list_entry(rnp->exp_tasks->prev,
-		       struct task_struct, rcu_node_entry);
-	list_for_each_entry_continue(t, &rnp->blkd_tasks, rcu_node_entry) {
-		pr_cont(" P%d", t->pid);
+	if (rnp->exp_tasks) {
+		t = list_entry(rnp->exp_tasks->prev,
+			       struct task_struct, rcu_node_entry);
+		list_for_each_entry_continue(t, &rnp->blkd_tasks, rcu_node_entry) {
+			pr_cont(" P%d", t->pid);
+			ndetected++;
+		}
+	}
+	list_for_each_entry(t, &rnp->dqs_blkd_tasks, rcu_node_entry) {
+		pr_cont(" Q%d", t->pid);
 		ndetected++;
 	}
 	raw_spin_unlock_irqrestore_rcu_node(rnp, flags);
