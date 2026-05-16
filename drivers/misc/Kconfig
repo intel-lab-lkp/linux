@@ -644,6 +644,16 @@ config MCHP_LAN966X_PCI
 	    - lan966x-miim (MDIO_MSCC_MIIM)
 	    - lan966x-switch (LAN966X_SWITCH)
 
+config SYNCOBJ_DEV
+	tristate "DRM syncobj device (/dev/syncobj)"
+	depends on DRM
+	help
+	  Creates a /dev/syncobj device node that provides DRM synchronization
+	  objects (syncobjs) without requiring a DRM device.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called syncobj.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
