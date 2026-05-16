@@ -104,11 +104,10 @@ static int cevt_init_cpu(uint cpu)
 	reg = ioread32(reg_ctl(cpu)) | ctl_bit_enabled(cpu);
 	iowrite32(reg, reg_ctl(cpu));
 
-	enable_percpu_irq(cd->irq, IRQ_TYPE_NONE);
-
-	/* Do this last because it synchronously configures the timer */
 	clockevents_config_and_register(cd, econet_timer.freq_hz,
 					ECONET_MIN_DELTA, ECONET_MAX_DELTA);
+
+	enable_percpu_irq(cd->irq, IRQ_TYPE_NONE);
 
 	return 0;
 }
@@ -176,6 +175,8 @@ static int __init timer_init(struct device_node *np)
 		ret = -EINVAL;
 		goto out_membase;
 	}
+
+	irq_set_status_flags(econet_timer.irq, IRQ_NOAUTOEN);
 
 	ret = request_percpu_irq(econet_timer.irq, cevt_interrupt, np->name,
 				 &econet_timer_pcpu);
