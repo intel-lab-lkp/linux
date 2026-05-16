@@ -62,7 +62,7 @@ static void guest_code(void)
 	l2_stack_top = ucall_translate_to_gpa(&l2_stack[L2STACKSZ]);
 
 	init_vcpu(&vcpu, l2_pc, l2_stack_top);
-	prepare_hyp();
+	prepare_hyp_no_s2();
 
 	ret = run_l2(&vcpu, &hyp_data);
 	GUEST_ASSERT_EQ(ret, ARM_EXCEPTION_TRAP);

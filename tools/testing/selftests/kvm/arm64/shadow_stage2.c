@@ -72,7 +72,7 @@ static void guest_code(void)
 	l2_pc = ucall_translate_to_gpa(l2_guest_code);
 
 	init_vcpu(&vcpu, l2_pc, l2_stack_top);
-	prepare_hyp();
+	prepare_hyp_no_s2();
 
 	while (true) {
 		GUEST_PRINTF("L2 enter\n");

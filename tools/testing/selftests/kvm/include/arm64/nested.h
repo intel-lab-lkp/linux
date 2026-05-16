@@ -38,6 +38,14 @@ struct vcpu {
 	struct cpu_context context;
 };
 
+struct s2_mmu {
+	gpa_t pgd;
+	unsigned int vmid;
+	unsigned int page_size_shift;
+	u64 vtcr;
+	u64 ipa_bits;
+};
+
 /*
  * KVM has host_data and hyp_context, combine them because we're only doing
  * hyp context.
@@ -56,8 +64,13 @@ struct page_pool {
 size_t get_page_size(void);
 gpa_t alloc_page(struct page_pool *pp);
 bool has_tgran_2(u64 mmfr0, size_t size);
-void prepare_hyp(void);
+void prepare_hyp_no_s2(void);
+void prepare_hyp(struct s2_mmu *mmu);
 void init_vcpu(struct vcpu *vcpu, gpa_t l2_pc, gpa_t l2_stack_top);
+void create_s2_mapping(struct s2_mmu *mmu, u64 ipa, u64 pa, size_t size,
+		       struct page_pool *pp);
+void init_s2_mmu(struct s2_mmu *mmu, unsigned int vmid, gpa_t pgd,
+		 size_t page_size, u64 ipa_bits);
 int run_l2(struct vcpu *vcpu, struct hyp_data *hyp_data);
 
 u64 do_hvc(u64 action, u64 arg1, u64 arg2);
