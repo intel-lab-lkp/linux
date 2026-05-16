@@ -765,18 +765,36 @@ static int drm_syncobj_fd_to_handle(struct drm_file *file_private,
 static int drm_syncobj_import_sync_file_fence(struct drm_file *file_private,
 					      int fd, int handle, u64 point)
 {
-	struct dma_fence *fence = sync_file_get_fence(fd);
 	struct drm_syncobj *syncobj;
+	int ret = 0;
+
+	syncobj = drm_syncobj_find(file_private, handle);
+	if (!syncobj)
+		return -ENOENT;
+
+	ret = drm_syncobj_import_sync_file(syncobj, fd, point);
+
+	drm_syncobj_put(syncobj);
+
+	return ret;
+}
+
+/**
+ * drm_syncobj_import_sync_file - import a sync_file fd into a syncobj
+ * @syncobj: syncobj to import into
+ * @fd: sync_file file descriptor
+ * @point: timeline point or 0
+ *
+ * Returns 0 on success or a negative error value on failure.
+ */
+int drm_syncobj_import_sync_file(struct drm_syncobj *syncobj,
+				 int fd, u64 point)
+{
+	struct dma_fence *fence = sync_file_get_fence(fd);
 	int ret = 0;
 
 	if (!fence)
 		return -EINVAL;
-
-	syncobj = drm_syncobj_find(file_private, handle);
-	if (!syncobj) {
-		ret = -ENOENT;
-		goto err_syncobj;
-	}
 
 	if (point) {
 		struct dma_fence_chain *chain = dma_fence_chain_alloc();
@@ -792,11 +810,10 @@ static int drm_syncobj_import_sync_file_fence(struct drm_file *file_private,
 	}
 
 err:
-	drm_syncobj_put(syncobj);
-err_syncobj:
 	dma_fence_put(fence);
 	return ret;
 }
+EXPORT_SYMBOL(drm_syncobj_import_sync_file);
 
 static int drm_syncobj_export_sync_file(struct drm_file *file_private,
 					int handle, u64 point, int *p_fd)
