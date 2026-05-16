@@ -2704,6 +2704,17 @@ Kernel parameters
 	irqaffinity=	[SMP] Set the default irq affinity mask
 			The argument is a cpu list, as described above.
 
+			Note: This parameter only sets the default affinity
+			for unmanaged interrupts (e.g., legacy single-queue
+			devices or unmanaged pre/post vectors). It is
+			explicitly ignored by managed interrupts, such as
+			those utilised by modern multiqueue storage
+			controllers. To isolate CPUs from managed
+			interrupts, see "isolcpus=managed_irq".
+
+			For further details see:
+			Documentation/core-api/irq/managed_irq.rst
+
 	irqchip.gicv2_force_probe=
 			[ARM,ARM64,EARLY]
 			Format: <bool>

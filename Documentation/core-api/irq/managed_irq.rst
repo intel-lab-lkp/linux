@@ -80,9 +80,63 @@ The following examples assume a system with 8 CPUs.
     /proc/irq/48/effective_affinity_list:0
     /proc/irq/48/smp_affinity_list:7
 
-  This can be verified via the debugfs interface
-  (/sys/kernel/debug/irq/irqs/48). The dstate field will include
-  IRQD_IRQ_DISABLED, IRQD_IRQ_MASKED and IRQD_MANAGED_SHUTDOWN.
+  If the Linux kernel was built with Kconfig CONFIG_GENERIC_IRQ_DEBUGFS
+  enabled, this can be verified via the debugfs interface (e.g.,
+  /sys/kernel/debug/irq/irqs/48).
+
+  A managed IRQ will always include IRQD_AFFINITY_MANAGED in its dstate.
+  Furthermore, when the associated CPU is offlined, the dstate field will
+  also include IRQD_IRQ_DISABLED, IRQD_IRQ_MASKED, and IRQD_MANAGED_SHUTDOWN,
+  verifying that the interrupt was cleanly shut down rather than migrated.
+
+  For example, an active managed interrupt might look like this::
+
+    # cat /sys/kernel/debug/irq/irqs/87
+    handler:  handle_edge_irq
+    device:   0000:41:00.0
+    status:   0x00000000
+    istate:   0x00004000
+    ddepth:   0
+    wdepth:   0
+    dstate:   0x19601200
+		IRQD_ACTIVATED
+		IRQD_IRQ_STARTED
+		IRQD_SINGLE_TARGET
+		IRQD_AFFINITY_SET
+		IRQD_AFFINITY_MANAGED
+		IRQD_AFFINITY_ON_ACTIVATE
+		IRQD_HANDLE_ENFORCE_IRQCTX
+    node:     0
+    affinity: 3
+    effectiv: 3
+    pending:
+    domain:  IR-PCI-MSIX-0000:41:00.0-12
+     hwirq:   0x8
+     chip:    IR-PCI-MSIX-0000:41:00.0
+      flags:   0x430
+		 IRQCHIP_SKIP_SET_WAKE
+		 IRQCHIP_ONESHOT_SAFE
+
+      address_hi: 0x00000000
+      address_lo: 0xfee00000
+      msg_data:   0x00000008
+     parent:
+	domain:  AMD-IR-3-14
+	 hwirq:   0x41000000
+	 chip:    AMD-IR
+	  flags:   0x0
+	 parent:
+	    domain:  VECTOR
+	     hwirq:   0x57
+	     chip:    APIC
+	      flags:   0x0
+	     Vector:    33
+	     Target:     3
+	     move_in_progress: 0
+	     is_managed:       1
+	     can_reserve:      0
+	     has_reserved:     0
+	     cleanup_pending:  0
 
 - A QEMU instance is booted with "-device virtio-scsi-pci,num_queues=2"
   and the kernel command line includes:
