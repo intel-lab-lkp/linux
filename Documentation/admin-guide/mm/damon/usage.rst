@@ -238,9 +238,8 @@ contexts/<N>/monitoring_attrs/
 
 Files for specifying attributes of the monitoring including required quality
 and efficiency of the monitoring, and types of accesses to monitor are in
-``monitoring_attrs`` directory.  Specifically, three directories,
-``intervals``, ``nr_regions``, ``probes`` and ``sample`` exist in this
-directory.
+``monitoring_attrs`` directory.  Specifically, four directories, ``intervals``,
+``nr_regions``, ``probes`` and ``sample`` exist in this directory.
 
 Under ``intervals`` directory, three files for DAMON's sampling interval
 (``sample_us``), aggregation interval (``aggr_us``), and update interval
