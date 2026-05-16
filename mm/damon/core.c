@@ -3449,7 +3449,11 @@ int damon_set_region_system_rams_default(struct damon_target *t,
 static unsigned int damon_moving_sum(unsigned int mvsum, unsigned int nomvsum,
 		unsigned int len_window, unsigned int new_value)
 {
-	return mvsum - nomvsum / len_window + new_value;
+	unsigned int subtrahend = nomvsum / len_window;
+
+	if (subtrahend > mvsum)
+		return new_value;
+	return mvsum - subtrahend + new_value;
 }
 
 /**
