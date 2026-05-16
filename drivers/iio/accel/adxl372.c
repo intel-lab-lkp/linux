@@ -344,6 +344,7 @@ static const struct iio_chan_spec adxl372_channels[] = {
 	ADXL372_ACCEL_CHANNEL(0, ADXL372_X_DATA_H, X),
 	ADXL372_ACCEL_CHANNEL(1, ADXL372_Y_DATA_H, Y),
 	ADXL372_ACCEL_CHANNEL(2, ADXL372_Z_DATA_H, Z),
+	IIO_CHAN_SOFT_TIMESTAMP(3),
 };
 
 struct adxl372_state {
@@ -365,7 +366,7 @@ struct adxl372_state {
 	u8				fifo_set_size;
 	unsigned long			int1_bitmask;
 	u16				watermark;
-	__be16				fifo_buf[ADXL372_FIFO_SIZE];
+	IIO_DECLARE_BUFFER_WITH_TS(__be16, fifo_buf, ADXL372_FIFO_SIZE);
 	bool				peak_fifo_mode_en;
 	struct mutex			threshold_m; /* lock for threshold */
 };
@@ -703,13 +704,15 @@ static irqreturn_t adxl372_trigger_handler(int irq, void  *p)
 	struct adxl372_state *st = iio_priv(indio_dev);
 	u8 status1, status2;
 	u16 fifo_entries;
+	s64 ts;
 	int i, ret;
 
 	ret = adxl372_get_status(st, &status1, &status2, &fifo_entries);
 	if (ret < 0)
 		goto err;
 
-	adxl372_push_event(indio_dev, iio_get_time_ns(indio_dev), status2);
+	ts = iio_get_time_ns(indio_dev);
+	adxl372_push_event(indio_dev, ts, status2);
 
 	if (st->fifo_mode != ADXL372_FIFO_BYPASSED &&
 	    ADXL372_STATUS_1_FIFO_FULL(status1)) {
@@ -733,7 +736,9 @@ static irqreturn_t adxl372_trigger_handler(int irq, void  *p)
 			/* filter peak detection data */
 			if (st->peak_fifo_mode_en)
 				adxl372_arrange_axis_data(st, &st->fifo_buf[i]);
-			iio_push_to_buffers(indio_dev, &st->fifo_buf[i]);
+			iio_push_to_buffers_with_ts(indio_dev, &st->fifo_buf[i],
+						    st->fifo_set_size * sizeof(__be16),
+						    ts);
 		}
 	}
 err:
