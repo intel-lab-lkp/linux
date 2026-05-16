@@ -802,7 +802,7 @@ static int usb_gpib_read(struct gpib_board *board,
 	if (retval < 0)
 		goto read_return;
 
-	if (one_char(board, &b) != DLE || one_char(board, &b) != STX) {
+	if (!(one_char(board, &b) == DLE && one_char(board, &b) == STX)) {
 		dev_err(board->gpib_dev, "wrong <DLE><STX> sequence\n");
 		retval = -EIO;
 		goto read_return;
