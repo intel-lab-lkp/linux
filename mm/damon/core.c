@@ -83,6 +83,16 @@ static bool damon_ops_is_hw_hotness(enum damon_ops_id id)
 	return id == DAMON_OPS_PADDR_IBS;
 }
 
+/*
+ * Returns true if the ops id treats the monitoring target as a
+ * physical-address region (no per-task PID).  Used by paddr-only
+ * gates such as node_eligible_mem_bp.
+ */
+static bool damon_ops_id_is_paddr_family(enum damon_ops_id id)
+{
+	return id == DAMON_OPS_PADDR || id == DAMON_OPS_PADDR_IBS;
+}
+
 /**
  * damon_is_registered_ops() - Check if a given damon_operations is registered.
  * @id:	Id of the damon_operations to check if registered.
@@ -1787,8 +1797,8 @@ int damon_commit_ctx(struct damon_ctx *dst, struct damon_ctx *src)
 	if (!is_power_of_2(src->min_region_sz))
 		return -EINVAL;
 
-	/* node_eligible_mem_bp metric requires PADDR ops */
-	if (src->ops.id != DAMON_OPS_PADDR) {
+	/* node_eligible_mem_bp metric requires PADDR-family ops */
+	if (!damon_ops_id_is_paddr_family(src->ops.id)) {
 		damon_for_each_scheme(scheme, src) {
 			struct damos_quota *quota = &scheme->quota;
 
@@ -3041,7 +3051,7 @@ static unsigned long damos_get_node_eligible_mem_bp(struct damon_ctx *c,
 	phys_addr_t total_eligible = 0;
 	phys_addr_t node_eligible;
 
-	if (c->ops.id != DAMON_OPS_PADDR)
+	if (!damon_ops_id_is_paddr_family(c->ops.id))
 		return 0;
 
 	if (nid < 0 || nid >= MAX_NUMNODES || !node_online(nid))
