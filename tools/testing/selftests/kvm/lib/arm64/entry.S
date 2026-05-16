@@ -3,6 +3,11 @@
  * adapted from arch/arm64/kvm/hyp/entry.S
  */
 
+ .globl do_hvc
+ do_hvc:
+	hvc	#0
+	ret
+
 /*
  * Manually define these for now
  */
