@@ -23,3 +23,16 @@ bool damos_folio_filter_match(struct damos_filter *filter, struct folio *folio);
 unsigned long damon_migrate_pages(struct list_head *folio_list, int target_nid);
 
 bool damos_ops_has_filter(struct damos *s);
+
+/*
+ * paddr ops callbacks, declared here so paddr-family backends
+ * (e.g. paddr_ibs) can reuse the paddr operation implementations.
+ */
+void damon_pa_prepare_access_checks(struct damon_ctx *ctx);
+unsigned int damon_pa_check_accesses(struct damon_ctx *ctx);
+void damon_pa_apply_probes(struct damon_ctx *ctx);
+unsigned long damon_pa_apply_scheme(struct damon_ctx *ctx,
+		struct damon_target *t, struct damon_region *r,
+		struct damos *scheme, unsigned long *sz_filter_passed);
+int damon_pa_scheme_score(struct damon_ctx *context,
+		struct damon_region *r, struct damos *scheme);

@@ -124,13 +124,14 @@ static void damon_pa_prepare_access_checks_faults(struct damon_ctx *ctx)
 	}
 }
 
-static void damon_pa_prepare_access_checks(struct damon_ctx *ctx)
+void damon_pa_prepare_access_checks(struct damon_ctx *ctx)
 {
 	if (ctx->sample_control.primitives_enabled.page_table)
 		damon_pa_prepare_access_checks_abit(ctx);
 	if (ctx->sample_control.primitives_enabled.page_fault)
 		damon_pa_prepare_access_checks_faults(ctx);
 }
+EXPORT_SYMBOL_GPL(damon_pa_prepare_access_checks);
 
 static bool damon_pa_young(phys_addr_t paddr, unsigned long *folio_sz)
 {
@@ -168,7 +169,7 @@ static void __damon_pa_check_access(struct damon_region *r,
 	last_addr = sampling_addr;
 }
 
-static unsigned int damon_pa_check_accesses(struct damon_ctx *ctx)
+unsigned int damon_pa_check_accesses(struct damon_ctx *ctx)
 {
 	struct damon_target *t;
 	struct damon_region *r;
@@ -184,6 +185,7 @@ static unsigned int damon_pa_check_accesses(struct damon_ctx *ctx)
 
 	return max_nr_accesses;
 }
+EXPORT_SYMBOL_GPL(damon_pa_check_accesses);
 
 static bool damon_pa_filter_match(struct damon_filter *filter,
 		struct folio *folio)
@@ -234,7 +236,7 @@ static bool damon_pa_filter_pass(phys_addr_t pa, struct folio *folio,
 	return pass;
 }
 
-static void damon_pa_apply_probes(struct damon_ctx *ctx)
+void damon_pa_apply_probes(struct damon_ctx *ctx)
 {
 	struct damon_target *t;
 	struct damon_region *r;
@@ -259,6 +261,7 @@ static void damon_pa_apply_probes(struct damon_ctx *ctx)
 		}
 	}
 }
+EXPORT_SYMBOL_GPL(damon_pa_apply_probes);
 
 /*
  * damos_pa_filter_out - Return true if the page should be filtered out.
@@ -542,7 +545,7 @@ static unsigned long damon_pa_alloc_or_free(
 
 #endif
 
-static unsigned long damon_pa_apply_scheme(struct damon_ctx *ctx,
+unsigned long damon_pa_apply_scheme(struct damon_ctx *ctx,
 		struct damon_target *t, struct damon_region *r,
 		struct damos *scheme, unsigned long *sz_filter_passed)
 {
@@ -574,8 +577,9 @@ static unsigned long damon_pa_apply_scheme(struct damon_ctx *ctx,
 	}
 	return 0;
 }
+EXPORT_SYMBOL_GPL(damon_pa_apply_scheme);
 
-static int damon_pa_scheme_score(struct damon_ctx *context,
+int damon_pa_scheme_score(struct damon_ctx *context,
 		struct damon_region *r, struct damos *scheme)
 {
 	switch (scheme->action) {
@@ -595,6 +599,7 @@ static int damon_pa_scheme_score(struct damon_ctx *context,
 
 	return DAMOS_MAX_SCORE;
 }
+EXPORT_SYMBOL_GPL(damon_pa_scheme_score);
 
 static int __init damon_pa_initcall(void)
 {
