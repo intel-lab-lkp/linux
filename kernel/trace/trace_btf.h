@@ -9,3 +9,13 @@ const struct btf_member *btf_find_struct_member(struct btf *btf,
 						const struct btf_type *type,
 						const char *member_name,
 						u32 *anon_offset);
+
+#ifdef CONFIG_PROBE_EVENTS_BTF_ARGS
+/* Will modify arg, but will put it back before returning. */
+int btf_find_offset(char *arg, long *offset);
+#else
+static inline int btf_find_offset(char *arg, long *offset)
+{
+	return -EINVAL;
+}
+#endif

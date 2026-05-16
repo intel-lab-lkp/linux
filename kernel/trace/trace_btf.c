@@ -120,3 +120,114 @@ out:
 	return member;
 }
 
+#define BITS_ROUNDDOWN_BYTES(bits) ((bits) >> 3)
+
+static int find_member(const char *ptr, struct btf *btf,
+		       const struct btf_type **type, int level)
+{
+	const struct btf_member *member;
+	const struct btf_type *t = *type;
+	int i;
+
+	/* Max of 3 depth of anonymous structures */
+	if (level > 3)
+		return -E2BIG;
+
+	for_each_member(i, t, member) {
+		const char *tname = btf_name_by_offset(btf, member->name_off);
+
+		if (strcmp(ptr, tname) == 0) {
+			int offset = __btf_member_bit_offset(t, member);
+			*type = btf_type_by_id(btf, member->type);
+			return BITS_ROUNDDOWN_BYTES(offset);
+		}
+
+		/* Handle anonymous structures */
+		if (strlen(tname))
+			continue;
+
+		*type = btf_type_by_id(btf, member->type);
+		if (btf_type_is_struct(*type)) {
+			int offset = find_member(ptr, btf, type, level + 1);
+
+			if (offset < 0)
+				continue;
+
+			return offset + BITS_ROUNDDOWN_BYTES(member->offset);
+		}
+	}
+
+	return -ENOENT;
+}
+
+/**
+ * btf_find_offset - Find an offset of a member for a structure
+ * @arg: A structure name followed by one or more members
+ * @offset_p: A pointer to where to store the offset
+ *
+ * Will parse @arg with the expected format of: struct.member[[.member]..]
+ * It is delimited by '.'. The first item must be a structure type.
+ * The next are its members. If the member is also of a structure type it
+ * another member may follow ".member".
+ *
+ * Note, @arg is modified but will be put back to what it was on return.
+ *
+ * Returns: 0 on success and -EINVAL if no '.' is present
+ *    or -ENXIO if the structure or member is not found.
+ *    Returns -EINVAL if BTF is not defined.
+ *  On success, @offset_p will contain the offset of the member specified
+ *    by @arg.
+ */
+int btf_find_offset(char *arg, long *offset_p)
+{
+	const struct btf_type *t;
+	struct btf *btf;
+	long offset = 0;
+	char *ptr;
+	int ret;
+	s32 id;
+
+	ptr = strchr(arg, '.');
+	if (!ptr)
+		return -EINVAL;
+
+	*ptr = '\0';
+
+	ret = -ENXIO;
+	id = bpf_find_btf_id(arg, BTF_KIND_STRUCT, &btf);
+	if (id < 0)
+		goto error;
+
+	/* Get BTF_KIND_FUNC type */
+	t = btf_type_by_id(btf, id);
+
+	/* May allow more than one member, as long as they are structures */
+	do {
+		ret = -ENXIO;
+		if (!t || !btf_type_is_struct(t))
+			goto error;
+
+		*ptr++ = '.';
+		arg = ptr;
+		ptr = strchr(ptr, '.');
+		if (ptr)
+			*ptr = '\0';
+
+		ret = find_member(arg, btf, &t, 0);
+		if (ret < 0)
+			goto error;
+
+		offset += ret;
+
+	} while (ptr);
+
+	btf_put(btf);
+	*offset_p = offset;
+	return 0;
+
+error:
+	btf_put(btf);
+	if (ptr)
+		*ptr = '.';
+	return ret;
+}
