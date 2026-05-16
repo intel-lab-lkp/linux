@@ -266,6 +266,8 @@ static int pdsc_init_pf(struct pdsc *pdsc)
 
 	mutex_unlock(&pdsc->config_lock);
 
+	pdsc_debugfs_add_host_mem(pdsc);
+
 	err = pdsc_auxbus_dev_add(pdsc, pdsc, PDS_DEV_TYPE_FWCTL, &pdsc->padev);
 	if (err)
 		goto err_out_stop;
