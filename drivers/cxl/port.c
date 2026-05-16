@@ -58,6 +58,91 @@ static int discover_region(struct device *dev, void *unused)
 	return 0;
 }
 
+static int cxl_dport_init_bi(struct cxl_dport *dport)
+{
+	struct cxl_register_map *map = &dport->reg_map;
+	struct device *dev = dport->dport_dev;
+
+	/*
+	 * Already mapped. The BI Decoder iomap persists for the dport's
+	 * lifetime via the parent cxl_port's devm context.
+	 */
+	if (dport->regs.bi_decoder)
+		return 0;
+
+	if (!map->component_map.bi_decoder.valid) {
+		dev_dbg(dev, "BI decoder registers not found\n");
+		return 0;
+	}
+
+	if (cxl_map_component_regs(map, &dport->regs.component,
+				   BIT(CXL_CM_CAP_CAP_ID_BI_DECODER))) {
+		dev_dbg(dev, "Failed to map BI decoder capability.\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+/*
+ * Initialize Back-Invalidate registers for @port: map the BI Decoder on
+ * the upstream parent dport (root port or switch DSP), and map this
+ * port's own BI capability -- BI RT for a switch USP, BI Decoder for
+ * an endpoint.
+ */
+static void cxl_port_init_bi(struct cxl_port *port)
+{
+	struct cxl_register_map *map = &port->reg_map;
+	struct cxl_dport *parent_dport = port->parent_dport;
+	struct device *dport_dev, *udev;
+	int cap_id;
+
+	/* no upstream BI registers above host bridges or the cxl_root */
+	if (!parent_dport || is_cxl_root(parent_dport->port))
+		return;
+
+	/* BI requires 256B Flit on the upstream link */
+	udev = is_cxl_endpoint(port) ?
+		port->uport_dev->parent : port->uport_dev;
+	if (dev_is_pci(udev) && !cxl_pci_flit_256(to_pci_dev(udev)))
+		return;
+
+	dport_dev = parent_dport->dport_dev;
+	if (dev_is_pci(dport_dev)) {
+		switch (pci_pcie_type(to_pci_dev(dport_dev))) {
+		case PCI_EXP_TYPE_ROOT_PORT:
+		case PCI_EXP_TYPE_DOWNSTREAM:
+			cxl_dport_init_bi(parent_dport);
+			break;
+		default:
+			break;
+		}
+	}
+
+	if (is_cxl_endpoint(port)) {
+		if (port->regs.bi_decoder)
+			return;
+		if (!map->component_map.bi_decoder.valid) {
+			dev_dbg(&port->dev, "BI Decoder registers not found\n");
+			return;
+		}
+		cap_id = CXL_CM_CAP_CAP_ID_BI_DECODER;
+	} else {
+		if (port->regs.bi_rt)
+			return;
+		if (!map->component_map.bi_rt.valid) {
+			dev_dbg(&port->dev, "BI RT registers not found\n");
+			return;
+		}
+		cap_id = CXL_CM_CAP_CAP_ID_BI_RT;
+	}
+
+	map->host = &port->dev;
+	if (cxl_map_component_regs(map, &port->regs, BIT(cap_id)))
+		dev_dbg(&port->dev, "Failed to map BI capability 0x%x\n",
+			cap_id);
+}
+
 static int cxl_switch_port_probe(struct cxl_port *port)
 {
 	/* Reset nr_dports for rebind of driver */
@@ -65,6 +150,8 @@ static int cxl_switch_port_probe(struct cxl_port *port)
 
 	/* Cache the data early to ensure is_visible() works */
 	read_cdat_data(port);
+
+	cxl_port_init_bi(port);
 
 	return 0;
 }
@@ -127,6 +214,8 @@ static int cxl_endpoint_port_probe(struct cxl_port *port)
 	/* Cache the data early to ensure is_visible() works */
 	read_cdat_data(port);
 	cxl_endpoint_parse_cdat(port);
+
+	cxl_port_init_bi(port);
 
 	get_device(&cxlmd->dev);
 	rc = devm_add_action_or_reset(&port->dev, schedule_detach, cxlmd);
