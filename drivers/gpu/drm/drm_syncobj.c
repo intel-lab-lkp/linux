@@ -815,8 +815,34 @@ err:
 }
 EXPORT_SYMBOL(drm_syncobj_import_sync_file);
 
-static int drm_syncobj_export_sync_file(struct drm_file *file_private,
-					int handle, u64 point, int *p_fd)
+static int drm_syncobj_export_sync_file_by_handle(struct drm_file *file_private,
+						   int handle, u64 point,
+						   int *p_fd)
+{
+	struct drm_syncobj *syncobj;
+	int ret;
+
+	syncobj = drm_syncobj_find(file_private, handle);
+	if (!syncobj)
+		return -ENOENT;
+
+	ret = drm_syncobj_export_sync_file(syncobj, point, p_fd);
+
+	drm_syncobj_put(syncobj);
+
+	return ret;
+}
+
+/**
+ * drm_syncobj_export_sync_file - export a syncobj fence as a sync_file fd
+ * @syncobj: syncobj to export from
+ * @point: timeline point or 0
+ * @p_fd: out parameter for the new file descriptor
+ *
+ * Returns 0 on success or a negative error value on failure.
+ */
+int drm_syncobj_export_sync_file(struct drm_syncobj *syncobj,
+				 u64 point, int *p_fd)
 {
 	int ret;
 	struct dma_fence *fence;
@@ -826,7 +852,7 @@ static int drm_syncobj_export_sync_file(struct drm_file *file_private,
 	if (fd < 0)
 		return fd;
 
-	ret = drm_syncobj_find_fence(file_private, handle, point, 0, &fence);
+	ret = drm_syncobj_fence_lookup(syncobj, point, 0, &fence);
 	if (ret)
 		goto err_put_fd;
 
@@ -847,6 +873,8 @@ err_put_fd:
 	put_unused_fd(fd);
 	return ret;
 }
+EXPORT_SYMBOL(drm_syncobj_export_sync_file);
+
 /**
  * drm_syncobj_open - initializes syncobj file-private structures at devnode open time
  * @file_private: drm file-private structure to set up
@@ -933,8 +961,9 @@ drm_syncobj_handle_to_fd_ioctl(struct drm_device *dev, void *data,
 		point = args->point;
 
 	if (args->flags & DRM_SYNCOBJ_HANDLE_TO_FD_FLAGS_EXPORT_SYNC_FILE)
-		return drm_syncobj_export_sync_file(file_private, args->handle,
-						    point, &args->fd);
+		return drm_syncobj_export_sync_file_by_handle(file_private,
+							      args->handle,
+							      point, &args->fd);
 
 	if (args->point)
 		return -EINVAL;
