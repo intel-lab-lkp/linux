@@ -144,6 +144,18 @@ struct virtio_admin_cmd {
 };
 
 /**
+ * enum virtio_noirq_state - tracks noirq PM phase progress
+ * @VIRTIO_NOIRQ_NONE: noirq phase was not entered (only freeze ran)
+ * @VIRTIO_NOIRQ_ENTERED: freeze_noirq ran; restore_noirq is expected
+ * @VIRTIO_NOIRQ_RESTORED: restore_noirq completed successfully
+ */
+enum virtio_noirq_state {
+	VIRTIO_NOIRQ_NONE,
+	VIRTIO_NOIRQ_ENTERED,
+	VIRTIO_NOIRQ_RESTORED,
+};
+
+/**
  * struct virtio_device - representation of a device using virtio
  * @index: unique position on the virtio bus
  * @failed: saved value for VIRTIO_CONFIG_S_FAILED bit (for restore)
@@ -151,6 +163,7 @@ struct virtio_admin_cmd {
  * @config_driver_disabled: configuration change reporting disabled by
  *                          a driver
  * @config_change_pending: configuration change reported while disabled
+ * @noirq_state: tracks noirq PM phase progress for restore coordination
  * @config_lock: protects configuration change reporting
  * @vqs_list_lock: protects @vqs.
  * @dev: underlying device.
@@ -171,6 +184,7 @@ struct virtio_device {
 	bool config_core_enabled;
 	bool config_driver_disabled;
 	bool config_change_pending;
+	enum virtio_noirq_state noirq_state;
 	spinlock_t config_lock;
 	spinlock_t vqs_list_lock;
 	struct device dev;
@@ -209,8 +223,12 @@ void virtio_config_driver_enable(struct virtio_device *dev);
 #ifdef CONFIG_PM_SLEEP
 int virtio_device_freeze(struct virtio_device *dev);
 int virtio_device_restore(struct virtio_device *dev);
+int virtio_device_freeze_noirq(struct virtio_device *dev);
+int virtio_device_restore_noirq(struct virtio_device *dev);
 #endif
 void virtio_reset_device(struct virtio_device *dev);
+void virtio_reset_device_noirq(struct virtio_device *dev);
+void virtio_add_status_noirq(struct virtio_device *dev, unsigned int status);
 int virtio_device_reset_prepare(struct virtio_device *dev);
 int virtio_device_reset_done(struct virtio_device *dev);
 
@@ -237,6 +255,28 @@ size_t virtio_max_dma_size(const struct virtio_device *vdev);
  *    changes; may be called in interrupt context.
  * @freeze: optional function to call during suspend/hibernation.
  * @restore: optional function to call on resume.
+ *    When @restore_noirq is not implemented, core resets and reinitializes
+ *    the device before calling this. When @restore_noirq succeeded, core
+ *    skips reinitialization; drivers should avoid calling virtio_device_ready()
+ *    if DRIVER_OK was already set in the noirq phase.
+ *    When @restore_noirq failed, this callback is not invoked for same-device
+ *    recovery; the saved noirq error is propagated instead.
+ *    When the noirq phase was entirely skipped (e.g. suspend aborted before
+ *    suspend_noirq), core skips reinitialization for drivers that implement
+ *    @restore_noirq and calls @restore (if provided) to undo the freeze()
+ *    quiesce. Drivers without @restore_noirq follow the normal reinit +
+ *    restore path.
+ * @freeze_noirq: optional function to call during noirq suspend/hibernation.
+ * @restore_noirq: optional function to call on noirq resume.
+ *    If this callback fails, PM core may still continue later resume phases
+ *    for global system recovery. Virtio does not treat @restore as an
+ *    implicit same-device fallback for @restore_noirq failure; drivers should
+ *    only implement @restore_noirq when noirq resume is their required
+ *    recovery point.
+ *    A noirq restore failure is detected by the normal restore path
+ *    (noirq_state == VIRTIO_NOIRQ_ENTERED, meaning freeze_noirq ran but
+ *    restore_noirq did not complete) and returns -EIO instead of attempting
+ *    same-device recovery.
  * @reset_prepare: optional function to call when a transport specific reset
  *    occurs.
  * @reset_done: optional function to call after transport specific reset
@@ -258,6 +298,8 @@ struct virtio_driver {
 	void (*config_changed)(struct virtio_device *dev);
 	int (*freeze)(struct virtio_device *dev);
 	int (*restore)(struct virtio_device *dev);
+	int (*freeze_noirq)(struct virtio_device *dev);
+	int (*restore_noirq)(struct virtio_device *dev);
 	int (*reset_prepare)(struct virtio_device *dev);
 	int (*reset_done)(struct virtio_device *dev);
 	void (*shutdown)(struct virtio_device *dev);
