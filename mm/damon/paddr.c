@@ -218,13 +218,12 @@ static bool damon_pa_filter_match(struct damon_filter *filter,
 	return matched == filter->matching;
 }
 
-static bool damon_pa_filter_pass(phys_addr_t pa, struct damon_probe *p)
+static bool damon_pa_filter_pass(phys_addr_t pa, struct folio *folio,
+		struct damon_probe *p)
 {
 	struct damon_filter *f;
-	struct folio *folio;
 	bool pass = true;
 
-	folio = damon_get_folio(PHYS_PFN(pa));
 	damon_for_each_filter(f, p) {
 		if (damon_pa_filter_match(f, folio)) {
 			pass = f->allow;
@@ -232,8 +231,6 @@ static bool damon_pa_filter_pass(phys_addr_t pa, struct damon_probe *p)
 		}
 		pass = !f->allow;
 	}
-	if (folio)
-		folio_put(folio);
 	return pass;
 }
 
@@ -246,16 +243,19 @@ static void damon_pa_apply_probes(struct damon_ctx *ctx)
 	damon_for_each_target(t, ctx) {
 		damon_for_each_region(r, t) {
 			int i = 0;
+			phys_addr_t pa;
+			struct folio *folio;
 
+			pa = damon_pa_phys_addr(r->sampling_addr,
+					ctx->addr_unit);
+			folio = damon_get_folio(PHYS_PFN(pa));
 			damon_for_each_probe(p, ctx) {
-				phys_addr_t pa;
-
-				pa = damon_pa_phys_addr(r->sampling_addr,
-						ctx->addr_unit);
-				if (damon_pa_filter_pass(pa, p))
+				if (damon_pa_filter_pass(pa, folio, p))
 					r->probe_hits[i]++;
 				i++;
 			}
+			if (folio)
+				folio_put(folio);
 		}
 	}
 }
