@@ -70,7 +70,7 @@ struct vprbrd_gpio {
 };
 
 /* gpioa sampling clock module parameter */
-static unsigned char gpioa_clk;
+static unsigned char gpioa_clk __ro_after_init;
 static unsigned int gpioa_freq = VPRBRD_GPIOA_FREQ_DEFAULT;
 module_param(gpioa_freq, uint, 0);
 MODULE_PARM_DESC(gpioa_freq,
