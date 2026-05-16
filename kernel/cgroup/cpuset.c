@@ -2968,7 +2968,6 @@ out:
  * cpuset_can_attach() and cpuset_attach() specific internal data
  * Protected by cpuset_mutex
  */
-static struct cpuset *cpuset_attach_old_cs;
 static bool attach_cpus_updated;
 static bool attach_mems_updated;
 
@@ -3052,9 +3051,7 @@ static int cpuset_can_attach(struct cgroup_taskset *tset)
 	bool setsched_check;
 	int ret;
 
-	/* used later by cpuset_attach() */
-	cpuset_attach_old_cs = task_cs(cgroup_taskset_first(tset, &css));
-	oldcs = cpuset_attach_old_cs;
+	oldcs = task_cs(cgroup_taskset_first(tset, &css));
 	cs = css_cs(css);
 
 	mutex_lock(&cpuset_mutex);
@@ -3075,6 +3072,8 @@ static int cpuset_can_attach(struct cgroup_taskset *tset)
 				goto out_unlock;
 		}
 
+		/* Save a copy of oldcs to be used later in cpuset_attach() */
+		task->attach_old_cs = oldcs;
 		if (dl_task(task)) {
 			/*
 			 * Count all migrating DL tasks for cpuset task accounting.
@@ -3156,11 +3155,11 @@ static void cpuset_attach(struct cgroup_taskset *tset)
 	struct task_struct *task;
 	struct task_struct *leader;
 	struct cgroup_subsys_state *css;
-	struct cpuset *cs;
-	struct cpuset *oldcs = cpuset_attach_old_cs;
+	struct cpuset *cs, *oldcs;
 	bool queue_task_work = false;
 
-	cgroup_taskset_first(tset, &css);
+	task = cgroup_taskset_first(tset, &css);
+	oldcs = task->attach_old_cs;
 	cs = css_cs(css);
 
 	lockdep_assert_cpus_held();	/* see cgroup_attach_lock() */

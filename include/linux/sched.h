@@ -63,6 +63,7 @@ struct bpf_run_ctx;
 struct bpf_net_context;
 struct capture_control;
 struct cfs_rq;
+struct cpuset;
 struct fs_struct;
 struct futex_pi_state;
 struct io_context;
@@ -1317,6 +1318,8 @@ struct task_struct {
 	/* Sequence number to catch updates: */
 	seqcount_spinlock_t		mems_allowed_seq;
 	int				cpuset_mem_spread_rotor;
+	/* Old cpuset to be used in cpuset_attach() */
+	struct cpuset			*attach_old_cs;
 #endif
 #ifdef CONFIG_CGROUPS
 	/* Control Group info protected by css_set_lock: */
