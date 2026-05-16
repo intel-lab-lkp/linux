@@ -1031,13 +1031,9 @@ drm_syncobj_transfer_ioctl(struct drm_device *dev, void *data,
 		goto err_dst;
 	}
 
-	if (args->dst_point)
-		ret = drm_syncobj_transfer_to_timeline(src, args->src_point,
-						       dst, args->dst_point,
-						       args->flags);
-	else
-		ret = drm_syncobj_transfer_to_binary(src, args->src_point,
-						     dst, args->flags);
+	ret = drm_syncobj_transfer(src, args->src_point,
+				   dst, args->dst_point,
+				   args->flags);
 
 	drm_syncobj_put(dst);
 err_dst:
@@ -1045,6 +1041,32 @@ err_dst:
 
 	return ret;
 }
+
+/**
+ * drm_syncobj_transfer - transfer a fence between syncobjs
+ * @src: source syncobj
+ * @src_point: source point
+ * @dst: destination syncobj
+ * @dst_point: destination point
+ * @flags: DRM_SYNCOBJ_WAIT_FLAGS_WAIT_FOR_SUBMIT or 0
+ *
+ * Copies the fence at @src_point in @src to @dst_point in @dst.
+ *
+ * Returns 0 on success or a negative error value on failure.
+ */
+int drm_syncobj_transfer(struct drm_syncobj *src, u64 src_point,
+			 struct drm_syncobj *dst, u64 dst_point,
+			 u32 flags)
+{
+	if (dst_point)
+		return drm_syncobj_transfer_to_timeline(src, src_point,
+							dst, dst_point,
+							flags);
+	else
+		return drm_syncobj_transfer_to_binary(src, src_point,
+						      dst, flags);
+}
+EXPORT_SYMBOL(drm_syncobj_transfer);
 
 static void syncobj_wait_fence_func(struct dma_fence *fence,
 				    struct dma_fence_cb *cb)
