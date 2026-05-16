@@ -93,14 +93,78 @@ int pdsc_dl_flash_update(struct devlink *dl,
 	return pdsc_firmware_update(pdsc, params, extack);
 }
 
+static int pdsc_dl_report_component(struct devlink_info_req *req,
+				    struct pds_core_fw_component_info *info)
+{
+	enum devlink_info_version_type ver_type;
+	u16 flags = le16_to_cpu(info->flags);
+	char *ver = info->version;
+	char buf[32];
+
+	ver_type = DEVLINK_INFO_VERSION_TYPE_NONE;
+	snprintf(buf, sizeof(buf), "fw.%s", info->name);
+	if (flags & PDS_CORE_FW_COMPONENT_INFO_F_UPDATE_BY_NAME)
+		ver_type = DEVLINK_INFO_VERSION_TYPE_COMPONENT;
+
+	if (flags & PDS_CORE_FW_COMPONENT_INFO_F_FIXED)
+		return devlink_info_version_fixed_put(req, buf, ver);
+
+	if (flags & PDS_CORE_FW_COMPONENT_INFO_F_RUNNING) {
+		int err;
+
+		err = devlink_info_version_running_put_ext(req, buf,
+							   ver, ver_type);
+		if (err)
+			return err;
+	}
+
+	if (flags & PDS_CORE_FW_COMPONENT_INFO_F_STARTUP)
+		return devlink_info_version_stored_put_ext(req, buf,
+							   ver, ver_type);
+
+	return 0;
+}
+
+static int pdsc_dl_component_info_get(struct devlink *dl,
+				      struct devlink_info_req *req,
+				      struct netlink_ext_ack *extack)
+{
+	struct pds_core_component_list_info *list_info;
+	struct pdsc *pdsc = devlink_priv(dl);
+	u8 num_components;
+	int err;
+	int i;
+
+	if (!pdsc->fw_components.num_components) {
+		err = pdsc_get_component_info(pdsc);
+		if (err) {
+			dev_err(pdsc->dev, "Failed to get component_info %pe\n",
+				ERR_PTR(err));
+			return err;
+		}
+	}
+
+	list_info = &pdsc->fw_components;
+	num_components = min_t(u8, list_info->num_components,
+			       le16_to_cpu(pdsc->dev_ident.max_fw_slots));
+	for (i = 0; i < num_components; i++) {
+		err = pdsc_dl_report_component(req, &list_info->info[i]);
+		if (err)
+			return err;
+	}
+
+	return 0;
+}
+
 static char *fw_slotnames[] = {
 	"fw.goldfw",
 	"fw.mainfwa",
 	"fw.mainfwb",
 };
 
-int pdsc_dl_info_get(struct devlink *dl, struct devlink_info_req *req,
-		     struct netlink_ext_ack *extack)
+static int pdsc_dl_fw_list_info_get(struct devlink *dl,
+				    struct devlink_info_req *req,
+				    struct netlink_ext_ack *extack)
 {
 	union pds_core_dev_cmd cmd = {
 		.fw_control.opcode = PDS_CORE_CMD_FW_CONTROL,
@@ -130,6 +194,26 @@ int pdsc_dl_info_get(struct devlink *dl, struct devlink_info_req *req,
 						      fw_list.fw_names[i].fw_version);
 		if (err)
 			return err;
+	}
+
+	return 0;
+}
+
+int pdsc_dl_info_get(struct devlink *dl, struct devlink_info_req *req,
+		     struct netlink_ext_ack *extack)
+{
+	struct pdsc *pdsc = devlink_priv(dl);
+	char buf[32];
+	int err;
+
+	if (pdsc->dev_ident.version >= PDS_CORE_IDENTITY_VERSION_2)
+		err = pdsc_dl_component_info_get(dl, req, extack);
+	else
+		err = pdsc_dl_fw_list_info_get(dl, req, extack);
+	if (err) {
+		dev_err(pdsc->dev, "Failed to get devlink info for identity version %u: %pe\n",
+			pdsc->dev_ident.version, ERR_PTR(err));
+		return err;
 	}
 
 	err = devlink_info_version_running_put(req,
