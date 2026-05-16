@@ -528,37 +528,6 @@ void put_task_stack(struct task_struct *tsk)
 }
 #endif
 
-void free_task(struct task_struct *tsk)
-{
-#ifdef CONFIG_SECCOMP
-	WARN_ON_ONCE(tsk->seccomp.filter);
-#endif
-	release_user_cpus_ptr(tsk);
-	scs_release(tsk);
-
-#ifndef CONFIG_THREAD_INFO_IN_TASK
-	/*
-	 * The task is finally done with both the stack and thread_info,
-	 * so free both.
-	 */
-	release_task_stack(tsk);
-#else
-	/*
-	 * If the task had a separate stack allocation, it should be gone
-	 * by now.
-	 */
-	WARN_ON_ONCE(refcount_read(&tsk->stack_refcount) != 0);
-#endif
-	rt_mutex_debug_task_free(tsk);
-	ftrace_graph_exit_task(tsk);
-	arch_release_task_struct(tsk);
-	if (tsk->flags & PF_KTHREAD)
-		free_kthread_struct(tsk);
-	bpf_task_storage_free(tsk);
-	free_task_struct(tsk);
-}
-EXPORT_SYMBOL(free_task);
-
 void dup_mm_exe_file(struct mm_struct *mm, struct mm_struct *oldmm)
 {
 	struct file *exe_file;
@@ -774,6 +743,39 @@ static inline void put_signal_struct(struct signal_struct *sig)
 	if (refcount_dec_and_test(&sig->sigcnt))
 		free_signal_struct(sig);
 }
+
+void free_task(struct task_struct *tsk)
+{
+#ifdef CONFIG_SECCOMP
+	WARN_ON_ONCE(tsk->seccomp.filter);
+#endif
+	release_user_cpus_ptr(tsk);
+	scs_release(tsk);
+
+#ifndef CONFIG_THREAD_INFO_IN_TASK
+	/*
+	 * The task is finally done with both the stack and thread_info,
+	 * so free both.
+	 */
+	release_task_stack(tsk);
+#else
+	/*
+	 * If the task had a separate stack allocation, it should be gone
+	 * by now.
+	 */
+	WARN_ON_ONCE(refcount_read(&tsk->stack_refcount) != 0);
+#endif
+	rt_mutex_debug_task_free(tsk);
+	ftrace_graph_exit_task(tsk);
+	arch_release_task_struct(tsk);
+	if (tsk->flags & PF_KTHREAD)
+		free_kthread_struct(tsk);
+	bpf_task_storage_free(tsk);
+	if (tsk->exit_mm)
+		mmdrop_async(tsk->exit_mm);
+	free_task_struct(tsk);
+}
+EXPORT_SYMBOL(free_task);
 
 void __put_task_struct(struct task_struct *tsk)
 {

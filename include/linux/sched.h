@@ -961,6 +961,7 @@ struct task_struct {
 
 	struct mm_struct		*mm;
 	struct mm_struct		*active_mm;
+	struct mm_struct		*exit_mm;
 
 	int				exit_state;
 	int				exit_code;
@@ -1001,9 +1002,6 @@ struct task_struct {
 #ifdef CONFIG_RT_MUTEXES
 	unsigned			sched_rt_mutex:1;
 #endif
-
-	/* Save user-dumpable when mm goes away */
-	unsigned			user_dumpable:1;
 
 	/* Bit to tell TOMOYO we're in execve(): */
 	unsigned			in_execve:1;

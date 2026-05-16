@@ -272,18 +272,26 @@ static bool ptrace_has_cap(struct user_namespace *ns, unsigned int mode)
 	return ns_capable(ns, CAP_SYS_PTRACE);
 }
 
-static bool task_still_dumpable(struct task_struct *task, unsigned int mode)
+/*
+ * Decide whether ptrace access to @task is allowed based on its mm.
+ * Reads the dumpable flag and user_ns from ->mm, or from ->exit_mm if
+ * the task has gone through exit_mm(). Note that kernel threads may have
+ * neither.
+ */
+static bool may_access_mm(struct task_struct *task, unsigned int mode)
 {
 	struct mm_struct *mm = task->mm;
+	struct user_namespace *mm_userns = &init_user_ns;
+
+	if (!mm)
+		mm = task->exit_mm;
 	if (mm) {
 		if (get_dumpable(mm) == SUID_DUMP_USER)
 			return true;
-		return ptrace_has_cap(mm->user_ns, mode);
+		mm_userns = mm->user_ns;
 	}
 
-	if (task->user_dumpable)
-		return true;
-	return ptrace_has_cap(&init_user_ns, mode);
+	return ptrace_has_cap(mm_userns, mode);
 }
 
 /* Returns 0 on success, -errno on denial. */
@@ -350,7 +358,7 @@ ok:
 	 * Pairs with a write barrier in commit_creds().
 	 */
 	smp_rmb();
-	if (!task_still_dumpable(task, mode))
+	if (!may_access_mm(task, mode))
 		return -EPERM;
 
 	return security_ptrace_access_check(task, mode);
