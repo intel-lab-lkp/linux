@@ -110,7 +110,8 @@ static inline uint64_t blkg_rwstat_total(struct blkg_rwstat *rwstat)
 	struct blkg_rwstat_sample tmp = { };
 
 	blkg_rwstat_read(rwstat, &tmp);
-	return tmp.cnt[BLKG_RWSTAT_READ] + tmp.cnt[BLKG_RWSTAT_WRITE];
+	return tmp.cnt[BLKG_RWSTAT_READ] + tmp.cnt[BLKG_RWSTAT_WRITE] +
+	       tmp.cnt[BLKG_RWSTAT_DISCARD];
 }
 
 /**
