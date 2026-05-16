@@ -7,7 +7,8 @@ Description
 
 This module is a very simple fake I2C/SMBus driver.  It implements six
 types of SMBus commands: write quick, (r/w) byte, (r/w) byte data, (r/w)
-word data, (r/w) I2C block data, and (r/w) SMBus block data.
+word data, (r/w) I2C block data, and (r/w) SMBus block data, as-well as
+I2C transactions.
 
 You need to provide chip addresses as a module parameter when loading this
 driver, which will then only react to SMBus commands to these addresses.
@@ -29,6 +30,11 @@ module parameter.
 SMBus block commands must be written to configure an SMBus command for
 SMBus block operations. Writes can be partial. Block read commands always
 return the number of bytes selected with the largest write so far.
+
+Support for I2C transactions using the I2C_RDWR ioctl must also be explicitly
+enabled by setting I2C_FUNC_I2C (0x00000001) in the functionality parameter.
+When enabled, the message data is written to and read from the beginning of a
+buffer, that is separate from the SMBus commands.
 
 The typical use-case is like this:
 
