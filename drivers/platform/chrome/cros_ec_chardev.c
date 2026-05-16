@@ -23,6 +23,7 @@
 #include <linux/platform_data/cros_ec_proto.h>
 #include <linux/platform_device.h>
 #include <linux/poll.h>
+#include <linux/rwsem.h>
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
@@ -38,6 +39,7 @@
 struct chardev_pdata {
 	struct miscdevice misc;
 	struct kref kref;
+	struct rw_semaphore ec_dev_sem;
 	struct cros_ec_device *ec_dev;
 	u16 cmd_offset;
 	struct blocking_notifier_head subscribers;
@@ -94,12 +96,19 @@ static int ec_get_version(struct chardev_priv *priv, char *str, int maxlen)
 	msg->command = EC_CMD_GET_VERSION + priv->pdata->cmd_offset;
 	msg->insize = sizeof(*resp);
 
-	ret = cros_ec_cmd_xfer_status(priv->pdata->ec_dev, msg);
-	if (ret < 0) {
-		snprintf(str, maxlen,
-			 "Unknown EC version, returned error: %d\n",
-			 msg->result);
-		goto exit;
+	scoped_guard(rwsem_read, &priv->pdata->ec_dev_sem) {
+		if (!priv->pdata->ec_dev) {
+			ret = -ENODEV;
+			goto exit;
+		}
+
+		ret = cros_ec_cmd_xfer_status(priv->pdata->ec_dev, msg);
+		if (ret < 0) {
+			snprintf(str, maxlen,
+				 "Unknown EC version, returned error: %d\n",
+				 msg->result);
+			goto exit;
+		}
 	}
 
 	resp = (struct ec_response_get_version *)msg->data;
@@ -122,10 +131,18 @@ static int cros_ec_chardev_mkbp_event(struct notifier_block *nb,
 {
 	struct chardev_priv *priv = container_of(nb, struct chardev_priv,
 						 notifier);
-	struct cros_ec_device *ec_dev = priv->pdata->ec_dev;
+	struct cros_ec_device *ec_dev;
 	struct ec_event *event;
-	unsigned long event_bit = 1 << ec_dev->event_data.event_type;
-	int total_size = sizeof(*event) + ec_dev->event_size;
+	unsigned long event_bit;
+	int total_size;
+
+	guard(rwsem_read)(&priv->pdata->ec_dev_sem);
+	if (!priv->pdata->ec_dev)
+		return NOTIFY_DONE;
+	ec_dev = priv->pdata->ec_dev;
+
+	event_bit = 1 << ec_dev->event_data.event_type;
+	total_size = sizeof(*event) + ec_dev->event_size;
 
 	if (!(event_bit & priv->event_mask) ||
 	    (priv->event_len + total_size) > CROS_MAX_EVENT_LEN)
@@ -206,8 +223,11 @@ static int cros_ec_chardev_open(struct inode *inode, struct file *filp)
 	ret = blocking_notifier_chain_register(&pdata->subscribers,
 					       &priv->notifier);
 	if (ret) {
-		dev_err(pdata->ec_dev->dev,
-			"failed to register event notifier\n");
+		scoped_guard(rwsem_read, &pdata->ec_dev_sem) {
+			if (pdata->ec_dev)
+				dev_err(pdata->ec_dev->dev,
+					"failed to register event notifier\n");
+		}
 		kref_put(&priv->pdata->kref, chardev_pdata_release);
 		kfree(priv);
 	}
@@ -330,10 +350,18 @@ static long cros_ec_chardev_ioctl_xcmd(struct chardev_priv *priv, void __user *a
 	}
 
 	s_cmd->command += priv->pdata->cmd_offset;
-	ret = cros_ec_cmd_xfer(priv->pdata->ec_dev, s_cmd);
-	/* Only copy data to userland if data was received. */
-	if (ret < 0)
-		goto exit;
+
+	scoped_guard(rwsem_read, &priv->pdata->ec_dev_sem) {
+		if (!priv->pdata->ec_dev) {
+			ret = -ENODEV;
+			goto exit;
+		}
+
+		ret = cros_ec_cmd_xfer(priv->pdata->ec_dev, s_cmd);
+		/* Only copy data to userland if data was received. */
+		if (ret < 0)
+			goto exit;
+	}
 
 	if (copy_to_user(arg, s_cmd, sizeof(*s_cmd) + s_cmd->insize))
 		ret = -EFAULT;
@@ -344,9 +372,14 @@ exit:
 
 static long cros_ec_chardev_ioctl_readmem(struct chardev_priv *priv, void __user *arg)
 {
-	struct cros_ec_device *ec_dev = priv->pdata->ec_dev;
+	struct cros_ec_device *ec_dev;
 	struct cros_ec_readmem s_mem = { };
 	long num;
+
+	guard(rwsem_read)(&priv->pdata->ec_dev_sem);
+	if (!priv->pdata->ec_dev)
+		return -ENODEV;
+	ec_dev = priv->pdata->ec_dev;
 
 	/* Not every platform supports direct reads */
 	if (!ec_dev->cmd_readmem)
@@ -414,6 +447,7 @@ static int cros_ec_chardev_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, pdata);
 	kref_init(&pdata->kref);
+	init_rwsem(&pdata->ec_dev_sem);
 	pdata->ec_dev = ec->ec_dev;
 	pdata->cmd_offset = ec->cmd_offset;
 	BLOCKING_INIT_NOTIFIER_HEAD(&pdata->subscribers);
@@ -451,6 +485,8 @@ static void cros_ec_chardev_remove(struct platform_device *pdev)
 
 	blocking_notifier_chain_unregister(&pdata->ec_dev->event_notifier,
 					   &pdata->relay);
+	scoped_guard(rwsem_write, &pdata->ec_dev_sem)
+		pdata->ec_dev = NULL;
 	misc_deregister(&pdata->misc);
 	kref_put(&pdata->kref, chardev_pdata_release);
 }
