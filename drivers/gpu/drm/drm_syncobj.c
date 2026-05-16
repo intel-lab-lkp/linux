@@ -684,6 +684,31 @@ int drm_syncobj_get_fd(struct drm_syncobj *syncobj, int *p_fd)
 }
 EXPORT_SYMBOL(drm_syncobj_get_fd);
 
+/**
+ * drm_syncobj_from_fd - lookup and reference a syncobj.
+ * @fd: syncobj file descriptor
+ *
+ * Returns a reference to the syncobj pointed to by @fd or NULL. The
+ * reference must be released by calling drm_syncobj_put().
+ */
+struct drm_syncobj *drm_syncobj_from_fd(int fd)
+{
+	struct drm_syncobj *syncobj;
+
+	CLASS(fd, f)(fd);
+
+	if (fd_empty(f))
+		return NULL;
+
+	if (fd_file(f)->f_op != &drm_syncobj_file_fops)
+		return NULL;
+
+	syncobj = fd_file(f)->private_data;
+	drm_syncobj_get(syncobj);
+	return syncobj;
+}
+EXPORT_SYMBOL(drm_syncobj_from_fd);
+
 static int drm_syncobj_handle_to_fd(struct drm_file *file_private,
 				    u32 handle, int *p_fd)
 {
@@ -701,19 +726,11 @@ static int drm_syncobj_handle_to_fd(struct drm_file *file_private,
 static int drm_syncobj_fd_to_handle(struct drm_file *file_private,
 				    int fd, u32 *handle)
 {
-	struct drm_syncobj *syncobj;
-	CLASS(fd, f)(fd);
+	struct drm_syncobj *syncobj = drm_syncobj_from_fd(fd);
 	int ret;
 
-	if (fd_empty(f))
+	if (!syncobj)
 		return -EINVAL;
-
-	if (fd_file(f)->f_op != &drm_syncobj_file_fops)
-		return -EINVAL;
-
-	/* take a reference to put in the xarray */
-	syncobj = fd_file(f)->private_data;
-	drm_syncobj_get(syncobj);
 
 	ret = xa_alloc(&file_private->syncobj_xa, handle, syncobj, xa_limit_32b,
 		       GFP_KERNEL);
