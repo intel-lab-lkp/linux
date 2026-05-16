@@ -7,6 +7,8 @@
 #include <linux/init.h>
 #include <linux/sysctl.h>
 
+extern int sysctl_splice_needs_write;
+
 static const struct ctl_table fs_shared_sysctls[] = {
 	{
 		.procname	= "overflowuid",
@@ -25,6 +27,15 @@ static const struct ctl_table fs_shared_sysctls[] = {
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_MAXOLDUID,
+	},
+	{
+		.procname	= "splice_needs_write",
+		.data		= &sysctl_splice_needs_write,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
 	},
 };
 

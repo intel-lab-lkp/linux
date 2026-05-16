@@ -39,6 +39,8 @@
 
 #include "internal.h"
 
+int sysctl_splice_needs_write;
+
 /*
  * Splice doesn't support FMODE_NOWAIT. Since pipes may set this flag to
  * indicate they support non-blocking reads or writes, we must clear it
@@ -947,6 +949,36 @@ static void do_splice_eof(struct splice_desc *sd)
 		sd->splice_eof(sd);
 }
 
+static bool splice_may_read(struct file *in)
+{
+	if (READ_ONCE(sysctl_splice_needs_write)) {
+		/*
+		 * Disallow splice from files we cannot in any way write to.
+		 * This serves as a trivial mitigation for page cache splice
+		 * attacks, where attackers splice a file they cannot write to,
+		 * but can read (like /etc/passwd, or /bin/su) and, through a
+		 * complex set of logic, manage to write to these page cache
+		 * pages.
+		 * The set of checks is quite simple: if we can already write
+		 * to it, if we could write to it (by reopening), or if we
+		 * could chmod it (owner of the file), then any vulnerability
+		 * coming from this is futile, as you can already write to it
+		 * normally.
+		 */
+		if (!(in->f_mode & FMODE_WRITE) &&
+		    !inode_owner_or_capable(file_mnt_idmap(in), file_inode(in)) &&
+		    file_permission(in, MAY_WRITE)) {
+			pr_warn_once("splice: task %s/%d attempted to splice"
+			" a file it cannot write to. This is disabled by the"
+			" fs.splice_needs_write sysctl. If this is truly required"
+			" then disable the sysctl. Performance may be degraded.\n",
+			current->comm, current->pid);
+			return false;
+		}
+	}
+	return true;
+}
+
 /*
  * Callers already called rw_verify_area() on the entire range.
  * No need to call it for sub ranges.
@@ -971,11 +1003,13 @@ static ssize_t do_splice_read(struct file *in, loff_t *ppos,
 
 	if (unlikely(!in->f_op->splice_read))
 		return warn_unsupported(in, "read");
+
 	/*
 	 * O_DIRECT and DAX don't deal with the pagecache, so we allocate a
 	 * buffer, copy into it and splice that into the pipe.
 	 */
-	if ((in->f_flags & O_DIRECT) || IS_DAX(in->f_mapping->host))
+	if ((in->f_flags & O_DIRECT) || IS_DAX(in->f_mapping->host) ||
+	    !splice_may_read(in))
 		return copy_splice_read(in, ppos, pipe, len, flags);
 	return in->f_op->splice_read(in, ppos, pipe, len, flags);
 }
@@ -1440,10 +1474,51 @@ static ssize_t __do_splice(struct file *in, loff_t __user *off_in,
 	return ret;
 }
 
+static bool may_write_to_page(struct page *page, struct address_space **plast)
+{
+	struct folio *folio = page_folio(page);
+	struct address_space *mapping, *last = *plast;
+	struct inode *inode;
+	bool may = false;
+
+	if (!READ_ONCE(sysctl_splice_needs_write))
+		return true;
+	/*
+	 * Always fine to write to anon folios.
+	 */
+	if (folio_test_anon(folio))
+		return true;
+
+	mapping = READ_ONCE(folio->mapping);
+	WARN_ON((unsigned long) mapping & FOLIO_MAPPING_FLAGS);
+
+	/* If it is the same (locklessly), then LGTM, proceed. */
+	if (mapping == last)
+		return true;
+	/*
+	 * Else we have to recheck with the folio lock held, for mapping
+	 * stability. TODO: killable?
+	 */
+	folio_lock(folio);
+	mapping = folio_mapping(folio);
+	/* May have been truncated, etc */
+	if (!mapping)
+		goto out_lock;
+	inode = mapping->host;
+	may = inode_owner_or_capable(&nop_mnt_idmap, inode) ||
+	      inode_permission(&nop_mnt_idmap, inode, MAY_WRITE) == 0;
+	if (likely(may))
+		*plast = mapping;
+out_lock:
+	folio_unlock(folio);
+	return may;
+}
+
 static ssize_t iter_to_pipe(struct iov_iter *from,
 			    struct pipe_inode_info *pipe,
 			    unsigned int flags)
 {
+	struct address_space *last = NULL;
 	struct pipe_buffer buf = {
 		.ops = &user_page_pipe_buf_ops,
 		.flags = flags
@@ -1467,6 +1542,12 @@ static ssize_t iter_to_pipe(struct iov_iter *from,
 		for (i = 0; i < n; i++) {
 			int size = umin(left, PAGE_SIZE - start);
 
+			if (!may_write_to_page(pages[i], &last)) {
+				iov_iter_revert(from, left);
+				while (i < n)
+					put_page(pages[i++]);
+				goto out;
+			}
 			buf.page = pages[i];
 			buf.offset = start;
 			buf.len = size;
