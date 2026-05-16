@@ -23,6 +23,13 @@ static int ce6230_ctrl_msg(struct dvb_usb_device *d, struct usb_req *req)
 	value = req->value;
 	index = req->index;
 
+	if (!req->data_len) {
+		dev_err(&d->udev->dev,
+			"%s: cannot send crtl_msg of size 0",
+			KBUILD_MODNAME);
+		return -ENOBUFS;
+	}
+
 	switch (req->cmd) {
 	case I2C_READ:
 	case DEMOD_READ:
