@@ -939,6 +939,11 @@ dump_blkd_tasks(struct rcu_node *rnp, int ncheck)
 		if (++i >= ncheck)
 			break;
 	}
+	list_for_each(lhp, &rnp->dqs_blkd_tasks) {
+		if (i++ >= ncheck)
+			break;
+		pr_cont(" Q%p", lhp);
+	}
 	pr_cont("\n");
 	for (cpu = rnp->grplo; cpu <= rnp->grphi; cpu++) {
 		rdp = per_cpu_ptr(&rcu_data, cpu);
@@ -1157,7 +1162,7 @@ void exit_rcu(void)
 static void
 dump_blkd_tasks(struct rcu_node *rnp, int ncheck)
 {
-	WARN_ON_ONCE(!list_empty(&rnp->blkd_tasks));
+	WARN_ON_ONCE(!list_empty(&rnp->blkd_tasks) || !list_empty(&rnp->dqs_blkd_tasks));
 }
 
 static void rcu_preempt_deferred_qs_init(struct rcu_data *rdp) { }
