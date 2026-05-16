@@ -14,6 +14,7 @@
 #include <linux/swap.h>
 #include <linux/memory-tiers.h>
 #include <linux/mm_inline.h>
+#include <linux/ktime.h>
 
 #include "../internal.h"
 #include "ops-common.h"
@@ -254,6 +255,14 @@ static unsigned long damon_pa_deactivate_pages(struct damon_region *r,
 	return damon_pa_de_activate(r, addr_unit, s, false, sz_filter_passed);
 }
 
+/* Maximum wall-clock time to spend in a single migration walk (ns) */
+#define DAMON_PA_MIGRATE_BUDGET_NS	(100 * NSEC_PER_MSEC)
+
+/* Check the time budget every 4096 pages (~16MB) to amortize ktime_get(). */
+#define DAMON_PA_MIGRATE_TIME_CHECK_PAGES	4096
+#define DAMON_PA_MIGRATE_TIME_CHECK_MASK	\
+	(DAMON_PA_MIGRATE_TIME_CHECK_PAGES - 1)
+
 static unsigned long damon_pa_migrate(struct damon_region *r,
 		unsigned long addr_unit, struct damos *s,
 		unsigned long *sz_filter_passed)
@@ -262,6 +271,7 @@ static unsigned long damon_pa_migrate(struct damon_region *r,
 	LIST_HEAD(folio_list);
 	struct folio *folio = NULL;
 	unsigned long pfn;
+	ktime_t deadline = ktime_add_ns(ktime_get(), DAMON_PA_MIGRATE_BUDGET_NS);
 
 	addr = damon_pa_phys_addr(r->ar.start, addr_unit);
 	end = damon_pa_phys_addr(r->ar.end, addr_unit);
@@ -282,6 +292,11 @@ static unsigned long damon_pa_migrate(struct damon_region *r,
 				continue;
 			}
 		}
+
+		/* Time budget: keep kdamond responsive on long migration walks. */
+		if (!(pfn & DAMON_PA_MIGRATE_TIME_CHECK_MASK) &&
+		    ktime_after(ktime_get(), deadline))
+			break;
 
 		folio = damon_get_folio(pfn);
 		if (damon_pa_invalid_damos_folio(folio, s)) {
