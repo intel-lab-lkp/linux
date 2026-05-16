@@ -258,13 +258,32 @@ static unsigned long damon_pa_migrate(struct damon_region *r,
 		unsigned long addr_unit, struct damos *s,
 		unsigned long *sz_filter_passed)
 {
-	phys_addr_t addr, applied;
+	phys_addr_t addr, end, applied;
 	LIST_HEAD(folio_list);
 	struct folio *folio = NULL;
+	unsigned long pfn;
 
 	addr = damon_pa_phys_addr(r->ar.start, addr_unit);
-	while (addr < damon_pa_phys_addr(r->ar.end, addr_unit)) {
-		folio = damon_get_folio(PHYS_PFN(addr));
+	end = damon_pa_phys_addr(r->ar.end, addr_unit);
+	while (addr < end) {
+		pfn = PHYS_PFN(addr);
+
+		/* Skip pageblocks that are entirely free. */
+		if (IS_ALIGNED(pfn, pageblock_nr_pages)) {
+			struct page *page = pfn_to_online_page(pfn);
+
+			if (!page) {
+				addr += pageblock_nr_pages * PAGE_SIZE;
+				continue;
+			}
+			if (PageBuddy(page) &&
+			    buddy_order_unsafe(page) >= pageblock_order) {
+				addr += pageblock_nr_pages * PAGE_SIZE;
+				continue;
+			}
+		}
+
+		folio = damon_get_folio(pfn);
 		if (damon_pa_invalid_damos_folio(folio, s)) {
 			addr += PAGE_SIZE;
 			continue;
