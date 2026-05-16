@@ -34,6 +34,12 @@ enum pds_core_adminq_opcode {
 	PDS_AQ_CMD_RX_FILTER_ADD	= 31,
 	PDS_AQ_CMD_RX_FILTER_DEL	= 32,
 
+	/* MEM commands */
+	PDS_AQ_CMD_MEM_GET_COUNT	= 10,
+	PDS_AQ_CMD_MEM_QUERY		= 11,
+	PDS_AQ_CMD_MEM_ADD		= 12,
+	PDS_AQ_CMD_MEM_DEL		= 13,
+
 	/* Queue commands */
 	PDS_AQ_CMD_Q_IDENTIFY		= 39,
 	PDS_AQ_CMD_Q_INIT		= 40,
@@ -206,6 +212,122 @@ struct pds_core_client_request_cmd {
 	__le16 client_id;
 	u8     client_cmd[60];
 };
+
+/**
+ * struct pds_core_mem_get_count_cmd - MEM_GET_COUNT command
+ * @opcode:     opcode PDS_AQ_CMD_MEM_GET_COUNT
+ * @rsvd:       Word boundary padding
+ * @max_contig: Maximum contiguous memory size in bytes
+ *
+ * Query the number of host memory requests needed by firmware.
+ */
+struct pds_core_mem_get_count_cmd {
+	u8     opcode;
+	u8     rsvd[3];
+	__le32 max_contig;
+} __packed;
+
+/**
+ * struct pds_core_mem_get_count_comp - MEM_GET_COUNT completion
+ * @status:     Status of the command (enum pds_core_status_code)
+ * @rsvd:       Word boundary padding
+ * @comp_index: Index in the descriptor ring for which this is the completion
+ * @count:      Number of host memory requests
+ * @rsvd2:      Word boundary padding
+ * @color:      Color bit
+ */
+struct pds_core_mem_get_count_comp {
+	u8     status;
+	u8     rsvd;
+	__le16 comp_index;
+	__le16 count;
+	u8     rsvd2[9];
+	u8     color;
+} __packed;
+
+/**
+ * struct pds_core_mem_query_cmd - MEM_QUERY command
+ * @opcode: opcode PDS_AQ_CMD_MEM_QUERY
+ * @rsvd:   Word boundary padding
+ * @index:  Memory request index
+ */
+struct pds_core_mem_query_cmd {
+	u8     opcode;
+	u8     rsvd;
+	__le16 index;
+} __packed;
+
+/**
+ * struct pds_core_mem_query_comp - MEM_QUERY completion
+ * @status:     Status of the command (enum pds_core_status_code)
+ * @rsvd:       Word boundary padding
+ * @comp_index: Index in the descriptor ring for which this is the completion
+ * @size:       Size of memory request in bytes
+ * @tag:        Tag for this memory request
+ */
+struct pds_core_mem_query_comp {
+	u8     status;
+	u8     rsvd;
+	__le16 comp_index;
+	__le32 size;
+	__le16 tag;
+} __packed;
+
+/**
+ * struct pds_core_mem_add_cmd - MEM_ADD command
+ * @opcode: opcode PDS_AQ_CMD_MEM_ADD
+ * @rsvd:   Word boundary padding
+ * @tag:    Tag for this memory request
+ * @size:   Size of memory in bytes
+ * @buf_pa: DMA address of memory
+ */
+struct pds_core_mem_add_cmd {
+	u8     opcode;
+	u8     rsvd;
+	__le16 tag;
+	__le32 size;
+	__le64 buf_pa;
+} __packed;
+
+/**
+ * struct pds_core_mem_add_comp - MEM_ADD command completion
+ * @status: Status of the command (enum pds_core_status_code)
+ * @rsvd: padding for natural alignment
+ * @comp_index: Index in the desc ring for which this is the completion
+ */
+struct pds_core_mem_add_comp {
+	u8 status;
+	u8 rsvd;
+	__le16 comp_index;
+} __packed;
+
+/**
+ * struct pds_core_mem_del_cmd - MEM_DEL command
+ * @opcode: opcode PDS_AQ_CMD_MEM_DEL
+ * @rsvd:   Word boundary padding
+ * @tag:    Tag for this memory request
+ * @reason: Reason for deletion
+ */
+struct pds_core_mem_del_cmd {
+	u8     opcode;
+	u8     rsvd;
+	__le16 tag;
+	u8     reason;
+} __packed;
+
+/**
+ * struct pds_core_mem_del_comp - MEM_DEL command completion
+ * @status: Status of the command (enum pds_core_status_code)
+ * @rsvd: Word boundary padding
+ * @comp_index: Index in the desc ring for which this is the completion
+ * @tag: Tag for the memory request
+ */
+struct pds_core_mem_del_comp {
+	u8 status;
+	u8 rsvd;
+	__le16 comp_index;
+	__le16 tag;
+} __packed;
 
 #define PDS_CORE_MAX_FRAGS		16
 
@@ -1454,6 +1576,11 @@ union pds_core_adminq_cmd {
 	struct pds_core_client_unreg_cmd   client_unreg;
 	struct pds_core_client_request_cmd client_request;
 
+	struct pds_core_mem_get_count_cmd mem_get_count;
+	struct pds_core_mem_query_cmd     mem_query;
+	struct pds_core_mem_add_cmd       mem_add;
+	struct pds_core_mem_del_cmd       mem_del;
+
 	struct pds_core_lif_identify_cmd  lif_ident;
 	struct pds_core_lif_init_cmd      lif_init;
 	struct pds_core_lif_reset_cmd     lif_reset;
@@ -1501,6 +1628,11 @@ union pds_core_adminq_comp {
 	u32    words[4];
 
 	struct pds_core_client_reg_comp   client_reg;
+
+	struct pds_core_mem_get_count_comp mem_get_count;
+	struct pds_core_mem_query_comp     mem_query;
+	struct pds_core_mem_add_comp       mem_add;
+	struct pds_core_mem_del_comp       mem_del;
 
 	struct pds_core_lif_identify_comp lif_ident;
 	struct pds_core_lif_init_comp     lif_init;
