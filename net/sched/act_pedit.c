@@ -398,11 +398,12 @@ TC_INDIRECT_SCOPE int tcf_pedit_act(struct sk_buff *skb,
 
 	parms = rcu_dereference_bh(p->parms);
 
-	max_offset = (skb_transport_header_was_set(skb) ?
-		      skb_transport_offset(skb) :
-		      skb_network_offset(skb)) +
-		     parms->tcfp_off_max_hint;
-	if (skb_ensure_writable(skb, min(skb->len, max_offset)))
+	max_offset = min_t(u32, skb->len,
+			   (skb_transport_header_was_set(skb) ?
+			    skb_transport_offset(skb) :
+			    skb_network_offset(skb)) +
+			   parms->tcfp_off_max_hint);
+	if (skb_ensure_writable(skb, max_offset))
 		goto done;
 
 	tcf_lastuse_update(&p->tcf_tm);
@@ -414,8 +415,9 @@ TC_INDIRECT_SCOPE int tcf_pedit_act(struct sk_buff *skb,
 	for (i = parms->tcfp_nkeys; i > 0; i--, tkey++) {
 		int offset = tkey->off;
 		int hoffset = 0;
+		int write_offset;
 		u32 *ptr, hdata;
-		u32 val;
+		u32 val, write_end;
 		int rc;
 
 		if (tkey_ex) {
@@ -451,12 +453,26 @@ TC_INDIRECT_SCOPE int tcf_pedit_act(struct sk_buff *skb,
 			}
 		}
 
-		if (!offset_valid(skb, hoffset + offset)) {
-			pr_info_ratelimited("tc action pedit offset %d out of bounds\n", hoffset + offset);
+		write_offset = hoffset + offset;
+		if (!offset_valid(skb, write_offset)) {
+			pr_info_ratelimited("tc action pedit offset %d out of bounds\n",
+					    write_offset);
 			goto bad;
 		}
 
-		ptr = skb_header_pointer(skb, hoffset + offset,
+		/* Earlier edits can change later header-relative offsets, so
+		 * grow the writable window from the final per-key store.
+		 */
+		if (write_offset >= 0) {
+			write_end = (u32)write_offset + sizeof(hdata);
+			if (write_end > max_offset) {
+				max_offset = min_t(u32, skb->len, write_end);
+				if (skb_ensure_writable(skb, max_offset))
+					goto bad;
+			}
+		}
+
+		ptr = skb_header_pointer(skb, write_offset,
 					 sizeof(hdata), &hdata);
 		if (!ptr)
 			goto bad;
@@ -475,7 +491,7 @@ TC_INDIRECT_SCOPE int tcf_pedit_act(struct sk_buff *skb,
 
 		*ptr = ((*ptr & tkey->mask) ^ val);
 		if (ptr == &hdata)
-			skb_store_bits(skb, hoffset + offset, ptr, 4);
+			skb_store_bits(skb, write_offset, ptr, sizeof(hdata));
 	}
 
 	goto done;
