@@ -4,7 +4,7 @@
 //!
 //! C header: [`include/linux/seq_file.h`](srctree/include/linux/seq_file.h)
 
-use crate::{bindings, fmt, str::CStrExt as _, types::NotThreadSafe, types::Opaque};
+use crate::{bindings, ffi::c_void, fmt, types::NotThreadSafe, types::Opaque};
 
 /// A utility for generating the contents of a seq file.
 #[repr(transparent)]
@@ -32,13 +32,29 @@ impl SeqFile {
     /// Used by the [`seq_print`] macro.
     #[inline]
     pub fn call_printf(&self, args: fmt::Arguments<'_>) {
-        // SAFETY: Passing a void pointer to `Arguments` is valid for `%pA`.
-        unsafe {
-            bindings::seq_printf(
-                self.inner.get(),
-                c"%pA".as_char_ptr(),
-                core::ptr::from_ref(&args).cast::<crate::ffi::c_void>(),
-            );
+        let mut this = self;
+        let _ = fmt::Write::write_fmt(&mut this, args);
+    }
+}
+
+impl fmt::Write for &SeqFile {
+    #[inline]
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        // SAFETY: `self` is a valid reference, ensuring `self.inner.get()` is a valid pointer
+        // to `struct seq_file`. `s` is a valid string slice, guaranteeing `s.as_ptr()` is
+        // readable for `s.len()` bytes. `seq_write` handles bounds checking and does not
+        // require a null-terminated string.
+        //
+        // CAST: `s.as_ptr()` (a `*const u8`) is cast to `*const c_void` because `seq_write`
+        // only reads the buffer via `memcpy` and does not care about the underlying type.
+
+        let res =
+            unsafe { bindings::seq_write(self.inner.get(), s.as_ptr().cast::<c_void>(), s.len()) };
+
+        if res < 0 {
+            Err(fmt::Error)
+        } else {
+            Ok(())
         }
     }
 }
