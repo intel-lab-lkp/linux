@@ -141,6 +141,8 @@ int drm_syncobj_transfer(struct drm_syncobj *src, u64 src_point,
 			 u32 flags);
 int drm_syncobj_timeline_signal(struct drm_syncobj **syncobjs,
 				u64 user_points, u32 count);
+int drm_syncobj_query(struct drm_syncobj **syncobjs, u64 user_points,
+		      u32 count, u32 flags);
 void drm_syncobj_free(struct kref *kref);
 int drm_syncobj_create(struct drm_syncobj **out_syncobj, uint32_t flags,
 		       struct dma_fence *fence);
