@@ -129,6 +129,11 @@ int drm_syncobj_fence_lookup(struct drm_syncobj *syncobj, u64 point,
 int drm_syncobj_find_fence(struct drm_file *file_private,
 			   u32 handle, u64 point, u64 flags,
 			   struct dma_fence **fence);
+signed long drm_syncobj_array_wait_timeout(struct drm_syncobj **syncobjs,
+					   void __user *user_points,
+					   uint32_t count, uint32_t flags,
+					   signed long timeout, uint32_t *idx,
+					   ktime_t *deadline);
 void drm_syncobj_free(struct kref *kref);
 int drm_syncobj_create(struct drm_syncobj **out_syncobj, uint32_t flags,
 		       struct dma_fence *fence);
