@@ -51,9 +51,11 @@ static void l2_guest_code(void)
 static void guest_code(void)
 {
 	struct vcpu vcpu;
+	struct s2_mmu mmu;
 	struct hyp_data hyp_data;
 	int ret, i = 0;
-	gpa_t l2_pc, l2_stack_top;
+	gpa_t l2_pc, l2_stack_start, l2_stack_top, s2_pgd;
+	gpa_t do_hvc_gpa;
 	struct page_pool pp;
 	u64 mmfr0 = read_sysreg(id_aa64mmfr0_el1);
 
@@ -68,11 +70,20 @@ static void guest_code(void)
 	if (!has_tgran_2(mmfr0, pp.page_size))
 		GUEST_SYNC1(TGRAN2NOSUP);
 
-	l2_stack_top = alloc_page(&pp) + pp.page_size;
+	l2_stack_start = alloc_page(&pp);
+	l2_stack_top = l2_stack_start + pp.page_size;
 	l2_pc = ucall_translate_to_gpa(l2_guest_code);
+	do_hvc_gpa = ucall_translate_to_gpa(do_hvc);
+
+	s2_pgd = alloc_page(&pp);
 
 	init_vcpu(&vcpu, l2_pc, l2_stack_top);
-	prepare_hyp_no_s2();
+	init_s2_mmu(&mmu, 0, s2_pgd, pp.page_size, 40);
+	create_s2_mapping(&mmu, l2_pc, l2_pc, pp.page_size * 2, &pp);
+	create_s2_mapping(&mmu, do_hvc_gpa, do_hvc_gpa, pp.page_size, &pp);
+	create_s2_mapping(&mmu, l2_stack_start, l2_stack_start, pp.page_size, &pp);
+
+	prepare_hyp(&mmu);
 
 	while (true) {
 		GUEST_PRINTF("L2 enter\n");
@@ -113,6 +124,12 @@ int main(void)
 	vm_userspace_mem_region_add(vm, VM_MEM_SRC_ANONYMOUS,
 				    L2_PAGE_POOL_ADDR, L2_PAGE_POOL_MEMSLOT,
 				    L2_PAGE_POOL_NPAGES, 0);
+	/*
+	 * This idmap allows L1 to traverse and build its guest stage-2, where
+	 * it must do a PA to VA conversion in order to descend to the next
+	 * level.
+	 */
+	virt_map(vm, L2_PAGE_POOL_ADDR, L2_PAGE_POOL_ADDR, L2_PAGE_POOL_NPAGES);
 
 	while (true) {
 		vcpu_run(vcpu);
