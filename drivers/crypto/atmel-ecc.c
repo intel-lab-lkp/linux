@@ -346,21 +346,14 @@ err_list_del:
 
 static void atmel_ecc_remove(struct i2c_client *client)
 {
-	struct atmel_i2c_client_priv *i2c_priv = i2c_get_clientdata(client);
+	struct atmel_i2c_client_priv *i2c_priv;
 
-	/* Return EBUSY if i2c client already allocated. */
-	if (atomic_read(&i2c_priv->tfm_count)) {
-		/*
-		 * After we return here, the memory backing the device is freed.
-		 * That happens no matter what the return value of this function
-		 * is because in the Linux device model there is no error
-		 * handling for unbinding a driver.
-		 * If there is still some action pending, it probably involves
-		 * accessing the freed memory.
-		 */
-		dev_emerg(&client->dev, "Device is busy, expect memory corruption.\n");
+	i2c_priv = i2c_get_clientdata(client);
+	if (WARN_ON(!i2c_priv))
 		return;
-	}
+
+	if (atomic_read(&i2c_priv->tfm_count))
+		dev_warn(&client->dev, "Device is busy, remove it anyhow\n");
 
 	crypto_unregister_kpp(&atmel_ecdh_nist_p256);
 
