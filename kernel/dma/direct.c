@@ -8,6 +8,7 @@
 #include <linux/export.h>
 #include <linux/mm.h>
 #include <linux/dma-map-ops.h>
+#include <linux/highmem.h>
 #include <linux/scatterlist.h>
 #include <linux/pfn.h>
 #include <linux/vmalloc.h>
@@ -102,6 +103,15 @@ static void __dma_direct_free_pages(struct device *dev, struct page *page,
 	if (swiotlb_free(dev, page, size))
 		return;
 	dma_free_contiguous(dev, page, size);
+}
+
+static void dma_direct_zero_pages(struct page *page, size_t size)
+{
+	unsigned long count = PAGE_ALIGN(size) >> PAGE_SHIFT;
+	unsigned long i;
+
+	for (i = 0; i < count; i++)
+		clear_highpage(page + i);
 }
 
 static struct page *dma_direct_alloc_swiotlb(struct device *dev, size_t size)
@@ -268,6 +278,13 @@ void *dma_direct_alloc(struct device *dev, size_t size,
 	if (remap) {
 		pgprot_t prot = dma_pgprot(dev, PAGE_KERNEL, attrs);
 
+		/*
+		 * Zero via the page mapping before creating a potentially
+		 * uncached remap.  Some architectures cannot safely run normal
+		 * memset on uncached memory.
+		 */
+		dma_direct_zero_pages(page, size);
+
 		if (force_dma_unencrypted(dev))
 			prot = pgprot_decrypted(prot);
 
@@ -283,9 +300,8 @@ void *dma_direct_alloc(struct device *dev, size_t size,
 		ret = page_address(page);
 		if (dma_set_decrypted(dev, ret, size))
 			goto out_leak_pages;
+		memset(ret, 0, size);
 	}
-
-	memset(ret, 0, size);
 
 	if (set_uncached) {
 		arch_dma_prep_coherent(page, size);
