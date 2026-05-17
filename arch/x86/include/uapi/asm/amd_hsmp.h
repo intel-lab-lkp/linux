@@ -664,11 +664,54 @@ struct hsmp_metric_table_zen6 {
 	struct hsmp_metric_table_zen6_ccd ccd[F1A_M50_M5F_MAX_CCD];
 };
 
+/**
+ * struct hsmp_telemetry_data - Request descriptor for HSMP telemetry IOCTL
+ * @buf:       Input. Userspace pointer (encoded as __u64 to keep the layout
+ *             stable between 32-bit and 64-bit callers) to the destination
+ *             buffer that receives the metric table.
+ * @size:      Input. Size in bytes of the buffer pointed to by @buf.  Must
+ *             match the firmware-reported metric table size for the running
+ *             HSMP protocol version (see below); any other value results in
+ *             -EINVAL.  The kernel does not write this field back.
+ * @sock_ind:  Input. Socket index from which the metric table is read.
+ * @reserved:  Reserved for future use.  Callers should set this to zero;
+ *             future kernels may begin interpreting the field, so passing
+ *             a non-zero value today is not forwards compatible.
+ *
+ * Placing @buf first lets all fields fall on their natural alignment under
+ * the surrounding #pragma pack(4), so the struct is a tight 16 bytes with
+ * the same wire layout on 32-bit and 64-bit userspace.
+ *
+ * The exact metric table layout depends on the HSMP protocol version reported
+ * by the firmware:
+ *   - Protocol version 6 -> struct hsmp_metric_table
+ *   - Protocol version 7 -> struct hsmp_metric_table_zen6
+ *
+ * Userspace queries the protocol version (e.g. via the protocol_version sysfs
+ * attribute) and uses sizeof() on the matching UAPI structure for both @size
+ * and the allocation backing @buf.
+ */
+struct hsmp_telemetry_data {
+	__u64	buf;
+	__u32	size;
+	__u16	sock_ind;
+	__u16	reserved;
+};
+
 /* Reset to default packing */
 #pragma pack()
 
 /* Define unique ioctl command for hsmp msgs using generic _IOWR */
 #define HSMP_BASE_IOCTL_NR	0xF8
 #define HSMP_IOCTL_CMD		_IOWR(HSMP_BASE_IOCTL_NR, 0, struct hsmp_message)
+
+/*
+ * Fetch the firmware metric (telemetry) table for a given socket via the
+ * HSMP character device.  This avoids the PAGE_SIZE limitation of the
+ * sysfs binary attribute path for tables larger than one page (such as the
+ * ~13 KB hsmp_metric_table_zen6 used on Family 1Ah Model 50h-5Fh).
+ */
+#define HSMP_IOCTL_GET_TELEMETRY_DATA \
+	_IOWR(HSMP_BASE_IOCTL_NR, 1, struct hsmp_telemetry_data)
 
 #endif /*_ASM_X86_AMD_HSMP_H_*/
