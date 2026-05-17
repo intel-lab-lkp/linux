@@ -21,6 +21,8 @@
 #include <asm/mach/pci.h>
 #include <asm/hardware/dec21285.h>
 
+#include "pci.h"
+
 #define MAX_SLOTS		21
 
 #define PCICMD_ABORT		((PCI_STATUS_REC_MASTER_ABORT| \

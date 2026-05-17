@@ -14,6 +14,8 @@
 #include <asm/mach/pci.h>
 #include <asm/mach-types.h>
 
+#include "pci.h"
+
 /*
  * We now use the slot ID instead of the device identifiers to select
  * which interrupt is routed where.

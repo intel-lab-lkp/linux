@@ -14,6 +14,8 @@
 #include <asm/mach/pci.h>
 #include <asm/mach-types.h>
 
+#include "pci.h"
+
 static int irqmap_ebsa285[] = { IRQ_IN3, IRQ_IN1, IRQ_IN0, IRQ_PCI };
 
 static int ebsa285_map_irq(const struct pci_dev *dev, u8 slot, u8 pin)
