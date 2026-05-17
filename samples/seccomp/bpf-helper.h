@@ -17,6 +17,7 @@
 
 #include <asm/bitsperlong.h>	/* for __BITS_PER_LONG */
 #include <endian.h>
+#include <linux/audit.h>
 #include <linux/filter.h>
 #include <linux/seccomp.h>	/* for seccomp_data */
 #include <linux/types.h>
@@ -256,7 +257,12 @@ union arg64 {
 	jt, \
 	BPF_STMT(BPF_LD+BPF_MEM, 1)
 
-#define LOAD_SYSCALL_NR \
+#define LOAD_SYSCALL_NR(_arch) \
+	BPF_STMT(BPF_LD + BPF_W + BPF_ABS, \
+		offsetof(struct seccomp_data, arch)), \
+	BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, \
+		_arch, 1, 0), \
+	DENY, \
 	BPF_STMT(BPF_LD+BPF_W+BPF_ABS, \
 		 offsetof(struct seccomp_data, nr))
 

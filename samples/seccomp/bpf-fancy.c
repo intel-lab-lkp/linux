@@ -14,6 +14,7 @@
 #include <linux/seccomp.h>
 #include <linux/unistd.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/prctl.h>
 #include <unistd.h>
@@ -26,6 +27,14 @@
 
 int main(int argc, char **argv)
 {
+	if (argc < 2) {
+		fprintf(stderr, "Usage:\n"
+			"bpf-fancy <architecture>\n"
+			"Help:	AUDIT_ARCH_I386: 0x%X\n"
+			"	AUDIT_ARCH_X86_64: 0x%X\n"
+			"\n", AUDIT_ARCH_I386, AUDIT_ARCH_X86_64);
+		return -1;
+	}
 	struct bpf_labels l = {
 		.count = 0,
 	};
@@ -34,7 +43,7 @@ int main(int argc, char **argv)
 	char buf[256];
 	struct sock_filter filter[] = {
 		/* TODO: LOAD_SYSCALL_NR(arch) and enforce an arch */
-		LOAD_SYSCALL_NR,
+		LOAD_SYSCALL_NR(strtol(argv[1], NULL, 0)),
 		SYSCALL(__NR_exit, ALLOW),
 		SYSCALL(__NR_exit_group, ALLOW),
 		SYSCALL(__NR_write, JUMP(&l, write_fd)),
