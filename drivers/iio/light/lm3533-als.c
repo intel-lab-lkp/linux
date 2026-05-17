@@ -16,15 +16,18 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/mfd/core.h>
+#include <linux/mod_devicetable.h>
 #include <linux/platform_device.h>
+#include <linux/property.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
+#include <linux/units.h>
 
 #include <linux/mfd/lm3533.h>
 
 
-#define LM3533_ALS_RESISTOR_MIN			1
-#define LM3533_ALS_RESISTOR_MAX			127
+#define LM3533_ALS_RESISTOR_MIN			1575
+#define LM3533_ALS_RESISTOR_MAX			200000
 #define LM3533_ALS_CHANNEL_CURRENT_MAX		2
 #define LM3533_ALS_THRESH_MAX			3
 #define LM3533_ALS_ZONE_MAX			4
@@ -56,6 +59,9 @@ struct lm3533_als {
 
 	atomic_t zone;
 	struct mutex thresh_mutex;
+
+	bool pwm_mode;
+	u32 r_select;
 };
 
 
@@ -714,64 +720,6 @@ static const struct attribute_group lm3533_als_attribute_group = {
 	.attrs = lm3533_als_attributes
 };
 
-static int lm3533_als_set_input_mode(struct lm3533_als *als, bool pwm_mode)
-{
-	u8 mask = LM3533_ALS_INPUT_MODE_MASK;
-	u8 val;
-	int ret;
-
-	if (pwm_mode)
-		val = mask;	/* pwm input */
-	else
-		val = 0;	/* analog input */
-
-	ret = lm3533_update(als->lm3533, LM3533_REG_ALS_CONF, val, mask);
-	if (ret) {
-		dev_err(&als->pdev->dev, "failed to set input mode %d\n",
-								pwm_mode);
-		return ret;
-	}
-
-	return 0;
-}
-
-static int lm3533_als_set_resistor(struct lm3533_als *als, u8 val)
-{
-	int ret;
-
-	if (val < LM3533_ALS_RESISTOR_MIN || val > LM3533_ALS_RESISTOR_MAX) {
-		dev_err(&als->pdev->dev, "invalid resistor value\n");
-		return -EINVAL;
-	}
-
-	ret = lm3533_write(als->lm3533, LM3533_REG_ALS_RESISTOR_SELECT, val);
-	if (ret) {
-		dev_err(&als->pdev->dev, "failed to set resistor\n");
-		return ret;
-	}
-
-	return 0;
-}
-
-static int lm3533_als_setup(struct lm3533_als *als,
-			    const struct lm3533_als_platform_data *pdata)
-{
-	int ret;
-
-	ret = lm3533_als_set_input_mode(als, pdata->pwm_mode);
-	if (ret)
-		return ret;
-
-	/* ALS input is always high impedance in PWM-mode. */
-	if (!pdata->pwm_mode) {
-		ret = lm3533_als_set_resistor(als, pdata->r_select);
-		if (ret)
-			return ret;
-	}
-
-	return 0;
-}
-
 static int lm3533_als_setup_irq(struct lm3533_als *als, void *dev)
 {
 	u8 mask = LM3533_ALS_INT_ENABLE_MASK;
@@ -784,7 +732,8 @@ static int lm3533_als_setup_irq(struct lm3533_als *als, void *dev)
 		return ret;
 	}
 
-	ret = request_threaded_irq(als->irq, NULL, lm3533_als_isr,
+	ret = devm_request_threaded_irq(&als->pdev->dev, als->irq, NULL,
+					lm3533_als_isr,
 					IRQF_TRIGGER_LOW | IRQF_ONESHOT,
 					dev_name(&als->pdev->dev), dev);
 	if (ret) {
@@ -828,7 +777,6 @@ static const struct iio_info lm3533_als_info = {
 
 static int lm3533_als_probe(struct platform_device *pdev)
 {
-	const struct lm3533_als_platform_data *pdata;
 	struct lm3533 *lm3533;
 	struct lm3533_als *als;
 	struct iio_dev *indio_dev;
@@ -838,12 +786,6 @@ static int lm3533_als_probe(struct platform_device *pdev)
 	if (!lm3533)
 		return -EINVAL;
 
-	pdata = dev_get_platdata(&pdev->dev);
-	if (!pdata) {
-		dev_err(&pdev->dev, "no platform data\n");
-		return -EINVAL;
-	}
-
 	indio_dev = devm_iio_device_alloc(&pdev->dev, sizeof(*als));
 	if (!indio_dev)
 		return -ENOMEM;
@@ -852,31 +794,52 @@ static int lm3533_als_probe(struct platform_device *pdev)
 	indio_dev->channels = lm3533_als_channels;
 	indio_dev->num_channels = ARRAY_SIZE(lm3533_als_channels);
 	indio_dev->name = dev_name(&pdev->dev);
-	iio_device_set_parent(indio_dev, pdev->dev.parent);
 	indio_dev->modes = INDIO_DIRECT_MODE;
 
 	als = iio_priv(indio_dev);
 	als->lm3533 = lm3533;
 	als->pdev = pdev;
-	als->irq = lm3533->irq;
+	als->irq = platform_get_irq_optional(pdev, 0);
 	atomic_set(&als->zone, 0);
 	mutex_init(&als->thresh_mutex);
 
 	platform_set_drvdata(pdev, indio_dev);
 
-	if (als->irq) {
+	if (als->irq > 0) {
 		ret = lm3533_als_setup_irq(als, indio_dev);
 		if (ret)
 			return ret;
 	}
 
-	ret = lm3533_als_setup(als, pdata);
+	device_property_read_u32(&pdev->dev, "ti,resistor-value-ohm",
+				 &als->r_select);
+
+	als->r_select = clamp(als->r_select, LM3533_ALS_RESISTOR_MIN,
+			      LM3533_ALS_RESISTOR_MAX);
+	als->r_select = DIV_ROUND_UP(2 * MICRO, 10 * als->r_select);
+
+	als->pwm_mode = device_property_read_bool(&pdev->dev, "ti,pwm-mode");
+
+	ret = lm3533_update(lm3533, LM3533_REG_ALS_CONF, als->pwm_mode ?
+			    LM3533_ALS_INPUT_MODE_MASK : 0,
+			    LM3533_ALS_INPUT_MODE_MASK);
 	if (ret)
-		goto err_free_irq;
+		return dev_err_probe(&pdev->dev, ret,
+				     "failed to set input mode %d\n",
+				     als->pwm_mode);
+
+	/* ALS input is always high impedance in PWM-mode. */
+	if (!als->pwm_mode) {
+		ret = lm3533_write(lm3533, LM3533_REG_ALS_RESISTOR_SELECT,
+				   (u8)als->r_select);
+		if (ret)
+			return dev_err_probe(&pdev->dev, ret,
+					     "failed to set resistor\n");
+	}
 
 	ret = lm3533_als_enable(als);
 	if (ret)
-		goto err_free_irq;
+		return ret;
 
 	ret = iio_device_register(indio_dev);
 	if (ret) {
@@ -888,9 +851,6 @@ static int lm3533_als_probe(struct platform_device *pdev)
 
 err_disable:
 	lm3533_als_disable(als);
-err_free_irq:
-	if (als->irq)
-		free_irq(als->irq, indio_dev);
 
 	return ret;
 }
@@ -903,13 +863,18 @@ static void lm3533_als_remove(struct platform_device *pdev)
 	lm3533_als_set_int_mode(indio_dev, false);
 	iio_device_unregister(indio_dev);
 	lm3533_als_disable(als);
-	if (als->irq)
-		free_irq(als->irq, indio_dev);
 }
+
+static const struct of_device_id lm3533_als_match_table[] = {
+	{ .compatible = "ti,lm3533-als" },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, lm3533_als_match_table);
 
 static struct platform_driver lm3533_als_driver = {
 	.driver	= {
 		.name	= "lm3533-als",
+		.of_match_table = lm3533_als_match_table,
 	},
 	.probe		= lm3533_als_probe,
 	.remove		= lm3533_als_remove,
