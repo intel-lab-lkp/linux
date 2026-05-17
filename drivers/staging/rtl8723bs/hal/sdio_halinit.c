@@ -21,20 +21,26 @@ static u8 CardEnable(struct adapter *padapter)
 	u8 bMacPwrCtrlOn;
 	u8 ret = _FAIL;
 
-
 	rtw_hal_get_hwreg(padapter, HW_VAR_APFM_ON_MAC, &bMacPwrCtrlOn);
 	if (!bMacPwrCtrlOn) {
 		/*  RSV_CTRL 0x1C[7:0] = 0x00 */
 		/*  unlock ISO/CLK/Power control register */
 		rtw_write8(padapter, REG_RSV_CTRL, 0x0);
 
-		ret = HalPwrSeqCmdParsing(padapter, PWR_CUT_ALL_MSK, PWR_FAB_ALL_MSK, PWR_INTF_SDIO_MSK, rtl8723B_card_enable_flow);
+		ret = HalPwrSeqCmdParsing(padapter,
+					  PWR_CUT_ALL_MSK,
+					  PWR_FAB_ALL_MSK,
+					  PWR_INTF_SDIO_MSK,
+					  rtl8723B_card_enable_flow);
 		if (ret == _SUCCESS) {
 			bMacPwrCtrlOn = true;
-			rtw_hal_set_hwreg(padapter, HW_VAR_APFM_ON_MAC, &bMacPwrCtrlOn);
+			rtw_hal_set_hwreg(padapter,
+					  HW_VAR_APFM_ON_MAC,
+					  &bMacPwrCtrlOn);
 		}
-	} else
+	} else {
 		ret = _SUCCESS;
+	}
 
 	return ret;
 }
@@ -46,8 +52,7 @@ u8 _InitPowerOn_8723BS(struct adapter *padapter)
 	u16 value16;
 	u32 value32;
 	u8 ret;
-/* 	u8 bMacPwrCtrlOn; */
-
+/*	u8 bMacPwrCtrlOn; */
 
 	/*  all of these MUST be configured before power on */
 
@@ -70,13 +75,13 @@ u8 _InitPowerOn_8723BS(struct adapter *padapter)
 	rtw_write16(padapter, REG_APS_FSMCO, value16);
 
 	/*  Enable CMD53 R/W Operation */
-/* 	bMacPwrCtrlOn = true; */
-/* 	rtw_hal_set_hwreg(padapter, HW_VAR_APFM_ON_MAC, &bMacPwrCtrlOn); */
+/*	bMacPwrCtrlOn = true; */
+/*	rtw_hal_set_hwreg(padapter, HW_VAR_APFM_ON_MAC, &bMacPwrCtrlOn); */
 
 	rtw_write8(padapter, REG_CR, 0x00);
 	/*  Enable MAC DMA/WMAC/SCHEDULE/SEC block */
 	value16 = rtw_read16(padapter, REG_CR);
-	value16 |= (
+	value16 |=
 		HCI_TXDMA_EN |
 		HCI_RXDMA_EN |
 		TXDMA_EN |
@@ -84,8 +89,7 @@ u8 _InitPowerOn_8723BS(struct adapter *padapter)
 		PROTOCOL_EN |
 		SCHEDULE_EN |
 		ENSEC |
-		CALTMR_EN
-	);
+		CALTMR_EN;
 	rtw_write16(padapter, REG_CR, value16);
 
 	hal_btcoex_PowerOnSetting(padapter);
@@ -111,7 +115,11 @@ u8 _InitPowerOn_8723BS(struct adapter *padapter)
 }
 
 /* Tx Page FIFO threshold */
-static void _init_available_page_threshold(struct adapter *padapter, u8 numHQ, u8 numNQ, u8 numLQ, u8 numPubQ)
+static void _init_available_page_threshold(struct adapter *padapter,
+					   u8 numHQ,
+					   u8 numNQ,
+					   u8 numLQ,
+					   u8 numPubQ)
 {
 	u16 HQ_threshold, NQ_threshold, LQ_threshold;
 
@@ -142,14 +150,20 @@ static void _InitQueueReservedPage(struct adapter *padapter)
 	bool bWiFiConfig	= pregistrypriv->wifi_spec;
 
 	if (pHalData->OutEpQueueSel & TX_SELE_HQ)
-		numHQ = bWiFiConfig ? WMM_NORMAL_PAGE_NUM_HPQ_8723B : NORMAL_PAGE_NUM_HPQ_8723B;
+		numHQ = bWiFiConfig
+			? WMM_NORMAL_PAGE_NUM_HPQ_8723B
+			: NORMAL_PAGE_NUM_HPQ_8723B;
 
 	if (pHalData->OutEpQueueSel & TX_SELE_LQ)
-		numLQ = bWiFiConfig ? WMM_NORMAL_PAGE_NUM_LPQ_8723B : NORMAL_PAGE_NUM_LPQ_8723B;
+		numLQ = bWiFiConfig
+			? WMM_NORMAL_PAGE_NUM_LPQ_8723B
+			: NORMAL_PAGE_NUM_LPQ_8723B;
 
 	/*  NOTE: This step shall be proceed before writing REG_RQPN. */
 	if (pHalData->OutEpQueueSel & TX_SELE_NQ)
-		numNQ = bWiFiConfig ? WMM_NORMAL_PAGE_NUM_NPQ_8723B : NORMAL_PAGE_NUM_NPQ_8723B;
+		numNQ = bWiFiConfig
+			? WMM_NORMAL_PAGE_NUM_NPQ_8723B
+			: NORMAL_PAGE_NUM_NPQ_8723B;
 
 	numPubQ = TX_TOTAL_PAGE_NUMBER_8723B - numHQ - numLQ - numNQ;
 
@@ -160,9 +174,11 @@ static void _InitQueueReservedPage(struct adapter *padapter)
 	value32 = _HPQ(numHQ) | _LPQ(numLQ) | _PUBQ(numPubQ) | LD_RQPN;
 	rtw_write32(padapter, REG_RQPN, value32);
 
-	rtw_hal_set_sdio_tx_max_length(padapter, numHQ, numNQ, numLQ, numPubQ);
+	rtw_hal_set_sdio_tx_max_length(padapter, numHQ,
+				       numNQ, numLQ, numPubQ);
 
-	_init_available_page_threshold(padapter, numHQ, numNQ, numLQ, numPubQ);
+	_init_available_page_threshold(padapter, numHQ,
+				       numNQ, numLQ, numPubQ);
 }
 
 static void _InitTxBufferBoundary(struct adapter *padapter)
@@ -186,15 +202,13 @@ static void _InitTxBufferBoundary(struct adapter *padapter)
 	rtw_write8(padapter, REG_TDECTRL + 1, txpktbuf_bndy);
 }
 
-static void _InitNormalChipRegPriority(
-	struct adapter *Adapter,
-	u16 beQ,
-	u16 bkQ,
-	u16 viQ,
-	u16 voQ,
-	u16 mgtQ,
-	u16 hiQ
-)
+static void _InitNormalChipRegPriority(struct adapter *Adapter,
+				       u16 beQ,
+				       u16 bkQ,
+				       u16 viQ,
+				       u16 voQ,
+				       u16 mgtQ,
+				       u16 hiQ)
 {
 	u16 value16 = (rtw_read16(Adapter, REG_TRXDMA_CTRL) & 0x7);
 
@@ -229,10 +243,13 @@ static void _InitNormalChipOneOutEpPriority(struct adapter *Adapter)
 		break;
 	}
 
-	_InitNormalChipRegPriority(
-		Adapter, value, value, value, value, value, value
-	);
-
+	_InitNormalChipRegPriority(Adapter,
+				   value,
+				   value,
+				   value,
+				   value,
+				   value,
+				   value);
 }
 
 static void _InitNormalChipTwoOutEpPriority(struct adapter *Adapter)
@@ -240,7 +257,6 @@ static void _InitNormalChipTwoOutEpPriority(struct adapter *Adapter)
 	struct hal_com_data *pHalData = GET_HAL_DATA(Adapter);
 	struct registry_priv *pregistrypriv = &Adapter->registrypriv;
 	u16 beQ, bkQ, viQ, voQ, mgtQ, hiQ;
-
 
 	u16 valueHi = 0;
 	u16 valueLow = 0;
@@ -280,7 +296,6 @@ static void _InitNormalChipTwoOutEpPriority(struct adapter *Adapter)
 	}
 
 	_InitNormalChipRegPriority(Adapter, beQ, bkQ, viQ, voQ, mgtQ, hiQ);
-
 }
 
 static void _InitNormalChipThreeOutEpPriority(struct adapter *padapter)
@@ -325,8 +340,6 @@ static void _InitQueuePriority(struct adapter *Adapter)
 	default:
 		break;
 	}
-
-
 }
 
 static void _InitPageBoundary(struct adapter *padapter)
@@ -359,7 +372,7 @@ static void _InitNetworkType(struct adapter *padapter)
 	value32 = rtw_read32(padapter, REG_CR);
 
 	/*  TODO: use the other function to set network type */
-/* 	value32 = (value32 & ~MASK_NETTYPE) | _NETTYPE(NT_LINK_AD_HOC); */
+/*	value32 = (value32 & ~MASK_NETTYPE) | _NETTYPE(NT_LINK_AD_HOC); */
 	value32 = (value32 & ~MASK_NETTYPE) | _NETTYPE(NT_LINK_AP);
 
 	rtw_write32(padapter, REG_CR, value32);
@@ -370,14 +383,19 @@ static void _InitWMACSetting(struct adapter *padapter)
 	struct hal_com_data *pHalData;
 	u16 value16;
 
-
 	pHalData = GET_HAL_DATA(padapter);
 
 	pHalData->ReceiveConfig = 0;
 	pHalData->ReceiveConfig |= RCR_APM | RCR_AM | RCR_AB;
-	pHalData->ReceiveConfig |= RCR_CBSSID_DATA | RCR_CBSSID_BCN | RCR_AMF;
+	pHalData->ReceiveConfig |=
+		RCR_CBSSID_DATA |
+		RCR_CBSSID_BCN |
+		RCR_AMF;
 	pHalData->ReceiveConfig |= RCR_HTC_LOC_CTRL;
-	pHalData->ReceiveConfig |= RCR_APP_PHYST_RXFF | RCR_APP_ICV | RCR_APP_MIC;
+	pHalData->ReceiveConfig |=
+		RCR_APP_PHYST_RXFF |
+		RCR_APP_ICV |
+		RCR_APP_MIC;
 	rtw_write32(padapter, REG_RCR, pHalData->ReceiveConfig);
 
 	/*  Accept all multicast address */
@@ -479,7 +497,8 @@ static void sdio_AggSettingRxUpdate(struct adapter *padapter)
 	valueRxAggCtrl |= RXDMA_AGG_MODE_EN;
 	valueRxAggCtrl |= ((aggBurstNum << 2) & 0x0C);
 	valueRxAggCtrl |= ((aggBurstSize << 4) & 0x30);
-	rtw_write8(padapter, REG_RXDMA_MODE_CTRL_8723B, valueRxAggCtrl);/* RxAggLowThresh = 4*1K */
+	/* RxAggLowThresh = 4*1K */
+	rtw_write8(padapter, REG_RXDMA_MODE_CTRL_8723B, valueRxAggCtrl);
 }
 
 static void _initSdioAggregationSetting(struct adapter *padapter)
@@ -487,7 +506,7 @@ static void _initSdioAggregationSetting(struct adapter *padapter)
 	struct hal_com_data	*pHalData = GET_HAL_DATA(padapter);
 
 	/*  Tx aggregation setting */
-/* 	sdio_AggSettingTxUpdate(padapter); */
+/*	sdio_AggSettingTxUpdate(padapter); */
 
 	/*  Rx aggregation setting */
 	HalRxAggr8723BSdio(padapter);
@@ -530,7 +549,6 @@ static void _InitOperationMode(struct adapter *padapter)
 	}
 
 	rtw_write8(padapter, REG_BWOPMODE, regBwOpMode);
-
 }
 
 static void _InitInterrupt(struct adapter *padapter)
@@ -573,7 +591,6 @@ static bool HalDetectPwrDownMode(struct adapter *Adapter)
 	struct hal_com_data *pHalData = GET_HAL_DATA(Adapter);
 	struct pwrctrl_priv *pwrctrlpriv = adapter_to_pwrctl(Adapter);
 
-
 	EFUSE_ShadowRead(Adapter, 1, 0x7B/*EEPROM_RF_OPT3_92C*/, (u32 *)&tmpvalue);
 
 	/*  2010/08/25 MH INF priority > PDN Efuse value. */
@@ -596,10 +613,8 @@ u32 rtl8723bs_hal_init(struct adapter *padapter)
 	pHalData = GET_HAL_DATA(padapter);
 	pwrctrlpriv = adapter_to_pwrctl(padapter);
 
-	if (
-		adapter_to_pwrctl(padapter)->bips_processing == true &&
-		adapter_to_pwrctl(padapter)->pre_ips_type == 0
-	) {
+	if (adapter_to_pwrctl(padapter)->bips_processing &&
+	    !adapter_to_pwrctl(padapter)->pre_ips_type) {
 		unsigned long start_time;
 		u8 cpwm_orig, cpwm_now;
 		u8 val8, bMacPwrCtrlOn = true;
@@ -619,7 +634,6 @@ u32 rtl8723bs_hal_init(struct adapter *padapter)
 		/* do polling cpwm */
 		start_time = jiffies;
 		do {
-
 			mdelay(1);
 
 			rtw_hal_get_hwreg(padapter, HW_VAR_CPWM, &cpwm_now);
@@ -628,7 +642,6 @@ u32 rtl8723bs_hal_init(struct adapter *padapter)
 
 			if (jiffies_to_msecs(jiffies - start_time) > 100)
 				break;
-
 		} while (1);
 
 		rtl8723b_set_FwPwrModeInIPS_cmd(padapter, 0);
@@ -641,7 +654,7 @@ u32 rtl8723bs_hal_init(struct adapter *padapter)
 	}
 
 	/*  Disable Interrupt first. */
-/* 	rtw_hal_disable_interrupt(padapter); */
+/*	rtw_hal_disable_interrupt(padapter); */
 
 	ret = _InitPowerOn_8723BS(padapter);
 	if (ret == _FAIL)
@@ -650,18 +663,18 @@ u32 rtl8723bs_hal_init(struct adapter *padapter)
 	rtw_write8(padapter, REG_EARLY_MODE_CONTROL, 0);
 
 	ret = rtl8723b_FirmwareDownload(padapter, false);
-	if (ret != _SUCCESS) {
+	if (ret == _SUCCESS) {
+		padapter->bFWReady = true;
+		pHalData->fw_ractrl = true;
+	} else {
 		padapter->bFWReady = false;
 		pHalData->fw_ractrl = false;
 		return ret;
-	} else {
-		padapter->bFWReady = true;
-		pHalData->fw_ractrl = true;
 	}
 
 	rtl8723b_InitializeFirmwareVars(padapter);
 
-/* 	SIC_Init(padapter); */
+/*	SIC_Init(padapter); */
 
 	if (pwrctrlpriv->reg_rfoff)
 		pwrctrlpriv->rf_pwrstate = rf_off;
@@ -700,10 +713,15 @@ u32 rtl8723bs_hal_init(struct adapter *padapter)
 	/*  Joseph Note: Keep RfRegChnlVal for later use. */
 	/*  */
 	pHalData->RfRegChnlVal[0] =
-		PHY_QueryRFReg(padapter, (enum rf_path)0, RF_CHNLBW, bRFRegOffsetMask);
+		PHY_QueryRFReg(padapter,
+			       (enum rf_path)0,
+			       RF_CHNLBW,
+			       bRFRegOffsetMask);
 	pHalData->RfRegChnlVal[1] =
-		PHY_QueryRFReg(padapter, (enum rf_path)1, RF_CHNLBW, bRFRegOffsetMask);
-
+		PHY_QueryRFReg(padapter,
+			       (enum rf_path)1,
+			       RF_CHNLBW,
+			       bRFRegOffsetMask);
 
 	/* if (!pHalData->bMACFuncEnable) { */
 	_InitQueueReservedPage(padapter);
@@ -742,13 +760,16 @@ u32 rtl8723bs_hal_init(struct adapter *padapter)
 
 	invalidate_cam_all(padapter);
 
-	rtw_hal_set_chnl_bw(padapter, padapter->registrypriv.channel,
-		CHANNEL_WIDTH_20, HAL_PRIME_CHNL_OFFSET_DONT_CARE, HAL_PRIME_CHNL_OFFSET_DONT_CARE);
+	rtw_hal_set_chnl_bw(padapter,
+			    padapter->registrypriv.channel,
+			    CHANNEL_WIDTH_20,
+			    HAL_PRIME_CHNL_OFFSET_DONT_CARE,
+			    HAL_PRIME_CHNL_OFFSET_DONT_CARE);
 
 	/*  Record original value for template. This is arough data, we can only use the data */
 	/*  for power adjust. The value can not be adjustde according to different power!!! */
-/* 	pHalData->OriginalCckTxPwrIdx = pHalData->CurrentCckTxPwrIdx; */
-/* 	pHalData->OriginalOfdm24GTxPwrIdx = pHalData->CurrentOfdm24GTxPwrIdx; */
+/*	pHalData->OriginalCckTxPwrIdx = pHalData->CurrentCckTxPwrIdx; */
+/*	pHalData->OriginalOfdm24GTxPwrIdx = pHalData->CurrentOfdm24GTxPwrIdx; */
 
 	rtl8723b_InitAntenna_Selection(padapter);
 
@@ -762,7 +783,6 @@ u32 rtl8723bs_hal_init(struct adapter *padapter)
 	/*  set 0x0 to 0xFF by tynli. Default enable HW SEQ NUM. */
 	rtw_write8(padapter, REG_HWSEQ_CTRL, 0xFF);
 
-
 	/*  */
 	/*  Configure SDIO TxRx Control to enable Rx DMA timer masking. */
 	/*  2010.02.24. */
@@ -770,7 +790,6 @@ u32 rtl8723bs_hal_init(struct adapter *padapter)
 	rtw_write32(padapter, SDIO_LOCAL_BASE | SDIO_REG_TX_CTRL, 0);
 
 	_RfPowerSave(padapter);
-
 
 	rtl8723b_InitHalDm(padapter);
 
@@ -789,9 +808,12 @@ u32 rtl8723bs_hal_init(struct adapter *padapter)
 	rtw_hal_set_hwreg(padapter, HW_VAR_NAV_UPPER, (u8 *)&NavUpper);
 
 	/* ack for xmit mgmt frames. */
-	rtw_write32(padapter, REG_FWHW_TXQ_CTRL, rtw_read32(padapter, REG_FWHW_TXQ_CTRL) | BIT(12));
+	rtw_write32(padapter,
+		    REG_FWHW_TXQ_CTRL,
+	rtw_read32(padapter,
+		   REG_FWHW_TXQ_CTRL) | BIT(12));
 
-/* 	pHalData->PreRpwmVal = SdioLocalCmd52Read1Byte(padapter, SDIO_REG_HRPWM1) & 0x80; */
+/*	pHalData->PreRpwmVal = SdioLocalCmd52Read1Byte(padapter, SDIO_REG_HRPWM1) & 0x80; */
 
 	{
 		pwrctrlpriv->rf_pwrstate = rf_on;
@@ -809,7 +831,10 @@ u32 rtl8723bs_hal_init(struct adapter *padapter)
 
 			/* Inform WiFi FW that it is the beginning of IQK */
 			h2cCmdBuf = 1;
-			FillH2CCmd8723B(padapter, H2C_8723B_BT_WLAN_CALIBRATION, 1, &h2cCmdBuf);
+			FillH2CCmd8723B(padapter,
+					H2C_8723B_BT_WLAN_CALIBRATION,
+					1,
+					&h2cCmdBuf);
 
 			start_time = jiffies;
 			do {
@@ -823,14 +848,21 @@ u32 rtl8723bs_hal_init(struct adapter *padapter)
 
 			restore_iqk_rst = pwrpriv->bips_processing;
 			b2Ant = pHalData->EEPROMBluetoothAntNum == Ant_x2;
-			PHY_IQCalibrate_8723B(padapter, false, restore_iqk_rst, b2Ant, pHalData->ant_path);
+			PHY_IQCalibrate_8723B(padapter,
+					      false,
+					      restore_iqk_rst,
+					      b2Ant,
+					      pHalData->ant_path);
 			pHalData->odmpriv.RFCalibrateInfo.bIQKInitialized = true;
 
 			hal_btcoex_IQKNotify(padapter, false);
 
 			/* Inform WiFi FW that it is the finish of IQK */
 			h2cCmdBuf = 0;
-			FillH2CCmd8723B(padapter, H2C_8723B_BT_WLAN_CALIBRATION, 1, &h2cCmdBuf);
+			FillH2CCmd8723B(padapter,
+					H2C_8723B_BT_WLAN_CALIBRATION,
+					1,
+					&h2cCmdBuf);
 
 			ODM_TXPowerTrackingCheck(&pHalData->odmpriv);
 		}
@@ -844,7 +876,7 @@ u32 rtl8723bs_hal_init(struct adapter *padapter)
 
 /*  */
 /*  Description: */
-/* 	RTL8723e card disable power sequence v003 which suggested by Scott. */
+/*	RTL8723e card disable power sequence v003 which suggested by Scott. */
 /*  */
 /*  First created by tynli. 2011.01.28. */
 /*  */
@@ -854,9 +886,13 @@ static void CardDisableRTL8723BSdio(struct adapter *padapter)
 	u8 bMacPwrCtrlOn;
 
 	/*  Run LPS WL RFOFF flow */
-	HalPwrSeqCmdParsing(padapter, PWR_CUT_ALL_MSK, PWR_FAB_ALL_MSK, PWR_INTF_SDIO_MSK, rtl8723B_enter_lps_flow);
+	HalPwrSeqCmdParsing(padapter,
+			    PWR_CUT_ALL_MSK,
+			    PWR_FAB_ALL_MSK,
+			    PWR_INTF_SDIO_MSK,
+			    rtl8723B_enter_lps_flow);
 
-	/* 	==== Reset digital sequence   ====== */
+	/*      ==== Reset digital sequence   ====== */
 
 	val = rtw_read8(padapter, REG_MCUFWDL);
 	if ((val & RAM_DL_SEL) && padapter->bFWReady) /* 8051 RAM code */
@@ -879,11 +915,15 @@ static void CardDisableRTL8723BSdio(struct adapter *padapter)
 	val |= BIT(0);
 	rtw_write8(padapter, REG_RSV_CTRL + 1, val);
 
-	/* 	==== Reset digital sequence end ====== */
+	/*	==== Reset digital sequence end ====== */
 
 	bMacPwrCtrlOn = false;	/*  Disable CMD53 R/W */
 	rtw_hal_set_hwreg(padapter, HW_VAR_APFM_ON_MAC, &bMacPwrCtrlOn);
-	HalPwrSeqCmdParsing(padapter, PWR_CUT_ALL_MSK, PWR_FAB_ALL_MSK, PWR_INTF_SDIO_MSK, rtl8723B_card_disable_flow);
+	HalPwrSeqCmdParsing(padapter,
+			    PWR_CUT_ALL_MSK,
+			    PWR_FAB_ALL_MSK,
+			    PWR_INTF_SDIO_MSK,
+			    rtl8723B_card_disable_flow);
 }
 
 u32 rtl8723bs_hal_deinit(struct adapter *padapter)
@@ -895,7 +935,11 @@ u32 rtl8723bs_hal_deinit(struct adapter *padapter)
 				u8 val8 = 0;
 
 				rtl8723b_set_FwPwrModeInIPS_cmd(padapter, 0x3);
-				/* poll 0x1cc to make sure H2C command already finished by FW; MAC_0x1cc = 0 means H2C done by FW. */
+				/*
+				 * poll 0x1cc to make sure H2C command already
+				 * finished by FW; MAC_0x1cc = 0 means H2C done
+				 * by FW.
+				 */
 				do {
 					val8 = rtw_read8(padapter, REG_HMETFR);
 					cnt++;
@@ -904,12 +948,17 @@ u32 rtl8723bs_hal_deinit(struct adapter *padapter)
 				/* H2C done, enter 32k */
 				if (val8 == 0) {
 					/* set rpwm to enter 32k */
-					val8 = rtw_read8(padapter, SDIO_LOCAL_BASE | SDIO_REG_HRPWM1);
+					val8 = rtw_read8(padapter,
+							 SDIO_LOCAL_BASE | SDIO_REG_HRPWM1);
 					val8 += 0x80;
 					val8 |= BIT(0);
-					rtw_write8(padapter, SDIO_LOCAL_BASE | SDIO_REG_HRPWM1, val8);
-					adapter_to_pwrctl(padapter)->tog = (val8 + 0x80) & 0x80;
-					cnt = val8 = 0;
+					rtw_write8(padapter,
+						   SDIO_LOCAL_BASE | SDIO_REG_HRPWM1,
+						   val8);
+					adapter_to_pwrctl(padapter)->tog =
+						(val8 + 0x80) & 0x80;
+					cnt = 0;
+					val8 = 0;
 					do {
 						val8 = rtw_read8(padapter, REG_CR);
 						cnt++;
@@ -937,7 +986,6 @@ void rtl8723bs_init_default_value(struct adapter *padapter)
 {
 	struct hal_com_data *pHalData;
 
-
 	pHalData = GET_HAL_DATA(padapter);
 
 	rtl8723b_init_default_value(padapter);
@@ -952,7 +1000,6 @@ void rtl8723bs_interface_configure(struct adapter *padapter)
 	struct dvobj_priv *pdvobjpriv = adapter_to_dvobj(padapter);
 	struct registry_priv *pregistrypriv = &padapter->registrypriv;
 	bool bWiFiConfig = pregistrypriv->wifi_spec;
-
 
 	pdvobjpriv->RtOutPipe[0] = WLAN_TX_HIQ_DEVICE_ID;
 	pdvobjpriv->RtOutPipe[1] = WLAN_TX_MIQ_DEVICE_ID;
@@ -981,13 +1028,13 @@ void rtl8723bs_interface_configure(struct adapter *padapter)
 }
 
 /*  */
-/* 	Description: */
-/* 		We should set Efuse cell selection to WiFi cell in default. */
+/*	Description: */
+/*		We should set Efuse cell selection to WiFi cell in default. */
 /*  */
-/* 	Assumption: */
-/* 		PASSIVE_LEVEL */
+/*	Assumption: */
+/*		PASSIVE_LEVEL */
 /*  */
-/* 	Added by Roger, 2010.11.23. */
+/*	Added by Roger, 2010.11.23. */
 /*  */
 static void _EfuseCellSel(struct adapter *padapter)
 {
@@ -1005,10 +1052,9 @@ static void _ReadRFType(struct adapter *Adapter)
 	pHalData->rf_chip = RF_6052;
 }
 
-
-static void Hal_EfuseParseMACAddr_8723BS(
-	struct adapter *padapter, u8 *hwinfo, bool AutoLoadFail
-)
+static void Hal_EfuseParseMACAddr_8723BS(struct adapter *padapter,
+					 u8 *hwinfo,
+					 bool AutoLoadFail)
 {
 	struct eeprom_priv *pEEPROM = GET_EEPROM_EFUSE_PRIV(padapter);
 
@@ -1016,13 +1062,15 @@ static void Hal_EfuseParseMACAddr_8723BS(
 		eth_random_addr(pEEPROM->mac_addr);
 	} else {
 		/* Read Permanent MAC address */
-		memcpy(pEEPROM->mac_addr, &hwinfo[EEPROM_MAC_ADDR_8723BS], ETH_ALEN);
+		memcpy(pEEPROM->mac_addr,
+		       &hwinfo[EEPROM_MAC_ADDR_8723BS],
+		       ETH_ALEN);
 	}
 }
 
-static void Hal_EfuseParseBoardType_8723BS(
-	struct adapter *padapter, u8 *hwinfo, bool AutoLoadFail
-)
+static void Hal_EfuseParseBoardType_8723BS(struct adapter *padapter,
+					   u8 *hwinfo,
+					   bool AutoLoadFail)
 {
 	struct hal_com_data *pHalData = GET_HAL_DATA(padapter);
 
@@ -1030,8 +1078,9 @@ static void Hal_EfuseParseBoardType_8723BS(
 		pHalData->BoardType = (hwinfo[EEPROM_RF_BOARD_OPTION_8723B] & 0xE0) >> 5;
 		if (pHalData->BoardType == 0xFF)
 			pHalData->BoardType = (EEPROM_DEFAULT_BOARD_OPTION & 0xE0) >> 5;
-	} else
+	} else {
 		pHalData->BoardType = 0;
+	}
 }
 
 static void _ReadEfuseInfo8723BS(struct adapter *padapter)
@@ -1073,24 +1122,24 @@ static void _ReadEfuseInfo8723BS(struct adapter *padapter)
 static void _ReadPROMContent(struct adapter *padapter)
 {
 	struct eeprom_priv *pEEPROM = GET_EEPROM_EFUSE_PRIV(padapter);
-	u8 	eeValue;
+	u8 eeValue;
 
 	eeValue = rtw_read8(padapter, REG_9346CR);
 	/*  To check system boot selection. */
 	pEEPROM->EepromOrEfuse = (eeValue & BOOT_FROM_EEPROM) ? true : false;
 	pEEPROM->bautoload_fail_flag = (eeValue & EEPROM_EN) ? false : true;
 
-/* 	pHalData->EEType = IS_BOOT_FROM_EEPROM(Adapter) ? EEPROM_93C46 : EEPROM_BOOT_EFUSE; */
+/*	pHalData->EEType = IS_BOOT_FROM_EEPROM(Adapter) ? EEPROM_93C46 : EEPROM_BOOT_EFUSE; */
 
 	_ReadEfuseInfo8723BS(padapter);
 }
 
 /*  */
-/* 	Description: */
-/* 		Read HW adapter information by E-Fuse or EEPROM according CR9346 reported. */
+/*	Description: */
+/*		Read HW adapter information by E-Fuse or EEPROM according CR9346 reported. */
 /*  */
-/* 	Assumption: */
-/* 		PASSIVE_LEVEL (SDIO interface) */
+/*	Assumption: */
+/*		PASSIVE_LEVEL (SDIO interface) */
 /*  */
 /*  */
 static s32 _ReadAdapterInfo8723BS(struct adapter *padapter)
@@ -1101,7 +1150,6 @@ static s32 _ReadAdapterInfo8723BS(struct adapter *padapter)
 	if (!padapter->hw_init_completed)
 		_InitPowerOn_8723BS(padapter);
 
-
 	val8 = rtw_read8(padapter, 0x4e);
 	val8 |= BIT(6);
 	rtw_write8(padapter, 0x4e, val8);
@@ -1111,8 +1159,13 @@ static s32 _ReadAdapterInfo8723BS(struct adapter *padapter)
 	_ReadPROMContent(padapter);
 
 	if (!padapter->hw_init_completed) {
-		rtw_write8(padapter, 0x67, 0x00); /*  for BT, Switch Ant control to BT */
-		CardDisableRTL8723BSdio(padapter);/* for the power consumption issue,  wifi ko module is loaded during booting, but wifi GUI is off */
+		/*  for BT, Switch Ant control to BT */
+		rtw_write8(padapter, 0x67, 0x00);
+		/*
+		 * for the power consumption issue, wifi ko module is loaded
+		 * during booting, but wifi GUI is off
+		 */
+		CardDisableRTL8723BSdio(padapter);
 	}
 
 	return _SUCCESS;
@@ -1191,7 +1244,10 @@ void GetHwReg8723BS(struct adapter *padapter, u8 variable, u8 *val)
 	}
 }
 
-void SetHwRegWithBuf8723B(struct adapter *padapter, u8 variable, u8 *pbuf, int len)
+void SetHwRegWithBuf8723B(struct adapter *padapter,
+			  u8 variable,
+			  u8 *pbuf,
+			  int len)
 {
 	switch (variable) {
 	case HW_VAR_C2H_HANDLE:
@@ -1203,14 +1259,14 @@ void SetHwRegWithBuf8723B(struct adapter *padapter, u8 variable, u8 *pbuf, int l
 }
 
 /*  */
-/* 	Description: */
-/* 		Query setting of specified variable. */
+/*	Description: */
+/*		Query setting of specified variable. */
 /*  */
-u8 GetHalDefVar8723BSDIO(
-	struct adapter *Adapter, enum hal_def_variable eVariable, void *pValue
-)
+u8 GetHalDefVar8723BSDIO(struct adapter *Adapter,
+			 enum hal_def_variable eVariable,
+			 void *pValue)
 {
-	u8 	bResult = _SUCCESS;
+	u8 bResult = _SUCCESS;
 
 	switch (eVariable) {
 	case HAL_DEF_IS_SUPPORT_ANT_DIV:
