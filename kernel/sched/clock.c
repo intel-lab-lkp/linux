@@ -282,13 +282,13 @@ again:
 	/*
 	 * scd->clock = clamp(scd->tick_gtod + delta,
 	 *		      max(scd->tick_gtod, scd->clock),
-	 *		      scd->tick_gtod + TICK_NSEC);
+	 *		      scd->tick_gtod + PTICK_NSEC);
 	 */
 
 	gtod = scd->tick_gtod + __gtod_offset;
 	clock = gtod + delta;
 	min_clock = wrap_max(gtod, old_clock);
-	max_clock = wrap_max(old_clock, gtod + TICK_NSEC);
+	max_clock = wrap_max(old_clock, gtod + PTICK_NSEC);
 
 	clock = wrap_max(clock, min_clock);
 	clock = wrap_min(clock, max_clock);

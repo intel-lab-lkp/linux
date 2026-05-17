@@ -601,7 +601,7 @@ static inline bool entity_before(const struct sched_entity *a,
  * and this value should be no more than two lag bounds. Which puts it in the
  * general order of:
  *
- *	(slice + TICK_NSEC) << NICE_0_LOAD_SHIFT
+ *	(slice + PTICK_NSEC) << NICE_0_LOAD_SHIFT
  *
  * which is around 44 bits in size (on 64bit); that is 20 for
  * NICE_0_LOAD_SHIFT, another 20 for NSEC_PER_MSEC and then a handful for
@@ -822,7 +822,7 @@ static inline u64 cfs_rq_max_slice(struct cfs_rq *cfs_rq);
  * is possible -- by addition/removal/reweight to the tree -- to move V around
  * and end up with a larger lag than we started with.
  *
- * Limit this to either double the slice length with a minimum of TICK_NSEC
+ * Limit this to either double the slice length with a minimum of PTICK_NSEC
  * since that is the timing granularity.
  *
  * EEVDF gives the following limit for a steady state system:
@@ -831,7 +831,7 @@ static inline u64 cfs_rq_max_slice(struct cfs_rq *cfs_rq);
  */
 static s64 entity_lag(struct cfs_rq *cfs_rq, struct sched_entity *se, u64 avruntime)
 {
-	u64 max_slice = cfs_rq_max_slice(cfs_rq) + TICK_NSEC;
+	u64 max_slice = cfs_rq_max_slice(cfs_rq) + PTICK_NSEC;
 	s64 vlag, limit;
 
 	vlag = avruntime - se->vruntime;
