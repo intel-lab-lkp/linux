@@ -2307,6 +2307,15 @@ static int vgic_its_restore_dte(struct vgic_its *its, u32 id,
 	/* dte entry is valid */
 	offset = (entry & KVM_ITS_DTE_NEXT_MASK) >> KVM_ITS_DTE_NEXT_SHIFT;
 
+	/*
+	 * The MAPD command rejects this case; mirror the cap here so a
+	 * restored DTE cannot install an out-of-range num_eventid_bits
+	 * that vgic_its_restore_itt() would then convert into a
+	 * sign-extended scan_its_table() length.
+	 */
+	if (num_eventid_bits > VITS_TYPER_IDBITS)
+		return -EINVAL;
+
 	if (!vgic_its_check_id(its, baser, id, NULL))
 		return -EINVAL;
 
