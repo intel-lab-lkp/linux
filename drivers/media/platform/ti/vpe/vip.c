@@ -3095,6 +3095,7 @@ static int alloc_stream(struct vip_port *port, int stream_id, int vfl_type)
 		goto do_free_dropq;
 	}
 	*vfd = vip_videodev;
+	vfd->release = video_device_release_empty;
 	vfd->v4l2_dev = &dev->v4l2_dev;
 	vfd->queue = q;
 
@@ -3107,6 +3108,8 @@ static int alloc_stream(struct vip_port *port, int stream_id, int vfl_type)
 		v4l2_err(&dev->v4l2_dev, "Failed to register video device\n");
 		goto do_free_vfd;
 	}
+
+	vfd->release = video_device_release;
 
 	v4l2_info(&dev->v4l2_dev, "device registered as %s\n",
 		  video_device_node_name(vfd));
