@@ -22,8 +22,8 @@
 #include "ipu7-platform-regs.h"
 #include "ipu7-syscom.h"
 
-#define IPU_FW_START_STOP_TIMEOUT		2000
-#define IPU_BOOT_CELL_RESET_TIMEOUT		(2 * USEC_PER_SEC)
+#define IPU_FW_START_STOP_TIMEOUT	2000
+#define IPU_BOOT_CELL_RESET_TIMEOUT	(2 * USEC_PER_SEC)
 #define BOOT_STATE_IS_CRITICAL(s)	IA_GOFO_FW_BOOT_STATE_IS_CRITICAL(s)
 #define BOOT_STATE_IS_READY(s)		((s) == IA_GOFO_FW_BOOT_STATE_READY)
 #define BOOT_STATE_IS_INACTIVE(s)	((s) == IA_GOFO_FW_BOOT_STATE_INACTIVE)
@@ -39,17 +39,17 @@ struct ipu7_boot_context {
 static const struct ipu7_boot_context contexts[IPU_SUBSYS_NUM] = {
 	{
 		/* ISYS */
-		.dmem_address = IPU_ISYS_DMEM_OFFSET,
-		.status_ctrl_reg = BUTTRESS_REG_DRV_IS_UCX_CONTROL_STATUS,
-		.fw_start_address_reg = BUTTRESS_REG_DRV_IS_UCX_START_ADDR,
-		.fw_code_base_reg = IS_UC_CTRL_BASE
+		.dmem_address		= IPU_ISYS_DMEM_OFFSET,
+		.status_ctrl_reg	= BUTTRESS_REG_DRV_IS_UCX_CONTROL_STATUS,
+		.fw_start_address_reg	= BUTTRESS_REG_DRV_IS_UCX_START_ADDR,
+		.fw_code_base_reg	= IS_UC_CTRL_BASE
 	},
 	{
 		/* PSYS */
-		.dmem_address = IPU_PSYS_DMEM_OFFSET,
-		.status_ctrl_reg = BUTTRESS_REG_DRV_PS_UCX_CONTROL_STATUS,
-		.fw_start_address_reg = BUTTRESS_REG_DRV_PS_UCX_START_ADDR,
-		.fw_code_base_reg = PS_UC_CTRL_BASE
+		.dmem_address		= IPU_PSYS_DMEM_OFFSET,
+		.status_ctrl_reg	= BUTTRESS_REG_DRV_PS_UCX_CONTROL_STATUS,
+		.fw_start_address_reg	= BUTTRESS_REG_DRV_PS_UCX_START_ADDR,
+		.fw_code_base_reg	= PS_UC_CTRL_BASE
 	}
 };
 
@@ -85,9 +85,9 @@ static int ipu7_boot_cell_reset(const struct ipu7_bus_device *adev)
 {
 	const struct ipu7_boot_context *ctx = &contexts[adev->subsys];
 	const struct device *dev = &adev->auxdev.dev;
+	void __iomem *base = adev->isp->base;
 	u32 ucx_ctrl_status = ctx->status_ctrl_reg;
 	u32 timeout = IPU_BOOT_CELL_RESET_TIMEOUT;
-	void __iomem *base = adev->isp->base;
 	u32 val, val2;
 	int ret;
 
@@ -134,8 +134,8 @@ static int ipu7_boot_cell_reset(const struct ipu7_bus_device *adev)
 static void ipu7_boot_cell_start(const struct ipu7_bus_device *adev)
 {
 	const struct ipu7_boot_context *ctx = &contexts[adev->subsys];
-	void __iomem *base = adev->isp->base;
 	const struct device *dev = &adev->auxdev.dev;
+	void __iomem *base = adev->isp->base;
 	u32 val;
 
 	dev_dbg(dev, "starting cell...\n");
@@ -152,8 +152,8 @@ static void ipu7_boot_cell_start(const struct ipu7_bus_device *adev)
 static void ipu7_boot_cell_stop(const struct ipu7_bus_device *adev)
 {
 	const struct ipu7_boot_context *ctx = &contexts[adev->subsys];
-	void __iomem *base = adev->isp->base;
 	const struct device *dev = &adev->auxdev.dev;
+	void __iomem *base = adev->isp->base;
 	u32 val;
 
 	dev_dbg(dev, "stopping cell...\n");
@@ -187,16 +187,14 @@ static int ipu7_boot_cell_init(const struct ipu7_bus_device *adev)
 }
 
 static void init_boot_config(struct ia_gofo_boot_config *boot_config,
-			     u32 length, u8 major)
+			     u32 config_size, u8 major)
 {
-	/* syscom version, new syscom2 version */
-	boot_config->length = length;
+	boot_config->length = config_size;
 	boot_config->config_version.major = 1U;
 	boot_config->config_version.minor = 0U;
 	boot_config->config_version.subminor = 0U;
 	boot_config->config_version.patch = 0U;
 
-	/* msg version for task interface */
 	boot_config->client_version_support.num_versions = 1U;
 	boot_config->client_version_support.versions[0].major = major;
 	boot_config->client_version_support.versions[0].minor = 0U;
@@ -221,7 +219,7 @@ int ipu7_boot_init_boot_config(struct ipu7_bus_device *adev,
 
 	dev_dbg(dev, "boot config queues_nr: %d freq: %u sys_conf: 0x%pad\n",
 		num_queues, uc_freq, &subsys_config);
-	/* Allocate boot config. */
+
 	adev->boot_config_size =
 		sizeof(*cfgs) * num_queues + sizeof(*boot_config);
 	adev->boot_config = ipu7_dma_alloc(adev, adev->boot_config_size,
@@ -257,12 +255,15 @@ int ipu7_boot_init_boot_config(struct ipu7_bus_device *adev,
 		qconfigs[i].queue_size = queue_size;
 	}
 
-	/* Allocate queue memory */
 	syscom->queue_mem = ipu7_dma_alloc(adev, total_queue_size_aligned,
 					   &syscom->queue_mem_dma_addr,
 					   GFP_KERNEL, 0);
 	if (!syscom->queue_mem) {
 		dev_err(dev, "Failed to allocate queue memory.\n");
+		ipu7_dma_free(adev, adev->boot_config_size,
+			      adev->boot_config,
+			      adev->boot_config_dma_addr, 0);
+		adev->boot_config = NULL;
 		return -ENOMEM;
 	}
 	syscom->queue_mem_size = total_queue_size_aligned;
@@ -312,7 +313,6 @@ EXPORT_SYMBOL_NS_GPL(ipu7_boot_release_boot_config, "INTEL_IPU7");
 int ipu7_boot_start_fw(const struct ipu7_bus_device *adev)
 {
 	const struct device *dev = &adev->auxdev.dev;
-	u32 timeout = IPU_FW_START_STOP_TIMEOUT;
 	void __iomem *base = adev->isp->base;
 	u32 boot_state, last_boot_state;
 	u32 indices_addr, msg_ver, id;
@@ -323,37 +323,26 @@ int ipu7_boot_start_fw(const struct ipu7_bus_device *adev)
 		return ret;
 
 	dev_dbg(dev, "start booting fw...\n");
-	/* store "uninit" state to syscom/boot state reg */
 	write_fw_boot_param(adev, IA_GOFO_FW_BOOT_STATE_ID,
 			    IA_GOFO_FW_BOOT_STATE_UNINIT);
-	/*
-	 * Set registers to zero
-	 * (not strictly required, but recommended for diagnostics)
-	 */
 	write_fw_boot_param(adev,
 			    IA_GOFO_FW_BOOT_SYSCOM_QUEUE_INDICES_BASE_ID, 0);
 	write_fw_boot_param(adev, IA_GOFO_FW_BOOT_MESSAGING_VERSION_ID, 0);
-	/* store firmware configuration address */
 	write_fw_boot_param(adev, IA_GOFO_FW_BOOT_CONFIG_ID,
 			    adev->boot_config_dma_addr);
 
-	/* Kick uC, then wait for boot complete */
 	ipu7_boot_cell_start(adev);
 
 	last_boot_state = IA_GOFO_FW_BOOT_STATE_UNINIT;
-	while (timeout--) {
-		boot_state = read_fw_boot_param(adev,
-						IA_GOFO_FW_BOOT_STATE_ID);
-		if (boot_state != last_boot_state) {
-			dev_dbg(dev, "boot state changed from 0x%x to 0x%x\n",
-				last_boot_state, boot_state);
-			last_boot_state = boot_state;
-		}
-		if (BOOT_STATE_IS_CRITICAL(boot_state) ||
-		    BOOT_STATE_IS_READY(boot_state))
-			break;
-		usleep_range(1000, 1200);
-	}
+	ret = read_poll_timeout(read_fw_boot_param, boot_state,
+				BOOT_STATE_IS_CRITICAL(boot_state) ||
+				BOOT_STATE_IS_READY(boot_state),
+				1000, IPU_FW_START_STOP_TIMEOUT * 1000ULL,
+				false, adev, IA_GOFO_FW_BOOT_STATE_ID);
+
+	if (boot_state != last_boot_state)
+		dev_dbg(dev, "boot state changed from 0x%x to 0x%x\n",
+			last_boot_state, boot_state);
 
 	if (BOOT_STATE_IS_CRITICAL(boot_state)) {
 		ipu7_dump_fw_error_log(adev);
@@ -365,13 +354,11 @@ int ipu7_boot_start_fw(const struct ipu7_bus_device *adev)
 	}
 	dev_dbg(dev, "fw boot done.\n");
 
-	/* Get FW syscom queue indices addr */
 	id = IA_GOFO_FW_BOOT_SYSCOM_QUEUE_INDICES_BASE_ID;
 	indices_addr = read_fw_boot_param(adev, id);
 	adev->syscom->queue_indices = base + indices_addr;
 	dev_dbg(dev, "fw queue indices offset is 0x%x\n", indices_addr);
 
-	/* Get message version. */
 	msg_ver = read_fw_boot_param(adev,
 				     IA_GOFO_FW_BOOT_MESSAGING_VERSION_ID);
 	dev_dbg(dev, "ipu message version is 0x%08x\n", msg_ver);
@@ -383,8 +370,8 @@ EXPORT_SYMBOL_NS_GPL(ipu7_boot_start_fw, "INTEL_IPU7");
 int ipu7_boot_stop_fw(const struct ipu7_bus_device *adev)
 {
 	const struct device *dev = &adev->auxdev.dev;
-	u32 timeout = IPU_FW_START_STOP_TIMEOUT;
 	u32 boot_state;
+	int ret;
 
 	boot_state = read_fw_boot_param(adev, IA_GOFO_FW_BOOT_STATE_ID);
 	if (BOOT_STATE_IS_CRITICAL(boot_state) ||
@@ -394,18 +381,15 @@ int ipu7_boot_stop_fw(const struct ipu7_bus_device *adev)
 		return -EBUSY;
 	}
 
-	/* Issue shutdown to start shutdown process */
 	dev_dbg(dev, "stopping fw...\n");
 	write_fw_boot_param(adev, IA_GOFO_FW_BOOT_STATE_ID,
 			    IA_GOFO_FW_BOOT_STATE_SHUTDOWN_CMD);
-	while (timeout--) {
-		boot_state = read_fw_boot_param(adev,
-						IA_GOFO_FW_BOOT_STATE_ID);
-		if (BOOT_STATE_IS_CRITICAL(boot_state) ||
-		    BOOT_STATE_IS_INACTIVE(boot_state))
-			break;
-		usleep_range(1000, 1200);
-	}
+
+	ret = read_poll_timeout(read_fw_boot_param, boot_state,
+				BOOT_STATE_IS_CRITICAL(boot_state) ||
+				BOOT_STATE_IS_INACTIVE(boot_state),
+				1000, IPU_FW_START_STOP_TIMEOUT * 1000ULL,
+				false, adev, IA_GOFO_FW_BOOT_STATE_ID);
 
 	if (BOOT_STATE_IS_CRITICAL(boot_state)) {
 		ipu7_dump_fw_error_log(adev);
