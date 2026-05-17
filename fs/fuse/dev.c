@@ -2566,6 +2566,7 @@ int fuse_dev_release(struct inode *inode, struct file *file)
 		if (last) {
 			WARN_ON(fc->iq.fasync != NULL);
 			fuse_abort_conn(fc);
+			fuse_wait_aborted(fc);
 		}
 		fuse_conn_put(fc);
 	}
