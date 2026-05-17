@@ -651,6 +651,7 @@ static int dma2d_probe(struct platform_device *pdev)
 	}
 
 	*vfd = dma2d_videodev;
+	vfd->release = video_device_release_empty;
 	vfd->lock = &dev->mutex;
 	vfd->v4l2_dev = &dev->v4l2_dev;
 	vfd->device_caps = V4L2_CAP_VIDEO_M2M | V4L2_CAP_STREAMING;
@@ -668,6 +669,8 @@ static int dma2d_probe(struct platform_device *pdev)
 		v4l2_err(&dev->v4l2_dev, "Failed to register video device\n");
 		goto free_m2m;
 	}
+
+	vfd->release = video_device_release;
 
 	video_set_drvdata(vfd, dev);
 	dev->vfd = vfd;
