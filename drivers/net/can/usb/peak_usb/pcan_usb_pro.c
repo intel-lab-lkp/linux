@@ -715,8 +715,19 @@ static int pcan_usb_pro_decode_buf(struct peak_usb_device *dev, struct urb *urb)
 	msg_end = urb->transfer_buffer + urb->actual_length;
 	rec_cnt = le16_to_cpu(*usb_msg.u.rec_cnt_rd);
 	for (; rec_cnt > 0; rec_cnt--) {
-		union pcan_usb_pro_rec *pr = (union pcan_usb_pro_rec *)rec_ptr;
-		u16 sizeof_rec = pcan_usb_pro_sizeof_rec[pr->data_type];
+		union pcan_usb_pro_rec *pr;
+		u16 sizeof_rec;
+
+		/* make sure data_type is readable before dereferencing it */
+		if (rec_ptr >= msg_end) {
+			netdev_err(netdev,
+				   "got frag rec: should inc usb rx buf size\n");
+			err = -EBADMSG;
+			break;
+		}
+
+		pr = (union pcan_usb_pro_rec *)rec_ptr;
+		sizeof_rec = pcan_usb_pro_sizeof_rec[pr->data_type];
 
 		if (!sizeof_rec) {
 			netdev_err(netdev,
