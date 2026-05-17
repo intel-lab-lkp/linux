@@ -34,8 +34,8 @@ static void connector_unbind(struct device *dev, struct device *connector, void 
 }
 
 static const struct component_ops connector_ops = {
-	.bind = connector_bind,
-	.unbind = connector_unbind,
+	.bind	= connector_bind,
+	.unbind	= connector_unbind,
 };
 
 static ssize_t link_show(struct device *dev, struct device_attribute *attr,
@@ -137,7 +137,6 @@ bool usb4_usb3_port_match(struct device *usb4_port_dev,
 	if (IS_ERR(nhi_fwnode))
 		return false;
 
-	/* Check if USB3 fwnode references same NHI where USB4 port resides */
 	if (!device_match_fwnode(&nhi->pdev->dev, nhi_fwnode))
 		return false;
 
@@ -179,7 +178,6 @@ static ssize_t offline_store(struct device *dev,
 	if (val == usb4->offline)
 		goto out_unlock;
 
-	/* Offline mode works only for ports that are not connected */
 	if (tb_port_has_remote(port)) {
 		ret = -EBUSY;
 		goto out_unlock;
@@ -230,7 +228,6 @@ static ssize_t rescan_store(struct device *dev,
 		goto out_rpm;
 	}
 
-	/* Must be in offline mode already */
 	if (!usb4->offline) {
 		ret = -EINVAL;
 		goto out_unlock;
@@ -261,16 +258,12 @@ static umode_t service_attr_is_visible(struct kobject *kobj,
 	struct device *dev = kobj_to_dev(kobj);
 	struct usb4_port *usb4 = tb_to_usb4_port_device(dev);
 
-	/*
-	 * Always need some platform help to cycle the modes so that
-	 * retimers can be accessed through the sideband.
-	 */
 	return usb4->can_offline ? attr->mode : 0;
 }
 
 static const struct attribute_group service_group = {
-	.attrs = service_attrs,
-	.is_visible = service_attr_is_visible,
+	.attrs		= service_attrs,
+	.is_visible	= service_attr_is_visible,
 };
 
 static const struct attribute_group *usb4_port_device_groups[] = {
@@ -282,14 +275,13 @@ static const struct attribute_group *usb4_port_device_groups[] = {
 static void usb4_port_device_release(struct device *dev)
 {
 	struct usb4_port *usb4 = container_of(dev, struct usb4_port, dev);
-
 	kfree(usb4);
 }
 
 const struct device_type usb4_port_device_type = {
-	.name = "usb4_port",
-	.groups = usb4_port_device_groups,
-	.release = usb4_port_device_release,
+	.name		= "usb4_port",
+	.groups		= usb4_port_device_groups,
+	.release	= usb4_port_device_release,
 };
 
 /**
@@ -324,6 +316,7 @@ struct usb4_port *usb4_port_device_add(struct tb_port *port)
 	if (ret) {
 		dev_err(&usb4->dev, "failed to add component\n");
 		device_unregister(&usb4->dev);
+		return ERR_PTR(ret);
 	}
 
 	if (!tb_is_upstream_port(port))
