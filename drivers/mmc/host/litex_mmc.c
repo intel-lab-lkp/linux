@@ -68,6 +68,9 @@
 #define SD_SLEEP_US       5
 #define SD_TIMEOUT_US 20000
 
+#define SD_INIT_DELAY_US  1000
+#define SD_INIT_CLK_HZ    400000
+
 #define SDIRQ_CARD_DETECT    1
 #define SDIRQ_SD_TO_MEM_DONE 2
 #define SDIRQ_MEM_TO_SD_DONE 4
@@ -449,6 +452,9 @@ static void litex_mmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 {
 	struct litex_mmc_host *host = mmc_priv(mmc);
 
+	if (ios->chip_select == MMC_CS_HIGH)
+		ios->clock = SD_INIT_CLK_HZ;
+
 	/*
 	 * NOTE: Ignore any ios->bus_width updates; they occur right after
 	 * the mmc core sends its own acmd6 bus-width change notification,
@@ -459,6 +465,11 @@ static void litex_mmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	/* Update sd_clk */
 	if (ios->clock != host->sd_clk)
 		litex_mmc_setclk(host, ios->clock);
+
+	if (ios->chip_select == MMC_CS_HIGH) {
+		litex_write8(host->sdphy + LITEX_PHY_INITIALIZE, 1);
+		fsleep(SD_INIT_DELAY_US);
+	}
 }
 
 static const struct mmc_host_ops litex_mmc_ops = {
