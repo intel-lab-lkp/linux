@@ -874,6 +874,12 @@ static void kmalloc_double_kzfree(struct kunit *test)
 	char *ptr;
 	size_t size = 16;
 
+	/*
+	 * Only generic KASAN uses quarantine, which could prevent the just freed
+	 * memory from being allocated soon.
+	 */
+	KASAN_TEST_NEEDS_CONFIG_ON(test, CONFIG_KASAN_GENERIC);
+
 	ptr = kmalloc(size, GFP_KERNEL);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, ptr);
 
