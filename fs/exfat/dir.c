@@ -513,6 +513,20 @@ void exfat_remove_entries(struct inode *inode, struct exfat_entry_set_cache *es,
 		es->modified = true;
 }
 
+void exfat_remove_entries_nofree(struct exfat_entry_set_cache *es, int order)
+{
+	int i;
+	struct exfat_dentry *ep;
+
+	for (i = order; i < es->num_entries; i++) {
+		ep = exfat_get_dentry_cached(es, i);
+		exfat_set_entry_type(ep, TYPE_DELETED);
+	}
+
+	if (order < es->num_entries)
+		es->modified = true;
+}
+
 void exfat_update_dir_chksum(struct exfat_entry_set_cache *es)
 {
 	int chksum_type = CS_DIR_ENTRY, i;
