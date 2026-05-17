@@ -597,14 +597,27 @@ err_remove_mmap:
 	return -ENOMEM;
 }
 
-static int efa_qp_validate_cap(struct efa_dev *dev,
-			       struct ib_qp_init_attr *init_attr)
+static int efa_calc_sq_wqe_size(u32 sq_ring_size, u32 max_send_wr)
 {
-	if (init_attr->cap.max_send_wr > dev->dev_attr.max_sq_depth) {
+	return max_send_wr == 0 ? 0 : sq_ring_size / max_send_wr;
+}
+
+static u32 efa_calc_sq_max_depth(struct efa_dev *dev, u32 sq_wqe_size)
+{
+	return sq_wqe_size == 0 ? 0 :
+		rounddown_pow_of_two(dev->dev_attr.max_llq_size / sq_wqe_size);
+}
+
+static int efa_qp_validate_cap(struct efa_dev *dev,
+			       struct ib_qp_init_attr *init_attr,
+			       u32 sq_wqe_size)
+{
+	u32 sq_max_depth = efa_calc_sq_max_depth(dev, sq_wqe_size);
+
+	if (init_attr->cap.max_send_wr > sq_max_depth) {
 		ibdev_dbg(&dev->ibdev,
 			  "qp: requested send wr[%u] exceeds the max[%u]\n",
-			  init_attr->cap.max_send_wr,
-			  dev->dev_attr.max_sq_depth);
+			  init_attr->cap.max_send_wr, sq_max_depth);
 		return -EINVAL;
 	}
 	if (init_attr->cap.max_recv_wr > dev->dev_attr.max_rq_depth) {
@@ -671,18 +684,11 @@ int efa_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *init_attr,
 	struct efa_qp *qp = to_eqp(ibqp);
 	struct efa_ucontext *ucontext;
 	u16 supported_efa_flags = 0;
+	u32 sq_wqe_size;
 	int err;
 
 	ucontext = rdma_udata_to_drv_context(udata, struct efa_ucontext,
 					     ibucontext);
-
-	err = efa_qp_validate_cap(dev, init_attr);
-	if (err)
-		goto err_out;
-
-	err = efa_qp_validate_attr(dev, init_attr);
-	if (err)
-		goto err_out;
 
 	err = ib_copy_validate_udata_in_cm(udata, cmd, driver_qp_type, 0);
 	if (err)
@@ -704,6 +710,15 @@ int efa_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *init_attr,
 		err = -EOPNOTSUPP;
 		goto err_out;
 	}
+
+	sq_wqe_size = efa_calc_sq_wqe_size(cmd.sq_ring_size, init_attr->cap.max_send_wr);
+	err = efa_qp_validate_cap(dev, init_attr, sq_wqe_size);
+	if (err)
+		goto err_out;
+
+	err = efa_qp_validate_attr(dev, init_attr);
+	if (err)
+		goto err_out;
 
 	create_qp_params.uarn = ucontext->uarn;
 	create_qp_params.pd = to_epd(ibqp->pd)->pdn;
