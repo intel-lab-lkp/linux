@@ -2118,6 +2118,19 @@ Description:
 		specific attributes. This is useful for userspace to be able to
 		better identify an individual channel.
 
+What:		/sys/bus/iio/devices/iio:deviceX/in_voltageY_parent
+What:		/sys/bus/iio/devices/iio:deviceX/out_voltageY_parent
+What:		/sys/bus/iio/devices/iio:deviceX/in_altvoltageY_parent
+What:		/sys/bus/iio/devices/iio:deviceX/out_altvoltageY_parent
+KernelVersion:	7.1
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Read-only attribute containing the label of the parent channel
+		for hierarchical channel relationships. Only present on channels
+		that have a parent channel with a valid label. This is useful for
+		userspace to organize channels in tree-like structures that reflects
+		the physical or logical relationships between them.
+
 What:		/sys/bus/iio/devices/iio:deviceX/in_phaseY_raw
 KernelVersion:	4.18
 Contact:	linux-iio@vger.kernel.org
