@@ -983,6 +983,7 @@ static int ge2d_probe(struct platform_device *pdev)
 	}
 
 	*vfd = ge2d_videodev;
+	vfd->release = video_device_release_empty;
 	vfd->lock = &ge2d->mutex;
 	vfd->v4l2_dev = &ge2d->v4l2_dev;
 
@@ -1005,6 +1006,7 @@ static int ge2d_probe(struct platform_device *pdev)
 
 	v4l2_info(&ge2d->v4l2_dev, "Registered %s as /dev/%s\n",
 		  vfd->name, video_device_node_name(vfd));
+	vfd->release = video_device_release;
 
 	return 0;
 
