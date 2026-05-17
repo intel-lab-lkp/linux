@@ -280,10 +280,11 @@ impl<T: Send> Devres<T> {
         &self.dev
     }
 
-    /// Obtain `&'a T`, bypassing the [`Revocable`].
+    /// Obtain `&'bound T`, bypassing the [`Revocable`].
     ///
-    /// This method allows to directly obtain a `&'a T`, bypassing the [`Revocable`], by presenting
-    /// a `&'a Device<Bound>` of the same [`Device`] this [`Devres`] instance has been created with.
+    /// This method allows to directly obtain a `&'bound T`, bypassing the
+    /// [`Revocable`], by presenting a `&'bound Device<Bound>` of the same
+    /// [`Device`] this [`Devres`] instance has been created with.
     ///
     /// # Errors
     ///
@@ -316,7 +317,7 @@ impl<T: Send> Devres<T> {
     ///     Ok(())
     /// }
     /// ```
-    pub fn access<'a>(&'a self, dev: &'a Device<Bound>) -> Result<&'a T> {
+    pub fn access<'bound>(&'bound self, dev: &'bound Device<Bound>) -> Result<&'bound T> {
         if self.dev.as_raw() != dev.as_raw() {
             return Err(EINVAL);
         }
@@ -338,7 +339,10 @@ impl<T: Send> Devres<T> {
     }
 
     /// [`Devres`] accessor for [`Revocable::try_access_with_guard`].
-    pub fn try_access_with_guard<'a>(&'a self, guard: &'a rcu::Guard) -> Option<&'a T> {
+    pub fn try_access_with_guard<'bound>(
+        &'bound self,
+        guard: &'bound rcu::Guard,
+    ) -> Option<&'bound T> {
         self.data().try_access_with_guard(guard)
     }
 }

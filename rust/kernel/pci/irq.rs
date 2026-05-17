@@ -76,19 +76,19 @@ impl IrqTypes {
 /// This type ties an IRQ vector to the device it was allocated for,
 /// ensuring the vector is only used with the correct device.
 #[derive(Clone, Copy)]
-pub struct IrqVector<'a> {
-    dev: &'a Device<Bound>,
+pub struct IrqVector<'bound> {
+    dev: &'bound Device<Bound>,
     index: u32,
 }
 
-impl<'a> IrqVector<'a> {
+impl<'bound> IrqVector<'bound> {
     /// Creates a new [`IrqVector`] for the given device and index.
     ///
     /// # Safety
     ///
     /// - `index` must be a valid IRQ vector index for `dev`.
     /// - `dev` must point to a [`Device`] that has successfully allocated IRQ vectors.
-    unsafe fn new(dev: &'a Device<Bound>, index: u32) -> Self {
+    unsafe fn new(dev: &'bound Device<Bound>, index: u32) -> Self {
         Self { dev, index }
     }
 
@@ -98,10 +98,10 @@ impl<'a> IrqVector<'a> {
     }
 }
 
-impl<'a> TryInto<IrqRequest<'a>> for IrqVector<'a> {
+impl<'bound> TryInto<IrqRequest<'bound>> for IrqVector<'bound> {
     type Error = Error;
 
-    fn try_into(self) -> Result<IrqRequest<'a>> {
+    fn try_into(self) -> Result<IrqRequest<'bound>> {
         // SAFETY: `self.as_raw` returns a valid pointer to a `struct pci_dev`.
         let irq = unsafe { bindings::pci_irq_vector(self.dev.as_raw(), self.index()) };
         if irq < 0 {
@@ -129,12 +129,12 @@ impl IrqVectorRegistration {
     ///
     /// Allocates IRQ vectors and registers them with devres for automatic cleanup.
     /// Returns a range of valid IRQ vectors.
-    fn register<'a>(
-        dev: &'a Device<Bound>,
+    fn register<'bound>(
+        dev: &'bound Device<Bound>,
         min_vecs: u32,
         max_vecs: u32,
         irq_types: IrqTypes,
-    ) -> Result<RangeInclusive<IrqVector<'a>>> {
+    ) -> Result<RangeInclusive<IrqVector<'bound>>> {
         // SAFETY:
         // - `dev.as_raw()` is guaranteed to be a valid pointer to a `struct pci_dev`
         //   by the type invariant of `Device`.
@@ -173,13 +173,13 @@ impl Drop for IrqVectorRegistration {
 
 impl Device<device::Bound> {
     /// Returns a [`kernel::irq::Registration`] for the given IRQ vector.
-    pub fn request_irq<'a, T: crate::irq::Handler + 'static>(
-        &'a self,
-        vector: IrqVector<'a>,
+    pub fn request_irq<'bound, T: crate::irq::Handler + 'static>(
+        &'bound self,
+        vector: IrqVector<'bound>,
         flags: irq::Flags,
         name: &'static CStr,
-        handler: impl PinInit<T, Error> + 'a,
-    ) -> impl PinInit<irq::Registration<T>, Error> + 'a {
+        handler: impl PinInit<T, Error> + 'bound,
+    ) -> impl PinInit<irq::Registration<T>, Error> + 'bound {
         pin_init::pin_init_scope(move || {
             let request = vector.try_into()?;
 
@@ -188,13 +188,13 @@ impl Device<device::Bound> {
     }
 
     /// Returns a [`kernel::irq::ThreadedRegistration`] for the given IRQ vector.
-    pub fn request_threaded_irq<'a, T: crate::irq::ThreadedHandler + 'static>(
-        &'a self,
-        vector: IrqVector<'a>,
+    pub fn request_threaded_irq<'bound, T: crate::irq::ThreadedHandler + 'static>(
+        &'bound self,
+        vector: IrqVector<'bound>,
         flags: irq::Flags,
         name: &'static CStr,
-        handler: impl PinInit<T, Error> + 'a,
-    ) -> impl PinInit<irq::ThreadedRegistration<T>, Error> + 'a {
+        handler: impl PinInit<T, Error> + 'bound,
+    ) -> impl PinInit<irq::ThreadedRegistration<T>, Error> + 'bound {
         pin_init::pin_init_scope(move || {
             let request = vector.try_into()?;
 

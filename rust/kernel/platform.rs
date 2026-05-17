@@ -337,13 +337,13 @@ macro_rules! define_irq_accessor_by_index {
         $handler_trait:ident
     ) => {
         $(#[$meta])*
-        pub fn $fn_name<'a, T: irq::$handler_trait + 'static>(
-            &'a self,
+        pub fn $fn_name<'bound, T: irq::$handler_trait + 'static>(
+            &'bound self,
             flags: irq::Flags,
             index: u32,
             name: &'static CStr,
-            handler: impl PinInit<T, Error> + 'a,
-        ) -> impl PinInit<irq::$reg_type<T>, Error> + 'a {
+            handler: impl PinInit<T, Error> + 'bound,
+        ) -> impl PinInit<irq::$reg_type<T>, Error> + 'bound {
             pin_init::pin_init_scope(move || {
                 let request = self.$request_fn(index)?;
 
@@ -366,13 +366,13 @@ macro_rules! define_irq_accessor_by_name {
         $handler_trait:ident
     ) => {
         $(#[$meta])*
-        pub fn $fn_name<'a, T: irq::$handler_trait + 'static>(
-            &'a self,
+        pub fn $fn_name<'bound, T: irq::$handler_trait + 'static>(
+            &'bound self,
             flags: irq::Flags,
-            irq_name: &'a CStr,
+            irq_name: &'bound CStr,
             name: &'static CStr,
-            handler: impl PinInit<T, Error> + 'a,
-        ) -> impl PinInit<irq::$reg_type<T>, Error> + 'a {
+            handler: impl PinInit<T, Error> + 'bound,
+        ) -> impl PinInit<irq::$reg_type<T>, Error> + 'bound {
             pin_init::pin_init_scope(move || {
                 let request = self.$request_fn(irq_name)?;
 

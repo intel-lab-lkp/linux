@@ -566,11 +566,11 @@ pub struct Registration(NonNull<bindings::i2c_client>);
 
 impl Registration {
     /// The C `i2c_new_client_device` function wrapper for manual I2C client creation.
-    pub fn new<'a>(
+    pub fn new<'bound>(
         i2c_adapter: &I2cAdapter,
         i2c_board_info: &I2cBoardInfo,
-        parent_dev: &'a device::Device<device::Bound>,
-    ) -> impl PinInit<Devres<Self>, Error> + 'a {
+        parent_dev: &'bound device::Device<device::Bound>,
+    ) -> impl PinInit<Devres<Self>, Error> + 'bound {
         Devres::new(parent_dev, Self::try_new(i2c_adapter, i2c_board_info))
     }
 
