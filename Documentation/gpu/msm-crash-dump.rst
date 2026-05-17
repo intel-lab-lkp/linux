@@ -70,7 +70,7 @@ ringbuffer
 
 bo
 	List of buffers from the hanging submission if available.
-	Each buffer object will have a uinque iova.
+	Each buffer object will have a unique iova.
 
 	iova
 		GPU address of the buffer object.
