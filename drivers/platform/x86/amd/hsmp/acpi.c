@@ -231,25 +231,6 @@ static int hsmp_parse_acpi_table(struct device *dev, u16 sock_ind)
 	return hsmp_read_acpi_dsd(sock);
 }
 
-static ssize_t hsmp_metric_tbl_acpi_read(struct file *filp, struct kobject *kobj,
-					 const struct bin_attribute *bin_attr, char *buf,
-					 loff_t off, size_t count)
-{
-	struct device *dev = container_of(kobj, struct device, kobj);
-	struct hsmp_socket *sock = dev_get_drvdata(dev);
-
-	return hsmp_metric_tbl_read(sock, buf, count);
-}
-
-static umode_t hsmp_is_sock_attr_visible(struct kobject *kobj,
-					 const struct bin_attribute *battr, int id)
-{
-	if (hsmp_pdev->proto_ver == HSMP_PROTO_VER6)
-		return battr->attr.mode;
-
-	return 0;
-}
-
 static umode_t hsmp_is_sock_dev_attr_visible(struct kobject *kobj,
 					     struct attribute *attr, int id)
 {
@@ -491,7 +472,7 @@ static int init_acpi(struct device *dev)
 		return ret;
 	}
 
-	if (hsmp_pdev->proto_ver == HSMP_PROTO_VER6) {
+	if (hsmp_pdev->proto_ver >= HSMP_PROTO_VER6) {
 		ret = hsmp_get_tbl_dram_base(sock_ind);
 		if (ret)
 			dev_info(dev, "Failed to init metric table\n");
@@ -505,17 +486,6 @@ static int init_acpi(struct device *dev)
 
 	return 0;
 }
-
-static const struct bin_attribute  hsmp_metric_tbl_attr = {
-	.attr = { .name = HSMP_METRICS_TABLE_NAME, .mode = 0444},
-	.read = hsmp_metric_tbl_acpi_read,
-	.size = sizeof(struct hsmp_metric_table),
-};
-
-static const struct bin_attribute *hsmp_attr_list[] = {
-	&hsmp_metric_tbl_attr,
-	NULL
-};
 
 #define HSMP_DEV_ATTR(_name, _msg_id, _show, _mode)	\
 static struct hsmp_sys_attr hattr_##_name = {		\
@@ -559,9 +529,7 @@ static struct attribute *hsmp_dev_attr_list[] = {
 };
 
 static const struct attribute_group hsmp_attr_grp = {
-	.bin_attrs = hsmp_attr_list,
 	.attrs = hsmp_dev_attr_list,
-	.is_bin_visible = hsmp_is_sock_attr_visible,
 	.is_visible = hsmp_is_sock_dev_attr_visible,
 };
 
