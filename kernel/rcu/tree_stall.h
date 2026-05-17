@@ -985,7 +985,7 @@ void show_rcu_gp_kthreads(void)
 		    !data_race(READ_ONCE(rnp->qsmask)) && !data_race(READ_ONCE(rnp->boost_tasks)) &&
 		    !data_race(READ_ONCE(rnp->exp_tasks)) && !data_race(READ_ONCE(rnp->gp_tasks)))
 			continue;
-		pr_info("\trcu_node %d:%d ->gp_seq %ld ->gp_seq_needed %ld ->qsmask %#lx %c%c%c%c ->n_boosts %ld\n",
+		pr_info("\trcu_node %d:%d ->gp_seq %ld ->gp_seq_needed %ld ->qsmask %#lx %c%c%c%c%c ->n_boosts %ld\n",
 			rnp->grplo, rnp->grphi,
 			(long)data_race(READ_ONCE(rnp->gp_seq)),
 			(long)data_race(READ_ONCE(rnp->gp_seq_needed)),
@@ -994,6 +994,7 @@ void show_rcu_gp_kthreads(void)
 			".B"[!!data_race(READ_ONCE(rnp->boost_tasks))],
 			".E"[!!data_race(READ_ONCE(rnp->exp_tasks))],
 			".G"[!!data_race(READ_ONCE(rnp->gp_tasks))],
+			".D"[!list_empty(&rnp->dqs_blkd_tasks)],
 			data_race(READ_ONCE(rnp->n_boosts)));
 		if (!rcu_is_leaf_node(rnp))
 			continue;
