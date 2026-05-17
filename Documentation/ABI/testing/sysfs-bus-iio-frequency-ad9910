@@ -1,0 +1,76 @@
+What:		/sys/bus/iio/devices/iio:deviceX/out_altvoltageY_frequency_offset
+KernelVersion:
+Contact:	linux-iio@vger.kernel.org
+Description:
+		For a channel that allows frequency control through buffers, this
+		represents the base frequency value in Hz. The actual output frequency
+		is derived from this offset combined with the processed buffer sample
+		value.
+
+What:		/sys/bus/iio/devices/iio:deviceX/out_altvoltageY_frequency_scale
+KernelVersion:
+Contact:	linux-iio@vger.kernel.org
+Description:
+		For a channel that allows frequency control through buffers, this
+		represents the frequency modulation gain. This value multiplies the
+		buffer input sample value before it is added to a frequency offset.
+
+What:		/sys/bus/iio/devices/iio:deviceX/out_altvoltageY_phase_offset
+KernelVersion:
+Contact:	linux-iio@vger.kernel.org
+Description:
+		For a channel that allows phase control through buffers, this
+		represents the base phase value in radians. The actual output phase	is
+		derived from this offset combined with the processed buffer sample
+		value.
+
+What:		/sys/bus/iio/devices/iio:deviceX/out_altvoltageY_scale_offset
+KernelVersion:
+Contact:	linux-iio@vger.kernel.org
+Description:
+		For a channel that allows amplitude control through buffers, this
+		represents the value for a base amplitude scale. The actual output
+		amplitude scale is derived from this offset combined with the processed
+		buffer sample value.
+
+What:		/sys/bus/iio/devices/iio:deviceX/out_altvoltageY_dwell_en
+KernelVersion:
+Contact:	linux-iio@vger.kernel.org
+Description:
+		For a channel that produces parametric sweeps, this attribute controls
+		the sweep behavior at the configured limits. It enables dwell mode at a
+		sweep limit when set to 1. Otherwise, the sweep may stop at the initial
+		position or restart from that initial position or continue by reversing
+		its direction.
+
+What:		/sys/bus/iio/devices/iio:deviceX/out_altvoltageY_frequency_roc
+KernelVersion:
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Frequency rate of change in Hz/s for channels that produce linear
+		frequency sweeps. This value may be influenced by the channel's
+		sampling_frequency setting.
+
+What:		/sys/bus/iio/devices/iio:deviceX/out_altvoltageY_phase_roc
+KernelVersion:
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Phase rate of change in rad/s for channels that produce linear
+		phase sweeps. This value may be influenced by the channel's
+		sampling_frequency setting.
+
+What:		/sys/bus/iio/devices/iio:deviceX/out_altvoltageY_scale_roc
+KernelVersion:
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Amplitude scale rate of change in 1/s for channels that ramp
+		amplitude. This value may be influenced by the channel's
+		sampling_frequency setting.
+
+What:		/sys/bus/iio/devices/iio:deviceX/out_altvoltageY_scale_roc_available
+KernelVersion:
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Lists the available scale_roc values for the channel based on
+		the current sampling_frequency. Values are space-separated in
+		ascending order.
