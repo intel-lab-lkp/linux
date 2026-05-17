@@ -14,8 +14,7 @@ use crate::{
         Mmio,
         MmioRaw, //
     },
-    prelude::*,
-    sync::aref::ARef, //
+    prelude::*, //
 };
 use core::{
     marker::PhantomData,
@@ -78,15 +77,15 @@ impl ConfigSpaceKind for Extended {
 /// The generic parameter `S` indicates the maximum size of the configuration space.
 /// Use [`Normal`] for 256-byte legacy configuration space or [`Extended`] for
 /// 4096-byte PCIe extended configuration space (default).
-pub struct ConfigSpace<'a, S: ConfigSpaceKind = Extended> {
-    pub(crate) pdev: &'a Device<device::Bound>,
+pub struct ConfigSpace<'bound, S: ConfigSpaceKind = Extended> {
+    pub(crate) pdev: &'bound Device<device::Bound>,
     _marker: PhantomData<S>,
 }
 
 /// Implements [`IoCapable`] on [`ConfigSpace`] for `$ty` using `$read_fn` and `$write_fn`.
 macro_rules! impl_config_space_io_capable {
     ($ty:ty, $read_fn:ident, $write_fn:ident) => {
-        impl<'a, S: ConfigSpaceKind> IoCapable<$ty> for ConfigSpace<'a, S> {
+        impl<'bound, S: ConfigSpaceKind> IoCapable<$ty> for ConfigSpace<'bound, S> {
             unsafe fn io_read(&self, address: usize) -> $ty {
                 let mut val: $ty = 0;
 
@@ -119,7 +118,7 @@ impl_config_space_io_capable!(u8, pci_read_config_byte, pci_write_config_byte);
 impl_config_space_io_capable!(u16, pci_read_config_word, pci_write_config_word);
 impl_config_space_io_capable!(u32, pci_read_config_dword, pci_write_config_dword);
 
-impl<'a, S: ConfigSpaceKind> Io for ConfigSpace<'a, S> {
+impl<'bound, S: ConfigSpaceKind> Io for ConfigSpace<'bound, S> {
     /// Returns the base address of the I/O region. It is always 0 for configuration space.
     #[inline]
     fn addr(&self) -> usize {
@@ -133,7 +132,7 @@ impl<'a, S: ConfigSpaceKind> Io for ConfigSpace<'a, S> {
     }
 }
 
-impl<'a, S: ConfigSpaceKind> IoKnownSize for ConfigSpace<'a, S> {
+impl<'bound, S: ConfigSpaceKind> IoKnownSize for ConfigSpace<'bound, S> {
     const MIN_SIZE: usize = S::SIZE;
 }
 
@@ -146,14 +145,14 @@ impl<'a, S: ConfigSpaceKind> IoKnownSize for ConfigSpace<'a, S> {
 ///
 /// `Bar` always holds an `IoRaw` instance that holds a valid pointer to the start of the I/O
 /// memory mapped PCI BAR and its size.
-pub struct Bar<const SIZE: usize = 0> {
-    pdev: ARef<Device>,
+pub struct Bar<'bound, const SIZE: usize = 0> {
+    pdev: &'bound Device<device::Bound>,
     io: MmioRaw<SIZE>,
     num: i32,
 }
 
-impl<const SIZE: usize> Bar<SIZE> {
-    pub(super) fn new(pdev: &Device, num: u32, name: &CStr) -> Result<Self> {
+impl<'bound, const SIZE: usize> Bar<'bound, SIZE> {
+    pub(super) fn new(pdev: &'bound Device<device::Bound>, num: u32, name: &CStr) -> Result<Self> {
         let len = pdev.resource_len(num)?;
         if len == 0 {
             return Err(ENOMEM);
@@ -196,11 +195,7 @@ impl<const SIZE: usize> Bar<SIZE> {
             }
         };
 
-        Ok(Bar {
-            pdev: pdev.into(),
-            io,
-            num,
-        })
+        Ok(Bar { pdev, io, num })
     }
 
     /// # Safety
@@ -219,11 +214,24 @@ impl<const SIZE: usize> Bar<SIZE> {
 
     fn release(&self) {
         // SAFETY: The safety requirements are guaranteed by the type invariant of `self.pdev`.
-        unsafe { Self::do_release(&self.pdev, self.io.addr(), self.num) };
+        unsafe { Self::do_release(self.pdev, self.io.addr(), self.num) };
+    }
+
+    /// Consume the `Bar` and register it as a device-managed resource.
+    ///
+    /// The returned `Devres<Bar<'static, SIZE>>` can outlive the original lifetime `'bound`. Access
+    /// to the BAR is revoked when the device is unbound.
+    pub fn into_devres(self) -> Result<Devres<Bar<'static, SIZE>>> {
+        // SAFETY: Casting to `'static` is sound because `Devres` guarantees the `Bar` does not
+        // actually outlive the device -- access is revoked and the resource is released when the
+        // device is unbound.
+        let bar: Bar<'static, SIZE> = unsafe { core::mem::transmute(self) };
+        let pdev = bar.pdev;
+        Devres::new(pdev.as_ref(), bar)
     }
 }
 
-impl Bar {
+impl Bar<'_> {
     #[inline]
     pub(super) fn index_is_valid(index: u32) -> bool {
         // A `struct pci_dev` owns an array of resources with at most `PCI_NUM_RESOURCES` entries.
@@ -231,13 +239,13 @@ impl Bar {
     }
 }
 
-impl<const SIZE: usize> Drop for Bar<SIZE> {
+impl<const SIZE: usize> Drop for Bar<'_, SIZE> {
     fn drop(&mut self) {
         self.release();
     }
 }
 
-impl<const SIZE: usize> Deref for Bar<SIZE> {
+impl<const SIZE: usize> Deref for Bar<'_, SIZE> {
     type Target = Mmio<SIZE>;
 
     fn deref(&self) -> &Self::Target {
@@ -249,20 +257,16 @@ impl<const SIZE: usize> Deref for Bar<SIZE> {
 impl Device<device::Bound> {
     /// Maps an entire PCI BAR after performing a region-request on it. I/O operation bound checks
     /// can be performed on compile time for offsets (plus the requested type size) < SIZE.
-    pub fn iomap_region_sized<'a, const SIZE: usize>(
-        &'a self,
+    pub fn iomap_region_sized<'bound, const SIZE: usize>(
+        &'bound self,
         bar: u32,
-        name: &'a CStr,
-    ) -> impl PinInit<Devres<Bar<SIZE>>, Error> + 'a {
-        Devres::new(self.as_ref(), Bar::<SIZE>::new(self, bar, name))
+        name: &CStr,
+    ) -> Result<Bar<'bound, SIZE>> {
+        Bar::new(self, bar, name)
     }
 
     /// Maps an entire PCI BAR after performing a region-request on it.
-    pub fn iomap_region<'a>(
-        &'a self,
-        bar: u32,
-        name: &'a CStr,
-    ) -> impl PinInit<Devres<Bar>, Error> + 'a {
+    pub fn iomap_region<'bound>(&'bound self, bar: u32, name: &CStr) -> Result<Bar<'bound>> {
         self.iomap_region_sized::<0>(bar, name)
     }
 
@@ -282,7 +286,7 @@ impl Device<device::Bound> {
     }
 
     /// Return an initialized normal (256-byte) config space object.
-    pub fn config_space<'a>(&'a self) -> ConfigSpace<'a, Normal> {
+    pub fn config_space<'bound>(&'bound self) -> ConfigSpace<'bound, Normal> {
         ConfigSpace {
             pdev: self,
             _marker: PhantomData,
@@ -290,7 +294,7 @@ impl Device<device::Bound> {
     }
 
     /// Return an initialized extended (4096-byte) config space object.
-    pub fn config_space_extended<'a>(&'a self) -> Result<ConfigSpace<'a, Extended>> {
+    pub fn config_space_extended<'bound>(&'bound self) -> Result<ConfigSpace<'bound, Extended>> {
         if self.cfg_size() != ConfigSpaceSize::Extended {
             return Err(EINVAL);
         }
