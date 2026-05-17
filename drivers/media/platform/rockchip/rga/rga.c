@@ -851,6 +851,7 @@ static int rga_probe(struct platform_device *pdev)
 		goto unreg_v4l2_dev;
 	}
 	*vfd = rga_videodev;
+	vfd->release = video_device_release_empty;
 	vfd->lock = &rga->mutex;
 	vfd->v4l2_dev = &rga->v4l2_dev;
 
@@ -894,6 +895,8 @@ static int rga_probe(struct platform_device *pdev)
 		v4l2_err(&rga->v4l2_dev, "Failed to register video device\n");
 		goto free_dma;
 	}
+
+	vfd->release = video_device_release;
 
 	v4l2_info(&rga->v4l2_dev, "Registered %s as /dev/%s\n",
 		  vfd->name, video_device_node_name(vfd));
