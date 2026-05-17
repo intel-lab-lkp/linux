@@ -337,7 +337,7 @@ static void nxp_sar_adc_isr_buffer(struct iio_dev *indio_dev)
 		ret = nxp_sar_adc_read_data(info, info->buffered_chan[i]);
 		if (ret < 0) {
 			nxp_sar_adc_read_notify(info);
-			return;
+			goto done;
 		}
 
 		info->buffer[i] = ret;
@@ -348,6 +348,7 @@ static void nxp_sar_adc_isr_buffer(struct iio_dev *indio_dev)
 	iio_push_to_buffers_with_ts(indio_dev, info->buffer, sizeof(info->buffer),
 				    iio_get_time_ns(indio_dev));
 
+done:
 	iio_trigger_notify_done(indio_dev->trig);
 }
 
