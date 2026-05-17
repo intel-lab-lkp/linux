@@ -150,10 +150,10 @@ separate render node called renderD<num>. There will be one render node
 per device. No ioctls except PRIME-related ioctls will be allowed on
 this node. Especially GEM_OPEN will be explicitly prohibited. For a
 complete list of driver-independent ioctls that can be used on render
-nodes, see the ioctls marked DRM_RENDER_ALLOW in drm_ioctl.c  Render
-nodes are designed to avoid the buffer-leaks, which occur if clients
+nodes, see the ioctls marked DRM_RENDER_ALLOW in drm_ioctl.c.  Render
+nodes are designed to avoid the buffer leaks, which occur if clients
 guess the flink names or mmap offsets on the legacy interface.
-Additionally to this basic interface, drivers must mark their
+In addition to this basic interface, drivers must mark their
 driver-dependent render-only ioctls as DRM_RENDER_ALLOW so render
 clients can use them. Driver authors must be careful not to allow any
 privileged ioctls on render nodes.
@@ -568,7 +568,7 @@ ENOSPC:
 EPERM/EACCES:
         Returned for an operation that is valid, but needs more privileges.
         E.g. root-only or much more common, DRM master-only operations return
-        this when called by unpriviledged clients. There's no clear
+        this when called by unprivileged clients. There's no clear
         difference between EACCES and EPERM.
 
 ENODEV:

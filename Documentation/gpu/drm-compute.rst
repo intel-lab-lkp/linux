@@ -7,7 +7,7 @@ seconds. (The time let the user wait before he reaches for the power button).
 This means that other techniques need to be used to manage those workloads,
 that cannot use fences.
 
-Some hardware may schedule compute jobs, and have no way to pre-empt them, or
+Some hardware may schedule compute jobs, and have no way to preempt them, or
 have their memory swapped out from them. Or they simply want their workload
 not to be preempted or swapped out at all.
 

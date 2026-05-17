@@ -156,9 +156,9 @@ IOCTL Interfaces
 GPU virtual addresses used for queues and related data (rptrs, wptrs, context
 save areas, etc.) should be validated by the kernel mode driver to prevent the
 user from specifying invalid GPU virtual addresses.  If the user provides
-invalid GPU virtual addresses or doorbell indicies, the IOCTL should return an
+invalid GPU virtual addresses or doorbell indices, the IOCTL should return an
 error message.  These buffers should also be tracked in the kernel driver so
-that if the user attempts to unmap the buffer(s) from the GPUVM, the umap call
+that if the user attempts to unmap the buffer(s) from the GPUVM, the unmap call
 would return an error.
 
 INFO
