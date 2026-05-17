@@ -331,6 +331,39 @@ static int adm1266_state_read(struct seq_file *s, void *pdata)
 	return 0;
 }
 
+/*
+ * Clearing the blackbox is required when the device is configured in
+ * single-recording mode (BLACKBOX_CONFIG[0] = 0): once the 32-record
+ * buffer is full the device stops recording until cleared.
+ *
+ * The clear is issued as a 2-byte block-write to READ_BLACKBOX with
+ * payload {0xFE, 0x00} per the datasheet. READ_BLACKBOX is also used
+ * by adm1266_nvmem_read_blackbox() to walk records one at a time;
+ * both paths run under pmbus_lock so the clear cannot interleave
+ * mid-iteration and corrupt the read sequence.
+ */
+static ssize_t adm1266_clear_blackbox_write(struct file *file, const char __user *ubuf,
+					    size_t count, loff_t *ppos)
+{
+	struct i2c_client *client = file->private_data;
+	u8 payload[2] = { 0xFE, 0x00 };
+	int ret;
+
+	guard(pmbus_lock)(client);
+	ret = i2c_smbus_write_block_data(client, ADM1266_READ_BLACKBOX,
+					 sizeof(payload), payload);
+	if (ret < 0)
+		return ret;
+
+	return count;
+}
+
+static const struct file_operations adm1266_clear_blackbox_fops = {
+	.owner = THIS_MODULE,
+	.open = simple_open,
+	.write = adm1266_clear_blackbox_write,
+	.llseek = noop_llseek,
+};
 static void adm1266_init_debugfs(struct adm1266_data *data)
 {
 	struct dentry *root;
@@ -343,6 +376,8 @@ static void adm1266_init_debugfs(struct adm1266_data *data)
 
 	debugfs_create_devm_seqfile(&data->client->dev, "sequencer_state", data->debugfs_dir,
 				    adm1266_state_read);
+	debugfs_create_file("clear_blackbox", 0200, data->debugfs_dir, data->client,
+			    &adm1266_clear_blackbox_fops);
 }
 
 static int adm1266_nvmem_read_blackbox(struct adm1266_data *data, u8 *read_buff)
@@ -355,7 +390,6 @@ static int adm1266_nvmem_read_blackbox(struct adm1266_data *data, u8 *read_buff)
 	ret = i2c_smbus_read_block_data(data->client, ADM1266_BLACKBOX_INFO, buf);
 	if (ret < 0)
 		return ret;
-
 	if (ret != 4)
 		return -EIO;
 
@@ -365,7 +399,6 @@ static int adm1266_nvmem_read_blackbox(struct adm1266_data *data, u8 *read_buff)
 		ret = adm1266_pmbus_block_xfer(data, ADM1266_READ_BLACKBOX, 1, &index, read_buff);
 		if (ret < 0)
 			return ret;
-
 		if (ret != ADM1266_BLACKBOX_SIZE)
 			return -EIO;
 
@@ -382,6 +415,8 @@ static int adm1266_nvmem_read(void *priv, unsigned int offset, void *val, size_t
 
 	if (offset + bytes > data->nvmem_config.size)
 		return -EINVAL;
+
+	guard(pmbus_lock)(data->client);
 
 	if (offset == 0) {
 		memset(data->dev_mem, 0, data->nvmem_config.size);
@@ -470,12 +505,12 @@ static int adm1266_probe(struct i2c_client *client)
 	if (ret < 0)
 		return ret;
 
-	ret = adm1266_config_nvmem(data);
-	if (ret < 0)
-		return ret;
-
 	ret = pmbus_do_probe(client, &data->info);
 	if (ret)
+		return ret;
+
+	ret = adm1266_config_nvmem(data);
+	if (ret < 0)
 		return ret;
 
 	adm1266_init_debugfs(data);
