@@ -6457,6 +6457,7 @@ reset:
  *	  or pure receivers (this means either the sequence number or the ack
  *	  value must stay constant)
  *	- Unexpected TCP option.
+ *	- Socket is in repair mode.
  *
  *	When these conditions are not satisfied it drops into a standard
  *	receive procedure patterned after RFC793 to handle all cases.
@@ -6506,7 +6507,8 @@ void tcp_rcv_established(struct sock *sk, struct sk_buff *skb)
 
 	if ((tcp_flag_word(th) & TCP_HP_BITS) == tp->pred_flags &&
 	    TCP_SKB_CB(skb)->seq == tp->rcv_nxt &&
-	    !after(TCP_SKB_CB(skb)->ack_seq, tp->snd_nxt)) {
+	    !after(TCP_SKB_CB(skb)->ack_seq, tp->snd_nxt) &&
+	    !tp->repair) {
 		int tcp_header_len = tp->tcp_header_len;
 		s32 delta = 0;
 		int flag = 0;
@@ -6629,6 +6631,11 @@ slow_path:
 
 	if (!th->ack && !th->rst && !th->syn) {
 		reason = SKB_DROP_REASON_TCP_FLAGS;
+		goto discard;
+	}
+
+	if (tp->repair) {
+		reason = SKB_DROP_REASON_SOCKET_REPAIR;
 		goto discard;
 	}
 
@@ -7124,6 +7131,11 @@ tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 	struct request_sock *req;
 	int queued = 0;
 	SKB_DR(reason);
+
+	if (tp->repair) {
+		SKB_DR_SET(reason, SOCKET_REPAIR);
+		goto discard;
+	}
 
 	switch (sk->sk_state) {
 	case TCP_CLOSE:
