@@ -834,6 +834,7 @@ static int emmaprp_probe(struct platform_device *pdev)
 	}
 
 	*vfd = emmaprp_videodev;
+	vfd->release = video_device_release_empty;
 	vfd->lock = &pcdev->dev_mutex;
 	vfd->v4l2_dev = &pcdev->v4l2_dev;
 
@@ -867,6 +868,7 @@ static int emmaprp_probe(struct platform_device *pdev)
 		v4l2_err(&pcdev->v4l2_dev, "Failed to register video device\n");
 		goto rel_m2m;
 	}
+	vfd->release = video_device_release;
 
 	return 0;
 
