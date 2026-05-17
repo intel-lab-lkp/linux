@@ -10,6 +10,7 @@
 
 #define pr_fmt(fmt)	"perf/amd_iommu: " fmt
 
+#include <linux/device.h>
 #include <linux/perf_event.h>
 #include <linux/init.h>
 #include <linux/cpumask.h>
@@ -43,6 +44,7 @@ struct perf_amd_iommu {
 	u8 max_counters;
 	u64 cntr_assign_mask;
 	raw_spinlock_t lock;
+	cpumask_t cpumask;
 };
 
 static LIST_HEAD(perf_amd_iommu_list);
@@ -131,13 +133,15 @@ static struct amd_iommu_event_desc amd_iommu_v2_event_descs[] = {
 /*---------------------------------------------
  * sysfs cpumask attributes
  *---------------------------------------------*/
-static cpumask_t iommu_cpumask;
-
 static ssize_t _iommu_cpumask_show(struct device *dev,
 				   struct device_attribute *attr,
 				   char *buf)
 {
-	return cpumap_print_to_pagebuf(true, buf, &iommu_cpumask);
+	struct pmu *pmu = dev_get_drvdata(dev);
+	struct perf_amd_iommu *perf_iommu =
+			container_of(pmu, struct perf_amd_iommu, pmu);
+
+	return cpumap_print_to_pagebuf(true, buf, &perf_iommu->cpumask);
 }
 static DEVICE_ATTR(cpumask, S_IRUGO, _iommu_cpumask_show, NULL);
 
@@ -420,7 +424,8 @@ static const struct pmu iommu_pmu __initconst = {
 static __init int init_one_iommu(unsigned int idx)
 {
 	struct perf_amd_iommu *perf_iommu;
-	int ret;
+	struct device *dev;
+	int node, cpu, ret;
 
 	perf_iommu = kzalloc_obj(struct perf_amd_iommu);
 	if (!perf_iommu)
@@ -439,6 +444,20 @@ static __init int init_one_iommu(unsigned int idx)
 		kfree(perf_iommu);
 		return -EINVAL;
 	}
+
+	dev = amd_iommu_idx_to_dev(idx);
+	node = dev ? dev_to_node(dev) : NUMA_NO_NODE;
+	if (node != NUMA_NO_NODE)
+		cpu = cpumask_any_and(cpumask_of_node(node), cpu_online_mask);
+	else
+		cpu = cpumask_any(cpu_online_mask);
+
+	if (cpu >= nr_cpu_ids) {
+		pr_warn("Failed to find online CPU for IOMMU %d.\n", idx);
+		kfree(perf_iommu);
+		return -ENODEV;
+	}
+	cpumask_set_cpu(cpu, &perf_iommu->cpumask);
 
 	snprintf(perf_iommu->name, IOMMU_NAME_SIZE, "amd_iommu_%u", idx);
 
@@ -483,8 +502,6 @@ static __init int amd_iommu_pc_init(void)
 		return -ENODEV;
 	}
 
-	/* Init cpumask attributes to only core 0 */
-	cpumask_set_cpu(0, &iommu_cpumask);
 	return 0;
 }
 

@@ -3886,6 +3886,13 @@ struct amd_iommu *get_amd_iommu(unsigned int idx)
 	return NULL;
 }
 
+struct device *amd_iommu_idx_to_dev(unsigned int idx)
+{
+	struct amd_iommu *iommu = get_amd_iommu(idx);
+
+	return iommu ? &iommu->dev->dev : NULL;
+}
+
 /****************************************************************************
  *
  * IOMMU EFR Performance Counter support functionality. This code allows
