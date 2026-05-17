@@ -16,6 +16,7 @@
 struct rxe_ns_sock {
 	struct sock __rcu *rxe_sk4;
 	struct sock __rcu *rxe_sk6;
+	struct mutex	release_lock;
 };
 
 /*
@@ -31,8 +32,24 @@ static int rxe_ns_init(struct net *net)
 	/* defer socket create in the namespace to the first
 	 * device create.
 	 */
+	struct rxe_ns_sock *ns_sk = net_generic(net, rxe_pernet_id);
 
+	mutex_init(&ns_sk->release_lock);
 	return 0;
+}
+
+void rxe_ns_lock(struct net *net)
+{
+	struct rxe_ns_sock *ns_sk = net_generic(net, rxe_pernet_id);
+
+	mutex_lock(&ns_sk->release_lock);
+}
+
+void rxe_ns_unlock(struct net *net)
+{
+	struct rxe_ns_sock *ns_sk = net_generic(net, rxe_pernet_id);
+
+	mutex_unlock(&ns_sk->release_lock);
 }
 
 static void rxe_ns_exit(struct net *net)
@@ -42,6 +59,7 @@ static void rxe_ns_exit(struct net *net)
 	struct rxe_ns_sock *ns_sk = net_generic(net, rxe_pernet_id);
 	struct sock *sk;
 
+	rxe_ns_lock(net);
 	rcu_read_lock();
 	sk = rcu_dereference(ns_sk->rxe_sk4);
 	rcu_read_unlock();
@@ -59,6 +77,10 @@ static void rxe_ns_exit(struct net *net)
 		udp_tunnel_sock_release(sk->sk_socket);
 	}
 #endif
+
+	rxe_ns_unlock(net);
+
+	mutex_destroy(&ns_sk->release_lock);
 }
 
 /*

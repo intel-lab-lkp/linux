@@ -656,6 +656,8 @@ void rxe_net_del(struct ib_device *dev)
 
 	net = dev_net(ndev);
 
+	rxe_ns_lock(net);
+
 	sk = rxe_ns_pernet_sk4(net);
 	if (sk)
 		rxe_sock_put(sk, rxe_ns_pernet_set_sk4, net);
@@ -663,6 +665,8 @@ void rxe_net_del(struct ib_device *dev)
 	sk = rxe_ns_pernet_sk6(net);
 	if (sk)
 		rxe_sock_put(sk, rxe_ns_pernet_set_sk6, net);
+
+	rxe_ns_unlock(net);
 
 	dev_put(ndev);
 }
