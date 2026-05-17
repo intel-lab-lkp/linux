@@ -1295,6 +1295,7 @@ static struct solo_enc_dev *solo_enc_alloc(struct solo_dev *solo_dev,
 		goto pci_free;
 
 	*solo_enc->vfd = solo_enc_template;
+	solo_enc->vfd->release = video_device_release_empty;
 	solo_enc->vfd->v4l2_dev = &solo_dev->v4l2_dev;
 	solo_enc->vfd->ctrl_handler = hdl;
 	solo_enc->vfd->queue = &solo_enc->vidq;
@@ -1303,6 +1304,8 @@ static struct solo_enc_dev *solo_enc_alloc(struct solo_dev *solo_dev,
 	ret = video_register_device(solo_enc->vfd, VFL_TYPE_VIDEO, nr);
 	if (ret < 0)
 		goto vdev_release;
+
+	solo_enc->vfd->release = video_device_release;
 
 	snprintf(solo_enc->vfd->name, sizeof(solo_enc->vfd->name),
 		 "%s-enc (%i/%i)", SOLO6X10_NAME, solo_dev->vfd->num,
