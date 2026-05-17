@@ -382,11 +382,11 @@ static void f2fs_write_end_io(struct bio *bio)
 						STOP_CP_REASON_WRITE_FAIL);
 		}
 
-		if (is_node_folio(folio)) {
-			f2fs_sanity_check_node_footer(sbi, folio,
-				folio->index, NODE_TYPE_REGULAR, true);
-			f2fs_bug_on(sbi, folio->index != nid_of_node(folio));
-		}
+		if (is_node_folio(folio) &&
+		    f2fs_sanity_check_node_footer(sbi, folio,
+						  folio->index, NODE_TYPE_REGULAR, true))
+			bio->bi_status = BLK_STS_IOERR;
+
 		if (f2fs_in_warm_node_list(folio))
 			f2fs_del_fsync_node_entry(sbi, folio);
 
