@@ -59,8 +59,6 @@ enum hp_ec_offsets {
 #define HP_POWER_LIMIT_DEFAULT	 0x00
 #define HP_POWER_LIMIT_NO_CHANGE 0xFF
 
-#define zero_if_sup(tmp) (zero_insize_support?0:sizeof(tmp)) // use when zero insize is required
-
 enum hp_thermal_profile_omen_v0 {
 	HP_OMEN_V0_THERMAL_PROFILE_DEFAULT		= 0x00,
 	HP_OMEN_V0_THERMAL_PROFILE_PERFORMANCE		= 0x01,
@@ -443,7 +441,6 @@ static struct device *platform_profile_device;
 static struct notifier_block platform_power_source_nb;
 static enum platform_profile_option active_platform_profile;
 static bool platform_profile_support;
-static bool zero_insize_support;
 
 static struct rfkill *wifi_rfkill;
 static struct rfkill *bluetooth_rfkill;
@@ -457,6 +454,28 @@ struct rfkill2_device {
 
 static int rfkill2_count;
 static struct rfkill2_device rfkill2[HPWMI_MAX_RFKILL2_DEVICES];
+
+/*
+ * Before zero_insize_support is known, HPWMI_RET_INVALID_PARAMETERS
+ * indicates that the firmware expects zero input size.
+ */
+
+enum zero_insize_status {
+	ZERO_INSIZE_UNSUPPORTED,
+	ZERO_INSIZE_SUPPORTED,
+	ZERO_INSIZE_UNKNOWN,
+};
+
+static enum zero_insize_status zero_insize_status = ZERO_INSIZE_UNKNOWN;
+
+#define zero_if_sup(tmp) \
+	(zero_insize_status == ZERO_INSIZE_SUPPORTED ? 0 : sizeof(tmp))
+
+static inline bool hp_wmi_is_zero_insize_probe_error(int return_value)
+{
+	return zero_insize_status == ZERO_INSIZE_UNKNOWN &&
+	       return_value == HPWMI_RET_INVALID_PARAMETERS;
+}
 
 /*
  * Chassis Types values were obtained from SMBIOS reference
@@ -611,7 +630,8 @@ static int hp_wmi_perform_query(int query, enum hp_wmi_command command,
 
 	if (ret) {
 		if (ret != HPWMI_RET_UNKNOWN_COMMAND &&
-		    ret != HPWMI_RET_UNKNOWN_CMDTYPE)
+		    ret != HPWMI_RET_UNKNOWN_CMDTYPE &&
+		    !hp_wmi_is_zero_insize_probe_error(ret))
 			pr_warn("query 0x%x returned error 0x%x\n", query, ret);
 		goto out_free;
 	}
@@ -2712,7 +2732,9 @@ static int __init hp_wmi_init(void)
 
 	if (hp_wmi_perform_query(HPWMI_HARDWARE_QUERY, HPWMI_READ, &tmp,
 				 sizeof(tmp), sizeof(tmp)) == HPWMI_RET_INVALID_PARAMETERS)
-		zero_insize_support = true;
+		zero_insize_status = ZERO_INSIZE_SUPPORTED;
+	else
+		zero_insize_status = ZERO_INSIZE_UNSUPPORTED;
 
 	if (event_capable) {
 		err = hp_wmi_input_setup();
