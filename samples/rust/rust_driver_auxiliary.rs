@@ -14,6 +14,7 @@ use kernel::{
     driver,
     pci,
     prelude::*,
+    types::ForLt,
     InPlaceModule, //
 };
 
@@ -55,9 +56,10 @@ struct Data {
     index: u32,
 }
 
+#[allow(clippy::type_complexity)]
 struct ParentDriver {
-    _reg0: Devres<auxiliary::Registration<Data>>,
-    _reg1: Devres<auxiliary::Registration<Data>>,
+    _reg0: Devres<auxiliary::Registration<ForLt!(Data)>>,
+    _reg1: Devres<auxiliary::Registration<ForLt!(Data)>>,
 }
 
 kernel::pci_device_table!(
@@ -101,7 +103,7 @@ impl ParentDriver {
         let dev = adev.parent();
         let pdev: &pci::Device<Bound> = dev.try_into()?;
 
-        let data = adev.registration_data::<Data>()?;
+        let data = adev.registration_data::<ForLt!(Data)>()?;
 
         dev_info!(
             dev,
