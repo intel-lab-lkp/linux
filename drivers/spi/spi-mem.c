@@ -1005,10 +1005,19 @@ int spi_mem_poll_status(struct spi_mem *mem,
 			usleep_range((initial_delay_us >> 2) + 1,
 				     initial_delay_us);
 
-		ret = read_poll_timeout(spi_mem_read_status, read_status_ret,
-					(read_status_ret || ((status) & mask) == match),
-					polling_delay_us, timeout_ms * 1000, false, mem,
-					op, &status);
+		if (polling_delay_us < 10)
+			ret = read_poll_timeout_atomic(
+				spi_mem_read_status, read_status_ret,
+				(read_status_ret || ((status)&mask) == match),
+				polling_delay_us, timeout_ms * 1000, false, mem,
+				op, &status);
+		else
+			ret = read_poll_timeout(
+				spi_mem_read_status, read_status_ret,
+				(read_status_ret || ((status)&mask) == match),
+				polling_delay_us, timeout_ms * 1000, false, mem,
+				op, &status);
+
 		if (read_status_ret)
 			return read_status_ret;
 	}
