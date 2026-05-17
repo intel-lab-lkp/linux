@@ -505,6 +505,11 @@ struct thread_struct {
 
 	unsigned int		iopl_warn:1;
 
+#ifdef CONFIG_X86_USER_IBT
+	unsigned int		ibt:1;
+	unsigned int		ibt_locked:1;
+#endif
+
 	/*
 	 * Protection Keys Register for Userspace.  Loaded immediately on
 	 * context switch. Store it in thread_struct to avoid a lookup in

@@ -114,4 +114,18 @@ static inline void ibt_restore(u64 save) { }
 
 #define ENDBR_INSN_SIZE		(4*HAS_KERNEL_IBT)
 
+#ifndef __ASSEMBLER__
+
+struct pt_regs;
+
+#ifdef CONFIG_X86_USER_IBT
+bool user_ibt_pop_wait_endbr(struct pt_regs *regs);
+void user_ibt_restore_wait_endbr(struct pt_regs *regs, bool wait_endbr);
+#else
+static inline bool user_ibt_pop_wait_endbr(struct pt_regs *regs) { return false; }
+static inline void user_ibt_restore_wait_endbr(struct pt_regs *regs, bool wait_endbr) {}
+#endif /* CONFIG_X86_USER_IBT */
+
+#endif /* __ASSEMBLER__ */
+
 #endif /* _ASM_X86_IBT_H */
