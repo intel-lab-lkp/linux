@@ -19,7 +19,8 @@
 
 #include <mach/hardware.h>
 #include <mach/jornada720.h>
-#include <asm/hardware/ssp.h>
+
+#include "ssp.h"
 
 static DEFINE_SPINLOCK(jornada_ssp_lock);
 static unsigned long jornada_ssp_flags;

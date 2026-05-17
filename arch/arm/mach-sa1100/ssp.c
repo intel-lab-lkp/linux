@@ -18,7 +18,8 @@
 
 #include <mach/hardware.h>
 #include <mach/irqs.h>
-#include <asm/hardware/ssp.h>
+
+#include "ssp.h"
 
 #define TIMEOUT 100000
 
