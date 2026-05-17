@@ -121,9 +121,11 @@ struct pt_regs;
 #ifdef CONFIG_X86_USER_IBT
 bool user_ibt_pop_wait_endbr(struct pt_regs *regs);
 void user_ibt_restore_wait_endbr(struct pt_regs *regs, bool wait_endbr);
+void reset_thread_ibt(void);
 #else
 static inline bool user_ibt_pop_wait_endbr(struct pt_regs *regs) { return false; }
 static inline void user_ibt_restore_wait_endbr(struct pt_regs *regs, bool wait_endbr) {}
+static inline void reset_thread_ibt(void) {}
 #endif /* CONFIG_X86_USER_IBT */
 
 #endif /* __ASSEMBLER__ */
