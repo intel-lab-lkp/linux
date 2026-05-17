@@ -14348,6 +14348,17 @@ F:	lib/Kconfig.kmsan
 F:	mm/kmsan/
 F:	scripts/Makefile.kmsan
 
+KILLSWITCH (function short-circuit mitigation)
+M:	Sasha Levin <sashal@kernel.org>
+L:	linux-kernel@vger.kernel.org
+S:	Maintained
+F:	Documentation/admin-guide/killswitch.rst
+F:	include/linux/killswitch.h
+F:	kernel/Kconfig.killswitch
+F:	kernel/killswitch.c
+F:	lib/test_killswitch.c
+F:	tools/testing/selftests/killswitch/
+
 KPROBES
 M:	Naveen N Rao <naveen@kernel.org>
 M:	"David S. Miller" <davem@davemloft.net>

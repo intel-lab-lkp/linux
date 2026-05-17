@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: GPL-2.0
+#
+# Killswitch: per-function short-circuit mitigation primitive.
+#
+# Copyright (C) 2026 Sasha Levin <sashal@kernel.org>
+#
+
+config KILLSWITCH
+	bool "Killswitch: short-circuit a kernel function as a CVE mitigation"
+	depends on SECURITYFS
+	depends on KPROBES && HAVE_KPROBES_ON_FTRACE
+	depends on HAVE_FUNCTION_ERROR_INJECTION
+	select FUNCTION_ERROR_INJECTION
+	help
+	  Provide an admin-facing mechanism to make a chosen kernel function
+	  return a fixed value without executing its body, as a temporary
+	  mitigation for a security bug before a real fix is available.
+
+	  Operators write "engage <symbol> <retval>" to
+	  /sys/kernel/security/killswitch/control. The function entry is
+	  redirected via a kprobe whose pre-handler sets the chosen return
+	  value and short-circuits the call. There is no allowlist,
+	  denylist, or return-type validation: if the kprobe layer accepts
+	  the symbol the engagement proceeds, otherwise its error is
+	  returned to userspace.
+
+	  This is *not* livepatch: there is no replacement implementation,
+	  the function simply returns the chosen value. Engaging a killswitch
+	  taints the kernel (TAINT_KILLSWITCH, 'H'). Requires CAP_SYS_ADMIN.
+
+	  If unsure, say N.

@@ -70,6 +70,7 @@ problems and bugs in particular.
    bug-hunting
    bug-bisect
    tainted-kernels
+   killswitch
    ramoops
    dynamic-debug-howto
    init
