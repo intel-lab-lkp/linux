@@ -1494,6 +1494,45 @@ int ocfs2_validate_inode_block(struct super_block *sb,
 		goto bail;
 	}
 
+	/*
+	 * Reject dinodes whose i_mode does not name one of the seven
+	 * canonical POSIX file types, or whose mode carries bits outside
+	 * S_IFMT | 07777.  ocfs2_populate_inode() copies i_mode verbatim
+	 * into inode->i_mode and then dispatches via switch (mode & S_IFMT)
+	 * to file/dir/symlink/special_file iops; an unrecognised type
+	 * falls into ocfs2_special_file_iops with init_special_inode(),
+	 * which interprets i_rdev.  Constrain the type byte here so the
+	 * dispatch only ever sees a value mkfs.ocfs2 / VFS can produce.
+	 */
+	{
+		u16 mode = le16_to_cpu(di->i_mode);
+
+		if (mode & ~(S_IFMT | 07777)) {
+			rc = ocfs2_error(sb,
+					 "Invalid dinode #%llu: mode 0%o has bits outside S_IFMT|07777\n",
+					 (unsigned long long)bh->b_blocknr,
+					 mode);
+			goto bail;
+		}
+
+		switch (mode & S_IFMT) {
+		case S_IFREG:
+		case S_IFDIR:
+		case S_IFLNK:
+		case S_IFCHR:
+		case S_IFBLK:
+		case S_IFIFO:
+		case S_IFSOCK:
+			break;
+		default:
+			rc = ocfs2_error(sb,
+					 "Invalid dinode #%llu: mode 0%o has unknown file type\n",
+					 (unsigned long long)bh->b_blocknr,
+					 mode);
+			goto bail;
+		}
+	}
+
 	if (le16_to_cpu(di->i_dyn_features) & OCFS2_INLINE_DATA_FL) {
 		struct ocfs2_inline_data *data = &di->id2.i_data;
 
