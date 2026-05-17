@@ -258,6 +258,10 @@ struct iio_scan_type {
  *			by all channels.
  * @info_mask_shared_by_all_available: What availability information is to be
  *			exported that is shared by all channels.
+ * @parent:		Optional pointer to the parent channel spec for
+ *			hierarchical channel relationships. When set, a read-only
+ *			"parent" sysfs attribute is created containing the
+ *			parent channel's label.
  * @event_spec:		Array of events which should be registered for this
  *			channel.
  * @num_event_specs:	Size of the event_spec array.
@@ -306,6 +310,7 @@ struct iio_chan_spec {
 	unsigned long			info_mask_shared_by_dir_available;
 	unsigned long			info_mask_shared_by_all;
 	unsigned long			info_mask_shared_by_all_available;
+	const struct iio_chan_spec *parent;
 	const struct iio_event_spec *event_spec;
 	unsigned int		num_event_specs;
 	const struct iio_chan_spec_ext_info *ext_info;
