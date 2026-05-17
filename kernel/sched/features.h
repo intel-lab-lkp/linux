@@ -68,17 +68,18 @@ SCHED_FEAT(WAKEUP_PREEMPTION, true)
 #ifdef CONFIG_HRTIMER_REARM_DEFERRED
 SCHED_FEAT(HRTICK, true)
 SCHED_FEAT(HRTICK_DL, true)
-#else
-SCHED_FEAT(HRTICK, false)
-SCHED_FEAT(HRTICK_DL, false)
-#endif
 
 /*
  * Pseudo Tick. Triggers when tasks are running on CPU. sched_tick() will run
  * off of it when turned on. Will use regular TICK when no tasks are running or
  * turned off.
  */
+SCHED_FEAT(PTICK, true)
+#else
+SCHED_FEAT(HRTICK, false)
+SCHED_FEAT(HRTICK_DL, false)
 SCHED_FEAT(PTICK, false)
+#endif
 
 /*
  * Decrement CPU capacity based on time not spent running tasks
