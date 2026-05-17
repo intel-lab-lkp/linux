@@ -17,9 +17,21 @@
 #include <linux/pm_runtime.h>
 #include <linux/iopoll.h>
 #include <linux/soundwire/sdw_amd.h>
+#include <linux/dmi.h>
 #include "../mach-config.h"
 
 #include "acp63.h"
+
+static const struct dmi_system_id acp63_dmic_quirk_table[] = {
+	{
+		.ident = "MSI Crosshair A16 HX",
+		.matches = {
+			DMI_MATCH(DMI_BOARD_VENDOR, "Micro-Star International Co., Ltd."),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Crosshair A16 HX D8WFKG"),
+		}
+	},
+	{}
+};
 
 static void handle_acp70_sdw_wake_event(struct acp63_dev_data *adata)
 {
@@ -436,6 +448,12 @@ static int get_acp63_device_config(struct pci_dev *pci, struct acp63_dev_data *a
 	if (dmic_en && wov_en)
 		is_dmic_dev = true;
 
+	/* fallback for msi firmware lacking standard acpi audio routing flags */
+	if (dmi_check_system(acp63_dmic_quirk_table)) {
+		is_dmic_dev = true;
+		acp_data->is_pdm_config = true;
+	}
+
 	if (acp_data->is_sdw_config) {
 		ret = acp_scan_sdw_devices(&pci->dev, ACP63_SDW_ADDR);
 		if (!ret && acp_data->info.link_mask)
@@ -587,6 +605,7 @@ static int snd_acp63_probe(struct pci_dev *pci,
 
 	/* ACP PCI revision id check for ACP6.3, ACP7.0 & ACP7.1 platforms */
 	switch (pci->revision) {
+	case ACP62_PCI_REV:
 	case ACP63_PCI_REV:
 	case ACP70_PCI_REV:
 	case ACP71_PCI_REV:
