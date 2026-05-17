@@ -1571,6 +1571,47 @@ int ocfs2_validate_inode_block(struct super_block *sb,
 		goto bail;
 	}
 
+	/*
+	 * On a non-sparse volume, a regular file with non-zero i_size
+	 * and zero i_clusters that is not marked as inline data is
+	 * structurally malformed: the extent map declares no allocated
+	 * clusters yet the size header claims the file has content.
+	 * ocfs2_populate_inode() would still publish i_size to VFS and
+	 * leave the extent state inconsistent for any later read or
+	 * truncate.  This is the shape an attacker who keeps the rest
+	 * of the extent list intact (to satisfy the inline-data,
+	 * refcount, chain-list, and per-field validators above) would
+	 * produce when forging only the inode header to publish a
+	 * synthetic file size on a victim node.  It is also the shape
+	 * on-disk corruption of the i_clusters field produces.
+	 *
+	 * The check opts out on sparse-alloc volumes, where the
+	 * extend path (ocfs2_extend_file -> ocfs2_zero_extend ->
+	 * ocfs2_simple_size_update) legitimately grows i_size without
+	 * allocating clusters.  On non-sparse volumes the equivalent
+	 * path (ocfs2_extend_no_holes) journals clusters first and
+	 * i_size second, and truncate-down floors i_clusters at
+	 * ocfs2_clusters_for_bytes(new_i_size) which is >= 1 whenever
+	 * new_i_size > 0, so the rejected shape never appears on disk.
+	 *
+	 * Skip system inodes (OCFS2_SYSTEM_FL) and the inline-data
+	 * fast path (handled below).  Symlinks legitimately keep
+	 * i_clusters == 0 with non-zero i_size (fast symlinks), so
+	 * restrict to S_IFREG.
+	 */
+	if (!ocfs2_sparse_alloc(OCFS2_SB(sb)) &&
+	    S_ISREG(le16_to_cpu(di->i_mode)) &&
+	    !(le32_to_cpu(di->i_flags) & OCFS2_SYSTEM_FL) &&
+	    !(le16_to_cpu(di->i_dyn_features) & OCFS2_INLINE_DATA_FL) &&
+	    le64_to_cpu(di->i_size) != 0 &&
+	    le32_to_cpu(di->i_clusters) == 0) {
+		rc = ocfs2_error(sb,
+				 "Invalid dinode #%llu: regular file i_size %llu with i_clusters 0 and no inline-data flag on non-sparse volume\n",
+				 (unsigned long long)bh->b_blocknr,
+				 (unsigned long long)le64_to_cpu(di->i_size));
+		goto bail;
+	}
+
 	if (le16_to_cpu(di->i_dyn_features) & OCFS2_INLINE_DATA_FL) {
 		struct ocfs2_inline_data *data = &di->id2.i_data;
 
