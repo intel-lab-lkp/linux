@@ -9,6 +9,7 @@
 #include <linux/skbuff.h>
 #include <net/hotdata.h>
 #include <net/inet_common.h>
+#include <net/inet_connection_sock.h>
 #include <net/ipv6.h>
 #include <net/tcp.h>
 #include <net/transp_v6.h>
@@ -210,14 +211,29 @@ void ovpn_tcp_socket_detach(struct ovpn_socket *ovpn_sock)
 {
 	struct ovpn_peer *peer = ovpn_sock->peer;
 	struct sock *sk = ovpn_sock->sk;
+	bool has_ulp;
 
 	strp_stop(&peer->tcp.strp);
 	skb_queue_purge(&peer->tcp.user_queue);
 
-	/* restore CBs that were saved in ovpn_sock_set_tcp_cb() */
-	sk->sk_data_ready = peer->tcp.sk_cb.sk_data_ready;
-	sk->sk_write_space = peer->tcp.sk_cb.sk_write_space;
-	sk->sk_prot = peer->tcp.sk_cb.prot;
+	/* If a TCP ULP (e.g. kTLS) was installed on top of our protocol
+	 * callbacks after ovpn_tcp_socket_attach(), the ULP recorded
+	 * ovpn_tcp_prot as its lower layer and replaced sk_prot with its
+	 * own. Directly restoring the pre-attach sk_prot here would
+	 * overwrite the ULP's sk_prot with the base TCP proto, bypassing
+	 * the ULP close path entirely on subsequent close() (which would
+	 * leak the ULP context and leave any deferred ULP work pointing
+	 * at the freed sock). Leave the callbacks alone in that case;
+	 * the ULP's close path is responsible for both its own teardown
+	 * and for chaining into the saved lower-layer close.
+	 */
+	has_ulp = inet_csk_has_ulp(sk);
+	if (!has_ulp) {
+		/* restore CBs that were saved in ovpn_sock_set_tcp_cb() */
+		sk->sk_data_ready = peer->tcp.sk_cb.sk_data_ready;
+		sk->sk_write_space = peer->tcp.sk_cb.sk_write_space;
+		sk->sk_prot = peer->tcp.sk_cb.prot;
+	}
 
 	/* tcp_close() may race this function and could set
 	 * sk->sk_socket to NULL. It does so by invoking
@@ -228,7 +244,7 @@ void ovpn_tcp_socket_detach(struct ovpn_socket *ovpn_sock)
 	 * sk_socket to disappear under our feet
 	 */
 	write_lock_bh(&sk->sk_callback_lock);
-	if (sk->sk_socket)
+	if (sk->sk_socket && !has_ulp)
 		sk->sk_socket->ops = peer->tcp.sk_cb.ops;
 	write_unlock_bh(&sk->sk_callback_lock);
 
@@ -518,6 +534,17 @@ int ovpn_tcp_socket_attach(struct ovpn_socket *ovpn_sock,
 	/* make sure no pre-existing encapsulation handler exists */
 	if (ovpn_sock->sk->sk_user_data)
 		return -EBUSY;
+
+	/* refuse to layer on top of an already-attached TCP ULP (e.g.
+	 * kTLS). ovpn replaces sk_prot/sk_data_ready/sk_write_space by
+	 * direct field writes; layering it under an existing ULP would
+	 * confuse the ULP's saved-proto chain. The inverse case (a ULP
+	 * layered on top of ovpn after attach) is handled in
+	 * ovpn_tcp_socket_detach().
+	 */
+	if (inet_csk_has_ulp(ovpn_sock->sk))
+		return -EBUSY;
+
 	rcu_assign_sk_user_data(ovpn_sock->sk, ovpn_sock);
 
 	/* only a fully connected socket is expected. Connection should be
@@ -583,6 +610,26 @@ static void ovpn_tcp_close(struct sock *sk, long timeout)
 	sock = rcu_dereference_sk_user_data(sk);
 	if (!sock || !sock->peer || !ovpn_peer_hold(sock->peer)) {
 		rcu_read_unlock();
+		/* No (or no-longer-attached) ovpn state on this socket.
+		 * That happens when ovpn_tcp_socket_detach() already ran
+		 * and cleared sk_user_data, but the caller chain still
+		 * dispatches ->close() on ovpn_tcp_prot. The two cases
+		 * that exhibit this are:
+		 *   - a TCP ULP layered on top of ovpn whose close hook
+		 *     chains via the captured ctx->sk_proto (which is
+		 *     &ovpn_tcp_prot) after detach has run;
+		 *   - the close-vs-detach race window where sk_user_data
+		 *     has been cleared but sk_prot has not yet been
+		 *     restored.
+		 * In both cases the TCP layer still owes the peer a
+		 * graceful close, so chain to the base TCP close.
+		 */
+#if IS_ENABLED(CONFIG_IPV6)
+		if (sk->sk_family == AF_INET6)
+			tcpv6_prot.close(sk, timeout);
+		else
+#endif
+			tcp_prot.close(sk, timeout);
 		return;
 	}
 	peer = sock->peer;
