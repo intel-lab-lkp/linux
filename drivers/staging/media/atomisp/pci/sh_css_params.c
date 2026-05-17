@@ -1466,7 +1466,7 @@ sh_css_set_morph_table(struct ia_css_isp_parameters *params,
 	IA_CSS_ENTER_PRIVATE("table=%p", table);
 
 	assert(params);
-	if (table->enable == false)
+	if (!table->enable)
 		table = NULL;
 	params->morph_table = table;
 	params->morph_table_changed = true;
