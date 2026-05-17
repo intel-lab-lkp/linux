@@ -28,7 +28,7 @@
 #include <drm/display/drm_hdmi_audio_helper.h>
 
 #define EDID_BLOCK_SIZE	128
-#define EDID_NUM_BLOCKS	2
+#define EDID_NUM_BLOCKS	4
 
 #define FW_FILE "lt9611uxc_fw.bin"
 
@@ -61,6 +61,8 @@ struct lt9611uxc {
 	/* can be accessed from different threads, so protect this with ocm_lock */
 	bool hdmi_connected;
 	uint8_t fw_version;
+
+	const struct drm_edid *edid_data;
 };
 
 #define LT9611_PAGE_CONTROL	0xff
@@ -169,6 +171,12 @@ static void lt9611uxc_hpd_work(struct work_struct *work)
 	mutex_lock(&lt9611uxc->ocm_lock);
 	connected = lt9611uxc->hdmi_connected;
 	mutex_unlock(&lt9611uxc->ocm_lock);
+
+	if (!connected) {
+		lt9611uxc->edid_read = false;
+		drm_edid_free(lt9611uxc->edid_data);
+		lt9611uxc->edid_data = NULL;
+	}
 
 	drm_bridge_hpd_notify(&lt9611uxc->bridge,
 			      connected ?
@@ -384,10 +392,34 @@ static int lt9611uxc_wait_for_edid(struct lt9611uxc *lt9611uxc)
 			msecs_to_jiffies(500));
 }
 
+static int lt9611uxc_read_edid_block(struct lt9611uxc *lt9611uxc, unsigned int block,
+				     u8 *buf,  size_t len)
+{
+	int ret;
+
+	lt9611uxc_lock(lt9611uxc);
+
+	regmap_write(lt9611uxc->regmap, 0xb00a, (block%2) * EDID_BLOCK_SIZE);
+
+	ret = regmap_noinc_read(lt9611uxc->regmap, 0xb0b0, buf, len);
+	if (ret) {
+		dev_err(lt9611uxc->dev, "edid block %d read failed: %d\n", block, ret);
+		lt9611uxc_unlock(lt9611uxc);
+		return -EINVAL;
+	}
+	lt9611uxc_unlock(lt9611uxc);
+
+	return ret;
+}
+
 static int lt9611uxc_get_edid_block(void *data, u8 *buf, unsigned int block, size_t len)
 {
 	struct lt9611uxc *lt9611uxc = data;
-	int ret;
+	int ret = 0;
+	int retry_cnt = 10;
+	int edid_ext_block;
+	const u8 edid_header[8] = { 0x00, 0xFF, 0xFF, 0xFF,
+				    0xFF, 0xFF, 0xFF, 0x00 };
 
 	if (len > EDID_BLOCK_SIZE)
 		return -EINVAL;
@@ -395,19 +427,39 @@ static int lt9611uxc_get_edid_block(void *data, u8 *buf, unsigned int block, siz
 	if (block >= EDID_NUM_BLOCKS)
 		return -EINVAL;
 
-	lt9611uxc_lock(lt9611uxc);
+	if (block == 2) {
+		lt9611uxc_lock(lt9611uxc);
 
-	regmap_write(lt9611uxc->regmap, 0xb00b, 0x10);
+		/* Read number of block available in EDID data */
+		ret = regmap_read(lt9611uxc->regmap, 0xb02a, &edid_ext_block);
+		if (ret) {
+			dev_err(lt9611uxc->dev, "edid block read failed: %d\n", ret);
+			lt9611uxc_unlock(lt9611uxc);
+			return ret;
+		}
 
-	regmap_write(lt9611uxc->regmap, 0xb00a, block * EDID_BLOCK_SIZE);
+		/* Reset EDID ready flag so that lt9611uxc can read 2nd and 3rd block */
+		regmap_write(lt9611uxc->regmap, 0xb02a, (edid_ext_block & (~BIT(3))));
 
-	ret = regmap_noinc_read(lt9611uxc->regmap, 0xb0b0, buf, len);
-	if (ret)
-		dev_err(lt9611uxc->dev, "edid read failed: %d\n", ret);
+		lt9611uxc_unlock(lt9611uxc);
 
-	lt9611uxc_unlock(lt9611uxc);
+		msleep(100);
 
-	return 0;
+		ret = lt9611uxc_read_edid_block(lt9611uxc, block, buf, len);
+
+		/*
+		 * Compare first 8 bytes of EDID header (0th block) and 2nd block to confirm
+		 * that 2nd EDID block data is read successfully by lt9611uxc
+		 */
+		while (!ret && 0 == memcmp(&edid_header, &buf, 8) && retry_cnt-- > 0) {
+			msleep(100);
+			ret = lt9611uxc_read_edid_block(lt9611uxc, block, buf, len);
+		}
+	} else {
+		ret = lt9611uxc_read_edid_block(lt9611uxc, block, buf, len);
+	}
+
+	return ret;
 };
 
 static const struct drm_edid *lt9611uxc_bridge_edid_read(struct drm_bridge *bridge,
@@ -425,7 +477,17 @@ static const struct drm_edid *lt9611uxc_bridge_edid_read(struct drm_bridge *brid
 		return NULL;
 	}
 
-	return drm_edid_read_custom(connector, lt9611uxc_get_edid_block, lt9611uxc);
+	/* If EDID is read once, provide same EDID data till next HPD event */
+	if (lt9611uxc->edid_data == NULL) {
+		lt9611uxc->edid_data = drm_edid_read_custom(connector, lt9611uxc_get_edid_block,
+							   lt9611uxc);
+	}
+
+	/*
+	 * Copy the EDID data and return the copied value which will be freed by DRM.
+	 * The original EDID data is cached in the driver until the next HPD event.
+	 */
+	return drm_edid_dup(lt9611uxc->edid_data);
 }
 
 static void lt9611uxc_bridge_hpd_notify(struct drm_bridge *bridge,
