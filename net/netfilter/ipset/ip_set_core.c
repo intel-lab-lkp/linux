@@ -350,8 +350,10 @@ ip_set_init_comment(struct ip_set *set, struct ip_set_comment *comment,
 	size_t len = ext->comment ? strlen(ext->comment) : 0;
 
 	if (unlikely(c)) {
-		set->ext_size -= sizeof(*c) + strlen(c->str) + 1;
-		kfree_rcu(c, rcu);
+		if (refcount_dec_and_test(&c->ref)) {
+			set->ext_size -= sizeof(*c) + strlen(c->str) + 1;
+			kfree_rcu(c, rcu);
+		}
 		rcu_assign_pointer(comment->c, NULL);
 	}
 	if (!len)
@@ -361,11 +363,36 @@ ip_set_init_comment(struct ip_set *set, struct ip_set_comment *comment,
 	c = kmalloc(sizeof(*c) + len + 1, GFP_ATOMIC);
 	if (unlikely(!c))
 		return;
+	refcount_set(&c->ref, 1);
 	strscpy(c->str, ext->comment, len + 1);
 	set->ext_size += sizeof(*c) + strlen(c->str) + 1;
 	rcu_assign_pointer(comment->c, c);
 }
 EXPORT_SYMBOL_GPL(ip_set_init_comment);
+
+void
+ip_set_ext_get(struct ip_set *set, void *dst, const void *src)
+{
+	struct ip_set_comment_rcu *c;
+	struct ip_set_comment *dst_comment;
+	const struct ip_set_comment *src_comment;
+
+	if (!SET_WITH_COMMENT(set))
+		return;
+
+	dst_comment = ext_comment(dst, set);
+	src_comment = ext_comment(src, set);
+	RCU_INIT_POINTER(dst_comment->c, NULL);
+
+	c = rcu_dereference_bh(src_comment->c);
+	if (!c)
+		return;
+
+	if (!refcount_inc_not_zero(&c->ref))
+		return;
+	rcu_assign_pointer(dst_comment->c, c);
+}
+EXPORT_SYMBOL_GPL(ip_set_ext_get);
 
 /* Used only when dumping a set, protected by rcu_read_lock() */
 static int
@@ -392,9 +419,11 @@ ip_set_comment_free(struct ip_set *set, void *ptr)
 	c = rcu_dereference_protected(comment->c, 1);
 	if (unlikely(!c))
 		return;
-	set->ext_size -= sizeof(*c) + strlen(c->str) + 1;
-	kfree_rcu(c, rcu);
 	rcu_assign_pointer(comment->c, NULL);
+	if (refcount_dec_and_test(&c->ref)) {
+		set->ext_size -= sizeof(*c) + strlen(c->str) + 1;
+		kfree_rcu(c, rcu);
+	}
 }
 
 typedef void (*destroyer)(struct ip_set *, void *);

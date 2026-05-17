@@ -485,13 +485,14 @@ mtype_gc_do(struct ip_set *set, struct htype *h, struct htable *t, u32 r)
 {
 	struct hbucket *n, *tmp;
 	struct mtype_elem *data;
+	struct mtype_resize_ad *x;
+	LIST_HEAD(list);
 	u32 i, j, d;
 	size_t dsize = set->dsize;
 #ifdef IP_SET_HASH_WITH_NETS
 	u8 k;
 #endif
 	u8 htable_bits = t->htable_bits;
-
 	spin_lock_bh(&t->hregion[r].lock);
 	for (i = ahash_bucket_start(r, htable_bits);
 	     i < ahash_bucket_end(r, htable_bits); i++) {
@@ -516,6 +517,16 @@ mtype_gc_do(struct ip_set *set, struct htype *h, struct htable *t, u32 r)
 					k);
 #endif
 			t->hregion[r].elements--;
+			if (atomic_read(&t->ref)) {
+				x = kzalloc_obj(struct mtype_resize_ad,
+						GFP_ATOMIC);
+				if (x) {
+					x->ad = IPSET_DEL;
+					memcpy(&x->d, data,
+					       sizeof(struct mtype_elem));
+					list_add_tail(&x->list, &list);
+				}
+			}
 			ip_set_ext_destroy(set, data);
 			d++;
 		}
@@ -551,6 +562,11 @@ mtype_gc_do(struct ip_set *set, struct htype *h, struct htable *t, u32 r)
 		}
 	}
 	spin_unlock_bh(&t->hregion[r].lock);
+	if (!list_empty(&list)) {
+		spin_lock_bh(&set->lock);
+		list_splice_tail_init(&list, &h->ad);
+		spin_unlock_bh(&set->lock);
+	}
 }
 
 static void
@@ -584,7 +600,7 @@ mtype_gc(struct work_struct *work)
 
 	if (atomic_dec_and_test(&t->uref) && atomic_read(&t->ref)) {
 		pr_debug("Table destroy after resize by expire: %p\n", t);
-		mtype_ahash_destroy(set, t, false);
+		mtype_ahash_destroy(set, t, true);
 	}
 
 	queue_delayed_work(system_power_efficient_wq, &gc->dwork, next_run);
@@ -743,6 +759,7 @@ retry:
 				}
 				d = ahash_data(m, m->pos, dsize);
 				memcpy(d, data, dsize);
+				ip_set_ext_get(set, d, data);
 				set_bit(m->pos++, m->used);
 				t->hregion[nr].elements++;
 #ifdef IP_SET_HASH_WITH_NETS
@@ -775,10 +792,9 @@ retry:
 		list_del(l);
 		kfree(l);
 	}
-	/* If there's nobody else using the table, destroy it */
 	if (atomic_dec_and_test(&orig->uref)) {
 		pr_debug("Table destroy by resize %p\n", orig);
-		mtype_ahash_destroy(set, orig, false);
+		mtype_ahash_destroy(set, orig, true);
 	}
 
 out:
@@ -791,7 +807,7 @@ cleanup:
 	rcu_read_unlock_bh();
 	atomic_set(&orig->ref, 0);
 	atomic_dec(&orig->uref);
-	mtype_ahash_destroy(set, t, false);
+	mtype_ahash_destroy(set, t, true);
 	if (ret == -EAGAIN)
 		goto retry;
 	goto out;
@@ -1023,7 +1039,7 @@ unlock:
 out:
 	if (atomic_dec_and_test(&t->uref) && atomic_read(&t->ref)) {
 		pr_debug("Table destroy after resize by add: %p\n", t);
-		mtype_ahash_destroy(set, t, false);
+		mtype_ahash_destroy(set, t, true);
 	}
 	return ret;
 }
@@ -1040,6 +1056,7 @@ mtype_del(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 	struct mtype_elem *data;
 	struct hbucket *n;
 	struct mtype_resize_ad *x = NULL;
+	bool resize_in_progress;
 	int i, j, k, r, ret = -IPSET_ERR_EXIST;
 	u32 key, multi = 0;
 	size_t dsize = set->dsize;
@@ -1066,7 +1083,7 @@ mtype_del(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 		data = ahash_data(n, i, dsize);
 		if (!mtype_data_equal(data, d, &multi))
 			continue;
-		if (SET_ELEM_EXPIRED(set, data))
+		if (SET_ELEM_EXPIRED(set, data) && ext)
 			goto out;
 
 		ret = 0;
@@ -1075,6 +1092,7 @@ mtype_del(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 		if (i + 1 == n->pos)
 			n->pos--;
 		t->hregion[r].elements--;
+		resize_in_progress = atomic_read(&t->ref) && ext && ext->target;
 #ifdef IP_SET_HASH_WITH_NETS
 		for (j = 0; j < IPSET_NET_COUNT; j++)
 			mtype_del_cidr(set, h,
@@ -1082,9 +1100,11 @@ mtype_del(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 #endif
 		ip_set_ext_destroy(set, data);
 
-		if (atomic_read(&t->ref) && ext->target) {
+		if (resize_in_progress) {
 			/* Resize is in process and kernel side del,
-			 * save values
+			 * save values. The old-table ref is dropped above;
+			 * the delete will be replayed on the resized table
+			 * to drop the copied ref there too.
 			 */
 			x = kzalloc_obj(struct mtype_resize_ad, GFP_ATOMIC);
 			if (x) {
@@ -1135,7 +1155,7 @@ out:
 	}
 	if (atomic_dec_and_test(&t->uref) && atomic_read(&t->ref)) {
 		pr_debug("Table destroy after resize by del: %p\n", t);
-		mtype_ahash_destroy(set, t, false);
+		mtype_ahash_destroy(set, t, true);
 	}
 	return ret;
 }
@@ -1341,7 +1361,7 @@ mtype_uref(struct ip_set *set, struct netlink_callback *cb, bool start)
 		if (atomic_dec_and_test(&t->uref) && atomic_read(&t->ref)) {
 			pr_debug("Table destroy after resize "
 				 " by dump: %p\n", t);
-			mtype_ahash_destroy(set, t, false);
+			mtype_ahash_destroy(set, t, true);
 		}
 		cb->args[IPSET_CB_PRIVATE] = 0;
 	}
