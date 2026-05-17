@@ -305,6 +305,7 @@ struct ag71xx_buf {
 	union {
 		struct {
 			struct sk_buff *skb;
+			dma_addr_t dma_addr;
 			unsigned int len;
 		} tx;
 		struct {
@@ -805,6 +806,8 @@ static int ag71xx_tx_packets(struct ag71xx *ag, bool flush, int budget)
 		if (!skb)
 			continue;
 
+		dma_unmap_single(&ag->pdev->dev, ring->buf[i].tx.dma_addr,
+				 ring->buf[i].tx.len, DMA_TO_DEVICE);
 		napi_consume_skb(skb, budget);
 		ring->buf[i].tx.skb = NULL;
 
@@ -1133,6 +1136,9 @@ static void ag71xx_ring_tx_clean(struct ag71xx *ag)
 		}
 
 		if (ring->buf[i].tx.skb) {
+			dma_unmap_single(&ag->pdev->dev,
+					 ring->buf[i].tx.dma_addr,
+					 ring->buf[i].tx.len, DMA_TO_DEVICE);
 			bytes_compl += ring->buf[i].tx.len;
 			pkts_compl++;
 			dev_kfree_skb_any(ring->buf[i].tx.skb);
@@ -1531,6 +1537,7 @@ static netdev_tx_t ag71xx_hard_start_xmit(struct sk_buff *skb,
 		goto err_drop_unmap;
 
 	i = (ring->curr + n - 1) & ring_mask;
+	ring->buf[i].tx.dma_addr = dma_addr;
 	ring->buf[i].tx.len = skb->len;
 	ring->buf[i].tx.skb = skb;
 
