@@ -9,6 +9,8 @@
 #include <linux/percpu.h>
 #include <linux/skbuff.h>
 #include <linux/netfilter.h>
+#include <net/sock.h>
+#include <net/tcp.h>
 #include <net/ipv6.h>
 #include <net/ip6_route.h>
 #include <net/netfilter/ipv6/nf_dup_ipv6.h>
@@ -44,9 +46,26 @@ static bool nf_dup_ipv6_route(struct net *net, struct sk_buff *skb,
 	return true;
 }
 
+static bool nf_dup_ipv6_tx_owner(struct sock *sk,
+				 void (*destructor)(struct sk_buff *))
+{
+	return sk && (destructor == sock_wfree ||
+		      destructor == __sock_wfree ||
+		      destructor == tcp_wfree);
+}
+
+static bool nf_dup_ipv6_egress(unsigned int hooknum)
+{
+	return hooknum == NF_INET_LOCAL_OUT ||
+	       hooknum == NF_INET_POST_ROUTING;
+}
+
 void nf_dup_ipv6(struct net *net, struct sk_buff *skb, unsigned int hooknum,
 		 const struct in6_addr *gw, int oif)
 {
+	void (*destructor)(struct sk_buff *) = skb->destructor;
+	struct sock *sk = skb->sk;
+
 	local_bh_disable();
 	if (current->in_nf_duplicate)
 		goto out;
@@ -64,6 +83,18 @@ void nf_dup_ipv6(struct net *net, struct sk_buff *skb, unsigned int hooknum,
 		--iph->hop_limit;
 	}
 	if (nf_dup_ipv6_route(net, skb, gw, oif)) {
+		/* pskb_copy() drops skb ownership. Preserve the originating
+		 * socket for egress duplicates, and restore write-memory
+		 * accounting when the original skb was owner charged.
+		 */
+		if (nf_dup_ipv6_egress(hooknum) && sk && sk_fullsock(sk)) {
+			skb->sk = sk;
+			if (nf_dup_ipv6_tx_owner(sk, destructor)) {
+				skb->destructor = destructor;
+				refcount_add(skb->truesize,
+					     &sk->sk_wmem_alloc);
+			}
+		}
 		current->in_nf_duplicate = true;
 		ip6_local_out(net, skb->sk, skb);
 		current->in_nf_duplicate = false;

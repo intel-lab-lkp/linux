@@ -16,6 +16,8 @@
 #include <net/icmp.h>
 #include <net/ip.h>
 #include <net/route.h>
+#include <net/sock.h>
+#include <net/tcp.h>
 #include <net/netfilter/ipv4/nf_dup_ipv4.h>
 #if IS_ENABLED(CONFIG_NF_CONNTRACK)
 #include <net/netfilter/nf_conntrack.h>
@@ -48,9 +50,25 @@ static bool nf_dup_ipv4_route(struct net *net, struct sk_buff *skb,
 	return true;
 }
 
+static bool nf_dup_ipv4_tx_owner(struct sock *sk,
+				 void (*destructor)(struct sk_buff *))
+{
+	return sk && (destructor == sock_wfree ||
+		      destructor == __sock_wfree ||
+		      destructor == tcp_wfree);
+}
+
+static bool nf_dup_ipv4_egress(unsigned int hooknum)
+{
+	return hooknum == NF_INET_LOCAL_OUT ||
+	       hooknum == NF_INET_POST_ROUTING;
+}
+
 void nf_dup_ipv4(struct net *net, struct sk_buff *skb, unsigned int hooknum,
 		 const struct in_addr *gw, int oif)
 {
+	void (*destructor)(struct sk_buff *) = skb->destructor;
+	struct sock *sk = skb->sk;
 	struct iphdr *iph;
 
 	local_bh_disable();
@@ -86,6 +104,18 @@ void nf_dup_ipv4(struct net *net, struct sk_buff *skb, unsigned int hooknum,
 		--iph->ttl;
 
 	if (nf_dup_ipv4_route(net, skb, gw, oif)) {
+		/* pskb_copy() drops skb ownership. Preserve the originating
+		 * socket for egress duplicates, and restore write-memory
+		 * accounting when the original skb was owner charged.
+		 */
+		if (nf_dup_ipv4_egress(hooknum) && sk && sk_fullsock(sk)) {
+			skb->sk = sk;
+			if (nf_dup_ipv4_tx_owner(sk, destructor)) {
+				skb->destructor = destructor;
+				refcount_add(skb->truesize,
+					     &sk->sk_wmem_alloc);
+			}
+		}
 		current->in_nf_duplicate = true;
 		ip_local_out(net, skb->sk, skb);
 		current->in_nf_duplicate = false;
