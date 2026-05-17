@@ -75,6 +75,13 @@
 		sizeof(struct luo_session_header_ser)) /		\
 		sizeof(struct luo_session_ser))
 
+/*
+ * Protects session mutations during serialization. All session mutation
+ * operations must hold the read lock. The serialization process holds the write
+ * lock indefinitely on success to block all concurrent and future mutations.
+ */
+static DECLARE_RWSEM(luo_session_serialize_rwsem);
+
 /**
  * struct luo_session_header - Header struct for managing LUO sessions.
  * @count:      The number of sessions currently tracked in the @list.
@@ -205,6 +212,7 @@ static int luo_session_release(struct inode *inodep, struct file *filep)
 	struct luo_session *session = filep->private_data;
 	struct luo_session_header *sh;
 
+	guard(rwsem_read)(&luo_session_serialize_rwsem);
 	/* If retrieved is set, it means this session is from incoming list */
 	if (session->retrieved) {
 		int err = luo_session_finish_one(session);
@@ -354,6 +362,7 @@ static long luo_session_ioctl(struct file *filep, unsigned int cmd,
 	if (ret)
 		return ret;
 
+	guard(rwsem_read)(&luo_session_serialize_rwsem);
 	return op->execute(session, &ucmd);
 }
 
@@ -385,9 +394,12 @@ int luo_session_create(const char *name, struct file **filep)
 	struct luo_session *session;
 	int err;
 
+	down_read(&luo_session_serialize_rwsem);
 	session = luo_session_alloc(name);
-	if (IS_ERR(session))
-		return PTR_ERR(session);
+	if (IS_ERR(session)) {
+		err = PTR_ERR(session);
+		goto err_unlock;
+	}
 
 	err = luo_session_insert(&luo_session_global.outgoing, session);
 	if (err)
@@ -398,12 +410,16 @@ int luo_session_create(const char *name, struct file **filep)
 	if (err)
 		goto err_remove;
 
+	up_read(&luo_session_serialize_rwsem);
+
 	return 0;
 
 err_remove:
 	luo_session_remove(&luo_session_global.outgoing, session);
 err_free:
 	luo_session_free(session);
+err_unlock:
+	up_read(&luo_session_serialize_rwsem);
 
 	return err;
 }
@@ -415,6 +431,7 @@ int luo_session_retrieve(const char *name, struct file **filep)
 	struct luo_session *it;
 	int err;
 
+	guard(rwsem_read)(&luo_session_serialize_rwsem);
 	guard(rwsem_read)(&sh->rwsem);
 	list_for_each_entry(it, &sh->list, list) {
 		if (!strncmp(it->name, name, sizeof(it->name))) {
@@ -582,7 +599,8 @@ int luo_session_serialize(void)
 	int i = 0;
 	int err;
 
-	guard(rwsem_write)(&sh->rwsem);
+	down_write(&luo_session_serialize_rwsem);
+	down_write(&sh->rwsem);
 	list_for_each_entry(session, &sh->list, list) {
 		err = luo_session_freeze_one(session, &sh->ser[i]);
 		if (err)
@@ -593,6 +611,7 @@ int luo_session_serialize(void)
 		i++;
 	}
 	sh->header_ser->count = sh->count;
+	up_write(&sh->rwsem);
 
 	return 0;
 
@@ -602,6 +621,8 @@ err_undo:
 		luo_session_unfreeze_one(session, &sh->ser[i]);
 		memset(sh->ser[i].name, 0, sizeof(sh->ser[i].name));
 	}
+	up_write(&sh->rwsem);
+	up_write(&luo_session_serialize_rwsem);
 
 	return err;
 }
