@@ -554,8 +554,12 @@ relock:
 		wb_put_many(old_wb, nr_switched);
 	}
 
-	for (inodep = isw->inodes; *inodep; inodep++)
+	for (inodep = isw->inodes; *inodep; inodep++) {
+		struct super_block *sb = (*inodep)->i_sb;
+
 		iput(*inodep);
+		atomic_dec(&sb->s_isw_nr_in_flight);
+	}
 	wb_put(new_wb);
 	kfree(isw);
 	atomic_dec(&isw_nr_in_flight);
@@ -598,16 +602,19 @@ void inode_switch_wbs_work_fn(struct work_struct *work)
 static bool inode_prepare_wbs_switch(struct inode *inode,
 				     struct bdi_writeback *new_wb)
 {
+	/* Avoid the atomic_inc/smp_mb dance once SB_ACTIVE is gone. */
+	if (!(inode->i_sb->s_flags & SB_ACTIVE))
+		return false;
+
 	/*
-	 * Paired with smp_mb() in cgroup_writeback_umount().
-	 * isw_nr_in_flight must be increased before checking SB_ACTIVE and
-	 * grabbing an inode, otherwise isw_nr_in_flight can be observed as 0
-	 * in cgroup_writeback_umount() and the isw_wq will be not flushed.
+	 * Pairs with smp_mb() in cgroup_writeback_umount(): the umounter either
+	 * sees a non-zero counter and waits, or we see SB_ACTIVE clear below.
 	 */
+	atomic_inc(&inode->i_sb->s_isw_nr_in_flight);
 	smp_mb();
 
 	if (IS_DAX(inode))
-		return false;
+		goto out_dec;
 
 	/* while holding I_WB_SWITCH, no one else can update the association */
 	spin_lock(&inode->i_lock);
@@ -615,13 +622,17 @@ static bool inode_prepare_wbs_switch(struct inode *inode,
 	    inode_state_read(inode) & (I_WB_SWITCH | I_FREEING | I_WILL_FREE) ||
 	    inode_to_wb(inode) == new_wb) {
 		spin_unlock(&inode->i_lock);
-		return false;
+		goto out_dec;
 	}
 	inode_state_set(inode, I_WB_SWITCH);
 	__iget(inode);
 	spin_unlock(&inode->i_lock);
 
 	return true;
+
+out_dec:
+	atomic_dec(&inode->i_sb->s_isw_nr_in_flight);
+	return false;
 }
 
 static void wb_queue_isw(struct bdi_writeback *wb,
@@ -665,6 +676,7 @@ static void inode_switch_wbs(struct inode *inode, int new_wb_id)
 	memcg_css = css_from_id(new_wb_id, &memory_cgrp_subsys);
 	if (memcg_css && !css_tryget(memcg_css))
 		memcg_css = NULL;
+	rcu_read_unlock();
 	if (!memcg_css)
 		goto out_free;
 
@@ -679,18 +691,10 @@ static void inode_switch_wbs(struct inode *inode, int new_wb_id)
 	isw->inodes[0] = inode;
 
 	trace_inode_switch_wbs_queue(inode->i_wb, new_wb, 1);
-	/*
-	 * Paired with synchronize_rcu() in cgroup_writeback_umount().
-	 * Holding rcu_read_lock across wb_queue_isw() ensures
-	 * synchronize_rcu() cannot return until the work is queued, so
-	 * the subsequent flush_workqueue() will wait for the switch.
-	 */
 	wb_queue_isw(new_wb, isw);
-	rcu_read_unlock();
 	return;
 
 out_free:
-	rcu_read_unlock();
 	atomic_dec(&isw_nr_in_flight);
 	if (new_wb)
 		wb_put(new_wb);
@@ -748,14 +752,6 @@ bool cleanup_offline_cgwb(struct bdi_writeback *wb)
 		new_wb = &wb->bdi->wb; /* wb_get() is noop for bdi's wb */
 
 	nr = 0;
-	/*
-	 * Paired with synchronize_rcu() in cgroup_writeback_umount().
-	 * Holding rcu_read_lock across the SB_ACTIVE check, the inode grab
-	 * and wb_queue_isw() ensures synchronize_rcu() cannot return until
-	 * the work is queued, so the subsequent flush_workqueue() will wait
-	 * for the switch.
-	 */
-	rcu_read_lock();
 	spin_lock(&wb->list_lock);
 	/*
 	 * In addition to the inodes that have completed writeback, also switch
@@ -773,7 +769,6 @@ bool cleanup_offline_cgwb(struct bdi_writeback *wb)
 
 	/* no attached inodes? bail out */
 	if (nr == 0) {
-		rcu_read_unlock();
 		atomic_dec(&isw_nr_in_flight);
 		wb_put(new_wb);
 		kfree(isw);
@@ -782,7 +777,6 @@ bool cleanup_offline_cgwb(struct bdi_writeback *wb)
 
 	trace_inode_switch_wbs_queue(wb, new_wb, nr);
 	wb_queue_isw(new_wb, isw);
-	rcu_read_unlock();
 
 	return restart;
 }
@@ -1215,38 +1209,30 @@ out_bdi_put:
 }
 
 /**
- * cgroup_writeback_umount - flush inode wb switches for umount
+ * cgroup_writeback_umount - wait for in-flight inode wb switches on @sb
  * @sb: target super_block
  *
- * This function is called when a super_block is about to be destroyed and
- * flushes in-flight inode wb switches.  An inode wb switch goes through
- * RCU and then workqueue, so the two need to be flushed in order to ensure
- * that all previously scheduled switches are finished.  As wb switches are
- * rare occurrences and synchronize_rcu() can take a while, perform
- * flushing iff wb switches are in flight.
+ * Wait until every inode wb switch that already passed the SB_ACTIVE
+ * check on this superblock has been completed by the worker.  Since
+ * SB_ACTIVE is cleared before this is called, no new switches can start
+ * for @sb, so s_isw_nr_in_flight will monotonically drop to zero.
  */
 void cgroup_writeback_umount(struct super_block *sb)
 {
-
 	if (!(sb->s_bdi->capabilities & BDI_CAP_WRITEBACK))
 		return;
 
 	/*
-	 * SB_ACTIVE should be reliably cleared before checking
-	 * isw_nr_in_flight, see generic_shutdown_super().
+	 * Pairs with smp_mb() in inode_prepare_wbs_switch(): we either observe
+	 * a non-zero counter and wait, or the switcher sees SB_ACTIVE clear
+	 * (cleared by generic_shutdown_super()) and bails before grabbing the
+	 * inode.
 	 */
 	smp_mb();
 
-	if (atomic_read(&isw_nr_in_flight)) {
-		/*
-		 * Paired with rcu_read_lock() in inode_switch_wbs() and
-		 * cleanup_offline_cgwb().  synchronize_rcu() waits for any
-		 * in-flight switcher that already passed the SB_ACTIVE check
-		 * to finish queueing its work, so flush_workqueue() below
-		 * will then drain it.
-		 */
-		synchronize_rcu();
+	while (atomic_read(&sb->s_isw_nr_in_flight)) {
 		flush_workqueue(isw_wq);
+		cond_resched();
 	}
 }
 
