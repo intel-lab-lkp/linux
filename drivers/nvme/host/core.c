@@ -1044,8 +1044,23 @@ static inline blk_status_t nvme_setup_rw(struct nvme_ns *ns,
 		 * namespace capacity to zero to prevent any I/O.
 		 */
 		if (!blk_integrity_rq(req)) {
-			if (WARN_ON_ONCE(!nvme_ns_has_pi(ns->head)))
+			/*
+			 * A namespace with metadata but neither PI nor a block
+			 * layer integrity profile is unusable: nvme_init_integrity()
+			 * registers no profile, blk_get_integrity() is NULL, no bio
+			 * ever gets REQ_INTEGRITY, and the capacity is forced to 0.
+			 * A bio that passed bio_check_eod() under the old capacity
+			 * and was batched on a plug before the namespace revalidated
+			 * can still be dispatched here afterwards.  Reject it; this
+			 * is the expected terminal handling of I/O to a namespace
+			 * that revalidated to an unusable geometry, not a bug.
+			 */
+			if (!nvme_ns_has_pi(ns->head)) {
+				dev_warn_once(ns->ctrl->device,
+					"%s: I/O to namespace with metadata but no usable integrity profile (ms=%u), rejecting\n",
+					ns->disk->disk_name, ns->head->ms);
 				return BLK_STS_NOTSUPP;
+			}
 			control |= NVME_RW_PRINFO_PRACT;
 			nvme_set_ref_tag(ns, cmnd, req);
 		}
