@@ -17,6 +17,8 @@
 #include "ethernet-mdio.h"
 #include "ethernet-util.h"
 
+#define CVM_OCT_PHY_FLAGS 0
+
 static void cvm_oct_get_drvinfo(struct net_device *dev,
 				struct ethtool_drvinfo *info)
 {
@@ -36,30 +38,16 @@ static int cvm_oct_nway_reset(struct net_device *dev)
 }
 
 const struct ethtool_ops cvm_oct_ethtool_ops = {
-	.get_drvinfo = cvm_oct_get_drvinfo,
-	.nway_reset = cvm_oct_nway_reset,
-	.get_link = ethtool_op_get_link,
-	.get_link_ksettings = phy_ethtool_get_link_ksettings,
-	.set_link_ksettings = phy_ethtool_set_link_ksettings,
+	.get_drvinfo		= cvm_oct_get_drvinfo,
+	.nway_reset		= cvm_oct_nway_reset,
+	.get_link		= ethtool_op_get_link,
+	.get_link_ksettings	= phy_ethtool_get_link_ksettings,
+	.set_link_ksettings	= phy_ethtool_set_link_ksettings,
 };
 
-/**
- * cvm_oct_ioctl - IOCTL support for PHY control
- * @dev:    Device to change
- * @rq:     the request
- * @cmd:    the command
- *
- * Returns Zero on success
- */
 int cvm_oct_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 {
-	if (!netif_running(dev))
-		return -EINVAL;
-
-	if (!dev->phydev)
-		return -EINVAL;
-
-	return phy_mii_ioctl(dev->phydev, rq, cmd);
+	return phy_do_ioctl_running(dev, rq, cmd);
 }
 
 void cvm_oct_note_carrier(struct octeon_ethernet *priv,
@@ -81,15 +69,15 @@ void cvm_oct_adjust_link(struct net_device *dev)
 	struct octeon_ethernet *priv = netdev_priv(dev);
 	union cvmx_helper_link_info link_info;
 
+	if (WARN_ON(!dev->phydev))
+		return;
+
 	link_info.u64		= 0;
 	link_info.s.link_up	= dev->phydev->link ? 1 : 0;
-	link_info.s.full_duplex = dev->phydev->duplex ? 1 : 0;
+	link_info.s.full_duplex	= dev->phydev->duplex ? 1 : 0;
 	link_info.s.speed	= dev->phydev->speed;
 	priv->link_info		= link_info.u64;
 
-	/*
-	 * The polling task need to know about link status changes.
-	 */
 	if (priv->poll)
 		priv->poll(dev);
 
@@ -100,13 +88,13 @@ void cvm_oct_adjust_link(struct net_device *dev)
 	}
 }
 
-int cvm_oct_common_stop(struct net_device *dev)
+void cvm_oct_common_stop(struct net_device *dev)
 {
 	struct octeon_ethernet *priv = netdev_priv(dev);
 	int interface = INTERFACE(priv->port);
+	int index = INDEX(priv->port);
 	union cvmx_helper_link_info link_info;
 	union cvmx_gmxx_prtx_cfg gmx_cfg;
-	int index = INDEX(priv->port);
 
 	gmx_cfg.u64 = cvmx_read_csr(CVMX_GMXX_PRTX_CFG(index, interface));
 	gmx_cfg.s.en = 0;
@@ -114,26 +102,21 @@ int cvm_oct_common_stop(struct net_device *dev)
 
 	priv->poll = NULL;
 
+	netif_carrier_off(dev);
+
 	if (dev->phydev)
 		phy_disconnect(dev->phydev);
 
 	if (priv->last_link) {
-		link_info.u64 = 0;
-		priv->last_link = 0;
+		link_info.u64	= 0;
+		priv->link_info	= 0;
+		priv->last_link	= 0;
 
 		cvmx_helper_link_set(priv->port, link_info);
 		cvm_oct_note_carrier(priv, link_info);
 	}
-	return 0;
 }
 
-/**
- * cvm_oct_phy_setup_device - setup the PHY
- *
- * @dev:    Device to setup
- *
- * Returns Zero on success, negative on failure
- */
 int cvm_oct_phy_setup_device(struct net_device *dev)
 {
 	struct octeon_ethernet *priv = netdev_priv(dev);
@@ -149,8 +132,8 @@ int cvm_oct_phy_setup_device(struct net_device *dev)
 	if (!phy_node)
 		goto no_phy;
 
-	phydev = of_phy_connect(dev, phy_node, cvm_oct_adjust_link, 0,
-				priv->phy_mode);
+	phydev = of_phy_connect(dev, phy_node, cvm_oct_adjust_link,
+				CVM_OCT_PHY_FLAGS, priv->phy_mode);
 	of_node_put(phy_node);
 
 	if (!phydev)
@@ -160,10 +143,9 @@ int cvm_oct_phy_setup_device(struct net_device *dev)
 	phy_start(phydev);
 
 	return 0;
+
 no_phy:
-	/* If there is no phy, assume a direct MAC connection and that
-	 * the link is up.
-	 */
 	netif_carrier_on(dev);
 	return 0;
 }
+
