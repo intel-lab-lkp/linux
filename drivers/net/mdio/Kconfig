@@ -169,6 +169,16 @@ config MDIO_IPQ8064
 	  This driver supports the MDIO interface found in the network
 	  interface units of the IPQ8064 SoC
 
+config MDIO_REALTEK_OTTO
+	tristate "Realtek Otto MDIO interface support"
+	default MACH_REALTEK_RTL
+	depends on MACH_REALTEK_RTL || COMPILE_TEST
+	help
+	  This driver supports the MDIO bus on SoCs of the Realtek Otto
+	  switch platform. These include gigabit devices like the RTL838x
+	  or RTL839x. Additionally 2.5G/10G devices like the RTL930x and
+	  RTL931x are supported.
+
 config MDIO_REALTEK_RTL9300
 	tristate "Realtek RTL9300 MDIO interface support"
 	depends on MACH_REALTEK_RTL || COMPILE_TEST
