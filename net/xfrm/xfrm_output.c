@@ -641,7 +641,10 @@ static int xfrm_dev_direct_output(struct sock *sk, struct xfrm_state *x,
 	 * to netdevice.
 	 */
 	skb->dev = x->xso.dev;
-	__skb_push(skb, skb->dev->hard_header_len);
+	err = skb_cow_head(skb, skb->dev->hard_header_len);
+	if (err)
+		return err;
+	skb_push(skb, skb->dev->hard_header_len);
 	return dev_queue_xmit(skb);
 }
 
