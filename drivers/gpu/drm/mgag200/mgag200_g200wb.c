@@ -49,13 +49,14 @@ static int mgag200_g200wb_pixpllc_atomic_check(struct drm_crtc *crtc,
 	struct mgag200_crtc_state *new_mgag200_crtc_state = to_mgag200_crtc_state(new_crtc_state);
 	long clock = new_crtc_state->mode.clock;
 	struct mgag200_pll_values *pixpllc = &new_mgag200_crtc_state->pixpllc;
-	unsigned int delta, tmpdelta;
+	unsigned int delta, tmpdelta, permitteddelta;
 	unsigned int testp, testm, testn;
 	unsigned int p, m, n, s;
 	unsigned int computed;
 
 	m = n = p = s = 0;
 	delta = 0xffffffff;
+	permitteddelta = clock * 5 / 1000;
 
 	for (testp = 1; testp < 9; testp++) {
 		if (clock * testp > vcomax)
@@ -79,6 +80,11 @@ static int mgag200_g200wb_pixpllc_atomic_check(struct drm_crtc *crtc,
 				}
 			}
 		}
+	}
+
+	if (delta > permitteddelta) {
+		pr_warn("PLL delta too large\n");
+		return -EINVAL;
 	}
 
 	pixpllc->m = m;
