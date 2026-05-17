@@ -821,6 +821,17 @@ static int sunxi_pmx_get_func_groups(struct pinctrl_dev *pctldev,
 	return 0;
 }
 
+static bool sunxi_pmx_function_is_gpio(struct pinctrl_dev *pctldev,
+				       unsigned function)
+{
+	struct sunxi_pinctrl *pctl = pinctrl_dev_get_drvdata(pctldev);
+
+	if (!strncmp(pctl->functions[function].name, "gpio", 4))
+		return true;
+
+	return false;
+}
+
 static void sunxi_pmx_set(struct pinctrl_dev *pctldev,
 				 unsigned pin,
 				 u8 config)
@@ -952,6 +963,7 @@ static const struct pinmux_ops sunxi_pmx_ops = {
 	.get_functions_count	= sunxi_pmx_get_funcs_cnt,
 	.get_function_name	= sunxi_pmx_get_func_name,
 	.get_function_groups	= sunxi_pmx_get_func_groups,
+	.function_is_gpio	= sunxi_pmx_function_is_gpio,
 	.set_mux		= sunxi_pmx_set_mux,
 	.gpio_set_direction	= sunxi_pmx_gpio_set_direction,
 	.request		= sunxi_pmx_request,
