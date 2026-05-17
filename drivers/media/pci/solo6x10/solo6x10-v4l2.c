@@ -647,6 +647,7 @@ int solo_v4l2_init(struct solo_dev *solo_dev, unsigned nr)
 		return -ENOMEM;
 
 	*solo_dev->vfd = solo_v4l2_template;
+	solo_dev->vfd->release = video_device_release_empty;
 	solo_dev->vfd->v4l2_dev = &solo_dev->v4l2_dev;
 	solo_dev->vfd->queue = &solo_dev->vidq;
 	solo_dev->vfd->lock = &solo_dev->lock;
@@ -689,6 +690,8 @@ int solo_v4l2_init(struct solo_dev *solo_dev, unsigned nr)
 	ret = video_register_device(solo_dev->vfd, VFL_TYPE_VIDEO, nr);
 	if (ret < 0)
 		goto fail;
+
+	solo_dev->vfd->release = video_device_release;
 
 	snprintf(solo_dev->vfd->name, sizeof(solo_dev->vfd->name), "%s (%i)",
 		 SOLO6X10_NAME, solo_dev->vfd->num);
