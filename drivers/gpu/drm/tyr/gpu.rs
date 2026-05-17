@@ -10,7 +10,6 @@ use kernel::{
         Bound,
         Device, //
     },
-    devres::Devres,
     io::poll,
     platform,
     prelude::*,
@@ -35,37 +34,36 @@ use crate::{
 pub(crate) struct GpuInfo(pub(crate) uapi::drm_panthor_gpu_info);
 
 impl GpuInfo {
-    pub(crate) fn new(dev: &Device<Bound>, iomem: &Devres<IoMem>) -> Result<Self> {
-        let gpu_id = regs::GPU_ID.read(dev, iomem)?;
-        let csf_id = regs::GPU_CSF_ID.read(dev, iomem)?;
-        let gpu_rev = regs::GPU_REVID.read(dev, iomem)?;
-        let core_features = regs::GPU_CORE_FEATURES.read(dev, iomem)?;
-        let l2_features = regs::GPU_L2_FEATURES.read(dev, iomem)?;
-        let tiler_features = regs::GPU_TILER_FEATURES.read(dev, iomem)?;
-        let mem_features = regs::GPU_MEM_FEATURES.read(dev, iomem)?;
-        let mmu_features = regs::GPU_MMU_FEATURES.read(dev, iomem)?;
-        let thread_features = regs::GPU_THREAD_FEATURES.read(dev, iomem)?;
-        let max_threads = regs::GPU_THREAD_MAX_THREADS.read(dev, iomem)?;
-        let thread_max_workgroup_size = regs::GPU_THREAD_MAX_WORKGROUP_SIZE.read(dev, iomem)?;
-        let thread_max_barrier_size = regs::GPU_THREAD_MAX_BARRIER_SIZE.read(dev, iomem)?;
-        let coherency_features = regs::GPU_COHERENCY_FEATURES.read(dev, iomem)?;
+    pub(crate) fn new(iomem: &IoMem) -> Self {
+        let gpu_id = regs::GPU_ID.read(iomem);
+        let csf_id = regs::GPU_CSF_ID.read(iomem);
+        let gpu_rev = regs::GPU_REVID.read(iomem);
+        let core_features = regs::GPU_CORE_FEATURES.read(iomem);
+        let l2_features = regs::GPU_L2_FEATURES.read(iomem);
+        let tiler_features = regs::GPU_TILER_FEATURES.read(iomem);
+        let mem_features = regs::GPU_MEM_FEATURES.read(iomem);
+        let mmu_features = regs::GPU_MMU_FEATURES.read(iomem);
+        let thread_features = regs::GPU_THREAD_FEATURES.read(iomem);
+        let max_threads = regs::GPU_THREAD_MAX_THREADS.read(iomem);
+        let thread_max_workgroup_size = regs::GPU_THREAD_MAX_WORKGROUP_SIZE.read(iomem);
+        let thread_max_barrier_size = regs::GPU_THREAD_MAX_BARRIER_SIZE.read(iomem);
+        let coherency_features = regs::GPU_COHERENCY_FEATURES.read(iomem);
 
-        let texture_features = regs::GPU_TEXTURE_FEATURES0.read(dev, iomem)?;
+        let texture_features = regs::GPU_TEXTURE_FEATURES0.read(iomem);
 
-        let as_present = regs::GPU_AS_PRESENT.read(dev, iomem)?;
+        let as_present = regs::GPU_AS_PRESENT.read(iomem);
 
-        let shader_present = u64::from(regs::GPU_SHADER_PRESENT_LO.read(dev, iomem)?);
+        let shader_present = u64::from(regs::GPU_SHADER_PRESENT_LO.read(iomem));
         let shader_present =
-            shader_present | u64::from(regs::GPU_SHADER_PRESENT_HI.read(dev, iomem)?) << 32;
+            shader_present | u64::from(regs::GPU_SHADER_PRESENT_HI.read(iomem)) << 32;
 
-        let tiler_present = u64::from(regs::GPU_TILER_PRESENT_LO.read(dev, iomem)?);
-        let tiler_present =
-            tiler_present | u64::from(regs::GPU_TILER_PRESENT_HI.read(dev, iomem)?) << 32;
+        let tiler_present = u64::from(regs::GPU_TILER_PRESENT_LO.read(iomem));
+        let tiler_present = tiler_present | u64::from(regs::GPU_TILER_PRESENT_HI.read(iomem)) << 32;
 
-        let l2_present = u64::from(regs::GPU_L2_PRESENT_LO.read(dev, iomem)?);
-        let l2_present = l2_present | u64::from(regs::GPU_L2_PRESENT_HI.read(dev, iomem)?) << 32;
+        let l2_present = u64::from(regs::GPU_L2_PRESENT_LO.read(iomem));
+        let l2_present = l2_present | u64::from(regs::GPU_L2_PRESENT_HI.read(iomem)) << 32;
 
-        Ok(Self(uapi::drm_panthor_gpu_info {
+        Self(uapi::drm_panthor_gpu_info {
             gpu_id,
             gpu_rev,
             csf_id,
@@ -88,7 +86,7 @@ impl GpuInfo {
             core_features,
             pad: 0,
             gpu_features: 0,
-        }))
+        })
     }
 
     pub(crate) fn log(&self, pdev: &platform::Device) {
@@ -208,11 +206,11 @@ impl From<u32> for GpuId {
 }
 
 /// Powers on the l2 block.
-pub(crate) fn l2_power_on(dev: &Device<Bound>, iomem: &Devres<IoMem>) -> Result {
-    regs::L2_PWRON_LO.write(dev, iomem, 1)?;
+pub(crate) fn l2_power_on(dev: &Device<Bound>, iomem: &IoMem) -> Result {
+    regs::L2_PWRON_LO.write(iomem, 1);
 
     poll::read_poll_timeout(
-        || regs::L2_READY_LO.read(dev, iomem),
+        || Ok(regs::L2_READY_LO.read(iomem)),
         |status| *status == 1,
         Delta::from_millis(1),
         Delta::from_millis(100),
