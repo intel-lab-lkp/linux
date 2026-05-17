@@ -223,6 +223,7 @@ static int hyperv_negotiate_version(struct hv_device *hdev, u32 ver)
 	msg->vid_hdr.size = sizeof(struct synthvid_msg_hdr) +
 		sizeof(struct synthvid_version_req);
 	msg->ver_req.version = ver;
+	reinit_completion(&hv->wait);
 	hyperv_sendpacket(hdev, msg);
 
 	t = wait_for_completion_timeout(&hv->wait, VMBUS_VSP_TIMEOUT);
@@ -257,6 +258,7 @@ int hyperv_update_vram_location(struct hv_device *hdev, phys_addr_t vram_pp)
 	msg->vram.user_ctx = vram_pp;
 	msg->vram.vram_gpa = vram_pp;
 	msg->vram.is_vram_gpa_specified = 1;
+	reinit_completion(&hv->wait);
 	hyperv_sendpacket(hdev, msg);
 
 	t = wait_for_completion_timeout(&hv->wait, VMBUS_VSP_TIMEOUT);
@@ -383,6 +385,7 @@ static int hyperv_get_supported_resolution(struct hv_device *hdev)
 		sizeof(struct synthvid_supported_resolution_req);
 	msg->resolution_req.maximum_resolution_count =
 		SYNTHVID_MAX_RESOLUTION_COUNT;
+	reinit_completion(&hv->wait);
 	hyperv_sendpacket(hdev, msg);
 
 	t = wait_for_completion_timeout(&hv->wait, VMBUS_VSP_TIMEOUT);
@@ -391,8 +394,11 @@ static int hyperv_get_supported_resolution(struct hv_device *hdev)
 		return -ETIMEDOUT;
 	}
 
-	if (msg->resolution_resp.resolution_count == 0) {
-		drm_err(dev, "No supported resolutions\n");
+	if (msg->resolution_resp.resolution_count == 0 ||
+	    msg->resolution_resp.resolution_count >
+	    SYNTHVID_MAX_RESOLUTION_COUNT) {
+		drm_err(dev, "Invalid resolution count: %d\n",
+			msg->resolution_resp.resolution_count);
 		return -ENODEV;
 	}
 
@@ -506,8 +512,13 @@ int hyperv_connect_vsp(struct hv_device *hdev)
 
 	if (hyperv_version_ge(hv->synthvid_version, SYNTHVID_VERSION_WIN10)) {
 		ret = hyperv_get_supported_resolution(hdev);
-		if (ret)
+		if (ret) {
 			drm_err(dev, "Failed to get supported resolution from host, use default\n");
+			hv->screen_width_max = SYNTHVID_WIDTH_WIN8;
+			hv->screen_height_max = SYNTHVID_HEIGHT_WIN8;
+			hv->preferred_width = SYNTHVID_WIDTH_WIN8;
+			hv->preferred_height = SYNTHVID_HEIGHT_WIN8;
+		}
 	} else {
 		hv->screen_width_max = SYNTHVID_WIDTH_WIN8;
 		hv->screen_height_max = SYNTHVID_HEIGHT_WIN8;
