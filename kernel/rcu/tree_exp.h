@@ -603,7 +603,7 @@ static void synchronize_rcu_expedited_stall(unsigned long jiffies_start, unsigne
 				continue;
 			pr_cont(" l=%u:%d-%d:%#lx/%c",
 				rnp->level, rnp->grplo, rnp->grphi, data_race(rnp->expmask),
-				".T"[!!data_race(rnp->exp_tasks)]);
+				".T"[!!data_race(rnp->exp_tasks) || !list_empty(&rnp->dqs_blkd_tasks)]);
 		}
 		pr_cont("\n");
 	}
