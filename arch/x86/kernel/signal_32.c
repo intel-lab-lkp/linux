@@ -143,6 +143,11 @@ static bool ia32_restore_sigcontext(struct pt_regs *regs,
 	regs->ds = fixup_rpl(sc.ds);
 #endif
 
+#ifdef CONFIG_X86_USER_IBT
+	if (current->thread.ibt)
+		return false;
+#endif
+
 	return fpu__restore_sig(compat_ptr(sc.fpstate), 1);
 }
 
