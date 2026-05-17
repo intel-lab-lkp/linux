@@ -3472,6 +3472,8 @@ void wacom_wac_irq(struct wacom_wac *wacom_wac, size_t len)
 		break;
 
 	case DTU:
+		if (len < 8)
+			return;
 		sync = wacom_dtu_irq(wacom_wac);
 		break;
 
