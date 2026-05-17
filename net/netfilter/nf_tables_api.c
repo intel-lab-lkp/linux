@@ -9711,7 +9711,7 @@ static int nf_tables_fill_gen_info(struct sk_buff *skb, struct net *net,
 
 	if (nla_put_be32(skb, NFTA_GEN_ID, htonl(nft_base_seq(net))) ||
 	    nla_put_be32(skb, NFTA_GEN_PROC_PID, htonl(task_pid_nr(current))) ||
-	    nla_put_string(skb, NFTA_GEN_PROC_NAME, get_task_comm(buf, current)))
+	    nla_put_string(skb, NFTA_GEN_PROC_NAME, strscpy_pad(buf, current->comm)))
 		goto nla_put_failure;
 
 	nlmsg_end(skb, nlh);

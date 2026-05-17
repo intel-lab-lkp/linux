@@ -3603,7 +3603,7 @@ static void group_init_task_info(struct panthor_group *group)
 	struct task_struct *task = current->group_leader;
 
 	group->task_info.pid = task->pid;
-	get_task_comm(group->task_info.comm, task);
+	strscpy_pad(group->task_info.comm, task->comm);
 }
 
 static void add_group_kbo_sizes(struct panthor_device *ptdev,
