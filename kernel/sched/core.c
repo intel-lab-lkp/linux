@@ -890,7 +890,7 @@ static void __used hrtick_clear(struct rq *rq)
 }
 
 /*
- * High-resolution timer tick.
+ * High-resolution timer tick. Triggers at the end of next_task slice.
  * Runs from hardirq context with interrupts disabled.
  */
 static enum hrtimer_restart hrtick(struct hrtimer *timer)
@@ -1011,11 +1011,63 @@ static void hrtick_rq_init(struct rq *rq)
 	hrtimer_setup(&rq->hrtick_timer, hrtick, CLOCK_MONOTONIC,
 		      HRTIMER_MODE_REL_HARD | HRTIMER_MODE_LAZY_REARM);
 }
+
+static void ptick_clear(struct rq *rq)
+{
+	if (hrtimer_active(&rq->ptick_timer))
+		hrtimer_cancel(&rq->ptick_timer);
+}
+
+static void ptick_start(struct rq *rq)
+{
+	hrtimer_start(&rq->ptick_timer, ns_to_ktime(PTICK_NSEC),
+		      HRTIMER_MODE_ABS_PINNED_HARD);
+}
+
+static void ptick_ctx_switch(struct rq *rq,
+			     struct task_struct *prev, struct task_struct *next)
+{
+	if (is_idle_task(next))
+		ptick_clear(rq);
+
+	if (sched_feat(PTICK) && is_idle_task(prev))
+		ptick_start(rq);
+}
+
+void __sched_tick(void);
+
+/*
+ * High-resolution timer tick. Triggers regularly every PTICK_NSEC.
+ * Runs from hardirq context with interrupts disabled.
+ */
+static enum hrtimer_restart ptick(struct hrtimer *timer)
+{
+	struct rq *rq = container_of(timer, struct rq, ptick_timer);
+
+	WARN_ON_ONCE(cpu_of(rq) != smp_processor_id());
+
+	__sched_tick();
+
+	hrtimer_forward_now(timer, ns_to_ktime(PTICK_NSEC));
+
+	return HRTIMER_RESTART;
+}
+
+static void ptick_rq_init(struct rq *rq)
+{
+	hrtimer_setup(&rq->ptick_timer, ptick, CLOCK_MONOTONIC,
+		      HRTIMER_MODE_REL_HARD | HRTIMER_MODE_LAZY_REARM);
+}
 #else /* !CONFIG_SCHED_HRTICK: */
 static inline void hrtick_clear(struct rq *rq) { }
 static inline void hrtick_rq_init(struct rq *rq) { }
 static inline void hrtick_schedule_enter(struct rq *rq) { }
 static inline void hrtick_schedule_exit(struct rq *rq) { }
+static inline void ptick_clear(struct rq *rq) { }
+static inline void ptick_start(struct rq *rq) { }
+static inline void ptick_ctx_switch(struct rq *rq,
+				    struct task_struct *prev, struct task_struct *next) { }
+static inline void ptick_rq_init(struct rq *rq) { }
 #endif /* !CONFIG_SCHED_HRTICK */
 
 /*
@@ -5246,6 +5298,7 @@ static struct rq *finish_task_switch(struct task_struct *prev)
 	prev_state = READ_ONCE(prev->__state);
 	vtime_task_switch(prev);
 	perf_event_task_sched_in(prev, current);
+	ptick_ctx_switch(rq, prev, current);
 	finish_task(prev);
 	tick_nohz_task_switch();
 	finish_lock_switch(rq);
@@ -5637,11 +5690,7 @@ static int __init setup_resched_latency_warn_ms(char *str)
 }
 __setup("resched_latency_warn_ms=", setup_resched_latency_warn_ms);
 
-/*
- * This function gets called by the timer code, with HZ frequency.
- * We call it with interrupts disabled.
- */
-void sched_tick(void)
+void __sched_tick(void)
 {
 	int cpu = smp_processor_id();
 	struct rq *rq = cpu_rq(cpu);
@@ -5689,6 +5738,22 @@ void sched_tick(void)
 		rq->idle_balance = idle_cpu(cpu);
 		sched_balance_trigger(rq);
 	}
+}
+
+/*
+ * This function gets called by the timer code, with HZ frequency or
+ * PTICK_NSEC. We call it with interrupts disabled.
+ */
+void sched_tick(void)
+{
+	int cpu = smp_processor_id();
+	struct rq *rq = cpu_rq(cpu);
+
+	/* Skip HZ calls unless there are no tasks running when PTICK is enabled */
+	if (sched_feat(PTICK) && rq->nr_running)
+		return;
+
+	__sched_tick();
 }
 
 #ifdef CONFIG_NO_HZ_FULL
@@ -9017,6 +9082,7 @@ void __init sched_init(void)
 		rcuwait_init(&rq->hotplug_wait);
 #endif
 		hrtick_rq_init(rq);
+		ptick_rq_init(rq);
 		atomic_set(&rq->nr_iowait, 0);
 		fair_server_init(rq);
 #ifdef CONFIG_SCHED_CLASS_EXT

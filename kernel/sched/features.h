@@ -74,6 +74,13 @@ SCHED_FEAT(HRTICK_DL, false)
 #endif
 
 /*
+ * Pseudo Tick. Triggers when tasks are running on CPU. sched_tick() will run
+ * off of it when turned on. Will use regular TICK when no tasks are running or
+ * turned off.
+ */
+SCHED_FEAT(PTICK, false)
+
+/*
  * Decrement CPU capacity based on time not spent running tasks
  */
 SCHED_FEAT(NONTASK_CAPACITY, true)

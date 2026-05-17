@@ -1297,6 +1297,8 @@ struct rq {
 	ktime_t			hrtick_time;
 	ktime_t			hrtick_delay;
 	unsigned int		hrtick_sched;
+
+	struct hrtimer		ptick_timer;
 #endif
 
 #ifdef CONFIG_SCHEDSTATS
@@ -3069,6 +3071,11 @@ extern unsigned int sysctl_numa_balancing_scan_size;
 extern unsigned int sysctl_numa_balancing_hot_threshold;
 
 #ifdef CONFIG_SCHED_HRTICK
+
+/* PELT period is 1024us, add 1 to ensure one PELT period has passed */
+#define PTICK_USEC		(sched_feat(PTICK) ? (long)(USEC_PER_MSEC * 1.025) : TICK_USEC)
+#define PTICK_NSEC		(sched_feat(PTICK) ? (long)(NSEC_PER_MSEC * 1.025) : TICK_NSEC)
+#define PTICK_HZ		(sched_feat(PTICK) ? 1000 : HZ)
 
 /*
  * Use hrtick when:
