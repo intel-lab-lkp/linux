@@ -634,7 +634,7 @@ __noendbr void ibt_restore(u64 save)
 
 static __always_inline void setup_cet(struct cpuinfo_x86 *c)
 {
-	bool user_shstk, kernel_ibt;
+	bool user_shstk, kernel_ibt, user_ibt;
 
 	if (!IS_ENABLED(CONFIG_X86_CET))
 		return;
@@ -642,12 +642,18 @@ static __always_inline void setup_cet(struct cpuinfo_x86 *c)
 	kernel_ibt = HAS_KERNEL_IBT && cpu_feature_enabled(X86_FEATURE_IBT);
 	user_shstk = cpu_feature_enabled(X86_FEATURE_SHSTK) &&
 		     IS_ENABLED(CONFIG_X86_USER_SHADOW_STACK);
+	/* User IBT only needs hardware IBT, not kernel-enabled IBT. */
+	user_ibt = cpu_has(c, X86_FEATURE_IBT) &&
+		   IS_ENABLED(CONFIG_X86_USER_IBT);
 
-	if (!kernel_ibt && !user_shstk)
+	if (!kernel_ibt && !user_shstk && !user_ibt)
 		return;
 
 	if (user_shstk)
 		set_cpu_cap(c, X86_FEATURE_USER_SHSTK);
+
+	if (user_ibt)
+		set_cpu_cap(c, X86_FEATURE_USER_IBT);
 
 	if (kernel_ibt)
 		wrmsrq(MSR_IA32_S_CET, CET_ENDBR_EN);
@@ -666,6 +672,7 @@ static __always_inline void setup_cet(struct cpuinfo_x86 *c)
 __noendbr void cet_disable(void)
 {
 	if (!(cpu_feature_enabled(X86_FEATURE_IBT) ||
+	      cpu_feature_enabled(X86_FEATURE_USER_IBT) ||
 	      cpu_feature_enabled(X86_FEATURE_SHSTK)))
 		return;
 
@@ -1752,6 +1759,9 @@ static void __init cpu_parse_early_param(void)
 
 	if (cmdline_find_option_bool(boot_command_line, "nousershstk"))
 		setup_clear_cpu_cap(X86_FEATURE_USER_SHSTK);
+
+	if (cmdline_find_option_bool(boot_command_line, "nouseribt"))
+		setup_clear_cpu_cap(X86_FEATURE_USER_IBT);
 
 	/* Minimize the gap between FRED is available and available but disabled. */
 	arglen = cmdline_find_option(boot_command_line, "fred", arg, sizeof(arg));

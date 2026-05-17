@@ -149,7 +149,8 @@ __setup("ibt=", ibt_setup);
 DEFINE_IDTENTRY_ERRORCODE(exc_control_protection)
 {
 	if (user_mode(regs)) {
-		if (cpu_feature_enabled(X86_FEATURE_USER_SHSTK))
+		if (cpu_feature_enabled(X86_FEATURE_USER_SHSTK) ||
+		    cpu_feature_enabled(X86_FEATURE_USER_IBT))
 			do_user_cp_fault(regs, error_code);
 		else
 			do_unexpected_cp(regs, error_code);
