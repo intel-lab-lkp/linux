@@ -3509,7 +3509,14 @@ void wacom_wac_irq(struct wacom_wac *wacom_wac, size_t len)
 		break;
 
 	case WACOM_24HDT:
+		if (len < 62)
+			return;
+		sync = wacom_24hdt_irq(wacom_wac);
+		break;
+
 	case WACOM_27QHDT:
+		if (len < 64)
+			return;
 		sync = wacom_24hdt_irq(wacom_wac);
 		break;
 
