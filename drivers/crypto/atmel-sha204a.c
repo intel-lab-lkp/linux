@@ -213,7 +213,11 @@ err_list_del:
 
 static void atmel_sha204a_remove(struct i2c_client *client)
 {
-	struct atmel_i2c_client_priv *i2c_priv = i2c_get_clientdata(client);
+	struct atmel_i2c_client_priv *i2c_priv;
+
+	i2c_priv = i2c_get_clientdata(client);
+	if (WARN_ON(!i2c_priv))
+		return;
 
 	devm_hwrng_unregister(&client->dev, &i2c_priv->hwrng);
 
