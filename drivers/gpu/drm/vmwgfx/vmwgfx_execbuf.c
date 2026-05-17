@@ -1506,6 +1506,12 @@ static int vmw_cmd_dma(struct vmw_private *dev_priv,
 	bool dirty;
 
 	cmd = container_of(header, typeof(*cmd), header);
+
+	if (unlikely(header->size < sizeof(cmd->body) + sizeof(*suffix))) {
+		VMW_DEBUG_USER("DMA cmd header.size too small.\n");
+		return -EINVAL;
+	}
+
 	suffix = (SVGA3dCmdSurfaceDMASuffix *)((unsigned long) &cmd->body +
 					       header->size - sizeof(*suffix));
 
@@ -1572,6 +1578,12 @@ static int vmw_cmd_draw(struct vmw_private *dev_priv,
 		return ret;
 
 	cmd = container_of(header, typeof(*cmd), header);
+
+	if (unlikely(header->size < sizeof(cmd->body))) {
+		VMW_DEBUG_USER("Draw cmd header.size smaller than body.\n");
+		return -EINVAL;
+	}
+
 	maxnum = (header->size - sizeof(cmd->body)) / sizeof(*decl);
 
 	if (unlikely(cmd->body.numVertexDecls > maxnum)) {
@@ -1914,6 +1926,11 @@ static int vmw_cmd_shader_define(struct vmw_private *dev_priv,
 
 	if (unlikely(!dev_priv->has_mob))
 		return 0;
+
+	if (unlikely(cmd->header.size < sizeof(cmd->body))) {
+		VMW_DEBUG_USER("Shader define cmd header.size smaller than body.\n");
+		return -EINVAL;
+	}
 
 	size = cmd->header.size - sizeof(cmd->body);
 	ret = vmw_compat_shader_add(dev_priv, vmw_context_res_man(ctx),
