@@ -446,6 +446,34 @@ void memcpy_and_pad(void *dest, size_t dest_len, const void *src, size_t count,
 } while (0)
 
 /**
+ * strtostr - Copy NUL-terminanted string to NUL-terminate string
+ *
+ * @dest: Pointer of destination string
+ * @src: Pointer to NUL-terminates string
+ *
+ * This is a replacement for strcpy() where the caller doesn't care about the
+ * return value and if the string is going to be truncated, albeit it needs
+ * to mark sure that it will be NUL-terminated. Intended for performance
+ * sensitive cases, such as tracing.
+ *
+ * If the destination is bigger than the source, no padding happens. It it's
+ * smaller the strings gets truncated.
+ *
+ * Both arguments needs to be arrays with lengths discoverable by the compiler.
+ */
+#define strtostr(dest, src)	do {					\
+	const size_t _dest_len = __must_be_cstr(dest) +			\
+				 ARRAY_SIZE(dest);			\
+	const size_t _src_len = __must_be_cstr(src) +			\
+				__builtin_object_size(src, 1);		\
+									\
+	BUILD_BUG_ON(!__builtin_constant_p(_dest_len) ||		\
+		     _dest_len == (size_t)-1);				\
+	memcpy(dest, src, strnlen(src, min(_src_len, _dest_len)));	\
+	dest[_dest_len - 1] = '\0';						\
+} while (0)
+
+/**
  * memtostr - Copy a possibly non-NUL-term string to a NUL-term string
  * @dest: Pointer to destination NUL-terminates string
  * @src: Pointer to character array (likely marked as __nonstring)

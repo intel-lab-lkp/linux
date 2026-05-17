@@ -23,7 +23,7 @@ TRACE_EVENT(oom_score_adj_update,
 
 	TP_fast_assign(
 		__entry->pid = task->pid;
-		memcpy(__entry->comm, task->comm, TASK_COMM_LEN);
+		strtostr(__entry->comm, task->comm);
 		__entry->oom_score_adj = task->signal->oom_score_adj;
 	),
 
