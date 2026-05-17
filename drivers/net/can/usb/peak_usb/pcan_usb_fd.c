@@ -726,7 +726,7 @@ static int pcan_usb_fd_decode_buf(struct peak_usb_device *dev, struct urb *urb)
 	/* loop reading all the records from the incoming message */
 	msg_ptr = urb->transfer_buffer;
 	msg_end = urb->transfer_buffer + urb->actual_length;
-	for (; msg_ptr < msg_end;) {
+	while (msg_ptr + sizeof(struct pucan_msg) <= msg_end) {
 		u16 rx_msg_type, rx_msg_size;
 
 		rx_msg = (struct pucan_msg *)msg_ptr;
@@ -738,8 +738,9 @@ static int pcan_usb_fd_decode_buf(struct peak_usb_device *dev, struct urb *urb)
 		rx_msg_size = le16_to_cpu(rx_msg->size);
 		rx_msg_type = le16_to_cpu(rx_msg->type);
 
-		/* check if the record goes out of current packet */
-		if (msg_ptr + rx_msg_size > msg_end) {
+		/* check if the record fits inside the current packet */
+		if (rx_msg_size < sizeof(struct pucan_msg) ||
+		    msg_ptr + rx_msg_size > msg_end) {
 			netdev_err(netdev,
 				   "got frag rec: should inc usb rx buf sze\n");
 			err = -EBADMSG;
