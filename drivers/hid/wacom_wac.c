@@ -3453,6 +3453,8 @@ void wacom_wac_irq(struct wacom_wac *wacom_wac, size_t len)
 		break;
 
 	case PL:
+		if (len < 8)
+			return;
 		sync = wacom_pl_irq(wacom_wac);
 		break;
 
@@ -3464,6 +3466,8 @@ void wacom_wac_irq(struct wacom_wac *wacom_wac, size_t len)
 		break;
 
 	case PTU:
+		if (len < 8)
+			return;
 		sync = wacom_ptu_irq(wacom_wac);
 		break;
 
