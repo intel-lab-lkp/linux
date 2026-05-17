@@ -48,7 +48,7 @@ static struct hw_pci mss2_pci __initdata = {
 static int __init mss2_pci_init(void)
 {
 	if (machine_is_mss2())
-		pci_common_init(&mss2_pci);
+		pci_common_init_dev(NULL, &mss2_pci);
 
 	return 0;
 }

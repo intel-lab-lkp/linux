@@ -222,5 +222,5 @@ void __init dove_pcie_init(int init_port0, int init_port1)
 	if (init_port1)
 		add_pcie_port(1, DOVE_PCIE1_VIRT_BASE);
 
-	pci_common_init(&dove_pci);
+	pci_common_init_dev(NULL, &dove_pci);
 }

@@ -145,7 +145,7 @@ static struct hw_pci qnap_ts409_pci __initdata = {
 static int __init qnap_ts409_pci_init(void)
 {
 	if (machine_is_ts409())
-		pci_common_init(&qnap_ts409_pci);
+		pci_common_init_dev(NULL, &qnap_ts409_pci);
 
 	return 0;
 }

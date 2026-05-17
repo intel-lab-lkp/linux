@@ -99,7 +99,7 @@ static int __init dns323_pci_init(void)
 	 * gets in the way of initialising the SATA controller.
 	 */
 	if (machine_is_dns323() && system_rev == DNS323_REV_A1)
-		pci_common_init(&dns323_pci);
+		pci_common_init_dev(NULL, &dns323_pci);
 
 	return 0;
 }

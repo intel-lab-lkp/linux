@@ -144,7 +144,7 @@ static int __init kurobox_pro_pci_init(void)
 {
 	if (machine_is_kurobox_pro()) {
 		orion5x_pci_disable();
-		pci_common_init(&kurobox_pro_pci);
+		pci_common_init_dev(NULL, &kurobox_pro_pci);
 	}
 
 	return 0;

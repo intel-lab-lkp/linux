@@ -41,7 +41,7 @@ static struct hw_pci ebsa285_pci __initdata = {
 static int __init ebsa285_init_pci(void)
 {
 	if (machine_is_ebsa285())
-		pci_common_init(&ebsa285_pci);
+		pci_common_init_dev(NULL, &ebsa285_pci);
 	return 0;
 }
 

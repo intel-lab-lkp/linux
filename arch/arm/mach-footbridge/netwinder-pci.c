@@ -55,7 +55,7 @@ static struct hw_pci netwinder_pci __initdata = {
 static int __init netwinder_pci_init(void)
 {
 	if (machine_is_netwinder())
-		pci_common_init(&netwinder_pci);
+		pci_common_init_dev(NULL, &netwinder_pci);
 	return 0;
 }
 

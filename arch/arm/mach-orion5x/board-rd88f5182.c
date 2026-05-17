@@ -106,7 +106,7 @@ static struct hw_pci rd88f5182_pci __initdata = {
 static int __init rd88f5182_pci_init(void)
 {
 	if (of_machine_is_compatible("marvell,rd-88f5182-nas"))
-		pci_common_init(&rd88f5182_pci);
+		pci_common_init_dev(NULL, &rd88f5182_pci);
 
 	return 0;
 }

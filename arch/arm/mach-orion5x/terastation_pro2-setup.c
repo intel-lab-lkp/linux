@@ -126,7 +126,7 @@ static struct hw_pci tsp2_pci __initdata = {
 static int __init tsp2_pci_init(void)
 {
 	if (machine_is_terastation_pro2())
-		pci_common_init(&tsp2_pci);
+		pci_common_init_dev(NULL, &tsp2_pci);
 
 	return 0;
 }
