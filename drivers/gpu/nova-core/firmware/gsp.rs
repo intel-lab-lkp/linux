@@ -65,11 +65,11 @@ pub(crate) struct GspFirmware {
 impl GspFirmware {
     /// Loads the GSP firmware binaries, map them into `dev`'s address-space, and creates the page
     /// tables expected by the GSP bootloader to load it.
-    pub(crate) fn new<'a>(
-        dev: &'a device::Device<device::Bound>,
+    pub(crate) fn new<'bound>(
+        dev: &'bound device::Device<device::Bound>,
         chipset: Chipset,
-        ver: &'a str,
-    ) -> impl PinInit<Self, Error> + 'a {
+        ver: &'bound str,
+    ) -> impl PinInit<Self, Error> + 'bound {
         pin_init::pin_init_scope(move || {
             let firmware = super::request_firmware(dev, chipset, "gsp", ver)?;
 

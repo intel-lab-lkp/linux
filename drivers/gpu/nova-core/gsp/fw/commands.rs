@@ -24,7 +24,9 @@ static_assert!(size_of::<GspSetSystemInfo>() < GSP_PAGE_SIZE);
 impl GspSetSystemInfo {
     /// Returns an in-place initializer for the `GspSetSystemInfo` command.
     #[allow(non_snake_case)]
-    pub(crate) fn init<'a>(dev: &'a pci::Device<device::Bound>) -> impl Init<Self, Error> + 'a {
+    pub(crate) fn init<'bound>(
+        dev: &'bound pci::Device<device::Bound>,
+    ) -> impl Init<Self, Error> + 'bound {
         type InnerGspSystemInfo = bindings::GspSystemInfo;
         let init_inner = try_init!(InnerGspSystemInfo {
             gpuPhysAddr: dev.resource_start(0)?,

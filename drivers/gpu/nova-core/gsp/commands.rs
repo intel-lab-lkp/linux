@@ -35,18 +35,18 @@ use crate::{
 };
 
 /// The `GspSetSystemInfo` command.
-pub(crate) struct SetSystemInfo<'a> {
-    pdev: &'a pci::Device<device::Bound>,
+pub(crate) struct SetSystemInfo<'bound> {
+    pdev: &'bound pci::Device<device::Bound>,
 }
 
-impl<'a> SetSystemInfo<'a> {
+impl<'bound> SetSystemInfo<'bound> {
     /// Creates a new `GspSetSystemInfo` command using the parameters of `pdev`.
-    pub(crate) fn new(pdev: &'a pci::Device<device::Bound>) -> Self {
+    pub(crate) fn new(pdev: &'bound pci::Device<device::Bound>) -> Self {
         Self { pdev }
     }
 }
 
-impl<'a> CommandToGsp for SetSystemInfo<'a> {
+impl<'bound> CommandToGsp for SetSystemInfo<'bound> {
     const FUNCTION: MsgFunction = MsgFunction::GspSetSystemInfo;
     type Command = GspSetSystemInfo;
     type Reply = NoReply;

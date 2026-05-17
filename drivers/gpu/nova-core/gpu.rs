@@ -241,11 +241,11 @@ pub(crate) struct Gpu {
 }
 
 impl Gpu {
-    pub(crate) fn new<'a>(
-        pdev: &'a pci::Device<device::Bound>,
+    pub(crate) fn new<'bound>(
+        pdev: &'bound pci::Device<device::Bound>,
         devres_bar: Arc<Devres<Bar0>>,
-        bar: &'a Bar0,
-    ) -> impl PinInit<Self, Error> + 'a {
+        bar: &'bound Bar0,
+    ) -> impl PinInit<Self, Error> + 'bound {
         try_pin_init!(Self {
             spec: Spec::new(pdev.as_ref(), bar).inspect(|spec| {
                 dev_info!(pdev,"NVIDIA ({})\n", spec);
