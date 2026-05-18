@@ -1,0 +1,36 @@
+drm drm-fixes 5200f5f493f79f14bbdc349e402a40dfb32f23c8
+	Linux 7.1-rc4
+drm-misc drm-misc-fixes 379e8f1ca5e919b130b40d8115d92a536e5f8d7a
+	drm/gem: Make the GEM LRU lock part of drm_device
+drm-rust drm-rust-fixes 0a69ac25bd596d50823d530d0a2004336668c0df
+	rust: drm: fix unsound initialization in drm::Device::new
+drm-intel drm-intel-fixes 5200f5f493f79f14bbdc349e402a40dfb32f23c8
+	Linux 7.1-rc4
+drm-xe drm-xe-fixes 5200f5f493f79f14bbdc349e402a40dfb32f23c8
+	Linux 7.1-rc4
+drm drm-next 1f863fe67343e2f45fc0af75ac94c3705bdf6537
+	Merge tag 'drm-intel-next-2026-05-14' of https://gitlab.freedesktop.org/drm/i915/kernel into drm-next
+drm-misc drm-misc-next-fixes f6c73e7156b54d8b9ddf1a27f4e93d3a1e49a73e
+	drm: rcar-du: Fix crash when no CMM is available
+drm-intel drm-intel-next-fixes 314f6179e370988ac00dadf373a4f6166eb3db15
+	drm/i915/psr: Init variable to avoid early exit from et alignment loop
+drm-xe drm-xe-next-fixes 6de23f81a5e08be8fbf5e8d7e9febc72a5b5f27f
+	Linux 7.0-rc1
+drm-misc drm-misc-next e5b93bd6fdb92aa5e4689715d7e8487d9ce66a38
+	drm/syncobj: Fix memory leak in drm_syncobj_find_fence()
+drm-rust drm-rust-next 8bfe9d72cf2064f679c4192dba84be79eb70675d
+	gpu: nova: Use module names consistently
+drm-intel drm-intel-next fed4921503a8a346ea4e6826eee7658f480341ec
+	drm/i915/psr: Apply SDP on prior scanline workaround for Xe3p
+drm-intel drm-intel-gt-next 8edf8b09fc44990977b3fbcb708035b1740d0b7e
+	Merge drm/drm-next into drm-intel-gt-next
+drm-xe drm-xe-next 058da4a2b164e477b02ca0562f01a9eb9e621cdd
+	drm/xe/reg_sr: Do sanity check for MCR vs non-MCR
+drm-intel topic/core-for-CI 42f6438f1d344694656e7eca76e2d02b109697b6
+	Revert "lockdep: Enable PROVE_RAW_LOCK_NESTING with PROVE_LOCKING."
+drm-xe topic/xe-for-CI bd9ef8d19f9e9ff47518ce48fb2002d58bfeeaaa
+	drm/xe/nvlp: Define GuC firmware for NVL-P
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
+drm-intel topic/pipe-reorder 2c683e9b419328da3433a49f7c467da71aaf0469
+	drm/i915/display: change pipe allocation order for discrete platforms
