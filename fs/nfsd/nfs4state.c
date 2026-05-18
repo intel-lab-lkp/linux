@@ -8527,13 +8527,18 @@ out:
 		 * If this is a new, never-before-used stateid, and we are
 		 * returning an error, then just go ahead and release it.
 		 */
-		if (status && new)
+		if (status && new) {
+			mutex_unlock(&lock_stp->st_mutex);
 			release_lock_stateid(lock_stp);
+			goto out_no_lock_stp;
+		}
 
 		mutex_unlock(&lock_stp->st_mutex);
 
 		nfs4_put_stid(&lock_stp->st_stid);
 	}
+
+out_no_lock_stp:
 	if (open_stp)
 		nfs4_put_stid(&open_stp->st_stid);
 	nfsd4_bump_seqid(cstate, status);
