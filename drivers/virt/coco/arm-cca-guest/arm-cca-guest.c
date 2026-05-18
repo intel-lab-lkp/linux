@@ -108,7 +108,7 @@ static int arm_cca_report_new(struct tsm_report *report, void *data)
 	 * allocate outblob based on the returned value from the 'init'
 	 * call and that cannot be done in an atomic context.
 	 */
-	cpu = smp_processor_id();
+	cpu = raw_smp_processor_id();
 
 	info.challenge = desc->inblob;
 	info.challenge_size = desc->inblob_len;
