@@ -475,7 +475,7 @@ static int lc824206xa_probe(struct i2c_client *client)
 }
 
 static const struct i2c_device_id lc824206xa_i2c_ids[] = {
-	{ "lc824206xa" },
+	{ .name = "lc824206xa" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, lc824206xa_i2c_ids);
