@@ -4425,6 +4425,43 @@ done:
 }
 
 /**
+ * pci_do_d3hot_transition - Perform D3hot->D0 power state transition
+ * @dev: Device to transition
+ *
+ * Common helper to perform D3hot->D0 transition for PM-based reset methods.
+ * Handles IOMMU preparation, state transition, and waiting for device ready.
+ */
+static int pci_do_d3hot_transition(struct pci_dev *dev)
+{
+	u16 csr;
+	int ret;
+
+	if (dev->current_state != PCI_D0)
+		return -EINVAL;
+
+	ret = pci_dev_reset_iommu_prepare(dev);
+	if (ret) {
+		pci_err(dev, "failed to stop IOMMU for a PCI reset: %d\n", ret);
+		return ret;
+	}
+
+	pci_read_config_word(dev, dev->pm_cap + PCI_PM_CTRL, &csr);
+	csr &= ~PCI_PM_CTRL_STATE_MASK;
+	csr |= PCI_D3hot;
+	pci_write_config_word(dev, dev->pm_cap + PCI_PM_CTRL, csr);
+	pci_dev_d3_sleep(dev);
+
+	csr &= ~PCI_PM_CTRL_STATE_MASK;
+	csr |= PCI_D0;
+	pci_write_config_word(dev, dev->pm_cap + PCI_PM_CTRL, csr);
+	pci_dev_d3_sleep(dev);
+
+	ret = pci_dev_wait(dev, "PM D3hot->D0", PCIE_RESET_READY_POLL_MS);
+	pci_dev_reset_iommu_done(dev);
+	return ret;
+}
+
+/**
  * pci_pm_reset - Put device into PCI_D3 and back into PCI_D0.
  * @dev: Device to reset.
  * @probe: if true, return 0 if the device can be reset this way.
@@ -4442,7 +4479,6 @@ done:
 static int pci_pm_reset(struct pci_dev *dev, bool probe)
 {
 	u16 csr;
-	int ret;
 
 	if (!dev->pm_cap || dev->dev_flags & PCI_DEV_FLAGS_NO_PM_RESET)
 		return -ENOTTY;
@@ -4454,28 +4490,7 @@ static int pci_pm_reset(struct pci_dev *dev, bool probe)
 	if (probe)
 		return 0;
 
-	if (dev->current_state != PCI_D0)
-		return -EINVAL;
-
-	ret = pci_dev_reset_iommu_prepare(dev);
-	if (ret) {
-		pci_err(dev, "failed to stop IOMMU for a PCI reset: %d\n", ret);
-		return ret;
-	}
-
-	csr &= ~PCI_PM_CTRL_STATE_MASK;
-	csr |= PCI_D3hot;
-	pci_write_config_word(dev, dev->pm_cap + PCI_PM_CTRL, csr);
-	pci_dev_d3_sleep(dev);
-
-	csr &= ~PCI_PM_CTRL_STATE_MASK;
-	csr |= PCI_D0;
-	pci_write_config_word(dev, dev->pm_cap + PCI_PM_CTRL, csr);
-	pci_dev_d3_sleep(dev);
-
-	ret = pci_dev_wait(dev, "PM D3hot->D0", PCIE_RESET_READY_POLL_MS);
-	pci_dev_reset_iommu_done(dev);
-	return ret;
+	return pci_do_d3hot_transition(dev);
 }
 
 /**
@@ -4515,6 +4530,42 @@ static int pci_d3cold_reset(struct pci_dev *dev, bool probe)
 		return ret;
 
 	return pci_set_power_state(dev, PCI_D0);
+}
+
+/**
+ * pci_soft_reset - Software-initiated reset via D3hot as last resort
+ * @dev: PCI device to reset
+ * @probe: if true, check if soft reset is supported; if false, perform reset
+ *
+ * Attempt a software-initiated reset via D3hot->D0 transition as an absolute
+ * last resort when all other reset methods have failed. This method only
+ * becomes available if the device has PM capability, pci_pm_reset() is blocked
+ * (typically by NoSoftRst+), and pci_d3cold_reset() is not available.
+ *
+ * Some devices incorrectly advertise NoSoftRst+ but D3hot transition does
+ * provide sufficient reset for certain use cases (e.g., VFIO passthrough).
+ * This method provides a "better than nothing" option when the device would
+ * otherwise have no reset capability.
+ *
+ * Returns 0 if device can be/was reset this way, -ENOTTY if a better reset
+ * method is available (pm or d3cold) or device lacks PM capability, or other
+ * negative error code on failure.
+ */
+static int pci_soft_reset(struct pci_dev *dev, bool probe)
+{
+	if (pci_pm_reset(dev, true) == 0)
+		return -ENOTTY;
+
+	if (pci_d3cold_reset(dev, true) == 0)
+		return -ENOTTY;
+
+	if (!dev->pm_cap)
+		return -ENOTTY;
+
+	if (probe)
+		return 0;
+
+	return pci_do_d3hot_transition(dev);
 }
 
 /**
@@ -5092,6 +5143,7 @@ const struct pci_reset_fn_method pci_reset_fn_methods[] = {
 	{ pci_reset_bus_function, .name = "bus" },
 	{ cxl_reset_bus_function, .name = "cxl_bus" },
 	{ pci_d3cold_reset, .name = "d3cold" },
+	{ pci_soft_reset, .name = "soft" },
 };
 
 /**
