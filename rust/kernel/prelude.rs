@@ -101,6 +101,7 @@ pub use super::{
     try_init,
     try_pin_init,
     uaccess::UserPtr,
+    unsafe_precondition_assert,
     ThisModule, //
 };
 
