@@ -96,7 +96,7 @@ static void sun6i_mipi_csi2_disable(struct sun6i_mipi_csi2_device *csi2_dev)
 }
 
 static void sun6i_mipi_csi2_configure(struct sun6i_mipi_csi2_device *csi2_dev,
-				       const struct v4l2_mbus_framefmt *mbus_format)
+				      const struct v4l2_mbus_framefmt *mbus_format)
 {
 	struct regmap *regmap = csi2_dev->regmap;
 	unsigned int lanes_count =
