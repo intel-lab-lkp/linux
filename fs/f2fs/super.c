@@ -4996,11 +4996,13 @@ static int f2fs_fill_super(struct super_block *sb, struct fs_context *fc)
 	int recovery, i, valid_super_block;
 	struct curseg_info *seg_i;
 	int retry_cnt = 1;
+	bool gc_thread_srcu_inited = false;
 #ifdef CONFIG_QUOTA
 	bool quota_enabled = false;
 #endif
 
 try_onemore:
+	gc_thread_srcu_inited = false;
 	err = -EINVAL;
 	raw_super = NULL;
 	valid_super_block = -1;
@@ -5035,6 +5037,10 @@ try_onemore:
 		spin_lock_init(&sbi->inode_lock[i]);
 	}
 	mutex_init(&sbi->flush_lock);
+	err = init_srcu_struct(&sbi->gc_thread_srcu);
+	if (err)
+		goto free_sbi;
+	gc_thread_srcu_inited = true;
 
 	/* set a block size */
 	if (unlikely(!sb_set_blocksize(sb, F2FS_BLKSIZE))) {
@@ -5501,6 +5507,10 @@ free_sbi:
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
 	lockdep_unregister_key(&sbi->cp_global_sem_key);
 #endif
+	if (gc_thread_srcu_inited) {
+		cleanup_srcu_struct(&sbi->gc_thread_srcu);
+		gc_thread_srcu_inited = false;
+	}
 	kfree(sbi);
 	sb->s_fs_info = NULL;
 
@@ -5585,6 +5595,7 @@ static void kill_f2fs_super(struct super_block *sb)
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
 		lockdep_unregister_key(&sbi->cp_global_sem_key);
 #endif
+		cleanup_srcu_struct(&sbi->gc_thread_srcu);
 		kfree(sbi);
 		sb->s_fs_info = NULL;
 	}

@@ -30,10 +30,10 @@ static unsigned int count_bits(const unsigned long *addr,
 
 static int gc_thread_func(void *data)
 {
-	struct f2fs_sb_info *sbi = data;
-	struct f2fs_gc_kthread *gc_th = sbi->gc_thread;
-	wait_queue_head_t *wq = &sbi->gc_thread->gc_wait_queue_head;
-	wait_queue_head_t *fggc_wq = &sbi->gc_thread->fggc_wq;
+	struct f2fs_gc_kthread *gc_th = data;
+	struct f2fs_sb_info *sbi = gc_th->sbi;
+	wait_queue_head_t *wq = &gc_th->gc_wait_queue_head;
+	wait_queue_head_t *fggc_wq = &gc_th->fggc_wq;
 	unsigned int wait_ms;
 	struct f2fs_gc_control gc_control = {
 		.victim_segno = NULL_SEGNO,
@@ -134,7 +134,7 @@ static int gc_thread_func(void *data)
 				wait_ms = gc_th->max_sleep_time;
 		}
 
-		if (need_to_boost_gc(sbi)) {
+		if (need_to_boost_gc(sbi, gc_th)) {
 			decrease_sleep_time(gc_th, &wait_ms);
 			if (f2fs_sb_has_blkzoned(sbi))
 				gc_boost = true;
@@ -194,6 +194,7 @@ next:
 int f2fs_start_gc_thread(struct f2fs_sb_info *sbi)
 {
 	struct f2fs_gc_kthread *gc_th;
+	struct task_struct *task;
 	dev_t dev = sbi->sb->s_bdev->bd_dev;
 
 	gc_th = f2fs_kmalloc(sbi, sizeof(struct f2fs_gc_kthread), GFP_KERNEL);
@@ -219,36 +220,44 @@ int f2fs_start_gc_thread(struct f2fs_sb_info *sbi)
 		gc_th->boost_zoned_gc_percent = 0;
 	}
 
+	gc_th->sbi = sbi;
 	gc_th->gc_wake = false;
+	init_waitqueue_head(&gc_th->gc_wait_queue_head);
+	init_waitqueue_head(&gc_th->fggc_wq);
 
-	sbi->gc_thread = gc_th;
-	init_waitqueue_head(&sbi->gc_thread->gc_wait_queue_head);
-	init_waitqueue_head(&sbi->gc_thread->fggc_wq);
-	sbi->gc_thread->f2fs_gc_task = kthread_run(gc_thread_func, sbi,
-			"f2fs_gc-%u:%u", MAJOR(dev), MINOR(dev));
-	if (IS_ERR(gc_th->f2fs_gc_task)) {
-		int err = PTR_ERR(gc_th->f2fs_gc_task);
+	task = kthread_run(gc_thread_func, gc_th, "f2fs_gc-%u:%u",
+			MAJOR(dev), MINOR(dev));
+	if (IS_ERR(task)) {
+		int err = PTR_ERR(task);
 
 		kfree(gc_th);
-		sbi->gc_thread = NULL;
 		return err;
 	}
 
-	set_user_nice(gc_th->f2fs_gc_task,
-			PRIO_TO_NICE(sbi->critical_task_priority));
+	get_task_struct(task);
+	WRITE_ONCE(gc_th->f2fs_gc_task, task);
+	set_user_nice(task, PRIO_TO_NICE(sbi->critical_task_priority));
+	smp_store_release(&sbi->gc_thread, gc_th);
 	return 0;
 }
 
 void f2fs_stop_gc_thread(struct f2fs_sb_info *sbi)
 {
-	struct f2fs_gc_kthread *gc_th = sbi->gc_thread;
+	struct f2fs_gc_kthread *gc_th;
+	struct task_struct *task;
 
+	gc_th = xchg(&sbi->gc_thread, NULL);
 	if (!gc_th)
 		return;
-	kthread_stop(gc_th->f2fs_gc_task);
+
+	task = xchg(&gc_th->f2fs_gc_task, NULL);
+	if (task)
+		kthread_stop(task);
 	wake_up_all(&gc_th->fggc_wq);
+	synchronize_srcu(&sbi->gc_thread_srcu);
+	if (task)
+		put_task_struct(task);
 	kfree(gc_th);
-	sbi->gc_thread = NULL;
 }
 
 static int select_gc_type(struct f2fs_sb_info *sbi, int gc_type)
@@ -795,8 +804,16 @@ int f2fs_get_victim(struct f2fs_sb_info *sbi, unsigned int *result,
 	p.age_threshold = sbi->am.age_threshold;
 	if (one_time) {
 		p.one_time_gc = one_time;
-		if (has_enough_free_secs(sbi, 0, NR_PERSISTENT_LOG))
-			valid_thresh_ratio = sbi->gc_thread->valid_thresh_ratio;
+		if (has_enough_free_secs(sbi, 0, NR_PERSISTENT_LOG)) {
+			struct f2fs_gc_kthread *gc_th;
+			int srcu_idx;
+
+			gc_th = f2fs_get_gc_thread(sbi, &srcu_idx);
+			if (gc_th) {
+				valid_thresh_ratio = gc_th->valid_thresh_ratio;
+				f2fs_put_gc_thread(sbi, srcu_idx);
+			}
+		}
 	}
 
 retry:
@@ -1775,11 +1792,19 @@ static int do_garbage_collect(struct f2fs_sb_info *sbi,
 			unsigned int window_granularity =
 				sbi->migration_window_granularity;
 
-			if (f2fs_sb_has_blkzoned(sbi) &&
-					!has_enough_free_blocks(sbi,
-					sbi->gc_thread->boost_zoned_gc_percent))
-				window_granularity *=
-					sbi->gc_thread->boost_gc_multiple;
+			if (f2fs_sb_has_blkzoned(sbi)) {
+				struct f2fs_gc_kthread *gc_th;
+				int srcu_idx;
+
+				gc_th = f2fs_get_gc_thread(sbi, &srcu_idx);
+				if (gc_th) {
+					if (!has_enough_free_blocks(sbi,
+						gc_th->boost_zoned_gc_percent))
+						window_granularity *=
+							gc_th->boost_gc_multiple;
+					f2fs_put_gc_thread(sbi, srcu_idx);
+				}
+			}
 
 			end_segno = start_segno + window_granularity;
 		}

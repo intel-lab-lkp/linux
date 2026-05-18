@@ -445,16 +445,30 @@ void f2fs_balance_fs(struct f2fs_sb_info *sbi, bool need)
 	if (has_enough_free_secs(sbi, 0, 0))
 		return;
 
-	if (test_opt(sbi, GC_MERGE) && sbi->gc_thread &&
-				sbi->gc_thread->f2fs_gc_task) {
-		DEFINE_WAIT(wait);
+	if (test_opt(sbi, GC_MERGE)) {
+		struct f2fs_gc_kthread *gc_th;
+		int srcu_idx;
 
-		prepare_to_wait(&sbi->gc_thread->fggc_wq, &wait,
-					TASK_UNINTERRUPTIBLE);
-		wake_up(&sbi->gc_thread->gc_wait_queue_head);
-		io_schedule();
-		finish_wait(&sbi->gc_thread->fggc_wq, &wait);
-	} else {
+		gc_th = f2fs_get_gc_thread(sbi, &srcu_idx);
+		if (gc_th) {
+			if (READ_ONCE(gc_th->f2fs_gc_task)) {
+				DEFINE_WAIT(wait);
+
+				prepare_to_wait(&gc_th->fggc_wq, &wait,
+						TASK_UNINTERRUPTIBLE);
+				if (READ_ONCE(gc_th->f2fs_gc_task)) {
+					wake_up(&gc_th->gc_wait_queue_head);
+					io_schedule();
+				}
+				finish_wait(&gc_th->fggc_wq, &wait);
+				f2fs_put_gc_thread(sbi, srcu_idx);
+				return;
+			}
+			f2fs_put_gc_thread(sbi, srcu_idx);
+		}
+	}
+
+	{
 		struct f2fs_gc_control gc_control = {
 			.victim_segno = NULL_SEGNO,
 			.init_gc_type = f2fs_sb_has_blkzoned(sbi) ?

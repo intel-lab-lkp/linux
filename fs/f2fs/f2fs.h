@@ -25,6 +25,7 @@
 #include <linux/quotaops.h>
 #include <linux/part_stat.h>
 #include <linux/rw_hint.h>
+#include <linux/srcu.h>
 
 #include <linux/fscrypt.h>
 #include <linux/fsverity.h>
@@ -164,6 +165,8 @@ typedef u32 block_t;	/*
 			 * address format, __le32.
 			 */
 typedef u32 nid_t;
+
+struct f2fs_gc_kthread;
 
 #define COMPRESS_EXT_NUM		16
 
@@ -1883,7 +1886,8 @@ struct f2fs_sb_info {
 						 * semaphore for GC, avoid
 						 * race between GC and GC or CP
 						 */
-	struct f2fs_gc_kthread	*gc_thread;	/* GC thread */
+	struct f2fs_gc_kthread	*gc_thread;	/* published GC thread */
+	struct srcu_struct gc_thread_srcu;	/* protects gc_thread readers */
 	struct atgc_management am;		/* atgc management */
 	unsigned int cur_victim_sec;		/* current victim section num */
 	unsigned int gc_mode;			/* current GC state */
@@ -4220,6 +4224,26 @@ extern const struct iomap_ops f2fs_iomap_ops;
 /*
  * gc.c
  */
+static inline struct f2fs_gc_kthread *f2fs_get_gc_thread(
+					struct f2fs_sb_info *sbi, int *srcu_idx)
+{
+	struct f2fs_gc_kthread *gc_th;
+
+	*srcu_idx = srcu_read_lock(&sbi->gc_thread_srcu);
+	gc_th = smp_load_acquire(&sbi->gc_thread);
+	if (!gc_th) {
+		srcu_read_unlock(&sbi->gc_thread_srcu, *srcu_idx);
+		*srcu_idx = -1;
+	}
+
+	return gc_th;
+}
+
+static inline void f2fs_put_gc_thread(struct f2fs_sb_info *sbi, int srcu_idx)
+{
+	srcu_read_unlock(&sbi->gc_thread_srcu, srcu_idx);
+}
+
 int f2fs_start_gc_thread(struct f2fs_sb_info *sbi);
 void f2fs_stop_gc_thread(struct f2fs_sb_info *sbi);
 block_t f2fs_start_bidx_of_node(unsigned int node_ofs, struct inode *inode);
