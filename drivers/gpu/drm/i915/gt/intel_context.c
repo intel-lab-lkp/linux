@@ -475,6 +475,11 @@ void intel_context_enter_engine(struct intel_context *ce)
 
 void intel_context_exit_engine(struct intel_context *ce)
 {
+	if (unlikely(atomic_read(&ce->engine->wakeref.count) <= 0)) {
+		intel_timeline_exit(ce->timeline);
+		return;
+	}
+
 	intel_timeline_exit(ce->timeline);
 	intel_engine_pm_put(ce->engine);
 }
