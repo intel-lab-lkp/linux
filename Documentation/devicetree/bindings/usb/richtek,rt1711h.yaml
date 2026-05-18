@@ -52,6 +52,13 @@ properties:
     description:
       Properties for usb c connector.
 
+  port:
+    $ref: /schemas/graph.yaml#/properties/port
+    description:
+      OF graph port describing the connection to the USB role switch
+      consumer (e.g., a dwc3 controller with usb-role-switch), used to
+      convey type-C data-role changes signaled by the TCPC.
+
 additionalProperties: false
 
 required:
@@ -106,6 +113,12 @@ examples:
                 remote-endpoint = <&dp_aux>;
               };
             };
+          };
+        };
+
+        port {
+          endpoint {
+            remote-endpoint = <&usb_role_switch>;
           };
         };
       };
