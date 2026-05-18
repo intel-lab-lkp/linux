@@ -8,6 +8,7 @@
 #define APEI_INTERNAL_H
 
 #include <linux/acpi.h>
+#include <acpi/ghes_cper.h>
 
 struct apei_exec_context;
 
@@ -119,15 +120,6 @@ int apei_exec_collect_resources(struct apei_exec_context *ctx,
 
 struct dentry;
 struct dentry *apei_get_debugfs_dir(void);
-
-static inline u32 cper_estatus_len(struct acpi_hest_generic_status *estatus)
-{
-	if (estatus->raw_data_length)
-		return estatus->raw_data_offset + \
-			estatus->raw_data_length;
-	else
-		return sizeof(*estatus) + estatus->data_length;
-}
 
 int apei_osc_setup(void);
 
