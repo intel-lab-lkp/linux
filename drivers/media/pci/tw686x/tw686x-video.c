@@ -1266,7 +1266,7 @@ int tw686x_video_init(struct tw686x_dev *dev)
 		snprintf(vdev->name, sizeof(vdev->name), "%s video", dev->name);
 		vdev->fops = &tw686x_video_fops;
 		vdev->ioctl_ops = &tw686x_video_ioctl_ops;
-		vdev->release = video_device_release;
+		vdev->release = video_device_release_empty;
 		vdev->v4l2_dev = &dev->v4l2_dev;
 		vdev->queue = &vc->vidq;
 		vdev->tvnorms = V4L2_STD_525_60 | V4L2_STD_625_50;
@@ -1281,8 +1281,11 @@ int tw686x_video_init(struct tw686x_dev *dev)
 		err = video_register_device(vdev, VFL_TYPE_VIDEO, -1);
 		if (err < 0) {
 			video_device_release(vdev);
+			vc->device = NULL;
 			goto error;
 		}
+
+		vdev->release = video_device_release;
 		vc->num = vdev->num;
 	}
 
