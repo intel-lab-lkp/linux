@@ -23,50 +23,7 @@
 #include "gpiolib.h"
 #include "gpiolib-acpi.h"
 
-/**
- * struct acpi_gpio_event - ACPI GPIO event handler data
- *
- * @node:	  list-entry of the events list of the struct acpi_gpio_chip
- * @handle:	  handle of ACPI method to execute when the IRQ triggers
- * @handler:	  handler function to pass to request_irq() when requesting the IRQ
- * @pin:	  GPIO pin number on the struct gpio_chip
- * @irq:	  Linux IRQ number for the event, for request_irq() / free_irq()
- * @irqflags:	  flags to pass to request_irq() when requesting the IRQ
- * @irq_is_wake:  If the ACPI flags indicate the IRQ is a wakeup source
- * @irq_requested:True if request_irq() has been done
- * @desc:	  struct gpio_desc for the GPIO pin for this event
- */
-struct acpi_gpio_event {
-	struct list_head node;
-	acpi_handle handle;
-	irq_handler_t handler;
-	unsigned int pin;
-	unsigned int irq;
-	unsigned long irqflags;
-	bool irq_is_wake;
-	bool irq_requested;
-	struct gpio_desc *desc;
-};
 
-struct acpi_gpio_connection {
-	struct list_head node;
-	unsigned int pin;
-	struct gpio_desc *desc;
-};
-
-struct acpi_gpio_chip {
-	/*
-	 * ACPICA requires that the first field of the context parameter
-	 * passed to acpi_install_address_space_handler() is large enough
-	 * to hold struct acpi_connection_info.
-	 */
-	struct acpi_connection_info conn_info;
-	struct list_head conns;
-	struct mutex conn_lock;
-	struct gpio_chip *chip;
-	struct list_head events;
-	struct list_head deferred_req_irqs_list_entry;
-};
 
 /**
  * struct acpi_gpio_info - ACPI GPIO specific information

@@ -8,10 +8,13 @@
 #ifndef GPIOLIB_ACPI_H
 #define GPIOLIB_ACPI_H
 
+#include <linux/acpi.h>
 #include <linux/err.h>
-#include <linux/types.h>
-
 #include <linux/gpio/consumer.h>
+#include <linux/interrupt.h>
+#include <linux/list.h>
+#include <linux/mutex.h>
+#include <linux/types.h>
 
 struct device;
 struct fwnode_handle;
@@ -19,6 +22,38 @@ struct fwnode_handle;
 struct gpio_chip;
 struct gpio_desc;
 struct gpio_device;
+
+struct acpi_gpio_event {
+	struct list_head node;
+	acpi_handle handle;
+	irq_handler_t handler;
+	unsigned int pin;
+	unsigned int irq;
+	unsigned long irqflags;
+	bool irq_is_wake;
+	bool irq_requested;
+	struct gpio_desc *desc;
+};
+
+struct acpi_gpio_connection {
+	struct list_head node;
+	unsigned int pin;
+	struct gpio_desc *desc;
+};
+
+struct acpi_gpio_chip {
+	/*
+	 * ACPICA requires that the first field of the context parameter
+	 * passed to acpi_install_address_space_handler() is large enough
+	 * to hold struct acpi_connection_info.
+	 */
+	struct acpi_connection_info conn_info;
+	struct list_head conns;
+	struct mutex conn_lock;
+	struct gpio_chip *chip;
+	struct list_head events;
+	struct list_head deferred_req_irqs_list_entry;
+};
 
 #ifdef CONFIG_ACPI
 void acpi_gpiochip_add(struct gpio_chip *chip);
