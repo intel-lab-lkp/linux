@@ -397,6 +397,48 @@ struct gpr64_regs {
 	u64 r15;
 };
 
+extern struct gpr64_regs guest_regs;
+
+#define DEFINE_ASM_GPR64_OFFSET(reg) \
+	asm(".equ GPR64_OFF_" #reg ", %c0" : : "i"(offsetof(struct gpr64_regs, reg)))
+
+DEFINE_ASM_GPR64_OFFSET(rbx);
+DEFINE_ASM_GPR64_OFFSET(rcx);
+DEFINE_ASM_GPR64_OFFSET(rdx);
+DEFINE_ASM_GPR64_OFFSET(rbp);
+DEFINE_ASM_GPR64_OFFSET(rsi);
+DEFINE_ASM_GPR64_OFFSET(rdi);
+DEFINE_ASM_GPR64_OFFSET(r8);
+DEFINE_ASM_GPR64_OFFSET(r9);
+DEFINE_ASM_GPR64_OFFSET(r10);
+DEFINE_ASM_GPR64_OFFSET(r11);
+DEFINE_ASM_GPR64_OFFSET(r12);
+DEFINE_ASM_GPR64_OFFSET(r13);
+DEFINE_ASM_GPR64_OFFSET(r14);
+DEFINE_ASM_GPR64_OFFSET(r15);
+
+#define GUEST_SWITCH_GPR_ASM(reg) \
+	"xchg %%" #reg ", guest_regs + GPR64_OFF_" #reg "\n\t"
+/*
+ * save/restore 64-bit general registers except rax, rip, rsp
+ * which are directly handed through the VMCB guest processor state
+ */
+#define GUEST_SWITCH_GPRS_NORAX_ASM \
+	GUEST_SWITCH_GPR_ASM(rbx) \
+	GUEST_SWITCH_GPR_ASM(rcx) \
+	GUEST_SWITCH_GPR_ASM(rdx) \
+	GUEST_SWITCH_GPR_ASM(rbp) \
+	GUEST_SWITCH_GPR_ASM(rsi) \
+	GUEST_SWITCH_GPR_ASM(rdi) \
+	GUEST_SWITCH_GPR_ASM(r8)  \
+	GUEST_SWITCH_GPR_ASM(r9)  \
+	GUEST_SWITCH_GPR_ASM(r10) \
+	GUEST_SWITCH_GPR_ASM(r11) \
+	GUEST_SWITCH_GPR_ASM(r12) \
+	GUEST_SWITCH_GPR_ASM(r13) \
+	GUEST_SWITCH_GPR_ASM(r14) \
+	GUEST_SWITCH_GPR_ASM(r15)
+
 struct desc64 {
 	u16 limit0;
 	u16 base0;
