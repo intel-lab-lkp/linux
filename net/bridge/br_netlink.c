@@ -1827,6 +1827,7 @@ static int br_fill_linkxstats(struct sk_buff *skb,
 	struct nlattr *nla __maybe_unused;
 	struct net_bridge_port *p = NULL;
 	struct net_bridge_vlan_group *vg;
+	unsigned int limit = U16_MAX;
 	struct net_bridge_vlan *v;
 	struct net_bridge *br;
 	struct nlattr *nest;
@@ -1841,6 +1842,7 @@ static int br_fill_linkxstats(struct sk_buff *skb,
 		p = br_port_get_rtnl(dev);
 		if (!p)
 			return 0;
+		limit -= nla_total_size_64bit(sizeof(p->stp_xstats));
 		br = p->br;
 		vg = nbp_vlan_group(p);
 		break;
@@ -1855,6 +1857,9 @@ static int br_fill_linkxstats(struct sk_buff *skb,
 	if (vg) {
 		u16 pvid;
 
+		limit -= nla_total_size(sizeof(struct br_mcast_stats)) +
+			 nla_total_size_64bit(sizeof(struct br_mcast_stats));
+
 		pvid = br_get_pvid(vg);
 		list_for_each_entry(v, &vg->vlan_list, vlist) {
 			struct bridge_vlan_xstats vxi;
@@ -1862,6 +1867,10 @@ static int br_fill_linkxstats(struct sk_buff *skb,
 
 			if (++vl_idx < *prividx)
 				continue;
+
+			if (skb_tail_pointer(skb) - (unsigned char *)nest >= limit)
+				goto nla_put_failure;
+
 			memset(&vxi, 0, sizeof(vxi));
 			vxi.vid = v->vid;
 			vxi.flags = v->flags;
