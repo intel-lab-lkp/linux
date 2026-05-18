@@ -1066,7 +1066,7 @@ static int rcar_drif_sdr_register(struct rcar_drif_sdr *sdr)
 	snprintf(sdr->vdev->name, sizeof(sdr->vdev->name), "R-Car DRIF");
 	sdr->vdev->fops = &rcar_drif_fops;
 	sdr->vdev->ioctl_ops = &rcar_drif_ioctl_ops;
-	sdr->vdev->release = video_device_release;
+	sdr->vdev->release = video_device_release_empty;
 	sdr->vdev->lock = &sdr->v4l2_mutex;
 	sdr->vdev->queue = &sdr->vb_queue;
 	sdr->vdev->ctrl_handler = &sdr->ctrl_hdl;
@@ -1082,6 +1082,7 @@ static int rcar_drif_sdr_register(struct rcar_drif_sdr *sdr)
 		sdr->vdev = NULL;
 		dev_err(sdr->dev, "failed video_register_device (%d)\n", ret);
 	}
+	sdr->vdev->release = video_device_release;
 
 	return ret;
 }
