@@ -2915,7 +2915,7 @@ static int s5p_jpeg_probe(struct platform_device *pdev)
 	jpeg->vfd_encoder->fops		= &s5p_jpeg_fops;
 	jpeg->vfd_encoder->ioctl_ops	= &s5p_jpeg_ioctl_ops;
 	jpeg->vfd_encoder->minor	= -1;
-	jpeg->vfd_encoder->release	= video_device_release;
+	jpeg->vfd_encoder->release	= video_device_release_empty;
 	jpeg->vfd_encoder->lock		= &jpeg->lock;
 	jpeg->vfd_encoder->v4l2_dev	= &jpeg->v4l2_dev;
 	jpeg->vfd_encoder->vfl_dir	= VFL_DIR_M2M;
@@ -2927,6 +2927,7 @@ static int s5p_jpeg_probe(struct platform_device *pdev)
 		video_device_release(jpeg->vfd_encoder);
 		goto m2m_init_rollback;
 	}
+	jpeg->vfd_encoder->release = video_device_release;
 
 	video_set_drvdata(jpeg->vfd_encoder, jpeg);
 	v4l2_info(&jpeg->v4l2_dev,
@@ -2945,7 +2946,7 @@ static int s5p_jpeg_probe(struct platform_device *pdev)
 	jpeg->vfd_decoder->fops		= &s5p_jpeg_fops;
 	jpeg->vfd_decoder->ioctl_ops	= &s5p_jpeg_ioctl_ops;
 	jpeg->vfd_decoder->minor	= -1;
-	jpeg->vfd_decoder->release	= video_device_release;
+	jpeg->vfd_decoder->release	= video_device_release_empty;
 	jpeg->vfd_decoder->lock		= &jpeg->lock;
 	jpeg->vfd_decoder->v4l2_dev	= &jpeg->v4l2_dev;
 	jpeg->vfd_decoder->vfl_dir	= VFL_DIR_M2M;
@@ -2957,6 +2958,7 @@ static int s5p_jpeg_probe(struct platform_device *pdev)
 		video_device_release(jpeg->vfd_decoder);
 		goto enc_vdev_register_rollback;
 	}
+	jpeg->vfd_decoder->release = video_device_release;
 
 	video_set_drvdata(jpeg->vfd_decoder, jpeg);
 	v4l2_info(&jpeg->v4l2_dev,
