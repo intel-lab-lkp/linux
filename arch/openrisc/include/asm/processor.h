@@ -55,7 +55,9 @@ struct thread_struct {
  * user->kernel transition registers are reached by this (i.e. not regs
  * for running signal handler)
  */
-#define user_regs(thread_info)  (((struct pt_regs *)((unsigned long)(thread_info) + THREAD_SIZE - STACK_FRAME_OVERHEAD)) - 1)
+#define user_regs(thread_info) \
+	(((struct pt_regs *)((unsigned long)(thread_info) + \
+	THREAD_SIZE - KERNEL_REDZONE_SIZE)) - 1)
 
 /*
  * Dito but for the currently running task

@@ -79,7 +79,7 @@ void save_stack_trace_tsk(struct task_struct *tsk, struct stack_trace *trace)
 
 		/* Locate stack from kernel context */
 		ksp = task_thread_info(tsk)->ksp;
-		ksp += STACK_FRAME_OVERHEAD;	/* redzone */
+		ksp += KERNEL_REDZONE_SIZE;	/* redzone */
 		ksp += sizeof(struct pt_regs);
 
 		sp = (unsigned long *) ksp;

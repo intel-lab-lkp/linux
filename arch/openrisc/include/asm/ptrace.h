@@ -94,8 +94,7 @@ struct pt_regs {
 	long dummy2;		/* Cheap alignment fix */
 };
 
-/* TODO: Rename this to REDZONE because that's what it is */
-#define STACK_FRAME_OVERHEAD  128  /* size of minimum stack frame */
+#define KERNEL_REDZONE_SIZE  128  /* size of minimum stack frame */
 
 #define MAX_REG_OFFSET offsetof(struct pt_regs, orig_gpr11)
 

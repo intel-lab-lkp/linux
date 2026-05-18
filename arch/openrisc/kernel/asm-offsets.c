@@ -53,8 +53,8 @@ int main(void)
 	DEFINE(PT_SIZE, sizeof(struct pt_regs));
 
 	/* Interrupt register frame */
-	DEFINE(STACK_FRAME_OVERHEAD, STACK_FRAME_OVERHEAD);
-	DEFINE(INT_FRAME_SIZE, STACK_FRAME_OVERHEAD + sizeof(struct pt_regs));
+	DEFINE(KERNEL_REDZONE_SIZE, KERNEL_REDZONE_SIZE);
+	DEFINE(INT_FRAME_SIZE, KERNEL_REDZONE_SIZE + sizeof(struct pt_regs));
 
 	DEFINE(NUM_USER_SEGMENTS, TASK_SIZE >> 28);
 	return 0;

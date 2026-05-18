@@ -171,7 +171,7 @@ static inline void __user *get_sigframe(struct ksignal *ksig,
 	unsigned long sp = regs->sp;
 
 	/* redzone */
-	sp -= STACK_FRAME_OVERHEAD;
+	sp -= KERNEL_REDZONE_SIZE;
 	sp = sigsp(sp, ksig);
 	sp = align_sigframe(sp - frame_size);
 

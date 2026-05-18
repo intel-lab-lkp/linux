@@ -176,12 +176,12 @@ copy_thread(struct task_struct *p, const struct kernel_clone_args *args)
 	top_of_kernel_stack = sp;
 
 	/* Locate userspace context on stack... */
-	sp -= STACK_FRAME_OVERHEAD;	/* redzone */
+	sp -= KERNEL_REDZONE_SIZE;	/* redzone */
 	sp -= sizeof(struct pt_regs);
 	userregs = (struct pt_regs *) sp;
 
 	/* ...and kernel context */
-	sp -= STACK_FRAME_OVERHEAD;	/* redzone */
+	sp -= KERNEL_REDZONE_SIZE;	/* redzone */
 	sp -= sizeof(struct pt_regs);
 	kregs = (struct pt_regs *)sp;
 
