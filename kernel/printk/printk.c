@@ -4207,8 +4207,7 @@ void register_console(struct console *newcon)
 	 */
 	con_printk(KERN_INFO, newcon, "enabled\n");
 	if (bootcon_registered &&
-	    ((newcon->flags & (CON_CONSDEV | CON_BOOT)) == CON_CONSDEV) &&
-	    !keep_bootcon) {
+	    !(newcon->flags & CON_BOOT) && !keep_bootcon) {
 		struct hlist_node *tmp;
 
 		hlist_for_each_entry_safe(con, tmp, &console_list, node) {
