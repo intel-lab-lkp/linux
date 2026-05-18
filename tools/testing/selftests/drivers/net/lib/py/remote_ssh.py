@@ -21,6 +21,7 @@ class Remote:
 
     def cmd(self, comm):
         return subprocess.Popen(["ssh", "-q", self.name, comm],
+                                stdin=subprocess.DEVNULL,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     def _mktmp(self):
