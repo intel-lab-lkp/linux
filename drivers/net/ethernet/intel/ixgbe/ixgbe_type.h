@@ -620,67 +620,6 @@ struct ixgbe_nvm_version {
 #define IXGBE_SECRXSTAT_SECRX_OFF_DIS   0x00000002
 #define IXGBE_SECRXSTAT_ECC_RXERR       0x00000004
 
-/* LinkSec (MacSec) Registers */
-#define IXGBE_LSECTXCAP         0x08A00
-#define IXGBE_LSECRXCAP         0x08F00
-#define IXGBE_LSECTXCTRL        0x08A04
-#define IXGBE_LSECTXSCL         0x08A08 /* SCI Low */
-#define IXGBE_LSECTXSCH         0x08A0C /* SCI High */
-#define IXGBE_LSECTXSA          0x08A10
-#define IXGBE_LSECTXPN0         0x08A14
-#define IXGBE_LSECTXPN1         0x08A18
-#define IXGBE_LSECTXKEY0(_n)    (0x08A1C + (4 * (_n))) /* 4 of these (0-3) */
-#define IXGBE_LSECTXKEY1(_n)    (0x08A2C + (4 * (_n))) /* 4 of these (0-3) */
-#define IXGBE_LSECRXCTRL        0x08F04
-#define IXGBE_LSECRXSCL         0x08F08
-#define IXGBE_LSECRXSCH         0x08F0C
-#define IXGBE_LSECRXSA(_i)      (0x08F10 + (4 * (_i))) /* 2 of these (0-1) */
-#define IXGBE_LSECRXPN(_i)      (0x08F18 + (4 * (_i))) /* 2 of these (0-1) */
-#define IXGBE_LSECRXKEY(_n, _m) (0x08F20 + ((0x10 * (_n)) + (4 * (_m))))
-#define IXGBE_LSECTXUT          0x08A3C /* OutPktsUntagged */
-#define IXGBE_LSECTXPKTE        0x08A40 /* OutPktsEncrypted */
-#define IXGBE_LSECTXPKTP        0x08A44 /* OutPktsProtected */
-#define IXGBE_LSECTXOCTE        0x08A48 /* OutOctetsEncrypted */
-#define IXGBE_LSECTXOCTP        0x08A4C /* OutOctetsProtected */
-#define IXGBE_LSECRXUT          0x08F40 /* InPktsUntagged/InPktsNoTag */
-#define IXGBE_LSECRXOCTD        0x08F44 /* InOctetsDecrypted */
-#define IXGBE_LSECRXOCTV        0x08F48 /* InOctetsValidated */
-#define IXGBE_LSECRXBAD         0x08F4C /* InPktsBadTag */
-#define IXGBE_LSECRXNOSCI       0x08F50 /* InPktsNoSci */
-#define IXGBE_LSECRXUNSCI       0x08F54 /* InPktsUnknownSci */
-#define IXGBE_LSECRXUNCH        0x08F58 /* InPktsUnchecked */
-#define IXGBE_LSECRXDELAY       0x08F5C /* InPktsDelayed */
-#define IXGBE_LSECRXLATE        0x08F60 /* InPktsLate */
-#define IXGBE_LSECRXOK(_n)      (0x08F64 + (0x04 * (_n))) /* InPktsOk */
-#define IXGBE_LSECRXINV(_n)     (0x08F6C + (0x04 * (_n))) /* InPktsInvalid */
-#define IXGBE_LSECRXNV(_n)      (0x08F74 + (0x04 * (_n))) /* InPktsNotValid */
-#define IXGBE_LSECRXUNSA        0x08F7C /* InPktsUnusedSa */
-#define IXGBE_LSECRXNUSA        0x08F80 /* InPktsNotUsingSa */
-
-/* LinkSec (MacSec) Bit Fields and Masks */
-#define IXGBE_LSECTXCAP_SUM_MASK        0x00FF0000
-#define IXGBE_LSECTXCAP_SUM_SHIFT       16
-#define IXGBE_LSECRXCAP_SUM_MASK        0x00FF0000
-#define IXGBE_LSECRXCAP_SUM_SHIFT       16
-
-#define IXGBE_LSECTXCTRL_EN_MASK        0x00000003
-#define IXGBE_LSECTXCTRL_DISABLE        0x0
-#define IXGBE_LSECTXCTRL_AUTH           0x1
-#define IXGBE_LSECTXCTRL_AUTH_ENCRYPT   0x2
-#define IXGBE_LSECTXCTRL_AISCI          0x00000020
-#define IXGBE_LSECTXCTRL_PNTHRSH_MASK   0xFFFFFF00
-#define IXGBE_LSECTXCTRL_RSV_MASK       0x000000D8
-
-#define IXGBE_LSECRXCTRL_EN_MASK        0x0000000C
-#define IXGBE_LSECRXCTRL_EN_SHIFT       2
-#define IXGBE_LSECRXCTRL_DISABLE        0x0
-#define IXGBE_LSECRXCTRL_CHECK          0x1
-#define IXGBE_LSECRXCTRL_STRICT         0x2
-#define IXGBE_LSECRXCTRL_DROP           0x3
-#define IXGBE_LSECRXCTRL_PLSH           0x00000040
-#define IXGBE_LSECRXCTRL_RP             0x00000080
-#define IXGBE_LSECRXCTRL_RSV_MASK       0xFFFFFF33
-
 /* IpSec Registers */
 #define IXGBE_IPSTXIDX          0x08900
 #define IXGBE_IPSTXSALT         0x08904
