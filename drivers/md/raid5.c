@@ -4596,6 +4596,92 @@ static void handle_stripe_expansion(struct r5conf *conf, struct stripe_head *sh)
 	async_tx_quiesce(&tx);
 }
 
+/*
+ * handle_failed_reshape - drop reshape state when too many devices have failed
+ *
+ * Called from handle_stripe() in the "s.failed > conf->max_degraded" branch
+ * when sh is participating in a reshape. raid5_error() has set MD_BROKEN
+ * and MD_RECOVERY_INTR); The reshape stripes that reshape_request() handed out
+ * must be released, otherwise they leak conf->reshape_stripes and
+ * mddev->recovery_active, and md_do_sync() hangs forever at
+ * wait_event(mddev->recovery_wait, !atomic_read(&mddev->recovery_active)).
+ *
+ * Three kinds of stripes can reach this path:
+ *
+ *  1. Destination stripes with skipped_disk = 0 in reshape_request()
+ *     - the new stripe maps entirely past the old array end, so its
+ *     blocks are zero-filled in place without any source read.
+ *     STRIPE_EXPANDING, STRIPE_EXPAND_READY and STRIPE_HANDLE are all set, 
+ *     handle_stripe() sees them with s.expanded == 1.
+ *
+ *  2. Destination stripes with skipped_disk = 1 - the new stripe
+ *     overlaps existing data and still needs source blocks copied in by
+ *     handle_stripe_expansion().  Only STRIPE_EXPANDING is set, *not*
+ *     STRIPE_HANDLE, so they sit idle in the stripe cache until a successful
+ *     source expand re-handles them.  In the failure path no one ever does,
+ *     so handle_stripe() will never see them on its own; they are cleaned up
+ *     from the source side in step (b) below.
+ *
+ *  3. Source stripes (STRIPE_EXPAND_SOURCE) - reach handle_stripe() via the
+ *     read-error path once the source members start returning EIO and
+ *     raid5_error() marks them Faulty.
+ *
+ * Handling:
+ *
+ *  (a) If STRIPE_EXPANDING is set on sh, clear it together with
+ *      STRIPE_EXPAND_READY, atomic_dec conf->reshape_stripes, wake
+ *      wait_for_reshape and md_done_sync(RAID5_STRIPE_SECTORS) to return
+ *      the sectors reshape_request() accounted on recovery_active.
+ *
+ *  (b) If STRIPE_EXPAND_SOURCE is set on sh, clear it and walk sh's
+ *      non-parity disks the same way handle_stripe_expansion() does
+ *      (raid5_compute_blocknr previous=1 -> raid5_compute_sector previous=0)
+ *      to find each destination, look it up with
+ *      R5_GAS_NOBLOCK | R5_GAS_NOQUIESCE and apply step (a) to it.
+ *      A NULL lookup means the destination never contributed to
+ *      reshape_stripes - nothing to release.
+ */
+static void handle_failed_reshape(struct r5conf *conf, struct stripe_head *sh)
+{
+	int i;
+
+	if (test_and_clear_bit(STRIPE_EXPANDING, &sh->state)) {
+		atomic_dec(&conf->reshape_stripes);
+		wake_up(&conf->wait_for_reshape);
+		md_done_sync(conf->mddev, RAID5_STRIPE_SECTORS(conf));
+	}
+
+	clear_bit(STRIPE_EXPAND_READY, &sh->state);
+
+	if (test_and_clear_bit(STRIPE_EXPAND_SOURCE, &sh->state)) {
+		for (i = 0; i < sh->disks; i++) {
+			int dd_idx;
+			struct stripe_head *sh2;
+			sector_t bn, sec;
+
+			if (i == sh->pd_idx)
+				continue;
+			if (conf->level == 6 && i == sh->qd_idx)
+				continue;
+
+			bn = raid5_compute_blocknr(sh, i, 1);
+			sec = raid5_compute_sector(conf, bn, 0, &dd_idx, NULL);
+			sh2 = raid5_get_active_stripe(conf, NULL, sec,
+					R5_GAS_NOBLOCK | R5_GAS_NOQUIESCE);
+			if (!sh2)
+				continue;
+			if (test_and_clear_bit(STRIPE_EXPANDING, &sh2->state)) {
+				atomic_dec(&conf->reshape_stripes);
+				wake_up(&conf->wait_for_reshape);
+				md_done_sync(conf->mddev,
+					     RAID5_STRIPE_SECTORS(conf));
+			}
+			clear_bit(STRIPE_EXPAND_READY, &sh2->state);
+			raid5_release_stripe(sh2);
+		}
+	}
+}
+
 static void analyse_stripe(struct stripe_head *sh, struct stripe_head_state *s)
 {
 	struct r5conf *conf = sh->raid_conf;
@@ -5003,6 +5089,11 @@ static void handle_stripe(struct stripe_head *sh)
 			handle_failed_stripe(conf, sh, &s, disks);
 		if (s.syncing + s.replacing)
 			handle_failed_sync(conf, sh, &s);
+		if (s.expanding || s.expanded) {
+			handle_failed_reshape(conf, sh);
+			s.expanding = 0;
+			s.expanded = 0;
+		}
 	}
 
 	/* Now we check to see if any write operations have recently
