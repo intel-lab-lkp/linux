@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
 
-purgatory-y := purgatory.o sha256.o entry.o string.o ctype.o memcpy.o memset.o
+purgatory-y := purgatory.o sha256.o entry.o string.o ctype.o memcpy.o memset.o memcmp.o
 ifeq ($(CONFIG_KASAN_GENERIC)$(CONFIG_KASAN_SW_TAGS),)
 purgatory-y += strcmp.o strlen.o strncmp.o strnlen.o strchr.o strrchr.o
 endif
@@ -39,6 +39,9 @@ $(obj)/strchr.o: $(srctree)/arch/riscv/lib/strchr.S FORCE
 	$(call if_changed_rule,as_o_S)
 
 $(obj)/strrchr.o: $(srctree)/arch/riscv/lib/strrchr.S FORCE
+	$(call if_changed_rule,as_o_S)
+
+$(obj)/memcmp.o: $(srctree)/arch/riscv/lib/memcmp.S FORCE
 	$(call if_changed_rule,as_o_S)
 
 CFLAGS_sha256.o := -D__DISABLE_EXPORTS -D__NO_FORTIFY
