@@ -131,31 +131,49 @@ void generic_svm_setup(struct svm_test_data *svm, void *guest_rip, void *guest_r
 	}
 }
 
+#define DEFINE_ASM_GPR64_OFFSET(reg) \
+	asm(".equ GPR64_OFF_" #reg ", %c0" : : "i"(offsetof(struct gpr64_regs, reg)))
+
+DEFINE_ASM_GPR64_OFFSET(rbx);
+DEFINE_ASM_GPR64_OFFSET(rcx);
+DEFINE_ASM_GPR64_OFFSET(rdx);
+DEFINE_ASM_GPR64_OFFSET(rbp);
+DEFINE_ASM_GPR64_OFFSET(rsi);
+DEFINE_ASM_GPR64_OFFSET(rdi);
+DEFINE_ASM_GPR64_OFFSET(r8);
+DEFINE_ASM_GPR64_OFFSET(r9);
+DEFINE_ASM_GPR64_OFFSET(r10);
+DEFINE_ASM_GPR64_OFFSET(r11);
+DEFINE_ASM_GPR64_OFFSET(r12);
+DEFINE_ASM_GPR64_OFFSET(r13);
+DEFINE_ASM_GPR64_OFFSET(r14);
+DEFINE_ASM_GPR64_OFFSET(r15);
+
+#define GUEST_SWITCH_GPR_ASM(reg) \
+	"xchg %%" #reg ", guest_regs + GPR64_OFF_" #reg "\n\t"
 /*
  * save/restore 64-bit general registers except rax, rip, rsp
  * which are directly handed through the VMCB guest processor state
  */
-#define SAVE_GPR_C				\
-	"xchg %%rbx, guest_regs+0x20\n\t"	\
-	"xchg %%rcx, guest_regs+0x10\n\t"	\
-	"xchg %%rdx, guest_regs+0x18\n\t"	\
-	"xchg %%rbp, guest_regs+0x30\n\t"	\
-	"xchg %%rsi, guest_regs+0x38\n\t"	\
-	"xchg %%rdi, guest_regs+0x40\n\t"	\
-	"xchg %%r8,  guest_regs+0x48\n\t"	\
-	"xchg %%r9,  guest_regs+0x50\n\t"	\
-	"xchg %%r10, guest_regs+0x58\n\t"	\
-	"xchg %%r11, guest_regs+0x60\n\t"	\
-	"xchg %%r12, guest_regs+0x68\n\t"	\
-	"xchg %%r13, guest_regs+0x70\n\t"	\
-	"xchg %%r14, guest_regs+0x78\n\t"	\
-	"xchg %%r15, guest_regs+0x80\n\t"
-
-#define LOAD_GPR_C      SAVE_GPR_C
+#define GUEST_SWITCH_GPRS_NORAX_ASM \
+	GUEST_SWITCH_GPR_ASM(rbx) \
+	GUEST_SWITCH_GPR_ASM(rcx) \
+	GUEST_SWITCH_GPR_ASM(rdx) \
+	GUEST_SWITCH_GPR_ASM(rbp) \
+	GUEST_SWITCH_GPR_ASM(rsi) \
+	GUEST_SWITCH_GPR_ASM(rdi) \
+	GUEST_SWITCH_GPR_ASM(r8)  \
+	GUEST_SWITCH_GPR_ASM(r9)  \
+	GUEST_SWITCH_GPR_ASM(r10) \
+	GUEST_SWITCH_GPR_ASM(r11) \
+	GUEST_SWITCH_GPR_ASM(r12) \
+	GUEST_SWITCH_GPR_ASM(r13) \
+	GUEST_SWITCH_GPR_ASM(r14) \
+	GUEST_SWITCH_GPR_ASM(r15)
 
 /*
  * selftests do not use interrupts so we dropped clgi/sti/cli/stgi
- * for now. registers involved in LOAD/SAVE_GPR_C are eventually
+ * for now. registers involved in GPRs switching are eventually
  * unmodified so they do not need to be in the clobber list.
  */
 void run_guest(struct vmcb *vmcb, u64 vmcb_gpa)
@@ -166,9 +184,9 @@ void run_guest(struct vmcb *vmcb, u64 vmcb_gpa)
 		"mov %%r15, 0x170(%[vmcb])\n\t"
 		"mov guest_regs, %%r15\n\t"	// rax
 		"mov %%r15, 0x1f8(%[vmcb])\n\t"
-		LOAD_GPR_C
+		GUEST_SWITCH_GPRS_NORAX_ASM
 		"vmrun %[vmcb_gpa]\n\t"
-		SAVE_GPR_C
+		GUEST_SWITCH_GPRS_NORAX_ASM
 		"mov 0x170(%[vmcb]), %%r15\n\t"	// rflags
 		"mov %%r15, rflags\n\t"
 		"mov 0x1f8(%[vmcb]), %%r15\n\t"	// rax

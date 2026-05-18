@@ -381,10 +381,9 @@ static inline unsigned int x86_model(unsigned int eax)
 /* General Registers in 64-Bit Mode */
 struct gpr64_regs {
 	u64 rax;
+	u64 rbx;
 	u64 rcx;
 	u64 rdx;
-	u64 rbx;
-	u64 rsp;
 	u64 rbp;
 	u64 rsi;
 	u64 rdi;
