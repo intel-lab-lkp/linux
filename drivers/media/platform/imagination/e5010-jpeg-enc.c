@@ -1045,7 +1045,7 @@ static int e5010_probe(struct platform_device *pdev)
 	e5010->vdev->fops = &e5010_fops;
 	e5010->vdev->ioctl_ops = &e5010_ioctl_ops;
 	e5010->vdev->minor = -1;
-	e5010->vdev->release = video_device_release;
+	e5010->vdev->release = video_device_release_empty;
 	e5010->vdev->vfl_dir = VFL_DIR_M2M;
 	e5010->vdev->device_caps = V4L2_CAP_VIDEO_M2M_MPLANE | V4L2_CAP_STREAMING;
 	e5010->vdev->v4l2_dev = &e5010->v4l2_dev;
@@ -1106,6 +1106,7 @@ static int e5010_probe(struct platform_device *pdev)
 		dev_err_probe(dev, ret, "failed to register video device\n");
 		goto fail_after_video_register_device;
 	}
+	e5010->vdev->release = video_device_release;
 
 	v4l2_info(&e5010->v4l2_dev, "Device registered as /dev/video%d\n",
 		  e5010->vdev->num);
