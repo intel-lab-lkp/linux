@@ -66,6 +66,19 @@ config PHY_CAN_TRANSCEIVER
 	  functional modes using gpios and sets the attribute max link
 	  rate, for CAN drivers.
 
+config PHY_ECONET_USB
+	tristate "EcoNet USB PHY driver"
+	depends on ECONET || COMPILE_TEST
+	depends on OF
+	select GENERIC_PHY
+	select REGMAP_MMIO
+	help
+	  Enable support for the USB PHY on EcoNet EN751221, EN751627, and
+	  EN7528 SoCs. These PHYs support USB 2.0 and USB 3.0. SoCs typically
+	  have two ports, one supporting USB 2.0 only and the other supporting
+	  USB 3.0. Though some chip configurations have only the 2.0 capable
+	  port and some only have the 3.0 capable port.
+
 config PHY_GOOGLE_USB
 	tristate "Google Tensor SoC USB PHY driver"
 	select GENERIC_PHY
