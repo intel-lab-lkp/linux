@@ -451,6 +451,18 @@ int pcie_enable_tph(struct pci_dev *pdev, int mode)
 }
 EXPORT_SYMBOL(pcie_enable_tph);
 
+/**
+ * pcie_tph_enabled_mode - Get current enabled TPH mode
+ * @pdev: PCI device
+ *
+ * Return the enabled TPH mode (IV/DS) or 0 if disabled.
+ */
+int pcie_tph_enabled_mode(struct pci_dev *pdev)
+{
+	return pdev->tph_enabled ? pdev->tph_mode : 0;
+}
+EXPORT_SYMBOL(pcie_tph_enabled_mode);
+
 void pci_restore_tph_state(struct pci_dev *pdev)
 {
 	struct pci_cap_saved_state *save_state;
