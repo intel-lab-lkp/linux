@@ -536,7 +536,6 @@
 #define AW88261_DEV_SYSST_CHECK_MAX	(10)
 #define AW88261_SOFT_RESET_VALUE	(0x55aa)
 #define AW88261_REG_TO_DB		(0x3f)
-#define AW88261_VOL_START_MASK		(0xfc00)
 #define AW88261_INIT_PROFILE		(0)
 
 #define REG_VAL_TO_DB(value)		((((value) >> AW88261_VOL_6DB_START) * \
