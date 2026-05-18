@@ -74,7 +74,7 @@ static ssize_t dma_store_dev_id(struct device *dev,
 				const char *buf, size_t count)
 {
 	struct dma_channel *channel = to_dma_channel(dev);
-	strcpy(channel->dev_id, buf);
+	strscpy(channel->dev_id, buf);
 	return count;
 }
 
