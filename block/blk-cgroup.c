@@ -134,6 +134,11 @@ static void blkg_free_workfn(struct work_struct *work)
 	spin_lock_irq(&q->queue_lock);
 	list_del_init(&blkg->q_node);
 	spin_unlock_irq(&q->queue_lock);
+	/*
+	 * Release blkcg css ref only after blkg is removed from q->blkg_list,
+	 * so concurrent iterators won't see a blkg with a freed blkcg.
+	 */
+	css_put(&blkg->blkcg->css);
 	mutex_unlock(&q->blkcg_mutex);
 
 	blk_put_queue(q);
@@ -179,8 +184,6 @@ static void __blkg_release(struct rcu_head *rcu)
 	for_each_possible_cpu(cpu)
 		__blkcg_rstat_flush(blkcg, cpu);
 
-	/* release the blkcg and parent blkg refs this blkg has been holding */
-	css_put(&blkg->blkcg->css);
 	blkg_free(blkg);
 }
 
