@@ -8,10 +8,13 @@
 #include <pthread.h>
 #include <signal.h>
 #include <unistd.h>
+#include <getopt.h>
 
 #include "test_util.h"
 #include "kvm_util.h"
 #include "processor.h"
+#include "svm_util.h"
+#include "vmx.h"
 
 #define NR_ITERATIONS		500
 
@@ -25,6 +28,8 @@
 #define TEST_MEM_BASE		0xc0000000ULL
 #define NR_TEST_ADDRS		512
 #define PATTERN			0xabcdefabcdefabcdULL
+
+#define L2_GUEST_STACK_SIZE	64
 
 #define PTRS_PER_PTE		512
 #define PXD_INDEX(vaddr, level)	(((vaddr) >> PG_LEVEL_SHIFT(level)) & (PTRS_PER_PTE - 1))
@@ -104,6 +109,41 @@ static void guest_access_memory(void *arg)
 	}
 }
 
+static void l1_svm_code(struct svm_test_data *svm)
+{
+	unsigned long l2_guest_stack[L2_GUEST_STACK_SIZE];
+
+	generic_svm_setup(svm, guest_access_memory, &l2_guest_stack[L2_GUEST_STACK_SIZE]);
+
+	run_guest(svm->vmcb, svm->vmcb_gpa);
+	GUEST_ASSERT(false);
+}
+
+static void l1_vmx_code(struct vmx_pages *vmx)
+{
+	unsigned long l2_guest_stack[L2_GUEST_STACK_SIZE];
+
+	GUEST_ASSERT(prepare_for_vmx_operation(vmx));
+	GUEST_ASSERT(load_vmcs(vmx));
+	prepare_vmcs(vmx, guest_access_memory, &l2_guest_stack[L2_GUEST_STACK_SIZE]);
+
+	/* Ignore any #PF */
+	GUEST_ASSERT(!vmwrite(EXCEPTION_BITMAP, BIT(PF_VECTOR)));
+	GUEST_ASSERT(!vmwrite(PAGE_FAULT_ERROR_CODE_MASK, 0));
+	GUEST_ASSERT(!vmwrite(PAGE_FAULT_ERROR_CODE_MATCH, -1));
+
+	GUEST_ASSERT(!vmlaunch());
+	GUEST_ASSERT(false);
+}
+
+static void l1_guest_code(void *test_data)
+{
+	if (this_cpu_has(X86_FEATURE_SVM))
+		l1_svm_code(test_data);
+	else
+		l1_vmx_code(test_data);
+}
+
 static void *sigusr_thread_fn(void *arg)
 {
 	pthread_t vcpu_thread = (pthread_t)arg;
@@ -131,6 +171,25 @@ static void vcpu_sigusr_ignore(void)
 	sigaction(SIGUSR1, &sa, NULL);
 }
 
+static bool parse_args_nested(int argc, char *argv[])
+{
+	bool nested = false;
+	int opt;
+
+	while ((opt = getopt(argc, argv, "n")) != -1) {
+		switch (opt) {
+		case 'n':
+			nested = true;
+			break;
+		default:
+			printf("Usage: %s [-n]\n", argv[0]);
+			exit(1);
+		}
+	}
+
+	return nested;
+}
+
 int main(int argc, char *argv[])
 {
 	struct kvm_x86_state *state;
@@ -139,11 +198,23 @@ int main(int argc, char *argv[])
 	int r, i, count = 0;
 	struct kvm_vm *vm;
 	struct ucall uc;
+	bool nested;
 	gva_t gva;
 	gpa_t gpa;
 
-	vm = vm_create_with_one_vcpu(&vcpu, guest_access_memory);
+	nested = parse_args_nested(argc, argv);
+
+	vm = vm_create_with_one_vcpu(&vcpu, nested ? l1_guest_code : guest_access_memory);
 	vm_install_exception_handler(vm, PF_VECTOR, guest_pf_handler);
+
+	if (nested) {
+		TEST_REQUIRE(kvm_cpu_has(X86_FEATURE_SVM) || kvm_cpu_has(X86_FEATURE_VMX));
+		if (kvm_cpu_has(X86_FEATURE_SVM))
+			vcpu_alloc_svm(vm, &gva);
+		else
+			vcpu_alloc_vmx(vm, &gva);
+		vcpu_args_set(vcpu, 1, gva);
+	}
 
 	pte_present_mask = PTE_PRESENT_MASK(&vm->mmu);
 	pte_huge_mask = PTE_HUGE_MASK(&vm->mmu);
@@ -202,7 +273,7 @@ int main(int argc, char *argv[])
 	}
 
 	sync_global_from_guest(vm, guest_accesses);
-	pr_info("Guest page accesses: %lu\n", guest_accesses);
+	pr_info("Guest page accesses%s: %lu\n", nested ? " (from L2)" : "", guest_accesses);
 
 	pthread_cancel(sigusr_thread);
 	pthread_join(sigusr_thread, NULL);
