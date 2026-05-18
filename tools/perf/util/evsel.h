@@ -190,12 +190,18 @@ struct evsel {
 			double max;
 		} retirement_latency;
 		/* duration_time is a single global time. */
-		__u64 start_time;
+		struct {
+			__u64 start_time;
+			__u64 accumulated_time;
+		} duration_time;
 		/*
 		 * user_time and system_time read an initial value potentially
 		 * per-CPU or per-pid.
 		 */
-		struct xyarray *start_times;
+		struct {
+			struct xyarray *start_times;
+			struct xyarray *accumulated_times;
+		} process_time;
 	};
 	/* Is the tool's fd for /proc/pid/stat or /proc/stat. */
 	bool pid_stat;
