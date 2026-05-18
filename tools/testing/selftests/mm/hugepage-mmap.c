@@ -45,7 +45,7 @@ enum fd_kind {
 FIXTURE(hugepage_mmap)
 {
 	int fd;
-	char *addr;
+	unsigned int *addr;
 	char mount_dir[PATH_MAX];
 };
 
@@ -122,19 +122,21 @@ FIXTURE_TEARDOWN(hugepage_mmap)
 	}
 }
 
+#define RANDOM_CONSTANT 0x1234ABCD
+
 TEST_F(hugepage_mmap, read_write)
 {
 	unsigned long i;
 
-	TH_LOG("First hex is %x", *((unsigned int *)self->addr));
+	TH_LOG("First hex is %x", *self->addr);
 
-	for (i = 0; i < LENGTH; i++)
-		self->addr[i] = (char)i;
+	for (i = 0; i < LENGTH / sizeof(*self->addr); i++)
+		self->addr[i] = RANDOM_CONSTANT ^ i;
 
-	TH_LOG("First hex is %x", *((unsigned int *)self->addr));
+	TH_LOG("First hex is %x", *self->addr);
 
-	for (i = 0; i < LENGTH; i++) {
-		ASSERT_EQ(self->addr[i], (char)i) {
+	for (i = 0; i < LENGTH / sizeof(*self->addr); i++) {
+		ASSERT_EQ(self->addr[i], RANDOM_CONSTANT ^ i) {
 			TH_LOG("Error: Mismatch at %lu\n", i);
 		};
 	}
