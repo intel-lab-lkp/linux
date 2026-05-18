@@ -187,6 +187,21 @@ static int bperf_load_program(struct evlist *evlist)
 	}
 
 	/*
+	 * Propagate supported flag from leaders to followers. Follower events
+	 * are not opened, so their supported flag remains false.
+	 */
+	{
+		struct evsel *leader;
+		int num_events = evlist->core.nr_entries / nr_cgroups;
+
+		evlist__for_each_entry(evlist, evsel) {
+			leader = evlist__find_evsel(evlist, evsel->core.idx % num_events);
+			if (leader)
+				evsel->supported = leader->supported;
+		}
+	}
+
+	/*
 	 * bperf uses BPF_PROG_TEST_RUN to get accurate reading. Check
 	 * whether the kernel support it
 	 */
