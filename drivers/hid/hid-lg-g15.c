@@ -29,6 +29,11 @@
 #define LG_G510_INPUT_MACRO_KEYS	0x03
 #define LG_G510_INPUT_KBD_BACKLIGHT	0x04
 
+#define LG_G710_FEATURE_GAMEMODE        0x05
+#define LG_G710_FEATURE_M_KEYS_LEDS     0x06
+#define LG_G710_FEATURE_BACKLIGHT       0x08
+#define LG_G710_FEATURE_EXTRA_KEYS      0x09
+
 #define LG_G13_INPUT_REPORT		0x01
 #define LG_G13_FEATURE_M_KEYS_LEDS	0x05
 #define LG_G13_FEATURE_BACKLIGHT_RGB	0x07
@@ -48,6 +53,7 @@ enum lg_g15_model {
 	LG_G15_V2,
 	LG_G510,
 	LG_G510_USB_AUDIO,
+	LG_G710,
 	LG_Z10,
 };
 
@@ -59,6 +65,7 @@ enum lg_g15_led_type {
 	LG_G15_MACRO_PRESET2,
 	LG_G15_MACRO_PRESET3,
 	LG_G15_MACRO_RECORD,
+	LG_G15_GAMEMODE,
 	LG_G15_LED_MAX
 };
 
@@ -92,6 +99,7 @@ struct lg_g15_data {
 	struct lg_g15_led leds[LG_G15_LED_MAX];
 	bool game_mode_enabled;
 	bool backlight_disabled;	/* true == HW backlight toggled *OFF* */
+	unsigned long brightness_changed;	/* bitmask of LEDs hw-cycled */
 };
 
 /********* G13 LED functions ***********/
@@ -334,7 +342,7 @@ static int lg_g15_led_set(struct led_classdev *led_cdev,
 		g15->transfer_buf[1] = g15_led->led + 1;
 		g15->transfer_buf[2] = brightness << (g15_led->led * 4);
 	} else {
-		for (i = LG_G15_MACRO_PRESET1; i < LG_G15_LED_MAX; i++) {
+		for (i = LG_G15_MACRO_PRESET1; i <= LG_G15_MACRO_RECORD; i++) {
 			if (i == g15_led->led)
 				val = brightness;
 			else
@@ -567,7 +575,7 @@ static int lg_g510_mkey_led_set(struct led_classdev *led_cdev,
 
 	mutex_lock(&g15->mutex);
 
-	for (i = LG_G15_MACRO_PRESET1; i < LG_G15_LED_MAX; i++) {
+	for (i = LG_G15_MACRO_PRESET1; i <= LG_G15_MACRO_RECORD; i++) {
 		if (i == g15_led->led)
 			val = brightness;
 		else
@@ -597,6 +605,234 @@ static int lg_g510_mkey_led_set(struct led_classdev *led_cdev,
 	return ret;
 }
 
+/******** G710 LED functions ********/
+
+static int lg_g710_update_game_led_brightness(struct lg_g15_data *g15)
+{
+	int ret;
+
+	ret = hid_hw_raw_request(g15->hdev, LG_G710_FEATURE_GAMEMODE,
+				 g15->transfer_buf, 8,
+				 HID_FEATURE_REPORT, HID_REQ_GET_REPORT);
+	if (ret != 8) {
+		hid_err(g15->hdev, "Error getting gamemode LED brightness: %d\n", ret);
+		return (ret < 0) ? ret : -EIO;
+	}
+
+	g15->leds[LG_G15_GAMEMODE].brightness =
+		!!g15->transfer_buf[1];
+
+	return 0;
+}
+
+static int lg_g710_update_mkey_led_brightness(struct lg_g15_data *g15)
+{
+	int ret;
+
+	ret = hid_hw_raw_request(g15->hdev, LG_G710_FEATURE_M_KEYS_LEDS,
+				 g15->transfer_buf, 2,
+				 HID_FEATURE_REPORT, HID_REQ_GET_REPORT);
+	if (ret != 2) {
+		hid_err(g15->hdev, "Error getting macro LED brightness: %d\n", ret);
+		return (ret < 0) ? ret : -EIO;
+	}
+
+	g15->leds[LG_G15_MACRO_PRESET1].brightness =
+		!!(g15->transfer_buf[1] & 0x10);
+	g15->leds[LG_G15_MACRO_PRESET2].brightness =
+		!!(g15->transfer_buf[1] & 0x20);
+	g15->leds[LG_G15_MACRO_PRESET3].brightness =
+		!!(g15->transfer_buf[1] & 0x40);
+	g15->leds[LG_G15_MACRO_RECORD].brightness =
+		!!(g15->transfer_buf[1] & 0x80);
+
+	return 0;
+}
+
+static int lg_g710_update_kbd_led_brightness(struct lg_g15_data *g15)
+{
+	int ret;
+
+	ret = hid_hw_raw_request(g15->hdev, LG_G710_FEATURE_BACKLIGHT,
+				 g15->transfer_buf, 4,
+				 HID_FEATURE_REPORT, HID_REQ_GET_REPORT);
+	if (ret != 4) {
+		hid_err(g15->hdev, "Error getting LED brightness: %d\n", ret);
+		return (ret < 0) ? ret : -EIO;
+	}
+
+	g15->leds[LG_G15_KBD_BRIGHTNESS].brightness = 4 - min_t(u8, g15->transfer_buf[2], 4);
+	g15->leds[LG_G15_LCD_BRIGHTNESS].brightness = 4 - min_t(u8, g15->transfer_buf[1], 4);
+
+	return 0;
+}
+
+static enum led_brightness lg_g710_led_get(struct led_classdev *led_cdev)
+{
+	struct lg_g15_led *g15_led =
+		container_of(led_cdev, struct lg_g15_led, cdev);
+	struct lg_g15_data *g15 = dev_get_drvdata(led_cdev->dev->parent);
+	enum led_brightness brightness;
+
+	mutex_lock(&g15->mutex);
+	/*
+	 * The G710+ firmware's GET_REPORT for the backlight always returns
+	 * the power-on default values, ignoring any changes made via
+	 * SET_REPORT. Use the cached brightness which is kept in sync by
+	 * the _set callbacks. M-key and gamemode LEDs read back correctly.
+	 */
+	if (g15_led->led >= LG_G15_BRIGHTNESS_MAX && g15_led->led < LG_G15_GAMEMODE)
+		lg_g710_update_mkey_led_brightness(g15);
+	else if (g15_led->led >= LG_G15_GAMEMODE)
+		lg_g710_update_game_led_brightness(g15);
+	brightness = g15->leds[g15_led->led].brightness;
+	mutex_unlock(&g15->mutex);
+
+	return brightness;
+}
+
+static int lg_g710_mkey_led_set(struct led_classdev *led_cdev,
+			  enum led_brightness brightness)
+{
+	struct lg_g15_led *g15_led =
+		container_of(led_cdev, struct lg_g15_led, cdev);
+	struct lg_g15_data *g15 = dev_get_drvdata(led_cdev->dev->parent);
+	u8 val, mask = 0;
+	int i, ret;
+
+	/* Ignore LED off on unregister / keyboard unplug */
+	if (led_cdev->flags & LED_UNREGISTERING)
+		return 0;
+
+	mutex_lock(&g15->mutex);
+
+	g15->transfer_buf[0] = LG_G710_FEATURE_M_KEYS_LEDS;
+
+	for (i = LG_G15_MACRO_PRESET1; i <= LG_G15_MACRO_RECORD; i++) {
+		if (i == g15_led->led)
+			val = brightness;
+		else
+			val = g15->leds[i].brightness;
+
+		if (val)
+			mask |= 1 << (i - LG_G15_MACRO_PRESET1 + 4);
+	}
+
+	g15->transfer_buf[1] = mask;
+
+	ret = hid_hw_raw_request(g15->hdev, LG_G710_FEATURE_M_KEYS_LEDS,
+				 g15->transfer_buf, 2,
+				 HID_FEATURE_REPORT, HID_REQ_SET_REPORT);
+	if (ret == 2) {
+		/* Success */
+		g15_led->brightness = brightness;
+		ret = 0;
+	} else {
+		if (ret != -EPIPE)
+			hid_err(g15->hdev, "Error setting LED brightness: %d\n", ret);
+		/* -EPIPE is transient (USB stall), cache is unchanged, retry next time */
+		ret = 0;
+	}
+
+	mutex_unlock(&g15->mutex);
+
+	return ret;
+}
+
+static int lg_g710_kbd_led_set(struct led_classdev *led_cdev,
+			  enum led_brightness brightness)
+{
+	struct lg_g15_led *g15_led =
+		container_of(led_cdev, struct lg_g15_led, cdev);
+	struct lg_g15_data *g15 = dev_get_drvdata(led_cdev->dev->parent);
+	int ret;
+
+	/* Ignore LED off on unregister / keyboard unplug */
+	if (led_cdev->flags & LED_UNREGISTERING)
+		return 0;
+
+	mutex_lock(&g15->mutex);
+
+	g15->transfer_buf[0] = LG_G710_FEATURE_BACKLIGHT;
+	g15->transfer_buf[3] = 0;
+
+	if (g15_led->led == LG_G15_KBD_BRIGHTNESS) {
+		g15->transfer_buf[1] = 4 - g15->leds[LG_G15_LCD_BRIGHTNESS].brightness;
+		g15->transfer_buf[2] = 4 - brightness;
+	} else {
+		g15->transfer_buf[1] = 4 - brightness;
+		g15->transfer_buf[2] = 4 - g15->leds[LG_G15_KBD_BRIGHTNESS].brightness;
+	}
+
+	ret = hid_hw_raw_request(g15->hdev, LG_G710_FEATURE_BACKLIGHT,
+				 g15->transfer_buf, 4,
+				 HID_FEATURE_REPORT, HID_REQ_SET_REPORT);
+	if (ret == 4) {
+		/* Success */
+		g15_led->brightness = brightness;
+		ret = 0;
+	} else {
+		if (ret != -EPIPE)
+			hid_err(g15->hdev, "Error setting LED brightness: %d\n", ret);
+		/* -EPIPE is transient (USB stall), cache is unchanged, retry next time */
+		ret = 0;
+	}
+
+	mutex_unlock(&g15->mutex);
+
+	return ret;
+}
+
+/*
+ * The G710+ has separate physical keys for cycling the main keyboard backlight
+ * and the WASD backlight. The firmware handles the actual brightness change
+ * internally, but GET_REPORT always returns the power-on defaults regardless
+ * of any changes. So we must track the brightness in our cache and cycle it
+ * ourselves when a hardware brightness key press is detected.
+ *
+ * The firmware cycles brightness DOWN: 4 → 3 → 2 → 1 → 0 → 4 (in wire
+ * format where 0 = brightest, 4 = off). In user-facing terms (inverted):
+ * 4 → 3 → 2 → 1 → 0 → 4.
+ *
+ * The game mode toggle is also handled here: the firmware toggles game mode
+ * internally and updates the LED, so we read back the actual state via
+ * GET_REPORT and notify userspace of the change.
+ */
+static void lg_g710_leds_changed_work(struct work_struct *work)
+{
+	struct lg_g15_data *g15 = container_of(work, struct lg_g15_data, work);
+	bool changed[LG_G15_LED_MAX] = {};
+	int i;
+
+	mutex_lock(&g15->mutex);
+	for (i = 0; i < LG_G15_BRIGHTNESS_MAX; i++) {
+		if (!test_and_clear_bit(i, &g15->brightness_changed))
+			continue;
+
+		changed[i] = true;
+
+		if (g15->leds[i].brightness > 0)
+			g15->leds[i].brightness--;
+		else
+			g15->leds[i].brightness =
+				g15->leds[i].cdev.max_brightness;
+	}
+
+	if (test_and_clear_bit(LG_G15_GAMEMODE, &g15->brightness_changed)) {
+		changed[LG_G15_GAMEMODE] = true;
+		lg_g710_update_game_led_brightness(g15);
+	}
+
+	for (i = 0; i < LG_G15_LED_MAX; i++) {
+		if (!changed[i])
+			continue;
+
+		led_classdev_notify_brightness_hw_changed(&g15->leds[i].cdev,
+						  g15->leds[i].brightness);
+	}
+	mutex_unlock(&g15->mutex);
+}
+
 /******** Generic LED functions ********/
 static int lg_g15_get_initial_led_brightness(struct lg_g15_data *g15)
 {
@@ -619,6 +855,16 @@ static int lg_g15_get_initial_led_brightness(struct lg_g15_data *g15)
 			return ret;
 
 		return lg_g510_update_mkey_led_brightness(g15);
+	case LG_G710:
+		ret = lg_g710_update_game_led_brightness(g15);
+		if (ret)
+			return ret;
+
+		ret = lg_g710_update_mkey_led_brightness(g15);
+		if (ret)
+			return ret;
+
+		return lg_g710_update_kbd_led_brightness(g15);
 	case LG_Z10:
 		/*
 		 * Getting the LCD backlight brightness is not supported.
@@ -890,6 +1136,71 @@ static int lg_g510_leds_event(struct lg_g15_data *g15, u8 *data)
 	return 0;
 }
 
+static int lg_g710_event(struct lg_g15_data *g15, u8 *data, int size)
+{
+	/*
+	 * Bits 0-5:  G1-G6 keys
+	 * Bits 6-8:  M1-M3 keys
+	 * Bit 9:     MR key
+	 * Bit 10:    WASD backlight cycle (handled as hw brightness change)
+	 * Bit 11:    Kbd backlight cycle (handled as hw brightness change)
+	 * Bit 12:    Game mode toggle (LED state change, handled by firmware)
+	 */
+	static const u16 keymap[] = {
+		KEY_MACRO1,
+		KEY_MACRO2,
+		KEY_MACRO3,
+		KEY_MACRO4,
+		KEY_MACRO5,
+		KEY_MACRO6,
+		KEY_MACRO_PRESET1,
+		KEY_MACRO_PRESET2,
+		KEY_MACRO_PRESET3,
+		KEY_MACRO_RECORD_START,
+		0,	/* WASD illumination cycle - not a key event */
+		0,	/* Kbd illumination cycle - not a key event */
+		0,	/* Game mode toggle */
+	};
+	u16 pressed_keys;
+	int i;
+
+	if (size != 4 || data[0] != 3)
+		return 1;
+
+	pressed_keys = (data[1] & 0x3f) | ((data[2] & 0xf0) << 2) |
+		       ((data[3] & 0x7) << 10);
+
+	for (i = 0; i < ARRAY_SIZE(keymap); i++) {
+		if (keymap[i])
+			input_report_key(g15->input, keymap[i],
+					pressed_keys & BIT(i));
+	}
+	input_sync(g15->input);
+
+	/*
+	 * Detect brightness key presses and schedule the work function
+	 * to cycle cached brightness and notify userspace.
+	 * Bit 10 = WASD backlight (maps to LG_G15_LCD_BRIGHTNESS slot).
+	 * Bit 11 = Kbd backlight (maps to LG_G15_KBD_BRIGHTNESS slot).
+	 */
+	if (pressed_keys & BIT(10)) {
+		set_bit(LG_G15_LCD_BRIGHTNESS, &g15->brightness_changed);
+		schedule_work(&g15->work);
+	}
+	if (pressed_keys & BIT(11)) {
+		set_bit(LG_G15_KBD_BRIGHTNESS, &g15->brightness_changed);
+		schedule_work(&g15->work);
+	}
+
+	/* Game mode toggle — bit 12 is a state bit, trigger on any change */
+	if (pressed_keys & BIT(12)) {
+		set_bit(LG_G15_GAMEMODE, &g15->brightness_changed);
+		schedule_work(&g15->work);
+	}
+
+	return 0;
+}
+
 static int lg_g15_raw_event(struct hid_device *hdev, struct hid_report *report,
 			    u8 *data, int size)
 {
@@ -923,6 +1234,10 @@ static int lg_g15_raw_event(struct hid_device *hdev, struct hid_report *report,
 			return lg_g510_event(g15, data);
 		if (data[0] == LG_G510_INPUT_KBD_BACKLIGHT && size == 2)
 			return lg_g510_leds_event(g15, data);
+		break;
+	case LG_G710:
+		if (data[0] == 0x03 && size == 4)
+			return lg_g710_event(g15, data, size);
 		break;
 	}
 
@@ -1055,6 +1370,37 @@ static int lg_g15_register_led(struct lg_g15_data *g15, int i, const char *name)
 			ret = devm_led_classdev_register(&g15->hdev->dev, &g15->leds[i].cdev);
 		}
 		break;
+	case LG_G710:
+		switch (i) {
+		case LG_G15_LCD_BRIGHTNESS:
+			/*
+			 * The G710+ does not have a separate LCD brightness,
+			 * but it does have a separate brightness for WASD keys.
+			 * Do not use the ::kbd_backlight suffix here, UPower
+			 * only supports one kbd_backlight LED per device.
+			 */
+			g15->leds[i].cdev.name = "g15::kbd_zoned_backlight-wasd";
+			fallthrough;
+		case LG_G15_KBD_BRIGHTNESS:
+			g15->leds[i].cdev.brightness_set_blocking =
+				lg_g710_kbd_led_set;
+			g15->leds[i].cdev.brightness_get =
+				lg_g710_led_get;
+			g15->leds[i].cdev.max_brightness = 4;
+			g15->leds[i].cdev.flags = LED_BRIGHT_HW_CHANGED;
+			break;
+		default:
+			if (i != LG_G15_GAMEMODE)
+				g15->leds[i].cdev.brightness_set_blocking =
+					lg_g710_mkey_led_set;
+			g15->leds[i].cdev.brightness_get =
+				lg_g710_led_get;
+			g15->leds[i].cdev.max_brightness = 1;
+			if (i == LG_G15_GAMEMODE)
+				g15->leds[i].cdev.flags = LED_BRIGHT_HW_CHANGED;
+		}
+		ret = devm_led_classdev_register(&g15->hdev->dev, &g15->leds[i].cdev);
+		break;
 	}
 
 	return ret;
@@ -1079,9 +1425,13 @@ static void lg_g15_init_input_dev_core(struct hid_device *hdev, struct input_dev
 static void lg_g15_init_input_dev(struct hid_device *hdev, struct input_dev *input,
 				  const char *name)
 {
+	struct lg_g15_data *g15 = hid_get_drvdata(hdev);
 	int i;
 
 	lg_g15_init_input_dev_core(hdev, input, name);
+
+	if (g15->model == LG_G710)
+		return;
 
 	/* Keys below the LCD, intended for controlling a menu on the LCD */
 	for (i = 0; i < 5; i++)
@@ -1137,8 +1487,8 @@ static int lg_g15_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		return ret;
 
 	/*
-	 * Some models have multiple interfaces, we want the interface with
-	 * the f000.0000 application input report.
+	 * Some models have multiple interfaces, we want the interface
+	 * with the ff00.0000 application input report.
 	 */
 	rep_enum = &hdev->report_enum[HID_INPUT_REPORT];
 	list_for_each_entry(rep, &rep_enum->report_list, list) {
@@ -1212,6 +1562,13 @@ static int lg_g15_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	case LG_Z10:
 		connect_mask = HID_CONNECT_HIDRAW;
 		break;
+	case LG_G710:
+		INIT_WORK(&g15->work, lg_g710_leds_changed_work);
+		hdev->quirks |= HID_QUIRK_NOGET;
+		connect_mask = HID_CONNECT_DEFAULT;
+		gkeys_settings_feature_report = LG_G710_FEATURE_EXTRA_KEYS;
+		gkeys = 6;
+		break;
 	}
 
 	ret = hid_hw_start(hdev, connect_mask);
@@ -1234,11 +1591,13 @@ static int lg_g15_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	}
 
 	if (gkeys_settings_feature_report) {
+		int report_size = (g15->model == LG_G710) ? gkeys * 2 : gkeys;
+
 		g15->transfer_buf[0] = gkeys_settings_feature_report;
-		memset(g15->transfer_buf + 1, 0, gkeys);
+		memset(g15->transfer_buf + 1, 0, report_size);
 		ret = hid_hw_raw_request(g15->hdev,
 				gkeys_settings_feature_report,
-				g15->transfer_buf, gkeys + 1,
+				g15->transfer_buf, report_size + 1,
 				HID_FEATURE_REPORT, HID_REQ_SET_REPORT);
 	}
 
@@ -1327,8 +1686,14 @@ static int lg_g15_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		goto error_hw_stop;
 
 	/* Register LED devices */
-	for (i = 0; i < LG_G15_LED_MAX; i++) {
+	for (i = 0; i <= LG_G15_MACRO_RECORD; i++) {
 		ret = lg_g15_register_led(g15, i, led_names[i]);
+		if (ret)
+			goto error_hw_stop;
+	}
+
+	if (g15->model == LG_G710) {
+		ret = lg_g15_register_led(g15, LG_G15_GAMEMODE, "g15::gamemode");
 		if (ret)
 			goto error_hw_stop;
 	}
@@ -1366,6 +1731,10 @@ static const struct hid_device_id lg_g15_devices[] = {
 	{ HID_USB_DEVICE(USB_VENDOR_ID_LOGITECH,
 			 USB_DEVICE_ID_LOGITECH_G510_USB_AUDIO),
 		.driver_data = LG_G510_USB_AUDIO },
+	/* G710 or G710+ */
+	{ HID_USB_DEVICE(USB_VENDOR_ID_LOGITECH,
+			 USB_DEVICE_ID_LOGITECH_G710),
+		.driver_data = LG_G710 },
 	/* Z-10 speakers */
 	{ HID_USB_DEVICE(USB_VENDOR_ID_LOGITECH,
 			 USB_DEVICE_ID_LOGITECH_Z_10_SPK),
