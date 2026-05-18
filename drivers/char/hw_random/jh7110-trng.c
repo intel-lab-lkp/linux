@@ -78,6 +78,9 @@
 #define STARFIVE_ISTAT_SEED_DONE	BIT(1)
 #define STARFIVE_ISTAT_LFSR_LOCKUP	BIT(4)
 
+#define HW_SEQ_RESET_FIRST_THEN_CLK	0
+#define HW_SEQ_CLK_FIRST_THEN_RESET	1
+
 #define STARFIVE_RAND_LEN		sizeof(u32)
 
 #define to_trng(p)			container_of(p, struct starfive_trng, rng)
@@ -95,12 +98,14 @@ enum mode {
 struct starfive_trng {
 	struct device		*dev;
 	void __iomem		*base;
+	int			irq;
 	struct clk		*hclk;
 	struct clk		*ahb;
 	struct reset_control	*rst;
 	struct hwrng		rng;
 	struct completion	random_done;
 	struct completion	reseed_done;
+	u32			hw_seq;
 	u32			mode;
 	u32			mission;
 	u32			reseed;
@@ -130,12 +135,29 @@ static inline int starfive_trng_wait_idle(struct starfive_trng *trng)
 					  10, 100000);
 }
 
-static inline void starfive_trng_irq_mask_clear(struct starfive_trng *trng)
+static inline void starfive_trng_irq_clear(struct starfive_trng *trng)
 {
 	/* clear register: ISTAT */
 	u32 data = readl(trng->base + STARFIVE_ISTAT);
 
 	writel(data, trng->base + STARFIVE_ISTAT);
+}
+
+static void starfive_trng_release(void *data)
+{
+	struct starfive_trng *trng = data;
+
+	pm_runtime_disable(trng->dev);
+	pm_runtime_dont_use_autosuspend(trng->dev);
+
+	if (trng->hw_seq == HW_SEQ_RESET_FIRST_THEN_CLK)
+		reset_control_assert(trng->rst);
+
+	clk_disable_unprepare(trng->ahb);
+	clk_disable_unprepare(trng->hclk);
+
+	if (trng->hw_seq == HW_SEQ_CLK_FIRST_THEN_RESET)
+		reset_control_assert(trng->rst);
 }
 
 static int starfive_trng_cmd(struct starfive_trng *trng, u32 cmd, bool wait)
@@ -174,13 +196,16 @@ static int starfive_trng_init(struct hwrng *rng)
 {
 	struct starfive_trng *trng = to_trng(rng);
 	u32 mode, intr = 0;
+	int ret;
+
+	pm_runtime_get_sync(trng->dev);
 
 	/* setup Auto Request/Age register */
 	writel(autoage, trng->base + STARFIVE_AUTO_AGE);
 	writel(autoreq, trng->base + STARFIVE_AUTO_RQSTS);
 
 	/* clear register: ISTAT */
-	starfive_trng_irq_mask_clear(trng);
+	starfive_trng_irq_clear(trng);
 
 	intr |= STARFIVE_IE_ALL;
 	writel(intr, trng->base + STARFIVE_IE);
@@ -201,7 +226,11 @@ static int starfive_trng_init(struct hwrng *rng)
 
 	writel(mode, trng->base + STARFIVE_MODE);
 
-	return starfive_trng_cmd(trng, STARFIVE_CTRL_EXEC_RANDRESEED, 1);
+	ret = starfive_trng_cmd(trng, STARFIVE_CTRL_EXEC_RANDRESEED, 1);
+
+	pm_runtime_put_sync_autosuspend(trng->dev);
+
+	return ret;
 }
 
 static irqreturn_t starfive_trng_irq(int irq, void *priv)
@@ -235,11 +264,17 @@ static void starfive_trng_cleanup(struct hwrng *rng)
 {
 	struct starfive_trng *trng = to_trng(rng);
 
+	pm_runtime_get_sync(trng->dev);
+
+	writel(0, trng->base + STARFIVE_IE);
+	starfive_trng_irq_clear(trng);
+
+	if (trng->irq >= 0)
+		synchronize_irq(trng->irq);
+
 	writel(0, trng->base + STARFIVE_CTRL);
 
-	reset_control_assert(trng->rst);
-	clk_disable_unprepare(trng->hclk);
-	clk_disable_unprepare(trng->ahb);
+	pm_runtime_put_sync(trng->dev);
 }
 
 static int starfive_trng_read(struct hwrng *rng, void *buf, size_t max, bool wait)
@@ -257,24 +292,26 @@ static int starfive_trng_read(struct hwrng *rng, void *buf, size_t max, bool wai
 	if (wait) {
 		ret = starfive_trng_wait_idle(trng);
 		if (ret)
-			return -ETIMEDOUT;
+			goto end;
 	}
 
 	ret = starfive_trng_cmd(trng, STARFIVE_CTRL_GENE_RANDNUM, wait);
 	if (ret)
-		return ret;
+		goto end;
 
 	memcpy_fromio(buf, trng->base + STARFIVE_RAND0, max);
 
+	ret = max;
+
+end:
 	pm_runtime_put_sync_autosuspend(trng->dev);
 
-	return max;
+	return ret;
 }
 
 static int starfive_trng_probe(struct platform_device *pdev)
 {
 	int ret;
-	int irq;
 	struct starfive_trng *trng;
 
 	trng = devm_kzalloc(&pdev->dev, sizeof(*trng), GFP_KERNEL);
@@ -283,21 +320,22 @@ static int starfive_trng_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, trng);
 	trng->dev = &pdev->dev;
+	trng->hw_seq = (kernel_ulong_t)of_device_get_match_data(&pdev->dev);
 
 	trng->base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(trng->base))
 		return dev_err_probe(&pdev->dev, PTR_ERR(trng->base),
 				     "Error remapping memory for platform device.\n");
 
-	irq = platform_get_irq(pdev, 0);
-	if (irq < 0)
-		return irq;
+	trng->irq = platform_get_irq(pdev, 0);
+	if (trng->irq < 0)
+		return trng->irq;
 
 	init_completion(&trng->random_done);
 	init_completion(&trng->reseed_done);
 	spin_lock_init(&trng->write_lock);
 
-	ret = devm_request_irq(&pdev->dev, irq, starfive_trng_irq, 0, pdev->name,
+	ret = devm_request_irq(&pdev->dev, trng->irq, starfive_trng_irq, 0, pdev->name,
 			       (void *)trng);
 	if (ret)
 		return dev_err_probe(&pdev->dev, ret,
@@ -333,18 +371,16 @@ static int starfive_trng_probe(struct platform_device *pdev)
 
 	pm_runtime_use_autosuspend(&pdev->dev);
 	pm_runtime_set_autosuspend_delay(&pdev->dev, 100);
+	pm_runtime_set_active(&pdev->dev);
 	pm_runtime_enable(&pdev->dev);
 
+	ret = devm_add_action_or_reset(&pdev->dev, starfive_trng_release, trng);
+	if (ret)
+		return ret;
+
 	ret = devm_hwrng_register(&pdev->dev, &trng->rng);
-	if (ret) {
-		pm_runtime_disable(&pdev->dev);
-
-		reset_control_assert(trng->rst);
-		clk_disable_unprepare(trng->ahb);
-		clk_disable_unprepare(trng->hclk);
-
+	if (ret)
 		return dev_err_probe(&pdev->dev, ret, "Failed to register hwrng\n");
-	}
 
 	return 0;
 }
@@ -377,7 +413,8 @@ static const struct dev_pm_ops starfive_trng_pm_ops = {
 };
 
 static const struct of_device_id trng_dt_ids[] __maybe_unused = {
-	{ .compatible = "starfive,jh7110-trng" },
+	{ .compatible = "starfive,jh7110-trng", .data = (void *)HW_SEQ_RESET_FIRST_THEN_CLK },
+	{ .compatible = "starfive,jhb100-trng", .data = (void *)HW_SEQ_CLK_FIRST_THEN_RESET },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, trng_dt_ids);
