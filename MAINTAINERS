@@ -22120,6 +22120,14 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/usb/qcom,pmic-*.yaml
 F:	drivers/usb/typec/tcpm/qcom/
 
+QUALCOMM PMI8998 USB TYPE-C ROLE-SWITCH DRIVER
+M:	Maxim Furman <taygoth@gmail.com>
+L:	linux-arm-msm@vger.kernel.org
+L:	linux-usb@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/usb/qcom,pmi8998-typec.yaml
+F:	drivers/usb/typec/qcom_pmi8998_typec.c
+
 QUALCOMM VENUS VIDEO ACCELERATOR DRIVER
 M:	Vikash Garodia <vikash.garodia@oss.qualcomm.com>
 M:	Dikshita Agarwal <dikshita.agarwal@oss.qualcomm.com>
