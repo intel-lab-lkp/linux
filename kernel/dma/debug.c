@@ -474,6 +474,35 @@ static int active_cacheline_dec_overlap(phys_addr_t cln)
 	return active_cacheline_set_overlap(cln, --overlap);
 }
 
+/*
+ * Whether cacheline-overlap tracking is meaningful for @dev.
+ *
+ * Mirrors the suppression conditions add_dma_entry() already applies to
+ * the sibling "cacheline tracking EEXIST" err_printk:
+ *
+ *  - On architectures with hardware DMA cache coherence
+ *    (dma_get_cache_alignment() < L1_CACHE_BYTES, e.g. x86_64) bus
+ *    snooping makes overlapping cacheline mappings safe.
+ *
+ *  - With CONFIG_DMA_BOUNCE_UNALIGNED_KMALLOC and an active SWIOTLB,
+ *    unaligned kmalloc buffers are bounced through aligned swiotlb
+ *    buffers, so the original cacheline overlap never reaches DMA.
+ *    See commit 03521c892bb8 ("dma-debug: don't report false positives
+ *    with DMA_BOUNCE_UNALIGNED_KMALLOC").
+ *
+ * In both cases tracking is pure overhead and produces false-positive
+ * WARN_ONCEs.
+ */
+static bool dma_debug_cacheline_tracking_needed(struct device *dev)
+{
+	if (dma_get_cache_alignment() < L1_CACHE_BYTES)
+		return false;
+	if (IS_ENABLED(CONFIG_DMA_BOUNCE_UNALIGNED_KMALLOC) &&
+	    is_swiotlb_active(dev))
+		return false;
+	return true;
+}
+
 static int active_cacheline_insert(struct dma_debug_entry *entry,
 				   bool *overlap_cache_clean)
 {
@@ -488,6 +517,9 @@ static int active_cacheline_insert(struct dma_debug_entry *entry,
 	 * legitimate usages of overlapping mappings.
 	 */
 	if (entry->direction == DMA_TO_DEVICE)
+		return 0;
+
+	if (!dma_debug_cacheline_tracking_needed(entry->dev))
 		return 0;
 
 	spin_lock_irqsave(&radix_lock, flags);
@@ -514,6 +546,9 @@ static void active_cacheline_remove(struct dma_debug_entry *entry)
 
 	/* ...mirror the insert case */
 	if (entry->direction == DMA_TO_DEVICE)
+		return;
+
+	if (!dma_debug_cacheline_tracking_needed(entry->dev))
 		return;
 
 	spin_lock_irqsave(&radix_lock, flags);
