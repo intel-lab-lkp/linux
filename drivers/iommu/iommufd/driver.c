@@ -149,15 +149,28 @@ int iommufd_viommu_report_event(struct iommufd_viommu *viommu,
 		goto out_unlock_veventqs;
 	}
 
-	spin_lock(&veventq->common.lock);
-	if (veventq->num_events == veventq->depth) {
+	/*
+	 * Optimistic skip when clearly full. A concurrent reader may free a slot
+	 * before the spinlock; the cost is recording one extra event as lost.
+	 */
+	if (READ_ONCE(veventq->num_events) >= veventq->depth) {
+		spin_lock(&veventq->common.lock);
 		vevent = &veventq->lost_events_header;
 		goto out_set_header;
 	}
 
-	vevent = kzalloc_flex(*vevent, event_data, data_len, GFP_ATOMIC);
+	/* Pre-allocate to avoid GFP_ATOMIC; use GFP_NOWAIT to avoid sleeping */
+	vevent = kzalloc_flex(*vevent, event_data, data_len, GFP_NOWAIT);
 	if (!vevent) {
+		spin_lock(&veventq->common.lock);
+		vevent = &veventq->lost_events_header;
 		rc = -ENOMEM;
+		goto out_set_header;
+	}
+
+	spin_lock(&veventq->common.lock);
+	if (veventq->num_events == veventq->depth) {
+		kfree(vevent);
 		vevent = &veventq->lost_events_header;
 		goto out_set_header;
 	}
