@@ -20,11 +20,6 @@
 #define LENGTH (256UL*1024*1024)
 #define PROTECTION (PROT_READ | PROT_WRITE)
 
-static void check_bytes(char *addr)
-{
-	ksft_print_msg("First hex is %x\n", *((unsigned int *)addr));
-}
-
 static void write_bytes(char *addr)
 {
 	unsigned long i;
@@ -37,7 +32,7 @@ static int read_bytes(char *addr)
 {
 	unsigned long i;
 
-	check_bytes(addr);
+	ksft_print_msg("First hex is %x\n", *((unsigned int *)addr));
 	for (i = 0; i < LENGTH; i++)
 		if (*(addr + i) != (char)i) {
 			ksft_print_msg("Error: Mismatch at %lu\n", i);
@@ -65,7 +60,7 @@ int main(void)
 	}
 
 	ksft_print_msg("Returned address is %p\n", addr);
-	check_bytes(addr);
+	ksft_print_msg("First hex is %x\n", *((unsigned int *)addr));
 	write_bytes(addr);
 	ret = read_bytes(addr);
 
