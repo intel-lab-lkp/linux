@@ -5,6 +5,7 @@
  */
 
 #include <linux/bus/stm32_firewall_device.h>
+#include <linux/bitfield.h>
 #include <linux/clk-provider.h>
 #include <linux/io.h>
 #include <linux/platform_device.h>
