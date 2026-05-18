@@ -372,9 +372,10 @@ static acpi_status acpi_gpiochip_alloc_event(struct acpi_resource *ares,
 
 	if (pin <= 255) {
 		char ev_name[8];
-		sprintf(ev_name, "_%c%02X",
-			agpio->triggering == ACPI_EDGE_SENSITIVE ? 'E' : 'L',
-			pin);
+
+		snprintf(ev_name, sizeof(ev_name), "_%c%02X",
+			 agpio->triggering == ACPI_EDGE_SENSITIVE ? 'E' : 'L',
+			 pin);
 		if (ACPI_SUCCESS(acpi_get_handle(handle, ev_name, &evt_handle)))
 			handler = acpi_gpio_irq_handler;
 	}
@@ -645,7 +646,7 @@ __acpi_gpio_update_gpiod_flags(enum gpiod_flags *flags, enum gpiod_flags update)
 }
 
 static int acpi_gpio_update_gpiod_flags(enum gpiod_flags *flags,
-				        struct acpi_gpio_info *info)
+					struct acpi_gpio_info *info)
 {
 	struct device *dev = &info->adev->dev;
 	enum gpiod_flags old = *flags;
@@ -1206,7 +1207,7 @@ static void acpi_gpiochip_request_regions(struct acpi_gpio_chip *achip)
 						    NULL, achip);
 	if (ACPI_FAILURE(status))
 		dev_err(chip->parent,
-		        "Failed to install GPIO OpRegion handler\n");
+			"Failed to install GPIO OpRegion handler\n");
 }
 
 static void acpi_gpiochip_free_regions(struct acpi_gpio_chip *achip)
