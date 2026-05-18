@@ -1364,7 +1364,7 @@ static int mtk_jpeg_probe(struct platform_device *pdev)
 	jpeg->vdev->fops = &mtk_jpeg_fops;
 	jpeg->vdev->ioctl_ops = jpeg->variant->ioctl_ops;
 	jpeg->vdev->minor = -1;
-	jpeg->vdev->release = video_device_release;
+	jpeg->vdev->release = video_device_release_empty;
 	jpeg->vdev->lock = &jpeg->lock;
 	jpeg->vdev->v4l2_dev = &jpeg->v4l2_dev;
 	jpeg->vdev->vfl_dir = VFL_DIR_M2M;
@@ -1376,6 +1376,7 @@ static int mtk_jpeg_probe(struct platform_device *pdev)
 		v4l2_err(&jpeg->v4l2_dev, "Failed to register video device\n");
 		goto err_vfd_jpeg_register;
 	}
+	jpeg->vdev->release = video_device_release;
 
 	video_set_drvdata(jpeg->vdev, jpeg);
 	v4l2_info(&jpeg->v4l2_dev,
