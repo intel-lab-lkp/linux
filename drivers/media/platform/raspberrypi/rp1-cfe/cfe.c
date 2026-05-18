@@ -6,6 +6,7 @@
  * Copyright (c) 2023-2024 Ideas on Board Oy
  */
 
+#include <linux/cleanup.h>
 #include <linux/clk.h>
 #include <linux/debugfs.h>
 #include <linux/delay.h>
@@ -803,7 +804,6 @@ static int cfe_get_vc_dt_fallback(struct cfe_device *cfe, u8 *vc, u8 *dt)
 static int cfe_get_vc_dt(struct cfe_device *cfe, unsigned int channel, u8 *vc,
 			 u8 *dt)
 {
-	struct v4l2_mbus_frame_desc remote_desc;
 	struct v4l2_subdev_state *state;
 	u32 sink_stream;
 	unsigned int i;
@@ -816,34 +816,30 @@ static int cfe_get_vc_dt(struct cfe_device *cfe, unsigned int channel, u8 *vc,
 	if (ret)
 		return ret;
 
-	ret = v4l2_subdev_call(cfe->source_sd, pad, get_frame_desc,
-			       cfe->source_pad, &remote_desc);
-	if (ret == -ENOIOCTLCMD) {
+	struct v4l2_mbus_frame_desc *fd __free(v4l2_subdev_free_frame_desc) =
+		v4l2_subdev_get_frame_desc(cfe->source_sd, cfe->source_pad,
+					   V4L2_MBUS_FRAME_DESC_TYPE_CSI2);
+	if (PTR_ERR(fd) == -ENOIOCTLCMD) {
 		cfe_dbg(cfe, "source does not support get_frame_desc, use fallback\n");
 		return cfe_get_vc_dt_fallback(cfe, vc, dt);
-	} else if (ret) {
+	} else if (IS_ERR(fd)) {
 		cfe_err(cfe, "Failed to get frame descriptor\n");
-		return ret;
+		return PTR_ERR(fd);
 	}
 
-	if (remote_desc.type != V4L2_MBUS_FRAME_DESC_TYPE_CSI2) {
-		cfe_err(cfe, "Frame descriptor does not describe CSI-2 link");
-		return -EINVAL;
-	}
-
-	for (i = 0; i < remote_desc.num_entries; i++) {
-		if (remote_desc.entry[i].stream == sink_stream)
+	for (i = 0; i < fd->num_entries; i++) {
+		if (fd->entry[i].stream == sink_stream)
 			break;
 	}
 
-	if (i == remote_desc.num_entries) {
+	if (i == fd->num_entries) {
 		cfe_err(cfe, "Stream %u not found in remote frame desc\n",
 			sink_stream);
 		return -EINVAL;
 	}
 
-	*vc = remote_desc.entry[i].bus.csi2.vc;
-	*dt = remote_desc.entry[i].bus.csi2.dt;
+	*vc = fd->entry[i].bus.csi2.vc;
+	*dt = fd->entry[i].bus.csi2.dt;
 
 	return 0;
 }
