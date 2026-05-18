@@ -555,11 +555,6 @@
 	.put = profile_set, \
 }
 
-enum {
-	AW88261_SYNC_START = 0,
-	AW88261_ASYNC_START,
-};
-
 enum aw88261_id {
 	AW88261_CHIP_ID = 0x2113,
 };
@@ -594,7 +589,6 @@ struct aw88261 {
 	struct aw_device *aw_pa;
 	struct mutex lock;
 	struct gpio_desc *reset_gpio;
-	struct delayed_work start_work;
 	struct regmap *regmap;
 	struct aw_container *aw_cfg;
 
