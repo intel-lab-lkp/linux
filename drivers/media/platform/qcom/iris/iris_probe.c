@@ -151,7 +151,7 @@ static int iris_register_video_device(struct iris_core *core, enum domain_type t
 	if (!vdev)
 		return -ENOMEM;
 
-	vdev->release = video_device_release;
+	vdev->release = video_device_release_empty;
 	vdev->fops = core->iris_v4l2_file_ops;
 	vdev->vfl_dir = VFL_DIR_M2M;
 	vdev->v4l2_dev = &core->v4l2_dev;
@@ -174,11 +174,17 @@ static int iris_register_video_device(struct iris_core *core, enum domain_type t
 	if (ret)
 		goto err_vdev_release;
 
+	vdev->release = video_device_release;
 	video_set_drvdata(vdev, core);
 
 	return 0;
 
 err_vdev_release:
+	if (core->vdev_dec == vdev)
+		core->vdev_dec = NULL;
+	if (core->vdev_enc == vdev)
+		core->vdev_enc = NULL;
+
 	video_device_release(vdev);
 
 	return ret;
