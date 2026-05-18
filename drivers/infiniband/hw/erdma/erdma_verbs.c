@@ -824,26 +824,33 @@ static void erdma_destroy_mtt(struct erdma_dev *dev, struct erdma_mtt *mtt)
 }
 
 static int erdma_mem_init(struct erdma_dev *dev, struct erdma_mem *mem,
-			  u64 start, u64 len, int access, u64 virt,
-			  unsigned long req_page_size, bool force_continuous)
+			  struct erdma_mem_init_attr *attr)
 {
 	int ret = 0;
 
-	mem->umem = ib_umem_get(&dev->ibdev, start, len, access);
+	mem->umem =
+		ib_umem_get(&dev->ibdev, attr->start, attr->len, attr->access);
 	if (IS_ERR(mem->umem)) {
 		ret = PTR_ERR(mem->umem);
 		mem->umem = NULL;
 		return ret;
 	}
 
-	mem->va = virt;
-	mem->len = len;
-	mem->page_size = ib_umem_find_best_pgsz(mem->umem, req_page_size, virt);
-	mem->page_offset = start & (mem->page_size - 1);
+	mem->va = attr->virt;
+	mem->len = attr->len;
+
+	mem->page_size = ib_umem_find_best_pgsz(mem->umem, attr->req_page_size,
+						attr->virt);
+	if (!mem->page_size) {
+		ret = -EINVAL;
+		goto error_ret;
+	}
+
+	mem->page_offset = attr->start & (mem->page_size - 1);
 	mem->mtt_nents = ib_umem_num_dma_blocks(mem->umem, mem->page_size);
 	mem->page_cnt = mem->mtt_nents;
 	mem->mtt = erdma_create_mtt(dev, MTT_SIZE(mem->page_cnt),
-				    force_continuous);
+				    attr->flags & ERDMA_MEM_FLAG_MTT_PHYS_CONT);
 	if (IS_ERR(mem->mtt)) {
 		ret = PTR_ERR(mem->mtt);
 		goto error_ret;
@@ -938,6 +945,7 @@ erdma_unmap_user_dbrecords(struct erdma_ucontext *ctx,
 static int init_user_qp(struct erdma_qp *qp, struct erdma_ucontext *uctx,
 			u64 va, u32 len, u64 dbrec_va)
 {
+	struct erdma_mem_init_attr attr = {};
 	dma_addr_t dbrec_dma;
 	u32 rq_offset;
 	int ret;
@@ -946,18 +954,22 @@ static int init_user_qp(struct erdma_qp *qp, struct erdma_ucontext *uctx,
 		   qp->attrs.rq_size * RQE_SIZE))
 		return -EINVAL;
 
-	ret = erdma_mem_init(qp->dev, &qp->user_qp.sq_mem, va,
-			     qp->attrs.sq_size << SQEBB_SHIFT, 0, va,
-			     (SZ_1M - SZ_4K), true);
+	attr.virt = va;
+	attr.start = va;
+	attr.req_page_size = SZ_1M - SZ_4K;
+	attr.len = qp->attrs.sq_size << SQEBB_SHIFT;
+	attr.flags = ERDMA_MEM_FLAG_MTT_PHYS_CONT;
+	ret = erdma_mem_init(qp->dev, &qp->user_qp.sq_mem, &attr);
 	if (ret)
 		return ret;
 
 	rq_offset = ALIGN(qp->attrs.sq_size << SQEBB_SHIFT, ERDMA_HW_PAGE_SIZE);
 	qp->user_qp.rq_offset = rq_offset;
 
-	ret = erdma_mem_init(qp->dev, &qp->user_qp.rq_mem, va + rq_offset,
-			      qp->attrs.rq_size << RQE_SHIFT, 0, va + rq_offset,
-			      (SZ_1M - SZ_4K), true);
+	attr.virt = va + rq_offset;
+	attr.start = va + rq_offset;
+	attr.len = qp->attrs.rq_size << RQE_SHIFT;
+	ret = erdma_mem_init(qp->dev, &qp->user_qp.rq_mem, &attr);
 	if (ret)
 		goto uninit_sq_mem;
 
@@ -1231,8 +1243,9 @@ struct ib_mr *erdma_reg_user_mr(struct ib_pd *ibpd, u64 start, u64 len,
 				u64 virt, int access, struct ib_dmah *dmah,
 				struct ib_udata *udata)
 {
-	struct erdma_mr *mr = NULL;
 	struct erdma_dev *dev = to_edev(ibpd->device);
+	struct erdma_mem_init_attr attr = {};
+	struct erdma_mr *mr = NULL;
 	u32 stag;
 	int ret;
 
@@ -1246,8 +1259,12 @@ struct ib_mr *erdma_reg_user_mr(struct ib_pd *ibpd, u64 start, u64 len,
 	if (!mr)
 		return ERR_PTR(-ENOMEM);
 
-	ret = erdma_mem_init(dev, &mr->mem, start, len, access, virt,
-			     SZ_2G - SZ_4K, false);
+	attr.len = len;
+	attr.virt = virt;
+	attr.start = start;
+	attr.access = access;
+	attr.req_page_size = SZ_2G - SZ_4K;
+	ret = erdma_mem_init(dev, &mr->mem, &attr);
 	if (ret)
 		goto err_out_free;
 
@@ -1902,12 +1919,16 @@ int erdma_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *qp_attr,
 static int erdma_init_user_cq(struct erdma_ucontext *ctx, struct erdma_cq *cq,
 			      struct erdma_ureq_create_cq *ureq)
 {
-	int ret;
 	struct erdma_dev *dev = to_edev(cq->ibcq.device);
+	struct erdma_mem_init_attr attr = {};
+	int ret;
 
-	ret = erdma_mem_init(dev, &cq->user_cq.qbuf_mem, ureq->qbuf_va,
-			     ureq->qbuf_len, 0, ureq->qbuf_va, SZ_64M - SZ_4K,
-			     true);
+	attr.len = ureq->qbuf_len;
+	attr.virt = ureq->qbuf_va;
+	attr.start = ureq->qbuf_va;
+	attr.req_page_size = SZ_64M - SZ_4K;
+	attr.flags = ERDMA_MEM_FLAG_MTT_PHYS_CONT;
+	ret = erdma_mem_init(dev, &cq->user_cq.qbuf_mem, &attr);
 	if (ret)
 		return ret;
 
