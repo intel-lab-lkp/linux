@@ -343,6 +343,17 @@ void virt_map_level(struct kvm_vm *vm, gva_t gva, gpa_t gpa,
 	}
 }
 
+void virt_map_page_tables(struct kvm_vm *vm)
+{
+	gpa_t gpa = KVM_GUEST_PAGE_TABLE_MIN_PADDR;
+	struct userspace_mem_region *region;
+	u64 pt_size;
+
+	region = memslot2region(vm, vm->memslots[MEM_REGION_PT]);
+	pt_size = region->region.guest_phys_addr + region->region.memory_size - gpa;
+	virt_map(vm, gpa, gpa, pt_size / getpagesize());
+}
+
 static bool vm_is_target_pte(struct kvm_mmu *mmu, u64 *pte,
 			     int *level, int current_level)
 {
