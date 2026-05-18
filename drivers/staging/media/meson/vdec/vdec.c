@@ -1074,7 +1074,7 @@ static int vdec_probe(struct platform_device *pdev)
 	mutex_init(&core->lock);
 
 	strscpy(vdev->name, "meson-video-decoder", sizeof(vdev->name));
-	vdev->release = video_device_release;
+	vdev->release = video_device_release_empty;
 	vdev->fops = &vdec_fops;
 	vdev->ioctl_ops = &vdec_ioctl_ops;
 	vdev->vfl_dir = VFL_DIR_M2M;
@@ -1089,6 +1089,7 @@ static int vdec_probe(struct platform_device *pdev)
 		dev_err(dev, "Failed registering video device\n");
 		goto err_vdev_release;
 	}
+	vdev->release = video_device_release;
 
 	return 0;
 
