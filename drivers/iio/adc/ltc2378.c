@@ -10,6 +10,9 @@
 #include <linux/bitops.h>
 #include <linux/delay.h>
 #include <linux/err.h>
+#include <linux/iio/buffer.h>
+#include <linux/iio/triggered_buffer.h>
+#include <linux/iio/trigger_consumer.h>
 #include <linux/module.h>
 #include <linux/regulator/consumer.h>
 
@@ -272,6 +275,25 @@ static const struct iio_info ltc2378_iio_info = {
 	.read_raw = &ltc2378_read_raw,
 };
 
+static irqreturn_t ltc2378_trigger_handler(int irq, void *p)
+{
+	struct iio_poll_func *pf = p;
+	struct iio_dev *indio_dev = pf->indio_dev;
+	struct ltc2378_state *st = iio_priv(indio_dev);
+	int ret;
+
+	ret = ltc2378_convert_and_acquire(st);
+	if (ret < 0)
+		goto err_out;
+
+	iio_push_to_buffers_with_ts(indio_dev, &st->scan, sizeof(st->scan),
+				    pf->timestamp);
+
+err_out:
+	iio_trigger_notify_done(indio_dev->trig);
+	return IRQ_HANDLED;
+}
+
 static int ltc2378_probe(struct spi_device *spi)
 {
 	struct iio_chan_spec *ltc2378_chan;
@@ -305,11 +327,11 @@ static int ltc2378_probe(struct spi_device *spi)
 		return dev_err_probe(dev, PTR_ERR(st->cnv_gpio),
 				     "failed to get CNV GPIO");
 
-	ltc2378_chan = devm_kzalloc(&spi->dev, sizeof(struct iio_chan_spec), GFP_KERNEL);
+	ltc2378_chan = devm_kzalloc(&spi->dev, 2 * sizeof(struct iio_chan_spec), GFP_KERNEL);
 	if (!ltc2378_chan)
 		return -ENOMEM;
 
-	*ltc2378_chan = (struct iio_chan_spec) {
+	ltc2378_chan[0] = (struct iio_chan_spec) {
 		.type = IIO_VOLTAGE,
 		.info_mask_separate = BIT(IIO_CHAN_INFO_RAW) |
 				      BIT(IIO_CHAN_INFO_SCALE),
@@ -327,7 +349,18 @@ static int ltc2378_probe(struct spi_device *spi)
 	ret = ltc2378_offload_buffer_setup(indio_dev, spi);
 	if (ret == -ENODEV) {
 		/* SPI offloading is unavailable. Fall back to triggered buffer. */
-		dev_notice(dev, "buffered data capture not supported\n");
+		ret = devm_iio_triggered_buffer_setup(dev, indio_dev,
+						      &iio_pollfunc_store_time,
+						      &ltc2378_trigger_handler,
+						      NULL);
+		if (ret)
+			return ret;
+
+		/* Add timestamp channel */
+		struct iio_chan_spec ts_chan = IIO_CHAN_SOFT_TIMESTAMP(1);
+
+		ltc2378_chan[1] = ts_chan;
+		num_iio_chans++;
 	} else if (ret) {
 		return dev_err_probe(dev, ret, "error on SPI offload setup\n");
 	} else {
