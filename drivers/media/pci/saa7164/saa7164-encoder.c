@@ -1081,6 +1081,7 @@ int saa7164_encoder_register(struct saa7164_port *port)
 	}
 
 	port->v4l_device->ctrl_handler = hdl;
+	port->v4l_device->release = video_device_release_empty;
 	v4l2_ctrl_handler_setup(hdl);
 	video_set_drvdata(port->v4l_device, port);
 	result = video_register_device(port->v4l_device,
@@ -1090,6 +1091,7 @@ int saa7164_encoder_register(struct saa7164_port *port)
 			dev->name);
 		goto fail_reg;
 	}
+	port->v4l_device->release = video_device_release;
 
 	printk(KERN_INFO "%s: registered device video%d [mpeg]\n",
 		dev->name, port->v4l_device->num);
