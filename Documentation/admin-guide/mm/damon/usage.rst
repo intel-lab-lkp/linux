@@ -167,6 +167,9 @@ Users can write below commands for the kdamond to the ``state`` file.
 - ``update_schemes_effective_quotas``: Update the contents of
   ``effective_bytes`` files for each DAMON-based operation scheme of the
   kdamond.  For more details, refer to :ref:`quotas directory <sysfs_quotas>`.
+- ``update_schemes_quota_goals``: Update the contents of ``current_value`` files
+  for each DAMON-based operation scheme quota goal of the kdamond.  For more
+  details, refer to :ref:`goals directory <sysfs_schemes_quota_goals>`.
 
 If the state is ``on``, reading ``pid`` shows the pid of the kdamond thread.
 
@@ -448,7 +451,11 @@ get the five parameters for the quota auto-tuning goals that specified on the
 :ref:`design doc <damon_design_damos_quotas_auto_tuning>` by writing to and
 reading from each of the files.  Note that users should further write
 ``commit_schemes_quota_goals`` to the ``state`` file of the :ref:`kdamond
-directory <sysfs_kdamond>` to pass the feedback to DAMON.
+directory <sysfs_kdamond>` to pass the feedback to DAMON.  The
+``current_value`` file is not updated in real time, so users should ask DAMON
+sysfs interface to periodically update it using ``refresh_ms``, or do a one time
+update by writing a special keyword, ``update_schemes_quota_goals`` to the
+relevant ``kdamonds/<N>/state`` file.
 
 .. _sysfs_watermarks:
 
