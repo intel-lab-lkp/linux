@@ -19,6 +19,8 @@ struct iova {
 	struct rb_node	node;
 	unsigned long	pfn_hi; /* Highest allocated pfn */
 	unsigned long	pfn_lo; /* Lowest allocated pfn */
+	unsigned long	gap_to_prev;       /* Gap (in pfns) to predecessor */
+	unsigned long	__subtree_max_gap; /* Max gap_to_prev in subtree */
 };
 
 
