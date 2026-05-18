@@ -1321,6 +1321,11 @@ enum damon_sysfs_cmd {
 	 */
 	DAMON_SYSFS_CMD_UPDATE_SCHEMES_EFFECTIVE_QUOTAS,
 	/*
+	 * @DAMON_SYSFS_CMD_UPDATE_SCHEMES_QUOTA_GOALS: Update the
+	 * current value of the scheme quota goals.
+	 */
+	DAMON_SYSFS_CMD_UPDATE_SCHEMES_QUOTA_GOALS,
+	/*
 	 * @DAMON_SYSFS_CMD_UPDATE_TUNED_INTERVALS: Update the tuned monitoring
 	 * intervals.
 	 */
@@ -1342,6 +1347,7 @@ static const char * const damon_sysfs_cmd_strs[] = {
 	"update_schemes_tried_regions",
 	"clear_schemes_tried_regions",
 	"update_schemes_effective_quotas",
+	"update_schemes_quota_goals",
 	"update_tuned_intervals",
 };
 
@@ -1606,6 +1612,16 @@ static int damon_sysfs_upd_schemes_effective_quotas(void *data)
 	return 0;
 }
 
+static int damon_sysfs_upd_schemes_quota_goals(void *data)
+{
+	struct damon_sysfs_kdamond *kdamond = data;
+	struct damon_ctx *ctx = kdamond->damon_ctx;
+
+	damos_sysfs_update_quota_goals(
+			kdamond->contexts->contexts_arr[0]->schemes, ctx);
+	return 0;
+}
+
 static int damon_sysfs_upd_tuned_intervals(void *data)
 {
 	struct damon_sysfs_kdamond *kdamond = data;
@@ -1656,6 +1672,7 @@ static int damon_sysfs_repeat_call_fn(void *data)
 	damon_sysfs_upd_tuned_intervals(sysfs_kdamond);
 	damon_sysfs_upd_schemes_stats(sysfs_kdamond);
 	damon_sysfs_upd_schemes_effective_quotas(sysfs_kdamond);
+	damon_sysfs_upd_schemes_quota_goals(sysfs_kdamond);
 out:
 	mutex_unlock(&damon_sysfs_lock);
 	return 0;
@@ -1812,6 +1829,10 @@ static int damon_sysfs_handle_cmd(enum damon_sysfs_cmd cmd,
 	case DAMON_SYSFS_CMD_UPDATE_SCHEMES_EFFECTIVE_QUOTAS:
 		return damon_sysfs_damon_call(
 				damon_sysfs_upd_schemes_effective_quotas,
+				kdamond);
+	case DAMON_SYSFS_CMD_UPDATE_SCHEMES_QUOTA_GOALS:
+		return damon_sysfs_damon_call(
+				damon_sysfs_upd_schemes_quota_goals,
 				kdamond);
 	case DAMON_SYSFS_CMD_UPDATE_TUNED_INTERVALS:
 		return damon_sysfs_damon_call(

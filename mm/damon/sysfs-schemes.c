@@ -2812,6 +2812,35 @@ void damos_sysfs_update_effective_quotas(
 	}
 }
 
+void damos_sysfs_update_quota_goals(
+		struct damon_sysfs_schemes *sysfs_schemes,
+		struct damon_ctx *ctx)
+{
+	struct damos *scheme;
+	int schemes_idx = 0;
+
+	damon_for_each_scheme(scheme, ctx) {
+		struct damos_sysfs_quota_goals *sysfs_goals;
+		struct damos_quota_goal *goal;
+		int goals_idx = 0;
+
+		/* user could have removed the scheme sysfs dir */
+		if (schemes_idx >= sysfs_schemes->nr)
+			break;
+
+		sysfs_goals =
+			sysfs_schemes->schemes_arr[schemes_idx++]->quotas->goals;
+
+		damos_for_each_quota_goal(goal, &scheme->quota) {
+			if (goals_idx >= sysfs_goals->nr)
+				break;
+
+			sysfs_goals->goals_arr[goals_idx++]->current_value =
+				goal->current_value;
+		}
+	}
+}
+
 static int damos_sysfs_add_migrate_dest(struct damos *scheme,
 		struct damos_sysfs_dests *sysfs_dests)
 {
