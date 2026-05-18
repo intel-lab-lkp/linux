@@ -4,7 +4,7 @@
 //!
 //! C header: [`include/linux/cpu.h`](srctree/include/linux/cpu.h)
 
-use crate::{bindings, device::Device, error::Result, prelude::ENODEV};
+use crate::{bindings, device::Device, error::Result, prelude::*};
 
 /// Returns the maximum number of possible CPUs in the current system configuration.
 #[inline]
@@ -54,8 +54,14 @@ impl CpuId {
     /// The caller must ensure that `id` is a valid CPU ID (i.e., `0 <= id < nr_cpu_ids()`).
     #[inline]
     pub unsafe fn from_i32_unchecked(id: i32) -> Self {
-        debug_assert!(id >= 0);
-        debug_assert!((id as u32) < nr_cpu_ids());
+        unsafe_precondition_assert!(
+            id >= 0,
+            "`CpuId::from_i32_unchecked` requires a non-negative `id`"
+        );
+        unsafe_precondition_assert!(
+            (id as u32) < nr_cpu_ids(),
+            "`CpuId::from_i32_unchecked` requires a valid `id` (i.e., `0 <= id < nr_cpu_ids()`)"
+        );
 
         // INVARIANT: The function safety guarantees `id` is a valid CPU id.
         Self(id as u32)
@@ -78,10 +84,16 @@ impl CpuId {
     /// The caller must ensure that `id` is a valid CPU ID (i.e., `0 <= id < nr_cpu_ids()`).
     #[inline]
     pub unsafe fn from_u32_unchecked(id: u32) -> Self {
-        debug_assert!(id < nr_cpu_ids());
+        unsafe_precondition_assert!(
+            id < nr_cpu_ids(),
+            "`CpuId::from_u32_unchecked` requires a valid `id` (i.e., `0 <= id < nr_cpu_ids()`)"
+        );
 
         // Ensure the `id` fits in an [`i32`] as it's also representable that way.
-        debug_assert!(id <= i32::MAX as u32);
+        unsafe_precondition_assert!(
+            id <= i32::MAX as u32,
+            "`CpuId::from_u32_unchecked` requires the `id` to not overflow `i32::MAX`"
+        );
 
         // INVARIANT: The function safety guarantees `id` is a valid CPU id.
         Self(id)
