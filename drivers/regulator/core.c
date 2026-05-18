@@ -2240,10 +2240,12 @@ static int regulator_resolve_supply(struct regulator_dev *rdev)
 	 * device get probe deferred and unregisters the supply.
 	 */
 	if (r->dev.parent && r->dev.parent != rdev->dev.parent) {
-		if (!device_is_bound(r->dev.parent)) {
-			put_device(&r->dev);
-			ret = -EPROBE_DEFER;
-			goto out;
+		scoped_guard(device, r->dev.parent) {
+			if (!device_is_bound(r->dev.parent)) {
+				put_device(&r->dev);
+				ret = -EPROBE_DEFER;
+				goto out;
+			}
 		}
 	}
 
