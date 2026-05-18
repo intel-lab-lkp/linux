@@ -316,12 +316,19 @@ static void mana_per_port_queue_reset_work_handler(struct work_struct *work)
 		goto out;
 	}
 
+	/* If already detached (indicates detach succeeded but attach failed
+	 * previously). Now skip mana detach and just retry mana_attach.
+	 */
+	if (!netif_device_present(ndev))
+		goto attach;
+
 	err = mana_detach(ndev, false);
 	if (err) {
 		netdev_err(ndev, "mana_detach failed: %d\n", err);
 		goto dealloc_pre_rxbufs;
 	}
 
+attach:
 	err = mana_attach(ndev);
 	if (err)
 		netdev_err(ndev, "mana_attach failed: %d\n", err);
