@@ -829,7 +829,7 @@ int vpu_add_func(struct vpu_dev *vpu, struct vpu_func *func)
 		dev_err(vpu->dev, "alloc vpu decoder video device fail\n");
 		return -ENOMEM;
 	}
-	vfd->release = video_device_release;
+	vfd->release = video_device_release_empty;
 	vfd->vfl_dir = VFL_DIR_M2M;
 	vfd->v4l2_dev = &vpu->v4l2_dev;
 	vfd->device_caps = V4L2_CAP_VIDEO_M2M_MPLANE | V4L2_CAP_STREAMING;
@@ -850,6 +850,8 @@ int vpu_add_func(struct vpu_dev *vpu, struct vpu_func *func)
 		v4l2_m2m_release(func->m2m_dev);
 		return ret;
 	}
+
+	vfd->release = video_device_release;
 	func->vfd = vfd;
 
 	ret = v4l2_m2m_register_media_controller(func->m2m_dev, func->vfd, func->function);
