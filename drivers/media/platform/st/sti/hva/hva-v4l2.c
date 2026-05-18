@@ -1305,7 +1305,7 @@ static int hva_register_device(struct hva_dev *hva)
 
 	vdev->fops = &hva_fops;
 	vdev->ioctl_ops = &hva_ioctl_ops;
-	vdev->release = video_device_release;
+	vdev->release = video_device_release_empty;
 	vdev->lock = &hva->lock;
 	vdev->vfl_dir = VFL_DIR_M2M;
 	vdev->device_caps = V4L2_CAP_STREAMING | V4L2_CAP_VIDEO_M2M;
@@ -1319,6 +1319,7 @@ static int hva_register_device(struct hva_dev *hva)
 			HVA_PREFIX);
 		goto err_vdev_release;
 	}
+	vdev->release = video_device_release;
 
 	hva->vdev = vdev;
 	video_set_drvdata(vdev, hva);
