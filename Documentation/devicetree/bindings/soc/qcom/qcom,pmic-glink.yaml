@@ -72,6 +72,14 @@ properties:
       - const: charge_limit_end
       - const: charge_limit_delta
 
+  qcom,batteryless:
+    $ref: /schemas/types.yaml#/definitions/flag
+    description:
+      When present, the battery manager registers the power supply as
+      POWER_SUPPLY_TYPE_MAINS instead of BATTERY. This is intended for
+      12V DC adapters, where exposing the supply as a battery would
+      incorrectly trigger userspace battery power-saving sequences.
+
 patternProperties:
   '^connector@\d$':
     $ref: /schemas/connector/usb-connector.yaml#
