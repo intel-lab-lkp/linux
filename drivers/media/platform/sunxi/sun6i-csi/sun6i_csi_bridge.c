@@ -473,6 +473,7 @@ disable:
 
 unlock:
 	v4l2_subdev_unlock_state(state);
+
 	return ret;
 }
 
@@ -533,7 +534,7 @@ static int sun6i_csi_bridge_set_fmt(struct v4l2_subdev *subdev,
 				    struct v4l2_subdev_state *state,
 				    struct v4l2_subdev_format *format)
 {
-	struct v4l2_mbus_framefmt *fmt;
+	struct v4l2_mbus_framefmt *mbus_format;
 
 	/* The format on the source pad always matches the sink pad. */
 	if (format->pad != SUN6I_CSI_BRIDGE_PAD_SINK)
@@ -542,12 +543,12 @@ static int sun6i_csi_bridge_set_fmt(struct v4l2_subdev *subdev,
 	sun6i_csi_bridge_mbus_format_prepare(&format->format);
 
 	/* Set the format on the sink pad. */
-	fmt = v4l2_subdev_state_get_format(state, format->pad);
-	*fmt = format->format;
+	mbus_format = v4l2_subdev_state_get_format(state, format->pad);
+	*mbus_format = format->format;
 
 	/* Propagate the format to the source pad. */
-	fmt = v4l2_subdev_state_get_format(state, SUN6I_CSI_BRIDGE_PAD_SOURCE);
-	*fmt = format->format;
+	mbus_format = v4l2_subdev_state_get_format(state, SUN6I_CSI_BRIDGE_PAD_SOURCE);
+	*mbus_format = format->format;
 
 	return 0;
 }
@@ -779,13 +780,11 @@ int sun6i_csi_bridge_setup(struct sun6i_csi_device *csi_dev)
 	if (ret < 0)
 		return ret;
 
-	/* V4L2 Subdev finalize */
+	/* V4L2 Subdev */
 
 	ret = v4l2_subdev_init_finalize(subdev);
 	if (ret < 0)
 		goto error_media_entity;
-
-	/* V4L2 Subdev */
 
 	if (csi_dev->isp_available)
 		ret = v4l2_async_register_subdev(subdev);
@@ -846,7 +845,6 @@ void sun6i_csi_bridge_cleanup(struct sun6i_csi_device *csi_dev)
 	v4l2_async_nf_cleanup(notifier);
 
 	v4l2_device_unregister_subdev(subdev);
-
 	v4l2_subdev_cleanup(subdev);
 
 	media_entity_cleanup(&subdev->entity);

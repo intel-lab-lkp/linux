@@ -812,27 +812,6 @@ static int sun6i_csi_capture_enum_fmt(struct file *file, void *priv,
 	return -EINVAL;
 }
 
-static int sun6i_csi_capture_enum_framesize(struct file *file, void *fh,
-					    struct v4l2_frmsizeenum *fsize)
-{
-	if (fsize->index)
-		return -EINVAL;
-
-	/* Only accept format in map table. */
-	if (!sun6i_csi_capture_format_find(fsize->pixel_format))
-		return -EINVAL;
-
-	fsize->type = V4L2_FRMSIZE_TYPE_STEPWISE;
-	fsize->stepwise.min_width = SUN6I_CSI_CAPTURE_WIDTH_MIN;
-	fsize->stepwise.max_width = SUN6I_CSI_CAPTURE_WIDTH_MAX;
-	fsize->stepwise.min_height = SUN6I_CSI_CAPTURE_HEIGHT_MIN;
-	fsize->stepwise.max_height = SUN6I_CSI_CAPTURE_HEIGHT_MAX;
-	fsize->stepwise.step_width = 2;
-	fsize->stepwise.step_height = 2;
-
-	return 0;
-}
-
 static int sun6i_csi_capture_g_fmt(struct file *file, void *priv,
 				   struct v4l2_format *format)
 {
@@ -863,6 +842,27 @@ static int sun6i_csi_capture_try_fmt(struct file *file, void *priv,
 				     struct v4l2_format *format)
 {
 	sun6i_csi_capture_format_prepare(format);
+
+	return 0;
+}
+
+static int sun6i_csi_capture_enum_framesizes(struct file *file, void *fh,
+					     struct v4l2_frmsizeenum *frmsize)
+{
+	if (frmsize->index)
+		return -EINVAL;
+
+	/* Only accept format in map table. */
+	if (!sun6i_csi_capture_format_find(frmsize->pixel_format))
+		return -EINVAL;
+
+	frmsize->type = V4L2_FRMSIZE_TYPE_STEPWISE;
+	frmsize->stepwise.min_width = SUN6I_CSI_CAPTURE_WIDTH_MIN;
+	frmsize->stepwise.max_width = SUN6I_CSI_CAPTURE_WIDTH_MAX;
+	frmsize->stepwise.min_height = SUN6I_CSI_CAPTURE_HEIGHT_MIN;
+	frmsize->stepwise.max_height = SUN6I_CSI_CAPTURE_HEIGHT_MAX;
+	frmsize->stepwise.step_width = 2;
+	frmsize->stepwise.step_height = 2;
 
 	return 0;
 }
@@ -900,10 +900,11 @@ static const struct v4l2_ioctl_ops sun6i_csi_capture_ioctl_ops = {
 	.vidioc_querycap		= sun6i_csi_capture_querycap,
 
 	.vidioc_enum_fmt_vid_cap	= sun6i_csi_capture_enum_fmt,
-	.vidioc_enum_framesizes		= sun6i_csi_capture_enum_framesize,
 	.vidioc_g_fmt_vid_cap		= sun6i_csi_capture_g_fmt,
 	.vidioc_s_fmt_vid_cap		= sun6i_csi_capture_s_fmt,
 	.vidioc_try_fmt_vid_cap		= sun6i_csi_capture_try_fmt,
+
+	.vidioc_enum_framesizes		= sun6i_csi_capture_enum_framesizes,
 
 	.vidioc_enum_input		= sun6i_csi_capture_enum_input,
 	.vidioc_g_input			= sun6i_csi_capture_g_input,
@@ -984,16 +985,17 @@ static int sun6i_csi_capture_link_validate(struct media_link *link)
 		media_entity_to_video_device(link->sink->entity);
 	struct sun6i_csi_device *csi_dev = video_get_drvdata(video_dev);
 	struct v4l2_device *v4l2_dev = csi_dev->v4l2_dev;
-	struct v4l2_subdev *src_subdev =
+	struct v4l2_subdev *bridge_subdev =
 		media_entity_to_v4l2_subdev(link->source->entity);
 	const struct sun6i_csi_capture_format *capture_format;
 	const struct sun6i_csi_bridge_format *bridge_format;
 	unsigned int capture_width, capture_height;
-	struct v4l2_subdev_format src_fmt = {
-		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
-		.pad = link->source->index
+	unsigned int bridge_width, bridge_height;
+	struct v4l2_subdev_format bridge_subdev_format = {
+		.which	= V4L2_SUBDEV_FORMAT_ACTIVE,
+		.pad	= link->source->index,
 	};
-	u32 pixelformat, capture_field;
+	u32 pixelformat, capture_field, mbus_code;
 	int ret;
 
 	sun6i_csi_capture_dimensions(csi_dev, &capture_width, &capture_height);
@@ -1004,21 +1006,25 @@ static int sun6i_csi_capture_link_validate(struct media_link *link)
 		return -EINVAL;
 
 	/* Resolve csi bridge format. */
-	ret = v4l2_subdev_call(src_subdev, pad, get_fmt, NULL, &src_fmt);
+	ret = v4l2_subdev_call(bridge_subdev, pad, get_fmt, NULL,
+			       &bridge_subdev_format);
 	if (ret)
 		return ret;
 
-	bridge_format = sun6i_csi_bridge_format_find(src_fmt.format.code);
+	bridge_width = bridge_subdev_format.format.width;
+	bridge_height = bridge_subdev_format.format.height;
+	mbus_code = bridge_subdev_format.format.code;
+
+	bridge_format = sun6i_csi_bridge_format_find(mbus_code);
 	if (WARN_ON(!bridge_format))
 		return -EINVAL;
 
 	/* No cropping/scaling is supported. */
-	if (capture_width != src_fmt.format.width ||
-	    capture_height != src_fmt.format.height) {
+	if (capture_width != bridge_width || capture_height != bridge_height) {
 		v4l2_err(v4l2_dev,
 			 "invalid input/output dimensions: %ux%u/%ux%u\n",
-			 src_fmt.format.width, src_fmt.format.height,
-			 capture_width, capture_height);
+			 bridge_width, bridge_height, capture_width,
+			 capture_height);
 		return -EINVAL;
 	}
 
