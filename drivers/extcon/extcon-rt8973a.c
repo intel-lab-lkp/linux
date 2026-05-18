@@ -684,7 +684,7 @@ static SIMPLE_DEV_PM_OPS(rt8973a_muic_pm_ops,
 			 rt8973a_muic_suspend, rt8973a_muic_resume);
 
 static const struct i2c_device_id rt8973a_i2c_id[] = {
-	{ "rt8973a", TYPE_RT8973A },
+	{ .name = "rt8973a" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, rt8973a_i2c_id);

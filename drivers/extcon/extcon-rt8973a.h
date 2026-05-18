@@ -8,10 +8,6 @@
 #ifndef __LINUX_EXTCON_RT8973A_H
 #define __LINUX_EXTCON_RT8973A_H
 
-enum rt8973a_types {
-	TYPE_RT8973A,
-};
-
 /* RT8973A registers */
 enum rt8973A_reg {
 	RT8973A_REG_DEVICE_ID = 0x1,
