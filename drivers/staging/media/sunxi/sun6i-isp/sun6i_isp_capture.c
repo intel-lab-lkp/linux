@@ -452,6 +452,26 @@ static int sun6i_isp_capture_enum_fmt(struct file *file, void *priv,
 	return 0;
 }
 
+static int sun6i_isp_capture_enum_framesizes(struct file *file, void *fh,
+					     struct v4l2_frmsizeenum *frmsize)
+{
+	if (frmsize->index)
+		return -EINVAL;
+
+	if (!sun6i_isp_capture_format_find(frmsize->pixel_format))
+		return -EINVAL;
+
+	frmsize->type = V4L2_FRMSIZE_TYPE_STEPWISE;
+	frmsize->stepwise.min_width = SUN6I_ISP_CAPTURE_WIDTH_MIN;
+	frmsize->stepwise.max_width = SUN6I_ISP_CAPTURE_WIDTH_MAX;
+	frmsize->stepwise.min_height = SUN6I_ISP_CAPTURE_HEIGHT_MIN;
+	frmsize->stepwise.max_height = SUN6I_ISP_CAPTURE_HEIGHT_MAX;
+	frmsize->stepwise.step_width = 2;
+	frmsize->stepwise.step_height = 2;
+
+	return 0;
+}
+
 static int sun6i_isp_capture_g_fmt(struct file *file, void *priv,
 				   struct v4l2_format *format)
 {
@@ -521,6 +541,8 @@ static const struct v4l2_ioctl_ops sun6i_isp_capture_ioctl_ops = {
 	.vidioc_g_fmt_vid_cap		= sun6i_isp_capture_g_fmt,
 	.vidioc_s_fmt_vid_cap		= sun6i_isp_capture_s_fmt,
 	.vidioc_try_fmt_vid_cap		= sun6i_isp_capture_try_fmt,
+
+	.vidioc_enum_framesizes		= sun6i_isp_capture_enum_framesizes,
 
 	.vidioc_enum_input		= sun6i_isp_capture_enum_input,
 	.vidioc_g_input			= sun6i_isp_capture_g_input,
