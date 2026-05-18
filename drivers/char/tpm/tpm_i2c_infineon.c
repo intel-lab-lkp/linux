@@ -664,10 +664,10 @@ out_err:
 }
 
 static const struct i2c_device_id tpm_tis_i2c_table[] = {
-	{"tpm_i2c_infineon"},
-	{"slb9635tt"},
-	{"slb9645tt"},
-	{},
+	{ .name = "tpm_i2c_infineon" },
+	{ .name = "slb9635tt" },
+	{ .name = "slb9645tt" },
+	{ }
 };
 
 MODULE_DEVICE_TABLE(i2c, tpm_tis_i2c_table);

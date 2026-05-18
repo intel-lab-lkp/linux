@@ -624,9 +624,9 @@ static void i2c_nuvoton_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id i2c_nuvoton_id[] = {
-	{"tpm_i2c_nuvoton"},
-	{"tpm2_i2c_nuvoton", .driver_data = I2C_IS_TPM2},
-	{}
+	{ .name = "tpm_i2c_nuvoton" },
+	{ .name = "tpm2_i2c_nuvoton", .driver_data = I2C_IS_TPM2},
+	{ }
 };
 MODULE_DEVICE_TABLE(i2c, i2c_nuvoton_id);
 
