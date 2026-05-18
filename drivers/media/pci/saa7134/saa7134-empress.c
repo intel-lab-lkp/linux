@@ -250,7 +250,7 @@ static int empress_init(struct saa7134_dev *dev)
 		return -ENOMEM;
 	*(dev->empress_dev) = saa7134_empress_template;
 	dev->empress_dev->v4l2_dev  = &dev->v4l2_dev;
-	dev->empress_dev->release = video_device_release;
+	dev->empress_dev->release = video_device_release_empty;
 	dev->empress_dev->lock = &dev->lock;
 	snprintf(dev->empress_dev->name, sizeof(dev->empress_dev->name),
 		 "%s empress (%s)", dev->name,
@@ -305,6 +305,8 @@ static int empress_init(struct saa7134_dev *dev)
 		dev->empress_dev = NULL;
 		return err;
 	}
+
+	dev->empress_dev->release = video_device_release;
 	pr_info("%s: registered device %s [mpeg]\n",
 	       dev->name, video_device_node_name(dev->empress_dev));
 
