@@ -103,7 +103,7 @@ static int prepare_metric(struct perf_stat_config *config,
 					val *= 1e-9;
 				}
 				if (!source_count)
-					source_count = evsel__source_count(metric_events[i]);
+					source_count = aggr->nr;
 			}
 		}
 		n = strdup(evsel__metric_id(metric_events[i]));
