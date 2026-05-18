@@ -20,6 +20,7 @@
 
 #define RT1711H_PHYCTRL1	0x80
 #define RT1711H_PHYCTRL2	0x81
+#define RT1711H_BMCCTRL		0x90
 
 #define RT1711H_RTCTRL4		0x93
 /* rx threshold of rd/rp: 1b0 for level 0.4V/0.7V, 1b1 for 0.35V/0.75V */
@@ -254,6 +255,18 @@ static int rt1711h_start_drp_toggling(struct tcpci *tcpci,
 	return 0;
 }
 
+static void rt1711h_set_low_power_mode(struct tcpci *tcpci,
+				       struct tcpci_data *tdata, bool enable)
+{
+	int ret;
+	struct rt1711h_chip *chip = tdata_to_rt1711h(tdata);
+
+	ret = rt1711h_write8(chip, RT1711H_BMCCTRL, enable ? 0x08 : 0x07);
+	if (ret < 0)
+		dev_err(chip->dev, "%s lpm fail(%d)\n",
+			enable ? "enter" : "exit", ret);
+}
+
 static irqreturn_t rt1711h_irq(int irq, void *dev_id)
 {
 	int ret;
@@ -336,6 +349,7 @@ static int rt1711h_probe(struct i2c_client *client)
 	chip->data.set_vbus = rt1711h_set_vbus;
 	chip->data.set_vconn = rt1711h_set_vconn;
 	chip->data.start_drp_toggling = rt1711h_start_drp_toggling;
+	chip->data.set_low_power_mode = rt1711h_set_low_power_mode;
 	chip->tcpci = tcpci_register_port(chip->dev, &chip->data);
 	if (IS_ERR_OR_NULL(chip->tcpci))
 		return PTR_ERR(chip->tcpci);
