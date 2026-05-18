@@ -19,8 +19,11 @@ class Remote:
             cmd("rm -rf " + self._tmpdir, host=self)
             self._tmpdir = None
 
-    def cmd(self, comm):
-        return subprocess.Popen(["ssh", "-q", self.name, comm],
+    def cmd(self, comm, pty=False):
+        args = ["ssh", "-q"]
+        if pty:
+            args += ["-tt"]
+        return subprocess.Popen(args + [self.name, comm],
                                 stdin=subprocess.DEVNULL,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 

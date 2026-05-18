@@ -11,7 +11,7 @@ class Remote:
         self.name = name
         self.dir_path = dir_path
 
-    def cmd(self, comm):
+    def cmd(self, comm, pty=False):  # pty arg needed but ignored, netns is local
         return subprocess.Popen(["ip", "netns", "exec", self.name, "bash", "-c", comm],
                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 

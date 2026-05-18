@@ -58,7 +58,9 @@ class cmd:
         self.comm = comm
 
         if host:
-            self.proc = host.cmd(comm)
+            # Remote commands get a PTY, which forces the remote process to
+            # exit in all circumstances when the local ssh client is terminated.
+            self.proc = host.cmd(comm, pty=background)
         else:
             # If user doesn't explicitly request shell try to avoid it.
             if shell is None and isinstance(comm, str) and ' ' in comm:
