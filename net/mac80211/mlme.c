@@ -3182,7 +3182,7 @@ ieee80211_sta_process_chanswitch(struct ieee80211_link_data *link,
 
 	cfg80211_ch_switch_started_notify(sdata->dev, &csa_ie.chanreq.oper,
 					  link->link_id, csa_ie.count,
-					  csa_ie.mode);
+					  csa_ie.mode, csa_ie.max_switch_time);
 
 	/* we may have to handle timeout for deactivated link in software */
 	now = ktime_get_boottime();

@@ -22271,7 +22271,8 @@ static void nl80211_ch_switch_notify(struct cfg80211_registered_device *rdev,
 				     struct cfg80211_chan_def *chandef,
 				     gfp_t gfp,
 				     enum nl80211_commands notif,
-				     u8 count, bool quiet)
+				     u8 count, bool quiet,
+				     u32 mcst_tu)
 {
 	struct wireless_dev *wdev = netdev->ieee80211_ptr;
 	struct sk_buff *msg;
@@ -22302,6 +22303,9 @@ static void nl80211_ch_switch_notify(struct cfg80211_registered_device *rdev,
 			goto nla_put_failure;
 		if (quiet &&
 		    nla_put_flag(msg, NL80211_ATTR_CH_SWITCH_BLOCK_TX))
+			goto nla_put_failure;
+		if (mcst_tu &&
+		    nla_put_u32(msg, NL80211_ATTR_MAX_CH_SWITCH_TIME, mcst_tu))
 			goto nla_put_failure;
 	}
 
@@ -22355,7 +22359,7 @@ void cfg80211_ch_switch_notify(struct net_device *dev,
 	cfg80211_sched_dfs_chan_update(rdev);
 
 	nl80211_ch_switch_notify(rdev, dev, link_id, chandef, GFP_KERNEL,
-				 NL80211_CMD_CH_SWITCH_NOTIFY, 0, false);
+				 NL80211_CMD_CH_SWITCH_NOTIFY, 0, false, 0);
 }
 EXPORT_SYMBOL(cfg80211_ch_switch_notify);
 
@@ -22402,7 +22406,7 @@ EXPORT_SYMBOL(cfg80211_incumbent_signal_notify);
 void cfg80211_ch_switch_started_notify(struct net_device *dev,
 				       struct cfg80211_chan_def *chandef,
 				       unsigned int link_id, u8 count,
-				       bool quiet)
+				       bool quiet, u32 mcst_tu)
 {
 	struct wireless_dev *wdev = dev->ieee80211_ptr;
 	struct wiphy *wiphy = wdev->wiphy;
@@ -22416,7 +22420,7 @@ void cfg80211_ch_switch_started_notify(struct net_device *dev,
 
 	nl80211_ch_switch_notify(rdev, dev, link_id, chandef, GFP_KERNEL,
 				 NL80211_CMD_CH_SWITCH_STARTED_NOTIFY,
-				 count, quiet);
+				 count, quiet, mcst_tu);
 }
 EXPORT_SYMBOL(cfg80211_ch_switch_started_notify);
 
