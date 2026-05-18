@@ -52,6 +52,7 @@ extern int vgif;
 extern bool intercept_smi;
 extern bool vnmi;
 extern int lbrv;
+extern bool pml;
 
 extern int tsc_aux_uret_slot __ro_after_init;
 
@@ -831,6 +832,8 @@ static inline void svm_enable_intercept_for_msr(struct kvm_vcpu *vcpu,
 {
 	svm_set_intercept_for_msr(vcpu, msr, type, true);
 }
+
+void svm_update_cpu_dirty_logging(struct kvm_vcpu *vcpu);
 
 /* nested.c */
 

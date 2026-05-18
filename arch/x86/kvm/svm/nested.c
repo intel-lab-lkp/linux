@@ -882,6 +882,12 @@ static void nested_vmcb02_prepare_control(struct vcpu_svm *svm)
 	vmcb02->control.msrpm_base_pa = vmcb01->control.msrpm_base_pa;
 	vmcb_mark_dirty(vmcb02, VMCB_PERM_MAP);
 
+	/* Clear PML fields to avoid stale data in vmcb02. */
+	if (pml) {
+		vmcb02->control.pml_addr = 0;
+		vmcb02->control.pml_index = -1;
+	}
+
 	/*
 	 * Stash vmcb02's counter if the guest hasn't moved past the guilty
 	 * instruction; otherwise, reset the counter to '0'.
