@@ -436,7 +436,13 @@ static int sun6i_isp_capture_querycap(struct file *file, void *priv,
 static int sun6i_isp_capture_enum_fmt(struct file *file, void *priv,
 				      struct v4l2_fmtdesc *fmtdesc)
 {
+	u32 mbus_code = fmtdesc->mbus_code;
 	u32 index = fmtdesc->index;
+
+	if (mbus_code && !sun6i_isp_proc_format_find(mbus_code))
+		return -EINVAL;
+
+	/* Capture format is independent from proc format. */
 
 	if (index >= ARRAY_SIZE(sun6i_isp_capture_formats))
 		return -EINVAL;
@@ -697,7 +703,8 @@ int sun6i_isp_capture_setup(struct sun6i_isp_device *isp_dev)
 
 	strscpy(video_dev->name, SUN6I_ISP_CAPTURE_NAME,
 		sizeof(video_dev->name));
-	video_dev->device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
+	video_dev->device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING |
+				 V4L2_CAP_IO_MC;
 	video_dev->vfl_dir = VFL_DIR_RX;
 	video_dev->release = video_device_release_empty;
 	video_dev->fops = &sun6i_isp_capture_fops;

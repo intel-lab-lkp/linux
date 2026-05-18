@@ -531,7 +531,8 @@ int sun6i_isp_params_setup(struct sun6i_isp_device *isp_dev)
 
 	strscpy(video_dev->name, SUN6I_ISP_PARAMS_NAME,
 		sizeof(video_dev->name));
-	video_dev->device_caps = V4L2_CAP_META_OUTPUT | V4L2_CAP_STREAMING;
+	video_dev->device_caps = V4L2_CAP_META_OUTPUT | V4L2_CAP_STREAMING |
+				 V4L2_CAP_IO_MC;
 	video_dev->vfl_dir = VFL_DIR_TX;
 	video_dev->release = video_device_release_empty;
 	video_dev->fops = &sun6i_isp_params_fops;
