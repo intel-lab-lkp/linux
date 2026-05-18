@@ -773,14 +773,43 @@ static int sun6i_csi_capture_querycap(struct file *file, void *priv,
 static int sun6i_csi_capture_enum_fmt(struct file *file, void *priv,
 				      struct v4l2_fmtdesc *fmtdesc)
 {
+	const struct sun6i_csi_capture_format *capture_format;
+	const struct sun6i_csi_bridge_format *bridge_format;
+	u32 mbus_code = fmtdesc->mbus_code;
 	u32 index = fmtdesc->index;
+	unsigned int index_valid = 0;
+	unsigned int i;
 
-	if (index >= ARRAY_SIZE(sun6i_csi_capture_formats))
+	/* Video-node-centric enumeration. */
+	if (!mbus_code) {
+		if (index >= ARRAY_SIZE(sun6i_csi_capture_formats))
+			return -EINVAL;
+
+		fmtdesc->pixelformat =
+			sun6i_csi_capture_formats[index].pixelformat;
+		return 0;
+	}
+
+	bridge_format = sun6i_csi_bridge_format_find(mbus_code);
+	if (!bridge_format)
 		return -EINVAL;
 
-	fmtdesc->pixelformat = sun6i_csi_capture_formats[index].pixelformat;
+	for (i = 0; i < ARRAY_SIZE(sun6i_csi_capture_formats); i++) {
+		capture_format = &sun6i_csi_capture_formats[i];
 
-	return 0;
+		if (!sun6i_csi_capture_format_check(capture_format,
+						    bridge_format))
+			continue;
+
+		if (index_valid == index) {
+			fmtdesc->pixelformat = capture_format->pixelformat;
+			return 0;
+		}
+
+		index_valid++;
+	}
+
+	return -EINVAL;
 }
 
 static int sun6i_csi_capture_enum_framesize(struct file *file, void *fh,
@@ -1076,7 +1105,8 @@ int sun6i_csi_capture_setup(struct sun6i_csi_device *csi_dev)
 
 	strscpy(video_dev->name, SUN6I_CSI_CAPTURE_NAME,
 		sizeof(video_dev->name));
-	video_dev->device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
+	video_dev->device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING |
+				 V4L2_CAP_IO_MC;
 	video_dev->vfl_dir = VFL_DIR_RX;
 	video_dev->release = video_device_release_empty;
 	video_dev->fops = &sun6i_csi_capture_fops;
