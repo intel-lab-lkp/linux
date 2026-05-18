@@ -36,8 +36,8 @@ struct sun6i_isp_params {
 
 /* Params */
 
-void sun6i_isp_params_configure(struct sun6i_isp_device *isp_dev);
-
+void sun6i_isp_params_configure(struct sun6i_isp_device *isp_dev,
+				const struct v4l2_mbus_framefmt *mbus_format);
 /* State */
 
 void sun6i_isp_params_state_update(struct sun6i_isp_device *isp_dev,

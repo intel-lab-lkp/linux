@@ -42,17 +42,10 @@ struct sun6i_isp_proc {
 	struct v4l2_subdev		subdev;
 	struct media_pad		pads[3];
 	struct v4l2_async_notifier	notifier;
-	struct v4l2_mbus_framefmt	mbus_format;
-	struct mutex			lock; /* Mbus format lock. */
 
 	struct sun6i_isp_proc_source	source_csi0;
 	struct sun6i_isp_proc_source	source_csi1;
 };
-
-/* Helpers */
-
-void sun6i_isp_proc_dimensions(struct sun6i_isp_device *isp_dev,
-			       unsigned int *width, unsigned int *height);
 
 /* Format */
 

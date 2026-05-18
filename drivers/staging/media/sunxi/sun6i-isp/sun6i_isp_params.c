@@ -43,11 +43,14 @@ static const struct sun6i_isp_params_config sun6i_isp_params_config_default = {
 	},
 };
 
-static void sun6i_isp_params_configure_ob(struct sun6i_isp_device *isp_dev)
+static void
+sun6i_isp_params_configure_ob(struct sun6i_isp_device *isp_dev,
+			      const struct v4l2_mbus_framefmt *mbus_format)
 {
 	unsigned int width, height;
 
-	sun6i_isp_proc_dimensions(isp_dev, &width, &height);
+	width = mbus_format->width;
+	height = mbus_format->height;
 
 	sun6i_isp_load_write(isp_dev, SUN6I_ISP_OB_SIZE_REG,
 			     SUN6I_ISP_OB_SIZE_WIDTH(width) |
@@ -112,10 +115,12 @@ static void sun6i_isp_params_configure_wb(struct sun6i_isp_device *isp_dev)
 			     SUN6I_ISP_WB_CFG_CLIP(0xfff));
 }
 
-static void sun6i_isp_params_configure_base(struct sun6i_isp_device *isp_dev)
+static void
+sun6i_isp_params_configure_base(struct sun6i_isp_device *isp_dev,
+				const struct v4l2_mbus_framefmt *mbus_format)
 {
 	sun6i_isp_params_configure_ae(isp_dev);
-	sun6i_isp_params_configure_ob(isp_dev);
+	sun6i_isp_params_configure_ob(isp_dev, mbus_format);
 	sun6i_isp_params_configure_wb(isp_dev);
 }
 
@@ -170,14 +175,15 @@ sun6i_isp_params_configure_modules(struct sun6i_isp_device *isp_dev,
 	sun6i_isp_load_write(isp_dev, SUN6I_ISP_MODULE_EN_REG, value);
 }
 
-void sun6i_isp_params_configure(struct sun6i_isp_device *isp_dev)
+void sun6i_isp_params_configure(struct sun6i_isp_device *isp_dev,
+				const struct v4l2_mbus_framefmt *mbus_format)
 {
 	struct sun6i_isp_params_state *state = &isp_dev->params.state;
 	unsigned long flags;
 
 	spin_lock_irqsave(&state->lock, flags);
 
-	sun6i_isp_params_configure_base(isp_dev);
+	sun6i_isp_params_configure_base(isp_dev, mbus_format);
 
 	/* Default config is only applied at the very first stream start. */
 	if (state->configured)

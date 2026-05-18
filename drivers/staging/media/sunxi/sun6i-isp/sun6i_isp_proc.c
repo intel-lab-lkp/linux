@@ -15,17 +15,6 @@
 #include "sun6i_isp_proc.h"
 #include "sun6i_isp_reg.h"
 
-/* Helpers */
-
-void sun6i_isp_proc_dimensions(struct sun6i_isp_device *isp_dev,
-			       unsigned int *width, unsigned int *height)
-{
-	if (width)
-		*width = isp_dev->proc.mbus_format.width;
-	if (height)
-		*height = isp_dev->proc.mbus_format.height;
-}
-
 /* Format */
 
 static const struct sun6i_isp_proc_format sun6i_isp_proc_formats[] = {
@@ -137,9 +126,10 @@ static void sun6i_isp_proc_disable(struct sun6i_isp_device *isp_dev)
 	regmap_write(regmap, SUN6I_ISP_FE_CFG_REG, 0);
 }
 
-static void sun6i_isp_proc_configure(struct sun6i_isp_device *isp_dev)
+static void
+sun6i_isp_proc_configure(struct sun6i_isp_device *isp_dev,
+			 const struct v4l2_mbus_framefmt *mbus_format)
 {
-	struct v4l2_mbus_framefmt *mbus_format = &isp_dev->proc.mbus_format;
 	const struct sun6i_isp_proc_format *format;
 	u32 value;
 
@@ -173,6 +163,8 @@ static int sun6i_isp_proc_s_stream(struct v4l2_subdev *subdev, int on)
 	struct sun6i_isp_proc_source *source;
 	struct v4l2_subdev *source_subdev;
 	struct media_pad *remote_pad;
+	struct v4l2_subdev_state *state;
+	const struct v4l2_mbus_framefmt *mbus_format;
 	int ret;
 
 	/* Source */
@@ -191,6 +183,10 @@ static int sun6i_isp_proc_s_stream(struct v4l2_subdev *subdev, int on)
 	else
 		source = &proc->source_csi1;
 
+	/* Active State */
+
+	state = v4l2_subdev_lock_and_get_active_state(subdev);
+
 	if (!on) {
 		sun6i_isp_proc_irq_disable(isp_dev);
 		v4l2_subdev_call(source_subdev, video, s_stream, 0);
@@ -202,7 +198,7 @@ static int sun6i_isp_proc_s_stream(struct v4l2_subdev *subdev, int on)
 
 	ret = pm_runtime_resume_and_get(dev);
 	if (ret < 0)
-		return ret;
+		goto unlock;
 
 	/* Clear */
 
@@ -210,9 +206,12 @@ static int sun6i_isp_proc_s_stream(struct v4l2_subdev *subdev, int on)
 
 	/* Configure */
 
+	mbus_format = v4l2_subdev_state_get_format(state,
+						   SUN6I_ISP_PROC_PAD_SINK_CSI);
+
 	sun6i_isp_tables_configure(isp_dev);
-	sun6i_isp_params_configure(isp_dev);
-	sun6i_isp_proc_configure(isp_dev);
+	sun6i_isp_params_configure(isp_dev, mbus_format);
+	sun6i_isp_proc_configure(isp_dev, mbus_format);
 	sun6i_isp_capture_configure(isp_dev);
 
 	/* State Update */
@@ -230,12 +229,16 @@ static int sun6i_isp_proc_s_stream(struct v4l2_subdev *subdev, int on)
 		goto disable;
 	}
 
-	return 0;
+	ret = 0;
+	goto unlock;
 
 disable:
 	sun6i_isp_proc_disable(isp_dev);
 
 	pm_runtime_put(dev);
+
+unlock:
+	v4l2_subdev_unlock_state(state);
 
 	return ret;
 }
@@ -259,21 +262,22 @@ sun6i_isp_proc_mbus_format_prepare(struct v4l2_mbus_framefmt *mbus_format)
 static int sun6i_isp_proc_init_state(struct v4l2_subdev *subdev,
 				     struct v4l2_subdev_state *state)
 {
-	struct sun6i_isp_device *isp_dev = v4l2_get_subdevdata(subdev);
-	unsigned int pad = SUN6I_ISP_PROC_PAD_SINK_CSI;
-	struct v4l2_mbus_framefmt *mbus_format =
-		v4l2_subdev_state_get_format(state, pad);
-	struct mutex *lock = &isp_dev->proc.lock;
+	unsigned int pad;
 
-	mutex_lock(lock);
+	for (pad = 0; pad < subdev->entity.num_pads; pad++) {
+		struct v4l2_mbus_framefmt *mbus_format;
 
-	mbus_format->code = sun6i_isp_proc_formats[0].mbus_code;
-	mbus_format->width = 1280;
-	mbus_format->height = 720;
+		if (pad == SUN6I_ISP_PROC_PAD_SINK_PARAMS)
+			continue;
 
-	sun6i_isp_proc_mbus_format_prepare(mbus_format);
+		mbus_format = v4l2_subdev_state_get_format(state, pad);
 
-	mutex_unlock(lock);
+		mbus_format->code = sun6i_isp_proc_formats[0].mbus_code;
+		mbus_format->width = 1280;
+		mbus_format->height = 720;
+
+		sun6i_isp_proc_mbus_format_prepare(mbus_format);
+	}
 
 	return 0;
 }
@@ -291,53 +295,31 @@ sun6i_isp_proc_enum_mbus_code(struct v4l2_subdev *subdev,
 	return 0;
 }
 
-static int sun6i_isp_proc_get_fmt(struct v4l2_subdev *subdev,
-				  struct v4l2_subdev_state *state,
-				  struct v4l2_subdev_format *format)
-{
-	struct sun6i_isp_device *isp_dev = v4l2_get_subdevdata(subdev);
-	struct v4l2_mbus_framefmt *mbus_format = &format->format;
-	struct mutex *lock = &isp_dev->proc.lock;
-
-	mutex_lock(lock);
-
-	if (format->which == V4L2_SUBDEV_FORMAT_TRY)
-		*mbus_format = *v4l2_subdev_state_get_format(state,
-							     format->pad);
-	else
-		*mbus_format = isp_dev->proc.mbus_format;
-
-	mutex_unlock(lock);
-
-	return 0;
-}
-
 static int sun6i_isp_proc_set_fmt(struct v4l2_subdev *subdev,
 				  struct v4l2_subdev_state *state,
 				  struct v4l2_subdev_format *format)
 {
-	struct sun6i_isp_device *isp_dev = v4l2_get_subdevdata(subdev);
-	struct v4l2_mbus_framefmt *mbus_format = &format->format;
-	struct mutex *lock = &isp_dev->proc.lock;
+	struct v4l2_mbus_framefmt *mbus_format;
 
-	mutex_lock(lock);
+	if (format->pad != SUN6I_ISP_PROC_PAD_SINK_CSI)
+		return v4l2_subdev_get_fmt(subdev, state, format);
 
-	sun6i_isp_proc_mbus_format_prepare(mbus_format);
+	sun6i_isp_proc_mbus_format_prepare(&format->format);
 
-	if (format->which == V4L2_SUBDEV_FORMAT_TRY)
-		*v4l2_subdev_state_get_format(state, format->pad) =
-			*mbus_format;
-	else
-		isp_dev->proc.mbus_format = *mbus_format;
+	mbus_format = v4l2_subdev_state_get_format(state, format->pad);
+	*mbus_format = format->format;
 
-	mutex_unlock(lock);
+	/* Propagate the format to the source pad. */
+	mbus_format = v4l2_subdev_state_get_format(state,
+						   SUN6I_ISP_PROC_PAD_SOURCE);
+	*mbus_format = format->format;
 
 	return 0;
 }
 
 static const struct v4l2_subdev_pad_ops sun6i_isp_proc_pad_ops = {
 	.enum_mbus_code	= sun6i_isp_proc_enum_mbus_code,
-	.get_fmt	= sun6i_isp_proc_get_fmt,
+	.get_fmt	= v4l2_subdev_get_fmt,
 	.set_fmt	= sun6i_isp_proc_set_fmt,
 };
 
@@ -499,8 +481,6 @@ int sun6i_isp_proc_setup(struct sun6i_isp_device *isp_dev)
 	struct media_pad *pads = proc->pads;
 	int ret;
 
-	mutex_init(&proc->lock);
-
 	/* V4L2 Subdev */
 
 	v4l2_subdev_init(subdev, &sun6i_isp_proc_subdev_ops);
@@ -532,10 +512,14 @@ int sun6i_isp_proc_setup(struct sun6i_isp_device *isp_dev)
 
 	/* V4L2 Subdev */
 
+	ret = v4l2_subdev_init_finalize(subdev);
+	if (ret < 0)
+		goto error_media_entity;
+
 	ret = v4l2_device_register_subdev(v4l2_dev, subdev);
 	if (ret < 0) {
 		v4l2_err(v4l2_dev, "failed to register v4l2 subdev: %d\n", ret);
-		goto error_media_entity;
+		goto error_subdev_finalize;
 	}
 
 	/* V4L2 Async */
@@ -562,6 +546,9 @@ error_v4l2_async_notifier:
 
 	v4l2_device_unregister_subdev(subdev);
 
+error_subdev_finalize:
+	v4l2_subdev_cleanup(subdev);
+
 error_media_entity:
 	media_entity_cleanup(&subdev->entity);
 
@@ -577,5 +564,7 @@ void sun6i_isp_proc_cleanup(struct sun6i_isp_device *isp_dev)
 	v4l2_async_nf_cleanup(notifier);
 
 	v4l2_device_unregister_subdev(subdev);
+	v4l2_subdev_cleanup(subdev);
+
 	media_entity_cleanup(&subdev->entity);
 }

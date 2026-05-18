@@ -595,11 +595,25 @@ static int sun6i_isp_capture_link_validate(struct media_link *link)
 		media_entity_to_video_device(link->sink->entity);
 	struct sun6i_isp_device *isp_dev = video_get_drvdata(video_dev);
 	struct v4l2_device *v4l2_dev = &isp_dev->v4l2.v4l2_dev;
+	struct v4l2_subdev *proc_subdev =
+		media_entity_to_v4l2_subdev(link->source->entity);
 	unsigned int capture_width, capture_height;
 	unsigned int proc_width, proc_height;
+	struct v4l2_subdev_format proc_subdev_format = {
+		.which	= V4L2_SUBDEV_FORMAT_ACTIVE,
+		.pad	= link->source->index,
+	};
+	int ret;
 
 	sun6i_isp_capture_dimensions(isp_dev, &capture_width, &capture_height);
-	sun6i_isp_proc_dimensions(isp_dev, &proc_width, &proc_height);
+
+	ret = v4l2_subdev_call(proc_subdev, pad, get_fmt, NULL,
+			       &proc_subdev_format);
+	if (ret)
+		return ret;
+
+	proc_width = proc_subdev_format.format.width;
+	proc_height = proc_subdev_format.format.height;
 
 	/* No cropping/scaling is supported (yet). */
 	if (capture_width != proc_width || capture_height != proc_height) {
