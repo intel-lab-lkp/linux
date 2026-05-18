@@ -1935,7 +1935,7 @@ static ssize_t i915_dp_force_link_rate_write(struct file *file,
 	if (err)
 		return err;
 
-	intel_dp_reset_link_params(intel_dp);
+	intel_dp_reset_link_params_force(intel_dp);
 	intel_dp->link.force_rate = rate;
 
 	drm_modeset_unlock(&display->drm->mode_config.connection_mutex);
@@ -2037,7 +2037,7 @@ static ssize_t i915_dp_force_lane_count_write(struct file *file,
 	if (err)
 		return err;
 
-	intel_dp_reset_link_params(intel_dp);
+	intel_dp_reset_link_params_force(intel_dp);
 	intel_dp->link.force_lane_count = lane_count;
 
 	drm_modeset_unlock(&display->drm->mode_config.connection_mutex);

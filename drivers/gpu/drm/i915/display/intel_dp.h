@@ -114,7 +114,8 @@ int intel_dp_rate_index(const int *rates, int len, int rate);
 int intel_dp_link_config_index(struct intel_dp *intel_dp, int link_rate, int lane_count);
 void intel_dp_link_config_get(struct intel_dp *intel_dp, int idx, int *link_rate, int *lane_count);
 void intel_dp_update_sink_caps(struct intel_dp *intel_dp);
-void intel_dp_reset_link_params(struct intel_dp *intel_dp);
+void intel_dp_reset_link_params_force(struct intel_dp *intel_dp);
+bool intel_dp_reset_link_params_defer(struct intel_dp *intel_dp);
 
 void intel_dp_compute_rate(struct intel_dp *intel_dp, int port_clock,
 			   u8 *link_bw, u8 *rate_select);

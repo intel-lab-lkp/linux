@@ -3710,7 +3710,11 @@ void intel_dp_set_link_params(struct intel_dp *intel_dp,
 	intel_dp->lane_count = lane_count;
 }
 
-void intel_dp_reset_link_params(struct intel_dp *intel_dp)
+/*
+ * Reset link params now, preserving any deferred connector
+ * detect-time reset request.
+ */
+void intel_dp_reset_link_params_force(struct intel_dp *intel_dp)
 {
 	intel_dp->link.max_lane_count = intel_dp_max_common_lane_count(intel_dp);
 	intel_dp->link.max_rate = intel_dp_max_common_rate(intel_dp);
@@ -3718,6 +3722,28 @@ void intel_dp_reset_link_params(struct intel_dp *intel_dp)
 	intel_dp->link.mst_probed_rate = 0;
 	intel_dp->link.retrain_disabled = false;
 	intel_dp->link.seq_train_failures = 0;
+}
+
+/*
+ * Reset link params during the next connector detect.
+ * Return %true if a new reset was queued.
+ */
+bool intel_dp_reset_link_params_defer(struct intel_dp *intel_dp)
+{
+	bool reset_was_pending = intel_dp->reset_link_params;
+
+	intel_dp->reset_link_params = true;
+
+	return !reset_was_pending;
+}
+
+static void intel_dp_handle_deferred_link_params_reset(struct intel_dp *intel_dp)
+{
+	if (!intel_dp->reset_link_params)
+		return;
+
+	intel_dp->reset_link_params = false;
+	intel_dp_reset_link_params_force(intel_dp);
 }
 
 /* Enable backlight PWM and backlight PP control. */
@@ -4066,7 +4092,7 @@ void intel_dp_sync_state(struct intel_encoder *encoder,
 	intel_dp_tunnel_resume(intel_dp, crtc_state, dpcd_updated);
 
 	if (crtc_state) {
-		intel_dp_reset_link_params(intel_dp);
+		intel_dp_reset_link_params_force(intel_dp);
 		intel_dp_set_link_params(intel_dp, crtc_state->port_clock, crtc_state->lane_count);
 		intel_dp->link.active = true;
 	}
@@ -6487,10 +6513,7 @@ intel_dp_detect(struct drm_connector *_connector,
 
 	intel_dp_detect_sdp_caps(intel_dp);
 
-	if (intel_dp->reset_link_params) {
-		intel_dp_reset_link_params(intel_dp);
-		intel_dp->reset_link_params = false;
-	}
+	intel_dp_handle_deferred_link_params_reset(intel_dp);
 
 	intel_dp_mst_configure(intel_dp);
 
@@ -6944,7 +6967,7 @@ intel_dp_hpd_pulse(struct intel_digital_port *dig_port, bool long_hpd)
 
 		intel_dp_read_dprx_caps(intel_dp, dpcd);
 
-		intel_dp->reset_link_params = true;
+		intel_dp_reset_link_params_defer(intel_dp);
 		intel_dp_invalidate_source_oui(intel_dp);
 
 		return IRQ_NONE;
@@ -7252,7 +7275,7 @@ intel_dp_init_connector(struct intel_digital_port *dig_port,
 		     encoder->base.name))
 		return false;
 
-	intel_dp->reset_link_params = true;
+	intel_dp_reset_link_params_defer(intel_dp);
 
 	/* Preserve the current hw state. */
 	intel_dp->DP = intel_de_read(display, intel_dp->output_reg);
@@ -7317,7 +7340,7 @@ intel_dp_init_connector(struct intel_digital_port *dig_port,
 
 	intel_dp_set_source_rates(intel_dp);
 	intel_dp_set_common_rates(intel_dp);
-	intel_dp_reset_link_params(intel_dp);
+	intel_dp_reset_link_params_force(intel_dp);
 
 	/* init MST on ports that can support it */
 	intel_dp_mst_encoder_init(dig_port, connector->base.base.id);

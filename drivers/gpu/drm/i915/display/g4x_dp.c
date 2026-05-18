@@ -1265,7 +1265,7 @@ static void intel_dp_encoder_reset(struct drm_encoder *encoder)
 
 	intel_dp->DP = intel_de_read(display, intel_dp->output_reg);
 
-	intel_dp->reset_link_params = true;
+	intel_dp_reset_link_params_defer(intel_dp);
 	intel_dp_invalidate_source_oui(intel_dp);
 
 	if (display->platform.valleyview || display->platform.cherryview)
