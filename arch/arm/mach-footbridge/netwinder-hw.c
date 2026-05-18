@@ -468,13 +468,17 @@ static inline void rwa010_global_init(void)
 
 static inline void rwa010_game_port_init(void)
 {
+#ifdef DEBUG
 	int i;
+#endif
 
 	WRITE_RWA(7, 5);
 
 	dprintk("Slider base: ");
 	WRITE_RWA(0x61, 1);
+#ifdef DEBUG
 	i = inb(0x203);
+#endif
 
 	WRITE_RWA(0x60, 2);
 	dprintk("%02X%02X (201)\n", inb(0x203), i);
@@ -484,13 +488,17 @@ static inline void rwa010_game_port_init(void)
 
 static inline void rwa010_waveartist_init(int base, int irq, int dma)
 {
+#ifdef DEBUG
 	int i;
+#endif
 
 	WRITE_RWA(7, 0);
 
 	dprintk("WaveArtist base: ");
 	WRITE_RWA(0x61, base & 255);
+#ifdef DEBUG
 	i = inb(0x203);
+#endif
 
 	WRITE_RWA(0x60, base >> 8);
 	dprintk("%02X%02X (%X),", inb(0x203), i, base);
@@ -506,13 +514,17 @@ static inline void rwa010_waveartist_init(int base, int irq, int dma)
 
 static inline void rwa010_soundblaster_init(int sb_base, int al_base, int irq, int dma)
 {
+#ifdef DEBUG
 	int i;
+#endif
 
 	WRITE_RWA(7, 1);
 
 	dprintk("SoundBlaster base: ");
 	WRITE_RWA(0x61, sb_base & 255);
+#ifdef DEBUG
 	i = inb(0x203);
+#endif
 
 	WRITE_RWA(0x60, sb_base >> 8);
 	dprintk("%02X%02X (%X),", inb(0x203), i, sb_base);
@@ -527,7 +539,9 @@ static inline void rwa010_soundblaster_init(int sb_base, int al_base, int irq, i
 
 	dprintk("AdLib base: ");
 	WRITE_RWA(0x63, al_base & 255);
+#ifdef DEBUG
 	i = inb(0x203);
+#endif
 
 	WRITE_RWA(0x62, al_base >> 8);
 	dprintk("%02X%02X (%X)\n", inb(0x203), i, al_base);
