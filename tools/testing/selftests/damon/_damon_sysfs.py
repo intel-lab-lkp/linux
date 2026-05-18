@@ -806,6 +806,21 @@ class Kdamond:
                     goal.effective_bytes = int(content)
         return None
 
+    def update_schemes_quota_goals(self):
+        err = write_file(os.path.join(self.sysfs_dir(), 'state'),
+                         'update_schemes_quota_goals')
+        if err is not None:
+            return err
+        for context in self.contexts:
+            for scheme in context.schemes:
+                for goal in scheme.quota.goals:
+                    content, err = read_file(
+                            os.path.join(goal.sysfs_dir(), 'current_value'))
+                    if err is not None:
+                        return err
+                    goal.current_value = int(content)
+        return None
+
     def commit(self):
         nr_contexts_file = os.path.join(self.sysfs_dir(),
                 'contexts', 'nr_contexts')
