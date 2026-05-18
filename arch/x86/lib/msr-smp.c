@@ -94,6 +94,26 @@ int wrmsrq_on_cpu(unsigned int cpu, u32 msr_no, u64 q)
 }
 EXPORT_SYMBOL(wrmsrq_on_cpu);
 
+void wrmsrq_on_cpus(const struct cpumask *mask, u32 msr_no, u64 q)
+{
+	struct msr_info rv;
+	int this_cpu;
+
+	memset(&rv, 0, sizeof(rv));
+
+	rv.msr_no = msr_no;
+	rv.reg.q = q;
+
+	this_cpu = get_cpu();
+
+	if (cpumask_test_cpu(this_cpu, mask))
+		__wrmsr_on_cpu(&rv);
+
+	smp_call_function_many(mask, __wrmsr_on_cpu, &rv, 1);
+	put_cpu();
+}
+EXPORT_SYMBOL(wrmsrq_on_cpus);
+
 static void __rwmsr_on_cpus(const struct cpumask *mask, u32 msr_no,
 			    struct msr __percpu *msrs,
 			    void (*msr_func) (void *info))
