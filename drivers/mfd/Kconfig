@@ -2566,6 +2566,21 @@ config MFD_UPBOARD_FPGA
 	  To compile this driver as a module, choose M here: the module will be
 	  called upboard-fpga.
 
+config MFD_MC33978
+	tristate "NXP MC33978/MC34978 MFD driver"
+	depends on OF && SPI
+	select MC33978_CORE
+	help
+	  MFD driver for NXP MC33978/MC34978 industrial input controllers.
+
+	  The MC33978/MC34978 devices provide 22 switch detection inputs,
+	  analog multiplexing (AMUX), and comprehensive hardware fault
+	  detection. This driver provides IRQ domain, event processing,
+	  and interfaces for child devices (pinctrl, hwmon, mux).
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called mc33978.
+
 config MFD_MAX7360
 	tristate "Maxim MAX7360 I2C IO Expander"
 	depends on I2C
