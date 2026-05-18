@@ -95,6 +95,8 @@
 #define O_NDELAY	O_NONBLOCK
 #endif
 
+#define O_MKDIR_MASK	(O_CREAT | O_DIRECTORY)
+
 #define F_DUPFD		0	/* dup */
 #define F_GETFD		1	/* get close_on_exec */
 #define F_SETFD		2	/* set/clear close_on_exec */
