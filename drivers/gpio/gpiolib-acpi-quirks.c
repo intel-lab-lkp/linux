@@ -24,14 +24,12 @@ MODULE_PARM_DESC(run_edge_events_on_boot,
 static char *ignore_wake;
 module_param(ignore_wake, charp, 0444);
 MODULE_PARM_DESC(ignore_wake,
-		 "controller@pin combos on which to ignore the ACPI wake flag "
-		 "ignore_wake=controller@pin[,controller@pin[,...]]");
+		 "controller@pin combos on which to ignore the ACPI wake flag ignore_wake=controller@pin[,controller@pin[,...]]");
 
 static char *ignore_interrupt;
 module_param(ignore_interrupt, charp, 0444);
 MODULE_PARM_DESC(ignore_interrupt,
-		 "controller@pin combos on which to ignore interrupt "
-		 "ignore_interrupt=controller@pin[,controller@pin[,...]]");
+		 "controller@pin combos on which to ignore interrupt ignore_interrupt=controller@pin[,controller@pin[,...]]");
 
 /*
  * For GPIO chips which call acpi_gpiochip_request_interrupts() before late_init
@@ -75,7 +73,6 @@ bool acpi_gpio_in_ignore_list(enum acpi_gpio_ignore_list list,
 {
 	const char *ignore_list, *controller, *pin_str;
 	unsigned int pin;
-	char *endp;
 	int len;
 
 	switch (list) {
@@ -98,8 +95,20 @@ bool acpi_gpio_in_ignore_list(enum acpi_gpio_ignore_list list,
 		len = pin_str - controller;
 		if (len == strlen(controller_in) &&
 		    strncmp(controller, controller_in, len) == 0) {
-			pin = simple_strtoul(pin_str + 1, &endp, 10);
-			if (*endp != 0 && *endp != ',')
+			char pin_buf[16];
+			size_t pin_len = 0;
+			const char *p = pin_str + 1;
+
+			while (*p && *p != ',') {
+				if (pin_len < sizeof(pin_buf) - 1)
+					pin_buf[pin_len++] = *p;
+				else
+					goto err;
+				p++;
+			}
+			pin_buf[pin_len] = '\0';
+
+			if (kstrtouint(pin_buf, 10, &pin))
 				goto err;
 
 			if (pin == pin_in)
