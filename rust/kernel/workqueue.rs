@@ -871,6 +871,35 @@ where
     }
 }
 
+pub fn cancel_work<T, const ID: u64>(item: &Arc<T>) -> bool
+where
+    T: WorkItem<ID, Pointer = Arc<T>>,
+    T: HasWork<T, ID>,
+{
+    let ptr = Arc::as_ptr(item);
+    // SAFETY: `ptr` comes from `Arc::as_ptr` which is a valid non-dangling pointer to `T`.
+    let work_ptr = unsafe { T::raw_get_work(ptr.cast_mut()) };
+    // SAFETY: `raw_get_work` returns a pointer to a valid `Work<T, ID>` field.
+    let work_ptr_struct = unsafe { Work::raw_get(work_ptr) };
+    // SAFETY: The `Arc` keeps the allocation alive, so `work_ptr_struct` is valid for
+    // the duration of this call.
+    let cancel_res = unsafe { bindings::cancel_work(work_ptr_struct) };
+
+    if cancel_res {
+        // SAFETY: `cancel_work` returned true, meaning the work was pending and has been
+        // removed from the queue. The workqueue will not call `run`, so we are responsible
+        // for reclaiming the `Arc` reference that was leaked in `__enqueue` via
+        // `Arc::into_raw`. We use `work_container_of` to recover the original `*const T`
+        // pointer from the `Work<T, ID>` field pointer, then reconstruct the `Arc` with
+        // `Arc::from_raw` and drop it to decrement the ref count.
+        let item_ptr = unsafe { T::work_container_of(work_ptr) };
+        drop(unsafe { Arc::from_raw(item_ptr) });
+        true
+    } else {
+        false
+    }
+}
+
 // SAFETY: By the safety requirements of `HasDelayedWork`, the `work_struct` returned by methods in
 // `HasWork` provides a `work_struct` that is the `work` field of a `delayed_work`, and the rest of
 // the `delayed_work` has the same access rules as its `work` field.
