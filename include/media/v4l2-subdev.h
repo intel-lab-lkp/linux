@@ -1798,6 +1798,11 @@ int v4l2_subdev_get_frame_desc_passthrough(struct v4l2_subdev *sd,
  * for each frame descriptor obtained by calling this function using
  * v4l2_subdev_free_frame_desc().
  *
+ * Use __free() to release the frame descriptor automatically::
+ *
+ *    struct v4l2_mbus_frame_desc *desc __free(v4l2_subdev_free_frame_desc) =
+ *            v4l2_subdev_get_frame_desc(sd, pad, desc);
+ *
  * Return: The frame descriptor on success or a negative error code on failure.
  */
 struct v4l2_mbus_frame_desc *
@@ -1811,6 +1816,10 @@ v4l2_subdev_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
  * Release the frame descriptor.
  */
 void v4l2_subdev_free_frame_desc(struct v4l2_mbus_frame_desc *desc);
+
+DEFINE_FREE(v4l2_subdev_free_frame_desc, struct v4l2_mbus_frame_desc *, \
+	    if (!IS_ERR_OR_NULL(_T))					\
+		    v4l2_subdev_free_frame_desc(_T))
 
 #endif /* CONFIG_VIDEO_V4L2_SUBDEV_API */
 
