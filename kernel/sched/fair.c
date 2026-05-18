@@ -13155,6 +13155,7 @@ static int sched_balance_newidle(struct rq *this_rq, struct rq_flags *rf)
 	int this_cpu = this_rq->cpu;
 	int continue_balancing = 1;
 	u64 t0, t1, curr_cost = 0;
+	u64 idx, half_idle = 0, try_bits = 0;
 	struct sched_domain *sd;
 	int pulled_task = 0;
 
@@ -13210,18 +13211,28 @@ static int sched_balance_newidle(struct rq *this_rq, struct rq_flags *rf)
 	rq_modified_begin(this_rq, &fair_sched_class);
 	raw_spin_rq_unlock(this_rq);
 
+retry:
+	idx = 0;
 	for_each_domain(this_cpu, sd) {
-		u64 domain_cost;
+		u64 domain_cost, next_cost = curr_cost + sd->max_newidle_lb_cost;
 
-		update_next_balance(sd, &next_balance);
+		if (!half_idle)
+			update_next_balance(sd, &next_balance);
 
-		if (this_rq->avg_idle < curr_cost + sd->max_newidle_lb_cost)
+		if (this_rq->avg_idle < next_cost) {
+			continue_balancing = 0;
 			break;
+		}
+
+		if (try_bits & (1UL << ++idx) ||
+		    (half_idle && (!(sd->flags & SD_SHARE_LLC) || next_cost >= half_idle)))
+			continue;
 
 		if (sd->flags & SD_BALANCE_NEWIDLE) {
 			unsigned int weight = 1;
 
-			if (sched_feat(NI_RANDOM) && sd->newidle_ratio < 1024) {
+			if (sched_feat(NI_RANDOM) && sd->newidle_ratio < 1024 &&
+			    !half_idle) {
 				/*
 				 * Throw a 1k sided dice; and only run
 				 * newidle_balance according to the success
@@ -13236,6 +13247,7 @@ static int sched_balance_newidle(struct rq *this_rq, struct rq_flags *rf)
 				weight = (1024 + weight/2) / weight;
 			}
 
+			try_bits |= (1UL << idx);
 			pulled_task = sched_balance_rq(this_cpu, this_rq,
 						   sd, CPU_NEWLY_IDLE,
 						   &continue_balancing);
@@ -13258,6 +13270,17 @@ static int sched_balance_newidle(struct rq *this_rq, struct rq_flags *rf)
 		 */
 		if (pulled_task || !continue_balancing)
 			break;
+	}
+
+	if (sched_feat(NI_RANDOM) && !half_idle &&
+	    !(pulled_task || !continue_balancing)) {
+		s64 remain_idle = this_rq->avg_idle - curr_cost;
+
+		if (remain_idle > 0 &&
+		    remain_idle >= this_rq->avg_idle / 2) {
+			half_idle = remain_idle;
+			goto retry;
+		}
 	}
 
 	raw_spin_rq_lock(this_rq);
