@@ -563,7 +563,9 @@ extern int traceprobe_define_arg_fields(struct trace_event_call *event_call,
 	C(NEED_STRING_TYPE,	"$comm and immediate-string only accepts string type"),\
 	C(TOO_MANY_ARGS,	"Too many arguments are specified"),	\
 	C(TOO_MANY_EARGS,	"Too many entry arguments specified"),	\
-	C(EVENT_TOO_BIG,	"Event too big (too many fields?)"),
+	C(EVENT_TOO_BIG,	"Event too big (too many fields?)"), \
+	C(MEMBER_TOO_DEEP,	"Too many indirections of anonymous structure"), \
+	C(BAD_STRUCT_FMT,	"Unknown BTF structure"),
 
 #undef C
 #define C(a, b)		TP_ERR_##a
