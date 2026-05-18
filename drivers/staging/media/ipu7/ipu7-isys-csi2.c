@@ -6,6 +6,7 @@
 #include <linux/atomic.h>
 #include <linux/bits.h>
 #include <linux/bug.h>
+#include <linux/cleanup.h>
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/io.h>
@@ -491,11 +492,9 @@ int ipu7_isys_csi2_get_remote_desc(u32 source_stream,
 {
 	struct v4l2_mbus_frame_desc_entry *desc_entry = NULL;
 	struct device *dev = &csi2->isys->adev->auxdev.dev;
-	struct v4l2_mbus_frame_desc desc;
 	struct v4l2_subdev *source;
 	struct media_pad *pad;
 	unsigned int i;
-	int ret;
 
 	source = media_entity_to_v4l2_subdev(source_entity);
 	if (!source)
@@ -505,18 +504,15 @@ int ipu7_isys_csi2_get_remote_desc(u32 source_stream,
 	if (!pad)
 		return -EPIPE;
 
-	ret = v4l2_subdev_call(source, pad, get_frame_desc, pad->index, &desc);
-	if (ret)
-		return ret;
+	struct v4l2_mbus_frame_desc *desc __free(v4l2_subdev_free_frame_desc) =
+		v4l2_subdev_get_frame_desc(source, pad->index,
+					   V4L2_MBUS_FRAME_DESC_TYPE_CSI2);
+	if (IS_ERR(desc))
+		return PTR_ERR(desc);
 
-	if (desc.type != V4L2_MBUS_FRAME_DESC_TYPE_CSI2) {
-		dev_err(dev, "Unsupported frame descriptor type\n");
-		return -EINVAL;
-	}
-
-	for (i = 0; i < desc.num_entries; i++) {
-		if (source_stream == desc.entry[i].stream) {
-			desc_entry = &desc.entry[i];
+	for (i = 0; i < desc->num_entries; i++) {
+		if (source_stream == desc->entry[i].stream) {
+			desc_entry = &desc->entry[i];
 			break;
 		}
 	}
@@ -534,8 +530,8 @@ int ipu7_isys_csi2_get_remote_desc(u32 source_stream,
 
 	*entry = *desc_entry;
 
-	for (i = 0; i < desc.num_entries; i++) {
-		if (desc_entry->bus.csi2.vc == desc.entry[i].bus.csi2.vc)
+	for (i = 0; i < desc->num_entries; i++) {
+		if (desc_entry->bus.csi2.vc == desc->entry[i].bus.csi2.vc)
 			(*nr_queues)++;
 	}
 

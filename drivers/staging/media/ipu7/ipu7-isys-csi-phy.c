@@ -5,6 +5,7 @@
 
 #include <linux/bitmap.h>
 #include <linux/bug.h>
+#include <linux/cleanup.h>
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/iopoll.h>
@@ -300,7 +301,6 @@ static int ipu7_isys_csi_ctrl_dids_config(struct ipu7_isys_csi2 *csi2, u32 id)
 {
 	struct v4l2_mbus_frame_desc_entry *desc_entry = NULL;
 	struct device *dev = &csi2->isys->adev->auxdev.dev;
-	struct v4l2_mbus_frame_desc desc;
 	struct v4l2_subdev *ext_sd;
 	struct media_pad *pad;
 	unsigned int i;
@@ -318,17 +318,14 @@ static int ipu7_isys_csi_ctrl_dids_config(struct ipu7_isys_csi2 *csi2, u32 id)
 		 pad->entity->name))
 		return -ENODEV;
 
-	ret = v4l2_subdev_call(ext_sd, pad, get_frame_desc, pad->index, &desc);
-	if (ret)
-		return ret;
+	struct v4l2_mbus_frame_desc *desc __free(v4l2_subdev_free_frame_desc) =
+		v4l2_subdev_get_frame_desc(ext_sd, pad->index,
+					   V4L2_MBUS_FRAME_DESC_TYPE_CSI2);
+	if (IS_ERR(desc))
+		return PTR_ERR(desc);
 
-	if (desc.type != V4L2_MBUS_FRAME_DESC_TYPE_CSI2) {
-		dev_warn(dev, "Unsupported frame descriptor type\n");
-		return -EINVAL;
-	}
-
-	for (i = 0; i < desc.num_entries; i++) {
-		desc_entry = &desc.entry[i];
+	for (i = 0; i < desc->num_entries; i++) {
+		desc_entry = &desc->entry[i];
 		if (desc_entry->bus.csi2.vc < IPU7_NR_OF_CSI2_VC) {
 			ret = __dids_config(csi2, id, desc_entry->bus.csi2.vc,
 					    desc_entry->bus.csi2.dt);
