@@ -450,6 +450,18 @@ static const struct v4l2_file_operations sun6i_isp_params_fops = {
 	.poll		= vb2_fop_poll,
 };
 
+/* Media Entity */
+
+static int sun6i_isp_params_link_validate(struct media_link *link)
+{
+	/* Nothing to validate here. */
+	return 0;
+}
+
+static const struct media_entity_operations sun6i_isp_params_entity_ops = {
+	.link_validate	= sun6i_isp_params_link_validate,
+};
+
 /* Params */
 
 int sun6i_isp_params_setup(struct sun6i_isp_device *isp_dev)
@@ -469,6 +481,10 @@ int sun6i_isp_params_setup(struct sun6i_isp_device *isp_dev)
 
 	INIT_LIST_HEAD(&state->queue);
 	spin_lock_init(&state->lock);
+
+	/* Media Entity */
+
+	video_dev->entity.ops = &sun6i_isp_params_entity_ops;
 
 	/* Media Pads */
 
