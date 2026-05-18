@@ -9,6 +9,7 @@
  *	Laurent Pinchart <laurent.pinchart@ideasonboard.com>
  */
 
+#include <linux/cleanup.h>
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/mfd/syscon.h>
@@ -872,7 +873,8 @@ static int cal_camerarx_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
 				       struct v4l2_mbus_frame_desc *fd)
 {
 	struct cal_camerarx *phy = to_cal_camerarx(sd);
-	struct v4l2_mbus_frame_desc remote_desc;
+	struct v4l2_mbus_frame_desc *remote_desc
+		__free(v4l2_subdev_free_frame_desc) = NULL;
 	const struct media_pad *remote_pad;
 	struct v4l2_subdev_state *state;
 	u32 sink_stream;
@@ -893,24 +895,20 @@ static int cal_camerarx_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
 		goto out_unlock;
 	}
 
-	ret = v4l2_subdev_call(phy->source, pad, get_frame_desc,
-			       remote_pad->index, &remote_desc);
-	if (ret)
-		goto out_unlock;
-
-	if (remote_desc.type != V4L2_MBUS_FRAME_DESC_TYPE_CSI2) {
-		cal_err(phy->cal,
-			"Frame descriptor does not describe CSI-2 link");
-		ret = -EINVAL;
+	remote_desc =
+		v4l2_subdev_get_frame_desc(phy->source, remote_pad->index,
+					   V4L2_MBUS_FRAME_DESC_TYPE_CSI2);
+	if (IS_ERR(remote_desc)) {
+		ret = PTR_ERR(remote_desc);
 		goto out_unlock;
 	}
 
-	for (i = 0; i < remote_desc.num_entries; i++) {
-		if (remote_desc.entry[i].stream == sink_stream)
+	for (i = 0; i < remote_desc->num_entries; i++) {
+		if (remote_desc->entry[i].stream == sink_stream)
 			break;
 	}
 
-	if (i == remote_desc.num_entries) {
+	if (i == remote_desc->num_entries) {
 		cal_err(phy->cal, "Stream %u not found in remote frame desc\n",
 			sink_stream);
 		ret = -EINVAL;
@@ -919,7 +917,7 @@ static int cal_camerarx_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
 
 	fd->type = V4L2_MBUS_FRAME_DESC_TYPE_CSI2;
 	fd->num_entries = 1;
-	fd->entry[0] = remote_desc.entry[i];
+	fd->entry[0] = remote_desc->entry[i];
 
 out_unlock:
 	v4l2_subdev_unlock_state(state);
