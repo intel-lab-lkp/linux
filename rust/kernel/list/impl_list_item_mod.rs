@@ -86,7 +86,11 @@ macro_rules! impl_has_list_links_self_ptr {
         // right type.
         unsafe impl$(<$($generics)*>)? $crate::list::HasSelfPtr<$item_type $(, $id)?> for $self {}
 
-        // SAFETY: TODO.
+        // SAFETY: The implementation of `raw_get_list_links` only compiles if the field has the
+        // type `ListLinksSelfPtr<$item_type, $id>`. The cast to `*mut ListLinks<$id>` is valid
+        // because `ListLinksSelfPtr` is `#[repr(C)]` and `inner: ListLinks<ID>` is its first
+        // field, so a pointer to `ListLinksSelfPtr<T, ID>` has the same address as the `inner`
+        // field and is therefore a valid pointer to `ListLinks<ID>`.
         unsafe impl$(<$($generics)*>)? $crate::list::HasListLinks$(<$id>)? for $self {
             #[inline]
             unsafe fn raw_get_list_links(ptr: *mut Self) -> *mut $crate::list::ListLinks$(<$id>)? {
@@ -274,7 +278,10 @@ macro_rules! impl_list_item {
                 // SAFETY: The caller promises that `me` points at a valid value of type `Self`.
                 let links_field = unsafe { <Self as $crate::list::ListItem<$num>>::view_links(me) };
 
-                // SAFETY: TODO.
+                // SAFETY: `links_field` was obtained by calling `view_links(me)`, which calls
+                // `raw_get_list_links` on a valid `Self` pointer. That method returns a pointer
+                // to the `inner` field of the `ListLinksSelfPtr<Self, $num>` embedded in `Self`,
+                // so `links_field` points to the `inner` field of such a struct.
                 let container = unsafe {
                     $crate::container_of!(
                         links_field, $crate::list::ListLinksSelfPtr<Self, $num>, inner
@@ -326,7 +333,11 @@ macro_rules! impl_list_item {
             //   `ListArc` containing `Self` until the next call to `post_remove`. The value cannot
             //   be destroyed while a `ListArc` reference exists.
             unsafe fn view_value(links_field: *mut $crate::list::ListLinks<$num>) -> *const Self {
-                // SAFETY: TODO.
+                // SAFETY: By the safety requirements of this method, `links_field` originates from
+                // the most recent call to `prepare_to_insert`, which returns the result of
+                // `view_links`. `view_links` calls `raw_get_list_links`, which returns a pointer
+                // to the `inner` field of the `ListLinksSelfPtr<Self, $num>` embedded in `Self`,
+                // so `links_field` points to the `inner` field of such a struct.
                 let container = unsafe {
                     $crate::container_of!(
                         links_field, $crate::list::ListLinksSelfPtr<Self, $num>, inner
