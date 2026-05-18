@@ -42,101 +42,141 @@ static const struct ltc2378_chip_info ltc2378_chip_info[] = {
 	[ID_LTC2338_18] = {
 		.name = "ltc2338-18",
 		.resolution = 18,
+		.max_sample_rate_hz = HZ_PER_MHZ,
+		.tconv_ns = 527,
 		.out_format = IIO_SCAN_FORMAT_SIGNED_INT,
 	},
 	[ID_LTC2364_16] = {
 		.name = "ltc2364-16",
 		.resolution = 16,
+		.max_sample_rate_hz = 250 * HZ_PER_KHZ,
+		.tconv_ns = 3000,
 		.out_format = IIO_SCAN_FORMAT_UNSIGNED_INT,
 	},
 	[ID_LTC2364_18] = {
 		.name = "ltc2364-18",
 		.resolution = 18,
+		.max_sample_rate_hz = 250 * HZ_PER_KHZ,
+		.tconv_ns = 3000,
 		.out_format = IIO_SCAN_FORMAT_UNSIGNED_INT,
 	},
 	[ID_LTC2367_16] = {
 		.name = "ltc2367-16",
 		.resolution = 16,
+		.max_sample_rate_hz = 500 * HZ_PER_KHZ,
+		.tconv_ns = 1500,
 		.out_format = IIO_SCAN_FORMAT_UNSIGNED_INT,
 	},
 	[ID_LTC2367_18] = {
 		.name = "ltc2367-18",
 		.resolution = 18,
+		.max_sample_rate_hz = 500 * HZ_PER_KHZ,
+		.tconv_ns = 1500,
 		.out_format = IIO_SCAN_FORMAT_UNSIGNED_INT,
 	},
 	[ID_LTC2368_16] = {
 		.name = "ltc2368-16",
 		.resolution = 16,
+		.max_sample_rate_hz = HZ_PER_MHZ,
+		.tconv_ns = 527,
 		.out_format = IIO_SCAN_FORMAT_UNSIGNED_INT,
 	},
 	[ID_LTC2368_18] = {
 		.name = "ltc2368-18",
 		.resolution = 18,
+		.max_sample_rate_hz = HZ_PER_MHZ,
+		.tconv_ns = 527,
 		.out_format = IIO_SCAN_FORMAT_UNSIGNED_INT,
 	},
 	[ID_LTC2369_18] = {
 		.name = "ltc2369-18",
 		.resolution = 18,
+		.max_sample_rate_hz = 1600 * HZ_PER_KHZ,
+		.tconv_ns = 412,
 		.out_format = IIO_SCAN_FORMAT_UNSIGNED_INT,
 	},
 	[ID_LTC2370_16] = {
 		.name = "ltc2370-16",
 		.resolution = 16,
+		.max_sample_rate_hz = 2 * HZ_PER_MHZ,
+		.tconv_ns = 322,
 		.out_format = IIO_SCAN_FORMAT_UNSIGNED_INT,
 	},
 	[ID_LTC2376_16] = {
 		.name = "ltc2376-16",
 		.resolution = 16,
+		.max_sample_rate_hz = 250 * HZ_PER_KHZ,
+		.tconv_ns = 3000,
 		.out_format = IIO_SCAN_FORMAT_SIGNED_INT,
 	},
 	[ID_LTC2376_18] = {
 		.name = "ltc2376-18",
 		.resolution = 18,
+		.max_sample_rate_hz = 250 * HZ_PER_KHZ,
+		.tconv_ns = 3000,
 		.out_format = IIO_SCAN_FORMAT_SIGNED_INT,
 	},
 	[ID_LTC2376_20] = {
 		.name = "ltc2376-20",
 		.resolution = 20,
+		.max_sample_rate_hz = 250 * HZ_PER_KHZ,
+		.tconv_ns = 3000,
 		.out_format = IIO_SCAN_FORMAT_SIGNED_INT,
 	},
 	[ID_LTC2377_16] = {
 		.name = "ltc2377-16",
 		.resolution = 16,
+		.max_sample_rate_hz = 500 * HZ_PER_KHZ,
+		.tconv_ns = 1500,
 		.out_format = IIO_SCAN_FORMAT_SIGNED_INT,
 	},
 	[ID_LTC2377_18] = {
 		.name = "ltc2377-18",
 		.resolution = 18,
+		.max_sample_rate_hz = 500 * HZ_PER_KHZ,
+		.tconv_ns = 1500,
 		.out_format = IIO_SCAN_FORMAT_SIGNED_INT,
 	},
 	[ID_LTC2377_20] = {
 		.name = "ltc2377-20",
 		.resolution = 20,
+		.max_sample_rate_hz = 500 * HZ_PER_KHZ,
+		.tconv_ns = 1500,
 		.out_format = IIO_SCAN_FORMAT_SIGNED_INT,
 	},
 	[ID_LTC2378_16] = {
 		.name = "ltc2378-16",
 		.resolution = 16,
+		.max_sample_rate_hz = HZ_PER_MHZ,
+		.tconv_ns = 527,
 		.out_format = IIO_SCAN_FORMAT_SIGNED_INT,
 	},
 	[ID_LTC2378_18] = {
 		.name = "ltc2378-18",
 		.resolution = 18,
+		.max_sample_rate_hz = HZ_PER_MHZ,
 		.out_format = IIO_SCAN_FORMAT_SIGNED_INT,
+		.tconv_ns = 527,
 	},
 	[ID_LTC2378_20] = {
 		.name = "ltc2378-20",
 		.resolution = 20,
+		.max_sample_rate_hz = HZ_PER_MHZ,
+		.tconv_ns = 675,
 		.out_format = IIO_SCAN_FORMAT_SIGNED_INT,
 	},
 	[ID_LTC2379_18] = {
 		.name = "ltc2379-18",
 		.resolution = 18,
+		.max_sample_rate_hz = 1600 * HZ_PER_KHZ,
+		.tconv_ns = 412,
 		.out_format = IIO_SCAN_FORMAT_SIGNED_INT,
 	},
 	[ID_LTC2380_16] = {
 		.name = "ltc2380-16",
 		.resolution = 16,
+		.max_sample_rate_hz = 2 * HZ_PER_MHZ,
+		.tconv_ns = 322,
 		.out_format = IIO_SCAN_FORMAT_SIGNED_INT,
 	},
 };
@@ -226,6 +266,9 @@ static int ltc2378_read_raw(struct iio_dev *indio_dev,
 }
 
 static const struct iio_info ltc2378_iio_info = {
+#ifdef CONFIG_LTC2378_OFFLOAD_BUFFER
+	.attrs = &ltc2378_offload_attribute_group,
+#endif
 	.read_raw = &ltc2378_read_raw,
 };
 
@@ -236,6 +279,7 @@ static int ltc2378_probe(struct spi_device *spi)
 	unsigned int num_iio_chans = 1;
 	struct iio_dev *indio_dev;
 	struct ltc2378_state *st;
+	int ret;
 
 	indio_dev = devm_iio_device_alloc(&spi->dev, sizeof(*st));
 	if (!indio_dev)
@@ -279,6 +323,23 @@ static int ltc2378_probe(struct spi_device *spi)
 	};
 	st->xfer.rx_buf = &st->scan.data;
 	st->xfer.len = BITS_TO_BYTES(ltc2378_chan->scan_type.storagebits);
+
+	ret = ltc2378_offload_buffer_setup(indio_dev, spi);
+	if (ret == -ENODEV) {
+		/* SPI offloading is unavailable. Fall back to triggered buffer. */
+		dev_notice(dev, "buffered data capture not supported\n");
+	} else if (ret) {
+		return dev_err_probe(dev, ret, "error on SPI offload setup\n");
+	} else {
+		/*
+		 * Currently, the available offload hardware + DMA configuration
+		 * only supports pushing data to IIO buffers in CPU endianness.
+		 * That also requires we apply no shift to scan elements to
+		 * correctly read ADC sample data.
+		 */
+		ltc2378_chan->scan_type.shift = 0;
+		ltc2378_chan->scan_type.endianness = IIO_CPU;
+	}
 
 	indio_dev->channels = ltc2378_chan;
 	indio_dev->num_channels = num_iio_chans;
@@ -350,3 +411,4 @@ MODULE_AUTHOR("Ioan-Daniel Pop <pop.ioan-daniel@analog.com>");
 MODULE_AUTHOR("Marcelo Schmitt <marcelo.schmitt@analog.com>");
 MODULE_DESCRIPTION("Analog Devices LTC2378 ADC series driver");
 MODULE_LICENSE("GPL");
+MODULE_IMPORT_NS("IIO_LTC2378");
