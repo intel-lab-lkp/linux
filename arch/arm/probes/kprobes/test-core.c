@@ -1663,6 +1663,7 @@ static void __exit kprobe_test_exit(void)
 
 module_init(run_all_tests)
 module_exit(kprobe_test_exit)
+MODULE_DESCRIPTION("Tests for the kprobes API and instruction set simulation");
 MODULE_LICENSE("GPL");
 
 #else /* !MODULE */
