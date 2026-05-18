@@ -1689,7 +1689,7 @@ static int cxusb_medion_register_analog_radio(struct dvb_usb_device *dvbdev)
 	strscpy(cxdev->radiodev->name, "cxusb", sizeof(cxdev->radiodev->name));
 	cxdev->radiodev->vfl_dir = VFL_DIR_RX;
 	cxdev->radiodev->ioctl_ops = &cxusb_radio_ioctl;
-	cxdev->radiodev->release = video_device_release;
+	cxdev->radiodev->release = video_device_release_empty;
 	cxdev->radiodev->lock = &cxdev->dev_lock;
 	video_set_drvdata(cxdev->radiodev, dvbdev);
 
@@ -1701,6 +1701,7 @@ static int cxusb_medion_register_analog_radio(struct dvb_usb_device *dvbdev)
 		return ret;
 	}
 
+	cxdev->radiodev->release = video_device_release;
 	return 0;
 }
 
