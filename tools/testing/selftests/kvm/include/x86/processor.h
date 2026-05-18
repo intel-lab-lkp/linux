@@ -402,6 +402,7 @@ extern struct gpr64_regs guest_regs;
 #define DEFINE_ASM_GPR64_OFFSET(reg) \
 	asm(".equ GPR64_OFF_" #reg ", %c0" : : "i"(offsetof(struct gpr64_regs, reg)))
 
+DEFINE_ASM_GPR64_OFFSET(rax);
 DEFINE_ASM_GPR64_OFFSET(rbx);
 DEFINE_ASM_GPR64_OFFSET(rcx);
 DEFINE_ASM_GPR64_OFFSET(rdx);
@@ -438,6 +439,10 @@ DEFINE_ASM_GPR64_OFFSET(r15);
 	GUEST_SWITCH_GPR_ASM(r13) \
 	GUEST_SWITCH_GPR_ASM(r14) \
 	GUEST_SWITCH_GPR_ASM(r15)
+
+#define GUEST_SWITCH_GPRS_ASM \
+	GUEST_SWITCH_GPR_ASM(rax) \
+	GUEST_SWITCH_GPRS_NORAX_ASM
 
 struct desc64 {
 	u16 limit0;
