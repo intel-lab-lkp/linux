@@ -745,6 +745,7 @@ void intel_dsb_vblank_evade(struct intel_atomic_state *state,
 		intel_pre_commit_crtc_state(state, crtc);
 	int latency = intel_usecs_to_scanlines(&crtc_state->hw.adjusted_mode,
 					       intel_dsb_arm_exec_time_us());
+	int vblank_delay = crtc_state->set_context_latency;
 	int start, end;
 
 	/*
@@ -760,7 +761,6 @@ void intel_dsb_vblank_evade(struct intel_atomic_state *state,
 		intel_dsb_emit_wait_dsl(dsb, DSB_OPCODE_WAIT_DSL_OUT, 0, 0);
 
 	if (pre_commit_is_vrr_active(state, crtc) && crtc_state->vrr.dc_balance.enable) {
-		int vblank_delay = crtc_state->set_context_latency;
 		int vmin_vblank_start, vmax_vblank_start;
 
 		vmin_vblank_start = intel_vrr_dcb_vmin_vblank_start_next(crtc_state);
@@ -789,8 +789,6 @@ void intel_dsb_vblank_evade(struct intel_atomic_state *state,
 		start = end - vblank_delay - latency;
 		intel_dsb_wait_scanline_out(state, dsb, start, end);
 	} else if (pre_commit_is_vrr_active(state, crtc)) {
-		int vblank_delay = crtc_state->set_context_latency;
-
 		end = intel_vrr_vmin_vblank_start(crtc_state);
 		start = end - vblank_delay - latency;
 		intel_dsb_wait_scanline_out(state, dsb, start, end);
@@ -799,8 +797,6 @@ void intel_dsb_vblank_evade(struct intel_atomic_state *state,
 		start = end - vblank_delay - latency;
 		intel_dsb_wait_scanline_out(state, dsb, start, end);
 	} else {
-		int vblank_delay = intel_mode_vblank_delay(&crtc_state->hw.adjusted_mode);
-
 		end = intel_mode_vblank_start(&crtc_state->hw.adjusted_mode);
 		start = end - vblank_delay - latency;
 		intel_dsb_wait_scanline_out(state, dsb, start, end);
@@ -889,7 +885,7 @@ void intel_dsb_wait_for_delayed_vblank(struct intel_atomic_state *state,
 		intel_pre_commit_crtc_state(state, crtc);
 	const struct drm_display_mode *adjusted_mode =
 		&crtc_state->hw.adjusted_mode;
-	int wait_scanlines;
+	int wait_scanlines = crtc_state->set_context_latency + 1;
 
 	if (pre_commit_is_vrr_active(state, crtc)) {
 		/*
@@ -912,9 +908,6 @@ void intel_dsb_wait_for_delayed_vblank(struct intel_atomic_state *state,
 		 * scanline until the delayed vblank occurs after
 		 * TRANS_PUSH has been written.
 		 */
-		wait_scanlines = crtc_state->set_context_latency + 1;
-	} else {
-		wait_scanlines = intel_mode_vblank_delay(adjusted_mode);
 	}
 
 	intel_dsb_wait_usec(dsb, intel_scanlines_to_usecs(adjusted_mode, wait_scanlines));
