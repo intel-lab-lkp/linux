@@ -20,31 +20,11 @@
 #define LENGTH (256UL*1024*1024)
 #define PROTECTION (PROT_READ | PROT_WRITE)
 
-static void write_bytes(char *addr)
-{
-	unsigned long i;
-
-	for (i = 0; i < LENGTH; i++)
-		*(addr + i) = (char)i;
-}
-
-static int read_bytes(char *addr)
-{
-	unsigned long i;
-
-	ksft_print_msg("First hex is %x\n", *((unsigned int *)addr));
-	for (i = 0; i < LENGTH; i++)
-		if (*(addr + i) != (char)i) {
-			ksft_print_msg("Error: Mismatch at %lu\n", i);
-			return 1;
-		}
-	return 0;
-}
-
 int main(void)
 {
 	void *addr;
-	int fd, ret;
+	int fd, ret = 0;
+	unsigned long i;
 
 	ksft_print_header();
 	ksft_set_plan(1);
@@ -61,8 +41,18 @@ int main(void)
 
 	ksft_print_msg("Returned address is %p\n", addr);
 	ksft_print_msg("First hex is %x\n", *((unsigned int *)addr));
-	write_bytes(addr);
-	ret = read_bytes(addr);
+
+	for (i = 0; i < LENGTH; i++)
+		*(char *)(addr + i) = (char)i;
+
+	ksft_print_msg("First hex is %x\n", *((unsigned int *)addr));
+	for (i = 0; i < LENGTH; i++) {
+		if (*(char *)(addr + i) != (char)i) {
+			ksft_print_msg("Error: Mismatch at %lu\n", i);
+			ret = 1;
+			break;
+		}
+	}
 
 	munmap(addr, LENGTH);
 	close(fd);
